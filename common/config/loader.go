@@ -2,8 +2,8 @@ package config
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
-	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
@@ -13,7 +13,6 @@ const envPrefix = "AEGISCORE"
 
 func Load(path string) (*Config, error) {
 	v := viper.New()
-	setDefaults(v)
 
 	v.SetConfigType("yaml")
 	if path != "" {
@@ -27,6 +26,9 @@ func Load(path string) (*Config, error) {
 	v.SetEnvPrefix(envPrefix)
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	v.AutomaticEnv()
+	if err := bindEnvKeys(v); err != nil {
+		return nil, err
+	}
 
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
@@ -37,85 +39,109 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("decode config: %w", err)
 	}
 
-	if err := applyDefaults(&cfg); err != nil {
+	if err := validateRequiredKeys(v); err != nil {
 		return nil, err
 	}
-
-	validate := validator.New(validator.WithRequiredStructEnabled())
-	if err := validate.Struct(cfg); err != nil {
-		return nil, fmt.Errorf("validate config: %w", err)
+	if err := validateStruct(cfg); err != nil {
+		return nil, err
 	}
 
 	return &cfg, nil
 }
 
-func setDefaults(v *viper.Viper) {
-	v.SetDefault("app.name", "aegiscore")
-	v.SetDefault("app.environment", "local")
-	v.SetDefault("http.host", "0.0.0.0")
-	v.SetDefault("http.port", 8080)
-	v.SetDefault("http.read_timeout", "10s")
-	v.SetDefault("http.write_timeout", "10s")
-	v.SetDefault("http.idle_timeout", "60s")
-	v.SetDefault("http.shutdown_timeout", "10s")
-	v.SetDefault("log.level", "info")
-	v.SetDefault("log.format", "json")
-	v.SetDefault("redis.addr", "127.0.0.1:6379")
-	v.SetDefault("redis.db", 0)
-	v.SetDefault("redis.dial_timeout", "5s")
-	v.SetDefault("redis.read_timeout", "3s")
-	v.SetDefault("redis.write_timeout", "3s")
-	v.SetDefault("database.postgres.driver", "pgx")
-	v.SetDefault("database.postgres.port", 5432)
-	v.SetDefault("database.postgres.sslmode", "disable")
-	v.SetDefault("database.postgres.max_open_conns", 25)
-	v.SetDefault("database.postgres.max_idle_conns", 5)
-	v.SetDefault("database.postgres.conn_max_lifetime", "30m")
-	v.SetDefault("database.postgres.conn_max_idle_time", "10m")
-	v.SetDefault("database.postgres.ping_timeout", "5s")
+func validateRequiredKeys(v *viper.Viper) error {
+	for _, key := range explicitRequiredKeys {
+		if !v.IsSet(key) {
+			return fmt.Errorf("%s is required", key)
+		}
+	}
+	return nil
 }
 
-func applyDefaults(cfg *Config) error {
-	db := cfg.Database.Postgres
-	if db.Driver == "" {
-		db.Driver = "pgx"
+func validateStruct(cfg Config) error {
+	validate := validator.New(validator.WithRequiredStructEnabled())
+	validate.RegisterTagNameFunc(func(field reflect.StructField) string {
+		name := strings.SplitN(field.Tag.Get("mapstructure"), ",", 2)[0]
+		if name == "" || name == "-" {
+			return field.Name
+		}
+		return name
+	})
+	if err := validate.Struct(cfg); err != nil {
+		return formatValidationError(err)
 	}
-	if db.Port == 0 {
-		db.Port = 5432
+	return nil
+}
+
+func formatValidationError(err error) error {
+	validationErrors, ok := err.(validator.ValidationErrors)
+	if !ok || len(validationErrors) == 0 {
+		return fmt.Errorf("validate config: %w", err)
 	}
-	if db.SSLMode == "" {
-		db.SSLMode = "disable"
+	errField := validationErrors[0]
+	field := configPath(errField.Namespace())
+	switch errField.Tag() {
+	case "required":
+		return fmt.Errorf("%s is required", field)
+	case "min":
+		return fmt.Errorf("%s must be at least %s", field, errField.Param())
+	case "max":
+		return fmt.Errorf("%s must be at most %s", field, errField.Param())
+	case "gt":
+		return fmt.Errorf("%s must be greater than %s", field, errField.Param())
+	default:
+		return fmt.Errorf("%s failed validation %s", field, errField.Tag())
 	}
-	if db.MaxOpenConns == 0 {
-		db.MaxOpenConns = 25
+}
+
+func configPath(namespace string) string {
+	path := strings.ToLower(namespace)
+	return strings.TrimPrefix(path, "config.")
+}
+
+var explicitRequiredKeys = []string{
+	"app.name",
+	"app.environment",
+	"http.host",
+	"http.port",
+	"http.read_timeout",
+	"http.write_timeout",
+	"http.idle_timeout",
+	"http.shutdown_timeout",
+	"log.level",
+	"log.format",
+	"redis.addr",
+	"redis.db",
+	"redis.dial_timeout",
+	"redis.read_timeout",
+	"redis.write_timeout",
+	"database.postgres.host",
+	"database.postgres.port",
+	"database.postgres.username",
+	"database.postgres.user_db_name",
+	"database.postgres.pay_db_name",
+	"database.postgres.common_db_name",
+	"database.postgres.driver",
+	"database.postgres.sslmode",
+	"database.postgres.max_open_conns",
+	"database.postgres.max_idle_conns",
+	"database.postgres.conn_max_lifetime",
+	"database.postgres.conn_max_idle_time",
+	"database.postgres.ping_timeout",
+}
+
+var envKeys = append([]string{
+	"http.trusted_proxies",
+	"redis.username",
+	"redis.password",
+	"database.postgres.password",
+}, explicitRequiredKeys...)
+
+func bindEnvKeys(v *viper.Viper) error {
+	for _, key := range envKeys {
+		if err := v.BindEnv(key); err != nil {
+			return fmt.Errorf("bind env %s: %w", key, err)
+		}
 	}
-	if db.MaxIdleConns == 0 {
-		db.MaxIdleConns = 5
-	}
-	if db.ConnMaxLifetime == 0 {
-		db.ConnMaxLifetime = 30 * time.Minute
-	}
-	if db.ConnMaxIdleTime == 0 {
-		db.ConnMaxIdleTime = 10 * time.Minute
-	}
-	if db.PingTimeout == 0 {
-		db.PingTimeout = 5 * time.Second
-	}
-	if db.Host == "" {
-		return fmt.Errorf("database.postgres.host is required")
-	}
-	if db.Port < 1 || db.Port > 65535 {
-		return fmt.Errorf("database.postgres.port must be between 1 and 65535")
-	}
-	if db.Username == "" {
-		return fmt.Errorf("database.postgres.username is required")
-	}
-	if db.UserDBName == "" {
-		return fmt.Errorf("database.postgres.user_db_name is required")
-	}
-	if db.CommonDBName == "" {
-		return fmt.Errorf("database.postgres.common_db_name is required")
-	}
-	cfg.Database.Postgres = db
 	return nil
 }

@@ -14,7 +14,7 @@
 - Service：repository 返回值到 DTO 的字段映射，repository 错误通过 `response.FromError` 转换。
 - Repository：Ent not found 转 `NOT_FOUND`，其他查询错误保留 cause 并映射为 internal error。
 - Middleware：request id 透传/生成、panic recovery 输出统一错误、CORS 处理 OPTIONS。
-- Config：默认值、环境变量覆盖、缺失 PostgreSQL DSN 报错。
+- Config：显式配置加载、环境变量覆盖、缺失主要配置或无效字段时报错。
 - Runtime：Fx 生命周期启动与停止，HTTP server 使用配置中的 host/port/timeouts。
 
 ## 3. External Dependencies
