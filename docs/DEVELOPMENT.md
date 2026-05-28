@@ -2,7 +2,7 @@
 
 ## 1. Prerequisites
 
-- Go workspace 使用 `go 1.24` 和 `toolchain go1.24.1`，见 `go.work`。
+- Go workspace 使用 `go 1.26` 和 `toolchain go1.26.3`，见 `go.work`。
 - 本地运行用户服务需要 PostgreSQL 和 Redis。
 - 用户服务配置示例位于 `user-services/configs/config.yaml`。
 

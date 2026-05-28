@@ -1,6 +1,8 @@
 module github.com/aegiscore/common
 
-go 1.23
+go 1.26
+
+toolchain go1.26.3
 
 require (
 	github.com/gin-gonic/gin v1.10.0
