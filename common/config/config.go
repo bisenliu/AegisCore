@@ -9,11 +9,11 @@ import (
 
 // Config is the root configuration object for AegisCore services.
 type Config struct {
-	App      AppConfig      `mapstructure:"app"`
-	HTTP     HTTPConfig     `mapstructure:"http"`
-	Log      LogConfig      `mapstructure:"log"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	Database DatabaseConfig `mapstructure:"database"`
+	App     AppConfig                 `mapstructure:"app"`
+	HTTP    HTTPConfig                `mapstructure:"http"`
+	Log     LogConfig                 `mapstructure:"log"`
+	Redis   map[string]RedisConfig    `mapstructure:"redis"`
+	Postgre map[string]PostgresConfig `mapstructure:"postgre"`
 }
 
 type AppConfig struct {
@@ -46,18 +46,12 @@ type RedisConfig struct {
 	WriteTimeout time.Duration `mapstructure:"write_timeout"`
 }
 
-type DatabaseConfig struct {
-	Postgres PostgresConfig `mapstructure:"postgres"`
-}
-
 type PostgresConfig struct {
 	Host            string        `mapstructure:"host"`
 	Port            int           `mapstructure:"port"`
 	Username        string        `mapstructure:"username"`
 	Password        string        `mapstructure:"password"`
-	UserDBName      string        `mapstructure:"user_db_name"`
-	PayDBName       string        `mapstructure:"pay_db_name"`
-	CommonDBName    string        `mapstructure:"common_db_name"`
+	DBName          string        `mapstructure:"db_name"`
 	Driver          string        `mapstructure:"driver"`
 	SSLMode         string        `mapstructure:"sslmode"`
 	MaxOpenConns    int           `mapstructure:"max_open_conns"`
@@ -77,45 +71,33 @@ type PostgresDatabaseConfig struct {
 	PingTimeout     time.Duration
 }
 
-func (c Config) Postgres(name string) (PostgresDatabaseConfig, bool) {
-	return c.Database.Postgres.Database(name)
+func (c Config) RedisConfig(name string) (RedisConfig, bool) {
+	redisCfg, ok := c.Redis[name]
+	return redisCfg, ok
 }
 
-func (p PostgresConfig) Database(name string) (PostgresDatabaseConfig, bool) {
-	dbName := p.databaseName(name)
-	if dbName == "" {
+func (c Config) Postgres(name string) (PostgresDatabaseConfig, bool) {
+	pg, ok := c.Postgre[name]
+	if !ok {
 		return PostgresDatabaseConfig{}, false
 	}
 	return PostgresDatabaseConfig{
-		Driver:          p.Driver,
-		DSN:             p.dsn(dbName),
-		MaxOpenConns:    p.MaxOpenConns,
-		MaxIdleConns:    p.MaxIdleConns,
-		ConnMaxLifetime: p.ConnMaxLifetime,
-		ConnMaxIdleTime: p.ConnMaxIdleTime,
-		PingTimeout:     p.PingTimeout,
+		Driver:          pg.Driver,
+		DSN:             pg.dsn(),
+		MaxOpenConns:    pg.MaxOpenConns,
+		MaxIdleConns:    pg.MaxIdleConns,
+		ConnMaxLifetime: pg.ConnMaxLifetime,
+		ConnMaxIdleTime: pg.ConnMaxIdleTime,
+		PingTimeout:     pg.PingTimeout,
 	}, true
 }
 
-func (p PostgresConfig) databaseName(name string) string {
-	switch name {
-	case "user_db":
-		return p.UserDBName
-	case "pay_db":
-		return p.PayDBName
-	case "common_db":
-		return p.CommonDBName
-	default:
-		return ""
-	}
-}
-
-func (p PostgresConfig) dsn(dbName string) string {
+func (p PostgresConfig) dsn() string {
 	u := url.URL{
 		Scheme: "postgres",
 		User:   url.UserPassword(p.Username, p.Password),
 		Host:   net.JoinHostPort(p.Host, strconv.Itoa(p.Port)),
-		Path:   dbName,
+		Path:   p.DBName,
 	}
 	if p.SSLMode != "" {
 		q := u.Query()

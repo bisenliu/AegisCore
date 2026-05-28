@@ -6,6 +6,5 @@ var Module = fx.Module("aegiscore-common-infrastructure",
 	fx.Provide(
 		NewConfig,
 		NewLogger,
-		NewRedisClient,
 	),
 )

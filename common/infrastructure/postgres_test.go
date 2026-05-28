@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -91,16 +92,77 @@ func TestModuleDoesNotProvideNamedPostgresPools(t *testing.T) {
 	}
 }
 
+func TestNewRedisClientReturnsErrorForMissingConfig(t *testing.T) {
+	cfg := &config.Config{}
+	lc := fxtest.NewLifecycle(t)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	_, err := NewRedisClient(lc, cfg, log, "missing_redis")
+	if err == nil {
+		t.Fatal("NewRedisClient error = nil")
+	}
+	if !strings.Contains(err.Error(), `redis config "missing_redis" not found`) {
+		t.Fatalf("NewRedisClient error = %q, want missing config", err.Error())
+	}
+}
+
+func TestNewRedisClientRegistersLifecycle(t *testing.T) {
+	redisServer := newTestRedisServer(t)
+	cfg := &config.Config{Redis: map[string]config.RedisConfig{
+		"cache_redis": {
+			Addr:         redisServer.addr,
+			DB:           0,
+			DialTimeout:  time.Second,
+			ReadTimeout:  time.Second,
+			WriteTimeout: time.Second,
+		},
+	}}
+	lc := fxtest.NewLifecycle(t)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	client, err := NewRedisClient(lc, cfg, log, "cache_redis")
+	if err != nil {
+		t.Fatalf("NewRedisClient: %v", err)
+	}
+	lc.RequireStart()
+	lc.RequireStop()
+
+	if client.Options().Addr != redisServer.addr {
+		t.Fatalf("Addr = %q, want %q", client.Options().Addr, redisServer.addr)
+	}
+	if got := redisServer.pings.Load(); got != 1 {
+		t.Fatalf("pings = %d, want 1", got)
+	}
+}
+
+func TestModuleDoesNotProvideRedisClient(t *testing.T) {
+	type params struct {
+		fx.In
+
+		Redis any `name:"cache_redis"`
+	}
+
+	err := fx.ValidateApp(
+		Module,
+		fx.Invoke(func(params) {}),
+	)
+	if err == nil {
+		t.Fatal("ValidateApp error = nil")
+	}
+	if !strings.Contains(err.Error(), `name="cache_redis"`) {
+		t.Fatalf("ValidateApp error = %q, want missing named cache_redis", err.Error())
+	}
+}
+
 func testConfig(driverName string) *config.Config {
 	return &config.Config{
-		Database: config.DatabaseConfig{
-			Postgres: config.PostgresConfig{
+		Postgre: map[string]config.PostgresConfig{
+			"user_db": {
 				Host:            "127.0.0.1",
 				Port:            15432,
 				Username:        "aegiscore",
 				Password:        "secret",
-				UserDBName:      "aegiscore_user",
-				CommonDBName:    "aegiscore_common",
+				DBName:          "aegiscore_user",
 				Driver:          driverName,
 				MaxOpenConns:    7,
 				MaxIdleConns:    3,
@@ -109,6 +171,54 @@ func testConfig(driverName string) *config.Config {
 				PingTimeout:     time.Second,
 			},
 		},
+	}
+}
+
+func newTestRedisServer(t *testing.T) *testRedisServer {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	server := &testRedisServer{addr: listener.Addr().String()}
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go server.handle(conn)
+		}
+	}()
+	return server
+}
+
+type testRedisServer struct {
+	addr  string
+	pings atomic.Int64
+}
+
+func (s *testRedisServer) handle(conn net.Conn) {
+	defer conn.Close()
+	buf := make([]byte, 1024)
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			return
+		}
+		command := strings.ToUpper(string(buf[:n]))
+		switch {
+		case strings.Contains(command, "PING"):
+			s.pings.Add(1)
+			_, _ = conn.Write([]byte("+PONG\r\n"))
+		case strings.Contains(command, "HELLO"):
+			_, _ = conn.Write([]byte("-ERR unknown command 'HELLO'\r\n"))
+		case strings.Contains(command, "CLIENT"):
+			_, _ = conn.Write([]byte("+OK\r\n"))
+		default:
+			_, _ = conn.Write([]byte("+OK\r\n"))
+		}
 	}
 }
 

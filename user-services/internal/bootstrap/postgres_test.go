@@ -83,17 +83,60 @@ func TestNewPostgresPoolsDoesNotProvidePayDatabase(t *testing.T) {
 	}
 }
 
+func TestUserServiceDoesNotRequireRedisClient(t *testing.T) {
+	type clients struct {
+		fx.In
+
+		CacheRedis *struct{} `name:"cache_redis"`
+	}
+
+	err := fx.ValidateApp(
+		fx.Provide(NewPostgresPools),
+		fx.Invoke(func(clients) {}),
+	)
+	if err == nil {
+		t.Fatal("ValidateApp error = nil")
+	}
+	if !strings.Contains(err.Error(), `name="cache_redis"`) {
+		t.Fatalf("ValidateApp error = %q, want missing named cache_redis", err.Error())
+	}
+}
+
 func bootstrapTestConfig(driverName string) *config.Config {
 	return &config.Config{
-		Database: config.DatabaseConfig{
-			Postgres: config.PostgresConfig{
+		Postgre: map[string]config.PostgresConfig{
+			"user_db": {
 				Host:            "127.0.0.1",
 				Port:            15432,
 				Username:        "aegiscore",
 				Password:        "secret",
-				UserDBName:      "aegiscore_user",
-				PayDBName:       "aegiscore_pay",
-				CommonDBName:    "aegiscore_common",
+				DBName:          "aegiscore_user",
+				Driver:          driverName,
+				MaxOpenConns:    7,
+				MaxIdleConns:    3,
+				ConnMaxLifetime: time.Minute,
+				ConnMaxIdleTime: 30 * time.Second,
+				PingTimeout:     time.Second,
+			},
+			"pay_db": {
+				Host:            "127.0.0.1",
+				Port:            15432,
+				Username:        "aegiscore",
+				Password:        "secret",
+				DBName:          "aegiscore_pay",
+				Driver:          driverName,
+				MaxOpenConns:    7,
+				MaxIdleConns:    3,
+				ConnMaxLifetime: time.Minute,
+				ConnMaxIdleTime: 30 * time.Second,
+				PingTimeout:     time.Second,
+			},
+			"common_db": {
+				Host:            "127.0.0.1",
+				Port:            15432,
+				Username:        "aegiscore",
+				Password:        "secret",
+				DBName:          "aegiscore_common",
 				Driver:          driverName,
 				MaxOpenConns:    7,
 				MaxIdleConns:    3,

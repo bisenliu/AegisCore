@@ -16,28 +16,46 @@ log:
   level: info
   format: json
 
-redis:
+# Redis 基础连接模板
+.redis_base: &redis_base
   addr: 127.0.0.1:6379
   username: ""
   password: ""
-  db: 0
   dial_timeout: 5s
   read_timeout: 3s
   write_timeout: 3s
 
-database:
-  postgres:
-    host: 127.0.0.1
-    port: 5432
-    username: aegiscore
-    password: aegiscore
-    user_db_name: aegiscore_user
-    pay_db_name: aegiscore_pay
-    common_db_name: aegiscore_common
-    driver: pgx
-    sslmode: disable
-    max_open_conns: 25
-    max_idle_conns: 5
-    conn_max_lifetime: 30m
-    conn_max_idle_time: 10m
-    ping_timeout: 5s
+# PostgreSQL 基础连接模板
+.postgre_base: &postgre_base
+  host: 127.0.0.1
+  port: 5432
+  username: aegiscore
+  password: aegiscore
+  driver: pgx
+  sslmode: disable
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 30m
+  conn_max_idle_time: 10m
+  ping_timeout: 5s
+
+redis:
+  cache_redis:
+    <<: *redis_base
+    db: 0
+  queue_redis:
+    <<: *redis_base
+    db: 1
+    dial_timeout: 10s
+
+postgre:
+  user_db:
+    <<: *postgre_base
+    db_name: aegiscore_user
+    max_open_conns: 50
+  pay_db:
+    <<: *postgre_base
+    db_name: aegiscore_pay
+  common_db:
+    <<: *postgre_base
+    db_name: aegiscore_common

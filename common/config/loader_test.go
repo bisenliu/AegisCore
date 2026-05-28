@@ -19,11 +19,22 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cfg.HTTP.Port != 18080 {
 		t.Fatalf("HTTP.Port = %d, want 18080", cfg.HTTP.Port)
 	}
-	if cfg.Redis.DB != 2 {
-		t.Fatalf("Redis.DB = %d, want 2", cfg.Redis.DB)
+	cacheRedis, ok := cfg.RedisConfig("cache_redis")
+	if !ok {
+		t.Fatal("RedisConfig(cache_redis) ok = false")
+	}
+	if cacheRedis.DB != 2 {
+		t.Fatalf("cache_redis.DB = %d, want 2", cacheRedis.DB)
+	}
+	queueRedis, ok := cfg.RedisConfig("queue_redis")
+	if !ok {
+		t.Fatal("RedisConfig(queue_redis) ok = false")
+	}
+	if queueRedis.DB != 1 {
+		t.Fatalf("queue_redis.DB = %d, want 1", queueRedis.DB)
 	}
 
-	pg := cfg.Database.Postgres
+	pg := cfg.Postgre["user_db"]
 	if pg.Host != "127.0.0.1" {
 		t.Fatalf("Host = %q, want 127.0.0.1", pg.Host)
 	}
@@ -51,13 +62,16 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if pg.PingTimeout != 7*time.Second {
 		t.Fatalf("PingTimeout = %s, want 7s", pg.PingTimeout)
 	}
-	if pg.PayDBName != "aegiscore_pay" {
-		t.Fatalf("PayDBName = %q, want aegiscore_pay", pg.PayDBName)
+	if pg.DBName != "aegiscore_user" {
+		t.Fatalf("DBName = %q, want aegiscore_user", pg.DBName)
+	}
+	if cfg.Postgre["pay_db"].DBName != "aegiscore_pay" {
+		t.Fatalf("pay_db.DBName = %q, want aegiscore_pay", cfg.Postgre["pay_db"].DBName)
 	}
 }
 
-func TestLoadDoesNotValidateMissingPrimaryConfigFields(t *testing.T) {
-	cfg := loadConfigFromYAML(t, `app:
+func TestLoadValidatesMissingPrimaryConfigFields(t *testing.T) {
+	_, err := Load(writeTempConfig(t, `app:
   environment: test
 
 http:
@@ -66,92 +80,81 @@ http:
 log: {}
 
 redis:
-  db: 0
+  cache_redis:
+    db: 0
 
-database:
-  postgres:
+postgre:
+  user_db:
     port: 0
-`)
-
-	if cfg.App.Name != "" {
-		t.Fatalf("App.Name = %q, want empty", cfg.App.Name)
+`))
+	if err == nil {
+		t.Fatal("Load error = nil")
 	}
-	if cfg.HTTP.Host != "" {
-		t.Fatalf("HTTP.Host = %q, want empty", cfg.HTTP.Host)
-	}
-	if cfg.Redis.Addr != "" {
-		t.Fatalf("Redis.Addr = %q, want empty", cfg.Redis.Addr)
-	}
-	if cfg.Database.Postgres.UserDBName != "" {
-		t.Fatalf("UserDBName = %q, want empty", cfg.Database.Postgres.UserDBName)
-	}
-	if _, ok := cfg.Postgres("user_db"); ok {
-		t.Fatal("Postgres(user_db) ok = true")
+	if !strings.Contains(err.Error(), "app.name is required") {
+		t.Fatalf("Load error = %q, want app.name validation", err.Error())
 	}
 }
 
-func TestLoadDoesNotValidateInvalidBasicValues(t *testing.T) {
-	cfg := loadConfigFromYAML(t, configYAMLWithSection(`http:
+func TestLoadValidatesInvalidBasicValues(t *testing.T) {
+	_, err := Load(writeTempConfig(t, configYAMLWithSection(`http:
   host: 127.0.0.1
   port: 70000
   read_timeout: 0s
   write_timeout: 0s
   idle_timeout: 0s
-  shutdown_timeout: 0s`))
-	if cfg.HTTP.Port != 70000 {
-		t.Fatalf("HTTP.Port = %d, want 70000", cfg.HTTP.Port)
-	}
-	if cfg.HTTP.ReadTimeout != 0 {
-		t.Fatalf("HTTP.ReadTimeout = %s, want 0s", cfg.HTTP.ReadTimeout)
+  shutdown_timeout: 0s`)))
+	if err == nil || !strings.Contains(err.Error(), "http.port") {
+		t.Fatalf("Load error = %v, want http.port validation", err)
 	}
 
-	cfg = loadConfigFromYAML(t, configYAMLWithSection(`redis:
-  addr: 127.0.0.1:6379
-  db: -1
-  dial_timeout: 0s
-  read_timeout: 0s
-  write_timeout: 0s`))
-	if cfg.Redis.DB != -1 {
-		t.Fatalf("Redis.DB = %d, want -1", cfg.Redis.DB)
-	}
-	if cfg.Redis.DialTimeout != 0 {
-		t.Fatalf("Redis.DialTimeout = %s, want 0s", cfg.Redis.DialTimeout)
+	_, err = Load(writeTempConfig(t, configYAMLWithSection(`redis:
+  cache_redis:
+    addr: 127.0.0.1:6379
+    db: -1
+    dial_timeout: 5s
+    read_timeout: 3s
+    write_timeout: 3s`)))
+	if err == nil || !strings.Contains(err.Error(), "redis.cache_redis.db") {
+		t.Fatalf("Load error = %v, want redis.cache_redis.db validation", err)
 	}
 
-	cfg = loadConfigFromYAML(t, configYAMLWithSection(`database:
-  postgres:
+	_, err = Load(writeTempConfig(t, configYAMLWithSection(`postgre:
+  user_db:
     host: 127.0.0.1
     port: 15432
     username: aegiscore
     password: secret
-    user_db_name: aegiscore_user
-    pay_db_name: aegiscore_pay
-    common_db_name: aegiscore_common
+    db_name: aegiscore_user
     driver: pgx
     sslmode: disable
     max_open_conns: 0
     max_idle_conns: 0
     conn_max_lifetime: 0s
     conn_max_idle_time: 0s
-    ping_timeout: 0s`))
-	if cfg.Database.Postgres.MaxOpenConns != 0 {
-		t.Fatalf("MaxOpenConns = %d, want 0", cfg.Database.Postgres.MaxOpenConns)
-	}
-	if cfg.Database.Postgres.PingTimeout != 0 {
-		t.Fatalf("PingTimeout = %s, want 0s", cfg.Database.Postgres.PingTimeout)
+    ping_timeout: 0s`)))
+	if err == nil || !strings.Contains(err.Error(), "postgre.user_db.max_open_conns") {
+		t.Fatalf("Load error = %v, want postgre.user_db.max_open_conns validation", err)
 	}
 }
 
 func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_HTTP_PORT", "19090")
-	t.Setenv("AEGISCORE_DATABASE_POSTGRES_PASSWORD", "env-secret")
+	t.Setenv("AEGISCORE_REDIS_CACHE_REDIS_DB", "9")
+	t.Setenv("AEGISCORE_POSTGRE_USER_DB_PASSWORD", "env-secret")
+	t.Setenv("AEGISCORE_POSTGRE_USER_DB_MAX_OPEN_CONNS", "30")
 
 	cfg := loadConfigFromYAML(t, explicitConfigYAML())
 	if cfg.HTTP.Port != 19090 {
 		t.Fatalf("HTTP.Port = %d, want 19090", cfg.HTTP.Port)
 	}
-	if cfg.Database.Postgres.Password != "env-secret" {
-		t.Fatalf("Postgres.Password = %q, want env-secret", cfg.Database.Postgres.Password)
+	if cfg.Redis["cache_redis"].DB != 9 {
+		t.Fatalf("cache_redis.DB = %d, want 9", cfg.Redis["cache_redis"].DB)
+	}
+	if cfg.Postgre["user_db"].Password != "env-secret" {
+		t.Fatalf("user_db.Password = %q, want env-secret", cfg.Postgre["user_db"].Password)
+	}
+	if cfg.Postgre["user_db"].MaxOpenConns != 30 {
+		t.Fatalf("user_db.MaxOpenConns = %d, want 30", cfg.Postgre["user_db"].MaxOpenConns)
 	}
 }
 
@@ -168,26 +171,25 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
 	}
 
 	cfg = loadConfigFromYAML(t, configYAMLWithSection(`redis:
-  addr: 127.0.0.1:6379
-  db: 2
-  dial_timeout: 5s
-  read_timeout: 3s
-  write_timeout: 3s`))
-	if cfg.Redis.Username != "" {
-		t.Fatalf("Redis.Username = %q, want empty", cfg.Redis.Username)
+  cache_redis:
+    addr: 127.0.0.1:6379
+    db: 2
+    dial_timeout: 5s
+    read_timeout: 3s
+    write_timeout: 3s`))
+	if cfg.Redis["cache_redis"].Username != "" {
+		t.Fatalf("Redis.Username = %q, want empty", cfg.Redis["cache_redis"].Username)
 	}
-	if cfg.Redis.Password != "" {
-		t.Fatalf("Redis.Password = %q, want empty", cfg.Redis.Password)
+	if cfg.Redis["cache_redis"].Password != "" {
+		t.Fatalf("Redis.Password = %q, want empty", cfg.Redis["cache_redis"].Password)
 	}
 
-	cfg = loadConfigFromYAML(t, configYAMLWithSection(`database:
-  postgres:
+	cfg = loadConfigFromYAML(t, configYAMLWithSection(`postgre:
+  user_db:
     host: 127.0.0.1
     port: 15432
     username: aegiscore
-    user_db_name: aegiscore_user
-    pay_db_name: aegiscore_pay
-    common_db_name: aegiscore_common
+    db_name: aegiscore_user
     driver: pgx
     sslmode: disable
     max_open_conns: 20
@@ -195,42 +197,65 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
     conn_max_lifetime: 45m
     conn_max_idle_time: 12m
     ping_timeout: 7s`))
-	if cfg.Database.Postgres.Password != "" {
-		t.Fatalf("Postgres.Password = %q, want empty", cfg.Database.Postgres.Password)
-	}
-
-	cfg = loadConfigFromYAML(t, configYAMLWithSection(`database:
-  postgres:
-    host: 127.0.0.1
-    port: 15432
-    username: aegiscore
-    user_db_name: aegiscore_user
-    common_db_name: aegiscore_common
-    driver: pgx
-    sslmode: disable
-    max_open_conns: 20
-    max_idle_conns: 4
-    conn_max_lifetime: 45m
-    conn_max_idle_time: 12m
-    ping_timeout: 7s`))
-	if cfg.Database.Postgres.PayDBName != "" {
-		t.Fatalf("Postgres.PayDBName = %q, want empty", cfg.Database.Postgres.PayDBName)
+	if cfg.Postgre["user_db"].Password != "" {
+		t.Fatalf("Postgres.Password = %q, want empty", cfg.Postgre["user_db"].Password)
 	}
 	if _, ok := cfg.Postgres("pay_db"); ok {
 		t.Fatal("Postgres(pay_db) ok = true")
 	}
 }
 
+func TestLoadYAMLMergeForNamedDatastores(t *testing.T) {
+	cfg := loadConfigFromYAML(t, explicitConfigYAML())
+
+	if got := cfg.Redis["queue_redis"].DialTimeout; got != 10*time.Second {
+		t.Fatalf("queue_redis.DialTimeout = %s, want 10s", got)
+	}
+	if got := cfg.Redis["queue_redis"].ReadTimeout; got != 3*time.Second {
+		t.Fatalf("queue_redis.ReadTimeout = %s, want 3s", got)
+	}
+	if got := cfg.Postgre["user_db"].MaxOpenConns; got != 20 {
+		t.Fatalf("user_db.MaxOpenConns = %d, want 20", got)
+	}
+	if got := cfg.Postgre["pay_db"].MaxOpenConns; got != 25 {
+		t.Fatalf("pay_db.MaxOpenConns = %d, want 25", got)
+	}
+}
+
 func TestPostgresNamedDatabaseDSNs(t *testing.T) {
-	cfg := loadConfigFromYAML(t, configYAMLWithSection(`database:
-  postgres:
+	cfg := loadConfigFromYAML(t, configYAMLWithSection(`postgre:
+  user_db:
     host: db.example.internal
     port: 15432
     username: user@example.com
     password: p@ss/w:rd
-    user_db_name: user_db
-    pay_db_name: pay_db
-    common_db_name: common_db
+    db_name: user_db
+    driver: pgx
+    sslmode: disable
+    max_open_conns: 20
+    max_idle_conns: 4
+    conn_max_lifetime: 45m
+    conn_max_idle_time: 12m
+    ping_timeout: 7s
+  common_db:
+    host: db.example.internal
+    port: 15432
+    username: user@example.com
+    password: p@ss/w:rd
+    db_name: common_db
+    driver: pgx
+    sslmode: disable
+    max_open_conns: 20
+    max_idle_conns: 4
+    conn_max_lifetime: 45m
+    conn_max_idle_time: 12m
+    ping_timeout: 7s
+  pay_db:
+    host: db.example.internal
+    port: 15432
+    username: user@example.com
+    password: p@ss/w:rd
+    db_name: pay_db
     driver: pgx
     sslmode: disable
     max_open_conns: 20
@@ -286,6 +311,20 @@ func TestPostgresNamedDatabaseDSNs(t *testing.T) {
 	}
 }
 
+func TestRedisConfigLookup(t *testing.T) {
+	cfg := loadConfigFromYAML(t, explicitConfigYAML())
+	redisCfg, ok := cfg.RedisConfig("cache_redis")
+	if !ok {
+		t.Fatal("RedisConfig(cache_redis) ok = false")
+	}
+	if redisCfg.Addr != "127.0.0.1:6379" {
+		t.Fatalf("Addr = %q, want 127.0.0.1:6379", redisCfg.Addr)
+	}
+	if _, ok := cfg.RedisConfig("missing_redis"); ok {
+		t.Fatal("RedisConfig(missing_redis) ok = true")
+	}
+}
+
 func explicitConfigYAML() string {
 	return `app:
   name: aegiscore-test
@@ -305,31 +344,47 @@ log:
   level: info
   format: json
 
-redis:
+.redis_base: &redis_base
   addr: 127.0.0.1:6379
   username: ""
   password: ""
-  db: 2
   dial_timeout: 5s
   read_timeout: 3s
   write_timeout: 3s
 
-database:
-  postgres:
-    host: 127.0.0.1
-    port: 15432
-    username: aegiscore
-    password: secret
-    user_db_name: aegiscore_user
-    pay_db_name: aegiscore_pay
-    common_db_name: aegiscore_common
-    driver: pgx
-    sslmode: disable
+.postgre_base: &postgre_base
+  host: 127.0.0.1
+  port: 15432
+  username: aegiscore
+  password: secret
+  driver: pgx
+  sslmode: disable
+  max_open_conns: 25
+  max_idle_conns: 4
+  conn_max_lifetime: 45m
+  conn_max_idle_time: 12m
+  ping_timeout: 7s
+
+redis:
+  cache_redis:
+    <<: *redis_base
+    db: 2
+  queue_redis:
+    <<: *redis_base
+    db: 1
+    dial_timeout: 10s
+
+postgre:
+  user_db:
+    <<: *postgre_base
+    db_name: aegiscore_user
     max_open_conns: 20
-    max_idle_conns: 4
-    conn_max_lifetime: 45m
-    conn_max_idle_time: 12m
-    ping_timeout: 7s
+  pay_db:
+    <<: *postgre_base
+    db_name: aegiscore_pay
+  common_db:
+    <<: *postgre_base
+    db_name: aegiscore_common
 `
 }
 
@@ -351,22 +406,21 @@ func configYAMLWithSection(section string) string {
   level: info
   format: json`,
 		"redis": `redis:
-  addr: 127.0.0.1:6379
-  username: ""
-  password: ""
-  db: 2
-  dial_timeout: 5s
-  read_timeout: 3s
-  write_timeout: 3s`,
-		"database": `database:
-  postgres:
+  cache_redis:
+    addr: 127.0.0.1:6379
+    username: ""
+    password: ""
+    db: 2
+    dial_timeout: 5s
+    read_timeout: 3s
+    write_timeout: 3s`,
+		"postgre": `postgre:
+  user_db:
     host: 127.0.0.1
     port: 15432
     username: aegiscore
     password: secret
-    user_db_name: aegiscore_user
-    pay_db_name: aegiscore_pay
-    common_db_name: aegiscore_common
+    db_name: aegiscore_user
     driver: pgx
     sslmode: disable
     max_open_conns: 20
@@ -381,7 +435,8 @@ func configYAMLWithSection(section string) string {
 			break
 		}
 	}
-	return fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n", sections["app"], sections["http"], sections["log"], sections["redis"], sections["database"])
+	ordered := []string{sections["app"], sections["http"], sections["log"], sections["redis"], sections["postgre"]}
+	return fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n", ordered[0], ordered[1], ordered[2], ordered[3], ordered[4])
 }
 
 func loadConfigFromYAML(t *testing.T, content string) *Config {

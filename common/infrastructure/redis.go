@@ -11,15 +11,19 @@ import (
 	"go.uber.org/fx"
 )
 
-func NewRedisClient(lc fx.Lifecycle, cfg *config.Config, log *slog.Logger) (*redis.Client, error) {
+func NewRedisClient(lc fx.Lifecycle, cfg *config.Config, log *slog.Logger, name string) (*redis.Client, error) {
+	redisCfg, ok := cfg.RedisConfig(name)
+	if !ok {
+		return nil, fmt.Errorf("redis config %q not found", name)
+	}
 	client := redis.NewClient(&redis.Options{
-		Addr:         cfg.Redis.Addr,
-		Username:     cfg.Redis.Username,
-		Password:     cfg.Redis.Password,
-		DB:           cfg.Redis.DB,
-		DialTimeout:  cfg.Redis.DialTimeout,
-		ReadTimeout:  cfg.Redis.ReadTimeout,
-		WriteTimeout: cfg.Redis.WriteTimeout,
+		Addr:         redisCfg.Addr,
+		Username:     redisCfg.Username,
+		Password:     redisCfg.Password,
+		DB:           redisCfg.DB,
+		DialTimeout:  redisCfg.DialTimeout,
+		ReadTimeout:  redisCfg.ReadTimeout,
+		WriteTimeout: redisCfg.WriteTimeout,
 	})
 
 	lc.Append(fx.Hook{
@@ -27,16 +31,16 @@ func NewRedisClient(lc fx.Lifecycle, cfg *config.Config, log *slog.Logger) (*red
 			pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 			if err := client.Ping(pingCtx).Err(); err != nil {
-				return fmt.Errorf("ping redis: %w", err)
+				return fmt.Errorf("ping redis %s: %w", name, err)
 			}
-			log.InfoContext(ctx, "redis connected", slog.String("addr", cfg.Redis.Addr))
+			log.InfoContext(ctx, "redis connected", slog.String("name", name), slog.String("addr", redisCfg.Addr))
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			if err := client.Close(); err != nil {
-				return fmt.Errorf("close redis: %w", err)
+				return fmt.Errorf("close redis %s: %w", name, err)
 			}
-			log.InfoContext(ctx, "redis closed")
+			log.InfoContext(ctx, "redis closed", slog.String("name", name))
 			return nil
 		},
 	})
