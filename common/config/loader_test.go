@@ -56,53 +56,89 @@ func TestLoadExplicitConfig(t *testing.T) {
 	}
 }
 
-func TestLoadRequiresPrimaryConfigFields(t *testing.T) {
-	tests := []struct {
-		name     string
-		override string
-		wantErr  string
-	}{
-		{name: "app name", override: "app:\n  environment: test", wantErr: "app.name is required"},
-		{name: "http host", override: "http:\n  port: 18080\n  read_timeout: 10s\n  write_timeout: 10s\n  idle_timeout: 60s\n  shutdown_timeout: 10s\n  trusted_proxies:\n    - 127.0.0.1", wantErr: "http.host is required"},
-		{name: "log level", override: "log:\n  format: json", wantErr: "log.level is required"},
-		{name: "redis addr", override: "redis:\n  username: \"\"\n  password: \"\"\n  db: 0\n  dial_timeout: 5s\n  read_timeout: 3s\n  write_timeout: 3s", wantErr: "redis.addr is required"},
-		{name: "postgres host", override: "database:\n  postgres:\n    port: 15432\n    username: aegiscore\n    password: secret\n    user_db_name: aegiscore_user\n    pay_db_name: aegiscore_pay\n    common_db_name: aegiscore_common\n    driver: pgx\n    sslmode: disable\n    max_open_conns: 20\n    max_idle_conns: 4\n    conn_max_lifetime: 45m\n    conn_max_idle_time: 12m\n    ping_timeout: 7s", wantErr: "database.postgres.host is required"},
-	}
+func TestLoadDoesNotValidateMissingPrimaryConfigFields(t *testing.T) {
+	cfg := loadConfigFromYAML(t, `app:
+  environment: test
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := Load(writeTempConfig(t, configYAMLWithSection(tt.override)))
-			if err == nil {
-				t.Fatal("Load returned nil error")
-			}
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Fatalf("Load error = %q, want to contain %q", err.Error(), tt.wantErr)
-			}
-		})
+http:
+  port: 0
+
+log: {}
+
+redis:
+  db: 0
+
+database:
+  postgres:
+    port: 0
+`)
+
+	if cfg.App.Name != "" {
+		t.Fatalf("App.Name = %q, want empty", cfg.App.Name)
+	}
+	if cfg.HTTP.Host != "" {
+		t.Fatalf("HTTP.Host = %q, want empty", cfg.HTTP.Host)
+	}
+	if cfg.Redis.Addr != "" {
+		t.Fatalf("Redis.Addr = %q, want empty", cfg.Redis.Addr)
+	}
+	if cfg.Database.Postgres.UserDBName != "" {
+		t.Fatalf("UserDBName = %q, want empty", cfg.Database.Postgres.UserDBName)
+	}
+	if _, ok := cfg.Postgres("user_db"); ok {
+		t.Fatal("Postgres(user_db) ok = true")
 	}
 }
 
-func TestLoadRejectsInvalidConfigValues(t *testing.T) {
-	tests := []struct {
-		name     string
-		override string
-		wantErr  string
-	}{
-		{name: "http port", override: "http:\n  host: 127.0.0.1\n  port: 70000\n  read_timeout: 10s\n  write_timeout: 10s\n  idle_timeout: 60s\n  shutdown_timeout: 10s\n  trusted_proxies:\n    - 127.0.0.1", wantErr: "http.port must be at most 65535"},
-		{name: "redis db", override: "redis:\n  addr: 127.0.0.1:6379\n  username: \"\"\n  password: \"\"\n  db: -1\n  dial_timeout: 5s\n  read_timeout: 3s\n  write_timeout: 3s", wantErr: "redis.db must be at least 0"},
-		{name: "postgres max open conns", override: "database:\n  postgres:\n    host: 127.0.0.1\n    port: 15432\n    username: aegiscore\n    password: secret\n    user_db_name: aegiscore_user\n    pay_db_name: aegiscore_pay\n    common_db_name: aegiscore_common\n    driver: pgx\n    sslmode: disable\n    max_open_conns: 0\n    max_idle_conns: 4\n    conn_max_lifetime: 45m\n    conn_max_idle_time: 12m\n    ping_timeout: 7s", wantErr: "database.postgres.max_open_conns must be greater than 0"},
+func TestLoadDoesNotValidateInvalidBasicValues(t *testing.T) {
+	cfg := loadConfigFromYAML(t, configYAMLWithSection(`http:
+  host: 127.0.0.1
+  port: 70000
+  read_timeout: 0s
+  write_timeout: 0s
+  idle_timeout: 0s
+  shutdown_timeout: 0s`))
+	if cfg.HTTP.Port != 70000 {
+		t.Fatalf("HTTP.Port = %d, want 70000", cfg.HTTP.Port)
+	}
+	if cfg.HTTP.ReadTimeout != 0 {
+		t.Fatalf("HTTP.ReadTimeout = %s, want 0s", cfg.HTTP.ReadTimeout)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := Load(writeTempConfig(t, configYAMLWithSection(tt.override)))
-			if err == nil {
-				t.Fatal("Load returned nil error")
-			}
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Fatalf("Load error = %q, want to contain %q", err.Error(), tt.wantErr)
-			}
-		})
+	cfg = loadConfigFromYAML(t, configYAMLWithSection(`redis:
+  addr: 127.0.0.1:6379
+  db: -1
+  dial_timeout: 0s
+  read_timeout: 0s
+  write_timeout: 0s`))
+	if cfg.Redis.DB != -1 {
+		t.Fatalf("Redis.DB = %d, want -1", cfg.Redis.DB)
+	}
+	if cfg.Redis.DialTimeout != 0 {
+		t.Fatalf("Redis.DialTimeout = %s, want 0s", cfg.Redis.DialTimeout)
+	}
+
+	cfg = loadConfigFromYAML(t, configYAMLWithSection(`database:
+  postgres:
+    host: 127.0.0.1
+    port: 15432
+    username: aegiscore
+    password: secret
+    user_db_name: aegiscore_user
+    pay_db_name: aegiscore_pay
+    common_db_name: aegiscore_common
+    driver: pgx
+    sslmode: disable
+    max_open_conns: 0
+    max_idle_conns: 0
+    conn_max_lifetime: 0s
+    conn_max_idle_time: 0s
+    ping_timeout: 0s`))
+	if cfg.Database.Postgres.MaxOpenConns != 0 {
+		t.Fatalf("MaxOpenConns = %d, want 0", cfg.Database.Postgres.MaxOpenConns)
+	}
+	if cfg.Database.Postgres.PingTimeout != 0 {
+		t.Fatalf("PingTimeout = %s, want 0s", cfg.Database.Postgres.PingTimeout)
 	}
 }
 
@@ -161,6 +197,27 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
     ping_timeout: 7s`))
 	if cfg.Database.Postgres.Password != "" {
 		t.Fatalf("Postgres.Password = %q, want empty", cfg.Database.Postgres.Password)
+	}
+
+	cfg = loadConfigFromYAML(t, configYAMLWithSection(`database:
+  postgres:
+    host: 127.0.0.1
+    port: 15432
+    username: aegiscore
+    user_db_name: aegiscore_user
+    common_db_name: aegiscore_common
+    driver: pgx
+    sslmode: disable
+    max_open_conns: 20
+    max_idle_conns: 4
+    conn_max_lifetime: 45m
+    conn_max_idle_time: 12m
+    ping_timeout: 7s`))
+	if cfg.Database.Postgres.PayDBName != "" {
+		t.Fatalf("Postgres.PayDBName = %q, want empty", cfg.Database.Postgres.PayDBName)
+	}
+	if _, ok := cfg.Postgres("pay_db"); ok {
+		t.Fatal("Postgres(pay_db) ok = true")
 	}
 }
 

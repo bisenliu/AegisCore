@@ -9,62 +9,62 @@ import (
 
 // Config is the root configuration object for AegisCore services.
 type Config struct {
-	App      AppConfig      `mapstructure:"app" validate:"required"`
-	HTTP     HTTPConfig     `mapstructure:"http" validate:"required"`
-	Log      LogConfig      `mapstructure:"log" validate:"required"`
-	Redis    RedisConfig    `mapstructure:"redis" validate:"required"`
-	Database DatabaseConfig `mapstructure:"database" validate:"required"`
+	App      AppConfig      `mapstructure:"app"`
+	HTTP     HTTPConfig     `mapstructure:"http"`
+	Log      LogConfig      `mapstructure:"log"`
+	Redis    RedisConfig    `mapstructure:"redis"`
+	Database DatabaseConfig `mapstructure:"database"`
 }
 
 type AppConfig struct {
-	Name        string `mapstructure:"name" validate:"required"`
-	Environment string `mapstructure:"environment" validate:"required"`
+	Name        string `mapstructure:"name"`
+	Environment string `mapstructure:"environment"`
 }
 
 type HTTPConfig struct {
-	Host            string        `mapstructure:"host" validate:"required"`
-	Port            int           `mapstructure:"port" validate:"min=1,max=65535"`
-	ReadTimeout     time.Duration `mapstructure:"read_timeout" validate:"gt=0"`
-	WriteTimeout    time.Duration `mapstructure:"write_timeout" validate:"gt=0"`
-	IdleTimeout     time.Duration `mapstructure:"idle_timeout" validate:"gt=0"`
-	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout" validate:"gt=0"`
+	Host            string        `mapstructure:"host"`
+	Port            int           `mapstructure:"port"`
+	ReadTimeout     time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
+	IdleTimeout     time.Duration `mapstructure:"idle_timeout"`
+	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
 	TrustedProxies  []string      `mapstructure:"trusted_proxies"`
 }
 
 type LogConfig struct {
-	Level  string `mapstructure:"level" validate:"required"`
-	Format string `mapstructure:"format" validate:"required"`
+	Level  string `mapstructure:"level"`
+	Format string `mapstructure:"format"`
 }
 
 type RedisConfig struct {
-	Addr         string        `mapstructure:"addr" validate:"required"`
+	Addr         string        `mapstructure:"addr"`
 	Username     string        `mapstructure:"username"`
 	Password     string        `mapstructure:"password"`
-	DB           int           `mapstructure:"db" validate:"min=0"`
-	DialTimeout  time.Duration `mapstructure:"dial_timeout" validate:"gt=0"`
-	ReadTimeout  time.Duration `mapstructure:"read_timeout" validate:"gt=0"`
-	WriteTimeout time.Duration `mapstructure:"write_timeout" validate:"gt=0"`
+	DB           int           `mapstructure:"db"`
+	DialTimeout  time.Duration `mapstructure:"dial_timeout"`
+	ReadTimeout  time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout time.Duration `mapstructure:"write_timeout"`
 }
 
 type DatabaseConfig struct {
-	Postgres PostgresConfig `mapstructure:"postgres" validate:"required"`
+	Postgres PostgresConfig `mapstructure:"postgres"`
 }
 
 type PostgresConfig struct {
-	Host            string        `mapstructure:"host" validate:"required"`
-	Port            int           `mapstructure:"port" validate:"min=1,max=65535"`
-	Username        string        `mapstructure:"username" validate:"required"`
+	Host            string        `mapstructure:"host"`
+	Port            int           `mapstructure:"port"`
+	Username        string        `mapstructure:"username"`
 	Password        string        `mapstructure:"password"`
-	UserDBName      string        `mapstructure:"user_db_name" validate:"required"`
-	PayDBName       string        `mapstructure:"pay_db_name" validate:"required"`
-	CommonDBName    string        `mapstructure:"common_db_name" validate:"required"`
-	Driver          string        `mapstructure:"driver" validate:"required"`
-	SSLMode         string        `mapstructure:"sslmode" validate:"required"`
-	MaxOpenConns    int           `mapstructure:"max_open_conns" validate:"gt=0"`
-	MaxIdleConns    int           `mapstructure:"max_idle_conns" validate:"gt=0"`
-	ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime" validate:"gt=0"`
-	ConnMaxIdleTime time.Duration `mapstructure:"conn_max_idle_time" validate:"gt=0"`
-	PingTimeout     time.Duration `mapstructure:"ping_timeout" validate:"gt=0"`
+	UserDBName      string        `mapstructure:"user_db_name"`
+	PayDBName       string        `mapstructure:"pay_db_name"`
+	CommonDBName    string        `mapstructure:"common_db_name"`
+	Driver          string        `mapstructure:"driver"`
+	SSLMode         string        `mapstructure:"sslmode"`
+	MaxOpenConns    int           `mapstructure:"max_open_conns"`
+	MaxIdleConns    int           `mapstructure:"max_idle_conns"`
+	ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime"`
+	ConnMaxIdleTime time.Duration `mapstructure:"conn_max_idle_time"`
+	PingTimeout     time.Duration `mapstructure:"ping_timeout"`
 }
 
 type PostgresDatabaseConfig struct {
