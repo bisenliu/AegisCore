@@ -34,8 +34,10 @@ func NewPostgresPools(lc fx.Lifecycle, cfg *config.Config, log *slog.Logger) (Po
 		return PostgresPools{}, err
 	}
 
-	registerDBLifecycle(lc, log, UserDBName, userDB, cfg.Database.Postgres[UserDBName])
-	registerDBLifecycle(lc, log, CommonDBName, commonDB, cfg.Database.Postgres[CommonDBName])
+	userDBCfg, _ := cfg.Postgres(UserDBName)
+	commonDBCfg, _ := cfg.Postgres(CommonDBName)
+	registerDBLifecycle(lc, log, UserDBName, userDB, userDBCfg)
+	registerDBLifecycle(lc, log, CommonDBName, commonDB, commonDBCfg)
 
 	return PostgresPools{UserDB: userDB, CommonDB: commonDB}, nil
 }
@@ -56,7 +58,7 @@ func openPostgres(cfg *config.Config, name string) (*sql.DB, error) {
 	return db, nil
 }
 
-func registerDBLifecycle(lc fx.Lifecycle, log *slog.Logger, name string, db *sql.DB, cfg config.PostgresConfig) {
+func registerDBLifecycle(lc fx.Lifecycle, log *slog.Logger, name string, db *sql.DB, cfg config.PostgresDatabaseConfig) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			pingCtx, cancel := context.WithTimeout(ctx, cfg.PingTimeout)

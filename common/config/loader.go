@@ -65,35 +65,57 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("redis.dial_timeout", "5s")
 	v.SetDefault("redis.read_timeout", "3s")
 	v.SetDefault("redis.write_timeout", "3s")
+	v.SetDefault("database.postgres.driver", "pgx")
+	v.SetDefault("database.postgres.port", 5432)
+	v.SetDefault("database.postgres.sslmode", "disable")
+	v.SetDefault("database.postgres.max_open_conns", 25)
+	v.SetDefault("database.postgres.max_idle_conns", 5)
+	v.SetDefault("database.postgres.conn_max_lifetime", "30m")
+	v.SetDefault("database.postgres.conn_max_idle_time", "10m")
+	v.SetDefault("database.postgres.ping_timeout", "5s")
 }
 
 func applyDefaults(cfg *Config) error {
-	if cfg.Database.Postgres == nil {
-		cfg.Database.Postgres = make(map[string]PostgresConfig)
+	db := cfg.Database.Postgres
+	if db.Driver == "" {
+		db.Driver = "pgx"
 	}
-	for name, db := range cfg.Database.Postgres {
-		if db.Driver == "" {
-			db.Driver = "pgx"
-		}
-		if db.MaxOpenConns == 0 {
-			db.MaxOpenConns = 25
-		}
-		if db.MaxIdleConns == 0 {
-			db.MaxIdleConns = 5
-		}
-		if db.ConnMaxLifetime == 0 {
-			db.ConnMaxLifetime = 30 * time.Minute
-		}
-		if db.ConnMaxIdleTime == 0 {
-			db.ConnMaxIdleTime = 10 * time.Minute
-		}
-		if db.PingTimeout == 0 {
-			db.PingTimeout = 5 * time.Second
-		}
-		if db.DSN == "" {
-			return fmt.Errorf("database.postgres.%s.dsn is required", name)
-		}
-		cfg.Database.Postgres[name] = db
+	if db.Port == 0 {
+		db.Port = 5432
 	}
+	if db.SSLMode == "" {
+		db.SSLMode = "disable"
+	}
+	if db.MaxOpenConns == 0 {
+		db.MaxOpenConns = 25
+	}
+	if db.MaxIdleConns == 0 {
+		db.MaxIdleConns = 5
+	}
+	if db.ConnMaxLifetime == 0 {
+		db.ConnMaxLifetime = 30 * time.Minute
+	}
+	if db.ConnMaxIdleTime == 0 {
+		db.ConnMaxIdleTime = 10 * time.Minute
+	}
+	if db.PingTimeout == 0 {
+		db.PingTimeout = 5 * time.Second
+	}
+	if db.Host == "" {
+		return fmt.Errorf("database.postgres.host is required")
+	}
+	if db.Port < 1 || db.Port > 65535 {
+		return fmt.Errorf("database.postgres.port must be between 1 and 65535")
+	}
+	if db.Username == "" {
+		return fmt.Errorf("database.postgres.username is required")
+	}
+	if db.UserDBName == "" {
+		return fmt.Errorf("database.postgres.user_db_name is required")
+	}
+	if db.CommonDBName == "" {
+		return fmt.Errorf("database.postgres.common_db_name is required")
+	}
+	cfg.Database.Postgres = db
 	return nil
 }
