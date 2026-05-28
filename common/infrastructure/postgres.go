@@ -11,42 +11,20 @@ import (
 	"go.uber.org/fx"
 )
 
-const (
-	UserDBName   = "user_db"
-	CommonDBName = "common_db"
-)
-
-type PostgresPools struct {
-	fx.Out
-
-	UserDB   *sql.DB `name:"user_db"`
-	CommonDB *sql.DB `name:"common_db"`
-}
-
-func NewPostgresPools(lc fx.Lifecycle, cfg *config.Config, log *slog.Logger) (PostgresPools, error) {
-	userDB, err := openPostgres(cfg, UserDBName)
-	if err != nil {
-		return PostgresPools{}, err
-	}
-	commonDB, err := openPostgres(cfg, CommonDBName)
-	if err != nil {
-		_ = userDB.Close()
-		return PostgresPools{}, err
-	}
-
-	userDBCfg, _ := cfg.Postgres(UserDBName)
-	commonDBCfg, _ := cfg.Postgres(CommonDBName)
-	registerDBLifecycle(lc, log, UserDBName, userDB, userDBCfg)
-	registerDBLifecycle(lc, log, CommonDBName, commonDB, commonDBCfg)
-
-	return PostgresPools{UserDB: userDB, CommonDB: commonDB}, nil
-}
-
-func openPostgres(cfg *config.Config, name string) (*sql.DB, error) {
+func NewPostgres(lc fx.Lifecycle, cfg *config.Config, log *slog.Logger, name string) (*sql.DB, error) {
 	dbCfg, ok := cfg.Postgres(name)
 	if !ok {
 		return nil, fmt.Errorf("postgres config %q not found", name)
 	}
+	db, err := openPostgres(name, dbCfg)
+	if err != nil {
+		return nil, err
+	}
+	registerDBLifecycle(lc, log, name, db, dbCfg)
+	return db, nil
+}
+
+func openPostgres(name string, dbCfg config.PostgresDatabaseConfig) (*sql.DB, error) {
 	db, err := sql.Open(dbCfg.Driver, dbCfg.DSN)
 	if err != nil {
 		return nil, fmt.Errorf("open postgres %s: %w", name, err)

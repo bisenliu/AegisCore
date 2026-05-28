@@ -7,6 +7,5 @@ var Module = fx.Module("aegiscore-common-infrastructure",
 		NewConfig,
 		NewLogger,
 		NewRedisClient,
-		NewPostgresPools,
 	),
 )
