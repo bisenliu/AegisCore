@@ -1,0 +1,64 @@
+# Architecture
+
+## 1. Overview
+
+AegisCore 当前是 Go workspace，包含共享基础设施模块 `common` 和用户服务模块 `user-services`。用户服务通过 Cobra 提供 CLI 命令，通过 Uber Fx 组装依赖，通过 Gin 提供 HTTP API，通过 Ent 访问 PostgreSQL。
+
+## 2. Module Boundaries
+
+| 模块 | 责任 | 关键位置 |
+|---|---|---|
+| `common` | 跨服务共享配置、日志、数据库、Redis、HTTP 中间件、响应信封、错误模型 | `common/config/`, `common/infrastructure/`, `common/middleware/`, `common/response/` |
+| `user-services` | 用户服务运行时、用户 HTTP API、用户领域访问 | `user-services/cmd/`, `user-services/internal/`, `user-services/ent/` |
+| `openspec` | OPSX/OpenSpec 规则、主规格和后续变更 artifacts | `openspec/config.yaml`, `openspec/specs/` |
+
+## 3. Runtime Flow
+
+1. `user-services/cmd/main.go` 创建 `aegiscore-user-services` CLI，并注册 `serve` 子命令。
+2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
+3. `common/infrastructure.Module` 提供配置、日志、Redis、Postgres 连接池。
+4. `user-services/internal/bootstrap.Module` 提供 Ent clients、repository、service、controller、Gin engine、HTTP server。
+5. `RegisterRoutes` 将 `/healthz` 和 `/api/v1/users/:id` 注册到 Gin engine。
+6. Fx 生命周期启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
+
+## 4. HTTP Request Flow
+
+| 步骤 | 代码位置 | 行为 |
+|---|---|---|
+| 中间件链 | `user-services/internal/bootstrap/bootstrap.go` | 注册 request id、panic recovery、request logging、CORS |
+| 路由匹配 | `user-services/internal/router/router.go` | 匹配 `/healthz` 或 `/api/v1/users/:id` |
+| 参数解析 | `user-services/internal/controller/user_controller.go` | 将 path id 解析为 `int64` 并校验 `gt=0` |
+| 业务调用 | `user-services/internal/service/user_service.go` | 调用 repository 并映射为 `dto.UserResponse` |
+| 数据访问 | `user-services/internal/repository/user_repository.go` | 使用 Ent client 查询用户，not found 转为应用错误 |
+| 响应输出 | `common/response/response.go` | 统一输出 `success/code/message/data` 信封 |
+
+## 5. Data Model
+
+`user-services/ent/schema/user.go` 定义当前用户模型：
+
+| 字段 | 约束 |
+|---|---|
+| `id` | `int64`、唯一、不可变 |
+| `name` | 非空、最大 128 |
+| `email` | 非空、唯一、最大 255 |
+| `active` | 默认 `true` |
+| `created_at` | 默认当前时间、不可变 |
+| `updated_at` | 默认当前时间、更新时自动刷新 |
+
+## 6. Infrastructure
+
+- 配置加载由 `common/config/loader.go` 负责，支持 YAML 文件和 `AEGISCORE_` 环境变量覆盖。
+- PostgreSQL 连接池由 `common/infrastructure/postgres.go` 创建，当前要求 `user_db` 和 `common_db` 都存在。
+- Redis client 由 `common/infrastructure/redis.go` 创建，并在启动时执行 ping。
+- Ent clients 由 `user-services/internal/entclient/provider.go` 基于具名 `*sql.DB` 构建。
+- 日志基于 `log/slog`，由 `common/logger` 与 `common/infrastructure/logger.go` 提供。
+
+## 7. Generated Code
+
+`user-services/ent/` 大多是 Ent 生成代码。业务变更应优先修改 `user-services/ent/schema/`，然后运行 `go generate ./ent` 重新生成。不要直接编辑生成代码来表达领域变更。
+
+## 8. Current Constraints
+
+- 当前 HTTP API 只暴露健康检查和按 ID 查询用户。
+- 配置样例包含 `pay_db`，但当前共享基础设施只打开 `user_db` 和 `common_db`。
+- 启动服务需要 PostgreSQL 和 Redis 可连接；本地纯单元测试应避免依赖真实外部服务，或显式说明集成测试要求。

@@ -1,0 +1,66 @@
+# shared-infrastructure
+
+## Purpose
+
+共享基础设施能力为服务提供一致的配置加载、结构化日志、Redis client、PostgreSQL 连接池和 Ent client 装配，减少各服务重复实现运行时基础能力。
+
+## Requirements
+
+### Requirement: Load configuration from YAML and environment
+
+系统必须从 YAML 配置文件加载运行时配置，并支持 `AEGISCORE_` 前缀的环境变量覆盖。
+
+#### Scenario: Load explicit config file
+- **Given** 调用方提供配置文件路径
+- **When** `common/config.Load` 被调用
+- **Then** 系统读取该 YAML 文件
+- **Then** 系统应用默认值并反序列化为 `config.Config`
+- **Then** 系统验证配置结构
+
+#### Scenario: Override config with environment variable
+- **Given** 环境变量使用 `AEGISCORE_` 前缀
+- **When** 环境变量 key 对应配置路径中的 `.` 或 `-`
+- **Then** 系统将其映射为 `_` 并覆盖配置值
+
+#### Scenario: Missing PostgreSQL DSN fails validation
+- **Given** 配置中存在某个 PostgreSQL 数据库项但缺少 `dsn`
+- **When** 系统应用数据库默认值
+- **Then** 配置加载返回错误，指出对应 `database.postgres.<name>.dsn` 必填
+
+### Requirement: Provide shared runtime dependencies through Fx
+
+系统必须通过 `common/infrastructure.Module` 提供配置、日志、Redis 和 PostgreSQL 连接池。
+
+#### Scenario: Provide common dependencies
+- **Given** Fx app 包含 `common/infrastructure.Module`
+- **When** Fx 解析依赖
+- **Then** module 提供 `*config.Config`、`*slog.Logger`、`*redis.Client` 和具名 PostgreSQL 连接池
+
+#### Scenario: Register PostgreSQL lifecycle
+- **Given** 配置中存在 `user_db` 和 `common_db`
+- **When** Fx app 启动
+- **Then** 系统创建两个具名 `*sql.DB` 连接池
+- **Then** 启动时 ping 每个数据库
+- **Then** 停止时关闭每个数据库连接池
+
+#### Scenario: Register Redis lifecycle
+- **Given** 配置中存在 Redis 地址和超时设置
+- **When** Fx app 启动
+- **Then** 系统创建 Redis client 并执行 ping
+- **Then** Fx app 停止时关闭 Redis client
+
+### Requirement: Provide service-specific Ent clients
+
+系统必须为用户服务基于共享 PostgreSQL 连接池创建 Ent clients。
+
+#### Scenario: Create named Ent clients
+- **Given** Fx 容器中存在具名 `user_db` 和 `common_db` PostgreSQL 连接池
+- **When** `user-services/internal/entclient.NewClients` 被调用
+- **Then** 系统创建具名 `user_db` Ent client
+- **Then** 系统创建具名 `common_db` Ent client
+- **Then** Fx app 停止时关闭 Ent clients
+
+#### Scenario: Repository receives user database client
+- **Given** 用户 repository 需要访问用户数据
+- **When** Fx 构造 `UserRepository`
+- **Then** repository 接收具名 `user_db` Ent client，而不是直接打开数据库连接
