@@ -1,0 +1,53 @@
+app:
+  name: aegiscore-user-services
+  environment: local
+
+http:
+  host: 0.0.0.0
+  port: 8080
+  read_timeout: 10s
+  write_timeout: 10s
+  idle_timeout: 60s
+  shutdown_timeout: 10s
+  trusted_proxies:
+    - 127.0.0.1
+
+log:
+  level: info
+  format: json
+
+redis:
+  addr: 127.0.0.1:6379
+  username: ""
+  password: ""
+  db: 0
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+
+database:
+  postgres:
+    user_db:
+      driver: pgx
+      dsn: postgres://aegiscore:aegiscore@127.0.0.1:5432/aegiscore_user?sslmode=disable
+      max_open_conns: 25
+      max_idle_conns: 5
+      conn_max_lifetime: 30m
+      conn_max_idle_time: 10m
+      ping_timeout: 5s
+    common_db:
+      driver: pgx
+      dsn: postgres://aegiscore:aegiscore@127.0.0.1:5432/aegiscore_common?sslmode=disable
+      max_open_conns: 15
+      max_idle_conns: 5
+      conn_max_lifetime: 30m
+      conn_max_idle_time: 10m
+      ping_timeout: 5s
+    pay_db:
+      driver: pgx
+      dsn: postgres://aegiscore:aegiscore@127.0.0.1:5432/aegiscore_pay?sslmode=disable
+      max_open_conns: 15
+      max_idle_conns: 5
+      conn_max_lifetime: 30m
+      conn_max_idle_time: 10m
+      ping_timeout: 5s

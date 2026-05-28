@@ -1,0 +1,59 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/aegiscore/user-services/internal/bootstrap"
+	"github.com/spf13/cobra"
+)
+
+func main() {
+	if err := newRootCommand().Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func newRootCommand() *cobra.Command {
+	var configPath string
+
+	root := &cobra.Command{
+		Use:   "aegiscore-user-services",
+		Short: "AegisCore user services runtime",
+	}
+
+	serve := &cobra.Command{
+		Use:   "serve",
+		Short: "Start the AegisCore user services HTTP server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runServe(cmd.Context(), configPath)
+		},
+	}
+	serve.Flags().StringVar(&configPath, "config", "./configs/config.yaml", "path to YAML configuration file")
+	root.AddCommand(serve)
+
+	return root
+}
+
+func runServe(ctx context.Context, configPath string) error {
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	app := bootstrap.NewApp(configPath)
+	startCtx, cancelStart := context.WithTimeout(ctx, 15*time.Second)
+	defer cancelStart()
+	if err := app.Start(startCtx); err != nil {
+		return err
+	}
+
+	<-ctx.Done()
+
+	stopCtx, cancelStop := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelStop()
+	return app.Stop(stopCtx)
+}

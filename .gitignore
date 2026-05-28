@@ -1,0 +1,63 @@
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+*.wasm
+
+# Test binaries
+*_test
+
+# Build output
+/bin/
+/pkg/
+
+# Dependency directories
+/vendor/
+
+# Environment-specific files
+.env
+.env.*
+
+# Editor and IDE specific files
+.idea
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db # Windows specific
+.codebuddy
+.kiro
+
+# Log files
+*.log
+logs
+
+# Coverage files
+*.out
+
+# pb files
+*pb.go
+services/main
+
+# Configuration files
+services/configs/app.yaml
+services/configs/app.yaml.docker
+
+# Logs
+logs/
+*.log
+
+# Binaries
+bin/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+.agent
+.codex
+.kilocode
