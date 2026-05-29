@@ -31,6 +31,7 @@ func NewApp(configPath string) *fx.App {
 var Module = fx.Module("aegiscore-user-services",
 	fx.Provide(
 		NewPostgresPools,
+		NewRedisClients,
 		entclient.NewClients,
 		repository.NewUserRepository,
 		service.NewUserService,

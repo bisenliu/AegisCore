@@ -8,32 +8,31 @@
 
 ### Requirement: Load configuration from YAML and environment
 
-系统必须从 YAML 配置文件加载运行时配置，并支持 `AEGISCORE_` 前缀的环境变量覆盖。主要运行时配置必须由 YAML 或环境变量显式提供，系统不得通过代码默认值补齐缺失的主要配置。配置结构体必须声明必填/可选和基础取值范围校验规则，配置加载必须优先通过结构体验证执行字段校验。Redis 与 PostgreSQL 配置必须支持按名称声明多个实例；PostgreSQL 配置必须按实例声明连接参数和数据库名称字段，而不是通过共享字段加固定数据库名字段或完整 DSN 表达。
+系统必须从 YAML 配置文件加载运行时配置，并支持 `AEGISCORE_` 前缀的环境变量覆盖。配置加载必须将 YAML 与环境变量覆盖反序列化为 `config.Config`，但不得执行 required/optional、字段存在性或基础取值范围校验。Redis 与 PostgreSQL 配置必须支持按名称声明多个实例；PostgreSQL 配置必须按实例声明连接参数和数据库名称字段，而不是通过共享字段加固定数据库名字段或完整 DSN 表达。
 
 #### Scenario: Load explicit config file
 - **Given** 调用方提供配置文件路径
 - **When** `common/config.Load` 被调用
 - **Then** 系统读取该 YAML 文件
 - **Then** 系统将 YAML 与 `AEGISCORE_` 环境变量覆盖反序列化为 `config.Config`
-- **Then** 系统通过配置结构体上的校验规则验证配置结构
+- **Then** 系统不得执行 required/optional、字段存在性或基础范围校验
 
 #### Scenario: Override config with environment variable
 - **Given** 环境变量使用 `AEGISCORE_` 前缀
 - **When** 环境变量 key 对应配置路径中的 `.` 或 `-`
 - **Then** 系统将其映射为 `_` 并覆盖配置值
 
-#### Scenario: Missing primary configuration fails validation
+#### Scenario: Missing primary configuration is not rejected by config loader
 - **Given** YAML 和环境变量未显式提供 app、HTTP、log、Redis 命名实例或 PostgreSQL 命名实例的主要运行时配置字段
 - **When** `common/config.Load` 被调用
-- **Then** 配置加载必须返回错误，指出缺失或无效的配置字段
-- **Then** 服务启动必须在依赖初始化前失败
+- **Then** 配置加载不得仅因为字段缺失、为空或为零值而返回校验错误
+- **Then** 后续服务启动或依赖初始化可以因实际无法启动或无法连接而失败
 
-#### Scenario: Validate required and optional fields from config structs
-- **Given** 配置结构体字段声明了必填、可选和基础范围校验规则
-- **When** `common/config.Load` 反序列化配置后执行校验
-- **Then** 必填字段缺失或为空时配置加载必须失败
-- **Then** 可选字段为空或省略时不得仅因为空而失败
-- **Then** 端口、连接池大小和 timeout 等字段超出基础范围时配置加载必须失败
+#### Scenario: Invalid basic values are not rejected by config loader
+- **Given** YAML 配置包含零值端口、负数 Redis DB、零值连接池大小或零值 timeout
+- **When** `common/config.Load` 反序列化配置
+- **Then** 配置加载不得执行范围校验
+- **Then** 相关错误或默认行为必须由后续运行时初始化或依赖库处理
 
 #### Scenario: Load Redis named instances
 - **Given** YAML 配置包含 `redis.cache_redis` 和 `redis.queue_redis` 命名实例
@@ -47,14 +46,16 @@
 - **Then** 系统必须加载每个 PostgreSQL 实例的 host、port、username、password、db_name、driver、sslmode、连接池和 ping timeout 字段到配置对象
 - **Then** 每个 PostgreSQL 实例必须能独立覆盖连接池和 timeout 等运行时参数
 
-#### Scenario: Missing PostgreSQL required field fails validation
-- **Given** 任一已声明 PostgreSQL 实例缺少 host、port、username、db_name 或 driver 中任一必填字段
-- **When** 系统验证配置结构
-- **Then** 配置加载必须返回错误，指出对应 `postgre.<name>.<field>` 必填或无效
+#### Scenario: Core dependency startup failure remains fatal
+- **Given** 配置加载成功
+- **Given** Redis、`user_db`、`common_db` 或 HTTP server 在启动时不可用或配置无法被底层依赖接受
+- **When** 服务启动初始化共享基础设施或 HTTP server
+- **Then** 对应初始化必须返回错误并终止服务启动
+- **Then** 错误必须保留失败的依赖名称、类型或底层错误上下文
 
 ### Requirement: Provide shared runtime dependencies through Fx
 
-系统必须通过 `common/infrastructure.Module` 提供配置和日志。Redis 与 PostgreSQL 共享基础能力必须支持按调用方指定的单个命名实例创建具名 client 或连接池，并注册启动 ping 与停止 close 生命周期；具体服务必须在自己的 Fx module 中声明需要哪些具名 Redis client 和 PostgreSQL 连接池。Redis 与 PostgreSQL provider 必须只连接调用方声明的实例，不得因为配置中存在其他实例而自动连接全部实例。
+系统必须通过 `common/infrastructure.Module` 提供配置和日志。Redis 与 PostgreSQL 共享基础能力必须支持按调用方指定的单个命名实例创建具名 client 或连接池，并注册启动 ping 与停止 close 生命周期；具体服务必须在自己的 Fx module 中声明需要哪些具名 Redis client 和 PostgreSQL 连接池。Redis 与 PostgreSQL provider 必须只连接调用方声明的实例，不得因为配置中存在其他实例而自动连接全部实例。用户服务必须声明并提供具名 `cache_redis` Redis client，供用户服务内部组件注入使用。
 
 #### Scenario: Provide common dependencies
 - **Given** Fx app 包含 `common/infrastructure.Module`
@@ -78,6 +79,14 @@
 - **Then** Fx app 启动时 ping 该数据库
 - **Then** Fx app 停止时关闭该数据库连接池
 
+#### Scenario: User service declares required Redis client
+- **Given** 用户服务运行时需要缓存 Redis
+- **When** Fx app 包含用户服务模块
+- **Then** 用户服务模块必须声明并提供具名 `cache_redis` Redis client
+- **Then** `cache_redis` client 必须连接到 `redis.cache_redis` 指定的 Redis 实例
+- **Then** Fx app 启动时必须 ping `cache_redis`
+- **Then** Fx app 停止时必须关闭 `cache_redis`
+
 #### Scenario: User service declares required PostgreSQL pools
 - **Given** 用户服务运行时需要 `user_db` 和 `common_db`
 - **When** Fx app 包含用户服务模块
@@ -92,9 +101,9 @@
 - **Then** 系统不得因为其他配置字段存在而连接未声明的业务数据库
 
 #### Scenario: Service does not connect unused Redis clients
-- **Given** 某个服务只声明需要 `cache_redis`
-- **When** Fx app 启动该服务
-- **Then** 系统必须只创建该服务声明的 Redis client
+- **Given** 用户服务只声明需要 `cache_redis`
+- **When** Fx app 启动用户服务
+- **Then** 系统必须只创建 `cache_redis` Redis client
 - **Then** 系统不得因为配置中存在 `queue_redis` 而连接未声明的 Redis 实例
 
 #### Scenario: Pay database is configurable without adding payment runtime dependency

@@ -70,8 +70,8 @@ func TestLoadExplicitConfig(t *testing.T) {
 	}
 }
 
-func TestLoadValidatesMissingPrimaryConfigFields(t *testing.T) {
-	_, err := Load(writeTempConfig(t, `app:
+func TestLoadDoesNotValidateMissingPrimaryConfigFields(t *testing.T) {
+	cfg := loadConfigFromYAML(t, `app:
   environment: test
 
 http:
@@ -86,39 +86,52 @@ redis:
 postgre:
   user_db:
     port: 0
-`))
-	if err == nil {
-		t.Fatal("Load error = nil")
+`)
+
+	if cfg.App.Name != "" {
+		t.Fatalf("App.Name = %q, want empty", cfg.App.Name)
 	}
-	if !strings.Contains(err.Error(), "app.name is required") {
-		t.Fatalf("Load error = %q, want app.name validation", err.Error())
+	if cfg.HTTP.Host != "" {
+		t.Fatalf("HTTP.Host = %q, want empty", cfg.HTTP.Host)
+	}
+	if cfg.HTTP.Port != 0 {
+		t.Fatalf("HTTP.Port = %d, want 0", cfg.HTTP.Port)
+	}
+	if cfg.Redis["cache_redis"].Addr != "" {
+		t.Fatalf("cache_redis.Addr = %q, want empty", cfg.Redis["cache_redis"].Addr)
+	}
+	if cfg.Postgre["user_db"].Host != "" {
+		t.Fatalf("user_db.Host = %q, want empty", cfg.Postgre["user_db"].Host)
 	}
 }
 
-func TestLoadValidatesInvalidBasicValues(t *testing.T) {
-	_, err := Load(writeTempConfig(t, configYAMLWithSection(`http:
+func TestLoadDoesNotValidateInvalidBasicValues(t *testing.T) {
+	cfg := loadConfigFromYAML(t, configYAMLWithSection(`http:
   host: 127.0.0.1
   port: 70000
   read_timeout: 0s
   write_timeout: 0s
   idle_timeout: 0s
-  shutdown_timeout: 0s`)))
-	if err == nil || !strings.Contains(err.Error(), "http.port") {
-		t.Fatalf("Load error = %v, want http.port validation", err)
+  shutdown_timeout: 0s`))
+	if cfg.HTTP.Port != 70000 {
+		t.Fatalf("HTTP.Port = %d, want 70000", cfg.HTTP.Port)
+	}
+	if cfg.HTTP.ReadTimeout != 0 {
+		t.Fatalf("HTTP.ReadTimeout = %s, want 0", cfg.HTTP.ReadTimeout)
 	}
 
-	_, err = Load(writeTempConfig(t, configYAMLWithSection(`redis:
+	cfg = loadConfigFromYAML(t, configYAMLWithSection(`redis:
   cache_redis:
     addr: 127.0.0.1:6379
     db: -1
     dial_timeout: 5s
     read_timeout: 3s
-    write_timeout: 3s`)))
-	if err == nil || !strings.Contains(err.Error(), "redis.cache_redis.db") {
-		t.Fatalf("Load error = %v, want redis.cache_redis.db validation", err)
+    write_timeout: 3s`))
+	if cfg.Redis["cache_redis"].DB != -1 {
+		t.Fatalf("cache_redis.DB = %d, want -1", cfg.Redis["cache_redis"].DB)
 	}
 
-	_, err = Load(writeTempConfig(t, configYAMLWithSection(`postgre:
+	cfg = loadConfigFromYAML(t, configYAMLWithSection(`postgre:
   user_db:
     host: 127.0.0.1
     port: 15432
@@ -131,9 +144,12 @@ func TestLoadValidatesInvalidBasicValues(t *testing.T) {
     max_idle_conns: 0
     conn_max_lifetime: 0s
     conn_max_idle_time: 0s
-    ping_timeout: 0s`)))
-	if err == nil || !strings.Contains(err.Error(), "postgre.user_db.max_open_conns") {
-		t.Fatalf("Load error = %v, want postgre.user_db.max_open_conns validation", err)
+    ping_timeout: 0s`))
+	if cfg.Postgre["user_db"].MaxOpenConns != 0 {
+		t.Fatalf("user_db.MaxOpenConns = %d, want 0", cfg.Postgre["user_db"].MaxOpenConns)
+	}
+	if cfg.Postgre["user_db"].PingTimeout != 0 {
+		t.Fatalf("user_db.PingTimeout = %s, want 0", cfg.Postgre["user_db"].PingTimeout)
 	}
 }
 

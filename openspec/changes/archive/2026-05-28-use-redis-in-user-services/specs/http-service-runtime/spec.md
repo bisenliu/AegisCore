@@ -1,10 +1,4 @@
-# http-service-runtime
-
-## Purpose
-
-HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖、注册 Gin 中间件和路由，并在进程终止时优雅关闭 HTTP server。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Start service through CLI
 
@@ -28,26 +22,6 @@ HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖
 - **When** Fx app 启动基础设施生命周期
 - **Then** 启动过程返回错误
 - **Then** 服务不应假装已经健康可用
-
-### Requirement: Register standard HTTP routes and middleware
-
-系统必须注册健康检查、用户 API 路由和共享 HTTP 中间件。
-
-#### Scenario: Health endpoint returns service status
-- **Given** HTTP server 已启动
-- **When** 调用方请求 `GET /healthz`
-- **Then** 系统返回 HTTP 200
-- **Then** 响应包含 `status: ok` 和 `service: aegiscore-user-services`
-
-#### Scenario: User API route is registered under versioned prefix
-- **Given** HTTP server 已启动
-- **When** 调用方请求 `GET /api/v1/users/:id`
-- **Then** 请求被路由到 `UserController.GetByID`
-
-#### Scenario: Request middleware is applied
-- **Given** 任意 HTTP 请求进入服务
-- **When** Gin engine 处理请求
-- **Then** 请求经过 request id、panic recovery、request logging 和 CORS 中间件
 
 ### Requirement: Shutdown gracefully
 
