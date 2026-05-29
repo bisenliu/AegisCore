@@ -3,7 +3,7 @@ package dto
 import "time"
 
 type GetUserRequest struct {
-	ID int64 `validate:"required,gt=0"`
+	ID int64 `uri:"id" validate:"required,gt=0" label:"用户ID"`
 }
 
 type UserResponse struct {

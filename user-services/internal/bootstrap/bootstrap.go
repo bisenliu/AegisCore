@@ -11,6 +11,7 @@ import (
 	commoninfra "github.com/aegiscore/common/infrastructure"
 	"github.com/aegiscore/common/logger"
 	commonmw "github.com/aegiscore/common/middleware"
+	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/controller"
 	"github.com/aegiscore/user-services/internal/entclient"
 	"github.com/aegiscore/user-services/internal/repository"
@@ -30,6 +31,7 @@ func NewApp(configPath string) *fx.App {
 }
 
 var Module = fx.Module("aegiscore-user-services",
+	validation.Module,
 	fx.Provide(
 		NewPostgresPools,
 		NewRedisClients,

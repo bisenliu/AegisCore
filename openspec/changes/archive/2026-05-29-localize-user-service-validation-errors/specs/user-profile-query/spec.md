@@ -1,10 +1,4 @@
-# user-profile-query
-
-## Purpose
-
-用户资料查询能力允许 API 调用方通过用户 ID 获取用户基础资料，并把参数错误、用户不存在和内部查询错误转换为统一响应契约。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Query user by positive ID
 
@@ -39,18 +33,6 @@
 - **Then** repository 将 Ent not found 转换为 `user not found`
 - **Then** 系统返回 HTTP 404
 - **Then** 响应信封的 `success` 为 `false`，`code` 为 `NOT_FOUND`，`message` 为 `user not found`
-
-### Requirement: Preserve user model constraints
-
-系统必须以 Ent `User` schema 作为用户资料查询的数据结构来源。
-
-#### Scenario: User schema defines stable fields
-- **Given** 用户资料由 Ent `User` schema 定义
-- **When** 系统读取用户记录并映射响应 DTO
-- **Then** 用户 ID 为唯一且不可变的 `int64`
-- **Then** 用户 `email` 非空、唯一且最大长度为 255
-- **Then** 用户 `name` 非空且最大长度为 128
-- **Then** 响应包含 `active`、`created_at`、`updated_at`
 
 #### Scenario: Repository returns unexpected database error
 - **Given** 数据库查询用户时发生非 not found 错误

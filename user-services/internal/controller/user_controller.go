@@ -1,34 +1,25 @@
 package controller
 
 import (
-	"strconv"
-
 	"github.com/aegiscore/common/response"
+	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/service"
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
 )
 
 type UserController struct {
 	service   service.UserService
-	validator *validator.Validate
+	validator *validation.Validator
 }
 
-func NewUserController(service service.UserService) *UserController {
-	return &UserController{service: service, validator: validator.New(validator.WithRequiredStructEnabled())}
+func NewUserController(service service.UserService, validator *validation.Validator) *UserController {
+	return &UserController{service: service, validator: validator}
 }
 
 func (ctl *UserController) GetByID(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "invalid user id")
-		return
-	}
-
-	req := dto.GetUserRequest{ID: id}
-	if err := ctl.validator.Struct(req); err != nil {
-		response.BadRequest(c, "invalid user id")
+	req := dto.GetUserRequest{}
+	if !ctl.validator.BindOrAbort(c, &req, validation.URIBinder) {
 		return
 	}
 
