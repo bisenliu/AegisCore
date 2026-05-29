@@ -5,7 +5,7 @@
 - Go workspace 使用 `go 1.26` 和 `toolchain go1.26.3`，见 `go.work`。
 - 工具链基线由 `openspec/specs/go-toolchain-baseline/spec.md` 约束；修改 `go.work` 或任一 `go.mod` 的 Go/toolchain 版本时需同步更新该规格和文档。
 - 本地运行用户服务需要 PostgreSQL 和 Redis。
-- 生成或执行数据库迁移需要 Atlas CLI，用户服务迁移目标通常指向 `postgre.user_db` 或部署环境提供的 `DATABASE_URL`。
+- 生成或执行数据库迁移需要 Atlas CLI，用户服务迁移目标通常指向 `postgres.user_db` 或部署环境提供的 `DATABASE_URL`。
 - 用户服务配置示例位于 `user-services/configs/config.yaml`。
 
 ## 2. Workspace Layout
@@ -36,7 +36,7 @@
 - 环境变量前缀为 `AEGISCORE`。
 - 配置 key 中的 `.` 和 `-` 会映射为环境变量中的 `_`。
 - Redis 使用 `redis.<name>` 命名实例，例如 `redis.cache_redis`、`redis.queue_redis`。
-- PostgreSQL 使用 `postgre.<name>` 命名实例，例如 `postgre.user_db`、`postgre.common_db`、`postgre.pay_db`。
+- PostgreSQL 使用 `postgres.<name>` 命名实例，例如 `postgres.user_db`、`postgres.common_db`、`postgres.pay_db`。
 - 用户服务当前声明 `cache_redis`、`user_db` 和 `common_db`；`pay_db` 可存在于配置中，但不代表支付连接池或支付业务已启用。
 - `common/config.Load` 只负责读取 YAML、应用 `AEGISCORE_` 覆盖并反序列化为配置对象；缺失字段、零值端口或无效范围不在加载阶段被字段校验拒绝，后续初始化或依赖库会暴露运行时失败。
 

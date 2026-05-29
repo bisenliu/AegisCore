@@ -9,11 +9,11 @@ import (
 
 // Config is the root configuration object for AegisCore services.
 type Config struct {
-	App     AppConfig                 `mapstructure:"app"`
-	HTTP    HTTPConfig                `mapstructure:"http"`
-	Log     LogConfig                 `mapstructure:"log"`
-	Redis   map[string]RedisConfig    `mapstructure:"redis"`
-	Postgre map[string]PostgresConfig `mapstructure:"postgre"`
+	App             AppConfig                 `mapstructure:"app"`
+	HTTP            HTTPConfig                `mapstructure:"http"`
+	Log             LogConfig                 `mapstructure:"log"`
+	Redis           map[string]RedisConfig    `mapstructure:"redis"`
+	PostgresConfigs map[string]PostgresConfig `mapstructure:"postgres"`
 }
 
 type AppConfig struct {
@@ -83,7 +83,7 @@ func (c Config) RedisConfig(name string) (RedisConfig, bool) {
 }
 
 func (c Config) Postgres(name string) (PostgresDatabaseConfig, bool) {
-	pg, ok := c.Postgre[name]
+	pg, ok := c.PostgresConfigs[name]
 	if !ok {
 		return PostgresDatabaseConfig{}, false
 	}

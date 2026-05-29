@@ -46,7 +46,7 @@ func TestLoadExplicitConfig(t *testing.T) {
 		t.Fatalf("queue_redis.DB = %d, want 1", queueRedis.DB)
 	}
 
-	pg := cfg.Postgre["user_db"]
+	pg := cfg.PostgresConfigs["user_db"]
 	if pg.Host != "127.0.0.1" {
 		t.Fatalf("Host = %q, want 127.0.0.1", pg.Host)
 	}
@@ -77,8 +77,8 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if pg.DBName != "aegiscore_user" {
 		t.Fatalf("DBName = %q, want aegiscore_user", pg.DBName)
 	}
-	if cfg.Postgre["pay_db"].DBName != "aegiscore_pay" {
-		t.Fatalf("pay_db.DBName = %q, want aegiscore_pay", cfg.Postgre["pay_db"].DBName)
+	if cfg.PostgresConfigs["pay_db"].DBName != "aegiscore_pay" {
+		t.Fatalf("pay_db.DBName = %q, want aegiscore_pay", cfg.PostgresConfigs["pay_db"].DBName)
 	}
 }
 
@@ -95,7 +95,7 @@ redis:
   cache_redis:
     db: 0
 
-postgre:
+postgres:
   user_db:
     port: 0
 `)
@@ -112,8 +112,8 @@ postgre:
 	if cfg.Redis["cache_redis"].Addr != "" {
 		t.Fatalf("cache_redis.Addr = %q, want empty", cfg.Redis["cache_redis"].Addr)
 	}
-	if cfg.Postgre["user_db"].Host != "" {
-		t.Fatalf("user_db.Host = %q, want empty", cfg.Postgre["user_db"].Host)
+	if cfg.PostgresConfigs["user_db"].Host != "" {
+		t.Fatalf("user_db.Host = %q, want empty", cfg.PostgresConfigs["user_db"].Host)
 	}
 }
 
@@ -143,7 +143,7 @@ func TestLoadDoesNotValidateInvalidBasicValues(t *testing.T) {
 		t.Fatalf("cache_redis.DB = %d, want -1", cfg.Redis["cache_redis"].DB)
 	}
 
-	cfg = loadConfigFromYAML(t, configYAMLWithSection(`postgre:
+	cfg = loadConfigFromYAML(t, configYAMLWithSection(`postgres:
   user_db:
     host: 127.0.0.1
     port: 15432
@@ -157,19 +157,19 @@ func TestLoadDoesNotValidateInvalidBasicValues(t *testing.T) {
     conn_max_lifetime: 0s
     conn_max_idle_time: 0s
     ping_timeout: 0s`))
-	if cfg.Postgre["user_db"].MaxOpenConns != 0 {
-		t.Fatalf("user_db.MaxOpenConns = %d, want 0", cfg.Postgre["user_db"].MaxOpenConns)
+	if cfg.PostgresConfigs["user_db"].MaxOpenConns != 0 {
+		t.Fatalf("user_db.MaxOpenConns = %d, want 0", cfg.PostgresConfigs["user_db"].MaxOpenConns)
 	}
-	if cfg.Postgre["user_db"].PingTimeout != 0 {
-		t.Fatalf("user_db.PingTimeout = %s, want 0", cfg.Postgre["user_db"].PingTimeout)
+	if cfg.PostgresConfigs["user_db"].PingTimeout != 0 {
+		t.Fatalf("user_db.PingTimeout = %s, want 0", cfg.PostgresConfigs["user_db"].PingTimeout)
 	}
 }
 
 func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_HTTP_PORT", "19090")
 	t.Setenv("AEGISCORE_REDIS_CACHE_REDIS_DB", "9")
-	t.Setenv("AEGISCORE_POSTGRE_USER_DB_PASSWORD", "env-secret")
-	t.Setenv("AEGISCORE_POSTGRE_USER_DB_MAX_OPEN_CONNS", "30")
+	t.Setenv("AEGISCORE_POSTGRES_USER_DB_PASSWORD", "env-secret")
+	t.Setenv("AEGISCORE_POSTGRES_USER_DB_MAX_OPEN_CONNS", "30")
 
 	cfg := loadConfigFromYAML(t, explicitConfigYAML())
 	if cfg.HTTP.Port != 19090 {
@@ -178,11 +178,11 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	if cfg.Redis["cache_redis"].DB != 9 {
 		t.Fatalf("cache_redis.DB = %d, want 9", cfg.Redis["cache_redis"].DB)
 	}
-	if cfg.Postgre["user_db"].Password != "env-secret" {
-		t.Fatalf("user_db.Password = %q, want env-secret", cfg.Postgre["user_db"].Password)
+	if cfg.PostgresConfigs["user_db"].Password != "env-secret" {
+		t.Fatalf("user_db.Password = %q, want env-secret", cfg.PostgresConfigs["user_db"].Password)
 	}
-	if cfg.Postgre["user_db"].MaxOpenConns != 30 {
-		t.Fatalf("user_db.MaxOpenConns = %d, want 30", cfg.Postgre["user_db"].MaxOpenConns)
+	if cfg.PostgresConfigs["user_db"].MaxOpenConns != 30 {
+		t.Fatalf("user_db.MaxOpenConns = %d, want 30", cfg.PostgresConfigs["user_db"].MaxOpenConns)
 	}
 }
 
@@ -212,7 +212,7 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
 		t.Fatalf("Redis.Password = %q, want empty", cfg.Redis["cache_redis"].Password)
 	}
 
-	cfg = loadConfigFromYAML(t, configYAMLWithSection(`postgre:
+	cfg = loadConfigFromYAML(t, configYAMLWithSection(`postgres:
   user_db:
     host: 127.0.0.1
     port: 15432
@@ -225,8 +225,8 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
     conn_max_lifetime: 45m
     conn_max_idle_time: 12m
     ping_timeout: 7s`))
-	if cfg.Postgre["user_db"].Password != "" {
-		t.Fatalf("Postgres.Password = %q, want empty", cfg.Postgre["user_db"].Password)
+	if cfg.PostgresConfigs["user_db"].Password != "" {
+		t.Fatalf("Postgres.Password = %q, want empty", cfg.PostgresConfigs["user_db"].Password)
 	}
 	if _, ok := cfg.Postgres("pay_db"); ok {
 		t.Fatal("Postgres(pay_db) ok = true")
@@ -242,16 +242,16 @@ func TestLoadYAMLMergeForNamedDatastores(t *testing.T) {
 	if got := cfg.Redis["queue_redis"].ReadTimeout; got != 3*time.Second {
 		t.Fatalf("queue_redis.ReadTimeout = %s, want 3s", got)
 	}
-	if got := cfg.Postgre["user_db"].MaxOpenConns; got != 20 {
+	if got := cfg.PostgresConfigs["user_db"].MaxOpenConns; got != 20 {
 		t.Fatalf("user_db.MaxOpenConns = %d, want 20", got)
 	}
-	if got := cfg.Postgre["pay_db"].MaxOpenConns; got != 25 {
+	if got := cfg.PostgresConfigs["pay_db"].MaxOpenConns; got != 25 {
 		t.Fatalf("pay_db.MaxOpenConns = %d, want 25", got)
 	}
 }
 
 func TestPostgresNamedDatabaseDSNs(t *testing.T) {
-	cfg := loadConfigFromYAML(t, configYAMLWithSection(`postgre:
+	cfg := loadConfigFromYAML(t, configYAMLWithSection(`postgres:
   user_db:
     host: db.example.internal
     port: 15432
@@ -386,7 +386,7 @@ log:
   read_timeout: 3s
   write_timeout: 3s
 
-.postgre_base: &postgre_base
+.postgres_base: &postgres_base
   host: 127.0.0.1
   port: 15432
   username: aegiscore
@@ -408,16 +408,16 @@ redis:
     db: 1
     dial_timeout: 10s
 
-postgre:
+postgres:
   user_db:
-    <<: *postgre_base
+    <<: *postgres_base
     db_name: aegiscore_user
     max_open_conns: 20
   pay_db:
-    <<: *postgre_base
+    <<: *postgres_base
     db_name: aegiscore_pay
   common_db:
-    <<: *postgre_base
+    <<: *postgres_base
     db_name: aegiscore_common
 `
 }
@@ -454,7 +454,7 @@ func configYAMLWithSection(section string) string {
     dial_timeout: 5s
     read_timeout: 3s
     write_timeout: 3s`,
-		"postgre": `postgre:
+		"postgres": `postgres:
   user_db:
     host: 127.0.0.1
     port: 15432
@@ -475,7 +475,7 @@ func configYAMLWithSection(section string) string {
 			break
 		}
 	}
-	ordered := []string{sections["app"], sections["http"], sections["log"], sections["redis"], sections["postgre"]}
+	ordered := []string{sections["app"], sections["http"], sections["log"], sections["redis"], sections["postgres"]}
 	return fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n", ordered[0], ordered[1], ordered[2], ordered[3], ordered[4])
 }
 

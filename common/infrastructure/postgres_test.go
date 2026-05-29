@@ -155,7 +155,7 @@ func TestModuleDoesNotProvideRedisClient(t *testing.T) {
 
 func testConfig(driverName string) *config.Config {
 	return &config.Config{
-		Postgre: map[string]config.PostgresConfig{
+		PostgresConfigs: map[string]config.PostgresConfig{
 			"user_db": {
 				Host:            "127.0.0.1",
 				Port:            15432,

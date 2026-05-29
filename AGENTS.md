@@ -67,4 +67,4 @@
 - 保持 controller/service/repository 分层：HTTP 解析在 controller，业务编排在 service，数据库访问在 repository。
 - 共享基础能力优先放在 `common/`，避免在服务模块中重复实现中间件、响应信封或基础设施初始化。
 - HTTP API 应使用 `common/response.Envelope` 格式返回。
-- 配置通过 YAML 与 `AEGISCORE_` 环境变量覆盖加载，Redis/PostgreSQL 使用 `redis.<name>` 与 `postgre.<name>` 命名实例，避免硬编码运行时配置。
+- 配置通过 YAML 与 `AEGISCORE_` 环境变量覆盖加载，Redis/PostgreSQL 使用 `redis.<name>` 与 `postgres.<name>` 命名实例，避免硬编码运行时配置。

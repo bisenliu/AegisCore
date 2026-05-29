@@ -9,7 +9,7 @@ context: |
   当前稳定能力：user-profile-query、http-service-runtime、shared-infrastructure、api-response-contract、database-schema-migrations、go-toolchain-baseline。
   生成代码规则：不要手写 user-services/ent/ 下的 Ent 生成代码；修改 user-services/ent/schema/ 后在 user-services 模块运行 go generate ./ent。
   API 规则：HTTP API 使用 common/response.Envelope 输出 success/code/message/data 信封。
-  配置规则：运行时配置通过 YAML 和 AEGISCORE_ 环境变量覆盖加载，Redis/PostgreSQL 使用 redis.<name> 与 postgre.<name> 命名实例；common/config.Load 只读取、覆盖和反序列化，不执行 required/range 字段校验。
+  配置规则：运行时配置通过 YAML 和 AEGISCORE_ 环境变量覆盖加载，Redis/PostgreSQL 使用 redis.<name> 与 postgres.<name> 命名实例；common/config.Load 只读取、覆盖和反序列化，不执行 required/range 字段校验。
   日志规则：使用 Zap 和 trace-id；HTTP header 为 X-Trace-ID，日志字段为 trace-id，业务日志优先通过 common/logger context API 输出。
 
 rules:

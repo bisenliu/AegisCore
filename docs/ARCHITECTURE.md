@@ -48,7 +48,7 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 ## 6. Infrastructure
 
 - 配置加载由 `common/config/loader.go` 负责，支持 YAML 文件和 `AEGISCORE_` 环境变量覆盖；加载阶段只做读取、覆盖和反序列化，不做 required/range 字段校验。
-- PostgreSQL 使用 `postgre.<name>` 命名实例配置；用户服务当前声明并连接 `postgre.user_db` 与 `postgre.common_db`，不因存在 `postgre.pay_db` 而初始化支付连接池。
+- PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前声明并连接 `postgres.user_db` 与 `postgres.common_db`，不因存在 `postgres.pay_db` 而初始化支付连接池。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`，不因存在 `redis.queue_redis` 而初始化队列 Redis。
 - Ent clients 由 `user-services/internal/entclient/provider.go` 基于具名 `*sql.DB` 构建。
 - 日志基于 Zap，由 `common/logger` 与 `common/infrastructure/logger.go` 提供；HTTP trace header 为 `X-Trace-ID`，日志字段统一为 `trace-id`。
@@ -67,5 +67,5 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 ## 9. Current Constraints
 
 - 当前 HTTP API 只暴露健康检查和按 ID 查询用户。
-- 配置样例包含 `postgre.pay_db`，但当前用户服务只声明 `postgre.user_db`、`postgre.common_db` 和 `redis.cache_redis`。
+- 配置样例包含 `postgres.pay_db`，但当前用户服务只声明 `postgres.user_db`、`postgres.common_db` 和 `redis.cache_redis`。
 - 启动服务需要 PostgreSQL 和 Redis 可连接；本地纯单元测试应避免依赖真实外部服务，或显式说明集成测试要求。

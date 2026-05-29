@@ -205,7 +205,7 @@ func bootstrapTestConfig(driverName string) *config.Config {
 				WriteTimeout: time.Second,
 			},
 		},
-		Postgre: map[string]config.PostgresConfig{
+		PostgresConfigs: map[string]config.PostgresConfig{
 			"user_db": {
 				Host:            "127.0.0.1",
 				Port:            15432,

@@ -32,7 +32,7 @@ log:
   write_timeout: 3s
 
 # PostgreSQL 基础连接模板
-.postgre_base: &postgre_base
+.postgres_base: &postgres_base
   host: 127.0.0.1
   port: 5432
   username: aegiscore
@@ -54,14 +54,14 @@ redis:
     db: 1
     dial_timeout: 10s
 
-postgre:
+postgres:
   user_db:
-    <<: *postgre_base
+    <<: *postgres_base
     db_name: aegiscore_user
     max_open_conns: 50
   pay_db:
-    <<: *postgre_base
+    <<: *postgres_base
     db_name: aegiscore_pay
   common_db:
-    <<: *postgre_base
+    <<: *postgres_base
     db_name: aegiscore_common

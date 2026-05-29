@@ -11,7 +11,7 @@ set -eu
 #     ./scripts/migrate-apply.sh
 #
 # 必需环境变量：
-#   DATABASE_URL  用户服务数据库（`postgre.user_db`）的 PostgreSQL URL。
+#   DATABASE_URL  用户服务数据库（`postgres.user_db`）的 PostgreSQL URL。
 #
 # 行为：
 #   - 切换到 user-services 目录，使 Atlas 读取 ./atlas.hcl 和 ./migrations。
