@@ -6,6 +6,7 @@ import (
 
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/ent"
+	"github.com/aegiscore/user-services/internal/apperror"
 	"go.uber.org/fx"
 )
 
@@ -33,8 +34,7 @@ func (r *userRepository) GetByID(ctx context.Context, id int64) (*ent.User, erro
 		return user, nil
 	}
 	if ent.IsNotFound(err) {
-		return nil, response.NotFoundError("user not found")
+		return nil, response.NotFoundError(apperror.MsgUserNotFound)
 	}
 	return nil, fmt.Errorf("query user by id %d: %w", id, err)
 }
-

@@ -48,8 +48,9 @@ type FieldError struct {
 }
 
 type Error struct {
-	Message string       `json:"message"`
-	Fields  []FieldError `json:"fields,omitempty"`
+	Message string        `json:"message"`
+	Fields  []FieldError  `json:"fields,omitempty"`
+	Code    response.Code `json:"-"`
 }
 
 type bindFieldError struct {
@@ -144,7 +145,11 @@ func (v *Validator) Bind(c *gin.Context, dst any, binder Binder) error {
 func (v *Validator) BindOrAbort(c *gin.Context, dst any, binder Binder) bool {
 	if err := v.Bind(c, dst, binder); err != nil {
 		logger.Warn(c.Request.Context(), "invalid request", zap.Error(err), zap.String("path", c.Request.URL.Path))
-		response.BadRequest(c, publicMessage(err))
+		if validationFailure(err) {
+			response.ValidationFailed(c, publicMessage(err))
+		} else {
+			response.BadRequest(c, publicMessage(err))
+		}
 		c.Abort()
 		return false
 	}
@@ -165,7 +170,7 @@ func QueryBinder(c *gin.Context, dst any) error {
 
 func JSONBinder(c *gin.Context, dst any) error {
 	if c.Request.Body == nil || c.Request.ContentLength == 0 {
-		return &Error{Message: ErrEmptyRequestBody}
+		return &Error{Message: ErrEmptyRequestBody, Code: response.CodeBadRequest}
 	}
 	decoder := json.NewDecoder(c.Request.Body)
 	if err := decoder.Decode(dst); err != nil {
@@ -313,19 +318,19 @@ func (v *Validator) normalizeError(dst any, err error) error {
 		for _, fieldErr := range validationErrors {
 			fields = append(fields, FieldError{Field: fieldErr.Field(), Message: fieldErr.Translate(v.trans)})
 		}
-		return &Error{Message: ErrValidationFailed, Fields: fields}
+		return &Error{Message: ErrValidationFailed, Fields: fields, Code: response.CodeValidationFailed}
 	}
 	var typeErr *json.UnmarshalTypeError
 	if errors.As(err, &typeErr) {
 		field := displayName(dst, typeErr.Field)
-		return &Error{Message: fmt.Sprintf("%s字段类型不正确，应为%s类型", field, expectedType(typeErr.Type))}
+		return &Error{Message: fmt.Sprintf("%s字段类型不正确，应为%s类型", field, expectedType(typeErr.Type)), Code: response.CodeBadRequest}
 	}
 	var bindErr *bindFieldError
 	if errors.As(err, &bindErr) {
-		return &Error{Message: fmt.Sprintf("%s字段类型不正确，应为%s类型", bindErr.field, expectedType(bindErr.typ))}
+		return &Error{Message: fmt.Sprintf("%s字段类型不正确，应为%s类型", bindErr.field, expectedType(bindErr.typ)), Code: response.CodeBadRequest}
 	}
 	if errors.Is(err, io.EOF) {
-		return &Error{Message: ErrEmptyRequestBody}
+		return &Error{Message: ErrEmptyRequestBody, Code: response.CodeBadRequest}
 	}
 	return err
 }
@@ -379,6 +384,11 @@ func publicMessage(err error) string {
 		return validationErr.Message
 	}
 	return err.Error()
+}
+
+func validationFailure(err error) bool {
+	var validationErr *Error
+	return errors.As(err, &validationErr) && validationErr.Code == response.CodeValidationFailed
 }
 
 func expectedType(t reflect.Type) string {

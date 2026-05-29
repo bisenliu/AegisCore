@@ -35,6 +35,9 @@ func TestValidateStructAndFieldNames(t *testing.T) {
 	if validationErr.Message != ErrValidationFailed {
 		t.Fatalf("Message = %q, want %q", validationErr.Message, ErrValidationFailed)
 	}
+	if validationErr.Code != response.CodeValidationFailed {
+		t.Fatalf("Code = %d, want %d", validationErr.Code, response.CodeValidationFailed)
+	}
 	fields := fieldMessages(validationErr.Fields)
 	for _, field := range []string{"姓名", "age", "id", "query_id"} {
 		if fields[field] == "" {
@@ -75,6 +78,9 @@ func TestJSONBinder(t *testing.T) {
 		if validationErr.Message != ErrEmptyRequestBody {
 			t.Fatalf("Message = %q, want %q", validationErr.Message, ErrEmptyRequestBody)
 		}
+		if validationErr.Code != response.CodeBadRequest {
+			t.Fatalf("Code = %d, want %d", validationErr.Code, response.CodeBadRequest)
+		}
 	})
 
 	t.Run("type mismatch", func(t *testing.T) {
@@ -87,6 +93,9 @@ func TestJSONBinder(t *testing.T) {
 		}
 		if got, want := validationErr.Message, "用户ID字段类型不正确，应为整数类型"; got != want {
 			t.Fatalf("Message = %q, want %q", got, want)
+		}
+		if validationErr.Code != response.CodeBadRequest {
+			t.Fatalf("Code = %d, want %d", validationErr.Code, response.CodeBadRequest)
 		}
 	})
 }
@@ -123,6 +132,9 @@ func TestBinders(t *testing.T) {
 		}
 		if got, want := validationErr.Message, "用户ID字段类型不正确，应为整数类型"; got != want {
 			t.Fatalf("Message = %q, want %q", got, want)
+		}
+		if validationErr.Code != response.CodeBadRequest {
+			t.Fatalf("Code = %d, want %d", validationErr.Code, response.CodeBadRequest)
 		}
 	})
 
@@ -231,7 +243,30 @@ func TestBindOrAbort(t *testing.T) {
 	if err := jsonUnmarshal(recorder.Body.String(), &envelope); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
-	if envelope.Success || envelope.Code != response.CodeBadRequest || envelope.Message != ErrValidationFailed {
+	if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != ErrValidationFailed {
+		t.Fatalf("envelope = %#v", envelope)
+	}
+}
+
+func TestBindOrAbortTypeMismatchUsesBadRequest(t *testing.T) {
+	validator := newTestValidator(t)
+	type request struct {
+		ID int64 `uri:"id" label:"用户ID"`
+	}
+	ctx, recorder := newRequestContextWithRecorder(http.MethodGet, "/users/bad", "")
+	ctx.Params = gin.Params{{Key: "id", Value: "bad"}}
+	var req request
+	if validator.BindOrAbort(ctx, &req, URIBinder) {
+		t.Fatal("BindOrAbort = true, want false")
+	}
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	var envelope response.Envelope
+	if err := jsonUnmarshal(recorder.Body.String(), &envelope); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if envelope.Success || envelope.Code != response.CodeBadRequest || envelope.Message != "用户ID字段类型不正确，应为整数类型" {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 }

@@ -1,10 +1,4 @@
-# api-response-contract
-
-## Purpose
-
-API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错误码和应用错误映射，确保调用方能以一致方式解析结果。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Return success responses with envelope
 
@@ -107,6 +101,8 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 - **When** 调用方请求 `GET /healthz`
 - **Then** 系统可以返回最小健康状态 JSON，而不要求使用业务 API 响应信封
 - **Then** 业务 API 仍必须使用 `common/response.Envelope`
+
+## ADDED Requirements
 
 ### Requirement: Provide standard numeric response codes
 

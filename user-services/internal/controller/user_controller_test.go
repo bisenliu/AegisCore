@@ -11,6 +11,7 @@ import (
 
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/common/validation"
+	"github.com/aegiscore/user-services/internal/apperror"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/gin-gonic/gin"
 )
@@ -61,11 +62,11 @@ func TestUserControllerGetByID(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		status, envelope := executeGetByID(t, &stubUserService{err: response.NotFoundError("user not found")}, "999")
+		status, envelope := executeGetByID(t, &stubUserService{err: response.NotFoundError(apperror.MsgUserNotFound)}, "999")
 		if status != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", status, http.StatusNotFound)
 		}
-		if envelope.Success || envelope.Code != response.CodeNotFound || envelope.Message != "user not found" {
+		if envelope.Success || envelope.Code != response.CodeNotFound || envelope.Message != apperror.MsgUserNotFound {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 	})
@@ -121,7 +122,11 @@ func assertInvalidUserID(t *testing.T, status int, envelope response.Envelope, m
 	if status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 	}
-	if envelope.Success || envelope.Code != response.CodeBadRequest || envelope.Message != message || envelope.Message == "invalid user id" {
+	wantCode := response.CodeBadRequest
+	if message == validation.ErrValidationFailed {
+		wantCode = response.CodeValidationFailed
+	}
+	if envelope.Success || envelope.Code != wantCode || envelope.Message != message || envelope.Message == "invalid user id" {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 }

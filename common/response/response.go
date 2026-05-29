@@ -26,10 +26,26 @@ func Fail(c *gin.Context, err error) {
 	c.JSON(appErr.HTTPStatus, Envelope{Success: false, Code: appErr.Code, Message: appErr.Message})
 }
 
-func BadRequest(c *gin.Context, message string) {
-	Fail(c, BadRequestError(message))
+func BadRequest(c *gin.Context, format string, args ...any) {
+	Fail(c, NewError(CodeBadRequest, formatMessage(format, args), http.StatusBadRequest))
 }
 
-func NotFound(c *gin.Context, message string) {
-	Fail(c, NotFoundError(message))
+func ValidationFailed(c *gin.Context, format string, args ...any) {
+	Fail(c, NewError(CodeValidationFailed, formatMessage(format, args), http.StatusBadRequest))
+}
+
+func Unauthenticated(c *gin.Context, format string, args ...any) {
+	Fail(c, NewError(CodeUnauthenticated, formatMessage(format, args), http.StatusUnauthorized))
+}
+
+func Forbidden(c *gin.Context, format string, args ...any) {
+	Fail(c, NewError(CodeForbidden, formatMessage(format, args), http.StatusForbidden))
+}
+
+func Conflict(c *gin.Context, format string, args ...any) {
+	Fail(c, NewError(CodeConflict, formatMessage(format, args), http.StatusConflict))
+}
+
+func NotFound(c *gin.Context, format string, args ...any) {
+	Fail(c, NewError(CodeNotFound, formatMessage(format, args), http.StatusNotFound))
 }
