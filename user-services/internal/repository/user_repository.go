@@ -37,3 +37,4 @@ func (r *userRepository) GetByID(ctx context.Context, id int64) (*ent.User, erro
 	}
 	return nil, fmt.Errorf("query user by id %d: %w", id, err)
 }
+

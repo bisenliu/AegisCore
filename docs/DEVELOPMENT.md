@@ -20,6 +20,9 @@
 | 运行用户服务 | `go run ./user-services/cmd serve --config ./user-services/configs/config.yaml` | 仓库根目录 |
 | 运行单模块测试 | `go test ./...` | `common/` 或 `user-services/` |
 | 生成 Ent 代码 | `go generate ./ent` | `user-services/` |
+| 生成用户服务数据库迁移 | `./scripts/migrate-diff.sh <name>` | `user-services/` |
+| 校验用户服务迁移目录 | `./scripts/migrate-validate.sh` | `user-services/` |
+| 执行用户服务数据库迁移 | `DATABASE_URL='<postgres-url>' ./scripts/migrate-apply.sh` | `user-services/` |
 | 格式化 Go 文件 | `gofmt -w <files>` | 任意目录 |
 
 ## 4. Configuration
@@ -42,14 +45,77 @@
 - Ent 生成代码不要手动编辑；修改 schema 后重新生成。
 - Go 文件提交前运行 `gofmt`。
 
-## 6. API Conventions
+## 6. Database Migrations
+
+用户服务采用服务内迁移目录方案：Ent schema、业务代码、Atlas 配置和 SQL migration 都由 `user-services/` 自己维护。这样可以保持服务发布、镜像打包和 CI/CD 迁移执行独立，不需要在仓库根目录集中维护所有服务的迁移文件。
+
+### 6.1 Directory Layout
+
+```text
+user-services/
+  atlas.hcl
+  ent/
+    schema/
+    migrate/main.go
+  migrations/
+    atlas.sum
+    *.sql
+  scripts/
+    migrate-diff.sh
+    migrate-validate.sh
+    migrate-apply.sh
+    entrypoint.sh
+```
+
+### 6.2 Generate SQL Migrations
+
+1. 修改 `user-services/ent/schema/` 下的 Ent schema。
+2. 在 `user-services/` 执行 `go generate ./ent`，只生成 Ent 代码，不要手写 `user-services/ent/` 下的生成文件。
+3. 在 `user-services/` 执行 `./scripts/migrate-diff.sh <migration-name>`。
+4. 审查 `user-services/migrations/*.sql` 和 `user-services/migrations/atlas.sum`。
+
+`migrate-diff.sh` 使用 Atlas 的 `ent://ent/schema` schema source 读取 Ent schema，并通过 PostgreSQL dev database 计算与现有 migration directory 的差异。默认 dev URL 为 `docker://postgres/15/dev?search_path=public`，可通过 `ATLAS_DEV_URL` 覆盖。
+
+### 6.3 Review And Manual SQL Edits
+
+Atlas 生成的 SQL 必须提交前 review。允许手动调整 SQL 以满足 PostgreSQL 生产安全要求，例如将普通索引调整为并发索引：
+
+```sql
+-- atlas:txmode none
+CREATE INDEX CONCURRENTLY "users_email_idx" ON "users" ("email");
+```
+
+`CREATE INDEX CONCURRENTLY` 不能在事务中执行，因此需要将该语句放在非事务 migration 中，或按 Atlas 支持的事务模式指令拆分 migration。任何手动修改 SQL 后，都必须在 `user-services/` 执行：
+
+```bash
+atlas migrate hash --dir file://migrations
+./scripts/migrate-validate.sh
+```
+
+如果 SQL 文件与 `atlas.sum` 不一致，`atlas migrate validate --dir file://migrations` 会失败，CI/CD 不得继续部署。
+
+### 6.4 Apply In CI/CD Or Entrypoint
+
+推荐在 CI/CD release job 中执行迁移，再启动或滚动发布服务：
+
+```bash
+cd user-services
+./scripts/migrate-validate.sh
+DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&search_path=public' ./scripts/migrate-apply.sh
+```
+
+如果发布平台无法提供独立 migration job，也可以使用容器 `entrypoint.sh` 在启动前执行迁移。容器启动前迁移会增加启动耗时，并且多副本并发启动时需要依赖 Atlas migration lock 和发布平台副本策略；生产环境优先使用单独 migration job。
+
+`DATABASE_URL` 必须指向用户服务拥有的 `user_db`，不要因为配置中存在 `pay_db` 或 `common_db` 而迁移非目标数据库。
+
+## 7. API Conventions
 
 - 成功响应使用 `common/response.OK` 或 `common/response.Created`。
 - 失败响应使用 `common/response.Fail` 或便捷方法 `BadRequest`、`NotFound`。
 - 响应信封字段为 `success`、`code`、`message`、`data`。
 - API 错误码目前包括 `OK`、`BAD_REQUEST`、`NOT_FOUND`、`INTERNAL_ERROR`。
 
-## 7. Adding Features
+## 8. Adding Features
 
 1. 在 `docs/opsx/CAPABILITY_MAP.md` 中定位或新增 capability。
 2. 如新增长期能力，先添加 `openspec/specs/<capability>/spec.md`。
@@ -57,6 +123,6 @@
 4. 使用 `/opsx:apply <change-name>` 实现。
 5. 增加或更新测试，并在受影响模块目录运行相关 `go test` 命令；跨模块变更时分别在 `common/` 和 `user-services/` 运行。
 
-## 8. Local Runtime Notes
+## 9. Local Runtime Notes
 
 用户服务启动时会 ping Redis 和 PostgreSQL。若本地没有外部依赖，启动会失败。开发纯业务逻辑时优先通过单元测试覆盖 service/repository 边界，集成验证再连接真实依赖。
