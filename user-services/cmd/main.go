@@ -1,5 +1,14 @@
 package main
 
+// @title AegisCore User Services API
+// @version 1.0.0
+// @description AegisCore 用户服务 API 文档，覆盖用户资料查询、用户创建和服务健康检查。
+// @host localhost:8080
+// @BasePath /api/v1
+// @schemes http https
+// @accept json
+// @produce json
+
 import (
 	"context"
 	"fmt"

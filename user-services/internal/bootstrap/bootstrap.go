@@ -71,12 +71,13 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 type RegisterRouteParams struct {
 	fx.In
 
+	Config         *config.Config
 	Engine         *gin.Engine
 	UserController *controller.UserController
 }
 
 func RegisterRoutes(params RegisterRouteParams) {
-	router.RegisterRoutes(params.Engine, router.RouteParams{UserController: params.UserController})
+	router.RegisterRoutes(params.Engine, router.RouteParams{Environment: params.Config.App.Environment, UserController: params.UserController})
 }
 
 type HTTPServerParams struct {

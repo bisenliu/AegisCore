@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,10 +83,95 @@ func TestUserControllerGetByID(t *testing.T) {
 	})
 }
 
+func TestUserControllerCreate(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	createdAt := time.Date(2026, 5, 29, 10, 0, 0, 0, time.UTC)
+	createdUser := &dto.UserResponse{
+		ID:        123,
+		Name:      "Alice",
+		Email:     "alice@example.com",
+		Active:    true,
+		CreatedAt: createdAt,
+		UpdatedAt: createdAt,
+	}
+
+	t.Run("valid body", func(t *testing.T) {
+		service := &stubUserService{createResponse: createdUser}
+
+		status, envelope := executeCreate(t, service, `{"name":"Alice","email":"alice@example.com"}`)
+
+		if status != http.StatusCreated {
+			t.Fatalf("status = %d, want %d", status, http.StatusCreated)
+		}
+		if service.gotCreate.Email != "alice@example.com" {
+			t.Fatalf("gotCreate = %#v", service.gotCreate)
+		}
+		if !envelope.Success || envelope.Code != response.CodeOK || envelope.Message != "created" {
+			t.Fatalf("envelope = %#v", envelope)
+		}
+		data, ok := envelope.Data.(map[string]any)
+		if !ok || data["id"] != float64(123) || data["email"] != "alice@example.com" {
+			t.Fatalf("data = %#v", envelope.Data)
+		}
+	})
+
+	t.Run("empty body", func(t *testing.T) {
+		status, envelope := executeCreate(t, &stubUserService{}, "")
+		if status != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
+		}
+		if envelope.Success || envelope.Code != response.CodeBadRequest || envelope.Message != validation.ErrEmptyRequestBody {
+			t.Fatalf("envelope = %#v", envelope)
+		}
+	})
+
+	t.Run("validation failed", func(t *testing.T) {
+		status, envelope := executeCreate(t, &stubUserService{}, `{"name":"Alice","email":"bad"}`)
+		if status != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
+		}
+		if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
+			t.Fatalf("envelope = %#v", envelope)
+		}
+	})
+
+	t.Run("user already exists", func(t *testing.T) {
+		status, envelope := executeCreate(t, &stubUserService{createErr: response.ConflictError(apperror.MsgUserAlreadyExists)}, `{"name":"Alice","email":"alice@example.com"}`)
+		if status != http.StatusConflict {
+			t.Fatalf("status = %d, want %d", status, http.StatusConflict)
+		}
+		if envelope.Success || envelope.Code != response.CodeConflict || envelope.Message != apperror.MsgUserAlreadyExists {
+			t.Fatalf("envelope = %#v", envelope)
+		}
+	})
+
+	t.Run("service error", func(t *testing.T) {
+		status, envelope := executeCreate(t, &stubUserService{createErr: errors.New("database down")}, `{"name":"Alice","email":"alice@example.com"}`)
+		if status != http.StatusInternalServerError {
+			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
+		}
+		if envelope.Success || envelope.Code != response.CodeInternalError || envelope.Message != "internal server error" {
+			t.Fatalf("envelope = %#v", envelope)
+		}
+	})
+}
+
 type stubUserService struct {
-	response *dto.UserResponse
-	err      error
-	gotID    int64
+	response       *dto.UserResponse
+	err            error
+	gotID          int64
+	createResponse *dto.UserResponse
+	createErr      error
+	gotCreate      dto.CreateUserRequest
+}
+
+func (s *stubUserService) CreateUser(_ context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error) {
+	s.gotCreate = req
+	if s.createErr != nil {
+		return nil, response.FromError(s.createErr)
+	}
+	return s.createResponse, nil
 }
 
 func (s *stubUserService) GetUserByID(_ context.Context, id int64) (*dto.UserResponse, error) {
@@ -94,6 +180,29 @@ func (s *stubUserService) GetUserByID(_ context.Context, id int64) (*dto.UserRes
 		return nil, response.FromError(s.err)
 	}
 	return s.response, nil
+}
+
+func executeCreate(t *testing.T, service *stubUserService, body string) (int, response.Envelope) {
+	t.Helper()
+	validator, err := validation.NewDefault()
+	if err != nil {
+		t.Fatalf("NewDefault: %v", err)
+	}
+	ctl := NewUserController(service, validator)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.ContentLength = int64(len(body))
+	ctx.Request = request
+
+	ctl.Create(ctx)
+
+	var envelope response.Envelope
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	return recorder.Code, envelope
 }
 
 func executeGetByID(t *testing.T, service *stubUserService, id string) (int, response.Envelope) {

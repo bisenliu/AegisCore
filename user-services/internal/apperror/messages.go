@@ -1,5 +1,7 @@
 package apperror
 
 const (
-	MsgUserNotFound = "用户不存在"
+	MsgInvalidUserName   = "用户名不能为空"
+	MsgUserAlreadyExists = "用户已存在"
+	MsgUserNotFound      = "用户不存在"
 )
