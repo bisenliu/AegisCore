@@ -31,7 +31,7 @@ HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖
 
 ### Requirement: Register standard HTTP routes and middleware
 
-系统必须注册健康检查、用户 API 路由和共享 HTTP 中间件。HTTP 中间件必须先注入 trace-id，再执行 panic recovery、请求日志和 CORS。trace-id 必须来自 `X-Trace-ID` 请求头或由系统生成，并必须写入 Gin context、Go `context.Context` 和 `X-Trace-ID` 响应头。`common/middleware/request_id.go` 必须重命名为 `trace_id.go`，对外提供 `TraceID()` 中间件。
+系统必须注册健康检查、用户 API 路由和共享 HTTP 中间件。HTTP 中间件必须先注入 trace-id，再执行 panic recovery、请求日志和 CORS。trace-id 必须来自 `X-Trace-ID` 请求头或由系统生成，并必须写入 Gin context、Go `context.Context` 和 `X-Trace-ID` 响应头。共享中间件必须对外提供 `TraceID()` Gin middleware。
 
 #### Scenario: Health endpoint returns service status
 - **Given** HTTP server 已启动

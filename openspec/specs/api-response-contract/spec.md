@@ -55,22 +55,30 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 #### Scenario: Handler panics
 - **Given** HTTP handler 或下游逻辑发生 panic
 - **When** recovery 中间件捕获 panic
-- **Then** 系统记录 panic、request id 和 stack 信息
+- **Then** 系统记录 panic、trace-id 和 stack 信息
 - **Then** 系统返回失败信封，错误码为 `INTERNAL_ERROR`
 - **Then** 请求被 abort，避免继续执行后续 handler
 
-### Requirement: Preserve request id for observability
+### Requirement: Preserve trace id for observability
 
-系统必须为 HTTP 请求保留或生成 request id，并在响应 header 和日志中使用。
+系统必须为 HTTP 请求保留或生成 trace id，并在响应 header、context 和日志中使用。
 
-#### Scenario: Request provides request id
-- **Given** HTTP 请求包含 `X-Request-ID` header
-- **When** request id 中间件处理请求
+#### Scenario: Request provides trace id
+- **Given** HTTP 请求包含 `X-Trace-ID` header
+- **When** trace id 中间件处理请求
 - **Then** 系统将该值写入 Gin context
-- **Then** 响应包含相同的 `X-Request-ID` header
+- **Then** 系统将该值写入 Go `context.Context`
+- **Then** 响应包含相同的 `X-Trace-ID` header
 
-#### Scenario: Request omits request id
-- **Given** HTTP 请求没有 `X-Request-ID` header
-- **When** request id 中间件处理请求
+#### Scenario: Request omits trace id
+- **Given** HTTP 请求没有 `X-Trace-ID` header
+- **When** trace id 中间件处理请求
 - **Then** 系统生成新的 UUID 字符串
-- **Then** 响应包含生成的 `X-Request-ID` header
+- **Then** 系统将生成值写入 Gin context 和 Go `context.Context`
+- **Then** 响应包含生成的 `X-Trace-ID` header
+
+#### Scenario: Health endpoint uses minimal status payload
+- **Given** HTTP server 已启动
+- **When** 调用方请求 `GET /healthz`
+- **Then** 系统可以返回最小健康状态 JSON，而不要求使用业务 API 响应信封
+- **Then** 业务 API 仍必须使用 `common/response.Envelope`

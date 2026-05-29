@@ -46,6 +46,7 @@
 - Go 代码格式化：`gofmt`。
 - 单元测试或集成测试：`go test ./...`。
 - Ent schema 变更后：在 `user-services/` 执行 `go generate ./ent`。
+- 数据库 schema 或 migration 变更后：在 `user-services/` 执行 `./scripts/migrate-diff.sh <name>`、审查 SQL，并执行 `./scripts/migrate-validate.sh`；手工修改 SQL 后先执行 `atlas migrate hash --dir file://migrations`。
 - HTTP 行为变更后：验证成功响应、参数错误、not found 和 internal error。
 
 ## 5. Archive
@@ -64,5 +65,7 @@
 - 修改现有 API 响应、错误码或兼容行为。
 - 修改服务启动、配置加载、中间件或基础设施生命周期。
 - 修改用户模型约束或查询语义。
+- 修改 Ent schema、Atlas migration 工作流、部署前迁移规则或 `atlas.sum` 校验要求。
+- 修改 Go workspace/module 的 `go` 或 `toolchain` 基线。
 
 不要因为一次性重构或纯格式化变更更新主规格，除非外部可观察行为发生变化。
