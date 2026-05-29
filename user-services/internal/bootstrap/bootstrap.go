@@ -40,7 +40,11 @@ var Module = fx.Module("aegiscore-user-services",
 		NewGinEngine,
 		NewHTTPServer,
 	),
-	fx.Invoke(RegisterRoutes),
+	fx.Invoke(
+		RegisterRoutes,
+		// 确保 HTTP 服务器被实例化并将其生命周期 Hook 注册到 Fx 中
+		func(*http.Server) {},
+	),
 )
 
 type GinParams struct {
