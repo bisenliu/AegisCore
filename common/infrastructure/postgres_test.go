@@ -6,8 +6,6 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -17,6 +15,7 @@ import (
 	"github.com/aegiscore/common/config"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
+	"go.uber.org/zap"
 )
 
 var testDriverSeq atomic.Int64
@@ -24,7 +23,7 @@ var testDriverSeq atomic.Int64
 func TestNewPostgresReturnsErrorForMissingConfig(t *testing.T) {
 	cfg := &config.Config{}
 	lc := fxtest.NewLifecycle(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := zap.NewNop()
 
 	_, err := NewPostgres(lc, cfg, log, "missing_db")
 	if err == nil {
@@ -39,7 +38,7 @@ func TestNewPostgresAppliesPoolSettings(t *testing.T) {
 	drv := registerTestSQLDriver(t)
 	cfg := testConfig(drv.name)
 	lc := fxtest.NewLifecycle(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := zap.NewNop()
 
 	db, err := NewPostgres(lc, cfg, log, "user_db")
 	if err != nil {
@@ -57,7 +56,7 @@ func TestNewPostgresRegistersLifecycle(t *testing.T) {
 	drv := registerTestSQLDriver(t)
 	cfg := testConfig(drv.name)
 	lc := fxtest.NewLifecycle(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := zap.NewNop()
 
 	if _, err := NewPostgres(lc, cfg, log, "user_db"); err != nil {
 		t.Fatalf("NewPostgres: %v", err)
@@ -95,7 +94,7 @@ func TestModuleDoesNotProvideNamedPostgresPools(t *testing.T) {
 func TestNewRedisClientReturnsErrorForMissingConfig(t *testing.T) {
 	cfg := &config.Config{}
 	lc := fxtest.NewLifecycle(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := zap.NewNop()
 
 	_, err := NewRedisClient(lc, cfg, log, "missing_redis")
 	if err == nil {
@@ -118,7 +117,7 @@ func TestNewRedisClientRegistersLifecycle(t *testing.T) {
 		},
 	}}
 	lc := fxtest.NewLifecycle(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := zap.NewNop()
 
 	client, err := NewRedisClient(lc, cfg, log, "cache_redis")
 	if err != nil {

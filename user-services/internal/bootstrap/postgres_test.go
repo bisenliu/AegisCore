@@ -6,8 +6,6 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"net"
 	"net/url"
 	"sort"
@@ -21,6 +19,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
+	"go.uber.org/zap"
 )
 
 var bootstrapTestDriverSeq atomic.Int64
@@ -28,7 +27,7 @@ var bootstrapTestDriverSeq atomic.Int64
 func TestNewPostgresPoolsProvidesUserServiceDatabases(t *testing.T) {
 	drv := registerBootstrapTestSQLDriver(t)
 	cfg := bootstrapTestConfig(drv.name)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := zap.NewNop()
 
 	type pools struct {
 		fx.In
@@ -104,7 +103,7 @@ func TestNewRedisClientsProvidesCacheRedis(t *testing.T) {
 			WriteTimeout: time.Second,
 		},
 	}
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := zap.NewNop()
 
 	type clients struct {
 		fx.In
@@ -141,7 +140,7 @@ func TestNewRedisClientsDoesNotProvideQueueRedis(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		fx.Supply(&config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil))),
+		fx.Supply(&config.Config{}, zap.NewNop()),
 		fx.Provide(NewRedisClients),
 		fx.Invoke(func(clients) {}),
 	)
@@ -155,7 +154,7 @@ func TestNewRedisClientsDoesNotProvideQueueRedis(t *testing.T) {
 
 func TestNewRedisClientsReturnsErrorForMissingCacheRedisConfig(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := zap.NewNop()
 
 	_, err := NewRedisClients(RedisParams{
 		Lifecycle: lc,
@@ -172,7 +171,7 @@ func TestNewRedisClientsReturnsErrorForMissingCacheRedisConfig(t *testing.T) {
 
 func TestNewRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := zap.NewNop()
 	cfg := &config.Config{Redis: map[string]config.RedisConfig{
 		"cache_redis": {
 			Addr:         "127.0.0.1:1",

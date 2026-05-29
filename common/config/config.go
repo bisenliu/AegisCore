@@ -32,8 +32,14 @@ type HTTPConfig struct {
 }
 
 type LogConfig struct {
-	Level  string `mapstructure:"level"`
-	Format string `mapstructure:"format"`
+	Level      string `mapstructure:"level"`
+	Format     string `mapstructure:"format"`
+	Directory  string `mapstructure:"directory"`
+	Filename   string `mapstructure:"filename"`
+	Console    bool   `mapstructure:"console"`
+	MaxAgeDays int    `mapstructure:"max_age_days"`
+	MaxSizeMB  int    `mapstructure:"max_size_mb"`
+	MaxBackups int    `mapstructure:"max_backups"`
 }
 
 type RedisConfig struct {

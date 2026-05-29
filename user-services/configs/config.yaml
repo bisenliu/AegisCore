@@ -15,6 +15,12 @@ http:
 log:
   level: info
   format: json
+  directory: ./logs
+  filename: aegiscore-user-services
+  console: true
+  max_age_days: 7
+  max_size_mb: 100
+  max_backups: 30
 
 # Redis 基础连接模板
 .redis_base: &redis_base

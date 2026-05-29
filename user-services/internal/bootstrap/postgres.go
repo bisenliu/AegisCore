@@ -2,11 +2,11 @@ package bootstrap
 
 import (
 	"database/sql"
-	"log/slog"
 
 	"github.com/aegiscore/common/config"
 	commoninfra "github.com/aegiscore/common/infrastructure"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 )
 
 const (
@@ -19,7 +19,7 @@ type PostgresParams struct {
 
 	Lifecycle fx.Lifecycle
 	Config    *config.Config
-	Log       *slog.Logger
+	Log       *zap.Logger
 }
 
 type PostgresPools struct {

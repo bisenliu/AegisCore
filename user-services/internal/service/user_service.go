@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 
+	"github.com/aegiscore/common/logger"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/repository"
+	"go.uber.org/zap"
 )
 
 type UserService interface {
@@ -21,8 +23,10 @@ func NewUserService(repo repository.UserRepository) UserService {
 }
 
 func (s *userService) GetUserByID(ctx context.Context, id int64) (*dto.UserResponse, error) {
+	logger.Info(ctx, "query user profile", zap.Int64("user_id", id))
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
+		logger.Error(ctx, "query user profile failed", zap.Int64("user_id", id), zap.Error(err))
 		return nil, response.FromError(err)
 	}
 	return &dto.UserResponse{

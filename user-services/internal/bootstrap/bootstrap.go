@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/aegiscore/common/config"
 	commoninfra "github.com/aegiscore/common/infrastructure"
+	"github.com/aegiscore/common/logger"
 	commonmw "github.com/aegiscore/common/middleware"
 	"github.com/aegiscore/user-services/internal/controller"
 	"github.com/aegiscore/user-services/internal/entclient"
@@ -18,6 +18,7 @@ import (
 	"github.com/aegiscore/user-services/internal/service"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 )
 
 func NewApp(configPath string) *fx.App {
@@ -46,7 +47,7 @@ type GinParams struct {
 	fx.In
 
 	Config *config.Config
-	Log    *slog.Logger
+	Log    *zap.Logger
 }
 
 func NewGinEngine(params GinParams) (*gin.Engine, error) {
@@ -57,7 +58,7 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 			return nil, fmt.Errorf("set trusted proxies: %w", err)
 		}
 	}
-	engine.Use(commonmw.RequestID(), commonmw.Recovery(params.Log), commonmw.RequestLogger(params.Log), commonmw.CORS())
+	engine.Use(commonmw.TraceID(), commonmw.Recovery(params.Log), commonmw.RequestLogger(params.Log), commonmw.CORS())
 	return engine, nil
 }
 
@@ -77,7 +78,7 @@ type HTTPServerParams struct {
 
 	Lifecycle fx.Lifecycle
 	Config    *config.Config
-	Log       *slog.Logger
+	Log       *zap.Logger
 	Engine    *gin.Engine
 }
 
@@ -93,10 +94,10 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			params.Log.InfoContext(ctx, "starting http server", slog.String("addr", addr))
+			logger.WithContext(params.Log, ctx).Info("starting http server", zap.String("addr", addr))
 			go func() {
 				if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					params.Log.Error("http server failed", slog.Any("error", err))
+					params.Log.Error("http server failed", zap.Error(err))
 				}
 			}()
 			return nil
@@ -108,7 +109,7 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 			}
 			shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 			defer cancel()
-			params.Log.InfoContext(ctx, "stopping http server")
+			logger.WithContext(params.Log, ctx).Info("stopping http server")
 			return server.Shutdown(shutdownCtx)
 		},
 	})

@@ -1,0 +1,119 @@
+package middleware
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/aegiscore/common/logger"
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+)
+
+func TestTraceIDPropagatesHeaderToGinAndGoContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.Use(TraceID())
+	engine.GET("/trace", func(c *gin.Context) {
+		if got := traceID(c); got != "trace-123" {
+			t.Fatalf("traceID(c) = %q, want trace-123", got)
+		}
+		if got := logger.TraceIDFromContext(c.Request.Context()); got != "trace-123" {
+			t.Fatalf("TraceIDFromContext = %q, want trace-123", got)
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/trace", nil)
+	req.Header.Set("X-Trace-ID", "trace-123")
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+	if got := rec.Header().Get("X-Trace-ID"); got != "trace-123" {
+		t.Fatalf("X-Trace-ID = %q, want trace-123", got)
+	}
+}
+
+func TestTraceIDGeneratesWhenMissing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.Use(TraceID())
+	engine.GET("/trace", func(c *gin.Context) {
+		if got := traceID(c); got == "" {
+			t.Fatal("traceID(c) = empty, want generated value")
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/trace", nil))
+
+	if got := rec.Header().Get("X-Trace-ID"); got == "" {
+		t.Fatal("X-Trace-ID = empty, want generated value")
+	}
+}
+
+func TestRequestLoggerIncludesTraceIDAndRequestFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core)
+	engine := gin.New()
+	engine.Use(TraceID(), RequestLogger(log))
+	engine.GET("/ok", func(c *gin.Context) { c.Status(http.StatusAccepted) })
+
+	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
+	req.Header.Set("X-Trace-ID", "trace-log")
+	engine.ServeHTTP(httptest.NewRecorder(), req)
+
+	entries := logs.FilterMessage("http request completed").All()
+	if len(entries) != 1 {
+		t.Fatalf("request log count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields[logger.TraceIDField] != "trace-log" || fields["method"] != http.MethodGet || fields["path"] != "/ok" || fields["status"] != int64(http.StatusAccepted) {
+		t.Fatalf("request log fields = %#v", fields)
+	}
+	if _, ok := fields["latency"]; !ok {
+		t.Fatalf("request log missing latency: %#v", fields)
+	}
+	if _, ok := fields["client_ip"]; !ok {
+		t.Fatalf("request log missing client_ip: %#v", fields)
+	}
+}
+
+func TestRecoveryIncludesTraceIDAndEnvelope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zap.ErrorLevel)
+	log := zap.New(core)
+	engine := gin.New()
+	engine.Use(TraceID(), Recovery(log))
+	engine.GET("/panic", func(c *gin.Context) { panic("boom") })
+
+	req := httptest.NewRequest(http.MethodGet, "/panic", nil)
+	req.Header.Set("X-Trace-ID", "trace-panic")
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `"success":false`) {
+		t.Fatalf("response body = %s, want failure envelope", rec.Body.String())
+	}
+	entries := logs.FilterMessage("panic recovered").All()
+	if len(entries) != 1 {
+		t.Fatalf("recovery log count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields[logger.TraceIDField] != "trace-panic" || fields["panic"] != "boom" {
+		t.Fatalf("recovery log fields = %#v", fields)
+	}
+	if _, ok := fields["stack"]; !ok {
+		t.Fatalf("recovery log missing stack: %#v", fields)
+	}
+}

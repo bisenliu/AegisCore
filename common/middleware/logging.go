@@ -1,33 +1,24 @@
 package middleware
 
 import (
-	"log/slog"
 	"time"
 
+	"github.com/aegiscore/common/logger"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
-func RequestLogger(log *slog.Logger) gin.HandlerFunc {
+func RequestLogger(log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
 
-		log.InfoContext(c.Request.Context(), "http request completed",
-			slog.String("method", c.Request.Method),
-			slog.String("path", c.Request.URL.Path),
-			slog.Int("status", c.Writer.Status()),
-			slog.Duration("latency", time.Since(start)),
-			slog.String("client_ip", c.ClientIP()),
-			slog.String("request_id", requestID(c)),
+		logger.WithContext(log, c.Request.Context()).Info("http request completed",
+			zap.String("method", c.Request.Method),
+			zap.String("path", c.Request.URL.Path),
+			zap.Int("status", c.Writer.Status()),
+			zap.Duration("latency", time.Since(start)),
+			zap.String("client_ip", c.ClientIP()),
 		)
 	}
-}
-
-func requestID(c *gin.Context) string {
-	v, ok := c.Get(RequestIDKey)
-	if !ok {
-		return ""
-	}
-	requestID, _ := v.(string)
-	return requestID
 }

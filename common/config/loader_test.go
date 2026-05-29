@@ -19,6 +19,18 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cfg.HTTP.Port != 18080 {
 		t.Fatalf("HTTP.Port = %d, want 18080", cfg.HTTP.Port)
 	}
+	if cfg.Log.Directory != "./logs" {
+		t.Fatalf("Log.Directory = %q, want ./logs", cfg.Log.Directory)
+	}
+	if cfg.Log.Filename != "aegiscore-test" {
+		t.Fatalf("Log.Filename = %q, want aegiscore-test", cfg.Log.Filename)
+	}
+	if !cfg.Log.Console {
+		t.Fatal("Log.Console = false, want true")
+	}
+	if cfg.Log.MaxAgeDays != 7 || cfg.Log.MaxSizeMB != 100 || cfg.Log.MaxBackups != 30 {
+		t.Fatalf("Log rotation = (%d,%d,%d), want (7,100,30)", cfg.Log.MaxAgeDays, cfg.Log.MaxSizeMB, cfg.Log.MaxBackups)
+	}
 	cacheRedis, ok := cfg.RedisConfig("cache_redis")
 	if !ok {
 		t.Fatal("RedisConfig(cache_redis) ok = false")
@@ -359,6 +371,12 @@ http:
 log:
   level: info
   format: json
+  directory: ./logs
+  filename: aegiscore-test
+  console: true
+  max_age_days: 7
+  max_size_mb: 100
+  max_backups: 30
 
 .redis_base: &redis_base
   addr: 127.0.0.1:6379
@@ -420,7 +438,13 @@ func configYAMLWithSection(section string) string {
     - 127.0.0.1`,
 		"log": `log:
   level: info
-  format: json`,
+  format: json
+  directory: ./logs
+  filename: aegiscore-test
+  console: true
+  max_age_days: 7
+  max_size_mb: 100
+  max_backups: 30`,
 		"redis": `redis:
   cache_redis:
     addr: 127.0.0.1:6379

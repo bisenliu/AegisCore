@@ -1,12 +1,11 @@
 package bootstrap
 
 import (
-	"log/slog"
-
 	"github.com/aegiscore/common/config"
 	commoninfra "github.com/aegiscore/common/infrastructure"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 )
 
 const cacheRedisName = "cache_redis"
@@ -16,7 +15,7 @@ type RedisParams struct {
 
 	Lifecycle fx.Lifecycle
 	Config    *config.Config
-	Log       *slog.Logger
+	Log       *zap.Logger
 }
 
 type RedisClients struct {
