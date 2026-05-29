@@ -10,7 +10,7 @@
 | `http-service-runtime` | 通过 CLI 启动 HTTP 服务，注册中间件和路由，并支持优雅关闭 | `user-services/cmd/main.go`, `user-services/internal/bootstrap/bootstrap.go`, `user-services/internal/router/router.go` | `openspec/specs/http-service-runtime/spec.md` | ready |
 | `shared-infrastructure` | 加载配置并通过 Fx 提供日志、Redis、Postgres 和 Ent clients | `common/config/`, `common/infrastructure/`, `user-services/internal/entclient/provider.go` | `openspec/specs/shared-infrastructure/spec.md` | ready |
 | `api-response-contract` | 统一 HTTP 成功/失败信封、错误码和应用错误映射 | `common/response/`, `common/middleware/recovery.go`, `user-services/internal/controller/user_controller.go` | `openspec/specs/api-response-contract/spec.md` | ready |
-| `database-schema-migrations` | 通过 Ent schema 和 Atlas 生成、审查、校验并部署服务内 SQL migration | `user-services/atlas.hcl`, `user-services/ent/migrate/main.go`, `user-services/migrations/`, `user-services/scripts/` | `openspec/specs/database-schema-migrations/spec.md` | proposed |
+| `database-schema-migrations` | 通过 Ent schema 和 Atlas 生成、审查、校验并部署服务内 SQL migration | `user-services/atlas.hcl`, `user-services/ent/migrate/main.go`, `user-services/migrations/`, `user-services/scripts/` | `openspec/specs/database-schema-migrations/spec.md` | ready |
 
 ## 2. Key Entry Points
 
