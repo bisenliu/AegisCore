@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/config"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
@@ -114,6 +115,7 @@ func TestNewRedisClientRegistersLifecycle(t *testing.T) {
 			DialTimeout:  time.Second,
 			ReadTimeout:  time.Second,
 			WriteTimeout: time.Second,
+			PingTimeout:  time.Second,
 		},
 	}}
 	lc := fxtest.NewLifecycle(t)
@@ -150,6 +152,77 @@ func TestModuleDoesNotProvideRedisClient(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `name="cache_redis"`) {
 		t.Fatalf("ValidateApp error = %q, want missing named cache_redis", err.Error())
+	}
+}
+
+func TestProvideNamedPostgresProvidesOnlyDeclaredPool(t *testing.T) {
+	drv := registerTestSQLDriver(t)
+	cfg := testConfig(drv.name)
+	log := zap.NewNop()
+	type params struct {
+		fx.In
+
+		UserDB *sql.DB `name:"user_db"`
+	}
+	var got params
+
+	app := fxtest.New(t,
+		fx.Supply(cfg, log),
+		ProvideNamedPostgres("user_db", "user_db"),
+		fx.Populate(&got),
+	)
+	app.RequireStart()
+	app.RequireStop()
+
+	if got.UserDB == nil {
+		t.Fatal("UserDB = nil")
+	}
+	if got := drv.pings.Load(); got != 1 {
+		t.Fatalf("pings = %d, want 1", got)
+	}
+}
+
+func TestProvideNamedRedisProvidesOnlyDeclaredClient(t *testing.T) {
+	redisServer := newTestRedisServer(t)
+	cfg := &config.Config{Redis: map[string]config.RedisConfig{
+		"cache_redis": {
+			Addr:         redisServer.addr,
+			DB:           0,
+			DialTimeout:  time.Second,
+			ReadTimeout:  time.Second,
+			WriteTimeout: time.Second,
+			PingTimeout:  time.Second,
+		},
+		"queue_redis": {
+			Addr:         "127.0.0.1:1",
+			DB:           1,
+			DialTimeout:  time.Second,
+			ReadTimeout:  time.Second,
+			WriteTimeout: time.Second,
+			PingTimeout:  time.Second,
+		},
+	}}
+	log := zap.NewNop()
+	type params struct {
+		fx.In
+
+		CacheRedis *redis.Client `name:"cache_redis"`
+	}
+	var got params
+
+	app := fxtest.New(t,
+		fx.Supply(cfg, log),
+		ProvideNamedRedis("cache_redis", "cache_redis"),
+		fx.Populate(&got),
+	)
+	app.RequireStart()
+	app.RequireStop()
+
+	if got.CacheRedis == nil {
+		t.Fatal("CacheRedis = nil")
+	}
+	if got := redisServer.pings.Load(); got != 1 {
+		t.Fatalf("pings = %d, want 1", got)
 	}
 }
 

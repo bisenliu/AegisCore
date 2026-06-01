@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aegiscore/common/logger"
 	"github.com/aegiscore/common/response"
@@ -132,6 +133,35 @@ func TestJSONBinder(t *testing.T) {
 			t.Fatalf("Code = %d, want %d", validationErr.Code, response.CodeBadRequest)
 		}
 	})
+
+	t.Run("trailing body", func(t *testing.T) {
+		ctx := newJSONContext(`{"id":123} {"id":456}`)
+		var req request
+		err := validator.Bind(ctx, &req, JSONBinder)
+		var validationErr *Error
+		if !errors.As(err, &validationErr) {
+			t.Fatalf("Bind error = %T, want *Error", err)
+		}
+		if validationErr.Message != ErrTrailingJSONBody || validationErr.Code != response.CodeBadRequest {
+			t.Fatalf("validation error = %#v", validationErr)
+		}
+	})
+
+	t.Run("unknown field compatible by default", func(t *testing.T) {
+		ctx := newJSONContext(`{"id":123,"extra":true}`)
+		var req request
+		if err := validator.Bind(ctx, &req, JSONBinder); err != nil {
+			t.Fatalf("Bind: %v", err)
+		}
+	})
+
+	t.Run("unknown field rejected in strict mode", func(t *testing.T) {
+		ctx := newJSONContext(`{"id":123,"extra":true}`)
+		var req request
+		if err := validator.Bind(ctx, &req, StrictJSONBinder); err == nil {
+			t.Fatal("Bind error = nil, want unknown field error")
+		}
+	})
 }
 
 func TestBinders(t *testing.T) {
@@ -198,6 +228,35 @@ func TestBinders(t *testing.T) {
 		}
 		if req.Name != "aegis" {
 			t.Fatalf("Name = %q, want aegis", req.Name)
+		}
+	})
+
+	t.Run("custom text unmarshaler and duration", func(t *testing.T) {
+		type request struct {
+			Status testTextValue `query:"status"`
+			TTL    time.Duration `query:"ttl"`
+		}
+		ctx := newRequestContext(http.MethodGet, "/users?status=active&ttl=5s", "")
+		var req request
+		if err := validator.Bind(ctx, &req, QueryBinder); err != nil {
+			t.Fatalf("Bind: %v", err)
+		}
+		if req.Status != testTextValue("parsed:active") || req.TTL != 5*time.Second {
+			t.Fatalf("request = %#v", req)
+		}
+	})
+
+	t.Run("embedded pointer struct", func(t *testing.T) {
+		type request struct {
+			*TestEmbedded
+		}
+		ctx := newRequestContext(http.MethodGet, "/users?page=3", "")
+		var req request
+		if err := validator.Bind(ctx, &req, QueryBinder); err != nil {
+			t.Fatalf("Bind: %v", err)
+		}
+		if req.TestEmbedded == nil || req.Page != 3 {
+			t.Fatalf("embedded request = %#v", req)
 		}
 	})
 }
@@ -378,6 +437,17 @@ type testStatus string
 
 func (s testStatus) IsValid() bool {
 	return s == "active"
+}
+
+type testTextValue string
+
+func (v *testTextValue) UnmarshalText(text []byte) error {
+	*v = testTextValue("parsed:" + string(text))
+	return nil
+}
+
+type TestEmbedded struct {
+	Page int `query:"page"`
 }
 
 type enumRequest struct {

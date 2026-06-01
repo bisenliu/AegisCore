@@ -63,6 +63,20 @@ func TestWrapInternalAndFromError(t *testing.T) {
 func TestFailureResponseErrors(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	t.Run("nil failure returns internal envelope", func(t *testing.T) {
+		ctx, recorder := newTestContext()
+
+		Fail(ctx, nil)
+
+		var envelope Envelope
+		if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		if recorder.Code != http.StatusInternalServerError || envelope.Success || envelope.Code != CodeInternalError || envelope.Message != MessageInternalError {
+			t.Fatalf("response = status %d envelope %#v", recorder.Code, envelope)
+		}
+	})
+
 	t.Run("ordinary failure omits errors", func(t *testing.T) {
 		ctx, recorder := newTestContext()
 

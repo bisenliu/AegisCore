@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -108,6 +109,23 @@ func TestTraceIDHelpers(t *testing.T) {
 	if got := TraceIDFromContext(context.Background()); got != "" {
 		t.Fatalf("TraceIDFromContext empty = %q, want empty", got)
 	}
+}
+
+func TestDefaultLoggerConcurrentAccess(t *testing.T) {
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			SetDefault(zap.NewNop())
+		}()
+		go func() {
+			defer wg.Done()
+			Info(context.Background(), "concurrent logger access")
+		}()
+	}
+	wg.Wait()
+	SetDefault(nil)
 }
 
 func TestDailyWriterRotatesWhenDateChanges(t *testing.T) {

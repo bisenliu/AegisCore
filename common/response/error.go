@@ -92,12 +92,12 @@ func WrapInternal(err error, publicMessage string) *Error {
 }
 
 func InternalError(err error) *Error {
-	return WrapInternal(err, "internal server error")
+	return WrapInternal(err, MessageInternalError)
 }
 
 func FromError(err error) *Error {
 	if err == nil {
-		return nil
+		return InternalError(nil)
 	}
 	var appErr *Error
 	if errors.As(err, &appErr) {

@@ -14,12 +14,18 @@ type Envelope struct {
 	Errors  any    `json:"errors,omitempty"`
 }
 
+const (
+	MessageOK            = "ok"
+	MessageCreated       = "created"
+	MessageInternalError = "internal server error"
+)
+
 func OK(c *gin.Context, data any) {
-	c.JSON(http.StatusOK, Envelope{Success: true, Code: CodeOK, Message: "ok", Data: data})
+	c.JSON(http.StatusOK, Envelope{Success: true, Code: CodeOK, Message: MessageOK, Data: data})
 }
 
 func Created(c *gin.Context, data any) {
-	c.JSON(http.StatusCreated, Envelope{Success: true, Code: CodeOK, Message: "created", Data: data})
+	c.JSON(http.StatusCreated, Envelope{Success: true, Code: CodeOK, Message: MessageCreated, Data: data})
 }
 
 func Fail(c *gin.Context, err error) {

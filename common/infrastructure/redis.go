@@ -3,7 +3,6 @@ package infrastructure
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/aegiscore/common/config"
 	"github.com/aegiscore/common/logger"
@@ -29,7 +28,7 @@ func NewRedisClient(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name s
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			pingCtx, cancel := context.WithTimeout(ctx, redisCfg.PingTimeout)
 			defer cancel()
 			if err := client.Ping(pingCtx).Err(); err != nil {
 				return fmt.Errorf("ping redis %s: %w", name, err)

@@ -61,6 +61,8 @@ log:
   read_timeout: 3s
   # Redis 写操作超时时间。
   write_timeout: 3s
+  # 服务启动时 ping Redis 的超时时间；超时会导致启动失败。
+  ping_timeout: 5s
 
 # PostgreSQL 基础连接模板。
 # 具体数据库实例通过 YAML merge 继承该模板，并覆盖 db_name、连接池等差异字段。

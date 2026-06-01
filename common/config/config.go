@@ -50,6 +50,7 @@ type RedisConfig struct {
 	DialTimeout  time.Duration `mapstructure:"dial_timeout"`
 	ReadTimeout  time.Duration `mapstructure:"read_timeout"`
 	WriteTimeout time.Duration `mapstructure:"write_timeout"`
+	PingTimeout  time.Duration `mapstructure:"ping_timeout"`
 }
 
 type PostgresConfig struct {

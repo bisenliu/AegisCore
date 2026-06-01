@@ -94,6 +94,7 @@ func TestNewRedisClientsProvidesCacheRedis(t *testing.T) {
 			DialTimeout:  time.Second,
 			ReadTimeout:  time.Second,
 			WriteTimeout: time.Second,
+			PingTimeout:  time.Second,
 		},
 		"queue_redis": {
 			Addr:         "127.0.0.1:1",
@@ -101,6 +102,7 @@ func TestNewRedisClientsProvidesCacheRedis(t *testing.T) {
 			DialTimeout:  time.Second,
 			ReadTimeout:  time.Second,
 			WriteTimeout: time.Second,
+			PingTimeout:  time.Second,
 		},
 	}
 	log := zap.NewNop()
@@ -179,6 +181,7 @@ func TestNewRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 			DialTimeout:  10 * time.Millisecond,
 			ReadTimeout:  10 * time.Millisecond,
 			WriteTimeout: 10 * time.Millisecond,
+			PingTimeout:  10 * time.Millisecond,
 		},
 	}}
 
@@ -203,6 +206,7 @@ func bootstrapTestConfig(driverName string) *config.Config {
 				DialTimeout:  time.Second,
 				ReadTimeout:  time.Second,
 				WriteTimeout: time.Second,
+				PingTimeout:  time.Second,
 			},
 		},
 		PostgresConfigs: map[string]config.PostgresConfig{

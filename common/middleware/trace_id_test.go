@@ -58,6 +58,62 @@ func TestTraceIDGeneratesWhenMissing(t *testing.T) {
 	}
 }
 
+func TestTraceIDReplacesUnsafeInboundValue(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.Use(TraceIDWithOptions(TraceIDOptions{MaxLength: 8, Validate: func(value string) bool { return !strings.Contains(value, " ") }}))
+	engine.GET("/trace", func(c *gin.Context) {
+		if got := traceID(c); got == "unsafe trace value" || got == "" {
+			t.Fatalf("traceID(c) = %q, want generated replacement", got)
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/trace", nil)
+	req.Header.Set(HeaderTraceID, "unsafe trace value")
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get(HeaderTraceID); got == "unsafe trace value" || got == "" {
+		t.Fatalf("X-Trace-ID = %q, want generated replacement", got)
+	}
+}
+
+func TestCORSWithOptions(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.Use(CORSWithOptions(CORSOptions{
+		AllowedMethods:   []string{http.MethodGet},
+		AllowedHeaders:   []string{"Content-Type"},
+		ExposedHeaders:   []string{HeaderTraceID},
+		AllowCredentials: true,
+		MaxAgeSeconds:    600,
+		ReflectOrigin:    true,
+	}))
+	engine.GET("/cors", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	req := httptest.NewRequest(http.MethodGet, "/cors", nil)
+	req.Header.Set(HeaderOrigin, "https://example.test")
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get(HeaderAccessControlAllowOrigin); got != "https://example.test" {
+		t.Fatalf("allow origin = %q", got)
+	}
+	if got := rec.Header().Get(HeaderVary); got != HeaderOrigin {
+		t.Fatalf("vary = %q", got)
+	}
+	if got := rec.Header().Get(HeaderAccessControlExposeHeaders); got != HeaderTraceID {
+		t.Fatalf("expose headers = %q", got)
+	}
+	if got := rec.Header().Get(HeaderAccessControlAllowCredentials); got != "true" {
+		t.Fatalf("allow credentials = %q", got)
+	}
+	if got := rec.Header().Get(HeaderAccessControlMaxAge); got != "600" {
+		t.Fatalf("max age = %q", got)
+	}
+}
+
 func TestRequestLoggerIncludesTraceIDAndRequestFields(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	core, logs := observer.New(zap.InfoLevel)

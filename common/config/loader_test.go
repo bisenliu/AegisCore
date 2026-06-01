@@ -38,6 +38,9 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cacheRedis.DB != 2 {
 		t.Fatalf("cache_redis.DB = %d, want 2", cacheRedis.DB)
 	}
+	if cacheRedis.PingTimeout != 7*time.Second {
+		t.Fatalf("cache_redis.PingTimeout = %s, want 7s", cacheRedis.PingTimeout)
+	}
 	queueRedis, ok := cfg.RedisConfig("queue_redis")
 	if !ok {
 		t.Fatal("RedisConfig(queue_redis) ok = false")
@@ -138,7 +141,8 @@ func TestLoadDoesNotValidateInvalidBasicValues(t *testing.T) {
     db: -1
     dial_timeout: 5s
     read_timeout: 3s
-    write_timeout: 3s`))
+    write_timeout: 3s
+    ping_timeout: 0s`))
 	if cfg.Redis["cache_redis"].DB != -1 {
 		t.Fatalf("cache_redis.DB = %d, want -1", cfg.Redis["cache_redis"].DB)
 	}
@@ -385,6 +389,7 @@ log:
   dial_timeout: 5s
   read_timeout: 3s
   write_timeout: 3s
+  ping_timeout: 7s
 
 .postgres_base: &postgres_base
   host: 127.0.0.1
@@ -407,6 +412,7 @@ redis:
     <<: *redis_base
     db: 1
     dial_timeout: 10s
+    ping_timeout: 9s
 
 postgres:
   user_db:
@@ -453,7 +459,8 @@ func configYAMLWithSection(section string) string {
     db: 2
     dial_timeout: 5s
     read_timeout: 3s
-    write_timeout: 3s`,
+    write_timeout: 3s
+    ping_timeout: 7s`,
 		"postgres": `postgres:
   user_db:
     host: 127.0.0.1
