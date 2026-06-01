@@ -2,7 +2,6 @@ package logger
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,13 +38,14 @@ func TestNewWritesClassifiedFiles(t *testing.T) {
 		t.Fatalf("Sync: %v", err)
 	}
 
-	assertFileContains(t, filepath.Join(dir, "aegiscore-test.all.log"), "debug message", "info message", "warn message", "error message", `"trace-id":"trace-123"`)
-	assertFileContains(t, filepath.Join(dir, "aegiscore-test.info.log"), "info message")
-	assertFileNotContains(t, filepath.Join(dir, "aegiscore-test.info.log"), "warn message", "error message")
-	assertFileContains(t, filepath.Join(dir, "aegiscore-test.warning.log"), "warn message")
-	assertFileNotContains(t, filepath.Join(dir, "aegiscore-test.warning.log"), "info message", "error message")
-	assertFileContains(t, filepath.Join(dir, "aegiscore-test.error.log"), "error message")
-	assertFileNotContains(t, filepath.Join(dir, "aegiscore-test.error.log"), "info message", "warn message")
+	date := time.Now().Format("2006-01-02")
+	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "all"), "debug message", "info message", "warn message", "error message", `"trace-id":"trace-123"`)
+	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "info"), "info message")
+	assertFileNotContains(t, datedPath(dir, "aegiscore-test", date, "info"), "warn message", "error message")
+	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "warning"), "warn message")
+	assertFileNotContains(t, datedPath(dir, "aegiscore-test", date, "warning"), "info message", "error message")
+	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "error"), "error message")
+	assertFileNotContains(t, datedPath(dir, "aegiscore-test", date, "error"), "info message", "warn message")
 }
 
 func TestErrorDoesNotIncludeStacktraceByDefault(t *testing.T) {
@@ -70,8 +70,9 @@ func TestErrorDoesNotIncludeStacktraceByDefault(t *testing.T) {
 		t.Fatalf("Sync: %v", err)
 	}
 
-	assertFileContains(t, filepath.Join(dir, "aegiscore-test.error.log"), "error without stacktrace", `"caller"`)
-	assertFileNotContains(t, filepath.Join(dir, "aegiscore-test.error.log"), `"stacktrace"`)
+	path := datedPath(dir, "aegiscore-test", time.Now().Format("2006-01-02"), "error")
+	assertFileContains(t, path, "error without stacktrace", `"caller"`)
+	assertFileNotContains(t, path, `"stacktrace"`)
 }
 
 func TestExplicitStacktraceField(t *testing.T) {
@@ -96,7 +97,7 @@ func TestExplicitStacktraceField(t *testing.T) {
 		t.Fatalf("Sync: %v", err)
 	}
 
-	assertFileContains(t, filepath.Join(dir, "aegiscore-test.error.log"), "error with stacktrace", `"stacktrace"`)
+	assertFileContains(t, datedPath(dir, "aegiscore-test", time.Now().Format("2006-01-02"), "error"), "error with stacktrace", `"stacktrace"`)
 }
 
 func TestTraceIDHelpers(t *testing.T) {
@@ -128,59 +129,29 @@ func TestDailyWriterRotatesWhenDateChanges(t *testing.T) {
 	if err := daily.Sync(); err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
-	assertFileContains(t, filepath.Join(dir, "aegiscore-test-2026-05-29.all.log"), "first day")
-	assertFileContains(t, filepath.Join(dir, "aegiscore-test.all.log"), "second day")
+	assertFileContains(t, datedPath(dir, "aegiscore-test", "2026-05-29", "all"), "first day")
+	assertFileContains(t, datedPath(dir, "aegiscore-test", "2026-05-30", "all"), "second day")
+	assertFileNotContains(t, datedPath(dir, "aegiscore-test", "2026-05-29", "all"), "second day")
 }
 
-func TestDailyWriterDoesNotOverwriteExistingArchive(t *testing.T) {
+func TestDailyWriterAppliesLumberjackConfig(t *testing.T) {
 	dir := t.TempDir()
-	archivePath := filepath.Join(dir, "aegiscore-test-2026-05-29.all.log")
-	if err := os.WriteFile(archivePath, []byte("existing archive\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile archive: %v", err)
-	}
-	writer := newDailyLumberjackWriteSyncer(filepath.Join(dir, "aegiscore-test.all.log"), config.LogConfig{MaxAgeDays: 7, MaxSizeMB: 1, MaxBackups: 10})
+	writer := newDailyLumberjackWriteSyncer(filepath.Join(dir, "aegiscore-test.all.log"), config.LogConfig{MaxAgeDays: 5, MaxSizeMB: 6, MaxBackups: 7})
 	daily := writer.(*dailyLumberjackWriteSyncer)
-	now := time.Date(2026, 5, 29, 8, 0, 0, 0, time.Local)
-	daily.newClock = func() time.Time { return now }
-	if _, err := daily.Write([]byte("first day\n")); err != nil {
-		t.Fatalf("Write first day: %v", err)
-	}
-	now = now.AddDate(0, 0, 1)
-	if _, err := daily.Write([]byte("second day\n")); err != nil {
-		t.Fatalf("Write second day: %v", err)
-	}
-	if err := daily.Sync(); err != nil {
-		t.Fatalf("Sync: %v", err)
-	}
-
-	assertFileContains(t, archivePath, "existing archive")
-	assertFileNotContains(t, archivePath, "first day")
-	assertFileContains(t, filepath.Join(dir, "aegiscore-test-2026-05-29.1.all.log"), "first day")
-}
-
-func TestDailyWriterCleansArchivesByAgeAndCount(t *testing.T) {
-	dir := t.TempDir()
-	writer := newDailyLumberjackWriteSyncer(filepath.Join(dir, "aegiscore-test.all.log"), config.LogConfig{MaxAgeDays: 2, MaxSizeMB: 1, MaxBackups: 1})
-	daily := writer.(*dailyLumberjackWriteSyncer)
-	archives := []string{
-		"aegiscore-test-2026-05-27.all.log",
-		"aegiscore-test-2026-05-28.all.log",
-		"aegiscore-test-2026-05-29.all.log",
-	}
-	for i, name := range archives {
-		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, []byte(fmt.Sprintf("archive %d\n", i)), 0o644); err != nil {
-			t.Fatalf("WriteFile(%s): %v", name, err)
-		}
-	}
-	daily.newClock = func() time.Time { return time.Date(2026, 5, 30, 8, 0, 0, 0, time.Local) }
 	daily.mu.Lock()
-	daily.cleanupArchivesLocked()
-	daily.mu.Unlock()
-
-	assertFileDoesNotExist(t, filepath.Join(dir, "aegiscore-test-2026-05-27.all.log"))
-	assertFileDoesNotExist(t, filepath.Join(dir, "aegiscore-test-2026-05-28.all.log"))
-	assertFileContains(t, filepath.Join(dir, "aegiscore-test-2026-05-29.all.log"), "archive 2")
+	defer daily.mu.Unlock()
+	if daily.logger.MaxSize != 6 {
+		t.Fatalf("MaxSize = %d, want 6", daily.logger.MaxSize)
+	}
+	if daily.logger.MaxBackups != 7 {
+		t.Fatalf("MaxBackups = %d, want 7", daily.logger.MaxBackups)
+	}
+	if daily.logger.MaxAge != 5 {
+		t.Fatalf("MaxAge = %d, want 5", daily.logger.MaxAge)
+	}
+	if daily.logger.Filename != datedPath(dir, "aegiscore-test", daily.date, "all") {
+		t.Fatalf("Filename = %q, want dated file", daily.logger.Filename)
+	}
 }
 
 func assertFileContains(t *testing.T, path string, wants ...string) {
@@ -211,11 +182,6 @@ func assertFileNotContains(t *testing.T, path string, wants ...string) {
 	}
 }
 
-func assertFileDoesNotExist(t *testing.T, path string) {
-	t.Helper()
-	if _, err := os.Stat(path); err == nil {
-		t.Fatalf("%s exists, want absent", path)
-	} else if !os.IsNotExist(err) {
-		t.Fatalf("Stat(%s): %v", path, err)
-	}
+func datedPath(dir string, prefix string, date string, level string) string {
+	return filepath.Join(dir, prefix+"."+date+"."+level+".log")
 }
