@@ -20,3 +20,14 @@ func TestModuleResolvesSharedValidationDependency(t *testing.T) {
 		t.Fatalf("ValidateApp error = %v", err)
 	}
 }
+
+func TestModuleIncludesSharedTimezoneDependency(t *testing.T) {
+	err := fx.ValidateApp(
+		fx.Supply(&config.Config{}, zap.NewNop()),
+		Module,
+		fx.Invoke(func(*validation.Validator, *controller.UserController) {}),
+	)
+	if err != nil {
+		t.Fatalf("ValidateApp with timezone module error = %v", err)
+	}
+}

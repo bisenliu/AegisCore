@@ -9,11 +9,16 @@ import (
 
 // Config is the root configuration object for AegisCore services.
 type Config struct {
+	System          SystemConfig              `mapstructure:"system"`
 	App             AppConfig                 `mapstructure:"app"`
 	HTTP            HTTPConfig                `mapstructure:"http"`
 	Log             LogConfig                 `mapstructure:"log"`
 	Redis           map[string]RedisConfig    `mapstructure:"redis"`
 	PostgresConfigs map[string]PostgresConfig `mapstructure:"postgres"`
+}
+
+type SystemConfig struct {
+	Timezone string `mapstructure:"timezone"`
 }
 
 type AppConfig struct {

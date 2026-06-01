@@ -16,6 +16,9 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cfg.App.Name != "aegiscore-test" {
 		t.Fatalf("App.Name = %q, want aegiscore-test", cfg.App.Name)
 	}
+	if cfg.System.Timezone != "Asia/Shanghai" {
+		t.Fatalf("System.Timezone = %q, want Asia/Shanghai", cfg.System.Timezone)
+	}
 	if cfg.HTTP.Port != 18080 {
 		t.Fatalf("HTTP.Port = %d, want 18080", cfg.HTTP.Port)
 	}
@@ -112,6 +115,9 @@ postgres:
 	if cfg.HTTP.Port != 0 {
 		t.Fatalf("HTTP.Port = %d, want 0", cfg.HTTP.Port)
 	}
+	if cfg.System.Timezone != "" {
+		t.Fatalf("System.Timezone = %q, want empty", cfg.System.Timezone)
+	}
 	if cfg.Redis["cache_redis"].Addr != "" {
 		t.Fatalf("cache_redis.Addr = %q, want empty", cfg.Redis["cache_redis"].Addr)
 	}
@@ -170,6 +176,7 @@ func TestLoadDoesNotValidateInvalidBasicValues(t *testing.T) {
 }
 
 func TestLoadEnvironmentOverride(t *testing.T) {
+	t.Setenv("AEGISCORE_SYSTEM_TIMEZONE", "UTC")
 	t.Setenv("AEGISCORE_HTTP_PORT", "19090")
 	t.Setenv("AEGISCORE_HTTP_READ_TIMEOUT", "30s")
 	t.Setenv("AEGISCORE_HTTP_WRITE_TIMEOUT", "60s")
@@ -180,6 +187,9 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_MAX_OPEN_CONNS", "30")
 
 	cfg := loadConfigFromYAML(t, explicitConfigYAML())
+	if cfg.System.Timezone != "UTC" {
+		t.Fatalf("System.Timezone = %q, want UTC", cfg.System.Timezone)
+	}
 	if cfg.HTTP.Port != 19090 {
 		t.Fatalf("HTTP.Port = %d, want 19090", cfg.HTTP.Port)
 	}
@@ -365,7 +375,10 @@ func TestRedisConfigLookup(t *testing.T) {
 }
 
 func explicitConfigYAML() string {
-	return `app:
+	return `system:
+  timezone: Asia/Shanghai
+
+app:
   name: aegiscore-test
   environment: test
 
@@ -437,6 +450,8 @@ postgres:
 
 func configYAMLWithSection(section string) string {
 	sections := map[string]string{
+		"system": `system:
+  timezone: Asia/Shanghai`,
 		"app": `app:
   name: aegiscore-test
   environment: test`,
@@ -489,8 +504,8 @@ func configYAMLWithSection(section string) string {
 			break
 		}
 	}
-	ordered := []string{sections["app"], sections["http"], sections["log"], sections["redis"], sections["postgres"]}
-	return fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n", ordered[0], ordered[1], ordered[2], ordered[3], ordered[4])
+	ordered := []string{sections["system"], sections["app"], sections["http"], sections["log"], sections["redis"], sections["postgres"]}
+	return fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n", ordered[0], ordered[1], ordered[2], ordered[3], ordered[4], ordered[5])
 }
 
 func loadConfigFromYAML(t *testing.T, content string) *Config {
