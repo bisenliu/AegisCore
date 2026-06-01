@@ -44,6 +44,8 @@ type Enum interface {
 
 type FieldError struct {
 	Field   string `json:"field"`
+	Label   string `json:"label"`
+	Rule    string `json:"rule"`
 	Message string `json:"message"`
 }
 
@@ -146,7 +148,7 @@ func (v *Validator) BindOrAbort(c *gin.Context, dst any, binder Binder) bool {
 	if err := v.Bind(c, dst, binder); err != nil {
 		logger.Warn(c.Request.Context(), "invalid request", zap.Error(err), zap.String("path", c.Request.URL.Path))
 		if validationFailure(err) {
-			response.ValidationFailed(c, publicMessage(err))
+			response.ValidationFailedWithErrors(c, publicMessage(err), validationDetails(err))
 		} else {
 			response.BadRequest(c, publicMessage(err))
 		}
@@ -316,7 +318,8 @@ func (v *Validator) normalizeError(dst any, err error) error {
 	if errors.As(err, &validationErrors) {
 		fields := make([]FieldError, 0, len(validationErrors))
 		for _, fieldErr := range validationErrors {
-			fields = append(fields, FieldError{Field: fieldErr.Field(), Message: fieldErr.Translate(v.trans)})
+			field, label := validationFieldNames(dst, fieldErr)
+			fields = append(fields, FieldError{Field: field, Label: label, Rule: fieldErr.Tag(), Message: fieldErr.Translate(v.trans)})
 		}
 		return &Error{Message: ErrValidationFailed, Fields: fields, Code: response.CodeValidationFailed}
 	}
@@ -389,6 +392,14 @@ func publicMessage(err error) string {
 func validationFailure(err error) bool {
 	var validationErr *Error
 	return errors.As(err, &validationErr) && validationErr.Code == response.CodeValidationFailed
+}
+
+func validationDetails(err error) []FieldError {
+	var validationErr *Error
+	if errors.As(err, &validationErr) {
+		return validationErr.Fields
+	}
+	return nil
 }
 
 func expectedType(t reflect.Type) string {
@@ -466,4 +477,68 @@ func displayNameFromField(field reflect.StructField) string {
 		return jsonName
 	}
 	return fieldName(field)
+}
+
+func validationFieldNames(dst any, fieldErr validator.FieldError) (string, string) {
+	field, label, ok := validationFieldNamesFromPath(dst, fieldErr.StructNamespace())
+	if ok {
+		return field, label
+	}
+	name := fieldErr.Field()
+	return name, name
+}
+
+func validationFieldNamesFromPath(dst any, namespace string) (string, string, bool) {
+	parts := strings.Split(namespace, ".")
+	if len(parts) < 2 {
+		return "", "", false
+	}
+	typ := reflect.TypeOf(dst)
+	for typ != nil && typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	if typ == nil || typ.Kind() != reflect.Struct {
+		return "", "", false
+	}
+
+	fieldParts := make([]string, 0, len(parts)-1)
+	label := ""
+	for _, part := range parts[1:] {
+		part = strings.SplitN(part, "[", 2)[0]
+		structField, ok := typ.FieldByName(part)
+		if !ok {
+			return "", "", false
+		}
+		name := requestFieldName(structField)
+		if name == "" {
+			return "", "", false
+		}
+		fieldParts = append(fieldParts, name)
+		label = displayNameFromField(structField)
+
+		typ = structField.Type
+		for typ.Kind() == reflect.Ptr || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
+			typ = typ.Elem()
+		}
+		if typ.Kind() != reflect.Struct {
+			break
+		}
+	}
+	if len(fieldParts) == 0 || label == "" {
+		return "", "", false
+	}
+	return strings.Join(fieldParts, "."), label, true
+}
+
+func requestFieldName(field reflect.StructField) string {
+	for _, tag := range []string{"json", "form", "uri", "query"} {
+		name := strings.SplitN(field.Tag.Get(tag), ",", 2)[0]
+		if name == "-" {
+			return ""
+		}
+		if name != "" {
+			return name
+		}
+	}
+	return field.Name
 }

@@ -26,7 +26,7 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 
 ### Requirement: Return failure responses with application errors
 
-系统必须将应用错误转换为统一失败信封，并使用错误对象中的 HTTP 状态码、数字业务码和消息。
+系统必须将应用错误转换为统一失败信封，并使用错误对象中的 HTTP 状态码、数字业务码和消息。参数校验失败响应必须在统一失败信封中携带字段级 `errors` 明细。
 
 #### Scenario: Return bad request
 - **Given** controller 检测到请求格式错误、请求体格式错误或参数无法解析
@@ -39,8 +39,10 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 - **Given** 请求参数绑定成功但 required、min、max、len、email、enum、gt、gte、lt 或 lte 等校验规则不通过
 - **When** validation helper 生成失败响应
 - **Then** 系统返回 HTTP 400
-- **Then** 响应 JSON 包含 `success: false`、`code: 10001` 和中文化校验失败消息
-- **Then** 响应不包含 `data`
+- **Then** 响应 JSON 包含 `success: false`、`code: 10001` 和顶层消息 `请求参数验证失败`
+- **Then** 响应 JSON 包含 `errors` 数组
+- **Then** 每个 `errors` 元素必须包含 `field`、`label`、`rule`、`message`
+- **Then** 响应不包含业务 `data`
 
 #### Scenario: Return unauthenticated
 - **Given** 请求缺少有效认证信息

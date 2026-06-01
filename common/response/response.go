@@ -11,6 +11,7 @@ type Envelope struct {
 	Code    Code        `json:"code"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
+	Errors  interface{} `json:"errors,omitempty"`
 }
 
 func OK(c *gin.Context, data interface{}) {
@@ -32,6 +33,16 @@ func BadRequest(c *gin.Context, format string, args ...any) {
 
 func ValidationFailed(c *gin.Context, format string, args ...any) {
 	Fail(c, NewError(CodeValidationFailed, formatMessage(format, args), http.StatusBadRequest))
+}
+
+func ValidationFailedWithErrors(c *gin.Context, message string, errors interface{}) {
+	c.JSON(http.StatusBadRequest, struct {
+		Success bool        `json:"success"`
+		Code    Code        `json:"code"`
+		Message string      `json:"message"`
+		Data    interface{} `json:"data"`
+		Errors  interface{} `json:"errors,omitempty"`
+	}{Success: false, Code: CodeValidationFailed, Message: message, Errors: errors})
 }
 
 func Unauthenticated(c *gin.Context, format string, args ...any) {

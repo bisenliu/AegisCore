@@ -134,6 +134,7 @@ func TestUserControllerCreate(t *testing.T) {
 		if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
 			t.Fatalf("envelope = %#v", envelope)
 		}
+		assertFieldError(t, envelope, "email", "邮箱", "email", "邮箱格式不正确")
 	})
 
 	t.Run("user already exists", func(t *testing.T) {
@@ -237,5 +238,20 @@ func assertInvalidUserID(t *testing.T, status int, envelope response.Envelope, m
 	}
 	if envelope.Success || envelope.Code != wantCode || envelope.Message != message || envelope.Message == "invalid user id" {
 		t.Fatalf("envelope = %#v", envelope)
+	}
+}
+
+func assertFieldError(t *testing.T, envelope response.Envelope, field, label, rule, message string) {
+	t.Helper()
+	errors, ok := envelope.Errors.([]any)
+	if !ok || len(errors) != 1 {
+		t.Fatalf("errors = %#v, want one error", envelope.Errors)
+	}
+	got, ok := errors[0].(map[string]any)
+	if !ok {
+		t.Fatalf("field error = %T, want map", errors[0])
+	}
+	if got["field"] != field || got["label"] != label || got["rule"] != rule || got["message"] != message {
+		t.Fatalf("field error = %#v", got)
 	}
 }

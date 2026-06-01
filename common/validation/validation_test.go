@@ -38,14 +38,44 @@ func TestValidateStructAndFieldNames(t *testing.T) {
 	if validationErr.Code != response.CodeValidationFailed {
 		t.Fatalf("Code = %d, want %d", validationErr.Code, response.CodeValidationFailed)
 	}
-	fields := fieldMessages(validationErr.Fields)
-	for _, field := range []string{"姓名", "age", "id", "query_id"} {
-		if fields[field] == "" {
+	fields := fieldDetails(validationErr.Fields)
+	checks := map[string]FieldError{
+		"name":     {Field: "name", Label: "姓名", Rule: "required"},
+		"age":      {Field: "age", Label: "age", Rule: "gt"},
+		"id":       {Field: "id", Label: "id", Rule: "gt"},
+		"query_id": {Field: "query_id", Label: "query_id", Rule: "gt"},
+	}
+	for field, want := range checks {
+		got := fields[field]
+		if got.Message == "" {
 			t.Fatalf("missing field error for %q in %#v", field, validationErr.Fields)
 		}
+		if got.Label != want.Label || got.Rule != want.Rule {
+			t.Fatalf("field error for %q = %#v, want label %q rule %q", field, got, want.Label, want.Rule)
+		}
 	}
-	if fields["Hidden"] != "" || fields["-"] != "" {
+	if fields["Hidden"].Message != "" || fields["-"].Message != "" {
 		t.Fatalf("hidden field leaked in %#v", validationErr.Fields)
+	}
+}
+
+func TestValidateEmailFieldDetails(t *testing.T) {
+	validator := newTestValidator(t)
+	type request struct {
+		Email string `json:"email" validate:"required,email" label:"邮箱"`
+	}
+
+	err := validator.Validate(&request{Email: "bad"})
+	var validationErr *Error
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("Validate error = %T, want *Error", err)
+	}
+	if len(validationErr.Fields) != 1 {
+		t.Fatalf("Fields = %#v, want one field", validationErr.Fields)
+	}
+	field := validationErr.Fields[0]
+	if field.Field != "email" || field.Label != "邮箱" || field.Rule != "email" || field.Message != "邮箱格式不正确" {
+		t.Fatalf("field = %#v", field)
 	}
 }
 
@@ -246,6 +276,9 @@ func TestBindOrAbort(t *testing.T) {
 	if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != ErrValidationFailed {
 		t.Fatalf("envelope = %#v", envelope)
 	}
+	if len(envelope.Errors.([]any)) != 1 {
+		t.Fatalf("errors = %#v, want one error", envelope.Errors)
+	}
 }
 
 func TestBindOrAbortTypeMismatchUsesBadRequest(t *testing.T) {
@@ -268,6 +301,9 @@ func TestBindOrAbortTypeMismatchUsesBadRequest(t *testing.T) {
 	}
 	if envelope.Success || envelope.Code != response.CodeBadRequest || envelope.Message != "用户ID字段类型不正确，应为整数类型" {
 		t.Fatalf("envelope = %#v", envelope)
+	}
+	if envelope.Errors != nil {
+		t.Fatalf("errors = %#v, want nil", envelope.Errors)
 	}
 }
 
@@ -345,10 +381,10 @@ func newRequestContextWithRecorder(method, target, body string) (*gin.Context, *
 	return ctx, recorder
 }
 
-func fieldMessages(fields []FieldError) map[string]string {
-	messages := make(map[string]string, len(fields))
+func fieldDetails(fields []FieldError) map[string]FieldError {
+	messages := make(map[string]FieldError, len(fields))
 	for _, field := range fields {
-		messages[field.Field] = field.Message
+		messages[field.Field] = field
 	}
 	return messages
 }
