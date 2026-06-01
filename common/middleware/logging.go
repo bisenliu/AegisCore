@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/logger"
-	"github.com/aegiscore/common/netutil"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -19,7 +18,7 @@ func RequestLogger(log *zap.Logger) gin.HandlerFunc {
 			zap.String("path", c.Request.URL.Path),
 			zap.Int("status", c.Writer.Status()),
 			zap.Duration("latency", time.Since(start)),
-			zap.String("client_ip", netutil.GetClientIP(c)),
+			zap.String("client_ip", c.ClientIP()),
 		)
 	}
 }
