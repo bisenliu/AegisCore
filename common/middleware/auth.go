@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/aegiscore/common/config"
@@ -9,6 +10,7 @@ import (
 	"github.com/aegiscore/common/logger"
 	"github.com/aegiscore/common/response"
 	"github.com/gin-gonic/gin"
+	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"go.uber.org/zap"
 )
 
@@ -32,7 +34,7 @@ func Auth(jwtService *commonjwt.Service, cfg config.AuthConfig) gin.HandlerFunc 
 		}
 		if !strings.HasPrefix(authHeader, contextutil.TokenPrefix) {
 			logger.Error(ctx, "invalid authorization header format")
-			response.Unauthenticated(c, unauthenticatedMessage)
+			response.TokenInvalid(c, unauthenticatedMessage)
 			c.Abort()
 			return
 		}
@@ -40,7 +42,7 @@ func Auth(jwtService *commonjwt.Service, cfg config.AuthConfig) gin.HandlerFunc 
 		tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, contextutil.TokenPrefix))
 		if tokenString == "" {
 			logger.Error(ctx, "empty bearer token")
-			response.Unauthenticated(c, unauthenticatedMessage)
+			response.TokenInvalid(c, unauthenticatedMessage)
 			c.Abort()
 			return
 		}
@@ -48,7 +50,11 @@ func Auth(jwtService *commonjwt.Service, cfg config.AuthConfig) gin.HandlerFunc 
 		claims, err := jwtService.ParseToken(tokenString)
 		if err != nil {
 			logger.Error(ctx, "token validation failed", zap.Error(err))
-			response.Unauthenticated(c, unauthenticatedMessage)
+			if errors.Is(err, jwtv5.ErrTokenExpired) {
+				response.TokenExpired(c, unauthenticatedMessage)
+			} else {
+				response.TokenInvalid(c, unauthenticatedMessage)
+			}
 			c.Abort()
 			return
 		}

@@ -115,7 +115,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
 		engine.ServeHTTP(recorder, request)
-		assertUnauthenticatedEnvelope(t, recorder)
+		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
 	})
 
 	t.Run("create requires auth", func(t *testing.T) {
@@ -123,7 +123,15 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"name":"Alice","email":"alice@example.com"}`))
 		request.Header.Set("Content-Type", "application/json")
 		engine.ServeHTTP(recorder, request)
-		assertUnauthenticatedEnvelope(t, recorder)
+		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
+	})
+
+	t.Run("query with invalid token returns token invalid", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
+		request.Header.Set("Authorization", "Bearer invalid")
+		engine.ServeHTTP(recorder, request)
+		assertAuthFailureEnvelope(t, recorder, response.CodeTokenInvalid)
 	})
 
 	t.Run("query with valid token keeps controller behavior", func(t *testing.T) {
@@ -167,7 +175,7 @@ func (s *routeAuthUserService) GetUserByID(_ context.Context, id int64) (*dto.Us
 	return &dto.UserResponse{ID: id, Name: "Aegis", Email: "aegis@example.com", Active: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 }
 
-func assertUnauthenticatedEnvelope(t *testing.T, recorder *httptest.ResponseRecorder) {
+func assertAuthFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantCode response.Code) {
 	t.Helper()
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
@@ -176,7 +184,7 @@ func assertUnauthenticatedEnvelope(t *testing.T, recorder *httptest.ResponseReco
 	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
-	if envelope.Success || envelope.Code != response.CodeUnauthenticated {
+	if envelope.Success || envelope.Code != wantCode {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 }

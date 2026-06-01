@@ -21,6 +21,12 @@ const (
 	// CodeUnauthenticated 表示用户未认证。
 	CodeUnauthenticated Code = 20000
 
+	// CodeTokenInvalid 表示 Token 格式错误、非法或签名解析失败。
+	CodeTokenInvalid Code = 20001
+
+	// CodeTokenExpired 表示 Token 已过期。
+	CodeTokenExpired Code = 20002
+
 	// CodeForbidden 表示用户无权访问资源或执行操作。
 	CodeForbidden Code = 30000
 
@@ -73,6 +79,14 @@ func ValidationFailedError(format string, args ...any) *Error {
 
 func UnauthenticatedError(format string, args ...any) *Error {
 	return NewError(CodeUnauthenticated, formatMessage(format, args), http.StatusUnauthorized)
+}
+
+func TokenInvalidError(format string, args ...any) *Error {
+	return NewError(CodeTokenInvalid, formatMessage(format, args), http.StatusUnauthorized)
+}
+
+func TokenExpiredError(format string, args ...any) *Error {
+	return NewError(CodeTokenExpired, formatMessage(format, args), http.StatusUnauthorized)
 }
 
 func ForbiddenError(format string, args ...any) *Error {

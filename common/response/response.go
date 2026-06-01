@@ -49,6 +49,14 @@ func Unauthenticated(c *gin.Context, format string, args ...any) {
 	Fail(c, NewError(CodeUnauthenticated, formatMessage(format, args), http.StatusUnauthorized))
 }
 
+func TokenInvalid(c *gin.Context, format string, args ...any) {
+	Fail(c, NewError(CodeTokenInvalid, formatMessage(format, args), http.StatusUnauthorized))
+}
+
+func TokenExpired(c *gin.Context, format string, args ...any) {
+	Fail(c, NewError(CodeTokenExpired, formatMessage(format, args), http.StatusUnauthorized))
+}
+
 func Forbidden(c *gin.Context, format string, args ...any) {
 	Fail(c, NewError(CodeForbidden, formatMessage(format, args), http.StatusForbidden))
 }
