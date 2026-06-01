@@ -146,7 +146,11 @@ func (v *Validator) Bind(c *gin.Context, dst any, binder Binder) error {
 
 func (v *Validator) BindOrAbort(c *gin.Context, dst any, binder Binder) bool {
 	if err := v.Bind(c, dst, binder); err != nil {
-		logger.Warn(c.Request.Context(), "invalid request", zap.Error(err), zap.String("path", c.Request.URL.Path))
+		fields := []zap.Field{zap.Error(err), zap.String("path", c.Request.URL.Path)}
+		if details := validationDetails(err); len(details) > 0 {
+			fields = append(fields, zap.Any("errors", details))
+		}
+		logger.Error(c.Request.Context(), "invalid request", fields...)
 		if validationFailure(err) {
 			response.ValidationFailedWithErrors(c, publicMessage(err), validationDetails(err))
 		} else {

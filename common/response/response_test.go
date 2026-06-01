@@ -93,8 +93,8 @@ func TestFailureResponseErrors(t *testing.T) {
 		if recorder.Code != http.StatusBadRequest || body["success"] != false || body["code"] != float64(CodeValidationFailed) || body["message"] != "请求参数验证失败" {
 			t.Fatalf("response = status %d body %#v", recorder.Code, body)
 		}
-		if _, ok := body["data"]; !ok || body["data"] != nil {
-			t.Fatalf("data = %#v, want null", body["data"])
+		if _, ok := body["data"]; ok {
+			t.Fatalf("data = %#v, want omitted", body["data"])
 		}
 		errors, ok := body["errors"].([]any)
 		if !ok || len(errors) != 1 {

@@ -8,8 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aegiscore/common/logger"
 	"github.com/aegiscore/common/response"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestValidateStructAndFieldNames(t *testing.T) {
@@ -74,7 +78,7 @@ func TestValidateEmailFieldDetails(t *testing.T) {
 		t.Fatalf("Fields = %#v, want one field", validationErr.Fields)
 	}
 	field := validationErr.Fields[0]
-	if field.Field != "email" || field.Label != "邮箱" || field.Rule != "email" || field.Message != "邮箱格式不正确" {
+	if field.Field != "email" || field.Label != "邮箱" || field.Rule != "email" || field.Message != "邮箱必须是一个有效的邮箱" {
 		t.Fatalf("field = %#v", field)
 	}
 }
@@ -258,6 +262,7 @@ func TestEnumValidation(t *testing.T) {
 
 func TestBindOrAbort(t *testing.T) {
 	validator := newTestValidator(t)
+	logs := captureValidationLogs(t)
 	type request struct {
 		Name string `json:"name" validate:"required"`
 	}
@@ -279,10 +284,33 @@ func TestBindOrAbort(t *testing.T) {
 	if len(envelope.Errors.([]any)) != 1 {
 		t.Fatalf("errors = %#v, want one error", envelope.Errors)
 	}
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("log entries = %d, want 1", len(entries))
+	}
+	entry := entries[0]
+	if entry.Level != zapcore.ErrorLevel || entry.Message != "invalid request" {
+		t.Fatalf("log entry = level %s message %q, want error invalid request", entry.Level, entry.Message)
+	}
+	fields := entry.ContextMap()
+	if fields["path"] != "/" {
+		t.Fatalf("log path = %#v, want /", fields["path"])
+	}
+	if fields["error"] == nil {
+		t.Fatalf("log error field missing: %#v", fields)
+	}
+	errorsField, ok := fields["errors"].([]FieldError)
+	if !ok || len(errorsField) != 1 {
+		t.Fatalf("log errors = %#v, want one FieldError", fields["errors"])
+	}
+	if errorsField[0].Field != "name" || errorsField[0].Rule != "required" {
+		t.Fatalf("log field error = %#v", errorsField[0])
+	}
 }
 
 func TestBindOrAbortTypeMismatchUsesBadRequest(t *testing.T) {
 	validator := newTestValidator(t)
+	logs := captureValidationLogs(t)
 	type request struct {
 		ID int64 `uri:"id" label:"用户ID"`
 	}
@@ -304,6 +332,24 @@ func TestBindOrAbortTypeMismatchUsesBadRequest(t *testing.T) {
 	}
 	if envelope.Errors != nil {
 		t.Fatalf("errors = %#v, want nil", envelope.Errors)
+	}
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("log entries = %d, want 1", len(entries))
+	}
+	entry := entries[0]
+	if entry.Level != zapcore.ErrorLevel || entry.Message != "invalid request" {
+		t.Fatalf("log entry = level %s message %q, want error invalid request", entry.Level, entry.Message)
+	}
+	fields := entry.ContextMap()
+	if fields["path"] != "/users/bad" {
+		t.Fatalf("log path = %#v, want /users/bad", fields["path"])
+	}
+	if fields["error"] == nil {
+		t.Fatalf("log error field missing: %#v", fields)
+	}
+	if _, ok := fields["errors"]; ok {
+		t.Fatalf("log errors = %#v, want omitted", fields["errors"])
 	}
 }
 
@@ -401,4 +447,12 @@ func assertNoPanic(t *testing.T, fn func()) {
 
 func jsonUnmarshal(raw string, dst any) error {
 	return json.NewDecoder(strings.NewReader(raw)).Decode(dst)
+}
+
+func captureValidationLogs(t *testing.T) *observer.ObservedLogs {
+	t.Helper()
+	core, logs := observer.New(zapcore.DebugLevel)
+	logger.SetDefault(zap.New(core))
+	t.Cleanup(func() { logger.SetDefault(nil) })
+	return logs
 }

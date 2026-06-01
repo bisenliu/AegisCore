@@ -134,7 +134,7 @@ func TestUserControllerCreate(t *testing.T) {
 		if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
 			t.Fatalf("envelope = %#v", envelope)
 		}
-		assertFieldError(t, envelope, "email", "邮箱", "email", "邮箱格式不正确")
+		assertFieldError(t, envelope, "email", "邮箱", "email", "邮箱必须是一个有效的邮箱")
 	})
 
 	t.Run("user already exists", func(t *testing.T) {
