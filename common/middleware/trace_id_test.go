@@ -17,6 +17,10 @@ func TestTraceIDPropagatesHeaderToGinAndGoContext(t *testing.T) {
 	engine := gin.New()
 	engine.Use(TraceID())
 	engine.GET("/trace", func(c *gin.Context) {
+		v, ok := c.Get(TraceIDKey)
+		if !ok || v != "trace-123" {
+			t.Fatalf("gin context trace id = %#v, %v; want trace-123, true", v, ok)
+		}
 		if got := traceID(c); got != "trace-123" {
 			t.Fatalf("traceID(c) = %q, want trace-123", got)
 		}
@@ -44,8 +48,12 @@ func TestTraceIDGeneratesWhenMissing(t *testing.T) {
 	engine := gin.New()
 	engine.Use(TraceID())
 	engine.GET("/trace", func(c *gin.Context) {
-		if got := traceID(c); got == "" {
+		got := traceID(c)
+		if got == "" {
 			t.Fatal("traceID(c) = empty, want generated value")
+		}
+		if ctxTraceID := logger.TraceIDFromContext(c.Request.Context()); ctxTraceID != got {
+			t.Fatalf("TraceIDFromContext = %q, want %q", ctxTraceID, got)
 		}
 		c.Status(http.StatusNoContent)
 	})
@@ -63,8 +71,12 @@ func TestTraceIDReplacesUnsafeInboundValue(t *testing.T) {
 	engine := gin.New()
 	engine.Use(TraceIDWithOptions(TraceIDOptions{MaxLength: 8, Validate: func(value string) bool { return !strings.Contains(value, " ") }}))
 	engine.GET("/trace", func(c *gin.Context) {
-		if got := traceID(c); got == "unsafe trace value" || got == "" {
+		got := traceID(c)
+		if got == "unsafe trace value" || got == "" {
 			t.Fatalf("traceID(c) = %q, want generated replacement", got)
+		}
+		if ctxTraceID := logger.TraceIDFromContext(c.Request.Context()); ctxTraceID != got {
+			t.Fatalf("TraceIDFromContext = %q, want %q", ctxTraceID, got)
 		}
 		c.Status(http.StatusNoContent)
 	})
@@ -76,6 +88,33 @@ func TestTraceIDReplacesUnsafeInboundValue(t *testing.T) {
 
 	if got := rec.Header().Get(HeaderTraceID); got == "unsafe trace value" || got == "" {
 		t.Fatalf("X-Trace-ID = %q, want generated replacement", got)
+	}
+}
+
+func TestTraceIDStoresBaseLoggerInRequestContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core)
+	engine := gin.New()
+	engine.Use(func(c *gin.Context) {
+		c.Set(ContextKeyLogger, log)
+		c.Next()
+	}, TraceID())
+	engine.GET("/trace", func(c *gin.Context) {
+		logger.Info(c.Request.Context(), "context logger used")
+		c.Status(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/trace", nil)
+	req.Header.Set(HeaderTraceID, "trace-context-log")
+	engine.ServeHTTP(httptest.NewRecorder(), req)
+
+	entries := logs.FilterMessage("context logger used").All()
+	if len(entries) != 1 {
+		t.Fatalf("context log count = %d, want 1", len(entries))
+	}
+	if got := entries[0].ContextMap()[logger.TraceIDField]; got != "trace-context-log" {
+		t.Fatalf("%s = %q, want trace-context-log", logger.TraceIDField, got)
 	}
 }
 

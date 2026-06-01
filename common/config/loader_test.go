@@ -171,6 +171,10 @@ func TestLoadDoesNotValidateInvalidBasicValues(t *testing.T) {
 
 func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_HTTP_PORT", "19090")
+	t.Setenv("AEGISCORE_HTTP_READ_TIMEOUT", "30s")
+	t.Setenv("AEGISCORE_HTTP_WRITE_TIMEOUT", "60s")
+	t.Setenv("AEGISCORE_HTTP_IDLE_TIMEOUT", "120s")
+	t.Setenv("AEGISCORE_HTTP_SHUTDOWN_TIMEOUT", "25s")
 	t.Setenv("AEGISCORE_REDIS_CACHE_REDIS_DB", "9")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_PASSWORD", "env-secret")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_MAX_OPEN_CONNS", "30")
@@ -178,6 +182,9 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	cfg := loadConfigFromYAML(t, explicitConfigYAML())
 	if cfg.HTTP.Port != 19090 {
 		t.Fatalf("HTTP.Port = %d, want 19090", cfg.HTTP.Port)
+	}
+	if cfg.HTTP.ReadTimeout != 30*time.Second || cfg.HTTP.WriteTimeout != 60*time.Second || cfg.HTTP.IdleTimeout != 120*time.Second || cfg.HTTP.ShutdownTimeout != 25*time.Second {
+		t.Fatalf("HTTP timeouts = (%s,%s,%s,%s), want (30s,60s,120s,25s)", cfg.HTTP.ReadTimeout, cfg.HTTP.WriteTimeout, cfg.HTTP.IdleTimeout, cfg.HTTP.ShutdownTimeout)
 	}
 	if cfg.Redis["cache_redis"].DB != 9 {
 		t.Fatalf("cache_redis.DB = %d, want 9", cfg.Redis["cache_redis"].DB)

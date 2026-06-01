@@ -11,13 +11,13 @@ http:
   port: 8080
 
   # 读取请求头和请求体的最大耗时，避免慢请求长期占用连接。
-  read_timeout: 10s
+  read_timeout: 30s
   # 写出响应的最大耗时，避免客户端读取过慢拖住服务端资源。
-  write_timeout: 10s
+  write_timeout: 60s
   # keep-alive 空闲连接保留时间，超时后服务端主动关闭连接。
-  idle_timeout: 60s
+  idle_timeout: 120s
   # 服务停止时等待已有请求完成的最大耗时，超过后强制结束 shutdown。
-  shutdown_timeout: 10s
+  shutdown_timeout: 25s
 
   # Gin trusted proxies；生产环境应按真实反向代理或网关地址配置。
   trusted_proxies:
