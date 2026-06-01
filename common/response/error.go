@@ -27,6 +27,16 @@ const (
 	// CodeTokenExpired 表示 Token 已过期。
 	CodeTokenExpired Code = 20002
 
+	// CodeTokenRevoked 表示 Token 已失效/被拉黑（如用户在别处修改了密码、或主动登出）。
+	// 前端捕获后应清空本地缓存，直接重定向至登录页。
+	CodeTokenRevoked Code = 20003
+
+	// CodeMFARequired 表示密码验证通过，但需要进行多因素认证（MFA，如短信验证码、Authenticator）。
+	CodeMFARequired Code = 20004
+
+	// CodeUserAccountLocked 表示用户账号已被冻结或封禁。
+	CodeUserAccountLocked Code = 20005
+
 	// CodeForbidden 表示用户无权访问资源或执行操作。
 	CodeForbidden Code = 30000
 
