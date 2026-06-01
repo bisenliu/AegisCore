@@ -12,6 +12,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const unauthenticatedMessage = "登录状态无效或已过期，请重新登录"
+
 func Auth(jwtService *commonjwt.Service, cfg config.AuthConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
@@ -24,13 +26,13 @@ func Auth(jwtService *commonjwt.Service, cfg config.AuthConfig) gin.HandlerFunc 
 		authHeader := c.GetHeader(contextutil.AuthorizationHeader)
 		if authHeader == "" {
 			logger.Error(ctx, "missing authorization header")
-			response.Unauthenticated(c, "missing authorization header")
+			response.Unauthenticated(c, unauthenticatedMessage)
 			c.Abort()
 			return
 		}
 		if !strings.HasPrefix(authHeader, contextutil.TokenPrefix) {
 			logger.Error(ctx, "invalid authorization header format")
-			response.Unauthenticated(c, "invalid authorization header format")
+			response.Unauthenticated(c, unauthenticatedMessage)
 			c.Abort()
 			return
 		}
@@ -38,7 +40,7 @@ func Auth(jwtService *commonjwt.Service, cfg config.AuthConfig) gin.HandlerFunc 
 		tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, contextutil.TokenPrefix))
 		if tokenString == "" {
 			logger.Error(ctx, "empty bearer token")
-			response.Unauthenticated(c, "empty token")
+			response.Unauthenticated(c, unauthenticatedMessage)
 			c.Abort()
 			return
 		}
@@ -46,7 +48,7 @@ func Auth(jwtService *commonjwt.Service, cfg config.AuthConfig) gin.HandlerFunc 
 		claims, err := jwtService.ParseToken(tokenString)
 		if err != nil {
 			logger.Error(ctx, "token validation failed", zap.Error(err))
-			response.Unauthenticated(c, "invalid token")
+			response.Unauthenticated(c, unauthenticatedMessage)
 			c.Abort()
 			return
 		}

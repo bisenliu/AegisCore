@@ -70,7 +70,7 @@ func TestAuthMiddleware(t *testing.T) {
 				if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
 					t.Fatalf("unmarshal response: %v", err)
 				}
-				if envelope.Success || envelope.Code != response.CodeUnauthenticated {
+				if envelope.Success || envelope.Code != response.CodeUnauthenticated || envelope.Message != unauthenticatedMessage {
 					t.Fatalf("envelope = %#v", envelope)
 				}
 			}
