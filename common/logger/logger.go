@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -52,7 +53,7 @@ func NewWithConfig(cfg config.LogConfig) (*zap.Logger, error) {
 		cores = append(cores, zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), level))
 	}
 
-	log := zap.New(zapcore.NewTee(cores...), zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+	log := zap.New(zapcore.NewTee(cores...), zap.AddCaller())
 	SetDefault(log)
 	return log, nil
 }
@@ -113,6 +114,10 @@ func Error(ctx context.Context, msg string, fields ...zap.Field) {
 	FromContext(ctx).Error(msg, fields...)
 }
 
+func StackTrace(fields ...zap.Field) []zap.Field {
+	return append(fields, zap.Stack("stacktrace"))
+}
+
 type fileWriters struct {
 	all     zapcore.WriteSyncer
 	info    zapcore.WriteSyncer
@@ -143,6 +148,9 @@ func newFileWriters(cfg config.LogConfig) (fileWriters, error) {
 type dailyLumberjackWriteSyncer struct {
 	mu       sync.Mutex
 	filename string
+	dir      string
+	prefix   string
+	suffix   string
 	date     string
 	newClock func() time.Time
 	logger   *lumberjack.Logger
@@ -150,12 +158,16 @@ type dailyLumberjackWriteSyncer struct {
 }
 
 func newDailyLumberjackWriteSyncer(filename string, cfg config.LogConfig) zapcore.WriteSyncer {
+	prefix, suffix := splitLogFilename(filepath.Base(filename))
 	w := &dailyLumberjackWriteSyncer{
 		filename: filename,
+		dir:      filepath.Dir(filename),
+		prefix:   prefix,
+		suffix:   suffix,
 		newClock: time.Now,
 		cfg:      cfg,
 	}
-	w.rotateLocked()
+	_ = w.rotateLocked()
 	return zapcore.AddSync(w)
 }
 
@@ -182,10 +194,10 @@ func (w *dailyLumberjackWriteSyncer) Sync() error {
 func (w *dailyLumberjackWriteSyncer) rotateLocked() error {
 	date := w.newClock().Format("2006-01-02")
 	if w.logger != nil {
-		if err := w.logger.Rotate(); err != nil {
+		if err := w.logger.Close(); err != nil {
 			return err
 		}
-		if err := w.logger.Close(); err != nil {
+		if err := w.archiveActiveFileLocked(w.date); err != nil {
 			return err
 		}
 	}
@@ -198,7 +210,106 @@ func (w *dailyLumberjackWriteSyncer) rotateLocked() error {
 		LocalTime:  true,
 		Compress:   false,
 	}
+	w.cleanupArchivesLocked()
 	return nil
+}
+
+func (w *dailyLumberjackWriteSyncer) archiveActiveFileLocked(date string) error {
+	if date == "" {
+		return nil
+	}
+	info, err := os.Stat(w.filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if info.IsDir() {
+		return nil
+	}
+	return os.Rename(w.filename, w.nextArchiveFilenameLocked(date))
+}
+
+func (w *dailyLumberjackWriteSyncer) nextArchiveFilenameLocked(date string) string {
+	base := filepath.Join(w.dir, w.prefix+"-"+date+w.suffix)
+	if _, err := os.Stat(base); os.IsNotExist(err) {
+		return base
+	}
+	for i := 1; ; i++ {
+		candidate := filepath.Join(w.dir, fmt.Sprintf("%s-%s.%d%s", w.prefix, date, i, w.suffix))
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate
+		}
+	}
+}
+
+func (w *dailyLumberjackWriteSyncer) cleanupArchivesLocked() {
+	entries, err := os.ReadDir(w.dir)
+	if err != nil {
+		return
+	}
+	archives := make([]archiveFile, 0)
+	now := w.newClock()
+	maxAge := positiveOrDefault(w.cfg.MaxAgeDays, 7)
+	cutoff := now.AddDate(0, 0, -maxAge)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		date, ok := w.archiveDate(entry.Name())
+		if !ok {
+			continue
+		}
+		path := filepath.Join(w.dir, entry.Name())
+		parsedDate, err := time.ParseInLocation("2006-01-02", date, time.Local)
+		if err == nil && parsedDate.Before(startOfDay(cutoff)) {
+			_ = os.Remove(path)
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		archives = append(archives, archiveFile{path: path, date: date, modTime: info.ModTime()})
+	}
+	maxBackups := positiveOrDefault(w.cfg.MaxBackups, 30)
+	if len(archives) <= maxBackups {
+		return
+	}
+	sort.Slice(archives, func(i, j int) bool {
+		if archives[i].date == archives[j].date {
+			return archives[i].modTime.After(archives[j].modTime)
+		}
+		return archives[i].date > archives[j].date
+	})
+	for _, archive := range archives[maxBackups:] {
+		_ = os.Remove(archive.path)
+	}
+}
+
+func (w *dailyLumberjackWriteSyncer) archiveDate(name string) (string, bool) {
+	if !strings.HasPrefix(name, w.prefix+"-") || !strings.HasSuffix(name, w.suffix) {
+		return "", false
+	}
+	rest := strings.TrimSuffix(strings.TrimPrefix(name, w.prefix+"-"), w.suffix)
+	if len(rest) < len("2006-01-02") {
+		return "", false
+	}
+	date := rest[:len("2006-01-02")]
+	if _, err := time.ParseInLocation("2006-01-02", date, time.Local); err != nil {
+		return "", false
+	}
+	if len(rest) == len(date) {
+		return date, true
+	}
+	return date, strings.HasPrefix(rest[len(date):], ".")
+}
+
+type archiveFile struct {
+	path    string
+	date    string
+	modTime time.Time
 }
 
 func newEncoder(format string) zapcore.Encoder {
@@ -234,4 +345,20 @@ func positiveOrDefault(value int, fallback int) int {
 		return value
 	}
 	return fallback
+}
+
+func splitLogFilename(name string) (string, string) {
+	if strings.HasSuffix(name, ".log") {
+		stem := strings.TrimSuffix(name, ".log")
+		if idx := strings.LastIndex(stem, "."); idx > 0 {
+			return stem[:idx], stem[idx:] + ".log"
+		}
+	}
+	ext := filepath.Ext(name)
+	return strings.TrimSuffix(name, ext), ext
+}
+
+func startOfDay(t time.Time) time.Time {
+	year, month, day := t.Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, t.Location())
 }

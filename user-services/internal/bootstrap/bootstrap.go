@@ -104,7 +104,7 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 			logger.WithContext(params.Log, ctx).Info("starting http server", zap.String("addr", addr))
 			go func() {
 				if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					params.Log.Error("http server failed", zap.Error(err))
+					params.Log.Error("http server failed", logger.StackTrace(zap.Error(err))...)
 				}
 			}()
 			return nil

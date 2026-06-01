@@ -127,6 +127,8 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 - HTTP trace header 是 `X-Trace-ID`，日志字段统一为 `trace-id`。
 - trace-id 中间件会将 trace-id 写入 Gin context、Go `context.Context` 和响应头。
 - 业务代码优先通过 `common/logger.Info(ctx, ...)`、`Warn(ctx, ...)`、`Error(ctx, ...)` 输出日志，避免绕过 context helper 导致 trace-id 丢失。
+- Error 级别日志默认不自动添加 stacktrace；关键运行时错误需要显式传入 `logger.StackTrace(...)` 或 `zap.Stack("stacktrace")`。
+- 文件日志当天活动文件使用 `aegiscore-user-services.<level>.log`，跨天后归档为 `aegiscore-user-services-yyyy-mm-dd.<level>.log`。
 
 ## 9. Adding Features
 
