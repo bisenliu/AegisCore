@@ -43,6 +43,11 @@ const docTemplate = `{
         },
         "/users": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "创建一个新的用户资料。请求体使用共享校验器校验，邮箱必须唯一，active 缺省为 true。",
                 "consumes": [
                     "application/json"
@@ -90,6 +95,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/response.Envelope"
                         }
                     },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
                     "409": {
                         "description": "用户已存在",
                         "schema": {
@@ -107,6 +118,11 @@ const docTemplate = `{
         },
         "/users/{id}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "通过正整数用户 ID 查询用户基础资料。",
                 "produces": [
                     "application/json"
@@ -146,6 +162,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "用户 ID 参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -263,6 +285,7 @@ const docTemplate = `{
                     "$ref": "#/definitions/response.Code"
                 },
                 "data": {},
+                "errors": {},
                 "message": {
                     "type": "string"
                 },
@@ -270,6 +293,14 @@ const docTemplate = `{
                     "type": "boolean"
                 }
             }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "输入 Bearer token，格式为：Bearer \u003ctoken\u003e",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }`

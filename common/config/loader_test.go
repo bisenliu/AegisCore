@@ -22,6 +22,18 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cfg.HTTP.Port != 18080 {
 		t.Fatalf("HTTP.Port = %d, want 18080", cfg.HTTP.Port)
 	}
+	if cfg.Auth.JWT.Secret != "test-secret" {
+		t.Fatalf("Auth.JWT.Secret = %q, want test-secret", cfg.Auth.JWT.Secret)
+	}
+	if cfg.Auth.JWT.Issuer != "aegiscore-test" || cfg.Auth.JWT.Audience != "aegiscore-users" {
+		t.Fatalf("Auth.JWT issuer/audience = (%q,%q), want (aegiscore-test,aegiscore-users)", cfg.Auth.JWT.Issuer, cfg.Auth.JWT.Audience)
+	}
+	if cfg.Auth.JWT.AccessTokenTTL != 15*time.Minute {
+		t.Fatalf("Auth.JWT.AccessTokenTTL = %s, want 15m", cfg.Auth.JWT.AccessTokenTTL)
+	}
+	if got := strings.Join(cfg.Auth.Whitelist, ","); got != "/healthz,/swagger,/docs,/api-docs" {
+		t.Fatalf("Auth.Whitelist = %q, want /healthz,/swagger,/docs,/api-docs", got)
+	}
 	if cfg.Log.Directory != "./logs" {
 		t.Fatalf("Log.Directory = %q, want ./logs", cfg.Log.Directory)
 	}
@@ -118,6 +130,9 @@ postgres:
 	if cfg.System.Timezone != "" {
 		t.Fatalf("System.Timezone = %q, want empty", cfg.System.Timezone)
 	}
+	if cfg.Auth.JWT.Secret != "" || len(cfg.Auth.Whitelist) != 0 {
+		t.Fatalf("Auth = %#v, want zero value", cfg.Auth)
+	}
 	if cfg.Redis["cache_redis"].Addr != "" {
 		t.Fatalf("cache_redis.Addr = %q, want empty", cfg.Redis["cache_redis"].Addr)
 	}
@@ -182,6 +197,8 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_HTTP_WRITE_TIMEOUT", "60s")
 	t.Setenv("AEGISCORE_HTTP_IDLE_TIMEOUT", "120s")
 	t.Setenv("AEGISCORE_HTTP_SHUTDOWN_TIMEOUT", "25s")
+	t.Setenv("AEGISCORE_AUTH_JWT_SECRET", "env-secret")
+	t.Setenv("AEGISCORE_AUTH_JWT_ISSUER", "env-issuer")
 	t.Setenv("AEGISCORE_REDIS_CACHE_REDIS_DB", "9")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_PASSWORD", "env-secret")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_MAX_OPEN_CONNS", "30")
@@ -195,6 +212,9 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	}
 	if cfg.HTTP.ReadTimeout != 30*time.Second || cfg.HTTP.WriteTimeout != 60*time.Second || cfg.HTTP.IdleTimeout != 120*time.Second || cfg.HTTP.ShutdownTimeout != 25*time.Second {
 		t.Fatalf("HTTP timeouts = (%s,%s,%s,%s), want (30s,60s,120s,25s)", cfg.HTTP.ReadTimeout, cfg.HTTP.WriteTimeout, cfg.HTTP.IdleTimeout, cfg.HTTP.ShutdownTimeout)
+	}
+	if cfg.Auth.JWT.Secret != "env-secret" || cfg.Auth.JWT.Issuer != "env-issuer" {
+		t.Fatalf("Auth JWT = %#v, want env overrides", cfg.Auth.JWT)
 	}
 	if cfg.Redis["cache_redis"].DB != 9 {
 		t.Fatalf("cache_redis.DB = %d, want 9", cfg.Redis["cache_redis"].DB)
@@ -392,6 +412,18 @@ http:
   trusted_proxies:
     - 127.0.0.1
 
+auth:
+  jwt:
+    secret: test-secret
+    issuer: aegiscore-test
+    audience: aegiscore-users
+    access_token_ttl: 15m
+  whitelist:
+    - /healthz
+    - /swagger
+    - /docs
+    - /api-docs
+
 log:
   level: info
   format: json
@@ -464,6 +496,14 @@ func configYAMLWithSection(section string) string {
   shutdown_timeout: 10s
   trusted_proxies:
     - 127.0.0.1`,
+		"auth": `auth:
+  jwt:
+    secret: test-secret
+    issuer: aegiscore-test
+    audience: aegiscore-users
+    access_token_ttl: 15m
+  whitelist:
+    - /healthz`,
 		"log": `log:
   level: info
   format: json
@@ -504,8 +544,8 @@ func configYAMLWithSection(section string) string {
 			break
 		}
 	}
-	ordered := []string{sections["system"], sections["app"], sections["http"], sections["log"], sections["redis"], sections["postgres"]}
-	return fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n", ordered[0], ordered[1], ordered[2], ordered[3], ordered[4], ordered[5])
+	ordered := []string{sections["system"], sections["app"], sections["http"], sections["auth"], sections["log"], sections["redis"], sections["postgres"]}
+	return fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n", ordered[0], ordered[1], ordered[2], ordered[3], ordered[4], ordered[5], ordered[6])
 }
 
 func loadConfigFromYAML(t *testing.T, content string) *Config {

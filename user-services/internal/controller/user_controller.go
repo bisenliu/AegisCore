@@ -26,8 +26,10 @@ func NewUserController(service service.UserService, validator *validation.Valida
 // @Param request body dto.CreateUserRequest true "创建用户请求"
 // @Success 201 {object} response.Envelope{data=dto.UserResponse} "创建成功"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 409 {object} response.Envelope "用户已存在"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
 // @Router /users [post]
 func (ctl *UserController) Create(c *gin.Context) {
 	req := dto.CreateUserRequest{}
@@ -51,8 +53,10 @@ func (ctl *UserController) Create(c *gin.Context) {
 // @Param id path int true "用户ID" minimum(1)
 // @Success 200 {object} response.Envelope{data=dto.UserResponse} "查询成功"
 // @Failure 400 {object} response.Envelope "用户 ID 参数错误"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 404 {object} response.Envelope "用户不存在"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
 // @Router /users/{id} [get]
 func (ctl *UserController) GetByID(c *gin.Context) {
 	req := dto.GetUserRequest{}

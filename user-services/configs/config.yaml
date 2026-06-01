@@ -28,6 +28,23 @@ http:
     # 本地回环代理地址；生产环境应替换为网关、Ingress 或负载均衡器地址段。
     - 127.0.0.1
 
+auth:
+  jwt:
+    # JWT HMAC secret；生产环境必须通过环境变量或 Secret 注入覆盖。
+    secret: local-development-secret
+    # 可选 issuer 校验；为空时不校验 issuer。
+    issuer: aegiscore-user-services
+    # 可选 audience 校验；为空时不校验 audience。
+    audience: aegiscore-users
+    # 访问 token 建议有效期；当前认证中间件解析 token 的 exp claim，不负责签发 token。
+    access_token_ttl: 2h
+  # 认证白名单使用前缀匹配，以下路径保持公开访问。
+  whitelist:
+    - /healthz
+    - /swagger
+    - /docs
+    - /api-docs
+
 log:
   # 日志最低输出级别；常用值为 debug、info、warn、error。
   level: info

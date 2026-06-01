@@ -12,6 +12,7 @@ type Config struct {
 	System          SystemConfig              `mapstructure:"system"`
 	App             AppConfig                 `mapstructure:"app"`
 	HTTP            HTTPConfig                `mapstructure:"http"`
+	Auth            AuthConfig                `mapstructure:"auth"`
 	Log             LogConfig                 `mapstructure:"log"`
 	Redis           map[string]RedisConfig    `mapstructure:"redis"`
 	PostgresConfigs map[string]PostgresConfig `mapstructure:"postgres"`
@@ -34,6 +35,18 @@ type HTTPConfig struct {
 	IdleTimeout     time.Duration `mapstructure:"idle_timeout"`
 	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
 	TrustedProxies  []string      `mapstructure:"trusted_proxies"`
+}
+
+type AuthConfig struct {
+	JWT       JWTConfig `mapstructure:"jwt"`
+	Whitelist []string  `mapstructure:"whitelist"`
+}
+
+type JWTConfig struct {
+	Secret         string        `mapstructure:"secret"`
+	Issuer         string        `mapstructure:"issuer"`
+	Audience       string        `mapstructure:"audience"`
+	AccessTokenTTL time.Duration `mapstructure:"access_token_ttl"`
 }
 
 type LogConfig struct {

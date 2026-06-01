@@ -8,6 +8,10 @@ package main
 // @schemes http https
 // @accept json
 // @produce json
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description 输入 Bearer token，格式为：Bearer <token>
 
 import (
 	"context"
