@@ -181,6 +181,29 @@ func TestRequestLoggerIncludesTraceIDAndRequestFields(t *testing.T) {
 	}
 }
 
+func TestRequestLoggerUsesSharedClientIPExtraction(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core)
+	engine := gin.New()
+	engine.Use(TraceID(), RequestLogger(log))
+	engine.GET("/ok", func(c *gin.Context) { c.Status(http.StatusAccepted) })
+
+	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
+	req.Header.Set("X-Trace-ID", "trace-log")
+	req.Header.Set("X-Forwarded-For", "203.0.113.10, 10.0.0.1")
+	engine.ServeHTTP(httptest.NewRecorder(), req)
+
+	entries := logs.FilterMessage("http request completed").All()
+	if len(entries) != 1 {
+		t.Fatalf("request log count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["client_ip"] != "203.0.113.10" {
+		t.Fatalf("client_ip = %q, want 203.0.113.10; fields = %#v", fields["client_ip"], fields)
+	}
+}
+
 func TestRecoveryIncludesTraceIDAndEnvelope(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	core, logs := observer.New(zap.ErrorLevel)
