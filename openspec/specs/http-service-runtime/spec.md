@@ -55,7 +55,7 @@ HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖
 
 ### Requirement: Register standard HTTP routes and middleware
 
-系统必须注册健康检查、用户 API 路由、Swagger 文档路由和共享 HTTP 中间件。HTTP 中间件必须先注入 trace-id，再执行 panic recovery、请求日志、CORS 和认证策略。trace-id 必须来自 `X-Trace-ID` 请求头或由系统生成，并必须写入 Gin context、Go `context.Context` 和 `X-Trace-ID` 响应头。共享中间件必须对外提供 `TraceID()` Gin middleware。用户服务运行时 MUST 对 `/api/v1` 业务路由启用认证，并 MUST 保持健康检查和 Swagger 文档路径可公开访问。请求日志的 `client_ip` 字段必须使用 Gin `Context.ClientIP()` 的结果。
+系统必须注册健康检查、用户 API 路由、Swagger 文档路由和共享 HTTP 中间件。HTTP 中间件必须先注入 trace-id，再执行 panic recovery、请求日志、CORS 和认证策略。trace-id 必须来自 `X-Trace-ID` 请求头或由系统生成，并必须写入 Gin context、Go `context.Context` 和 `X-Trace-ID` 响应头。共享中间件必须对外提供 `TraceID()` Gin middleware。用户服务运行时 MUST 对 `/api/v1` 业务路由启用认证，并 MUST 保持健康检查和 Swagger 文档路径可公开访问。用户服务运行时 MUST 在注册认证中间件时传入 Fx 注入的 Zap logger。请求日志的 `client_ip` 字段必须使用 Gin `Context.ClientIP()` 的结果。
 
 #### Scenario: Health endpoint returns service status
 - **Given** HTTP server 已启动
@@ -84,6 +84,12 @@ HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖
 - **When** Gin engine 处理请求
 - **Then** 请求经过 trace id、panic recovery、request logging、CORS 和认证相关中间件
 - **Then** trace id 中间件必须在 request logging、recovery 和认证中间件之前执行
+
+#### Scenario: Authentication middleware receives runtime logger
+- **Given** 用户服务 Fx app 已注入 Zap logger
+- **When** 用户服务运行时创建 Gin engine 并注册认证中间件
+- **Then** 系统 MUST 将该 Zap logger 传入共享认证中间件
+- **Then** 认证中间件 MUST 使用同一个 logger 输出认证相关日志
 
 #### Scenario: Trace id is propagated to Go context
 - **Given** 请求头包含 `X-Trace-ID`

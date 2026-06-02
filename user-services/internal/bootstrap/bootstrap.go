@@ -69,7 +69,13 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 			return nil, fmt.Errorf("set trusted proxies: %w", err)
 		}
 	}
-	engine.Use(commonmw.TraceID(), commonmw.Recovery(params.Log), commonmw.RequestLogger(params.Log), commonmw.CORS(), commonmw.Auth(params.JWT, params.Config.Auth))
+	engine.Use(
+		commonmw.TraceID(),
+		commonmw.Recovery(params.Log),
+		commonmw.RequestLogger(params.Log),
+		commonmw.CORS(),
+		commonmw.Auth(params.Log, params.JWT, params.Config.Auth),
+	)
 	return engine, nil
 }
 

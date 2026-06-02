@@ -13,6 +13,7 @@ import (
 	"github.com/aegiscore/common/response"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestAuthMiddleware(t *testing.T) {
@@ -40,7 +41,7 @@ func TestAuthMiddleware(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			engine := gin.New()
-			engine.Use(Auth(commonjwt.NewService(cfg), cfg))
+			engine.Use(Auth(zaptest.NewLogger(t), commonjwt.NewService(cfg), cfg))
 			handled := false
 			engine.GET("/*path", func(c *gin.Context) {
 				handled = true
