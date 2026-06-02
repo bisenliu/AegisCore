@@ -4,7 +4,8 @@ import "context"
 
 const (
 	AuthorizationHeader = "Authorization"
-	TokenPrefix         = "Bearer "
+	TokenTypeBearer     = "Bearer"
+	TokenPrefix         = TokenTypeBearer + " "
 	UserIDKey           = "user_id"
 	SessionIDKey        = "session_id"
 )

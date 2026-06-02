@@ -38,14 +38,14 @@ func TestAuthMiddleware(t *testing.T) {
 		{name: "whitelist", path: "/healthz", wantStatus: http.StatusOK, wantHandled: true},
 		{name: "missing header", path: "/api/v1/users/123", wantStatus: http.StatusUnauthorized, wantCode: response.CodeUnauthenticated},
 		{name: "invalid format", path: "/api/v1/users/123", authorization: "Token abc", wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
-		{name: "empty token", path: "/api/v1/users/123", authorization: "Bearer ", wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
-		{name: "invalid token", path: "/api/v1/users/123", authorization: "Bearer invalid", wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
-		{name: "expired token", path: "/api/v1/users/123", authorization: "Bearer " + expiredToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenExpired},
-		{name: "missing token version", path: "/api/v1/users/123", authorization: "Bearer " + missingVersionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
-		{name: "missing session id", path: "/api/v1/users/123", authorization: "Bearer " + missingSessionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
-		{name: "token version mismatch", path: "/api/v1/users/123", authorization: "Bearer " + validToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("version mismatch") })},
-		{name: "valid token", path: "/api/v1/users/123", authorization: "Bearer " + validToken, wantStatus: http.StatusOK, wantHandled: true},
-		{name: "valid token with version validator", path: "/api/v1/users/123", authorization: "Bearer " + validToken, wantStatus: http.StatusOK, wantHandled: true, validator: TokenVersionValidatorFunc(func(_ context.Context, userID string, version int64) error {
+		{name: "empty token", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
+		{name: "invalid token", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + "invalid", wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
+		{name: "expired token", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + expiredToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenExpired},
+		{name: "missing token version", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + missingVersionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
+		{name: "missing session id", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + missingSessionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
+		{name: "token version mismatch", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("version mismatch") })},
+		{name: "valid token", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true},
+		{name: "valid token with version validator", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true, validator: TokenVersionValidatorFunc(func(_ context.Context, userID string, version int64) error {
 			if userID != "u-123" || version != 1 {
 				return errors.New("unexpected token version input")
 			}
@@ -94,7 +94,7 @@ func TestAuthMiddleware(t *testing.T) {
 				if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
 					t.Fatalf("unmarshal response: %v", err)
 				}
-				if envelope.Success || envelope.Code != tt.wantCode || envelope.Message != unauthenticatedMessage {
+				if envelope.Success || envelope.Code != tt.wantCode || envelope.Message != response.MessageAuthInvalid {
 					t.Fatalf("envelope = %#v", envelope)
 				}
 			}

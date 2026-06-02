@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/config"
+	"github.com/aegiscore/common/contextutil"
 	commonjwt "github.com/aegiscore/common/jwt"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/common/validation"
@@ -138,7 +139,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query with invalid token returns token invalid", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
-		request.Header.Set("Authorization", "Bearer invalid")
+		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+"invalid")
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, response.CodeTokenInvalid)
 	})
@@ -146,7 +147,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query with valid token keeps controller behavior", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
-		request.Header.Set("Authorization", "Bearer "+signRouteAuthToken(t, "secret", "u-123"))
+		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+signRouteAuthToken(t, "secret", "u-123"))
 		request.Header.Set("X-Trace-ID", "trace-auth-test")
 		engine.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusOK {
@@ -160,7 +161,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query with mismatched token version returns token invalid", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
-		request.Header.Set("Authorization", "Bearer "+signRouteAuthTokenWithVersion(t, "secret", "u-123", 2))
+		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+signRouteAuthTokenWithVersion(t, "secret", "u-123", 2))
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, response.CodeTokenInvalid)
 	})
@@ -168,7 +169,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query validation still runs after auth", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/abc", nil)
-		request.Header.Set("Authorization", "Bearer "+signRouteAuthToken(t, "secret", "u-123"))
+		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+signRouteAuthToken(t, "secret", "u-123"))
 		engine.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
@@ -216,11 +217,11 @@ func (s *routeAuthSessionStore) InvalidateUserTokenVersion(context.Context, int6
 }
 
 func (s *routeAuthAuthService) Login(context.Context, dto.LoginRequest) (*dto.TokenResponse, error) {
-	return &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: "Bearer", ExpiresIn: 3600}, nil
+	return &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonjwt.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
 func (s *routeAuthAuthService) Refresh(context.Context, dto.RefreshTokenRequest) (*dto.TokenResponse, error) {
-	return &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: "Bearer", ExpiresIn: 3600}, nil
+	return &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonjwt.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
 func (s *routeAuthAuthService) Logout(context.Context) (*dto.LogoutResponse, error) {

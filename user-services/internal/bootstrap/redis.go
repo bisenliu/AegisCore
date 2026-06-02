@@ -8,8 +8,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const cacheRedisName = "cache_redis"
-
 type NamedRedisParams struct {
 	fx.In
 
@@ -25,7 +23,7 @@ type NamedRedisClients struct {
 }
 
 func NewRedisClients(params NamedRedisParams) (NamedRedisClients, error) {
-	cacheRedis, err := commoninfra.NewRedisClient(params.Lifecycle, params.Config, params.Log, cacheRedisName)
+	cacheRedis, err := commoninfra.NewRedisClient(params.Lifecycle, params.Config, params.Log, commoninfra.NameCacheRedis)
 	if err != nil {
 		return NamedRedisClients{}, err
 	}

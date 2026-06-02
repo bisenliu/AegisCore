@@ -30,7 +30,7 @@ func TestAuthServiceLogin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
-	if tokens.AccessToken == "" || tokens.RefreshToken == "" || tokens.TokenType != "Bearer" || tokens.ExpiresIn != 900 {
+	if tokens.AccessToken == "" || tokens.RefreshToken == "" || tokens.TokenType != commonjwt.TokenTypeBearer || tokens.ExpiresIn != 900 {
 		t.Fatalf("tokens = %#v", tokens)
 	}
 	if repo.gotEmail != "alice@example.com" {
@@ -88,7 +88,7 @@ func TestAuthServiceRefreshAcceptsBearerPrefix(t *testing.T) {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
 
-	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: " Bearer " + refresh + " "})
+	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: " " + contextutil.TokenPrefix + refresh + " "})
 
 	if err != nil {
 		t.Fatalf("Refresh: %v", err)
@@ -101,7 +101,7 @@ func TestAuthServiceRefreshAcceptsBearerPrefix(t *testing.T) {
 func TestAuthServiceRefreshRejectsEmptyBearerPrefix(t *testing.T) {
 	svc := newTestAuthService(&authRepoStub{}, &sessionStoreStub{version: 2}, false)
 
-	_, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: " Bearer "})
+	_, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: " " + contextutil.TokenPrefix})
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeTokenInvalid {

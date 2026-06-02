@@ -41,7 +41,7 @@ func TestNewPostgresAppliesPoolSettings(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	db, err := NewPostgres(lc, cfg, log, "user_db")
+	db, err := NewPostgres(lc, cfg, log, NameUserDB)
 	if err != nil {
 		t.Fatalf("NewPostgres: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestNewPostgresRegistersLifecycle(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	if _, err := NewPostgres(lc, cfg, log, "user_db"); err != nil {
+	if _, err := NewPostgres(lc, cfg, log, NameUserDB); err != nil {
 		t.Fatalf("NewPostgres: %v", err)
 	}
 	lc.RequireStart()
@@ -110,7 +110,7 @@ func TestNewRedisClientReturnsErrorForMissingConfig(t *testing.T) {
 func TestNewRedisClientRegistersLifecycle(t *testing.T) {
 	redisServer := newTestRedisServer(t)
 	cfg := &config.Config{Redis: map[string]config.RedisConfig{
-		"cache_redis": {
+		NameCacheRedis: {
 			Addr:         redisServer.addr,
 			DB:           0,
 			DialTimeout:  time.Second,
@@ -122,7 +122,7 @@ func TestNewRedisClientRegistersLifecycle(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	client, err := NewRedisClient(lc, cfg, log, "cache_redis")
+	client, err := NewRedisClient(lc, cfg, log, NameCacheRedis)
 	if err != nil {
 		t.Fatalf("NewRedisClient: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestProvideNamedPostgresProvidesOnlyDeclaredPool(t *testing.T) {
 
 	app := fxtest.New(t,
 		fx.Supply(cfg, log),
-		ProvideNamedPostgres("user_db", "user_db"),
+		ProvideNamedPostgres(NameUserDB, NameUserDB),
 		fx.Populate(&got),
 	)
 	app.RequireStart()
@@ -187,7 +187,7 @@ func TestProvideNamedPostgresProvidesOnlyDeclaredPool(t *testing.T) {
 func TestProvideNamedRedisProvidesOnlyDeclaredClient(t *testing.T) {
 	redisServer := newTestRedisServer(t)
 	cfg := &config.Config{Redis: map[string]config.RedisConfig{
-		"cache_redis": {
+		NameCacheRedis: {
 			Addr:         redisServer.addr,
 			DB:           0,
 			DialTimeout:  time.Second,
@@ -214,7 +214,7 @@ func TestProvideNamedRedisProvidesOnlyDeclaredClient(t *testing.T) {
 
 	app := fxtest.New(t,
 		fx.Supply(cfg, log),
-		ProvideNamedRedis("cache_redis", "cache_redis"),
+		ProvideNamedRedis(NameCacheRedis, NameCacheRedis),
 		fx.Populate(&got),
 	)
 	app.RequireStart()
@@ -231,7 +231,7 @@ func TestProvideNamedRedisProvidesOnlyDeclaredClient(t *testing.T) {
 func testConfig(driverName string) *config.Config {
 	return &config.Config{
 		PostgresConfigs: map[string]config.PostgresConfig{
-			"user_db": {
+			NameUserDB: {
 				Host:            "127.0.0.1",
 				Port:            15432,
 				Username:        "aegiscore",

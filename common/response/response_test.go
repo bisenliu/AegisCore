@@ -22,8 +22,8 @@ func TestErrorConstructors(t *testing.T) {
 		{name: "bad request formatted", err: BadRequestError("%s 必须在 %d 和 %d 之间", "人数", 2, 10), wantCode: CodeBadRequest, wantStatus: http.StatusBadRequest, wantMsg: "人数 必须在 2 和 10 之间"},
 		{name: "validation failed", err: ValidationFailedError("请求参数验证失败"), wantCode: CodeValidationFailed, wantStatus: http.StatusBadRequest, wantMsg: "请求参数验证失败"},
 		{name: "unauthenticated", err: UnauthenticatedError("请先登录"), wantCode: CodeUnauthenticated, wantStatus: http.StatusUnauthorized, wantMsg: "请先登录"},
-		{name: "token invalid", err: TokenInvalidError("登录状态无效或已过期，请重新登录"), wantCode: CodeTokenInvalid, wantStatus: http.StatusUnauthorized, wantMsg: "登录状态无效或已过期，请重新登录"},
-		{name: "token expired", err: TokenExpiredError("登录状态无效或已过期，请重新登录"), wantCode: CodeTokenExpired, wantStatus: http.StatusUnauthorized, wantMsg: "登录状态无效或已过期，请重新登录"},
+		{name: "token invalid", err: TokenInvalidError(MessageAuthInvalid), wantCode: CodeTokenInvalid, wantStatus: http.StatusUnauthorized, wantMsg: MessageAuthInvalid},
+		{name: "token expired", err: TokenExpiredError(MessageAuthInvalid), wantCode: CodeTokenExpired, wantStatus: http.StatusUnauthorized, wantMsg: MessageAuthInvalid},
 		{name: "forbidden", err: ForbiddenError("无权访问"), wantCode: CodeForbidden, wantStatus: http.StatusForbidden, wantMsg: "无权访问"},
 		{name: "conflict", err: ConflictError("当前状态不允许操作"), wantCode: CodeConflict, wantStatus: http.StatusConflict, wantMsg: "当前状态不允许操作"},
 		{name: "not found", err: NotFoundError("用户不存在"), wantCode: CodeNotFound, wantStatus: http.StatusNotFound, wantMsg: "用户不存在"},
@@ -99,13 +99,13 @@ func TestFailureResponseErrors(t *testing.T) {
 	t.Run("token invalid failure", func(t *testing.T) {
 		ctx, recorder := newTestContext()
 
-		TokenInvalid(ctx, "登录状态无效或已过期，请重新登录")
+		TokenInvalid(ctx, MessageAuthInvalid)
 
 		var envelope Envelope
 		if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
 			t.Fatalf("unmarshal response: %v", err)
 		}
-		if recorder.Code != http.StatusUnauthorized || envelope.Success || envelope.Code != CodeTokenInvalid || envelope.Message != "登录状态无效或已过期，请重新登录" {
+		if recorder.Code != http.StatusUnauthorized || envelope.Success || envelope.Code != CodeTokenInvalid || envelope.Message != MessageAuthInvalid {
 			t.Fatalf("response = status %d envelope %#v", recorder.Code, envelope)
 		}
 	})
@@ -113,13 +113,13 @@ func TestFailureResponseErrors(t *testing.T) {
 	t.Run("token expired failure", func(t *testing.T) {
 		ctx, recorder := newTestContext()
 
-		TokenExpired(ctx, "登录状态无效或已过期，请重新登录")
+		TokenExpired(ctx, MessageAuthInvalid)
 
 		var envelope Envelope
 		if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
 			t.Fatalf("unmarshal response: %v", err)
 		}
-		if recorder.Code != http.StatusUnauthorized || envelope.Success || envelope.Code != CodeTokenExpired || envelope.Message != "登录状态无效或已过期，请重新登录" {
+		if recorder.Code != http.StatusUnauthorized || envelope.Success || envelope.Code != CodeTokenExpired || envelope.Message != MessageAuthInvalid {
 			t.Fatalf("response = status %d envelope %#v", recorder.Code, envelope)
 		}
 	})

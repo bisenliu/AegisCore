@@ -15,8 +15,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const unauthenticatedMessage = "登录状态无效或已过期，请重新登录"
-
 type TokenVersionValidator interface {
 	ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error
 }
@@ -44,13 +42,13 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *commonjwt.Servic
 		authHeader := c.GetHeader(contextutil.AuthorizationHeader)
 		if authHeader == "" {
 			reqLog.Error("missing authorization header")
-			response.Unauthenticated(c, unauthenticatedMessage)
+			response.Unauthenticated(c, response.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
 		if !strings.HasPrefix(authHeader, contextutil.TokenPrefix) {
 			reqLog.Error("invalid authorization header format")
-			response.TokenInvalid(c, unauthenticatedMessage)
+			response.TokenInvalid(c, response.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
@@ -58,7 +56,7 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *commonjwt.Servic
 		tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, contextutil.TokenPrefix))
 		if tokenString == "" {
 			reqLog.Error("empty bearer token")
-			response.TokenInvalid(c, unauthenticatedMessage)
+			response.TokenInvalid(c, response.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
@@ -67,9 +65,9 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *commonjwt.Servic
 		if err != nil {
 			reqLog.Error("token validation failed", zap.Error(err))
 			if errors.Is(err, jwtv5.ErrTokenExpired) {
-				response.TokenExpired(c, unauthenticatedMessage)
+				response.TokenExpired(c, response.MessageAuthInvalid)
 			} else {
-				response.TokenInvalid(c, unauthenticatedMessage)
+				response.TokenInvalid(c, response.MessageAuthInvalid)
 			}
 			c.Abort()
 			return
@@ -78,7 +76,7 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *commonjwt.Servic
 		if validator != nil {
 			if err := validator.ValidateTokenVersion(ctx, claims.UserID, claims.TokenVersion); err != nil {
 				reqLog.Error("token version validation failed", zap.Error(err))
-				response.TokenInvalid(c, unauthenticatedMessage)
+				response.TokenInvalid(c, response.MessageAuthInvalid)
 				c.Abort()
 				return
 			}

@@ -9,11 +9,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	userDBName   = "user_db"
-	commonDBName = "common_db"
-)
-
 type NamedPostgresParams struct {
 	fx.In
 
@@ -30,11 +25,11 @@ type NamedPostgresPools struct {
 }
 
 func NewPostgresPools(params NamedPostgresParams) (NamedPostgresPools, error) {
-	userDB, err := commoninfra.NewPostgres(params.Lifecycle, params.Config, params.Log, userDBName)
+	userDB, err := commoninfra.NewPostgres(params.Lifecycle, params.Config, params.Log, commoninfra.NameUserDB)
 	if err != nil {
 		return NamedPostgresPools{}, err
 	}
-	commonDB, err := commoninfra.NewPostgres(params.Lifecycle, params.Config, params.Log, commonDBName)
+	commonDB, err := commoninfra.NewPostgres(params.Lifecycle, params.Config, params.Log, commoninfra.NameCommonDB)
 	if err != nil {
 		_ = userDB.Close()
 		return NamedPostgresPools{}, err

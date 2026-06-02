@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/config"
+	"github.com/aegiscore/common/contextutil"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 )
 
@@ -17,7 +18,7 @@ var (
 )
 
 const (
-	TokenTypeBearer = "Bearer"
+	TokenTypeBearer = contextutil.TokenTypeBearer
 	SubjectAccess   = "access"
 	SubjectRefresh  = "refresh"
 )
