@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/ent"
@@ -14,13 +13,13 @@ import (
 )
 
 func TestUserServiceCreateUser(t *testing.T) {
-	createdAt := time.Date(2026, 5, 29, 10, 0, 0, 0, time.UTC)
+	createdAt := int64(1780048800000)
 
 	t.Run("success normalizes fields and defaults active", func(t *testing.T) {
 		repo := &stubUserRepository{created: &ent.User{ID: 123, Name: "Alice", Email: "alice@example.com", Active: true, CreatedAt: createdAt, UpdatedAt: createdAt}}
 		svc := NewUserService(repo)
 
-		user, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: " Alice ", Email: "ALICE@EXAMPLE.COM"})
+		user, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: " Alice ", Email: "ALICE@EXAMPLE.COM", Password: " secret "})
 
 		if err != nil {
 			t.Fatalf("CreateUser: %v", err)
@@ -28,10 +27,10 @@ func TestUserServiceCreateUser(t *testing.T) {
 		if repo.checkedEmail != "alice@example.com" {
 			t.Fatalf("checkedEmail = %q", repo.checkedEmail)
 		}
-		if repo.createdInput.Name != "Alice" || repo.createdInput.Email != "alice@example.com" || !repo.createdInput.Active {
+		if repo.createdInput.Name != "Alice" || repo.createdInput.Email != "alice@example.com" || repo.createdInput.Password != "secret" || !repo.createdInput.Active {
 			t.Fatalf("createdInput = %#v", repo.createdInput)
 		}
-		if user.ID != 123 || user.Email != "alice@example.com" {
+		if user.ID != 123 || user.Email != "alice@example.com" || user.CreatedAt != createdAt || user.UpdatedAt != createdAt {
 			t.Fatalf("user = %#v", user)
 		}
 	})
@@ -39,7 +38,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("reject blank trimmed name", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "   ", Email: "alice@example.com"})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "   ", Email: "alice@example.com", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeValidationFailed || appErr.Message != apperror.MsgInvalidUserName {
@@ -47,10 +46,21 @@ func TestUserServiceCreateUser(t *testing.T) {
 		}
 	})
 
+	t.Run("reject blank trimmed password", func(t *testing.T) {
+		svc := NewUserService(&stubUserRepository{})
+
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Email: "alice@example.com", Password: "   "})
+
+		appErr := response.FromError(err)
+		if appErr.Code != response.CodeValidationFailed || appErr.Message != apperror.MsgInvalidPassword {
+			t.Fatalf("err = %#v", appErr)
+		}
+	})
+
 	t.Run("reject existing email", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{exists: true})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Email: "alice@example.com"})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Email: "alice@example.com", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeConflict || appErr.Message != apperror.MsgUserAlreadyExists {
@@ -61,7 +71,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("wrap existence check error", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{existsErr: errors.New("database down")})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Email: "alice@example.com"})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Email: "alice@example.com", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeInternalError || appErr.Message != "internal server error" {
@@ -72,7 +82,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("preserve create conflict", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{createErr: response.ConflictError(apperror.MsgUserAlreadyExists)})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Email: "alice@example.com"})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Email: "alice@example.com", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeConflict || appErr.Message != apperror.MsgUserAlreadyExists {

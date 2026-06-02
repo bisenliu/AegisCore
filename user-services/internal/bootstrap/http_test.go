@@ -162,7 +162,8 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 type routeAuthUserService struct{}
 
 func (s *routeAuthUserService) CreateUser(context.Context, dto.CreateUserRequest) (*dto.UserResponse, error) {
-	return &dto.UserResponse{ID: 124, Name: "Alice", Email: "alice@example.com", Active: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+	now := time.Now().UnixMilli()
+	return &dto.UserResponse{ID: 124, Name: "Alice", Email: "alice@example.com", Active: true, CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func (s *routeAuthUserService) GetUserByID(_ context.Context, id int64) (*dto.UserResponse, error) {
@@ -172,7 +173,8 @@ func (s *routeAuthUserService) GetUserByID(_ context.Context, id int64) (*dto.Us
 	if id == 500 {
 		return nil, errors.New("database down")
 	}
-	return &dto.UserResponse{ID: id, Name: "Aegis", Email: "aegis@example.com", Active: true, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+	now := time.Now().UnixMilli()
+	return &dto.UserResponse{ID: id, Name: "Aegis", Email: "aegis@example.com", Active: true, CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func assertAuthFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantCode response.Code) {

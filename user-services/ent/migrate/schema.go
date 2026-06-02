@@ -13,9 +13,10 @@ var (
 		{Name: "id", Type: field.TypeInt64, Increment: true},
 		{Name: "name", Type: field.TypeString, Size: 128},
 		{Name: "email", Type: field.TypeString, Unique: true, Size: 255},
+		{Name: "password", Type: field.TypeString},
 		{Name: "active", Type: field.TypeBool, Default: true},
-		{Name: "created_at", Type: field.TypeTime},
-		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_at", Type: field.TypeInt64},
+		{Name: "updated_at", Type: field.TypeInt64},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{

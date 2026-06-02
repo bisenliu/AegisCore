@@ -29,8 +29,12 @@ func NewUserService(repo repository.UserRepository) UserService {
 func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error) {
 	name := strings.TrimSpace(req.Name)
 	email := strings.ToLower(strings.TrimSpace(req.Email))
+	password := strings.TrimSpace(req.Password)
 	if name == "" {
 		return nil, response.ValidationFailedError(apperror.MsgInvalidUserName)
+	}
+	if password == "" {
+		return nil, response.ValidationFailedError(apperror.MsgInvalidPassword)
 	}
 	active := true
 	if req.Active != nil {
@@ -47,7 +51,7 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 		return nil, response.ConflictError(apperror.MsgUserAlreadyExists)
 	}
 
-	user, err := s.repo.Create(ctx, repository.CreateUserInput{Name: name, Email: email, Active: active})
+	user, err := s.repo.Create(ctx, repository.CreateUserInput{Name: name, Email: email, Password: password, Active: active})
 	if err != nil {
 		logger.Error(ctx, "create user failed", zap.String("email", email), zap.Error(err))
 		return nil, response.FromError(err)

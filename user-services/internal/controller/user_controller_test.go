@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/common/validation"
@@ -21,8 +20,8 @@ func TestUserControllerGetByID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("valid ID", func(t *testing.T) {
-		createdAt := time.Date(2026, 5, 29, 10, 0, 0, 0, time.UTC)
-		updatedAt := createdAt.Add(time.Hour)
+		createdAt := int64(1780048800000)
+		updatedAt := int64(1780052400000)
 		service := &stubUserService{response: &dto.UserResponse{
 			ID:        123,
 			Name:      "Aegis",
@@ -47,7 +46,10 @@ func TestUserControllerGetByID(t *testing.T) {
 		if !ok {
 			t.Fatalf("data = %T, want map", envelope.Data)
 		}
-		if data["id"] != float64(123) || data["name"] != "Aegis" {
+		if data["id"] != float64(123) || data["name"] != "Aegis" || data["created_at"] != float64(createdAt) || data["updated_at"] != float64(updatedAt) {
+			t.Fatalf("data = %#v", data)
+		}
+		if _, ok := data["password"]; ok {
 			t.Fatalf("data = %#v", data)
 		}
 	})
@@ -86,7 +88,7 @@ func TestUserControllerGetByID(t *testing.T) {
 func TestUserControllerCreate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	createdAt := time.Date(2026, 5, 29, 10, 0, 0, 0, time.UTC)
+	createdAt := int64(1780048800000)
 	createdUser := &dto.UserResponse{
 		ID:        123,
 		Name:      "Alice",
@@ -99,19 +101,22 @@ func TestUserControllerCreate(t *testing.T) {
 	t.Run("valid body", func(t *testing.T) {
 		service := &stubUserService{createResponse: createdUser}
 
-		status, envelope := executeCreate(t, service, `{"name":"Alice","email":"alice@example.com"}`)
+		status, envelope := executeCreate(t, service, `{"name":"Alice","email":"alice@example.com","password":"secret"}`)
 
 		if status != http.StatusCreated {
 			t.Fatalf("status = %d, want %d", status, http.StatusCreated)
 		}
-		if service.gotCreate.Email != "alice@example.com" {
+		if service.gotCreate.Email != "alice@example.com" || service.gotCreate.Password != "secret" {
 			t.Fatalf("gotCreate = %#v", service.gotCreate)
 		}
 		if !envelope.Success || envelope.Code != response.CodeOK || envelope.Message != "created" {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 		data, ok := envelope.Data.(map[string]any)
-		if !ok || data["id"] != float64(123) || data["email"] != "alice@example.com" {
+		if !ok || data["id"] != float64(123) || data["email"] != "alice@example.com" || data["created_at"] != float64(createdAt) {
+			t.Fatalf("data = %#v", envelope.Data)
+		}
+		if _, ok := data["password"]; ok {
 			t.Fatalf("data = %#v", envelope.Data)
 		}
 	})
@@ -127,7 +132,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("validation failed", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{}, `{"name":"Alice","email":"bad"}`)
+		status, envelope := executeCreate(t, &stubUserService{}, `{"name":"Alice","email":"bad","password":"secret"}`)
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
@@ -137,8 +142,19 @@ func TestUserControllerCreate(t *testing.T) {
 		assertFieldError(t, envelope, "email", "邮箱", "email", "邮箱必须是一个有效的邮箱")
 	})
 
+	t.Run("missing password validation failed", func(t *testing.T) {
+		status, envelope := executeCreate(t, &stubUserService{}, `{"name":"Alice","email":"alice@example.com"}`)
+		if status != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
+		}
+		if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
+			t.Fatalf("envelope = %#v", envelope)
+		}
+		assertFieldError(t, envelope, "password", "密码", "required", "密码为必填字段")
+	})
+
 	t.Run("user already exists", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{createErr: response.ConflictError(apperror.MsgUserAlreadyExists)}, `{"name":"Alice","email":"alice@example.com"}`)
+		status, envelope := executeCreate(t, &stubUserService{createErr: response.ConflictError(apperror.MsgUserAlreadyExists)}, `{"name":"Alice","email":"alice@example.com","password":"secret"}`)
 		if status != http.StatusConflict {
 			t.Fatalf("status = %d, want %d", status, http.StatusConflict)
 		}
@@ -148,7 +164,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("service error", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{createErr: errors.New("database down")}, `{"name":"Alice","email":"alice@example.com"}`)
+		status, envelope := executeCreate(t, &stubUserService{createErr: errors.New("database down")}, `{"name":"Alice","email":"alice@example.com","password":"secret"}`)
 		if status != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 		}

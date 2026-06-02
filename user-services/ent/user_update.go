@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -56,6 +55,20 @@ func (_u *UserUpdate) SetNillableEmail(v *string) *UserUpdate {
 	return _u
 }
 
+// SetPassword sets the "password" field.
+func (_u *UserUpdate) SetPassword(v string) *UserUpdate {
+	_u.mutation.SetPassword(v)
+	return _u
+}
+
+// SetNillablePassword sets the "password" field if the given value is not nil.
+func (_u *UserUpdate) SetNillablePassword(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetPassword(*v)
+	}
+	return _u
+}
+
 // SetActive sets the "active" field.
 func (_u *UserUpdate) SetActive(v bool) *UserUpdate {
 	_u.mutation.SetActive(v)
@@ -71,8 +84,15 @@ func (_u *UserUpdate) SetNillableActive(v *bool) *UserUpdate {
 }
 
 // SetUpdatedAt sets the "updated_at" field.
-func (_u *UserUpdate) SetUpdatedAt(v time.Time) *UserUpdate {
+func (_u *UserUpdate) SetUpdatedAt(v int64) *UserUpdate {
+	_u.mutation.ResetUpdatedAt()
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// AddUpdatedAt adds value to the "updated_at" field.
+func (_u *UserUpdate) AddUpdatedAt(v int64) *UserUpdate {
+	_u.mutation.AddUpdatedAt(v)
 	return _u
 }
 
@@ -129,6 +149,11 @@ func (_u *UserUpdate) check() error {
 			return &ValidationError{Name: "email", err: fmt.Errorf(`ent: validator failed for field "User.email": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Password(); ok {
+		if err := user.PasswordValidator(v); err != nil {
+			return &ValidationError{Name: "password", err: fmt.Errorf(`ent: validator failed for field "User.password": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -150,11 +175,17 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Password(); ok {
+		_spec.SetField(user.FieldPassword, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Active(); ok {
 		_spec.SetField(user.FieldActive, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
+		_spec.SetField(user.FieldUpdatedAt, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
+		_spec.AddField(user.FieldUpdatedAt, field.TypeInt64, value)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -204,6 +235,20 @@ func (_u *UserUpdateOne) SetNillableEmail(v *string) *UserUpdateOne {
 	return _u
 }
 
+// SetPassword sets the "password" field.
+func (_u *UserUpdateOne) SetPassword(v string) *UserUpdateOne {
+	_u.mutation.SetPassword(v)
+	return _u
+}
+
+// SetNillablePassword sets the "password" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillablePassword(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetPassword(*v)
+	}
+	return _u
+}
+
 // SetActive sets the "active" field.
 func (_u *UserUpdateOne) SetActive(v bool) *UserUpdateOne {
 	_u.mutation.SetActive(v)
@@ -219,8 +264,15 @@ func (_u *UserUpdateOne) SetNillableActive(v *bool) *UserUpdateOne {
 }
 
 // SetUpdatedAt sets the "updated_at" field.
-func (_u *UserUpdateOne) SetUpdatedAt(v time.Time) *UserUpdateOne {
+func (_u *UserUpdateOne) SetUpdatedAt(v int64) *UserUpdateOne {
+	_u.mutation.ResetUpdatedAt()
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// AddUpdatedAt adds value to the "updated_at" field.
+func (_u *UserUpdateOne) AddUpdatedAt(v int64) *UserUpdateOne {
+	_u.mutation.AddUpdatedAt(v)
 	return _u
 }
 
@@ -290,6 +342,11 @@ func (_u *UserUpdateOne) check() error {
 			return &ValidationError{Name: "email", err: fmt.Errorf(`ent: validator failed for field "User.email": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Password(); ok {
+		if err := user.PasswordValidator(v); err != nil {
+			return &ValidationError{Name: "password", err: fmt.Errorf(`ent: validator failed for field "User.password": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -328,11 +385,17 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(user.FieldEmail, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Password(); ok {
+		_spec.SetField(user.FieldPassword, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Active(); ok {
 		_spec.SetField(user.FieldActive, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(user.FieldUpdatedAt, field.TypeTime, value)
+		_spec.SetField(user.FieldUpdatedAt, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
+		_spec.AddField(user.FieldUpdatedAt, field.TypeInt64, value)
 	}
 	_node = &User{config: _u.config}
 	_spec.Assign = _node.assignValues

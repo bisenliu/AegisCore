@@ -18,9 +18,10 @@ type UserRepository interface {
 }
 
 type CreateUserInput struct {
-	Name   string
-	Email  string
-	Active bool
+	Name     string
+	Email    string
+	Password string
+	Active   bool
 }
 
 type userRepository struct {
@@ -41,6 +42,7 @@ func (r *userRepository) Create(ctx context.Context, input CreateUserInput) (*en
 	created, err := r.client.User.Create().
 		SetName(input.Name).
 		SetEmail(input.Email).
+		SetPassword(input.Password).
 		SetActive(input.Active).
 		Save(ctx)
 	if err == nil {

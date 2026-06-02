@@ -16,9 +16,14 @@ definitions:
         maxLength: 128
         minLength: 1
         type: string
+      password:
+        example: secret
+        minLength: 1
+        type: string
     required:
     - email
     - name
+    - password
     type: object
   github_com_aegiscore_user-services_internal_dto.UserResponse:
     properties:
@@ -26,8 +31,8 @@ definitions:
         example: true
         type: boolean
       created_at:
-        example: "2026-05-29T10:00:00Z"
-        type: string
+        example: 1780288800000
+        type: integer
       email:
         example: alice@example.com
         type: string
@@ -38,8 +43,8 @@ definitions:
         example: Alice
         type: string
       updated_at:
-        example: "2026-05-29T10:00:00Z"
-        type: string
+        example: 1780288800000
+        type: integer
     type: object
   internal_router.HealthResponse:
     properties:
@@ -58,6 +63,9 @@ definitions:
     - 20000
     - 20001
     - 20002
+    - 20003
+    - 20004
+    - 20005
     - 30000
     - 40000
     - 50000
@@ -70,6 +78,9 @@ definitions:
     - CodeUnauthenticated
     - CodeTokenInvalid
     - CodeTokenExpired
+    - CodeTokenRevoked
+    - CodeMFARequired
+    - CodeUserAccountLocked
     - CodeForbidden
     - CodeConflict
     - CodeNotFound

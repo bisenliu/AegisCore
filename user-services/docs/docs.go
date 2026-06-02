@@ -193,7 +193,8 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "email",
-                "name"
+                "name",
+                "password"
             ],
             "properties": {
                 "active": {
@@ -210,6 +211,11 @@ const docTemplate = `{
                     "maxLength": 128,
                     "minLength": 1,
                     "example": "Alice"
+                },
+                "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "example": "secret"
                 }
             }
         },
@@ -221,8 +227,8 @@ const docTemplate = `{
                     "example": true
                 },
                 "created_at": {
-                    "type": "string",
-                    "example": "2026-05-29T10:00:00Z"
+                    "type": "integer",
+                    "example": 1780288800000
                 },
                 "email": {
                     "type": "string",
@@ -237,8 +243,8 @@ const docTemplate = `{
                     "example": "Alice"
                 },
                 "updated_at": {
-                    "type": "string",
-                    "example": "2026-05-29T10:00:00Z"
+                    "type": "integer",
+                    "example": 1780288800000
                 }
             }
         },
@@ -264,6 +270,9 @@ const docTemplate = `{
                 20000,
                 20001,
                 20002,
+                20003,
+                20004,
+                20005,
                 30000,
                 40000,
                 50000,
@@ -276,6 +285,9 @@ const docTemplate = `{
                 "CodeUnauthenticated",
                 "CodeTokenInvalid",
                 "CodeTokenExpired",
+                "CodeTokenRevoked",
+                "CodeMFARequired",
+                "CodeUserAccountLocked",
                 "CodeForbidden",
                 "CodeConflict",
                 "CodeNotFound",
