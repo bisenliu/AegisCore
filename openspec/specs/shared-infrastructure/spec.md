@@ -80,6 +80,33 @@
 - **Then** 配置加载 MUST 成功反序列化配置对象
 - **Then** 配置加载器 MUST NOT 因系统时区为空而返回校验错误
 
+### Requirement: Load authentication configuration
+
+系统 MUST 从 YAML 配置和 `AEGISCORE_` 环境变量覆盖中加载 `auth` 配置到共享配置对象。认证配置 MUST 至少支持 JWT secret、issuer、audience、token 过期配置和认证白名单路径。配置加载器 MUST 只负责读取、覆盖和反序列化这些字段，不得在 `common/config.Load` 阶段执行 required、字段存在性或基础取值范围校验。
+
+#### Scenario: Load auth config from YAML
+- **Given** YAML 配置包含 `auth.jwt.secret`、`auth.jwt.issuer`、`auth.jwt.audience` 和 `auth.whitelist`
+- **When** `common/config.Load` 被调用
+- **Then** 系统 MUST 将这些字段反序列化到 `config.Config` 的认证配置中
+- **Then** 白名单路径 MUST 保持 YAML 中的顺序
+
+#### Scenario: Override auth config with environment variable
+- **Given** YAML 配置包含 auth 配置
+- **Given** 环境变量提供 `AEGISCORE_AUTH_JWT_SECRET` 或 `AEGISCORE_AUTH_JWT_ISSUER`
+- **When** `common/config.Load` 被调用
+- **Then** 系统 MUST 使用环境变量覆盖后的 auth 配置值
+
+#### Scenario: Missing auth config is not rejected by config loader
+- **Given** YAML 和环境变量未显式提供 auth 配置
+- **When** `common/config.Load` 被调用
+- **Then** 配置加载 MUST 成功反序列化配置对象
+- **Then** 配置加载器 MUST NOT 因 auth 字段缺失、为空或零值而返回校验错误
+
+#### Scenario: Auth config does not create datastore dependencies
+- **Given** 配置中存在 auth 配置
+- **When** `common/config.Load` 或共享基础设施 module 初始化
+- **Then** 系统 MUST NOT 因 auth 配置存在而创建 Redis client、PostgreSQL 连接池、Ent client 或 HTTP server
+
 ### Requirement: Provide shared timezone initialization module
 
 系统 MUST 在 `common` 模块提供可复用的 timezone Fx module。该 module MUST 基于共享配置初始化进程本地时区，默认使用 `Asia/Shanghai`，成功时设置 `time.Local` 并同步 `TZ` 环境变量。无效时区 MUST 返回启动错误并保留底层加载错误上下文。初始化 MUST 在进程内只执行一次。
@@ -359,42 +386,6 @@
 - **When** trace-id middleware 使用配置的校验策略处理请求
 - **Then** 系统必须生成替代 trace id 或按配置拒绝该值
 - **Then** 系统不得把不安全的原始值写入日志字段或响应 header
-
-### Requirement: Provide reusable client IP extraction
-
-系统 MUST 在 `common` 模块提供可复用的 Gin 客户端 IP 提取工具。该工具 MUST 按 `X-Forwarded-For`、`X-Real-IP`、`X-Client-IP`、Gin `ClientIP()` 的顺序解析客户端 IP，并且 MUST 忽略空白 header 值和逗号分隔列表中的空白候选值。
-
-#### Scenario: Extract first forwarded IP
-- **Given** HTTP 请求包含 `X-Forwarded-For: 203.0.113.10, 10.0.0.1`
-- **When** 调用共享客户端 IP 提取工具
-- **Then** 系统 MUST 返回 `203.0.113.10`
-
-#### Scenario: Ignore blank forwarded candidates
-- **Given** HTTP 请求包含 `X-Forwarded-For:  , 203.0.113.11`
-- **When** 调用共享客户端 IP 提取工具
-- **Then** 系统 MUST 返回 `203.0.113.11`
-
-#### Scenario: Fall back to real IP header
-- **Given** HTTP 请求未包含可用的 `X-Forwarded-For`
-- **Given** HTTP 请求包含 `X-Real-IP: 203.0.113.12`
-- **When** 调用共享客户端 IP 提取工具
-- **Then** 系统 MUST 返回 `203.0.113.12`
-
-#### Scenario: Fall back to client IP header
-- **Given** HTTP 请求未包含可用的 `X-Forwarded-For` 或 `X-Real-IP`
-- **Given** HTTP 请求包含 `X-Client-IP: 203.0.113.13`
-- **When** 调用共享客户端 IP 提取工具
-- **Then** 系统 MUST 返回 `203.0.113.13`
-
-#### Scenario: Fall back to Gin client IP
-- **Given** HTTP 请求未包含可用的代理 IP header
-- **When** 调用共享客户端 IP 提取工具
-- **Then** 系统 MUST 返回 Gin `ClientIP()` 的结果
-
-#### Scenario: Request log uses shared client IP extraction
-- **Given** HTTP 请求经过共享 request logging middleware
-- **When** 请求包含可用的代理 IP header
-- **Then** 请求日志中的 `client_ip` 字段 MUST 使用共享客户端 IP 提取工具的结果
 
 ### Requirement: Use one trace identifier across HTTP and logger contexts
 

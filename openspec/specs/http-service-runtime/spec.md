@@ -55,7 +55,7 @@ HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖
 
 ### Requirement: Register standard HTTP routes and middleware
 
-系统必须注册健康检查、用户 API 路由、Swagger 文档路由和共享 HTTP 中间件。HTTP 中间件必须先注入 trace-id，再执行 panic recovery、请求日志和 CORS。trace-id 必须来自 `X-Trace-ID` 请求头或由系统生成，并必须写入 Gin context、Go `context.Context` 和 `X-Trace-ID` 响应头。共享中间件必须对外提供 `TraceID()` Gin middleware。
+系统必须注册健康检查、用户 API 路由、Swagger 文档路由和共享 HTTP 中间件。HTTP 中间件必须先注入 trace-id，再执行 panic recovery、请求日志、CORS 和认证策略。trace-id 必须来自 `X-Trace-ID` 请求头或由系统生成，并必须写入 Gin context、Go `context.Context` 和 `X-Trace-ID` 响应头。共享中间件必须对外提供 `TraceID()` Gin middleware。用户服务运行时 MUST 对 `/api/v1` 业务路由启用认证，并 MUST 保持健康检查和 Swagger 文档路径可公开访问。请求日志的 `client_ip` 字段必须使用 Gin `Context.ClientIP()` 的结果。
 
 #### Scenario: Health endpoint returns service status
 - **Given** HTTP server 已启动
@@ -82,8 +82,8 @@ HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖
 #### Scenario: Request middleware is applied
 - **Given** 任意 HTTP 请求进入服务
 - **When** Gin engine 处理请求
-- **Then** 请求经过 trace id、panic recovery、request logging 和 CORS 中间件
-- **Then** trace id 中间件必须在 request logging 和 recovery 之前执行
+- **Then** 请求经过 trace id、panic recovery、request logging、CORS 和认证相关中间件
+- **Then** trace id 中间件必须在 request logging、recovery 和认证中间件之前执行
 
 #### Scenario: Trace id is propagated to Go context
 - **Given** 请求头包含 `X-Trace-ID`
@@ -102,12 +102,25 @@ HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖
 - **Given** HTTP 请求已完成
 - **When** request logging 中间件输出请求日志
 - **Then** 日志必须包含 `trace-id`、method、path、status、latency 和 client_ip 字段
+- **Then** `client_ip` 字段必须等于 Gin `Context.ClientIP()` 的结果
 
 #### Scenario: Recovery log includes trace-id
 - **Given** HTTP handler 发生 panic
 - **When** recovery 中间件恢复 panic 并输出错误日志
 - **Then** 日志必须包含 `trace-id`、panic 内容和 stack 字段
 - **Then** HTTP 响应仍必须使用 `common/response.Envelope` 失败格式
+
+#### Scenario: Public routes bypass authentication
+- **Given** HTTP server 已启动
+- **When** 调用方请求 `/healthz`、`/swagger/index.html`、`/docs` 或 `/api-docs` 且未携带认证 header
+- **Then** 用户服务运行时 MUST 允许这些公开路径继续由对应 handler 处理
+- **Then** 系统 MUST NOT 因缺少认证 header 返回 HTTP 401
+
+#### Scenario: Versioned user APIs require authentication
+- **Given** HTTP server 已启动
+- **When** 调用方请求 `/api/v1/users` 或 `/api/v1/users/:id` 且未携带有效 Bearer token
+- **Then** 用户服务运行时 MUST 在进入 controller 前拒绝请求
+- **Then** 系统 MUST 返回 HTTP 401 和统一失败响应信封
 
 ### Requirement: Shutdown gracefully
 
