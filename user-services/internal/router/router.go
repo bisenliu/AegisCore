@@ -24,6 +24,7 @@ func RegisterRoutes(engine *gin.Engine, params RouteParams) {
 	v1 := engine.Group("/api/v1")
 	{
 		users := v1.Group("/users")
+		users.GET("", params.UserController.List)
 		users.POST("", params.UserController.Create)
 		users.GET("/:id", params.UserController.GetByID)
 	}

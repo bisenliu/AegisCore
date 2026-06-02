@@ -126,6 +126,13 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
 	})
 
+	t.Run("list requires auth", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
+		engine.ServeHTTP(recorder, request)
+		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
+	})
+
 	t.Run("query with invalid token returns token invalid", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
@@ -175,6 +182,12 @@ func (s *routeAuthUserService) GetUserByID(_ context.Context, id int64) (*dto.Us
 	}
 	now := time.Now().UnixMilli()
 	return &dto.UserResponse{ID: id, Name: "Aegis", Email: "aegis@example.com", Active: true, CreatedAt: now, UpdatedAt: now}, nil
+}
+
+func (s *routeAuthUserService) ListUsers(context.Context, dto.ListUsersRequest) (response.PaginatedData[dto.UserResponse], error) {
+	now := time.Now().UnixMilli()
+	items := []dto.UserResponse{{ID: 123, Name: "Aegis", Email: "aegis@example.com", Active: true, CreatedAt: now, UpdatedAt: now}}
+	return response.NewPaginatedData(items, response.NewPagination(1, 10, 1)), nil
 }
 
 func assertAuthFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantCode response.Code) {

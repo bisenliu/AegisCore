@@ -91,6 +91,79 @@ func TestUserServiceCreateUser(t *testing.T) {
 	})
 }
 
+func TestUserServiceListUsers(t *testing.T) {
+	createdAt := int64(1780048800000)
+
+	t.Run("default pagination returns empty page", func(t *testing.T) {
+		repo := &stubUserRepository{}
+		svc := NewUserService(repo)
+
+		users, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{})
+
+		if err != nil {
+			t.Fatalf("ListUsers: %v", err)
+		}
+		if repo.listInput.Offset != 0 || repo.listInput.Limit != 10 {
+			t.Fatalf("listInput = %#v", repo.listInput)
+		}
+		if users.Items == nil || len(users.Items) != 0 {
+			t.Fatalf("items = %#v", users.Items)
+		}
+		if users.Pagination.Page != 1 || users.Pagination.PageSize != 10 || users.Pagination.Total != 0 || users.Pagination.TotalPages != 0 {
+			t.Fatalf("pagination = %#v", users.Pagination)
+		}
+	})
+
+	t.Run("explicit pagination and filters", func(t *testing.T) {
+		active := true
+		repo := &stubUserRepository{listUsers: []*ent.User{{ID: 1, Name: "Alice", Email: "alice@example.com", Active: true, CreatedAt: createdAt, UpdatedAt: createdAt}}, listTotal: 128}
+		svc := NewUserService(repo)
+
+		users, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{Page: 2, PageSize: 20, Name: " Ali ", Email: " ALICE@EXAMPLE.COM ", Active: &active})
+
+		if err != nil {
+			t.Fatalf("ListUsers: %v", err)
+		}
+		if repo.listInput.Offset != 20 || repo.listInput.Limit != 20 || repo.listInput.Name != "Ali" || repo.listInput.Email != "alice@example.com" {
+			t.Fatalf("listInput = %#v", repo.listInput)
+		}
+		if repo.listInput.Active == nil || !*repo.listInput.Active {
+			t.Fatalf("active = %#v", repo.listInput.Active)
+		}
+		if len(users.Items) != 1 || users.Items[0].ID != 1 || users.Items[0].Email != "alice@example.com" || users.Items[0].CreatedAt != createdAt {
+			t.Fatalf("items = %#v", users.Items)
+		}
+		if users.Pagination.Page != 2 || users.Pagination.PageSize != 20 || users.Pagination.Total != 128 || users.Pagination.TotalPages != 7 {
+			t.Fatalf("pagination = %#v", users.Pagination)
+		}
+	})
+
+	t.Run("invalid pagination boundaries use defaults", func(t *testing.T) {
+		repo := &stubUserRepository{}
+		svc := NewUserService(repo)
+
+		_, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{Page: -1, PageSize: 0})
+
+		if err != nil {
+			t.Fatalf("ListUsers: %v", err)
+		}
+		if repo.listInput.Offset != 0 || repo.listInput.Limit != 10 {
+			t.Fatalf("listInput = %#v", repo.listInput)
+		}
+	})
+
+	t.Run("wrap repository error", func(t *testing.T) {
+		svc := NewUserService(&stubUserRepository{listErr: errors.New("database down")})
+
+		_, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{})
+
+		appErr := response.FromError(err)
+		if appErr.Code != response.CodeInternalError || appErr.Message != response.MessageInternalError {
+			t.Fatalf("err = %#v", appErr)
+		}
+	})
+}
+
 type stubUserRepository struct {
 	created      *ent.User
 	createErr    error
@@ -98,6 +171,10 @@ type stubUserRepository struct {
 	exists       bool
 	existsErr    error
 	checkedEmail string
+	listUsers    []*ent.User
+	listTotal    int
+	listErr      error
+	listInput    repository.ListUsersInput
 }
 
 func (r *stubUserRepository) Create(_ context.Context, input repository.CreateUserInput) (*ent.User, error) {
@@ -118,4 +195,12 @@ func (r *stubUserRepository) ExistsByEmail(_ context.Context, email string) (boo
 
 func (r *stubUserRepository) GetByID(context.Context, int64) (*ent.User, error) {
 	return nil, nil
+}
+
+func (r *stubUserRepository) ListUsers(_ context.Context, input repository.ListUsersInput) ([]*ent.User, int, error) {
+	r.listInput = input
+	if r.listErr != nil {
+		return nil, 0, r.listErr
+	}
+	return r.listUsers, r.listTotal, nil
 }

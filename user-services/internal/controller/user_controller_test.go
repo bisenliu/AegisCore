@@ -174,6 +174,61 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 }
 
+func TestUserControllerList(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	createdAt := int64(1780048800000)
+	listResponse := response.NewPaginatedData([]dto.UserResponse{{
+		ID:        1,
+		Name:      "Alice",
+		Email:     "alice@example.com",
+		Active:    true,
+		CreatedAt: createdAt,
+		UpdatedAt: createdAt,
+	}}, response.NewPagination(1, 20, 128))
+
+	t.Run("default pagination", func(t *testing.T) {
+		service := &stubUserService{listResponse: response.NewPaginatedData([]dto.UserResponse{}, response.NewPagination(1, 10, 0))}
+
+		status, envelope := executeList(t, service, "/api/v1/users")
+
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, want %d", status, http.StatusOK)
+		}
+		if service.gotList.Page != 0 || service.gotList.PageSize != 0 {
+			t.Fatalf("gotList = %#v", service.gotList)
+		}
+		assertPaginatedEnvelope(t, envelope, 1, 10, 0, 0, 0)
+	})
+
+	t.Run("explicit query", func(t *testing.T) {
+		service := &stubUserService{listResponse: listResponse}
+
+		status, envelope := executeList(t, service, "/api/v1/users?page=2&page_size=20&name=Ali&email=ALICE@example.com&active=true")
+
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, want %d", status, http.StatusOK)
+		}
+		if service.gotList.Page != 2 || service.gotList.PageSize != 20 || service.gotList.Name != "Ali" || service.gotList.Email != "ALICE@example.com" {
+			t.Fatalf("gotList = %#v", service.gotList)
+		}
+		if service.gotList.Active == nil || !*service.gotList.Active {
+			t.Fatalf("active = %#v", service.gotList.Active)
+		}
+		assertPaginatedEnvelope(t, envelope, 1, 20, 128, 7, 1)
+	})
+
+	t.Run("invalid active", func(t *testing.T) {
+		status, envelope := executeList(t, &stubUserService{}, "/api/v1/users?active=bad")
+		if status != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
+		}
+		if envelope.Success || envelope.Code != response.CodeBadRequest || envelope.Message != "是否启用字段类型不正确，应为布尔类型" {
+			t.Fatalf("envelope = %#v", envelope)
+		}
+	})
+}
+
 type stubUserService struct {
 	response       *dto.UserResponse
 	err            error
@@ -181,6 +236,9 @@ type stubUserService struct {
 	createResponse *dto.UserResponse
 	createErr      error
 	gotCreate      dto.CreateUserRequest
+	listResponse   response.PaginatedData[dto.UserResponse]
+	listErr        error
+	gotList        dto.ListUsersRequest
 }
 
 func (s *stubUserService) CreateUser(_ context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error) {
@@ -197,6 +255,14 @@ func (s *stubUserService) GetUserByID(_ context.Context, id int64) (*dto.UserRes
 		return nil, response.FromError(s.err)
 	}
 	return s.response, nil
+}
+
+func (s *stubUserService) ListUsers(_ context.Context, req dto.ListUsersRequest) (response.PaginatedData[dto.UserResponse], error) {
+	s.gotList = req
+	if s.listErr != nil {
+		return response.PaginatedData[dto.UserResponse]{}, response.FromError(s.listErr)
+	}
+	return s.listResponse, nil
 }
 
 func executeCreate(t *testing.T, service *stubUserService, body string) (int, response.Envelope) {
@@ -241,6 +307,57 @@ func executeGetByID(t *testing.T, service *stubUserService, id string) (int, res
 		t.Fatalf("unmarshal response: %v", err)
 	}
 	return recorder.Code, envelope
+}
+
+func executeList(t *testing.T, service *stubUserService, path string) (int, response.Envelope) {
+	t.Helper()
+	validator, err := validation.NewDefault()
+	if err != nil {
+		t.Fatalf("NewDefault: %v", err)
+	}
+	ctl := NewUserController(service, validator)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, path, nil)
+
+	ctl.List(ctx)
+
+	var envelope response.Envelope
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	return recorder.Code, envelope
+}
+
+func assertPaginatedEnvelope(t *testing.T, envelope response.Envelope, page, pageSize, total, totalPages, itemCount int) {
+	t.Helper()
+	if !envelope.Success || envelope.Code != response.CodeOK || envelope.Message != response.MessageOK {
+		t.Fatalf("envelope = %#v", envelope)
+	}
+	data, ok := envelope.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("data = %T, want map", envelope.Data)
+	}
+	items, ok := data["items"].([]any)
+	if !ok || len(items) != itemCount {
+		t.Fatalf("items = %#v", data["items"])
+	}
+	if itemCount > 0 {
+		item, ok := items[0].(map[string]any)
+		if !ok || item["id"] != float64(1) || item["name"] != "Alice" {
+			t.Fatalf("item = %#v", items[0])
+		}
+		if _, ok := item["password"]; ok {
+			t.Fatalf("item = %#v", item)
+		}
+	}
+	pagination, ok := data["pagination"].(map[string]any)
+	if !ok {
+		t.Fatalf("pagination = %#v", data["pagination"])
+	}
+	if pagination["page"] != float64(page) || pagination["page_size"] != float64(pageSize) || pagination["total"] != float64(total) || pagination["total_pages"] != float64(totalPages) {
+		t.Fatalf("pagination = %#v", pagination)
+	}
 }
 
 func assertInvalidUserID(t *testing.T, status int, envelope response.Envelope, message string) {

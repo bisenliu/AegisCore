@@ -151,6 +151,73 @@ func TestFailureResponseErrors(t *testing.T) {
 	})
 }
 
+func TestPaginationHelpers(t *testing.T) {
+	tests := []struct {
+		name     string
+		page     int
+		pageSize int
+		want     PaginationQuery
+	}{
+		{name: "missing values use defaults", page: 0, pageSize: 0, want: PaginationQuery{Page: DefaultPage, PageSize: DefaultPageSize, Offset: 0, Limit: DefaultPageSize}},
+		{name: "negative values use defaults", page: -1, pageSize: -20, want: PaginationQuery{Page: DefaultPage, PageSize: DefaultPageSize, Offset: 0, Limit: DefaultPageSize}},
+		{name: "explicit values calculate offset", page: 2, pageSize: 20, want: PaginationQuery{Page: 2, PageSize: 20, Offset: 20, Limit: 20}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizePagination(tt.page, tt.pageSize)
+			if got != tt.want {
+				t.Fatalf("NormalizePagination = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+
+	pagination := NewPagination(1, 20, 128)
+	if pagination.Page != 1 || pagination.PageSize != 20 || pagination.Total != 128 || pagination.TotalPages != 7 {
+		t.Fatalf("pagination = %#v", pagination)
+	}
+
+	empty := NewPagination(0, 0, 0)
+	if empty.Page != DefaultPage || empty.PageSize != DefaultPageSize || empty.Total != 0 || empty.TotalPages != 0 {
+		t.Fatalf("empty pagination = %#v", empty)
+	}
+
+	data := NewPaginatedData[string](nil, empty)
+	if data.Items == nil || len(data.Items) != 0 || data.Pagination != empty {
+		t.Fatalf("paginated data = %#v", data)
+	}
+}
+
+func TestOKWithPaginatedData(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, recorder := newTestContext()
+
+	OK(ctx, NewPaginatedData([]map[string]any{{"id": 1, "name": "Alice"}}, NewPagination(1, 20, 128)))
+
+	var body map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if recorder.Code != http.StatusOK || body["success"] != true || body["code"] != float64(CodeOK) || body["message"] != MessageOK {
+		t.Fatalf("response = status %d body %#v", recorder.Code, body)
+	}
+	data, ok := body["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data = %#v", body["data"])
+	}
+	items, ok := data["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("items = %#v", data["items"])
+	}
+	pagination, ok := data["pagination"].(map[string]any)
+	if !ok {
+		t.Fatalf("pagination = %#v", data["pagination"])
+	}
+	if pagination["page"] != float64(1) || pagination["page_size"] != float64(20) || pagination["total"] != float64(128) || pagination["total_pages"] != float64(7) {
+		t.Fatalf("pagination = %#v", pagination)
+	}
+}
+
 func newTestContext() (*gin.Context, *httptest.ResponseRecorder) {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)

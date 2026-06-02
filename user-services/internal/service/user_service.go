@@ -16,6 +16,7 @@ import (
 type UserService interface {
 	CreateUser(ctx context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error)
 	GetUserByID(ctx context.Context, id int64) (*dto.UserResponse, error)
+	ListUsers(ctx context.Context, req dto.ListUsersRequest) (response.PaginatedData[dto.UserResponse], error)
 }
 
 type userService struct {
@@ -67,6 +68,31 @@ func (s *userService) GetUserByID(ctx context.Context, id int64) (*dto.UserRespo
 		return nil, response.FromError(err)
 	}
 	return toUserResponse(user), nil
+}
+
+func (s *userService) ListUsers(ctx context.Context, req dto.ListUsersRequest) (response.PaginatedData[dto.UserResponse], error) {
+	paging := response.NormalizePagination(req.Page, req.PageSize)
+	name := strings.TrimSpace(req.Name)
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+
+	logger.Info(ctx, "list users", zap.Int("page", paging.Page), zap.Int("page_size", paging.PageSize))
+	users, total, err := s.repo.ListUsers(ctx, repository.ListUsersInput{
+		Offset: paging.Offset,
+		Limit:  paging.Limit,
+		Name:   name,
+		Email:  email,
+		Active: req.Active,
+	})
+	if err != nil {
+		logger.Error(ctx, "list users failed", zap.Error(err))
+		return response.PaginatedData[dto.UserResponse]{}, response.FromError(err)
+	}
+
+	items := make([]dto.UserResponse, 0, len(users))
+	for _, user := range users {
+		items = append(items, *toUserResponse(user))
+	}
+	return response.NewPaginatedData(items, response.NewPagination(paging.Page, paging.PageSize, total)), nil
 }
 
 func toUserResponse(user *ent.User) *dto.UserResponse {
