@@ -16,7 +16,7 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 
 1. `user-services/cmd/main.go` 创建 `aegiscore-user-services` CLI，并注册 `serve` 子命令。
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
-3. `common/infrastructure.Module` 提供配置和 Zap logger；Redis/PostgreSQL 由 common 提供单实例创建与 lifecycle helper。
+3. 用户服务启动装配显式提供 `commoninfra.NewConfig` 和 `commoninfra.NewLogger`；Redis/PostgreSQL 由 common 提供单实例创建与 lifecycle helper。
 4. `user-services/internal/bootstrap.Module` 显式声明 `cache_redis`、`user_db`、`common_db`，并提供 Ent clients、repository、service、controller、Gin engine、HTTP server。
 5. `RegisterRoutes` 将 `/healthz` 和 `/api/v1/users/:id` 注册到 Gin engine。
 6. Fx 生命周期启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。

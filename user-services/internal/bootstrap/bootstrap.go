@@ -27,7 +27,10 @@ import (
 func NewApp(configPath string) *fx.App {
 	return fx.New(
 		fx.Supply(commoninfra.ConfigPath(configPath)),
-		commoninfra.Module,
+		fx.Provide(
+			commoninfra.NewConfig,
+			commoninfra.NewLogger,
+		),
 		Module,
 	)
 }

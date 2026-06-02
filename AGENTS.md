@@ -27,7 +27,7 @@
 - 用户查询服务：`user-services/internal/service/user_service.go`
 - 用户数据访问：`user-services/internal/repository/user_repository.go`
 - 共享配置加载：`common/config/loader.go`
-- 共享基础设施 Fx 模块：`common/infrastructure/module.go`
+- 共享基础设施 provider：`common/infrastructure/config.go`、`common/infrastructure/logger.go`、`common/infrastructure/redis.go`、`common/infrastructure/postgres.go`
 - Atlas 迁移配置：`user-services/atlas.hcl`
 - 用户服务迁移目录：`user-services/migrations/`
 - 迁移脚本：`user-services/scripts/migrate-diff.sh`、`user-services/scripts/migrate-validate.sh`、`user-services/scripts/migrate-apply.sh`

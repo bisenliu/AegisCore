@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/aegiscore/common/config"
+	commoninfra "github.com/aegiscore/common/infrastructure"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/controller"
 	"go.uber.org/fx"
@@ -29,5 +30,20 @@ func TestModuleIncludesSharedTimezoneDependency(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("ValidateApp with timezone module error = %v", err)
+	}
+}
+
+func TestAppWiresCommonDependenciesExplicitly(t *testing.T) {
+	err := fx.ValidateApp(
+		fx.Supply(commoninfra.ConfigPath("../../configs/config.yaml")),
+		fx.Provide(
+			commoninfra.NewConfig,
+			commoninfra.NewLogger,
+		),
+		Module,
+		fx.Invoke(func(*config.Config, *zap.Logger, *controller.UserController) {}),
+	)
+	if err != nil {
+		t.Fatalf("ValidateApp with explicit common providers error = %v", err)
 	}
 }

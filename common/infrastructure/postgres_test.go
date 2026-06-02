@@ -73,7 +73,7 @@ func TestNewPostgresRegistersLifecycle(t *testing.T) {
 	}
 }
 
-func TestModuleDoesNotProvideNamedPostgresPools(t *testing.T) {
+func TestExplicitCommonProvidersDoNotProvideNamedPostgresPools(t *testing.T) {
 	type params struct {
 		fx.In
 
@@ -81,7 +81,8 @@ func TestModuleDoesNotProvideNamedPostgresPools(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		Module,
+		fx.Supply(ConfigPath("config.yaml")),
+		fx.Provide(NewConfig, NewLogger),
 		fx.Invoke(func(params) {}),
 	)
 	if err == nil {
@@ -136,7 +137,7 @@ func TestNewRedisClientRegistersLifecycle(t *testing.T) {
 	}
 }
 
-func TestModuleDoesNotProvideRedisClient(t *testing.T) {
+func TestExplicitCommonProvidersDoNotProvideRedisClient(t *testing.T) {
 	type params struct {
 		fx.In
 
@@ -144,7 +145,8 @@ func TestModuleDoesNotProvideRedisClient(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		Module,
+		fx.Supply(ConfigPath("config.yaml")),
+		fx.Provide(NewConfig, NewLogger),
 		fx.Invoke(func(params) {}),
 	)
 	if err == nil {

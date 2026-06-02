@@ -18,7 +18,7 @@
 - CLI：`user-services/cmd/main.go`
 - Fx app：`user-services/internal/bootstrap/bootstrap.go`
 - Router：`user-services/internal/router/router.go`
-- Shared infrastructure：`common/infrastructure/module.go`
+- Shared infrastructure：`common/infrastructure/config.go`, `common/infrastructure/logger.go`, `common/infrastructure/redis.go`, `common/infrastructure/postgres.go`
 - API response helpers：`common/response/response.go`
 - Database migrations：`user-services/atlas.hcl`, `user-services/migrations/`, `user-services/scripts/`
 

@@ -8,7 +8,6 @@ import (
 	"github.com/aegiscore/common/config"
 	"github.com/aegiscore/common/logger"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -17,15 +16,6 @@ func ProvideNamedPostgres(logicalName string, configName string) fx.Option {
 	return fx.Provide(fx.Annotate(
 		func(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger) (*sql.DB, error) {
 			return NewPostgres(lc, cfg, log, configName)
-		},
-		fx.ResultTags(fmt.Sprintf(`name:"%s"`, logicalName)),
-	))
-}
-
-func ProvideNamedRedis(logicalName string, configName string) fx.Option {
-	return fx.Provide(fx.Annotate(
-		func(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger) (*redis.Client, error) {
-			return NewRedisClient(lc, cfg, log, configName)
 		},
 		fx.ResultTags(fmt.Sprintf(`name:"%s"`, logicalName)),
 	))
