@@ -8,7 +8,7 @@ func TestUserListPredicates(t *testing.T) {
 	}
 
 	active := true
-	got := userListPredicates(ListUsersInput{Name: "Ali", Email: "alice@example.com", Active: &active})
+	got := userListPredicates(ListUsersInput{Name: "Ali", Username: "alice", Active: &active})
 	if len(got) != 3 {
 		t.Fatalf("predicates = %d, want 3", len(got))
 	}

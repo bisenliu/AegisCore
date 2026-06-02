@@ -8,6 +8,7 @@ import (
 	"github.com/aegiscore/common/config"
 	"github.com/aegiscore/common/contextutil"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 var (
@@ -105,6 +106,9 @@ func (s *Service) parse(tokenString string) (*Claims, error) {
 	if claims.UserID == "" {
 		return nil, ErrMissingUserID
 	}
+	if _, err := uuid.Parse(claims.UserID); err != nil {
+		return nil, ErrMissingUserID
+	}
 	return claims, nil
 }
 
@@ -113,6 +117,9 @@ func (s *Service) sign(input SignInput, subject string) (string, error) {
 		return "", ErrMissingSecret
 	}
 	if input.UserID == "" {
+		return "", ErrMissingUserID
+	}
+	if _, err := uuid.Parse(input.UserID); err != nil {
 		return "", ErrMissingUserID
 	}
 	if input.TokenVersion <= 0 {

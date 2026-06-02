@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/aegiscore/common/config"
 	"github.com/aegiscore/user-services/internal/repository"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 )
@@ -18,20 +18,20 @@ var ErrSessionNotFound = errors.New("auth session not found")
 var ErrTokenVersionMismatch = errors.New("token version mismatch")
 
 type Session struct {
-	UserID       int64     `json:"user_id"`
+	UserID       string    `json:"user_id"`
 	SessionID    string    `json:"session_id"`
 	TokenVersion int64     `json:"token_version"`
 	ExpiresAt    time.Time `json:"expires_at"`
 }
 
 type SessionStore interface {
-	GetCurrentTokenVersion(ctx context.Context, userID int64) (int64, error)
+	GetCurrentTokenVersion(ctx context.Context, userID string) (int64, error)
 	ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error
 	CreateSession(ctx context.Context, session Session, ttl time.Duration) error
 	GetSession(ctx context.Context, sessionID string) (Session, error)
-	DeleteSession(ctx context.Context, userID int64, sessionID string) error
-	DeleteAllUserSessions(ctx context.Context, userID int64) error
-	InvalidateUserTokenVersion(ctx context.Context, userID int64) error
+	DeleteSession(ctx context.Context, userID string, sessionID string) error
+	DeleteAllUserSessions(ctx context.Context, userID string) error
+	InvalidateUserTokenVersion(ctx context.Context, userID string) error
 }
 
 type SessionStoreParams struct {
@@ -52,11 +52,11 @@ func NewSessionStore(params SessionStoreParams) SessionStore {
 	return &redisSessionStore{redis: params.Redis, repo: params.Repo, tokenVersionCacheTTL: params.Cfg.Auth.TokenVersionCacheTTL}
 }
 
-func (s *redisSessionStore) GetCurrentTokenVersion(ctx context.Context, userID int64) (int64, error) {
+func (s *redisSessionStore) GetCurrentTokenVersion(ctx context.Context, userID string) (int64, error) {
 	key := tokenVersionKey(userID)
 	value, err := s.redis.Get(ctx, key).Result()
 	if err == nil {
-		version, parseErr := strconv.ParseInt(value, 10, 64)
+		version, parseErr := parseTokenVersion(value)
 		if parseErr == nil && version > 0 {
 			return version, nil
 		}
@@ -65,7 +65,11 @@ func (s *redisSessionStore) GetCurrentTokenVersion(ctx context.Context, userID i
 		return 0, fmt.Errorf("get token version cache: %w", err)
 	}
 
-	version, err := s.repo.GetTokenVersion(ctx, userID)
+	parsedUserID, err := uuid.Parse(userID)
+	if err != nil {
+		return 0, fmt.Errorf("parse user id: %w", err)
+	}
+	version, err := s.repo.GetTokenVersion(ctx, parsedUserID)
 	if err != nil {
 		return 0, err
 	}
@@ -73,18 +77,17 @@ func (s *redisSessionStore) GetCurrentTokenVersion(ctx context.Context, userID i
 	if ttl <= 0 {
 		ttl = 5 * time.Minute
 	}
-	if err := s.redis.Set(ctx, key, strconv.FormatInt(version, 10), ttl).Err(); err != nil {
+	if err := s.redis.Set(ctx, key, formatTokenVersion(version), ttl).Err(); err != nil {
 		return 0, fmt.Errorf("set token version cache: %w", err)
 	}
 	return version, nil
 }
 
 func (s *redisSessionStore) ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
-	id, err := strconv.ParseInt(userID, 10, 64)
-	if err != nil {
+	if _, err := uuid.Parse(userID); err != nil {
 		return fmt.Errorf("parse user id: %w", err)
 	}
-	current, err := s.GetCurrentTokenVersion(ctx, id)
+	current, err := s.GetCurrentTokenVersion(ctx, userID)
 	if err != nil {
 		return err
 	}
@@ -128,7 +131,7 @@ func (s *redisSessionStore) GetSession(ctx context.Context, sessionID string) (S
 	return session, nil
 }
 
-func (s *redisSessionStore) DeleteSession(ctx context.Context, userID int64, sessionID string) error {
+func (s *redisSessionStore) DeleteSession(ctx context.Context, userID string, sessionID string) error {
 	pipe := s.redis.TxPipeline()
 	pipe.Del(ctx, sessionKey(sessionID))
 	pipe.SRem(ctx, userSessionsKey(userID), sessionID)
@@ -139,7 +142,7 @@ func (s *redisSessionStore) DeleteSession(ctx context.Context, userID int64, ses
 	return nil
 }
 
-func (s *redisSessionStore) DeleteAllUserSessions(ctx context.Context, userID int64) error {
+func (s *redisSessionStore) DeleteAllUserSessions(ctx context.Context, userID string) error {
 	sessions, err := s.redis.SMembers(ctx, userSessionsKey(userID)).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return fmt.Errorf("list user auth sessions: %w", err)
@@ -156,21 +159,31 @@ func (s *redisSessionStore) DeleteAllUserSessions(ctx context.Context, userID in
 	return nil
 }
 
-func (s *redisSessionStore) InvalidateUserTokenVersion(ctx context.Context, userID int64) error {
+func (s *redisSessionStore) InvalidateUserTokenVersion(ctx context.Context, userID string) error {
 	if err := s.redis.Del(ctx, tokenVersionKey(userID)).Err(); err != nil {
 		return fmt.Errorf("delete token version cache: %w", err)
 	}
 	return nil
 }
 
-func tokenVersionKey(userID int64) string {
-	return fmt.Sprintf("auth:user:%d:token_version", userID)
+func tokenVersionKey(userID string) string {
+	return fmt.Sprintf("auth:user:%s:token_version", userID)
 }
 
 func sessionKey(sessionID string) string {
 	return fmt.Sprintf("auth:session:%s", sessionID)
 }
 
-func userSessionsKey(userID int64) string {
-	return fmt.Sprintf("auth:user:%d:sessions", userID)
+func userSessionsKey(userID string) string {
+	return fmt.Sprintf("auth:user:%s:sessions", userID)
+}
+
+func parseTokenVersion(value string) (int64, error) {
+	var version int64
+	_, err := fmt.Sscan(value, &version)
+	return version, err
+}
+
+func formatTokenVersion(version int64) string {
+	return fmt.Sprintf("%d", version)
 }

@@ -5,36 +5,40 @@ import (
 	"errors"
 	"testing"
 
+	commonpassword "github.com/aegiscore/common/password"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/ent"
 	"github.com/aegiscore/user-services/internal/apperror"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/repository"
-	"github.com/aegiscore/user-services/internal/security"
+	"github.com/google/uuid"
 )
+
+var testUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
 
 func TestUserServiceCreateUser(t *testing.T) {
 	createdAt := int64(1780048800000)
 
 	t.Run("success normalizes fields and defaults active", func(t *testing.T) {
-		repo := &stubUserRepository{created: &ent.User{ID: 123, Name: "Alice", Email: "alice@example.com", Active: true, TokenVersion: 1, CreatedAt: createdAt, UpdatedAt: createdAt}}
+		repo := &stubUserRepository{created: &ent.User{ID: 123, UserID: testUserID, Name: "Alice", Username: "alice", Active: true, TokenVersion: 1, CreatedAt: createdAt, UpdatedAt: createdAt}}
 		svc := NewUserService(repo)
 
-		user, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: " Alice ", Email: "ALICE@EXAMPLE.COM", Password: " secret "})
+		user, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: " Alice ", Username: " alice ", Password: " secret "})
 
 		if err != nil {
 			t.Fatalf("CreateUser: %v", err)
 		}
-		if repo.checkedEmail != "alice@example.com" {
-			t.Fatalf("checkedEmail = %q", repo.checkedEmail)
+		if repo.checkedUsername != "alice" {
+			t.Fatalf("checkedUsername = %q", repo.checkedUsername)
 		}
-		if repo.createdInput.Name != "Alice" || repo.createdInput.Email != "alice@example.com" || !repo.createdInput.Active {
+		if repo.createdInput.Name != "Alice" || repo.createdInput.Username != "alice" || repo.createdInput.UserID == uuid.Nil || !repo.createdInput.Active {
 			t.Fatalf("createdInput = %#v", repo.createdInput)
 		}
-		if repo.createdInput.Password == "secret" || !security.CheckPassword(repo.createdInput.Password, "secret") {
-			t.Fatalf("created password was not hashed correctly")
+		matched, err := commonpassword.Verify("secret", repo.createdInput.Password)
+		if err != nil || !matched {
+			t.Fatalf("created password was not hashed correctly: matched=%v err=%v", matched, err)
 		}
-		if user.ID != 123 || user.Email != "alice@example.com" || user.CreatedAt != createdAt || user.UpdatedAt != createdAt {
+		if user.UserID != testUserID.String() || user.Username != "alice" || user.CreatedAt != createdAt || user.UpdatedAt != createdAt {
 			t.Fatalf("user = %#v", user)
 		}
 	})
@@ -42,7 +46,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("reject blank trimmed name", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "   ", Email: "alice@example.com", Password: "secret"})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "   ", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeValidationFailed || appErr.Message != apperror.MsgInvalidUserName {
@@ -53,7 +57,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("reject blank trimmed password", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Email: "alice@example.com", Password: "   "})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Username: "alice", Password: "   "})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeValidationFailed || appErr.Message != apperror.MsgInvalidPassword {
@@ -61,10 +65,10 @@ func TestUserServiceCreateUser(t *testing.T) {
 		}
 	})
 
-	t.Run("reject existing email", func(t *testing.T) {
+	t.Run("reject existing username", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{exists: true})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Email: "alice@example.com", Password: "secret"})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeConflict || appErr.Message != apperror.MsgUserAlreadyExists {
@@ -75,7 +79,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("wrap existence check error", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{existsErr: errors.New("database down")})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Email: "alice@example.com", Password: "secret"})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeInternalError || appErr.Message != "internal server error" {
@@ -86,7 +90,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("preserve create conflict", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{createErr: response.ConflictError(apperror.MsgUserAlreadyExists)})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Email: "alice@example.com", Password: "secret"})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeConflict || appErr.Message != apperror.MsgUserAlreadyExists {
@@ -120,21 +124,21 @@ func TestUserServiceListUsers(t *testing.T) {
 
 	t.Run("explicit pagination and filters", func(t *testing.T) {
 		active := true
-		repo := &stubUserRepository{listUsers: []*ent.User{{ID: 1, Name: "Alice", Email: "alice@example.com", Active: true, CreatedAt: createdAt, UpdatedAt: createdAt}}, listTotal: 128}
+		repo := &stubUserRepository{listUsers: []*ent.User{{ID: 1, UserID: testUserID, Name: "Alice", Username: "alice", Active: true, CreatedAt: createdAt, UpdatedAt: createdAt}}, listTotal: 128}
 		svc := NewUserService(repo)
 
-		users, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{Page: 2, PageSize: 20, Name: " Ali ", Email: " ALICE@EXAMPLE.COM ", Active: &active})
+		users, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{Page: 2, PageSize: 20, Name: " Ali ", Username: " alice ", Active: &active})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
 		}
-		if repo.listInput.Offset != 20 || repo.listInput.Limit != 20 || repo.listInput.Name != "Ali" || repo.listInput.Email != "alice@example.com" {
+		if repo.listInput.Offset != 20 || repo.listInput.Limit != 20 || repo.listInput.Name != "Ali" || repo.listInput.Username != "alice" {
 			t.Fatalf("listInput = %#v", repo.listInput)
 		}
 		if repo.listInput.Active == nil || !*repo.listInput.Active {
 			t.Fatalf("active = %#v", repo.listInput.Active)
 		}
-		if len(users.Items) != 1 || users.Items[0].ID != 1 || users.Items[0].Email != "alice@example.com" || users.Items[0].CreatedAt != createdAt {
+		if len(users.Items) != 1 || users.Items[0].UserID != testUserID.String() || users.Items[0].Username != "alice" || users.Items[0].CreatedAt != createdAt {
 			t.Fatalf("items = %#v", users.Items)
 		}
 		if users.Pagination.Page != 2 || users.Pagination.PageSize != 20 || users.Pagination.Total != 128 || users.Pagination.TotalPages != 7 {
@@ -169,16 +173,16 @@ func TestUserServiceListUsers(t *testing.T) {
 }
 
 type stubUserRepository struct {
-	created      *ent.User
-	createErr    error
-	createdInput repository.CreateUserInput
-	exists       bool
-	existsErr    error
-	checkedEmail string
-	listUsers    []*ent.User
-	listTotal    int
-	listErr      error
-	listInput    repository.ListUsersInput
+	created         *ent.User
+	createErr       error
+	createdInput    repository.CreateUserInput
+	exists          bool
+	existsErr       error
+	checkedUsername string
+	listUsers       []*ent.User
+	listTotal       int
+	listErr         error
+	listInput       repository.ListUsersInput
 }
 
 func (r *stubUserRepository) Create(_ context.Context, input repository.CreateUserInput) (*ent.User, error) {
@@ -189,27 +193,27 @@ func (r *stubUserRepository) Create(_ context.Context, input repository.CreateUs
 	return r.created, nil
 }
 
-func (r *stubUserRepository) ExistsByEmail(_ context.Context, email string) (bool, error) {
-	r.checkedEmail = email
+func (r *stubUserRepository) ExistsByUsername(_ context.Context, username string) (bool, error) {
+	r.checkedUsername = username
 	if r.existsErr != nil {
 		return false, r.existsErr
 	}
 	return r.exists, nil
 }
 
-func (r *stubUserRepository) GetByID(context.Context, int64) (*ent.User, error) {
+func (r *stubUserRepository) GetByUserID(context.Context, uuid.UUID) (*ent.User, error) {
 	return nil, nil
 }
 
-func (r *stubUserRepository) GetByEmail(context.Context, string) (*ent.User, error) {
+func (r *stubUserRepository) GetByUsername(context.Context, string) (*ent.User, error) {
 	return nil, nil
 }
 
-func (r *stubUserRepository) GetTokenVersion(context.Context, int64) (int64, error) {
+func (r *stubUserRepository) GetTokenVersion(context.Context, uuid.UUID) (int64, error) {
 	return 0, nil
 }
 
-func (r *stubUserRepository) IncrementTokenVersion(context.Context, int64) (int64, error) {
+func (r *stubUserRepository) IncrementTokenVersion(context.Context, uuid.UUID) (int64, error) {
 	return 0, nil
 }
 

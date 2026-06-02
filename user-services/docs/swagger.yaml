@@ -7,10 +7,6 @@ definitions:
       active:
         example: true
         type: boolean
-      email:
-        example: alice@example.com
-        maxLength: 255
-        type: string
       name:
         example: Alice
         maxLength: 128
@@ -20,24 +16,30 @@ definitions:
         example: secret
         minLength: 1
         type: string
+      username:
+        example: alice
+        maxLength: 255
+        minLength: 1
+        type: string
     required:
-    - email
     - name
     - password
+    - username
     type: object
   github_com_aegiscore_user-services_internal_dto.LoginRequest:
     properties:
-      email:
-        example: alice@example.com
-        maxLength: 255
-        type: string
       password:
         example: secret
         minLength: 1
         type: string
+      username:
+        example: alice
+        maxLength: 255
+        minLength: 1
+        type: string
     required:
-    - email
     - password
+    - username
     type: object
   github_com_aegiscore_user-services_internal_dto.LogoutResponse:
     properties:
@@ -86,18 +88,18 @@ definitions:
       created_at:
         example: 1780288800000
         type: integer
-      email:
-        example: alice@example.com
-        type: string
-      id:
-        example: 123
-        type: integer
       name:
         example: Alice
         type: string
       updated_at:
         example: 1780288800000
         type: integer
+      user_id:
+        example: 018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e
+        type: string
+      username:
+        example: alice
+        type: string
     type: object
   internal_router.HealthResponse:
     properties:
@@ -175,7 +177,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 校验用户邮箱和密码，创建可撤销会话并返回 Access Token 与 Refresh Token。
+      description: 校验用户名和密码，创建可撤销会话并返回 Access Token 与 Refresh Token。
       parameters:
       - description: 登录请求
         in: body
@@ -200,7 +202,7 @@ paths:
           schema:
             $ref: '#/definitions/response.Envelope'
         "401":
-          description: 邮箱或密码错误
+          description: 用户名或密码错误
           schema:
             $ref: '#/definitions/response.Envelope'
         "500":
@@ -320,7 +322,7 @@ paths:
       - 系统
   /users:
     get:
-      description: 分页查询用户资料列表，支持按用户名、邮箱和启用状态过滤。分页参数未传或小于 1 时使用默认值 page=1、page_size=10。
+      description: 分页查询用户资料列表，支持按用户昵称、用户名和启用状态过滤。分页参数未传或小于 1 时使用默认值 page=1、page_size=10。
       parameters:
       - description: 页码，未传或小于 1 时默认为 1
         in: query
@@ -332,13 +334,13 @@ paths:
         minimum: 1
         name: page_size
         type: integer
-      - description: 用户名模糊匹配
+      - description: 用户昵称模糊匹配
         in: query
         name: name
         type: string
-      - description: 邮箱精确匹配，服务端会转小写
+      - description: 用户名精确匹配
         in: query
-        name: email
+        name: username
         type: string
       - description: 是否启用
         in: query
@@ -376,7 +378,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 创建一个新的用户资料。请求体使用共享校验器校验，邮箱必须唯一，active 缺省为 true。
+      description: 创建一个新的用户资料。请求体使用共享校验器校验，用户名必须唯一，active 缺省为 true。
       parameters:
       - description: 创建用户请求
         in: body
@@ -417,16 +419,15 @@ paths:
       summary: 创建用户
       tags:
       - 用户
-  /users/{id}:
+  /users/{user_id}:
     get:
-      description: 通过正整数用户 ID 查询用户基础资料。
+      description: 通过外部 UUID 用户 ID 查询用户基础资料。
       parameters:
       - description: 用户ID
         in: path
-        minimum: 1
-        name: id
+        name: user_id
         required: true
-        type: integer
+        type: string
       produces:
       - application/json
       responses:

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -12,11 +11,11 @@ import (
 	"github.com/aegiscore/common/contextutil"
 	commonjwt "github.com/aegiscore/common/jwt"
 	"github.com/aegiscore/common/logger"
+	commonpassword "github.com/aegiscore/common/password"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/internal/apperror"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/repository"
-	"github.com/aegiscore/user-services/internal/security"
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -50,26 +49,31 @@ func NewAuthService(params AuthServiceParams) AuthService {
 }
 
 func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.TokenResponse, error) {
-	email := strings.ToLower(strings.TrimSpace(req.Email))
-	password := strings.TrimSpace(req.Password)
-	if email == "" || password == "" {
+	username := strings.TrimSpace(req.Username)
+	plainPassword := strings.TrimSpace(req.Password)
+	if username == "" || plainPassword == "" {
 		return nil, response.UnauthenticatedError(apperror.MsgInvalidCredentials)
 	}
 
-	user, err := s.repo.GetByEmail(ctx, email)
+	user, err := s.repo.GetByUsername(ctx, username)
 	if err != nil {
 		appErr := response.FromError(err)
 		if appErr.Code == response.CodeNotFound {
 			return nil, response.UnauthenticatedError(apperror.MsgInvalidCredentials)
 		}
-		logger.Error(ctx, "query login user failed", zap.String("email", email), zap.Error(err))
+		logger.Error(ctx, "query login user failed", zap.String("username", username), zap.Error(err))
 		return nil, response.FromError(err)
 	}
-	if !security.CheckPassword(user.Password, password) {
+	matched, err := commonpassword.Verify(plainPassword, user.Password)
+	if err != nil {
+		logger.Error(ctx, "verify login password failed", zap.String("username", username), zap.Error(err))
+		return nil, response.UnauthenticatedError(apperror.MsgInvalidCredentials)
+	}
+	if !matched {
 		return nil, response.UnauthenticatedError(apperror.MsgInvalidCredentials)
 	}
 
-	return s.issueTokenPair(ctx, user.ID, user.TokenVersion, uuid.NewString())
+	return s.issueTokenPair(ctx, user.UserID.String(), user.TokenVersion, uuid.NewString())
 }
 
 func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) (*dto.TokenResponse, error) {
@@ -84,8 +88,7 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) 
 	if claims.Subject != commonjwt.SubjectRefresh {
 		return nil, response.TokenInvalidError(apperror.MsgMissingSession)
 	}
-	userID, err := strconv.ParseInt(claims.UserID, 10, 64)
-	if err != nil {
+	if _, err := uuid.Parse(claims.UserID); err != nil {
 		return nil, response.TokenInvalidError(apperror.MsgMissingSession)
 	}
 	session, err := s.sessions.GetSession(ctx, claims.SessionID)
@@ -95,10 +98,10 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) 
 		}
 		return nil, response.FromError(err)
 	}
-	if session.UserID != userID || session.TokenVersion != claims.TokenVersion {
+	if session.UserID != claims.UserID || session.TokenVersion != claims.TokenVersion {
 		return nil, response.TokenInvalidError(apperror.MsgMissingSession)
 	}
-	currentVersion, err := s.sessions.GetCurrentTokenVersion(ctx, userID)
+	currentVersion, err := s.sessions.GetCurrentTokenVersion(ctx, claims.UserID)
 	if err != nil {
 		return nil, response.FromError(err)
 	}
@@ -108,12 +111,12 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) 
 
 	sessionID := session.SessionID
 	if s.config.Auth.RefreshTokenRotation {
-		if err := s.sessions.DeleteSession(ctx, userID, session.SessionID); err != nil {
+		if err := s.sessions.DeleteSession(ctx, claims.UserID, session.SessionID); err != nil {
 			return nil, response.FromError(err)
 		}
 		sessionID = uuid.NewString()
 	}
-	return s.issueTokenPair(ctx, userID, currentVersion, sessionID)
+	return s.issueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
 }
 
 func normalizeRefreshToken(token string) string {
@@ -140,7 +143,11 @@ func (s *authService) LogoutAll(ctx context.Context) (*dto.LogoutResponse, error
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.repo.IncrementTokenVersion(ctx, userID); err != nil {
+	parsedUserID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, response.UnauthenticatedError(apperror.MsgMissingSession)
+	}
+	if _, err := s.repo.IncrementTokenVersion(ctx, parsedUserID); err != nil {
 		return nil, response.FromError(err)
 	}
 	if err := s.sessions.InvalidateUserTokenVersion(ctx, userID); err != nil {
@@ -152,7 +159,7 @@ func (s *authService) LogoutAll(ctx context.Context) (*dto.LogoutResponse, error
 	return &dto.LogoutResponse{LoggedOut: true}, nil
 }
 
-func (s *authService) issueTokenPair(ctx context.Context, userID int64, tokenVersion int64, sessionID string) (*dto.TokenResponse, error) {
+func (s *authService) issueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*dto.TokenResponse, error) {
 	accessTTL := s.config.Auth.JWT.AccessTokenTTL
 	if accessTTL <= 0 {
 		accessTTL = 15 * time.Minute
@@ -161,12 +168,11 @@ func (s *authService) issueTokenPair(ctx context.Context, userID int64, tokenVer
 	if refreshTTL <= 0 {
 		refreshTTL = 7 * 24 * time.Hour
 	}
-	userIDString := strconv.FormatInt(userID, 10)
-	access, err := s.jwt.SignAccessToken(commonjwt.SignInput{UserID: userIDString, TokenVersion: tokenVersion, SessionID: sessionID, TTL: accessTTL})
+	access, err := s.jwt.SignAccessToken(commonjwt.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: accessTTL})
 	if err != nil {
 		return nil, response.FromError(fmt.Errorf("sign access token: %w", err))
 	}
-	refresh, err := s.jwt.SignRefreshToken(commonjwt.SignInput{UserID: userIDString, TokenVersion: tokenVersion, SessionID: sessionID, TTL: refreshTTL})
+	refresh, err := s.jwt.SignRefreshToken(commonjwt.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: refreshTTL})
 	if err != nil {
 		return nil, response.FromError(fmt.Errorf("sign refresh token: %w", err))
 	}
@@ -176,18 +182,17 @@ func (s *authService) issueTokenPair(ctx context.Context, userID int64, tokenVer
 	return &dto.TokenResponse{AccessToken: access, RefreshToken: refresh, TokenType: commonjwt.TokenTypeBearer, ExpiresIn: int64(accessTTL.Seconds())}, nil
 }
 
-func authenticatedSession(ctx context.Context) (int64, string, error) {
+func authenticatedSession(ctx context.Context) (string, string, error) {
 	userIDString, ok := contextutil.UserIDFromContext(ctx)
 	if !ok {
-		return 0, "", response.UnauthenticatedError(apperror.MsgMissingSession)
+		return "", "", response.UnauthenticatedError(apperror.MsgMissingSession)
 	}
-	userID, err := strconv.ParseInt(userIDString, 10, 64)
-	if err != nil {
-		return 0, "", response.UnauthenticatedError(apperror.MsgMissingSession)
+	if _, err := uuid.Parse(userIDString); err != nil {
+		return "", "", response.UnauthenticatedError(apperror.MsgMissingSession)
 	}
 	sessionID, ok := contextutil.SessionIDFromContext(ctx)
 	if !ok {
-		return 0, "", response.UnauthenticatedError(apperror.MsgMissingSession)
+		return "", "", response.UnauthenticatedError(apperror.MsgMissingSession)
 	}
-	return userID, sessionID, nil
+	return userIDString, sessionID, nil
 }

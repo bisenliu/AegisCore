@@ -18,7 +18,7 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
 3. 用户服务启动装配显式提供 `commoninfra.NewConfig` 和 `commoninfra.NewLogger`；Redis/PostgreSQL 由 common 提供单实例创建与 lifecycle helper。
 4. `user-services/internal/bootstrap.UserServiceModule` 显式声明 `cache_redis`、`user_db`、`common_db`，并提供 Ent clients、repository、service、controller、Gin engine、HTTP server。
-5. `RegisterRoutes` 将 `/healthz`、`/api/v1/users` 和 `/api/v1/users/:id` 注册到 Gin engine。
+5. `RegisterRoutes` 将 `/healthz`、`/api/v1/users` 和 `/api/v1/users/:user_id` 注册到 Gin engine。
 6. Fx 生命周期启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
 ## 4. HTTP Request Flow
@@ -26,8 +26,8 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 | 步骤 | 代码位置 | 行为 |
 |---|---|---|
 | 中间件链 | `user-services/internal/bootstrap/bootstrap.go` | 注册 trace-id、panic recovery、request logging、CORS；trace-id 先于日志和 recovery 执行 |
-| 路由匹配 | `user-services/internal/router/router.go` | 匹配 `/healthz` 或 `/api/v1/users/:id` |
-| 参数解析 | `user-services/internal/controller/user_controller.go` | 将 path id 解析为 `int64` 并校验 `gt=0` |
+| 路由匹配 | `user-services/internal/router/router.go` | 匹配 `/healthz` 或 `/api/v1/users/:user_id` |
+| 参数解析 | `user-services/internal/controller/user_controller.go` | 将 path `user_id` 校验为 UUID 字符串 |
 | 业务调用 | `user-services/internal/service/user_service.go` | 调用 repository 并映射为 `dto.UserResponse` |
 | 数据访问 | `user-services/internal/repository/user_repository.go` | 使用 Ent client 查询用户，not found 转为应用错误 |
 | 响应输出 | `common/response/response.go` | 统一输出 `success/code/message/data` 信封 |
@@ -39,8 +39,11 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 | 字段 | 约束 |
 |---|---|
 | `id` | `int64`、唯一、不可变 |
+| `user_id` | UUID、唯一、不可变、对外用户标识 |
 | `name` | 非空、最大 128 |
-| `email` | 非空、唯一、最大 255 |
+| `username` | 非空、唯一、最大 255 |
+| `password` | 非空、Argon2id 密码哈希 |
+| `token_version` | 默认 `1` |
 | `active` | 默认 `true` |
 | `created_at` | 默认当前时间、不可变 |
 | `updated_at` | 默认当前时间、更新时自动刷新 |
@@ -66,6 +69,6 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 
 ## 9. Current Constraints
 
-- 当前 HTTP API 暴露健康检查、创建用户和按 ID 查询用户。
+- 当前 HTTP API 暴露健康检查、创建用户、用户列表、按 `user_id` 查询用户和认证会话接口。
 - 配置样例包含 `postgres.pay_db`，但当前用户服务只声明 `postgres.user_db`、`postgres.common_db` 和 `redis.cache_redis`。
 - 启动服务需要 PostgreSQL 和 Redis 可连接；本地纯单元测试应避免依赖真实外部服务，或显式说明集成测试要求。

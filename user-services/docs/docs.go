@@ -23,7 +23,7 @@ const docTemplate = `{
     "paths": {
         "/auth/login": {
             "post": {
-                "description": "校验用户邮箱和密码，创建可撤销会话并返回 Access Token 与 Refresh Token。",
+                "description": "校验用户名和密码，创建可撤销会话并返回 Access Token 与 Refresh Token。",
                 "consumes": [
                     "application/json"
                 ],
@@ -71,7 +71,7 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "邮箱或密码错误",
+                        "description": "用户名或密码错误",
                         "schema": {
                             "$ref": "#/definitions/response.Envelope"
                         }
@@ -274,7 +274,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "分页查询用户资料列表，支持按用户名、邮箱和启用状态过滤。分页参数未传或小于 1 时使用默认值 page=1、page_size=10。",
+                "description": "分页查询用户资料列表，支持按用户昵称、用户名和启用状态过滤。分页参数未传或小于 1 时使用默认值 page=1、page_size=10。",
                 "produces": [
                     "application/json"
                 ],
@@ -299,14 +299,14 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "用户名模糊匹配",
+                        "description": "用户昵称模糊匹配",
                         "name": "name",
                         "in": "query"
                     },
                     {
                         "type": "string",
-                        "description": "邮箱精确匹配，服务端会转小写",
-                        "name": "email",
+                        "description": "用户名精确匹配",
+                        "name": "username",
                         "in": "query"
                     },
                     {
@@ -361,7 +361,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "创建一个新的用户资料。请求体使用共享校验器校验，邮箱必须唯一，active 缺省为 true。",
+                "description": "创建一个新的用户资料。请求体使用共享校验器校验，用户名必须唯一，active 缺省为 true。",
                 "consumes": [
                     "application/json"
                 ],
@@ -429,14 +429,14 @@ const docTemplate = `{
                 }
             }
         },
-        "/users/{id}": {
+        "/users/{user_id}": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "通过正整数用户 ID 查询用户基础资料。",
+                "description": "通过外部 UUID 用户 ID 查询用户基础资料。",
                 "produces": [
                     "application/json"
                 ],
@@ -446,10 +446,9 @@ const docTemplate = `{
                 "summary": "查询用户资料",
                 "parameters": [
                     {
-                        "minimum": 1,
-                        "type": "integer",
+                        "type": "string",
                         "description": "用户ID",
-                        "name": "id",
+                        "name": "user_id",
                         "in": "path",
                         "required": true
                     }
@@ -505,19 +504,14 @@ const docTemplate = `{
         "github_com_aegiscore_user-services_internal_dto.CreateUserRequest": {
             "type": "object",
             "required": [
-                "email",
                 "name",
-                "password"
+                "password",
+                "username"
             ],
             "properties": {
                 "active": {
                     "type": "boolean",
                     "example": true
-                },
-                "email": {
-                    "type": "string",
-                    "maxLength": 255,
-                    "example": "alice@example.com"
                 },
                 "name": {
                     "type": "string",
@@ -529,25 +523,32 @@ const docTemplate = `{
                     "type": "string",
                     "minLength": 1,
                     "example": "secret"
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "example": "alice"
                 }
             }
         },
         "github_com_aegiscore_user-services_internal_dto.LoginRequest": {
             "type": "object",
             "required": [
-                "email",
-                "password"
+                "password",
+                "username"
             ],
             "properties": {
-                "email": {
-                    "type": "string",
-                    "maxLength": 255,
-                    "example": "alice@example.com"
-                },
                 "password": {
                     "type": "string",
                     "minLength": 1,
                     "example": "secret"
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "example": "alice"
                 }
             }
         },
@@ -619,14 +620,6 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 1780288800000
                 },
-                "email": {
-                    "type": "string",
-                    "example": "alice@example.com"
-                },
-                "id": {
-                    "type": "integer",
-                    "example": 123
-                },
                 "name": {
                     "type": "string",
                     "example": "Alice"
@@ -634,6 +627,14 @@ const docTemplate = `{
                 "updated_at": {
                     "type": "integer",
                     "example": 1780288800000
+                },
+                "user_id": {
+                    "type": "string",
+                    "example": "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "alice"
                 }
             }
         },

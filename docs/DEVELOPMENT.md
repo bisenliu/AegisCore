@@ -88,7 +88,7 @@ Atlas 生成的 SQL 必须提交前 review。允许手动调整 SQL 以满足 Po
 
 ```sql
 -- atlas:txmode none
-CREATE INDEX CONCURRENTLY "users_email_idx" ON "users" ("email");
+CREATE INDEX CONCURRENTLY "users_username_idx" ON "users" ("username");
 ```
 
 `CREATE INDEX CONCURRENTLY` 不能在事务中执行，因此需要将该语句放在非事务 migration 中，或按 Atlas 支持的事务模式指令拆分 migration。任何手动修改 SQL 后，都必须在 `user-services/` 执行：

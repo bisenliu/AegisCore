@@ -20,9 +20,12 @@ import (
 	"github.com/aegiscore/user-services/internal/service"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
+
+const routeAuthUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
 
 type lifecycleRecorder struct {
 	hooks []fx.Hook
@@ -116,14 +119,14 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 
 	t.Run("query requires auth", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
-		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
 	})
 
 	t.Run("create requires auth", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
-		request := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"name":"Alice","email":"alice@example.com"}`))
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"name":"Alice","username":"alice"}`))
 		request.Header.Set("Content-Type", "application/json")
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
@@ -138,7 +141,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 
 	t.Run("query with invalid token returns token invalid", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
-		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
 		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+"invalid")
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, response.CodeTokenInvalid)
@@ -146,8 +149,8 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 
 	t.Run("query with valid token keeps controller behavior", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
-		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
-		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+signRouteAuthToken(t, "secret", "u-123"))
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
+		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		request.Header.Set("X-Trace-ID", "trace-auth-test")
 		engine.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusOK {
@@ -160,8 +163,8 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 
 	t.Run("query with mismatched token version returns token invalid", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
-		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
-		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+signRouteAuthTokenWithVersion(t, "secret", "u-123", 2))
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
+		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+signRouteAuthTokenWithVersion(t, "secret", routeAuthUserID, 2))
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, response.CodeTokenInvalid)
 	})
@@ -169,7 +172,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query validation still runs after auth", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/abc", nil)
-		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+signRouteAuthToken(t, "secret", "u-123"))
+		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		engine.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
@@ -185,7 +188,7 @@ type routeAuthSessionStore struct {
 	version int64
 }
 
-func (s *routeAuthSessionStore) GetCurrentTokenVersion(context.Context, int64) (int64, error) {
+func (s *routeAuthSessionStore) GetCurrentTokenVersion(context.Context, string) (int64, error) {
 	return s.version, nil
 }
 
@@ -204,15 +207,15 @@ func (s *routeAuthSessionStore) GetSession(context.Context, string) (service.Ses
 	return service.Session{}, nil
 }
 
-func (s *routeAuthSessionStore) DeleteSession(context.Context, int64, string) error {
+func (s *routeAuthSessionStore) DeleteSession(context.Context, string, string) error {
 	return nil
 }
 
-func (s *routeAuthSessionStore) DeleteAllUserSessions(context.Context, int64) error {
+func (s *routeAuthSessionStore) DeleteAllUserSessions(context.Context, string) error {
 	return nil
 }
 
-func (s *routeAuthSessionStore) InvalidateUserTokenVersion(context.Context, int64) error {
+func (s *routeAuthSessionStore) InvalidateUserTokenVersion(context.Context, string) error {
 	return nil
 }
 
@@ -234,23 +237,23 @@ func (s *routeAuthAuthService) LogoutAll(context.Context) (*dto.LogoutResponse, 
 
 func (s *routeAuthUserService) CreateUser(context.Context, dto.CreateUserRequest) (*dto.UserResponse, error) {
 	now := time.Now().UnixMilli()
-	return &dto.UserResponse{ID: 124, Name: "Alice", Email: "alice@example.com", Active: true, CreatedAt: now, UpdatedAt: now}, nil
+	return &dto.UserResponse{UserID: routeAuthUserID, Name: "Alice", Username: "alice", Active: true, CreatedAt: now, UpdatedAt: now}, nil
 }
 
-func (s *routeAuthUserService) GetUserByID(_ context.Context, id int64) (*dto.UserResponse, error) {
-	if id == 999 {
+func (s *routeAuthUserService) GetUserByID(_ context.Context, userID string) (*dto.UserResponse, error) {
+	if userID == "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3999" {
 		return nil, response.NotFoundError("user not found")
 	}
-	if id == 500 {
+	if userID == "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3500" {
 		return nil, errors.New("database down")
 	}
 	now := time.Now().UnixMilli()
-	return &dto.UserResponse{ID: id, Name: "Aegis", Email: "aegis@example.com", Active: true, CreatedAt: now, UpdatedAt: now}, nil
+	return &dto.UserResponse{UserID: userID, Name: "Aegis", Username: "aegis", Active: true, CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func (s *routeAuthUserService) ListUsers(context.Context, dto.ListUsersRequest) (response.PaginatedData[dto.UserResponse], error) {
 	now := time.Now().UnixMilli()
-	items := []dto.UserResponse{{ID: 123, Name: "Aegis", Email: "aegis@example.com", Active: true, CreatedAt: now, UpdatedAt: now}}
+	items := []dto.UserResponse{{UserID: routeAuthUserID, Name: "Aegis", Username: "aegis", Active: true, CreatedAt: now, UpdatedAt: now}}
 	return response.NewPaginatedData(items, response.NewPagination(1, 10, 1)), nil
 }
 
@@ -274,6 +277,9 @@ func signRouteAuthToken(t *testing.T, secret, userID string) string {
 
 func signRouteAuthTokenWithVersion(t *testing.T, secret, userID string, tokenVersion int64) string {
 	t.Helper()
+	if _, err := uuid.Parse(userID); err != nil {
+		t.Fatalf("parse userID: %v", err)
+	}
 	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, commonjwt.Claims{
 		UserID:           userID,
 		TokenVersion:     tokenVersion,

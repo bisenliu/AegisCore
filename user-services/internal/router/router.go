@@ -33,7 +33,7 @@ func RegisterRoutes(engine *gin.Engine, params RouteParams) {
 		users := v1.Group("/users")
 		users.GET("", params.UserController.List)
 		users.POST("", params.UserController.Create)
-		users.GET("/:id", params.UserController.GetByID)
+		users.GET("/:user_id", params.UserController.GetByID)
 	}
 }
 

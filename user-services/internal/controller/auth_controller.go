@@ -19,14 +19,14 @@ func NewAuthController(authService service.AuthService, validator *validation.Va
 
 // Login godoc
 // @Summary 用户登录
-// @Description 校验用户邮箱和密码，创建可撤销会话并返回 Access Token 与 Refresh Token。
+// @Description 校验用户名和密码，创建可撤销会话并返回 Access Token 与 Refresh Token。
 // @Tags 认证
 // @Accept json
 // @Produce json
 // @Param request body dto.LoginRequest true "登录请求"
 // @Success 200 {object} response.Envelope{data=dto.TokenResponse} "登录成功"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
-// @Failure 401 {object} response.Envelope "邮箱或密码错误"
+// @Failure 401 {object} response.Envelope "用户名或密码错误"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Router /auth/login [post]
 func (ctl *AuthController) Login(c *gin.Context) {

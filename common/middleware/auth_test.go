@@ -18,13 +18,15 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
+const authTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+
 func TestAuthMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}, Whitelist: []string{"/healthz"}}
-	validToken := signAuthTestToken(t, "secret", "u-123", 1, "s-123", time.Now().Add(time.Hour))
-	expiredToken := signAuthTestToken(t, "secret", "u-123", 1, "s-123", time.Now().Add(-time.Hour))
-	missingVersionToken := signAuthTestToken(t, "secret", "u-123", 0, "s-123", time.Now().Add(time.Hour))
-	missingSessionToken := signAuthTestToken(t, "secret", "u-123", 1, "", time.Now().Add(time.Hour))
+	validToken := signAuthTestToken(t, "secret", authTestUserID, 1, "s-123", time.Now().Add(time.Hour))
+	expiredToken := signAuthTestToken(t, "secret", authTestUserID, 1, "s-123", time.Now().Add(-time.Hour))
+	missingVersionToken := signAuthTestToken(t, "secret", authTestUserID, 0, "s-123", time.Now().Add(time.Hour))
+	missingSessionToken := signAuthTestToken(t, "secret", authTestUserID, 1, "", time.Now().Add(time.Hour))
 
 	tests := []struct {
 		name          string
@@ -46,7 +48,7 @@ func TestAuthMiddleware(t *testing.T) {
 		{name: "token version mismatch", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("version mismatch") })},
 		{name: "valid token", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true},
 		{name: "valid token with version validator", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true, validator: TokenVersionValidatorFunc(func(_ context.Context, userID string, version int64) error {
-			if userID != "u-123" || version != 1 {
+			if userID != authTestUserID || version != 1 {
 				return errors.New("unexpected token version input")
 			}
 			return nil
@@ -60,11 +62,11 @@ func TestAuthMiddleware(t *testing.T) {
 			engine.GET("/*path", func(c *gin.Context) {
 				handled = true
 				if tt.authorization != "" && tt.wantStatus == http.StatusOK {
-					if got, ok := c.Get(contextutil.UserIDKey); !ok || got != "u-123" {
-						t.Fatalf("gin user id = %#v, %v; want u-123, true", got, ok)
+					if got, ok := c.Get(contextutil.UserIDKey); !ok || got != authTestUserID {
+						t.Fatalf("gin user id = %#v, %v; want %s, true", got, ok, authTestUserID)
 					}
-					if got, ok := contextutil.UserIDFromContext(c.Request.Context()); !ok || got != "u-123" {
-						t.Fatalf("context user id = %q, %v; want u-123, true", got, ok)
+					if got, ok := contextutil.UserIDFromContext(c.Request.Context()); !ok || got != authTestUserID {
+						t.Fatalf("context user id = %q, %v; want %s, true", got, ok, authTestUserID)
 					}
 					if got, ok := c.Get(contextutil.SessionIDKey); !ok || got != "s-123" {
 						t.Fatalf("gin session id = %#v, %v; want s-123, true", got, ok)

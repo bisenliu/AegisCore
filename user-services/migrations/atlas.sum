@@ -1,4 +1,5 @@
-h1:chaL5haG41Wl4F5RxWkui1kMUtwM44H8R27dTHmdaGE=
+h1:3Nt2vq47sow/+br2s+4CMjLd3pUbmLBYZijdTS3wlnc=
 20260529041305_create_users.sql h1:8HNxNGAUoXpBRdXFL7L5N91TXjuuD0x8K45iFvH3P6I=
 20260602020244_update_user_schema_fields.sql h1:RcPy1mgIyk2zXPMT4jPEQSymjRucXm7kwdVC3E31+pg=
 20260602064145_add_user_token_version.sql h1:DE/f4T+la7onEKykFZQXgq8wGvL+pVFWXZ0tG6qlMbM=
+20260602095617_refactor_user_identity_auth.sql h1:CajvglI1ozak7AqSQtXEnunRBfj+Ub9KQPZ9m0f4d80=

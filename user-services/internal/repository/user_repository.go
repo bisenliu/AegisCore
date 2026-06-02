@@ -9,32 +9,34 @@ import (
 	"github.com/aegiscore/user-services/ent/predicate"
 	"github.com/aegiscore/user-services/ent/user"
 	"github.com/aegiscore/user-services/internal/apperror"
+	"github.com/google/uuid"
 	"go.uber.org/fx"
 )
 
 type UserRepository interface {
 	Create(ctx context.Context, input CreateUserInput) (*ent.User, error)
-	ExistsByEmail(ctx context.Context, email string) (bool, error)
-	GetByEmail(ctx context.Context, email string) (*ent.User, error)
-	GetByID(ctx context.Context, id int64) (*ent.User, error)
-	GetTokenVersion(ctx context.Context, id int64) (int64, error)
-	IncrementTokenVersion(ctx context.Context, id int64) (int64, error)
+	ExistsByUsername(ctx context.Context, username string) (bool, error)
+	GetByUsername(ctx context.Context, username string) (*ent.User, error)
+	GetByUserID(ctx context.Context, userID uuid.UUID) (*ent.User, error)
+	GetTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error)
+	IncrementTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error)
 	ListUsers(ctx context.Context, input ListUsersInput) ([]*ent.User, int, error)
 }
 
 type CreateUserInput struct {
 	Name     string
-	Email    string
+	UserID   uuid.UUID
+	Username string
 	Password string
 	Active   bool
 }
 
 type ListUsersInput struct {
-	Offset int
-	Limit  int
-	Name   string
-	Email  string
-	Active *bool
+	Offset   int
+	Limit    int
+	Name     string
+	Username string
+	Active   *bool
 }
 
 type userRepository struct {
@@ -53,8 +55,9 @@ func NewUserRepository(params UserRepositoryParams) UserRepository {
 
 func (r *userRepository) Create(ctx context.Context, input CreateUserInput) (*ent.User, error) {
 	created, err := r.client.User.Create().
+		SetUserID(input.UserID).
 		SetName(input.Name).
-		SetEmail(input.Email).
+		SetUsername(input.Username).
 		SetPassword(input.Password).
 		SetActive(input.Active).
 		Save(ctx)
@@ -64,59 +67,63 @@ func (r *userRepository) Create(ctx context.Context, input CreateUserInput) (*en
 	if ent.IsConstraintError(err) {
 		return nil, response.ConflictError(apperror.MsgUserAlreadyExists)
 	}
-	return nil, fmt.Errorf("create user email %s: %w", input.Email, err)
+	return nil, fmt.Errorf("create user username %s: %w", input.Username, err)
 }
 
-func (r *userRepository) ExistsByEmail(ctx context.Context, email string) (bool, error) {
-	exists, err := r.client.User.Query().Where(user.EmailEQ(email)).Exist(ctx)
+func (r *userRepository) ExistsByUsername(ctx context.Context, username string) (bool, error) {
+	exists, err := r.client.User.Query().Where(user.UsernameEQ(username)).Exist(ctx)
 	if err != nil {
-		return false, fmt.Errorf("check user email %s exists: %w", email, err)
+		return false, fmt.Errorf("check username %s exists: %w", username, err)
 	}
 	return exists, nil
 }
 
-func (r *userRepository) GetByID(ctx context.Context, id int64) (*ent.User, error) {
-	user, err := r.client.User.Get(ctx, id)
+func (r *userRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*ent.User, error) {
+	user, err := r.client.User.Query().Where(user.UserIDEQ(userID)).Only(ctx)
 	if err == nil {
 		return user, nil
 	}
 	if ent.IsNotFound(err) {
 		return nil, response.NotFoundError(apperror.MsgUserNotFound)
 	}
-	return nil, fmt.Errorf("query user by id %d: %w", id, err)
+	return nil, fmt.Errorf("query user by user_id %s: %w", userID.String(), err)
 }
 
-func (r *userRepository) GetByEmail(ctx context.Context, email string) (*ent.User, error) {
-	user, err := r.client.User.Query().Where(user.EmailEQ(email)).Only(ctx)
+func (r *userRepository) GetByUsername(ctx context.Context, username string) (*ent.User, error) {
+	user, err := r.client.User.Query().Where(user.UsernameEQ(username)).Only(ctx)
 	if err == nil {
 		return user, nil
 	}
 	if ent.IsNotFound(err) {
 		return nil, response.NotFoundError(apperror.MsgUserNotFound)
 	}
-	return nil, fmt.Errorf("query user by email %s: %w", email, err)
+	return nil, fmt.Errorf("query user by username %s: %w", username, err)
 }
 
-func (r *userRepository) GetTokenVersion(ctx context.Context, id int64) (int64, error) {
-	user, err := r.client.User.Query().Where(user.IDEQ(id)).Only(ctx)
+func (r *userRepository) GetTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
+	user, err := r.client.User.Query().Where(user.UserIDEQ(userID)).Only(ctx)
 	if err == nil {
 		return user.TokenVersion, nil
 	}
 	if ent.IsNotFound(err) {
 		return 0, response.NotFoundError(apperror.MsgUserNotFound)
 	}
-	return 0, fmt.Errorf("query user token version by id %d: %w", id, err)
+	return 0, fmt.Errorf("query user token version by user_id %s: %w", userID.String(), err)
 }
 
-func (r *userRepository) IncrementTokenVersion(ctx context.Context, id int64) (int64, error) {
-	updated, err := r.client.User.UpdateOneID(id).AddTokenVersion(1).Save(ctx)
+func (r *userRepository) IncrementTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
+	updated, err := r.client.User.Update().Where(user.UserIDEQ(userID)).AddTokenVersion(1).Save(ctx)
 	if err == nil {
-		return updated.TokenVersion, nil
+		if updated == 0 {
+			return 0, response.NotFoundError(apperror.MsgUserNotFound)
+		}
+		user, err := r.GetByUserID(ctx, userID)
+		if err != nil {
+			return 0, err
+		}
+		return user.TokenVersion, nil
 	}
-	if ent.IsNotFound(err) {
-		return 0, response.NotFoundError(apperror.MsgUserNotFound)
-	}
-	return 0, fmt.Errorf("increment user token version by id %d: %w", id, err)
+	return 0, fmt.Errorf("increment user token version by user_id %s: %w", userID.String(), err)
 }
 
 func (r *userRepository) ListUsers(ctx context.Context, input ListUsersInput) ([]*ent.User, int, error) {
@@ -143,8 +150,8 @@ func userListPredicates(input ListUsersInput) []predicate.User {
 	if input.Name != "" {
 		predicates = append(predicates, user.NameContains(input.Name))
 	}
-	if input.Email != "" {
-		predicates = append(predicates, user.EmailEQ(input.Email))
+	if input.Username != "" {
+		predicates = append(predicates, user.UsernameEQ(input.Username))
 	}
 	if input.Active != nil {
 		predicates = append(predicates, user.ActiveEQ(*input.Active))
