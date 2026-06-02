@@ -15,7 +15,10 @@ import (
 type UserRepository interface {
 	Create(ctx context.Context, input CreateUserInput) (*ent.User, error)
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
+	GetByEmail(ctx context.Context, email string) (*ent.User, error)
 	GetByID(ctx context.Context, id int64) (*ent.User, error)
+	GetTokenVersion(ctx context.Context, id int64) (int64, error)
+	IncrementTokenVersion(ctx context.Context, id int64) (int64, error)
 	ListUsers(ctx context.Context, input ListUsersInput) ([]*ent.User, int, error)
 }
 
@@ -81,6 +84,39 @@ func (r *userRepository) GetByID(ctx context.Context, id int64) (*ent.User, erro
 		return nil, response.NotFoundError(apperror.MsgUserNotFound)
 	}
 	return nil, fmt.Errorf("query user by id %d: %w", id, err)
+}
+
+func (r *userRepository) GetByEmail(ctx context.Context, email string) (*ent.User, error) {
+	user, err := r.client.User.Query().Where(user.EmailEQ(email)).Only(ctx)
+	if err == nil {
+		return user, nil
+	}
+	if ent.IsNotFound(err) {
+		return nil, response.NotFoundError(apperror.MsgUserNotFound)
+	}
+	return nil, fmt.Errorf("query user by email %s: %w", email, err)
+}
+
+func (r *userRepository) GetTokenVersion(ctx context.Context, id int64) (int64, error) {
+	user, err := r.client.User.Query().Where(user.IDEQ(id)).Only(ctx)
+	if err == nil {
+		return user.TokenVersion, nil
+	}
+	if ent.IsNotFound(err) {
+		return 0, response.NotFoundError(apperror.MsgUserNotFound)
+	}
+	return 0, fmt.Errorf("query user token version by id %d: %w", id, err)
+}
+
+func (r *userRepository) IncrementTokenVersion(ctx context.Context, id int64) (int64, error) {
+	updated, err := r.client.User.UpdateOneID(id).AddTokenVersion(1).Save(ctx)
+	if err == nil {
+		return updated.TokenVersion, nil
+	}
+	if ent.IsNotFound(err) {
+		return 0, response.NotFoundError(apperror.MsgUserNotFound)
+	}
+	return 0, fmt.Errorf("increment user token version by id %d: %w", id, err)
 }
 
 func (r *userRepository) ListUsers(ctx context.Context, input ListUsersInput) ([]*ent.User, int, error) {

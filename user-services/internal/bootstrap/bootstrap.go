@@ -44,7 +44,10 @@ var UserServiceModule = fx.Module("aegiscore-user-services",
 		NewJWTService,
 		entclient.NewNamedClients,
 		repository.NewUserRepository,
+		service.NewSessionStore,
+		service.NewAuthService,
 		service.NewUserService,
+		controller.NewAuthController,
 		controller.NewUserController,
 		NewGinEngine,
 		NewHTTPServer,
@@ -59,9 +62,10 @@ var UserServiceModule = fx.Module("aegiscore-user-services",
 type GinParams struct {
 	fx.In
 
-	Config *config.Config
-	Log    *zap.Logger
-	JWT    *commonjwt.Service
+	Config       *config.Config
+	Log          *zap.Logger
+	JWT          *commonjwt.Service
+	SessionStore service.SessionStore `optional:"true"`
 }
 
 func NewGinEngine(params GinParams) (*gin.Engine, error) {
@@ -77,7 +81,7 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 		commonmw.Recovery(params.Log),
 		commonmw.RequestLogger(params.Log),
 		commonmw.CORS(),
-		commonmw.Auth(params.Log, params.JWT, params.Config.Auth),
+		commonmw.AuthWithTokenVersionValidator(params.Log, params.JWT, params.Config.Auth, params.SessionStore),
 	)
 	return engine, nil
 }
@@ -91,11 +95,12 @@ type RegisterRouteParams struct {
 
 	Config         *config.Config
 	Engine         *gin.Engine
+	AuthController *controller.AuthController
 	UserController *controller.UserController
 }
 
 func RegisterRoutes(params RegisterRouteParams) {
-	router.RegisterRoutes(params.Engine, router.RouteParams{Environment: params.Config.App.Environment, UserController: params.UserController})
+	router.RegisterRoutes(params.Engine, router.RouteParams{Environment: params.Config.App.Environment, AuthController: params.AuthController, UserController: params.UserController})
 }
 
 type HTTPServerParams struct {

@@ -9,6 +9,7 @@
 | `user-profile-query` | 通过用户 ID 查询用户资料并返回统一 API 响应 | `user-services/internal/router/router.go`, `user-services/internal/controller/user_controller.go`, `user-services/internal/service/user_service.go`, `user-services/internal/repository/user_repository.go`, `user-services/ent/schema/user.go` | `openspec/specs/user-profile-query/spec.md` | ready |
 | `user-profile-create` | 创建用户资料并将请求校验、唯一性冲突和持久化错误转换为统一响应 | `user-services/internal/router/router.go`, `user-services/internal/controller/user_controller.go`, `user-services/internal/service/user_service.go`, `user-services/internal/repository/user_repository.go`, `user-services/ent/schema/user.go` | `openspec/specs/user-profile-create/spec.md` | ready |
 | `user-authentication` | 通过 JWT Bearer 中间件校验受保护 API 并传播认证用户身份 | `common/jwt/`, `common/middleware/auth.go`, `common/contextutil/auth.go`, `user-services/internal/bootstrap/bootstrap.go` | `openspec/specs/user-authentication/spec.md` | ready |
+| `user-session-control` | 通过短期 Access Token、可撤销 Refresh Token 会话和用户级 token_version 支持登录、刷新、退出当前设备和退出全部设备 | `user-services/internal/controller/auth_controller.go`, `user-services/internal/service/auth_service.go`, `user-services/internal/service/session_store.go`, `user-services/internal/repository/user_repository.go`, `user-services/ent/schema/user.go` | `openspec/specs/user-session-control/spec.md` | proposed |
 | `http-service-runtime` | 通过 CLI 启动 HTTP 服务，注册中间件和路由，并支持优雅关闭 | `user-services/cmd/main.go`, `user-services/internal/bootstrap/bootstrap.go`, `user-services/internal/router/router.go` | `openspec/specs/http-service-runtime/spec.md` | ready |
 | `shared-infrastructure` | 加载配置，提供 Zap 日志，并支持服务侧声明具名 Redis/PostgreSQL/Ent 运行时依赖 | `common/config/`, `common/infrastructure/`, `common/logger/`, `user-services/internal/bootstrap/`, `user-services/internal/entclient/provider.go` | `openspec/specs/shared-infrastructure/spec.md` | ready |
 | `api-response-contract` | 统一 HTTP 成功/失败信封、错误码和应用错误映射 | `common/response/`, `common/middleware/recovery.go`, `user-services/internal/controller/user_controller.go` | `openspec/specs/api-response-contract/spec.md` | ready |
@@ -33,6 +34,7 @@
 - `user-profile-create` 依赖 `shared-infrastructure` 提供 Ent `user_db` client，并依赖 `request-validation` 处理 JSON 请求校验。
 - `user-profile-create` 依赖 `api-response-contract` 输出统一成功、参数错误和冲突响应。
 - `user-authentication` 依赖 `shared-infrastructure` 的配置、日志和 trace-id 日志约定，并依赖 `api-response-contract` 输出认证失败响应。
+- `user-session-control` 依赖 `user-authentication` 的 JWT claims、认证上下文和 Bearer 中间件，并依赖 `shared-infrastructure` 提供 `cache_redis` 与 `user_db`。
 - `http-service-runtime` 依赖 `shared-infrastructure` 加载配置、初始化 Zap logger，并复用 Redis/PostgreSQL 单实例创建能力；用户服务运行时自身声明 `cache_redis`、`user_db`、`common_db`。
 - `http-service-runtime` 依赖 `api-response-contract` 通过 recovery 中间件输出 panic 错误。
 - `request-validation` 依赖 `api-response-contract` 输出统一校验失败响应。
@@ -45,7 +47,7 @@
 这些能力目前没有足够实现基础，不应作为 ready 主规格：
 
 - 用户更新、禁用或删除。
-- 授权、会话管理或 token 撤销列表。
+- 授权或细粒度权限控制。
 - 支付服务或 `pay_db` 相关业务。
 - 依赖级健康检查，例如 Redis/Postgres 健康状态聚合。
 

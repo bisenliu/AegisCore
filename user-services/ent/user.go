@@ -23,6 +23,8 @@ type User struct {
 	Email string `json:"email,omitempty"`
 	// 密码
 	Password string `json:"password,omitempty"`
+	// 认证令牌版本
+	TokenVersion int64 `json:"token_version,omitempty"`
 	// 是否启用
 	Active bool `json:"active,omitempty"`
 	// 创建时间戳毫秒
@@ -39,7 +41,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case user.FieldActive:
 			values[i] = new(sql.NullBool)
-		case user.FieldID, user.FieldCreatedAt, user.FieldUpdatedAt:
+		case user.FieldID, user.FieldTokenVersion, user.FieldCreatedAt, user.FieldUpdatedAt:
 			values[i] = new(sql.NullInt64)
 		case user.FieldName, user.FieldEmail, user.FieldPassword:
 			values[i] = new(sql.NullString)
@@ -81,6 +83,12 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field password", values[i])
 			} else if value.Valid {
 				_m.Password = value.String
+			}
+		case user.FieldTokenVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field token_version", values[i])
+			} else if value.Valid {
+				_m.TokenVersion = value.Int64
 			}
 		case user.FieldActive:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -144,6 +152,9 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("password=")
 	builder.WriteString(_m.Password)
+	builder.WriteString(", ")
+	builder.WriteString("token_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TokenVersion))
 	builder.WriteString(", ")
 	builder.WriteString("active=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Active))

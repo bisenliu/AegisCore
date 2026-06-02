@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,8 +21,10 @@ import (
 func TestAuthMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}, Whitelist: []string{"/healthz"}}
-	validToken := signAuthTestToken(t, "secret", "u-123", time.Now().Add(time.Hour))
-	expiredToken := signAuthTestToken(t, "secret", "u-123", time.Now().Add(-time.Hour))
+	validToken := signAuthTestToken(t, "secret", "u-123", 1, "s-123", time.Now().Add(time.Hour))
+	expiredToken := signAuthTestToken(t, "secret", "u-123", 1, "s-123", time.Now().Add(-time.Hour))
+	missingVersionToken := signAuthTestToken(t, "secret", "u-123", 0, "s-123", time.Now().Add(time.Hour))
+	missingSessionToken := signAuthTestToken(t, "secret", "u-123", 1, "", time.Now().Add(time.Hour))
 
 	tests := []struct {
 		name          string
@@ -29,6 +33,7 @@ func TestAuthMiddleware(t *testing.T) {
 		wantStatus    int
 		wantCode      response.Code
 		wantHandled   bool
+		validator     TokenVersionValidator
 	}{
 		{name: "whitelist", path: "/healthz", wantStatus: http.StatusOK, wantHandled: true},
 		{name: "missing header", path: "/api/v1/users/123", wantStatus: http.StatusUnauthorized, wantCode: response.CodeUnauthenticated},
@@ -36,12 +41,21 @@ func TestAuthMiddleware(t *testing.T) {
 		{name: "empty token", path: "/api/v1/users/123", authorization: "Bearer ", wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
 		{name: "invalid token", path: "/api/v1/users/123", authorization: "Bearer invalid", wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
 		{name: "expired token", path: "/api/v1/users/123", authorization: "Bearer " + expiredToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenExpired},
+		{name: "missing token version", path: "/api/v1/users/123", authorization: "Bearer " + missingVersionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
+		{name: "missing session id", path: "/api/v1/users/123", authorization: "Bearer " + missingSessionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
+		{name: "token version mismatch", path: "/api/v1/users/123", authorization: "Bearer " + validToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("version mismatch") })},
 		{name: "valid token", path: "/api/v1/users/123", authorization: "Bearer " + validToken, wantStatus: http.StatusOK, wantHandled: true},
+		{name: "valid token with version validator", path: "/api/v1/users/123", authorization: "Bearer " + validToken, wantStatus: http.StatusOK, wantHandled: true, validator: TokenVersionValidatorFunc(func(_ context.Context, userID string, version int64) error {
+			if userID != "u-123" || version != 1 {
+				return errors.New("unexpected token version input")
+			}
+			return nil
+		})},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			engine := gin.New()
-			engine.Use(Auth(zaptest.NewLogger(t), commonjwt.NewService(cfg), cfg))
+			engine.Use(AuthWithTokenVersionValidator(zaptest.NewLogger(t), commonjwt.NewService(cfg), cfg, tt.validator))
 			handled := false
 			engine.GET("/*path", func(c *gin.Context) {
 				handled = true
@@ -51,6 +65,12 @@ func TestAuthMiddleware(t *testing.T) {
 					}
 					if got, ok := contextutil.UserIDFromContext(c.Request.Context()); !ok || got != "u-123" {
 						t.Fatalf("context user id = %q, %v; want u-123, true", got, ok)
+					}
+					if got, ok := c.Get(contextutil.SessionIDKey); !ok || got != "s-123" {
+						t.Fatalf("gin session id = %#v, %v; want s-123, true", got, ok)
+					}
+					if got, ok := contextutil.SessionIDFromContext(c.Request.Context()); !ok || got != "s-123" {
+						t.Fatalf("context session id = %q, %v; want s-123, true", got, ok)
 					}
 				}
 				c.Status(http.StatusOK)
@@ -82,10 +102,12 @@ func TestAuthMiddleware(t *testing.T) {
 	}
 }
 
-func signAuthTestToken(t *testing.T, secret, userID string, expiresAt time.Time) string {
+func signAuthTestToken(t *testing.T, secret, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {
 	t.Helper()
 	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, commonjwt.Claims{
 		UserID:           userID,
+		TokenVersion:     tokenVersion,
+		SessionID:        sessionID,
 		RegisteredClaims: jwtv5.RegisteredClaims{ExpiresAt: jwtv5.NewNumericDate(expiresAt)},
 	}).SignedString([]byte(secret))
 	if err != nil {

@@ -14,6 +14,7 @@ var (
 		{Name: "name", Type: field.TypeString, Size: 128},
 		{Name: "email", Type: field.TypeString, Unique: true, Size: 255},
 		{Name: "password", Type: field.TypeString},
+		{Name: "token_version", Type: field.TypeInt64, Default: 1},
 		{Name: "active", Type: field.TypeBool, Default: true},
 		{Name: "created_at", Type: field.TypeInt64},
 		{Name: "updated_at", Type: field.TypeInt64},

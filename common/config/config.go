@@ -38,15 +38,18 @@ type HTTPConfig struct {
 }
 
 type AuthConfig struct {
-	JWT       JWTConfig `mapstructure:"jwt"`
-	Whitelist []string  `mapstructure:"whitelist"`
+	JWT                  JWTConfig     `mapstructure:"jwt"`
+	Whitelist            []string      `mapstructure:"whitelist"`
+	TokenVersionCacheTTL time.Duration `mapstructure:"token_version_cache_ttl"`
+	RefreshTokenRotation bool          `mapstructure:"refresh_token_rotation"`
 }
 
 type JWTConfig struct {
-	Secret         string        `mapstructure:"secret"`
-	Issuer         string        `mapstructure:"issuer"`
-	Audience       string        `mapstructure:"audience"`
-	AccessTokenTTL time.Duration `mapstructure:"access_token_ttl"`
+	Secret          string        `mapstructure:"secret"`
+	Issuer          string        `mapstructure:"issuer"`
+	Audience        string        `mapstructure:"audience"`
+	AccessTokenTTL  time.Duration `mapstructure:"access_token_ttl"`
+	RefreshTokenTTL time.Duration `mapstructure:"refresh_token_ttl"`
 }
 
 type LogConfig struct {

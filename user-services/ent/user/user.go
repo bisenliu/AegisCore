@@ -17,6 +17,8 @@ const (
 	FieldEmail = "email"
 	// FieldPassword holds the string denoting the password field in the database.
 	FieldPassword = "password"
+	// FieldTokenVersion holds the string denoting the token_version field in the database.
+	FieldTokenVersion = "token_version"
 	// FieldActive holds the string denoting the active field in the database.
 	FieldActive = "active"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -33,6 +35,7 @@ var Columns = []string{
 	FieldName,
 	FieldEmail,
 	FieldPassword,
+	FieldTokenVersion,
 	FieldActive,
 	FieldCreatedAt,
 	FieldUpdatedAt,
@@ -55,6 +58,8 @@ var (
 	EmailValidator func(string) error
 	// PasswordValidator is a validator for the "password" field. It is called by the builders before save.
 	PasswordValidator func(string) error
+	// DefaultTokenVersion holds the default value on creation for the "token_version" field.
+	DefaultTokenVersion int64
 	// DefaultActive holds the default value on creation for the "active" field.
 	DefaultActive bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
@@ -86,6 +91,11 @@ func ByEmail(opts ...sql.OrderTermOption) OrderOption {
 // ByPassword orders the results by the password field.
 func ByPassword(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPassword, opts...).ToFunc()
+}
+
+// ByTokenVersion orders the results by the token_version field.
+func ByTokenVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTokenVersion, opts...).ToFunc()
 }
 
 // ByActive orders the results by the active field.

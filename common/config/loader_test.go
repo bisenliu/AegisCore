@@ -31,6 +31,15 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cfg.Auth.JWT.AccessTokenTTL != 15*time.Minute {
 		t.Fatalf("Auth.JWT.AccessTokenTTL = %s, want 15m", cfg.Auth.JWT.AccessTokenTTL)
 	}
+	if cfg.Auth.JWT.RefreshTokenTTL != 168*time.Hour {
+		t.Fatalf("Auth.JWT.RefreshTokenTTL = %s, want 168h", cfg.Auth.JWT.RefreshTokenTTL)
+	}
+	if cfg.Auth.TokenVersionCacheTTL != 5*time.Minute {
+		t.Fatalf("Auth.TokenVersionCacheTTL = %s, want 5m", cfg.Auth.TokenVersionCacheTTL)
+	}
+	if !cfg.Auth.RefreshTokenRotation {
+		t.Fatal("Auth.RefreshTokenRotation = false, want true")
+	}
 	if got := strings.Join(cfg.Auth.Whitelist, ","); got != "/healthz,/swagger,/docs,/api-docs" {
 		t.Fatalf("Auth.Whitelist = %q, want /healthz,/swagger,/docs,/api-docs", got)
 	}
@@ -199,6 +208,8 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_HTTP_SHUTDOWN_TIMEOUT", "25s")
 	t.Setenv("AEGISCORE_AUTH_JWT_SECRET", "env-secret")
 	t.Setenv("AEGISCORE_AUTH_JWT_ISSUER", "env-issuer")
+	t.Setenv("AEGISCORE_AUTH_JWT_REFRESH_TOKEN_TTL", "720h")
+	t.Setenv("AEGISCORE_AUTH_TOKEN_VERSION_CACHE_TTL", "30s")
 	t.Setenv("AEGISCORE_REDIS_CACHE_REDIS_DB", "9")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_PASSWORD", "env-secret")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_MAX_OPEN_CONNS", "30")
@@ -215,6 +226,12 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	}
 	if cfg.Auth.JWT.Secret != "env-secret" || cfg.Auth.JWT.Issuer != "env-issuer" {
 		t.Fatalf("Auth JWT = %#v, want env overrides", cfg.Auth.JWT)
+	}
+	if cfg.Auth.JWT.RefreshTokenTTL != 720*time.Hour {
+		t.Fatalf("Auth.JWT.RefreshTokenTTL = %s, want 720h", cfg.Auth.JWT.RefreshTokenTTL)
+	}
+	if cfg.Auth.TokenVersionCacheTTL != 30*time.Second {
+		t.Fatalf("Auth.TokenVersionCacheTTL = %s, want 30s", cfg.Auth.TokenVersionCacheTTL)
 	}
 	if cfg.Redis["cache_redis"].DB != 9 {
 		t.Fatalf("cache_redis.DB = %d, want 9", cfg.Redis["cache_redis"].DB)
@@ -418,6 +435,9 @@ auth:
     issuer: aegiscore-test
     audience: aegiscore-users
     access_token_ttl: 15m
+    refresh_token_ttl: 168h
+  token_version_cache_ttl: 5m
+  refresh_token_rotation: true
   whitelist:
     - /healthz
     - /swagger
@@ -502,6 +522,9 @@ func configYAMLWithSection(section string) string {
     issuer: aegiscore-test
     audience: aegiscore-users
     access_token_ttl: 15m
+    refresh_token_ttl: 168h
+  token_version_cache_ttl: 5m
+  refresh_token_rotation: true
   whitelist:
     - /healthz`,
 		"log": `log:

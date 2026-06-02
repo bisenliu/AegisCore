@@ -10,6 +10,7 @@ import (
 	"github.com/aegiscore/user-services/internal/apperror"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/repository"
+	"github.com/aegiscore/user-services/internal/security"
 	"go.uber.org/zap"
 )
 
@@ -52,7 +53,13 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 		return nil, response.ConflictError(apperror.MsgUserAlreadyExists)
 	}
 
-	user, err := s.repo.Create(ctx, repository.CreateUserInput{Name: name, Email: email, Password: password, Active: active})
+	passwordHash, err := security.HashPassword(password)
+	if err != nil {
+		logger.Error(ctx, "hash user password failed", zap.String("email", email), zap.Error(err))
+		return nil, response.FromError(err)
+	}
+
+	user, err := s.repo.Create(ctx, repository.CreateUserInput{Name: name, Email: email, Password: passwordHash, Active: active})
 	if err != nil {
 		logger.Error(ctx, "create user failed", zap.String("email", email), zap.Error(err))
 		return nil, response.FromError(err)

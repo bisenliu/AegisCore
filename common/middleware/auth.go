@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"errors"
 	"strings"
 
@@ -16,7 +17,21 @@ import (
 
 const unauthenticatedMessage = "登录状态无效或已过期，请重新登录"
 
+type TokenVersionValidator interface {
+	ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error
+}
+
+type TokenVersionValidatorFunc func(ctx context.Context, userID string, tokenVersion int64) error
+
+func (f TokenVersionValidatorFunc) ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
+	return f(ctx, userID, tokenVersion)
+}
+
 func Auth(log *zap.Logger, jwtService *commonjwt.Service, cfg config.AuthConfig) gin.HandlerFunc {
+	return AuthWithTokenVersionValidator(log, jwtService, cfg, nil)
+}
+
+func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *commonjwt.Service, cfg config.AuthConfig, validator TokenVersionValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		reqLog := logger.WithContext(log, ctx)
@@ -60,9 +75,20 @@ func Auth(log *zap.Logger, jwtService *commonjwt.Service, cfg config.AuthConfig)
 			return
 		}
 
+		if validator != nil {
+			if err := validator.ValidateTokenVersion(ctx, claims.UserID, claims.TokenVersion); err != nil {
+				reqLog.Error("token version validation failed", zap.Error(err))
+				response.TokenInvalid(c, unauthenticatedMessage)
+				c.Abort()
+				return
+			}
+		}
+
 		ctx = contextutil.WithUserID(ctx, claims.UserID)
+		ctx = contextutil.WithSessionID(ctx, claims.SessionID)
 		c.Request = c.Request.WithContext(ctx)
 		c.Set(contextutil.UserIDKey, claims.UserID)
+		c.Set(contextutil.SessionIDKey, claims.SessionID)
 		c.Next()
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/controller"
 	"github.com/aegiscore/user-services/internal/dto"
+	"github.com/aegiscore/user-services/internal/service"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"go.uber.org/fx"
@@ -42,8 +43,8 @@ func TestDefaultConfigHTTPTimeouts(t *testing.T) {
 	if cfg.Auth.JWT.Secret == "" || cfg.Auth.JWT.Issuer != "aegiscore-user-services" || cfg.Auth.JWT.Audience != "aegiscore-users" {
 		t.Fatalf("Auth.JWT = %#v, want default auth config", cfg.Auth.JWT)
 	}
-	if got := strings.Join(cfg.Auth.Whitelist, ","); got != "/healthz,/swagger,/docs,/api-docs" {
-		t.Fatalf("Auth.Whitelist = %q, want /healthz,/swagger,/docs,/api-docs", got)
+	if got := strings.Join(cfg.Auth.Whitelist, ","); got != "/healthz,/swagger,/docs,/api-docs,/api/v1/auth/login,/api/v1/auth/refresh" {
+		t.Fatalf("Auth.Whitelist = %q, want default auth whitelist", got)
 	}
 }
 
@@ -82,10 +83,10 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		App: config.AppConfig{Environment: "local"},
 		Auth: config.AuthConfig{
 			JWT:       config.JWTConfig{Secret: "secret"},
-			Whitelist: []string{"/healthz", "/swagger", "/docs", "/api-docs"},
+			Whitelist: []string{"/healthz", "/swagger", "/docs", "/api-docs", "/api/v1/auth/login", "/api/v1/auth/refresh"},
 		},
 	}
-	engine, err := NewGinEngine(GinParams{Config: cfg, Log: zap.NewNop(), JWT: commonjwt.NewService(cfg.Auth)})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Log: zap.NewNop(), JWT: commonjwt.NewService(cfg.Auth), SessionStore: &routeAuthSessionStore{version: 1}})
 	if err != nil {
 		t.Fatalf("NewGinEngine: %v", err)
 	}
@@ -96,6 +97,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	RegisterRoutes(RegisterRouteParams{
 		Config:         cfg,
 		Engine:         engine,
+		AuthController: controller.NewAuthController(&routeAuthAuthService{}, validator),
 		UserController: controller.NewUserController(&routeAuthUserService{}, validator),
 	})
 
@@ -155,6 +157,14 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		}
 	})
 
+	t.Run("query with mismatched token version returns token invalid", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
+		request.Header.Set("Authorization", "Bearer "+signRouteAuthTokenWithVersion(t, "secret", "u-123", 2))
+		engine.ServeHTTP(recorder, request)
+		assertAuthFailureEnvelope(t, recorder, response.CodeTokenInvalid)
+	})
+
 	t.Run("query validation still runs after auth", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/abc", nil)
@@ -167,6 +177,59 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 }
 
 type routeAuthUserService struct{}
+
+type routeAuthAuthService struct{}
+
+type routeAuthSessionStore struct {
+	version int64
+}
+
+func (s *routeAuthSessionStore) GetCurrentTokenVersion(context.Context, int64) (int64, error) {
+	return s.version, nil
+}
+
+func (s *routeAuthSessionStore) ValidateTokenVersion(_ context.Context, _ string, tokenVersion int64) error {
+	if tokenVersion != s.version {
+		return errors.New("token version mismatch")
+	}
+	return nil
+}
+
+func (s *routeAuthSessionStore) CreateSession(context.Context, service.Session, time.Duration) error {
+	return nil
+}
+
+func (s *routeAuthSessionStore) GetSession(context.Context, string) (service.Session, error) {
+	return service.Session{}, nil
+}
+
+func (s *routeAuthSessionStore) DeleteSession(context.Context, int64, string) error {
+	return nil
+}
+
+func (s *routeAuthSessionStore) DeleteAllUserSessions(context.Context, int64) error {
+	return nil
+}
+
+func (s *routeAuthSessionStore) InvalidateUserTokenVersion(context.Context, int64) error {
+	return nil
+}
+
+func (s *routeAuthAuthService) Login(context.Context, dto.LoginRequest) (*dto.TokenResponse, error) {
+	return &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: "Bearer", ExpiresIn: 3600}, nil
+}
+
+func (s *routeAuthAuthService) Refresh(context.Context, dto.RefreshTokenRequest) (*dto.TokenResponse, error) {
+	return &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: "Bearer", ExpiresIn: 3600}, nil
+}
+
+func (s *routeAuthAuthService) Logout(context.Context) (*dto.LogoutResponse, error) {
+	return &dto.LogoutResponse{LoggedOut: true}, nil
+}
+
+func (s *routeAuthAuthService) LogoutAll(context.Context) (*dto.LogoutResponse, error) {
+	return &dto.LogoutResponse{LoggedOut: true}, nil
+}
 
 func (s *routeAuthUserService) CreateUser(context.Context, dto.CreateUserRequest) (*dto.UserResponse, error) {
 	now := time.Now().UnixMilli()
@@ -205,9 +268,15 @@ func assertAuthFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder
 }
 
 func signRouteAuthToken(t *testing.T, secret, userID string) string {
+	return signRouteAuthTokenWithVersion(t, secret, userID, 1)
+}
+
+func signRouteAuthTokenWithVersion(t *testing.T, secret, userID string, tokenVersion int64) string {
 	t.Helper()
 	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, commonjwt.Claims{
 		UserID:           userID,
+		TokenVersion:     tokenVersion,
+		SessionID:        "s-123",
 		RegisteredClaims: jwtv5.RegisteredClaims{ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))},
 	}).SignedString([]byte(secret))
 	if err != nil {

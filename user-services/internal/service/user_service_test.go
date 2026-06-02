@@ -10,13 +10,14 @@ import (
 	"github.com/aegiscore/user-services/internal/apperror"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/repository"
+	"github.com/aegiscore/user-services/internal/security"
 )
 
 func TestUserServiceCreateUser(t *testing.T) {
 	createdAt := int64(1780048800000)
 
 	t.Run("success normalizes fields and defaults active", func(t *testing.T) {
-		repo := &stubUserRepository{created: &ent.User{ID: 123, Name: "Alice", Email: "alice@example.com", Active: true, CreatedAt: createdAt, UpdatedAt: createdAt}}
+		repo := &stubUserRepository{created: &ent.User{ID: 123, Name: "Alice", Email: "alice@example.com", Active: true, TokenVersion: 1, CreatedAt: createdAt, UpdatedAt: createdAt}}
 		svc := NewUserService(repo)
 
 		user, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: " Alice ", Email: "ALICE@EXAMPLE.COM", Password: " secret "})
@@ -27,8 +28,11 @@ func TestUserServiceCreateUser(t *testing.T) {
 		if repo.checkedEmail != "alice@example.com" {
 			t.Fatalf("checkedEmail = %q", repo.checkedEmail)
 		}
-		if repo.createdInput.Name != "Alice" || repo.createdInput.Email != "alice@example.com" || repo.createdInput.Password != "secret" || !repo.createdInput.Active {
+		if repo.createdInput.Name != "Alice" || repo.createdInput.Email != "alice@example.com" || !repo.createdInput.Active {
 			t.Fatalf("createdInput = %#v", repo.createdInput)
+		}
+		if repo.createdInput.Password == "secret" || !security.CheckPassword(repo.createdInput.Password, "secret") {
+			t.Fatalf("created password was not hashed correctly")
 		}
 		if user.ID != 123 || user.Email != "alice@example.com" || user.CreatedAt != createdAt || user.UpdatedAt != createdAt {
 			t.Fatalf("user = %#v", user)
@@ -195,6 +199,18 @@ func (r *stubUserRepository) ExistsByEmail(_ context.Context, email string) (boo
 
 func (r *stubUserRepository) GetByID(context.Context, int64) (*ent.User, error) {
 	return nil, nil
+}
+
+func (r *stubUserRepository) GetByEmail(context.Context, string) (*ent.User, error) {
+	return nil, nil
+}
+
+func (r *stubUserRepository) GetTokenVersion(context.Context, int64) (int64, error) {
+	return 0, nil
+}
+
+func (r *stubUserRepository) IncrementTokenVersion(context.Context, int64) (int64, error) {
+	return 0, nil
 }
 
 func (r *stubUserRepository) ListUsers(_ context.Context, input repository.ListUsersInput) ([]*ent.User, int, error) {

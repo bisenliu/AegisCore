@@ -9,6 +9,7 @@ import (
 
 type RouteParams struct {
 	Environment    string
+	AuthController *controller.AuthController
 	UserController *controller.UserController
 }
 
@@ -23,6 +24,12 @@ func RegisterRoutes(engine *gin.Engine, params RouteParams) {
 
 	v1 := engine.Group("/api/v1")
 	{
+		auth := v1.Group("/auth")
+		auth.POST("/login", params.AuthController.Login)
+		auth.POST("/refresh", params.AuthController.Refresh)
+		auth.POST("/logout", params.AuthController.Logout)
+		auth.POST("/logout-all", params.AuthController.LogoutAll)
+
 		users := v1.Group("/users")
 		users.GET("", params.UserController.List)
 		users.POST("", params.UserController.Create)

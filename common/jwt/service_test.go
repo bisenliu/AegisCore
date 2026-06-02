@@ -14,7 +14,9 @@ func TestServiceParseToken(t *testing.T) {
 
 	t.Run("valid token", func(t *testing.T) {
 		claims, err := service.ParseToken(signTestToken(t, "secret", Claims{
-			UserID: "u-123",
+			UserID:       "u-123",
+			TokenVersion: 1,
+			SessionID:    "s-123",
 			RegisteredClaims: jwtv5.RegisteredClaims{
 				Issuer:    "issuer",
 				Audience:  []string{"audience"},
@@ -27,6 +29,9 @@ func TestServiceParseToken(t *testing.T) {
 		if claims.UserID != "u-123" {
 			t.Fatalf("UserID = %q, want u-123", claims.UserID)
 		}
+		if claims.TokenVersion != 1 || claims.SessionID != "s-123" {
+			t.Fatalf("claims = %#v, want token version and session", claims)
+		}
 	})
 
 	tests := []struct {
@@ -38,28 +43,40 @@ func TestServiceParseToken(t *testing.T) {
 		{
 			name:   "expired token",
 			secret: "secret",
-			claims: Claims{UserID: "u-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(-time.Hour))}},
+			claims: Claims{UserID: "u-123", TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(-time.Hour))}},
 		},
 		{
 			name:   "wrong secret",
 			secret: "other-secret",
-			claims: Claims{UserID: "u-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
+			claims: Claims{UserID: "u-123", TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
 		},
 		{
 			name:   "issuer mismatch",
 			secret: "secret",
-			claims: Claims{UserID: "u-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "other", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
+			claims: Claims{UserID: "u-123", TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "other", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
 		},
 		{
 			name:   "audience mismatch",
 			secret: "secret",
-			claims: Claims{UserID: "u-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"other"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
+			claims: Claims{UserID: "u-123", TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"other"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
 		},
 		{
 			name:   "missing user id",
 			secret: "secret",
-			claims: Claims{RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
+			claims: Claims{TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
 			want:   ErrMissingUserID,
+		},
+		{
+			name:   "missing token version",
+			secret: "secret",
+			claims: Claims{UserID: "u-123", SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
+			want:   ErrMissingTokenVersion,
+		},
+		{
+			name:   "missing session id",
+			secret: "secret",
+			claims: Claims{UserID: "u-123", TokenVersion: 1, RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
+			want:   ErrMissingSessionID,
 		},
 	}
 	for _, tt := range tests {
@@ -77,9 +94,36 @@ func TestServiceParseToken(t *testing.T) {
 
 func TestServiceParseTokenOptionalIssuerAudience(t *testing.T) {
 	service := NewService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}})
-	token := signTestToken(t, "secret", Claims{UserID: "u-123", RegisteredClaims: jwtv5.RegisteredClaims{ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}})
+	token := signTestToken(t, "secret", Claims{UserID: "u-123", TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}})
 	if _, err := service.ParseToken(token); err != nil {
 		t.Fatalf("ParseToken: %v", err)
+	}
+}
+
+func TestServiceSignTokens(t *testing.T) {
+	service := NewService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"}})
+	token, err := service.SignAccessToken(SignInput{UserID: "u-123", TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
+	if err != nil {
+		t.Fatalf("SignAccessToken: %v", err)
+	}
+	claims, err := service.ParseToken(token)
+	if err != nil {
+		t.Fatalf("ParseToken: %v", err)
+	}
+	if claims.UserID != "u-123" || claims.TokenVersion != 2 || claims.SessionID != "s-123" || claims.Subject != SubjectAccess {
+		t.Fatalf("claims = %#v", claims)
+	}
+
+	refresh, err := service.SignRefreshToken(SignInput{UserID: "u-123", TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
+	if err != nil {
+		t.Fatalf("SignRefreshToken: %v", err)
+	}
+	refreshClaims, err := service.ParseRefreshToken(refresh)
+	if err != nil {
+		t.Fatalf("ParseRefreshToken: %v", err)
+	}
+	if refreshClaims.Subject != SubjectRefresh {
+		t.Fatalf("Subject = %q, want %s", refreshClaims.Subject, SubjectRefresh)
 	}
 }
 

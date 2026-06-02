@@ -3,19 +3,37 @@ package jwt
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/aegiscore/common/config"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 )
 
 var (
-	ErrMissingSecret = errors.New("jwt secret is required")
-	ErrMissingUserID = errors.New("jwt user_id is required")
+	ErrMissingSecret       = errors.New("jwt secret is required")
+	ErrMissingUserID       = errors.New("jwt user_id is required")
+	ErrMissingTokenVersion = errors.New("jwt token_version is required")
+	ErrMissingSessionID    = errors.New("jwt session_id is required")
+)
+
+const (
+	TokenTypeBearer = "Bearer"
+	SubjectAccess   = "access"
+	SubjectRefresh  = "refresh"
 )
 
 type Claims struct {
-	UserID string `json:"user_id"`
+	UserID       string `json:"user_id"`
+	TokenVersion int64  `json:"token_version"`
+	SessionID    string `json:"session_id"`
 	jwtv5.RegisteredClaims
+}
+
+type SignInput struct {
+	UserID       string
+	TokenVersion int64
+	SessionID    string
+	TTL          time.Duration
 }
 
 type Service struct {
@@ -33,6 +51,32 @@ func NewService(cfg config.AuthConfig) *Service {
 }
 
 func (s *Service) ParseToken(tokenString string) (*Claims, error) {
+	claims, err := s.parse(tokenString)
+	if err != nil {
+		return nil, err
+	}
+	if claims.TokenVersion <= 0 {
+		return nil, ErrMissingTokenVersion
+	}
+	if claims.SessionID == "" {
+		return nil, ErrMissingSessionID
+	}
+	return claims, nil
+}
+
+func (s *Service) ParseRefreshToken(tokenString string) (*Claims, error) {
+	return s.parse(tokenString)
+}
+
+func (s *Service) SignAccessToken(input SignInput) (string, error) {
+	return s.sign(input, SubjectAccess)
+}
+
+func (s *Service) SignRefreshToken(input SignInput) (string, error) {
+	return s.sign(input, SubjectRefresh)
+}
+
+func (s *Service) parse(tokenString string) (*Claims, error) {
 	if len(s.secret) == 0 {
 		return nil, ErrMissingSecret
 	}
@@ -61,4 +105,39 @@ func (s *Service) ParseToken(tokenString string) (*Claims, error) {
 		return nil, ErrMissingUserID
 	}
 	return claims, nil
+}
+
+func (s *Service) sign(input SignInput, subject string) (string, error) {
+	if len(s.secret) == 0 {
+		return "", ErrMissingSecret
+	}
+	if input.UserID == "" {
+		return "", ErrMissingUserID
+	}
+	if input.TokenVersion <= 0 {
+		return "", ErrMissingTokenVersion
+	}
+	if input.SessionID == "" {
+		return "", ErrMissingSessionID
+	}
+	expiresAt := time.Now().Add(input.TTL)
+	claims := Claims{
+		UserID:       input.UserID,
+		TokenVersion: input.TokenVersion,
+		SessionID:    input.SessionID,
+		RegisteredClaims: jwtv5.RegisteredClaims{
+			Issuer:    s.issuer,
+			Audience:  audienceClaim(s.audience),
+			Subject:   subject,
+			ExpiresAt: jwtv5.NewNumericDate(expiresAt),
+		},
+	}
+	return jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, claims).SignedString(s.secret)
+}
+
+func audienceClaim(audience string) jwtv5.ClaimStrings {
+	if audience == "" {
+		return nil
+	}
+	return jwtv5.ClaimStrings{audience}
 }

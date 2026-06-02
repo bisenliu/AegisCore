@@ -37,6 +37,20 @@ func (_c *UserCreate) SetPassword(v string) *UserCreate {
 	return _c
 }
 
+// SetTokenVersion sets the "token_version" field.
+func (_c *UserCreate) SetTokenVersion(v int64) *UserCreate {
+	_c.mutation.SetTokenVersion(v)
+	return _c
+}
+
+// SetNillableTokenVersion sets the "token_version" field if the given value is not nil.
+func (_c *UserCreate) SetNillableTokenVersion(v *int64) *UserCreate {
+	if v != nil {
+		_c.SetTokenVersion(*v)
+	}
+	return _c
+}
+
 // SetActive sets the "active" field.
 func (_c *UserCreate) SetActive(v bool) *UserCreate {
 	_c.mutation.SetActive(v)
@@ -120,6 +134,10 @@ func (_c *UserCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *UserCreate) defaults() {
+	if _, ok := _c.mutation.TokenVersion(); !ok {
+		v := user.DefaultTokenVersion
+		_c.mutation.SetTokenVersion(v)
+	}
 	if _, ok := _c.mutation.Active(); !ok {
 		v := user.DefaultActive
 		_c.mutation.SetActive(v)
@@ -159,6 +177,9 @@ func (_c *UserCreate) check() error {
 		if err := user.PasswordValidator(v); err != nil {
 			return &ValidationError{Name: "password", err: fmt.Errorf(`ent: validator failed for field "User.password": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.TokenVersion(); !ok {
+		return &ValidationError{Name: "token_version", err: errors.New(`ent: missing required field "User.token_version"`)}
 	}
 	if _, ok := _c.mutation.Active(); !ok {
 		return &ValidationError{Name: "active", err: errors.New(`ent: missing required field "User.active"`)}
@@ -212,6 +233,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Password(); ok {
 		_spec.SetField(user.FieldPassword, field.TypeString, value)
 		_node.Password = value
+	}
+	if value, ok := _c.mutation.TokenVersion(); ok {
+		_spec.SetField(user.FieldTokenVersion, field.TypeInt64, value)
+		_node.TokenVersion = value
 	}
 	if value, ok := _c.mutation.Active(); ok {
 		_spec.SetField(user.FieldActive, field.TypeBool, value)
