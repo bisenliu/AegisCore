@@ -11,6 +11,7 @@ import (
 
 	"github.com/aegiscore/common/config"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestNewWritesClassifiedFiles(t *testing.T) {
@@ -109,6 +110,43 @@ func TestTraceIDHelpers(t *testing.T) {
 	if got := TraceIDFromContext(context.Background()); got != "" {
 		t.Fatalf("TraceIDFromContext empty = %q, want empty", got)
 	}
+}
+
+func TestContextLoggerReportsCallerFromCallSite(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core, zap.AddCaller())
+	ctx := ToContext(context.Background(), log)
+
+	contextLoggerCallerProbe(ctx)
+	assertCallerFromLoggerTest(t, logs.FilterMessage("caller probe").All())
+}
+
+func TestDefaultLoggerReportsCallerFromCallSite(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core, zap.AddCaller())
+	SetDefault(log)
+	t.Cleanup(func() { SetDefault(nil) })
+
+	contextLoggerCallerProbe(context.Background())
+	assertCallerFromLoggerTest(t, logs.FilterMessage("caller probe").All())
+}
+
+func assertCallerFromLoggerTest(t *testing.T, entries []observer.LoggedEntry) {
+	t.Helper()
+	if len(entries) != 1 {
+		t.Fatalf("log count = %d, want 1", len(entries))
+	}
+	caller := entries[0].Caller
+	if strings.HasSuffix(caller.File, "common/logger/context.go") {
+		t.Fatalf("caller = %s:%d, want test call site", caller.File, caller.Line)
+	}
+	if !strings.HasSuffix(caller.File, "common/logger/logger_test.go") {
+		t.Fatalf("caller file = %s, want logger_test.go", caller.File)
+	}
+}
+
+func contextLoggerCallerProbe(ctx context.Context) {
+	Info(ctx, "caller probe")
 }
 
 func TestDefaultLoggerConcurrentAccess(t *testing.T) {

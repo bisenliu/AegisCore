@@ -77,7 +77,7 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 		commonmw.Recovery(params.Log),
 		commonmw.RequestLogger(params.Log),
 		commonmw.CORS(),
-		commonmw.Auth(params.Log, params.JWT, params.Config.Auth),
+		// commonmw.Auth(params.Log, params.JWT, params.Config.Auth),
 	)
 	return engine, nil
 }

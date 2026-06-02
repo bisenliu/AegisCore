@@ -228,7 +228,7 @@
 
 ### Requirement: Provide Zap logging with trace-id and file rotation
 
-系统必须提供基于 Zap 的共享日志组件。日志组件必须支持从 YAML 与 `AEGISCORE_` 环境变量加载日志级别、格式、目录、文件名前缀、控制台输出、保留天数、单文件大小和备份数量。所有通过项目 logger context API 输出的日志必须包含 `trace-id` 字段。日志必须按天写入带日期的分类日志文件，文件名格式为 `xxx.yyyy-mm-dd.all.log`、`xxx.yyyy-mm-dd.info.log`、`xxx.yyyy-mm-dd.warning.log`、`xxx.yyyy-mm-dd.error.log`。日期变化后，新日志必须写入新日期文件，旧日期文件必须保持原名作为历史日志。普通 Error 级别日志不得默认自动包含 stacktrace；需要堆栈的关键错误必须通过显式字段记录。
+系统必须提供基于 Zap 的共享日志组件。日志组件必须支持从 YAML 与 `AEGISCORE_` 环境变量加载日志级别、格式、目录、文件名前缀、控制台输出、保留天数、单文件大小和备份数量。所有通过项目 logger context API 输出的日志必须包含 `trace-id` 字段。所有通过项目 logger context API 输出的日志，其 `caller` 字段必须指向调用该 context API 的业务代码位置，而不是 `common/logger` 的封装函数位置。日志必须按天写入带日期的分类日志文件，文件名格式为 `xxx.yyyy-mm-dd.all.log`、`xxx.yyyy-mm-dd.info.log`、`xxx.yyyy-mm-dd.warning.log`、`xxx.yyyy-mm-dd.error.log`。日期变化后，新日志必须写入新日期文件，旧日期文件必须保持原名作为历史日志。普通 Error 级别日志不得默认自动包含 stacktrace；需要堆栈的关键错误必须通过显式字段记录。
 
 #### Scenario: Initialize Zap logger from config
 - **Given** YAML 配置包含 log level、format、directory、filename、console、max_age_days、max_size_mb 和 max_backups
@@ -267,6 +267,13 @@
 - **Given** `context.Context` 中存在 trace-id
 - **When** 业务代码调用 `common/logger.Info(ctx, ...)`、`Warn(ctx, ...)` 或 `Error(ctx, ...)`
 - **Then** 输出日志必须包含字段 `trace-id` 且值等于 context 中的 trace-id
+
+#### Scenario: Context API records business caller
+- **Given** 业务代码在 `user-services/internal/service/user_service.go` 中调用 `common/logger.Info(ctx, "create user", ...)`
+- **When** logger 写出该 Info 日志
+- **Then** 日志必须包含 `caller` 字段
+- **Then** `caller` 字段必须指向 `user-services/internal/service/user_service.go` 的调用行
+- **Then** `caller` 字段不得指向 `common/logger/context.go` 中的 `Info`、`Debug`、`Warn` 或 `Error` 封装函数
 
 #### Scenario: Log without request context
 - **Given** `context.Context` 中不存在 trace-id
