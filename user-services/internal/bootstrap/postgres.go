@@ -14,7 +14,7 @@ const (
 	commonDBName = "common_db"
 )
 
-type PostgresParams struct {
+type NamedPostgresParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
@@ -22,23 +22,23 @@ type PostgresParams struct {
 	Log       *zap.Logger
 }
 
-type PostgresPools struct {
+type NamedPostgresPools struct {
 	fx.Out
 
 	UserDB   *sql.DB `name:"user_db"`
 	CommonDB *sql.DB `name:"common_db"`
 }
 
-func NewPostgresPools(params PostgresParams) (PostgresPools, error) {
+func NewPostgresPools(params NamedPostgresParams) (NamedPostgresPools, error) {
 	userDB, err := commoninfra.NewPostgres(params.Lifecycle, params.Config, params.Log, userDBName)
 	if err != nil {
-		return PostgresPools{}, err
+		return NamedPostgresPools{}, err
 	}
 	commonDB, err := commoninfra.NewPostgres(params.Lifecycle, params.Config, params.Log, commonDBName)
 	if err != nil {
 		_ = userDB.Close()
-		return PostgresPools{}, err
+		return NamedPostgresPools{}, err
 	}
 
-	return PostgresPools{UserDB: userDB, CommonDB: commonDB}, nil
+	return NamedPostgresPools{UserDB: userDB, CommonDB: commonDB}, nil
 }

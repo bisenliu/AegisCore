@@ -56,7 +56,7 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 		logger.Error(ctx, "create user failed", zap.String("email", email), zap.Error(err))
 		return nil, response.FromError(err)
 	}
-	return userResponse(user), nil
+	return toUserResponse(user), nil
 }
 
 func (s *userService) GetUserByID(ctx context.Context, id int64) (*dto.UserResponse, error) {
@@ -66,10 +66,10 @@ func (s *userService) GetUserByID(ctx context.Context, id int64) (*dto.UserRespo
 		logger.Error(ctx, "query user profile failed", zap.Int64("user_id", id), zap.Error(err))
 		return nil, response.FromError(err)
 	}
-	return userResponse(user), nil
+	return toUserResponse(user), nil
 }
 
-func userResponse(user *ent.User) *dto.UserResponse {
+func toUserResponse(user *ent.User) *dto.UserResponse {
 	return &dto.UserResponse{
 		ID:        user.ID,
 		Name:      user.Name,

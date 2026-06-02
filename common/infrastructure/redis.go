@@ -11,12 +11,12 @@ import (
 	"go.uber.org/zap"
 )
 
-func ProvideNamedRedis(logicalName string, configName string) fx.Option {
+func ProvideNamedRedis(fxName string, configKey string) fx.Option {
 	return fx.Provide(fx.Annotate(
 		func(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger) (*redis.Client, error) {
-			return NewRedisClient(lc, cfg, log, configName)
+			return NewRedisClient(lc, cfg, log, configKey)
 		},
-		fx.ResultTags(fmt.Sprintf(`name:"%s"`, logicalName)),
+		fx.ResultTags(fmt.Sprintf(`name:"%s"`, fxName)),
 	))
 }
 

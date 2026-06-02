@@ -17,8 +17,8 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 1. `user-services/cmd/main.go` 创建 `aegiscore-user-services` CLI，并注册 `serve` 子命令。
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
 3. 用户服务启动装配显式提供 `commoninfra.NewConfig` 和 `commoninfra.NewLogger`；Redis/PostgreSQL 由 common 提供单实例创建与 lifecycle helper。
-4. `user-services/internal/bootstrap.Module` 显式声明 `cache_redis`、`user_db`、`common_db`，并提供 Ent clients、repository、service、controller、Gin engine、HTTP server。
-5. `RegisterRoutes` 将 `/healthz` 和 `/api/v1/users/:id` 注册到 Gin engine。
+4. `user-services/internal/bootstrap.UserServiceModule` 显式声明 `cache_redis`、`user_db`、`common_db`，并提供 Ent clients、repository、service、controller、Gin engine、HTTP server。
+5. `RegisterRoutes` 将 `/healthz`、`/api/v1/users` 和 `/api/v1/users/:id` 注册到 Gin engine。
 6. Fx 生命周期启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
 ## 4. HTTP Request Flow
@@ -51,7 +51,7 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前声明并连接 `postgres.user_db` 与 `postgres.common_db`，不因存在 `postgres.pay_db` 而初始化支付连接池。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`，不因存在 `redis.queue_redis` 而初始化队列 Redis。
 - Ent clients 由 `user-services/internal/entclient/provider.go` 基于具名 `*sql.DB` 构建。
-- 日志基于 Zap，由 `common/logger` 与 `common/infrastructure/logger.go` 提供；HTTP trace header 为 `X-Trace-ID`，日志字段统一为 `trace-id`。
+- 日志基于 Zap，由 `common/logger` 与 `common/infrastructure/logger.go` 提供；HTTP trace header 为 `X-Trace-ID`，Gin context key 为 `trace_id`，日志字段统一为 `trace-id`。
 
 ## 7. Database Migrations
 
@@ -66,6 +66,6 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 
 ## 9. Current Constraints
 
-- 当前 HTTP API 只暴露健康检查和按 ID 查询用户。
+- 当前 HTTP API 暴露健康检查、创建用户和按 ID 查询用户。
 - 配置样例包含 `postgres.pay_db`，但当前用户服务只声明 `postgres.user_db`、`postgres.common_db` 和 `redis.cache_redis`。
 - 启动服务需要 PostgreSQL 和 Redis 可连接；本地纯单元测试应避免依赖真实外部服务，或显式说明集成测试要求。

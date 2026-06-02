@@ -8,7 +8,7 @@
 
 ### Requirement: Authenticate HTTP requests with JWT Bearer tokens
 
-系统 MUST 提供可复用的 Gin 认证中间件，用于校验 `Authorization: Bearer <token>` 请求头。中间件 MUST 支持配置化白名单路径；非白名单请求缺少认证头、认证头格式错误、token 为空或 token 无效时，系统 MUST 返回 HTTP 401，并使用 `common/response.Envelope` 失败格式与 `CodeUnauthenticated` 错误码。
+系统 MUST 提供可复用的 Gin 认证中间件，用于校验 `Authorization: Bearer <token>` 请求头。中间件 MUST 支持配置化白名单路径；非白名单请求缺少认证头、认证头格式错误、token 为空或 token 无效时，系统 MUST 返回 HTTP 401，并使用 `common/response.Envelope` 失败格式与未认证数字业务码 `20000`。
 
 #### Scenario: Skip whitelisted path
 - **Given** auth 配置白名单包含 `/healthz`
@@ -21,7 +21,7 @@
 - **When** 调用方未携带 `Authorization` header
 - **Then** 系统 MUST 返回 HTTP 401
 - **Then** 响应信封的 `success` MUST 为 `false`
-- **Then** 响应信封的 `code` MUST 为 `CodeUnauthenticated`
+- **Then** 响应信封的 `code` MUST 为 `20000`
 
 #### Scenario: Reject invalid bearer format
 - **Given** 请求路径不在 auth 白名单中

@@ -10,7 +10,7 @@ import (
 
 const cacheRedisName = "cache_redis"
 
-type RedisParams struct {
+type NamedRedisParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
@@ -18,16 +18,16 @@ type RedisParams struct {
 	Log       *zap.Logger
 }
 
-type RedisClients struct {
+type NamedRedisClients struct {
 	fx.Out
 
 	CacheRedis *redis.Client `name:"cache_redis"`
 }
 
-func NewRedisClients(params RedisParams) (RedisClients, error) {
+func NewRedisClients(params NamedRedisParams) (NamedRedisClients, error) {
 	cacheRedis, err := commoninfra.NewRedisClient(params.Lifecycle, params.Config, params.Log, cacheRedisName)
 	if err != nil {
-		return RedisClients{}, err
+		return NamedRedisClients{}, err
 	}
-	return RedisClients{CacheRedis: cacheRedis}, nil
+	return NamedRedisClients{CacheRedis: cacheRedis}, nil
 }

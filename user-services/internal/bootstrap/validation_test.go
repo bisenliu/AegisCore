@@ -11,10 +11,10 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestModuleResolvesSharedValidationDependency(t *testing.T) {
+func TestUserServiceModuleResolvesSharedValidationDependency(t *testing.T) {
 	err := fx.ValidateApp(
 		fx.Supply(&config.Config{}, zap.NewNop()),
-		Module,
+		UserServiceModule,
 		fx.Invoke(func(*validation.Validator, *controller.UserController) {}),
 	)
 	if err != nil {
@@ -22,10 +22,10 @@ func TestModuleResolvesSharedValidationDependency(t *testing.T) {
 	}
 }
 
-func TestModuleIncludesSharedTimezoneDependency(t *testing.T) {
+func TestUserServiceModuleIncludesSharedTimezoneDependency(t *testing.T) {
 	err := fx.ValidateApp(
 		fx.Supply(&config.Config{}, zap.NewNop()),
-		Module,
+		UserServiceModule,
 		fx.Invoke(func(*validation.Validator, *controller.UserController) {}),
 	)
 	if err != nil {
@@ -40,7 +40,7 @@ func TestAppWiresCommonDependenciesExplicitly(t *testing.T) {
 			commoninfra.NewConfig,
 			commoninfra.NewLogger,
 		),
-		Module,
+		UserServiceModule,
 		fx.Invoke(func(*config.Config, *zap.Logger, *controller.UserController) {}),
 	)
 	if err != nil {

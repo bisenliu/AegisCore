@@ -158,7 +158,7 @@ func TestNewRedisClientsReturnsErrorForMissingCacheRedisConfig(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	_, err := NewRedisClients(RedisParams{
+	_, err := NewRedisClients(NamedRedisParams{
 		Lifecycle: lc,
 		Config:    &config.Config{},
 		Log:       log,
@@ -185,7 +185,7 @@ func TestNewRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 		},
 	}}
 
-	if _, err := NewRedisClients(RedisParams{Lifecycle: lc, Config: cfg, Log: log}); err != nil {
+	if _, err := NewRedisClients(NamedRedisParams{Lifecycle: lc, Config: cfg, Log: log}); err != nil {
 		t.Fatalf("NewRedisClients: %v", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

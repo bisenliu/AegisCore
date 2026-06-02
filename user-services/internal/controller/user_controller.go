@@ -9,12 +9,12 @@ import (
 )
 
 type UserController struct {
-	service   service.UserService
-	validator *validation.Validator
+	userService service.UserService
+	validator   *validation.Validator
 }
 
-func NewUserController(service service.UserService, validator *validation.Validator) *UserController {
-	return &UserController{service: service, validator: validator}
+func NewUserController(userService service.UserService, validator *validation.Validator) *UserController {
+	return &UserController{userService: userService, validator: validator}
 }
 
 // Create godoc
@@ -37,7 +37,7 @@ func (ctl *UserController) Create(c *gin.Context) {
 		return
 	}
 
-	user, err := ctl.service.CreateUser(c.Request.Context(), req)
+	user, err := ctl.userService.CreateUser(c.Request.Context(), req)
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -64,7 +64,7 @@ func (ctl *UserController) GetByID(c *gin.Context) {
 		return
 	}
 
-	user, err := ctl.service.GetUserByID(c.Request.Context(), req.ID)
+	user, err := ctl.userService.GetUserByID(c.Request.Context(), req.ID)
 	if err != nil {
 		response.Fail(c, err)
 		return

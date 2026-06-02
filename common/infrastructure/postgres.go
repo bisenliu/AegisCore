@@ -12,12 +12,12 @@ import (
 	"go.uber.org/zap"
 )
 
-func ProvideNamedPostgres(logicalName string, configName string) fx.Option {
+func ProvideNamedPostgres(fxName string, configKey string) fx.Option {
 	return fx.Provide(fx.Annotate(
 		func(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger) (*sql.DB, error) {
-			return NewPostgres(lc, cfg, log, configName)
+			return NewPostgres(lc, cfg, log, configKey)
 		},
-		fx.ResultTags(fmt.Sprintf(`name:"%s"`, logicalName)),
+		fx.ResultTags(fmt.Sprintf(`name:"%s"`, fxName)),
 	))
 }
 

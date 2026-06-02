@@ -292,7 +292,7 @@
 
 #### Scenario: Create named Ent clients
 - **Given** Fx 容器中存在具名 `user_db` 和 `common_db` PostgreSQL 连接池
-- **When** `user-services/internal/entclient.NewClients` 被调用
+- **When** `user-services/internal/entclient.NewNamedClients` 被调用
 - **Then** 系统创建具名 `user_db` Ent client
 - **Then** 系统创建具名 `common_db` Ent client
 - **Then** Fx app 停止时关闭 Ent clients
@@ -415,3 +415,14 @@
 - **When** trace-id 中间件处理请求
 - **Then** 系统 MUST 生成替代 trace id
 - **Then** 系统 MUST NOT 将不安全的原始 header 值写入 Gin context、Go `context.Context`、响应 header 或日志字段
+
+### Requirement: Shared infrastructure naming cleanup preserves runtime behavior
+共享基础设施相关命名标准化 SHALL 只修改低风险内部名称或文档表达，不得改变配置加载、Zap 日志、trace-id 边界名称、Redis provider、PostgreSQL provider 或 Ent runtime client 的行为。
+
+#### Scenario: Shared infrastructure names are reviewed
+- **WHEN** 实现审查 `common/config`、`common/infrastructure`、`common/logger`、`common/middleware`、`common/validation` 和服务侧基础设施 wiring 的命名
+- **THEN** 实现 MUST 区分公共 Go API、内部参数名、文档表达和外部配置契约
+
+#### Scenario: Runtime contracts are preserved
+- **WHEN** 共享基础设施相关名称被标准化
+- **THEN** YAML key、`AEGISCORE_` 环境变量覆盖、Redis/PostgreSQL 命名实例、`X-Trace-ID` header 和日志 `trace-id` 字段 MUST 保持不变

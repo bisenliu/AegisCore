@@ -16,7 +16,7 @@
 - **Then** controller 使用共享校验器绑定 JSON 请求体
 - **Then** service 创建用户记录并持久化 `password`
 - **Then** 系统返回 HTTP 201
-- **Then** 响应信封的 `success` 为 `true`，`code` 为 `OK`，`message` 为 `created`
+- **Then** 响应信封的 `success` 为 `true`，`code` 为 `0`，`message` 为 `created`
 - **Then** `data` 包含新用户的 `id`、`name`、`email`、`active`、`created_at`、`updated_at`
 - **Then** `data.created_at` 和 `data.updated_at` 必须为毫秒级 Unix 时间戳
 - **Then** `data` 不得包含 `password`
@@ -26,7 +26,7 @@
 - **When** 调用方请求 `POST /api/v1/users` 并提交合法 JSON 请求体
 - **Then** 系统返回 HTTP 401
 - **Then** 响应信封的 `success` 为 `false`
-- **Then** 响应信封的 `code` 为 `CodeUnauthenticated`
+- **Then** 响应信封的 `code` 为 `20000`
 - **Then** 请求不得进入 `UserController.Create`
 
 #### Scenario: Reject empty JSON body
@@ -44,7 +44,7 @@
 - **Given** 创建用户请求缺少 `name`、`email` 或 `password`
 - **When** controller 使用共享校验器校验请求 DTO
 - **Then** 系统返回 HTTP 400
-- **Then** 响应信封的 `code` 为 `VALIDATION_FAILED`
+- **Then** 响应信封的 `code` 为 `10001`
 - **Then** 响应信封的 `message` 为中文化参数校验失败消息
 - **Then** 响应不写入用户记录
 
@@ -52,14 +52,14 @@
 - **Given** 创建用户请求的 `email` 不是合法邮箱格式
 - **When** controller 使用共享校验器校验请求 DTO
 - **Then** 系统返回 HTTP 400
-- **Then** 响应信封的 `code` 为 `VALIDATION_FAILED`
+- **Then** 响应信封的 `code` 为 `10001`
 - **Then** 响应不写入用户记录
 
 #### Scenario: Reject fields exceeding length limits
 - **Given** 创建用户请求的 `name` 超过 128 字符或 `email` 超过 255 字符
 - **When** controller 使用共享校验器校验请求 DTO
 - **Then** 系统返回 HTTP 400
-- **Then** 响应信封的 `code` 为 `VALIDATION_FAILED`
+- **Then** 响应信封的 `code` 为 `10001`
 - **Then** 响应不写入用户记录
 
 #### Scenario: Apply active default
@@ -71,7 +71,7 @@
 - **Given** 创建用户请求包含枚举型字段且字段值不在允许范围内
 - **When** controller 使用共享校验器校验请求 DTO
 - **Then** 系统返回 HTTP 400
-- **Then** 响应信封的 `code` 为 `VALIDATION_FAILED`
+- **Then** 响应信封的 `code` 为 `10001`
 
 ### Requirement: Enforce unique user identity
 系统必须以邮箱作为创建用户的唯一业务身份。若邮箱已存在，系统必须返回统一冲突错误，不得创建重复用户。
@@ -81,7 +81,7 @@
 - **When** 调用方请求创建相同邮箱的用户
 - **Then** service 必须识别用户已存在
 - **Then** 系统返回 HTTP 409
-- **Then** 响应信封的 `success` 为 `false`，`code` 为 `CONFLICT`
+- **Then** 响应信封的 `success` 为 `false`，`code` 为 `40000`
 - **Then** 响应信封的 `message` 使用 `user-services/internal/apperror` 中维护的用户已存在文案
 
 #### Scenario: Convert database uniqueness violation to conflict

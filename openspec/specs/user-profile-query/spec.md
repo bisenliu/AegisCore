@@ -15,7 +15,7 @@
 - **Given** 调用方携带有效 Bearer token
 - **When** 调用方请求 `GET /api/v1/users/123`
 - **Then** 系统返回 HTTP 200
-- **Then** 响应信封的 `success` 为 `true`，`code` 为 `OK`，`message` 为 `ok`
+- **Then** 响应信封的 `success` 为 `true`，`code` 为 `0`，`message` 为 `ok`
 - **Then** `data` 包含用户的 `id`、`name`、`email`、`active`、`created_at`、`updated_at`
 - **Then** `data.created_at` 和 `data.updated_at` 必须为毫秒级 Unix 时间戳
 - **Then** `data` 不得包含 `password`
@@ -25,7 +25,7 @@
 - **When** 调用方请求 `GET /api/v1/users/123`
 - **Then** 系统返回 HTTP 401
 - **Then** 响应信封的 `success` 为 `false`
-- **Then** 响应信封的 `code` 为 `CodeUnauthenticated`
+- **Then** 响应信封的 `code` 为 `20000`
 - **Then** 请求不得进入 `UserController.GetByID`
 
 #### Scenario: Reject non-numeric user ID
@@ -33,7 +33,7 @@
 - **Given** 调用方携带有效 Bearer token
 - **When** 调用方请求 `GET /api/v1/users/abc`
 - **Then** 系统返回 HTTP 400
-- **Then** 响应信封的 `success` 为 `false`，`code` 为 `BAD_REQUEST`
+- **Then** 响应信封的 `success` 为 `false`，`code` 为 `10000`
 - **Then** 响应信封的 `message` 为共享校验器提供的中文公开错误消息
 - **Then** 响应信封的 `message` 不得为 `invalid user id`
 
@@ -42,7 +42,7 @@
 - **Given** 调用方携带有效 Bearer token
 - **When** 调用方请求 `GET /api/v1/users/0`
 - **Then** 系统返回 HTTP 400
-- **Then** 响应信封的 `success` 为 `false`，`code` 为 `BAD_REQUEST`
+- **Then** 响应信封的 `success` 为 `false`，`code` 为 `10000`
 - **Then** 响应信封的 `message` 为共享校验器提供的中文公开错误消息
 - **Then** 响应信封的 `message` 不得为 `invalid user id`
 
@@ -52,7 +52,7 @@
 - **When** 调用方请求 `GET /api/v1/users/999`
 - **Then** repository 将 Ent not found 转换为 `user not found`
 - **Then** 系统返回 HTTP 404
-- **Then** 响应信封的 `success` 为 `false`，`code` 为 `NOT_FOUND`，`message` 为 `user not found`
+- **Then** 响应信封的 `success` 为 `false`，`code` 为 `50000`，`message` 为 `user not found`
 
 ### Requirement: Preserve user model constraints
 
@@ -72,7 +72,7 @@
 - **Given** 数据库查询用户时发生非 not found 错误
 - **When** service 处理 repository 返回的错误
 - **Then** 错误被转换为内部错误
-- **Then** API 响应使用 `INTERNAL_ERROR` 和 `internal server error`，不暴露底层数据库细节
+- **Then** API 响应使用内部错误业务码 `90000` 和 `internal server error`，不暴露底层数据库细节
 
 ### Requirement: Document query user API in Swagger
 系统必须为现有 `GET /api/v1/users/:id` 查询用户接口提供与实际路由、请求参数和统一响应契约一致的 Swagger 注解和文档输出，不得改变查询接口运行时行为。
@@ -92,3 +92,14 @@
 - **Then** 文档包含 HTTP 400 参数错误响应
 - **Then** 文档包含 HTTP 404 用户不存在响应
 - **Then** 文档包含 HTTP 500 内部错误响应
+
+### Requirement: User profile query naming cleanup preserves layered behavior
+用户资料查询相关命名标准化 SHALL 保持 controller/service/repository 分层职责不变，并不得改变 `GET /api/v1/users/:id` 的请求解析、业务编排、数据访问、错误映射或响应内容。
+
+#### Scenario: Internal user query symbols are renamed
+- **WHEN** 实现重命名用户查询相关内部函数、方法、参数、mapper 或类型
+- **THEN** controller 仍 MUST 只处理 HTTP 解析和响应输出，service 仍 MUST 负责编排，repository 仍 MUST 负责数据库访问
+
+#### Scenario: User query API remains compatible
+- **WHEN** 命名标准化完成
+- **THEN** `GET /api/v1/users/:id` 的路径、响应 envelope、用户响应 JSON 字段和错误语义 MUST 保持不变

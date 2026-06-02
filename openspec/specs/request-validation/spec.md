@@ -55,7 +55,7 @@
 - **Given** controller 使用共享校验器处理请求校验失败
 - **When** controller 输出失败响应
 - **Then** 响应必须使用 `common/response.Envelope`
-- **Then** 响应必须为 HTTP 400 和 `BAD_REQUEST` 错误码，除非 controller 显式映射为已有兼容消息
+- **Then** 响应必须为 HTTP 400 和通用请求错误业务码 `10000`，除非 controller 显式映射为已有兼容消息
 
 #### Scenario: Include validation error details in envelope
 - **Given** controller 使用共享校验器处理 validator tag 校验失败

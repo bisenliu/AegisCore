@@ -31,18 +31,18 @@ func NewApp(configPath string) *fx.App {
 			commoninfra.NewConfig,
 			commoninfra.NewLogger,
 		),
-		Module,
+		UserServiceModule,
 	)
 }
 
-var Module = fx.Module("aegiscore-user-services",
+var UserServiceModule = fx.Module("aegiscore-user-services",
 	commontz.Module,
 	validation.Module,
 	fx.Provide(
 		NewPostgresPools,
 		NewRedisClients,
 		NewJWTService,
-		entclient.NewClients,
+		entclient.NewNamedClients,
 		repository.NewUserRepository,
 		service.NewUserService,
 		controller.NewUserController,

@@ -21,6 +21,12 @@
 - **Then** 镜像必须包含 `user-services/migrations/` 中的用户服务迁移文件
 - **Then** 镜像不得要求打包其他服务的迁移目录才能启动用户服务
 
+#### Scenario: Name new migration files clearly
+- **Given** 开发者为用户服务生成新的 SQL migration
+- **When** 开发者为 migration 选择名称
+- **Then** 名称必须描述 schema 变更语义，例如新增字段、索引或约束
+- **Then** 系统不得要求重命名已经提交的 migration 文件或修改既有迁移历史
+
 ### Requirement: Generate SQL migrations from Ent schema with Atlas
 系统必须使用 Atlas 对比 Ent schema 与目标数据库状态生成 `.sql` migration 文件。迁移生成不得依赖服务运行时调用 `client.Schema.Create(ctx)`。
 
@@ -116,3 +122,14 @@
 - **When** 新服务接入数据库 schema 迁移能力
 - **Then** 该服务必须在自身目录维护 Atlas 配置、schema loader 和 migrations 目录
 - **Then** 该服务必须复用相同的 SQL review、`atlas.sum` 校验和部署前 apply 规则
+
+### Requirement: Migration naming guidance preserves history
+数据库迁移相关命名标准化 SHALL 记录未来 migration 文件应使用清晰语义名称的约束，但不得重命名已存在 migration 文件、修改 `atlas.sum` 历史或改变数据库 schema。
+
+#### Scenario: Existing migration filename is unclear
+- **WHEN** 审查发现已存在 migration 文件名语义较泛
+- **THEN** 实现 MUST 保留该文件名和迁移历史，并只在文档或规格中记录未来命名建议
+
+#### Scenario: Migration capability is unaffected
+- **WHEN** 命名标准化完成
+- **THEN** Atlas migration 校验、生成脚本、apply 脚本和数据库结构 MUST 与修改前保持一致

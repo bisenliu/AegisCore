@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type Params struct {
+type ClientParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
@@ -21,14 +21,14 @@ type Params struct {
 	CommonDB  *sql.DB `name:"common_db"`
 }
 
-type Clients struct {
+type NamedClients struct {
 	fx.Out
 
 	UserClient   *ent.Client `name:"user_db"`
 	CommonClient *ent.Client `name:"common_db"`
 }
 
-func NewClients(params Params) Clients {
+func NewNamedClients(params ClientParams) NamedClients {
 	userClient := newClient(params.UserDB)
 	commonClient := newClient(params.CommonDB)
 
@@ -44,7 +44,7 @@ func NewClients(params Params) Clients {
 		},
 	})
 
-	return Clients{UserClient: userClient, CommonClient: commonClient}
+	return NamedClients{UserClient: userClient, CommonClient: commonClient}
 }
 
 func newClient(db *sql.DB) *ent.Client {
