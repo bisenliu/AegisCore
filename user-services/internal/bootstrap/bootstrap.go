@@ -16,6 +16,8 @@ import (
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/controller"
 	"github.com/aegiscore/user-services/internal/repository"
+	"github.com/aegiscore/user-services/internal/repository/postgres"
+	"github.com/aegiscore/user-services/internal/repository/redis"
 	"github.com/aegiscore/user-services/internal/router"
 	"github.com/aegiscore/user-services/internal/service"
 	"github.com/gin-gonic/gin"
@@ -42,8 +44,8 @@ var UserServiceModule = fx.Module("aegiscore-user-services",
 		NewRedisClients,
 		NewJWTService,
 		NewNamedClients,
-		repository.NewUserRepository,
-		service.NewSessionStore,
+		postgres.NewUserRepository,
+		redis.NewAuthSessionRepository,
 		service.NewAuthService,
 		service.NewUserService,
 		controller.NewAuthController,
@@ -93,7 +95,7 @@ type RegisterRouteParams struct {
 	Log            *zap.Logger
 	Engine         *gin.Engine
 	JWT            *auth.JWTService
-	SessionStore   service.SessionStore `optional:"true"`
+	AuthSessions   repository.AuthSessionRepository `optional:"true"`
 	AuthController *controller.AuthController
 	UserController *controller.UserController
 }
@@ -104,7 +106,7 @@ func RegisterRoutes(params RegisterRouteParams) {
 		Log:                   params.Log,
 		JWT:                   params.JWT,
 		AuthConfig:            params.Config.Auth,
-		TokenVersionValidator: params.SessionStore,
+		TokenVersionValidator: params.AuthSessions,
 		AuthController:        params.AuthController,
 		UserController:        params.UserController,
 	})

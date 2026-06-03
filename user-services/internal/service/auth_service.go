@@ -39,14 +39,14 @@ type AuthServiceParams struct {
 	fx.In
 
 	Repo     repository.UserRepository
-	Sessions SessionStore
+	Sessions repository.AuthSessionRepository
 	JWT      *auth.JWTService
 	Config   *config.Config
 }
 
 type authService struct {
 	repo     repository.UserRepository
-	sessions SessionStore
+	sessions repository.AuthSessionRepository
 	jwt      *auth.JWTService
 	config   *config.Config
 }
@@ -168,7 +168,7 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) 
 	}
 	session, err := s.sessions.GetSession(ctx, claims.SessionID)
 	if err != nil {
-		if errors.Is(err, ErrSessionNotFound) {
+		if errors.Is(err, repository.ErrAuthSessionNotFound) {
 			return nil, response.TokenInvalidError(errmsg.MsgMissingSession)
 		}
 		return nil, response.FromError(err)
@@ -251,7 +251,7 @@ func (s *authService) issueTokenPair(ctx context.Context, userID string, tokenVe
 	if err != nil {
 		return nil, response.FromError(fmt.Errorf("sign refresh token: %w", err))
 	}
-	if err := s.sessions.CreateSession(ctx, Session{UserID: userID, SessionID: sessionID, TokenVersion: tokenVersion, ExpiresAt: time.Now().Add(refreshTTL)}, refreshTTL); err != nil {
+	if err := s.sessions.CreateSession(ctx, repository.AuthSession{UserID: userID, SessionID: sessionID, TokenVersion: tokenVersion, ExpiresAt: time.Now().Add(refreshTTL)}, refreshTTL); err != nil {
 		return nil, response.FromError(err)
 	}
 	return &dto.TokenResponse{AccessToken: access, RefreshToken: refresh, TokenType: auth.TokenTypeBearer, ExpiresIn: int64(accessTTL.Seconds())}, nil

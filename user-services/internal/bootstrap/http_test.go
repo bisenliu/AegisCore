@@ -17,7 +17,7 @@ import (
 	"github.com/aegiscore/user-services/internal/controller"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
-	"github.com/aegiscore/user-services/internal/service"
+	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -88,7 +88,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	}
 	log := zap.NewNop()
 	jwtService := auth.NewJWTService(cfg.Auth)
-	sessionStore := &routeAuthSessionStore{version: 1}
+	authSessions := &routeAuthSessionRepository{version: 1}
 	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log})
 	if err != nil {
 		t.Fatalf("NewGinEngine: %v", err)
@@ -102,7 +102,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		Log:            log,
 		Engine:         engine,
 		JWT:            jwtService,
-		SessionStore:   sessionStore,
+		AuthSessions:   authSessions,
 		AuthController: controller.NewAuthController(&routeAuthAuthService{}, validator),
 		UserController: controller.NewUserController(&routeAuthUserService{}, validator),
 	})
@@ -217,38 +217,38 @@ type routeAuthUserService struct{}
 
 type routeAuthAuthService struct{}
 
-type routeAuthSessionStore struct {
+type routeAuthSessionRepository struct {
 	version int64
 }
 
-func (s *routeAuthSessionStore) GetCurrentTokenVersion(context.Context, string) (int64, error) {
+func (s *routeAuthSessionRepository) GetCurrentTokenVersion(context.Context, string) (int64, error) {
 	return s.version, nil
 }
 
-func (s *routeAuthSessionStore) ValidateTokenVersion(_ context.Context, _ string, tokenVersion int64) error {
+func (s *routeAuthSessionRepository) ValidateTokenVersion(_ context.Context, _ string, tokenVersion int64) error {
 	if tokenVersion != s.version {
 		return errors.New("token version mismatch")
 	}
 	return nil
 }
 
-func (s *routeAuthSessionStore) CreateSession(context.Context, service.Session, time.Duration) error {
+func (s *routeAuthSessionRepository) CreateSession(context.Context, repository.AuthSession, time.Duration) error {
 	return nil
 }
 
-func (s *routeAuthSessionStore) GetSession(context.Context, string) (service.Session, error) {
-	return service.Session{}, nil
+func (s *routeAuthSessionRepository) GetSession(context.Context, string) (repository.AuthSession, error) {
+	return repository.AuthSession{}, nil
 }
 
-func (s *routeAuthSessionStore) DeleteSession(context.Context, string, string) error {
+func (s *routeAuthSessionRepository) DeleteSession(context.Context, string, string) error {
 	return nil
 }
 
-func (s *routeAuthSessionStore) DeleteAllUserSessions(context.Context, string) error {
+func (s *routeAuthSessionRepository) DeleteAllUserSessions(context.Context, string) error {
 	return nil
 }
 
-func (s *routeAuthSessionStore) InvalidateUserTokenVersion(context.Context, string) error {
+func (s *routeAuthSessionRepository) InvalidateUserTokenVersion(context.Context, string) error {
 	return nil
 }
 

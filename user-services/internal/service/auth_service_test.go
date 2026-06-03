@@ -196,7 +196,7 @@ func TestAuthServiceChangePasswordRejectsAccessToken(t *testing.T) {
 }
 
 func TestAuthServiceRefreshRotatesSession(t *testing.T) {
-	store := &sessionStoreStub{version: 2, session: Session{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
+	store := &sessionStoreStub{version: 2, session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, true)
 	refresh, err := svc.(*authService).jwt.SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
@@ -220,7 +220,7 @@ func TestAuthServiceRefreshRotatesSession(t *testing.T) {
 }
 
 func TestAuthServiceRefreshAcceptsBearerPrefix(t *testing.T) {
-	store := &sessionStoreStub{version: 2, session: Session{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
+	store := &sessionStoreStub{version: 2, session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, false)
 	refresh, err := svc.(*authService).jwt.SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
@@ -249,7 +249,7 @@ func TestAuthServiceRefreshRejectsEmptyBearerPrefix(t *testing.T) {
 }
 
 func TestAuthServiceRefreshRejectsAccessTokenSubject(t *testing.T) {
-	store := &sessionStoreStub{version: 2, session: Session{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
+	store := &sessionStoreStub{version: 2, session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, false)
 	access, err := svc.(*authService).jwt.SignAccessToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
@@ -265,7 +265,7 @@ func TestAuthServiceRefreshRejectsAccessTokenSubject(t *testing.T) {
 }
 
 func TestAuthServiceRefreshRejectsVersionChange(t *testing.T) {
-	store := &sessionStoreStub{version: 3, session: Session{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
+	store := &sessionStoreStub{version: 3, session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, true)
 	refresh, err := svc.(*authService).jwt.SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
@@ -296,12 +296,12 @@ func TestAuthServiceLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 	}
 }
 
-func newTestAuthService(repo repository.UserRepository, store SessionStore, rotation bool) AuthService {
+func newTestAuthService(repo repository.UserRepository, store repository.AuthSessionRepository, rotation bool) AuthService {
 	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute}}
 	return NewAuthService(AuthServiceParams{Repo: repo, Sessions: store, JWT: auth.NewJWTService(cfg.Auth), Config: cfg})
 }
 
-func newTestAuthServiceWithConfig(repo repository.UserRepository, store SessionStore, authCfg config.AuthConfig) AuthService {
+func newTestAuthServiceWithConfig(repo repository.UserRepository, store repository.AuthSessionRepository, authCfg config.AuthConfig) AuthService {
 	cfg := &config.Config{Auth: authCfg}
 	return NewAuthService(AuthServiceParams{Repo: repo, Sessions: store, JWT: auth.NewJWTService(cfg.Auth), Config: cfg})
 }
@@ -347,8 +347,8 @@ func (r *authRepoStub) UpdateCredentials(_ context.Context, input repository.Upd
 
 type sessionStoreStub struct {
 	version          int64
-	session          Session
-	created          Session
+	session          repository.AuthSession
+	created          repository.AuthSession
 	createdTTL       time.Duration
 	deleted          bool
 	deletedSessionID string
@@ -360,14 +360,14 @@ func (s *sessionStoreStub) GetCurrentTokenVersion(context.Context, string) (int6
 	return s.version, nil
 }
 func (s *sessionStoreStub) ValidateTokenVersion(context.Context, string, int64) error { return nil }
-func (s *sessionStoreStub) CreateSession(_ context.Context, session Session, ttl time.Duration) error {
+func (s *sessionStoreStub) CreateSession(_ context.Context, session repository.AuthSession, ttl time.Duration) error {
 	s.created = session
 	s.createdTTL = ttl
 	return nil
 }
-func (s *sessionStoreStub) GetSession(context.Context, string) (Session, error) {
+func (s *sessionStoreStub) GetSession(context.Context, string) (repository.AuthSession, error) {
 	if s.session.SessionID == "" {
-		return Session{}, ErrSessionNotFound
+		return repository.AuthSession{}, repository.ErrAuthSessionNotFound
 	}
 	return s.session, nil
 }
