@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -73,11 +74,40 @@ func TestSessionStoreTokenVersionCacheUsesExplicitTTL(t *testing.T) {
 	}
 }
 
+func TestSessionStoreTokenVersionInvalidCacheReadsRepository(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	repo := &tokenVersionRepoStub{version: 9}
+	store := newTestSessionStore(redisServer, repo)
+	ctx := context.Background()
+	key := tokenVersionKey(sessionTestUserID.String())
+
+	for _, value := range []string{"not-an-int", "0"} {
+		if err := store.redis.Set(ctx, key, value, time.Minute).Err(); err != nil {
+			t.Fatalf("Set token version cache: %v", err)
+		}
+		version, err := store.GetCurrentTokenVersion(ctx, sessionTestUserID.String())
+		if err != nil {
+			t.Fatalf("GetCurrentTokenVersion(%q): %v", value, err)
+		}
+		if version != repo.version {
+			t.Fatalf("version = %d, want %d", version, repo.version)
+		}
+	}
+	if repo.getTokenVersionCalls != 2 {
+		t.Fatalf("GetTokenVersion calls = %d, want 2", repo.getTokenVersionCalls)
+	}
+}
+
 func TestSessionStoreCreateGetAndDeleteSession(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer, &tokenVersionRepoStub{version: 1})
 	ctx := context.Background()
-	session := Session{UserID: sessionTestUserID.String(), SessionID: "s-123", TokenVersion: 1, ExpiresAt: time.Now().Add(time.Hour)}
+	indexKey := userSessionsKey(sessionTestUserID.String())
+	expiresAt := time.Now().Add(time.Hour).Truncate(time.Second)
+	session := Session{UserID: sessionTestUserID.String(), SessionID: "s-123", TokenVersion: 1, ExpiresAt: expiresAt}
+	if err := store.redis.ZAdd(ctx, indexKey, redis.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err(); err != nil {
+		t.Fatalf("ZAdd expired session: %v", err)
+	}
 
 	if err := store.CreateSession(ctx, session, time.Hour); err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -89,13 +119,26 @@ func TestSessionStoreCreateGetAndDeleteSession(t *testing.T) {
 	if stored.UserID != sessionTestUserID.String() || stored.SessionID != "s-123" || stored.TokenVersion != 1 {
 		t.Fatalf("stored = %#v", stored)
 	}
-	indexKey := "auth:user:" + sessionTestUserID.String() + ":sessions"
-	isMember, err := redisServer.SIsMember(indexKey, "s-123")
+	score, err := store.redis.ZScore(ctx, indexKey, "s-123").Result()
 	if err != nil {
-		t.Fatalf("SIsMember: %v", err)
+		t.Fatalf("ZScore: %v", err)
 	}
-	if !isMember {
-		t.Fatal("session index missing s-123")
+	if int64(score) != expiresAt.Unix() {
+		t.Fatalf("ZScore = %d, want %d", int64(score), expiresAt.Unix())
+	}
+	if _, err := store.redis.ZScore(ctx, indexKey, "expired-session").Result(); !errors.Is(err, redis.Nil) {
+		t.Fatalf("expired session ZScore err = %v, want redis.Nil", err)
+	}
+	typ, err := store.redis.Type(ctx, indexKey).Result()
+	if err != nil {
+		t.Fatalf("Type: %v", err)
+	}
+	if typ != "zset" {
+		t.Fatalf("session index type = %q, want zset", typ)
+	}
+
+	if err := store.redis.ZAdd(ctx, indexKey, redis.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-on-delete"}).Err(); err != nil {
+		t.Fatalf("ZAdd expired-on-delete: %v", err)
 	}
 
 	if err := store.DeleteSession(ctx, sessionTestUserID.String(), "s-123"); err != nil {
@@ -104,12 +147,11 @@ func TestSessionStoreCreateGetAndDeleteSession(t *testing.T) {
 	if redisServer.Exists("auth:session:s-123") {
 		t.Fatal("session key still exists")
 	}
-	isMember, err = redisServer.SIsMember(indexKey, "s-123")
-	if err != nil && err.Error() != "ERR no such key" {
-		t.Fatalf("SIsMember: %v", err)
+	if _, err := store.redis.ZScore(ctx, indexKey, "s-123").Result(); !errors.Is(err, redis.Nil) {
+		t.Fatalf("deleted session ZScore err = %v, want redis.Nil", err)
 	}
-	if isMember {
-		t.Fatal("session index still contains s-123")
+	if _, err := store.redis.ZScore(ctx, indexKey, "expired-on-delete").Result(); !errors.Is(err, redis.Nil) {
+		t.Fatalf("expired-on-delete ZScore err = %v, want redis.Nil", err)
 	}
 }
 
@@ -117,16 +159,26 @@ func TestSessionStoreDeleteAllUserSessions(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer, &tokenVersionRepoStub{version: 1})
 	ctx := context.Background()
+	indexKey := userSessionsKey(sessionTestUserID.String())
 	for _, sessionID := range []string{"s-1", "s-2"} {
 		if err := store.CreateSession(ctx, Session{UserID: sessionTestUserID.String(), SessionID: sessionID, TokenVersion: 1, ExpiresAt: time.Now().Add(time.Hour)}, time.Hour); err != nil {
 			t.Fatalf("CreateSession: %v", err)
 		}
 	}
+	if err := store.redis.Set(ctx, sessionKey("expired-session"), "stale", 0).Err(); err != nil {
+		t.Fatalf("Set expired session: %v", err)
+	}
+	if err := store.redis.ZAdd(ctx, indexKey, redis.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err(); err != nil {
+		t.Fatalf("ZAdd expired session: %v", err)
+	}
 	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
 		t.Fatalf("DeleteAllUserSessions: %v", err)
 	}
-	if redisServer.Exists("auth:session:s-1") || redisServer.Exists("auth:session:s-2") || redisServer.Exists("auth:user:"+sessionTestUserID.String()+":sessions") {
+	if redisServer.Exists("auth:session:s-1") || redisServer.Exists("auth:session:s-2") || redisServer.Exists(indexKey) {
 		t.Fatal("user sessions were not fully deleted")
+	}
+	if !redisServer.Exists(sessionKey("expired-session")) {
+		t.Fatal("expired session key was deleted despite expired index member cleanup")
 	}
 }
 
@@ -140,7 +192,8 @@ func newTestSessionStoreWithConfig(redisServer *miniredis.Miniredis, repo reposi
 }
 
 type tokenVersionRepoStub struct {
-	version int64
+	version              int64
+	getTokenVersionCalls int
 }
 
 func (r *tokenVersionRepoStub) Create(context.Context, repository.CreateUserInput) (*ent.User, error) {
@@ -156,6 +209,7 @@ func (r *tokenVersionRepoStub) GetByUserID(context.Context, uuid.UUID) (*ent.Use
 	return nil, nil
 }
 func (r *tokenVersionRepoStub) GetTokenVersion(context.Context, uuid.UUID) (int64, error) {
+	r.getTokenVersionCalls++
 	return r.version, nil
 }
 func (r *tokenVersionRepoStub) IncrementTokenVersion(context.Context, uuid.UUID) (int64, error) {

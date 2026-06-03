@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/aegiscore/common/config"
@@ -106,14 +107,19 @@ func (s *redisSessionStore) CreateSession(ctx context.Context, session Session, 
 	if ttl <= 0 {
 		ttl = defaultAuthSessionTTL
 	}
+	now := time.Now()
+	if session.ExpiresAt.IsZero() {
+		session.ExpiresAt = now.Add(ttl)
+	}
 	data, err := json.Marshal(session)
 	if err != nil {
 		return fmt.Errorf("marshal auth session: %w", err)
 	}
+	userSessions := userSessionsKey(session.UserID)
 	pipe := s.redis.TxPipeline()
 	pipe.Set(ctx, sessionKey(session.SessionID), data, ttl)
-	pipe.SAdd(ctx, userSessionsKey(session.UserID), session.SessionID)
-	pipe.Expire(ctx, userSessionsKey(session.UserID), ttl)
+	pipe.ZRemRangeByScore(ctx, userSessions, "-inf", unixScore(now))
+	pipe.ZAdd(ctx, userSessions, redis.Z{Score: float64(session.ExpiresAt.Unix()), Member: session.SessionID})
 	_, err = pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("create auth session: %w", err)
@@ -137,9 +143,11 @@ func (s *redisSessionStore) GetSession(ctx context.Context, sessionID string) (S
 }
 
 func (s *redisSessionStore) DeleteSession(ctx context.Context, userID string, sessionID string) error {
+	userSessions := userSessionsKey(userID)
 	pipe := s.redis.TxPipeline()
 	pipe.Del(ctx, sessionKey(sessionID))
-	pipe.SRem(ctx, userSessionsKey(userID), sessionID)
+	pipe.ZRemRangeByScore(ctx, userSessions, "-inf", unixScore(time.Now()))
+	pipe.ZRem(ctx, userSessions, sessionID)
 	_, err := pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("delete auth session: %w", err)
@@ -148,7 +156,11 @@ func (s *redisSessionStore) DeleteSession(ctx context.Context, userID string, se
 }
 
 func (s *redisSessionStore) DeleteAllUserSessions(ctx context.Context, userID string) error {
-	sessions, err := s.redis.SMembers(ctx, userSessionsKey(userID)).Result()
+	userSessions := userSessionsKey(userID)
+	if err := s.redis.ZRemRangeByScore(ctx, userSessions, "-inf", unixScore(time.Now())).Err(); err != nil {
+		return fmt.Errorf("clean expired user auth sessions: %w", err)
+	}
+	sessions, err := s.redis.ZRange(ctx, userSessions, 0, -1).Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return fmt.Errorf("list user auth sessions: %w", err)
 	}
@@ -156,7 +168,7 @@ func (s *redisSessionStore) DeleteAllUserSessions(ctx context.Context, userID st
 	for _, sessionID := range sessions {
 		pipe.Del(ctx, sessionKey(sessionID))
 	}
-	pipe.Del(ctx, userSessionsKey(userID))
+	pipe.Del(ctx, userSessions)
 	_, err = pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("delete user auth sessions: %w", err)
@@ -183,10 +195,12 @@ func userSessionsKey(userID string) string {
 	return fmt.Sprintf("auth:user:%s:sessions", userID)
 }
 
+func unixScore(t time.Time) string {
+	return strconv.FormatInt(t.Unix(), 10)
+}
+
 func parseTokenVersion(value string) (int64, error) {
-	var version int64
-	_, err := fmt.Sscan(value, &version)
-	return version, err
+	return strconv.ParseInt(value, 10, 64)
 }
 
 func formatTokenVersion(version int64) string {
