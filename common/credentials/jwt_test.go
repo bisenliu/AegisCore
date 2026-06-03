@@ -1,4 +1,4 @@
-package jwt
+package credentials
 
 import (
 	"errors"
@@ -11,8 +11,8 @@ import (
 
 const testUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
 
-func TestServiceParseToken(t *testing.T) {
-	service := NewService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"}})
+func TestJWTServiceParseToken(t *testing.T) {
+	service := NewJWTService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"}})
 
 	t.Run("valid token", func(t *testing.T) {
 		claims, err := service.ParseToken(signTestToken(t, "secret", Claims{
@@ -95,16 +95,16 @@ func TestServiceParseToken(t *testing.T) {
 	}
 }
 
-func TestServiceParseTokenOptionalIssuerAudience(t *testing.T) {
-	service := NewService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}})
+func TestJWTServiceParseTokenOptionalIssuerAudience(t *testing.T) {
+	service := NewJWTService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}})
 	token := signTestToken(t, "secret", Claims{UserID: testUserID, TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Subject: SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}})
 	if _, err := service.ParseToken(token); err != nil {
 		t.Fatalf("ParseToken: %v", err)
 	}
 }
 
-func TestServiceSignTokens(t *testing.T) {
-	service := NewService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"}})
+func TestJWTServiceSignTokens(t *testing.T) {
+	service := NewJWTService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"}})
 	token, err := service.SignAccessToken(SignInput{UserID: testUserID, TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
@@ -142,8 +142,8 @@ func TestServiceSignTokens(t *testing.T) {
 	}
 }
 
-func TestServiceRejectsWrongSubjects(t *testing.T) {
-	service := NewService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}})
+func TestJWTServiceRejectsWrongSubjects(t *testing.T) {
+	service := NewJWTService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}})
 	refresh, err := service.SignRefreshToken(SignInput{UserID: testUserID, TokenVersion: 1, SessionID: "s-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
@@ -160,8 +160,8 @@ func TestServiceRejectsWrongSubjects(t *testing.T) {
 	}
 }
 
-func TestServiceParseTokenMissingSecret(t *testing.T) {
-	service := NewService(config.AuthConfig{})
+func TestJWTServiceParseTokenMissingSecret(t *testing.T) {
+	service := NewJWTService(config.AuthConfig{})
 	_, err := service.ParseToken("token")
 	if !errors.Is(err, ErrMissingSecret) {
 		t.Fatalf("ParseToken err = %v, want %v", err, ErrMissingSecret)

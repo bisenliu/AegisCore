@@ -11,8 +11,7 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/config"
-	"github.com/aegiscore/common/contextutil"
-	commonjwt "github.com/aegiscore/common/jwt"
+	"github.com/aegiscore/common/credentials"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/controller"
@@ -91,7 +90,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			Whitelist: []string{"/healthz", "/swagger", "/docs", "/api-docs", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/change-password"},
 		},
 	}
-	engine, err := NewGinEngine(GinParams{Config: cfg, Log: zap.NewNop(), JWT: commonjwt.NewService(cfg.Auth), SessionStore: &routeAuthSessionStore{version: 1}})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Log: zap.NewNop(), JWT: credentials.NewJWTService(cfg.Auth), SessionStore: &routeAuthSessionStore{version: 1}})
 	if err != nil {
 		t.Fatalf("NewGinEngine: %v", err)
 	}
@@ -143,7 +142,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query with invalid token returns token invalid", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
-		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+"invalid")
+		request.Header.Set(credentials.AuthorizationHeader, credentials.TokenPrefix+"invalid")
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, response.CodeTokenInvalid)
 	})
@@ -151,7 +150,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query with valid token keeps controller behavior", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
-		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		request.Header.Set(credentials.AuthorizationHeader, credentials.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		request.Header.Set("X-Trace-ID", "trace-auth-test")
 		engine.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusOK {
@@ -165,7 +164,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query with mismatched token version returns token invalid", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
-		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+signRouteAuthTokenWithVersion(t, "secret", routeAuthUserID, 2))
+		request.Header.Set(credentials.AuthorizationHeader, credentials.TokenPrefix+signRouteAuthTokenWithVersion(t, "secret", routeAuthUserID, 2))
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, response.CodeTokenInvalid)
 	})
@@ -173,7 +172,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query validation still runs after auth", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/abc", nil)
-		request.Header.Set(contextutil.AuthorizationHeader, contextutil.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		request.Header.Set(credentials.AuthorizationHeader, credentials.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		engine.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
@@ -221,11 +220,11 @@ func (s *routeAuthSessionStore) InvalidateUserTokenVersion(context.Context, stri
 }
 
 func (s *routeAuthAuthService) Login(context.Context, dto.LoginRequest) (*dto.TokenResponse, error) {
-	return &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonjwt.TokenTypeBearer, ExpiresIn: 3600}, nil
+	return &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: credentials.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
 func (s *routeAuthAuthService) Refresh(context.Context, dto.RefreshTokenRequest) (*dto.TokenResponse, error) {
-	return &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonjwt.TokenTypeBearer, ExpiresIn: 3600}, nil
+	return &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: credentials.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
 func (s *routeAuthAuthService) ChangePassword(context.Context, dto.ChangePasswordRequest) (*dto.ChangePasswordResponse, error) {
@@ -285,11 +284,11 @@ func signRouteAuthTokenWithVersion(t *testing.T, secret, userID string, tokenVer
 	if _, err := uuid.Parse(userID); err != nil {
 		t.Fatalf("parse userID: %v", err)
 	}
-	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, commonjwt.Claims{
+	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, credentials.Claims{
 		UserID:           userID,
 		TokenVersion:     tokenVersion,
 		SessionID:        "s-123",
-		RegisteredClaims: jwtv5.RegisteredClaims{Subject: commonjwt.SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))},
+		RegisteredClaims: jwtv5.RegisteredClaims{Subject: credentials.SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))},
 	}).SignedString([]byte(secret))
 	if err != nil {
 		t.Fatalf("SignedString: %v", err)

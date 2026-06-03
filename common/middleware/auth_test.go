@@ -10,8 +10,7 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/config"
-	"github.com/aegiscore/common/contextutil"
-	commonjwt "github.com/aegiscore/common/jwt"
+	"github.com/aegiscore/common/credentials"
 	"github.com/aegiscore/common/response"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
@@ -27,7 +26,7 @@ func TestAuthMiddleware(t *testing.T) {
 	expiredToken := signAuthTestToken(t, "secret", authTestUserID, 1, "s-123", time.Now().Add(-time.Hour))
 	missingVersionToken := signAuthTestToken(t, "secret", authTestUserID, 0, "s-123", time.Now().Add(time.Hour))
 	missingSessionToken := signAuthTestToken(t, "secret", authTestUserID, 1, "", time.Now().Add(time.Hour))
-	passwordChangeToken := signAuthSubjectTestToken(t, "secret", commonjwt.SubjectPasswordChange, authTestUserID, 1, "pc-123", time.Now().Add(time.Hour))
+	passwordChangeToken := signAuthSubjectTestToken(t, "secret", credentials.SubjectPasswordChange, authTestUserID, 1, "pc-123", time.Now().Add(time.Hour))
 
 	tests := []struct {
 		name          string
@@ -41,15 +40,15 @@ func TestAuthMiddleware(t *testing.T) {
 		{name: "whitelist", path: "/healthz", wantStatus: http.StatusOK, wantHandled: true},
 		{name: "missing header", path: "/api/v1/users/123", wantStatus: http.StatusUnauthorized, wantCode: response.CodeUnauthenticated},
 		{name: "invalid format", path: "/api/v1/users/123", authorization: "Token abc", wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
-		{name: "empty token", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
-		{name: "invalid token", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + "invalid", wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
-		{name: "expired token", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + expiredToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenExpired},
-		{name: "missing token version", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + missingVersionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
-		{name: "missing session id", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + missingSessionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
-		{name: "password change token rejected", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + passwordChangeToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
-		{name: "token version mismatch", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("version mismatch") })},
-		{name: "valid token", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true},
-		{name: "valid token with version validator", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true, validator: TokenVersionValidatorFunc(func(_ context.Context, userID string, version int64) error {
+		{name: "empty token", path: "/api/v1/users/123", authorization: credentials.TokenPrefix, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
+		{name: "invalid token", path: "/api/v1/users/123", authorization: credentials.TokenPrefix + "invalid", wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
+		{name: "expired token", path: "/api/v1/users/123", authorization: credentials.TokenPrefix + expiredToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenExpired},
+		{name: "missing token version", path: "/api/v1/users/123", authorization: credentials.TokenPrefix + missingVersionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
+		{name: "missing session id", path: "/api/v1/users/123", authorization: credentials.TokenPrefix + missingSessionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
+		{name: "password change token rejected", path: "/api/v1/users/123", authorization: credentials.TokenPrefix + passwordChangeToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
+		{name: "token version mismatch", path: "/api/v1/users/123", authorization: credentials.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("version mismatch") })},
+		{name: "valid token", path: "/api/v1/users/123", authorization: credentials.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true},
+		{name: "valid token with version validator", path: "/api/v1/users/123", authorization: credentials.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true, validator: TokenVersionValidatorFunc(func(_ context.Context, userID string, version int64) error {
 			if userID != authTestUserID || version != 1 {
 				return errors.New("unexpected token version input")
 			}
@@ -59,21 +58,21 @@ func TestAuthMiddleware(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			engine := gin.New()
-			engine.Use(AuthWithTokenVersionValidator(zaptest.NewLogger(t), commonjwt.NewService(cfg), cfg, tt.validator))
+			engine.Use(AuthWithTokenVersionValidator(zaptest.NewLogger(t), credentials.NewJWTService(cfg), cfg, tt.validator))
 			handled := false
 			engine.GET("/*path", func(c *gin.Context) {
 				handled = true
 				if tt.authorization != "" && tt.wantStatus == http.StatusOK {
-					if got, ok := c.Get(contextutil.UserIDKey); !ok || got != authTestUserID {
+					if got, ok := c.Get(credentials.UserIDKey); !ok || got != authTestUserID {
 						t.Fatalf("gin user id = %#v, %v; want %s, true", got, ok, authTestUserID)
 					}
-					if got, ok := contextutil.UserIDFromContext(c.Request.Context()); !ok || got != authTestUserID {
+					if got, ok := credentials.UserIDFromContext(c.Request.Context()); !ok || got != authTestUserID {
 						t.Fatalf("context user id = %q, %v; want %s, true", got, ok, authTestUserID)
 					}
-					if got, ok := c.Get(contextutil.SessionIDKey); !ok || got != "s-123" {
+					if got, ok := c.Get(credentials.SessionIDKey); !ok || got != "s-123" {
 						t.Fatalf("gin session id = %#v, %v; want s-123, true", got, ok)
 					}
-					if got, ok := contextutil.SessionIDFromContext(c.Request.Context()); !ok || got != "s-123" {
+					if got, ok := credentials.SessionIDFromContext(c.Request.Context()); !ok || got != "s-123" {
 						t.Fatalf("context session id = %q, %v; want s-123, true", got, ok)
 					}
 				}
@@ -83,7 +82,7 @@ func TestAuthMiddleware(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, tt.path, nil)
 			if tt.authorization != "" {
-				request.Header.Set(contextutil.AuthorizationHeader, tt.authorization)
+				request.Header.Set(credentials.AuthorizationHeader, tt.authorization)
 			}
 			engine.ServeHTTP(recorder, request)
 
@@ -107,12 +106,12 @@ func TestAuthMiddleware(t *testing.T) {
 }
 
 func signAuthTestToken(t *testing.T, secret, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {
-	return signAuthSubjectTestToken(t, secret, commonjwt.SubjectAccess, userID, tokenVersion, sessionID, expiresAt)
+	return signAuthSubjectTestToken(t, secret, credentials.SubjectAccess, userID, tokenVersion, sessionID, expiresAt)
 }
 
 func signAuthSubjectTestToken(t *testing.T, secret, subject, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {
 	t.Helper()
-	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, commonjwt.Claims{
+	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, credentials.Claims{
 		UserID:           userID,
 		TokenVersion:     tokenVersion,
 		SessionID:        sessionID,

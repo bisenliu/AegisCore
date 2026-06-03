@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/aegiscore/common/credentials"
 	"github.com/aegiscore/common/logger"
-	commonpassword "github.com/aegiscore/common/password"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/ent"
 	"github.com/aegiscore/user-services/internal/apperror"
@@ -58,7 +58,7 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 		return nil, response.ConflictError(apperror.MsgUserAlreadyExists)
 	}
 
-	passwordHash, err := commonpassword.Hash(plainPassword)
+	passwordHash, err := credentials.HashPassword(plainPassword)
 	if err != nil {
 		logger.Error(ctx, "hash user password failed", zap.String("username", username), zap.Error(err))
 		return nil, response.FromError(err)

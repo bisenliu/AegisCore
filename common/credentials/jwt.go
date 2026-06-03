@@ -1,4 +1,4 @@
-package jwt
+package credentials
 
 import (
 	"errors"
@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/config"
-	"github.com/aegiscore/common/contextutil"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -20,7 +19,6 @@ var (
 )
 
 const (
-	TokenTypeBearer       = contextutil.TokenTypeBearer
 	SubjectAccess         = "access"
 	SubjectRefresh        = "refresh"
 	SubjectPasswordChange = "password_change"
@@ -40,21 +38,21 @@ type SignInput struct {
 	TTL          time.Duration
 }
 
-type Service struct {
+type JWTService struct {
 	secret   []byte
 	issuer   string
 	audience string
 }
 
-func NewService(cfg config.AuthConfig) *Service {
-	return &Service{
+func NewJWTService(cfg config.AuthConfig) *JWTService {
+	return &JWTService{
 		secret:   []byte(cfg.JWT.Secret),
 		issuer:   cfg.JWT.Issuer,
 		audience: cfg.JWT.Audience,
 	}
 }
 
-func (s *Service) ParseToken(tokenString string) (*Claims, error) {
+func (s *JWTService) ParseToken(tokenString string) (*Claims, error) {
 	claims, err := s.parse(tokenString)
 	if err != nil {
 		return nil, err
@@ -71,7 +69,7 @@ func (s *Service) ParseToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-func (s *Service) ParseRefreshToken(tokenString string) (*Claims, error) {
+func (s *JWTService) ParseRefreshToken(tokenString string) (*Claims, error) {
 	claims, err := s.parse(tokenString)
 	if err != nil {
 		return nil, err
@@ -82,7 +80,7 @@ func (s *Service) ParseRefreshToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-func (s *Service) ParsePasswordChangeToken(tokenString string) (*Claims, error) {
+func (s *JWTService) ParsePasswordChangeToken(tokenString string) (*Claims, error) {
 	claims, err := s.parse(tokenString)
 	if err != nil {
 		return nil, err
@@ -99,19 +97,19 @@ func (s *Service) ParsePasswordChangeToken(tokenString string) (*Claims, error) 
 	return claims, nil
 }
 
-func (s *Service) SignAccessToken(input SignInput) (string, error) {
+func (s *JWTService) SignAccessToken(input SignInput) (string, error) {
 	return s.sign(input, SubjectAccess)
 }
 
-func (s *Service) SignRefreshToken(input SignInput) (string, error) {
+func (s *JWTService) SignRefreshToken(input SignInput) (string, error) {
 	return s.sign(input, SubjectRefresh)
 }
 
-func (s *Service) SignPasswordChangeToken(input SignInput) (string, error) {
+func (s *JWTService) SignPasswordChangeToken(input SignInput) (string, error) {
 	return s.sign(input, SubjectPasswordChange)
 }
 
-func (s *Service) parse(tokenString string) (*Claims, error) {
+func (s *JWTService) parse(tokenString string) (*Claims, error) {
 	if len(s.secret) == 0 {
 		return nil, ErrMissingSecret
 	}
@@ -145,7 +143,7 @@ func (s *Service) parse(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
-func (s *Service) sign(input SignInput, subject string) (string, error) {
+func (s *JWTService) sign(input SignInput, subject string) (string, error) {
 	if len(s.secret) == 0 {
 		return "", ErrMissingSecret
 	}

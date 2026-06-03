@@ -8,10 +8,8 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/config"
-	"github.com/aegiscore/common/contextutil"
-	commonjwt "github.com/aegiscore/common/jwt"
+	"github.com/aegiscore/common/credentials"
 	"github.com/aegiscore/common/logger"
-	commonpassword "github.com/aegiscore/common/password"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/internal/apperror"
 	"github.com/aegiscore/user-services/internal/domain"
@@ -35,14 +33,14 @@ type AuthServiceParams struct {
 
 	Repo     repository.UserRepository
 	Sessions SessionStore
-	JWT      *commonjwt.Service
+	JWT      *credentials.JWTService
 	Config   *config.Config
 }
 
 type authService struct {
 	repo     repository.UserRepository
 	sessions SessionStore
-	jwt      *commonjwt.Service
+	jwt      *credentials.JWTService
 	config   *config.Config
 }
 
@@ -66,7 +64,7 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Tok
 		logger.Error(ctx, "query login user failed", zap.String("username", username), zap.Error(err))
 		return nil, response.FromError(err)
 	}
-	matched, err := commonpassword.Verify(plainPassword, user.PasswordHash)
+	matched, err := credentials.VerifyPassword(plainPassword, user.PasswordHash)
 	if err != nil {
 		logger.Error(ctx, "verify login password failed", zap.String("username", username), zap.Error(err))
 		return nil, response.UnauthenticatedError(apperror.MsgInvalidCredentials)
@@ -112,7 +110,7 @@ func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePassword
 	if domain.UserStatus(user.Status) != domain.UserStatusMustChangePassword {
 		return nil, response.TokenInvalidError(apperror.MsgMissingSession)
 	}
-	passwordHash, err := commonpassword.Hash(plainPassword)
+	passwordHash, err := credentials.HashPassword(plainPassword)
 	if err != nil {
 		logger.Error(ctx, "hash changed password failed", zap.String("user_id", claims.UserID), zap.Error(err))
 		return nil, response.FromError(err)
@@ -135,7 +133,7 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) 
 	if err != nil {
 		return nil, response.TokenInvalidError(apperror.MsgMissingSession)
 	}
-	if claims.Subject != commonjwt.SubjectRefresh {
+	if claims.Subject != credentials.SubjectRefresh {
 		return nil, response.TokenInvalidError(apperror.MsgMissingSession)
 	}
 	if _, err := uuid.Parse(claims.UserID); err != nil {
@@ -171,8 +169,8 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) 
 
 func normalizeRefreshToken(token string) string {
 	token = strings.TrimSpace(token)
-	if len(token) >= len(contextutil.TokenPrefix) && strings.EqualFold(token[:len(contextutil.TokenPrefix)], contextutil.TokenPrefix) {
-		return strings.TrimSpace(token[len(contextutil.TokenPrefix):])
+	if len(token) >= len(credentials.TokenPrefix) && strings.EqualFold(token[:len(credentials.TokenPrefix)], credentials.TokenPrefix) {
+		return strings.TrimSpace(token[len(credentials.TokenPrefix):])
 	}
 	return token
 }
@@ -218,18 +216,18 @@ func (s *authService) issueTokenPair(ctx context.Context, userID string, tokenVe
 	if refreshTTL <= 0 {
 		refreshTTL = 7 * 24 * time.Hour
 	}
-	access, err := s.jwt.SignAccessToken(commonjwt.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: accessTTL})
+	access, err := s.jwt.SignAccessToken(credentials.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: accessTTL})
 	if err != nil {
 		return nil, response.FromError(fmt.Errorf("sign access token: %w", err))
 	}
-	refresh, err := s.jwt.SignRefreshToken(commonjwt.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: refreshTTL})
+	refresh, err := s.jwt.SignRefreshToken(credentials.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: refreshTTL})
 	if err != nil {
 		return nil, response.FromError(fmt.Errorf("sign refresh token: %w", err))
 	}
 	if err := s.sessions.CreateSession(ctx, Session{UserID: userID, SessionID: sessionID, TokenVersion: tokenVersion, ExpiresAt: time.Now().Add(refreshTTL)}, refreshTTL); err != nil {
 		return nil, response.FromError(err)
 	}
-	return &dto.TokenResponse{AccessToken: access, RefreshToken: refresh, TokenType: commonjwt.TokenTypeBearer, ExpiresIn: int64(accessTTL.Seconds())}, nil
+	return &dto.TokenResponse{AccessToken: access, RefreshToken: refresh, TokenType: credentials.TokenTypeBearer, ExpiresIn: int64(accessTTL.Seconds())}, nil
 }
 
 func (s *authService) issuePasswordChangeToken(_ context.Context, userID string, tokenVersion int64, sessionID string) (*dto.TokenResponse, error) {
@@ -237,22 +235,22 @@ func (s *authService) issuePasswordChangeToken(_ context.Context, userID string,
 	if ttl <= 0 {
 		ttl = 15 * time.Minute
 	}
-	token, err := s.jwt.SignPasswordChangeToken(commonjwt.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: ttl})
+	token, err := s.jwt.SignPasswordChangeToken(credentials.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: ttl})
 	if err != nil {
 		return nil, response.FromError(fmt.Errorf("sign password change token: %w", err))
 	}
-	return &dto.TokenResponse{AccessToken: token, TokenType: commonjwt.TokenTypeBearer, ExpiresIn: int64(ttl.Seconds()), PasswordChangeRequired: true}, nil
+	return &dto.TokenResponse{AccessToken: token, TokenType: credentials.TokenTypeBearer, ExpiresIn: int64(ttl.Seconds()), PasswordChangeRequired: true}, nil
 }
 
 func authenticatedSession(ctx context.Context) (string, string, error) {
-	userIDString, ok := contextutil.UserIDFromContext(ctx)
+	userIDString, ok := credentials.UserIDFromContext(ctx)
 	if !ok {
 		return "", "", response.UnauthenticatedError(apperror.MsgMissingSession)
 	}
 	if _, err := uuid.Parse(userIDString); err != nil {
 		return "", "", response.UnauthenticatedError(apperror.MsgMissingSession)
 	}
-	sessionID, ok := contextutil.SessionIDFromContext(ctx)
+	sessionID, ok := credentials.SessionIDFromContext(ctx)
 	if !ok {
 		return "", "", response.UnauthenticatedError(apperror.MsgMissingSession)
 	}

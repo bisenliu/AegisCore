@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	commonpassword "github.com/aegiscore/common/password"
+	"github.com/aegiscore/common/credentials"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/ent"
 	"github.com/aegiscore/user-services/internal/apperror"
@@ -35,7 +35,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 		if repo.createdInput.Nickname != "Alice" || repo.createdInput.Username != "alice" || repo.createdInput.UserID == uuid.Nil || repo.createdInput.Status != domain.UserStatusNormal {
 			t.Fatalf("createdInput = %#v", repo.createdInput)
 		}
-		matched, err := commonpassword.Verify("secret", repo.createdInput.PasswordHash)
+		matched, err := credentials.VerifyPassword("secret", repo.createdInput.PasswordHash)
 		if err != nil || !matched {
 			t.Fatalf("created password was not hashed correctly: matched=%v err=%v", matched, err)
 		}

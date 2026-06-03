@@ -6,8 +6,7 @@ import (
 	"strings"
 
 	"github.com/aegiscore/common/config"
-	"github.com/aegiscore/common/contextutil"
-	commonjwt "github.com/aegiscore/common/jwt"
+	"github.com/aegiscore/common/credentials"
 	"github.com/aegiscore/common/logger"
 	"github.com/aegiscore/common/response"
 	"github.com/gin-gonic/gin"
@@ -25,11 +24,11 @@ func (f TokenVersionValidatorFunc) ValidateTokenVersion(ctx context.Context, use
 	return f(ctx, userID, tokenVersion)
 }
 
-func Auth(log *zap.Logger, jwtService *commonjwt.Service, cfg config.AuthConfig) gin.HandlerFunc {
+func Auth(log *zap.Logger, jwtService *credentials.JWTService, cfg config.AuthConfig) gin.HandlerFunc {
 	return AuthWithTokenVersionValidator(log, jwtService, cfg, nil)
 }
 
-func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *commonjwt.Service, cfg config.AuthConfig, validator TokenVersionValidator) gin.HandlerFunc {
+func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *credentials.JWTService, cfg config.AuthConfig, validator TokenVersionValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		reqLog := logger.WithContext(log, ctx)
@@ -39,21 +38,21 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *commonjwt.Servic
 			return
 		}
 
-		authHeader := c.GetHeader(contextutil.AuthorizationHeader)
+		authHeader := c.GetHeader(credentials.AuthorizationHeader)
 		if authHeader == "" {
 			reqLog.Error("missing authorization header")
 			response.Unauthenticated(c, response.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
-		if !strings.HasPrefix(authHeader, contextutil.TokenPrefix) {
+		if !strings.HasPrefix(authHeader, credentials.TokenPrefix) {
 			reqLog.Error("invalid authorization header format")
 			response.TokenInvalid(c, response.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
 
-		tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, contextutil.TokenPrefix))
+		tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, credentials.TokenPrefix))
 		if tokenString == "" {
 			reqLog.Error("empty bearer token")
 			response.TokenInvalid(c, response.MessageAuthInvalid)
@@ -82,11 +81,11 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *commonjwt.Servic
 			}
 		}
 
-		ctx = contextutil.WithUserID(ctx, claims.UserID)
-		ctx = contextutil.WithSessionID(ctx, claims.SessionID)
+		ctx = credentials.WithUserID(ctx, claims.UserID)
+		ctx = credentials.WithSessionID(ctx, claims.SessionID)
 		c.Request = c.Request.WithContext(ctx)
-		c.Set(contextutil.UserIDKey, claims.UserID)
-		c.Set(contextutil.SessionIDKey, claims.SessionID)
+		c.Set(credentials.UserIDKey, claims.UserID)
+		c.Set(credentials.SessionIDKey, claims.SessionID)
 		c.Next()
 	}
 }

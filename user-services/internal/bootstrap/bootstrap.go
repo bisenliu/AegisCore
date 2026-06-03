@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/config"
+	"github.com/aegiscore/common/credentials"
 	commoninfra "github.com/aegiscore/common/infrastructure"
-	commonjwt "github.com/aegiscore/common/jwt"
 	"github.com/aegiscore/common/logger"
 	commonmw "github.com/aegiscore/common/middleware"
 	commontz "github.com/aegiscore/common/timezone"
@@ -64,7 +64,7 @@ type GinParams struct {
 
 	Config       *config.Config
 	Log          *zap.Logger
-	JWT          *commonjwt.Service
+	JWT          *credentials.JWTService
 	SessionStore service.SessionStore `optional:"true"`
 }
 
@@ -86,8 +86,8 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 	return engine, nil
 }
 
-func NewJWTService(cfg *config.Config) *commonjwt.Service {
-	return commonjwt.NewService(cfg.Auth)
+func NewJWTService(cfg *config.Config) *credentials.JWTService {
+	return credentials.NewJWTService(cfg.Auth)
 }
 
 type RegisterRouteParams struct {
