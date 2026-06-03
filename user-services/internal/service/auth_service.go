@@ -124,6 +124,9 @@ func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePassword
 		return nil, response.FromError(err)
 	}
 	if _, err := s.repo.UpdateCredentials(ctx, repository.UpdateCredentialsInput{UserID: parsedUserID, PasswordHash: passwordHash, Status: domain.UserStatusNormal}); err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return nil, response.NotFoundError(errmsg.MsgUserNotFound)
+		}
 		return nil, response.FromError(err)
 	}
 	if err := s.sessions.InvalidateUserTokenVersion(ctx, parsedUserID.String()); err != nil {
@@ -139,6 +142,9 @@ func (s *authService) verifyPasswordChangeToken(ctx context.Context, token strin
 	}
 	currentVersion, err := s.sessions.GetCurrentTokenVersion(ctx, claims.UserID)
 	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return uuid.Nil, response.NotFoundError(errmsg.MsgUserNotFound)
+		}
 		return uuid.Nil, response.FromError(err)
 	}
 	if currentVersion != claims.TokenVersion {
@@ -178,6 +184,9 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) 
 	}
 	currentVersion, err := s.sessions.GetCurrentTokenVersion(ctx, claims.UserID)
 	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return nil, response.NotFoundError(errmsg.MsgUserNotFound)
+		}
 		return nil, response.FromError(err)
 	}
 	if currentVersion != session.TokenVersion {
@@ -215,6 +224,9 @@ func (s *authService) LogoutAll(ctx context.Context) (*dto.LogoutResponse, error
 		return nil, response.UnauthenticatedError(errmsg.MsgMissingSession)
 	}
 	if _, err := s.repo.IncrementTokenVersion(ctx, parsedUserID); err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return nil, response.NotFoundError(errmsg.MsgUserNotFound)
+		}
 		return nil, response.FromError(err)
 	}
 	if err := s.sessions.InvalidateUserTokenVersion(ctx, userID); err != nil {

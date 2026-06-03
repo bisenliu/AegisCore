@@ -178,6 +178,38 @@ func TestAuthServiceChangePassword(t *testing.T) {
 	}
 }
 
+func TestAuthServiceChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
+	repo := &authRepoStub{userByID: &ent.User{ID: 123, UserID: authTestUserID, Status: int64(domain.UserStatusMustChangePassword), TokenVersion: 2}, updateErr: domain.ErrUserNotFound}
+	store := &sessionStoreStub{version: 2}
+	svc := newTestAuthService(repo, store, true)
+	token, err := svc.(*authService).jwt.SignPasswordChangeToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
+	if err != nil {
+		t.Fatalf("SignPasswordChangeToken: %v", err)
+	}
+
+	_, err = svc.ChangePassword(context.Background(), dto.ChangePasswordRequest{Token: token, NewPassword: "new-secret"})
+
+	appErr := response.FromError(err)
+	if appErr.Code != response.CodeNotFound {
+		t.Fatalf("err = %#v", appErr)
+	}
+}
+
+func TestAuthServiceChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
+	svc := newTestAuthService(&authRepoStub{}, &sessionStoreStub{getVersionErr: domain.ErrUserNotFound}, true)
+	token, err := svc.(*authService).jwt.SignPasswordChangeToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
+	if err != nil {
+		t.Fatalf("SignPasswordChangeToken: %v", err)
+	}
+
+	_, err = svc.ChangePassword(context.Background(), dto.ChangePasswordRequest{Token: token, NewPassword: "new-secret"})
+
+	appErr := response.FromError(err)
+	if appErr.Code != response.CodeNotFound {
+		t.Fatalf("err = %#v", appErr)
+	}
+}
+
 func TestAuthServiceChangePasswordRejectsAccessToken(t *testing.T) {
 	repo := &authRepoStub{userByID: &ent.User{ID: 123, UserID: authTestUserID, Status: int64(domain.UserStatusMustChangePassword), TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
@@ -280,6 +312,22 @@ func TestAuthServiceRefreshRejectsVersionChange(t *testing.T) {
 	}
 }
 
+func TestAuthServiceRefreshMapsTokenVersionUserNotFound(t *testing.T) {
+	store := &sessionStoreStub{session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}, getVersionErr: domain.ErrUserNotFound}
+	svc := newTestAuthService(&authRepoStub{}, store, true)
+	refresh, err := svc.(*authService).jwt.SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
+	if err != nil {
+		t.Fatalf("SignRefreshToken: %v", err)
+	}
+
+	_, err = svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: refresh})
+
+	appErr := response.FromError(err)
+	if appErr.Code != response.CodeNotFound {
+		t.Fatalf("err = %#v", appErr)
+	}
+}
+
 func TestAuthServiceLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 	repo := &authRepoStub{newVersion: 3}
 	store := &sessionStoreStub{version: 2}
@@ -293,6 +341,23 @@ func TestAuthServiceLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 	}
 	if !result.LoggedOut || repo.incrementedUserID != authTestUserID || !store.invalidated || !store.deletedAll {
 		t.Fatalf("result=%#v repo=%#v store=%#v", result, repo, store)
+	}
+}
+
+func TestAuthServiceLogoutAllMapsIncrementUserNotFound(t *testing.T) {
+	repo := &authRepoStub{incrementErr: domain.ErrUserNotFound}
+	store := &sessionStoreStub{version: 2}
+	svc := newTestAuthService(repo, store, true)
+	ctx := auth.WithSessionID(auth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
+
+	_, err := svc.LogoutAll(ctx)
+
+	appErr := response.FromError(err)
+	if appErr.Code != response.CodeNotFound {
+		t.Fatalf("err = %#v", appErr)
+	}
+	if store.invalidated || store.deletedAll {
+		t.Fatalf("sessions mutated after increment failure: %#v", store)
 	}
 }
 
@@ -311,6 +376,8 @@ type authRepoStub struct {
 	userByID          *ent.User
 	gotUsername       string
 	newVersion        int64
+	incrementErr      error
+	updateErr         error
 	incrementedUserID uuid.UUID
 	updatedInput      repository.UpdateCredentialsInput
 }
@@ -321,7 +388,7 @@ func (r *authRepoStub) Create(context.Context, repository.CreateUserInput) (*ent
 func (r *authRepoStub) ExistsByUsername(context.Context, string) (bool, error) { return false, nil }
 func (r *authRepoStub) GetByUserID(_ context.Context, userID uuid.UUID) (*ent.User, error) {
 	if r.userByID == nil {
-		return nil, response.NotFoundError("user not found")
+		return nil, domain.ErrUserNotFound
 	}
 	return r.userByID, nil
 }
@@ -331,17 +398,23 @@ func (r *authRepoStub) ListUsers(context.Context, repository.ListUsersInput) ([]
 func (r *authRepoStub) GetByUsername(_ context.Context, username string) (*ent.User, error) {
 	r.gotUsername = username
 	if r.userByUsername == nil {
-		return nil, response.NotFoundError("user not found")
+		return nil, domain.ErrUserNotFound
 	}
 	return r.userByUsername, nil
 }
 func (r *authRepoStub) GetTokenVersion(context.Context, uuid.UUID) (int64, error) { return 0, nil }
 func (r *authRepoStub) IncrementTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
 	r.incrementedUserID = userID
+	if r.incrementErr != nil {
+		return 0, r.incrementErr
+	}
 	return r.newVersion, nil
 }
 func (r *authRepoStub) UpdateCredentials(_ context.Context, input repository.UpdateCredentialsInput) (int64, error) {
 	r.updatedInput = input
+	if r.updateErr != nil {
+		return 0, r.updateErr
+	}
 	return r.newVersion, nil
 }
 
@@ -354,9 +427,13 @@ type sessionStoreStub struct {
 	deletedSessionID string
 	deletedAll       bool
 	invalidated      bool
+	getVersionErr    error
 }
 
 func (s *sessionStoreStub) GetCurrentTokenVersion(context.Context, string) (int64, error) {
+	if s.getVersionErr != nil {
+		return 0, s.getVersionErr
+	}
 	return s.version, nil
 }
 func (s *sessionStoreStub) ValidateTokenVersion(context.Context, string, int64) error { return nil }
