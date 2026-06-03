@@ -3,12 +3,9 @@
 ## Purpose
 
 用户认证能力为 HTTP API 提供可复用的 JWT Bearer 认证中间件，统一处理认证校验、失败响应和认证用户身份在请求上下文中的传播。
-
 ## Requirements
-
 ### Requirement: Authenticate HTTP requests with JWT Bearer tokens
-
-系统 MUST 提供可复用的 Gin 认证中间件，用于校验 `Authorization: Bearer <token>` 请求头。中间件 MUST 支持配置化白名单路径；非白名单请求缺少认证头、认证头格式错误、token 为空或 token 无效时，系统 MUST 返回 HTTP 401，并使用 `common/response.Envelope` 失败格式与未认证数字业务码 `20000`。当 token 通过签名、过期时间、issuer 和 audience 校验后，中间件 MUST 解析 `user_id`、`token_version` 和 `session_id`，并将 token 中的 `token_version` 与服务端当前版本比较；版本不一致时系统 MUST 将该 token 视为无效。
+系统 MUST 提供可复用的 Gin 认证中间件，用于校验 `Authorization: Bearer <token>` 请求头。中间件 MUST 支持配置化白名单路径；非白名单请求缺少认证头、认证头格式错误、token 为空或 token 无效时，系统 MUST 返回 HTTP 401，并使用 `common/response.Envelope` 失败格式与未认证数字业务码 `20000`。当 token 通过签名、过期时间、issuer 和 audience 校验后，中间件 MUST 解析 `user_id`、`token_version` 和 `session_id`，其中 `user_id` MUST 是用户外部 UUID 标识，并将 token 中的 `token_version` 与服务端当前版本比较；版本不一致时系统 MUST 将该 token 视为无效。
 
 #### Scenario: Skip whitelisted path
 - **Given** auth 配置白名单包含 `/healthz`
@@ -75,13 +72,12 @@
 - **Then** 日志 MUST 包含请求 context 对应的 `trace-id` 字段
 
 ### Requirement: Parse JWT tokens using v5 dependency
-
-系统 MUST 使用 `github.com/golang-jwt/jwt/v5` 解析 JWT token，并 MUST 校验签名方法与过期时间。配置声明 issuer 或 audience 时，系统 MUST 对应校验 issuer 或 audience；未配置 issuer 或 audience 时，系统 MUST NOT 因这些字段为空而拒绝 token。用于访问受保护业务接口的 Access Token claims MUST 包含非空 `user_id`、大于零的 `token_version` 和非空 `session_id`。
+系统 MUST 使用 `github.com/golang-jwt/jwt/v5` 解析 JWT token，并 MUST 校验签名方法与过期时间。配置声明 issuer 或 audience 时，系统 MUST 对应校验 issuer 或 audience；未配置 issuer 或 audience 时，系统 MUST NOT 因这些字段为空而拒绝 token。用于访问受保护业务接口的 Access Token claims MUST 包含非空且格式合法的 UUID `user_id`、大于零的 `token_version` 和非空 `session_id`。
 
 #### Scenario: Accept valid token
 - **Given** auth 配置包含 JWT secret
 - **Given** token 使用允许的签名方法签名且未过期
-- **Given** token claims 包含非空 `user_id`
+- **Given** token claims 包含非空 UUID `user_id`
 - **Given** token claims 包含大于零的 `token_version` 和非空 `session_id`
 - **When** 认证中间件解析该 token
 - **Then** 系统 MUST 将请求视为已认证
@@ -106,15 +102,21 @@
 - **Then** 系统 MUST 返回 HTTP 401
 - **Then** 系统 MUST NOT 执行业务 handler
 
-### Requirement: Propagate authenticated user identity through request contexts
+#### Scenario: Reject internal numeric user id claim
+- **Given** token 签名有效且未过期
+- **Given** token claims 的 `user_id` 为内部数字 ID 或非 UUID 字符串
+- **When** 认证中间件解析该 token
+- **Then** 系统 MUST 返回 HTTP 401
+- **Then** 系统 MUST NOT 将该请求标记为已认证
 
-系统 MUST 将认证通过后的用户 ID 写入 Gin context 和 `c.Request.Context()`，并使用稳定的 context key 表示当前认证用户。系统 MUST 同时传播当前认证会话标识，使后续 handler 能读取当前 `session_id` 以执行退出当前设备等会话控制操作。
+### Requirement: Propagate authenticated user identity through request contexts
+系统 MUST 将认证通过后的外部用户 ID 写入 Gin context 和 `c.Request.Context()`，并使用稳定的 context key 表示当前认证用户。系统 MUST 同时传播当前认证会话标识，使后续 handler 能读取当前 `session_id` 以执行退出当前设备等会话控制操作。
 
 #### Scenario: Store user id after successful authentication
-- **Given** token claims 包含 `user_id: "u-123"`
+- **Given** token claims 包含 `user_id: "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
 - **When** 认证中间件成功认证请求
-- **Then** Gin context MUST 包含当前用户 ID `u-123`
-- **Then** Go `context.Context` MUST 包含当前用户 ID `u-123`
+- **Then** Gin context MUST 包含当前用户 ID `018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e`
+- **Then** Go `context.Context` MUST 包含当前用户 ID `018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e`
 - **Then** 后续 handler MUST 能读取该用户 ID
 
 #### Scenario: Store session id after successful authentication
@@ -125,27 +127,27 @@
 - **Then** 后续 handler MUST 能读取该会话 ID
 
 #### Scenario: Do not store user id on failed authentication
-- **Given** token 无效或缺少非空 `user_id`
+- **Given** token 无效或缺少非空 UUID `user_id`
 - **When** 认证中间件拒绝请求
 - **Then** Gin context MUST NOT 被标记为已认证用户
 - **Then** 系统 MUST NOT 执行业务 handler
 
 ### Requirement: Reuse shared authentication boundary constants
-系统 SHALL 使用 `common` 模块中统一定义的认证边界常量表达 Authorization header、Bearer token type 和 Bearer authorization prefix，避免调用方重复硬编码这些协议值。
+系统 SHALL 使用 `common/credentials` 包中统一定义的认证边界常量表达 Authorization header、Bearer token type 和 Bearer authorization prefix，避免调用方重复硬编码这些协议值。
 
 #### Scenario: Use shared authorization header constant
 - **WHEN** 认证中间件读取请求认证信息
-- **THEN** 系统 MUST 使用 `common` 中的 Authorization header 常量
+- **THEN** 系统 MUST 使用 `common/credentials` 中的 Authorization header 常量
 - **THEN** header 名值 MUST 保持为 `Authorization`
 
 #### Scenario: Use shared bearer prefix constant
 - **WHEN** 认证中间件校验或剥离 Authorization header
-- **THEN** 系统 MUST 使用 `common` 中的 Bearer prefix 常量
+- **THEN** 系统 MUST 使用 `common/credentials` 中的 Bearer prefix 常量
 - **THEN** prefix 值 MUST 保持为 `Bearer `
 
 #### Scenario: Use shared bearer token type constant
 - **WHEN** 登录或刷新接口响应 token type
-- **THEN** 系统 MUST 使用 `common` 中的 Bearer token type 常量
+- **THEN** 系统 MUST 使用 `common/credentials` 中的 Bearer token type 常量
 - **THEN** token type 值 MUST 保持为 `Bearer`
 
 ### Requirement: Reuse shared authentication failure message
@@ -162,3 +164,17 @@
 - **THEN** token 格式错误、非法或版本不匹配 MUST 继续返回 token invalid 业务码
 - **THEN** token 过期 MUST 继续返回 token expired 业务码
 - **THEN** 所有上述响应 MUST 继续使用 HTTP 401
+
+### Requirement: Use shared credentials package for JWT token service
+系统 SHALL 使用 `common/credentials` 包作为 JWT token 凭证服务、claims、sign input 和 token subject 常量的规范来源。认证中间件和用户认证会话业务 MUST NOT 在新代码中继续依赖分散的 `common/jwt` 规范来源。
+
+#### Scenario: Authentication middleware uses credentials JWT service
+- **WHEN** 认证中间件解析 Bearer access token
+- **THEN** 系统 MUST 使用 `common/credentials` 提供的 JWT token 服务类型或接口
+- **THEN** access token 的签名、过期时间、issuer、audience、subject、`user_id`、`token_version` 和 `session_id` 校验行为 MUST 保持不变
+
+#### Scenario: Login and refresh responses keep bearer token type
+- **WHEN** 登录或刷新接口返回 token 响应
+- **THEN** token type MUST 来自 `common/credentials` 的 Bearer token type 常量
+- **THEN** 响应中的 token type 值 MUST 保持为 `Bearer`
+
