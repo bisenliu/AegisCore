@@ -12,6 +12,7 @@ import (
 	"github.com/aegiscore/common/logger"
 	"github.com/aegiscore/common/password"
 	"github.com/aegiscore/common/response"
+	"github.com/aegiscore/user-services/ent"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/errmsg"
@@ -57,6 +58,19 @@ func NewAuthService(params AuthServiceParams) AuthService {
 func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.TokenResponse, error) {
 	username := strings.TrimSpace(req.Username)
 	plainPassword := strings.TrimSpace(req.Password)
+	user, err := s.authenticateUser(ctx, username, plainPassword)
+	if err != nil {
+		return nil, err
+	}
+
+	if domain.UserStatus(user.Status) == domain.UserStatusMustChangePassword {
+		return s.issuePasswordChangeToken(ctx, user.UserID.String(), user.TokenVersion, uuid.NewString())
+	}
+
+	return s.issueTokenPair(ctx, user.UserID.String(), user.TokenVersion, uuid.NewString())
+}
+
+func (s *authService) authenticateUser(ctx context.Context, username, plainPassword string) (*ent.User, error) {
 	if username == "" || plainPassword == "" {
 		return nil, response.UnauthenticatedError(errmsg.MsgInvalidCredentials)
 	}
@@ -78,14 +92,11 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Tok
 		return nil, response.UnauthenticatedError(errmsg.MsgInvalidCredentials)
 	}
 	status := domain.UserStatus(user.Status)
-	if status == domain.UserStatusMustChangePassword {
-		return s.issuePasswordChangeToken(ctx, user.UserID.String(), user.TokenVersion, uuid.NewString())
-	}
-	if !status.CanLogin() {
+	if status != domain.UserStatusMustChangePassword && !status.CanLogin() {
 		return nil, response.UnauthenticatedError(errmsg.MsgInvalidCredentials)
 	}
 
-	return s.issueTokenPair(ctx, user.UserID.String(), user.TokenVersion, uuid.NewString())
+	return user, nil
 }
 
 func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePasswordRequest) (*dto.ChangePasswordResponse, error) {
@@ -93,20 +104,9 @@ func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePassword
 	if plainPassword == "" {
 		return nil, response.ValidationFailedError(errmsg.MsgInvalidPassword)
 	}
-	claims, err := s.jwt.ParsePasswordChangeToken(normalizeRefreshToken(req.Token))
+	parsedUserID, err := s.verifyPasswordChangeToken(ctx, req.Token)
 	if err != nil {
-		return nil, response.TokenInvalidError(errmsg.MsgMissingSession)
-	}
-	currentVersion, err := s.sessions.GetCurrentTokenVersion(ctx, claims.UserID)
-	if err != nil {
-		return nil, response.FromError(err)
-	}
-	if currentVersion != claims.TokenVersion {
-		return nil, response.TokenInvalidError(errmsg.MsgMissingSession)
-	}
-	parsedUserID, err := uuid.Parse(claims.UserID)
-	if err != nil {
-		return nil, response.TokenInvalidError(errmsg.MsgMissingSession)
+		return nil, err
 	}
 	user, err := s.repo.GetByUserID(ctx, parsedUserID)
 	if err != nil {
@@ -120,16 +120,35 @@ func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePassword
 	}
 	passwordHash, err := password.Hash(plainPassword)
 	if err != nil {
-		logger.Error(ctx, "hash changed password failed", zap.String("user_id", claims.UserID), zap.Error(err))
+		logger.Error(ctx, "hash changed password failed", zap.String("user_id", parsedUserID.String()), zap.Error(err))
 		return nil, response.FromError(err)
 	}
 	if _, err := s.repo.UpdateCredentials(ctx, repository.UpdateCredentialsInput{UserID: parsedUserID, PasswordHash: passwordHash, Status: domain.UserStatusNormal}); err != nil {
 		return nil, response.FromError(err)
 	}
-	if err := s.sessions.InvalidateUserTokenVersion(ctx, claims.UserID); err != nil {
+	if err := s.sessions.InvalidateUserTokenVersion(ctx, parsedUserID.String()); err != nil {
 		return nil, response.FromError(err)
 	}
 	return &dto.ChangePasswordResponse{Changed: true}, nil
+}
+
+func (s *authService) verifyPasswordChangeToken(ctx context.Context, token string) (uuid.UUID, error) {
+	claims, err := s.jwt.ParsePasswordChangeToken(normalizeRefreshToken(token))
+	if err != nil {
+		return uuid.Nil, response.TokenInvalidError(errmsg.MsgMissingSession)
+	}
+	currentVersion, err := s.sessions.GetCurrentTokenVersion(ctx, claims.UserID)
+	if err != nil {
+		return uuid.Nil, response.FromError(err)
+	}
+	if currentVersion != claims.TokenVersion {
+		return uuid.Nil, response.TokenInvalidError(errmsg.MsgMissingSession)
+	}
+	parsedUserID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		return uuid.Nil, response.TokenInvalidError(errmsg.MsgMissingSession)
+	}
+	return parsedUserID, nil
 }
 
 func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) (*dto.TokenResponse, error) {
