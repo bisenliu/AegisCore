@@ -27,6 +27,7 @@ func TestAuthMiddleware(t *testing.T) {
 	expiredToken := signAuthTestToken(t, "secret", authTestUserID, 1, "s-123", time.Now().Add(-time.Hour))
 	missingVersionToken := signAuthTestToken(t, "secret", authTestUserID, 0, "s-123", time.Now().Add(time.Hour))
 	missingSessionToken := signAuthTestToken(t, "secret", authTestUserID, 1, "", time.Now().Add(time.Hour))
+	passwordChangeToken := signAuthSubjectTestToken(t, "secret", commonjwt.SubjectPasswordChange, authTestUserID, 1, "pc-123", time.Now().Add(time.Hour))
 
 	tests := []struct {
 		name          string
@@ -45,6 +46,7 @@ func TestAuthMiddleware(t *testing.T) {
 		{name: "expired token", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + expiredToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenExpired},
 		{name: "missing token version", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + missingVersionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
 		{name: "missing session id", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + missingSessionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
+		{name: "password change token rejected", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + passwordChangeToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
 		{name: "token version mismatch", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("version mismatch") })},
 		{name: "valid token", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true},
 		{name: "valid token with version validator", path: "/api/v1/users/123", authorization: contextutil.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true, validator: TokenVersionValidatorFunc(func(_ context.Context, userID string, version int64) error {
@@ -105,12 +107,16 @@ func TestAuthMiddleware(t *testing.T) {
 }
 
 func signAuthTestToken(t *testing.T, secret, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {
+	return signAuthSubjectTestToken(t, secret, commonjwt.SubjectAccess, userID, tokenVersion, sessionID, expiresAt)
+}
+
+func signAuthSubjectTestToken(t *testing.T, secret, subject, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {
 	t.Helper()
 	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, commonjwt.Claims{
 		UserID:           userID,
 		TokenVersion:     tokenVersion,
 		SessionID:        sessionID,
-		RegisteredClaims: jwtv5.RegisteredClaims{ExpiresAt: jwtv5.NewNumericDate(expiresAt)},
+		RegisteredClaims: jwtv5.RegisteredClaims{Subject: subject, ExpiresAt: jwtv5.NewNumericDate(expiresAt)},
 	}).SignedString([]byte(secret))
 	if err != nil {
 		t.Fatalf("SignedString: %v", err)

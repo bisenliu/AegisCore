@@ -1,15 +1,19 @@
 package repository
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/aegiscore/user-services/internal/domain"
+)
 
 func TestUserListPredicates(t *testing.T) {
-	if got := userListPredicates(ListUsersInput{}); len(got) != 0 {
-		t.Fatalf("predicates = %d, want 0", len(got))
+	if got := userListPredicates(ListUsersInput{}); len(got) != 1 {
+		t.Fatalf("predicates = %d, want 1", len(got))
 	}
 
-	active := true
-	got := userListPredicates(ListUsersInput{Name: "Ali", Username: "alice", Active: &active})
-	if len(got) != 3 {
-		t.Fatalf("predicates = %d, want 3", len(got))
+	status := domain.UserStatusNormal
+	got := userListPredicates(ListUsersInput{Nickname: "Ali", Username: "alice", Status: &status})
+	if len(got) != 4 {
+		t.Fatalf("predicates = %d, want 4", len(got))
 	}
 }

@@ -12,6 +12,7 @@ import (
 	commonpassword "github.com/aegiscore/common/password"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/ent"
+	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
@@ -24,7 +25,7 @@ func TestAuthServiceLogin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", Password: passwordHash, TokenVersion: 2}}
+	repo := &authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(domain.UserStatusNormal), TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
 
@@ -49,12 +50,102 @@ func TestAuthServiceLoginRejectsInvalidCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	svc := newTestAuthService(&authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", Password: passwordHash, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
+	svc := newTestAuthService(&authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(domain.UserStatusNormal), TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
 
 	_, err = svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "wrong"})
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeUnauthenticated {
+		t.Fatalf("err = %#v", appErr)
+	}
+}
+
+func TestAuthServiceLoginRejectsInactiveStatuses(t *testing.T) {
+	passwordHash, err := commonpassword.Hash("secret")
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+	for _, status := range []domain.UserStatus{domain.UserStatusDisabled} {
+		svc := newTestAuthService(&authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(status), TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
+
+		_, err = svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "secret"})
+
+		appErr := response.FromError(err)
+		if appErr.Code != response.CodeUnauthenticated {
+			t.Fatalf("status %d err = %#v", status, appErr)
+		}
+	}
+}
+
+func TestAuthServiceLoginIssuesPasswordChangeToken(t *testing.T) {
+	passwordHash, err := commonpassword.Hash("secret")
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+	repo := &authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(domain.UserStatusMustChangePassword), TokenVersion: 2}}
+	store := &sessionStoreStub{version: 2}
+	svc := newTestAuthService(repo, store, true)
+
+	tokens, err := svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "secret"})
+
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if tokens.AccessToken == "" || tokens.RefreshToken != "" || !tokens.PasswordChangeRequired {
+		t.Fatalf("tokens = %#v", tokens)
+	}
+	claims, err := svc.(*authService).jwt.ParsePasswordChangeToken(tokens.AccessToken)
+	if err != nil {
+		t.Fatalf("ParsePasswordChangeToken: %v", err)
+	}
+	if claims.UserID != authTestUserID.String() || claims.TokenVersion != 2 || claims.Subject != commonjwt.SubjectPasswordChange {
+		t.Fatalf("claims = %#v", claims)
+	}
+	if store.created.SessionID != "" {
+		t.Fatalf("created normal session = %#v", store.created)
+	}
+}
+
+func TestAuthServiceChangePassword(t *testing.T) {
+	passwordHash, err := commonpassword.Hash("old-secret")
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+	repo := &authRepoStub{userByID: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(domain.UserStatusMustChangePassword), TokenVersion: 2}, newVersion: 3}
+	store := &sessionStoreStub{version: 2}
+	svc := newTestAuthService(repo, store, true)
+	token, err := svc.(*authService).jwt.SignPasswordChangeToken(commonjwt.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
+	if err != nil {
+		t.Fatalf("SignPasswordChangeToken: %v", err)
+	}
+
+	result, err := svc.ChangePassword(context.Background(), dto.ChangePasswordRequest{Token: token, NewPassword: "new-secret"})
+
+	if err != nil {
+		t.Fatalf("ChangePassword: %v", err)
+	}
+	if !result.Changed || repo.updatedUserID != authTestUserID || repo.updatedStatus != domain.UserStatusNormal || !store.invalidated {
+		t.Fatalf("result=%#v repo=%#v store=%#v", result, repo, store)
+	}
+	matched, err := commonpassword.Verify("new-secret", repo.updatedPasswordHash)
+	if err != nil || !matched {
+		t.Fatalf("updated password hash mismatch: matched=%v err=%v", matched, err)
+	}
+}
+
+func TestAuthServiceChangePasswordRejectsAccessToken(t *testing.T) {
+	repo := &authRepoStub{userByID: &ent.User{ID: 123, UserID: authTestUserID, Status: int64(domain.UserStatusMustChangePassword), TokenVersion: 2}}
+	store := &sessionStoreStub{version: 2}
+	svc := newTestAuthService(repo, store, true)
+	token, err := svc.(*authService).jwt.SignAccessToken(commonjwt.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
+	if err != nil {
+		t.Fatalf("SignAccessToken: %v", err)
+	}
+
+	_, err = svc.ChangePassword(context.Background(), dto.ChangePasswordRequest{Token: token, NewPassword: "new-secret"})
+
+	appErr := response.FromError(err)
+	if appErr.Code != response.CodeTokenInvalid {
 		t.Fatalf("err = %#v", appErr)
 	}
 }
@@ -166,17 +257,26 @@ func newTestAuthService(repo repository.UserRepository, store SessionStore, rota
 }
 
 type authRepoStub struct {
-	userByUsername    *ent.User
-	gotUsername       string
-	newVersion        int64
-	incrementedUserID uuid.UUID
+	userByUsername      *ent.User
+	userByID            *ent.User
+	gotUsername         string
+	newVersion          int64
+	incrementedUserID   uuid.UUID
+	updatedUserID       uuid.UUID
+	updatedPasswordHash string
+	updatedStatus       domain.UserStatus
 }
 
 func (r *authRepoStub) Create(context.Context, repository.CreateUserInput) (*ent.User, error) {
 	return nil, nil
 }
-func (r *authRepoStub) ExistsByUsername(context.Context, string) (bool, error)    { return false, nil }
-func (r *authRepoStub) GetByUserID(context.Context, uuid.UUID) (*ent.User, error) { return nil, nil }
+func (r *authRepoStub) ExistsByUsername(context.Context, string) (bool, error) { return false, nil }
+func (r *authRepoStub) GetByUserID(_ context.Context, userID uuid.UUID) (*ent.User, error) {
+	if r.userByID == nil {
+		return nil, response.NotFoundError("user not found")
+	}
+	return r.userByID, nil
+}
 func (r *authRepoStub) ListUsers(context.Context, repository.ListUsersInput) ([]*ent.User, int, error) {
 	return nil, 0, nil
 }
@@ -190,6 +290,12 @@ func (r *authRepoStub) GetByUsername(_ context.Context, username string) (*ent.U
 func (r *authRepoStub) GetTokenVersion(context.Context, uuid.UUID) (int64, error) { return 0, nil }
 func (r *authRepoStub) IncrementTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
 	r.incrementedUserID = userID
+	return r.newVersion, nil
+}
+func (r *authRepoStub) UpdatePasswordHashAndStatus(_ context.Context, userID uuid.UUID, passwordHash string, status domain.UserStatus) (int64, error) {
+	r.updatedUserID = userID
+	r.updatedPasswordHash = passwordHash
+	r.updatedStatus = status
 	return r.newVersion, nil
 }
 

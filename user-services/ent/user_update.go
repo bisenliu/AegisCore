@@ -27,16 +27,16 @@ func (_u *UserUpdate) Where(ps ...predicate.User) *UserUpdate {
 	return _u
 }
 
-// SetName sets the "name" field.
-func (_u *UserUpdate) SetName(v string) *UserUpdate {
-	_u.mutation.SetName(v)
+// SetNickname sets the "nickname" field.
+func (_u *UserUpdate) SetNickname(v string) *UserUpdate {
+	_u.mutation.SetNickname(v)
 	return _u
 }
 
-// SetNillableName sets the "name" field if the given value is not nil.
-func (_u *UserUpdate) SetNillableName(v *string) *UserUpdate {
+// SetNillableNickname sets the "nickname" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableNickname(v *string) *UserUpdate {
 	if v != nil {
-		_u.SetName(*v)
+		_u.SetNickname(*v)
 	}
 	return _u
 }
@@ -55,16 +55,16 @@ func (_u *UserUpdate) SetNillableUsername(v *string) *UserUpdate {
 	return _u
 }
 
-// SetPassword sets the "password" field.
-func (_u *UserUpdate) SetPassword(v string) *UserUpdate {
-	_u.mutation.SetPassword(v)
+// SetPasswordHash sets the "password_hash" field.
+func (_u *UserUpdate) SetPasswordHash(v string) *UserUpdate {
+	_u.mutation.SetPasswordHash(v)
 	return _u
 }
 
-// SetNillablePassword sets the "password" field if the given value is not nil.
-func (_u *UserUpdate) SetNillablePassword(v *string) *UserUpdate {
+// SetNillablePasswordHash sets the "password_hash" field if the given value is not nil.
+func (_u *UserUpdate) SetNillablePasswordHash(v *string) *UserUpdate {
 	if v != nil {
-		_u.SetPassword(*v)
+		_u.SetPasswordHash(*v)
 	}
 	return _u
 }
@@ -90,17 +90,51 @@ func (_u *UserUpdate) AddTokenVersion(v int64) *UserUpdate {
 	return _u
 }
 
-// SetActive sets the "active" field.
-func (_u *UserUpdate) SetActive(v bool) *UserUpdate {
-	_u.mutation.SetActive(v)
+// SetStatus sets the "status" field.
+func (_u *UserUpdate) SetStatus(v int64) *UserUpdate {
+	_u.mutation.ResetStatus()
+	_u.mutation.SetStatus(v)
 	return _u
 }
 
-// SetNillableActive sets the "active" field if the given value is not nil.
-func (_u *UserUpdate) SetNillableActive(v *bool) *UserUpdate {
+// SetNillableStatus sets the "status" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableStatus(v *int64) *UserUpdate {
 	if v != nil {
-		_u.SetActive(*v)
+		_u.SetStatus(*v)
 	}
+	return _u
+}
+
+// AddStatus adds value to the "status" field.
+func (_u *UserUpdate) AddStatus(v int64) *UserUpdate {
+	_u.mutation.AddStatus(v)
+	return _u
+}
+
+// SetDeletedAt sets the "deleted_at" field.
+func (_u *UserUpdate) SetDeletedAt(v int64) *UserUpdate {
+	_u.mutation.ResetDeletedAt()
+	_u.mutation.SetDeletedAt(v)
+	return _u
+}
+
+// SetNillableDeletedAt sets the "deleted_at" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableDeletedAt(v *int64) *UserUpdate {
+	if v != nil {
+		_u.SetDeletedAt(*v)
+	}
+	return _u
+}
+
+// AddDeletedAt adds value to the "deleted_at" field.
+func (_u *UserUpdate) AddDeletedAt(v int64) *UserUpdate {
+	_u.mutation.AddDeletedAt(v)
+	return _u
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (_u *UserUpdate) ClearDeletedAt() *UserUpdate {
+	_u.mutation.ClearDeletedAt()
 	return _u
 }
 
@@ -160,9 +194,9 @@ func (_u *UserUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *UserUpdate) check() error {
-	if v, ok := _u.mutation.Name(); ok {
-		if err := user.NameValidator(v); err != nil {
-			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "User.name": %w`, err)}
+	if v, ok := _u.mutation.Nickname(); ok {
+		if err := user.NicknameValidator(v); err != nil {
+			return &ValidationError{Name: "nickname", err: fmt.Errorf(`ent: validator failed for field "User.nickname": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Username(); ok {
@@ -170,9 +204,9 @@ func (_u *UserUpdate) check() error {
 			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.Password(); ok {
-		if err := user.PasswordValidator(v); err != nil {
-			return &ValidationError{Name: "password", err: fmt.Errorf(`ent: validator failed for field "User.password": %w`, err)}
+	if v, ok := _u.mutation.PasswordHash(); ok {
+		if err := user.PasswordHashValidator(v); err != nil {
+			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
 		}
 	}
 	return nil
@@ -190,14 +224,14 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			}
 		}
 	}
-	if value, ok := _u.mutation.Name(); ok {
-		_spec.SetField(user.FieldName, field.TypeString, value)
+	if value, ok := _u.mutation.Nickname(); ok {
+		_spec.SetField(user.FieldNickname, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.Password(); ok {
-		_spec.SetField(user.FieldPassword, field.TypeString, value)
+	if value, ok := _u.mutation.PasswordHash(); ok {
+		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.TokenVersion(); ok {
 		_spec.SetField(user.FieldTokenVersion, field.TypeInt64, value)
@@ -205,8 +239,20 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedTokenVersion(); ok {
 		_spec.AddField(user.FieldTokenVersion, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.Active(); ok {
-		_spec.SetField(user.FieldActive, field.TypeBool, value)
+	if value, ok := _u.mutation.Status(); ok {
+		_spec.SetField(user.FieldStatus, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedStatus(); ok {
+		_spec.AddField(user.FieldStatus, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.DeletedAt(); ok {
+		_spec.SetField(user.FieldDeletedAt, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDeletedAt(); ok {
+		_spec.AddField(user.FieldDeletedAt, field.TypeInt64, value)
+	}
+	if _u.mutation.DeletedAtCleared() {
+		_spec.ClearField(user.FieldDeletedAt, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeInt64, value)
@@ -234,16 +280,16 @@ type UserUpdateOne struct {
 	mutation *UserMutation
 }
 
-// SetName sets the "name" field.
-func (_u *UserUpdateOne) SetName(v string) *UserUpdateOne {
-	_u.mutation.SetName(v)
+// SetNickname sets the "nickname" field.
+func (_u *UserUpdateOne) SetNickname(v string) *UserUpdateOne {
+	_u.mutation.SetNickname(v)
 	return _u
 }
 
-// SetNillableName sets the "name" field if the given value is not nil.
-func (_u *UserUpdateOne) SetNillableName(v *string) *UserUpdateOne {
+// SetNillableNickname sets the "nickname" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableNickname(v *string) *UserUpdateOne {
 	if v != nil {
-		_u.SetName(*v)
+		_u.SetNickname(*v)
 	}
 	return _u
 }
@@ -262,16 +308,16 @@ func (_u *UserUpdateOne) SetNillableUsername(v *string) *UserUpdateOne {
 	return _u
 }
 
-// SetPassword sets the "password" field.
-func (_u *UserUpdateOne) SetPassword(v string) *UserUpdateOne {
-	_u.mutation.SetPassword(v)
+// SetPasswordHash sets the "password_hash" field.
+func (_u *UserUpdateOne) SetPasswordHash(v string) *UserUpdateOne {
+	_u.mutation.SetPasswordHash(v)
 	return _u
 }
 
-// SetNillablePassword sets the "password" field if the given value is not nil.
-func (_u *UserUpdateOne) SetNillablePassword(v *string) *UserUpdateOne {
+// SetNillablePasswordHash sets the "password_hash" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillablePasswordHash(v *string) *UserUpdateOne {
 	if v != nil {
-		_u.SetPassword(*v)
+		_u.SetPasswordHash(*v)
 	}
 	return _u
 }
@@ -297,17 +343,51 @@ func (_u *UserUpdateOne) AddTokenVersion(v int64) *UserUpdateOne {
 	return _u
 }
 
-// SetActive sets the "active" field.
-func (_u *UserUpdateOne) SetActive(v bool) *UserUpdateOne {
-	_u.mutation.SetActive(v)
+// SetStatus sets the "status" field.
+func (_u *UserUpdateOne) SetStatus(v int64) *UserUpdateOne {
+	_u.mutation.ResetStatus()
+	_u.mutation.SetStatus(v)
 	return _u
 }
 
-// SetNillableActive sets the "active" field if the given value is not nil.
-func (_u *UserUpdateOne) SetNillableActive(v *bool) *UserUpdateOne {
+// SetNillableStatus sets the "status" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableStatus(v *int64) *UserUpdateOne {
 	if v != nil {
-		_u.SetActive(*v)
+		_u.SetStatus(*v)
 	}
+	return _u
+}
+
+// AddStatus adds value to the "status" field.
+func (_u *UserUpdateOne) AddStatus(v int64) *UserUpdateOne {
+	_u.mutation.AddStatus(v)
+	return _u
+}
+
+// SetDeletedAt sets the "deleted_at" field.
+func (_u *UserUpdateOne) SetDeletedAt(v int64) *UserUpdateOne {
+	_u.mutation.ResetDeletedAt()
+	_u.mutation.SetDeletedAt(v)
+	return _u
+}
+
+// SetNillableDeletedAt sets the "deleted_at" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableDeletedAt(v *int64) *UserUpdateOne {
+	if v != nil {
+		_u.SetDeletedAt(*v)
+	}
+	return _u
+}
+
+// AddDeletedAt adds value to the "deleted_at" field.
+func (_u *UserUpdateOne) AddDeletedAt(v int64) *UserUpdateOne {
+	_u.mutation.AddDeletedAt(v)
+	return _u
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (_u *UserUpdateOne) ClearDeletedAt() *UserUpdateOne {
+	_u.mutation.ClearDeletedAt()
 	return _u
 }
 
@@ -380,9 +460,9 @@ func (_u *UserUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *UserUpdateOne) check() error {
-	if v, ok := _u.mutation.Name(); ok {
-		if err := user.NameValidator(v); err != nil {
-			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "User.name": %w`, err)}
+	if v, ok := _u.mutation.Nickname(); ok {
+		if err := user.NicknameValidator(v); err != nil {
+			return &ValidationError{Name: "nickname", err: fmt.Errorf(`ent: validator failed for field "User.nickname": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Username(); ok {
@@ -390,9 +470,9 @@ func (_u *UserUpdateOne) check() error {
 			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.Password(); ok {
-		if err := user.PasswordValidator(v); err != nil {
-			return &ValidationError{Name: "password", err: fmt.Errorf(`ent: validator failed for field "User.password": %w`, err)}
+	if v, ok := _u.mutation.PasswordHash(); ok {
+		if err := user.PasswordHashValidator(v); err != nil {
+			return &ValidationError{Name: "password_hash", err: fmt.Errorf(`ent: validator failed for field "User.password_hash": %w`, err)}
 		}
 	}
 	return nil
@@ -427,14 +507,14 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			}
 		}
 	}
-	if value, ok := _u.mutation.Name(); ok {
-		_spec.SetField(user.FieldName, field.TypeString, value)
+	if value, ok := _u.mutation.Nickname(); ok {
+		_spec.SetField(user.FieldNickname, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.Password(); ok {
-		_spec.SetField(user.FieldPassword, field.TypeString, value)
+	if value, ok := _u.mutation.PasswordHash(); ok {
+		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.TokenVersion(); ok {
 		_spec.SetField(user.FieldTokenVersion, field.TypeInt64, value)
@@ -442,8 +522,20 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	if value, ok := _u.mutation.AddedTokenVersion(); ok {
 		_spec.AddField(user.FieldTokenVersion, field.TypeInt64, value)
 	}
-	if value, ok := _u.mutation.Active(); ok {
-		_spec.SetField(user.FieldActive, field.TypeBool, value)
+	if value, ok := _u.mutation.Status(); ok {
+		_spec.SetField(user.FieldStatus, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedStatus(); ok {
+		_spec.AddField(user.FieldStatus, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.DeletedAt(); ok {
+		_spec.SetField(user.FieldDeletedAt, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDeletedAt(); ok {
+		_spec.AddField(user.FieldDeletedAt, field.TypeInt64, value)
+	}
+	if _u.mutation.DeletedAtCleared() {
+		_spec.ClearField(user.FieldDeletedAt, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeInt64, value)

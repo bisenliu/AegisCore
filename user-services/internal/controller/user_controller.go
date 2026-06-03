@@ -19,14 +19,14 @@ func NewUserController(userService service.UserService, validator *validation.Va
 
 // List godoc
 // @Summary 分页查询用户列表
-// @Description 分页查询用户资料列表，支持按用户昵称、用户名和启用状态过滤。分页参数未传或小于 1 时使用默认值 page=1、page_size=10。
+// @Description 分页查询用户资料列表，支持按用户昵称、用户名和用户状态过滤，默认排除软删除用户。分页参数未传或小于 1 时使用默认值 page=1、page_size=10。
 // @Tags 用户
 // @Produce json
 // @Param page query int false "页码，未传或小于 1 时默认为 1" minimum(1)
 // @Param page_size query int false "每页数量，未传或小于 1 时默认为 10" minimum(1)
-// @Param name query string false "用户昵称模糊匹配"
+// @Param nickname query string false "用户昵称模糊匹配"
 // @Param username query string false "用户名精确匹配"
-// @Param active query bool false "是否启用"
+// @Param status query int false "用户状态：100 正常，200 冻结/停用，300 必须修改密码" Enums(100,200,300)
 // @Success 200 {object} response.Envelope{data=dto.UserListResponseDoc} "查询成功"
 // @Failure 400 {object} response.Envelope "查询参数错误"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
@@ -49,7 +49,7 @@ func (ctl *UserController) List(c *gin.Context) {
 
 // Create godoc
 // @Summary 创建用户
-// @Description 创建一个新的用户资料。请求体使用共享校验器校验，用户名必须唯一，active 缺省为 true。
+// @Description 创建一个新的用户资料。请求体使用共享校验器校验，用户名必须唯一，status 缺省为 100。
 // @Tags 用户
 // @Accept json
 // @Produce json

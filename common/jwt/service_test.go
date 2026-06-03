@@ -22,6 +22,7 @@ func TestServiceParseToken(t *testing.T) {
 			RegisteredClaims: jwtv5.RegisteredClaims{
 				Issuer:    "issuer",
 				Audience:  []string{"audience"},
+				Subject:   SubjectAccess,
 				ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour)),
 			},
 		}))
@@ -45,39 +46,39 @@ func TestServiceParseToken(t *testing.T) {
 		{
 			name:   "expired token",
 			secret: "secret",
-			claims: Claims{UserID: testUserID, TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(-time.Hour))}},
+			claims: Claims{UserID: testUserID, TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, Subject: SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(-time.Hour))}},
 		},
 		{
 			name:   "wrong secret",
 			secret: "other-secret",
-			claims: Claims{UserID: testUserID, TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
+			claims: Claims{UserID: testUserID, TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, Subject: SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
 		},
 		{
 			name:   "issuer mismatch",
 			secret: "secret",
-			claims: Claims{UserID: testUserID, TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "other", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
+			claims: Claims{UserID: testUserID, TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "other", Audience: []string{"audience"}, Subject: SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
 		},
 		{
 			name:   "audience mismatch",
 			secret: "secret",
-			claims: Claims{UserID: testUserID, TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"other"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
+			claims: Claims{UserID: testUserID, TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"other"}, Subject: SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
 		},
 		{
 			name:   "missing user id",
 			secret: "secret",
-			claims: Claims{TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
+			claims: Claims{TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, Subject: SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
 			want:   ErrMissingUserID,
 		},
 		{
 			name:   "missing token version",
 			secret: "secret",
-			claims: Claims{UserID: testUserID, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
+			claims: Claims{UserID: testUserID, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, Subject: SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
 			want:   ErrMissingTokenVersion,
 		},
 		{
 			name:   "missing session id",
 			secret: "secret",
-			claims: Claims{UserID: testUserID, TokenVersion: 1, RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
+			claims: Claims{UserID: testUserID, TokenVersion: 1, RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, Subject: SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
 			want:   ErrMissingSessionID,
 		},
 	}
@@ -96,7 +97,7 @@ func TestServiceParseToken(t *testing.T) {
 
 func TestServiceParseTokenOptionalIssuerAudience(t *testing.T) {
 	service := NewService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}})
-	token := signTestToken(t, "secret", Claims{UserID: testUserID, TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}})
+	token := signTestToken(t, "secret", Claims{UserID: testUserID, TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Subject: SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}})
 	if _, err := service.ParseToken(token); err != nil {
 		t.Fatalf("ParseToken: %v", err)
 	}
@@ -126,6 +127,36 @@ func TestServiceSignTokens(t *testing.T) {
 	}
 	if refreshClaims.Subject != SubjectRefresh {
 		t.Fatalf("Subject = %q, want %s", refreshClaims.Subject, SubjectRefresh)
+	}
+
+	passwordChange, err := service.SignPasswordChangeToken(SignInput{UserID: testUserID, TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
+	if err != nil {
+		t.Fatalf("SignPasswordChangeToken: %v", err)
+	}
+	passwordChangeClaims, err := service.ParsePasswordChangeToken(passwordChange)
+	if err != nil {
+		t.Fatalf("ParsePasswordChangeToken: %v", err)
+	}
+	if passwordChangeClaims.Subject != SubjectPasswordChange || passwordChangeClaims.SessionID != "pc-123" {
+		t.Fatalf("passwordChangeClaims = %#v", passwordChangeClaims)
+	}
+}
+
+func TestServiceRejectsWrongSubjects(t *testing.T) {
+	service := NewService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}})
+	refresh, err := service.SignRefreshToken(SignInput{UserID: testUserID, TokenVersion: 1, SessionID: "s-123", TTL: time.Hour})
+	if err != nil {
+		t.Fatalf("SignRefreshToken: %v", err)
+	}
+	if _, err := service.ParseToken(refresh); !errors.Is(err, ErrInvalidSubject) {
+		t.Fatalf("ParseToken err = %v, want %v", err, ErrInvalidSubject)
+	}
+	passwordChange, err := service.SignPasswordChangeToken(SignInput{UserID: testUserID, TokenVersion: 1, SessionID: "pc-123", TTL: time.Hour})
+	if err != nil {
+		t.Fatalf("SignPasswordChangeToken: %v", err)
+	}
+	if _, err := service.ParseToken(passwordChange); !errors.Is(err, ErrInvalidSubject) {
+		t.Fatalf("ParseToken password-change err = %v, want %v", err, ErrInvalidSubject)
 	}
 }
 

@@ -16,12 +16,14 @@ var (
 	ErrMissingUserID       = errors.New("jwt user_id is required")
 	ErrMissingTokenVersion = errors.New("jwt token_version is required")
 	ErrMissingSessionID    = errors.New("jwt session_id is required")
+	ErrInvalidSubject      = errors.New("jwt subject is invalid")
 )
 
 const (
-	TokenTypeBearer = contextutil.TokenTypeBearer
-	SubjectAccess   = "access"
-	SubjectRefresh  = "refresh"
+	TokenTypeBearer       = contextutil.TokenTypeBearer
+	SubjectAccess         = "access"
+	SubjectRefresh        = "refresh"
+	SubjectPasswordChange = "password_change"
 )
 
 type Claims struct {
@@ -63,11 +65,38 @@ func (s *Service) ParseToken(tokenString string) (*Claims, error) {
 	if claims.SessionID == "" {
 		return nil, ErrMissingSessionID
 	}
+	if claims.Subject != SubjectAccess {
+		return nil, ErrInvalidSubject
+	}
 	return claims, nil
 }
 
 func (s *Service) ParseRefreshToken(tokenString string) (*Claims, error) {
-	return s.parse(tokenString)
+	claims, err := s.parse(tokenString)
+	if err != nil {
+		return nil, err
+	}
+	if claims.Subject != SubjectRefresh {
+		return nil, ErrInvalidSubject
+	}
+	return claims, nil
+}
+
+func (s *Service) ParsePasswordChangeToken(tokenString string) (*Claims, error) {
+	claims, err := s.parse(tokenString)
+	if err != nil {
+		return nil, err
+	}
+	if claims.TokenVersion <= 0 {
+		return nil, ErrMissingTokenVersion
+	}
+	if claims.SessionID == "" {
+		return nil, ErrMissingSessionID
+	}
+	if claims.Subject != SubjectPasswordChange {
+		return nil, ErrInvalidSubject
+	}
+	return claims, nil
 }
 
 func (s *Service) SignAccessToken(input SignInput) (string, error) {
@@ -76,6 +105,10 @@ func (s *Service) SignAccessToken(input SignInput) (string, error) {
 
 func (s *Service) SignRefreshToken(input SignInput) (string, error) {
 	return s.sign(input, SubjectRefresh)
+}
+
+func (s *Service) SignPasswordChangeToken(input SignInput) (string, error) {
+	return s.sign(input, SubjectPasswordChange)
 }
 
 func (s *Service) parse(tokenString string) (*Claims, error) {

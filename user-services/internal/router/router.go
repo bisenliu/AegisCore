@@ -27,6 +27,7 @@ func RegisterRoutes(engine *gin.Engine, params RouteParams) {
 		auth := v1.Group("/auth")
 		auth.POST("/login", params.AuthController.Login)
 		auth.POST("/refresh", params.AuthController.Refresh)
+		auth.POST("/change-password", params.AuthController.ChangePassword)
 		auth.POST("/logout", params.AuthController.Logout)
 		auth.POST("/logout-all", params.AuthController.LogoutAll)
 

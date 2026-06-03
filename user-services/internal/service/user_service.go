@@ -9,6 +9,7 @@ import (
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/ent"
 	"github.com/aegiscore/user-services/internal/apperror"
+	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
@@ -30,10 +31,10 @@ func NewUserService(repo repository.UserRepository) UserService {
 }
 
 func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error) {
-	name := strings.TrimSpace(req.Name)
+	nickname := strings.TrimSpace(req.Nickname)
 	username := strings.TrimSpace(req.Username)
 	plainPassword := strings.TrimSpace(req.Password)
-	if name == "" {
+	if nickname == "" {
 		return nil, response.ValidationFailedError(apperror.MsgInvalidUserName)
 	}
 	if username == "" {
@@ -42,9 +43,9 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 	if plainPassword == "" {
 		return nil, response.ValidationFailedError(apperror.MsgInvalidPassword)
 	}
-	active := true
-	if req.Active != nil {
-		active = *req.Active
+	status := domain.UserStatusNormal
+	if req.Status != nil {
+		status = *req.Status
 	}
 
 	logger.Info(ctx, "create user", zap.String("username", username))
@@ -69,7 +70,7 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 		return nil, response.FromError(err)
 	}
 
-	user, err := s.repo.Create(ctx, repository.CreateUserInput{Name: name, UserID: userID, Username: username, Password: passwordHash, Active: active})
+	user, err := s.repo.Create(ctx, repository.CreateUserInput{Nickname: nickname, UserID: userID, Username: username, PasswordHash: passwordHash, Status: status})
 	if err != nil {
 		logger.Error(ctx, "create user failed", zap.String("username", username), zap.Error(err))
 		return nil, response.FromError(err)
@@ -93,16 +94,16 @@ func (s *userService) GetUserByID(ctx context.Context, userID string) (*dto.User
 
 func (s *userService) ListUsers(ctx context.Context, req dto.ListUsersRequest) (response.PaginatedData[dto.UserResponse], error) {
 	paging := response.NormalizePagination(req.Page, req.PageSize)
-	name := strings.TrimSpace(req.Name)
+	nickname := strings.TrimSpace(req.Nickname)
 	username := strings.TrimSpace(req.Username)
 
 	logger.Info(ctx, "list users", zap.Int("page", paging.Page), zap.Int("page_size", paging.PageSize))
 	users, total, err := s.repo.ListUsers(ctx, repository.ListUsersInput{
 		Offset:   paging.Offset,
 		Limit:    paging.Limit,
-		Name:     name,
+		Nickname: nickname,
 		Username: username,
-		Active:   req.Active,
+		Status:   req.Status,
 	})
 	if err != nil {
 		logger.Error(ctx, "list users failed", zap.Error(err))
@@ -119,9 +120,9 @@ func (s *userService) ListUsers(ctx context.Context, req dto.ListUsersRequest) (
 func toUserResponse(user *ent.User) *dto.UserResponse {
 	return &dto.UserResponse{
 		UserID:    user.UserID.String(),
-		Name:      user.Name,
+		Nickname:  user.Nickname,
 		Username:  user.Username,
-		Active:    user.Active,
+		Status:    domain.UserStatus(user.Status),
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	}

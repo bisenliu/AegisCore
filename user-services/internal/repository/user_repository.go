@@ -9,6 +9,7 @@ import (
 	"github.com/aegiscore/user-services/ent/predicate"
 	"github.com/aegiscore/user-services/ent/user"
 	"github.com/aegiscore/user-services/internal/apperror"
+	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 )
@@ -20,23 +21,24 @@ type UserRepository interface {
 	GetByUserID(ctx context.Context, userID uuid.UUID) (*ent.User, error)
 	GetTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error)
 	IncrementTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error)
+	UpdatePasswordHashAndStatus(ctx context.Context, userID uuid.UUID, passwordHash string, status domain.UserStatus) (int64, error)
 	ListUsers(ctx context.Context, input ListUsersInput) ([]*ent.User, int, error)
 }
 
 type CreateUserInput struct {
-	Name     string
-	UserID   uuid.UUID
-	Username string
-	Password string
-	Active   bool
+	Nickname     string
+	UserID       uuid.UUID
+	Username     string
+	PasswordHash string
+	Status       domain.UserStatus
 }
 
 type ListUsersInput struct {
 	Offset   int
 	Limit    int
-	Name     string
+	Nickname string
 	Username string
-	Active   *bool
+	Status   *domain.UserStatus
 }
 
 type userRepository struct {
@@ -56,10 +58,10 @@ func NewUserRepository(params UserRepositoryParams) UserRepository {
 func (r *userRepository) Create(ctx context.Context, input CreateUserInput) (*ent.User, error) {
 	created, err := r.client.User.Create().
 		SetUserID(input.UserID).
-		SetName(input.Name).
+		SetNickname(input.Nickname).
 		SetUsername(input.Username).
-		SetPassword(input.Password).
-		SetActive(input.Active).
+		SetPasswordHash(input.PasswordHash).
+		SetStatus(int64(input.Status)).
 		Save(ctx)
 	if err == nil {
 		return created, nil
@@ -71,7 +73,7 @@ func (r *userRepository) Create(ctx context.Context, input CreateUserInput) (*en
 }
 
 func (r *userRepository) ExistsByUsername(ctx context.Context, username string) (bool, error) {
-	exists, err := r.client.User.Query().Where(user.UsernameEQ(username)).Exist(ctx)
+	exists, err := r.client.User.Query().Where(user.UsernameEQ(username), user.DeletedAtIsNil()).Exist(ctx)
 	if err != nil {
 		return false, fmt.Errorf("check username %s exists: %w", username, err)
 	}
@@ -79,7 +81,7 @@ func (r *userRepository) ExistsByUsername(ctx context.Context, username string) 
 }
 
 func (r *userRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*ent.User, error) {
-	user, err := r.client.User.Query().Where(user.UserIDEQ(userID)).Only(ctx)
+	user, err := r.client.User.Query().Where(user.UserIDEQ(userID), user.DeletedAtIsNil()).Only(ctx)
 	if err == nil {
 		return user, nil
 	}
@@ -90,7 +92,7 @@ func (r *userRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*en
 }
 
 func (r *userRepository) GetByUsername(ctx context.Context, username string) (*ent.User, error) {
-	user, err := r.client.User.Query().Where(user.UsernameEQ(username)).Only(ctx)
+	user, err := r.client.User.Query().Where(user.UsernameEQ(username), user.DeletedAtIsNil()).Only(ctx)
 	if err == nil {
 		return user, nil
 	}
@@ -101,7 +103,7 @@ func (r *userRepository) GetByUsername(ctx context.Context, username string) (*e
 }
 
 func (r *userRepository) GetTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
-	user, err := r.client.User.Query().Where(user.UserIDEQ(userID)).Only(ctx)
+	user, err := r.client.User.Query().Where(user.UserIDEQ(userID), user.DeletedAtIsNil()).Only(ctx)
 	if err == nil {
 		return user.TokenVersion, nil
 	}
@@ -112,7 +114,7 @@ func (r *userRepository) GetTokenVersion(ctx context.Context, userID uuid.UUID) 
 }
 
 func (r *userRepository) IncrementTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
-	updated, err := r.client.User.Update().Where(user.UserIDEQ(userID)).AddTokenVersion(1).Save(ctx)
+	updated, err := r.client.User.Update().Where(user.UserIDEQ(userID), user.DeletedAtIsNil()).AddTokenVersion(1).Save(ctx)
 	if err == nil {
 		if updated == 0 {
 			return 0, response.NotFoundError(apperror.MsgUserNotFound)
@@ -124,6 +126,21 @@ func (r *userRepository) IncrementTokenVersion(ctx context.Context, userID uuid.
 		return user.TokenVersion, nil
 	}
 	return 0, fmt.Errorf("increment user token version by user_id %s: %w", userID.String(), err)
+}
+
+func (r *userRepository) UpdatePasswordHashAndStatus(ctx context.Context, userID uuid.UUID, passwordHash string, status domain.UserStatus) (int64, error) {
+	updated, err := r.client.User.Update().Where(user.UserIDEQ(userID), user.DeletedAtIsNil()).SetPasswordHash(passwordHash).SetStatus(int64(status)).AddTokenVersion(1).Save(ctx)
+	if err == nil {
+		if updated == 0 {
+			return 0, response.NotFoundError(apperror.MsgUserNotFound)
+		}
+		user, err := r.GetByUserID(ctx, userID)
+		if err != nil {
+			return 0, err
+		}
+		return user.TokenVersion, nil
+	}
+	return 0, fmt.Errorf("update user password by user_id %s: %w", userID.String(), err)
 }
 
 func (r *userRepository) ListUsers(ctx context.Context, input ListUsersInput) ([]*ent.User, int, error) {
@@ -146,15 +163,15 @@ func (r *userRepository) ListUsers(ctx context.Context, input ListUsersInput) ([
 }
 
 func userListPredicates(input ListUsersInput) []predicate.User {
-	predicates := make([]predicate.User, 0, 3)
-	if input.Name != "" {
-		predicates = append(predicates, user.NameContains(input.Name))
+	predicates := []predicate.User{user.DeletedAtIsNil()}
+	if input.Nickname != "" {
+		predicates = append(predicates, user.NicknameContains(input.Nickname))
 	}
 	if input.Username != "" {
 		predicates = append(predicates, user.UsernameEQ(input.Username))
 	}
-	if input.Active != nil {
-		predicates = append(predicates, user.ActiveEQ(*input.Active))
+	if input.Status != nil {
+		predicates = append(predicates, user.StatusEQ(int64(*input.Status)))
 	}
 	return predicates
 }

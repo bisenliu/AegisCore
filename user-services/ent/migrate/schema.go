@@ -12,11 +12,12 @@ var (
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
 		{Name: "user_id", Type: field.TypeUUID, Unique: true},
-		{Name: "name", Type: field.TypeString, Size: 128},
+		{Name: "nickname", Type: field.TypeString, Size: 128},
 		{Name: "username", Type: field.TypeString, Unique: true, Size: 255},
-		{Name: "password", Type: field.TypeString},
+		{Name: "password_hash", Type: field.TypeString},
 		{Name: "token_version", Type: field.TypeInt64, Default: 1},
-		{Name: "active", Type: field.TypeBool, Default: true},
+		{Name: "status", Type: field.TypeInt64, Default: 100},
+		{Name: "deleted_at", Type: field.TypeInt64, Nullable: true},
 		{Name: "created_at", Type: field.TypeInt64},
 		{Name: "updated_at", Type: field.TypeInt64},
 	}
@@ -25,6 +26,23 @@ var (
 		Name:       "users",
 		Columns:    UsersColumns,
 		PrimaryKey: []*schema.Column{UsersColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "user_nickname",
+				Unique:  false,
+				Columns: []*schema.Column{UsersColumns[2]},
+			},
+			{
+				Name:    "user_status",
+				Unique:  false,
+				Columns: []*schema.Column{UsersColumns[6]},
+			},
+			{
+				Name:    "user_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{UsersColumns[7]},
+			},
+		},
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{

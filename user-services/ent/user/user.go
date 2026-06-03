@@ -13,16 +13,18 @@ const (
 	FieldID = "id"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
-	// FieldName holds the string denoting the name field in the database.
-	FieldName = "name"
+	// FieldNickname holds the string denoting the nickname field in the database.
+	FieldNickname = "nickname"
 	// FieldUsername holds the string denoting the username field in the database.
 	FieldUsername = "username"
-	// FieldPassword holds the string denoting the password field in the database.
-	FieldPassword = "password"
+	// FieldPasswordHash holds the string denoting the password_hash field in the database.
+	FieldPasswordHash = "password_hash"
 	// FieldTokenVersion holds the string denoting the token_version field in the database.
 	FieldTokenVersion = "token_version"
-	// FieldActive holds the string denoting the active field in the database.
-	FieldActive = "active"
+	// FieldStatus holds the string denoting the status field in the database.
+	FieldStatus = "status"
+	// FieldDeletedAt holds the string denoting the deleted_at field in the database.
+	FieldDeletedAt = "deleted_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -35,11 +37,12 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldUserID,
-	FieldName,
+	FieldNickname,
 	FieldUsername,
-	FieldPassword,
+	FieldPasswordHash,
 	FieldTokenVersion,
-	FieldActive,
+	FieldStatus,
+	FieldDeletedAt,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -55,16 +58,16 @@ func ValidColumn(column string) bool {
 }
 
 var (
-	// NameValidator is a validator for the "name" field. It is called by the builders before save.
-	NameValidator func(string) error
+	// NicknameValidator is a validator for the "nickname" field. It is called by the builders before save.
+	NicknameValidator func(string) error
 	// UsernameValidator is a validator for the "username" field. It is called by the builders before save.
 	UsernameValidator func(string) error
-	// PasswordValidator is a validator for the "password" field. It is called by the builders before save.
-	PasswordValidator func(string) error
+	// PasswordHashValidator is a validator for the "password_hash" field. It is called by the builders before save.
+	PasswordHashValidator func(string) error
 	// DefaultTokenVersion holds the default value on creation for the "token_version" field.
 	DefaultTokenVersion int64
-	// DefaultActive holds the default value on creation for the "active" field.
-	DefaultActive bool
+	// DefaultStatus holds the default value on creation for the "status" field.
+	DefaultStatus int64
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() int64
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -86,9 +89,9 @@ func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUserID, opts...).ToFunc()
 }
 
-// ByName orders the results by the name field.
-func ByName(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldName, opts...).ToFunc()
+// ByNickname orders the results by the nickname field.
+func ByNickname(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldNickname, opts...).ToFunc()
 }
 
 // ByUsername orders the results by the username field.
@@ -96,9 +99,9 @@ func ByUsername(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUsername, opts...).ToFunc()
 }
 
-// ByPassword orders the results by the password field.
-func ByPassword(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldPassword, opts...).ToFunc()
+// ByPasswordHash orders the results by the password_hash field.
+func ByPasswordHash(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPasswordHash, opts...).ToFunc()
 }
 
 // ByTokenVersion orders the results by the token_version field.
@@ -106,9 +109,14 @@ func ByTokenVersion(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTokenVersion, opts...).ToFunc()
 }
 
-// ByActive orders the results by the active field.
-func ByActive(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldActive, opts...).ToFunc()
+// ByStatus orders the results by the status field.
+func ByStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// ByDeletedAt orders the results by the deleted_at field.
+func ByDeletedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDeletedAt, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

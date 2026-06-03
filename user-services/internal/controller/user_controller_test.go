@@ -12,6 +12,7 @@ import (
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/apperror"
+	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/gin-gonic/gin"
 )
@@ -24,7 +25,7 @@ func TestUserControllerGetByID(t *testing.T) {
 	t.Run("valid ID", func(t *testing.T) {
 		createdAt := int64(1780048800000)
 		updatedAt := int64(1780052400000)
-		service := &stubUserService{response: &dto.UserResponse{UserID: controllerTestUserID, Name: "Aegis", Username: "aegis", Active: true, CreatedAt: createdAt, UpdatedAt: updatedAt}}
+		service := &stubUserService{response: &dto.UserResponse{UserID: controllerTestUserID, Nickname: "Aegis", Username: "aegis", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}
 
 		status, envelope := executeGetByID(t, service, controllerTestUserID)
 
@@ -41,7 +42,7 @@ func TestUserControllerGetByID(t *testing.T) {
 		if !ok {
 			t.Fatalf("data = %T, want map", envelope.Data)
 		}
-		if data["user_id"] != controllerTestUserID || data["username"] != "aegis" || data["created_at"] != float64(createdAt) || data["updated_at"] != float64(updatedAt) {
+		if data["user_id"] != controllerTestUserID || data["nickname"] != "Aegis" || data["username"] != "aegis" || data["status"] != float64(domain.UserStatusNormal) || data["created_at"] != float64(createdAt) || data["updated_at"] != float64(updatedAt) {
 			t.Fatalf("data = %#v", data)
 		}
 		if _, ok := data["id"]; ok {
@@ -82,24 +83,24 @@ func TestUserControllerCreate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	createdUser := &dto.UserResponse{UserID: controllerTestUserID, Name: "Alice", Username: "alice", Active: true, CreatedAt: createdAt, UpdatedAt: createdAt}
+	createdUser := &dto.UserResponse{UserID: controllerTestUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}
 
 	t.Run("valid body", func(t *testing.T) {
 		service := &stubUserService{createResponse: createdUser}
 
-		status, envelope := executeCreate(t, service, `{"name":"Alice","username":"alice","password":"secret"}`)
+		status, envelope := executeCreate(t, service, `{"nickname":"Alice","username":"alice","password":"secret"}`)
 
 		if status != http.StatusCreated {
 			t.Fatalf("status = %d, want %d", status, http.StatusCreated)
 		}
-		if service.gotCreate.Username != "alice" || service.gotCreate.Password != "secret" {
+		if service.gotCreate.Nickname != "Alice" || service.gotCreate.Username != "alice" || service.gotCreate.Password != "secret" || service.gotCreate.Status == nil || *service.gotCreate.Status != domain.UserStatusNormal {
 			t.Fatalf("gotCreate = %#v", service.gotCreate)
 		}
 		if !envelope.Success || envelope.Code != response.CodeOK || envelope.Message != "created" {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 		data, ok := envelope.Data.(map[string]any)
-		if !ok || data["user_id"] != controllerTestUserID || data["username"] != "alice" || data["created_at"] != float64(createdAt) {
+		if !ok || data["user_id"] != controllerTestUserID || data["nickname"] != "Alice" || data["username"] != "alice" || data["status"] != float64(domain.UserStatusNormal) || data["created_at"] != float64(createdAt) {
 			t.Fatalf("data = %#v", envelope.Data)
 		}
 		if _, ok := data["id"]; ok {
@@ -121,7 +122,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("validation failed", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{}, `{"name":"Alice","password":"secret"}`)
+		status, envelope := executeCreate(t, &stubUserService{}, `{"nickname":"Alice","password":"secret"}`)
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
@@ -131,8 +132,19 @@ func TestUserControllerCreate(t *testing.T) {
 		assertFieldError(t, envelope, "username", "用户名", "required", "用户名为必填字段")
 	})
 
+	t.Run("invalid status validation failed", func(t *testing.T) {
+		status, envelope := executeCreate(t, &stubUserService{}, `{"nickname":"Alice","username":"alice","password":"secret","status":999}`)
+		if status != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
+		}
+		if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
+			t.Fatalf("envelope = %#v", envelope)
+		}
+		assertFieldError(t, envelope, "status", "用户状态", "enum", "用户状态不合法")
+	})
+
 	t.Run("missing password validation failed", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{}, `{"name":"Alice","username":"alice"}`)
+		status, envelope := executeCreate(t, &stubUserService{}, `{"nickname":"Alice","username":"alice"}`)
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
@@ -143,7 +155,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("user already exists", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{createErr: response.ConflictError(apperror.MsgUserAlreadyExists)}, `{"name":"Alice","username":"alice","password":"secret"}`)
+		status, envelope := executeCreate(t, &stubUserService{createErr: response.ConflictError(apperror.MsgUserAlreadyExists)}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
 		if status != http.StatusConflict {
 			t.Fatalf("status = %d, want %d", status, http.StatusConflict)
 		}
@@ -153,7 +165,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("service error", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{createErr: errors.New("database down")}, `{"name":"Alice","username":"alice","password":"secret"}`)
+		status, envelope := executeCreate(t, &stubUserService{createErr: errors.New("database down")}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
 		if status != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 		}
@@ -167,7 +179,7 @@ func TestUserControllerList(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	listResponse := response.NewPaginatedData([]dto.UserResponse{{UserID: controllerTestUserID, Name: "Alice", Username: "alice", Active: true, CreatedAt: createdAt, UpdatedAt: createdAt}}, response.NewPagination(1, 20, 128))
+	listResponse := response.NewPaginatedData([]dto.UserResponse{{UserID: controllerTestUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, response.NewPagination(1, 20, 128))
 
 	t.Run("default pagination", func(t *testing.T) {
 		service := &stubUserService{listResponse: response.NewPaginatedData([]dto.UserResponse{}, response.NewPagination(1, 10, 0))}
@@ -186,28 +198,29 @@ func TestUserControllerList(t *testing.T) {
 	t.Run("explicit query", func(t *testing.T) {
 		service := &stubUserService{listResponse: listResponse}
 
-		status, envelope := executeList(t, service, "/api/v1/users?page=2&page_size=20&name=Ali&username=alice&active=true")
+		status, envelope := executeList(t, service, "/api/v1/users?page=2&page_size=20&nickname=Ali&username=alice&status=100")
 
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if service.gotList.Page != 2 || service.gotList.PageSize != 20 || service.gotList.Name != "Ali" || service.gotList.Username != "alice" {
+		if service.gotList.Page != 2 || service.gotList.PageSize != 20 || service.gotList.Nickname != "Ali" || service.gotList.Username != "alice" {
 			t.Fatalf("gotList = %#v", service.gotList)
 		}
-		if service.gotList.Active == nil || !*service.gotList.Active {
-			t.Fatalf("active = %#v", service.gotList.Active)
+		if service.gotList.Status == nil || *service.gotList.Status != domain.UserStatusNormal {
+			t.Fatalf("status = %#v", service.gotList.Status)
 		}
 		assertPaginatedEnvelope(t, envelope, 1, 20, 128, 7, 1)
 	})
 
-	t.Run("invalid active", func(t *testing.T) {
-		status, envelope := executeList(t, &stubUserService{}, "/api/v1/users?active=bad")
+	t.Run("invalid status", func(t *testing.T) {
+		status, envelope := executeList(t, &stubUserService{}, "/api/v1/users?status=999")
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
-		if envelope.Success || envelope.Code != response.CodeBadRequest || envelope.Message != "是否启用字段类型不正确，应为布尔类型" {
+		if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
 			t.Fatalf("envelope = %#v", envelope)
 		}
+		assertFieldError(t, envelope, "status", "用户状态", "enum", "用户状态不合法")
 	})
 }
 
@@ -326,7 +339,7 @@ func assertPaginatedEnvelope(t *testing.T, envelope response.Envelope, page, pag
 	}
 	if itemCount > 0 {
 		item, ok := items[0].(map[string]any)
-		if !ok || item["user_id"] != controllerTestUserID || item["username"] != "alice" {
+		if !ok || item["user_id"] != controllerTestUserID || item["nickname"] != "Alice" || item["username"] != "alice" || item["status"] != float64(domain.UserStatusNormal) {
 			t.Fatalf("item = %#v", items[0])
 		}
 		if _, ok := item["id"]; ok {

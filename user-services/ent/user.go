@@ -21,15 +21,17 @@ type User struct {
 	// 外部用户ID
 	UserID uuid.UUID `json:"user_id,omitempty"`
 	// 用户昵称
-	Name string `json:"name,omitempty"`
+	Nickname string `json:"nickname,omitempty"`
 	// 用户名
 	Username string `json:"username,omitempty"`
 	// 密码哈希
-	Password string `json:"password,omitempty"`
+	PasswordHash string `json:"password_hash,omitempty"`
 	// 认证令牌版本
 	TokenVersion int64 `json:"token_version,omitempty"`
-	// 是否启用
-	Active bool `json:"active,omitempty"`
+	// 用户状态：100 正常，200 冻结/停用，300 必须修改密码
+	Status int64 `json:"status,omitempty"`
+	// 软删除时间戳毫秒，NULL 表示未删除
+	DeletedAt *int64 `json:"deleted_at,omitempty"`
 	// 创建时间戳毫秒
 	CreatedAt int64 `json:"created_at,omitempty"`
 	// 更新时间戳毫秒
@@ -42,11 +44,9 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldActive:
-			values[i] = new(sql.NullBool)
-		case user.FieldID, user.FieldTokenVersion, user.FieldCreatedAt, user.FieldUpdatedAt:
+		case user.FieldID, user.FieldTokenVersion, user.FieldStatus, user.FieldDeletedAt, user.FieldCreatedAt, user.FieldUpdatedAt:
 			values[i] = new(sql.NullInt64)
-		case user.FieldName, user.FieldUsername, user.FieldPassword:
+		case user.FieldNickname, user.FieldUsername, user.FieldPasswordHash:
 			values[i] = new(sql.NullString)
 		case user.FieldUserID:
 			values[i] = new(uuid.UUID)
@@ -77,11 +77,11 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value != nil {
 				_m.UserID = *value
 			}
-		case user.FieldName:
+		case user.FieldNickname:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field name", values[i])
+				return fmt.Errorf("unexpected type %T for field nickname", values[i])
 			} else if value.Valid {
-				_m.Name = value.String
+				_m.Nickname = value.String
 			}
 		case user.FieldUsername:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -89,11 +89,11 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Username = value.String
 			}
-		case user.FieldPassword:
+		case user.FieldPasswordHash:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field password", values[i])
+				return fmt.Errorf("unexpected type %T for field password_hash", values[i])
 			} else if value.Valid {
-				_m.Password = value.String
+				_m.PasswordHash = value.String
 			}
 		case user.FieldTokenVersion:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -101,11 +101,18 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.TokenVersion = value.Int64
 			}
-		case user.FieldActive:
-			if value, ok := values[i].(*sql.NullBool); !ok {
-				return fmt.Errorf("unexpected type %T for field active", values[i])
+		case user.FieldStatus:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
-				_m.Active = value.Bool
+				_m.Status = value.Int64
+			}
+		case user.FieldDeletedAt:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field deleted_at", values[i])
+			} else if value.Valid {
+				_m.DeletedAt = new(int64)
+				*_m.DeletedAt = value.Int64
 			}
 		case user.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -158,20 +165,25 @@ func (_m *User) String() string {
 	builder.WriteString("user_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.UserID))
 	builder.WriteString(", ")
-	builder.WriteString("name=")
-	builder.WriteString(_m.Name)
+	builder.WriteString("nickname=")
+	builder.WriteString(_m.Nickname)
 	builder.WriteString(", ")
 	builder.WriteString("username=")
 	builder.WriteString(_m.Username)
 	builder.WriteString(", ")
-	builder.WriteString("password=")
-	builder.WriteString(_m.Password)
+	builder.WriteString("password_hash=")
+	builder.WriteString(_m.PasswordHash)
 	builder.WriteString(", ")
 	builder.WriteString("token_version=")
 	builder.WriteString(fmt.Sprintf("%v", _m.TokenVersion))
 	builder.WriteString(", ")
-	builder.WriteString("active=")
-	builder.WriteString(fmt.Sprintf("%v", _m.Active))
+	builder.WriteString("status=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Status))
+	builder.WriteString(", ")
+	if v := _m.DeletedAt; v != nil {
+		builder.WriteString("deleted_at=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(fmt.Sprintf("%v", _m.CreatedAt))

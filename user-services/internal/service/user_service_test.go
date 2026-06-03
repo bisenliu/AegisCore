@@ -9,6 +9,7 @@ import (
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/ent"
 	"github.com/aegiscore/user-services/internal/apperror"
+	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
@@ -19,11 +20,11 @@ var testUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
 func TestUserServiceCreateUser(t *testing.T) {
 	createdAt := int64(1780048800000)
 
-	t.Run("success normalizes fields and defaults active", func(t *testing.T) {
-		repo := &stubUserRepository{created: &ent.User{ID: 123, UserID: testUserID, Name: "Alice", Username: "alice", Active: true, TokenVersion: 1, CreatedAt: createdAt, UpdatedAt: createdAt}}
+	t.Run("success normalizes fields and defaults status", func(t *testing.T) {
+		repo := &stubUserRepository{created: &ent.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: int64(domain.UserStatusNormal), TokenVersion: 1, CreatedAt: createdAt, UpdatedAt: createdAt}}
 		svc := NewUserService(repo)
 
-		user, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: " Alice ", Username: " alice ", Password: " secret "})
+		user, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: " Alice ", Username: " alice ", Password: " secret "})
 
 		if err != nil {
 			t.Fatalf("CreateUser: %v", err)
@@ -31,10 +32,10 @@ func TestUserServiceCreateUser(t *testing.T) {
 		if repo.checkedUsername != "alice" {
 			t.Fatalf("checkedUsername = %q", repo.checkedUsername)
 		}
-		if repo.createdInput.Name != "Alice" || repo.createdInput.Username != "alice" || repo.createdInput.UserID == uuid.Nil || !repo.createdInput.Active {
+		if repo.createdInput.Nickname != "Alice" || repo.createdInput.Username != "alice" || repo.createdInput.UserID == uuid.Nil || repo.createdInput.Status != domain.UserStatusNormal {
 			t.Fatalf("createdInput = %#v", repo.createdInput)
 		}
-		matched, err := commonpassword.Verify("secret", repo.createdInput.Password)
+		matched, err := commonpassword.Verify("secret", repo.createdInput.PasswordHash)
 		if err != nil || !matched {
 			t.Fatalf("created password was not hashed correctly: matched=%v err=%v", matched, err)
 		}
@@ -46,7 +47,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("reject blank trimmed name", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "   ", Username: "alice", Password: "secret"})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "   ", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeValidationFailed || appErr.Message != apperror.MsgInvalidUserName {
@@ -57,7 +58,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("reject blank trimmed password", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Username: "alice", Password: "   "})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "   "})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeValidationFailed || appErr.Message != apperror.MsgInvalidPassword {
@@ -68,7 +69,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("reject existing username", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{exists: true})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Username: "alice", Password: "secret"})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeConflict || appErr.Message != apperror.MsgUserAlreadyExists {
@@ -79,7 +80,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("wrap existence check error", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{existsErr: errors.New("database down")})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Username: "alice", Password: "secret"})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeInternalError || appErr.Message != "internal server error" {
@@ -90,7 +91,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("preserve create conflict", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{createErr: response.ConflictError(apperror.MsgUserAlreadyExists)})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Name: "Alice", Username: "alice", Password: "secret"})
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeConflict || appErr.Message != apperror.MsgUserAlreadyExists {
@@ -123,20 +124,20 @@ func TestUserServiceListUsers(t *testing.T) {
 	})
 
 	t.Run("explicit pagination and filters", func(t *testing.T) {
-		active := true
-		repo := &stubUserRepository{listUsers: []*ent.User{{ID: 1, UserID: testUserID, Name: "Alice", Username: "alice", Active: true, CreatedAt: createdAt, UpdatedAt: createdAt}}, listTotal: 128}
+		status := domain.UserStatusNormal
+		repo := &stubUserRepository{listUsers: []*ent.User{{ID: 1, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: int64(domain.UserStatusNormal), CreatedAt: createdAt, UpdatedAt: createdAt}}, listTotal: 128}
 		svc := NewUserService(repo)
 
-		users, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{Page: 2, PageSize: 20, Name: " Ali ", Username: " alice ", Active: &active})
+		users, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{Page: 2, PageSize: 20, Nickname: " Ali ", Username: " alice ", Status: &status})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
 		}
-		if repo.listInput.Offset != 20 || repo.listInput.Limit != 20 || repo.listInput.Name != "Ali" || repo.listInput.Username != "alice" {
+		if repo.listInput.Offset != 20 || repo.listInput.Limit != 20 || repo.listInput.Nickname != "Ali" || repo.listInput.Username != "alice" {
 			t.Fatalf("listInput = %#v", repo.listInput)
 		}
-		if repo.listInput.Active == nil || !*repo.listInput.Active {
-			t.Fatalf("active = %#v", repo.listInput.Active)
+		if repo.listInput.Status == nil || *repo.listInput.Status != domain.UserStatusNormal {
+			t.Fatalf("status = %#v", repo.listInput.Status)
 		}
 		if len(users.Items) != 1 || users.Items[0].UserID != testUserID.String() || users.Items[0].Username != "alice" || users.Items[0].CreatedAt != createdAt {
 			t.Fatalf("items = %#v", users.Items)
@@ -214,6 +215,10 @@ func (r *stubUserRepository) GetTokenVersion(context.Context, uuid.UUID) (int64,
 }
 
 func (r *stubUserRepository) IncrementTokenVersion(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}
+
+func (r *stubUserRepository) UpdatePasswordHashAndStatus(context.Context, uuid.UUID, string, domain.UserStatus) (int64, error) {
 	return 0, nil
 }
 

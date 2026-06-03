@@ -1,6 +1,9 @@
 package controller
 
 import (
+	"strings"
+
+	"github.com/aegiscore/common/contextutil"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/dto"
@@ -11,6 +14,39 @@ import (
 type AuthController struct {
 	authService service.AuthService
 	validator   *validation.Validator
+}
+
+// ChangePassword godoc
+// @Summary 修改密码
+// @Description 使用登录后返回的受限改密凭据修改密码，并将用户状态恢复为正常。
+// @Tags 认证
+// @Accept json
+// @Produce json
+// @Param Authorization header string true "Bearer password-change-token"
+// @Param request body dto.ChangePasswordRequest true "修改密码请求"
+// @Success 200 {object} response.Envelope{data=dto.ChangePasswordResponse} "修改成功"
+// @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
+// @Failure 401 {object} response.Envelope "改密凭据无效或已失效"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Router /auth/change-password [post]
+func (ctl *AuthController) ChangePassword(c *gin.Context) {
+	req := dto.ChangePasswordRequest{Token: bearerToken(c.GetHeader(contextutil.AuthorizationHeader))}
+	if !ctl.validator.BindOrAbort(c, &req, validation.JSONBinder) {
+		return
+	}
+	result, err := ctl.authService.ChangePassword(c.Request.Context(), req)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, result)
+}
+
+func bearerToken(header string) string {
+	if !strings.HasPrefix(header, contextutil.TokenPrefix) {
+		return header
+	}
+	return strings.TrimSpace(strings.TrimPrefix(header, contextutil.TokenPrefix))
 }
 
 func NewAuthController(authService service.AuthService, validator *validation.Validator) *AuthController {
