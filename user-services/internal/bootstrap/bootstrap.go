@@ -15,7 +15,6 @@ import (
 	commontz "github.com/aegiscore/common/timezone"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/controller"
-	"github.com/aegiscore/user-services/internal/entclient"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/aegiscore/user-services/internal/router"
 	"github.com/aegiscore/user-services/internal/service"
@@ -42,7 +41,7 @@ var UserServiceModule = fx.Module("aegiscore-user-services",
 		NewPostgresPools,
 		NewRedisClients,
 		NewJWTService,
-		entclient.NewNamedClients,
+		NewNamedClients,
 		repository.NewUserRepository,
 		service.NewSessionStore,
 		service.NewAuthService,

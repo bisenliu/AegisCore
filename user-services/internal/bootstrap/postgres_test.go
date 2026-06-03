@@ -85,6 +85,54 @@ func TestNewPostgresPoolsDoesNotProvidePayDatabase(t *testing.T) {
 	}
 }
 
+func TestNewNamedClientsProvidesUserServiceEntClients(t *testing.T) {
+	drv := registerBootstrapTestSQLDriver(t)
+	userDB, err := sql.Open(drv.name, "postgres://aegiscore:secret@127.0.0.1/aegiscore_user")
+	if err != nil {
+		t.Fatalf("open user db: %v", err)
+	}
+	commonDB, err := sql.Open(drv.name, "postgres://aegiscore:secret@127.0.0.1/aegiscore_common")
+	if err != nil {
+		t.Fatalf("open common db: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := userDB.PingContext(ctx); err != nil {
+		t.Fatalf("ping user db: %v", err)
+	}
+	if err := commonDB.PingContext(ctx); err != nil {
+		t.Fatalf("ping common db: %v", err)
+	}
+
+	lc := fxtest.NewLifecycle(t)
+	got := NewNamedClients(ClientParams{
+		Lifecycle: lc,
+		Log:       zap.NewNop(),
+		UserDB:    userDB,
+		CommonDB:  commonDB,
+	})
+
+	if got.UserClient == nil {
+		t.Fatal("UserClient = nil")
+	}
+	if got.CommonClient == nil {
+		t.Fatal("CommonClient = nil")
+	}
+	if got := drv.closes.Load(); got != 0 {
+		t.Fatalf("closes before lifecycle stop = %d, want 0", got)
+	}
+
+	if err := lc.Start(ctx); err != nil {
+		t.Fatalf("lifecycle start: %v", err)
+	}
+	if err := lc.Stop(ctx); err != nil {
+		t.Fatalf("lifecycle stop: %v", err)
+	}
+	if got := drv.closes.Load(); got != 2 {
+		t.Fatalf("closes after lifecycle stop = %d, want 2", got)
+	}
+}
+
 func TestNewRedisClientsProvidesCacheRedis(t *testing.T) {
 	redisServer := newBootstrapTestRedisServer(t)
 	cfg := bootstrapTestConfig("")

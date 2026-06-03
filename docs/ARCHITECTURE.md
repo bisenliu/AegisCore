@@ -53,7 +53,7 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 - 配置加载由 `common/config/loader.go` 负责，支持 YAML 文件和 `AEGISCORE_` 环境变量覆盖；加载阶段只做读取、覆盖和反序列化，不做 required/range 字段校验。
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前声明并连接 `postgres.user_db` 与 `postgres.common_db`，不因存在 `postgres.pay_db` 而初始化支付连接池。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`，不因存在 `redis.queue_redis` 而初始化队列 Redis。
-- Ent clients 由 `user-services/internal/entclient/provider.go` 基于具名 `*sql.DB` 构建。
+- Ent clients 由 `user-services/internal/bootstrap/ent.go` 基于具名 `*sql.DB` 构建。
 - 日志基于 Zap，由 `common/logger` 与 `common/infrastructure/logger.go` 提供；HTTP trace header 为 `X-Trace-ID`，Gin context key 为 `trace_id`，日志字段统一为 `trace-id`。
 
 ## 7. Database Migrations
