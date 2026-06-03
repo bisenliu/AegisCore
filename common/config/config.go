@@ -39,7 +39,6 @@ type HTTPConfig struct {
 
 type AuthConfig struct {
 	JWT                  JWTConfig     `mapstructure:"jwt"`
-	Whitelist            []string      `mapstructure:"whitelist"`
 	TokenVersionCacheTTL time.Duration `mapstructure:"token_version_cache_ttl"`
 	RefreshTokenRotation bool          `mapstructure:"refresh_token_rotation"`
 }

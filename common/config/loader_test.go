@@ -40,9 +40,6 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if !cfg.Auth.RefreshTokenRotation {
 		t.Fatal("Auth.RefreshTokenRotation = false, want true")
 	}
-	if got := strings.Join(cfg.Auth.Whitelist, ","); got != "/healthz,/swagger,/docs,/api-docs" {
-		t.Fatalf("Auth.Whitelist = %q, want /healthz,/swagger,/docs,/api-docs", got)
-	}
 	if cfg.Log.Directory != "./logs" {
 		t.Fatalf("Log.Directory = %q, want ./logs", cfg.Log.Directory)
 	}
@@ -139,7 +136,7 @@ postgres:
 	if cfg.System.Timezone != "" {
 		t.Fatalf("System.Timezone = %q, want empty", cfg.System.Timezone)
 	}
-	if cfg.Auth.JWT.Secret != "" || len(cfg.Auth.Whitelist) != 0 {
+	if cfg.Auth.JWT.Secret != "" {
 		t.Fatalf("Auth = %#v, want zero value", cfg.Auth)
 	}
 	if cfg.Redis["cache_redis"].Addr != "" {
@@ -438,11 +435,6 @@ auth:
     refresh_token_ttl: 168h
   token_version_cache_ttl: 5m
   refresh_token_rotation: true
-  whitelist:
-    - /healthz
-    - /swagger
-    - /docs
-    - /api-docs
 
 log:
   level: info
@@ -524,9 +516,7 @@ func configYAMLWithSection(section string) string {
     access_token_ttl: 15m
     refresh_token_ttl: 168h
   token_version_cache_ttl: 5m
-  refresh_token_rotation: true
-  whitelist:
-    - /healthz`,
+  refresh_token_rotation: true`,
 		"log": `log:
   level: info
   format: json

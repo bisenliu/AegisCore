@@ -3,14 +3,22 @@ package router
 import (
 	"net/http"
 
+	"github.com/aegiscore/common/config"
+	"github.com/aegiscore/common/credentials"
+	commonmw "github.com/aegiscore/common/middleware"
 	"github.com/aegiscore/user-services/internal/controller"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type RouteParams struct {
-	Environment    string
-	AuthController *controller.AuthController
-	UserController *controller.UserController
+	Environment           string
+	Log                   *zap.Logger
+	JWT                   *credentials.JWTService
+	AuthConfig            config.AuthConfig
+	TokenVersionValidator commonmw.TokenVersionValidator
+	AuthController        *controller.AuthController
+	UserController        *controller.UserController
 }
 
 type HealthResponse struct {
@@ -24,14 +32,21 @@ func RegisterRoutes(engine *gin.Engine, params RouteParams) {
 
 	v1 := engine.Group("/api/v1")
 	{
-		auth := v1.Group("/auth")
-		auth.POST("/login", params.AuthController.Login)
-		auth.POST("/refresh", params.AuthController.Refresh)
-		auth.POST("/change-password", params.AuthController.ChangePassword)
-		auth.POST("/logout", params.AuthController.Logout)
-		auth.POST("/logout-all", params.AuthController.LogoutAll)
+		publicAuth := v1.Group("/auth")
+		publicAuth.POST("/login", params.AuthController.Login)
+		publicAuth.POST("/refresh", params.AuthController.Refresh)
+		publicAuth.POST("/change-password", params.AuthController.ChangePassword)
 
-		users := v1.Group("/users")
+		authenticated := v1.Group("")
+		authenticated.Use(commonmw.AuthWithTokenVersionValidator(params.Log, params.JWT, params.AuthConfig, params.TokenVersionValidator))
+
+		protectedAuth := authenticated.Group("/auth")
+		protectedAuth.POST("/logout", params.AuthController.Logout)
+		protectedAuth.POST("/logout-all", params.AuthController.LogoutAll)
+
+		// Mount future Casbin authorization middleware on this group after authentication.
+		authorized := authenticated.Group("")
+		users := authorized.Group("/users")
 		users.GET("", params.UserController.List)
 		users.POST("", params.UserController.Create)
 		users.GET("/:user_id", params.UserController.GetByID)

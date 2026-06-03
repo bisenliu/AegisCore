@@ -32,12 +32,6 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *credentials.JWTS
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		reqLog := logger.WithContext(log, ctx)
-		if isWhitelistedPath(c.Request.URL.Path, cfg.Whitelist) {
-			reqLog.Debug("skipping authentication for whitelisted path", zap.String("path", c.Request.URL.Path))
-			c.Next()
-			return
-		}
-
 		authHeader := c.GetHeader(credentials.AuthorizationHeader)
 		if authHeader == "" {
 			reqLog.Error("missing authorization header")
@@ -88,13 +82,4 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *credentials.JWTS
 		c.Set(credentials.SessionIDKey, claims.SessionID)
 		c.Next()
 	}
-}
-
-func isWhitelistedPath(path string, whitelist []string) bool {
-	for _, prefix := range whitelist {
-		if prefix != "" && strings.HasPrefix(path, prefix) {
-			return true
-		}
-	}
-	return false
 }

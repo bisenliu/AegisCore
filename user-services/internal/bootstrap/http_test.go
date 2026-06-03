@@ -47,9 +47,6 @@ func TestDefaultConfigHTTPTimeouts(t *testing.T) {
 	if cfg.Auth.JWT.Secret == "" || cfg.Auth.JWT.Issuer != "aegiscore-user-services" || cfg.Auth.JWT.Audience != "aegiscore-users" {
 		t.Fatalf("Auth.JWT = %#v, want default auth config", cfg.Auth.JWT)
 	}
-	if got := strings.Join(cfg.Auth.Whitelist, ","); got != "/healthz,/swagger,/docs,/api-docs,/api/v1/auth/login,/api/v1/auth/refresh,/api/v1/auth/change-password" {
-		t.Fatalf("Auth.Whitelist = %q, want default auth whitelist", got)
-	}
 }
 
 func TestHTTPServerUsesConfiguredTimeouts(t *testing.T) {
@@ -86,11 +83,13 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	cfg := &config.Config{
 		App: config.AppConfig{Environment: "local"},
 		Auth: config.AuthConfig{
-			JWT:       config.JWTConfig{Secret: "secret"},
-			Whitelist: []string{"/healthz", "/swagger", "/docs", "/api-docs", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/change-password"},
+			JWT: config.JWTConfig{Secret: "secret"},
 		},
 	}
-	engine, err := NewGinEngine(GinParams{Config: cfg, Log: zap.NewNop(), JWT: credentials.NewJWTService(cfg.Auth), SessionStore: &routeAuthSessionStore{version: 1}})
+	log := zap.NewNop()
+	jwtService := credentials.NewJWTService(cfg.Auth)
+	sessionStore := &routeAuthSessionStore{version: 1}
+	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log})
 	if err != nil {
 		t.Fatalf("NewGinEngine: %v", err)
 	}
@@ -100,19 +99,39 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	}
 	RegisterRoutes(RegisterRouteParams{
 		Config:         cfg,
+		Log:            log,
 		Engine:         engine,
+		JWT:            jwtService,
+		SessionStore:   sessionStore,
 		AuthController: controller.NewAuthController(&routeAuthAuthService{}, validator),
 		UserController: controller.NewUserController(&routeAuthUserService{}, validator),
 	})
 
-	publicPaths := []string{"/healthz", "/swagger/index.html", "/docs", "/api-docs", "/api/v1/auth/change-password"}
-	for _, path := range publicPaths {
-		t.Run("public "+path, func(t *testing.T) {
+	publicRequests := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodGet, path: "/healthz"},
+		{method: http.MethodGet, path: "/swagger/index.html"},
+		{method: http.MethodGet, path: "/docs"},
+		{method: http.MethodGet, path: "/api-docs"},
+		{method: http.MethodPost, path: "/api/v1/auth/login", body: `{"username":"alice","password":"secret"}`},
+		{method: http.MethodPost, path: "/api/v1/auth/refresh", body: `{"refresh_token":"refresh"}`},
+		{method: http.MethodPost, path: "/api/v1/auth/change-password", body: `{"new_password":"NewPassword123!"}`},
+	}
+	for _, tt := range publicRequests {
+		t.Run("public "+tt.path, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
-			request := httptest.NewRequest(http.MethodGet, path, nil)
+			request := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("X-Trace-ID", "trace-public-test")
 			engine.ServeHTTP(recorder, request)
 			if recorder.Code == http.StatusUnauthorized {
-				t.Fatalf("%s status = %d, want not unauthorized", path, recorder.Code)
+				t.Fatalf("%s status = %d, want not unauthorized", tt.path, recorder.Code)
+			}
+			if recorder.Header().Get("X-Trace-ID") != "trace-public-test" {
+				t.Fatalf("X-Trace-ID = %q, want trace-public-test", recorder.Header().Get("X-Trace-ID"))
 			}
 		})
 	}
@@ -135,6 +154,20 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("list requires auth", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
+		engine.ServeHTTP(recorder, request)
+		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
+	})
+
+	t.Run("logout requires auth", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+		engine.ServeHTTP(recorder, request)
+		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
+	})
+
+	t.Run("logout all requires auth", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout-all", nil)
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
 	})

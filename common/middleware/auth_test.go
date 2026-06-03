@@ -21,7 +21,7 @@ const authTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
 
 func TestAuthMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}, Whitelist: []string{"/healthz"}}
+	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}}
 	validToken := signAuthTestToken(t, "secret", authTestUserID, 1, "s-123", time.Now().Add(time.Hour))
 	expiredToken := signAuthTestToken(t, "secret", authTestUserID, 1, "s-123", time.Now().Add(-time.Hour))
 	missingVersionToken := signAuthTestToken(t, "secret", authTestUserID, 0, "s-123", time.Now().Add(time.Hour))
@@ -37,7 +37,6 @@ func TestAuthMiddleware(t *testing.T) {
 		wantHandled   bool
 		validator     TokenVersionValidator
 	}{
-		{name: "whitelist", path: "/healthz", wantStatus: http.StatusOK, wantHandled: true},
 		{name: "missing header", path: "/api/v1/users/123", wantStatus: http.StatusUnauthorized, wantCode: response.CodeUnauthenticated},
 		{name: "invalid format", path: "/api/v1/users/123", authorization: "Token abc", wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
 		{name: "empty token", path: "/api/v1/users/123", authorization: credentials.TokenPrefix, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
