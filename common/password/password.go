@@ -1,4 +1,4 @@
-package credentials
+package password
 
 import (
 	"crypto/rand"
@@ -44,7 +44,7 @@ var defaultPasswordParams = passwordParams{
 	keyLength:   passwordKeyLength,
 }
 
-func HashPassword(plain string) (string, error) {
+func Hash(plain string) (string, error) {
 	if plain == "" {
 		return "", ErrEmptyPassword
 	}
@@ -60,7 +60,7 @@ func HashPassword(plain string) (string, error) {
 	return fmt.Sprintf("$%s$v=%d$m=%d,t=%d,p=%d$%s$%s", passwordAlgorithm, passwordVersion, defaultPasswordParams.memory, defaultPasswordParams.iterations, defaultPasswordParams.parallelism, b64Salt, b64Key), nil
 }
 
-func VerifyPassword(plain, encodedHash string) (bool, error) {
+func Verify(plain, encodedHash string) (bool, error) {
 	if plain == "" {
 		return false, ErrEmptyPassword
 	}

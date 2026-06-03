@@ -3,7 +3,7 @@ package controller
 import (
 	"strings"
 
-	"github.com/aegiscore/common/credentials"
+	"github.com/aegiscore/common/auth"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/dto"
@@ -30,7 +30,7 @@ type AuthController struct {
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Router /auth/change-password [post]
 func (ctl *AuthController) ChangePassword(c *gin.Context) {
-	req := dto.ChangePasswordRequest{Token: bearerToken(c.GetHeader(credentials.AuthorizationHeader))}
+	req := dto.ChangePasswordRequest{Token: bearerToken(c.GetHeader(auth.AuthorizationHeader))}
 	if !ctl.validator.BindOrAbort(c, &req, validation.JSONBinder) {
 		return
 	}
@@ -43,10 +43,10 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 }
 
 func bearerToken(header string) string {
-	if !strings.HasPrefix(header, credentials.TokenPrefix) {
+	if !strings.HasPrefix(header, auth.TokenPrefix) {
 		return header
 	}
-	return strings.TrimSpace(strings.TrimPrefix(header, credentials.TokenPrefix))
+	return strings.TrimSpace(strings.TrimPrefix(header, auth.TokenPrefix))
 }
 
 func NewAuthController(authService service.AuthService, validator *validation.Validator) *AuthController {

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/aegiscore/common/auth"
 	"github.com/aegiscore/common/config"
-	"github.com/aegiscore/common/credentials"
 	"github.com/aegiscore/common/logger"
 	"github.com/aegiscore/common/response"
 	"github.com/gin-gonic/gin"
@@ -24,29 +24,29 @@ func (f TokenVersionValidatorFunc) ValidateTokenVersion(ctx context.Context, use
 	return f(ctx, userID, tokenVersion)
 }
 
-func Auth(log *zap.Logger, jwtService *credentials.JWTService, cfg config.AuthConfig) gin.HandlerFunc {
+func Auth(log *zap.Logger, jwtService *auth.JWTService, cfg config.AuthConfig) gin.HandlerFunc {
 	return AuthWithTokenVersionValidator(log, jwtService, cfg, nil)
 }
 
-func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *credentials.JWTService, cfg config.AuthConfig, validator TokenVersionValidator) gin.HandlerFunc {
+func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService, cfg config.AuthConfig, validator TokenVersionValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		reqLog := logger.WithContext(log, ctx)
-		authHeader := c.GetHeader(credentials.AuthorizationHeader)
+		authHeader := c.GetHeader(auth.AuthorizationHeader)
 		if authHeader == "" {
 			reqLog.Error("missing authorization header")
 			response.Unauthenticated(c, response.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
-		if !strings.HasPrefix(authHeader, credentials.TokenPrefix) {
+		if !strings.HasPrefix(authHeader, auth.TokenPrefix) {
 			reqLog.Error("invalid authorization header format")
 			response.TokenInvalid(c, response.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
 
-		tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, credentials.TokenPrefix))
+		tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, auth.TokenPrefix))
 		if tokenString == "" {
 			reqLog.Error("empty bearer token")
 			response.TokenInvalid(c, response.MessageAuthInvalid)
@@ -75,11 +75,11 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *credentials.JWTS
 			}
 		}
 
-		ctx = credentials.WithUserID(ctx, claims.UserID)
-		ctx = credentials.WithSessionID(ctx, claims.SessionID)
+		ctx = auth.WithUserID(ctx, claims.UserID)
+		ctx = auth.WithSessionID(ctx, claims.SessionID)
 		c.Request = c.Request.WithContext(ctx)
-		c.Set(credentials.UserIDKey, claims.UserID)
-		c.Set(credentials.SessionIDKey, claims.SessionID)
+		c.Set(auth.UserIDKey, claims.UserID)
+		c.Set(auth.SessionIDKey, claims.SessionID)
 		c.Next()
 	}
 }

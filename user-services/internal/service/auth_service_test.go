@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aegiscore/common/auth"
 	"github.com/aegiscore/common/config"
-	"github.com/aegiscore/common/credentials"
+	"github.com/aegiscore/common/password"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/ent"
 	"github.com/aegiscore/user-services/internal/domain"
@@ -19,7 +20,7 @@ import (
 var authTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
 
 func TestAuthServiceLogin(t *testing.T) {
-	passwordHash, err := credentials.HashPassword("secret")
+	passwordHash, err := password.Hash("secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -32,7 +33,7 @@ func TestAuthServiceLogin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
-	if tokens.AccessToken == "" || tokens.RefreshToken == "" || tokens.TokenType != credentials.TokenTypeBearer || tokens.ExpiresIn != 900 {
+	if tokens.AccessToken == "" || tokens.RefreshToken == "" || tokens.TokenType != auth.TokenTypeBearer || tokens.ExpiresIn != 900 {
 		t.Fatalf("tokens = %#v", tokens)
 	}
 	if repo.gotUsername != "alice" {
@@ -44,7 +45,7 @@ func TestAuthServiceLogin(t *testing.T) {
 }
 
 func TestAuthServiceLoginUsesDefaultTTLs(t *testing.T) {
-	passwordHash, err := credentials.HashPassword("secret")
+	passwordHash, err := password.Hash("secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -66,7 +67,7 @@ func TestAuthServiceLoginUsesDefaultTTLs(t *testing.T) {
 }
 
 func TestAuthServiceLoginUsesExplicitTTLs(t *testing.T) {
-	passwordHash, err := credentials.HashPassword("secret")
+	passwordHash, err := password.Hash("secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -90,7 +91,7 @@ func TestAuthServiceLoginUsesExplicitTTLs(t *testing.T) {
 }
 
 func TestAuthServiceLoginRejectsInvalidCredentials(t *testing.T) {
-	passwordHash, err := credentials.HashPassword("secret")
+	passwordHash, err := password.Hash("secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -105,7 +106,7 @@ func TestAuthServiceLoginRejectsInvalidCredentials(t *testing.T) {
 }
 
 func TestAuthServiceLoginRejectsInactiveStatuses(t *testing.T) {
-	passwordHash, err := credentials.HashPassword("secret")
+	passwordHash, err := password.Hash("secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -122,7 +123,7 @@ func TestAuthServiceLoginRejectsInactiveStatuses(t *testing.T) {
 }
 
 func TestAuthServiceLoginIssuesPasswordChangeToken(t *testing.T) {
-	passwordHash, err := credentials.HashPassword("secret")
+	passwordHash, err := password.Hash("secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -142,7 +143,7 @@ func TestAuthServiceLoginIssuesPasswordChangeToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParsePasswordChangeToken: %v", err)
 	}
-	if claims.UserID != authTestUserID.String() || claims.TokenVersion != 2 || claims.Subject != credentials.SubjectPasswordChange {
+	if claims.UserID != authTestUserID.String() || claims.TokenVersion != 2 || claims.Subject != auth.SubjectPasswordChange {
 		t.Fatalf("claims = %#v", claims)
 	}
 	if store.created.SessionID != "" {
@@ -151,14 +152,14 @@ func TestAuthServiceLoginIssuesPasswordChangeToken(t *testing.T) {
 }
 
 func TestAuthServiceChangePassword(t *testing.T) {
-	passwordHash, err := credentials.HashPassword("old-secret")
+	passwordHash, err := password.Hash("old-secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
 	repo := &authRepoStub{userByID: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(domain.UserStatusMustChangePassword), TokenVersion: 2}, newVersion: 3}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
-	token, err := svc.(*authService).jwt.SignPasswordChangeToken(credentials.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
+	token, err := svc.(*authService).jwt.SignPasswordChangeToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
 	}
@@ -171,7 +172,7 @@ func TestAuthServiceChangePassword(t *testing.T) {
 	if !result.Changed || repo.updatedUserID != authTestUserID || repo.updatedStatus != domain.UserStatusNormal || !store.invalidated {
 		t.Fatalf("result=%#v repo=%#v store=%#v", result, repo, store)
 	}
-	matched, err := credentials.VerifyPassword("new-secret", repo.updatedPasswordHash)
+	matched, err := password.Verify("new-secret", repo.updatedPasswordHash)
 	if err != nil || !matched {
 		t.Fatalf("updated password hash mismatch: matched=%v err=%v", matched, err)
 	}
@@ -181,7 +182,7 @@ func TestAuthServiceChangePasswordRejectsAccessToken(t *testing.T) {
 	repo := &authRepoStub{userByID: &ent.User{ID: 123, UserID: authTestUserID, Status: int64(domain.UserStatusMustChangePassword), TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
-	token, err := svc.(*authService).jwt.SignAccessToken(credentials.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
+	token, err := svc.(*authService).jwt.SignAccessToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
@@ -197,7 +198,7 @@ func TestAuthServiceChangePasswordRejectsAccessToken(t *testing.T) {
 func TestAuthServiceRefreshRotatesSession(t *testing.T) {
 	store := &sessionStoreStub{version: 2, session: Session{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, true)
-	refresh, err := svc.(*authService).jwt.SignRefreshToken(credentials.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
+	refresh, err := svc.(*authService).jwt.SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
@@ -221,12 +222,12 @@ func TestAuthServiceRefreshRotatesSession(t *testing.T) {
 func TestAuthServiceRefreshAcceptsBearerPrefix(t *testing.T) {
 	store := &sessionStoreStub{version: 2, session: Session{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, false)
-	refresh, err := svc.(*authService).jwt.SignRefreshToken(credentials.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
+	refresh, err := svc.(*authService).jwt.SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
 
-	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: " " + credentials.TokenPrefix + refresh + " "})
+	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: " " + auth.TokenPrefix + refresh + " "})
 
 	if err != nil {
 		t.Fatalf("Refresh: %v", err)
@@ -239,7 +240,7 @@ func TestAuthServiceRefreshAcceptsBearerPrefix(t *testing.T) {
 func TestAuthServiceRefreshRejectsEmptyBearerPrefix(t *testing.T) {
 	svc := newTestAuthService(&authRepoStub{}, &sessionStoreStub{version: 2}, false)
 
-	_, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: " " + credentials.TokenPrefix})
+	_, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: " " + auth.TokenPrefix})
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeTokenInvalid {
@@ -250,7 +251,7 @@ func TestAuthServiceRefreshRejectsEmptyBearerPrefix(t *testing.T) {
 func TestAuthServiceRefreshRejectsAccessTokenSubject(t *testing.T) {
 	store := &sessionStoreStub{version: 2, session: Session{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, false)
-	access, err := svc.(*authService).jwt.SignAccessToken(credentials.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
+	access, err := svc.(*authService).jwt.SignAccessToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
@@ -266,7 +267,7 @@ func TestAuthServiceRefreshRejectsAccessTokenSubject(t *testing.T) {
 func TestAuthServiceRefreshRejectsVersionChange(t *testing.T) {
 	store := &sessionStoreStub{version: 3, session: Session{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, true)
-	refresh, err := svc.(*authService).jwt.SignRefreshToken(credentials.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
+	refresh, err := svc.(*authService).jwt.SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
@@ -283,7 +284,7 @@ func TestAuthServiceLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 	repo := &authRepoStub{newVersion: 3}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
-	ctx := credentials.WithSessionID(credentials.WithUserID(context.Background(), authTestUserID.String()), "s-123")
+	ctx := auth.WithSessionID(auth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 
 	result, err := svc.LogoutAll(ctx)
 
@@ -297,12 +298,12 @@ func TestAuthServiceLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 
 func newTestAuthService(repo repository.UserRepository, store SessionStore, rotation bool) AuthService {
 	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute}}
-	return NewAuthService(AuthServiceParams{Repo: repo, Sessions: store, JWT: credentials.NewJWTService(cfg.Auth), Config: cfg})
+	return NewAuthService(AuthServiceParams{Repo: repo, Sessions: store, JWT: auth.NewJWTService(cfg.Auth), Config: cfg})
 }
 
 func newTestAuthServiceWithConfig(repo repository.UserRepository, store SessionStore, authCfg config.AuthConfig) AuthService {
 	cfg := &config.Config{Auth: authCfg}
-	return NewAuthService(AuthServiceParams{Repo: repo, Sessions: store, JWT: credentials.NewJWTService(cfg.Auth), Config: cfg})
+	return NewAuthService(AuthServiceParams{Repo: repo, Sessions: store, JWT: auth.NewJWTService(cfg.Auth), Config: cfg})
 }
 
 type authRepoStub struct {

@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aegiscore/common/credentials"
+	"github.com/aegiscore/common/auth"
 	"github.com/gin-gonic/gin"
 )
 
@@ -33,7 +33,7 @@ type CORSOptions struct {
 var defaultCORSOptions = CORSOptions{
 	AllowedOrigins: []string{"*"},
 	AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-	AllowedHeaders: []string{credentials.AuthorizationHeader, "Content-Type", HeaderTraceID},
+	AllowedHeaders: []string{auth.AuthorizationHeader, "Content-Type", HeaderTraceID},
 }
 
 func CORS() gin.HandlerFunc {

@@ -57,7 +57,7 @@
 - **Then** 普通业务 handler MUST NOT 执行
 
 ### Requirement: Refresh access tokens through revocable refresh sessions
-系统 SHALL 提供 Refresh Token 刷新能力。刷新时，系统 MUST 校验 Refresh Token 签名、过期时间和 Refresh Token subject，解析外部用户标识和会话标识，确认 Redis 会话仍存在，并校验该用户当前 `token_version` 与 Refresh Token 或会话记录中的版本一致；校验通过后签发新的 Access Token。系统 SHOULD 对 Refresh Token 执行轮转，使旧 Refresh Token 对应会话失效并创建新会话。Access Token 与 Refresh Token 的 subject/token type 枚举 MUST 由 `common/credentials` 统一提供，签发方法 MUST 内部强制设置对应 subject。
+系统 SHALL 提供 Refresh Token 刷新能力。刷新时，系统 MUST 校验 Refresh Token 签名、过期时间和 Refresh Token subject，解析外部用户标识和会话标识，确认 Redis 会话仍存在，并校验该用户当前 `token_version` 与 Refresh Token 或会话记录中的版本一致；校验通过后签发新的 Access Token。系统 SHOULD 对 Refresh Token 执行轮转，使旧 Refresh Token 对应会话失效并创建新会话。Access Token 与 Refresh Token 的 subject/token type 枚举 MUST 由 `common/auth` 统一提供，签发方法 MUST 内部强制设置对应 subject。
 
 #### Scenario: Refresh succeeds for active session
 - **Given** Refresh Token 签名有效且未过期
@@ -208,12 +208,12 @@
 - **THEN** 系统 MUST NOT 用默认 TTL 常量覆盖有效配置值
 
 ### Requirement: Verify login passwords through shared Argon2id helper
-系统 SHALL 在登录认证中通过 `common/credentials` 的统一密码校验方法验证密码。认证服务不得直接调用底层 Argon2 API，不得使用明文比较，不得在日志或错误响应中公开密码明文、完整 hash、salt 或 hash 参数。
+系统 SHALL 在登录认证中通过 `common/password` 的统一密码校验方法验证密码。认证服务不得直接调用底层 Argon2 API，不得使用明文比较，不得在日志或错误响应中公开密码明文、完整 hash、salt 或 hash 参数。
 
 #### Scenario: Login uses shared password verification
 - **Given** 用户存在且数据库中保存 Argon2id 密码 hash
 - **When** 调用方提交 `username` 和 `password` 登录
-- **Then** auth service MUST 调用 `common/credentials` 密码校验方法
+- **Then** auth service MUST 调用 `common/password` 密码校验方法
 - **Then** 密码校验通过时系统 MUST 继续创建认证会话
 
 #### Scenario: Login hides password verification details

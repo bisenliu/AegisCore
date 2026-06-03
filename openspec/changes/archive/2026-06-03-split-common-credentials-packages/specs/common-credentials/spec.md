@@ -1,8 +1,5 @@
-# common-credentials Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change consolidate-common-credentials. Update Purpose after archive.
-## Requirements
 ### Requirement: Provide password credential primitives
 系统 SHALL 在 `common/password` 包提供可复用的密码凭证原语，用于生成和校验 Argon2id 密码 hash。密码 hash 输出格式、默认参数、空密码错误和无效 hash 错误语义 MUST 与现有密码凭证行为保持兼容。
 

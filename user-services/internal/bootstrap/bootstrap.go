@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/aegiscore/common/auth"
 	"github.com/aegiscore/common/config"
-	"github.com/aegiscore/common/credentials"
 	commoninfra "github.com/aegiscore/common/infrastructure"
 	"github.com/aegiscore/common/logger"
 	commonmw "github.com/aegiscore/common/middleware"
@@ -83,8 +83,8 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 	return engine, nil
 }
 
-func NewJWTService(cfg *config.Config) *credentials.JWTService {
-	return credentials.NewJWTService(cfg.Auth)
+func NewJWTService(cfg *config.Config) *auth.JWTService {
+	return auth.NewJWTService(cfg.Auth)
 }
 
 type RegisterRouteParams struct {
@@ -93,7 +93,7 @@ type RegisterRouteParams struct {
 	Config         *config.Config
 	Log            *zap.Logger
 	Engine         *gin.Engine
-	JWT            *credentials.JWTService
+	JWT            *auth.JWTService
 	SessionStore   service.SessionStore `optional:"true"`
 	AuthController *controller.AuthController
 	UserController *controller.UserController

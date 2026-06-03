@@ -3,8 +3,8 @@ package router
 import (
 	"net/http"
 
+	"github.com/aegiscore/common/auth"
 	"github.com/aegiscore/common/config"
-	"github.com/aegiscore/common/credentials"
 	commonmw "github.com/aegiscore/common/middleware"
 	"github.com/aegiscore/user-services/internal/controller"
 	"github.com/gin-gonic/gin"
@@ -14,7 +14,7 @@ import (
 type RouteParams struct {
 	Environment           string
 	Log                   *zap.Logger
-	JWT                   *credentials.JWTService
+	JWT                   *auth.JWTService
 	AuthConfig            config.AuthConfig
 	TokenVersionValidator commonmw.TokenVersionValidator
 	AuthController        *controller.AuthController
