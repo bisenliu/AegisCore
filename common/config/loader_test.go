@@ -73,7 +73,7 @@ func TestLoadExplicitConfig(t *testing.T) {
 		t.Fatalf("queue_redis.DB = %d, want 1", queueRedis.DB)
 	}
 
-	pg := cfg.PostgresConfigs["user_db"]
+	pg := cfg.Postgres["user_db"]
 	if pg.Host != "127.0.0.1" {
 		t.Fatalf("Host = %q, want 127.0.0.1", pg.Host)
 	}
@@ -104,8 +104,8 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if pg.DBName != "aegiscore_user" {
 		t.Fatalf("DBName = %q, want aegiscore_user", pg.DBName)
 	}
-	if cfg.PostgresConfigs["pay_db"].DBName != "aegiscore_pay" {
-		t.Fatalf("pay_db.DBName = %q, want aegiscore_pay", cfg.PostgresConfigs["pay_db"].DBName)
+	if cfg.Postgres["pay_db"].DBName != "aegiscore_pay" {
+		t.Fatalf("pay_db.DBName = %q, want aegiscore_pay", cfg.Postgres["pay_db"].DBName)
 	}
 }
 
@@ -145,8 +145,8 @@ postgres:
 	if cfg.Redis["cache_redis"].Addr != "" {
 		t.Fatalf("cache_redis.Addr = %q, want empty", cfg.Redis["cache_redis"].Addr)
 	}
-	if cfg.PostgresConfigs["user_db"].Host != "" {
-		t.Fatalf("user_db.Host = %q, want empty", cfg.PostgresConfigs["user_db"].Host)
+	if cfg.Postgres["user_db"].Host != "" {
+		t.Fatalf("user_db.Host = %q, want empty", cfg.Postgres["user_db"].Host)
 	}
 }
 
@@ -191,11 +191,11 @@ func TestLoadDoesNotValidateInvalidBasicValues(t *testing.T) {
     conn_max_lifetime: 0s
     conn_max_idle_time: 0s
     ping_timeout: 0s`))
-	if cfg.PostgresConfigs["user_db"].MaxOpenConns != 0 {
-		t.Fatalf("user_db.MaxOpenConns = %d, want 0", cfg.PostgresConfigs["user_db"].MaxOpenConns)
+	if cfg.Postgres["user_db"].MaxOpenConns != 0 {
+		t.Fatalf("user_db.MaxOpenConns = %d, want 0", cfg.Postgres["user_db"].MaxOpenConns)
 	}
-	if cfg.PostgresConfigs["user_db"].PingTimeout != 0 {
-		t.Fatalf("user_db.PingTimeout = %s, want 0", cfg.PostgresConfigs["user_db"].PingTimeout)
+	if cfg.Postgres["user_db"].PingTimeout != 0 {
+		t.Fatalf("user_db.PingTimeout = %s, want 0", cfg.Postgres["user_db"].PingTimeout)
 	}
 }
 
@@ -236,11 +236,11 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	if cfg.Redis["cache_redis"].DB != 9 {
 		t.Fatalf("cache_redis.DB = %d, want 9", cfg.Redis["cache_redis"].DB)
 	}
-	if cfg.PostgresConfigs["user_db"].Password != "env-secret" {
-		t.Fatalf("user_db.Password = %q, want env-secret", cfg.PostgresConfigs["user_db"].Password)
+	if cfg.Postgres["user_db"].Password != "env-secret" {
+		t.Fatalf("user_db.Password = %q, want env-secret", cfg.Postgres["user_db"].Password)
 	}
-	if cfg.PostgresConfigs["user_db"].MaxOpenConns != 30 {
-		t.Fatalf("user_db.MaxOpenConns = %d, want 30", cfg.PostgresConfigs["user_db"].MaxOpenConns)
+	if cfg.Postgres["user_db"].MaxOpenConns != 30 {
+		t.Fatalf("user_db.MaxOpenConns = %d, want 30", cfg.Postgres["user_db"].MaxOpenConns)
 	}
 }
 
@@ -283,11 +283,11 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
     conn_max_lifetime: 45m
     conn_max_idle_time: 12m
     ping_timeout: 7s`))
-	if cfg.PostgresConfigs["user_db"].Password != "" {
-		t.Fatalf("Postgres.Password = %q, want empty", cfg.PostgresConfigs["user_db"].Password)
+	if cfg.Postgres["user_db"].Password != "" {
+		t.Fatalf("Postgres.Password = %q, want empty", cfg.Postgres["user_db"].Password)
 	}
-	if _, ok := cfg.Postgres("pay_db"); ok {
-		t.Fatal("Postgres(pay_db) ok = true")
+	if _, ok := cfg.PostgresDatabase("pay_db"); ok {
+		t.Fatal("PostgresDatabase(pay_db) ok = true")
 	}
 }
 
@@ -300,10 +300,10 @@ func TestLoadYAMLMergeForNamedDatastores(t *testing.T) {
 	if got := cfg.Redis["queue_redis"].ReadTimeout; got != 3*time.Second {
 		t.Fatalf("queue_redis.ReadTimeout = %s, want 3s", got)
 	}
-	if got := cfg.PostgresConfigs["user_db"].MaxOpenConns; got != 20 {
+	if got := cfg.Postgres["user_db"].MaxOpenConns; got != 20 {
 		t.Fatalf("user_db.MaxOpenConns = %d, want 20", got)
 	}
-	if got := cfg.PostgresConfigs["pay_db"].MaxOpenConns; got != 25 {
+	if got := cfg.Postgres["pay_db"].MaxOpenConns; got != 25 {
 		t.Fatalf("pay_db.MaxOpenConns = %d, want 25", got)
 	}
 }
@@ -359,9 +359,9 @@ func TestPostgresNamedDatabaseDSNs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, ok := cfg.Postgres(tt.name)
+			db, ok := cfg.PostgresDatabase(tt.name)
 			if !ok {
-				t.Fatalf("Postgres(%q) ok = false", tt.name)
+				t.Fatalf("PostgresDatabase(%q) ok = false", tt.name)
 			}
 			parsed, err := url.Parse(db.DSN)
 			if err != nil {
@@ -389,11 +389,11 @@ func TestPostgresNamedDatabaseDSNs(t *testing.T) {
 		})
 	}
 
-	if _, ok := cfg.Postgres("pay_db"); !ok {
-		t.Fatal("Postgres(pay_db) ok = false")
+	if _, ok := cfg.PostgresDatabase("pay_db"); !ok {
+		t.Fatal("PostgresDatabase(pay_db) ok = false")
 	}
-	if _, ok := cfg.Postgres("missing_db"); ok {
-		t.Fatal("Postgres(missing_db) ok = true")
+	if _, ok := cfg.PostgresDatabase("missing_db"); ok {
+		t.Fatal("PostgresDatabase(missing_db) ok = true")
 	}
 }
 

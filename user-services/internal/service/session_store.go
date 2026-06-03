@@ -17,6 +17,11 @@ import (
 var ErrSessionNotFound = errors.New("auth session not found")
 var ErrTokenVersionMismatch = errors.New("token version mismatch")
 
+const (
+	defaultTokenVersionCacheTTL = 5 * time.Minute
+	defaultAuthSessionTTL       = time.Hour
+)
+
 type Session struct {
 	UserID       string    `json:"user_id"`
 	SessionID    string    `json:"session_id"`
@@ -75,7 +80,7 @@ func (s *redisSessionStore) GetCurrentTokenVersion(ctx context.Context, userID s
 	}
 	ttl := s.tokenVersionCacheTTL
 	if ttl <= 0 {
-		ttl = 5 * time.Minute
+		ttl = defaultTokenVersionCacheTTL
 	}
 	if err := s.redis.Set(ctx, key, formatTokenVersion(version), ttl).Err(); err != nil {
 		return 0, fmt.Errorf("set token version cache: %w", err)
@@ -99,7 +104,7 @@ func (s *redisSessionStore) ValidateTokenVersion(ctx context.Context, userID str
 
 func (s *redisSessionStore) CreateSession(ctx context.Context, session Session, ttl time.Duration) error {
 	if ttl <= 0 {
-		ttl = time.Hour
+		ttl = defaultAuthSessionTTL
 	}
 	data, err := json.Marshal(session)
 	if err != nil {

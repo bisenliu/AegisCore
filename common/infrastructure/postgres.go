@@ -22,7 +22,7 @@ func ProvideNamedPostgres(fxName string, configKey string) fx.Option {
 }
 
 func NewPostgres(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name string) (*sql.DB, error) {
-	dbCfg, ok := cfg.Postgres(name)
+	dbCfg, ok := cfg.PostgresDatabase(name)
 	if !ok {
 		return nil, fmt.Errorf("postgres config %q not found", name)
 	}

@@ -20,6 +20,11 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	defaultAccessTokenTTL  = 15 * time.Minute
+	defaultRefreshTokenTTL = 7 * 24 * time.Hour
+)
+
 type AuthService interface {
 	Login(ctx context.Context, req dto.LoginRequest) (*dto.TokenResponse, error)
 	ChangePassword(ctx context.Context, req dto.ChangePasswordRequest) (*dto.ChangePasswordResponse, error)
@@ -210,11 +215,11 @@ func (s *authService) LogoutAll(ctx context.Context) (*dto.LogoutResponse, error
 func (s *authService) issueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*dto.TokenResponse, error) {
 	accessTTL := s.config.Auth.JWT.AccessTokenTTL
 	if accessTTL <= 0 {
-		accessTTL = 15 * time.Minute
+		accessTTL = defaultAccessTokenTTL
 	}
 	refreshTTL := s.config.Auth.JWT.RefreshTokenTTL
 	if refreshTTL <= 0 {
-		refreshTTL = 7 * 24 * time.Hour
+		refreshTTL = defaultRefreshTokenTTL
 	}
 	access, err := s.jwt.SignAccessToken(credentials.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: accessTTL})
 	if err != nil {
@@ -233,7 +238,7 @@ func (s *authService) issueTokenPair(ctx context.Context, userID string, tokenVe
 func (s *authService) issuePasswordChangeToken(_ context.Context, userID string, tokenVersion int64, sessionID string) (*dto.TokenResponse, error) {
 	ttl := s.config.Auth.JWT.AccessTokenTTL
 	if ttl <= 0 {
-		ttl = 15 * time.Minute
+		ttl = defaultAccessTokenTTL
 	}
 	token, err := s.jwt.SignPasswordChangeToken(credentials.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: ttl})
 	if err != nil {

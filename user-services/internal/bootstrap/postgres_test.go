@@ -210,7 +210,7 @@ func bootstrapTestConfig(driverName string) *config.Config {
 				PingTimeout:  time.Second,
 			},
 		},
-		PostgresConfigs: map[string]config.PostgresConfig{
+		Postgres: map[string]config.PostgresConfig{
 			commoninfra.NameUserDB: {
 				Host:            "127.0.0.1",
 				Port:            15432,

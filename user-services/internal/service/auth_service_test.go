@@ -43,6 +43,52 @@ func TestAuthServiceLogin(t *testing.T) {
 	}
 }
 
+func TestAuthServiceLoginUsesDefaultTTLs(t *testing.T) {
+	passwordHash, err := credentials.HashPassword("secret")
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+	repo := &authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(domain.UserStatusNormal), TokenVersion: 2}}
+	store := &sessionStoreStub{version: 2}
+	svc := newTestAuthServiceWithConfig(repo, store, config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"}})
+
+	tokens, err := svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "secret"})
+
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if tokens.ExpiresIn != int64(defaultAccessTokenTTL.Seconds()) {
+		t.Fatalf("ExpiresIn = %d, want %d", tokens.ExpiresIn, int64(defaultAccessTokenTTL.Seconds()))
+	}
+	if store.createdTTL != defaultRefreshTokenTTL {
+		t.Fatalf("created TTL = %s, want %s", store.createdTTL, defaultRefreshTokenTTL)
+	}
+}
+
+func TestAuthServiceLoginUsesExplicitTTLs(t *testing.T) {
+	passwordHash, err := credentials.HashPassword("secret")
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+	repo := &authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(domain.UserStatusNormal), TokenVersion: 2}}
+	store := &sessionStoreStub{version: 2}
+	accessTTL := time.Minute
+	refreshTTL := 2 * time.Hour
+	svc := newTestAuthServiceWithConfig(repo, store, config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: accessTTL, RefreshTokenTTL: refreshTTL}})
+
+	tokens, err := svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "secret"})
+
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if tokens.ExpiresIn != int64(accessTTL.Seconds()) {
+		t.Fatalf("ExpiresIn = %d, want %d", tokens.ExpiresIn, int64(accessTTL.Seconds()))
+	}
+	if store.createdTTL != refreshTTL {
+		t.Fatalf("created TTL = %s, want %s", store.createdTTL, refreshTTL)
+	}
+}
+
 func TestAuthServiceLoginRejectsInvalidCredentials(t *testing.T) {
 	passwordHash, err := credentials.HashPassword("secret")
 	if err != nil {
@@ -254,6 +300,11 @@ func newTestAuthService(repo repository.UserRepository, store SessionStore, rota
 	return NewAuthService(AuthServiceParams{Repo: repo, Sessions: store, JWT: credentials.NewJWTService(cfg.Auth), Config: cfg})
 }
 
+func newTestAuthServiceWithConfig(repo repository.UserRepository, store SessionStore, authCfg config.AuthConfig) AuthService {
+	cfg := &config.Config{Auth: authCfg}
+	return NewAuthService(AuthServiceParams{Repo: repo, Sessions: store, JWT: credentials.NewJWTService(cfg.Auth), Config: cfg})
+}
+
 type authRepoStub struct {
 	userByUsername      *ent.User
 	userByID            *ent.User
@@ -301,6 +352,7 @@ type sessionStoreStub struct {
 	version          int64
 	session          Session
 	created          Session
+	createdTTL       time.Duration
 	deleted          bool
 	deletedSessionID string
 	deletedAll       bool
@@ -311,8 +363,9 @@ func (s *sessionStoreStub) GetCurrentTokenVersion(context.Context, string) (int6
 	return s.version, nil
 }
 func (s *sessionStoreStub) ValidateTokenVersion(context.Context, string, int64) error { return nil }
-func (s *sessionStoreStub) CreateSession(_ context.Context, session Session, _ time.Duration) error {
+func (s *sessionStoreStub) CreateSession(_ context.Context, session Session, ttl time.Duration) error {
 	s.created = session
+	s.createdTTL = ttl
 	return nil
 }
 func (s *sessionStoreStub) GetSession(context.Context, string) (Session, error) {

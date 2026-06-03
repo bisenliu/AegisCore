@@ -230,7 +230,7 @@ func TestProvideNamedRedisProvidesOnlyDeclaredClient(t *testing.T) {
 
 func testConfig(driverName string) *config.Config {
 	return &config.Config{
-		PostgresConfigs: map[string]config.PostgresConfig{
+		Postgres: map[string]config.PostgresConfig{
 			NameUserDB: {
 				Host:            "127.0.0.1",
 				Port:            15432,

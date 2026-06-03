@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aegiscore/common/config"
 	"github.com/aegiscore/user-services/ent"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/repository"
@@ -32,6 +33,43 @@ func TestSessionStoreTokenVersionCacheMissReadsRepository(t *testing.T) {
 	}
 	if got != "7" {
 		t.Fatalf("cached token version = %q, want 7", got)
+	}
+}
+
+func TestSessionStoreTokenVersionCacheUsesDefaultTTL(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestSessionStoreWithConfig(redisServer, &tokenVersionRepoStub{version: 7}, config.AuthConfig{})
+
+	_, err := store.GetCurrentTokenVersion(context.Background(), sessionTestUserID.String())
+
+	if err != nil {
+		t.Fatalf("GetCurrentTokenVersion: %v", err)
+	}
+	ttl, err := store.redis.TTL(context.Background(), tokenVersionKey(sessionTestUserID.String())).Result()
+	if err != nil {
+		t.Fatalf("TTL: %v", err)
+	}
+	if ttl <= 0 || ttl > defaultTokenVersionCacheTTL {
+		t.Fatalf("TTL = %s, want within default %s", ttl, defaultTokenVersionCacheTTL)
+	}
+}
+
+func TestSessionStoreTokenVersionCacheUsesExplicitTTL(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	explicitTTL := time.Minute
+	store := newTestSessionStoreWithConfig(redisServer, &tokenVersionRepoStub{version: 7}, config.AuthConfig{TokenVersionCacheTTL: explicitTTL})
+
+	_, err := store.GetCurrentTokenVersion(context.Background(), sessionTestUserID.String())
+
+	if err != nil {
+		t.Fatalf("GetCurrentTokenVersion: %v", err)
+	}
+	ttl, err := store.redis.TTL(context.Background(), tokenVersionKey(sessionTestUserID.String())).Result()
+	if err != nil {
+		t.Fatalf("TTL: %v", err)
+	}
+	if ttl <= 0 || ttl > explicitTTL {
+		t.Fatalf("TTL = %s, want within explicit %s", ttl, explicitTTL)
 	}
 }
 
@@ -93,8 +131,12 @@ func TestSessionStoreDeleteAllUserSessions(t *testing.T) {
 }
 
 func newTestSessionStore(redisServer *miniredis.Miniredis, repo repository.UserRepository) *redisSessionStore {
+	return newTestSessionStoreWithConfig(redisServer, repo, config.AuthConfig{TokenVersionCacheTTL: time.Minute})
+}
+
+func newTestSessionStoreWithConfig(redisServer *miniredis.Miniredis, repo repository.UserRepository, authCfg config.AuthConfig) *redisSessionStore {
 	client := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
-	return &redisSessionStore{redis: client, repo: repo, tokenVersionCacheTTL: time.Minute}
+	return &redisSessionStore{redis: client, repo: repo, tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL}
 }
 
 type tokenVersionRepoStub struct {
