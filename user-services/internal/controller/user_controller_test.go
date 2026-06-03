@@ -140,7 +140,7 @@ func TestUserControllerCreate(t *testing.T) {
 		if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
 			t.Fatalf("envelope = %#v", envelope)
 		}
-		assertFieldError(t, envelope, "status", "用户状态", "enum", "用户状态不合法")
+		assertFieldError(t, envelope, "status", "用户状态", "enum", "用户状态取值不合法，允许值为：100、200、300")
 	})
 
 	t.Run("missing password validation failed", func(t *testing.T) {
@@ -220,7 +220,7 @@ func TestUserControllerList(t *testing.T) {
 		if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
 			t.Fatalf("envelope = %#v", envelope)
 		}
-		assertFieldError(t, envelope, "status", "用户状态", "enum", "用户状态不合法")
+		assertFieldError(t, envelope, "status", "用户状态", "enum", "用户状态取值不合法，允许值为：100、200、300")
 	})
 }
 

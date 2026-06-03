@@ -295,8 +295,27 @@ func TestEnumValidation(t *testing.T) {
 
 	t.Run("invalid", func(t *testing.T) {
 		req := enumRequest{Status: testStatus("disabled")}
-		if err := validator.Validate(&req); err == nil {
-			t.Fatal("Validate error = nil, want enum error")
+		err := validator.Validate(&req)
+		var validationErr *Error
+		if !errors.As(err, &validationErr) {
+			t.Fatalf("Validate error = %T, want *Error", err)
+		}
+		fields := fieldDetails(validationErr.Fields)
+		if got, want := fields["status"].Message, "用户状态取值不合法，允许值为：active、inactive"; got != want {
+			t.Fatalf("message = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("invalid without allowed values", func(t *testing.T) {
+		req := enumWithoutValuesRequest{Status: testStatusWithoutValues("disabled")}
+		err := validator.Validate(&req)
+		var validationErr *Error
+		if !errors.As(err, &validationErr) {
+			t.Fatalf("Validate error = %T, want *Error", err)
+		}
+		fields := fieldDetails(validationErr.Fields)
+		if got, want := fields["status"].Message, "用户状态取值不合法"; got != want {
+			t.Fatalf("message = %q, want %q", got, want)
 		}
 	})
 
@@ -439,6 +458,16 @@ func (s testStatus) IsValid() bool {
 	return s == "active"
 }
 
+func (s testStatus) AllowedValues() []string {
+	return []string{"active", "inactive"}
+}
+
+type testStatusWithoutValues string
+
+func (s testStatusWithoutValues) IsValid() bool {
+	return s == "active"
+}
+
 type testTextValue string
 
 func (v *testTextValue) UnmarshalText(text []byte) error {
@@ -451,7 +480,11 @@ type TestEmbedded struct {
 }
 
 type enumRequest struct {
-	Status testStatus `validate:"enum"`
+	Status testStatus `json:"status" validate:"enum" label:"用户状态"`
+}
+
+type enumWithoutValuesRequest struct {
+	Status testStatusWithoutValues `json:"status" validate:"enum" label:"用户状态"`
 }
 
 type pointerEnumRequest struct {

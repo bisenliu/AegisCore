@@ -237,25 +237,29 @@ func (s *authService) issueTokenPair(ctx context.Context, userID string, tokenVe
 	}
 	access, err := s.jwt.SignAccessToken(auth.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: accessTTL})
 	if err != nil {
+		logger.Error(ctx, "sign access token failed", zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Error(err))
 		return nil, response.FromError(fmt.Errorf("sign access token: %w", err))
 	}
 	refresh, err := s.jwt.SignRefreshToken(auth.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: refreshTTL})
 	if err != nil {
+		logger.Error(ctx, "sign refresh token failed", zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Error(err))
 		return nil, response.FromError(fmt.Errorf("sign refresh token: %w", err))
 	}
 	if err := s.sessions.CreateSession(ctx, repository.AuthSession{UserID: userID, SessionID: sessionID, TokenVersion: tokenVersion, ExpiresAt: time.Now().Add(refreshTTL)}, refreshTTL); err != nil {
+		logger.Error(ctx, "create auth session failed", zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Error(err))
 		return nil, response.FromError(err)
 	}
 	return &dto.TokenResponse{AccessToken: access, RefreshToken: refresh, TokenType: auth.TokenTypeBearer, ExpiresIn: int64(accessTTL.Seconds())}, nil
 }
 
-func (s *authService) issuePasswordChangeToken(_ context.Context, userID string, tokenVersion int64, sessionID string) (*dto.TokenResponse, error) {
+func (s *authService) issuePasswordChangeToken(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*dto.TokenResponse, error) {
 	ttl := s.config.Auth.JWT.AccessTokenTTL
 	if ttl <= 0 {
 		ttl = defaultAccessTokenTTL
 	}
 	token, err := s.jwt.SignPasswordChangeToken(auth.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: ttl})
 	if err != nil {
+		logger.Error(ctx, "sign password change token failed", zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Error(err))
 		return nil, response.FromError(fmt.Errorf("sign password change token: %w", err))
 	}
 	return &dto.TokenResponse{AccessToken: token, TokenType: auth.TokenTypeBearer, ExpiresIn: int64(ttl.Seconds()), PasswordChangeRequired: true}, nil

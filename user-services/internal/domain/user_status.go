@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 )
 
@@ -19,6 +20,14 @@ func (s UserStatus) IsValid() bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func (s UserStatus) AllowedValues() []string {
+	return []string{
+		fmt.Sprint(UserStatusNormal),
+		fmt.Sprint(UserStatusDisabled),
+		fmt.Sprint(UserStatusMustChangePassword),
 	}
 }
 

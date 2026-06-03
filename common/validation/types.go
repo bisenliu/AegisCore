@@ -38,6 +38,10 @@ type Enum interface {
 	IsValid() bool
 }
 
+type EnumValues interface {
+	AllowedValues() []string
+}
+
 type FieldError struct {
 	Field   string `json:"field"`
 	Label   string `json:"label"`
