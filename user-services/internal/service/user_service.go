@@ -8,9 +8,9 @@ import (
 	"github.com/aegiscore/common/password"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/ent"
-	"github.com/aegiscore/user-services/internal/apperror"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
+	"github.com/aegiscore/user-services/internal/errmsg"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -35,13 +35,13 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 	username := strings.TrimSpace(req.Username)
 	plainPassword := strings.TrimSpace(req.Password)
 	if nickname == "" {
-		return nil, response.ValidationFailedError(apperror.MsgInvalidUserName)
+		return nil, response.ValidationFailedError(errmsg.MsgInvalidUserName)
 	}
 	if username == "" {
-		return nil, response.ValidationFailedError(apperror.MsgInvalidUserName)
+		return nil, response.ValidationFailedError(errmsg.MsgInvalidUserName)
 	}
 	if plainPassword == "" {
-		return nil, response.ValidationFailedError(apperror.MsgInvalidPassword)
+		return nil, response.ValidationFailedError(errmsg.MsgInvalidPassword)
 	}
 	status := domain.UserStatusNormal
 	if req.Status != nil {
@@ -55,7 +55,7 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 		return nil, response.FromError(err)
 	}
 	if exists {
-		return nil, response.ConflictError(apperror.MsgUserAlreadyExists)
+		return nil, response.ConflictError(errmsg.MsgUserAlreadyExists)
 	}
 
 	passwordHash, err := password.Hash(plainPassword)
@@ -81,7 +81,7 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 func (s *userService) GetUserByID(ctx context.Context, userID string) (*dto.UserResponse, error) {
 	parsedUserID, err := uuid.Parse(userID)
 	if err != nil {
-		return nil, response.BadRequestError(apperror.MsgInvalidUserID)
+		return nil, response.BadRequestError(errmsg.MsgInvalidUserID)
 	}
 	logger.Info(ctx, "query user profile", zap.String("user_id", userID))
 	user, err := s.repo.GetByUserID(ctx, parsedUserID)

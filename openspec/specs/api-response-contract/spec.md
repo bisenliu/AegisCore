@@ -216,16 +216,27 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 - **Then** 错误对象保留内部错误原因用于 `Unwrap`
 - **Then** 响应 JSON 使用业务码 `90000` 和 `publicMessage`
 
-### Requirement: Maintain service business messages separately
+### Requirement: User service owns error message constants separately from application errors
 
-`user-services` 必须在 `internal/apperror` 集中维护非参数校验类业务错误文案常量和模板，并复用 `common/response` 通用错误构造函数。
+用户服务 MUST 将服务内复用的错误消息文本常量放在 `user-services/internal/errmsg` 包中，并 MUST NOT 使用 `user-services/internal/apperror` 承载仅包含消息文本的常量。迁移 MUST 保持既有响应信封、HTTP 状态码、业务错误码和对外错误消息文本不变。
 
-#### Scenario: Return user business error from shared message
-- **Given** repository 或 service 需要返回用户服务业务错误
-- **When** 业务错误不属于参数校验错误
-- **Then** 代码使用 `user-services/internal/apperror` 中的文案常量或模板
-- **Then** 代码使用 `common/response` 的通用错误构造函数创建应用错误
-- **Then** `user-services` 不为每条业务错误封装专用响应 helper
+#### Scenario: Reuse service error message text
+- **Given** user-services controller、service 或相关业务代码需要复用用户错误消息文本
+- **When** 代码引用消息常量
+- **Then** 系统 MUST 从 `user-services/internal/errmsg` 引用 `Msg*` 常量
+- **Then** 常量值 MUST 与迁移前对应消息文本一致
+
+#### Scenario: Preserve external error response contract
+- **Given** 请求触发用户服务中使用迁移后消息常量的失败路径
+- **When** controller 或中间件返回统一失败响应
+- **Then** 响应 MUST 继续使用 `common/response.Envelope` 失败信封
+- **Then** HTTP 状态码和业务错误码 MUST 与迁移前一致
+- **Then** 对外 `message` 文本 MUST 与迁移前一致
+
+#### Scenario: Remove misleading application error package
+- **Given** 迁移完成后的 user-services 代码
+- **When** 仓库中搜索 `user-services/internal/apperror` 或 `apperror.Msg`
+- **Then** 系统 MUST 不再存在对旧包或旧限定名的引用
 
 ### Requirement: Document response envelope in Swagger
 系统必须在 Swagger/OpenAPI 文档中复用运行时 `common/response.Envelope` 语义描述业务 API 成功和失败响应，确保文档中的状态码、业务码、消息和 data 包装方式与真实响应一致。
@@ -333,4 +344,3 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 - **When** 系统返回错误响应
 - **Then** 响应 MUST 继续使用统一失败响应信封
 - **Then** 响应 MUST NOT 通过错误消息泄露内部数据库 `id`、密码明文、完整密码 hash 或底层数据库细节
-

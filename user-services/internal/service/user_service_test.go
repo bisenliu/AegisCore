@@ -8,9 +8,9 @@ import (
 	"github.com/aegiscore/common/password"
 	"github.com/aegiscore/common/response"
 	"github.com/aegiscore/user-services/ent"
-	"github.com/aegiscore/user-services/internal/apperror"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
+	"github.com/aegiscore/user-services/internal/errmsg"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
 )
@@ -50,7 +50,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "   ", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
-		if appErr.Code != response.CodeValidationFailed || appErr.Message != apperror.MsgInvalidUserName {
+		if appErr.Code != response.CodeValidationFailed || appErr.Message != errmsg.MsgInvalidUserName {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})
@@ -61,7 +61,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "   "})
 
 		appErr := response.FromError(err)
-		if appErr.Code != response.CodeValidationFailed || appErr.Message != apperror.MsgInvalidPassword {
+		if appErr.Code != response.CodeValidationFailed || appErr.Message != errmsg.MsgInvalidPassword {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})
@@ -72,7 +72,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
-		if appErr.Code != response.CodeConflict || appErr.Message != apperror.MsgUserAlreadyExists {
+		if appErr.Code != response.CodeConflict || appErr.Message != errmsg.MsgUserAlreadyExists {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})
@@ -89,12 +89,12 @@ func TestUserServiceCreateUser(t *testing.T) {
 	})
 
 	t.Run("preserve create conflict", func(t *testing.T) {
-		svc := NewUserService(&stubUserRepository{createErr: response.ConflictError(apperror.MsgUserAlreadyExists)})
+		svc := NewUserService(&stubUserRepository{createErr: response.ConflictError(errmsg.MsgUserAlreadyExists)})
 
 		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
-		if appErr.Code != response.CodeConflict || appErr.Message != apperror.MsgUserAlreadyExists {
+		if appErr.Code != response.CodeConflict || appErr.Message != errmsg.MsgUserAlreadyExists {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})

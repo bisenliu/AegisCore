@@ -1,4 +1,4 @@
-package apperror
+package errmsg
 
 const (
 	MsgInvalidUserName    = "用户名不能为空"
