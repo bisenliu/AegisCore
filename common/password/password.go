@@ -16,11 +16,12 @@ const (
 	passwordAlgorithm = "argon2id"
 	passwordVersion   = argon2.Version
 
-	passwordMemory      uint32 = 64 * 1024
-	passwordIterations  uint32 = 3
-	passwordParallelism uint8  = 4
-	passwordSaltLength         = 16
-	passwordKeyLength   uint32 = 32
+	passwordMemory       uint32 = 64 * 1024
+	passwordIterations   uint32 = 3
+	passwordParallelism  uint8  = 4
+	passwordSaltLength          = 16
+	passwordKeyLength    uint32 = 32
+	maxEncodedHashLength        = 512
 )
 
 var (
@@ -77,7 +78,7 @@ func Verify(plain, encodedHash string) (bool, error) {
 }
 
 func parsePasswordHash(encodedHash string) (passwordParams, []byte, []byte, error) {
-	if len(encodedHash) > 512 {
+	if len(encodedHash) > maxEncodedHashLength {
 		return passwordParams{}, nil, nil, ErrInvalidHash
 	}
 

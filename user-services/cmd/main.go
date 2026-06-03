@@ -25,6 +25,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	startTimeout = 15 * time.Second
+	stopTimeout  = 15 * time.Second
+)
+
 func main() {
 	if err := newRootCommand().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -58,7 +63,7 @@ func runServe(ctx context.Context, configPath string) error {
 	defer stop()
 
 	app := bootstrap.NewApp(configPath)
-	startCtx, cancelStart := context.WithTimeout(ctx, 15*time.Second)
+	startCtx, cancelStart := context.WithTimeout(ctx, startTimeout)
 	defer cancelStart()
 	if err := app.Start(startCtx); err != nil {
 		return err
@@ -66,7 +71,7 @@ func runServe(ctx context.Context, configPath string) error {
 
 	<-ctx.Done()
 
-	stopCtx, cancelStop := context.WithTimeout(context.Background(), 15*time.Second)
+	stopCtx, cancelStop := context.WithTimeout(context.Background(), stopTimeout)
 	defer cancelStop()
 	return app.Stop(stopCtx)
 }

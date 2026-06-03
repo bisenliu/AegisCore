@@ -264,7 +264,7 @@
 
 ### Requirement: Provide Zap logging with trace-id and file rotation
 
-系统必须提供基于 Zap 的共享日志组件。日志组件必须支持从 YAML 与 `AEGISCORE_` 环境变量加载日志级别、格式、目录、文件名前缀、控制台输出、保留天数、单文件大小和备份数量。所有通过项目 logger context API 输出的日志必须包含 `trace-id` 字段。所有通过项目 logger context API 输出的日志，其 `caller` 字段必须指向调用该 context API 的业务代码位置，而不是 `common/logger` 的封装函数位置。日志必须按天写入带日期的分类日志文件，文件名格式为 `xxx.yyyy-mm-dd.all.log`、`xxx.yyyy-mm-dd.info.log`、`xxx.yyyy-mm-dd.warning.log`、`xxx.yyyy-mm-dd.error.log`。日期变化后，新日志必须写入新日期文件，旧日期文件必须保持原名作为历史日志。普通 Error 级别日志不得默认自动包含 stacktrace；需要堆栈的关键错误必须通过显式字段记录。
+系统必须提供基于 Zap 的共享日志组件。日志组件必须支持从 YAML 与 `AEGISCORE_` 环境变量加载日志级别、格式、目录、文件名前缀、控制台输出、保留天数、单文件大小和备份数量。所有通过项目 logger context API 输出的日志必须包含 `trace-id` 字段。所有通过项目 logger context API 输出的日志，其 `caller` 字段必须指向调用该 context API 的业务代码位置，而不是 `common/logger` 的封装函数位置。日志必须按天写入带日期的分类日志文件，文件名格式为 `xxx.yyyy-mm-dd.all.log`、`xxx.yyyy-mm-dd.info.log`、`xxx.yyyy-mm-dd.warning.log`、`xxx.yyyy-mm-dd.error.log`。日期变化后，新日志必须写入新日期文件，旧日期文件必须保持原名作为历史日志。普通 Error 级别日志不得默认自动包含 stacktrace；需要堆栈的关键错误必须通过显式字段记录。Fx 停止流程同步 logger 时，系统 MUST 忽略 stdout/stderr 等不可同步设备常见的 `syscall.EINVAL` 与 `syscall.ENOTTY`，但 MUST 继续返回其他 logger sync 错误。
 
 #### Scenario: Initialize Zap logger from config
 - **Given** YAML 配置包含 log level、format、directory、filename、console、max_age_days、max_size_mb 和 max_backups
@@ -328,6 +328,20 @@
 - **When** logger 写出该 Error 日志
 - **Then** 日志必须包含显式请求的 stacktrace 字段
 - **Then** 该行为不得重新启用所有 Error 级别日志的自动 stacktrace
+
+#### Scenario: Logger sync ignores terminal device sync errors
+- **Given** Fx app 停止流程正在同步 Zap logger
+- **Given** logger 底层 stdout 或 stderr writer 的 `Sync()` 返回 `syscall.EINVAL` 或 `syscall.ENOTTY`
+- **When** logger stop hook 处理该错误
+- **Then** 系统 MUST 忽略该错误并继续正常停止
+- **Then** 服务 MUST NOT 因终端设备不支持同步而报告退出异常
+
+#### Scenario: Logger sync preserves unexpected errors
+- **Given** Fx app 停止流程正在同步 Zap logger
+- **Given** logger `Sync()` 返回非 `syscall.EINVAL` 且非 `syscall.ENOTTY` 的错误
+- **When** logger stop hook 处理该错误
+- **Then** 系统 MUST 返回该错误
+- **Then** 真实日志同步失败 MUST 保持可观察
 
 ### Requirement: Provide service-specific Ent clients
 

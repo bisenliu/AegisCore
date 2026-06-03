@@ -133,7 +133,7 @@ func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePassword
 }
 
 func (s *authService) verifyPasswordChangeToken(ctx context.Context, token string) (uuid.UUID, error) {
-	claims, err := s.jwt.ParsePasswordChangeToken(normalizeRefreshToken(token))
+	claims, err := s.jwt.ParsePasswordChangeToken(auth.StripBearerPrefix(token))
 	if err != nil {
 		return uuid.Nil, response.TokenInvalidError(errmsg.MsgMissingSession)
 	}
@@ -152,7 +152,7 @@ func (s *authService) verifyPasswordChangeToken(ctx context.Context, token strin
 }
 
 func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) (*dto.TokenResponse, error) {
-	refreshToken := normalizeRefreshToken(req.RefreshToken)
+	refreshToken := auth.StripBearerPrefix(req.RefreshToken)
 	if refreshToken == "" {
 		return nil, response.TokenInvalidError(errmsg.MsgMissingSession)
 	}
@@ -192,14 +192,6 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) 
 		sessionID = uuid.NewString()
 	}
 	return s.issueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
-}
-
-func normalizeRefreshToken(token string) string {
-	token = strings.TrimSpace(token)
-	if len(token) >= len(auth.TokenPrefix) && strings.EqualFold(token[:len(auth.TokenPrefix)], auth.TokenPrefix) {
-		return strings.TrimSpace(token[len(auth.TokenPrefix):])
-	}
-	return token
 }
 
 func (s *authService) Logout(ctx context.Context) (*dto.LogoutResponse, error) {

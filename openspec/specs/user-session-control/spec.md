@@ -89,13 +89,19 @@
 
 ### Requirement: Verify password-change credentials before loading user state
 
-系统 SHALL 在修改密码流程中先验证受限改密凭据并解析外部用户 UUID，再读取用户状态和更新凭证。受限改密凭据验证 MUST 支持剥离可选 `Bearer ` 前缀，MUST 解析 password-change token，MUST 校验服务端当前 `token_version` 与 token claims 一致，并 MUST 将 claims 中的 `user_id` 解析为 UUID。用户存在性检查、用户仍处于 `status=300` 的校验、新密码 hash、凭证更新和 Redis token version 缓存失效 MUST 继续由修改密码业务流程负责。
+系统 SHALL 在修改密码流程中先验证受限改密凭据并解析外部用户 UUID，再读取用户状态和更新凭证。受限改密凭据验证 MUST 复用 `common/auth.StripBearerPrefix` 支持剥离可选 `Bearer ` 前缀，MUST 解析 password-change token，MUST 校验服务端当前 `token_version` 与 token claims 一致，并 MUST 将 claims 中的 `user_id` 解析为 UUID。用户存在性检查、用户仍处于 `status=300` 的校验、新密码 hash、凭证更新和 Redis token version 缓存失效 MUST 继续由修改密码业务流程负责。
 
 #### Scenario: Password-change token validation rejects invalid token
 - **Given** 调用方提交空白、格式非法、签名无效或 subject 非改密凭据的 token
 - **When** 系统验证受限改密凭据
 - **Then** 系统 MUST 返回 token 无效响应
 - **Then** 系统 MUST NOT 更新用户凭证
+
+#### Scenario: Password-change token validation accepts optional bearer prefix
+- **Given** 调用方提交 `Bearer <password-change-token>`
+- **When** 系统验证受限改密凭据
+- **Then** 系统 MUST 通过 `common/auth.StripBearerPrefix` 剥离可选 Bearer 前缀
+- **Then** 系统 MUST 按剥离后的 password-change token 执行后续校验
 
 #### Scenario: Password-change token validation rejects changed token version
 - **Given** 受限改密凭据签名有效且未过期
@@ -112,7 +118,7 @@
 - **Then** 只有状态校验通过后系统 MUST 更新 `password_hash`、将状态更新为 `100` 并失效 token version 缓存
 
 ### Requirement: Refresh access tokens through revocable refresh sessions
-系统 SHALL 提供 Refresh Token 刷新能力。刷新时，系统 MUST 校验 Refresh Token 签名、过期时间和 Refresh Token subject，解析外部用户标识和会话标识，确认 Redis 会话仍存在，并校验该用户当前 `token_version` 与 Refresh Token 或会话记录中的版本一致；校验通过后签发新的 Access Token。系统 SHOULD 对 Refresh Token 执行轮转，使旧 Refresh Token 对应会话失效并创建新会话。Access Token 与 Refresh Token 的 subject/token type 枚举 MUST 由 `common/auth` 统一提供，签发方法 MUST 内部强制设置对应 subject。
+系统 SHALL 提供 Refresh Token 刷新能力。刷新时，系统 MUST 校验 Refresh Token 签名、过期时间和 Refresh Token subject，解析外部用户标识和会话标识，确认 Redis 会话仍存在，并校验该用户当前 `token_version` 与 Refresh Token 或会话记录中的版本一致；校验通过后签发新的 Access Token。系统 SHOULD 对 Refresh Token 执行轮转，使旧 Refresh Token 对应会话失效并创建新会话。Access Token 与 Refresh Token 的 subject/token type 枚举 MUST 由 `common/auth` 统一提供，签发方法 MUST 内部强制设置对应 subject。刷新流程 MUST 通过 `common/auth.StripBearerPrefix` 统一处理请求体中可选 Bearer 前缀。
 
 #### Scenario: Refresh succeeds for active session
 - **Given** Refresh Token 签名有效且未过期
@@ -127,7 +133,7 @@
 - **Given** Refresh Token 签名有效且未过期
 - **Given** Redis 中存在对应会话记录
 - **When** 调用方在刷新请求体 `refresh_token` 字段中提交 `Bearer <refresh-token>`
-- **Then** 系统 MUST 在解析前剥离 `Bearer ` 前缀
+- **Then** 系统 MUST 通过 `common/auth.StripBearerPrefix` 剥离 `Bearer ` 前缀
 - **Then** 系统 MUST 按剥离后的 Refresh Token 执行刷新校验
 
 #### Scenario: Refresh request body prefers raw token

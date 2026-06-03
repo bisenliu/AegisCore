@@ -8,7 +8,7 @@ HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖
 
 ### Requirement: Start service through CLI
 
-系统必须提供 `aegiscore-user-services serve` 命令，并允许通过 `--config` 指定 YAML 配置路径。用户服务启动时必须在自身 Fx 装配中显式提供公共配置和 Zap logger，并初始化自己声明的运行时依赖，包括 HTTP server、具名 PostgreSQL 连接池和具名 Redis client。
+系统必须提供 `aegiscore-user-services serve` 命令，并允许通过 `--config` 指定 YAML 配置路径。用户服务启动时必须在自身 Fx 装配中显式提供公共配置和 Zap logger，并初始化自己声明的运行时依赖，包括 HTTP server、具名 PostgreSQL 连接池和具名 Redis client。CLI 启动和停止 Fx app 的 timeout MUST 使用语义独立的具名常量表达，即使当前默认值相同也 MUST 分别维护启动超时和停止超时。
 
 #### Scenario: Start with explicit config path
 - **Given** 调用方提供有效配置文件路径 `./user-services/configs/config.yaml`
@@ -35,6 +35,13 @@ HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖
 - **When** 查看用户服务启动装配
 - **Then** 用户服务不得通过 `common/infrastructure.Module` 注入公共依赖
 - **Then** 用户服务必须手动依次提供公共配置、Zap logger 和自身声明的运行时依赖
+
+#### Scenario: CLI lifecycle timeouts are named separately
+- **Given** CLI 启动或停止 Fx app
+- **When** 实现创建 start context 和 stop context
+- **Then** 启动 context MUST 使用启动超时常量
+- **Then** 停止 context MUST 使用停止超时常量
+- **Then** 两个常量当前值 MUST 均保持为 `15s`
 
 ### Requirement: Initialize configured timezone during user service startup
 
@@ -150,7 +157,7 @@ HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖
 
 ### Requirement: Shutdown gracefully
 
-系统必须在收到中断或 SIGTERM 后停止接受新请求，并在配置的 shutdown timeout 内关闭 HTTP server。用户服务声明的 Redis client 和 PostgreSQL 连接池必须随 Fx app stop 释放。
+系统必须在收到中断或 SIGTERM 后停止接受新请求，并在配置的 shutdown timeout 内关闭 HTTP server。用户服务声明的 Redis client 和 PostgreSQL 连接池必须随 Fx app stop 释放。HTTP server 在配置未提供有效 shutdown timeout 时 MUST 使用具名默认关闭超时常量，当前默认值 MUST 保持为 `10s`。
 
 #### Scenario: Process receives termination signal
 - **Given** 服务正在运行
@@ -163,6 +170,12 @@ HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖
 - **Given** HTTP server 正常关闭
 - **When** `ListenAndServe` 返回 `http.ErrServerClosed`
 - **Then** 系统不应将其记录为服务失败
+
+#### Scenario: Default shutdown timeout is named
+- **Given** HTTP 配置未提供有效 shutdown timeout
+- **When** HTTP server stop hook 创建 graceful shutdown context
+- **Then** 系统 MUST 使用具名默认关闭超时常量
+- **Then** 默认关闭超时 MUST 保持为 `10s`
 
 ### Requirement: Provide high-throughput HTTP timeout defaults
 

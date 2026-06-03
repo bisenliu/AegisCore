@@ -25,6 +25,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const defaultShutdownTimeout = 10 * time.Second
+
 func NewApp(configPath string) *fx.App {
 	return fx.New(
 		fx.Supply(commoninfra.ConfigPath(configPath)),
@@ -144,7 +146,7 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 		OnStop: func(ctx context.Context) error {
 			shutdownTimeout := params.Config.HTTP.ShutdownTimeout
 			if shutdownTimeout == 0 {
-				shutdownTimeout = 10 * time.Second
+				shutdownTimeout = defaultShutdownTimeout
 			}
 			shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 			defer cancel()
