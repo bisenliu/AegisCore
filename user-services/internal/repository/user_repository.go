@@ -73,7 +73,7 @@ func (r *userRepository) Create(ctx context.Context, input CreateUserInput) (*en
 		return created, nil
 	}
 	if ent.IsConstraintError(err) {
-		return nil, response.ConflictError(errmsg.MsgUserAlreadyExists)
+		return nil, domain.ErrUserAlreadyExists
 	}
 	return nil, fmt.Errorf("create user username %s: %w", input.Username, err)
 }
@@ -92,7 +92,7 @@ func (r *userRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*en
 		return user, nil
 	}
 	if ent.IsNotFound(err) {
-		return nil, response.NotFoundError(errmsg.MsgUserNotFound)
+		return nil, domain.ErrUserNotFound
 	}
 	return nil, fmt.Errorf("query user by user_id %s: %w", userID.String(), err)
 }
@@ -103,7 +103,7 @@ func (r *userRepository) GetByUsername(ctx context.Context, username string) (*e
 		return user, nil
 	}
 	if ent.IsNotFound(err) {
-		return nil, response.NotFoundError(errmsg.MsgUserNotFound)
+		return nil, domain.ErrUserNotFound
 	}
 	return nil, fmt.Errorf("query user by username %s: %w", username, err)
 }

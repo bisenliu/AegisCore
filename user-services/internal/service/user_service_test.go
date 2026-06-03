@@ -98,6 +98,60 @@ func TestUserServiceCreateUser(t *testing.T) {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})
+
+	t.Run("map domain create conflict", func(t *testing.T) {
+		svc := NewUserService(&stubUserRepository{createErr: domain.ErrUserAlreadyExists})
+
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
+
+		appErr := response.FromError(err)
+		if appErr.Code != response.CodeConflict || appErr.Message != errmsg.MsgUserAlreadyExists {
+			t.Fatalf("err = %#v", appErr)
+		}
+	})
+}
+
+func TestUserServiceGetUserByID(t *testing.T) {
+	createdAt := int64(1780048800000)
+
+	t.Run("success", func(t *testing.T) {
+		repo := &stubUserRepository{getByUserIDUser: &ent.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: int64(domain.UserStatusNormal), CreatedAt: createdAt, UpdatedAt: createdAt}}
+		svc := NewUserService(repo)
+
+		user, err := svc.GetUserByID(context.Background(), testUserID.String())
+
+		if err != nil {
+			t.Fatalf("GetUserByID: %v", err)
+		}
+		if repo.getByUserID != testUserID {
+			t.Fatalf("getByUserID = %s", repo.getByUserID)
+		}
+		if user.UserID != testUserID.String() || user.Username != "alice" || user.CreatedAt != createdAt {
+			t.Fatalf("user = %#v", user)
+		}
+	})
+
+	t.Run("map domain not found", func(t *testing.T) {
+		svc := NewUserService(&stubUserRepository{getByUserIDErr: domain.ErrUserNotFound})
+
+		_, err := svc.GetUserByID(context.Background(), testUserID.String())
+
+		appErr := response.FromError(err)
+		if appErr.Code != response.CodeNotFound || appErr.Message != errmsg.MsgUserNotFound {
+			t.Fatalf("err = %#v", appErr)
+		}
+	})
+
+	t.Run("wrap repository error", func(t *testing.T) {
+		svc := NewUserService(&stubUserRepository{getByUserIDErr: errors.New("database down")})
+
+		_, err := svc.GetUserByID(context.Background(), testUserID.String())
+
+		appErr := response.FromError(err)
+		if appErr.Code != response.CodeInternalError || appErr.Message != response.MessageInternalError {
+			t.Fatalf("err = %#v", appErr)
+		}
+	})
 }
 
 func TestUserServiceListUsers(t *testing.T) {
@@ -184,6 +238,9 @@ type stubUserRepository struct {
 	listTotal       int
 	listErr         error
 	listInput       repository.ListUsersInput
+	getByUserID     uuid.UUID
+	getByUserIDUser *ent.User
+	getByUserIDErr  error
 }
 
 func (r *stubUserRepository) Create(_ context.Context, input repository.CreateUserInput) (*ent.User, error) {
@@ -202,8 +259,12 @@ func (r *stubUserRepository) ExistsByUsername(_ context.Context, username string
 	return r.exists, nil
 }
 
-func (r *stubUserRepository) GetByUserID(context.Context, uuid.UUID) (*ent.User, error) {
-	return nil, nil
+func (r *stubUserRepository) GetByUserID(_ context.Context, userID uuid.UUID) (*ent.User, error) {
+	r.getByUserID = userID
+	if r.getByUserIDErr != nil {
+		return nil, r.getByUserIDErr
+	}
+	return r.getByUserIDUser, nil
 }
 
 func (r *stubUserRepository) GetByUsername(context.Context, string) (*ent.User, error) {

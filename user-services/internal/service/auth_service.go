@@ -63,8 +63,7 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Tok
 
 	user, err := s.repo.GetByUsername(ctx, username)
 	if err != nil {
-		appErr := response.FromError(err)
-		if appErr.Code == response.CodeNotFound {
+		if errors.Is(err, domain.ErrUserNotFound) {
 			return nil, response.UnauthenticatedError(errmsg.MsgInvalidCredentials)
 		}
 		logger.Error(ctx, "query login user failed", zap.String("username", username), zap.Error(err))
@@ -111,6 +110,9 @@ func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePassword
 	}
 	user, err := s.repo.GetByUserID(ctx, parsedUserID)
 	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return nil, response.NotFoundError(errmsg.MsgUserNotFound)
+		}
 		return nil, response.FromError(err)
 	}
 	if domain.UserStatus(user.Status) != domain.UserStatusMustChangePassword {

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/aegiscore/common/logger"
@@ -72,6 +73,9 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 
 	user, err := s.repo.Create(ctx, repository.CreateUserInput{Nickname: nickname, UserID: userID, Username: username, PasswordHash: passwordHash, Status: status})
 	if err != nil {
+		if errors.Is(err, domain.ErrUserAlreadyExists) {
+			return nil, response.ConflictError(errmsg.MsgUserAlreadyExists)
+		}
 		logger.Error(ctx, "create user failed", zap.String("username", username), zap.Error(err))
 		return nil, response.FromError(err)
 	}
@@ -86,6 +90,9 @@ func (s *userService) GetUserByID(ctx context.Context, userID string) (*dto.User
 	logger.Info(ctx, "query user profile", zap.String("user_id", userID))
 	user, err := s.repo.GetByUserID(ctx, parsedUserID)
 	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return nil, response.NotFoundError(errmsg.MsgUserNotFound)
+		}
 		logger.Error(ctx, "query user profile failed", zap.String("user_id", userID), zap.Error(err))
 		return nil, response.FromError(err)
 	}
