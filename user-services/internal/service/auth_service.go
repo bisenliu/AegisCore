@@ -121,7 +121,7 @@ func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePassword
 		logger.Error(ctx, "hash changed password failed", zap.String("user_id", claims.UserID), zap.Error(err))
 		return nil, response.FromError(err)
 	}
-	if _, err := s.repo.UpdatePasswordHashAndStatus(ctx, parsedUserID, passwordHash, domain.UserStatusNormal); err != nil {
+	if _, err := s.repo.UpdateCredentials(ctx, repository.UpdateCredentialsInput{UserID: parsedUserID, PasswordHash: passwordHash, Status: domain.UserStatusNormal}); err != nil {
 		return nil, response.FromError(err)
 	}
 	if err := s.sessions.InvalidateUserTokenVersion(ctx, claims.UserID); err != nil {

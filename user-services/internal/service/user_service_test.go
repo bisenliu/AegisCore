@@ -218,7 +218,7 @@ func (r *stubUserRepository) IncrementTokenVersion(context.Context, uuid.UUID) (
 	return 0, nil
 }
 
-func (r *stubUserRepository) UpdatePasswordHashAndStatus(context.Context, uuid.UUID, string, domain.UserStatus) (int64, error) {
+func (r *stubUserRepository) UpdateCredentials(context.Context, repository.UpdateCredentialsInput) (int64, error) {
 	return 0, nil
 }
 

@@ -169,10 +169,10 @@ func TestAuthServiceChangePassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChangePassword: %v", err)
 	}
-	if !result.Changed || repo.updatedUserID != authTestUserID || repo.updatedStatus != domain.UserStatusNormal || !store.invalidated {
+	if !result.Changed || repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != domain.UserStatusNormal || !store.invalidated {
 		t.Fatalf("result=%#v repo=%#v store=%#v", result, repo, store)
 	}
-	matched, err := password.Verify("new-secret", repo.updatedPasswordHash)
+	matched, err := password.Verify("new-secret", repo.updatedInput.PasswordHash)
 	if err != nil || !matched {
 		t.Fatalf("updated password hash mismatch: matched=%v err=%v", matched, err)
 	}
@@ -307,14 +307,12 @@ func newTestAuthServiceWithConfig(repo repository.UserRepository, store SessionS
 }
 
 type authRepoStub struct {
-	userByUsername      *ent.User
-	userByID            *ent.User
-	gotUsername         string
-	newVersion          int64
-	incrementedUserID   uuid.UUID
-	updatedUserID       uuid.UUID
-	updatedPasswordHash string
-	updatedStatus       domain.UserStatus
+	userByUsername    *ent.User
+	userByID          *ent.User
+	gotUsername       string
+	newVersion        int64
+	incrementedUserID uuid.UUID
+	updatedInput      repository.UpdateCredentialsInput
 }
 
 func (r *authRepoStub) Create(context.Context, repository.CreateUserInput) (*ent.User, error) {
@@ -342,10 +340,8 @@ func (r *authRepoStub) IncrementTokenVersion(_ context.Context, userID uuid.UUID
 	r.incrementedUserID = userID
 	return r.newVersion, nil
 }
-func (r *authRepoStub) UpdatePasswordHashAndStatus(_ context.Context, userID uuid.UUID, passwordHash string, status domain.UserStatus) (int64, error) {
-	r.updatedUserID = userID
-	r.updatedPasswordHash = passwordHash
-	r.updatedStatus = status
+func (r *authRepoStub) UpdateCredentials(_ context.Context, input repository.UpdateCredentialsInput) (int64, error) {
+	r.updatedInput = input
 	return r.newVersion, nil
 }
 

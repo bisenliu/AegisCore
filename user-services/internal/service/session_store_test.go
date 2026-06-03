@@ -8,7 +8,6 @@ import (
 
 	"github.com/aegiscore/common/config"
 	"github.com/aegiscore/user-services/ent"
-	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
@@ -215,7 +214,7 @@ func (r *tokenVersionRepoStub) GetTokenVersion(context.Context, uuid.UUID) (int6
 func (r *tokenVersionRepoStub) IncrementTokenVersion(context.Context, uuid.UUID) (int64, error) {
 	return r.version + 1, nil
 }
-func (r *tokenVersionRepoStub) UpdatePasswordHashAndStatus(context.Context, uuid.UUID, string, domain.UserStatus) (int64, error) {
+func (r *tokenVersionRepoStub) UpdateCredentials(context.Context, repository.UpdateCredentialsInput) (int64, error) {
 	return r.version + 1, nil
 }
 func (r *tokenVersionRepoStub) ListUsers(context.Context, repository.ListUsersInput) ([]*ent.User, int, error) {

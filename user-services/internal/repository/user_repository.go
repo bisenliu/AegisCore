@@ -21,7 +21,7 @@ type UserRepository interface {
 	GetByUserID(ctx context.Context, userID uuid.UUID) (*ent.User, error)
 	GetTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error)
 	IncrementTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error)
-	UpdatePasswordHashAndStatus(ctx context.Context, userID uuid.UUID, passwordHash string, status domain.UserStatus) (int64, error)
+	UpdateCredentials(ctx context.Context, input UpdateCredentialsInput) (int64, error)
 	ListUsers(ctx context.Context, input ListUsersInput) ([]*ent.User, int, error)
 }
 
@@ -29,6 +29,12 @@ type CreateUserInput struct {
 	Nickname     string
 	UserID       uuid.UUID
 	Username     string
+	PasswordHash string
+	Status       domain.UserStatus
+}
+
+type UpdateCredentialsInput struct {
+	UserID       uuid.UUID
 	PasswordHash string
 	Status       domain.UserStatus
 }
@@ -128,19 +134,19 @@ func (r *userRepository) IncrementTokenVersion(ctx context.Context, userID uuid.
 	return 0, fmt.Errorf("increment user token version by user_id %s: %w", userID.String(), err)
 }
 
-func (r *userRepository) UpdatePasswordHashAndStatus(ctx context.Context, userID uuid.UUID, passwordHash string, status domain.UserStatus) (int64, error) {
-	updated, err := r.client.User.Update().Where(user.UserIDEQ(userID), user.DeletedAtIsNil()).SetPasswordHash(passwordHash).SetStatus(int64(status)).AddTokenVersion(1).Save(ctx)
+func (r *userRepository) UpdateCredentials(ctx context.Context, input UpdateCredentialsInput) (int64, error) {
+	updated, err := r.client.User.Update().Where(user.UserIDEQ(input.UserID), user.DeletedAtIsNil()).SetPasswordHash(input.PasswordHash).SetStatus(int64(input.Status)).AddTokenVersion(1).Save(ctx)
 	if err == nil {
 		if updated == 0 {
 			return 0, response.NotFoundError(errmsg.MsgUserNotFound)
 		}
-		user, err := r.GetByUserID(ctx, userID)
+		user, err := r.GetByUserID(ctx, input.UserID)
 		if err != nil {
 			return 0, err
 		}
 		return user.TokenVersion, nil
 	}
-	return 0, fmt.Errorf("update user password by user_id %s: %w", userID.String(), err)
+	return 0, fmt.Errorf("update user credentials by user_id %s: %w", input.UserID.String(), err)
 }
 
 func (r *userRepository) ListUsers(ctx context.Context, input ListUsersInput) ([]*ent.User, int, error) {
