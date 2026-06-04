@@ -1,4 +1,4 @@
-package infrastructure
+package datastorefx
 
 import (
 	"context"
@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/configfx"
+	"github.com/aegiscore/common/runtime/loggerfx"
+	"github.com/aegiscore/common/runtime/resources"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
@@ -41,7 +44,7 @@ func TestNewPostgresAppliesPoolSettings(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	db, err := NewPostgres(lc, cfg, log, NameUserDB)
+	db, err := NewPostgres(lc, cfg, log, resources.NameUserDB)
 	if err != nil {
 		t.Fatalf("NewPostgres: %v", err)
 	}
@@ -59,7 +62,7 @@ func TestNewPostgresRegistersLifecycle(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	if _, err := NewPostgres(lc, cfg, log, NameUserDB); err != nil {
+	if _, err := NewPostgres(lc, cfg, log, resources.NameUserDB); err != nil {
 		t.Fatalf("NewPostgres: %v", err)
 	}
 	lc.RequireStart()
@@ -81,8 +84,8 @@ func TestExplicitCommonProvidersDoNotProvideNamedPostgresPools(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		fx.Supply(ConfigPath("config.yaml")),
-		fx.Provide(NewConfig, NewLogger),
+		fx.Supply(configfx.ConfigPath("config.yaml")),
+		fx.Provide(configfx.NewConfig, loggerfx.NewLogger),
 		fx.Invoke(func(params) {}),
 	)
 	if err == nil {
@@ -110,7 +113,7 @@ func TestNewRedisClientReturnsErrorForMissingConfig(t *testing.T) {
 func TestNewRedisClientRegistersLifecycle(t *testing.T) {
 	redisServer := newTestRedisServer(t)
 	cfg := &config.Config{Redis: map[string]config.RedisConfig{
-		NameCacheRedis: {
+		resources.NameCacheRedis: {
 			Addr:         redisServer.addr,
 			DB:           0,
 			DialTimeout:  time.Second,
@@ -122,7 +125,7 @@ func TestNewRedisClientRegistersLifecycle(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	client, err := NewRedisClient(lc, cfg, log, NameCacheRedis)
+	client, err := NewRedisClient(lc, cfg, log, resources.NameCacheRedis)
 	if err != nil {
 		t.Fatalf("NewRedisClient: %v", err)
 	}
@@ -145,8 +148,8 @@ func TestExplicitCommonProvidersDoNotProvideRedisClient(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		fx.Supply(ConfigPath("config.yaml")),
-		fx.Provide(NewConfig, NewLogger),
+		fx.Supply(configfx.ConfigPath("config.yaml")),
+		fx.Provide(configfx.NewConfig, loggerfx.NewLogger),
 		fx.Invoke(func(params) {}),
 	)
 	if err == nil {
@@ -170,7 +173,7 @@ func TestProvideNamedPostgresProvidesOnlyDeclaredPool(t *testing.T) {
 
 	app := fxtest.New(t,
 		fx.Supply(cfg, log),
-		ProvideNamedPostgres(NameUserDB, NameUserDB),
+		ProvideNamedPostgres(resources.NameUserDB, resources.NameUserDB),
 		fx.Populate(&got),
 	)
 	app.RequireStart()
@@ -187,7 +190,7 @@ func TestProvideNamedPostgresProvidesOnlyDeclaredPool(t *testing.T) {
 func TestProvideNamedRedisProvidesOnlyDeclaredClient(t *testing.T) {
 	redisServer := newTestRedisServer(t)
 	cfg := &config.Config{Redis: map[string]config.RedisConfig{
-		NameCacheRedis: {
+		resources.NameCacheRedis: {
 			Addr:         redisServer.addr,
 			DB:           0,
 			DialTimeout:  time.Second,
@@ -214,7 +217,7 @@ func TestProvideNamedRedisProvidesOnlyDeclaredClient(t *testing.T) {
 
 	app := fxtest.New(t,
 		fx.Supply(cfg, log),
-		ProvideNamedRedis(NameCacheRedis, NameCacheRedis),
+		ProvideNamedRedis(resources.NameCacheRedis, resources.NameCacheRedis),
 		fx.Populate(&got),
 	)
 	app.RequireStart()
@@ -231,7 +234,7 @@ func TestProvideNamedRedisProvidesOnlyDeclaredClient(t *testing.T) {
 func testConfig(driverName string) *config.Config {
 	return &config.Config{
 		Postgres: map[string]config.PostgresConfig{
-			NameUserDB: {
+			resources.NameUserDB: {
 				Host:            "127.0.0.1",
 				Port:            15432,
 				Username:        "aegiscore",

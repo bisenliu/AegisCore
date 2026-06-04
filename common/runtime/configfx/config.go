@@ -1,4 +1,4 @@
-package infrastructure
+package configfx
 
 import "github.com/aegiscore/common/runtime/config"
 

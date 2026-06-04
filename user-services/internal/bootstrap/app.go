@@ -3,7 +3,8 @@ package bootstrap
 import (
 	"net/http"
 
-	commoninfra "github.com/aegiscore/common/runtime/infrastructure"
+	"github.com/aegiscore/common/runtime/configfx"
+	"github.com/aegiscore/common/runtime/loggerfx"
 	commontz "github.com/aegiscore/common/runtime/timezone"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/controller"
@@ -15,10 +16,10 @@ import (
 
 func NewApp(configPath string) *fx.App {
 	return fx.New(
-		fx.Supply(commoninfra.ConfigPath(configPath)),
+		fx.Supply(configfx.ConfigPath(configPath)),
 		fx.Provide(
-			commoninfra.NewConfig,
-			commoninfra.NewLogger,
+			configfx.NewConfig,
+			loggerfx.NewLogger,
 		),
 		UserServiceModule,
 	)

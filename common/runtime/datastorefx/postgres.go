@@ -1,4 +1,4 @@
-package infrastructure
+package datastorefx
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/datastore"
 	"github.com/aegiscore/common/runtime/logger"
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -26,23 +26,11 @@ func NewPostgres(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name stri
 	if !ok {
 		return nil, fmt.Errorf("postgres config %q not found", name)
 	}
-	db, err := openPostgres(name, dbCfg)
+	db, err := datastore.OpenPostgres(name, dbCfg)
 	if err != nil {
 		return nil, err
 	}
 	registerDBLifecycle(lc, log, name, db, dbCfg)
-	return db, nil
-}
-
-func openPostgres(name string, dbCfg config.PostgresDatabaseConfig) (*sql.DB, error) {
-	db, err := sql.Open(dbCfg.Driver, dbCfg.DSN)
-	if err != nil {
-		return nil, fmt.Errorf("open postgres %s: %w", name, err)
-	}
-	db.SetMaxOpenConns(dbCfg.MaxOpenConns)
-	db.SetMaxIdleConns(dbCfg.MaxIdleConns)
-	db.SetConnMaxLifetime(dbCfg.ConnMaxLifetime)
-	db.SetConnMaxIdleTime(dbCfg.ConnMaxIdleTime)
 	return db, nil
 }
 

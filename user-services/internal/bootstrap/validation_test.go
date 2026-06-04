@@ -4,7 +4,8 @@ import (
 	"testing"
 
 	"github.com/aegiscore/common/runtime/config"
-	commoninfra "github.com/aegiscore/common/runtime/infrastructure"
+	"github.com/aegiscore/common/runtime/configfx"
+	"github.com/aegiscore/common/runtime/loggerfx"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/controller"
 	"go.uber.org/fx"
@@ -35,10 +36,10 @@ func TestUserServiceModuleIncludesSharedTimezoneDependency(t *testing.T) {
 
 func TestAppWiresCommonDependenciesExplicitly(t *testing.T) {
 	err := fx.ValidateApp(
-		fx.Supply(commoninfra.ConfigPath("../../configs/config.yaml")),
+		fx.Supply(configfx.ConfigPath("../../configs/config.yaml")),
 		fx.Provide(
-			commoninfra.NewConfig,
-			commoninfra.NewLogger,
+			configfx.NewConfig,
+			loggerfx.NewLogger,
 		),
 		UserServiceModule,
 		fx.Invoke(func(*config.Config, *zap.Logger, *controller.UserController) {}),

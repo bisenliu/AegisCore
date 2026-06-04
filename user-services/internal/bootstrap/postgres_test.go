@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/runtime/config"
-	commoninfra "github.com/aegiscore/common/runtime/infrastructure"
+	"github.com/aegiscore/common/runtime/resources"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
@@ -137,7 +137,7 @@ func TestProvideRedisClientsProvidesCacheRedis(t *testing.T) {
 	redisServer := newBootstrapTestRedisServer(t)
 	cfg := bootstrapTestConfig("")
 	cfg.Redis = map[string]config.RedisConfig{
-		commoninfra.NameCacheRedis: {
+		resources.NameCacheRedis: {
 			Addr:         redisServer.addr,
 			DB:           0,
 			DialTimeout:  time.Second,
@@ -215,7 +215,7 @@ func TestProvideRedisClientsReturnsErrorForMissingCacheRedisConfig(t *testing.T)
 	if err == nil {
 		t.Fatal("ProvideRedisClients error = nil")
 	}
-	if !strings.Contains(err.Error(), `redis config "`+commoninfra.NameCacheRedis+`" not found`) {
+	if !strings.Contains(err.Error(), `redis config "`+resources.NameCacheRedis+`" not found`) {
 		t.Fatalf("ProvideRedisClients error = %q, want missing cache_redis config", err.Error())
 	}
 }
@@ -224,7 +224,7 @@ func TestProvideRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 	cfg := &config.Config{Redis: map[string]config.RedisConfig{
-		commoninfra.NameCacheRedis: {
+		resources.NameCacheRedis: {
 			Addr:         "127.0.0.1:1",
 			DB:           0,
 			DialTimeout:  10 * time.Millisecond,
@@ -249,7 +249,7 @@ func TestProvideRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 func bootstrapTestConfig(driverName string) *config.Config {
 	return &config.Config{
 		Redis: map[string]config.RedisConfig{
-			commoninfra.NameCacheRedis: {
+			resources.NameCacheRedis: {
 				Addr:         "127.0.0.1:6379",
 				DB:           0,
 				DialTimeout:  time.Second,
@@ -259,7 +259,7 @@ func bootstrapTestConfig(driverName string) *config.Config {
 			},
 		},
 		Postgres: map[string]config.PostgresConfig{
-			commoninfra.NameUserDB: {
+			resources.NameUserDB: {
 				Host:            "127.0.0.1",
 				Port:            15432,
 				Username:        "aegiscore",
@@ -285,7 +285,7 @@ func bootstrapTestConfig(driverName string) *config.Config {
 				ConnMaxIdleTime: 30 * time.Second,
 				PingTimeout:     time.Second,
 			},
-			commoninfra.NameCommonDB: {
+			resources.NameCommonDB: {
 				Host:            "127.0.0.1",
 				Port:            15432,
 				Username:        "aegiscore",

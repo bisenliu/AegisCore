@@ -4,7 +4,8 @@ import (
 	"database/sql"
 
 	"github.com/aegiscore/common/runtime/config"
-	commoninfra "github.com/aegiscore/common/runtime/infrastructure"
+	"github.com/aegiscore/common/runtime/datastorefx"
+	"github.com/aegiscore/common/runtime/resources"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -25,11 +26,11 @@ type NamedPostgresPools struct {
 }
 
 func ProvidePostgresPools(params NamedPostgresParams) (NamedPostgresPools, error) {
-	userDB, err := commoninfra.NewPostgres(params.Lifecycle, params.Config, params.Log, commoninfra.NameUserDB)
+	userDB, err := datastorefx.NewPostgres(params.Lifecycle, params.Config, params.Log, resources.NameUserDB)
 	if err != nil {
 		return NamedPostgresPools{}, err
 	}
-	commonDB, err := commoninfra.NewPostgres(params.Lifecycle, params.Config, params.Log, commoninfra.NameCommonDB)
+	commonDB, err := datastorefx.NewPostgres(params.Lifecycle, params.Config, params.Log, resources.NameCommonDB)
 	if err != nil {
 		_ = userDB.Close()
 		return NamedPostgresPools{}, err

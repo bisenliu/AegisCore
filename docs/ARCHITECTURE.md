@@ -54,12 +54,12 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前声明并连接 `postgres.user_db` 与 `postgres.common_db`，不因存在 `postgres.pay_db` 而初始化支付连接池。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`，不因存在 `redis.queue_redis` 而初始化队列 Redis。
 - Ent clients 由 `user-services/internal/bootstrap/ent.go` 基于具名 `*sql.DB` 构建。
-- 日志基于 Zap，由 `common/runtime/logger` 与 `common/runtime/infrastructure/logger.go` 提供；HTTP trace header 为 `X-Trace-ID`，Gin context key 为 `trace_id`，日志字段统一为 `trace-id`。
+- 日志基于 Zap，由 `common/runtime/logger` 与 `common/runtime/loggerfx` 提供；HTTP trace header 为 `X-Trace-ID`，Gin context key 为 `trace_id`，日志字段统一为 `trace-id`。
 
 ## 7. Common Organization
 
 - `common/contract/`：跨服务外部契约，例如 `response` 响应信封、错误码和分页响应模型。
-- `common/runtime/`：服务运行时基础能力，例如配置、日志、具名 Redis/PostgreSQL provider、时区初始化和 Fx lifecycle helper。
+- `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、运行时资源名、时区初始化和 Fx lifecycle helper。
 - `common/http/`：HTTP/Gin 边界适配，例如 middleware 和 Gin 请求绑定/校验失败响应适配层。
 - `common/security/`：安全与凭证原语，例如 JWT、Bearer 传输常量、认证上下文和 Argon2id 密码 helper。
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。

@@ -1,4 +1,4 @@
-package infrastructure
+package resources
 
 // 运行时资源名称用于 datastore 和 Ent 的 Fx wiring。
 const (

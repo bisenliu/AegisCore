@@ -12,7 +12,7 @@
 | `user-authentication` | 通过 JWT Bearer 中间件校验受保护 API 并传播外部 UUID `user_id` 认证身份 | `common/security/auth/`, `common/http/middleware/auth.go`, `user-services/internal/bootstrap/bootstrap.go` | `openspec/specs/user-authentication/spec.md` | ready |
 | `user-session-control` | 通过 username 登录、短期 Access Token、可撤销 Refresh Token 会话和用户级 token_version 支持登录、刷新、退出当前设备和退出全部设备 | `user-services/internal/controller/auth_controller.go`, `user-services/internal/service/auth_service.go`, `user-services/internal/service/session_store.go`, `user-services/internal/repository/user_repository.go`, `user-services/ent/schema/user.go` | `openspec/specs/user-session-control/spec.md` | proposed |
 | `http-service-runtime` | 通过 CLI 启动 HTTP 服务，注册中间件和路由，并支持优雅关闭 | `user-services/cmd/main.go`, `user-services/internal/bootstrap/bootstrap.go`, `user-services/internal/router/router.go` | `openspec/specs/http-service-runtime/spec.md` | ready |
-| `shared-infrastructure` | 加载配置，提供 Zap 日志，并支持服务侧声明具名 Redis/PostgreSQL/Ent 运行时依赖 | `common/runtime/config/`, `common/runtime/infrastructure/`, `common/runtime/logger/`, `user-services/internal/bootstrap/` | `openspec/specs/shared-infrastructure/spec.md` | ready |
+| `shared-infrastructure` | 加载配置，提供 Zap 日志，并支持服务侧声明具名 Redis/PostgreSQL/Ent 运行时依赖 | `common/runtime/config/`, `common/runtime/configfx/`, `common/runtime/logger/`, `common/runtime/loggerfx/`, `common/runtime/datastore/`, `common/runtime/datastorefx/`, `common/runtime/resources/`, `user-services/internal/bootstrap/` | `openspec/specs/shared-infrastructure/spec.md` | ready |
 | `api-response-contract` | 统一 HTTP 成功/失败信封、错误码和应用错误映射 | `common/contract/response/`, `common/http/middleware/recovery.go`, `user-services/internal/controller/user_controller.go` | `openspec/specs/api-response-contract/spec.md` | ready |
 | `request-validation` | 为 Gin controller 提供统一请求绑定、结构体校验、字段明细和校验失败响应 | `common/validation/`, `user-services/internal/controller/user_controller.go`, `user-services/internal/bootstrap/bootstrap.go` | `openspec/specs/request-validation/spec.md` | ready |
 | `common-module-organization` | 约束 common 模块按 contract、runtime、http、security、validation 分类组织共享能力，并要求新增共享代码先明确 capability owner | `common/contract/`, `common/runtime/`, `common/http/`, `common/security/`, `common/validation/` | `openspec/specs/common-module-organization/spec.md` | ready |
@@ -25,7 +25,7 @@
 - CLI：`user-services/cmd/main.go`
 - Fx app：`user-services/internal/bootstrap/bootstrap.go`
 - Router：`user-services/internal/router/router.go`
-- Shared infrastructure：`common/runtime/infrastructure/config.go`, `common/runtime/infrastructure/logger.go`, `common/runtime/infrastructure/redis.go`, `common/runtime/infrastructure/postgres.go`
+- Shared infrastructure：`common/runtime/config/`, `common/runtime/configfx/`, `common/runtime/logger/`, `common/runtime/loggerfx/`, `common/runtime/datastore/`, `common/runtime/datastorefx/`, `common/runtime/resources/`
 - API response helpers：`common/contract/response/response.go`
 - Database migrations：`user-services/atlas.hcl`, `user-services/migrations/`, `user-services/scripts/`
 

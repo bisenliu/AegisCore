@@ -27,7 +27,10 @@
 - 用户查询服务：`user-services/internal/service/user_service.go`
 - 用户数据访问：`user-services/internal/repository/user_repository.go`
 - 共享配置加载：`common/runtime/config/loader.go`
-- 共享基础设施 provider：`common/runtime/infrastructure/config.go`、`common/runtime/infrastructure/logger.go`、`common/runtime/infrastructure/redis.go`、`common/runtime/infrastructure/postgres.go`
+- 共享配置 Fx provider：`common/runtime/configfx/config.go`
+- 共享日志 Fx provider：`common/runtime/loggerfx/logger.go`
+- 共享 datastore provider：`common/runtime/datastorefx/redis.go`、`common/runtime/datastorefx/postgres.go`
+- 运行时资源名：`common/runtime/resources/resource_names.go`
 - Atlas 迁移配置：`user-services/atlas.hcl`
 - 用户服务迁移目录：`user-services/migrations/`
 - 迁移脚本：`user-services/scripts/migrate-diff.sh`、`user-services/scripts/migrate-validate.sh`、`user-services/scripts/migrate-apply.sh`
