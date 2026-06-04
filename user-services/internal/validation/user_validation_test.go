@@ -28,7 +28,7 @@ func TestNormalizeCreateUser(t *testing.T) {
 		err := NormalizeCreateUser(&req)
 
 		appErr := response.FromError(err)
-		if appErr.Code != response.CodeValidationFailed || appErr.Message != errmsg.MsgInvalidUserName {
+		if appErr.Code != response.CodeValidationFailed || appErr.Message != errmsg.MsgInvalidUsername {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})

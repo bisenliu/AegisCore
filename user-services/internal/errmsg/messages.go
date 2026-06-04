@@ -1,7 +1,7 @@
 package errmsg
 
 const (
-	MsgInvalidUserName    = "用户名不能为空"
+	MsgInvalidUsername    = "用户名不能为空"
 	MsgInvalidUserID      = "用户ID格式不正确"
 	MsgInvalidPassword    = "密码不能为空"
 	MsgInvalidCredentials = "用户名或密码错误"
