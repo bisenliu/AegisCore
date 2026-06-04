@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/aegiscore/common/ginvalidation"
 	"github.com/aegiscore/common/response"
 	commonvalidation "github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/dto"
@@ -36,7 +37,7 @@ func NewUserController(userService service.UserService, validator *commonvalidat
 // @Router /users [get]
 func (ctl *UserController) List(c *gin.Context) {
 	req := dto.ListUsersRequest{}
-	if !ctl.validator.BindOrAbort(c, &req, commonvalidation.QueryBinder) {
+	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.QueryBinder) {
 		return
 	}
 	uservalidation.NormalizeListUsers(&req)
@@ -65,7 +66,7 @@ func (ctl *UserController) List(c *gin.Context) {
 // @Router /users [post]
 func (ctl *UserController) Create(c *gin.Context) {
 	req := dto.CreateUserRequest{}
-	if !ctl.validator.BindOrAbort(c, &req, commonvalidation.JSONBinder) {
+	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
 	if err := uservalidation.NormalizeCreateUser(&req); err != nil {
@@ -96,7 +97,7 @@ func (ctl *UserController) Create(c *gin.Context) {
 // @Router /users/{user_id} [get]
 func (ctl *UserController) GetByID(c *gin.Context) {
 	req := dto.GetUserRequest{}
-	if !ctl.validator.BindOrAbort(c, &req, commonvalidation.URIBinder) {
+	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.URIBinder) {
 		return
 	}
 	userID, err := uservalidation.ParseUserID(req)

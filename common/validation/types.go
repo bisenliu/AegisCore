@@ -4,7 +4,6 @@ import (
 	"reflect"
 
 	"github.com/aegiscore/common/response"
-	"github.com/gin-gonic/gin"
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
 )
@@ -34,8 +33,6 @@ const (
 
 var requestTags = []string{TagJSON, TagForm, TagURI, TagQuery}
 
-type Binder func(*gin.Context, any) error
-
 type Defaultable interface {
 	SetDefaults()
 }
@@ -63,6 +60,12 @@ type Error struct {
 	Message string        `json:"message"`
 	Fields  []FieldError  `json:"fields,omitempty"`
 	Code    response.Code `json:"-"`
+}
+
+type Failure struct {
+	Message      string
+	Fields       []FieldError
+	IsValidation bool
 }
 
 type bindFieldError struct {

@@ -3,14 +3,10 @@ package validation
 import (
 	"fmt"
 
-	"github.com/aegiscore/common/logger"
-	"github.com/aegiscore/common/response"
-	"github.com/gin-gonic/gin"
 	"github.com/go-playground/locales/zh"
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
 	zhtranslations "github.com/go-playground/validator/v10/translations/zh"
-	"go.uber.org/zap"
 )
 
 func NewDefault() (*Validator, error) {
@@ -63,27 +59,6 @@ func (v *Validator) Validate(dst any) error {
 	return nil
 }
 
-func (v *Validator) Bind(c *gin.Context, dst any, binder Binder) error {
-	if err := binder(c, dst); err != nil {
-		return v.normalizeError(dst, err)
-	}
-	return v.Validate(dst)
-}
-
-func (v *Validator) BindOrAbort(c *gin.Context, dst any, binder Binder) bool {
-	if err := v.Bind(c, dst, binder); err != nil {
-		fields := []zap.Field{zap.Error(err), zap.String("path", c.Request.URL.Path)}
-		if details := validationDetails(err); len(details) > 0 {
-			fields = append(fields, zap.Any("errors", details))
-		}
-		logger.Error(c.Request.Context(), "invalid request", fields...)
-		if validationFailure(err) {
-			response.ValidationFailedWithErrors(c, publicMessage(err), validationDetails(err))
-		} else {
-			response.BadRequest(c, publicMessage(err))
-		}
-		c.Abort()
-		return false
-	}
-	return true
+func (v *Validator) NormalizeError(dst any, err error) error {
+	return v.normalizeError(dst, err)
 }

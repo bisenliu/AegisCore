@@ -2,76 +2,15 @@ package validation
 
 import (
 	"encoding"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/aegiscore/common/response"
-	"github.com/gin-gonic/gin"
 )
 
-func URIBinder(c *gin.Context, dst any) error {
-	values := make(url.Values, len(c.Params))
-	for _, param := range c.Params {
-		values.Set(param.Key, param.Value)
-	}
-	return bindValues(dst, values, TagURI)
-}
-
-func QueryBinder(c *gin.Context, dst any) error {
-	return bindValues(dst, c.Request.URL.Query(), TagQuery, TagForm)
-}
-
-func JSONBinder(c *gin.Context, dst any) error {
-	return jsonBinder(c, dst, false)
-}
-
-func StrictJSONBinder(c *gin.Context, dst any) error {
-	return jsonBinder(c, dst, true)
-}
-
-func JSONBinderWithOptions(disallowUnknownFields bool) Binder {
-	return func(c *gin.Context, dst any) error {
-		return jsonBinder(c, dst, disallowUnknownFields)
-	}
-}
-
-func jsonBinder(c *gin.Context, dst any, disallowUnknownFields bool) error {
-	if c.Request.Body == nil || c.Request.ContentLength == 0 {
-		return &Error{Message: ErrEmptyRequestBody, Code: response.CodeBadRequest}
-	}
-	decoder := json.NewDecoder(c.Request.Body)
-	if disallowUnknownFields {
-		decoder.DisallowUnknownFields()
-	}
-	if err := decoder.Decode(dst); err != nil {
-		return err
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return &Error{Message: ErrTrailingJSONBody, Code: response.CodeBadRequest}
-	}
-	return nil
-}
-
-func FormBinder(c *gin.Context, dst any) error {
-	if err := c.Request.ParseForm(); err != nil {
-		return err
-	}
-	values := c.Request.PostForm
-	if c.Request.Method == http.MethodGet {
-		values = c.Request.Form
-	}
-	return bindValues(dst, values, TagForm)
-}
-
-func bindValues(dst any, values url.Values, tags ...string) error {
+func BindValues(dst any, values url.Values, tags ...string) error {
 	value := reflect.ValueOf(dst)
 	if value.Kind() != reflect.Ptr || value.IsNil() {
 		return fmt.Errorf("validation bind target must be a non-nil pointer")

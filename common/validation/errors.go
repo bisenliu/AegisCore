@@ -64,6 +64,10 @@ func validationDetails(err error) []FieldError {
 	return nil
 }
 
+func ClassifyError(err error) Failure {
+	return Failure{Message: publicMessage(err), Fields: validationDetails(err), IsValidation: validationFailure(err)}
+}
+
 func expectedType(t reflect.Type) string {
 	if t == nil {
 		return "正确"
