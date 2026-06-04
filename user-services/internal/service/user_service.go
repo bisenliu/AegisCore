@@ -7,7 +7,6 @@ import (
 	"github.com/aegiscore/common/logger"
 	"github.com/aegiscore/common/password"
 	"github.com/aegiscore/common/response"
-	"github.com/aegiscore/user-services/ent"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/errmsg"
@@ -97,18 +96,18 @@ func (s *userService) ListUsers(ctx context.Context, req dto.ListUsersRequest) (
 	}
 
 	items := make([]dto.UserResponse, 0, len(users))
-	for _, user := range users {
-		items = append(items, *toUserResponse(user))
+	for i := range users {
+		items = append(items, *toUserResponse(&users[i]))
 	}
 	return response.NewPaginatedData(items, response.NewPagination(req.Page, req.PageSize, total)), nil
 }
 
-func toUserResponse(user *ent.User) *dto.UserResponse {
+func toUserResponse(user *domain.User) *dto.UserResponse {
 	return &dto.UserResponse{
 		UserID:    user.UserID.String(),
 		Nickname:  user.Nickname,
 		Username:  user.Username,
-		Status:    domain.UserStatus(user.Status),
+		Status:    user.Status,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	}

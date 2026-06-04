@@ -10,7 +10,6 @@ import (
 	"github.com/aegiscore/common/config"
 	"github.com/aegiscore/common/password"
 	"github.com/aegiscore/common/response"
-	"github.com/aegiscore/user-services/ent"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/repository"
@@ -24,7 +23,7 @@ func TestAuthServiceLogin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(domain.UserStatusNormal), TokenVersion: 2}}
+	repo := &authRepoStub{userByUsername: &domain.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: domain.UserStatusNormal, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
 
@@ -49,7 +48,7 @@ func TestAuthServiceLoginUsesDefaultTTLs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(domain.UserStatusNormal), TokenVersion: 2}}
+	repo := &authRepoStub{userByUsername: &domain.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: domain.UserStatusNormal, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthServiceWithConfig(repo, store, config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"}})
 
@@ -71,7 +70,7 @@ func TestAuthServiceLoginUsesExplicitTTLs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(domain.UserStatusNormal), TokenVersion: 2}}
+	repo := &authRepoStub{userByUsername: &domain.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: domain.UserStatusNormal, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	accessTTL := time.Minute
 	refreshTTL := 2 * time.Hour
@@ -95,7 +94,7 @@ func TestAuthServiceLoginRejectsInvalidCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	svc := newTestAuthService(&authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(domain.UserStatusNormal), TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
+	svc := newTestAuthService(&authRepoStub{userByUsername: &domain.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: domain.UserStatusNormal, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
 
 	_, err = svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "wrong"})
 
@@ -111,7 +110,7 @@ func TestAuthServiceLoginRejectsInactiveStatuses(t *testing.T) {
 		t.Fatalf("Hash: %v", err)
 	}
 	for _, status := range []domain.UserStatus{domain.UserStatusDisabled} {
-		svc := newTestAuthService(&authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(status), TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
+		svc := newTestAuthService(&authRepoStub{userByUsername: &domain.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: status, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
 
 		_, err = svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "secret"})
 
@@ -127,7 +126,7 @@ func TestAuthServiceLoginIssuesPasswordChangeToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(domain.UserStatusMustChangePassword), TokenVersion: 2}}
+	repo := &authRepoStub{userByUsername: &domain.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: domain.UserStatusMustChangePassword, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
 
@@ -156,7 +155,7 @@ func TestAuthServiceChangePassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByID: &ent.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: int64(domain.UserStatusMustChangePassword), TokenVersion: 2}, newVersion: 3}
+	repo := &authRepoStub{userByID: &domain.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: domain.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
 	token, err := svc.(*authService).jwt.SignPasswordChangeToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
@@ -179,7 +178,7 @@ func TestAuthServiceChangePassword(t *testing.T) {
 }
 
 func TestAuthServiceChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
-	repo := &authRepoStub{userByID: &ent.User{ID: 123, UserID: authTestUserID, Status: int64(domain.UserStatusMustChangePassword), TokenVersion: 2}, updateErr: domain.ErrUserNotFound}
+	repo := &authRepoStub{userByID: &domain.User{ID: 123, UserID: authTestUserID, Status: domain.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: domain.ErrUserNotFound}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
 	token, err := svc.(*authService).jwt.SignPasswordChangeToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
@@ -211,7 +210,7 @@ func TestAuthServiceChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
 }
 
 func TestAuthServiceChangePasswordRejectsAccessToken(t *testing.T) {
-	repo := &authRepoStub{userByID: &ent.User{ID: 123, UserID: authTestUserID, Status: int64(domain.UserStatusMustChangePassword), TokenVersion: 2}}
+	repo := &authRepoStub{userByID: &domain.User{ID: 123, UserID: authTestUserID, Status: domain.UserStatusMustChangePassword, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
 	token, err := svc.(*authService).jwt.SignAccessToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
@@ -361,8 +360,8 @@ func newTestAuthServiceWithConfig(repo repository.UserRepository, store reposito
 }
 
 type authRepoStub struct {
-	userByUsername    *ent.User
-	userByID          *ent.User
+	userByUsername    *domain.User
+	userByID          *domain.User
 	gotUsername       string
 	newVersion        int64
 	incrementErr      error
@@ -371,20 +370,20 @@ type authRepoStub struct {
 	updatedInput      repository.UpdateCredentialsInput
 }
 
-func (r *authRepoStub) Create(context.Context, repository.CreateUserInput) (*ent.User, error) {
+func (r *authRepoStub) Create(context.Context, repository.CreateUserInput) (*domain.User, error) {
 	return nil, nil
 }
 func (r *authRepoStub) ExistsByUsername(context.Context, string) (bool, error) { return false, nil }
-func (r *authRepoStub) GetByUserID(_ context.Context, userID uuid.UUID) (*ent.User, error) {
+func (r *authRepoStub) GetByUserID(_ context.Context, userID uuid.UUID) (*domain.User, error) {
 	if r.userByID == nil {
 		return nil, domain.ErrUserNotFound
 	}
 	return r.userByID, nil
 }
-func (r *authRepoStub) ListUsers(context.Context, repository.ListUsersInput) ([]*ent.User, int, error) {
+func (r *authRepoStub) ListUsers(context.Context, repository.ListUsersInput) ([]domain.User, int, error) {
 	return nil, 0, nil
 }
-func (r *authRepoStub) GetByUsername(_ context.Context, username string) (*ent.User, error) {
+func (r *authRepoStub) GetByUsername(_ context.Context, username string) (*domain.User, error) {
 	r.gotUsername = username
 	if r.userByUsername == nil {
 		return nil, domain.ErrUserNotFound

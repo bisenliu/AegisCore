@@ -11,7 +11,6 @@ import (
 	"github.com/aegiscore/common/logger"
 	"github.com/aegiscore/common/password"
 	"github.com/aegiscore/common/response"
-	"github.com/aegiscore/user-services/ent"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/errmsg"
@@ -60,14 +59,14 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Tok
 		return nil, err
 	}
 
-	if domain.UserStatus(user.Status) == domain.UserStatusMustChangePassword {
+	if user.RequiresPasswordChange() {
 		return s.issuePasswordChangeToken(ctx, user.UserID.String(), user.TokenVersion, uuid.NewString())
 	}
 
 	return s.issueTokenPair(ctx, user.UserID.String(), user.TokenVersion, uuid.NewString())
 }
 
-func (s *authService) authenticateUser(ctx context.Context, username, plainPassword string) (*ent.User, error) {
+func (s *authService) authenticateUser(ctx context.Context, username, plainPassword string) (*domain.User, error) {
 	user, err := s.repo.GetByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
@@ -84,8 +83,7 @@ func (s *authService) authenticateUser(ctx context.Context, username, plainPassw
 	if !matched {
 		return nil, response.UnauthenticatedError(errmsg.MsgInvalidCredentials)
 	}
-	status := domain.UserStatus(user.Status)
-	if status != domain.UserStatusMustChangePassword && !status.CanLogin() {
+	if !user.RequiresPasswordChange() && !user.CanLogin() {
 		return nil, response.UnauthenticatedError(errmsg.MsgInvalidCredentials)
 	}
 
@@ -104,7 +102,7 @@ func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePassword
 		}
 		return nil, response.FromError(err)
 	}
-	if domain.UserStatus(user.Status) != domain.UserStatusMustChangePassword {
+	if !user.CanChangePassword() {
 		return nil, response.TokenInvalidError(errmsg.MsgMissingSession)
 	}
 	passwordHash, err := password.Hash(req.NewPassword)

@@ -3,20 +3,19 @@ package repository
 import (
 	"context"
 
-	"github.com/aegiscore/user-services/ent"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/google/uuid"
 )
 
 type UserRepository interface {
-	Create(ctx context.Context, input CreateUserInput) (*ent.User, error)
+	Create(ctx context.Context, input CreateUserInput) (*domain.User, error)
 	ExistsByUsername(ctx context.Context, username string) (bool, error)
-	GetByUsername(ctx context.Context, username string) (*ent.User, error)
-	GetByUserID(ctx context.Context, userID uuid.UUID) (*ent.User, error)
+	GetByUsername(ctx context.Context, username string) (*domain.User, error)
+	GetByUserID(ctx context.Context, userID uuid.UUID) (*domain.User, error)
 	GetTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error)
 	IncrementTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error)
 	UpdateCredentials(ctx context.Context, input UpdateCredentialsInput) (int64, error)
-	ListUsers(ctx context.Context, input ListUsersInput) ([]*ent.User, int, error)
+	ListUsers(ctx context.Context, input ListUsersInput) ([]domain.User, int, error)
 }
 
 type CreateUserInput struct {

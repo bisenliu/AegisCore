@@ -27,7 +27,7 @@ func NewUserRepository(params UserRepositoryParams) repository.UserRepository {
 	return &userRepository{client: params.Client}
 }
 
-func (r *userRepository) Create(ctx context.Context, input repository.CreateUserInput) (*ent.User, error) {
+func (r *userRepository) Create(ctx context.Context, input repository.CreateUserInput) (*domain.User, error) {
 	created, err := r.client.User.Create().
 		SetUserID(input.UserID).
 		SetNickname(input.Nickname).
@@ -36,7 +36,7 @@ func (r *userRepository) Create(ctx context.Context, input repository.CreateUser
 		SetStatus(int64(input.Status)).
 		Save(ctx)
 	if err == nil {
-		return created, nil
+		return toDomainUser(created), nil
 	}
 	if ent.IsConstraintError(err) {
 		return nil, domain.ErrUserAlreadyExists
@@ -52,10 +52,10 @@ func (r *userRepository) ExistsByUsername(ctx context.Context, username string) 
 	return exists, nil
 }
 
-func (r *userRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*ent.User, error) {
+func (r *userRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	user, err := r.client.User.Query().Where(user.UserIDEQ(userID), user.DeletedAtIsNil()).Only(ctx)
 	if err == nil {
-		return user, nil
+		return toDomainUser(user), nil
 	}
 	if ent.IsNotFound(err) {
 		return nil, domain.ErrUserNotFound
@@ -63,10 +63,10 @@ func (r *userRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*en
 	return nil, fmt.Errorf("query user by user_id %s: %w", userID.String(), err)
 }
 
-func (r *userRepository) GetByUsername(ctx context.Context, username string) (*ent.User, error) {
+func (r *userRepository) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
 	user, err := r.client.User.Query().Where(user.UsernameEQ(username), user.DeletedAtIsNil()).Only(ctx)
 	if err == nil {
-		return user, nil
+		return toDomainUser(user), nil
 	}
 	if ent.IsNotFound(err) {
 		return nil, domain.ErrUserNotFound
@@ -115,7 +115,7 @@ func (r *userRepository) UpdateCredentials(ctx context.Context, input repository
 	return 0, fmt.Errorf("update user credentials by user_id %s: %w", input.UserID.String(), err)
 }
 
-func (r *userRepository) ListUsers(ctx context.Context, input repository.ListUsersInput) ([]*ent.User, int, error) {
+func (r *userRepository) ListUsers(ctx context.Context, input repository.ListUsersInput) ([]domain.User, int, error) {
 	predicates := userListPredicates(input)
 	total, err := r.client.User.Query().Where(predicates...).Count(ctx)
 	if err != nil {
@@ -131,7 +131,34 @@ func (r *userRepository) ListUsers(ctx context.Context, input repository.ListUse
 	if err != nil {
 		return nil, 0, fmt.Errorf("list users: %w", err)
 	}
-	return users, total, nil
+	return toDomainUsers(users), total, nil
+}
+
+func toDomainUser(user *ent.User) *domain.User {
+	if user == nil {
+		return nil
+	}
+	return &domain.User{
+		ID:           user.ID,
+		UserID:       user.UserID,
+		Nickname:     user.Nickname,
+		Username:     user.Username,
+		PasswordHash: user.PasswordHash,
+		Status:       domain.UserStatus(user.Status),
+		TokenVersion: user.TokenVersion,
+		CreatedAt:    user.CreatedAt,
+		UpdatedAt:    user.UpdatedAt,
+	}
+}
+
+func toDomainUsers(users []*ent.User) []domain.User {
+	result := make([]domain.User, 0, len(users))
+	for _, user := range users {
+		if mapped := toDomainUser(user); mapped != nil {
+			result = append(result, *mapped)
+		}
+	}
+	return result
 }
 
 func userListPredicates(input repository.ListUsersInput) []predicate.User {

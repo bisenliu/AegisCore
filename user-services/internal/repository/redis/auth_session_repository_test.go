@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/config"
-	"github.com/aegiscore/user-services/ent"
+	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
@@ -195,16 +195,16 @@ type tokenVersionRepoStub struct {
 	getTokenVersionCalls int
 }
 
-func (r *tokenVersionRepoStub) Create(context.Context, repository.CreateUserInput) (*ent.User, error) {
+func (r *tokenVersionRepoStub) Create(context.Context, repository.CreateUserInput) (*domain.User, error) {
 	return nil, nil
 }
 func (r *tokenVersionRepoStub) ExistsByUsername(context.Context, string) (bool, error) {
 	return false, nil
 }
-func (r *tokenVersionRepoStub) GetByUsername(context.Context, string) (*ent.User, error) {
+func (r *tokenVersionRepoStub) GetByUsername(context.Context, string) (*domain.User, error) {
 	return nil, nil
 }
-func (r *tokenVersionRepoStub) GetByUserID(context.Context, uuid.UUID) (*ent.User, error) {
+func (r *tokenVersionRepoStub) GetByUserID(context.Context, uuid.UUID) (*domain.User, error) {
 	return nil, nil
 }
 func (r *tokenVersionRepoStub) GetTokenVersion(context.Context, uuid.UUID) (int64, error) {
@@ -217,6 +217,6 @@ func (r *tokenVersionRepoStub) IncrementTokenVersion(context.Context, uuid.UUID)
 func (r *tokenVersionRepoStub) UpdateCredentials(context.Context, repository.UpdateCredentialsInput) (int64, error) {
 	return r.version + 1, nil
 }
-func (r *tokenVersionRepoStub) ListUsers(context.Context, repository.ListUsersInput) ([]*ent.User, int, error) {
+func (r *tokenVersionRepoStub) ListUsers(context.Context, repository.ListUsersInput) ([]domain.User, int, error) {
 	return nil, 0, nil
 }

@@ -7,7 +7,6 @@ import (
 
 	"github.com/aegiscore/common/password"
 	"github.com/aegiscore/common/response"
-	"github.com/aegiscore/user-services/ent"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/errmsg"
@@ -21,7 +20,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	createdAt := int64(1780048800000)
 
 	t.Run("success uses normalized fields and defaults status", func(t *testing.T) {
-		repo := &stubUserRepository{created: &ent.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: int64(domain.UserStatusNormal), TokenVersion: 1, CreatedAt: createdAt, UpdatedAt: createdAt}}
+		repo := &stubUserRepository{created: &domain.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, TokenVersion: 1, CreatedAt: createdAt, UpdatedAt: createdAt}}
 		svc := NewUserService(repo)
 
 		user, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
@@ -93,7 +92,7 @@ func TestUserServiceGetUserByID(t *testing.T) {
 	createdAt := int64(1780048800000)
 
 	t.Run("success", func(t *testing.T) {
-		repo := &stubUserRepository{getByUserIDUser: &ent.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: int64(domain.UserStatusNormal), CreatedAt: createdAt, UpdatedAt: createdAt}}
+		repo := &stubUserRepository{getByUserIDUser: &domain.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}
 		svc := NewUserService(repo)
 
 		user, err := svc.GetUserByID(context.Background(), testUserID)
@@ -157,7 +156,7 @@ func TestUserServiceListUsers(t *testing.T) {
 
 	t.Run("explicit pagination and filters", func(t *testing.T) {
 		status := domain.UserStatusNormal
-		repo := &stubUserRepository{listUsers: []*ent.User{{ID: 1, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: int64(domain.UserStatusNormal), CreatedAt: createdAt, UpdatedAt: createdAt}}, listTotal: 128}
+		repo := &stubUserRepository{listUsers: []domain.User{{ID: 1, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, listTotal: 128}
 		svc := NewUserService(repo)
 
 		users, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{Page: 2, PageSize: 20, Offset: 20, Limit: 20, Nickname: "Ali", Username: "alice", Status: &status})
@@ -192,22 +191,22 @@ func TestUserServiceListUsers(t *testing.T) {
 }
 
 type stubUserRepository struct {
-	created         *ent.User
+	created         *domain.User
 	createErr       error
 	createdInput    repository.CreateUserInput
 	exists          bool
 	existsErr       error
 	checkedUsername string
-	listUsers       []*ent.User
+	listUsers       []domain.User
 	listTotal       int
 	listErr         error
 	listInput       repository.ListUsersInput
 	getByUserID     uuid.UUID
-	getByUserIDUser *ent.User
+	getByUserIDUser *domain.User
 	getByUserIDErr  error
 }
 
-func (r *stubUserRepository) Create(_ context.Context, input repository.CreateUserInput) (*ent.User, error) {
+func (r *stubUserRepository) Create(_ context.Context, input repository.CreateUserInput) (*domain.User, error) {
 	r.createdInput = input
 	if r.createErr != nil {
 		return nil, r.createErr
@@ -223,7 +222,7 @@ func (r *stubUserRepository) ExistsByUsername(_ context.Context, username string
 	return r.exists, nil
 }
 
-func (r *stubUserRepository) GetByUserID(_ context.Context, userID uuid.UUID) (*ent.User, error) {
+func (r *stubUserRepository) GetByUserID(_ context.Context, userID uuid.UUID) (*domain.User, error) {
 	r.getByUserID = userID
 	if r.getByUserIDErr != nil {
 		return nil, r.getByUserIDErr
@@ -231,7 +230,7 @@ func (r *stubUserRepository) GetByUserID(_ context.Context, userID uuid.UUID) (*
 	return r.getByUserIDUser, nil
 }
 
-func (r *stubUserRepository) GetByUsername(context.Context, string) (*ent.User, error) {
+func (r *stubUserRepository) GetByUsername(context.Context, string) (*domain.User, error) {
 	return nil, nil
 }
 
@@ -247,7 +246,7 @@ func (r *stubUserRepository) UpdateCredentials(context.Context, repository.Updat
 	return 0, nil
 }
 
-func (r *stubUserRepository) ListUsers(_ context.Context, input repository.ListUsersInput) ([]*ent.User, int, error) {
+func (r *stubUserRepository) ListUsers(_ context.Context, input repository.ListUsersInput) ([]domain.User, int, error) {
 	r.listInput = input
 	if r.listErr != nil {
 		return nil, 0, r.listErr

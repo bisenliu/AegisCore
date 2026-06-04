@@ -120,6 +120,45 @@ func TestUserRepositoryDomainErrors(t *testing.T) {
 	})
 }
 
+func TestUserRepositoryReturnsDomainUsers(t *testing.T) {
+	repo := newTestUserRepository(t)
+	ctx := context.Background()
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000101")
+
+	created, err := repo.Create(ctx, repository.CreateUserInput{Nickname: "Domain Alice", UserID: userID, Username: "domain-alice", PasswordHash: "hash", Status: domain.UserStatusMustChangePassword})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if created.ID == 0 || created.UserID != userID || created.Nickname != "Domain Alice" || created.Username != "domain-alice" || created.PasswordHash != "hash" || created.Status != domain.UserStatusMustChangePassword || created.TokenVersion != 1 || created.CreatedAt == 0 || created.UpdatedAt == 0 {
+		t.Fatalf("created = %#v", created)
+	}
+
+	byID, err := repo.GetByUserID(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetByUserID: %v", err)
+	}
+	if byID.UserID != userID || byID.Username != "domain-alice" || byID.Status != domain.UserStatusMustChangePassword {
+		t.Fatalf("byID = %#v", byID)
+	}
+
+	byUsername, err := repo.GetByUsername(ctx, "domain-alice")
+	if err != nil {
+		t.Fatalf("GetByUsername: %v", err)
+	}
+	if byUsername.UserID != userID || byUsername.PasswordHash != "hash" || byUsername.TokenVersion != 1 {
+		t.Fatalf("byUsername = %#v", byUsername)
+	}
+
+	status := domain.UserStatusMustChangePassword
+	users, total, err := repo.ListUsers(ctx, repository.ListUsersInput{Limit: 10, Username: "domain-alice", Status: &status})
+	if err != nil {
+		t.Fatalf("ListUsers: %v", err)
+	}
+	if total != 1 || len(users) != 1 || users[0].UserID != userID || users[0].Username != "domain-alice" || users[0].Status != domain.UserStatusMustChangePassword {
+		t.Fatalf("users=%#v total=%d", users, total)
+	}
+}
+
 func TestUserListPredicates(t *testing.T) {
 	if got := userListPredicates(repository.ListUsersInput{}); len(got) != 1 {
 		t.Fatalf("predicates = %d, want 1", len(got))
