@@ -25,7 +25,7 @@ import (
 
 var bootstrapTestDriverSeq atomic.Int64
 
-func TestNewPostgresPoolsProvidesUserServiceDatabases(t *testing.T) {
+func TestProvidePostgresPoolsProvidesUserServiceDatabases(t *testing.T) {
 	drv := registerBootstrapTestSQLDriver(t)
 	cfg := bootstrapTestConfig(drv.name)
 	log := zap.NewNop()
@@ -40,7 +40,7 @@ func TestNewPostgresPoolsProvidesUserServiceDatabases(t *testing.T) {
 	var got pools
 	app := fxtest.New(t,
 		fx.Supply(cfg, log),
-		fx.Provide(NewPostgresPools),
+		fx.Provide(ProvidePostgresPools),
 		fx.Populate(&got),
 	)
 	app.RequireStart()
@@ -66,7 +66,7 @@ func TestNewPostgresPoolsProvidesUserServiceDatabases(t *testing.T) {
 	}
 }
 
-func TestNewPostgresPoolsDoesNotProvidePayDatabase(t *testing.T) {
+func TestProvidePostgresPoolsDoesNotProvidePayDatabase(t *testing.T) {
 	type pools struct {
 		fx.In
 
@@ -74,7 +74,7 @@ func TestNewPostgresPoolsDoesNotProvidePayDatabase(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		fx.Provide(NewPostgresPools),
+		fx.Provide(ProvidePostgresPools),
 		fx.Invoke(func(pools) {}),
 	)
 	if err == nil {
@@ -85,7 +85,7 @@ func TestNewPostgresPoolsDoesNotProvidePayDatabase(t *testing.T) {
 	}
 }
 
-func TestNewNamedClientsProvidesUserServiceEntClients(t *testing.T) {
+func TestProvideEntClientsProvidesUserServiceEntClients(t *testing.T) {
 	drv := registerBootstrapTestSQLDriver(t)
 	userDB, err := sql.Open(drv.name, "postgres://aegiscore:secret@127.0.0.1/aegiscore_user")
 	if err != nil {
@@ -105,7 +105,7 @@ func TestNewNamedClientsProvidesUserServiceEntClients(t *testing.T) {
 	}
 
 	lc := fxtest.NewLifecycle(t)
-	got := NewNamedClients(ClientParams{
+	got := ProvideEntClients(NamedEntClientParams{
 		Lifecycle: lc,
 		Log:       zap.NewNop(),
 		UserDB:    userDB,
@@ -133,7 +133,7 @@ func TestNewNamedClientsProvidesUserServiceEntClients(t *testing.T) {
 	}
 }
 
-func TestNewRedisClientsProvidesCacheRedis(t *testing.T) {
+func TestProvideRedisClientsProvidesCacheRedis(t *testing.T) {
 	redisServer := newBootstrapTestRedisServer(t)
 	cfg := bootstrapTestConfig("")
 	cfg.Redis = map[string]config.RedisConfig{
@@ -165,7 +165,7 @@ func TestNewRedisClientsProvidesCacheRedis(t *testing.T) {
 	var got clients
 	app := fxtest.New(t,
 		fx.Supply(cfg, log),
-		fx.Provide(NewRedisClients),
+		fx.Provide(ProvideRedisClients),
 		fx.Populate(&got),
 	)
 	app.RequireStart()
@@ -183,7 +183,7 @@ func TestNewRedisClientsProvidesCacheRedis(t *testing.T) {
 	redisServer.requireClosed(t)
 }
 
-func TestNewRedisClientsDoesNotProvideQueueRedis(t *testing.T) {
+func TestProvideRedisClientsDoesNotProvideQueueRedis(t *testing.T) {
 	type clients struct {
 		fx.In
 
@@ -192,7 +192,7 @@ func TestNewRedisClientsDoesNotProvideQueueRedis(t *testing.T) {
 
 	err := fx.ValidateApp(
 		fx.Supply(&config.Config{}, zap.NewNop()),
-		fx.Provide(NewRedisClients),
+		fx.Provide(ProvideRedisClients),
 		fx.Invoke(func(clients) {}),
 	)
 	if err == nil {
@@ -203,24 +203,24 @@ func TestNewRedisClientsDoesNotProvideQueueRedis(t *testing.T) {
 	}
 }
 
-func TestNewRedisClientsReturnsErrorForMissingCacheRedisConfig(t *testing.T) {
+func TestProvideRedisClientsReturnsErrorForMissingCacheRedisConfig(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	_, err := NewRedisClients(NamedRedisParams{
+	_, err := ProvideRedisClients(NamedRedisParams{
 		Lifecycle: lc,
 		Config:    &config.Config{},
 		Log:       log,
 	})
 	if err == nil {
-		t.Fatal("NewRedisClients error = nil")
+		t.Fatal("ProvideRedisClients error = nil")
 	}
 	if !strings.Contains(err.Error(), `redis config "`+commoninfra.NameCacheRedis+`" not found`) {
-		t.Fatalf("NewRedisClients error = %q, want missing cache_redis config", err.Error())
+		t.Fatalf("ProvideRedisClients error = %q, want missing cache_redis config", err.Error())
 	}
 }
 
-func TestNewRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
+func TestProvideRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 	cfg := &config.Config{Redis: map[string]config.RedisConfig{
@@ -234,8 +234,8 @@ func TestNewRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 		},
 	}}
 
-	if _, err := NewRedisClients(NamedRedisParams{Lifecycle: lc, Config: cfg, Log: log}); err != nil {
-		t.Fatalf("NewRedisClients: %v", err)
+	if _, err := ProvideRedisClients(NamedRedisParams{Lifecycle: lc, Config: cfg, Log: log}); err != nil {
+		t.Fatalf("ProvideRedisClients: %v", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

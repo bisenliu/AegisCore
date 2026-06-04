@@ -22,7 +22,7 @@ type NamedRedisClients struct {
 	CacheRedis *redis.Client `name:"cache_redis"`
 }
 
-func NewRedisClients(params NamedRedisParams) (NamedRedisClients, error) {
+func ProvideRedisClients(params NamedRedisParams) (NamedRedisClients, error) {
 	cacheRedis, err := commoninfra.NewRedisClient(params.Lifecycle, params.Config, params.Log, commoninfra.NameCacheRedis)
 	if err != nil {
 		return NamedRedisClients{}, err

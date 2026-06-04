@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type ClientParams struct {
+type NamedEntClientParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
@@ -21,16 +21,16 @@ type ClientParams struct {
 	CommonDB  *sql.DB `name:"common_db"`
 }
 
-type NamedClients struct {
+type NamedEntClients struct {
 	fx.Out
 
 	UserClient   *ent.Client `name:"user_db"`
 	CommonClient *ent.Client `name:"common_db"`
 }
 
-func NewNamedClients(params ClientParams) NamedClients {
-	userClient := newClient(params.UserDB)
-	commonClient := newClient(params.CommonDB)
+func ProvideEntClients(params NamedEntClientParams) NamedEntClients {
+	userClient := newEntClient(params.UserDB)
+	commonClient := newEntClient(params.CommonDB)
 
 	params.Lifecycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
@@ -44,10 +44,10 @@ func NewNamedClients(params ClientParams) NamedClients {
 		},
 	})
 
-	return NamedClients{UserClient: userClient, CommonClient: commonClient}
+	return NamedEntClients{UserClient: userClient, CommonClient: commonClient}
 }
 
-func newClient(db *sql.DB) *ent.Client {
+func newEntClient(db *sql.DB) *ent.Client {
 	driver := entsql.OpenDB(dialect.Postgres, db)
 	return ent.NewClient(ent.Driver(driver))
 }

@@ -24,7 +24,7 @@ type NamedPostgresPools struct {
 	CommonDB *sql.DB `name:"common_db"`
 }
 
-func NewPostgresPools(params NamedPostgresParams) (NamedPostgresPools, error) {
+func ProvidePostgresPools(params NamedPostgresParams) (NamedPostgresPools, error) {
 	userDB, err := commoninfra.NewPostgres(params.Lifecycle, params.Config, params.Log, commoninfra.NameUserDB)
 	if err != nil {
 		return NamedPostgresPools{}, err
