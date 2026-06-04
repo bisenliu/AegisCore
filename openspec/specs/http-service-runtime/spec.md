@@ -33,7 +33,7 @@ HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖
 #### Scenario: Service app does not depend on common infrastructure module
 - **Given** 用户服务创建 Fx app
 - **When** 查看用户服务启动装配
-- **Then** 用户服务不得通过 `common/infrastructure.Module` 注入公共依赖
+- **Then** 用户服务不得通过 `common/runtime/infrastructure.Module` 注入公共依赖
 - **Then** 用户服务必须手动依次提供公共配置、Zap logger 和自身声明的运行时依赖
 
 #### Scenario: CLI lifecycle timeouts are named separately
@@ -157,7 +157,7 @@ HTTP 服务运行时 MUST 在 Fx `OnStart` 完成前绑定配置中的 HTTP host
 - **Given** HTTP handler 发生 panic
 - **When** recovery 中间件恢复 panic 并输出错误日志
 - **Then** 日志必须包含 `trace-id`、panic 内容和 stack 字段
-- **Then** HTTP 响应仍必须使用 `common/response.Envelope` 失败格式
+- **Then** HTTP 响应仍必须使用 `common/contract/response.Envelope` 失败格式
 
 #### Scenario: Public routes bypass authentication
 - **Given** HTTP server 已启动
@@ -231,7 +231,7 @@ HTTP 服务运行时 MUST 在 Fx `OnStart` 完成前绑定配置中的 HTTP host
 
 #### Scenario: Environment can override timeout defaults
 - **Given** 部署环境通过 `AEGISCORE_` 前缀环境变量覆盖 HTTP timeout 配置
-- **When** `common/config.Load` 反序列化运行时配置
+- **When** `common/runtime/config.Load` 反序列化运行时配置
 - **Then** 用户服务 MUST 使用环境变量覆盖后的 timeout 值
 - **Then** 配置加载器 MUST NOT 对 timeout 执行额外 required 或范围校验
 

@@ -3,8 +3,8 @@ package bootstrap
 import (
 	"testing"
 
-	"github.com/aegiscore/common/config"
-	commoninfra "github.com/aegiscore/common/infrastructure"
+	"github.com/aegiscore/common/runtime/config"
+	commoninfra "github.com/aegiscore/common/runtime/infrastructure"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/controller"
 	"go.uber.org/fx"

@@ -1,8 +1,8 @@
 package bootstrap
 
 import (
-	"github.com/aegiscore/common/config"
-	commoninfra "github.com/aegiscore/common/infrastructure"
+	"github.com/aegiscore/common/runtime/config"
+	commoninfra "github.com/aegiscore/common/runtime/infrastructure"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/zap"

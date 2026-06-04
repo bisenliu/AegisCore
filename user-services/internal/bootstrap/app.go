@@ -3,8 +3,8 @@ package bootstrap
 import (
 	"net/http"
 
-	commoninfra "github.com/aegiscore/common/infrastructure"
-	commontz "github.com/aegiscore/common/timezone"
+	commoninfra "github.com/aegiscore/common/runtime/infrastructure"
+	commontz "github.com/aegiscore/common/runtime/timezone"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/controller"
 	"github.com/aegiscore/user-services/internal/repository/postgres"

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/aegiscore/common/password"
-	"github.com/aegiscore/common/response"
+	"github.com/aegiscore/common/contract/response"
+	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/errmsg"

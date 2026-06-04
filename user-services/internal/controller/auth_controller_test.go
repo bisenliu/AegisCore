@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aegiscore/common/auth"
-	"github.com/aegiscore/common/response"
+	"github.com/aegiscore/common/contract/response"
+	"github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/errmsg"

@@ -54,7 +54,7 @@ Swagger/OpenAPI 文档能力为用户服务提供可生成、可访问、与运�
 - **Then** `@Router` 路径必须为 `/users [post]`
 - **Then** 创建请求体必须描述 `nickname`、`username`、`password` 和可选 `status`
 - **Then** `status` 必须描述允许值 `100`、`200`、`300`
-- **Then** 成功响应必须描述 HTTP 201 和 `common/response.Envelope` 包装的用户资料
+- **Then** 成功响应必须描述 HTTP 201 和 `common/contract/response.Envelope` 包装的用户资料
 - **Then** 成功响应用户资料必须包含 `user_id`、`nickname`、`username`、`status`、`created_at`、`updated_at`
 - **Then** 成功响应不得描述 `name`、`active`、`password`、`password_hash` 或 `deleted_at`
 

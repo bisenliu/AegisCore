@@ -3,9 +3,9 @@ package router
 import (
 	"net/http"
 
-	"github.com/aegiscore/common/auth"
-	"github.com/aegiscore/common/config"
-	commonmw "github.com/aegiscore/common/middleware"
+	commonmw "github.com/aegiscore/common/http/middleware"
+	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/user-services/internal/controller"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"

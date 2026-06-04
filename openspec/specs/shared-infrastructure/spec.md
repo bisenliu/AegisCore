@@ -10,7 +10,7 @@
 
 #### Scenario: Load explicit config file
 - **Given** 调用方提供配置文件路径
-- **When** `common/config.Load` 被调用
+- **When** `common/runtime/config.Load` 被调用
 - **Then** 系统读取该 YAML 文件
 - **Then** 系统将 YAML 与 `AEGISCORE_` 环境变量覆盖反序列化为 `config.Config`
 - **Then** 系统不得执行 required/optional、字段存在性或基础范围校验
@@ -23,30 +23,30 @@
 #### Scenario: Override PostgreSQL config with environment variable
 - **Given** YAML 配置包含 `postgres.user_db` 命名实例
 - **Given** 环境变量提供 `AEGISCORE_POSTGRES_USER_DB_PASSWORD` 或 `AEGISCORE_POSTGRES_USER_DB_MAX_OPEN_CONNS`
-- **When** `common/config.Load` 被调用
+- **When** `common/runtime/config.Load` 被调用
 - **Then** 系统必须将环境变量覆盖应用到 `postgres.user_db` 对应字段
 
 #### Scenario: Missing primary configuration is not rejected by config loader
 - **Given** YAML 和环境变量未显式提供 app、HTTP、log、Redis 命名实例或 PostgreSQL 命名实例的主要运行时配置字段
-- **When** `common/config.Load` 被调用
+- **When** `common/runtime/config.Load` 被调用
 - **Then** 配置加载不得仅因为字段缺失、为空或为零值而返回校验错误
 - **Then** 后续服务启动或依赖初始化可以因实际无法启动或无法连接而失败
 
 #### Scenario: Invalid basic values are not rejected by config loader
 - **Given** YAML 配置包含零值端口、负数 Redis DB、零值连接池大小或零值 timeout
-- **When** `common/config.Load` 反序列化配置
+- **When** `common/runtime/config.Load` 反序列化配置
 - **Then** 配置加载不得执行范围校验
 - **Then** 相关错误或默认行为必须由后续运行时初始化或依赖库处理
 
 #### Scenario: Load Redis named instances
 - **Given** YAML 配置包含 `redis.cache_redis` 和 `redis.queue_redis` 命名实例
-- **When** `common/config.Load` 被调用
+- **When** `common/runtime/config.Load` 被调用
 - **Then** 系统必须加载每个 Redis 实例的 addr、username、password、db 和 timeout 字段到配置对象
 - **Then** 每个 Redis 实例必须能独立覆盖 db 和 timeout 等运行时参数
 
 #### Scenario: Load PostgreSQL named instances
 - **Given** YAML 配置包含 `postgres.user_db`、`postgres.pay_db` 和 `postgres.common_db` 命名实例
-- **When** `common/config.Load` 被调用
+- **When** `common/runtime/config.Load` 被调用
 - **Then** 系统必须加载每个 PostgreSQL 实例的 host、port、username、password、db_name、driver、sslmode、连接池和 ping timeout 字段到配置对象
 - **Then** 每个 PostgreSQL 实例必须能独立覆盖连接池和 timeout 等运行时参数
 
@@ -59,32 +59,32 @@
 
 ### Requirement: Load system timezone configuration
 
-系统 MUST 从 YAML 配置和 `AEGISCORE_` 环境变量覆盖中加载 `system.timezone` 到共享配置对象。配置加载器 MUST 只负责读取、覆盖和反序列化该字段，不得因为该字段缺失、为空或取值无法加载为 IANA 时区而在 `common/config.Load` 阶段返回校验错误。
+系统 MUST 从 YAML 配置和 `AEGISCORE_` 环境变量覆盖中加载 `system.timezone` 到共享配置对象。配置加载器 MUST 只负责读取、覆盖和反序列化该字段，不得因为该字段缺失、为空或取值无法加载为 IANA 时区而在 `common/runtime/config.Load` 阶段返回校验错误。
 
 #### Scenario: Load timezone from YAML
 - **Given** YAML 配置包含 `system.timezone: Asia/Shanghai`
-- **When** `common/config.Load` 被调用
+- **When** `common/runtime/config.Load` 被调用
 - **Then** 系统 MUST 将该值反序列化到 `config.Config` 的系统配置中
 
 #### Scenario: Override timezone with environment variable
 - **Given** YAML 配置包含 `system.timezone: Asia/Shanghai`
 - **Given** 环境变量提供 `AEGISCORE_SYSTEM_TIMEZONE=UTC`
-- **When** `common/config.Load` 被调用
+- **When** `common/runtime/config.Load` 被调用
 - **Then** 系统 MUST 将系统时区配置加载为 `UTC`
 
 #### Scenario: Missing timezone is not rejected by config loader
 - **Given** YAML 和环境变量未显式提供 `system.timezone`
-- **When** `common/config.Load` 被调用
+- **When** `common/runtime/config.Load` 被调用
 - **Then** 配置加载 MUST 成功反序列化配置对象
 - **Then** 配置加载器 MUST NOT 因系统时区为空而返回校验错误
 
 ### Requirement: Load authentication configuration
 
-系统 MUST 从 YAML 配置和 `AEGISCORE_` 环境变量覆盖中加载 `auth` 配置到共享配置对象。认证配置 MUST 支持 JWT secret、issuer、audience 和 token 过期配置。配置加载器 MUST 只负责读取、覆盖和反序列化这些字段，不得在 `common/config.Load` 阶段执行 required、字段存在性或基础取值范围校验。认证配置 MUST NOT 包含 `auth.whitelist` 字段，服务 MUST NOT 通过共享认证配置声明公开路径或认证豁免路径。
+系统 MUST 从 YAML 配置和 `AEGISCORE_` 环境变量覆盖中加载 `auth` 配置到共享配置对象。认证配置 MUST 支持 JWT secret、issuer、audience 和 token 过期配置。配置加载器 MUST 只负责读取、覆盖和反序列化这些字段，不得在 `common/runtime/config.Load` 阶段执行 required、字段存在性或基础取值范围校验。认证配置 MUST NOT 包含 `auth.whitelist` 字段，服务 MUST NOT 通过共享认证配置声明公开路径或认证豁免路径。
 
 #### Scenario: Load auth config from YAML
 - **Given** YAML 配置包含 `auth.jwt.secret`、`auth.jwt.issuer` 和 `auth.jwt.audience`
-- **When** `common/config.Load` 反序列化配置
+- **When** `common/runtime/config.Load` 反序列化配置
 - **Then** 系统 MUST 将这些字段反序列化到 `config.Config` 的认证配置中
 - **Then** 认证配置对象 MUST NOT 暴露白名单路径集合
 
@@ -96,13 +96,13 @@
 
 #### Scenario: Missing auth config is not rejected by config loader
 - **Given** YAML 和环境变量未显式提供 auth 配置
-- **When** `common/config.Load` 反序列化配置
+- **When** `common/runtime/config.Load` 反序列化配置
 - **Then** 配置加载 MUST 成功反序列化配置对象
 - **Then** 配置加载器 MUST NOT 因 auth 字段缺失、为空或零值而返回校验错误
 
 #### Scenario: Auth config does not create infrastructure clients
 - **Given** 配置中存在 auth 配置
-- **When** `common/config.Load` 反序列化配置
+- **When** `common/runtime/config.Load` 反序列化配置
 - **Then** 系统 MUST NOT 因 auth 配置存在而创建 Redis client、PostgreSQL 连接池、Ent client 或 HTTP server
 
 #### Scenario: Whitelist config is not part of the contract
@@ -113,18 +113,18 @@
 
 ### Requirement: Load refresh token authentication configuration
 
-系统 SHALL 从 YAML 配置和 `AEGISCORE_` 环境变量覆盖中加载 Refresh Token 和认证会话相关配置，包括 Refresh Token TTL、token version 缓存 TTL 和 Refresh Token 轮转开关。配置加载器 MUST 只负责读取、覆盖和反序列化这些字段，不得在 `common/config.Load` 阶段执行 required、字段存在性或基础取值范围校验。
+系统 SHALL 从 YAML 配置和 `AEGISCORE_` 环境变量覆盖中加载 Refresh Token 和认证会话相关配置，包括 Refresh Token TTL、token version 缓存 TTL 和 Refresh Token 轮转开关。配置加载器 MUST 只负责读取、覆盖和反序列化这些字段，不得在 `common/runtime/config.Load` 阶段执行 required、字段存在性或基础取值范围校验。
 
 #### Scenario: Load refresh token config from YAML
 - **Given** YAML 配置包含 `auth.jwt.refresh_token_ttl`、`auth.token_version_cache_ttl` 和 `auth.refresh_token_rotation`
-- **When** `common/config.Load` 被调用
+- **When** `common/runtime/config.Load` 被调用
 - **Then** 系统 MUST 将这些字段反序列化到 `config.Config` 的认证配置中
 - **Then** 配置加载器 MUST NOT 因 TTL 为零值或轮转开关未显式设置而返回校验错误
 
 #### Scenario: Override refresh token config from environment
 - **Given** YAML 配置包含 Refresh Token 相关认证配置
 - **Given** 环境变量提供 `AEGISCORE_AUTH_JWT_REFRESH_TOKEN_TTL` 或 `AEGISCORE_AUTH_TOKEN_VERSION_CACHE_TTL`
-- **When** `common/config.Load` 被调用
+- **When** `common/runtime/config.Load` 被调用
 - **Then** 系统 MUST 使用环境变量覆盖后的认证配置值
 
 ### Requirement: Reuse user service datastore dependencies for authentication sessions
@@ -236,7 +236,7 @@
 
 #### Scenario: Redis helper is organized with Redis infrastructure
 - **Given** 维护者需要定位命名 Redis Fx provider helper
-- **When** 查看 `common/infrastructure` 包中的 Redis 相关文件
+- **When** 查看 `common/runtime/infrastructure` 包中的 Redis 相关文件
 - **Then** `ProvideNamedRedis` 必须与 Redis runtime factory 组织在 Redis 相关文件中
 - **Then** PostgreSQL 相关文件不得包含 Redis provider helper 实现
 
@@ -251,9 +251,9 @@
 - **Then** controller 必须能够注入该实例并用于请求绑定和校验
 
 #### Scenario: Do not validate runtime config in config loader
-- **Given** `common/config.Load` 加载 YAML 和 `AEGISCORE_` 环境变量
+- **Given** `common/runtime/config.Load` 加载 YAML 和 `AEGISCORE_` 环境变量
 - **When** 共享请求校验能力被引入服务
-- **Then** `common/config.Load` 仍不得执行 required、optional、字段存在性或基础取值范围校验
+- **Then** `common/runtime/config.Load` 仍不得执行 required、optional、字段存在性或基础取值范围校验
 - **Then** 请求 DTO 校验与运行时配置加载必须保持职责分离
 
 #### Scenario: Do not connect extra runtime dependencies
@@ -264,11 +264,11 @@
 
 ### Requirement: Provide Zap logging with trace-id and file rotation
 
-系统必须提供基于 Zap 的共享日志组件。日志组件必须支持从 YAML 与 `AEGISCORE_` 环境变量加载日志级别、格式、目录、文件名前缀、控制台输出、保留天数、单文件大小和备份数量。所有通过项目 logger context API 输出的日志必须包含 `trace-id` 字段。所有通过项目 logger context API 输出的日志，其 `caller` 字段必须指向调用该 context API 的业务代码位置，而不是 `common/logger` 的封装函数位置。日志必须按天写入带日期的分类日志文件，文件名格式为 `xxx.yyyy-mm-dd.all.log`、`xxx.yyyy-mm-dd.info.log`、`xxx.yyyy-mm-dd.warning.log`、`xxx.yyyy-mm-dd.error.log`。日期变化后，新日志必须写入新日期文件，旧日期文件必须保持原名作为历史日志。普通 Error 级别日志不得默认自动包含 stacktrace；需要堆栈的关键错误必须通过显式字段记录。Fx 停止流程同步 logger 时，系统 MUST 忽略 stdout/stderr 等不可同步设备常见的 `syscall.EINVAL` 与 `syscall.ENOTTY`，但 MUST 继续返回其他 logger sync 错误。
+系统必须提供基于 Zap 的共享日志组件。日志组件必须支持从 YAML 与 `AEGISCORE_` 环境变量加载日志级别、格式、目录、文件名前缀、控制台输出、保留天数、单文件大小和备份数量。所有通过项目 logger context API 输出的日志必须包含 `trace-id` 字段。所有通过项目 logger context API 输出的日志，其 `caller` 字段必须指向调用该 context API 的业务代码位置，而不是 `common/runtime/logger` 的封装函数位置。日志必须按天写入带日期的分类日志文件，文件名格式为 `xxx.yyyy-mm-dd.all.log`、`xxx.yyyy-mm-dd.info.log`、`xxx.yyyy-mm-dd.warning.log`、`xxx.yyyy-mm-dd.error.log`。日期变化后，新日志必须写入新日期文件，旧日期文件必须保持原名作为历史日志。普通 Error 级别日志不得默认自动包含 stacktrace；需要堆栈的关键错误必须通过显式字段记录。Fx 停止流程同步 logger 时，系统 MUST 忽略 stdout/stderr 等不可同步设备常见的 `syscall.EINVAL` 与 `syscall.ENOTTY`，但 MUST 继续返回其他 logger sync 错误。
 
 #### Scenario: Initialize Zap logger from config
 - **Given** YAML 配置包含 log level、format、directory、filename、console、max_age_days、max_size_mb 和 max_backups
-- **When** `common/logger.New` 被调用
+- **When** `common/runtime/logger.New` 被调用
 - **Then** 系统必须创建 Zap logger
 - **Then** logger 必须按配置输出 JSON 或 console 格式
 - **Then** logger 必须在配置的目录下准备带日期的分类日志文件 writer
@@ -301,15 +301,15 @@
 
 #### Scenario: Include trace-id from context
 - **Given** `context.Context` 中存在 trace-id
-- **When** 业务代码调用 `common/logger.Info(ctx, ...)`、`Warn(ctx, ...)` 或 `Error(ctx, ...)`
+- **When** 业务代码调用 `common/runtime/logger.Info(ctx, ...)`、`Warn(ctx, ...)` 或 `Error(ctx, ...)`
 - **Then** 输出日志必须包含字段 `trace-id` 且值等于 context 中的 trace-id
 
 #### Scenario: Context API records business caller
-- **Given** 业务代码在 `user-services/internal/service/user_service.go` 中调用 `common/logger.Info(ctx, "create user", ...)`
+- **Given** 业务代码在 `user-services/internal/service/user_service.go` 中调用 `common/runtime/logger.Info(ctx, "create user", ...)`
 - **When** logger 写出该 Info 日志
 - **Then** 日志必须包含 `caller` 字段
 - **Then** `caller` 字段必须指向 `user-services/internal/service/user_service.go` 的调用行
-- **Then** `caller` 字段不得指向 `common/logger/context.go` 中的 `Info`、`Debug`、`Warn` 或 `Error` 封装函数
+- **Then** `caller` 字段不得指向 `common/runtime/logger/context.go` 中的 `Info`、`Debug`、`Warn` 或 `Error` 封装函数
 
 #### Scenario: Log without request context
 - **Given** `context.Context` 中不存在 trace-id
@@ -318,7 +318,7 @@
 - **Then** 字段值必须为空字符串或系统明确生成的 trace-id
 
 #### Scenario: Log expected error without stacktrace
-- **Given** 业务代码调用 `common/logger.Error(ctx, "query user profile failed", zap.Error(err))`
+- **Given** 业务代码调用 `common/runtime/logger.Error(ctx, "query user profile failed", zap.Error(err))`
 - **When** logger 写出该 Error 日志
 - **Then** 日志必须包含错误字段、caller 字段和 `trace-id` 字段
 - **Then** 日志不得因为 Error 级别自动包含 stacktrace 字段
@@ -356,7 +356,7 @@
 #### Scenario: User service does not duplicate logger infrastructure
 - **Given** 用户服务需要增强业务日志字段
 - **When** 实现日志增强
-- **Then** 用户服务 MUST 复用 `common/logger` 和共享 trace-id 中间件
+- **Then** 用户服务 MUST 复用 `common/runtime/logger` 和共享 trace-id 中间件
 - **Then** 用户服务 MUST NOT 新增独立 logger 初始化、日志 writer、日志文件切分或 trace-id 生成实现
 
 #### Scenario: Error logs can include stack trace helper
@@ -469,7 +469,7 @@
 
 #### Scenario: Logger package remains modular
 - **Given** 维护者需要修改 logger factory、context helper 或 file writer
-- **When** 查看 `common/logger` 包
+- **When** 查看 `common/runtime/logger` 包
 - **Then** 不同职责的实现必须组织在聚焦文件中
 - **Then** 文件组织不得要求修改一个聚合大文件才能维护无关职责
 
@@ -501,7 +501,7 @@
 
 #### Scenario: Request trace id is shared across contexts
 - **Given** HTTP 请求包含合法 `X-Trace-ID` header
-- **When** trace-id 中间件处理请求并业务代码通过 `common/logger` context API 输出日志
+- **When** trace-id 中间件处理请求并业务代码通过 `common/runtime/logger` context API 输出日志
 - **Then** Gin context 中的 `trace_id` 值 MUST 等于请求 header 中的 trace id
 - **Then** Go `context.Context` 中的 trace id 值 MUST 等于请求 header 中的 trace id
 - **Then** 日志字段 `trace-id` 值 MUST 等于请求 header 中的 trace id
@@ -522,7 +522,7 @@
 共享基础设施相关命名标准化 SHALL 只修改低风险内部名称或文档表达，不得改变配置加载、Zap 日志、trace-id 边界名称、Redis provider、PostgreSQL provider 或 Ent runtime client 的行为。
 
 #### Scenario: Shared infrastructure names are reviewed
-- **WHEN** 实现审查 `common/config`、`common/infrastructure`、`common/logger`、`common/middleware`、`common/validation` 和服务侧基础设施 wiring 的命名
+- **WHEN** 实现审查 `common/runtime/config`、`common/runtime/infrastructure`、`common/runtime/logger`、`common/http/middleware`、`common/validation` 和服务侧基础设施 wiring 的命名
 - **THEN** 实现 MUST 区分公共 Go API、内部参数名、文档表达和外部配置契约
 
 #### Scenario: Runtime contracts are preserved
@@ -535,14 +535,14 @@
 
 #### Scenario: Load PostgreSQL named instances into Postgres field
 - **GIVEN** YAML 配置包含 `postgres.user_db` 命名实例
-- **WHEN** `common/config.Load` 被调用
+- **WHEN** `common/runtime/config.Load` 被调用
 - **THEN** 系统 MUST 将该实例反序列化到 `config.Config.Postgres["user_db"]`
 - **THEN** 系统 MUST 保持配置路径为 `postgres.user_db`
 
 #### Scenario: Override PostgreSQL named instances after field rename
 - **GIVEN** YAML 配置包含 `postgres.user_db` 命名实例
 - **GIVEN** 环境变量提供 `AEGISCORE_POSTGRES_USER_DB_PASSWORD`
-- **WHEN** `common/config.Load` 被调用
+- **WHEN** `common/runtime/config.Load` 被调用
 - **THEN** 系统 MUST 将环境变量覆盖应用到 `config.Config.Postgres["user_db"].Password`
 - **THEN** 系统 MUST NOT 要求调用方使用新的 YAML key 或新的环境变量前缀
 
@@ -571,7 +571,7 @@
 - **THEN** 该常量值 MUST 保持为 `cache_redis`
 
 #### Scenario: Keep resource names in an explicit file
-- **WHEN** 维护者查看 `common/infrastructure` 中的运行时资源名常量
+- **WHEN** 维护者查看 `common/runtime/infrastructure` 中的运行时资源名常量
 - **THEN** 常量 MUST 位于职责明确的资源名文件中
 - **THEN** 常量组 MUST 使用中文注释说明其用于 datastore 和 Ent 的 Fx wiring
 - **THEN** 实现 MUST NOT 为减少文件数量而将这些跨资源常量合并进配置加载实现文件
@@ -584,7 +584,7 @@
 #### Scenario: Preserve named datastore configuration
 - **WHEN** 运行时资源名称常量迁移完成
 - **THEN** 配置路径 MUST 继续使用 `postgres.user_db`、`postgres.common_db` 和 `redis.cache_redis`
-- **THEN** `common/config.Load` 的读取、覆盖和反序列化行为 MUST 保持不变
+- **THEN** `common/runtime/config.Load` 的读取、覆盖和反序列化行为 MUST 保持不变
 
 ### Requirement: Provide shared Argon2id password helpers
 系统 SHALL 在 `common` 模块提供统一的密码哈希和密码校验方法。密码哈希 MUST 使用 Argon2id、随机盐和可解析的编码格式保存算法版本与参数；密码校验 MUST 使用编码 hash 中的参数重新计算并执行常量时间比较。该能力 MUST 不创建 Redis client、PostgreSQL 连接池、Ent client、HTTP server 或 Fx runtime dependency。
@@ -619,16 +619,16 @@
 - **Then** 系统 MUST NOT 创建 Redis client、PostgreSQL 连接池、Ent client、HTTP server 或 Fx app
 
 ### Requirement: Structure shared infrastructure organization review feedback
-系统 SHALL 在整理共享基础设施目录组织类代码评审意见时，使用中文分别给出问题说明、原因分析和建议改法，并围绕 `common/infrastructure/` 的可维护性、职责边界和后续扩展成本给出可执行建议。
+系统 SHALL 在整理共享基础设施目录组织类代码评审意见时，使用中文分别给出问题说明、原因分析和建议改法，并围绕 `common/runtime/infrastructure/` 的可维护性、职责边界和后续扩展成本给出可执行建议。
 
 #### Scenario: Explain flat infrastructure directory risk
-- **WHEN** 评审意见涉及 `common/infrastructure/` 未按基础设施类型进一步拆分
+- **WHEN** 评审意见涉及 `common/runtime/infrastructure/` 未按基础设施类型进一步拆分
 - **THEN** 反馈 MUST 在问题说明中指出 Redis、PostgreSQL、MongoDB、RabbitMQ 等组件持续增加后，单目录容易出现文件过多和职责混杂
 - **THEN** 反馈 MUST 在原因分析中说明平铺目录会降低定位效率、增加跨组件修改风险，并弱化共享基础设施 provider 的职责边界
 - **THEN** 反馈 MUST 在建议改法中给出按基础设施类型或职责分层的组织建议
 
 #### Scenario: Recommend maintainable infrastructure layering
-- **WHEN** 反馈给出 `common/infrastructure/` 的拆分建议
+- **WHEN** 反馈给出 `common/runtime/infrastructure/` 的拆分建议
 - **THEN** 反馈 MUST 至少包含按基础设施类型拆分的示例，例如 `redis/`、`postgres/`、`mongo/`、`rabbitmq/`
 - **THEN** 反馈 MAY 补充按职责拆分的示例，例如 `datastore/`、`messaging/`、`logging/`、`config/`
 - **THEN** 反馈 MUST 明确后续重构需要保持 YAML key、`AEGISCORE_` 环境变量、Redis/PostgreSQL 命名实例和 Fx named injection 行为不变
@@ -683,13 +683,13 @@
 
 #### Scenario: Config contract constants stay with config loading
 - **WHEN** 实现调整配置默认路径、环境变量前缀、key replacer 或配置结构 tag 相关常量
-- **THEN** 这些常量 MUST 由 `common/config` 边界维护
-- **THEN** `common/config.Load` MUST 继续只读取、覆盖和反序列化配置
+- **THEN** 这些常量 MUST 由 `common/runtime/config` 边界维护
+- **THEN** `common/runtime/config.Load` MUST 继续只读取、覆盖和反序列化配置
 - **THEN** 实现 MUST NOT 通过常量重构新增 required、optional 或基础范围校验
 
 #### Scenario: Runtime resource names stay with infrastructure wiring
 - **WHEN** 实现引用 `user_db`、`common_db` 或 `cache_redis` 运行时资源名
-- **THEN** 非 struct tag 的引用 MUST 优先使用 `common/infrastructure` 中的公共资源名常量
+- **THEN** 非 struct tag 的引用 MUST 优先使用 `common/runtime/infrastructure` 中的公共资源名常量
 - **THEN** 配置路径 MUST 继续保持为 `postgres.user_db`、`postgres.common_db` 和 `redis.cache_redis`
 - **THEN** Fx struct tag 中无法引用常量的 name 字面量 MUST 与公共资源名常量保持一致
 
@@ -704,3 +704,26 @@
 - **WHEN** 实现整理日志轮转默认值、Redis/PostgreSQL ping timeout 或 datastore provider fallback
 - **THEN** 默认值 MUST 保持在拥有运行时行为的基础设施包附近
 - **THEN** 示例 YAML 中的部署默认值与代码 fallback 不一致时 MUST 通过命名、测试或文档说明语义差异
+
+### Requirement: Use categorized runtime paths for shared infrastructure
+共享基础设施相关代码 SHALL 使用分类后的 runtime 和 HTTP adapter 路径。配置加载 MUST 位于 `common/runtime/config`；Zap logger MUST 位于 `common/runtime/logger`；Redis/PostgreSQL provider、运行时资源名和 Fx helper MUST 位于 `common/runtime/infrastructure`；timezone Fx module MUST 位于 `common/runtime/timezone`；共享 HTTP middleware MUST 位于 `common/http/middleware`。目录迁移 MUST 保持配置加载、日志、trace-id、Redis/PostgreSQL provider 和 Fx lifecycle 行为不变。
+
+#### Scenario: Runtime config path is updated without contract changes
+- **WHEN** 配置加载代码迁移到 `common/runtime/config`
+- **THEN** `Load` MUST 继续读取 YAML 并应用 `AEGISCORE_` 环境变量覆盖
+- **THEN** YAML key、环境变量前缀、Redis/PostgreSQL 命名实例和不执行 required/range 校验的行为 MUST 保持不变
+
+#### Scenario: Logger path is updated without behavior changes
+- **WHEN** logger 代码迁移到 `common/runtime/logger`
+- **THEN** context logger API MUST 继续输出 `trace-id` 字段
+- **THEN** Zap encoder、caller、日志文件切分和 sync 错误处理语义 MUST 保持不变
+
+#### Scenario: Infrastructure path is updated without wiring changes
+- **WHEN** Redis 和 PostgreSQL provider 迁移到 `common/runtime/infrastructure`
+- **THEN** provider MUST 继续只连接调用方显式声明的命名实例
+- **THEN** `cache_redis`、`user_db` 和 `common_db` 的配置路径、Fx name tag 和常量值 MUST 保持不变
+
+#### Scenario: HTTP middleware path is updated without request behavior changes
+- **WHEN** 共享 middleware 迁移到 `common/http/middleware`
+- **THEN** trace-id、recovery、request logging、CORS 和认证 middleware 行为 MUST 保持不变
+- **THEN** `X-Trace-ID` header、Gin context trace key 和日志 `trace-id` 字段 MUST 保持不变

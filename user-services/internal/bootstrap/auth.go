@@ -1,8 +1,8 @@
 package bootstrap
 
 import (
-	"github.com/aegiscore/common/auth"
-	"github.com/aegiscore/common/config"
+	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/security/auth"
 )
 
 func NewJWTService(cfg *config.Config) *auth.JWTService {

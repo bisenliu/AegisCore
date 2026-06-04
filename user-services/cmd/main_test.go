@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/config"
+	"github.com/aegiscore/common/runtime/config"
 )
 
 func TestFxAppLifecycleTimeouts(t *testing.T) {

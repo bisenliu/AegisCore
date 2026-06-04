@@ -1,7 +1,7 @@
 package dto
 
 import (
-	"github.com/aegiscore/common/response"
+	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/user-services/internal/domain"
 )
 

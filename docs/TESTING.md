@@ -14,7 +14,7 @@
 - Service：repository 返回值到 DTO 的字段映射，repository 错误通过 `response.FromError` 转换。
 - Repository：Ent not found 转 `NOT_FOUND`，其他查询错误保留 cause 并映射为 internal error。
 - Middleware：trace-id 透传/生成、写入 Gin context/Go context/响应头、panic recovery 输出统一错误、request logging 携带 trace-id、CORS 处理 OPTIONS。
-- Config loader：显式配置加载、`AEGISCORE_` 环境变量覆盖、命名 Redis/PostgreSQL 实例反序列化；`common/config.Load` 不应因 required/range 字段校验拒绝缺失或零值配置。
+- Config loader：显式配置加载、`AEGISCORE_` 环境变量覆盖、命名 Redis/PostgreSQL 实例反序列化；`common/runtime/config.Load` 不应因 required/range 字段校验拒绝缺失或零值配置。
 - Runtime/Infrastructure：Fx 生命周期启动与停止，HTTP server 使用配置中的 host/port/timeouts，用户服务声明 `cache_redis`、`user_db`、`common_db`，依赖不可用或底层库拒绝配置时启动失败。
 - Logging：Zap logger 初始化、分类日志文件、trace-id 字段和无 request context 时的日志行为。
 
@@ -43,5 +43,5 @@ Ent 生成代码通常不需要逐文件测试。测试应覆盖 schema 约束�
 1. 与改动范围匹配的 `go test ./...`；跨模块变更时分别在 `common/` 和 `user-services/` 执行。
 2. 如涉及 Ent schema，执行 `go generate ./ent` 并检查生成结果。
 3. 如涉及 migration，执行 `./scripts/migrate-validate.sh` 并检查 `atlas.sum` 与 SQL 文件一致。
-4. 如涉及 HTTP API，验证成功和失败响应均符合 `common/response.Envelope`。
+4. 如涉及 HTTP API，验证成功和失败响应均符合 `common/contract/response.Envelope`。
 5. 如涉及配置或启动流程，验证 loader 行为、依赖不可用和优雅停止场景。

@@ -8,7 +8,7 @@
 
 ### Requirement: User service logs include necessary context
 
-用户服务 MUST 通过 `common/logger` 的 context API 输出关键业务日志，并 MUST 自动关联 `trace-id`。关键错误日志 MUST 包含错误对象和必要业务标识，例如 user_id、username、session_id、分页参数或状态字段。用户服务 MUST NOT 为本次变更新增私有日志框架或强制追加 module、method、event、error_code、error_kind、reason 等额外通用字段。
+用户服务 MUST 通过 `common/runtime/logger` 的 context API 输出关键业务日志，并 MUST 自动关联 `trace-id`。关键错误日志 MUST 包含错误对象和必要业务标识，例如 user_id、username、session_id、分页参数或状态字段。用户服务 MUST NOT 为本次变更新增私有日志框架或强制追加 module、method、event、error_code、error_kind、reason 等额外通用字段。
 
 #### Scenario: Error log includes trace and operation context
 - **Given** HTTP 请求携带或生成了 `X-Trace-ID`
@@ -107,6 +107,6 @@
 #### Scenario: Error response remains unchanged after logging
 - **Given** 用户服务发生参数错误、认证失败、用户不存在、冲突或内部错误
 - **When** 新日志逻辑记录该事件
-- **Then** HTTP 响应 MUST 继续使用 `common/response.Envelope`
+- **Then** HTTP 响应 MUST 继续使用 `common/contract/response.Envelope`
 - **Then** 响应错误码和 HTTP 状态码 MUST 与日志增强前保持兼容
 - **Then** 日志写入失败或 logger 缺失 MUST NOT 改变业务响应

@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/auth"
-	"github.com/aegiscore/common/config"
-	"github.com/aegiscore/common/response"
+	"github.com/aegiscore/common/contract/response"
+	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/controller"
 	"github.com/aegiscore/user-services/internal/domain"

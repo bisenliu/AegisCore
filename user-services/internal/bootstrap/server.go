@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aegiscore/common/config"
-	"github.com/aegiscore/common/logger"
+	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/logger"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 	"go.uber.org/zap"

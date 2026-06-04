@@ -3,8 +3,8 @@ package validation
 import (
 	"strings"
 
-	"github.com/aegiscore/common/auth"
-	"github.com/aegiscore/common/response"
+	"github.com/aegiscore/common/contract/response"
+	"github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/errmsg"
 	"github.com/google/uuid"

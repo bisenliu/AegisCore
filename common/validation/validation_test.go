@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/aegiscore/common/response"
+	"github.com/aegiscore/common/contract/response"
 )
 
 func TestValidateStructAndFieldNames(t *testing.T) {

@@ -34,7 +34,7 @@
 
 ### Requirement: Normalize validation errors
 
-系统必须把 binding、结构体校验和业务自定义校验错误归一化为调用方可读的校验错误，并允许 controller 使用 `common/response.Envelope` 输出失败响应。对于结构体 validator tag 校验失败，归一化错误必须包含可序列化的字段级明细。
+系统必须把 binding、结构体校验和业务自定义校验错误归一化为调用方可读的校验错误，并允许 controller 使用 `common/contract/response.Envelope` 输出失败响应。对于结构体 validator tag 校验失败，归一化错误必须包含可序列化的字段级明细。
 
 #### Scenario: Reject invalid field value
 - **Given** 请求 DTO 字段包含 `validate:"required"`、`validate:"gt=0"` 或其他 validator tag
@@ -52,7 +52,7 @@
 #### Scenario: Preserve response envelope
 - **Given** controller 使用共享校验器处理请求校验失败
 - **When** controller 输出失败响应
-- **Then** 响应必须使用 `common/response.Envelope`
+- **Then** 响应必须使用 `common/contract/response.Envelope`
 - **Then** 响应必须为 HTTP 400 和通用请求错误业务码 `10000`，除非 controller 显式映射为已有兼容消息
 
 #### Scenario: Include validation error details in envelope
@@ -179,7 +179,7 @@
 #### Scenario: Gin adapter preserves validation failure responses
 - **Given** controller 使用共享 Gin 校验适配层处理请求校验失败
 - **When** binding 或 validator tag 校验失败
-- **Then** 响应 MUST 继续使用 `common/response.Envelope`
+- **Then** 响应 MUST 继续使用 `common/contract/response.Envelope`
 - **Then** HTTP 状态码、业务错误码、公开 message 和字段级 `errors` 明细 MUST 与拆分前保持兼容
 
 #### Scenario: Gin adapter logs and aborts failed requests
@@ -299,5 +299,23 @@
 #### Scenario: Validation errors preserve envelope contract
 - **Given** 服务内 Validation 层判定请求级校验失败
 - **When** controller 输出失败响应
-- **Then** 响应 MUST 继续使用 `common/response.Envelope`
+- **Then** 响应 MUST 继续使用 `common/contract/response.Envelope`
 - **Then** 错误状态码、业务码和公开消息 MUST 与现有请求校验错误语义兼容
+
+### Requirement: Keep validation core separate from categorized Gin adapter path
+请求校验能力 SHALL 保持通用校验核心与 Gin HTTP 适配层分离。通用 validator 初始化、结构体校验、字段名解析、错误归一化、自定义 rule 和 DTO 扩展钩子 MUST 保持在 `common/validation`；Gin binding、失败响应、日志记录和 abort 控制流 MUST 位于 `common/http/ginvalidation`。目录迁移 MUST 保持请求绑定、校验规则、错误明细和失败响应行为不变。
+
+#### Scenario: Core validation remains Gin-independent
+- **WHEN** 非 HTTP 或非 Gin 调用方导入 `common/validation`
+- **THEN** 该包 MUST NOT 要求调用方使用 `gin.Context`
+- **THEN** 该包 MUST NOT 写入 HTTP 响应或调用 Gin abort 控制流
+
+#### Scenario: Gin adapter path changes without response changes
+- **WHEN** controller 使用 `common/http/ginvalidation` 绑定 URI、query、JSON 或 form 请求参数
+- **THEN** 请求参数绑定和结构体校验行为 MUST 与迁移前保持一致
+- **THEN** 校验失败响应 MUST 继续使用统一失败信封和字段级 `errors` 明细
+
+#### Scenario: Service-specific validation remains service-owned
+- **WHEN** 用户服务需要用户资料请求清洗、UUID 解析、分页规范化或用户服务特定跨字段校验
+- **THEN** 相关规则 MUST 保持在用户服务自己的 validation 边界内
+- **THEN** 实现 MUST NOT 因 `common` 目录重组而把服务特定规则移动到 `common/validation`

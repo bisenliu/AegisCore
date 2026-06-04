@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/config"
+	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/alicebob/miniredis/v2"

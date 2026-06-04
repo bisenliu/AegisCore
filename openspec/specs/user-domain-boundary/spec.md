@@ -34,7 +34,7 @@
 - **Given** Ent 查询返回 not found 或唯一约束冲突
 - **When** PostgreSQL repository 处理该错误
 - **Then** Repository MUST 继续返回 `domain.ErrUserNotFound` 或 `domain.ErrUserAlreadyExists`
-- **Then** Repository MUST NOT 构造 `common/response` 应用错误
+- **Then** Repository MUST NOT 构造 `common/contract/response` 应用错误
 
 #### Scenario: Internal refactor preserves external contracts
 - **Given** 用户领域边界调整完成

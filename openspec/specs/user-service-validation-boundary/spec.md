@@ -28,7 +28,7 @@
 - **Then** Controller 和 Validation 层 MUST NOT 直接调用 Ent client 或 PostgreSQL 实现包
 
 ### Requirement: Provide service-local validation for user request rules
-用户服务 MUST 在服务内保留可维护的请求校验边界，用于承载用户服务特定的清洗、基础校验和复杂请求规则，并 MUST 复用 `common/validation` 和 `common/response` 的共享能力。用户服务特定规则 MUST NOT 上移到 `common`，除非多个服务存在稳定复用需求。
+用户服务 MUST 在服务内保留可维护的请求校验边界，用于承载用户服务特定的清洗、基础校验和复杂请求规则，并 MUST 复用 `common/validation` 和 `common/contract/response` 的共享能力。用户服务特定规则 MUST NOT 上移到 `common`，除非多个服务存在稳定复用需求。
 
 #### Scenario: Validate complex user request rules locally
 - **Given** 用户服务接口需要校验用户名、昵称、密码、状态、分页、过滤条件或请求体 token 字段
@@ -49,7 +49,7 @@
 - **Given** 创建用户请求校验逻辑从 Service 迁移到 Controller 或服务内 Validation 层
 - **When** 调用方提交合法或非法创建用户请求
 - **Then** `POST /api/v1/users` 的路径、请求字段、成功响应字段和失败响应信封 MUST 与迁移前保持兼容
-- **Then** 校验失败仍 MUST 通过 `common/response.Envelope` 输出统一 HTTP 400 响应
+- **Then** 校验失败仍 MUST 通过 `common/contract/response.Envelope` 输出统一 HTTP 400 响应
 
 #### Scenario: Validation boundary refactor keeps query API compatible
 - **Given** 查询用户请求校验逻辑从 Service 迁移到 Controller 或服务内 Validation 层

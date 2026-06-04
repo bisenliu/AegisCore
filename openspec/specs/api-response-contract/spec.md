@@ -24,7 +24,7 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 
 ### Requirement: Return paginated success responses
 
-系统 MUST 在 `common/response` 中提供可复用分页响应数据结构。分页列表成功响应 MUST 保持统一 `Envelope` 顶层字段，并将列表数据包装到 `data.items`，分页元信息包装到 `data.pagination`。
+系统 MUST 在 `common/contract/response` 中提供可复用分页响应数据结构。分页列表成功响应 MUST 保持统一 `Envelope` 顶层字段，并将列表数据包装到 `data.items`，分页元信息包装到 `data.pagination`。
 
 #### Scenario: Return paginated list payload
 - **Given** controller 成功处理分页列表请求并获得列表数据和分页元信息
@@ -174,11 +174,11 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 - **Given** HTTP server 已启动
 - **When** 调用方请求 `GET /healthz`
 - **Then** 系统可以返回最小健康状态 JSON，而不要求使用业务 API 响应信封
-- **Then** 业务 API 仍必须使用 `common/response.Envelope`
+- **Then** 业务 API 仍必须使用 `common/contract/response.Envelope`
 
 ### Requirement: Provide standard numeric response codes
 
-系统必须在 `common/response` 中定义标准数字业务码，业务码必须独立于 HTTP status code。
+系统必须在 `common/contract/response` 中定义标准数字业务码，业务码必须独立于 HTTP status code。
 
 #### Scenario: Standard code values are stable
 - **Given** 服务构造成功或失败响应
@@ -229,7 +229,7 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 #### Scenario: Preserve external error response contract
 - **Given** 请求触发用户服务中使用迁移后消息常量的失败路径
 - **When** controller 或中间件返回统一失败响应
-- **Then** 响应 MUST 继续使用 `common/response.Envelope` 失败信封
+- **Then** 响应 MUST 继续使用 `common/contract/response.Envelope` 失败信封
 - **Then** HTTP 状态码和业务错误码 MUST 与迁移前一致
 - **Then** 对外 `message` 文本 MUST 与迁移前一致
 
@@ -239,7 +239,7 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 - **Then** 系统 MUST 不再存在对旧包或旧限定名的引用
 
 ### Requirement: Document response envelope in Swagger
-系统必须在 Swagger/OpenAPI 文档中复用运行时 `common/response.Envelope` 语义描述业务 API 成功和失败响应，确保文档中的状态码、业务码、消息和 data 包装方式与真实响应一致。
+系统必须在 Swagger/OpenAPI 文档中复用运行时 `common/contract/response.Envelope` 语义描述业务 API 成功和失败响应，确保文档中的状态码、业务码、消息和 data 包装方式与真实响应一致。
 
 #### Scenario: Document created response envelope
 - **Given** 创建用户接口成功创建资源
@@ -278,7 +278,7 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 
 ### Requirement: Keep response contract constants centralized
 
-系统 MUST 在 `common/response` 中集中维护标准成功消息、内部错误消息和业务码常量，避免在响应构造函数中重复硬编码同一契约值。
+系统 MUST 在 `common/contract/response` 中集中维护标准成功消息、内部错误消息和业务码常量，避免在响应构造函数中重复硬编码同一契约值。
 
 #### Scenario: Success messages use response constants
 - **Given** controller 调用 `response.OK` 或 `response.Created`
@@ -299,7 +299,7 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 - **THEN** 规格 MUST 明确对外响应 `code` 仍使用当前数字枚举，且 Go 常量名或语义标签不得改变 JSON payload 结构
 
 #### Scenario: Response envelope is preserved
-- **WHEN** 命名标准化涉及 `common/response` 或 controller 响应引用
+- **WHEN** 命名标准化涉及 `common/contract/response` 或 controller 响应引用
 - **THEN** HTTP 响应 MUST 继续使用 `success`、`code`、`message`、`data` 和既有错误字段约定
 
 ### Requirement: Centralize shared authentication response message
@@ -319,11 +319,11 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 
 #### Scenario: Internal error and success messages remain centralized
 - **WHEN** 实现迁移或整合 response message 常量
-- **THEN** `ok`、`created` 和 `internal server error` 的常量来源 MUST 继续位于 `common/response`
+- **THEN** `ok`、`created` 和 `internal server error` 的常量来源 MUST 继续位于 `common/contract/response`
 - **THEN** 成功响应和内部错误响应的 message 值 MUST 保持不变
 
 ### Requirement: Return external user identity fields in user profile data
-系统 SHALL 保持用户相关 API 的 `common/response.Envelope` 外层响应契约不变，同时用户资料 `data` MUST 只公开外部用户身份字段和非敏感资料字段。用户资料响应 MUST 返回 `user_id` 和 `username`，MUST NOT 返回内部数据库 `id`、`email`、`password` 或密码哈希。
+系统 SHALL 保持用户相关 API 的 `common/contract/response.Envelope` 外层响应契约不变，同时用户资料 `data` MUST 只公开外部用户身份字段和非敏感资料字段。用户资料响应 MUST 返回 `user_id` 和 `username`，MUST NOT 返回内部数据库 `id`、`email`、`password` 或密码哈希。
 
 #### Scenario: Create user response exposes external identity
 - **Given** 用户创建成功
@@ -346,11 +346,11 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 - **Then** 响应 MUST NOT 通过错误消息泄露内部数据库 `id`、密码明文、完整密码 hash 或底层数据库细节
 
 ### Requirement: Organize response package by contract responsibilities
-系统 SHALL 将 `common/response` 中的响应信封、分页模型/计算、标准消息常量和失败响应 helper 组织到职责明确的源文件中。该组织变更 MUST 保持 `common/response` 包名、导出 API、HTTP status、业务错误码、JSON 字段和对外消息语义不变。
+系统 SHALL 将 `common/contract/response` 中的响应信封、分页模型/计算、标准消息常量和失败响应 helper 组织到职责明确的源文件中。该组织变更 MUST 保持 `common/contract/response` 包名、导出 API、HTTP status、业务错误码、JSON 字段和对外消息语义不变。
 
 #### Scenario: Response envelope behavior is preserved after file split
 - **Given** controller 调用 `response.OK`、`response.Created`、`response.Fail` 或标准失败 helper
-- **When** `common/response` 文件组织被拆分
+- **When** `common/contract/response` 文件组织被拆分
 - **Then** 响应 JSON MUST 继续使用 `success`、`code`、`message`、`data` 和 `errors` 字段约定
 - **Then** 成功响应、失败响应、校验失败响应和 token 失败响应的 HTTP status 与业务码 MUST 与拆分前一致
 - **Then** 调用方 MUST NOT 因文件拆分改用新的 Go package import 路径
@@ -366,4 +366,22 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 - **Given** 响应 helper 构造成功、认证失败或内部错误消息
 - **When** 标准消息常量被移动到聚焦文件
 - **Then** `ok`、`created`、`internal server error` 和通用认证失败消息值 MUST 保持不变
-- **Then** 标准业务码常量 MUST 继续位于 `common/response` 包中供调用方复用
+- **Then** 标准业务码常量 MUST 继续位于 `common/contract/response` 包中供调用方复用
+
+### Requirement: Host response contract under common contract path
+API 响应契约代码 SHALL 位于 `common/contract/response`，以表达响应信封、业务错误码、失败响应 helper 和分页模型属于跨服务 API contract。目录迁移 MUST 保持 Go package name、导出 API 语义、HTTP status、业务错误码、JSON 字段和对外 message 行为不变。
+
+#### Scenario: Response package path changes without envelope changes
+- **WHEN** controller 或 middleware 使用迁移后的 response 包构造成功或失败响应
+- **THEN** 响应 JSON MUST 继续使用 `success`、`code`、`message`、`data` 和 `errors` 字段约定
+- **THEN** 成功响应、参数错误、认证失败、冲突、未找到和内部错误的业务码 MUST 保持不变
+
+#### Scenario: Pagination helpers remain contract-owned
+- **WHEN** list 类接口使用分页响应 helper
+- **THEN** 分页模型 MUST 继续位于响应契约包边界内
+- **THEN** `data.items` 和 `data.pagination` 的 JSON 结构 MUST 保持不变
+
+#### Scenario: Response imports are synchronized
+- **WHEN** 响应契约包迁移到 `common/contract/response`
+- **THEN** 仓库内 Go imports、测试、Swagger-adjacent 引用、文档和 OpenSpec 路径引用 MUST 同步更新
+- **THEN** 实现 MUST NOT 保留与新路径行为分叉的旧响应包

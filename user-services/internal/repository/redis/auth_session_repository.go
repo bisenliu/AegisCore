@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aegiscore/common/config"
+	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"

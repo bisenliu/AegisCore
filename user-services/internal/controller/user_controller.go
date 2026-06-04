@@ -1,8 +1,8 @@
 package controller
 
 import (
-	"github.com/aegiscore/common/ginvalidation"
-	"github.com/aegiscore/common/response"
+	"github.com/aegiscore/common/contract/response"
+	"github.com/aegiscore/common/http/ginvalidation"
 	commonvalidation "github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/service"

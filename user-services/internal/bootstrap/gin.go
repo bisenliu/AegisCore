@@ -3,8 +3,8 @@ package bootstrap
 import (
 	"fmt"
 
-	"github.com/aegiscore/common/config"
-	commonmw "github.com/aegiscore/common/middleware"
+	commonmw "github.com/aegiscore/common/http/middleware"
+	"github.com/aegiscore/common/runtime/config"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 	"go.uber.org/zap"

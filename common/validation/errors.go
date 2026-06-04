@@ -7,7 +7,7 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/aegiscore/common/response"
+	"github.com/aegiscore/common/contract/response"
 	"github.com/go-playground/validator/v10"
 )
 

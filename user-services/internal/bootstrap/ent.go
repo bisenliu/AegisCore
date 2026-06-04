@@ -6,7 +6,7 @@ import (
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
-	"github.com/aegiscore/common/logger"
+	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/user-services/ent"
 	"go.uber.org/fx"
 	"go.uber.org/zap"

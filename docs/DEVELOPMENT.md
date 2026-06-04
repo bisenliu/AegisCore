@@ -29,7 +29,7 @@
 
 ## 4. Configuration
 
-配置加载逻辑位于 `common/config/loader.go`。
+配置加载逻辑位于 `common/runtime/config/loader.go`。
 
 - 默认配置文件路径由服务命令传入，`serve` 默认使用 `./configs/config.yaml`。
 - 从仓库根目录运行时应显式传入 `./user-services/configs/config.yaml`。
@@ -38,7 +38,7 @@
 - Redis 使用 `redis.<name>` 命名实例，例如 `redis.cache_redis`、`redis.queue_redis`。
 - PostgreSQL 使用 `postgres.<name>` 命名实例，例如 `postgres.user_db`、`postgres.common_db`、`postgres.pay_db`。
 - 用户服务当前声明 `cache_redis`、`user_db` 和 `common_db`；`pay_db` 可存在于配置中，但不代表支付连接池或支付业务已启用。
-- `common/config.Load` 只负责读取 YAML、应用 `AEGISCORE_` 覆盖并反序列化为配置对象；缺失字段、零值端口或无效范围不在加载阶段被字段校验拒绝，后续初始化或依赖库会暴露运行时失败。
+- `common/runtime/config.Load` 只负责读取 YAML、应用 `AEGISCORE_` 覆盖并反序列化为配置对象；缺失字段、零值端口或无效范围不在加载阶段被字段校验拒绝，后续初始化或依赖库会暴露运行时失败。
 
 示例：`AEGISCORE_HTTP_PORT=8081` 可覆盖 `http.port`。
 
@@ -47,7 +47,8 @@
 - HTTP 层只处理请求解析、参数校验和响应输出。
 - Service 层负责业务编排和 DTO 映射。
 - Repository 层负责 Ent/数据库访问和存储错误转换。
-- 共享中间件、响应模型、配置和基础设施放在 `common/`。
+- 共享中间件、响应模型、配置和基础设施放在 `common/` 的对应能力分类目录中：响应契约使用 `common/contract/response`，运行时基础能力使用 `common/runtime`，HTTP/Gin 适配使用 `common/http`，安全凭证原语使用 `common/security`，通用校验核心使用 `common/validation`。
+- `common` 只承载跨服务稳定契约和基础能力；用户服务独有规则、DTO 映射、repository 行为或仅为未来可能复用的 helper 应保留在 `user-services` 内。
 - Ent 生成代码不要手动编辑；修改 schema 后重新生成。
 - Go 文件提交前运行 `gofmt`。
 
@@ -116,17 +117,17 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 
 ## 7. API Conventions
 
-- 成功响应使用 `common/response.OK` 或 `common/response.Created`。
-- 失败响应使用 `common/response.Fail` 或便捷方法 `BadRequest`、`NotFound`。
+- 成功响应使用 `common/contract/response.OK` 或 `common/contract/response.Created`。
+- 失败响应使用 `common/contract/response.Fail` 或便捷方法 `BadRequest`、`NotFound`。
 - 响应信封字段为 `success`、`code`、`message`、`data`。
 - API 错误码目前包括 `OK`、`BAD_REQUEST`、`NOT_FOUND`、`INTERNAL_ERROR`。
 
 ## 8. Logging And Trace ID
 
-- 日志使用 `common/logger` 提供的 Zap 封装和 context API。
+- 日志使用 `common/runtime/logger` 提供的 Zap 封装和 context API。
 - HTTP trace header 是 `X-Trace-ID`，日志字段统一为 `trace-id`。
 - trace-id 中间件会将 trace-id 写入 Gin context、Go `context.Context` 和响应头。
-- 业务代码优先通过 `common/logger.Info(ctx, ...)`、`Warn(ctx, ...)`、`Error(ctx, ...)` 输出日志，避免绕过 context helper 导致 trace-id 丢失。
+- 业务代码优先通过 `common/runtime/logger.Info(ctx, ...)`、`Warn(ctx, ...)`、`Error(ctx, ...)` 输出日志，避免绕过 context helper 导致 trace-id 丢失。
 - Error 级别日志默认不自动添加 stacktrace；关键运行时错误需要显式传入 `logger.StackTrace(...)` 或 `zap.Stack("stacktrace")`。
 - 文件日志按天写入带日期的分类文件，例如 `aegiscore-user-services.2026-06-02.info.log`。
 
@@ -138,6 +139,13 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 4. 使用 `/opsx:apply <change-name>` 实现。
 5. 增加或更新测试，并在受影响模块目录运行相关 `go test` 命令；跨模块变更时分别在 `common/` 和 `user-services/` 运行。
 
-## 10. Local Runtime Notes
+## 10. Adding Shared Code
+
+1. 先确认共享代码是否属于跨服务稳定契约、运行时基础能力、HTTP/Gin 适配、安全凭证原语或通用校验核心。
+2. 如能力只服务于用户服务请求清洗、状态规则、DTO 映射、repository 行为或业务编排，保留在 `user-services` 对应分层内。
+3. 如确需进入 `common`，在 capability map 或 OpenSpec 中明确 owner，并选择对应目录：`common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation`。
+4. 新增或迁移共享 API 时同步更新 Go imports、测试、文档和相关 OpenSpec 规格。
+
+## 11. Local Runtime Notes
 
 用户服务启动时会 ping Redis 和 PostgreSQL。若本地没有外部依赖，启动会失败。开发纯业务逻辑时优先通过单元测试覆盖 service/repository 边界，集成验证再连接真实依赖。
