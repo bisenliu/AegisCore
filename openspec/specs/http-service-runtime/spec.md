@@ -43,6 +43,28 @@ HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖
 - **Then** 停止 context MUST 使用表达 Fx app stop budget 的停止超时常量
 - **Then** 停止超时常量名称 MUST NOT 暗示它只控制 HTTP server shutdown
 
+### Requirement: Report HTTP listen failures during startup
+
+HTTP 服务运行时 MUST 在 Fx `OnStart` 完成前绑定配置中的 HTTP host 和 port。若监听器创建、端口绑定或地址绑定失败，启动过程 MUST 向 Fx 返回错误，服务 MUST NOT 在 HTTP server 实际不可用时报告启动成功。成功绑定后，HTTP server MUST 继续异步处理请求，并在正常关闭时继续忽略 `http.ErrServerClosed`。
+
+#### Scenario: Startup fails when HTTP port is already in use
+- **Given** 配置中的 `http.host` 和 `http.port` 指向一个已被占用的本地监听地址
+- **When** Fx app 启动 HTTP server 生命周期
+- **Then** `OnStart` MUST 返回包含监听失败上下文的错误
+- **Then** 服务 MUST NOT 假装已经健康可用
+
+#### Scenario: Startup succeeds only after HTTP listener is bound
+- **Given** 配置中的 HTTP 地址可监听
+- **When** Fx app 启动 HTTP server 生命周期
+- **Then** `OnStart` MUST 在 HTTP listener 成功绑定后才返回成功
+- **Then** HTTP server MUST 使用该 listener 异步处理请求
+
+#### Scenario: Normal shutdown remains non-failing
+- **Given** HTTP server 已成功启动
+- **When** Fx app 停止并触发 graceful shutdown
+- **Then** HTTP server MUST 使用现有 shutdown timeout 规则关闭
+- **Then** `http.ErrServerClosed` MUST NOT 被记录为服务失败
+
 ### Requirement: Initialize configured timezone during user service startup
 
 用户服务运行时 MUST 在 Fx 启动图中引入共享 timezone module，并使用加载后的共享配置初始化进程本地时区。该初始化 MUST 与用户服务声明的 HTTP server、Redis、PostgreSQL 和 Ent runtime 依赖一起参与启动失败处理。

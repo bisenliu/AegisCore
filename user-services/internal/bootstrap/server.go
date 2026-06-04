@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -38,8 +39,12 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			logger.WithContext(params.Log, ctx).Info("starting http server", zap.String("addr", addr))
+			listener, err := net.Listen("tcp", addr)
+			if err != nil {
+				return fmt.Errorf("listen http server on %s: %w", addr, err)
+			}
 			go func() {
-				if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 					params.Log.Error("http server failed", logger.StackTrace(zap.Error(err))...)
 				}
 			}()

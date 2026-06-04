@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -76,6 +77,63 @@ func TestHTTPServerUsesConfiguredTimeouts(t *testing.T) {
 	}
 	if len(lifecycle.hooks) != 1 || lifecycle.hooks[0].OnStop == nil {
 		t.Fatalf("lifecycle hooks = %#v, want one shutdown hook", lifecycle.hooks)
+	}
+}
+
+func TestHTTPServerStartReturnsListenError(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve listener: %v", err)
+	}
+	defer listener.Close()
+
+	addr := listener.Addr().(*net.TCPAddr)
+	lifecycle := &lifecycleRecorder{}
+	NewHTTPServer(HTTPServerParams{
+		Lifecycle: lifecycle,
+		Config: &config.Config{HTTP: config.HTTPConfig{
+			Host: "127.0.0.1",
+			Port: addr.Port,
+		}},
+		Log:    zap.NewNop(),
+		Engine: gin.New(),
+	})
+
+	if len(lifecycle.hooks) != 1 || lifecycle.hooks[0].OnStart == nil {
+		t.Fatalf("lifecycle hooks = %#v, want one start hook", lifecycle.hooks)
+	}
+	err = lifecycle.hooks[0].OnStart(context.Background())
+	if err == nil {
+		t.Fatal("OnStart error = nil, want listen error")
+	}
+	if !strings.Contains(err.Error(), "listen http server") {
+		t.Fatalf("OnStart error = %q, want listen http server context", err.Error())
+	}
+}
+
+func TestHTTPServerStartAndStop(t *testing.T) {
+	lifecycle := &lifecycleRecorder{}
+	NewHTTPServer(HTTPServerParams{
+		Lifecycle: lifecycle,
+		Config: &config.Config{HTTP: config.HTTPConfig{
+			Host:            "127.0.0.1",
+			Port:            0,
+			ShutdownTimeout: time.Second,
+		}},
+		Log:    zap.NewNop(),
+		Engine: gin.New(),
+	})
+
+	if len(lifecycle.hooks) != 1 || lifecycle.hooks[0].OnStart == nil || lifecycle.hooks[0].OnStop == nil {
+		t.Fatalf("lifecycle hooks = %#v, want one start/stop hook", lifecycle.hooks)
+	}
+	if err := lifecycle.hooks[0].OnStart(context.Background()); err != nil {
+		t.Fatalf("OnStart: %v", err)
+	}
+	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := lifecycle.hooks[0].OnStop(stopCtx); err != nil {
+		t.Fatalf("OnStop: %v", err)
 	}
 }
 
