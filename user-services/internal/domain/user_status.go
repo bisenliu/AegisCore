@@ -2,15 +2,17 @@ package domain
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
 )
 
 type UserStatus int64
 
 const (
-	UserStatusNormal             UserStatus = 100
-	UserStatusDisabled           UserStatus = 200
+	// UserStatusNormal 表示用户状态正常，可正常登录并访问受保护资源。
+	UserStatusNormal UserStatus = 100
+	// UserStatusDisabled 表示用户已被冻结或停用，不允许登录。
+	UserStatusDisabled UserStatus = 200
+	// UserStatusMustChangePassword 表示用户必须先完成密码修改，只允许获取改密令牌。
 	UserStatusMustChangePassword UserStatus = 300
 )
 
@@ -25,9 +27,9 @@ func (s UserStatus) IsValid() bool {
 
 func (s UserStatus) AllowedValues() []string {
 	return []string{
-		fmt.Sprint(UserStatusNormal),
-		fmt.Sprint(UserStatusDisabled),
-		fmt.Sprint(UserStatusMustChangePassword),
+		strconv.FormatInt(int64(UserStatusNormal), 10),
+		strconv.FormatInt(int64(UserStatusDisabled), 10),
+		strconv.FormatInt(int64(UserStatusMustChangePassword), 10),
 	}
 }
 

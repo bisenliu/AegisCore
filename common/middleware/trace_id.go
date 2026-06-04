@@ -10,10 +10,14 @@ import (
 )
 
 const (
-	HeaderTraceID    = "X-Trace-ID"
-	TraceIDKey       = "trace_id"
+	// HeaderTraceID 是请求接收并在响应中回传的 trace id 请求头。
+	HeaderTraceID = "X-Trace-ID"
+	// TraceIDKey 是 Gin context 中存储有效 trace id 的 key。
+	TraceIDKey = "trace_id"
+	// ContextKeyLogger 是 Gin context 中存储请求 logger 的 key。
 	ContextKeyLogger = "logger"
 
+	// DefaultMaxTraceIDLength 限制调用方传入的 trace id 进入日志和上下文前的最大长度。
 	DefaultMaxTraceIDLength = 128
 )
 

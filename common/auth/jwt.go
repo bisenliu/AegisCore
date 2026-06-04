@@ -19,8 +19,11 @@ var (
 )
 
 const (
-	SubjectAccess         = "access"
-	SubjectRefresh        = "refresh"
+	// SubjectAccess 标识可被受保护 API 中间件接受的访问令牌。
+	SubjectAccess = "access"
+	// SubjectRefresh 标识刷新令牌，不能作为访问令牌使用。
+	SubjectRefresh = "refresh"
+	// SubjectPasswordChange 标识只允许强制修改密码的短期令牌。
 	SubjectPasswordChange = "password_change"
 )
 

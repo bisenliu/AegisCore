@@ -16,12 +16,19 @@ import (
 )
 
 const (
+	// defaultTokenVersionCacheTTL 限制 token_version 校验依赖 Redis 缓存的最长时间。
 	defaultTokenVersionCacheTTL = 5 * time.Minute
-	defaultAuthSessionTTL       = time.Hour
-	tokenVersionKeyFormat       = "auth:user:%s:token_version"
-	sessionKeyFormat            = "auth:session:%s"
-	userSessionsKeyFormat       = "auth:user:%s:sessions"
-	expiredSessionMinScore      = "-inf"
+	// defaultAuthSessionTTL 是调用方未提供有效时长时的会话兜底过期时间。
+	defaultAuthSessionTTL = time.Hour
+
+	// tokenVersionKeyFormat 按用户 UUID 缓存当前 token_version。
+	tokenVersionKeyFormat = "auth:user:%s:token_version"
+	// sessionKeyFormat 按会话 UUID 存储序列化后的认证会话数据。
+	sessionKeyFormat = "auth:session:%s"
+	// userSessionsKeyFormat 用 ZSET 存储用户活跃会话 ID，score 为过期 Unix 时间。
+	userSessionsKeyFormat = "auth:user:%s:sessions"
+	// expiredSessionMinScore 让 ZRemRangeByScore 清理所有 score 小于等于当前时间的会话。
+	expiredSessionMinScore = "-inf"
 )
 
 type AuthSessionRepositoryParams struct {
@@ -188,5 +195,5 @@ func parseTokenVersion(value string) (int64, error) {
 }
 
 func formatTokenVersion(version int64) string {
-	return fmt.Sprintf("%d", version)
+	return strconv.FormatInt(version, 10)
 }

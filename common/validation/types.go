@@ -10,16 +10,26 @@ import (
 )
 
 const (
-	DefaultLocale       = "zh"
+	// DefaultLocale 选择内置校验翻译语言。
+	DefaultLocale = "zh"
+	// ErrEmptyRequestBody 表示请求需要 JSON body 但内容为空。
 	ErrEmptyRequestBody = "请求体参数不能为空"
+	// ErrValidationFailed 是 validator 规则失败时的响应信封消息。
 	ErrValidationFailed = "请求参数验证失败"
+	// ErrTrailingJSONBody 表示请求体包含多个 JSON 值，必须拒绝解析。
 	ErrTrailingJSONBody = "请求体只能包含一个 JSON 值"
-	RuleEnum            = "enum"
-	TagLabel            = "label"
-	TagJSON             = "json"
-	TagForm             = "form"
-	TagURI              = "uri"
-	TagQuery            = "query"
+	// RuleEnum 是枚举型请求字段使用的自定义 validator 标签。
+	RuleEnum = "enum"
+	// TagLabel 是用于校验错误展示名称的结构体标签。
+	TagLabel = "label"
+	// TagJSON 是用于提取 JSON 请求字段名的结构体标签。
+	TagJSON = "json"
+	// TagForm 是用于提取表单请求字段名的结构体标签。
+	TagForm = "form"
+	// TagURI 是用于提取 URI 参数字段名的结构体标签。
+	TagURI = "uri"
+	// TagQuery 是用于提取 query 参数字段名的结构体标签。
+	TagQuery = "query"
 )
 
 var requestTags = []string{TagJSON, TagForm, TagURI, TagQuery}

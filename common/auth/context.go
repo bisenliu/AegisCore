@@ -3,11 +3,16 @@ package auth
 import "context"
 
 const (
+	// AuthorizationHeader 是承载 Bearer 令牌的 HTTP 请求头。
 	AuthorizationHeader = "Authorization"
-	TokenTypeBearer     = "Bearer"
-	TokenPrefix         = TokenTypeBearer + " "
-	UserIDKey           = "user_id"
-	SessionIDKey        = "session_id"
+	// TokenTypeBearer 是 Authorization 请求头使用的 OAuth2 Bearer 令牌类型。
+	TokenTypeBearer = "Bearer"
+	// TokenPrefix 是 Authorization 请求头中原始令牌前必须携带的前缀。
+	TokenPrefix = TokenTypeBearer + " "
+	// UserIDKey 是认证用户标识对外暴露为字段或请求值时使用的名称。
+	UserIDKey = "user_id"
+	// SessionIDKey 是认证会话标识对外暴露为字段或请求值时使用的名称。
+	SessionIDKey = "session_id"
 )
 
 type userIDContextKey struct{}

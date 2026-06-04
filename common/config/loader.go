@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 )
 
+// envPrefix 定义环境变量配置覆盖使用的全局前缀。
 const envPrefix = "AEGISCORE"
 
 func Load(path string) (*Config, error) {

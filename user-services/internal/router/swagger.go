@@ -12,6 +12,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+// swaggerEnabledEnv 显式开启或关闭 Swagger 路由，并覆盖环境默认行为。
 const swaggerEnabledEnv = "SWAGGER_ENABLED"
 
 func RegisterSwagger(engine *gin.Engine, environment string) {

@@ -13,15 +13,22 @@ import (
 )
 
 const (
+	// passwordAlgorithm 和 passwordVersion 会写入编码后的哈希，用于兼容性校验。
 	passwordAlgorithm = "argon2id"
 	passwordVersion   = argon2.Version
 
-	passwordMemory       uint32 = 64 * 1024
-	passwordIterations   uint32 = 3
-	passwordParallelism  uint8  = 4
-	passwordSaltLength          = 16
-	passwordKeyLength    uint32 = 32
-	maxEncodedHashLength        = 512
+	// passwordMemory 是 Argon2id 内存成本，单位为 KiB。
+	passwordMemory uint32 = 64 * 1024
+	// passwordIterations 是 Argon2id 时间成本。
+	passwordIterations uint32 = 3
+	// passwordParallelism 是 Argon2id 并行度成本。
+	passwordParallelism uint8 = 4
+	// passwordSaltLength 是随机盐长度，单位为字节。
+	passwordSaltLength = 16
+	// passwordKeyLength 是派生密钥长度，单位为字节。
+	passwordKeyLength uint32 = 32
+	// maxEncodedHashLength 限制不可信编码哈希输入的解析成本。
+	maxEncodedHashLength = 512
 )
 
 var (
