@@ -24,7 +24,7 @@ type RegisterRouteParams struct {
 }
 
 func RegisterRoutes(params RegisterRouteParams) {
-	router.RegisterRoutes(params.Engine, router.RouteParams{
+	router.RegisterUserServiceHTTPRoutes(params.Engine, router.RouteParams{
 		Environment:           params.Config.App.Environment,
 		Log:                   params.Log,
 		JWT:                   params.JWT,

@@ -91,7 +91,7 @@ HTTP 服务运行时 MUST 在 Fx `OnStart` 完成前绑定配置中的 HTTP host
 
 ### Requirement: Register standard HTTP routes and middleware
 
-系统必须注册健康检查、用户 API 路由、Swagger 文档路由和共享 HTTP 中间件。HTTP 基础中间件必须先注入 trace-id，再执行 panic recovery、请求日志和 CORS；trace-id 必须来自 `X-Trace-ID` 请求头或由系统生成，并必须写入 Gin context、Go `context.Context` 和 `X-Trace-ID` 响应头。共享中间件必须对外提供 `TraceID()` Gin middleware。用户服务运行时 MUST 通过路由局部分组控制认证中间件挂载：健康检查、Swagger 文档、登录、刷新和受限改密入口 MUST 保持公开访问；退出当前设备、退出全部设备和用户资料 API MUST 挂载认证中间件。用户服务运行时 MUST 在注册认证中间件时传入 Fx 注入的 Zap logger。请求日志的 `client_ip` 字段必须使用 Gin `Context.ClientIP()` 的结果。后续 Casbin 授权中间件 MUST 挂载在认证中间件之后、业务 handler 之前的受保护路由子分组中。
+系统必须注册健康检查、用户 API 路由、Swagger 文档路由和共享 HTTP 中间件。HTTP 基础中间件必须先注入 trace-id，再执行 panic recovery、请求日志和 CORS；trace-id 必须来自 `X-Trace-ID` 请求头或由系统生成，并必须写入 Gin context、Go `context.Context` 和 `X-Trace-ID` 响应头。共享中间件必须对外提供 `TraceID()` Gin middleware。用户服务运行时 MUST 通过服务级 HTTP 路由入口注册完整用户服务 HTTP surface，该入口 MUST 使用明确表达用户服务 HTTP 范围的命名，并 MUST 按系统路由、Swagger 文档路由、版本化 API、公共认证路由、受保护认证路由和用户资源路由组织注册逻辑。用户服务运行时 MUST 通过路由局部分组控制认证中间件挂载：健康检查、Swagger 文档、登录、刷新和受限改密入口 MUST 保持公开访问；退出当前设备、退出全部设备和用户资料 API MUST 挂载认证中间件。用户服务运行时 MUST 在注册认证中间件时传入 Fx 注入的 Zap logger。请求日志的 `client_ip` 字段必须使用 Gin `Context.ClientIP()` 的结果。后续 Casbin 授权中间件 MUST 挂载在认证中间件之后、业务 handler 之前的受保护路由子分组中。
 
 #### Scenario: Health endpoint returns service status
 - **Given** HTTP server 已启动
@@ -176,6 +176,18 @@ HTTP 服务运行时 MUST 在 Fx `OnStart` 完成前绑定配置中的 HTTP host
 - **When** 服务为需要细粒度授权的业务 API 注册路由
 - **Then** Casbin 中间件 MUST 挂载在认证中间件之后
 - **Then** Casbin 中间件 MUST 在对应业务 handler 执行之前完成授权判定
+
+#### Scenario: User service HTTP route entrypoint is explicitly scoped
+- **Given** 维护者查看 `user-services/internal/router` 中的路由注册入口
+- **When** 入口函数注册用户服务完整 HTTP surface
+- **Then** 入口名称 MUST 明确表达用户服务 HTTP 路由范围
+- **Then** 实现 MUST NOT 使用仅表达泛化路由注册的名称承载完整用户服务 HTTP surface
+
+#### Scenario: Route registration is grouped by API surface
+- **Given** 用户服务注册 HTTP 路由
+- **When** 实现组织 `user-services/internal/router` 包内路由注册逻辑
+- **Then** 系统路由、Swagger 文档路由、版本化 API、公共认证路由、受保护认证路由和用户资源路由 MUST 有清晰分组边界
+- **Then** 拆分 MUST 保持现有路径、HTTP 方法、handler 绑定和认证边界等价
 
 ### Requirement: Shutdown gracefully
 
