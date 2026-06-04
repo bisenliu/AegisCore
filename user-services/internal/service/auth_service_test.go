@@ -373,7 +373,6 @@ type authRepoStub struct {
 func (r *authRepoStub) Create(context.Context, repository.CreateUserInput) (*domain.User, error) {
 	return nil, nil
 }
-func (r *authRepoStub) ExistsByUsername(context.Context, string) (bool, error) { return false, nil }
 func (r *authRepoStub) GetByUserID(_ context.Context, userID uuid.UUID) (*domain.User, error) {
 	if r.userByID == nil {
 		return nil, domain.ErrUserNotFound

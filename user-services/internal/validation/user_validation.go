@@ -12,7 +12,7 @@ import (
 
 func NormalizeCreateUser(req *dto.CreateUserRequest) error {
 	req.Nickname = strings.TrimSpace(req.Nickname)
-	req.Username = strings.TrimSpace(req.Username)
+	req.Username = strings.ToLower(strings.TrimSpace(req.Username))
 	req.Password = strings.TrimSpace(req.Password)
 	if req.Nickname == "" || req.Username == "" {
 		return response.ValidationFailedError(errmsg.MsgInvalidUserName)

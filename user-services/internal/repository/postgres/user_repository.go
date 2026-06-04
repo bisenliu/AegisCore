@@ -44,14 +44,6 @@ func (r *userRepository) Create(ctx context.Context, input repository.CreateUser
 	return nil, fmt.Errorf("create user username %s: %w", input.Username, err)
 }
 
-func (r *userRepository) ExistsByUsername(ctx context.Context, username string) (bool, error) {
-	exists, err := r.client.User.Query().Where(user.UsernameEQ(username), user.DeletedAtIsNil()).Exist(ctx)
-	if err != nil {
-		return false, fmt.Errorf("check username %s exists: %w", username, err)
-	}
-	return exists, nil
-}
-
 func (r *userRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	user, err := r.client.User.Query().Where(user.UserIDEQ(userID), user.DeletedAtIsNil()).Only(ctx)
 	if err == nil {

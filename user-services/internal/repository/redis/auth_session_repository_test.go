@@ -198,9 +198,6 @@ type tokenVersionRepoStub struct {
 func (r *tokenVersionRepoStub) Create(context.Context, repository.CreateUserInput) (*domain.User, error) {
 	return nil, nil
 }
-func (r *tokenVersionRepoStub) ExistsByUsername(context.Context, string) (bool, error) {
-	return false, nil
-}
 func (r *tokenVersionRepoStub) GetByUsername(context.Context, string) (*domain.User, error) {
 	return nil, nil
 }

@@ -36,15 +36,6 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 	}
 
 	logger.Info(ctx, "create user", zap.String("username", req.Username))
-	exists, err := s.repo.ExistsByUsername(ctx, req.Username)
-	if err != nil {
-		logger.Error(ctx, "check username failed", zap.String("username", req.Username), zap.Error(err))
-		return nil, response.FromError(err)
-	}
-	if exists {
-		return nil, response.ConflictError(errmsg.MsgUserAlreadyExists)
-	}
-
 	passwordHash, err := password.Hash(req.Password)
 	if err != nil {
 		logger.Error(ctx, "hash user password failed", zap.String("username", req.Username), zap.Error(err))

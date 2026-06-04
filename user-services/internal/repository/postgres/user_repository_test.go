@@ -118,6 +118,17 @@ func TestUserRepositoryDomainErrors(t *testing.T) {
 			t.Fatalf("err = %v, want ErrUserAlreadyExists", err)
 		}
 	})
+
+	t.Run("soft deleted username remains reserved", func(t *testing.T) {
+		ctx := context.Background()
+		createSoftDeletedUser(t, repo, repository.CreateUserInput{Nickname: "Deleted Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000003"), Username: "reserved-alice", PasswordHash: "hash", Status: domain.UserStatusNormal})
+
+		_, err := repo.Create(ctx, repository.CreateUserInput{Nickname: "New Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000004"), Username: "reserved-alice", PasswordHash: "hash", Status: domain.UserStatusNormal})
+
+		if !errors.Is(err, domain.ErrUserAlreadyExists) {
+			t.Fatalf("err = %v, want ErrUserAlreadyExists", err)
+		}
+	})
 }
 
 func TestUserRepositoryReturnsDomainUsers(t *testing.T) {

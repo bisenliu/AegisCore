@@ -11,8 +11,8 @@ import (
 )
 
 func TestNormalizeCreateUser(t *testing.T) {
-	t.Run("trims fields", func(t *testing.T) {
-		req := dto.CreateUserRequest{Nickname: " Alice ", Username: " alice ", Password: " secret "}
+	t.Run("trims fields and lowercases username", func(t *testing.T) {
+		req := dto.CreateUserRequest{Nickname: " Alice ", Username: " Alice ", Password: " secret "}
 
 		if err := NormalizeCreateUser(&req); err != nil {
 			t.Fatalf("NormalizeCreateUser: %v", err)

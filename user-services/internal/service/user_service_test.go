@@ -28,9 +28,6 @@ func TestUserServiceCreateUser(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateUser: %v", err)
 		}
-		if repo.checkedUsername != "alice" {
-			t.Fatalf("checkedUsername = %q", repo.checkedUsername)
-		}
 		if repo.createdInput.Nickname != "Alice" || repo.createdInput.Username != "alice" || repo.createdInput.UserID == uuid.Nil || repo.createdInput.Status != domain.UserStatusNormal {
 			t.Fatalf("createdInput = %#v", repo.createdInput)
 		}
@@ -40,28 +37,6 @@ func TestUserServiceCreateUser(t *testing.T) {
 		}
 		if user.UserID != testUserID.String() || user.Username != "alice" || user.CreatedAt != createdAt || user.UpdatedAt != createdAt {
 			t.Fatalf("user = %#v", user)
-		}
-	})
-
-	t.Run("reject existing username", func(t *testing.T) {
-		svc := NewUserService(&stubUserRepository{exists: true})
-
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
-
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeConflict || appErr.Message != errmsg.MsgUserAlreadyExists {
-			t.Fatalf("err = %#v", appErr)
-		}
-	})
-
-	t.Run("wrap existence check error", func(t *testing.T) {
-		svc := NewUserService(&stubUserRepository{existsErr: errors.New("database down")})
-
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
-
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeInternalError || appErr.Message != "internal server error" {
-			t.Fatalf("err = %#v", appErr)
 		}
 	})
 
@@ -81,6 +56,21 @@ func TestUserServiceCreateUser(t *testing.T) {
 
 		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
 
+		appErr := response.FromError(err)
+		if appErr.Code != response.CodeConflict || appErr.Message != errmsg.MsgUserAlreadyExists {
+			t.Fatalf("err = %#v", appErr)
+		}
+	})
+
+	t.Run("maps uppercase duplicate after normalization", func(t *testing.T) {
+		repo := &stubUserRepository{createErr: domain.ErrUserAlreadyExists}
+		svc := NewUserService(repo)
+
+		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
+
+		if repo.createdInput.Username != "alice" {
+			t.Fatalf("created username = %q", repo.createdInput.Username)
+		}
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeConflict || appErr.Message != errmsg.MsgUserAlreadyExists {
 			t.Fatalf("err = %#v", appErr)
@@ -194,9 +184,6 @@ type stubUserRepository struct {
 	created         *domain.User
 	createErr       error
 	createdInput    repository.CreateUserInput
-	exists          bool
-	existsErr       error
-	checkedUsername string
 	listUsers       []domain.User
 	listTotal       int
 	listErr         error
@@ -212,14 +199,6 @@ func (r *stubUserRepository) Create(_ context.Context, input repository.CreateUs
 		return nil, r.createErr
 	}
 	return r.created, nil
-}
-
-func (r *stubUserRepository) ExistsByUsername(_ context.Context, username string) (bool, error) {
-	r.checkedUsername = username
-	if r.existsErr != nil {
-		return false, r.existsErr
-	}
-	return r.exists, nil
 }
 
 func (r *stubUserRepository) GetByUserID(_ context.Context, userID uuid.UUID) (*domain.User, error) {

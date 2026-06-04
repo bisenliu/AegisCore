@@ -9,7 +9,6 @@ import (
 
 type UserRepository interface {
 	Create(ctx context.Context, input CreateUserInput) (*domain.User, error)
-	ExistsByUsername(ctx context.Context, username string) (bool, error)
 	GetByUsername(ctx context.Context, username string) (*domain.User, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID) (*domain.User, error)
 	GetTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error)
