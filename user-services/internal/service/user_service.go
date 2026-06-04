@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/aegiscore/common/logger"
 	"github.com/aegiscore/common/password"
@@ -19,7 +18,7 @@ import (
 
 type UserService interface {
 	CreateUser(ctx context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error)
-	GetUserByID(ctx context.Context, userID string) (*dto.UserResponse, error)
+	GetUserByID(ctx context.Context, userID uuid.UUID) (*dto.UserResponse, error)
 	ListUsers(ctx context.Context, req dto.ListUsersRequest) (response.PaginatedData[dto.UserResponse], error)
 }
 
@@ -32,84 +31,64 @@ func NewUserService(repo repository.UserRepository) UserService {
 }
 
 func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error) {
-	nickname := strings.TrimSpace(req.Nickname)
-	username := strings.TrimSpace(req.Username)
-	plainPassword := strings.TrimSpace(req.Password)
-	if nickname == "" {
-		return nil, response.ValidationFailedError(errmsg.MsgInvalidUserName)
-	}
-	if username == "" {
-		return nil, response.ValidationFailedError(errmsg.MsgInvalidUserName)
-	}
-	if plainPassword == "" {
-		return nil, response.ValidationFailedError(errmsg.MsgInvalidPassword)
-	}
 	status := domain.UserStatusNormal
 	if req.Status != nil {
 		status = *req.Status
 	}
 
-	logger.Info(ctx, "create user", zap.String("username", username))
-	exists, err := s.repo.ExistsByUsername(ctx, username)
+	logger.Info(ctx, "create user", zap.String("username", req.Username))
+	exists, err := s.repo.ExistsByUsername(ctx, req.Username)
 	if err != nil {
-		logger.Error(ctx, "check username failed", zap.String("username", username), zap.Error(err))
+		logger.Error(ctx, "check username failed", zap.String("username", req.Username), zap.Error(err))
 		return nil, response.FromError(err)
 	}
 	if exists {
 		return nil, response.ConflictError(errmsg.MsgUserAlreadyExists)
 	}
 
-	passwordHash, err := password.Hash(plainPassword)
+	passwordHash, err := password.Hash(req.Password)
 	if err != nil {
-		logger.Error(ctx, "hash user password failed", zap.String("username", username), zap.Error(err))
+		logger.Error(ctx, "hash user password failed", zap.String("username", req.Username), zap.Error(err))
 		return nil, response.FromError(err)
 	}
 
 	userID, err := uuid.NewV7()
 	if err != nil {
-		logger.Error(ctx, "generate user id failed", zap.String("username", username), zap.Error(err))
+		logger.Error(ctx, "generate user id failed", zap.String("username", req.Username), zap.Error(err))
 		return nil, response.FromError(err)
 	}
 
-	user, err := s.repo.Create(ctx, repository.CreateUserInput{Nickname: nickname, UserID: userID, Username: username, PasswordHash: passwordHash, Status: status})
+	user, err := s.repo.Create(ctx, repository.CreateUserInput{Nickname: req.Nickname, UserID: userID, Username: req.Username, PasswordHash: passwordHash, Status: status})
 	if err != nil {
 		if errors.Is(err, domain.ErrUserAlreadyExists) {
 			return nil, response.ConflictError(errmsg.MsgUserAlreadyExists)
 		}
-		logger.Error(ctx, "create user failed", zap.String("username", username), zap.Error(err))
+		logger.Error(ctx, "create user failed", zap.String("username", req.Username), zap.Error(err))
 		return nil, response.FromError(err)
 	}
 	return toUserResponse(user), nil
 }
 
-func (s *userService) GetUserByID(ctx context.Context, userID string) (*dto.UserResponse, error) {
-	parsedUserID, err := uuid.Parse(userID)
-	if err != nil {
-		return nil, response.BadRequestError(errmsg.MsgInvalidUserID)
-	}
-	logger.Info(ctx, "query user profile", zap.String("user_id", userID))
-	user, err := s.repo.GetByUserID(ctx, parsedUserID)
+func (s *userService) GetUserByID(ctx context.Context, userID uuid.UUID) (*dto.UserResponse, error) {
+	logger.Info(ctx, "query user profile", zap.String("user_id", userID.String()))
+	user, err := s.repo.GetByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			return nil, response.NotFoundError(errmsg.MsgUserNotFound)
 		}
-		logger.Error(ctx, "query user profile failed", zap.String("user_id", userID), zap.Error(err))
+		logger.Error(ctx, "query user profile failed", zap.String("user_id", userID.String()), zap.Error(err))
 		return nil, response.FromError(err)
 	}
 	return toUserResponse(user), nil
 }
 
 func (s *userService) ListUsers(ctx context.Context, req dto.ListUsersRequest) (response.PaginatedData[dto.UserResponse], error) {
-	paging := response.NormalizePagination(req.Page, req.PageSize)
-	nickname := strings.TrimSpace(req.Nickname)
-	username := strings.TrimSpace(req.Username)
-
-	logger.Info(ctx, "list users", zap.Int("page", paging.Page), zap.Int("page_size", paging.PageSize))
+	logger.Info(ctx, "list users", zap.Int("page", req.Page), zap.Int("page_size", req.PageSize))
 	users, total, err := s.repo.ListUsers(ctx, repository.ListUsersInput{
-		Offset:   paging.Offset,
-		Limit:    paging.Limit,
-		Nickname: nickname,
-		Username: username,
+		Offset:   req.Offset,
+		Limit:    req.Limit,
+		Nickname: req.Nickname,
+		Username: req.Username,
 		Status:   req.Status,
 	})
 	if err != nil {
@@ -121,7 +100,7 @@ func (s *userService) ListUsers(ctx context.Context, req dto.ListUsersRequest) (
 	for _, user := range users {
 		items = append(items, *toUserResponse(user))
 	}
-	return response.NewPaginatedData(items, response.NewPagination(paging.Page, paging.PageSize, total)), nil
+	return response.NewPaginatedData(items, response.NewPagination(req.Page, req.PageSize, total)), nil
 }
 
 func toUserResponse(user *ent.User) *dto.UserResponse {

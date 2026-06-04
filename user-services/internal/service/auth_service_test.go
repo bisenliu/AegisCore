@@ -28,7 +28,7 @@ func TestAuthServiceLogin(t *testing.T) {
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
 
-	tokens, err := svc.Login(context.Background(), dto.LoginRequest{Username: " alice ", Password: " secret "})
+	tokens, err := svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "secret"})
 
 	if err != nil {
 		t.Fatalf("Login: %v", err)
@@ -251,7 +251,7 @@ func TestAuthServiceRefreshRotatesSession(t *testing.T) {
 	}
 }
 
-func TestAuthServiceRefreshAcceptsBearerPrefix(t *testing.T) {
+func TestAuthServiceRefreshUsesNormalizedToken(t *testing.T) {
 	store := &sessionStoreStub{version: 2, session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, false)
 	refresh, err := svc.(*authService).jwt.SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
@@ -259,24 +259,13 @@ func TestAuthServiceRefreshAcceptsBearerPrefix(t *testing.T) {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
 
-	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: " " + auth.TokenPrefix + refresh + " "})
+	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: refresh})
 
 	if err != nil {
 		t.Fatalf("Refresh: %v", err)
 	}
 	if tokens.AccessToken == "" || tokens.RefreshToken == "" {
 		t.Fatalf("tokens = %#v", tokens)
-	}
-}
-
-func TestAuthServiceRefreshRejectsEmptyBearerPrefix(t *testing.T) {
-	svc := newTestAuthService(&authRepoStub{}, &sessionStoreStub{version: 2}, false)
-
-	_, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: " " + auth.TokenPrefix})
-
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeTokenInvalid {
-		t.Fatalf("err = %#v", appErr)
 	}
 }
 

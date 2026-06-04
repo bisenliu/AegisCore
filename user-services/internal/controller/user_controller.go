@@ -2,18 +2,19 @@ package controller
 
 import (
 	"github.com/aegiscore/common/response"
-	"github.com/aegiscore/common/validation"
+	commonvalidation "github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/service"
+	uservalidation "github.com/aegiscore/user-services/internal/validation"
 	"github.com/gin-gonic/gin"
 )
 
 type UserController struct {
 	userService service.UserService
-	validator   *validation.Validator
+	validator   *commonvalidation.Validator
 }
 
-func NewUserController(userService service.UserService, validator *validation.Validator) *UserController {
+func NewUserController(userService service.UserService, validator *commonvalidation.Validator) *UserController {
 	return &UserController{userService: userService, validator: validator}
 }
 
@@ -35,9 +36,10 @@ func NewUserController(userService service.UserService, validator *validation.Va
 // @Router /users [get]
 func (ctl *UserController) List(c *gin.Context) {
 	req := dto.ListUsersRequest{}
-	if !ctl.validator.BindOrAbort(c, &req, validation.QueryBinder) {
+	if !ctl.validator.BindOrAbort(c, &req, commonvalidation.QueryBinder) {
 		return
 	}
+	uservalidation.NormalizeListUsers(&req)
 
 	users, err := ctl.userService.ListUsers(c.Request.Context(), req)
 	if err != nil {
@@ -63,7 +65,11 @@ func (ctl *UserController) List(c *gin.Context) {
 // @Router /users [post]
 func (ctl *UserController) Create(c *gin.Context) {
 	req := dto.CreateUserRequest{}
-	if !ctl.validator.BindOrAbort(c, &req, validation.JSONBinder) {
+	if !ctl.validator.BindOrAbort(c, &req, commonvalidation.JSONBinder) {
+		return
+	}
+	if err := uservalidation.NormalizeCreateUser(&req); err != nil {
+		response.Fail(c, err)
 		return
 	}
 
@@ -90,11 +96,16 @@ func (ctl *UserController) Create(c *gin.Context) {
 // @Router /users/{user_id} [get]
 func (ctl *UserController) GetByID(c *gin.Context) {
 	req := dto.GetUserRequest{}
-	if !ctl.validator.BindOrAbort(c, &req, validation.URIBinder) {
+	if !ctl.validator.BindOrAbort(c, &req, commonvalidation.URIBinder) {
+		return
+	}
+	userID, err := uservalidation.ParseUserID(req)
+	if err != nil {
+		response.Fail(c, err)
 		return
 	}
 
-	user, err := ctl.userService.GetUserByID(c.Request.Context(), req.UserID)
+	user, err := ctl.userService.GetUserByID(c.Request.Context(), userID)
 	if err != nil {
 		response.Fail(c, err)
 		return

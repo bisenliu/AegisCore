@@ -12,6 +12,8 @@ type GetUserRequest struct {
 type ListUsersRequest struct {
 	Page     int                `query:"page" label:"页码" example:"1"`
 	PageSize int                `query:"page_size" label:"每页数量" example:"20"`
+	Offset   int                `query:"-"`
+	Limit    int                `query:"-"`
 	Nickname string             `query:"nickname" label:"用户昵称" example:"Alice"`
 	Username string             `query:"username" label:"用户名" example:"alice"`
 	Status   *domain.UserStatus `query:"status" validate:"omitempty,enum" label:"用户状态" example:"100"`

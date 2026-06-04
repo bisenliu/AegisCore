@@ -3,15 +3,16 @@ package controller
 import (
 	"github.com/aegiscore/common/auth"
 	"github.com/aegiscore/common/response"
-	"github.com/aegiscore/common/validation"
+	commonvalidation "github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/service"
+	uservalidation "github.com/aegiscore/user-services/internal/validation"
 	"github.com/gin-gonic/gin"
 )
 
 type AuthController struct {
 	authService service.AuthService
-	validator   *validation.Validator
+	validator   *commonvalidation.Validator
 }
 
 // ChangePassword godoc
@@ -28,8 +29,12 @@ type AuthController struct {
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Router /auth/change-password [post]
 func (ctl *AuthController) ChangePassword(c *gin.Context) {
-	req := dto.ChangePasswordRequest{Token: auth.StripBearerPrefix(c.GetHeader(auth.AuthorizationHeader))}
-	if !ctl.validator.BindOrAbort(c, &req, validation.JSONBinder) {
+	req := dto.ChangePasswordRequest{Token: c.GetHeader(auth.AuthorizationHeader)}
+	if !ctl.validator.BindOrAbort(c, &req, commonvalidation.JSONBinder) {
+		return
+	}
+	if err := uservalidation.NormalizeChangePassword(&req); err != nil {
+		response.Fail(c, err)
 		return
 	}
 	result, err := ctl.authService.ChangePassword(c.Request.Context(), req)
@@ -40,7 +45,7 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 	response.OK(c, result)
 }
 
-func NewAuthController(authService service.AuthService, validator *validation.Validator) *AuthController {
+func NewAuthController(authService service.AuthService, validator *commonvalidation.Validator) *AuthController {
 	return &AuthController{authService: authService, validator: validator}
 }
 
@@ -58,7 +63,11 @@ func NewAuthController(authService service.AuthService, validator *validation.Va
 // @Router /auth/login [post]
 func (ctl *AuthController) Login(c *gin.Context) {
 	req := dto.LoginRequest{}
-	if !ctl.validator.BindOrAbort(c, &req, validation.JSONBinder) {
+	if !ctl.validator.BindOrAbort(c, &req, commonvalidation.JSONBinder) {
+		return
+	}
+	if err := uservalidation.NormalizeLogin(&req); err != nil {
+		response.Fail(c, err)
 		return
 	}
 	tokens, err := ctl.authService.Login(c.Request.Context(), req)
@@ -83,7 +92,11 @@ func (ctl *AuthController) Login(c *gin.Context) {
 // @Router /auth/refresh [post]
 func (ctl *AuthController) Refresh(c *gin.Context) {
 	req := dto.RefreshTokenRequest{}
-	if !ctl.validator.BindOrAbort(c, &req, validation.JSONBinder) {
+	if !ctl.validator.BindOrAbort(c, &req, commonvalidation.JSONBinder) {
+		return
+	}
+	if err := uservalidation.NormalizeRefresh(&req); err != nil {
+		response.Fail(c, err)
 		return
 	}
 	tokens, err := ctl.authService.Refresh(c.Request.Context(), req)

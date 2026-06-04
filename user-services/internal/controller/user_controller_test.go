@@ -15,6 +15,7 @@ import (
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/errmsg"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 const controllerTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
@@ -32,7 +33,7 @@ func TestUserControllerGetByID(t *testing.T) {
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if service.gotID != controllerTestUserID {
+		if service.gotID.String() != controllerTestUserID {
 			t.Fatalf("gotID = %q", service.gotID)
 		}
 		if !envelope.Success || envelope.Code != response.CodeOK || envelope.Message != "ok" {
@@ -189,7 +190,7 @@ func TestUserControllerList(t *testing.T) {
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if service.gotList.Page != 0 || service.gotList.PageSize != 0 {
+		if service.gotList.Page != 1 || service.gotList.PageSize != 10 || service.gotList.Offset != 0 || service.gotList.Limit != 10 {
 			t.Fatalf("gotList = %#v", service.gotList)
 		}
 		assertPaginatedEnvelope(t, envelope, 1, 10, 0, 0, 0)
@@ -203,7 +204,7 @@ func TestUserControllerList(t *testing.T) {
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if service.gotList.Page != 2 || service.gotList.PageSize != 20 || service.gotList.Nickname != "Ali" || service.gotList.Username != "alice" {
+		if service.gotList.Page != 2 || service.gotList.PageSize != 20 || service.gotList.Offset != 20 || service.gotList.Limit != 20 || service.gotList.Nickname != "Ali" || service.gotList.Username != "alice" {
 			t.Fatalf("gotList = %#v", service.gotList)
 		}
 		if service.gotList.Status == nil || *service.gotList.Status != domain.UserStatusNormal {
@@ -227,7 +228,7 @@ func TestUserControllerList(t *testing.T) {
 type stubUserService struct {
 	response       *dto.UserResponse
 	err            error
-	gotID          string
+	gotID          uuid.UUID
 	createResponse *dto.UserResponse
 	createErr      error
 	gotCreate      dto.CreateUserRequest
@@ -244,7 +245,7 @@ func (s *stubUserService) CreateUser(_ context.Context, req dto.CreateUserReques
 	return s.createResponse, nil
 }
 
-func (s *stubUserService) GetUserByID(_ context.Context, userID string) (*dto.UserResponse, error) {
+func (s *stubUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*dto.UserResponse, error) {
 	s.gotID = userID
 	if s.err != nil {
 		return nil, response.FromError(s.err)

@@ -20,11 +20,11 @@ var testUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
 func TestUserServiceCreateUser(t *testing.T) {
 	createdAt := int64(1780048800000)
 
-	t.Run("success normalizes fields and defaults status", func(t *testing.T) {
+	t.Run("success uses normalized fields and defaults status", func(t *testing.T) {
 		repo := &stubUserRepository{created: &ent.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: int64(domain.UserStatusNormal), TokenVersion: 1, CreatedAt: createdAt, UpdatedAt: createdAt}}
 		svc := NewUserService(repo)
 
-		user, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: " Alice ", Username: " alice ", Password: " secret "})
+		user, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
 
 		if err != nil {
 			t.Fatalf("CreateUser: %v", err)
@@ -41,28 +41,6 @@ func TestUserServiceCreateUser(t *testing.T) {
 		}
 		if user.UserID != testUserID.String() || user.Username != "alice" || user.CreatedAt != createdAt || user.UpdatedAt != createdAt {
 			t.Fatalf("user = %#v", user)
-		}
-	})
-
-	t.Run("reject blank trimmed name", func(t *testing.T) {
-		svc := NewUserService(&stubUserRepository{})
-
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "   ", Username: "alice", Password: "secret"})
-
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeValidationFailed || appErr.Message != errmsg.MsgInvalidUserName {
-			t.Fatalf("err = %#v", appErr)
-		}
-	})
-
-	t.Run("reject blank trimmed password", func(t *testing.T) {
-		svc := NewUserService(&stubUserRepository{})
-
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "   "})
-
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeValidationFailed || appErr.Message != errmsg.MsgInvalidPassword {
-			t.Fatalf("err = %#v", appErr)
 		}
 	})
 
@@ -118,7 +96,7 @@ func TestUserServiceGetUserByID(t *testing.T) {
 		repo := &stubUserRepository{getByUserIDUser: &ent.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: int64(domain.UserStatusNormal), CreatedAt: createdAt, UpdatedAt: createdAt}}
 		svc := NewUserService(repo)
 
-		user, err := svc.GetUserByID(context.Background(), testUserID.String())
+		user, err := svc.GetUserByID(context.Background(), testUserID)
 
 		if err != nil {
 			t.Fatalf("GetUserByID: %v", err)
@@ -134,7 +112,7 @@ func TestUserServiceGetUserByID(t *testing.T) {
 	t.Run("map domain not found", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{getByUserIDErr: domain.ErrUserNotFound})
 
-		_, err := svc.GetUserByID(context.Background(), testUserID.String())
+		_, err := svc.GetUserByID(context.Background(), testUserID)
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeNotFound || appErr.Message != errmsg.MsgUserNotFound {
@@ -145,7 +123,7 @@ func TestUserServiceGetUserByID(t *testing.T) {
 	t.Run("wrap repository error", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{getByUserIDErr: errors.New("database down")})
 
-		_, err := svc.GetUserByID(context.Background(), testUserID.String())
+		_, err := svc.GetUserByID(context.Background(), testUserID)
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeInternalError || appErr.Message != response.MessageInternalError {
@@ -157,11 +135,11 @@ func TestUserServiceGetUserByID(t *testing.T) {
 func TestUserServiceListUsers(t *testing.T) {
 	createdAt := int64(1780048800000)
 
-	t.Run("default pagination returns empty page", func(t *testing.T) {
+	t.Run("normalized default pagination returns empty page", func(t *testing.T) {
 		repo := &stubUserRepository{}
 		svc := NewUserService(repo)
 
-		users, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{})
+		users, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{Page: 1, PageSize: 10, Limit: 10})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
@@ -182,7 +160,7 @@ func TestUserServiceListUsers(t *testing.T) {
 		repo := &stubUserRepository{listUsers: []*ent.User{{ID: 1, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: int64(domain.UserStatusNormal), CreatedAt: createdAt, UpdatedAt: createdAt}}, listTotal: 128}
 		svc := NewUserService(repo)
 
-		users, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{Page: 2, PageSize: 20, Nickname: " Ali ", Username: " alice ", Status: &status})
+		users, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{Page: 2, PageSize: 20, Offset: 20, Limit: 20, Nickname: "Ali", Username: "alice", Status: &status})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
@@ -198,20 +176,6 @@ func TestUserServiceListUsers(t *testing.T) {
 		}
 		if users.Pagination.Page != 2 || users.Pagination.PageSize != 20 || users.Pagination.Total != 128 || users.Pagination.TotalPages != 7 {
 			t.Fatalf("pagination = %#v", users.Pagination)
-		}
-	})
-
-	t.Run("invalid pagination boundaries use defaults", func(t *testing.T) {
-		repo := &stubUserRepository{}
-		svc := NewUserService(repo)
-
-		_, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{Page: -1, PageSize: 0})
-
-		if err != nil {
-			t.Fatalf("ListUsers: %v", err)
-		}
-		if repo.listInput.Offset != 0 || repo.listInput.Limit != 10 {
-			t.Fatalf("listInput = %#v", repo.listInput)
 		}
 	})
 

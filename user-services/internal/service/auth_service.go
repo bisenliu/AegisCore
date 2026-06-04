@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/aegiscore/common/auth"
@@ -56,9 +55,7 @@ func NewAuthService(params AuthServiceParams) AuthService {
 }
 
 func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.TokenResponse, error) {
-	username := strings.TrimSpace(req.Username)
-	plainPassword := strings.TrimSpace(req.Password)
-	user, err := s.authenticateUser(ctx, username, plainPassword)
+	user, err := s.authenticateUser(ctx, req.Username, req.Password)
 	if err != nil {
 		return nil, err
 	}
@@ -71,10 +68,6 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Tok
 }
 
 func (s *authService) authenticateUser(ctx context.Context, username, plainPassword string) (*ent.User, error) {
-	if username == "" || plainPassword == "" {
-		return nil, response.UnauthenticatedError(errmsg.MsgInvalidCredentials)
-	}
-
 	user, err := s.repo.GetByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
@@ -100,10 +93,6 @@ func (s *authService) authenticateUser(ctx context.Context, username, plainPassw
 }
 
 func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePasswordRequest) (*dto.ChangePasswordResponse, error) {
-	plainPassword := strings.TrimSpace(req.NewPassword)
-	if plainPassword == "" {
-		return nil, response.ValidationFailedError(errmsg.MsgInvalidPassword)
-	}
 	parsedUserID, err := s.verifyPasswordChangeToken(ctx, req.Token)
 	if err != nil {
 		return nil, err
@@ -118,7 +107,7 @@ func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePassword
 	if domain.UserStatus(user.Status) != domain.UserStatusMustChangePassword {
 		return nil, response.TokenInvalidError(errmsg.MsgMissingSession)
 	}
-	passwordHash, err := password.Hash(plainPassword)
+	passwordHash, err := password.Hash(req.NewPassword)
 	if err != nil {
 		logger.Error(ctx, "hash changed password failed", zap.String("user_id", parsedUserID.String()), zap.Error(err))
 		return nil, response.FromError(err)
@@ -158,11 +147,7 @@ func (s *authService) verifyPasswordChangeToken(ctx context.Context, token strin
 }
 
 func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) (*dto.TokenResponse, error) {
-	refreshToken := auth.StripBearerPrefix(req.RefreshToken)
-	if refreshToken == "" {
-		return nil, response.TokenInvalidError(errmsg.MsgMissingSession)
-	}
-	claims, err := s.jwt.ParseRefreshToken(refreshToken)
+	claims, err := s.jwt.ParseRefreshToken(req.RefreshToken)
 	if err != nil {
 		return nil, response.TokenInvalidError(errmsg.MsgMissingSession)
 	}

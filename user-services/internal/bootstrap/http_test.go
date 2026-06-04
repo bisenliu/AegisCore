@@ -135,6 +135,9 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			request := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
 			request.Header.Set("Content-Type", "application/json")
 			request.Header.Set("X-Trace-ID", "trace-public-test")
+			if tt.path == "/api/v1/auth/change-password" {
+				request.Header.Set(auth.AuthorizationHeader, auth.TokenPrefix+"password-change-token")
+			}
 			engine.ServeHTTP(recorder, request)
 			if recorder.Code == http.StatusUnauthorized {
 				t.Fatalf("%s status = %d, want not unauthorized", tt.path, recorder.Code)
@@ -286,15 +289,16 @@ func (s *routeAuthUserService) CreateUser(context.Context, dto.CreateUserRequest
 	return &dto.UserResponse{UserID: routeAuthUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
 }
 
-func (s *routeAuthUserService) GetUserByID(_ context.Context, userID string) (*dto.UserResponse, error) {
-	if userID == "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3999" {
+func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*dto.UserResponse, error) {
+	userIDString := userID.String()
+	if userIDString == "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3999" {
 		return nil, response.NotFoundError("user not found")
 	}
-	if userID == "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3500" {
+	if userIDString == "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3500" {
 		return nil, errors.New("database down")
 	}
 	now := time.Now().UnixMilli()
-	return &dto.UserResponse{UserID: userID, Nickname: "Aegis", Username: "aegis", Status: domain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
+	return &dto.UserResponse{UserID: userIDString, Nickname: "Aegis", Username: "aegis", Status: domain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func (s *routeAuthUserService) ListUsers(context.Context, dto.ListUsersRequest) (response.PaginatedData[dto.UserResponse], error) {
