@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultShutdownTimeout = 10 * time.Second
+const defaultHTTPShutdownTimeout = 10 * time.Second
 
 type HTTPServerParams struct {
 	fx.In
@@ -48,7 +48,7 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 		OnStop: func(ctx context.Context) error {
 			shutdownTimeout := params.Config.HTTP.ShutdownTimeout
 			if shutdownTimeout == 0 {
-				shutdownTimeout = defaultShutdownTimeout
+				shutdownTimeout = defaultHTTPShutdownTimeout
 			}
 			shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 			defer cancel()

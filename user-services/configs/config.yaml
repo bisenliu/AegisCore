@@ -36,8 +36,8 @@ auth:
     issuer: aegiscore-user-services
     # 可选 audience 校验；为空时不校验 audience。
     audience: aegiscore-users
-    # 访问 token 建议有效期；当前认证中间件解析 token 的 exp claim，不负责签发 token。
-    access_token_ttl: 2h
+    # Access Token 有效期；与认证服务缺失配置时的安全 fallback 保持一致。
+    access_token_ttl: 15m
     # Refresh Token 有效期；用于长期会话续签 Access Token。
     refresh_token_ttl: 168h
   # 用户 token_version Redis 缓存有效期；缓存未命中时回源 PostgreSQL。

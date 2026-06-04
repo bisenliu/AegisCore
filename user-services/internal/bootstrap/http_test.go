@@ -47,6 +47,9 @@ func TestDefaultConfigHTTPTimeouts(t *testing.T) {
 	if cfg.Auth.JWT.Secret == "" || cfg.Auth.JWT.Issuer != "aegiscore-user-services" || cfg.Auth.JWT.Audience != "aegiscore-users" {
 		t.Fatalf("Auth.JWT = %#v, want default auth config", cfg.Auth.JWT)
 	}
+	if cfg.Auth.JWT.AccessTokenTTL != 15*time.Minute || cfg.Auth.JWT.RefreshTokenTTL != 168*time.Hour || cfg.Auth.TokenVersionCacheTTL != 5*time.Minute {
+		t.Fatalf("auth TTLs = (%s,%s,%s), want (15m,168h,5m)", cfg.Auth.JWT.AccessTokenTTL, cfg.Auth.JWT.RefreshTokenTTL, cfg.Auth.TokenVersionCacheTTL)
+	}
 }
 
 func TestHTTPServerUsesConfiguredTimeouts(t *testing.T) {
@@ -73,6 +76,12 @@ func TestHTTPServerUsesConfiguredTimeouts(t *testing.T) {
 	}
 	if len(lifecycle.hooks) != 1 || lifecycle.hooks[0].OnStop == nil {
 		t.Fatalf("lifecycle hooks = %#v, want one shutdown hook", lifecycle.hooks)
+	}
+}
+
+func TestDefaultHTTPShutdownTimeout(t *testing.T) {
+	if defaultHTTPShutdownTimeout != 10*time.Second {
+		t.Fatalf("defaultHTTPShutdownTimeout = %s, want 10s", defaultHTTPShutdownTimeout)
 	}
 }
 

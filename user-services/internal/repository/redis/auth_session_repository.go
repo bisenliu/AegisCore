@@ -18,6 +18,10 @@ import (
 const (
 	defaultTokenVersionCacheTTL = 5 * time.Minute
 	defaultAuthSessionTTL       = time.Hour
+	tokenVersionKeyFormat       = "auth:user:%s:token_version"
+	sessionKeyFormat            = "auth:session:%s"
+	userSessionsKeyFormat       = "auth:user:%s:sessions"
+	expiredSessionMinScore      = "-inf"
 )
 
 type AuthSessionRepositoryParams struct {
@@ -98,7 +102,7 @@ func (r *authSessionRepository) CreateSession(ctx context.Context, session repos
 	userSessions := userSessionsKey(session.UserID)
 	pipe := r.redis.TxPipeline()
 	pipe.Set(ctx, sessionKey(session.SessionID), data, ttl)
-	pipe.ZRemRangeByScore(ctx, userSessions, "-inf", unixScore(now))
+	pipe.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(now))
 	pipe.ZAdd(ctx, userSessions, rediscache.Z{Score: float64(session.ExpiresAt.Unix()), Member: session.SessionID})
 	_, err = pipe.Exec(ctx)
 	if err != nil {
@@ -126,7 +130,7 @@ func (r *authSessionRepository) DeleteSession(ctx context.Context, userID string
 	userSessions := userSessionsKey(userID)
 	pipe := r.redis.TxPipeline()
 	pipe.Del(ctx, sessionKey(sessionID))
-	pipe.ZRemRangeByScore(ctx, userSessions, "-inf", unixScore(time.Now()))
+	pipe.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(time.Now()))
 	pipe.ZRem(ctx, userSessions, sessionID)
 	_, err := pipe.Exec(ctx)
 	if err != nil {
@@ -137,7 +141,7 @@ func (r *authSessionRepository) DeleteSession(ctx context.Context, userID string
 
 func (r *authSessionRepository) DeleteAllUserSessions(ctx context.Context, userID string) error {
 	userSessions := userSessionsKey(userID)
-	if err := r.redis.ZRemRangeByScore(ctx, userSessions, "-inf", unixScore(time.Now())).Err(); err != nil {
+	if err := r.redis.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(time.Now())).Err(); err != nil {
 		return fmt.Errorf("clean expired user auth sessions: %w", err)
 	}
 	sessions, err := r.redis.ZRange(ctx, userSessions, 0, -1).Result()
@@ -164,15 +168,15 @@ func (r *authSessionRepository) InvalidateUserTokenVersion(ctx context.Context, 
 }
 
 func tokenVersionKey(userID string) string {
-	return fmt.Sprintf("auth:user:%s:token_version", userID)
+	return fmt.Sprintf(tokenVersionKeyFormat, userID)
 }
 
 func sessionKey(sessionID string) string {
-	return fmt.Sprintf("auth:session:%s", sessionID)
+	return fmt.Sprintf(sessionKeyFormat, sessionID)
 }
 
 func userSessionsKey(userID string) string {
-	return fmt.Sprintf("auth:user:%s:sessions", userID)
+	return fmt.Sprintf(userSessionsKeyFormat, userID)
 }
 
 func unixScore(t time.Time) string {

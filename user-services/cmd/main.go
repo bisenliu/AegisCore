@@ -26,8 +26,8 @@ import (
 )
 
 const (
-	startTimeout = 15 * time.Second
-	stopTimeout  = 15 * time.Second
+	fxAppStartTimeout = 15 * time.Second
+	fxAppStopTimeout  = 30 * time.Second
 )
 
 func main() {
@@ -63,7 +63,7 @@ func runServe(ctx context.Context, configPath string) error {
 	defer stop()
 
 	app := bootstrap.NewApp(configPath)
-	startCtx, cancelStart := context.WithTimeout(ctx, startTimeout)
+	startCtx, cancelStart := context.WithTimeout(ctx, fxAppStartTimeout)
 	defer cancelStart()
 	if err := app.Start(startCtx); err != nil {
 		return err
@@ -71,7 +71,7 @@ func runServe(ctx context.Context, configPath string) error {
 
 	<-ctx.Done()
 
-	stopCtx, cancelStop := context.WithTimeout(context.Background(), stopTimeout)
+	stopCtx, cancelStop := context.WithTimeout(context.Background(), fxAppStopTimeout)
 	defer cancelStop()
 	return app.Stop(stopCtx)
 }

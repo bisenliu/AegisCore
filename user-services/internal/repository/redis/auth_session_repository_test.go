@@ -27,7 +27,7 @@ func TestAuthSessionRepositoryTokenVersionCacheMissReadsRepository(t *testing.T)
 	if version != 7 {
 		t.Fatalf("version = %d, want 7", version)
 	}
-	got, err := redisServer.Get("auth:user:" + sessionTestUserID.String() + ":token_version")
+	got, err := redisServer.Get(tokenVersionKey(sessionTestUserID.String()))
 	if err != nil {
 		t.Fatalf("Get cached token version: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestAuthSessionRepositoryCreateGetAndDeleteSession(t *testing.T) {
 	if err := store.DeleteSession(ctx, sessionTestUserID.String(), "s-123"); err != nil {
 		t.Fatalf("DeleteSession: %v", err)
 	}
-	if redisServer.Exists("auth:session:s-123") {
+	if redisServer.Exists(sessionKey("s-123")) {
 		t.Fatal("session key still exists")
 	}
 	if _, err := store.redis.ZScore(ctx, indexKey, "s-123").Result(); !errors.Is(err, rediscache.Nil) {
@@ -173,7 +173,7 @@ func TestAuthSessionRepositoryDeleteAllUserSessions(t *testing.T) {
 	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
 		t.Fatalf("DeleteAllUserSessions: %v", err)
 	}
-	if redisServer.Exists("auth:session:s-1") || redisServer.Exists("auth:session:s-2") || redisServer.Exists(indexKey) {
+	if redisServer.Exists(sessionKey("s-1")) || redisServer.Exists(sessionKey("s-2")) || redisServer.Exists(indexKey) {
 		t.Fatal("user sessions were not fully deleted")
 	}
 	if !redisServer.Exists(sessionKey("expired-session")) {
