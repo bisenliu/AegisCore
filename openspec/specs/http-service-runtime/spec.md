@@ -107,7 +107,7 @@ HTTP 服务运行时 MUST 在 Fx `OnStart` 完成前绑定配置中的 HTTP host
 #### Scenario: Create user API route is registered under versioned prefix
 - **Given** HTTP server 已启动
 - **When** 调用方请求 `POST /api/v1/users`
-- **Then** 请求被路由到 `UserController.Create`
+- **Then** 请求被路由到 `UserController.CreateUser`
 
 #### Scenario: Auth routes are grouped by credential requirements
 - **Given** HTTP server 已启动
@@ -306,3 +306,27 @@ HTTP 服务运行时 SHALL 在 `user-services/internal/bootstrap` 组合根中�
 - **Then** server MUST 继续监听配置中的 host 和 port
 - **Then** read、write、idle 和 shutdown timeout MUST 继续使用加载后的 HTTP 配置和默认关闭超时规则
 - **Then** `http.ErrServerClosed` MUST 继续不被记录为服务失败
+
+### Requirement: Use explicit controller handler bindings in route registration
+用户服务 HTTP 运行时 SHALL 在路由注册中绑定明确表达业务动作的 controller handler 名称。实现 MUST 保持现有 HTTP 路径、方法、公开/受保护路由分组、认证中间件挂载顺序和响应行为不变。
+
+#### Scenario: User routes bind explicit handlers
+- **Given** 用户服务 HTTP 路由已注册
+- **When** 开发者检查用户资源路由 handler 绑定
+- **Then** `GET /api/v1/users` MUST 绑定 `UserController.ListUsers`
+- **Then** `POST /api/v1/users` MUST 绑定 `UserController.CreateUser`
+- **Then** `GET /api/v1/users/:user_id` MUST 继续绑定 `UserController.GetByID`
+
+#### Scenario: Auth routes bind explicit session handlers
+- **Given** 用户服务 HTTP 路由已注册
+- **When** 开发者检查认证路由 handler 绑定
+- **Then** `POST /api/v1/auth/login` MUST 绑定 `AuthController.LoginUser`
+- **Then** `POST /api/v1/auth/refresh` MUST 绑定 `AuthController.RefreshToken`
+- **Then** `POST /api/v1/auth/change-password` MUST 继续绑定 `AuthController.ChangePassword`
+- **Then** `POST /api/v1/auth/logout` MUST 绑定 `AuthController.LogoutCurrentSession`
+- **Then** `POST /api/v1/auth/logout-all` MUST 绑定 `AuthController.LogoutAllSessions`
+
+#### Scenario: Route surface remains unchanged
+- **Given** controller handler 标识符已重命名
+- **When** 用户服务注册 HTTP 路由
+- **Then** 所有现有用户和认证 API 的 path、HTTP method、公开/受保护分组和中间件顺序 MUST 保持不变

@@ -132,7 +132,7 @@ func executeAuthLogin(t *testing.T, service *stubAuthService, body string) (int,
 	ctl := newTestAuthController(t, service)
 	recorder, ctx := newAuthJSONContext(http.MethodPost, "/api/v1/auth/login", body)
 
-	ctl.Login(ctx)
+	ctl.LoginUser(ctx)
 
 	return decodeAuthEnvelope(t, recorder)
 }
@@ -153,7 +153,7 @@ func executeAuthRefresh(t *testing.T, service *stubAuthService, body string) (in
 	ctl := newTestAuthController(t, service)
 	recorder, ctx := newAuthJSONContext(http.MethodPost, "/api/v1/auth/refresh", body)
 
-	ctl.Refresh(ctx)
+	ctl.RefreshToken(ctx)
 
 	return decodeAuthEnvelope(t, recorder)
 }

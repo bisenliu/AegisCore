@@ -19,7 +19,7 @@ func NewUserController(userService service.UserService, validator *commonvalidat
 	return &UserController{userService: userService, validator: validator}
 }
 
-// List godoc
+// ListUsers godoc
 // @Summary 分页查询用户列表
 // @Description 分页查询用户资料列表，支持按用户昵称、用户名和用户状态过滤，默认排除软删除用户。分页参数未传或小于 1 时使用默认值 page=1、page_size=10。
 // @Tags 用户
@@ -35,7 +35,7 @@ func NewUserController(userService service.UserService, validator *commonvalidat
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /users [get]
-func (ctl *UserController) List(c *gin.Context) {
+func (ctl *UserController) ListUsers(c *gin.Context) {
 	req := dto.ListUsersRequest{}
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.QueryBinder) {
 		return
@@ -50,7 +50,7 @@ func (ctl *UserController) List(c *gin.Context) {
 	response.OK(c, users)
 }
 
-// Create godoc
+// CreateUser godoc
 // @Summary 创建用户
 // @Description 创建一个新的用户资料。请求体使用共享校验器校验，用户名必须唯一，status 缺省为 100。
 // @Tags 用户
@@ -64,7 +64,7 @@ func (ctl *UserController) List(c *gin.Context) {
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /users [post]
-func (ctl *UserController) Create(c *gin.Context) {
+func (ctl *UserController) CreateUser(c *gin.Context) {
 	req := dto.CreateUserRequest{}
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return

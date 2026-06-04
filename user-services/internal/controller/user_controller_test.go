@@ -275,7 +275,7 @@ func executeCreate(t *testing.T, service *stubUserService, body string) (int, re
 	request.ContentLength = int64(len(body))
 	ctx.Request = request
 
-	ctl.Create(ctx)
+	ctl.CreateUser(ctx)
 
 	var envelope response.Envelope
 	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
@@ -316,7 +316,7 @@ func executeList(t *testing.T, service *stubUserService, path string) (int, resp
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, path, nil)
 
-	ctl.List(ctx)
+	ctl.ListUsers(ctx)
 
 	var envelope response.Envelope
 	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
