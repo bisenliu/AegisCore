@@ -6,9 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aegiscore/common/auth"
 	"github.com/aegiscore/common/logger"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
 
@@ -170,7 +172,7 @@ func TestRequestLoggerIncludesTraceIDAndRequestFields(t *testing.T) {
 		t.Fatalf("request log count = %d, want 1", len(entries))
 	}
 	fields := entries[0].ContextMap()
-	if fields[logger.TraceIDField] != "trace-log" || fields["method"] != http.MethodGet || fields["path"] != "/ok" || fields["status"] != int64(http.StatusAccepted) {
+	if fields[logger.TraceIDField] != "trace-log" || fields["method"] != http.MethodGet || fields["path"] != "/ok" || fields["status"] != int64(http.StatusAccepted) || fields[auth.UserIDKey] != anonymousUserID {
 		t.Fatalf("request log fields = %#v", fields)
 	}
 	if _, ok := fields["latency"]; !ok {
@@ -201,6 +203,67 @@ func TestRequestLoggerUsesSharedClientIPExtraction(t *testing.T) {
 	fields := entries[0].ContextMap()
 	if fields["client_ip"] != "203.0.113.10" {
 		t.Fatalf("client_ip = %q, want 203.0.113.10; fields = %#v", fields["client_ip"], fields)
+	}
+}
+
+func TestRequestLoggerSelectsLevelByStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name   string
+		status int
+		level  zapcore.Level
+	}{
+		{name: "success", status: http.StatusNoContent, level: zap.InfoLevel},
+		{name: "redirect", status: http.StatusFound, level: zap.InfoLevel},
+		{name: "client error", status: http.StatusNotFound, level: zap.WarnLevel},
+		{name: "server error", status: http.StatusInternalServerError, level: zap.ErrorLevel},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			core, logs := observer.New(zap.DebugLevel)
+			log := zap.New(core)
+			engine := gin.New()
+			engine.Use(TraceID(), RequestLogger(log))
+			engine.GET("/status", func(c *gin.Context) { c.Status(tt.status) })
+
+			req := httptest.NewRequest(http.MethodGet, "/status", nil)
+			req.Header.Set(HeaderTraceID, "trace-level")
+			engine.ServeHTTP(httptest.NewRecorder(), req)
+
+			entries := logs.FilterMessage("http request completed").All()
+			if len(entries) != 1 {
+				t.Fatalf("request log count = %d, want 1", len(entries))
+			}
+			if entries[0].Level != tt.level {
+				t.Fatalf("level = %s, want %s", entries[0].Level, tt.level)
+			}
+		})
+	}
+}
+
+func TestRequestLoggerIncludesUserIDFromRequestContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core)
+	engine := gin.New()
+	engine.Use(TraceID(), RequestLogger(log))
+	engine.GET("/me", func(c *gin.Context) {
+		c.Request = c.Request.WithContext(auth.WithUserID(c.Request.Context(), "u-123"))
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/me", nil)
+	req.Header.Set(HeaderTraceID, "trace-user")
+	engine.ServeHTTP(httptest.NewRecorder(), req)
+
+	entries := logs.FilterMessage("http request completed").All()
+	if len(entries) != 1 {
+		t.Fatalf("request log count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields[auth.UserIDKey] != "u-123" {
+		t.Fatalf("user_id = %q, want u-123; fields = %#v", fields[auth.UserIDKey], fields)
 	}
 }
 

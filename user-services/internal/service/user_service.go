@@ -35,25 +35,26 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 		status = *req.Status
 	}
 
-	logger.Info(ctx, "create user", zap.String("username", req.Username))
+	logger.Info(ctx, "create user", zap.String("username", req.Username), zap.Int64("status", int64(status)))
 	passwordHash, err := password.Hash(req.Password)
 	if err != nil {
-		logger.Error(ctx, "hash user password failed", zap.String("username", req.Username), zap.Error(err))
+		logger.Error(ctx, "hash user password failed", logger.StackTrace(zap.String("username", req.Username), zap.Int64("status", int64(status)), zap.Error(err))...)
 		return nil, response.FromError(err)
 	}
 
 	userID, err := uuid.NewV7()
 	if err != nil {
-		logger.Error(ctx, "generate user id failed", zap.String("username", req.Username), zap.Error(err))
+		logger.Error(ctx, "generate user id failed", logger.StackTrace(zap.String("username", req.Username), zap.Int64("status", int64(status)), zap.Error(err))...)
 		return nil, response.FromError(err)
 	}
 
 	user, err := s.repo.Create(ctx, repository.CreateUserInput{Nickname: req.Nickname, UserID: userID, Username: req.Username, PasswordHash: passwordHash, Status: status})
 	if err != nil {
 		if errors.Is(err, domain.ErrUserAlreadyExists) {
+			logger.Warn(ctx, "create user conflict", zap.String("username", req.Username), zap.Int64("status", int64(status)))
 			return nil, response.ConflictError(errmsg.MsgUserAlreadyExists)
 		}
-		logger.Error(ctx, "create user failed", zap.String("username", req.Username), zap.Error(err))
+		logger.Error(ctx, "create user failed", logger.StackTrace(zap.String("username", req.Username), zap.String("user_id", userID.String()), zap.Int64("status", int64(status)), zap.Error(err))...)
 		return nil, response.FromError(err)
 	}
 	return toUserResponse(user), nil
@@ -64,9 +65,10 @@ func (s *userService) GetUserByID(ctx context.Context, userID uuid.UUID) (*dto.U
 	user, err := s.repo.GetByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
+			logger.Warn(ctx, "query user profile not found", zap.String("user_id", userID.String()))
 			return nil, response.NotFoundError(errmsg.MsgUserNotFound)
 		}
-		logger.Error(ctx, "query user profile failed", zap.String("user_id", userID.String()), zap.Error(err))
+		logger.Error(ctx, "query user profile failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
 		return nil, response.FromError(err)
 	}
 	return toUserResponse(user), nil
@@ -82,7 +84,7 @@ func (s *userService) ListUsers(ctx context.Context, req dto.ListUsersRequest) (
 		Status:   req.Status,
 	})
 	if err != nil {
-		logger.Error(ctx, "list users failed", zap.Error(err))
+		logger.Error(ctx, "list users failed", logger.StackTrace(zap.Int("page", req.Page), zap.Int("page_size", req.PageSize), zap.Error(err))...)
 		return response.PaginatedData[dto.UserResponse]{}, response.FromError(err)
 	}
 
