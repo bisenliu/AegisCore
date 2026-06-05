@@ -7,7 +7,7 @@ import (
 	"github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
-	"github.com/aegiscore/user-services/internal/errmsg"
+	"github.com/aegiscore/user-services/internal/messages"
 )
 
 func TestNormalizeCreateUser(t *testing.T) {
@@ -28,7 +28,7 @@ func TestNormalizeCreateUser(t *testing.T) {
 		err := NormalizeCreateUser(&req)
 
 		appErr := response.FromError(err)
-		if appErr.Code != response.CodeValidationFailed || appErr.Message != errmsg.MsgInvalidUsername {
+		if appErr.Code != response.CodeValidationFailed || appErr.Message != messages.InvalidUsername {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})
@@ -39,7 +39,7 @@ func TestNormalizeCreateUser(t *testing.T) {
 		err := NormalizeCreateUser(&req)
 
 		appErr := response.FromError(err)
-		if appErr.Code != response.CodeValidationFailed || appErr.Message != errmsg.MsgInvalidPassword {
+		if appErr.Code != response.CodeValidationFailed || appErr.Message != messages.InvalidPassword {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})
@@ -70,7 +70,7 @@ func TestParseUserID(t *testing.T) {
 
 	_, err = ParseUserID(dto.GetUserRequest{UserID: "abc"})
 	appErr := response.FromError(err)
-	if appErr.Code != response.CodeBadRequest || appErr.Message != errmsg.MsgInvalidUserID {
+	if appErr.Code != response.CodeBadRequest || appErr.Message != messages.InvalidUserID {
 		t.Fatalf("err = %#v", appErr)
 	}
 }
@@ -87,7 +87,7 @@ func TestNormalizeLogin(t *testing.T) {
 	req = dto.LoginRequest{Username: "alice", Password: " "}
 	err := NormalizeLogin(&req)
 	appErr := response.FromError(err)
-	if appErr.Code != response.CodeUnauthenticated || appErr.Message != errmsg.MsgInvalidCredentials {
+	if appErr.Code != response.CodeUnauthenticated || appErr.Message != messages.InvalidCredentials {
 		t.Fatalf("err = %#v", appErr)
 	}
 }
@@ -104,7 +104,7 @@ func TestNormalizeChangePassword(t *testing.T) {
 	req = dto.ChangePasswordRequest{Token: auth.TokenPrefix + "token", NewPassword: " "}
 	err := NormalizeChangePassword(&req)
 	appErr := response.FromError(err)
-	if appErr.Code != response.CodeValidationFailed || appErr.Message != errmsg.MsgInvalidPassword {
+	if appErr.Code != response.CodeValidationFailed || appErr.Message != messages.InvalidPassword {
 		t.Fatalf("err = %#v", appErr)
 	}
 }
@@ -121,7 +121,7 @@ func TestNormalizeRefresh(t *testing.T) {
 	req = dto.RefreshTokenRequest{RefreshToken: " " + auth.TokenPrefix}
 	err := NormalizeRefresh(&req)
 	appErr := response.FromError(err)
-	if appErr.Code != response.CodeTokenInvalid || appErr.Message != errmsg.MsgMissingSession {
+	if appErr.Code != response.CodeTokenInvalid || appErr.Message != messages.MissingSession {
 		t.Fatalf("err = %#v", appErr)
 	}
 }

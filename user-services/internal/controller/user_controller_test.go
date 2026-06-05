@@ -13,7 +13,7 @@ import (
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
-	"github.com/aegiscore/user-services/internal/errmsg"
+	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -60,11 +60,11 @@ func TestUserControllerGetByUserID(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		status, envelope := executeGetByUserID(t, &stubUserService{err: response.NotFoundError(errmsg.MsgUserNotFound)}, controllerTestUserID)
+		status, envelope := executeGetByUserID(t, &stubUserService{err: response.NotFoundError(messages.UserNotFound)}, controllerTestUserID)
 		if status != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", status, http.StatusNotFound)
 		}
-		if envelope.Success || envelope.Code != response.CodeNotFound || envelope.Message != errmsg.MsgUserNotFound {
+		if envelope.Success || envelope.Code != response.CodeNotFound || envelope.Message != messages.UserNotFound {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 	})
@@ -156,11 +156,11 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("user already exists", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{createErr: response.ConflictError(errmsg.MsgUserAlreadyExists)}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
+		status, envelope := executeCreate(t, &stubUserService{createErr: response.ConflictError(messages.UserAlreadyExists)}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
 		if status != http.StatusConflict {
 			t.Fatalf("status = %d, want %d", status, http.StatusConflict)
 		}
-		if envelope.Success || envelope.Code != response.CodeConflict || envelope.Message != errmsg.MsgUserAlreadyExists {
+		if envelope.Success || envelope.Code != response.CodeConflict || envelope.Message != messages.UserAlreadyExists {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 	})

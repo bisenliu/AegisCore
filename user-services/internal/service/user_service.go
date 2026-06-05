@@ -9,7 +9,7 @@ import (
 	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
-	"github.com/aegiscore/user-services/internal/errmsg"
+	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -52,7 +52,7 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserAlreadyExists) {
 			logger.Warn(ctx, "create user conflict", zap.String("username", req.Username), zap.Int64("status", int64(status)))
-			return nil, response.ConflictError(errmsg.MsgUserAlreadyExists)
+			return nil, response.ConflictError(messages.UserAlreadyExists)
 		}
 		logger.Error(ctx, "create user failed", logger.StackTrace(zap.String("username", req.Username), zap.String("user_id", userID.String()), zap.Int64("status", int64(status)), zap.Error(err))...)
 		return nil, response.FromError(err)
@@ -66,7 +66,7 @@ func (s *userService) GetUserByID(ctx context.Context, userID uuid.UUID) (*dto.U
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			logger.Warn(ctx, "query user profile not found", zap.String("user_id", userID.String()))
-			return nil, response.NotFoundError(errmsg.MsgUserNotFound)
+			return nil, response.NotFoundError(messages.UserNotFound)
 		}
 		logger.Error(ctx, "query user profile failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
 		return nil, response.FromError(err)

@@ -11,7 +11,7 @@ import (
 	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
-	"github.com/aegiscore/user-services/internal/errmsg"
+	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
 	"go.uber.org/fx"
@@ -80,14 +80,14 @@ func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePassword
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			logger.Warn(ctx, "change password user not found", zap.String("user_id", parsedUserID.String()))
-			return nil, response.NotFoundError(errmsg.MsgUserNotFound)
+			return nil, response.NotFoundError(messages.UserNotFound)
 		}
 		logger.Error(ctx, "query change password user failed", logger.StackTrace(zap.String("user_id", parsedUserID.String()), zap.Error(err))...)
 		return nil, response.FromError(err)
 	}
 	if !user.CanChangePassword() {
 		logger.Warn(ctx, "change password status rejected", zap.String("user_id", parsedUserID.String()), zap.Int64("status", int64(user.Status)))
-		return nil, response.TokenInvalidError(errmsg.MsgMissingSession)
+		return nil, response.TokenInvalidError(messages.MissingSession)
 	}
 	passwordHash, err := password.Hash(req.NewPassword)
 	if err != nil {
@@ -97,7 +97,7 @@ func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePassword
 	if _, err := s.repo.UpdateCredentials(ctx, repository.UpdateCredentialsInput{UserID: parsedUserID, PasswordHash: passwordHash, Status: domain.UserStatusNormal}); err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			logger.Warn(ctx, "update credentials user not found", zap.String("user_id", parsedUserID.String()))
-			return nil, response.NotFoundError(errmsg.MsgUserNotFound)
+			return nil, response.NotFoundError(messages.UserNotFound)
 		}
 		logger.Error(ctx, "update credentials failed", logger.StackTrace(zap.String("user_id", parsedUserID.String()), zap.Error(err))...)
 		return nil, response.FromError(err)
@@ -161,12 +161,12 @@ func (s *authService) LogoutAll(ctx context.Context) (*dto.LogoutResponse, error
 	parsedUserID, err := uuid.Parse(userID)
 	if err != nil {
 		logger.Warn(ctx, "logout all user id invalid", zap.String("user_id", userID))
-		return nil, response.UnauthenticatedError(errmsg.MsgMissingSession)
+		return nil, response.UnauthenticatedError(messages.MissingSession)
 	}
 	if _, err := s.repo.IncrementTokenVersion(ctx, parsedUserID); err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			logger.Warn(ctx, "logout all user not found", zap.String("user_id", userID))
-			return nil, response.NotFoundError(errmsg.MsgUserNotFound)
+			return nil, response.NotFoundError(messages.UserNotFound)
 		}
 		logger.Error(ctx, "increment token version failed", logger.StackTrace(zap.String("user_id", userID), zap.Error(err))...)
 		return nil, response.FromError(err)
@@ -194,14 +194,14 @@ func (s *authService) issueTokenPair(ctx context.Context, userID string, tokenVe
 func authenticatedSession(ctx context.Context) (string, string, error) {
 	userIDString, ok := auth.UserIDFromContext(ctx)
 	if !ok {
-		return "", "", response.UnauthenticatedError(errmsg.MsgMissingSession)
+		return "", "", response.UnauthenticatedError(messages.MissingSession)
 	}
 	if _, err := uuid.Parse(userIDString); err != nil {
-		return "", "", response.UnauthenticatedError(errmsg.MsgMissingSession)
+		return "", "", response.UnauthenticatedError(messages.MissingSession)
 	}
 	sessionID, ok := auth.SessionIDFromContext(ctx)
 	if !ok {
-		return "", "", response.UnauthenticatedError(errmsg.MsgMissingSession)
+		return "", "", response.UnauthenticatedError(messages.MissingSession)
 	}
 	return userIDString, sessionID, nil
 }

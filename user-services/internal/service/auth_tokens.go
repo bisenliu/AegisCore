@@ -10,7 +10,7 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/user-services/internal/dto"
-	"github.com/aegiscore/user-services/internal/errmsg"
+	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -74,15 +74,15 @@ func (i *authTokenIssuer) ParseRefreshToken(ctx context.Context, token string) (
 	claims, err := i.jwt.ParseRefreshToken(auth.StripBearerPrefix(token))
 	if err != nil {
 		logger.Warn(ctx, "refresh token invalid", zap.Bool("token_present", token != ""))
-		return nil, response.TokenInvalidError(errmsg.MsgMissingSession)
+		return nil, response.TokenInvalidError(messages.MissingSession)
 	}
 	if claims.Subject != auth.SubjectRefresh {
 		logger.Warn(ctx, "refresh token subject rejected", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.String("subject", claims.Subject))
-		return nil, response.TokenInvalidError(errmsg.MsgMissingSession)
+		return nil, response.TokenInvalidError(messages.MissingSession)
 	}
 	if _, err := uuid.Parse(claims.UserID); err != nil {
 		logger.Warn(ctx, "refresh token user id invalid", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-		return nil, response.TokenInvalidError(errmsg.MsgMissingSession)
+		return nil, response.TokenInvalidError(messages.MissingSession)
 	}
 	return claims, nil
 }
@@ -91,12 +91,12 @@ func (i *authTokenIssuer) ParsePasswordChangeToken(ctx context.Context, token st
 	claims, err := i.jwt.ParsePasswordChangeToken(auth.StripBearerPrefix(token))
 	if err != nil {
 		logger.Warn(ctx, "password change token invalid", zap.Bool("token_present", token != ""))
-		return nil, uuid.Nil, response.TokenInvalidError(errmsg.MsgMissingSession)
+		return nil, uuid.Nil, response.TokenInvalidError(messages.MissingSession)
 	}
 	parsedUserID, err := uuid.Parse(claims.UserID)
 	if err != nil {
 		logger.Warn(ctx, "password change token user id invalid", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-		return nil, uuid.Nil, response.TokenInvalidError(errmsg.MsgMissingSession)
+		return nil, uuid.Nil, response.TokenInvalidError(messages.MissingSession)
 	}
 	return claims, parsedUserID, nil
 }

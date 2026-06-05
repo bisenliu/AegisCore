@@ -12,7 +12,7 @@ import (
 	"github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/dto"
-	"github.com/aegiscore/user-services/internal/errmsg"
+	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/gin-gonic/gin"
 )
 
@@ -42,7 +42,7 @@ func TestAuthControllerLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 	if status != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
 	}
-	if service.gotLogin.Username != "" || envelope.Success || envelope.Code != response.CodeUnauthenticated || envelope.Message != errmsg.MsgInvalidCredentials {
+	if service.gotLogin.Username != "" || envelope.Success || envelope.Code != response.CodeUnauthenticated || envelope.Message != messages.InvalidCredentials {
 		t.Fatalf("service=%#v envelope=%#v", service, envelope)
 	}
 }
@@ -90,7 +90,7 @@ func TestAuthControllerRefreshRejectsBlankTrimmedToken(t *testing.T) {
 	if status != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
 	}
-	if service.gotRefresh.RefreshToken != "" || envelope.Success || envelope.Code != response.CodeTokenInvalid || envelope.Message != errmsg.MsgMissingSession {
+	if service.gotRefresh.RefreshToken != "" || envelope.Success || envelope.Code != response.CodeTokenInvalid || envelope.Message != messages.MissingSession {
 		t.Fatalf("service=%#v envelope=%#v", service, envelope)
 	}
 }

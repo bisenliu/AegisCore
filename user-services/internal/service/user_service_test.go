@@ -9,7 +9,7 @@ import (
 	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
-	"github.com/aegiscore/user-services/internal/errmsg"
+	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
 )
@@ -41,12 +41,12 @@ func TestUserServiceCreateUser(t *testing.T) {
 	})
 
 	t.Run("preserve create conflict", func(t *testing.T) {
-		svc := NewUserService(&stubUserRepository{createErr: response.ConflictError(errmsg.MsgUserAlreadyExists)})
+		svc := NewUserService(&stubUserRepository{createErr: response.ConflictError(messages.UserAlreadyExists)})
 
 		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
-		if appErr.Code != response.CodeConflict || appErr.Message != errmsg.MsgUserAlreadyExists {
+		if appErr.Code != response.CodeConflict || appErr.Message != messages.UserAlreadyExists {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})
@@ -57,7 +57,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
-		if appErr.Code != response.CodeConflict || appErr.Message != errmsg.MsgUserAlreadyExists {
+		if appErr.Code != response.CodeConflict || appErr.Message != messages.UserAlreadyExists {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})
@@ -72,7 +72,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 			t.Fatalf("created username = %q", repo.createdInput.Username)
 		}
 		appErr := response.FromError(err)
-		if appErr.Code != response.CodeConflict || appErr.Message != errmsg.MsgUserAlreadyExists {
+		if appErr.Code != response.CodeConflict || appErr.Message != messages.UserAlreadyExists {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})
@@ -104,7 +104,7 @@ func TestUserServiceGetUserByID(t *testing.T) {
 		_, err := svc.GetUserByID(context.Background(), testUserID)
 
 		appErr := response.FromError(err)
-		if appErr.Code != response.CodeNotFound || appErr.Message != errmsg.MsgUserNotFound {
+		if appErr.Code != response.CodeNotFound || appErr.Message != messages.UserNotFound {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})

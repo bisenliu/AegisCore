@@ -9,7 +9,7 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/user-services/internal/domain"
-	"github.com/aegiscore/user-services/internal/errmsg"
+	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/aegiscore/user-services/internal/repository"
 	"go.uber.org/zap"
 )
@@ -44,14 +44,14 @@ func (m *authSessionManager) ValidatePasswordChangeClaims(ctx context.Context, c
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			logger.Warn(ctx, "password change user not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-			return response.NotFoundError(errmsg.MsgUserNotFound)
+			return response.NotFoundError(messages.UserNotFound)
 		}
 		logger.Error(ctx, "get password change token version failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
 		return response.FromError(err)
 	}
 	if currentVersion != claims.TokenVersion {
 		logger.Warn(ctx, "password change token version mismatch", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Int64("current_token_version", currentVersion), zap.Int64("token_version", claims.TokenVersion))
-		return response.TokenInvalidError(errmsg.MsgMissingSession)
+		return response.TokenInvalidError(messages.MissingSession)
 	}
 	return nil
 }
@@ -61,27 +61,27 @@ func (m *authSessionManager) ValidateRefreshSession(ctx context.Context, claims 
 	if err != nil {
 		if errors.Is(err, repository.ErrAuthSessionNotFound) {
 			logger.Warn(ctx, "refresh session not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-			return repository.AuthSession{}, 0, response.TokenInvalidError(errmsg.MsgMissingSession)
+			return repository.AuthSession{}, 0, response.TokenInvalidError(messages.MissingSession)
 		}
 		logger.Error(ctx, "get refresh session failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
 		return repository.AuthSession{}, 0, response.FromError(err)
 	}
 	if session.UserID != claims.UserID || session.TokenVersion != claims.TokenVersion {
 		logger.Warn(ctx, "refresh session mismatch", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Int64("session_token_version", session.TokenVersion), zap.Int64("token_version", claims.TokenVersion))
-		return repository.AuthSession{}, 0, response.TokenInvalidError(errmsg.MsgMissingSession)
+		return repository.AuthSession{}, 0, response.TokenInvalidError(messages.MissingSession)
 	}
 	currentVersion, err := m.sessions.GetCurrentTokenVersion(ctx, claims.UserID)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			logger.Warn(ctx, "refresh user not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-			return repository.AuthSession{}, 0, response.NotFoundError(errmsg.MsgUserNotFound)
+			return repository.AuthSession{}, 0, response.NotFoundError(messages.UserNotFound)
 		}
 		logger.Error(ctx, "get refresh token version failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
 		return repository.AuthSession{}, 0, response.FromError(err)
 	}
 	if currentVersion != session.TokenVersion {
 		logger.Warn(ctx, "refresh token version mismatch", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Int64("current_token_version", currentVersion), zap.Int64("session_token_version", session.TokenVersion))
-		return repository.AuthSession{}, 0, response.TokenInvalidError(errmsg.MsgMissingSession)
+		return repository.AuthSession{}, 0, response.TokenInvalidError(messages.MissingSession)
 	}
 	return session, currentVersion, nil
 }
