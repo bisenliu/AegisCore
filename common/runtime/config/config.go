@@ -88,7 +88,7 @@ type PostgresConfig struct {
 	PingTimeout     time.Duration `mapstructure:"ping_timeout"`
 }
 
-type PostgresDatabaseConfig struct {
+type PostgresDBConfig struct {
 	Driver          string
 	DSN             string
 	MaxOpenConns    int
@@ -103,12 +103,12 @@ func (c Config) RedisConfig(name string) (RedisConfig, bool) {
 	return redisCfg, ok
 }
 
-func (c Config) PostgresDatabase(name string) (PostgresDatabaseConfig, bool) {
+func (c Config) PostgresDatabaseConfig(name string) (PostgresDBConfig, bool) {
 	pg, ok := c.Postgres[name]
 	if !ok {
-		return PostgresDatabaseConfig{}, false
+		return PostgresDBConfig{}, false
 	}
-	return PostgresDatabaseConfig{
+	return PostgresDBConfig{
 		Driver:          pg.Driver,
 		DSN:             pg.dsn(),
 		MaxOpenConns:    pg.MaxOpenConns,

@@ -8,7 +8,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-func OpenPostgres(name string, dbCfg config.PostgresDatabaseConfig) (*sql.DB, error) {
+func OpenPostgres(name string, dbCfg config.PostgresDBConfig) (*sql.DB, error) {
 	db, err := sql.Open(dbCfg.Driver, dbCfg.DSN)
 	if err != nil {
 		return nil, fmt.Errorf("open postgres %s: %w", name, err)

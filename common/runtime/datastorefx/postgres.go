@@ -22,7 +22,7 @@ func ProvideNamedPostgres(fxName string, configKey string) fx.Option {
 }
 
 func NewPostgres(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name string) (*sql.DB, error) {
-	dbCfg, ok := cfg.PostgresDatabase(name)
+	dbCfg, ok := cfg.PostgresDatabaseConfig(name)
 	if !ok {
 		return nil, fmt.Errorf("postgres config %q not found", name)
 	}
@@ -34,7 +34,7 @@ func NewPostgres(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name stri
 	return db, nil
 }
 
-func registerDBLifecycle(lc fx.Lifecycle, log *zap.Logger, name string, db *sql.DB, cfg config.PostgresDatabaseConfig) {
+func registerDBLifecycle(lc fx.Lifecycle, log *zap.Logger, name string, db *sql.DB, cfg config.PostgresDBConfig) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			pingCtx, cancel := context.WithTimeout(ctx, cfg.PingTimeout)

@@ -283,8 +283,8 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
 	if cfg.Postgres["user_db"].Password != "" {
 		t.Fatalf("Postgres.Password = %q, want empty", cfg.Postgres["user_db"].Password)
 	}
-	if _, ok := cfg.PostgresDatabase("pay_db"); ok {
-		t.Fatal("PostgresDatabase(pay_db) ok = true")
+	if _, ok := cfg.PostgresDatabaseConfig("pay_db"); ok {
+		t.Fatal("PostgresDatabaseConfig(pay_db) ok = true")
 	}
 }
 
@@ -356,9 +356,9 @@ func TestPostgresNamedDatabaseDSNs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, ok := cfg.PostgresDatabase(tt.name)
+			db, ok := cfg.PostgresDatabaseConfig(tt.name)
 			if !ok {
-				t.Fatalf("PostgresDatabase(%q) ok = false", tt.name)
+				t.Fatalf("PostgresDatabaseConfig(%q) ok = false", tt.name)
 			}
 			parsed, err := url.Parse(db.DSN)
 			if err != nil {
@@ -386,11 +386,11 @@ func TestPostgresNamedDatabaseDSNs(t *testing.T) {
 		})
 	}
 
-	if _, ok := cfg.PostgresDatabase("pay_db"); !ok {
-		t.Fatal("PostgresDatabase(pay_db) ok = false")
+	if _, ok := cfg.PostgresDatabaseConfig("pay_db"); !ok {
+		t.Fatal("PostgresDatabaseConfig(pay_db) ok = false")
 	}
-	if _, ok := cfg.PostgresDatabase("missing_db"); ok {
-		t.Fatal("PostgresDatabase(missing_db) ok = true")
+	if _, ok := cfg.PostgresDatabaseConfig("missing_db"); ok {
+		t.Fatal("PostgresDatabaseConfig(missing_db) ok = true")
 	}
 }
 
