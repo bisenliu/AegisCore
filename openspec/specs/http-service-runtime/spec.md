@@ -249,6 +249,28 @@ HTTP 服务运行时 SHALL 在 HTTP server 启动日志中输出关键运行时�
 - **Then** 常量名称 MUST 表达二者处于不同层级
 - **Then** 维护者 MUST 能判断 CLI stop timeout 是整个 Fx app 停止预算，HTTP shutdown timeout 是 server graceful shutdown 预算
 
+### Requirement: Preserve upstream context metadata during CLI stop
+
+用户服务 CLI 停止 Fx app 时，系统 MUST 使用从 `runServe` 上游 context 派生的 stop root context，以保留调用方注入的 context values。该 stop root context MUST NOT 直接继承终止信号触发后的取消状态；Fx app stop context MUST 继续使用 `fxAppStopTimeout` 表达独立停止预算。
+
+#### Scenario: Stop context preserves upstream values
+- **Given** 调用方使用携带 context value 的上游 context 调用 `runServe`
+- **When** CLI 收到 `os.Interrupt` 或 `SIGTERM` 并触发 Fx app stop
+- **Then** Fx app stop hooks MUST 能通过 stop context 读取该上游 context value
+- **Then** stop context MUST 继续使用 CLI/Fx app stop timeout 作为停止预算
+
+#### Scenario: Stop context does not inherit signal cancellation
+- **Given** 服务运行 context 因 `os.Interrupt` 或 `SIGTERM` 变为已取消
+- **When** CLI 创建传给 Fx app stop hooks 的 stop context
+- **Then** stop context MUST NOT 因该终止信号而已经处于取消状态
+- **Then** stop hooks MUST 仍可在 `fxAppStopTimeout` 预算内执行清理逻辑
+
+#### Scenario: Runtime surface remains unchanged
+- **Given** CLI stop context 创建策略已调整
+- **When** 用户服务通过 `aegiscore-user-services serve` 启动并停止
+- **Then** CLI 命令名、`--config` 参数、HTTP 路由、响应信封、认证边界和 runtime 依赖初始化 MUST 保持不变
+- **Then** HTTP server graceful shutdown MUST 继续使用现有配置和默认 timeout 规则
+
 ### Requirement: Provide high-throughput HTTP timeout defaults
 
 用户服务示例配置 MUST 提供适合较高请求量和 keep-alive 复用场景的 HTTP timeout 基线。默认 YAML 配置 MUST 设置 `http.read_timeout` 为 `30s`、`http.write_timeout` 为 `60s`、`http.idle_timeout` 为 `120s`、`http.shutdown_timeout` 为 `25s`。这些值 MUST 通过现有 YAML 与 `AEGISCORE_` 环境变量覆盖机制加载，HTTP server MUST 使用加载后的配置值。

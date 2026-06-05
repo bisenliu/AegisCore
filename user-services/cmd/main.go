@@ -30,6 +30,15 @@ const (
 	fxAppStopTimeout  = 30 * time.Second
 )
 
+type lifecycleApp interface {
+	Start(context.Context) error
+	Stop(context.Context) error
+}
+
+var newLifecycleApp = func(configPath string) lifecycleApp {
+	return bootstrap.NewApp(configPath)
+}
+
 func main() {
 	if err := newRootCommand().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -59,10 +68,11 @@ func newRootCommand() *cobra.Command {
 }
 
 func runServe(ctx context.Context, configPath string) error {
+	upstreamCtx := ctx
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	app := bootstrap.NewApp(configPath)
+	app := newLifecycleApp(configPath)
 	startCtx, cancelStart := context.WithTimeout(ctx, fxAppStartTimeout)
 	defer cancelStart()
 	if err := app.Start(startCtx); err != nil {
@@ -71,7 +81,7 @@ func runServe(ctx context.Context, configPath string) error {
 
 	<-ctx.Done()
 
-	stopCtx, cancelStop := context.WithTimeout(context.Background(), fxAppStopTimeout)
+	stopCtx, cancelStop := context.WithTimeout(context.WithoutCancel(upstreamCtx), fxAppStopTimeout)
 	defer cancelStop()
 	return app.Stop(stopCtx)
 }
