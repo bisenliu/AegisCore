@@ -9,6 +9,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/repository"
+	"github.com/aegiscore/user-services/internal/service"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
@@ -27,7 +28,7 @@ func TestAuthSessionRepositoryTokenVersionCacheMissReadsRepository(t *testing.T)
 	if version != 7 {
 		t.Fatalf("version = %d, want 7", version)
 	}
-	got, err := redisServer.Get(tokenVersionKey(sessionTestUserID.String()))
+	got, err := redisServer.Get(store.tokenVersionKey(sessionTestUserID.String()))
 	if err != nil {
 		t.Fatalf("Get cached token version: %v", err)
 	}
@@ -45,7 +46,7 @@ func TestAuthSessionRepositoryTokenVersionCacheUsesDefaultTTL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCurrentTokenVersion: %v", err)
 	}
-	ttl, err := store.redis.TTL(context.Background(), tokenVersionKey(sessionTestUserID.String())).Result()
+	ttl, err := store.redis.TTL(context.Background(), store.tokenVersionKey(sessionTestUserID.String())).Result()
 	if err != nil {
 		t.Fatalf("TTL: %v", err)
 	}
@@ -64,7 +65,7 @@ func TestAuthSessionRepositoryTokenVersionCacheUsesExplicitTTL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCurrentTokenVersion: %v", err)
 	}
-	ttl, err := store.redis.TTL(context.Background(), tokenVersionKey(sessionTestUserID.String())).Result()
+	ttl, err := store.redis.TTL(context.Background(), store.tokenVersionKey(sessionTestUserID.String())).Result()
 	if err != nil {
 		t.Fatalf("TTL: %v", err)
 	}
@@ -78,7 +79,7 @@ func TestAuthSessionRepositoryTokenVersionInvalidCacheReadsRepository(t *testing
 	repo := &tokenVersionRepoStub{version: 9}
 	store := newTestAuthSessionRepository(redisServer, repo)
 	ctx := context.Background()
-	key := tokenVersionKey(sessionTestUserID.String())
+	key := store.tokenVersionKey(sessionTestUserID.String())
 
 	for _, value := range []string{"not-an-int", "0"} {
 		if err := store.redis.Set(ctx, key, value, time.Minute).Err(); err != nil {
@@ -101,7 +102,7 @@ func TestAuthSessionRepositoryCreateGetAndDeleteSession(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestAuthSessionRepository(redisServer, &tokenVersionRepoStub{version: 1})
 	ctx := context.Background()
-	indexKey := userSessionsKey(sessionTestUserID.String())
+	indexKey := store.userSessionsKey(sessionTestUserID.String())
 	expiresAt := time.Now().Add(time.Hour).Truncate(time.Second)
 	session := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-123", TokenVersion: 1, ExpiresAt: expiresAt}
 	if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err(); err != nil {
@@ -143,7 +144,7 @@ func TestAuthSessionRepositoryCreateGetAndDeleteSession(t *testing.T) {
 	if err := store.DeleteSession(ctx, sessionTestUserID.String(), "s-123"); err != nil {
 		t.Fatalf("DeleteSession: %v", err)
 	}
-	if redisServer.Exists(sessionKey("s-123")) {
+	if redisServer.Exists(store.sessionKey("s-123")) {
 		t.Fatal("session key still exists")
 	}
 	if _, err := store.redis.ZScore(ctx, indexKey, "s-123").Result(); !errors.Is(err, rediscache.Nil) {
@@ -158,13 +159,13 @@ func TestAuthSessionRepositoryDeleteAllUserSessions(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestAuthSessionRepository(redisServer, &tokenVersionRepoStub{version: 1})
 	ctx := context.Background()
-	indexKey := userSessionsKey(sessionTestUserID.String())
+	indexKey := store.userSessionsKey(sessionTestUserID.String())
 	for _, sessionID := range []string{"s-1", "s-2"} {
 		if err := store.CreateSession(ctx, repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: sessionID, TokenVersion: 1, ExpiresAt: time.Now().Add(time.Hour)}, time.Hour); err != nil {
 			t.Fatalf("CreateSession: %v", err)
 		}
 	}
-	if err := store.redis.Set(ctx, sessionKey("expired-session"), "stale", 0).Err(); err != nil {
+	if err := store.redis.Set(ctx, store.sessionKey("expired-session"), "stale", 0).Err(); err != nil {
 		t.Fatalf("Set expired session: %v", err)
 	}
 	if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err(); err != nil {
@@ -173,11 +174,65 @@ func TestAuthSessionRepositoryDeleteAllUserSessions(t *testing.T) {
 	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
 		t.Fatalf("DeleteAllUserSessions: %v", err)
 	}
-	if redisServer.Exists(sessionKey("s-1")) || redisServer.Exists(sessionKey("s-2")) || redisServer.Exists(indexKey) {
+	if redisServer.Exists(store.sessionKey("s-1")) || redisServer.Exists(store.sessionKey("s-2")) || redisServer.Exists(indexKey) {
 		t.Fatal("user sessions were not fully deleted")
 	}
-	if !redisServer.Exists(sessionKey("expired-session")) {
+	if !redisServer.Exists(store.sessionKey("expired-session")) {
 		t.Fatal("expired session key was deleted despite expired index member cleanup")
+	}
+}
+
+func TestAuthSessionRepositoryKeysUseAppNamePrefix(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestAuthSessionRepositoryWithAppName(redisServer, &tokenVersionRepoStub{version: 7}, " aegiscore-user-services ")
+	ctx := context.Background()
+	session := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-prefixed", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
+
+	if err := store.CreateSession(ctx, session, time.Hour); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if _, err := store.GetCurrentTokenVersion(ctx, sessionTestUserID.String()); err != nil {
+		t.Fatalf("GetCurrentTokenVersion: %v", err)
+	}
+
+	if !redisServer.Exists("aegiscore-user-services:auth:session:s-prefixed") {
+		t.Fatal("prefixed session key does not exist")
+	}
+	if !redisServer.Exists("aegiscore-user-services:auth:user:" + sessionTestUserID.String() + ":sessions") {
+		t.Fatal("prefixed user sessions key does not exist")
+	}
+	if !redisServer.Exists("aegiscore-user-services:auth:user:" + sessionTestUserID.String() + ":token_version") {
+		t.Fatal("prefixed token version key does not exist")
+	}
+	if redisServer.Exists("auth:session:s-prefixed") || redisServer.Exists("auth:user:"+sessionTestUserID.String()+":sessions") || redisServer.Exists("auth:user:"+sessionTestUserID.String()+":token_version") {
+		t.Fatal("unprefixed Redis keys should not exist when app.name is set")
+	}
+}
+
+func TestAuthSessionRepositoryKeysRemainUnprefixedWhenAppNameEmpty(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestAuthSessionRepositoryWithAppName(redisServer, &tokenVersionRepoStub{version: 7}, "   ")
+	ctx := context.Background()
+	session := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-empty-prefix", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
+
+	if err := store.CreateSession(ctx, session, time.Hour); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if _, err := store.GetCurrentTokenVersion(ctx, sessionTestUserID.String()); err != nil {
+		t.Fatalf("GetCurrentTokenVersion: %v", err)
+	}
+
+	if !redisServer.Exists("auth:session:s-empty-prefix") {
+		t.Fatal("unprefixed session key does not exist")
+	}
+	if !redisServer.Exists("auth:user:" + sessionTestUserID.String() + ":sessions") {
+		t.Fatal("unprefixed user sessions key does not exist")
+	}
+	if !redisServer.Exists("auth:user:" + sessionTestUserID.String() + ":token_version") {
+		t.Fatal("unprefixed token version key does not exist")
+	}
+	if redisServer.Exists("aegiscore-user-services:auth:session:s-empty-prefix") || redisServer.Exists("aegiscore-user-services:auth:user:"+sessionTestUserID.String()+":sessions") || redisServer.Exists("aegiscore-user-services:auth:user:"+sessionTestUserID.String()+":token_version") {
+		t.Fatal("default service-name Redis keys should not exist when app.name is empty")
 	}
 }
 
@@ -187,7 +242,21 @@ func newTestAuthSessionRepository(redisServer *miniredis.Miniredis, repo reposit
 
 func newTestAuthSessionRepositoryWithConfig(redisServer *miniredis.Miniredis, repo repository.UserRepository, authCfg config.AuthConfig) *authSessionRepository {
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
-	return &authSessionRepository{redis: client, repo: repo, tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL}
+	return &authSessionRepository{redis: client, repo: repo, keys: service.NewRedisKeyBuilder(&config.Config{}), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL}
+}
+
+func newTestAuthSessionRepositoryWithAppName(redisServer *miniredis.Miniredis, repo repository.UserRepository, appName string) *authSessionRepository {
+	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
+	store := NewAuthSessionRepository(AuthSessionRepositoryParams{
+		Redis: client,
+		Repo:  repo,
+		Keys:  service.NewRedisKeyBuilder(&config.Config{App: config.AppConfig{Name: appName}}),
+		Cfg: &config.Config{
+			App:  config.AppConfig{Name: appName},
+			Auth: config.AuthConfig{TokenVersionCacheTTL: time.Minute},
+		},
+	})
+	return store.(*authSessionRepository)
 }
 
 type tokenVersionRepoStub struct {

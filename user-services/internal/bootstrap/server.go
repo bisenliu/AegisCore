@@ -38,7 +38,12 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			logger.WithContext(params.Log, ctx).Info("starting http server", zap.String("addr", addr))
+			logger.WithContext(params.Log, ctx).Info("starting http server",
+				zap.String("addr", addr),
+				zap.String("service", params.Config.App.Name),
+				zap.String("environment", params.Config.App.Environment),
+				zap.String("timezone", params.Config.System.Timezone),
+			)
 			listener, err := net.Listen("tcp", addr)
 			if err != nil {
 				return fmt.Errorf("listen http server on %s: %w", addr, err)

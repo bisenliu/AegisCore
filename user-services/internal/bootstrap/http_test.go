@@ -24,6 +24,8 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 const routeAuthUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
@@ -134,6 +136,46 @@ func TestHTTPServerStartAndStop(t *testing.T) {
 	defer cancel()
 	if err := lifecycle.hooks[0].OnStop(stopCtx); err != nil {
 		t.Fatalf("OnStop: %v", err)
+	}
+}
+
+func TestHTTPServerStartLogIncludesRuntimeIdentity(t *testing.T) {
+	lifecycle := &lifecycleRecorder{}
+	core, logs := observer.New(zapcore.InfoLevel)
+	log := zap.New(core)
+	NewHTTPServer(HTTPServerParams{
+		Lifecycle: lifecycle,
+		Config: &config.Config{
+			App:    config.AppConfig{Name: "aegiscore-user-services", Environment: "local"},
+			System: config.SystemConfig{Timezone: "Asia/Shanghai"},
+			HTTP: config.HTTPConfig{
+				Host: "127.0.0.1",
+				Port: 0,
+			},
+		},
+		Log:    log,
+		Engine: gin.New(),
+	})
+
+	if len(lifecycle.hooks) != 1 || lifecycle.hooks[0].OnStart == nil || lifecycle.hooks[0].OnStop == nil {
+		t.Fatalf("lifecycle hooks = %#v, want one start/stop hook", lifecycle.hooks)
+	}
+	if err := lifecycle.hooks[0].OnStart(context.Background()); err != nil {
+		t.Fatalf("OnStart: %v", err)
+	}
+	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := lifecycle.hooks[0].OnStop(stopCtx); err != nil {
+		t.Fatalf("OnStop: %v", err)
+	}
+
+	entries := logs.FilterMessage("starting http server").All()
+	if len(entries) != 1 {
+		t.Fatalf("starting http server logs = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["addr"] != "127.0.0.1:0" || fields["service"] != "aegiscore-user-services" || fields["environment"] != "local" || fields["timezone"] != "Asia/Shanghai" {
+		t.Fatalf("startup log fields = %#v", fields)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/user-services/internal/repository"
+	"github.com/aegiscore/user-services/internal/service"
 	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
@@ -21,12 +22,6 @@ const (
 	// defaultAuthSessionTTL 是调用方未提供有效时长时的会话兜底过期时间。
 	defaultAuthSessionTTL = time.Hour
 
-	// tokenVersionKeyFormat 按用户 UUID 缓存当前 token_version。
-	tokenVersionKeyFormat = "auth:user:%s:token_version"
-	// sessionKeyFormat 按会话 UUID 存储序列化后的认证会话数据。
-	sessionKeyFormat = "auth:session:%s"
-	// userSessionsKeyFormat 用 ZSET 存储用户活跃会话 ID，score 为过期 Unix 时间。
-	userSessionsKeyFormat = "auth:user:%s:sessions"
 	// expiredSessionMinScore 让 ZRemRangeByScore 清理所有 score 小于等于当前时间的会话。
 	expiredSessionMinScore = "-inf"
 )
@@ -37,20 +32,22 @@ type AuthSessionRepositoryParams struct {
 	Redis *rediscache.Client `name:"cache_redis"`
 	Repo  repository.UserRepository
 	Cfg   *config.Config
+	Keys  service.RedisKeyBuilder
 }
 
 type authSessionRepository struct {
 	redis                *rediscache.Client
 	repo                 repository.UserRepository
+	keys                 service.RedisKeyBuilder
 	tokenVersionCacheTTL time.Duration
 }
 
 func NewAuthSessionRepository(params AuthSessionRepositoryParams) repository.AuthSessionRepository {
-	return &authSessionRepository{redis: params.Redis, repo: params.Repo, tokenVersionCacheTTL: params.Cfg.Auth.TokenVersionCacheTTL}
+	return &authSessionRepository{redis: params.Redis, repo: params.Repo, keys: params.Keys, tokenVersionCacheTTL: params.Cfg.Auth.TokenVersionCacheTTL}
 }
 
 func (r *authSessionRepository) GetCurrentTokenVersion(ctx context.Context, userID string) (int64, error) {
-	key := tokenVersionKey(userID)
+	key := r.tokenVersionKey(userID)
 	value, err := r.redis.Get(ctx, key).Result()
 	if err == nil {
 		version, parseErr := parseTokenVersion(value)
@@ -106,9 +103,9 @@ func (r *authSessionRepository) CreateSession(ctx context.Context, session repos
 	if err != nil {
 		return fmt.Errorf("marshal auth session: %w", err)
 	}
-	userSessions := userSessionsKey(session.UserID)
+	userSessions := r.userSessionsKey(session.UserID)
 	pipe := r.redis.TxPipeline()
-	pipe.Set(ctx, sessionKey(session.SessionID), data, ttl)
+	pipe.Set(ctx, r.sessionKey(session.SessionID), data, ttl)
 	pipe.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(now))
 	pipe.ZAdd(ctx, userSessions, rediscache.Z{Score: float64(session.ExpiresAt.Unix()), Member: session.SessionID})
 	_, err = pipe.Exec(ctx)
@@ -119,7 +116,7 @@ func (r *authSessionRepository) CreateSession(ctx context.Context, session repos
 }
 
 func (r *authSessionRepository) GetSession(ctx context.Context, sessionID string) (repository.AuthSession, error) {
-	data, err := r.redis.Get(ctx, sessionKey(sessionID)).Bytes()
+	data, err := r.redis.Get(ctx, r.sessionKey(sessionID)).Bytes()
 	if errors.Is(err, rediscache.Nil) {
 		return repository.AuthSession{}, repository.ErrAuthSessionNotFound
 	}
@@ -134,9 +131,9 @@ func (r *authSessionRepository) GetSession(ctx context.Context, sessionID string
 }
 
 func (r *authSessionRepository) DeleteSession(ctx context.Context, userID string, sessionID string) error {
-	userSessions := userSessionsKey(userID)
+	userSessions := r.userSessionsKey(userID)
 	pipe := r.redis.TxPipeline()
-	pipe.Del(ctx, sessionKey(sessionID))
+	pipe.Del(ctx, r.sessionKey(sessionID))
 	pipe.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(time.Now()))
 	pipe.ZRem(ctx, userSessions, sessionID)
 	_, err := pipe.Exec(ctx)
@@ -147,7 +144,7 @@ func (r *authSessionRepository) DeleteSession(ctx context.Context, userID string
 }
 
 func (r *authSessionRepository) DeleteAllUserSessions(ctx context.Context, userID string) error {
-	userSessions := userSessionsKey(userID)
+	userSessions := r.userSessionsKey(userID)
 	if err := r.redis.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(time.Now())).Err(); err != nil {
 		return fmt.Errorf("clean expired user auth sessions: %w", err)
 	}
@@ -157,7 +154,7 @@ func (r *authSessionRepository) DeleteAllUserSessions(ctx context.Context, userI
 	}
 	pipe := r.redis.TxPipeline()
 	for _, sessionID := range sessions {
-		pipe.Del(ctx, sessionKey(sessionID))
+		pipe.Del(ctx, r.sessionKey(sessionID))
 	}
 	pipe.Del(ctx, userSessions)
 	_, err = pipe.Exec(ctx)
@@ -168,22 +165,22 @@ func (r *authSessionRepository) DeleteAllUserSessions(ctx context.Context, userI
 }
 
 func (r *authSessionRepository) InvalidateUserTokenVersion(ctx context.Context, userID string) error {
-	if err := r.redis.Del(ctx, tokenVersionKey(userID)).Err(); err != nil {
+	if err := r.redis.Del(ctx, r.tokenVersionKey(userID)).Err(); err != nil {
 		return fmt.Errorf("delete token version cache: %w", err)
 	}
 	return nil
 }
 
-func tokenVersionKey(userID string) string {
-	return fmt.Sprintf(tokenVersionKeyFormat, userID)
+func (r *authSessionRepository) tokenVersionKey(userID string) string {
+	return r.keys.AuthUserTokenVersion(userID)
 }
 
-func sessionKey(sessionID string) string {
-	return fmt.Sprintf(sessionKeyFormat, sessionID)
+func (r *authSessionRepository) sessionKey(sessionID string) string {
+	return r.keys.AuthSession(sessionID)
 }
 
-func userSessionsKey(userID string) string {
-	return fmt.Sprintf(userSessionsKeyFormat, userID)
+func (r *authSessionRepository) userSessionsKey(userID string) string {
+	return r.keys.AuthUserSessions(userID)
 }
 
 func unixScore(t time.Time) string {
