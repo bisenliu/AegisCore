@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// defaultUserStatus 是 users.status 的持久化默认值，必须与 domain.UserStatusNormal 保持一致。
 const defaultUserStatus = 100
 
 func Fields() []ent.Field {
