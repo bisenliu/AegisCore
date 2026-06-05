@@ -2,7 +2,7 @@ package schema
 
 import (
 	"entgo.io/ent"
-	"github.com/aegiscore/user-services/ent/schema/user"
+	"github.com/aegiscore/user-services/ent/schema/userschema"
 )
 
 type User struct {
@@ -10,9 +10,9 @@ type User struct {
 }
 
 func (User) Fields() []ent.Field {
-	return user.Fields()
+	return userschema.Fields()
 }
 
 func (User) Indexes() []ent.Index {
-	return user.Indexes()
+	return userschema.Indexes()
 }
