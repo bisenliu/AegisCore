@@ -128,7 +128,7 @@ HTTP 服务运行时 SHALL 在 HTTP server 启动日志中输出关键运行时�
 #### Scenario: User API route is registered under versioned prefix
 - **Given** HTTP server 已启动
 - **When** 调用方请求 `GET /api/v1/users/:user_id`
-- **Then** 请求被路由到 `UserController.GetByID`
+- **Then** 请求被路由到 `UserController.GetByUserID`
 
 #### Scenario: Create user API route is registered under versioned prefix
 - **Given** HTTP server 已启动
@@ -363,7 +363,7 @@ HTTP 服务运行时 SHALL 在 `user-services/internal/bootstrap` 组合根中�
 - **When** 开发者检查用户资源路由 handler 绑定
 - **Then** `GET /api/v1/users` MUST 绑定 `UserController.ListUsers`
 - **Then** `POST /api/v1/users` MUST 绑定 `UserController.CreateUser`
-- **Then** `GET /api/v1/users/:user_id` MUST 继续绑定 `UserController.GetByID`
+- **Then** `GET /api/v1/users/:user_id` MUST 继续绑定 `UserController.GetByUserID`
 
 #### Scenario: Auth routes bind explicit session handlers
 - **Given** 用户服务 HTTP 路由已注册

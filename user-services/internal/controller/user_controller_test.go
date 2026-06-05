@@ -20,7 +20,7 @@ import (
 
 const controllerTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
 
-func TestUserControllerGetByID(t *testing.T) {
+func TestUserControllerGetByUserID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("valid ID", func(t *testing.T) {
@@ -28,7 +28,7 @@ func TestUserControllerGetByID(t *testing.T) {
 		updatedAt := int64(1780052400000)
 		service := &stubUserService{response: &dto.UserResponse{UserID: controllerTestUserID, Nickname: "Aegis", Username: "aegis", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}
 
-		status, envelope := executeGetByID(t, service, controllerTestUserID)
+		status, envelope := executeGetByUserID(t, service, controllerTestUserID)
 
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want %d", status, http.StatusOK)
@@ -55,12 +55,12 @@ func TestUserControllerGetByID(t *testing.T) {
 	})
 
 	t.Run("invalid UUID", func(t *testing.T) {
-		status, envelope := executeGetByID(t, &stubUserService{}, "abc")
+		status, envelope := executeGetByUserID(t, &stubUserService{}, "abc")
 		assertInvalidUserID(t, status, envelope, validation.ErrValidationFailed)
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		status, envelope := executeGetByID(t, &stubUserService{err: response.NotFoundError(errmsg.MsgUserNotFound)}, controllerTestUserID)
+		status, envelope := executeGetByUserID(t, &stubUserService{err: response.NotFoundError(errmsg.MsgUserNotFound)}, controllerTestUserID)
 		if status != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", status, http.StatusNotFound)
 		}
@@ -70,7 +70,7 @@ func TestUserControllerGetByID(t *testing.T) {
 	})
 
 	t.Run("service error", func(t *testing.T) {
-		status, envelope := executeGetByID(t, &stubUserService{err: errors.New("database down")}, controllerTestUserID)
+		status, envelope := executeGetByUserID(t, &stubUserService{err: errors.New("database down")}, controllerTestUserID)
 		if status != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 		}
@@ -284,7 +284,7 @@ func executeCreate(t *testing.T, service *stubUserService, body string) (int, re
 	return recorder.Code, envelope
 }
 
-func executeGetByID(t *testing.T, service *stubUserService, id string) (int, response.Envelope) {
+func executeGetByUserID(t *testing.T, service *stubUserService, id string) (int, response.Envelope) {
 	t.Helper()
 	validator, err := validation.NewDefault()
 	if err != nil {
@@ -296,7 +296,7 @@ func executeGetByID(t *testing.T, service *stubUserService, id string) (int, res
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/v1/users/"+id, nil)
 	ctx.Params = gin.Params{{Key: "user_id", Value: id}}
 
-	ctl.GetByID(ctx)
+	ctl.GetByUserID(ctx)
 
 	var envelope response.Envelope
 	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {

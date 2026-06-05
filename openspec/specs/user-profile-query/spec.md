@@ -6,7 +6,7 @@
 ## Requirements
 ### Requirement: Query user by external user ID
 
-系统必须通过 `GET /api/v1/users/:user_id` 接收外部用户 ID，并要求调用方提供有效的 Bearer token。认证通过后，系统使用共享请求校验能力校验 `user_id` 为 UUID 字符串，并返回对应未软删除用户资料。参数校验失败时，系统必须使用共享校验器提供的中文公开错误消息，不得由用户查询 controller 返回英文硬编码消息。认证失败时，系统必须在进入 controller 前返回统一未认证响应。repository MUST 将 Ent not found 转换为用户领域 `ErrUserNotFound`，service MUST 将该领域错误映射为现有 not found 应用错误。
+系统必须通过 `GET /api/v1/users/:user_id` 接收外部用户 ID，并要求调用方提供有效的 Bearer token。认证通过后，系统使用共享请求校验能力校验 `user_id` 为 UUID 字符串，并返回对应未软删除用户资料。参数校验失败时，系统必须使用共享校验器提供的中文公开错误消息，不得由用户查询 controller 返回英文硬编码消息。认证失败时，系统必须在进入 `UserController.GetByUserID` 前返回统一未认证响应。repository MUST 将 Ent not found 转换为用户领域 `ErrUserNotFound`，service MUST 将该领域错误映射为现有 not found 应用错误。
 
 #### Scenario: Query existing user
 - **Given** 数据库中存在 `user_id` 为 `018f0000-0000-7000-8000-000000000001` 的用户，且包含 `nickname`、`username`、`status`、`password_hash`、`created_at`、`updated_at`、`deleted_at` 字段
@@ -25,7 +25,7 @@
 - **Then** 系统返回 HTTP 401
 - **Then** 响应信封的 `success` 为 `false`
 - **Then** 响应信封的 `code` 为 `20000`
-- **Then** 请求不得进入 `UserController.GetByID`
+- **Then** 请求不得进入 `UserController.GetByUserID`
 
 #### Scenario: Reject invalid user ID
 - **Given** 调用方没有可用的 UUID 用户 ID

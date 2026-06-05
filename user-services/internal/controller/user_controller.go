@@ -82,7 +82,7 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 	response.Created(c, user)
 }
 
-// GetByID godoc
+// GetByUserID godoc
 // @Summary 查询用户资料
 // @Description 通过外部 UUID 用户 ID 查询用户基础资料。
 // @Tags 用户
@@ -95,7 +95,7 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /users/{user_id} [get]
-func (ctl *UserController) GetByID(c *gin.Context) {
+func (ctl *UserController) GetByUserID(c *gin.Context) {
 	req := dto.GetUserRequest{}
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.URIBinder) {
 		return

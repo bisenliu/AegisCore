@@ -8,5 +8,5 @@ import (
 func registerUserRoutes(group *gin.RouterGroup, userController *controller.UserController) {
 	group.GET("", userController.ListUsers)
 	group.POST("", userController.CreateUser)
-	group.GET("/:user_id", userController.GetByID)
+	group.GET("/:user_id", userController.GetByUserID)
 }
