@@ -3,6 +3,8 @@ package bootstrap
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
@@ -35,12 +37,7 @@ func ProvideEntClients(params NamedEntClientParams) NamedEntClients {
 	params.Lifecycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			logger.WithContext(params.Log, ctx).Info("closing ent clients")
-			userErr := userClient.Close()
-			commonErr := commonClient.Close()
-			if userErr != nil {
-				return userErr
-			}
-			return commonErr
+			return closeEntClients(userClient.Close, commonClient.Close)
 		},
 	})
 
@@ -50,4 +47,21 @@ func ProvideEntClients(params NamedEntClientParams) NamedEntClients {
 func newEntClient(db *sql.DB) *ent.Client {
 	driver := entsql.OpenDB(dialect.Postgres, db)
 	return ent.NewClient(ent.Driver(driver))
+}
+
+func closeEntClients(closeUser, closeCommon func() error) error {
+	userErr := closeUser()
+	commonErr := closeCommon()
+
+	return errors.Join(
+		wrapEntCloseError("user_db", userErr),
+		wrapEntCloseError("common_db", commonErr),
+	)
+}
+
+func wrapEntCloseError(name string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("close %s ent client: %w", name, err)
 }
