@@ -1,6 +1,8 @@
 package bootstrap
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/aegiscore/common/runtime/config"
@@ -12,10 +14,10 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestUserServiceModuleResolvesSharedValidationDependency(t *testing.T) {
+func TestAppModuleResolvesSharedValidationDependency(t *testing.T) {
 	err := fx.ValidateApp(
 		fx.Supply(&config.Config{}, zap.NewNop()),
-		UserServiceModule,
+		AppModule,
 		fx.Invoke(func(*validation.Validator, *controller.UserController) {}),
 	)
 	if err != nil {
@@ -23,10 +25,10 @@ func TestUserServiceModuleResolvesSharedValidationDependency(t *testing.T) {
 	}
 }
 
-func TestUserServiceModuleIncludesSharedTimezoneDependency(t *testing.T) {
+func TestAppModuleIncludesSharedTimezoneDependency(t *testing.T) {
 	err := fx.ValidateApp(
 		fx.Supply(&config.Config{}, zap.NewNop()),
-		UserServiceModule,
+		AppModule,
 		fx.Invoke(func(*validation.Validator, *controller.UserController) {}),
 	)
 	if err != nil {
@@ -41,10 +43,30 @@ func TestAppWiresCommonDependenciesExplicitly(t *testing.T) {
 			configfx.NewConfig,
 			loggerfx.NewLogger,
 		),
-		UserServiceModule,
+		AppModule,
 		fx.Invoke(func(*config.Config, *zap.Logger, *controller.UserController) {}),
 	)
 	if err != nil {
 		t.Fatalf("ValidateApp with explicit common providers error = %v", err)
+	}
+}
+
+func TestRuntimeModuleNamingReflectsCompositionRootScope(t *testing.T) {
+	content, err := os.ReadFile("app.go")
+	if err != nil {
+		t.Fatalf("ReadFile app.go error = %v", err)
+	}
+
+	source := string(content)
+	legacyName := "User" + "ServiceModule"
+	if strings.Contains(source, legacyName) {
+		t.Fatalf("app.go contains legacy service-layer-like module name %q", legacyName)
+	}
+	supersededName := "User" + "ServiceRuntimeModule"
+	if strings.Contains(source, supersededName) {
+		t.Fatalf("app.go contains superseded runtime module name %q", supersededName)
+	}
+	if !strings.Contains(source, "AppModule") {
+		t.Fatal("app.go does not contain composition-root module name AppModule")
 	}
 }

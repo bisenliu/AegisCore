@@ -21,11 +21,11 @@ func NewApp(configPath string) *fx.App {
 			configfx.NewConfig,
 			loggerfx.NewLogger,
 		),
-		UserServiceModule,
+		AppModule,
 	)
 }
 
-var UserServiceModule = fx.Module("aegiscore-user-services",
+var AppModule = fx.Module("aegiscore-user-services",
 	commontz.Module,
 	validation.Module,
 	fx.Provide(
