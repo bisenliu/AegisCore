@@ -2,14 +2,11 @@ package service
 
 import (
 	"context"
-	"errors"
 
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/security/password"
-	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/aegiscore/user-services/internal/repository"
@@ -36,22 +33,18 @@ type AuthServiceParams struct {
 }
 
 type authService struct {
-	repo        repository.UserRepository
-	jwt         *auth.JWTService
-	config      *config.Config
-	credentials CredentialVerifier
-	tokens      AuthTokenIssuer
-	sessions    AuthSessionManager
+	credentials          CredentialVerifier
+	tokens               AuthTokenIssuer
+	sessions             AuthSessionManager
+	refreshTokenRotation bool
 }
 
 func NewAuthService(params AuthServiceParams) AuthService {
 	return &authService{
-		repo:        params.Repo,
-		jwt:         params.JWT,
-		config:      params.Config,
-		credentials: newCredentialVerifier(params.Repo),
-		tokens:      newAuthTokenIssuer(params.JWT, params.Config),
-		sessions:    newAuthSessionManager(params.Sessions),
+		credentials:          newCredentialVerifier(params.Repo),
+		tokens:               newAuthTokenIssuer(params.JWT, params.Config),
+		sessions:             newAuthSessionManager(params.Repo, params.Sessions),
+		refreshTokenRotation: params.Config.Auth.RefreshTokenRotation,
 	}
 }
 
@@ -76,35 +69,11 @@ func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePassword
 	if err != nil {
 		return nil, err
 	}
-	user, err := s.repo.GetByUserID(ctx, parsedUserID)
-	if err != nil {
-		if errors.Is(err, domain.ErrUserNotFound) {
-			logger.Warn(ctx, "change password user not found", zap.String("user_id", parsedUserID.String()))
-			return nil, response.NotFoundError(messages.UserNotFound)
-		}
-		logger.Error(ctx, "query change password user failed", logger.StackTrace(zap.String("user_id", parsedUserID.String()), zap.Error(err))...)
-		return nil, response.FromError(err)
+	if _, err := s.credentials.ChangePassword(ctx, parsedUserID, req.NewPassword); err != nil {
+		return nil, err
 	}
-	if !user.CanChangePassword() {
-		logger.Warn(ctx, "change password status rejected", zap.String("user_id", parsedUserID.String()), zap.Int64("status", int64(user.Status)))
-		return nil, response.TokenInvalidError(messages.MissingSession)
-	}
-	passwordHash, err := password.Hash(req.NewPassword)
-	if err != nil {
-		logger.Error(ctx, "hash changed password failed", logger.StackTrace(zap.String("user_id", parsedUserID.String()), zap.Error(err))...)
-		return nil, response.FromError(err)
-	}
-	if _, err := s.repo.UpdateCredentials(ctx, repository.UpdateCredentialsInput{UserID: parsedUserID, PasswordHash: passwordHash, Status: domain.UserStatusNormal}); err != nil {
-		if errors.Is(err, domain.ErrUserNotFound) {
-			logger.Warn(ctx, "update credentials user not found", zap.String("user_id", parsedUserID.String()))
-			return nil, response.NotFoundError(messages.UserNotFound)
-		}
-		logger.Error(ctx, "update credentials failed", logger.StackTrace(zap.String("user_id", parsedUserID.String()), zap.Error(err))...)
-		return nil, response.FromError(err)
-	}
-	if err := s.sessions.InvalidateUserTokenVersion(ctx, parsedUserID.String()); err != nil {
-		logger.Error(ctx, "invalidate token version after password change failed", logger.StackTrace(zap.String("user_id", parsedUserID.String()), zap.Error(err))...)
-		return nil, response.FromError(err)
+	if _, err := s.sessions.RevokeAllUserSessions(ctx, parsedUserID); err != nil {
+		return nil, err
 	}
 	return &dto.ChangePasswordResponse{Changed: true}, nil
 }
@@ -131,7 +100,7 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) 
 	}
 
 	sessionID := session.SessionID
-	if s.config.Auth.RefreshTokenRotation {
+	if s.refreshTokenRotation {
 		if err := s.sessions.DeleteSession(ctx, claims.UserID, session.SessionID); err != nil {
 			return nil, err
 		}
@@ -163,18 +132,7 @@ func (s *authService) LogoutAll(ctx context.Context) (*dto.LogoutResponse, error
 		logger.Warn(ctx, "logout all user id invalid", zap.String("user_id", userID))
 		return nil, response.UnauthenticatedError(messages.MissingSession)
 	}
-	if _, err := s.repo.IncrementTokenVersion(ctx, parsedUserID); err != nil {
-		if errors.Is(err, domain.ErrUserNotFound) {
-			logger.Warn(ctx, "logout all user not found", zap.String("user_id", userID))
-			return nil, response.NotFoundError(messages.UserNotFound)
-		}
-		logger.Error(ctx, "increment token version failed", logger.StackTrace(zap.String("user_id", userID), zap.Error(err))...)
-		return nil, response.FromError(err)
-	}
-	if err := s.sessions.InvalidateUserTokenVersion(ctx, userID); err != nil {
-		return nil, err
-	}
-	if err := s.sessions.DeleteAllUserSessions(ctx, userID); err != nil {
+	if _, err = s.sessions.RevokeAllUserSessions(ctx, parsedUserID); err != nil {
 		return nil, err
 	}
 	return &dto.LogoutResponse{LoggedOut: true}, nil

@@ -11,6 +11,7 @@ import (
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/aegiscore/user-services/internal/repository"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -19,16 +20,21 @@ type AuthSessionManager interface {
 	ValidatePasswordChangeClaims(ctx context.Context, claims *auth.Claims) error
 	ValidateRefreshSession(ctx context.Context, claims *auth.Claims) (repository.AuthSession, int64, error)
 	DeleteSession(ctx context.Context, userID string, sessionID string) error
-	DeleteAllUserSessions(ctx context.Context, userID string) error
-	InvalidateUserTokenVersion(ctx context.Context, userID string) error
+	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*SessionRevocationResult, error)
+}
+
+type SessionRevocationResult struct {
+	UserID       uuid.UUID
+	TokenVersion int64
 }
 
 type authSessionManager struct {
+	users    repository.UserRepository
 	sessions repository.AuthSessionRepository
 }
 
-func newAuthSessionManager(sessions repository.AuthSessionRepository) AuthSessionManager {
-	return &authSessionManager{sessions: sessions}
+func newAuthSessionManager(users repository.UserRepository, sessions repository.AuthSessionRepository) AuthSessionManager {
+	return &authSessionManager{users: users, sessions: sessions}
 }
 
 func (m *authSessionManager) CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error {
@@ -94,18 +100,23 @@ func (m *authSessionManager) DeleteSession(ctx context.Context, userID string, s
 	return nil
 }
 
-func (m *authSessionManager) DeleteAllUserSessions(ctx context.Context, userID string) error {
-	if err := m.sessions.DeleteAllUserSessions(ctx, userID); err != nil {
-		logger.Error(ctx, "delete all user sessions failed", logger.StackTrace(zap.String("user_id", userID), zap.Error(err))...)
-		return response.FromError(err)
+func (m *authSessionManager) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*SessionRevocationResult, error) {
+	tokenVersion, err := m.users.IncrementTokenVersion(ctx, userID)
+	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			logger.Warn(ctx, "revoke all user sessions user not found", zap.String("user_id", userID.String()))
+			return nil, response.NotFoundError(messages.UserNotFound)
+		}
+		logger.Error(ctx, "increment token version failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
+		return nil, response.FromError(err)
 	}
-	return nil
-}
-
-func (m *authSessionManager) InvalidateUserTokenVersion(ctx context.Context, userID string) error {
-	if err := m.sessions.InvalidateUserTokenVersion(ctx, userID); err != nil {
-		logger.Error(ctx, "invalidate token version failed", logger.StackTrace(zap.String("user_id", userID), zap.Error(err))...)
-		return response.FromError(err)
+	if err := m.sessions.InvalidateUserTokenVersion(ctx, userID.String()); err != nil {
+		logger.Error(ctx, "invalidate token version failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
+		return nil, response.FromError(err)
 	}
-	return nil
+	if err := m.sessions.DeleteAllUserSessions(ctx, userID.String()); err != nil {
+		logger.Error(ctx, "delete all user sessions failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
+		return nil, response.FromError(err)
+	}
+	return &SessionRevocationResult{UserID: userID, TokenVersion: tokenVersion}, nil
 }

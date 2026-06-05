@@ -138,7 +138,7 @@ func TestAuthServiceLoginIssuesPasswordChangeToken(t *testing.T) {
 	if tokens.AccessToken == "" || tokens.RefreshToken != "" || !tokens.PasswordChangeRequired {
 		t.Fatalf("tokens = %#v", tokens)
 	}
-	claims, err := svc.(*authService).jwt.ParsePasswordChangeToken(tokens.AccessToken)
+	claims, err := testJWTService().ParsePasswordChangeToken(tokens.AccessToken)
 	if err != nil {
 		t.Fatalf("ParsePasswordChangeToken: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestAuthServiceChangePassword(t *testing.T) {
 	repo := &authRepoStub{userByID: &domain.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: domain.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
-	token, err := svc.(*authService).jwt.SignPasswordChangeToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
+	token, err := testJWTService().SignPasswordChangeToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestAuthServiceChangePassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChangePassword: %v", err)
 	}
-	if !result.Changed || repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != domain.UserStatusNormal || !store.invalidated {
+	if !result.Changed || repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != domain.UserStatusNormal || repo.incrementedUserID != authTestUserID || !store.invalidated || !store.deletedAll {
 		t.Fatalf("result=%#v repo=%#v store=%#v", result, repo, store)
 	}
 	matched, err := password.Verify("new-secret", repo.updatedInput.PasswordHash)
@@ -181,7 +181,7 @@ func TestAuthServiceChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
 	repo := &authRepoStub{userByID: &domain.User{ID: 123, UserID: authTestUserID, Status: domain.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: domain.ErrUserNotFound}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
-	token, err := svc.(*authService).jwt.SignPasswordChangeToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
+	token, err := testJWTService().SignPasswordChangeToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestAuthServiceChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
 
 func TestAuthServiceChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
 	svc := newTestAuthService(&authRepoStub{}, &sessionStoreStub{getVersionErr: domain.ErrUserNotFound}, true)
-	token, err := svc.(*authService).jwt.SignPasswordChangeToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
+	token, err := testJWTService().SignPasswordChangeToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestAuthServiceChangePasswordRejectsAccessToken(t *testing.T) {
 	repo := &authRepoStub{userByID: &domain.User{ID: 123, UserID: authTestUserID, Status: domain.UserStatusMustChangePassword, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
-	token, err := svc.(*authService).jwt.SignAccessToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
+	token, err := testJWTService().SignAccessToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestAuthServiceChangePasswordRejectsAccessToken(t *testing.T) {
 func TestAuthServiceRefreshRotatesSession(t *testing.T) {
 	store := &sessionStoreStub{version: 2, session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, true)
-	refresh, err := svc.(*authService).jwt.SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
+	refresh, err := testJWTService().SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestAuthServiceRefreshRotatesSession(t *testing.T) {
 func TestAuthServiceRefreshUsesNormalizedToken(t *testing.T) {
 	store := &sessionStoreStub{version: 2, session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, false)
-	refresh, err := svc.(*authService).jwt.SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
+	refresh, err := testJWTService().SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
@@ -271,7 +271,7 @@ func TestAuthServiceRefreshUsesNormalizedToken(t *testing.T) {
 func TestAuthServiceRefreshRejectsAccessTokenSubject(t *testing.T) {
 	store := &sessionStoreStub{version: 2, session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, false)
-	access, err := svc.(*authService).jwt.SignAccessToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
+	access, err := testJWTService().SignAccessToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
@@ -287,7 +287,7 @@ func TestAuthServiceRefreshRejectsAccessTokenSubject(t *testing.T) {
 func TestAuthServiceRefreshRejectsVersionChange(t *testing.T) {
 	store := &sessionStoreStub{version: 3, session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, true)
-	refresh, err := svc.(*authService).jwt.SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
+	refresh, err := testJWTService().SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestAuthServiceRefreshRejectsVersionChange(t *testing.T) {
 func TestAuthServiceRefreshMapsTokenVersionUserNotFound(t *testing.T) {
 	store := &sessionStoreStub{session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}, getVersionErr: domain.ErrUserNotFound}
 	svc := newTestAuthService(&authRepoStub{}, store, true)
-	refresh, err := svc.(*authService).jwt.SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
+	refresh, err := testJWTService().SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
@@ -357,6 +357,10 @@ func newTestAuthService(repo repository.UserRepository, store repository.AuthSes
 func newTestAuthServiceWithConfig(repo repository.UserRepository, store repository.AuthSessionRepository, authCfg config.AuthConfig) AuthService {
 	cfg := &config.Config{Auth: authCfg}
 	return NewAuthService(AuthServiceParams{Repo: repo, Sessions: store, JWT: auth.NewJWTService(cfg.Auth), Config: cfg})
+}
+
+func testJWTService() *auth.JWTService {
+	return auth.NewJWTService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}})
 }
 
 type authRepoStub struct {
@@ -415,6 +419,8 @@ type sessionStoreStub struct {
 	deletedAll       bool
 	invalidated      bool
 	getVersionErr    error
+	invalidateErr    error
+	deleteAllErr     error
 }
 
 func (s *sessionStoreStub) GetCurrentTokenVersion(context.Context, string) (int64, error) {
@@ -444,10 +450,16 @@ func (s *sessionStoreStub) DeleteSession(_ context.Context, _ string, sessionID 
 	return nil
 }
 func (s *sessionStoreStub) DeleteAllUserSessions(context.Context, string) error {
+	if s.deleteAllErr != nil {
+		return s.deleteAllErr
+	}
 	s.deletedAll = true
 	return nil
 }
 func (s *sessionStoreStub) InvalidateUserTokenVersion(context.Context, string) error {
+	if s.invalidateErr != nil {
+		return s.invalidateErr
+	}
 	s.invalidated = true
 	return nil
 }

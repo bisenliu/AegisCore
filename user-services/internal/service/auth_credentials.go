@@ -10,11 +10,18 @@ import (
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/aegiscore/user-services/internal/repository"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
 type CredentialVerifier interface {
 	VerifyPassword(ctx context.Context, username string, plainPassword string) (*domain.User, error)
+	ChangePassword(ctx context.Context, userID uuid.UUID, newPassword string) (*CredentialUpdateResult, error)
+}
+
+type CredentialUpdateResult struct {
+	UserID       uuid.UUID
+	TokenVersion int64
 }
 
 type credentialVerifier struct {
@@ -50,4 +57,35 @@ func (v *credentialVerifier) VerifyPassword(ctx context.Context, username string
 	}
 
 	return user, nil
+}
+
+func (v *credentialVerifier) ChangePassword(ctx context.Context, userID uuid.UUID, newPassword string) (*CredentialUpdateResult, error) {
+	user, err := v.repo.GetByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			logger.Warn(ctx, "change password user not found", zap.String("user_id", userID.String()))
+			return nil, response.NotFoundError(messages.UserNotFound)
+		}
+		logger.Error(ctx, "query change password user failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
+		return nil, response.FromError(err)
+	}
+	if !user.CanChangePassword() {
+		logger.Warn(ctx, "change password status rejected", zap.String("user_id", userID.String()), zap.Int64("status", int64(user.Status)))
+		return nil, response.TokenInvalidError(messages.MissingSession)
+	}
+	passwordHash, err := password.Hash(newPassword)
+	if err != nil {
+		logger.Error(ctx, "hash changed password failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
+		return nil, response.FromError(err)
+	}
+	tokenVersion, err := v.repo.UpdateCredentials(ctx, repository.UpdateCredentialsInput{UserID: userID, PasswordHash: passwordHash, Status: domain.UserStatusNormal})
+	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			logger.Warn(ctx, "update credentials user not found", zap.String("user_id", userID.String()))
+			return nil, response.NotFoundError(messages.UserNotFound)
+		}
+		logger.Error(ctx, "update credentials failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
+		return nil, response.FromError(err)
+	}
+	return &CredentialUpdateResult{UserID: userID, TokenVersion: tokenVersion}, nil
 }
