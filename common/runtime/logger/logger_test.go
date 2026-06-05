@@ -190,6 +190,29 @@ func TestDailyWriterRotatesWhenDateChanges(t *testing.T) {
 	assertFileNotContains(t, datedPath(dir, "aegiscore-test", "2026-05-29", "all"), "second day")
 }
 
+func TestDailyWriterSyncDoesNotPreventFurtherWrites(t *testing.T) {
+	dir := t.TempDir()
+	writer := newDailyLumberjackWriteSyncer(filepath.Join(dir, "aegiscore-test.all.log"), config.LogConfig{MaxAgeDays: 1, MaxSizeMB: 1, MaxBackups: 1})
+	daily, ok := writer.(*dailyLumberjackWriteSyncer)
+	if !ok {
+		t.Fatalf("writer type = %T, want *dailyLumberjackWriteSyncer", writer)
+	}
+	now := time.Date(2026, 5, 29, 8, 0, 0, 0, time.Local)
+	daily.newClock = func() time.Time { return now }
+
+	if _, err := daily.Write([]byte("before sync\n")); err != nil {
+		t.Fatalf("Write before sync: %v", err)
+	}
+	if err := daily.Sync(); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if _, err := daily.Write([]byte("after sync\n")); err != nil {
+		t.Fatalf("Write after sync: %v", err)
+	}
+
+	assertFileContains(t, datedPath(dir, "aegiscore-test", "2026-05-29", "all"), "before sync", "after sync")
+}
+
 func TestDailyWriterAppliesLumberjackConfig(t *testing.T) {
 	dir := t.TempDir()
 	writer := newDailyLumberjackWriteSyncer(filepath.Join(dir, "aegiscore-test.all.log"), config.LogConfig{MaxAgeDays: 5, MaxSizeMB: 6, MaxBackups: 7})

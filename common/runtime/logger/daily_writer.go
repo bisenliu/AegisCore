@@ -52,7 +52,7 @@ func (w *dailyLumberjackWriteSyncer) Sync() error {
 	if w.logger == nil {
 		return nil
 	}
-	return w.logger.Close()
+	return nil
 }
 
 func (w *dailyLumberjackWriteSyncer) rotateLocked() error {
