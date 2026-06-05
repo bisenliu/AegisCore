@@ -201,7 +201,7 @@
 - **Then** 旧 Access Token MUST 因版本不一致而失效
 
 ### Requirement: Store authentication session data in Redis as cache and session layer
-系统 SHALL 使用 Redis 保存用户 `token_version` 缓存、Refresh Token 会话记录和用户活跃会话索引。Redis 中的 `token_version` 只能作为缓存，缓存未命中或被删除时系统 MUST 使用外部 `user_id` 回源 PostgreSQL 获取真实值。认证会话 Redis key MUST 使用 `config.App.Name` 作为前缀来源；系统 MUST NOT 校验 `app.name`，MUST NOT 为 `app.name` 设置代码级默认值。当 `config.App.Name` 去除首尾空白后非空时，token version 缓存 key MUST 为 `<app.name>:auth:user:<user_id>:token_version`，Refresh Token 会话记录 key MUST 为 `<app.name>:auth:session:<session_id>`，用户活跃会话索引 key MUST 为 `<app.name>:auth:user:<user_id>:sessions`。当 `config.App.Name` 去除首尾空白后为空时，Redis key MUST 保持无前缀业务格式：`auth:user:<user_id>:token_version`、`auth:session:<session_id>` 和 `auth:user:<user_id>:sessions`。用户活跃会话索引 MUST 使用 Redis ZSet，member MUST 使用 `session_id`，score MUST 使用该会话过期时间的 Unix 时间戳。系统 MUST 在写入、读取或删除该用户活跃会话索引时，按当前 Unix 时间戳执行过期 member 清理。
+系统 SHALL 使用 Redis 保存用户 `token_version` 缓存、Refresh Token 会话记录和用户活跃会话索引。Redis 中的 `token_version` 只能作为缓存，缓存未命中或被删除时系统 MUST 使用外部 `user_id` 回源 PostgreSQL 获取真实值。认证会话 Redis key MUST 使用 `config.App.Name` 作为前缀来源；系统 MUST NOT 校验 `app.name`，MUST NOT 为 `app.name` 设置代码级默认值。当 `config.App.Name` 去除首尾空白后非空时，token version 缓存 key MUST 为 `<app.name>:auth:user:<user_id>:token_version`，Refresh Token 会话记录 key MUST 为 `<app.name>:auth:session:<session_id>`，用户活跃会话索引 key MUST 为 `<app.name>:auth:user:<user_id>:sessions`。当 `config.App.Name` 去除首尾空白后为空时，Redis key MUST 保持无前缀业务格式：`auth:user:<user_id>:token_version`、`auth:session:<session_id>` 和 `auth:user:<user_id>:sessions`。用户活跃会话索引 MUST 使用 Redis ZSet，member MUST 使用 `session_id`，score MUST 使用该会话过期时间的 Unix 时间戳。系统 MUST 以 Redis session key 的实际 TTL 推导会话过期时间，并使会话 payload 中的 `ExpiresAt`、session key TTL 和用户活跃会话索引 score 保持一致。系统 MUST 在写入、读取或删除该用户活跃会话索引时，按当前 Unix 时间戳执行过期 member 清理。系统 MUST 为用户活跃会话索引设计过期或清理策略，避免没有活跃会话的 ZSet key 和已过期 `session_id` 长期残留。
 
 #### Scenario: Token version cache miss reads PostgreSQL
 - **Given** Redis 中不存在某用户的 token version 缓存
@@ -224,6 +224,23 @@
 - **Then** 系统 MUST 将 `session_id` 写入 `aegiscore-user-services:auth:user:<user_id>:sessions` ZSet
 - **Then** 该 ZSet member 的 score MUST 等于该会话过期时间的 Unix 时间戳
 - **Then** 系统 MUST 在写入索引时清理该 ZSet 中所有 score 小于或等于当前 Unix 时间戳的过期 member
+
+#### Scenario: Session creation uses one expiration source
+- **Given** 登录或 Refresh Token 轮转需要创建新的 Redis 会话记录
+- **Given** 调用方传入的会话 payload 包含空白或非空白 `ExpiresAt`
+- **When** 系统根据有效 Refresh Token TTL 保存会话记录和用户活跃会话索引
+- **Then** 系统 MUST 以该 TTL 和当前时间推导唯一会话过期时间
+- **Then** Redis session key 的 TTL MUST 与该推导过期时间一致
+- **Then** 序列化会话 payload 中的 `ExpiresAt` MUST 与该推导过期时间一致
+- **Then** 用户活跃会话 ZSet member 的 score MUST 与该推导过期时间一致
+- **Then** 系统 MUST NOT 让调用方传入的旧 `ExpiresAt` 导致 ZSet score 与 session key 实际过期时间不一致
+
+#### Scenario: User session index receives expiration or bounded cleanup
+- **Given** 系统创建或轮转 Refresh Token 会话
+- **When** 系统写入用户活跃会话 ZSet 索引
+- **Then** 系统 MUST 为该 ZSet key 设置可使无活跃会话索引最终消失的过期策略，或提供等价的有界清理策略
+- **Then** 该策略 MUST NOT 在仍存在未过期会话时提前删除用户活跃会话索引
+- **Then** 过期 `session_id` MUST NOT 只能依赖未来批量退出操作才被清理
 
 #### Scenario: Empty app name keeps unprefixed Redis keys
 - **Given** `config.App.Name` 去除首尾空白后为空
@@ -250,6 +267,13 @@
 - **Then** 系统 MUST 从该 ZSet 读取仍未过期的 `session_id`
 - **Then** 系统 MUST 删除读取到的 Redis 会话记录
 - **Then** 系统 MUST 删除或清空该用户活跃会话索引
+
+#### Scenario: Stale index data does not inflate future session operations
+- **Given** 用户活跃会话 ZSet 中存在已过期 `session_id` member
+- **When** 系统创建新会话、删除当前会话或删除该用户全部会话
+- **Then** 系统 MUST 在读取或写入业务相关 member 前清理按 score 已过期的 member
+- **Then** 系统 MUST 避免长期遍历已过期残留作为活跃会话
+- **Then** 后续会话统计、管理或审计能力 MUST 能基于清理后的索引语义区分活跃会话和过期残留
 
 ### Requirement: Centralize default authentication TTL values
 

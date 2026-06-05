@@ -103,15 +103,18 @@ func TestAuthSessionRepositoryCreateGetAndDeleteSession(t *testing.T) {
 	store := newTestAuthSessionRepository(redisServer, &tokenVersionRepoStub{version: 1})
 	ctx := context.Background()
 	indexKey := store.userSessionsKey(sessionTestUserID.String())
-	expiresAt := time.Now().Add(time.Hour).Truncate(time.Second)
-	session := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-123", TokenVersion: 1, ExpiresAt: expiresAt}
+	ttl := time.Hour
+	mismatchedExpiresAt := time.Now().Add(24 * time.Hour).Truncate(time.Second)
+	session := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-123", TokenVersion: 1, ExpiresAt: mismatchedExpiresAt}
 	if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err(); err != nil {
 		t.Fatalf("ZAdd expired session: %v", err)
 	}
 
-	if err := store.CreateSession(ctx, session, time.Hour); err != nil {
+	beforeCreate := time.Now()
+	if err := store.CreateSession(ctx, session, ttl); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
+	afterCreate := time.Now()
 	stored, err := store.GetSession(ctx, "s-123")
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
@@ -119,12 +122,32 @@ func TestAuthSessionRepositoryCreateGetAndDeleteSession(t *testing.T) {
 	if stored.UserID != sessionTestUserID.String() || stored.SessionID != "s-123" || stored.TokenVersion != 1 {
 		t.Fatalf("stored = %#v", stored)
 	}
+	if stored.ExpiresAt.Before(beforeCreate.Add(ttl)) || stored.ExpiresAt.After(afterCreate.Add(ttl)) {
+		t.Fatalf("stored ExpiresAt = %s, want derived from ttl %s", stored.ExpiresAt, ttl)
+	}
+	if stored.ExpiresAt.Unix() == mismatchedExpiresAt.Unix() {
+		t.Fatalf("stored ExpiresAt used caller-provided mismatched value %s", mismatchedExpiresAt)
+	}
 	score, err := store.redis.ZScore(ctx, indexKey, "s-123").Result()
 	if err != nil {
 		t.Fatalf("ZScore: %v", err)
 	}
-	if int64(score) != expiresAt.Unix() {
-		t.Fatalf("ZScore = %d, want %d", int64(score), expiresAt.Unix())
+	if int64(score) != stored.ExpiresAt.Unix() {
+		t.Fatalf("ZScore = %d, want %d", int64(score), stored.ExpiresAt.Unix())
+	}
+	sessionTTL, err := store.redis.TTL(ctx, store.sessionKey("s-123")).Result()
+	if err != nil {
+		t.Fatalf("session TTL: %v", err)
+	}
+	if sessionTTL <= 0 || sessionTTL > ttl {
+		t.Fatalf("session TTL = %s, want within %s", sessionTTL, ttl)
+	}
+	indexTTL, err := store.redis.TTL(ctx, indexKey).Result()
+	if err != nil {
+		t.Fatalf("index TTL: %v", err)
+	}
+	if indexTTL <= ttl || indexTTL > ttl+authSessionIndexTTLBuffer {
+		t.Fatalf("index TTL = %s, want between session ttl and %s", indexTTL, ttl+authSessionIndexTTLBuffer)
 	}
 	if _, err := store.redis.ZScore(ctx, indexKey, "expired-session").Result(); !errors.Is(err, rediscache.Nil) {
 		t.Fatalf("expired session ZScore err = %v, want redis.Nil", err)
@@ -171,6 +194,9 @@ func TestAuthSessionRepositoryDeleteAllUserSessions(t *testing.T) {
 	if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err(); err != nil {
 		t.Fatalf("ZAdd expired session: %v", err)
 	}
+	if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(time.Hour).Unix()), Member: "missing-session"}).Err(); err != nil {
+		t.Fatalf("ZAdd missing session: %v", err)
+	}
 	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
 		t.Fatalf("DeleteAllUserSessions: %v", err)
 	}
@@ -179,6 +205,40 @@ func TestAuthSessionRepositoryDeleteAllUserSessions(t *testing.T) {
 	}
 	if !redisServer.Exists(store.sessionKey("expired-session")) {
 		t.Fatal("expired session key was deleted despite expired index member cleanup")
+	}
+}
+
+func TestAuthSessionRepositoryUserSessionsIndexTTLIsNotShortened(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestAuthSessionRepository(redisServer, &tokenVersionRepoStub{version: 1})
+	ctx := context.Background()
+	indexKey := store.userSessionsKey(sessionTestUserID.String())
+	longTTL := 2 * time.Hour
+	shortTTL := time.Hour
+
+	if err := store.CreateSession(ctx, repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "long", TokenVersion: 1}, longTTL); err != nil {
+		t.Fatalf("CreateSession(long): %v", err)
+	}
+	longIndexTTL, err := store.redis.TTL(ctx, indexKey).Result()
+	if err != nil {
+		t.Fatalf("long index TTL: %v", err)
+	}
+	if longIndexTTL <= longTTL || longIndexTTL > longTTL+authSessionIndexTTLBuffer {
+		t.Fatalf("long index TTL = %s, want between session ttl and %s", longIndexTTL, longTTL+authSessionIndexTTLBuffer)
+	}
+
+	if err := store.CreateSession(ctx, repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "short", TokenVersion: 1}, shortTTL); err != nil {
+		t.Fatalf("CreateSession(short): %v", err)
+	}
+	afterShortIndexTTL, err := store.redis.TTL(ctx, indexKey).Result()
+	if err != nil {
+		t.Fatalf("after short index TTL: %v", err)
+	}
+	if afterShortIndexTTL <= shortTTL+authSessionIndexTTLBuffer {
+		t.Fatalf("index TTL was shortened to %s after short session", afterShortIndexTTL)
+	}
+	if afterShortIndexTTL > longTTL+authSessionIndexTTLBuffer {
+		t.Fatalf("index TTL = %s, want at most %s", afterShortIndexTTL, longTTL+authSessionIndexTTLBuffer)
 	}
 }
 

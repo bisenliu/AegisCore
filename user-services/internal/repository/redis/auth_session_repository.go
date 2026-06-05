@@ -21,6 +21,8 @@ const (
 	defaultTokenVersionCacheTTL = 5 * time.Minute
 	// defaultAuthSessionTTL 是调用方未提供有效时长时的会话兜底过期时间。
 	defaultAuthSessionTTL = time.Hour
+	// authSessionIndexTTLBuffer 让用户会话索引在最后一个会话过期后仍保留短暂窗口用于懒清理。
+	authSessionIndexTTLBuffer = 5 * time.Minute
 
 	// expiredSessionMinScore 让 ZRemRangeByScore 清理所有 score 小于等于当前时间的会话。
 	expiredSessionMinScore = "-inf"
@@ -96,18 +98,25 @@ func (r *authSessionRepository) CreateSession(ctx context.Context, session repos
 		ttl = defaultAuthSessionTTL
 	}
 	now := time.Now()
-	if session.ExpiresAt.IsZero() {
-		session.ExpiresAt = now.Add(ttl)
-	}
+	expiresAt := now.Add(ttl)
+	session.ExpiresAt = expiresAt
 	data, err := json.Marshal(session)
 	if err != nil {
 		return fmt.Errorf("marshal auth session: %w", err)
 	}
 	userSessions := r.userSessionsKey(session.UserID)
+	indexTTL := ttl + authSessionIndexTTLBuffer
+	indexCurrentTTL, err := r.redis.TTL(ctx, userSessions).Result()
+	if err != nil {
+		return fmt.Errorf("get user auth sessions ttl: %w", err)
+	}
 	pipe := r.redis.TxPipeline()
 	pipe.Set(ctx, r.sessionKey(session.SessionID), data, ttl)
 	pipe.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(now))
-	pipe.ZAdd(ctx, userSessions, rediscache.Z{Score: float64(session.ExpiresAt.Unix()), Member: session.SessionID})
+	pipe.ZAdd(ctx, userSessions, rediscache.Z{Score: float64(expiresAt.Unix()), Member: session.SessionID})
+	if indexCurrentTTL < indexTTL {
+		pipe.Expire(ctx, userSessions, indexTTL)
+	}
 	_, err = pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("create auth session: %w", err)
