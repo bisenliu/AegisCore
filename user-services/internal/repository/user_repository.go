@@ -7,14 +7,27 @@ import (
 	"github.com/google/uuid"
 )
 
-type UserRepository interface {
+type UserProfileRepository interface {
 	Create(ctx context.Context, input CreateUserInput) (*domain.User, error)
+	GetByUserID(ctx context.Context, userID uuid.UUID) (*domain.User, error)
+	ListUsers(ctx context.Context, input ListUsersInput) ([]domain.User, int, error)
+}
+
+type UserCredentialRepository interface {
 	GetByUsername(ctx context.Context, username string) (*domain.User, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID) (*domain.User, error)
+	UpdateCredentials(ctx context.Context, input UpdateCredentialsInput) (int64, error)
+}
+
+type UserTokenVersionRepository interface {
 	GetTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error)
 	IncrementTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error)
-	UpdateCredentials(ctx context.Context, input UpdateCredentialsInput) (int64, error)
-	ListUsers(ctx context.Context, input ListUsersInput) ([]domain.User, int, error)
+}
+
+type UserRepository interface {
+	UserProfileRepository
+	UserCredentialRepository
+	UserTokenVersionRepository
 }
 
 type CreateUserInput struct {

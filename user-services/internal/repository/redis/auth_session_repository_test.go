@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/aegiscore/user-services/internal/service"
 	"github.com/alicebob/miniredis/v2"
@@ -296,16 +295,16 @@ func TestAuthSessionRepositoryKeysRemainUnprefixedWhenAppNameEmpty(t *testing.T)
 	}
 }
 
-func newTestAuthSessionRepository(redisServer *miniredis.Miniredis, repo repository.UserRepository) *authSessionRepository {
+func newTestAuthSessionRepository(redisServer *miniredis.Miniredis, repo repository.UserTokenVersionRepository) *authSessionRepository {
 	return newTestAuthSessionRepositoryWithConfig(redisServer, repo, config.AuthConfig{TokenVersionCacheTTL: time.Minute})
 }
 
-func newTestAuthSessionRepositoryWithConfig(redisServer *miniredis.Miniredis, repo repository.UserRepository, authCfg config.AuthConfig) *authSessionRepository {
+func newTestAuthSessionRepositoryWithConfig(redisServer *miniredis.Miniredis, repo repository.UserTokenVersionRepository, authCfg config.AuthConfig) *authSessionRepository {
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
 	return &authSessionRepository{redis: client, repo: repo, keys: service.NewRedisKeyBuilder(&config.Config{}), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL}
 }
 
-func newTestAuthSessionRepositoryWithAppName(redisServer *miniredis.Miniredis, repo repository.UserRepository, appName string) *authSessionRepository {
+func newTestAuthSessionRepositoryWithAppName(redisServer *miniredis.Miniredis, repo repository.UserTokenVersionRepository, appName string) *authSessionRepository {
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
 	store := NewAuthSessionRepository(AuthSessionRepositoryParams{
 		Redis: client,
@@ -324,25 +323,10 @@ type tokenVersionRepoStub struct {
 	getTokenVersionCalls int
 }
 
-func (r *tokenVersionRepoStub) Create(context.Context, repository.CreateUserInput) (*domain.User, error) {
-	return nil, nil
-}
-func (r *tokenVersionRepoStub) GetByUsername(context.Context, string) (*domain.User, error) {
-	return nil, nil
-}
-func (r *tokenVersionRepoStub) GetByUserID(context.Context, uuid.UUID) (*domain.User, error) {
-	return nil, nil
-}
 func (r *tokenVersionRepoStub) GetTokenVersion(context.Context, uuid.UUID) (int64, error) {
 	r.getTokenVersionCalls++
 	return r.version, nil
 }
 func (r *tokenVersionRepoStub) IncrementTokenVersion(context.Context, uuid.UUID) (int64, error) {
 	return r.version + 1, nil
-}
-func (r *tokenVersionRepoStub) UpdateCredentials(context.Context, repository.UpdateCredentialsInput) (int64, error) {
-	return r.version + 1, nil
-}
-func (r *tokenVersionRepoStub) ListUsers(context.Context, repository.ListUsersInput) ([]domain.User, int, error) {
-	return nil, 0, nil
 }

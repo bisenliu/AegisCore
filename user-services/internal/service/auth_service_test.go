@@ -349,14 +349,14 @@ func TestAuthServiceLogoutAllMapsIncrementUserNotFound(t *testing.T) {
 	}
 }
 
-func newTestAuthService(repo repository.UserRepository, store repository.AuthSessionRepository, rotation bool) AuthService {
+func newTestAuthService(repo *authRepoStub, store repository.AuthSessionRepository, rotation bool) AuthService {
 	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute}}
-	return NewAuthService(AuthServiceParams{Repo: repo, Sessions: store, JWT: auth.NewJWTService(cfg.Auth), Config: cfg})
+	return NewAuthService(AuthServiceParams{Credentials: repo, TokenVersions: repo, Sessions: store, JWT: auth.NewJWTService(cfg.Auth), Config: cfg})
 }
 
-func newTestAuthServiceWithConfig(repo repository.UserRepository, store repository.AuthSessionRepository, authCfg config.AuthConfig) AuthService {
+func newTestAuthServiceWithConfig(repo *authRepoStub, store repository.AuthSessionRepository, authCfg config.AuthConfig) AuthService {
 	cfg := &config.Config{Auth: authCfg}
-	return NewAuthService(AuthServiceParams{Repo: repo, Sessions: store, JWT: auth.NewJWTService(cfg.Auth), Config: cfg})
+	return NewAuthService(AuthServiceParams{Credentials: repo, TokenVersions: repo, Sessions: store, JWT: auth.NewJWTService(cfg.Auth), Config: cfg})
 }
 
 func testJWTService() *auth.JWTService {
@@ -374,17 +374,11 @@ type authRepoStub struct {
 	updatedInput      repository.UpdateCredentialsInput
 }
 
-func (r *authRepoStub) Create(context.Context, repository.CreateUserInput) (*domain.User, error) {
-	return nil, nil
-}
 func (r *authRepoStub) GetByUserID(_ context.Context, userID uuid.UUID) (*domain.User, error) {
 	if r.userByID == nil {
 		return nil, domain.ErrUserNotFound
 	}
 	return r.userByID, nil
-}
-func (r *authRepoStub) ListUsers(context.Context, repository.ListUsersInput) ([]domain.User, int, error) {
-	return nil, 0, nil
 }
 func (r *authRepoStub) GetByUsername(_ context.Context, username string) (*domain.User, error) {
 	r.gotUsername = username

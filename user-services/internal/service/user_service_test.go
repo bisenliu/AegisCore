@@ -209,22 +209,6 @@ func (r *stubUserRepository) GetByUserID(_ context.Context, userID uuid.UUID) (*
 	return r.getByUserIDUser, nil
 }
 
-func (r *stubUserRepository) GetByUsername(context.Context, string) (*domain.User, error) {
-	return nil, nil
-}
-
-func (r *stubUserRepository) GetTokenVersion(context.Context, uuid.UUID) (int64, error) {
-	return 0, nil
-}
-
-func (r *stubUserRepository) IncrementTokenVersion(context.Context, uuid.UUID) (int64, error) {
-	return 0, nil
-}
-
-func (r *stubUserRepository) UpdateCredentials(context.Context, repository.UpdateCredentialsInput) (int64, error) {
-	return 0, nil
-}
-
 func (r *stubUserRepository) ListUsers(_ context.Context, input repository.ListUsersInput) ([]domain.User, int, error) {
 	r.listInput = input
 	if r.listErr != nil {

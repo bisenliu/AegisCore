@@ -26,10 +26,11 @@ type AuthService interface {
 type AuthServiceParams struct {
 	fx.In
 
-	Repo     repository.UserRepository
-	Sessions repository.AuthSessionRepository
-	JWT      *auth.JWTService
-	Config   *config.Config
+	Credentials   repository.UserCredentialRepository
+	TokenVersions repository.UserTokenVersionRepository
+	Sessions      repository.AuthSessionRepository
+	JWT           *auth.JWTService
+	Config        *config.Config
 }
 
 type authService struct {
@@ -41,9 +42,9 @@ type authService struct {
 
 func NewAuthService(params AuthServiceParams) AuthService {
 	return &authService{
-		credentials:          newCredentialVerifier(params.Repo),
+		credentials:          newCredentialVerifier(params.Credentials),
 		tokens:               newAuthTokenIssuer(params.JWT, params.Config),
-		sessions:             newAuthSessionManager(params.Repo, params.Sessions),
+		sessions:             newAuthSessionManager(params.TokenVersions, params.Sessions),
 		refreshTokenRotation: params.Config.Auth.RefreshTokenRotation,
 	}
 }

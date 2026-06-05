@@ -32,14 +32,14 @@ type AuthSessionRepositoryParams struct {
 	fx.In
 
 	Redis *rediscache.Client `name:"cache_redis"`
-	Repo  repository.UserRepository
+	Repo  repository.UserTokenVersionRepository
 	Cfg   *config.Config
 	Keys  service.RedisKeyBuilder
 }
 
 type authSessionRepository struct {
 	redis                *rediscache.Client
-	repo                 repository.UserRepository
+	repo                 repository.UserTokenVersionRepository
 	keys                 service.RedisKeyBuilder
 	tokenVersionCacheTTL time.Duration
 }

@@ -25,10 +25,10 @@ type CredentialUpdateResult struct {
 }
 
 type credentialVerifier struct {
-	repo repository.UserRepository
+	repo repository.UserCredentialRepository
 }
 
-func newCredentialVerifier(repo repository.UserRepository) CredentialVerifier {
+func newCredentialVerifier(repo repository.UserCredentialRepository) CredentialVerifier {
 	return &credentialVerifier{repo: repo}
 }
 

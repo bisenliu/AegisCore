@@ -17,6 +17,11 @@ type userRepository struct {
 	client *ent.Client
 }
 
+var _ repository.UserRepository = (*userRepository)(nil)
+var _ repository.UserProfileRepository = (*userRepository)(nil)
+var _ repository.UserCredentialRepository = (*userRepository)(nil)
+var _ repository.UserTokenVersionRepository = (*userRepository)(nil)
+
 type UserRepositoryParams struct {
 	fx.In
 
@@ -25,6 +30,18 @@ type UserRepositoryParams struct {
 
 func NewUserRepository(params UserRepositoryParams) repository.UserRepository {
 	return &userRepository{client: params.Client}
+}
+
+func AsUserProfileRepository(repo repository.UserRepository) repository.UserProfileRepository {
+	return repo
+}
+
+func AsUserCredentialRepository(repo repository.UserRepository) repository.UserCredentialRepository {
+	return repo
+}
+
+func AsUserTokenVersionRepository(repo repository.UserRepository) repository.UserTokenVersionRepository {
+	return repo
 }
 
 func (r *userRepository) Create(ctx context.Context, input repository.CreateUserInput) (*domain.User, error) {

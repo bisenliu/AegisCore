@@ -29,11 +29,11 @@ type SessionRevocationResult struct {
 }
 
 type authSessionManager struct {
-	users    repository.UserRepository
+	users    repository.UserTokenVersionRepository
 	sessions repository.AuthSessionRepository
 }
 
-func newAuthSessionManager(users repository.UserRepository, sessions repository.AuthSessionRepository) AuthSessionManager {
+func newAuthSessionManager(users repository.UserTokenVersionRepository, sessions repository.AuthSessionRepository) AuthSessionManager {
 	return &authSessionManager{users: users, sessions: sessions}
 }
 
