@@ -254,7 +254,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Setenv("SWAGGER_ENABLED", "true")
 
 	cfg := &config.Config{
-		App: config.AppConfig{Environment: "local"},
+		App: config.AppConfig{Name: "configured-user-service", Environment: "local"},
 		Auth: config.AuthConfig{
 			JWT: config.JWTConfig{Secret: "secret"},
 		},
@@ -311,6 +311,25 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("healthz returns configured service name", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		engine.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+		}
+		var health struct {
+			Status  string `json:"status"`
+			Service string `json:"service"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &health); err != nil {
+			t.Fatalf("unmarshal health response: %v", err)
+		}
+		if health.Status != "ok" || health.Service != cfg.App.Name {
+			t.Fatalf("health = %#v, want configured service name", health)
+		}
+	})
 
 	t.Run("query requires auth", func(t *testing.T) {
 		recorder := httptest.NewRecorder()

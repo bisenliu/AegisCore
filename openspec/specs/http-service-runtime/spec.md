@@ -140,13 +140,15 @@ HTTP 服务运行时 SHALL 在 HTTP server 启动日志中输出关键运行时�
 
 ### Requirement: Register standard HTTP routes and middleware
 
-系统必须注册健康检查、用户 API 路由、Swagger 文档路由和共享 HTTP 中间件。HTTP 基础中间件必须先注入 trace-id，再执行 panic recovery、请求日志和 CORS；trace-id 必须来自 `X-Trace-ID` 请求头或由系统生成，并必须写入 Gin context、Go `context.Context` 和 `X-Trace-ID` 响应头。共享中间件必须对外提供 `TraceID()` Gin middleware。用户服务运行时 MUST 通过服务级 HTTP 路由入口注册完整用户服务 HTTP surface，该入口 MUST 使用明确表达用户服务 HTTP 范围的命名，并 MUST 按系统路由、Swagger 文档路由、版本化 API、公共认证路由、受保护认证路由和用户资源路由组织注册逻辑。用户服务运行时 MUST 通过路由局部分组控制认证中间件挂载：健康检查、Swagger 文档、登录、刷新和受限改密入口 MUST 保持公开访问；退出当前设备、退出全部设备和用户资料 API MUST 挂载认证中间件。用户服务运行时 MUST 在注册认证中间件时传入 Fx 注入的 Zap logger。请求日志的 `client_ip` 字段必须使用 Gin `Context.ClientIP()` 的结果。后续 Casbin 授权中间件 MUST 挂载在认证中间件之后、业务 handler 之前的受保护路由子分组中。
+系统必须注册健康检查、用户 API 路由、Swagger 文档路由和共享 HTTP 中间件。HTTP 基础中间件必须先注入 trace-id，再执行 panic recovery、请求日志和 CORS；trace-id 必须来自 `X-Trace-ID` 请求头或由系统生成，并必须写入 Gin context、Go `context.Context` 和 `X-Trace-ID` 响应头。共享中间件必须对外提供 `TraceID()` Gin middleware。用户服务运行时 MUST 通过服务级 HTTP 路由入口注册完整用户服务 HTTP surface，该入口 MUST 使用明确表达用户服务 HTTP 范围的命名，并 MUST 按系统路由、Swagger 文档路由、版本化 API、公共认证路由、受保护认证路由和用户资源路由组织注册逻辑。用户服务运行时 MUST 将 `config.App.Name` 作为健康检查响应中的服务名来源传入系统路由，MUST NOT 在健康检查 handler 中硬编码服务名或设置代码级默认服务名；健康检查成功状态值 MUST 使用路由包内拥有的常量表达。用户服务运行时 MUST 通过路由局部分组控制认证中间件挂载：健康检查、Swagger 文档、登录、刷新和受限改密入口 MUST 保持公开访问；退出当前设备、退出全部设备和用户资料 API MUST 挂载认证中间件。用户服务运行时 MUST 在注册认证中间件时传入 Fx 注入的 Zap logger。请求日志的 `client_ip` 字段必须使用 Gin `Context.ClientIP()` 的结果。后续 Casbin 授权中间件 MUST 挂载在认证中间件之后、业务 handler 之前的受保护路由子分组中。
 
 #### Scenario: Health endpoint returns service status
-- **Given** HTTP server 已启动
+- **Given** HTTP server 已启动且配置包含 `app.name: aegiscore-user-services`
 - **When** 调用方请求 `GET /healthz`
 - **Then** 系统返回 HTTP 200
-- **Then** 响应包含 `status: ok` 和 `service: aegiscore-user-services`
+- **Then** 响应包含 `status: ok`
+- **Then** 响应包含 `service` 且值来自 `config.App.Name`
+- **Then** 系统 MUST NOT 在健康检查 handler 中硬编码服务名
 
 #### Scenario: User API route is registered under versioned prefix
 - **Given** HTTP server 已启动

@@ -11,6 +11,7 @@ import (
 
 // RouteParams 包含挂载用户服务 HTTP 路由所需的依赖。
 type RouteParams struct {
+	ServiceName           string
 	Environment           string
 	Log                   *zap.Logger
 	JWT                   *auth.JWTService
@@ -22,7 +23,7 @@ type RouteParams struct {
 
 // RegisterUserServiceHTTPRoutes 挂载系统、Swagger、认证和用户 API 路由。
 func RegisterUserServiceHTTPRoutes(engine *gin.Engine, params RouteParams) {
-	registerSystemRoutes(engine)
+	registerSystemRoutes(engine, params.ServiceName)
 	RegisterSwagger(engine, params.Environment)
 	registerV1Routes(engine, params)
 }

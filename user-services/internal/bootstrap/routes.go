@@ -28,6 +28,7 @@ type RegisterRouteParams struct {
 // RegisterRoutes 将 bootstrap 依赖适配为 router 层路由注册参数。
 func RegisterRoutes(params RegisterRouteParams) {
 	router.RegisterUserServiceHTTPRoutes(params.Engine, router.RouteParams{
+		ServiceName:           params.Config.App.Name,
 		Environment:           params.Config.App.Environment,
 		Log:                   params.Log,
 		JWT:                   params.JWT,
