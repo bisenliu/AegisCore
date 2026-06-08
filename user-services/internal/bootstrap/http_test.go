@@ -13,10 +13,11 @@ import (
 
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/security/auth"
+	"github.com/aegiscore/common/runtime/logger"
+	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
-	"github.com/aegiscore/user-services/internal/api/auth"
-	"github.com/aegiscore/user-services/internal/api/user"
+	authapi "github.com/aegiscore/user-services/internal/api/auth"
+	userapi "github.com/aegiscore/user-services/internal/api/user"
 	"github.com/aegiscore/user-services/internal/controller"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/repository"
@@ -30,6 +31,9 @@ import (
 )
 
 const routeAuthUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+const routeAuthForbiddenUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3403"
+const routeAuthNotFoundUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3999"
+const routeAuthInternalErrorUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3500"
 
 type lifecycleRecorder struct {
 	hooks []fx.Hook
@@ -259,8 +263,9 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			JWT: config.JWTConfig{Secret: "secret"},
 		},
 	}
-	log := zap.NewNop()
-	jwtService := auth.NewJWTService(cfg.Auth)
+	core, logs := observer.New(zap.DebugLevel)
+	log := zap.New(core)
+	jwtService := commonauth.NewJWTService(cfg.Auth)
 	tokenVersions := &routeTokenVersionValidator{version: 1}
 	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log})
 	if err != nil {
@@ -300,7 +305,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			request.Header.Set("Content-Type", "application/json")
 			request.Header.Set("X-Trace-ID", "trace-public-test")
 			if tt.path == "/api/v1/auth/change-password" {
-				request.Header.Set(auth.AuthorizationHeader, auth.TokenPrefix+"password-change-token")
+				request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+"password-change-token")
 			}
 			engine.ServeHTTP(recorder, request)
 			if recorder.Code == http.StatusUnauthorized {
@@ -370,7 +375,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query with invalid token returns token invalid", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
-		request.Header.Set(auth.AuthorizationHeader, auth.TokenPrefix+"invalid")
+		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+"invalid")
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, response.CodeTokenInvalid)
 	})
@@ -378,7 +383,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	t.Run("query with valid token keeps controller behavior", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
-		request.Header.Set(auth.AuthorizationHeader, auth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		request.Header.Set("X-Trace-ID", "trace-auth-test")
 		engine.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusOK {
@@ -387,20 +392,81 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		if recorder.Header().Get("X-Trace-ID") != "trace-auth-test" {
 			t.Fatalf("X-Trace-ID = %q, want trace-auth-test", recorder.Header().Get("X-Trace-ID"))
 		}
+		assertSuccessEnvelope(t, recorder)
+
+		entries := logs.FilterMessage("http request completed").All()
+		if len(entries) == 0 {
+			t.Fatal("request log count = 0, want at least one")
+		}
+		fields := entries[len(entries)-1].ContextMap()
+		if fields[logger.TraceIDField] != "trace-auth-test" || fields["method"] != http.MethodGet || fields["path"] != "/api/v1/users/"+routeAuthUserID || fields["status"] != int64(http.StatusOK) || fields[commonauth.UserIDKey] != routeAuthUserID {
+			t.Fatalf("request log fields = %#v", fields)
+		}
+		if _, ok := fields["latency"]; !ok {
+			t.Fatalf("request log missing latency: %#v", fields)
+		}
+		if _, ok := fields["client_ip"]; !ok {
+			t.Fatalf("request log missing client_ip: %#v", fields)
+		}
 	})
 
 	t.Run("query with mismatched token version returns token invalid", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
-		request.Header.Set(auth.AuthorizationHeader, auth.TokenPrefix+signRouteAuthTokenWithVersion(t, "secret", routeAuthUserID, 2))
+		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthTokenWithVersion(t, "secret", routeAuthUserID, 2))
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, response.CodeTokenInvalid)
+	})
+
+	t.Run("query not found returns route envelope", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthNotFoundUserID, nil)
+		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		engine.ServeHTTP(recorder, request)
+		assertFailureEnvelope(t, recorder, http.StatusNotFound, response.CodeNotFound)
+	})
+
+	t.Run("query forbidden returns route envelope", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthForbiddenUserID, nil)
+		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		engine.ServeHTTP(recorder, request)
+		assertFailureEnvelope(t, recorder, http.StatusForbidden, response.CodeForbidden)
+	})
+
+	t.Run("query internal error returns route envelope", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthInternalErrorUserID, nil)
+		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		engine.ServeHTTP(recorder, request)
+		assertFailureEnvelope(t, recorder, http.StatusInternalServerError, response.CodeInternalError)
+	})
+
+	t.Run("panic recovery returns envelope and logs trace id", func(t *testing.T) {
+		engine.GET("/panic-route-chain", func(c *gin.Context) { panic("route-chain boom") })
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/panic-route-chain", nil)
+		request.Header.Set("X-Trace-ID", "trace-panic-route-chain")
+		engine.ServeHTTP(recorder, request)
+
+		assertFailureEnvelope(t, recorder, http.StatusInternalServerError, response.CodeInternalError)
+		entries := logs.FilterMessage("panic recovered").All()
+		if len(entries) != 1 {
+			t.Fatalf("panic recovered logs = %d, want 1", len(entries))
+		}
+		fields := entries[0].ContextMap()
+		if fields[logger.TraceIDField] != "trace-panic-route-chain" || fields["panic"] != "route-chain boom" {
+			t.Fatalf("recovery log fields = %#v", fields)
+		}
+		if _, ok := fields["stack"]; !ok {
+			t.Fatalf("recovery log missing stack: %#v", fields)
+		}
 	})
 
 	t.Run("query validation still runs after auth", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/abc", nil)
-		request.Header.Set(auth.AuthorizationHeader, auth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		engine.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
@@ -452,11 +518,11 @@ func (s *routeAuthSessionRepository) DeleteAllUserSessions(context.Context, stri
 }
 
 func (s *routeAuthAuthService) Login(context.Context, authapi.LoginRequest) (*authapi.TokenResponse, error) {
-	return &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 3600}, nil
+	return &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
 func (s *routeAuthAuthService) Refresh(context.Context, authapi.RefreshTokenRequest) (*authapi.TokenResponse, error) {
-	return &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 3600}, nil
+	return &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
 func (s *routeAuthAuthService) ChangePassword(context.Context, authapi.ChangePasswordRequest) (*authapi.ChangePasswordResponse, error) {
@@ -478,14 +544,42 @@ func (s *routeAuthUserService) CreateUser(context.Context, userapi.CreateUserReq
 
 func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapi.UserResponse, error) {
 	userIDString := userID.String()
-	if userIDString == "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3999" {
+	if userIDString == routeAuthNotFoundUserID {
 		return nil, response.NotFoundError("user not found")
 	}
-	if userIDString == "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3500" {
+	if userIDString == routeAuthForbiddenUserID {
+		return nil, response.ForbiddenError("forbidden")
+	}
+	if userIDString == routeAuthInternalErrorUserID {
 		return nil, errors.New("database down")
 	}
 	now := time.Now().UnixMilli()
 	return &userapi.UserResponse{UserID: userIDString, Nickname: "Aegis", Username: "aegis", Status: domain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
+}
+
+func assertSuccessEnvelope(t *testing.T, recorder *httptest.ResponseRecorder) {
+	t.Helper()
+	var envelope response.Envelope
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if !envelope.Success || envelope.Code != response.CodeOK {
+		t.Fatalf("envelope = %#v, want success OK", envelope)
+	}
+}
+
+func assertFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantStatus int, wantCode response.Code) {
+	t.Helper()
+	if recorder.Code != wantStatus {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, wantStatus, recorder.Body.String())
+	}
+	var envelope response.Envelope
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if envelope.Success || envelope.Code != wantCode {
+		t.Fatalf("envelope = %#v, want failure code %d", envelope, wantCode)
+	}
 }
 
 func (s *routeAuthUserService) ListUsers(context.Context, userapi.ListUsersRequest) (response.PaginatedData[userapi.UserResponse], error) {
@@ -517,11 +611,11 @@ func signRouteAuthTokenWithVersion(t *testing.T, secret, userID string, tokenVer
 	if _, err := uuid.Parse(userID); err != nil {
 		t.Fatalf("parse userID: %v", err)
 	}
-	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, auth.Claims{
+	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, commonauth.Claims{
 		UserID:           userID,
 		TokenVersion:     tokenVersion,
 		SessionID:        "s-123",
-		RegisteredClaims: jwtv5.RegisteredClaims{Subject: auth.SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))},
+		RegisteredClaims: jwtv5.RegisteredClaims{Subject: commonauth.SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))},
 	}).SignedString([]byte(secret))
 	if err != nil {
 		t.Fatalf("SignedString: %v", err)

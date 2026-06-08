@@ -134,6 +134,112 @@ func TestAuthSessionRepositoryTokenVersionInvalidCacheReportsMiss(t *testing.T) 
 	}
 }
 
+func TestTokenVersionValidatorBackfillsMiniredisCacheOnMiss(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestAuthSessionRepository(redisServer)
+	users := &tokenVersionRepositoryStub{version: 7}
+	validator := service.NewTokenVersionValidator(users, store)
+	ctx := context.Background()
+
+	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 7)
+
+	if err != nil {
+		t.Fatalf("ValidateTokenVersion: %v", err)
+	}
+	if users.getTokenVersionCalls != 1 || users.gotUserID != sessionTestUserID {
+		t.Fatalf("users repo calls=%d userID=%s, want one call for %s", users.getTokenVersionCalls, users.gotUserID, sessionTestUserID)
+	}
+	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
+	if err != nil {
+		t.Fatalf("GetCachedTokenVersion after backfill: %v", err)
+	}
+	if version != 7 {
+		t.Fatalf("cached version = %d, want 7", version)
+	}
+	ttl, err := store.redis.TTL(ctx, store.tokenVersionKey(sessionTestUserID.String())).Result()
+	if err != nil {
+		t.Fatalf("TTL: %v", err)
+	}
+	if ttl <= 0 || ttl > time.Minute {
+		t.Fatalf("TTL = %s, want within explicit %s", ttl, time.Minute)
+	}
+}
+
+func TestTokenVersionValidatorUsesMiniredisCacheHitWithoutRepositoryLookup(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestAuthSessionRepository(redisServer)
+	ctx := context.Background()
+	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 8); err != nil {
+		t.Fatalf("CacheTokenVersion: %v", err)
+	}
+	users := &tokenVersionRepositoryStub{err: errors.New("database should not be read")}
+	validator := service.NewTokenVersionValidator(users, store)
+
+	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 8)
+
+	if err != nil {
+		t.Fatalf("ValidateTokenVersion: %v", err)
+	}
+	if users.getTokenVersionCalls != 0 {
+		t.Fatalf("users repo calls = %d, want 0 on cache hit", users.getTokenVersionCalls)
+	}
+}
+
+func TestTokenVersionValidatorRejectsStaleTokenUsingMiniredisCache(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestAuthSessionRepository(redisServer)
+	ctx := context.Background()
+	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 9); err != nil {
+		t.Fatalf("CacheTokenVersion: %v", err)
+	}
+	users := &tokenVersionRepositoryStub{err: errors.New("database should not be read")}
+	validator := service.NewTokenVersionValidator(users, store)
+
+	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 8)
+
+	if !errors.Is(err, repository.ErrTokenVersionMismatch) {
+		t.Fatalf("err = %v, want token version mismatch", err)
+	}
+	if users.getTokenVersionCalls != 0 {
+		t.Fatalf("users repo calls = %d, want 0 on cache hit mismatch", users.getTokenVersionCalls)
+	}
+}
+
+func TestTokenVersionCacheRefreshMakesStaleTokenObservable(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestAuthSessionRepository(redisServer)
+	ctx := context.Background()
+	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 5); err != nil {
+		t.Fatalf("CacheTokenVersion old: %v", err)
+	}
+	if err := store.CreateSession(ctx, repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-stale", TokenVersion: 5}, time.Hour); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 6); err != nil {
+		t.Fatalf("CacheTokenVersion refreshed: %v", err)
+	}
+	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
+		t.Fatalf("DeleteAllUserSessions: %v", err)
+	}
+	validator := service.NewTokenVersionValidator(&tokenVersionRepositoryStub{err: errors.New("database should not be read")}, store)
+
+	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 5)
+
+	if !errors.Is(err, repository.ErrTokenVersionMismatch) {
+		t.Fatalf("err = %v, want token version mismatch", err)
+	}
+	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
+	if err != nil {
+		t.Fatalf("GetCachedTokenVersion: %v", err)
+	}
+	if version != 6 {
+		t.Fatalf("cached version = %d, want 6", version)
+	}
+	if redisServer.Exists(store.sessionKey("s-stale")) || redisServer.Exists(store.userSessionsKey(sessionTestUserID.String())) {
+		t.Fatal("user sessions were not deleted during cache refresh flow")
+	}
+}
+
 func TestAuthSessionRepositoryCreateGetAndDeleteSession(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestAuthSessionRepository(redisServer)
@@ -352,4 +458,33 @@ func newTestAuthSessionRepositoryWithAppName(redisServer *miniredis.Miniredis, a
 		},
 	})
 	return store.(*authSessionRepository)
+}
+
+type tokenVersionRepositoryStub struct {
+	version              int64
+	newVersion           int64
+	err                  error
+	incrementErr         error
+	gotUserID            uuid.UUID
+	incrementedUserID    uuid.UUID
+	getTokenVersionCalls int
+	incrementCalls       int
+}
+
+func (r *tokenVersionRepositoryStub) GetTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
+	r.getTokenVersionCalls++
+	r.gotUserID = userID
+	if r.err != nil {
+		return 0, r.err
+	}
+	return r.version, nil
+}
+
+func (r *tokenVersionRepositoryStub) IncrementTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
+	r.incrementCalls++
+	r.incrementedUserID = userID
+	if r.incrementErr != nil {
+		return 0, r.incrementErr
+	}
+	return r.newVersion, nil
 }
