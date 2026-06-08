@@ -92,3 +92,30 @@
 - **THEN** `GET /api/v1/users/:user_id` 路径 MUST 保持不变
 - **THEN** `user_id` 路径参数名、响应 envelope、公开 JSON 字段、业务错误码和认证要求 MUST 保持不变
 - **THEN** 实现 MUST NOT 修改数据库 schema、Atlas migration 或内部自增 `id` 字段语义
+
+### Requirement: Avoid vague Go symbol names
+
+系统 SHALL 在手写 Go 符号中避免无明确意图的泛化名词或模糊动词。内部类型、接口、函数、方法和测试替身名称 MUST 表达其稳定职责、触发条件或结果。`Manager` 等泛化后缀不得用于掩盖组件职责；`Handle` 等模糊动词不得用于无法从名称判断具体动作或结果的 helper；service 相关访问器或构造名不得重复堆叠上下文名词形成 `Get...Service` 类冗余表达。命名修正 MUST 保持外部可观察契约不变，并 MUST 同步更新所有 workspace 内引用、测试名称和相关 OpenSpec 表达。
+
+#### Scenario: Rename generic manager symbols by responsibility
+- **WHEN** 审查发现手写 Go 符号使用 `Manager` 表达内部组件
+- **THEN** 审查 MUST 判断该组件的真实职责
+- **THEN** 实现 MUST 使用能表达职责的名称，例如生命周期、校验、签发、解析、存储、解析器或编排语义
+- **THEN** 实现 MUST NOT 使用 `Manager` 作为无具体意图的兜底命名
+
+#### Scenario: Rename vague handle helpers by action or outcome
+- **WHEN** 审查发现手写 Go helper 使用 `Handle` 或 `handle` 且名称无法表达具体动作
+- **THEN** 实现 MUST 将该 helper 命名为具体动作、触发条件或结果
+- **THEN** 对 HTTP serve 异常后触发 Fx shutdown 的 helper，名称 MUST 表达 serve error 与 shutdown 之间的关系
+- **THEN** 实现 MUST NOT 使用仅表示“处理”的模糊动词替代真实行为
+
+#### Scenario: Avoid redundant service accessor names
+- **WHEN** 审查发现手写 Go 符号使用 `Get...Service` 或等价冗余表达
+- **THEN** 审查 MUST 标注该名称重复了调用方或类型上下文
+- **THEN** 实现 SHOULD 使用构造、查找或用例职责命名，避免同时堆叠 `Get`、领域名和 `Service`
+- **THEN** 对已表达 HTTP/API 用例且未造成歧义的方法名，审查 MAY 保留现有名称并说明保留原因
+
+#### Scenario: Vague symbol rename preserves external behavior
+- **WHEN** 内部 Go 符号因泛化名词、模糊动词或冗余上下文被重命名
+- **THEN** HTTP path、method、JSON 字段、header、配置 key、环境变量、数据库 schema、Redis key、响应信封和错误码 MUST 保持不变
+- **THEN** 相关 Go 模块测试 MUST 通过

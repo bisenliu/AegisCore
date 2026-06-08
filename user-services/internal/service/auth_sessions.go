@@ -16,8 +16,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// AuthSessionManager 为服务用例校验和撤销认证会话。
-type AuthSessionManager interface {
+// AuthSessionLifecycle 为服务用例创建、校验和撤销认证会话。
+type AuthSessionLifecycle interface {
 	CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error
 	ValidatePasswordChangeClaims(ctx context.Context, claims *auth.Claims) error
 	ValidateRefreshSession(ctx context.Context, claims *auth.Claims) (repository.AuthSession, int64, error)
@@ -36,7 +36,7 @@ type SessionRevocationResult struct {
 	TokenVersion int64
 }
 
-type authSessionManager struct {
+type authSessionLifecycle struct {
 	users    repository.UserTokenVersionRepository
 	sessions repository.AuthSessionRepository
 }
@@ -51,12 +51,12 @@ func NewTokenVersionValidator(users repository.UserTokenVersionRepository, sessi
 	return &tokenVersionValidator{users: users, sessions: sessions}
 }
 
-func newAuthSessionManager(users repository.UserTokenVersionRepository, sessions repository.AuthSessionRepository) AuthSessionManager {
-	return &authSessionManager{users: users, sessions: sessions}
+func newAuthSessionLifecycle(users repository.UserTokenVersionRepository, sessions repository.AuthSessionRepository) AuthSessionLifecycle {
+	return &authSessionLifecycle{users: users, sessions: sessions}
 }
 
 // CreateTokenSession 为新签发的 token pair 持久化 refresh 会话元数据。
-func (m *authSessionManager) CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error {
+func (m *authSessionLifecycle) CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error {
 	if err := m.sessions.CreateSession(ctx, repository.AuthSession{UserID: userID, SessionID: sessionID, TokenVersion: tokenVersion, ExpiresAt: time.Now().Add(refreshTTL)}, refreshTTL); err != nil {
 		logger.Error(ctx, "create auth session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return response.FromError(err)
@@ -65,7 +65,7 @@ func (m *authSessionManager) CreateTokenSession(ctx context.Context, userID stri
 }
 
 // ValidatePasswordChangeClaims 校验改密 token version 是否仍为当前版本。
-func (m *authSessionManager) ValidatePasswordChangeClaims(ctx context.Context, claims *auth.Claims) error {
+func (m *authSessionLifecycle) ValidatePasswordChangeClaims(ctx context.Context, claims *auth.Claims) error {
 	currentVersion, err := m.currentTokenVersion(ctx, claims.UserID)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
@@ -83,7 +83,7 @@ func (m *authSessionManager) ValidatePasswordChangeClaims(ctx context.Context, c
 }
 
 // ValidateRefreshSession 校验会话存在性、claim 与会话一致性以及当前 token version。
-func (m *authSessionManager) ValidateRefreshSession(ctx context.Context, claims *auth.Claims) (repository.AuthSession, int64, error) {
+func (m *authSessionLifecycle) ValidateRefreshSession(ctx context.Context, claims *auth.Claims) (repository.AuthSession, int64, error) {
 	session, err := m.sessions.GetSession(ctx, claims.SessionID)
 	if err != nil {
 		if errors.Is(err, repository.ErrAuthSessionNotFound) {
@@ -114,7 +114,7 @@ func (m *authSessionManager) ValidateRefreshSession(ctx context.Context, claims 
 }
 
 // DeleteSession 撤销一个 refresh token 会话。
-func (m *authSessionManager) DeleteSession(ctx context.Context, userID string, sessionID string) error {
+func (m *authSessionLifecycle) DeleteSession(ctx context.Context, userID string, sessionID string) error {
 	if err := m.sessions.DeleteSession(ctx, userID, sessionID); err != nil {
 		logger.Error(ctx, "delete auth session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Error(err))...)
 		return response.FromError(err)
@@ -122,7 +122,7 @@ func (m *authSessionManager) DeleteSession(ctx context.Context, userID string, s
 	return nil
 }
 
-func (m *authSessionManager) currentTokenVersion(ctx context.Context, userID string) (int64, error) {
+func (m *authSessionLifecycle) currentTokenVersion(ctx context.Context, userID string) (int64, error) {
 	return currentTokenVersion(ctx, m.users, m.sessions, userID)
 }
 
@@ -163,7 +163,7 @@ func currentTokenVersion(ctx context.Context, users repository.UserTokenVersionR
 }
 
 // RevokeAllUserSessions 递增 token version、刷新缓存并删除全部 refresh 会话。
-func (m *authSessionManager) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*SessionRevocationResult, error) {
+func (m *authSessionLifecycle) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*SessionRevocationResult, error) {
 	tokenVersion, err := m.users.IncrementTokenVersion(ctx, userID)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {

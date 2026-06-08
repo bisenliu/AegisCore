@@ -53,7 +53,7 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 				return fmt.Errorf("listen http server on %s: %w", addr, err)
 			}
 			go func() {
-				handleHTTPServeError(params.Log, params.Shutdowner, server.Serve(listener))
+				shutdownOnHTTPServeError(params.Log, params.Shutdowner, server.Serve(listener))
 			}()
 			return nil
 		},
@@ -73,7 +73,7 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 	return server
 }
 
-func handleHTTPServeError(log *zap.Logger, shutdowner fx.Shutdowner, err error) {
+func shutdownOnHTTPServeError(log *zap.Logger, shutdowner fx.Shutdowner, err error) {
 	if err == nil || errors.Is(err, http.ErrServerClosed) {
 		// http.ErrServerClosed 是正常优雅关闭过程产生的错误，不应再次停止 Fx app。
 		return

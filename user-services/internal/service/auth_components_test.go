@@ -124,11 +124,11 @@ func TestAuthTokenIssuerParsesBearerRefreshToken(t *testing.T) {
 	}
 }
 
-func TestAuthSessionManagerRejectsRefreshVersionMismatch(t *testing.T) {
-	manager := newAuthSessionManager(&authRepoStub{}, &sessionStoreStub{version: 3, session: authRefreshTestSession("s-123", 2)})
+func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
+	lifecycle := newAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{version: 3, session: authRefreshTestSession("s-123", 2)})
 	claims := &auth.Claims{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123"}
 
-	_, _, err := manager.ValidateRefreshSession(context.Background(), claims)
+	_, _, err := lifecycle.ValidateRefreshSession(context.Background(), claims)
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeTokenInvalid {
@@ -136,11 +136,11 @@ func TestAuthSessionManagerRejectsRefreshVersionMismatch(t *testing.T) {
 	}
 }
 
-func TestAuthSessionManagerCurrentTokenVersionUsesCacheHit(t *testing.T) {
+func TestAuthSessionLifecycleCurrentTokenVersionUsesCacheHit(t *testing.T) {
 	repo := &authRepoStub{tokenVersionErr: errors.New("database should not be read")}
-	manager := newAuthSessionManager(repo, &sessionStoreStub{version: 2})
+	lifecycle := newAuthSessionLifecycle(repo, &sessionStoreStub{version: 2})
 
-	version, err := manager.(*authSessionManager).currentTokenVersion(context.Background(), authTestUserID.String())
+	version, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
 
 	if err != nil {
 		t.Fatalf("currentTokenVersion: %v", err)
@@ -153,12 +153,12 @@ func TestAuthSessionManagerCurrentTokenVersionUsesCacheHit(t *testing.T) {
 	}
 }
 
-func TestAuthSessionManagerCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
+func TestAuthSessionLifecycleCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
 	repo := &authRepoStub{tokenVersion: 7}
 	store := &sessionStoreStub{cacheMiss: true}
-	manager := newAuthSessionManager(repo, store)
+	lifecycle := newAuthSessionLifecycle(repo, store)
 
-	version, err := manager.(*authSessionManager).currentTokenVersion(context.Background(), authTestUserID.String())
+	version, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
 
 	if err != nil {
 		t.Fatalf("currentTokenVersion: %v", err)
@@ -174,12 +174,12 @@ func TestAuthSessionManagerCurrentTokenVersionCacheMissReadsRepository(t *testin
 	}
 }
 
-func TestAuthSessionManagerCurrentTokenVersionPropagatesCacheError(t *testing.T) {
+func TestAuthSessionLifecycleCurrentTokenVersionPropagatesCacheError(t *testing.T) {
 	repo := &authRepoStub{tokenVersion: 7}
 	cacheErr := errors.New("redis failed")
-	manager := newAuthSessionManager(repo, &sessionStoreStub{getVersionErr: cacheErr})
+	lifecycle := newAuthSessionLifecycle(repo, &sessionStoreStub{getVersionErr: cacheErr})
 
-	_, err := manager.(*authSessionManager).currentTokenVersion(context.Background(), authTestUserID.String())
+	_, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
 
 	if !errors.Is(err, cacheErr) {
 		t.Fatalf("err = %v, want %v", err, cacheErr)
@@ -189,24 +189,24 @@ func TestAuthSessionManagerCurrentTokenVersionPropagatesCacheError(t *testing.T)
 	}
 }
 
-func TestAuthSessionManagerCurrentTokenVersionPropagatesBackfillError(t *testing.T) {
+func TestAuthSessionLifecycleCurrentTokenVersionPropagatesBackfillError(t *testing.T) {
 	cacheErr := errors.New("redis set failed")
 	store := &sessionStoreStub{cacheMiss: true, cacheErr: cacheErr}
-	manager := newAuthSessionManager(&authRepoStub{tokenVersion: 7}, store)
+	lifecycle := newAuthSessionLifecycle(&authRepoStub{tokenVersion: 7}, store)
 
-	_, err := manager.(*authSessionManager).currentTokenVersion(context.Background(), authTestUserID.String())
+	_, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
 
 	if !errors.Is(err, cacheErr) {
 		t.Fatalf("err = %v, want %v", err, cacheErr)
 	}
 }
 
-func TestAuthSessionManagerRevokeAllUserSessions(t *testing.T) {
+func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
 	repo := &authRepoStub{newVersion: 4}
 	store := &sessionStoreStub{}
-	manager := newAuthSessionManager(repo, store)
+	lifecycle := newAuthSessionLifecycle(repo, store)
 
-	result, err := manager.RevokeAllUserSessions(context.Background(), authTestUserID)
+	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
 	if err != nil {
 		t.Fatalf("RevokeAllUserSessions: %v", err)
@@ -219,11 +219,11 @@ func TestAuthSessionManagerRevokeAllUserSessions(t *testing.T) {
 	}
 }
 
-func TestAuthSessionManagerRevokeAllUserSessionsMapsUserNotFound(t *testing.T) {
+func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T) {
 	store := &sessionStoreStub{}
-	manager := newAuthSessionManager(&authRepoStub{incrementErr: domain.ErrUserNotFound}, store)
+	lifecycle := newAuthSessionLifecycle(&authRepoStub{incrementErr: domain.ErrUserNotFound}, store)
 
-	_, err := manager.RevokeAllUserSessions(context.Background(), authTestUserID)
+	_, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeNotFound {
@@ -234,11 +234,11 @@ func TestAuthSessionManagerRevokeAllUserSessionsMapsUserNotFound(t *testing.T) {
 	}
 }
 
-func TestAuthSessionManagerRevokeAllUserSessionsStopsOnCacheRefreshError(t *testing.T) {
+func TestAuthSessionLifecycleRevokeAllUserSessionsStopsOnCacheRefreshError(t *testing.T) {
 	store := &sessionStoreStub{cacheErr: errors.New("cache refresh failed")}
-	manager := newAuthSessionManager(&authRepoStub{newVersion: 4}, store)
+	lifecycle := newAuthSessionLifecycle(&authRepoStub{newVersion: 4}, store)
 
-	_, err := manager.RevokeAllUserSessions(context.Background(), authTestUserID)
+	_, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeInternalError {
@@ -249,11 +249,11 @@ func TestAuthSessionManagerRevokeAllUserSessionsStopsOnCacheRefreshError(t *test
 	}
 }
 
-func TestAuthSessionManagerRevokeAllUserSessionsMapsDeleteAllError(t *testing.T) {
+func TestAuthSessionLifecycleRevokeAllUserSessionsMapsDeleteAllError(t *testing.T) {
 	store := &sessionStoreStub{deleteAllErr: errors.New("delete all failed")}
-	manager := newAuthSessionManager(&authRepoStub{newVersion: 4}, store)
+	lifecycle := newAuthSessionLifecycle(&authRepoStub{newVersion: 4}, store)
 
-	_, err := manager.RevokeAllUserSessions(context.Background(), authTestUserID)
+	_, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeInternalError {

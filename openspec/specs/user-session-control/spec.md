@@ -245,7 +245,7 @@
 - **Then** 系统 MUST 清空该用户活跃会话索引
 - **Then** 旧 Access Token MUST 因版本不一致而失效
 
-#### Scenario: Auth session manager owns logout all writes
+#### Scenario: Auth session lifecycle owns logout all writes
 - **Given** 请求已通过 Access Token 认证
 - **When** `AuthService` 处理退出全部设备流程
 - **Then** `AuthService` MUST 从认证上下文提取并校验当前 `user_id`

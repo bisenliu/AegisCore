@@ -39,7 +39,7 @@ type AuthServiceParams struct {
 type authService struct {
 	credentials          CredentialVerifier
 	tokens               AuthTokenIssuer
-	sessions             AuthSessionManager
+	sessions             AuthSessionLifecycle
 	refreshTokenRotation bool
 }
 
@@ -48,7 +48,7 @@ func NewAuthService(params AuthServiceParams) AuthService {
 	return &authService{
 		credentials:          newCredentialVerifier(params.Credentials),
 		tokens:               newAuthTokenIssuer(params.JWT, params.Config),
-		sessions:             newAuthSessionManager(params.TokenVersions, params.Sessions),
+		sessions:             newAuthSessionLifecycle(params.TokenVersions, params.Sessions),
 		refreshTokenRotation: params.Config.Auth.RefreshTokenRotation,
 	}
 }

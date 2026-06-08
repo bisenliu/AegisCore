@@ -133,7 +133,7 @@ func TestHTTPServerUnexpectedServeErrorTriggersShutdown(t *testing.T) {
 	shutdowner := &shutdownRecorder{}
 	serveErr := errors.New("serve failed")
 
-	handleHTTPServeError(zap.New(core), shutdowner, serveErr)
+	shutdownOnHTTPServeError(zap.New(core), shutdowner, serveErr)
 
 	if shutdowner.calls != 1 {
 		t.Fatalf("shutdown calls = %d, want 1", shutdowner.calls)
@@ -152,7 +152,7 @@ func TestHTTPServerUnexpectedServeErrorLogsShutdownFailure(t *testing.T) {
 	shutdownErr := errors.New("shutdown failed")
 	shutdowner := &shutdownRecorder{err: shutdownErr}
 
-	handleHTTPServeError(zap.New(core), shutdowner, errors.New("serve failed"))
+	shutdownOnHTTPServeError(zap.New(core), shutdowner, errors.New("serve failed"))
 
 	if shutdowner.calls != 1 {
 		t.Fatalf("shutdown calls = %d, want 1", shutdowner.calls)
@@ -170,8 +170,8 @@ func TestHTTPServerClosedServeErrorDoesNotTriggerShutdown(t *testing.T) {
 	core, logs := observer.New(zapcore.ErrorLevel)
 	shutdowner := &shutdownRecorder{}
 
-	handleHTTPServeError(zap.New(core), shutdowner, http.ErrServerClosed)
-	handleHTTPServeError(zap.New(core), shutdowner, nil)
+	shutdownOnHTTPServeError(zap.New(core), shutdowner, http.ErrServerClosed)
+	shutdownOnHTTPServeError(zap.New(core), shutdowner, nil)
 
 	if shutdowner.calls != 0 {
 		t.Fatalf("shutdown calls = %d, want 0", shutdowner.calls)

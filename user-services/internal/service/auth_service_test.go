@@ -302,7 +302,7 @@ func TestAuthServiceRefreshRejectsInvalidNormalizedToken(t *testing.T) {
 }
 
 func TestAuthServiceRefreshRotationKeepsOldSessionWhenTokenSigningFails(t *testing.T) {
-	sessions := newRefreshRotationSessionManager()
+	sessions := newRefreshRotationSessionLifecycle()
 	svc := &authService{
 		tokens:               &refreshRotationTokenIssuer{issueErr: errors.New("sign failed")},
 		sessions:             sessions,
@@ -323,7 +323,7 @@ func TestAuthServiceRefreshRotationKeepsOldSessionWhenTokenSigningFails(t *testi
 }
 
 func TestAuthServiceRefreshRotationKeepsOldSessionWhenNewSessionCreateFails(t *testing.T) {
-	sessions := newRefreshRotationSessionManager()
+	sessions := newRefreshRotationSessionLifecycle()
 	sessions.createErr = errors.New("create failed")
 	svc := &authService{
 		tokens:               &refreshRotationTokenIssuer{},
@@ -345,7 +345,7 @@ func TestAuthServiceRefreshRotationKeepsOldSessionWhenNewSessionCreateFails(t *t
 }
 
 func TestAuthServiceRefreshRotationCleansNewSessionWhenOldDeleteFails(t *testing.T) {
-	sessions := newRefreshRotationSessionManager()
+	sessions := newRefreshRotationSessionLifecycle()
 	sessions.deleteErrBySessionID = map[string]error{"s-old": errors.New("delete failed")}
 	svc := &authService{
 		tokens:               &refreshRotationTokenIssuer{},
@@ -373,7 +373,7 @@ func TestAuthServiceRefreshRotationCleansNewSessionWhenOldDeleteFails(t *testing
 }
 
 func TestAuthServiceRefreshRotationReturnsTokenAfterNewSessionAndOldRevocation(t *testing.T) {
-	sessions := newRefreshRotationSessionManager()
+	sessions := newRefreshRotationSessionLifecycle()
 	svc := &authService{
 		tokens:               &refreshRotationTokenIssuer{},
 		sessions:             sessions,
@@ -646,18 +646,18 @@ func (i *refreshRotationTokenIssuer) ParsePasswordChangeToken(context.Context, s
 	return nil, uuid.Nil, errors.New("not implemented")
 }
 
-type refreshRotationSessionManager struct {
+type refreshRotationSessionLifecycle struct {
 	createErr            error
 	deleteErrBySessionID map[string]error
 	createdSessionID     string
 	deletedSessionIDs    []string
 }
 
-func newRefreshRotationSessionManager() *refreshRotationSessionManager {
-	return &refreshRotationSessionManager{deleteErrBySessionID: map[string]error{}}
+func newRefreshRotationSessionLifecycle() *refreshRotationSessionLifecycle {
+	return &refreshRotationSessionLifecycle{deleteErrBySessionID: map[string]error{}}
 }
 
-func (m *refreshRotationSessionManager) CreateTokenSession(_ context.Context, _ string, sessionID string, _ int64, _ time.Duration) error {
+func (m *refreshRotationSessionLifecycle) CreateTokenSession(_ context.Context, _ string, sessionID string, _ int64, _ time.Duration) error {
 	if m.createErr != nil {
 		return m.createErr
 	}
@@ -665,15 +665,15 @@ func (m *refreshRotationSessionManager) CreateTokenSession(_ context.Context, _ 
 	return nil
 }
 
-func (m *refreshRotationSessionManager) ValidatePasswordChangeClaims(context.Context, *auth.Claims) error {
+func (m *refreshRotationSessionLifecycle) ValidatePasswordChangeClaims(context.Context, *auth.Claims) error {
 	return errors.New("not implemented")
 }
 
-func (m *refreshRotationSessionManager) ValidateRefreshSession(context.Context, *auth.Claims) (repository.AuthSession, int64, error) {
+func (m *refreshRotationSessionLifecycle) ValidateRefreshSession(context.Context, *auth.Claims) (repository.AuthSession, int64, error) {
 	return repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}, 2, nil
 }
 
-func (m *refreshRotationSessionManager) DeleteSession(_ context.Context, _ string, sessionID string) error {
+func (m *refreshRotationSessionLifecycle) DeleteSession(_ context.Context, _ string, sessionID string) error {
 	m.deletedSessionIDs = append(m.deletedSessionIDs, sessionID)
 	if err := m.deleteErrBySessionID[sessionID]; err != nil {
 		return err
@@ -681,6 +681,6 @@ func (m *refreshRotationSessionManager) DeleteSession(_ context.Context, _ strin
 	return nil
 }
 
-func (m *refreshRotationSessionManager) RevokeAllUserSessions(context.Context, uuid.UUID) (*SessionRevocationResult, error) {
+func (m *refreshRotationSessionLifecycle) RevokeAllUserSessions(context.Context, uuid.UUID) (*SessionRevocationResult, error) {
 	return nil, errors.New("not implemented")
 }
