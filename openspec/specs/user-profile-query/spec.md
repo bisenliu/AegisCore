@@ -119,29 +119,30 @@
 - **THEN** `GET /api/v1/users/:user_id` 的路径、响应 envelope、用户响应 JSON 字段和错误语义 MUST 保持不变
 
 ### Requirement: User query data access uses repository abstraction with PostgreSQL implementation boundary
-用户资料查询能力 SHALL 通过根 `repository.UserRepository` 抽象读取用户资料，具体 Ent/PostgreSQL 查询实现 MUST 位于 `user-services/internal/repository/postgres` 包。根 `repository` 包 MUST NOT 依赖 `repository/postgres`，查询 API 的路由、认证要求、错误映射和响应内容 MUST 保持不变。
+用户资料查询能力 SHALL 通过 service 消费侧声明的用户资料持久化端口读取用户资料，具体 Ent/PostgreSQL 查询实现 MUST 位于 `user-services/internal/repository/postgres` 包。根 `repository` 包 MUST NOT 定义用户资料查询 service 消费的接口或依赖 `repository/postgres`，查询 API 的路由、认证要求、错误映射和响应内容 MUST 保持不变。
 
-#### Scenario: Query service depends on repository abstraction
+#### Scenario: Query service depends on consumer-owned repository port
 - **Given** 用户资料查询 service 需要按外部 UUID 读取用户
-- **When** service 调用数据访问层
-- **Then** service MUST 依赖 `repository.UserRepository`
+- **When** service 构造函数声明仓储依赖
+- **Then** service MUST 依赖由 `user-services/internal/service` 声明的用户资料持久化端口
+- **Then** service MUST NOT 依赖根 `repository` 包声明的用户资料接口
 - **Then** service MUST NOT 直接依赖 `repository/postgres` 或 Ent 查询实现类型
 
 #### Scenario: PostgreSQL implementation preserves query behavior
-- **Given** `repository/postgres` 提供 `UserRepository` 的 Ent/PostgreSQL 实现
+- **Given** `repository/postgres` 提供用户资料持久化端口的 Ent/PostgreSQL 实现
 - **When** 调用方请求 `GET /api/v1/users/:user_id`
 - **Then** 系统 MUST 继续只返回未软删除用户
 - **Then** Ent not found MUST 继续转换为用户领域 `ErrUserNotFound`
 - **Then** HTTP 响应路径、响应信封和公开字段 MUST 与迁移前保持一致
 
 ### Requirement: Validate and normalize query input before service business flow
-系统 MUST 在用户查询 Service 执行业务编排前完成查询请求的请求级清洗和基础校验。路径 `user_id` 的 UUID 格式校验、列表分页归一化和过滤字段空白裁剪 MUST 位于 Controller、共享请求校验器或服务内 validators 层，而不是作为用户查询 Service 的主要职责。
+系统 MUST 在用户查询 Service 调用 Repository 前完成查询请求的请求级清洗和基础校验。路径 `user_id` 的 UUID 格式校验 MUST 位于 Controller、共享请求校验器或服务内 validators 层，并在调用 Service 查询前完成。用户列表的分页归一化、`offset`/`limit` 派生和过滤字段空白裁剪 MUST 由 Service 在 Repository 访问前完成，可复用服务内 validators 层；Controller MUST NOT 调用带副作用的列表归一化函数。
 
 #### Scenario: Validate user ID before service lookup
 - **Given** 调用方请求 `GET /api/v1/users/:user_id`
 - **When** `user_id` 不是合法 UUID 或缺失
 - **Then** 请求 MUST 在调用 Repository 查询前被判定为参数错误
-- **Then** controller 或服务内 validators 层 MUST 负责 UUID 格式校验
+- **Then** controller、共享请求校验器或服务内 validators 层 MUST 负责 UUID 格式校验
 - **Then** Service MUST 保留用户不存在和内部查询错误的业务错误映射
 
 #### Scenario: Pass normalized user ID to service
@@ -150,11 +151,18 @@
 - **Then** Service MUST 接收已通过基础格式校验的用户 ID 输入
 - **Then** Service MUST NOT 将路径参数解析错误作为主要业务分支
 
-#### Scenario: Normalize list filters before repository access
+#### Scenario: Normalize list filters in service before repository access
 - **Given** 调用方请求用户列表并提交 `nickname`、`username`、`page` 或 `page_size` 查询参数
 - **When** controller 调用列表查询 Service
-- **Then** 过滤字段空白裁剪和分页归一化 MUST 在 Controller 或服务内 validators 层完成
+- **Then** controller MUST 将绑定后的请求传递给 Service，且不得调用带副作用的列表归一化函数
+- **Then** Service MUST 在访问 Repository 前应用分页默认值、派生 `offset` 和 `limit`，并裁剪过滤字段空白字符
 - **Then** Service MUST 使用规范化后的分页和过滤条件编排 Repository 查询
+
+#### Scenario: Service protects non-HTTP list callers
+- **Given** 非 HTTP 调用方使用零值或未归一化分页字段调用 `UserService.ListUsers`
+- **When** Service 处理列表查询
+- **Then** Service MUST 在调用 Repository 前归一化请求
+- **Then** Repository MUST 接收与 HTTP API 默认值等价的有界分页输入
 
 ### Requirement: Query service uses domain user model
 用户资料查询能力 SHALL 通过根 `repository.UserRepository` 获取用户领域实体，并将领域实体映射为查询响应 DTO。Service 层 MUST NOT 直接依赖 Ent 用户模型或 Ent 查询实现类型，查询 API 的认证要求、参数校验、错误映射和响应内容 MUST 保持不变。
@@ -180,12 +188,12 @@
 
 ### Requirement: User profile query depends on profile repository interface
 
-用户资料查询服务 SHALL 仅依赖用户资料相关仓储接口读取用户资料。该接口 MUST 覆盖按外部用户 ID 查询和用户列表查询所需方法，MUST NOT 要求用户资料查询服务依赖认证凭证更新、按用户名认证读取或 token version 递增能力。查询 API 的认证要求、参数校验、错误映射、响应信封和公开字段 MUST 保持不变。
+用户资料查询服务 SHALL 仅依赖由消费方声明的用户资料相关仓储接口读取用户资料。该接口 MUST 覆盖按外部用户 ID 查询和用户列表查询所需方法，MUST NOT 要求用户资料查询服务依赖认证凭证更新、按用户名认证读取或 token version 递增能力。查询 API 的认证要求、参数校验、错误映射、响应信封和公开字段 MUST 保持不变。
 
 #### Scenario: Query service declares minimum repository dependency
 - **Given** 用户资料查询 service 需要按外部 UUID 读取用户
 - **When** service 构造函数声明仓储依赖
-- **Then** service MUST 依赖用户资料仓储接口
+- **Then** service MUST 依赖由 `user-services/internal/service` 声明的用户资料仓储接口
 - **Then** service MUST NOT 依赖包含认证凭证和 token version 操作的完整用户仓储大接口
 - **Then** service MUST NOT 直接依赖 `repository/postgres` 或 Ent 查询实现类型
 
@@ -201,3 +209,22 @@
 - **When** 测试构造用户资料查询 service 的仓储替身
 - **Then** 测试替身 MUST 只需要实现用户资料查询相关方法
 - **Then** 测试替身 MUST NOT 为认证凭证更新或 token version 递增提供无关空实现
+
+### Requirement: User query API contracts are grouped by capability
+
+用户资料查询能力 SHALL 使用按业务能力组织的用户 API 契约包承载查询请求、列表请求、用户响应和用户列表文档模型。实现 MUST NOT 继续依赖全局 `user-services/internal/dto` 包表达用户资料查询契约，并 MUST 保持 `GET /api/v1/users/:user_id` 与 `GET /api/v1/users` 的外部 HTTP 行为不变。
+
+#### Scenario: Query user contract types use user API package
+- **WHEN** controller、service、validation 或测试引用用户查询请求、列表请求、用户响应或用户列表文档模型
+- **THEN** 这些引用 MUST 来自用户 API 契约包
+- **THEN** 这些引用 MUST NOT 来自全局 `internal/dto` 包
+
+#### Scenario: Query user behavior remains compatible after package migration
+- **WHEN** 用户查询 API 契约类型迁移完成
+- **THEN** `GET /api/v1/users/:user_id` 的路径、认证要求、UUID 校验、响应信封、错误语义和公开 JSON 字段 MUST 保持不变
+- **THEN** `GET /api/v1/users` 的分页、过滤参数、响应信封、分页结构和公开 JSON 字段 MUST 保持不变
+
+#### Scenario: Query response still hides internal fields
+- **WHEN** Service 将用户领域实体映射为用户查询或列表响应
+- **THEN** 响应 MUST 继续包含 `user_id`、`nickname`、`username`、`status`、`created_at` 和 `updated_at`
+- **THEN** 响应 MUST NOT 包含 `password`、`password_hash`、内部 `id`、`token_version` 或 `deleted_at`

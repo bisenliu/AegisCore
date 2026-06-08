@@ -201,12 +201,12 @@
 - **Then** 请求 MUST 由共享 `validateEnum` 判定为校验失败
 
 ### Requirement: User creation data access uses repository abstraction with PostgreSQL implementation boundary
-用户创建能力 SHALL 通过根 `repository.UserRepository` 抽象创建用户，具体 Ent/PostgreSQL 写入和查询实现 MUST 位于 `user-services/internal/repository/postgres` 包。根 `repository` 包 MUST 保留创建输入类型并 MUST NOT 依赖具体实现包。
+用户创建能力 SHALL 通过 service 消费侧声明的用户资料持久化端口创建用户，具体 Ent/PostgreSQL 写入和查询实现 MUST 位于 `user-services/internal/repository/postgres` 包。用户创建 service 的创建输入模型 MUST 由消费侧声明，根 `repository` 包 MUST NOT 定义用户资料创建 service 消费的接口或输入模型。
 
 #### Scenario: Create flow remains layered
 - **Given** 用户创建 controller 已完成请求绑定和校验
 - **When** service 编排用户创建
-- **Then** service MUST 通过 `repository.UserRepository` 调用创建
+- **Then** service MUST 通过 `user-services/internal/service` 声明的用户资料持久化端口调用创建
 - **Then** service MUST NOT 调用 `ExistsByUsername` 或等价用户名存在性预查
 - **Then** service MUST NOT 直接调用 Ent client 或 `repository/postgres` 私有实现类型
 
@@ -280,12 +280,12 @@
 
 ### Requirement: User creation depends on profile repository interface
 
-用户资料创建服务 SHALL 仅依赖用户资料相关仓储接口创建用户资料。该接口 MUST 覆盖创建用户、按外部用户 ID 查询和用户列表查询等用户资料服务实际消费的方法，MUST NOT 要求创建服务依赖认证凭证更新、按用户名认证读取或 token version 递增能力。创建 API 的请求校验、密码 hash、用户名唯一性冲突映射、响应信封和公开字段 MUST 保持不变。
+用户资料创建服务 SHALL 仅依赖由消费方声明的用户资料相关仓储接口创建用户资料。该接口 MUST 覆盖创建用户、按外部用户 ID 查询和用户列表查询等用户资料服务实际消费的方法，MUST NOT 要求创建服务依赖认证凭证更新、按用户名认证读取或 token version 递增能力。创建 API 的请求校验、密码 hash、用户名唯一性冲突映射、响应信封和公开字段 MUST 保持不变。
 
 #### Scenario: Create service declares minimum repository dependency
 - **Given** 用户创建 service 需要持久化新用户记录
 - **When** service 构造函数声明仓储依赖
-- **Then** service MUST 依赖用户资料仓储接口
+- **Then** service MUST 依赖由 `user-services/internal/service` 声明的用户资料仓储接口
 - **Then** service MUST NOT 依赖包含认证凭证和 token version 操作的完整用户仓储大接口
 - **Then** service MUST NOT 直接调用 Ent client 或 `repository/postgres` 私有实现类型
 
@@ -301,3 +301,24 @@
 - **When** 测试构造用户创建 service 的仓储替身
 - **Then** 测试替身 MUST 只需要实现用户资料创建和资料读取相关方法
 - **Then** 测试替身 MUST NOT 为认证凭证更新、按用户名认证读取或 token version 递增提供无关空实现
+
+### Requirement: User creation API contracts are grouped by capability
+
+用户资料创建能力 SHALL 使用按业务能力组织的用户 API 契约包承载创建请求和用户响应模型。实现 MUST NOT 继续依赖全局 `user-services/internal/dto` 包表达用户创建契约，并 MUST 保持 `POST /api/v1/users` 的外部 HTTP 行为不变。
+
+#### Scenario: Create user contract types use user API package
+- **WHEN** controller、service、validation 或测试引用创建用户请求或创建成功用户响应
+- **THEN** 这些引用 MUST 来自用户 API 契约包
+- **THEN** 这些引用 MUST NOT 来自全局 `internal/dto` 包
+
+#### Scenario: Create user request contract remains compatible
+- **WHEN** 用户创建请求类型迁移完成
+- **THEN** 请求体 MUST 继续使用 `nickname`、`username`、`password` 和可选 `status` 字段
+- **THEN** 原有 JSON tag、校验 tag、label 和 example 语义 MUST 保持不变
+- **THEN** 缺省用户状态和请求级规范化行为 MUST 保持不变
+
+#### Scenario: Create user response contract remains compatible
+- **WHEN** 用户创建响应类型迁移完成
+- **THEN** `POST /api/v1/users` MUST 继续返回 HTTP 201 和统一成功响应信封
+- **THEN** 创建响应 MUST 继续包含 `user_id`、`nickname`、`username`、`status`、`created_at` 和 `updated_at`
+- **THEN** 创建响应 MUST NOT 包含 `password`、`password_hash`、`token_version`、内部 `id` 或 `deleted_at`
