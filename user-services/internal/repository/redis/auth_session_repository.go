@@ -11,7 +11,6 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/aegiscore/user-services/internal/service"
-	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 )
@@ -32,63 +31,43 @@ type AuthSessionRepositoryParams struct {
 	fx.In
 
 	Redis *rediscache.Client `name:"cache_redis"`
-	Repo  repository.UserTokenVersionRepository
 	Cfg   *config.Config
 	Keys  service.RedisKeyBuilder
 }
 
 type authSessionRepository struct {
 	redis                *rediscache.Client
-	repo                 repository.UserTokenVersionRepository
 	keys                 service.RedisKeyBuilder
 	tokenVersionCacheTTL time.Duration
 }
 
 func NewAuthSessionRepository(params AuthSessionRepositoryParams) repository.AuthSessionRepository {
-	return &authSessionRepository{redis: params.Redis, repo: params.Repo, keys: params.Keys, tokenVersionCacheTTL: params.Cfg.Auth.TokenVersionCacheTTL}
+	return &authSessionRepository{redis: params.Redis, keys: params.Keys, tokenVersionCacheTTL: params.Cfg.Auth.TokenVersionCacheTTL}
 }
 
-func (r *authSessionRepository) GetCurrentTokenVersion(ctx context.Context, userID string) (int64, error) {
+func (r *authSessionRepository) GetCachedTokenVersion(ctx context.Context, userID string) (int64, error) {
 	key := r.tokenVersionKey(userID)
 	value, err := r.redis.Get(ctx, key).Result()
-	if err == nil {
-		version, parseErr := parseTokenVersion(value)
-		if parseErr == nil && version > 0 {
-			return version, nil
-		}
+	if errors.Is(err, rediscache.Nil) {
+		return 0, repository.ErrTokenVersionCacheMiss
 	}
-	if err != nil && !errors.Is(err, rediscache.Nil) {
+	if err != nil {
 		return 0, fmt.Errorf("get token version cache: %w", err)
 	}
-
-	parsedUserID, err := uuid.Parse(userID)
-	if err != nil {
-		return 0, fmt.Errorf("parse user id: %w", err)
-	}
-	version, err := r.repo.GetTokenVersion(ctx, parsedUserID)
-	if err != nil {
-		return 0, err
-	}
-	ttl := r.tokenVersionCacheTTL
-	if ttl <= 0 {
-		ttl = defaultTokenVersionCacheTTL
-	}
-	if err := r.redis.Set(ctx, key, formatTokenVersion(version), ttl).Err(); err != nil {
-		return 0, fmt.Errorf("set token version cache: %w", err)
+	version, err := parseTokenVersion(value)
+	if err != nil || version <= 0 {
+		return 0, repository.ErrTokenVersionCacheMiss
 	}
 	return version, nil
 }
 
-func (r *authSessionRepository) ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
-	if _, err := uuid.Parse(userID); err != nil {
-		return fmt.Errorf("parse user id: %w", err)
+func (r *authSessionRepository) CacheTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
+	ttl := r.tokenVersionCacheTTL
+	if ttl <= 0 {
+		ttl = defaultTokenVersionCacheTTL
 	}
-	current, err := r.GetCurrentTokenVersion(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if current != tokenVersion {
-		return repository.ErrTokenVersionMismatch
+	if err := r.redis.Set(ctx, r.tokenVersionKey(userID), formatTokenVersion(tokenVersion), ttl).Err(); err != nil {
+		return fmt.Errorf("set token version cache: %w", err)
 	}
 	return nil
 }

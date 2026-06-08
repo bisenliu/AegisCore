@@ -219,7 +219,7 @@
 - **Then** `AuthService` MUST NOT 直接持有用户 repository 来完成退出全部设备写操作
 
 ### Requirement: Store authentication session data in Redis as cache and session layer
-系统 SHALL 使用 Redis 保存用户 `token_version` 缓存、Refresh Token 会话记录和用户活跃会话索引。Redis 中的 `token_version` 只能作为缓存，缓存未命中或被删除时系统 MUST 使用外部 `user_id` 回源 PostgreSQL 获取真实值。认证会话 Redis key MUST 使用 `config.App.Name` 作为前缀来源；系统 MUST NOT 校验 `app.name`，MUST NOT 为 `app.name` 设置代码级默认值。当 `config.App.Name` 去除首尾空白后非空时，token version 缓存 key MUST 为 `<app.name>:auth:user:<user_id>:token_version`，Refresh Token 会话记录 key MUST 为 `<app.name>:auth:session:<session_id>`，用户活跃会话索引 key MUST 为 `<app.name>:auth:user:<user_id>:sessions`。当 `config.App.Name` 去除首尾空白后为空时，Redis key MUST 保持无前缀业务格式：`auth:user:<user_id>:token_version`、`auth:session:<session_id>` 和 `auth:user:<user_id>:sessions`。用户活跃会话索引 MUST 使用 Redis ZSet，member MUST 使用 `session_id`，score MUST 使用该会话过期时间的 Unix 时间戳。系统 MUST 以 Redis session key 的实际 TTL 推导会话过期时间，并使会话 payload 中的 `ExpiresAt`、session key TTL 和用户活跃会话索引 score 保持一致。系统 MUST 在写入、读取或删除该用户活跃会话索引时，按当前 Unix 时间戳执行过期 member 清理。系统 MUST 为用户活跃会话索引设计过期或清理策略，避免没有活跃会话的 ZSet key 和已过期 `session_id` 长期残留。
+系统 SHALL 使用 Redis 保存用户 `token_version` 缓存、Refresh Token 会话记录和用户活跃会话索引。Redis 中的 `token_version` 只能作为缓存，缓存未命中或被删除时系统 MUST 由认证会话 service 组件或 token version resolver 使用外部 `user_id` 回源 PostgreSQL 获取真实值。认证会话 Redis key MUST 使用 `config.App.Name` 作为前缀来源；系统 MUST NOT 校验 `app.name`，MUST NOT 为 `app.name` 设置代码级默认值。当 `config.App.Name` 去除首尾空白后非空时，token version 缓存 key MUST 为 `<app.name>:auth:user:<user_id>:token_version`，Refresh Token 会话记录 key MUST 为 `<app.name>:auth:session:<session_id>`，用户活跃会话索引 key MUST 为 `<app.name>:auth:user:<user_id>:sessions`。当 `config.App.Name` 去除首尾空白后为空时，Redis key MUST 保持无前缀业务格式：`auth:user:<user_id>:token_version`、`auth:session:<session_id>` 和 `auth:user:<user_id>:sessions`。用户活跃会话索引 MUST 使用 Redis ZSet，member MUST 使用 `session_id`，score MUST 使用该会话过期时间的 Unix 时间戳。系统 MUST 以 Redis session key 的实际 TTL 推导会话过期时间，并使会话 payload 中的 `ExpiresAt`、session key TTL 和用户活跃会话索引 score 保持一致。系统 MUST 在写入、读取或删除该用户活跃会话索引时，按当前 Unix 时间戳执行过期 member 清理。系统 MUST 为用户活跃会话索引设计过期或清理策略，避免没有活跃会话的 ZSet key 和已过期 `session_id` 长期残留。
 
 #### Scenario: Token version cache miss reads PostgreSQL
 - **Given** Redis 中不存在某用户的 token version 缓存
@@ -292,6 +292,43 @@
 - **Then** 系统 MUST 在读取或写入业务相关 member 前清理按 score 已过期的 member
 - **Then** 系统 MUST 避免长期遍历已过期残留作为活跃会话
 - **Then** 后续会话统计、管理或审计能力 MUST 能基于清理后的索引语义区分活跃会话和过期残留
+
+### Requirement: Separate token version cache from database lookup strategy
+
+用户会话控制能力 SHALL 将 Redis token version cache 操作与 PostgreSQL token version 读取策略分离。Redis auth session repository MUST 只负责 Redis 会话记录、用户活跃会话索引、token version cache key 的读取、写入和删除；它 MUST NOT 直接依赖用户 repository 或在缓存未命中时自行回源 PostgreSQL。认证会话 service 组件或专门的 token version resolver MUST 组合 Redis cache 与 `UserTokenVersionRepository`，并保持缓存未命中时回源 PostgreSQL、成功后回填 Redis 缓存的行为。
+
+#### Scenario: Cache hit uses Redis value without database lookup
+- **Given** Redis 中存在某用户有效的 token version 缓存
+- **When** 系统需要校验该用户的 token version
+- **Then** 系统 MUST 使用 Redis 缓存中的版本值
+- **Then** 系统 MUST NOT 查询 PostgreSQL 获取该用户的 token version
+
+#### Scenario: Cache miss is resolved outside Redis repository
+- **Given** Redis 中不存在某用户的 token version 缓存
+- **When** 系统需要校验该用户的 token version
+- **Then** Redis auth session repository MUST 只报告缓存未命中或等价结果
+- **Then** 认证会话 service 组件或 token version resolver MUST 使用外部 `user_id` 回源 PostgreSQL 获取真实 `token_version`
+- **Then** 回源成功后系统 MUST 将真实版本回填 Redis 缓存
+
+#### Scenario: Redis repository does not depend on user repository
+- **Given** 用户服务运行时通过 Fx 构造 Redis auth session repository
+- **When** 查看 Redis auth session repository 的构造参数和字段
+- **Then** Redis auth session repository MUST 依赖具名 `cache_redis` Redis client、Redis key builder 和认证缓存 TTL 配置
+- **Then** Redis auth session repository MUST NOT 持有 `UserRepository` 或 `UserTokenVersionRepository`
+
+#### Scenario: Invalid token version cache falls back through resolver
+- **Given** Redis 中存在无法解析或非正数的 token version 缓存值
+- **When** 系统需要校验该用户的 token version
+- **Then** Redis auth session repository MUST 将该值视为无效缓存
+- **Then** 认证会话 service 组件或 token version resolver MUST 回源 PostgreSQL 获取真实 `token_version`
+- **Then** 回源成功后系统 MUST 使用真实版本覆盖 Redis 缓存
+
+#### Scenario: External behavior remains compatible
+- **Given** 调用方执行登录、刷新、修改密码、退出当前设备或退出全部设备流程
+- **When** token version cache 与 PostgreSQL 读取策略完成解耦
+- **Then** 系统 MUST 保持现有 HTTP 路由、请求体、响应信封、错误码和认证语义不变
+- **Then** 系统 MUST 继续使用 `auth.token_version_cache_ttl` 控制 token version 缓存 TTL
+- **Then** 系统 MUST NOT 修改 Ent schema、Atlas migration 或 Redis key 格式
 
 ### Requirement: Centralize default authentication TTL values
 
@@ -406,7 +443,7 @@
 - **Given** `repository/redis` 承载认证会话 Redis 实现
 - **When** 系统创建、读取、删除或批量删除认证会话
 - **Then** Redis key 格式、Refresh Token 会话 TTL、用户活跃会话 ZSet 和过期 member 清理行为 MUST 与迁移前保持一致
-- **Then** token version 缓存未命中时 MUST 继续回源 `repository.UserRepository`
+- **Then** token version 缓存未命中时 Redis 实现 MUST 只报告缓存未命中或等价结果，由认证会话 service 组件或 token version resolver 回源 PostgreSQL
 
 ### Requirement: Authentication token validator uses auth session repository abstraction
 用户服务运行时 SHALL 将 `repository.AuthSessionRepository` 作为认证中间件 token version validator 的依赖来源。该抽象 MUST 提供 `ValidateTokenVersion(ctx, userID, tokenVersion)`，并保持现有 token version 校验语义。

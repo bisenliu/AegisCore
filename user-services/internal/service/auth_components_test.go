@@ -12,6 +12,7 @@ import (
 	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/repository"
+	"github.com/google/uuid"
 )
 
 func TestCredentialVerifierAcceptsMustChangePasswordUser(t *testing.T) {
@@ -132,6 +133,71 @@ func TestAuthSessionManagerRejectsRefreshVersionMismatch(t *testing.T) {
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeTokenInvalid {
 		t.Fatalf("err = %#v", appErr)
+	}
+}
+
+func TestAuthSessionManagerCurrentTokenVersionUsesCacheHit(t *testing.T) {
+	repo := &authRepoStub{tokenVersionErr: errors.New("database should not be read")}
+	manager := newAuthSessionManager(repo, &sessionStoreStub{version: 2})
+
+	version, err := manager.(*authSessionManager).currentTokenVersion(context.Background(), authTestUserID.String())
+
+	if err != nil {
+		t.Fatalf("currentTokenVersion: %v", err)
+	}
+	if version != 2 {
+		t.Fatalf("version = %d, want 2", version)
+	}
+	if repo.getTokenVersionID != uuid.Nil {
+		t.Fatalf("repository was read on cache hit: %s", repo.getTokenVersionID)
+	}
+}
+
+func TestAuthSessionManagerCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
+	repo := &authRepoStub{tokenVersion: 7}
+	store := &sessionStoreStub{cacheMiss: true}
+	manager := newAuthSessionManager(repo, store)
+
+	version, err := manager.(*authSessionManager).currentTokenVersion(context.Background(), authTestUserID.String())
+
+	if err != nil {
+		t.Fatalf("currentTokenVersion: %v", err)
+	}
+	if version != 7 {
+		t.Fatalf("version = %d, want 7", version)
+	}
+	if repo.getTokenVersionID != authTestUserID {
+		t.Fatalf("getTokenVersionID = %s, want %s", repo.getTokenVersionID, authTestUserID)
+	}
+	if !store.cached || store.cachedUserID != authTestUserID.String() || store.cachedVersion != 7 {
+		t.Fatalf("cached store = %#v", store)
+	}
+}
+
+func TestAuthSessionManagerCurrentTokenVersionPropagatesCacheError(t *testing.T) {
+	repo := &authRepoStub{tokenVersion: 7}
+	cacheErr := errors.New("redis failed")
+	manager := newAuthSessionManager(repo, &sessionStoreStub{getVersionErr: cacheErr})
+
+	_, err := manager.(*authSessionManager).currentTokenVersion(context.Background(), authTestUserID.String())
+
+	if !errors.Is(err, cacheErr) {
+		t.Fatalf("err = %v, want %v", err, cacheErr)
+	}
+	if repo.getTokenVersionID != uuid.Nil {
+		t.Fatalf("repository was read after cache error: %s", repo.getTokenVersionID)
+	}
+}
+
+func TestAuthSessionManagerCurrentTokenVersionPropagatesBackfillError(t *testing.T) {
+	cacheErr := errors.New("redis set failed")
+	store := &sessionStoreStub{cacheMiss: true, cacheErr: cacheErr}
+	manager := newAuthSessionManager(&authRepoStub{tokenVersion: 7}, store)
+
+	_, err := manager.(*authSessionManager).currentTokenVersion(context.Background(), authTestUserID.String())
+
+	if !errors.Is(err, cacheErr) {
+		t.Fatalf("err = %v, want %v", err, cacheErr)
 	}
 }
 

@@ -195,7 +195,7 @@ func TestAuthServiceChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
 }
 
 func TestAuthServiceChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
-	svc := newTestAuthService(&authRepoStub{}, &sessionStoreStub{getVersionErr: domain.ErrUserNotFound}, true)
+	svc := newTestAuthService(&authRepoStub{tokenVersionErr: domain.ErrUserNotFound}, &sessionStoreStub{cacheMiss: true}, true)
 	token, err := testJWTService().SignPasswordChangeToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
@@ -301,8 +301,8 @@ func TestAuthServiceRefreshRejectsVersionChange(t *testing.T) {
 }
 
 func TestAuthServiceRefreshMapsTokenVersionUserNotFound(t *testing.T) {
-	store := &sessionStoreStub{session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}, getVersionErr: domain.ErrUserNotFound}
-	svc := newTestAuthService(&authRepoStub{}, store, true)
+	store := &sessionStoreStub{session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}, cacheMiss: true}
+	svc := newTestAuthService(&authRepoStub{tokenVersionErr: domain.ErrUserNotFound}, store, true)
 	refresh, err := testJWTService().SignRefreshToken(auth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
@@ -372,6 +372,9 @@ type authRepoStub struct {
 	updateErr         error
 	incrementedUserID uuid.UUID
 	updatedInput      repository.UpdateCredentialsInput
+	tokenVersion      int64
+	tokenVersionErr   error
+	getTokenVersionID uuid.UUID
 }
 
 func (r *authRepoStub) GetByUserID(_ context.Context, userID uuid.UUID) (*domain.User, error) {
@@ -387,7 +390,13 @@ func (r *authRepoStub) GetByUsername(_ context.Context, username string) (*domai
 	}
 	return r.userByUsername, nil
 }
-func (r *authRepoStub) GetTokenVersion(context.Context, uuid.UUID) (int64, error) { return 0, nil }
+func (r *authRepoStub) GetTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
+	r.getTokenVersionID = userID
+	if r.tokenVersionErr != nil {
+		return 0, r.tokenVersionErr
+	}
+	return r.tokenVersion, nil
+}
 func (r *authRepoStub) IncrementTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
 	r.incrementedUserID = userID
 	if r.incrementErr != nil {
@@ -415,15 +424,31 @@ type sessionStoreStub struct {
 	getVersionErr    error
 	invalidateErr    error
 	deleteAllErr     error
+	cacheMiss        bool
+	cacheErr         error
+	cached           bool
+	cachedUserID     string
+	cachedVersion    int64
 }
 
-func (s *sessionStoreStub) GetCurrentTokenVersion(context.Context, string) (int64, error) {
+func (s *sessionStoreStub) GetCachedTokenVersion(context.Context, string) (int64, error) {
 	if s.getVersionErr != nil {
 		return 0, s.getVersionErr
 	}
+	if s.cacheMiss {
+		return 0, repository.ErrTokenVersionCacheMiss
+	}
 	return s.version, nil
 }
-func (s *sessionStoreStub) ValidateTokenVersion(context.Context, string, int64) error { return nil }
+func (s *sessionStoreStub) CacheTokenVersion(_ context.Context, userID string, tokenVersion int64) error {
+	if s.cacheErr != nil {
+		return s.cacheErr
+	}
+	s.cached = true
+	s.cachedUserID = userID
+	s.cachedVersion = tokenVersion
+	return nil
+}
 func (s *sessionStoreStub) CreateSession(_ context.Context, session repository.AuthSession, ttl time.Duration) error {
 	s.created = session
 	s.createdTTL = ttl

@@ -7,6 +7,7 @@ import (
 )
 
 var ErrAuthSessionNotFound = errors.New("auth session not found")
+var ErrTokenVersionCacheMiss = errors.New("token version cache miss")
 var ErrTokenVersionMismatch = errors.New("token version mismatch")
 
 type AuthSession struct {
@@ -17,8 +18,8 @@ type AuthSession struct {
 }
 
 type AuthSessionRepository interface {
-	GetCurrentTokenVersion(ctx context.Context, userID string) (int64, error)
-	ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error
+	GetCachedTokenVersion(ctx context.Context, userID string) (int64, error)
+	CacheTokenVersion(ctx context.Context, userID string, tokenVersion int64) error
 	CreateSession(ctx context.Context, session AuthSession, ttl time.Duration) error
 	GetSession(ctx context.Context, sessionID string) (AuthSession, error)
 	DeleteSession(ctx context.Context, userID string, sessionID string) error

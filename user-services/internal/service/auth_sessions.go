@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/aegiscore/common/contract/response"
@@ -23,6 +24,10 @@ type AuthSessionManager interface {
 	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*SessionRevocationResult, error)
 }
 
+type TokenVersionValidator interface {
+	ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error
+}
+
 type SessionRevocationResult struct {
 	UserID       uuid.UUID
 	TokenVersion int64
@@ -31,6 +36,15 @@ type SessionRevocationResult struct {
 type authSessionManager struct {
 	users    repository.UserTokenVersionRepository
 	sessions repository.AuthSessionRepository
+}
+
+type tokenVersionValidator struct {
+	users    repository.UserTokenVersionRepository
+	sessions repository.AuthSessionRepository
+}
+
+func NewTokenVersionValidator(users repository.UserTokenVersionRepository, sessions repository.AuthSessionRepository) TokenVersionValidator {
+	return &tokenVersionValidator{users: users, sessions: sessions}
 }
 
 func newAuthSessionManager(users repository.UserTokenVersionRepository, sessions repository.AuthSessionRepository) AuthSessionManager {
@@ -46,7 +60,7 @@ func (m *authSessionManager) CreateTokenSession(ctx context.Context, userID stri
 }
 
 func (m *authSessionManager) ValidatePasswordChangeClaims(ctx context.Context, claims *auth.Claims) error {
-	currentVersion, err := m.sessions.GetCurrentTokenVersion(ctx, claims.UserID)
+	currentVersion, err := m.currentTokenVersion(ctx, claims.UserID)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			logger.Warn(ctx, "password change user not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
@@ -76,7 +90,7 @@ func (m *authSessionManager) ValidateRefreshSession(ctx context.Context, claims 
 		logger.Warn(ctx, "refresh session mismatch", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Int64("session_token_version", session.TokenVersion), zap.Int64("token_version", claims.TokenVersion))
 		return repository.AuthSession{}, 0, response.TokenInvalidError(messages.MissingSession)
 	}
-	currentVersion, err := m.sessions.GetCurrentTokenVersion(ctx, claims.UserID)
+	currentVersion, err := m.currentTokenVersion(ctx, claims.UserID)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
 			logger.Warn(ctx, "refresh user not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
@@ -98,6 +112,43 @@ func (m *authSessionManager) DeleteSession(ctx context.Context, userID string, s
 		return response.FromError(err)
 	}
 	return nil
+}
+
+func (m *authSessionManager) currentTokenVersion(ctx context.Context, userID string) (int64, error) {
+	return currentTokenVersion(ctx, m.users, m.sessions, userID)
+}
+
+func (v *tokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
+	currentVersion, err := currentTokenVersion(ctx, v.users, v.sessions, userID)
+	if err != nil {
+		return err
+	}
+	if currentVersion != tokenVersion {
+		return repository.ErrTokenVersionMismatch
+	}
+	return nil
+}
+
+func currentTokenVersion(ctx context.Context, users repository.UserTokenVersionRepository, sessions repository.AuthSessionRepository, userID string) (int64, error) {
+	currentVersion, err := sessions.GetCachedTokenVersion(ctx, userID)
+	if err == nil {
+		return currentVersion, nil
+	}
+	if !errors.Is(err, repository.ErrTokenVersionCacheMiss) {
+		return 0, err
+	}
+	parsedUserID, err := uuid.Parse(userID)
+	if err != nil {
+		return 0, fmt.Errorf("parse user id: %w", err)
+	}
+	currentVersion, err = users.GetTokenVersion(ctx, parsedUserID)
+	if err != nil {
+		return 0, err
+	}
+	if err := sessions.CacheTokenVersion(ctx, userID, currentVersion); err != nil {
+		return 0, err
+	}
+	return currentVersion, nil
 }
 
 func (m *authSessionManager) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*SessionRevocationResult, error) {

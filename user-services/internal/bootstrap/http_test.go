@@ -197,7 +197,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	}
 	log := zap.NewNop()
 	jwtService := auth.NewJWTService(cfg.Auth)
-	authSessions := &routeAuthSessionRepository{version: 1}
+	tokenVersions := &routeTokenVersionValidator{version: 1}
 	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log})
 	if err != nil {
 		t.Fatalf("NewGinEngine: %v", err)
@@ -211,7 +211,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		Log:            log,
 		Engine:         engine,
 		JWT:            jwtService,
-		AuthSessions:   authSessions,
+		TokenVersions:  tokenVersions,
 		AuthController: controller.NewAuthController(&routeAuthAuthService{}, validator),
 		UserController: controller.NewUserController(&routeAuthUserService{}, validator),
 	})
@@ -333,14 +333,22 @@ type routeAuthSessionRepository struct {
 	version int64
 }
 
-func (s *routeAuthSessionRepository) GetCurrentTokenVersion(context.Context, string) (int64, error) {
-	return s.version, nil
+type routeTokenVersionValidator struct {
+	version int64
 }
 
-func (s *routeAuthSessionRepository) ValidateTokenVersion(_ context.Context, _ string, tokenVersion int64) error {
+func (s *routeTokenVersionValidator) ValidateTokenVersion(_ context.Context, _ string, tokenVersion int64) error {
 	if tokenVersion != s.version {
 		return errors.New("token version mismatch")
 	}
+	return nil
+}
+
+func (s *routeAuthSessionRepository) GetCachedTokenVersion(context.Context, string) (int64, error) {
+	return s.version, nil
+}
+
+func (s *routeAuthSessionRepository) CacheTokenVersion(context.Context, string, int64) error {
 	return nil
 }
 

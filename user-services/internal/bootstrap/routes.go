@@ -4,8 +4,8 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/user-services/internal/controller"
-	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/aegiscore/user-services/internal/router"
+	"github.com/aegiscore/user-services/internal/service"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -18,7 +18,7 @@ type RegisterRouteParams struct {
 	Log            *zap.Logger
 	Engine         *gin.Engine
 	JWT            *auth.JWTService
-	AuthSessions   repository.AuthSessionRepository `optional:"true"`
+	TokenVersions  service.TokenVersionValidator `optional:"true"`
 	AuthController *controller.AuthController
 	UserController *controller.UserController
 }
@@ -29,7 +29,7 @@ func RegisterRoutes(params RegisterRouteParams) {
 		Log:                   params.Log,
 		JWT:                   params.JWT,
 		AuthConfig:            params.Config.Auth,
-		TokenVersionValidator: params.AuthSessions,
+		TokenVersionValidator: params.TokenVersions,
 		AuthController:        params.AuthController,
 		UserController:        params.UserController,
 	})

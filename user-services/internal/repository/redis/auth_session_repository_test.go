@@ -16,13 +16,29 @@ import (
 
 var sessionTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
 
-func TestAuthSessionRepositoryTokenVersionCacheMissReadsRepository(t *testing.T) {
+func TestAuthSessionRepositoryTokenVersionCacheMiss(t *testing.T) {
 	redisServer := miniredis.RunT(t)
-	store := newTestAuthSessionRepository(redisServer, &tokenVersionRepoStub{version: 7})
+	store := newTestAuthSessionRepository(redisServer)
 
-	version, err := store.GetCurrentTokenVersion(context.Background(), sessionTestUserID.String())
+	_, err := store.GetCachedTokenVersion(context.Background(), sessionTestUserID.String())
+	if !errors.Is(err, repository.ErrTokenVersionCacheMiss) {
+		t.Fatalf("GetCachedTokenVersion err = %v, want cache miss", err)
+	}
+	if redisServer.Exists(store.tokenVersionKey(sessionTestUserID.String())) {
+		t.Fatal("cache miss should not create token version key")
+	}
+}
+
+func TestAuthSessionRepositoryCachesAndGetsTokenVersion(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestAuthSessionRepository(redisServer)
+
+	if err := store.CacheTokenVersion(context.Background(), sessionTestUserID.String(), 7); err != nil {
+		t.Fatalf("CacheTokenVersion: %v", err)
+	}
+	version, err := store.GetCachedTokenVersion(context.Background(), sessionTestUserID.String())
 	if err != nil {
-		t.Fatalf("GetCurrentTokenVersion: %v", err)
+		t.Fatalf("GetCachedTokenVersion: %v", err)
 	}
 	if version != 7 {
 		t.Fatalf("version = %d, want 7", version)
@@ -38,12 +54,12 @@ func TestAuthSessionRepositoryTokenVersionCacheMissReadsRepository(t *testing.T)
 
 func TestAuthSessionRepositoryTokenVersionCacheUsesDefaultTTL(t *testing.T) {
 	redisServer := miniredis.RunT(t)
-	store := newTestAuthSessionRepositoryWithConfig(redisServer, &tokenVersionRepoStub{version: 7}, config.AuthConfig{})
+	store := newTestAuthSessionRepositoryWithConfig(redisServer, config.AuthConfig{})
 
-	_, err := store.GetCurrentTokenVersion(context.Background(), sessionTestUserID.String())
+	err := store.CacheTokenVersion(context.Background(), sessionTestUserID.String(), 7)
 
 	if err != nil {
-		t.Fatalf("GetCurrentTokenVersion: %v", err)
+		t.Fatalf("CacheTokenVersion: %v", err)
 	}
 	ttl, err := store.redis.TTL(context.Background(), store.tokenVersionKey(sessionTestUserID.String())).Result()
 	if err != nil {
@@ -57,12 +73,12 @@ func TestAuthSessionRepositoryTokenVersionCacheUsesDefaultTTL(t *testing.T) {
 func TestAuthSessionRepositoryTokenVersionCacheUsesExplicitTTL(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	explicitTTL := time.Minute
-	store := newTestAuthSessionRepositoryWithConfig(redisServer, &tokenVersionRepoStub{version: 7}, config.AuthConfig{TokenVersionCacheTTL: explicitTTL})
+	store := newTestAuthSessionRepositoryWithConfig(redisServer, config.AuthConfig{TokenVersionCacheTTL: explicitTTL})
 
-	_, err := store.GetCurrentTokenVersion(context.Background(), sessionTestUserID.String())
+	err := store.CacheTokenVersion(context.Background(), sessionTestUserID.String(), 7)
 
 	if err != nil {
-		t.Fatalf("GetCurrentTokenVersion: %v", err)
+		t.Fatalf("CacheTokenVersion: %v", err)
 	}
 	ttl, err := store.redis.TTL(context.Background(), store.tokenVersionKey(sessionTestUserID.String())).Result()
 	if err != nil {
@@ -73,10 +89,9 @@ func TestAuthSessionRepositoryTokenVersionCacheUsesExplicitTTL(t *testing.T) {
 	}
 }
 
-func TestAuthSessionRepositoryTokenVersionInvalidCacheReadsRepository(t *testing.T) {
+func TestAuthSessionRepositoryTokenVersionInvalidCacheReportsMiss(t *testing.T) {
 	redisServer := miniredis.RunT(t)
-	repo := &tokenVersionRepoStub{version: 9}
-	store := newTestAuthSessionRepository(redisServer, repo)
+	store := newTestAuthSessionRepository(redisServer)
 	ctx := context.Background()
 	key := store.tokenVersionKey(sessionTestUserID.String())
 
@@ -84,22 +99,16 @@ func TestAuthSessionRepositoryTokenVersionInvalidCacheReadsRepository(t *testing
 		if err := store.redis.Set(ctx, key, value, time.Minute).Err(); err != nil {
 			t.Fatalf("Set token version cache: %v", err)
 		}
-		version, err := store.GetCurrentTokenVersion(ctx, sessionTestUserID.String())
-		if err != nil {
-			t.Fatalf("GetCurrentTokenVersion(%q): %v", value, err)
+		_, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
+		if !errors.Is(err, repository.ErrTokenVersionCacheMiss) {
+			t.Fatalf("GetCachedTokenVersion(%q) err = %v, want cache miss", value, err)
 		}
-		if version != repo.version {
-			t.Fatalf("version = %d, want %d", version, repo.version)
-		}
-	}
-	if repo.getTokenVersionCalls != 2 {
-		t.Fatalf("GetTokenVersion calls = %d, want 2", repo.getTokenVersionCalls)
 	}
 }
 
 func TestAuthSessionRepositoryCreateGetAndDeleteSession(t *testing.T) {
 	redisServer := miniredis.RunT(t)
-	store := newTestAuthSessionRepository(redisServer, &tokenVersionRepoStub{version: 1})
+	store := newTestAuthSessionRepository(redisServer)
 	ctx := context.Background()
 	indexKey := store.userSessionsKey(sessionTestUserID.String())
 	ttl := time.Hour
@@ -179,7 +188,7 @@ func TestAuthSessionRepositoryCreateGetAndDeleteSession(t *testing.T) {
 
 func TestAuthSessionRepositoryDeleteAllUserSessions(t *testing.T) {
 	redisServer := miniredis.RunT(t)
-	store := newTestAuthSessionRepository(redisServer, &tokenVersionRepoStub{version: 1})
+	store := newTestAuthSessionRepository(redisServer)
 	ctx := context.Background()
 	indexKey := store.userSessionsKey(sessionTestUserID.String())
 	for _, sessionID := range []string{"s-1", "s-2"} {
@@ -209,7 +218,7 @@ func TestAuthSessionRepositoryDeleteAllUserSessions(t *testing.T) {
 
 func TestAuthSessionRepositoryUserSessionsIndexTTLIsNotShortened(t *testing.T) {
 	redisServer := miniredis.RunT(t)
-	store := newTestAuthSessionRepository(redisServer, &tokenVersionRepoStub{version: 1})
+	store := newTestAuthSessionRepository(redisServer)
 	ctx := context.Background()
 	indexKey := store.userSessionsKey(sessionTestUserID.String())
 	longTTL := 2 * time.Hour
@@ -243,15 +252,15 @@ func TestAuthSessionRepositoryUserSessionsIndexTTLIsNotShortened(t *testing.T) {
 
 func TestAuthSessionRepositoryKeysUseAppNamePrefix(t *testing.T) {
 	redisServer := miniredis.RunT(t)
-	store := newTestAuthSessionRepositoryWithAppName(redisServer, &tokenVersionRepoStub{version: 7}, " aegiscore-user-services ")
+	store := newTestAuthSessionRepositoryWithAppName(redisServer, " aegiscore-user-services ")
 	ctx := context.Background()
 	session := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-prefixed", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
 
 	if err := store.CreateSession(ctx, session, time.Hour); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if _, err := store.GetCurrentTokenVersion(ctx, sessionTestUserID.String()); err != nil {
-		t.Fatalf("GetCurrentTokenVersion: %v", err)
+	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7); err != nil {
+		t.Fatalf("CacheTokenVersion: %v", err)
 	}
 
 	if !redisServer.Exists("aegiscore-user-services:auth:session:s-prefixed") {
@@ -270,15 +279,15 @@ func TestAuthSessionRepositoryKeysUseAppNamePrefix(t *testing.T) {
 
 func TestAuthSessionRepositoryKeysRemainUnprefixedWhenAppNameEmpty(t *testing.T) {
 	redisServer := miniredis.RunT(t)
-	store := newTestAuthSessionRepositoryWithAppName(redisServer, &tokenVersionRepoStub{version: 7}, "   ")
+	store := newTestAuthSessionRepositoryWithAppName(redisServer, "   ")
 	ctx := context.Background()
 	session := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-empty-prefix", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
 
 	if err := store.CreateSession(ctx, session, time.Hour); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if _, err := store.GetCurrentTokenVersion(ctx, sessionTestUserID.String()); err != nil {
-		t.Fatalf("GetCurrentTokenVersion: %v", err)
+	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7); err != nil {
+		t.Fatalf("CacheTokenVersion: %v", err)
 	}
 
 	if !redisServer.Exists("auth:session:s-empty-prefix") {
@@ -295,20 +304,19 @@ func TestAuthSessionRepositoryKeysRemainUnprefixedWhenAppNameEmpty(t *testing.T)
 	}
 }
 
-func newTestAuthSessionRepository(redisServer *miniredis.Miniredis, repo repository.UserTokenVersionRepository) *authSessionRepository {
-	return newTestAuthSessionRepositoryWithConfig(redisServer, repo, config.AuthConfig{TokenVersionCacheTTL: time.Minute})
+func newTestAuthSessionRepository(redisServer *miniredis.Miniredis) *authSessionRepository {
+	return newTestAuthSessionRepositoryWithConfig(redisServer, config.AuthConfig{TokenVersionCacheTTL: time.Minute})
 }
 
-func newTestAuthSessionRepositoryWithConfig(redisServer *miniredis.Miniredis, repo repository.UserTokenVersionRepository, authCfg config.AuthConfig) *authSessionRepository {
+func newTestAuthSessionRepositoryWithConfig(redisServer *miniredis.Miniredis, authCfg config.AuthConfig) *authSessionRepository {
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
-	return &authSessionRepository{redis: client, repo: repo, keys: service.NewRedisKeyBuilder(&config.Config{}), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL}
+	return &authSessionRepository{redis: client, keys: service.NewRedisKeyBuilder(&config.Config{}), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL}
 }
 
-func newTestAuthSessionRepositoryWithAppName(redisServer *miniredis.Miniredis, repo repository.UserTokenVersionRepository, appName string) *authSessionRepository {
+func newTestAuthSessionRepositoryWithAppName(redisServer *miniredis.Miniredis, appName string) *authSessionRepository {
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
 	store := NewAuthSessionRepository(AuthSessionRepositoryParams{
 		Redis: client,
-		Repo:  repo,
 		Keys:  service.NewRedisKeyBuilder(&config.Config{App: config.AppConfig{Name: appName}}),
 		Cfg: &config.Config{
 			App:  config.AppConfig{Name: appName},
@@ -316,17 +324,4 @@ func newTestAuthSessionRepositoryWithAppName(redisServer *miniredis.Miniredis, r
 		},
 	})
 	return store.(*authSessionRepository)
-}
-
-type tokenVersionRepoStub struct {
-	version              int64
-	getTokenVersionCalls int
-}
-
-func (r *tokenVersionRepoStub) GetTokenVersion(context.Context, uuid.UUID) (int64, error) {
-	r.getTokenVersionCalls++
-	return r.version, nil
-}
-func (r *tokenVersionRepoStub) IncrementTokenVersion(context.Context, uuid.UUID) (int64, error) {
-	return r.version + 1, nil
 }
