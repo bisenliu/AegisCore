@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// NormalizeCreateUser 在 service 处理前裁剪用户创建输入，并将 username 转为小写。
 func NormalizeCreateUser(req *dto.CreateUserRequest) error {
 	req.Nickname = strings.TrimSpace(req.Nickname)
 	req.Username = strings.ToLower(strings.TrimSpace(req.Username))
@@ -23,6 +24,7 @@ func NormalizeCreateUser(req *dto.CreateUserRequest) error {
 	return nil
 }
 
+// NormalizeListUsers 应用分页默认值并裁剪用户列表过滤条件。
 func NormalizeListUsers(req *dto.ListUsersRequest) {
 	paging := response.NormalizePagination(req.Page, req.PageSize)
 	req.Page = paging.Page
@@ -33,6 +35,7 @@ func NormalizeListUsers(req *dto.ListUsersRequest) {
 	req.Username = strings.TrimSpace(req.Username)
 }
 
+// ParseUserID 将 URI user ID 转换为 UUID，并将无效输入映射为 API bad request。
 func ParseUserID(req dto.GetUserRequest) (uuid.UUID, error) {
 	userID, err := uuid.Parse(req.UserID)
 	if err != nil {
@@ -41,6 +44,7 @@ func ParseUserID(req dto.GetUserRequest) (uuid.UUID, error) {
 	return userID, nil
 }
 
+// NormalizeLogin 裁剪凭证，并将空登录字段映射为 unauthenticated 错误。
 func NormalizeLogin(req *dto.LoginRequest) error {
 	req.Username = strings.TrimSpace(req.Username)
 	req.Password = strings.TrimSpace(req.Password)
@@ -50,6 +54,7 @@ func NormalizeLogin(req *dto.LoginRequest) error {
 	return nil
 }
 
+// NormalizeChangePassword 规范化受限 token，并校验新密码字段。
 func NormalizeChangePassword(req *dto.ChangePasswordRequest) error {
 	req.Token = auth.StripBearerPrefix(req.Token)
 	req.NewPassword = strings.TrimSpace(req.NewPassword)
@@ -62,6 +67,7 @@ func NormalizeChangePassword(req *dto.ChangePasswordRequest) error {
 	return nil
 }
 
+// NormalizeRefresh 规范化 refresh token 输入，并拒绝空值或仅 Bearer 的值。
 func NormalizeRefresh(req *dto.RefreshTokenRequest) error {
 	req.RefreshToken = auth.StripBearerPrefix(req.RefreshToken)
 	if req.RefreshToken == "" || strings.EqualFold(req.RefreshToken, auth.TokenTypeBearer) {

@@ -15,8 +15,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// defaultHTTPShutdownTimeout 是配置缺省 http.shutdown_timeout 时使用的关闭超时。
 const defaultHTTPShutdownTimeout = 10 * time.Second
 
+// HTTPServerParams 包含注册 HTTP server 生命周期所需的 Fx 输入。
 type HTTPServerParams struct {
 	fx.In
 
@@ -27,6 +29,7 @@ type HTTPServerParams struct {
 	Engine     *gin.Engine
 }
 
+// NewHTTPServer 创建 HTTP server，并注册 Fx start/stop 生命周期 hook。
 func NewHTTPServer(params HTTPServerParams) *http.Server {
 	addr := fmt.Sprintf("%s:%d", params.Config.HTTP.Host, params.Config.HTTP.Port)
 	server := &http.Server{
@@ -57,6 +60,7 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 		OnStop: func(ctx context.Context) error {
 			shutdownTimeout := params.Config.HTTP.ShutdownTimeout
 			if shutdownTimeout == 0 {
+				// 0 表示配置未填写超时，应使用服务默认值而不是取消关闭边界。
 				shutdownTimeout = defaultHTTPShutdownTimeout
 			}
 			shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
@@ -71,6 +75,7 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 
 func handleHTTPServeError(log *zap.Logger, shutdowner fx.Shutdowner, err error) {
 	if err == nil || errors.Is(err, http.ErrServerClosed) {
+		// http.ErrServerClosed 是正常优雅关闭过程产生的错误，不应再次停止 Fx app。
 		return
 	}
 

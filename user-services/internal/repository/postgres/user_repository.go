@@ -22,28 +22,34 @@ var _ repository.UserProfileRepository = (*userRepository)(nil)
 var _ repository.UserCredentialRepository = (*userRepository)(nil)
 var _ repository.UserTokenVersionRepository = (*userRepository)(nil)
 
+// UserRepositoryParams 包含 PostgreSQL-backed 用户仓储所需的 Fx 输入。
 type UserRepositoryParams struct {
 	fx.In
 
 	Client *ent.Client `name:"user_db"`
 }
 
+// NewUserRepository 构造基于 Ent 的用户仓储。
 func NewUserRepository(params UserRepositoryParams) repository.UserRepository {
 	return &userRepository{client: params.Client}
 }
 
+// AsUserProfileRepository 将聚合仓储暴露为资料专用依赖。
 func AsUserProfileRepository(repo repository.UserRepository) repository.UserProfileRepository {
 	return repo
 }
 
+// AsUserCredentialRepository 将聚合仓储暴露为凭证专用依赖。
 func AsUserCredentialRepository(repo repository.UserRepository) repository.UserCredentialRepository {
 	return repo
 }
 
+// AsUserTokenVersionRepository 将聚合仓储暴露为 token version 专用依赖。
 func AsUserTokenVersionRepository(repo repository.UserRepository) repository.UserTokenVersionRepository {
 	return repo
 }
 
+// Create 插入用户记录，并将唯一约束冲突映射为 ErrUserAlreadyExists。
 func (r *userRepository) Create(ctx context.Context, input repository.CreateUserInput) (*domain.User, error) {
 	created, err := r.client.User.Create().
 		SetUserID(input.UserID).
@@ -61,6 +67,7 @@ func (r *userRepository) Create(ctx context.Context, input repository.CreateUser
 	return nil, fmt.Errorf("create user username %s: %w", input.Username, err)
 }
 
+// GetByUserID 按外部 UUID 返回未软删除用户。
 func (r *userRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*domain.User, error) {
 	user, err := r.client.User.Query().Where(user.UserIDEQ(userID), user.DeletedAtIsNil()).Only(ctx)
 	if err == nil {
@@ -72,6 +79,7 @@ func (r *userRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*do
 	return nil, fmt.Errorf("query user by user_id %s: %w", userID.String(), err)
 }
 
+// GetByUsername 按规范化 username 返回未软删除用户。
 func (r *userRepository) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
 	user, err := r.client.User.Query().Where(user.UsernameEQ(username), user.DeletedAtIsNil()).Only(ctx)
 	if err == nil {
@@ -83,6 +91,7 @@ func (r *userRepository) GetByUsername(ctx context.Context, username string) (*d
 	return nil, fmt.Errorf("query user by username %s: %w", username, err)
 }
 
+// GetTokenVersion 返回未软删除用户的当前 token version。
 func (r *userRepository) GetTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
 	user, err := r.client.User.Query().Where(user.UserIDEQ(userID), user.DeletedAtIsNil()).Only(ctx)
 	if err == nil {
@@ -94,10 +103,12 @@ func (r *userRepository) GetTokenVersion(ctx context.Context, userID uuid.UUID) 
 	return 0, fmt.Errorf("query user token version by user_id %s: %w", userID.String(), err)
 }
 
+// IncrementTokenVersion 递增用户 token version 并返回新值。
 func (r *userRepository) IncrementTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
 	updated, err := r.client.User.Update().Where(user.UserIDEQ(userID), user.DeletedAtIsNil()).AddTokenVersion(1).Save(ctx)
 	if err == nil {
 		if updated == 0 {
+			// Ent Update().Save 返回受影响行数，0 表示过滤条件未匹配到用户。
 			return 0, domain.ErrUserNotFound
 		}
 		user, err := r.GetByUserID(ctx, userID)
@@ -109,10 +120,12 @@ func (r *userRepository) IncrementTokenVersion(ctx context.Context, userID uuid.
 	return 0, fmt.Errorf("increment user token version by user_id %s: %w", userID.String(), err)
 }
 
+// UpdateCredentials 替换密码哈希和状态，递增 token version 并返回新版本。
 func (r *userRepository) UpdateCredentials(ctx context.Context, input repository.UpdateCredentialsInput) (int64, error) {
 	updated, err := r.client.User.Update().Where(user.UserIDEQ(input.UserID), user.DeletedAtIsNil()).SetPasswordHash(input.PasswordHash).SetStatus(int64(input.Status)).AddTokenVersion(1).Save(ctx)
 	if err == nil {
 		if updated == 0 {
+			// Ent Update().Save 返回受影响行数，0 表示过滤条件未匹配到用户。
 			return 0, domain.ErrUserNotFound
 		}
 		user, err := r.GetByUserID(ctx, input.UserID)
@@ -124,6 +137,7 @@ func (r *userRepository) UpdateCredentials(ctx context.Context, input repository
 	return 0, fmt.Errorf("update user credentials by user_id %s: %w", input.UserID.String(), err)
 }
 
+// ListUsers 返回一页未软删除用户，以及同一过滤条件下的总数。
 func (r *userRepository) ListUsers(ctx context.Context, input repository.ListUsersInput) ([]domain.User, int, error) {
 	predicates := userListPredicates(input)
 	total, err := r.client.User.Query().Where(predicates...).Count(ctx)
@@ -171,6 +185,7 @@ func toDomainUsers(users []*ent.User) []domain.User {
 }
 
 func userListPredicates(input repository.ListUsersInput) []predicate.User {
+	// 所有列表查询先隐藏软删除用户，再应用可选业务过滤条件。
 	predicates := []predicate.User{user.DeletedAtIsNil()}
 	if input.Nickname != "" {
 		predicates = append(predicates, user.NicknameContains(input.Nickname))

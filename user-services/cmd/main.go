@@ -26,15 +26,19 @@ import (
 )
 
 const (
+	// fxAppStartTimeout 限制 Fx 启动时长，避免依赖失败导致 CLI 无限挂起。
 	fxAppStartTimeout = 15 * time.Second
-	fxAppStopTimeout  = 30 * time.Second
+	// fxAppStopTimeout 限制 SIGINT 或 SIGTERM 后的优雅关闭时长。
+	fxAppStopTimeout = 30 * time.Second
 )
 
+// lifecycleApp 是 runServe 和测试所需的最小 Fx 生命周期接口。
 type lifecycleApp interface {
 	Start(context.Context) error
 	Stop(context.Context) error
 }
 
+// newLifecycleApp 构造服务生命周期 app，并允许测试替换。
 var newLifecycleApp = func(configPath string) lifecycleApp {
 	return bootstrap.NewApp(configPath)
 }
@@ -81,6 +85,7 @@ func runServe(ctx context.Context, configPath string) error {
 
 	<-ctx.Done()
 
+	// 使用未被取消的父 context，使信号触发后优雅关闭仍能获得完整预算。
 	stopCtx, cancelStop := context.WithTimeout(context.WithoutCancel(upstreamCtx), fxAppStopTimeout)
 	defer cancelStop()
 	return app.Stop(stopCtx)

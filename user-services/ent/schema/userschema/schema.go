@@ -9,9 +9,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// defaultUserStatus 是 users.status 的持久化默认值，必须与 domain.UserStatusNormal 保持一致。
+// defaultUserStatus 是 users.status 的持久化默认值，调用方未显式传入状态时新用户默认为正常状态。
+// 该值必须与 domain.UserStatusNormal 保持一致，避免 schema 默认值和领域默认值漂移。
 const defaultUserStatus = 100
 
+// Fields 返回 users 表列定义，包括认证字段和时间戳默认值。
 func Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("id").Unique().Immutable().Comment("用户ID"),
@@ -27,6 +29,7 @@ func Fields() []ent.Field {
 	}
 }
 
+// Indexes 返回支持 nickname、status 和软删除过滤查询的索引。
 func Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("nickname"),

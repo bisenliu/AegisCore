@@ -11,12 +11,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// AuthController 处理认证和会话端点的 HTTP 请求。
 type AuthController struct {
 	authService service.AuthService
 	validator   *commonvalidation.Validator
 }
 
-// ChangePassword godoc
+// ChangePassword 使用受限 token 处理强制改密请求。
 // @Summary 修改密码
 // @Description 使用登录后返回的受限改密凭据修改密码，并将用户状态恢复为正常。
 // @Tags 认证
@@ -46,11 +47,12 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 	response.OK(c, result)
 }
 
+// NewAuthController 使用 service 和 validator 依赖构造认证控制器。
 func NewAuthController(authService service.AuthService, validator *commonvalidation.Validator) *AuthController {
 	return &AuthController{authService: authService, validator: validator}
 }
 
-// LoginUser godoc
+// LoginUser 处理用户名和密码登录请求。
 // @Summary 用户登录
 // @Description 校验用户名和密码，创建可撤销会话并返回 Access Token 与 Refresh Token。
 // @Tags 认证
@@ -79,7 +81,7 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 	response.OK(c, tokens)
 }
 
-// RefreshToken godoc
+// RefreshToken 处理 refresh token 换取请求。
 // @Summary 刷新 Access Token
 // @Description 使用仍有效且未撤销的 Refresh Token 换取新的 Access Token。
 // @Tags 认证
@@ -108,7 +110,7 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 	response.OK(c, tokens)
 }
 
-// LogoutCurrentSession godoc
+// LogoutCurrentSession 处理当前认证会话的登出请求。
 // @Summary 退出当前设备
 // @Description 删除当前会话的 Refresh Token 会话记录，不修改用户 token_version。
 // @Tags 认证
@@ -127,7 +129,7 @@ func (ctl *AuthController) LogoutCurrentSession(c *gin.Context) {
 	response.OK(c, result)
 }
 
-// LogoutAllSessions godoc
+// LogoutAllSessions 处理认证用户全部会话的撤销请求。
 // @Summary 退出全部设备
 // @Description 递增用户 token_version 并清理该用户所有 Refresh Token 会话。
 // @Tags 认证

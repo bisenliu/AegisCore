@@ -9,19 +9,23 @@ import (
 	zhtranslations "github.com/go-playground/validator/v10/translations/zh"
 )
 
+// NewDefault 使用包默认 locale 创建 Validator。
 func NewDefault() (*Validator, error) {
 	return New(Options{Locale: DefaultLocale})
 }
 
+// New 创建已注册翻译和自定义枚举校验的 Validator。
 func New(opts Options) (*Validator, error) {
 	locale := opts.Locale
 	if locale == "" {
 		locale = DefaultLocale
 	}
 	if locale != DefaultLocale {
+		// 当前只注册 zh 翻译，提前失败可避免生成中英混杂的错误消息。
 		return nil, fmt.Errorf("unsupported validation locale %q", locale)
 	}
 
+	// RequiredStructEnabled 让 request DTO 嵌套结构体上的 required tag 行为保持一致。
 	validate := validator.New(validator.WithRequiredStructEnabled())
 	validate.RegisterTagNameFunc(fieldName)
 
@@ -44,6 +48,7 @@ func New(opts Options) (*Validator, error) {
 	return &Validator{validate: validate, trans: trans}, nil
 }
 
+// Validate 先应用默认值，再执行 struct tag 校验，最后执行请求自定义校验。
 func (v *Validator) Validate(dst any) error {
 	if d, ok := dst.(Defaultable); ok {
 		d.SetDefaults()
@@ -59,6 +64,7 @@ func (v *Validator) Validate(dst any) error {
 	return nil
 }
 
+// NormalizeError 将 bind、JSON 和 validator 错误转换为 AegisCore 校验错误。
 func (v *Validator) NormalizeError(dst any, err error) error {
 	return v.normalizeError(dst, err)
 }

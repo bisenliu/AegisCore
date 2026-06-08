@@ -33,22 +33,27 @@ const (
 
 var requestTags = []string{TagJSON, TagForm, TagURI, TagQuery}
 
+// Defaultable 标记可在校验前填充安全默认值的请求值。
 type Defaultable interface {
 	SetDefaults()
 }
 
+// Validatable 标记可在 struct tag 校验后执行自定义校验的请求值。
 type Validatable interface {
 	Validate() error
 }
 
+// Enum 由可针对固定枚举域自校验的值实现。
 type Enum interface {
 	IsValid() bool
 }
 
+// EnumValues 暴露允许的枚举值，用于校验错误消息。
 type EnumValues interface {
 	AllowedValues() []string
 }
 
+// FieldError 描述返回给 API 客户端的单个请求字段校验失败。
 type FieldError struct {
 	Field   string `json:"field"`
 	Label   string `json:"label"`
@@ -56,12 +61,14 @@ type FieldError struct {
 	Message string `json:"message"`
 }
 
+// Error 是规范化后的校验或绑定错误，可携带字段明细。
 type Error struct {
 	Message string        `json:"message"`
 	Fields  []FieldError  `json:"fields,omitempty"`
 	Code    response.Code `json:"-"`
 }
 
+// Failure 包含从校验或绑定错误派生出的响应元数据。
 type Failure struct {
 	Message      string
 	Fields       []FieldError
@@ -82,6 +89,7 @@ func (e *bindFieldError) Unwrap() error {
 	return e.err
 }
 
+// Error 返回规范化公开消息，并允许 nil receiver。
 func (e *Error) Error() string {
 	if e == nil {
 		return ""
@@ -89,10 +97,12 @@ func (e *Error) Error() string {
 	return e.Message
 }
 
+// Options 配置 Validator 构造行为。
 type Options struct {
 	Locale string
 }
 
+// Validator 用 AegisCore 翻译和规范化规则包装 go-playground validator。
 type Validator struct {
 	validate *validator.Validate
 	trans    ut.Translator

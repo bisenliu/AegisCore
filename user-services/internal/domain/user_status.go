@@ -5,6 +5,7 @@ import (
 	"strconv"
 )
 
+// UserStatus 是用户持久化生命周期和认证状态。
 type UserStatus int64
 
 const (
@@ -16,6 +17,7 @@ const (
 	UserStatusMustChangePassword UserStatus = 300
 )
 
+// IsValid 返回 s 是否为已知用户状态值之一。
 func (s UserStatus) IsValid() bool {
 	switch s {
 	case UserStatusNormal, UserStatusDisabled, UserStatusMustChangePassword:
@@ -25,6 +27,7 @@ func (s UserStatus) IsValid() bool {
 	}
 }
 
+// AllowedValues 返回用于枚举校验消息的有效用户状态字符串值。
 func (s UserStatus) AllowedValues() []string {
 	return []string{
 		strconv.FormatInt(int64(UserStatusNormal), 10),
@@ -33,10 +36,12 @@ func (s UserStatus) AllowedValues() []string {
 	}
 }
 
+// CanLogin 返回 s 是否允许常规登录和 access token 使用。
 func (s UserStatus) CanLogin() bool {
 	return s == UserStatusNormal
 }
 
+// UnmarshalText 将 query 或 form 文本解析为用户状态值。
 func (s *UserStatus) UnmarshalText(text []byte) error {
 	value, err := strconv.ParseInt(string(text), 10, 64)
 	if err != nil {
@@ -46,6 +51,7 @@ func (s *UserStatus) UnmarshalText(text []byte) error {
 	return nil
 }
 
+// UnmarshalJSON 解析 JSON 数字用户状态值。
 func (s *UserStatus) UnmarshalJSON(data []byte) error {
 	var value int64
 	if err := json.Unmarshal(data, &value); err != nil {

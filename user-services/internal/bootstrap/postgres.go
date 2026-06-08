@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// NamedPostgresParams 包含供应用户服务 PostgreSQL 连接池所需的 Fx 输入。
 type NamedPostgresParams struct {
 	fx.In
 
@@ -18,6 +19,7 @@ type NamedPostgresParams struct {
 	Log       *zap.Logger
 }
 
+// NamedPostgresPools 包含 user 和 common PostgreSQL 连接池的 Fx 输出。
 type NamedPostgresPools struct {
 	fx.Out
 
@@ -25,6 +27,7 @@ type NamedPostgresPools struct {
 	CommonDB *sql.DB `name:"common_db"`
 }
 
+// ProvidePostgresPools 供应 user-services 所需的具名 PostgreSQL 连接池。
 func ProvidePostgresPools(params NamedPostgresParams) (NamedPostgresPools, error) {
 	dbs, err := datastorefx.NewPostgresPools(
 		params.Lifecycle,

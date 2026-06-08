@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// BindValues 按给定 struct tag 顺序扫描，将 URL 风格 values 绑定到结构体指针。
 func BindValues(dst any, values url.Values, tags ...string) error {
 	value := reflect.ValueOf(dst)
 	if value.Kind() != reflect.Ptr || value.IsNil() {
@@ -31,6 +32,7 @@ func bindStruct(value reflect.Value, values url.Values, tags []string) error {
 			continue
 		}
 		if structField.Anonymous && field.Kind() == reflect.Ptr && field.Type().Elem().Kind() == reflect.Struct {
+			// 嵌入指针结构体只有在其 tag 字段出现时才分配，保留可选过滤器语义。
 			if field.IsNil() && embeddedStructHasValues(field.Type().Elem(), values, tags) {
 				field.Set(reflect.New(field.Type().Elem()))
 			}
@@ -103,12 +105,14 @@ func setField(field reflect.Value, rawValues []string) error {
 	}
 	if field.Kind() == reflect.Ptr {
 		if rawValues[0] == "" {
+			// 空字符串保持指针字段为 nil，避免将省略的可选值混淆为零值。
 			return nil
 		}
 		field.Set(reflect.New(field.Type().Elem()))
 		return setField(field.Elem(), rawValues)
 	}
 	if field.Kind() == reflect.Slice {
+		// 重复 query/form 值映射为切片；标量字段只使用首个值以保持绑定可预测。
 		slice := reflect.MakeSlice(field.Type(), 0, len(rawValues))
 		for _, raw := range rawValues {
 			elem := reflect.New(field.Type().Elem()).Elem()
@@ -126,10 +130,12 @@ func setField(field reflect.Value, rawValues []string) error {
 func setScalar(field reflect.Value, raw string) error {
 	if field.CanAddr() {
 		if unmarshaler, ok := field.Addr().Interface().(encoding.TextUnmarshaler); ok {
+			// 自定义文本反序列化是枚举等领域类型的扩展点。
 			return unmarshaler.UnmarshalText([]byte(raw))
 		}
 	}
 	if field.Type() == reflect.TypeOf(time.Duration(0)) {
+		// duration 请求输入使用类似 "5s" 的 Go 语法，而不是原始整数纳秒。
 		value, err := time.ParseDuration(raw)
 		if err != nil {
 			return err

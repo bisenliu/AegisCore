@@ -14,6 +14,7 @@ import (
 	"go.uber.org/fx"
 )
 
+// NewApp 构建包含共享配置、日志和服务模块的 user-services Fx 应用。
 func NewApp(configPath string) *fx.App {
 	return fx.New(
 		fx.Supply(configfx.ConfigPath(configPath)),
@@ -25,6 +26,7 @@ func NewApp(configPath string) *fx.App {
 	)
 }
 
+// AppModule 组装 user-services 运行时基础设施、仓储、服务、控制器、路由和 HTTP server。
 var AppModule = fx.Module("aegiscore-user-services",
 	commontz.Module,
 	validation.Module,

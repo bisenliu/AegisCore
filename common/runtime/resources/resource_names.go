@@ -1,8 +1,10 @@
 package resources
 
-// 运行时资源名称用于 datastore 和 Ent 的 Fx wiring。
 const (
-	NameUserDB     = "user_db"
-	NameCommonDB   = "common_db"
+	// NameUserDB 是用户数据库的具名 datastore 和 Ent 资源名。
+	NameUserDB = "user_db"
+	// NameCommonDB 是 common 数据库的具名 datastore 和 Ent 资源名。
+	NameCommonDB = "common_db"
+	// NameCacheRedis 是缓存型运行时状态使用的具名 Redis 资源名。
 	NameCacheRedis = "cache_redis"
 )

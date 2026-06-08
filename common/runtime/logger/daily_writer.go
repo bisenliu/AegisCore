@@ -64,7 +64,8 @@ func (w *dailyLumberjackWriteSyncer) rotateLocked() error {
 	}
 	w.date = date
 	w.logger = &lumberjack.Logger{
-		Filename:   w.datedFilename(date),
+		Filename: w.datedFilename(date),
+		// 默认值采用保守保留策略：100 MB 分片、30 个备份、保留 7 天。
 		MaxSize:    positiveOrDefault(w.cfg.MaxSizeMB, 100),
 		MaxBackups: positiveOrDefault(w.cfg.MaxBackups, 30),
 		MaxAge:     positiveOrDefault(w.cfg.MaxAgeDays, 7),

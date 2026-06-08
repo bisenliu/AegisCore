@@ -16,10 +16,13 @@ import (
 )
 
 const (
-	defaultAccessTokenTTL  = 15 * time.Minute
+	// defaultAccessTokenTTL 是配置为非正数时 access/改密 token 的兜底生命周期。
+	defaultAccessTokenTTL = 15 * time.Minute
+	// defaultRefreshTokenTTL 是配置为非正数时 refresh 会话的兜底生命周期。
 	defaultRefreshTokenTTL = 7 * 24 * time.Hour
 )
 
+// AuthTokenIssuer 签发和解析认证流程使用的 JWT。
 type AuthTokenIssuer interface {
 	IssueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*issuedTokenPair, error)
 	IssuePasswordChangeToken(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*dto.TokenResponse, error)
@@ -41,6 +44,7 @@ func newAuthTokenIssuer(jwt *auth.JWTService, cfg *config.Config) AuthTokenIssue
 	return &authTokenIssuer{jwt: jwt, config: cfg}
 }
 
+// IssueTokenPair 为一个认证会话签发 access 和 refresh token。
 func (i *authTokenIssuer) IssueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*issuedTokenPair, error) {
 	accessTTL := i.accessTokenTTL()
 	refreshTTL := i.refreshTokenTTL()
@@ -60,6 +64,7 @@ func (i *authTokenIssuer) IssueTokenPair(ctx context.Context, userID string, tok
 	}, nil
 }
 
+// IssuePasswordChangeToken 签发受限 token，并有意不返回 refresh token。
 func (i *authTokenIssuer) IssuePasswordChangeToken(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*dto.TokenResponse, error) {
 	ttl := i.accessTokenTTL()
 	token, err := i.jwt.SignPasswordChangeToken(auth.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: ttl})
@@ -70,6 +75,7 @@ func (i *authTokenIssuer) IssuePasswordChangeToken(ctx context.Context, userID s
 	return &dto.TokenResponse{AccessToken: token, TokenType: auth.TokenTypeBearer, ExpiresIn: int64(ttl.Seconds()), PasswordChangeRequired: true}, nil
 }
 
+// ParseRefreshToken 规范化可选 Bearer 输入并校验 refresh token claims。
 func (i *authTokenIssuer) ParseRefreshToken(ctx context.Context, token string) (*auth.Claims, error) {
 	claims, err := i.jwt.ParseRefreshToken(auth.StripBearerPrefix(token))
 	if err != nil {
@@ -87,6 +93,7 @@ func (i *authTokenIssuer) ParseRefreshToken(ctx context.Context, token string) (
 	return claims, nil
 }
 
+// ParsePasswordChangeToken 规范化可选 Bearer 输入，并返回已校验的改密 claims。
 func (i *authTokenIssuer) ParsePasswordChangeToken(ctx context.Context, token string) (*auth.Claims, uuid.UUID, error) {
 	claims, err := i.jwt.ParsePasswordChangeToken(auth.StripBearerPrefix(token))
 	if err != nil {
@@ -104,6 +111,7 @@ func (i *authTokenIssuer) ParsePasswordChangeToken(ctx context.Context, token st
 func (i *authTokenIssuer) accessTokenTTL() time.Duration {
 	ttl := i.config.Auth.JWT.AccessTokenTTL
 	if ttl <= 0 {
+		// 非正数 TTL 配置使用默认值，确保签发 token 始终会过期。
 		return defaultAccessTokenTTL
 	}
 	return ttl
@@ -112,6 +120,7 @@ func (i *authTokenIssuer) accessTokenTTL() time.Duration {
 func (i *authTokenIssuer) refreshTokenTTL() time.Duration {
 	ttl := i.config.Auth.JWT.RefreshTokenTTL
 	if ttl <= 0 {
+		// 非正数 TTL 配置使用默认值，确保 refresh 会话始终会过期。
 		return defaultRefreshTokenTTL
 	}
 	return ttl

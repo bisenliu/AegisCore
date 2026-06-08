@@ -21,16 +21,19 @@ const (
 	DefaultMaxTraceIDLength = 128
 )
 
+// TraceIDOptions 配置 trace-id 请求头传播、长度限制和校验规则。
 type TraceIDOptions struct {
 	HeaderName string
 	MaxLength  int
 	Validate   func(string) bool
 }
 
+// TraceID 返回传播 X-Trace-ID 或生成 UUID trace id 的中间件。
 func TraceID() gin.HandlerFunc {
 	return TraceIDWithOptions(TraceIDOptions{})
 }
 
+// TraceIDWithOptions 返回使用自定义 trace-id 请求头和校验行为的中间件。
 func TraceIDWithOptions(options TraceIDOptions) gin.HandlerFunc {
 	headerName := options.HeaderName
 	if headerName == "" {
@@ -38,16 +41,19 @@ func TraceIDWithOptions(options TraceIDOptions) gin.HandlerFunc {
 	}
 	maxLength := options.MaxLength
 	if maxLength == 0 {
+		// 0 是便于配置的默认值哨兵，不表示允许无限长度的 trace-id。
 		maxLength = DefaultMaxTraceIDLength
 	}
 	return func(c *gin.Context) {
 		traceID := strings.TrimSpace(c.GetHeader(headerName))
 		if traceID == "" || len(traceID) > maxLength || (options.Validate != nil && !options.Validate(traceID)) {
+			// 不可信 trace-id 会被重新生成，避免日志字段失控或继续传播无效关联数据。
 			traceID = uuid.NewString()
 		}
 		ctx := logger.WithTraceID(c.Request.Context(), traceID)
 		if base, ok := c.Get(ContextKeyLogger); ok {
 			if log, ok := base.(*zap.Logger); ok {
+				// 将请求 logger 保留到 context，使包级 logger helper 复用相同基础字段。
 				ctx = logger.ToContext(ctx, log)
 			}
 		}

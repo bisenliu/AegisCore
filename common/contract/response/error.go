@@ -6,6 +6,7 @@ import (
 	"net/http"
 )
 
+// Code 是所有响应信封携带的稳定应用层响应码。
 type Code int
 
 const (
@@ -50,6 +51,8 @@ const (
 	CodeInternalError Code = 90000
 )
 
+// Error 描述可渲染为响应信封的应用错误。
+// Cause 保留内部错误供 errors.Is/As 使用，但不会暴露给客户端。
 type Error struct {
 	Code       Code
 	Message    string
@@ -57,6 +60,7 @@ type Error struct {
 	Cause      error
 }
 
+// Error 返回对外展示的错误消息，并允许 nil receiver 以兼容防御性日志路径。
 func (e *Error) Error() string {
 	if e == nil {
 		return ""
@@ -64,6 +68,7 @@ func (e *Error) Error() string {
 	return e.Message
 }
 
+// Unwrap 返回内部原因错误，使调用方可以使用 errors.Is 和 errors.As。
 func (e *Error) Unwrap() error {
 	if e == nil {
 		return nil
@@ -71,56 +76,70 @@ func (e *Error) Unwrap() error {
 	return e.Cause
 }
 
+// NewError 创建不包含内部原因的应用错误。
 func NewError(code Code, message string, status int) *Error {
 	return &Error{Code: code, Message: message, HTTPStatus: status}
 }
 
+// Wrap 创建应用错误，并将 err 保留为内部原因。
 func Wrap(err error, code Code, message string, status int) *Error {
 	return &Error{Code: code, Message: message, HTTPStatus: status, Cause: err}
 }
 
+// BadRequestError 创建表示请求格式错误或无法解析的 400 错误。
 func BadRequestError(format string, args ...any) *Error {
 	return NewError(CodeBadRequest, formatMessage(format, args), http.StatusBadRequest)
 }
 
+// ValidationFailedError 创建表示请求字段语义校验失败的 400 错误。
 func ValidationFailedError(format string, args ...any) *Error {
 	return NewError(CodeValidationFailed, formatMessage(format, args), http.StatusBadRequest)
 }
 
+// UnauthenticatedError 创建表示缺少认证状态的 401 错误。
 func UnauthenticatedError(format string, args ...any) *Error {
 	return NewError(CodeUnauthenticated, formatMessage(format, args), http.StatusUnauthorized)
 }
 
+// TokenInvalidError 创建表示 token 格式错误、无效或无法校验的 401 错误。
 func TokenInvalidError(format string, args ...any) *Error {
 	return NewError(CodeTokenInvalid, formatMessage(format, args), http.StatusUnauthorized)
 }
 
+// TokenExpiredError 创建表示 token 已过期而被拒绝的 401 错误。
 func TokenExpiredError(format string, args ...any) *Error {
 	return NewError(CodeTokenExpired, formatMessage(format, args), http.StatusUnauthorized)
 }
 
+// ForbiddenError 创建表示认证调用方无权访问资源的 403 错误。
 func ForbiddenError(format string, args ...any) *Error {
 	return NewError(CodeForbidden, formatMessage(format, args), http.StatusForbidden)
 }
 
+// ConflictError 创建表示领域冲突或资源状态不允许操作的 409 错误。
 func ConflictError(format string, args ...any) *Error {
 	return NewError(CodeConflict, formatMessage(format, args), http.StatusConflict)
 }
 
+// NotFoundError 创建表示资源不存在或不可见的 404 错误。
 func NotFoundError(format string, args ...any) *Error {
 	return NewError(CodeNotFound, formatMessage(format, args), http.StatusNotFound)
 }
 
+// WrapInternal 创建 500 错误，并在响应中使用 publicMessage 隐藏 err 细节。
 func WrapInternal(err error, publicMessage string) *Error {
 	return Wrap(err, CodeInternalError, publicMessage, http.StatusInternalServerError)
 }
 
+// InternalError 创建使用包默认非敏感公开消息的 500 错误。
 func InternalError(err error) *Error {
 	return WrapInternal(err, MessageInternalError)
 }
 
+// FromError 将任意错误转换为应用错误，nil 和未知错误默认映射为内部错误。
 func FromError(err error) *Error {
 	if err == nil {
+		// nil 错误无法生成成功的失败信封，因此按失败关闭策略映射为内部错误。
 		return InternalError(nil)
 	}
 	var appErr *Error

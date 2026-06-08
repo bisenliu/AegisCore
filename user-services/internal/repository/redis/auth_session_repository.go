@@ -27,6 +27,7 @@ const (
 	expiredSessionMinScore = "-inf"
 )
 
+// AuthSessionRepositoryParams 包含 Redis 认证会话仓储所需的 Fx 输入。
 type AuthSessionRepositoryParams struct {
 	fx.In
 
@@ -41,10 +42,12 @@ type authSessionRepository struct {
 	tokenVersionCacheTTL time.Duration
 }
 
+// NewAuthSessionRepository 构造认证会话持久化的 Redis 实现。
 func NewAuthSessionRepository(params AuthSessionRepositoryParams) repository.AuthSessionRepository {
 	return &authSessionRepository{redis: params.Redis, keys: params.Keys, tokenVersionCacheTTL: params.Cfg.Auth.TokenVersionCacheTTL}
 }
 
+// GetCachedTokenVersion 返回缓存的 token version，未命中时返回 ErrTokenVersionCacheMiss。
 func (r *authSessionRepository) GetCachedTokenVersion(ctx context.Context, userID string) (int64, error) {
 	key := r.tokenVersionKey(userID)
 	value, err := r.redis.Get(ctx, key).Result()
@@ -61,9 +64,11 @@ func (r *authSessionRepository) GetCachedTokenVersion(ctx context.Context, userI
 	return version, nil
 }
 
+// CacheTokenVersion 存储用户 token version，供中间件执行撤销校验。
 func (r *authSessionRepository) CacheTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
 	ttl := r.tokenVersionCacheTTL
 	if ttl <= 0 {
+		// 非正数配置表示使用有界默认过期窗口，而不是创建永久缓存项。
 		ttl = defaultTokenVersionCacheTTL
 	}
 	if err := r.redis.Set(ctx, r.tokenVersionKey(userID), formatTokenVersion(tokenVersion), ttl).Err(); err != nil {
@@ -72,8 +77,10 @@ func (r *authSessionRepository) CacheTokenVersion(ctx context.Context, userID st
 	return nil
 }
 
+// CreateSession 存储 refresh token 会话，并按用户建立索引用于批量撤销。
 func (r *authSessionRepository) CreateSession(ctx context.Context, session repository.AuthSession, ttl time.Duration) error {
 	if ttl <= 0 {
+		// 非正数 TTL 回退到短期会话，避免创建永久 Redis key。
 		ttl = defaultAuthSessionTTL
 	}
 	now := time.Now()
@@ -94,6 +101,7 @@ func (r *authSessionRepository) CreateSession(ctx context.Context, session repos
 	pipe.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(now))
 	pipe.ZAdd(ctx, userSessions, rediscache.Z{Score: float64(expiresAt.Unix()), Member: session.SessionID})
 	if indexCurrentTTL < indexTTL {
+		// 用户会话索引需要长于最长会话，但不应被新会话缩短有效期。
 		pipe.Expire(ctx, userSessions, indexTTL)
 	}
 	_, err = pipe.Exec(ctx)
@@ -103,6 +111,7 @@ func (r *authSessionRepository) CreateSession(ctx context.Context, session repos
 	return nil
 }
 
+// GetSession 按 session ID 返回 refresh token 会话。
 func (r *authSessionRepository) GetSession(ctx context.Context, sessionID string) (repository.AuthSession, error) {
 	data, err := r.redis.Get(ctx, r.sessionKey(sessionID)).Bytes()
 	if errors.Is(err, rediscache.Nil) {
@@ -118,6 +127,7 @@ func (r *authSessionRepository) GetSession(ctx context.Context, sessionID string
 	return session, nil
 }
 
+// DeleteSession 删除一个 refresh token 会话，并从用户索引中清理过期项。
 func (r *authSessionRepository) DeleteSession(ctx context.Context, userID string, sessionID string) error {
 	userSessions := r.userSessionsKey(userID)
 	pipe := r.redis.TxPipeline()
@@ -131,6 +141,7 @@ func (r *authSessionRepository) DeleteSession(ctx context.Context, userID string
 	return nil
 }
 
+// DeleteAllUserSessions 删除用户所有存活 refresh token 会话，并删除用户索引。
 func (r *authSessionRepository) DeleteAllUserSessions(ctx context.Context, userID string) error {
 	userSessions := r.userSessionsKey(userID)
 	if err := r.redis.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(time.Now())).Err(); err != nil {
@@ -141,6 +152,7 @@ func (r *authSessionRepository) DeleteAllUserSessions(ctx context.Context, userI
 		return fmt.Errorf("list user auth sessions: %w", err)
 	}
 	pipe := r.redis.TxPipeline()
+	// 已先清理过期成员，因此只需显式删除存活会话的载荷 key。
 	for _, sessionID := range sessions {
 		pipe.Del(ctx, r.sessionKey(sessionID))
 	}

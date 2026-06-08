@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Config is the root configuration object for AegisCore services.
+// Config 是 AegisCore 服务的根配置对象。
 type Config struct {
 	System   SystemConfig              `mapstructure:"system"`
 	App      AppConfig                 `mapstructure:"app"`
@@ -18,15 +18,18 @@ type Config struct {
 	Postgres map[string]PostgresConfig `mapstructure:"postgres"`
 }
 
+// SystemConfig 包含进程级运行时设置。
 type SystemConfig struct {
 	Timezone string `mapstructure:"timezone"`
 }
 
+// AppConfig 标识运行中的服务和部署环境。
 type AppConfig struct {
 	Name        string `mapstructure:"name"`
 	Environment string `mapstructure:"environment"`
 }
 
+// HTTPConfig 包含服务地址、超时、关闭和代理设置。
 type HTTPConfig struct {
 	Host            string        `mapstructure:"host"`
 	Port            int           `mapstructure:"port"`
@@ -37,12 +40,14 @@ type HTTPConfig struct {
 	TrustedProxies  []string      `mapstructure:"trusted_proxies"`
 }
 
+// AuthConfig 包含认证 token 与会话校验设置。
 type AuthConfig struct {
 	JWT                  JWTConfig     `mapstructure:"jwt"`
 	TokenVersionCacheTTL time.Duration `mapstructure:"token_version_cache_ttl"`
 	RefreshTokenRotation bool          `mapstructure:"refresh_token_rotation"`
 }
 
+// JWTConfig 包含 JWT 签发和校验设置。
 type JWTConfig struct {
 	Secret          string        `mapstructure:"secret"`
 	Issuer          string        `mapstructure:"issuer"`
@@ -51,6 +56,7 @@ type JWTConfig struct {
 	RefreshTokenTTL time.Duration `mapstructure:"refresh_token_ttl"`
 }
 
+// LogConfig 控制 zap logger 格式、输出目标和文件轮转。
 type LogConfig struct {
 	Level      string `mapstructure:"level"`
 	Format     string `mapstructure:"format"`
@@ -62,6 +68,7 @@ type LogConfig struct {
 	MaxBackups int    `mapstructure:"max_backups"`
 }
 
+// RedisConfig 包含一个具名 Redis 客户端配置。
 type RedisConfig struct {
 	Addr         string        `mapstructure:"addr"`
 	Username     string        `mapstructure:"username"`
@@ -73,6 +80,7 @@ type RedisConfig struct {
 	PingTimeout  time.Duration `mapstructure:"ping_timeout"`
 }
 
+// PostgresConfig 包含一个具名 PostgreSQL 数据源在生成 DSN 前的配置。
 type PostgresConfig struct {
 	Host            string        `mapstructure:"host"`
 	Port            int           `mapstructure:"port"`
@@ -88,6 +96,7 @@ type PostgresConfig struct {
 	PingTimeout     time.Duration `mapstructure:"ping_timeout"`
 }
 
+// PostgresDBConfig 包含从 PostgresConfig 派生出的 SQL driver 设置。
 type PostgresDBConfig struct {
 	Driver          string
 	DSN             string
@@ -98,11 +107,13 @@ type PostgresDBConfig struct {
 	PingTimeout     time.Duration
 }
 
+// RedisConfig 返回具名 Redis 配置及其是否存在。
 func (c Config) RedisConfig(name string) (RedisConfig, bool) {
 	redisCfg, ok := c.Redis[name]
 	return redisCfg, ok
 }
 
+// PostgresDatabaseConfig 返回带有已生成 DSN 的具名 PostgreSQL 数据库配置。
 func (c Config) PostgresDatabaseConfig(name string) (PostgresDBConfig, bool) {
 	pg, ok := c.Postgres[name]
 	if !ok {
@@ -127,6 +138,7 @@ func (p PostgresConfig) dsn() string {
 		Path:   p.DBName,
 	}
 	if p.SSLMode != "" {
+		// 未配置 sslmode 时保持为空，让 pgx driver 使用自身默认行为。
 		q := u.Query()
 		q.Set("sslmode", p.SSLMode)
 		u.RawQuery = q.Encode()

@@ -5,10 +5,12 @@ import (
 	"github.com/aegiscore/user-services/internal/domain"
 )
 
+// GetUserRequest 是通过外部 UUID 查询用户的 URI 绑定请求。
 type GetUserRequest struct {
 	UserID string `uri:"user_id" validate:"required,uuid" label:"用户ID" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
 }
 
+// ListUsersRequest 是分页用户列表和过滤条件的 query 绑定请求。
 type ListUsersRequest struct {
 	Page     int                `query:"page" label:"页码" example:"1"`
 	PageSize int                `query:"page_size" label:"每页数量" example:"20"`
@@ -19,6 +21,7 @@ type ListUsersRequest struct {
 	Status   *domain.UserStatus `query:"status" validate:"omitempty,enum" label:"用户状态" example:"100"`
 }
 
+// CreateUserRequest 是创建用户资料和凭证的 JSON 请求体。
 type CreateUserRequest struct {
 	Nickname string             `json:"nickname" validate:"required,min=1,max=128" label:"用户昵称" example:"Alice"`
 	Username string             `json:"username" validate:"required,min=1,max=255" label:"用户名" example:"alice"`
@@ -26,6 +29,7 @@ type CreateUserRequest struct {
 	Status   *domain.UserStatus `json:"status,omitempty" validate:"omitempty,enum" label:"用户状态" example:"100"`
 }
 
+// SetDefaults 在校验前将缺省用户状态设置为 UserStatusNormal。
 func (r *CreateUserRequest) SetDefaults() {
 	if r.Status == nil {
 		status := domain.UserStatusNormal
@@ -33,6 +37,7 @@ func (r *CreateUserRequest) SetDefaults() {
 	}
 }
 
+// UserResponse 是不包含凭证字段的公开用户资料响应。
 type UserResponse struct {
 	UserID    string            `json:"user_id" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
 	Nickname  string            `json:"nickname" example:"Alice"`
@@ -42,6 +47,7 @@ type UserResponse struct {
 	UpdatedAt int64             `json:"updated_at" example:"1780288800000"`
 }
 
+// UserListResponseDoc 描述分页用户列表 Swagger 响应载荷。
 type UserListResponseDoc struct {
 	Items      []UserResponse      `json:"items"`
 	Pagination response.Pagination `json:"pagination"`

@@ -11,18 +11,21 @@ import (
 	"go.uber.org/zap"
 )
 
+// RegisterRouteParams 包含挂载用户服务路由所需的依赖。
 type RegisterRouteParams struct {
 	fx.In
 
-	Config         *config.Config
-	Log            *zap.Logger
-	Engine         *gin.Engine
-	JWT            *auth.JWTService
+	Config *config.Config
+	Log    *zap.Logger
+	Engine *gin.Engine
+	JWT    *auth.JWTService
+	// TokenVersions 是可选依赖，使公开路由和测试可以在不提供撤销能力时挂载中间件。
 	TokenVersions  service.TokenVersionValidator `optional:"true"`
 	AuthController *controller.AuthController
 	UserController *controller.UserController
 }
 
+// RegisterRoutes 将 bootstrap 依赖适配为 router 层路由注册参数。
 func RegisterRoutes(params RegisterRouteParams) {
 	router.RegisterUserServiceHTTPRoutes(params.Engine, router.RouteParams{
 		Environment:           params.Config.App.Environment,

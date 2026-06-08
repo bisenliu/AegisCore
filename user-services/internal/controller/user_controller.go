@@ -10,16 +10,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// UserController 处理用户资料端点的 HTTP 请求。
 type UserController struct {
 	userService service.UserService
 	validator   *commonvalidation.Validator
 }
 
+// NewUserController 使用 service 和请求 validator 依赖构造用户控制器。
 func NewUserController(userService service.UserService, validator *commonvalidation.Validator) *UserController {
 	return &UserController{userService: userService, validator: validator}
 }
 
-// ListUsers godoc
+// ListUsers 处理分页用户列表请求。
 // @Summary 分页查询用户列表
 // @Description 分页查询用户资料列表，支持按用户昵称、用户名和用户状态过滤，默认排除软删除用户。分页参数未传或小于 1 时使用默认值 page=1、page_size=10。
 // @Tags 用户
@@ -50,7 +52,7 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 	response.OK(c, users)
 }
 
-// CreateUser godoc
+// CreateUser 处理用户创建请求。
 // @Summary 创建用户
 // @Description 创建一个新的用户资料。请求体使用共享校验器校验，用户名必须唯一，status 缺省为 100。
 // @Tags 用户
@@ -82,7 +84,7 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 	response.Created(c, user)
 }
 
-// GetByUserID godoc
+// GetByUserID 处理通过外部 UUID 查询用户资料的请求。
 // @Summary 查询用户资料
 // @Description 通过外部 UUID 用户 ID 查询用户基础资料。
 // @Tags 用户

@@ -22,6 +22,7 @@ func newFileWriters(cfg config.LogConfig) (fileWriters, error) {
 	if dir == "" {
 		dir = "./logs"
 	}
+	// 0755 允许服务用户写入日志，同时允许运维人员查看日志目录。
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fileWriters{}, fmt.Errorf("create log directory: %w", err)
 	}

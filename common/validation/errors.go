@@ -64,12 +64,14 @@ func validationDetails(err error) []FieldError {
 	return nil
 }
 
+// ClassifyError 将规范化错误转换为 HTTP handler 使用的响应元数据。
 func ClassifyError(err error) Failure {
 	return Failure{Message: publicMessage(err), Fields: validationDetails(err), IsValidation: validationFailure(err)}
 }
 
 func expectedType(t reflect.Type) string {
 	if t == nil {
+		// decoder 无法报告具体 Go 类型时可能出现 nil，这里保持用户可见消息语义通顺。
 		return "正确"
 	}
 	for t.Kind() == reflect.Ptr {

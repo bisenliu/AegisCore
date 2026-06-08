@@ -18,10 +18,12 @@ const (
 type userIDContextKey struct{}
 type sessionIDContextKey struct{}
 
+// WithUserID 返回携带认证用户 ID 的 context。
 func WithUserID(ctx context.Context, userID string) context.Context {
 	return context.WithValue(ctx, userIDContextKey{}, userID)
 }
 
+// UserIDFromContext 从 ctx 返回非空认证用户 ID，并标记其是否存在。
 func UserIDFromContext(ctx context.Context) (string, bool) {
 	if ctx == nil {
 		return "", false
@@ -30,10 +32,12 @@ func UserIDFromContext(ctx context.Context) (string, bool) {
 	return userID, ok && userID != ""
 }
 
+// WithSessionID 返回携带认证会话 ID 的 context。
 func WithSessionID(ctx context.Context, sessionID string) context.Context {
 	return context.WithValue(ctx, sessionIDContextKey{}, sessionID)
 }
 
+// SessionIDFromContext 从 ctx 返回非空认证会话 ID，并标记其是否存在。
 func SessionIDFromContext(ctx context.Context) (string, bool) {
 	if ctx == nil {
 		return "", false

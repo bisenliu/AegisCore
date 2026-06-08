@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// GinParams 包含创建 Gin engine 所需的 Fx 输入。
 type GinParams struct {
 	fx.In
 
@@ -17,6 +18,7 @@ type GinParams struct {
 	Log    *zap.Logger
 }
 
+// NewGinEngine 创建 Gin engine，应用可信代理配置并安装共享中间件。
 func NewGinEngine(params GinParams) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()

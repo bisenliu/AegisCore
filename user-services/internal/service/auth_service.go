@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// AuthService 定义认证、刷新、改密和登出用例。
 type AuthService interface {
 	Login(ctx context.Context, req dto.LoginRequest) (*dto.TokenResponse, error)
 	ChangePassword(ctx context.Context, req dto.ChangePasswordRequest) (*dto.ChangePasswordResponse, error)
@@ -23,6 +24,7 @@ type AuthService interface {
 	LogoutAll(ctx context.Context) (*dto.LogoutResponse, error)
 }
 
+// AuthServiceParams 包含构造认证服务所需的 Fx 输入。
 type AuthServiceParams struct {
 	fx.In
 
@@ -40,6 +42,7 @@ type authService struct {
 	refreshTokenRotation bool
 }
 
+// NewAuthService 组合凭证、token、会话和轮换依赖。
 func NewAuthService(params AuthServiceParams) AuthService {
 	return &authService{
 		credentials:          newCredentialVerifier(params.Credentials),
@@ -49,6 +52,7 @@ func NewAuthService(params AuthServiceParams) AuthService {
 	}
 }
 
+// Login 校验凭证，并签发普通 token 或受限改密 token。
 func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.TokenResponse, error) {
 	logger.Info(ctx, "login user", zap.String("username", req.Username))
 	user, err := s.credentials.VerifyPassword(ctx, req.Username, req.Password)
@@ -57,6 +61,7 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Tok
 	}
 
 	if user.RequiresPasswordChange() {
+		// 必须改密用户只认证到可获取受限改密 token 的程度。
 		logger.Warn(ctx, "login requires password change", zap.String("username", req.Username), zap.String("user_id", user.UserID.String()), zap.Int64("token_version", user.TokenVersion))
 		return s.tokens.IssuePasswordChangeToken(ctx, user.UserID.String(), user.TokenVersion, uuid.NewString())
 	}
@@ -65,6 +70,7 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Tok
 	return s.issueTokenPair(ctx, user.UserID.String(), user.TokenVersion, uuid.NewString())
 }
 
+// ChangePassword 校验受限 token，更新凭证并撤销现有会话。
 func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePasswordRequest) (*dto.ChangePasswordResponse, error) {
 	parsedUserID, err := s.verifyPasswordChangeToken(ctx, req.Token)
 	if err != nil {
@@ -90,6 +96,7 @@ func (s *authService) verifyPasswordChangeToken(ctx context.Context, token strin
 	return parsedUserID, nil
 }
 
+// Refresh 校验 refresh 会话并签发新的 token 响应。
 func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) (*dto.TokenResponse, error) {
 	claims, err := s.tokens.ParseRefreshToken(ctx, req.RefreshToken)
 	if err != nil {
@@ -102,6 +109,7 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) 
 
 	sessionID := session.SessionID
 	if s.refreshTokenRotation {
+		// 先创建新会话再删除旧会话，确保 token 签发失败时旧会话仍可使用。
 		sessionID = uuid.NewString()
 		tokens, err := s.issueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
 		if err != nil {
@@ -118,6 +126,7 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) 
 	return s.issueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
 }
 
+// Logout 撤销当前 refresh token 会话，但不修改用户 token version。
 func (s *authService) Logout(ctx context.Context) (*dto.LogoutResponse, error) {
 	userID, sessionID, err := authenticatedSession(ctx)
 	if err != nil {
@@ -130,6 +139,7 @@ func (s *authService) Logout(ctx context.Context) (*dto.LogoutResponse, error) {
 	return &dto.LogoutResponse{LoggedOut: true}, nil
 }
 
+// LogoutAll 递增认证用户的 token version，并移除全部 refresh 会话。
 func (s *authService) LogoutAll(ctx context.Context) (*dto.LogoutResponse, error) {
 	userID, _, err := authenticatedSession(ctx)
 	if err != nil {

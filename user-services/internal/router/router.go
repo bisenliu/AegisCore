@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// RouteParams 包含挂载用户服务 HTTP 路由所需的依赖。
 type RouteParams struct {
 	Environment           string
 	Log                   *zap.Logger
@@ -19,6 +20,7 @@ type RouteParams struct {
 	UserController        *controller.UserController
 }
 
+// RegisterUserServiceHTTPRoutes 挂载系统、Swagger、认证和用户 API 路由。
 func RegisterUserServiceHTTPRoutes(engine *gin.Engine, params RouteParams) {
 	registerSystemRoutes(engine)
 	RegisterSwagger(engine, params.Environment)

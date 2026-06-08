@@ -32,8 +32,10 @@ const (
 )
 
 var (
+	// ErrEmptyPassword 表示哈希或校验收到空明文密码。
 	ErrEmptyPassword = errors.New("password is empty")
-	ErrInvalidHash   = errors.New("password hash is invalid")
+	// ErrInvalidHash 表示编码后的密码哈希格式错误或不受支持。
+	ErrInvalidHash = errors.New("password hash is invalid")
 )
 
 type passwordParams struct {
@@ -52,6 +54,7 @@ var defaultPasswordParams = passwordParams{
 	keyLength:   passwordKeyLength,
 }
 
+// Hash 使用包默认安全参数创建编码后的 Argon2id 密码哈希。
 func Hash(plain string) (string, error) {
 	if plain == "" {
 		return "", ErrEmptyPassword
@@ -68,12 +71,14 @@ func Hash(plain string) (string, error) {
 	return fmt.Sprintf("$%s$v=%d$m=%d,t=%d,p=%d$%s$%s", passwordAlgorithm, passwordVersion, defaultPasswordParams.memory, defaultPasswordParams.iterations, defaultPasswordParams.parallelism, b64Salt, b64Key), nil
 }
 
+// Verify 使用常量时间比较校验明文密码和编码后的 Argon2id 哈希。
 func Verify(plain, encodedHash string) (bool, error) {
 	if plain == "" {
 		return false, ErrEmptyPassword
 	}
 	parsed, salt, expected, err := parsePasswordHash(encodedHash)
 	if err != nil {
+		// 格式错误或超长哈希会在运行 Argon2 前被拒绝，以限制攻击者可控解析成本。
 		return false, err
 	}
 

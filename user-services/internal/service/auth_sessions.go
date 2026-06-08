@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// AuthSessionManager 为服务用例校验和撤销认证会话。
 type AuthSessionManager interface {
 	CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error
 	ValidatePasswordChangeClaims(ctx context.Context, claims *auth.Claims) error
@@ -24,10 +25,12 @@ type AuthSessionManager interface {
 	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*SessionRevocationResult, error)
 }
 
+// TokenVersionValidator 是面向中间件的契约，用于拒绝过期 access token。
 type TokenVersionValidator interface {
 	ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error
 }
 
+// SessionRevocationResult 返回撤销用户全部会话后的新 token version。
 type SessionRevocationResult struct {
 	UserID       uuid.UUID
 	TokenVersion int64
@@ -43,6 +46,7 @@ type tokenVersionValidator struct {
 	sessions repository.AuthSessionRepository
 }
 
+// NewTokenVersionValidator 构造由缓存和持久化存储支撑的 token version 校验器。
 func NewTokenVersionValidator(users repository.UserTokenVersionRepository, sessions repository.AuthSessionRepository) TokenVersionValidator {
 	return &tokenVersionValidator{users: users, sessions: sessions}
 }
@@ -51,6 +55,7 @@ func newAuthSessionManager(users repository.UserTokenVersionRepository, sessions
 	return &authSessionManager{users: users, sessions: sessions}
 }
 
+// CreateTokenSession 为新签发的 token pair 持久化 refresh 会话元数据。
 func (m *authSessionManager) CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error {
 	if err := m.sessions.CreateSession(ctx, repository.AuthSession{UserID: userID, SessionID: sessionID, TokenVersion: tokenVersion, ExpiresAt: time.Now().Add(refreshTTL)}, refreshTTL); err != nil {
 		logger.Error(ctx, "create auth session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
@@ -59,6 +64,7 @@ func (m *authSessionManager) CreateTokenSession(ctx context.Context, userID stri
 	return nil
 }
 
+// ValidatePasswordChangeClaims 校验改密 token version 是否仍为当前版本。
 func (m *authSessionManager) ValidatePasswordChangeClaims(ctx context.Context, claims *auth.Claims) error {
 	currentVersion, err := m.currentTokenVersion(ctx, claims.UserID)
 	if err != nil {
@@ -76,6 +82,7 @@ func (m *authSessionManager) ValidatePasswordChangeClaims(ctx context.Context, c
 	return nil
 }
 
+// ValidateRefreshSession 校验会话存在性、claim 与会话一致性以及当前 token version。
 func (m *authSessionManager) ValidateRefreshSession(ctx context.Context, claims *auth.Claims) (repository.AuthSession, int64, error) {
 	session, err := m.sessions.GetSession(ctx, claims.SessionID)
 	if err != nil {
@@ -106,6 +113,7 @@ func (m *authSessionManager) ValidateRefreshSession(ctx context.Context, claims 
 	return session, currentVersion, nil
 }
 
+// DeleteSession 撤销一个 refresh token 会话。
 func (m *authSessionManager) DeleteSession(ctx context.Context, userID string, sessionID string) error {
 	if err := m.sessions.DeleteSession(ctx, userID, sessionID); err != nil {
 		logger.Error(ctx, "delete auth session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Error(err))...)
@@ -118,6 +126,7 @@ func (m *authSessionManager) currentTokenVersion(ctx context.Context, userID str
 	return currentTokenVersion(ctx, m.users, m.sessions, userID)
 }
 
+// ValidateTokenVersion 拒绝 version 不再匹配当前用户版本的 token。
 func (v *tokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
 	currentVersion, err := currentTokenVersion(ctx, v.users, v.sessions, userID)
 	if err != nil {
@@ -130,6 +139,7 @@ func (v *tokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID
 }
 
 func currentTokenVersion(ctx context.Context, users repository.UserTokenVersionRepository, sessions repository.AuthSessionRepository, userID string) (int64, error) {
+	// access token 中间件对延迟敏感，因此先查 Redis，再回退到仓储。
 	currentVersion, err := sessions.GetCachedTokenVersion(ctx, userID)
 	if err == nil {
 		return currentVersion, nil
@@ -139,6 +149,7 @@ func currentTokenVersion(ctx context.Context, users repository.UserTokenVersionR
 	}
 	parsedUserID, err := uuid.Parse(userID)
 	if err != nil {
+		// token 用户 ID 是外部 UUID，解析可保护仓储调用不接收畸形 claims。
 		return 0, fmt.Errorf("parse user id: %w", err)
 	}
 	currentVersion, err = users.GetTokenVersion(ctx, parsedUserID)
@@ -151,6 +162,7 @@ func currentTokenVersion(ctx context.Context, users repository.UserTokenVersionR
 	return currentVersion, nil
 }
 
+// RevokeAllUserSessions 递增 token version、刷新缓存并删除全部 refresh 会话。
 func (m *authSessionManager) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*SessionRevocationResult, error) {
 	tokenVersion, err := m.users.IncrementTokenVersion(ctx, userID)
 	if err != nil {
@@ -162,6 +174,7 @@ func (m *authSessionManager) RevokeAllUserSessions(ctx context.Context, userID u
 		return nil, response.FromError(err)
 	}
 	if err := m.sessions.CacheTokenVersion(ctx, userID.String(), tokenVersion); err != nil {
+		// 删除会话前先刷新缓存，使 access token 中间件立即拒绝旧 token。
 		logger.Error(ctx, "refresh token version cache failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return nil, response.FromError(err)
 	}
