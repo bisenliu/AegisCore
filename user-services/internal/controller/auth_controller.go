@@ -5,7 +5,7 @@ import (
 	"github.com/aegiscore/common/http/ginvalidation"
 	"github.com/aegiscore/common/security/auth"
 	commonvalidation "github.com/aegiscore/common/validation"
-	"github.com/aegiscore/user-services/internal/dto"
+	"github.com/aegiscore/user-services/internal/api/auth"
 	"github.com/aegiscore/user-services/internal/service"
 	uservalidation "github.com/aegiscore/user-services/internal/validation"
 	"github.com/gin-gonic/gin"
@@ -24,14 +24,14 @@ type AuthController struct {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer password-change-token"
-// @Param request body dto.ChangePasswordRequest true "修改密码请求"
-// @Success 200 {object} response.Envelope{data=dto.ChangePasswordResponse} "修改成功"
+// @Param request body authapi.ChangePasswordRequest true "修改密码请求"
+// @Success 200 {object} response.Envelope{data=authapi.ChangePasswordResponse} "修改成功"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
 // @Failure 401 {object} response.Envelope "改密凭据无效或已失效"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Router /auth/change-password [post]
 func (ctl *AuthController) ChangePassword(c *gin.Context) {
-	req := dto.ChangePasswordRequest{Token: c.GetHeader(auth.AuthorizationHeader)}
+	req := authapi.ChangePasswordRequest{Token: c.GetHeader(auth.AuthorizationHeader)}
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
@@ -58,14 +58,14 @@ func NewAuthController(authService service.AuthService, validator *commonvalidat
 // @Tags 认证
 // @Accept json
 // @Produce json
-// @Param request body dto.LoginRequest true "登录请求"
-// @Success 200 {object} response.Envelope{data=dto.TokenResponse} "登录成功"
+// @Param request body authapi.LoginRequest true "登录请求"
+// @Success 200 {object} response.Envelope{data=authapi.TokenResponse} "登录成功"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
 // @Failure 401 {object} response.Envelope "用户名或密码错误"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Router /auth/login [post]
 func (ctl *AuthController) LoginUser(c *gin.Context) {
-	req := dto.LoginRequest{}
+	req := authapi.LoginRequest{}
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
@@ -87,14 +87,14 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 // @Tags 认证
 // @Accept json
 // @Produce json
-// @Param request body dto.RefreshTokenRequest true "刷新请求"
-// @Success 200 {object} response.Envelope{data=dto.TokenResponse} "刷新成功"
+// @Param request body authapi.RefreshTokenRequest true "刷新请求"
+// @Success 200 {object} response.Envelope{data=authapi.TokenResponse} "刷新成功"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
 // @Failure 401 {object} response.Envelope "Refresh Token 无效或会话已失效"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Router /auth/refresh [post]
 func (ctl *AuthController) RefreshToken(c *gin.Context) {
-	req := dto.RefreshTokenRequest{}
+	req := authapi.RefreshTokenRequest{}
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
@@ -115,7 +115,7 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 // @Description 删除当前会话的 Refresh Token 会话记录，不修改用户 token_version。
 // @Tags 认证
 // @Produce json
-// @Success 200 {object} response.Envelope{data=dto.LogoutResponse} "退出成功"
+// @Success 200 {object} response.Envelope{data=authapi.LogoutResponse} "退出成功"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
@@ -134,7 +134,7 @@ func (ctl *AuthController) LogoutCurrentSession(c *gin.Context) {
 // @Description 递增用户 token_version 并清理该用户所有 Refresh Token 会话。
 // @Tags 认证
 // @Produce json
-// @Success 200 {object} response.Envelope{data=dto.LogoutResponse} "退出成功"
+// @Success 200 {object} response.Envelope{data=authapi.LogoutResponse} "退出成功"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth

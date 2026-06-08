@@ -11,8 +11,8 @@ import (
 
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/validation"
+	"github.com/aegiscore/user-services/internal/api/user"
 	"github.com/aegiscore/user-services/internal/domain"
-	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -26,7 +26,7 @@ func TestUserControllerGetByUserID(t *testing.T) {
 	t.Run("valid ID", func(t *testing.T) {
 		createdAt := int64(1780048800000)
 		updatedAt := int64(1780052400000)
-		service := &stubUserService{response: &dto.UserResponse{UserID: controllerTestUserID, Nickname: "Aegis", Username: "aegis", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}
+		service := &stubUserService{response: &userapi.UserResponse{UserID: controllerTestUserID, Nickname: "Aegis", Username: "aegis", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}
 
 		status, envelope := executeGetByUserID(t, service, controllerTestUserID)
 
@@ -84,7 +84,7 @@ func TestUserControllerCreate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	createdUser := &dto.UserResponse{UserID: controllerTestUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}
+	createdUser := &userapi.UserResponse{UserID: controllerTestUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}
 
 	t.Run("valid body", func(t *testing.T) {
 		service := &stubUserService{createResponse: createdUser}
@@ -180,10 +180,10 @@ func TestUserControllerList(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	listResponse := response.NewPaginatedData([]dto.UserResponse{{UserID: controllerTestUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, response.NewPagination(1, 20, 128))
+	listResponse := response.NewPaginatedData([]userapi.UserResponse{{UserID: controllerTestUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, response.NewPagination(1, 20, 128))
 
 	t.Run("default pagination", func(t *testing.T) {
-		service := &stubUserService{listResponse: response.NewPaginatedData([]dto.UserResponse{}, response.NewPagination(1, 10, 0))}
+		service := &stubUserService{listResponse: response.NewPaginatedData([]userapi.UserResponse{}, response.NewPagination(1, 10, 0))}
 
 		status, envelope := executeList(t, service, "/api/v1/users")
 
@@ -226,18 +226,18 @@ func TestUserControllerList(t *testing.T) {
 }
 
 type stubUserService struct {
-	response       *dto.UserResponse
+	response       *userapi.UserResponse
 	err            error
 	gotID          uuid.UUID
-	createResponse *dto.UserResponse
+	createResponse *userapi.UserResponse
 	createErr      error
-	gotCreate      dto.CreateUserRequest
-	listResponse   response.PaginatedData[dto.UserResponse]
+	gotCreate      userapi.CreateUserRequest
+	listResponse   response.PaginatedData[userapi.UserResponse]
 	listErr        error
-	gotList        dto.ListUsersRequest
+	gotList        userapi.ListUsersRequest
 }
 
-func (s *stubUserService) CreateUser(_ context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error) {
+func (s *stubUserService) CreateUser(_ context.Context, req userapi.CreateUserRequest) (*userapi.UserResponse, error) {
 	s.gotCreate = req
 	if s.createErr != nil {
 		return nil, response.FromError(s.createErr)
@@ -245,7 +245,7 @@ func (s *stubUserService) CreateUser(_ context.Context, req dto.CreateUserReques
 	return s.createResponse, nil
 }
 
-func (s *stubUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*dto.UserResponse, error) {
+func (s *stubUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapi.UserResponse, error) {
 	s.gotID = userID
 	if s.err != nil {
 		return nil, response.FromError(s.err)
@@ -253,10 +253,10 @@ func (s *stubUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*dto
 	return s.response, nil
 }
 
-func (s *stubUserService) ListUsers(_ context.Context, req dto.ListUsersRequest) (response.PaginatedData[dto.UserResponse], error) {
+func (s *stubUserService) ListUsers(_ context.Context, req userapi.ListUsersRequest) (response.PaginatedData[userapi.UserResponse], error) {
 	s.gotList = req
 	if s.listErr != nil {
-		return response.PaginatedData[dto.UserResponse]{}, response.FromError(s.listErr)
+		return response.PaginatedData[userapi.UserResponse]{}, response.FromError(s.listErr)
 	}
 	return s.listResponse, nil
 }

@@ -10,8 +10,8 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
+	"github.com/aegiscore/user-services/internal/api/auth"
 	"github.com/aegiscore/user-services/internal/domain"
-	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
 )
@@ -27,7 +27,7 @@ func TestAuthServiceLogin(t *testing.T) {
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
 
-	tokens, err := svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "secret"})
+	tokens, err := svc.Login(context.Background(), authapi.LoginRequest{Username: "alice", Password: "secret"})
 
 	if err != nil {
 		t.Fatalf("Login: %v", err)
@@ -52,7 +52,7 @@ func TestAuthServiceLoginUsesDefaultTTLs(t *testing.T) {
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthServiceWithConfig(repo, store, config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"}})
 
-	tokens, err := svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "secret"})
+	tokens, err := svc.Login(context.Background(), authapi.LoginRequest{Username: "alice", Password: "secret"})
 
 	if err != nil {
 		t.Fatalf("Login: %v", err)
@@ -76,7 +76,7 @@ func TestAuthServiceLoginUsesExplicitTTLs(t *testing.T) {
 	refreshTTL := 2 * time.Hour
 	svc := newTestAuthServiceWithConfig(repo, store, config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: accessTTL, RefreshTokenTTL: refreshTTL}})
 
-	tokens, err := svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "secret"})
+	tokens, err := svc.Login(context.Background(), authapi.LoginRequest{Username: "alice", Password: "secret"})
 
 	if err != nil {
 		t.Fatalf("Login: %v", err)
@@ -96,7 +96,7 @@ func TestAuthServiceLoginRejectsInvalidCredentials(t *testing.T) {
 	}
 	svc := newTestAuthService(&authRepoStub{userByUsername: &domain.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: domain.UserStatusNormal, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
 
-	_, err = svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "wrong"})
+	_, err = svc.Login(context.Background(), authapi.LoginRequest{Username: "alice", Password: "wrong"})
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeUnauthenticated {
@@ -112,7 +112,7 @@ func TestAuthServiceLoginRejectsInactiveStatuses(t *testing.T) {
 	for _, status := range []domain.UserStatus{domain.UserStatusDisabled} {
 		svc := newTestAuthService(&authRepoStub{userByUsername: &domain.User{ID: 123, UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: status, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
 
-		_, err = svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "secret"})
+		_, err = svc.Login(context.Background(), authapi.LoginRequest{Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeUnauthenticated {
@@ -130,7 +130,7 @@ func TestAuthServiceLoginIssuesPasswordChangeToken(t *testing.T) {
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
 
-	tokens, err := svc.Login(context.Background(), dto.LoginRequest{Username: "alice", Password: "secret"})
+	tokens, err := svc.Login(context.Background(), authapi.LoginRequest{Username: "alice", Password: "secret"})
 
 	if err != nil {
 		t.Fatalf("Login: %v", err)
@@ -163,7 +163,7 @@ func TestAuthServiceChangePassword(t *testing.T) {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
 	}
 
-	result, err := svc.ChangePassword(context.Background(), dto.ChangePasswordRequest{Token: token, NewPassword: "new-secret"})
+	result, err := svc.ChangePassword(context.Background(), authapi.ChangePasswordRequest{Token: token, NewPassword: "new-secret"})
 
 	if err != nil {
 		t.Fatalf("ChangePassword: %v", err)
@@ -186,7 +186,7 @@ func TestAuthServiceChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
 	}
 
-	_, err = svc.ChangePassword(context.Background(), dto.ChangePasswordRequest{Token: token, NewPassword: "new-secret"})
+	_, err = svc.ChangePassword(context.Background(), authapi.ChangePasswordRequest{Token: token, NewPassword: "new-secret"})
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeNotFound {
@@ -201,7 +201,7 @@ func TestAuthServiceChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
 	}
 
-	_, err = svc.ChangePassword(context.Background(), dto.ChangePasswordRequest{Token: token, NewPassword: "new-secret"})
+	_, err = svc.ChangePassword(context.Background(), authapi.ChangePasswordRequest{Token: token, NewPassword: "new-secret"})
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeNotFound {
@@ -218,7 +218,7 @@ func TestAuthServiceChangePasswordRejectsAccessToken(t *testing.T) {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
 
-	_, err = svc.ChangePassword(context.Background(), dto.ChangePasswordRequest{Token: token, NewPassword: "new-secret"})
+	_, err = svc.ChangePassword(context.Background(), authapi.ChangePasswordRequest{Token: token, NewPassword: "new-secret"})
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeTokenInvalid {
@@ -234,7 +234,7 @@ func TestAuthServiceRefreshRotatesSession(t *testing.T) {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
 
-	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: refresh})
+	tokens, err := svc.Refresh(context.Background(), authapi.RefreshTokenRequest{RefreshToken: refresh})
 
 	if err != nil {
 		t.Fatalf("Refresh: %v", err)
@@ -258,7 +258,7 @@ func TestAuthServiceRefreshRotationKeepsOldSessionWhenTokenSigningFails(t *testi
 		refreshTokenRotation: true,
 	}
 
-	_, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: "refresh"})
+	_, err := svc.Refresh(context.Background(), authapi.RefreshTokenRequest{RefreshToken: "refresh"})
 
 	if err == nil {
 		t.Fatal("Refresh error is nil")
@@ -280,7 +280,7 @@ func TestAuthServiceRefreshRotationKeepsOldSessionWhenNewSessionCreateFails(t *t
 		refreshTokenRotation: true,
 	}
 
-	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: "refresh"})
+	tokens, err := svc.Refresh(context.Background(), authapi.RefreshTokenRequest{RefreshToken: "refresh"})
 
 	if err == nil {
 		t.Fatal("Refresh error is nil")
@@ -302,7 +302,7 @@ func TestAuthServiceRefreshRotationCleansNewSessionWhenOldDeleteFails(t *testing
 		refreshTokenRotation: true,
 	}
 
-	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: "refresh"})
+	tokens, err := svc.Refresh(context.Background(), authapi.RefreshTokenRequest{RefreshToken: "refresh"})
 
 	if err == nil {
 		t.Fatal("Refresh error is nil")
@@ -329,7 +329,7 @@ func TestAuthServiceRefreshRotationReturnsTokenAfterNewSessionAndOldRevocation(t
 		refreshTokenRotation: true,
 	}
 
-	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: "refresh"})
+	tokens, err := svc.Refresh(context.Background(), authapi.RefreshTokenRequest{RefreshToken: "refresh"})
 
 	if err != nil {
 		t.Fatalf("Refresh: %v", err)
@@ -353,7 +353,7 @@ func TestAuthServiceRefreshUsesNormalizedToken(t *testing.T) {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
 
-	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: refresh})
+	tokens, err := svc.Refresh(context.Background(), authapi.RefreshTokenRequest{RefreshToken: refresh})
 
 	if err != nil {
 		t.Fatalf("Refresh: %v", err)
@@ -371,7 +371,7 @@ func TestAuthServiceRefreshRejectsAccessTokenSubject(t *testing.T) {
 		t.Fatalf("SignAccessToken: %v", err)
 	}
 
-	_, err = svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: access})
+	_, err = svc.Refresh(context.Background(), authapi.RefreshTokenRequest{RefreshToken: access})
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeTokenInvalid {
@@ -387,7 +387,7 @@ func TestAuthServiceRefreshRejectsVersionChange(t *testing.T) {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
 
-	_, err = svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: refresh})
+	_, err = svc.Refresh(context.Background(), authapi.RefreshTokenRequest{RefreshToken: refresh})
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeTokenInvalid {
@@ -403,7 +403,7 @@ func TestAuthServiceRefreshMapsTokenVersionUserNotFound(t *testing.T) {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
 
-	_, err = svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: refresh})
+	_, err = svc.Refresh(context.Background(), authapi.RefreshTokenRequest{RefreshToken: refresh})
 
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeNotFound {
@@ -578,12 +578,12 @@ func (i *refreshRotationTokenIssuer) IssueTokenPair(context.Context, string, int
 		return nil, i.issueErr
 	}
 	return &issuedTokenPair{
-		Response:   &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh-new", TokenType: auth.TokenTypeBearer, ExpiresIn: 900},
+		Response:   &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh-new", TokenType: auth.TokenTypeBearer, ExpiresIn: 900},
 		RefreshTTL: time.Hour,
 	}, nil
 }
 
-func (i *refreshRotationTokenIssuer) IssuePasswordChangeToken(context.Context, string, int64, string) (*dto.TokenResponse, error) {
+func (i *refreshRotationTokenIssuer) IssuePasswordChangeToken(context.Context, string, int64, string) (*authapi.TokenResponse, error) {
 	return nil, errors.New("not implemented")
 }
 

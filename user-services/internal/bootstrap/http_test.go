@@ -15,9 +15,10 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
+	"github.com/aegiscore/user-services/internal/api/auth"
+	"github.com/aegiscore/user-services/internal/api/user"
 	"github.com/aegiscore/user-services/internal/controller"
 	"github.com/aegiscore/user-services/internal/domain"
-	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
@@ -431,32 +432,32 @@ func (s *routeAuthSessionRepository) DeleteAllUserSessions(context.Context, stri
 	return nil
 }
 
-func (s *routeAuthAuthService) Login(context.Context, dto.LoginRequest) (*dto.TokenResponse, error) {
-	return &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 3600}, nil
+func (s *routeAuthAuthService) Login(context.Context, authapi.LoginRequest) (*authapi.TokenResponse, error) {
+	return &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
-func (s *routeAuthAuthService) Refresh(context.Context, dto.RefreshTokenRequest) (*dto.TokenResponse, error) {
-	return &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 3600}, nil
+func (s *routeAuthAuthService) Refresh(context.Context, authapi.RefreshTokenRequest) (*authapi.TokenResponse, error) {
+	return &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
-func (s *routeAuthAuthService) ChangePassword(context.Context, dto.ChangePasswordRequest) (*dto.ChangePasswordResponse, error) {
-	return &dto.ChangePasswordResponse{Changed: true}, nil
+func (s *routeAuthAuthService) ChangePassword(context.Context, authapi.ChangePasswordRequest) (*authapi.ChangePasswordResponse, error) {
+	return &authapi.ChangePasswordResponse{Changed: true}, nil
 }
 
-func (s *routeAuthAuthService) Logout(context.Context) (*dto.LogoutResponse, error) {
-	return &dto.LogoutResponse{LoggedOut: true}, nil
+func (s *routeAuthAuthService) Logout(context.Context) (*authapi.LogoutResponse, error) {
+	return &authapi.LogoutResponse{LoggedOut: true}, nil
 }
 
-func (s *routeAuthAuthService) LogoutAll(context.Context) (*dto.LogoutResponse, error) {
-	return &dto.LogoutResponse{LoggedOut: true}, nil
+func (s *routeAuthAuthService) LogoutAll(context.Context) (*authapi.LogoutResponse, error) {
+	return &authapi.LogoutResponse{LoggedOut: true}, nil
 }
 
-func (s *routeAuthUserService) CreateUser(context.Context, dto.CreateUserRequest) (*dto.UserResponse, error) {
+func (s *routeAuthUserService) CreateUser(context.Context, userapi.CreateUserRequest) (*userapi.UserResponse, error) {
 	now := time.Now().UnixMilli()
-	return &dto.UserResponse{UserID: routeAuthUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
+	return &userapi.UserResponse{UserID: routeAuthUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
 }
 
-func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*dto.UserResponse, error) {
+func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapi.UserResponse, error) {
 	userIDString := userID.String()
 	if userIDString == "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3999" {
 		return nil, response.NotFoundError("user not found")
@@ -465,12 +466,12 @@ func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) 
 		return nil, errors.New("database down")
 	}
 	now := time.Now().UnixMilli()
-	return &dto.UserResponse{UserID: userIDString, Nickname: "Aegis", Username: "aegis", Status: domain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
+	return &userapi.UserResponse{UserID: userIDString, Nickname: "Aegis", Username: "aegis", Status: domain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
 }
 
-func (s *routeAuthUserService) ListUsers(context.Context, dto.ListUsersRequest) (response.PaginatedData[dto.UserResponse], error) {
+func (s *routeAuthUserService) ListUsers(context.Context, userapi.ListUsersRequest) (response.PaginatedData[userapi.UserResponse], error) {
 	now := time.Now().UnixMilli()
-	items := []dto.UserResponse{{UserID: routeAuthUserID, Nickname: "Aegis", Username: "aegis", Status: domain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
+	items := []userapi.UserResponse{{UserID: routeAuthUserID, Nickname: "Aegis", Username: "aegis", Status: domain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
 	return response.NewPaginatedData(items, response.NewPagination(1, 10, 1)), nil
 }
 

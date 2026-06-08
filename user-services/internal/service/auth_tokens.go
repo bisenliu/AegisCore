@@ -9,7 +9,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/user-services/internal/dto"
+	"github.com/aegiscore/user-services/internal/api/auth"
 	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -25,13 +25,13 @@ const (
 // AuthTokenIssuer 签发和解析认证流程使用的 JWT。
 type AuthTokenIssuer interface {
 	IssueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*issuedTokenPair, error)
-	IssuePasswordChangeToken(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*dto.TokenResponse, error)
+	IssuePasswordChangeToken(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*authapi.TokenResponse, error)
 	ParseRefreshToken(ctx context.Context, token string) (*auth.Claims, error)
 	ParsePasswordChangeToken(ctx context.Context, token string) (*auth.Claims, uuid.UUID, error)
 }
 
 type issuedTokenPair struct {
-	Response   *dto.TokenResponse
+	Response   *authapi.TokenResponse
 	RefreshTTL time.Duration
 }
 
@@ -59,20 +59,20 @@ func (i *authTokenIssuer) IssueTokenPair(ctx context.Context, userID string, tok
 		return nil, response.FromError(fmt.Errorf("sign refresh token: %w", err))
 	}
 	return &issuedTokenPair{
-		Response:   &dto.TokenResponse{AccessToken: access, RefreshToken: refresh, TokenType: auth.TokenTypeBearer, ExpiresIn: int64(accessTTL.Seconds())},
+		Response:   &authapi.TokenResponse{AccessToken: access, RefreshToken: refresh, TokenType: auth.TokenTypeBearer, ExpiresIn: int64(accessTTL.Seconds())},
 		RefreshTTL: refreshTTL,
 	}, nil
 }
 
 // IssuePasswordChangeToken 签发受限 token，并有意不返回 refresh token。
-func (i *authTokenIssuer) IssuePasswordChangeToken(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*dto.TokenResponse, error) {
+func (i *authTokenIssuer) IssuePasswordChangeToken(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*authapi.TokenResponse, error) {
 	ttl := i.accessTokenTTL()
 	token, err := i.jwt.SignPasswordChangeToken(auth.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: ttl})
 	if err != nil {
 		logger.Error(ctx, "sign password change token failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return nil, response.FromError(fmt.Errorf("sign password change token: %w", err))
 	}
-	return &dto.TokenResponse{AccessToken: token, TokenType: auth.TokenTypeBearer, ExpiresIn: int64(ttl.Seconds()), PasswordChangeRequired: true}, nil
+	return &authapi.TokenResponse{AccessToken: token, TokenType: auth.TokenTypeBearer, ExpiresIn: int64(ttl.Seconds()), PasswordChangeRequired: true}, nil
 }
 
 // ParseRefreshToken 规范化可选 Bearer 输入并校验 refresh token claims。

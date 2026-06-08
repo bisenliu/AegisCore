@@ -7,7 +7,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/user-services/internal/dto"
+	"github.com/aegiscore/user-services/internal/api/auth"
 	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
@@ -17,11 +17,11 @@ import (
 
 // AuthService 定义认证、刷新、改密和登出用例。
 type AuthService interface {
-	Login(ctx context.Context, req dto.LoginRequest) (*dto.TokenResponse, error)
-	ChangePassword(ctx context.Context, req dto.ChangePasswordRequest) (*dto.ChangePasswordResponse, error)
-	Refresh(ctx context.Context, req dto.RefreshTokenRequest) (*dto.TokenResponse, error)
-	Logout(ctx context.Context) (*dto.LogoutResponse, error)
-	LogoutAll(ctx context.Context) (*dto.LogoutResponse, error)
+	Login(ctx context.Context, req authapi.LoginRequest) (*authapi.TokenResponse, error)
+	ChangePassword(ctx context.Context, req authapi.ChangePasswordRequest) (*authapi.ChangePasswordResponse, error)
+	Refresh(ctx context.Context, req authapi.RefreshTokenRequest) (*authapi.TokenResponse, error)
+	Logout(ctx context.Context) (*authapi.LogoutResponse, error)
+	LogoutAll(ctx context.Context) (*authapi.LogoutResponse, error)
 }
 
 // AuthServiceParams 包含构造认证服务所需的 Fx 输入。
@@ -53,7 +53,7 @@ func NewAuthService(params AuthServiceParams) AuthService {
 }
 
 // Login 校验凭证，并签发普通 token 或受限改密 token。
-func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.TokenResponse, error) {
+func (s *authService) Login(ctx context.Context, req authapi.LoginRequest) (*authapi.TokenResponse, error) {
 	logger.Info(ctx, "login user", zap.String("username", req.Username))
 	user, err := s.credentials.VerifyPassword(ctx, req.Username, req.Password)
 	if err != nil {
@@ -71,7 +71,7 @@ func (s *authService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Tok
 }
 
 // ChangePassword 校验受限 token，更新凭证并撤销现有会话。
-func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePasswordRequest) (*dto.ChangePasswordResponse, error) {
+func (s *authService) ChangePassword(ctx context.Context, req authapi.ChangePasswordRequest) (*authapi.ChangePasswordResponse, error) {
 	parsedUserID, err := s.verifyPasswordChangeToken(ctx, req.Token)
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func (s *authService) ChangePassword(ctx context.Context, req dto.ChangePassword
 	if _, err := s.sessions.RevokeAllUserSessions(ctx, parsedUserID); err != nil {
 		return nil, err
 	}
-	return &dto.ChangePasswordResponse{Changed: true}, nil
+	return &authapi.ChangePasswordResponse{Changed: true}, nil
 }
 
 func (s *authService) verifyPasswordChangeToken(ctx context.Context, token string) (uuid.UUID, error) {
@@ -97,7 +97,7 @@ func (s *authService) verifyPasswordChangeToken(ctx context.Context, token strin
 }
 
 // Refresh 校验 refresh 会话并签发新的 token 响应。
-func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) (*dto.TokenResponse, error) {
+func (s *authService) Refresh(ctx context.Context, req authapi.RefreshTokenRequest) (*authapi.TokenResponse, error) {
 	claims, err := s.tokens.ParseRefreshToken(ctx, req.RefreshToken)
 	if err != nil {
 		return nil, err
@@ -127,7 +127,7 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) 
 }
 
 // Logout 撤销当前 refresh token 会话，但不修改用户 token version。
-func (s *authService) Logout(ctx context.Context) (*dto.LogoutResponse, error) {
+func (s *authService) Logout(ctx context.Context) (*authapi.LogoutResponse, error) {
 	userID, sessionID, err := authenticatedSession(ctx)
 	if err != nil {
 		logger.Warn(ctx, "logout missing authenticated session", zap.Error(err))
@@ -136,11 +136,11 @@ func (s *authService) Logout(ctx context.Context) (*dto.LogoutResponse, error) {
 	if err := s.sessions.DeleteSession(ctx, userID, sessionID); err != nil {
 		return nil, err
 	}
-	return &dto.LogoutResponse{LoggedOut: true}, nil
+	return &authapi.LogoutResponse{LoggedOut: true}, nil
 }
 
 // LogoutAll 递增认证用户的 token version，并移除全部 refresh 会话。
-func (s *authService) LogoutAll(ctx context.Context) (*dto.LogoutResponse, error) {
+func (s *authService) LogoutAll(ctx context.Context) (*authapi.LogoutResponse, error) {
 	userID, _, err := authenticatedSession(ctx)
 	if err != nil {
 		logger.Warn(ctx, "logout all missing authenticated session", zap.Error(err))
@@ -154,10 +154,10 @@ func (s *authService) LogoutAll(ctx context.Context) (*dto.LogoutResponse, error
 	if _, err = s.sessions.RevokeAllUserSessions(ctx, parsedUserID); err != nil {
 		return nil, err
 	}
-	return &dto.LogoutResponse{LoggedOut: true}, nil
+	return &authapi.LogoutResponse{LoggedOut: true}, nil
 }
 
-func (s *authService) issueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*dto.TokenResponse, error) {
+func (s *authService) issueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*authapi.TokenResponse, error) {
 	tokens, err := s.tokens.IssueTokenPair(ctx, userID, tokenVersion, sessionID)
 	if err != nil {
 		return nil, err

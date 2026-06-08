@@ -11,14 +11,14 @@ import (
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
-	"github.com/aegiscore/user-services/internal/dto"
+	"github.com/aegiscore/user-services/internal/api/auth"
 	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/gin-gonic/gin"
 )
 
 func TestAuthControllerLoginNormalizesRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthService{tokens: &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthLogin(t, service, `{"username":" alice ","password":" secret "}`)
 
@@ -49,7 +49,7 @@ func TestAuthControllerLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 
 func TestAuthControllerChangePasswordNormalizesRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{changeResponse: &dto.ChangePasswordResponse{Changed: true}}
+	service := &stubAuthService{changeResponse: &authapi.ChangePasswordResponse{Changed: true}}
 
 	status, envelope := executeAuthChangePassword(t, service, auth.TokenPrefix+"password-token", `{"new_password":" new-secret "}`)
 
@@ -66,7 +66,7 @@ func TestAuthControllerChangePasswordNormalizesRequest(t *testing.T) {
 
 func TestAuthControllerRefreshNormalizesRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthService{tokens: &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthRefresh(t, service, `{"refresh_token":" Bearer refresh-token "}`)
 
@@ -96,34 +96,34 @@ func TestAuthControllerRefreshRejectsBlankTrimmedToken(t *testing.T) {
 }
 
 type stubAuthService struct {
-	tokens         *dto.TokenResponse
-	changeResponse *dto.ChangePasswordResponse
-	logoutResponse *dto.LogoutResponse
-	gotLogin       dto.LoginRequest
-	gotRefresh     dto.RefreshTokenRequest
-	gotChange      dto.ChangePasswordRequest
+	tokens         *authapi.TokenResponse
+	changeResponse *authapi.ChangePasswordResponse
+	logoutResponse *authapi.LogoutResponse
+	gotLogin       authapi.LoginRequest
+	gotRefresh     authapi.RefreshTokenRequest
+	gotChange      authapi.ChangePasswordRequest
 }
 
-func (s *stubAuthService) Login(_ context.Context, req dto.LoginRequest) (*dto.TokenResponse, error) {
+func (s *stubAuthService) Login(_ context.Context, req authapi.LoginRequest) (*authapi.TokenResponse, error) {
 	s.gotLogin = req
 	return s.tokens, nil
 }
 
-func (s *stubAuthService) ChangePassword(_ context.Context, req dto.ChangePasswordRequest) (*dto.ChangePasswordResponse, error) {
+func (s *stubAuthService) ChangePassword(_ context.Context, req authapi.ChangePasswordRequest) (*authapi.ChangePasswordResponse, error) {
 	s.gotChange = req
 	return s.changeResponse, nil
 }
 
-func (s *stubAuthService) Refresh(_ context.Context, req dto.RefreshTokenRequest) (*dto.TokenResponse, error) {
+func (s *stubAuthService) Refresh(_ context.Context, req authapi.RefreshTokenRequest) (*authapi.TokenResponse, error) {
 	s.gotRefresh = req
 	return s.tokens, nil
 }
 
-func (s *stubAuthService) Logout(context.Context) (*dto.LogoutResponse, error) {
+func (s *stubAuthService) Logout(context.Context) (*authapi.LogoutResponse, error) {
 	return s.logoutResponse, nil
 }
 
-func (s *stubAuthService) LogoutAll(context.Context) (*dto.LogoutResponse, error) {
+func (s *stubAuthService) LogoutAll(context.Context) (*authapi.LogoutResponse, error) {
 	return s.logoutResponse, nil
 }
 

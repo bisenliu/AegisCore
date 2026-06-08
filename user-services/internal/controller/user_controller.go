@@ -4,7 +4,7 @@ import (
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/http/ginvalidation"
 	commonvalidation "github.com/aegiscore/common/validation"
-	"github.com/aegiscore/user-services/internal/dto"
+	"github.com/aegiscore/user-services/internal/api/user"
 	"github.com/aegiscore/user-services/internal/service"
 	uservalidation "github.com/aegiscore/user-services/internal/validation"
 	"github.com/gin-gonic/gin"
@@ -31,14 +31,14 @@ func NewUserController(userService service.UserService, validator *commonvalidat
 // @Param nickname query string false "用户昵称模糊匹配"
 // @Param username query string false "用户名精确匹配"
 // @Param status query int false "用户状态：100 正常，200 冻结/停用，300 必须修改密码" Enums(100,200,300)
-// @Success 200 {object} response.Envelope{data=dto.UserListResponseDoc} "查询成功"
+// @Success 200 {object} response.Envelope{data=userapi.UserListResponseDoc} "查询成功"
 // @Failure 400 {object} response.Envelope "查询参数错误"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /users [get]
 func (ctl *UserController) ListUsers(c *gin.Context) {
-	req := dto.ListUsersRequest{}
+	req := userapi.ListUsersRequest{}
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.QueryBinder) {
 		return
 	}
@@ -58,8 +58,8 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 // @Tags 用户
 // @Accept json
 // @Produce json
-// @Param request body dto.CreateUserRequest true "创建用户请求"
-// @Success 201 {object} response.Envelope{data=dto.UserResponse} "创建成功"
+// @Param request body userapi.CreateUserRequest true "创建用户请求"
+// @Success 201 {object} response.Envelope{data=userapi.UserResponse} "创建成功"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 409 {object} response.Envelope "用户已存在"
@@ -67,7 +67,7 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 // @Security BearerAuth
 // @Router /users [post]
 func (ctl *UserController) CreateUser(c *gin.Context) {
-	req := dto.CreateUserRequest{}
+	req := userapi.CreateUserRequest{}
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
@@ -90,7 +90,7 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 // @Tags 用户
 // @Produce json
 // @Param user_id path string true "用户ID"
-// @Success 200 {object} response.Envelope{data=dto.UserResponse} "查询成功"
+// @Success 200 {object} response.Envelope{data=userapi.UserResponse} "查询成功"
 // @Failure 400 {object} response.Envelope "用户 ID 参数错误"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 404 {object} response.Envelope "用户不存在"
@@ -98,7 +98,7 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 // @Security BearerAuth
 // @Router /users/{user_id} [get]
 func (ctl *UserController) GetByUserID(c *gin.Context) {
-	req := dto.GetUserRequest{}
+	req := userapi.GetUserRequest{}
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.URIBinder) {
 		return
 	}

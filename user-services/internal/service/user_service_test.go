@@ -7,8 +7,8 @@ import (
 
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/security/password"
+	"github.com/aegiscore/user-services/internal/api/user"
 	"github.com/aegiscore/user-services/internal/domain"
-	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
@@ -23,7 +23,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 		repo := &stubUserRepository{created: &domain.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, TokenVersion: 1, CreatedAt: createdAt, UpdatedAt: createdAt}}
 		svc := NewUserService(repo)
 
-		user, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
+		user, err := svc.CreateUser(context.Background(), userapi.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
 
 		if err != nil {
 			t.Fatalf("CreateUser: %v", err)
@@ -43,7 +43,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("preserve create conflict", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{createErr: response.ConflictError(messages.UserAlreadyExists)})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
+		_, err := svc.CreateUser(context.Background(), userapi.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeConflict || appErr.Message != messages.UserAlreadyExists {
@@ -54,7 +54,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 	t.Run("map domain create conflict", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{createErr: domain.ErrUserAlreadyExists})
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
+		_, err := svc.CreateUser(context.Background(), userapi.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeConflict || appErr.Message != messages.UserAlreadyExists {
@@ -66,7 +66,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 		repo := &stubUserRepository{createErr: domain.ErrUserAlreadyExists}
 		svc := NewUserService(repo)
 
-		_, err := svc.CreateUser(context.Background(), dto.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
+		_, err := svc.CreateUser(context.Background(), userapi.CreateUserRequest{Nickname: "Alice", Username: "alice", Password: "secret"})
 
 		if repo.createdInput.Username != "alice" {
 			t.Fatalf("created username = %q", repo.createdInput.Username)
@@ -128,7 +128,7 @@ func TestUserServiceListUsers(t *testing.T) {
 		repo := &stubUserRepository{}
 		svc := NewUserService(repo)
 
-		users, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{Page: 1, PageSize: 10, Limit: 10})
+		users, err := svc.ListUsers(context.Background(), userapi.ListUsersRequest{Page: 1, PageSize: 10, Limit: 10})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
@@ -149,7 +149,7 @@ func TestUserServiceListUsers(t *testing.T) {
 		repo := &stubUserRepository{listUsers: []domain.User{{ID: 1, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, listTotal: 128}
 		svc := NewUserService(repo)
 
-		users, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{Page: 2, PageSize: 20, Offset: 20, Limit: 20, Nickname: "Ali", Username: "alice", Status: &status})
+		users, err := svc.ListUsers(context.Background(), userapi.ListUsersRequest{Page: 2, PageSize: 20, Offset: 20, Limit: 20, Nickname: "Ali", Username: "alice", Status: &status})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
@@ -171,7 +171,7 @@ func TestUserServiceListUsers(t *testing.T) {
 	t.Run("wrap repository error", func(t *testing.T) {
 		svc := NewUserService(&stubUserRepository{listErr: errors.New("database down")})
 
-		_, err := svc.ListUsers(context.Background(), dto.ListUsersRequest{})
+		_, err := svc.ListUsers(context.Background(), userapi.ListUsersRequest{})
 
 		appErr := response.FromError(err)
 		if appErr.Code != response.CodeInternalError || appErr.Message != response.MessageInternalError {

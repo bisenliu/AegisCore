@@ -7,8 +7,8 @@ import (
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/password"
+	"github.com/aegiscore/user-services/internal/api/user"
 	"github.com/aegiscore/user-services/internal/domain"
-	"github.com/aegiscore/user-services/internal/dto"
 	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
@@ -17,9 +17,9 @@ import (
 
 // UserService 定义暴露给 HTTP controller 的用户资料用例。
 type UserService interface {
-	CreateUser(ctx context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error)
-	GetUserByID(ctx context.Context, userID uuid.UUID) (*dto.UserResponse, error)
-	ListUsers(ctx context.Context, req dto.ListUsersRequest) (response.PaginatedData[dto.UserResponse], error)
+	CreateUser(ctx context.Context, req userapi.CreateUserRequest) (*userapi.UserResponse, error)
+	GetUserByID(ctx context.Context, userID uuid.UUID) (*userapi.UserResponse, error)
+	ListUsers(ctx context.Context, req userapi.ListUsersRequest) (response.PaginatedData[userapi.UserResponse], error)
 }
 
 type userService struct {
@@ -32,7 +32,7 @@ func NewUserService(repo repository.UserProfileRepository) UserService {
 }
 
 // CreateUser 创建新用户资料，哈希密码，并将 username 冲突映射为 API 错误。
-func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest) (*dto.UserResponse, error) {
+func (s *userService) CreateUser(ctx context.Context, req userapi.CreateUserRequest) (*userapi.UserResponse, error) {
 	status := domain.UserStatusNormal
 	if req.Status != nil {
 		// DTO 默认值通常会填充 status，此兜底保证 HTTP 之外的 service 调用同样安全。
@@ -65,7 +65,7 @@ func (s *userService) CreateUser(ctx context.Context, req dto.CreateUserRequest)
 }
 
 // GetUserByID 按外部 UUID 返回公开用户资料。
-func (s *userService) GetUserByID(ctx context.Context, userID uuid.UUID) (*dto.UserResponse, error) {
+func (s *userService) GetUserByID(ctx context.Context, userID uuid.UUID) (*userapi.UserResponse, error) {
 	logger.Info(ctx, "query user profile", zap.String("user_id", userID.String()))
 	user, err := s.repo.GetByUserID(ctx, userID)
 	if err != nil {
@@ -80,7 +80,7 @@ func (s *userService) GetUserByID(ctx context.Context, userID uuid.UUID) (*dto.U
 }
 
 // ListUsers 使用规范化过滤条件返回分页用户资料列表。
-func (s *userService) ListUsers(ctx context.Context, req dto.ListUsersRequest) (response.PaginatedData[dto.UserResponse], error) {
+func (s *userService) ListUsers(ctx context.Context, req userapi.ListUsersRequest) (response.PaginatedData[userapi.UserResponse], error) {
 	logger.Info(ctx, "list users", zap.Int("page", req.Page), zap.Int("page_size", req.PageSize))
 	users, total, err := s.repo.ListUsers(ctx, repository.ListUsersInput{
 		Offset:   req.Offset,
@@ -91,18 +91,18 @@ func (s *userService) ListUsers(ctx context.Context, req dto.ListUsersRequest) (
 	})
 	if err != nil {
 		logger.Error(ctx, "list users failed", logger.StackTrace(zap.Int("page", req.Page), zap.Int("page_size", req.PageSize), zap.Error(err))...)
-		return response.PaginatedData[dto.UserResponse]{}, response.FromError(err)
+		return response.PaginatedData[userapi.UserResponse]{}, response.FromError(err)
 	}
 
-	items := make([]dto.UserResponse, 0, len(users))
+	items := make([]userapi.UserResponse, 0, len(users))
 	for i := range users {
 		items = append(items, *toUserResponse(&users[i]))
 	}
 	return response.NewPaginatedData(items, response.NewPagination(req.Page, req.PageSize, total)), nil
 }
 
-func toUserResponse(user *domain.User) *dto.UserResponse {
-	return &dto.UserResponse{
+func toUserResponse(user *domain.User) *userapi.UserResponse {
+	return &userapi.UserResponse{
 		UserID:    user.UserID.String(),
 		Nickname:  user.Nickname,
 		Username:  user.Username,
