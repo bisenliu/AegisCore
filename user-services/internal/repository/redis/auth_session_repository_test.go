@@ -3,6 +3,8 @@ package redis
 import (
 	"context"
 	"errors"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -317,6 +319,154 @@ func TestAuthSessionRepositoryCreateGetAndDeleteSession(t *testing.T) {
 	}
 	if _, err := store.redis.ZScore(ctx, indexKey, "expired-on-delete").Result(); !errors.Is(err, rediscache.Nil) {
 		t.Fatalf("expired-on-delete ZScore err = %v, want redis.Nil", err)
+	}
+}
+
+func TestAuthSessionRepositoryRotateSession(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestAuthSessionRepository(redisServer)
+	ctx := context.Background()
+	indexKey := store.userSessionsKey(sessionTestUserID.String())
+	ttl := time.Hour
+	oldSession := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 1}
+	newSession := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 1, ExpiresAt: time.Now().Add(24 * time.Hour)}
+	if err := store.CreateSession(ctx, oldSession, ttl); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err(); err != nil {
+		t.Fatalf("ZAdd expired session: %v", err)
+	}
+
+	beforeRotate := time.Now()
+	if err := store.RotateSession(ctx, oldSession, newSession, ttl); err != nil {
+		t.Fatalf("RotateSession: %v", err)
+	}
+	afterRotate := time.Now()
+
+	if redisServer.Exists(store.sessionKey("s-old")) {
+		t.Fatal("old session key still exists")
+	}
+	stored, err := store.GetSession(ctx, "s-new")
+	if err != nil {
+		t.Fatalf("GetSession(new): %v", err)
+	}
+	if stored.UserID != sessionTestUserID.String() || stored.SessionID != "s-new" || stored.TokenVersion != 1 {
+		t.Fatalf("stored = %#v", stored)
+	}
+	if stored.ExpiresAt.Before(beforeRotate.Add(ttl)) || stored.ExpiresAt.After(afterRotate.Add(ttl)) {
+		t.Fatalf("stored ExpiresAt = %s, want derived from ttl %s", stored.ExpiresAt, ttl)
+	}
+	if stored.ExpiresAt.Unix() == newSession.ExpiresAt.Unix() {
+		t.Fatalf("stored ExpiresAt used caller-provided mismatched value %s", newSession.ExpiresAt)
+	}
+	if _, err := store.redis.ZScore(ctx, indexKey, "s-old").Result(); !errors.Is(err, rediscache.Nil) {
+		t.Fatalf("old session ZScore err = %v, want redis.Nil", err)
+	}
+	score, err := store.redis.ZScore(ctx, indexKey, "s-new").Result()
+	if err != nil {
+		t.Fatalf("new session ZScore: %v", err)
+	}
+	if int64(score) != stored.ExpiresAt.Unix() {
+		t.Fatalf("new session score = %d, want %d", int64(score), stored.ExpiresAt.Unix())
+	}
+	if _, err := store.redis.ZScore(ctx, indexKey, "expired-session").Result(); !errors.Is(err, rediscache.Nil) {
+		t.Fatalf("expired session ZScore err = %v, want redis.Nil", err)
+	}
+	indexTTL, err := store.redis.TTL(ctx, indexKey).Result()
+	if err != nil {
+		t.Fatalf("index TTL: %v", err)
+	}
+	if indexTTL <= ttl || indexTTL > ttl+authSessionIndexTTLBuffer {
+		t.Fatalf("index TTL = %s, want between session ttl and %s", indexTTL, ttl+authSessionIndexTTLBuffer)
+	}
+}
+
+func TestAuthSessionRepositoryRotateSessionRejectsMissingOldSession(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestAuthSessionRepository(redisServer)
+	ctx := context.Background()
+	oldSession := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-missing", TokenVersion: 1}
+	newSession := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 1}
+
+	err := store.RotateSession(ctx, oldSession, newSession, time.Hour)
+
+	if !errors.Is(err, repository.ErrAuthSessionNotFound) {
+		t.Fatalf("err = %v, want session not found", err)
+	}
+	if redisServer.Exists(store.sessionKey("s-new")) {
+		t.Fatal("new session was created after missing old session")
+	}
+}
+
+func TestAuthSessionRepositoryRotateSessionRejectsOldSessionMismatch(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestAuthSessionRepository(redisServer)
+	ctx := context.Background()
+	storedOldSession := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 1}
+	if err := store.CreateSession(ctx, storedOldSession, time.Hour); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	oldSession := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
+	newSession := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 2}
+
+	err := store.RotateSession(ctx, oldSession, newSession, time.Hour)
+
+	if !errors.Is(err, repository.ErrAuthSessionMismatch) {
+		t.Fatalf("err = %v, want session mismatch", err)
+	}
+	if !redisServer.Exists(store.sessionKey("s-old")) {
+		t.Fatal("old session was deleted after mismatch")
+	}
+	if redisServer.Exists(store.sessionKey("s-new")) {
+		t.Fatal("new session was created after mismatch")
+	}
+}
+
+func TestAuthSessionRepositoryRotateSessionConcurrentAttemptsSucceedOnce(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestAuthSessionRepository(redisServer)
+	ctx := context.Background()
+	oldSession := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 1}
+	if err := store.CreateSession(ctx, oldSession, time.Hour); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	const attempts = 8
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	results := make(chan error, attempts)
+	for i := 0; i < attempts; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			newSession := repository.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new-" + strconv.Itoa(i), TokenVersion: 1}
+			results <- store.RotateSession(ctx, oldSession, newSession, time.Hour)
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	successes := 0
+	for err := range results {
+		if err == nil {
+			successes++
+			continue
+		}
+		if !errors.Is(err, repository.ErrAuthSessionNotFound) {
+			t.Fatalf("err = %v, want session not found for failed concurrent rotation", err)
+		}
+	}
+	if successes != 1 {
+		t.Fatalf("successes = %d, want 1", successes)
+	}
+	members, err := store.redis.ZRange(ctx, store.userSessionsKey(sessionTestUserID.String()), 0, -1).Result()
+	if err != nil {
+		t.Fatalf("ZRange: %v", err)
+	}
+	if len(members) != 1 {
+		t.Fatalf("members = %v, want exactly one new session", members)
 	}
 }
 

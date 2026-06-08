@@ -344,9 +344,9 @@ func TestAuthServiceRefreshRotationKeepsOldSessionWhenNewSessionCreateFails(t *t
 	}
 }
 
-func TestAuthServiceRefreshRotationCleansNewSessionWhenOldDeleteFails(t *testing.T) {
+func TestAuthServiceRefreshRotationFailureDoesNotReturnToken(t *testing.T) {
 	sessions := newRefreshRotationSessionLifecycle()
-	sessions.deleteErrBySessionID = map[string]error{"s-old": errors.New("delete failed")}
+	sessions.rotateErr = errors.New("rotate failed")
 	svc := &authService{
 		tokens:               &refreshRotationTokenIssuer{},
 		sessions:             sessions,
@@ -361,14 +361,11 @@ func TestAuthServiceRefreshRotationCleansNewSessionWhenOldDeleteFails(t *testing
 	if tokens != nil {
 		t.Fatalf("tokens = %#v, want nil", tokens)
 	}
-	if len(sessions.deletedSessionIDs) != 2 {
-		t.Fatalf("deleted sessions = %v, want old session and cleanup", sessions.deletedSessionIDs)
+	if sessions.createdSessionID != "" {
+		t.Fatalf("created session = %q, want none after atomic rotation failure", sessions.createdSessionID)
 	}
-	if sessions.deletedSessionIDs[0] != "s-old" {
-		t.Fatalf("first deleted session = %q, want s-old", sessions.deletedSessionIDs[0])
-	}
-	if sessions.deletedSessionIDs[1] != sessions.createdSessionID || sessions.deletedSessionIDs[1] == "s-old" {
-		t.Fatalf("cleanup session = %q, created = %q", sessions.deletedSessionIDs[1], sessions.createdSessionID)
+	if len(sessions.deletedSessionIDs) != 0 {
+		t.Fatalf("deleted sessions = %v, want none after atomic rotation failure", sessions.deletedSessionIDs)
 	}
 }
 
@@ -568,6 +565,7 @@ type sessionStoreStub struct {
 	deletedAll       bool
 	getVersionErr    error
 	deleteAllErr     error
+	rotateErr        error
 	cacheMiss        bool
 	cacheErr         error
 	cached           bool
@@ -595,6 +593,16 @@ func (s *sessionStoreStub) CacheTokenVersion(_ context.Context, userID string, t
 }
 func (s *sessionStoreStub) CreateSession(_ context.Context, session repository.AuthSession, ttl time.Duration) error {
 	s.created = session
+	s.createdTTL = ttl
+	return nil
+}
+func (s *sessionStoreStub) RotateSession(_ context.Context, oldSession repository.AuthSession, newSession repository.AuthSession, ttl time.Duration) error {
+	if s.rotateErr != nil {
+		return s.rotateErr
+	}
+	s.deleted = true
+	s.deletedSessionID = oldSession.SessionID
+	s.created = newSession
 	s.createdTTL = ttl
 	return nil
 }
@@ -648,6 +656,7 @@ func (i *refreshRotationTokenIssuer) ParsePasswordChangeToken(context.Context, s
 
 type refreshRotationSessionLifecycle struct {
 	createErr            error
+	rotateErr            error
 	deleteErrBySessionID map[string]error
 	createdSessionID     string
 	deletedSessionIDs    []string
@@ -671,6 +680,21 @@ func (m *refreshRotationSessionLifecycle) ValidatePasswordChangeClaims(context.C
 
 func (m *refreshRotationSessionLifecycle) ValidateRefreshSession(context.Context, *auth.Claims) (repository.AuthSession, int64, error) {
 	return repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}, 2, nil
+}
+
+func (m *refreshRotationSessionLifecycle) RotateTokenSession(_ context.Context, oldSession repository.AuthSession, newSession repository.AuthSession, _ time.Duration) error {
+	if m.createErr != nil {
+		return m.createErr
+	}
+	if m.rotateErr != nil {
+		return m.rotateErr
+	}
+	m.createdSessionID = newSession.SessionID
+	m.deletedSessionIDs = append(m.deletedSessionIDs, oldSession.SessionID)
+	if err := m.deleteErrBySessionID[oldSession.SessionID]; err != nil {
+		return err
+	}
+	return nil
 }
 
 func (m *refreshRotationSessionLifecycle) DeleteSession(_ context.Context, _ string, sessionID string) error {

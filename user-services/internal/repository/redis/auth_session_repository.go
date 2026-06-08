@@ -111,6 +111,63 @@ func (r *authSessionRepository) CreateSession(ctx context.Context, session repos
 	return nil
 }
 
+// RotateSession 原子消费旧 refresh 会话，并创建新 refresh 会话。
+func (r *authSessionRepository) RotateSession(ctx context.Context, oldSession repository.AuthSession, newSession repository.AuthSession, ttl time.Duration) error {
+	if newSession.UserID != oldSession.UserID || newSession.TokenVersion != oldSession.TokenVersion {
+		return repository.ErrAuthSessionMismatch
+	}
+	if ttl <= 0 {
+		// 非正数 TTL 回退到短期会话，避免创建永久 Redis key。
+		ttl = defaultAuthSessionTTL
+	}
+	now := time.Now()
+	expiresAt := now.Add(ttl)
+	newSession.ExpiresAt = expiresAt
+	data, err := json.Marshal(newSession)
+	if err != nil {
+		return fmt.Errorf("marshal rotated auth session: %w", err)
+	}
+	oldKey := r.sessionKey(oldSession.SessionID)
+	newKey := r.sessionKey(newSession.SessionID)
+	userSessions := r.userSessionsKey(newSession.UserID)
+	indexTTL := ttl + authSessionIndexTTLBuffer
+	err = r.redis.Watch(ctx, func(tx *rediscache.Tx) error {
+		stored, err := getWatchedSession(ctx, tx, oldKey)
+		if err != nil {
+			return err
+		}
+		if stored.UserID != oldSession.UserID || stored.SessionID != oldSession.SessionID || stored.TokenVersion != oldSession.TokenVersion {
+			return repository.ErrAuthSessionMismatch
+		}
+		indexCurrentTTL, err := tx.TTL(ctx, userSessions).Result()
+		if err != nil {
+			return fmt.Errorf("get user auth sessions ttl: %w", err)
+		}
+		_, err = tx.TxPipelined(ctx, func(pipe rediscache.Pipeliner) error {
+			pipe.Set(ctx, newKey, data, ttl)
+			pipe.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(now))
+			pipe.ZAdd(ctx, userSessions, rediscache.Z{Score: float64(expiresAt.Unix()), Member: newSession.SessionID})
+			pipe.ZRem(ctx, userSessions, oldSession.SessionID)
+			pipe.Del(ctx, oldKey)
+			if indexCurrentTTL < indexTTL {
+				pipe.Expire(ctx, userSessions, indexTTL)
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("rotate auth session: %w", err)
+		}
+		return nil
+	}, oldKey)
+	if errors.Is(err, rediscache.TxFailedErr) {
+		return repository.ErrAuthSessionNotFound
+	}
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // GetSession 按 session ID 返回 refresh token 会话。
 func (r *authSessionRepository) GetSession(ctx context.Context, sessionID string) (repository.AuthSession, error) {
 	data, err := r.redis.Get(ctx, r.sessionKey(sessionID)).Bytes()
@@ -174,6 +231,21 @@ func (r *authSessionRepository) sessionKey(sessionID string) string {
 
 func (r *authSessionRepository) userSessionsKey(userID string) string {
 	return r.keys.AuthUserSessions(userID)
+}
+
+func getWatchedSession(ctx context.Context, tx *rediscache.Tx, key string) (repository.AuthSession, error) {
+	data, err := tx.Get(ctx, key).Bytes()
+	if errors.Is(err, rediscache.Nil) {
+		return repository.AuthSession{}, repository.ErrAuthSessionNotFound
+	}
+	if err != nil {
+		return repository.AuthSession{}, fmt.Errorf("get auth session: %w", err)
+	}
+	var session repository.AuthSession
+	if err := json.Unmarshal(data, &session); err != nil {
+		return repository.AuthSession{}, fmt.Errorf("unmarshal auth session: %w", err)
+	}
+	return session, nil
 }
 
 func unixScore(t time.Time) string {

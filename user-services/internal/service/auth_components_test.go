@@ -136,6 +136,36 @@ func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
 	}
 }
 
+func TestAuthSessionLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T) {
+	for _, err := range []error{repository.ErrAuthSessionNotFound, repository.ErrAuthSessionMismatch} {
+		t.Run(err.Error(), func(t *testing.T) {
+			lifecycle := newAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{rotateErr: err})
+			oldSession := authRefreshTestSession("s-old", 2)
+			newSession := authRefreshTestSession("s-new", 2)
+
+			err := lifecycle.RotateTokenSession(context.Background(), oldSession, newSession, time.Hour)
+
+			appErr := response.FromError(err)
+			if appErr.Code != response.CodeTokenInvalid {
+				t.Fatalf("err = %#v, want token invalid", appErr)
+			}
+		})
+	}
+}
+
+func TestAuthSessionLifecycleRotateTokenSessionMapsUnexpectedError(t *testing.T) {
+	lifecycle := newAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{rotateErr: errors.New("redis failed")})
+	oldSession := authRefreshTestSession("s-old", 2)
+	newSession := authRefreshTestSession("s-new", 2)
+
+	err := lifecycle.RotateTokenSession(context.Background(), oldSession, newSession, time.Hour)
+
+	appErr := response.FromError(err)
+	if appErr.Code != response.CodeInternalError {
+		t.Fatalf("err = %#v, want internal", appErr)
+	}
+}
+
 func TestAuthSessionLifecycleCurrentTokenVersionUsesCacheHit(t *testing.T) {
 	repo := &authRepoStub{tokenVersionErr: errors.New("database should not be read")}
 	lifecycle := newAuthSessionLifecycle(repo, &sessionStoreStub{version: 2})

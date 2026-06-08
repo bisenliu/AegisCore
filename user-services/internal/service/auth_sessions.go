@@ -21,6 +21,7 @@ type AuthSessionLifecycle interface {
 	CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error
 	ValidatePasswordChangeClaims(ctx context.Context, claims *auth.Claims) error
 	ValidateRefreshSession(ctx context.Context, claims *auth.Claims) (repository.AuthSession, int64, error)
+	RotateTokenSession(ctx context.Context, oldSession repository.AuthSession, newSession repository.AuthSession, refreshTTL time.Duration) error
 	DeleteSession(ctx context.Context, userID string, sessionID string) error
 	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*SessionRevocationResult, error)
 }
@@ -111,6 +112,19 @@ func (m *authSessionLifecycle) ValidateRefreshSession(ctx context.Context, claim
 		return repository.AuthSession{}, 0, response.TokenInvalidError(messages.MissingSession)
 	}
 	return session, currentVersion, nil
+}
+
+// RotateTokenSession 原子消费旧 refresh 会话，并创建新 refresh 会话。
+func (m *authSessionLifecycle) RotateTokenSession(ctx context.Context, oldSession repository.AuthSession, newSession repository.AuthSession, refreshTTL time.Duration) error {
+	if err := m.sessions.RotateSession(ctx, oldSession, newSession, refreshTTL); err != nil {
+		if errors.Is(err, repository.ErrAuthSessionNotFound) || errors.Is(err, repository.ErrAuthSessionMismatch) {
+			logger.Warn(ctx, "rotate auth session rejected", zap.String("user_id", oldSession.UserID), zap.String("old_session_id", oldSession.SessionID), zap.String("new_session_id", newSession.SessionID), zap.Error(err))
+			return response.TokenInvalidError(messages.MissingSession)
+		}
+		logger.Error(ctx, "rotate auth session failed", logger.StackTrace(zap.String("user_id", oldSession.UserID), zap.String("old_session_id", oldSession.SessionID), zap.String("new_session_id", newSession.SessionID), zap.Error(err))...)
+		return response.FromError(err)
+	}
+	return nil
 }
 
 // DeleteSession 撤销一个 refresh token 会话。

@@ -111,32 +111,43 @@ func (s *authService) Refresh(ctx context.Context, req authapi.RefreshTokenReque
 		return nil, err
 	}
 
-	claims, err := s.tokens.ParseRefreshToken(ctx, req.RefreshToken)
+	claims, session, currentVersion, err := s.parseAndValidateRefreshSession(ctx, req.RefreshToken)
 	if err != nil {
 		return nil, err
+	}
+	if !s.refreshTokenRotation {
+		return s.refreshWithoutRotation(ctx, claims, session, currentVersion)
+	}
+	return s.refreshWithRotation(ctx, claims, session, currentVersion)
+}
+
+func (s *authService) parseAndValidateRefreshSession(ctx context.Context, refreshToken string) (*auth.Claims, repository.AuthSession, int64, error) {
+	claims, err := s.tokens.ParseRefreshToken(ctx, refreshToken)
+	if err != nil {
+		return nil, repository.AuthSession{}, 0, err
 	}
 	session, currentVersion, err := s.sessions.ValidateRefreshSession(ctx, claims)
 	if err != nil {
+		return nil, repository.AuthSession{}, 0, err
+	}
+	return claims, session, currentVersion, nil
+}
+
+func (s *authService) refreshWithoutRotation(ctx context.Context, claims *auth.Claims, session repository.AuthSession, currentVersion int64) (*authapi.TokenResponse, error) {
+	return s.issueTokenPair(ctx, claims.UserID, currentVersion, session.SessionID)
+}
+
+func (s *authService) refreshWithRotation(ctx context.Context, claims *auth.Claims, oldSession repository.AuthSession, currentVersion int64) (*authapi.TokenResponse, error) {
+	sessionID := uuid.NewString()
+	tokens, err := s.tokens.IssueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
+	if err != nil {
 		return nil, err
 	}
-
-	sessionID := session.SessionID
-	if s.refreshTokenRotation {
-		// 先创建新会话再删除旧会话，确保 token 签发失败时旧会话仍可使用。
-		sessionID = uuid.NewString()
-		tokens, err := s.issueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
-		if err != nil {
-			return nil, err
-		}
-		if err := s.sessions.DeleteSession(ctx, claims.UserID, session.SessionID); err != nil {
-			if cleanupErr := s.sessions.DeleteSession(ctx, claims.UserID, sessionID); cleanupErr != nil {
-				logger.Warn(ctx, "cleanup rotated auth session failed", zap.String("user_id", claims.UserID), zap.String("session_id", sessionID), zap.Error(cleanupErr))
-			}
-			return nil, err
-		}
-		return tokens, nil
+	newSession := repository.AuthSession{UserID: claims.UserID, SessionID: sessionID, TokenVersion: currentVersion}
+	if err := s.sessions.RotateTokenSession(ctx, oldSession, newSession, tokens.RefreshTTL); err != nil {
+		return nil, err
 	}
-	return s.issueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
+	return tokens.Response, nil
 }
 
 // Logout 撤销当前 refresh token 会话，但不修改用户 token version。

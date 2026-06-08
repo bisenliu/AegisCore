@@ -9,6 +9,9 @@ import (
 // ErrAuthSessionNotFound 表示 refresh token 会话不存在或已过期。
 var ErrAuthSessionNotFound = errors.New("auth session not found")
 
+// ErrAuthSessionMismatch 表示 refresh token 会话与预期用户或版本不一致。
+var ErrAuthSessionMismatch = errors.New("auth session mismatch")
+
 // ErrTokenVersionCacheMiss 表示 token version 缓存未命中，需要从持久化存储回填。
 var ErrTokenVersionCacheMiss = errors.New("token version cache miss")
 
@@ -28,6 +31,7 @@ type AuthSessionRepository interface {
 	GetCachedTokenVersion(ctx context.Context, userID string) (int64, error)
 	CacheTokenVersion(ctx context.Context, userID string, tokenVersion int64) error
 	CreateSession(ctx context.Context, session AuthSession, ttl time.Duration) error
+	RotateSession(ctx context.Context, oldSession AuthSession, newSession AuthSession, ttl time.Duration) error
 	GetSession(ctx context.Context, sessionID string) (AuthSession, error)
 	DeleteSession(ctx context.Context, userID string, sessionID string) error
 	DeleteAllUserSessions(ctx context.Context, userID string) error

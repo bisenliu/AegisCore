@@ -505,6 +505,10 @@ func (s *routeAuthSessionRepository) CreateSession(context.Context, repository.A
 	return nil
 }
 
+func (s *routeAuthSessionRepository) RotateSession(context.Context, repository.AuthSession, repository.AuthSession, time.Duration) error {
+	return nil
+}
+
 func (s *routeAuthSessionRepository) GetSession(context.Context, string) (repository.AuthSession, error) {
 	return repository.AuthSession{}, nil
 }
