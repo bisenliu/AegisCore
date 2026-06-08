@@ -20,10 +20,11 @@ const defaultHTTPShutdownTimeout = 10 * time.Second
 type HTTPServerParams struct {
 	fx.In
 
-	Lifecycle fx.Lifecycle
-	Config    *config.Config
-	Log       *zap.Logger
-	Engine    *gin.Engine
+	Lifecycle  fx.Lifecycle
+	Shutdowner fx.Shutdowner
+	Config     *config.Config
+	Log        *zap.Logger
+	Engine     *gin.Engine
 }
 
 func NewHTTPServer(params HTTPServerParams) *http.Server {
@@ -49,9 +50,7 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 				return fmt.Errorf("listen http server on %s: %w", addr, err)
 			}
 			go func() {
-				if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					params.Log.Error("http server failed", logger.StackTrace(zap.Error(err))...)
-				}
+				handleHTTPServeError(params.Log, params.Shutdowner, server.Serve(listener))
 			}()
 			return nil
 		},
@@ -68,4 +67,18 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 	})
 
 	return server
+}
+
+func handleHTTPServeError(log *zap.Logger, shutdowner fx.Shutdowner, err error) {
+	if err == nil || errors.Is(err, http.ErrServerClosed) {
+		return
+	}
+
+	log.Error("http server failed", logger.StackTrace(zap.Error(err))...)
+	if shutdowner == nil {
+		return
+	}
+	if shutdownErr := shutdowner.Shutdown(); shutdownErr != nil {
+		log.Error("shutdown after http server failure failed", logger.StackTrace(zap.Error(shutdownErr))...)
+	}
 }

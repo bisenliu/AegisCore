@@ -38,6 +38,16 @@ func (r *lifecycleRecorder) Append(hook fx.Hook) {
 	r.hooks = append(r.hooks, hook)
 }
 
+type shutdownRecorder struct {
+	calls int
+	err   error
+}
+
+func (r *shutdownRecorder) Shutdown(...fx.ShutdownOption) error {
+	r.calls++
+	return r.err
+}
+
 func TestDefaultConfigHTTPTimeouts(t *testing.T) {
 	cfg, err := config.Load("../../configs/config.yaml")
 	if err != nil {
@@ -110,6 +120,59 @@ func TestHTTPServerStartReturnsListenError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "listen http server") {
 		t.Fatalf("OnStart error = %q, want listen http server context", err.Error())
+	}
+}
+
+func TestHTTPServerUnexpectedServeErrorTriggersShutdown(t *testing.T) {
+	core, logs := observer.New(zapcore.ErrorLevel)
+	shutdowner := &shutdownRecorder{}
+	serveErr := errors.New("serve failed")
+
+	handleHTTPServeError(zap.New(core), shutdowner, serveErr)
+
+	if shutdowner.calls != 1 {
+		t.Fatalf("shutdown calls = %d, want 1", shutdowner.calls)
+	}
+	entries := logs.FilterMessage("http server failed").All()
+	if len(entries) != 1 {
+		t.Fatalf("http server failed logs = %d, want 1", len(entries))
+	}
+	if loggedErr, ok := entries[0].ContextMap()["error"].(string); !ok || loggedErr != serveErr.Error() {
+		t.Fatalf("logged error = %#v, want %q", entries[0].ContextMap()["error"], serveErr.Error())
+	}
+}
+
+func TestHTTPServerUnexpectedServeErrorLogsShutdownFailure(t *testing.T) {
+	core, logs := observer.New(zapcore.ErrorLevel)
+	shutdownErr := errors.New("shutdown failed")
+	shutdowner := &shutdownRecorder{err: shutdownErr}
+
+	handleHTTPServeError(zap.New(core), shutdowner, errors.New("serve failed"))
+
+	if shutdowner.calls != 1 {
+		t.Fatalf("shutdown calls = %d, want 1", shutdowner.calls)
+	}
+	entries := logs.FilterMessage("shutdown after http server failure failed").All()
+	if len(entries) != 1 {
+		t.Fatalf("shutdown failure logs = %d, want 1", len(entries))
+	}
+	if loggedErr, ok := entries[0].ContextMap()["error"].(string); !ok || loggedErr != shutdownErr.Error() {
+		t.Fatalf("logged shutdown error = %#v, want %q", entries[0].ContextMap()["error"], shutdownErr.Error())
+	}
+}
+
+func TestHTTPServerClosedServeErrorDoesNotTriggerShutdown(t *testing.T) {
+	core, logs := observer.New(zapcore.ErrorLevel)
+	shutdowner := &shutdownRecorder{}
+
+	handleHTTPServeError(zap.New(core), shutdowner, http.ErrServerClosed)
+	handleHTTPServeError(zap.New(core), shutdowner, nil)
+
+	if shutdowner.calls != 0 {
+		t.Fatalf("shutdown calls = %d, want 0", shutdowner.calls)
+	}
+	if logs.Len() != 0 {
+		t.Fatalf("error logs = %d, want 0", logs.Len())
 	}
 }
 
