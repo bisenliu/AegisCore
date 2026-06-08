@@ -102,10 +102,18 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshTokenRequest) 
 
 	sessionID := session.SessionID
 	if s.refreshTokenRotation {
-		if err := s.sessions.DeleteSession(ctx, claims.UserID, session.SessionID); err != nil {
+		sessionID = uuid.NewString()
+		tokens, err := s.issueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
+		if err != nil {
 			return nil, err
 		}
-		sessionID = uuid.NewString()
+		if err := s.sessions.DeleteSession(ctx, claims.UserID, session.SessionID); err != nil {
+			if cleanupErr := s.sessions.DeleteSession(ctx, claims.UserID, sessionID); cleanupErr != nil {
+				logger.Warn(ctx, "cleanup rotated auth session failed", zap.String("user_id", claims.UserID), zap.String("session_id", sessionID), zap.Error(cleanupErr))
+			}
+			return nil, err
+		}
+		return tokens, nil
 	}
 	return s.issueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
 }

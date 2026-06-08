@@ -250,6 +250,101 @@ func TestAuthServiceRefreshRotatesSession(t *testing.T) {
 	}
 }
 
+func TestAuthServiceRefreshRotationKeepsOldSessionWhenTokenSigningFails(t *testing.T) {
+	sessions := newRefreshRotationSessionManager()
+	svc := &authService{
+		tokens:               &refreshRotationTokenIssuer{issueErr: errors.New("sign failed")},
+		sessions:             sessions,
+		refreshTokenRotation: true,
+	}
+
+	_, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: "refresh"})
+
+	if err == nil {
+		t.Fatal("Refresh error is nil")
+	}
+	if sessions.createdSessionID != "" {
+		t.Fatalf("created session = %q, want none", sessions.createdSessionID)
+	}
+	if len(sessions.deletedSessionIDs) != 0 {
+		t.Fatalf("deleted sessions = %v, want none", sessions.deletedSessionIDs)
+	}
+}
+
+func TestAuthServiceRefreshRotationKeepsOldSessionWhenNewSessionCreateFails(t *testing.T) {
+	sessions := newRefreshRotationSessionManager()
+	sessions.createErr = errors.New("create failed")
+	svc := &authService{
+		tokens:               &refreshRotationTokenIssuer{},
+		sessions:             sessions,
+		refreshTokenRotation: true,
+	}
+
+	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: "refresh"})
+
+	if err == nil {
+		t.Fatal("Refresh error is nil")
+	}
+	if tokens != nil {
+		t.Fatalf("tokens = %#v, want nil", tokens)
+	}
+	if len(sessions.deletedSessionIDs) != 0 {
+		t.Fatalf("deleted sessions = %v, want none", sessions.deletedSessionIDs)
+	}
+}
+
+func TestAuthServiceRefreshRotationCleansNewSessionWhenOldDeleteFails(t *testing.T) {
+	sessions := newRefreshRotationSessionManager()
+	sessions.deleteErrBySessionID = map[string]error{"s-old": errors.New("delete failed")}
+	svc := &authService{
+		tokens:               &refreshRotationTokenIssuer{},
+		sessions:             sessions,
+		refreshTokenRotation: true,
+	}
+
+	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: "refresh"})
+
+	if err == nil {
+		t.Fatal("Refresh error is nil")
+	}
+	if tokens != nil {
+		t.Fatalf("tokens = %#v, want nil", tokens)
+	}
+	if len(sessions.deletedSessionIDs) != 2 {
+		t.Fatalf("deleted sessions = %v, want old session and cleanup", sessions.deletedSessionIDs)
+	}
+	if sessions.deletedSessionIDs[0] != "s-old" {
+		t.Fatalf("first deleted session = %q, want s-old", sessions.deletedSessionIDs[0])
+	}
+	if sessions.deletedSessionIDs[1] != sessions.createdSessionID || sessions.deletedSessionIDs[1] == "s-old" {
+		t.Fatalf("cleanup session = %q, created = %q", sessions.deletedSessionIDs[1], sessions.createdSessionID)
+	}
+}
+
+func TestAuthServiceRefreshRotationReturnsTokenAfterNewSessionAndOldRevocation(t *testing.T) {
+	sessions := newRefreshRotationSessionManager()
+	svc := &authService{
+		tokens:               &refreshRotationTokenIssuer{},
+		sessions:             sessions,
+		refreshTokenRotation: true,
+	}
+
+	tokens, err := svc.Refresh(context.Background(), dto.RefreshTokenRequest{RefreshToken: "refresh"})
+
+	if err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if tokens == nil || tokens.AccessToken != "access" || tokens.RefreshToken != "refresh-new" {
+		t.Fatalf("tokens = %#v", tokens)
+	}
+	if sessions.createdSessionID == "" || sessions.createdSessionID == "s-old" {
+		t.Fatalf("created session = %q", sessions.createdSessionID)
+	}
+	if len(sessions.deletedSessionIDs) != 1 || sessions.deletedSessionIDs[0] != "s-old" {
+		t.Fatalf("deleted sessions = %v, want old session only", sessions.deletedSessionIDs)
+	}
+}
+
 func TestAuthServiceRefreshUsesNormalizedToken(t *testing.T) {
 	store := &sessionStoreStub{version: 2, session: repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
 	svc := newTestAuthService(&authRepoStub{}, store, false)
@@ -481,4 +576,69 @@ func (s *sessionStoreStub) InvalidateUserTokenVersion(context.Context, string) e
 	}
 	s.invalidated = true
 	return nil
+}
+
+type refreshRotationTokenIssuer struct {
+	issueErr error
+}
+
+func (i *refreshRotationTokenIssuer) IssueTokenPair(context.Context, string, int64, string) (*issuedTokenPair, error) {
+	if i.issueErr != nil {
+		return nil, i.issueErr
+	}
+	return &issuedTokenPair{
+		Response:   &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh-new", TokenType: auth.TokenTypeBearer, ExpiresIn: 900},
+		RefreshTTL: time.Hour,
+	}, nil
+}
+
+func (i *refreshRotationTokenIssuer) IssuePasswordChangeToken(context.Context, string, int64, string) (*dto.TokenResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (i *refreshRotationTokenIssuer) ParseRefreshToken(context.Context, string) (*auth.Claims, error) {
+	return &auth.Claims{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old"}, nil
+}
+
+func (i *refreshRotationTokenIssuer) ParsePasswordChangeToken(context.Context, string) (*auth.Claims, uuid.UUID, error) {
+	return nil, uuid.Nil, errors.New("not implemented")
+}
+
+type refreshRotationSessionManager struct {
+	createErr            error
+	deleteErrBySessionID map[string]error
+	createdSessionID     string
+	deletedSessionIDs    []string
+}
+
+func newRefreshRotationSessionManager() *refreshRotationSessionManager {
+	return &refreshRotationSessionManager{deleteErrBySessionID: map[string]error{}}
+}
+
+func (m *refreshRotationSessionManager) CreateTokenSession(_ context.Context, _ string, sessionID string, _ int64, _ time.Duration) error {
+	if m.createErr != nil {
+		return m.createErr
+	}
+	m.createdSessionID = sessionID
+	return nil
+}
+
+func (m *refreshRotationSessionManager) ValidatePasswordChangeClaims(context.Context, *auth.Claims) error {
+	return errors.New("not implemented")
+}
+
+func (m *refreshRotationSessionManager) ValidateRefreshSession(context.Context, *auth.Claims) (repository.AuthSession, int64, error) {
+	return repository.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}, 2, nil
+}
+
+func (m *refreshRotationSessionManager) DeleteSession(_ context.Context, _ string, sessionID string) error {
+	m.deletedSessionIDs = append(m.deletedSessionIDs, sessionID)
+	if err := m.deleteErrBySessionID[sessionID]; err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *refreshRotationSessionManager) RevokeAllUserSessions(context.Context, uuid.UUID) (*SessionRevocationResult, error) {
+	return nil, errors.New("not implemented")
 }
