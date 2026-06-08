@@ -10,7 +10,6 @@ import (
 	"github.com/aegiscore/user-services/internal/api/user"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/messages"
-	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
 )
 
@@ -183,17 +182,17 @@ func TestUserServiceListUsers(t *testing.T) {
 type stubUserRepository struct {
 	created         *domain.User
 	createErr       error
-	createdInput    repository.CreateUserInput
+	createdInput    CreateUserInput
 	listUsers       []domain.User
 	listTotal       int
 	listErr         error
-	listInput       repository.ListUsersInput
+	listInput       ListUsersInput
 	getByUserID     uuid.UUID
 	getByUserIDUser *domain.User
 	getByUserIDErr  error
 }
 
-func (r *stubUserRepository) Create(_ context.Context, input repository.CreateUserInput) (*domain.User, error) {
+func (r *stubUserRepository) Create(_ context.Context, input CreateUserInput) (*domain.User, error) {
 	r.createdInput = input
 	if r.createErr != nil {
 		return nil, r.createErr
@@ -209,7 +208,7 @@ func (r *stubUserRepository) GetByUserID(_ context.Context, userID uuid.UUID) (*
 	return r.getByUserIDUser, nil
 }
 
-func (r *stubUserRepository) ListUsers(_ context.Context, input repository.ListUsersInput) ([]domain.User, int, error) {
+func (r *stubUserRepository) ListUsers(_ context.Context, input ListUsersInput) ([]domain.User, int, error) {
 	r.listInput = input
 	if r.listErr != nil {
 		return nil, 0, r.listErr

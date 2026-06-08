@@ -8,6 +8,7 @@ import (
 	commontz "github.com/aegiscore/common/runtime/timezone"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/controller"
+	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/aegiscore/user-services/internal/repository/postgres"
 	"github.com/aegiscore/user-services/internal/repository/redis"
 	"github.com/aegiscore/user-services/internal/service"
@@ -35,10 +36,18 @@ var AppModule = fx.Module("aegiscore-user-services",
 		ProvideRedisClients,
 		NewJWTService,
 		ProvideEntClients,
-		postgres.NewUserRepository,
-		postgres.AsUserProfileRepository,
-		postgres.AsUserCredentialRepository,
-		postgres.AsUserTokenVersionRepository,
+		fx.Annotate(
+			postgres.NewUserRepository,
+			fx.As(new(service.UserProfileStore)),
+		),
+		fx.Annotate(
+			postgres.NewUserRepository,
+			fx.As(new(repository.UserCredentialRepository)),
+		),
+		fx.Annotate(
+			postgres.NewUserRepository,
+			fx.As(new(repository.UserTokenVersionRepository)),
+		),
 		service.NewRedisKeyBuilder,
 		redis.NewAuthSessionRepository,
 		service.NewTokenVersionValidator,

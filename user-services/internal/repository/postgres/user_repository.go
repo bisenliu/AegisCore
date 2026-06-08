@@ -9,6 +9,7 @@ import (
 	"github.com/aegiscore/user-services/ent/user"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/repository"
+	"github.com/aegiscore/user-services/internal/service"
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 )
@@ -17,8 +18,8 @@ type userRepository struct {
 	client *ent.Client
 }
 
+var _ service.UserProfileStore = (*userRepository)(nil)
 var _ repository.UserRepository = (*userRepository)(nil)
-var _ repository.UserProfileRepository = (*userRepository)(nil)
 var _ repository.UserCredentialRepository = (*userRepository)(nil)
 var _ repository.UserTokenVersionRepository = (*userRepository)(nil)
 
@@ -30,27 +31,12 @@ type UserRepositoryParams struct {
 }
 
 // NewUserRepository 构造基于 Ent 的用户仓储。
-func NewUserRepository(params UserRepositoryParams) repository.UserRepository {
+func NewUserRepository(params UserRepositoryParams) *userRepository {
 	return &userRepository{client: params.Client}
 }
 
-// AsUserProfileRepository 将聚合仓储暴露为资料专用依赖。
-func AsUserProfileRepository(repo repository.UserRepository) repository.UserProfileRepository {
-	return repo
-}
-
-// AsUserCredentialRepository 将聚合仓储暴露为凭证专用依赖。
-func AsUserCredentialRepository(repo repository.UserRepository) repository.UserCredentialRepository {
-	return repo
-}
-
-// AsUserTokenVersionRepository 将聚合仓储暴露为 token version 专用依赖。
-func AsUserTokenVersionRepository(repo repository.UserRepository) repository.UserTokenVersionRepository {
-	return repo
-}
-
 // Create 插入用户记录，并将唯一约束冲突映射为 ErrUserAlreadyExists。
-func (r *userRepository) Create(ctx context.Context, input repository.CreateUserInput) (*domain.User, error) {
+func (r *userRepository) Create(ctx context.Context, input service.CreateUserInput) (*domain.User, error) {
 	created, err := r.client.User.Create().
 		SetUserID(input.UserID).
 		SetNickname(input.Nickname).
@@ -138,7 +124,7 @@ func (r *userRepository) UpdateCredentials(ctx context.Context, input repository
 }
 
 // ListUsers 返回一页未软删除用户，以及同一过滤条件下的总数。
-func (r *userRepository) ListUsers(ctx context.Context, input repository.ListUsersInput) ([]domain.User, int, error) {
+func (r *userRepository) ListUsers(ctx context.Context, input service.ListUsersInput) ([]domain.User, int, error) {
 	predicates := userListPredicates(input)
 	total, err := r.client.User.Query().Where(predicates...).Count(ctx)
 	if err != nil {
@@ -184,7 +170,7 @@ func toDomainUsers(users []*ent.User) []domain.User {
 	return result
 }
 
-func userListPredicates(input repository.ListUsersInput) []predicate.User {
+func userListPredicates(input service.ListUsersInput) []predicate.User {
 	// 所有列表查询先隐藏软删除用户，再应用可选业务过滤条件。
 	predicates := []predicate.User{user.DeletedAtIsNil()}
 	if input.Nickname != "" {
