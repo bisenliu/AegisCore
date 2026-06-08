@@ -58,5 +58,11 @@ bin/
 # OS
 .DS_Store
 Thumbs.db
+
+# Ai Agent
 .agent
 .codex
+
+# Code Graph
+.codegraph
+
