@@ -3,12 +3,11 @@ package middleware
 import (
 	"context"
 	"errors"
-	"strings"
 
-	"github.com/aegiscore/common/security/auth"
+	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
-	"github.com/aegiscore/common/contract/response"
+	"github.com/aegiscore/common/security/auth"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"go.uber.org/zap"
@@ -39,16 +38,21 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService,
 			c.Abort()
 			return
 		}
-		if !strings.HasPrefix(authHeader, auth.TokenPrefix) {
+		tokenString, err := auth.ParseBearerAuthorization(authHeader)
+		if errors.Is(err, auth.ErrMissingBearerPrefix) {
 			reqLog.Error("invalid authorization header format")
 			response.TokenInvalid(c, response.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
-
-		tokenString := strings.TrimSpace(strings.TrimPrefix(authHeader, auth.TokenPrefix))
-		if tokenString == "" {
+		if errors.Is(err, auth.ErrEmptyBearerToken) {
 			reqLog.Error("empty bearer token")
+			response.TokenInvalid(c, response.MessageAuthInvalid)
+			c.Abort()
+			return
+		}
+		if err != nil {
+			reqLog.Error("invalid authorization header format", zap.Error(err))
 			response.TokenInvalid(c, response.MessageAuthInvalid)
 			c.Abort()
 			return

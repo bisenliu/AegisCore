@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/contract/response"
+	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/security/auth"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"go.uber.org/zap/zaptest"
@@ -47,6 +47,8 @@ func TestAuthMiddleware(t *testing.T) {
 		{name: "password change token rejected", path: "/api/v1/users/123", authorization: auth.TokenPrefix + passwordChangeToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
 		{name: "token version mismatch", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("version mismatch") })},
 		{name: "valid token", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true},
+		{name: "valid token with lowercase bearer prefix", path: "/api/v1/users/123", authorization: "bearer " + validToken, wantStatus: http.StatusOK, wantHandled: true},
+		{name: "valid token with uppercase bearer prefix", path: "/api/v1/users/123", authorization: "BEARER " + validToken, wantStatus: http.StatusOK, wantHandled: true},
 		{name: "valid token with version validator", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true, validator: TokenVersionValidatorFunc(func(_ context.Context, userID string, version int64) error {
 			if userID != authTestUserID || version != 1 {
 				return errors.New("unexpected token version input")
