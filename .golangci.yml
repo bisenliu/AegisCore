@@ -1,0 +1,84 @@
+version: "2"
+
+# 从 common/ 和 user-services/ 模块目录运行；根目录不是单一 Go module。
+run:
+  modules-download-mode: readonly
+  tests: true
+
+# 使用文本输出，便于本地终端和 CI 日志直接定位问题。
+output:
+  formats:
+    text:
+      path: stdout
+
+linters:
+  # standard 默认包含 errcheck、govet、staticcheck、unused 等基础高价值检查。
+  default: standard
+  enable:
+    # revive 提供可配置的代码风格和常见问题检查。
+    - revive
+  # golangci-lint v2 将旧版独立的 gosimple/stylecheck analyzer family 合并到 staticcheck suite 中。
+  settings:
+    revive:
+      severity: warning
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+          disabled: true
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+          disabled: true
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: unused-parameter
+  exclusions:
+    generated: lax
+    rules:
+      # 测试中的 Close/Rollback 忽略通常不影响被测行为，避免产生低价值噪声。
+      - linters:
+          - errcheck
+        path: (_test\.go)$
+        text: Error return value.*(Close|Rollback)
+    paths:
+      # 排除 Ent 生成代码，但不排除 user-services/ent/schema/ 下的 schema source。
+      - (^|/)ent/(enttest|hook|migrate|predicate|runtime|user)(/|$)
+      - (^|/)ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update)\.go$
+      - third_party$
+      - builtin$
+      - examples$
+
+issues:
+  # 不截断问题数量，首次接入时便于完整统计存量 lint findings。
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    # v2 中 gofmt/goimports 属于 formatter，而不是 linter。
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      # 本地模块导入与第三方导入分组。
+      local-prefixes:
+        - github.com/aegiscore
+  exclusions:
+    generated: lax
+    paths:
+      # formatter 同样跳过 Ent 生成代码，避免对 codegen 输出产生噪声。
+      - (^|/)ent/(enttest|hook|migrate|predicate|runtime|user)(/|$)
+      - (^|/)ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update)\.go$
+      - third_party$
+      - builtin$
+      - examples$

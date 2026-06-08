@@ -1,0 +1,49 @@
+name: lint
+
+# 在 PR 和主线分支推送时执行 lint，先作为报告型检查接入。
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  golangci-lint:
+    name: golangci-lint (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      # 仓库包含多个 Go module，分别进入模块目录运行 lint，避免把仓库根目录当作单一 Go module。
+      matrix:
+        module:
+          - common
+          - user-services
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          # 与 go.work / go.mod 中声明的工具链基线保持一致。
+          go-version: '1.26.3'
+          cache: true
+          cache-dependency-path: |
+            common/go.sum
+            user-services/go.sum
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        # 当前仓库仍有存量 lint findings，先保持非阻断；完成治理后移除该配置并设为 required check。
+        continue-on-error: true
+        with:
+          # 固定版本，避免本地和 CI 因 golangci-lint 版本漂移产生不同结果。
+          version: v2.12.2
+          working-directory: ${{ matrix.module }}
+          # 从模块目录读取仓库根目录的统一配置。
+          args: --config ../.golangci.yml ./...

@@ -4,6 +4,7 @@
 
 - Go workspace 使用 `go 1.26` 和 `toolchain go1.26.3`，见 `go.work`。
 - 工具链基线由 `openspec/specs/go-toolchain-baseline/spec.md` 约束；修改 `go.work` 或任一 `go.mod` 的 Go/toolchain 版本时需同步更新该规格和文档。
+- 本地代码规范检查使用 `golangci-lint`，建议安装与 CI 一致的版本：`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2`。
 - 本地运行用户服务需要 PostgreSQL 和 Redis。
 - 生成或执行数据库迁移需要 Atlas CLI，用户服务迁移目标通常指向 `postgres.user_db` 或部署环境提供的 `DATABASE_URL`。
 - 用户服务配置示例位于 `user-services/configs/config.yaml`。
@@ -21,6 +22,8 @@
 | 运行全部测试 | 分别执行 `go test ./...` | `common/` 和 `user-services/` |
 | 运行用户服务 | `go run ./user-services/cmd serve --config ./user-services/configs/config.yaml` | 仓库根目录 |
 | 运行单模块测试 | `go test ./...` | `common/` 或 `user-services/` |
+| 运行共享模块 lint | `golangci-lint run ./...` | `common/` |
+| 运行用户服务 lint | `golangci-lint run ./...` | `user-services/` |
 | 生成 Ent 代码 | `go generate ./ent` | `user-services/` |
 | 生成用户服务数据库迁移 | `./scripts/migrate-diff.sh <name>` | `user-services/` |
 | 校验用户服务迁移目录 | `./scripts/migrate-validate.sh` | `user-services/` |
@@ -51,6 +54,15 @@
 - `common` 只承载跨服务稳定契约和基础能力；用户服务独有规则、DTO 映射、repository 行为或仅为未来可能复用的 helper 应保留在 `user-services` 内。
 - Ent 生成代码不要手动编辑；修改 schema 后重新生成。生成代码边界、`go generate ./ent` 用法和新增 Entity Schema 流程见 `user-services/ent/README.md`。
 - Go 文件提交前运行 `gofmt`。
+- 提交前建议在受影响 Go module 中运行 `golangci-lint run ./...`；完整 lint 配置、CI/pre-commit 集成和存量问题治理方案见 `docs/GO_LINT_AUTOMATION.md`。
+
+### 5.1 Lint Troubleshooting
+
+- `gofmt` 或 `goimports` 失败时，先格式化对应文件并整理 imports。
+- `errcheck` 失败时，优先显式处理错误；确认可忽略时用 `_ = fn()` 表达有意忽略。
+- `govet` 或 `staticcheck` 失败时，按潜在真实 bug 优先排查，不建议直接排除。
+- CI 与本地结果不一致时，检查 Go 版本、`golangci-lint` 版本、执行目录和 `../.golangci.yml` 配置路径是否一致。
+- 生成代码产生 lint 噪声时，确认排除规则只覆盖 Ent 生成代码，不覆盖 `user-services/ent/schema/`。
 
 ## 6. Database Migrations
 

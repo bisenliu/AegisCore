@@ -19,6 +19,7 @@
 | `api-swagger-documentation` | 生成并按环境暴露与运行时路由和响应契约一致的 Swagger/OpenAPI 文档 | `user-services/cmd/main.go`, `user-services/internal/router/swagger.go`, `user-services/docs/`, `user-services/internal/controller/user_controller.go` | `openspec/specs/api-swagger-documentation/spec.md` | ready |
 | `database-schema-migrations` | 通过 Ent schema 和 Atlas 生成、审查、校验并部署服务内 SQL migration | `user-services/atlas.hcl`, `user-services/ent/migrate/main.go`, `user-services/migrations/`, `user-services/scripts/` | `openspec/specs/database-schema-migrations/spec.md` | ready |
 | `go-toolchain-baseline` | 统一 Go workspace 与模块工具链版本，保证开发、测试和自动化环境一致 | `go.work`, `common/go.mod`, `user-services/go.mod`, `docs/DEVELOPMENT.md` | `openspec/specs/go-toolchain-baseline/spec.md` | ready |
+| `go-lint-automation` | 通过 golangci-lint、CI/pre-commit 建议和分阶段存量治理提供自动化 Go 代码规范检查 | `.golangci.yml`, `.github/workflows/lint.yml`, `docs/GO_LINT_AUTOMATION.md`, `docs/DEVELOPMENT.md` | `openspec/specs/go-lint-automation/spec.md` | proposed |
 
 ## 2. Key Entry Points
 
@@ -44,6 +45,7 @@
 - `api-swagger-documentation` 依赖 `http-service-runtime` 的真实路由和 `api-response-contract` 的响应信封语义。
 - `database-schema-migrations` 依赖 `shared-infrastructure` 的 PostgreSQL 命名实例配置约定，但迁移执行不得启动 Fx、Redis、HTTP server 或 Ent runtime client。
 - 所有 Go capability 的实现、测试、Ent 生成和 Atlas helper 构建都依赖 `go-toolchain-baseline`。
+- 所有 Go capability 的新增或修改代码都应通过 `go-lint-automation` 提供的 lint 配置和 CI 检查逐步建立质量门禁。
 
 ## 4. Candidate Future Capabilities
 
