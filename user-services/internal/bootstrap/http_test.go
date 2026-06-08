@@ -431,10 +431,6 @@ func (s *routeAuthSessionRepository) DeleteAllUserSessions(context.Context, stri
 	return nil
 }
 
-func (s *routeAuthSessionRepository) InvalidateUserTokenVersion(context.Context, string) error {
-	return nil
-}
-
 func (s *routeAuthAuthService) Login(context.Context, dto.LoginRequest) (*dto.TokenResponse, error) {
 	return &dto.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }

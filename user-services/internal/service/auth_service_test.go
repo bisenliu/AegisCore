@@ -168,7 +168,7 @@ func TestAuthServiceChangePassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChangePassword: %v", err)
 	}
-	if !result.Changed || repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != domain.UserStatusNormal || repo.incrementedUserID != authTestUserID || !store.invalidated || !store.deletedAll {
+	if !result.Changed || repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != domain.UserStatusNormal || repo.incrementedUserID != authTestUserID || !store.cached || store.cachedVersion != 3 || !store.deletedAll {
 		t.Fatalf("result=%#v repo=%#v store=%#v", result, repo, store)
 	}
 	matched, err := password.Verify("new-secret", repo.updatedInput.PasswordHash)
@@ -422,7 +422,7 @@ func TestAuthServiceLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LogoutAll: %v", err)
 	}
-	if !result.LoggedOut || repo.incrementedUserID != authTestUserID || !store.invalidated || !store.deletedAll {
+	if !result.LoggedOut || repo.incrementedUserID != authTestUserID || !store.cached || store.cachedVersion != 3 || !store.deletedAll {
 		t.Fatalf("result=%#v repo=%#v store=%#v", result, repo, store)
 	}
 }
@@ -439,7 +439,7 @@ func TestAuthServiceLogoutAllMapsIncrementUserNotFound(t *testing.T) {
 	if appErr.Code != response.CodeNotFound {
 		t.Fatalf("err = %#v", appErr)
 	}
-	if store.invalidated || store.deletedAll {
+	if store.cached || store.deletedAll {
 		t.Fatalf("sessions mutated after increment failure: %#v", store)
 	}
 }
@@ -515,9 +515,7 @@ type sessionStoreStub struct {
 	deleted          bool
 	deletedSessionID string
 	deletedAll       bool
-	invalidated      bool
 	getVersionErr    error
-	invalidateErr    error
 	deleteAllErr     error
 	cacheMiss        bool
 	cacheErr         error
@@ -568,13 +566,6 @@ func (s *sessionStoreStub) DeleteAllUserSessions(context.Context, string) error 
 		return s.deleteAllErr
 	}
 	s.deletedAll = true
-	return nil
-}
-func (s *sessionStoreStub) InvalidateUserTokenVersion(context.Context, string) error {
-	if s.invalidateErr != nil {
-		return s.invalidateErr
-	}
-	s.invalidated = true
 	return nil
 }
 

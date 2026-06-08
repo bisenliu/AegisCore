@@ -52,6 +52,34 @@ func TestAuthSessionRepositoryCachesAndGetsTokenVersion(t *testing.T) {
 	}
 }
 
+func TestAuthSessionRepositoryCacheTokenVersionOverwritesStaleValue(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestAuthSessionRepository(redisServer)
+	ctx := context.Background()
+
+	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7); err != nil {
+		t.Fatalf("CacheTokenVersion old: %v", err)
+	}
+	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 8); err != nil {
+		t.Fatalf("CacheTokenVersion new: %v", err)
+	}
+
+	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
+	if err != nil {
+		t.Fatalf("GetCachedTokenVersion: %v", err)
+	}
+	if version != 8 {
+		t.Fatalf("version = %d, want 8", version)
+	}
+	ttl, err := store.redis.TTL(ctx, store.tokenVersionKey(sessionTestUserID.String())).Result()
+	if err != nil {
+		t.Fatalf("TTL: %v", err)
+	}
+	if ttl <= 0 || ttl > time.Minute {
+		t.Fatalf("TTL = %s, want within explicit %s", ttl, time.Minute)
+	}
+}
+
 func TestAuthSessionRepositoryTokenVersionCacheUsesDefaultTTL(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestAuthSessionRepositoryWithConfig(redisServer, config.AuthConfig{})

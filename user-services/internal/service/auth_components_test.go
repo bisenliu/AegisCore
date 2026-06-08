@@ -214,7 +214,7 @@ func TestAuthSessionManagerRevokeAllUserSessions(t *testing.T) {
 	if result.UserID != authTestUserID || result.TokenVersion != 4 {
 		t.Fatalf("result = %#v", result)
 	}
-	if repo.incrementedUserID != authTestUserID || !store.invalidated || !store.deletedAll {
+	if repo.incrementedUserID != authTestUserID || !store.cached || store.cachedVersion != 4 || !store.deletedAll {
 		t.Fatalf("repo=%#v store=%#v", repo, store)
 	}
 }
@@ -229,13 +229,13 @@ func TestAuthSessionManagerRevokeAllUserSessionsMapsUserNotFound(t *testing.T) {
 	if appErr.Code != response.CodeNotFound {
 		t.Fatalf("err = %#v", appErr)
 	}
-	if store.invalidated || store.deletedAll {
+	if store.cached || store.deletedAll {
 		t.Fatalf("store mutated after increment failure: %#v", store)
 	}
 }
 
-func TestAuthSessionManagerRevokeAllUserSessionsStopsOnInvalidateError(t *testing.T) {
-	store := &sessionStoreStub{invalidateErr: errors.New("invalidate failed")}
+func TestAuthSessionManagerRevokeAllUserSessionsStopsOnCacheRefreshError(t *testing.T) {
+	store := &sessionStoreStub{cacheErr: errors.New("cache refresh failed")}
 	manager := newAuthSessionManager(&authRepoStub{newVersion: 4}, store)
 
 	_, err := manager.RevokeAllUserSessions(context.Background(), authTestUserID)
@@ -245,7 +245,7 @@ func TestAuthSessionManagerRevokeAllUserSessionsStopsOnInvalidateError(t *testin
 		t.Fatalf("err = %#v", appErr)
 	}
 	if store.deletedAll {
-		t.Fatalf("deleted all after invalidate failure: %#v", store)
+		t.Fatalf("deleted all after cache refresh failure: %#v", store)
 	}
 }
 
@@ -259,8 +259,18 @@ func TestAuthSessionManagerRevokeAllUserSessionsMapsDeleteAllError(t *testing.T)
 	if appErr.Code != response.CodeInternalError {
 		t.Fatalf("err = %#v", appErr)
 	}
-	if !store.invalidated {
-		t.Fatalf("token version cache was not invalidated before delete failure")
+	if !store.cached || store.cachedVersion != 4 {
+		t.Fatalf("token version cache was not refreshed before delete failure: %#v", store)
+	}
+}
+
+func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing.T) {
+	validator := NewTokenVersionValidator(&authRepoStub{tokenVersionErr: errors.New("database should not be read")}, &sessionStoreStub{version: 4})
+
+	err := validator.ValidateTokenVersion(context.Background(), authTestUserID.String(), 3)
+
+	if !errors.Is(err, repository.ErrTokenVersionMismatch) {
+		t.Fatalf("err = %v, want token version mismatch", err)
 	}
 }
 

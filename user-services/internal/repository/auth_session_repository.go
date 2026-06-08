@@ -24,5 +24,4 @@ type AuthSessionRepository interface {
 	GetSession(ctx context.Context, sessionID string) (AuthSession, error)
 	DeleteSession(ctx context.Context, userID string, sessionID string) error
 	DeleteAllUserSessions(ctx context.Context, userID string) error
-	InvalidateUserTokenVersion(ctx context.Context, userID string) error
 }

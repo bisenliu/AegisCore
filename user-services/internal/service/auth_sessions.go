@@ -161,8 +161,8 @@ func (m *authSessionManager) RevokeAllUserSessions(ctx context.Context, userID u
 		logger.Error(ctx, "increment token version failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
 		return nil, response.FromError(err)
 	}
-	if err := m.sessions.InvalidateUserTokenVersion(ctx, userID.String()); err != nil {
-		logger.Error(ctx, "invalidate token version failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
+	if err := m.sessions.CacheTokenVersion(ctx, userID.String(), tokenVersion); err != nil {
+		logger.Error(ctx, "refresh token version cache failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return nil, response.FromError(err)
 	}
 	if err := m.sessions.DeleteAllUserSessions(ctx, userID.String()); err != nil {

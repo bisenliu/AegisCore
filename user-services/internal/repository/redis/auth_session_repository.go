@@ -152,13 +152,6 @@ func (r *authSessionRepository) DeleteAllUserSessions(ctx context.Context, userI
 	return nil
 }
 
-func (r *authSessionRepository) InvalidateUserTokenVersion(ctx context.Context, userID string) error {
-	if err := r.redis.Del(ctx, r.tokenVersionKey(userID)).Err(); err != nil {
-		return fmt.Errorf("delete token version cache: %w", err)
-	}
-	return nil
-}
-
 func (r *authSessionRepository) tokenVersionKey(userID string) string {
 	return r.keys.AuthUserTokenVersion(userID)
 }
