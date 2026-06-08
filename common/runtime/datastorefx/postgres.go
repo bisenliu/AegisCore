@@ -3,6 +3,7 @@ package datastorefx
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/aegiscore/common/runtime/config"
@@ -22,35 +23,71 @@ func ProvideNamedPostgres(fxName string, configKey string) fx.Option {
 }
 
 func NewPostgres(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name string) (*sql.DB, error) {
-	dbCfg, ok := cfg.PostgresDatabaseConfig(name)
-	if !ok {
-		return nil, fmt.Errorf("postgres config %q not found", name)
-	}
-	db, err := datastore.OpenPostgres(name, dbCfg)
+	dbs, err := NewPostgresPools(lc, cfg, log, name)
 	if err != nil {
 		return nil, err
 	}
-	registerDBLifecycle(lc, log, name, db, dbCfg)
-	return db, nil
+	return dbs[name], nil
 }
 
-func registerDBLifecycle(lc fx.Lifecycle, log *zap.Logger, name string, db *sql.DB, cfg config.PostgresDBConfig) {
+func NewPostgresPools(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, names ...string) (map[string]*sql.DB, error) {
+	dbs := make(map[string]*sql.DB, len(names))
+	dbCfgs := make(map[string]config.PostgresDBConfig, len(names))
+	for _, name := range names {
+		dbCfg, ok := cfg.PostgresDatabaseConfig(name)
+		if !ok {
+			return nil, errors.Join(
+				fmt.Errorf("postgres config %q not found", name),
+				closePostgresPools(dbs),
+			)
+		}
+		db, err := datastore.OpenPostgres(name, dbCfg)
+		if err != nil {
+			return nil, errors.Join(err, closePostgresPools(dbs))
+		}
+		dbs[name] = db
+		dbCfgs[name] = dbCfg
+	}
+	registerDBLifecycle(lc, log, dbs, dbCfgs, names)
+	return dbs, nil
+}
+
+func closePostgresPools(dbs map[string]*sql.DB) error {
+	errs := make([]error, 0, len(dbs))
+	for name, db := range dbs {
+		if err := db.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("close postgres %s: %w", name, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func registerDBLifecycle(lc fx.Lifecycle, log *zap.Logger, dbs map[string]*sql.DB, dbCfgs map[string]config.PostgresDBConfig, names []string) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			pingCtx, cancel := context.WithTimeout(ctx, cfg.PingTimeout)
-			defer cancel()
-			if err := db.PingContext(pingCtx); err != nil {
-				return fmt.Errorf("ping postgres %s: %w", name, err)
+			for _, name := range names {
+				db := dbs[name]
+				cfg := dbCfgs[name]
+				pingCtx, cancel := context.WithTimeout(ctx, cfg.PingTimeout)
+				if err := db.PingContext(pingCtx); err != nil {
+					cancel()
+					return fmt.Errorf("ping postgres %s: %w", name, err)
+				}
+				cancel()
+				logger.WithContext(log, ctx).Info("postgres connected", zap.String("name", name))
 			}
-			logger.WithContext(log, ctx).Info("postgres connected", zap.String("name", name))
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			if err := db.Close(); err != nil {
-				return fmt.Errorf("close postgres %s: %w", name, err)
+			errs := make([]error, 0, len(names))
+			for _, name := range names {
+				if err := dbs[name].Close(); err != nil {
+					errs = append(errs, fmt.Errorf("close postgres %s: %w", name, err))
+					continue
+				}
+				logger.WithContext(log, ctx).Info("postgres closed", zap.String("name", name))
 			}
-			logger.WithContext(log, ctx).Info("postgres closed", zap.String("name", name))
-			return nil
+			return errors.Join(errs...)
 		},
 	})
 }

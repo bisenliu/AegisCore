@@ -17,6 +17,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/resources"
+	"github.com/aegiscore/user-services/ent"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
@@ -63,6 +64,41 @@ func TestProvidePostgresPoolsProvidesUserServiceDatabases(t *testing.T) {
 	}
 	if got := drv.closes.Load(); got != 2 {
 		t.Fatalf("closes = %d, want 2", got)
+	}
+}
+
+func TestProvidePostgresPoolsReturnsErrorForMissingCommonDBConfig(t *testing.T) {
+	drv := registerBootstrapTestSQLDriver(t)
+	cfg := bootstrapTestConfig(drv.name)
+	delete(cfg.Postgres, resources.NameCommonDB)
+	lc := fxtest.NewLifecycle(t)
+	log := zap.NewNop()
+
+	_, err := ProvidePostgresPools(NamedPostgresParams{
+		Lifecycle: lc,
+		Config:    cfg,
+		Log:       log,
+	})
+	if err == nil {
+		t.Fatal("ProvidePostgresPools error = nil")
+	}
+	if !strings.Contains(err.Error(), `postgres config "`+resources.NameCommonDB+`" not found`) {
+		t.Fatalf("ProvidePostgresPools error = %q, want common_db context", err.Error())
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := lc.Start(ctx); err != nil {
+		t.Fatalf("lifecycle start after failed provider: %v", err)
+	}
+	if err := lc.Stop(ctx); err != nil {
+		t.Fatalf("lifecycle stop after failed provider: %v", err)
+	}
+	if got := drv.pings.Load(); got != 0 {
+		t.Fatalf("pings after failed provider = %d, want 0", got)
+	}
+	if got := drv.closes.Load(); got != 0 {
+		t.Fatalf("driver closes after failed provider = %d, want 0", got)
 	}
 }
 
@@ -128,8 +164,43 @@ func TestProvideEntClientsProvidesUserServiceEntClients(t *testing.T) {
 	if err := lc.Stop(ctx); err != nil {
 		t.Fatalf("lifecycle stop: %v", err)
 	}
+	if got := drv.closes.Load(); got != 0 {
+		t.Fatalf("closes after ent lifecycle stop = %d, want 0", got)
+	}
+}
+
+func TestPostgresPoolsAndEntClientsClosePoolsOnce(t *testing.T) {
+	drv := registerBootstrapTestSQLDriver(t)
+	cfg := bootstrapTestConfig(drv.name)
+	log := zap.NewNop()
+
+	type clients struct {
+		fx.In
+
+		UserClient   *ent.Client `name:"user_db"`
+		CommonClient *ent.Client `name:"common_db"`
+	}
+
+	var got clients
+	app := fxtest.New(t,
+		fx.Supply(cfg, log),
+		fx.Provide(ProvidePostgresPools, ProvideEntClients),
+		fx.Populate(&got),
+	)
+	app.RequireStart()
+	app.RequireStop()
+
+	if got.UserClient == nil {
+		t.Fatal("UserClient = nil")
+	}
+	if got.CommonClient == nil {
+		t.Fatal("CommonClient = nil")
+	}
+	if got := drv.pings.Load(); got != 2 {
+		t.Fatalf("pings = %d, want 2", got)
+	}
 	if got := drv.closes.Load(); got != 2 {
-		t.Fatalf("closes after lifecycle stop = %d, want 2", got)
+		t.Fatalf("closes after composed lifecycle stop = %d, want 2", got)
 	}
 }
 

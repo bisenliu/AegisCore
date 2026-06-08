@@ -46,7 +46,15 @@ func ProvideEntClients(params NamedEntClientParams) NamedEntClients {
 
 func newEntClient(db *sql.DB) *ent.Client {
 	driver := entsql.OpenDB(dialect.Postgres, db)
-	return ent.NewClient(ent.Driver(driver))
+	return ent.NewClient(ent.Driver(nonClosingEntDriver{Driver: driver}))
+}
+
+type nonClosingEntDriver struct {
+	dialect.Driver
+}
+
+func (d nonClosingEntDriver) Close() error {
+	return nil
 }
 
 func closeEntClients(closeUser, closeCommon func() error) error {

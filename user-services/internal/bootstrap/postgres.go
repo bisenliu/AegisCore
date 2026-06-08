@@ -26,15 +26,19 @@ type NamedPostgresPools struct {
 }
 
 func ProvidePostgresPools(params NamedPostgresParams) (NamedPostgresPools, error) {
-	userDB, err := datastorefx.NewPostgres(params.Lifecycle, params.Config, params.Log, resources.NameUserDB)
+	dbs, err := datastorefx.NewPostgresPools(
+		params.Lifecycle,
+		params.Config,
+		params.Log,
+		resources.NameUserDB,
+		resources.NameCommonDB,
+	)
 	if err != nil {
-		return NamedPostgresPools{}, err
-	}
-	commonDB, err := datastorefx.NewPostgres(params.Lifecycle, params.Config, params.Log, resources.NameCommonDB)
-	if err != nil {
-		_ = userDB.Close()
 		return NamedPostgresPools{}, err
 	}
 
-	return NamedPostgresPools{UserDB: userDB, CommonDB: commonDB}, nil
+	return NamedPostgresPools{
+		UserDB:   dbs[resources.NameUserDB],
+		CommonDB: dbs[resources.NameCommonDB],
+	}, nil
 }

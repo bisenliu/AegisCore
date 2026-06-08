@@ -76,6 +76,63 @@ func TestNewPostgresRegistersLifecycle(t *testing.T) {
 	}
 }
 
+func TestNewPostgresPoolsRegistersSingleLifecycleForDeclaredPools(t *testing.T) {
+	drv := registerTestSQLDriver(t)
+	cfg := testConfig(drv.name)
+	cfg.Postgres[resources.NameCommonDB] = cfg.Postgres[resources.NameUserDB]
+	lc := fxtest.NewLifecycle(t)
+	log := zap.NewNop()
+
+	dbs, err := NewPostgresPools(lc, cfg, log, resources.NameUserDB, resources.NameCommonDB)
+	if err != nil {
+		t.Fatalf("NewPostgresPools: %v", err)
+	}
+	if dbs[resources.NameUserDB] == nil {
+		t.Fatal("user_db = nil")
+	}
+	if dbs[resources.NameCommonDB] == nil {
+		t.Fatal("common_db = nil")
+	}
+	lc.RequireStart()
+	lc.RequireStop()
+
+	if got := drv.pings.Load(); got != 2 {
+		t.Fatalf("pings = %d, want 2", got)
+	}
+	if got := drv.closes.Load(); got != 2 {
+		t.Fatalf("closes = %d, want 2", got)
+	}
+}
+
+func TestNewPostgresPoolsStopPreservesNamedCloseErrors(t *testing.T) {
+	drv := registerTestSQLDriver(t)
+	drv.closeErr = errors.New("driver close failed")
+	cfg := testConfig(drv.name)
+	cfg.Postgres[resources.NameCommonDB] = cfg.Postgres[resources.NameUserDB]
+	lc := fxtest.NewLifecycle(t)
+	log := zap.NewNop()
+
+	if _, err := NewPostgresPools(lc, cfg, log, resources.NameUserDB, resources.NameCommonDB); err != nil {
+		t.Fatalf("NewPostgresPools: %v", err)
+	}
+	lc.RequireStart()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err := lc.Stop(ctx)
+	if err == nil {
+		t.Fatal("Lifecycle Stop error = nil")
+	}
+	if !strings.Contains(err.Error(), "close postgres user_db") {
+		t.Fatalf("Lifecycle Stop error = %q, want user_db context", err.Error())
+	}
+	if !strings.Contains(err.Error(), "close postgres common_db") {
+		t.Fatalf("Lifecycle Stop error = %q, want common_db context", err.Error())
+	}
+	if got := drv.closes.Load(); got != 2 {
+		t.Fatalf("closes = %d, want 2", got)
+	}
+}
+
 func TestExplicitCommonProvidersDoNotProvideNamedPostgresPools(t *testing.T) {
 	type params struct {
 		fx.In
@@ -311,6 +368,8 @@ type testSQLDriver struct {
 	name   string
 	pings  atomic.Int64
 	closes atomic.Int64
+
+	closeErr error
 }
 
 func (d *testSQLDriver) Open(string) (driver.Conn, error) {
@@ -327,7 +386,7 @@ func (c *testSQLConn) Prepare(string) (driver.Stmt, error) {
 
 func (c *testSQLConn) Close() error {
 	c.driver.closes.Add(1)
-	return nil
+	return c.driver.closeErr
 }
 
 func (c *testSQLConn) Begin() (driver.Tx, error) {
