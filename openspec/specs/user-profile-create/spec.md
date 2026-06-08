@@ -217,12 +217,12 @@
 - **Then** 用户名冲突、校验失败和持久化错误的公开错误语义 MUST 与迁移前保持一致
 
 ### Requirement: Validate and normalize create input before service business flow
-系统 MUST 在用户创建 Service 执行业务编排前完成创建请求的请求级清洗和基础校验。`nickname`、`username` 和 `password` 的空白裁剪、`username` 小写规范化、必填校验、长度/格式校验和状态枚举校验 MUST 位于 Controller、共享请求校验器或服务内 Validation 层，而不是作为用户创建 Service 的主要职责。
+系统 MUST 在用户创建 Service 执行业务编排前完成创建请求的请求级清洗和基础校验。`nickname`、`username` 和 `password` 的空白裁剪、`username` 小写规范化、必填校验、长度/格式校验和状态枚举校验 MUST 位于 Controller、共享请求校验器或服务内 validators 层，而不是作为用户创建 Service 的主要职责。
 
 #### Scenario: Trim and lowercase create user fields before service call
 - **Given** 调用方提交 `nickname`、`username` 或 `password` 前后包含空白的创建用户请求，且 `username` 包含大写字母
 - **When** controller 处理创建用户请求并调用 Service
-- **Then** 空白裁剪 MUST 在 Controller 或服务内 Validation 层完成
+- **Then** 空白裁剪 MUST 在 Controller 或服务内 validators 层完成
 - **Then** `username` 小写规范化 MUST 在持久化前完成
 - **Then** Service MUST 使用已规范化的 `nickname`、`username` 和 `password` 执行业务流程
 

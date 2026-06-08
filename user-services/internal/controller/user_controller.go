@@ -6,7 +6,7 @@ import (
 	commonvalidation "github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/api/user"
 	"github.com/aegiscore/user-services/internal/service"
-	uservalidation "github.com/aegiscore/user-services/internal/validation"
+	"github.com/aegiscore/user-services/internal/validators"
 	"github.com/gin-gonic/gin"
 )
 
@@ -42,7 +42,7 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.QueryBinder) {
 		return
 	}
-	uservalidation.NormalizeListUsers(&req)
+	validators.NormalizeListUsers(&req)
 
 	users, err := ctl.userService.ListUsers(c.Request.Context(), req)
 	if err != nil {
@@ -71,7 +71,7 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
-	if err := uservalidation.NormalizeCreateUser(&req); err != nil {
+	if err := validators.NormalizeCreateUser(&req); err != nil {
 		response.Fail(c, err)
 		return
 	}
@@ -102,7 +102,7 @@ func (ctl *UserController) GetByUserID(c *gin.Context) {
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.URIBinder) {
 		return
 	}
-	userID, err := uservalidation.ParseUserID(req)
+	userID, err := validators.ParseUserID(req)
 	if err != nil {
 		response.Fail(c, err)
 		return

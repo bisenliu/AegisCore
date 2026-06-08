@@ -545,12 +545,12 @@
 - **Then** service 层 MUST 继续将非预期错误映射为内部错误或既有安全失败语义
 
 ### Requirement: Validate and normalize auth request input before service business flow
-系统 MUST 在 Auth Service 执行认证会话业务编排前完成认证请求的请求级清洗和基础校验。登录请求的 `username` 和 `password` 裁剪、空凭据校验，改密请求的 `new_password` 裁剪和空值校验，以及刷新请求体 `refresh_token` 的可选 Bearer 前缀剥离和空值校验 MUST 位于 Controller、共享请求校验器或服务内 Validation 层，而不是作为 Auth Service 的主要职责。
+系统 MUST 在 Auth Service 执行认证会话业务编排前完成认证请求的请求级清洗和基础校验。登录请求的 `username` 和 `password` 裁剪、空凭据校验，改密请求的 `new_password` 裁剪和空值校验，以及刷新请求体 `refresh_token` 的可选 Bearer 前缀剥离和空值校验 MUST 位于 Controller、共享请求校验器或服务内 validators 层，而不是作为 Auth Service 的主要职责。
 
 #### Scenario: Normalize login credentials before authentication
 - **Given** 调用方提交登录请求且 `username` 或 `password` 前后包含空白
 - **When** controller 处理登录请求并调用 Auth Service
-- **Then** 空白裁剪 MUST 在 Controller 或服务内 Validation 层完成
+- **Then** 空白裁剪 MUST 在 Controller 或服务内 validators 层完成
 - **Then** Auth Service MUST 使用已规范化的 `username` 和明文密码执行凭据认证
 
 #### Scenario: Reject empty login credentials before repository lookup
@@ -563,17 +563,17 @@
 #### Scenario: Normalize password change input before credential update
 - **Given** 调用方提交改密请求且 `new_password` 前后包含空白
 - **When** controller 处理改密请求并调用 Auth Service
-- **Then** 新密码空白裁剪和裁剪后空值校验 MUST 在 Controller 或服务内 Validation 层完成
+- **Then** 新密码空白裁剪和裁剪后空值校验 MUST 在 Controller 或服务内 validators 层完成
 - **Then** Auth Service MUST 使用已规范化的新密码执行密码哈希和凭证更新流程
 
 #### Scenario: Normalize refresh token request before refresh flow
 - **Given** 调用方在刷新请求体 `refresh_token` 字段提交裸 Refresh Token 或 `Bearer <refresh-token>`
 - **When** controller 处理刷新请求并调用 Auth Service
-- **Then** 请求体 token 的可选 Bearer 前缀剥离和空值校验 MUST 在 Controller 或服务内 Validation 层完成
+- **Then** 请求体 token 的可选 Bearer 前缀剥离和空值校验 MUST 在 Controller 或服务内 validators 层完成
 - **Then** Auth Service MUST 使用已规范化的 Refresh Token 执行 token claims、session 和 token version 校验
 
 ### Requirement: Keep authentication and session semantics in Auth Service
-系统 MUST 保持认证会话安全语义由 Auth Service 或认证中间件边界负责。Validation 层 MUST NOT 执行依赖 JWT claims、Redis session、token version、用户状态或 Repository 查询的认证业务校验。
+系统 MUST 保持认证会话安全语义由 Auth Service 或认证中间件边界负责。validators 层 MUST NOT 执行依赖 JWT claims、Redis session、token version、用户状态或 Repository 查询的认证业务校验。
 
 #### Scenario: Auth service verifies credentials after request validation
 - **Given** 登录请求已经完成请求级规范化和基础校验
@@ -600,7 +600,7 @@
 - **Given** 调用方请求退出当前设备或退出全部设备
 - **When** Auth Service 从认证上下文读取 `user_id` 和 `session_id`
 - **Then** Auth Service 或认证中间件 MUST 继续校验上下文中的认证身份和会话标识
-- **Then** 普通请求 Validation 层 MUST NOT 替代认证上下文安全校验
+- **Then** 普通请求 validators 层 MUST NOT 替代认证上下文安全校验
 
 ### Requirement: Separate auth orchestration from credential token and session strategies
 

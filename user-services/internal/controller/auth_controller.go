@@ -7,7 +7,7 @@ import (
 	commonvalidation "github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/api/auth"
 	"github.com/aegiscore/user-services/internal/service"
-	uservalidation "github.com/aegiscore/user-services/internal/validation"
+	"github.com/aegiscore/user-services/internal/validators"
 	"github.com/gin-gonic/gin"
 )
 
@@ -35,7 +35,7 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
-	if err := uservalidation.NormalizeChangePassword(&req); err != nil {
+	if err := validators.NormalizeChangePassword(&req); err != nil {
 		response.Fail(c, err)
 		return
 	}
@@ -69,7 +69,7 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
-	if err := uservalidation.NormalizeLogin(&req); err != nil {
+	if err := validators.NormalizeLogin(&req); err != nil {
 		response.Fail(c, err)
 		return
 	}
@@ -98,7 +98,7 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
-	if err := uservalidation.NormalizeRefresh(&req); err != nil {
+	if err := validators.NormalizeRefresh(&req); err != nil {
 		response.Fail(c, err)
 		return
 	}
