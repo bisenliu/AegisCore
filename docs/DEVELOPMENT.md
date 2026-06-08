@@ -49,7 +49,7 @@
 - Repository 层负责 Ent/数据库访问和存储错误转换。
 - 共享中间件、响应模型、配置和基础设施放在 `common/` 的对应能力分类目录中：响应契约使用 `common/contract/response`，运行时基础能力使用 `common/runtime`，HTTP/Gin 适配使用 `common/http`，安全凭证原语使用 `common/security`，通用校验核心使用 `common/validation`。
 - `common` 只承载跨服务稳定契约和基础能力；用户服务独有规则、DTO 映射、repository 行为或仅为未来可能复用的 helper 应保留在 `user-services` 内。
-- Ent 生成代码不要手动编辑；修改 schema 后重新生成。
+- Ent 生成代码不要手动编辑；修改 schema 后重新生成。生成代码边界、`go generate ./ent` 用法和新增 Entity Schema 流程见 `user-services/ent/README.md`。
 - Go 文件提交前运行 `gofmt`。
 
 ## 6. Database Migrations
@@ -80,6 +80,8 @@ user-services/
 2. 在 `user-services/` 执行 `go generate ./ent`，只生成 Ent 代码，不要手写 `user-services/ent/` 下的生成文件。
 3. 在 `user-services/` 执行 `./scripts/migrate-diff.sh <migration-name>`。
 4. 审查 `user-services/migrations/*.sql` 和 `user-services/migrations/atlas.sum`。
+
+Ent 生成代码边界和新增 Entity Schema 的完整说明见 `user-services/ent/README.md`。
 
 `migrate-diff.sh` 使用 Atlas 的 `ent://ent/schema` schema source 读取 Ent schema，并通过 PostgreSQL dev database 计算与现有 migration directory 的差异。默认 dev URL 为 `docker://postgres/15/dev?search_path=public`，可通过 `ATLAS_DEV_URL` 覆盖。
 
