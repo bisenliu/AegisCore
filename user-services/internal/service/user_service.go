@@ -10,6 +10,7 @@ import (
 	"github.com/aegiscore/user-services/internal/api/user"
 	"github.com/aegiscore/user-services/internal/domain"
 	"github.com/aegiscore/user-services/internal/messages"
+	"github.com/aegiscore/user-services/internal/validators"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -105,6 +106,8 @@ func (s *userService) GetUserByID(ctx context.Context, userID uuid.UUID) (*usera
 
 // ListUsers 使用规范化过滤条件返回分页用户资料列表。
 func (s *userService) ListUsers(ctx context.Context, req userapi.ListUsersRequest) (response.PaginatedData[userapi.UserResponse], error) {
+	validators.NormalizeListUsers(&req)
+
 	logger.Info(ctx, "list users", zap.Int("page", req.Page), zap.Int("page_size", req.PageSize))
 	users, total, err := s.repo.ListUsers(ctx, ListUsersInput{
 		Offset:   req.Offset,

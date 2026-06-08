@@ -127,7 +127,7 @@ func TestUserServiceListUsers(t *testing.T) {
 		repo := &stubUserRepository{}
 		svc := NewUserService(repo)
 
-		users, err := svc.ListUsers(context.Background(), userapi.ListUsersRequest{Page: 1, PageSize: 10, Limit: 10})
+		users, err := svc.ListUsers(context.Background(), userapi.ListUsersRequest{})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
@@ -148,7 +148,7 @@ func TestUserServiceListUsers(t *testing.T) {
 		repo := &stubUserRepository{listUsers: []domain.User{{ID: 1, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, listTotal: 128}
 		svc := NewUserService(repo)
 
-		users, err := svc.ListUsers(context.Background(), userapi.ListUsersRequest{Page: 2, PageSize: 20, Offset: 20, Limit: 20, Nickname: "Ali", Username: "alice", Status: &status})
+		users, err := svc.ListUsers(context.Background(), userapi.ListUsersRequest{Page: 2, PageSize: 20, Nickname: " Ali ", Username: " alice ", Status: &status})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)

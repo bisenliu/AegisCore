@@ -42,7 +42,6 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.QueryBinder) {
 		return
 	}
-	validators.NormalizeListUsers(&req)
 
 	users, err := ctl.userService.ListUsers(c.Request.Context(), req)
 	if err != nil {

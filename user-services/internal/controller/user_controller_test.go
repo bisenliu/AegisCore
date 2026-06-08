@@ -190,7 +190,7 @@ func TestUserControllerList(t *testing.T) {
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if service.gotList.Page != 1 || service.gotList.PageSize != 10 || service.gotList.Offset != 0 || service.gotList.Limit != 10 {
+		if service.gotList.Page != 0 || service.gotList.PageSize != 0 || service.gotList.Offset != 0 || service.gotList.Limit != 0 {
 			t.Fatalf("gotList = %#v", service.gotList)
 		}
 		assertPaginatedEnvelope(t, envelope, 1, 10, 0, 0, 0)
@@ -199,12 +199,12 @@ func TestUserControllerList(t *testing.T) {
 	t.Run("explicit query", func(t *testing.T) {
 		service := &stubUserService{listResponse: listResponse}
 
-		status, envelope := executeList(t, service, "/api/v1/users?page=2&page_size=20&nickname=Ali&username=alice&status=100")
+		status, envelope := executeList(t, service, "/api/v1/users?page=2&page_size=20&nickname=%20Ali%20&username=%20alice%20&status=100")
 
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if service.gotList.Page != 2 || service.gotList.PageSize != 20 || service.gotList.Offset != 20 || service.gotList.Limit != 20 || service.gotList.Nickname != "Ali" || service.gotList.Username != "alice" {
+		if service.gotList.Page != 2 || service.gotList.PageSize != 20 || service.gotList.Offset != 0 || service.gotList.Limit != 0 || service.gotList.Nickname != " Ali " || service.gotList.Username != " alice " {
 			t.Fatalf("gotList = %#v", service.gotList)
 		}
 		if service.gotList.Status == nil || *service.gotList.Status != domain.UserStatusNormal {

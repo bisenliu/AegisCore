@@ -12,6 +12,7 @@ import (
 	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/user-services/internal/api/auth"
 	"github.com/aegiscore/user-services/internal/domain"
+	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/aegiscore/user-services/internal/repository"
 	"github.com/google/uuid"
 )
@@ -27,7 +28,7 @@ func TestAuthServiceLogin(t *testing.T) {
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthService(repo, store, true)
 
-	tokens, err := svc.Login(context.Background(), authapi.LoginRequest{Username: "alice", Password: "secret"})
+	tokens, err := svc.Login(context.Background(), authapi.LoginRequest{Username: " alice ", Password: " secret "})
 
 	if err != nil {
 		t.Fatalf("Login: %v", err)
@@ -40,6 +41,17 @@ func TestAuthServiceLogin(t *testing.T) {
 	}
 	if store.created.SessionID == "" || store.created.UserID != authTestUserID.String() || store.created.TokenVersion != 2 {
 		t.Fatalf("created session = %#v", store.created)
+	}
+}
+
+func TestAuthServiceLoginRejectsBlankTrimmedCredentials(t *testing.T) {
+	svc := newTestAuthService(&authRepoStub{}, &sessionStoreStub{}, true)
+
+	_, err := svc.Login(context.Background(), authapi.LoginRequest{Username: "alice", Password: " "})
+
+	appErr := response.FromError(err)
+	if appErr.Code != response.CodeUnauthenticated || appErr.Message != messages.InvalidCredentials {
+		t.Fatalf("err = %#v", appErr)
 	}
 }
 
@@ -163,7 +175,7 @@ func TestAuthServiceChangePassword(t *testing.T) {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
 	}
 
-	result, err := svc.ChangePassword(context.Background(), authapi.ChangePasswordRequest{Token: token, NewPassword: "new-secret"})
+	result, err := svc.ChangePassword(context.Background(), authapi.ChangePasswordRequest{Token: auth.TokenPrefix + token, NewPassword: " new-secret "})
 
 	if err != nil {
 		t.Fatalf("ChangePassword: %v", err)
@@ -174,6 +186,32 @@ func TestAuthServiceChangePassword(t *testing.T) {
 	matched, err := password.Verify("new-secret", repo.updatedInput.PasswordHash)
 	if err != nil || !matched {
 		t.Fatalf("updated password hash mismatch: matched=%v err=%v", matched, err)
+	}
+}
+
+func TestAuthServiceChangePasswordRejectsInvalidNormalizedInput(t *testing.T) {
+	svc := newTestAuthService(&authRepoStub{}, &sessionStoreStub{}, true)
+
+	tests := []struct {
+		name        string
+		req         authapi.ChangePasswordRequest
+		wantCode    response.Code
+		wantMessage string
+	}{
+		{name: "missing token", req: authapi.ChangePasswordRequest{NewPassword: "new-secret"}, wantCode: response.CodeTokenInvalid, wantMessage: messages.MissingSession},
+		{name: "bearer only token", req: authapi.ChangePasswordRequest{Token: auth.TokenTypeBearer, NewPassword: "new-secret"}, wantCode: response.CodeTokenInvalid, wantMessage: messages.MissingSession},
+		{name: "blank password", req: authapi.ChangePasswordRequest{Token: "password-token", NewPassword: " "}, wantCode: response.CodeValidationFailed, wantMessage: messages.InvalidPassword},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := svc.ChangePassword(context.Background(), tt.req)
+
+			appErr := response.FromError(err)
+			if appErr.Code != tt.wantCode || appErr.Message != tt.wantMessage {
+				t.Fatalf("err = %#v", appErr)
+			}
+		})
 	}
 }
 
@@ -234,7 +272,7 @@ func TestAuthServiceRefreshRotatesSession(t *testing.T) {
 		t.Fatalf("SignRefreshToken: %v", err)
 	}
 
-	tokens, err := svc.Refresh(context.Background(), authapi.RefreshTokenRequest{RefreshToken: refresh})
+	tokens, err := svc.Refresh(context.Background(), authapi.RefreshTokenRequest{RefreshToken: " " + auth.TokenPrefix + refresh + " "})
 
 	if err != nil {
 		t.Fatalf("Refresh: %v", err)
@@ -247,6 +285,19 @@ func TestAuthServiceRefreshRotatesSession(t *testing.T) {
 	}
 	if store.created.SessionID == "" || store.created.SessionID == "s-old" {
 		t.Fatalf("created rotated session = %#v", store.created)
+	}
+}
+
+func TestAuthServiceRefreshRejectsInvalidNormalizedToken(t *testing.T) {
+	svc := newTestAuthService(&authRepoStub{}, &sessionStoreStub{}, false)
+
+	for _, token := range []string{"", " ", auth.TokenTypeBearer, auth.TokenPrefix} {
+		_, err := svc.Refresh(context.Background(), authapi.RefreshTokenRequest{RefreshToken: token})
+
+		appErr := response.FromError(err)
+		if appErr.Code != response.CodeTokenInvalid || appErr.Message != messages.MissingSession {
+			t.Fatalf("token %q err = %#v", token, appErr)
+		}
 	}
 }
 

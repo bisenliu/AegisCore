@@ -12,11 +12,10 @@ import (
 	"github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/api/auth"
-	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/gin-gonic/gin"
 )
 
-func TestAuthControllerLoginNormalizesRequest(t *testing.T) {
+func TestAuthControllerLoginPassesBoundRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	service := &stubAuthService{tokens: &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 900}}
 
@@ -25,7 +24,7 @@ func TestAuthControllerLoginNormalizesRequest(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", status, http.StatusOK)
 	}
-	if service.gotLogin.Username != "alice" || service.gotLogin.Password != "secret" {
+	if service.gotLogin.Username != " alice " || service.gotLogin.Password != " secret " {
 		t.Fatalf("gotLogin = %#v", service.gotLogin)
 	}
 	if !envelope.Success || envelope.Code != response.CodeOK {
@@ -33,21 +32,21 @@ func TestAuthControllerLoginNormalizesRequest(t *testing.T) {
 	}
 }
 
-func TestAuthControllerLoginRejectsBlankTrimmedCredentials(t *testing.T) {
+func TestAuthControllerLoginLeavesCredentialNormalizationToService(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{}
+	service := &stubAuthService{tokens: &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthLogin(t, service, `{"username":"alice","password":" "}`)
 
-	if status != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", status, http.StatusOK)
 	}
-	if service.gotLogin.Username != "" || envelope.Success || envelope.Code != response.CodeUnauthenticated || envelope.Message != messages.InvalidCredentials {
+	if service.gotLogin.Username != "alice" || service.gotLogin.Password != " " || !envelope.Success || envelope.Code != response.CodeOK {
 		t.Fatalf("service=%#v envelope=%#v", service, envelope)
 	}
 }
 
-func TestAuthControllerChangePasswordNormalizesRequest(t *testing.T) {
+func TestAuthControllerChangePasswordPassesBoundRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	service := &stubAuthService{changeResponse: &authapi.ChangePasswordResponse{Changed: true}}
 
@@ -56,7 +55,7 @@ func TestAuthControllerChangePasswordNormalizesRequest(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", status, http.StatusOK)
 	}
-	if service.gotChange.Token != "password-token" || service.gotChange.NewPassword != "new-secret" {
+	if service.gotChange.Token != auth.TokenPrefix+"password-token" || service.gotChange.NewPassword != " new-secret " {
 		t.Fatalf("gotChange = %#v", service.gotChange)
 	}
 	if !envelope.Success || envelope.Code != response.CodeOK {
@@ -64,7 +63,7 @@ func TestAuthControllerChangePasswordNormalizesRequest(t *testing.T) {
 	}
 }
 
-func TestAuthControllerRefreshNormalizesRequest(t *testing.T) {
+func TestAuthControllerRefreshPassesBoundRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	service := &stubAuthService{tokens: &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 900}}
 
@@ -73,7 +72,7 @@ func TestAuthControllerRefreshNormalizesRequest(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", status, http.StatusOK)
 	}
-	if service.gotRefresh.RefreshToken != "refresh-token" {
+	if service.gotRefresh.RefreshToken != " Bearer refresh-token " {
 		t.Fatalf("gotRefresh = %#v", service.gotRefresh)
 	}
 	if !envelope.Success || envelope.Code != response.CodeOK {
@@ -81,16 +80,16 @@ func TestAuthControllerRefreshNormalizesRequest(t *testing.T) {
 	}
 }
 
-func TestAuthControllerRefreshRejectsBlankTrimmedToken(t *testing.T) {
+func TestAuthControllerRefreshLeavesTokenNormalizationToService(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{}
+	service := &stubAuthService{tokens: &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: auth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthRefresh(t, service, `{"refresh_token":" Bearer "}`)
 
-	if status != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", status, http.StatusOK)
 	}
-	if service.gotRefresh.RefreshToken != "" || envelope.Success || envelope.Code != response.CodeTokenInvalid || envelope.Message != messages.MissingSession {
+	if service.gotRefresh.RefreshToken != " Bearer " || !envelope.Success || envelope.Code != response.CodeOK {
 		t.Fatalf("service=%#v envelope=%#v", service, envelope)
 	}
 }

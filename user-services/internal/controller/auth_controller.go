@@ -7,7 +7,6 @@ import (
 	commonvalidation "github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-services/internal/api/auth"
 	"github.com/aegiscore/user-services/internal/service"
-	"github.com/aegiscore/user-services/internal/validators"
 	"github.com/gin-gonic/gin"
 )
 
@@ -33,10 +32,6 @@ type AuthController struct {
 func (ctl *AuthController) ChangePassword(c *gin.Context) {
 	req := authapi.ChangePasswordRequest{Token: c.GetHeader(auth.AuthorizationHeader)}
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
-		return
-	}
-	if err := validators.NormalizeChangePassword(&req); err != nil {
-		response.Fail(c, err)
 		return
 	}
 	result, err := ctl.authService.ChangePassword(c.Request.Context(), req)
@@ -69,10 +64,6 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
-	if err := validators.NormalizeLogin(&req); err != nil {
-		response.Fail(c, err)
-		return
-	}
 	tokens, err := ctl.authService.Login(c.Request.Context(), req)
 	if err != nil {
 		response.Fail(c, err)
@@ -96,10 +87,6 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 func (ctl *AuthController) RefreshToken(c *gin.Context) {
 	req := authapi.RefreshTokenRequest{}
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
-		return
-	}
-	if err := validators.NormalizeRefresh(&req); err != nil {
-		response.Fail(c, err)
 		return
 	}
 	tokens, err := ctl.authService.Refresh(c.Request.Context(), req)

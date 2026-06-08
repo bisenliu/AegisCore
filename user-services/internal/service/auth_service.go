@@ -10,6 +10,7 @@ import (
 	"github.com/aegiscore/user-services/internal/api/auth"
 	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/aegiscore/user-services/internal/repository"
+	"github.com/aegiscore/user-services/internal/validators"
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -54,6 +55,10 @@ func NewAuthService(params AuthServiceParams) AuthService {
 
 // Login 校验凭证，并签发普通 token 或受限改密 token。
 func (s *authService) Login(ctx context.Context, req authapi.LoginRequest) (*authapi.TokenResponse, error) {
+	if err := validators.NormalizeLogin(&req); err != nil {
+		return nil, err
+	}
+
 	logger.Info(ctx, "login user", zap.String("username", req.Username))
 	user, err := s.credentials.VerifyPassword(ctx, req.Username, req.Password)
 	if err != nil {
@@ -72,6 +77,10 @@ func (s *authService) Login(ctx context.Context, req authapi.LoginRequest) (*aut
 
 // ChangePassword 校验受限 token，更新凭证并撤销现有会话。
 func (s *authService) ChangePassword(ctx context.Context, req authapi.ChangePasswordRequest) (*authapi.ChangePasswordResponse, error) {
+	if err := validators.NormalizeChangePassword(&req); err != nil {
+		return nil, err
+	}
+
 	parsedUserID, err := s.verifyPasswordChangeToken(ctx, req.Token)
 	if err != nil {
 		return nil, err
@@ -98,6 +107,10 @@ func (s *authService) verifyPasswordChangeToken(ctx context.Context, token strin
 
 // Refresh 校验 refresh 会话并签发新的 token 响应。
 func (s *authService) Refresh(ctx context.Context, req authapi.RefreshTokenRequest) (*authapi.TokenResponse, error) {
+	if err := validators.NormalizeRefresh(&req); err != nil {
+		return nil, err
+	}
+
 	claims, err := s.tokens.ParseRefreshToken(ctx, req.RefreshToken)
 	if err != nil {
 		return nil, err
