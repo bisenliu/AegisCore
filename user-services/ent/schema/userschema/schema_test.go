@@ -3,7 +3,7 @@ package userschema
 import (
 	"testing"
 
-	"github.com/aegiscore/user-services/internal/domain"
+	userdomain "github.com/aegiscore/user-services/internal/features/user/domain"
 )
 
 func TestUserStatusDefaultMatchesDomainNormalStatus(t *testing.T) {
@@ -17,8 +17,8 @@ func TestUserStatusDefaultMatchesDomainNormalStatus(t *testing.T) {
 		if !ok {
 			t.Fatalf("status default has type %T, want int64", desc.Default)
 		}
-		if defaultStatus != int64(domain.UserStatusNormal) {
-			t.Fatalf("status default = %d, want domain.UserStatusNormal %d", defaultStatus, domain.UserStatusNormal)
+		if defaultStatus != int64(userdomain.UserStatusNormal) {
+			t.Fatalf("status default = %d, want UserStatusNormal %d", defaultStatus, userdomain.UserStatusNormal)
 		}
 		return
 	}

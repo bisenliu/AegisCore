@@ -201,17 +201,17 @@
 - **Then** 请求 MUST 由共享 `validateEnum` 判定为校验失败
 
 ### Requirement: User creation data access uses repository abstraction with PostgreSQL implementation boundary
-用户创建能力 SHALL 通过 service 消费侧声明的用户资料持久化端口创建用户，具体 Ent/PostgreSQL 写入和查询实现 MUST 位于 `user-services/internal/repository/postgres` 包。用户创建 service 的创建输入模型 MUST 由消费侧声明，根 `repository` 包 MUST NOT 定义用户资料创建 service 消费的接口或输入模型。
+用户创建能力 SHALL 通过 app service 消费侧声明的用户资料持久化端口创建用户，具体 Ent/PostgreSQL 写入和查询实现 MUST 位于 `user-services/internal/features/user/infra/postgres` 包。用户创建 service 的创建输入模型 MUST 由消费侧声明，根 `repository` 包 MUST NOT 定义用户资料创建 service 消费的接口或输入模型。
 
 #### Scenario: Create flow remains layered
 - **Given** 用户创建 controller 已完成请求绑定和校验
 - **When** service 编排用户创建
-- **Then** service MUST 通过 `user-services/internal/service` 声明的用户资料持久化端口调用创建
+- **Then** service MUST 通过 `user-services/internal/features/user/app` 声明的用户资料持久化端口调用创建
 - **Then** service MUST NOT 调用 `ExistsByUsername` 或等价用户名存在性预查
-- **Then** service MUST NOT 直接调用 Ent client 或 `repository/postgres` 私有实现类型
+- **Then** service MUST NOT 直接调用 Ent client 或 `features/user/infra/postgres` 私有实现类型
 
 #### Scenario: Create API remains compatible after implementation split
-- **Given** `repository/postgres` 承载 Ent/PostgreSQL 用户创建实现
+- **Given** `features/user/infra/postgres` 承载 Ent/PostgreSQL 用户创建实现
 - **When** 调用方提交有效用户创建请求
 - **Then** 系统 MUST 保持现有成功响应信封和用户响应字段
 - **Then** 用户名冲突、校验失败和持久化错误的公开错误语义 MUST 与迁移前保持一致
@@ -285,9 +285,9 @@
 #### Scenario: Create service declares minimum repository dependency
 - **Given** 用户创建 service 需要持久化新用户记录
 - **When** service 构造函数声明仓储依赖
-- **Then** service MUST 依赖由 `user-services/internal/service` 声明的用户资料仓储接口
+- **Then** service MUST 依赖由 `user-services/internal/features/user/app` 声明的用户资料仓储接口
 - **Then** service MUST NOT 依赖包含认证凭证和 token version 操作的完整用户仓储大接口
-- **Then** service MUST NOT 直接调用 Ent client 或 `repository/postgres` 私有实现类型
+- **Then** service MUST NOT 直接调用 Ent client 或 `features/user/infra/postgres` 私有实现类型
 
 #### Scenario: Create API behavior remains compatible
 - **Given** PostgreSQL 用户仓储实现通过用户资料仓储接口提供创建能力
@@ -304,12 +304,12 @@
 
 ### Requirement: User creation API contracts are grouped by capability
 
-用户资料创建能力 SHALL 使用按业务能力组织的用户 API 契约包承载创建请求和用户响应模型。实现 MUST NOT 继续依赖全局 `user-services/internal/dto` 包表达用户创建契约，并 MUST 保持 `POST /api/v1/users` 的外部 HTTP 行为不变。
+用户资料创建能力 SHALL 使用按业务能力组织的用户 API 契约包承载创建请求和用户响应模型。实现 MUST NOT 依赖全局 DTO 包表达用户创建契约，并 MUST 保持 `POST /api/v1/users` 的外部 HTTP 行为不变。
 
 #### Scenario: Create user contract types use user API package
 - **WHEN** controller、service、validation 或测试引用创建用户请求或创建成功用户响应
 - **THEN** 这些引用 MUST 来自用户 API 契约包
-- **THEN** 这些引用 MUST NOT 来自全局 `internal/dto` 包
+- **THEN** 这些引用 MUST NOT 来自全局 DTO 包
 
 #### Scenario: Create user request contract remains compatible
 - **WHEN** 用户创建请求类型迁移完成
@@ -322,3 +322,4 @@
 - **THEN** `POST /api/v1/users` MUST 继续返回 HTTP 201 和统一成功响应信封
 - **THEN** 创建响应 MUST 继续包含 `user_id`、`nickname`、`username`、`status`、`created_at` 和 `updated_at`
 - **THEN** 创建响应 MUST NOT 包含 `password`、`password_hash`、`token_version`、内部 `id` 或 `deleted_at`
+

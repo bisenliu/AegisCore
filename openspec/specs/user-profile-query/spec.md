@@ -119,17 +119,17 @@
 - **THEN** `GET /api/v1/users/:user_id` 的路径、响应 envelope、用户响应 JSON 字段和错误语义 MUST 保持不变
 
 ### Requirement: User query data access uses repository abstraction with PostgreSQL implementation boundary
-用户资料查询能力 SHALL 通过 service 消费侧声明的用户资料持久化端口读取用户资料，具体 Ent/PostgreSQL 查询实现 MUST 位于 `user-services/internal/repository/postgres` 包。根 `repository` 包 MUST NOT 定义用户资料查询 service 消费的接口或依赖 `repository/postgres`，查询 API 的路由、认证要求、错误映射和响应内容 MUST 保持不变。
+用户资料查询能力 SHALL 通过 app service 消费侧声明的用户资料持久化端口读取用户资料，具体 Ent/PostgreSQL 查询实现 MUST 位于 `user-services/internal/features/user/infra/postgres` 包。实现 MUST NOT 新增根 `repository` 包定义用户资料查询 app service 消费的接口或依赖具体 infra 实现，查询 API 的路由、认证要求、错误映射和响应内容 MUST 保持不变。
 
 #### Scenario: Query service depends on consumer-owned repository port
 - **Given** 用户资料查询 service 需要按外部 UUID 读取用户
 - **When** service 构造函数声明仓储依赖
-- **Then** service MUST 依赖由 `user-services/internal/service` 声明的用户资料持久化端口
+- **Then** service MUST 依赖由 `user-services/internal/features/user/app` 声明的用户资料持久化端口
 - **Then** service MUST NOT 依赖根 `repository` 包声明的用户资料接口
-- **Then** service MUST NOT 直接依赖 `repository/postgres` 或 Ent 查询实现类型
+- **Then** service MUST NOT 直接依赖 `features/user/infra/postgres` 或 Ent 查询实现类型
 
 #### Scenario: PostgreSQL implementation preserves query behavior
-- **Given** `repository/postgres` 提供用户资料持久化端口的 Ent/PostgreSQL 实现
+- **Given** `features/user/infra/postgres` 提供用户资料持久化端口的 Ent/PostgreSQL 实现
 - **When** 调用方请求 `GET /api/v1/users/:user_id`
 - **Then** 系统 MUST 继续只返回未软删除用户
 - **Then** Ent not found MUST 继续转换为用户领域 `ErrUserNotFound`
@@ -165,24 +165,24 @@
 - **Then** Repository MUST 接收与 HTTP API 默认值等价的有界分页输入
 
 ### Requirement: Query service uses domain user model
-用户资料查询能力 SHALL 通过根 `repository.UserRepository` 获取用户领域实体，并将领域实体映射为查询响应 DTO。Service 层 MUST NOT 直接依赖 Ent 用户模型或 Ent 查询实现类型，查询 API 的认证要求、参数校验、错误映射和响应内容 MUST 保持不变。
+用户资料查询能力 SHALL 通过 `userapp.UserProfileStore` 获取用户领域实体，并将领域实体映射为查询响应 DTO。Service 层 MUST NOT 直接依赖 Ent 用户模型或 Ent 查询实现类型，查询 API 的认证要求、参数校验、错误映射和响应内容 MUST 保持不变。
 
 #### Scenario: Query maps domain user to response
 - **Given** PostgreSQL repository 读取到未软删除用户并返回用户领域实体
 - **When** `UserService.GetUserByID` 处理查询结果
-- **Then** Service MUST 将用户领域实体映射为 `dto.UserResponse`
+- **Then** Service MUST 将用户领域实体映射为 `userapi.UserResponse`
 - **Then** 响应 MUST 继续包含 `user_id`、`nickname`、`username`、`status`、`created_at` 和 `updated_at`
 - **Then** 响应 MUST NOT 包含 `password_hash`、内部 `id` 或 `deleted_at`
 
 #### Scenario: Query service remains independent of Ent
 - **Given** 用户资料查询 Service 编译
 - **When** 检查 Service 层依赖
-- **Then** `user-services/internal/service` MUST NOT 为用户资料查询导入 `github.com/aegiscore/user-services/ent`
-- **Then** Ent 查询和 Ent 到 Domain 映射 MUST 位于 `user-services/internal/repository/postgres`
+- **Then** `user-services/internal/features/user/app` MUST NOT 为用户资料查询导入 `github.com/aegiscore/user-services/ent`
+- **Then** Ent 查询和 Ent 到 Domain 映射 MUST 位于 `user-services/internal/features/user/infra/postgres`
 
 #### Scenario: Query not found mapping remains unchanged
 - **Given** PostgreSQL repository 未找到未软删除用户
-- **When** Repository 返回 `domain.ErrUserNotFound`
+- **When** Store 返回 `userdomain.ErrUserNotFound`
 - **Then** Service MUST 继续将该领域错误映射为用户不存在响应
 - **Then** HTTP 404 响应信封和公开错误消息 MUST 与现有查询能力保持一致
 
@@ -193,9 +193,9 @@
 #### Scenario: Query service declares minimum repository dependency
 - **Given** 用户资料查询 service 需要按外部 UUID 读取用户
 - **When** service 构造函数声明仓储依赖
-- **Then** service MUST 依赖由 `user-services/internal/service` 声明的用户资料仓储接口
+- **Then** service MUST 依赖由 `user-services/internal/features/user/app` 声明的用户资料仓储接口
 - **Then** service MUST NOT 依赖包含认证凭证和 token version 操作的完整用户仓储大接口
-- **Then** service MUST NOT 直接依赖 `repository/postgres` 或 Ent 查询实现类型
+- **Then** service MUST NOT 直接依赖 `features/user/infra/postgres` 或 Ent 查询实现类型
 
 #### Scenario: Query API behavior remains compatible
 - **Given** PostgreSQL 用户仓储实现通过用户资料仓储接口提供查询能力
@@ -212,12 +212,12 @@
 
 ### Requirement: User query API contracts are grouped by capability
 
-用户资料查询能力 SHALL 使用按业务能力组织的用户 API 契约包承载查询请求、列表请求、用户响应和用户列表文档模型。实现 MUST NOT 继续依赖全局 `user-services/internal/dto` 包表达用户资料查询契约，并 MUST 保持 `GET /api/v1/users/:user_id` 与 `GET /api/v1/users` 的外部 HTTP 行为不变。
+用户资料查询能力 SHALL 使用按业务能力组织的用户 API 契约包承载查询请求、列表请求、用户响应和用户列表文档模型。实现 MUST NOT 依赖全局 DTO 包表达用户资料查询契约，并 MUST 保持 `GET /api/v1/users/:user_id` 与 `GET /api/v1/users` 的外部 HTTP 行为不变。
 
 #### Scenario: Query user contract types use user API package
 - **WHEN** controller、service、validation 或测试引用用户查询请求、列表请求、用户响应或用户列表文档模型
 - **THEN** 这些引用 MUST 来自用户 API 契约包
-- **THEN** 这些引用 MUST NOT 来自全局 `internal/dto` 包
+- **THEN** 这些引用 MUST NOT 来自全局 DTO 包
 
 #### Scenario: Query user behavior remains compatible after package migration
 - **WHEN** 用户查询 API 契约类型迁移完成
@@ -228,3 +228,4 @@
 - **WHEN** Service 将用户领域实体映射为用户查询或列表响应
 - **THEN** 响应 MUST 继续包含 `user_id`、`nickname`、`username`、`status`、`created_at` 和 `updated_at`
 - **THEN** 响应 MUST NOT 包含 `password`、`password_hash`、内部 `id`、`token_version` 或 `deleted_at`
+

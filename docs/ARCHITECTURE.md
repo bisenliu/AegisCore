@@ -9,27 +9,27 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 | 模块 | 责任 | 关键位置 |
 |---|---|---|
 | `common` | 跨服务稳定契约与基础能力模块，按 contract、runtime、http、security、validation 分类承载共享能力；不得作为服务特定 helper 的兜底目录 | `common/contract/response/`, `common/runtime/`, `common/http/`, `common/security/`, `common/validation/` |
-| `user-services` | 用户服务运行时、用户 HTTP API、用户领域访问、Ent schema、Atlas migration | `user-services/cmd/`, `user-services/internal/`, `user-services/ent/`, `user-services/migrations/` |
+| `user-services` | 用户服务运行时、feature-local 用户 HTTP API 和认证会话能力、Ent schema、Atlas migration | `user-services/cmd/`, `user-services/internal/features/`, `user-services/internal/bootstrap/`, `user-services/internal/router/`, `user-services/ent/`, `user-services/migrations/` |
 | `openspec` | OPSX/OpenSpec 规则、主规格和后续变更 artifacts | `openspec/config.yaml`, `openspec/specs/` |
 
 ## 3. Runtime Flow
 
 1. `user-services/cmd/main.go` 创建 `aegiscore-user-services` CLI，并注册 `serve` 子命令。
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
-3. 用户服务启动装配显式提供 `commoninfra.NewConfig` 和 `commoninfra.NewLogger`；Redis/PostgreSQL 由 common 提供单实例创建与 lifecycle helper。
-4. `user-services/internal/bootstrap.UserServiceModule` 显式声明 `cache_redis`、`user_db`、`common_db`，并提供 Ent clients、repository、service、controller、Gin engine、HTTP server。
-5. `RegisterRoutes` 将 `/healthz`、`/api/v1/users` 和 `/api/v1/users/:user_id` 注册到 Gin engine。
+3. 用户服务启动装配显式提供共享配置和日志 provider；Redis/PostgreSQL 由 common runtime datastore helper 创建。
+4. `user-services/internal/bootstrap.AppModule` 显式声明 `cache_redis`、`user_db`、`common_db`，并提供 Ent clients、Gin engine、HTTP server，同时导入 user/auth feature modules 组装 feature-local infra、app service 和 HTTP controller。
+5. `RegisterRoutes` 将 `/healthz` 和 Swagger 注册到 Gin engine，创建 `/api/v1`、public auth、protected auth 和 protected user 路由组，并调用 feature-local route registration。
 6. Fx 生命周期启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
 ## 4. HTTP Request Flow
 
 | 步骤 | 代码位置 | 行为 |
 |---|---|---|
-| 中间件链 | `user-services/internal/bootstrap/bootstrap.go` | 注册 trace-id、panic recovery、request logging、CORS；trace-id 先于日志和 recovery 执行 |
-| 路由匹配 | `user-services/internal/router/router.go` | 匹配 `/healthz` 或 `/api/v1/users/:user_id` |
-| 参数解析 | `user-services/internal/controller/user_controller.go` | 将 path `user_id` 校验为 UUID 字符串 |
-| 业务调用 | `user-services/internal/service/user_service.go` | 调用 repository 并映射为 `dto.UserResponse` |
-| 数据访问 | `user-services/internal/repository/user_repository.go` | 使用 Ent client 查询用户，not found 转为应用错误 |
+| 中间件链 | `user-services/internal/bootstrap/gin.go` | 注册 trace-id、panic recovery、request logging、CORS；trace-id 先于日志和 recovery 执行 |
+| 路由匹配 | `user-services/internal/router/router.go` | 匹配 `/healthz`、`/api/v1/auth/*` 或 `/api/v1/users*` |
+| 参数解析 | `user-services/internal/features/user/transport/http/controller.go`, `user-services/internal/features/auth/transport/http/controller.go` | 绑定 feature API DTO，执行边界校验，并映射为 command/query |
+| 业务调用 | `user-services/internal/features/user/app/service.go`, `user-services/internal/features/auth/app/service.go` | 编排用户资料或认证会话用例，并映射应用错误 |
+| 数据访问 | `user-services/internal/features/user/infra/postgres/user_store.go`, `user-services/internal/features/auth/infra/postgres/credential_store.go`, `user-services/internal/features/auth/infra/redis/session_store.go` | 使用 Ent 或 Redis 访问持久化细节，not found 转为 capability 领域错误 |
 | 响应输出 | `common/contract/response/response.go` | 统一输出 `success/code/message/data` 信封 |
 
 ## 5. Data Model
@@ -56,7 +56,23 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 - Ent clients 由 `user-services/internal/bootstrap/ent.go` 基于具名 `*sql.DB` 构建。
 - 日志基于 Zap，由 `common/runtime/logger` 与 `common/runtime/loggerfx` 提供；HTTP trace header 为 `X-Trace-ID`，Gin context key 为 `trace_id`，日志字段统一为 `trace-id`。
 
-## 7. Common Organization
+## 7. Feature Organization
+
+- `user-services/internal/features/user/api/`：用户资料 HTTP request/response DTO 和 Swagger 文档模型。
+- `user-services/internal/features/user/app/`：用户 service、commands、queries、ports 和 use case mapper。
+- `user-services/internal/features/user/domain/`：用户实体、状态枚举和领域错误。
+- `user-services/internal/features/user/transport/http/`：用户资料 Gin controller、route registration 和 HTTP DTO validation。
+- `user-services/internal/features/user/infra/postgres/`：用户资料 Ent/PostgreSQL adapter 和 Ent predicate 构造。
+- `user-services/internal/features/user/module.go`：用户 feature Fx module，组装 app、transport 和 infra provider。
+- `user-services/internal/features/auth/api/`：认证登录、刷新、改密、登出相关 HTTP DTO。
+- `user-services/internal/features/auth/app/`：认证 service、credential/token/session 组件、commands 和 ports。
+- `user-services/internal/features/auth/domain/`：认证凭据、认证会话、会话吊销结果、认证领域错误和 Redis key 业务语义。
+- `user-services/internal/features/auth/transport/http/`：认证 Gin controller、public/protected route registration 和 HTTP DTO validation。
+- `user-services/internal/features/auth/infra/postgres/`：认证凭据和 token version 的 Ent/PostgreSQL adapter。
+- `user-services/internal/features/auth/infra/redis/`：Refresh Token 会话和 token version cache 的 Redis adapter。
+- `user-services/internal/features/auth/module.go`：认证 feature Fx module，组装 app、transport 和 infra provider。
+
+## 8. Common Organization
 
 - `common/contract/`：跨服务外部契约，例如 `response` 响应信封、错误码和分页响应模型。
 - `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、运行时资源名、时区初始化和 Fx lifecycle helper。
@@ -65,18 +81,18 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。
 - 新增共享代码进入 `common` 前必须先定位 capability；服务独有规则、DTO 映射、repository 行为或只为未来可能复用的 helper 应保留在对应服务模块内。
 
-## 8. Database Migrations
+## 9. Database Migrations
 
 - 用户服务使用服务内迁移目录 `user-services/migrations/`，Atlas 配置位于 `user-services/atlas.hcl`。
 - Ent schema 是期望数据库结构来源；开发期通过 `./scripts/migrate-diff.sh <name>` 生成 SQL migration，并通过 `./scripts/migrate-validate.sh` 校验 `atlas.sum`。
 - 运行时不得通过 `client.Schema.Create(ctx)` 自动创建或修改 schema；迁移应由 CI/CD release job 或容器 entrypoint 在 HTTP runtime 启动前执行。
 - 迁移执行应面向用户服务拥有的 `user_db`，不得因为配置中存在 `pay_db` 或 `common_db` 而迁移非目标数据库。
 
-## 9. Generated Code
+## 10. Generated Code
 
 `user-services/ent/` 大多是 Ent 生成代码。业务变更应优先修改 `user-services/ent/schema/`，然后运行 `go generate ./ent` 重新生成。不要直接编辑生成代码来表达领域变更。
 
-## 10. Current Constraints
+## 11. Current Constraints
 
 - 当前 HTTP API 暴露健康检查、创建用户、用户列表、按 `user_id` 查询用户和认证会话接口。
 - 配置样例包含 `postgres.pay_db`，但当前用户服务只声明 `postgres.user_db`、`postgres.common_db` 和 `redis.cache_redis`。

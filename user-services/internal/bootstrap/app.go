@@ -7,11 +7,8 @@ import (
 	"github.com/aegiscore/common/runtime/loggerfx"
 	commontz "github.com/aegiscore/common/runtime/timezone"
 	"github.com/aegiscore/common/validation"
-	"github.com/aegiscore/user-services/internal/controller"
-	"github.com/aegiscore/user-services/internal/repository"
-	"github.com/aegiscore/user-services/internal/repository/postgres"
-	"github.com/aegiscore/user-services/internal/repository/redis"
-	"github.com/aegiscore/user-services/internal/service"
+	authfeature "github.com/aegiscore/user-services/internal/features/auth"
+	userfeature "github.com/aegiscore/user-services/internal/features/user"
 	"go.uber.org/fx"
 )
 
@@ -31,30 +28,13 @@ func NewApp(configPath string) *fx.App {
 var AppModule = fx.Module("aegiscore-user-services",
 	commontz.Module,
 	validation.Module,
+	authfeature.Module,
+	userfeature.Module,
 	fx.Provide(
 		ProvidePostgresPools,
 		ProvideRedisClients,
 		NewJWTService,
 		ProvideEntClients,
-		fx.Annotate(
-			postgres.NewUserRepository,
-			fx.As(new(service.UserProfileStore)),
-		),
-		fx.Annotate(
-			postgres.NewUserRepository,
-			fx.As(new(repository.UserCredentialRepository)),
-		),
-		fx.Annotate(
-			postgres.NewUserRepository,
-			fx.As(new(repository.UserTokenVersionRepository)),
-		),
-		service.NewRedisKeyBuilder,
-		redis.NewAuthSessionRepository,
-		service.NewTokenVersionValidator,
-		service.NewAuthService,
-		service.NewUserService,
-		controller.NewAuthController,
-		controller.NewUserController,
 		NewGinEngine,
 		NewHTTPServer,
 	),

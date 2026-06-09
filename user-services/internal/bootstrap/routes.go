@@ -2,10 +2,11 @@ package bootstrap
 
 import (
 	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/user-services/internal/controller"
+	commonauth "github.com/aegiscore/common/security/auth"
+	authapp "github.com/aegiscore/user-services/internal/features/auth/app"
+	authhttp "github.com/aegiscore/user-services/internal/features/auth/transport/http"
+	userhttp "github.com/aegiscore/user-services/internal/features/user/transport/http"
 	"github.com/aegiscore/user-services/internal/router"
-	"github.com/aegiscore/user-services/internal/service"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -18,11 +19,11 @@ type RegisterRouteParams struct {
 	Config *config.Config
 	Log    *zap.Logger
 	Engine *gin.Engine
-	JWT    *auth.JWTService
+	JWT    *commonauth.JWTService
 	// TokenVersions 是可选依赖，使公开路由和测试可以在不提供撤销能力时挂载中间件。
-	TokenVersions  service.TokenVersionValidator `optional:"true"`
-	AuthController *controller.AuthController
-	UserController *controller.UserController
+	TokenVersions  authapp.TokenVersionValidator `optional:"true"`
+	AuthController *authhttp.AuthController
+	UserController *userhttp.UserController
 }
 
 // RegisterRoutes 将 bootstrap 依赖适配为 router 层路由注册参数。

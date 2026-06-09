@@ -16,11 +16,12 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
-	authapi "github.com/aegiscore/user-services/internal/api/auth"
-	userapi "github.com/aegiscore/user-services/internal/api/user"
-	"github.com/aegiscore/user-services/internal/controller"
-	"github.com/aegiscore/user-services/internal/domain"
-	"github.com/aegiscore/user-services/internal/repository"
+	authapi "github.com/aegiscore/user-services/internal/features/auth/api"
+	authapp "github.com/aegiscore/user-services/internal/features/auth/app"
+	authhttp "github.com/aegiscore/user-services/internal/features/auth/transport/http"
+	userapi "github.com/aegiscore/user-services/internal/features/user/api"
+	userapp "github.com/aegiscore/user-services/internal/features/user/app"
+	userhttp "github.com/aegiscore/user-services/internal/features/user/transport/http"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -181,6 +182,43 @@ func TestHTTPServerClosedServeErrorDoesNotTriggerShutdown(t *testing.T) {
 	}
 }
 
+func TestHTTPServerLifecycleCancelStopsServeGoroutine(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+
+	core, logs := observer.New(zapcore.DebugLevel)
+	shutdowner := &shutdownRecorder{}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		serveHTTPWithLifecycle(ctx, zap.New(core), shutdowner, &http.Server{}, listener)
+	}()
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("serve goroutine did not exit after lifecycle context cancellation")
+	}
+
+	if shutdowner.calls != 0 {
+		t.Fatalf("shutdown calls = %d, want 0", shutdowner.calls)
+	}
+	if entries := logs.FilterMessage("http server failed").All(); len(entries) != 0 {
+		t.Fatalf("http server failed logs = %d, want 0", len(entries))
+	}
+	entries := logs.FilterMessage("http server goroutine stopped").All()
+	if len(entries) != 1 {
+		t.Fatalf("http server goroutine stopped logs = %d, want 1", len(entries))
+	}
+	if reason := entries[0].ContextMap()["reason"]; reason != "lifecycle_canceled" {
+		t.Fatalf("goroutine stop reason = %#v, want lifecycle_canceled", reason)
+	}
+}
+
 func TestHTTPServerStartAndStop(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
 	NewHTTPServer(HTTPServerParams{
@@ -281,8 +319,8 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		Engine:         engine,
 		JWT:            jwtService,
 		TokenVersions:  tokenVersions,
-		AuthController: controller.NewAuthController(&routeAuthAuthService{}, validator),
-		UserController: controller.NewUserController(&routeAuthUserService{}, validator),
+		AuthController: authhttp.NewAuthController(&routeAuthAuthService{}, validator),
+		UserController: userhttp.NewUserController(&routeAuthUserService{}, validator),
 	})
 
 	publicRequests := []struct {
@@ -478,10 +516,6 @@ type routeAuthUserService struct{}
 
 type routeAuthAuthService struct{}
 
-type routeAuthSessionRepository struct {
-	version int64
-}
-
 type routeTokenVersionValidator struct {
 	version int64
 }
@@ -493,43 +527,15 @@ func (s *routeTokenVersionValidator) ValidateTokenVersion(_ context.Context, _ s
 	return nil
 }
 
-func (s *routeAuthSessionRepository) GetCachedTokenVersion(context.Context, string) (int64, error) {
-	return s.version, nil
-}
-
-func (s *routeAuthSessionRepository) CacheTokenVersion(context.Context, string, int64) error {
-	return nil
-}
-
-func (s *routeAuthSessionRepository) CreateSession(context.Context, repository.AuthSession, time.Duration) error {
-	return nil
-}
-
-func (s *routeAuthSessionRepository) RotateSession(context.Context, repository.AuthSession, repository.AuthSession, time.Duration) error {
-	return nil
-}
-
-func (s *routeAuthSessionRepository) GetSession(context.Context, string) (repository.AuthSession, error) {
-	return repository.AuthSession{}, nil
-}
-
-func (s *routeAuthSessionRepository) DeleteSession(context.Context, string, string) error {
-	return nil
-}
-
-func (s *routeAuthSessionRepository) DeleteAllUserSessions(context.Context, string) error {
-	return nil
-}
-
-func (s *routeAuthAuthService) Login(context.Context, authapi.LoginRequest) (*authapi.TokenResponse, error) {
+func (s *routeAuthAuthService) Login(context.Context, authapp.LoginCommand) (*authapi.TokenResponse, error) {
 	return &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
-func (s *routeAuthAuthService) Refresh(context.Context, authapi.RefreshTokenRequest) (*authapi.TokenResponse, error) {
+func (s *routeAuthAuthService) Refresh(context.Context, authapp.RefreshTokenCommand) (*authapi.TokenResponse, error) {
 	return &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
-func (s *routeAuthAuthService) ChangePassword(context.Context, authapi.ChangePasswordRequest) (*authapi.ChangePasswordResponse, error) {
+func (s *routeAuthAuthService) ChangePassword(context.Context, authapp.ChangePasswordCommand) (*authapi.ChangePasswordResponse, error) {
 	return &authapi.ChangePasswordResponse{Changed: true}, nil
 }
 
@@ -541,9 +547,9 @@ func (s *routeAuthAuthService) LogoutAll(context.Context) (*authapi.LogoutRespon
 	return &authapi.LogoutResponse{LoggedOut: true}, nil
 }
 
-func (s *routeAuthUserService) CreateUser(context.Context, userapi.CreateUserRequest) (*userapi.UserResponse, error) {
+func (s *routeAuthUserService) CreateUser(context.Context, userapp.CreateUserCommand) (*userapi.UserResponse, error) {
 	now := time.Now().UnixMilli()
-	return &userapi.UserResponse{UserID: routeAuthUserID, Nickname: "Alice", Username: "alice", Status: domain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
+	return &userapi.UserResponse{UserID: routeAuthUserID, Nickname: "Alice", Username: "alice", Status: userapi.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapi.UserResponse, error) {
@@ -558,7 +564,7 @@ func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) 
 		return nil, errors.New("database down")
 	}
 	now := time.Now().UnixMilli()
-	return &userapi.UserResponse{UserID: userIDString, Nickname: "Aegis", Username: "aegis", Status: domain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
+	return &userapi.UserResponse{UserID: userIDString, Nickname: "Aegis", Username: "aegis", Status: userapi.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func assertSuccessEnvelope(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -586,9 +592,9 @@ func assertFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wa
 	}
 }
 
-func (s *routeAuthUserService) ListUsers(context.Context, userapi.ListUsersRequest) (response.PaginatedData[userapi.UserResponse], error) {
+func (s *routeAuthUserService) ListUsers(context.Context, userapp.ListUsersQuery) (response.PaginatedData[userapi.UserResponse], error) {
 	now := time.Now().UnixMilli()
-	items := []userapi.UserResponse{{UserID: routeAuthUserID, Nickname: "Aegis", Username: "aegis", Status: domain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
+	items := []userapi.UserResponse{{UserID: routeAuthUserID, Nickname: "Aegis", Username: "aegis", Status: userapi.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
 	return response.NewPaginatedData(items, response.NewPagination(1, 10, 1)), nil
 }
 

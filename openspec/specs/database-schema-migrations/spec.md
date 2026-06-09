@@ -304,7 +304,7 @@
 
 #### Scenario: Schema default matches domain normal status
 - **Given** `user-services/ent/schema/userschema` 定义 `User` schema 的 `status` 字段默认值
-- **Given** `user-services/internal/domain` 定义 `domain.UserStatusNormal`
+- **Given** `user-services/internal/features/user/domain` 定义 `userdomain.UserStatusNormal`
 - **When** 用户服务测试运行
 - **Then** 测试 MUST 验证 `status` 字段默认值等于 `domain.UserStatusNormal` 的数值
 - **Then** 测试 MUST 在 schema 默认值或领域正常状态枚举发生单边修改时失败
@@ -313,7 +313,7 @@
 - **Given** Ent schema 使用 schema 本地默认值常量表达 `status` 字段默认值
 - **When** 开发者阅读该默认值常量或其用途
 - **Then** 注释 MUST 明确该值必须与 `domain.UserStatusNormal` 保持一致
-- **Then** 生产 schema source MUST NOT 为复用领域常量而直接依赖 `user-services/internal/domain`
+- **Then** 生产 schema source MUST NOT 为复用领域常量而直接依赖 `user-services/internal/features/user/domain`
 
 #### Scenario: Consistency guard does not change database schema
 - **Given** 本次变更只新增一致性测试并补充默认值注释

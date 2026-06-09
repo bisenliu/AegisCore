@@ -39,6 +39,7 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 		WriteTimeout: params.Config.HTTP.WriteTimeout,
 		IdleTimeout:  params.Config.HTTP.IdleTimeout,
 	}
+	cancelServe := func() {}
 
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
@@ -52,12 +53,13 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 			if err != nil {
 				return fmt.Errorf("listen http server on %s: %w", addr, err)
 			}
-			go func() {
-				shutdownOnHTTPServeError(params.Log, params.Shutdowner, server.Serve(listener))
-			}()
+			serveCtx, cancel := context.WithCancel(context.Background())
+			cancelServe = cancel
+			go serveHTTPWithLifecycle(serveCtx, params.Log, params.Shutdowner, server, listener)
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
+			cancelServe()
 			shutdownTimeout := params.Config.HTTP.ShutdownTimeout
 			if shutdownTimeout == 0 {
 				// 0 表示配置未填写超时，应使用服务默认值而不是取消关闭边界。
@@ -73,6 +75,34 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 	return server
 }
 
+func serveHTTPWithLifecycle(ctx context.Context, log *zap.Logger, shutdowner fx.Shutdowner, server *http.Server, listener net.Listener) {
+	stopCancelListener := context.AfterFunc(ctx, func() {
+		logger.WithContext(log, ctx).Debug("http server lifecycle context canceled")
+		if err := listener.Close(); err != nil && !isExpectedHTTPServeCloseError(err) {
+			log.Warn("close http listener after lifecycle cancel failed", zap.Error(err))
+		}
+	})
+	err := server.Serve(listener)
+	stopCancelListener()
+	handleHTTPServeExit(log, shutdowner, ctx, err)
+}
+
+func handleHTTPServeExit(log *zap.Logger, shutdowner fx.Shutdowner, ctx context.Context, err error) {
+	if err == nil {
+		log.Debug("http server goroutine stopped", zap.String("reason", "serve_returned"))
+		return
+	}
+	if errors.Is(err, http.ErrServerClosed) {
+		log.Debug("http server goroutine stopped", zap.String("reason", "server_closed"))
+		return
+	}
+	if ctx.Err() != nil && isExpectedHTTPServeCloseError(err) {
+		log.Debug("http server goroutine stopped", zap.String("reason", "lifecycle_canceled"), zap.Error(ctx.Err()))
+		return
+	}
+	shutdownOnHTTPServeError(log, shutdowner, err)
+}
+
 func shutdownOnHTTPServeError(log *zap.Logger, shutdowner fx.Shutdowner, err error) {
 	if err == nil || errors.Is(err, http.ErrServerClosed) {
 		// http.ErrServerClosed 是正常优雅关闭过程产生的错误，不应再次停止 Fx app。
@@ -86,4 +116,8 @@ func shutdownOnHTTPServeError(log *zap.Logger, shutdowner fx.Shutdowner, err err
 	if shutdownErr := shutdowner.Shutdown(); shutdownErr != nil {
 		log.Error("shutdown after http server failure failed", logger.StackTrace(zap.Error(shutdownErr))...)
 	}
+}
+
+func isExpectedHTTPServeCloseError(err error) bool {
+	return errors.Is(err, net.ErrClosed) || errors.Is(err, context.Canceled)
 }
