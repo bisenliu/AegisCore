@@ -6,7 +6,6 @@ import (
 	commonvalidation "github.com/aegiscore/common/validation"
 	userapi "github.com/aegiscore/user-services/internal/features/user/api"
 	userapp "github.com/aegiscore/user-services/internal/features/user/app"
-	userdomain "github.com/aegiscore/user-services/internal/features/user/domain"
 	"github.com/gin-gonic/gin"
 )
 
@@ -51,7 +50,7 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 		Limit:    req.Limit,
 		Nickname: req.Nickname,
 		Username: req.Username,
-		Status:   toCommandStatus(req.Status),
+		Status:   req.Status,
 	})
 	if err != nil {
 		response.Fail(c, err)
@@ -88,7 +87,7 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 		Nickname: req.Nickname,
 		Username: req.Username,
 		Password: req.Password,
-		Status:   toCommandStatus(req.Status),
+		Status:   req.Status,
 	})
 	if err != nil {
 		response.Fail(c, err)
@@ -127,12 +126,4 @@ func (ctl *UserController) GetByUserID(c *gin.Context) {
 		return
 	}
 	response.OK(c, user)
-}
-
-func toCommandStatus(status *userapi.UserStatus) *userdomain.UserStatus {
-	if status == nil {
-		return nil
-	}
-	value := userdomain.UserStatus(*status)
-	return &value
 }

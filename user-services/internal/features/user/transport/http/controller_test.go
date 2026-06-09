@@ -27,7 +27,7 @@ func TestUserControllerGetByUserID(t *testing.T) {
 	t.Run("valid ID", func(t *testing.T) {
 		createdAt := int64(1780048800000)
 		updatedAt := int64(1780052400000)
-		service := &stubUserService{response: &userapi.UserResponse{UserID: controllerTestUserID, Nickname: "Aegis", Username: "aegis", Status: userapi.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}
+		service := &stubUserService{response: &userapi.UserResponse{UserID: controllerTestUserID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}
 
 		status, envelope := executeGetByUserID(t, service, controllerTestUserID)
 
@@ -85,7 +85,7 @@ func TestUserControllerCreate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	createdUser := &userapi.UserResponse{UserID: controllerTestUserID, Nickname: "Alice", Username: "alice", Status: userapi.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}
+	createdUser := &userapi.UserResponse{UserID: controllerTestUserID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}
 
 	t.Run("valid body", func(t *testing.T) {
 		service := &stubUserService{createResponse: createdUser}
@@ -181,7 +181,7 @@ func TestUserControllerList(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	listResponse := response.NewPaginatedData([]userapi.UserResponse{{UserID: controllerTestUserID, Nickname: "Alice", Username: "alice", Status: userapi.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, response.NewPagination(1, 20, 128))
+	listResponse := response.NewPaginatedData([]userapi.UserResponse{{UserID: controllerTestUserID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, response.NewPagination(1, 20, 128))
 
 	t.Run("default pagination", func(t *testing.T) {
 		service := &stubUserService{listResponse: response.NewPaginatedData([]userapi.UserResponse{}, response.NewPagination(1, 10, 0))}

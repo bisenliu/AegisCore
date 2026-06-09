@@ -5,6 +5,7 @@ import (
 
 	"github.com/aegiscore/common/contract/response"
 	userapi "github.com/aegiscore/user-services/internal/features/user/api"
+	userdomain "github.com/aegiscore/user-services/internal/features/user/domain"
 	"github.com/aegiscore/user-services/internal/messages"
 )
 
@@ -44,7 +45,7 @@ func TestNormalizeCreateUser(t *testing.T) {
 }
 
 func TestNormalizeListUsers(t *testing.T) {
-	status := userapi.UserStatusNormal
+	status := userdomain.UserStatusNormal
 	req := userapi.ListUsersRequest{Page: 2, PageSize: 20, Nickname: " Alice ", Username: " alice ", Status: &status}
 
 	NormalizeListUsers(&req)

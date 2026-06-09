@@ -10,7 +10,7 @@ func toUserResponse(user *userdomain.User) *userapi.UserResponse {
 		UserID:    user.UserID.String(),
 		Nickname:  user.Nickname,
 		Username:  user.Username,
-		Status:    userapi.UserStatus(user.Status),
+		Status:    user.Status,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 	}

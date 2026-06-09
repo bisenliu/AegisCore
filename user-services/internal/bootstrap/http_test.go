@@ -21,6 +21,7 @@ import (
 	authhttp "github.com/aegiscore/user-services/internal/features/auth/transport/http"
 	userapi "github.com/aegiscore/user-services/internal/features/user/api"
 	userapp "github.com/aegiscore/user-services/internal/features/user/app"
+	userdomain "github.com/aegiscore/user-services/internal/features/user/domain"
 	userhttp "github.com/aegiscore/user-services/internal/features/user/transport/http"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
@@ -549,7 +550,7 @@ func (s *routeAuthAuthService) LogoutAll(context.Context) (*authapi.LogoutRespon
 
 func (s *routeAuthUserService) CreateUser(context.Context, userapp.CreateUserCommand) (*userapi.UserResponse, error) {
 	now := time.Now().UnixMilli()
-	return &userapi.UserResponse{UserID: routeAuthUserID, Nickname: "Alice", Username: "alice", Status: userapi.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
+	return &userapi.UserResponse{UserID: routeAuthUserID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapi.UserResponse, error) {
@@ -564,7 +565,7 @@ func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) 
 		return nil, errors.New("database down")
 	}
 	now := time.Now().UnixMilli()
-	return &userapi.UserResponse{UserID: userIDString, Nickname: "Aegis", Username: "aegis", Status: userapi.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
+	return &userapi.UserResponse{UserID: userIDString, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func assertSuccessEnvelope(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -594,7 +595,7 @@ func assertFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wa
 
 func (s *routeAuthUserService) ListUsers(context.Context, userapp.ListUsersQuery) (response.PaginatedData[userapi.UserResponse], error) {
 	now := time.Now().UnixMilli()
-	items := []userapi.UserResponse{{UserID: routeAuthUserID, Nickname: "Aegis", Username: "aegis", Status: userapi.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
+	items := []userapi.UserResponse{{UserID: routeAuthUserID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
 	return response.NewPaginatedData(items, response.NewPagination(1, 10, 1)), nil
 }
 
