@@ -64,7 +64,7 @@ func (m *authSessionLifecycle) ValidatePasswordChangeClaims(ctx context.Context,
 
 // ValidateRefreshSession 校验会话存在性、claim 与会话一致性以及当前 token version。
 func (m *authSessionLifecycle) ValidateRefreshSession(ctx context.Context, claims *commonauth.Claims) (authdomain.AuthSession, int64, error) {
-	session, err := m.sessions.GetSession(ctx, claims.SessionID)
+	session, err := m.sessions.GetSession(ctx, claims.UserID, claims.SessionID)
 	if err != nil {
 		if errors.Is(err, authdomain.ErrAuthSessionNotFound) {
 			logger.Warn(ctx, "refresh session not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))

@@ -26,6 +26,56 @@ const (
 	expiredSessionMinScore = "-inf"
 )
 
+const (
+	rotateSessionResultOK        int64 = 1
+	rotateSessionResultNotFound  int64 = 2
+	rotateSessionResultMismatch  int64 = 3
+	deleteAllUserSessionsNoLimit       = 0
+)
+
+var rotateSessionScript = rediscache.NewScript(`
+local old_payload = redis.call("GET", KEYS[1])
+if not old_payload then
+	return 2
+end
+
+local ok, old_session = pcall(cjson.decode, old_payload)
+if not ok then
+	return 3
+end
+if old_session["user_id"] ~= ARGV[1] or old_session["session_id"] ~= ARGV[2] or tostring(old_session["token_version"]) ~= ARGV[3] then
+	return 3
+end
+
+redis.call("SET", KEYS[2], ARGV[6], "PX", ARGV[7])
+redis.call("ZREMRANGEBYSCORE", KEYS[3], "-inf", ARGV[9])
+redis.call("ZADD", KEYS[3], ARGV[8], ARGV[4])
+redis.call("ZREM", KEYS[3], ARGV[2])
+redis.call("DEL", KEYS[1])
+
+local index_ttl = redis.call("PTTL", KEYS[3])
+local target_ttl = tonumber(ARGV[10])
+if index_ttl < target_ttl then
+	redis.call("PEXPIRE", KEYS[3], target_ttl)
+end
+
+return 1
+`)
+
+var deleteAllUserSessionsScript = rediscache.NewScript(`
+redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+local sessions = redis.call("ZRANGE", KEYS[1], 0, -1)
+local keys = {}
+for _, session_id in ipairs(sessions) do
+	keys[#keys + 1] = ARGV[2] .. session_id
+end
+keys[#keys + 1] = KEYS[1]
+if #keys > 0 then
+	redis.call("UNLINK", unpack(keys))
+end
+return #keys
+`)
+
 // SessionStoreParams 包含 Redis 认证会话 store 所需的 Fx 输入。
 type SessionStoreParams struct {
 	fx.In
@@ -96,7 +146,7 @@ func (r *sessionStore) CreateSession(ctx context.Context, session authdomain.Aut
 		return fmt.Errorf("get user auth sessions ttl: %w", err)
 	}
 	pipe := r.redis.TxPipeline()
-	pipe.Set(ctx, r.sessionKey(session.SessionID), data, ttl)
+	pipe.Set(ctx, r.sessionKey(session.UserID, session.SessionID), data, ttl)
 	pipe.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(now))
 	pipe.ZAdd(ctx, userSessions, rediscache.Z{Score: float64(expiresAt.Unix()), Member: session.SessionID})
 	if indexCurrentTTL < indexTTL {
@@ -126,50 +176,41 @@ func (r *sessionStore) RotateSession(ctx context.Context, oldSession authdomain.
 	if err != nil {
 		return fmt.Errorf("marshal rotated auth session: %w", err)
 	}
-	oldKey := r.sessionKey(oldSession.SessionID)
-	newKey := r.sessionKey(newSession.SessionID)
+	oldKey := r.sessionKey(oldSession.UserID, oldSession.SessionID)
+	newKey := r.sessionKey(newSession.UserID, newSession.SessionID)
 	userSessions := r.userSessionsKey(newSession.UserID)
 	indexTTL := ttl + authSessionIndexTTLBuffer
-	err = r.redis.Watch(ctx, func(tx *rediscache.Tx) error {
-		stored, err := getWatchedSession(ctx, tx, oldKey)
-		if err != nil {
-			return err
-		}
-		if stored.UserID != oldSession.UserID || stored.SessionID != oldSession.SessionID || stored.TokenVersion != oldSession.TokenVersion {
-			return authdomain.ErrAuthSessionMismatch
-		}
-		indexCurrentTTL, err := tx.TTL(ctx, userSessions).Result()
-		if err != nil {
-			return fmt.Errorf("get user auth sessions ttl: %w", err)
-		}
-		_, err = tx.TxPipelined(ctx, func(pipe rediscache.Pipeliner) error {
-			pipe.Set(ctx, newKey, data, ttl)
-			pipe.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(now))
-			pipe.ZAdd(ctx, userSessions, rediscache.Z{Score: float64(expiresAt.Unix()), Member: newSession.SessionID})
-			pipe.ZRem(ctx, userSessions, oldSession.SessionID)
-			pipe.Del(ctx, oldKey)
-			if indexCurrentTTL < indexTTL {
-				pipe.Expire(ctx, userSessions, indexTTL)
-			}
-			return nil
-		})
-		if err != nil {
-			return fmt.Errorf("rotate auth session: %w", err)
-		}
-		return nil
-	}, oldKey)
-	if errors.Is(err, rediscache.TxFailedErr) {
-		return authdomain.ErrAuthSessionNotFound
-	}
+
+	result, err := rotateSessionScript.Run(ctx, r.redis, []string{oldKey, newKey, userSessions},
+		oldSession.UserID,
+		oldSession.SessionID,
+		formatTokenVersion(oldSession.TokenVersion),
+		newSession.SessionID,
+		formatTokenVersion(newSession.TokenVersion),
+		data,
+		milliseconds(ttl),
+		unixScore(expiresAt),
+		unixScore(now),
+		milliseconds(indexTTL),
+	).Int64()
 	if err != nil {
-		return err
+		return fmt.Errorf("rotate auth session: %w", err)
 	}
-	return nil
+	switch result {
+	case rotateSessionResultOK:
+		return nil
+	case rotateSessionResultNotFound:
+		return authdomain.ErrAuthSessionNotFound
+	case rotateSessionResultMismatch:
+		return authdomain.ErrAuthSessionMismatch
+	default:
+		return fmt.Errorf("rotate auth session: unexpected script result %d", result)
+	}
 }
 
 // GetSession 按 session ID 返回 refresh token 会话。
-func (r *sessionStore) GetSession(ctx context.Context, sessionID string) (authdomain.AuthSession, error) {
-	data, err := r.redis.Get(ctx, r.sessionKey(sessionID)).Bytes()
+func (r *sessionStore) GetSession(ctx context.Context, userID string, sessionID string) (authdomain.AuthSession, error) {
+	data, err := r.redis.Get(ctx, r.sessionKey(userID, sessionID)).Bytes()
 	if errors.Is(err, rediscache.Nil) {
 		return authdomain.AuthSession{}, authdomain.ErrAuthSessionNotFound
 	}
@@ -187,7 +228,7 @@ func (r *sessionStore) GetSession(ctx context.Context, sessionID string) (authdo
 func (r *sessionStore) DeleteSession(ctx context.Context, userID string, sessionID string) error {
 	userSessions := r.userSessionsKey(userID)
 	pipe := r.redis.TxPipeline()
-	pipe.Del(ctx, r.sessionKey(sessionID))
+	pipe.Del(ctx, r.sessionKey(userID, sessionID))
 	pipe.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(time.Now()))
 	pipe.ZRem(ctx, userSessions, sessionID)
 	_, err := pipe.Exec(ctx)
@@ -200,21 +241,7 @@ func (r *sessionStore) DeleteSession(ctx context.Context, userID string, session
 // DeleteAllUserSessions 删除用户所有存活 refresh token 会话，并删除用户索引。
 func (r *sessionStore) DeleteAllUserSessions(ctx context.Context, userID string) error {
 	userSessions := r.userSessionsKey(userID)
-	if err := r.redis.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(time.Now())).Err(); err != nil {
-		return fmt.Errorf("clean expired user auth sessions: %w", err)
-	}
-	sessions, err := r.redis.ZRange(ctx, userSessions, 0, -1).Result()
-	if err != nil && !errors.Is(err, rediscache.Nil) {
-		return fmt.Errorf("list user auth sessions: %w", err)
-	}
-	pipe := r.redis.TxPipeline()
-	// 已先清理过期成员，因此只需显式删除存活会话的载荷 key。
-	for _, sessionID := range sessions {
-		pipe.Del(ctx, r.sessionKey(sessionID))
-	}
-	pipe.Del(ctx, userSessions)
-	_, err = pipe.Exec(ctx)
-	if err != nil {
+	if _, err := deleteAllUserSessionsScript.Run(ctx, r.redis, []string{userSessions}, unixScore(time.Now()), r.keys.AuthSessionPrefix(userID), deleteAllUserSessionsNoLimit).Result(); err != nil {
 		return fmt.Errorf("delete user auth sessions: %w", err)
 	}
 	return nil
@@ -224,31 +251,20 @@ func (r *sessionStore) tokenVersionKey(userID string) string {
 	return r.keys.AuthUserTokenVersion(userID)
 }
 
-func (r *sessionStore) sessionKey(sessionID string) string {
-	return r.keys.AuthSession(sessionID)
+func (r *sessionStore) sessionKey(userID string, sessionID string) string {
+	return r.keys.AuthSession(userID, sessionID)
 }
 
 func (r *sessionStore) userSessionsKey(userID string) string {
 	return r.keys.AuthUserSessions(userID)
 }
 
-func getWatchedSession(ctx context.Context, tx *rediscache.Tx, key string) (authdomain.AuthSession, error) {
-	data, err := tx.Get(ctx, key).Bytes()
-	if errors.Is(err, rediscache.Nil) {
-		return authdomain.AuthSession{}, authdomain.ErrAuthSessionNotFound
-	}
-	if err != nil {
-		return authdomain.AuthSession{}, fmt.Errorf("get auth session: %w", err)
-	}
-	var session authdomain.AuthSession
-	if err := json.Unmarshal(data, &session); err != nil {
-		return authdomain.AuthSession{}, fmt.Errorf("unmarshal auth session: %w", err)
-	}
-	return session, nil
-}
-
 func unixScore(t time.Time) string {
 	return strconv.FormatInt(t.Unix(), 10)
+}
+
+func milliseconds(ttl time.Duration) string {
+	return strconv.FormatInt(ttl.Milliseconds(), 10)
 }
 
 func parseTokenVersion(value string) (int64, error) {

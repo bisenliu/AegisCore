@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"sync"
@@ -237,7 +238,7 @@ func TestTokenVersionCacheRefreshMakesStaleTokenObservable(t *testing.T) {
 	if version != 6 {
 		t.Fatalf("cached version = %d, want 6", version)
 	}
-	if redisServer.Exists(store.sessionKey("s-stale")) || redisServer.Exists(store.userSessionsKey(sessionTestUserID.String())) {
+	if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-stale")) || redisServer.Exists(store.userSessionsKey(sessionTestUserID.String())) {
 		t.Fatal("user sessions were not deleted during cache refresh flow")
 	}
 }
@@ -259,7 +260,7 @@ func TestSessionStoreCreateGetAndDeleteSession(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	afterCreate := time.Now()
-	stored, err := store.GetSession(ctx, "s-123")
+	stored, err := store.GetSession(ctx, sessionTestUserID.String(), "s-123")
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
@@ -279,7 +280,7 @@ func TestSessionStoreCreateGetAndDeleteSession(t *testing.T) {
 	if int64(score) != stored.ExpiresAt.Unix() {
 		t.Fatalf("ZScore = %d, want %d", int64(score), stored.ExpiresAt.Unix())
 	}
-	sessionTTL, err := store.redis.TTL(ctx, store.sessionKey("s-123")).Result()
+	sessionTTL, err := store.redis.TTL(ctx, store.sessionKey(sessionTestUserID.String(), "s-123")).Result()
 	if err != nil {
 		t.Fatalf("session TTL: %v", err)
 	}
@@ -311,7 +312,7 @@ func TestSessionStoreCreateGetAndDeleteSession(t *testing.T) {
 	if err := store.DeleteSession(ctx, sessionTestUserID.String(), "s-123"); err != nil {
 		t.Fatalf("DeleteSession: %v", err)
 	}
-	if redisServer.Exists(store.sessionKey("s-123")) {
+	if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-123")) {
 		t.Fatal("session key still exists")
 	}
 	if _, err := store.redis.ZScore(ctx, indexKey, "s-123").Result(); !errors.Is(err, rediscache.Nil) {
@@ -343,10 +344,10 @@ func TestSessionStoreRotateSession(t *testing.T) {
 	}
 	afterRotate := time.Now()
 
-	if redisServer.Exists(store.sessionKey("s-old")) {
+	if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-old")) {
 		t.Fatal("old session key still exists")
 	}
-	stored, err := store.GetSession(ctx, "s-new")
+	stored, err := store.GetSession(ctx, sessionTestUserID.String(), "s-new")
 	if err != nil {
 		t.Fatalf("GetSession(new): %v", err)
 	}
@@ -393,7 +394,7 @@ func TestSessionStoreRotateSessionRejectsMissingOldSession(t *testing.T) {
 	if !errors.Is(err, authdomain.ErrAuthSessionNotFound) {
 		t.Fatalf("err = %v, want session not found", err)
 	}
-	if redisServer.Exists(store.sessionKey("s-new")) {
+	if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-new")) {
 		t.Fatal("new session was created after missing old session")
 	}
 }
@@ -414,10 +415,10 @@ func TestSessionStoreRotateSessionRejectsOldSessionMismatch(t *testing.T) {
 	if !errors.Is(err, authdomain.ErrAuthSessionMismatch) {
 		t.Fatalf("err = %v, want session mismatch", err)
 	}
-	if !redisServer.Exists(store.sessionKey("s-old")) {
+	if !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-old")) {
 		t.Fatal("old session was deleted after mismatch")
 	}
-	if redisServer.Exists(store.sessionKey("s-new")) {
+	if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-new")) {
 		t.Fatal("new session was created after mismatch")
 	}
 }
@@ -480,7 +481,7 @@ func TestSessionStoreDeleteAllUserSessions(t *testing.T) {
 			t.Fatalf("CreateSession: %v", err)
 		}
 	}
-	if err := store.redis.Set(ctx, store.sessionKey("expired-session"), "stale", 0).Err(); err != nil {
+	if err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID.String(), "expired-session"), "stale", 0).Err(); err != nil {
 		t.Fatalf("Set expired session: %v", err)
 	}
 	if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err(); err != nil {
@@ -492,10 +493,10 @@ func TestSessionStoreDeleteAllUserSessions(t *testing.T) {
 	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
 		t.Fatalf("DeleteAllUserSessions: %v", err)
 	}
-	if redisServer.Exists(store.sessionKey("s-1")) || redisServer.Exists(store.sessionKey("s-2")) || redisServer.Exists(indexKey) {
+	if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-1")) || redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-2")) || redisServer.Exists(indexKey) {
 		t.Fatal("user sessions were not fully deleted")
 	}
-	if !redisServer.Exists(store.sessionKey("expired-session")) {
+	if !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "expired-session")) {
 		t.Fatal("expired session key was deleted despite expired index member cleanup")
 	}
 }
@@ -534,7 +535,7 @@ func TestSessionStoreUserSessionsIndexTTLIsNotShortened(t *testing.T) {
 	}
 }
 
-func TestSessionStoreKeysUseAppNamePrefix(t *testing.T) {
+func TestSessionStoreKeysUseAppNamePrefixWithNewFormat(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStoreWithAppName(redisServer, " aegiscore-user-services ")
 	ctx := context.Background()
@@ -547,16 +548,16 @@ func TestSessionStoreKeysUseAppNamePrefix(t *testing.T) {
 		t.Fatalf("CacheTokenVersion: %v", err)
 	}
 
-	if !redisServer.Exists("aegiscore-user-services:auth:session:s-prefixed") {
-		t.Fatal("prefixed session key does not exist")
+	if !redisServer.Exists("aegiscore-user-services:auth:session:{" + sessionTestUserID.String() + "}:s-prefixed") {
+		t.Fatal("prefixed new session key does not exist")
 	}
-	if !redisServer.Exists("aegiscore-user-services:auth:user:" + sessionTestUserID.String() + ":sessions") {
-		t.Fatal("prefixed user sessions key does not exist")
+	if !redisServer.Exists("aegiscore-user-services:auth:user:sessions:{" + sessionTestUserID.String() + "}") {
+		t.Fatal("prefixed new user sessions key does not exist")
 	}
-	if !redisServer.Exists("aegiscore-user-services:auth:user:" + sessionTestUserID.String() + ":token_version") {
-		t.Fatal("prefixed token version key does not exist")
+	if !redisServer.Exists("aegiscore-user-services:auth:user:token_version:{" + sessionTestUserID.String() + "}") {
+		t.Fatal("prefixed new token version key does not exist")
 	}
-	if redisServer.Exists("auth:session:s-prefixed") || redisServer.Exists("auth:user:"+sessionTestUserID.String()+":sessions") || redisServer.Exists("auth:user:"+sessionTestUserID.String()+":token_version") {
+	if redisServer.Exists("auth:session:{"+sessionTestUserID.String()+"}:s-prefixed") || redisServer.Exists("auth:user:sessions:{"+sessionTestUserID.String()+"}") || redisServer.Exists("auth:user:token_version:{"+sessionTestUserID.String()+"}") {
 		t.Fatal("unprefixed Redis keys should not exist when app.name is set")
 	}
 }
@@ -574,17 +575,43 @@ func TestSessionStoreKeysRemainUnprefixedWhenAppNameEmpty(t *testing.T) {
 		t.Fatalf("CacheTokenVersion: %v", err)
 	}
 
-	if !redisServer.Exists("auth:session:s-empty-prefix") {
-		t.Fatal("unprefixed session key does not exist")
+	if !redisServer.Exists("auth:session:{" + sessionTestUserID.String() + "}:s-empty-prefix") {
+		t.Fatal("unprefixed new session key does not exist")
 	}
-	if !redisServer.Exists("auth:user:" + sessionTestUserID.String() + ":sessions") {
-		t.Fatal("unprefixed user sessions key does not exist")
+	if !redisServer.Exists("auth:user:sessions:{" + sessionTestUserID.String() + "}") {
+		t.Fatal("unprefixed new user sessions key does not exist")
 	}
-	if !redisServer.Exists("auth:user:" + sessionTestUserID.String() + ":token_version") {
-		t.Fatal("unprefixed token version key does not exist")
+	if !redisServer.Exists("auth:user:token_version:{" + sessionTestUserID.String() + "}") {
+		t.Fatal("unprefixed new token version key does not exist")
 	}
-	if redisServer.Exists("aegiscore-user-services:auth:session:s-empty-prefix") || redisServer.Exists("aegiscore-user-services:auth:user:"+sessionTestUserID.String()+":sessions") || redisServer.Exists("aegiscore-user-services:auth:user:"+sessionTestUserID.String()+":token_version") {
+	if redisServer.Exists("aegiscore-user-services:auth:session:{"+sessionTestUserID.String()+"}:s-empty-prefix") || redisServer.Exists("aegiscore-user-services:auth:user:sessions:{"+sessionTestUserID.String()+"}") || redisServer.Exists("aegiscore-user-services:auth:user:token_version:{"+sessionTestUserID.String()+"}") {
 		t.Fatal("default service-name Redis keys should not exist when app.name is empty")
+	}
+}
+
+func TestSessionStoreIgnoresLegacyKeys(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestSessionStore(redisServer)
+	ctx := context.Background()
+	legacySession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-legacy", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
+	data, err := json.Marshal(legacySession)
+	if err != nil {
+		t.Fatalf("Marshal legacy session: %v", err)
+	}
+	if err := store.redis.Set(ctx, "auth:session:s-legacy", data, time.Hour).Err(); err != nil {
+		t.Fatalf("Set legacy session: %v", err)
+	}
+	if err := store.redis.Set(ctx, "auth:user:"+sessionTestUserID.String()+":token_version", "7", time.Hour).Err(); err != nil {
+		t.Fatalf("Set legacy token version: %v", err)
+	}
+
+	_, err = store.GetSession(ctx, sessionTestUserID.String(), "s-legacy")
+	if !errors.Is(err, authdomain.ErrAuthSessionNotFound) {
+		t.Fatalf("GetSession err = %v, want session not found", err)
+	}
+	_, err = store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
+	if !errors.Is(err, authdomain.ErrTokenVersionCacheMiss) {
+		t.Fatalf("GetCachedTokenVersion err = %v, want cache miss", err)
 	}
 }
 

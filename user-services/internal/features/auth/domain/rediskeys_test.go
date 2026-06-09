@@ -6,16 +6,19 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 )
 
-func TestRedisKeyBuilderUsesAppNamePrefix(t *testing.T) {
+func TestRedisKeyBuilderUsesAppNamePrefixWithNewKeyFormat(t *testing.T) {
 	builder := NewRedisKeyBuilder(&config.Config{App: config.AppConfig{Name: " aegiscore-user-services "}})
 
-	if got := builder.AuthSession("s-123"); got != "aegiscore-user-services:auth:session:s-123" {
+	if got := builder.AuthSession("u-123", "s-123"); got != "aegiscore-user-services:auth:session:{u-123}:s-123" {
 		t.Fatalf("AuthSession = %q", got)
 	}
-	if got := builder.AuthUserTokenVersion("u-123"); got != "aegiscore-user-services:auth:user:u-123:token_version" {
+	if got := builder.AuthSessionPrefix("u-123"); got != "aegiscore-user-services:auth:session:{u-123}:" {
+		t.Fatalf("AuthSessionPrefix = %q", got)
+	}
+	if got := builder.AuthUserTokenVersion("u-123"); got != "aegiscore-user-services:auth:user:token_version:{u-123}" {
 		t.Fatalf("AuthUserTokenVersion = %q", got)
 	}
-	if got := builder.AuthUserSessions("u-123"); got != "aegiscore-user-services:auth:user:u-123:sessions" {
+	if got := builder.AuthUserSessions("u-123"); got != "aegiscore-user-services:auth:user:sessions:{u-123}" {
 		t.Fatalf("AuthUserSessions = %q", got)
 	}
 }
@@ -23,13 +26,13 @@ func TestRedisKeyBuilderUsesAppNamePrefix(t *testing.T) {
 func TestRedisKeyBuilderKeepsUnprefixedKeysWhenAppNameEmpty(t *testing.T) {
 	builder := NewRedisKeyBuilder(&config.Config{App: config.AppConfig{Name: "   "}})
 
-	if got := builder.AuthSession("s-123"); got != "auth:session:s-123" {
+	if got := builder.AuthSession("u-123", "s-123"); got != "auth:session:{u-123}:s-123" {
 		t.Fatalf("AuthSession = %q", got)
 	}
-	if got := builder.AuthUserTokenVersion("u-123"); got != "auth:user:u-123:token_version" {
+	if got := builder.AuthUserTokenVersion("u-123"); got != "auth:user:token_version:{u-123}" {
 		t.Fatalf("AuthUserTokenVersion = %q", got)
 	}
-	if got := builder.AuthUserSessions("u-123"); got != "auth:user:u-123:sessions" {
+	if got := builder.AuthUserSessions("u-123"); got != "auth:user:sessions:{u-123}" {
 		t.Fatalf("AuthUserSessions = %q", got)
 	}
 }

@@ -580,7 +580,7 @@ func (s *sessionStoreStub) RotateSession(_ context.Context, oldSession authdomai
 	s.createdTTL = ttl
 	return nil
 }
-func (s *sessionStoreStub) GetSession(context.Context, string) (authdomain.AuthSession, error) {
+func (s *sessionStoreStub) GetSession(context.Context, string, string) (authdomain.AuthSession, error) {
 	if s.session.SessionID == "" {
 		return authdomain.AuthSession{}, authdomain.ErrAuthSessionNotFound
 	}
