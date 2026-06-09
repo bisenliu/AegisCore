@@ -1,4 +1,4 @@
-package app
+package authhttp
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
 	authapi "github.com/aegiscore/user-services/internal/features/auth/api"
+	authapp "github.com/aegiscore/user-services/internal/features/auth/app"
 	"github.com/gin-gonic/gin"
 )
 
@@ -98,22 +99,22 @@ type stubAuthService struct {
 	tokens         *authapi.TokenResponse
 	changeResponse *authapi.ChangePasswordResponse
 	logoutResponse *authapi.LogoutResponse
-	gotLogin       LoginCommand
-	gotRefresh     RefreshTokenCommand
-	gotChange      ChangePasswordCommand
+	gotLogin       authapp.LoginCommand
+	gotRefresh     authapp.RefreshTokenCommand
+	gotChange      authapp.ChangePasswordCommand
 }
 
-func (s *stubAuthService) Login(_ context.Context, cmd LoginCommand) (*authapi.TokenResponse, error) {
+func (s *stubAuthService) Login(_ context.Context, cmd authapp.LoginCommand) (*authapi.TokenResponse, error) {
 	s.gotLogin = cmd
 	return s.tokens, nil
 }
 
-func (s *stubAuthService) ChangePassword(_ context.Context, cmd ChangePasswordCommand) (*authapi.ChangePasswordResponse, error) {
+func (s *stubAuthService) ChangePassword(_ context.Context, cmd authapp.ChangePasswordCommand) (*authapi.ChangePasswordResponse, error) {
 	s.gotChange = cmd
 	return s.changeResponse, nil
 }
 
-func (s *stubAuthService) Refresh(_ context.Context, cmd RefreshTokenCommand) (*authapi.TokenResponse, error) {
+func (s *stubAuthService) Refresh(_ context.Context, cmd authapp.RefreshTokenCommand) (*authapi.TokenResponse, error) {
 	s.gotRefresh = cmd
 	return s.tokens, nil
 }

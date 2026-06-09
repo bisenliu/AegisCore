@@ -201,17 +201,17 @@
 - **Then** 请求 MUST 由共享 `validateEnum` 判定为校验失败
 
 ### Requirement: User creation data access uses repository abstraction with PostgreSQL implementation boundary
-用户创建能力 SHALL 通过 app service 消费侧声明的用户资料持久化端口创建用户，具体 Ent/PostgreSQL 写入和查询实现 MUST 位于 `user-services/internal/features/user/store/postgres` 包。用户创建 service 的创建输入模型 MUST 由消费侧声明，根 `repository` 包 MUST NOT 定义用户资料创建 service 消费的接口或输入模型。
+用户创建能力 SHALL 通过 app service 消费侧声明的用户资料持久化端口创建用户，具体 Ent/PostgreSQL 写入和查询实现 MUST 位于 `user-services/internal/features/user/infra/postgres` 包。用户创建 service 的创建输入模型 MUST 由消费侧声明，根 `repository` 包 MUST NOT 定义用户资料创建 service 消费的接口或输入模型。
 
 #### Scenario: Create flow remains layered
 - **Given** 用户创建 controller 已完成请求绑定和校验
 - **When** service 编排用户创建
 - **Then** service MUST 通过 `user-services/internal/features/user/app` 声明的用户资料持久化端口调用创建
 - **Then** service MUST NOT 调用 `ExistsByUsername` 或等价用户名存在性预查
-- **Then** service MUST NOT 直接调用 Ent client 或 `features/user/store/postgres` 私有实现类型
+- **Then** service MUST NOT 直接调用 Ent client 或 `features/user/infra/postgres` 私有实现类型
 
 #### Scenario: Create API remains compatible after implementation split
-- **Given** `features/user/store/postgres` 承载 Ent/PostgreSQL 用户创建实现
+- **Given** `features/user/infra/postgres` 承载 Ent/PostgreSQL 用户创建实现
 - **When** 调用方提交有效用户创建请求
 - **Then** 系统 MUST 保持现有成功响应信封和用户响应字段
 - **Then** 用户名冲突、校验失败和持久化错误的公开错误语义 MUST 与迁移前保持一致
@@ -287,7 +287,7 @@
 - **When** service 构造函数声明仓储依赖
 - **Then** service MUST 依赖由 `user-services/internal/features/user/app` 声明的用户资料仓储接口
 - **Then** service MUST NOT 依赖包含认证凭证和 token version 操作的完整用户仓储大接口
-- **Then** service MUST NOT 直接调用 Ent client 或 `features/user/store/postgres` 私有实现类型
+- **Then** service MUST NOT 直接调用 Ent client 或 `features/user/infra/postgres` 私有实现类型
 
 #### Scenario: Create API behavior remains compatible
 - **Given** PostgreSQL 用户仓储实现通过用户资料仓储接口提供创建能力

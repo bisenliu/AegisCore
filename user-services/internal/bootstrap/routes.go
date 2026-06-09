@@ -4,7 +4,8 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authapp "github.com/aegiscore/user-services/internal/features/auth/app"
-	userapp "github.com/aegiscore/user-services/internal/features/user/app"
+	authhttp "github.com/aegiscore/user-services/internal/features/auth/transport/http"
+	userhttp "github.com/aegiscore/user-services/internal/features/user/transport/http"
 	"github.com/aegiscore/user-services/internal/router"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
@@ -21,8 +22,8 @@ type RegisterRouteParams struct {
 	JWT    *commonauth.JWTService
 	// TokenVersions 是可选依赖，使公开路由和测试可以在不提供撤销能力时挂载中间件。
 	TokenVersions  authapp.TokenVersionValidator `optional:"true"`
-	AuthController *authapp.AuthController
-	UserController *userapp.UserController
+	AuthController *authhttp.AuthController
+	UserController *userhttp.UserController
 }
 
 // RegisterRoutes 将 bootstrap 依赖适配为 router 层路由注册参数。

@@ -17,8 +17,8 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 1. `user-services/cmd/main.go` 创建 `aegiscore-user-services` CLI，并注册 `serve` 子命令。
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
 3. 用户服务启动装配显式提供共享配置和日志 provider；Redis/PostgreSQL 由 common runtime datastore helper 创建。
-4. `user-services/internal/bootstrap.AppModule` 显式声明 `cache_redis`、`user_db`、`common_db`，并提供 Ent clients、feature-local user/auth store、app service、controller、Gin engine、HTTP server。
-5. `RegisterRoutes` 将 `/healthz`、Swagger、`/api/v1/auth/*` 和 `/api/v1/users*` 注册到 Gin engine。
+4. `user-services/internal/bootstrap.AppModule` 显式声明 `cache_redis`、`user_db`、`common_db`，并提供 Ent clients、Gin engine、HTTP server，同时导入 user/auth feature modules 组装 feature-local infra、app service 和 HTTP controller。
+5. `RegisterRoutes` 将 `/healthz` 和 Swagger 注册到 Gin engine，创建 `/api/v1`、public auth、protected auth 和 protected user 路由组，并调用 feature-local route registration。
 6. Fx 生命周期启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
 ## 4. HTTP Request Flow
@@ -27,9 +27,9 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 |---|---|---|
 | 中间件链 | `user-services/internal/bootstrap/gin.go` | 注册 trace-id、panic recovery、request logging、CORS；trace-id 先于日志和 recovery 执行 |
 | 路由匹配 | `user-services/internal/router/router.go` | 匹配 `/healthz`、`/api/v1/auth/*` 或 `/api/v1/users*` |
-| 参数解析 | `user-services/internal/features/user/app/controller.go`, `user-services/internal/features/auth/app/controller.go` | 绑定 feature API DTO，执行边界校验，并映射为 command/query |
+| 参数解析 | `user-services/internal/features/user/transport/http/controller.go`, `user-services/internal/features/auth/transport/http/controller.go` | 绑定 feature API DTO，执行边界校验，并映射为 command/query |
 | 业务调用 | `user-services/internal/features/user/app/service.go`, `user-services/internal/features/auth/app/service.go` | 编排用户资料或认证会话用例，并映射应用错误 |
-| 数据访问 | `user-services/internal/features/user/store/postgres/user_store.go`, `user-services/internal/features/auth/store/postgres/credential_store.go`, `user-services/internal/features/auth/store/redis/session_store.go` | 使用 Ent 或 Redis 访问持久化细节，not found 转为 capability 领域错误 |
+| 数据访问 | `user-services/internal/features/user/infra/postgres/user_store.go`, `user-services/internal/features/auth/infra/postgres/credential_store.go`, `user-services/internal/features/auth/infra/redis/session_store.go` | 使用 Ent 或 Redis 访问持久化细节，not found 转为 capability 领域错误 |
 | 响应输出 | `common/contract/response/response.go` | 统一输出 `success/code/message/data` 信封 |
 
 ## 5. Data Model
@@ -59,14 +59,18 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 ## 7. Feature Organization
 
 - `user-services/internal/features/user/api/`：用户资料 HTTP request/response DTO 和 Swagger 文档模型。
-- `user-services/internal/features/user/app/`：用户 controller、service、commands、ports 和 use case mapper。
+- `user-services/internal/features/user/app/`：用户 service、commands、queries、ports 和 use case mapper。
 - `user-services/internal/features/user/domain/`：用户实体、状态枚举和领域错误。
-- `user-services/internal/features/user/store/postgres/`：用户资料 Ent/PostgreSQL adapter 和 Ent predicate 构造。
+- `user-services/internal/features/user/transport/http/`：用户资料 Gin controller、route registration 和 HTTP DTO validation。
+- `user-services/internal/features/user/infra/postgres/`：用户资料 Ent/PostgreSQL adapter 和 Ent predicate 构造。
+- `user-services/internal/features/user/module.go`：用户 feature Fx module，组装 app、transport 和 infra provider。
 - `user-services/internal/features/auth/api/`：认证登录、刷新、改密、登出相关 HTTP DTO。
-- `user-services/internal/features/auth/app/`：认证 controller、service、credential/token/session 组件、commands 和 ports。
+- `user-services/internal/features/auth/app/`：认证 service、credential/token/session 组件、commands 和 ports。
 - `user-services/internal/features/auth/domain/`：认证凭据、认证会话、会话吊销结果、认证领域错误和 Redis key 业务语义。
-- `user-services/internal/features/auth/store/postgres/`：认证凭据和 token version 的 Ent/PostgreSQL adapter。
-- `user-services/internal/features/auth/store/redis/`：Refresh Token 会话和 token version cache 的 Redis adapter。
+- `user-services/internal/features/auth/transport/http/`：认证 Gin controller、public/protected route registration 和 HTTP DTO validation。
+- `user-services/internal/features/auth/infra/postgres/`：认证凭据和 token version 的 Ent/PostgreSQL adapter。
+- `user-services/internal/features/auth/infra/redis/`：Refresh Token 会话和 token version cache 的 Redis adapter。
+- `user-services/internal/features/auth/module.go`：认证 feature Fx module，组装 app、transport 和 infra provider。
 
 ## 8. Common Organization
 

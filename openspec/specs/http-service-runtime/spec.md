@@ -338,7 +338,7 @@ HTTP 服务运行时相关命名标准化 SHALL 只修改内部组装名称、�
 - **THEN** 本变更 MUST 保留该名称，并将目录、module path、CLI 名或服务标识重命名视为单独 breaking change
 
 ### Requirement: Runtime composes concrete feature store implementations at the bootstrap boundary
-HTTP 服务运行时 SHALL 在 `user-services/internal/bootstrap` 组合根中装配具体 feature store 实现。用户服务启动时 MUST 通过 `features/user/store/postgres` provider 提供 `userapp.UserProfileStore`，通过 `features/auth/store/postgres` provider 提供认证凭据与 token version store，并通过 `features/auth/store/redis` provider 提供 `authapp.AuthSessionStore`，同时保持现有 `user_db` Ent client、`cache_redis` Redis client 和 auth 配置依赖不变。
+HTTP 服务运行时 SHALL 在 `user-services/internal/bootstrap` 组合根中装配具体 feature store 实现。用户服务启动时 MUST 通过 `features/user/infra/postgres` provider 提供 `userapp.UserProfileStore`，通过 `features/auth/infra/postgres` provider 提供认证凭据与 token version store，并通过 `features/auth/infra/redis` provider 提供 `authapp.AuthSessionStore`，同时保持现有 `user_db` Ent client、`cache_redis` Redis client 和 auth 配置依赖不变。
 
 #### Scenario: Bootstrap provides PostgreSQL user profile store
 - **Given** Fx app 装配用户服务依赖

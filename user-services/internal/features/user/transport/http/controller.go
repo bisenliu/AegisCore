@@ -1,23 +1,23 @@
-package app
+package userhttp
 
 import (
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/http/ginvalidation"
 	commonvalidation "github.com/aegiscore/common/validation"
 	userapi "github.com/aegiscore/user-services/internal/features/user/api"
+	userapp "github.com/aegiscore/user-services/internal/features/user/app"
 	userdomain "github.com/aegiscore/user-services/internal/features/user/domain"
-	"github.com/aegiscore/user-services/internal/validators"
 	"github.com/gin-gonic/gin"
 )
 
 // UserController 处理用户资料端点的 HTTP 请求。
 type UserController struct {
-	userService UserService
+	userService userapp.UserService
 	validator   *commonvalidation.Validator
 }
 
 // NewUserController 使用 service 和请求 validator 依赖构造用户控制器。
-func NewUserController(userService UserService, validator *commonvalidation.Validator) *UserController {
+func NewUserController(userService userapp.UserService, validator *commonvalidation.Validator) *UserController {
 	return &UserController{userService: userService, validator: validator}
 }
 
@@ -43,8 +43,8 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 		return
 	}
 
-	validators.NormalizeListUsers(&req)
-	users, err := ctl.userService.ListUsers(c.Request.Context(), ListUsersQuery{
+	NormalizeListUsers(&req)
+	users, err := ctl.userService.ListUsers(c.Request.Context(), userapp.ListUsersQuery{
 		Page:     req.Page,
 		PageSize: req.PageSize,
 		Offset:   req.Offset,
@@ -79,12 +79,12 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
-	if err := validators.NormalizeCreateUser(&req); err != nil {
+	if err := NormalizeCreateUser(&req); err != nil {
 		response.Fail(c, err)
 		return
 	}
 
-	user, err := ctl.userService.CreateUser(c.Request.Context(), CreateUserCommand{
+	user, err := ctl.userService.CreateUser(c.Request.Context(), userapp.CreateUserCommand{
 		Nickname: req.Nickname,
 		Username: req.Username,
 		Password: req.Password,
@@ -115,7 +115,7 @@ func (ctl *UserController) GetByUserID(c *gin.Context) {
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.URIBinder) {
 		return
 	}
-	userID, err := validators.ParseUserID(req)
+	userID, err := ParseUserID(req)
 	if err != nil {
 		response.Fail(c, err)
 		return

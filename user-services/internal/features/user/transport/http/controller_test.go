@@ -1,4 +1,4 @@
-package app
+package userhttp
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/validation"
 	userapi "github.com/aegiscore/user-services/internal/features/user/api"
+	userapp "github.com/aegiscore/user-services/internal/features/user/app"
 	userdomain "github.com/aegiscore/user-services/internal/features/user/domain"
 	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/gin-gonic/gin"
@@ -231,13 +232,13 @@ type stubUserService struct {
 	gotID          uuid.UUID
 	createResponse *userapi.UserResponse
 	createErr      error
-	gotCreate      CreateUserCommand
+	gotCreate      userapp.CreateUserCommand
 	listResponse   response.PaginatedData[userapi.UserResponse]
 	listErr        error
-	gotList        ListUsersQuery
+	gotList        userapp.ListUsersQuery
 }
 
-func (s *stubUserService) CreateUser(_ context.Context, req CreateUserCommand) (*userapi.UserResponse, error) {
+func (s *stubUserService) CreateUser(_ context.Context, req userapp.CreateUserCommand) (*userapi.UserResponse, error) {
 	s.gotCreate = req
 	if s.createErr != nil {
 		return nil, response.FromError(s.createErr)
@@ -253,7 +254,7 @@ func (s *stubUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*use
 	return s.response, nil
 }
 
-func (s *stubUserService) ListUsers(_ context.Context, req ListUsersQuery) (response.PaginatedData[userapi.UserResponse], error) {
+func (s *stubUserService) ListUsers(_ context.Context, req userapp.ListUsersQuery) (response.PaginatedData[userapi.UserResponse], error) {
 	s.gotList = req
 	if s.listErr != nil {
 		return response.PaginatedData[userapi.UserResponse]{}, response.FromError(s.listErr)

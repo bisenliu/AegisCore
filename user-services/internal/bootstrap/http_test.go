@@ -18,8 +18,10 @@ import (
 	"github.com/aegiscore/common/validation"
 	authapi "github.com/aegiscore/user-services/internal/features/auth/api"
 	authapp "github.com/aegiscore/user-services/internal/features/auth/app"
+	authhttp "github.com/aegiscore/user-services/internal/features/auth/transport/http"
 	userapi "github.com/aegiscore/user-services/internal/features/user/api"
 	userapp "github.com/aegiscore/user-services/internal/features/user/app"
+	userhttp "github.com/aegiscore/user-services/internal/features/user/transport/http"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -317,8 +319,8 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		Engine:         engine,
 		JWT:            jwtService,
 		TokenVersions:  tokenVersions,
-		AuthController: authapp.NewAuthController(&routeAuthAuthService{}, validator),
-		UserController: userapp.NewUserController(&routeAuthUserService{}, validator),
+		AuthController: authhttp.NewAuthController(&routeAuthAuthService{}, validator),
+		UserController: userhttp.NewUserController(&routeAuthUserService{}, validator),
 	})
 
 	publicRequests := []struct {

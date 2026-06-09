@@ -473,14 +473,14 @@
 - **Then** 系统 MUST NOT 将该次修改密码报告为成功
 
 ### Requirement: Authentication sessions use repository abstraction with Redis implementation boundary
-用户会话控制能力 SHALL 通过认证 app 层声明的 `authapp.AuthSessionStore` 抽象管理 token version、Refresh Token 会话和用户活跃会话索引，具体 Redis 实现 MUST 位于 `user-services/internal/features/auth/store/redis` 包。service 层 MUST NOT 定义或持有 Redis session store 具体实现。
+用户会话控制能力 SHALL 通过认证 app 层声明的 `authapp.AuthSessionStore` 抽象管理 token version、Refresh Token 会话和用户活跃会话索引，具体 Redis 实现 MUST 位于 `user-services/internal/features/auth/infra/redis` 包。service 层 MUST NOT 定义或持有 Redis session store 具体实现。
 
 #### Scenario: Auth service depends on auth session repository abstraction
 - **Given** 登录、刷新、退出当前设备、退出全部设备或修改密码流程需要访问会话状态
 - **When** auth service 调用会话数据访问层
 - **Then** auth service MUST 依赖 `authapp.AuthSessionStore` 或更高层 session lifecycle 组件
 - **Then** auth service MUST 使用 `authdomain.AuthSession` 表达会话数据
-- **Then** auth service MUST NOT 依赖 Redis client 或 `features/auth/store/redis` 私有实现类型
+- **Then** auth service MUST NOT 依赖 Redis client 或 `features/auth/infra/redis` 私有实现类型
 
 #### Scenario: Session not found error remains mappable
 - **Given** Redis 中不存在指定 Refresh Token 会话记录
@@ -495,7 +495,7 @@
 - **Then** 系统 MUST 继续拒绝刷新、受保护请求或改密凭据校验
 
 #### Scenario: Redis session storage behavior remains compatible
-- **Given** `features/auth/store/redis` 承载认证会话 Redis 实现
+- **Given** `features/auth/infra/redis` 承载认证会话 Redis 实现
 - **When** 系统创建、读取、删除或批量删除认证会话
 - **Then** Redis key 格式、Refresh Token 会话 TTL、用户活跃会话 ZSet 和过期 member 清理行为 MUST 与迁移前保持一致
 - **Then** token version 缓存未命中时 Redis 实现 MUST 只报告缓存未命中或等价结果，由认证会话 service 组件或 token version resolver 回源 PostgreSQL

@@ -1,4 +1,4 @@
-package app
+package authhttp
 
 import (
 	"github.com/aegiscore/common/contract/response"
@@ -6,13 +6,13 @@ import (
 	commonauth "github.com/aegiscore/common/security/auth"
 	commonvalidation "github.com/aegiscore/common/validation"
 	authapi "github.com/aegiscore/user-services/internal/features/auth/api"
-	"github.com/aegiscore/user-services/internal/validators"
+	authapp "github.com/aegiscore/user-services/internal/features/auth/app"
 	"github.com/gin-gonic/gin"
 )
 
 // AuthController 处理认证和会话端点的 HTTP 请求。
 type AuthController struct {
-	authService AuthService
+	authService authapp.AuthService
 	validator   *commonvalidation.Validator
 }
 
@@ -34,11 +34,11 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
-	if err := validators.NormalizeChangePassword(&req); err != nil {
+	if err := NormalizeChangePassword(&req); err != nil {
 		response.Fail(c, err)
 		return
 	}
-	result, err := ctl.authService.ChangePassword(c.Request.Context(), ChangePasswordCommand{
+	result, err := ctl.authService.ChangePassword(c.Request.Context(), authapp.ChangePasswordCommand{
 		Token:       req.Token,
 		NewPassword: req.NewPassword,
 	})
@@ -50,7 +50,7 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 }
 
 // NewAuthController 使用 service 和 validator 依赖构造认证控制器。
-func NewAuthController(authService AuthService, validator *commonvalidation.Validator) *AuthController {
+func NewAuthController(authService authapp.AuthService, validator *commonvalidation.Validator) *AuthController {
 	return &AuthController{authService: authService, validator: validator}
 }
 
@@ -71,11 +71,11 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
-	if err := validators.NormalizeLogin(&req); err != nil {
+	if err := NormalizeLogin(&req); err != nil {
 		response.Fail(c, err)
 		return
 	}
-	tokens, err := ctl.authService.Login(c.Request.Context(), LoginCommand{
+	tokens, err := ctl.authService.Login(c.Request.Context(), authapp.LoginCommand{
 		Username: req.Username,
 		Password: req.Password,
 	})
@@ -103,11 +103,11 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
 		return
 	}
-	if err := validators.NormalizeRefresh(&req); err != nil {
+	if err := NormalizeRefresh(&req); err != nil {
 		response.Fail(c, err)
 		return
 	}
-	tokens, err := ctl.authService.Refresh(c.Request.Context(), RefreshTokenCommand{
+	tokens, err := ctl.authService.Refresh(c.Request.Context(), authapp.RefreshTokenCommand{
 		RefreshToken: req.RefreshToken,
 	})
 	if err != nil {

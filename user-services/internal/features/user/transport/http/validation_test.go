@@ -1,4 +1,4 @@
-package validators
+package userhttp
 
 import (
 	"testing"

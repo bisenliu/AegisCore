@@ -9,7 +9,7 @@ import (
 	"github.com/aegiscore/common/runtime/configfx"
 	"github.com/aegiscore/common/runtime/loggerfx"
 	"github.com/aegiscore/common/validation"
-	userapp "github.com/aegiscore/user-services/internal/features/user/app"
+	userhttp "github.com/aegiscore/user-services/internal/features/user/transport/http"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -18,7 +18,7 @@ func TestAppModuleResolvesSharedValidationDependency(t *testing.T) {
 	err := fx.ValidateApp(
 		fx.Supply(&config.Config{}, zap.NewNop()),
 		AppModule,
-		fx.Invoke(func(*validation.Validator, *userapp.UserController) {}),
+		fx.Invoke(func(*validation.Validator, *userhttp.UserController) {}),
 	)
 	if err != nil {
 		t.Fatalf("ValidateApp error = %v", err)
@@ -29,7 +29,7 @@ func TestAppModuleIncludesSharedTimezoneDependency(t *testing.T) {
 	err := fx.ValidateApp(
 		fx.Supply(&config.Config{}, zap.NewNop()),
 		AppModule,
-		fx.Invoke(func(*validation.Validator, *userapp.UserController) {}),
+		fx.Invoke(func(*validation.Validator, *userhttp.UserController) {}),
 	)
 	if err != nil {
 		t.Fatalf("ValidateApp with timezone module error = %v", err)
@@ -44,7 +44,7 @@ func TestAppWiresCommonDependenciesExplicitly(t *testing.T) {
 			loggerfx.NewLogger,
 		),
 		AppModule,
-		fx.Invoke(func(*config.Config, *zap.Logger, *userapp.UserController) {}),
+		fx.Invoke(func(*config.Config, *zap.Logger, *userhttp.UserController) {}),
 	)
 	if err != nil {
 		t.Fatalf("ValidateApp with explicit common providers error = %v", err)
