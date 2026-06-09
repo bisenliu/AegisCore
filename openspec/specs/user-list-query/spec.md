@@ -158,3 +158,4 @@
 - **When** 调用方请求 `GET /api/v1/users`
 - **Then** 系统 MUST 继续通过统一响应信封返回分页用户列表
 - **Then** controller、service 和 repository 的职责边界 MUST 保持不变
+

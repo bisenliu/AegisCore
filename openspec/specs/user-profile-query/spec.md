@@ -119,7 +119,7 @@
 - **THEN** `GET /api/v1/users/:user_id` 的路径、响应 envelope、用户响应 JSON 字段和错误语义 MUST 保持不变
 
 ### Requirement: User query data access uses repository abstraction with PostgreSQL implementation boundary
-用户资料查询能力 SHALL 通过 app service 消费侧声明的用户资料持久化端口读取用户资料，具体 Ent/PostgreSQL 查询实现 MUST 位于 `user-services/internal/features/user/infra/postgres` 包。实现 MUST NOT 新增根 `repository` 包定义用户资料查询 app service 消费的接口或依赖具体 store 实现，查询 API 的路由、认证要求、错误映射和响应内容 MUST 保持不变。
+用户资料查询能力 SHALL 通过 app service 消费侧声明的用户资料持久化端口读取用户资料，具体 Ent/PostgreSQL 查询实现 MUST 位于 `user-services/internal/features/user/infra/postgres` 包。实现 MUST NOT 新增根 `repository` 包定义用户资料查询 app service 消费的接口或依赖具体 infra 实现，查询 API 的路由、认证要求、错误映射和响应内容 MUST 保持不变。
 
 #### Scenario: Query service depends on consumer-owned repository port
 - **Given** 用户资料查询 service 需要按外部 UUID 读取用户
@@ -228,3 +228,4 @@
 - **WHEN** Service 将用户领域实体映射为用户查询或列表响应
 - **THEN** 响应 MUST 继续包含 `user_id`、`nickname`、`username`、`status`、`created_at` 和 `updated_at`
 - **THEN** 响应 MUST NOT 包含 `password`、`password_hash`、内部 `id`、`token_version` 或 `deleted_at`
+

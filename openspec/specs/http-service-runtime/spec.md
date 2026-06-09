@@ -3,9 +3,7 @@
 ## Purpose
 
 HTTP 服务运行时能力负责通过 CLI 启动用户服务、组装 Fx 依赖、注册 Gin 中间件和路由，并在进程终止时优雅关闭 HTTP server。
-
 ## Requirements
-
 ### Requirement: Start service through CLI
 
 系统必须提供 `aegiscore-user-services serve` 命令，并允许通过 `--config` 指定 YAML 配置路径。用户服务启动时必须在自身 Fx 装配中显式提供公共配置和 Zap logger，并初始化自己声明的运行时依赖，包括 HTTP server、具名 PostgreSQL 连接池和具名 Redis client。CLI 启动和停止 Fx app 的 timeout MUST 使用语义独立的具名常量表达；启动超时表达 Fx app start budget，停止超时表达 Fx app stop budget，二者不得与 HTTP server graceful shutdown fallback 混用命名。
@@ -140,7 +138,7 @@ HTTP 服务运行时 SHALL 在 HTTP server 启动日志中输出关键运行时�
 
 ### Requirement: Register standard HTTP routes and middleware
 
-系统必须注册健康检查、用户 API 路由、Swagger 文档路由和共享 HTTP 中间件。HTTP 基础中间件必须先注入 trace-id，再执行 panic recovery、请求日志和 CORS；trace-id 必须来自 `X-Trace-ID` 请求头或由系统生成，并必须写入 Gin context、Go `context.Context` 和 `X-Trace-ID` 响应头。共享中间件必须对外提供 `TraceID()` Gin middleware。用户服务运行时 MUST 通过服务级 HTTP 路由入口注册完整用户服务 HTTP surface，该入口 MUST 使用明确表达用户服务 HTTP 范围的命名，并 MUST 按系统路由、Swagger 文档路由、版本化 API、公共认证路由、受保护认证路由和用户资源路由组织注册逻辑。用户服务运行时 MUST 将 `config.App.Name` 作为健康检查响应中的服务名来源传入系统路由，MUST NOT 在健康检查 handler 中硬编码服务名或设置代码级默认服务名；健康检查成功状态值 MUST 使用路由包内拥有的常量表达。用户服务运行时 MUST 通过路由局部分组控制认证中间件挂载：健康检查、Swagger 文档、登录、刷新和受限改密入口 MUST 保持公开访问；退出当前设备、退出全部设备和用户资料 API MUST 挂载认证中间件。用户服务运行时 MUST 在注册认证中间件时传入 Fx 注入的 Zap logger。请求日志的 `client_ip` 字段必须使用 Gin `Context.ClientIP()` 的结果。后续 Casbin 授权中间件 MUST 挂载在认证中间件之后、业务 handler 之前的受保护路由子分组中。
+系统必须注册健康检查、用户 API 路由、Swagger 文档路由和共享 HTTP 中间件。HTTP 基础中间件必须先注入 trace-id，再执行 panic recovery、请求日志和 CORS；trace-id 必须来自 `X-Trace-ID` 请求头或由系统生成，并必须写入 Gin context、Go `context.Context` 和 `X-Trace-ID` 响应头。共享中间件必须对外提供 `TraceID()` Gin middleware。用户服务运行时 MUST 通过服务级 HTTP 路由入口注册完整用户服务 HTTP surface，该入口 MUST 使用明确表达用户服务 HTTP 范围的命名，并 MUST 按系统路由、Swagger 文档路由、版本化 API、公共认证路由、受保护认证路由和用户资源路由组织总装逻辑。用户和认证业务 endpoint 的具体路由注册 MUST 由对应 feature 的 `transport/http/routes.go` 拥有；服务级路由入口只创建分组、挂载认证中间件并调用 feature route registration。用户服务运行时 MUST 将 `config.App.Name` 作为健康检查响应中的服务名来源传入系统路由，MUST NOT 在健康检查 handler 中硬编码服务名或设置代码级默认服务名；健康检查成功状态值 MUST 使用路由包内拥有的常量表达。用户服务运行时 MUST 通过路由局部分组控制认证中间件挂载：健康检查、Swagger 文档、登录、刷新和受限改密入口 MUST 保持公开访问；退出当前设备、退出全部设备和用户资料 API MUST 挂载认证中间件。用户服务运行时 MUST 在注册认证中间件时传入 Fx 注入的 Zap logger。请求日志的 `client_ip` 字段必须使用 Gin `Context.ClientIP()` 的结果。后续 Casbin 授权中间件 MUST 挂载在认证中间件之后、业务 handler 之前的受保护路由子分组中。
 
 #### Scenario: Health endpoint returns service status
 - **Given** HTTP server 已启动且配置包含 `app.name: aegiscore-user-services`
@@ -153,18 +151,18 @@ HTTP 服务运行时 SHALL 在 HTTP server 启动日志中输出关键运行时�
 #### Scenario: User API route is registered under versioned prefix
 - **Given** HTTP server 已启动
 - **When** 调用方请求 `GET /api/v1/users/:user_id`
-- **Then** 请求被路由到 `UserController.GetByUserID`
+- **Then** 请求被路由到用户 feature `transport/http` controller 的 `GetByUserID`
 
 #### Scenario: Create user API route is registered under versioned prefix
 - **Given** HTTP server 已启动
 - **When** 调用方请求 `POST /api/v1/users`
-- **Then** 请求被路由到 `UserController.CreateUser`
+- **Then** 请求被路由到用户 feature `transport/http` controller 的 `CreateUser`
 
 #### Scenario: Auth routes are grouped by credential requirements
 - **Given** HTTP server 已启动
 - **When** 查看 `/api/v1/auth` 路由注册
-- **Then** `POST /api/v1/auth/login`、`POST /api/v1/auth/refresh` 和 `POST /api/v1/auth/change-password` MUST 注册在公开路由分组
-- **Then** `POST /api/v1/auth/logout` 和 `POST /api/v1/auth/logout-all` MUST 注册在已挂载认证中间件的路由分组
+- **Then** `POST /api/v1/auth/login`、`POST /api/v1/auth/refresh` 和 `POST /api/v1/auth/change-password` MUST 通过认证 feature `RegisterPublicRoutes` 注册在公开路由分组
+- **Then** `POST /api/v1/auth/logout` 和 `POST /api/v1/auth/logout-all` MUST 通过认证 feature `RegisterProtectedRoutes` 注册在已挂载认证中间件的路由分组
 
 #### Scenario: Swagger routes are registered when enabled
 - **Given** HTTP server 已启动且 Swagger 已启用
@@ -185,31 +183,6 @@ HTTP 服务运行时 SHALL 在 HTTP server 启动日志中输出关键运行时�
 - **Then** 系统 MUST 将该 Zap logger 传入共享认证中间件
 - **Then** 认证中间件 MUST 使用同一个 logger 输出认证相关日志
 
-#### Scenario: Trace id is propagated to Go context
-- **Given** 请求头包含 `X-Trace-ID`
-- **When** trace id 中间件处理请求
-- **Then** 系统必须将该值写入 Gin context
-- **Then** 系统必须将该值写入 `c.Request.Context()`
-- **Then** 系统必须将该值写入 `X-Trace-ID` 响应头
-
-#### Scenario: Trace id is generated when missing
-- **Given** 请求头不包含 `X-Trace-ID`
-- **When** trace id 中间件处理请求
-- **Then** 系统必须生成新的 trace-id
-- **Then** 系统必须将生成值写入 Gin context、Go context 和响应头
-
-#### Scenario: Request log includes trace-id
-- **Given** HTTP 请求已完成
-- **When** request logging 中间件输出请求日志
-- **Then** 日志必须包含 `trace-id`、method、path、status、latency 和 client_ip 字段
-- **Then** `client_ip` 字段必须等于 Gin `Context.ClientIP()` 的结果
-
-#### Scenario: Recovery log includes trace-id
-- **Given** HTTP handler 发生 panic
-- **When** recovery 中间件恢复 panic 并输出错误日志
-- **Then** 日志必须包含 `trace-id`、panic 内容和 stack 字段
-- **Then** HTTP 响应仍必须使用 `common/contract/response.Envelope` 失败格式
-
 #### Scenario: Public routes bypass authentication
 - **Given** HTTP server 已启动
 - **When** 调用方请求 `/healthz`、`/swagger/index.html`、`/docs`、`/api-docs`、`/api/v1/auth/login`、`/api/v1/auth/refresh` 或 `/api/v1/auth/change-password` 且未携带普通 Access Token
@@ -222,22 +195,12 @@ HTTP 服务运行时 SHALL 在 HTTP server 启动日志中输出关键运行时�
 - **Then** 用户服务运行时 MUST 在进入 controller 前拒绝请求
 - **Then** 系统 MUST 返回 HTTP 401 和统一失败响应信封
 
-#### Scenario: Authorization middleware has a stable future mounting point
-- **Given** 后续用户服务接入 Casbin 授权中间件
-- **When** 服务为需要细粒度授权的业务 API 注册路由
-- **Then** Casbin 中间件 MUST 挂载在认证中间件之后
-- **Then** Casbin 中间件 MUST 在对应业务 handler 执行之前完成授权判定
-
-#### Scenario: User service HTTP route entrypoint is explicitly scoped
-- **Given** 维护者查看 `user-services/internal/router` 中的路由注册入口
-- **When** 入口函数注册用户服务完整 HTTP surface
-- **Then** 入口名称 MUST 明确表达用户服务 HTTP 路由范围
-- **Then** 实现 MUST NOT 使用仅表达泛化路由注册的名称承载完整用户服务 HTTP surface
-
 #### Scenario: Route registration is grouped by API surface
 - **Given** 用户服务注册 HTTP 路由
-- **When** 实现组织 `user-services/internal/router` 包内路由注册逻辑
+- **When** 实现组织服务级路由总装和 feature-local route registration
 - **Then** 系统路由、Swagger 文档路由、版本化 API、公共认证路由、受保护认证路由和用户资源路由 MUST 有清晰分组边界
+- **Then** 用户资料业务 routes MUST 位于 `features/user/transport/http/routes.go`
+- **Then** 认证业务 routes MUST 位于 `features/auth/transport/http/routes.go`
 - **Then** 拆分 MUST 保持现有路径、HTTP 方法、handler 绑定和认证边界等价
 
 ### Requirement: Shutdown gracefully
@@ -338,19 +301,26 @@ HTTP 服务运行时相关命名标准化 SHALL 只修改内部组装名称、�
 - **THEN** 本变更 MUST 保留该名称，并将目录、module path、CLI 名或服务标识重命名视为单独 breaking change
 
 ### Requirement: Runtime composes concrete feature store implementations at the bootstrap boundary
-HTTP 服务运行时 SHALL 在 `user-services/internal/bootstrap` 组合根中装配具体 feature store 实现。用户服务启动时 MUST 通过 `features/user/infra/postgres` provider 提供 `userapp.UserProfileStore`，通过 `features/auth/infra/postgres` provider 提供认证凭据与 token version store，并通过 `features/auth/infra/redis` provider 提供 `authapp.AuthSessionStore`，同时保持现有 `user_db` Ent client、`cache_redis` Redis client 和 auth 配置依赖不变。
+HTTP 服务运行时 SHALL 通过 feature-owned Fx modules 装配具体 feature 实现。用户服务启动时，`features/user/module.go` MUST 提供用户资料 app service、HTTP controller 和 `features/user/infra/postgres` provider；`features/auth/module.go` MUST 提供认证 app service、HTTP controller、`features/auth/infra/postgres` provider 和 `features/auth/infra/redis` provider。`bootstrap.AppModule` MUST 引入 feature modules，并继续负责共享配置、Zap logger、timezone、validation、具名 PostgreSQL/Redis runtime、Ent client、Gin engine、HTTP server 和路由总装。现有 `user_db` Ent client、`cache_redis` Redis client 和 auth 配置依赖 MUST 保持不变。
 
-#### Scenario: Bootstrap provides PostgreSQL user profile store
+#### Scenario: Bootstrap imports feature modules
 - **Given** Fx app 装配用户服务依赖
-- **When** bootstrap 创建用户资料 store provider
-- **Then** bootstrap MUST 使用 `userpostgres.NewUserStore`
+- **When** bootstrap 创建 `AppModule`
+- **Then** `AppModule` MUST 引入 `features/user.Module` 和 `features/auth.Module`
+- **Then** bootstrap MUST NOT 逐个列出用户和认证 feature 内部 app service、HTTP controller 或 infra adapter provider
+- **Then** feature modules MUST NOT 创建 PostgreSQL/Redis runtime clients 或 Ent clients
+
+#### Scenario: User feature module provides PostgreSQL user profile adapter
+- **Given** Fx app 装配用户 feature 依赖
+- **When** 用户 feature module 创建用户资料 infra provider
+- **Then** provider MUST 使用 `features/user/infra/postgres.NewUserStore` 或等价构造函数
 - **Then** provider MUST 注入具名 `user_db` Ent client
 - **Then** 下游 service MUST 接收 `userapp.UserProfileStore` 抽象
 
-#### Scenario: Bootstrap provides auth credential and session stores
-- **Given** Fx app 装配用户服务依赖
-- **When** bootstrap 创建认证凭据、token version 和会话 store provider
-- **Then** bootstrap MUST 使用 `authpostgres.NewCredentialStore` 和 `authredis.NewSessionStore`
+#### Scenario: Auth feature module provides credential and session adapters
+- **Given** Fx app 装配认证 feature 依赖
+- **When** 认证 feature module 创建认证凭据、token version 和会话 infra provider
+- **Then** provider MUST 使用 `features/auth/infra/postgres.NewCredentialStore` 和 `features/auth/infra/redis.NewSessionStore` 或等价构造函数
 - **Then** provider MUST 注入具名 `user_db` Ent client、具名 `cache_redis` Redis client 和 auth 配置
 - **Then** 下游 auth service 和认证中间件 MUST 接收 `authapp.UserCredentialStore`、`authapp.UserTokenVersionStore`、`authapp.AuthSessionStore` 和 `authapp.TokenVersionValidator` 抽象
 
@@ -358,7 +328,7 @@ HTTP 服务运行时 SHALL 在 `user-services/internal/bootstrap` 组合根中�
 - **Given** 用户服务通过 CLI 启动
 - **When** Fx app 初始化 runtime 依赖
 - **Then** 系统 MUST 继续只初始化自身声明的 `cache_redis`、`user_db` 和 `common_db` 运行时依赖
-- **Then** 系统 MUST NOT 因 repository 实现分包新增 Redis、PostgreSQL、Ent client 或 HTTP 路由依赖
+- **Then** 系统 MUST NOT 因 feature module 拆分新增 Redis、PostgreSQL、Ent client 或 HTTP 路由依赖
 
 ### Requirement: Split user service bootstrap by runtime responsibility
 系统 SHALL 将 `user-services/internal/bootstrap` 组合根按职责组织为聚焦源文件，至少区分 Fx app/module 装配、Gin engine 创建、认证 provider、路由注册和 HTTP server lifecycle。Fx app/module 装配文件 MUST 使用职责名称，例如 `app.go` 或 `fx.go`，拆分完成后 MUST NOT 保留 `bootstrap/bootstrap.go` 作为泛化聚合文件。拆分 MUST 保持服务启动命令、Fx provider/invoke 集合、Gin 中间件顺序、路由注册、认证中间件挂载和优雅关闭行为等价。
@@ -409,3 +379,36 @@ HTTP 服务运行时 SHALL 在 `user-services/internal/bootstrap` 组合根中�
 - **Given** controller handler 标识符已重命名
 - **When** 用户服务注册 HTTP 路由
 - **Then** 所有现有用户和认证 API 的 path、HTTP method、公开/受保护分组和中间件顺序 MUST 保持不变
+
+### Requirement: Manage HTTP server goroutine with lifecycle context
+
+HTTP 服务运行时 MUST 将 Fx `OnStart` 中启动的 HTTP server 异步 goroutine 作为 lifecycle 托管资源，并 MUST 为该 goroutine 提供可取消 context。Fx `OnStop` MUST 触发该 context 取消，并 MUST 继续执行现有 HTTP graceful shutdown。HTTP server goroutine MUST 能在 context 取消、正常 `http.ErrServerClosed` 或非预期 `Serve` 错误后退出；只有非预期 `Serve` 错误 MUST 被记录为服务失败并触发 Fx 应用级 shutdown。
+
+#### Scenario: Stop cancels HTTP server goroutine context
+- **Given** HTTP listener 已成功绑定且 `Serve` goroutine 已启动
+- **When** Fx app 停止并执行 HTTP server `OnStop`
+- **Then** `OnStop` MUST 取消托管该 goroutine 的 context
+- **Then** HTTP server MUST 继续使用 `http.shutdown_timeout` 或默认 `10s` 执行 graceful shutdown
+- **Then** goroutine MUST 能观察到生命周期取消并退出
+
+#### Scenario: Normal server closed exit remains non-failing
+- **Given** HTTP server goroutine 已由 lifecycle context 托管
+- **When** graceful shutdown 导致 `Serve` 返回 `http.ErrServerClosed`
+- **Then** 系统 MUST NOT 将该错误记录为 HTTP server 失败
+- **Then** 系统 MUST NOT 因该错误再次触发应用级 shutdown
+- **Then** goroutine 退出 MUST 不依赖无限阻塞或不可取消等待
+
+#### Scenario: Unexpected serve failure still triggers application shutdown
+- **Given** HTTP server goroutine 已由 lifecycle context 托管
+- **When** `Serve` 返回非 `http.ErrServerClosed` 错误且 lifecycle context 尚未表示正常停止完成
+- **Then** 系统 MUST 记录 HTTP server 失败日志
+- **Then** 系统 MUST 触发 Fx 应用级 shutdown
+- **Then** goroutine MUST 在错误处理完成后退出
+
+#### Scenario: Future HTTP runtime goroutines require cancellation boundary
+- **Given** 维护者在 `http-service-runtime` 的 HTTP server lifecycle 中新增异步 goroutine
+- **When** 该 goroutine 执行循环、重试、阻塞上报或等待多个资源
+- **Then** 该 goroutine MUST 接收可取消 context 或等价停止信号
+- **Then** 该 goroutine MUST 在 lifecycle 停止时有明确退出路径
+- **Then** 该 goroutine 的正常退出和异常退出 MUST 具备可测试或可观测行为
+

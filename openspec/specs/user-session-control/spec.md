@@ -646,8 +646,8 @@
 - **When** 实现新增组件或领域服务
 - **Then** 组件 MUST 位于 `user-services/internal/features/auth/app` 或等价 service 层边界内
 - **Then** 组件 MUST 依赖 `authapp.UserCredentialStore`、`authapp.UserTokenVersionStore`、`authapp.AuthSessionStore`、`common/security/auth`、`common/security/password` 和配置等现有抽象
-- **Then** 组件 MUST NOT 直接依赖 Ent 生成模型、Redis client、controller、router 或 HTTP response writer
-- **Then** repository 层 MUST 继续只负责数据访问，controller 层 MUST 继续只负责 HTTP 请求解析和响应输出
+- **Then** 组件 MUST NOT 直接依赖 Ent 生成模型、Redis client、transport controller、router 或 HTTP response writer
+- **Then** infra 层 MUST 继续只负责数据访问，transport/http 层 MUST 继续只负责 HTTP 请求解析和响应输出
 
 #### Scenario: Auth service stores only orchestration dependencies
 - **Given** `AuthService` 由 Fx 构造函数创建
@@ -768,7 +768,7 @@
 - **Then** 调用方后续 MAY 使用旧 Refresh Token 重试刷新
 
 ### Requirement: Use explicit authentication session handler names
-用户会话控制能力 SHALL 在 auth controller 和路由注册中使用能独立表达认证或会话动作的 handler 名称。实现 MUST 保持 `/api/v1/auth/login`、`/api/v1/auth/refresh`、`/api/v1/auth/logout`、`/api/v1/auth/logout-all` 和 `/api/v1/auth/change-password` 的 HTTP 契约、认证边界、响应信封、错误语义、Redis 会话行为和 token version 行为不变。
+用户会话控制能力 SHALL 在 auth `transport/http` controller 和路由注册中使用能独立表达认证或会话动作的 handler 名称。实现 MUST 保持 `/api/v1/auth/login`、`/api/v1/auth/refresh`、`/api/v1/auth/logout`、`/api/v1/auth/logout-all` 和 `/api/v1/auth/change-password` 的 HTTP 契约、认证边界、响应信封、错误语义、Redis 会话行为和 token version 行为不变。
 
 #### Scenario: Login route uses explicit handler name
 - **Given** 公开认证路由已注册
@@ -793,7 +793,7 @@
 - **Given** 调用方按现有契约请求认证或会话接口
 - **When** 系统处理登录、刷新 token、退出当前设备或退出全部设备请求
 - **Then** 系统 MUST 保持现有 token 签发、刷新、撤销、token version 和统一响应行为
-- **Then** controller、service、session store 和 repository 的职责边界 MUST 保持不变
+- **Then** transport/http、app service、session infra 和 PostgreSQL infra 的职责边界 MUST 保持不变
 
 ### Requirement: Authentication uses credential and token version repository interfaces
 
@@ -837,3 +837,4 @@
 - **When** 测试构造认证会话组件的仓储替身
 - **Then** 测试替身 MUST 只需要实现 token version 读取和递增相关方法
 - **Then** 测试替身 MUST NOT 为用户资料创建、用户列表查询、按用户名读取或凭证更新提供无关空实现
+

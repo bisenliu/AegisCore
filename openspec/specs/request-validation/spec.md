@@ -313,12 +313,12 @@
 - **Given** 开发者新增或修改用户资料或认证会话 HTTP request DTO 的清洗、基础解析或跨字段校验
 - **When** 规则只属于单一 feature 的 HTTP transport 边界
 - **Then** 规则 MUST 位于 `features/<feature>/transport/http`
-- **Then** 实现 MUST NOT 新增或继续依赖服务级全局 validators 包承载该规则
+- **Then** 实现 MUST NOT 新增或继续依赖 `user-services/internal/validators` 承载该规则
 
 #### Scenario: Service orchestrates resource-dependent business validation
 - **Given** 创建或更新用例需要查询数据库、缓存、外部服务、当前时间窗口、资源锁定状态、价格一致性或业务实体状态
 - **When** 系统校验该用例是否允许执行
-- **Then** Service MUST 通过 repository、cache 或 domain 依赖编排校验
+- **Then** Service MUST 通过 repository、cache、domain 或 app port 依赖编排校验
 - **Then** 请求 DTO 的 `Validate` 方法和 Controller handler MUST NOT 为这些业务检查依赖 Gin context、全局数据库句柄、全局缓存客户端或全局 logger
 
 ### Requirement: Keep validation core separate from categorized Gin adapter path
@@ -338,3 +338,4 @@
 - **WHEN** 用户服务需要用户资料请求清洗、UUID 解析、分页规范化、请求体 token 规范化或用户服务特定跨字段校验
 - **THEN** 相关规则 MUST 保持在用户服务自己的 validators 边界内
 - **THEN** 实现 MUST NOT 因服务内目录重命名而把服务特定规则移动到 `common/validation`
+

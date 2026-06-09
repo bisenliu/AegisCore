@@ -28,17 +28,6 @@
 - **Then** Redis key 格式、Refresh Token 会话 TTL、用户活跃会话 ZSet 和过期 member 清理行为 MUST 与迁移前保持一致
 - **Then** token version 缓存未命中时 Redis 实现 MUST 只报告缓存未命中或等价结果，由认证会话 service 组件或 token version resolver 回源 PostgreSQL
 
-### Requirement: Components remain inside service layer boundaries
-认证能力需要拆分凭证、token 和 session 策略时，组件 MUST 位于 `user-services/internal/features/auth/app` 或等价 service 层边界内。组件 MUST 依赖 `authapp.UserCredentialStore`、`authapp.UserTokenVersionStore`、`authapp.AuthSessionStore`、`common/security/auth`、`common/security/password` 和配置等现有抽象。组件 MUST NOT 直接依赖 Ent 生成模型、Redis client、transport controller、router 或 HTTP response writer。`infra` 层 MUST 继续只负责数据访问，`transport/http` 层 MUST 继续只负责 HTTP 请求解析、validation、command 映射和响应输出。
-
-#### Scenario: Components remain inside service layer boundaries
-- **Given** 认证能力需要拆分凭证、token 和 session 策略
-- **When** 实现新增组件或领域服务
-- **Then** 组件 MUST 位于 `user-services/internal/features/auth/app` 或等价 service 层边界内
-- **Then** 组件 MUST 依赖 `authapp.UserCredentialStore`、`authapp.UserTokenVersionStore`、`authapp.AuthSessionStore`、`common/security/auth`、`common/security/password` 和配置等现有抽象
-- **Then** 组件 MUST NOT 直接依赖 Ent 生成模型、Redis client、transport controller、router 或 HTTP response writer
-- **Then** infra 层 MUST 继续只负责数据访问，transport/http 层 MUST 继续只负责 HTTP 请求解析和响应输出
-
 ### Requirement: Use explicit authentication session handler names
 用户会话控制能力 SHALL 在 auth `transport/http` controller 和路由注册中使用能独立表达认证或会话动作的 handler 名称。实现 MUST 保持 `/api/v1/auth/login`、`/api/v1/auth/refresh`、`/api/v1/auth/logout`、`/api/v1/auth/logout-all` 和 `/api/v1/auth/change-password` 的 HTTP 契约、认证边界、响应信封、错误语义、Redis 会话行为和 token version 行为不变。
 

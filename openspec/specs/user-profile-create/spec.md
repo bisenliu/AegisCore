@@ -322,3 +322,4 @@
 - **THEN** `POST /api/v1/users` MUST 继续返回 HTTP 201 和统一成功响应信封
 - **THEN** 创建响应 MUST 继续包含 `user_id`、`nickname`、`username`、`status`、`created_at` 和 `updated_at`
 - **THEN** 创建响应 MUST NOT 包含 `password`、`password_hash`、`token_version`、内部 `id` 或 `deleted_at`
+
