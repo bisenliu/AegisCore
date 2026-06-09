@@ -180,6 +180,43 @@ func TestHTTPServerClosedServeErrorDoesNotTriggerShutdown(t *testing.T) {
 	}
 }
 
+func TestHTTPServerLifecycleCancelStopsServeGoroutine(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+
+	core, logs := observer.New(zapcore.DebugLevel)
+	shutdowner := &shutdownRecorder{}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		serveHTTPWithLifecycle(ctx, zap.New(core), shutdowner, &http.Server{}, listener)
+	}()
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("serve goroutine did not exit after lifecycle context cancellation")
+	}
+
+	if shutdowner.calls != 0 {
+		t.Fatalf("shutdown calls = %d, want 0", shutdowner.calls)
+	}
+	if entries := logs.FilterMessage("http server failed").All(); len(entries) != 0 {
+		t.Fatalf("http server failed logs = %d, want 0", len(entries))
+	}
+	entries := logs.FilterMessage("http server goroutine stopped").All()
+	if len(entries) != 1 {
+		t.Fatalf("http server goroutine stopped logs = %d, want 1", len(entries))
+	}
+	if reason := entries[0].ContextMap()["reason"]; reason != "lifecycle_canceled" {
+		t.Fatalf("goroutine stop reason = %#v, want lifecycle_canceled", reason)
+	}
+}
+
 func TestHTTPServerStartAndStop(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
 	NewHTTPServer(HTTPServerParams{
