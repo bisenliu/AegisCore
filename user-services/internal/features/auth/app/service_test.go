@@ -20,7 +20,7 @@ import (
 var authTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
 
 func TestAuthServiceLogin(t *testing.T) {
-	passwordHash, err := password.Hash("secret")
+	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestAuthServiceLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 }
 
 func TestAuthServiceLoginUsesDefaultTTLs(t *testing.T) {
-	passwordHash, err := password.Hash("secret")
+	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestAuthServiceLoginUsesDefaultTTLs(t *testing.T) {
 }
 
 func TestAuthServiceLoginUsesExplicitTTLs(t *testing.T) {
-	passwordHash, err := password.Hash("secret")
+	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestAuthServiceLoginUsesExplicitTTLs(t *testing.T) {
 }
 
 func TestAuthServiceLoginRejectsInvalidCredentials(t *testing.T) {
-	passwordHash, err := password.Hash("secret")
+	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestAuthServiceLoginRejectsInvalidCredentials(t *testing.T) {
 }
 
 func TestAuthServiceLoginRejectsInactiveStatuses(t *testing.T) {
-	passwordHash, err := password.Hash("secret")
+	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestAuthServiceLoginRejectsInactiveStatuses(t *testing.T) {
 }
 
 func TestAuthServiceLoginIssuesPasswordChangeToken(t *testing.T) {
-	passwordHash, err := password.Hash("secret")
+	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestAuthServiceLoginIssuesPasswordChangeToken(t *testing.T) {
 }
 
 func TestAuthServiceChangePassword(t *testing.T) {
-	passwordHash, err := password.Hash("old-secret")
+	passwordHash, err := password.HashContext(context.Background(), "old-secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestAuthServiceChangePassword(t *testing.T) {
 	if !result.Changed || repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != userdomain.UserStatusNormal || repo.incrementedUserID != authTestUserID || !store.cached || store.cachedVersion != 3 || !store.deletedAll {
 		t.Fatalf("result=%#v repo=%#v store=%#v", result, repo, store)
 	}
-	matched, err := password.Verify("new-secret", repo.updatedInput.PasswordHash)
+	matched, err := password.VerifyContext(context.Background(), "new-secret", repo.updatedInput.PasswordHash)
 	if err != nil || !matched {
 		t.Fatalf("updated password hash mismatch: matched=%v err=%v", matched, err)
 	}

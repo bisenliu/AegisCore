@@ -33,7 +33,7 @@ func (v *credentialVerifier) VerifyPassword(ctx context.Context, username string
 		logger.Error(ctx, "query login user failed", logger.StackTrace(zap.String("username", username), zap.Error(err))...)
 		return nil, response.FromError(err)
 	}
-	matched, err := password.Verify(plainPassword, credential.PasswordHash)
+	matched, err := password.VerifyContext(ctx, plainPassword, credential.PasswordHash)
 	if err != nil {
 		logger.Error(ctx, "verify login password failed", logger.StackTrace(zap.String("username", username), zap.String("user_id", credential.UserID.String()), zap.Error(err))...)
 		return nil, response.UnauthenticatedError(messages.InvalidCredentials)
@@ -67,7 +67,7 @@ func (v *credentialVerifier) ChangePassword(ctx context.Context, userID uuid.UUI
 		logger.Warn(ctx, "change password status rejected", zap.String("user_id", userID.String()), zap.Int64("status", int64(credential.Status)))
 		return nil, response.TokenInvalidError(messages.MissingSession)
 	}
-	passwordHash, err := password.Hash(newPassword)
+	passwordHash, err := password.HashContext(ctx, newPassword)
 	if err != nil {
 		logger.Error(ctx, "hash changed password failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
 		return nil, response.FromError(err)

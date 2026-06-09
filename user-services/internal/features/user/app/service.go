@@ -31,7 +31,7 @@ func (s *service) CreateUser(ctx context.Context, cmd CreateUserCommand) (*usera
 	}
 
 	logger.Info(ctx, "create user", zap.String("username", cmd.Username), zap.Int64("status", int64(status)))
-	passwordHash, err := password.Hash(cmd.Password)
+	passwordHash, err := password.HashContext(ctx, cmd.Password)
 	if err != nil {
 		logger.Error(ctx, "hash user password failed", logger.StackTrace(zap.String("username", cmd.Username), zap.Int64("status", int64(status)), zap.Error(err))...)
 		return nil, response.FromError(err)

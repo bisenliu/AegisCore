@@ -16,7 +16,7 @@ import (
 )
 
 func TestCredentialVerifierAcceptsMustChangePasswordUser(t *testing.T) {
-	passwordHash, err := password.Hash("secret")
+	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestCredentialVerifierAcceptsMustChangePasswordUser(t *testing.T) {
 }
 
 func TestCredentialVerifierRejectsDisabledUser(t *testing.T) {
-	passwordHash, err := password.Hash("secret")
+	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestCredentialVerifierRejectsDisabledUser(t *testing.T) {
 }
 
 func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
-	oldHash, err := password.Hash("old-secret")
+	oldHash, err := password.HashContext(context.Background(), "old-secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	if repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != userdomain.UserStatusNormal {
 		t.Fatalf("updated input = %#v", repo.updatedInput)
 	}
-	matched, err := password.Verify("new-secret", repo.updatedInput.PasswordHash)
+	matched, err := password.VerifyContext(context.Background(), "new-secret", repo.updatedInput.PasswordHash)
 	if err != nil || !matched {
 		t.Fatalf("updated password hash mismatch: matched=%v err=%v", matched, err)
 	}

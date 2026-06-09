@@ -29,7 +29,7 @@ func TestUserServiceCreateUser(t *testing.T) {
 		if repo.createdInput.Nickname != "Alice" || repo.createdInput.Username != "alice" || repo.createdInput.UserID == uuid.Nil || repo.createdInput.Status != userdomain.UserStatusNormal {
 			t.Fatalf("createdInput = %#v", repo.createdInput)
 		}
-		matched, err := password.Verify("secret", repo.createdInput.PasswordHash)
+		matched, err := password.VerifyContext(context.Background(), "secret", repo.createdInput.PasswordHash)
 		if err != nil || !matched {
 			t.Fatalf("created password was not hashed correctly: matched=%v err=%v", matched, err)
 		}

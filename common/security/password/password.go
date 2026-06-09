@@ -1,6 +1,7 @@
 package password
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
@@ -29,13 +30,24 @@ const (
 	passwordKeyLength uint32 = 32
 	// maxEncodedHashLength 限制不可信编码哈希输入的解析成本。
 	maxEncodedHashLength = 512
+	// maxPasswordLength 限制明文密码长度，避免超大输入放大请求内存和解析成本。
+	maxPasswordLength = 256
+
+	// defaultArgon2Concurrency 是单进程默认 Argon2id 执行并发上限。
+	defaultArgon2Concurrency = 2
+	// defaultArgon2QueueSize 是单进程默认 Argon2id KDF 区域请求总数上限，包含执行中和等待中的请求。
+	defaultArgon2QueueSize = 16
 )
 
 var (
 	// ErrEmptyPassword 表示哈希或校验收到空明文密码。
 	ErrEmptyPassword = errors.New("password is empty")
+	// ErrPasswordTooLong 表示明文密码超过包允许的最大长度。
+	ErrPasswordTooLong = errors.New("password is too long")
 	// ErrInvalidHash 表示编码后的密码哈希格式错误或不受支持。
 	ErrInvalidHash = errors.New("password hash is invalid")
+	// ErrPasswordKDFBusy 表示密码 KDF 执行中和等待执行的请求总数已达上限。
+	ErrPasswordKDFBusy = errors.New("password kdf is busy")
 )
 
 type passwordParams struct {
@@ -54,10 +66,17 @@ var defaultPasswordParams = passwordParams{
 	keyLength:   passwordKeyLength,
 }
 
-// Hash 使用包默认安全参数创建编码后的 Argon2id 密码哈希。
-func Hash(plain string) (string, error) {
-	if plain == "" {
-		return "", ErrEmptyPassword
+// argon2Gate 限制同一进程内同时执行 Argon2id 的数量。
+// 默认 2 个并发约等于 128MiB Argon2 工作内存，不包含 Go runtime、HTTP、DB、Redis 等额外内存。
+var argon2Gate = make(chan struct{}, defaultArgon2Concurrency)
+
+// argon2Queue 限制同一进程内执行中和等待执行 Argon2id 的请求总数，避免 handler goroutine 无限堆积。
+var argon2Queue = make(chan struct{}, defaultArgon2QueueSize)
+
+// HashContext 使用包默认安全参数创建编码后的 Argon2id 密码哈希，并支持等待 KDF 槽位时被 ctx 取消。
+func HashContext(ctx context.Context, plain string) (string, error) {
+	if err := validatePlainPassword(plain); err != nil {
+		return "", err
 	}
 
 	salt := make([]byte, defaultPasswordParams.saltLength)
@@ -65,28 +84,126 @@ func Hash(plain string) (string, error) {
 		return "", fmt.Errorf("generate password salt: %w", err)
 	}
 
-	key := argon2.IDKey([]byte(plain), salt, defaultPasswordParams.iterations, defaultPasswordParams.memory, defaultPasswordParams.parallelism, defaultPasswordParams.keyLength)
+	key, err := deriveKeyContext(ctx, []byte(plain), salt, defaultPasswordParams)
+	if err != nil {
+		return "", err
+	}
+
 	b64Salt := base64.RawStdEncoding.EncodeToString(salt)
 	b64Key := base64.RawStdEncoding.EncodeToString(key)
-	return fmt.Sprintf("$%s$v=%d$m=%d,t=%d,p=%d$%s$%s", passwordAlgorithm, passwordVersion, defaultPasswordParams.memory, defaultPasswordParams.iterations, defaultPasswordParams.parallelism, b64Salt, b64Key), nil
+
+	return fmt.Sprintf(
+		"$%s$v=%d$m=%d,t=%d,p=%d$%s$%s",
+		passwordAlgorithm,
+		passwordVersion,
+		defaultPasswordParams.memory,
+		defaultPasswordParams.iterations,
+		defaultPasswordParams.parallelism,
+		b64Salt,
+		b64Key,
+	), nil
 }
 
-// Verify 使用常量时间比较校验明文密码和编码后的 Argon2id 哈希。
-func Verify(plain, encodedHash string) (bool, error) {
-	if plain == "" {
-		return false, ErrEmptyPassword
-	}
-	parsed, salt, expected, err := parsePasswordHash(encodedHash)
-	if err != nil {
-		// 格式错误或超长哈希会在运行 Argon2 前被拒绝，以限制攻击者可控解析成本。
+// VerifyContext 使用常量时间比较校验明文密码和编码后的 Argon2id 哈希，并支持等待 KDF 槽位时被 ctx 取消。
+func VerifyContext(ctx context.Context, plain, encodedHash string) (bool, error) {
+	if err := validatePlainPassword(plain); err != nil {
 		return false, err
 	}
 
-	actual := argon2.IDKey([]byte(plain), salt, parsed.iterations, parsed.memory, parsed.parallelism, parsed.keyLength)
+	parsed, salt, expected, err := parsePasswordHash(encodedHash)
+	if err != nil {
+		// 格式错误、超长哈希或不符合当前策略的参数会在运行 Argon2 前被拒绝。
+		return false, err
+	}
+
+	actual, err := deriveKeyContext(ctx, []byte(plain), salt, parsed)
+	if err != nil {
+		return false, err
+	}
+
 	if subtle.ConstantTimeCompare(actual, expected) == 1 {
 		return true, nil
 	}
 	return false, nil
+}
+
+func validatePlainPassword(plain string) error {
+	if plain == "" {
+		return ErrEmptyPassword
+	}
+	if len(plain) > maxPasswordLength {
+		return ErrPasswordTooLong
+	}
+	return nil
+}
+
+func deriveKeyContext(ctx context.Context, plain, salt []byte, params passwordParams) ([]byte, error) {
+	if err := enterArgon2Queue(ctx); err != nil {
+		return nil, err
+	}
+	defer leaveArgon2Queue()
+
+	if err := acquireArgon2Slot(ctx); err != nil {
+		return nil, err
+	}
+	defer releaseArgon2Slot()
+
+	return argon2.IDKey(
+		plain,
+		salt,
+		params.iterations,
+		params.memory,
+		params.parallelism,
+		params.keyLength,
+	), nil
+}
+
+func enterArgon2Queue(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	select {
+	case argon2Queue <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return ErrPasswordKDFBusy
+	}
+
+	if err := ctx.Err(); err != nil {
+		leaveArgon2Queue()
+		return err
+	}
+
+	return nil
+}
+
+func leaveArgon2Queue() {
+	<-argon2Queue
+}
+
+func acquireArgon2Slot(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	select {
+	case argon2Gate <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	if err := ctx.Err(); err != nil {
+		releaseArgon2Slot()
+		return err
+	}
+
+	return nil
+}
+
+func releaseArgon2Slot() {
+	<-argon2Gate
 }
 
 func parsePasswordHash(encodedHash string) (passwordParams, []byte, []byte, error) {
@@ -117,8 +234,14 @@ func parsePasswordHash(encodedHash string) (passwordParams, []byte, []byte, erro
 	if err != nil || len(key) == 0 {
 		return passwordParams{}, nil, nil, ErrInvalidHash
 	}
+
 	parsedParams.saltLength = uint32(len(salt))
 	parsedParams.keyLength = uint32(len(key))
+
+	if !isPasswordParamsAllowed(parsedParams) {
+		return passwordParams{}, nil, nil, ErrInvalidHash
+	}
+
 	return parsedParams, salt, key, nil
 }
 
@@ -155,5 +278,18 @@ func parsePasswordParams(value string) (passwordParams, error) {
 	if !okM || !okT || !okP || p > 255 {
 		return passwordParams{}, ErrInvalidHash
 	}
-	return passwordParams{memory: uint32(m), iterations: uint32(t), parallelism: uint8(p)}, nil
+
+	return passwordParams{
+		memory:      uint32(m),
+		iterations:  uint32(t),
+		parallelism: uint8(p),
+	}, nil
+}
+
+func isPasswordParamsAllowed(params passwordParams) bool {
+	return params.memory == passwordMemory &&
+		params.iterations == passwordIterations &&
+		params.parallelism == passwordParallelism &&
+		params.saltLength == passwordSaltLength &&
+		params.keyLength == passwordKeyLength
 }
