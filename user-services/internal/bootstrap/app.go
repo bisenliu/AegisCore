@@ -7,11 +7,10 @@ import (
 	"github.com/aegiscore/common/runtime/loggerfx"
 	commontz "github.com/aegiscore/common/runtime/timezone"
 	"github.com/aegiscore/common/validation"
-	"github.com/aegiscore/user-services/internal/controller"
-	"github.com/aegiscore/user-services/internal/repository"
-	"github.com/aegiscore/user-services/internal/repository/postgres"
-	"github.com/aegiscore/user-services/internal/repository/redis"
-	"github.com/aegiscore/user-services/internal/service"
+	"github.com/aegiscore/user-services/internal/auth"
+	authredis "github.com/aegiscore/user-services/internal/auth/store/redis"
+	"github.com/aegiscore/user-services/internal/user"
+	userpostgres "github.com/aegiscore/user-services/internal/user/store/postgres"
 	"go.uber.org/fx"
 )
 
@@ -37,24 +36,27 @@ var AppModule = fx.Module("aegiscore-user-services",
 		NewJWTService,
 		ProvideEntClients,
 		fx.Annotate(
-			postgres.NewUserRepository,
-			fx.As(new(service.UserProfileStore)),
+			userpostgres.NewUserStore,
+			fx.As(new(user.UserProfileStore)),
 		),
 		fx.Annotate(
-			postgres.NewUserRepository,
-			fx.As(new(repository.UserCredentialRepository)),
+			userpostgres.NewUserStore,
+			fx.As(new(auth.UserCredentialStore)),
 		),
 		fx.Annotate(
-			postgres.NewUserRepository,
-			fx.As(new(repository.UserTokenVersionRepository)),
+			userpostgres.NewUserStore,
+			fx.As(new(auth.UserTokenVersionStore)),
 		),
-		service.NewRedisKeyBuilder,
-		redis.NewAuthSessionRepository,
-		service.NewTokenVersionValidator,
-		service.NewAuthService,
-		service.NewUserService,
-		controller.NewAuthController,
-		controller.NewUserController,
+		auth.NewRedisKeyBuilder,
+		fx.Annotate(
+			authredis.NewSessionStore,
+			fx.As(new(auth.AuthSessionStore)),
+		),
+		auth.NewTokenVersionValidator,
+		auth.NewAuthService,
+		user.NewUserService,
+		auth.NewAuthController,
+		user.NewUserController,
 		NewGinEngine,
 		NewHTTPServer,
 	),

@@ -16,20 +16,20 @@ AegisCore 当前是 Go 1.26 workspace，包含共享基础设施模块 `common` 
 
 1. `user-services/cmd/main.go` 创建 `aegiscore-user-services` CLI，并注册 `serve` 子命令。
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
-3. 用户服务启动装配显式提供 `commoninfra.NewConfig` 和 `commoninfra.NewLogger`；Redis/PostgreSQL 由 common 提供单实例创建与 lifecycle helper。
-4. `user-services/internal/bootstrap.UserServiceModule` 显式声明 `cache_redis`、`user_db`、`common_db`，并提供 Ent clients、repository、service、controller、Gin engine、HTTP server。
-5. `RegisterRoutes` 将 `/healthz`、`/api/v1/users` 和 `/api/v1/users/:user_id` 注册到 Gin engine。
+3. 用户服务启动装配显式提供共享配置和日志 provider；Redis/PostgreSQL 由 common runtime datastore helper 创建。
+4. `user-services/internal/bootstrap.AppModule` 显式声明 `cache_redis`、`user_db`、`common_db`，并提供 Ent clients、user/auth store、service、controller、Gin engine、HTTP server。
+5. `RegisterRoutes` 将 `/healthz`、Swagger、`/api/v1/auth/*` 和 `/api/v1/users*` 注册到 Gin engine。
 6. Fx 生命周期启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
 ## 4. HTTP Request Flow
 
 | 步骤 | 代码位置 | 行为 |
 |---|---|---|
-| 中间件链 | `user-services/internal/bootstrap/bootstrap.go` | 注册 trace-id、panic recovery、request logging、CORS；trace-id 先于日志和 recovery 执行 |
-| 路由匹配 | `user-services/internal/router/router.go` | 匹配 `/healthz` 或 `/api/v1/users/:user_id` |
-| 参数解析 | `user-services/internal/controller/user_controller.go` | 将 path `user_id` 校验为 UUID 字符串 |
-| 业务调用 | `user-services/internal/service/user_service.go` | 调用 repository 并映射为 `dto.UserResponse` |
-| 数据访问 | `user-services/internal/repository/user_repository.go` | 使用 Ent client 查询用户，not found 转为应用错误 |
+| 中间件链 | `user-services/internal/bootstrap/gin.go` | 注册 trace-id、panic recovery、request logging、CORS；trace-id 先于日志和 recovery 执行 |
+| 路由匹配 | `user-services/internal/router/router.go` | 匹配 `/healthz`、`/api/v1/auth/*` 或 `/api/v1/users*` |
+| 参数解析 | `user-services/internal/user/controller.go`, `user-services/internal/auth/controller.go` | 绑定 HTTP DTO，执行边界校验，并映射为 command/query |
+| 业务调用 | `user-services/internal/user/service.go`, `user-services/internal/auth/service.go` | 编排用户资料或认证会话用例，并映射应用错误 |
+| 数据访问 | `user-services/internal/user/store/postgres/user_store.go`, `user-services/internal/auth/store/redis/session_store.go` | 使用 Ent 或 Redis 访问持久化细节，not found 转为 capability 领域错误 |
 | 响应输出 | `common/contract/response/response.go` | 统一输出 `success/code/message/data` 信封 |
 
 ## 5. Data Model

@@ -3,8 +3,9 @@ package router
 import (
 	commonmw "github.com/aegiscore/common/http/middleware"
 	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/user-services/internal/controller"
+	commonauth "github.com/aegiscore/common/security/auth"
+	"github.com/aegiscore/user-services/internal/auth"
+	"github.com/aegiscore/user-services/internal/user"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -14,11 +15,11 @@ type RouteParams struct {
 	ServiceName           string
 	Environment           string
 	Log                   *zap.Logger
-	JWT                   *auth.JWTService
+	JWT                   *commonauth.JWTService
 	AuthConfig            config.AuthConfig
 	TokenVersionValidator commonmw.TokenVersionValidator
-	AuthController        *controller.AuthController
-	UserController        *controller.UserController
+	AuthController        *auth.AuthController
+	UserController        *user.UserController
 }
 
 // RegisterUserServiceHTTPRoutes 挂载系统、Swagger、认证和用户 API 路由。

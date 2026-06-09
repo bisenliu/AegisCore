@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/aegiscore/common/contract/response"
-	"github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/user-services/internal/api/auth"
+	commonauth "github.com/aegiscore/common/security/auth"
+	authapi "github.com/aegiscore/user-services/internal/auth/api"
 	"github.com/aegiscore/user-services/internal/messages"
 )
 
@@ -27,7 +27,7 @@ func TestNormalizeLogin(t *testing.T) {
 }
 
 func TestNormalizeChangePassword(t *testing.T) {
-	req := authapi.ChangePasswordRequest{Token: " " + auth.TokenPrefix + "token ", NewPassword: " new-secret "}
+	req := authapi.ChangePasswordRequest{Token: " " + commonauth.TokenPrefix + "token ", NewPassword: " new-secret "}
 	if err := NormalizeChangePassword(&req); err != nil {
 		t.Fatalf("NormalizeChangePassword: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestNormalizeChangePassword(t *testing.T) {
 		t.Fatalf("req = %#v", req)
 	}
 
-	req = authapi.ChangePasswordRequest{Token: auth.TokenPrefix + "token", NewPassword: " "}
+	req = authapi.ChangePasswordRequest{Token: commonauth.TokenPrefix + "token", NewPassword: " "}
 	err := NormalizeChangePassword(&req)
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeValidationFailed || appErr.Message != messages.InvalidPassword {
@@ -44,7 +44,7 @@ func TestNormalizeChangePassword(t *testing.T) {
 }
 
 func TestNormalizeRefresh(t *testing.T) {
-	req := authapi.RefreshTokenRequest{RefreshToken: " " + auth.TokenPrefix + "refresh-token "}
+	req := authapi.RefreshTokenRequest{RefreshToken: " " + commonauth.TokenPrefix + "refresh-token "}
 	if err := NormalizeRefresh(&req); err != nil {
 		t.Fatalf("NormalizeRefresh: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestNormalizeRefresh(t *testing.T) {
 		t.Fatalf("req = %#v", req)
 	}
 
-	req = authapi.RefreshTokenRequest{RefreshToken: " " + auth.TokenPrefix}
+	req = authapi.RefreshTokenRequest{RefreshToken: " " + commonauth.TokenPrefix}
 	err := NormalizeRefresh(&req)
 	appErr := response.FromError(err)
 	if appErr.Code != response.CodeTokenInvalid || appErr.Message != messages.MissingSession {

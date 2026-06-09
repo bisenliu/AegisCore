@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/aegiscore/common/contract/response"
-	"github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/user-services/internal/api/auth"
+	commonauth "github.com/aegiscore/common/security/auth"
+	authapi "github.com/aegiscore/user-services/internal/auth/api"
 	"github.com/aegiscore/user-services/internal/messages"
 )
 
@@ -21,9 +21,9 @@ func NormalizeLogin(req *authapi.LoginRequest) error {
 
 // NormalizeChangePassword 规范化受限 token，并校验新密码字段。
 func NormalizeChangePassword(req *authapi.ChangePasswordRequest) error {
-	req.Token = auth.StripBearerPrefix(req.Token)
+	req.Token = commonauth.StripBearerPrefix(req.Token)
 	req.NewPassword = strings.TrimSpace(req.NewPassword)
-	if req.Token == "" || strings.EqualFold(req.Token, auth.TokenTypeBearer) {
+	if req.Token == "" || strings.EqualFold(req.Token, commonauth.TokenTypeBearer) {
 		return response.TokenInvalidError(messages.MissingSession)
 	}
 	if req.NewPassword == "" {
@@ -34,8 +34,8 @@ func NormalizeChangePassword(req *authapi.ChangePasswordRequest) error {
 
 // NormalizeRefresh 规范化 refresh token 输入，并拒绝空值或仅 Bearer 的值。
 func NormalizeRefresh(req *authapi.RefreshTokenRequest) error {
-	req.RefreshToken = auth.StripBearerPrefix(req.RefreshToken)
-	if req.RefreshToken == "" || strings.EqualFold(req.RefreshToken, auth.TokenTypeBearer) {
+	req.RefreshToken = commonauth.StripBearerPrefix(req.RefreshToken)
+	if req.RefreshToken == "" || strings.EqualFold(req.RefreshToken, commonauth.TokenTypeBearer) {
 		return response.TokenInvalidError(messages.MissingSession)
 	}
 	return nil
