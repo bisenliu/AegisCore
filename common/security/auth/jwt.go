@@ -15,6 +15,8 @@ var (
 	ErrMissingSecret = errors.New("jwt secret is required")
 	// ErrMissingUserID 表示 JWT 输入或 claim 缺少有效的 user_id UUID。
 	ErrMissingUserID = errors.New("jwt user_id is required")
+	// ErrInvalidUserID 表示 JWT 输入或 claim 中的 user_id 不是合法 UUID。
+	ErrInvalidUserID = errors.New("jwt user_id is invalid")
 	// ErrMissingTokenVersion 表示 JWT 输入或 claim 缺少正数 token version。
 	ErrMissingTokenVersion = errors.New("jwt token_version is required")
 	// ErrMissingSessionID 表示 JWT 输入或 claim 缺少会话标识。
@@ -158,7 +160,7 @@ func (s *JWTService) parse(tokenString string) (*Claims, error) {
 	}
 	if _, err := uuid.Parse(claims.UserID); err != nil {
 		// token 中的用户 ID 是外部 UUID，不是数据库 ID，因此提前拒绝非 UUID subject。
-		return nil, ErrMissingUserID
+		return nil, ErrInvalidUserID
 	}
 	return claims, nil
 }
@@ -171,7 +173,7 @@ func (s *JWTService) sign(input SignInput, subject string) (string, error) {
 		return "", ErrMissingUserID
 	}
 	if _, err := uuid.Parse(input.UserID); err != nil {
-		return "", ErrMissingUserID
+		return "", ErrInvalidUserID
 	}
 	if input.TokenVersion <= 0 {
 		return "", ErrMissingTokenVersion

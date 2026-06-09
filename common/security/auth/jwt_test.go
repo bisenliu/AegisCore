@@ -70,6 +70,12 @@ func TestJWTServiceParseToken(t *testing.T) {
 			want:   ErrMissingUserID,
 		},
 		{
+			name:   "invalid user id",
+			secret: "secret",
+			claims: Claims{UserID: "not-a-uuid", TokenVersion: 1, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, Subject: SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
+			want:   ErrInvalidUserID,
+		},
+		{
 			name:   "missing token version",
 			secret: "secret",
 			claims: Claims{UserID: testUserID, SessionID: "s-123", RegisteredClaims: jwtv5.RegisteredClaims{Issuer: "issuer", Audience: []string{"audience"}, Subject: SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))}},
@@ -90,6 +96,9 @@ func TestJWTServiceParseToken(t *testing.T) {
 			}
 			if tt.want != nil && !errors.Is(err, tt.want) {
 				t.Fatalf("ParseToken err = %v, want %v", err, tt.want)
+			}
+			if tt.want == ErrInvalidUserID && errors.Is(err, ErrMissingUserID) {
+				t.Fatalf("ParseToken err = %v, must not match %v", err, ErrMissingUserID)
 			}
 		})
 	}
@@ -139,6 +148,21 @@ func TestJWTServiceSignTokens(t *testing.T) {
 	}
 	if passwordChangeClaims.Subject != SubjectPasswordChange || passwordChangeClaims.SessionID != "pc-123" {
 		t.Fatalf("passwordChangeClaims = %#v", passwordChangeClaims)
+	}
+}
+
+func TestJWTServiceSignTokensInvalidUserID(t *testing.T) {
+	service := NewJWTService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}})
+	input := SignInput{UserID: "not-a-uuid", TokenVersion: 1, SessionID: "s-123", TTL: time.Hour}
+
+	if _, err := service.SignAccessToken(input); !errors.Is(err, ErrInvalidUserID) {
+		t.Fatalf("SignAccessToken err = %v, want %v", err, ErrInvalidUserID)
+	}
+	if _, err := service.SignRefreshToken(input); !errors.Is(err, ErrInvalidUserID) {
+		t.Fatalf("SignRefreshToken err = %v, want %v", err, ErrInvalidUserID)
+	}
+	if _, err := service.SignPasswordChangeToken(input); !errors.Is(err, ErrInvalidUserID) {
+		t.Fatalf("SignPasswordChangeToken err = %v, want %v", err, ErrInvalidUserID)
 	}
 }
 
