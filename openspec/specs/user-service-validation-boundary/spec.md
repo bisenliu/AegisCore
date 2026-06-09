@@ -2,12 +2,12 @@
 
 ## Purpose
 
-用户服务校验边界能力定义用户服务中 Controller、服务内 validators 层、Service 和 Repository 的职责划分，确保请求级输入清洗与基础校验不混入业务编排或数据访问实现。
+用户服务校验边界能力定义用户服务中 Controller、服务内 validators 层、app Service 和 feature store adapter 的职责划分，确保请求级输入清洗与基础校验不混入业务编排或数据访问实现。
 
 ## Requirements
 
 ### Requirement: Separate request validation from service business logic
-用户服务 MUST 将请求级输入清洗和基础参数校验与 Service 业务编排分离。Controller MUST 负责 HTTP 参数提取和响应输出；服务内 validators 层 MUST 负责请求字段清洗、格式校验和不依赖持久化状态的跨字段校验；Service MUST 负责业务编排、领域规则和 DTO 映射；Repository MUST 负责 Ent/PostgreSQL 数据访问。
+用户服务 MUST 将请求级输入清洗和基础参数校验与 Service 业务编排分离。Controller MUST 负责 HTTP 参数提取和响应输出；服务内 validators 层 MUST 负责请求字段清洗、格式校验和不依赖持久化状态的跨字段校验；Service MUST 负责业务编排、领域规则和 DTO 映射；feature store adapter MUST 负责 Ent/PostgreSQL 或 Redis 数据访问。
 
 #### Scenario: Normalize request input before service call
 - **Given** 调用方提交包含前后空白的创建用户、列表用户、用户 ID、登录、改密或刷新请求参数
@@ -19,13 +19,13 @@
 - **Given** 创建用户、登录、改密或刷新请求已经通过请求级校验
 - **When** Service 编排用户资料或认证会话流程
 - **Then** Service MUST 负责用户名唯一性检查、凭据认证、密码哈希、用户 ID 生成、默认业务状态、JWT claims 校验、session/token version 校验和领域错误映射
-- **Then** validators 层 MUST NOT 直接访问 Repository 或 Ent client 执行持久化状态检查
+- **Then** validators 层 MUST NOT 直接访问 store adapter、Redis、PostgreSQL 或 Ent client 执行持久化状态检查
 
-#### Scenario: Keep database access in repository
+#### Scenario: Keep database access in store adapters
 - **Given** 用户服务需要查询、创建或检查用户记录
 - **When** Service 执行业务流程
-- **Then** Service MUST 通过 `repository.UserRepository` 访问数据
-- **Then** Controller 和 validators 层 MUST NOT 直接调用 Ent client 或 PostgreSQL 实现包
+- **Then** Service MUST 通过 feature app 层声明的最小 store port 访问数据
+- **Then** Controller 和 validators 层 MUST NOT 直接调用 Ent client、Redis client 或具体 store 实现包
 
 ### Requirement: Provide service-local validation for user request rules
 用户服务 MUST 在服务内保留可维护的校验器集合，用于承载用户服务特定的清洗、基础校验、解析、转换和复杂请求规则，并 MUST 复用 `common/validation` 和 `common/contract/response` 的共享能力。用户服务特定规则 MUST NOT 上移到 `common`，除非多个服务存在稳定复用需求。服务内校验器集合 MUST 位于 `user-services/internal/validators`，并可按领域拆分为 `user.go`、`auth.go`、`team.go` 等文件。

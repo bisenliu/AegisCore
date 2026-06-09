@@ -7,10 +7,12 @@ import (
 	"github.com/aegiscore/common/runtime/loggerfx"
 	commontz "github.com/aegiscore/common/runtime/timezone"
 	"github.com/aegiscore/common/validation"
-	"github.com/aegiscore/user-services/internal/auth"
-	authredis "github.com/aegiscore/user-services/internal/auth/store/redis"
-	"github.com/aegiscore/user-services/internal/user"
-	userpostgres "github.com/aegiscore/user-services/internal/user/store/postgres"
+	authapp "github.com/aegiscore/user-services/internal/features/auth/app"
+	authdomain "github.com/aegiscore/user-services/internal/features/auth/domain"
+	authpostgres "github.com/aegiscore/user-services/internal/features/auth/store/postgres"
+	authredis "github.com/aegiscore/user-services/internal/features/auth/store/redis"
+	userapp "github.com/aegiscore/user-services/internal/features/user/app"
+	userpostgres "github.com/aegiscore/user-services/internal/features/user/store/postgres"
 	"go.uber.org/fx"
 )
 
@@ -37,26 +39,26 @@ var AppModule = fx.Module("aegiscore-user-services",
 		ProvideEntClients,
 		fx.Annotate(
 			userpostgres.NewUserStore,
-			fx.As(new(user.UserProfileStore)),
+			fx.As(new(userapp.UserProfileStore)),
 		),
 		fx.Annotate(
-			userpostgres.NewUserStore,
-			fx.As(new(auth.UserCredentialStore)),
+			authpostgres.NewCredentialStore,
+			fx.As(new(authapp.UserCredentialStore)),
 		),
 		fx.Annotate(
-			userpostgres.NewUserStore,
-			fx.As(new(auth.UserTokenVersionStore)),
+			authpostgres.NewCredentialStore,
+			fx.As(new(authapp.UserTokenVersionStore)),
 		),
-		auth.NewRedisKeyBuilder,
+		authdomain.NewRedisKeyBuilder,
 		fx.Annotate(
 			authredis.NewSessionStore,
-			fx.As(new(auth.AuthSessionStore)),
+			fx.As(new(authapp.AuthSessionStore)),
 		),
-		auth.NewTokenVersionValidator,
-		auth.NewAuthService,
-		user.NewUserService,
-		auth.NewAuthController,
-		user.NewUserController,
+		authapp.NewTokenVersionValidator,
+		authapp.NewAuthService,
+		userapp.NewUserService,
+		authapp.NewAuthController,
+		userapp.NewUserController,
 		NewGinEngine,
 		NewHTTPServer,
 	),

@@ -48,7 +48,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_auth_api.ChangePasswordRequest"
+                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_auth_api.ChangePasswordRequest"
                         }
                     }
                 ],
@@ -64,7 +64,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_auth_api.ChangePasswordResponse"
+                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_auth_api.ChangePasswordResponse"
                                         }
                                     }
                                 }
@@ -112,7 +112,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_auth_api.LoginRequest"
+                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_auth_api.LoginRequest"
                         }
                     }
                 ],
@@ -128,7 +128,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_auth_api.TokenResponse"
+                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_auth_api.TokenResponse"
                                         }
                                     }
                                 }
@@ -183,7 +183,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_auth_api.LogoutResponse"
+                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_auth_api.LogoutResponse"
                                         }
                                     }
                                 }
@@ -232,7 +232,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_auth_api.LogoutResponse"
+                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_auth_api.LogoutResponse"
                                         }
                                     }
                                 }
@@ -274,7 +274,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_auth_api.RefreshTokenRequest"
+                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_auth_api.RefreshTokenRequest"
                         }
                     }
                 ],
@@ -290,7 +290,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_auth_api.TokenResponse"
+                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_auth_api.TokenResponse"
                                         }
                                     }
                                 }
@@ -404,7 +404,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_user_api.UserListResponseDoc"
+                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_user_api.UserListResponseDoc"
                                         }
                                     }
                                 }
@@ -455,7 +455,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_user_api.CreateUserRequest"
+                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_user_api.CreateUserRequest"
                         }
                     }
                 ],
@@ -471,7 +471,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_user_api.UserResponseDoc"
+                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_user_api.UserResponseDoc"
                                         }
                                     }
                                 }
@@ -541,7 +541,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_user_api.UserResponseDoc"
+                                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_user_api.UserResponseDoc"
                                         }
                                     }
                                 }
@@ -577,7 +577,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "github_com_aegiscore_user-services_internal_auth_api.ChangePasswordRequest": {
+        "github_com_aegiscore_user-services_internal_features_auth_api.ChangePasswordRequest": {
             "type": "object",
             "required": [
                 "new_password"
@@ -590,7 +590,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_aegiscore_user-services_internal_auth_api.ChangePasswordResponse": {
+        "github_com_aegiscore_user-services_internal_features_auth_api.ChangePasswordResponse": {
             "type": "object",
             "properties": {
                 "changed": {
@@ -599,7 +599,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_aegiscore_user-services_internal_auth_api.LoginRequest": {
+        "github_com_aegiscore_user-services_internal_features_auth_api.LoginRequest": {
             "type": "object",
             "required": [
                 "password",
@@ -619,7 +619,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_aegiscore_user-services_internal_auth_api.LogoutResponse": {
+        "github_com_aegiscore_user-services_internal_features_auth_api.LogoutResponse": {
             "type": "object",
             "properties": {
                 "logged_out": {
@@ -628,7 +628,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_aegiscore_user-services_internal_auth_api.RefreshTokenRequest": {
+        "github_com_aegiscore_user-services_internal_features_auth_api.RefreshTokenRequest": {
             "type": "object",
             "required": [
                 "refresh_token"
@@ -641,7 +641,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_aegiscore_user-services_internal_auth_api.TokenResponse": {
+        "github_com_aegiscore_user-services_internal_features_auth_api.TokenResponse": {
             "type": "object",
             "properties": {
                 "access_token": {
@@ -666,7 +666,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_aegiscore_user-services_internal_user_api.CreateUserRequest": {
+        "github_com_aegiscore_user-services_internal_features_user_api.CreateUserRequest": {
             "type": "object",
             "required": [
                 "nickname",
@@ -688,7 +688,7 @@ const docTemplate = `{
                 "status": {
                     "allOf": [
                         {
-                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_user_api.UserStatus"
+                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_user_api.UserStatus"
                         }
                     ],
                     "example": 100
@@ -701,13 +701,13 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_aegiscore_user-services_internal_user_api.UserListResponseDoc": {
+        "github_com_aegiscore_user-services_internal_features_user_api.UserListResponseDoc": {
             "type": "object",
             "properties": {
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_aegiscore_user-services_internal_user_api.UserResponseDoc"
+                        "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_user_api.UserResponseDoc"
                     }
                 },
                 "pagination": {
@@ -715,7 +715,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_aegiscore_user-services_internal_user_api.UserResponseDoc": {
+        "github_com_aegiscore_user-services_internal_features_user_api.UserResponseDoc": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -744,7 +744,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_aegiscore_user-services_internal_user_api.UserStatus": {
+        "github_com_aegiscore_user-services_internal_features_user_api.UserStatus": {
             "type": "integer",
             "format": "int64",
             "enum": [

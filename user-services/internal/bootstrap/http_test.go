@@ -16,9 +16,10 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
-	internalauth "github.com/aegiscore/user-services/internal/auth"
-	authapi "github.com/aegiscore/user-services/internal/auth/api"
-	"github.com/aegiscore/user-services/internal/user"
+	authapi "github.com/aegiscore/user-services/internal/features/auth/api"
+	authapp "github.com/aegiscore/user-services/internal/features/auth/app"
+	userapi "github.com/aegiscore/user-services/internal/features/user/api"
+	userapp "github.com/aegiscore/user-services/internal/features/user/app"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -279,8 +280,8 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		Engine:         engine,
 		JWT:            jwtService,
 		TokenVersions:  tokenVersions,
-		AuthController: internalauth.NewAuthController(&routeAuthAuthService{}, validator),
-		UserController: user.NewUserController(&routeAuthUserService{}, validator),
+		AuthController: authapp.NewAuthController(&routeAuthAuthService{}, validator),
+		UserController: userapp.NewUserController(&routeAuthUserService{}, validator),
 	})
 
 	publicRequests := []struct {
@@ -487,15 +488,15 @@ func (s *routeTokenVersionValidator) ValidateTokenVersion(_ context.Context, _ s
 	return nil
 }
 
-func (s *routeAuthAuthService) Login(context.Context, internalauth.LoginCommand) (*authapi.TokenResponse, error) {
+func (s *routeAuthAuthService) Login(context.Context, authapp.LoginCommand) (*authapi.TokenResponse, error) {
 	return &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
-func (s *routeAuthAuthService) Refresh(context.Context, internalauth.RefreshTokenCommand) (*authapi.TokenResponse, error) {
+func (s *routeAuthAuthService) Refresh(context.Context, authapp.RefreshTokenCommand) (*authapi.TokenResponse, error) {
 	return &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
-func (s *routeAuthAuthService) ChangePassword(context.Context, internalauth.ChangePasswordCommand) (*authapi.ChangePasswordResponse, error) {
+func (s *routeAuthAuthService) ChangePassword(context.Context, authapp.ChangePasswordCommand) (*authapi.ChangePasswordResponse, error) {
 	return &authapi.ChangePasswordResponse{Changed: true}, nil
 }
 
@@ -507,12 +508,12 @@ func (s *routeAuthAuthService) LogoutAll(context.Context) (*authapi.LogoutRespon
 	return &authapi.LogoutResponse{LoggedOut: true}, nil
 }
 
-func (s *routeAuthUserService) CreateUser(context.Context, user.CreateUserCommand) (*user.UserResponse, error) {
+func (s *routeAuthUserService) CreateUser(context.Context, userapp.CreateUserCommand) (*userapi.UserResponse, error) {
 	now := time.Now().UnixMilli()
-	return &user.UserResponse{UserID: routeAuthUserID, Nickname: "Alice", Username: "alice", Status: user.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
+	return &userapi.UserResponse{UserID: routeAuthUserID, Nickname: "Alice", Username: "alice", Status: userapi.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
 }
 
-func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*user.UserResponse, error) {
+func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapi.UserResponse, error) {
 	userIDString := userID.String()
 	if userIDString == routeAuthNotFoundUserID {
 		return nil, response.NotFoundError("user not found")
@@ -524,7 +525,7 @@ func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) 
 		return nil, errors.New("database down")
 	}
 	now := time.Now().UnixMilli()
-	return &user.UserResponse{UserID: userIDString, Nickname: "Aegis", Username: "aegis", Status: user.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
+	return &userapi.UserResponse{UserID: userIDString, Nickname: "Aegis", Username: "aegis", Status: userapi.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func assertSuccessEnvelope(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -552,9 +553,9 @@ func assertFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wa
 	}
 }
 
-func (s *routeAuthUserService) ListUsers(context.Context, user.ListUsersQuery) (response.PaginatedData[user.UserResponse], error) {
+func (s *routeAuthUserService) ListUsers(context.Context, userapp.ListUsersQuery) (response.PaginatedData[userapi.UserResponse], error) {
 	now := time.Now().UnixMilli()
-	items := []user.UserResponse{{UserID: routeAuthUserID, Nickname: "Aegis", Username: "aegis", Status: user.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
+	items := []userapi.UserResponse{{UserID: routeAuthUserID, Nickname: "Aegis", Username: "aegis", Status: userapi.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
 	return response.NewPaginatedData(items, response.NewPagination(1, 10, 1)), nil
 }
 

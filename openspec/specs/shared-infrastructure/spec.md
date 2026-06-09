@@ -344,10 +344,10 @@
 - **Then** 输出日志必须包含字段 `trace-id` 且值等于 context 中的 trace-id
 
 #### Scenario: Context API records business caller
-- **Given** 业务代码在 `user-services/internal/service/user_service.go` 中调用 `common/runtime/logger.Info(ctx, "create user", ...)`
+- **Given** 业务代码在 `user-services/internal/features/user/app/service.go` 中调用 `common/runtime/logger.Info(ctx, "create user", ...)`
 - **When** logger 写出该 Info 日志
 - **Then** 日志必须包含 `caller` 字段
-- **Then** `caller` 字段必须指向 `user-services/internal/service/user_service.go` 的调用行
+- **Then** `caller` 字段必须指向 `user-services/internal/features/user/app/service.go` 的调用行
 - **Then** `caller` 字段不得指向 `common/runtime/logger/context.go` 中的 `Info`、`Debug`、`Warn` 或 `Error` 封装函数
 
 #### Scenario: Log without request context

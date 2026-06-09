@@ -4,8 +4,8 @@ import (
 	commonmw "github.com/aegiscore/common/http/middleware"
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/user-services/internal/auth"
-	"github.com/aegiscore/user-services/internal/user"
+	authapp "github.com/aegiscore/user-services/internal/features/auth/app"
+	userapp "github.com/aegiscore/user-services/internal/features/user/app"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -18,8 +18,8 @@ type RouteParams struct {
 	JWT                   *commonauth.JWTService
 	AuthConfig            config.AuthConfig
 	TokenVersionValidator commonmw.TokenVersionValidator
-	AuthController        *auth.AuthController
-	UserController        *user.UserController
+	AuthController        *authapp.AuthController
+	UserController        *userapp.UserController
 }
 
 // RegisterUserServiceHTTPRoutes 挂载系统、Swagger、认证和用户 API 路由。

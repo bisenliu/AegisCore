@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/aegiscore/common/contract/response"
+	userapi "github.com/aegiscore/user-services/internal/features/user/api"
 	"github.com/aegiscore/user-services/internal/messages"
-	userapi "github.com/aegiscore/user-services/internal/user/api"
 	"github.com/google/uuid"
 )
 

@@ -473,40 +473,40 @@
 - **Then** 系统 MUST NOT 将该次修改密码报告为成功
 
 ### Requirement: Authentication sessions use repository abstraction with Redis implementation boundary
-用户会话控制能力 SHALL 通过根 `repository.AuthSessionRepository` 抽象管理 token version、Refresh Token 会话和用户活跃会话索引，具体 Redis 实现 MUST 位于 `user-services/internal/repository/redis` 包。service 层 MUST NOT 定义或持有 Redis session store 具体实现。
+用户会话控制能力 SHALL 通过认证 app 层声明的 `authapp.AuthSessionStore` 抽象管理 token version、Refresh Token 会话和用户活跃会话索引，具体 Redis 实现 MUST 位于 `user-services/internal/features/auth/store/redis` 包。service 层 MUST NOT 定义或持有 Redis session store 具体实现。
 
 #### Scenario: Auth service depends on auth session repository abstraction
 - **Given** 登录、刷新、退出当前设备、退出全部设备或修改密码流程需要访问会话状态
 - **When** auth service 调用会话数据访问层
-- **Then** auth service MUST 依赖 `repository.AuthSessionRepository`
-- **Then** auth service MUST 使用 `repository.AuthSession` 表达会话数据
-- **Then** auth service MUST NOT 依赖 Redis client 或 `repository/redis` 私有实现类型
+- **Then** auth service MUST 依赖 `authapp.AuthSessionStore` 或更高层 session lifecycle 组件
+- **Then** auth service MUST 使用 `authdomain.AuthSession` 表达会话数据
+- **Then** auth service MUST NOT 依赖 Redis client 或 `features/auth/store/redis` 私有实现类型
 
 #### Scenario: Session not found error remains mappable
 - **Given** Redis 中不存在指定 Refresh Token 会话记录
 - **When** auth service 读取会话
-- **Then** Redis 实现 MUST 返回 `repository.ErrAuthSessionNotFound`
+- **Then** Redis 实现 MUST 返回 `authdomain.ErrAuthSessionNotFound`
 - **Then** auth service MUST 继续将该错误映射为未认证或 token 无效响应
 
 #### Scenario: Token version mismatch remains mappable
 - **Given** token claims 或会话记录中的 `token_version` 与服务端当前版本不一致
 - **When** 系统校验 token version
-- **Then** auth session repository MUST 返回 `repository.ErrTokenVersionMismatch`
+- **Then** auth session store 或 lifecycle 组件 MUST 返回认证领域 token version mismatch 错误
 - **Then** 系统 MUST 继续拒绝刷新、受保护请求或改密凭据校验
 
 #### Scenario: Redis session storage behavior remains compatible
-- **Given** `repository/redis` 承载认证会话 Redis 实现
+- **Given** `features/auth/store/redis` 承载认证会话 Redis 实现
 - **When** 系统创建、读取、删除或批量删除认证会话
 - **Then** Redis key 格式、Refresh Token 会话 TTL、用户活跃会话 ZSet 和过期 member 清理行为 MUST 与迁移前保持一致
 - **Then** token version 缓存未命中时 Redis 实现 MUST 只报告缓存未命中或等价结果，由认证会话 service 组件或 token version resolver 回源 PostgreSQL
 
 ### Requirement: Authentication token validator uses auth session repository abstraction
-用户服务运行时 SHALL 将 `repository.AuthSessionRepository` 作为认证中间件 token version validator 的依赖来源。该抽象 MUST 提供 `ValidateTokenVersion(ctx, userID, tokenVersion)`，并保持现有 token version 校验语义。
+用户服务运行时 SHALL 将 `authapp.TokenVersionValidator` 作为认证中间件 token version validator 的依赖来源。该抽象 MUST 提供 `ValidateTokenVersion(ctx, userID, tokenVersion)`，并保持现有 token version 校验语义。
 
 #### Scenario: Protected route token validation remains compatible
 - **Given** 用户服务注册受保护路由认证中间件
 - **When** 中间件需要校验 Access Token 的 token version
-- **Then** 中间件 MUST 使用 Fx 注入的 `repository.AuthSessionRepository`
+- **Then** 中间件 MUST 使用 Fx 注入的 `authapp.TokenVersionValidator`
 - **Then** 有效 token MUST 继续允许进入受保护 handler
 - **Then** 版本不一致 token MUST 继续在进入 handler 前被拒绝
 
@@ -644,8 +644,8 @@
 #### Scenario: Components remain inside service layer boundaries
 - **Given** 认证能力需要拆分凭证、token 和 session 策略
 - **When** 实现新增组件或领域服务
-- **Then** 组件 MUST 位于 `user-services/internal/service` 或等价 service 层边界内
-- **Then** 组件 MUST 依赖 `repository.UserRepository`、`repository.AuthSessionRepository`、`common/security/auth`、`common/security/password` 和配置等现有抽象
+- **Then** 组件 MUST 位于 `user-services/internal/features/auth/app` 或等价 service 层边界内
+- **Then** 组件 MUST 依赖 `authapp.UserCredentialStore`、`authapp.UserTokenVersionStore`、`authapp.AuthSessionStore`、`common/security/auth`、`common/security/password` 和配置等现有抽象
 - **Then** 组件 MUST NOT 直接依赖 Ent 生成模型、Redis client、controller、router 或 HTTP response writer
 - **Then** repository 层 MUST 继续只负责数据访问，controller 层 MUST 继续只负责 HTTP 请求解析和响应输出
 
@@ -689,12 +689,12 @@
 
 ### Requirement: Authentication API contracts are grouped by capability
 
-用户会话控制能力 SHALL 使用按业务能力组织的认证 API 契约包承载登录、刷新、强制改密、登出和 token 响应模型。实现 MUST NOT 继续依赖全局 `user-services/internal/dto` 包表达认证会话契约，并 MUST 保持认证相关 HTTP API、token 语义、Redis 会话行为和响应结构不变。
+用户会话控制能力 SHALL 使用按业务能力组织的认证 API 契约包承载登录、刷新、强制改密、登出和 token 响应模型。实现 MUST NOT 依赖全局 DTO 包表达认证会话契约，并 MUST 保持认证相关 HTTP API、token 语义、Redis 会话行为和响应结构不变。
 
 #### Scenario: Auth contract types use auth API package
 - **WHEN** controller、service、validation 或测试引用登录请求、刷新请求、改密请求、token 响应、改密响应或登出响应
 - **THEN** 这些引用 MUST 来自认证 API 契约包
-- **THEN** 这些引用 MUST NOT 来自全局 `internal/dto` 包
+- **THEN** 这些引用 MUST NOT 来自全局 DTO 包
 
 #### Scenario: Login and refresh contracts remain compatible
 - **WHEN** 认证请求和响应类型迁移完成

@@ -321,7 +321,7 @@ HTTP 服务运行时 SHALL 在 HTTP server 启动日志中输出关键运行时�
 - **Then** 配置加载器 MUST NOT 对 timeout 执行额外 required 或范围校验
 
 ### Requirement: HTTP runtime naming cleanup preserves service contract
-HTTP 服务运行时相关命名标准化 SHALL 只修改内部组装名称、局部变量、内部类型或文档表达，不得改变 CLI、路由注册、中间件顺序、健康检查、Swagger 暴露或优雅关闭行为。用户服务 Fx 运行时组装模块的 Go 符号名称 MUST 明确表达进程级运行时装配职责，并 MUST NOT 使用容易与 `internal/service` 业务 service 层混淆的名称。
+HTTP 服务运行时相关命名标准化 SHALL 只修改内部组装名称、局部变量、内部类型或文档表达，不得改变 CLI、路由注册、中间件顺序、健康检查、Swagger 暴露或优雅关闭行为。用户服务 Fx 运行时组装模块的 Go 符号名称 MUST 明确表达进程级运行时装配职责，并 MUST NOT 使用容易与 feature `app` service 层混淆的名称。
 
 #### Scenario: Runtime module names are standardized
 - **WHEN** 实现修改 `user-services/internal/bootstrap`、`user-services/internal/router` 或 `user-services/cmd` 中的内部命名
@@ -337,22 +337,22 @@ HTTP 服务运行时相关命名标准化 SHALL 只修改内部组装名称、�
 - **WHEN** 审查发现 `user-services` 复数命名或服务名语义可改进
 - **THEN** 本变更 MUST 保留该名称，并将目录、module path、CLI 名或服务标识重命名视为单独 breaking change
 
-### Requirement: Runtime composes concrete repository implementations at the bootstrap boundary
-HTTP 服务运行时 SHALL 在 `user-services/internal/bootstrap` 组合根中装配具体 repository 实现。用户服务启动时 MUST 通过 `repository/postgres` provider 提供 `repository.UserRepository`，并通过 `repository/redis` provider 提供 `repository.AuthSessionRepository`，同时保持现有 `user_db` Ent client、`cache_redis` Redis client 和 auth 配置依赖不变。
+### Requirement: Runtime composes concrete feature store implementations at the bootstrap boundary
+HTTP 服务运行时 SHALL 在 `user-services/internal/bootstrap` 组合根中装配具体 feature store 实现。用户服务启动时 MUST 通过 `features/user/store/postgres` provider 提供 `userapp.UserProfileStore`，通过 `features/auth/store/postgres` provider 提供认证凭据与 token version store，并通过 `features/auth/store/redis` provider 提供 `authapp.AuthSessionStore`，同时保持现有 `user_db` Ent client、`cache_redis` Redis client 和 auth 配置依赖不变。
 
-#### Scenario: Bootstrap provides PostgreSQL user repository
+#### Scenario: Bootstrap provides PostgreSQL user profile store
 - **Given** Fx app 装配用户服务依赖
-- **When** bootstrap 创建用户仓储 provider
-- **Then** bootstrap MUST 使用 `postgres.NewUserRepository`
+- **When** bootstrap 创建用户资料 store provider
+- **Then** bootstrap MUST 使用 `userpostgres.NewUserStore`
 - **Then** provider MUST 注入具名 `user_db` Ent client
-- **Then** 下游 service MUST 接收 `repository.UserRepository` 抽象
+- **Then** 下游 service MUST 接收 `userapp.UserProfileStore` 抽象
 
-#### Scenario: Bootstrap provides Redis auth session repository
+#### Scenario: Bootstrap provides auth credential and session stores
 - **Given** Fx app 装配用户服务依赖
-- **When** bootstrap 创建认证会话仓储 provider
-- **Then** bootstrap MUST 使用 `redis.NewAuthSessionRepository`
-- **Then** provider MUST 注入具名 `cache_redis` Redis client、`repository.UserRepository` 和 auth 配置
-- **Then** 下游 auth service 和认证中间件 MUST 接收 `repository.AuthSessionRepository` 抽象
+- **When** bootstrap 创建认证凭据、token version 和会话 store provider
+- **Then** bootstrap MUST 使用 `authpostgres.NewCredentialStore` 和 `authredis.NewSessionStore`
+- **Then** provider MUST 注入具名 `user_db` Ent client、具名 `cache_redis` Redis client 和 auth 配置
+- **Then** 下游 auth service 和认证中间件 MUST 接收 `authapp.UserCredentialStore`、`authapp.UserTokenVersionStore`、`authapp.AuthSessionStore` 和 `authapp.TokenVersionValidator` 抽象
 
 #### Scenario: Startup dependencies remain unchanged
 - **Given** 用户服务通过 CLI 启动

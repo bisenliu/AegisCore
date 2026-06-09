@@ -5,7 +5,7 @@ import (
 
 	"github.com/aegiscore/common/contract/response"
 	commonauth "github.com/aegiscore/common/security/auth"
-	authapi "github.com/aegiscore/user-services/internal/auth/api"
+	authapi "github.com/aegiscore/user-services/internal/features/auth/api"
 	"github.com/aegiscore/user-services/internal/messages"
 )
 

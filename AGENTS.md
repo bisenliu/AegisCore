@@ -15,9 +15,9 @@
 
 - `go.work`：Go workspace，包含 `common` 和 `user-services` 两个模块。
 - `common/`：按 `contract`、`runtime`、`http`、`security`、`validation` 分类组织跨服务稳定契约和基础能力，不作为服务特定 helper 的兜底目录。
-- `user-services/`：用户服务 HTTP 运行时，包含 Cobra 入口、Fx 组装、Gin 路由，以及按 capability 组织的 `internal/user` 与 `internal/auth` 包；同时包含 Ent schema、Atlas 配置、服务内 migration 和生成代码。
-- `user-services/internal/user/`：用户资料 capability，包含 HTTP controller、应用 service、领域模型、command/query、消费侧 ports、`api/` DTO 和 `store/postgres/` Ent adapter。
-- `user-services/internal/auth/`：认证会话 capability，包含 HTTP controller、应用 service、credential/token/session 组件、command/model/ports、Redis key builder、`api/` DTO 和 `store/redis/` session adapter。
+- `user-services/`：用户服务 HTTP 运行时，包含 Cobra 入口、Fx 组装、Gin 路由，以及按 capability 组织的 `internal/features/user` 与 `internal/features/auth` 包；同时包含 Ent schema、Atlas 配置、服务内 migration 和生成代码。
+- `user-services/internal/features/user/`：用户资料 capability，按 `api/` HTTP DTO 和 Swagger 文档模型、`app/` controller/service/command/query/ports/mapper、`domain/` 领域实体/枚举/错误、`store/postgres/` Ent adapter 分层。
+- `user-services/internal/features/auth/`：认证会话 capability，按 `api/` HTTP DTO、`app/` controller/service/credential/token/session/commands/ports、`domain/` 会话/凭据模型/Redis key 语义/领域错误、`store/postgres/` credential/token-version adapter、`store/redis/` session adapter 分层。
 - `user-services/internal/validators/`：请求 DTO 规范化和简单字段解析；必须保持纯净，不承载业务编排或 datastore 访问。
 - `openspec/`：OPSX/OpenSpec 配置、主规格和后续 change artifacts。
 
@@ -26,12 +26,13 @@
 - CLI 入口：`user-services/cmd/main.go`
 - 服务组装：`user-services/internal/bootstrap/app.go`
 - HTTP 路由：`user-services/internal/router/router.go`
-- 用户 controller：`user-services/internal/user/controller.go`
-- 用户 service：`user-services/internal/user/service.go`
-- 用户 PostgreSQL store：`user-services/internal/user/store/postgres/user_store.go`
-- 认证 controller：`user-services/internal/auth/controller.go`
-- 认证 service：`user-services/internal/auth/service.go`
-- 认证 session store：`user-services/internal/auth/store/redis/session_store.go`
+- 用户 controller：`user-services/internal/features/user/app/controller.go`
+- 用户 service：`user-services/internal/features/user/app/service.go`
+- 用户 PostgreSQL store：`user-services/internal/features/user/store/postgres/user_store.go`
+- 认证 controller：`user-services/internal/features/auth/app/controller.go`
+- 认证 service：`user-services/internal/features/auth/app/service.go`
+- 认证 PostgreSQL credential store：`user-services/internal/features/auth/store/postgres/credential_store.go`
+- 认证 session store：`user-services/internal/features/auth/store/redis/session_store.go`
 - 共享配置加载：`common/runtime/config/loader.go`
 - 共享配置 Fx provider：`common/runtime/configfx/config.go`
 - 共享日志 Fx provider：`common/runtime/loggerfx/logger.go`
@@ -77,13 +78,13 @@
 
 - 不要手写 `user-services/ent/` 下的生成代码；修改 Ent schema 后重新生成。
 - 不要用运行时 `client.Schema.Create(ctx)` 表达 schema 变更；修改 Ent schema 后生成 Ent 代码和 Atlas SQL migration。
-- 按 capability 组织服务内代码：用户资料放在 `internal/user`，认证会话放在 `internal/auth`。不要重新新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。
+- 按 capability 组织服务内代码：用户资料放在 `internal/features/user`，认证会话放在 `internal/features/auth`，并在 feature 内使用 `api/app/domain/store` 分层。不要重新新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。
 - 保持 controller/service/store 分层：HTTP 解析在 controller，业务编排在 service，数据库或 Redis 访问在 `store/*` adapter。
 - 共享基础能力优先放在 `common/` 对应能力分类目录中，避免在服务模块中重复实现中间件、响应信封或基础设施初始化；服务特定规则保留在服务模块内。
 - HTTP API 应使用 `common/contract/response.Envelope` 格式返回。
 - 配置通过 YAML 与 `AEGISCORE_` 环境变量覆盖加载，Redis/PostgreSQL 使用 `redis.<name>` 与 `postgres.<name>` 命名实例，避免硬编码运行时配置。
 - `internal/shared` 默认禁止新增。只有当能力已被至少两个 capability 真实消费、边界稳定、且不能归入 `common` 时，才可在 proposal/design 中说明 owner、准入理由和禁止事项后新增。
-- Ports 由消费侧 capability 拥有：用户资料 service 消费的接口放在 `internal/user/ports.go`，认证 service 消费的凭据、token version 和 session 接口放在 `internal/auth/ports.go`。不要为了 adapter 方便在 store 包或共享根包定义大接口。
+- Ports 由消费侧 capability 拥有：用户资料 service 消费的接口放在 `internal/features/user/app/ports.go`，认证 service 消费的凭据、token version 和 session 接口放在 `internal/features/auth/app/ports.go`。不要为了 adapter 方便在 store 包或共享根包定义大接口。
 - `internal/validators` 只能依赖请求 DTO、共享校验/响应原语和标准库；不得导入 `gin`、Ent、Redis、service、store，或执行业务编排。
 - Controller 必须把 transport DTO 映射为 command/query 后再调用 service，service 不接收 `api/*Request`。
 
@@ -96,7 +97,7 @@
       response.Fail(c, err)
       return
   }
-  created, err := ctl.userService.CreateUser(c.Request.Context(), user.CreateUserCommand{
+  created, err := ctl.userService.CreateUser(c.Request.Context(), userapp.CreateUserCommand{
       Nickname: req.Nickname,
       Username: req.Username,
       Password: req.Password,
@@ -108,15 +109,15 @@
 
   ```go
   type AuthUserAdapter struct {
-      store auth.UserCredentialStore
+      store authapp.UserCredentialStore
   }
 
-  func (a AuthUserAdapter) GetByUsername(ctx context.Context, username string) (*auth.UserCredential, error) {
+  func (a AuthUserAdapter) GetByUsername(ctx context.Context, username string) (*authdomain.UserCredential, error) {
       credential, err := a.store.GetByUsername(ctx, strings.TrimSpace(username))
       if err != nil {
           return nil, err
       }
-      return &auth.UserCredential{
+      return &authdomain.UserCredential{
           UserID:       credential.UserID,
           Username:     credential.Username,
           PasswordHash: credential.PasswordHash,
@@ -127,10 +128,10 @@
   ```
 
   禁止在 `adapter.go` 中实现登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
-- Ent predicate 构造必须封装在 store 内，例如 `internal/user/store/postgres/predicates.go`：
+- Ent predicate 构造必须封装在 store 内，例如 `internal/features/user/store/postgres/predicates.go`：
 
   ```go
-  func buildListPredicates(input user.ListUsersInput) []predicate.User {
+  func buildListPredicates(input userapp.ListUsersInput) []predicate.User {
       predicates := []predicate.User{entuser.DeletedAtIsNil()}
       if input.Status != nil {
           predicates = append(predicates, entuser.StatusEQ(int64(*input.Status)))
@@ -139,4 +140,4 @@
   }
   ```
 
-  反例：`internal/user/service.go` 不得导入 `github.com/aegiscore/user-services/ent/user`，也不得直接调用 `user.StatusEQ(...)` 或其他 Ent predicate。
+  反例：`internal/features/user/app/service.go` 不得导入 `github.com/aegiscore/user-services/ent/user`，也不得直接调用 `user.StatusEQ(...)` 或其他 Ent predicate。
