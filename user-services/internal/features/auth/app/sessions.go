@@ -25,7 +25,7 @@ type tokenVersionValidator struct {
 }
 
 // NewTokenVersionValidator 构造由缓存和持久化存储支撑的 token version 校验器。
-func NewTokenVersionValidator(users UserTokenVersionStore, sessions AuthSessionStore) TokenVersionValidator {
+func NewTokenVersionValidator(users UserTokenVersionStore, sessions AuthSessionStore) commonauth.TokenVersionValidator {
 	return &tokenVersionValidator{users: users, sessions: sessions}
 }
 
@@ -123,10 +123,7 @@ func (v *tokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID
 	if err != nil {
 		return err
 	}
-	if currentVersion != tokenVersion {
-		return authdomain.ErrTokenVersionMismatch
-	}
-	return nil
+	return commonauth.ValidateTokenVersion(tokenVersion, currentVersion)
 }
 
 func currentTokenVersion(ctx context.Context, users UserTokenVersionStore, sessions AuthSessionStore, userID string) (int64, error) {
@@ -136,7 +133,8 @@ func currentTokenVersion(ctx context.Context, users UserTokenVersionStore, sessi
 		return currentVersion, nil
 	}
 	if !errors.Is(err, authdomain.ErrTokenVersionCacheMiss) {
-		logger.Warn(ctx, "token version cache unavailable, fallback to database", zap.String("user_id", userID), zap.Error(err))
+		logger.Error(ctx, "token version cache unavailable", logger.StackTrace(zap.String("user_id", userID), zap.Error(err))...)
+		return 0, fmt.Errorf("get token version cache: %w", err)
 	}
 	parsedUserID, err := uuid.Parse(userID)
 	if err != nil {
@@ -145,10 +143,11 @@ func currentTokenVersion(ctx context.Context, users UserTokenVersionStore, sessi
 	}
 	currentVersion, err = users.GetTokenVersion(ctx, parsedUserID)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("get token version from database: %w", err)
 	}
 	if err := sessions.CacheTokenVersion(ctx, userID, currentVersion); err != nil {
-		logger.Warn(ctx, "backfill token version cache failed", zap.String("user_id", userID), zap.Int64("token_version", currentVersion), zap.Error(err))
+		logger.Error(ctx, "backfill token version cache failed", logger.StackTrace(zap.String("user_id", userID), zap.Int64("token_version", currentVersion), zap.Error(err))...)
+		return 0, fmt.Errorf("backfill token version cache: %w", err)
 	}
 	return currentVersion, nil
 }

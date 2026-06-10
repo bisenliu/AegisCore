@@ -19,6 +19,3 @@ var ErrAuthSessionMismatch = errors.New("auth session mismatch")
 
 // ErrTokenVersionCacheMiss 表示 token version 缓存未命中，需要从持久化存储回填。
 var ErrTokenVersionCacheMiss = errors.New("token version cache miss")
-
-// ErrTokenVersionMismatch 表示 token 携带了过期的用户 token version。
-var ErrTokenVersionMismatch = errors.New("token version mismatch")

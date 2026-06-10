@@ -54,11 +54,6 @@ type AuthSessionLifecycle interface {
 	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*authdomain.SessionRevocationResult, error)
 }
 
-// TokenVersionValidator 是面向中间件的契约，用于拒绝过期 access token。
-type TokenVersionValidator interface {
-	ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error
-}
-
 // CredentialVerifier 校验登录凭证并完成强制改密。
 type CredentialVerifier interface {
 	VerifyPassword(ctx context.Context, username string, plainPassword string) (*authdomain.UserCredential, error)

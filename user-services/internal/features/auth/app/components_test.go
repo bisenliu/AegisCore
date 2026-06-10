@@ -198,40 +198,53 @@ func TestAuthSessionLifecycleCurrentTokenVersionCacheMissReadsRepository(t *test
 	}
 }
 
-func TestAuthSessionLifecycleCurrentTokenVersionCacheErrorFallsBackToRepository(t *testing.T) {
+func TestAuthSessionLifecycleCurrentTokenVersionCacheErrorReturnsInfrastructureError(t *testing.T) {
 	repo := &authRepoStub{tokenVersion: 7}
 	cacheErr := errors.New("redis failed")
 	store := &sessionStoreStub{getVersionErr: cacheErr}
 	lifecycle := newAuthSessionLifecycle(repo, store)
 
-	version, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
+	_, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
 
-	if err != nil {
-		t.Fatalf("currentTokenVersion: %v", err)
+	if !errors.Is(err, cacheErr) {
+		t.Fatalf("err = %v, want cache error", err)
 	}
-	if version != 7 {
-		t.Fatalf("version = %d, want 7", version)
+	if repo.getTokenVersionID != uuid.Nil {
+		t.Fatalf("repository should not be read after cache infrastructure error: %s", repo.getTokenVersionID)
 	}
-	if repo.getTokenVersionID != authTestUserID {
-		t.Fatalf("getTokenVersionID = %s, want %s", repo.getTokenVersionID, authTestUserID)
-	}
-	if !store.cached || store.cachedVersion != 7 {
+	if store.cached {
 		t.Fatalf("store = %#v", store)
 	}
 }
 
-func TestAuthSessionLifecycleCurrentTokenVersionIgnoresBackfillError(t *testing.T) {
+func TestAuthSessionLifecycleCurrentTokenVersionDatabaseFallbackErrorReturnsInfrastructureError(t *testing.T) {
+	dbErr := errors.New("database failed")
+	repo := &authRepoStub{tokenVersionErr: dbErr}
+	store := &sessionStoreStub{cacheMiss: true}
+	lifecycle := newAuthSessionLifecycle(repo, store)
+
+	_, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
+
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("err = %v, want database error", err)
+	}
+	if repo.getTokenVersionID != authTestUserID {
+		t.Fatalf("getTokenVersionID = %s, want %s", repo.getTokenVersionID, authTestUserID)
+	}
+	if store.cached {
+		t.Fatalf("store should not be backfilled after database error: %#v", store)
+	}
+}
+
+func TestAuthSessionLifecycleCurrentTokenVersionBackfillErrorReturnsInfrastructureError(t *testing.T) {
 	cacheErr := errors.New("redis set failed")
 	store := &sessionStoreStub{cacheMiss: true, cacheErr: cacheErr}
 	lifecycle := newAuthSessionLifecycle(&authRepoStub{tokenVersion: 7}, store)
 
-	version, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
+	_, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
 
-	if err != nil {
-		t.Fatalf("currentTokenVersion: %v", err)
-	}
-	if version != 7 {
-		t.Fatalf("version = %d, want 7", version)
+	if !errors.Is(err, cacheErr) {
+		t.Fatalf("err = %v, want cache backfill error", err)
 	}
 }
 
@@ -325,8 +338,15 @@ func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing
 
 	err := validator.ValidateTokenVersion(context.Background(), authTestUserID.String(), 3)
 
-	if !errors.Is(err, authdomain.ErrTokenVersionMismatch) {
-		t.Fatalf("err = %v, want token version mismatch", err)
+	if !errors.Is(err, commonauth.ErrTokenVersionMismatch) {
+		t.Fatalf("err = %v, want common token version mismatch", err)
+	}
+	var mismatch *commonauth.TokenVersionMismatchError
+	if !errors.As(err, &mismatch) {
+		t.Fatalf("err = %v, want structured token version mismatch", err)
+	}
+	if mismatch.Current != 4 || mismatch.Token != 3 {
+		t.Fatalf("mismatch = %#v, want current=4 token=3", mismatch)
 	}
 }
 

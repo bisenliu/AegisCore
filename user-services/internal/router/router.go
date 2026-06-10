@@ -17,7 +17,7 @@ type RouteParams struct {
 	Log                   *zap.Logger
 	JWT                   *commonauth.JWTService
 	AuthConfig            config.AuthConfig
-	TokenVersionValidator commonmw.TokenVersionValidator
+	TokenVersionValidator commonauth.TokenVersionValidator
 	AuthController        *authhttp.AuthController
 	UserController        *userhttp.UserController
 }

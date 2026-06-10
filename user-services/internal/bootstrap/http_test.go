@@ -521,7 +521,7 @@ type routeTokenVersionValidator struct {
 
 func (s *routeTokenVersionValidator) ValidateTokenVersion(_ context.Context, _ string, tokenVersion int64) error {
 	if tokenVersion != s.version {
-		return errors.New("token version mismatch")
+		return &commonauth.TokenVersionMismatchError{Current: s.version, Token: tokenVersion}
 	}
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -35,7 +36,7 @@ func TestAuthMiddleware(t *testing.T) {
 		wantStatus    int
 		wantCode      response.Code
 		wantHandled   bool
-		validator     TokenVersionValidator
+		validator     auth.TokenVersionValidator
 	}{
 		{name: "missing header", path: "/api/v1/users/123", wantStatus: http.StatusUnauthorized, wantCode: response.CodeUnauthenticated},
 		{name: "invalid format", path: "/api/v1/users/123", authorization: "Token abc", wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
@@ -45,7 +46,10 @@ func TestAuthMiddleware(t *testing.T) {
 		{name: "missing token version", path: "/api/v1/users/123", authorization: auth.TokenPrefix + missingVersionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
 		{name: "missing session id", path: "/api/v1/users/123", authorization: auth.TokenPrefix + missingSessionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
 		{name: "password change token rejected", path: "/api/v1/users/123", authorization: auth.TokenPrefix + passwordChangeToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid},
-		{name: "token version mismatch", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("version mismatch") })},
+		{name: "token version mismatch", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error {
+			return fmt.Errorf("validate token version: %w", &auth.TokenVersionMismatchError{Current: 3, Token: 1})
+		})},
+		{name: "token version infrastructure error", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusInternalServerError, wantCode: response.CodeInternalError, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("redis unavailable") })},
 		{name: "valid token", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true},
 		{name: "valid token with lowercase bearer prefix", path: "/api/v1/users/123", authorization: "bearer " + validToken, wantStatus: http.StatusOK, wantHandled: true},
 		{name: "valid token with uppercase bearer prefix", path: "/api/v1/users/123", authorization: "BEARER " + validToken, wantStatus: http.StatusOK, wantHandled: true},
@@ -93,12 +97,16 @@ func TestAuthMiddleware(t *testing.T) {
 			if handled != tt.wantHandled {
 				t.Fatalf("handled = %v, want %v", handled, tt.wantHandled)
 			}
-			if tt.wantStatus == http.StatusUnauthorized {
+			if tt.wantCode != 0 {
 				var envelope response.Envelope
 				if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
 					t.Fatalf("unmarshal response: %v", err)
 				}
-				if envelope.Success || envelope.Code != tt.wantCode || envelope.Message != response.MessageAuthInvalid {
+				wantMessage := response.MessageAuthInvalid
+				if tt.wantStatus == http.StatusInternalServerError {
+					wantMessage = response.MessageInternalError
+				}
+				if envelope.Success || envelope.Code != tt.wantCode || envelope.Message != wantMessage {
 					t.Fatalf("envelope = %#v", envelope)
 				}
 			}

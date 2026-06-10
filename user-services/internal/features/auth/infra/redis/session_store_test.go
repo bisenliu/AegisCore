@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/runtime/config"
+	commonauth "github.com/aegiscore/common/security/auth"
 	authapp "github.com/aegiscore/user-services/internal/features/auth/app"
 	authdomain "github.com/aegiscore/user-services/internal/features/auth/domain"
 	"github.com/alicebob/miniredis/v2"
@@ -245,7 +246,7 @@ func TestTokenVersionValidatorRejectsStaleTokenUsingMiniredisCache(t *testing.T)
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 8)
 
-	if !errors.Is(err, authdomain.ErrTokenVersionMismatch) {
+	if !errors.Is(err, commonauth.ErrTokenVersionMismatch) {
 		t.Fatalf("err = %v, want token version mismatch", err)
 	}
 	if users.getTokenVersionCalls != 0 {
@@ -273,7 +274,7 @@ func TestTokenVersionCacheRefreshMakesStaleTokenObservable(t *testing.T) {
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 5)
 
-	if !errors.Is(err, authdomain.ErrTokenVersionMismatch) {
+	if !errors.Is(err, commonauth.ErrTokenVersionMismatch) {
 		t.Fatalf("err = %v, want token version mismatch", err)
 	}
 	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())

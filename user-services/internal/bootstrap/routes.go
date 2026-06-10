@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
-	authapp "github.com/aegiscore/user-services/internal/features/auth/app"
 	authhttp "github.com/aegiscore/user-services/internal/features/auth/transport/http"
 	userhttp "github.com/aegiscore/user-services/internal/features/user/transport/http"
 	"github.com/aegiscore/user-services/internal/router"
@@ -21,7 +20,7 @@ type RegisterRouteParams struct {
 	Engine *gin.Engine
 	JWT    *commonauth.JWTService
 	// TokenVersions 是可选依赖，使公开路由和测试可以在不提供撤销能力时挂载中间件。
-	TokenVersions  authapp.TokenVersionValidator `optional:"true"`
+	TokenVersions  commonauth.TokenVersionValidator `optional:"true"`
 	AuthController *authhttp.AuthController
 	UserController *userhttp.UserController
 }

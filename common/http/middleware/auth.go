@@ -13,11 +13,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// TokenVersionValidator 校验 token version，使中间件可以拒绝已撤销或过期状态的 access token。
-type TokenVersionValidator interface {
-	ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error
-}
-
 // TokenVersionValidatorFunc 将函数适配为 TokenVersionValidator 接口。
 type TokenVersionValidatorFunc func(ctx context.Context, userID string, tokenVersion int64) error
 
@@ -32,7 +27,7 @@ func Auth(log *zap.Logger, jwtService *auth.JWTService, cfg config.AuthConfig) g
 }
 
 // AuthWithTokenVersionValidator 返回支持可选 token version 校验的 JWT 认证中间件。
-func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService, cfg config.AuthConfig, validator TokenVersionValidator) gin.HandlerFunc {
+func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService, cfg config.AuthConfig, validator auth.TokenVersionValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		reqLog := logger.WithContext(log, ctx)
@@ -78,8 +73,18 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService,
 
 		if validator != nil {
 			if err := validator.ValidateTokenVersion(ctx, claims.UserID, claims.TokenVersion); err != nil {
-				reqLog.Error("token version validation failed", zap.Error(err))
-				response.TokenInvalid(c, response.MessageAuthInvalid)
+				if errors.Is(err, auth.ErrTokenVersionMismatch) {
+					fields := []zap.Field{zap.String("user_id", claims.UserID), zap.Error(err)}
+					var mismatch *auth.TokenVersionMismatchError
+					if errors.As(err, &mismatch) {
+						fields = append(fields, zap.Int64("current_token_version", mismatch.Current), zap.Int64("token_version", mismatch.Token))
+					}
+					reqLog.Warn("token version mismatch", fields...)
+					response.TokenInvalid(c, response.MessageAuthInvalid)
+				} else {
+					reqLog.Error("token version validation failed", zap.String("user_id", claims.UserID), zap.Error(err))
+					response.Fail(c, response.InternalError(err))
+				}
 				c.Abort()
 				return
 			}
