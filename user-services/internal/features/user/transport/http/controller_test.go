@@ -182,37 +182,67 @@ func TestUserControllerList(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	listResponse := &userapp.ListUsersResult{Items: []userdomain.User{{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, Page: 2, PageSize: 20, Total: 128}
+	listResponse := &userapp.ListUsersResult{Items: []userdomain.User{{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, PageSize: 20, NextCursor: controllerTestUserID, HasNext: true}
 
 	t.Run("default pagination", func(t *testing.T) {
-		service := &stubUserService{listResponse: &userapp.ListUsersResult{Items: []userdomain.User{}, Page: 1, PageSize: 10, Total: 0}}
+		service := &stubUserService{listResponse: &userapp.ListUsersResult{Items: []userdomain.User{}, PageSize: 10}}
 
 		status, envelope := executeList(t, service, "/api/v1/users")
 
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if service.gotList.Page != 1 || service.gotList.PageSize != 10 || service.gotList.Offset != 0 || service.gotList.Limit != 10 {
+		if service.gotList.Cursor != nil || service.gotList.PageSize != 10 || service.gotList.Limit != 10 {
 			t.Fatalf("gotList = %#v", service.gotList)
 		}
-		assertPaginatedEnvelope(t, envelope, 1, 10, 0, 0, 0)
+		assertPaginatedEnvelope(t, envelope, 10, "", false, 0)
 	})
 
 	t.Run("explicit query", func(t *testing.T) {
 		service := &stubUserService{listResponse: listResponse}
 
-		status, envelope := executeList(t, service, "/api/v1/users?page=2&page_size=20&nickname=%20Ali%20&username=%20alice%20&status=100")
+		status, envelope := executeList(t, service, "/api/v1/users?cursor=018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4d&page_size=20&nickname=%20Ali%20&username=%20alice%20&status=100")
 
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if service.gotList.Page != 2 || service.gotList.PageSize != 20 || service.gotList.Offset != 20 || service.gotList.Limit != 20 || service.gotList.Nickname != "Ali" || service.gotList.Username != "alice" {
+		if service.gotList.Cursor == nil || service.gotList.Cursor.String() != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4d" || service.gotList.PageSize != 20 || service.gotList.Limit != 20 || service.gotList.Nickname != "Ali" || service.gotList.Username != "alice" {
 			t.Fatalf("gotList = %#v", service.gotList)
 		}
 		if service.gotList.Status == nil || *service.gotList.Status != userdomain.UserStatusNormal {
 			t.Fatalf("status = %#v", service.gotList.Status)
 		}
-		assertPaginatedEnvelope(t, envelope, 2, 20, 128, 7, 1)
+		assertPaginatedEnvelope(t, envelope, 20, controllerTestUserID, true, 1)
+	})
+
+	t.Run("page size capped", func(t *testing.T) {
+		service := &stubUserService{listResponse: &userapp.ListUsersResult{Items: []userdomain.User{}, PageSize: 100}}
+
+		status, envelope := executeList(t, service, "/api/v1/users?page_size=101")
+
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, want %d", status, http.StatusOK)
+		}
+		if service.gotList.PageSize != 100 || service.gotList.Limit != 100 {
+			t.Fatalf("gotList = %#v", service.gotList)
+		}
+		assertPaginatedEnvelope(t, envelope, 100, "", false, 0)
+	})
+
+	t.Run("invalid cursor", func(t *testing.T) {
+		service := &stubUserService{}
+
+		status, envelope := executeList(t, service, "/api/v1/users?cursor=abc")
+
+		if status != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
+		}
+		if service.gotList.Limit != 0 {
+			t.Fatalf("service should not be called, gotList = %#v", service.gotList)
+		}
+		if envelope.Success || envelope.Code != response.CodeBadRequest || envelope.Message != messages.InvalidUserID {
+			t.Fatalf("envelope = %#v", envelope)
+		}
 	})
 
 	t.Run("invalid status", func(t *testing.T) {
@@ -337,7 +367,7 @@ func executeList(t *testing.T, service *stubUserService, path string) (int, resp
 	return recorder.Code, envelope
 }
 
-func assertPaginatedEnvelope(t *testing.T, envelope response.Envelope, page, pageSize, total, totalPages, itemCount int) {
+func assertPaginatedEnvelope(t *testing.T, envelope response.Envelope, pageSize int, nextCursor string, hasNext bool, itemCount int) {
 	t.Helper()
 	if !envelope.Success || envelope.Code != response.CodeOK || envelope.Message != response.MessageOK {
 		t.Fatalf("envelope = %#v", envelope)
@@ -366,8 +396,20 @@ func assertPaginatedEnvelope(t *testing.T, envelope response.Envelope, page, pag
 	if !ok {
 		t.Fatalf("pagination = %#v", data["pagination"])
 	}
-	if pagination["page"] != float64(page) || pagination["page_size"] != float64(pageSize) || pagination["total"] != float64(total) || pagination["total_pages"] != float64(totalPages) {
+	if pagination["page_size"] != float64(pageSize) || pagination["has_next"] != hasNext {
 		t.Fatalf("pagination = %#v", pagination)
+	}
+	if nextCursor == "" {
+		if _, ok := pagination["next_cursor"]; ok {
+			t.Fatalf("pagination = %#v, want next_cursor omitted", pagination)
+		}
+	} else if pagination["next_cursor"] != nextCursor {
+		t.Fatalf("pagination = %#v", pagination)
+	}
+	for _, removed := range []string{"page", "offset", "total", "total_pages"} {
+		if _, ok := pagination[removed]; ok {
+			t.Fatalf("pagination contains removed field %q: %#v", removed, pagination)
+		}
 	}
 }
 

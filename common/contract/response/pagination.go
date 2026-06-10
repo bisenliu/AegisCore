@@ -1,18 +1,17 @@
 package response
 
 const (
-	// DefaultPage 是分页参数缺失或无效时使用的首页页码。
-	DefaultPage = 1
 	// DefaultPageSize 是分页大小缺失或无效时使用的兜底每页数量。
 	DefaultPageSize = 10
+	// MaxPageSize 是分页大小允许的最大值。
+	MaxPageSize = 100
 )
 
 // Pagination 描述分页集合响应的元数据。
 type Pagination struct {
-	Page       int `json:"page" example:"1"`
-	PageSize   int `json:"page_size" example:"20"`
-	Total      int `json:"total" example:"128"`
-	TotalPages int `json:"total_pages" example:"7"`
+	PageSize   int    `json:"page_size" example:"50"`
+	NextCursor string `json:"next_cursor,omitempty" example:"0190c8d2-8d8a-7a01-9f43-0f91fb4e2b7c"`
+	HasNext    bool   `json:"has_next" example:"true"`
 }
 
 // PaginatedData 将当前页数据和分页元数据包装在一起。
@@ -21,40 +20,20 @@ type PaginatedData[T any] struct {
 	Pagination Pagination `json:"pagination"`
 }
 
-// PaginationQuery 是规范化后的请求分页参数，包含派生的 offset 和 limit。
-type PaginationQuery struct {
-	Page     int
-	PageSize int
-	Offset   int
-	Limit    int
-}
-
-// NormalizePagination 将无效分页输入修正为仓储层安全默认值，并计算 offset/limit。
-func NormalizePagination(page, pageSize int) PaginationQuery {
-	if page < 1 {
-		// 无效页码按未传入处理，使调用方稳定获得第一页响应。
-		page = DefaultPage
-	}
+// NormalizePageSize 将无效或过大的分页大小修正为公开契约允许的范围。
+func NormalizePageSize(pageSize int) int {
 	if pageSize < 1 {
-		// 非正数分页大小会导致 offset/limit 不可用，因此使用公开默认值。
-		pageSize = DefaultPageSize
+		return DefaultPageSize
 	}
-	return PaginationQuery{Page: page, PageSize: pageSize, Offset: (page - 1) * pageSize, Limit: pageSize}
+	if pageSize > MaxPageSize {
+		return MaxPageSize
+	}
+	return pageSize
 }
 
-// NewPagination 使用规范化分页输入创建响应分页元数据。
-func NewPagination(page, pageSize, total int) Pagination {
-	query := NormalizePagination(page, pageSize)
-	page = query.Page
-	pageSize = query.PageSize
-	if total < 1 {
-		return Pagination{Page: page, PageSize: pageSize, Total: 0, TotalPages: 0}
-	}
-	totalPages := total / pageSize
-	if total%pageSize != 0 {
-		totalPages++
-	}
-	return Pagination{Page: page, PageSize: pageSize, Total: total, TotalPages: totalPages}
+// NewPagination 使用 keyset 分页输入创建响应分页元数据。
+func NewPagination(pageSize int, nextCursor string, hasNext bool) Pagination {
+	return Pagination{PageSize: NormalizePageSize(pageSize), NextCursor: nextCursor, HasNext: hasNext}
 }
 
 // NewPaginatedData 创建分页载荷，并保证空结果集仍输出 JSON 数组。

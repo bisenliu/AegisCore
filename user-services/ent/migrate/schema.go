@@ -42,6 +42,16 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{UsersColumns[7]},
 			},
+			{
+				Name:    "user_deleted_at_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{UsersColumns[7], UsersColumns[1]},
+			},
+			{
+				Name:    "user_status_deleted_at_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{UsersColumns[6], UsersColumns[7], UsersColumns[1]},
+			},
 		},
 	}
 	// Tables holds all the tables in the schema.

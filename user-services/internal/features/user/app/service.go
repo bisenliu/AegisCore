@@ -70,17 +70,25 @@ func (s *service) GetUserByID(ctx context.Context, userID uuid.UUID) (*UserResul
 
 // ListUsers 使用规范化过滤条件返回分页用户资料列表。
 func (s *service) ListUsers(ctx context.Context, query ListUsersQuery) (*ListUsersResult, error) {
-	logger.Info(ctx, "list users", zap.Int("page", query.Page), zap.Int("page_size", query.PageSize))
-	users, total, err := s.store.ListUsers(ctx, ListUsersInput{
-		Offset:   query.Offset,
-		Limit:    query.Limit,
-		Nickname: query.Nickname,
-		Username: query.Username,
-		Status:   query.Status,
+	fields := []zap.Field{zap.Int("page_size", query.PageSize)}
+	if query.Cursor != nil {
+		fields = append(fields, zap.String("cursor", query.Cursor.String()))
+	}
+	logger.Info(ctx, "list users", fields...)
+	users, hasNext, err := s.store.ListUsers(ctx, ListUsersInput{
+		AfterUserID: query.Cursor,
+		Limit:       query.Limit,
+		Nickname:    query.Nickname,
+		Username:    query.Username,
+		Status:      query.Status,
 	})
 	if err != nil {
-		logger.Error(ctx, "list users failed", logger.StackTrace(zap.Int("page", query.Page), zap.Int("page_size", query.PageSize), zap.Error(err))...)
+		logger.Error(ctx, "list users failed", logger.StackTrace(append(fields, zap.Error(err))...)...)
 		return nil, err
 	}
-	return &ListUsersResult{Items: users, Page: query.Page, PageSize: query.PageSize, Total: total}, nil
+	nextCursor := ""
+	if hasNext && len(users) > 0 {
+		nextCursor = users[len(users)-1].UserID.String()
+	}
+	return &ListUsersResult{Items: users, PageSize: query.PageSize, NextCursor: nextCursor, HasNext: hasNext}, nil
 }

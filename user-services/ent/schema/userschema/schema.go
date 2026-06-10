@@ -29,11 +29,13 @@ func Fields() []ent.Field {
 	}
 }
 
-// Indexes 返回支持 nickname、status 和软删除过滤查询的索引。
+// Indexes 返回支持 nickname、status、软删除过滤和 user_id keyset 列表查询的索引。
 func Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("nickname"),
 		index.Fields("status"),
 		index.Fields("deleted_at"),
+		index.Fields("deleted_at", "user_id"),
+		index.Fields("status", "deleted_at", "user_id"),
 	}
 }

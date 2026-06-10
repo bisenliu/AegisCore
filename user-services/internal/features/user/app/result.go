@@ -9,8 +9,8 @@ type UserResult struct {
 
 // ListUsersResult 是用户列表 use case 的 transport-neutral 分页输出。
 type ListUsersResult struct {
-	Items    []userdomain.User
-	Page     int
-	PageSize int
-	Total    int
+	Items      []userdomain.User
+	PageSize   int
+	NextCursor string
+	HasNext    bool
 }

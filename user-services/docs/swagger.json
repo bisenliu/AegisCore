@@ -343,7 +343,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "分页查询用户资料列表，支持按用户昵称、用户名和用户状态过滤，默认排除软删除用户。分页参数未传或小于 1 时使用默认值 page=1、page_size=10。",
+                "description": "基于 user_id keyset 分页查询用户资料列表，支持按用户昵称、用户名和用户状态过滤，默认排除软删除用户。page_size 未传或小于 1 时使用默认值 10，超过 100 时按 100 处理。",
                 "produces": [
                     "application/json"
                 ],
@@ -353,16 +353,16 @@
                 "summary": "分页查询用户列表",
                 "parameters": [
                     {
-                        "minimum": 1,
-                        "type": "integer",
-                        "description": "页码，未传或小于 1 时默认为 1",
-                        "name": "page",
+                        "type": "string",
+                        "description": "分页游标，上一页最后一条用户的 user_id",
+                        "name": "cursor",
                         "in": "query"
                     },
                     {
+                        "maximum": 100,
                         "minimum": 1,
                         "type": "integer",
-                        "description": "每页数量，未传或小于 1 时默认为 10",
+                        "description": "每页数量，未传或小于 1 时默认为 10，超过 100 时按 100 处理",
                         "name": "page_size",
                         "in": "query"
                     },
@@ -686,7 +686,7 @@
                 "status": {
                     "allOf": [
                         {
-                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_user_api.UserStatus"
+                            "$ref": "#/definitions/github_com_aegiscore_user-services_internal_features_user_domain.UserStatus"
                         }
                     ],
                     "example": 100
@@ -742,7 +742,7 @@
                 }
             }
         },
-        "github_com_aegiscore_user-services_internal_features_user_api.UserStatus": {
+        "github_com_aegiscore_user-services_internal_features_user_domain.UserStatus": {
             "type": "integer",
             "format": "int64",
             "enum": [
@@ -821,21 +821,17 @@
         "response.Pagination": {
             "type": "object",
             "properties": {
-                "page": {
-                    "type": "integer",
-                    "example": 1
+                "has_next": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "next_cursor": {
+                    "type": "string",
+                    "example": "0190c8d2-8d8a-7a01-9f43-0f91fb4e2b7c"
                 },
                 "page_size": {
                     "type": "integer",
-                    "example": 20
-                },
-                "total": {
-                    "type": "integer",
-                    "example": 128
-                },
-                "total_pages": {
-                    "type": "integer",
-                    "example": 7
+                    "example": 50
                 }
             }
         }

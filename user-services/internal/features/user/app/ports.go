@@ -18,7 +18,7 @@ type UserService interface {
 type UserProfileStore interface {
 	Create(ctx context.Context, input CreateUserInput) (*userdomain.User, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID) (*userdomain.User, error)
-	ListUsers(ctx context.Context, input ListUsersInput) ([]userdomain.User, int, error)
+	ListUsers(ctx context.Context, input ListUsersInput) ([]userdomain.User, bool, error)
 }
 
 // CreateUserInput 包含规范化后的用户创建数据和已哈希密码。
@@ -32,9 +32,9 @@ type CreateUserInput struct {
 
 // ListUsersInput 包含用户列表查询使用的规范化分页和过滤条件。
 type ListUsersInput struct {
-	Offset   int
-	Limit    int
-	Nickname string
-	Username string
-	Status   *userdomain.UserStatus
+	AfterUserID *uuid.UUID
+	Limit       int
+	Nickname    string
+	Username    string
+	Status      *userdomain.UserStatus
 }

@@ -34,7 +34,7 @@ func toUserListResponse(result *userapp.ListUsersResult) response.PaginatedData[
 			UpdatedAt: result.Items[i].UpdatedAt,
 		})
 	}
-	return response.NewPaginatedData(items, response.NewPagination(result.Page, result.PageSize, result.Total))
+	return response.NewPaginatedData(items, response.NewPagination(result.PageSize, result.NextCursor, result.HasNext))
 }
 
 func toUserHTTPError(err error) error {

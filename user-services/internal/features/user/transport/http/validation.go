@@ -25,13 +25,23 @@ func NormalizeCreateUser(req *userapi.CreateUserRequest) error {
 
 // NormalizeListUsers 应用分页默认值并裁剪用户列表过滤条件。
 func NormalizeListUsers(req *userapi.ListUsersRequest) {
-	paging := response.NormalizePagination(req.Page, req.PageSize)
-	req.Page = paging.Page
-	req.PageSize = paging.PageSize
-	req.Offset = paging.Offset
-	req.Limit = paging.Limit
+	req.Cursor = strings.TrimSpace(req.Cursor)
+	req.PageSize = response.NormalizePageSize(req.PageSize)
+	req.Limit = req.PageSize
 	req.Nickname = strings.TrimSpace(req.Nickname)
 	req.Username = strings.TrimSpace(req.Username)
+}
+
+// ParseListCursor 将列表 cursor 转换为 UUID；空 cursor 表示第一页。
+func ParseListCursor(req userapi.ListUsersRequest) (*uuid.UUID, error) {
+	if req.Cursor == "" {
+		return nil, nil
+	}
+	cursor, err := uuid.Parse(req.Cursor)
+	if err != nil {
+		return nil, response.BadRequestError(messages.InvalidUserID)
+	}
+	return &cursor, nil
 }
 
 // ParseUserID 将 URI user ID 转换为 UUID，并将无效输入映射为 API bad request。

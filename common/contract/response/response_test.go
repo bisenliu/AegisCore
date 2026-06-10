@@ -154,31 +154,31 @@ func TestFailureResponseErrors(t *testing.T) {
 func TestPaginationHelpers(t *testing.T) {
 	tests := []struct {
 		name     string
-		page     int
 		pageSize int
-		want     PaginationQuery
+		want     int
 	}{
-		{name: "missing values use defaults", page: 0, pageSize: 0, want: PaginationQuery{Page: DefaultPage, PageSize: DefaultPageSize, Offset: 0, Limit: DefaultPageSize}},
-		{name: "negative values use defaults", page: -1, pageSize: -20, want: PaginationQuery{Page: DefaultPage, PageSize: DefaultPageSize, Offset: 0, Limit: DefaultPageSize}},
-		{name: "explicit values calculate offset", page: 2, pageSize: 20, want: PaginationQuery{Page: 2, PageSize: 20, Offset: 20, Limit: 20}},
+		{name: "missing values use defaults", pageSize: 0, want: DefaultPageSize},
+		{name: "negative values use defaults", pageSize: -20, want: DefaultPageSize},
+		{name: "explicit value is preserved", pageSize: 20, want: 20},
+		{name: "oversized value is capped", pageSize: 101, want: MaxPageSize},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NormalizePagination(tt.page, tt.pageSize)
+			got := NormalizePageSize(tt.pageSize)
 			if got != tt.want {
-				t.Fatalf("NormalizePagination = %#v, want %#v", got, tt.want)
+				t.Fatalf("NormalizePageSize = %d, want %d", got, tt.want)
 			}
 		})
 	}
 
-	pagination := NewPagination(1, 20, 128)
-	if pagination.Page != 1 || pagination.PageSize != 20 || pagination.Total != 128 || pagination.TotalPages != 7 {
+	pagination := NewPagination(20, "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e", true)
+	if pagination.PageSize != 20 || pagination.NextCursor != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e" || !pagination.HasNext {
 		t.Fatalf("pagination = %#v", pagination)
 	}
 
-	empty := NewPagination(0, 0, 0)
-	if empty.Page != DefaultPage || empty.PageSize != DefaultPageSize || empty.Total != 0 || empty.TotalPages != 0 {
+	empty := NewPagination(0, "", false)
+	if empty.PageSize != DefaultPageSize || empty.NextCursor != "" || empty.HasNext {
 		t.Fatalf("empty pagination = %#v", empty)
 	}
 
@@ -192,7 +192,7 @@ func TestOKWithPaginatedData(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, recorder := newTestContext()
 
-	OK(ctx, NewPaginatedData([]map[string]any{{"id": 1, "name": "Alice"}}, NewPagination(1, 20, 128)))
+	OK(ctx, NewPaginatedData([]map[string]any{{"id": 1, "name": "Alice"}}, NewPagination(20, "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e", true)))
 
 	var body map[string]any
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
@@ -213,8 +213,13 @@ func TestOKWithPaginatedData(t *testing.T) {
 	if !ok {
 		t.Fatalf("pagination = %#v", data["pagination"])
 	}
-	if pagination["page"] != float64(1) || pagination["page_size"] != float64(20) || pagination["total"] != float64(128) || pagination["total_pages"] != float64(7) {
+	if pagination["page_size"] != float64(20) || pagination["next_cursor"] != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e" || pagination["has_next"] != true {
 		t.Fatalf("pagination = %#v", pagination)
+	}
+	for _, removed := range []string{"page", "offset", "total", "total_pages"} {
+		if _, ok := pagination[removed]; ok {
+			t.Fatalf("pagination contains removed field %q: %#v", removed, pagination)
+		}
 	}
 }
 

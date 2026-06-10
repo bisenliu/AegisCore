@@ -9,9 +9,8 @@ type GetUserRequest struct {
 
 // ListUsersRequest 是分页用户列表和过滤条件的 query 绑定请求。
 type ListUsersRequest struct {
-	Page     int                    `query:"page" label:"页码" example:"1"`
+	Cursor   string                 `query:"cursor" label:"分页游标" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
 	PageSize int                    `query:"page_size" label:"每页数量" example:"20"`
-	Offset   int                    `query:"-"`
 	Limit    int                    `query:"-"`
 	Nickname string                 `query:"nickname" label:"用户昵称" example:"Alice"`
 	Username string                 `query:"username" label:"用户名" example:"alice"`

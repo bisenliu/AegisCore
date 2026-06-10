@@ -60,24 +60,26 @@ func (s *userStore) GetByUserID(ctx context.Context, userID uuid.UUID) (*userdom
 	return nil, fmt.Errorf("query user by user_id %s: %w", userID.String(), err)
 }
 
-// ListUsers 返回一页未软删除用户，以及同一过滤条件下的总数。
-func (s *userStore) ListUsers(ctx context.Context, input userapp.ListUsersInput) ([]userdomain.User, int, error) {
+// ListUsers 返回一页未软删除用户，以及是否存在下一页。
+func (s *userStore) ListUsers(ctx context.Context, input userapp.ListUsersInput) ([]userdomain.User, bool, error) {
 	predicates := buildListPredicates(input)
-	total, err := s.client.User.Query().Where(predicates...).Count(ctx)
-	if err != nil {
-		return nil, 0, fmt.Errorf("count users: %w", err)
+	if input.AfterUserID != nil {
+		predicates = append(predicates, entuser.UserIDGT(*input.AfterUserID))
 	}
 
 	users, err := s.client.User.Query().
 		Where(predicates...).
-		Order(entuser.ByID()).
-		Offset(input.Offset).
-		Limit(input.Limit).
+		Order(entuser.ByUserID()).
+		Limit(input.Limit + 1).
 		All(ctx)
 	if err != nil {
-		return nil, 0, fmt.Errorf("list users: %w", err)
+		return nil, false, fmt.Errorf("list users: %w", err)
 	}
-	return toModels(users), total, nil
+	hasNext := len(users) > input.Limit
+	if hasNext {
+		users = users[:input.Limit]
+	}
+	return toModels(users), hasNext, nil
 }
 
 func toModel(entUser *ent.User) *userdomain.User {

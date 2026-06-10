@@ -594,7 +594,7 @@ func assertFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wa
 func (s *routeAuthUserService) ListUsers(context.Context, userapp.ListUsersQuery) (*userapp.ListUsersResult, error) {
 	now := time.Now().UnixMilli()
 	items := []userdomain.User{{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
-	return &userapp.ListUsersResult{Items: items, Page: 1, PageSize: 10, Total: 1}, nil
+	return &userapp.ListUsersResult{Items: items, PageSize: 10}, nil
 }
 
 func assertAuthFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantCode response.Code) {

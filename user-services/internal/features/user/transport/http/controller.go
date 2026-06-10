@@ -22,11 +22,11 @@ func NewUserController(userService userapp.UserService, validator *commonvalidat
 
 // ListUsers 处理分页用户列表请求。
 // @Summary 分页查询用户列表
-// @Description 分页查询用户资料列表，支持按用户昵称、用户名和用户状态过滤，默认排除软删除用户。分页参数未传或小于 1 时使用默认值 page=1、page_size=10。
+// @Description 基于 user_id keyset 分页查询用户资料列表，支持按用户昵称、用户名和用户状态过滤，默认排除软删除用户。page_size 未传或小于 1 时使用默认值 10，超过 100 时按 100 处理。
 // @Tags 用户
 // @Produce json
-// @Param page query int false "页码，未传或小于 1 时默认为 1" minimum(1)
-// @Param page_size query int false "每页数量，未传或小于 1 时默认为 10" minimum(1)
+// @Param cursor query string false "分页游标，上一页最后一条用户的 user_id"
+// @Param page_size query int false "每页数量，未传或小于 1 时默认为 10，超过 100 时按 100 处理" minimum(1) maximum(100)
 // @Param nickname query string false "用户昵称模糊匹配"
 // @Param username query string false "用户名精确匹配"
 // @Param status query int false "用户状态：100 正常，200 冻结/停用，300 必须修改密码" Enums(100,200,300)
@@ -43,10 +43,14 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 	}
 
 	NormalizeListUsers(&req)
+	cursor, err := ParseListCursor(req)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
 	users, err := ctl.userService.ListUsers(c.Request.Context(), userapp.ListUsersQuery{
-		Page:     req.Page,
+		Cursor:   cursor,
 		PageSize: req.PageSize,
-		Offset:   req.Offset,
 		Limit:    req.Limit,
 		Nickname: req.Nickname,
 		Username: req.Username,

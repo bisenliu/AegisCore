@@ -78,7 +78,7 @@ definitions:
         type: string
       status:
         allOf:
-        - $ref: '#/definitions/github_com_aegiscore_user-services_internal_features_user_api.UserStatus'
+        - $ref: '#/definitions/github_com_aegiscore_user-services_internal_features_user_domain.UserStatus'
         example: 100
       username:
         example: alice
@@ -120,7 +120,7 @@ definitions:
         example: alice
         type: string
     type: object
-  github_com_aegiscore_user-services_internal_features_user_api.UserStatus:
+  github_com_aegiscore_user-services_internal_features_user_domain.UserStatus:
     enum:
     - 100
     - 200
@@ -183,17 +183,14 @@ definitions:
     type: object
   response.Pagination:
     properties:
-      page:
-        example: 1
-        type: integer
+      has_next:
+        example: true
+        type: boolean
+      next_cursor:
+        example: 0190c8d2-8d8a-7a01-9f43-0f91fb4e2b7c
+        type: string
       page_size:
-        example: 20
-        type: integer
-      total:
-        example: 128
-        type: integer
-      total_pages:
-        example: 7
+        example: 50
         type: integer
     type: object
 host: localhost:8080
@@ -396,15 +393,16 @@ paths:
       - 系统
   /users:
     get:
-      description: 分页查询用户资料列表，支持按用户昵称、用户名和用户状态过滤，默认排除软删除用户。分页参数未传或小于 1 时使用默认值 page=1、page_size=10。
+      description: 基于 user_id keyset 分页查询用户资料列表，支持按用户昵称、用户名和用户状态过滤，默认排除软删除用户。page_size
+        未传或小于 1 时使用默认值 10，超过 100 时按 100 处理。
       parameters:
-      - description: 页码，未传或小于 1 时默认为 1
+      - description: 分页游标，上一页最后一条用户的 user_id
         in: query
-        minimum: 1
-        name: page
-        type: integer
-      - description: 每页数量，未传或小于 1 时默认为 10
+        name: cursor
+        type: string
+      - description: 每页数量，未传或小于 1 时默认为 10，超过 100 时按 100 处理
         in: query
+        maximum: 100
         minimum: 1
         name: page_size
         type: integer

@@ -110,33 +110,34 @@ func TestUserServiceListUsers(t *testing.T) {
 		repo := &stubUserRepository{}
 		svc := NewUserService(repo)
 
-		users, err := svc.ListUsers(context.Background(), ListUsersQuery{Page: 1, PageSize: 10, Limit: 10})
+		users, err := svc.ListUsers(context.Background(), ListUsersQuery{PageSize: 10, Limit: 10})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
 		}
-		if repo.listInput.Offset != 0 || repo.listInput.Limit != 10 {
+		if repo.listInput.AfterUserID != nil || repo.listInput.Limit != 10 {
 			t.Fatalf("listInput = %#v", repo.listInput)
 		}
 		if len(users.Items) != 0 {
 			t.Fatalf("items = %#v", users.Items)
 		}
-		if users.Page != 1 || users.PageSize != 10 || users.Total != 0 {
+		if users.PageSize != 10 || users.NextCursor != "" || users.HasNext {
 			t.Fatalf("pagination result = %#v", users)
 		}
 	})
 
-	t.Run("explicit pagination and filters", func(t *testing.T) {
+	t.Run("explicit cursor pagination and filters", func(t *testing.T) {
 		status := userdomain.UserStatusNormal
-		repo := &stubUserRepository{listUsers: []userdomain.User{{ID: 1, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, listTotal: 128}
+		repo := &stubUserRepository{listUsers: []userdomain.User{{ID: 1, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, listHasNext: true}
 		svc := NewUserService(repo)
+		afterUserID := uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4d")
 
-		users, err := svc.ListUsers(context.Background(), ListUsersQuery{Page: 2, PageSize: 20, Offset: 20, Limit: 20, Nickname: "Ali", Username: "alice", Status: &status})
+		users, err := svc.ListUsers(context.Background(), ListUsersQuery{Cursor: &afterUserID, PageSize: 20, Limit: 20, Nickname: "Ali", Username: "alice", Status: &status})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
 		}
-		if repo.listInput.Offset != 20 || repo.listInput.Limit != 20 || repo.listInput.Nickname != "Ali" || repo.listInput.Username != "alice" {
+		if repo.listInput.AfterUserID == nil || *repo.listInput.AfterUserID != afterUserID || repo.listInput.Limit != 20 || repo.listInput.Nickname != "Ali" || repo.listInput.Username != "alice" {
 			t.Fatalf("listInput = %#v", repo.listInput)
 		}
 		if repo.listInput.Status == nil || *repo.listInput.Status != userdomain.UserStatusNormal {
@@ -145,7 +146,7 @@ func TestUserServiceListUsers(t *testing.T) {
 		if len(users.Items) != 1 || users.Items[0].UserID != testUserID || users.Items[0].Username != "alice" || users.Items[0].CreatedAt != createdAt {
 			t.Fatalf("items = %#v", users.Items)
 		}
-		if users.Page != 2 || users.PageSize != 20 || users.Total != 128 {
+		if users.PageSize != 20 || users.NextCursor != testUserID.String() || !users.HasNext {
 			t.Fatalf("pagination result = %#v", users)
 		}
 	})
@@ -154,7 +155,7 @@ func TestUserServiceListUsers(t *testing.T) {
 		repoErr := errors.New("database down")
 		svc := NewUserService(&stubUserRepository{listErr: repoErr})
 
-		_, err := svc.ListUsers(context.Background(), ListUsersQuery{Page: 1, PageSize: 10, Limit: 10})
+		_, err := svc.ListUsers(context.Background(), ListUsersQuery{PageSize: 10, Limit: 10})
 
 		if err == nil || !errors.Is(err, repoErr) {
 			t.Fatalf("err = %v, want %v", err, repoErr)
@@ -167,7 +168,7 @@ type stubUserRepository struct {
 	createErr       error
 	createdInput    CreateUserInput
 	listUsers       []userdomain.User
-	listTotal       int
+	listHasNext     bool
 	listErr         error
 	listInput       ListUsersInput
 	getByUserID     uuid.UUID
@@ -191,10 +192,10 @@ func (r *stubUserRepository) GetByUserID(_ context.Context, userID uuid.UUID) (*
 	return r.getByUserIDUser, nil
 }
 
-func (r *stubUserRepository) ListUsers(_ context.Context, input ListUsersInput) ([]userdomain.User, int, error) {
+func (r *stubUserRepository) ListUsers(_ context.Context, input ListUsersInput) ([]userdomain.User, bool, error) {
 	r.listInput = input
 	if r.listErr != nil {
-		return nil, 0, r.listErr
+		return nil, false, r.listErr
 	}
-	return r.listUsers, r.listTotal, nil
+	return r.listUsers, r.listHasNext, nil
 }

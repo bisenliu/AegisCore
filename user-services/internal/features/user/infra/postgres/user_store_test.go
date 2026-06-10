@@ -99,12 +99,12 @@ func TestUserRepositoryReturnsDomainUsers(t *testing.T) {
 	assertSameUser(t, byID, created)
 
 	status := userdomain.UserStatusMustChangePassword
-	users, total, err := repo.ListUsers(ctx, userapp.ListUsersInput{Limit: 10, Username: "domain-alice", Status: &status})
+	users, hasNext, err := repo.ListUsers(ctx, userapp.ListUsersInput{Limit: 10, Username: "domain-alice", Status: &status})
 	if err != nil {
 		t.Fatalf("ListUsers: %v", err)
 	}
-	if total != 1 || len(users) != 1 || users[0].UserID != userID || users[0].Username != "domain-alice" || users[0].Status != userdomain.UserStatusMustChangePassword {
-		t.Fatalf("users=%#v total=%d", users, total)
+	if hasNext || len(users) != 1 || users[0].UserID != userID || users[0].Username != "domain-alice" || users[0].Status != userdomain.UserStatusMustChangePassword {
+		t.Fatalf("users=%#v hasNext=%v", users, hasNext)
 	}
 }
 
@@ -112,36 +112,45 @@ func TestUserRepositoryListUsersBoundaries(t *testing.T) {
 	t.Run("empty page", func(t *testing.T) {
 		repo := newTestUserStore(t)
 
-		users, total, err := repo.ListUsers(context.Background(), userapp.ListUsersInput{Limit: 10})
+		users, hasNext, err := repo.ListUsers(context.Background(), userapp.ListUsersInput{Limit: 10})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
 		}
-		if total != 0 || len(users) != 0 {
-			t.Fatalf("users=%#v total=%d, want empty page", users, total)
+		if hasNext || len(users) != 0 {
+			t.Fatalf("users=%#v hasNext=%v, want empty page", users, hasNext)
 		}
 	})
 
-	t.Run("paginates with stable id order", func(t *testing.T) {
+	t.Run("paginates with stable user id order", func(t *testing.T) {
 		repo := newTestUserStore(t)
 		ctx := context.Background()
 		first := createTestUser(t, repo, userapp.CreateUserInput{Nickname: "Page One", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000201"), Username: "page-one", PasswordHash: "hash-1", Status: userdomain.UserStatusNormal})
 		second := createTestUser(t, repo, userapp.CreateUserInput{Nickname: "Page Two", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000202"), Username: "page-two", PasswordHash: "hash-2", Status: userdomain.UserStatusDisabled})
 		third := createTestUser(t, repo, userapp.CreateUserInput{Nickname: "Page Three", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000203"), Username: "page-three", PasswordHash: "hash-3", Status: userdomain.UserStatusMustChangePassword})
 
-		users, total, err := repo.ListUsers(ctx, userapp.ListUsersInput{Limit: 2, Offset: 1})
+		users, hasNext, err := repo.ListUsers(ctx, userapp.ListUsersInput{Limit: 2})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
 		}
-		if total != 3 || len(users) != 2 {
-			t.Fatalf("users=%#v total=%d, want 2 of 3", users, total)
+		if !hasNext || len(users) != 2 {
+			t.Fatalf("users=%#v hasNext=%v, want 2 with next page", users, hasNext)
 		}
-		if first.ID >= second.ID || second.ID >= third.ID {
-			t.Fatalf("seed IDs not increasing: first=%d second=%d third=%d", first.ID, second.ID, third.ID)
+		if first.UserID.String() >= second.UserID.String() || second.UserID.String() >= third.UserID.String() {
+			t.Fatalf("seed user IDs not increasing: first=%s second=%s third=%s", first.UserID, second.UserID, third.UserID)
 		}
-		assertSameUserValue(t, users[0], second)
-		assertSameUserValue(t, users[1], third)
+		assertSameUserValue(t, users[0], first)
+		assertSameUserValue(t, users[1], second)
+
+		users, hasNext, err = repo.ListUsers(ctx, userapp.ListUsersInput{AfterUserID: &second.UserID, Limit: 2})
+		if err != nil {
+			t.Fatalf("ListUsers after cursor: %v", err)
+		}
+		if hasNext || len(users) != 1 {
+			t.Fatalf("users=%#v hasNext=%v, want final page", users, hasNext)
+		}
+		assertSameUserValue(t, users[0], third)
 	})
 
 	t.Run("filters by nickname username status and combined predicates", func(t *testing.T) {
@@ -158,28 +167,28 @@ func TestUserRepositoryListUsersBoundaries(t *testing.T) {
 		assertListUsernames(t, repo, userapp.ListUsersInput{Limit: 10, Status: &disabled}, []string{"alice-audit"})
 		assertListUsernames(t, repo, userapp.ListUsersInput{Limit: 10, Nickname: "Alice", Username: "alice-audit", Status: &disabled}, []string{"alice-audit"})
 
-		users, total, err := repo.ListUsers(ctx, userapp.ListUsersInput{Limit: 10, Nickname: "Missing"})
+		users, hasNext, err := repo.ListUsers(ctx, userapp.ListUsersInput{Limit: 10, Nickname: "Missing"})
 		if err != nil {
 			t.Fatalf("ListUsers missing filter: %v", err)
 		}
-		if total != 0 || len(users) != 0 {
-			t.Fatalf("users=%#v total=%d, want no matches", users, total)
+		if hasNext || len(users) != 0 {
+			t.Fatalf("users=%#v hasNext=%v, want no matches", users, hasNext)
 		}
 	})
 
-	t.Run("excludes soft deleted users from rows and total", func(t *testing.T) {
+	t.Run("excludes soft deleted users from rows and has next", func(t *testing.T) {
 		repo := newTestUserStore(t)
 		ctx := context.Background()
 		active := createTestUser(t, repo, userapp.CreateUserInput{Nickname: "Active Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000221"), Username: "active-alice", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
 		createSoftDeletedUser(t, repo, userapp.CreateUserInput{Nickname: "Deleted Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000222"), Username: "deleted-alice-list", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
 
-		users, total, err := repo.ListUsers(ctx, userapp.ListUsersInput{Limit: 10, Nickname: "Alice"})
+		users, hasNext, err := repo.ListUsers(ctx, userapp.ListUsersInput{Limit: 10, Nickname: "Alice"})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
 		}
-		if total != 1 || len(users) != 1 {
-			t.Fatalf("users=%#v total=%d, want only active user", users, total)
+		if hasNext || len(users) != 1 {
+			t.Fatalf("users=%#v hasNext=%v, want only active user", users, hasNext)
 		}
 		assertSameUserValue(t, users[0], active)
 	})
@@ -247,12 +256,12 @@ func assertSameUserValue(t *testing.T, got userdomain.User, want *userdomain.Use
 
 func assertListUsernames(t *testing.T, repo *userStore, input userapp.ListUsersInput, want []string) {
 	t.Helper()
-	users, total, err := repo.ListUsers(context.Background(), input)
+	users, hasNext, err := repo.ListUsers(context.Background(), input)
 	if err != nil {
 		t.Fatalf("ListUsers(%#v): %v", input, err)
 	}
-	if total != len(want) || len(users) != len(want) {
-		t.Fatalf("users=%#v total=%d, want usernames %v", users, total, want)
+	if hasNext || len(users) != len(want) {
+		t.Fatalf("users=%#v hasNext=%v, want usernames %v", users, hasNext, want)
 	}
 	for i := range want {
 		if users[i].Username != want[i] {

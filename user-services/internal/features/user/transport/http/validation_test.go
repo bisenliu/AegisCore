@@ -46,18 +46,42 @@ func TestNormalizeCreateUser(t *testing.T) {
 
 func TestNormalizeListUsers(t *testing.T) {
 	status := userdomain.UserStatusNormal
-	req := userapi.ListUsersRequest{Page: 2, PageSize: 20, Nickname: " Alice ", Username: " alice ", Status: &status}
+	req := userapi.ListUsersRequest{Cursor: " 018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e ", PageSize: 20, Nickname: " Alice ", Username: " alice ", Status: &status}
 
 	NormalizeListUsers(&req)
 
-	if req.Page != 2 || req.PageSize != 20 || req.Offset != 20 || req.Limit != 20 || req.Nickname != "Alice" || req.Username != "alice" || req.Status == nil || *req.Status != status {
+	if req.Cursor != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e" || req.PageSize != 20 || req.Limit != 20 || req.Nickname != "Alice" || req.Username != "alice" || req.Status == nil || *req.Status != status {
 		t.Fatalf("req = %#v", req)
 	}
 
-	req = userapi.ListUsersRequest{Page: -1, PageSize: 0}
+	req = userapi.ListUsersRequest{PageSize: 0}
 	NormalizeListUsers(&req)
-	if req.Page != 1 || req.PageSize != 10 || req.Offset != 0 || req.Limit != 10 {
+	if req.PageSize != 10 || req.Limit != 10 {
 		t.Fatalf("defaulted req = %#v", req)
+	}
+
+	req = userapi.ListUsersRequest{PageSize: 101}
+	NormalizeListUsers(&req)
+	if req.PageSize != 100 || req.Limit != 100 {
+		t.Fatalf("capped req = %#v", req)
+	}
+}
+
+func TestParseListCursor(t *testing.T) {
+	cursor, err := ParseListCursor(userapi.ListUsersRequest{Cursor: "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"})
+	if err != nil || cursor == nil || cursor.String() != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e" {
+		t.Fatalf("cursor=%v err=%v", cursor, err)
+	}
+
+	cursor, err = ParseListCursor(userapi.ListUsersRequest{})
+	if err != nil || cursor != nil {
+		t.Fatalf("empty cursor=%v err=%v", cursor, err)
+	}
+
+	_, err = ParseListCursor(userapi.ListUsersRequest{Cursor: "abc"})
+	appErr := response.FromError(err)
+	if appErr.Code != response.CodeBadRequest || appErr.Message != messages.InvalidUserID {
+		t.Fatalf("err = %#v", appErr)
 	}
 }
 
