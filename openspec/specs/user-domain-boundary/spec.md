@@ -53,7 +53,7 @@
 - **Then** 数据库 schema、Atlas migration、Ent 生成代码和 Go module 边界 MUST 保持不变
 
 ### Requirement: User domain model owns user state rules
-系统 SHALL 在 `user-services/internal/features/user/domain` 中提供用户领域实体，用于表达用户对外身份、基础资料、认证凭据摘要、状态、token version 和公开时间戳。用户状态相关业务判断 MUST 通过用户领域实体或用户状态枚举方法表达，app service 层 MUST NOT 直接依赖 Ent 用户模型字段实现用户状态规则。
+系统 SHALL 在 `user-services/internal/features/user/domain` 中提供用户领域实体，用于表达用户对外身份、基础资料、认证凭据摘要、状态、token version 和公开时间戳。用户状态相关业务判断、状态合法性校验、允许值列表以及 JSON/query 文本解析 MUST 通过用户领域实体或用户状态枚举方法表达，app service 层 MUST NOT 直接依赖 Ent 用户模型字段实现用户状态规则。用户 HTTP API DTO MAY 直接复用用户领域状态枚举作为请求和响应中的状态类型；实现 MUST NOT 在 `user-services/internal/features/user/api` 中重复定义用户状态类型、状态常量或状态解析/枚举校验方法。
 
 #### Scenario: Domain user represents service user data needs
 - **Given** Service 层需要处理用户查询、创建响应、登录、改密或 token version 相关流程
@@ -67,6 +67,13 @@
 - **When** Service 执行用户状态判断
 - **Then** Service MUST 使用用户领域实体或 `user.UserStatus` 提供的方法表达状态规则
 - **Then** Service MUST NOT 通过散落的 Ent 字段类型转换重复实现相同状态规则
+
+#### Scenario: API DTO reuses domain user status enum
+- **Given** 用户创建或用户列表 HTTP request DTO 需要表达可选 `status` 字段
+- **When** DTO 定义状态字段类型
+- **Then** DTO MUST 直接复用 `user-services/internal/features/user/domain.UserStatus`
+- **Then** `user-services/internal/features/user/api` MUST NOT 重复定义 `UserStatus` 类型、状态常量、`IsValid`、`AllowedValues`、`UnmarshalText` 或 `UnmarshalJSON`
+- **Then** 共享 enum 校验和 Gin 绑定 MUST 继续使用领域状态类型上的解析和枚举方法
 
 ### Requirement: Persistence models remain store implementation details
 系统 SHALL 将 Ent 用户模型限制在 PostgreSQL store 实现边界内。用户资料和认证能力的 store port 抽象 MUST 面向领域模型和领域错误，不得向 Service、Controller 或 DTO 层暴露 Ent 生成类型。
@@ -144,4 +151,3 @@
 - **When** Store 返回用户数据给 Service
 - **Then** Store MUST 将 Ent `status` 数值转换为 `userdomain.UserStatus`
 - **Then** Ent schema 本地默认值常量 MUST NOT 成为 Service 或 Controller 的业务状态规则来源
-
