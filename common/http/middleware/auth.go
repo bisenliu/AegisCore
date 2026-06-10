@@ -34,26 +34,26 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService,
 		authHeader := c.GetHeader(auth.AuthorizationHeader)
 		if authHeader == "" {
 			// 缺少请求头表示调用方未认证；下面的 Bearer 格式错误则属于 token 无效。
-			reqLog.Error("missing authorization header")
+			reqLog.Info("missing authorization header")
 			response.Unauthenticated(c, response.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
 		tokenString, err := auth.ParseBearerAuthorization(authHeader)
 		if errors.Is(err, auth.ErrMissingBearerPrefix) {
-			reqLog.Error("invalid authorization header format")
+			reqLog.Warn("invalid authorization header format")
 			response.TokenInvalid(c, response.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
 		if errors.Is(err, auth.ErrEmptyBearerToken) {
-			reqLog.Error("empty bearer token")
+			reqLog.Warn("empty bearer token")
 			response.TokenInvalid(c, response.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
 		if err != nil {
-			reqLog.Error("invalid authorization header format", zap.Error(err))
+			reqLog.Warn("invalid authorization header format", zap.Error(err))
 			response.TokenInvalid(c, response.MessageAuthInvalid)
 			c.Abort()
 			return
@@ -61,7 +61,11 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService,
 
 		claims, err := jwtService.ParseToken(tokenString)
 		if err != nil {
-			reqLog.Error("token validation failed", zap.Error(err))
+			if errors.Is(err, auth.ErrMissingSecret) {
+				reqLog.Error("token validation failed", zap.Error(err))
+			} else {
+				reqLog.Warn("token validation failed", zap.Error(err))
+			}
 			if errors.Is(err, jwtv5.ErrTokenExpired) {
 				response.TokenExpired(c, response.MessageAuthInvalid)
 			} else {
