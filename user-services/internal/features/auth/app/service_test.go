@@ -180,12 +180,70 @@ func TestAuthServiceChangePassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChangePassword: %v", err)
 	}
-	if !result.Changed || repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != userdomain.UserStatusNormal || repo.incrementedUserID != authTestUserID || !store.cached || store.cachedVersion != 3 || !store.deletedAll {
+	if !result.Changed || repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != userdomain.UserStatusNormal || repo.incrementedUserID != uuid.Nil || !store.cached || store.cachedVersion != 3 || !store.deletedAll {
 		t.Fatalf("result=%#v repo=%#v store=%#v", result, repo, store)
 	}
 	matched, err := password.VerifyContext(context.Background(), "new-secret", repo.updatedInput.PasswordHash)
 	if err != nil || !matched {
 		t.Fatalf("updated password hash mismatch: matched=%v err=%v", matched, err)
+	}
+}
+
+func TestAuthServiceChangePasswordIncrementsTokenVersionOnce(t *testing.T) {
+	passwordHash, err := password.HashContext(context.Background(), "old-secret")
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
+	store := &sessionStoreStub{version: 2}
+	svc := newTestAuthService(repo, store, true)
+	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
+	if err != nil {
+		t.Fatalf("SignPasswordChangeToken: %v", err)
+	}
+
+	_, err = svc.ChangePassword(context.Background(), ChangePasswordCommand{Token: token, NewPassword: "new-secret"})
+
+	if err != nil {
+		t.Fatalf("ChangePassword: %v", err)
+	}
+	if repo.updateCalls != 1 {
+		t.Fatalf("UpdateCredentials calls = %d, want 1", repo.updateCalls)
+	}
+	if repo.incrementCalls != 0 || repo.incrementedUserID != uuid.Nil {
+		t.Fatalf("IncrementTokenVersion calls = %d userID=%s, want none", repo.incrementCalls, repo.incrementedUserID)
+	}
+	if !store.cached || store.cachedVersion != 3 || !store.deletedAll {
+		t.Fatalf("store projection = %#v", store)
+	}
+}
+
+func TestAuthServiceChangePasswordSucceedsWhenRevocationProjectionFails(t *testing.T) {
+	passwordHash, err := password.HashContext(context.Background(), "old-secret")
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
+	store := &sessionStoreStub{version: 2, cacheErr: errors.New("cache failed"), deleteAllErr: errors.New("delete failed")}
+	svc := newTestAuthService(repo, store, true)
+	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
+	if err != nil {
+		t.Fatalf("SignPasswordChangeToken: %v", err)
+	}
+
+	result, err := svc.ChangePassword(context.Background(), ChangePasswordCommand{Token: token, NewPassword: "new-secret"})
+
+	if err != nil {
+		t.Fatalf("ChangePassword: %v", err)
+	}
+	if result == nil || !result.Changed {
+		t.Fatalf("result = %#v", result)
+	}
+	if !store.cacheDeleted || store.deletedCachedUserID != authTestUserID.String() {
+		t.Fatalf("cache eviction = %#v", store)
+	}
+	if repo.incrementCalls != 0 {
+		t.Fatalf("IncrementTokenVersion calls = %d, want 0", repo.incrementCalls)
 	}
 }
 
@@ -449,6 +507,28 @@ func TestAuthServiceLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 	}
 }
 
+func TestAuthServiceLogoutAllSucceedsWhenRevocationProjectionFails(t *testing.T) {
+	repo := &authRepoStub{newVersion: 3}
+	store := &sessionStoreStub{version: 2, cacheErr: errors.New("cache failed"), deleteAllErr: errors.New("delete failed")}
+	svc := newTestAuthService(repo, store, true)
+	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
+
+	result, err := svc.LogoutAll(ctx)
+
+	if err != nil {
+		t.Fatalf("LogoutAll: %v", err)
+	}
+	if result == nil || !result.LoggedOut {
+		t.Fatalf("result = %#v", result)
+	}
+	if repo.incrementCalls != 1 || repo.incrementedUserID != authTestUserID {
+		t.Fatalf("repo increment calls=%d userID=%s", repo.incrementCalls, repo.incrementedUserID)
+	}
+	if !store.cacheDeleted || store.deletedCachedUserID != authTestUserID.String() {
+		t.Fatalf("cache eviction = %#v", store)
+	}
+}
+
 func TestAuthServiceLogoutAllMapsIncrementUserNotFound(t *testing.T) {
 	repo := &authRepoStub{incrementErr: userdomain.ErrUserNotFound}
 	store := &sessionStoreStub{version: 2}
@@ -488,7 +568,9 @@ type authRepoStub struct {
 	incrementErr      error
 	updateErr         error
 	incrementedUserID uuid.UUID
+	incrementCalls    int
 	updatedInput      authdomain.UpdateCredentialsInput
+	updateCalls       int
 	tokenVersion      int64
 	tokenVersionErr   error
 	getTokenVersionID uuid.UUID
@@ -515,6 +597,7 @@ func (r *authRepoStub) GetTokenVersion(_ context.Context, userID uuid.UUID) (int
 	return r.tokenVersion, nil
 }
 func (r *authRepoStub) IncrementTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
+	r.incrementCalls++
 	r.incrementedUserID = userID
 	if r.incrementErr != nil {
 		return 0, r.incrementErr
@@ -522,6 +605,7 @@ func (r *authRepoStub) IncrementTokenVersion(_ context.Context, userID uuid.UUID
 	return r.newVersion, nil
 }
 func (r *authRepoStub) UpdateCredentials(_ context.Context, input authdomain.UpdateCredentialsInput) (int64, error) {
+	r.updateCalls++
 	r.updatedInput = input
 	if r.updateErr != nil {
 		return 0, r.updateErr
@@ -530,21 +614,24 @@ func (r *authRepoStub) UpdateCredentials(_ context.Context, input authdomain.Upd
 }
 
 type sessionStoreStub struct {
-	version          int64
-	session          authdomain.AuthSession
-	created          authdomain.AuthSession
-	createdTTL       time.Duration
-	deleted          bool
-	deletedSessionID string
-	deletedAll       bool
-	getVersionErr    error
-	deleteAllErr     error
-	rotateErr        error
-	cacheMiss        bool
-	cacheErr         error
-	cached           bool
-	cachedUserID     string
-	cachedVersion    int64
+	version             int64
+	session             authdomain.AuthSession
+	created             authdomain.AuthSession
+	createdTTL          time.Duration
+	deleted             bool
+	deletedSessionID    string
+	deletedAll          bool
+	getVersionErr       error
+	deleteAllErr        error
+	rotateErr           error
+	cacheMiss           bool
+	cacheErr            error
+	deleteCacheErr      error
+	cacheDeleted        bool
+	deletedCachedUserID string
+	cached              bool
+	cachedUserID        string
+	cachedVersion       int64
 }
 
 func (s *sessionStoreStub) GetCachedTokenVersion(context.Context, string) (int64, error) {
@@ -563,6 +650,14 @@ func (s *sessionStoreStub) CacheTokenVersion(_ context.Context, userID string, t
 	s.cached = true
 	s.cachedUserID = userID
 	s.cachedVersion = tokenVersion
+	return nil
+}
+func (s *sessionStoreStub) DeleteCachedTokenVersion(_ context.Context, userID string) error {
+	if s.deleteCacheErr != nil {
+		return s.deleteCacheErr
+	}
+	s.cacheDeleted = true
+	s.deletedCachedUserID = userID
 	return nil
 }
 func (s *sessionStoreStub) CreateSession(_ context.Context, session authdomain.AuthSession, ttl time.Duration) error {
@@ -677,6 +772,10 @@ func (m *refreshRotationSessionLifecycle) DeleteSession(_ context.Context, _ str
 		return err
 	}
 	return nil
+}
+
+func (m *refreshRotationSessionLifecycle) RevokeUserSessionsAtVersion(context.Context, uuid.UUID, int64) error {
+	return errors.New("not implemented")
 }
 
 func (m *refreshRotationSessionLifecycle) RevokeAllUserSessions(context.Context, uuid.UUID) (*authdomain.SessionRevocationResult, error) {

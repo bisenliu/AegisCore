@@ -27,11 +27,26 @@ const (
 )
 
 const (
-	rotateSessionResultOK        int64 = 1
-	rotateSessionResultNotFound  int64 = 2
-	rotateSessionResultMismatch  int64 = 3
-	deleteAllUserSessionsNoLimit       = 0
+	rotateSessionResultOK          int64 = 1
+	rotateSessionResultNotFound    int64 = 2
+	rotateSessionResultMismatch    int64 = 3
+	cacheTokenVersionResultStored        = 1
+	cacheTokenVersionResultSkipped       = 2
+	deleteAllUserSessionsNoLimit         = 0
 )
+
+var cacheTokenVersionScript = rediscache.NewScript(`
+local current = redis.call("GET", KEYS[1])
+local next_version = tonumber(ARGV[1])
+if current then
+	local current_version = tonumber(current)
+	if current_version and current_version > next_version then
+		return 2
+	end
+end
+redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])
+return 1
+`)
 
 var rotateSessionScript = rediscache.NewScript(`
 local old_payload = redis.call("GET", KEYS[1])
@@ -120,8 +135,20 @@ func (r *sessionStore) CacheTokenVersion(ctx context.Context, userID string, tok
 		// 非正数配置表示使用有界默认过期窗口，而不是创建永久缓存项。
 		ttl = defaultTokenVersionCacheTTL
 	}
-	if err := r.redis.Set(ctx, r.tokenVersionKey(userID), formatTokenVersion(tokenVersion), ttl).Err(); err != nil {
+	result, err := cacheTokenVersionScript.Run(ctx, r.redis, []string{r.tokenVersionKey(userID)}, formatTokenVersion(tokenVersion), milliseconds(ttl)).Int64()
+	if err != nil {
 		return fmt.Errorf("set token version cache: %w", err)
+	}
+	if result != cacheTokenVersionResultStored && result != cacheTokenVersionResultSkipped {
+		return fmt.Errorf("set token version cache: unexpected script result %d", result)
+	}
+	return nil
+}
+
+// DeleteCachedTokenVersion 删除用户 token version 缓存，使后续校验回源 PostgreSQL。
+func (r *sessionStore) DeleteCachedTokenVersion(ctx context.Context, userID string) error {
+	if err := r.redis.Del(ctx, r.tokenVersionKey(userID)).Err(); err != nil {
+		return fmt.Errorf("delete token version cache: %w", err)
 	}
 	return nil
 }

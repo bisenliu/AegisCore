@@ -83,6 +83,51 @@ func TestSessionStoreCacheTokenVersionOverwritesStaleValue(t *testing.T) {
 	}
 }
 
+func TestSessionStoreCacheTokenVersionDoesNotOverwriteNewerValue(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestSessionStore(redisServer)
+	ctx := context.Background()
+
+	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 9); err != nil {
+		t.Fatalf("CacheTokenVersion new: %v", err)
+	}
+	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 8); err != nil {
+		t.Fatalf("CacheTokenVersion stale: %v", err)
+	}
+
+	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
+	if err != nil {
+		t.Fatalf("GetCachedTokenVersion: %v", err)
+	}
+	if version != 9 {
+		t.Fatalf("version = %d, want 9", version)
+	}
+}
+
+func TestSessionStoreDeleteCachedTokenVersion(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestSessionStore(redisServer)
+	ctx := context.Background()
+
+	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7); err != nil {
+		t.Fatalf("CacheTokenVersion: %v", err)
+	}
+	if err := store.DeleteCachedTokenVersion(ctx, sessionTestUserID.String()); err != nil {
+		t.Fatalf("DeleteCachedTokenVersion: %v", err)
+	}
+
+	_, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
+	if !errors.Is(err, authdomain.ErrTokenVersionCacheMiss) {
+		t.Fatalf("GetCachedTokenVersion err = %v, want cache miss", err)
+	}
+	if redisServer.Exists(store.tokenVersionKey(sessionTestUserID.String())) {
+		t.Fatal("token version cache key still exists")
+	}
+	if store.tokenVersionKey(sessionTestUserID.String()) != "auth:user:token_version:{"+sessionTestUserID.String()+"}" {
+		t.Fatalf("token version key changed: %q", store.tokenVersionKey(sessionTestUserID.String()))
+	}
+}
+
 func TestSessionStoreTokenVersionCacheUsesDefaultTTL(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStoreWithConfig(redisServer, config.AuthConfig{})

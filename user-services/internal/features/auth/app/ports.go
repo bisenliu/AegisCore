@@ -36,6 +36,7 @@ type UserTokenVersionStore interface {
 type AuthSessionStore interface {
 	GetCachedTokenVersion(ctx context.Context, userID string) (int64, error)
 	CacheTokenVersion(ctx context.Context, userID string, tokenVersion int64) error
+	DeleteCachedTokenVersion(ctx context.Context, userID string) error
 	CreateSession(ctx context.Context, session authdomain.AuthSession, ttl time.Duration) error
 	RotateSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, ttl time.Duration) error
 	GetSession(ctx context.Context, userID string, sessionID string) (authdomain.AuthSession, error)
@@ -50,6 +51,7 @@ type AuthSessionLifecycle interface {
 	ValidateRefreshSession(ctx context.Context, claims *commonauth.Claims) (authdomain.AuthSession, int64, error)
 	RotateTokenSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, refreshTTL time.Duration) error
 	DeleteSession(ctx context.Context, userID string, sessionID string) error
+	RevokeUserSessionsAtVersion(ctx context.Context, userID uuid.UUID, tokenVersion int64) error
 	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*authdomain.SessionRevocationResult, error)
 }
 

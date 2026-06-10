@@ -138,7 +138,7 @@ func currentTokenVersion(ctx context.Context, users UserTokenVersionStore, sessi
 		return currentVersion, nil
 	}
 	if !errors.Is(err, authdomain.ErrTokenVersionCacheMiss) {
-		return 0, err
+		logger.Warn(ctx, "token version cache unavailable, fallback to database", zap.String("user_id", userID), zap.Error(err))
 	}
 	parsedUserID, err := uuid.Parse(userID)
 	if err != nil {
@@ -150,7 +150,7 @@ func currentTokenVersion(ctx context.Context, users UserTokenVersionStore, sessi
 		return 0, err
 	}
 	if err := sessions.CacheTokenVersion(ctx, userID, currentVersion); err != nil {
-		return 0, err
+		logger.Warn(ctx, "backfill token version cache failed", zap.String("user_id", userID), zap.Int64("token_version", currentVersion), zap.Error(err))
 	}
 	return currentVersion, nil
 }
@@ -166,14 +166,27 @@ func (m *authSessionLifecycle) RevokeAllUserSessions(ctx context.Context, userID
 		logger.Error(ctx, "increment token version failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
 		return nil, response.FromError(err)
 	}
-	if err := m.sessions.CacheTokenVersion(ctx, userID.String(), tokenVersion); err != nil {
-		// 删除会话前先刷新缓存，使 access token 中间件立即拒绝旧 token。
-		logger.Error(ctx, "refresh token version cache failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
-		return nil, response.FromError(err)
-	}
-	if err := m.sessions.DeleteAllUserSessions(ctx, userID.String()); err != nil {
-		logger.Error(ctx, "delete all user sessions failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
-		return nil, response.FromError(err)
+	if err := m.RevokeUserSessionsAtVersion(ctx, userID, tokenVersion); err != nil {
+		logger.Error(ctx, "revoke all user sessions projection failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 	}
 	return &authdomain.SessionRevocationResult{UserID: userID, TokenVersion: tokenVersion}, nil
+}
+
+// RevokeUserSessionsAtVersion 刷新 token version 投影并删除全部 refresh 会话，不修改 PostgreSQL 版本。
+func (m *authSessionLifecycle) RevokeUserSessionsAtVersion(ctx context.Context, userID uuid.UUID, tokenVersion int64) error {
+	userIDString := userID.String()
+	var projectionErr error
+	if err := m.sessions.CacheTokenVersion(ctx, userIDString, tokenVersion); err != nil {
+		logger.Error(ctx, "refresh token version cache failed", logger.StackTrace(zap.String("user_id", userIDString), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
+		projectionErr = errors.Join(projectionErr, fmt.Errorf("refresh token version cache: %w", err))
+		if evictErr := m.sessions.DeleteCachedTokenVersion(ctx, userIDString); evictErr != nil {
+			logger.Error(ctx, "delete token version cache failed", logger.StackTrace(zap.String("user_id", userIDString), zap.Int64("token_version", tokenVersion), zap.Error(evictErr))...)
+			projectionErr = errors.Join(projectionErr, fmt.Errorf("delete token version cache: %w", evictErr))
+		}
+	}
+	if err := m.sessions.DeleteAllUserSessions(ctx, userIDString); err != nil {
+		logger.Error(ctx, "delete all user sessions failed", logger.StackTrace(zap.String("user_id", userIDString), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
+		projectionErr = errors.Join(projectionErr, fmt.Errorf("delete all user sessions: %w", err))
+	}
+	return projectionErr
 }

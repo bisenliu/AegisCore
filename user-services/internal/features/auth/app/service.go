@@ -67,11 +67,12 @@ func (s *authService) ChangePassword(ctx context.Context, cmd ChangePasswordComm
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.credentials.ChangePassword(ctx, parsedUserID, cmd.NewPassword); err != nil {
+	updated, err := s.credentials.ChangePassword(ctx, parsedUserID, cmd.NewPassword)
+	if err != nil {
 		return nil, err
 	}
-	if _, err := s.sessions.RevokeAllUserSessions(ctx, parsedUserID); err != nil {
-		return nil, err
+	if err := s.sessions.RevokeUserSessionsAtVersion(ctx, updated.UserID, updated.TokenVersion); err != nil {
+		logger.Error(ctx, "password change session revocation projection failed", logger.StackTrace(zap.String("user_id", updated.UserID.String()), zap.Int64("token_version", updated.TokenVersion), zap.Error(err))...)
 	}
 	return &authapi.ChangePasswordResponse{Changed: true}, nil
 }
