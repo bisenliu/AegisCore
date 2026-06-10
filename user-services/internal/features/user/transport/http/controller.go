@@ -53,10 +53,10 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 		Status:   req.Status,
 	})
 	if err != nil {
-		response.Fail(c, err)
+		response.Fail(c, toUserHTTPError(err))
 		return
 	}
-	response.OK(c, users)
+	response.OK(c, toUserListResponse(users))
 }
 
 // CreateUser 处理用户创建请求。
@@ -90,10 +90,10 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 		Status:   req.Status,
 	})
 	if err != nil {
-		response.Fail(c, err)
+		response.Fail(c, toUserHTTPError(err))
 		return
 	}
-	response.Created(c, user)
+	response.Created(c, toUserResponse(user))
 }
 
 // GetByUserID 处理通过外部 UUID 查询用户资料的请求。
@@ -122,8 +122,8 @@ func (ctl *UserController) GetByUserID(c *gin.Context) {
 
 	user, err := ctl.userService.GetUserByID(c.Request.Context(), userID)
 	if err != nil {
-		response.Fail(c, err)
+		response.Fail(c, toUserHTTPError(err))
 		return
 	}
-	response.OK(c, user)
+	response.OK(c, toUserResponse(user))
 }

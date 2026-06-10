@@ -3,13 +3,10 @@ package app
 import (
 	"context"
 
-	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
-	authapi "github.com/aegiscore/user-services/internal/features/auth/api"
 	authdomain "github.com/aegiscore/user-services/internal/features/auth/domain"
-	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -44,7 +41,7 @@ func NewAuthService(params AuthServiceParams) AuthService {
 }
 
 // Login 校验凭证，并签发普通 token 或受限改密 token。
-func (s *authService) Login(ctx context.Context, cmd LoginCommand) (*authapi.TokenResponse, error) {
+func (s *authService) Login(ctx context.Context, cmd LoginCommand) (*TokenResult, error) {
 	logger.Info(ctx, "login user", zap.String("username", cmd.Username))
 	user, err := s.credentials.VerifyPassword(ctx, cmd.Username, cmd.Password)
 	if err != nil {
@@ -62,7 +59,7 @@ func (s *authService) Login(ctx context.Context, cmd LoginCommand) (*authapi.Tok
 }
 
 // ChangePassword 校验受限 token，更新凭证并撤销现有会话。
-func (s *authService) ChangePassword(ctx context.Context, cmd ChangePasswordCommand) (*authapi.ChangePasswordResponse, error) {
+func (s *authService) ChangePassword(ctx context.Context, cmd ChangePasswordCommand) (*ChangePasswordResult, error) {
 	parsedUserID, err := s.verifyPasswordChangeToken(ctx, cmd.Token)
 	if err != nil {
 		return nil, err
@@ -74,7 +71,7 @@ func (s *authService) ChangePassword(ctx context.Context, cmd ChangePasswordComm
 	if err := s.sessions.RevokeUserSessionsAtVersion(ctx, updated.UserID, updated.TokenVersion); err != nil {
 		logger.Error(ctx, "password change session revocation projection failed", logger.StackTrace(zap.String("user_id", updated.UserID.String()), zap.Int64("token_version", updated.TokenVersion), zap.Error(err))...)
 	}
-	return &authapi.ChangePasswordResponse{Changed: true}, nil
+	return &ChangePasswordResult{Changed: true}, nil
 }
 
 func (s *authService) verifyPasswordChangeToken(ctx context.Context, token string) (uuid.UUID, error) {
@@ -89,7 +86,7 @@ func (s *authService) verifyPasswordChangeToken(ctx context.Context, token strin
 }
 
 // Refresh 校验 refresh 会话并签发新的 token 响应。
-func (s *authService) Refresh(ctx context.Context, cmd RefreshTokenCommand) (*authapi.TokenResponse, error) {
+func (s *authService) Refresh(ctx context.Context, cmd RefreshTokenCommand) (*TokenResult, error) {
 	claims, session, currentVersion, err := s.parseAndValidateRefreshSession(ctx, cmd.RefreshToken)
 	if err != nil {
 		return nil, err
@@ -112,11 +109,11 @@ func (s *authService) parseAndValidateRefreshSession(ctx context.Context, refres
 	return claims, session, currentVersion, nil
 }
 
-func (s *authService) refreshWithoutRotation(ctx context.Context, claims *commonauth.Claims, session authdomain.AuthSession, currentVersion int64) (*authapi.TokenResponse, error) {
+func (s *authService) refreshWithoutRotation(ctx context.Context, claims *commonauth.Claims, session authdomain.AuthSession, currentVersion int64) (*TokenResult, error) {
 	return s.issueTokenPair(ctx, claims.UserID, currentVersion, session.SessionID)
 }
 
-func (s *authService) refreshWithRotation(ctx context.Context, claims *commonauth.Claims, oldSession authdomain.AuthSession, currentVersion int64) (*authapi.TokenResponse, error) {
+func (s *authService) refreshWithRotation(ctx context.Context, claims *commonauth.Claims, oldSession authdomain.AuthSession, currentVersion int64) (*TokenResult, error) {
 	sessionID := uuid.NewString()
 	tokens, err := s.tokens.IssueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
 	if err != nil {
@@ -130,7 +127,7 @@ func (s *authService) refreshWithRotation(ctx context.Context, claims *commonaut
 }
 
 // Logout 撤销当前 refresh token 会话，但不修改用户 token version。
-func (s *authService) Logout(ctx context.Context) (*authapi.LogoutResponse, error) {
+func (s *authService) Logout(ctx context.Context) (*LogoutResult, error) {
 	userID, sessionID, err := authenticatedSession(ctx)
 	if err != nil {
 		logger.Warn(ctx, "logout missing authenticated session", zap.Error(err))
@@ -139,11 +136,11 @@ func (s *authService) Logout(ctx context.Context) (*authapi.LogoutResponse, erro
 	if err := s.sessions.DeleteSession(ctx, userID, sessionID); err != nil {
 		return nil, err
 	}
-	return &authapi.LogoutResponse{LoggedOut: true}, nil
+	return &LogoutResult{LoggedOut: true}, nil
 }
 
 // LogoutAll 递增认证用户的 token version，并移除全部 refresh 会话。
-func (s *authService) LogoutAll(ctx context.Context) (*authapi.LogoutResponse, error) {
+func (s *authService) LogoutAll(ctx context.Context) (*LogoutResult, error) {
 	userID, _, err := authenticatedSession(ctx)
 	if err != nil {
 		logger.Warn(ctx, "logout all missing authenticated session", zap.Error(err))
@@ -152,15 +149,15 @@ func (s *authService) LogoutAll(ctx context.Context) (*authapi.LogoutResponse, e
 	parsedUserID, err := uuid.Parse(userID)
 	if err != nil {
 		logger.Warn(ctx, "logout all user id invalid", zap.String("user_id", userID))
-		return nil, response.UnauthenticatedError(messages.MissingSession)
+		return nil, authdomain.ErrMissingSession
 	}
 	if _, err = s.sessions.RevokeAllUserSessions(ctx, parsedUserID); err != nil {
 		return nil, err
 	}
-	return &authapi.LogoutResponse{LoggedOut: true}, nil
+	return &LogoutResult{LoggedOut: true}, nil
 }
 
-func (s *authService) issueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*authapi.TokenResponse, error) {
+func (s *authService) issueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*TokenResult, error) {
 	tokens, err := s.tokens.IssueTokenPair(ctx, userID, tokenVersion, sessionID)
 	if err != nil {
 		return nil, err
@@ -174,14 +171,14 @@ func (s *authService) issueTokenPair(ctx context.Context, userID string, tokenVe
 func authenticatedSession(ctx context.Context) (string, string, error) {
 	userIDString, ok := commonauth.UserIDFromContext(ctx)
 	if !ok {
-		return "", "", response.UnauthenticatedError(messages.MissingSession)
+		return "", "", authdomain.ErrMissingSession
 	}
 	if _, err := uuid.Parse(userIDString); err != nil {
-		return "", "", response.UnauthenticatedError(messages.MissingSession)
+		return "", "", authdomain.ErrMissingSession
 	}
 	sessionID, ok := commonauth.SessionIDFromContext(ctx)
 	if !ok {
-		return "", "", response.UnauthenticatedError(messages.MissingSession)
+		return "", "", authdomain.ErrMissingSession
 	}
 	return userIDString, sessionID, nil
 }

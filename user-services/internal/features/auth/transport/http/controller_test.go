@@ -3,6 +3,7 @@ package authhttp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,14 +12,18 @@ import (
 	"github.com/aegiscore/common/contract/response"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
-	authapi "github.com/aegiscore/user-services/internal/features/auth/api"
 	authapp "github.com/aegiscore/user-services/internal/features/auth/app"
+	authdomain "github.com/aegiscore/user-services/internal/features/auth/domain"
+	userdomain "github.com/aegiscore/user-services/internal/features/user/domain"
+	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/gin-gonic/gin"
 )
 
+var errAuthDatabaseDown = errors.New("database down")
+
 func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthService{tokens: &authapp.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthLogin(t, service, `{"username":" alice ","password":" secret "}`)
 
@@ -31,11 +36,15 @@ func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 	if !envelope.Success || envelope.Code != response.CodeOK {
 		t.Fatalf("envelope = %#v", envelope)
 	}
+	data, ok := envelope.Data.(map[string]any)
+	if !ok || data["access_token"] != "access" || data["refresh_token"] != "refresh" || data["token_type"] != commonauth.TokenTypeBearer || data["expires_in"] != float64(900) {
+		t.Fatalf("data = %#v", envelope.Data)
+	}
 }
 
 func TestAuthControllerLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthService{tokens: &authapp.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthLogin(t, service, `{"username":"alice","password":" "}`)
 
@@ -47,9 +56,37 @@ func TestAuthControllerLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 	}
 }
 
+func TestAuthControllerLoginMapsInvalidCredentials(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	service := &stubAuthService{loginErr: authdomain.ErrInvalidCredentials}
+
+	status, envelope := executeAuthLogin(t, service, `{"username":"alice","password":"secret"}`)
+
+	if status != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
+	}
+	if envelope.Success || envelope.Code != response.CodeUnauthenticated || envelope.Message != messages.InvalidCredentials {
+		t.Fatalf("envelope = %#v", envelope)
+	}
+}
+
+func TestAuthControllerLoginMapsServiceError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	service := &stubAuthService{loginErr: errAuthDatabaseDown}
+
+	status, envelope := executeAuthLogin(t, service, `{"username":"alice","password":"secret"}`)
+
+	if status != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
+	}
+	if envelope.Success || envelope.Code != response.CodeInternalError || envelope.Message != response.MessageInternalError {
+		t.Fatalf("envelope = %#v", envelope)
+	}
+}
+
 func TestAuthControllerChangePasswordNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{changeResponse: &authapi.ChangePasswordResponse{Changed: true}}
+	service := &stubAuthService{changeResponse: &authapp.ChangePasswordResult{Changed: true}}
 
 	status, envelope := executeAuthChangePassword(t, service, commonauth.TokenPrefix+"password-token", `{"new_password":" new-secret "}`)
 
@@ -62,11 +99,29 @@ func TestAuthControllerChangePasswordNormalizesToCommand(t *testing.T) {
 	if !envelope.Success || envelope.Code != response.CodeOK {
 		t.Fatalf("envelope = %#v", envelope)
 	}
+	data, ok := envelope.Data.(map[string]any)
+	if !ok || data["changed"] != true {
+		t.Fatalf("data = %#v", envelope.Data)
+	}
+}
+
+func TestAuthControllerChangePasswordMapsNotFound(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	service := &stubAuthService{changeErr: userdomain.ErrUserNotFound}
+
+	status, envelope := executeAuthChangePassword(t, service, commonauth.TokenPrefix+"password-token", `{"new_password":"new-secret"}`)
+
+	if status != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", status, http.StatusNotFound)
+	}
+	if envelope.Success || envelope.Code != response.CodeNotFound || envelope.Message != messages.UserNotFound {
+		t.Fatalf("envelope = %#v", envelope)
+	}
 }
 
 func TestAuthControllerRefreshNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthService{tokens: &authapp.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthRefresh(t, service, `{"refresh_token":" Bearer refresh-token "}`)
 
@@ -83,7 +138,7 @@ func TestAuthControllerRefreshNormalizesToCommand(t *testing.T) {
 
 func TestAuthControllerRefreshRejectsBearerOnlyToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthService{tokens: &authapp.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthRefresh(t, service, `{"refresh_token":" Bearer "}`)
 
@@ -95,35 +150,68 @@ func TestAuthControllerRefreshRejectsBearerOnlyToken(t *testing.T) {
 	}
 }
 
+func TestAuthControllerRefreshMapsTokenInvalid(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	service := &stubAuthService{refreshErr: authdomain.ErrTokenInvalid}
+
+	status, envelope := executeAuthRefresh(t, service, `{"refresh_token":"refresh-token"}`)
+
+	if status != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
+	}
+	if envelope.Success || envelope.Code != response.CodeTokenInvalid || envelope.Message != messages.MissingSession {
+		t.Fatalf("envelope = %#v", envelope)
+	}
+}
+
 type stubAuthService struct {
-	tokens         *authapi.TokenResponse
-	changeResponse *authapi.ChangePasswordResponse
-	logoutResponse *authapi.LogoutResponse
+	tokens         *authapp.TokenResult
+	loginErr       error
+	changeResponse *authapp.ChangePasswordResult
+	changeErr      error
+	refreshErr     error
+	logoutResponse *authapp.LogoutResult
+	logoutErr      error
 	gotLogin       authapp.LoginCommand
 	gotRefresh     authapp.RefreshTokenCommand
 	gotChange      authapp.ChangePasswordCommand
 }
 
-func (s *stubAuthService) Login(_ context.Context, cmd authapp.LoginCommand) (*authapi.TokenResponse, error) {
+func (s *stubAuthService) Login(_ context.Context, cmd authapp.LoginCommand) (*authapp.TokenResult, error) {
 	s.gotLogin = cmd
+	if s.loginErr != nil {
+		return nil, s.loginErr
+	}
 	return s.tokens, nil
 }
 
-func (s *stubAuthService) ChangePassword(_ context.Context, cmd authapp.ChangePasswordCommand) (*authapi.ChangePasswordResponse, error) {
+func (s *stubAuthService) ChangePassword(_ context.Context, cmd authapp.ChangePasswordCommand) (*authapp.ChangePasswordResult, error) {
 	s.gotChange = cmd
+	if s.changeErr != nil {
+		return nil, s.changeErr
+	}
 	return s.changeResponse, nil
 }
 
-func (s *stubAuthService) Refresh(_ context.Context, cmd authapp.RefreshTokenCommand) (*authapi.TokenResponse, error) {
+func (s *stubAuthService) Refresh(_ context.Context, cmd authapp.RefreshTokenCommand) (*authapp.TokenResult, error) {
 	s.gotRefresh = cmd
+	if s.refreshErr != nil {
+		return nil, s.refreshErr
+	}
 	return s.tokens, nil
 }
 
-func (s *stubAuthService) Logout(context.Context) (*authapi.LogoutResponse, error) {
+func (s *stubAuthService) Logout(context.Context) (*authapp.LogoutResult, error) {
+	if s.logoutErr != nil {
+		return nil, s.logoutErr
+	}
 	return s.logoutResponse, nil
 }
 
-func (s *stubAuthService) LogoutAll(context.Context) (*authapi.LogoutResponse, error) {
+func (s *stubAuthService) LogoutAll(context.Context) (*authapp.LogoutResult, error) {
+	if s.logoutErr != nil {
+		return nil, s.logoutErr
+	}
 	return s.logoutResponse, nil
 }
 

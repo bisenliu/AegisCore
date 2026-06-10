@@ -11,7 +11,6 @@ import (
 
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/validation"
-	userapi "github.com/aegiscore/user-services/internal/features/user/api"
 	userapp "github.com/aegiscore/user-services/internal/features/user/app"
 	userdomain "github.com/aegiscore/user-services/internal/features/user/domain"
 	"github.com/aegiscore/user-services/internal/messages"
@@ -21,13 +20,15 @@ import (
 
 const controllerTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
 
+var controllerTestUUID = uuid.MustParse(controllerTestUserID)
+
 func TestUserControllerGetByUserID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	t.Run("valid ID", func(t *testing.T) {
 		createdAt := int64(1780048800000)
 		updatedAt := int64(1780052400000)
-		service := &stubUserService{response: &userapi.UserResponse{UserID: controllerTestUserID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}
+		service := &stubUserService{response: &userapp.UserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}}
 
 		status, envelope := executeGetByUserID(t, service, controllerTestUserID)
 
@@ -61,7 +62,7 @@ func TestUserControllerGetByUserID(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		status, envelope := executeGetByUserID(t, &stubUserService{err: response.NotFoundError(messages.UserNotFound)}, controllerTestUserID)
+		status, envelope := executeGetByUserID(t, &stubUserService{err: userdomain.ErrUserNotFound}, controllerTestUserID)
 		if status != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", status, http.StatusNotFound)
 		}
@@ -85,7 +86,7 @@ func TestUserControllerCreate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	createdUser := &userapi.UserResponse{UserID: controllerTestUserID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}
+	createdUser := &userapp.UserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}
 
 	t.Run("valid body", func(t *testing.T) {
 		service := &stubUserService{createResponse: createdUser}
@@ -157,7 +158,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("user already exists", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{createErr: response.ConflictError(messages.UserAlreadyExists)}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
+		status, envelope := executeCreate(t, &stubUserService{createErr: userdomain.ErrUserAlreadyExists}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
 		if status != http.StatusConflict {
 			t.Fatalf("status = %d, want %d", status, http.StatusConflict)
 		}
@@ -181,10 +182,10 @@ func TestUserControllerList(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	listResponse := response.NewPaginatedData([]userapi.UserResponse{{UserID: controllerTestUserID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, response.NewPagination(1, 20, 128))
+	listResponse := &userapp.ListUsersResult{Items: []userdomain.User{{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, Page: 2, PageSize: 20, Total: 128}
 
 	t.Run("default pagination", func(t *testing.T) {
-		service := &stubUserService{listResponse: response.NewPaginatedData([]userapi.UserResponse{}, response.NewPagination(1, 10, 0))}
+		service := &stubUserService{listResponse: &userapp.ListUsersResult{Items: []userdomain.User{}, Page: 1, PageSize: 10, Total: 0}}
 
 		status, envelope := executeList(t, service, "/api/v1/users")
 
@@ -211,7 +212,7 @@ func TestUserControllerList(t *testing.T) {
 		if service.gotList.Status == nil || *service.gotList.Status != userdomain.UserStatusNormal {
 			t.Fatalf("status = %#v", service.gotList.Status)
 		}
-		assertPaginatedEnvelope(t, envelope, 1, 20, 128, 7, 1)
+		assertPaginatedEnvelope(t, envelope, 2, 20, 128, 7, 1)
 	})
 
 	t.Run("invalid status", func(t *testing.T) {
@@ -224,40 +225,50 @@ func TestUserControllerList(t *testing.T) {
 		}
 		assertFieldError(t, envelope, "status", "用户状态", "enum", "用户状态取值不合法，允许值为：100、200、300")
 	})
+
+	t.Run("service error", func(t *testing.T) {
+		status, envelope := executeList(t, &stubUserService{listErr: errors.New("database down")}, "/api/v1/users")
+		if status != http.StatusInternalServerError {
+			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
+		}
+		if envelope.Success || envelope.Code != response.CodeInternalError || envelope.Message != response.MessageInternalError {
+			t.Fatalf("envelope = %#v", envelope)
+		}
+	})
 }
 
 type stubUserService struct {
-	response       *userapi.UserResponse
+	response       *userapp.UserResult
 	err            error
 	gotID          uuid.UUID
-	createResponse *userapi.UserResponse
+	createResponse *userapp.UserResult
 	createErr      error
 	gotCreate      userapp.CreateUserCommand
-	listResponse   response.PaginatedData[userapi.UserResponse]
+	listResponse   *userapp.ListUsersResult
 	listErr        error
 	gotList        userapp.ListUsersQuery
 }
 
-func (s *stubUserService) CreateUser(_ context.Context, req userapp.CreateUserCommand) (*userapi.UserResponse, error) {
+func (s *stubUserService) CreateUser(_ context.Context, req userapp.CreateUserCommand) (*userapp.UserResult, error) {
 	s.gotCreate = req
 	if s.createErr != nil {
-		return nil, response.FromError(s.createErr)
+		return nil, s.createErr
 	}
 	return s.createResponse, nil
 }
 
-func (s *stubUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapi.UserResponse, error) {
+func (s *stubUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapp.UserResult, error) {
 	s.gotID = userID
 	if s.err != nil {
-		return nil, response.FromError(s.err)
+		return nil, s.err
 	}
 	return s.response, nil
 }
 
-func (s *stubUserService) ListUsers(_ context.Context, req userapp.ListUsersQuery) (response.PaginatedData[userapi.UserResponse], error) {
+func (s *stubUserService) ListUsers(_ context.Context, req userapp.ListUsersQuery) (*userapp.ListUsersResult, error) {
 	s.gotList = req
 	if s.listErr != nil {
-		return response.PaginatedData[userapi.UserResponse]{}, response.FromError(s.listErr)
+		return nil, s.listErr
 	}
 	return s.listResponse, nil
 }

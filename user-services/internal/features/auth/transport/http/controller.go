@@ -43,10 +43,10 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 		NewPassword: req.NewPassword,
 	})
 	if err != nil {
-		response.Fail(c, err)
+		response.Fail(c, toAuthHTTPError(err))
 		return
 	}
-	response.OK(c, result)
+	response.OK(c, toChangePasswordResponse(result))
 }
 
 // NewAuthController 使用 service 和 validator 依赖构造认证控制器。
@@ -80,10 +80,10 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 		Password: req.Password,
 	})
 	if err != nil {
-		response.Fail(c, err)
+		response.Fail(c, toAuthHTTPError(err))
 		return
 	}
-	response.OK(c, tokens)
+	response.OK(c, toTokenResponse(tokens))
 }
 
 // RefreshToken 处理 refresh token 换取请求。
@@ -111,10 +111,10 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 		RefreshToken: req.RefreshToken,
 	})
 	if err != nil {
-		response.Fail(c, err)
+		response.Fail(c, toAuthHTTPError(err))
 		return
 	}
-	response.OK(c, tokens)
+	response.OK(c, toTokenResponse(tokens))
 }
 
 // LogoutCurrentSession 处理当前认证会话的登出请求。
@@ -130,10 +130,10 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 func (ctl *AuthController) LogoutCurrentSession(c *gin.Context) {
 	result, err := ctl.authService.Logout(c.Request.Context())
 	if err != nil {
-		response.Fail(c, err)
+		response.Fail(c, toAuthHTTPError(err))
 		return
 	}
-	response.OK(c, result)
+	response.OK(c, toLogoutResponse(result))
 }
 
 // LogoutAllSessions 处理认证用户全部会话的撤销请求。
@@ -149,8 +149,8 @@ func (ctl *AuthController) LogoutCurrentSession(c *gin.Context) {
 func (ctl *AuthController) LogoutAllSessions(c *gin.Context) {
 	result, err := ctl.authService.LogoutAll(c.Request.Context())
 	if err != nil {
-		response.Fail(c, err)
+		response.Fail(c, toAuthHTTPError(err))
 		return
 	}
-	response.OK(c, result)
+	response.OK(c, toLogoutResponse(result))
 }

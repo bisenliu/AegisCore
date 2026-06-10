@@ -1,32 +1,9 @@
 package domain
 
 import (
-	"errors"
-	"time"
-
 	userdomain "github.com/aegiscore/user-services/internal/features/user/domain"
 	"github.com/google/uuid"
 )
-
-// ErrAuthSessionNotFound 表示 refresh token 会话不存在或已过期。
-var ErrAuthSessionNotFound = errors.New("auth session not found")
-
-// ErrAuthSessionMismatch 表示 refresh token 会话与预期用户或版本不一致。
-var ErrAuthSessionMismatch = errors.New("auth session mismatch")
-
-// ErrTokenVersionCacheMiss 表示 token version 缓存未命中，需要从持久化存储回填。
-var ErrTokenVersionCacheMiss = errors.New("token version cache miss")
-
-// ErrTokenVersionMismatch 表示 token 携带了过期的用户 token version。
-var ErrTokenVersionMismatch = errors.New("token version mismatch")
-
-// AuthSession 包含 Redis 存储的 refresh token 会话元数据。
-type AuthSession struct {
-	UserID       string    `json:"user_id"`
-	SessionID    string    `json:"session_id"`
-	TokenVersion int64     `json:"token_version"`
-	ExpiresAt    time.Time `json:"expires_at"`
-}
 
 // UserCredential 是认证能力需要的最小用户凭据模型。
 type UserCredential struct {
@@ -63,10 +40,4 @@ type UpdateCredentialsInput struct {
 	UserID       uuid.UUID
 	PasswordHash string
 	Status       userdomain.UserStatus
-}
-
-// SessionRevocationResult 返回撤销用户全部会话后的新 token version。
-type SessionRevocationResult struct {
-	UserID       uuid.UUID
-	TokenVersion int64
 }

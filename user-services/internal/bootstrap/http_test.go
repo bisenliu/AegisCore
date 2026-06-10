@@ -16,10 +16,8 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
-	authapi "github.com/aegiscore/user-services/internal/features/auth/api"
 	authapp "github.com/aegiscore/user-services/internal/features/auth/app"
 	authhttp "github.com/aegiscore/user-services/internal/features/auth/transport/http"
-	userapi "github.com/aegiscore/user-services/internal/features/user/api"
 	userapp "github.com/aegiscore/user-services/internal/features/user/app"
 	userdomain "github.com/aegiscore/user-services/internal/features/user/domain"
 	userhttp "github.com/aegiscore/user-services/internal/features/user/transport/http"
@@ -528,35 +526,35 @@ func (s *routeTokenVersionValidator) ValidateTokenVersion(_ context.Context, _ s
 	return nil
 }
 
-func (s *routeAuthAuthService) Login(context.Context, authapp.LoginCommand) (*authapi.TokenResponse, error) {
-	return &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
+func (s *routeAuthAuthService) Login(context.Context, authapp.LoginCommand) (*authapp.TokenResult, error) {
+	return &authapp.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
-func (s *routeAuthAuthService) Refresh(context.Context, authapp.RefreshTokenCommand) (*authapi.TokenResponse, error) {
-	return &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
+func (s *routeAuthAuthService) Refresh(context.Context, authapp.RefreshTokenCommand) (*authapp.TokenResult, error) {
+	return &authapp.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
-func (s *routeAuthAuthService) ChangePassword(context.Context, authapp.ChangePasswordCommand) (*authapi.ChangePasswordResponse, error) {
-	return &authapi.ChangePasswordResponse{Changed: true}, nil
+func (s *routeAuthAuthService) ChangePassword(context.Context, authapp.ChangePasswordCommand) (*authapp.ChangePasswordResult, error) {
+	return &authapp.ChangePasswordResult{Changed: true}, nil
 }
 
-func (s *routeAuthAuthService) Logout(context.Context) (*authapi.LogoutResponse, error) {
-	return &authapi.LogoutResponse{LoggedOut: true}, nil
+func (s *routeAuthAuthService) Logout(context.Context) (*authapp.LogoutResult, error) {
+	return &authapp.LogoutResult{LoggedOut: true}, nil
 }
 
-func (s *routeAuthAuthService) LogoutAll(context.Context) (*authapi.LogoutResponse, error) {
-	return &authapi.LogoutResponse{LoggedOut: true}, nil
+func (s *routeAuthAuthService) LogoutAll(context.Context) (*authapp.LogoutResult, error) {
+	return &authapp.LogoutResult{LoggedOut: true}, nil
 }
 
-func (s *routeAuthUserService) CreateUser(context.Context, userapp.CreateUserCommand) (*userapi.UserResponse, error) {
+func (s *routeAuthUserService) CreateUser(context.Context, userapp.CreateUserCommand) (*userapp.UserResult, error) {
 	now := time.Now().UnixMilli()
-	return &userapi.UserResponse{UserID: routeAuthUserID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
+	return &userapp.UserResult{User: userdomain.User{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
 }
 
-func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapi.UserResponse, error) {
+func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapp.UserResult, error) {
 	userIDString := userID.String()
 	if userIDString == routeAuthNotFoundUserID {
-		return nil, response.NotFoundError("user not found")
+		return nil, userdomain.ErrUserNotFound
 	}
 	if userIDString == routeAuthForbiddenUserID {
 		return nil, response.ForbiddenError("forbidden")
@@ -565,7 +563,7 @@ func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) 
 		return nil, errors.New("database down")
 	}
 	now := time.Now().UnixMilli()
-	return &userapi.UserResponse{UserID: userIDString, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}, nil
+	return &userapp.UserResult{User: userdomain.User{UserID: userID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
 }
 
 func assertSuccessEnvelope(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -593,10 +591,10 @@ func assertFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wa
 	}
 }
 
-func (s *routeAuthUserService) ListUsers(context.Context, userapp.ListUsersQuery) (response.PaginatedData[userapi.UserResponse], error) {
+func (s *routeAuthUserService) ListUsers(context.Context, userapp.ListUsersQuery) (*userapp.ListUsersResult, error) {
 	now := time.Now().UnixMilli()
-	items := []userapi.UserResponse{{UserID: routeAuthUserID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
-	return response.NewPaginatedData(items, response.NewPagination(1, 10, 1)), nil
+	items := []userdomain.User{{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
+	return &userapp.ListUsersResult{Items: items, Page: 1, PageSize: 10, Total: 1}, nil
 }
 
 func assertAuthFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantCode response.Code) {

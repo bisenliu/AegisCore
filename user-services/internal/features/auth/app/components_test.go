@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
@@ -41,9 +40,8 @@ func TestCredentialVerifierRejectsDisabledUser(t *testing.T) {
 
 	_, err = verifier.VerifyPassword(context.Background(), "alice", "secret")
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeUnauthenticated {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, authdomain.ErrInvalidCredentials) {
+		t.Fatalf("err = %v, want authdomain.ErrInvalidCredentials", err)
 	}
 }
 
@@ -77,9 +75,8 @@ func TestCredentialVerifierChangePasswordMapsUserNotFound(t *testing.T) {
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeNotFound {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, userdomain.ErrUserNotFound) {
+		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
 }
 
@@ -88,20 +85,19 @@ func TestCredentialVerifierChangePasswordRejectsInvalidStatus(t *testing.T) {
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeTokenInvalid {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, authdomain.ErrTokenInvalid) {
+		t.Fatalf("err = %v, want authdomain.ErrTokenInvalid", err)
 	}
 }
 
 func TestCredentialVerifierChangePasswordMapsUpdateError(t *testing.T) {
-	verifier := newCredentialVerifier(&authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: errors.New("update failed")})
+	updateErr := errors.New("update failed")
+	verifier := newCredentialVerifier(&authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: updateErr})
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeInternalError {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, updateErr) {
+		t.Fatalf("err = %v, want %v", err, updateErr)
 	}
 }
 
@@ -130,9 +126,8 @@ func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
 
 	_, _, err := lifecycle.ValidateRefreshSession(context.Background(), claims)
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeTokenInvalid {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, authdomain.ErrTokenInvalid) {
+		t.Fatalf("err = %v, want authdomain.ErrTokenInvalid", err)
 	}
 }
 
@@ -145,24 +140,23 @@ func TestAuthSessionLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T)
 
 			err := lifecycle.RotateTokenSession(context.Background(), oldSession, newSession, time.Hour)
 
-			appErr := response.FromError(err)
-			if appErr.Code != response.CodeTokenInvalid {
-				t.Fatalf("err = %#v, want token invalid", appErr)
+			if !errors.Is(err, authdomain.ErrTokenInvalid) {
+				t.Fatalf("err = %v, want authdomain.ErrTokenInvalid", err)
 			}
 		})
 	}
 }
 
 func TestAuthSessionLifecycleRotateTokenSessionMapsUnexpectedError(t *testing.T) {
-	lifecycle := newAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{rotateErr: errors.New("redis failed")})
+	rotateErr := errors.New("redis failed")
+	lifecycle := newAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{rotateErr: rotateErr})
 	oldSession := authRefreshTestSession("s-old", 2)
 	newSession := authRefreshTestSession("s-new", 2)
 
 	err := lifecycle.RotateTokenSession(context.Background(), oldSession, newSession, time.Hour)
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeInternalError {
-		t.Fatalf("err = %#v, want internal", appErr)
+	if !errors.Is(err, rotateErr) {
+		t.Fatalf("err = %v, want %v", err, rotateErr)
 	}
 }
 
@@ -265,9 +259,8 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T)
 
 	_, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeNotFound {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, userdomain.ErrUserNotFound) {
+		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
 	if store.cached || store.deletedAll {
 		t.Fatalf("store mutated after increment failure: %#v", store)

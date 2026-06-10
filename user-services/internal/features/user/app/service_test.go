@@ -5,10 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/security/password"
 	userdomain "github.com/aegiscore/user-services/internal/features/user/domain"
-	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/google/uuid"
 )
 
@@ -33,19 +31,8 @@ func TestUserServiceCreateUser(t *testing.T) {
 		if err != nil || !matched {
 			t.Fatalf("created password was not hashed correctly: matched=%v err=%v", matched, err)
 		}
-		if user.UserID != testUserID.String() || user.Username != "alice" || user.CreatedAt != createdAt || user.UpdatedAt != createdAt {
+		if user.User.UserID != testUserID || user.User.Username != "alice" || user.User.CreatedAt != createdAt || user.User.UpdatedAt != createdAt {
 			t.Fatalf("user = %#v", user)
-		}
-	})
-
-	t.Run("preserve create conflict", func(t *testing.T) {
-		svc := NewUserService(&stubUserRepository{createErr: response.ConflictError(messages.UserAlreadyExists)})
-
-		_, err := svc.CreateUser(context.Background(), CreateUserCommand{Nickname: "Alice", Username: "alice", Password: "secret"})
-
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeConflict || appErr.Message != messages.UserAlreadyExists {
-			t.Fatalf("err = %#v", appErr)
 		}
 	})
 
@@ -54,9 +41,8 @@ func TestUserServiceCreateUser(t *testing.T) {
 
 		_, err := svc.CreateUser(context.Background(), CreateUserCommand{Nickname: "Alice", Username: "alice", Password: "secret"})
 
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeConflict || appErr.Message != messages.UserAlreadyExists {
-			t.Fatalf("err = %#v", appErr)
+		if !errors.Is(err, userdomain.ErrUserAlreadyExists) {
+			t.Fatalf("err = %v, want ErrUserAlreadyExists", err)
 		}
 	})
 
@@ -69,9 +55,8 @@ func TestUserServiceCreateUser(t *testing.T) {
 		if repo.createdInput.Username != "alice" {
 			t.Fatalf("created username = %q", repo.createdInput.Username)
 		}
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeConflict || appErr.Message != messages.UserAlreadyExists {
-			t.Fatalf("err = %#v", appErr)
+		if !errors.Is(err, userdomain.ErrUserAlreadyExists) {
+			t.Fatalf("err = %v, want ErrUserAlreadyExists", err)
 		}
 	})
 }
@@ -91,7 +76,7 @@ func TestUserServiceGetUserByID(t *testing.T) {
 		if repo.getByUserID != testUserID {
 			t.Fatalf("getByUserID = %s", repo.getByUserID)
 		}
-		if user.UserID != testUserID.String() || user.Username != "alice" || user.CreatedAt != createdAt {
+		if user.User.UserID != testUserID || user.User.Username != "alice" || user.User.CreatedAt != createdAt {
 			t.Fatalf("user = %#v", user)
 		}
 	})
@@ -101,20 +86,19 @@ func TestUserServiceGetUserByID(t *testing.T) {
 
 		_, err := svc.GetUserByID(context.Background(), testUserID)
 
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeNotFound || appErr.Message != messages.UserNotFound {
-			t.Fatalf("err = %#v", appErr)
+		if !errors.Is(err, userdomain.ErrUserNotFound) {
+			t.Fatalf("err = %v, want ErrUserNotFound", err)
 		}
 	})
 
 	t.Run("wrap repository error", func(t *testing.T) {
-		svc := NewUserService(&stubUserRepository{getByUserIDErr: errors.New("database down")})
+		repoErr := errors.New("database down")
+		svc := NewUserService(&stubUserRepository{getByUserIDErr: repoErr})
 
 		_, err := svc.GetUserByID(context.Background(), testUserID)
 
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeInternalError || appErr.Message != response.MessageInternalError {
-			t.Fatalf("err = %#v", appErr)
+		if err == nil || !errors.Is(err, repoErr) {
+			t.Fatalf("err = %v, want %v", err, repoErr)
 		}
 	})
 }
@@ -134,11 +118,11 @@ func TestUserServiceListUsers(t *testing.T) {
 		if repo.listInput.Offset != 0 || repo.listInput.Limit != 10 {
 			t.Fatalf("listInput = %#v", repo.listInput)
 		}
-		if users.Items == nil || len(users.Items) != 0 {
+		if len(users.Items) != 0 {
 			t.Fatalf("items = %#v", users.Items)
 		}
-		if users.Pagination.Page != 1 || users.Pagination.PageSize != 10 || users.Pagination.Total != 0 || users.Pagination.TotalPages != 0 {
-			t.Fatalf("pagination = %#v", users.Pagination)
+		if users.Page != 1 || users.PageSize != 10 || users.Total != 0 {
+			t.Fatalf("pagination result = %#v", users)
 		}
 	})
 
@@ -158,22 +142,22 @@ func TestUserServiceListUsers(t *testing.T) {
 		if repo.listInput.Status == nil || *repo.listInput.Status != userdomain.UserStatusNormal {
 			t.Fatalf("status = %#v", repo.listInput.Status)
 		}
-		if len(users.Items) != 1 || users.Items[0].UserID != testUserID.String() || users.Items[0].Username != "alice" || users.Items[0].CreatedAt != createdAt {
+		if len(users.Items) != 1 || users.Items[0].UserID != testUserID || users.Items[0].Username != "alice" || users.Items[0].CreatedAt != createdAt {
 			t.Fatalf("items = %#v", users.Items)
 		}
-		if users.Pagination.Page != 2 || users.Pagination.PageSize != 20 || users.Pagination.Total != 128 || users.Pagination.TotalPages != 7 {
-			t.Fatalf("pagination = %#v", users.Pagination)
+		if users.Page != 2 || users.PageSize != 20 || users.Total != 128 {
+			t.Fatalf("pagination result = %#v", users)
 		}
 	})
 
 	t.Run("wrap repository error", func(t *testing.T) {
-		svc := NewUserService(&stubUserRepository{listErr: errors.New("database down")})
+		repoErr := errors.New("database down")
+		svc := NewUserService(&stubUserRepository{listErr: repoErr})
 
 		_, err := svc.ListUsers(context.Background(), ListUsersQuery{Page: 1, PageSize: 10, Limit: 10})
 
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeInternalError || appErr.Message != response.MessageInternalError {
-			t.Fatalf("err = %#v", appErr)
+		if err == nil || !errors.Is(err, repoErr) {
+			t.Fatalf("err = %v, want %v", err, repoErr)
 		}
 	})
 }

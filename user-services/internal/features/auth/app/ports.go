@@ -5,18 +5,17 @@ import (
 	"time"
 
 	commonauth "github.com/aegiscore/common/security/auth"
-	authapi "github.com/aegiscore/user-services/internal/features/auth/api"
 	authdomain "github.com/aegiscore/user-services/internal/features/auth/domain"
 	"github.com/google/uuid"
 )
 
 // AuthService 定义认证、刷新、改密和登出用例。
 type AuthService interface {
-	Login(ctx context.Context, cmd LoginCommand) (*authapi.TokenResponse, error)
-	ChangePassword(ctx context.Context, cmd ChangePasswordCommand) (*authapi.ChangePasswordResponse, error)
-	Refresh(ctx context.Context, cmd RefreshTokenCommand) (*authapi.TokenResponse, error)
-	Logout(ctx context.Context) (*authapi.LogoutResponse, error)
-	LogoutAll(ctx context.Context) (*authapi.LogoutResponse, error)
+	Login(ctx context.Context, cmd LoginCommand) (*TokenResult, error)
+	ChangePassword(ctx context.Context, cmd ChangePasswordCommand) (*ChangePasswordResult, error)
+	Refresh(ctx context.Context, cmd RefreshTokenCommand) (*TokenResult, error)
+	Logout(ctx context.Context) (*LogoutResult, error)
+	LogoutAll(ctx context.Context) (*LogoutResult, error)
 }
 
 // UserCredentialStore 定义认证流程对用户凭据的最小依赖面。

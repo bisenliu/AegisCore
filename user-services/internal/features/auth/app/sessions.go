@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authdomain "github.com/aegiscore/user-services/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-services/internal/features/user/domain"
-	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -39,7 +37,7 @@ func newAuthSessionLifecycle(users UserTokenVersionStore, sessions AuthSessionSt
 func (m *authSessionLifecycle) CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error {
 	if err := m.sessions.CreateSession(ctx, authdomain.AuthSession{UserID: userID, SessionID: sessionID, TokenVersion: tokenVersion, ExpiresAt: time.Now().Add(refreshTTL)}, refreshTTL); err != nil {
 		logger.Error(ctx, "create auth session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
-		return response.FromError(err)
+		return err
 	}
 	return nil
 }
@@ -50,14 +48,14 @@ func (m *authSessionLifecycle) ValidatePasswordChangeClaims(ctx context.Context,
 	if err != nil {
 		if errors.Is(err, userdomain.ErrUserNotFound) {
 			logger.Warn(ctx, "password change user not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-			return response.NotFoundError(messages.UserNotFound)
+			return userdomain.ErrUserNotFound
 		}
 		logger.Error(ctx, "get password change token version failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
-		return response.FromError(err)
+		return err
 	}
 	if currentVersion != claims.TokenVersion {
 		logger.Warn(ctx, "password change token version mismatch", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Int64("current_token_version", currentVersion), zap.Int64("token_version", claims.TokenVersion))
-		return response.TokenInvalidError(messages.MissingSession)
+		return authdomain.ErrTokenInvalid
 	}
 	return nil
 }
@@ -68,27 +66,27 @@ func (m *authSessionLifecycle) ValidateRefreshSession(ctx context.Context, claim
 	if err != nil {
 		if errors.Is(err, authdomain.ErrAuthSessionNotFound) {
 			logger.Warn(ctx, "refresh session not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-			return authdomain.AuthSession{}, 0, response.TokenInvalidError(messages.MissingSession)
+			return authdomain.AuthSession{}, 0, authdomain.ErrTokenInvalid
 		}
 		logger.Error(ctx, "get refresh session failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
-		return authdomain.AuthSession{}, 0, response.FromError(err)
+		return authdomain.AuthSession{}, 0, err
 	}
 	if session.UserID != claims.UserID || session.TokenVersion != claims.TokenVersion {
 		logger.Warn(ctx, "refresh session mismatch", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Int64("session_token_version", session.TokenVersion), zap.Int64("token_version", claims.TokenVersion))
-		return authdomain.AuthSession{}, 0, response.TokenInvalidError(messages.MissingSession)
+		return authdomain.AuthSession{}, 0, authdomain.ErrTokenInvalid
 	}
 	currentVersion, err := m.currentTokenVersion(ctx, claims.UserID)
 	if err != nil {
 		if errors.Is(err, userdomain.ErrUserNotFound) {
 			logger.Warn(ctx, "refresh user not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-			return authdomain.AuthSession{}, 0, response.NotFoundError(messages.UserNotFound)
+			return authdomain.AuthSession{}, 0, userdomain.ErrUserNotFound
 		}
 		logger.Error(ctx, "get refresh token version failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
-		return authdomain.AuthSession{}, 0, response.FromError(err)
+		return authdomain.AuthSession{}, 0, err
 	}
 	if currentVersion != session.TokenVersion {
 		logger.Warn(ctx, "refresh token version mismatch", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Int64("current_token_version", currentVersion), zap.Int64("session_token_version", session.TokenVersion))
-		return authdomain.AuthSession{}, 0, response.TokenInvalidError(messages.MissingSession)
+		return authdomain.AuthSession{}, 0, authdomain.ErrTokenInvalid
 	}
 	return session, currentVersion, nil
 }
@@ -98,10 +96,10 @@ func (m *authSessionLifecycle) RotateTokenSession(ctx context.Context, oldSessio
 	if err := m.sessions.RotateSession(ctx, oldSession, newSession, refreshTTL); err != nil {
 		if errors.Is(err, authdomain.ErrAuthSessionNotFound) || errors.Is(err, authdomain.ErrAuthSessionMismatch) {
 			logger.Warn(ctx, "rotate auth session rejected", zap.String("user_id", oldSession.UserID), zap.String("old_session_id", oldSession.SessionID), zap.String("new_session_id", newSession.SessionID), zap.Error(err))
-			return response.TokenInvalidError(messages.MissingSession)
+			return authdomain.ErrTokenInvalid
 		}
 		logger.Error(ctx, "rotate auth session failed", logger.StackTrace(zap.String("user_id", oldSession.UserID), zap.String("old_session_id", oldSession.SessionID), zap.String("new_session_id", newSession.SessionID), zap.Error(err))...)
-		return response.FromError(err)
+		return err
 	}
 	return nil
 }
@@ -110,7 +108,7 @@ func (m *authSessionLifecycle) RotateTokenSession(ctx context.Context, oldSessio
 func (m *authSessionLifecycle) DeleteSession(ctx context.Context, userID string, sessionID string) error {
 	if err := m.sessions.DeleteSession(ctx, userID, sessionID); err != nil {
 		logger.Error(ctx, "delete auth session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Error(err))...)
-		return response.FromError(err)
+		return err
 	}
 	return nil
 }
@@ -161,10 +159,10 @@ func (m *authSessionLifecycle) RevokeAllUserSessions(ctx context.Context, userID
 	if err != nil {
 		if errors.Is(err, userdomain.ErrUserNotFound) {
 			logger.Warn(ctx, "revoke all user sessions user not found", zap.String("user_id", userID.String()))
-			return nil, response.NotFoundError(messages.UserNotFound)
+			return nil, userdomain.ErrUserNotFound
 		}
 		logger.Error(ctx, "increment token version failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
-		return nil, response.FromError(err)
+		return nil, err
 	}
 	if err := m.RevokeUserSessionsAtVersion(ctx, userID, tokenVersion); err != nil {
 		logger.Error(ctx, "revoke all user sessions projection failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion), zap.Error(err))...)

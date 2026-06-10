@@ -6,14 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
-	authapi "github.com/aegiscore/user-services/internal/features/auth/api"
 	authdomain "github.com/aegiscore/user-services/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-services/internal/features/user/domain"
-	"github.com/aegiscore/user-services/internal/messages"
 	"github.com/google/uuid"
 )
 
@@ -49,9 +46,8 @@ func TestAuthServiceLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 
 	_, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: " "})
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeUnauthenticated || appErr.Message != messages.InvalidCredentials {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, authdomain.ErrInvalidCredentials) {
+		t.Fatalf("err = %v, want authdomain.ErrInvalidCredentials", err)
 	}
 }
 
@@ -110,9 +106,8 @@ func TestAuthServiceLoginRejectsInvalidCredentials(t *testing.T) {
 
 	_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "wrong"})
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeUnauthenticated {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, authdomain.ErrInvalidCredentials) {
+		t.Fatalf("err = %v, want authdomain.ErrInvalidCredentials", err)
 	}
 }
 
@@ -126,9 +121,8 @@ func TestAuthServiceLoginRejectsInactiveStatuses(t *testing.T) {
 
 		_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeUnauthenticated {
-			t.Fatalf("status %d err = %#v", status, appErr)
+		if !errors.Is(err, authdomain.ErrInvalidCredentials) {
+			t.Fatalf("status %d err = %v, want authdomain.ErrInvalidCredentials", status, err)
 		}
 	}
 }
@@ -258,9 +252,8 @@ func TestAuthServiceChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
 
 	_, err = svc.ChangePassword(context.Background(), ChangePasswordCommand{Token: token, NewPassword: "new-secret"})
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeNotFound {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, userdomain.ErrUserNotFound) {
+		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
 }
 
@@ -273,9 +266,8 @@ func TestAuthServiceChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
 
 	_, err = svc.ChangePassword(context.Background(), ChangePasswordCommand{Token: token, NewPassword: "new-secret"})
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeNotFound {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, userdomain.ErrUserNotFound) {
+		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
 }
 
@@ -290,9 +282,8 @@ func TestAuthServiceChangePasswordRejectsAccessToken(t *testing.T) {
 
 	_, err = svc.ChangePassword(context.Background(), ChangePasswordCommand{Token: token, NewPassword: "new-secret"})
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeTokenInvalid {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, authdomain.ErrTokenInvalid) {
+		t.Fatalf("err = %v, want authdomain.ErrTokenInvalid", err)
 	}
 }
 
@@ -326,9 +317,8 @@ func TestAuthServiceRefreshRejectsInvalidNormalizedToken(t *testing.T) {
 	for _, token := range []string{"", " ", commonauth.TokenTypeBearer, commonauth.TokenPrefix} {
 		_, err := svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: token})
 
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeTokenInvalid || appErr.Message != messages.MissingSession {
-			t.Fatalf("token %q err = %#v", token, appErr)
+		if !errors.Is(err, authdomain.ErrTokenInvalid) {
+			t.Fatalf("token %q err = %v, want authdomain.ErrTokenInvalid", token, err)
 		}
 	}
 }
@@ -453,9 +443,8 @@ func TestAuthServiceRefreshRejectsAccessTokenSubject(t *testing.T) {
 
 	_, err = svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: access})
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeTokenInvalid {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, authdomain.ErrTokenInvalid) {
+		t.Fatalf("err = %v, want authdomain.ErrTokenInvalid", err)
 	}
 }
 
@@ -469,9 +458,8 @@ func TestAuthServiceRefreshRejectsVersionChange(t *testing.T) {
 
 	_, err = svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: refresh})
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeTokenInvalid {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, authdomain.ErrTokenInvalid) {
+		t.Fatalf("err = %v, want authdomain.ErrTokenInvalid", err)
 	}
 }
 
@@ -485,9 +473,8 @@ func TestAuthServiceRefreshMapsTokenVersionUserNotFound(t *testing.T) {
 
 	_, err = svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: refresh})
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeNotFound {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, userdomain.ErrUserNotFound) {
+		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
 }
 
@@ -537,9 +524,8 @@ func TestAuthServiceLogoutAllMapsIncrementUserNotFound(t *testing.T) {
 
 	_, err := svc.LogoutAll(ctx)
 
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeNotFound {
-		t.Fatalf("err = %#v", appErr)
+	if !errors.Is(err, userdomain.ErrUserNotFound) {
+		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
 	if store.cached || store.deletedAll {
 		t.Fatalf("sessions mutated after increment failure: %#v", store)
@@ -706,12 +692,12 @@ func (i *refreshRotationTokenIssuer) IssueTokenPair(context.Context, string, int
 		return nil, i.issueErr
 	}
 	return &issuedTokenPair{
-		Response:   &authapi.TokenResponse{AccessToken: "access", RefreshToken: "refresh-new", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900},
+		Response:   &TokenResult{AccessToken: "access", RefreshToken: "refresh-new", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900},
 		RefreshTTL: time.Hour,
 	}, nil
 }
 
-func (i *refreshRotationTokenIssuer) IssuePasswordChangeToken(context.Context, string, int64, string) (*authapi.TokenResponse, error) {
+func (i *refreshRotationTokenIssuer) IssuePasswordChangeToken(context.Context, string, int64, string) (*TokenResult, error) {
 	return nil, errors.New("not implemented")
 }
 
