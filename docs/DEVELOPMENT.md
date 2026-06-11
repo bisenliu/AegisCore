@@ -3,7 +3,7 @@
 ## 1. Prerequisites
 
 - Go workspace 使用 `go 1.26` 和 `toolchain go1.26.3`，见 `go.work`。
-- 工具链基线由 `openspec/specs/go-toolchain-baseline/spec.md` 约束；修改 `go.work` 或任一 `go.mod` 的 Go/toolchain 版本时需同步更新该规格和文档。
+- 工具链基线由 `go.work`、`common/go.mod`、`user-services/go.mod` 和本文档共同说明；修改 Go/toolchain 版本时需同步更新这些文件。
 - 本地代码规范检查使用 `golangci-lint`，建议安装与 CI 一致的版本：`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2`。
 - 本地运行用户服务需要 PostgreSQL 和 Redis。
 - 生成或执行数据库迁移需要 Atlas CLI，用户服务迁移目标通常指向 `postgres.user_db` 或部署环境提供的 `DATABASE_URL`。
@@ -147,18 +147,18 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 
 ## 9. Adding Features
 
-1. 在 `docs/opsx/CAPABILITY_MAP.md` 中定位或新增 capability。
-2. 如新增长期能力，先添加 `openspec/specs/<capability>/spec.md`。
-3. 使用 `/opsx:propose <change-name>` 生成 change artifacts。
-4. 使用 `/opsx:apply <change-name>` 实现。
+1. 先阅读 `docs/ARCHITECTURE.md`，确认新能力属于哪个模块、feature 和层。
+2. 新增服务内业务能力时，优先放在 `user-services/internal/features/<feature>/`；已有 feature 内按 `api/app/domain/transport/http/infra/*` 分层扩展。
+3. 新增跨服务稳定基础能力时，按 `common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation` 归类。
+4. 跨 feature、跨模块、外部 API、配置、数据库 schema 或目录结构变更，应在 issue、PR 描述或开发记录中写清目标、影响范围和验证方式。
 5. 增加或更新测试，并在受影响模块目录运行相关 `go test` 命令；跨模块变更时分别在 `common/` 和 `user-services/` 运行。
 
 ## 10. Adding Shared Code
 
 1. 先确认共享代码是否属于跨服务稳定契约、运行时基础能力、HTTP/Gin 适配、安全凭证原语或通用校验核心。
 2. 如能力只服务于用户服务请求清洗、状态规则、DTO 映射、repository 行为或业务编排，保留在 `user-services` 对应分层内。
-3. 如确需进入 `common`，在 capability map 或 OpenSpec 中明确 owner，并选择对应目录：`common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation`。
-4. 新增或迁移共享 API 时同步更新 Go imports、测试、文档和相关 OpenSpec 规格。
+3. 如确需进入 `common`，选择对应目录：`common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation`，并在 `docs/ARCHITECTURE.md` 更新边界说明。
+4. 新增或迁移共享 API 时同步更新 Go imports、测试和文档。
 
 ## 11. Local Runtime Notes
 

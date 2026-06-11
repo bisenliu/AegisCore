@@ -36,7 +36,7 @@ Ent 生成代码通常不需要逐文件测试。测试应覆盖 schema 约束�
 4. 在 `user-services/` 运行 `./scripts/migrate-validate.sh`。
 5. 确认运行时没有通过 `client.Schema.Create(ctx)` 自动修改 schema。
 
-## 6. OPSX Verification
+## 6. Change Verification
 
 每个 change 实现完成后至少执行：
 
