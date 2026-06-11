@@ -47,6 +47,11 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 - `user`：用户资料创建、查询和分页列表。
 - `auth`：登录、刷新、强制改密、退出当前设备、退出全部设备。
 
+当前也保留以下 future feature skeleton，仅用于标记后续 RBAC 能力边界，不属于已实现 HTTP/API 能力：
+
+- `role`：未来角色聚合、角色生命周期和角色相关应用用例的归属边界；当前只保留最小 README，不注册路由、不提供 Fx module、不声明 Ent schema。
+- `permission`：未来权限定义、权限查询和权限边界规则的归属边界；当前只保留最小 README，不注册路由、不提供 Fx module、不声明 Ent schema。
+
 每个 feature 使用以下分层：
 
 | 目录 | 责任 |

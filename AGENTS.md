@@ -19,6 +19,7 @@
 - `user-service/internal/integration/`：用户服务访问外部系统的防腐层边界，按 `http/`、`grpc/`、`events/` 分类组织；当前没有真实外部系统调用时只保留 README 或 package doc，占位不得引入未使用代码。
 - `user-service/internal/features/user/`：用户资料 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；`domain/` 可在有真实纯领域规则或事件模型时按需新增 `services/`、`events/`；`application/command` 承载写侧用例，`application/query` 承载读侧用例，`application/validators` 承载 transport-neutral application 输入辅助；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`。
 - `user-service/internal/features/auth/`：认证会话 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/redis/` 和 `fx.go` 分层；`domain/services`、`domain/events` 仅在有真实领域服务或领域事件模型时新增；`application/command` 承载登录、刷新、强制改密、退出当前设备和退出全部设备 use case，`application/validators` 承载 transport-neutral application 输入辅助、token version 撤销校验、cache/database fallback 策略和 refresh session 一致性校验，`application/ports.go` 继续拥有凭据、token version 和 session ports；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`。
+- `user-service/internal/features/role/`、`user-service/internal/features/permission/`：未来 RBAC 能力的最小 feature skeleton，仅保留 README 标注边界；当前不注册路由、不提供 Fx module、不新增 application/domain/infrastructure 代码、不新增 Ent schema 或数据库表。
 - `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产。
 
 ## 3. Key Entry Points
@@ -66,6 +67,7 @@
 - 用户资料创建：`POST /api/v1/users`
 - 用户列表分页查询：`GET /api/v1/users`
 - 认证会话控制：登录、刷新、强制改密、退出当前设备、退出全部设备。
+- RBAC future feature skeleton：`internal/features/role` 和 `internal/features/permission` 只标注未来角色权限边界，当前不实现角色权限业务。
 - HTTP 服务运行时：启动、运行、路由注册和优雅停止。
 - 外部系统防腐层边界：`internal/integration/http`、`grpc`、`events` 只承载真实外部调用的协议适配规则，当前不实现真实 client。
 - 共享基础设施：配置、日志、Redis/PostgreSQL/Ent 运行时依赖。
