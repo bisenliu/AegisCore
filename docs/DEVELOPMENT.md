@@ -19,16 +19,23 @@
 
 | 任务 | 命令 | 执行目录 |
 |---|---|---|
-| 运行全部测试 | 分别执行 `go test ./...` | `common/` 和 `user-service/` |
-| 运行用户服务 | `go run ./user-service/cmd serve --config ./user-service/configs/config.yaml` | 仓库根目录 |
-| 运行单模块测试 | `go test ./...` | `common/` 或 `user-service/` |
-| 运行共享模块 lint | `golangci-lint run ./...` | `common/` |
-| 运行用户服务 lint | `golangci-lint run ./...` | `user-service/` |
-| 生成 Ent 代码 | `go generate ./ent` | `user-service/` |
-| 生成用户服务数据库迁移 | `./scripts/migrate-diff.sh <name>` | `user-service/` |
-| 校验用户服务迁移目录 | `./scripts/migrate-validate.sh` | `user-service/` |
-| 执行用户服务数据库迁移 | `DATABASE_URL='<postgres-url>' ./scripts/migrate-apply.sh` | `user-service/` |
+| 查看统一入口 | `make help` | 仓库根目录 |
+| 构建用户服务二进制 | `make build` 或 `make build-user-service` | 仓库根目录 |
+| 运行全部测试 | `make test` | 仓库根目录 |
+| 运行用户服务 | `make run-user-service` | 仓库根目录 |
+| 运行共享模块测试 | `make test-common` | 仓库根目录 |
+| 运行用户服务测试 | `make test-user-service` | 仓库根目录 |
+| 运行全部 lint | `make lint` | 仓库根目录 |
+| 运行共享模块 lint | `make lint-common` | 仓库根目录 |
+| 运行用户服务 lint | `make lint-user-service` | 仓库根目录 |
+| 生成 Ent 代码 | `make generate` | 仓库根目录 |
+| 生成用户服务数据库迁移 | `make migrate-diff name=<name>` | 仓库根目录 |
+| 校验用户服务迁移目录 | `make migrate-validate` | 仓库根目录 |
+| 执行用户服务数据库迁移 | `DATABASE_URL='<postgres-url>' make migrate-apply` | 仓库根目录 |
+| 生成 Swagger 文档 | `make swagger-generate` | 仓库根目录 |
 | 格式化 Go 文件 | `gofmt -w <files>` | 任意目录 |
+
+Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user-service/` 执行，迁移和 Swagger 操作仍委托 `user-service/scripts/` 下的现有脚本。直接运行底层命令仍然可用，排错时可参考对应脚本和执行目录。
 
 ## 4. Configuration
 

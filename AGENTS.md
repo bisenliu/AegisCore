@@ -55,13 +55,18 @@
 
 ## 5. Development Commands
 
-- 运行全部测试：分别在 `common/` 和 `user-service/` 执行 `go test ./...`。
-- 运行用户服务：`go run ./user-service/cmd serve --config ./user-service/configs/config.yaml`。
-- 生成 Ent 代码：在 `user-service/` 执行 `go generate ./ent`。
-- 生成迁移：在 `user-service/` 执行 `./scripts/migrate-diff.sh <name>`。
-- 校验迁移：在 `user-service/` 执行 `./scripts/migrate-validate.sh`。
+- 查看统一入口：`make help`。
+- 构建用户服务二进制：`make build` 或 `make build-user-service`。
+- 运行全部测试：`make test`。
+- 运行用户服务：`make run-user-service`。
+- 运行单模块测试：`make test-common` 或 `make test-user-service`。
+- 生成 Ent 代码：`make generate`。
+- 生成迁移：`make migrate-diff name=<name>`。
+- 校验迁移：`make migrate-validate`。
+- 执行迁移：`DATABASE_URL='<postgres-url>' make migrate-apply`。
+- 生成 Swagger 文档：`make swagger-generate`。
 - 格式化 Go 代码：`gofmt -w <files>`。
-- 运行 lint：分别在 `common/` 和 `user-service/` 执行 `golangci-lint run ./...`。
+- 运行 lint：`make lint`，或按模块运行 `make lint-common`、`make lint-user-service`。
 
 ## 6. Change Workflow
 
