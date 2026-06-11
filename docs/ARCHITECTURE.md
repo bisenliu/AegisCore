@@ -22,7 +22,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
 3. `user-service/internal/bootstrap.AppModule` 导入共享 runtime module、feature modules、`providers.Module`，并提供 HTTP server 生命周期。
 4. `user-service/internal/providers.Module` 显式提供 Redis/PostgreSQL named providers、Ent clients、JWT service、Gin engine 和 HTTP route registration。
-5. User/Auth feature modules 自己组装 feature-local infrastructure adapter、application service 或 command/query 用例和 HTTP controller。
+5. User/Auth feature modules 自己组装 feature-local infrastructure adapter、application service 或 command/query use case 和 HTTP controller。
 6. `user-service/internal/providers/routes.go` 适配依赖并调用 `router.RegisterUserServiceHTTPRoutes`；`router.go` 负责 route graph 总装和 `/api/v1` 分组，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向。
 7. Fx lifecycle 启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
@@ -36,7 +36,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | 路由 provider | `user-service/internal/providers/routes.go` | 将 Fx 依赖适配为 router route params |
 | 路由总装 | `user-service/internal/router/router.go`、`health.go`、`swagger.go` | `router.go` 创建 public/protected route groups 并总装 route graph，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向 |
 | 参数解析 | `features/*/transport/http/controller.go` | 绑定 HTTP DTO，执行边界校验，并映射为 command/query |
-| 业务调用 | `features/*/application/` | 编排用户资料或认证会话用例；用户资料 feature 的读写用例分别位于 `application/query` 与 `application/command` |
+| 业务调用 | `features/*/application/` | 编排用户资料或认证会话用例；用户资料 feature 的读写用例分别位于 `application/query` 与 `application/command`，认证会话 feature 的登录、刷新、强制改密和登出用例位于 `application/command` |
 | 数据访问 | `features/*/infrastructure/postgres/`, `features/*/infrastructure/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
 | 响应输出 | `common/http/response/` + `common/contract/response/` | 通过 Gin writer 输出统一 `success/code/message/data` 信封，并复用稳定错误码与分页契约 |
 
@@ -51,7 +51,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 | 目录 | 责任 |
 |---|---|
-| `application/` | service、commands、queries、ports、use case mapper 和业务编排；可按 feature 需要细分为 `command/`、`query/`、`validators/` |
+| `application/` | service、commands、queries、ports、use case mapper 和业务编排；可按 feature 需要细分为 `command/`、`query/`、`validators/` 和稳定组件包。Auth 当前使用 `command/` 承载登录、刷新、强制改密和登出 use case，使用 `validators/` 承载 transport-neutral 输入辅助，使用 `tokenversion/` 承载 token version 撤销校验和 cache/database fallback 策略 |
 | `domain/` | 领域实体、值对象、枚举、领域错误和纯业务规则 |
 | `transport/http/` | Gin controller、route registration、HTTP request/response DTO、Swagger 文档模型、HTTP DTO validation 和边界映射 |
 | `infrastructure/postgres/` | Ent/PostgreSQL adapter 和 predicate 构造 |

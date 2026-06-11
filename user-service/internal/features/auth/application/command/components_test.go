@@ -1,4 +1,4 @@
-package application
+package command
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
+	authtokenversion "github.com/aegiscore/user-service/internal/features/auth/application/tokenversion"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/google/uuid"
@@ -334,7 +335,7 @@ func TestAuthSessionLifecycleRevokeUserSessionsAtVersionReturnsProjectionError(t
 }
 
 func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing.T) {
-	validator := NewTokenVersionValidator(&authRepoStub{tokenVersionErr: errors.New("database should not be read")}, &sessionStoreStub{version: 4})
+	validator := authtokenversion.NewValidator(&authRepoStub{tokenVersionErr: errors.New("database should not be read")}, &sessionStoreStub{version: 4})
 
 	err := validator.ValidateTokenVersion(context.Background(), authTestUserID.String(), 3)
 

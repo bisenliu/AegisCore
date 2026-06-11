@@ -18,7 +18,7 @@
 - `user-service/internal/providers/`：用户服务级 Fx provider，集中承载 Gin engine、HTTP route registration、JWT service、PostgreSQL/Redis named resources 和 Ent clients 的服务侧组装；不得承载 feature 业务逻辑。
 - `user-service/internal/integration/`：用户服务访问外部系统的防腐层边界，按 `http/`、`grpc/`、`events/` 分类组织；当前没有真实外部系统调用时只保留 README 或 package doc，占位不得引入未使用代码。
 - `user-service/internal/features/user/`：用户资料 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；`application/command` 承载写侧用例，`application/query` 承载读侧用例，`application/validators` 承载 transport-neutral application 输入辅助；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`。
-- `user-service/internal/features/auth/`：认证会话 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/redis/` 和 `fx.go` 分层；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`。
+- `user-service/internal/features/auth/`：认证会话 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/redis/` 和 `fx.go` 分层；`application/command` 承载登录、刷新、强制改密、退出当前设备和退出全部设备 use case，`application/validators` 承载 transport-neutral application 输入辅助，`application/tokenversion` 承载 token version 撤销校验和 cache/database fallback 策略，`application/ports.go` 继续拥有凭据、token version 和 session ports；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`。
 - `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产。
 
 ## 3. Key Entry Points
@@ -45,7 +45,11 @@
 - 认证 feature module：`user-service/internal/features/auth/fx.go`
 - 认证 controller：`user-service/internal/features/auth/transport/http/controller.go`
 - 认证 HTTP DTO：`user-service/internal/features/auth/transport/http/request.go`、`user-service/internal/features/auth/transport/http/response.go`
-- 认证 service：`user-service/internal/features/auth/application/service.go`
+- 认证登录 command use case：`user-service/internal/features/auth/application/command/login.go`
+- 认证刷新 command use case：`user-service/internal/features/auth/application/command/refresh.go`
+- 认证改密 command use case：`user-service/internal/features/auth/application/command/change_password.go`
+- 认证登出 command use case：`user-service/internal/features/auth/application/command/logout_current_session.go`、`user-service/internal/features/auth/application/command/logout_all_sessions.go`
+- 认证 token version validator：`user-service/internal/features/auth/application/tokenversion/validator.go`
 - 认证 PostgreSQL adapter：`user-service/internal/features/auth/infrastructure/postgres/credential_store.go`
 - 认证 Redis adapter：`user-service/internal/features/auth/infrastructure/redis/session_store.go`
 - 共享配置加载：`common/runtime/config/loader.go`
@@ -105,9 +109,9 @@
 - HTTP API 应使用 `common/contract/response.Envelope` 格式返回，并通过 `common/http/response` 写出 Gin 响应。
 - 配置通过 YAML 与 `AEGISCORE_` 环境变量覆盖加载，Redis/PostgreSQL 使用 `redis.<name>` 与 `postgres.<name>` 命名实例，避免硬编码运行时配置。
 - `internal/shared` 默认禁止新增。只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并且必须在 `docs/ARCHITECTURE.md` 说明 owner、准入理由和禁止事项。
-- Ports 由消费侧 feature 拥有：用户资料 command/query 消费的接口放在 `internal/features/user/application/ports.go`，认证 service 消费的凭据、token version 和 session 接口放在 `internal/features/auth/application/ports.go`。不要为了 adapter 方便在 infrastructure 包或共享根包定义大接口。
+- Ports 由消费侧 feature 拥有：用户资料 command/query 消费的接口放在 `internal/features/user/application/ports.go`，认证 command use case 消费的凭据、token version 和 session 接口放在 `internal/features/auth/application/ports.go`。不要为了 adapter 方便在 infrastructure 包或共享根包定义大接口。
 - HTTP request/response DTO、Swagger model、请求 DTO 清洗、绑定后的输入规范化和简单字段解析放在对应 feature 的 `transport/http/request.go`、`response.go`、`validation.go`。这些函数不得导入 Ent、Redis、service、infrastructure，或执行业务编排。
-- Controller 必须把 transport DTO 映射为 application command/query 后再调用 service 或用例，service 不接收 HTTP request/response DTO。
+- Controller 必须把 transport DTO 映射为 application command/query 后再调用 service 或 use case，service/use case 不接收 HTTP request/response DTO。
 
 | 层 | 可以依赖 | 禁止依赖 |
 |---|---|---|

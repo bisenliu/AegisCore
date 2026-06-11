@@ -16,7 +16,7 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
-	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
+	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
@@ -57,12 +57,19 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		t.Fatalf("NewDefault: %v", err)
 	}
 	RegisterRoutes(RegisterRouteParams{
-		Config:         cfg,
-		Log:            log,
-		Engine:         engine,
-		JWT:            jwtService,
-		TokenVersions:  tokenVersions,
-		AuthController: authhttp.NewAuthController(&routeAuthAuthService{}, validator),
+		Config:        cfg,
+		Log:           log,
+		Engine:        engine,
+		JWT:           jwtService,
+		TokenVersions: tokenVersions,
+		AuthController: authhttp.NewAuthController(authhttp.AuthControllerParams{
+			Login:          &routeAuthAuthUseCases{},
+			Refresh:        &routeAuthAuthUseCases{},
+			ChangePassword: &routeAuthAuthUseCases{},
+			LogoutCurrent:  &routeAuthAuthUseCases{},
+			LogoutAll:      &routeAuthAuthUseCases{},
+			Validator:      validator,
+		}),
 		UserController: userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
 	})
 
@@ -259,7 +266,7 @@ type routeAuthUserCommands struct{}
 
 type routeAuthUserQueries struct{}
 
-type routeAuthAuthService struct{}
+type routeAuthAuthUseCases struct{}
 
 type routeTokenVersionValidator struct {
 	version int64
@@ -272,24 +279,24 @@ func (s *routeTokenVersionValidator) ValidateTokenVersion(_ context.Context, _ s
 	return nil
 }
 
-func (s *routeAuthAuthService) Login(context.Context, authapplication.LoginCommand) (*authapplication.TokenResult, error) {
-	return &authapplication.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
+func (s *routeAuthAuthUseCases) Login(context.Context, authcommand.LoginCommand) (*authcommand.TokenResult, error) {
+	return &authcommand.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
-func (s *routeAuthAuthService) Refresh(context.Context, authapplication.RefreshTokenCommand) (*authapplication.TokenResult, error) {
-	return &authapplication.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
+func (s *routeAuthAuthUseCases) Refresh(context.Context, authcommand.RefreshTokenCommand) (*authcommand.TokenResult, error) {
+	return &authcommand.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
-func (s *routeAuthAuthService) ChangePassword(context.Context, authapplication.ChangePasswordCommand) (*authapplication.ChangePasswordResult, error) {
-	return &authapplication.ChangePasswordResult{Changed: true}, nil
+func (s *routeAuthAuthUseCases) ChangePassword(context.Context, authcommand.ChangePasswordCommand) (*authcommand.ChangePasswordResult, error) {
+	return &authcommand.ChangePasswordResult{Changed: true}, nil
 }
 
-func (s *routeAuthAuthService) Logout(context.Context) (*authapplication.LogoutResult, error) {
-	return &authapplication.LogoutResult{LoggedOut: true}, nil
+func (s *routeAuthAuthUseCases) LogoutCurrentSession(context.Context) (*authcommand.LogoutResult, error) {
+	return &authcommand.LogoutResult{LoggedOut: true}, nil
 }
 
-func (s *routeAuthAuthService) LogoutAll(context.Context) (*authapplication.LogoutResult, error) {
-	return &authapplication.LogoutResult{LoggedOut: true}, nil
+func (s *routeAuthAuthUseCases) LogoutAllSessions(context.Context) (*authcommand.LogoutResult, error) {
+	return &authcommand.LogoutResult{LoggedOut: true}, nil
 }
 
 func (s *routeAuthUserCommands) CreateUser(context.Context, usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error) {

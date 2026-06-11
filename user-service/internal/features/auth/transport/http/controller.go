@@ -5,14 +5,31 @@ import (
 	"github.com/aegiscore/common/http/response"
 	commonauth "github.com/aegiscore/common/security/auth"
 	commonvalidation "github.com/aegiscore/common/validation"
-	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
+	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/fx"
 )
 
 // AuthController 处理认证和会话端点的 HTTP 请求。
 type AuthController struct {
-	authService authapplication.AuthService
-	validator   *commonvalidation.Validator
+	login          authcommand.LoginUseCase
+	refresh        authcommand.RefreshTokenUseCase
+	changePassword authcommand.ChangePasswordUseCase
+	logoutCurrent  authcommand.LogoutCurrentSessionUseCase
+	logoutAll      authcommand.LogoutAllSessionsUseCase
+	validator      *commonvalidation.Validator
+}
+
+// AuthControllerParams 包含构造认证控制器所需的依赖。
+type AuthControllerParams struct {
+	fx.In
+
+	Login          authcommand.LoginUseCase
+	Refresh        authcommand.RefreshTokenUseCase
+	ChangePassword authcommand.ChangePasswordUseCase
+	LogoutCurrent  authcommand.LogoutCurrentSessionUseCase
+	LogoutAll      authcommand.LogoutAllSessionsUseCase
+	Validator      *commonvalidation.Validator
 }
 
 // ChangePassword 使用受限 token 处理强制改密请求。
@@ -37,7 +54,7 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	result, err := ctl.authService.ChangePassword(c.Request.Context(), authapplication.ChangePasswordCommand{
+	result, err := ctl.changePassword.ChangePassword(c.Request.Context(), authcommand.ChangePasswordCommand{
 		Token:       req.Token,
 		NewPassword: req.NewPassword,
 	})
@@ -48,9 +65,16 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 	response.OK(c, toChangePasswordResponse(result))
 }
 
-// NewAuthController 使用 service 和 validator 依赖构造认证控制器。
-func NewAuthController(authService authapplication.AuthService, validator *commonvalidation.Validator) *AuthController {
-	return &AuthController{authService: authService, validator: validator}
+// NewAuthController 使用 command use case 和 validator 依赖构造认证控制器。
+func NewAuthController(params AuthControllerParams) *AuthController {
+	return &AuthController{
+		login:          params.Login,
+		refresh:        params.Refresh,
+		changePassword: params.ChangePassword,
+		logoutCurrent:  params.LogoutCurrent,
+		logoutAll:      params.LogoutAll,
+		validator:      params.Validator,
+	}
 }
 
 // LoginUser 处理用户名和密码登录请求。
@@ -74,7 +98,7 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	tokens, err := ctl.authService.Login(c.Request.Context(), authapplication.LoginCommand{
+	tokens, err := ctl.login.Login(c.Request.Context(), authcommand.LoginCommand{
 		Username: req.Username,
 		Password: req.Password,
 	})
@@ -106,7 +130,7 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	tokens, err := ctl.authService.Refresh(c.Request.Context(), authapplication.RefreshTokenCommand{
+	tokens, err := ctl.refresh.Refresh(c.Request.Context(), authcommand.RefreshTokenCommand{
 		RefreshToken: req.RefreshToken,
 	})
 	if err != nil {
@@ -127,7 +151,7 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 // @Security BearerAuth
 // @Router /auth/logout [post]
 func (ctl *AuthController) LogoutCurrentSession(c *gin.Context) {
-	result, err := ctl.authService.Logout(c.Request.Context())
+	result, err := ctl.logoutCurrent.LogoutCurrentSession(c.Request.Context())
 	if err != nil {
 		response.Fail(c, toAuthHTTPError(err))
 		return
@@ -146,7 +170,7 @@ func (ctl *AuthController) LogoutCurrentSession(c *gin.Context) {
 // @Security BearerAuth
 // @Router /auth/logout-all [post]
 func (ctl *AuthController) LogoutAllSessions(c *gin.Context) {
-	result, err := ctl.authService.LogoutAll(c.Request.Context())
+	result, err := ctl.logoutAll.LogoutAllSessions(c.Request.Context())
 	if err != nil {
 		response.Fail(c, toAuthHTTPError(err))
 		return

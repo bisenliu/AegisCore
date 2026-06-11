@@ -1,4 +1,4 @@
-package application
+package command
 
 import (
 	"context"
@@ -7,17 +7,24 @@ import (
 
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/password"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
-type credentialVerifier struct {
-	repo UserCredentialStore
+// CredentialVerifier 校验登录凭证并完成强制改密。
+type CredentialVerifier interface {
+	VerifyPassword(ctx context.Context, username string, plainPassword string) (*authdomain.UserCredential, error)
+	ChangePassword(ctx context.Context, userID uuid.UUID, newPassword string) (*authdomain.CredentialUpdateResult, error)
 }
 
-func newCredentialVerifier(repo UserCredentialStore) CredentialVerifier {
+type credentialVerifier struct {
+	repo authapplication.UserCredentialStore
+}
+
+func newCredentialVerifier(repo authapplication.UserCredentialStore) CredentialVerifier {
 	return &credentialVerifier{repo: repo}
 }
 

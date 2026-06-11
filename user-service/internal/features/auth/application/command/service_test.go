@@ -1,4 +1,4 @@
-package application
+package command
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/google/uuid"
@@ -16,14 +17,14 @@ import (
 
 var authTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
 
-func TestAuthServiceLogin(t *testing.T) {
+func TestAuthUseCaseLogin(t *testing.T) {
 	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
 	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
-	svc := newTestAuthService(repo, store, true)
+	svc := newTestAuthUseCases(repo, store, true)
 
 	tokens, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 
@@ -41,8 +42,8 @@ func TestAuthServiceLogin(t *testing.T) {
 	}
 }
 
-func TestAuthServiceLoginRejectsBlankTrimmedCredentials(t *testing.T) {
-	svc := newTestAuthService(&authRepoStub{}, &sessionStoreStub{}, true)
+func TestAuthUseCaseLoginRejectsBlankTrimmedCredentials(t *testing.T) {
+	svc := newTestAuthUseCases(&authRepoStub{}, &sessionStoreStub{}, true)
 
 	_, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: " "})
 
@@ -51,14 +52,14 @@ func TestAuthServiceLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 	}
 }
 
-func TestAuthServiceLoginUsesDefaultTTLs(t *testing.T) {
+func TestAuthUseCaseLoginUsesDefaultTTLs(t *testing.T) {
 	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
 	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
-	svc := newTestAuthServiceWithConfig(repo, store, config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"}})
+	svc := newTestAuthUseCasesWithConfig(repo, store, config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"}})
 
 	tokens, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 
@@ -73,7 +74,7 @@ func TestAuthServiceLoginUsesDefaultTTLs(t *testing.T) {
 	}
 }
 
-func TestAuthServiceLoginUsesExplicitTTLs(t *testing.T) {
+func TestAuthUseCaseLoginUsesExplicitTTLs(t *testing.T) {
 	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
@@ -82,7 +83,7 @@ func TestAuthServiceLoginUsesExplicitTTLs(t *testing.T) {
 	store := &sessionStoreStub{version: 2}
 	accessTTL := time.Minute
 	refreshTTL := 2 * time.Hour
-	svc := newTestAuthServiceWithConfig(repo, store, config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: accessTTL, RefreshTokenTTL: refreshTTL}})
+	svc := newTestAuthUseCasesWithConfig(repo, store, config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: accessTTL, RefreshTokenTTL: refreshTTL}})
 
 	tokens, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 
@@ -97,12 +98,12 @@ func TestAuthServiceLoginUsesExplicitTTLs(t *testing.T) {
 	}
 }
 
-func TestAuthServiceLoginRejectsInvalidCredentials(t *testing.T) {
+func TestAuthUseCaseLoginRejectsInvalidCredentials(t *testing.T) {
 	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	svc := newTestAuthService(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
+	svc := newTestAuthUseCases(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
 
 	_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "wrong"})
 
@@ -111,13 +112,13 @@ func TestAuthServiceLoginRejectsInvalidCredentials(t *testing.T) {
 	}
 }
 
-func TestAuthServiceLoginRejectsInactiveStatuses(t *testing.T) {
+func TestAuthUseCaseLoginRejectsInactiveStatuses(t *testing.T) {
 	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
 	for _, status := range []userdomain.UserStatus{userdomain.UserStatusDisabled} {
-		svc := newTestAuthService(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: status, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
+		svc := newTestAuthUseCases(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: status, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
 
 		_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 
@@ -127,14 +128,14 @@ func TestAuthServiceLoginRejectsInactiveStatuses(t *testing.T) {
 	}
 }
 
-func TestAuthServiceLoginIssuesPasswordChangeToken(t *testing.T) {
+func TestAuthUseCaseLoginIssuesPasswordChangeToken(t *testing.T) {
 	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
 	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
-	svc := newTestAuthService(repo, store, true)
+	svc := newTestAuthUseCases(repo, store, true)
 
 	tokens, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 
@@ -156,14 +157,14 @@ func TestAuthServiceLoginIssuesPasswordChangeToken(t *testing.T) {
 	}
 }
 
-func TestAuthServiceChangePassword(t *testing.T) {
+func TestAuthUseCaseChangePassword(t *testing.T) {
 	passwordHash, err := password.HashContext(context.Background(), "old-secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
 	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
 	store := &sessionStoreStub{version: 2}
-	svc := newTestAuthService(repo, store, true)
+	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
@@ -183,14 +184,14 @@ func TestAuthServiceChangePassword(t *testing.T) {
 	}
 }
 
-func TestAuthServiceChangePasswordIncrementsTokenVersionOnce(t *testing.T) {
+func TestAuthUseCaseChangePasswordIncrementsTokenVersionOnce(t *testing.T) {
 	passwordHash, err := password.HashContext(context.Background(), "old-secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
 	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
 	store := &sessionStoreStub{version: 2}
-	svc := newTestAuthService(repo, store, true)
+	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
@@ -212,14 +213,14 @@ func TestAuthServiceChangePasswordIncrementsTokenVersionOnce(t *testing.T) {
 	}
 }
 
-func TestAuthServiceChangePasswordSucceedsWhenRevocationProjectionFails(t *testing.T) {
+func TestAuthUseCaseChangePasswordSucceedsWhenRevocationProjectionFails(t *testing.T) {
 	passwordHash, err := password.HashContext(context.Background(), "old-secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
 	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
 	store := &sessionStoreStub{version: 2, cacheErr: errors.New("cache failed"), deleteAllErr: errors.New("delete failed")}
-	svc := newTestAuthService(repo, store, true)
+	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
@@ -241,10 +242,10 @@ func TestAuthServiceChangePasswordSucceedsWhenRevocationProjectionFails(t *testi
 	}
 }
 
-func TestAuthServiceChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
+func TestAuthUseCaseChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
 	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: userdomain.ErrUserNotFound}
 	store := &sessionStoreStub{version: 2}
-	svc := newTestAuthService(repo, store, true)
+	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
@@ -257,8 +258,8 @@ func TestAuthServiceChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
 	}
 }
 
-func TestAuthServiceChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
-	svc := newTestAuthService(&authRepoStub{tokenVersionErr: userdomain.ErrUserNotFound}, &sessionStoreStub{cacheMiss: true}, true)
+func TestAuthUseCaseChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
+	svc := newTestAuthUseCases(&authRepoStub{tokenVersionErr: userdomain.ErrUserNotFound}, &sessionStoreStub{cacheMiss: true}, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
@@ -271,10 +272,10 @@ func TestAuthServiceChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
 	}
 }
 
-func TestAuthServiceChangePasswordRejectsAccessToken(t *testing.T) {
+func TestAuthUseCaseChangePasswordRejectsAccessToken(t *testing.T) {
 	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
-	svc := newTestAuthService(repo, store, true)
+	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignAccessToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
@@ -287,9 +288,9 @@ func TestAuthServiceChangePasswordRejectsAccessToken(t *testing.T) {
 	}
 }
 
-func TestAuthServiceRefreshRotatesSession(t *testing.T) {
+func TestAuthUseCaseRefreshRotatesSession(t *testing.T) {
 	store := &sessionStoreStub{version: 2, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
-	svc := newTestAuthService(&authRepoStub{}, store, true)
+	svc := newTestAuthUseCases(&authRepoStub{}, store, true)
 	refresh, err := testJWTService().SignRefreshToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
@@ -311,8 +312,8 @@ func TestAuthServiceRefreshRotatesSession(t *testing.T) {
 	}
 }
 
-func TestAuthServiceRefreshRejectsInvalidNormalizedToken(t *testing.T) {
-	svc := newTestAuthService(&authRepoStub{}, &sessionStoreStub{}, false)
+func TestAuthUseCaseRefreshRejectsInvalidNormalizedToken(t *testing.T) {
+	svc := newTestAuthUseCases(&authRepoStub{}, &sessionStoreStub{}, false)
 
 	for _, token := range []string{"", " ", commonauth.TokenTypeBearer, commonauth.TokenPrefix} {
 		_, err := svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: token})
@@ -323,13 +324,9 @@ func TestAuthServiceRefreshRejectsInvalidNormalizedToken(t *testing.T) {
 	}
 }
 
-func TestAuthServiceRefreshRotationKeepsOldSessionWhenTokenSigningFails(t *testing.T) {
+func TestAuthUseCaseRefreshRotationKeepsOldSessionWhenTokenSigningFails(t *testing.T) {
 	sessions := newRefreshRotationSessionLifecycle()
-	svc := &authService{
-		tokens:               &refreshRotationTokenIssuer{issueErr: errors.New("sign failed")},
-		sessions:             sessions,
-		refreshTokenRotation: true,
-	}
+	svc := &refreshTokenUseCase{deps: &UseCaseDeps{tokens: &refreshRotationTokenIssuer{issueErr: errors.New("sign failed")}, sessions: sessions, refreshTokenRotation: true}}
 
 	_, err := svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
 
@@ -344,14 +341,10 @@ func TestAuthServiceRefreshRotationKeepsOldSessionWhenTokenSigningFails(t *testi
 	}
 }
 
-func TestAuthServiceRefreshRotationKeepsOldSessionWhenNewSessionCreateFails(t *testing.T) {
+func TestAuthUseCaseRefreshRotationKeepsOldSessionWhenNewSessionCreateFails(t *testing.T) {
 	sessions := newRefreshRotationSessionLifecycle()
 	sessions.createErr = errors.New("create failed")
-	svc := &authService{
-		tokens:               &refreshRotationTokenIssuer{},
-		sessions:             sessions,
-		refreshTokenRotation: true,
-	}
+	svc := &refreshTokenUseCase{deps: &UseCaseDeps{tokens: &refreshRotationTokenIssuer{}, sessions: sessions, refreshTokenRotation: true}}
 
 	tokens, err := svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
 
@@ -366,14 +359,10 @@ func TestAuthServiceRefreshRotationKeepsOldSessionWhenNewSessionCreateFails(t *t
 	}
 }
 
-func TestAuthServiceRefreshRotationFailureDoesNotReturnToken(t *testing.T) {
+func TestAuthUseCaseRefreshRotationFailureDoesNotReturnToken(t *testing.T) {
 	sessions := newRefreshRotationSessionLifecycle()
 	sessions.rotateErr = errors.New("rotate failed")
-	svc := &authService{
-		tokens:               &refreshRotationTokenIssuer{},
-		sessions:             sessions,
-		refreshTokenRotation: true,
-	}
+	svc := &refreshTokenUseCase{deps: &UseCaseDeps{tokens: &refreshRotationTokenIssuer{}, sessions: sessions, refreshTokenRotation: true}}
 
 	tokens, err := svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
 
@@ -391,13 +380,9 @@ func TestAuthServiceRefreshRotationFailureDoesNotReturnToken(t *testing.T) {
 	}
 }
 
-func TestAuthServiceRefreshRotationReturnsTokenAfterNewSessionAndOldRevocation(t *testing.T) {
+func TestAuthUseCaseRefreshRotationReturnsTokenAfterNewSessionAndOldRevocation(t *testing.T) {
 	sessions := newRefreshRotationSessionLifecycle()
-	svc := &authService{
-		tokens:               &refreshRotationTokenIssuer{},
-		sessions:             sessions,
-		refreshTokenRotation: true,
-	}
+	svc := &refreshTokenUseCase{deps: &UseCaseDeps{tokens: &refreshRotationTokenIssuer{}, sessions: sessions, refreshTokenRotation: true}}
 
 	tokens, err := svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
 
@@ -415,9 +400,9 @@ func TestAuthServiceRefreshRotationReturnsTokenAfterNewSessionAndOldRevocation(t
 	}
 }
 
-func TestAuthServiceRefreshUsesNormalizedToken(t *testing.T) {
+func TestAuthUseCaseRefreshUsesNormalizedToken(t *testing.T) {
 	store := &sessionStoreStub{version: 2, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
-	svc := newTestAuthService(&authRepoStub{}, store, false)
+	svc := newTestAuthUseCases(&authRepoStub{}, store, false)
 	refresh, err := testJWTService().SignRefreshToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
@@ -433,9 +418,9 @@ func TestAuthServiceRefreshUsesNormalizedToken(t *testing.T) {
 	}
 }
 
-func TestAuthServiceRefreshRejectsAccessTokenSubject(t *testing.T) {
+func TestAuthUseCaseRefreshRejectsAccessTokenSubject(t *testing.T) {
 	store := &sessionStoreStub{version: 2, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
-	svc := newTestAuthService(&authRepoStub{}, store, false)
+	svc := newTestAuthUseCases(&authRepoStub{}, store, false)
 	access, err := testJWTService().SignAccessToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
@@ -448,9 +433,9 @@ func TestAuthServiceRefreshRejectsAccessTokenSubject(t *testing.T) {
 	}
 }
 
-func TestAuthServiceRefreshRejectsVersionChange(t *testing.T) {
+func TestAuthUseCaseRefreshRejectsVersionChange(t *testing.T) {
 	store := &sessionStoreStub{version: 3, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
-	svc := newTestAuthService(&authRepoStub{}, store, true)
+	svc := newTestAuthUseCases(&authRepoStub{}, store, true)
 	refresh, err := testJWTService().SignRefreshToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
@@ -463,9 +448,9 @@ func TestAuthServiceRefreshRejectsVersionChange(t *testing.T) {
 	}
 }
 
-func TestAuthServiceRefreshMapsTokenVersionUserNotFound(t *testing.T) {
+func TestAuthUseCaseRefreshMapsTokenVersionUserNotFound(t *testing.T) {
 	store := &sessionStoreStub{session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}, cacheMiss: true}
-	svc := newTestAuthService(&authRepoStub{tokenVersionErr: userdomain.ErrUserNotFound}, store, true)
+	svc := newTestAuthUseCases(&authRepoStub{tokenVersionErr: userdomain.ErrUserNotFound}, store, true)
 	refresh, err := testJWTService().SignRefreshToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
@@ -478,13 +463,13 @@ func TestAuthServiceRefreshMapsTokenVersionUserNotFound(t *testing.T) {
 	}
 }
 
-func TestAuthServiceLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
+func TestAuthUseCaseLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 	repo := &authRepoStub{newVersion: 3}
 	store := &sessionStoreStub{version: 2}
-	svc := newTestAuthService(repo, store, true)
+	svc := newTestAuthUseCases(repo, store, true)
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 
-	result, err := svc.LogoutAll(ctx)
+	result, err := svc.LogoutAllSessions(ctx)
 
 	if err != nil {
 		t.Fatalf("LogoutAll: %v", err)
@@ -494,13 +479,13 @@ func TestAuthServiceLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 	}
 }
 
-func TestAuthServiceLogoutAllSucceedsWhenRevocationProjectionFails(t *testing.T) {
+func TestAuthUseCaseLogoutAllSucceedsWhenRevocationProjectionFails(t *testing.T) {
 	repo := &authRepoStub{newVersion: 3}
 	store := &sessionStoreStub{version: 2, cacheErr: errors.New("cache failed"), deleteAllErr: errors.New("delete failed")}
-	svc := newTestAuthService(repo, store, true)
+	svc := newTestAuthUseCases(repo, store, true)
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 
-	result, err := svc.LogoutAll(ctx)
+	result, err := svc.LogoutAllSessions(ctx)
 
 	if err != nil {
 		t.Fatalf("LogoutAll: %v", err)
@@ -516,13 +501,13 @@ func TestAuthServiceLogoutAllSucceedsWhenRevocationProjectionFails(t *testing.T)
 	}
 }
 
-func TestAuthServiceLogoutAllMapsIncrementUserNotFound(t *testing.T) {
+func TestAuthUseCaseLogoutAllMapsIncrementUserNotFound(t *testing.T) {
 	repo := &authRepoStub{incrementErr: userdomain.ErrUserNotFound}
 	store := &sessionStoreStub{version: 2}
-	svc := newTestAuthService(repo, store, true)
+	svc := newTestAuthUseCases(repo, store, true)
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 
-	_, err := svc.LogoutAll(ctx)
+	_, err := svc.LogoutAllSessions(ctx)
 
 	if !errors.Is(err, userdomain.ErrUserNotFound) {
 		t.Fatalf("err = %v, want ErrUserNotFound", err)
@@ -532,14 +517,29 @@ func TestAuthServiceLogoutAllMapsIncrementUserNotFound(t *testing.T) {
 	}
 }
 
-func newTestAuthService(repo *authRepoStub, store AuthSessionStore, rotation bool) AuthService {
+func newTestAuthUseCases(repo *authRepoStub, store authapplication.AuthSessionStore, rotation bool) testAuthUseCases {
 	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute}}
-	return NewAuthService(AuthServiceParams{Credentials: repo, TokenVersions: repo, Sessions: store, JWT: commonauth.NewJWTService(cfg.Auth), Config: cfg})
+	return newTestAuthUseCasesWithConfig(repo, store, cfg.Auth)
 }
 
-func newTestAuthServiceWithConfig(repo *authRepoStub, store AuthSessionStore, authCfg config.AuthConfig) AuthService {
+func newTestAuthUseCasesWithConfig(repo *authRepoStub, store authapplication.AuthSessionStore, authCfg config.AuthConfig) testAuthUseCases {
 	cfg := &config.Config{Auth: authCfg}
-	return NewAuthService(AuthServiceParams{Credentials: repo, TokenVersions: repo, Sessions: store, JWT: commonauth.NewJWTService(cfg.Auth), Config: cfg})
+	deps := NewUseCaseDeps(UseCaseDepsParams{Credentials: repo, TokenVersions: repo, Sessions: store, JWT: commonauth.NewJWTService(cfg.Auth), Config: cfg})
+	return testAuthUseCases{
+		LoginUseCase:                NewLoginUseCase(deps),
+		RefreshTokenUseCase:         NewRefreshTokenUseCase(deps),
+		ChangePasswordUseCase:       NewChangePasswordUseCase(deps),
+		LogoutCurrentSessionUseCase: NewLogoutCurrentSessionUseCase(deps),
+		LogoutAllSessionsUseCase:    NewLogoutAllSessionsUseCase(deps),
+	}
+}
+
+type testAuthUseCases struct {
+	LoginUseCase
+	RefreshTokenUseCase
+	ChangePasswordUseCase
+	LogoutCurrentSessionUseCase
+	LogoutAllSessionsUseCase
 }
 
 func testJWTService() *commonauth.JWTService {

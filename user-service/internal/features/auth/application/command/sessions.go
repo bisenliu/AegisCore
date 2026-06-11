@@ -1,4 +1,4 @@
-package application
+package command
 
 import (
 	"context"
@@ -8,28 +8,31 @@ import (
 
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
+	authtokenversion "github.com/aegiscore/user-service/internal/features/auth/application/tokenversion"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
+// AuthSessionLifecycle 为 auth command use case 创建、校验和撤销认证会话。
+type AuthSessionLifecycle interface {
+	CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error
+	ValidatePasswordChangeClaims(ctx context.Context, claims *commonauth.Claims) error
+	ValidateRefreshSession(ctx context.Context, claims *commonauth.Claims) (authdomain.AuthSession, int64, error)
+	RotateTokenSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, refreshTTL time.Duration) error
+	DeleteSession(ctx context.Context, userID string, sessionID string) error
+	RevokeUserSessionsAtVersion(ctx context.Context, userID uuid.UUID, tokenVersion int64) error
+	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*authdomain.SessionRevocationResult, error)
+}
+
 type authSessionLifecycle struct {
-	users    UserTokenVersionStore
-	sessions AuthSessionStore
+	users    authapplication.UserTokenVersionStore
+	sessions authapplication.AuthSessionStore
 }
 
-type tokenVersionValidator struct {
-	users    UserTokenVersionStore
-	sessions AuthSessionStore
-}
-
-// NewTokenVersionValidator 构造由缓存和持久化存储支撑的 token version 校验器。
-func NewTokenVersionValidator(users UserTokenVersionStore, sessions AuthSessionStore) commonauth.TokenVersionValidator {
-	return &tokenVersionValidator{users: users, sessions: sessions}
-}
-
-func newAuthSessionLifecycle(users UserTokenVersionStore, sessions AuthSessionStore) AuthSessionLifecycle {
+func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) AuthSessionLifecycle {
 	return &authSessionLifecycle{users: users, sessions: sessions}
 }
 
@@ -114,42 +117,7 @@ func (m *authSessionLifecycle) DeleteSession(ctx context.Context, userID string,
 }
 
 func (m *authSessionLifecycle) currentTokenVersion(ctx context.Context, userID string) (int64, error) {
-	return currentTokenVersion(ctx, m.users, m.sessions, userID)
-}
-
-// ValidateTokenVersion 拒绝 version 不再匹配当前用户版本的 token。
-func (v *tokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
-	currentVersion, err := currentTokenVersion(ctx, v.users, v.sessions, userID)
-	if err != nil {
-		return err
-	}
-	return commonauth.ValidateTokenVersion(tokenVersion, currentVersion)
-}
-
-func currentTokenVersion(ctx context.Context, users UserTokenVersionStore, sessions AuthSessionStore, userID string) (int64, error) {
-	// access token 中间件对延迟敏感，因此先查 Redis，再回退到仓储。
-	currentVersion, err := sessions.GetCachedTokenVersion(ctx, userID)
-	if err == nil {
-		return currentVersion, nil
-	}
-	if !errors.Is(err, authdomain.ErrTokenVersionCacheMiss) {
-		logger.Error(ctx, "token version cache unavailable", logger.StackTrace(zap.String("user_id", userID), zap.Error(err))...)
-		return 0, fmt.Errorf("get token version cache: %w", err)
-	}
-	parsedUserID, err := uuid.Parse(userID)
-	if err != nil {
-		// token 用户 ID 是外部 UUID，解析可保护仓储调用不接收畸形 claims。
-		return 0, fmt.Errorf("parse user id: %w", err)
-	}
-	currentVersion, err = users.GetTokenVersion(ctx, parsedUserID)
-	if err != nil {
-		return 0, fmt.Errorf("get token version from database: %w", err)
-	}
-	if err := sessions.CacheTokenVersion(ctx, userID, currentVersion); err != nil {
-		logger.Error(ctx, "backfill token version cache failed", logger.StackTrace(zap.String("user_id", userID), zap.Int64("token_version", currentVersion), zap.Error(err))...)
-		return 0, fmt.Errorf("backfill token version cache: %w", err)
-	}
-	return currentVersion, nil
+	return authtokenversion.Current(ctx, m.users, m.sessions, userID)
 }
 
 // RevokeAllUserSessions 递增 token version、刷新缓存并删除全部 refresh 会话。

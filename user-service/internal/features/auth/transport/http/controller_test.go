@@ -13,7 +13,7 @@ import (
 	"github.com/aegiscore/common/contract/response"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
-	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
+	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
@@ -24,7 +24,7 @@ var errAuthDatabaseDown = errors.New("database down")
 
 func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &authapplication.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthUseCases{tokens: &authcommand.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthLogin(t, service, `{"username":" alice ","password":" secret "}`)
 
@@ -45,7 +45,7 @@ func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 
 func TestAuthControllerLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &authapplication.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthUseCases{tokens: &authcommand.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthLogin(t, service, `{"username":"alice","password":" "}`)
 
@@ -59,7 +59,7 @@ func TestAuthControllerLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 
 func TestAuthControllerLoginMapsInvalidCredentials(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{loginErr: authdomain.ErrInvalidCredentials}
+	service := &stubAuthUseCases{loginErr: authdomain.ErrInvalidCredentials}
 
 	status, envelope := executeAuthLogin(t, service, `{"username":"alice","password":"secret"}`)
 
@@ -73,7 +73,7 @@ func TestAuthControllerLoginMapsInvalidCredentials(t *testing.T) {
 
 func TestAuthControllerLoginMapsServiceError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{loginErr: errAuthDatabaseDown}
+	service := &stubAuthUseCases{loginErr: errAuthDatabaseDown}
 
 	status, envelope := executeAuthLogin(t, service, `{"username":"alice","password":"secret"}`)
 
@@ -87,7 +87,7 @@ func TestAuthControllerLoginMapsServiceError(t *testing.T) {
 
 func TestAuthControllerChangePasswordNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{changeResponse: &authapplication.ChangePasswordResult{Changed: true}}
+	service := &stubAuthUseCases{changeResponse: &authcommand.ChangePasswordResult{Changed: true}}
 
 	status, envelope := executeAuthChangePassword(t, service, commonauth.TokenPrefix+"password-token", `{"new_password":" new-secret "}`)
 
@@ -108,7 +108,7 @@ func TestAuthControllerChangePasswordNormalizesToCommand(t *testing.T) {
 
 func TestAuthControllerChangePasswordMapsNotFound(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{changeErr: userdomain.ErrUserNotFound}
+	service := &stubAuthUseCases{changeErr: userdomain.ErrUserNotFound}
 
 	status, envelope := executeAuthChangePassword(t, service, commonauth.TokenPrefix+"password-token", `{"new_password":"new-secret"}`)
 
@@ -122,7 +122,7 @@ func TestAuthControllerChangePasswordMapsNotFound(t *testing.T) {
 
 func TestAuthControllerRefreshNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &authapplication.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthUseCases{tokens: &authcommand.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthRefresh(t, service, `{"refresh_token":" Bearer refresh-token "}`)
 
@@ -139,7 +139,7 @@ func TestAuthControllerRefreshNormalizesToCommand(t *testing.T) {
 
 func TestAuthControllerRefreshRejectsBearerOnlyToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &authapplication.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthUseCases{tokens: &authcommand.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthRefresh(t, service, `{"refresh_token":" Bearer "}`)
 
@@ -153,7 +153,7 @@ func TestAuthControllerRefreshRejectsBearerOnlyToken(t *testing.T) {
 
 func TestAuthControllerRefreshMapsTokenInvalid(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{refreshErr: authdomain.ErrTokenInvalid}
+	service := &stubAuthUseCases{refreshErr: authdomain.ErrTokenInvalid}
 
 	status, envelope := executeAuthRefresh(t, service, `{"refresh_token":"refresh-token"}`)
 
@@ -165,20 +165,20 @@ func TestAuthControllerRefreshMapsTokenInvalid(t *testing.T) {
 	}
 }
 
-type stubAuthService struct {
-	tokens         *authapplication.TokenResult
+type stubAuthUseCases struct {
+	tokens         *authcommand.TokenResult
 	loginErr       error
-	changeResponse *authapplication.ChangePasswordResult
+	changeResponse *authcommand.ChangePasswordResult
 	changeErr      error
 	refreshErr     error
-	logoutResponse *authapplication.LogoutResult
+	logoutResponse *authcommand.LogoutResult
 	logoutErr      error
-	gotLogin       authapplication.LoginCommand
-	gotRefresh     authapplication.RefreshTokenCommand
-	gotChange      authapplication.ChangePasswordCommand
+	gotLogin       authcommand.LoginCommand
+	gotRefresh     authcommand.RefreshTokenCommand
+	gotChange      authcommand.ChangePasswordCommand
 }
 
-func (s *stubAuthService) Login(_ context.Context, cmd authapplication.LoginCommand) (*authapplication.TokenResult, error) {
+func (s *stubAuthUseCases) Login(_ context.Context, cmd authcommand.LoginCommand) (*authcommand.TokenResult, error) {
 	s.gotLogin = cmd
 	if s.loginErr != nil {
 		return nil, s.loginErr
@@ -186,7 +186,7 @@ func (s *stubAuthService) Login(_ context.Context, cmd authapplication.LoginComm
 	return s.tokens, nil
 }
 
-func (s *stubAuthService) ChangePassword(_ context.Context, cmd authapplication.ChangePasswordCommand) (*authapplication.ChangePasswordResult, error) {
+func (s *stubAuthUseCases) ChangePassword(_ context.Context, cmd authcommand.ChangePasswordCommand) (*authcommand.ChangePasswordResult, error) {
 	s.gotChange = cmd
 	if s.changeErr != nil {
 		return nil, s.changeErr
@@ -194,7 +194,7 @@ func (s *stubAuthService) ChangePassword(_ context.Context, cmd authapplication.
 	return s.changeResponse, nil
 }
 
-func (s *stubAuthService) Refresh(_ context.Context, cmd authapplication.RefreshTokenCommand) (*authapplication.TokenResult, error) {
+func (s *stubAuthUseCases) Refresh(_ context.Context, cmd authcommand.RefreshTokenCommand) (*authcommand.TokenResult, error) {
 	s.gotRefresh = cmd
 	if s.refreshErr != nil {
 		return nil, s.refreshErr
@@ -202,21 +202,21 @@ func (s *stubAuthService) Refresh(_ context.Context, cmd authapplication.Refresh
 	return s.tokens, nil
 }
 
-func (s *stubAuthService) Logout(context.Context) (*authapplication.LogoutResult, error) {
+func (s *stubAuthUseCases) LogoutCurrentSession(context.Context) (*authcommand.LogoutResult, error) {
 	if s.logoutErr != nil {
 		return nil, s.logoutErr
 	}
 	return s.logoutResponse, nil
 }
 
-func (s *stubAuthService) LogoutAll(context.Context) (*authapplication.LogoutResult, error) {
+func (s *stubAuthUseCases) LogoutAllSessions(context.Context) (*authcommand.LogoutResult, error) {
 	if s.logoutErr != nil {
 		return nil, s.logoutErr
 	}
 	return s.logoutResponse, nil
 }
 
-func executeAuthLogin(t *testing.T, service *stubAuthService, body string) (int, response.Envelope) {
+func executeAuthLogin(t *testing.T, service *stubAuthUseCases, body string) (int, response.Envelope) {
 	t.Helper()
 	ctl := newTestAuthController(t, service)
 	recorder, ctx := newAuthJSONContext(http.MethodPost, "/api/v1/auth/login", body)
@@ -226,7 +226,7 @@ func executeAuthLogin(t *testing.T, service *stubAuthService, body string) (int,
 	return decodeAuthEnvelope(t, recorder)
 }
 
-func executeAuthChangePassword(t *testing.T, service *stubAuthService, token string, body string) (int, response.Envelope) {
+func executeAuthChangePassword(t *testing.T, service *stubAuthUseCases, token string, body string) (int, response.Envelope) {
 	t.Helper()
 	ctl := newTestAuthController(t, service)
 	recorder, ctx := newAuthJSONContext(http.MethodPost, "/api/v1/auth/change-password", body)
@@ -237,7 +237,7 @@ func executeAuthChangePassword(t *testing.T, service *stubAuthService, token str
 	return decodeAuthEnvelope(t, recorder)
 }
 
-func executeAuthRefresh(t *testing.T, service *stubAuthService, body string) (int, response.Envelope) {
+func executeAuthRefresh(t *testing.T, service *stubAuthUseCases, body string) (int, response.Envelope) {
 	t.Helper()
 	ctl := newTestAuthController(t, service)
 	recorder, ctx := newAuthJSONContext(http.MethodPost, "/api/v1/auth/refresh", body)
@@ -247,13 +247,20 @@ func executeAuthRefresh(t *testing.T, service *stubAuthService, body string) (in
 	return decodeAuthEnvelope(t, recorder)
 }
 
-func newTestAuthController(t *testing.T, service *stubAuthService) *AuthController {
+func newTestAuthController(t *testing.T, service *stubAuthUseCases) *AuthController {
 	t.Helper()
 	validator, err := validation.NewDefault()
 	if err != nil {
 		t.Fatalf("NewDefault: %v", err)
 	}
-	return NewAuthController(service, validator)
+	return NewAuthController(AuthControllerParams{
+		Login:          service,
+		Refresh:        service,
+		ChangePassword: service,
+		LogoutCurrent:  service,
+		LogoutAll:      service,
+		Validator:      validator,
+	})
 }
 
 func newAuthJSONContext(method, path, body string) (*httptest.ResponseRecorder, *gin.Context) {

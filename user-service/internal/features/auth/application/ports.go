@@ -4,19 +4,9 @@ import (
 	"context"
 	"time"
 
-	commonauth "github.com/aegiscore/common/security/auth"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	"github.com/google/uuid"
 )
-
-// AuthService 定义认证、刷新、改密和登出用例。
-type AuthService interface {
-	Login(ctx context.Context, cmd LoginCommand) (*TokenResult, error)
-	ChangePassword(ctx context.Context, cmd ChangePasswordCommand) (*ChangePasswordResult, error)
-	Refresh(ctx context.Context, cmd RefreshTokenCommand) (*TokenResult, error)
-	Logout(ctx context.Context) (*LogoutResult, error)
-	LogoutAll(ctx context.Context) (*LogoutResult, error)
-}
 
 // UserCredentialStore 定义认证流程对用户凭据的最小依赖面。
 type UserCredentialStore interface {
@@ -41,21 +31,4 @@ type AuthSessionStore interface {
 	GetSession(ctx context.Context, userID string, sessionID string) (authdomain.AuthSession, error)
 	DeleteSession(ctx context.Context, userID string, sessionID string) error
 	DeleteAllUserSessions(ctx context.Context, userID string) error
-}
-
-// AuthSessionLifecycle 为服务用例创建、校验和撤销认证会话。
-type AuthSessionLifecycle interface {
-	CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error
-	ValidatePasswordChangeClaims(ctx context.Context, claims *commonauth.Claims) error
-	ValidateRefreshSession(ctx context.Context, claims *commonauth.Claims) (authdomain.AuthSession, int64, error)
-	RotateTokenSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, refreshTTL time.Duration) error
-	DeleteSession(ctx context.Context, userID string, sessionID string) error
-	RevokeUserSessionsAtVersion(ctx context.Context, userID uuid.UUID, tokenVersion int64) error
-	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*authdomain.SessionRevocationResult, error)
-}
-
-// CredentialVerifier 校验登录凭证并完成强制改密。
-type CredentialVerifier interface {
-	VerifyPassword(ctx context.Context, username string, plainPassword string) (*authdomain.UserCredential, error)
-	ChangePassword(ctx context.Context, userID uuid.UUID, newPassword string) (*authdomain.CredentialUpdateResult, error)
 }

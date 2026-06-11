@@ -1,4 +1,4 @@
-package application
+package command
 
 import (
 	"context"
@@ -19,6 +19,15 @@ const (
 	// defaultRefreshTokenTTL 是配置为非正数时 refresh 会话的兜底生命周期。
 	defaultRefreshTokenTTL = 7 * 24 * time.Hour
 )
+
+// TokenResult 是登录、刷新和强制改密登录的 transport-neutral token 输出。
+type TokenResult struct {
+	AccessToken            string
+	RefreshToken           string
+	TokenType              string
+	ExpiresIn              int64
+	PasswordChangeRequired bool
+}
 
 // AuthTokenIssuer 签发和解析认证流程使用的 JWT。
 type AuthTokenIssuer interface {
@@ -122,4 +131,15 @@ func (i *authTokenIssuer) refreshTokenTTL() time.Duration {
 		return defaultRefreshTokenTTL
 	}
 	return ttl
+}
+
+func (d *UseCaseDeps) issueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*TokenResult, error) {
+	tokens, err := d.tokens.IssueTokenPair(ctx, userID, tokenVersion, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if err := d.sessions.CreateTokenSession(ctx, userID, sessionID, tokenVersion, tokens.RefreshTTL); err != nil {
+		return nil, err
+	}
+	return tokens.Response, nil
 }

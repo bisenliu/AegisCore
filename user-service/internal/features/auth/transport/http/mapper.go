@@ -4,13 +4,13 @@ import (
 	"errors"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
-	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
+	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
 )
 
-func toTokenResponse(result *authapplication.TokenResult) TokenResponse {
+func toTokenResponse(result *authcommand.TokenResult) TokenResponse {
 	return TokenResponse{
 		AccessToken:            result.AccessToken,
 		RefreshToken:           result.RefreshToken,
@@ -20,11 +20,11 @@ func toTokenResponse(result *authapplication.TokenResult) TokenResponse {
 	}
 }
 
-func toChangePasswordResponse(result *authapplication.ChangePasswordResult) ChangePasswordResponse {
+func toChangePasswordResponse(result *authcommand.ChangePasswordResult) ChangePasswordResponse {
 	return ChangePasswordResponse{Changed: result.Changed}
 }
 
-func toLogoutResponse(result *authapplication.LogoutResult) LogoutResponse {
+func toLogoutResponse(result *authcommand.LogoutResult) LogoutResponse {
 	return LogoutResponse{LoggedOut: result.LoggedOut}
 }
 
