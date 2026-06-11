@@ -20,10 +20,11 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 1. `user-service/cmd/main.go` 创建 `aegiscore-user-services` CLI，并注册 `serve` 子命令。
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
-3. `user-service/internal/bootstrap.AppModule` 显式提供配置、日志、Redis/PostgreSQL named providers、Ent clients、Gin engine、HTTP server，并导入 feature modules。
-4. User/Auth feature modules 自己组装 feature-local infra adapter、app service 和 HTTP controller。
-5. `user-service/internal/bootstrap/routes.go` 注册 `/healthz`、Swagger、`/api/v1`、认证中间件和 feature-local routes。
-6. Fx lifecycle 启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
+3. `user-service/internal/bootstrap.AppModule` 导入共享 runtime module、feature modules、`providers.Module`，并提供 HTTP server 生命周期。
+4. `user-service/internal/providers.Module` 显式提供 Redis/PostgreSQL named providers、Ent clients、JWT service、Gin engine 和 HTTP route registration。
+5. User/Auth feature modules 自己组装 feature-local infra adapter、app service 和 HTTP controller。
+6. `user-service/internal/providers/routes.go` 适配依赖并调用 `router.RegisterUserServiceHTTPRoutes` 注册 `/healthz`、Swagger、`/api/v1`、认证中间件和 feature-local routes。
+7. Fx lifecycle 启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
 `aegiscore-user-services` 是当前运行时 CLI/service name，不是仓库目录名或 Go module path；代码位置和 module path 统一使用 `user-service`。
 
@@ -31,9 +32,9 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 | 步骤 | 代码位置 | 行为 |
 |---|---|---|
-| 中间件链 | `user-service/internal/bootstrap/gin.go` | 注册 trace-id、panic recovery、request logging、CORS |
-| 路由总装 | `user-service/internal/bootstrap/routes.go` | 创建 public/protected route groups 并调用 feature route registration |
-| 路由基础设置 | `user-service/internal/router/router.go` | 创建 Gin engine 和基础系统路由 |
+| 中间件链 | `user-service/internal/providers/gin.go` | 创建 Gin engine，注册 trace-id、panic recovery、request logging、CORS |
+| 路由 provider | `user-service/internal/providers/routes.go` | 将 Fx 依赖适配为 router route params |
+| 路由总装 | `user-service/internal/router/router.go` | 创建 public/protected route groups 并调用系统、Swagger 和 feature route registration |
 | 参数解析 | `features/*/transport/http/controller.go` | 绑定 API DTO，执行边界校验，并映射为 command/query |
 | 业务调用 | `features/*/app/` | 编排用户资料或认证会话用例 |
 | 数据访问 | `features/*/infra/postgres/`, `features/*/infra/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
@@ -59,6 +60,8 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | `module.go` | Feature-local Fx module，组装 app、transport 和 infra provider |
 
 不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。跨 feature 的共享业务代码也不要默认放到 `internal/shared`；只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并需在本文件补充 owner、准入理由和禁止事项。
+
+服务级 provider 统一放在 `user-service/internal/providers`。该包只负责把共享 runtime、common security、Gin、router 和 Ent 适配为用户服务 Fx 依赖；不得承载 feature 业务逻辑、HTTP route 定义或跨服务共享基础能力。`internal/bootstrap` 只负责 `fx.New`、顶层 `AppModule` 总装和 HTTP server 生命周期。
 
 ## 6. Dependency Rules
 
@@ -111,7 +114,7 @@ Ent predicate 构造封装在 `infra/postgres` 内。Adapter 可以做字段裁�
 - 配置加载由 `common/runtime/config/loader.go` 负责，支持 YAML 文件和 `AEGISCORE_` 环境变量覆盖。
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前声明并连接 `postgres.user_db` 与 `postgres.common_db`。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`。
-- Ent clients 由 `user-service/internal/bootstrap/ent.go` 基于具名 `*sql.DB` 构建。
+- 用户服务的 Redis/PostgreSQL named resource、JWT service、Gin engine 和 Ent clients 由 `user-service/internal/providers/` 提供，其中 Ent clients 由 `providers/ent.go` 基于具名 `*sql.DB` 构建。
 - 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace header 为 `X-Trace-ID`，Gin context key 为 `trace_id`，日志字段统一为 `trace-id`。
 
 ## 10. Database Migrations

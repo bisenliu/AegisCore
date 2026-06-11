@@ -1,4 +1,4 @@
-package bootstrap
+package providers
 
 import (
 	"github.com/aegiscore/common/runtime/config"

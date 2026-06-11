@@ -1,4 +1,4 @@
-package bootstrap
+package providers
 
 import (
 	"github.com/aegiscore/common/runtime/config"
@@ -25,7 +25,7 @@ type RegisterRouteParams struct {
 	UserController *userhttp.UserController
 }
 
-// RegisterRoutes 将 bootstrap 依赖适配为 router 层路由注册参数。
+// RegisterRoutes 将服务级 provider 依赖适配为 router 层路由注册参数。
 func RegisterRoutes(params RegisterRouteParams) {
 	router.RegisterUserServiceHTTPRoutes(params.Engine, router.RouteParams{
 		ServiceName:           params.Config.App.Name,

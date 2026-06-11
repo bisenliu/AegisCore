@@ -15,6 +15,7 @@
 - `go.work`：Go workspace，包含 `common` 和 `user-service` 两个模块。
 - `common/`：跨服务稳定契约和基础能力，按 `contract`、`runtime`、`http`、`security`、`testing`、`validation` 分类组织；`contract/errors` 承载全局错误码，`contract/pagination` 承载分页契约，`contract/response` 承载 HTTP 响应信封 DTO，`http/binding` 承载 Gin 请求绑定和校验失败响应适配层，`http/response` 承载 Gin 响应输出 helper，`testing` 仅承载跨模块测试基础设施和无业务语义 fixture；不得作为服务特定 helper 的兜底目录。
 - `user-service/`：用户服务 HTTP 运行时和 Go module，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration，以及按 feature 组织的业务代码。
+- `user-service/internal/providers/`：用户服务级 Fx provider，集中承载 Gin engine、HTTP route registration、JWT service、PostgreSQL/Redis named resources 和 Ent clients 的服务侧组装；不得承载 feature 业务逻辑。
 - `user-service/internal/features/user/`：用户资料 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/` 和 `module.go` 分层。
 - `user-service/internal/features/auth/`：认证会话 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/`、`infra/redis/` 和 `module.go` 分层。
 - `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产。
@@ -23,8 +24,15 @@
 
 - CLI 入口：`user-service/cmd/main.go`
 - 服务组装：`user-service/internal/bootstrap/app.go`
-- HTTP 路由总装：`user-service/internal/bootstrap/routes.go`
-- Gin router 基础设置：`user-service/internal/router/router.go`
+- HTTP server 生命周期：`user-service/internal/bootstrap/server.go`
+- 服务级 provider module：`user-service/internal/providers/module.go`
+- Gin engine provider：`user-service/internal/providers/gin.go`
+- HTTP 路由 provider：`user-service/internal/providers/routes.go`
+- 认证 JWT provider：`user-service/internal/providers/auth.go`
+- 服务 PostgreSQL provider：`user-service/internal/providers/postgres.go`
+- 服务 Redis provider：`user-service/internal/providers/redis.go`
+- 服务 Ent provider：`user-service/internal/providers/ent.go`
+- Gin router 路由定义：`user-service/internal/router/router.go`
 - 用户 feature module：`user-service/internal/features/user/module.go`
 - 用户 controller：`user-service/internal/features/user/transport/http/controller.go`
 - 用户 service：`user-service/internal/features/user/app/service.go`
@@ -82,7 +90,8 @@
 - 按 feature 组织服务内代码：用户资料放在 `internal/features/user`，认证会话放在 `internal/features/auth`。不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。
 - 保持 `transport/http`、`app`、`domain`、`infra/*` 分层：HTTP 解析在 controller，业务编排在 app service，数据库或 Redis 访问在 infra adapter。
 - 每个 feature 自己注册路由：`transport/http/routes.go` 暴露 `RegisterRoutes`，认证 feature 可拆分 `RegisterPublicRoutes` 和 `RegisterProtectedRoutes`；全局 router 只负责 `/api/v1`、认证中间件和 feature 路由总装。
-- 每个 feature 自己提供 Fx module：`features/<feature>/module.go` 暴露 `Module` 并组装 feature 内部 service、controller 和 infra provider；`bootstrap.AppModule` 只保留共享运行时 provider、Gin engine、HTTP server 和路由 invoke。
+- 每个 feature 自己提供 Fx module：`features/<feature>/module.go` 暴露 `Module` 并组装 feature 内部 service、controller 和 infra provider；服务级 Gin engine、路由注册、JWT、PostgreSQL、Redis 和 Ent provider 放在 `internal/providers`。
+- `bootstrap.AppModule` 只负责顶层 Fx module 总装和 HTTP server lifecycle，具体服务级 provider 实现不得放回 `internal/bootstrap`。
 - 基础设施目录统一使用 `infra/postgres/`、`infra/redis/` 等；不要使用 `store/` 作为目录名。
 - 共享基础能力优先放在 `common/` 对应分类目录中；服务特定规则保留在服务模块内。
 - HTTP API 应使用 `common/contract/response.Envelope` 格式返回，并通过 `common/http/response` 写出 Gin 响应。

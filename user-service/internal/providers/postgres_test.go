@@ -1,4 +1,4 @@
-package bootstrap
+package providers
 
 import (
 	"context"
@@ -24,11 +24,11 @@ import (
 	"go.uber.org/zap"
 )
 
-var bootstrapTestDriverSeq atomic.Int64
+var providerTestDriverSeq atomic.Int64
 
 func TestProvidePostgresPoolsProvidesUserServiceDatabases(t *testing.T) {
-	drv := registerBootstrapTestSQLDriver(t)
-	cfg := bootstrapTestConfig(drv.name)
+	drv := registerProviderTestSQLDriver(t)
+	cfg := providerTestConfig(drv.name)
 	log := zap.NewNop()
 
 	type pools struct {
@@ -68,8 +68,8 @@ func TestProvidePostgresPoolsProvidesUserServiceDatabases(t *testing.T) {
 }
 
 func TestProvidePostgresPoolsReturnsErrorForMissingCommonDBConfig(t *testing.T) {
-	drv := registerBootstrapTestSQLDriver(t)
-	cfg := bootstrapTestConfig(drv.name)
+	drv := registerProviderTestSQLDriver(t)
+	cfg := providerTestConfig(drv.name)
 	delete(cfg.Postgres, resources.NameCommonDB)
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
@@ -122,7 +122,7 @@ func TestProvidePostgresPoolsDoesNotProvidePayDatabase(t *testing.T) {
 }
 
 func TestProvideEntClientsProvidesUserServiceEntClients(t *testing.T) {
-	drv := registerBootstrapTestSQLDriver(t)
+	drv := registerProviderTestSQLDriver(t)
 	userDB, err := sql.Open(drv.name, "postgres://aegiscore:secret@127.0.0.1/aegiscore_user")
 	if err != nil {
 		t.Fatalf("open user db: %v", err)
@@ -170,8 +170,8 @@ func TestProvideEntClientsProvidesUserServiceEntClients(t *testing.T) {
 }
 
 func TestPostgresPoolsAndEntClientsClosePoolsOnce(t *testing.T) {
-	drv := registerBootstrapTestSQLDriver(t)
-	cfg := bootstrapTestConfig(drv.name)
+	drv := registerProviderTestSQLDriver(t)
+	cfg := providerTestConfig(drv.name)
 	log := zap.NewNop()
 
 	type clients struct {
@@ -205,8 +205,8 @@ func TestPostgresPoolsAndEntClientsClosePoolsOnce(t *testing.T) {
 }
 
 func TestProvideRedisClientsProvidesCacheRedis(t *testing.T) {
-	redisServer := newBootstrapTestRedisServer(t)
-	cfg := bootstrapTestConfig("")
+	redisServer := newProviderTestRedisServer(t)
+	cfg := providerTestConfig("")
 	cfg.Redis = map[string]config.RedisConfig{
 		resources.NameCacheRedis: {
 			Addr:         redisServer.addr,
@@ -317,7 +317,7 @@ func TestProvideRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 	}
 }
 
-func bootstrapTestConfig(driverName string) *config.Config {
+func providerTestConfig(driverName string) *config.Config {
 	return &config.Config{
 		Redis: map[string]config.RedisConfig{
 			resources.NameCacheRedis: {
@@ -373,13 +373,13 @@ func bootstrapTestConfig(driverName string) *config.Config {
 	}
 }
 
-func newBootstrapTestRedisServer(t *testing.T) *bootstrapTestRedisServer {
+func newProviderTestRedisServer(t *testing.T) *providerTestRedisServer {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
-	server := &bootstrapTestRedisServer{
+	server := &providerTestRedisServer{
 		addr:   listener.Addr().String(),
 		closed: make(chan struct{}, 1),
 	}
@@ -396,13 +396,13 @@ func newBootstrapTestRedisServer(t *testing.T) *bootstrapTestRedisServer {
 	return server
 }
 
-type bootstrapTestRedisServer struct {
+type providerTestRedisServer struct {
 	addr   string
 	pings  atomic.Int64
 	closed chan struct{}
 }
 
-func (s *bootstrapTestRedisServer) handle(conn net.Conn) {
+func (s *providerTestRedisServer) handle(conn net.Conn) {
 	defer func() {
 		_ = conn.Close()
 		select {
@@ -432,7 +432,7 @@ func (s *bootstrapTestRedisServer) handle(conn net.Conn) {
 	}
 }
 
-func (s *bootstrapTestRedisServer) requireClosed(t *testing.T) {
+func (s *providerTestRedisServer) requireClosed(t *testing.T) {
 	t.Helper()
 	select {
 	case <-s.closed:
@@ -441,14 +441,14 @@ func (s *bootstrapTestRedisServer) requireClosed(t *testing.T) {
 	}
 }
 
-func registerBootstrapTestSQLDriver(t *testing.T) *bootstrapTestSQLDriver {
+func registerProviderTestSQLDriver(t *testing.T) *providerTestSQLDriver {
 	t.Helper()
-	drv := &bootstrapTestSQLDriver{name: fmt.Sprintf("aegiscore_bootstrap_test_postgres_%d", bootstrapTestDriverSeq.Add(1))}
+	drv := &providerTestSQLDriver{name: fmt.Sprintf("aegiscore_provider_test_postgres_%d", providerTestDriverSeq.Add(1))}
 	sql.Register(drv.name, drv)
 	return drv
 }
 
-type bootstrapTestSQLDriver struct {
+type providerTestSQLDriver struct {
 	name   string
 	pings  atomic.Int64
 	closes atomic.Int64
@@ -457,14 +457,14 @@ type bootstrapTestSQLDriver struct {
 	dsns []string
 }
 
-func (d *bootstrapTestSQLDriver) Open(dsn string) (driver.Conn, error) {
+func (d *providerTestSQLDriver) Open(dsn string) (driver.Conn, error) {
 	d.mu.Lock()
 	d.dsns = append(d.dsns, dsn)
 	d.mu.Unlock()
-	return &bootstrapTestSQLConn{driver: d}, nil
+	return &providerTestSQLConn{driver: d}, nil
 }
 
-func (d *bootstrapTestSQLDriver) databaseNames() []string {
+func (d *providerTestSQLDriver) databaseNames() []string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -480,24 +480,24 @@ func (d *bootstrapTestSQLDriver) databaseNames() []string {
 	return dbNames
 }
 
-type bootstrapTestSQLConn struct {
-	driver *bootstrapTestSQLDriver
+type providerTestSQLConn struct {
+	driver *providerTestSQLDriver
 }
 
-func (c *bootstrapTestSQLConn) Prepare(string) (driver.Stmt, error) {
+func (c *providerTestSQLConn) Prepare(string) (driver.Stmt, error) {
 	return nil, errors.New("prepare not implemented")
 }
 
-func (c *bootstrapTestSQLConn) Close() error {
+func (c *providerTestSQLConn) Close() error {
 	c.driver.closes.Add(1)
 	return nil
 }
 
-func (c *bootstrapTestSQLConn) Begin() (driver.Tx, error) {
+func (c *providerTestSQLConn) Begin() (driver.Tx, error) {
 	return nil, errors.New("begin not implemented")
 }
 
-func (c *bootstrapTestSQLConn) Ping(context.Context) error {
+func (c *providerTestSQLConn) Ping(context.Context) error {
 	c.driver.pings.Add(1)
 	return nil
 }

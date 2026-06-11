@@ -9,6 +9,7 @@ import (
 	"github.com/aegiscore/common/validation"
 	authfeature "github.com/aegiscore/user-service/internal/features/auth"
 	userfeature "github.com/aegiscore/user-service/internal/features/user"
+	"github.com/aegiscore/user-service/internal/providers"
 	"go.uber.org/fx"
 )
 
@@ -24,22 +25,17 @@ func NewApp(configPath string) *fx.App {
 	)
 }
 
-// AppModule 组装 user-service 运行时基础设施、仓储、服务、控制器、路由和 HTTP server。
+// AppModule 组装 user-service 顶层模块、服务级 provider 和 HTTP server 生命周期。
 var AppModule = fx.Module("aegiscore-user-services",
 	commontz.Module,
 	validation.Module,
 	authfeature.Module,
 	userfeature.Module,
+	providers.Module,
 	fx.Provide(
-		ProvidePostgresPools,
-		ProvideRedisClients,
-		NewJWTService,
-		ProvideEntClients,
-		NewGinEngine,
 		NewHTTPServer,
 	),
 	fx.Invoke(
-		RegisterRoutes,
 		// 确保 HTTP 服务器被实例化并将其生命周期 Hook 注册到 Fx 中
 		func(*http.Server) {},
 	),
