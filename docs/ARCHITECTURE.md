@@ -111,7 +111,7 @@ Ent predicate 构造封装在 `infra/postgres` 内。Adapter 可以做字段裁�
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前声明并连接 `postgres.user_db` 与 `postgres.common_db`。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`。
 - Ent clients 由 `user-service/internal/bootstrap/ent.go` 基于具名 `*sql.DB` 构建。
-- 日志基于 Zap，由 `common/runtime/logger` 与 `common/runtime/loggerfx` 提供；HTTP trace header 为 `X-Trace-ID`，Gin context key 为 `trace_id`，日志字段统一为 `trace-id`。
+- 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace header 为 `X-Trace-ID`，Gin context key 为 `trace_id`，日志字段统一为 `trace-id`。
 
 ## 10. Database Migrations
 

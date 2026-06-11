@@ -1,18 +1,17 @@
-package loggerfx
+package logger
 
 import (
 	"context"
 	"syscall"
 
 	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/logger"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
 
 // NewLogger 提供配置化 zap logger，并在 Fx 关闭阶段执行同步。
 func NewLogger(lc fx.Lifecycle, cfg *config.Config) (*zap.Logger, error) {
-	log, err := logger.New(cfg)
+	log, err := New(cfg)
 	if err != nil {
 		return nil, err
 	}

@@ -2,7 +2,7 @@ package bootstrap
 
 import (
 	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/datastorefx"
+	"github.com/aegiscore/common/runtime/datastore"
 	"github.com/aegiscore/common/runtime/resources"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
@@ -27,7 +27,7 @@ type NamedRedisClients struct {
 
 // ProvideRedisClients 根据共享 datastore 配置供应具名 cache Redis 依赖。
 func ProvideRedisClients(params NamedRedisParams) (NamedRedisClients, error) {
-	cacheRedis, err := datastorefx.NewRedisClient(params.Lifecycle, params.Config, params.Log, resources.NameCacheRedis)
+	cacheRedis, err := datastore.NewRedisClient(params.Lifecycle, params.Config, params.Log, resources.NameCacheRedis)
 	if err != nil {
 		return NamedRedisClients{}, err
 	}

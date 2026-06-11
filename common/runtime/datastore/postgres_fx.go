@@ -1,4 +1,4 @@
-package datastorefx
+package datastore
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/datastore"
 	"github.com/aegiscore/common/runtime/logger"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -45,7 +44,7 @@ func NewPostgresPools(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name
 				closePostgresPools(dbs),
 			)
 		}
-		db, err := datastore.OpenPostgres(name, dbCfg)
+		db, err := OpenPostgres(name, dbCfg)
 		if err != nil {
 			// 保留初始化错误，同时报告已创建连接池的清理失败。
 			return nil, errors.Join(err, closePostgresPools(dbs))

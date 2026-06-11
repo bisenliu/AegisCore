@@ -3,8 +3,8 @@ package bootstrap
 import (
 	"net/http"
 
-	"github.com/aegiscore/common/runtime/configfx"
-	"github.com/aegiscore/common/runtime/loggerfx"
+	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/logger"
 	commontz "github.com/aegiscore/common/runtime/timezone"
 	"github.com/aegiscore/common/validation"
 	authfeature "github.com/aegiscore/user-service/internal/features/auth"
@@ -15,10 +15,10 @@ import (
 // NewApp 构建包含共享配置、日志和服务模块的 user-service Fx 应用。
 func NewApp(configPath string) *fx.App {
 	return fx.New(
-		fx.Supply(configfx.ConfigPath(configPath)),
+		fx.Supply(config.ConfigPath(configPath)),
 		fx.Provide(
-			configfx.NewConfig,
-			loggerfx.NewLogger,
+			config.NewConfig,
+			logger.NewLogger,
 		),
 		AppModule,
 	)

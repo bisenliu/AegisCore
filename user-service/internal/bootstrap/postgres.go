@@ -4,7 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/datastorefx"
+	"github.com/aegiscore/common/runtime/datastore"
 	"github.com/aegiscore/common/runtime/resources"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -29,7 +29,7 @@ type NamedPostgresPools struct {
 
 // ProvidePostgresPools 供应 user-service 所需的具名 PostgreSQL 连接池。
 func ProvidePostgresPools(params NamedPostgresParams) (NamedPostgresPools, error) {
-	dbs, err := datastorefx.NewPostgresPools(
+	dbs, err := datastore.NewPostgresPools(
 		params.Lifecycle,
 		params.Config,
 		params.Log,

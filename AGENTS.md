@@ -35,9 +35,9 @@
 - 认证 PostgreSQL adapter：`user-service/internal/features/auth/infra/postgres/credential_store.go`
 - 认证 Redis adapter：`user-service/internal/features/auth/infra/redis/session_store.go`
 - 共享配置加载：`common/runtime/config/loader.go`
-- 共享配置 Fx provider：`common/runtime/configfx/config.go`
-- 共享日志 Fx provider：`common/runtime/loggerfx/logger.go`
-- 共享 datastore provider：`common/runtime/datastorefx/redis.go`、`common/runtime/datastorefx/postgres.go`
+- 共享配置 Fx provider：`common/runtime/config/fx.go`
+- 共享日志 Fx provider：`common/runtime/logger/fx.go`
+- 共享 datastore Fx provider：`common/runtime/datastore/redis_fx.go`、`common/runtime/datastore/postgres_fx.go`
 - 运行时资源名：`common/runtime/resources/resource_names.go`
 - Atlas 配置：`user-service/atlas.hcl`
 - 用户服务迁移目录：`user-service/migrations/`

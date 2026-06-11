@@ -1,4 +1,4 @@
-package datastorefx
+package datastore
 
 import (
 	"context"
@@ -13,8 +13,7 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/configfx"
-	"github.com/aegiscore/common/runtime/loggerfx"
+	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/runtime/resources"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
@@ -141,8 +140,8 @@ func TestExplicitCommonProvidersDoNotProvideNamedPostgresPools(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		fx.Supply(configfx.ConfigPath("config.yaml")),
-		fx.Provide(configfx.NewConfig, loggerfx.NewLogger),
+		fx.Supply(config.ConfigPath("config.yaml")),
+		fx.Provide(config.NewConfig, logger.NewLogger),
 		fx.Invoke(func(params) {}),
 	)
 	if err == nil {
@@ -205,8 +204,8 @@ func TestExplicitCommonProvidersDoNotProvideRedisClient(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		fx.Supply(configfx.ConfigPath("config.yaml")),
-		fx.Provide(configfx.NewConfig, loggerfx.NewLogger),
+		fx.Supply(config.ConfigPath("config.yaml")),
+		fx.Provide(config.NewConfig, logger.NewLogger),
 		fx.Invoke(func(params) {}),
 	)
 	if err == nil {

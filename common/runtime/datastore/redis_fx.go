@@ -1,11 +1,10 @@
-package datastorefx
+package datastore
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/datastore"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
@@ -28,7 +27,7 @@ func NewRedisClient(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name s
 	if !ok {
 		return nil, fmt.Errorf("redis config %q not found", name)
 	}
-	client := datastore.NewRedisClient(redisCfg)
+	client := OpenRedisClient(redisCfg)
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
