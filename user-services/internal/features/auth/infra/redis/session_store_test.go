@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -284,9 +285,10 @@ func TestTokenVersionCacheRefreshMakesStaleTokenObservable(t *testing.T) {
 	if version != 6 {
 		t.Fatalf("cached version = %d, want 6", version)
 	}
-	if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-stale")) || redisServer.Exists(store.userSessionsKey(sessionTestUserID.String())) {
-		t.Fatal("user sessions were not deleted during cache refresh flow")
-	}
+	waitForRedisCondition(t, func() bool {
+		return !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-stale")) &&
+			!redisServer.Exists(store.userSessionsKey(sessionTestUserID.String()))
+	}, "user sessions were not deleted during cache refresh flow")
 }
 
 func TestSessionStoreCreateGetAndDeleteSession(t *testing.T) {
@@ -539,11 +541,103 @@ func TestSessionStoreDeleteAllUserSessions(t *testing.T) {
 	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
 		t.Fatalf("DeleteAllUserSessions: %v", err)
 	}
-	if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-1")) || redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-2")) || redisServer.Exists(indexKey) {
-		t.Fatal("user sessions were not fully deleted")
-	}
+	waitForRedisCondition(t, func() bool {
+		return !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-1")) &&
+			!redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-2")) &&
+			!redisServer.Exists(indexKey)
+	}, "user sessions were not fully deleted")
 	if !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "expired-session")) {
 		t.Fatal("expired session key was deleted despite expired index member cleanup")
+	}
+}
+
+func TestSessionStoreDeleteAllUserSessionsPurgesInBatches(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestSessionStore(redisServer)
+	ctx := context.Background()
+	indexKey := store.userSessionsKey(sessionTestUserID.String())
+	sessionCount := int(deleteAllUserSessionsBatchSize)*2 + 1
+	for i := 0; i < sessionCount; i++ {
+		sessionID := "bulk-" + strconv.Itoa(i)
+		if err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID.String(), sessionID), "{}", time.Hour).Err(); err != nil {
+			t.Fatalf("Set session %d: %v", i, err)
+		}
+		if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(time.Hour).Unix()), Member: sessionID}).Err(); err != nil {
+			t.Fatalf("ZAdd session %d: %v", i, err)
+		}
+	}
+
+	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
+		t.Fatalf("DeleteAllUserSessions: %v", err)
+	}
+
+	waitForRedisCondition(t, func() bool {
+		for i := 0; i < sessionCount; i++ {
+			if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "bulk-"+strconv.Itoa(i))) {
+				return false
+			}
+		}
+		return !redisServer.Exists(indexKey)
+	}, "batched user sessions were not fully deleted")
+}
+
+func TestSessionStoreDeleteAllUserSessionsDoesNotDeleteNewSessionsAfterDetach(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestSessionStore(redisServer)
+	ctx := context.Background()
+	oldSessionID := "old-before-detach"
+	newSessionID := "new-after-detach"
+	if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: oldSessionID, TokenVersion: 1}, time.Hour); err != nil {
+		t.Fatalf("CreateSession old: %v", err)
+	}
+
+	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
+		t.Fatalf("DeleteAllUserSessions: %v", err)
+	}
+	if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: newSessionID, TokenVersion: 2}, time.Hour); err != nil {
+		t.Fatalf("CreateSession new: %v", err)
+	}
+
+	waitForRedisCondition(t, func() bool {
+		return !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), oldSessionID))
+	}, "detached old session was not purged")
+	if !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), newSessionID)) {
+		t.Fatal("new session created after detach was deleted")
+	}
+	members, err := store.redis.ZRange(ctx, store.userSessionsKey(sessionTestUserID.String()), 0, -1).Result()
+	if err != nil {
+		t.Fatalf("ZRange new index: %v", err)
+	}
+	if len(members) != 1 || members[0] != newSessionID {
+		t.Fatalf("members = %v, want only new session", members)
+	}
+}
+
+func TestSessionStorePurgeUserSessionsKeyKeepsHashTag(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestSessionStore(redisServer)
+
+	purgeKey := store.purgeUserSessionsKey(sessionTestUserID.String())
+
+	if !strings.HasPrefix(purgeKey, "auth:user:sessions:{"+sessionTestUserID.String()+"}:purge:") {
+		t.Fatalf("purge key = %q, want unprefixed purge key prefix", purgeKey)
+	}
+	if !strings.Contains(purgeKey, "{"+sessionTestUserID.String()+"}") {
+		t.Fatalf("purge key = %q, want user hash tag", purgeKey)
+	}
+}
+
+func TestSessionStorePurgeUserSessionsKeyUsesAppNamePrefix(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestSessionStoreWithAppName(redisServer, " aegiscore-user-services ")
+
+	purgeKey := store.purgeUserSessionsKey(sessionTestUserID.String())
+
+	if !strings.HasPrefix(purgeKey, "aegiscore-user-services:auth:user:sessions:{"+sessionTestUserID.String()+"}:purge:") {
+		t.Fatalf("purge key = %q, want app-name-prefixed purge key", purgeKey)
+	}
+	if !strings.Contains(purgeKey, "{"+sessionTestUserID.String()+"}") {
+		t.Fatalf("purge key = %q, want user hash tag", purgeKey)
 	}
 }
 
@@ -681,6 +775,18 @@ func newTestSessionStoreWithAppName(redisServer *miniredis.Miniredis, appName st
 		},
 	})
 	return store
+}
+
+func waitForRedisCondition(t *testing.T, condition func() bool, message string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal(message)
 }
 
 type tokenVersionRepositoryStub struct {

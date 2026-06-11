@@ -21,6 +21,9 @@ func TestRedisKeyBuilderUsesAppNamePrefixWithNewKeyFormat(t *testing.T) {
 	if got := builder.AuthUserSessions("u-123"); got != "aegiscore-user-services:auth:user:sessions:{u-123}" {
 		t.Fatalf("AuthUserSessions = %q", got)
 	}
+	if got := builder.AuthUserSessionsPurge("u-123", "p-123"); got != "aegiscore-user-services:auth:user:sessions:{u-123}:purge:p-123" {
+		t.Fatalf("AuthUserSessionsPurge = %q", got)
+	}
 }
 
 func TestRedisKeyBuilderKeepsUnprefixedKeysWhenAppNameEmpty(t *testing.T) {
@@ -34,5 +37,8 @@ func TestRedisKeyBuilderKeepsUnprefixedKeysWhenAppNameEmpty(t *testing.T) {
 	}
 	if got := builder.AuthUserSessions("u-123"); got != "auth:user:sessions:{u-123}" {
 		t.Fatalf("AuthUserSessions = %q", got)
+	}
+	if got := builder.AuthUserSessionsPurge("u-123", "p-123"); got != "auth:user:sessions:{u-123}:purge:p-123" {
+		t.Fatalf("AuthUserSessionsPurge = %q", got)
 	}
 }

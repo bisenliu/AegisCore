@@ -262,7 +262,7 @@
 - **Then** 系统 MUST NOT 将该次退出全部设备报告为成功
 
 ### Requirement: Store authentication session data in Redis as cache and session layer
-系统 SHALL 使用 Redis 保存用户 `token_version` 缓存、Refresh Token 会话记录和用户活跃会话索引。Redis 中的 `token_version` 只能作为缓存，缓存未命中或被删除时系统 MUST 由认证会话 service 组件或 token version resolver 使用外部 `user_id` 回源 PostgreSQL 获取真实值。用户级安全事件递增 PostgreSQL `token_version` 后，系统 MUST 将 Redis token version cache 覆盖为递增后的新版本，不得只删除旧缓存作为成功路径。认证会话 Redis key MUST 使用 `config.App.Name` 作为可选命名空间前缀来源；当 `config.App.Name` 去除首尾空白后非空时，token version 缓存 key MUST 为 `<app.name>:auth:user:token_version:{<user_id>}`，Refresh Token 会话记录 key MUST 为 `<app.name>:auth:session:{<user_id>}:<session_id>`，用户活跃会话索引 key MUST 为 `<app.name>:auth:user:sessions:{<user_id>}`；当 `config.App.Name` 去除首尾空白后为空时，系统 MUST 使用无前缀业务格式 `auth:user:token_version:{<user_id>}`、`auth:session:{<user_id>}:<session_id>` 和 `auth:user:sessions:{<user_id>}`。系统 MUST NOT 读取、写入或回退到旧格式 `<prefix>:auth:user:<user_id>:token_version`、`<prefix>:auth:session:<session_id>` 或 `<prefix>:auth:user:<user_id>:sessions`。`{<user_id>}` MUST 作为 Redis Cluster hash tag 保留在 key 中，使同一用户的会话 key、用户会话索引 key 和 token version key 能在脚本操作中落入同一 hash slot；服务名前缀位于 hash tag 外部，不得破坏同一用户多 key Lua 脚本的 cluster slot 一致性。用户活跃会话索引 MUST 使用 Redis ZSet，member MUST 使用 `session_id`，score MUST 使用该会话过期时间的 Unix 时间戳。系统 MUST 以 Redis session key 的实际 TTL 推导会话过期时间，并使会话 payload 中的 `ExpiresAt`、session key TTL 和用户活跃会话索引 score 保持一致。系统 MUST 在写入、读取或删除该用户活跃会话索引时，按当前 Unix 时间戳执行过期 member 清理。系统 MUST 为用户活跃会话索引设计过期或清理策略，避免没有活跃会话的 ZSet key 和已过期 `session_id` 长期残留。系统 MUST 使用 Redis Lua 脚本执行 Refresh Token 会话轮换，并使用 Redis Lua 脚本配合 `UNLINK` 执行用户全部会话删除。
+系统 SHALL 使用 Redis 保存用户 `token_version` 缓存、Refresh Token 会话记录和用户活跃会话索引。Redis 中的 `token_version` 只能作为缓存，缓存未命中或被删除时系统 MUST 由认证会话 service 组件或 token version resolver 使用外部 `user_id` 回源 PostgreSQL 获取真实值。用户级安全事件递增 PostgreSQL `token_version` 后，系统 MUST 将 Redis token version cache 覆盖为递增后的新版本，不得只删除旧缓存作为成功路径。认证会话 Redis key MUST 使用 `config.App.Name` 作为可选命名空间前缀来源；当 `config.App.Name` 去除首尾空白后非空时，token version 缓存 key MUST 为 `<app.name>:auth:user:token_version:{<user_id>}`，Refresh Token 会话记录 key MUST 为 `<app.name>:auth:session:{<user_id>}:<session_id>`，用户活跃会话索引 key MUST 为 `<app.name>:auth:user:sessions:{<user_id>}`，用户活跃会话临时清理 key MUST 为 `<app.name>:auth:user:sessions:{<user_id>}:purge:<purge_id>`；当 `config.App.Name` 去除首尾空白后为空时，系统 MUST 使用无前缀业务格式 `auth:user:token_version:{<user_id>}`、`auth:session:{<user_id>}:<session_id>`、`auth:user:sessions:{<user_id>}` 和 `auth:user:sessions:{<user_id>}:purge:<purge_id>`。系统 MUST NOT 读取、写入或回退到旧格式 `<prefix>:auth:user:<user_id>:token_version`、`<prefix>:auth:session:<session_id>` 或 `<prefix>:auth:user:<user_id>:sessions`。`{<user_id>}` MUST 作为 Redis Cluster hash tag 保留在 key 中，使同一用户的会话 key、用户会话索引 key、用户会话临时清理 key 和 token version key 能在脚本操作中落入同一 hash slot；服务名前缀位于 hash tag 外部，不得破坏同一用户多 key Lua 脚本的 cluster slot 一致性。用户活跃会话索引 MUST 使用 Redis ZSet，member MUST 使用 `session_id`，score MUST 使用该会话过期时间的 Unix 时间戳。系统 MUST 以 Redis session key 的实际 TTL 推导会话过期时间，并使会话 payload 中的 `ExpiresAt`、session key TTL 和用户活跃会话索引 score 保持一致。系统 MUST 在写入、读取或删除该用户活跃会话索引时，按当前 Unix 时间戳执行过期 member 清理。系统 MUST 为用户活跃会话索引设计过期或清理策略，避免没有活跃会话的 ZSet key 和已过期 `session_id` 长期残留。系统 MUST 使用 Redis Lua 脚本执行 Refresh Token 会话轮换。系统执行用户全部会话删除时，MUST 使用 Redis Lua 脚本将用户活跃会话索引原子迁移到同一 Redis Cluster hash slot 的临时清理 key，并在 Go 侧对该临时索引分批读取和 `UNLINK` 会话 payload，MUST NOT 一次性读取或删除无上限数量的会话记录。
 
 #### Scenario: Token version cache miss reads PostgreSQL
 - **Given** Redis 中不存在某用户的 token version 缓存
@@ -315,6 +315,7 @@
 - **Then** 系统 MUST 使用 `aegiscore-user-services:auth:user:token_version:{<user_id>}` 作为 token version 缓存 key
 - **Then** 系统 MUST 使用 `aegiscore-user-services:auth:session:{<user_id>}:<session_id>` 作为 Refresh Token 会话记录 key
 - **Then** 系统 MUST 使用 `aegiscore-user-services:auth:user:sessions:{<user_id>}` 作为用户活跃会话索引 key
+- **Then** 系统 MUST 使用 `aegiscore-user-services:auth:user:sessions:{<user_id>}:purge:<purge_id>` 作为用户活跃会话临时清理 key
 - **Then** 这些 key MUST 仍通过 `{<user_id>}` hash tag 落入同一 Redis Cluster hash slot
 
 #### Scenario: Empty app name keeps unprefixed Redis keys
@@ -323,6 +324,7 @@
 - **Then** 系统 MUST 使用 `auth:user:token_version:{<user_id>}` 作为 token version 缓存 key
 - **Then** 系统 MUST 使用 `auth:session:{<user_id>}:<session_id>` 作为 Refresh Token 会话记录 key
 - **Then** 系统 MUST 使用 `auth:user:sessions:{<user_id>}` 作为用户活跃会话索引 key
+- **Then** 系统 MUST 使用 `auth:user:sessions:{<user_id>}:purge:<purge_id>` 作为用户活跃会话临时清理 key
 - **Then** 系统 MUST NOT 使用代码级默认服务名补齐 Redis key 前缀
 
 #### Scenario: Legacy Redis keys are ignored
@@ -371,11 +373,12 @@
 - **Given** 请求已通过 Access Token 认证
 - **Given** `config.App.Name` 去除首尾空白后为 `aegiscore-user-services`
 - **When** 调用方请求退出全部设备
-- **Then** 系统 MUST 通过 Redis Lua 脚本先清理 `aegiscore-user-services:auth:user:sessions:{<user_id>}` ZSet 中所有 score 小于或等于当前 Unix 时间戳的过期 member
-- **Then** 同一 Lua 脚本 MUST 从该 ZSet 读取仍未过期的 `session_id`
-- **Then** 同一 Lua 脚本 MUST 使用 `UNLINK` 删除读取到的 `aegiscore-user-services:auth:session:{<user_id>}:<session_id>` 会话记录
-- **Then** 同一 Lua 脚本 MUST 使用 `UNLINK` 删除该用户活跃会话索引 key
-- **Then** 系统 MUST NOT 使用可能阻塞 Redis 主线程的批量 `DEL` 删除用户全部会话 payload
+- **Then** 系统 MUST 通过 Redis Lua 脚本将 `aegiscore-user-services:auth:user:sessions:{<user_id>}` 原子重命名为 `aegiscore-user-services:auth:user:sessions:{<user_id>}:purge:<purge_id>` 临时清理 key
+- **Then** 临时清理 key MUST 设置有限 TTL，避免后台清理失败时永久残留
+- **Then** 系统 MUST 在 Go 侧分批读取该临时 ZSet 中的 `session_id` 和过期 score
+- **Then** 系统 MUST 使用有上限批量 `UNLINK` 删除未过期 `aegiscore-user-services:auth:session:{<user_id>}:<session_id>` 会话记录
+- **Then** 系统 MUST 从临时 ZSet 移除已处理的 member，并在清理完成后使用 `UNLINK` 删除临时清理 key
+- **Then** 系统 MUST NOT 一次性读取全部 ZSet member、使用 Lua `unpack` 删除无上限 key 列表，或使用可能阻塞 Redis 主线程的批量 `DEL` 删除用户全部会话 payload
 
 #### Scenario: Stale index data does not inflate future session operations
 - **Given** 用户活跃会话 ZSet 中存在已过期 `session_id` member

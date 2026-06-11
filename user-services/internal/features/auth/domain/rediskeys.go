@@ -36,6 +36,11 @@ func (b RedisKeyBuilder) AuthUserSessions(userID string) string {
 	return b.join("auth", "user", "sessions", redisHashTag(userID))
 }
 
+// AuthUserSessionsPurge 返回用户活跃会话索引后台清理用的临时 key。
+func (b RedisKeyBuilder) AuthUserSessionsPurge(userID string, purgeID string) string {
+	return b.join("auth", "user", "sessions", redisHashTag(userID), "purge", purgeID)
+}
+
 func (b RedisKeyBuilder) join(parts ...string) string {
 	if b.appName == "" {
 		return strings.Join(parts, ":")

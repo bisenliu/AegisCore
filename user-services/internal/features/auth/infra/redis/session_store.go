@@ -10,6 +10,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/config"
 	authdomain "github.com/aegiscore/user-services/internal/features/auth/domain"
+	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 )
@@ -21,18 +22,24 @@ const (
 	defaultAuthSessionTTL = time.Hour
 	// authSessionIndexTTLBuffer 让用户会话索引在最后一个会话过期后仍保留短暂窗口用于懒清理。
 	authSessionIndexTTLBuffer = 5 * time.Minute
+	// deleteAllUserSessionsPurgeTTL 限制临时清理索引在后台清理失败时的最长保留时间。
+	deleteAllUserSessionsPurgeTTL = time.Hour
+	// deleteAllUserSessionsBatchSize 限制退出全部设备后台清理每批 Redis key 数量。
+	deleteAllUserSessionsBatchSize int64 = 500
 
 	// expiredSessionMinScore 让 ZRemRangeByScore 清理所有 score 小于等于当前时间的会话。
 	expiredSessionMinScore = "-inf"
 )
 
 const (
-	rotateSessionResultOK          int64 = 1
-	rotateSessionResultNotFound    int64 = 2
-	rotateSessionResultMismatch    int64 = 3
-	cacheTokenVersionResultStored        = 1
-	cacheTokenVersionResultSkipped       = 2
-	deleteAllUserSessionsNoLimit         = 0
+	rotateSessionResultOK            int64 = 1
+	rotateSessionResultNotFound      int64 = 2
+	rotateSessionResultMismatch      int64 = 3
+	cacheTokenVersionResultStored          = 1
+	cacheTokenVersionResultSkipped         = 2
+	detachUserSessionsResultEmpty          = 0
+	detachUserSessionsResultDetached       = 1
+	detachUserSessionsResultConflict       = 2
 )
 
 var cacheTokenVersionScript = rediscache.NewScript(`
@@ -77,18 +84,16 @@ end
 return 1
 `)
 
-var deleteAllUserSessionsScript = rediscache.NewScript(`
-redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
-local sessions = redis.call("ZRANGE", KEYS[1], 0, -1)
-local keys = {}
-for _, session_id in ipairs(sessions) do
-	keys[#keys + 1] = ARGV[2] .. session_id
+var detachUserSessionsScript = rediscache.NewScript(`
+if redis.call("EXISTS", KEYS[1]) == 0 then
+	return 0
 end
-keys[#keys + 1] = KEYS[1]
-if #keys > 0 then
-	redis.call("UNLINK", unpack(keys))
+if redis.call("EXISTS", KEYS[2]) == 1 then
+	return 2
 end
-return #keys
+redis.call("RENAME", KEYS[1], KEYS[2])
+redis.call("EXPIRE", KEYS[2], ARGV[1])
+return 1
 `)
 
 // SessionStoreParams 包含 Redis 认证会话 store 所需的 Fx 输入。
@@ -268,8 +273,60 @@ func (r *sessionStore) DeleteSession(ctx context.Context, userID string, session
 // DeleteAllUserSessions 删除用户所有存活 refresh token 会话，并删除用户索引。
 func (r *sessionStore) DeleteAllUserSessions(ctx context.Context, userID string) error {
 	userSessions := r.userSessionsKey(userID)
-	if _, err := deleteAllUserSessionsScript.Run(ctx, r.redis, []string{userSessions}, unixScore(time.Now()), r.keys.AuthSessionPrefix(userID), deleteAllUserSessionsNoLimit).Result(); err != nil {
+	purgeKey := r.purgeUserSessionsKey(userID)
+	cutTime := time.Now()
+	result, err := detachUserSessionsScript.Run(ctx, r.redis, []string{userSessions, purgeKey}, seconds(deleteAllUserSessionsPurgeTTL)).Int64()
+	if err != nil {
 		return fmt.Errorf("delete user auth sessions: %w", err)
+	}
+	switch result {
+	case detachUserSessionsResultEmpty:
+		return nil
+	case detachUserSessionsResultDetached:
+		go func() {
+			purgeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deleteAllUserSessionsPurgeTTL)
+			defer cancel()
+			_ = r.purgeDetachedUserSessions(purgeCtx, purgeKey, r.keys.AuthSessionPrefix(userID), cutTime)
+		}()
+		return nil
+	case detachUserSessionsResultConflict:
+		return fmt.Errorf("delete user auth sessions: purge key conflict")
+	default:
+		return fmt.Errorf("delete user auth sessions: unexpected script result %d", result)
+	}
+}
+
+func (r *sessionStore) purgeDetachedUserSessions(ctx context.Context, purgeKey string, sessionPrefix string, cutTime time.Time) error {
+	cutScore := float64(cutTime.Unix())
+	for {
+		sessions, err := r.redis.ZRangeWithScores(ctx, purgeKey, 0, deleteAllUserSessionsBatchSize-1).Result()
+		if err != nil {
+			return fmt.Errorf("read detached user sessions: %w", err)
+		}
+		if len(sessions) == 0 {
+			break
+		}
+
+		sessionKeys := make([]string, 0, len(sessions))
+		sessionIDs := make([]interface{}, 0, len(sessions))
+		for _, session := range sessions {
+			sessionID := redisMemberString(session.Member)
+			sessionIDs = append(sessionIDs, sessionID)
+			if session.Score > cutScore {
+				sessionKeys = append(sessionKeys, sessionPrefix+sessionID)
+			}
+		}
+		if len(sessionKeys) > 0 {
+			if err := r.redis.Unlink(ctx, sessionKeys...).Err(); err != nil {
+				return fmt.Errorf("unlink detached auth sessions: %w", err)
+			}
+		}
+		if err := r.redis.ZRem(ctx, purgeKey, sessionIDs...).Err(); err != nil {
+			return fmt.Errorf("remove detached user sessions: %w", err)
+		}
+	}
+	if err := r.redis.Unlink(ctx, purgeKey).Err(); err != nil {
+		return fmt.Errorf("unlink detached user sessions index: %w", err)
 	}
 	return nil
 }
@@ -286,8 +343,16 @@ func (r *sessionStore) userSessionsKey(userID string) string {
 	return r.keys.AuthUserSessions(userID)
 }
 
+func (r *sessionStore) purgeUserSessionsKey(userID string) string {
+	return r.keys.AuthUserSessionsPurge(userID, uuid.NewString())
+}
+
 func unixScore(t time.Time) string {
 	return strconv.FormatInt(t.Unix(), 10)
+}
+
+func seconds(ttl time.Duration) string {
+	return strconv.FormatInt(int64(ttl/time.Second), 10)
 }
 
 func milliseconds(ttl time.Duration) string {
@@ -300,4 +365,15 @@ func parseTokenVersion(value string) (int64, error) {
 
 func formatTokenVersion(version int64) string {
 	return strconv.FormatInt(version, 10)
+}
+
+func redisMemberString(member interface{}) string {
+	switch value := member.(type) {
+	case string:
+		return value
+	case []byte:
+		return string(value)
+	default:
+		return fmt.Sprint(value)
+	}
 }
