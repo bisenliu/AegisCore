@@ -6,7 +6,7 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 ## Requirements
 ### Requirement: Return success responses with envelope
 
-系统必须将成功响应包装为统一 `Envelope`。
+系统 MUST 将成功响应包装为统一 `Envelope`。
 
 #### Scenario: Return OK response
 - **Given** controller 成功处理请求并获得响应数据
@@ -24,7 +24,7 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 
 ### Requirement: Return paginated success responses
 
-系统 MUST 在 `common/contract/response` 中提供可复用分页响应数据结构。分页列表成功响应 MUST 保持统一 `Envelope` 顶层字段，并将列表数据包装到 `data.items`，分页元信息包装到 `data.pagination`。
+系统 MUST 在 `common/contract/response` 中提供可复用分页响应数据结构。分页列表成功响应 MUST 保持统一 `Envelope` 顶层字段，并将列表数据包装到 `data.items`，分页元信息包装到 `data.pagination`。公共响应类型 MUST 继续命名为 `Pagination` 和 `PaginatedData`，但分页元信息 MUST 使用 keyset pagination 语义。HTTP transport 层 MUST 负责将 app 层返回的列表应用结果映射为分页响应数据结构；app service MUST NOT 返回 `response.PaginatedData` 或 `response.Pagination`。
 
 #### Scenario: Return paginated list payload
 - **Given** controller 成功处理分页列表请求并获得列表数据和分页元信息
@@ -32,42 +32,61 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 - **Then** 系统返回 HTTP 200
 - **Then** 响应 JSON 包含 `success: true`、`code: 0`、`message: ok`
 - **Then** `data.items` MUST 包含当前页业务数据数组
-- **Then** `data.pagination` MUST 包含 `page`、`page_size`、`total`、`total_pages`
+- **Then** `data.pagination` MUST 只包含 `page_size`、`next_cursor`、`has_next`
+- **Then** `data.pagination` MUST NOT 包含 `page`、`offset`、`total` 或 `total_pages`
 
 #### Scenario: Return empty paginated list
 - **Given** 分页列表请求没有匹配到任何记录
 - **When** controller 返回分页数据
 - **Then** 系统返回 HTTP 200
 - **Then** `data.items` MUST 为空数组
-- **Then** `data.pagination.total` MUST 为 `0`
-- **Then** `data.pagination.total_pages` MUST 为 `0`
+- **Then** `data.pagination.page_size` MUST 为规范化后的 page size
+- **Then** `data.pagination.next_cursor` MUST 为空或省略
+- **Then** `data.pagination.has_next` MUST 为 `false`
+
+#### Scenario: Preserve pagination type names
+- **Given** 调用方引用公共分页响应类型
+- **When** 代码构造分页列表响应
+- **Then** 系统 MUST 继续提供 `response.Pagination`
+- **Then** 系统 MUST 继续提供 `response.PaginatedData`
+- **Then** 系统 MUST NOT 新增 `CursorPagination` 或 `CursorPaginatedData` 作为公共响应类型
+
+#### Scenario: Map app list result to paginated response at transport boundary
+- **Given** app service 返回列表应用结果、当前 page size、next cursor 和 has next 标记
+- **When** HTTP controller 准备返回列表响应
+- **Then** controller 或 feature-local HTTP mapper MUST 使用 `response.NewPagination` 和 `response.NewPaginatedData` 构造分页响应数据
+- **Then** app service MUST NOT 导入 `common/contract/response` 以构造 HTTP 分页响应契约
 
 ### Requirement: Normalize pagination query parameters
 
-系统 MUST 在 common 中提供可复用分页参数规范化方法，用于为 list 类接口统一处理 `page`、`page_size` 默认值并计算数据库分页参数。
+系统 MUST 在 common 中提供可复用 page size 规范化方法，用于为 list 类接口统一处理 `page_size` 默认值和最大值。系统 MUST NOT 在公共分页契约中继续提供 page/offset/count 计算语义。
 
-#### Scenario: Default missing pagination parameters
-- **Given** list 请求未提供 `page` 或 `page_size`
-- **When** 系统规范化分页参数
-- **Then** `page` MUST 使用默认值 `1`
+#### Scenario: Default missing page size parameter
+- **Given** list 请求未提供 `page_size`
+- **When** 系统规范化 page size
 - **Then** `page_size` MUST 使用默认值 `10`
-- **Then** 数据库查询 offset MUST 为 `0`
 - **Then** 数据库查询 limit MUST 为 `10`
 
-#### Scenario: Default invalid pagination parameters
-- **Given** list 请求提供的 `page` 小于 `1` 或 `page_size` 小于 `1`
-- **When** 系统规范化分页参数
-- **Then** 小于 `1` 的 `page` MUST 使用默认值 `1`
+#### Scenario: Default invalid page size parameter
+- **Given** list 请求提供的 `page_size` 小于 `1`
+- **When** 系统规范化 page size
 - **Then** 小于 `1` 的 `page_size` MUST 使用默认值 `10`
 
-#### Scenario: Calculate total pages
-- **Given** `total` 为 `128` 且 `page_size` 为 `20`
-- **When** 系统构造分页元信息
-- **Then** `total_pages` MUST 为 `7`
+#### Scenario: Cap page size parameter
+- **Given** list 请求提供的 `page_size` 大于 `100`
+- **When** 系统规范化 page size
+- **Then** 大于 `100` 的 `page_size` MUST 使用最大值 `100`
+
+#### Scenario: Remove page and offset helpers
+- **Given** 仓库内代码使用公共分页契约
+- **When** 实现 keyset pagination 响应契约
+- **Then** `common/contract/response` MUST NOT 继续提供 `PaginationQuery`
+- **Then** `common/contract/response` MUST NOT 继续提供 `NormalizePagination(page, pageSize)`
+- **Then** `response.Pagination` MUST NOT 包含 `Page`、`Offset`、`Total` 或 `TotalPages` 字段
 
 ### Requirement: Return failure responses with application errors
 
-系统必须将应用错误转换为统一失败信封，并使用错误对象中的 HTTP 状态码、数字业务码和消息。参数校验失败响应必须在统一失败信封中携带字段级 `errors` 明细。
+系统 MUST 将应用错误转换为统一失败信封，并使用错误对象中的 HTTP 状态码、数字业务码和消息。参数校验失败响应 MUST 在统一失败信封中携带字段级 `errors` 明细。HTTP transport 层、中间件或 `common/contract/response` helper MUST 负责构造 HTTP 应用错误；app service MUST 以领域错误、应用错误分类或普通 Go error 表达失败原因，并由 controller 映射为统一失败信封。
 
 #### Scenario: Return bad request
 - **Given** controller 检测到请求格式错误、请求体格式错误或参数无法解析
@@ -118,18 +137,18 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 
 #### Scenario: Return forbidden
 - **Given** 已认证调用方无权访问资源或执行操作
-- **When** controller 或 service 返回 `response.ForbiddenError`
+- **When** controller 或中间件将失败原因映射为 `response.ForbiddenError`
 - **Then** 系统返回 HTTP 403
 - **Then** 响应 JSON 包含 `success: false`、`code: 30000` 和调用方可读消息
 
 #### Scenario: Return conflict
 - **Given** service 检测到业务冲突或资源状态不允许当前操作
-- **When** service 返回 `response.ConflictError`
+- **When** controller 将该失败原因映射为 `response.ConflictError`
 - **Then** 系统返回 HTTP 409
 - **Then** 响应 JSON 包含 `success: false`、`code: 40000` 和调用方可读消息
 
 #### Scenario: Return not found
-- **Given** repository 或 service 返回 not found 应用错误
+- **Given** repository 或 app service 返回 not found 领域错误或应用错误分类
 - **When** controller 调用 `response.Fail`
 - **Then** 系统返回 HTTP 404
 - **Then** 响应 JSON 包含 `success: false`、`code: 50000` 和对应消息
@@ -141,9 +160,42 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 - **Then** HTTP 状态码为 500
 - **Then** 响应 JSON 包含 `success: false`、`code: 90000` 和对外安全消息 `internal server error`
 
+#### Scenario: Keep HTTP error construction out of app services
+- **Given** 开发者修改用户资料或认证会话 app service、ports、credential、token 或 session 组件
+- **When** 这些组件需要返回失败原因
+- **Then** 这些组件 MUST NOT 构造 `response.BadRequestError`、`response.UnauthenticatedError`、`response.TokenInvalidError`、`response.TokenExpiredError`、`response.ForbiddenError`、`response.ConflictError`、`response.NotFoundError` 或 `response.FromError`
+- **Then** HTTP controller、HTTP middleware 或 feature-local HTTP mapper MUST 将失败原因转换为统一失败信封
+
+### Requirement: Map token version infrastructure failures to server errors
+
+API 响应契约 SHALL 保证认证中间件的 token version 基础设施故障使用统一失败信封返回服务端故障响应。Redis、PostgreSQL 或缓存回填等非预期依赖错误 MUST NOT 使用 token invalid 业务码；系统 MUST 返回 HTTP 500、业务码 `90000` 和对外安全消息 `internal server error`，并且 MUST NOT 执行受保护业务 handler。明确的 token version mismatch MUST 继续使用 HTTP 401 和 token invalid 业务码。
+
+#### Scenario: Token version mismatch keeps token invalid response
+- **Given** 请求携带签名有效且未过期的 Access Token
+- **Given** token version validator 返回 token version mismatch 语义
+- **When** 认证中间件处理该请求
+- **Then** 系统 MUST 返回 HTTP 401
+- **Then** 响应 JSON MUST 包含 `success: false` 和 token invalid 业务码
+- **Then** 响应 MUST NOT 包含业务 `data`
+
+#### Scenario: Token version infrastructure error returns internal error envelope
+- **Given** 请求携带签名有效且未过期的 Access Token
+- **Given** token version validator 返回 Redis、PostgreSQL 或缓存回填相关基础设施错误
+- **When** 认证中间件处理该请求
+- **Then** 系统 MUST 返回 HTTP 500
+- **Then** 响应 JSON MUST 包含 `success: false`、`code: 90000` 和 `message: internal server error`
+- **Then** 响应 MUST NOT 包含业务 `data`
+- **Then** 受保护业务 handler MUST NOT 执行
+
+#### Scenario: Infrastructure failure response hides dependency details
+- **Given** token version validator 返回包含 Redis 地址、SQL 错误或底层依赖信息的错误
+- **When** 认证中间件返回失败响应
+- **Then** 响应 message MUST 使用对外安全消息
+- **Then** 响应 MUST NOT 暴露 Redis key、数据库 DSN、SQL 语句、JWT 内容或底层依赖错误文本
+
 ### Requirement: Recover panics with failure envelope
 
-系统必须通过 recovery 中间件捕获 panic，记录上下文并返回统一内部错误响应。
+系统 MUST 通过 recovery 中间件捕获 panic，记录上下文并返回统一内部错误响应。
 
 #### Scenario: Handler panics
 - **Given** HTTP handler 或下游逻辑发生 panic
@@ -154,7 +206,7 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 
 ### Requirement: Preserve trace id for observability
 
-系统必须为 HTTP 请求保留或生成 trace id，并在响应 header、context 和日志中使用。
+系统 MUST 为 HTTP 请求保留或生成 trace id，并在响应 header、context 和日志中使用。
 
 #### Scenario: Request provides trace id
 - **Given** HTTP 请求包含 `X-Trace-ID` header
@@ -178,7 +230,7 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 
 ### Requirement: Provide standard numeric response codes
 
-系统必须在 `common/contract/response` 中定义标准数字业务码，业务码必须独立于 HTTP status code。
+系统 MUST 在 `common/contract/response` 中定义标准数字业务码，业务码 MUST 独立于 HTTP status code。
 
 #### Scenario: Standard code values are stable
 - **Given** 服务构造成功或失败响应
@@ -196,7 +248,7 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 
 ### Requirement: Provide reusable error constructors
 
-系统必须提供通用错误构造函数和 Gin helper，供服务侧以固定文案或格式化模板创建标准失败响应。
+系统 MUST 提供通用错误构造函数和 Gin helper，供服务侧以固定文案或格式化模板创建标准失败响应。
 
 #### Scenario: Create fixed-message application error
 - **Given** 调用方传入固定错误文案且不传格式化参数
@@ -248,7 +300,7 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 - **Then** 系统 MUST 不再存在对旧包或旧 `Msg*` 常量名的引用
 
 ### Requirement: Document response envelope in Swagger
-系统必须在 Swagger/OpenAPI 文档中复用运行时 `common/contract/response.Envelope` 语义描述业务 API 成功和失败响应，确保文档中的状态码、业务码、消息和 data 包装方式与真实响应一致。
+系统 MUST 在 Swagger/OpenAPI 文档中复用运行时 `common/contract/response.Envelope` 语义描述业务 API 成功和失败响应，确保文档中的状态码、业务码、消息和 data 包装方式与真实响应一致。
 
 #### Scenario: Document created response envelope
 - **Given** 创建用户接口成功创建资源
@@ -365,9 +417,10 @@ API 响应契约能力定义所有 HTTP API 的成功与失败 JSON 信封、错
 - **Then** 调用方 MUST NOT 因文件组织调整改用新的 Go package import 路径
 
 #### Scenario: Pagination helpers remain reusable
-- **Given** list 类接口调用 `response.NormalizePagination`、`response.NewPagination` 或 `response.NewPaginatedData`
+- **Given** list 类接口调用 `response.NormalizePageSize`、`response.NewPagination` 或 `response.NewPaginatedData`
 - **When** 分页类型和计算逻辑位于聚焦文件中
-- **Then** 默认 `page=1` 和 `page_size=10` 的行为 MUST 保持不变
+- **Then** 默认 `page_size=10` 和最大 `page_size=100` 的行为 MUST 保持不变
+- **Then** 分页 JSON MUST 使用 `page_size`、`next_cursor`、`has_next` 语义
 - **Then** `data.items` 和 `data.pagination` 的 JSON 结构 MUST 保持不变
 - **Then** nil items MUST 继续序列化为空数组语义
 

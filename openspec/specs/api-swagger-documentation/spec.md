@@ -5,7 +5,7 @@
 Swagger/OpenAPI 文档能力为用户服务提供可生成、可访问、与运行时路由和统一响应契约保持一致的 API 文档。
 ## Requirements
 ### Requirement: Provide Swagger metadata and generated OpenAPI artifacts
-系统必须为用户服务提供 Swagger/OpenAPI 文档元数据、生成命令和生成产物，文档必须可由当前源码注解重复生成。
+系统 MUST 为用户服务提供 Swagger/OpenAPI 文档元数据、生成命令和生成产物，文档 MUST 可由当前源码注解重复生成。
 
 #### Scenario: Generate Swagger docs from user service entrypoint
 - **Given** 用户服务源码包含全局 Swagger 注解和接口注解
@@ -21,7 +21,7 @@ Swagger/OpenAPI 文档能力为用户服务提供可生成、可访问、与运�
 - **Then** 文档不得声明当前服务未实现的认证方案为接口必需项
 
 ### Requirement: Serve Swagger UI and document aliases
-系统必须在用户服务运行时注册 Swagger 文档访问路由，并提供清晰的启用策略。
+系统 MUST 在用户服务运行时注册 Swagger 文档访问路由，并提供清晰的启用策略。
 
 #### Scenario: Access Swagger UI in enabled environment
 - **Given** HTTP server 已启动且 Swagger 已启用
@@ -45,7 +45,7 @@ Swagger/OpenAPI 文档能力为用户服务提供可生成、可访问、与运�
 - **Then** 系统按环境变量显式值决定是否注册 Swagger 路由
 
 ### Requirement: Keep Swagger annotations aligned with runtime routes
-系统必须确保 Swagger 注解中的 HTTP 方法、路径、请求参数、响应结构和错误状态码与真实 Gin 路由和响应契约一致。
+系统 MUST 确保 Swagger 注解中的 HTTP 方法、路径、请求参数、响应结构和错误状态码与真实 Gin 路由和响应契约一致。
 
 #### Scenario: Document create user endpoint
 - **Given** `POST /api/v1/users` 已注册
@@ -69,11 +69,14 @@ Swagger/OpenAPI 文档能力为用户服务提供可生成、可访问、与运�
 #### Scenario: Document user list endpoint
 - **Given** `GET /api/v1/users` 已注册
 - **When** Swagger 文档生成
-- **Then** 文档包含分页参数 `page`、`page_size`
+- **Then** 文档包含 keyset 分页参数 `cursor`、`page_size`
+- **Then** 文档 MUST NOT 包含旧分页参数 `page` 或 `offset`
 - **Then** 文档包含过滤参数 `nickname`、`username`、`status`
 - **Then** 文档不包含旧过滤参数 `name` 或 `active`
 - **Then** 文档描述 `status` 允许值 `100`、`200`、`300`
 - **Then** 文档说明列表默认排除软删除用户
+- **Then** 文档描述成功响应 `data.pagination` 包含 `page_size`、`next_cursor`、`has_next`
+- **Then** 文档 MUST NOT 描述 `total` 或 `total_pages` 分页响应字段
 
 #### Scenario: Document health endpoint according to actual response
 - **Given** `GET /healthz` 返回最小健康状态 JSON
@@ -130,4 +133,3 @@ Swagger/OpenAPI 文档能力 SHALL 使用按业务能力组织的 API 契约包�
 - **WHEN** Swagger 文档从迁移后的源码注解生成
 - **THEN** 文档 MUST 继续描述现有 HTTP 方法、路径、认证要求、请求字段、响应信封和失败响应
 - **THEN** 文档中的用户资料响应、token 响应、改密响应和登出响应字段 MUST 与迁移前保持兼容
-

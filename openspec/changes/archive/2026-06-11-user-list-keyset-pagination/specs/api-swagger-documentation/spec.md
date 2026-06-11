@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Keep Swagger annotations aligned with runtime routes
-系统必须确保 Swagger 注解中的 HTTP 方法、路径、请求参数、响应结构和错误状态码与真实 Gin 路由和响应契约一致。
+系统 MUST 确保 Swagger 注解中的 HTTP 方法、路径、请求参数、响应结构和错误状态码与真实 Gin 路由和响应契约一致。
 
 #### Scenario: Document create user endpoint
 - **Given** `POST /api/v1/users` 已注册

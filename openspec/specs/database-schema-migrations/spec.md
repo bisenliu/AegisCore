@@ -5,7 +5,7 @@
 数据库 schema 迁移能力为服务提供基于 Ent schema 和 Atlas SQL migration 的声明式迁移工作流，使数据库结构变更可以生成、审查、校验、打包并在部署前执行。
 ## Requirements
 ### Requirement: Maintain service-owned migration directories
-系统必须将数据库迁移文件维护在拥有对应 Ent schema 的服务目录内。用户服务的迁移目录必须位于 `user-services/migrations/`，并必须包含生成的 `.sql` migration 文件和 Atlas 校验文件 `atlas.sum`。
+系统 MUST 将数据库迁移文件维护在拥有对应 Ent schema 的服务目录内。用户服务的迁移目录 MUST 位于 `user-services/migrations/`，并 MUST 包含生成的 `.sql` migration 文件和 Atlas 校验文件 `atlas.sum`。
 
 #### Scenario: User service owns its migration files
 - **Given** 用户服务拥有 Ent schema 和服务内 migration 目录
@@ -26,7 +26,7 @@
 - **Then** 系统不得要求重命名已经提交的 migration 文件或修改既有迁移历史
 
 ### Requirement: Generate SQL migrations from Ent schema with Atlas
-系统必须使用 Atlas 对比 Ent schema 与目标数据库状态生成 `.sql` migration 文件。迁移生成不得依赖服务运行时调用 `client.Schema.Create(ctx)`。
+系统 MUST 使用 Atlas 对比 Ent schema 与目标数据库状态生成 `.sql` migration 文件。迁移生成 MUST NOT 依赖服务运行时调用 `client.Schema.Create(ctx)`。
 
 #### Scenario: Generate migration after Ent user lifecycle schema change
 - **Given** 开发者修改 `user-services/ent/schema/` 下的 Ent `User` schema
@@ -37,7 +37,7 @@
 - **Then** 生成流程必须更新或校验 `user-services/migrations/atlas.sum`
 
 ### Requirement: Preserve user schema field comments in migrations
-系统必须通过 Ent schema 声明 `users` 表字段注释，并通过 Atlas migration 将字段 comment 写入用户服务迁移目录。
+系统 MUST 通过 Ent schema 声明 `users` 表字段注释，并通过 Atlas migration 将字段 comment 写入用户服务迁移目录。
 
 #### Scenario: Generate migration with updated user field comments
 - **Given** `user-services/ent/schema/user.go` 为每个 `User` 字段声明了 comment
@@ -47,7 +47,7 @@
 - **Then** 生成流程必须更新或校验 `user-services/migrations/atlas.sum`
 
 ### Requirement: Migrate user password and millisecond timestamps
-系统必须通过 Atlas SQL migration 表达用户表必填 `password_hash` 字段以及 `created_at`、`updated_at` 毫秒时间戳字段变更，不得依赖服务运行时自动建表或改表。
+系统 MUST 通过 Atlas SQL migration 表达用户表必填 `password_hash` 字段以及 `created_at`、`updated_at` 毫秒时间戳字段变更，MUST NOT 依赖服务运行时自动建表或改表。
 
 #### Scenario: Generate migration after user timestamp and password hash schema change
 - **Given** Ent `User` schema 将密码持久化字段定义为非空 `password_hash`，并将 `created_at`、`updated_at` 定义为毫秒级 Unix 时间戳字段
@@ -85,7 +85,7 @@
 - **Then** 数据库 schema 变更 MUST 通过已生成并部署的 SQL migration 文件完成
 
 ### Requirement: Allow reviewed manual SQL adjustments
-系统必须允许开发者在提交前人工审查和调整 Atlas 生成的 SQL migration 文件。任何 SQL 文件内容变更后，系统必须要求重新计算 Atlas migration directory checksum。
+系统 MUST 允许开发者在提交前人工审查和调整 Atlas 生成的 SQL migration 文件。任何 SQL 文件内容变更后，系统 MUST 要求重新计算 Atlas migration directory checksum。
 
 #### Scenario: Adjust index creation for PostgreSQL
 - **Given** Atlas 生成的 SQL migration 包含需要人工优化的索引语句
@@ -101,7 +101,7 @@
 - **Then** CI/CD 或部署流程不得继续执行该迁移目录
 
 ### Requirement: Apply committed migrations before service startup
-系统必须在用户服务 HTTP runtime 启动前执行已提交的 Atlas SQL migration，或由 CI/CD 在发布服务前完成迁移。迁移失败时服务启动流程必须停止。
+系统 MUST 在用户服务 HTTP runtime 启动前执行已提交的 Atlas SQL migration，或由 CI/CD 在发布服务前完成迁移。迁移失败时服务启动流程 MUST 停止。
 
 #### Scenario: Apply migrations from deployment environment
 - **Given** 部署流程提供目标 PostgreSQL 连接 URL
@@ -116,7 +116,7 @@
 - **Then** 用户服务 HTTP runtime 不得在未完成必需迁移的情况下继续启动
 
 ### Requirement: Derive migration targets from postgres named instances
-当迁移工具从项目配置组装数据库连接信息时，系统必须使用 `postgres.<name>` 命名实例路径作为 PostgreSQL 配置来源。用户服务迁移目标必须解析为 `postgres.user_db`，不得继续依赖旧的 `postgre.user_db` 路径。
+当迁移工具从项目配置组装数据库连接信息时，系统 MUST 使用 `postgres.<name>` 命名实例路径作为 PostgreSQL 配置来源。用户服务迁移目标 MUST 解析为 `postgres.user_db`，MUST NOT 继续依赖旧的 `postgre.user_db` 路径。
 
 #### Scenario: User service migration derives target from postgres user database
 - **Given** 用户服务配置包含 `postgres.user_db`、`postgres.common_db` 和 `postgres.pay_db`
@@ -131,7 +131,7 @@
 - **Then** 系统不得要求启动 Fx app、Redis client、HTTP server 或 Ent runtime client
 
 ### Requirement: Document repeatable service onboarding steps
-系统必须为后续服务提供可复制的 Ent/Atlas 迁移接入步骤，包括目录结构、Atlas 配置、生成命令、人工修改规则和部署执行方式。
+系统 MUST 为后续服务提供可复制的 Ent/Atlas 迁移接入步骤，包括目录结构、Atlas 配置、生成命令、人工修改规则和部署执行方式。
 
 #### Scenario: New service adopts migration workflow
 - **Given** 新服务引入自己的 Ent schema 和 PostgreSQL 数据库
@@ -235,6 +235,29 @@
 - **When** migration 审查索引
 - **Then** 系统 MUST 为 `deleted_at` 相关过滤保留可审查的索引策略
 - **Then** 常用 `username`、`status` 或 `nickname` 查询 MUST 不依赖已删除的旧字段索引
+
+### Requirement: Maintain user indexes for keyset list queries
+系统 SHALL 通过 Ent schema 和 Atlas SQL migration 表达用户列表 keyset pagination 所需索引。用户列表默认按未软删除记录和 `user_id ASC` 前进，且支持 status 过滤时，索引策略 MUST 覆盖对应查询路径。迁移文件 MUST 写入 `user-services/migrations/`，并且 MUST 与 `atlas.sum` 一起维护；用户服务运行时 MUST NOT 通过 `client.Schema.Create(ctx)` 自动创建或修改这些索引。
+
+#### Scenario: Add deleted at user id keyset index
+- **Given** `GET /api/v1/users` 默认只查询未软删除用户并按 `user_id ASC` 排序
+- **When** 开发者修改 `user-services/ent/schema/` 下的 Ent `User` schema
+- **Then** Ent schema MUST 声明 `deleted_at`、`user_id` 组合索引
+- **Then** Atlas MUST 在 `user-services/migrations/` 生成对应索引 SQL migration
+- **Then** 生成流程 MUST 更新或校验 `user-services/migrations/atlas.sum`
+
+#### Scenario: Add status deleted at user id keyset index
+- **Given** 用户列表支持高频 `status` 过滤并按 `user_id ASC` 排序
+- **When** 开发者修改 `User` Ent schema 的索引定义
+- **Then** Ent schema MUST 声明 `status`、`deleted_at`、`user_id` 组合索引
+- **Then** Atlas migration MUST 表达该索引用于 status 过滤下的 keyset 查询路径
+- **Then** migration SQL MUST 可被人工审查
+
+#### Scenario: Runtime does not create keyset indexes implicitly
+- **Given** keyset pagination 索引变更已经通过 SQL migration 表达
+- **When** 用户服务 HTTP runtime 启动
+- **Then** 服务 MUST NOT 通过 `client.Schema.Create(ctx)` 自动创建或修改索引
+- **Then** 数据库 schema 变更 MUST 通过已生成并部署的 SQL migration 文件完成
 
 ### Requirement: Organize Ent schema files by domain without changing database schema
 系统 SHALL 将用户服务 Ent schema 源文件实际组织为可扩展的领域分类。当前 `User` schema MUST 纳入用户领域分类，并且根 `schema` package MUST 继续作为 Ent codegen 和 Atlas schema source 的稳定入口。该分类变更 MUST NOT 改变 `User` 字段、索引、字段注释、表结构或 migration 历史。
