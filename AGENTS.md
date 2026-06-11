@@ -14,7 +14,7 @@
 
 - `go.work`：Go workspace，包含 `common` 和 `user-service` 两个模块。
 - `common/`：跨服务稳定契约和基础能力，按 `contract`、`runtime`、`http`、`security`、`validation` 分类组织；不得作为服务特定 helper 的兜底目录。
-- `user-service/`：用户服务 HTTP 运行时，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration，以及按 feature 组织的业务代码。
+- `user-service/`：用户服务 HTTP 运行时和 Go module，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration，以及按 feature 组织的业务代码。
 - `user-service/internal/features/user/`：用户资料 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/` 和 `module.go` 分层。
 - `user-service/internal/features/auth/`：认证会话 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/`、`infra/redis/` 和 `module.go` 分层。
 - `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产。

@@ -25,6 +25,8 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 5. `user-service/internal/bootstrap/routes.go` 注册 `/healthz`、Swagger、`/api/v1`、认证中间件和 feature-local routes。
 6. Fx lifecycle 启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
+`aegiscore-user-services` 是当前运行时 CLI/service name，不是仓库目录名或 Go module path；代码位置和 module path 统一使用 `user-service`。
+
 ## 4. HTTP Request Flow
 
 | 步骤 | 代码位置 | 行为 |
@@ -83,7 +85,7 @@ Ent predicate 构造封装在 `infra/postgres` 内。Adapter 可以做字段裁�
 - `common/security/`：安全与凭证原语，例如 JWT、Bearer 传输常量、认证上下文和密码 hash helper。
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。
 
-新增共享代码进入 `common` 前必须满足跨服务稳定、无业务语义、边界清晰。服务独有规则、DTO 映射、repository 行为或只为未来可能复用的 helper 应保留在对应服务模块内。
+新增共享代码进入 `common` 前必须满足跨服务稳定、无业务语义、边界清晰。服务独有规则、DTO 映射、infra adapter 行为或只为未来可能复用的 helper 应保留在对应服务模块内。
 
 ## 8. Data Model
 
