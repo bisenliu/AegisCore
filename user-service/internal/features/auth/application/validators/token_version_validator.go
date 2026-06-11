@@ -1,4 +1,4 @@
-package tokenversion
+package validators
 
 import (
 	"context"

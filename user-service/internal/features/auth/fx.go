@@ -3,7 +3,7 @@ package auth
 import (
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
-	authtokenversion "github.com/aegiscore/user-service/internal/features/auth/application/tokenversion"
+	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	authpostgres "github.com/aegiscore/user-service/internal/features/auth/infrastructure/postgres"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
@@ -27,7 +27,7 @@ var Module = fx.Module("feature-auth",
 			authredis.NewSessionStore,
 			fx.As(new(authapplication.AuthSessionStore)),
 		),
-		authtokenversion.NewValidator,
+		authvalidators.NewValidator,
 		authcommand.NewUseCaseDeps,
 		authcommand.NewLoginUseCase,
 		authcommand.NewRefreshTokenUseCase,

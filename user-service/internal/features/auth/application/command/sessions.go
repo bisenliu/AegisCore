@@ -9,7 +9,7 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
-	authtokenversion "github.com/aegiscore/user-service/internal/features/auth/application/tokenversion"
+	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/google/uuid"
@@ -56,9 +56,9 @@ func (m *authSessionLifecycle) ValidatePasswordChangeClaims(ctx context.Context,
 		logger.Error(ctx, "get password change token version failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
 		return err
 	}
-	if currentVersion != claims.TokenVersion {
+	if err := authvalidators.ValidateTokenVersionMatch(currentVersion, claims.TokenVersion); err != nil {
 		logger.Warn(ctx, "password change token version mismatch", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Int64("current_token_version", currentVersion), zap.Int64("token_version", claims.TokenVersion))
-		return authdomain.ErrTokenInvalid
+		return err
 	}
 	return nil
 }
@@ -74,9 +74,9 @@ func (m *authSessionLifecycle) ValidateRefreshSession(ctx context.Context, claim
 		logger.Error(ctx, "get refresh session failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
 		return authdomain.AuthSession{}, 0, err
 	}
-	if session.UserID != claims.UserID || session.TokenVersion != claims.TokenVersion {
+	if err := authvalidators.ValidateRefreshSessionClaims(session, claims.UserID, claims.TokenVersion); err != nil {
 		logger.Warn(ctx, "refresh session mismatch", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Int64("session_token_version", session.TokenVersion), zap.Int64("token_version", claims.TokenVersion))
-		return authdomain.AuthSession{}, 0, authdomain.ErrTokenInvalid
+		return authdomain.AuthSession{}, 0, err
 	}
 	currentVersion, err := m.currentTokenVersion(ctx, claims.UserID)
 	if err != nil {
@@ -87,9 +87,9 @@ func (m *authSessionLifecycle) ValidateRefreshSession(ctx context.Context, claim
 		logger.Error(ctx, "get refresh token version failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
 		return authdomain.AuthSession{}, 0, err
 	}
-	if currentVersion != session.TokenVersion {
+	if err := authvalidators.ValidateTokenVersionMatch(currentVersion, session.TokenVersion); err != nil {
 		logger.Warn(ctx, "refresh token version mismatch", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Int64("current_token_version", currentVersion), zap.Int64("session_token_version", session.TokenVersion))
-		return authdomain.AuthSession{}, 0, authdomain.ErrTokenInvalid
+		return authdomain.AuthSession{}, 0, err
 	}
 	return session, currentVersion, nil
 }
@@ -117,7 +117,7 @@ func (m *authSessionLifecycle) DeleteSession(ctx context.Context, userID string,
 }
 
 func (m *authSessionLifecycle) currentTokenVersion(ctx context.Context, userID string) (int64, error) {
-	return authtokenversion.Current(ctx, m.users, m.sessions, userID)
+	return authvalidators.Current(ctx, m.users, m.sessions, userID)
 }
 
 // RevokeAllUserSessions 递增 token version、刷新缓存并删除全部 refresh 会话。
