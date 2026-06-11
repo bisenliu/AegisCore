@@ -13,7 +13,7 @@ import (
 	"github.com/aegiscore/common/contract/response"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
-	authapp "github.com/aegiscore/user-service/internal/features/auth/app"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
@@ -24,7 +24,7 @@ var errAuthDatabaseDown = errors.New("database down")
 
 func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &authapp.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthService{tokens: &authapplication.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthLogin(t, service, `{"username":" alice ","password":" secret "}`)
 
@@ -45,7 +45,7 @@ func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 
 func TestAuthControllerLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &authapp.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthService{tokens: &authapplication.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthLogin(t, service, `{"username":"alice","password":" "}`)
 
@@ -87,7 +87,7 @@ func TestAuthControllerLoginMapsServiceError(t *testing.T) {
 
 func TestAuthControllerChangePasswordNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{changeResponse: &authapp.ChangePasswordResult{Changed: true}}
+	service := &stubAuthService{changeResponse: &authapplication.ChangePasswordResult{Changed: true}}
 
 	status, envelope := executeAuthChangePassword(t, service, commonauth.TokenPrefix+"password-token", `{"new_password":" new-secret "}`)
 
@@ -122,7 +122,7 @@ func TestAuthControllerChangePasswordMapsNotFound(t *testing.T) {
 
 func TestAuthControllerRefreshNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &authapp.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthService{tokens: &authapplication.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthRefresh(t, service, `{"refresh_token":" Bearer refresh-token "}`)
 
@@ -139,7 +139,7 @@ func TestAuthControllerRefreshNormalizesToCommand(t *testing.T) {
 
 func TestAuthControllerRefreshRejectsBearerOnlyToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthService{tokens: &authapp.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthService{tokens: &authapplication.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthRefresh(t, service, `{"refresh_token":" Bearer "}`)
 
@@ -166,19 +166,19 @@ func TestAuthControllerRefreshMapsTokenInvalid(t *testing.T) {
 }
 
 type stubAuthService struct {
-	tokens         *authapp.TokenResult
+	tokens         *authapplication.TokenResult
 	loginErr       error
-	changeResponse *authapp.ChangePasswordResult
+	changeResponse *authapplication.ChangePasswordResult
 	changeErr      error
 	refreshErr     error
-	logoutResponse *authapp.LogoutResult
+	logoutResponse *authapplication.LogoutResult
 	logoutErr      error
-	gotLogin       authapp.LoginCommand
-	gotRefresh     authapp.RefreshTokenCommand
-	gotChange      authapp.ChangePasswordCommand
+	gotLogin       authapplication.LoginCommand
+	gotRefresh     authapplication.RefreshTokenCommand
+	gotChange      authapplication.ChangePasswordCommand
 }
 
-func (s *stubAuthService) Login(_ context.Context, cmd authapp.LoginCommand) (*authapp.TokenResult, error) {
+func (s *stubAuthService) Login(_ context.Context, cmd authapplication.LoginCommand) (*authapplication.TokenResult, error) {
 	s.gotLogin = cmd
 	if s.loginErr != nil {
 		return nil, s.loginErr
@@ -186,7 +186,7 @@ func (s *stubAuthService) Login(_ context.Context, cmd authapp.LoginCommand) (*a
 	return s.tokens, nil
 }
 
-func (s *stubAuthService) ChangePassword(_ context.Context, cmd authapp.ChangePasswordCommand) (*authapp.ChangePasswordResult, error) {
+func (s *stubAuthService) ChangePassword(_ context.Context, cmd authapplication.ChangePasswordCommand) (*authapplication.ChangePasswordResult, error) {
 	s.gotChange = cmd
 	if s.changeErr != nil {
 		return nil, s.changeErr
@@ -194,7 +194,7 @@ func (s *stubAuthService) ChangePassword(_ context.Context, cmd authapp.ChangePa
 	return s.changeResponse, nil
 }
 
-func (s *stubAuthService) Refresh(_ context.Context, cmd authapp.RefreshTokenCommand) (*authapp.TokenResult, error) {
+func (s *stubAuthService) Refresh(_ context.Context, cmd authapplication.RefreshTokenCommand) (*authapplication.TokenResult, error) {
 	s.gotRefresh = cmd
 	if s.refreshErr != nil {
 		return nil, s.refreshErr
@@ -202,14 +202,14 @@ func (s *stubAuthService) Refresh(_ context.Context, cmd authapp.RefreshTokenCom
 	return s.tokens, nil
 }
 
-func (s *stubAuthService) Logout(context.Context) (*authapp.LogoutResult, error) {
+func (s *stubAuthService) Logout(context.Context) (*authapplication.LogoutResult, error) {
 	if s.logoutErr != nil {
 		return nil, s.logoutErr
 	}
 	return s.logoutResponse, nil
 }
 
-func (s *stubAuthService) LogoutAll(context.Context) (*authapp.LogoutResult, error) {
+func (s *stubAuthService) LogoutAll(context.Context) (*authapplication.LogoutResult, error) {
 	if s.logoutErr != nil {
 		return nil, s.logoutErr
 	}

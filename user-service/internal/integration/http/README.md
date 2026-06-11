@@ -5,9 +5,9 @@
 可以放置：
 
 - 外部 HTTP request/response DTO。
-- 外部状态码、错误体和网络错误到 feature app/domain 错误的转换。
+- 外部状态码、错误体和网络错误到 feature application/domain 错误的转换。
 - per-system base URL、timeout、auth header、idempotency key、retry/backoff 等调用边界。
-- 对 feature app port 的实现。
+- 对 feature application port 的实现。
 
 禁止放置：
 

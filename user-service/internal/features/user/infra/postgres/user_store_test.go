@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/aegiscore/user-service/ent/enttest"
-	userapp "github.com/aegiscore/user-service/internal/features/user/app"
+	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
@@ -29,7 +29,7 @@ func TestUserRepositoryDomainErrors(t *testing.T) {
 	t.Run("get by user id ignores soft deleted user", func(t *testing.T) {
 		ctx := context.Background()
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000010")
-		createSoftDeletedUser(t, repo, userapp.CreateUserInput{Nickname: "Deleted Profile", UserID: userID, Username: "deleted-profile", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		createSoftDeletedUser(t, repo, userapplication.CreateUserInput{Nickname: "Deleted Profile", UserID: userID, Username: "deleted-profile", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
 
 		_, err := repo.GetByUserID(ctx, userID)
 
@@ -40,12 +40,12 @@ func TestUserRepositoryDomainErrors(t *testing.T) {
 
 	t.Run("create uniqueness violation returns domain already exists", func(t *testing.T) {
 		ctx := context.Background()
-		_, err := repo.Create(ctx, userapp.CreateUserInput{Nickname: "Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000001"), Username: "alice", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		_, err := repo.Create(ctx, userapplication.CreateUserInput{Nickname: "Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000001"), Username: "alice", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
 		if err != nil {
 			t.Fatalf("Create initial user: %v", err)
 		}
 
-		_, err = repo.Create(ctx, userapp.CreateUserInput{Nickname: "Alice 2", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000002"), Username: "alice", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		_, err = repo.Create(ctx, userapplication.CreateUserInput{Nickname: "Alice 2", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000002"), Username: "alice", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
 
 		if !errors.Is(err, userdomain.ErrUserAlreadyExists) {
 			t.Fatalf("err = %v, want userdomain.ErrUserAlreadyExists", err)
@@ -55,12 +55,12 @@ func TestUserRepositoryDomainErrors(t *testing.T) {
 	t.Run("create duplicate user id returns domain already exists", func(t *testing.T) {
 		ctx := context.Background()
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000013")
-		_, err := repo.Create(ctx, userapp.CreateUserInput{Nickname: "Duplicate ID", UserID: userID, Username: "duplicate-id", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		_, err := repo.Create(ctx, userapplication.CreateUserInput{Nickname: "Duplicate ID", UserID: userID, Username: "duplicate-id", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
 		if err != nil {
 			t.Fatalf("Create initial user: %v", err)
 		}
 
-		_, err = repo.Create(ctx, userapp.CreateUserInput{Nickname: "Duplicate ID 2", UserID: userID, Username: "duplicate-id-2", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		_, err = repo.Create(ctx, userapplication.CreateUserInput{Nickname: "Duplicate ID 2", UserID: userID, Username: "duplicate-id-2", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
 
 		if !errors.Is(err, userdomain.ErrUserAlreadyExists) {
 			t.Fatalf("err = %v, want userdomain.ErrUserAlreadyExists", err)
@@ -69,9 +69,9 @@ func TestUserRepositoryDomainErrors(t *testing.T) {
 
 	t.Run("soft deleted username remains reserved", func(t *testing.T) {
 		ctx := context.Background()
-		createSoftDeletedUser(t, repo, userapp.CreateUserInput{Nickname: "Deleted Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000003"), Username: "reserved-alice", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		createSoftDeletedUser(t, repo, userapplication.CreateUserInput{Nickname: "Deleted Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000003"), Username: "reserved-alice", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
 
-		_, err := repo.Create(ctx, userapp.CreateUserInput{Nickname: "New Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000004"), Username: "reserved-alice", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		_, err := repo.Create(ctx, userapplication.CreateUserInput{Nickname: "New Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000004"), Username: "reserved-alice", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
 
 		if !errors.Is(err, userdomain.ErrUserAlreadyExists) {
 			t.Fatalf("err = %v, want userdomain.ErrUserAlreadyExists", err)
@@ -84,7 +84,7 @@ func TestUserRepositoryReturnsDomainUsers(t *testing.T) {
 	ctx := context.Background()
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000101")
 
-	created, err := repo.Create(ctx, userapp.CreateUserInput{Nickname: "Domain Alice", UserID: userID, Username: "domain-alice", PasswordHash: "hash", Status: userdomain.UserStatusMustChangePassword})
+	created, err := repo.Create(ctx, userapplication.CreateUserInput{Nickname: "Domain Alice", UserID: userID, Username: "domain-alice", PasswordHash: "hash", Status: userdomain.UserStatusMustChangePassword})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestUserRepositoryReturnsDomainUsers(t *testing.T) {
 	assertSameUser(t, byID, created)
 
 	status := userdomain.UserStatusMustChangePassword
-	users, hasNext, err := repo.ListUsers(ctx, userapp.ListUsersInput{Limit: 10, Username: "domain-alice", Status: &status})
+	users, hasNext, err := repo.ListUsers(ctx, userapplication.ListUsersInput{Limit: 10, Username: "domain-alice", Status: &status})
 	if err != nil {
 		t.Fatalf("ListUsers: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestUserRepositoryListUsersBoundaries(t *testing.T) {
 	t.Run("empty page", func(t *testing.T) {
 		repo := newTestUserStore(t)
 
-		users, hasNext, err := repo.ListUsers(context.Background(), userapp.ListUsersInput{Limit: 10})
+		users, hasNext, err := repo.ListUsers(context.Background(), userapplication.ListUsersInput{Limit: 10})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
@@ -125,11 +125,11 @@ func TestUserRepositoryListUsersBoundaries(t *testing.T) {
 	t.Run("paginates with stable user id order", func(t *testing.T) {
 		repo := newTestUserStore(t)
 		ctx := context.Background()
-		first := createTestUser(t, repo, userapp.CreateUserInput{Nickname: "Page One", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000201"), Username: "page-one", PasswordHash: "hash-1", Status: userdomain.UserStatusNormal})
-		second := createTestUser(t, repo, userapp.CreateUserInput{Nickname: "Page Two", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000202"), Username: "page-two", PasswordHash: "hash-2", Status: userdomain.UserStatusDisabled})
-		third := createTestUser(t, repo, userapp.CreateUserInput{Nickname: "Page Three", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000203"), Username: "page-three", PasswordHash: "hash-3", Status: userdomain.UserStatusMustChangePassword})
+		first := createTestUser(t, repo, userapplication.CreateUserInput{Nickname: "Page One", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000201"), Username: "page-one", PasswordHash: "hash-1", Status: userdomain.UserStatusNormal})
+		second := createTestUser(t, repo, userapplication.CreateUserInput{Nickname: "Page Two", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000202"), Username: "page-two", PasswordHash: "hash-2", Status: userdomain.UserStatusDisabled})
+		third := createTestUser(t, repo, userapplication.CreateUserInput{Nickname: "Page Three", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000203"), Username: "page-three", PasswordHash: "hash-3", Status: userdomain.UserStatusMustChangePassword})
 
-		users, hasNext, err := repo.ListUsers(ctx, userapp.ListUsersInput{Limit: 2})
+		users, hasNext, err := repo.ListUsers(ctx, userapplication.ListUsersInput{Limit: 2})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
@@ -143,7 +143,7 @@ func TestUserRepositoryListUsersBoundaries(t *testing.T) {
 		assertSameUserValue(t, users[0], first)
 		assertSameUserValue(t, users[1], second)
 
-		users, hasNext, err = repo.ListUsers(ctx, userapp.ListUsersInput{AfterUserID: &second.UserID, Limit: 2})
+		users, hasNext, err = repo.ListUsers(ctx, userapplication.ListUsersInput{AfterUserID: &second.UserID, Limit: 2})
 		if err != nil {
 			t.Fatalf("ListUsers after cursor: %v", err)
 		}
@@ -156,18 +156,18 @@ func TestUserRepositoryListUsersBoundaries(t *testing.T) {
 	t.Run("filters by nickname username status and combined predicates", func(t *testing.T) {
 		repo := newTestUserStore(t)
 		ctx := context.Background()
-		createTestUser(t, repo, userapp.CreateUserInput{Nickname: "Alice Ops", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000211"), Username: "alice-ops", PasswordHash: "hash-1", Status: userdomain.UserStatusNormal})
-		createTestUser(t, repo, userapp.CreateUserInput{Nickname: "Alice Audit", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000212"), Username: "alice-audit", PasswordHash: "hash-2", Status: userdomain.UserStatusDisabled})
-		createTestUser(t, repo, userapp.CreateUserInput{Nickname: "Bob Ops", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000213"), Username: "bob-ops", PasswordHash: "hash-3", Status: userdomain.UserStatusMustChangePassword})
+		createTestUser(t, repo, userapplication.CreateUserInput{Nickname: "Alice Ops", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000211"), Username: "alice-ops", PasswordHash: "hash-1", Status: userdomain.UserStatusNormal})
+		createTestUser(t, repo, userapplication.CreateUserInput{Nickname: "Alice Audit", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000212"), Username: "alice-audit", PasswordHash: "hash-2", Status: userdomain.UserStatusDisabled})
+		createTestUser(t, repo, userapplication.CreateUserInput{Nickname: "Bob Ops", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000213"), Username: "bob-ops", PasswordHash: "hash-3", Status: userdomain.UserStatusMustChangePassword})
 
-		assertListUsernames(t, repo, userapp.ListUsersInput{Limit: 10, Nickname: "Alice"}, []string{"alice-ops", "alice-audit"})
-		assertListUsernames(t, repo, userapp.ListUsersInput{Limit: 10, Username: "bob-ops"}, []string{"bob-ops"})
+		assertListUsernames(t, repo, userapplication.ListUsersInput{Limit: 10, Nickname: "Alice"}, []string{"alice-ops", "alice-audit"})
+		assertListUsernames(t, repo, userapplication.ListUsersInput{Limit: 10, Username: "bob-ops"}, []string{"bob-ops"})
 
 		disabled := userdomain.UserStatusDisabled
-		assertListUsernames(t, repo, userapp.ListUsersInput{Limit: 10, Status: &disabled}, []string{"alice-audit"})
-		assertListUsernames(t, repo, userapp.ListUsersInput{Limit: 10, Nickname: "Alice", Username: "alice-audit", Status: &disabled}, []string{"alice-audit"})
+		assertListUsernames(t, repo, userapplication.ListUsersInput{Limit: 10, Status: &disabled}, []string{"alice-audit"})
+		assertListUsernames(t, repo, userapplication.ListUsersInput{Limit: 10, Nickname: "Alice", Username: "alice-audit", Status: &disabled}, []string{"alice-audit"})
 
-		users, hasNext, err := repo.ListUsers(ctx, userapp.ListUsersInput{Limit: 10, Nickname: "Missing"})
+		users, hasNext, err := repo.ListUsers(ctx, userapplication.ListUsersInput{Limit: 10, Nickname: "Missing"})
 		if err != nil {
 			t.Fatalf("ListUsers missing filter: %v", err)
 		}
@@ -179,10 +179,10 @@ func TestUserRepositoryListUsersBoundaries(t *testing.T) {
 	t.Run("excludes soft deleted users from rows and has next", func(t *testing.T) {
 		repo := newTestUserStore(t)
 		ctx := context.Background()
-		active := createTestUser(t, repo, userapp.CreateUserInput{Nickname: "Active Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000221"), Username: "active-alice", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
-		createSoftDeletedUser(t, repo, userapp.CreateUserInput{Nickname: "Deleted Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000222"), Username: "deleted-alice-list", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		active := createTestUser(t, repo, userapplication.CreateUserInput{Nickname: "Active Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000221"), Username: "active-alice", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		createSoftDeletedUser(t, repo, userapplication.CreateUserInput{Nickname: "Deleted Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000222"), Username: "deleted-alice-list", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
 
-		users, hasNext, err := repo.ListUsers(ctx, userapp.ListUsersInput{Limit: 10, Nickname: "Alice"})
+		users, hasNext, err := repo.ListUsers(ctx, userapplication.ListUsersInput{Limit: 10, Nickname: "Alice"})
 
 		if err != nil {
 			t.Fatalf("ListUsers: %v", err)
@@ -195,12 +195,12 @@ func TestUserRepositoryListUsersBoundaries(t *testing.T) {
 }
 
 func TestUserListPredicates(t *testing.T) {
-	if got := buildListPredicates(userapp.ListUsersInput{}); len(got) != 1 {
+	if got := buildListPredicates(userapplication.ListUsersInput{}); len(got) != 1 {
 		t.Fatalf("predicates = %d, want 1", len(got))
 	}
 
 	status := userdomain.UserStatusNormal
-	got := buildListPredicates(userapp.ListUsersInput{Nickname: "Ali", Username: "alice", Status: &status})
+	got := buildListPredicates(userapplication.ListUsersInput{Nickname: "Ali", Username: "alice", Status: &status})
 	if len(got) != 4 {
 		t.Fatalf("predicates = %d, want 4", len(got))
 	}
@@ -215,7 +215,7 @@ func newTestUserStore(t *testing.T) *userStore {
 	return NewUserStore(UserStoreParams{Client: client})
 }
 
-func createTestUser(t *testing.T, repo *userStore, input userapp.CreateUserInput) *userdomain.User {
+func createTestUser(t *testing.T, repo *userStore, input userapplication.CreateUserInput) *userdomain.User {
 	t.Helper()
 	created, err := repo.Create(context.Background(), input)
 	if err != nil {
@@ -224,7 +224,7 @@ func createTestUser(t *testing.T, repo *userStore, input userapp.CreateUserInput
 	return created
 }
 
-func createSoftDeletedUser(t *testing.T, repo *userStore, input userapp.CreateUserInput) {
+func createSoftDeletedUser(t *testing.T, repo *userStore, input userapplication.CreateUserInput) {
 	t.Helper()
 	ctx := context.Background()
 	created, err := repo.Create(ctx, input)
@@ -254,7 +254,7 @@ func assertSameUserValue(t *testing.T, got userdomain.User, want *userdomain.Use
 	}
 }
 
-func assertListUsernames(t *testing.T, repo *userStore, input userapp.ListUsersInput, want []string) {
+func assertListUsernames(t *testing.T, repo *userStore, input userapplication.ListUsersInput, want []string) {
 	t.Helper()
 	users, hasNext, err := repo.ListUsers(context.Background(), input)
 	if err != nil {

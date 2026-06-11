@@ -12,7 +12,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
-	authapp "github.com/aegiscore/user-service/internal/features/auth/app"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
@@ -188,7 +188,7 @@ func TestTokenVersionValidatorBackfillsMiniredisCacheOnMiss(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	users := &tokenVersionRepositoryStub{version: 7}
-	validator := authapp.NewTokenVersionValidator(users, store)
+	validator := authapplication.NewTokenVersionValidator(users, store)
 	ctx := context.Background()
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 7)
@@ -223,7 +223,7 @@ func TestTokenVersionValidatorUsesMiniredisCacheHitWithoutRepositoryLookup(t *te
 		t.Fatalf("CacheTokenVersion: %v", err)
 	}
 	users := &tokenVersionRepositoryStub{err: errors.New("database should not be read")}
-	validator := authapp.NewTokenVersionValidator(users, store)
+	validator := authapplication.NewTokenVersionValidator(users, store)
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 8)
 
@@ -243,7 +243,7 @@ func TestTokenVersionValidatorRejectsStaleTokenUsingMiniredisCache(t *testing.T)
 		t.Fatalf("CacheTokenVersion: %v", err)
 	}
 	users := &tokenVersionRepositoryStub{err: errors.New("database should not be read")}
-	validator := authapp.NewTokenVersionValidator(users, store)
+	validator := authapplication.NewTokenVersionValidator(users, store)
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 8)
 
@@ -271,7 +271,7 @@ func TestTokenVersionCacheRefreshMakesStaleTokenObservable(t *testing.T) {
 	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
 		t.Fatalf("DeleteAllUserSessions: %v", err)
 	}
-	validator := authapp.NewTokenVersionValidator(&tokenVersionRepositoryStub{err: errors.New("database should not be read")}, store)
+	validator := authapplication.NewTokenVersionValidator(&tokenVersionRepositoryStub{err: errors.New("database should not be read")}, store)
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 5)
 

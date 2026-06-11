@@ -1,7 +1,7 @@
 package user
 
 import (
-	userapp "github.com/aegiscore/user-service/internal/features/user/app"
+	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userpostgres "github.com/aegiscore/user-service/internal/features/user/infra/postgres"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 	"go.uber.org/fx"
@@ -12,9 +12,9 @@ var Module = fx.Module("feature-user",
 	fx.Provide(
 		fx.Annotate(
 			userpostgres.NewUserStore,
-			fx.As(new(userapp.UserProfileStore)),
+			fx.As(new(userapplication.UserProfileStore)),
 		),
-		userapp.NewUserService,
+		userapplication.NewUserService,
 		userhttp.NewUserController,
 	),
 )

@@ -6,7 +6,7 @@ import (
 
 	"github.com/aegiscore/user-service/ent"
 	entuser "github.com/aegiscore/user-service/ent/user"
-	userapp "github.com/aegiscore/user-service/internal/features/user/app"
+	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/google/uuid"
 	"go.uber.org/fx"
@@ -16,7 +16,7 @@ type userStore struct {
 	client *ent.Client
 }
 
-var _ userapp.UserProfileStore = (*userStore)(nil)
+var _ userapplication.UserProfileStore = (*userStore)(nil)
 
 // UserStoreParams 包含 PostgreSQL-backed 用户 store 所需的 Fx 输入。
 type UserStoreParams struct {
@@ -31,7 +31,7 @@ func NewUserStore(params UserStoreParams) *userStore {
 }
 
 // Create 插入用户记录，并将唯一约束冲突映射为 ErrUserAlreadyExists。
-func (s *userStore) Create(ctx context.Context, input userapp.CreateUserInput) (*userdomain.User, error) {
+func (s *userStore) Create(ctx context.Context, input userapplication.CreateUserInput) (*userdomain.User, error) {
 	created, err := s.client.User.Create().
 		SetUserID(input.UserID).
 		SetNickname(input.Nickname).
@@ -61,7 +61,7 @@ func (s *userStore) GetByUserID(ctx context.Context, userID uuid.UUID) (*userdom
 }
 
 // ListUsers 返回一页未软删除用户，以及是否存在下一页。
-func (s *userStore) ListUsers(ctx context.Context, input userapp.ListUsersInput) ([]userdomain.User, bool, error) {
+func (s *userStore) ListUsers(ctx context.Context, input userapplication.ListUsersInput) ([]userdomain.User, bool, error) {
 	predicates := buildListPredicates(input)
 	if input.AfterUserID != nil {
 		predicates = append(predicates, entuser.UserIDGT(*input.AfterUserID))

@@ -10,8 +10,8 @@
 
 ## 规则
 
-- Feature app service 仍通过自己拥有的 ports 表达外部能力需求，例如 `internal/features/<feature>/app/ports.go`。
-- Integration adapter 只在确有真实外部系统调用时实现 feature app port。
+- Feature application service 仍通过自己拥有的 ports 表达外部能力需求，例如 `internal/features/<feature>/application/ports.go`。
+- Integration adapter 只在确有真实外部系统调用时实现 feature application port。
 - 不要在这里定义为了 adapter 方便而扩张的大接口。
 - 不要在这里实现登录状态机、跨 store 事务、HTTP controller、Gin response 输出或本服务持久化访问。
 - 不要把尚不存在的外部系统 client、broker dependency 或 generated code 预先放进来。

@@ -6,8 +6,8 @@
 
 - generated gRPC client 的薄包装。
 - metadata、deadline、status code 和外部错误语义映射。
-- protobuf DTO 与 feature app command/result 或 domain 值对象的转换。
-- 对 feature app port 的实现。
+- protobuf DTO 与 feature application command/result 或 domain 值对象的转换。
+- 对 feature application port 的实现。
 
 禁止放置：
 

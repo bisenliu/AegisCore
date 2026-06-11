@@ -6,7 +6,7 @@ import (
 
 	"github.com/aegiscore/user-service/ent"
 	entuser "github.com/aegiscore/user-service/ent/user"
-	authapp "github.com/aegiscore/user-service/internal/features/auth/app"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/google/uuid"
@@ -17,8 +17,8 @@ type credentialStore struct {
 	client *ent.Client
 }
 
-var _ authapp.UserCredentialStore = (*credentialStore)(nil)
-var _ authapp.UserTokenVersionStore = (*credentialStore)(nil)
+var _ authapplication.UserCredentialStore = (*credentialStore)(nil)
+var _ authapplication.UserTokenVersionStore = (*credentialStore)(nil)
 
 // CredentialStoreParams 包含 PostgreSQL-backed 认证凭据 store 所需的 Fx 输入。
 type CredentialStoreParams struct {

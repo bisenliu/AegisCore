@@ -1,4 +1,4 @@
-package app
+package application
 
 import (
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"

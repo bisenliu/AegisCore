@@ -6,12 +6,12 @@ import (
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/pagination"
 	userapi "github.com/aegiscore/user-service/internal/features/user/api"
-	userapp "github.com/aegiscore/user-service/internal/features/user/app"
+	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
 )
 
-func toUserResponse(result *userapp.UserResult) userapi.UserResponse {
+func toUserResponse(result *userapplication.UserResult) userapi.UserResponse {
 	user := result.User
 	return userapi.UserResponse{
 		UserID:    user.UserID.String(),
@@ -23,7 +23,7 @@ func toUserResponse(result *userapp.UserResult) userapi.UserResponse {
 	}
 }
 
-func toUserListResponse(result *userapp.ListUsersResult) pagination.PaginatedData[userapi.UserResponse] {
+func toUserListResponse(result *userapplication.ListUsersResult) pagination.PaginatedData[userapi.UserResponse] {
 	items := make([]userapi.UserResponse, 0, len(result.Items))
 	for i := range result.Items {
 		items = append(items, userapi.UserResponse{

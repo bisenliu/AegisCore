@@ -22,7 +22,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
 3. `user-service/internal/bootstrap.AppModule` 导入共享 runtime module、feature modules、`providers.Module`，并提供 HTTP server 生命周期。
 4. `user-service/internal/providers.Module` 显式提供 Redis/PostgreSQL named providers、Ent clients、JWT service、Gin engine 和 HTTP route registration。
-5. User/Auth feature modules 自己组装 feature-local infra adapter、app service 和 HTTP controller。
+5. User/Auth feature modules 自己组装 feature-local infra adapter、application service 和 HTTP controller。
 6. `user-service/internal/providers/routes.go` 适配依赖并调用 `router.RegisterUserServiceHTTPRoutes`；`router.go` 负责 route graph 总装和 `/api/v1` 分组，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向。
 7. Fx lifecycle 启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
@@ -36,7 +36,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | 路由 provider | `user-service/internal/providers/routes.go` | 将 Fx 依赖适配为 router route params |
 | 路由总装 | `user-service/internal/router/router.go`、`health.go`、`swagger.go` | `router.go` 创建 public/protected route groups 并总装 route graph，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向 |
 | 参数解析 | `features/*/transport/http/controller.go` | 绑定 API DTO，执行边界校验，并映射为 command/query |
-| 业务调用 | `features/*/app/` | 编排用户资料或认证会话用例 |
+| 业务调用 | `features/*/application/` | 编排用户资料或认证会话用例 |
 | 数据访问 | `features/*/infra/postgres/`, `features/*/infra/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
 | 响应输出 | `common/http/response/` + `common/contract/response/` | 通过 Gin writer 输出统一 `success/code/message/data` 信封，并复用稳定错误码与分页契约 |
 
@@ -52,38 +52,38 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | 目录 | 责任 |
 |---|---|
 | `api/` | HTTP request/response DTO 和 Swagger 文档模型 |
-| `app/` | service、commands、queries、ports、use case mapper 和业务编排 |
+| `application/` | service、commands、queries、ports、use case mapper 和业务编排 |
 | `domain/` | 领域实体、值对象、枚举、领域错误和纯业务规则 |
 | `transport/http/` | Gin controller、route registration、HTTP DTO validation 和边界映射 |
 | `infra/postgres/` | Ent/PostgreSQL adapter 和 predicate 构造 |
 | `infra/redis/` | Redis adapter；仅在 feature 需要 Redis 时存在 |
-| `module.go` | Feature-local Fx module，组装 app、transport 和 infra provider |
+| `module.go` | Feature-local Fx module，组装 application、transport 和 infra provider |
 
 不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。跨 feature 的共享业务代码也不要默认放到 `internal/shared`；只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并需在本文件补充 owner、准入理由和禁止事项。
 
 服务级 provider 统一放在 `user-service/internal/providers`。该包只负责把共享 runtime、common security、Gin、router 和 Ent 适配为用户服务 Fx 依赖；不得承载 feature 业务逻辑、HTTP route 定义或跨服务共享基础能力。`internal/bootstrap` 只负责 `fx.New`、顶层 `AppModule` 总装和 HTTP server 生命周期。
 
-外部系统防腐层统一放在 `user-service/internal/integration`，并按 `http/`、`grpc/`、`events/` 分类。该边界只在有真实外部系统调用时承载协议 client adapter、外部 DTO 映射、外部错误语义归一化和传输细节；当前没有真实外部调用时只保留 README 或 package doc。`integration` 不属于 feature 内部业务编排，不拥有用例流程、登录状态机、跨 store 事务、HTTP controller 或本服务持久化访问。Feature app service 仍通过消费侧 ports 表达外部能力需求，integration adapter 只实现这些最小接口。
+外部系统防腐层统一放在 `user-service/internal/integration`，并按 `http/`、`grpc/`、`events/` 分类。该边界只在有真实外部系统调用时承载协议 client adapter、外部 DTO 映射、外部错误语义归一化和传输细节；当前没有真实外部调用时只保留 README 或 package doc。`integration` 不属于 feature 内部业务编排，不拥有用例流程、登录状态机、跨 store 事务、HTTP controller 或本服务持久化访问。Feature application service 仍通过消费侧 ports 表达外部能力需求，integration adapter 只实现这些最小接口。
 
 ## 6. Dependency Rules
 
 | 层 | 可以依赖 | 禁止依赖 |
 |---|---|---|
 | `domain` | 标准库、稳定值对象 | Gin、Ent、Redis、config、response envelope |
-| `app` | `domain`、消费侧端口接口、common 安全原语 | Gin、Ent、Redis、HTTP binder |
-| `transport/http` | `api`、`app`、Gin、response envelope、feature-local validation | Ent、Redis、SQL |
-| `infra/postgres` | Ent、SQL、app ports、domain | Gin、HTTP response |
-| `infra/redis` | Redis client、app ports、domain | Gin、HTTP response |
-| `integration/*` | 外部 SDK/client、feature app ports、domain、common runtime/security 原语 | Gin response、Ent、feature service 业务编排、service-owned persistence adapter |
+| `application` | `domain`、消费侧端口接口、common 安全原语 | Gin、Ent、Redis、HTTP binder |
+| `transport/http` | `api`、`application`、Gin、response envelope、feature-local validation | Ent、Redis、SQL |
+| `infra/postgres` | Ent、SQL、application ports、domain | Gin、HTTP response |
+| `infra/redis` | Redis client、application ports、domain | Gin、HTTP response |
+| `integration/*` | 外部 SDK/client、feature application ports、domain、common runtime/security 原语 | Gin response、Ent、feature service 业务编排、service-owned persistence adapter |
 | `module.go` | Fx、feature 内部包 | 业务逻辑 |
 
-Ports 由消费侧 feature 拥有。Infrastructure adapter 只实现 app 层定义的最小接口，不为了自身方便定义大接口。
+Ports 由消费侧 feature 拥有。Infrastructure adapter 只实现 application 层定义的最小接口，不为了自身方便定义大接口。
 
-Controller 必须把 HTTP DTO 映射为 app command/query 后再调用 service。Service 不接收 `api/*Request`，也不导入 Gin、Ent predicate、Redis client 或 HTTP binder。
+Controller 必须把 HTTP DTO 映射为 application command/query 后再调用 service。Service 不接收 `api/*Request`，也不导入 Gin、Ent predicate、Redis client 或 HTTP binder。
 
 Ent predicate 构造封装在 `infra/postgres` 内。Adapter 可以做字段裁剪、模型转换和存储错误转换，但不得承载复杂业务编排、登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
 
-Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 client 边界处理，但不得为了 adapter 自身方便定义大接口。外部能力接口归消费侧 feature app 层所有，adapter 只负责实现。
+Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 client 边界处理，但不得为了 adapter 自身方便定义大接口。外部能力接口归消费侧 feature application 层所有，adapter 只负责实现。
 
 ## 7. Common Organization
 

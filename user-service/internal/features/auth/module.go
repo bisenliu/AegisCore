@@ -1,7 +1,7 @@
 package auth
 
 import (
-	authapp "github.com/aegiscore/user-service/internal/features/auth/app"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	authpostgres "github.com/aegiscore/user-service/internal/features/auth/infra/postgres"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infra/redis"
@@ -14,19 +14,19 @@ var Module = fx.Module("feature-auth",
 	fx.Provide(
 		fx.Annotate(
 			authpostgres.NewCredentialStore,
-			fx.As(new(authapp.UserCredentialStore)),
+			fx.As(new(authapplication.UserCredentialStore)),
 		),
 		fx.Annotate(
 			authpostgres.NewCredentialStore,
-			fx.As(new(authapp.UserTokenVersionStore)),
+			fx.As(new(authapplication.UserTokenVersionStore)),
 		),
 		authdomain.NewRedisKeyBuilder,
 		fx.Annotate(
 			authredis.NewSessionStore,
-			fx.As(new(authapp.AuthSessionStore)),
+			fx.As(new(authapplication.AuthSessionStore)),
 		),
-		authapp.NewTokenVersionValidator,
-		authapp.NewAuthService,
+		authapplication.NewTokenVersionValidator,
+		authapplication.NewAuthService,
 		authhttp.NewAuthController,
 	),
 )

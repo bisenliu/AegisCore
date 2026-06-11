@@ -5,18 +5,18 @@ import (
 	"github.com/aegiscore/common/http/response"
 	commonvalidation "github.com/aegiscore/common/validation"
 	userapi "github.com/aegiscore/user-service/internal/features/user/api"
-	userapp "github.com/aegiscore/user-service/internal/features/user/app"
+	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	"github.com/gin-gonic/gin"
 )
 
 // UserController 处理用户资料端点的 HTTP 请求。
 type UserController struct {
-	userService userapp.UserService
+	userService userapplication.UserService
 	validator   *commonvalidation.Validator
 }
 
 // NewUserController 使用 service 和请求 validator 依赖构造用户控制器。
-func NewUserController(userService userapp.UserService, validator *commonvalidation.Validator) *UserController {
+func NewUserController(userService userapplication.UserService, validator *commonvalidation.Validator) *UserController {
 	return &UserController{userService: userService, validator: validator}
 }
 
@@ -48,7 +48,7 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	users, err := ctl.userService.ListUsers(c.Request.Context(), userapp.ListUsersQuery{
+	users, err := ctl.userService.ListUsers(c.Request.Context(), userapplication.ListUsersQuery{
 		Cursor:   cursor,
 		PageSize: req.PageSize,
 		Limit:    req.Limit,
@@ -87,7 +87,7 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := ctl.userService.CreateUser(c.Request.Context(), userapp.CreateUserCommand{
+	user, err := ctl.userService.CreateUser(c.Request.Context(), userapplication.CreateUserCommand{
 		Nickname: req.Nickname,
 		Username: req.Username,
 		Password: req.Password,

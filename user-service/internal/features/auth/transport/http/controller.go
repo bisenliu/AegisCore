@@ -6,13 +6,13 @@ import (
 	commonauth "github.com/aegiscore/common/security/auth"
 	commonvalidation "github.com/aegiscore/common/validation"
 	authapi "github.com/aegiscore/user-service/internal/features/auth/api"
-	authapp "github.com/aegiscore/user-service/internal/features/auth/app"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	"github.com/gin-gonic/gin"
 )
 
 // AuthController 处理认证和会话端点的 HTTP 请求。
 type AuthController struct {
-	authService authapp.AuthService
+	authService authapplication.AuthService
 	validator   *commonvalidation.Validator
 }
 
@@ -38,7 +38,7 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	result, err := ctl.authService.ChangePassword(c.Request.Context(), authapp.ChangePasswordCommand{
+	result, err := ctl.authService.ChangePassword(c.Request.Context(), authapplication.ChangePasswordCommand{
 		Token:       req.Token,
 		NewPassword: req.NewPassword,
 	})
@@ -50,7 +50,7 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 }
 
 // NewAuthController 使用 service 和 validator 依赖构造认证控制器。
-func NewAuthController(authService authapp.AuthService, validator *commonvalidation.Validator) *AuthController {
+func NewAuthController(authService authapplication.AuthService, validator *commonvalidation.Validator) *AuthController {
 	return &AuthController{authService: authService, validator: validator}
 }
 
@@ -75,7 +75,7 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	tokens, err := ctl.authService.Login(c.Request.Context(), authapp.LoginCommand{
+	tokens, err := ctl.authService.Login(c.Request.Context(), authapplication.LoginCommand{
 		Username: req.Username,
 		Password: req.Password,
 	})
@@ -107,7 +107,7 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	tokens, err := ctl.authService.Refresh(c.Request.Context(), authapp.RefreshTokenCommand{
+	tokens, err := ctl.authService.Refresh(c.Request.Context(), authapplication.RefreshTokenCommand{
 		RefreshToken: req.RefreshToken,
 	})
 	if err != nil {

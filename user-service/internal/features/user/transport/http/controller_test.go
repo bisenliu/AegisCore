@@ -12,7 +12,7 @@ import (
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/validation"
-	userapp "github.com/aegiscore/user-service/internal/features/user/app"
+	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
 	"github.com/gin-gonic/gin"
@@ -29,7 +29,7 @@ func TestUserControllerGetByUserID(t *testing.T) {
 	t.Run("valid ID", func(t *testing.T) {
 		createdAt := int64(1780048800000)
 		updatedAt := int64(1780052400000)
-		service := &stubUserService{response: &userapp.UserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}}
+		service := &stubUserService{response: &userapplication.UserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}}
 
 		status, envelope := executeGetByUserID(t, service, controllerTestUserID)
 
@@ -87,7 +87,7 @@ func TestUserControllerCreate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	createdUser := &userapp.UserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}
+	createdUser := &userapplication.UserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}
 
 	t.Run("valid body", func(t *testing.T) {
 		service := &stubUserService{createResponse: createdUser}
@@ -183,10 +183,10 @@ func TestUserControllerList(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	listResponse := &userapp.ListUsersResult{Items: []userdomain.User{{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, PageSize: 20, NextCursor: controllerTestUserID, HasNext: true}
+	listResponse := &userapplication.ListUsersResult{Items: []userdomain.User{{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, PageSize: 20, NextCursor: controllerTestUserID, HasNext: true}
 
 	t.Run("default pagination", func(t *testing.T) {
-		service := &stubUserService{listResponse: &userapp.ListUsersResult{Items: []userdomain.User{}, PageSize: 10}}
+		service := &stubUserService{listResponse: &userapplication.ListUsersResult{Items: []userdomain.User{}, PageSize: 10}}
 
 		status, envelope := executeList(t, service, "/api/v1/users")
 
@@ -217,7 +217,7 @@ func TestUserControllerList(t *testing.T) {
 	})
 
 	t.Run("page size capped", func(t *testing.T) {
-		service := &stubUserService{listResponse: &userapp.ListUsersResult{Items: []userdomain.User{}, PageSize: 100}}
+		service := &stubUserService{listResponse: &userapplication.ListUsersResult{Items: []userdomain.User{}, PageSize: 100}}
 
 		status, envelope := executeList(t, service, "/api/v1/users?page_size=101")
 
@@ -269,18 +269,18 @@ func TestUserControllerList(t *testing.T) {
 }
 
 type stubUserService struct {
-	response       *userapp.UserResult
+	response       *userapplication.UserResult
 	err            error
 	gotID          uuid.UUID
-	createResponse *userapp.UserResult
+	createResponse *userapplication.UserResult
 	createErr      error
-	gotCreate      userapp.CreateUserCommand
-	listResponse   *userapp.ListUsersResult
+	gotCreate      userapplication.CreateUserCommand
+	listResponse   *userapplication.ListUsersResult
 	listErr        error
-	gotList        userapp.ListUsersQuery
+	gotList        userapplication.ListUsersQuery
 }
 
-func (s *stubUserService) CreateUser(_ context.Context, req userapp.CreateUserCommand) (*userapp.UserResult, error) {
+func (s *stubUserService) CreateUser(_ context.Context, req userapplication.CreateUserCommand) (*userapplication.UserResult, error) {
 	s.gotCreate = req
 	if s.createErr != nil {
 		return nil, s.createErr
@@ -288,7 +288,7 @@ func (s *stubUserService) CreateUser(_ context.Context, req userapp.CreateUserCo
 	return s.createResponse, nil
 }
 
-func (s *stubUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapp.UserResult, error) {
+func (s *stubUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapplication.UserResult, error) {
 	s.gotID = userID
 	if s.err != nil {
 		return nil, s.err
@@ -296,7 +296,7 @@ func (s *stubUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*use
 	return s.response, nil
 }
 
-func (s *stubUserService) ListUsers(_ context.Context, req userapp.ListUsersQuery) (*userapp.ListUsersResult, error) {
+func (s *stubUserService) ListUsers(_ context.Context, req userapplication.ListUsersQuery) (*userapplication.ListUsersResult, error) {
 	s.gotList = req
 	if s.listErr != nil {
 		return nil, s.listErr

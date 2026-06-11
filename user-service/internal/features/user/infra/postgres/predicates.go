@@ -3,10 +3,10 @@ package postgres
 import (
 	"github.com/aegiscore/user-service/ent/predicate"
 	entuser "github.com/aegiscore/user-service/ent/user"
-	userapp "github.com/aegiscore/user-service/internal/features/user/app"
+	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 )
 
-func buildListPredicates(input userapp.ListUsersInput) []predicate.User {
+func buildListPredicates(input userapplication.ListUsersInput) []predicate.User {
 	// 所有列表查询先隐藏软删除用户，再应用可选业务过滤条件。
 	predicates := []predicate.User{entuser.DeletedAtIsNil()}
 	if input.Nickname != "" {

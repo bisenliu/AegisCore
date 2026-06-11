@@ -1,4 +1,4 @@
-package app
+package application
 
 // LoginCommand 是用户名密码认证的应用层输入。
 type LoginCommand struct {
