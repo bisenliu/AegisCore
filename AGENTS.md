@@ -16,6 +16,7 @@
 - `common/`：跨服务稳定契约和基础能力，按 `contract`、`runtime`、`http`、`security`、`testing`、`validation` 分类组织；`contract/errors` 承载全局错误码，`contract/pagination` 承载分页契约，`contract/response` 承载 HTTP 响应信封 DTO，`http/binding` 承载 Gin 请求绑定和校验失败响应适配层，`http/response` 承载 Gin 响应输出 helper，`testing` 仅承载跨模块测试基础设施和无业务语义 fixture；不得作为服务特定 helper 的兜底目录。
 - `user-service/`：用户服务 HTTP 运行时和 Go module，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration，以及按 feature 组织的业务代码。
 - `user-service/internal/providers/`：用户服务级 Fx provider，集中承载 Gin engine、HTTP route registration、JWT service、PostgreSQL/Redis named resources 和 Ent clients 的服务侧组装；不得承载 feature 业务逻辑。
+- `user-service/internal/integration/`：用户服务访问外部系统的防腐层边界，按 `http/`、`grpc/`、`events/` 分类组织；当前没有真实外部系统调用时只保留 README 或 package doc，占位不得引入未使用代码。
 - `user-service/internal/features/user/`：用户资料 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/` 和 `module.go` 分层。
 - `user-service/internal/features/auth/`：认证会话 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/`、`infra/redis/` 和 `module.go` 分层。
 - `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产。
@@ -25,7 +26,7 @@
 - CLI 入口：`user-service/cmd/main.go`
 - 服务组装：`user-service/internal/bootstrap/app.go`
 - HTTP server 生命周期：`user-service/internal/bootstrap/server.go`
-- 服务级 provider module：`user-service/internal/providers/module.go`
+- 服务级 provider Fx 组装：`user-service/internal/providers/fx.go`
 - Gin engine provider：`user-service/internal/providers/gin.go`
 - HTTP 路由 provider：`user-service/internal/providers/routes.go`
 - 认证 JWT provider：`user-service/internal/providers/auth.go`
@@ -59,6 +60,7 @@
 - 用户列表分页查询：`GET /api/v1/users`
 - 认证会话控制：登录、刷新、强制改密、退出当前设备、退出全部设备。
 - HTTP 服务运行时：启动、运行、路由注册和优雅停止。
+- 外部系统防腐层边界：`internal/integration/http`、`grpc`、`events` 只承载真实外部调用的协议适配规则，当前不实现真实 client。
 - 共享基础设施：配置、日志、Redis/PostgreSQL/Ent 运行时依赖。
 - API 响应契约：统一成功/失败响应信封、全局错误码和分页响应模型。
 - 数据库迁移：通过 Ent schema 和 Atlas 维护用户服务 SQL migration。
@@ -94,6 +96,7 @@
 - 每个 feature 自己注册路由：`transport/http/routes.go` 暴露 `RegisterRoutes`，认证 feature 可拆分 `RegisterPublicRoutes` 和 `RegisterProtectedRoutes`；全局 router 的 `router.go` 负责 route graph 总装和 `/api/v1` feature 路由分组，`health.go` 负责 `/healthz`，`swagger.go` 负责 Swagger UI 和文档重定向。
 - 每个 feature 自己提供 Fx module：`features/<feature>/module.go` 暴露 `Module` 并组装 feature 内部 service、controller 和 infra provider；服务级 Gin engine、路由注册、JWT、PostgreSQL、Redis 和 Ent provider 放在 `internal/providers`。
 - `bootstrap.AppModule` 只负责顶层 Fx module 总装和 HTTP server lifecycle，具体服务级 provider 实现不得放回 `internal/bootstrap`。
+- 外部系统防腐层统一使用 `internal/integration`，按 `http/`、`grpc/`、`events/` 分类；不要新增复数 `internal/integrations`。Integration adapter 只做外部协议、DTO、错误语义和 client 调用适配，不承载 feature 业务编排、HTTP controller、Ent/Redis 持久化 adapter 或预设的 order/payment client。
 - 基础设施目录统一使用 `infra/postgres/`、`infra/redis/` 等；不要使用 `store/` 作为目录名。
 - 共享基础能力优先放在 `common/` 对应分类目录中；服务特定规则保留在服务模块内。
 - HTTP API 应使用 `common/contract/response.Envelope` 格式返回，并通过 `common/http/response` 写出 Gin 响应。
@@ -110,6 +113,7 @@
 | `transport/http` | `api`、`app`、Gin、response envelope、feature-local validation | Ent、Redis、SQL |
 | `infra/postgres` | Ent、SQL、app ports、domain | Gin、HTTP response |
 | `infra/redis` | Redis client、app ports、domain | Gin、HTTP response |
+| `integration/*` | 外部 SDK/client、feature app ports、domain、common runtime/security 原语 | Gin response、Ent、feature service 业务编排、service-owned persistence adapter |
 | `module.go` | Fx、feature 内部包 | 业务逻辑 |
 
 Adapter 可以做字段裁剪和模型转换，但不得承载复杂业务编排。禁止在 adapter 中实现登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。

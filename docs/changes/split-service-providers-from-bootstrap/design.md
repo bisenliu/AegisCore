@@ -32,7 +32,7 @@ user-service/internal/bootstrap/
   server_test.go or http_test.go
 
 user-service/internal/providers/
-  module.go
+  fx.go
   auth.go
   ent.go
   ent_test.go
@@ -50,7 +50,7 @@ user-service/internal/providers/
 
 ## Providers Module
 
-新增 `user-service/internal/providers/module.go`：
+新增 `user-service/internal/providers/fx.go`：
 
 ```go
 package providers

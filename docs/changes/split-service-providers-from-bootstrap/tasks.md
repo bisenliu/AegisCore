@@ -3,7 +3,7 @@
 ## Implementation
 
 - [x] 阅读 `docs/ARCHITECTURE.md`、`docs/DEVELOPMENT.md` 和本 change 的 `proposal.md`、`design.md`，确认 provider split 不改变 feature 分层、HTTP 行为或配置契约。
-- [x] 新增 `user-service/internal/providers/module.go`，提供 `providers.Module` 统一组装服务级 providers 和 `RegisterRoutes` invoke。
+- [x] 新增 `user-service/internal/providers/fx.go`，提供 `providers.Module` 统一组装服务级 providers 和 `RegisterRoutes` invoke。
 - [x] 将 `user-service/internal/bootstrap/gin.go` 迁移到 `user-service/internal/providers/gin.go`，包名改为 `providers`，保留 Gin mode、trusted proxies 和 middleware 顺序。
 - [x] 将 `user-service/internal/bootstrap/routes.go` 迁移到 `user-service/internal/providers/routes.go`，包名改为 `providers`，保留 route params、optional token version validator 和 router 调用语义。
 - [x] 将 `user-service/internal/bootstrap/auth.go` 迁移到 `user-service/internal/providers/auth.go`，包名改为 `providers`，保留 JWT service 构造语义。

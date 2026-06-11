@@ -11,7 +11,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | 模块 | 责任 | 关键位置 |
 |---|---|---|
 | `common` | 跨服务稳定契约与基础能力；不得承载服务特定 helper 或业务语义 | `common/contract/`, `common/runtime/`, `common/http/`, `common/security/`, `common/validation/` |
-| `user-service` | 用户服务运行时、用户资料与认证会话 feature、Ent schema、Atlas migration、Swagger 文档 | `user-service/cmd/`, `user-service/internal/`, `user-service/ent/`, `user-service/migrations/`, `user-service/docs/` |
+| `user-service` | 用户服务运行时、用户资料与认证会话 feature、外部系统防腐层边界、Ent schema、Atlas migration、Swagger 文档 | `user-service/cmd/`, `user-service/internal/`, `user-service/internal/integration/`, `user-service/ent/`, `user-service/migrations/`, `user-service/docs/` |
 | `deployments` | 本地和生产部署资产 | `deployments/compose/`, `deployments/docker/`, `deployments/k8s/`, `deployments/helm/` |
 
 仓库根目录是 workspace，不是业务 Go module。运行 Go 命令时通常进入 `common/` 或 `user-service/`。
@@ -63,6 +63,8 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 服务级 provider 统一放在 `user-service/internal/providers`。该包只负责把共享 runtime、common security、Gin、router 和 Ent 适配为用户服务 Fx 依赖；不得承载 feature 业务逻辑、HTTP route 定义或跨服务共享基础能力。`internal/bootstrap` 只负责 `fx.New`、顶层 `AppModule` 总装和 HTTP server 生命周期。
 
+外部系统防腐层统一放在 `user-service/internal/integration`，并按 `http/`、`grpc/`、`events/` 分类。该边界只在有真实外部系统调用时承载协议 client adapter、外部 DTO 映射、外部错误语义归一化和传输细节；当前没有真实外部调用时只保留 README 或 package doc。`integration` 不属于 feature 内部业务编排，不拥有用例流程、登录状态机、跨 store 事务、HTTP controller 或本服务持久化访问。Feature app service 仍通过消费侧 ports 表达外部能力需求，integration adapter 只实现这些最小接口。
+
 ## 6. Dependency Rules
 
 | 层 | 可以依赖 | 禁止依赖 |
@@ -72,6 +74,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | `transport/http` | `api`、`app`、Gin、response envelope、feature-local validation | Ent、Redis、SQL |
 | `infra/postgres` | Ent、SQL、app ports、domain | Gin、HTTP response |
 | `infra/redis` | Redis client、app ports、domain | Gin、HTTP response |
+| `integration/*` | 外部 SDK/client、feature app ports、domain、common runtime/security 原语 | Gin response、Ent、feature service 业务编排、service-owned persistence adapter |
 | `module.go` | Fx、feature 内部包 | 业务逻辑 |
 
 Ports 由消费侧 feature 拥有。Infrastructure adapter 只实现 app 层定义的最小接口，不为了自身方便定义大接口。
@@ -79,6 +82,8 @@ Ports 由消费侧 feature 拥有。Infrastructure adapter 只实现 app 层定�
 Controller 必须把 HTTP DTO 映射为 app command/query 后再调用 service。Service 不接收 `api/*Request`，也不导入 Gin、Ent predicate、Redis client 或 HTTP binder。
 
 Ent predicate 构造封装在 `infra/postgres` 内。Adapter 可以做字段裁剪、模型转换和存储错误转换，但不得承载复杂业务编排、登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
+
+Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 client 边界处理，但不得为了 adapter 自身方便定义大接口。外部能力接口归消费侧 feature app 层所有，adapter 只负责实现。
 
 ## 7. Common Organization
 
@@ -115,6 +120,7 @@ Ent predicate 构造封装在 `infra/postgres` 内。Adapter 可以做字段裁�
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前声明并连接 `postgres.user_db` 与 `postgres.common_db`。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`。
 - 用户服务的 Redis/PostgreSQL named resource、JWT service、Gin engine 和 Ent clients 由 `user-service/internal/providers/` 提供，其中 Ent clients 由 `providers/ent.go` 基于具名 `*sql.DB` 构建。
+- 用户服务的外部系统防腐层边界位于 `user-service/internal/integration/`；当前没有 order、payment 等真实外部 client，也没有 Kafka、RabbitMQ、NATS 等 broker dependency。
 - 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace header 为 `X-Trace-ID`，Gin context key 为 `trace_id`，日志字段统一为 `trace-id`。
 
 ## 10. Database Migrations
@@ -131,5 +137,6 @@ Ent predicate 构造封装在 `infra/postgres` 内。Adapter 可以做字段裁�
 ## 12. Current Constraints
 
 - 当前 HTTP API 暴露健康检查、创建用户、用户列表、按 `user_id` 查询用户和认证会话接口。
+- 当前没有真实外部系统 client；`internal/integration` 只声明 HTTP、gRPC 和 events 防腐层边界。
 - 配置样例可能包含未来资源配置，但用户服务只初始化自己显式声明的 Redis/PostgreSQL named resources。
 - 启动服务需要 PostgreSQL 和 Redis 可连接；纯单元测试应避免依赖真实外部服务，集成测试需要显式说明依赖。
