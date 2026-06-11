@@ -32,7 +32,9 @@
 - 服务 PostgreSQL provider：`user-service/internal/providers/postgres.go`
 - 服务 Redis provider：`user-service/internal/providers/redis.go`
 - 服务 Ent provider：`user-service/internal/providers/ent.go`
-- Gin router 路由定义：`user-service/internal/router/router.go`
+- Gin router 路由总装：`user-service/internal/router/router.go`
+- 健康检查路由：`user-service/internal/router/health.go`
+- Swagger 路由：`user-service/internal/router/swagger.go`
 - 用户 feature module：`user-service/internal/features/user/module.go`
 - 用户 controller：`user-service/internal/features/user/transport/http/controller.go`
 - 用户 service：`user-service/internal/features/user/app/service.go`
@@ -89,7 +91,7 @@
 - 不要用运行时 `client.Schema.Create(ctx)` 表达 schema 变更；修改 Ent schema 后生成 Ent 代码和 Atlas SQL migration。
 - 按 feature 组织服务内代码：用户资料放在 `internal/features/user`，认证会话放在 `internal/features/auth`。不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。
 - 保持 `transport/http`、`app`、`domain`、`infra/*` 分层：HTTP 解析在 controller，业务编排在 app service，数据库或 Redis 访问在 infra adapter。
-- 每个 feature 自己注册路由：`transport/http/routes.go` 暴露 `RegisterRoutes`，认证 feature 可拆分 `RegisterPublicRoutes` 和 `RegisterProtectedRoutes`；全局 router 只负责 `/api/v1`、认证中间件和 feature 路由总装。
+- 每个 feature 自己注册路由：`transport/http/routes.go` 暴露 `RegisterRoutes`，认证 feature 可拆分 `RegisterPublicRoutes` 和 `RegisterProtectedRoutes`；全局 router 的 `router.go` 负责 route graph 总装和 `/api/v1` feature 路由分组，`health.go` 负责 `/healthz`，`swagger.go` 负责 Swagger UI 和文档重定向。
 - 每个 feature 自己提供 Fx module：`features/<feature>/module.go` 暴露 `Module` 并组装 feature 内部 service、controller 和 infra provider；服务级 Gin engine、路由注册、JWT、PostgreSQL、Redis 和 Ent provider 放在 `internal/providers`。
 - `bootstrap.AppModule` 只负责顶层 Fx module 总装和 HTTP server lifecycle，具体服务级 provider 实现不得放回 `internal/bootstrap`。
 - 基础设施目录统一使用 `infra/postgres/`、`infra/redis/` 等；不要使用 `store/` 作为目录名。

@@ -14,7 +14,7 @@ type HealthResponse struct {
 	Service string `json:"service" example:"aegiscore-user-services"`
 }
 
-func registerSystemRoutes(engine *gin.Engine, serviceName string) {
+func registerHealthRoutes(engine *gin.Engine, serviceName string) {
 	engine.GET("/healthz", healthz(serviceName))
 }
 

@@ -22,9 +22,9 @@ type RouteParams struct {
 	UserController        *userhttp.UserController
 }
 
-// RegisterUserServiceHTTPRoutes 挂载系统、Swagger、认证和用户 API 路由。
+// RegisterUserServiceHTTPRoutes 挂载健康检查、Swagger、认证和用户 API 路由。
 func RegisterUserServiceHTTPRoutes(engine *gin.Engine, params RouteParams) {
-	registerSystemRoutes(engine, params.ServiceName)
+	registerHealthRoutes(engine, params.ServiceName)
 	RegisterSwagger(engine, params.Environment)
 	registerV1Routes(engine, params)
 }
