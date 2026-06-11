@@ -62,6 +62,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | `transport/grpc/` | 未来本服务暴露入站 gRPC API 时的 feature-local transport，承载 gRPC handler、server-side protobuf request/response 映射、gRPC 边界 validation 和 application command/query 映射；当前没有真实 gRPC API 时不得新增业务代码、空 handler、空 service、未使用 proto 或 generated code，只可按需保留 README 或 package doc |
 | `infrastructure/postgres/` | Ent/PostgreSQL adapter 和 predicate 构造 |
 | `infrastructure/redis/` | Redis adapter；仅在 feature 需要 Redis 时存在 |
+| `infrastructure/consumers/` | 未来 feature-local 入站事件 consumer adapter；仅当该 feature 有真实外部事件消费需求时新增，负责把已归一化的事件输入映射为 application command/query 或 port 调用 |
 | `fx.go` | Feature-local Fx module，组装 application、transport 和 infrastructure provider |
 
 Feature transport 可以按入站协议拆分在同一 feature 的 `transport/` 下。`transport/http` 和未来 `transport/grpc` 都必须把协议 DTO 映射为 transport-neutral application command/query 后再调用用例，不得互相导入对方 controller、DTO 或 route。可复用的输入辅助优先沉淀到 application `validators/`、domain 值对象或其他 transport-neutral 层，而不是在 HTTP 和 gRPC transport 之间横向复用协议 DTO。
@@ -72,7 +73,9 @@ Feature transport 可以按入站协议拆分在同一 feature 的 `transport/` 
 
 服务级 provider 统一放在 `user-service/internal/providers`。该包只负责把共享 runtime、common security、Gin、router 和 Ent 适配为用户服务 Fx 依赖；不得承载 feature 业务逻辑、HTTP route 定义或跨服务共享基础能力。`internal/bootstrap` 只负责 `fx.New`、顶层 `AppModule` 总装和 HTTP server 生命周期。
 
-外部系统防腐层统一放在 `user-service/internal/integration`，并按 `http/`、`grpc/`、`events/` 分类。该边界只在有真实外部系统调用时承载协议 client adapter、外部 DTO 映射、外部错误语义归一化和传输细节；当前没有真实外部调用时只保留 README 或 package doc。`internal/integration/grpc` 只表示用户服务调用外部 gRPC service 的出站 client adapter，不承载本服务 gRPC server、handler、route 或 feature transport 逻辑。Feature 内 `domain/events` 只表达领域事实，不等同于 `internal/integration/events` 的外部协议适配。`integration` 不属于 feature 内部业务编排，不拥有用例流程、登录状态机、跨 store 事务、HTTP controller、gRPC handler 或本服务持久化访问。Feature application service 或 command/query 用例仍通过消费侧 ports 表达外部能力需求，integration adapter 只实现这些最小接口。
+外部系统防腐层统一放在 `user-service/internal/integration`，并按 `http/`、`grpc/`、`events/` 分类。该边界只在有真实外部系统调用时承载协议 client adapter、外部 DTO 映射、外部错误语义归一化和传输细节；当前没有真实外部调用时只保留 README 或 package doc。`internal/integration/grpc` 只表示用户服务调用外部 gRPC service 的出站 client adapter，不承载本服务 gRPC server、handler、route 或 feature transport 逻辑。`internal/integration/events` 只表示用户服务访问外部事件系统的 producer/consumer 协议 adapter 边界，承载 broker wrapper、topic/subject/stream 映射、事件 envelope、序列化和 broker 错误语义归一化；它不承载 feature-specific consumer handler、application command/query 实现、业务编排、本服务持久化访问或 outbox persistence。Feature 内 `domain/events` 只表达领域事实，不等同于 `internal/integration/events` 的外部协议适配。`integration` 不属于 feature 内部业务编排，不拥有用例流程、登录状态机、跨 store 事务、HTTP controller、gRPC handler 或本服务持久化访问。Feature application service 或 command/query 用例仍通过消费侧 ports 表达外部能力需求，integration adapter 只实现这些最小接口。
+
+未来事件 producer 路径应是 feature application use case 决定业务意图，通过 feature-owned publish port 交给 `integration/events` producer adapter，再由 adapter 调用真实外部 broker。未来事件 consumer 路径应是外部 broker 先进入 `integration/events` consumer wrapper，转换为归一化入站事件输入后，再交给 `features/<feature>/infrastructure/consumers` 的 feature-local adapter 映射到 application command/query 或 port。Feature `infrastructure/consumers` 不承载 broker SDK subscription loop、topic ack/nack 协议、跨 feature orchestration 或直接绕过 application 的业务状态变更。
 
 ## 6. Dependency Rules
 
@@ -84,6 +87,7 @@ Feature transport 可以按入站协议拆分在同一 feature 的 `transport/` 
 | `transport/grpc` | `application`、gRPC/protobuf 边界类型、feature-local gRPC DTO 和 validation | Ent、Redis、SQL、HTTP response envelope、Gin controller、external client adapter |
 | `infrastructure/postgres` | Ent、SQL、application ports、domain | Gin、HTTP response |
 | `infrastructure/redis` | Redis client、application ports、domain | Gin、HTTP response |
+| `infrastructure/consumers` | feature application、feature domain、必要的归一化事件输入 DTO | broker SDK subscription loop、Ent/Redis 直接业务访问、Gin、跨 feature orchestration |
 | `integration/*` | 外部 SDK/client、feature application ports、domain、common runtime/security 原语 | Gin response、Ent、feature service 业务编排、service-owned persistence adapter |
 | `fx.go` | Fx、feature 内部包 | 业务逻辑 |
 
@@ -95,7 +99,7 @@ Ent predicate 构造封装在 `infrastructure/postgres` 内。Adapter 可以做�
 
 Domain services 可以承载跨实体或跨值对象的纯领域判断，但不得替代 application use case。密码 hash、JWT 签发/解析、Bearer token 处理、Redis session 生命周期、token version cache/database fallback、日志和配置读取仍属于 application、common security、runtime 或 infrastructure 边界；auth 当前将 token/session validation helper 保留在 `application/validators`。Auth 当前的 `RedisKeyBuilder` 依赖 runtime config 并服务 Redis key 构造，不是 domain service 准入样例。Domain events 只承载领域事实的数据模型；事件总线、broker、outbox、publisher、subscriber 或后台投递 worker 必须另开变更设计。
 
-Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 client 边界处理，但不得为了 adapter 自身方便定义大接口。外部能力接口归消费侧 feature application 层所有，adapter 只负责实现。
+Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 client 边界处理，但不得为了 adapter 自身方便定义大接口。外部能力接口归消费侧 feature application 层所有，adapter 只负责实现。事件 producer 的业务决策归 feature application，broker envelope 和投递调用归 `integration/events`；事件 consumer 的 broker mechanics 归 `integration/events`，feature-specific 输入映射和 handler adapter 归对应 feature 的 `infrastructure/consumers`。
 
 ## 7. Common Organization
 
@@ -108,7 +112,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - `common/testing/`：跨模块测试基础设施和无业务语义 fixture，仅供测试代码使用；真实 PostgreSQL/Redis integration helper 放在 `testing/containers`，基础测试值生成放在 `testing/fixtures`。
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。
 
-新增共享代码进入 `common` 前必须满足跨服务稳定、无业务语义、边界清晰。服务独有规则、DTO 映射、infrastructure adapter 行为或只为未来可能复用的 helper 应保留在对应服务模块内。
+新增共享代码进入 `common` 前必须满足跨服务稳定、无业务语义、边界清晰。服务独有规则、DTO 映射、infrastructure adapter 行为或只为未来可能复用的 helper 应保留在对应服务模块内。未来 `common/runtime/eventbus` 只有在至少两个服务需要同一稳定 runtime primitive，且 API 不含用户服务业务语义时才可新增；它不得承载 user-service event name、feature port、业务 DTO 或 speculative broker abstraction。未来 outbox 若要进入 `common/runtime/outbox`，必须先通过单独变更设计 transaction boundary、存储模型、投递 worker、重试、幂等和失败策略；在该设计前不得新增 outbox table、Ent hook、transaction wrapper 或 dispatcher。
 
 ## 8. Data Model
 
@@ -132,7 +136,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前声明并连接 `postgres.user_db` 与 `postgres.common_db`。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`。
 - 用户服务的 Redis/PostgreSQL named resource、JWT service、Gin engine 和 Ent clients 由 `user-service/internal/providers/` 提供，其中 Ent clients 由 `providers/ent.go` 基于具名 `*sql.DB` 构建。
-- 用户服务的外部系统防腐层边界位于 `user-service/internal/integration/`；其中 `integration/grpc` 只表示出站外部 gRPC client adapter，不表示本服务入站 gRPC transport；当前没有 order、payment 等真实外部 client，也没有 Kafka、RabbitMQ、NATS 等 broker dependency；当前也没有事件总线、outbox、publisher、subscriber 或异步投递 worker。
+- 用户服务的外部系统防腐层边界位于 `user-service/internal/integration/`；其中 `integration/grpc` 只表示出站外部 gRPC client adapter，不表示本服务入站 gRPC transport；`integration/events` 只表示外部事件系统协议 adapter，不表示 feature consumer handler 或业务事件编排；当前没有 order、payment 等真实外部 client，也没有 Kafka、RabbitMQ、NATS、Redis Stream 等 broker dependency；当前也没有事件总线、outbox、publisher、subscriber、consumer handler 或异步投递 worker。
 - 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace header 为 `X-Trace-ID`，Gin context key 为 `trace_id`，日志字段统一为 `trace-id`。
 
 ## 10. Database Migrations
@@ -151,5 +155,6 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - 当前 HTTP API 暴露健康检查、创建用户、用户列表、按 `user_id` 查询用户和认证会话接口。
 - 当前没有真实 gRPC API、`.proto` schema、protobuf generated code 或 gRPC server runtime；如未来暴露入站 gRPC API，应先在对应 feature 的 `transport/grpc` 建立真实 API 设计，并单独设计服务级 runtime wiring。
 - 当前没有真实外部系统 client；`internal/integration` 只声明 HTTP、gRPC 和 events 防腐层边界。
+- 当前没有真实 MQ/broker、eventbus、outbox、producer、subscriber、consumer handler、后台投递 worker 或事件驱动事务语义；事件发布、事件消费和可靠投递能力都需要单独变更设计。
 - 配置样例可能包含未来资源配置，但用户服务只初始化自己显式声明的 Redis/PostgreSQL named resources。
 - 启动服务需要 PostgreSQL 和 Redis 可连接；纯单元测试应避免依赖真实外部服务，集成测试需要显式说明依赖。
