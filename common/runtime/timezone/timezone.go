@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/aegiscore/common/runtime/config"
-	"go.uber.org/fx"
 )
 
 // DefaultTimezone 是配置缺省 system.timezone 时使用的进程时区兜底值。
@@ -19,18 +18,6 @@ var state timezoneState
 type timezoneState struct {
 	mu          sync.Mutex
 	initialized bool
-}
-
-// Params 包含初始化进程时区所需的 Fx 依赖。
-type Params struct {
-	fx.In
-
-	Config *config.Config
-}
-
-// Init 根据 Fx 提供的配置初始化进程时区。
-func Init(params Params) error {
-	return InitConfig(params.Config)
 }
 
 // InitConfig 根据 config 初始化进程时区，并在缺省时回退到 DefaultTimezone。
@@ -67,8 +54,3 @@ func (s *timezoneState) init(timezone string) error {
 	s.initialized = true
 	return nil
 }
-
-// Module 在 Fx 启动阶段初始化进程时区。
-var Module = fx.Module("aegiscore-common-timezone",
-	fx.Invoke(Init),
-)

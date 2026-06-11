@@ -16,6 +16,8 @@
 - [x] 删除旧 `common/runtime/configfx`、`common/runtime/loggerfx`、`common/runtime/datastorefx` 包中的 Go 源码，确保不再形成可导入包。
 - [x] 更新 `AGENTS.md` 中共享 runtime Fx provider 的关键入口路径。
 - [x] 更新 `docs/ARCHITECTURE.md` 和必要开发文档中对 `loggerfx`、`configfx`、`datastorefx` 的描述。
+- [x] 将 `common/runtime/timezone` 中的 Fx 注入入口拆到 `fx.go`，与 runtime owner 包内 Fx 文件命名保持一致。
+- [x] 将 `common/runtime/timezone/module.go` 重命名为 `timezone.go`，避免非 Fx 文件继续使用 module 命名。
 - [x] 运行 `gofmt -w` 格式化所有改动的 Go 文件。
 
 ## Verification
