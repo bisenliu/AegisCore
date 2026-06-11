@@ -83,7 +83,7 @@ Ent predicate 构造封装在 `infra/postgres` 内。Adapter 可以做字段裁�
 - `common/contract/pagination/`：跨服务稳定 Cursor/Keyset 分页响应模型、分页大小边界和分页数据包装 helper。
 - `common/contract/response/`：HTTP 响应信封 DTO 和默认响应消息；不承载错误码、应用错误或分页 re-export。
 - `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、运行时资源名和时区初始化。
-- `common/http/`：HTTP/Gin 边界适配，例如 middleware、Gin 请求绑定/校验失败响应适配层和 `http/response` 输出 helper。
+- `common/http/`：HTTP/Gin 边界适配，例如 middleware、`http/binding` 请求绑定/校验失败响应适配层和 `http/response` 输出 helper。
 - `common/security/`：安全与凭证原语，例如 JWT、Bearer 传输常量、认证上下文和密码 hash helper。
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。
 

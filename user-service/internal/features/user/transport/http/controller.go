@@ -1,7 +1,7 @@
 package userhttp
 
 import (
-	"github.com/aegiscore/common/http/ginvalidation"
+	"github.com/aegiscore/common/http/binding"
 	"github.com/aegiscore/common/http/response"
 	commonvalidation "github.com/aegiscore/common/validation"
 	userapi "github.com/aegiscore/user-service/internal/features/user/api"
@@ -38,7 +38,7 @@ func NewUserController(userService userapp.UserService, validator *commonvalidat
 // @Router /users [get]
 func (ctl *UserController) ListUsers(c *gin.Context) {
 	req := userapi.ListUsersRequest{}
-	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.QueryBinder) {
+	if !binding.BindOrAbort(ctl.validator, c, &req, binding.QueryBinder) {
 		return
 	}
 
@@ -79,7 +79,7 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 // @Router /users [post]
 func (ctl *UserController) CreateUser(c *gin.Context) {
 	req := userapi.CreateUserRequest{}
-	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
+	if !binding.BindOrAbort(ctl.validator, c, &req, binding.JSONBinder) {
 		return
 	}
 	if err := NormalizeCreateUser(&req); err != nil {
@@ -115,7 +115,7 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 // @Router /users/{user_id} [get]
 func (ctl *UserController) GetByUserID(c *gin.Context) {
 	req := userapi.GetUserRequest{}
-	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.URIBinder) {
+	if !binding.BindOrAbort(ctl.validator, c, &req, binding.URIBinder) {
 		return
 	}
 	userID, err := ParseUserID(req)

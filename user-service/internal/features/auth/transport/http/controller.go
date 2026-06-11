@@ -1,7 +1,7 @@
 package authhttp
 
 import (
-	"github.com/aegiscore/common/http/ginvalidation"
+	"github.com/aegiscore/common/http/binding"
 	"github.com/aegiscore/common/http/response"
 	commonauth "github.com/aegiscore/common/security/auth"
 	commonvalidation "github.com/aegiscore/common/validation"
@@ -31,7 +31,7 @@ type AuthController struct {
 // @Router /auth/change-password [post]
 func (ctl *AuthController) ChangePassword(c *gin.Context) {
 	req := authapi.ChangePasswordRequest{Token: c.GetHeader(commonauth.AuthorizationHeader)}
-	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
+	if !binding.BindOrAbort(ctl.validator, c, &req, binding.JSONBinder) {
 		return
 	}
 	if err := NormalizeChangePassword(&req); err != nil {
@@ -68,7 +68,7 @@ func NewAuthController(authService authapp.AuthService, validator *commonvalidat
 // @Router /auth/login [post]
 func (ctl *AuthController) LoginUser(c *gin.Context) {
 	req := authapi.LoginRequest{}
-	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
+	if !binding.BindOrAbort(ctl.validator, c, &req, binding.JSONBinder) {
 		return
 	}
 	if err := NormalizeLogin(&req); err != nil {
@@ -100,7 +100,7 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 // @Router /auth/refresh [post]
 func (ctl *AuthController) RefreshToken(c *gin.Context) {
 	req := authapi.RefreshTokenRequest{}
-	if !ginvalidation.BindOrAbort(ctl.validator, c, &req, ginvalidation.JSONBinder) {
+	if !binding.BindOrAbort(ctl.validator, c, &req, binding.JSONBinder) {
 		return
 	}
 	if err := NormalizeRefresh(&req); err != nil {

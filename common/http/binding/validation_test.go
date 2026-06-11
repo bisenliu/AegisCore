@@ -1,4 +1,4 @@
-package ginvalidation
+package binding
 
 import (
 	"encoding/json"

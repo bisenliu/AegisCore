@@ -1,4 +1,4 @@
-package ginvalidation
+package binding
 
 import (
 	"github.com/aegiscore/common/http/response"
