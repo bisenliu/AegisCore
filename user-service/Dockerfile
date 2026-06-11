@@ -20,7 +20,6 @@ RUN addgroup -S aegiscore && adduser -S aegiscore -G aegiscore
 
 COPY --from=builder /out/user-services /app/user-service/bin/user-services
 COPY --from=atlas /atlas /usr/local/bin/atlas
-COPY user-service/atlas.hcl /app/user-service/atlas.hcl
 COPY user-service/configs /app/user-service/configs
 COPY user-service/migrations /app/user-service/migrations
 COPY user-service/scripts /app/user-service/scripts

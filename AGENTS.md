@@ -58,8 +58,8 @@
 - 共享日志 Fx provider：`common/runtime/logger/fx.go`
 - 共享 datastore Fx provider：`common/runtime/datastore/redis_fx.go`、`common/runtime/datastore/postgres_fx.go`
 - 运行时资源名：`common/runtime/resources/resource_names.go`
-- Atlas 配置：`user-service/atlas.hcl`
-- 用户服务迁移目录：`user-service/migrations/`
+- 用户服务迁移目录：`user-service/migrations/`，包含 SQL migration、`atlas.sum` 和 Atlas 配置。
+- Atlas 配置：`user-service/migrations/atlas.hcl`
 
 ## 4. Current Feature Areas
 

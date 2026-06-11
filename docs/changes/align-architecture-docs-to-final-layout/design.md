@@ -57,7 +57,7 @@
 - Common Commands：以 `make help`、`make build`、`make test`、`make run-user-service`、`make lint`、`make generate`、`make migrate-*`、`make swagger-generate` 为主。
 - Configuration：说明 YAML + `AEGISCORE_` 覆盖、named Redis/PostgreSQL 和当前用户服务声明的资源。
 - Coding Conventions：应使用 feature-first 术语，避免继续称服务内 data access 为横向 Repository 层；可使用 “infra adapter” 表达。
-- Database Migrations：以 `user-service/atlas.hcl`、`user-service/ent/`、`user-service/migrations/`、`user-service/scripts/` 为准。
+- Database Migrations：以 `user-service/migrations/atlas.hcl`、`user-service/ent/`、`user-service/migrations/`、`user-service/scripts/` 为准。
 - Adding Features / Shared Code：与 `docs/ARCHITECTURE.md` 的 feature-first 和 common 准入规则一致。
 
 ### docs/TESTING.md

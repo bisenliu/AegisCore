@@ -14,8 +14,8 @@ set -eu
 #   DATABASE_URL  用户服务数据库（`postgres.user_db`）的 PostgreSQL URL。
 #
 # 行为：
-#   - 切换到 user-service 目录，使 Atlas 读取 ./atlas.hcl 和 ./migrations。
-#   - 使用 atlas.hcl 中的 `deploy` 环境。
+#   - 切换到 user-service 目录，使 Atlas 读取 ./migrations/atlas.hcl 和 ./migrations。
+#   - 使用 migrations/atlas.hcl 中的 `deploy` 环境。
 #   - 只执行 user-service/migrations/ 中已经提交的 SQL 文件。
 #   - DATABASE_URL 缺失或 Atlas 迁移执行失败时，以非 0 状态退出。
 #
@@ -29,4 +29,4 @@ if [ -z "${DATABASE_URL:-}" ]; then
   exit 2
 fi
 
-atlas migrate apply --env deploy
+atlas migrate apply --config file://migrations/atlas.hcl --env deploy

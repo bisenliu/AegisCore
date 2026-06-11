@@ -82,11 +82,11 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 
 ```text
 user-service/
-  atlas.hcl
   ent/
     schema/
     migrate/main.go
   migrations/
+    atlas.hcl
     atlas.sum
     *.sql
   scripts/
@@ -106,6 +106,8 @@ user-service/
 Ent 生成代码边界和新增 Entity Schema 的完整说明见 `user-service/ent/README.md`。
 
 `migrate-diff.sh` 使用 Atlas 的 `ent://ent/schema` schema source 读取 Ent schema，并通过 PostgreSQL dev database 计算与现有 migration directory 的差异。默认 dev URL 为 `docker://postgres/15/dev?search_path=public`，可通过 `ATLAS_DEV_URL` 覆盖。
+
+Atlas 配置位于 `user-service/migrations/atlas.hcl`。迁移脚本从 `user-service/` 目录执行，并显式使用该配置文件，因此 `ent://ent/schema` 和 `file://migrations` 仍以 `user-service/` 为解析基准。
 
 ### 6.3 Review And Manual SQL Edits
 

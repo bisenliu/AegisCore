@@ -26,7 +26,7 @@ func main() {
 			usage()
 			os.Exit(2)
 		}
-		cmd = exec.Command("atlas", "migrate", "diff", os.Args[2], "--env", "local")
+		cmd = exec.Command("atlas", "migrate", "diff", os.Args[2], "--config", "file://migrations/atlas.hcl", "--env", "local")
 		cmd.Env = append(os.Environ(), "GOWORK=off")
 	default:
 		usage()

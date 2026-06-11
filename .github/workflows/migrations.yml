@@ -1,0 +1,26 @@
+name: migrations
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: atlas migration validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Atlas
+        uses: ariga/setup-atlas@v0
+
+      - name: Validate user-service migrations
+        run: make migrate-validate

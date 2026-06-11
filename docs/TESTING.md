@@ -58,7 +58,7 @@ Ent 生成代码通常不需要逐文件测试。测试应覆盖 schema 约束�
 1. 在 `user-service/` 运行 `go generate ./ent`。
 2. 在 `user-service/` 运行 `./scripts/migrate-diff.sh <name>` 或确认现有 migration 已覆盖 schema 变化。
 3. Review `user-service/migrations/*.sql`；如手工修改 SQL，运行 `atlas migrate hash --dir file://migrations`。
-4. 在 `user-service/` 运行 `./scripts/migrate-validate.sh`。
+4. 在 `user-service/` 运行 `./scripts/migrate-validate.sh`；Atlas 配置位于 `user-service/migrations/atlas.hcl`。
 5. 确认运行时没有通过 `client.Schema.Create(ctx)` 自动修改 schema。
 
 ## 7. Change Verification
