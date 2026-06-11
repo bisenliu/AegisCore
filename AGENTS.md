@@ -17,8 +17,8 @@
 - `user-service/`：用户服务 HTTP 运行时和 Go module，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration，以及按 feature 组织的业务代码。
 - `user-service/internal/providers/`：用户服务级 Fx provider，集中承载 Gin engine、HTTP route registration、JWT service、PostgreSQL/Redis named resources 和 Ent clients 的服务侧组装；不得承载 feature 业务逻辑。
 - `user-service/internal/integration/`：用户服务访问外部系统的防腐层边界，按 `http/`、`grpc/`、`events/` 分类组织；当前没有真实外部系统调用时只保留 README 或 package doc，占位不得引入未使用代码。
-- `user-service/internal/features/user/`：用户资料 feature，按 `api/`、`application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `module.go` 分层。
-- `user-service/internal/features/auth/`：认证会话 feature，按 `api/`、`application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/redis/` 和 `module.go` 分层。
+- `user-service/internal/features/user/`：用户资料 feature，按 `api/`、`application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层。
+- `user-service/internal/features/auth/`：认证会话 feature，按 `api/`、`application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/redis/` 和 `fx.go` 分层。
 - `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产。
 
 ## 3. Key Entry Points
@@ -36,11 +36,11 @@
 - Gin router 路由总装：`user-service/internal/router/router.go`
 - 健康检查路由：`user-service/internal/router/health.go`
 - Swagger 路由：`user-service/internal/router/swagger.go`
-- 用户 feature module：`user-service/internal/features/user/module.go`
+- 用户 feature module：`user-service/internal/features/user/fx.go`
 - 用户 controller：`user-service/internal/features/user/transport/http/controller.go`
 - 用户 service：`user-service/internal/features/user/application/service.go`
 - 用户 PostgreSQL adapter：`user-service/internal/features/user/infrastructure/postgres/user_store.go`
-- 认证 feature module：`user-service/internal/features/auth/module.go`
+- 认证 feature module：`user-service/internal/features/auth/fx.go`
 - 认证 controller：`user-service/internal/features/auth/transport/http/controller.go`
 - 认证 service：`user-service/internal/features/auth/application/service.go`
 - 认证 PostgreSQL adapter：`user-service/internal/features/auth/infrastructure/postgres/credential_store.go`
@@ -94,7 +94,7 @@
 - 按 feature 组织服务内代码：用户资料放在 `internal/features/user`，认证会话放在 `internal/features/auth`。不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。
 - 保持 `transport/http`、`application`、`domain`、`infrastructure/*` 分层：HTTP 解析在 controller，业务编排在 application service，数据库或 Redis 访问在 infrastructure adapter。
 - 每个 feature 自己注册路由：`transport/http/routes.go` 暴露 `RegisterRoutes`，认证 feature 可拆分 `RegisterPublicRoutes` 和 `RegisterProtectedRoutes`；全局 router 的 `router.go` 负责 route graph 总装和 `/api/v1` feature 路由分组，`health.go` 负责 `/healthz`，`swagger.go` 负责 Swagger UI 和文档重定向。
-- 每个 feature 自己提供 Fx module：`features/<feature>/module.go` 暴露 `Module` 并组装 feature 内部 service、controller 和 infrastructure provider；服务级 Gin engine、路由注册、JWT、PostgreSQL、Redis 和 Ent provider 放在 `internal/providers`。
+- 每个 feature 自己提供 Fx module：`features/<feature>/fx.go` 暴露 `Module` 并组装 feature 内部 service、controller 和 infrastructure provider；服务级 Gin engine、路由注册、JWT、PostgreSQL、Redis 和 Ent provider 放在 `internal/providers`。
 - `bootstrap.AppModule` 只负责顶层 Fx module 总装和 HTTP server lifecycle，具体服务级 provider 实现不得放回 `internal/bootstrap`。
 - 外部系统防腐层统一使用 `internal/integration`，按 `http/`、`grpc/`、`events/` 分类；不要新增复数 `internal/integrations`。Integration adapter 只做外部协议、DTO、错误语义和 client 调用适配，不承载 feature 业务编排、HTTP controller、Ent/Redis 持久化 adapter 或预设的 order/payment client。
 - Feature 基础设施目录统一使用 `infrastructure/postgres/`、`infrastructure/redis/` 等；不要使用 `store/` 作为目录名。
@@ -114,7 +114,7 @@
 | `infrastructure/postgres` | Ent、SQL、application ports、domain | Gin、HTTP response |
 | `infrastructure/redis` | Redis client、application ports、domain | Gin、HTTP response |
 | `integration/*` | 外部 SDK/client、feature application ports、domain、common runtime/security 原语 | Gin response、Ent、feature service 业务编排、service-owned persistence adapter |
-| `module.go` | Fx、feature 内部包 | 业务逻辑 |
+| `fx.go` | Fx、feature 内部包 | 业务逻辑 |
 
 Adapter 可以做字段裁剪和模型转换，但不得承载复杂业务编排。禁止在 adapter 中实现登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
 
