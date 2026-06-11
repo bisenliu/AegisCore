@@ -12,7 +12,8 @@ import (
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/validation"
-	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
+	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
+	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
 	"github.com/gin-gonic/gin"
@@ -29,7 +30,7 @@ func TestUserControllerGetByUserID(t *testing.T) {
 	t.Run("valid ID", func(t *testing.T) {
 		createdAt := int64(1780048800000)
 		updatedAt := int64(1780052400000)
-		service := &stubUserService{response: &userapplication.UserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}}
+		service := &stubUserQueries{response: &userquery.GetUserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}}
 
 		status, envelope := executeGetByUserID(t, service, controllerTestUserID)
 
@@ -58,12 +59,12 @@ func TestUserControllerGetByUserID(t *testing.T) {
 	})
 
 	t.Run("invalid UUID", func(t *testing.T) {
-		status, envelope := executeGetByUserID(t, &stubUserService{}, "abc")
+		status, envelope := executeGetByUserID(t, &stubUserQueries{}, "abc")
 		assertInvalidUserID(t, status, envelope, validation.ErrValidationFailed)
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		status, envelope := executeGetByUserID(t, &stubUserService{err: userdomain.ErrUserNotFound}, controllerTestUserID)
+		status, envelope := executeGetByUserID(t, &stubUserQueries{err: userdomain.ErrUserNotFound}, controllerTestUserID)
 		if status != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", status, http.StatusNotFound)
 		}
@@ -73,7 +74,7 @@ func TestUserControllerGetByUserID(t *testing.T) {
 	})
 
 	t.Run("service error", func(t *testing.T) {
-		status, envelope := executeGetByUserID(t, &stubUserService{err: errors.New("database down")}, controllerTestUserID)
+		status, envelope := executeGetByUserID(t, &stubUserQueries{err: errors.New("database down")}, controllerTestUserID)
 		if status != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 		}
@@ -87,10 +88,10 @@ func TestUserControllerCreate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	createdUser := &userapplication.UserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}
+	createdUser := &usercommand.CreateUserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}
 
 	t.Run("valid body", func(t *testing.T) {
-		service := &stubUserService{createResponse: createdUser}
+		service := &stubUserCommands{createResponse: createdUser}
 
 		status, envelope := executeCreate(t, service, `{"nickname":"Alice","username":"ALICE","password":"secret"}`)
 
@@ -116,7 +117,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("empty body", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{}, "")
+		status, envelope := executeCreate(t, &stubUserCommands{}, "")
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
@@ -126,7 +127,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("validation failed", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{}, `{"nickname":"Alice","password":"secret"}`)
+		status, envelope := executeCreate(t, &stubUserCommands{}, `{"nickname":"Alice","password":"secret"}`)
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
@@ -137,7 +138,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("invalid status validation failed", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{}, `{"nickname":"Alice","username":"alice","password":"secret","status":999}`)
+		status, envelope := executeCreate(t, &stubUserCommands{}, `{"nickname":"Alice","username":"alice","password":"secret","status":999}`)
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
@@ -148,7 +149,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("missing password validation failed", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{}, `{"nickname":"Alice","username":"alice"}`)
+		status, envelope := executeCreate(t, &stubUserCommands{}, `{"nickname":"Alice","username":"alice"}`)
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
@@ -159,7 +160,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("user already exists", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{createErr: userdomain.ErrUserAlreadyExists}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
+		status, envelope := executeCreate(t, &stubUserCommands{createErr: userdomain.ErrUserAlreadyExists}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
 		if status != http.StatusConflict {
 			t.Fatalf("status = %d, want %d", status, http.StatusConflict)
 		}
@@ -169,7 +170,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("service error", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserService{createErr: errors.New("database down")}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
+		status, envelope := executeCreate(t, &stubUserCommands{createErr: errors.New("database down")}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
 		if status != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 		}
@@ -183,10 +184,10 @@ func TestUserControllerList(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	listResponse := &userapplication.ListUsersResult{Items: []userdomain.User{{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, PageSize: 20, NextCursor: controllerTestUserID, HasNext: true}
+	listResponse := &userquery.ListUsersResult{Items: []userdomain.User{{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, PageSize: 20, NextCursor: controllerTestUserID, HasNext: true}
 
 	t.Run("default pagination", func(t *testing.T) {
-		service := &stubUserService{listResponse: &userapplication.ListUsersResult{Items: []userdomain.User{}, PageSize: 10}}
+		service := &stubUserQueries{listResponse: &userquery.ListUsersResult{Items: []userdomain.User{}, PageSize: 10}}
 
 		status, envelope := executeList(t, service, "/api/v1/users")
 
@@ -200,7 +201,7 @@ func TestUserControllerList(t *testing.T) {
 	})
 
 	t.Run("explicit query", func(t *testing.T) {
-		service := &stubUserService{listResponse: listResponse}
+		service := &stubUserQueries{listResponse: listResponse}
 
 		status, envelope := executeList(t, service, "/api/v1/users?cursor=018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4d&page_size=20&nickname=%20Ali%20&username=%20alice%20&status=100")
 
@@ -217,7 +218,7 @@ func TestUserControllerList(t *testing.T) {
 	})
 
 	t.Run("page size capped", func(t *testing.T) {
-		service := &stubUserService{listResponse: &userapplication.ListUsersResult{Items: []userdomain.User{}, PageSize: 100}}
+		service := &stubUserQueries{listResponse: &userquery.ListUsersResult{Items: []userdomain.User{}, PageSize: 100}}
 
 		status, envelope := executeList(t, service, "/api/v1/users?page_size=101")
 
@@ -231,7 +232,7 @@ func TestUserControllerList(t *testing.T) {
 	})
 
 	t.Run("invalid cursor", func(t *testing.T) {
-		service := &stubUserService{}
+		service := &stubUserQueries{}
 
 		status, envelope := executeList(t, service, "/api/v1/users?cursor=abc")
 
@@ -247,7 +248,7 @@ func TestUserControllerList(t *testing.T) {
 	})
 
 	t.Run("invalid status", func(t *testing.T) {
-		status, envelope := executeList(t, &stubUserService{}, "/api/v1/users?status=999")
+		status, envelope := executeList(t, &stubUserQueries{}, "/api/v1/users?status=999")
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
@@ -258,7 +259,7 @@ func TestUserControllerList(t *testing.T) {
 	})
 
 	t.Run("service error", func(t *testing.T) {
-		status, envelope := executeList(t, &stubUserService{listErr: errors.New("database down")}, "/api/v1/users")
+		status, envelope := executeList(t, &stubUserQueries{listErr: errors.New("database down")}, "/api/v1/users")
 		if status != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 		}
@@ -268,19 +269,22 @@ func TestUserControllerList(t *testing.T) {
 	})
 }
 
-type stubUserService struct {
-	response       *userapplication.UserResult
-	err            error
-	gotID          uuid.UUID
-	createResponse *userapplication.UserResult
+type stubUserCommands struct {
+	createResponse *usercommand.CreateUserResult
 	createErr      error
-	gotCreate      userapplication.CreateUserCommand
-	listResponse   *userapplication.ListUsersResult
-	listErr        error
-	gotList        userapplication.ListUsersQuery
+	gotCreate      usercommand.CreateUserCommand
 }
 
-func (s *stubUserService) CreateUser(_ context.Context, req userapplication.CreateUserCommand) (*userapplication.UserResult, error) {
+type stubUserQueries struct {
+	response     *userquery.GetUserResult
+	err          error
+	gotID        uuid.UUID
+	listResponse *userquery.ListUsersResult
+	listErr      error
+	gotList      userquery.ListUsersQuery
+}
+
+func (s *stubUserCommands) CreateUser(_ context.Context, req usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error) {
 	s.gotCreate = req
 	if s.createErr != nil {
 		return nil, s.createErr
@@ -288,15 +292,15 @@ func (s *stubUserService) CreateUser(_ context.Context, req userapplication.Crea
 	return s.createResponse, nil
 }
 
-func (s *stubUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapplication.UserResult, error) {
-	s.gotID = userID
+func (s *stubUserQueries) GetUserByID(_ context.Context, req userquery.GetUserByIDQuery) (*userquery.GetUserResult, error) {
+	s.gotID = req.UserID
 	if s.err != nil {
 		return nil, s.err
 	}
 	return s.response, nil
 }
 
-func (s *stubUserService) ListUsers(_ context.Context, req userapplication.ListUsersQuery) (*userapplication.ListUsersResult, error) {
+func (s *stubUserQueries) ListUsers(_ context.Context, req userquery.ListUsersQuery) (*userquery.ListUsersResult, error) {
 	s.gotList = req
 	if s.listErr != nil {
 		return nil, s.listErr
@@ -304,13 +308,13 @@ func (s *stubUserService) ListUsers(_ context.Context, req userapplication.ListU
 	return s.listResponse, nil
 }
 
-func executeCreate(t *testing.T, service *stubUserService, body string) (int, response.Envelope) {
+func executeCreate(t *testing.T, commands *stubUserCommands, body string) (int, response.Envelope) {
 	t.Helper()
 	validator, err := validation.NewDefault()
 	if err != nil {
 		t.Fatalf("NewDefault: %v", err)
 	}
-	ctl := NewUserController(service, validator)
+	ctl := NewUserController(commands, &stubUserQueries{}, validator)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(body))
@@ -327,13 +331,13 @@ func executeCreate(t *testing.T, service *stubUserService, body string) (int, re
 	return recorder.Code, envelope
 }
 
-func executeGetByUserID(t *testing.T, service *stubUserService, id string) (int, response.Envelope) {
+func executeGetByUserID(t *testing.T, queries *stubUserQueries, id string) (int, response.Envelope) {
 	t.Helper()
 	validator, err := validation.NewDefault()
 	if err != nil {
 		t.Fatalf("NewDefault: %v", err)
 	}
-	ctl := NewUserController(service, validator)
+	ctl := NewUserController(&stubUserCommands{}, queries, validator)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/v1/users/"+id, nil)
@@ -348,13 +352,13 @@ func executeGetByUserID(t *testing.T, service *stubUserService, id string) (int,
 	return recorder.Code, envelope
 }
 
-func executeList(t *testing.T, service *stubUserService, path string) (int, response.Envelope) {
+func executeList(t *testing.T, queries *stubUserQueries, path string) (int, response.Envelope) {
 	t.Helper()
 	validator, err := validation.NewDefault()
 	if err != nil {
 		t.Fatalf("NewDefault: %v", err)
 	}
-	ctl := NewUserController(service, validator)
+	ctl := NewUserController(&stubUserCommands{}, queries, validator)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, path, nil)

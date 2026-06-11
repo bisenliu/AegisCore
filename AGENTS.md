@@ -17,7 +17,7 @@
 - `user-service/`：用户服务 HTTP 运行时和 Go module，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration，以及按 feature 组织的业务代码。
 - `user-service/internal/providers/`：用户服务级 Fx provider，集中承载 Gin engine、HTTP route registration、JWT service、PostgreSQL/Redis named resources 和 Ent clients 的服务侧组装；不得承载 feature 业务逻辑。
 - `user-service/internal/integration/`：用户服务访问外部系统的防腐层边界，按 `http/`、`grpc/`、`events/` 分类组织；当前没有真实外部系统调用时只保留 README 或 package doc，占位不得引入未使用代码。
-- `user-service/internal/features/user/`：用户资料 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`。
+- `user-service/internal/features/user/`：用户资料 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；`application/command` 承载写侧用例，`application/query` 承载读侧用例，`application/validators` 承载 transport-neutral application 输入辅助；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`。
 - `user-service/internal/features/auth/`：认证会话 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/redis/` 和 `fx.go` 分层；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`。
 - `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产。
 
@@ -39,7 +39,8 @@
 - 用户 feature module：`user-service/internal/features/user/fx.go`
 - 用户 controller：`user-service/internal/features/user/transport/http/controller.go`
 - 用户 HTTP DTO：`user-service/internal/features/user/transport/http/request.go`、`user-service/internal/features/user/transport/http/response.go`
-- 用户 service：`user-service/internal/features/user/application/service.go`
+- 用户创建 command service：`user-service/internal/features/user/application/command/create_user.go`
+- 用户查询 query service：`user-service/internal/features/user/application/query/query_service.go`
 - 用户 PostgreSQL adapter：`user-service/internal/features/user/infrastructure/postgres/user_store.go`
 - 认证 feature module：`user-service/internal/features/auth/fx.go`
 - 认证 controller：`user-service/internal/features/auth/transport/http/controller.go`
@@ -94,7 +95,7 @@
 - 不要手写 `user-service/ent/` 下的生成代码；修改 Ent schema 后重新生成。
 - 不要用运行时 `client.Schema.Create(ctx)` 表达 schema 变更；修改 Ent schema 后生成 Ent 代码和 Atlas SQL migration。
 - 按 feature 组织服务内代码：用户资料放在 `internal/features/user`，认证会话放在 `internal/features/auth`。不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。
-- 保持 `transport/http`、`application`、`domain`、`infrastructure/*` 分层：HTTP 解析在 controller，业务编排在 application service，数据库或 Redis 访问在 infrastructure adapter。
+- 保持 `transport/http`、`application`、`domain`、`infrastructure/*` 分层：HTTP 解析在 controller，业务编排在 application service 或 application 内的 `command`/`query` 用例，数据库或 Redis 访问在 infrastructure adapter。
 - 每个 feature 自己注册路由：`transport/http/routes.go` 暴露 `RegisterRoutes`，认证 feature 可拆分 `RegisterPublicRoutes` 和 `RegisterProtectedRoutes`；全局 router 的 `router.go` 负责 route graph 总装和 `/api/v1` feature 路由分组，`health.go` 负责 `/healthz`，`swagger.go` 负责 Swagger UI 和文档重定向。
 - 每个 feature 自己提供 Fx module：`features/<feature>/fx.go` 暴露 `Module` 并组装 feature 内部 service、controller 和 infrastructure provider；服务级 Gin engine、路由注册、JWT、PostgreSQL、Redis 和 Ent provider 放在 `internal/providers`。
 - `bootstrap.AppModule` 只负责顶层 Fx module 总装和 HTTP server lifecycle，具体服务级 provider 实现不得放回 `internal/bootstrap`。
@@ -104,9 +105,9 @@
 - HTTP API 应使用 `common/contract/response.Envelope` 格式返回，并通过 `common/http/response` 写出 Gin 响应。
 - 配置通过 YAML 与 `AEGISCORE_` 环境变量覆盖加载，Redis/PostgreSQL 使用 `redis.<name>` 与 `postgres.<name>` 命名实例，避免硬编码运行时配置。
 - `internal/shared` 默认禁止新增。只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并且必须在 `docs/ARCHITECTURE.md` 说明 owner、准入理由和禁止事项。
-- Ports 由消费侧 feature 拥有：用户资料 service 消费的接口放在 `internal/features/user/application/ports.go`，认证 service 消费的凭据、token version 和 session 接口放在 `internal/features/auth/application/ports.go`。不要为了 adapter 方便在 infrastructure 包或共享根包定义大接口。
+- Ports 由消费侧 feature 拥有：用户资料 command/query 消费的接口放在 `internal/features/user/application/ports.go`，认证 service 消费的凭据、token version 和 session 接口放在 `internal/features/auth/application/ports.go`。不要为了 adapter 方便在 infrastructure 包或共享根包定义大接口。
 - HTTP request/response DTO、Swagger model、请求 DTO 清洗、绑定后的输入规范化和简单字段解析放在对应 feature 的 `transport/http/request.go`、`response.go`、`validation.go`。这些函数不得导入 Ent、Redis、service、infrastructure，或执行业务编排。
-- Controller 必须把 transport DTO 映射为 command/query 后再调用 service，service 不接收 HTTP request/response DTO。
+- Controller 必须把 transport DTO 映射为 application command/query 后再调用 service 或用例，service 不接收 HTTP request/response DTO。
 
 | 层 | 可以依赖 | 禁止依赖 |
 |---|---|---|
@@ -120,4 +121,4 @@
 
 Adapter 可以做字段裁剪和模型转换，但不得承载复杂业务编排。禁止在 adapter 中实现登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
 
-Ent predicate 构造必须封装在 infrastructure adapter 内，例如 `internal/features/user/infrastructure/postgres/predicates.go`。`application/service.go` 不得导入 `github.com/aegiscore/user-service/ent/user`，也不得直接调用 Ent predicate。
+Ent predicate 构造必须封装在 infrastructure adapter 内，例如 `internal/features/user/infrastructure/postgres/predicates.go`。`application/command`、`application/query` 和 application 根包不得导入 `github.com/aegiscore/user-service/ent/user`，也不得直接调用 Ent predicate。

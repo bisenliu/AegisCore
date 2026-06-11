@@ -22,7 +22,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
 3. `user-service/internal/bootstrap.AppModule` 导入共享 runtime module、feature modules、`providers.Module`，并提供 HTTP server 生命周期。
 4. `user-service/internal/providers.Module` 显式提供 Redis/PostgreSQL named providers、Ent clients、JWT service、Gin engine 和 HTTP route registration。
-5. User/Auth feature modules 自己组装 feature-local infrastructure adapter、application service 和 HTTP controller。
+5. User/Auth feature modules 自己组装 feature-local infrastructure adapter、application service 或 command/query 用例和 HTTP controller。
 6. `user-service/internal/providers/routes.go` 适配依赖并调用 `router.RegisterUserServiceHTTPRoutes`；`router.go` 负责 route graph 总装和 `/api/v1` 分组，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向。
 7. Fx lifecycle 启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
@@ -36,7 +36,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | 路由 provider | `user-service/internal/providers/routes.go` | 将 Fx 依赖适配为 router route params |
 | 路由总装 | `user-service/internal/router/router.go`、`health.go`、`swagger.go` | `router.go` 创建 public/protected route groups 并总装 route graph，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向 |
 | 参数解析 | `features/*/transport/http/controller.go` | 绑定 HTTP DTO，执行边界校验，并映射为 command/query |
-| 业务调用 | `features/*/application/` | 编排用户资料或认证会话用例 |
+| 业务调用 | `features/*/application/` | 编排用户资料或认证会话用例；用户资料 feature 的读写用例分别位于 `application/query` 与 `application/command` |
 | 数据访问 | `features/*/infrastructure/postgres/`, `features/*/infrastructure/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
 | 响应输出 | `common/http/response/` + `common/contract/response/` | 通过 Gin writer 输出统一 `success/code/message/data` 信封，并复用稳定错误码与分页契约 |
 
@@ -51,7 +51,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 | 目录 | 责任 |
 |---|---|
-| `application/` | service、commands、queries、ports、use case mapper 和业务编排 |
+| `application/` | service、commands、queries、ports、use case mapper 和业务编排；可按 feature 需要细分为 `command/`、`query/`、`validators/` |
 | `domain/` | 领域实体、值对象、枚举、领域错误和纯业务规则 |
 | `transport/http/` | Gin controller、route registration、HTTP request/response DTO、Swagger 文档模型、HTTP DTO validation 和边界映射 |
 | `infrastructure/postgres/` | Ent/PostgreSQL adapter 和 predicate 构造 |
@@ -62,7 +62,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 服务级 provider 统一放在 `user-service/internal/providers`。该包只负责把共享 runtime、common security、Gin、router 和 Ent 适配为用户服务 Fx 依赖；不得承载 feature 业务逻辑、HTTP route 定义或跨服务共享基础能力。`internal/bootstrap` 只负责 `fx.New`、顶层 `AppModule` 总装和 HTTP server 生命周期。
 
-外部系统防腐层统一放在 `user-service/internal/integration`，并按 `http/`、`grpc/`、`events/` 分类。该边界只在有真实外部系统调用时承载协议 client adapter、外部 DTO 映射、外部错误语义归一化和传输细节；当前没有真实外部调用时只保留 README 或 package doc。`integration` 不属于 feature 内部业务编排，不拥有用例流程、登录状态机、跨 store 事务、HTTP controller 或本服务持久化访问。Feature application service 仍通过消费侧 ports 表达外部能力需求，integration adapter 只实现这些最小接口。
+外部系统防腐层统一放在 `user-service/internal/integration`，并按 `http/`、`grpc/`、`events/` 分类。该边界只在有真实外部系统调用时承载协议 client adapter、外部 DTO 映射、外部错误语义归一化和传输细节；当前没有真实外部调用时只保留 README 或 package doc。`integration` 不属于 feature 内部业务编排，不拥有用例流程、登录状态机、跨 store 事务、HTTP controller 或本服务持久化访问。Feature application service 或 command/query 用例仍通过消费侧 ports 表达外部能力需求，integration adapter 只实现这些最小接口。
 
 ## 6. Dependency Rules
 
@@ -78,7 +78,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 Ports 由消费侧 feature 拥有。Infrastructure adapter 只实现 application 层定义的最小接口，不为了自身方便定义大接口。
 
-Controller 必须把 HTTP DTO 映射为 application command/query 后再调用 service。Service 不接收 HTTP request/response DTO，也不导入 Gin、Ent predicate、Redis client 或 HTTP binder。
+Controller 必须把 HTTP DTO 映射为 application command/query 后再调用 service 或用例。Service 和 command/query 用例不接收 HTTP request/response DTO，也不导入 Gin、Ent predicate、Redis client 或 HTTP binder。
 
 Ent predicate 构造封装在 `infrastructure/postgres` 内。Adapter 可以做字段裁剪、模型转换和存储错误转换，但不得承载复杂业务编排、登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
 

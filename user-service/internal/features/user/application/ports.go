@@ -7,13 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// UserService 定义暴露给 HTTP controller 的用户资料用例。
-type UserService interface {
-	CreateUser(ctx context.Context, cmd CreateUserCommand) (*UserResult, error)
-	GetUserByID(ctx context.Context, userID uuid.UUID) (*UserResult, error)
-	ListUsers(ctx context.Context, query ListUsersQuery) (*ListUsersResult, error)
-}
-
 // UserProfileStore 定义用户资料 service 实际消费的持久化端口。
 type UserProfileStore interface {
 	Create(ctx context.Context, input CreateUserInput) (*userdomain.User, error)

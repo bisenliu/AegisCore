@@ -18,7 +18,8 @@ import (
 	"github.com/aegiscore/common/validation"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
-	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
+	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
+	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 	"github.com/gin-gonic/gin"
@@ -62,7 +63,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		JWT:            jwtService,
 		TokenVersions:  tokenVersions,
 		AuthController: authhttp.NewAuthController(&routeAuthAuthService{}, validator),
-		UserController: userhttp.NewUserController(&routeAuthUserService{}, validator),
+		UserController: userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
 	})
 
 	publicRequests := []struct {
@@ -254,7 +255,9 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	})
 }
 
-type routeAuthUserService struct{}
+type routeAuthUserCommands struct{}
+
+type routeAuthUserQueries struct{}
 
 type routeAuthAuthService struct{}
 
@@ -289,12 +292,13 @@ func (s *routeAuthAuthService) LogoutAll(context.Context) (*authapplication.Logo
 	return &authapplication.LogoutResult{LoggedOut: true}, nil
 }
 
-func (s *routeAuthUserService) CreateUser(context.Context, userapplication.CreateUserCommand) (*userapplication.UserResult, error) {
+func (s *routeAuthUserCommands) CreateUser(context.Context, usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error) {
 	now := time.Now().UnixMilli()
-	return &userapplication.UserResult{User: userdomain.User{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
+	return &usercommand.CreateUserResult{User: userdomain.User{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
 }
 
-func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) (*userapplication.UserResult, error) {
+func (s *routeAuthUserQueries) GetUserByID(_ context.Context, req userquery.GetUserByIDQuery) (*userquery.GetUserResult, error) {
+	userID := req.UserID
 	userIDString := userID.String()
 	if userIDString == routeAuthNotFoundUserID {
 		return nil, userdomain.ErrUserNotFound
@@ -306,7 +310,7 @@ func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) 
 		return nil, errors.New("database down")
 	}
 	now := time.Now().UnixMilli()
-	return &userapplication.UserResult{User: userdomain.User{UserID: userID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
+	return &userquery.GetUserResult{User: userdomain.User{UserID: userID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
 }
 
 func assertSuccessEnvelope(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -334,10 +338,10 @@ func assertFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wa
 	}
 }
 
-func (s *routeAuthUserService) ListUsers(context.Context, userapplication.ListUsersQuery) (*userapplication.ListUsersResult, error) {
+func (s *routeAuthUserQueries) ListUsers(context.Context, userquery.ListUsersQuery) (*userquery.ListUsersResult, error) {
 	now := time.Now().UnixMilli()
 	items := []userdomain.User{{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
-	return &userapplication.ListUsersResult{Items: items, PageSize: 10}, nil
+	return &userquery.ListUsersResult{Items: items, PageSize: 10}, nil
 }
 
 func assertAuthFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantCode contracterrors.Code) {

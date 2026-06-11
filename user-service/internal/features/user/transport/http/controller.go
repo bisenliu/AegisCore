@@ -4,19 +4,21 @@ import (
 	"github.com/aegiscore/common/http/binding"
 	"github.com/aegiscore/common/http/response"
 	commonvalidation "github.com/aegiscore/common/validation"
-	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
+	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
+	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	"github.com/gin-gonic/gin"
 )
 
 // UserController 处理用户资料端点的 HTTP 请求。
 type UserController struct {
-	userService userapplication.UserService
-	validator   *commonvalidation.Validator
+	commands  usercommand.CreateUserService
+	queries   userquery.UserQueryService
+	validator *commonvalidation.Validator
 }
 
-// NewUserController 使用 service 和请求 validator 依赖构造用户控制器。
-func NewUserController(userService userapplication.UserService, validator *commonvalidation.Validator) *UserController {
-	return &UserController{userService: userService, validator: validator}
+// NewUserController 使用 command/query services 和请求 validator 依赖构造用户控制器。
+func NewUserController(commands usercommand.CreateUserService, queries userquery.UserQueryService, validator *commonvalidation.Validator) *UserController {
+	return &UserController{commands: commands, queries: queries, validator: validator}
 }
 
 // ListUsers 处理分页用户列表请求。
@@ -47,7 +49,7 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	users, err := ctl.userService.ListUsers(c.Request.Context(), userapplication.ListUsersQuery{
+	users, err := ctl.queries.ListUsers(c.Request.Context(), userquery.ListUsersQuery{
 		Cursor:   cursor,
 		PageSize: req.PageSize,
 		Limit:    req.Limit,
@@ -86,7 +88,7 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := ctl.userService.CreateUser(c.Request.Context(), userapplication.CreateUserCommand{
+	user, err := ctl.commands.CreateUser(c.Request.Context(), usercommand.CreateUserCommand{
 		Nickname: req.Nickname,
 		Username: req.Username,
 		Password: req.Password,
@@ -96,7 +98,7 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 		response.Fail(c, toUserHTTPError(err))
 		return
 	}
-	response.Created(c, toUserResponse(user))
+	response.Created(c, toUserResponse(user.User))
 }
 
 // GetByUserID 处理通过外部 UUID 查询用户资料的请求。
@@ -123,10 +125,10 @@ func (ctl *UserController) GetByUserID(c *gin.Context) {
 		return
 	}
 
-	user, err := ctl.userService.GetUserByID(c.Request.Context(), userID)
+	user, err := ctl.queries.GetUserByID(c.Request.Context(), userquery.GetUserByIDQuery{UserID: userID})
 	if err != nil {
 		response.Fail(c, toUserHTTPError(err))
 		return
 	}
-	response.OK(c, toUserResponse(user))
+	response.OK(c, toUserResponse(user.User))
 }
