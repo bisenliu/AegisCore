@@ -3,8 +3,8 @@ package auth
 import (
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	authpostgres "github.com/aegiscore/user-service/internal/features/auth/infra/postgres"
-	authredis "github.com/aegiscore/user-service/internal/features/auth/infra/redis"
+	authpostgres "github.com/aegiscore/user-service/internal/features/auth/infrastructure/postgres"
+	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	"go.uber.org/fx"
 )

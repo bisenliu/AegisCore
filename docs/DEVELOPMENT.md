@@ -56,10 +56,10 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 
 - HTTP 层只处理请求解析、参数校验和响应输出。
 - Application service 层负责业务编排、command/query 处理和 DTO 映射。
-- Infra adapter 层负责 Ent/PostgreSQL、Redis 访问、存储模型转换和存储错误转换，具体放在对应 feature 的 `infra/postgres` 或 `infra/redis` 下。
+- Infrastructure adapter 层负责 Ent/PostgreSQL、Redis 访问、存储模型转换和存储错误转换，具体放在对应 feature 的 `infrastructure/postgres` 或 `infrastructure/redis` 下。
 - 服务级 Fx provider 放在 `user-service/internal/providers`，用于组装 Gin engine、HTTP route registration、JWT service、PostgreSQL/Redis named resources 和 Ent clients；`internal/bootstrap` 只保留顶层 AppModule 和 HTTP server lifecycle。
 - 共享中间件、响应模型、配置和基础设施放在 `common/` 的对应能力分类目录中：响应 DTO 契约使用 `common/contract/response`，Gin 请求绑定和校验失败响应适配使用 `common/http/binding`，Gin 响应输出使用 `common/http/response`，运行时基础能力使用 `common/runtime`，HTTP/Gin 适配使用 `common/http`，安全凭证原语使用 `common/security`，通用校验核心使用 `common/validation`。
-- `common` 只承载跨服务稳定契约和基础能力；用户服务独有规则、DTO 映射、infra adapter 行为或仅为未来可能复用的 helper 应保留在 `user-service` 内。
+- `common` 只承载跨服务稳定契约和基础能力；用户服务独有规则、DTO 映射、infrastructure adapter 行为或仅为未来可能复用的 helper 应保留在 `user-service` 内。
 - Ent 生成代码不要手动编辑；修改 schema 后重新生成。生成代码边界、`go generate ./ent` 用法和新增 Entity Schema 流程见 `user-service/ent/README.md`。
 - Go 文件提交前运行 `gofmt`。
 - 提交前建议在受影响 Go module 中运行 `golangci-lint run ./...`；完整 lint 配置、CI/pre-commit 集成和存量问题治理方案见 `docs/GO_LINT_AUTOMATION.md`。
@@ -156,7 +156,7 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 ## 9. Adding Features
 
 1. 先阅读 `docs/ARCHITECTURE.md`，确认新能力属于哪个模块、feature 和层。
-2. 新增服务内业务能力时，优先放在 `user-service/internal/features/<feature>/`；已有 feature 内按 `api/application/domain/transport/http/infra/*` 分层扩展。
+2. 新增服务内业务能力时，优先放在 `user-service/internal/features/<feature>/`；已有 feature 内按 `api/application/domain/transport/http/infrastructure/*` 分层扩展。
 3. 新增跨服务稳定基础能力时，按 `common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation` 归类。
 4. 跨 feature、跨模块、外部 API、配置、数据库 schema 或目录结构变更，应在 issue、PR 描述或开发记录中写清目标、影响范围和验证方式。
 5. 增加或更新测试，并在受影响模块目录运行相关 `go test` 命令；跨模块变更时分别在 `common/` 和 `user-service/` 运行。
@@ -164,10 +164,10 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 ## 10. Adding Shared Code
 
 1. 先确认共享代码是否属于跨服务稳定契约、运行时基础能力、HTTP/Gin 适配、安全凭证原语或通用校验核心。
-2. 如能力只服务于用户服务请求清洗、状态规则、DTO 映射、infra adapter 行为或业务编排，保留在 `user-service` 对应分层内。
+2. 如能力只服务于用户服务请求清洗、状态规则、DTO 映射、infrastructure adapter 行为或业务编排，保留在 `user-service` 对应分层内。
 3. 如确需进入 `common`，选择对应目录：`common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation`，并在 `docs/ARCHITECTURE.md` 更新边界说明。
 4. 新增或迁移共享 API 时同步更新 Go imports、测试和文档。
 
 ## 11. Local Runtime Notes
 
-用户服务启动时会 ping Redis 和 PostgreSQL。若本地没有外部依赖，启动会失败。开发纯业务逻辑时优先通过单元测试覆盖 application service 与 infra adapter 边界，集成验证再连接真实依赖。
+用户服务启动时会 ping Redis 和 PostgreSQL。若本地没有外部依赖，启动会失败。开发纯业务逻辑时优先通过单元测试覆盖 application service 与 infrastructure adapter 边界，集成验证再连接真实依赖。

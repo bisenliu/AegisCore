@@ -2,7 +2,7 @@ package user
 
 import (
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
-	userpostgres "github.com/aegiscore/user-service/internal/features/user/infra/postgres"
+	userpostgres "github.com/aegiscore/user-service/internal/features/user/infrastructure/postgres"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 	"go.uber.org/fx"
 )

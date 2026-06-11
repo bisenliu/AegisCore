@@ -22,7 +22,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
 3. `user-service/internal/bootstrap.AppModule` 导入共享 runtime module、feature modules、`providers.Module`，并提供 HTTP server 生命周期。
 4. `user-service/internal/providers.Module` 显式提供 Redis/PostgreSQL named providers、Ent clients、JWT service、Gin engine 和 HTTP route registration。
-5. User/Auth feature modules 自己组装 feature-local infra adapter、application service 和 HTTP controller。
+5. User/Auth feature modules 自己组装 feature-local infrastructure adapter、application service 和 HTTP controller。
 6. `user-service/internal/providers/routes.go` 适配依赖并调用 `router.RegisterUserServiceHTTPRoutes`；`router.go` 负责 route graph 总装和 `/api/v1` 分组，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向。
 7. Fx lifecycle 启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
@@ -37,7 +37,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | 路由总装 | `user-service/internal/router/router.go`、`health.go`、`swagger.go` | `router.go` 创建 public/protected route groups 并总装 route graph，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向 |
 | 参数解析 | `features/*/transport/http/controller.go` | 绑定 API DTO，执行边界校验，并映射为 command/query |
 | 业务调用 | `features/*/application/` | 编排用户资料或认证会话用例 |
-| 数据访问 | `features/*/infra/postgres/`, `features/*/infra/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
+| 数据访问 | `features/*/infrastructure/postgres/`, `features/*/infrastructure/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
 | 响应输出 | `common/http/response/` + `common/contract/response/` | 通过 Gin writer 输出统一 `success/code/message/data` 信封，并复用稳定错误码与分页契约 |
 
 ## 5. Feature-First Organization
@@ -55,9 +55,9 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | `application/` | service、commands、queries、ports、use case mapper 和业务编排 |
 | `domain/` | 领域实体、值对象、枚举、领域错误和纯业务规则 |
 | `transport/http/` | Gin controller、route registration、HTTP DTO validation 和边界映射 |
-| `infra/postgres/` | Ent/PostgreSQL adapter 和 predicate 构造 |
-| `infra/redis/` | Redis adapter；仅在 feature 需要 Redis 时存在 |
-| `module.go` | Feature-local Fx module，组装 application、transport 和 infra provider |
+| `infrastructure/postgres/` | Ent/PostgreSQL adapter 和 predicate 构造 |
+| `infrastructure/redis/` | Redis adapter；仅在 feature 需要 Redis 时存在 |
+| `module.go` | Feature-local Fx module，组装 application、transport 和 infrastructure provider |
 
 不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。跨 feature 的共享业务代码也不要默认放到 `internal/shared`；只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并需在本文件补充 owner、准入理由和禁止事项。
 
@@ -72,8 +72,8 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | `domain` | 标准库、稳定值对象 | Gin、Ent、Redis、config、response envelope |
 | `application` | `domain`、消费侧端口接口、common 安全原语 | Gin、Ent、Redis、HTTP binder |
 | `transport/http` | `api`、`application`、Gin、response envelope、feature-local validation | Ent、Redis、SQL |
-| `infra/postgres` | Ent、SQL、application ports、domain | Gin、HTTP response |
-| `infra/redis` | Redis client、application ports、domain | Gin、HTTP response |
+| `infrastructure/postgres` | Ent、SQL、application ports、domain | Gin、HTTP response |
+| `infrastructure/redis` | Redis client、application ports、domain | Gin、HTTP response |
 | `integration/*` | 外部 SDK/client、feature application ports、domain、common runtime/security 原语 | Gin response、Ent、feature service 业务编排、service-owned persistence adapter |
 | `module.go` | Fx、feature 内部包 | 业务逻辑 |
 
@@ -81,7 +81,7 @@ Ports 由消费侧 feature 拥有。Infrastructure adapter 只实现 application
 
 Controller 必须把 HTTP DTO 映射为 application command/query 后再调用 service。Service 不接收 `api/*Request`，也不导入 Gin、Ent predicate、Redis client 或 HTTP binder。
 
-Ent predicate 构造封装在 `infra/postgres` 内。Adapter 可以做字段裁剪、模型转换和存储错误转换，但不得承载复杂业务编排、登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
+Ent predicate 构造封装在 `infrastructure/postgres` 内。Adapter 可以做字段裁剪、模型转换和存储错误转换，但不得承载复杂业务编排、登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
 
 Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 client 边界处理，但不得为了 adapter 自身方便定义大接口。外部能力接口归消费侧 feature application 层所有，adapter 只负责实现。
 
@@ -96,7 +96,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - `common/testing/`：跨模块测试基础设施和无业务语义 fixture，仅供测试代码使用；真实 PostgreSQL/Redis integration helper 放在 `testing/containers`，基础测试值生成放在 `testing/fixtures`。
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。
 
-新增共享代码进入 `common` 前必须满足跨服务稳定、无业务语义、边界清晰。服务独有规则、DTO 映射、infra adapter 行为或只为未来可能复用的 helper 应保留在对应服务模块内。
+新增共享代码进入 `common` 前必须满足跨服务稳定、无业务语义、边界清晰。服务独有规则、DTO 映射、infrastructure adapter 行为或只为未来可能复用的 helper 应保留在对应服务模块内。
 
 ## 8. Data Model
 
