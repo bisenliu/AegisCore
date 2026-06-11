@@ -13,7 +13,7 @@
 ## 2. Repository Shape
 
 - `go.work`：Go workspace，包含 `common` 和 `user-service` 两个模块。
-- `common/`：跨服务稳定契约和基础能力，按 `contract`、`runtime`、`http`、`security`、`validation` 分类组织；`contract/errors` 承载全局错误码，`contract/pagination` 承载分页契约，`contract/response` 承载 HTTP 响应信封 DTO，`http/binding` 承载 Gin 请求绑定和校验失败响应适配层，`http/response` 承载 Gin 响应输出 helper；不得作为服务特定 helper 的兜底目录。
+- `common/`：跨服务稳定契约和基础能力，按 `contract`、`runtime`、`http`、`security`、`testing`、`validation` 分类组织；`contract/errors` 承载全局错误码，`contract/pagination` 承载分页契约，`contract/response` 承载 HTTP 响应信封 DTO，`http/binding` 承载 Gin 请求绑定和校验失败响应适配层，`http/response` 承载 Gin 响应输出 helper，`testing` 仅承载跨模块测试基础设施和无业务语义 fixture；不得作为服务特定 helper 的兜底目录。
 - `user-service/`：用户服务 HTTP 运行时和 Go module，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration，以及按 feature 组织的业务代码。
 - `user-service/internal/features/user/`：用户资料 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/` 和 `module.go` 分层。
 - `user-service/internal/features/auth/`：认证会话 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/`、`infra/redis/` 和 `module.go` 分层。

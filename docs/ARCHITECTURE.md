@@ -85,6 +85,7 @@ Ent predicate 构造封装在 `infra/postgres` 内。Adapter 可以做字段裁�
 - `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、运行时资源名和时区初始化。
 - `common/http/`：HTTP/Gin 边界适配，例如 middleware、`http/binding` 请求绑定/校验失败响应适配层和 `http/response` 输出 helper。
 - `common/security/`：安全与凭证原语，例如 JWT、Bearer 传输常量、认证上下文和密码 hash helper。
+- `common/testing/`：跨模块测试基础设施和无业务语义 fixture，仅供测试代码使用；真实 PostgreSQL/Redis integration helper 放在 `testing/containers`，基础测试值生成放在 `testing/fixtures`。
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。
 
 新增共享代码进入 `common` 前必须满足跨服务稳定、无业务语义、边界清晰。服务独有规则、DTO 映射、infra adapter 行为或只为未来可能复用的 helper 应保留在对应服务模块内。

@@ -22,11 +22,36 @@
 
 用户服务启动会连接 Redis 和 PostgreSQL。单元测试应尽量隔离外部依赖；需要真实 Redis/PostgreSQL 的测试应明确作为集成测试，并在文档或测试名中说明依赖。
 
-## 4. Generated Code
+## 4. Integration And E2E Dependencies
+
+普通 `go test ./...` 和 `make test` 不要求 Docker，也不默认启动真实 PostgreSQL/Redis。需要验证真实外部依赖语义的 integration/e2e 测试应使用 `common/testing/containers`：
+
+```go
+postgres := containers.StartPostgres(ctx, t, containers.PostgresOptions{})
+redis := containers.StartRedis(ctx, t, containers.RedisOptions{})
+```
+
+容器测试通过环境变量显式启用：
+
+```bash
+AEGISCORE_TEST_CONTAINERS=1 go test ./...
+```
+
+未设置 `AEGISCORE_TEST_CONTAINERS` 时，`common/testing/containers` 的 integration-gated tests 会跳过。设置该变量后，如果 Docker 或容器镜像不可用，测试应失败并报告明确的启动、端口映射、ping 或清理错误，避免误判集成验证已经执行。
+
+使用取舍：
+
+- `domain` 和 `app` 单元测试优先使用 stub/fake，不连接外部服务。
+- Redis 命令语义测试可以继续使用 `miniredis`；只有需要真实 Redis 行为差异时再使用 `common/testing/containers.StartRedis`。
+- Ent/PostgreSQL adapter 当前可继续用 SQLite 覆盖可移植查询语义；只有需要 PostgreSQL-specific SQL、migration、constraint 或连接配置行为时再使用 `common/testing/containers.StartPostgres`。
+- `user-service` 可选择性导入 `github.com/aegiscore/common/testing/containers`，但不要求现有测试立即迁移。
+- 业务 fixture 仍放在对应 feature 的测试文件或测试包内；`common/testing/fixtures` 只提供用户名、邮箱、名称、UUID 等无业务语义的基础值。
+
+## 5. Generated Code
 
 Ent 生成代码通常不需要逐文件测试。测试应覆盖 schema 约束、infra adapter 行为或 API 行为。修改 `user-service/ent/schema/` 后运行 `go generate ./ent` 并再执行相关测试。
 
-## 5. Database Migration Verification
+## 6. Database Migration Verification
 
 涉及 Ent schema 或 SQL migration 的变更应验证：
 
@@ -36,7 +61,7 @@ Ent 生成代码通常不需要逐文件测试。测试应覆盖 schema 约束�
 4. 在 `user-service/` 运行 `./scripts/migrate-validate.sh`。
 5. 确认运行时没有通过 `client.Schema.Create(ctx)` 自动修改 schema。
 
-## 6. Change Verification
+## 7. Change Verification
 
 每个 change 实现完成后至少执行：
 
