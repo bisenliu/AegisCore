@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/validation"
 	userapp "github.com/aegiscore/user-service/internal/features/user/app"
@@ -38,7 +39,7 @@ func TestUserControllerGetByUserID(t *testing.T) {
 		if service.gotID.String() != controllerTestUserID {
 			t.Fatalf("gotID = %q", service.gotID)
 		}
-		if !envelope.Success || envelope.Code != response.CodeOK || envelope.Message != "ok" {
+		if !envelope.Success || envelope.Code != contracterrors.CodeOK || envelope.Message != "ok" {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 		data, ok := envelope.Data.(map[string]any)
@@ -66,7 +67,7 @@ func TestUserControllerGetByUserID(t *testing.T) {
 		if status != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", status, http.StatusNotFound)
 		}
-		if envelope.Success || envelope.Code != response.CodeNotFound || envelope.Message != messages.UserNotFound {
+		if envelope.Success || envelope.Code != contracterrors.CodeNotFound || envelope.Message != messages.UserNotFound {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 	})
@@ -76,7 +77,7 @@ func TestUserControllerGetByUserID(t *testing.T) {
 		if status != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 		}
-		if envelope.Success || envelope.Code != response.CodeInternalError || envelope.Message != "internal server error" {
+		if envelope.Success || envelope.Code != contracterrors.CodeInternalError || envelope.Message != "internal server error" {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 	})
@@ -99,7 +100,7 @@ func TestUserControllerCreate(t *testing.T) {
 		if service.gotCreate.Nickname != "Alice" || service.gotCreate.Username != "alice" || service.gotCreate.Password != "secret" || service.gotCreate.Status == nil || *service.gotCreate.Status != userdomain.UserStatusNormal {
 			t.Fatalf("gotCreate = %#v", service.gotCreate)
 		}
-		if !envelope.Success || envelope.Code != response.CodeOK || envelope.Message != "created" {
+		if !envelope.Success || envelope.Code != contracterrors.CodeOK || envelope.Message != "created" {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 		data, ok := envelope.Data.(map[string]any)
@@ -119,7 +120,7 @@ func TestUserControllerCreate(t *testing.T) {
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
-		if envelope.Success || envelope.Code != response.CodeBadRequest || envelope.Message != validation.ErrEmptyRequestBody {
+		if envelope.Success || envelope.Code != contracterrors.CodeBadRequest || envelope.Message != validation.ErrEmptyRequestBody {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 	})
@@ -129,7 +130,7 @@ func TestUserControllerCreate(t *testing.T) {
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
-		if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
+		if envelope.Success || envelope.Code != contracterrors.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 		assertFieldError(t, envelope, "username", "用户名", "required", "用户名为必填字段")
@@ -140,7 +141,7 @@ func TestUserControllerCreate(t *testing.T) {
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
-		if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
+		if envelope.Success || envelope.Code != contracterrors.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 		assertFieldError(t, envelope, "status", "用户状态", "enum", "用户状态取值不合法，允许值为：100、200、300")
@@ -151,7 +152,7 @@ func TestUserControllerCreate(t *testing.T) {
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
-		if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
+		if envelope.Success || envelope.Code != contracterrors.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 		assertFieldError(t, envelope, "password", "密码", "required", "密码为必填字段")
@@ -162,7 +163,7 @@ func TestUserControllerCreate(t *testing.T) {
 		if status != http.StatusConflict {
 			t.Fatalf("status = %d, want %d", status, http.StatusConflict)
 		}
-		if envelope.Success || envelope.Code != response.CodeConflict || envelope.Message != messages.UserAlreadyExists {
+		if envelope.Success || envelope.Code != contracterrors.CodeConflict || envelope.Message != messages.UserAlreadyExists {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 	})
@@ -172,7 +173,7 @@ func TestUserControllerCreate(t *testing.T) {
 		if status != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 		}
-		if envelope.Success || envelope.Code != response.CodeInternalError || envelope.Message != "internal server error" {
+		if envelope.Success || envelope.Code != contracterrors.CodeInternalError || envelope.Message != "internal server error" {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 	})
@@ -240,7 +241,7 @@ func TestUserControllerList(t *testing.T) {
 		if service.gotList.Limit != 0 {
 			t.Fatalf("service should not be called, gotList = %#v", service.gotList)
 		}
-		if envelope.Success || envelope.Code != response.CodeBadRequest || envelope.Message != messages.InvalidUserID {
+		if envelope.Success || envelope.Code != contracterrors.CodeBadRequest || envelope.Message != messages.InvalidUserID {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 	})
@@ -250,7 +251,7 @@ func TestUserControllerList(t *testing.T) {
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
-		if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
+		if envelope.Success || envelope.Code != contracterrors.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 		assertFieldError(t, envelope, "status", "用户状态", "enum", "用户状态取值不合法，允许值为：100、200、300")
@@ -261,7 +262,7 @@ func TestUserControllerList(t *testing.T) {
 		if status != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 		}
-		if envelope.Success || envelope.Code != response.CodeInternalError || envelope.Message != response.MessageInternalError {
+		if envelope.Success || envelope.Code != contracterrors.CodeInternalError || envelope.Message != response.MessageInternalError {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 	})
@@ -369,7 +370,7 @@ func executeList(t *testing.T, service *stubUserService, path string) (int, resp
 
 func assertPaginatedEnvelope(t *testing.T, envelope response.Envelope, pageSize int, nextCursor string, hasNext bool, itemCount int) {
 	t.Helper()
-	if !envelope.Success || envelope.Code != response.CodeOK || envelope.Message != response.MessageOK {
+	if !envelope.Success || envelope.Code != contracterrors.CodeOK || envelope.Message != response.MessageOK {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 	data, ok := envelope.Data.(map[string]any)
@@ -418,7 +419,7 @@ func assertInvalidUserID(t *testing.T, status int, envelope response.Envelope, m
 	if status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 	}
-	if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != message || envelope.Message == "invalid user id" {
+	if envelope.Success || envelope.Code != contracterrors.CodeValidationFailed || envelope.Message != message || envelope.Message == "invalid user id" {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 }

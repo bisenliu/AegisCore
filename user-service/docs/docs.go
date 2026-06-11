@@ -577,6 +577,39 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "github_com_aegiscore_common_contract_errors.Code": {
+            "type": "integer",
+            "enum": [
+                0,
+                10000,
+                10001,
+                20000,
+                20001,
+                20002,
+                20003,
+                20004,
+                20005,
+                30000,
+                40000,
+                50000,
+                90000
+            ],
+            "x-enum-varnames": [
+                "CodeOK",
+                "CodeBadRequest",
+                "CodeValidationFailed",
+                "CodeUnauthenticated",
+                "CodeTokenInvalid",
+                "CodeTokenExpired",
+                "CodeTokenRevoked",
+                "CodeMFARequired",
+                "CodeUserAccountLocked",
+                "CodeForbidden",
+                "CodeConflict",
+                "CodeNotFound",
+                "CodeInternalError"
+            ]
+        },
         "github_com_aegiscore_user-service_internal_features_auth_api.ChangePasswordRequest": {
             "type": "object",
             "required": [
@@ -711,7 +744,7 @@ const docTemplate = `{
                     }
                 },
                 "pagination": {
-                    "$ref": "#/definitions/response.Pagination"
+                    "$ref": "#/definitions/pagination.Pagination"
                 }
             }
         },
@@ -771,56 +804,7 @@ const docTemplate = `{
                 }
             }
         },
-        "response.Code": {
-            "type": "integer",
-            "enum": [
-                0,
-                10000,
-                10001,
-                20000,
-                20001,
-                20002,
-                20003,
-                20004,
-                20005,
-                30000,
-                40000,
-                50000,
-                90000
-            ],
-            "x-enum-varnames": [
-                "CodeOK",
-                "CodeBadRequest",
-                "CodeValidationFailed",
-                "CodeUnauthenticated",
-                "CodeTokenInvalid",
-                "CodeTokenExpired",
-                "CodeTokenRevoked",
-                "CodeMFARequired",
-                "CodeUserAccountLocked",
-                "CodeForbidden",
-                "CodeConflict",
-                "CodeNotFound",
-                "CodeInternalError"
-            ]
-        },
-        "response.Envelope": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "$ref": "#/definitions/response.Code"
-                },
-                "data": {},
-                "errors": {},
-                "message": {
-                    "type": "string"
-                },
-                "success": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "response.Pagination": {
+        "pagination.Pagination": {
             "type": "object",
             "properties": {
                 "has_next": {
@@ -834,6 +818,22 @@ const docTemplate = `{
                 "page_size": {
                     "type": "integer",
                     "example": 50
+                }
+            }
+        },
+        "response.Envelope": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "$ref": "#/definitions/github_com_aegiscore_common_contract_errors.Code"
+                },
+                "data": {},
+                "errors": {},
+                "message": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
                 }
             }
         }

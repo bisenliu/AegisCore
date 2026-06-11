@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/runtime/logger"
+	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
+	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/validation"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -47,8 +48,8 @@ func TestJSONBinder(t *testing.T) {
 		if validationErr.Message != validation.ErrEmptyRequestBody {
 			t.Fatalf("Message = %q, want %q", validationErr.Message, validation.ErrEmptyRequestBody)
 		}
-		if validationErr.Code != response.CodeBadRequest {
-			t.Fatalf("Code = %d, want %d", validationErr.Code, response.CodeBadRequest)
+		if validationErr.Code != contracterrors.CodeBadRequest {
+			t.Fatalf("Code = %d, want %d", validationErr.Code, contracterrors.CodeBadRequest)
 		}
 	})
 
@@ -63,8 +64,8 @@ func TestJSONBinder(t *testing.T) {
 		if got, want := validationErr.Message, "用户ID字段类型不正确，应为整数类型"; got != want {
 			t.Fatalf("Message = %q, want %q", got, want)
 		}
-		if validationErr.Code != response.CodeBadRequest {
-			t.Fatalf("Code = %d, want %d", validationErr.Code, response.CodeBadRequest)
+		if validationErr.Code != contracterrors.CodeBadRequest {
+			t.Fatalf("Code = %d, want %d", validationErr.Code, contracterrors.CodeBadRequest)
 		}
 	})
 
@@ -76,7 +77,7 @@ func TestJSONBinder(t *testing.T) {
 		if !errors.As(err, &validationErr) {
 			t.Fatalf("Bind error = %T, want *Error", err)
 		}
-		if validationErr.Message != validation.ErrTrailingJSONBody || validationErr.Code != response.CodeBadRequest {
+		if validationErr.Message != validation.ErrTrailingJSONBody || validationErr.Code != contracterrors.CodeBadRequest {
 			t.Fatalf("validation error = %#v", validationErr)
 		}
 	})
@@ -131,8 +132,8 @@ func TestBinders(t *testing.T) {
 		if got, want := validationErr.Message, "用户ID字段类型不正确，应为整数类型"; got != want {
 			t.Fatalf("Message = %q, want %q", got, want)
 		}
-		if validationErr.Code != response.CodeBadRequest {
-			t.Fatalf("Code = %d, want %d", validationErr.Code, response.CodeBadRequest)
+		if validationErr.Code != contracterrors.CodeBadRequest {
+			t.Fatalf("Code = %d, want %d", validationErr.Code, contracterrors.CodeBadRequest)
 		}
 	})
 
@@ -213,7 +214,7 @@ func TestBindOrAbort(t *testing.T) {
 	if err := jsonUnmarshal(recorder.Body.String(), &envelope); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
-	if envelope.Success || envelope.Code != response.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
+	if envelope.Success || envelope.Code != contracterrors.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 	if len(envelope.Errors.([]any)) != 1 {
@@ -262,7 +263,7 @@ func TestBindOrAbortTypeMismatchUsesBadRequest(t *testing.T) {
 	if err := jsonUnmarshal(recorder.Body.String(), &envelope); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
-	if envelope.Success || envelope.Code != response.CodeBadRequest || envelope.Message != "用户ID字段类型不正确，应为整数类型" {
+	if envelope.Success || envelope.Code != contracterrors.CodeBadRequest || envelope.Message != "用户ID字段类型不正确，应为整数类型" {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 	if envelope.Errors != nil {

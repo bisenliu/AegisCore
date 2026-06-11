@@ -37,7 +37,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | 参数解析 | `features/*/transport/http/controller.go` | 绑定 API DTO，执行边界校验，并映射为 command/query |
 | 业务调用 | `features/*/app/` | 编排用户资料或认证会话用例 |
 | 数据访问 | `features/*/infra/postgres/`, `features/*/infra/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
-| 响应输出 | `common/contract/response/` | 输出统一 `success/code/message/data` 信封 |
+| 响应输出 | `common/http/response/` + `common/contract/response/` | 通过 Gin writer 输出统一 `success/code/message/data` 信封，并复用稳定错误码与分页契约 |
 
 ## 5. Feature-First Organization
 
@@ -79,9 +79,11 @@ Ent predicate 构造封装在 `infra/postgres` 内。Adapter 可以做字段裁�
 
 ## 7. Common Organization
 
-- `common/contract/`：跨服务外部契约，例如响应信封、错误码和分页响应模型。
+- `common/contract/errors/`：跨服务稳定应用错误码、可渲染应用错误类型和错误转换 helper。
+- `common/contract/pagination/`：跨服务稳定 Cursor/Keyset 分页响应模型、分页大小边界和分页数据包装 helper。
+- `common/contract/response/`：HTTP 响应信封 DTO 和默认响应消息；不承载错误码、应用错误或分页 re-export。
 - `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、运行时资源名和时区初始化。
-- `common/http/`：HTTP/Gin 边界适配，例如 middleware 和 Gin 请求绑定/校验失败响应适配层。
+- `common/http/`：HTTP/Gin 边界适配，例如 middleware、Gin 请求绑定/校验失败响应适配层和 `http/response` 输出 helper。
 - `common/security/`：安全与凭证原语，例如 JWT、Bearer 传输常量、认证上下文和密码 hash helper。
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。
 

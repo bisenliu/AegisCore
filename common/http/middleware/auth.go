@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/aegiscore/common/contract/response"
+	contracterrors "github.com/aegiscore/common/contract/errors"
+	contractresponse "github.com/aegiscore/common/contract/response"
+	"github.com/aegiscore/common/http/response"
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/auth"
@@ -35,26 +37,26 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService,
 		if authHeader == "" {
 			// 缺少请求头表示调用方未认证；下面的 Bearer 格式错误则属于 token 无效。
 			reqLog.Info("missing authorization header")
-			response.Unauthenticated(c, response.MessageAuthInvalid)
+			response.Unauthenticated(c, contractresponse.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
 		tokenString, err := auth.ParseBearerAuthorization(authHeader)
 		if errors.Is(err, auth.ErrMissingBearerPrefix) {
 			reqLog.Warn("invalid authorization header format")
-			response.TokenInvalid(c, response.MessageAuthInvalid)
+			response.TokenInvalid(c, contractresponse.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
 		if errors.Is(err, auth.ErrEmptyBearerToken) {
 			reqLog.Warn("empty bearer token")
-			response.TokenInvalid(c, response.MessageAuthInvalid)
+			response.TokenInvalid(c, contractresponse.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
 		if err != nil {
 			reqLog.Warn("invalid authorization header format", zap.Error(err))
-			response.TokenInvalid(c, response.MessageAuthInvalid)
+			response.TokenInvalid(c, contractresponse.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
@@ -67,9 +69,9 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService,
 				reqLog.Warn("token validation failed", zap.Error(err))
 			}
 			if errors.Is(err, jwtv5.ErrTokenExpired) {
-				response.TokenExpired(c, response.MessageAuthInvalid)
+				response.TokenExpired(c, contractresponse.MessageAuthInvalid)
 			} else {
-				response.TokenInvalid(c, response.MessageAuthInvalid)
+				response.TokenInvalid(c, contractresponse.MessageAuthInvalid)
 			}
 			c.Abort()
 			return
@@ -84,10 +86,10 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService,
 						fields = append(fields, zap.Int64("current_token_version", mismatch.Current), zap.Int64("token_version", mismatch.Token))
 					}
 					reqLog.Warn("token version mismatch", fields...)
-					response.TokenInvalid(c, response.MessageAuthInvalid)
+					response.TokenInvalid(c, contractresponse.MessageAuthInvalid)
 				} else {
 					reqLog.Error("token version validation failed", zap.String("user_id", claims.UserID), zap.Error(err))
-					response.Fail(c, response.InternalError(err))
+					response.Fail(c, contracterrors.InternalError(err))
 				}
 				c.Abort()
 				return

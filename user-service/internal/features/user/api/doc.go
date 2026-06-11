@@ -1,6 +1,6 @@
 package userapi
 
-import "github.com/aegiscore/common/contract/response"
+import "github.com/aegiscore/common/contract/pagination"
 
 // UserResponseDoc 描述公开用户资料 Swagger 响应载荷。
 type UserResponseDoc struct {
@@ -14,6 +14,6 @@ type UserResponseDoc struct {
 
 // UserListResponseDoc 描述分页用户列表 Swagger 响应载荷。
 type UserListResponseDoc struct {
-	Items      []UserResponseDoc   `json:"items"`
-	Pagination response.Pagination `json:"pagination"`
+	Items      []UserResponseDoc     `json:"items"`
+	Pagination pagination.Pagination `json:"pagination"`
 }

@@ -1,7 +1,7 @@
 package ginvalidation
 
 import (
-	"github.com/aegiscore/common/contract/response"
+	"github.com/aegiscore/common/http/response"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/validation"
 	"github.com/gin-gonic/gin"

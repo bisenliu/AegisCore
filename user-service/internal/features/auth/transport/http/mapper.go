@@ -3,7 +3,7 @@ package authhttp
 import (
 	"errors"
 
-	"github.com/aegiscore/common/contract/response"
+	contracterrors "github.com/aegiscore/common/contract/errors"
 	authapi "github.com/aegiscore/user-service/internal/features/auth/api"
 	authapp "github.com/aegiscore/user-service/internal/features/auth/app"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
@@ -32,14 +32,14 @@ func toLogoutResponse(result *authapp.LogoutResult) authapi.LogoutResponse {
 func toAuthHTTPError(err error) error {
 	switch {
 	case errors.Is(err, authdomain.ErrInvalidCredentials):
-		return response.UnauthenticatedError(messages.InvalidCredentials)
+		return contracterrors.UnauthenticatedError(messages.InvalidCredentials)
 	case errors.Is(err, authdomain.ErrMissingSession):
-		return response.UnauthenticatedError(messages.MissingSession)
+		return contracterrors.UnauthenticatedError(messages.MissingSession)
 	case errors.Is(err, authdomain.ErrTokenInvalid):
-		return response.TokenInvalidError(messages.MissingSession)
+		return contracterrors.TokenInvalidError(messages.MissingSession)
 	case errors.Is(err, userdomain.ErrUserNotFound):
-		return response.NotFoundError(messages.UserNotFound)
+		return contracterrors.NotFoundError(messages.UserNotFound)
 	default:
-		return response.FromError(err)
+		return contracterrors.FromError(err)
 	}
 }

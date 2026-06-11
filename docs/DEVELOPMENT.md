@@ -57,7 +57,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - HTTP 层只处理请求解析、参数校验和响应输出。
 - App service 层负责业务编排、command/query 处理和 DTO 映射。
 - Infra adapter 层负责 Ent/PostgreSQL、Redis 访问、存储模型转换和存储错误转换，具体放在对应 feature 的 `infra/postgres` 或 `infra/redis` 下。
-- 共享中间件、响应模型、配置和基础设施放在 `common/` 的对应能力分类目录中：响应契约使用 `common/contract/response`，运行时基础能力使用 `common/runtime`，HTTP/Gin 适配使用 `common/http`，安全凭证原语使用 `common/security`，通用校验核心使用 `common/validation`。
+- 共享中间件、响应模型、配置和基础设施放在 `common/` 的对应能力分类目录中：响应 DTO 契约使用 `common/contract/response`，Gin 响应输出使用 `common/http/response`，运行时基础能力使用 `common/runtime`，HTTP/Gin 适配使用 `common/http`，安全凭证原语使用 `common/security`，通用校验核心使用 `common/validation`。
 - `common` 只承载跨服务稳定契约和基础能力；用户服务独有规则、DTO 映射、infra adapter 行为或仅为未来可能复用的 helper 应保留在 `user-service` 内。
 - Ent 生成代码不要手动编辑；修改 schema 后重新生成。生成代码边界、`go generate ./ent` 用法和新增 Entity Schema 流程见 `user-service/ent/README.md`。
 - Go 文件提交前运行 `gofmt`。
@@ -138,8 +138,8 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 
 ## 7. API Conventions
 
-- 成功响应使用 `common/contract/response.OK` 或 `common/contract/response.Created`。
-- 失败响应使用 `common/contract/response.Fail` 或便捷方法 `BadRequest`、`NotFound`。
+- 成功响应使用 `common/http/response.OK` 或 `common/http/response.Created`。
+- 失败响应使用 `common/http/response.Fail` 或便捷方法 `BadRequest`、`NotFound`。
 - 响应信封字段为 `success`、`code`、`message`、`data`。
 - API 错误码目前包括 `OK`、`BAD_REQUEST`、`NOT_FOUND`、`INTERNAL_ERROR`。
 

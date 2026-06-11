@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
@@ -33,7 +34,7 @@ func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 	if service.gotLogin.Username != "alice" || service.gotLogin.Password != "secret" {
 		t.Fatalf("gotLogin = %#v", service.gotLogin)
 	}
-	if !envelope.Success || envelope.Code != response.CodeOK {
+	if !envelope.Success || envelope.Code != contracterrors.CodeOK {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 	data, ok := envelope.Data.(map[string]any)
@@ -51,7 +52,7 @@ func TestAuthControllerLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 	if status != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
 	}
-	if service.gotLogin.Username != "" || service.gotLogin.Password != "" || envelope.Success || envelope.Code != response.CodeUnauthenticated {
+	if service.gotLogin.Username != "" || service.gotLogin.Password != "" || envelope.Success || envelope.Code != contracterrors.CodeUnauthenticated {
 		t.Fatalf("service=%#v envelope=%#v", service, envelope)
 	}
 }
@@ -65,7 +66,7 @@ func TestAuthControllerLoginMapsInvalidCredentials(t *testing.T) {
 	if status != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
 	}
-	if envelope.Success || envelope.Code != response.CodeUnauthenticated || envelope.Message != messages.InvalidCredentials {
+	if envelope.Success || envelope.Code != contracterrors.CodeUnauthenticated || envelope.Message != messages.InvalidCredentials {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 }
@@ -79,7 +80,7 @@ func TestAuthControllerLoginMapsServiceError(t *testing.T) {
 	if status != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 	}
-	if envelope.Success || envelope.Code != response.CodeInternalError || envelope.Message != response.MessageInternalError {
+	if envelope.Success || envelope.Code != contracterrors.CodeInternalError || envelope.Message != response.MessageInternalError {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 }
@@ -96,7 +97,7 @@ func TestAuthControllerChangePasswordNormalizesToCommand(t *testing.T) {
 	if service.gotChange.Token != "password-token" || service.gotChange.NewPassword != "new-secret" {
 		t.Fatalf("gotChange = %#v", service.gotChange)
 	}
-	if !envelope.Success || envelope.Code != response.CodeOK {
+	if !envelope.Success || envelope.Code != contracterrors.CodeOK {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 	data, ok := envelope.Data.(map[string]any)
@@ -114,7 +115,7 @@ func TestAuthControllerChangePasswordMapsNotFound(t *testing.T) {
 	if status != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", status, http.StatusNotFound)
 	}
-	if envelope.Success || envelope.Code != response.CodeNotFound || envelope.Message != messages.UserNotFound {
+	if envelope.Success || envelope.Code != contracterrors.CodeNotFound || envelope.Message != messages.UserNotFound {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 }
@@ -131,7 +132,7 @@ func TestAuthControllerRefreshNormalizesToCommand(t *testing.T) {
 	if service.gotRefresh.RefreshToken != "refresh-token" {
 		t.Fatalf("gotRefresh = %#v", service.gotRefresh)
 	}
-	if !envelope.Success || envelope.Code != response.CodeOK {
+	if !envelope.Success || envelope.Code != contracterrors.CodeOK {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 }
@@ -145,7 +146,7 @@ func TestAuthControllerRefreshRejectsBearerOnlyToken(t *testing.T) {
 	if status != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
 	}
-	if service.gotRefresh.RefreshToken != "" || envelope.Success || envelope.Code != response.CodeTokenInvalid {
+	if service.gotRefresh.RefreshToken != "" || envelope.Success || envelope.Code != contracterrors.CodeTokenInvalid {
 		t.Fatalf("service=%#v envelope=%#v", service, envelope)
 	}
 }
@@ -159,7 +160,7 @@ func TestAuthControllerRefreshMapsTokenInvalid(t *testing.T) {
 	if status != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
 	}
-	if envelope.Success || envelope.Code != response.CodeTokenInvalid || envelope.Message != messages.MissingSession {
+	if envelope.Success || envelope.Code != contracterrors.CodeTokenInvalid || envelope.Message != messages.MissingSession {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 }

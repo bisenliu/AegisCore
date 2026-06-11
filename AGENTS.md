@@ -13,7 +13,7 @@
 ## 2. Repository Shape
 
 - `go.work`：Go workspace，包含 `common` 和 `user-service` 两个模块。
-- `common/`：跨服务稳定契约和基础能力，按 `contract`、`runtime`、`http`、`security`、`validation` 分类组织；不得作为服务特定 helper 的兜底目录。
+- `common/`：跨服务稳定契约和基础能力，按 `contract`、`runtime`、`http`、`security`、`validation` 分类组织；`contract/errors` 承载全局错误码，`contract/pagination` 承载分页契约，`contract/response` 承载 HTTP 响应信封 DTO，`http/response` 承载 Gin 响应输出 helper；不得作为服务特定 helper 的兜底目录。
 - `user-service/`：用户服务 HTTP 运行时和 Go module，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration，以及按 feature 组织的业务代码。
 - `user-service/internal/features/user/`：用户资料 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/` 和 `module.go` 分层。
 - `user-service/internal/features/auth/`：认证会话 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/`、`infra/redis/` 和 `module.go` 分层。
@@ -50,7 +50,7 @@
 - 认证会话控制：登录、刷新、强制改密、退出当前设备、退出全部设备。
 - HTTP 服务运行时：启动、运行、路由注册和优雅停止。
 - 共享基础设施：配置、日志、Redis/PostgreSQL/Ent 运行时依赖。
-- API 响应契约：统一成功/失败响应信封和应用错误映射。
+- API 响应契约：统一成功/失败响应信封、全局错误码和分页响应模型。
 - 数据库迁移：通过 Ent schema 和 Atlas 维护用户服务 SQL migration。
 
 ## 5. Development Commands
@@ -85,7 +85,7 @@
 - 每个 feature 自己提供 Fx module：`features/<feature>/module.go` 暴露 `Module` 并组装 feature 内部 service、controller 和 infra provider；`bootstrap.AppModule` 只保留共享运行时 provider、Gin engine、HTTP server 和路由 invoke。
 - 基础设施目录统一使用 `infra/postgres/`、`infra/redis/` 等；不要使用 `store/` 作为目录名。
 - 共享基础能力优先放在 `common/` 对应分类目录中；服务特定规则保留在服务模块内。
-- HTTP API 应使用 `common/contract/response.Envelope` 格式返回。
+- HTTP API 应使用 `common/contract/response.Envelope` 格式返回，并通过 `common/http/response` 写出 Gin 响应。
 - 配置通过 YAML 与 `AEGISCORE_` 环境变量覆盖加载，Redis/PostgreSQL 使用 `redis.<name>` 与 `postgres.<name>` 命名实例，避免硬编码运行时配置。
 - `internal/shared` 默认禁止新增。只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并且必须在 `docs/ARCHITECTURE.md` 说明 owner、准入理由和禁止事项。
 - Ports 由消费侧 feature 拥有：用户资料 service 消费的接口放在 `internal/features/user/app/ports.go`，认证 service 消费的凭据、token version 和 session 接口放在 `internal/features/auth/app/ports.go`。不要为了 adapter 方便在 infra 包或共享根包定义大接口。

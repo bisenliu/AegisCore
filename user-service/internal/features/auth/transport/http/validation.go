@@ -3,7 +3,7 @@ package authhttp
 import (
 	"strings"
 
-	"github.com/aegiscore/common/contract/response"
+	contracterrors "github.com/aegiscore/common/contract/errors"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authapi "github.com/aegiscore/user-service/internal/features/auth/api"
 	"github.com/aegiscore/user-service/internal/messages"
@@ -14,7 +14,7 @@ func NormalizeLogin(req *authapi.LoginRequest) error {
 	req.Username = strings.TrimSpace(req.Username)
 	req.Password = strings.TrimSpace(req.Password)
 	if req.Username == "" || req.Password == "" {
-		return response.UnauthenticatedError(messages.InvalidCredentials)
+		return contracterrors.UnauthenticatedError(messages.InvalidCredentials)
 	}
 	return nil
 }
@@ -24,10 +24,10 @@ func NormalizeChangePassword(req *authapi.ChangePasswordRequest) error {
 	req.Token = commonauth.StripBearerPrefix(req.Token)
 	req.NewPassword = strings.TrimSpace(req.NewPassword)
 	if req.Token == "" || strings.EqualFold(req.Token, commonauth.TokenTypeBearer) {
-		return response.TokenInvalidError(messages.MissingSession)
+		return contracterrors.TokenInvalidError(messages.MissingSession)
 	}
 	if req.NewPassword == "" {
-		return response.ValidationFailedError(messages.InvalidPassword)
+		return contracterrors.ValidationFailedError(messages.InvalidPassword)
 	}
 	return nil
 }
@@ -36,7 +36,7 @@ func NormalizeChangePassword(req *authapi.ChangePasswordRequest) error {
 func NormalizeRefresh(req *authapi.RefreshTokenRequest) error {
 	req.RefreshToken = commonauth.StripBearerPrefix(req.RefreshToken)
 	if req.RefreshToken == "" || strings.EqualFold(req.RefreshToken, commonauth.TokenTypeBearer) {
-		return response.TokenInvalidError(messages.MissingSession)
+		return contracterrors.TokenInvalidError(messages.MissingSession)
 	}
 	return nil
 }

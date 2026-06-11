@@ -1,8 +1,8 @@
 package userhttp
 
 import (
-	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/http/ginvalidation"
+	"github.com/aegiscore/common/http/response"
 	commonvalidation "github.com/aegiscore/common/validation"
 	userapi "github.com/aegiscore/user-service/internal/features/user/api"
 	userapp "github.com/aegiscore/user-service/internal/features/user/app"

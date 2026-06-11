@@ -1,8 +1,8 @@
 package authhttp
 
 import (
-	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/http/ginvalidation"
+	"github.com/aegiscore/common/http/response"
 	commonauth "github.com/aegiscore/common/security/auth"
 	commonvalidation "github.com/aegiscore/common/validation"
 	authapi "github.com/aegiscore/user-service/internal/features/auth/api"

@@ -3,7 +3,8 @@ package middleware
 import (
 	"runtime/debug"
 
-	"github.com/aegiscore/common/contract/response"
+	contracterrors "github.com/aegiscore/common/contract/errors"
+	"github.com/aegiscore/common/http/response"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -18,7 +19,7 @@ func Recovery(log *zap.Logger) gin.HandlerFunc {
 					zap.Any("panic", r),
 					zap.String("stack", string(debug.Stack())),
 				)
-				response.Fail(c, response.InternalError(nil))
+				response.Fail(c, contracterrors.InternalError(nil))
 				c.Abort()
 			}
 		}()

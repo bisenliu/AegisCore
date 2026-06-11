@@ -3,7 +3,7 @@ package authhttp
 import (
 	"testing"
 
-	"github.com/aegiscore/common/contract/response"
+	contracterrors "github.com/aegiscore/common/contract/errors"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authapi "github.com/aegiscore/user-service/internal/features/auth/api"
 	"github.com/aegiscore/user-service/internal/messages"
@@ -20,8 +20,8 @@ func TestNormalizeLogin(t *testing.T) {
 
 	req = authapi.LoginRequest{Username: "alice", Password: " "}
 	err := NormalizeLogin(&req)
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeUnauthenticated || appErr.Message != messages.InvalidCredentials {
+	appErr := contracterrors.FromError(err)
+	if appErr.Code != contracterrors.CodeUnauthenticated || appErr.Message != messages.InvalidCredentials {
 		t.Fatalf("err = %#v", appErr)
 	}
 }
@@ -37,8 +37,8 @@ func TestNormalizeChangePassword(t *testing.T) {
 
 	req = authapi.ChangePasswordRequest{Token: commonauth.TokenPrefix + "token", NewPassword: " "}
 	err := NormalizeChangePassword(&req)
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeValidationFailed || appErr.Message != messages.InvalidPassword {
+	appErr := contracterrors.FromError(err)
+	if appErr.Code != contracterrors.CodeValidationFailed || appErr.Message != messages.InvalidPassword {
 		t.Fatalf("err = %#v", appErr)
 	}
 }
@@ -54,8 +54,8 @@ func TestNormalizeRefresh(t *testing.T) {
 
 	req = authapi.RefreshTokenRequest{RefreshToken: " " + commonauth.TokenPrefix}
 	err := NormalizeRefresh(&req)
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeTokenInvalid || appErr.Message != messages.MissingSession {
+	appErr := contracterrors.FromError(err)
+	if appErr.Code != contracterrors.CodeTokenInvalid || appErr.Message != messages.MissingSession {
 		t.Fatalf("err = %#v", appErr)
 	}
 }

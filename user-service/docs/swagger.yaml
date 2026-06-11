@@ -2,6 +2,36 @@ basePath: /api/v1
 consumes:
 - application/json
 definitions:
+  github_com_aegiscore_common_contract_errors.Code:
+    enum:
+    - 0
+    - 10000
+    - 10001
+    - 20000
+    - 20001
+    - 20002
+    - 20003
+    - 20004
+    - 20005
+    - 30000
+    - 40000
+    - 50000
+    - 90000
+    type: integer
+    x-enum-varnames:
+    - CodeOK
+    - CodeBadRequest
+    - CodeValidationFailed
+    - CodeUnauthenticated
+    - CodeTokenInvalid
+    - CodeTokenExpired
+    - CodeTokenRevoked
+    - CodeMFARequired
+    - CodeUserAccountLocked
+    - CodeForbidden
+    - CodeConflict
+    - CodeNotFound
+    - CodeInternalError
   github_com_aegiscore_user-service_internal_features_auth_api.ChangePasswordRequest:
     properties:
       new_password:
@@ -97,7 +127,7 @@ definitions:
           $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_user_api.UserResponseDoc'
         type: array
       pagination:
-        $ref: '#/definitions/response.Pagination'
+        $ref: '#/definitions/pagination.Pagination'
     type: object
   github_com_aegiscore_user-service_internal_features_user_api.UserResponseDoc:
     properties:
@@ -140,48 +170,7 @@ definitions:
         example: ok
         type: string
     type: object
-  response.Code:
-    enum:
-    - 0
-    - 10000
-    - 10001
-    - 20000
-    - 20001
-    - 20002
-    - 20003
-    - 20004
-    - 20005
-    - 30000
-    - 40000
-    - 50000
-    - 90000
-    type: integer
-    x-enum-varnames:
-    - CodeOK
-    - CodeBadRequest
-    - CodeValidationFailed
-    - CodeUnauthenticated
-    - CodeTokenInvalid
-    - CodeTokenExpired
-    - CodeTokenRevoked
-    - CodeMFARequired
-    - CodeUserAccountLocked
-    - CodeForbidden
-    - CodeConflict
-    - CodeNotFound
-    - CodeInternalError
-  response.Envelope:
-    properties:
-      code:
-        $ref: '#/definitions/response.Code'
-      data: {}
-      errors: {}
-      message:
-        type: string
-      success:
-        type: boolean
-    type: object
-  response.Pagination:
+  pagination.Pagination:
     properties:
       has_next:
         example: true
@@ -192,6 +181,17 @@ definitions:
       page_size:
         example: 50
         type: integer
+    type: object
+  response.Envelope:
+    properties:
+      code:
+        $ref: '#/definitions/github_com_aegiscore_common_contract_errors.Code'
+      data: {}
+      errors: {}
+      message:
+        type: string
+      success:
+        type: boolean
     type: object
 host: localhost:8080
 info:

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/aegiscore/common/contract/response"
+	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/validation"
 	"github.com/gin-gonic/gin"
 )
@@ -47,7 +47,7 @@ func JSONBinderWithOptions(disallowUnknownFields bool) Binder {
 
 func jsonBinder(c *gin.Context, dst any, disallowUnknownFields bool) error {
 	if c.Request.Body == nil || c.Request.ContentLength == 0 {
-		return &validation.Error{Message: validation.ErrEmptyRequestBody, Code: response.CodeBadRequest}
+		return &validation.Error{Message: validation.ErrEmptyRequestBody, Code: contracterrors.CodeBadRequest}
 	}
 	decoder := json.NewDecoder(c.Request.Body)
 	if disallowUnknownFields {
@@ -59,7 +59,7 @@ func jsonBinder(c *gin.Context, dst any, disallowUnknownFields bool) error {
 	var extra any
 	// API 只接受一个 JSON 文档，避免拼接载荷隐藏尾随数据。
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return &validation.Error{Message: validation.ErrTrailingJSONBody, Code: response.CodeBadRequest}
+		return &validation.Error{Message: validation.ErrTrailingJSONBody, Code: contracterrors.CodeBadRequest}
 	}
 	return nil
 }

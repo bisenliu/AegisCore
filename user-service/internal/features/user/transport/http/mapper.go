@@ -3,7 +3,8 @@ package userhttp
 import (
 	"errors"
 
-	"github.com/aegiscore/common/contract/response"
+	contracterrors "github.com/aegiscore/common/contract/errors"
+	"github.com/aegiscore/common/contract/pagination"
 	userapi "github.com/aegiscore/user-service/internal/features/user/api"
 	userapp "github.com/aegiscore/user-service/internal/features/user/app"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
@@ -22,7 +23,7 @@ func toUserResponse(result *userapp.UserResult) userapi.UserResponse {
 	}
 }
 
-func toUserListResponse(result *userapp.ListUsersResult) response.PaginatedData[userapi.UserResponse] {
+func toUserListResponse(result *userapp.ListUsersResult) pagination.PaginatedData[userapi.UserResponse] {
 	items := make([]userapi.UserResponse, 0, len(result.Items))
 	for i := range result.Items {
 		items = append(items, userapi.UserResponse{
@@ -34,16 +35,16 @@ func toUserListResponse(result *userapp.ListUsersResult) response.PaginatedData[
 			UpdatedAt: result.Items[i].UpdatedAt,
 		})
 	}
-	return response.NewPaginatedData(items, response.NewPagination(result.PageSize, result.NextCursor, result.HasNext))
+	return pagination.NewPaginatedData(items, pagination.NewPagination(result.PageSize, result.NextCursor, result.HasNext))
 }
 
 func toUserHTTPError(err error) error {
 	switch {
 	case errors.Is(err, userdomain.ErrUserAlreadyExists):
-		return response.ConflictError(messages.UserAlreadyExists)
+		return contracterrors.ConflictError(messages.UserAlreadyExists)
 	case errors.Is(err, userdomain.ErrUserNotFound):
-		return response.NotFoundError(messages.UserNotFound)
+		return contracterrors.NotFoundError(messages.UserNotFound)
 	default:
-		return response.FromError(err)
+		return contracterrors.FromError(err)
 	}
 }

@@ -3,7 +3,7 @@ package userhttp
 import (
 	"testing"
 
-	"github.com/aegiscore/common/contract/response"
+	contracterrors "github.com/aegiscore/common/contract/errors"
 	userapi "github.com/aegiscore/user-service/internal/features/user/api"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
@@ -26,8 +26,8 @@ func TestNormalizeCreateUser(t *testing.T) {
 
 		err := NormalizeCreateUser(&req)
 
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeValidationFailed || appErr.Message != messages.InvalidUsername {
+		appErr := contracterrors.FromError(err)
+		if appErr.Code != contracterrors.CodeValidationFailed || appErr.Message != messages.InvalidUsername {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})
@@ -37,8 +37,8 @@ func TestNormalizeCreateUser(t *testing.T) {
 
 		err := NormalizeCreateUser(&req)
 
-		appErr := response.FromError(err)
-		if appErr.Code != response.CodeValidationFailed || appErr.Message != messages.InvalidPassword {
+		appErr := contracterrors.FromError(err)
+		if appErr.Code != contracterrors.CodeValidationFailed || appErr.Message != messages.InvalidPassword {
 			t.Fatalf("err = %#v", appErr)
 		}
 	})
@@ -79,8 +79,8 @@ func TestParseListCursor(t *testing.T) {
 	}
 
 	_, err = ParseListCursor(userapi.ListUsersRequest{Cursor: "abc"})
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeBadRequest || appErr.Message != messages.InvalidUserID {
+	appErr := contracterrors.FromError(err)
+	if appErr.Code != contracterrors.CodeBadRequest || appErr.Message != messages.InvalidUserID {
 		t.Fatalf("err = %#v", appErr)
 	}
 }
@@ -92,8 +92,8 @@ func TestParseUserID(t *testing.T) {
 	}
 
 	_, err = ParseUserID(userapi.GetUserRequest{UserID: "abc"})
-	appErr := response.FromError(err)
-	if appErr.Code != response.CodeBadRequest || appErr.Message != messages.InvalidUserID {
+	appErr := contracterrors.FromError(err)
+	if appErr.Code != contracterrors.CodeBadRequest || appErr.Message != messages.InvalidUserID {
 		t.Fatalf("err = %#v", appErr)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
@@ -377,7 +378,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
 		engine.ServeHTTP(recorder, request)
-		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
+		assertAuthFailureEnvelope(t, recorder, contracterrors.CodeUnauthenticated)
 	})
 
 	t.Run("create requires auth", func(t *testing.T) {
@@ -385,28 +386,28 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"nickname":"Alice","username":"alice"}`))
 		request.Header.Set("Content-Type", "application/json")
 		engine.ServeHTTP(recorder, request)
-		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
+		assertAuthFailureEnvelope(t, recorder, contracterrors.CodeUnauthenticated)
 	})
 
 	t.Run("list requires auth", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users", nil)
 		engine.ServeHTTP(recorder, request)
-		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
+		assertAuthFailureEnvelope(t, recorder, contracterrors.CodeUnauthenticated)
 	})
 
 	t.Run("logout requires auth", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 		engine.ServeHTTP(recorder, request)
-		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
+		assertAuthFailureEnvelope(t, recorder, contracterrors.CodeUnauthenticated)
 	})
 
 	t.Run("logout all requires auth", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout-all", nil)
 		engine.ServeHTTP(recorder, request)
-		assertAuthFailureEnvelope(t, recorder, response.CodeUnauthenticated)
+		assertAuthFailureEnvelope(t, recorder, contracterrors.CodeUnauthenticated)
 	})
 
 	t.Run("query with invalid token returns token invalid", func(t *testing.T) {
@@ -414,7 +415,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
 		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+"invalid")
 		engine.ServeHTTP(recorder, request)
-		assertAuthFailureEnvelope(t, recorder, response.CodeTokenInvalid)
+		assertAuthFailureEnvelope(t, recorder, contracterrors.CodeTokenInvalid)
 	})
 
 	t.Run("query with valid token keeps controller behavior", func(t *testing.T) {
@@ -452,7 +453,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
 		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthTokenWithVersion(t, "secret", routeAuthUserID, 2))
 		engine.ServeHTTP(recorder, request)
-		assertAuthFailureEnvelope(t, recorder, response.CodeTokenInvalid)
+		assertAuthFailureEnvelope(t, recorder, contracterrors.CodeTokenInvalid)
 	})
 
 	t.Run("query not found returns route envelope", func(t *testing.T) {
@@ -460,7 +461,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthNotFoundUserID, nil)
 		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		engine.ServeHTTP(recorder, request)
-		assertFailureEnvelope(t, recorder, http.StatusNotFound, response.CodeNotFound)
+		assertFailureEnvelope(t, recorder, http.StatusNotFound, contracterrors.CodeNotFound)
 	})
 
 	t.Run("query forbidden returns route envelope", func(t *testing.T) {
@@ -468,7 +469,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthForbiddenUserID, nil)
 		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		engine.ServeHTTP(recorder, request)
-		assertFailureEnvelope(t, recorder, http.StatusForbidden, response.CodeForbidden)
+		assertFailureEnvelope(t, recorder, http.StatusForbidden, contracterrors.CodeForbidden)
 	})
 
 	t.Run("query internal error returns route envelope", func(t *testing.T) {
@@ -476,7 +477,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthInternalErrorUserID, nil)
 		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		engine.ServeHTTP(recorder, request)
-		assertFailureEnvelope(t, recorder, http.StatusInternalServerError, response.CodeInternalError)
+		assertFailureEnvelope(t, recorder, http.StatusInternalServerError, contracterrors.CodeInternalError)
 	})
 
 	t.Run("panic recovery returns envelope and logs trace id", func(t *testing.T) {
@@ -486,7 +487,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		request.Header.Set("X-Trace-ID", "trace-panic-route-chain")
 		engine.ServeHTTP(recorder, request)
 
-		assertFailureEnvelope(t, recorder, http.StatusInternalServerError, response.CodeInternalError)
+		assertFailureEnvelope(t, recorder, http.StatusInternalServerError, contracterrors.CodeInternalError)
 		entries := logs.FilterMessage("panic recovered").All()
 		if len(entries) != 1 {
 			t.Fatalf("panic recovered logs = %d, want 1", len(entries))
@@ -557,7 +558,7 @@ func (s *routeAuthUserService) GetUserByID(_ context.Context, userID uuid.UUID) 
 		return nil, userdomain.ErrUserNotFound
 	}
 	if userIDString == routeAuthForbiddenUserID {
-		return nil, response.ForbiddenError("forbidden")
+		return nil, contracterrors.ForbiddenError("forbidden")
 	}
 	if userIDString == routeAuthInternalErrorUserID {
 		return nil, errors.New("database down")
@@ -572,12 +573,12 @@ func assertSuccessEnvelope(t *testing.T, recorder *httptest.ResponseRecorder) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
-	if !envelope.Success || envelope.Code != response.CodeOK {
+	if !envelope.Success || envelope.Code != contracterrors.CodeOK {
 		t.Fatalf("envelope = %#v, want success OK", envelope)
 	}
 }
 
-func assertFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantStatus int, wantCode response.Code) {
+func assertFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantStatus int, wantCode contracterrors.Code) {
 	t.Helper()
 	if recorder.Code != wantStatus {
 		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, wantStatus, recorder.Body.String())
@@ -597,7 +598,7 @@ func (s *routeAuthUserService) ListUsers(context.Context, userapp.ListUsersQuery
 	return &userapp.ListUsersResult{Items: items, PageSize: 10}, nil
 }
 
-func assertAuthFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantCode response.Code) {
+func assertAuthFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantCode contracterrors.Code) {
 	t.Helper()
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)

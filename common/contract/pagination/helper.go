@@ -1,24 +1,4 @@
-package response
-
-const (
-	// DefaultPageSize 是分页大小缺失或无效时使用的兜底每页数量。
-	DefaultPageSize = 10
-	// MaxPageSize 是分页大小允许的最大值。
-	MaxPageSize = 100
-)
-
-// Pagination 描述分页集合响应的元数据。
-type Pagination struct {
-	PageSize   int    `json:"page_size" example:"50"`
-	NextCursor string `json:"next_cursor,omitempty" example:"0190c8d2-8d8a-7a01-9f43-0f91fb4e2b7c"`
-	HasNext    bool   `json:"has_next" example:"true"`
-}
-
-// PaginatedData 将当前页数据和分页元数据包装在一起。
-type PaginatedData[T any] struct {
-	Items      []T        `json:"items"`
-	Pagination Pagination `json:"pagination"`
-}
+package pagination
 
 // NormalizePageSize 将无效或过大的分页大小修正为公开契约允许的范围。
 func NormalizePageSize(pageSize int) int {

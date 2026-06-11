@@ -3,7 +3,8 @@ package userhttp
 import (
 	"strings"
 
-	"github.com/aegiscore/common/contract/response"
+	contracterrors "github.com/aegiscore/common/contract/errors"
+	"github.com/aegiscore/common/contract/pagination"
 	userapi "github.com/aegiscore/user-service/internal/features/user/api"
 	"github.com/aegiscore/user-service/internal/messages"
 	"github.com/google/uuid"
@@ -15,10 +16,10 @@ func NormalizeCreateUser(req *userapi.CreateUserRequest) error {
 	req.Username = strings.ToLower(strings.TrimSpace(req.Username))
 	req.Password = strings.TrimSpace(req.Password)
 	if req.Nickname == "" || req.Username == "" {
-		return response.ValidationFailedError(messages.InvalidUsername)
+		return contracterrors.ValidationFailedError(messages.InvalidUsername)
 	}
 	if req.Password == "" {
-		return response.ValidationFailedError(messages.InvalidPassword)
+		return contracterrors.ValidationFailedError(messages.InvalidPassword)
 	}
 	return nil
 }
@@ -26,7 +27,7 @@ func NormalizeCreateUser(req *userapi.CreateUserRequest) error {
 // NormalizeListUsers 应用分页默认值并裁剪用户列表过滤条件。
 func NormalizeListUsers(req *userapi.ListUsersRequest) {
 	req.Cursor = strings.TrimSpace(req.Cursor)
-	req.PageSize = response.NormalizePageSize(req.PageSize)
+	req.PageSize = pagination.NormalizePageSize(req.PageSize)
 	req.Limit = req.PageSize
 	req.Nickname = strings.TrimSpace(req.Nickname)
 	req.Username = strings.TrimSpace(req.Username)
@@ -39,7 +40,7 @@ func ParseListCursor(req userapi.ListUsersRequest) (*uuid.UUID, error) {
 	}
 	cursor, err := uuid.Parse(req.Cursor)
 	if err != nil {
-		return nil, response.BadRequestError(messages.InvalidUserID)
+		return nil, contracterrors.BadRequestError(messages.InvalidUserID)
 	}
 	return &cursor, nil
 }
@@ -48,7 +49,7 @@ func ParseListCursor(req userapi.ListUsersRequest) (*uuid.UUID, error) {
 func ParseUserID(req userapi.GetUserRequest) (uuid.UUID, error) {
 	userID, err := uuid.Parse(req.UserID)
 	if err != nil {
-		return uuid.Nil, response.BadRequestError(messages.InvalidUserID)
+		return uuid.Nil, contracterrors.BadRequestError(messages.InvalidUserID)
 	}
 	return userID, nil
 }
