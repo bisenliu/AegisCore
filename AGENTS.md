@@ -12,35 +12,35 @@
 
 ## 2. Repository Shape
 
-- `go.work`：Go workspace，包含 `common` 和 `user-services` 两个模块。
+- `go.work`：Go workspace，包含 `common` 和 `user-service` 两个模块。
 - `common/`：跨服务稳定契约和基础能力，按 `contract`、`runtime`、`http`、`security`、`validation` 分类组织；不得作为服务特定 helper 的兜底目录。
-- `user-services/`：用户服务 HTTP 运行时，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration，以及按 feature 组织的业务代码。
-- `user-services/internal/features/user/`：用户资料 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/` 和 `module.go` 分层。
-- `user-services/internal/features/auth/`：认证会话 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/`、`infra/redis/` 和 `module.go` 分层。
+- `user-service/`：用户服务 HTTP 运行时，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration，以及按 feature 组织的业务代码。
+- `user-service/internal/features/user/`：用户资料 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/` 和 `module.go` 分层。
+- `user-service/internal/features/auth/`：认证会话 feature，按 `api/`、`app/`、`domain/`、`transport/http/`、`infra/postgres/`、`infra/redis/` 和 `module.go` 分层。
 - `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产。
 
 ## 3. Key Entry Points
 
-- CLI 入口：`user-services/cmd/main.go`
-- 服务组装：`user-services/internal/bootstrap/app.go`
-- HTTP 路由总装：`user-services/internal/bootstrap/routes.go`
-- Gin router 基础设置：`user-services/internal/router/router.go`
-- 用户 feature module：`user-services/internal/features/user/module.go`
-- 用户 controller：`user-services/internal/features/user/transport/http/controller.go`
-- 用户 service：`user-services/internal/features/user/app/service.go`
-- 用户 PostgreSQL adapter：`user-services/internal/features/user/infra/postgres/user_store.go`
-- 认证 feature module：`user-services/internal/features/auth/module.go`
-- 认证 controller：`user-services/internal/features/auth/transport/http/controller.go`
-- 认证 service：`user-services/internal/features/auth/app/service.go`
-- 认证 PostgreSQL adapter：`user-services/internal/features/auth/infra/postgres/credential_store.go`
-- 认证 Redis adapter：`user-services/internal/features/auth/infra/redis/session_store.go`
+- CLI 入口：`user-service/cmd/main.go`
+- 服务组装：`user-service/internal/bootstrap/app.go`
+- HTTP 路由总装：`user-service/internal/bootstrap/routes.go`
+- Gin router 基础设置：`user-service/internal/router/router.go`
+- 用户 feature module：`user-service/internal/features/user/module.go`
+- 用户 controller：`user-service/internal/features/user/transport/http/controller.go`
+- 用户 service：`user-service/internal/features/user/app/service.go`
+- 用户 PostgreSQL adapter：`user-service/internal/features/user/infra/postgres/user_store.go`
+- 认证 feature module：`user-service/internal/features/auth/module.go`
+- 认证 controller：`user-service/internal/features/auth/transport/http/controller.go`
+- 认证 service：`user-service/internal/features/auth/app/service.go`
+- 认证 PostgreSQL adapter：`user-service/internal/features/auth/infra/postgres/credential_store.go`
+- 认证 Redis adapter：`user-service/internal/features/auth/infra/redis/session_store.go`
 - 共享配置加载：`common/runtime/config/loader.go`
 - 共享配置 Fx provider：`common/runtime/configfx/config.go`
 - 共享日志 Fx provider：`common/runtime/loggerfx/logger.go`
 - 共享 datastore provider：`common/runtime/datastorefx/redis.go`、`common/runtime/datastorefx/postgres.go`
 - 运行时资源名：`common/runtime/resources/resource_names.go`
-- Atlas 配置：`user-services/atlas.hcl`
-- 用户服务迁移目录：`user-services/migrations/`
+- Atlas 配置：`user-service/atlas.hcl`
+- 用户服务迁移目录：`user-service/migrations/`
 
 ## 4. Current Feature Areas
 
@@ -55,24 +55,24 @@
 
 ## 5. Development Commands
 
-- 运行全部测试：分别在 `common/` 和 `user-services/` 执行 `go test ./...`。
-- 运行用户服务：`go run ./user-services/cmd serve --config ./user-services/configs/config.yaml`。
-- 生成 Ent 代码：在 `user-services/` 执行 `go generate ./ent`。
-- 生成迁移：在 `user-services/` 执行 `./scripts/migrate-diff.sh <name>`。
-- 校验迁移：在 `user-services/` 执行 `./scripts/migrate-validate.sh`。
+- 运行全部测试：分别在 `common/` 和 `user-service/` 执行 `go test ./...`。
+- 运行用户服务：`go run ./user-service/cmd serve --config ./user-service/configs/config.yaml`。
+- 生成 Ent 代码：在 `user-service/` 执行 `go generate ./ent`。
+- 生成迁移：在 `user-service/` 执行 `./scripts/migrate-diff.sh <name>`。
+- 校验迁移：在 `user-service/` 执行 `./scripts/migrate-validate.sh`。
 - 格式化 Go 代码：`gofmt -w <files>`。
-- 运行 lint：分别在 `common/` 和 `user-services/` 执行 `golangci-lint run ./...`。
+- 运行 lint：分别在 `common/` 和 `user-service/` 执行 `golangci-lint run ./...`。
 
 ## 6. Change Workflow
 
 1. 先阅读 `docs/ARCHITECTURE.md`，确认改动属于哪个模块、feature 和层。
 2. 小改动直接实现；跨 feature、跨模块、目录结构或外部契约变更，应先在 issue、PR 描述或开发记录中写清目标、影响范围和验证方式。
 3. 修改结构规则时，同步更新 `AGENTS.md` 和 `docs/ARCHITECTURE.md`。
-4. 实现后运行与改动范围匹配的测试；跨模块变更分别在 `common/` 和 `user-services/` 验证。
+4. 实现后运行与改动范围匹配的测试；跨模块变更分别在 `common/` 和 `user-service/` 验证。
 
 ## 7. Repository Rules
 
-- 不要手写 `user-services/ent/` 下的生成代码；修改 Ent schema 后重新生成。
+- 不要手写 `user-service/ent/` 下的生成代码；修改 Ent schema 后重新生成。
 - 不要用运行时 `client.Schema.Create(ctx)` 表达 schema 变更；修改 Ent schema 后生成 Ent 代码和 Atlas SQL migration。
 - 按 feature 组织服务内代码：用户资料放在 `internal/features/user`，认证会话放在 `internal/features/auth`。不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。
 - 保持 `transport/http`、`app`、`domain`、`infra/*` 分层：HTTP 解析在 controller，业务编排在 app service，数据库或 Redis 访问在 infra adapter。
@@ -98,4 +98,4 @@
 
 Adapter 可以做字段裁剪和模型转换，但不得承载复杂业务编排。禁止在 adapter 中实现登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
 
-Ent predicate 构造必须封装在 infra adapter 内，例如 `internal/features/user/infra/postgres/predicates.go`。`app/service.go` 不得导入 `github.com/aegiscore/user-services/ent/user`，也不得直接调用 Ent predicate。
+Ent predicate 构造必须封装在 infra adapter 内，例如 `internal/features/user/infra/postgres/predicates.go`。`app/service.go` 不得导入 `github.com/aegiscore/user-service/ent/user`，也不得直接调用 Ent predicate。

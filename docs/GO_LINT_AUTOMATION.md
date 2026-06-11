@@ -26,13 +26,13 @@
     GO_LINT_AUTOMATION.md
   common/
     go.mod
-  user-services/
+  user-service/
     go.mod
 ```
 
 配置放置原则：
 
-- `.golangci.yml` 放在仓库根目录，统一 `common/` 和 `user-services/` 的 lint 规则。
+- `.golangci.yml` 放在仓库根目录，统一 `common/` 和 `user-service/` 的 lint 规则。
 - CI workflow 放在 `.github/workflows/lint.yml`；如果团队使用 GitLab CI、Jenkins 或其他平台，保留同等命令即可。
 - `docs/DEVELOPMENT.md` 放日常命令和排查入口，本文档放完整治理方案。
 - pre-commit 可以只作为文档建议，也可以后续落地 `.pre-commit-config.yaml`。
@@ -55,7 +55,7 @@ linters:
     - revive
 ```
 
-完整配置应同时包含运行超时、输出格式、测试文件检查策略、issue 限制和生成代码排除规则。生成代码排除需要避免扫描 Ent codegen 输出，但不能排除 `user-services/ent/schema/`，因为 schema source 是开发者维护的代码。
+完整配置应同时包含运行超时、输出格式、测试文件检查策略、issue 限制和生成代码排除规则。生成代码排除需要避免扫描 Ent codegen 输出，但不能排除 `user-service/ent/schema/`，因为 schema source 是开发者维护的代码。
 
 ## 5. 本地执行命令
 
@@ -73,11 +73,11 @@ golangci-lint run ./...
 ```
 
 ```bash
-cd user-services
+cd user-service
 golangci-lint run ./...
 ```
 
-不建议把仓库根目录 `golangci-lint run ./...` 作为唯一命令，因为仓库根目录是 Go workspace，不是单一 Go module。CI 和本地开发都应分别进入 `common/` 与 `user-services/` 执行。
+不建议把仓库根目录 `golangci-lint run ./...` 作为唯一命令，因为仓库根目录是 Go workspace，不是单一 Go module。CI 和本地开发都应分别进入 `common/` 与 `user-service/` 执行。
 
 ## 6. CI 集成建议
 
@@ -100,7 +100,7 @@ jobs:
       matrix:
         module:
           - common
-          - user-services
+          - user-service
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -117,7 +117,7 @@ jobs:
 
 ```bash
 cd common && golangci-lint run ./...
-cd ../user-services && golangci-lint run ./...
+cd ../user-service && golangci-lint run ./...
 ```
 
 ## 7. Pre-commit 集成建议
@@ -136,9 +136,9 @@ repos:
         args: [--config, ../.golangci.yml, ./...]
         files: ^common/.*\.go$
       - id: golangci-lint
-        name: golangci-lint user-services
+        name: golangci-lint user-service
         args: [--config, ../.golangci.yml, ./...]
-        files: ^user-services/.*\.go$
+        files: ^user-service/.*\.go$
 ```
 
 如果不引入 pre-commit 框架，也可以在 `.git/hooks/pre-commit` 本地脚本中执行：
@@ -148,7 +148,7 @@ repos:
 set -euo pipefail
 
 (cd common && golangci-lint run ./...)
-(cd user-services && golangci-lint run ./...)
+(cd user-service && golangci-lint run ./...)
 ```
 
 推荐落地方式：先启用 CI，确保团队有统一门禁；pre-commit 作为自愿使用的本地提速工具，待团队认可后再考虑提交框架配置。
@@ -161,13 +161,13 @@ set -euo pipefail
 - 如果历史问题较多，先让 CI 以报告模式运行或只对新增问题设置阻断，再逐步清理存量问题。
 - 不建议在存量问题未分类时立即全量阻断，否则容易让正常业务迭代被大量低风险历史问题阻塞。
 
-当前仓库首次接入时，`common/` 和 `user-services/` 均存在存量 lint findings，因此 `.github/workflows/lint.yml` 暂时对 lint step 设置 `continue-on-error: true`。完成存量治理或建立新增问题阻断机制后，应移除该设置，并在分支保护中将 lint workflow 设为 required check。
+当前仓库首次接入时，`common/` 和 `user-service/` 均存在存量 lint findings，因此 `.github/workflows/lint.yml` 暂时对 lint step 设置 `continue-on-error: true`。完成存量治理或建立新增问题阻断机制后，应移除该设置，并在分支保护中将 lint workflow 设为 required check。
 
 ## 9. 存量问题治理方式
 
 分阶段治理：
 
-1. 先运行 `golangci-lint run ./...`，统计 `common/` 与 `user-services/` 的问题数量、类型和路径。
+1. 先运行 `golangci-lint run ./...`，统计 `common/` 与 `user-service/` 的问题数量、类型和路径。
 2. 第一阶段修复高风险问题：`govet`、`staticcheck`、真实未处理错误、可能 panic 或资源泄露的问题。
 3. 第二阶段修复低成本问题：`gofmt`、`goimports`、`unused`、`gosimple`。
 4. 第三阶段处理风格类问题：`stylecheck`、`revive` 中争议较大的规则先团队确认，再分批落地。
@@ -177,7 +177,7 @@ set -euo pipefail
 首次验证基线：
 
 - `common/` 当前存在 45 个 lint findings，主要包括 `gofmt`、`goimports`、`govet`、`revive` 和 `staticcheck`。
-- `user-services/` 当前存在 47 个 lint findings，主要包括 `goimports`、`revive` 和 `unused`。
+- `user-service/` 当前存在 47 个 lint findings，主要包括 `goimports`、`revive` 和 `unused`。
 - 本次变更不直接修复这些存量问题，避免在自动化接入 PR 中混入大规模格式化和行为相关修改。
 
 优先级建议：
@@ -200,7 +200,7 @@ set -euo pipefail
 `docs/DEVELOPMENT.md` 应包含：
 
 - `golangci-lint` 安装命令。
-- `common/` 和 `user-services/` 的本地 lint 命令。
+- `common/` 和 `user-service/` 的本地 lint 命令。
 - 常见失败排查方式。
 - 本文档路径，作为完整整改方案入口。
 
@@ -210,5 +210,5 @@ set -euo pipefail
 - `goimports` 失败：安装 `goimports` 后运行 `goimports -w <files>`，或按 lint 输出调整 imports。
 - `errcheck` 失败：显式处理错误；确认为安全忽略时，用 `_ = fn()` 表达有意忽略并在必要时补充说明。
 - `staticcheck` 或 `govet` 失败：优先按真实 bug 处理，不建议直接排除。
-- 生成代码报错：确认 `.golangci.yml` 排除的是 Ent codegen 输出，而不是 `user-services/ent/schema/`。
+- 生成代码报错：确认 `.golangci.yml` 排除的是 Ent codegen 输出，而不是 `user-service/ent/schema/`。
 - CI 与本地结果不一致：检查 Go 版本、`golangci-lint` 版本、执行目录和配置路径是否一致。

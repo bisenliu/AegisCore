@@ -3,31 +3,31 @@
 ## 1. Prerequisites
 
 - Go workspace 使用 `go 1.26` 和 `toolchain go1.26.3`，见 `go.work`。
-- 工具链基线由 `go.work`、`common/go.mod`、`user-services/go.mod` 和本文档共同说明；修改 Go/toolchain 版本时需同步更新这些文件。
+- 工具链基线由 `go.work`、`common/go.mod`、`user-service/go.mod` 和本文档共同说明；修改 Go/toolchain 版本时需同步更新这些文件。
 - 本地代码规范检查使用 `golangci-lint`，建议安装与 CI 一致的版本：`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2`。
 - 本地运行用户服务需要 PostgreSQL 和 Redis。
 - 生成或执行数据库迁移需要 Atlas CLI，用户服务迁移目标通常指向 `postgres.user_db` 或部署环境提供的 `DATABASE_URL`。
-- 用户服务配置示例位于 `user-services/configs/config.yaml`。
+- 用户服务配置示例位于 `user-service/configs/config.yaml`。
 
 ## 2. Workspace Layout
 
 - `common/go.mod`：共享 Go 模块，模块路径 `github.com/aegiscore/common`。
-- `user-services/go.mod`：用户服务 Go 模块，模块路径 `github.com/aegiscore/user-services`。
+- `user-service/go.mod`：用户服务 Go 模块，模块路径 `github.com/aegiscore/user-service`。
 - `go.work`：将两个模块纳入同一个 workspace。
 
 ## 3. Common Commands
 
 | 任务 | 命令 | 执行目录 |
 |---|---|---|
-| 运行全部测试 | 分别执行 `go test ./...` | `common/` 和 `user-services/` |
-| 运行用户服务 | `go run ./user-services/cmd serve --config ./user-services/configs/config.yaml` | 仓库根目录 |
-| 运行单模块测试 | `go test ./...` | `common/` 或 `user-services/` |
+| 运行全部测试 | 分别执行 `go test ./...` | `common/` 和 `user-service/` |
+| 运行用户服务 | `go run ./user-service/cmd serve --config ./user-service/configs/config.yaml` | 仓库根目录 |
+| 运行单模块测试 | `go test ./...` | `common/` 或 `user-service/` |
 | 运行共享模块 lint | `golangci-lint run ./...` | `common/` |
-| 运行用户服务 lint | `golangci-lint run ./...` | `user-services/` |
-| 生成 Ent 代码 | `go generate ./ent` | `user-services/` |
-| 生成用户服务数据库迁移 | `./scripts/migrate-diff.sh <name>` | `user-services/` |
-| 校验用户服务迁移目录 | `./scripts/migrate-validate.sh` | `user-services/` |
-| 执行用户服务数据库迁移 | `DATABASE_URL='<postgres-url>' ./scripts/migrate-apply.sh` | `user-services/` |
+| 运行用户服务 lint | `golangci-lint run ./...` | `user-service/` |
+| 生成 Ent 代码 | `go generate ./ent` | `user-service/` |
+| 生成用户服务数据库迁移 | `./scripts/migrate-diff.sh <name>` | `user-service/` |
+| 校验用户服务迁移目录 | `./scripts/migrate-validate.sh` | `user-service/` |
+| 执行用户服务数据库迁移 | `DATABASE_URL='<postgres-url>' ./scripts/migrate-apply.sh` | `user-service/` |
 | 格式化 Go 文件 | `gofmt -w <files>` | 任意目录 |
 
 ## 4. Configuration
@@ -35,7 +35,7 @@
 配置加载逻辑位于 `common/runtime/config/loader.go`。
 
 - 默认配置文件路径由服务命令传入，`serve` 默认使用 `./configs/config.yaml`。
-- 从仓库根目录运行时应显式传入 `./user-services/configs/config.yaml`。
+- 从仓库根目录运行时应显式传入 `./user-service/configs/config.yaml`。
 - 环境变量前缀为 `AEGISCORE`。
 - 配置 key 中的 `.` 和 `-` 会映射为环境变量中的 `_`。
 - Redis 使用 `redis.<name>` 命名实例，例如 `redis.cache_redis`、`redis.queue_redis`。
@@ -51,8 +51,8 @@
 - Service 层负责业务编排和 DTO 映射。
 - Repository 层负责 Ent/数据库访问和存储错误转换。
 - 共享中间件、响应模型、配置和基础设施放在 `common/` 的对应能力分类目录中：响应契约使用 `common/contract/response`，运行时基础能力使用 `common/runtime`，HTTP/Gin 适配使用 `common/http`，安全凭证原语使用 `common/security`，通用校验核心使用 `common/validation`。
-- `common` 只承载跨服务稳定契约和基础能力；用户服务独有规则、DTO 映射、repository 行为或仅为未来可能复用的 helper 应保留在 `user-services` 内。
-- Ent 生成代码不要手动编辑；修改 schema 后重新生成。生成代码边界、`go generate ./ent` 用法和新增 Entity Schema 流程见 `user-services/ent/README.md`。
+- `common` 只承载跨服务稳定契约和基础能力；用户服务独有规则、DTO 映射、repository 行为或仅为未来可能复用的 helper 应保留在 `user-service` 内。
+- Ent 生成代码不要手动编辑；修改 schema 后重新生成。生成代码边界、`go generate ./ent` 用法和新增 Entity Schema 流程见 `user-service/ent/README.md`。
 - Go 文件提交前运行 `gofmt`。
 - 提交前建议在受影响 Go module 中运行 `golangci-lint run ./...`；完整 lint 配置、CI/pre-commit 集成和存量问题治理方案见 `docs/GO_LINT_AUTOMATION.md`。
 
@@ -62,16 +62,16 @@
 - `errcheck` 失败时，优先显式处理错误；确认可忽略时用 `_ = fn()` 表达有意忽略。
 - `govet` 或 `staticcheck` 失败时，按潜在真实 bug 优先排查，不建议直接排除。
 - CI 与本地结果不一致时，检查 Go 版本、`golangci-lint` 版本、执行目录和 `../.golangci.yml` 配置路径是否一致。
-- 生成代码产生 lint 噪声时，确认排除规则只覆盖 Ent 生成代码，不覆盖 `user-services/ent/schema/`。
+- 生成代码产生 lint 噪声时，确认排除规则只覆盖 Ent 生成代码，不覆盖 `user-service/ent/schema/`。
 
 ## 6. Database Migrations
 
-用户服务采用服务内迁移目录方案：Ent schema、业务代码、Atlas 配置和 SQL migration 都由 `user-services/` 自己维护。这样可以保持服务发布、镜像打包和 CI/CD 迁移执行独立，不需要在仓库根目录集中维护所有服务的迁移文件。
+用户服务采用服务内迁移目录方案：Ent schema、业务代码、Atlas 配置和 SQL migration 都由 `user-service/` 自己维护。这样可以保持服务发布、镜像打包和 CI/CD 迁移执行独立，不需要在仓库根目录集中维护所有服务的迁移文件。
 
 ### 6.1 Directory Layout
 
 ```text
-user-services/
+user-service/
   atlas.hcl
   ent/
     schema/
@@ -88,12 +88,12 @@ user-services/
 
 ### 6.2 Generate SQL Migrations
 
-1. 修改 `user-services/ent/schema/` 下的 Ent schema。
-2. 在 `user-services/` 执行 `go generate ./ent`，只生成 Ent 代码，不要手写 `user-services/ent/` 下的生成文件。
-3. 在 `user-services/` 执行 `./scripts/migrate-diff.sh <migration-name>`。
-4. 审查 `user-services/migrations/*.sql` 和 `user-services/migrations/atlas.sum`。
+1. 修改 `user-service/ent/schema/` 下的 Ent schema。
+2. 在 `user-service/` 执行 `go generate ./ent`，只生成 Ent 代码，不要手写 `user-service/ent/` 下的生成文件。
+3. 在 `user-service/` 执行 `./scripts/migrate-diff.sh <migration-name>`。
+4. 审查 `user-service/migrations/*.sql` 和 `user-service/migrations/atlas.sum`。
 
-Ent 生成代码边界和新增 Entity Schema 的完整说明见 `user-services/ent/README.md`。
+Ent 生成代码边界和新增 Entity Schema 的完整说明见 `user-service/ent/README.md`。
 
 `migrate-diff.sh` 使用 Atlas 的 `ent://ent/schema` schema source 读取 Ent schema，并通过 PostgreSQL dev database 计算与现有 migration directory 的差异。默认 dev URL 为 `docker://postgres/15/dev?search_path=public`，可通过 `ATLAS_DEV_URL` 覆盖。
 
@@ -106,7 +106,7 @@ Atlas 生成的 SQL 必须提交前 review。允许手动调整 SQL 以满足 Po
 CREATE INDEX CONCURRENTLY "users_username_idx" ON "users" ("username");
 ```
 
-`CREATE INDEX CONCURRENTLY` 不能在事务中执行，因此需要将该语句放在非事务 migration 中，或按 Atlas 支持的事务模式指令拆分 migration。任何手动修改 SQL 后，都必须在 `user-services/` 执行：
+`CREATE INDEX CONCURRENTLY` 不能在事务中执行，因此需要将该语句放在非事务 migration 中，或按 Atlas 支持的事务模式指令拆分 migration。任何手动修改 SQL 后，都必须在 `user-service/` 执行：
 
 ```bash
 atlas migrate hash --dir file://migrations
@@ -120,7 +120,7 @@ atlas migrate hash --dir file://migrations
 推荐在 CI/CD release job 中执行迁移，再启动或滚动发布服务：
 
 ```bash
-cd user-services
+cd user-service
 ./scripts/migrate-validate.sh
 DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&search_path=public' ./scripts/migrate-apply.sh
 ```
@@ -148,15 +148,15 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 ## 9. Adding Features
 
 1. 先阅读 `docs/ARCHITECTURE.md`，确认新能力属于哪个模块、feature 和层。
-2. 新增服务内业务能力时，优先放在 `user-services/internal/features/<feature>/`；已有 feature 内按 `api/app/domain/transport/http/infra/*` 分层扩展。
+2. 新增服务内业务能力时，优先放在 `user-service/internal/features/<feature>/`；已有 feature 内按 `api/app/domain/transport/http/infra/*` 分层扩展。
 3. 新增跨服务稳定基础能力时，按 `common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation` 归类。
 4. 跨 feature、跨模块、外部 API、配置、数据库 schema 或目录结构变更，应在 issue、PR 描述或开发记录中写清目标、影响范围和验证方式。
-5. 增加或更新测试，并在受影响模块目录运行相关 `go test` 命令；跨模块变更时分别在 `common/` 和 `user-services/` 运行。
+5. 增加或更新测试，并在受影响模块目录运行相关 `go test` 命令；跨模块变更时分别在 `common/` 和 `user-service/` 运行。
 
 ## 10. Adding Shared Code
 
 1. 先确认共享代码是否属于跨服务稳定契约、运行时基础能力、HTTP/Gin 适配、安全凭证原语或通用校验核心。
-2. 如能力只服务于用户服务请求清洗、状态规则、DTO 映射、repository 行为或业务编排，保留在 `user-services` 对应分层内。
+2. 如能力只服务于用户服务请求清洗、状态规则、DTO 映射、repository 行为或业务编排，保留在 `user-service` 对应分层内。
 3. 如确需进入 `common`，选择对应目录：`common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation`，并在 `docs/ARCHITECTURE.md` 更新边界说明。
 4. 新增或迁移共享 API 时同步更新 Go imports、测试和文档。
 

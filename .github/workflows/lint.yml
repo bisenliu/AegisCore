@@ -22,7 +22,7 @@ jobs:
       matrix:
         module:
           - common
-          - user-services
+          - user-service
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
           cache: true
           cache-dependency-path: |
             common/go.sum
-            user-services/go.sum
+            user-service/go.sum
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v8

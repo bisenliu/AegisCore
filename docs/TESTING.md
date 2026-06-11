@@ -4,9 +4,9 @@
 
 | 范围 | 命令 | 说明 |
 |---|---|---|
-| 全仓库 | 分别执行 `go test ./...` | 在 `common/` 和 `user-services/` 执行；仓库根目录本身不是 Go module |
+| 全仓库 | 分别执行 `go test ./...` | 在 `common/` 和 `user-service/` 执行；仓库根目录本身不是 Go module |
 | 共享模块 | `go test ./...` | 在 `common/` 执行 |
-| 用户服务模块 | `go test ./...` | 在 `user-services/` 执行 |
+| 用户服务模块 | `go test ./...` | 在 `user-service/` 执行 |
 
 ## 2. What To Validate
 
@@ -24,23 +24,23 @@
 
 ## 4. Generated Code
 
-Ent 生成代码通常不需要逐文件测试。测试应覆盖 schema 约束、repository 行为或 API 行为。修改 `user-services/ent/schema/` 后运行 `go generate ./ent` 并再执行相关测试。
+Ent 生成代码通常不需要逐文件测试。测试应覆盖 schema 约束、repository 行为或 API 行为。修改 `user-service/ent/schema/` 后运行 `go generate ./ent` 并再执行相关测试。
 
 ## 5. Database Migration Verification
 
 涉及 Ent schema 或 SQL migration 的变更应验证：
 
-1. 在 `user-services/` 运行 `go generate ./ent`。
-2. 在 `user-services/` 运行 `./scripts/migrate-diff.sh <name>` 或确认现有 migration 已覆盖 schema 变化。
-3. Review `user-services/migrations/*.sql`；如手工修改 SQL，运行 `atlas migrate hash --dir file://migrations`。
-4. 在 `user-services/` 运行 `./scripts/migrate-validate.sh`。
+1. 在 `user-service/` 运行 `go generate ./ent`。
+2. 在 `user-service/` 运行 `./scripts/migrate-diff.sh <name>` 或确认现有 migration 已覆盖 schema 变化。
+3. Review `user-service/migrations/*.sql`；如手工修改 SQL，运行 `atlas migrate hash --dir file://migrations`。
+4. 在 `user-service/` 运行 `./scripts/migrate-validate.sh`。
 5. 确认运行时没有通过 `client.Schema.Create(ctx)` 自动修改 schema。
 
 ## 6. Change Verification
 
 每个 change 实现完成后至少执行：
 
-1. 与改动范围匹配的 `go test ./...`；跨模块变更时分别在 `common/` 和 `user-services/` 执行。
+1. 与改动范围匹配的 `go test ./...`；跨模块变更时分别在 `common/` 和 `user-service/` 执行。
 2. 如涉及 Ent schema，执行 `go generate ./ent` 并检查生成结果。
 3. 如涉及 migration，执行 `./scripts/migrate-validate.sh` 并检查 `atlas.sum` 与 SQL 文件一致。
 4. 如涉及 HTTP API，验证成功和失败响应均符合 `common/contract/response.Envelope`。

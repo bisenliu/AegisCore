@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用户服务模块 `user-services`。用户服务通过 Cobra 提供 CLI，通过 Uber Fx 组装依赖，通过 Gin 暴露 HTTP API，通过 Ent 访问 PostgreSQL，并通过 Atlas 维护服务内 SQL migration。
+AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用户服务模块 `user-service`。用户服务通过 Cobra 提供 CLI，通过 Uber Fx 组装依赖，通过 Gin 暴露 HTTP API，通过 Ent 访问 PostgreSQL，并通过 Atlas 维护服务内 SQL migration。
 
 本文件和根目录 `AGENTS.md` 是仓库结构与分层规则的唯一长期规则源。仓库不再维护 OpenSpec/OPSX 工件。
 
@@ -11,27 +11,27 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | 模块 | 责任 | 关键位置 |
 |---|---|---|
 | `common` | 跨服务稳定契约与基础能力；不得承载服务特定 helper 或业务语义 | `common/contract/`, `common/runtime/`, `common/http/`, `common/security/`, `common/validation/` |
-| `user-services` | 用户服务运行时、用户资料与认证会话 feature、Ent schema、Atlas migration、Swagger 文档 | `user-services/cmd/`, `user-services/internal/`, `user-services/ent/`, `user-services/migrations/`, `user-services/docs/` |
+| `user-service` | 用户服务运行时、用户资料与认证会话 feature、Ent schema、Atlas migration、Swagger 文档 | `user-service/cmd/`, `user-service/internal/`, `user-service/ent/`, `user-service/migrations/`, `user-service/docs/` |
 | `deployments` | 本地和生产部署资产 | `deployments/compose/`, `deployments/docker/`, `deployments/k8s/`, `deployments/helm/` |
 
-仓库根目录是 workspace，不是业务 Go module。运行 Go 命令时通常进入 `common/` 或 `user-services/`。
+仓库根目录是 workspace，不是业务 Go module。运行 Go 命令时通常进入 `common/` 或 `user-service/`。
 
 ## 3. Runtime Flow
 
-1. `user-services/cmd/main.go` 创建 `aegiscore-user-services` CLI，并注册 `serve` 子命令。
+1. `user-service/cmd/main.go` 创建 `aegiscore-user-services` CLI，并注册 `serve` 子命令。
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
-3. `user-services/internal/bootstrap.AppModule` 显式提供配置、日志、Redis/PostgreSQL named providers、Ent clients、Gin engine、HTTP server，并导入 feature modules。
+3. `user-service/internal/bootstrap.AppModule` 显式提供配置、日志、Redis/PostgreSQL named providers、Ent clients、Gin engine、HTTP server，并导入 feature modules。
 4. User/Auth feature modules 自己组装 feature-local infra adapter、app service 和 HTTP controller。
-5. `user-services/internal/bootstrap/routes.go` 注册 `/healthz`、Swagger、`/api/v1`、认证中间件和 feature-local routes。
+5. `user-service/internal/bootstrap/routes.go` 注册 `/healthz`、Swagger、`/api/v1`、认证中间件和 feature-local routes。
 6. Fx lifecycle 启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
 ## 4. HTTP Request Flow
 
 | 步骤 | 代码位置 | 行为 |
 |---|---|---|
-| 中间件链 | `user-services/internal/bootstrap/gin.go` | 注册 trace-id、panic recovery、request logging、CORS |
-| 路由总装 | `user-services/internal/bootstrap/routes.go` | 创建 public/protected route groups 并调用 feature route registration |
-| 路由基础设置 | `user-services/internal/router/router.go` | 创建 Gin engine 和基础系统路由 |
+| 中间件链 | `user-service/internal/bootstrap/gin.go` | 注册 trace-id、panic recovery、request logging、CORS |
+| 路由总装 | `user-service/internal/bootstrap/routes.go` | 创建 public/protected route groups 并调用 feature route registration |
+| 路由基础设置 | `user-service/internal/router/router.go` | 创建 Gin engine 和基础系统路由 |
 | 参数解析 | `features/*/transport/http/controller.go` | 绑定 API DTO，执行边界校验，并映射为 command/query |
 | 业务调用 | `features/*/app/` | 编排用户资料或认证会话用例 |
 | 数据访问 | `features/*/infra/postgres/`, `features/*/infra/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
@@ -39,7 +39,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 ## 5. Feature-First Organization
 
-服务内业务代码按 feature 组织在 `user-services/internal/features/<feature>/`。当前稳定 feature 包括：
+服务内业务代码按 feature 组织在 `user-service/internal/features/<feature>/`。当前稳定 feature 包括：
 
 - `user`：用户资料创建、查询和分页列表。
 - `auth`：登录、刷新、强制改密、退出当前设备、退出全部设备。
@@ -87,7 +87,7 @@ Ent predicate 构造封装在 `infra/postgres` 内。Adapter 可以做字段裁�
 
 ## 8. Data Model
 
-`user-services/ent/schema/user.go` 定义当前用户模型：
+`user-service/ent/schema/user.go` 定义当前用户模型：
 
 | 字段 | 约束 |
 |---|---|
@@ -106,19 +106,19 @@ Ent predicate 构造封装在 `infra/postgres` 内。Adapter 可以做字段裁�
 - 配置加载由 `common/runtime/config/loader.go` 负责，支持 YAML 文件和 `AEGISCORE_` 环境变量覆盖。
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前声明并连接 `postgres.user_db` 与 `postgres.common_db`。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`。
-- Ent clients 由 `user-services/internal/bootstrap/ent.go` 基于具名 `*sql.DB` 构建。
+- Ent clients 由 `user-service/internal/bootstrap/ent.go` 基于具名 `*sql.DB` 构建。
 - 日志基于 Zap，由 `common/runtime/logger` 与 `common/runtime/loggerfx` 提供；HTTP trace header 为 `X-Trace-ID`，Gin context key 为 `trace_id`，日志字段统一为 `trace-id`。
 
 ## 10. Database Migrations
 
-- 用户服务使用服务内迁移目录 `user-services/migrations/`，Atlas 配置位于 `user-services/atlas.hcl`。
+- 用户服务使用服务内迁移目录 `user-service/migrations/`，Atlas 配置位于 `user-service/atlas.hcl`。
 - Ent schema 是期望数据库结构来源；开发期通过 `go generate ./ent` 生成 Ent 代码，通过 `./scripts/migrate-diff.sh <name>` 生成 SQL migration，并通过 `./scripts/migrate-validate.sh` 校验 `atlas.sum`。
 - 运行时不得通过 `client.Schema.Create(ctx)` 自动创建或修改 schema；迁移应由 CI/CD release job 或容器 entrypoint 在 HTTP runtime 启动前执行。
 - 迁移执行应面向用户服务拥有的 `user_db`，不得因为配置中存在其他数据库配置而迁移非目标数据库。
 
 ## 11. Generated Code
 
-`user-services/ent/` 大多是 Ent 生成代码。业务变更应优先修改 `user-services/ent/schema/`，然后在 `user-services/` 运行 `go generate ./ent` 重新生成。不要直接编辑生成代码来表达领域变更。
+`user-service/ent/` 大多是 Ent 生成代码。业务变更应优先修改 `user-service/ent/schema/`，然后在 `user-service/` 运行 `go generate ./ent` 重新生成。不要直接编辑生成代码来表达领域变更。
 
 ## 12. Current Constraints
 
