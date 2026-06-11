@@ -5,15 +5,14 @@ import (
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/pagination"
-	userapi "github.com/aegiscore/user-service/internal/features/user/api"
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
 )
 
-func toUserResponse(result *userapplication.UserResult) userapi.UserResponse {
+func toUserResponse(result *userapplication.UserResult) UserResponse {
 	user := result.User
-	return userapi.UserResponse{
+	return UserResponse{
 		UserID:    user.UserID.String(),
 		Nickname:  user.Nickname,
 		Username:  user.Username,
@@ -23,10 +22,10 @@ func toUserResponse(result *userapplication.UserResult) userapi.UserResponse {
 	}
 }
 
-func toUserListResponse(result *userapplication.ListUsersResult) pagination.PaginatedData[userapi.UserResponse] {
-	items := make([]userapi.UserResponse, 0, len(result.Items))
+func toUserListResponse(result *userapplication.ListUsersResult) pagination.PaginatedData[UserResponse] {
+	items := make([]UserResponse, 0, len(result.Items))
 	for i := range result.Items {
-		items = append(items, userapi.UserResponse{
+		items = append(items, UserResponse{
 			UserID:    result.Items[i].UserID.String(),
 			Nickname:  result.Items[i].Nickname,
 			Username:  result.Items[i].Username,

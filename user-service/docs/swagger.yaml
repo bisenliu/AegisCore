@@ -32,7 +32,18 @@ definitions:
     - CodeConflict
     - CodeNotFound
     - CodeInternalError
-  github_com_aegiscore_user-service_internal_features_auth_api.ChangePasswordRequest:
+  github_com_aegiscore_user-service_internal_features_user_domain.UserStatus:
+    enum:
+    - 100
+    - 200
+    - 300
+    format: int64
+    type: integer
+    x-enum-varnames:
+    - UserStatusNormal
+    - UserStatusDisabled
+    - UserStatusMustChangePassword
+  internal_features_auth_transport_http.ChangePasswordRequest:
     properties:
       new_password:
         example: new-secret
@@ -41,13 +52,13 @@ definitions:
     required:
     - new_password
     type: object
-  github_com_aegiscore_user-service_internal_features_auth_api.ChangePasswordResponse:
+  internal_features_auth_transport_http.ChangePasswordResponse:
     properties:
       changed:
         example: true
         type: boolean
     type: object
-  github_com_aegiscore_user-service_internal_features_auth_api.LoginRequest:
+  internal_features_auth_transport_http.LoginRequest:
     properties:
       password:
         example: secret
@@ -62,13 +73,13 @@ definitions:
     - password
     - username
     type: object
-  github_com_aegiscore_user-service_internal_features_auth_api.LogoutResponse:
+  internal_features_auth_transport_http.LogoutResponse:
     properties:
       logged_out:
         example: true
         type: boolean
     type: object
-  github_com_aegiscore_user-service_internal_features_auth_api.RefreshTokenRequest:
+  internal_features_auth_transport_http.RefreshTokenRequest:
     properties:
       refresh_token:
         example: eyJhbGciOi...
@@ -77,7 +88,7 @@ definitions:
     required:
     - refresh_token
     type: object
-  github_com_aegiscore_user-service_internal_features_auth_api.TokenResponse:
+  internal_features_auth_transport_http.TokenResponse:
     properties:
       access_token:
         example: eyJhbGciOi...
@@ -95,7 +106,7 @@ definitions:
         example: Bearer
         type: string
     type: object
-  github_com_aegiscore_user-service_internal_features_user_api.CreateUserRequest:
+  internal_features_user_transport_http.CreateUserRequest:
     properties:
       nickname:
         example: Alice
@@ -120,16 +131,16 @@ definitions:
     - password
     - username
     type: object
-  github_com_aegiscore_user-service_internal_features_user_api.UserListResponseDoc:
+  internal_features_user_transport_http.UserListResponseDoc:
     properties:
       items:
         items:
-          $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_user_api.UserResponseDoc'
+          $ref: '#/definitions/internal_features_user_transport_http.UserResponseDoc'
         type: array
       pagination:
         $ref: '#/definitions/pagination.Pagination'
     type: object
-  github_com_aegiscore_user-service_internal_features_user_api.UserResponseDoc:
+  internal_features_user_transport_http.UserResponseDoc:
     properties:
       created_at:
         example: 1780288800000
@@ -150,17 +161,6 @@ definitions:
         example: alice
         type: string
     type: object
-  github_com_aegiscore_user-service_internal_features_user_domain.UserStatus:
-    enum:
-    - 100
-    - 200
-    - 300
-    format: int64
-    type: integer
-    x-enum-varnames:
-    - UserStatusNormal
-    - UserStatusDisabled
-    - UserStatusMustChangePassword
   internal_router.HealthResponse:
     properties:
       service:
@@ -216,7 +216,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.ChangePasswordRequest'
+          $ref: '#/definitions/internal_features_auth_transport_http.ChangePasswordRequest'
       produces:
       - application/json
       responses:
@@ -227,7 +227,7 @@ paths:
             - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.ChangePasswordResponse'
+                  $ref: '#/definitions/internal_features_auth_transport_http.ChangePasswordResponse'
               type: object
         "400":
           description: 请求体错误或参数校验失败
@@ -255,7 +255,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.LoginRequest'
+          $ref: '#/definitions/internal_features_auth_transport_http.LoginRequest'
       produces:
       - application/json
       responses:
@@ -266,7 +266,7 @@ paths:
             - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.TokenResponse'
+                  $ref: '#/definitions/internal_features_auth_transport_http.TokenResponse'
               type: object
         "400":
           description: 请求体错误或参数校验失败
@@ -296,7 +296,7 @@ paths:
             - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.LogoutResponse'
+                  $ref: '#/definitions/internal_features_auth_transport_http.LogoutResponse'
               type: object
         "401":
           description: 未认证或 token 无效
@@ -324,7 +324,7 @@ paths:
             - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.LogoutResponse'
+                  $ref: '#/definitions/internal_features_auth_transport_http.LogoutResponse'
               type: object
         "401":
           description: 未认证或 token 无效
@@ -350,7 +350,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.RefreshTokenRequest'
+          $ref: '#/definitions/internal_features_auth_transport_http.RefreshTokenRequest'
       produces:
       - application/json
       responses:
@@ -361,7 +361,7 @@ paths:
             - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.TokenResponse'
+                  $ref: '#/definitions/internal_features_auth_transport_http.TokenResponse'
               type: object
         "400":
           description: 请求体错误或参数校验失败
@@ -432,7 +432,7 @@ paths:
             - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_user_api.UserListResponseDoc'
+                  $ref: '#/definitions/internal_features_user_transport_http.UserListResponseDoc'
               type: object
         "400":
           description: 查询参数错误
@@ -461,7 +461,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_user_api.CreateUserRequest'
+          $ref: '#/definitions/internal_features_user_transport_http.CreateUserRequest'
       produces:
       - application/json
       responses:
@@ -472,7 +472,7 @@ paths:
             - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_user_api.UserResponseDoc'
+                  $ref: '#/definitions/internal_features_user_transport_http.UserResponseDoc'
               type: object
         "400":
           description: 请求体错误或参数校验失败
@@ -514,7 +514,7 @@ paths:
             - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/github_com_aegiscore_user-service_internal_features_user_api.UserResponseDoc'
+                  $ref: '#/definitions/internal_features_user_transport_http.UserResponseDoc'
               type: object
         "400":
           description: 用户 ID 参数错误

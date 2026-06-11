@@ -5,12 +5,11 @@ import (
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	commonauth "github.com/aegiscore/common/security/auth"
-	authapi "github.com/aegiscore/user-service/internal/features/auth/api"
 	"github.com/aegiscore/user-service/internal/messages"
 )
 
 func TestNormalizeLogin(t *testing.T) {
-	req := authapi.LoginRequest{Username: " alice ", Password: " secret "}
+	req := LoginRequest{Username: " alice ", Password: " secret "}
 	if err := NormalizeLogin(&req); err != nil {
 		t.Fatalf("NormalizeLogin: %v", err)
 	}
@@ -18,7 +17,7 @@ func TestNormalizeLogin(t *testing.T) {
 		t.Fatalf("req = %#v", req)
 	}
 
-	req = authapi.LoginRequest{Username: "alice", Password: " "}
+	req = LoginRequest{Username: "alice", Password: " "}
 	err := NormalizeLogin(&req)
 	appErr := contracterrors.FromError(err)
 	if appErr.Code != contracterrors.CodeUnauthenticated || appErr.Message != messages.InvalidCredentials {
@@ -27,7 +26,7 @@ func TestNormalizeLogin(t *testing.T) {
 }
 
 func TestNormalizeChangePassword(t *testing.T) {
-	req := authapi.ChangePasswordRequest{Token: " " + commonauth.TokenPrefix + "token ", NewPassword: " new-secret "}
+	req := ChangePasswordRequest{Token: " " + commonauth.TokenPrefix + "token ", NewPassword: " new-secret "}
 	if err := NormalizeChangePassword(&req); err != nil {
 		t.Fatalf("NormalizeChangePassword: %v", err)
 	}
@@ -35,7 +34,7 @@ func TestNormalizeChangePassword(t *testing.T) {
 		t.Fatalf("req = %#v", req)
 	}
 
-	req = authapi.ChangePasswordRequest{Token: commonauth.TokenPrefix + "token", NewPassword: " "}
+	req = ChangePasswordRequest{Token: commonauth.TokenPrefix + "token", NewPassword: " "}
 	err := NormalizeChangePassword(&req)
 	appErr := contracterrors.FromError(err)
 	if appErr.Code != contracterrors.CodeValidationFailed || appErr.Message != messages.InvalidPassword {
@@ -44,7 +43,7 @@ func TestNormalizeChangePassword(t *testing.T) {
 }
 
 func TestNormalizeRefresh(t *testing.T) {
-	req := authapi.RefreshTokenRequest{RefreshToken: " " + commonauth.TokenPrefix + "refresh-token "}
+	req := RefreshTokenRequest{RefreshToken: " " + commonauth.TokenPrefix + "refresh-token "}
 	if err := NormalizeRefresh(&req); err != nil {
 		t.Fatalf("NormalizeRefresh: %v", err)
 	}
@@ -52,7 +51,7 @@ func TestNormalizeRefresh(t *testing.T) {
 		t.Fatalf("req = %#v", req)
 	}
 
-	req = authapi.RefreshTokenRequest{RefreshToken: " " + commonauth.TokenPrefix}
+	req = RefreshTokenRequest{RefreshToken: " " + commonauth.TokenPrefix}
 	err := NormalizeRefresh(&req)
 	appErr := contracterrors.FromError(err)
 	if appErr.Code != contracterrors.CodeTokenInvalid || appErr.Message != messages.MissingSession {

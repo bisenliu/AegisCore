@@ -55,6 +55,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 ## 5. Coding Conventions
 
 - HTTP 层只处理请求解析、参数校验和响应输出。
+- HTTP request/response DTO 和 Swagger model 放在对应 feature 的 `transport/http/request.go`、`response.go`，不要新增 feature-level `api/` DTO 包。
 - Application service 层负责业务编排、command/query 处理和 DTO 映射。
 - Infrastructure adapter 层负责 Ent/PostgreSQL、Redis 访问、存储模型转换和存储错误转换，具体放在对应 feature 的 `infrastructure/postgres` 或 `infrastructure/redis` 下。
 - 服务级 Fx provider 放在 `user-service/internal/providers`，用于组装 Gin engine、HTTP route registration、JWT service、PostgreSQL/Redis named resources 和 Ent clients；`internal/bootstrap` 只保留顶层 AppModule 和 HTTP server lifecycle。
@@ -156,7 +157,7 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 ## 9. Adding Features
 
 1. 先阅读 `docs/ARCHITECTURE.md`，确认新能力属于哪个模块、feature 和层。
-2. 新增服务内业务能力时，优先放在 `user-service/internal/features/<feature>/`；已有 feature 内按 `api/`、`application/`、`domain/`、`transport/http/`、`infrastructure/*/` 和 `fx.go` 分层扩展。
+2. 新增服务内业务能力时，优先放在 `user-service/internal/features/<feature>/`；已有 feature 内按 `application/`、`domain/`、`transport/http/`、`infrastructure/*/` 和 `fx.go` 分层扩展，HTTP DTO 放在 `transport/http/request.go` 和 `response.go`。
 3. 新增跨服务稳定基础能力时，按 `common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation` 归类。
 4. 跨 feature、跨模块、外部 API、配置、数据库 schema 或目录结构变更，应在 issue、PR 描述或开发记录中写清目标、影响范围和验证方式。
 5. 增加或更新测试，并在受影响模块目录运行相关 `go test` 命令；跨模块变更时分别在 `common/` 和 `user-service/` 运行。

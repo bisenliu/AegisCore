@@ -4,15 +4,14 @@ import (
 	"errors"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
-	authapi "github.com/aegiscore/user-service/internal/features/auth/api"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
 )
 
-func toTokenResponse(result *authapplication.TokenResult) authapi.TokenResponse {
-	return authapi.TokenResponse{
+func toTokenResponse(result *authapplication.TokenResult) TokenResponse {
+	return TokenResponse{
 		AccessToken:            result.AccessToken,
 		RefreshToken:           result.RefreshToken,
 		TokenType:              result.TokenType,
@@ -21,12 +20,12 @@ func toTokenResponse(result *authapplication.TokenResult) authapi.TokenResponse 
 	}
 }
 
-func toChangePasswordResponse(result *authapplication.ChangePasswordResult) authapi.ChangePasswordResponse {
-	return authapi.ChangePasswordResponse{Changed: result.Changed}
+func toChangePasswordResponse(result *authapplication.ChangePasswordResult) ChangePasswordResponse {
+	return ChangePasswordResponse{Changed: result.Changed}
 }
 
-func toLogoutResponse(result *authapplication.LogoutResult) authapi.LogoutResponse {
-	return authapi.LogoutResponse{LoggedOut: result.LoggedOut}
+func toLogoutResponse(result *authapplication.LogoutResult) LogoutResponse {
+	return LogoutResponse{LoggedOut: result.LoggedOut}
 }
 
 func toAuthHTTPError(err error) error {

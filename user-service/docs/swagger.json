@@ -46,7 +46,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.ChangePasswordRequest"
+                            "$ref": "#/definitions/internal_features_auth_transport_http.ChangePasswordRequest"
                         }
                     }
                 ],
@@ -62,7 +62,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.ChangePasswordResponse"
+                                            "$ref": "#/definitions/internal_features_auth_transport_http.ChangePasswordResponse"
                                         }
                                     }
                                 }
@@ -110,7 +110,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.LoginRequest"
+                            "$ref": "#/definitions/internal_features_auth_transport_http.LoginRequest"
                         }
                     }
                 ],
@@ -126,7 +126,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.TokenResponse"
+                                            "$ref": "#/definitions/internal_features_auth_transport_http.TokenResponse"
                                         }
                                     }
                                 }
@@ -181,7 +181,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.LogoutResponse"
+                                            "$ref": "#/definitions/internal_features_auth_transport_http.LogoutResponse"
                                         }
                                     }
                                 }
@@ -230,7 +230,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.LogoutResponse"
+                                            "$ref": "#/definitions/internal_features_auth_transport_http.LogoutResponse"
                                         }
                                     }
                                 }
@@ -272,7 +272,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.RefreshTokenRequest"
+                            "$ref": "#/definitions/internal_features_auth_transport_http.RefreshTokenRequest"
                         }
                     }
                 ],
@@ -288,7 +288,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_auth_api.TokenResponse"
+                                            "$ref": "#/definitions/internal_features_auth_transport_http.TokenResponse"
                                         }
                                     }
                                 }
@@ -402,7 +402,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_user_api.UserListResponseDoc"
+                                            "$ref": "#/definitions/internal_features_user_transport_http.UserListResponseDoc"
                                         }
                                     }
                                 }
@@ -453,7 +453,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_user_api.CreateUserRequest"
+                            "$ref": "#/definitions/internal_features_user_transport_http.CreateUserRequest"
                         }
                     }
                 ],
@@ -469,7 +469,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_user_api.UserResponseDoc"
+                                            "$ref": "#/definitions/internal_features_user_transport_http.UserResponseDoc"
                                         }
                                     }
                                 }
@@ -539,7 +539,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_user_api.UserResponseDoc"
+                                            "$ref": "#/definitions/internal_features_user_transport_http.UserResponseDoc"
                                         }
                                     }
                                 }
@@ -608,7 +608,21 @@
                 "CodeInternalError"
             ]
         },
-        "github_com_aegiscore_user-service_internal_features_auth_api.ChangePasswordRequest": {
+        "github_com_aegiscore_user-service_internal_features_user_domain.UserStatus": {
+            "type": "integer",
+            "format": "int64",
+            "enum": [
+                100,
+                200,
+                300
+            ],
+            "x-enum-varnames": [
+                "UserStatusNormal",
+                "UserStatusDisabled",
+                "UserStatusMustChangePassword"
+            ]
+        },
+        "internal_features_auth_transport_http.ChangePasswordRequest": {
             "type": "object",
             "required": [
                 "new_password"
@@ -621,7 +635,7 @@
                 }
             }
         },
-        "github_com_aegiscore_user-service_internal_features_auth_api.ChangePasswordResponse": {
+        "internal_features_auth_transport_http.ChangePasswordResponse": {
             "type": "object",
             "properties": {
                 "changed": {
@@ -630,7 +644,7 @@
                 }
             }
         },
-        "github_com_aegiscore_user-service_internal_features_auth_api.LoginRequest": {
+        "internal_features_auth_transport_http.LoginRequest": {
             "type": "object",
             "required": [
                 "password",
@@ -650,7 +664,7 @@
                 }
             }
         },
-        "github_com_aegiscore_user-service_internal_features_auth_api.LogoutResponse": {
+        "internal_features_auth_transport_http.LogoutResponse": {
             "type": "object",
             "properties": {
                 "logged_out": {
@@ -659,7 +673,7 @@
                 }
             }
         },
-        "github_com_aegiscore_user-service_internal_features_auth_api.RefreshTokenRequest": {
+        "internal_features_auth_transport_http.RefreshTokenRequest": {
             "type": "object",
             "required": [
                 "refresh_token"
@@ -672,7 +686,7 @@
                 }
             }
         },
-        "github_com_aegiscore_user-service_internal_features_auth_api.TokenResponse": {
+        "internal_features_auth_transport_http.TokenResponse": {
             "type": "object",
             "properties": {
                 "access_token": {
@@ -697,7 +711,7 @@
                 }
             }
         },
-        "github_com_aegiscore_user-service_internal_features_user_api.CreateUserRequest": {
+        "internal_features_user_transport_http.CreateUserRequest": {
             "type": "object",
             "required": [
                 "nickname",
@@ -732,13 +746,13 @@
                 }
             }
         },
-        "github_com_aegiscore_user-service_internal_features_user_api.UserListResponseDoc": {
+        "internal_features_user_transport_http.UserListResponseDoc": {
             "type": "object",
             "properties": {
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_user_api.UserResponseDoc"
+                        "$ref": "#/definitions/internal_features_user_transport_http.UserResponseDoc"
                     }
                 },
                 "pagination": {
@@ -746,7 +760,7 @@
                 }
             }
         },
-        "github_com_aegiscore_user-service_internal_features_user_api.UserResponseDoc": {
+        "internal_features_user_transport_http.UserResponseDoc": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -774,20 +788,6 @@
                     "example": "alice"
                 }
             }
-        },
-        "github_com_aegiscore_user-service_internal_features_user_domain.UserStatus": {
-            "type": "integer",
-            "format": "int64",
-            "enum": [
-                100,
-                200,
-                300
-            ],
-            "x-enum-varnames": [
-                "UserStatusNormal",
-                "UserStatusDisabled",
-                "UserStatusMustChangePassword"
-            ]
         },
         "internal_router.HealthResponse": {
             "type": "object",

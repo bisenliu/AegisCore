@@ -1,4 +1,4 @@
-package authapi
+package authhttp
 
 // LoginRequest 是用户名密码认证的 JSON 请求体。
 type LoginRequest struct {

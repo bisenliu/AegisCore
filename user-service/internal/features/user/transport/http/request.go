@@ -1,4 +1,4 @@
-package userapi
+package userhttp
 
 import userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 

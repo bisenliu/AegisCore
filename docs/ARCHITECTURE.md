@@ -35,7 +35,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | 中间件链 | `user-service/internal/providers/gin.go` | 创建 Gin engine，注册 trace-id、panic recovery、request logging、CORS |
 | 路由 provider | `user-service/internal/providers/routes.go` | 将 Fx 依赖适配为 router route params |
 | 路由总装 | `user-service/internal/router/router.go`、`health.go`、`swagger.go` | `router.go` 创建 public/protected route groups 并总装 route graph，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向 |
-| 参数解析 | `features/*/transport/http/controller.go` | 绑定 API DTO，执行边界校验，并映射为 command/query |
+| 参数解析 | `features/*/transport/http/controller.go` | 绑定 HTTP DTO，执行边界校验，并映射为 command/query |
 | 业务调用 | `features/*/application/` | 编排用户资料或认证会话用例 |
 | 数据访问 | `features/*/infrastructure/postgres/`, `features/*/infrastructure/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
 | 响应输出 | `common/http/response/` + `common/contract/response/` | 通过 Gin writer 输出统一 `success/code/message/data` 信封，并复用稳定错误码与分页契约 |
@@ -51,10 +51,9 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 | 目录 | 责任 |
 |---|---|
-| `api/` | HTTP request/response DTO 和 Swagger 文档模型 |
 | `application/` | service、commands、queries、ports、use case mapper 和业务编排 |
 | `domain/` | 领域实体、值对象、枚举、领域错误和纯业务规则 |
-| `transport/http/` | Gin controller、route registration、HTTP DTO validation 和边界映射 |
+| `transport/http/` | Gin controller、route registration、HTTP request/response DTO、Swagger 文档模型、HTTP DTO validation 和边界映射 |
 | `infrastructure/postgres/` | Ent/PostgreSQL adapter 和 predicate 构造 |
 | `infrastructure/redis/` | Redis adapter；仅在 feature 需要 Redis 时存在 |
 | `fx.go` | Feature-local Fx module，组装 application、transport 和 infrastructure provider |
@@ -71,7 +70,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 |---|---|---|
 | `domain` | 标准库、稳定值对象 | Gin、Ent、Redis、config、response envelope |
 | `application` | `domain`、消费侧端口接口、common 安全原语 | Gin、Ent、Redis、HTTP binder |
-| `transport/http` | `api`、`application`、Gin、response envelope、feature-local validation | Ent、Redis、SQL |
+| `transport/http` | `application`、Gin、response envelope、feature-local HTTP DTO 和 validation | Ent、Redis、SQL |
 | `infrastructure/postgres` | Ent、SQL、application ports、domain | Gin、HTTP response |
 | `infrastructure/redis` | Redis client、application ports、domain | Gin、HTTP response |
 | `integration/*` | 外部 SDK/client、feature application ports、domain、common runtime/security 原语 | Gin response、Ent、feature service 业务编排、service-owned persistence adapter |
@@ -79,7 +78,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 Ports 由消费侧 feature 拥有。Infrastructure adapter 只实现 application 层定义的最小接口，不为了自身方便定义大接口。
 
-Controller 必须把 HTTP DTO 映射为 application command/query 后再调用 service。Service 不接收 `api/*Request`，也不导入 Gin、Ent predicate、Redis client 或 HTTP binder。
+Controller 必须把 HTTP DTO 映射为 application command/query 后再调用 service。Service 不接收 HTTP request/response DTO，也不导入 Gin、Ent predicate、Redis client 或 HTTP binder。
 
 Ent predicate 构造封装在 `infrastructure/postgres` 内。Adapter 可以做字段裁剪、模型转换和存储错误转换，但不得承载复杂业务编排、登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
 
