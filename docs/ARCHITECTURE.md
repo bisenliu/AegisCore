@@ -58,10 +58,13 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 |---|---|
 | `application/` | service、commands、queries、ports、use case mapper 和业务编排；可按 feature 需要细分为 `command/`、`query/`、`validators/` 和稳定组件包。Auth 当前使用 `command/` 承载登录、刷新、强制改密和登出 use case，使用 `validators/` 承载 transport-neutral 输入辅助、token version 撤销校验、cache/database fallback 策略和 refresh session 一致性校验 |
 | `domain/` | 领域实体、值对象、枚举、领域错误和纯业务规则；可按真实需要细分 `services/` 承载跨实体或跨值对象的纯领域服务规则，`events/` 承载纯领域事件模型 |
-| `transport/http/` | Gin controller、route registration、HTTP request/response DTO、Swagger 文档模型、HTTP DTO validation 和边界映射 |
+| `transport/http/` | 当前已实现的入站 HTTP transport，承载 Gin controller、route registration、HTTP request/response DTO、Swagger 文档模型、HTTP DTO validation 和边界映射 |
+| `transport/grpc/` | 未来本服务暴露入站 gRPC API 时的 feature-local transport，承载 gRPC handler、server-side protobuf request/response 映射、gRPC 边界 validation 和 application command/query 映射；当前没有真实 gRPC API 时不得新增业务代码、空 handler、空 service、未使用 proto 或 generated code，只可按需保留 README 或 package doc |
 | `infrastructure/postgres/` | Ent/PostgreSQL adapter 和 predicate 构造 |
 | `infrastructure/redis/` | Redis adapter；仅在 feature 需要 Redis 时存在 |
 | `fx.go` | Feature-local Fx module，组装 application、transport 和 infrastructure provider |
+
+Feature transport 可以按入站协议拆分在同一 feature 的 `transport/` 下。`transport/http` 和未来 `transport/grpc` 都必须把协议 DTO 映射为 transport-neutral application command/query 后再调用用例，不得互相导入对方 controller、DTO 或 route。可复用的输入辅助优先沉淀到 application `validators/`、domain 值对象或其他 transport-neutral 层，而不是在 HTTP 和 gRPC transport 之间横向复用协议 DTO。
 
 `domain/services` 和 `domain/events` 是按需子目录，只在存在真实纯领域服务规则或领域事件模型时创建；不要为了目录完整新增空 package、空 struct、空 interface 或只含占位注释的业务代码。简单实体、值对象、枚举、领域错误和单实体短方法仍可留在 `domain/` 根部。Auth 当前将 token/session validation helper 保留在 `application/validators`；当前没有领域事件模型，也没有事件总线实现。
 
@@ -69,7 +72,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 服务级 provider 统一放在 `user-service/internal/providers`。该包只负责把共享 runtime、common security、Gin、router 和 Ent 适配为用户服务 Fx 依赖；不得承载 feature 业务逻辑、HTTP route 定义或跨服务共享基础能力。`internal/bootstrap` 只负责 `fx.New`、顶层 `AppModule` 总装和 HTTP server 生命周期。
 
-外部系统防腐层统一放在 `user-service/internal/integration`，并按 `http/`、`grpc/`、`events/` 分类。该边界只在有真实外部系统调用时承载协议 client adapter、外部 DTO 映射、外部错误语义归一化和传输细节；当前没有真实外部调用时只保留 README 或 package doc。Feature 内 `domain/events` 只表达领域事实，不等同于 `internal/integration/events` 的外部协议适配。`integration` 不属于 feature 内部业务编排，不拥有用例流程、登录状态机、跨 store 事务、HTTP controller 或本服务持久化访问。Feature application service 或 command/query 用例仍通过消费侧 ports 表达外部能力需求，integration adapter 只实现这些最小接口。
+外部系统防腐层统一放在 `user-service/internal/integration`，并按 `http/`、`grpc/`、`events/` 分类。该边界只在有真实外部系统调用时承载协议 client adapter、外部 DTO 映射、外部错误语义归一化和传输细节；当前没有真实外部调用时只保留 README 或 package doc。`internal/integration/grpc` 只表示用户服务调用外部 gRPC service 的出站 client adapter，不承载本服务 gRPC server、handler、route 或 feature transport 逻辑。Feature 内 `domain/events` 只表达领域事实，不等同于 `internal/integration/events` 的外部协议适配。`integration` 不属于 feature 内部业务编排，不拥有用例流程、登录状态机、跨 store 事务、HTTP controller、gRPC handler 或本服务持久化访问。Feature application service 或 command/query 用例仍通过消费侧 ports 表达外部能力需求，integration adapter 只实现这些最小接口。
 
 ## 6. Dependency Rules
 
@@ -78,6 +81,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | `domain`、`domain/services`、`domain/events` | 标准库、稳定值对象、同 feature domain 模型 | Gin、Ent、Redis、config、logger、response envelope、application ports、infrastructure adapter |
 | `application` | `domain`、消费侧端口接口、common 安全原语 | Gin、Ent、Redis、HTTP binder |
 | `transport/http` | `application`、Gin、response envelope、feature-local HTTP DTO 和 validation | Ent、Redis、SQL |
+| `transport/grpc` | `application`、gRPC/protobuf 边界类型、feature-local gRPC DTO 和 validation | Ent、Redis、SQL、HTTP response envelope、Gin controller、external client adapter |
 | `infrastructure/postgres` | Ent、SQL、application ports、domain | Gin、HTTP response |
 | `infrastructure/redis` | Redis client、application ports、domain | Gin、HTTP response |
 | `integration/*` | 外部 SDK/client、feature application ports、domain、common runtime/security 原语 | Gin response、Ent、feature service 业务编排、service-owned persistence adapter |
@@ -85,7 +89,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 Ports 由消费侧 feature 拥有。Infrastructure adapter 只实现 application 层定义的最小接口，不为了自身方便定义大接口。
 
-Controller 必须把 HTTP DTO 映射为 application command/query 后再调用 service 或用例。Service 和 command/query 用例不接收 HTTP request/response DTO，也不导入 Gin、Ent predicate、Redis client 或 HTTP binder。
+Controller 或未来 gRPC handler 必须把 transport DTO 映射为 application command/query 后再调用 service 或用例。Service 和 command/query 用例不接收 HTTP request/response DTO 或 protobuf DTO，也不导入 Gin、Ent predicate、Redis client、HTTP binder 或 gRPC runtime。
 
 Ent predicate 构造封装在 `infrastructure/postgres` 内。Adapter 可以做字段裁剪、模型转换和存储错误转换，但不得承载复杂业务编排、登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
 
@@ -128,7 +132,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前声明并连接 `postgres.user_db` 与 `postgres.common_db`。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`。
 - 用户服务的 Redis/PostgreSQL named resource、JWT service、Gin engine 和 Ent clients 由 `user-service/internal/providers/` 提供，其中 Ent clients 由 `providers/ent.go` 基于具名 `*sql.DB` 构建。
-- 用户服务的外部系统防腐层边界位于 `user-service/internal/integration/`；当前没有 order、payment 等真实外部 client，也没有 Kafka、RabbitMQ、NATS 等 broker dependency；当前也没有事件总线、outbox、publisher、subscriber 或异步投递 worker。
+- 用户服务的外部系统防腐层边界位于 `user-service/internal/integration/`；其中 `integration/grpc` 只表示出站外部 gRPC client adapter，不表示本服务入站 gRPC transport；当前没有 order、payment 等真实外部 client，也没有 Kafka、RabbitMQ、NATS 等 broker dependency；当前也没有事件总线、outbox、publisher、subscriber 或异步投递 worker。
 - 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace header 为 `X-Trace-ID`，Gin context key 为 `trace_id`，日志字段统一为 `trace-id`。
 
 ## 10. Database Migrations
@@ -145,6 +149,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 ## 12. Current Constraints
 
 - 当前 HTTP API 暴露健康检查、创建用户、用户列表、按 `user_id` 查询用户和认证会话接口。
+- 当前没有真实 gRPC API、`.proto` schema、protobuf generated code 或 gRPC server runtime；如未来暴露入站 gRPC API，应先在对应 feature 的 `transport/grpc` 建立真实 API 设计，并单独设计服务级 runtime wiring。
 - 当前没有真实外部系统 client；`internal/integration` 只声明 HTTP、gRPC 和 events 防腐层边界。
 - 配置样例可能包含未来资源配置，但用户服务只初始化自己显式声明的 Redis/PostgreSQL named resources。
 - 启动服务需要 PostgreSQL 和 Redis 可连接；纯单元测试应避免依赖真实外部服务，集成测试需要显式说明依赖。

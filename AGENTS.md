@@ -17,8 +17,8 @@
 - `user-service/`：用户服务 HTTP 运行时和 Go module，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration，以及按 feature 组织的业务代码。
 - `user-service/internal/providers/`：用户服务级 Fx provider，集中承载 Gin engine、HTTP route registration、JWT service、PostgreSQL/Redis named resources 和 Ent clients 的服务侧组装；不得承载 feature 业务逻辑。
 - `user-service/internal/integration/`：用户服务访问外部系统的防腐层边界，按 `http/`、`grpc/`、`events/` 分类组织；当前没有真实外部系统调用时只保留 README 或 package doc，占位不得引入未使用代码。
-- `user-service/internal/features/user/`：用户资料 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；`domain/` 可在有真实纯领域规则或事件模型时按需新增 `services/`、`events/`；`application/command` 承载写侧用例，`application/query` 承载读侧用例，`application/validators` 承载 transport-neutral application 输入辅助；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`。
-- `user-service/internal/features/auth/`：认证会话 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/redis/` 和 `fx.go` 分层；`domain/services`、`domain/events` 仅在有真实领域服务或领域事件模型时新增；`application/command` 承载登录、刷新、强制改密、退出当前设备和退出全部设备 use case，`application/validators` 承载 transport-neutral application 输入辅助、token version 撤销校验、cache/database fallback 策略和 refresh session 一致性校验，`application/ports.go` 继续拥有凭据、token version 和 session ports；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`。
+- `user-service/internal/features/user/`：用户资料 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；`domain/` 可在有真实纯领域规则或事件模型时按需新增 `services/`、`events/`；`application/command` 承载写侧用例，`application/query` 承载读侧用例，`application/validators` 承载 transport-neutral application 输入辅助；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`；未来如暴露本服务入站 gRPC API，使用 feature-local `transport/grpc`，当前没有真实 gRPC API 时不得新增业务代码、proto 或 generated code。
+- `user-service/internal/features/auth/`：认证会话 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/redis/` 和 `fx.go` 分层；`domain/services`、`domain/events` 仅在有真实领域服务或领域事件模型时新增；`application/command` 承载登录、刷新、强制改密、退出当前设备和退出全部设备 use case，`application/validators` 承载 transport-neutral application 输入辅助、token version 撤销校验、cache/database fallback 策略和 refresh session 一致性校验，`application/ports.go` 继续拥有凭据、token version 和 session ports；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`；未来如暴露本服务入站 gRPC API，使用 feature-local `transport/grpc`，当前没有真实 gRPC API 时不得新增业务代码、proto 或 generated code。
 - `user-service/internal/features/role/`、`user-service/internal/features/permission/`：未来 RBAC 能力的最小 feature skeleton，仅保留 README 标注边界；当前不注册路由、不提供 Fx module、不新增 application/domain/infrastructure 代码、不新增 Ent schema 或数据库表。
 - `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产。
 
@@ -69,7 +69,8 @@
 - 认证会话控制：登录、刷新、强制改密、退出当前设备、退出全部设备。
 - RBAC future feature skeleton：`internal/features/role` 和 `internal/features/permission` 只标注未来角色权限边界，当前不实现角色权限业务。
 - HTTP 服务运行时：启动、运行、路由注册和优雅停止。
-- 外部系统防腐层边界：`internal/integration/http`、`grpc`、`events` 只承载真实外部调用的协议适配规则，当前不实现真实 client。
+- 未来入站 gRPC transport 边界：如用户服务暴露真实 gRPC API，放在对应 feature 的 `transport/grpc`；当前不实现 gRPC API、proto、generated code 或 server runtime。
+- 外部系统防腐层边界：`internal/integration/http`、`grpc`、`events` 只承载真实外部调用的协议适配规则，当前不实现真实 client；`internal/integration/grpc` 是出站 external client adapter，不是本服务 gRPC server transport。
 - 共享基础设施：配置、日志、Redis/PostgreSQL/Ent 运行时依赖。
 - API 响应契约：统一成功/失败响应信封、全局错误码和分页响应模型。
 - 数据库迁移：通过 Ent schema 和 Atlas 维护用户服务 SQL migration。
@@ -101,12 +102,12 @@
 - 不要手写 `user-service/ent/` 下的生成代码；修改 Ent schema 后重新生成。
 - 不要用运行时 `client.Schema.Create(ctx)` 表达 schema 变更；修改 Ent schema 后生成 Ent 代码和 Atlas SQL migration。
 - 按 feature 组织服务内代码：用户资料放在 `internal/features/user`，认证会话放在 `internal/features/auth`。不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。
-- 保持 `transport/http`、`application`、`domain`、`infrastructure/*` 分层：HTTP 解析在 controller，业务编排在 application service 或 application 内的 `command`/`query` 用例，纯领域规则在 domain，数据库或 Redis 访问在 infrastructure adapter。
+- 保持 `transport/http`、未来 `transport/grpc`、`application`、`domain`、`infrastructure/*` 分层：HTTP 解析在 controller，未来 gRPC 解析在 feature-local `transport/grpc` handler，业务编排在 application service 或 application 内的 `command`/`query` 用例，纯领域规则在 domain，数据库或 Redis 访问在 infrastructure adapter。
 - `domain/services` 和 `domain/events` 是按需子目录：只有存在真实纯领域服务规则或领域事件模型时才创建；不得为了目录完整新增空 package、空 struct、空 interface 或只含占位注释的业务代码。
 - 每个 feature 自己注册路由：`transport/http/routes.go` 暴露 `RegisterRoutes`，认证 feature 可拆分 `RegisterPublicRoutes` 和 `RegisterProtectedRoutes`；全局 router 的 `router.go` 负责 route graph 总装和 `/api/v1` feature 路由分组，`health.go` 负责 `/healthz`，`swagger.go` 负责 Swagger UI 和文档重定向。
 - 每个 feature 自己提供 Fx module：`features/<feature>/fx.go` 暴露 `Module` 并组装 feature 内部 service、controller 和 infrastructure provider；服务级 Gin engine、路由注册、JWT、PostgreSQL、Redis 和 Ent provider 放在 `internal/providers`。
 - `bootstrap.AppModule` 只负责顶层 Fx module 总装和 HTTP server lifecycle，具体服务级 provider 实现不得放回 `internal/bootstrap`。
-- 外部系统防腐层统一使用 `internal/integration`，按 `http/`、`grpc/`、`events/` 分类；不要新增复数 `internal/integrations`。Integration adapter 只做外部协议、DTO、错误语义和 client 调用适配，不承载 feature 业务编排、HTTP controller、Ent/Redis 持久化 adapter 或预设的 order/payment client。Feature 内 `domain/events` 只表达领域事实，不等同于 `internal/integration/events` 的外部协议适配。
+- 外部系统防腐层统一使用 `internal/integration`，按 `http/`、`grpc/`、`events/` 分类；不要新增复数 `internal/integrations`。Integration adapter 只做外部协议、DTO、错误语义和 client 调用适配，不承载 feature 业务编排、HTTP controller、gRPC handler、Ent/Redis 持久化 adapter 或预设的 order/payment client。`internal/integration/grpc` 是出站 external client adapter，不是本服务 gRPC server transport。Feature 内 `domain/events` 只表达领域事实，不等同于 `internal/integration/events` 的外部协议适配。
 - Feature 基础设施目录统一使用 `infrastructure/postgres/`、`infrastructure/redis/` 等；不要使用 `store/` 作为目录名。
 - 共享基础能力优先放在 `common/` 对应分类目录中；服务特定规则保留在服务模块内。
 - HTTP API 应使用 `common/contract/response.Envelope` 格式返回，并通过 `common/http/response` 写出 Gin 响应。
@@ -114,13 +115,15 @@
 - `internal/shared` 默认禁止新增。只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并且必须在 `docs/ARCHITECTURE.md` 说明 owner、准入理由和禁止事项。
 - Ports 由消费侧 feature 拥有：用户资料 command/query 消费的接口放在 `internal/features/user/application/ports.go`，认证 command use case 消费的凭据、token version 和 session 接口放在 `internal/features/auth/application/ports.go`。不要为了 adapter 方便在 infrastructure 包或共享根包定义大接口。
 - HTTP request/response DTO、Swagger model、请求 DTO 清洗、绑定后的输入规范化和简单字段解析放在对应 feature 的 `transport/http/request.go`、`response.go`、`validation.go`。这些函数不得导入 Ent、Redis、service、infrastructure，或执行业务编排。
-- Controller 必须把 transport DTO 映射为 application command/query 后再调用 service 或 use case，service/use case 不接收 HTTP request/response DTO。
+- 未来 gRPC request/response DTO、protobuf 映射、metadata/status 适配和边界 validation 放在对应 feature 的 `transport/grpc`。没有真实 gRPC API 时，只允许 README 或 package doc 占位，不得新增空 handler、空 service、proto、generated code 或 gRPC runtime 依赖。
+- Controller 或未来 gRPC handler 必须把 transport DTO 映射为 application command/query 后再调用 service 或 use case，service/use case 不接收 HTTP request/response DTO 或 protobuf DTO。
 
 | 层 | 可以依赖 | 禁止依赖 |
 |---|---|---|
 | `domain`、`domain/services`、`domain/events` | 标准库、稳定值对象、同 feature domain 模型 | Gin、Ent、Redis、config、logger、response envelope、application ports、infrastructure adapter |
 | `application` | `domain`、消费侧端口接口、common 安全原语 | Gin、Ent、Redis、HTTP binder |
 | `transport/http` | `application`、Gin、response envelope、feature-local HTTP DTO 和 validation | Ent、Redis、SQL |
+| `transport/grpc` | `application`、gRPC/protobuf 边界类型、feature-local gRPC DTO 和 validation | Ent、Redis、SQL、HTTP response envelope、Gin controller、external client adapter |
 | `infrastructure/postgres` | Ent、SQL、application ports、domain | Gin、HTTP response |
 | `infrastructure/redis` | Redis client、application ports、domain | Gin、HTTP response |
 | `integration/*` | 外部 SDK/client、feature application ports、domain、common runtime/security 原语 | Gin response、Ent、feature service 业务编排、service-owned persistence adapter |
