@@ -64,10 +64,10 @@ test -f user-service/internal/features/auth/application/validators/token_version
 test -f user-service/internal/features/auth/application/validators/session_policy.go
 ```
 
-- [x] 运行引用扫描，确认没有旧包引用：
+- [x] 运行引用扫描，确认没有旧 auth 包引用：
 
 ```bash
-rg -n 'application/tokenversion|domain/services|authtokenversion|authservices' user-service/internal/features/auth user-service/internal/providers AGENTS.md docs/ARCHITECTURE.md docs/DEVELOPMENT.md
+rg -n 'application/tokenversion|authtokenversion|authservices|internal/features/auth/domain/services' user-service/internal/features/auth user-service/internal/providers AGENTS.md docs/ARCHITECTURE.md docs/DEVELOPMENT.md
 ```
 
 - [x] 运行 validators 越层依赖扫描：
