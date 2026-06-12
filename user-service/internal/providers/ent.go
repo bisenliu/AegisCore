@@ -8,10 +8,11 @@ import (
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
-	"github.com/aegiscore/common/runtime/logger"
-	"github.com/aegiscore/user-service/ent"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+
+	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/user-service/ent"
 )
 
 // NamedEntClientParams 包含由具名 SQL 连接池支撑 Ent client 所需的 Fx 输入。
@@ -39,7 +40,7 @@ func ProvideEntClients(params NamedEntClientParams) NamedEntClients {
 
 	params.Lifecycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
-			logger.WithContext(params.Log, ctx).Info("closing ent clients")
+			logger.WithContext(ctx, params.Log).Info("closing ent clients")
 			return closeEntClients(userClient.Close, commonClient.Close)
 		},
 	})

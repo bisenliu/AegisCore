@@ -3,10 +3,11 @@ package command
 import (
 	"context"
 
-	"github.com/aegiscore/common/runtime/logger"
-	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/aegiscore/common/runtime/logger"
+	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
 // LogoutAllSessionsUseCase 处理认证用户全部会话撤销。

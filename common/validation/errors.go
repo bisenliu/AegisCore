@@ -7,8 +7,9 @@ import (
 	"io"
 	"reflect"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/go-playground/validator/v10"
+
+	contracterrors "github.com/aegiscore/common/contract/errors"
 )
 
 func (v *Validator) normalizeError(dst any, err error) error {
@@ -74,7 +75,7 @@ func expectedType(t reflect.Type) string {
 		// decoder 无法报告具体 Go 类型时可能出现 nil，这里保持用户可见消息语义通顺。
 		return "正确"
 	}
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	switch t.Kind() {

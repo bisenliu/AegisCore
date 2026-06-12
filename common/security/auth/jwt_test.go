@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/runtime/config"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 const testUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"

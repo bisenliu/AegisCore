@@ -3,6 +3,8 @@ package bootstrap
 import (
 	"net/http"
 
+	"go.uber.org/fx"
+
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	commontz "github.com/aegiscore/common/runtime/timezone"
@@ -10,7 +12,6 @@ import (
 	authfeature "github.com/aegiscore/user-service/internal/features/auth"
 	userfeature "github.com/aegiscore/user-service/internal/features/user"
 	"github.com/aegiscore/user-service/internal/providers"
-	"go.uber.org/fx"
 )
 
 // NewApp 构建包含共享配置、日志和服务模块的 user-service Fx 应用。

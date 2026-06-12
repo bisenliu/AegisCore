@@ -3,10 +3,11 @@ package command
 import (
 	"context"
 
-	"github.com/aegiscore/common/runtime/logger"
-	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/aegiscore/common/runtime/logger"
+	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 )
 
 // ChangePasswordUseCase 处理强制改密。

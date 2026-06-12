@@ -21,8 +21,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aegiscore/user-service/internal/bootstrap"
 	"github.com/spf13/cobra"
+
+	"github.com/aegiscore/user-service/internal/bootstrap"
 )
 
 const (
@@ -61,7 +62,7 @@ func newRootCommand() *cobra.Command {
 	serve := &cobra.Command{
 		Use:   "serve",
 		Short: "Start the AegisCore user services HTTP server",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runServe(cmd.Context(), configPath)
 		},
 	}

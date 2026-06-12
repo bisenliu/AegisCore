@@ -1,8 +1,9 @@
 package domain
 
 import (
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/google/uuid"
+
+	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 )
 
 // UserCredential 是认证能力需要的最小用户凭据模型。

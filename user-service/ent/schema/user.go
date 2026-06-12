@@ -2,6 +2,7 @@ package schema
 
 import (
 	"entgo.io/ent"
+
 	"github.com/aegiscore/user-service/ent/schema/userschema"
 )
 

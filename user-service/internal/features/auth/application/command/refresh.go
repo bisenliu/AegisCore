@@ -3,10 +3,11 @@ package command
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	commonauth "github.com/aegiscore/common/security/auth"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	"github.com/google/uuid"
 )
 
 // RefreshTokenUseCase 处理 refresh token 续签。

@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/aegiscore/common/runtime/config"
+	// Register the pgx database/sql driver used by OpenPostgres.
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 // OpenPostgres 打开 PostgreSQL 连接池并应用连接池设置，但不执行 ping。

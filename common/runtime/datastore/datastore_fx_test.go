@@ -12,13 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/logger"
-	"github.com/aegiscore/common/runtime/resources"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
+
+	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/common/runtime/resources"
 )
 
 var testDriverSeq atomic.Int64

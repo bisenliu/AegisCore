@@ -9,6 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/validation"
@@ -16,8 +19,6 @@ import (
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 const controllerTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"

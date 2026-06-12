@@ -3,11 +3,12 @@ package query
 import (
 	"context"
 
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+
 	"github.com/aegiscore/common/runtime/logger"
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
-	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 // ListUsersQuery 包含用户列表查询使用的规范化分页和过滤条件。

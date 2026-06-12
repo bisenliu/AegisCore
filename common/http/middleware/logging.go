@@ -3,10 +3,11 @@ package middleware
 import (
 	"time"
 
-	"github.com/aegiscore/common/runtime/logger"
-	"github.com/aegiscore/common/security/auth"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+
+	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/common/security/auth"
 )
 
 const anonymousUserID = "anonymous"
@@ -17,7 +18,7 @@ func RequestLogger(log *zap.Logger) gin.HandlerFunc {
 		start := time.Now()
 		c.Next()
 
-		reqLog := logger.WithContext(log, c.Request.Context())
+		reqLog := logger.WithContext(c.Request.Context(), log)
 		fields := []zap.Field{
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),

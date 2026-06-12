@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
 	commonauth "github.com/aegiscore/common/security/auth"
@@ -17,7 +19,6 @@ import (
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
-	"github.com/gin-gonic/gin"
 )
 
 var errAuthDatabaseDown = errors.New("database down")

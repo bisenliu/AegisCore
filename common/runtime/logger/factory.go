@@ -4,9 +4,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aegiscore/common/runtime/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 // New 根据根配置创建 zap logger，并在配置为 nil 时使用默认配置。

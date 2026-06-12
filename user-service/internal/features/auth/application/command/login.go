@@ -3,10 +3,11 @@ package command
 import (
 	"context"
 
-	"github.com/aegiscore/common/runtime/logger"
-	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/aegiscore/common/runtime/logger"
+	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 )
 
 // LoginUseCase 处理用户名密码认证。

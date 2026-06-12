@@ -3,9 +3,10 @@ package response
 import (
 	"net/http"
 
+	"github.com/gin-gonic/gin"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
-	"github.com/gin-gonic/gin"
 )
 
 // OK 写入携带默认成功码和消息的 200 成功响应信封。

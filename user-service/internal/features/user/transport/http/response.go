@@ -1,7 +1,9 @@
 package userhttp
 
-import "github.com/aegiscore/common/contract/pagination"
-import userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+import (
+	"github.com/aegiscore/common/contract/pagination"
+	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+)
 
 // UserResponse 是不包含凭证字段的公开用户资料响应。
 type UserResponse struct {

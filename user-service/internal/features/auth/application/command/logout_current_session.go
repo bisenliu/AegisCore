@@ -3,8 +3,9 @@ package command
 import (
 	"context"
 
-	"github.com/aegiscore/common/runtime/logger"
 	"go.uber.org/zap"
+
+	"github.com/aegiscore/common/runtime/logger"
 )
 
 // LogoutCurrentSessionUseCase 处理当前认证会话登出。

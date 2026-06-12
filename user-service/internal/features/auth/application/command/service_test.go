@@ -6,13 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
-	"github.com/google/uuid"
 )
 
 var authTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
@@ -562,7 +563,7 @@ type authRepoStub struct {
 	getTokenVersionID uuid.UUID
 }
 
-func (r *authRepoStub) GetCredentialByUserID(_ context.Context, userID uuid.UUID) (*authdomain.UserCredential, error) {
+func (r *authRepoStub) GetCredentialByUserID(_ context.Context, _ uuid.UUID) (*authdomain.UserCredential, error) {
 	if r.userByID == nil {
 		return nil, userdomain.ErrUserNotFound
 	}
@@ -746,18 +747,12 @@ func (m *refreshRotationSessionLifecycle) RotateTokenSession(_ context.Context, 
 	}
 	m.createdSessionID = newSession.SessionID
 	m.deletedSessionIDs = append(m.deletedSessionIDs, oldSession.SessionID)
-	if err := m.deleteErrBySessionID[oldSession.SessionID]; err != nil {
-		return err
-	}
-	return nil
+	return m.deleteErrBySessionID[oldSession.SessionID]
 }
 
 func (m *refreshRotationSessionLifecycle) DeleteSession(_ context.Context, _ string, sessionID string) error {
 	m.deletedSessionIDs = append(m.deletedSessionIDs, sessionID)
-	if err := m.deleteErrBySessionID[sessionID]; err != nil {
-		return err
-	}
-	return nil
+	return m.deleteErrBySessionID[sessionID]
 }
 
 func (m *refreshRotationSessionLifecycle) RevokeUserSessionsAtVersion(context.Context, uuid.UUID, int64) error {

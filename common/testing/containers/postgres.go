@@ -14,8 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/runtime/config"
+	// Register the pgx database/sql driver used by test containers.
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 const (
@@ -206,7 +208,7 @@ func waitForPostgres(ctx context.Context, t testing.TB, pg *PostgresContainer) {
 	if err != nil {
 		t.Fatalf("open PostgreSQL test container: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	waitFor(ctx, t, "PostgreSQL ping", func(pingCtx context.Context) error {
 		return db.PingContext(pingCtx)

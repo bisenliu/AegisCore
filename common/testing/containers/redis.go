@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 const (
@@ -88,7 +89,7 @@ func normalizeRedisOptions(opts RedisOptions) RedisOptions {
 func waitForRedis(ctx context.Context, t testing.TB, redisContainer *RedisContainer) {
 	t.Helper()
 	client := redis.NewClient(redisContainer.Options())
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	waitFor(ctx, t, "Redis ping", func(ctx context.Context) error {
 		return client.Ping(ctx).Err()

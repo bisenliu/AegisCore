@@ -10,6 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
+	jwtv5 "github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
@@ -22,11 +28,6 @@ import (
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
-	"github.com/gin-gonic/gin"
-	jwtv5 "github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 const routeAuthUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
@@ -231,7 +232,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	})
 
 	t.Run("panic recovery returns envelope and logs trace id", func(t *testing.T) {
-		engine.GET("/panic-route-chain", func(c *gin.Context) { panic("route-chain boom") })
+		engine.GET("/panic-route-chain", func(_ *gin.Context) { panic("route-chain boom") })
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/panic-route-chain", nil)
 		request.Header.Set("X-Trace-ID", "trace-panic-route-chain")

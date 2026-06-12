@@ -3,8 +3,9 @@ package response
 import (
 	"net/http"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/gin-gonic/gin"
+
+	contracterrors "github.com/aegiscore/common/contract/errors"
 )
 
 // Fail 将 err 转换为应用错误，并写入对应失败响应信封。

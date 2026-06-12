@@ -1,13 +1,14 @@
 package router
 
 import (
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+
 	commonmw "github.com/aegiscore/common/http/middleware"
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 // RouteParams 包含挂载用户服务 HTTP 路由所需的依赖。

@@ -6,10 +6,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/logger"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+
+	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/logger"
 )
 
 // ProvideNamedPostgres 通过 Fx 名称到配置 key 的映射提供一个具名 PostgreSQL 连接池。
@@ -78,7 +79,7 @@ func registerDBLifecycle(lc fx.Lifecycle, log *zap.Logger, dbs map[string]*sql.D
 					return fmt.Errorf("ping postgres %s: %w", name, err)
 				}
 				cancel()
-				logger.WithContext(log, ctx).Info("postgres connected", zap.String("name", name))
+				logger.WithContext(ctx, log).Info("postgres connected", zap.String("name", name))
 			}
 			return nil
 		},
@@ -90,7 +91,7 @@ func registerDBLifecycle(lc fx.Lifecycle, log *zap.Logger, dbs map[string]*sql.D
 					errs = append(errs, fmt.Errorf("close postgres %s: %w", name, err))
 					continue
 				}
-				logger.WithContext(log, ctx).Info("postgres closed", zap.String("name", name))
+				logger.WithContext(ctx, log).Info("postgres closed", zap.String("name", name))
 			}
 			return errors.Join(errs...)
 		},

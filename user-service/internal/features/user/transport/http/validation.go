@@ -3,10 +3,11 @@ package userhttp
 import (
 	"strings"
 
+	"github.com/google/uuid"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/pagination"
 	"github.com/aegiscore/user-service/internal/messages"
-	"github.com/google/uuid"
 )
 
 // NormalizeCreateUser 在 service 处理前裁剪用户创建输入，并将 username 转为小写。

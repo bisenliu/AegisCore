@@ -6,9 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
-	"github.com/gin-gonic/gin"
 )
 
 func TestFailureResponseErrors(t *testing.T) {

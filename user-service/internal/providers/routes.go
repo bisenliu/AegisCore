@@ -1,14 +1,15 @@
 package providers
 
 import (
+	"github.com/gin-gonic/gin"
+	"go.uber.org/fx"
+	"go.uber.org/zap"
+
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 	"github.com/aegiscore/user-service/internal/router"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/fx"
-	"go.uber.org/zap"
 )
 
 // RegisterRouteParams 包含挂载用户服务路由所需的依赖。

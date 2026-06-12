@@ -3,10 +3,11 @@ package middleware
 import (
 	"strings"
 
-	"github.com/aegiscore/common/runtime/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/aegiscore/common/runtime/logger"
 )
 
 const (

@@ -4,19 +4,20 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+	"go.uber.org/fx"
+
 	"github.com/aegiscore/user-service/ent"
 	entuser "github.com/aegiscore/user-service/ent/user"
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
-	"github.com/google/uuid"
-	"go.uber.org/fx"
 )
 
-type userStore struct {
+type UserStore struct {
 	client *ent.Client
 }
 
-var _ userapplication.UserProfileStore = (*userStore)(nil)
+var _ userapplication.UserProfileStore = (*UserStore)(nil)
 
 // UserStoreParams 包含 PostgreSQL-backed 用户 store 所需的 Fx 输入。
 type UserStoreParams struct {
@@ -26,12 +27,12 @@ type UserStoreParams struct {
 }
 
 // NewUserStore 构造基于 Ent 的用户 store。
-func NewUserStore(params UserStoreParams) *userStore {
-	return &userStore{client: params.Client}
+func NewUserStore(params UserStoreParams) *UserStore {
+	return &UserStore{client: params.Client}
 }
 
 // Create 插入用户记录，并将唯一约束冲突映射为 ErrUserAlreadyExists。
-func (s *userStore) Create(ctx context.Context, input userapplication.CreateUserInput) (*userdomain.User, error) {
+func (s *UserStore) Create(ctx context.Context, input userapplication.CreateUserInput) (*userdomain.User, error) {
 	created, err := s.client.User.Create().
 		SetUserID(input.UserID).
 		SetNickname(input.Nickname).
@@ -49,7 +50,7 @@ func (s *userStore) Create(ctx context.Context, input userapplication.CreateUser
 }
 
 // GetByUserID 按外部 UUID 返回未软删除用户。
-func (s *userStore) GetByUserID(ctx context.Context, userID uuid.UUID) (*userdomain.User, error) {
+func (s *UserStore) GetByUserID(ctx context.Context, userID uuid.UUID) (*userdomain.User, error) {
 	found, err := s.client.User.Query().Where(entuser.UserIDEQ(userID), entuser.DeletedAtIsNil()).Only(ctx)
 	if err == nil {
 		return toModel(found), nil
@@ -61,7 +62,7 @@ func (s *userStore) GetByUserID(ctx context.Context, userID uuid.UUID) (*userdom
 }
 
 // ListUsers 返回一页未软删除用户，以及是否存在下一页。
-func (s *userStore) ListUsers(ctx context.Context, input userapplication.ListUsersInput) ([]userdomain.User, bool, error) {
+func (s *UserStore) ListUsers(ctx context.Context, input userapplication.ListUsersInput) ([]userdomain.User, bool, error) {
 	predicates := buildListPredicates(input)
 	if input.AfterUserID != nil {
 		predicates = append(predicates, entuser.UserIDGT(*input.AfterUserID))

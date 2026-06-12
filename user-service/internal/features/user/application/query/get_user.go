@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 
-	"github.com/aegiscore/common/runtime/logger"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/aegiscore/common/runtime/logger"
+	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 )
 
 // GetUserByIDQuery 包含按外部用户 ID 查询用户资料所需的应用层输入。

@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 
+	"github.com/gin-gonic/gin"
+	jwtv5 "github.com/golang-jwt/jwt/v5"
+	"go.uber.org/zap"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/http/response"
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/auth"
-	"github.com/gin-gonic/gin"
-	jwtv5 "github.com/golang-jwt/jwt/v5"
-	"go.uber.org/zap"
 )
 
 // TokenVersionValidatorFunc 将函数适配为 TokenVersionValidator 接口。
@@ -29,10 +30,10 @@ func Auth(log *zap.Logger, jwtService *auth.JWTService, cfg config.AuthConfig) g
 }
 
 // AuthWithTokenVersionValidator 返回支持可选 token version 校验的 JWT 认证中间件。
-func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService, cfg config.AuthConfig, validator auth.TokenVersionValidator) gin.HandlerFunc {
+func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService, _ config.AuthConfig, validator auth.TokenVersionValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
-		reqLog := logger.WithContext(log, ctx)
+		reqLog := logger.WithContext(ctx, log)
 		authHeader := c.GetHeader(auth.AuthorizationHeader)
 		if authHeader == "" {
 			// 缺少请求头表示调用方未认证；下面的 Bearer 格式错误则属于 token 无效。

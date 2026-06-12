@@ -72,7 +72,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - `common` 只承载跨服务稳定契约和基础能力；用户服务独有规则、DTO 映射、infrastructure adapter 行为或仅为未来可能复用的 helper 应保留在 `user-service` 内。
 - Ent 生成代码不要手动编辑；修改 schema 后重新生成。生成代码边界、`go generate ./ent` 用法和新增 Entity Schema 流程见 `user-service/ent/README.md`。
 - Go 文件提交前运行 `gofmt`。
-- 提交前建议在受影响 Go module 中运行 `golangci-lint run ./...`；完整 lint 配置、CI/pre-commit 集成和存量问题治理方案见 `docs/GO_LINT_AUTOMATION.md`。
+- 提交前建议在受影响 Go module 中运行 `golangci-lint run ./...`；CI lint failure 会阻断合并。完整 lint 配置、CI/pre-commit 集成和问题治理方案见 `docs/GO_LINT_AUTOMATION.md`。
 
 ### 6.1 Lint Troubleshooting
 

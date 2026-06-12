@@ -5,9 +5,10 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/uuid"
+
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
-	"github.com/google/uuid"
 )
 
 var testUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")

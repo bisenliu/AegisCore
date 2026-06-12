@@ -1,8 +1,9 @@
 package timezone
 
 import (
-	"github.com/aegiscore/common/runtime/config"
 	"go.uber.org/fx"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 // Params 包含初始化进程时区所需的 Fx 依赖。

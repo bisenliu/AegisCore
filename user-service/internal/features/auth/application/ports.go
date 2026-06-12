@@ -4,8 +4,9 @@ import (
 	"context"
 	"time"
 
-	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	"github.com/google/uuid"
+
+	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
 // UserCredentialStore 定义认证流程对用户凭据的最小依赖面。

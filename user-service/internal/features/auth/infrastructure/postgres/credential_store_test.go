@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
+	_ "github.com/mattn/go-sqlite3"
+
 	"github.com/aegiscore/user-service/ent"
 	"github.com/aegiscore/user-service/ent/enttest"
 	entuser "github.com/aegiscore/user-service/ent/user"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
-	"github.com/google/uuid"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 const deletedAtForCredentialTest int64 = 1710000000000
@@ -235,14 +236,14 @@ func TestCredentialStoreUpdateCredentials(t *testing.T) {
 	}
 }
 
-func newTestCredentialStore(t *testing.T) *credentialStore {
+func newTestCredentialStore(t *testing.T) *CredentialStore {
 	t.Helper()
 	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:credential_store_test_%s?mode=memory&cache=shared&_fk=1", uuid.NewString()))
 	t.Cleanup(func() { _ = client.Close() })
 	return NewCredentialStore(CredentialStoreParams{Client: client})
 }
 
-func createCredentialTestUser(t *testing.T, repo *credentialStore, input credentialTestUserInput) *ent.User {
+func createCredentialTestUser(t *testing.T, repo *CredentialStore, input credentialTestUserInput) *ent.User {
 	t.Helper()
 	created, err := repo.client.User.Create().
 		SetNickname(input.Nickname).
@@ -257,7 +258,7 @@ func createCredentialTestUser(t *testing.T, repo *credentialStore, input credent
 	return created
 }
 
-func createSoftDeletedCredentialUser(t *testing.T, repo *credentialStore, input credentialTestUserInput) {
+func createSoftDeletedCredentialUser(t *testing.T, repo *CredentialStore, input credentialTestUserInput) {
 	t.Helper()
 	ctx := context.Background()
 	created := createCredentialTestUser(t, repo, input)

@@ -10,13 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/google/uuid"
+	rediscache "github.com/redis/go-redis/v9"
+
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	"github.com/alicebob/miniredis/v2"
-	"github.com/google/uuid"
-	rediscache "github.com/redis/go-redis/v9"
 )
 
 var sessionTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
@@ -755,20 +756,19 @@ func TestSessionStoreIgnoresLegacyKeys(t *testing.T) {
 	}
 }
 
-func newTestSessionStore(redisServer *miniredis.Miniredis) *sessionStore {
+func newTestSessionStore(redisServer *miniredis.Miniredis) *SessionStore {
 	return newTestSessionStoreWithConfig(redisServer, config.AuthConfig{TokenVersionCacheTTL: time.Minute})
 }
 
-func newTestSessionStoreWithConfig(redisServer *miniredis.Miniredis, authCfg config.AuthConfig) *sessionStore {
+func newTestSessionStoreWithConfig(redisServer *miniredis.Miniredis, authCfg config.AuthConfig) *SessionStore {
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
-	return &sessionStore{redis: client, keys: authdomain.NewRedisKeyBuilder(&config.Config{}), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL}
+	return &SessionStore{redis: client, keys: authdomain.NewRedisKeyBuilder(""), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL}
 }
 
-func newTestSessionStoreWithAppName(redisServer *miniredis.Miniredis, appName string) *sessionStore {
+func newTestSessionStoreWithAppName(redisServer *miniredis.Miniredis, appName string) *SessionStore {
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
 	store := NewSessionStore(SessionStoreParams{
 		Redis: client,
-		Keys:  authdomain.NewRedisKeyBuilder(&config.Config{App: config.AppConfig{Name: appName}}),
 		Cfg: &config.Config{
 			App:  config.AppConfig{Name: appName},
 			Auth: config.AuthConfig{TokenVersionCacheTTL: time.Minute},

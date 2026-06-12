@@ -6,12 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/runtime/logger"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/common/security/auth"
 )
 
 func TestTraceIDPropagatesHeaderToGinAndGoContext(t *testing.T) {
@@ -273,7 +274,7 @@ func TestRecoveryIncludesTraceIDAndEnvelope(t *testing.T) {
 	log := zap.New(core)
 	engine := gin.New()
 	engine.Use(TraceID(), Recovery(log))
-	engine.GET("/panic", func(c *gin.Context) { panic("boom") })
+	engine.GET("/panic", func(_ *gin.Context) { panic("boom") })
 
 	req := httptest.NewRequest(http.MethodGet, "/panic", nil)
 	req.Header.Set("X-Trace-ID", "trace-panic")

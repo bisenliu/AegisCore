@@ -3,9 +3,10 @@ package validation
 import (
 	"reflect"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
+
+	contracterrors "github.com/aegiscore/common/contract/errors"
 )
 
 const (

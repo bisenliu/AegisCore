@@ -3,13 +3,14 @@ package providers
 import (
 	"testing"
 
+	"go.uber.org/fx"
+	"go.uber.org/zap"
+
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/validation"
 	authfeature "github.com/aegiscore/user-service/internal/features/auth"
 	userfeature "github.com/aegiscore/user-service/internal/features/user"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
-	"go.uber.org/fx"
-	"go.uber.org/zap"
 )
 
 func TestModuleResolvesServiceLevelProviders(t *testing.T) {

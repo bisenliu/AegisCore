@@ -6,13 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
-	"github.com/google/uuid"
 )
 
 func TestCredentialVerifierAcceptsMustChangePasswordUser(t *testing.T) {

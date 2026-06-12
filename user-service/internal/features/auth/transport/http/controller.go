@@ -1,13 +1,14 @@
 package authhttp
 
 import (
+	"github.com/gin-gonic/gin"
+	"go.uber.org/fx"
+
 	"github.com/aegiscore/common/http/binding"
 	"github.com/aegiscore/common/http/response"
 	commonauth "github.com/aegiscore/common/security/auth"
 	commonvalidation "github.com/aegiscore/common/validation"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/fx"
 )
 
 // AuthController 处理认证和会话端点的 HTTP 请求。

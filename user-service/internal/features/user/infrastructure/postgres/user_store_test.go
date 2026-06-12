@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
+	_ "github.com/mattn/go-sqlite3"
+
 	"github.com/aegiscore/user-service/ent/enttest"
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
-	"github.com/google/uuid"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 const deletedAtForTest int64 = 1710000000000
@@ -206,7 +207,7 @@ func TestUserListPredicates(t *testing.T) {
 	}
 }
 
-func newTestUserStore(t *testing.T) *userStore {
+func newTestUserStore(t *testing.T) *UserStore {
 	t.Helper()
 	// The store currently uses portable Ent query/update semantics, so SQLite
 	// covers the integration boundary without requiring Docker-only PostgreSQL tests.
@@ -215,7 +216,7 @@ func newTestUserStore(t *testing.T) *userStore {
 	return NewUserStore(UserStoreParams{Client: client})
 }
 
-func createTestUser(t *testing.T, repo *userStore, input userapplication.CreateUserInput) *userdomain.User {
+func createTestUser(t *testing.T, repo *UserStore, input userapplication.CreateUserInput) *userdomain.User {
 	t.Helper()
 	created, err := repo.Create(context.Background(), input)
 	if err != nil {
@@ -224,7 +225,7 @@ func createTestUser(t *testing.T, repo *userStore, input userapplication.CreateU
 	return created
 }
 
-func createSoftDeletedUser(t *testing.T, repo *userStore, input userapplication.CreateUserInput) {
+func createSoftDeletedUser(t *testing.T, repo *UserStore, input userapplication.CreateUserInput) {
 	t.Helper()
 	ctx := context.Background()
 	created, err := repo.Create(ctx, input)
@@ -254,7 +255,7 @@ func assertSameUserValue(t *testing.T, got userdomain.User, want *userdomain.Use
 	}
 }
 
-func assertListUsernames(t *testing.T, repo *userStore, input userapplication.ListUsersInput, want []string) {
+func assertListUsernames(t *testing.T, repo *UserStore, input userapplication.ListUsersInput, want []string) {
 	t.Helper()
 	users, hasNext, err := repo.ListUsers(context.Background(), input)
 	if err != nil {

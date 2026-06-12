@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 const (

@@ -9,14 +9,15 @@ import (
 	"testing"
 	"time"
 
-	contracterrors "github.com/aegiscore/common/contract/errors"
-	"github.com/aegiscore/common/contract/response"
-	"github.com/aegiscore/common/runtime/logger"
-	"github.com/aegiscore/common/validation"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+
+	contracterrors "github.com/aegiscore/common/contract/errors"
+	"github.com/aegiscore/common/contract/response"
+	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/common/validation"
 )
 
 func TestJSONBinder(t *testing.T) {

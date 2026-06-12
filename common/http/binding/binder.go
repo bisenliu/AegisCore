@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/gin-gonic/gin"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/validation"
-	"github.com/gin-gonic/gin"
 )
 
 // Binder 将 Gin context 中的请求数据绑定到 dst。

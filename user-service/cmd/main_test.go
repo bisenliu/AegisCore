@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/spf13/cobra"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 type testContextKey string
@@ -40,7 +41,7 @@ func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testin
 		}
 
 		return testLifecycleApp{
-			start: func(ctx context.Context) error {
+			start: func(_ context.Context) error {
 				cancel()
 				return nil
 			},

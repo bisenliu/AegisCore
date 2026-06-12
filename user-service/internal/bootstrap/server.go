@@ -8,11 +8,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/logger"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+
+	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/logger"
 )
 
 // defaultHTTPShutdownTimeout 是配置缺省 http.shutdown_timeout 时使用的关闭超时。
@@ -43,7 +44,7 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			logger.WithContext(params.Log, ctx).Info("starting http server",
+			logger.WithContext(ctx, params.Log).Info("starting http server",
 				zap.String("addr", addr),
 				zap.String("service", params.Config.App.Name),
 				zap.String("environment", params.Config.App.Environment),
@@ -67,7 +68,7 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 			}
 			shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 			defer cancel()
-			logger.WithContext(params.Log, ctx).Info("stopping http server")
+			logger.WithContext(ctx, params.Log).Info("stopping http server")
 			return server.Shutdown(shutdownCtx)
 		},
 	})
@@ -77,17 +78,17 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 
 func serveHTTPWithLifecycle(ctx context.Context, log *zap.Logger, shutdowner fx.Shutdowner, server *http.Server, listener net.Listener) {
 	stopCancelListener := context.AfterFunc(ctx, func() {
-		logger.WithContext(log, ctx).Debug("http server lifecycle context canceled")
+		logger.WithContext(ctx, log).Debug("http server lifecycle context canceled")
 		if err := listener.Close(); err != nil && !isExpectedHTTPServeCloseError(err) {
 			log.Warn("close http listener after lifecycle cancel failed", zap.Error(err))
 		}
 	})
 	err := server.Serve(listener)
 	stopCancelListener()
-	handleHTTPServeExit(log, shutdowner, ctx, err)
+	handleHTTPServeExit(ctx, log, shutdowner, err)
 }
 
-func handleHTTPServeExit(log *zap.Logger, shutdowner fx.Shutdowner, ctx context.Context, err error) {
+func handleHTTPServeExit(ctx context.Context, log *zap.Logger, shutdowner fx.Shutdowner, err error) {
 	if err == nil {
 		log.Debug("http server goroutine stopped", zap.String("reason", "serve_returned"))
 		return

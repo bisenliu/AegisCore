@@ -4,21 +4,22 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+	"go.uber.org/fx"
+
 	"github.com/aegiscore/user-service/ent"
 	entuser "github.com/aegiscore/user-service/ent/user"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
-	"github.com/google/uuid"
-	"go.uber.org/fx"
 )
 
-type credentialStore struct {
+type CredentialStore struct {
 	client *ent.Client
 }
 
-var _ authapplication.UserCredentialStore = (*credentialStore)(nil)
-var _ authapplication.UserTokenVersionStore = (*credentialStore)(nil)
+var _ authapplication.UserCredentialStore = (*CredentialStore)(nil)
+var _ authapplication.UserTokenVersionStore = (*CredentialStore)(nil)
 
 // CredentialStoreParams 包含 PostgreSQL-backed 认证凭据 store 所需的 Fx 输入。
 type CredentialStoreParams struct {
@@ -28,12 +29,12 @@ type CredentialStoreParams struct {
 }
 
 // NewCredentialStore 构造基于 Ent 的认证凭据和 token version store。
-func NewCredentialStore(params CredentialStoreParams) *credentialStore {
-	return &credentialStore{client: params.Client}
+func NewCredentialStore(params CredentialStoreParams) *CredentialStore {
+	return &CredentialStore{client: params.Client}
 }
 
 // GetByUsername 按规范化 username 返回未软删除用户的认证凭据。
-func (s *credentialStore) GetByUsername(ctx context.Context, username string) (*authdomain.UserCredential, error) {
+func (s *CredentialStore) GetByUsername(ctx context.Context, username string) (*authdomain.UserCredential, error) {
 	found, err := s.client.User.Query().Where(entuser.UsernameEQ(username), entuser.DeletedAtIsNil()).Only(ctx)
 	if err == nil {
 		return toCredential(found), nil
@@ -45,7 +46,7 @@ func (s *credentialStore) GetByUsername(ctx context.Context, username string) (*
 }
 
 // GetCredentialByUserID 按外部 UUID 返回认证能力需要的最小用户凭据。
-func (s *credentialStore) GetCredentialByUserID(ctx context.Context, userID uuid.UUID) (*authdomain.UserCredential, error) {
+func (s *CredentialStore) GetCredentialByUserID(ctx context.Context, userID uuid.UUID) (*authdomain.UserCredential, error) {
 	found, err := s.client.User.Query().Where(entuser.UserIDEQ(userID), entuser.DeletedAtIsNil()).Only(ctx)
 	if err == nil {
 		return toCredential(found), nil
@@ -57,7 +58,7 @@ func (s *credentialStore) GetCredentialByUserID(ctx context.Context, userID uuid
 }
 
 // GetTokenVersion 返回未软删除用户的当前 token version。
-func (s *credentialStore) GetTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
+func (s *CredentialStore) GetTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
 	found, err := s.client.User.Query().Where(entuser.UserIDEQ(userID), entuser.DeletedAtIsNil()).Only(ctx)
 	if err == nil {
 		return found.TokenVersion, nil
@@ -69,7 +70,7 @@ func (s *credentialStore) GetTokenVersion(ctx context.Context, userID uuid.UUID)
 }
 
 // IncrementTokenVersion 递增用户 token version 并返回新值。
-func (s *credentialStore) IncrementTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
+func (s *CredentialStore) IncrementTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
 	updated, err := s.client.User.Update().Where(entuser.UserIDEQ(userID), entuser.DeletedAtIsNil()).AddTokenVersion(1).Save(ctx)
 	if err == nil {
 		if updated == 0 {
@@ -82,7 +83,7 @@ func (s *credentialStore) IncrementTokenVersion(ctx context.Context, userID uuid
 }
 
 // UpdateCredentials 替换密码哈希和状态，递增 token version 并返回新版本。
-func (s *credentialStore) UpdateCredentials(ctx context.Context, input authdomain.UpdateCredentialsInput) (int64, error) {
+func (s *CredentialStore) UpdateCredentials(ctx context.Context, input authdomain.UpdateCredentialsInput) (int64, error) {
 	updated, err := s.client.User.Update().
 		Where(entuser.UserIDEQ(input.UserID), entuser.DeletedAtIsNil()).
 		SetPasswordHash(input.PasswordHash).

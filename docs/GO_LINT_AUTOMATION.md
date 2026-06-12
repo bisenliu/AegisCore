@@ -2,15 +2,15 @@
 
 ## 1. 问题描述
 
-当前仓库已经有 Go 测试、格式化、Ent 生成和 Atlas migration 校验说明，但缺少统一的自动化代码规范检查。代码格式、导入顺序、未处理错误、静态分析告警和风格问题主要依赖人工 review 发现，容易出现反馈滞后、不同 reviewer 标准不一致和问题进入主线后再修复的情况。
+当前仓库使用 `golangci-lint` 统一执行 Go 格式、导入顺序、未处理错误、静态分析、风格检查和架构依赖边界检查。Lint 是本地开发和 CI 合并门禁的一部分，避免格式、静态问题或错误分层依赖进入主线。
 
 ## 2. 整改目标
 
 - 使用 `golangci-lint` 统一 Go lint 规则。
 - 在本地提供明确安装、运行和排查方式。
-- 在 CI 中对 PR 和主线提交执行 lint，逐步形成合并门禁。
+- 在 CI 中对 PR 和主线提交执行 lint，并作为合并门禁。
 - 提供可选 pre-commit 方案，把低成本问题前移到提交前发现。
-- 对存量 lint 问题采用分阶段治理，避免一次性超大改动影响正常迭代。
+- 对未来新增 lint 规则或历史分支带回的问题采用分阶段治理，避免一次性超大改动影响正常迭代。
 - 在 `docs/DEVELOPMENT.md` 保留日常入口，在本文档保留完整整改策略。
 
 ## 3. 推荐目录结构
@@ -173,45 +173,42 @@ set -euo pipefail
 
 ## 8. 是否阻断合并
 
-推荐策略：
+当前策略：
 
-- 如果 lint 基线已经清零或问题规模很小，CI lint failure 应直接阻断 PR 合并，并在分支保护中设置 required check。
-- 如果历史问题较多，先让 CI 以报告模式运行或只对新增问题设置阻断，再逐步清理存量问题。
-- 不建议在存量问题未分类时立即全量阻断，否则容易让正常业务迭代被大量低风险历史问题阻塞。
+- CI lint failure 直接阻断 PR 合并和主线 push；`.github/workflows/lint.yml` 不使用 `continue-on-error`。
+- 分支保护应将 lint workflow 设为 required check。
+- 本地提交前应运行 `make lint`，或至少运行受影响模块的 `make lint-common` / `make lint-user-service`。
+- 如果未来新增严格规则导致大量历史问题，应先作为独立变更设计治理范围；不要在业务 PR 中混入大规模无关 lint 清理。
 
-当前仓库首次接入时，`common/` 和 `user-service/` 均存在存量 lint findings，因此 `.github/workflows/lint.yml` 暂时对 lint step 设置 `continue-on-error: true`。完成存量治理或建立新增问题阻断机制后，应移除该设置，并在分支保护中将 lint workflow 设为 required check。
+## 9. 新增规则和历史问题治理方式
 
-## 9. 存量问题治理方式
+未来新增 lint 规则、升级工具版本或合并历史分支时，如果重新出现批量 findings，按以下方式分阶段治理：
 
-分阶段治理：
-
-1. 先运行 `golangci-lint run ./...`，统计 `common/` 与 `user-service/` 的问题数量、类型和路径。
+1. 先运行 `make lint-common` 和 `make lint-user-service`，统计 `common/` 与 `user-service/` 的问题数量、类型和路径。
 2. 第一阶段修复高风险问题：`govet`、`staticcheck`、真实未处理错误、可能 panic 或资源泄露的问题。
 3. 第二阶段修复低成本问题：`gofmt`、`goimports`、`unused`、`gosimple`。
 4. 第三阶段处理风格类问题：`stylecheck`、`revive` 中争议较大的规则先团队确认，再分批落地。
 5. 每个 PR 只处理一个模块、一类问题或一组相关文件，避免大规模无关 diff 混入业务变更。
 6. 如果必须临时排除某些路径或规则，需要在整改方案或 issue 中记录原因、责任人和清理时间。
 
-首次验证基线：
+当前验证基线：
 
-- `common/` 当前存在 45 个 lint findings，主要包括 `gofmt`、`goimports`、`govet`、`revive` 和 `staticcheck`。
-- `user-service/` 当前存在 47 个 lint findings，主要包括 `goimports`、`revive` 和 `unused`。
-- 本次变更不直接修复这些存量问题，避免在自动化接入 PR 中混入大规模格式化和行为相关修改。
+- `make lint-common` 应通过。
+- `make lint-user-service` 应通过。
+- `make lint` 应通过。
+- `cd user-service && golangci-lint run --config ../.golangci.yml --enable-only depguard ./...` 应通过。
 
-Depguard 分层违规快照：
+Depguard 分层违规基线：
 
-- Domain：`user-service/internal/features/auth/domain/rediskeys.go` 和 `rediskeys_test.go` 当前导入 `github.com/aegiscore/common/runtime/config`。后续治理应把 Redis key namespace 所需的 app name 作为 plain value 或 application/infrastructure 构造参数传入，让 domain 保持纯值对象和纯领域规则。
-- Application：当前未发现 depguard 违规。
-- Transport：当前未发现 depguard 违规。
-- Infrastructure：当前未发现 depguard 违规。
-- Integration：当前未发现 depguard 违规。
+- 当前不保留已知 depguard 违规。
+- Auth Redis key builder 接收 plain app name；runtime config 提取留在 Redis infrastructure adapter，domain 不导入 `common/runtime/config`。
 
 Depguard 历史违规治理建议：
 
 1. 优先处理 domain 违规，因为 domain 是最内层边界，错误依赖会向所有外层扩散。
 2. 对每个违规只移动最小依赖：把配置读取、logger、Gin/HTTP response、Ent/Redis client 或 SQL 访问移到 application、transport 或 infrastructure 的正确层。
 3. 如果确有例外需求，先更新 `docs/ARCHITECTURE.md` 的 dependency table 和边界说明，再调整 depguard；不要只用 `nolint` 绕过架构规则。
-4. 清理完成后重新运行 `cd user-service && golangci-lint run --config ../.golangci.yml --enable-only depguard ./...`，并更新本快照。
+4. 清理完成后重新运行 `cd user-service && golangci-lint run --config ../.golangci.yml --enable-only depguard ./...`。
 
 优先级建议：
 

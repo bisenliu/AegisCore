@@ -3,8 +3,9 @@ package application
 import (
 	"context"
 
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/google/uuid"
+
+	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 )
 
 // UserProfileStore 定义用户资料 service 实际消费的持久化端口。

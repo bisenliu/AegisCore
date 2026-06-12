@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/logger"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+
+	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/logger"
 )
 
 // ProvideNamedRedis 通过 Fx 名称到配置 key 的映射提供一个具名 Redis 客户端。
@@ -37,14 +38,14 @@ func NewRedisClient(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name s
 			if err := client.Ping(pingCtx).Err(); err != nil {
 				return fmt.Errorf("ping redis %s: %w", name, err)
 			}
-			logger.WithContext(log, ctx).Info("redis connected", zap.String("name", name), zap.String("addr", redisCfg.Addr))
+			logger.WithContext(ctx, log).Info("redis connected", zap.String("name", name), zap.String("addr", redisCfg.Addr))
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			if err := client.Close(); err != nil {
 				return fmt.Errorf("close redis %s: %w", name, err)
 			}
-			logger.WithContext(log, ctx).Info("redis closed", zap.String("name", name))
+			logger.WithContext(ctx, log).Info("redis closed", zap.String("name", name))
 			return nil
 		},
 	})

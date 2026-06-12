@@ -5,12 +5,13 @@ import (
 	"strings"
 	"testing"
 
+	"go.uber.org/fx"
+	"go.uber.org/zap"
+
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/validation"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
-	"go.uber.org/fx"
-	"go.uber.org/zap"
 )
 
 func TestAppModuleResolvesSharedValidationDependency(t *testing.T) {

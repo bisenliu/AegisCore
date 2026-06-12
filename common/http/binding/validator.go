@@ -1,11 +1,12 @@
 package binding
 
 import (
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+
 	"github.com/aegiscore/common/http/response"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/validation"
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 // Bind 执行 binder，规范化绑定错误，并校验绑定后的请求值。

@@ -1,10 +1,11 @@
 package command
 
 import (
+	"go.uber.org/fx"
+
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
-	"go.uber.org/fx"
 )
 
 // UseCaseDepsParams 包含构造 auth command use case 共享依赖所需的 Fx 输入。

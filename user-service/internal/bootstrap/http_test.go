@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 type lifecycleRecorder struct {

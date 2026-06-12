@@ -6,7 +6,8 @@ import (
 )
 
 func TestUserIDContext(t *testing.T) {
-	if got, ok := UserIDFromContext(nil); ok || got != "" {
+	var nilContext context.Context
+	if got, ok := UserIDFromContext(nilContext); ok || got != "" {
 		t.Fatalf("UserIDFromContext nil = %q, %v; want empty, false", got, ok)
 	}
 	if got, ok := UserIDFromContext(context.Background()); ok || got != "" {
@@ -24,7 +25,8 @@ func TestUserIDContext(t *testing.T) {
 }
 
 func TestSessionIDContext(t *testing.T) {
-	if got, ok := SessionIDFromContext(nil); ok || got != "" {
+	var nilContext context.Context
+	if got, ok := SessionIDFromContext(nilContext); ok || got != "" {
 		t.Fatalf("SessionIDFromContext nil = %q, %v; want empty, false", got, ok)
 	}
 	if got, ok := SessionIDFromContext(context.Background()); ok || got != "" {

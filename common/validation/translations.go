@@ -32,7 +32,7 @@ func enumAllowedValues(value any) []string {
 	if !field.IsValid() {
 		return nil
 	}
-	if field.Kind() == reflect.Ptr {
+	if field.Kind() == reflect.Pointer {
 		if field.IsNil() {
 			return nil
 		}
@@ -52,7 +52,7 @@ func validateEnum(fl validator.FieldLevel) bool {
 	if !value.IsValid() {
 		return false
 	}
-	if value.Kind() == reflect.Ptr {
+	if value.Kind() == reflect.Pointer {
 		if value.IsNil() {
 			return false
 		}

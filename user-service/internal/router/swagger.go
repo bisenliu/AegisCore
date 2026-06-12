@@ -6,10 +6,12 @@ import (
 	"strconv"
 	"strings"
 
-	_ "github.com/aegiscore/user-service/docs"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+
+	// Register generated Swagger docs with swaggo.
+	_ "github.com/aegiscore/user-service/docs"
 )
 
 // swaggerEnabledEnv 显式开启或关闭 Swagger 路由，并覆盖环境默认行为。

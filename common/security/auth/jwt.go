@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aegiscore/common/runtime/config"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 var (

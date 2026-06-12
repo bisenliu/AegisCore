@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 type tokenVersionValidator struct {

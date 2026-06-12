@@ -3,9 +3,10 @@ package command
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	commonauth "github.com/aegiscore/common/security/auth"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	"github.com/google/uuid"
 )
 
 func authenticatedSession(ctx context.Context) (string, string, error) {

@@ -3,11 +3,12 @@ package providers
 import (
 	"fmt"
 
-	commonmw "github.com/aegiscore/common/http/middleware"
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+
+	commonmw "github.com/aegiscore/common/http/middleware"
+	"github.com/aegiscore/common/runtime/config"
 )
 
 // GinParams 包含创建 Gin engine 所需的 Fx 输入。

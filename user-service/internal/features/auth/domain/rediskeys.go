@@ -2,8 +2,6 @@ package domain
 
 import (
 	"strings"
-
-	"github.com/aegiscore/common/runtime/config"
 )
 
 // RedisKeyBuilder 构建认证会话 Redis key，并支持可选 app name 命名空间前缀。
@@ -11,9 +9,9 @@ type RedisKeyBuilder struct {
 	appName string
 }
 
-// NewRedisKeyBuilder 根据配置的 app name 构造 key builder。
-func NewRedisKeyBuilder(cfg *config.Config) RedisKeyBuilder {
-	return RedisKeyBuilder{appName: strings.TrimSpace(cfg.App.Name)}
+// NewRedisKeyBuilder 根据 app name 构造 key builder。
+func NewRedisKeyBuilder(appName string) RedisKeyBuilder {
+	return RedisKeyBuilder{appName: strings.TrimSpace(appName)}
 }
 
 // AuthSession 返回一个 refresh token 会话载荷的 key。

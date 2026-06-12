@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/password"
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	"github.com/aegiscore/user-service/internal/features/user/application/validators"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
-	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 // CreateUserCommand 包含创建用户所需的应用层输入。

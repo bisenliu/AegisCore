@@ -1,13 +1,9 @@
 package domain
 
-import (
-	"testing"
-
-	"github.com/aegiscore/common/runtime/config"
-)
+import "testing"
 
 func TestRedisKeyBuilderUsesAppNamePrefixWithNewKeyFormat(t *testing.T) {
-	builder := NewRedisKeyBuilder(&config.Config{App: config.AppConfig{Name: " aegiscore-user-services "}})
+	builder := NewRedisKeyBuilder(" aegiscore-user-services ")
 
 	if got := builder.AuthSession("u-123", "s-123"); got != "aegiscore-user-services:auth:session:{u-123}:s-123" {
 		t.Fatalf("AuthSession = %q", got)
@@ -27,7 +23,7 @@ func TestRedisKeyBuilderUsesAppNamePrefixWithNewKeyFormat(t *testing.T) {
 }
 
 func TestRedisKeyBuilderKeepsUnprefixedKeysWhenAppNameEmpty(t *testing.T) {
-	builder := NewRedisKeyBuilder(&config.Config{App: config.AppConfig{Name: "   "}})
+	builder := NewRedisKeyBuilder("   ")
 
 	if got := builder.AuthSession("u-123", "s-123"); got != "auth:session:{u-123}:s-123" {
 		t.Fatalf("AuthSession = %q", got)

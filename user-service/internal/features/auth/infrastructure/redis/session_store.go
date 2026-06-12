@@ -8,11 +8,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/aegiscore/common/runtime/config"
-	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
+
+	"github.com/aegiscore/common/runtime/config"
+	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
 const (
@@ -102,22 +103,25 @@ type SessionStoreParams struct {
 
 	Redis *rediscache.Client `name:"cache_redis"`
 	Cfg   *config.Config
-	Keys  authdomain.RedisKeyBuilder
 }
 
-type sessionStore struct {
+type SessionStore struct {
 	redis                *rediscache.Client
 	keys                 authdomain.RedisKeyBuilder
 	tokenVersionCacheTTL time.Duration
 }
 
 // NewSessionStore 构造认证会话持久化的 Redis 实现。
-func NewSessionStore(params SessionStoreParams) *sessionStore {
-	return &sessionStore{redis: params.Redis, keys: params.Keys, tokenVersionCacheTTL: params.Cfg.Auth.TokenVersionCacheTTL}
+func NewSessionStore(params SessionStoreParams) *SessionStore {
+	return &SessionStore{
+		redis:                params.Redis,
+		keys:                 authdomain.NewRedisKeyBuilder(params.Cfg.App.Name),
+		tokenVersionCacheTTL: params.Cfg.Auth.TokenVersionCacheTTL,
+	}
 }
 
 // GetCachedTokenVersion 返回缓存的 token version，未命中时返回 ErrTokenVersionCacheMiss。
-func (r *sessionStore) GetCachedTokenVersion(ctx context.Context, userID string) (int64, error) {
+func (r *SessionStore) GetCachedTokenVersion(ctx context.Context, userID string) (int64, error) {
 	key := r.tokenVersionKey(userID)
 	value, err := r.redis.Get(ctx, key).Result()
 	if errors.Is(err, rediscache.Nil) {
@@ -134,7 +138,7 @@ func (r *sessionStore) GetCachedTokenVersion(ctx context.Context, userID string)
 }
 
 // CacheTokenVersion 存储用户 token version，供中间件执行撤销校验。
-func (r *sessionStore) CacheTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
+func (r *SessionStore) CacheTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
 	ttl := r.tokenVersionCacheTTL
 	if ttl <= 0 {
 		// 非正数配置表示使用有界默认过期窗口，而不是创建永久缓存项。
@@ -151,7 +155,7 @@ func (r *sessionStore) CacheTokenVersion(ctx context.Context, userID string, tok
 }
 
 // DeleteCachedTokenVersion 删除用户 token version 缓存，使后续校验回源 PostgreSQL。
-func (r *sessionStore) DeleteCachedTokenVersion(ctx context.Context, userID string) error {
+func (r *SessionStore) DeleteCachedTokenVersion(ctx context.Context, userID string) error {
 	if err := r.redis.Del(ctx, r.tokenVersionKey(userID)).Err(); err != nil {
 		return fmt.Errorf("delete token version cache: %w", err)
 	}
@@ -159,7 +163,7 @@ func (r *sessionStore) DeleteCachedTokenVersion(ctx context.Context, userID stri
 }
 
 // CreateSession 存储 refresh token 会话，并按用户建立索引用于批量撤销。
-func (r *sessionStore) CreateSession(ctx context.Context, session authdomain.AuthSession, ttl time.Duration) error {
+func (r *SessionStore) CreateSession(ctx context.Context, session authdomain.AuthSession, ttl time.Duration) error {
 	if ttl <= 0 {
 		// 非正数 TTL 回退到短期会话，避免创建永久 Redis key。
 		ttl = defaultAuthSessionTTL
@@ -193,7 +197,7 @@ func (r *sessionStore) CreateSession(ctx context.Context, session authdomain.Aut
 }
 
 // RotateSession 原子消费旧 refresh 会话，并创建新 refresh 会话。
-func (r *sessionStore) RotateSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, ttl time.Duration) error {
+func (r *SessionStore) RotateSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, ttl time.Duration) error {
 	if newSession.UserID != oldSession.UserID || newSession.TokenVersion != oldSession.TokenVersion {
 		return authdomain.ErrAuthSessionMismatch
 	}
@@ -241,7 +245,7 @@ func (r *sessionStore) RotateSession(ctx context.Context, oldSession authdomain.
 }
 
 // GetSession 按 session ID 返回 refresh token 会话。
-func (r *sessionStore) GetSession(ctx context.Context, userID string, sessionID string) (authdomain.AuthSession, error) {
+func (r *SessionStore) GetSession(ctx context.Context, userID string, sessionID string) (authdomain.AuthSession, error) {
 	data, err := r.redis.Get(ctx, r.sessionKey(userID, sessionID)).Bytes()
 	if errors.Is(err, rediscache.Nil) {
 		return authdomain.AuthSession{}, authdomain.ErrAuthSessionNotFound
@@ -257,7 +261,7 @@ func (r *sessionStore) GetSession(ctx context.Context, userID string, sessionID 
 }
 
 // DeleteSession 删除一个 refresh token 会话，并从用户索引中清理过期项。
-func (r *sessionStore) DeleteSession(ctx context.Context, userID string, sessionID string) error {
+func (r *SessionStore) DeleteSession(ctx context.Context, userID string, sessionID string) error {
 	userSessions := r.userSessionsKey(userID)
 	pipe := r.redis.TxPipeline()
 	pipe.Del(ctx, r.sessionKey(userID, sessionID))
@@ -271,7 +275,7 @@ func (r *sessionStore) DeleteSession(ctx context.Context, userID string, session
 }
 
 // DeleteAllUserSessions 删除用户所有存活 refresh token 会话，并删除用户索引。
-func (r *sessionStore) DeleteAllUserSessions(ctx context.Context, userID string) error {
+func (r *SessionStore) DeleteAllUserSessions(ctx context.Context, userID string) error {
 	userSessions := r.userSessionsKey(userID)
 	purgeKey := r.purgeUserSessionsKey(userID)
 	cutTime := time.Now()
@@ -296,7 +300,7 @@ func (r *sessionStore) DeleteAllUserSessions(ctx context.Context, userID string)
 	}
 }
 
-func (r *sessionStore) purgeDetachedUserSessions(ctx context.Context, purgeKey string, sessionPrefix string, cutTime time.Time) error {
+func (r *SessionStore) purgeDetachedUserSessions(ctx context.Context, purgeKey string, sessionPrefix string, cutTime time.Time) error {
 	cutScore := float64(cutTime.Unix())
 	for {
 		sessions, err := r.redis.ZRangeWithScores(ctx, purgeKey, 0, deleteAllUserSessionsBatchSize-1).Result()
@@ -331,19 +335,19 @@ func (r *sessionStore) purgeDetachedUserSessions(ctx context.Context, purgeKey s
 	return nil
 }
 
-func (r *sessionStore) tokenVersionKey(userID string) string {
+func (r *SessionStore) tokenVersionKey(userID string) string {
 	return r.keys.AuthUserTokenVersion(userID)
 }
 
-func (r *sessionStore) sessionKey(userID string, sessionID string) string {
+func (r *SessionStore) sessionKey(userID string, sessionID string) string {
 	return r.keys.AuthSession(userID, sessionID)
 }
 
-func (r *sessionStore) userSessionsKey(userID string) string {
+func (r *SessionStore) userSessionsKey(userID string) string {
 	return r.keys.AuthUserSessions(userID)
 }
 
-func (r *sessionStore) purgeUserSessionsKey(userID string) string {
+func (r *SessionStore) purgeUserSessionsKey(userID string) string {
 	return r.keys.AuthUserSessionsPurge(userID, uuid.NewString())
 }
 

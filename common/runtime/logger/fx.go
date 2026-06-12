@@ -4,9 +4,10 @@ import (
 	"context"
 	"syscall"
 
-	"github.com/aegiscore/common/runtime/config"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 // NewLogger 提供配置化 zap logger，并在 Fx 关闭阶段执行同步。

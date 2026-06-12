@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/password"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
-	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 // CredentialVerifier 校验登录凭证并完成强制改密。

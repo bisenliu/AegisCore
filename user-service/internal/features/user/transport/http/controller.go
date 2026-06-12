@@ -1,12 +1,13 @@
 package userhttp
 
 import (
+	"github.com/gin-gonic/gin"
+
 	"github.com/aegiscore/common/http/binding"
 	"github.com/aegiscore/common/http/response"
 	commonvalidation "github.com/aegiscore/common/validation"
 	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
-	"github.com/gin-gonic/gin"
 )
 
 // UserController 处理用户资料端点的 HTTP 请求。

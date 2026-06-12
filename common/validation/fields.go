@@ -28,7 +28,7 @@ func displayName(dst any, path string) string {
 		return "参数"
 	}
 	typ := reflect.TypeOf(dst)
-	for typ != nil && typ.Kind() == reflect.Ptr {
+	for typ != nil && typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 	if typ == nil || typ.Kind() != reflect.Struct {
@@ -52,7 +52,7 @@ func displayNameFromType(typ reflect.Type, parts []string) string {
 			return displayNameFromField(field)
 		}
 		fieldType := field.Type
-		for fieldType.Kind() == reflect.Ptr {
+		for fieldType.Kind() == reflect.Pointer {
 			fieldType = fieldType.Elem()
 		}
 		if fieldType.Kind() == reflect.Struct {
@@ -88,7 +88,7 @@ func validationFieldNamesFromPath(dst any, namespace string) (string, string, bo
 		return "", "", false
 	}
 	typ := reflect.TypeOf(dst)
-	for typ != nil && typ.Kind() == reflect.Ptr {
+	for typ != nil && typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 	if typ == nil || typ.Kind() != reflect.Struct {
@@ -111,7 +111,7 @@ func validationFieldNamesFromPath(dst any, namespace string) (string, string, bo
 		label = displayNameFromField(structField)
 
 		typ = structField.Type
-		for typ.Kind() == reflect.Ptr || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
+		for typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
 			typ = typ.Elem()
 		}
 		if typ.Kind() != reflect.Struct {

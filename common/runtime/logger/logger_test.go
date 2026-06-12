@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/runtime/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 func TestNewWritesClassifiedFiles(t *testing.T) {
@@ -149,7 +150,7 @@ func contextLoggerCallerProbe(ctx context.Context) {
 	Info(ctx, "caller probe")
 }
 
-func TestDefaultLoggerConcurrentAccess(t *testing.T) {
+func TestDefaultLoggerConcurrentAccess(_ *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		wg.Add(2)
