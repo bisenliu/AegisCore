@@ -8,7 +8,7 @@ import (
 )
 
 // TraceIDField 是请求关联 ID 使用的 zap 字段名。
-const TraceIDField = "trace-id"
+const TraceIDField = "trace_id"
 
 type traceIDContextKey struct{}
 type loggerContextKey struct{}
@@ -49,7 +49,7 @@ func TraceIDFromContext(ctx context.Context) string {
 }
 
 // WithContext 基于 base 派生 logger，并附加 ctx 中的 trace-id 字段。
-func WithContext(base *zap.Logger, ctx context.Context) *zap.Logger {
+func WithContext(ctx context.Context, base *zap.Logger) *zap.Logger {
 	if base == nil {
 		base = getDefault()
 	}
@@ -65,10 +65,10 @@ func ToContext(ctx context.Context, log *zap.Logger) context.Context {
 func FromContext(ctx context.Context) *zap.Logger {
 	if ctx != nil {
 		if log, ok := ctx.Value(loggerContextKey{}).(*zap.Logger); ok && log != nil {
-			return WithContext(log, ctx)
+			return WithContext(ctx, log)
 		}
 	}
-	return WithContext(getDefault(), ctx)
+	return WithContext(ctx, getDefault())
 }
 
 // Debug 使用 context logger 写入 debug 日志，并保留调用方位置。

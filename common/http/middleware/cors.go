@@ -5,8 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aegiscore/common/security/auth"
 	"github.com/gin-gonic/gin"
+
+	"github.com/aegiscore/common/security/auth"
 )
 
 const (

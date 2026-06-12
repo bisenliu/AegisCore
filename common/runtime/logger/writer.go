@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aegiscore/common/runtime/config"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 type fileWriters struct {

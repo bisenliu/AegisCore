@@ -3,9 +3,10 @@ package validation
 import (
 	"reflect"
 
-	"github.com/aegiscore/common/contract/response"
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
+
+	contracterrors "github.com/aegiscore/common/contract/errors"
 )
 
 const (
@@ -63,9 +64,9 @@ type FieldError struct {
 
 // Error 是规范化后的校验或绑定错误，可携带字段明细。
 type Error struct {
-	Message string        `json:"message"`
-	Fields  []FieldError  `json:"fields,omitempty"`
-	Code    response.Code `json:"-"`
+	Message string              `json:"message"`
+	Fields  []FieldError        `json:"fields,omitempty"`
+	Code    contracterrors.Code `json:"-"`
 }
 
 // Failure 包含从校验或绑定错误派生出的响应元数据。

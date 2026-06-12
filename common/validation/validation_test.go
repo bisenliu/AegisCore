@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/aegiscore/common/contract/response"
+	contracterrors "github.com/aegiscore/common/contract/errors"
 )
 
 func TestValidateStructAndFieldNames(t *testing.T) {
@@ -30,8 +30,8 @@ func TestValidateStructAndFieldNames(t *testing.T) {
 	if validationErr.Message != ErrValidationFailed {
 		t.Fatalf("Message = %q, want %q", validationErr.Message, ErrValidationFailed)
 	}
-	if validationErr.Code != response.CodeValidationFailed {
-		t.Fatalf("Code = %d, want %d", validationErr.Code, response.CodeValidationFailed)
+	if validationErr.Code != contracterrors.CodeValidationFailed {
+		t.Fatalf("Code = %d, want %d", validationErr.Code, contracterrors.CodeValidationFailed)
 	}
 	fields := fieldDetails(validationErr.Fields)
 	checks := map[string]FieldError{

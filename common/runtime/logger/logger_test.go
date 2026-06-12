@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/runtime/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 func TestNewWritesClassifiedFiles(t *testing.T) {
@@ -41,7 +42,7 @@ func TestNewWritesClassifiedFiles(t *testing.T) {
 	}
 
 	date := time.Now().Format("2006-01-02")
-	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "all"), "debug message", "info message", "warn message", "error message", `"trace-id":"trace-123"`)
+	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "all"), "debug message", "info message", "warn message", "error message", `"trace_id":"trace-123"`)
 	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "info"), "info message")
 	assertFileNotContains(t, datedPath(dir, "aegiscore-test", date, "info"), "warn message", "error message")
 	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "warning"), "warn message")
@@ -149,7 +150,7 @@ func contextLoggerCallerProbe(ctx context.Context) {
 	Info(ctx, "caller probe")
 }
 
-func TestDefaultLoggerConcurrentAccess(t *testing.T) {
+func TestDefaultLoggerConcurrentAccess(_ *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		wg.Add(2)

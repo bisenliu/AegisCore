@@ -1,6 +1,6 @@
 name: lint
 
-# 在 PR 和主线分支推送时执行 lint，先作为报告型检查接入。
+# 在 PR 和主线分支推送时执行 lint，并作为合并门禁。
 on:
   pull_request:
   push:
@@ -22,7 +22,7 @@ jobs:
       matrix:
         module:
           - common
-          - user-services
+          - user-service
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,12 +35,10 @@ jobs:
           cache: true
           cache-dependency-path: |
             common/go.sum
-            user-services/go.sum
+            user-service/go.sum
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v8
-        # 当前仓库仍有存量 lint findings，先保持非阻断；完成治理后移除该配置并设为 required check。
-        continue-on-error: true
         with:
           # 固定版本，避免本地和 CI 因 golangci-lint 版本漂移产生不同结果。
           version: v2.12.2

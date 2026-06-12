@@ -13,7 +13,7 @@ import (
 // BindValues 按给定 struct tag 顺序扫描，将 URL 风格 values 绑定到结构体指针。
 func BindValues(dst any, values url.Values, tags ...string) error {
 	value := reflect.ValueOf(dst)
-	if value.Kind() != reflect.Ptr || value.IsNil() {
+	if value.Kind() != reflect.Pointer || value.IsNil() {
 		return fmt.Errorf("validation bind target must be a non-nil pointer")
 	}
 	value = value.Elem()
@@ -31,7 +31,7 @@ func bindStruct(value reflect.Value, values url.Values, tags []string) error {
 		if structField.PkgPath != "" && !structField.Anonymous {
 			continue
 		}
-		if structField.Anonymous && field.Kind() == reflect.Ptr && field.Type().Elem().Kind() == reflect.Struct {
+		if structField.Anonymous && field.Kind() == reflect.Pointer && field.Type().Elem().Kind() == reflect.Struct {
 			// 嵌入指针结构体只有在其 tag 字段出现时才分配，保留可选过滤器语义。
 			if field.IsNil() && embeddedStructHasValues(field.Type().Elem(), values, tags) {
 				field.Set(reflect.New(field.Type().Elem()))
@@ -75,7 +75,7 @@ func embeddedStructHasValues(typ reflect.Type, values url.Values, tags []string)
 		}
 		fieldType := field.Type
 		if field.Anonymous {
-			for fieldType.Kind() == reflect.Ptr {
+			for fieldType.Kind() == reflect.Pointer {
 				fieldType = fieldType.Elem()
 			}
 			if fieldType.Kind() == reflect.Struct && embeddedStructHasValues(fieldType, values, tags) {
@@ -103,7 +103,7 @@ func setField(field reflect.Value, rawValues []string) error {
 	if !field.CanSet() {
 		return nil
 	}
-	if field.Kind() == reflect.Ptr {
+	if field.Kind() == reflect.Pointer {
 		if rawValues[0] == "" {
 			// 空字符串保持指针字段为 nil，避免将省略的可选值混淆为零值。
 			return nil

@@ -6,9 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aegiscore/common/runtime/config"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 type dailyLumberjackWriteSyncer struct {

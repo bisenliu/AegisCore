@@ -10,14 +10,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aegiscore/common/contract/response"
-	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/security/auth"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+
+	contracterrors "github.com/aegiscore/common/contract/errors"
+	"github.com/aegiscore/common/contract/response"
+	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/security/auth"
 )
 
 const authTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
@@ -37,25 +40,26 @@ func TestAuthMiddleware(t *testing.T) {
 		cfg           *config.AuthConfig
 		authorization string
 		wantStatus    int
-		wantCode      response.Code
+		wantCode      contracterrors.Code
 		wantHandled   bool
 		validator     auth.TokenVersionValidator
 		wantLogLevel  zapcore.Level
 		wantLogMsg    string
+		wantMismatch  bool
 	}{
-		{name: "missing header", path: "/api/v1/users/123", wantStatus: http.StatusUnauthorized, wantCode: response.CodeUnauthenticated, wantLogLevel: zapcore.InfoLevel, wantLogMsg: "missing authorization header"},
-		{name: "invalid format", path: "/api/v1/users/123", authorization: "Token abc", wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "invalid authorization header format"},
-		{name: "empty token", path: "/api/v1/users/123", authorization: auth.TokenPrefix, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "empty bearer token"},
-		{name: "invalid token", path: "/api/v1/users/123", authorization: auth.TokenPrefix + "invalid", wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
-		{name: "expired token", path: "/api/v1/users/123", authorization: auth.TokenPrefix + expiredToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenExpired, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
-		{name: "missing token version", path: "/api/v1/users/123", authorization: auth.TokenPrefix + missingVersionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
-		{name: "missing session id", path: "/api/v1/users/123", authorization: auth.TokenPrefix + missingSessionToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
-		{name: "password change token rejected", path: "/api/v1/users/123", authorization: auth.TokenPrefix + passwordChangeToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
-		{name: "token version mismatch", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error {
+		{name: "missing header", path: "/api/v1/users/123", wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeUnauthenticated, wantLogLevel: zapcore.InfoLevel, wantLogMsg: "missing authorization header"},
+		{name: "invalid format", path: "/api/v1/users/123", authorization: "Token abc", wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "invalid authorization header format"},
+		{name: "empty token", path: "/api/v1/users/123", authorization: auth.TokenPrefix, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "empty bearer token"},
+		{name: "invalid token", path: "/api/v1/users/123", authorization: auth.TokenPrefix + "invalid", wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
+		{name: "expired token", path: "/api/v1/users/123", authorization: auth.TokenPrefix + expiredToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenExpired, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
+		{name: "missing token version", path: "/api/v1/users/123", authorization: auth.TokenPrefix + missingVersionToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
+		{name: "missing session id", path: "/api/v1/users/123", authorization: auth.TokenPrefix + missingSessionToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
+		{name: "password change token rejected", path: "/api/v1/users/123", authorization: auth.TokenPrefix + passwordChangeToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
+		{name: "token version mismatch", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error {
 			return fmt.Errorf("validate token version: %w", &auth.TokenVersionMismatchError{Current: 3, Token: 1})
-		}), wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token version mismatch"},
-		{name: "token version infrastructure error", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusInternalServerError, wantCode: response.CodeInternalError, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("redis unavailable") }), wantLogLevel: zapcore.ErrorLevel, wantLogMsg: "token version validation failed"},
-		{name: "missing jwt secret", path: "/api/v1/users/123", cfg: &config.AuthConfig{}, authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: response.CodeTokenInvalid, wantLogLevel: zapcore.ErrorLevel, wantLogMsg: "token validation failed"},
+		}), wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token version mismatch", wantMismatch: true},
+		{name: "token version infrastructure error", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusInternalServerError, wantCode: contracterrors.CodeInternalError, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("redis unavailable") }), wantLogLevel: zapcore.ErrorLevel, wantLogMsg: "token version validation failed"},
+		{name: "missing jwt secret", path: "/api/v1/users/123", cfg: &config.AuthConfig{}, authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.ErrorLevel, wantLogMsg: "token validation failed"},
 		{name: "valid token", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true},
 		{name: "valid token with lowercase bearer prefix", path: "/api/v1/users/123", authorization: "bearer " + validToken, wantStatus: http.StatusOK, wantHandled: true},
 		{name: "valid token with uppercase bearer prefix", path: "/api/v1/users/123", authorization: "BEARER " + validToken, wantStatus: http.StatusOK, wantHandled: true},
@@ -97,6 +101,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			request.Header.Set("User-Agent", "auth-test-agent")
 			if tt.authorization != "" {
 				request.Header.Set(auth.AuthorizationHeader, tt.authorization)
 			}
@@ -108,7 +113,16 @@ func TestAuthMiddleware(t *testing.T) {
 			if handled != tt.wantHandled {
 				t.Fatalf("handled = %v, want %v", handled, tt.wantHandled)
 			}
-			assertAuthLog(t, logs, tt.wantLogLevel, tt.wantLogMsg)
+			entry := assertAuthLog(t, logs, tt.wantLogLevel, tt.wantLogMsg)
+			if tt.wantLogMsg != "" {
+				assertAuthFailureFields(t, entry.ContextMap(), tt.path)
+				if tt.wantMismatch {
+					fields := entry.ContextMap()
+					if fields["user_id"] != authTestUserID || fields["current_token_version"] != int64(3) || fields["token_version"] != int64(1) {
+						t.Fatalf("token mismatch fields = %#v", fields)
+					}
+				}
+			}
 			if tt.wantCode != 0 {
 				var envelope response.Envelope
 				if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
@@ -126,14 +140,14 @@ func TestAuthMiddleware(t *testing.T) {
 	}
 }
 
-func assertAuthLog(t *testing.T, logs *observer.ObservedLogs, wantLevel zapcore.Level, wantMsg string) {
+func assertAuthLog(t *testing.T, logs *observer.ObservedLogs, wantLevel zapcore.Level, wantMsg string) observer.LoggedEntry {
 	t.Helper()
 	entries := logs.All()
 	if wantMsg == "" {
 		if len(entries) != 0 {
 			t.Fatalf("logs = %#v, want none", entries)
 		}
-		return
+		return observer.LoggedEntry{}
 	}
 
 	for _, entry := range entries {
@@ -144,10 +158,21 @@ func assertAuthLog(t *testing.T, logs *observer.ObservedLogs, wantLevel zapcore.
 
 	for _, entry := range entries {
 		if entry.Level == wantLevel && entry.Message == wantMsg {
-			return
+			return entry
 		}
 	}
 	t.Fatalf("missing log level=%s msg=%q in %#v", wantLevel, wantMsg, entries)
+	return observer.LoggedEntry{}
+}
+
+func assertAuthFailureFields(t *testing.T, fields map[string]any, _ string) {
+	t.Helper()
+	if fields["method"] != http.MethodGet || fields["path"] != "/*path" || fields["user_agent"] != "auth-test-agent" {
+		t.Fatalf("auth failure log fields = %#v", fields)
+	}
+	if _, ok := fields["client_ip"]; !ok {
+		t.Fatalf("auth failure log missing client_ip: %#v", fields)
+	}
 }
 
 func signAuthTestToken(t *testing.T, secret, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {
@@ -156,11 +181,15 @@ func signAuthTestToken(t *testing.T, secret, userID string, tokenVersion int64, 
 
 func signAuthSubjectTestToken(t *testing.T, secret, subject, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {
 	t.Helper()
+	tokenID, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("NewV7: %v", err)
+	}
 	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, auth.Claims{
 		UserID:           userID,
 		TokenVersion:     tokenVersion,
 		SessionID:        sessionID,
-		RegisteredClaims: jwtv5.RegisteredClaims{Subject: subject, ExpiresAt: jwtv5.NewNumericDate(expiresAt)},
+		RegisteredClaims: jwtv5.RegisteredClaims{ID: tokenID.String(), Subject: subject, ExpiresAt: jwtv5.NewNumericDate(expiresAt)},
 	}).SignedString([]byte(secret))
 	if err != nil {
 		t.Fatalf("SignedString: %v", err)

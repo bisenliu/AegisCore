@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -34,11 +35,14 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cfg.Auth.JWT.RefreshTokenTTL != 168*time.Hour {
 		t.Fatalf("Auth.JWT.RefreshTokenTTL = %s, want 168h", cfg.Auth.JWT.RefreshTokenTTL)
 	}
-	if cfg.Auth.TokenVersionCacheTTL != 5*time.Minute {
-		t.Fatalf("Auth.TokenVersionCacheTTL = %s, want 5m", cfg.Auth.TokenVersionCacheTTL)
+	if cfg.Auth.TokenVersionCacheTTL != 30*time.Second {
+		t.Fatalf("Auth.TokenVersionCacheTTL = %s, want 30s", cfg.Auth.TokenVersionCacheTTL)
 	}
 	if !cfg.Auth.RefreshTokenRotation {
 		t.Fatal("Auth.RefreshTokenRotation = false, want true")
+	}
+	if cfg.Auth.MaxActiveSessionsPerUser != 5 {
+		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 5", cfg.Auth.MaxActiveSessionsPerUser)
 	}
 	if cfg.Log.Directory != "./logs" {
 		t.Fatalf("Log.Directory = %q, want ./logs", cfg.Log.Directory)
@@ -106,8 +110,8 @@ func TestLoadExplicitConfig(t *testing.T) {
 	}
 }
 
-func TestLoadDoesNotValidateMissingPrimaryConfigFields(t *testing.T) {
-	cfg := loadConfigFromYAML(t, `app:
+func TestLoadValidatesMissingPrimaryConfigFields(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, `app:
   environment: test
 
 http:
@@ -124,57 +128,48 @@ postgres:
     port: 0
 `)
 
-	if cfg.App.Name != "" {
-		t.Fatalf("App.Name = %q, want empty", cfg.App.Name)
-	}
-	if cfg.HTTP.Host != "" {
-		t.Fatalf("HTTP.Host = %q, want empty", cfg.HTTP.Host)
-	}
-	if cfg.HTTP.Port != 0 {
-		t.Fatalf("HTTP.Port = %d, want 0", cfg.HTTP.Port)
-	}
-	if cfg.System.Timezone != "" {
-		t.Fatalf("System.Timezone = %q, want empty", cfg.System.Timezone)
-	}
-	if cfg.Auth.JWT.Secret != "" {
-		t.Fatalf("Auth = %#v, want zero value", cfg.Auth)
-	}
-	if cfg.Redis["cache_redis"].Addr != "" {
-		t.Fatalf("cache_redis.Addr = %q, want empty", cfg.Redis["cache_redis"].Addr)
-	}
-	if cfg.Postgres["user_db"].Host != "" {
-		t.Fatalf("user_db.Host = %q, want empty", cfg.Postgres["user_db"].Host)
-	}
+	assertConfigLoadErrorContains(t, err,
+		"system.timezone is required",
+		"app.name is required",
+		"http.host is required",
+		"http.port must be between 1 and 65535",
+		"auth.jwt.secret is required",
+		"redis.cache_redis.addr is required",
+		"postgres.user_db.host is required",
+	)
 }
 
-func TestLoadDoesNotValidateInvalidBasicValues(t *testing.T) {
-	cfg := loadConfigFromYAML(t, configYAMLWithSection(`http:
+func TestLoadValidatesInvalidBasicValues(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`http:
   host: 127.0.0.1
   port: 70000
   read_timeout: 0s
   write_timeout: 0s
   idle_timeout: 0s
   shutdown_timeout: 0s`))
-	if cfg.HTTP.Port != 70000 {
-		t.Fatalf("HTTP.Port = %d, want 70000", cfg.HTTP.Port)
-	}
-	if cfg.HTTP.ReadTimeout != 0 {
-		t.Fatalf("HTTP.ReadTimeout = %s, want 0", cfg.HTTP.ReadTimeout)
-	}
+	assertConfigLoadErrorContains(t, err,
+		"http.port must be between 1 and 65535",
+		"http.read_timeout must be > 0",
+		"http.write_timeout must be > 0",
+		"http.idle_timeout must be > 0",
+		"http.shutdown_timeout must be > 0",
+	)
 
-	cfg = loadConfigFromYAML(t, configYAMLWithSection(`redis:
+	err = loadConfigErrorFromYAML(t, configYAMLWithSection(`redis:
   cache_redis:
-    addr: 127.0.0.1:6379
+    addr: 127.0.0.1
     db: -1
     dial_timeout: 5s
     read_timeout: 3s
     write_timeout: 3s
     ping_timeout: 0s`))
-	if cfg.Redis["cache_redis"].DB != -1 {
-		t.Fatalf("cache_redis.DB = %d, want -1", cfg.Redis["cache_redis"].DB)
-	}
+	assertConfigLoadErrorContains(t, err,
+		"redis.cache_redis.addr must be in host:port format",
+		"redis.cache_redis.db must be >= 0",
+		"redis.cache_redis.ping_timeout must be > 0",
+	)
 
-	cfg = loadConfigFromYAML(t, configYAMLWithSection(`postgres:
+	err = loadConfigErrorFromYAML(t, configYAMLWithSection(`postgres:
   user_db:
     host: 127.0.0.1
     port: 15432
@@ -188,11 +183,51 @@ func TestLoadDoesNotValidateInvalidBasicValues(t *testing.T) {
     conn_max_lifetime: 0s
     conn_max_idle_time: 0s
     ping_timeout: 0s`))
-	if cfg.Postgres["user_db"].MaxOpenConns != 0 {
-		t.Fatalf("user_db.MaxOpenConns = %d, want 0", cfg.Postgres["user_db"].MaxOpenConns)
+	assertConfigLoadErrorContains(t, err,
+		"postgres.user_db.max_open_conns must be > 0",
+		"postgres.user_db.conn_max_lifetime must be > 0",
+		"postgres.user_db.conn_max_idle_time must be > 0",
+		"postgres.user_db.ping_timeout must be > 0",
+	)
+}
+
+func TestLoadAggregatesConfigValidationErrors(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`postgres:
+  user_db:
+    host: 127.0.0.1
+    port: 15432
+    username: aegiscore
+    password: secret
+    db_name: aegiscore_user
+    driver: pgx
+    sslmode: disable
+    max_open_conns: 2
+    max_idle_conns: 3
+    conn_max_lifetime: 45m
+    conn_max_idle_time: 12m
+    ping_timeout: 7s`))
+
+	assertConfigLoadErrorContains(t, err, "postgres.user_db.max_idle_conns must be <= max_open_conns")
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("Load error = %T, want ValidationError in chain", err)
 	}
-	if cfg.Postgres["user_db"].PingTimeout != 0 {
-		t.Fatalf("user_db.PingTimeout = %s, want 0", cfg.Postgres["user_db"].PingTimeout)
+	if got := len(validationErr.Unwrap()); got != 1 {
+		t.Fatalf("validation error count = %d, want 1", got)
+	}
+}
+
+func TestLoadRejectsProductionLikeInsecureConfig(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`app:
+  name: aegiscore-test
+  environment: prod`))
+
+	assertConfigLoadErrorContains(t, err,
+		"auth.jwt.secret must not use a development default in production-like environments",
+		"postgres.user_db.sslmode must not be disable in production-like environments",
+	)
+	if strings.Contains(err.Error(), "test-secret") {
+		t.Fatalf("Load error leaks sensitive JWT secret: %q", err.Error())
 	}
 }
 
@@ -207,6 +242,7 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_AUTH_JWT_ISSUER", "env-issuer")
 	t.Setenv("AEGISCORE_AUTH_JWT_REFRESH_TOKEN_TTL", "720h")
 	t.Setenv("AEGISCORE_AUTH_TOKEN_VERSION_CACHE_TTL", "30s")
+	t.Setenv("AEGISCORE_AUTH_MAX_ACTIVE_SESSIONS_PER_USER", "7")
 	t.Setenv("AEGISCORE_REDIS_CACHE_REDIS_DB", "9")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_PASSWORD", "env-secret")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_MAX_OPEN_CONNS", "30")
@@ -229,6 +265,9 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	}
 	if cfg.Auth.TokenVersionCacheTTL != 30*time.Second {
 		t.Fatalf("Auth.TokenVersionCacheTTL = %s, want 30s", cfg.Auth.TokenVersionCacheTTL)
+	}
+	if cfg.Auth.MaxActiveSessionsPerUser != 7 {
+		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 7", cfg.Auth.MaxActiveSessionsPerUser)
 	}
 	if cfg.Redis["cache_redis"].DB != 9 {
 		t.Fatalf("cache_redis.DB = %d, want 9", cfg.Redis["cache_redis"].DB)
@@ -259,7 +298,8 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
     db: 2
     dial_timeout: 5s
     read_timeout: 3s
-    write_timeout: 3s`))
+    write_timeout: 3s
+    ping_timeout: 7s`))
 	if cfg.Redis["cache_redis"].Username != "" {
 		t.Fatalf("Redis.Username = %q, want empty", cfg.Redis["cache_redis"].Username)
 	}
@@ -286,6 +326,34 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
 	if _, ok := cfg.PostgresDatabaseConfig("pay_db"); ok {
 		t.Fatal("PostgresDatabaseConfig(pay_db) ok = true")
 	}
+}
+
+func TestLoadValidatesAuthSessionLimit(t *testing.T) {
+	cfg := loadConfigFromYAML(t, configYAMLWithSection(`auth:
+  jwt:
+    secret: test-secret
+    issuer: aegiscore-test
+    audience: aegiscore-users
+    access_token_ttl: 15m
+    refresh_token_ttl: 168h
+  token_version_cache_ttl: 30s
+  refresh_token_rotation: true
+  max_active_sessions_per_user: 0`))
+	if cfg.Auth.MaxActiveSessionsPerUser != 0 {
+		t.Fatalf("MaxActiveSessionsPerUser = %d, want 0", cfg.Auth.MaxActiveSessionsPerUser)
+	}
+
+	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`auth:
+  jwt:
+    secret: test-secret
+    issuer: aegiscore-test
+    audience: aegiscore-users
+    access_token_ttl: 15m
+    refresh_token_ttl: 168h
+  token_version_cache_ttl: 30s
+  refresh_token_rotation: true
+  max_active_sessions_per_user: -1`))
+	assertConfigLoadErrorContains(t, err, "auth.max_active_sessions_per_user must be >= 0")
 }
 
 func TestLoadYAMLMergeForNamedDatastores(t *testing.T) {
@@ -433,8 +501,9 @@ auth:
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
-  token_version_cache_ttl: 5m
+  token_version_cache_ttl: 30s
   refresh_token_rotation: true
+  max_active_sessions_per_user: 5
 
 log:
   level: info
@@ -515,8 +584,9 @@ func configYAMLWithSection(section string) string {
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
-  token_version_cache_ttl: 5m
-  refresh_token_rotation: true`,
+  token_version_cache_ttl: 30s
+  refresh_token_rotation: true
+  max_active_sessions_per_user: 5`,
 		"log": `log:
   level: info
   format: json
@@ -568,6 +638,31 @@ func loadConfigFromYAML(t *testing.T, content string) *Config {
 		t.Fatalf("Load: %v", err)
 	}
 	return cfg
+}
+
+func loadConfigErrorFromYAML(t *testing.T, content string) error {
+	t.Helper()
+	_, err := Load(writeTempConfig(t, content))
+	if err == nil {
+		t.Fatal("Load error = nil, want validation error")
+	}
+	return err
+}
+
+func assertConfigLoadErrorContains(t *testing.T, err error, wants ...string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("Load error = nil, want error")
+	}
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("Load error = %T, want ValidationError in chain: %v", err, err)
+	}
+	for _, want := range wants {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Load error = %q, want %q", err.Error(), want)
+		}
+	}
 }
 
 func writeTempConfig(t *testing.T, content string) string {

@@ -1,12 +1,13 @@
 package datastore
 
 import (
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
-// NewRedisClient 根据配置构造 Redis 客户端，但不检查连接可用性。
-func NewRedisClient(redisCfg config.RedisConfig) *redis.Client {
+// OpenRedisClient 根据配置构造 Redis 客户端，但不检查连接可用性。
+func OpenRedisClient(redisCfg config.RedisConfig) *redis.Client {
 	return redis.NewClient(&redis.Options{
 		Addr:         redisCfg.Addr,
 		Username:     redisCfg.Username,

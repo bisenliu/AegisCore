@@ -7,8 +7,9 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/aegiscore/common/contract/response"
 	"github.com/go-playground/validator/v10"
+
+	contracterrors "github.com/aegiscore/common/contract/errors"
 )
 
 func (v *Validator) normalizeError(dst any, err error) error {
@@ -26,19 +27,19 @@ func (v *Validator) normalizeError(dst any, err error) error {
 			field, label := validationFieldNames(dst, fieldErr)
 			fields = append(fields, FieldError{Field: field, Label: label, Rule: fieldErr.Tag(), Message: fieldErr.Translate(v.trans)})
 		}
-		return &Error{Message: ErrValidationFailed, Fields: fields, Code: response.CodeValidationFailed}
+		return &Error{Message: ErrValidationFailed, Fields: fields, Code: contracterrors.CodeValidationFailed}
 	}
 	var typeErr *json.UnmarshalTypeError
 	if errors.As(err, &typeErr) {
 		field := displayName(dst, typeErr.Field)
-		return &Error{Message: fmt.Sprintf("%s字段类型不正确，应为%s类型", field, expectedType(typeErr.Type)), Code: response.CodeBadRequest}
+		return &Error{Message: fmt.Sprintf("%s字段类型不正确，应为%s类型", field, expectedType(typeErr.Type)), Code: contracterrors.CodeBadRequest}
 	}
 	var bindErr *bindFieldError
 	if errors.As(err, &bindErr) {
-		return &Error{Message: fmt.Sprintf("%s字段类型不正确，应为%s类型", bindErr.field, expectedType(bindErr.typ)), Code: response.CodeBadRequest}
+		return &Error{Message: fmt.Sprintf("%s字段类型不正确，应为%s类型", bindErr.field, expectedType(bindErr.typ)), Code: contracterrors.CodeBadRequest}
 	}
 	if errors.Is(err, io.EOF) {
-		return &Error{Message: ErrEmptyRequestBody, Code: response.CodeBadRequest}
+		return &Error{Message: ErrEmptyRequestBody, Code: contracterrors.CodeBadRequest}
 	}
 	return err
 }
@@ -53,7 +54,7 @@ func publicMessage(err error) string {
 
 func validationFailure(err error) bool {
 	var validationErr *Error
-	return errors.As(err, &validationErr) && validationErr.Code == response.CodeValidationFailed
+	return errors.As(err, &validationErr) && validationErr.Code == contracterrors.CodeValidationFailed
 }
 
 func validationDetails(err error) []FieldError {
@@ -74,7 +75,7 @@ func expectedType(t reflect.Type) string {
 		// decoder 无法报告具体 Go 类型时可能出现 nil，这里保持用户可见消息语义通顺。
 		return "正确"
 	}
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	switch t.Kind() {
