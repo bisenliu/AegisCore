@@ -5,7 +5,7 @@
 - [x] 阅读 `docs/ARCHITECTURE.md` 和 `docs/TESTING.md`，确认 integration/e2e 测试边界和 Docker 启用规则。
 - [x] 阅读 user/auth HTTP routes、request DTO 和 response DTO，确认实际 path、method 和 JSON 字段。
 - [x] 阅读 `common/testing/containers` API，确认 PostgreSQL/Redis container helper 返回的 config/DSN 可供 user-service config 使用。
-- [x] 新增 `user-service/internal/integrationtest/` 测试包。
+- [x] 新增 `user-service/tests/e2e/` 测试包。
 - [x] 新增 e2e 启用判断 helper，支持 `AEGISCORE_TEST_E2E=1`，并兼容 `AEGISCORE_TEST_CONTAINERS=1`。
 - [x] 新增 PostgreSQL/Redis 容器启动 harness，复用 `common/testing/containers`，不复制 testcontainers 逻辑。
 - [x] 新增测试配置生成 helper，把容器连接信息写入临时 YAML config。
@@ -27,8 +27,8 @@
 
 ## Verification
 
-- [x] 在 `user-service/` 执行 `go test ./internal/integrationtest`，确认未启用时测试 skip 且命令通过。
-- [x] 在 Docker 可用环境中执行 `AEGISCORE_TEST_E2E=1 go test ./internal/integrationtest -run TestHTTPAuthUserFlow -count=1`。
+- [x] 在 `user-service/` 执行 `go test ./tests/e2e`，确认未启用时测试 skip 且命令通过。
+- [x] 在 Docker 可用环境中执行 `AEGISCORE_TEST_E2E=1 go test ./tests/e2e -run TestHTTPAuthUserFlow -count=1`。
 - [x] 在 `user-service/` 执行 `go test ./...`，确认普通测试不要求 Docker。
 - [x] 在仓库根目录执行 `make test`，确认全仓库普通测试不要求 Docker。
 - [x] 如修改或复用 `common/testing`，在 `common/` 执行 `go test ./...`。
@@ -36,7 +36,7 @@
 - [x] 检查响应断言，确认成功和失败响应均符合统一 envelope。
 - [x] 检查 trace-id 断言，确认 middleware 链真实执行。
 - [x] 检查 auth 断言，确认 protected route 经过 JWT middleware 和 token version validation。
-- [x] 运行 `rg -n "client\\.Schema\\.Create" user-service/internal/integrationtest`，确认测试没有运行时自动建表。
+- [x] 运行 `rg -n "client\\.Schema\\.Create" user-service/tests/e2e`，确认测试没有运行时自动建表。
 - [x] 运行 `find . -maxdepth 2 \( -path './openspec' -o -path './docs/opsx' \) -print`，确认没有新增 OpenSpec/OPSX 工件。
 - [x] 检查 `git diff`，确认没有业务逻辑、HTTP API、数据库 schema、migration 或 Redis key 的非预期变化。
 

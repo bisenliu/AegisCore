@@ -21,7 +21,7 @@ httptest request
 建议新增目录：
 
 ```text
-user-service/internal/integrationtest/
+user-service/tests/e2e/
   http_flow_test.go
   harness_test.go
   migrations_test.go
@@ -49,13 +49,13 @@ if os.Getenv("AEGISCORE_TEST_E2E") != "1" && os.Getenv("AEGISCORE_TEST_CONTAINER
 
 ```bash
 cd user-service
-AEGISCORE_TEST_E2E=1 go test ./internal/integrationtest -run TestHTTPAuthUserFlow -count=1
+AEGISCORE_TEST_E2E=1 go test ./tests/e2e -run TestHTTPAuthUserFlow -count=1
 ```
 
 也可以支持已有容器开关：
 
 ```bash
-AEGISCORE_TEST_CONTAINERS=1 go test ./internal/integrationtest -count=1
+AEGISCORE_TEST_CONTAINERS=1 go test ./tests/e2e -count=1
 ```
 
 当开关已启用但 Docker、镜像拉取、端口映射、PostgreSQL ping、Redis ping 或 migration apply 失败时，测试应失败并输出明确错误，而不是跳过。
@@ -185,7 +185,7 @@ Token 断言不应打印或记录完整 token。测试失败信息也不要输�
 - `logoutCurrent(t, h, token)`
 - `applyMigrations(ctx, t, dsn string)`
 
-业务 fixture 保持在 `user-service/internal/integrationtest` 测试包内，不进入 `common/testing/fixtures`。通用用户名、邮箱、UUID 等基础值可以复用 `common/testing/fixtures`。
+业务 fixture 保持在 `user-service/tests/e2e` 测试包内，不进入 `common/testing/fixtures`。通用用户名、邮箱、UUID 等基础值可以复用 `common/testing/fixtures`。
 
 ## Route And DTO Discovery
 
@@ -237,15 +237,15 @@ Mitigation: 优先整文件执行；需要 splitter 时覆盖注释、quote 和 
 ## Verification Strategy
 
 - 未启用环境变量：
-  - `cd user-service && go test ./internal/integrationtest`
+  - `cd user-service && go test ./tests/e2e`
   - 期望测试 skip 且命令通过。
 - 启用 Docker integration：
-  - `cd user-service && AEGISCORE_TEST_E2E=1 go test ./internal/integrationtest -run TestHTTPAuthUserFlow -count=1`
+  - `cd user-service && AEGISCORE_TEST_E2E=1 go test ./tests/e2e -run TestHTTPAuthUserFlow -count=1`
   - 期望启动 PostgreSQL/Redis、应用 migration、完整 HTTP flow 通过。
 - 回归范围：
   - `make test` 仍不要求 Docker。
   - `cd common && go test ./...`
   - `cd user-service && go test ./...`
 - 文档和结构检查：
-  - `rg -n "client\\.Schema\\.Create|openspec|docs/opsx" user-service/internal/integrationtest docs/changes/add-user-service-http-flow-integration-tests docs/TESTING.md`
+  - `rg -n "client\\.Schema\\.Create|openspec|docs/opsx" user-service/tests/e2e docs/changes/add-user-service-http-flow-integration-tests docs/TESTING.md`
   - 确认没有新增 OpenSpec/OPSX 工件，没有在测试里使用 Ent runtime auto migration。

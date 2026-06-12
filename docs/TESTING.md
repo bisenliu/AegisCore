@@ -49,25 +49,25 @@ AEGISCORE_TEST_CONTAINERS=1 go test ./...
 
 ## 5. User-Service HTTP Flow Integration
 
-`user-service/internal/integrationtest` 承载用户服务 HTTP 全链路 integration 测试。该测试默认跳过，启用后会启动真实 PostgreSQL 和 Redis，按 `user-service/migrations/*.sql` 初始化 PostgreSQL schema，并通过 Fx 组装真实 Gin engine、provider、feature module、Ent client、JWT service 和 Redis session adapter。
+`user-service/tests/e2e` 承载用户服务 HTTP 全链路 integration/e2e 测试。该测试默认跳过，启用后会启动真实 PostgreSQL 和 Redis，按 `user-service/migrations/*.sql` 初始化 PostgreSQL schema，并通过 Fx 组装真实 Gin engine、provider、feature module、Ent client、JWT service 和 Redis session adapter。
 
 推荐只在需要验证完整 HTTP 请求流程时运行：
 
 ```bash
 cd user-service
-AEGISCORE_TEST_E2E=1 go test ./internal/integrationtest -run TestHTTPAuthUserFlow -count=1
+AEGISCORE_TEST_E2E=1 go test ./tests/e2e -run TestHTTPAuthUserFlow -count=1
 ```
 
 也可以使用已有容器开关：
 
 ```bash
 cd user-service
-AEGISCORE_TEST_CONTAINERS=1 go test ./internal/integrationtest -count=1
+AEGISCORE_TEST_CONTAINERS=1 go test ./tests/e2e -count=1
 ```
 
 该测试覆盖登录、受保护用户 API、强制改密、旧密码拒绝、登出当前设备、refresh session 失效、trace-id 响应头和统一 response envelope。测试通过 `httptest` 请求 Gin engine，不直接调用 controller 方法；除最小 bootstrap 用户 seed 外，关键业务行为均通过 HTTP API 执行。测试 schema 初始化必须来自 Atlas SQL migration，不得使用 `client.Schema.Create(ctx)`。
 
-未设置 `AEGISCORE_TEST_E2E` 或 `AEGISCORE_TEST_CONTAINERS` 时，`go test ./internal/integrationtest` 应稳定跳过并通过。设置开关后，如果 Docker、镜像、端口映射、PostgreSQL/Redis ping 或 migration apply 不可用，测试应失败并暴露具体错误。
+未设置 `AEGISCORE_TEST_E2E` 或 `AEGISCORE_TEST_CONTAINERS` 时，`go test ./tests/e2e` 应稳定跳过并通过。设置开关后，如果 Docker、镜像、端口映射、PostgreSQL/Redis ping 或 migration apply 不可用，测试应失败并暴露具体错误。
 
 ## 6. Generated Code
 

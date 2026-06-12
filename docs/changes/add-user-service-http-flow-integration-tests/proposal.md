@@ -31,7 +31,7 @@
 
 包括：
 
-- 新增 `user-service/internal/integrationtest` 或等价测试包，用于承载 user-service HTTP flow integration 测试和测试 harness。
+- 新增 `user-service/tests/e2e` 或等价测试包，用于承载 user-service HTTP flow integration 测试和测试 harness。
 - 复用 `common/testing/containers.StartPostgres` 和 `StartRedis`，不复制 testcontainers 启动逻辑。
 - 为测试 PostgreSQL 执行 `user-service/migrations` 下 SQL migration，或调用项目已有 Atlas migration helper/脚本的 Go 测试等价路径。
 - 构造测试专用 config，指向容器 PostgreSQL/Redis、短 token TTL、测试日志输出和随机可用 HTTP listen 地址。
