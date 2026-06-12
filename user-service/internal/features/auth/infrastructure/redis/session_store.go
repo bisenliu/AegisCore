@@ -153,7 +153,7 @@ type SessionStoreParams struct {
 
 type SessionStore struct {
 	redis                *rediscache.Client
-	keys                 authdomain.RedisKeyBuilder
+	keys                 KeyCatalog
 	tokenVersionCacheTTL time.Duration
 	purgePool            PurgeTaskPool
 }
@@ -166,9 +166,13 @@ type PurgeTaskPool interface {
 
 // NewSessionStore 构造认证会话持久化的 Redis 实现。
 func NewSessionStore(params SessionStoreParams) (*SessionStore, error) {
+	keys, err := NewKeyCatalog(params.Cfg.App.Name)
+	if err != nil {
+		return nil, fmt.Errorf("new auth redis keys: %w", err)
+	}
 	return &SessionStore{
 		redis:                params.Redis,
-		keys:                 authdomain.NewRedisKeyBuilder(params.Cfg.App.Name),
+		keys:                 keys,
 		tokenVersionCacheTTL: params.Cfg.Auth.TokenVersionCacheTTL,
 		purgePool:            params.PurgePool,
 	}, nil

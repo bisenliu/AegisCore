@@ -1076,7 +1076,7 @@ func newTestSessionStore(redisServer *miniredis.Miniredis) *SessionStore {
 
 func newTestSessionStoreWithConfig(redisServer *miniredis.Miniredis, authCfg config.AuthConfig) *SessionStore {
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
-	return &SessionStore{redis: client, keys: authdomain.NewRedisKeyBuilder(""), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL, purgePool: directPurgeTaskPool{}}
+	return &SessionStore{redis: client, keys: MustKeyCatalog(""), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL, purgePool: directPurgeTaskPool{}}
 }
 
 func defaultMaxActiveSessionsPerUser() int {

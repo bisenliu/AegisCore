@@ -56,6 +56,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - Redis 使用 `redis.<name>` 命名实例，例如 `redis.cache_redis`、`redis.queue_redis`。
 - PostgreSQL 使用 `postgres.<name>` 命名实例，例如 `postgres.user_db`、`postgres.pay_db`。
 - 用户服务当前声明 `cache_redis` 和 `user_db`；其他命名实例可存在于配置中作为示例或其他服务配置，但不代表用户服务会自动连接对应资源或启用相关业务。
+- Redis key 的通用构造规则使用 `common/runtime/rediskey`；具体 key schema 放在 owning feature 的 `infrastructure/redis` 或 owning runtime primitive 内，不放入 `common` 的通用 key 大表。
 - `common/runtime/config.Load` 会读取 YAML、应用 `AEGISCORE_` 覆盖、反序列化为配置对象，并在返回前执行结构化字段校验；缺失必填字段、非法端口、非正超时、无效 Redis/PostgreSQL named config 或生产环境不安全配置会在启动期被拒绝。
 
 示例：`AEGISCORE_HTTP_PORT=8081` 可覆盖 `http.port`。
