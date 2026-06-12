@@ -3,9 +3,13 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -227,6 +231,167 @@ func TestHTTPServerStartAndStop(t *testing.T) {
 	}
 }
 
+func TestHTTPServerStopWaitsForActiveRequest(t *testing.T) {
+	port := reserveHTTPTestPort(t)
+	lifecycle := &lifecycleRecorder{}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseRequest := func() {
+		releaseOnce.Do(func() {
+			close(release)
+		})
+	}
+	t.Cleanup(releaseRequest)
+
+	engine := gin.New()
+	engine.GET("/slow", func(c *gin.Context) {
+		close(started)
+		<-release
+		c.String(http.StatusOK, "ok")
+	})
+	NewHTTPServer(HTTPServerParams{
+		Lifecycle: lifecycle,
+		Config: &config.Config{HTTP: config.HTTPConfig{
+			Host:            "127.0.0.1",
+			Port:            port,
+			ShutdownTimeout: time.Second,
+		}},
+		Log:    zap.NewNop(),
+		Engine: engine,
+	})
+
+	if err := lifecycle.hooks[0].OnStart(context.Background()); err != nil {
+		t.Fatalf("OnStart: %v", err)
+	}
+	defer func() {
+		stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = lifecycle.hooks[0].OnStop(stopCtx)
+	}()
+
+	responseDone := make(chan error, 1)
+	go func() {
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/slow", port))
+		if err != nil {
+			responseDone <- err
+			return
+		}
+		defer resp.Body.Close()
+		_, err = io.ReadAll(resp.Body)
+		if err != nil {
+			responseDone <- err
+			return
+		}
+		if resp.StatusCode != http.StatusOK {
+			responseDone <- fmt.Errorf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+			return
+		}
+		responseDone <- nil
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("request handler did not start")
+	}
+
+	stopDone := make(chan error, 1)
+	go func() {
+		stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		stopDone <- lifecycle.hooks[0].OnStop(stopCtx)
+	}()
+
+	select {
+	case err := <-stopDone:
+		t.Fatalf("OnStop returned before active request finished: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	releaseRequest()
+	if err := <-stopDone; err != nil {
+		t.Fatalf("OnStop: %v", err)
+	}
+	if err := <-responseDone; err != nil {
+		t.Fatalf("GET /slow: %v", err)
+	}
+}
+
+func TestHTTPServerStopClosesAndDrainsActiveRequestAfterShutdownTimeout(t *testing.T) {
+	port := reserveHTTPTestPort(t)
+	lifecycle := &lifecycleRecorder{}
+	started := make(chan struct{})
+	exited := make(chan struct{})
+
+	engine := gin.New()
+	engine.GET("/blocked", func(c *gin.Context) {
+		close(started)
+		<-c.Request.Context().Done()
+		close(exited)
+	})
+	NewHTTPServer(HTTPServerParams{
+		Lifecycle: lifecycle,
+		Config: &config.Config{HTTP: config.HTTPConfig{
+			Host:            "127.0.0.1",
+			Port:            port,
+			ShutdownTimeout: 20 * time.Millisecond,
+		}},
+		Log:    zap.NewNop(),
+		Engine: engine,
+	})
+
+	if err := lifecycle.hooks[0].OnStart(context.Background()); err != nil {
+		t.Fatalf("OnStart: %v", err)
+	}
+	defer func() {
+		stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = lifecycle.hooks[0].OnStop(stopCtx)
+	}()
+
+	responseDone := make(chan error, 1)
+	go func() {
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/blocked", port))
+		if err != nil {
+			responseDone <- err
+			return
+		}
+		defer resp.Body.Close()
+		_, err = io.ReadAll(resp.Body)
+		responseDone <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("request handler did not start")
+	}
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err := lifecycle.hooks[0].OnStop(stopCtx)
+	if err == nil {
+		t.Fatal("OnStop error = nil, want graceful shutdown timeout")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("OnStop error = %v, want context deadline exceeded", err)
+	}
+
+	select {
+	case <-exited:
+	default:
+		t.Fatal("OnStop returned before blocked handler exited")
+	}
+	select {
+	case <-responseDone:
+	case <-time.After(time.Second):
+		t.Fatal("client request did not finish after forced HTTP close")
+	}
+}
+
 func TestHTTPServerStartLogIncludesRuntimeIdentity(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
 	core, logs := observer.New(zapcore.InfoLevel)
@@ -271,4 +436,69 @@ func TestDefaultHTTPShutdownTimeout(t *testing.T) {
 	if defaultHTTPShutdownTimeout != 10*time.Second {
 		t.Fatalf("defaultHTTPShutdownTimeout = %s, want 10s", defaultHTTPShutdownTimeout)
 	}
+}
+
+func TestHTTPDrainTrackerWaitsForActiveHandlers(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+	tracker := newHTTPDrainTracker(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		close(started)
+		<-release
+	}))
+
+	go func() {
+		defer close(done)
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		tracker.ServeHTTP(httptest.NewRecorder(), request)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("tracked handler did not start")
+	}
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if err := tracker.Wait(waitCtx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Wait error = %v, want context deadline exceeded", err)
+	}
+
+	close(release)
+	if err := tracker.Wait(context.Background()); err != nil {
+		t.Fatalf("Wait after release: %v", err)
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("tracked handler did not exit")
+	}
+}
+
+func TestHTTPDrainTrackerReturnsContextErrorWithActiveHandlers(t *testing.T) {
+	tracker := newHTTPDrainTracker(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	tracker.mu.Lock()
+	tracker.active = 1
+	tracker.mu.Unlock()
+	waitCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := tracker.Wait(waitCtx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Wait error = %v, want context canceled", err)
+	}
+}
+
+func reserveHTTPTestPort(t *testing.T) int {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve listener: %v", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil {
+		t.Fatalf("close reserved listener: %v", err)
+	}
+	return port
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -33,14 +34,15 @@ type HTTPServerParams struct {
 // NewHTTPServer 创建 HTTP server，并注册 Fx start/stop 生命周期 hook。
 func NewHTTPServer(params HTTPServerParams) *http.Server {
 	addr := fmt.Sprintf("%s:%d", params.Config.HTTP.Host, params.Config.HTTP.Port)
+	drainTracker := newHTTPDrainTracker(params.Engine)
 	server := &http.Server{
 		Addr:         addr,
-		Handler:      params.Engine,
+		Handler:      drainTracker,
 		ReadTimeout:  params.Config.HTTP.ReadTimeout,
 		WriteTimeout: params.Config.HTTP.WriteTimeout,
 		IdleTimeout:  params.Config.HTTP.IdleTimeout,
 	}
-	cancelServe := func() {}
+	var cancelServe context.CancelFunc
 
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
@@ -60,7 +62,9 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			cancelServe()
+			if cancelServe != nil {
+				defer cancelServe()
+			}
 			shutdownTimeout := params.Config.HTTP.ShutdownTimeout
 			if shutdownTimeout == 0 {
 				// 0 表示配置未填写超时，应使用服务默认值而不是取消关闭边界。
@@ -69,11 +73,105 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 			shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 			defer cancel()
 			logger.WithContext(ctx, params.Log).Info("stopping http server")
-			return server.Shutdown(shutdownCtx)
+			if err := server.Shutdown(shutdownCtx); err != nil {
+				return closeHTTPServerAfterShutdownError(ctx, params.Log, server, drainTracker, err)
+			}
+			return nil
 		},
 	})
 
 	return server
+}
+
+// httpDrainTracker 跟踪正在执行的 HTTP handler，保护后续资源关闭顺序。
+type httpDrainTracker struct {
+	handler http.Handler
+	mu      sync.Mutex
+	cond    *sync.Cond
+	active  int
+}
+
+// newHTTPDrainTracker 创建可等待活跃 handler 归零的 HTTP handler wrapper。
+func newHTTPDrainTracker(handler http.Handler) *httpDrainTracker {
+	tracker := &httpDrainTracker{handler: handler}
+	tracker.cond = sync.NewCond(&tracker.mu)
+	return tracker
+}
+
+// ServeHTTP 在进入真实 handler 前登记活跃请求，并在返回后解除登记。
+func (t *httpDrainTracker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t.mu.Lock()
+	t.active++
+	t.mu.Unlock()
+	defer func() {
+		t.mu.Lock()
+		t.active--
+		if t.active == 0 {
+			t.cond.Broadcast()
+		}
+		t.mu.Unlock()
+	}()
+	t.handler.ServeHTTP(w, r)
+}
+
+// Wait 等待所有已进入 handler 的请求完成，或在 context 到期时返回。
+func (t *httpDrainTracker) Wait(ctx context.Context) error {
+	stopContextWakeup := context.AfterFunc(ctx, func() {
+		t.mu.Lock()
+		t.cond.Broadcast()
+		t.mu.Unlock()
+	})
+	defer stopContextWakeup()
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	waited := false
+	for t.active > 0 {
+		waited = true
+		if err := ctx.Err(); err != nil {
+			// 外层 Fx stop context 已到期时必须返回；Fx 会停止后续资源关闭 hook。
+			return err
+		}
+		t.cond.Wait()
+	}
+	if waited {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// closeHTTPServerAfterShutdownError 在优雅关闭失败后关闭活跃连接，并等待 handler 退出。
+func closeHTTPServerAfterShutdownError(ctx context.Context, log *zap.Logger, server *http.Server, drainTracker *httpDrainTracker, shutdownErr error) error {
+	if ctx.Err() != nil {
+		return shutdownErr
+	}
+
+	logger.WithContext(ctx, log).Warn("http graceful shutdown failed; closing active connections", zap.Error(shutdownErr))
+	closeErr := server.Close()
+	waitErr := drainTracker.Wait(ctx)
+	return errors.Join(
+		fmt.Errorf("shutdown http server: %w", shutdownErr),
+		wrapHTTPServerCloseError(closeErr),
+		wrapHTTPDrainWaitError(waitErr),
+	)
+}
+
+// wrapHTTPServerCloseError 过滤关闭 HTTP server 时的预期错误。
+func wrapHTTPServerCloseError(err error) error {
+	if err == nil || errors.Is(err, http.ErrServerClosed) || isExpectedHTTPServeCloseError(err) {
+		return nil
+	}
+	return fmt.Errorf("close http server after shutdown failure: %w", err)
+}
+
+// wrapHTTPDrainWaitError 为等待活跃 HTTP handler 的错误补充上下文。
+func wrapHTTPDrainWaitError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("wait http handlers after shutdown failure: %w", err)
 }
 
 func serveHTTPWithLifecycle(ctx context.Context, log *zap.Logger, shutdowner fx.Shutdowner, server *http.Server, listener net.Listener) {

@@ -28,6 +28,20 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 `aegiscore-user-services` 是当前运行时 CLI/service name，不是仓库目录名或 Go module path；代码位置和 module path 统一使用 `user-service`。
 
+### Shutdown Order
+
+用户服务关闭必须显式保持以下顺序：
+
+1. 先停止 HTTP server 接收新请求。
+2. 再等待已经进入 handler 的请求处理完成。
+3. 最后关闭 Ent client、PostgreSQL/Redis 连接和后台任务池等底层资源。
+
+当前实现由 `user-service/internal/bootstrap/server.go` 和 Fx 生命周期注册顺序共同保证。`NewHTTPServer` 的 `OnStop` 调用 `http.Server.Shutdown`；该调用会先关闭 listener 和 idle connection，使服务不再接收新请求，然后等待 active connection 归零。HTTP handler 外层还包裹 `httpDrainTracker`：如果 `http.shutdown_timeout` 到期导致 graceful shutdown 返回错误，`OnStop` 会调用 `server.Close()` 关闭活跃连接，并继续等待已经进入 handler 的请求退出，直到它们完成或外层 Fx stop context 到期。这样在 stop context 仍有预算时，不会在 handler 仍运行时继续关闭数据库连接。
+
+Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`AppModule` 中 `providers.Module` 位于 `NewHTTPServer` provider 和 `fx.Invoke(func(*http.Server){})` 之前；HTTP server 被 invoke 实例化前，PostgreSQL、Redis、Ent client、auth session purge worker pool 等依赖已经因 feature/controller/router 依赖链完成构造并注册各自 hook。因此当前关闭顺序是：HTTP server `OnStop` 先执行并 drain 请求，然后 auth session purge worker pool 停止，随后 Ent client 关闭，最后 PostgreSQL/Redis 等 datastore 连接关闭。Ent client 使用 non-closing driver 包装具名 `*sql.DB`，自身关闭不负责关闭底层连接池；真正的 SQL pool 关闭仍由 datastore provider 的 hook 执行。
+
+如果 HTTP handler 忽略请求 context 且在 `server.Close()` 后仍不退出，`httpDrainTracker` 会一直等到外层 Fx stop context 到期。此时 Fx stop 会因 context 超时返回，后续 datastore hook 不应被当作已安全执行；调用方需要把这类超时视为 graceful shutdown 失败并排查阻塞 handler。
+
 ## 4. HTTP Request Flow
 
 | 步骤 | 代码位置 | 行为 |
