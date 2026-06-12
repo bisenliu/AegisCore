@@ -11,8 +11,10 @@ import (
 	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/workerpool"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
@@ -27,6 +29,10 @@ const (
 	deleteAllUserSessionsPurgeTTL = time.Hour
 	// deleteAllUserSessionsBatchSize 限制退出全部设备后台清理每批 Redis key 数量。
 	deleteAllUserSessionsBatchSize int64 = 500
+	// deleteAllUserSessionsPurgeWorkers 限制退出全部设备后台清理并发。
+	deleteAllUserSessionsPurgeWorkers = 4
+	// deleteAllUserSessionsPurgeStopTimeout 限制服务关闭时等待后台清理的时间。
+	deleteAllUserSessionsPurgeStopTimeout = 30 * time.Second
 
 	// expiredSessionMinScore 让 ZRemRangeByScore 清理所有 score 小于等于当前时间的会话。
 	expiredSessionMinScore = "-inf"
@@ -101,23 +107,32 @@ return 1
 type SessionStoreParams struct {
 	fx.In
 
-	Redis *rediscache.Client `name:"cache_redis"`
-	Cfg   *config.Config
+	Redis     *rediscache.Client `name:"cache_redis"`
+	Cfg       *config.Config
+	PurgePool PurgeTaskPool `name:"auth_session_purge_pool"`
 }
 
 type SessionStore struct {
 	redis                *rediscache.Client
 	keys                 authdomain.RedisKeyBuilder
 	tokenVersionCacheTTL time.Duration
+	purgePool            PurgeTaskPool
+}
+
+// PurgeTaskPool 是认证 Redis 适配器消费的后台清理任务池窄接口。
+type PurgeTaskPool interface {
+	Submit(ctx context.Context, task workerpool.Task) error
+	Stats() workerpool.Stats
 }
 
 // NewSessionStore 构造认证会话持久化的 Redis 实现。
-func NewSessionStore(params SessionStoreParams) *SessionStore {
+func NewSessionStore(params SessionStoreParams) (*SessionStore, error) {
 	return &SessionStore{
 		redis:                params.Redis,
 		keys:                 authdomain.NewRedisKeyBuilder(params.Cfg.App.Name),
 		tokenVersionCacheTTL: params.Cfg.Auth.TokenVersionCacheTTL,
-	}
+		purgePool:            params.PurgePool,
+	}, nil
 }
 
 // GetCachedTokenVersion 返回缓存的 token version，未命中时返回 ErrTokenVersionCacheMiss。
@@ -287,11 +302,25 @@ func (r *SessionStore) DeleteAllUserSessions(ctx context.Context, userID string)
 	case detachUserSessionsResultEmpty:
 		return nil
 	case detachUserSessionsResultDetached:
-		go func() {
-			purgeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deleteAllUserSessionsPurgeTTL)
-			defer cancel()
-			_ = r.purgeDetachedUserSessions(purgeCtx, purgeKey, r.keys.AuthSessionPrefix(userID), cutTime)
-		}()
+		sessionPrefix := r.keys.AuthSessionPrefix(userID)
+		task := workerpool.Task{
+			Name: "auth.redis.purge_detached_user_sessions",
+			Fields: []zap.Field{
+				zap.String("user_id", userID),
+				zap.String("purge_key", purgeKey),
+				zap.String("session_prefix", sessionPrefix),
+				zap.Time("cut_time", cutTime),
+				zap.Int64("batch_size", deleteAllUserSessionsBatchSize),
+			},
+			Run: func(taskCtx context.Context) error {
+				purgeCtx, cancel := context.WithTimeout(taskCtx, deleteAllUserSessionsPurgeTTL)
+				defer cancel()
+				return r.purgeDetachedUserSessions(purgeCtx, purgeKey, sessionPrefix, cutTime)
+			},
+		}
+		if err := r.purgePool.Submit(context.WithoutCancel(ctx), task); err != nil {
+			return fmt.Errorf("submit delete user auth sessions purge: %w", err)
+		}
 		return nil
 	case detachUserSessionsResultConflict:
 		return fmt.Errorf("delete user auth sessions: purge key conflict")

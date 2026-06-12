@@ -13,7 +13,7 @@
 ## 2. Repository Shape
 
 - `go.work`：Go workspace，包含 `common` 和 `user-service` 两个模块。
-- `common/`：跨服务稳定契约和基础能力，按 `contract`、`runtime`、`http`、`security`、`testing`、`validation` 分类组织；`contract/errors` 承载全局错误码，`contract/pagination` 承载分页契约，`contract/response` 承载 HTTP 响应信封 DTO，`http/binding` 承载 Gin 请求绑定和校验失败响应适配层，`http/response` 承载 Gin 响应输出 helper，`testing` 仅承载跨模块测试基础设施和无业务语义 fixture；未来 `runtime/eventbus` 或 `runtime/outbox` 只有在存在跨服务稳定 runtime primitive 和单独设计时才可新增；不得作为服务特定 helper 的兜底目录。
+- `common/`：跨服务稳定契约和基础能力，按 `contract`、`runtime`、`http`、`security`、`testing`、`validation` 分类组织；`contract/errors` 承载全局错误码，`contract/pagination` 承载分页契约，`contract/response` 承载 HTTP 响应信封 DTO，`http/binding` 承载 Gin 请求绑定和校验失败响应适配层，`http/response` 承载 Gin 响应输出 helper，`runtime/workerpool` 承载基于 ants 的无业务语义后台任务池 primitive，`testing` 仅承载跨模块测试基础设施和无业务语义 fixture；未来 `runtime/eventbus` 或 `runtime/outbox` 只有在存在跨服务稳定 runtime primitive 和单独设计时才可新增；不得作为服务特定 helper 的兜底目录。
 - `user-service/`：用户服务 HTTP 运行时和 Go module，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration，以及按 feature 组织的业务代码。
 - `user-service/internal/providers/`：用户服务级 Fx provider，集中承载 Gin engine、HTTP route registration、JWT service、PostgreSQL/Redis named resources 和 Ent clients 的服务侧组装；不得承载 feature 业务逻辑。
 - `user-service/internal/integration/`：用户服务访问外部系统的防腐层边界，按 `http/`、`grpc/`、`events/` 分类组织；`integration/events` 仅承载外部事件系统 producer/consumer 协议 adapter、envelope/topic 映射和 broker 错误语义归一化，不承载 feature consumer handler、业务编排、outbox persistence 或本服务持久化访问；当前没有真实外部系统调用时只保留 README 或 package doc，占位不得引入未使用代码。
@@ -57,6 +57,7 @@
 - 共享配置 Fx provider：`common/runtime/config/fx.go`
 - 共享日志 Fx provider：`common/runtime/logger/fx.go`
 - 共享 datastore Fx provider：`common/runtime/datastore/redis_fx.go`、`common/runtime/datastore/postgres_fx.go`
+- 共享后台任务池：`common/runtime/workerpool`
 - 运行时资源名：`common/runtime/resources/resource_names.go`
 - 用户服务迁移目录：`user-service/migrations/`，包含 SQL migration、`atlas.sum` 和 Atlas 配置。
 - Atlas 配置：`user-service/migrations/atlas.hcl`
@@ -111,7 +112,7 @@
 - `bootstrap.AppModule` 只负责顶层 Fx module 总装和 HTTP server lifecycle，具体服务级 provider 实现不得放回 `internal/bootstrap`。
 - 外部系统防腐层统一使用 `internal/integration`，按 `http/`、`grpc/`、`events/` 分类；不要新增复数 `internal/integrations`。Integration adapter 只做外部协议、DTO、错误语义和 client 调用适配，不承载 feature 业务编排、HTTP controller、gRPC handler、Ent/Redis 持久化 adapter 或预设的 order/payment client。`internal/integration/grpc` 是出站 external client adapter，不是本服务 gRPC server transport。`internal/integration/events` 只承载外部事件系统 broker wrapper、topic/subject/stream 映射、事件 envelope、序列化和 broker 错误语义归一化；事件 producer 的业务决策归 feature application，broker 投递 adapter 归 `integration/events`；事件 consumer 的 broker mechanics 归 `integration/events`，feature-specific 映射和 handler adapter 归对应 feature 的 `infrastructure/consumers`。Feature 内 `domain/events` 只表达领域事实，不等同于 `internal/integration/events` 的外部协议适配。
 - Feature 基础设施目录统一使用 `infrastructure/postgres/`、`infrastructure/redis/` 等；未来真实外部事件消费使用 feature-local `infrastructure/consumers/`，只做入站事件到 application command/query 或 port 的 adapter，不承载 broker SDK subscription loop、topic ack/nack 协议、跨 feature orchestration 或直接绕过 application 的业务状态变更；不要使用 `store/` 作为目录名。
-- 共享基础能力优先放在 `common/` 对应分类目录中；服务特定规则保留在服务模块内。未来 `common/runtime/eventbus` 只有在至少两个服务需要同一稳定、无业务语义 runtime primitive 时才可新增；未来 outbox 必须另开变更设计 transaction boundary、存储模型、投递 worker、重试、幂等和失败策略，设计前不得新增 outbox 表、Ent hook、transaction wrapper 或 dispatcher。
+- 共享基础能力优先放在 `common/` 对应分类目录中；服务特定规则保留在服务模块内。`common/runtime/workerpool` 只承载基于 ants 的受控后台任务执行、并发限制、满载拒绝、日志、统计和 Fx 生命周期管理，不承载 feature 业务规则、业务 DTO、跨 feature 编排、事件投递语义、outbox persistence 或可靠消息语义；长期后台清理不得在 feature adapter 中散落裸 goroutine，应通过该公共 worker pool 或服务侧明确生命周期管理能力提交。高并发正式系统中后台池应按用途命名为专用 Fx 资源，例如 `auth_session_purge_pool`，不得把多个业务场景混用到一个全局共享池。未来 `common/runtime/eventbus` 只有在至少两个服务需要同一稳定、无业务语义 runtime primitive 时才可新增；未来 outbox 必须另开变更设计 transaction boundary、存储模型、投递 worker、重试、幂等和失败策略，设计前不得新增 outbox 表、Ent hook、transaction wrapper 或 dispatcher。
 - HTTP API 应使用 `common/contract/response.Envelope` 格式返回，并通过 `common/http/response` 写出 Gin 响应。
 - 配置通过 YAML 与 `AEGISCORE_` 环境变量覆盖加载，Redis/PostgreSQL 使用 `redis.<name>` 与 `postgres.<name>` 命名实例，避免硬编码运行时配置。
 - `internal/shared` 默认禁止新增。只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并且必须在 `docs/ARCHITECTURE.md` 说明 owner、准入理由和禁止事项。

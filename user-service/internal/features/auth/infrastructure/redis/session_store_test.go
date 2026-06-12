@@ -13,8 +13,12 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
+	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/workerpool"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
@@ -614,6 +618,141 @@ func TestSessionStoreDeleteAllUserSessionsDoesNotDeleteNewSessionsAfterDetach(t 
 	}
 }
 
+func TestSessionStoreDeleteAllUserSessionsReturnsSubmitError(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestSessionStore(redisServer)
+	store.purgePool = rejectingPurgeTaskPool{err: workerpool.ErrQueueFull}
+	ctx := context.Background()
+	if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-rejected", TokenVersion: 1}, time.Hour); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String())
+
+	if !errors.Is(err, workerpool.ErrQueueFull) {
+		t.Fatalf("DeleteAllUserSessions err = %v, want ErrQueueFull", err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "submit delete user auth sessions purge") {
+		t.Fatalf("DeleteAllUserSessions err = %v, want submit context", err)
+	}
+}
+
+func TestSessionStoreDeleteAllUserSessionsPurgeFailureIsObservable(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestSessionStore(redisServer)
+	pool := &recordingPurgeTaskPool{beforeRun: redisServer.Close}
+	store.purgePool = pool
+	ctx := context.Background()
+	if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-fails", TokenVersion: 1}, time.Hour); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
+		t.Fatalf("DeleteAllUserSessions: %v", err)
+	}
+
+	if pool.Stats().Failed != 1 {
+		t.Fatalf("Failed stats = %d, want 1", pool.Stats().Failed)
+	}
+	if pool.err == nil || !strings.Contains(pool.err.Error(), "read detached user sessions") {
+		t.Fatalf("purge err = %v, want read detached user sessions", pool.err)
+	}
+	if pool.taskName != "auth.redis.purge_detached_user_sessions" {
+		t.Fatalf("task name = %q, want auth.redis.purge_detached_user_sessions", pool.taskName)
+	}
+}
+
+func TestSessionStorePurgePoolStopHookPrecedesRedisStopHook(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
+	lifecycle := &lifecycleRecorder{}
+	stopOrder := make([]string, 0, 2)
+	lifecycle.Append(fx.Hook{OnStop: func(context.Context) error {
+		stopOrder = append(stopOrder, "redis")
+		return client.Close()
+	}})
+
+	pool, err := NewSessionPurgePool(SessionPurgePoolParams{
+		Lifecycle: lifecycle,
+		Redis:     client,
+		Log:       zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("NewSessionPurgePool: %v", err)
+	}
+	store, err := NewSessionStore(SessionStoreParams{
+		Redis:     client,
+		Cfg:       &config.Config{},
+		PurgePool: pool,
+	})
+	if err != nil {
+		t.Fatalf("NewSessionStore: %v", err)
+	}
+	if store.purgePool == nil {
+		t.Fatal("purgePool = nil")
+	}
+	if len(lifecycle.hooks) != 2 {
+		t.Fatalf("lifecycle hooks = %d, want redis and purge pool hooks", len(lifecycle.hooks))
+	}
+	purgeStop := lifecycle.hooks[1].OnStop
+	lifecycle.hooks[1].OnStop = func(ctx context.Context) error {
+		stopOrder = append(stopOrder, "purge_pool")
+		return purgeStop(ctx)
+	}
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	for i := len(lifecycle.hooks) - 1; i >= 0; i-- {
+		hook := lifecycle.hooks[i]
+		if hook.OnStop == nil {
+			continue
+		}
+		if err := hook.OnStop(stopCtx); err != nil {
+			t.Fatalf("OnStop hook %d: %v", i, err)
+		}
+	}
+	if strings.Join(stopOrder, ",") != "purge_pool,redis" {
+		t.Fatalf("stop order = %v, want purge_pool before redis", stopOrder)
+	}
+}
+
+func TestSessionStoreConsumesNamedPurgePool(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
+	var store *SessionStore
+	app := fxtest.New(t,
+		fx.Provide(
+			func() *config.Config {
+				return &config.Config{Auth: config.AuthConfig{TokenVersionCacheTTL: time.Minute}}
+			},
+			func() *zap.Logger {
+				return zap.NewNop()
+			},
+			fx.Annotate(
+				func() *rediscache.Client {
+					return client
+				},
+				fx.ResultTags(`name:"cache_redis"`),
+			),
+			fx.Annotate(
+				NewSessionPurgePool,
+				fx.As(new(PurgeTaskPool)),
+				fx.ResultTags(`name:"auth_session_purge_pool"`),
+			),
+			NewSessionStore,
+		),
+		fx.Populate(&store),
+	)
+	app.RequireStart()
+	app.RequireStop()
+	_ = client.Close()
+	if store == nil {
+		t.Fatal("store = nil")
+	}
+	if store.purgePool == nil {
+		t.Fatal("purgePool = nil")
+	}
+}
+
 func TestSessionStorePurgeUserSessionsKeyKeepsHashTag(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
@@ -630,7 +769,7 @@ func TestSessionStorePurgeUserSessionsKeyKeepsHashTag(t *testing.T) {
 
 func TestSessionStorePurgeUserSessionsKeyUsesAppNamePrefix(t *testing.T) {
 	redisServer := miniredis.RunT(t)
-	store := newTestSessionStoreWithAppName(redisServer, " aegiscore-user-services ")
+	store := newTestSessionStoreWithAppName(t, redisServer, " aegiscore-user-services ")
 
 	purgeKey := store.purgeUserSessionsKey(sessionTestUserID.String())
 
@@ -678,7 +817,7 @@ func TestSessionStoreUserSessionsIndexTTLIsNotShortened(t *testing.T) {
 
 func TestSessionStoreKeysUseAppNamePrefixWithNewFormat(t *testing.T) {
 	redisServer := miniredis.RunT(t)
-	store := newTestSessionStoreWithAppName(redisServer, " aegiscore-user-services ")
+	store := newTestSessionStoreWithAppName(t, redisServer, " aegiscore-user-services ")
 	ctx := context.Background()
 	session := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-prefixed", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
 
@@ -705,7 +844,7 @@ func TestSessionStoreKeysUseAppNamePrefixWithNewFormat(t *testing.T) {
 
 func TestSessionStoreKeysRemainUnprefixedWhenAppNameEmpty(t *testing.T) {
 	redisServer := miniredis.RunT(t)
-	store := newTestSessionStoreWithAppName(redisServer, "   ")
+	store := newTestSessionStoreWithAppName(t, redisServer, "   ")
 	ctx := context.Background()
 	session := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-empty-prefix", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
 
@@ -762,17 +901,25 @@ func newTestSessionStore(redisServer *miniredis.Miniredis) *SessionStore {
 
 func newTestSessionStoreWithConfig(redisServer *miniredis.Miniredis, authCfg config.AuthConfig) *SessionStore {
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
-	return &SessionStore{redis: client, keys: authdomain.NewRedisKeyBuilder(""), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL}
+	return &SessionStore{redis: client, keys: authdomain.NewRedisKeyBuilder(""), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL, purgePool: directPurgeTaskPool{}}
 }
 
-func newTestSessionStoreWithAppName(redisServer *miniredis.Miniredis, appName string) *SessionStore {
+func newTestSessionStoreWithAppName(t testing.TB, redisServer *miniredis.Miniredis, appName string) *SessionStore {
+	t.Helper()
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
-	store := NewSessionStore(SessionStoreParams{
+	store, err := NewSessionStore(SessionStoreParams{
 		Redis: client,
 		Cfg: &config.Config{
 			App:  config.AppConfig{Name: appName},
 			Auth: config.AuthConfig{TokenVersionCacheTTL: time.Minute},
 		},
+		PurgePool: directPurgeTaskPool{},
+	})
+	if err != nil {
+		t.Fatalf("NewSessionStore: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = client.Close()
 	})
 	return store
 }
@@ -798,6 +945,70 @@ type tokenVersionRepositoryStub struct {
 	incrementedUserID    uuid.UUID
 	getTokenVersionCalls int
 	incrementCalls       int
+}
+
+type rejectingPurgeTaskPool struct {
+	err error
+}
+
+func (p rejectingPurgeTaskPool) Submit(context.Context, workerpool.Task) error {
+	return p.err
+}
+
+func (p rejectingPurgeTaskPool) Stats() workerpool.Stats {
+	return workerpool.Stats{}
+}
+
+type directPurgeTaskPool struct{}
+
+func (directPurgeTaskPool) Submit(ctx context.Context, task workerpool.Task) error {
+	if task.Run == nil {
+		return workerpool.ErrInvalidTask
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	return task.Run(ctx)
+}
+
+func (directPurgeTaskPool) Stats() workerpool.Stats {
+	return workerpool.Stats{}
+}
+
+type recordingPurgeTaskPool struct {
+	beforeRun func()
+	taskName  string
+	err       error
+	failed    int64
+}
+
+func (p *recordingPurgeTaskPool) Submit(ctx context.Context, task workerpool.Task) error {
+	p.taskName = task.Name
+	if p.beforeRun != nil {
+		p.beforeRun()
+	}
+	p.err = task.Run(ctx)
+	if p.err != nil {
+		p.failed++
+	}
+	return nil
+}
+
+func (p *recordingPurgeTaskPool) Stats() workerpool.Stats {
+	return workerpool.Stats{Failed: p.failed}
+}
+
+type lifecycleRecorder struct {
+	hooks []fx.Hook
+}
+
+func (r *lifecycleRecorder) Append(hook fx.Hook) {
+	r.hooks = append(r.hooks, hook)
 }
 
 func (r *tokenVersionRepositoryStub) GetTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
