@@ -67,6 +67,8 @@ linters:
 - `infrastructure/*` 不得导入 Gin 或 HTTP response envelope。
 - `integration/*` 不得导入 Gin response、Ent 或 feature persistence adapter。
 
+`depguard` 只能自动检查 import 依赖。边界检查还应在 code review 中人工确认函数定义、声明和调用顺序是否合理：类型和 Fx 参数结构应先于构造函数或 provider，构造函数应先于公开 handler/use case，HTTP controller handler 顺序应尽量匹配 `routes.go` 注册顺序，私有 helper 应按调用链减少跳读。若顺序导致可读性差、依赖关系混乱或潜在运行错误风险，应在不改变功能的前提下整理；Ent、Swagger 等生成代码不因排序手写修改。
+
 新增或调整分层规则时，先更新 `AGENTS.md` 和 `docs/ARCHITECTURE.md` 的长期规则，再同步 `.golangci.yml` 中对应的 depguard deny list。
 
 ## 5. 本地执行命令

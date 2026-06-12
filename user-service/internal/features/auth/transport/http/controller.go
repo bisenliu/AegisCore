@@ -33,39 +33,6 @@ type AuthControllerParams struct {
 	Validator      *commonvalidation.Validator
 }
 
-// ChangePassword 使用受限 token 处理强制改密请求。
-// @Summary 修改密码
-// @Description 使用登录后返回的受限改密凭据修改密码，并将用户状态恢复为正常。
-// @Tags 认证
-// @Accept json
-// @Produce json
-// @Param Authorization header string true "Bearer password-change-token"
-// @Param request body authhttp.ChangePasswordRequest true "修改密码请求"
-// @Success 200 {object} response.Envelope{data=authhttp.ChangePasswordResponse} "修改成功"
-// @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
-// @Failure 401 {object} response.Envelope "改密凭据无效或已失效"
-// @Failure 500 {object} response.Envelope "服务器内部错误"
-// @Router /auth/change-password [post]
-func (ctl *AuthController) ChangePassword(c *gin.Context) {
-	req := ChangePasswordRequest{Token: c.GetHeader(commonauth.AuthorizationHeader)}
-	if !binding.BindOrAbort(ctl.validator, c, &req, binding.JSONBinder) {
-		return
-	}
-	if err := NormalizeChangePassword(&req); err != nil {
-		response.Fail(c, err)
-		return
-	}
-	result, err := ctl.changePassword.ChangePassword(c.Request.Context(), authcommand.ChangePasswordCommand{
-		Token:       req.Token,
-		NewPassword: req.NewPassword,
-	})
-	if err != nil {
-		response.Fail(c, toAuthHTTPError(err))
-		return
-	}
-	response.OK(c, toChangePasswordResponse(result))
-}
-
 // NewAuthController 使用 command use case 和 validator 依赖构造认证控制器。
 func NewAuthController(params AuthControllerParams) *AuthController {
 	return &AuthController{
@@ -143,6 +110,39 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 		return
 	}
 	response.OK(c, toTokenResponse(tokens))
+}
+
+// ChangePassword 使用受限 token 处理强制改密请求。
+// @Summary 修改密码
+// @Description 使用登录后返回的受限改密凭据修改密码，并将用户状态恢复为正常。
+// @Tags 认证
+// @Accept json
+// @Produce json
+// @Param Authorization header string true "Bearer password-change-token"
+// @Param request body authhttp.ChangePasswordRequest true "修改密码请求"
+// @Success 200 {object} response.Envelope{data=authhttp.ChangePasswordResponse} "修改成功"
+// @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
+// @Failure 401 {object} response.Envelope "改密凭据无效或已失效"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Router /auth/change-password [post]
+func (ctl *AuthController) ChangePassword(c *gin.Context) {
+	req := ChangePasswordRequest{Token: c.GetHeader(commonauth.AuthorizationHeader)}
+	if !binding.BindOrAbort(ctl.validator, c, &req, binding.JSONBinder) {
+		return
+	}
+	if err := NormalizeChangePassword(&req); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	result, err := ctl.changePassword.ChangePassword(c.Request.Context(), authcommand.ChangePasswordCommand{
+		Token:       req.Token,
+		NewPassword: req.NewPassword,
+	})
+	if err != nil {
+		response.Fail(c, toAuthHTTPError(err))
+		return
+	}
+	response.OK(c, toChangePasswordResponse(result))
 }
 
 // LogoutCurrentSession 处理当前认证会话的登出请求。

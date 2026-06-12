@@ -111,6 +111,8 @@ Controller 或未来 gRPC handler 必须把 transport DTO 映射为 application 
 
 Ent predicate 构造封装在 `infrastructure/postgres` 内。Adapter 可以做字段裁剪、模型转换和存储错误转换，但不得承载复杂业务编排、登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
 
+边界检查不仅覆盖 import 依赖，也覆盖人工维护 Go 文件中的函数定义、声明和调用顺序。检查时应确认类型、Fx 参数结构和输出结构位于依赖它们的构造函数或 provider 前；构造函数和 provider 位于公开 handler、service 或 use case 方法前；HTTP controller 的 handler 顺序尽量与同包 `routes.go` 注册顺序一致；私有 helper 可以紧跟主要调用方，也可以在文件尾按调用链组织。若顺序导致可读性差、依赖关系混乱或潜在运行错误风险，应在不改变功能的前提下整理。Ent、Swagger 等生成代码不为顺序检查手写调整，必须通过对应生成流程更新。
+
 Domain services 可以承载跨实体或跨值对象的纯领域判断，但不得替代 application use case。密码 hash、JWT 签发/解析、Bearer token 处理、Redis session 生命周期、token version cache/database fallback、日志和配置读取仍属于 application、common security、runtime 或 infrastructure 边界；auth 当前将 token/session validation helper 保留在 `application/validators`。Auth 当前的 `RedisKeyBuilder` 依赖 runtime config 并服务 Redis key 构造，不是 domain service 准入样例。Domain events 只承载领域事实的数据模型；事件总线、broker、outbox、publisher、subscriber 或后台投递 worker 必须另开变更设计。
 
 Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 client 边界处理，但不得为了 adapter 自身方便定义大接口。外部能力接口归消费侧 feature application 层所有，adapter 只负责实现。事件 producer 的业务决策归 feature application，broker envelope 和投递调用归 `integration/events`；事件 consumer 的 broker mechanics 归 `integration/events`，feature-specific 输入映射和 handler adapter 归对应 feature 的 `infrastructure/consumers`。
