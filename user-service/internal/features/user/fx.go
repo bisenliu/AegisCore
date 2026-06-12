@@ -10,7 +10,7 @@ import (
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 )
 
-// Module wires the user profile feature application, transport, and infrastructure adapters.
+// Module 组装用户资料 feature 的应用层、传输层和基础设施适配器。
 var Module = fx.Module("feature-user",
 	fx.Provide(
 		fx.Annotate(

@@ -2,7 +2,7 @@ package providers
 
 import "go.uber.org/fx"
 
-// Module wires user-service level infrastructure providers into Fx.
+// Module 将用户服务级基础设施 provider 接入 Fx。
 var Module = fx.Module("user-service-providers",
 	fx.Provide(
 		ProvidePostgresPools,

@@ -226,8 +226,8 @@ func TestBindOrAbort(t *testing.T) {
 		t.Fatalf("log entries = %d, want 1", len(entries))
 	}
 	entry := entries[0]
-	if entry.Level != zapcore.ErrorLevel || entry.Message != "invalid request" {
-		t.Fatalf("log entry = level %s message %q, want error invalid request", entry.Level, entry.Message)
+	if entry.Level != zapcore.WarnLevel || entry.Message != "invalid request" {
+		t.Fatalf("log entry = level %s message %q, want warn invalid request", entry.Level, entry.Message)
 	}
 	fields := entry.ContextMap()
 	if fields["path"] != "/" {
@@ -275,8 +275,8 @@ func TestBindOrAbortTypeMismatchUsesBadRequest(t *testing.T) {
 		t.Fatalf("log entries = %d, want 1", len(entries))
 	}
 	entry := entries[0]
-	if entry.Level != zapcore.ErrorLevel || entry.Message != "invalid request" {
-		t.Fatalf("log entry = level %s message %q, want error invalid request", entry.Level, entry.Message)
+	if entry.Level != zapcore.WarnLevel || entry.Message != "invalid request" {
+		t.Fatalf("log entry = level %s message %q, want warn invalid request", entry.Level, entry.Message)
 	}
 	fields := entry.ContextMap()
 	if fields["path"] != "/users/bad" {

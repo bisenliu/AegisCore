@@ -2,7 +2,7 @@ package domain
 
 import "github.com/google/uuid"
 
-// User 是 repository 层和 service 层之间传递的标准领域用户模型。
+// User 是 application 端口与 infrastructure adapter 之间传递的标准领域用户模型。
 type User struct {
 	ID           int64
 	UserID       uuid.UUID

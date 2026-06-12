@@ -14,14 +14,14 @@ import (
 	"testing"
 	"time"
 
-	// Register the pgx database/sql driver used by test containers.
+	// 注册测试容器使用的 pgx database/sql driver。
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/aegiscore/common/runtime/config"
 )
 
 const (
-	// EnvTestContainers enables real Docker-backed integration containers.
+	// EnvTestContainers 控制是否启用真实 Docker-backed integration containers。
 	EnvTestContainers = "AEGISCORE_TEST_CONTAINERS"
 
 	DefaultPostgresImage    = "postgres:15-alpine"

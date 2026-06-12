@@ -10,7 +10,7 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
-	// Register generated Swagger docs with swaggo.
+	// 将生成的 Swagger 文档注册到 swaggo。
 	_ "github.com/aegiscore/user-service/docs"
 )
 

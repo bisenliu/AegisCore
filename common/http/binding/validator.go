@@ -25,7 +25,7 @@ func BindOrAbort(validator *validation.Validator, c *gin.Context, dst any, binde
 		if len(failure.Fields) > 0 {
 			fields = append(fields, zap.Any("errors", failure.Fields))
 		}
-		logger.Error(c.Request.Context(), "invalid request", fields...)
+		logger.Warn(c.Request.Context(), "invalid request", fields...)
 		if failure.IsValidation {
 			// validator 规则失败会暴露字段级明细；解析和绑定失败保持为通用 bad request。
 			response.ValidationFailedWithErrors(c, failure.Message, failure.Fields)

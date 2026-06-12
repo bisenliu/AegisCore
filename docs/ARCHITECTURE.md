@@ -142,6 +142,8 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - 用户服务的外部系统防腐层边界位于 `user-service/internal/integration/`；其中 `integration/grpc` 只表示出站外部 gRPC client adapter，不表示本服务入站 gRPC transport；`integration/events` 只表示外部事件系统协议 adapter，不表示 feature consumer handler 或业务事件编排；当前没有 order、payment 等真实外部 client，也没有 Kafka、RabbitMQ、NATS、Redis Stream 等 broker dependency；当前也没有事件总线、outbox、publisher、subscriber、consumer handler 或异步投递 worker。
 - 部署资产位于 `deployments/`：用户服务 Dockerfile 位于 `deployments/docker/user-service.Dockerfile`，并要求从仓库根目录执行 build；`deployments/compose/` 承载本地依赖或本地服务启动配置，`deployments/k8s/` 承载 Kubernetes YAML，`deployments/helm/` 承载 Helm chart。
 - 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace header 为 `X-Trace-ID`，Gin context key 为 `trace_id`，日志字段统一为 `trace-id`。
+- 代码注释统一使用中文，函数和方法注释必须使用中文；必要的协议名、库名、HTTP/JWT/Redis/PostgreSQL/Ent/Fx/Gin/trace-id 等技术术语可保留英文。人工维护源码不得新增英文注释；生成代码和第三方代码不为翻译注释而手写修改。
+- Log 日志消息内容必须全部使用英文，日志字段名使用稳定英文 snake_case。日志级别必须匹配场景严重性：`Debug` 用于生命周期细节和调试信息，`Info` 用于服务启动停止、资源连接关闭和重要成功业务动作，`Warn` 用于预期业务拒绝、客户端输入问题、认证拒绝、缓存降级和非致命冲突，`Error` 用于系统异常、外部依赖失败、数据访问失败、后台任务失败和 panic recover。业务日志优先使用 `common/runtime/logger` context helper，避免丢失 trace-id。
 
 ## 10. Database Migrations
 

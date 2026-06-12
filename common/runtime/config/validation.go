@@ -50,8 +50,7 @@ var (
 	}
 )
 
-// ValidationError aggregates config validation failures so startup can report
-// every invalid field in one pass.
+// ValidationError 聚合配置校验失败，使启动阶段能一次性报告全部非法字段。
 type ValidationError struct {
 	errs []error
 }
@@ -81,9 +80,8 @@ func (e *ValidationError) Unwrap() []error {
 	return e.errs
 }
 
-// Validate rejects structurally invalid runtime config before service startup.
-// It checks only config values that are service-agnostic; service-specific
-// required named resources and business policies belong to the service module.
+// Validate 在服务启动前拒绝结构非法的运行时配置。
+// 它只检查服务无关配置；服务特定的必需命名资源和业务策略属于服务模块。
 func (c Config) Validate() error {
 	var errs []error
 

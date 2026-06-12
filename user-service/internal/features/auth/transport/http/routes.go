@@ -2,14 +2,14 @@ package authhttp
 
 import "github.com/gin-gonic/gin"
 
-// RegisterPublicRoutes mounts authentication routes that do not require a normal access token.
+// RegisterPublicRoutes 挂载不需要普通 access token 的认证路由。
 func RegisterPublicRoutes(group *gin.RouterGroup, controller *AuthController) {
 	group.POST("/login", controller.LoginUser)
 	group.POST("/refresh", controller.RefreshToken)
 	group.POST("/change-password", controller.ChangePassword)
 }
 
-// RegisterProtectedRoutes mounts authentication routes that require a normal access token.
+// RegisterProtectedRoutes 挂载需要普通 access token 的认证路由。
 func RegisterProtectedRoutes(group *gin.RouterGroup, controller *AuthController) {
 	group.POST("/logout", controller.LogoutCurrentSession)
 	group.POST("/logout-all", controller.LogoutAllSessions)

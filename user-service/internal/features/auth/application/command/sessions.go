@@ -43,6 +43,7 @@ func (m *authSessionLifecycle) CreateTokenSession(ctx context.Context, userID st
 		logger.Error(ctx, "create auth session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return err
 	}
+	logger.Info(ctx, "auth session created", zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion))
 	return nil
 }
 
@@ -105,6 +106,7 @@ func (m *authSessionLifecycle) RotateTokenSession(ctx context.Context, oldSessio
 		logger.Error(ctx, "rotate auth session failed", logger.StackTrace(zap.String("user_id", oldSession.UserID), zap.String("old_session_id", oldSession.SessionID), zap.String("new_session_id", newSession.SessionID), zap.Error(err))...)
 		return err
 	}
+	logger.Info(ctx, "auth session rotated", zap.String("user_id", oldSession.UserID), zap.String("old_session_id", oldSession.SessionID), zap.String("new_session_id", newSession.SessionID), zap.Int64("token_version", newSession.TokenVersion))
 	return nil
 }
 
@@ -114,6 +116,7 @@ func (m *authSessionLifecycle) DeleteSession(ctx context.Context, userID string,
 		logger.Error(ctx, "delete auth session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Error(err))...)
 		return err
 	}
+	logger.Info(ctx, "auth session deleted", zap.String("user_id", userID), zap.String("session_id", sessionID))
 	return nil
 }
 
@@ -135,6 +138,7 @@ func (m *authSessionLifecycle) RevokeAllUserSessions(ctx context.Context, userID
 	if err := m.RevokeUserSessionsAtVersion(ctx, userID, tokenVersion); err != nil {
 		logger.Error(ctx, "revoke all user sessions projection failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 	}
+	logger.Info(ctx, "all user sessions revoked", zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion))
 	return &authdomain.SessionRevocationResult{UserID: userID, TokenVersion: tokenVersion}, nil
 }
 

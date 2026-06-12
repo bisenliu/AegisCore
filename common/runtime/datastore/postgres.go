@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	// Register the pgx database/sql driver used by OpenPostgres.
+	// 注册 OpenPostgres 使用的 pgx database/sql driver。
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/aegiscore/common/runtime/config"

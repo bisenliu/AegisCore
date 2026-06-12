@@ -40,7 +40,7 @@ func registerV1Routes(engine *gin.Engine, params RouteParams) {
 
 	authhttp.RegisterProtectedRoutes(authenticated.Group("/auth"), params.AuthController)
 
-	// Mount future Casbin authorization middleware on this group after authentication.
+	// 未来 Casbin 授权中间件应在认证之后挂载到该分组。
 	authorized := authenticated.Group("")
 	userhttp.RegisterRoutes(authorized.Group("/users"), params.UserController)
 }

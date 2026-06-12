@@ -209,8 +209,8 @@ func TestUserListPredicates(t *testing.T) {
 
 func newTestUserStore(t *testing.T) *UserStore {
 	t.Helper()
-	// The store currently uses portable Ent query/update semantics, so SQLite
-	// covers the integration boundary without requiring Docker-only PostgreSQL tests.
+	// 当前 store 只使用可移植的 Ent query/update 语义，因此 SQLite
+	// 足以覆盖 integration boundary，不需要依赖只能通过 Docker 运行的 PostgreSQL 测试。
 	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:user_store_test_%s?mode=memory&cache=shared&_fk=1", uuid.NewString()))
 	t.Cleanup(func() { _ = client.Close() })
 	return NewUserStore(UserStoreParams{Client: client})
