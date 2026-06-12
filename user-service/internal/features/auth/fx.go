@@ -3,8 +3,12 @@ package auth
 import (
 	"go.uber.org/fx"
 
+	"github.com/aegiscore/common/runtime/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
+	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
+	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
+	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authpostgres "github.com/aegiscore/user-service/internal/features/auth/infrastructure/postgres"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
@@ -32,6 +36,9 @@ var Module = fx.Module("feature-auth",
 			fx.ResultTags(`name:"auth_session_purge_pool"`),
 		),
 		authvalidators.NewValidator,
+		authcredentials.NewVerifier,
+		authtokens.NewIssuer,
+		newAuthSessionLifecycle,
 		authcommand.NewUseCaseDeps,
 		authcommand.NewLoginUseCase,
 		authcommand.NewRefreshTokenUseCase,
@@ -41,3 +48,7 @@ var Module = fx.Module("feature-auth",
 		authhttp.NewAuthController,
 	),
 )
+
+func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, cfg *config.Config) authsessions.Lifecycle {
+	return authsessions.NewLifecycle(users, sessions, cfg.Auth.MaxActiveSessionsPerUser)
+}

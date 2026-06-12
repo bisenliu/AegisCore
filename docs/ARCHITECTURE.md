@@ -50,7 +50,7 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 | 路由 provider | `user-service/internal/providers/routes.go` | 将 Fx 依赖适配为 router route params |
 | 路由总装 | `user-service/internal/router/router.go`、`health.go`、`swagger.go` | `router.go` 创建 public/protected route groups 并总装 route graph，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向 |
 | 参数解析 | `features/*/transport/http/controller.go` | 绑定 HTTP DTO，执行边界校验，并映射为 command/query |
-| 业务调用 | `features/*/application/` | 编排用户资料或认证会话用例；用户资料 feature 的读写用例分别位于 `application/query` 与 `application/command`，认证会话 feature 的登录、刷新、强制改密和登出用例位于 `application/command` |
+| 业务调用 | `features/*/application/` | 编排用户资料或认证会话用例；用户资料 feature 的读写用例分别位于 `application/query` 与 `application/command`，认证会话 feature 的登录、刷新、强制改密和登出用例位于 `application/command`，并复用 `authctx`、`credentials`、`tokens`、`sessions` application 组件 |
 | 数据访问 | `features/*/infrastructure/postgres/`, `features/*/infrastructure/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
 | 响应输出 | `common/http/response/` + `common/contract/response/` | 通过 Gin writer 输出统一 `success/code/message/data` 信封，并复用稳定错误码与分页契约 |
 
@@ -70,7 +70,7 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 
 | 目录 | 责任 |
 |---|---|
-| `application/` | service、commands、queries、ports、use case mapper 和业务编排；可按 feature 需要细分为 `command/`、`query/`、`validators/` 和稳定组件包。Auth 当前使用 `command/` 承载登录、刷新、强制改密和登出 use case，并持有每用户活跃 refresh session 上限策略；使用 `validators/` 承载 transport-neutral 输入辅助、token version 撤销校验、cache/database fallback 策略和 refresh session 一致性校验 |
+| `application/` | service、commands、queries、ports、use case mapper 和业务编排；可按 feature 需要细分为 `command/`、`query/`、`validators/` 和稳定组件包。Auth 当前使用扁平 `command/` 承载登录、刷新、强制改密和登出 use case；使用 `authctx/` 承载认证上下文 helper；使用 `credentials/` 承载凭据校验和强制改密凭据更新；使用 `tokens/` 承载 JWT 签发解析和 token result DTO；使用 `sessions/` 承载 refresh session 生命周期、token version fallback、每用户活跃 refresh session 上限策略和会话撤销；使用 `validators/` 承载 transport-neutral 输入辅助、token version 撤销校验和 refresh session 一致性校验。Auth 当前没有真实读侧 query，`application/query` 只保留 README 边界说明 |
 | `domain/` | 领域实体、值对象、枚举、领域错误和纯业务规则；可按真实需要细分 `services/` 承载跨实体或跨值对象的纯领域服务规则，`events/` 承载纯领域事件模型 |
 | `transport/http/` | 当前已实现的入站 HTTP transport，承载 Gin controller、route registration、HTTP request/response DTO、Swagger 文档模型、HTTP DTO validation 和边界映射 |
 | `transport/grpc/` | 未来本服务暴露入站 gRPC API 时的 feature-local transport，承载 gRPC handler、server-side protobuf request/response 映射、gRPC 边界 validation 和 application command/query 映射；当前没有真实 gRPC API 时不得新增业务代码、空 handler、空 service、未使用 proto 或 generated code，只可按需保留 README 或 package doc |
@@ -79,7 +79,7 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 | `infrastructure/consumers/` | 未来 feature-local 入站事件 consumer adapter；仅当该 feature 有真实外部事件消费需求时新增，负责把已归一化的事件输入映射为 application command/query 或 port 调用 |
 | `fx.go` | Feature-local Fx module，组装 application、transport 和 infrastructure provider |
 
-Feature transport 可以按入站协议拆分在同一 feature 的 `transport/` 下。`transport/http` 和未来 `transport/grpc` 都必须把协议 DTO 映射为 transport-neutral application command/query 后再调用用例，不得互相导入对方 controller、DTO 或 route。可复用的输入辅助优先沉淀到 application `validators/`、domain 值对象或其他 transport-neutral 层，而不是在 HTTP 和 gRPC transport 之间横向复用协议 DTO。
+Feature transport 可以按入站协议拆分在同一 feature 的 `transport/` 下。`transport/http` 和未来 `transport/grpc` 都必须把协议 DTO 映射为 transport-neutral application command/query 后再调用用例，不得互相导入对方 controller、DTO 或 route。可复用的输入辅助优先沉淀到 application `validators/`、`authctx/`、domain 值对象或其他 transport-neutral 层，而不是在 HTTP 和 gRPC transport 之间横向复用协议 DTO。
 
 `domain/services` 和 `domain/events` 是按需子目录，只在存在真实纯领域服务规则或领域事件模型时创建；不要为了目录完整新增空 package、空 struct、空 interface 或只含占位注释的业务代码。简单实体、值对象、枚举、领域错误和单实体短方法仍可留在 `domain/` 根部。Auth 当前将 token/session validation helper 保留在 `application/validators`；当前没有领域事件模型，也没有事件总线实现。
 
@@ -113,7 +113,7 @@ Ent predicate 构造封装在 `infrastructure/postgres` 内。Adapter 可以做�
 
 边界检查不仅覆盖 import 依赖，也覆盖人工维护 Go 文件中的函数定义、声明和调用顺序。检查时应确认类型、Fx 参数结构和输出结构位于依赖它们的构造函数或 provider 前；构造函数和 provider 位于公开 handler、service 或 use case 方法前；HTTP controller 的 handler 顺序尽量与同包 `routes.go` 注册顺序一致；私有 helper 可以紧跟主要调用方，也可以在文件尾按调用链组织。若顺序导致可读性差、依赖关系混乱或潜在运行错误风险，应在不改变功能的前提下整理。Ent、Swagger 等生成代码不为顺序检查手写调整，必须通过对应生成流程更新。
 
-Domain services 可以承载跨实体或跨值对象的纯领域判断，但不得替代 application use case。密码 hash、JWT 签发/解析、Bearer token 处理、Redis session 生命周期、token version cache/database fallback、日志和配置读取仍属于 application、common security、runtime 或 infrastructure 边界；auth 当前将 token/session validation helper 保留在 `application/validators`。Auth 当前的 `RedisKeyBuilder` 依赖 runtime config 并服务 Redis key 构造，不是 domain service 准入样例。Domain events 只承载领域事实的数据模型；事件总线、broker、outbox、publisher、subscriber 或后台投递 worker 必须另开变更设计。
+Domain services 可以承载跨实体或跨值对象的纯领域判断，但不得替代 application use case。密码 hash 属于 `application/credentials` 或 common security 原语，JWT 签发/解析和 Bearer token 处理属于 `application/tokens` 或 common security 原语，Redis session 生命周期和 token version cache/database fallback 属于 `application/sessions`、`application/validators` 或 infrastructure adapter，日志和配置读取仍属于 application、common runtime 或 infrastructure 边界。Auth 当前的 `RedisKeyBuilder` 依赖 runtime config 并服务 Redis key 构造，不是 domain service 准入样例。Domain events 只承载领域事实的数据模型；事件总线、broker、outbox、publisher、subscriber 或后台投递 worker 必须另开变更设计。
 
 Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 client 边界处理，但不得为了 adapter 自身方便定义大接口。外部能力接口归消费侧 feature application 层所有，adapter 只负责实现。事件 producer 的业务决策归 feature application，broker envelope 和投递调用归 `integration/events`；事件 consumer 的 broker mechanics 归 `integration/events`，feature-specific 输入映射和 handler adapter 归对应 feature 的 `infrastructure/consumers`。
 

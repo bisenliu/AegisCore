@@ -1,9 +1,8 @@
-package command
+package sessions
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,29 +16,31 @@ import (
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 )
 
-// AuthSessionLifecycle 为 auth command use case 创建、校验和撤销认证会话。
-type AuthSessionLifecycle interface {
+// Lifecycle 为 auth application use case 创建、校验和撤销认证会话。
+type Lifecycle interface {
 	CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error
 	ValidatePasswordChangeClaims(ctx context.Context, claims *commonauth.Claims) error
 	ValidateRefreshSession(ctx context.Context, claims *commonauth.Claims) (authdomain.AuthSession, int64, error)
 	RotateTokenSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, refreshTTL time.Duration) error
 	DeleteSession(ctx context.Context, userID string, sessionID string) error
+	CurrentTokenVersion(ctx context.Context, userID string) (int64, error)
 	RevokeUserSessionsAtVersion(ctx context.Context, userID uuid.UUID, tokenVersion int64) error
 	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*authdomain.SessionRevocationResult, error)
 }
 
-type authSessionLifecycle struct {
+type lifecycle struct {
 	users                    authapplication.UserTokenVersionStore
 	sessions                 authapplication.AuthSessionStore
 	maxActiveSessionsPerUser int
 }
 
-func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, maxActiveSessionsPerUser int) AuthSessionLifecycle {
-	return &authSessionLifecycle{users: users, sessions: sessions, maxActiveSessionsPerUser: maxActiveSessionsPerUser}
+// NewLifecycle 构造认证会话生命周期组件。
+func NewLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, maxActiveSessionsPerUser int) Lifecycle {
+	return &lifecycle{users: users, sessions: sessions, maxActiveSessionsPerUser: maxActiveSessionsPerUser}
 }
 
 // CreateTokenSession 为新签发的 token pair 持久化 refresh 会话元数据。
-func (m *authSessionLifecycle) CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error {
+func (m *lifecycle) CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error {
 	if err := m.sessions.CreateSession(ctx, authdomain.AuthSession{UserID: userID, SessionID: sessionID, TokenVersion: tokenVersion, ExpiresAt: time.Now().Add(refreshTTL)}, refreshTTL, m.maxActiveSessionsPerUser); err != nil {
 		logger.Error(ctx, "create auth session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return err
@@ -49,8 +50,8 @@ func (m *authSessionLifecycle) CreateTokenSession(ctx context.Context, userID st
 }
 
 // ValidatePasswordChangeClaims 校验改密 token version 是否仍为当前版本。
-func (m *authSessionLifecycle) ValidatePasswordChangeClaims(ctx context.Context, claims *commonauth.Claims) error {
-	currentVersion, err := m.currentTokenVersion(ctx, claims.UserID)
+func (m *lifecycle) ValidatePasswordChangeClaims(ctx context.Context, claims *commonauth.Claims) error {
+	currentVersion, err := m.CurrentTokenVersion(ctx, claims.UserID)
 	if err != nil {
 		if errors.Is(err, userdomain.ErrUserNotFound) {
 			logger.Warn(ctx, "password change user not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
@@ -67,7 +68,7 @@ func (m *authSessionLifecycle) ValidatePasswordChangeClaims(ctx context.Context,
 }
 
 // ValidateRefreshSession 校验会话存在性、claim 与会话一致性以及当前 token version。
-func (m *authSessionLifecycle) ValidateRefreshSession(ctx context.Context, claims *commonauth.Claims) (authdomain.AuthSession, int64, error) {
+func (m *lifecycle) ValidateRefreshSession(ctx context.Context, claims *commonauth.Claims) (authdomain.AuthSession, int64, error) {
 	session, err := m.sessions.GetSession(ctx, claims.UserID, claims.SessionID)
 	if err != nil {
 		if errors.Is(err, authdomain.ErrAuthSessionNotFound) {
@@ -81,7 +82,7 @@ func (m *authSessionLifecycle) ValidateRefreshSession(ctx context.Context, claim
 		logger.Warn(ctx, "refresh session mismatch", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Int64("session_token_version", session.TokenVersion), zap.Int64("token_version", claims.TokenVersion))
 		return authdomain.AuthSession{}, 0, err
 	}
-	currentVersion, err := m.currentTokenVersion(ctx, claims.UserID)
+	currentVersion, err := m.CurrentTokenVersion(ctx, claims.UserID)
 	if err != nil {
 		if errors.Is(err, userdomain.ErrUserNotFound) {
 			logger.Warn(ctx, "refresh user not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
@@ -98,7 +99,7 @@ func (m *authSessionLifecycle) ValidateRefreshSession(ctx context.Context, claim
 }
 
 // RotateTokenSession 原子消费旧 refresh 会话，并创建新 refresh 会话。
-func (m *authSessionLifecycle) RotateTokenSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, refreshTTL time.Duration) error {
+func (m *lifecycle) RotateTokenSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, refreshTTL time.Duration) error {
 	if err := m.sessions.RotateSession(ctx, oldSession, newSession, refreshTTL, m.maxActiveSessionsPerUser); err != nil {
 		if errors.Is(err, authdomain.ErrAuthSessionNotFound) || errors.Is(err, authdomain.ErrAuthSessionMismatch) {
 			logger.Warn(ctx, "rotate auth session rejected", zap.String("user_id", oldSession.UserID), zap.String("old_session_id", oldSession.SessionID), zap.String("new_session_id", newSession.SessionID), zap.Error(err))
@@ -112,7 +113,7 @@ func (m *authSessionLifecycle) RotateTokenSession(ctx context.Context, oldSessio
 }
 
 // DeleteSession 撤销一个 refresh token 会话。
-func (m *authSessionLifecycle) DeleteSession(ctx context.Context, userID string, sessionID string) error {
+func (m *lifecycle) DeleteSession(ctx context.Context, userID string, sessionID string) error {
 	if err := m.sessions.DeleteSession(ctx, userID, sessionID); err != nil {
 		logger.Error(ctx, "delete auth session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Error(err))...)
 		return err
@@ -121,43 +122,7 @@ func (m *authSessionLifecycle) DeleteSession(ctx context.Context, userID string,
 	return nil
 }
 
-func (m *authSessionLifecycle) currentTokenVersion(ctx context.Context, userID string) (int64, error) {
+// CurrentTokenVersion 返回用户当前 token version，优先使用缓存并在 miss 时回源。
+func (m *lifecycle) CurrentTokenVersion(ctx context.Context, userID string) (int64, error) {
 	return authvalidators.Current(ctx, m.users, m.sessions, userID)
-}
-
-// RevokeAllUserSessions 递增 token version、刷新缓存并删除全部 refresh 会话。
-func (m *authSessionLifecycle) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*authdomain.SessionRevocationResult, error) {
-	tokenVersion, err := m.users.IncrementTokenVersion(ctx, userID)
-	if err != nil {
-		if errors.Is(err, userdomain.ErrUserNotFound) {
-			logger.Warn(ctx, "revoke all user sessions user not found", zap.String("user_id", userID.String()))
-			return nil, userdomain.ErrUserNotFound
-		}
-		logger.Error(ctx, "increment token version failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
-		return nil, err
-	}
-	if err := m.RevokeUserSessionsAtVersion(ctx, userID, tokenVersion); err != nil {
-		logger.Error(ctx, "revoke all user sessions projection failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
-	}
-	logger.Info(ctx, "all user sessions revoked", zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion))
-	return &authdomain.SessionRevocationResult{UserID: userID, TokenVersion: tokenVersion}, nil
-}
-
-// RevokeUserSessionsAtVersion 刷新 token version 投影并删除全部 refresh 会话，不修改 PostgreSQL 版本。
-func (m *authSessionLifecycle) RevokeUserSessionsAtVersion(ctx context.Context, userID uuid.UUID, tokenVersion int64) error {
-	userIDString := userID.String()
-	var projectionErr error
-	if err := m.sessions.CacheTokenVersion(ctx, userIDString, tokenVersion); err != nil {
-		logger.Error(ctx, "refresh token version cache failed", logger.StackTrace(zap.String("user_id", userIDString), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
-		projectionErr = errors.Join(projectionErr, fmt.Errorf("refresh token version cache: %w", err))
-		if evictErr := m.sessions.DeleteCachedTokenVersion(ctx, userIDString); evictErr != nil {
-			logger.Error(ctx, "delete token version cache failed", logger.StackTrace(zap.String("user_id", userIDString), zap.Int64("token_version", tokenVersion), zap.Error(evictErr))...)
-			projectionErr = errors.Join(projectionErr, fmt.Errorf("delete token version cache: %w", evictErr))
-		}
-	}
-	if err := m.sessions.DeleteAllUserSessions(ctx, userIDString); err != nil {
-		logger.Error(ctx, "delete all user sessions failed", logger.StackTrace(zap.String("user_id", userIDString), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
-		projectionErr = errors.Join(projectionErr, fmt.Errorf("delete all user sessions: %w", err))
-	}
-	return projectionErr
 }

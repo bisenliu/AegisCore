@@ -6,13 +6,14 @@ import (
 	"github.com/google/uuid"
 
 	commonauth "github.com/aegiscore/common/security/auth"
+	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
 // RefreshTokenUseCase 处理 refresh token 续签。
 type RefreshTokenUseCase interface {
-	Refresh(ctx context.Context, cmd RefreshTokenCommand) (*TokenResult, error)
+	Refresh(ctx context.Context, cmd RefreshTokenCommand) (*authtokens.TokenResult, error)
 }
 
 // RefreshTokenCommand 是换取 refresh token 的应用层输入。
@@ -30,7 +31,7 @@ func NewRefreshTokenUseCase(deps *UseCaseDeps) RefreshTokenUseCase {
 }
 
 // Refresh 校验 refresh 会话并签发新的 token 响应。
-func (u *refreshTokenUseCase) Refresh(ctx context.Context, cmd RefreshTokenCommand) (*TokenResult, error) {
+func (u *refreshTokenUseCase) Refresh(ctx context.Context, cmd RefreshTokenCommand) (*authtokens.TokenResult, error) {
 	if err := authvalidators.ValidateRefreshToken(cmd.RefreshToken); err != nil {
 		return nil, err
 	}
@@ -57,11 +58,11 @@ func (u *refreshTokenUseCase) parseAndValidateRefreshSession(ctx context.Context
 	return claims, session, currentVersion, nil
 }
 
-func (u *refreshTokenUseCase) refreshWithoutRotation(ctx context.Context, claims *commonauth.Claims, session authdomain.AuthSession, currentVersion int64) (*TokenResult, error) {
+func (u *refreshTokenUseCase) refreshWithoutRotation(ctx context.Context, claims *commonauth.Claims, session authdomain.AuthSession, currentVersion int64) (*authtokens.TokenResult, error) {
 	return u.deps.issueTokenPair(ctx, claims.UserID, currentVersion, session.SessionID)
 }
 
-func (u *refreshTokenUseCase) refreshWithRotation(ctx context.Context, claims *commonauth.Claims, oldSession authdomain.AuthSession, currentVersion int64) (*TokenResult, error) {
+func (u *refreshTokenUseCase) refreshWithRotation(ctx context.Context, claims *commonauth.Claims, oldSession authdomain.AuthSession, currentVersion int64) (*authtokens.TokenResult, error) {
 	sessionID := uuid.NewString()
 	tokens, err := u.deps.tokens.IssueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
 	if err != nil {

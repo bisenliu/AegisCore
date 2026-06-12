@@ -5,12 +5,13 @@ import (
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
+	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
 )
 
-func toTokenResponse(result *authcommand.TokenResult) TokenResponse {
+func toTokenResponse(result *authtokens.TokenResult) TokenResponse {
 	return TokenResponse{
 		AccessToken:            result.AccessToken,
 		RefreshToken:           result.RefreshToken,

@@ -7,12 +7,13 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
+	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 )
 
 // LoginUseCase 处理用户名密码认证。
 type LoginUseCase interface {
-	Login(ctx context.Context, cmd LoginCommand) (*TokenResult, error)
+	Login(ctx context.Context, cmd LoginCommand) (*authtokens.TokenResult, error)
 }
 
 // LoginCommand 是用户名密码认证的应用层输入。
@@ -31,7 +32,7 @@ func NewLoginUseCase(deps *UseCaseDeps) LoginUseCase {
 }
 
 // Login 校验凭证，并签发普通 token 或受限改密 token。
-func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*TokenResult, error) {
+func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*authtokens.TokenResult, error) {
 	if err := authvalidators.ValidateLoginCommand(cmd.Username, cmd.Password); err != nil {
 		return nil, err
 	}

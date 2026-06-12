@@ -11,7 +11,7 @@
 ## 2. What To Validate
 
 - Controller：路径参数解析、校验失败、application service 或 command/query use case 错误映射、成功响应。
-- Application service/command/query：infrastructure adapter 返回值到 DTO 的字段映射，领域或应用错误通过 `contract/errors.FromError` 转换；auth command use case 测试位于 `user-service/internal/features/auth/application/command/`，auth validators 测试位于 `user-service/internal/features/auth/application/validators/`，auth token version 策略通过 command/session lifecycle 和 Redis adapter 测试覆盖。
+- Application service/command/query：infrastructure adapter 返回值到 DTO 的字段映射，领域或应用错误通过 `contract/errors.FromError` 转换；auth command use case 测试位于 `user-service/internal/features/auth/application/command/`，auth component 测试位于 `application/authctx/`、`application/credentials/`、`application/tokens/`、`application/sessions/`，auth validators 测试位于 `user-service/internal/features/auth/application/validators/`，auth token version 策略通过 sessions lifecycle、validators 和 Redis adapter 测试覆盖。
 - Infrastructure adapter：Ent not found 转应用层 not found 错误，其他查询错误保留 cause 并映射为 internal error；Redis adapter 覆盖 key、TTL、索引和清理语义。
 - Middleware：trace-id 透传/生成、写入 Gin context/Go context/响应头、panic recovery 输出统一错误、request logging 携带 trace-id、CORS 处理 OPTIONS。
 - Config loader：显式配置加载、`AEGISCORE_` 环境变量覆盖、命名 Redis/PostgreSQL 实例反序列化；`common/runtime/config.Load` 不应因 required/range 字段校验拒绝缺失或零值配置。

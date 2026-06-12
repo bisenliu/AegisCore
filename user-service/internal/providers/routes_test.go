@@ -23,6 +23,7 @@ import (
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
+	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
@@ -280,12 +281,12 @@ func (s *routeTokenVersionValidator) ValidateTokenVersion(_ context.Context, _ s
 	return nil
 }
 
-func (s *routeAuthAuthUseCases) Login(context.Context, authcommand.LoginCommand) (*authcommand.TokenResult, error) {
-	return &authcommand.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
+func (s *routeAuthAuthUseCases) Login(context.Context, authcommand.LoginCommand) (*authtokens.TokenResult, error) {
+	return &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
-func (s *routeAuthAuthUseCases) Refresh(context.Context, authcommand.RefreshTokenCommand) (*authcommand.TokenResult, error) {
-	return &authcommand.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
+func (s *routeAuthAuthUseCases) Refresh(context.Context, authcommand.RefreshTokenCommand) (*authtokens.TokenResult, error) {
+	return &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
 func (s *routeAuthAuthUseCases) ChangePassword(context.Context, authcommand.ChangePasswordCommand) (*authcommand.ChangePasswordResult, error) {

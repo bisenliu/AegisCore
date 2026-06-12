@@ -1,4 +1,4 @@
-package command
+package tokens
 
 import (
 	"context"
@@ -21,24 +21,16 @@ const (
 	defaultRefreshTokenTTL = 7 * 24 * time.Hour
 )
 
-// TokenResult 是登录、刷新和强制改密登录的 transport-neutral token 输出。
-type TokenResult struct {
-	AccessToken            string
-	RefreshToken           string
-	TokenType              string
-	ExpiresIn              int64
-	PasswordChangeRequired bool
-}
-
-// AuthTokenIssuer 签发和解析认证流程使用的 JWT。
-type AuthTokenIssuer interface {
-	IssueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*issuedTokenPair, error)
+// Issuer 签发和解析认证流程使用的 JWT。
+type Issuer interface {
+	IssueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*IssuedTokenPair, error)
 	IssuePasswordChangeToken(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*TokenResult, error)
 	ParseRefreshToken(ctx context.Context, token string) (*commonauth.Claims, error)
 	ParsePasswordChangeToken(ctx context.Context, token string) (*commonauth.Claims, uuid.UUID, error)
 }
 
-type issuedTokenPair struct {
+// IssuedTokenPair 表示已签发的 token 响应和 refresh 会话生命周期。
+type IssuedTokenPair struct {
 	Response   *TokenResult
 	RefreshTTL time.Duration
 }
@@ -48,12 +40,13 @@ type authTokenIssuer struct {
 	config *config.Config
 }
 
-func newAuthTokenIssuer(jwt *commonauth.JWTService, cfg *config.Config) AuthTokenIssuer {
+// NewIssuer 构造 token 签发解析组件。
+func NewIssuer(jwt *commonauth.JWTService, cfg *config.Config) Issuer {
 	return &authTokenIssuer{jwt: jwt, config: cfg}
 }
 
 // IssueTokenPair 为一个认证会话签发 access 和 refresh token。
-func (i *authTokenIssuer) IssueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*issuedTokenPair, error) {
+func (i *authTokenIssuer) IssueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*IssuedTokenPair, error) {
 	accessTTL := i.accessTokenTTL()
 	refreshTTL := i.refreshTokenTTL()
 	access, err := i.jwt.SignAccessToken(commonauth.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: accessTTL})
@@ -66,7 +59,7 @@ func (i *authTokenIssuer) IssueTokenPair(ctx context.Context, userID string, tok
 		logger.Error(ctx, "sign refresh token failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return nil, fmt.Errorf("sign refresh token: %w", err)
 	}
-	return &issuedTokenPair{
+	return &IssuedTokenPair{
 		Response:   &TokenResult{AccessToken: access, RefreshToken: refresh, TokenType: commonauth.TokenTypeBearer, ExpiresIn: int64(accessTTL.Seconds())},
 		RefreshTTL: refreshTTL,
 	}, nil
@@ -132,15 +125,4 @@ func (i *authTokenIssuer) refreshTokenTTL() time.Duration {
 		return defaultRefreshTokenTTL
 	}
 	return ttl
-}
-
-func (d *UseCaseDeps) issueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*TokenResult, error) {
-	tokens, err := d.tokens.IssueTokenPair(ctx, userID, tokenVersion, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	if err := d.sessions.CreateTokenSession(ctx, userID, sessionID, tokenVersion, tokens.RefreshTTL); err != nil {
-		return nil, err
-	}
-	return tokens.Response, nil
 }

@@ -15,7 +15,9 @@ import (
 	"github.com/aegiscore/common/contract/response"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
+	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
+	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
@@ -25,7 +27,7 @@ var errAuthDatabaseDown = errors.New("database down")
 
 func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthUseCases{tokens: &authcommand.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthUseCases{tokens: &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthLogin(t, service, `{"username":" alice ","password":" secret "}`)
 
@@ -49,7 +51,7 @@ func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 
 func TestAuthControllerLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthUseCases{tokens: &authcommand.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthUseCases{tokens: &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthLogin(t, service, `{"username":"alice","password":" "}`)
 
@@ -126,7 +128,7 @@ func TestAuthControllerChangePasswordMapsNotFound(t *testing.T) {
 
 func TestAuthControllerRefreshNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthUseCases{tokens: &authcommand.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthUseCases{tokens: &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthRefresh(t, service, `{"refresh_token":" Bearer refresh-token "}`)
 
@@ -143,7 +145,7 @@ func TestAuthControllerRefreshNormalizesToCommand(t *testing.T) {
 
 func TestAuthControllerRefreshRejectsBearerOnlyToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthUseCases{tokens: &authcommand.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
+	service := &stubAuthUseCases{tokens: &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}
 
 	status, envelope := executeAuthRefresh(t, service, `{"refresh_token":" Bearer "}`)
 
@@ -170,7 +172,7 @@ func TestAuthControllerRefreshMapsTokenInvalid(t *testing.T) {
 }
 
 type stubAuthUseCases struct {
-	tokens             *authcommand.TokenResult
+	tokens             *authtokens.TokenResult
 	loginErr           error
 	changeResponse     *authcommand.ChangePasswordResult
 	changeErr          error
@@ -178,15 +180,15 @@ type stubAuthUseCases struct {
 	logoutResponse     *authcommand.LogoutResult
 	logoutErr          error
 	gotLogin           authcommand.LoginCommand
-	gotClientContext   authcommand.ClientContext
+	gotClientContext   authctx.ClientContext
 	gotClientContextOK bool
 	gotRefresh         authcommand.RefreshTokenCommand
 	gotChange          authcommand.ChangePasswordCommand
 }
 
-func (s *stubAuthUseCases) Login(ctx context.Context, cmd authcommand.LoginCommand) (*authcommand.TokenResult, error) {
+func (s *stubAuthUseCases) Login(ctx context.Context, cmd authcommand.LoginCommand) (*authtokens.TokenResult, error) {
 	s.gotLogin = cmd
-	s.gotClientContext, s.gotClientContextOK = authcommand.ClientContextFromContext(ctx)
+	s.gotClientContext, s.gotClientContextOK = authctx.ClientContextFromContext(ctx)
 	if s.loginErr != nil {
 		return nil, s.loginErr
 	}
@@ -201,7 +203,7 @@ func (s *stubAuthUseCases) ChangePassword(_ context.Context, cmd authcommand.Cha
 	return s.changeResponse, nil
 }
 
-func (s *stubAuthUseCases) Refresh(_ context.Context, cmd authcommand.RefreshTokenCommand) (*authcommand.TokenResult, error) {
+func (s *stubAuthUseCases) Refresh(_ context.Context, cmd authcommand.RefreshTokenCommand) (*authtokens.TokenResult, error) {
 	s.gotRefresh = cmd
 	if s.refreshErr != nil {
 		return nil, s.refreshErr

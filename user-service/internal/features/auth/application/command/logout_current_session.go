@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 )
 
 // LogoutCurrentSessionUseCase 处理当前认证会话登出。
@@ -29,7 +30,7 @@ func NewLogoutCurrentSessionUseCase(deps *UseCaseDeps) LogoutCurrentSessionUseCa
 
 // LogoutCurrentSession 撤销当前 refresh token 会话，但不修改用户 token version。
 func (u *logoutCurrentSessionUseCase) LogoutCurrentSession(ctx context.Context) (*LogoutResult, error) {
-	userID, sessionID, err := authenticatedSession(ctx)
+	userID, sessionID, err := authctx.AuthenticatedSession(ctx)
 	if err != nil {
 		logger.Warn(ctx, "logout missing authenticated session", zap.Error(err))
 		return nil, err

@@ -64,7 +64,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 
 - HTTP 层只处理请求解析、参数校验和响应输出。
 - HTTP request/response DTO 和 Swagger model 放在对应 feature 的 `transport/http/request.go`、`response.go`，Swagger 生成使用稳定 Go struct/type 名称，避免生成文档暴露 `transport/http` 目录派生名称；不要新增 feature-level `api/` DTO 包。
-- Application service/use case 层负责业务编排、command/query 处理和 DTO 映射；已有 feature 可在 `application/command`、`application/query`、`application/validators` 和稳定组件包下继续细分读写用例与 transport-neutral 输入辅助。Auth 的登录、刷新、强制改密和登出流程放在 `application/command`，认证 application 输入辅助、token version 撤销校验、cache/database fallback 和 refresh session 一致性校验放在 `application/validators`。
+- Application service/use case 层负责业务编排、command/query 处理和 DTO 映射；已有 feature 可在 `application/command`、`application/query`、`application/validators` 和稳定组件包下继续细分读写用例与 transport-neutral 输入辅助。Auth 的登录、刷新、强制改密和登出流程放在扁平 `application/command`；认证上下文 helper 放在 `application/authctx`；凭据校验和强制改密凭据更新放在 `application/credentials`；JWT 签发解析和 token result DTO 放在 `application/tokens`；refresh session 生命周期、token version fallback、session 上限和会话撤销放在 `application/sessions`；认证 application 输入辅助、token version 撤销校验和 refresh session 一致性校验放在 `application/validators`。
 - Domain 层负责实体、值对象、枚举、领域错误和纯业务规则；只有存在真实跨实体/跨值对象领域规则或领域事件模型时，才在 feature 内新增 `domain/services` 或 `domain/events`，不得为了目录完整添加空业务代码。Domain services/events 不依赖 Gin、Ent、Redis、config、logger、application ports 或 infrastructure adapter。
 - Infrastructure adapter 层负责 Ent/PostgreSQL、Redis 访问、存储模型转换和存储错误转换，具体放在对应 feature 的 `infrastructure/postgres` 或 `infrastructure/redis` 下。
 - 服务级 Fx provider 放在 `user-service/internal/providers`，用于组装 Gin engine、HTTP route registration、JWT service、PostgreSQL/Redis named resources 和 Ent clients；`internal/bootstrap` 只保留顶层 AppModule 和 HTTP server lifecycle。
@@ -170,7 +170,7 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 ## 10. Adding Features
 
 1. 先阅读 `docs/ARCHITECTURE.md`，确认新能力属于哪个模块、feature 和层。
-2. 新增服务内业务能力时，优先放在 `user-service/internal/features/<feature>/`；已有 feature 内按 `application/`、`domain/`、`transport/http/`、`infrastructure/*/` 和 `fx.go` 分层扩展，HTTP DTO 放在 `transport/http/request.go` 和 `response.go`。用户资料 feature 的写侧用例放在 `application/command`，读侧用例放在 `application/query`，transport-neutral application 输入辅助放在 `application/validators`；认证 feature 的会话控制 use case 放在 `application/command`，认证输入辅助、token version 撤销校验和 session 一致性校验放在 `application/validators`。`domain/services` 和 `domain/events` 只在有真实纯领域规则或事件模型时创建；事件总线、broker、outbox、publisher、subscriber 或异步投递需要单独设计。
+2. 新增服务内业务能力时，优先放在 `user-service/internal/features/<feature>/`；已有 feature 内按 `application/`、`domain/`、`transport/http/`、`infrastructure/*/` 和 `fx.go` 分层扩展，HTTP DTO 放在 `transport/http/request.go` 和 `response.go`。用户资料 feature 的写侧用例放在 `application/command`，读侧用例放在 `application/query`，transport-neutral application 输入辅助放在 `application/validators`；认证 feature 的会话控制 use case 放在扁平 `application/command`，支撑组件按职责放在 `application/authctx`、`application/credentials`、`application/tokens`、`application/sessions`，认证输入辅助、token version 撤销校验和 session 一致性校验放在 `application/validators`。`domain/services` 和 `domain/events` 只在有真实纯领域规则或事件模型时创建；事件总线、broker、outbox、publisher、subscriber 或异步投递需要单独设计。
 3. 新增跨服务稳定基础能力时，按 `common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation` 归类。
 4. 跨 feature、跨模块、外部 API、配置、数据库 schema 或目录结构变更，应在 issue、PR 描述或开发记录中写清目标、影响范围和验证方式。
 5. 增加或更新测试，并在受影响模块目录运行相关 `go test` 命令；跨模块变更时分别在 `common/` 和 `user-service/` 运行。

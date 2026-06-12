@@ -12,6 +12,9 @@ import (
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
+	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
+	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
+	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 )
@@ -67,6 +70,8 @@ func TestAuthUseCaseLoginUsesDefaultTTLs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
+	defaultAccessTokenTTL := 15 * time.Minute
+	defaultRefreshTokenTTL := 7 * 24 * time.Hour
 	if tokens.ExpiresIn != int64(defaultAccessTokenTTL.Seconds()) {
 		t.Fatalf("ExpiresIn = %d, want %d", tokens.ExpiresIn, int64(defaultAccessTokenTTL.Seconds()))
 	}
@@ -592,7 +597,12 @@ func newTestAuthUseCases(repo *authRepoStub, store authapplication.AuthSessionSt
 
 func newTestAuthUseCasesWithConfig(repo *authRepoStub, store authapplication.AuthSessionStore, authCfg config.AuthConfig) testAuthUseCases {
 	cfg := &config.Config{Auth: authCfg}
-	deps := NewUseCaseDeps(UseCaseDepsParams{Credentials: repo, TokenVersions: repo, Sessions: store, JWT: commonauth.NewJWTService(cfg.Auth), Config: cfg})
+	deps := NewUseCaseDeps(UseCaseDepsParams{
+		Credentials: authcredentials.NewVerifier(repo),
+		Tokens:      authtokens.NewIssuer(commonauth.NewJWTService(cfg.Auth), cfg),
+		Sessions:    authsessions.NewLifecycle(repo, store, cfg.Auth.MaxActiveSessionsPerUser),
+		Config:      cfg,
+	})
 	return testAuthUseCases{
 		LoginUseCase:                NewLoginUseCase(deps),
 		RefreshTokenUseCase:         NewRefreshTokenUseCase(deps),
@@ -763,17 +773,17 @@ type refreshRotationTokenIssuer struct {
 	issueErr error
 }
 
-func (i *refreshRotationTokenIssuer) IssueTokenPair(context.Context, string, int64, string) (*issuedTokenPair, error) {
+func (i *refreshRotationTokenIssuer) IssueTokenPair(context.Context, string, int64, string) (*authtokens.IssuedTokenPair, error) {
 	if i.issueErr != nil {
 		return nil, i.issueErr
 	}
-	return &issuedTokenPair{
-		Response:   &TokenResult{AccessToken: "access", RefreshToken: "refresh-new", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900},
+	return &authtokens.IssuedTokenPair{
+		Response:   &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh-new", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900},
 		RefreshTTL: time.Hour,
 	}, nil
 }
 
-func (i *refreshRotationTokenIssuer) IssuePasswordChangeToken(context.Context, string, int64, string) (*TokenResult, error) {
+func (i *refreshRotationTokenIssuer) IssuePasswordChangeToken(context.Context, string, int64, string) (*authtokens.TokenResult, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -830,6 +840,10 @@ func (m *refreshRotationSessionLifecycle) DeleteSession(_ context.Context, _ str
 	return m.deleteErrBySessionID[sessionID]
 }
 
+func (m *refreshRotationSessionLifecycle) CurrentTokenVersion(context.Context, string) (int64, error) {
+	return 0, errors.New("not implemented")
+}
+
 func (m *refreshRotationSessionLifecycle) RevokeUserSessionsAtVersion(context.Context, uuid.UUID, int64) error {
 	return errors.New("not implemented")
 }
@@ -837,3 +851,6 @@ func (m *refreshRotationSessionLifecycle) RevokeUserSessionsAtVersion(context.Co
 func (m *refreshRotationSessionLifecycle) RevokeAllUserSessions(context.Context, uuid.UUID) (*authdomain.SessionRevocationResult, error) {
 	return nil, errors.New("not implemented")
 }
+
+var _ authtokens.Issuer = (*refreshRotationTokenIssuer)(nil)
+var _ authsessions.Lifecycle = (*refreshRotationSessionLifecycle)(nil)

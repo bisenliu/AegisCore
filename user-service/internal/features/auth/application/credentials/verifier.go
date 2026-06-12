@@ -1,4 +1,4 @@
-package command
+package credentials
 
 import (
 	"context"
@@ -11,30 +11,32 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/password"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
+	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 )
 
-// CredentialVerifier 校验登录凭证并完成强制改密。
-type CredentialVerifier interface {
+// Verifier 校验登录凭证并完成强制改密。
+type Verifier interface {
 	VerifyPassword(ctx context.Context, username string, plainPassword string) (*authdomain.UserCredential, error)
 	ChangePassword(ctx context.Context, userID uuid.UUID, newPassword string) (*authdomain.CredentialUpdateResult, error)
 }
 
-type credentialVerifier struct {
+type verifier struct {
 	repo authapplication.UserCredentialStore
 }
 
-func newCredentialVerifier(repo authapplication.UserCredentialStore) CredentialVerifier {
-	return &credentialVerifier{repo: repo}
+// NewVerifier 构造凭据校验组件。
+func NewVerifier(repo authapplication.UserCredentialStore) Verifier {
+	return &verifier{repo: repo}
 }
 
 // VerifyPassword 校验 username/password 组合，并执行登录状态规则。
-func (v *credentialVerifier) VerifyPassword(ctx context.Context, username string, plainPassword string) (*authdomain.UserCredential, error) {
+func (v *verifier) VerifyPassword(ctx context.Context, username string, plainPassword string) (*authdomain.UserCredential, error) {
 	credential, err := v.repo.GetByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, userdomain.ErrUserNotFound) {
-			fields := append([]zap.Field{zap.String("username", username)}, clientContextFields(ctx)...)
+			fields := append([]zap.Field{zap.String("username", username)}, authctx.ClientContextFields(ctx)...)
 			logger.Warn(ctx, "login user not found", fields...)
 			return nil, authdomain.ErrInvalidCredentials
 		}
@@ -47,13 +49,13 @@ func (v *credentialVerifier) VerifyPassword(ctx context.Context, username string
 		return nil, authdomain.ErrInvalidCredentials
 	}
 	if !matched {
-		fields := append([]zap.Field{zap.String("username", username), zap.String("user_id", credential.UserID.String())}, clientContextFields(ctx)...)
+		fields := append([]zap.Field{zap.String("username", username), zap.String("user_id", credential.UserID.String())}, authctx.ClientContextFields(ctx)...)
 		logger.Warn(ctx, "login password mismatch", fields...)
 		return nil, authdomain.ErrInvalidCredentials
 	}
 	if !credential.RequiresPasswordChange() && !credential.CanLogin() {
 		// 必须改密用户只允许通过登录以获取受限 token；其他禁用状态直接登录失败。
-		fields := append([]zap.Field{zap.String("username", username), zap.String("user_id", credential.UserID.String()), zap.Int64("status", int64(credential.Status))}, clientContextFields(ctx)...)
+		fields := append([]zap.Field{zap.String("username", username), zap.String("user_id", credential.UserID.String()), zap.Int64("status", int64(credential.Status))}, authctx.ClientContextFields(ctx)...)
 		logger.Warn(ctx, "login user status rejected", fields...)
 		return nil, authdomain.ErrInvalidCredentials
 	}
@@ -62,7 +64,7 @@ func (v *credentialVerifier) VerifyPassword(ctx context.Context, username string
 }
 
 // ChangePassword 为当前受限于改密流程的用户替换凭证。
-func (v *credentialVerifier) ChangePassword(ctx context.Context, userID uuid.UUID, newPassword string) (*authdomain.CredentialUpdateResult, error) {
+func (v *verifier) ChangePassword(ctx context.Context, userID uuid.UUID, newPassword string) (*authdomain.CredentialUpdateResult, error) {
 	credential, err := v.repo.GetCredentialByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, userdomain.ErrUserNotFound) {

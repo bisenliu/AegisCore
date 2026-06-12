@@ -8,6 +8,7 @@ import (
 	"github.com/aegiscore/common/http/response"
 	commonauth "github.com/aegiscore/common/security/auth"
 	commonvalidation "github.com/aegiscore/common/validation"
+	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 )
 
@@ -66,7 +67,7 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	ctx := authcommand.WithClientContext(c.Request.Context(), authcommand.ClientContext{
+	ctx := authctx.WithClientContext(c.Request.Context(), authctx.ClientContext{
 		ClientIP:  c.ClientIP(),
 		UserAgent: c.GetHeader("User-Agent"),
 	})

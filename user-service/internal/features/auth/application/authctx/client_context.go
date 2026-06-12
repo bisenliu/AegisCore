@@ -1,4 +1,4 @@
-package command
+package authctx
 
 import (
 	"context"
@@ -28,7 +28,8 @@ func ClientContextFromContext(ctx context.Context) (ClientContext, bool) {
 	return meta, ok
 }
 
-func clientContextFields(ctx context.Context) []zap.Field {
+// ClientContextFields 返回认证安全审计日志字段。
+func ClientContextFields(ctx context.Context) []zap.Field {
 	meta, ok := ClientContextFromContext(ctx)
 	if !ok {
 		return nil
