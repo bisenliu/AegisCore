@@ -35,6 +35,9 @@ func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 	if service.gotLogin.Username != "alice" || service.gotLogin.Password != "secret" {
 		t.Fatalf("gotLogin = %#v", service.gotLogin)
 	}
+	if !service.gotClientContextOK || service.gotClientContext.ClientIP != "203.0.113.20" || service.gotClientContext.UserAgent != "auth-controller-test" {
+		t.Fatalf("gotClientContext = %#v, %v", service.gotClientContext, service.gotClientContextOK)
+	}
 	if !envelope.Success || envelope.Code != contracterrors.CodeOK {
 		t.Fatalf("envelope = %#v", envelope)
 	}
@@ -167,20 +170,23 @@ func TestAuthControllerRefreshMapsTokenInvalid(t *testing.T) {
 }
 
 type stubAuthUseCases struct {
-	tokens         *authcommand.TokenResult
-	loginErr       error
-	changeResponse *authcommand.ChangePasswordResult
-	changeErr      error
-	refreshErr     error
-	logoutResponse *authcommand.LogoutResult
-	logoutErr      error
-	gotLogin       authcommand.LoginCommand
-	gotRefresh     authcommand.RefreshTokenCommand
-	gotChange      authcommand.ChangePasswordCommand
+	tokens             *authcommand.TokenResult
+	loginErr           error
+	changeResponse     *authcommand.ChangePasswordResult
+	changeErr          error
+	refreshErr         error
+	logoutResponse     *authcommand.LogoutResult
+	logoutErr          error
+	gotLogin           authcommand.LoginCommand
+	gotClientContext   authcommand.ClientContext
+	gotClientContextOK bool
+	gotRefresh         authcommand.RefreshTokenCommand
+	gotChange          authcommand.ChangePasswordCommand
 }
 
-func (s *stubAuthUseCases) Login(_ context.Context, cmd authcommand.LoginCommand) (*authcommand.TokenResult, error) {
+func (s *stubAuthUseCases) Login(ctx context.Context, cmd authcommand.LoginCommand) (*authcommand.TokenResult, error) {
 	s.gotLogin = cmd
+	s.gotClientContext, s.gotClientContextOK = authcommand.ClientContextFromContext(ctx)
 	if s.loginErr != nil {
 		return nil, s.loginErr
 	}
@@ -269,7 +275,9 @@ func newAuthJSONContext(method, path, body string) (*httptest.ResponseRecorder, 
 	ctx, _ := gin.CreateTestContext(recorder)
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("User-Agent", "auth-controller-test")
 	request.ContentLength = int64(len(body))
+	request.RemoteAddr = "203.0.113.20:1234"
 	ctx.Request = request
 	return recorder, ctx
 }

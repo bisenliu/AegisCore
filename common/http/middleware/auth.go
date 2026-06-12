@@ -37,26 +37,27 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService,
 		authHeader := c.GetHeader(auth.AuthorizationHeader)
 		if authHeader == "" {
 			// 缺少请求头表示调用方未认证；下面的 Bearer 格式错误则属于 token 无效。
-			reqLog.Info("missing authorization header")
+			reqLog.Info("missing authorization header", authFailureLogFields(c)...)
 			response.Unauthenticated(c, contractresponse.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
 		tokenString, err := auth.ParseBearerAuthorization(authHeader)
 		if errors.Is(err, auth.ErrMissingBearerPrefix) {
-			reqLog.Warn("invalid authorization header format")
+			reqLog.Warn("invalid authorization header format", authFailureLogFields(c)...)
 			response.TokenInvalid(c, contractresponse.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
 		if errors.Is(err, auth.ErrEmptyBearerToken) {
-			reqLog.Warn("empty bearer token")
+			reqLog.Warn("empty bearer token", authFailureLogFields(c)...)
 			response.TokenInvalid(c, contractresponse.MessageAuthInvalid)
 			c.Abort()
 			return
 		}
 		if err != nil {
-			reqLog.Warn("invalid authorization header format", zap.Error(err))
+			fields := append(authFailureLogFields(c), zap.Error(err))
+			reqLog.Warn("invalid authorization header format", fields...)
 			response.TokenInvalid(c, contractresponse.MessageAuthInvalid)
 			c.Abort()
 			return
@@ -64,10 +65,11 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService,
 
 		claims, err := jwtService.ParseToken(tokenString)
 		if err != nil {
+			fields := append(authFailureLogFields(c), zap.Error(err))
 			if errors.Is(err, auth.ErrMissingSecret) {
-				reqLog.Error("token validation failed", zap.Error(err))
+				reqLog.Error("token validation failed", fields...)
 			} else {
-				reqLog.Warn("token validation failed", zap.Error(err))
+				reqLog.Warn("token validation failed", fields...)
 			}
 			if errors.Is(err, jwtv5.ErrTokenExpired) {
 				response.TokenExpired(c, contractresponse.MessageAuthInvalid)
@@ -81,7 +83,7 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService,
 		if validator != nil {
 			if err := validator.ValidateTokenVersion(ctx, claims.UserID, claims.TokenVersion); err != nil {
 				if errors.Is(err, auth.ErrTokenVersionMismatch) {
-					fields := []zap.Field{zap.String("user_id", claims.UserID), zap.Error(err)}
+					fields := append(authFailureLogFields(c), zap.String("user_id", claims.UserID), zap.Error(err))
 					var mismatch *auth.TokenVersionMismatchError
 					if errors.As(err, &mismatch) {
 						fields = append(fields, zap.Int64("current_token_version", mismatch.Current), zap.Int64("token_version", mismatch.Token))
@@ -89,7 +91,8 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService,
 					reqLog.Warn("token version mismatch", fields...)
 					response.TokenInvalid(c, contractresponse.MessageAuthInvalid)
 				} else {
-					reqLog.Error("token version validation failed", zap.String("user_id", claims.UserID), zap.Error(err))
+					fields := append(authFailureLogFields(c), zap.String("user_id", claims.UserID), zap.Error(err))
+					reqLog.Error("token version validation failed", fields...)
 					response.Fail(c, contracterrors.InternalError(err))
 				}
 				c.Abort()

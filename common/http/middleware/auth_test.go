@@ -44,6 +44,7 @@ func TestAuthMiddleware(t *testing.T) {
 		validator     auth.TokenVersionValidator
 		wantLogLevel  zapcore.Level
 		wantLogMsg    string
+		wantMismatch  bool
 	}{
 		{name: "missing header", path: "/api/v1/users/123", wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeUnauthenticated, wantLogLevel: zapcore.InfoLevel, wantLogMsg: "missing authorization header"},
 		{name: "invalid format", path: "/api/v1/users/123", authorization: "Token abc", wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "invalid authorization header format"},
@@ -55,7 +56,7 @@ func TestAuthMiddleware(t *testing.T) {
 		{name: "password change token rejected", path: "/api/v1/users/123", authorization: auth.TokenPrefix + passwordChangeToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
 		{name: "token version mismatch", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error {
 			return fmt.Errorf("validate token version: %w", &auth.TokenVersionMismatchError{Current: 3, Token: 1})
-		}), wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token version mismatch"},
+		}), wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token version mismatch", wantMismatch: true},
 		{name: "token version infrastructure error", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusInternalServerError, wantCode: contracterrors.CodeInternalError, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("redis unavailable") }), wantLogLevel: zapcore.ErrorLevel, wantLogMsg: "token version validation failed"},
 		{name: "missing jwt secret", path: "/api/v1/users/123", cfg: &config.AuthConfig{}, authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.ErrorLevel, wantLogMsg: "token validation failed"},
 		{name: "valid token", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true},
@@ -99,6 +100,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			request.Header.Set("User-Agent", "auth-test-agent")
 			if tt.authorization != "" {
 				request.Header.Set(auth.AuthorizationHeader, tt.authorization)
 			}
@@ -110,7 +112,16 @@ func TestAuthMiddleware(t *testing.T) {
 			if handled != tt.wantHandled {
 				t.Fatalf("handled = %v, want %v", handled, tt.wantHandled)
 			}
-			assertAuthLog(t, logs, tt.wantLogLevel, tt.wantLogMsg)
+			entry := assertAuthLog(t, logs, tt.wantLogLevel, tt.wantLogMsg)
+			if tt.wantLogMsg != "" {
+				assertAuthFailureFields(t, entry.ContextMap(), tt.path)
+				if tt.wantMismatch {
+					fields := entry.ContextMap()
+					if fields["user_id"] != authTestUserID || fields["current_token_version"] != int64(3) || fields["token_version"] != int64(1) {
+						t.Fatalf("token mismatch fields = %#v", fields)
+					}
+				}
+			}
 			if tt.wantCode != 0 {
 				var envelope response.Envelope
 				if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
@@ -128,14 +139,14 @@ func TestAuthMiddleware(t *testing.T) {
 	}
 }
 
-func assertAuthLog(t *testing.T, logs *observer.ObservedLogs, wantLevel zapcore.Level, wantMsg string) {
+func assertAuthLog(t *testing.T, logs *observer.ObservedLogs, wantLevel zapcore.Level, wantMsg string) observer.LoggedEntry {
 	t.Helper()
 	entries := logs.All()
 	if wantMsg == "" {
 		if len(entries) != 0 {
 			t.Fatalf("logs = %#v, want none", entries)
 		}
-		return
+		return observer.LoggedEntry{}
 	}
 
 	for _, entry := range entries {
@@ -146,10 +157,21 @@ func assertAuthLog(t *testing.T, logs *observer.ObservedLogs, wantLevel zapcore.
 
 	for _, entry := range entries {
 		if entry.Level == wantLevel && entry.Message == wantMsg {
-			return
+			return entry
 		}
 	}
 	t.Fatalf("missing log level=%s msg=%q in %#v", wantLevel, wantMsg, entries)
+	return observer.LoggedEntry{}
+}
+
+func assertAuthFailureFields(t *testing.T, fields map[string]any, _ string) {
+	t.Helper()
+	if fields["method"] != http.MethodGet || fields["path"] != "/*path" || fields["user_agent"] != "auth-test-agent" {
+		t.Fatalf("auth failure log fields = %#v", fields)
+	}
+	if _, ok := fields["client_ip"]; !ok {
+		t.Fatalf("auth failure log missing client_ip: %#v", fields)
+	}
 }
 
 func signAuthTestToken(t *testing.T, secret, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {

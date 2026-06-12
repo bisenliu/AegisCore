@@ -176,8 +176,8 @@ func TestRequestLoggerIncludesTraceIDAndRequestFields(t *testing.T) {
 	if fields[logger.TraceIDField] != "trace-log" || fields["method"] != http.MethodGet || fields["path"] != "/ok" || fields["status"] != int64(http.StatusAccepted) || fields[auth.UserIDKey] != anonymousUserID {
 		t.Fatalf("request log fields = %#v", fields)
 	}
-	if _, ok := fields["latency"]; !ok {
-		t.Fatalf("request log missing latency: %#v", fields)
+	if _, ok := fields["latency_ms"]; !ok {
+		t.Fatalf("request log missing latency_ms: %#v", fields)
 	}
 	if _, ok := fields["client_ip"]; !ok {
 		t.Fatalf("request log missing client_ip: %#v", fields)

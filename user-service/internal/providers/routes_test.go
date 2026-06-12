@@ -188,11 +188,11 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			t.Fatal("request log count = 0, want at least one")
 		}
 		fields := entries[len(entries)-1].ContextMap()
-		if fields[logger.TraceIDField] != "trace-auth-test" || fields["method"] != http.MethodGet || fields["path"] != "/api/v1/users/"+routeAuthUserID || fields["status"] != int64(http.StatusOK) || fields[commonauth.UserIDKey] != routeAuthUserID {
+		if fields[logger.TraceIDField] != "trace-auth-test" || fields["method"] != http.MethodGet || fields["path"] != "/api/v1/users/:user_id" || fields["status"] != int64(http.StatusOK) || fields[commonauth.UserIDKey] != routeAuthUserID {
 			t.Fatalf("request log fields = %#v", fields)
 		}
-		if _, ok := fields["latency"]; !ok {
-			t.Fatalf("request log missing latency: %#v", fields)
+		if _, ok := fields["latency_ms"]; !ok {
+			t.Fatalf("request log missing latency_ms: %#v", fields)
 		}
 		if _, ok := fields["client_ip"]; !ok {
 			t.Fatalf("request log missing client_ip: %#v", fields)

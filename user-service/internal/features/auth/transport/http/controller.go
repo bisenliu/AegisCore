@@ -99,7 +99,11 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	tokens, err := ctl.login.Login(c.Request.Context(), authcommand.LoginCommand{
+	ctx := authcommand.WithClientContext(c.Request.Context(), authcommand.ClientContext{
+		ClientIP:  c.ClientIP(),
+		UserAgent: c.GetHeader("User-Agent"),
+	})
+	tokens, err := ctl.login.Login(ctx, authcommand.LoginCommand{
 		Username: req.Username,
 		Password: req.Password,
 	})

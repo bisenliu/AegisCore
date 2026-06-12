@@ -159,7 +159,9 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 ## 9. Logging And Trace ID
 
 - 日志使用 `common/runtime/logger` 提供的 Zap 封装和 context API。
-- HTTP trace header 是 `X-Trace-ID`，日志字段统一为 `trace-id`。
+- HTTP trace header 是 `X-Trace-ID`，Gin context key 和日志字段统一为 `trace_id`。
+- HTTP access log 标准字段为 `trace_id`、`user_id`、`client_ip`、`method`、`path`、`status`、`latency_ms`；认证失败安全事件日志额外记录 `user_agent`。
+- 认证失败日志不得记录 password、token、Authorization header、Cookie 或原始请求体。
 - trace-id 中间件会将 trace-id 写入 Gin context、Go `context.Context` 和响应头。
 - 业务代码优先通过 `common/runtime/logger.Info(ctx, ...)`、`Warn(ctx, ...)`、`Error(ctx, ...)` 输出日志，避免绕过 context helper 导致 trace-id 丢失。
 - Error 级别日志默认不自动添加 stacktrace；关键运行时错误需要显式传入 `logger.StackTrace(...)` 或 `zap.Stack("stacktrace")`。

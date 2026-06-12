@@ -42,7 +42,7 @@ func TestNewWritesClassifiedFiles(t *testing.T) {
 	}
 
 	date := time.Now().Format("2006-01-02")
-	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "all"), "debug message", "info message", "warn message", "error message", `"trace-id":"trace-123"`)
+	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "all"), "debug message", "info message", "warn message", "error message", `"trace_id":"trace-123"`)
 	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "info"), "info message")
 	assertFileNotContains(t, datedPath(dir, "aegiscore-test", date, "info"), "warn message", "error message")
 	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "warning"), "warn message")

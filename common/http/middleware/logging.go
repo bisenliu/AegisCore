@@ -19,14 +19,7 @@ func RequestLogger(log *zap.Logger) gin.HandlerFunc {
 		c.Next()
 
 		reqLog := logger.WithContext(c.Request.Context(), log)
-		fields := []zap.Field{
-			zap.String("method", c.Request.Method),
-			zap.String("path", c.Request.URL.Path),
-			zap.Int("status", c.Writer.Status()),
-			zap.Duration("latency", time.Since(start)),
-			zap.String("client_ip", c.ClientIP()),
-			zap.String(auth.UserIDKey, requestUserID(c)),
-		}
+		fields := requestLogFields(c, time.Since(start))
 
 		status := c.Writer.Status()
 		switch {

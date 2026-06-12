@@ -7,8 +7,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
@@ -44,6 +47,56 @@ func TestCredentialVerifierRejectsDisabledUser(t *testing.T) {
 
 	if !errors.Is(err, authdomain.ErrInvalidCredentials) {
 		t.Fatalf("err = %v, want authdomain.ErrInvalidCredentials", err)
+	}
+}
+
+func TestCredentialVerifierLoginFailureLogsClientContext(t *testing.T) {
+	passwordHash, err := password.HashContext(context.Background(), "secret")
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		repo       *authRepoStub
+		username   string
+		password   string
+		message    string
+		wantUserID bool
+		wantStatus bool
+	}{
+		{name: "user not found", repo: &authRepoStub{}, username: "alice", password: "secret", message: "login user not found"},
+		{name: "password mismatch", repo: &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}, username: "alice", password: "wrong", message: "login password mismatch", wantUserID: true},
+		{name: "status rejected", repo: &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusDisabled, TokenVersion: 2}}, username: "alice", password: "secret", message: "login user status rejected", wantUserID: true, wantStatus: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			core, logs := observer.New(zap.WarnLevel)
+			ctx := logger.ToContext(context.Background(), zap.New(core))
+			ctx = WithClientContext(ctx, ClientContext{ClientIP: "203.0.113.30", UserAgent: "auth-command-test"})
+			verifier := newCredentialVerifier(tt.repo)
+
+			_, err := verifier.VerifyPassword(ctx, tt.username, tt.password)
+
+			if !errors.Is(err, authdomain.ErrInvalidCredentials) {
+				t.Fatalf("err = %v, want authdomain.ErrInvalidCredentials", err)
+			}
+			entries := logs.FilterMessage(tt.message).All()
+			if len(entries) != 1 {
+				t.Fatalf("log count = %d, want 1", len(entries))
+			}
+			fields := entries[0].ContextMap()
+			if fields["username"] != tt.username || fields["client_ip"] != "203.0.113.30" || fields["user_agent"] != "auth-command-test" {
+				t.Fatalf("log fields = %#v", fields)
+			}
+			if tt.wantUserID && fields["user_id"] != authTestUserID.String() {
+				t.Fatalf("user_id = %#v, want %s; fields = %#v", fields["user_id"], authTestUserID.String(), fields)
+			}
+			if tt.wantStatus && fields["status"] != int64(userdomain.UserStatusDisabled) {
+				t.Fatalf("status = %#v, want %d; fields = %#v", fields["status"], userdomain.UserStatusDisabled, fields)
+			}
+		})
 	}
 }
 

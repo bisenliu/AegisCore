@@ -8,7 +8,7 @@ import (
 )
 
 // TraceIDField 是请求关联 ID 使用的 zap 字段名。
-const TraceIDField = "trace-id"
+const TraceIDField = "trace_id"
 
 type traceIDContextKey struct{}
 type loggerContextKey struct{}

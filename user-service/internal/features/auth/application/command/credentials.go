@@ -34,7 +34,8 @@ func (v *credentialVerifier) VerifyPassword(ctx context.Context, username string
 	credential, err := v.repo.GetByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, userdomain.ErrUserNotFound) {
-			logger.Warn(ctx, "login user not found", zap.String("username", username))
+			fields := append([]zap.Field{zap.String("username", username)}, clientContextFields(ctx)...)
+			logger.Warn(ctx, "login user not found", fields...)
 			return nil, authdomain.ErrInvalidCredentials
 		}
 		logger.Error(ctx, "query login user failed", logger.StackTrace(zap.String("username", username), zap.Error(err))...)
@@ -46,12 +47,14 @@ func (v *credentialVerifier) VerifyPassword(ctx context.Context, username string
 		return nil, authdomain.ErrInvalidCredentials
 	}
 	if !matched {
-		logger.Warn(ctx, "login password mismatch", zap.String("username", username), zap.String("user_id", credential.UserID.String()))
+		fields := append([]zap.Field{zap.String("username", username), zap.String("user_id", credential.UserID.String())}, clientContextFields(ctx)...)
+		logger.Warn(ctx, "login password mismatch", fields...)
 		return nil, authdomain.ErrInvalidCredentials
 	}
 	if !credential.RequiresPasswordChange() && !credential.CanLogin() {
 		// 必须改密用户只允许通过登录以获取受限 token；其他禁用状态直接登录失败。
-		logger.Warn(ctx, "login user status rejected", zap.String("username", username), zap.String("user_id", credential.UserID.String()), zap.Int64("status", int64(credential.Status)))
+		fields := append([]zap.Field{zap.String("username", username), zap.String("user_id", credential.UserID.String()), zap.Int64("status", int64(credential.Status))}, clientContextFields(ctx)...)
+		logger.Warn(ctx, "login user status rejected", fields...)
 		return nil, authdomain.ErrInvalidCredentials
 	}
 
