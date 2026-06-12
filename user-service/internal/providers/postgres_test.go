@@ -27,7 +27,7 @@ import (
 
 var providerTestDriverSeq atomic.Int64
 
-func TestProvidePostgresPoolsProvidesUserServiceDatabases(t *testing.T) {
+func TestProvidePostgresPoolsProvidesUserDatabase(t *testing.T) {
 	drv := registerProviderTestSQLDriver(t)
 	cfg := providerTestConfig(drv.name)
 	log := zap.NewNop()
@@ -35,8 +35,7 @@ func TestProvidePostgresPoolsProvidesUserServiceDatabases(t *testing.T) {
 	type pools struct {
 		fx.In
 
-		UserDB   *sql.DB `name:"user_db"`
-		CommonDB *sql.DB `name:"common_db"`
+		UserDB *sql.DB `name:"user_db"`
 	}
 
 	var got pools
@@ -51,55 +50,70 @@ func TestProvidePostgresPoolsProvidesUserServiceDatabases(t *testing.T) {
 	if got.UserDB == nil {
 		t.Fatal("UserDB = nil")
 	}
-	if got.CommonDB == nil {
-		t.Fatal("CommonDB = nil")
-	}
 
 	dbNames := drv.databaseNames()
-	want := []string{"aegiscore_common", "aegiscore_user"}
+	want := []string{"aegiscore_user"}
 	if strings.Join(dbNames, ",") != strings.Join(want, ",") {
 		t.Fatalf("opened databases = %v, want %v", dbNames, want)
 	}
-	if got := drv.pings.Load(); got != 2 {
-		t.Fatalf("pings = %d, want 2", got)
+	if got := drv.pings.Load(); got != 1 {
+		t.Fatalf("pings = %d, want 1", got)
 	}
-	if got := drv.closes.Load(); got != 2 {
-		t.Fatalf("closes = %d, want 2", got)
+	if got := drv.closes.Load(); got != 1 {
+		t.Fatalf("closes = %d, want 1", got)
 	}
 }
 
-func TestProvidePostgresPoolsReturnsErrorForMissingCommonDBConfig(t *testing.T) {
+func TestProvidePostgresPoolsDoesNotRequireSharedDBConfig(t *testing.T) {
 	drv := registerProviderTestSQLDriver(t)
 	cfg := providerTestConfig(drv.name)
-	delete(cfg.Postgres, resources.NameCommonDB)
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	_, err := ProvidePostgresPools(NamedPostgresParams{
+	got, err := ProvidePostgresPools(NamedPostgresParams{
 		Lifecycle: lc,
 		Config:    cfg,
 		Log:       log,
 	})
-	if err == nil {
-		t.Fatal("ProvidePostgresPools error = nil")
+	if err != nil {
+		t.Fatalf("ProvidePostgresPools: %v", err)
 	}
-	if !strings.Contains(err.Error(), `postgres config "`+resources.NameCommonDB+`" not found`) {
-		t.Fatalf("ProvidePostgresPools error = %q, want common_db context", err.Error())
+	if got.UserDB == nil {
+		t.Fatal("UserDB = nil")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	if err := lc.Start(ctx); err != nil {
-		t.Fatalf("lifecycle start after failed provider: %v", err)
+		t.Fatalf("lifecycle start: %v", err)
 	}
 	if err := lc.Stop(ctx); err != nil {
-		t.Fatalf("lifecycle stop after failed provider: %v", err)
+		t.Fatalf("lifecycle stop: %v", err)
 	}
-	if got := drv.pings.Load(); got != 0 {
-		t.Fatalf("pings after failed provider = %d, want 0", got)
+	if got := drv.pings.Load(); got != 1 {
+		t.Fatalf("pings = %d, want 1", got)
 	}
-	if got := drv.closes.Load(); got != 0 {
-		t.Fatalf("driver closes after failed provider = %d, want 0", got)
+	if got := drv.closes.Load(); got != 1 {
+		t.Fatalf("driver closes = %d, want 1", got)
+	}
+}
+
+func TestProvidePostgresPoolsDoesNotProvideSharedDatabase(t *testing.T) {
+	type pools struct {
+		fx.In
+
+		SharedDB *sql.DB `name:"shared_db"`
+	}
+
+	err := fx.ValidateApp(
+		fx.Provide(ProvidePostgresPools),
+		fx.Invoke(func(pools) {}),
+	)
+	if err == nil {
+		t.Fatal("ValidateApp error = nil")
+	}
+	if !strings.Contains(err.Error(), `name="shared_db"`) {
+		t.Fatalf("ValidateApp error = %q, want missing named shared_db", err.Error())
 	}
 }
 
@@ -122,23 +136,17 @@ func TestProvidePostgresPoolsDoesNotProvidePayDatabase(t *testing.T) {
 	}
 }
 
-func TestProvideEntClientsProvidesUserServiceEntClients(t *testing.T) {
+func TestProvideEntClientsProvidesUserServiceEntClient(t *testing.T) {
 	drv := registerProviderTestSQLDriver(t)
 	userDB, err := sql.Open(drv.name, "postgres://aegiscore:secret@127.0.0.1/aegiscore_user")
 	if err != nil {
 		t.Fatalf("open user db: %v", err)
 	}
-	commonDB, err := sql.Open(drv.name, "postgres://aegiscore:secret@127.0.0.1/aegiscore_common")
-	if err != nil {
-		t.Fatalf("open common db: %v", err)
-	}
+	defer userDB.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	if err := userDB.PingContext(ctx); err != nil {
 		t.Fatalf("ping user db: %v", err)
-	}
-	if err := commonDB.PingContext(ctx); err != nil {
-		t.Fatalf("ping common db: %v", err)
 	}
 
 	lc := fxtest.NewLifecycle(t)
@@ -146,14 +154,10 @@ func TestProvideEntClientsProvidesUserServiceEntClients(t *testing.T) {
 		Lifecycle: lc,
 		Log:       zap.NewNop(),
 		UserDB:    userDB,
-		CommonDB:  commonDB,
 	})
 
 	if got.UserClient == nil {
 		t.Fatal("UserClient = nil")
-	}
-	if got.CommonClient == nil {
-		t.Fatal("CommonClient = nil")
 	}
 	if got := drv.closes.Load(); got != 0 {
 		t.Fatalf("closes before lifecycle stop = %d, want 0", got)
@@ -170,7 +174,7 @@ func TestProvideEntClientsProvidesUserServiceEntClients(t *testing.T) {
 	}
 }
 
-func TestPostgresPoolsAndEntClientsClosePoolsOnce(t *testing.T) {
+func TestPostgresPoolsAndEntClientsClosePoolOnce(t *testing.T) {
 	drv := registerProviderTestSQLDriver(t)
 	cfg := providerTestConfig(drv.name)
 	log := zap.NewNop()
@@ -178,8 +182,7 @@ func TestPostgresPoolsAndEntClientsClosePoolsOnce(t *testing.T) {
 	type clients struct {
 		fx.In
 
-		UserClient   *ent.Client `name:"user_db"`
-		CommonClient *ent.Client `name:"common_db"`
+		UserClient *ent.Client `name:"user_db"`
 	}
 
 	var got clients
@@ -194,14 +197,11 @@ func TestPostgresPoolsAndEntClientsClosePoolsOnce(t *testing.T) {
 	if got.UserClient == nil {
 		t.Fatal("UserClient = nil")
 	}
-	if got.CommonClient == nil {
-		t.Fatal("CommonClient = nil")
+	if got := drv.pings.Load(); got != 1 {
+		t.Fatalf("pings = %d, want 1", got)
 	}
-	if got := drv.pings.Load(); got != 2 {
-		t.Fatalf("pings = %d, want 2", got)
-	}
-	if got := drv.closes.Load(); got != 2 {
-		t.Fatalf("closes after composed lifecycle stop = %d, want 2", got)
+	if got := drv.closes.Load(); got != 1 {
+		t.Fatalf("closes after composed lifecycle stop = %d, want 1", got)
 	}
 }
 
@@ -350,19 +350,6 @@ func providerTestConfig(driverName string) *config.Config {
 				Username:        "aegiscore",
 				Password:        "secret",
 				DBName:          "aegiscore_pay",
-				Driver:          driverName,
-				MaxOpenConns:    7,
-				MaxIdleConns:    3,
-				ConnMaxLifetime: time.Minute,
-				ConnMaxIdleTime: 30 * time.Second,
-				PingTimeout:     time.Second,
-			},
-			resources.NameCommonDB: {
-				Host:            "127.0.0.1",
-				Port:            15432,
-				Username:        "aegiscore",
-				Password:        "secret",
-				DBName:          "aegiscore_common",
 				Driver:          driverName,
 				MaxOpenConns:    7,
 				MaxIdleConns:    3,

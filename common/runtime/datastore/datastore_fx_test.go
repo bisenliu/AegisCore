@@ -24,6 +24,8 @@ import (
 
 var testDriverSeq atomic.Int64
 
+const testAuditDB = "audit_db"
+
 func TestNewPostgresReturnsErrorForMissingConfig(t *testing.T) {
 	cfg := &config.Config{}
 	lc := fxtest.NewLifecycle(t)
@@ -79,19 +81,19 @@ func TestNewPostgresRegistersLifecycle(t *testing.T) {
 func TestNewPostgresPoolsRegistersSingleLifecycleForDeclaredPools(t *testing.T) {
 	drv := registerTestSQLDriver(t)
 	cfg := testConfig(drv.name)
-	cfg.Postgres[resources.NameCommonDB] = cfg.Postgres[resources.NameUserDB]
+	cfg.Postgres[testAuditDB] = cfg.Postgres[resources.NameUserDB]
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	dbs, err := NewPostgresPools(lc, cfg, log, resources.NameUserDB, resources.NameCommonDB)
+	dbs, err := NewPostgresPools(lc, cfg, log, resources.NameUserDB, testAuditDB)
 	if err != nil {
 		t.Fatalf("NewPostgresPools: %v", err)
 	}
 	if dbs[resources.NameUserDB] == nil {
 		t.Fatal("user_db = nil")
 	}
-	if dbs[resources.NameCommonDB] == nil {
-		t.Fatal("common_db = nil")
+	if dbs[testAuditDB] == nil {
+		t.Fatal("audit_db = nil")
 	}
 	lc.RequireStart()
 	lc.RequireStop()
@@ -108,11 +110,11 @@ func TestNewPostgresPoolsStopPreservesNamedCloseErrors(t *testing.T) {
 	drv := registerTestSQLDriver(t)
 	drv.closeErr = errors.New("driver close failed")
 	cfg := testConfig(drv.name)
-	cfg.Postgres[resources.NameCommonDB] = cfg.Postgres[resources.NameUserDB]
+	cfg.Postgres[testAuditDB] = cfg.Postgres[resources.NameUserDB]
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	if _, err := NewPostgresPools(lc, cfg, log, resources.NameUserDB, resources.NameCommonDB); err != nil {
+	if _, err := NewPostgresPools(lc, cfg, log, resources.NameUserDB, testAuditDB); err != nil {
 		t.Fatalf("NewPostgresPools: %v", err)
 	}
 	lc.RequireStart()
@@ -125,8 +127,8 @@ func TestNewPostgresPoolsStopPreservesNamedCloseErrors(t *testing.T) {
 	if !strings.Contains(err.Error(), "close postgres user_db") {
 		t.Fatalf("Lifecycle Stop error = %q, want user_db context", err.Error())
 	}
-	if !strings.Contains(err.Error(), "close postgres common_db") {
-		t.Fatalf("Lifecycle Stop error = %q, want common_db context", err.Error())
+	if !strings.Contains(err.Error(), "close postgres audit_db") {
+		t.Fatalf("Lifecycle Stop error = %q, want audit_db context", err.Error())
 	}
 	if got := drv.closes.Load(); got != 2 {
 		t.Fatalf("closes = %d, want 2", got)

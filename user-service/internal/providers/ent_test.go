@@ -6,59 +6,32 @@ import (
 	"testing"
 )
 
-func TestCloseEntClientsPreservesBothNamedErrors(t *testing.T) {
+func TestCloseEntClientPreservesNamedError(t *testing.T) {
 	userErr := errors.New("user close failed")
-	commonErr := errors.New("common close failed")
 
-	err := closeEntClients(
-		func() error { return userErr },
-		func() error { return commonErr },
-	)
+	err := closeEntClient("user_db", func() error { return userErr })
 	if err == nil {
-		t.Fatal("closeEntClients error = nil")
+		t.Fatal("closeEntClient error = nil")
 	}
 	if !errors.Is(err, userErr) {
-		t.Fatalf("closeEntClients error = %v, want user close error", err)
-	}
-	if !errors.Is(err, commonErr) {
-		t.Fatalf("closeEntClients error = %v, want common close error", err)
+		t.Fatalf("closeEntClient error = %v, want user close error", err)
 	}
 	if !strings.Contains(err.Error(), "close user_db ent client") {
-		t.Fatalf("closeEntClients error = %q, want user_db context", err.Error())
-	}
-	if !strings.Contains(err.Error(), "close common_db ent client") {
-		t.Fatalf("closeEntClients error = %q, want common_db context", err.Error())
+		t.Fatalf("closeEntClient error = %q, want user_db context", err.Error())
 	}
 }
 
-func TestCloseEntClientsClosesBothWhenOneFails(t *testing.T) {
-	userErr := errors.New("user close failed")
-	userClosed := false
-	commonClosed := false
+func TestCloseEntClientCallsCloser(t *testing.T) {
+	closed := false
 
-	err := closeEntClients(
-		func() error {
-			userClosed = true
-			return userErr
-		},
-		func() error {
-			commonClosed = true
-			return nil
-		},
-	)
-	if err == nil {
-		t.Fatal("closeEntClients error = nil")
+	err := closeEntClient("user_db", func() error {
+		closed = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("closeEntClient: %v", err)
 	}
-	if !userClosed {
-		t.Fatal("user close was not called")
-	}
-	if !commonClosed {
-		t.Fatal("common close was not called")
-	}
-	if !errors.Is(err, userErr) {
-		t.Fatalf("closeEntClients error = %v, want user close error", err)
-	}
-	if !strings.Contains(err.Error(), "close user_db ent client") {
-		t.Fatalf("closeEntClients error = %q, want user_db context", err.Error())
+	if !closed {
+		t.Fatal("client close was not called")
 	}
 }

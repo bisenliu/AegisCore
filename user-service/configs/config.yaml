@@ -143,9 +143,3 @@ postgres:
     <<: *postgres_base
     # PostgreSQL 数据库名；保留给后续支付服务或支付能力使用。
     db_name: aegiscore_pay
-
-  # 公共业务库；当前用户服务声明该连接池，供跨域公共数据能力使用。
-  common_db:
-    <<: *postgres_base
-    # PostgreSQL 数据库名；用于公共域或跨服务共享数据能力。
-    db_name: aegiscore_common

@@ -54,8 +54,8 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - 环境变量前缀为 `AEGISCORE`。
 - 配置 key 中的 `.` 和 `-` 会映射为环境变量中的 `_`。
 - Redis 使用 `redis.<name>` 命名实例，例如 `redis.cache_redis`、`redis.queue_redis`。
-- PostgreSQL 使用 `postgres.<name>` 命名实例，例如 `postgres.user_db`、`postgres.common_db`、`postgres.pay_db`。
-- 用户服务当前声明 `cache_redis`、`user_db` 和 `common_db`；`pay_db` 可存在于配置中，但不代表支付连接池或支付业务已启用。
+- PostgreSQL 使用 `postgres.<name>` 命名实例，例如 `postgres.user_db`、`postgres.pay_db`。
+- 用户服务当前声明 `cache_redis` 和 `user_db`；其他命名实例可存在于配置中作为示例或其他服务配置，但不代表用户服务会自动连接对应资源或启用相关业务。
 - `common/runtime/config.Load` 会读取 YAML、应用 `AEGISCORE_` 覆盖、反序列化为配置对象，并在返回前执行结构化字段校验；缺失必填字段、非法端口、非正超时、无效 Redis/PostgreSQL named config 或生产环境不安全配置会在启动期被拒绝。
 
 示例：`AEGISCORE_HTTP_PORT=8081` 可覆盖 `http.port`。
@@ -73,6 +73,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - Ent 生成代码不要手动编辑；修改 schema 后重新生成。生成代码边界、`go generate ./ent` 用法和新增 Entity Schema 流程见 `user-service/ent/README.md`。
 - Go 文件提交前运行 `gofmt`。
 - 提交前建议在受影响 Go module 中运行 `golangci-lint run ./...`；CI lint failure 会阻断合并。完整 lint 配置、CI/pre-commit 集成和问题治理方案见 `docs/GO_LINT_AUTOMATION.md`。
+- GitHub Actions 当前还会在 PR 和主线 push 上运行测试、构建、Docker 镜像构建、race、coverage artifact、govulncheck、gosec、Trivy 扫描和 SBOM artifact；本地可优先用 `make test`、`make build` 和 Docker build 命令复现核心门禁。
 
 ### 6.1 Lint Troubleshooting
 
@@ -147,7 +148,7 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 
 如果发布平台无法提供独立 migration job，也可以使用容器 `entrypoint.sh` 在启动前执行迁移。容器启动前迁移会增加启动耗时，并且多副本并发启动时需要依赖 Atlas migration lock 和发布平台副本策略；生产环境优先使用单独 migration job。
 
-`DATABASE_URL` 必须指向用户服务拥有的 `user_db`，不要因为配置中存在 `pay_db` 或 `common_db` 而迁移非目标数据库。
+`DATABASE_URL` 必须指向用户服务拥有的 `user_db`，不要因为配置中存在其他 PostgreSQL 命名实例而迁移非目标数据库。
 
 ## 8. API Conventions
 

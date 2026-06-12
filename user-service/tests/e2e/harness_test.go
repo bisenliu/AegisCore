@@ -155,24 +155,10 @@ postgres:
     conn_max_lifetime: %s
     conn_max_idle_time: %s
     ping_timeout: %s
-  common_db:
-    host: %q
-    port: %d
-    username: %q
-    password: %q
-    db_name: %q
-    driver: %q
-    sslmode: %q
-    max_open_conns: %d
-    max_idle_conns: %d
-    conn_max_lifetime: %s
-    conn_max_idle_time: %s
-    ping_timeout: %s
 `,
 		port,
 		logDir,
 		redis.Addr, redis.Username, redis.Password, redis.DB, redis.DialTimeout, redis.ReadTimeout, redis.WriteTimeout, redis.PingTimeout,
-		postgres.Host, postgres.Port, postgres.Username, postgres.Password, postgres.DBName, postgres.Driver, postgres.SSLMode, postgres.MaxOpenConns, postgres.MaxIdleConns, postgres.ConnMaxLifetime, postgres.ConnMaxIdleTime, postgres.PingTimeout,
 		postgres.Host, postgres.Port, postgres.Username, postgres.Password, postgres.DBName, postgres.Driver, postgres.SSLMode, postgres.MaxOpenConns, postgres.MaxIdleConns, postgres.ConnMaxLifetime, postgres.ConnMaxIdleTime, postgres.PingTimeout,
 	)
 	path := filepath.Join(t.TempDir(), "config.yaml")

@@ -15,7 +15,7 @@
 - Infrastructure adapter：Ent not found 转应用层 not found 错误，其他查询错误保留 cause 并映射为 internal error；Redis adapter 覆盖 key、TTL、索引和清理语义。
 - Middleware：trace-id 透传/生成、写入 Gin context/Go context/响应头、panic recovery 输出统一错误、request logging 携带 trace-id、CORS 处理 OPTIONS。
 - Config loader：显式配置加载、`AEGISCORE_` 环境变量覆盖、命名 Redis/PostgreSQL 实例反序列化；`common/runtime/config.Load` 不应因 required/range 字段校验拒绝缺失或零值配置。
-- Runtime/Infrastructure：Fx 生命周期启动与停止，HTTP server 使用配置中的 host/port/timeouts，用户服务声明 `cache_redis`、`user_db`、`common_db`，依赖不可用或底层库拒绝配置时启动失败。
+- Runtime/Infrastructure：Fx 生命周期启动与停止，HTTP server 使用配置中的 host/port/timeouts，用户服务声明 `cache_redis`、`user_db`，依赖不可用或底层库拒绝配置时启动失败。
 - Logging：Zap logger 初始化、分类日志文件、trace-id 字段和无 request context 时的日志行为。
 
 ## 3. External Dependencies

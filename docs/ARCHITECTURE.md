@@ -151,7 +151,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 ## 9. Infrastructure
 
 - 配置加载由 `common/runtime/config/loader.go` 负责，支持 YAML 文件和 `AEGISCORE_` 环境变量覆盖。
-- PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前声明并连接 `postgres.user_db` 与 `postgres.common_db`。
+- PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前只声明并连接 `postgres.user_db`。配置中出现其他 PostgreSQL 命名实例不代表用户服务会自动连接或迁移它们。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`。
 - 用户服务的 Redis/PostgreSQL named resource、JWT service、Gin engine 和 Ent clients 由 `user-service/internal/providers/` 提供，其中 Ent clients 由 `providers/ent.go` 基于具名 `*sql.DB` 构建。
 - 用户服务认证 Redis adapter 对登录和 refresh rotation 的 refresh session 写入执行同步 Redis Lua 原子操作，并按 application 传入的每用户活跃 session 上限裁剪最旧 session；该裁剪影响 refresh token 可续期能力，不通过 worker pool 异步执行。

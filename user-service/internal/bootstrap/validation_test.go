@@ -120,8 +120,8 @@ func TestAppModuleStopsHTTPBeforeDatastoreResources(t *testing.T) {
 	if httpStopIndex > postgresCloseIndex {
 		t.Fatalf("log order = %v, want http stop before postgres close", messages)
 	}
-	if got := drv.closes.Load(); got != 2 {
-		t.Fatalf("postgres closes = %d, want 2", got)
+	if got := drv.closes.Load(); got != 1 {
+		t.Fatalf("postgres closes = %d, want 1", got)
 	}
 }
 
@@ -158,8 +158,7 @@ func appModuleLifecycleTestConfig(driverName string, redisAddr string, httpPort 
 			},
 		},
 		Postgres: map[string]config.PostgresConfig{
-			resources.NameUserDB:   appModulePostgresConfig(driverName, "aegiscore_user"),
-			resources.NameCommonDB: appModulePostgresConfig(driverName, "aegiscore_common"),
+			resources.NameUserDB: appModulePostgresConfig(driverName, "aegiscore_user"),
 		},
 	}
 }
@@ -202,7 +201,7 @@ type appModuleTestSQLDriver struct {
 	closes atomic.Int64
 }
 
-func (d *appModuleTestSQLDriver) Open(dsn string) (driver.Conn, error) {
+func (d *appModuleTestSQLDriver) Open(_ string) (driver.Conn, error) {
 	return &appModuleTestSQLConn{driver: d}, nil
 }
 

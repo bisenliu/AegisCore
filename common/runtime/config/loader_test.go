@@ -388,12 +388,12 @@ func TestPostgresNamedDatabaseDSNs(t *testing.T) {
     conn_max_lifetime: 45m
     conn_max_idle_time: 12m
     ping_timeout: 7s
-  common_db:
+  audit_db:
     host: db.example.internal
     port: 15432
     username: user@example.com
     password: p@ss/w:rd
-    db_name: common_db
+    db_name: audit_db
     driver: pgx
     sslmode: disable
     max_open_conns: 20
@@ -420,7 +420,7 @@ func TestPostgresNamedDatabaseDSNs(t *testing.T) {
 		wantDBName string
 	}{
 		{name: "user_db", wantDBName: "user_db"},
-		{name: "common_db", wantDBName: "common_db"},
+		{name: "audit_db", wantDBName: "audit_db"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -555,9 +555,9 @@ postgres:
   pay_db:
     <<: *postgres_base
     db_name: aegiscore_pay
-  common_db:
+  audit_db:
     <<: *postgres_base
-    db_name: aegiscore_common
+    db_name: aegiscore_audit
 `
 }
 

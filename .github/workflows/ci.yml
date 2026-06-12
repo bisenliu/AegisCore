@@ -1,0 +1,313 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.26.3'
+  USER_SERVICE_IMAGE: aegiscore-user-services:${{ github.sha }}
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            common/go.sum
+            user-service/go.sum
+
+      - name: Run tests
+        run: make test
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            common/go.sum
+            user-service/go.sum
+
+      - name: Build binary
+        run: make build
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-service-binary
+          path: bin/user-service
+          if-no-files-found: error
+          retention-days: 7
+
+  image:
+    name: docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build user-service image
+        run: docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
+
+  race:
+    name: race (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - common
+          - user-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            common/go.sum
+            user-service/go.sum
+
+      - name: Run race tests
+        working-directory: ${{ matrix.module }}
+        run: go test -race ./...
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            common/go.sum
+            user-service/go.sum
+
+      - name: Generate coverage profiles
+        run: |
+          mkdir -p coverage
+          cd common
+          go test -coverprofile=../coverage/common.out ./...
+          go tool cover -func=../coverage/common.out > ../coverage/common.txt
+          cd ../user-service
+          go test -coverprofile=../coverage/user-service.out ./...
+          go tool cover -func=../coverage/user-service.out > ../coverage/user-service.txt
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-profiles
+          path: coverage/
+          if-no-files-found: error
+          retention-days: 14
+
+  govulncheck:
+    name: govulncheck (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - common
+          - user-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            common/go.sum
+            user-service/go.sum
+
+      - name: Install govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Run govulncheck
+        working-directory: ${{ matrix.module }}
+        run: govulncheck ./...
+
+  gosec:
+    name: gosec (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - common
+          - user-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            common/go.sum
+            user-service/go.sum
+
+      - name: Install gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Run gosec high severity gate
+        working-directory: ${{ matrix.module }}
+        run: |
+          mkdir -p ../security
+          gosec -severity high -fmt sarif -out ../security/gosec-${{ matrix.module }}.sarif ./...
+
+      - name: Upload gosec artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gosec-${{ matrix.module }}
+          path: security/gosec-${{ matrix.module }}.sarif
+          if-no-files-found: warn
+          retention-days: 14
+
+  trivy-filesystem:
+    name: trivy filesystem
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare security artifacts
+        run: mkdir -p security
+
+      - name: Generate filesystem scan report
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: security/trivy-filesystem.sarif
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+
+      - name: Fail on high or critical filesystem findings
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          skip-setup-trivy: true
+
+      - name: Upload filesystem scan artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-filesystem
+          path: security/trivy-filesystem.sarif
+          if-no-files-found: warn
+          retention-days: 14
+
+  trivy-image-and-sbom:
+    name: trivy image and sbom
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare security artifacts
+        run: mkdir -p security
+
+      - name: Build user-service image
+        run: docker build -f deployments/docker/user-service.Dockerfile -t ${{ env.USER_SERVICE_IMAGE }} .
+
+      - name: Generate image scan report
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.USER_SERVICE_IMAGE }}
+          format: sarif
+          output: security/trivy-image.sarif
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+
+      - name: Generate repository SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: cyclonedx
+          output: security/sbom-repository.cdx.json
+          skip-setup-trivy: true
+
+      - name: Generate image SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.USER_SERVICE_IMAGE }}
+          format: cyclonedx
+          output: security/sbom-image.cdx.json
+          skip-setup-trivy: true
+
+      - name: Fail on high or critical image findings
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.USER_SERVICE_IMAGE }}
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          skip-setup-trivy: true
+
+      - name: Upload image scan and SBOM artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-and-sbom
+          path: |
+            security/trivy-image.sarif
+            security/sbom-repository.cdx.json
+            security/sbom-image.cdx.json
+          if-no-files-found: warn
+          retention-days: 14
