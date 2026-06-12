@@ -1,4 +1,4 @@
-package userschema
+package schema
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 )
 
 func TestUserStatusDefaultMatchesDomainNormalStatus(t *testing.T) {
-	for _, userField := range Fields() {
+	for _, userField := range (User{}).Fields() {
 		desc := userField.Descriptor()
 		if desc.Name != "status" {
 			continue

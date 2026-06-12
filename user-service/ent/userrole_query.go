@@ -4,7 +4,6 @@ package ent
 
 import (
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -14,58 +13,60 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/aegiscore/user-service/ent/predicate"
+	"github.com/aegiscore/user-service/ent/role"
 	"github.com/aegiscore/user-service/ent/user"
 	"github.com/aegiscore/user-service/ent/userrole"
 )
 
-// UserQuery is the builder for querying User entities.
-type UserQuery struct {
+// UserRoleQuery is the builder for querying UserRole entities.
+type UserRoleQuery struct {
 	config
-	ctx           *QueryContext
-	order         []user.OrderOption
-	inters        []Interceptor
-	predicates    []predicate.User
-	withUserRoles *UserRoleQuery
-	modifiers     []func(*sql.Selector)
+	ctx        *QueryContext
+	order      []userrole.OrderOption
+	inters     []Interceptor
+	predicates []predicate.UserRole
+	withUser   *UserQuery
+	withRole   *RoleQuery
+	modifiers  []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
 }
 
-// Where adds a new predicate for the UserQuery builder.
-func (_q *UserQuery) Where(ps ...predicate.User) *UserQuery {
+// Where adds a new predicate for the UserRoleQuery builder.
+func (_q *UserRoleQuery) Where(ps ...predicate.UserRole) *UserRoleQuery {
 	_q.predicates = append(_q.predicates, ps...)
 	return _q
 }
 
 // Limit the number of records to be returned by this query.
-func (_q *UserQuery) Limit(limit int) *UserQuery {
+func (_q *UserRoleQuery) Limit(limit int) *UserRoleQuery {
 	_q.ctx.Limit = &limit
 	return _q
 }
 
 // Offset to start from.
-func (_q *UserQuery) Offset(offset int) *UserQuery {
+func (_q *UserRoleQuery) Offset(offset int) *UserRoleQuery {
 	_q.ctx.Offset = &offset
 	return _q
 }
 
 // Unique configures the query builder to filter duplicate records on query.
 // By default, unique is set to true, and can be disabled using this method.
-func (_q *UserQuery) Unique(unique bool) *UserQuery {
+func (_q *UserRoleQuery) Unique(unique bool) *UserRoleQuery {
 	_q.ctx.Unique = &unique
 	return _q
 }
 
 // Order specifies how the records should be ordered.
-func (_q *UserQuery) Order(o ...user.OrderOption) *UserQuery {
+func (_q *UserRoleQuery) Order(o ...userrole.OrderOption) *UserRoleQuery {
 	_q.order = append(_q.order, o...)
 	return _q
 }
 
-// QueryUserRoles chains the current query on the "user_roles" edge.
-func (_q *UserQuery) QueryUserRoles() *UserRoleQuery {
-	query := (&UserRoleClient{config: _q.config}).Query()
+// QueryUser chains the current query on the "user" edge.
+func (_q *UserRoleQuery) QueryUser() *UserQuery {
+	query := (&UserClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -75,9 +76,9 @@ func (_q *UserQuery) QueryUserRoles() *UserRoleQuery {
 			return nil, err
 		}
 		step := sqlgraph.NewStep(
-			sqlgraph.From(user.Table, user.FieldID, selector),
-			sqlgraph.To(userrole.Table, userrole.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, user.UserRolesTable, user.UserRolesColumn),
+			sqlgraph.From(userrole.Table, userrole.FieldID, selector),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, userrole.UserTable, userrole.UserColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -85,21 +86,43 @@ func (_q *UserQuery) QueryUserRoles() *UserRoleQuery {
 	return query
 }
 
-// First returns the first User entity from the query.
-// Returns a *NotFoundError when no User was found.
-func (_q *UserQuery) First(ctx context.Context) (*User, error) {
+// QueryRole chains the current query on the "role" edge.
+func (_q *UserRoleQuery) QueryRole() *RoleQuery {
+	query := (&RoleClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(userrole.Table, userrole.FieldID, selector),
+			sqlgraph.To(role.Table, role.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, userrole.RoleTable, userrole.RoleColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// First returns the first UserRole entity from the query.
+// Returns a *NotFoundError when no UserRole was found.
+func (_q *UserRoleQuery) First(ctx context.Context) (*UserRole, error) {
 	nodes, err := _q.Limit(1).All(setContextOp(ctx, _q.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
 	if len(nodes) == 0 {
-		return nil, &NotFoundError{user.Label}
+		return nil, &NotFoundError{userrole.Label}
 	}
 	return nodes[0], nil
 }
 
 // FirstX is like First, but panics if an error occurs.
-func (_q *UserQuery) FirstX(ctx context.Context) *User {
+func (_q *UserRoleQuery) FirstX(ctx context.Context) *UserRole {
 	node, err := _q.First(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -107,22 +130,22 @@ func (_q *UserQuery) FirstX(ctx context.Context) *User {
 	return node
 }
 
-// FirstID returns the first User ID from the query.
-// Returns a *NotFoundError when no User ID was found.
-func (_q *UserQuery) FirstID(ctx context.Context) (id int64, err error) {
+// FirstID returns the first UserRole ID from the query.
+// Returns a *NotFoundError when no UserRole ID was found.
+func (_q *UserRoleQuery) FirstID(ctx context.Context) (id int64, err error) {
 	var ids []int64
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
-		err = &NotFoundError{user.Label}
+		err = &NotFoundError{userrole.Label}
 		return
 	}
 	return ids[0], nil
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *UserQuery) FirstIDX(ctx context.Context) int64 {
+func (_q *UserRoleQuery) FirstIDX(ctx context.Context) int64 {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -130,10 +153,10 @@ func (_q *UserQuery) FirstIDX(ctx context.Context) int64 {
 	return id
 }
 
-// Only returns a single User entity found by the query, ensuring it only returns one.
-// Returns a *NotSingularError when more than one User entity is found.
-// Returns a *NotFoundError when no User entities are found.
-func (_q *UserQuery) Only(ctx context.Context) (*User, error) {
+// Only returns a single UserRole entity found by the query, ensuring it only returns one.
+// Returns a *NotSingularError when more than one UserRole entity is found.
+// Returns a *NotFoundError when no UserRole entities are found.
+func (_q *UserRoleQuery) Only(ctx context.Context) (*UserRole, error) {
 	nodes, err := _q.Limit(2).All(setContextOp(ctx, _q.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
@@ -142,14 +165,14 @@ func (_q *UserQuery) Only(ctx context.Context) (*User, error) {
 	case 1:
 		return nodes[0], nil
 	case 0:
-		return nil, &NotFoundError{user.Label}
+		return nil, &NotFoundError{userrole.Label}
 	default:
-		return nil, &NotSingularError{user.Label}
+		return nil, &NotSingularError{userrole.Label}
 	}
 }
 
 // OnlyX is like Only, but panics if an error occurs.
-func (_q *UserQuery) OnlyX(ctx context.Context) *User {
+func (_q *UserRoleQuery) OnlyX(ctx context.Context) *UserRole {
 	node, err := _q.Only(ctx)
 	if err != nil {
 		panic(err)
@@ -157,10 +180,10 @@ func (_q *UserQuery) OnlyX(ctx context.Context) *User {
 	return node
 }
 
-// OnlyID is like Only, but returns the only User ID in the query.
-// Returns a *NotSingularError when more than one User ID is found.
+// OnlyID is like Only, but returns the only UserRole ID in the query.
+// Returns a *NotSingularError when more than one UserRole ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *UserQuery) OnlyID(ctx context.Context) (id int64, err error) {
+func (_q *UserRoleQuery) OnlyID(ctx context.Context) (id int64, err error) {
 	var ids []int64
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
@@ -169,15 +192,15 @@ func (_q *UserQuery) OnlyID(ctx context.Context) (id int64, err error) {
 	case 1:
 		id = ids[0]
 	case 0:
-		err = &NotFoundError{user.Label}
+		err = &NotFoundError{userrole.Label}
 	default:
-		err = &NotSingularError{user.Label}
+		err = &NotSingularError{userrole.Label}
 	}
 	return
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *UserQuery) OnlyIDX(ctx context.Context) int64 {
+func (_q *UserRoleQuery) OnlyIDX(ctx context.Context) int64 {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -185,18 +208,18 @@ func (_q *UserQuery) OnlyIDX(ctx context.Context) int64 {
 	return id
 }
 
-// All executes the query and returns a list of Users.
-func (_q *UserQuery) All(ctx context.Context) ([]*User, error) {
+// All executes the query and returns a list of UserRoles.
+func (_q *UserRoleQuery) All(ctx context.Context) ([]*UserRole, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryAll)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
-	qr := querierAll[[]*User, *UserQuery]()
-	return withInterceptors[[]*User](ctx, _q, qr, _q.inters)
+	qr := querierAll[[]*UserRole, *UserRoleQuery]()
+	return withInterceptors[[]*UserRole](ctx, _q, qr, _q.inters)
 }
 
 // AllX is like All, but panics if an error occurs.
-func (_q *UserQuery) AllX(ctx context.Context) []*User {
+func (_q *UserRoleQuery) AllX(ctx context.Context) []*UserRole {
 	nodes, err := _q.All(ctx)
 	if err != nil {
 		panic(err)
@@ -204,20 +227,20 @@ func (_q *UserQuery) AllX(ctx context.Context) []*User {
 	return nodes
 }
 
-// IDs executes the query and returns a list of User IDs.
-func (_q *UserQuery) IDs(ctx context.Context) (ids []int64, err error) {
+// IDs executes the query and returns a list of UserRole IDs.
+func (_q *UserRoleQuery) IDs(ctx context.Context) (ids []int64, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryIDs)
-	if err = _q.Select(user.FieldID).Scan(ctx, &ids); err != nil {
+	if err = _q.Select(userrole.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *UserQuery) IDsX(ctx context.Context) []int64 {
+func (_q *UserRoleQuery) IDsX(ctx context.Context) []int64 {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
@@ -226,16 +249,16 @@ func (_q *UserQuery) IDsX(ctx context.Context) []int64 {
 }
 
 // Count returns the count of the given query.
-func (_q *UserQuery) Count(ctx context.Context) (int, error) {
+func (_q *UserRoleQuery) Count(ctx context.Context) (int, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryCount)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
-	return withInterceptors[int](ctx, _q, querierCount[*UserQuery](), _q.inters)
+	return withInterceptors[int](ctx, _q, querierCount[*UserRoleQuery](), _q.inters)
 }
 
 // CountX is like Count, but panics if an error occurs.
-func (_q *UserQuery) CountX(ctx context.Context) int {
+func (_q *UserRoleQuery) CountX(ctx context.Context) int {
 	count, err := _q.Count(ctx)
 	if err != nil {
 		panic(err)
@@ -244,7 +267,7 @@ func (_q *UserQuery) CountX(ctx context.Context) int {
 }
 
 // Exist returns true if the query has elements in the graph.
-func (_q *UserQuery) Exist(ctx context.Context) (bool, error) {
+func (_q *UserRoleQuery) Exist(ctx context.Context) (bool, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryExist)
 	switch _, err := _q.FirstID(ctx); {
 	case IsNotFound(err):
@@ -257,7 +280,7 @@ func (_q *UserQuery) Exist(ctx context.Context) (bool, error) {
 }
 
 // ExistX is like Exist, but panics if an error occurs.
-func (_q *UserQuery) ExistX(ctx context.Context) bool {
+func (_q *UserRoleQuery) ExistX(ctx context.Context) bool {
 	exist, err := _q.Exist(ctx)
 	if err != nil {
 		panic(err)
@@ -265,33 +288,45 @@ func (_q *UserQuery) ExistX(ctx context.Context) bool {
 	return exist
 }
 
-// Clone returns a duplicate of the UserQuery builder, including all associated steps. It can be
+// Clone returns a duplicate of the UserRoleQuery builder, including all associated steps. It can be
 // used to prepare common query builders and use them differently after the clone is made.
-func (_q *UserQuery) Clone() *UserQuery {
+func (_q *UserRoleQuery) Clone() *UserRoleQuery {
 	if _q == nil {
 		return nil
 	}
-	return &UserQuery{
-		config:        _q.config,
-		ctx:           _q.ctx.Clone(),
-		order:         append([]user.OrderOption{}, _q.order...),
-		inters:        append([]Interceptor{}, _q.inters...),
-		predicates:    append([]predicate.User{}, _q.predicates...),
-		withUserRoles: _q.withUserRoles.Clone(),
+	return &UserRoleQuery{
+		config:     _q.config,
+		ctx:        _q.ctx.Clone(),
+		order:      append([]userrole.OrderOption{}, _q.order...),
+		inters:     append([]Interceptor{}, _q.inters...),
+		predicates: append([]predicate.UserRole{}, _q.predicates...),
+		withUser:   _q.withUser.Clone(),
+		withRole:   _q.withRole.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
 }
 
-// WithUserRoles tells the query-builder to eager-load the nodes that are connected to
-// the "user_roles" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *UserQuery) WithUserRoles(opts ...func(*UserRoleQuery)) *UserQuery {
-	query := (&UserRoleClient{config: _q.config}).Query()
+// WithUser tells the query-builder to eager-load the nodes that are connected to
+// the "user" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserRoleQuery) WithUser(opts ...func(*UserQuery)) *UserRoleQuery {
+	query := (&UserClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withUserRoles = query
+	_q.withUser = query
+	return _q
+}
+
+// WithRole tells the query-builder to eager-load the nodes that are connected to
+// the "role" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserRoleQuery) WithRole(opts ...func(*RoleQuery)) *UserRoleQuery {
+	query := (&RoleClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withRole = query
 	return _q
 }
 
@@ -301,19 +336,19 @@ func (_q *UserQuery) WithUserRoles(opts ...func(*UserRoleQuery)) *UserQuery {
 // Example:
 //
 //	var v []struct {
-//		UserID uuid.UUID `json:"user_id,omitempty"`
+//		UserID int64 `json:"user_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
-//	client.User.Query().
-//		GroupBy(user.FieldUserID).
+//	client.UserRole.Query().
+//		GroupBy(userrole.FieldUserID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
-func (_q *UserQuery) GroupBy(field string, fields ...string) *UserGroupBy {
+func (_q *UserRoleQuery) GroupBy(field string, fields ...string) *UserRoleGroupBy {
 	_q.ctx.Fields = append([]string{field}, fields...)
-	grbuild := &UserGroupBy{build: _q}
+	grbuild := &UserRoleGroupBy{build: _q}
 	grbuild.flds = &_q.ctx.Fields
-	grbuild.label = user.Label
+	grbuild.label = userrole.Label
 	grbuild.scan = grbuild.Scan
 	return grbuild
 }
@@ -324,26 +359,26 @@ func (_q *UserQuery) GroupBy(field string, fields ...string) *UserGroupBy {
 // Example:
 //
 //	var v []struct {
-//		UserID uuid.UUID `json:"user_id,omitempty"`
+//		UserID int64 `json:"user_id,omitempty"`
 //	}
 //
-//	client.User.Query().
-//		Select(user.FieldUserID).
+//	client.UserRole.Query().
+//		Select(userrole.FieldUserID).
 //		Scan(ctx, &v)
-func (_q *UserQuery) Select(fields ...string) *UserSelect {
+func (_q *UserRoleQuery) Select(fields ...string) *UserRoleSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
-	sbuild := &UserSelect{UserQuery: _q}
-	sbuild.label = user.Label
+	sbuild := &UserRoleSelect{UserRoleQuery: _q}
+	sbuild.label = userrole.Label
 	sbuild.flds, sbuild.scan = &_q.ctx.Fields, sbuild.Scan
 	return sbuild
 }
 
-// Aggregate returns a UserSelect configured with the given aggregations.
-func (_q *UserQuery) Aggregate(fns ...AggregateFunc) *UserSelect {
+// Aggregate returns a UserRoleSelect configured with the given aggregations.
+func (_q *UserRoleQuery) Aggregate(fns ...AggregateFunc) *UserRoleSelect {
 	return _q.Select().Aggregate(fns...)
 }
 
-func (_q *UserQuery) prepareQuery(ctx context.Context) error {
+func (_q *UserRoleQuery) prepareQuery(ctx context.Context) error {
 	for _, inter := range _q.inters {
 		if inter == nil {
 			return fmt.Errorf("ent: uninitialized interceptor (forgotten import ent/runtime?)")
@@ -355,7 +390,7 @@ func (_q *UserQuery) prepareQuery(ctx context.Context) error {
 		}
 	}
 	for _, f := range _q.ctx.Fields {
-		if !user.ValidColumn(f) {
+		if !userrole.ValidColumn(f) {
 			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 		}
 	}
@@ -369,19 +404,20 @@ func (_q *UserQuery) prepareQuery(ctx context.Context) error {
 	return nil
 }
 
-func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, error) {
+func (_q *UserRoleQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*UserRole, error) {
 	var (
-		nodes       = []*User{}
+		nodes       = []*UserRole{}
 		_spec       = _q.querySpec()
-		loadedTypes = [1]bool{
-			_q.withUserRoles != nil,
+		loadedTypes = [2]bool{
+			_q.withUser != nil,
+			_q.withRole != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
-		return (*User).scanValues(nil, columns)
+		return (*UserRole).scanValues(nil, columns)
 	}
 	_spec.Assign = func(columns []string, values []any) error {
-		node := &User{config: _q.config}
+		node := &UserRole{config: _q.config}
 		nodes = append(nodes, node)
 		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
@@ -398,48 +434,81 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
-	if query := _q.withUserRoles; query != nil {
-		if err := _q.loadUserRoles(ctx, query, nodes,
-			func(n *User) { n.Edges.UserRoles = []*UserRole{} },
-			func(n *User, e *UserRole) { n.Edges.UserRoles = append(n.Edges.UserRoles, e) }); err != nil {
+	if query := _q.withUser; query != nil {
+		if err := _q.loadUser(ctx, query, nodes, nil,
+			func(n *UserRole, e *User) { n.Edges.User = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withRole; query != nil {
+		if err := _q.loadRole(ctx, query, nodes, nil,
+			func(n *UserRole, e *Role) { n.Edges.Role = e }); err != nil {
 			return nil, err
 		}
 	}
 	return nodes, nil
 }
 
-func (_q *UserQuery) loadUserRoles(ctx context.Context, query *UserRoleQuery, nodes []*User, init func(*User), assign func(*User, *UserRole)) error {
-	fks := make([]driver.Value, 0, len(nodes))
-	nodeids := make(map[int64]*User)
+func (_q *UserRoleQuery) loadUser(ctx context.Context, query *UserQuery, nodes []*UserRole, init func(*UserRole), assign func(*UserRole, *User)) error {
+	ids := make([]int64, 0, len(nodes))
+	nodeids := make(map[int64][]*UserRole)
 	for i := range nodes {
-		fks = append(fks, nodes[i].ID)
-		nodeids[nodes[i].ID] = nodes[i]
-		if init != nil {
-			init(nodes[i])
+		fk := nodes[i].UserID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
 		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
 	}
-	if len(query.ctx.Fields) > 0 {
-		query.ctx.AppendFieldOnce(userrole.FieldUserID)
+	if len(ids) == 0 {
+		return nil
 	}
-	query.Where(predicate.UserRole(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(user.UserRolesColumn), fks...))
-	}))
+	query.Where(user.IDIn(ids...))
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err
 	}
 	for _, n := range neighbors {
-		fk := n.UserID
-		node, ok := nodeids[fk]
+		nodes, ok := nodeids[n.ID]
 		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "user_id" returned %v for node %v`, fk, n.ID)
+			return fmt.Errorf(`unexpected foreign-key "user_id" returned %v`, n.ID)
 		}
-		assign(node, n)
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
+func (_q *UserRoleQuery) loadRole(ctx context.Context, query *RoleQuery, nodes []*UserRole, init func(*UserRole), assign func(*UserRole, *Role)) error {
+	ids := make([]int64, 0, len(nodes))
+	nodeids := make(map[int64][]*UserRole)
+	for i := range nodes {
+		fk := nodes[i].RoleID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(role.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "role_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
 	}
 	return nil
 }
 
-func (_q *UserQuery) sqlCount(ctx context.Context) (int, error) {
+func (_q *UserRoleQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
 	if len(_q.modifiers) > 0 {
 		_spec.Modifiers = _q.modifiers
@@ -451,8 +520,8 @@ func (_q *UserQuery) sqlCount(ctx context.Context) (int, error) {
 	return sqlgraph.CountNodes(ctx, _q.driver, _spec)
 }
 
-func (_q *UserQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(user.Table, user.Columns, sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt64))
+func (_q *UserRoleQuery) querySpec() *sqlgraph.QuerySpec {
+	_spec := sqlgraph.NewQuerySpec(userrole.Table, userrole.Columns, sqlgraph.NewFieldSpec(userrole.FieldID, field.TypeInt64))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
@@ -461,11 +530,17 @@ func (_q *UserQuery) querySpec() *sqlgraph.QuerySpec {
 	}
 	if fields := _q.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, user.FieldID)
+		_spec.Node.Columns = append(_spec.Node.Columns, userrole.FieldID)
 		for i := range fields {
-			if fields[i] != user.FieldID {
+			if fields[i] != userrole.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if _q.withUser != nil {
+			_spec.Node.AddColumnOnce(userrole.FieldUserID)
+		}
+		if _q.withRole != nil {
+			_spec.Node.AddColumnOnce(userrole.FieldRoleID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {
@@ -491,12 +566,12 @@ func (_q *UserQuery) querySpec() *sqlgraph.QuerySpec {
 	return _spec
 }
 
-func (_q *UserQuery) sqlQuery(ctx context.Context) *sql.Selector {
+func (_q *UserRoleQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(_q.driver.Dialect())
-	t1 := builder.Table(user.Table)
+	t1 := builder.Table(userrole.Table)
 	columns := _q.ctx.Fields
 	if len(columns) == 0 {
-		columns = user.Columns
+		columns = userrole.Columns
 	}
 	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if _q.sql != nil {
@@ -529,7 +604,7 @@ func (_q *UserQuery) sqlQuery(ctx context.Context) *sql.Selector {
 // ForUpdate locks the selected rows against concurrent updates, and prevent them from being
 // updated, deleted or "selected ... for update" by other sessions, until the transaction is
 // either committed or rolled-back.
-func (_q *UserQuery) ForUpdate(opts ...sql.LockOption) *UserQuery {
+func (_q *UserRoleQuery) ForUpdate(opts ...sql.LockOption) *UserRoleQuery {
 	if _q.driver.Dialect() == dialect.Postgres {
 		_q.Unique(false)
 	}
@@ -542,7 +617,7 @@ func (_q *UserQuery) ForUpdate(opts ...sql.LockOption) *UserQuery {
 // ForShare behaves similarly to ForUpdate, except that it acquires a shared mode lock
 // on any rows that are read. Other sessions can read the rows, but cannot modify them
 // until your transaction commits.
-func (_q *UserQuery) ForShare(opts ...sql.LockOption) *UserQuery {
+func (_q *UserRoleQuery) ForShare(opts ...sql.LockOption) *UserRoleQuery {
 	if _q.driver.Dialect() == dialect.Postgres {
 		_q.Unique(false)
 	}
@@ -552,28 +627,28 @@ func (_q *UserQuery) ForShare(opts ...sql.LockOption) *UserQuery {
 	return _q
 }
 
-// UserGroupBy is the group-by builder for User entities.
-type UserGroupBy struct {
+// UserRoleGroupBy is the group-by builder for UserRole entities.
+type UserRoleGroupBy struct {
 	selector
-	build *UserQuery
+	build *UserRoleQuery
 }
 
 // Aggregate adds the given aggregation functions to the group-by query.
-func (_g *UserGroupBy) Aggregate(fns ...AggregateFunc) *UserGroupBy {
+func (_g *UserRoleGroupBy) Aggregate(fns ...AggregateFunc) *UserRoleGroupBy {
 	_g.fns = append(_g.fns, fns...)
 	return _g
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_g *UserGroupBy) Scan(ctx context.Context, v any) error {
+func (_g *UserRoleGroupBy) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _g.build.ctx, ent.OpQueryGroupBy)
 	if err := _g.build.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*UserQuery, *UserGroupBy](ctx, _g.build, _g, _g.build.inters, v)
+	return scanWithInterceptors[*UserRoleQuery, *UserRoleGroupBy](ctx, _g.build, _g, _g.build.inters, v)
 }
 
-func (_g *UserGroupBy) sqlScan(ctx context.Context, root *UserQuery, v any) error {
+func (_g *UserRoleGroupBy) sqlScan(ctx context.Context, root *UserRoleQuery, v any) error {
 	selector := root.sqlQuery(ctx).Select()
 	aggregation := make([]string, 0, len(_g.fns))
 	for _, fn := range _g.fns {
@@ -600,28 +675,28 @@ func (_g *UserGroupBy) sqlScan(ctx context.Context, root *UserQuery, v any) erro
 	return sql.ScanSlice(rows, v)
 }
 
-// UserSelect is the builder for selecting fields of User entities.
-type UserSelect struct {
-	*UserQuery
+// UserRoleSelect is the builder for selecting fields of UserRole entities.
+type UserRoleSelect struct {
+	*UserRoleQuery
 	selector
 }
 
 // Aggregate adds the given aggregation functions to the selector query.
-func (_s *UserSelect) Aggregate(fns ...AggregateFunc) *UserSelect {
+func (_s *UserRoleSelect) Aggregate(fns ...AggregateFunc) *UserRoleSelect {
 	_s.fns = append(_s.fns, fns...)
 	return _s
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_s *UserSelect) Scan(ctx context.Context, v any) error {
+func (_s *UserRoleSelect) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _s.ctx, ent.OpQuerySelect)
 	if err := _s.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*UserQuery, *UserSelect](ctx, _s.UserQuery, _s, _s.inters, v)
+	return scanWithInterceptors[*UserRoleQuery, *UserRoleSelect](ctx, _s.UserRoleQuery, _s, _s.inters, v)
 }
 
-func (_s *UserSelect) sqlScan(ctx context.Context, root *UserQuery, v any) error {
+func (_s *UserRoleSelect) sqlScan(ctx context.Context, root *UserRoleQuery, v any) error {
 	selector := root.sqlQuery(ctx)
 	aggregation := make([]string, 0, len(_s.fns))
 	for _, fn := range _s.fns {

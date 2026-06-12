@@ -12,8 +12,16 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// Permission is the client for interacting with the Permission builders.
+	Permission *PermissionClient
+	// Role is the client for interacting with the Role builders.
+	Role *RoleClient
+	// RolePermission is the client for interacting with the RolePermission builders.
+	RolePermission *RolePermissionClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
+	// UserRole is the client for interacting with the UserRole builders.
+	UserRole *UserRoleClient
 
 	// lazily loaded.
 	client     *Client
@@ -145,7 +153,11 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.Permission = NewPermissionClient(tx.config)
+	tx.Role = NewRoleClient(tx.config)
+	tx.RolePermission = NewRolePermissionClient(tx.config)
 	tx.User = NewUserClient(tx.config)
+	tx.UserRole = NewUserRoleClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.
@@ -155,7 +167,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: User.QueryXXX(), the query will be executed
+// applies a query, for example: Permission.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

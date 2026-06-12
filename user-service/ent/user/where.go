@@ -4,6 +4,7 @@ package user
 
 import (
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/aegiscore/user-service/ent/predicate"
 	"github.com/google/uuid"
 )
@@ -541,6 +542,29 @@ func UpdatedAtLT(v int64) predicate.User {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v int64) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// HasUserRoles applies the HasEdge predicate on the "user_roles" edge.
+func HasUserRoles() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, UserRolesTable, UserRolesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasUserRolesWith applies the HasEdge predicate on the "user_roles" edge with a given conditions (other predicates).
+func HasUserRolesWith(preds ...predicate.UserRole) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newUserRolesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
 }
 
 // And groups predicates with the AND operator between them.

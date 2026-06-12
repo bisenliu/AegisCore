@@ -10,6 +10,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/aegiscore/user-service/ent/user"
+	"github.com/aegiscore/user-service/ent/userrole"
 	"github.com/google/uuid"
 )
 
@@ -118,6 +119,21 @@ func (_c *UserCreate) SetNillableUpdatedAt(v *int64) *UserCreate {
 func (_c *UserCreate) SetID(v int64) *UserCreate {
 	_c.mutation.SetID(v)
 	return _c
+}
+
+// AddUserRoleIDs adds the "user_roles" edge to the UserRole entity by IDs.
+func (_c *UserCreate) AddUserRoleIDs(ids ...int64) *UserCreate {
+	_c.mutation.AddUserRoleIDs(ids...)
+	return _c
+}
+
+// AddUserRoles adds the "user_roles" edges to the UserRole entity.
+func (_c *UserCreate) AddUserRoles(v ...*UserRole) *UserCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddUserRoleIDs(ids...)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -281,6 +297,22 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(user.FieldUpdatedAt, field.TypeInt64, value)
 		_node.UpdatedAt = value
+	}
+	if nodes := _c.mutation.UserRolesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UserRolesTable,
+			Columns: []string{user.UserRolesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userrole.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }

@@ -12,7 +12,11 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/aegiscore/user-service/ent/permission"
+	"github.com/aegiscore/user-service/ent/role"
+	"github.com/aegiscore/user-service/ent/rolepermission"
 	"github.com/aegiscore/user-service/ent/user"
+	"github.com/aegiscore/user-service/ent/userrole"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -73,7 +77,11 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			user.Table: user.ValidColumn,
+			permission.Table:     permission.ValidColumn,
+			role.Table:           role.ValidColumn,
+			rolepermission.Table: rolepermission.ValidColumn,
+			user.Table:           user.ValidColumn,
+			userrole.Table:       userrole.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)
