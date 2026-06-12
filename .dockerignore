@@ -1,0 +1,35 @@
+# Docker 构建上下文
+*
+
+# deployments/docker/user-service.Dockerfile 所需的 workspace 文件
+!go.work
+!go.work.sum
+!common/
+!common/**
+!user-service/
+!user-service/**
+
+# 已允许目录内的本地和生成噪音
+**/.git
+**/.gitignore
+**/.DS_Store
+**/Thumbs.db
+**/.env
+**/.env.*
+**/*.log
+**/logs/
+**/bin/
+**/pkg/
+**/dist/
+**/build/
+**/tmp/
+**/node_modules/
+**/.codegraph/
+**/.codex/
+**/.gemini/
+**/.kilo/
+**/.kiro/
+**/.kilocode/
+**/.agent/
+**/coverage.out
+**/*.test
