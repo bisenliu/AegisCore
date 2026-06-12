@@ -18,6 +18,10 @@ var (
 	ErrMissingUserID = errors.New("jwt user_id is required")
 	// ErrInvalidUserID 表示 JWT 输入或 claim 中的 user_id 不是合法 UUID。
 	ErrInvalidUserID = errors.New("jwt user_id is invalid")
+	// ErrMissingTokenID 表示 JWT claim 缺少标准 jti。
+	ErrMissingTokenID = errors.New("jwt jti is required")
+	// ErrInvalidTokenID 表示 JWT claim 中的 jti 不是合法 UUID。
+	ErrInvalidTokenID = errors.New("jwt jti is invalid")
 	// ErrMissingTokenVersion 表示 JWT 输入或 claim 缺少正数 token version。
 	ErrMissingTokenVersion = errors.New("jwt token_version is required")
 	// ErrMissingSessionID 表示 JWT 输入或 claim 缺少会话标识。
@@ -156,6 +160,12 @@ func (s *JWTService) parse(tokenString string) (*Claims, error) {
 	if token == nil || !token.Valid {
 		return nil, jwtv5.ErrTokenInvalidClaims
 	}
+	if claims.ID == "" {
+		return nil, ErrMissingTokenID
+	}
+	if _, err := uuid.Parse(claims.ID); err != nil {
+		return nil, ErrInvalidTokenID
+	}
 	if claims.UserID == "" {
 		return nil, ErrMissingUserID
 	}
@@ -182,12 +192,17 @@ func (s *JWTService) sign(input SignInput, subject string) (string, error) {
 	if input.SessionID == "" {
 		return "", ErrMissingSessionID
 	}
+	tokenID, err := uuid.NewV7()
+	if err != nil {
+		return "", fmt.Errorf("generate jwt jti: %w", err)
+	}
 	expiresAt := time.Now().Add(input.TTL)
 	claims := Claims{
 		UserID:       input.UserID,
 		TokenVersion: input.TokenVersion,
 		SessionID:    input.SessionID,
 		RegisteredClaims: jwtv5.RegisteredClaims{
+			ID:        tokenID.String(),
 			Issuer:    s.issuer,
 			Audience:  audienceClaim(s.audience),
 			Subject:   subject,

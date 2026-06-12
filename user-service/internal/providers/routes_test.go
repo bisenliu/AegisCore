@@ -375,11 +375,15 @@ func signRouteAuthTokenWithVersion(t *testing.T, secret, userID string, tokenVer
 	if _, err := uuid.Parse(userID); err != nil {
 		t.Fatalf("parse userID: %v", err)
 	}
+	tokenID, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("NewV7: %v", err)
+	}
 	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, commonauth.Claims{
 		UserID:           userID,
 		TokenVersion:     tokenVersion,
 		SessionID:        "s-123",
-		RegisteredClaims: jwtv5.RegisteredClaims{Subject: commonauth.SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))},
+		RegisteredClaims: jwtv5.RegisteredClaims{ID: tokenID.String(), Subject: commonauth.SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))},
 	}).SignedString([]byte(secret))
 	if err != nil {
 		t.Fatalf("SignedString: %v", err)

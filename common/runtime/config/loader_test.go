@@ -35,8 +35,8 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cfg.Auth.JWT.RefreshTokenTTL != 168*time.Hour {
 		t.Fatalf("Auth.JWT.RefreshTokenTTL = %s, want 168h", cfg.Auth.JWT.RefreshTokenTTL)
 	}
-	if cfg.Auth.TokenVersionCacheTTL != 5*time.Minute {
-		t.Fatalf("Auth.TokenVersionCacheTTL = %s, want 5m", cfg.Auth.TokenVersionCacheTTL)
+	if cfg.Auth.TokenVersionCacheTTL != 30*time.Second {
+		t.Fatalf("Auth.TokenVersionCacheTTL = %s, want 30s", cfg.Auth.TokenVersionCacheTTL)
 	}
 	if !cfg.Auth.RefreshTokenRotation {
 		t.Fatal("Auth.RefreshTokenRotation = false, want true")
@@ -466,7 +466,7 @@ auth:
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
-  token_version_cache_ttl: 5m
+  token_version_cache_ttl: 30s
   refresh_token_rotation: true
 
 log:
@@ -548,7 +548,7 @@ func configYAMLWithSection(section string) string {
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
-  token_version_cache_ttl: 5m
+  token_version_cache_ttl: 30s
   refresh_token_rotation: true`,
 		"log": `log:
   level: info

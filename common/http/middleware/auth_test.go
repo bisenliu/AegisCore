@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -180,11 +181,15 @@ func signAuthTestToken(t *testing.T, secret, userID string, tokenVersion int64, 
 
 func signAuthSubjectTestToken(t *testing.T, secret, subject, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {
 	t.Helper()
+	tokenID, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("NewV7: %v", err)
+	}
 	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, auth.Claims{
 		UserID:           userID,
 		TokenVersion:     tokenVersion,
 		SessionID:        sessionID,
-		RegisteredClaims: jwtv5.RegisteredClaims{Subject: subject, ExpiresAt: jwtv5.NewNumericDate(expiresAt)},
+		RegisteredClaims: jwtv5.RegisteredClaims{ID: tokenID.String(), Subject: subject, ExpiresAt: jwtv5.NewNumericDate(expiresAt)},
 	}).SignedString([]byte(secret))
 	if err != nil {
 		t.Fatalf("SignedString: %v", err)

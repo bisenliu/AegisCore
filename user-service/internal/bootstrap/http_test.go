@@ -48,8 +48,8 @@ func TestDefaultConfigHTTPTimeouts(t *testing.T) {
 	if cfg.Auth.JWT.Secret == "" || cfg.Auth.JWT.Issuer != "aegiscore-user-services" || cfg.Auth.JWT.Audience != "aegiscore-users" {
 		t.Fatalf("Auth.JWT = %#v, want default auth config", cfg.Auth.JWT)
 	}
-	if cfg.Auth.JWT.AccessTokenTTL != 15*time.Minute || cfg.Auth.JWT.RefreshTokenTTL != 168*time.Hour || cfg.Auth.TokenVersionCacheTTL != 5*time.Minute {
-		t.Fatalf("auth TTLs = (%s,%s,%s), want (15m,168h,5m)", cfg.Auth.JWT.AccessTokenTTL, cfg.Auth.JWT.RefreshTokenTTL, cfg.Auth.TokenVersionCacheTTL)
+	if cfg.Auth.JWT.AccessTokenTTL != 15*time.Minute || cfg.Auth.JWT.RefreshTokenTTL != 168*time.Hour || cfg.Auth.TokenVersionCacheTTL != 30*time.Second {
+		t.Fatalf("auth TTLs = (%s,%s,%s), want (15m,168h,30s)", cfg.Auth.JWT.AccessTokenTTL, cfg.Auth.JWT.RefreshTokenTTL, cfg.Auth.TokenVersionCacheTTL)
 	}
 }
 
