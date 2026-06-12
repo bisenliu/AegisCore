@@ -1,6 +1,6 @@
 version: "2"
 
-# 从 common/ 和 user-services/ 模块目录运行；根目录不是单一 Go module。
+# 从 common/ 和 user-service/ 模块目录运行；根目录不是单一 Go module。
 run:
   modules-download-mode: readonly
   tests: true
@@ -17,8 +17,170 @@ linters:
   enable:
     # revive 提供可配置的代码风格和常见问题检查。
     - revive
+    # depguard 将 docs/ARCHITECTURE.md 中的分层依赖规则转为可执行 lint。
+    - depguard
   # golangci-lint v2 将旧版独立的 gosimple/stylecheck analyzer family 合并到 staticcheck suite 中。
   settings:
+    depguard:
+      rules:
+        feature-domain:
+          files:
+            - "**/internal/features/**/domain/*.go"
+            - "**/internal/features/**/domain/**/*.go"
+          deny:
+            - pkg: github.com/gin-gonic/gin
+              desc: domain must not depend on Gin transport
+            - pkg: github.com/aegiscore/user-service/ent$
+              desc: domain must not depend on Ent persistence
+            - pkg: github.com/aegiscore/user-service/ent/
+              desc: domain must not depend on Ent persistence
+            - pkg: github.com/redis/go-redis/v9
+              desc: domain must not depend on Redis clients
+            - pkg: github.com/aegiscore/common/runtime/config
+              desc: domain must not depend on runtime config
+            - pkg: github.com/aegiscore/common/runtime/logger
+              desc: domain must not depend on runtime logger
+            - pkg: github.com/aegiscore/common/contract/response
+              desc: domain must not depend on HTTP response envelopes
+            - pkg: github.com/aegiscore/common/http/response
+              desc: domain must not depend on HTTP response helpers
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/application$
+              desc: domain must not depend on application ports
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/application/
+              desc: domain must not depend on application code
+            - pkg: github.com/aegiscore/user-service/internal/features/user/application$
+              desc: domain must not depend on application ports
+            - pkg: github.com/aegiscore/user-service/internal/features/user/application/
+              desc: domain must not depend on application code
+            - pkg: github.com/aegiscore/user-service/internal/features/role/application$
+              desc: domain must not depend on application ports
+            - pkg: github.com/aegiscore/user-service/internal/features/role/application/
+              desc: domain must not depend on application code
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/application$
+              desc: domain must not depend on application ports
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/application/
+              desc: domain must not depend on application code
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/infrastructure$
+              desc: domain must not depend on infrastructure adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/infrastructure/
+              desc: domain must not depend on infrastructure adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/user/infrastructure$
+              desc: domain must not depend on infrastructure adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/user/infrastructure/
+              desc: domain must not depend on infrastructure adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/role/infrastructure$
+              desc: domain must not depend on infrastructure adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/role/infrastructure/
+              desc: domain must not depend on infrastructure adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/infrastructure$
+              desc: domain must not depend on infrastructure adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/infrastructure/
+              desc: domain must not depend on infrastructure adapters
+        feature-application:
+          files:
+            - "**/internal/features/**/application/*.go"
+            - "**/internal/features/**/application/**/*.go"
+          deny:
+            - pkg: github.com/gin-gonic/gin
+              desc: application must not depend on Gin transport
+            - pkg: github.com/aegiscore/user-service/ent$
+              desc: application must not depend on Ent persistence
+            - pkg: github.com/aegiscore/user-service/ent/
+              desc: application must not depend on Ent persistence
+            - pkg: github.com/redis/go-redis/v9
+              desc: application must not depend on Redis clients
+            - pkg: github.com/aegiscore/common/http/binding
+              desc: application must not depend on HTTP binder
+        feature-transport-http:
+          files:
+            - "**/internal/features/**/transport/http/*.go"
+            - "**/internal/features/**/transport/http/**/*.go"
+          deny:
+            - pkg: github.com/aegiscore/user-service/ent$
+              desc: HTTP transport must not depend on Ent persistence
+            - pkg: github.com/aegiscore/user-service/ent/
+              desc: HTTP transport must not depend on Ent persistence
+            - pkg: github.com/redis/go-redis/v9
+              desc: HTTP transport must not depend on Redis clients
+            - pkg: database/sql
+              desc: HTTP transport must not depend on SQL packages
+            - pkg: github.com/jackc/pgx/v5
+              desc: HTTP transport must not depend on PostgreSQL driver packages
+        feature-transport-grpc:
+          files:
+            - "**/internal/features/**/transport/grpc/*.go"
+            - "**/internal/features/**/transport/grpc/**/*.go"
+          deny:
+            - pkg: github.com/aegiscore/user-service/ent$
+              desc: gRPC transport must not depend on Ent persistence
+            - pkg: github.com/aegiscore/user-service/ent/
+              desc: gRPC transport must not depend on Ent persistence
+            - pkg: github.com/redis/go-redis/v9
+              desc: gRPC transport must not depend on Redis clients
+            - pkg: database/sql
+              desc: gRPC transport must not depend on SQL packages
+            - pkg: github.com/jackc/pgx/v5
+              desc: gRPC transport must not depend on PostgreSQL driver packages
+            - pkg: github.com/gin-gonic/gin
+              desc: gRPC transport must not depend on Gin transport
+            - pkg: github.com/aegiscore/common/http/response
+              desc: gRPC transport must not depend on HTTP response helpers
+            - pkg: github.com/aegiscore/common/contract/response
+              desc: gRPC transport must not depend on HTTP response envelopes
+            - pkg: github.com/aegiscore/user-service/internal/integration$
+              desc: gRPC transport must not depend on external integration adapters
+            - pkg: github.com/aegiscore/user-service/internal/integration/
+              desc: gRPC transport must not depend on external integration adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/transport/http$
+              desc: gRPC transport must not depend on HTTP controllers
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/transport/http/
+              desc: gRPC transport must not depend on HTTP controllers
+            - pkg: github.com/aegiscore/user-service/internal/features/user/transport/http$
+              desc: gRPC transport must not depend on HTTP controllers
+            - pkg: github.com/aegiscore/user-service/internal/features/user/transport/http/
+              desc: gRPC transport must not depend on HTTP controllers
+        feature-infrastructure:
+          files:
+            - "**/internal/features/**/infrastructure/*.go"
+            - "**/internal/features/**/infrastructure/**/*.go"
+          deny:
+            - pkg: github.com/gin-gonic/gin
+              desc: infrastructure must not depend on Gin transport
+            - pkg: github.com/aegiscore/common/http/response
+              desc: infrastructure must not depend on HTTP response helpers
+            - pkg: github.com/aegiscore/common/contract/response
+              desc: infrastructure must not depend on HTTP response envelopes
+        integration-boundary:
+          files:
+            - "**/internal/integration/*.go"
+            - "**/internal/integration/**/*.go"
+          deny:
+            - pkg: github.com/gin-gonic/gin
+              desc: integration adapters must not depend on Gin transport
+            - pkg: github.com/aegiscore/common/http/response
+              desc: integration adapters must not depend on HTTP response helpers
+            - pkg: github.com/aegiscore/common/contract/response
+              desc: integration adapters must not depend on HTTP response envelopes
+            - pkg: github.com/aegiscore/user-service/ent$
+              desc: integration adapters must not depend on Ent persistence
+            - pkg: github.com/aegiscore/user-service/ent/
+              desc: integration adapters must not depend on Ent persistence
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/infrastructure$
+              desc: integration adapters must not depend on feature persistence adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/infrastructure/
+              desc: integration adapters must not depend on feature persistence adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/user/infrastructure$
+              desc: integration adapters must not depend on feature persistence adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/user/infrastructure/
+              desc: integration adapters must not depend on feature persistence adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/role/infrastructure$
+              desc: integration adapters must not depend on feature persistence adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/role/infrastructure/
+              desc: integration adapters must not depend on feature persistence adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/infrastructure$
+              desc: integration adapters must not depend on feature persistence adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/infrastructure/
+              desc: integration adapters must not depend on feature persistence adapters
     revive:
       severity: warning
       rules:
@@ -51,7 +213,7 @@ linters:
         path: (_test\.go)$
         text: Error return value.*(Close|Rollback)
     paths:
-      # 排除 Ent 生成代码，但不排除 user-services/ent/schema/ 下的 schema source。
+      # 排除 Ent 生成代码，但不排除 user-service/ent/schema/ 下的 schema source。
       - (^|/)ent/(enttest|hook|migrate|predicate|runtime|user)(/|$)
       - (^|/)ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update)\.go$
       - third_party$

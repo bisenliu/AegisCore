@@ -1,5 +1,5 @@
 # Build from the repository root:
-#   docker build -f user-service/Dockerfile -t aegiscore-user-services .
+#   docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
 
 FROM golang:1.26-alpine AS builder
 WORKDIR /src

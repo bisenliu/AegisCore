@@ -20,7 +20,7 @@
 - `user-service/internal/features/user/`：用户资料 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；`domain/` 可在有真实纯领域规则或事件模型时按需新增 `services/`、`events/`；`application/command` 承载写侧用例，`application/query` 承载读侧用例，`application/validators` 承载 transport-neutral application 输入辅助；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`；未来如暴露本服务入站 gRPC API，使用 feature-local `transport/grpc`，当前没有真实 gRPC API 时不得新增业务代码、proto 或 generated code；未来如消费外部事件，使用 feature-local `infrastructure/consumers` 承载入站事件到 application command/query 的 adapter，当前没有真实消费者时不得新增业务代码。
 - `user-service/internal/features/auth/`：认证会话 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/redis/` 和 `fx.go` 分层；`domain/services`、`domain/events` 仅在有真实领域服务或领域事件模型时新增；`application/command` 承载登录、刷新、强制改密、退出当前设备和退出全部设备 use case，`application/validators` 承载 transport-neutral application 输入辅助、token version 撤销校验、cache/database fallback 策略和 refresh session 一致性校验，`application/ports.go` 继续拥有凭据、token version 和 session ports；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`；未来如暴露本服务入站 gRPC API，使用 feature-local `transport/grpc`，当前没有真实 gRPC API 时不得新增业务代码、proto 或 generated code；未来如消费外部事件，使用 feature-local `infrastructure/consumers` 承载入站事件到 application command/query 的 adapter，当前没有真实消费者时不得新增业务代码。
 - `user-service/internal/features/role/`、`user-service/internal/features/permission/`：未来 RBAC 能力的最小 feature skeleton，仅保留 README 标注边界；当前不注册路由、不提供 Fx module、不新增 application/domain/infrastructure 代码、不新增 Ent schema 或数据库表。
-- `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产。
+- `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产；`deployments/docker` 放 Dockerfile 或统一构建资产，`deployments/compose` 放本地依赖或本地服务启动配置，`deployments/k8s` 放 Kubernetes YAML，`deployments/helm` 放 Helm chart。
 
 ## 3. Key Entry Points
 
@@ -60,6 +60,7 @@
 - 运行时资源名：`common/runtime/resources/resource_names.go`
 - 用户服务迁移目录：`user-service/migrations/`，包含 SQL migration、`atlas.sum` 和 Atlas 配置。
 - Atlas 配置：`user-service/migrations/atlas.hcl`
+- 用户服务 Dockerfile：`deployments/docker/user-service.Dockerfile`
 
 ## 4. Current Feature Areas
 
@@ -81,6 +82,7 @@
 - 构建用户服务二进制：`make build` 或 `make build-user-service`。
 - 运行全部测试：`make test`。
 - 运行用户服务：`make run-user-service`。
+- 构建用户服务 Docker 镜像：`docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .`。
 - 运行单模块测试：`make test-common` 或 `make test-user-service`。
 - 生成 Ent 代码：`make generate`。
 - 生成迁移：`make migrate-diff name=<name>`。

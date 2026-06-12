@@ -5,7 +5,7 @@ set -eu
 #
 # Dockerfile 中的用法：
 #   ENTRYPOINT ["/app/user-service/scripts/entrypoint.sh"]
-#   CMD ["/app/user-service/bin/user-service", "serve", "--config", "/app/user-service/configs/config.yaml"]
+#   CMD ["/app/user-service/bin/user-services", "serve", "--config", "/app/user-service/configs/config.yaml"]
 #
 # 行为：
 #   - RUN_MIGRATIONS 未设置或为 "true" 时，先执行 Atlas 迁移，再启动服务。

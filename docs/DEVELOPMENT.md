@@ -23,6 +23,7 @@
 | 构建用户服务二进制 | `make build` 或 `make build-user-service` | 仓库根目录 |
 | 运行全部测试 | `make test` | 仓库根目录 |
 | 运行用户服务 | `make run-user-service` | 仓库根目录 |
+| 构建用户服务 Docker 镜像 | `docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .` | 仓库根目录 |
 | 运行共享模块测试 | `make test-common` | 仓库根目录 |
 | 运行用户服务测试 | `make test-user-service` | 仓库根目录 |
 | 运行全部 lint | `make lint` | 仓库根目录 |
@@ -37,7 +38,14 @@
 
 Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user-service/` 执行，迁移和 Swagger 操作仍委托 `user-service/scripts/` 下的现有脚本。Swagger 生成脚本从 `user-service/` 模块目录运行，将解析范围限定为 `github.com/aegiscore/user-service` 包前缀，并使用 Go struct/type 名称生成 schema definition；直接运行底层命令仍然可用，排错时可参考对应脚本和执行目录。
 
-## 4. Configuration
+## 4. Local Runtime And Deployment Assets
+
+- 本地直接运行用户服务：先准备 PostgreSQL 和 Redis，再执行 `make run-user-service`。
+- 构建用户服务容器镜像：从仓库根目录执行 `docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .`。该 Dockerfile 依赖仓库根目录作为 build context，以便复制 `go.work`、`common/` 和 `user-service/`。
+- 本地 Compose 文件归属 `deployments/compose/`。当前没有可运行 Compose file；若本地没有 PostgreSQL/Redis，需要按 `user-service/configs/config.yaml` 中的配置自行准备依赖。
+- Kubernetes YAML 归属 `deployments/k8s/`，Helm chart 归属 `deployments/helm/`。当前目录只声明边界，不提供可直接部署的生产资源。
+
+## 5. Configuration
 
 配置加载逻辑位于 `common/runtime/config/loader.go`。
 
@@ -52,7 +60,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 
 示例：`AEGISCORE_HTTP_PORT=8081` 可覆盖 `http.port`。
 
-## 5. Coding Conventions
+## 6. Coding Conventions
 
 - HTTP 层只处理请求解析、参数校验和响应输出。
 - HTTP request/response DTO 和 Swagger model 放在对应 feature 的 `transport/http/request.go`、`response.go`，Swagger 生成使用稳定 Go struct/type 名称，避免生成文档暴露 `transport/http` 目录派生名称；不要新增 feature-level `api/` DTO 包。
@@ -66,7 +74,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - Go 文件提交前运行 `gofmt`。
 - 提交前建议在受影响 Go module 中运行 `golangci-lint run ./...`；完整 lint 配置、CI/pre-commit 集成和存量问题治理方案见 `docs/GO_LINT_AUTOMATION.md`。
 
-### 5.1 Lint Troubleshooting
+### 6.1 Lint Troubleshooting
 
 - `gofmt` 或 `goimports` 失败时，先格式化对应文件并整理 imports。
 - `errcheck` 失败时，优先显式处理错误；确认可忽略时用 `_ = fn()` 表达有意忽略。
@@ -74,11 +82,11 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - CI 与本地结果不一致时，检查 Go 版本、`golangci-lint` 版本、执行目录和 `../.golangci.yml` 配置路径是否一致。
 - 生成代码产生 lint 噪声时，确认排除规则只覆盖 Ent 生成代码，不覆盖 `user-service/ent/schema/`。
 
-## 6. Database Migrations
+## 7. Database Migrations
 
 用户服务采用服务内迁移目录方案：Ent schema、业务代码、Atlas 配置和 SQL migration 都由 `user-service/` 自己维护。这样可以保持服务发布、镜像打包和 CI/CD 迁移执行独立，不需要在仓库根目录集中维护所有服务的迁移文件。
 
-### 6.1 Directory Layout
+### 7.1 Directory Layout
 
 ```text
 user-service/
@@ -96,7 +104,7 @@ user-service/
     entrypoint.sh
 ```
 
-### 6.2 Generate SQL Migrations
+### 7.2 Generate SQL Migrations
 
 1. 修改 `user-service/ent/schema/` 下的 Ent schema。
 2. 在 `user-service/` 执行 `go generate ./ent`，只生成 Ent 代码，不要手写 `user-service/ent/` 下的生成文件。
@@ -109,7 +117,7 @@ Ent 生成代码边界和新增 Entity Schema 的完整说明见 `user-service/e
 
 Atlas 配置位于 `user-service/migrations/atlas.hcl`。迁移脚本从 `user-service/` 目录执行，并显式使用该配置文件，因此 `ent://ent/schema` 和 `file://migrations` 仍以 `user-service/` 为解析基准。
 
-### 6.3 Review And Manual SQL Edits
+### 7.3 Review And Manual SQL Edits
 
 Atlas 生成的 SQL 必须提交前 review。允许手动调整 SQL 以满足 PostgreSQL 生产安全要求，例如将普通索引调整为并发索引：
 
@@ -127,7 +135,7 @@ atlas migrate hash --dir file://migrations
 
 如果 SQL 文件与 `atlas.sum` 不一致，`atlas migrate validate --dir file://migrations` 会失败，CI/CD 不得继续部署。
 
-### 6.4 Apply In CI/CD Or Entrypoint
+### 7.4 Apply In CI/CD Or Entrypoint
 
 推荐在 CI/CD release job 中执行迁移，再启动或滚动发布服务：
 
@@ -141,14 +149,14 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 
 `DATABASE_URL` 必须指向用户服务拥有的 `user_db`，不要因为配置中存在 `pay_db` 或 `common_db` 而迁移非目标数据库。
 
-## 7. API Conventions
+## 8. API Conventions
 
 - 成功响应使用 `common/http/response.OK` 或 `common/http/response.Created`。
 - 失败响应使用 `common/http/response.Fail` 或便捷方法 `BadRequest`、`NotFound`。
 - 响应信封字段为 `success`、`code`、`message`、`data`。
 - API 错误码目前包括 `OK`、`BAD_REQUEST`、`NOT_FOUND`、`INTERNAL_ERROR`。
 
-## 8. Logging And Trace ID
+## 9. Logging And Trace ID
 
 - 日志使用 `common/runtime/logger` 提供的 Zap 封装和 context API。
 - HTTP trace header 是 `X-Trace-ID`，日志字段统一为 `trace-id`。
@@ -157,7 +165,7 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 - Error 级别日志默认不自动添加 stacktrace；关键运行时错误需要显式传入 `logger.StackTrace(...)` 或 `zap.Stack("stacktrace")`。
 - 文件日志按天写入带日期的分类文件，例如 `aegiscore-user-services.2026-06-02.info.log`；其中 `aegiscore-user-services` 是运行时 service name，不是目录名。
 
-## 9. Adding Features
+## 10. Adding Features
 
 1. 先阅读 `docs/ARCHITECTURE.md`，确认新能力属于哪个模块、feature 和层。
 2. 新增服务内业务能力时，优先放在 `user-service/internal/features/<feature>/`；已有 feature 内按 `application/`、`domain/`、`transport/http/`、`infrastructure/*/` 和 `fx.go` 分层扩展，HTTP DTO 放在 `transport/http/request.go` 和 `response.go`。用户资料 feature 的写侧用例放在 `application/command`，读侧用例放在 `application/query`，transport-neutral application 输入辅助放在 `application/validators`；认证 feature 的会话控制 use case 放在 `application/command`，认证输入辅助、token version 撤销校验和 session 一致性校验放在 `application/validators`。`domain/services` 和 `domain/events` 只在有真实纯领域规则或事件模型时创建；事件总线、broker、outbox、publisher、subscriber 或异步投递需要单独设计。
@@ -165,13 +173,13 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 4. 跨 feature、跨模块、外部 API、配置、数据库 schema 或目录结构变更，应在 issue、PR 描述或开发记录中写清目标、影响范围和验证方式。
 5. 增加或更新测试，并在受影响模块目录运行相关 `go test` 命令；跨模块变更时分别在 `common/` 和 `user-service/` 运行。
 
-## 10. Adding Shared Code
+## 11. Adding Shared Code
 
 1. 先确认共享代码是否属于跨服务稳定契约、运行时基础能力、HTTP/Gin 适配、安全凭证原语或通用校验核心。
 2. 如能力只服务于用户服务请求清洗、状态规则、DTO 映射、infrastructure adapter 行为或业务编排，保留在 `user-service` 对应分层内。
 3. 如确需进入 `common`，选择对应目录：`common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation`，并在 `docs/ARCHITECTURE.md` 更新边界说明。
 4. 新增或迁移共享 API 时同步更新 Go imports、测试和文档。
 
-## 11. Local Runtime Notes
+## 12. Local Runtime Notes
 
 用户服务启动时会 ping Redis 和 PostgreSQL。若本地没有外部依赖，启动会失败。开发纯业务逻辑时优先通过单元测试覆盖 application service 与 infrastructure adapter 边界，集成验证再连接真实依赖。

@@ -53,9 +53,21 @@ linters:
   default: standard
   enable:
     - revive
+    - depguard
 ```
 
-完整配置应同时包含运行超时、输出格式、测试文件检查策略、issue 限制和生成代码排除规则。生成代码排除需要避免扫描 Ent codegen 输出，但不能排除 `user-service/ent/schema/`，因为 schema source 是开发者维护的代码。
+完整配置应同时包含运行超时、输出格式、测试文件检查策略、issue 限制、生成代码排除规则和架构依赖边界规则。生成代码排除需要避免扫描 Ent codegen 输出，但不能排除 `user-service/ent/schema/`，因为 schema source 是开发者维护的代码。
+
+`depguard` 规则用于把 `docs/ARCHITECTURE.md` 的分层依赖表转为可执行检查：
+
+- `domain` 不得导入 Gin、Ent、Redis、runtime config、logger、HTTP response envelope、application ports 或 infrastructure adapter。
+- `application` 不得导入 Gin、Ent、Redis 或 `common/http/binding`。
+- `transport/http` 不得导入 Ent、Redis 或 SQL/pgx package。
+- `transport/grpc` 不得导入 Ent、Redis、SQL/pgx、Gin、HTTP response envelope、HTTP controller 或 external integration adapter。
+- `infrastructure/*` 不得导入 Gin 或 HTTP response envelope。
+- `integration/*` 不得导入 Gin response、Ent 或 feature persistence adapter。
+
+新增或调整分层规则时，先更新 `AGENTS.md` 和 `docs/ARCHITECTURE.md` 的长期规则，再同步 `.golangci.yml` 中对应的 depguard deny list。
 
 ## 5. 本地执行命令
 
@@ -75,6 +87,12 @@ golangci-lint run ./...
 ```bash
 cd user-service
 golangci-lint run ./...
+```
+
+验证根目录配置是否能被当前版本读取：
+
+```bash
+golangci-lint config verify --config .golangci.yml
 ```
 
 不建议把仓库根目录 `golangci-lint run ./...` 作为唯一命令，因为仓库根目录是 Go workspace，不是单一 Go module。CI 和本地开发都应分别进入 `common/` 与 `user-service/` 执行。
@@ -180,6 +198,21 @@ set -euo pipefail
 - `user-service/` 当前存在 47 个 lint findings，主要包括 `goimports`、`revive` 和 `unused`。
 - 本次变更不直接修复这些存量问题，避免在自动化接入 PR 中混入大规模格式化和行为相关修改。
 
+Depguard 分层违规快照：
+
+- Domain：`user-service/internal/features/auth/domain/rediskeys.go` 和 `rediskeys_test.go` 当前导入 `github.com/aegiscore/common/runtime/config`。后续治理应把 Redis key namespace 所需的 app name 作为 plain value 或 application/infrastructure 构造参数传入，让 domain 保持纯值对象和纯领域规则。
+- Application：当前未发现 depguard 违规。
+- Transport：当前未发现 depguard 违规。
+- Infrastructure：当前未发现 depguard 违规。
+- Integration：当前未发现 depguard 违规。
+
+Depguard 历史违规治理建议：
+
+1. 优先处理 domain 违规，因为 domain 是最内层边界，错误依赖会向所有外层扩散。
+2. 对每个违规只移动最小依赖：把配置读取、logger、Gin/HTTP response、Ent/Redis client 或 SQL 访问移到 application、transport 或 infrastructure 的正确层。
+3. 如果确有例外需求，先更新 `docs/ARCHITECTURE.md` 的 dependency table 和边界说明，再调整 depguard；不要只用 `nolint` 绕过架构规则。
+4. 清理完成后重新运行 `cd user-service && golangci-lint run --config ../.golangci.yml --enable-only depguard ./...`，并更新本快照。
+
 优先级建议：
 
 - P0：可能导致编译失败、运行时错误、资源泄露或安全风险的问题。
@@ -210,5 +243,6 @@ set -euo pipefail
 - `goimports` 失败：安装 `goimports` 后运行 `goimports -w <files>`，或按 lint 输出调整 imports。
 - `errcheck` 失败：显式处理错误；确认为安全忽略时，用 `_ = fn()` 表达有意忽略并在必要时补充说明。
 - `staticcheck` 或 `govet` 失败：优先按真实 bug 处理，不建议直接排除。
+- `depguard` 失败：先确认当前文件所属层，再把被禁止 import 移到允许依赖该包的层；例如 controller 通过 command/query 调 application，application 通过 port 调 infrastructure，domain 不读取 runtime config。
 - 生成代码报错：确认 `.golangci.yml` 排除的是 Ent codegen 输出，而不是 `user-service/ent/schema/`。
 - CI 与本地结果不一致：检查 Go 版本、`golangci-lint` 版本、执行目录和配置路径是否一致。
