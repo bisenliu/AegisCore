@@ -56,7 +56,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - Redis 使用 `redis.<name>` 命名实例，例如 `redis.cache_redis`、`redis.queue_redis`。
 - PostgreSQL 使用 `postgres.<name>` 命名实例，例如 `postgres.user_db`、`postgres.common_db`、`postgres.pay_db`。
 - 用户服务当前声明 `cache_redis`、`user_db` 和 `common_db`；`pay_db` 可存在于配置中，但不代表支付连接池或支付业务已启用。
-- `common/runtime/config.Load` 只负责读取 YAML、应用 `AEGISCORE_` 覆盖并反序列化为配置对象；缺失字段、零值端口或无效范围不在加载阶段被字段校验拒绝，后续初始化或依赖库会暴露运行时失败。
+- `common/runtime/config.Load` 会读取 YAML、应用 `AEGISCORE_` 覆盖、反序列化为配置对象，并在返回前执行结构化字段校验；缺失必填字段、非法端口、非正超时、无效 Redis/PostgreSQL named config 或生产环境不安全配置会在启动期被拒绝。
 
 示例：`AEGISCORE_HTTP_PORT=8081` 可覆盖 `http.port`。
 
