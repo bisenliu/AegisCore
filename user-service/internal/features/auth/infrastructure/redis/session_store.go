@@ -39,6 +39,7 @@ const (
 )
 
 const (
+	createSessionResultOK            int64 = 1
 	rotateSessionResultOK            int64 = 1
 	rotateSessionResultNotFound      int64 = 2
 	rotateSessionResultMismatch      int64 = 3
@@ -62,6 +63,32 @@ redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])
 return 1
 `)
 
+var createSessionScript = rediscache.NewScript(`
+redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])
+redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[5])
+redis.call("ZADD", KEYS[2], ARGV[4], ARGV[3])
+
+local max_sessions = tonumber(ARGV[8])
+if max_sessions and max_sessions > 0 then
+	local overflow = redis.call("ZCARD", KEYS[2]) - max_sessions
+	if overflow > 0 then
+		local stale_sessions = redis.call("ZRANGE", KEYS[2], 0, overflow - 1)
+		for _, session_id in ipairs(stale_sessions) do
+			redis.call("DEL", ARGV[7] .. session_id)
+			redis.call("ZREM", KEYS[2], session_id)
+		end
+	end
+end
+
+local index_ttl = redis.call("PTTL", KEYS[2])
+local target_ttl = tonumber(ARGV[6])
+if index_ttl < target_ttl then
+	redis.call("PEXPIRE", KEYS[2], target_ttl)
+end
+
+return 1
+`)
+
 var rotateSessionScript = rediscache.NewScript(`
 local old_payload = redis.call("GET", KEYS[1])
 if not old_payload then
@@ -81,6 +108,18 @@ redis.call("ZREMRANGEBYSCORE", KEYS[3], "-inf", ARGV[9])
 redis.call("ZADD", KEYS[3], ARGV[8], ARGV[4])
 redis.call("ZREM", KEYS[3], ARGV[2])
 redis.call("DEL", KEYS[1])
+
+local max_sessions = tonumber(ARGV[12])
+if max_sessions and max_sessions > 0 then
+	local overflow = redis.call("ZCARD", KEYS[3]) - max_sessions
+	if overflow > 0 then
+		local stale_sessions = redis.call("ZRANGE", KEYS[3], 0, overflow - 1)
+		for _, session_id in ipairs(stale_sessions) do
+			redis.call("DEL", ARGV[11] .. session_id)
+			redis.call("ZREM", KEYS[3], session_id)
+		end
+	end
+end
 
 local index_ttl = redis.call("PTTL", KEYS[3])
 local target_ttl = tonumber(ARGV[10])
@@ -178,7 +217,7 @@ func (r *SessionStore) DeleteCachedTokenVersion(ctx context.Context, userID stri
 }
 
 // CreateSession 存储 refresh token 会话，并按用户建立索引用于批量撤销。
-func (r *SessionStore) CreateSession(ctx context.Context, session authdomain.AuthSession, ttl time.Duration) error {
+func (r *SessionStore) CreateSession(ctx context.Context, session authdomain.AuthSession, ttl time.Duration, maxActiveSessionsPerUser int) error {
 	if ttl <= 0 {
 		// 非正数 TTL 回退到短期会话，避免创建永久 Redis key。
 		ttl = defaultAuthSessionTTL
@@ -192,27 +231,28 @@ func (r *SessionStore) CreateSession(ctx context.Context, session authdomain.Aut
 	}
 	userSessions := r.userSessionsKey(session.UserID)
 	indexTTL := ttl + authSessionIndexTTLBuffer
-	indexCurrentTTL, err := r.redis.TTL(ctx, userSessions).Result()
-	if err != nil {
-		return fmt.Errorf("get user auth sessions ttl: %w", err)
-	}
-	pipe := r.redis.TxPipeline()
-	pipe.Set(ctx, r.sessionKey(session.UserID, session.SessionID), data, ttl)
-	pipe.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(now))
-	pipe.ZAdd(ctx, userSessions, rediscache.Z{Score: float64(expiresAt.Unix()), Member: session.SessionID})
-	if indexCurrentTTL < indexTTL {
-		// 用户会话索引需要长于最长会话，但不应被新会话缩短有效期。
-		pipe.Expire(ctx, userSessions, indexTTL)
-	}
-	_, err = pipe.Exec(ctx)
+
+	result, err := createSessionScript.Run(ctx, r.redis, []string{r.sessionKey(session.UserID, session.SessionID), userSessions},
+		data,
+		milliseconds(ttl),
+		session.SessionID,
+		redisScore(expiresAt),
+		redisScore(now),
+		milliseconds(indexTTL),
+		r.keys.AuthSessionPrefix(session.UserID),
+		strconv.Itoa(maxActiveSessionsPerUser),
+	).Int64()
 	if err != nil {
 		return fmt.Errorf("create auth session: %w", err)
+	}
+	if result != createSessionResultOK {
+		return fmt.Errorf("create auth session: unexpected script result %d", result)
 	}
 	return nil
 }
 
 // RotateSession 原子消费旧 refresh 会话，并创建新 refresh 会话。
-func (r *SessionStore) RotateSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, ttl time.Duration) error {
+func (r *SessionStore) RotateSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, ttl time.Duration, maxActiveSessionsPerUser int) error {
 	if newSession.UserID != oldSession.UserID || newSession.TokenVersion != oldSession.TokenVersion {
 		return authdomain.ErrAuthSessionMismatch
 	}
@@ -240,9 +280,11 @@ func (r *SessionStore) RotateSession(ctx context.Context, oldSession authdomain.
 		formatTokenVersion(newSession.TokenVersion),
 		data,
 		milliseconds(ttl),
-		unixScore(expiresAt),
-		unixScore(now),
+		redisScore(expiresAt),
+		redisScore(now),
 		milliseconds(indexTTL),
+		r.keys.AuthSessionPrefix(newSession.UserID),
+		strconv.Itoa(maxActiveSessionsPerUser),
 	).Int64()
 	if err != nil {
 		return fmt.Errorf("rotate auth session: %w", err)
@@ -280,7 +322,7 @@ func (r *SessionStore) DeleteSession(ctx context.Context, userID string, session
 	userSessions := r.userSessionsKey(userID)
 	pipe := r.redis.TxPipeline()
 	pipe.Del(ctx, r.sessionKey(userID, sessionID))
-	pipe.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, unixScore(time.Now()))
+	pipe.ZRemRangeByScore(ctx, userSessions, expiredSessionMinScore, redisScore(time.Now()))
 	pipe.ZRem(ctx, userSessions, sessionID)
 	_, err := pipe.Exec(ctx)
 	if err != nil {
@@ -330,7 +372,7 @@ func (r *SessionStore) DeleteAllUserSessions(ctx context.Context, userID string)
 }
 
 func (r *SessionStore) purgeDetachedUserSessions(ctx context.Context, purgeKey string, sessionPrefix string, cutTime time.Time) error {
-	cutScore := float64(cutTime.Unix())
+	cutScore := redisScoreFloat(cutTime)
 	for {
 		sessions, err := r.redis.ZRangeWithScores(ctx, purgeKey, 0, deleteAllUserSessionsBatchSize-1).Result()
 		if err != nil {
@@ -380,8 +422,12 @@ func (r *SessionStore) purgeUserSessionsKey(userID string) string {
 	return r.keys.AuthUserSessionsPurge(userID, uuid.NewString())
 }
 
-func unixScore(t time.Time) string {
-	return strconv.FormatInt(t.Unix(), 10)
+func redisScore(t time.Time) string {
+	return strconv.FormatFloat(redisScoreFloat(t), 'f', 9, 64)
+}
+
+func redisScoreFloat(t time.Time) float64 {
+	return float64(t.UnixNano()) / float64(time.Second)
 }
 
 func seconds(ttl time.Duration) string {

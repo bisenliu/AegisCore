@@ -14,6 +14,7 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
@@ -176,7 +177,7 @@ func TestAuthTokenIssuerParsesBearerRefreshToken(t *testing.T) {
 }
 
 func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
-	lifecycle := newAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{version: 3, session: authRefreshTestSession("s-123", 2)})
+	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{version: 3, session: authRefreshTestSession("s-123", 2)})
 	claims := &commonauth.Claims{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123"}
 
 	_, _, err := lifecycle.ValidateRefreshSession(context.Background(), claims)
@@ -189,7 +190,7 @@ func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
 func TestAuthSessionLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T) {
 	for _, err := range []error{authdomain.ErrAuthSessionNotFound, authdomain.ErrAuthSessionMismatch} {
 		t.Run(err.Error(), func(t *testing.T) {
-			lifecycle := newAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{rotateErr: err})
+			lifecycle := newTestAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{rotateErr: err})
 			oldSession := authRefreshTestSession("s-old", 2)
 			newSession := authRefreshTestSession("s-new", 2)
 
@@ -204,7 +205,7 @@ func TestAuthSessionLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T)
 
 func TestAuthSessionLifecycleRotateTokenSessionMapsUnexpectedError(t *testing.T) {
 	rotateErr := errors.New("redis failed")
-	lifecycle := newAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{rotateErr: rotateErr})
+	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{rotateErr: rotateErr})
 	oldSession := authRefreshTestSession("s-old", 2)
 	newSession := authRefreshTestSession("s-new", 2)
 
@@ -217,7 +218,7 @@ func TestAuthSessionLifecycleRotateTokenSessionMapsUnexpectedError(t *testing.T)
 
 func TestAuthSessionLifecycleCurrentTokenVersionUsesCacheHit(t *testing.T) {
 	repo := &authRepoStub{tokenVersionErr: errors.New("database should not be read")}
-	lifecycle := newAuthSessionLifecycle(repo, &sessionStoreStub{version: 2})
+	lifecycle := newTestAuthSessionLifecycle(repo, &sessionStoreStub{version: 2})
 
 	version, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
 
@@ -235,7 +236,7 @@ func TestAuthSessionLifecycleCurrentTokenVersionUsesCacheHit(t *testing.T) {
 func TestAuthSessionLifecycleCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
 	repo := &authRepoStub{tokenVersion: 7}
 	store := &sessionStoreStub{cacheMiss: true}
-	lifecycle := newAuthSessionLifecycle(repo, store)
+	lifecycle := newTestAuthSessionLifecycle(repo, store)
 
 	version, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
 
@@ -257,7 +258,7 @@ func TestAuthSessionLifecycleCurrentTokenVersionCacheErrorReturnsInfrastructureE
 	repo := &authRepoStub{tokenVersion: 7}
 	cacheErr := errors.New("redis failed")
 	store := &sessionStoreStub{getVersionErr: cacheErr}
-	lifecycle := newAuthSessionLifecycle(repo, store)
+	lifecycle := newTestAuthSessionLifecycle(repo, store)
 
 	_, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
 
@@ -276,7 +277,7 @@ func TestAuthSessionLifecycleCurrentTokenVersionDatabaseFallbackErrorReturnsInfr
 	dbErr := errors.New("database failed")
 	repo := &authRepoStub{tokenVersionErr: dbErr}
 	store := &sessionStoreStub{cacheMiss: true}
-	lifecycle := newAuthSessionLifecycle(repo, store)
+	lifecycle := newTestAuthSessionLifecycle(repo, store)
 
 	_, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
 
@@ -294,7 +295,7 @@ func TestAuthSessionLifecycleCurrentTokenVersionDatabaseFallbackErrorReturnsInfr
 func TestAuthSessionLifecycleCurrentTokenVersionBackfillErrorReturnsInfrastructureError(t *testing.T) {
 	cacheErr := errors.New("redis set failed")
 	store := &sessionStoreStub{cacheMiss: true, cacheErr: cacheErr}
-	lifecycle := newAuthSessionLifecycle(&authRepoStub{tokenVersion: 7}, store)
+	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{tokenVersion: 7}, store)
 
 	_, err := lifecycle.(*authSessionLifecycle).currentTokenVersion(context.Background(), authTestUserID.String())
 
@@ -306,7 +307,7 @@ func TestAuthSessionLifecycleCurrentTokenVersionBackfillErrorReturnsInfrastructu
 func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
 	repo := &authRepoStub{newVersion: 4}
 	store := &sessionStoreStub{}
-	lifecycle := newAuthSessionLifecycle(repo, store)
+	lifecycle := newTestAuthSessionLifecycle(repo, store)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
@@ -323,7 +324,7 @@ func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T) {
 	store := &sessionStoreStub{}
-	lifecycle := newAuthSessionLifecycle(&authRepoStub{incrementErr: userdomain.ErrUserNotFound}, store)
+	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{incrementErr: userdomain.ErrUserNotFound}, store)
 
 	_, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
@@ -337,7 +338,7 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T)
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t *testing.T) {
 	store := &sessionStoreStub{cacheErr: errors.New("cache refresh failed")}
-	lifecycle := newAuthSessionLifecycle(&authRepoStub{newVersion: 4}, store)
+	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{newVersion: 4}, store)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
@@ -354,7 +355,7 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsSucceedsAfterDeleteAllProjectionError(t *testing.T) {
 	store := &sessionStoreStub{deleteAllErr: errors.New("delete all failed")}
-	lifecycle := newAuthSessionLifecycle(&authRepoStub{newVersion: 4}, store)
+	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{newVersion: 4}, store)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
@@ -373,7 +374,7 @@ func TestAuthSessionLifecycleRevokeUserSessionsAtVersionReturnsProjectionError(t
 	cacheErr := errors.New("cache refresh failed")
 	deleteErr := errors.New("delete all failed")
 	store := &sessionStoreStub{cacheErr: cacheErr, deleteAllErr: deleteErr}
-	lifecycle := newAuthSessionLifecycle(&authRepoStub{newVersion: 99}, store)
+	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{newVersion: 99}, store)
 
 	err := lifecycle.RevokeUserSessionsAtVersion(context.Background(), authTestUserID, 4)
 
@@ -407,4 +408,8 @@ func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing
 
 func authRefreshTestSession(sessionID string, tokenVersion int64) authdomain.AuthSession {
 	return authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: sessionID, TokenVersion: tokenVersion}
+}
+
+func newTestAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) AuthSessionLifecycle {
+	return newAuthSessionLifecycle(users, sessions, 5)
 }

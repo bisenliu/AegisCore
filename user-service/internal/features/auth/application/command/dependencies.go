@@ -31,7 +31,7 @@ func NewUseCaseDeps(params UseCaseDepsParams) *UseCaseDeps {
 	return &UseCaseDeps{
 		credentials:          newCredentialVerifier(params.Credentials),
 		tokens:               newAuthTokenIssuer(params.JWT, params.Config),
-		sessions:             newAuthSessionLifecycle(params.TokenVersions, params.Sessions),
+		sessions:             newAuthSessionLifecycle(params.TokenVersions, params.Sessions, params.Config.Auth.MaxActiveSessionsPerUser),
 		refreshTokenRotation: params.Config.Auth.RefreshTokenRotation,
 	}
 }

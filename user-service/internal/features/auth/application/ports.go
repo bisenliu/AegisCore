@@ -27,8 +27,8 @@ type AuthSessionStore interface {
 	GetCachedTokenVersion(ctx context.Context, userID string) (int64, error)
 	CacheTokenVersion(ctx context.Context, userID string, tokenVersion int64) error
 	DeleteCachedTokenVersion(ctx context.Context, userID string) error
-	CreateSession(ctx context.Context, session authdomain.AuthSession, ttl time.Duration) error
-	RotateSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, ttl time.Duration) error
+	CreateSession(ctx context.Context, session authdomain.AuthSession, ttl time.Duration, maxActiveSessionsPerUser int) error
+	RotateSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, ttl time.Duration, maxActiveSessionsPerUser int) error
 	GetSession(ctx context.Context, userID string, sessionID string) (authdomain.AuthSession, error)
 	DeleteSession(ctx context.Context, userID string, sessionID string) error
 	DeleteAllUserSessions(ctx context.Context, userID string) error

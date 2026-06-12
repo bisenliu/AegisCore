@@ -99,6 +99,50 @@ func TestAuthUseCaseLoginUsesExplicitTTLs(t *testing.T) {
 	}
 }
 
+func TestAuthUseCaseLoginPassesMaxActiveSessionsPerUser(t *testing.T) {
+	passwordHash, err := password.HashContext(context.Background(), "secret")
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}
+	store := &sessionStoreStub{version: 2}
+	svc := newTestAuthUseCasesWithConfig(repo, store, config.AuthConfig{
+		JWT:                      config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour},
+		TokenVersionCacheTTL:     time.Minute,
+		RefreshTokenRotation:     true,
+		MaxActiveSessionsPerUser: 3,
+	})
+
+	_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if store.createdMaxActiveSessionsPerUser != 3 {
+		t.Fatalf("created limit = %#v, want max 3", store.createdMaxActiveSessionsPerUser)
+	}
+}
+
+func TestAuthUseCaseLoginDoesNotReturnTokenWhenSessionCreateFails(t *testing.T) {
+	passwordHash, err := password.HashContext(context.Background(), "secret")
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+	createErr := errors.New("create session failed")
+	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}
+	store := &sessionStoreStub{version: 2, createErr: createErr}
+	svc := newTestAuthUseCases(repo, store, true)
+
+	tokens, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+
+	if !errors.Is(err, createErr) {
+		t.Fatalf("Login err = %v, want create session error", err)
+	}
+	if tokens != nil {
+		t.Fatalf("tokens = %#v, want nil", tokens)
+	}
+}
+
 func TestAuthUseCaseLoginRejectsInvalidCredentials(t *testing.T) {
 	passwordHash, err := password.HashContext(context.Background(), "secret")
 	if err != nil {
@@ -313,6 +357,29 @@ func TestAuthUseCaseRefreshRotatesSession(t *testing.T) {
 	}
 }
 
+func TestAuthUseCaseRefreshRotationPassesMaxActiveSessionsPerUser(t *testing.T) {
+	store := &sessionStoreStub{version: 2, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
+	svc := newTestAuthUseCasesWithConfig(&authRepoStub{}, store, config.AuthConfig{
+		JWT:                      config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour},
+		TokenVersionCacheTTL:     time.Minute,
+		RefreshTokenRotation:     true,
+		MaxActiveSessionsPerUser: 4,
+	})
+	refresh, err := testJWTService().SignRefreshToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
+	if err != nil {
+		t.Fatalf("SignRefreshToken: %v", err)
+	}
+
+	_, err = svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: refresh})
+
+	if err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if store.rotatedMaxActiveSessionsPerUser != 4 {
+		t.Fatalf("rotated limit = %#v, want max 4", store.rotatedMaxActiveSessionsPerUser)
+	}
+}
+
 func TestAuthUseCaseRefreshRejectsInvalidNormalizedToken(t *testing.T) {
 	svc := newTestAuthUseCases(&authRepoStub{}, &sessionStoreStub{}, false)
 
@@ -519,7 +586,7 @@ func TestAuthUseCaseLogoutAllMapsIncrementUserNotFound(t *testing.T) {
 }
 
 func newTestAuthUseCases(repo *authRepoStub, store authapplication.AuthSessionStore, rotation bool) testAuthUseCases {
-	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute}}
+	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 5}}
 	return newTestAuthUseCasesWithConfig(repo, store, cfg.Auth)
 }
 
@@ -601,24 +668,27 @@ func (r *authRepoStub) UpdateCredentials(_ context.Context, input authdomain.Upd
 }
 
 type sessionStoreStub struct {
-	version             int64
-	session             authdomain.AuthSession
-	created             authdomain.AuthSession
-	createdTTL          time.Duration
-	deleted             bool
-	deletedSessionID    string
-	deletedAll          bool
-	getVersionErr       error
-	deleteAllErr        error
-	rotateErr           error
-	cacheMiss           bool
-	cacheErr            error
-	deleteCacheErr      error
-	cacheDeleted        bool
-	deletedCachedUserID string
-	cached              bool
-	cachedUserID        string
-	cachedVersion       int64
+	version                         int64
+	session                         authdomain.AuthSession
+	created                         authdomain.AuthSession
+	createdTTL                      time.Duration
+	deleted                         bool
+	deletedSessionID                string
+	deletedAll                      bool
+	getVersionErr                   error
+	deleteAllErr                    error
+	rotateErr                       error
+	cacheMiss                       bool
+	cacheErr                        error
+	deleteCacheErr                  error
+	cacheDeleted                    bool
+	deletedCachedUserID             string
+	cached                          bool
+	cachedUserID                    string
+	cachedVersion                   int64
+	createdMaxActiveSessionsPerUser int
+	rotatedMaxActiveSessionsPerUser int
+	createErr                       error
 }
 
 func (s *sessionStoreStub) GetCachedTokenVersion(context.Context, string) (int64, error) {
@@ -647,12 +717,16 @@ func (s *sessionStoreStub) DeleteCachedTokenVersion(_ context.Context, userID st
 	s.deletedCachedUserID = userID
 	return nil
 }
-func (s *sessionStoreStub) CreateSession(_ context.Context, session authdomain.AuthSession, ttl time.Duration) error {
+func (s *sessionStoreStub) CreateSession(_ context.Context, session authdomain.AuthSession, ttl time.Duration, maxActiveSessionsPerUser int) error {
+	if s.createErr != nil {
+		return s.createErr
+	}
 	s.created = session
 	s.createdTTL = ttl
+	s.createdMaxActiveSessionsPerUser = maxActiveSessionsPerUser
 	return nil
 }
-func (s *sessionStoreStub) RotateSession(_ context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, ttl time.Duration) error {
+func (s *sessionStoreStub) RotateSession(_ context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, ttl time.Duration, maxActiveSessionsPerUser int) error {
 	if s.rotateErr != nil {
 		return s.rotateErr
 	}
@@ -660,6 +734,7 @@ func (s *sessionStoreStub) RotateSession(_ context.Context, oldSession authdomai
 	s.deletedSessionID = oldSession.SessionID
 	s.created = newSession
 	s.createdTTL = ttl
+	s.rotatedMaxActiveSessionsPerUser = maxActiveSessionsPerUser
 	return nil
 }
 func (s *sessionStoreStub) GetSession(context.Context, string, string) (authdomain.AuthSession, error) {

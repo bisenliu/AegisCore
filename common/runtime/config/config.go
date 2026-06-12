@@ -42,9 +42,10 @@ type HTTPConfig struct {
 
 // AuthConfig 包含认证 token 与会话校验设置。
 type AuthConfig struct {
-	JWT                  JWTConfig     `mapstructure:"jwt"`
-	TokenVersionCacheTTL time.Duration `mapstructure:"token_version_cache_ttl"`
-	RefreshTokenRotation bool          `mapstructure:"refresh_token_rotation"`
+	JWT                      JWTConfig     `mapstructure:"jwt"`
+	TokenVersionCacheTTL     time.Duration `mapstructure:"token_version_cache_ttl"`
+	RefreshTokenRotation     bool          `mapstructure:"refresh_token_rotation"`
+	MaxActiveSessionsPerUser int           `mapstructure:"max_active_sessions_per_user"`
 }
 
 // JWTConfig 包含 JWT 签发和校验设置。

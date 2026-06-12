@@ -41,6 +41,9 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if !cfg.Auth.RefreshTokenRotation {
 		t.Fatal("Auth.RefreshTokenRotation = false, want true")
 	}
+	if cfg.Auth.MaxActiveSessionsPerUser != 5 {
+		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 5", cfg.Auth.MaxActiveSessionsPerUser)
+	}
 	if cfg.Log.Directory != "./logs" {
 		t.Fatalf("Log.Directory = %q, want ./logs", cfg.Log.Directory)
 	}
@@ -239,6 +242,7 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_AUTH_JWT_ISSUER", "env-issuer")
 	t.Setenv("AEGISCORE_AUTH_JWT_REFRESH_TOKEN_TTL", "720h")
 	t.Setenv("AEGISCORE_AUTH_TOKEN_VERSION_CACHE_TTL", "30s")
+	t.Setenv("AEGISCORE_AUTH_MAX_ACTIVE_SESSIONS_PER_USER", "7")
 	t.Setenv("AEGISCORE_REDIS_CACHE_REDIS_DB", "9")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_PASSWORD", "env-secret")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_MAX_OPEN_CONNS", "30")
@@ -261,6 +265,9 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	}
 	if cfg.Auth.TokenVersionCacheTTL != 30*time.Second {
 		t.Fatalf("Auth.TokenVersionCacheTTL = %s, want 30s", cfg.Auth.TokenVersionCacheTTL)
+	}
+	if cfg.Auth.MaxActiveSessionsPerUser != 7 {
+		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 7", cfg.Auth.MaxActiveSessionsPerUser)
 	}
 	if cfg.Redis["cache_redis"].DB != 9 {
 		t.Fatalf("cache_redis.DB = %d, want 9", cfg.Redis["cache_redis"].DB)
@@ -319,6 +326,34 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
 	if _, ok := cfg.PostgresDatabaseConfig("pay_db"); ok {
 		t.Fatal("PostgresDatabaseConfig(pay_db) ok = true")
 	}
+}
+
+func TestLoadValidatesAuthSessionLimit(t *testing.T) {
+	cfg := loadConfigFromYAML(t, configYAMLWithSection(`auth:
+  jwt:
+    secret: test-secret
+    issuer: aegiscore-test
+    audience: aegiscore-users
+    access_token_ttl: 15m
+    refresh_token_ttl: 168h
+  token_version_cache_ttl: 30s
+  refresh_token_rotation: true
+  max_active_sessions_per_user: 0`))
+	if cfg.Auth.MaxActiveSessionsPerUser != 0 {
+		t.Fatalf("MaxActiveSessionsPerUser = %d, want 0", cfg.Auth.MaxActiveSessionsPerUser)
+	}
+
+	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`auth:
+  jwt:
+    secret: test-secret
+    issuer: aegiscore-test
+    audience: aegiscore-users
+    access_token_ttl: 15m
+    refresh_token_ttl: 168h
+  token_version_cache_ttl: 30s
+  refresh_token_rotation: true
+  max_active_sessions_per_user: -1`))
+	assertConfigLoadErrorContains(t, err, "auth.max_active_sessions_per_user must be >= 0")
 }
 
 func TestLoadYAMLMergeForNamedDatastores(t *testing.T) {
@@ -468,6 +503,7 @@ auth:
     refresh_token_ttl: 168h
   token_version_cache_ttl: 30s
   refresh_token_rotation: true
+  max_active_sessions_per_user: 5
 
 log:
   level: info
@@ -549,7 +585,8 @@ func configYAMLWithSection(section string) string {
     access_token_ttl: 15m
     refresh_token_ttl: 168h
   token_version_cache_ttl: 30s
-  refresh_token_rotation: true`,
+  refresh_token_rotation: true
+  max_active_sessions_per_user: 5`,
 		"log": `log:
   level: info
   format: json

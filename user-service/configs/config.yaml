@@ -44,6 +44,8 @@ auth:
   token_version_cache_ttl: 30s
   # 刷新时是否轮转 Refresh Token，开启后旧 Refresh Token 会话失效。
   refresh_token_rotation: true
+  # 同一用户最多保留的活跃 Refresh Token 会话数；0 表示不限制。
+  max_active_sessions_per_user: 5
 
 log:
   # 日志最低输出级别；常用值为 debug、info、warn、error。

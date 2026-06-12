@@ -56,7 +56,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 
 | 目录 | 责任 |
 |---|---|
-| `application/` | service、commands、queries、ports、use case mapper 和业务编排；可按 feature 需要细分为 `command/`、`query/`、`validators/` 和稳定组件包。Auth 当前使用 `command/` 承载登录、刷新、强制改密和登出 use case，使用 `validators/` 承载 transport-neutral 输入辅助、token version 撤销校验、cache/database fallback 策略和 refresh session 一致性校验 |
+| `application/` | service、commands、queries、ports、use case mapper 和业务编排；可按 feature 需要细分为 `command/`、`query/`、`validators/` 和稳定组件包。Auth 当前使用 `command/` 承载登录、刷新、强制改密和登出 use case，并持有每用户活跃 refresh session 上限策略；使用 `validators/` 承载 transport-neutral 输入辅助、token version 撤销校验、cache/database fallback 策略和 refresh session 一致性校验 |
 | `domain/` | 领域实体、值对象、枚举、领域错误和纯业务规则；可按真实需要细分 `services/` 承载跨实体或跨值对象的纯领域服务规则，`events/` 承载纯领域事件模型 |
 | `transport/http/` | 当前已实现的入站 HTTP transport，承载 Gin controller、route registration、HTTP request/response DTO、Swagger 文档模型、HTTP DTO validation 和边界映射 |
 | `transport/grpc/` | 未来本服务暴露入站 gRPC API 时的 feature-local transport，承载 gRPC handler、server-side protobuf request/response 映射、gRPC 边界 validation 和 application command/query 映射；当前没有真实 gRPC API 时不得新增业务代码、空 handler、空 service、未使用 proto 或 generated code，只可按需保留 README 或 package doc |
@@ -91,7 +91,7 @@ Feature transport 可以按入站协议拆分在同一 feature 的 `transport/` 
 | `integration/*` | 外部 SDK/client、feature application ports、domain、common runtime/security 原语 | Gin response、Ent、feature service 业务编排、service-owned persistence adapter |
 | `fx.go` | Fx、feature 内部包 | 业务逻辑 |
 
-Ports 由消费侧 feature 拥有。Infrastructure adapter 只实现 application 层定义的最小接口，不为了自身方便定义大接口。
+Ports 由消费侧 feature 拥有。Infrastructure adapter 只实现 application 层定义的最小接口，不为了自身方便定义大接口。Auth 的每用户活跃 refresh session 上限属于 application 持有的安全策略，通过 application port 传入 Redis adapter 同步执行；该策略不得下沉为 Redis adapter 私有配置，也不得交给后台 worker 异步补偿。
 
 Controller 或未来 gRPC handler 必须把 transport DTO 映射为 application command/query 后再调用 service 或用例。Service 和 command/query 用例不接收 HTTP request/response DTO 或 protobuf DTO，也不导入 Gin、Ent predicate、Redis client、HTTP binder 或 gRPC runtime。
 
@@ -112,7 +112,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - `common/testing/`：跨模块测试基础设施和无业务语义 fixture，仅供测试代码使用；真实 PostgreSQL/Redis integration helper 放在 `testing/containers`，基础测试值生成放在 `testing/fixtures`。
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。
 
-`common/runtime/workerpool` 是跨服务稳定、无业务语义的后台任务池 primitive，当前基于 ants 封装并提供并发限制、满载拒绝、错误日志、内存统计和 Fx 生命周期关闭。它只能承载运行时任务执行能力，不承载 feature 业务规则、业务 DTO、跨 feature 编排、事件投递语义、outbox 持久化或可靠消息语义。Feature application 不应依赖 worker pool；需要后台清理的 infrastructure adapter 可以把它作为内部 runtime 依赖使用。高并发正式系统中后台池应按用途命名为专用 Fx 资源，例如 auth session purge 使用 `auth_session_purge_pool`，不得把多个业务场景混用到一个全局共享池。
+`common/runtime/workerpool` 是跨服务稳定、无业务语义的后台任务池 primitive，当前基于 ants 封装并提供并发限制、满载拒绝、错误日志、内存统计和 Fx 生命周期关闭。它只能承载运行时任务执行能力，不承载 feature 业务规则、业务 DTO、跨 feature 编排、事件投递语义、outbox 持久化、可靠消息语义或影响 token 有效性的 session 安全策略。Feature application 不应依赖 worker pool；需要后台清理的 infrastructure adapter 可以把它作为内部 runtime 依赖使用。高并发正式系统中后台池应按用途命名为专用 Fx 资源，例如 auth session purge 使用 `auth_session_purge_pool`，不得把多个业务场景混用到一个全局共享池。
 
 新增共享代码进入 `common` 前必须满足跨服务稳定、无业务语义、边界清晰。服务独有规则、DTO 映射、infrastructure adapter 行为或只为未来可能复用的 helper 应保留在对应服务模块内。未来 `common/runtime/eventbus` 只有在至少两个服务需要同一稳定 runtime primitive，且 API 不含用户服务业务语义时才可新增；它不得承载 user-service event name、feature port、业务 DTO 或 speculative broker abstraction。未来 outbox 若要进入 `common/runtime/outbox`，必须先通过单独变更设计 transaction boundary、存储模型、投递 worker、重试、幂等和失败策略；在该设计前不得新增 outbox table、Ent hook、transaction wrapper 或 dispatcher。
 
@@ -138,7 +138,8 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前声明并连接 `postgres.user_db` 与 `postgres.common_db`。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`。
 - 用户服务的 Redis/PostgreSQL named resource、JWT service、Gin engine 和 Ent clients 由 `user-service/internal/providers/` 提供，其中 Ent clients 由 `providers/ent.go` 基于具名 `*sql.DB` 构建。
-- 用户服务认证 Redis adapter 使用 `common/runtime/workerpool` 管理退出全部设备后的 detached session 后台清理；该 worker pool 只负责受控后台执行，不是 MQ、eventbus、outbox、通用 job system 或可靠投递框架。
+- 用户服务认证 Redis adapter 对登录和 refresh rotation 的 refresh session 写入执行同步 Redis Lua 原子操作，并按 application 传入的每用户活跃 session 上限裁剪最旧 session；该裁剪影响 refresh token 可续期能力，不通过 worker pool 异步执行。
+- 用户服务认证 Redis adapter 使用 `common/runtime/workerpool` 管理退出全部设备后的 detached session 后台物理清理；该 worker pool 只负责受控后台执行，不是 MQ、eventbus、outbox、通用 job system、可靠投递框架或 session 上限策略执行器。
 - 用户服务的外部系统防腐层边界位于 `user-service/internal/integration/`；其中 `integration/grpc` 只表示出站外部 gRPC client adapter，不表示本服务入站 gRPC transport；`integration/events` 只表示外部事件系统协议 adapter，不表示 feature consumer handler 或业务事件编排；当前没有 order、payment 等真实外部 client，也没有 Kafka、RabbitMQ、NATS、Redis Stream 等 broker dependency；当前也没有事件总线、outbox、publisher、subscriber、consumer handler 或异步投递 worker。
 - 部署资产位于 `deployments/`：用户服务 Dockerfile 位于 `deployments/docker/user-service.Dockerfile`，并要求从仓库根目录执行 build；`deployments/compose/` 承载本地依赖或本地服务启动配置，`deployments/k8s/` 承载 Kubernetes YAML，`deployments/helm/` 承载 Helm chart。
 - 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace header 为 `X-Trace-ID`，Gin context key 和日志字段统一为 `trace_id`。

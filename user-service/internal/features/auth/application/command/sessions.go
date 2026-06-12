@@ -29,17 +29,18 @@ type AuthSessionLifecycle interface {
 }
 
 type authSessionLifecycle struct {
-	users    authapplication.UserTokenVersionStore
-	sessions authapplication.AuthSessionStore
+	users                    authapplication.UserTokenVersionStore
+	sessions                 authapplication.AuthSessionStore
+	maxActiveSessionsPerUser int
 }
 
-func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) AuthSessionLifecycle {
-	return &authSessionLifecycle{users: users, sessions: sessions}
+func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, maxActiveSessionsPerUser int) AuthSessionLifecycle {
+	return &authSessionLifecycle{users: users, sessions: sessions, maxActiveSessionsPerUser: maxActiveSessionsPerUser}
 }
 
 // CreateTokenSession 为新签发的 token pair 持久化 refresh 会话元数据。
 func (m *authSessionLifecycle) CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error {
-	if err := m.sessions.CreateSession(ctx, authdomain.AuthSession{UserID: userID, SessionID: sessionID, TokenVersion: tokenVersion, ExpiresAt: time.Now().Add(refreshTTL)}, refreshTTL); err != nil {
+	if err := m.sessions.CreateSession(ctx, authdomain.AuthSession{UserID: userID, SessionID: sessionID, TokenVersion: tokenVersion, ExpiresAt: time.Now().Add(refreshTTL)}, refreshTTL, m.maxActiveSessionsPerUser); err != nil {
 		logger.Error(ctx, "create auth session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return err
 	}
@@ -98,7 +99,7 @@ func (m *authSessionLifecycle) ValidateRefreshSession(ctx context.Context, claim
 
 // RotateTokenSession 原子消费旧 refresh 会话，并创建新 refresh 会话。
 func (m *authSessionLifecycle) RotateTokenSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, refreshTTL time.Duration) error {
-	if err := m.sessions.RotateSession(ctx, oldSession, newSession, refreshTTL); err != nil {
+	if err := m.sessions.RotateSession(ctx, oldSession, newSession, refreshTTL, m.maxActiveSessionsPerUser); err != nil {
 		if errors.Is(err, authdomain.ErrAuthSessionNotFound) || errors.Is(err, authdomain.ErrAuthSessionMismatch) {
 			logger.Warn(ctx, "rotate auth session rejected", zap.String("user_id", oldSession.UserID), zap.String("old_session_id", oldSession.SessionID), zap.String("new_session_id", newSession.SessionID), zap.Error(err))
 			return authdomain.ErrTokenInvalid
