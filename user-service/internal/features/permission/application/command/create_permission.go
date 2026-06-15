@@ -62,5 +62,6 @@ func (s *permissionCommandService) CreatePermission(ctx context.Context, cmd Cre
 		logger.Error(ctx, "create permission failed", logger.StackTrace(zap.String("permission_id", permissionID.String()), zap.Error(err))...)
 		return nil, err
 	}
+	s.notifyPolicyChanged(ctx, "permission_created")
 	return &PermissionResult{Permission: *created}, nil
 }

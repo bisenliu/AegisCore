@@ -30,5 +30,6 @@ func (s *permissionCommandService) setPermissionActive(ctx context.Context, perm
 		logger.Error(ctx, "set permission active failed", logger.StackTrace(zap.String("permission_id", permissionID.String()), zap.Bool("active", active), zap.Error(err))...)
 		return nil, err
 	}
+	s.notifyPolicyChanged(ctx, "permission_active_changed")
 	return &PermissionResult{Permission: *updated}, nil
 }

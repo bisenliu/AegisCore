@@ -13,7 +13,8 @@ import (
 
 func TestPermissionCommandServiceCreateAndProtectSystemPermission(t *testing.T) {
 	store := &stubPermissionStore{}
-	service := NewPermissionCommandService(store)
+	notifier := &stubPolicyChangeNotifier{}
+	service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: notifier})
 
 	created, err := service.CreatePermission(context.Background(), CreatePermissionCommand{Name: "List Users", Module: "user", HTTPMethod: "get", PathTemplate: "/api/v1/users", IsSystem: true})
 	if err != nil {
@@ -21,6 +22,9 @@ func TestPermissionCommandServiceCreateAndProtectSystemPermission(t *testing.T) 
 	}
 	if created.Permission.HTTPMethod != "GET" || !created.Permission.Active || !created.Permission.IsSystem {
 		t.Fatalf("created = %#v", created.Permission)
+	}
+	if notifier.calls != 1 || notifier.reasons[0] != "permission_created" {
+		t.Fatalf("notifier = %#v", notifier.reasons)
 	}
 
 	_, err = service.UpdatePermission(context.Background(), UpdatePermissionCommand{PermissionID: created.Permission.PermissionID, Name: "List Users", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true})
@@ -31,7 +35,8 @@ func TestPermissionCommandServiceCreateAndProtectSystemPermission(t *testing.T) 
 
 func TestPermissionCommandServiceSetActive(t *testing.T) {
 	store := &stubPermissionStore{permission: permissiondomain.Permission{PermissionID: uuid.MustParse("018f0000-0000-7000-8000-000000000001"), HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}}
-	service := NewPermissionCommandService(store)
+	notifier := &stubPolicyChangeNotifier{}
+	service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: notifier})
 
 	result, err := service.DisablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: store.permission.PermissionID})
 	if err != nil {
@@ -40,11 +45,14 @@ func TestPermissionCommandServiceSetActive(t *testing.T) {
 	if result.Permission.Active {
 		t.Fatalf("permission remains active")
 	}
+	if notifier.calls != 1 || notifier.reasons[0] != "permission_active_changed" {
+		t.Fatalf("notifier = %#v", notifier.reasons)
+	}
 }
 
 func TestPermissionCommandServiceCreateMapsDuplicateAndShortCircuitsValidation(t *testing.T) {
 	store := &stubPermissionStore{createErr: permissiondomain.ErrPermissionAlreadyExists}
-	service := NewPermissionCommandService(store)
+	service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: &stubPolicyChangeNotifier{}})
 
 	_, err := service.CreatePermission(context.Background(), CreatePermissionCommand{Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users"})
 	if !errors.Is(err, permissiondomain.ErrPermissionAlreadyExists) {
@@ -55,7 +63,7 @@ func TestPermissionCommandServiceCreateMapsDuplicateAndShortCircuitsValidation(t
 	}
 
 	store = &stubPermissionStore{}
-	service = NewPermissionCommandService(store)
+	service = NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: &stubPolicyChangeNotifier{}})
 	_, err = service.CreatePermission(context.Background(), CreatePermissionCommand{Name: "", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users"})
 	if err == nil {
 		t.Fatalf("err is nil for invalid input")
@@ -68,7 +76,8 @@ func TestPermissionCommandServiceCreateMapsDuplicateAndShortCircuitsValidation(t
 func TestPermissionCommandServiceUpdateNonSystemNormalizesAndMapsDuplicate(t *testing.T) {
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000002")
 	store := &stubPermissionStore{permission: permissiondomain.Permission{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}}
-	service := NewPermissionCommandService(store)
+	notifier := &stubPolicyChangeNotifier{}
+	service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: notifier})
 
 	result, err := service.UpdatePermission(context.Background(), UpdatePermissionCommand{PermissionID: permissionID, Name: "  Create User  ", Description: "  Create users  ", Module: "  user  ", HTTPMethod: "post", PathTemplate: "/api/v1/users", Active: true})
 	if err != nil {
@@ -79,6 +88,9 @@ func TestPermissionCommandServiceUpdateNonSystemNormalizesAndMapsDuplicate(t *te
 	}
 	if store.updateInput.HTTPMethod != "POST" || store.updateInput.PathTemplate != "/api/v1/users" {
 		t.Fatalf("update input = %#v", store.updateInput)
+	}
+	if notifier.calls != 1 || notifier.reasons[0] != "permission_updated" {
+		t.Fatalf("notifier = %#v", notifier.reasons)
 	}
 
 	store.updateErr = permissiondomain.ErrPermissionAlreadyExists
@@ -91,7 +103,7 @@ func TestPermissionCommandServiceUpdateNonSystemNormalizesAndMapsDuplicate(t *te
 func TestPermissionCommandServiceEnablePermission(t *testing.T) {
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000003")
 	store := &stubPermissionStore{permission: permissiondomain.Permission{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: false}}
-	service := NewPermissionCommandService(store)
+	service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: &stubPolicyChangeNotifier{}})
 
 	result, err := service.EnablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
 	if err != nil {
@@ -100,6 +112,16 @@ func TestPermissionCommandServiceEnablePermission(t *testing.T) {
 	if !result.Permission.Active || !store.setActiveCalled || !store.setActiveValue {
 		t.Fatalf("active = %v called = %v value = %v", result.Permission.Active, store.setActiveCalled, store.setActiveValue)
 	}
+}
+
+type stubPolicyChangeNotifier struct {
+	calls   int
+	reasons []string
+}
+
+func (n *stubPolicyChangeNotifier) NotifyPolicyChanged(_ context.Context, reason string) {
+	n.calls++
+	n.reasons = append(n.reasons, reason)
 }
 
 type stubPermissionStore struct {

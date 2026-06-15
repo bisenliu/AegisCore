@@ -14,7 +14,7 @@ import (
 
 func TestRoleCommandServiceCreateRoleDefaultsAndNormalizes(t *testing.T) {
 	roles := &stubRoleStore{}
-	service := NewRoleCommandService(roles, &stubUserRoleStore{}, &stubRolePermissionStore{}, &stubPermissionLookup{})
+	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &stubUserRoleStore{}, RolePermissions: &stubRolePermissionStore{}, Permissions: &stubPermissionLookup{}, PolicyChanges: &stubRolePolicyChangeNotifier{}})
 
 	result, err := service.CreateRole(context.Background(), CreateRoleCommand{Name: "  Operator  ", Description: "  Ops user  ", IsSystem: true})
 	if err != nil {
@@ -34,7 +34,7 @@ func TestRoleCommandServiceCreateRoleDefaultsAndNormalizes(t *testing.T) {
 func TestRoleCommandServiceUpdateRoleProtectsSystemRole(t *testing.T) {
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000001")
 	roles := &stubRoleStore{role: roledomain.Role{RoleID: roleID, Name: "super_admin", Active: true, IsSystem: true}}
-	service := NewRoleCommandService(roles, &stubUserRoleStore{}, &stubRolePermissionStore{}, &stubPermissionLookup{})
+	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &stubUserRoleStore{}, RolePermissions: &stubRolePermissionStore{}, Permissions: &stubPermissionLookup{}, PolicyChanges: &stubRolePolicyChangeNotifier{}})
 
 	_, err := service.UpdateRole(context.Background(), UpdateRoleCommand{RoleID: roleID, Name: "renamed", Description: "system", Active: true})
 	if !errors.Is(err, roledomain.ErrSystemRoleProtected) {
@@ -48,7 +48,7 @@ func TestRoleCommandServiceUpdateRoleProtectsSystemRole(t *testing.T) {
 func TestRoleCommandServiceSetRoleActiveProtectsSystemRole(t *testing.T) {
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000002")
 	roles := &stubRoleStore{role: roledomain.Role{RoleID: roleID, Name: "super_admin", Active: true, IsSystem: true}}
-	service := NewRoleCommandService(roles, &stubUserRoleStore{}, &stubRolePermissionStore{}, &stubPermissionLookup{})
+	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &stubUserRoleStore{}, RolePermissions: &stubRolePermissionStore{}, Permissions: &stubPermissionLookup{}, PolicyChanges: &stubRolePolicyChangeNotifier{}})
 
 	_, err := service.SetRoleActive(context.Background(), SetRoleActiveCommand{RoleID: roleID, Active: false})
 	if !errors.Is(err, roledomain.ErrSystemRoleProtected) {
@@ -68,7 +68,8 @@ func TestRoleCommandServiceUserRoleBindings(t *testing.T) {
 		otherRoleID: {RoleID: otherRoleID, Name: "auditor", Active: true},
 	}}
 	userRoles := &stubUserRoleStore{items: []roledomain.Role{{RoleID: roleID, Name: "operator", Active: true}}}
-	service := NewRoleCommandService(roles, userRoles, &stubRolePermissionStore{}, &stubPermissionLookup{})
+	notifier := &stubRolePolicyChangeNotifier{}
+	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: userRoles, RolePermissions: &stubRolePermissionStore{}, Permissions: &stubPermissionLookup{}, PolicyChanges: notifier})
 
 	result, err := service.AddUserRole(context.Background(), UserRoleCommand{UserID: userID, RoleID: roleID})
 	if err != nil {
@@ -76,6 +77,9 @@ func TestRoleCommandServiceUserRoleBindings(t *testing.T) {
 	}
 	if userRoles.addUserID != userID || userRoles.addRoleID != roleID || len(result.Items) != 1 {
 		t.Fatalf("add state = user:%s role:%s result:%#v", userRoles.addUserID, userRoles.addRoleID, result.Items)
+	}
+	if notifier.reasons[0] != "user_role_added" {
+		t.Fatalf("notifier = %#v", notifier.reasons)
 	}
 
 	replaced, err := service.ReplaceUserRoles(context.Background(), ReplaceUserRolesCommand{UserID: userID, RoleIDs: []uuid.UUID{roleID, otherRoleID, roleID}})
@@ -87,6 +91,9 @@ func TestRoleCommandServiceUserRoleBindings(t *testing.T) {
 	}
 	if len(replaced.Items) != 2 {
 		t.Fatalf("replaced items = %#v", replaced.Items)
+	}
+	if notifier.reasons[1] != "user_roles_replaced" {
+		t.Fatalf("notifier = %#v", notifier.reasons)
 	}
 }
 
@@ -100,7 +107,8 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 		otherPermissionID: {PermissionID: otherPermissionID, HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true},
 	}}
 	rolePermissions := &stubRolePermissionStore{items: []roleapplication.PermissionReference{{PermissionID: permissionID, Active: true}}}
-	service := NewRoleCommandService(roles, &stubUserRoleStore{}, rolePermissions, permissions)
+	notifier := &stubRolePolicyChangeNotifier{}
+	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &stubUserRoleStore{}, RolePermissions: rolePermissions, Permissions: permissions, PolicyChanges: notifier})
 
 	result, err := service.AddRolePermission(context.Background(), RolePermissionCommand{RoleID: roleID, PermissionID: permissionID})
 	if err != nil {
@@ -108,6 +116,9 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	}
 	if rolePermissions.addRoleID != roleID || rolePermissions.addPermission.PermissionID != permissionID || len(result.Items) != 1 {
 		t.Fatalf("add state = role:%s permission:%#v result:%#v", rolePermissions.addRoleID, rolePermissions.addPermission, result.Items)
+	}
+	if notifier.reasons[0] != "role_permission_added" {
+		t.Fatalf("notifier = %#v", notifier.reasons)
 	}
 
 	replaced, err := service.ReplaceRolePermissions(context.Background(), ReplaceRolePermissionsCommand{RoleID: roleID, PermissionIDs: []uuid.UUID{permissionID, otherPermissionID, permissionID}})
@@ -123,6 +134,17 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	if len(replaced.Items) != 2 {
 		t.Fatalf("replaced items = %#v", replaced.Items)
 	}
+	if notifier.reasons[1] != "role_permissions_replaced" {
+		t.Fatalf("notifier = %#v", notifier.reasons)
+	}
+}
+
+type stubRolePolicyChangeNotifier struct {
+	reasons []string
+}
+
+func (n *stubRolePolicyChangeNotifier) NotifyPolicyChanged(_ context.Context, reason string) {
+	n.reasons = append(n.reasons, reason)
 }
 
 type stubRoleStore struct {

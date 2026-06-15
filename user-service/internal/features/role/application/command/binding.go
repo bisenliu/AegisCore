@@ -40,6 +40,7 @@ func (s *roleCommandService) AddUserRole(ctx context.Context, cmd UserRoleComman
 	if err := s.userRoles.Add(ctx, cmd.UserID, cmd.RoleID); err != nil {
 		return nil, err
 	}
+	s.notifyPolicyChanged(ctx, "user_role_added")
 	return s.listUserRoles(ctx, cmd.UserID)
 }
 
@@ -54,6 +55,7 @@ func (s *roleCommandService) ReplaceUserRoles(ctx context.Context, cmd ReplaceUs
 	if err != nil {
 		return nil, err
 	}
+	s.notifyPolicyChanged(ctx, "user_roles_replaced")
 	return &RolesResult{Items: items}, nil
 }
 
@@ -62,6 +64,7 @@ func (s *roleCommandService) RemoveUserRole(ctx context.Context, cmd UserRoleCom
 	if err := s.userRoles.Remove(ctx, cmd.UserID, cmd.RoleID); err != nil {
 		return nil, err
 	}
+	s.notifyPolicyChanged(ctx, "user_role_removed")
 	return s.listUserRoles(ctx, cmd.UserID)
 }
 
@@ -77,6 +80,7 @@ func (s *roleCommandService) AddRolePermission(ctx context.Context, cmd RolePerm
 	if err := s.rolePermissions.Add(ctx, cmd.RoleID, *permission); err != nil {
 		return nil, err
 	}
+	s.notifyPolicyChanged(ctx, "role_permission_added")
 	return s.listRolePermissions(ctx, cmd.RoleID)
 }
 
@@ -98,6 +102,7 @@ func (s *roleCommandService) ReplaceRolePermissions(ctx context.Context, cmd Rep
 	if err != nil {
 		return nil, err
 	}
+	s.notifyPolicyChanged(ctx, "role_permissions_replaced")
 	return &PermissionsResult{Items: items}, nil
 }
 
@@ -106,6 +111,7 @@ func (s *roleCommandService) RemoveRolePermission(ctx context.Context, cmd RoleP
 	if err := s.rolePermissions.Remove(ctx, cmd.RoleID, cmd.PermissionID); err != nil {
 		return nil, err
 	}
+	s.notifyPolicyChanged(ctx, "role_permission_removed")
 	return s.listRolePermissions(ctx, cmd.RoleID)
 }
 

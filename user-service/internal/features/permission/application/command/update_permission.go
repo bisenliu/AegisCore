@@ -46,5 +46,6 @@ func (s *permissionCommandService) UpdatePermission(ctx context.Context, cmd Upd
 		logger.Error(ctx, "update permission failed", logger.StackTrace(zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
 		return nil, err
 	}
+	s.notifyPolicyChanged(ctx, "permission_updated")
 	return &PermissionResult{Permission: *updated}, nil
 }

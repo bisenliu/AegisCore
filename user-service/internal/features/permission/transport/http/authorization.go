@@ -4,12 +4,13 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gin-gonic/gin"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
 	commonresponse "github.com/aegiscore/common/http/response"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/user-service/internal/features/permission/application/authorization"
-	"github.com/gin-gonic/gin"
 )
 
 const authorizationWildcardMethod = "*"

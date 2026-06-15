@@ -8,10 +8,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
 	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/gin-gonic/gin"
 )
 
 const authorizationTestUserID = "018f0000-0000-7000-8000-000000000801"
