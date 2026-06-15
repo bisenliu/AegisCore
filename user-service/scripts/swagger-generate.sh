@@ -16,9 +16,9 @@ set -eu
 cd "$(dirname "$0")/.."
 
 go run github.com/swaggo/swag/cmd/swag@v1.16.6 init \
-  -g cmd/main.go \
+  -d ./cmd,./internal/router,./internal/features/auth/transport/http,./internal/features/user/transport/http,./internal/features/role/transport/http,./internal/features/permission/transport/http \
+  -g main.go \
   -o docs \
-  --packagePrefix github.com/aegiscore/user-service \
   --useStructName \
   --parseDependency \
   --parseInternal

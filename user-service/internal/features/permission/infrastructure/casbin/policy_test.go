@@ -76,6 +76,27 @@ func TestPolicyLoaderAddsSuperAdminWildcard(t *testing.T) {
 	assertHasRule(t, policies.PermissionRules, uuid.MustParse(defaultSuperAdminRoleID), policyWildcard, policyWildcard)
 }
 
+func TestPolicyLoaderUsesRoleIDSubjectWithoutRoleCode(t *testing.T) {
+	client := newPolicyTestClient(t)
+	ctx := context.Background()
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000207")
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000208")
+	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000209")
+	user := createPolicyTestUser(t, client, userID, "role-id-subject@example.com")
+	role := createPolicyTestRole(t, client, roleID, true)
+	permission := createPolicyTestPermission(t, client, permissionID, "PATCH", "/api/v1/roles/:role_id", true)
+	createPolicyTestUserRole(t, client, user.ID, role.ID)
+	createPolicyTestRolePermission(t, client, role.ID, permission.ID)
+
+	loader := NewPolicyLoader(LoaderParams{Client: client})
+	policies, err := loader.LoadPolicies(ctx)
+	if err != nil {
+		t.Fatalf("LoadPolicies: %v", err)
+	}
+	assertHasGroup(t, policies.GroupingPolicies, userID, roleID)
+	assertHasRule(t, policies.PermissionRules, roleID, "/api/v1/roles/:role_id", "PATCH")
+}
+
 func newPolicyTestClient(t *testing.T) *ent.Client {
 	t.Helper()
 	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:casbin_policy_test_%s?mode=memory&cache=shared&_fk=1", uuid.NewString()))

@@ -2,7 +2,7 @@ package main
 
 // @title AegisCore User Services API
 // @version 1.0.0
-// @description AegisCore 用户服务 API 文档，覆盖用户资料查询、用户创建和服务健康检查。
+// @description AegisCore 用户服务 API 文档，覆盖认证会话、用户资料、角色管理、权限目录、RBAC 授权保护的业务接口和服务健康检查。
 // @host localhost:8080
 // @BasePath /api/v1
 // @schemes http https

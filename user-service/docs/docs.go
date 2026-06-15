@@ -48,7 +48,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_features_auth_transport_http.ChangePasswordRequest"
+                            "$ref": "#/definitions/ChangePasswordRequest"
                         }
                     }
                 ],
@@ -58,13 +58,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Envelope"
+                                    "$ref": "#/definitions/Envelope"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_features_auth_transport_http.ChangePasswordResponse"
+                                            "$ref": "#/definitions/ChangePasswordResponse"
                                         }
                                     }
                                 }
@@ -74,19 +74,19 @@ const docTemplate = `{
                     "400": {
                         "description": "请求体错误或参数校验失败",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "401": {
                         "description": "改密凭据无效或已失效",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "500": {
                         "description": "服务器内部错误",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     }
                 }
@@ -112,7 +112,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_features_auth_transport_http.LoginRequest"
+                            "$ref": "#/definitions/LoginRequest"
                         }
                     }
                 ],
@@ -122,13 +122,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Envelope"
+                                    "$ref": "#/definitions/Envelope"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_features_auth_transport_http.TokenResponse"
+                                            "$ref": "#/definitions/TokenResponse"
                                         }
                                     }
                                 }
@@ -138,19 +138,19 @@ const docTemplate = `{
                     "400": {
                         "description": "请求体错误或参数校验失败",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "401": {
                         "description": "用户名或密码错误",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "500": {
                         "description": "服务器内部错误",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     }
                 }
@@ -177,13 +177,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Envelope"
+                                    "$ref": "#/definitions/Envelope"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_features_auth_transport_http.LogoutResponse"
+                                            "$ref": "#/definitions/LogoutResponse"
                                         }
                                     }
                                 }
@@ -193,13 +193,13 @@ const docTemplate = `{
                     "401": {
                         "description": "未认证或 token 无效",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "500": {
                         "description": "服务器内部错误",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     }
                 }
@@ -226,13 +226,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Envelope"
+                                    "$ref": "#/definitions/Envelope"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_features_auth_transport_http.LogoutResponse"
+                                            "$ref": "#/definitions/LogoutResponse"
                                         }
                                     }
                                 }
@@ -242,13 +242,13 @@ const docTemplate = `{
                     "401": {
                         "description": "未认证或 token 无效",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "500": {
                         "description": "服务器内部错误",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     }
                 }
@@ -274,7 +274,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_features_auth_transport_http.RefreshTokenRequest"
+                            "$ref": "#/definitions/RefreshTokenRequest"
                         }
                     }
                 ],
@@ -284,13 +284,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Envelope"
+                                    "$ref": "#/definitions/Envelope"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_features_auth_transport_http.TokenResponse"
+                                            "$ref": "#/definitions/TokenResponse"
                                         }
                                     }
                                 }
@@ -300,19 +300,19 @@ const docTemplate = `{
                     "400": {
                         "description": "请求体错误或参数校验失败",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "401": {
                         "description": "Refresh Token 无效或会话已失效",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "500": {
                         "description": "服务器内部错误",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     }
                 }
@@ -332,7 +332,1398 @@ const docTemplate = `{
                     "200": {
                         "description": "服务健康",
                         "schema": {
-                            "$ref": "#/definitions/internal_router.HealthResponse"
+                            "$ref": "#/definitions/HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/permissions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询权限目录。业务接口由 JWT 和 RBAC 保护。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "权限"
+                ],
+                "summary": "分页查询权限",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "分页游标",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "模块",
+                        "name": "module",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "HTTP 方法",
+                        "name": "http_method",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "是否启用",
+                        "name": "active",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "是否系统权限",
+                        "name": "system",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "查询成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/PermissionListResponseDoc"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "查询参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "创建正式权限目录记录。业务接口由 JWT 和 RBAC 保护。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "权限"
+                ],
+                "summary": "创建权限",
+                "parameters": [
+                    {
+                        "description": "创建权限请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/CreatePermissionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "创建成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/PermissionResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求体错误或参数校验失败",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "409": {
+                        "description": "权限已存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/permissions/route-diff": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "只读比较 Gin 已注册业务路由和正式权限目录差异；不会创建权限，也不会绑定角色。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "权限"
+                ],
+                "summary": "查询权限路由差异",
+                "responses": {
+                    "200": {
+                        "description": "查询成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/RouteDiffResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/permissions/users/{user_id}/effective": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询用户经角色绑定后当前生效的权限集合。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "权限"
+                ],
+                "summary": "查询用户有效权限",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "查询成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/PermissionResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "用户 ID 参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/permissions/{permission_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "通过权限 ID 查询权限目录记录。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "权限"
+                ],
+                "summary": "查询权限详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "权限ID",
+                        "name": "permission_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "查询成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/PermissionResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "权限 ID 参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "权限不存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "更新权限目录记录。系统权限身份字段受保护。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "权限"
+                ],
+                "summary": "更新权限",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "权限ID",
+                        "name": "permission_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "更新权限请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/UpdatePermissionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/PermissionResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求错误或系统权限受保护",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "权限不存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "409": {
+                        "description": "权限已存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/permissions/{permission_id}/disable": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "停用权限目录记录。停用后相关 RBAC 授权应被拒绝。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "权限"
+                ],
+                "summary": "停用权限",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "权限ID",
+                        "name": "permission_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "停用成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/PermissionResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "权限 ID 参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "权限不存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/permissions/{permission_id}/enable": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "启用权限目录记录。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "权限"
+                ],
+                "summary": "启用权限",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "权限ID",
+                        "name": "permission_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "启用成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/PermissionResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "权限 ID 参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "权限不存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/roles": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询角色列表。业务接口由 JWT 和 RBAC 保护，Casbin 使用 role_id 作为策略主体，不依赖 roles.code。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色"
+                ],
+                "summary": "分页查询角色",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "分页游标",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "是否启用",
+                        "name": "active",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "是否系统角色",
+                        "name": "system",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "查询成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/RoleListResponseDoc"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "查询参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "创建角色。业务接口由 JWT 和 RBAC 保护。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色"
+                ],
+                "summary": "创建角色",
+                "parameters": [
+                    {
+                        "description": "创建角色请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/CreateRoleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "创建成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/RoleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求体错误或参数校验失败",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "409": {
+                        "description": "角色已存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/roles/{role_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "通过角色 ID 查询角色详情。业务接口由 JWT 和 RBAC 保护。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色"
+                ],
+                "summary": "查询角色详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "角色ID",
+                        "name": "role_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "查询成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/RoleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "角色 ID 参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "角色不存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "更新角色元数据。系统角色受保护字段不可破坏性修改。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色"
+                ],
+                "summary": "更新角色",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "角色ID",
+                        "name": "role_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "更新角色请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/UpdateRoleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/RoleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求错误或系统角色受保护",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "角色不存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "409": {
+                        "description": "角色已存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/roles/{role_id}/permissions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询角色绑定的权限列表。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色"
+                ],
+                "summary": "查询角色权限",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "角色ID",
+                        "name": "role_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "查询成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/PermissionResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "角色 ID 参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "幂等替换角色完整权限集合，角色权限解绑后相关 RBAC 授权应被拒绝。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色"
+                ],
+                "summary": "替换角色权限",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "角色ID",
+                        "name": "role_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "权限ID列表",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/PermissionIDsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "替换成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/PermissionResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "角色或权限不存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "为角色新增一个启用权限绑定。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色"
+                ],
+                "summary": "绑定角色权限",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "角色ID",
+                        "name": "role_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "权限ID",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/PermissionIDBodyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "绑定成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/PermissionResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "角色或启用权限不存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "409": {
+                        "description": "绑定已存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/roles/{role_id}/permissions/{permission_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "删除角色权限绑定，解绑后相关 RBAC 授权应被拒绝。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色"
+                ],
+                "summary": "解绑角色权限",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "角色ID",
+                        "name": "role_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "权限ID",
+                        "name": "permission_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "解绑成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/PermissionResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "绑定不存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/roles/{role_id}/status": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "启用或停用角色。停用角色后相关 RBAC 授权应被拒绝。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色"
+                ],
+                "summary": "启停角色",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "角色ID",
+                        "name": "role_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "角色状态请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/SetRoleStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "操作成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/RoleResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求错误或系统角色受保护",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "角色不存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
                         }
                     }
                 }
@@ -398,13 +1789,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Envelope"
+                                    "$ref": "#/definitions/Envelope"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_features_user_transport_http.UserListResponseDoc"
+                                            "$ref": "#/definitions/UserListResponseDoc"
                                         }
                                     }
                                 }
@@ -414,19 +1805,19 @@ const docTemplate = `{
                     "400": {
                         "description": "查询参数错误",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "401": {
                         "description": "未认证或 token 无效",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "500": {
                         "description": "服务器内部错误",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     }
                 }
@@ -455,7 +1846,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_features_user_transport_http.CreateUserRequest"
+                            "$ref": "#/definitions/CreateUserRequest"
                         }
                     }
                 ],
@@ -465,13 +1856,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Envelope"
+                                    "$ref": "#/definitions/Envelope"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_features_user_transport_http.UserResponseDoc"
+                                            "$ref": "#/definitions/UserResponseDoc"
                                         }
                                     }
                                 }
@@ -481,25 +1872,25 @@ const docTemplate = `{
                     "400": {
                         "description": "请求体错误或参数校验失败",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "401": {
                         "description": "未认证或 token 无效",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "409": {
                         "description": "用户已存在",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "500": {
                         "description": "服务器内部错误",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     }
                 }
@@ -535,13 +1926,13 @@ const docTemplate = `{
                         "schema": {
                             "allOf": [
                                 {
-                                    "$ref": "#/definitions/response.Envelope"
+                                    "$ref": "#/definitions/Envelope"
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/internal_features_user_transport_http.UserResponseDoc"
+                                            "$ref": "#/definitions/UserResponseDoc"
                                         }
                                     }
                                 }
@@ -551,25 +1942,368 @@ const docTemplate = `{
                     "400": {
                         "description": "用户 ID 参数错误",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "401": {
                         "description": "未认证或 token 无效",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "404": {
                         "description": "用户不存在",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
                         }
                     },
                     "500": {
                         "description": "服务器内部错误",
                         "schema": {
-                            "$ref": "#/definitions/response.Envelope"
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{user_id}/roles": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询用户当前绑定的角色列表。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色"
+                ],
+                "summary": "查询用户角色",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "查询成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/RoleResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "用户 ID 参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "幂等替换用户完整角色集合，用户角色解绑后相关 RBAC 授权应被拒绝。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色"
+                ],
+                "summary": "替换用户角色",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "角色ID列表",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/RoleIDsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "替换成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/RoleResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "角色不存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "为用户新增一个角色绑定。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色"
+                ],
+                "summary": "绑定用户角色",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "角色ID",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/RoleIDBodyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "绑定成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/RoleResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "角色不存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "409": {
+                        "description": "绑定已存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{user_id}/roles/{role_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "删除用户角色绑定，解绑后相关 RBAC 授权应被拒绝。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "角色"
+                ],
+                "summary": "解绑用户角色",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户ID",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "角色ID",
+                        "name": "role_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "解绑成功",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/RoleResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "请求错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证或 token 无效",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "403": {
+                        "description": "无访问权限",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "绑定不存在",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/Envelope"
                         }
                     }
                 }
@@ -577,7 +2311,29 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "github_com_aegiscore_common_contract_errors.Code": {
+        "ChangePasswordRequest": {
+            "type": "object",
+            "required": [
+                "new_password"
+            ],
+            "properties": {
+                "new_password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "example": "new-secret"
+                }
+            }
+        },
+        "ChangePasswordResponse": {
+            "type": "object",
+            "properties": {
+                "changed": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "Code": {
             "type": "integer",
             "enum": [
                 0,
@@ -610,43 +2366,155 @@ const docTemplate = `{
                 "CodeInternalError"
             ]
         },
-        "github_com_aegiscore_user-service_internal_features_user_domain.UserStatus": {
-            "type": "integer",
-            "format": "int64",
-            "enum": [
-                100,
-                200,
-                300
-            ],
-            "x-enum-varnames": [
-                "UserStatusNormal",
-                "UserStatusDisabled",
-                "UserStatusMustChangePassword"
-            ]
-        },
-        "internal_features_auth_transport_http.ChangePasswordRequest": {
+        "CreatePermissionRequest": {
             "type": "object",
             "required": [
-                "new_password"
+                "http_method",
+                "module",
+                "name",
+                "path_template"
             ],
             "properties": {
-                "new_password": {
-                    "type": "string",
-                    "minLength": 1,
-                    "example": "new-secret"
-                }
-            }
-        },
-        "internal_features_auth_transport_http.ChangePasswordResponse": {
-            "type": "object",
-            "properties": {
-                "changed": {
+                "active": {
                     "type": "boolean",
                     "example": true
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 512,
+                    "example": "允许分页查询用户资料"
+                },
+                "http_method": {
+                    "type": "string",
+                    "example": "GET"
+                },
+                "module": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "example": "user"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "example": "查询用户列表"
+                },
+                "path_template": {
+                    "type": "string",
+                    "example": "/api/v1/users"
+                },
+                "system": {
+                    "type": "boolean",
+                    "example": false
                 }
             }
         },
-        "internal_features_auth_transport_http.LoginRequest": {
+        "CreateRoleRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "active": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 512,
+                    "example": "管理后台角色"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "example": "管理员"
+                },
+                "system": {
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "CreateUserRequest": {
+            "type": "object",
+            "required": [
+                "nickname",
+                "password",
+                "username"
+            ],
+            "properties": {
+                "nickname": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "example": "Alice"
+                },
+                "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "example": "secret"
+                },
+                "status": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/UserStatus"
+                        }
+                    ],
+                    "example": 100
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "example": "alice"
+                }
+            }
+        },
+        "DiscoveredRouteResponse": {
+            "type": "object",
+            "properties": {
+                "http_method": {
+                    "type": "string",
+                    "example": "GET"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/api/v1/users"
+                }
+            }
+        },
+        "Envelope": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "$ref": "#/definitions/Code"
+                },
+                "data": {},
+                "errors": {},
+                "message": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "HealthResponse": {
+            "type": "object",
+            "properties": {
+                "service": {
+                    "type": "string",
+                    "example": "aegiscore-user-services"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "LoginRequest": {
             "type": "object",
             "required": [
                 "password",
@@ -666,7 +2534,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_features_auth_transport_http.LogoutResponse": {
+        "LogoutResponse": {
             "type": "object",
             "properties": {
                 "logged_out": {
@@ -675,7 +2543,109 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_features_auth_transport_http.RefreshTokenRequest": {
+        "Pagination": {
+            "type": "object",
+            "properties": {
+                "has_next": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "next_cursor": {
+                    "type": "string",
+                    "example": "0190c8d2-8d8a-7a01-9f43-0f91fb4e2b7c"
+                },
+                "page_size": {
+                    "type": "integer",
+                    "example": 50
+                }
+            }
+        },
+        "PermissionIDBodyRequest": {
+            "type": "object",
+            "required": [
+                "permission_id"
+            ],
+            "properties": {
+                "permission_id": {
+                    "type": "string",
+                    "example": "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+                }
+            }
+        },
+        "PermissionIDsRequest": {
+            "type": "object",
+            "required": [
+                "permission_ids"
+            ],
+            "properties": {
+                "permission_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "PermissionListResponseDoc": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/PermissionResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/Pagination"
+                }
+            }
+        },
+        "PermissionResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "created_at": {
+                    "type": "integer",
+                    "example": 1780288800000
+                },
+                "description": {
+                    "type": "string",
+                    "example": "允许分页查询用户资料"
+                },
+                "http_method": {
+                    "type": "string",
+                    "example": "GET"
+                },
+                "module": {
+                    "type": "string",
+                    "example": "user"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "查询用户列表"
+                },
+                "path_template": {
+                    "type": "string",
+                    "example": "/api/v1/users"
+                },
+                "permission_id": {
+                    "type": "string",
+                    "example": "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+                },
+                "system": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "updated_at": {
+                    "type": "integer",
+                    "example": 1780288800000
+                }
+            }
+        },
+        "RefreshTokenRequest": {
             "type": "object",
             "required": [
                 "refresh_token"
@@ -688,7 +2658,106 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_features_auth_transport_http.TokenResponse": {
+        "RoleIDBodyRequest": {
+            "type": "object",
+            "required": [
+                "role_id"
+            ],
+            "properties": {
+                "role_id": {
+                    "type": "string",
+                    "example": "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+                }
+            }
+        },
+        "RoleIDsRequest": {
+            "type": "object",
+            "required": [
+                "role_ids"
+            ],
+            "properties": {
+                "role_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "RoleListResponseDoc": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/RoleResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/Pagination"
+                }
+            }
+        },
+        "RoleResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "created_at": {
+                    "type": "integer",
+                    "example": 1780288800000
+                },
+                "description": {
+                    "type": "string",
+                    "example": "管理后台角色"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "管理员"
+                },
+                "role_id": {
+                    "type": "string",
+                    "example": "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+                },
+                "system": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "updated_at": {
+                    "type": "integer",
+                    "example": 1780288800000
+                }
+            }
+        },
+        "RouteDiffResponse": {
+            "type": "object",
+            "properties": {
+                "missing_in_permissions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/DiscoveredRouteResponse"
+                    }
+                },
+                "stale_permissions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/PermissionResponse"
+                    }
+                }
+            }
+        },
+        "SetRoleStatusRequest": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "TokenResponse": {
             "type": "object",
             "properties": {
                 "access_token": {
@@ -713,56 +2782,84 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_features_user_transport_http.CreateUserRequest": {
+        "UpdatePermissionRequest": {
             "type": "object",
             "required": [
-                "nickname",
-                "password",
-                "username"
+                "http_method",
+                "module",
+                "name",
+                "path_template"
             ],
             "properties": {
-                "nickname": {
+                "active": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 512,
+                    "example": "允许分页查询用户资料"
+                },
+                "http_method": {
+                    "type": "string",
+                    "example": "GET"
+                },
+                "module": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "example": "user"
+                },
+                "name": {
                     "type": "string",
                     "maxLength": 128,
                     "minLength": 1,
-                    "example": "Alice"
+                    "example": "查询用户列表"
                 },
-                "password": {
+                "path_template": {
                     "type": "string",
-                    "minLength": 1,
-                    "example": "secret"
-                },
-                "status": {
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/github_com_aegiscore_user-service_internal_features_user_domain.UserStatus"
-                        }
-                    ],
-                    "example": 100
-                },
-                "username": {
-                    "type": "string",
-                    "maxLength": 255,
-                    "minLength": 1,
-                    "example": "alice"
+                    "example": "/api/v1/users"
                 }
             }
         },
-        "internal_features_user_transport_http.UserListResponseDoc": {
+        "UpdateRoleRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "active": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "description": {
+                    "type": "string",
+                    "maxLength": 512,
+                    "example": "管理后台角色"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "example": "管理员"
+                }
+            }
+        },
+        "UserListResponseDoc": {
             "type": "object",
             "properties": {
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_features_user_transport_http.UserResponseDoc"
+                        "$ref": "#/definitions/UserResponseDoc"
                     }
                 },
                 "pagination": {
-                    "$ref": "#/definitions/pagination.Pagination"
+                    "$ref": "#/definitions/Pagination"
                 }
             }
         },
-        "internal_features_user_transport_http.UserResponseDoc": {
+        "UserResponseDoc": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -791,51 +2888,19 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_router.HealthResponse": {
-            "type": "object",
-            "properties": {
-                "service": {
-                    "type": "string",
-                    "example": "aegiscore-user-services"
-                },
-                "status": {
-                    "type": "string",
-                    "example": "ok"
-                }
-            }
-        },
-        "pagination.Pagination": {
-            "type": "object",
-            "properties": {
-                "has_next": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "next_cursor": {
-                    "type": "string",
-                    "example": "0190c8d2-8d8a-7a01-9f43-0f91fb4e2b7c"
-                },
-                "page_size": {
-                    "type": "integer",
-                    "example": 50
-                }
-            }
-        },
-        "response.Envelope": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "$ref": "#/definitions/github_com_aegiscore_common_contract_errors.Code"
-                },
-                "data": {},
-                "errors": {},
-                "message": {
-                    "type": "string"
-                },
-                "success": {
-                    "type": "boolean"
-                }
-            }
+        "UserStatus": {
+            "type": "integer",
+            "format": "int64",
+            "enum": [
+                100,
+                200,
+                300
+            ],
+            "x-enum-varnames": [
+                "UserStatusNormal",
+                "UserStatusDisabled",
+                "UserStatusMustChangePassword"
+            ]
         }
     },
     "securityDefinitions": {
@@ -855,7 +2920,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api/v1",
 	Schemes:          []string{"http", "https"},
 	Title:            "AegisCore User Services API",
-	Description:      "AegisCore 用户服务 API 文档，覆盖用户资料查询、用户创建和服务健康检查。",
+	Description:      "AegisCore 用户服务 API 文档，覆盖认证会话、用户资料、角色管理、权限目录、RBAC 授权保护的业务接口和服务健康检查。",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

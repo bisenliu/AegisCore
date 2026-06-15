@@ -24,6 +24,21 @@ func NewRoleController(commands rolecommand.RoleCommandService, queries rolequer
 }
 
 // ListRoles 处理分页角色列表请求。
+// @Summary 分页查询角色
+// @Description 查询角色列表。业务接口由 JWT 和 RBAC 保护，Casbin 使用 role_id 作为策略主体，不依赖 roles.code。
+// @Tags 角色
+// @Produce json
+// @Param cursor query string false "分页游标"
+// @Param page_size query int false "每页数量"
+// @Param active query bool false "是否启用"
+// @Param system query bool false "是否系统角色"
+// @Success 200 {object} response.Envelope{data=rolehttp.RoleListResponseDoc} "查询成功"
+// @Failure 400 {object} response.Envelope "查询参数错误"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
+// @Router /roles [get]
 func (ctl *RoleController) ListRoles(c *gin.Context) {
 	req := ListRolesRequest{}
 	if !binding.BindOrAbort(ctl.validator, c, &req, binding.QueryBinder) {
@@ -44,6 +59,20 @@ func (ctl *RoleController) ListRoles(c *gin.Context) {
 }
 
 // CreateRole 处理角色创建请求。
+// @Summary 创建角色
+// @Description 创建角色。业务接口由 JWT 和 RBAC 保护。
+// @Tags 角色
+// @Accept json
+// @Produce json
+// @Param request body rolehttp.CreateRoleRequest true "创建角色请求"
+// @Success 201 {object} response.Envelope{data=rolehttp.RoleResponse} "创建成功"
+// @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 409 {object} response.Envelope "角色已存在"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
+// @Router /roles [post]
 func (ctl *RoleController) CreateRole(c *gin.Context) {
 	req := CreateRoleRequest{}
 	if !binding.BindOrAbort(ctl.validator, c, &req, binding.JSONBinder) {
@@ -59,6 +88,19 @@ func (ctl *RoleController) CreateRole(c *gin.Context) {
 }
 
 // GetRole 处理角色详情请求。
+// @Summary 查询角色详情
+// @Description 通过角色 ID 查询角色详情。业务接口由 JWT 和 RBAC 保护。
+// @Tags 角色
+// @Produce json
+// @Param role_id path string true "角色ID"
+// @Success 200 {object} response.Envelope{data=rolehttp.RoleResponse} "查询成功"
+// @Failure 400 {object} response.Envelope "角色 ID 参数错误"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 404 {object} response.Envelope "角色不存在"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
+// @Router /roles/{role_id} [get]
 func (ctl *RoleController) GetRole(c *gin.Context) {
 	roleID, ok := ctl.parseRoleID(c)
 	if !ok {
@@ -73,6 +115,22 @@ func (ctl *RoleController) GetRole(c *gin.Context) {
 }
 
 // UpdateRole 处理角色更新请求。
+// @Summary 更新角色
+// @Description 更新角色元数据。系统角色受保护字段不可破坏性修改。
+// @Tags 角色
+// @Accept json
+// @Produce json
+// @Param role_id path string true "角色ID"
+// @Param request body rolehttp.UpdateRoleRequest true "更新角色请求"
+// @Success 200 {object} response.Envelope{data=rolehttp.RoleResponse} "更新成功"
+// @Failure 400 {object} response.Envelope "请求错误或系统角色受保护"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 404 {object} response.Envelope "角色不存在"
+// @Failure 409 {object} response.Envelope "角色已存在"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
+// @Router /roles/{role_id} [patch]
 func (ctl *RoleController) UpdateRole(c *gin.Context) {
 	roleID, ok := ctl.parseRoleID(c)
 	if !ok {
@@ -92,6 +150,21 @@ func (ctl *RoleController) UpdateRole(c *gin.Context) {
 }
 
 // SetRoleStatus 处理角色启停请求。
+// @Summary 启停角色
+// @Description 启用或停用角色。停用角色后相关 RBAC 授权应被拒绝。
+// @Tags 角色
+// @Accept json
+// @Produce json
+// @Param role_id path string true "角色ID"
+// @Param request body rolehttp.SetRoleStatusRequest true "角色状态请求"
+// @Success 200 {object} response.Envelope{data=rolehttp.RoleResponse} "操作成功"
+// @Failure 400 {object} response.Envelope "请求错误或系统角色受保护"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 404 {object} response.Envelope "角色不存在"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
+// @Router /roles/{role_id}/status [patch]
 func (ctl *RoleController) SetRoleStatus(c *gin.Context) {
 	roleID, ok := ctl.parseRoleID(c)
 	if !ok {
@@ -110,6 +183,18 @@ func (ctl *RoleController) SetRoleStatus(c *gin.Context) {
 }
 
 // ListUserRoles 处理用户角色查询请求。
+// @Summary 查询用户角色
+// @Description 查询用户当前绑定的角色列表。
+// @Tags 角色
+// @Produce json
+// @Param user_id path string true "用户ID"
+// @Success 200 {object} response.Envelope{data=[]rolehttp.RoleResponse} "查询成功"
+// @Failure 400 {object} response.Envelope "用户 ID 参数错误"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
+// @Router /users/{user_id}/roles [get]
 func (ctl *RoleController) ListUserRoles(c *gin.Context) {
 	userID, ok := ctl.parseUserID(c)
 	if !ok {
@@ -124,6 +209,21 @@ func (ctl *RoleController) ListUserRoles(c *gin.Context) {
 }
 
 // ReplaceUserRoles 处理用户角色全量替换请求。
+// @Summary 替换用户角色
+// @Description 幂等替换用户完整角色集合，用户角色解绑后相关 RBAC 授权应被拒绝。
+// @Tags 角色
+// @Accept json
+// @Produce json
+// @Param user_id path string true "用户ID"
+// @Param request body rolehttp.RoleIDsRequest true "角色ID列表"
+// @Success 200 {object} response.Envelope{data=[]rolehttp.RoleResponse} "替换成功"
+// @Failure 400 {object} response.Envelope "请求错误"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 404 {object} response.Envelope "角色不存在"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
+// @Router /users/{user_id}/roles [put]
 func (ctl *RoleController) ReplaceUserRoles(c *gin.Context) {
 	userID, ok := ctl.parseUserID(c)
 	if !ok {
@@ -142,6 +242,22 @@ func (ctl *RoleController) ReplaceUserRoles(c *gin.Context) {
 }
 
 // AddUserRole 处理用户角色增量绑定请求。
+// @Summary 绑定用户角色
+// @Description 为用户新增一个角色绑定。
+// @Tags 角色
+// @Accept json
+// @Produce json
+// @Param user_id path string true "用户ID"
+// @Param request body rolehttp.RoleIDBodyRequest true "角色ID"
+// @Success 200 {object} response.Envelope{data=[]rolehttp.RoleResponse} "绑定成功"
+// @Failure 400 {object} response.Envelope "请求错误"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 404 {object} response.Envelope "角色不存在"
+// @Failure 409 {object} response.Envelope "绑定已存在"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
+// @Router /users/{user_id}/roles [post]
 func (ctl *RoleController) AddUserRole(c *gin.Context) {
 	userID, ok := ctl.parseUserID(c)
 	if !ok {
@@ -160,6 +276,20 @@ func (ctl *RoleController) AddUserRole(c *gin.Context) {
 }
 
 // RemoveUserRole 处理用户角色解绑请求。
+// @Summary 解绑用户角色
+// @Description 删除用户角色绑定，解绑后相关 RBAC 授权应被拒绝。
+// @Tags 角色
+// @Produce json
+// @Param user_id path string true "用户ID"
+// @Param role_id path string true "角色ID"
+// @Success 200 {object} response.Envelope{data=[]rolehttp.RoleResponse} "解绑成功"
+// @Failure 400 {object} response.Envelope "请求错误"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 404 {object} response.Envelope "绑定不存在"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
+// @Router /users/{user_id}/roles/{role_id} [delete]
 func (ctl *RoleController) RemoveUserRole(c *gin.Context) {
 	userID, roleID, ok := ctl.parseUserRoleIDs(c)
 	if !ok {
@@ -174,6 +304,18 @@ func (ctl *RoleController) RemoveUserRole(c *gin.Context) {
 }
 
 // ListRolePermissions 处理角色权限查询请求。
+// @Summary 查询角色权限
+// @Description 查询角色绑定的权限列表。
+// @Tags 角色
+// @Produce json
+// @Param role_id path string true "角色ID"
+// @Success 200 {object} response.Envelope{data=[]rolehttp.PermissionResponse} "查询成功"
+// @Failure 400 {object} response.Envelope "角色 ID 参数错误"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
+// @Router /roles/{role_id}/permissions [get]
 func (ctl *RoleController) ListRolePermissions(c *gin.Context) {
 	roleID, ok := ctl.parseRoleID(c)
 	if !ok {
@@ -188,6 +330,21 @@ func (ctl *RoleController) ListRolePermissions(c *gin.Context) {
 }
 
 // ReplaceRolePermissions 处理角色权限全量替换请求。
+// @Summary 替换角色权限
+// @Description 幂等替换角色完整权限集合，角色权限解绑后相关 RBAC 授权应被拒绝。
+// @Tags 角色
+// @Accept json
+// @Produce json
+// @Param role_id path string true "角色ID"
+// @Param request body rolehttp.PermissionIDsRequest true "权限ID列表"
+// @Success 200 {object} response.Envelope{data=[]rolehttp.PermissionResponse} "替换成功"
+// @Failure 400 {object} response.Envelope "请求错误"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 404 {object} response.Envelope "角色或权限不存在"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
+// @Router /roles/{role_id}/permissions [put]
 func (ctl *RoleController) ReplaceRolePermissions(c *gin.Context) {
 	roleID, ok := ctl.parseRoleID(c)
 	if !ok {
@@ -206,6 +363,22 @@ func (ctl *RoleController) ReplaceRolePermissions(c *gin.Context) {
 }
 
 // AddRolePermission 处理角色权限增量绑定请求。
+// @Summary 绑定角色权限
+// @Description 为角色新增一个启用权限绑定。
+// @Tags 角色
+// @Accept json
+// @Produce json
+// @Param role_id path string true "角色ID"
+// @Param request body rolehttp.PermissionIDBodyRequest true "权限ID"
+// @Success 200 {object} response.Envelope{data=[]rolehttp.PermissionResponse} "绑定成功"
+// @Failure 400 {object} response.Envelope "请求错误"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 404 {object} response.Envelope "角色或启用权限不存在"
+// @Failure 409 {object} response.Envelope "绑定已存在"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
+// @Router /roles/{role_id}/permissions [post]
 func (ctl *RoleController) AddRolePermission(c *gin.Context) {
 	roleID, ok := ctl.parseRoleID(c)
 	if !ok {
@@ -224,6 +397,20 @@ func (ctl *RoleController) AddRolePermission(c *gin.Context) {
 }
 
 // RemoveRolePermission 处理角色权限解绑请求。
+// @Summary 解绑角色权限
+// @Description 删除角色权限绑定，解绑后相关 RBAC 授权应被拒绝。
+// @Tags 角色
+// @Produce json
+// @Param role_id path string true "角色ID"
+// @Param permission_id path string true "权限ID"
+// @Success 200 {object} response.Envelope{data=[]rolehttp.PermissionResponse} "解绑成功"
+// @Failure 400 {object} response.Envelope "请求错误"
+// @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 404 {object} response.Envelope "绑定不存在"
+// @Failure 500 {object} response.Envelope "服务器内部错误"
+// @Security BearerAuth
+// @Router /roles/{role_id}/permissions/{permission_id} [delete]
 func (ctl *RoleController) RemoveRolePermission(c *gin.Context) {
 	roleID, permissionID, ok := ctl.parseRolePermissionIDs(c)
 	if !ok {

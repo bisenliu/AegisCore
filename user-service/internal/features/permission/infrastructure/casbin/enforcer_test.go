@@ -88,6 +88,39 @@ func TestEngineReloadFailurePreservesPreviousPolicy(t *testing.T) {
 	}
 }
 
+func TestEngineReloadSuccessReplacesPolicyAndClearsError(t *testing.T) {
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000503")
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000504")
+	loader := &fakeLoader{err: errors.New("initial load failed")}
+	engine := NewEngine(Params{Loader: loader})
+	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
+	if err != nil {
+		t.Fatalf("Enforce after failed init: %v", err)
+	}
+	if allowed {
+		t.Fatal("failed initialization allowed request")
+	}
+
+	loader.err = nil
+	loader.policies = PolicySet{
+		GroupingPolicies: []GroupingPolicy{{UserID: userID, RoleID: roleID}},
+		PermissionRules:  []PermissionRule{{RoleID: roleID, PathTemplate: "/api/v1/users", HTTPMethod: "GET"}},
+	}
+	if err := engine.Reload(context.Background()); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+	allowed, err = engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
+	if err != nil {
+		t.Fatalf("Enforce after reload: %v", err)
+	}
+	if !allowed {
+		t.Fatal("reloaded policy denied matching request")
+	}
+	if engine.LastError() != nil {
+		t.Fatalf("LastError = %v, want nil", engine.LastError())
+	}
+}
+
 type fakeLoader struct {
 	policies PolicySet
 	err      error

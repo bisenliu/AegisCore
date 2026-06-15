@@ -20,7 +20,7 @@
 - `user-service/internal/features/user/`：用户资料 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；`domain/` 可在有真实纯领域规则或事件模型时按需新增 `services/`、`events/`；`application/command` 承载写侧用例，`application/query` 承载读侧用例，`application/validators` 承载 transport-neutral application 输入辅助；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`；未来如暴露本服务入站 gRPC API，使用 feature-local `transport/grpc`，当前没有真实 gRPC API 时不得新增业务代码、proto 或 generated code；未来如消费外部事件，使用 feature-local `infrastructure/consumers` 承载入站事件到 application command/query 的 adapter，当前没有真实消费者时不得新增业务代码。
 - `user-service/internal/features/auth/`：认证会话 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/redis/` 和 `fx.go` 分层；`domain/services`、`domain/events` 仅在有真实领域服务或领域事件模型时新增；`application/command` 保持扁平并承载登录、刷新、强制改密、退出当前设备和退出全部设备 use case；`application/authctx` 承载认证上下文和客户端审计上下文 helper；`application/credentials` 承载凭据校验和强制改密凭据更新 application 组件；`application/tokens` 承载 JWT 签发解析和 token result DTO；`application/sessions` 承载 refresh session 生命周期、token version fallback、每用户活跃 refresh session 上限策略和会话撤销；`application/validators` 承载 transport-neutral application 输入辅助、token version 撤销校验和 refresh session 一致性校验；`application/ports.go` 继续拥有凭据、token version 和 session ports；`application/query` 只有存在真实 auth 读侧用例时才放实现，当前只可保留 README；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`；未来如暴露本服务入站 gRPC API，使用 feature-local `transport/grpc`，当前没有真实 gRPC API 时不得新增业务代码、proto 或 generated code；未来如消费外部事件，使用 feature-local `infrastructure/consumers` 承载入站事件到 application command/query 的 adapter，当前没有真实消费者时不得新增业务代码。
 - `user-service/internal/features/role/`：角色管理 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；`domain/` 承载角色实体、系统角色保护规则和领域错误；`application/command` 承载角色生命周期、用户绑定角色和角色绑定权限写侧用例；`application/query` 承载角色、用户角色和角色权限读侧用例；`application/validators` 承载 transport-neutral 输入辅助；`application/ports.go` 拥有 RoleStore、UserRoleStore、RolePermissionStore 和 PermissionLookup 消费侧端口；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`；PostgreSQL adapter 使用 Ent 访问 roles、user_roles、role_permissions，并通过 permission feature application 端口校验权限存在且启用，不直接依赖 permission infrastructure。
-- `user-service/internal/features/permission/`：权限目录 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；承载权限生命周期、权限查询、有效权限查询和路由差异查询；角色 feature 只能通过 application port 查询权限，不得直接访问 permission infrastructure。
+- `user-service/internal/features/permission/`：权限目录和 RBAC 授权 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/casbin/` 和 `fx.go` 分层；承载权限生命周期、权限查询、有效权限查询、只读路由差异查询、`application/authorization` 授权端口适配、Gin RBAC 授权中间件和 Casbin policy loader/enforcer/reload；角色 feature 只能通过 application port 查询权限，不得直接访问 permission infrastructure；Casbin policy subject 使用 `role_id`（`role:<role_uuid>`），不要求 `roles.code` 字段；route diff 只能做已注册路由与正式权限的差异校验，不得创建正式权限或绑定角色。
 - `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产；`deployments/docker` 放 Dockerfile 或统一构建资产，`deployments/compose` 放本地依赖或本地服务启动配置，`deployments/k8s` 放 Kubernetes YAML，`deployments/helm` 放 Helm chart。
 
 ## 3. Key Entry Points
@@ -67,7 +67,9 @@
 - 权限 feature module：`user-service/internal/features/permission/fx.go`
 - 权限 controller：`user-service/internal/features/permission/transport/http/controller.go`
 - 权限 HTTP DTO：`user-service/internal/features/permission/transport/http/request.go`、`user-service/internal/features/permission/transport/http/response.go`
+- 权限 RBAC application 授权适配：`user-service/internal/features/permission/application/authorization/authorization.go`
 - 权限 PostgreSQL adapter：`user-service/internal/features/permission/infrastructure/postgres/permission_store.go`
+- 权限 Casbin adapter：`user-service/internal/features/permission/infrastructure/casbin/policy.go`、`user-service/internal/features/permission/infrastructure/casbin/enforcer.go`
 - 共享配置加载：`common/runtime/config/loader.go`
 - 共享配置 Fx provider：`common/runtime/config/fx.go`
 - 共享日志 Fx provider：`common/runtime/logger/fx.go`
@@ -87,6 +89,7 @@
 - 认证会话控制：登录、刷新、强制改密、退出当前设备、退出全部设备，以及每用户活跃 refresh session 上限治理。
 - 权限目录管理：权限创建、更新、启停、分页查询、详情查询、用户有效权限查询和路由差异查询。
 - 角色管理：角色创建、更新、启停、分页查询、详情查询、用户角色绑定查询/替换/增删，以及角色权限绑定查询/替换/增删。
+- RBAC HTTP 授权：JWT 认证后对用户、角色、权限业务接口执行 Casbin 授权；Casbin 使用 `user:<user_uuid>`、`role:<role_uuid>`、Gin route template 和 HTTP method，不依赖 `roles.code`。
 - HTTP 服务运行时：启动、运行、路由注册和优雅停止。
 - 未来入站 gRPC transport 边界：如用户服务暴露真实 gRPC API，放在对应 feature 的 `transport/grpc`；当前不实现 gRPC API、proto、generated code 或 server runtime。
 - 外部系统防腐层边界：`internal/integration/http`、`grpc`、`events` 只承载真实外部调用的协议适配规则，当前不实现真实 client；`internal/integration/grpc` 是出站 external client adapter，不是本服务 gRPC server transport；`internal/integration/events` 是外部事件系统 producer/consumer 协议 adapter，不是 feature consumer handler、业务事件编排或 outbox。
@@ -121,7 +124,7 @@
 
 - 不要手写 `user-service/ent/` 下的生成代码；修改 Ent schema 后重新生成。
 - 不要用运行时 `client.Schema.Create(ctx)` 表达 schema 变更；修改 Ent schema 后生成 Ent 代码和 Atlas SQL migration。
-- 按 feature 组织服务内代码：用户资料放在 `internal/features/user`，认证会话放在 `internal/features/auth`。不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。
+- 按 feature 组织服务内代码：用户资料放在 `internal/features/user`，认证会话放在 `internal/features/auth`，角色管理放在 `internal/features/role`，权限目录和 RBAC 授权放在 `internal/features/permission`。不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。
 - 保持 `transport/http`、未来 `transport/grpc`、`application`、`domain`、`infrastructure/*` 分层：HTTP 解析在 controller，未来 gRPC 解析在 feature-local `transport/grpc` handler，业务编排在 application service 或 application 内的 `command`/`query` 用例，纯领域规则在 domain，数据库或 Redis 访问在 infrastructure adapter。
 - `domain/services` 和 `domain/events` 是按需子目录：只有存在真实纯领域服务规则或领域事件模型时才创建；不得为了目录完整新增空 package、空 struct、空 interface 或只含占位注释的业务代码。
 - 每个 feature 自己注册路由：`transport/http/routes.go` 暴露 `RegisterRoutes`，认证 feature 可拆分 `RegisterPublicRoutes` 和 `RegisterProtectedRoutes`；全局 router 的 `router.go` 负责 route graph 总装和 `/api/v1` feature 路由分组，`health.go` 负责 `/healthz`，`swagger.go` 负责 Swagger UI 和文档重定向。
@@ -140,6 +143,7 @@
 - HTTP request/response DTO、Swagger model、请求 DTO 清洗、绑定后的输入规范化和简单字段解析放在对应 feature 的 `transport/http/request.go`、`response.go`、`validation.go`。这些函数不得导入 Ent、Redis、service、infrastructure，或执行业务编排。
 - 未来 gRPC request/response DTO、protobuf 映射、metadata/status 适配和边界 validation 放在对应 feature 的 `transport/grpc`。没有真实 gRPC API 时，只允许 README 或 package doc 占位，不得新增空 handler、空 service、proto、generated code 或 gRPC runtime 依赖。
 - Controller 或未来 gRPC handler 必须把 transport DTO 映射为 application command/query 后再调用 service 或 use case，service/use case 不接收 HTTP request/response DTO 或 protobuf DTO。
+- RBAC 授权由 permission feature 拥有：Gin RBAC middleware 位于 `permission/transport/http`，授权 application wrapper 位于 `permission/application/authorization`，Casbin policy loader/enforcer 位于 `permission/infrastructure/casbin`；loader 只加载启用角色、启用权限和未删除用户的绑定，并补充内置 `super_admin` wildcard policy。路由差异查询是只读诊断能力，只能返回 missing/stale 差异，不得写权限目录、不得绑定角色。
 
 | 层 | 可以依赖 | 禁止依赖 |
 |---|---|---|

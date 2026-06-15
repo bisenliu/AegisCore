@@ -11,7 +11,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | 模块 | 责任 | 关键位置 |
 |---|---|---|
 | `common` | 跨服务稳定契约与基础能力；不得承载服务特定 helper 或业务语义 | `common/contract/`, `common/runtime/`, `common/http/`, `common/security/`, `common/testing/`, `common/validation/` |
-| `user-service` | 用户服务运行时、用户资料与认证会话 feature、外部系统防腐层边界、Ent schema、Atlas migration、Swagger 文档 | `user-service/cmd/`, `user-service/internal/`, `user-service/internal/integration/`, `user-service/ent/`, `user-service/migrations/`, `user-service/docs/` |
+| `user-service` | 用户服务运行时、用户资料、认证会话、角色管理、权限目录与 RBAC 授权 feature、外部系统防腐层边界、Ent schema、Atlas migration、Swagger 文档 | `user-service/cmd/`, `user-service/internal/`, `user-service/internal/integration/`, `user-service/ent/`, `user-service/migrations/`, `user-service/docs/` |
 | `deployments` | 本地和生产部署资产；Docker build、Compose、本地依赖、Kubernetes YAML 和 Helm chart 的归属边界 | `deployments/docker/user-service.Dockerfile`, `deployments/compose/`, `deployments/k8s/`, `deployments/helm/` |
 
 仓库根目录是 workspace，不是业务 Go module。运行 Go 命令时通常进入 `common/` 或 `user-service/`。
@@ -22,7 +22,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
 3. `user-service/internal/bootstrap.AppModule` 导入共享 runtime module、feature modules、`providers.Module`，并提供 HTTP server 生命周期。
 4. `user-service/internal/providers.Module` 显式提供 Redis/PostgreSQL named providers、Ent clients、JWT service、Gin engine 和 HTTP route registration。
-5. User/Auth feature modules 自己组装 feature-local infrastructure adapter、application service 或 command/query use case 和 HTTP controller。
+5. User/Auth/Role/Permission feature modules 自己组装 feature-local infrastructure adapter、application service 或 command/query use case、授权组件和 HTTP controller。
 6. `user-service/internal/providers/routes.go` 适配依赖并调用 `router.RegisterUserServiceHTTPRoutes`；`router.go` 负责 route graph 总装和 `/api/v1` 分组，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向。
 7. Fx lifecycle 启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
@@ -50,7 +50,7 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 | 路由 provider | `user-service/internal/providers/routes.go` | 将 Fx 依赖适配为 router route params |
 | 路由总装 | `user-service/internal/router/router.go`、`health.go`、`swagger.go` | `router.go` 创建 public/protected route groups 并总装 route graph，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向 |
 | 参数解析 | `features/*/transport/http/controller.go` | 绑定 HTTP DTO，执行边界校验，并映射为 command/query |
-| 业务调用 | `features/*/application/` | 编排用户资料或认证会话用例；用户资料 feature 的读写用例分别位于 `application/query` 与 `application/command`，认证会话 feature 的登录、刷新、强制改密和登出用例位于 `application/command`，并复用 `authctx`、`credentials`、`tokens`、`sessions` application 组件 |
+| 业务调用 | `features/*/application/` | 编排用户资料、认证会话、角色管理、权限目录和 RBAC 授权用例；用户资料 feature 的读写用例分别位于 `application/query` 与 `application/command`，认证会话 feature 的登录、刷新、强制改密和登出用例位于 `application/command`，角色 feature 使用 command/query 管理角色与绑定，permission feature 使用 command/query 管理权限目录、有效权限、route diff 和 authorization wrapper，并复用 `authctx`、`credentials`、`tokens`、`sessions` application 组件 |
 | 数据访问 | `features/*/infrastructure/postgres/`, `features/*/infrastructure/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
 | 响应输出 | `common/http/response/` + `common/contract/response/` | 通过 Gin writer 输出统一 `success/code/message/data` 信封，并复用稳定错误码与分页契约 |
 
@@ -60,7 +60,7 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 
 - `user`：用户资料创建、查询和分页列表。
 - `auth`：登录、刷新、强制改密、退出当前设备、退出全部设备。
-- `permission`：权限目录生命周期、分页查询、用户有效权限查询和已注册 HTTP 路由差异查询。
+- `permission`：权限目录生命周期、分页查询、用户有效权限查询、只读已注册 HTTP 路由差异查询和 RBAC 授权；`application/authorization` 负责授权端口适配，`transport/http` 拥有 Gin RBAC middleware，`infrastructure/casbin` 拥有 Casbin policy loader/enforcer/reload。
 - `role`：角色生命周期、用户角色绑定、角色权限绑定和角色查询；角色绑定权限前通过 permission feature application 端口校验权限存在且启用，不直接依赖 permission infrastructure。
 
 每个 feature 使用以下分层：
@@ -79,6 +79,12 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 Feature transport 可以按入站协议拆分在同一 feature 的 `transport/` 下。`transport/http` 和未来 `transport/grpc` 都必须把协议 DTO 映射为 transport-neutral application command/query 后再调用用例，不得互相导入对方 controller、DTO 或 route。可复用的输入辅助优先沉淀到 application `validators/`、`authctx/`、domain 值对象或其他 transport-neutral 层，而不是在 HTTP 和 gRPC transport 之间横向复用协议 DTO。
 
 `domain/services` 和 `domain/events` 是按需子目录，只在存在真实纯领域服务规则或领域事件模型时创建；不要为了目录完整新增空 package、空 struct、空 interface 或只含占位注释的业务代码。简单实体、值对象、枚举、领域错误和单实体短方法仍可留在 `domain/` 根部。Auth 当前将 token/session validation helper 保留在 `application/validators`；当前没有领域事件模型，也没有事件总线实现。
+
+### RBAC Authorization Boundary
+
+RBAC 授权由 permission feature 拥有。HTTP route graph 中，JWT 认证先写入用户上下文，Gin RBAC middleware 再对用户、角色、权限等业务接口执行授权；健康检查、Swagger、公有 auth 路由、已认证但不做 RBAC 的 auth session 路由和 `OPTIONS` 请求不进入 RBAC 授权。Casbin object 使用 Gin `c.FullPath()` 得到的 route template，action 使用 HTTP method，subject 使用 `user:<user_uuid>` 和 `role:<role_uuid>`；policy loader 使用角色 UUID 作为 `role_id` 主体，不要求 `roles.code` 字段。
+
+Casbin policy loader 只加载未删除用户、启用角色、启用权限以及仍存在的用户角色和角色权限绑定，并补充内置 `super_admin` wildcard policy。角色 feature 绑定权限前只通过 permission application port 校验权限存在且启用，不直接依赖 permission infrastructure 或 Casbin 包。Permission route diff 是只读诊断能力，只比较 Gin 已注册可授权路由与正式权限目录的 missing/stale 差异，不创建权限、不修改权限状态、不绑定角色。
 
 不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。跨 feature 的共享业务代码也不要默认放到 `internal/shared`；只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并需在本文件补充 owner、准入理由和禁止事项。
 
@@ -176,7 +182,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 
 ## 12. Current Constraints
 
-- 当前 HTTP API 暴露健康检查、创建用户、用户列表、按 `user_id` 查询用户和认证会话接口。
+- 当前 HTTP API 暴露健康检查、Swagger、用户资料、认证会话、角色管理、权限目录、用户有效权限查询、只读 route diff 和 RBAC 授权保护的业务接口。
 - 当前没有真实 gRPC API、`.proto` schema、protobuf generated code 或 gRPC server runtime；如未来暴露入站 gRPC API，应先在对应 feature 的 `transport/grpc` 建立真实 API 设计，并单独设计服务级 runtime wiring。
 - 当前没有真实外部系统 client；`internal/integration` 只声明 HTTP、gRPC 和 events 防腐层边界。
 - 当前没有真实 MQ/broker、eventbus、outbox、producer、subscriber、consumer handler、后台投递 worker 或事件驱动事务语义；事件发布、事件消费和可靠投递能力都需要单独变更设计。

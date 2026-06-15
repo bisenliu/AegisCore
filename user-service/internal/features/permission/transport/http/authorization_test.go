@@ -105,6 +105,46 @@ func TestAuthorizeDeniedAndErrorResponses(t *testing.T) {
 	}
 }
 
+func TestAuthorizeDeniesRBACNegativeScenarios(t *testing.T) {
+	tests := []string{
+		"user has no roles",
+		"role disabled",
+		"permission disabled",
+		"user role unbound",
+		"role permission unbound",
+	}
+	for _, name := range tests {
+		t.Run(name, func(t *testing.T) {
+			engine, authz := newAuthorizationTestEngine(&fakeAuthorizer{allowed: false})
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+authorizationTestUserID, nil)
+
+			engine.ServeHTTP(response, request)
+
+			assertAuthorizationEnvelope(t, response, http.StatusForbidden, contracterrors.CodeForbidden)
+			if authz.calls != 1 || authz.pathTemplate != "/api/v1/users/:user_id" || authz.method != http.MethodGet {
+				t.Fatalf("authorizer call = %#v", authz)
+			}
+		})
+	}
+}
+
+func TestAuthorizeAllowsSuperAdminWildcardDecision(t *testing.T) {
+	engine, authz := newAuthorizationTestEngine(&fakeAuthorizer{allowed: true})
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodDelete, "/api/v1/users/"+authorizationTestUserID, nil)
+
+	engine.DELETE("/api/v1/users/:user_id", func(c *gin.Context) { c.Set(commonauth.UserIDKey, authorizationTestUserID) }, Authorize(authz), func(c *gin.Context) { c.Status(http.StatusOK) })
+	engine.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
+	}
+	if authz.calls != 1 || authz.method != http.MethodDelete || authz.pathTemplate != "/api/v1/users/:user_id" {
+		t.Fatalf("authorizer call = %#v", authz)
+	}
+}
+
 func TestAuthorizeWhitelistAndOptionsBypass(t *testing.T) {
 	tests := []struct {
 		name    string
