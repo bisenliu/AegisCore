@@ -10,6 +10,7 @@ import (
 
 	"github.com/aegiscore/user-service/ent"
 	"github.com/aegiscore/user-service/ent/enttest"
+	"github.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline"
 )
 
 func TestPolicyLoaderLoadsActiveBindings(t *testing.T) {
@@ -73,7 +74,7 @@ func TestPolicyLoaderAddsSuperAdminWildcard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPolicies: %v", err)
 	}
-	assertHasRule(t, policies.PermissionRules, uuid.MustParse(defaultSuperAdminRoleID), policyWildcard, policyWildcard)
+	assertHasRule(t, policies.PermissionRules, uuid.MustParse(rbacbaseline.SuperAdminRoleID), policyWildcard, policyWildcard)
 }
 
 func TestPolicyLoaderUsesRoleIDSubjectWithoutRoleCode(t *testing.T) {

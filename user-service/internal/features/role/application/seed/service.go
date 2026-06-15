@@ -7,10 +7,9 @@ import (
 	"github.com/google/uuid"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
-	permissioncatalog "github.com/aegiscore/user-service/internal/features/permission/application/catalog"
+	"github.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline"
 	permissionvalidators "github.com/aegiscore/user-service/internal/features/permission/application/validators"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
-	rolecatalog "github.com/aegiscore/user-service/internal/features/role/application/catalog"
 	rolevalidators "github.com/aegiscore/user-service/internal/features/role/application/validators"
 )
 
@@ -120,7 +119,7 @@ func (s *Service) Seed(ctx context.Context, opts SeedOptions) (SeedResult, error
 
 // AssignSuperAdmin 将指定用户绑定到内置超级管理员角色。
 func (s *Service) AssignSuperAdmin(ctx context.Context, userID uuid.UUID) (AssignSuperAdminResult, error) {
-	roleID, err := uuid.Parse(rolecatalog.SuperAdminRoleID)
+	roleID, err := uuid.Parse(rbacbaseline.SuperAdminRoleID)
 	if err != nil {
 		return AssignSuperAdminResult{}, fmt.Errorf("parse super admin role id: %w", err)
 	}
@@ -133,7 +132,7 @@ func (s *Service) AssignSuperAdmin(ctx context.Context, userID uuid.UUID) (Assig
 
 func buildRoleInputs(reactivate bool) ([]roleapplication.SeedRoleInput, error) {
 	seen := make(map[uuid.UUID]struct{})
-	roles := rolecatalog.DefaultRoles()
+	roles := rbacbaseline.DefaultRoles()
 	inputs := make([]roleapplication.SeedRoleInput, 0, len(roles))
 	for _, spec := range roles {
 		roleID, err := uuid.Parse(spec.RoleID)
@@ -156,7 +155,7 @@ func buildRoleInputs(reactivate bool) ([]roleapplication.SeedRoleInput, error) {
 func buildPermissionInputs(reactivate bool) ([]permissionapplication.SeedPermissionInput, error) {
 	seenIDs := make(map[uuid.UUID]struct{})
 	seenRoutes := make(map[string]struct{})
-	permissions := permissioncatalog.DefaultPermissions()
+	permissions := rbacbaseline.DefaultPermissions()
 	inputs := make([]permissionapplication.SeedPermissionInput, 0, len(permissions))
 	for _, spec := range permissions {
 		permissionID, err := uuid.Parse(spec.PermissionID)
@@ -182,7 +181,7 @@ func buildPermissionInputs(reactivate bool) ([]permissionapplication.SeedPermiss
 
 func buildRolePermissionInputs() (map[uuid.UUID][]uuid.UUID, error) {
 	roles := make(map[uuid.UUID]struct{})
-	for _, spec := range rolecatalog.DefaultRoles() {
+	for _, spec := range rbacbaseline.DefaultRoles() {
 		roleID, err := uuid.Parse(spec.RoleID)
 		if err != nil {
 			return nil, fmt.Errorf("parse role_id %q: %w", spec.RoleID, err)
@@ -190,7 +189,7 @@ func buildRolePermissionInputs() (map[uuid.UUID][]uuid.UUID, error) {
 		roles[roleID] = struct{}{}
 	}
 	permissions := make(map[uuid.UUID]struct{})
-	for _, spec := range permissioncatalog.DefaultPermissions() {
+	for _, spec := range rbacbaseline.DefaultPermissions() {
 		permissionID, err := uuid.Parse(spec.PermissionID)
 		if err != nil {
 			return nil, fmt.Errorf("parse permission_id %q: %w", spec.PermissionID, err)
@@ -200,7 +199,7 @@ func buildRolePermissionInputs() (map[uuid.UUID][]uuid.UUID, error) {
 
 	seen := make(map[string]struct{})
 	bindings := make(map[uuid.UUID][]uuid.UUID)
-	for _, spec := range rolecatalog.DefaultRolePermissions() {
+	for _, spec := range rbacbaseline.DefaultRolePermissions() {
 		roleID, err := uuid.Parse(spec.RoleID)
 		if err != nil {
 			return nil, fmt.Errorf("parse role permission role_id %q: %w", spec.RoleID, err)

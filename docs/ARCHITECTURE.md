@@ -60,7 +60,7 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 
 - `user`：用户资料创建、查询和分页列表。
 - `auth`：登录、刷新、强制改密、退出当前设备、退出全部设备。
-- `permission`：权限目录生命周期、分页查询、用户有效权限查询、只读已注册 HTTP 路由差异查询和 RBAC 授权；`application/authorization` 负责授权端口适配，`transport/http` 拥有 Gin RBAC middleware，`infrastructure/casbin` 拥有 Casbin policy loader/enforcer/reload。
+- `permission`：权限目录生命周期、分页查询、用户有效权限查询、只读已注册 HTTP 路由差异查询、系统 RBAC 基线和 RBAC 授权；`application/rbacbaseline` 是系统超级管理员角色、系统权限和默认角色权限绑定的唯一 owner，`application/authorization` 负责授权端口适配，`transport/http` 拥有 Gin RBAC middleware，`infrastructure/casbin` 拥有 Casbin policy loader/enforcer/reload。
 - `role`：角色生命周期、用户角色绑定、角色权限绑定和角色查询；角色绑定权限前通过 permission feature application 端口校验权限存在且启用，不直接依赖 permission infrastructure。
 
 每个 feature 使用以下分层：
@@ -82,9 +82,9 @@ Feature transport 可以按入站协议拆分在同一 feature 的 `transport/` 
 
 ### RBAC Authorization Boundary
 
-RBAC 授权由 permission feature 拥有。HTTP route graph 中，JWT 认证先写入用户上下文，Gin RBAC middleware 再对用户、角色、权限等业务接口执行授权；健康检查、Swagger、公有 auth 路由、已认证但不做 RBAC 的 auth session 路由和 `OPTIONS` 请求不进入 RBAC 授权。Casbin object 使用 Gin `c.FullPath()` 得到的 route template，action 使用 HTTP method，subject 使用 `user:<user_uuid>` 和 `role:<role_uuid>`；policy loader 使用角色 UUID 作为 `role_id` 主体，不要求 `roles.code` 字段。
+RBAC 授权和系统 RBAC 基线由 permission feature 拥有。`permission/application/rbacbaseline` 是系统超级管理员角色、系统权限和默认角色权限绑定的唯一长期入口；role seed 和 Casbin adapter 只消费该基线，不再各自维护重复常量。HTTP route graph 中，JWT 认证先写入用户上下文，Gin RBAC middleware 再对用户、角色、权限等业务接口执行授权；健康检查、Swagger、公有 auth 路由、已认证但不做 RBAC 的 auth session 路由和 `OPTIONS` 请求不进入 RBAC 授权。Casbin object 使用 Gin `c.FullPath()` 得到的 route template，action 使用 HTTP method，subject 使用 `user:<user_uuid>` 和 `role:<role_uuid>`；policy loader 使用角色 UUID 作为 `role_id` 主体，不要求 `roles.code` 字段。
 
-Casbin policy loader 只加载未删除用户、启用角色、启用权限以及仍存在的用户角色和角色权限绑定，并补充内置 `super_admin` wildcard policy。角色 feature 绑定权限前只通过 permission application port 校验权限存在且启用，不直接依赖 permission infrastructure 或 Casbin 包。Permission route diff 是只读诊断能力，只比较 Gin 已注册可授权路由与正式权限目录的 missing/stale 差异，不创建权限、不修改权限状态、不绑定角色。
+Casbin policy loader 只加载未删除用户、启用角色、启用权限以及仍存在的用户角色和角色权限绑定，并基于 `rbacbaseline.SuperAdminRoleID` 补充内置 `super_admin` wildcard policy。角色 feature 绑定权限前只通过 permission application port 校验权限存在且启用，不直接依赖 permission infrastructure 或 Casbin 包。Permission route diff 是只读诊断能力，只比较 Gin 已注册可授权路由与正式权限目录的 missing/stale 差异，不创建权限、不修改权限状态、不绑定角色。
 
 不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。跨 feature 的共享业务代码也不要默认放到 `internal/shared`；只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并需在本文件补充 owner、准入理由和禁止事项。
 

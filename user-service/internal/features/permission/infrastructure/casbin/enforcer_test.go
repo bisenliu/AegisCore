@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"github.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline"
 )
 
 func TestEngineEnforceAllowDenyAndDoesNotReload(t *testing.T) {
@@ -37,7 +39,7 @@ func TestEngineEnforceAllowDenyAndDoesNotReload(t *testing.T) {
 
 func TestEngineSuperAdminWildcard(t *testing.T) {
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000401")
-	superAdminRoleID := uuid.MustParse(defaultSuperAdminRoleID)
+	superAdminRoleID := uuid.MustParse(rbacbaseline.SuperAdminRoleID)
 	engine := NewEngine(Params{Loader: &fakeLoader{policies: PolicySet{
 		GroupingPolicies: []GroupingPolicy{{UserID: userID, RoleID: superAdminRoleID}},
 		PermissionRules:  []PermissionRule{{RoleID: superAdminRoleID, PathTemplate: policyWildcard, HTTPMethod: policyWildcard}},

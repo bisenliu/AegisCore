@@ -13,12 +13,10 @@ import (
 	entrolepermission "github.com/aegiscore/user-service/ent/rolepermission"
 	entuser "github.com/aegiscore/user-service/ent/user"
 	entuserrole "github.com/aegiscore/user-service/ent/userrole"
+	"github.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline"
 )
 
-const (
-	defaultSuperAdminRoleID = "00000000-0000-0000-0000-000000000001"
-	policyWildcard          = "*"
-)
+const policyWildcard = "*"
 
 // PolicySet 包含一次全量加载得到的 Casbin policy 数据。
 type PolicySet struct {
@@ -58,7 +56,7 @@ type entLoader struct {
 
 // NewPolicyLoader 构造基于 Ent 的 Casbin policy loader。
 func NewPolicyLoader(params LoaderParams) Loader {
-	return &entLoader{client: params.Client, superAdminRoleID: uuid.MustParse(defaultSuperAdminRoleID)}
+	return &entLoader{client: params.Client, superAdminRoleID: uuid.MustParse(rbacbaseline.SuperAdminRoleID)}
 }
 
 func (l *entLoader) LoadPolicies(ctx context.Context) (PolicySet, error) {

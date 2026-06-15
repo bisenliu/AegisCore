@@ -7,9 +7,9 @@ import (
 	"github.com/google/uuid"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
+	"github.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
-	rolecatalog "github.com/aegiscore/user-service/internal/features/role/application/catalog"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 )
 
@@ -65,7 +65,7 @@ func TestSeedServiceAssignSuperAdmin(t *testing.T) {
 	if !result.Added {
 		t.Fatal("first assignment Added=false")
 	}
-	if fakes.userRoles.lastRoleID.String() != rolecatalog.SuperAdminRoleID {
+	if fakes.userRoles.lastRoleID.String() != rbacbaseline.SuperAdminRoleID {
 		t.Fatalf("roleID = %s", fakes.userRoles.lastRoleID)
 	}
 
