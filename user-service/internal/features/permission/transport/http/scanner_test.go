@@ -8,6 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
+	"github.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline"
+	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
+	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 )
 
 func TestRouteCatalogScanner(t *testing.T) {
@@ -53,6 +56,34 @@ func TestRouteCatalogScannerFiltersAuthorizableRoutes(t *testing.T) {
 	assertDiscoveredRoute(t, routes, http.MethodGet, "/api/v1/permissions/route-diff")
 }
 
+func TestRouteCatalogScannerMatchesRBACBaseline(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	v1 := engine.Group("/api/v1")
+	RegisterRoutes(v1.Group("/permissions"), &PermissionController{})
+	rolehttp.RegisterRoleRoutes(v1.Group("/roles"), &rolehttp.RoleController{})
+	rolehttp.RegisterUserRoleRoutes(v1.Group("/users"), &rolehttp.RoleController{})
+	userhttp.RegisterRoutes(v1.Group("/users"), &userhttp.UserController{})
+
+	scanner := NewRouteCatalogScanner(RouteCatalogScannerParams{Engine: engine})
+	routes, err := scanner.DiscoverRoutes(context.Background())
+	if err != nil {
+		t.Fatalf("DiscoverRoutes: %v", err)
+	}
+	discovered := discoveredRouteSet(routes)
+	baseline := baselineRouteSet()
+	for route := range baseline {
+		if _, ok := discovered[route]; !ok {
+			t.Fatalf("scanner missing baseline route %s", route)
+		}
+	}
+	for route := range discovered {
+		if _, ok := baseline[route]; !ok {
+			t.Fatalf("baseline missing scanned route %s", route)
+		}
+	}
+}
+
 func assertDiscoveredRoute(t *testing.T, routes []permissionapplication.DiscoveredRoute, method string, path string) {
 	t.Helper()
 	for _, route := range routes {
@@ -61,4 +92,21 @@ func assertDiscoveredRoute(t *testing.T, routes []permissionapplication.Discover
 		}
 	}
 	t.Fatalf("missing route %s %s in %#v", method, path, routes)
+}
+
+func discoveredRouteSet(routes []permissionapplication.DiscoveredRoute) map[string]struct{} {
+	result := make(map[string]struct{}, len(routes))
+	for _, route := range routes {
+		result[route.Method+" "+route.Path] = struct{}{}
+	}
+	return result
+}
+
+func baselineRouteSet() map[string]struct{} {
+	permissions := rbacbaseline.DefaultPermissions()
+	result := make(map[string]struct{}, len(permissions))
+	for _, permission := range permissions {
+		result[permission.Method+" "+permission.PathTemplate] = struct{}{}
+	}
+	return result
 }

@@ -16,23 +16,25 @@ import (
 func TestSeedServiceDefaultEnsureAndRepeat(t *testing.T) {
 	fakes := newSeedFakes()
 	service := NewService(fakes.roles, fakes.permissions, fakes.rolePermissions, fakes.userRoles)
+	permissionCount := len(rbacbaseline.DefaultPermissions())
 
 	result, err := service.Seed(context.Background(), SeedOptions{})
 	if err != nil {
 		t.Fatalf("Seed: %v", err)
 	}
-	if result.RolesInserted != 1 || result.PermissionsInserted != 3 || result.RolePermissionBindingsAdd != 3 || fakes.rolePermissions.syncCalled {
+	if result.RolesInserted != 1 || result.PermissionsInserted != permissionCount || result.RolePermissionBindingsAdd != permissionCount || fakes.rolePermissions.syncCalled {
 		t.Fatalf("first result=%#v syncCalled=%v", result, fakes.rolePermissions.syncCalled)
 	}
 	if fakes.roles.lastReactivate || fakes.permissions.lastReactivate {
 		t.Fatal("default seed unexpectedly requested reactivation")
 	}
+	assertSuperAdminSeedBindings(t, fakes.rolePermissions.bindings)
 
 	result, err = service.Seed(context.Background(), SeedOptions{})
 	if err != nil {
 		t.Fatalf("Seed repeat: %v", err)
 	}
-	if result.RolesInserted != 0 || result.RolesUpdated != 1 || result.PermissionsInserted != 0 || result.PermissionsUpdated != 3 || result.RolePermissionBindingsAdd != 0 {
+	if result.RolesInserted != 0 || result.RolesUpdated != 1 || result.PermissionsInserted != 0 || result.PermissionsUpdated != permissionCount || result.RolePermissionBindingsAdd != 0 {
 		t.Fatalf("repeat result=%#v", result)
 	}
 }
@@ -156,4 +158,19 @@ func (s *fakeSeedUserRoleStore) AssignRole(_ context.Context, userID uuid.UUID, 
 	}
 	s.bindings[userID][roleID] = struct{}{}
 	return true, nil
+}
+
+func assertSuperAdminSeedBindings(t *testing.T, bindings map[uuid.UUID]map[uuid.UUID]struct{}) {
+	t.Helper()
+	roleID := uuid.MustParse(rbacbaseline.SuperAdminRoleID)
+	actual := bindings[roleID]
+	if len(actual) != len(rbacbaseline.DefaultPermissions()) {
+		t.Fatalf("super admin bindings = %d, want %d", len(actual), len(rbacbaseline.DefaultPermissions()))
+	}
+	for _, permission := range rbacbaseline.DefaultPermissions() {
+		permissionID := uuid.MustParse(permission.PermissionID)
+		if _, ok := actual[permissionID]; !ok {
+			t.Fatalf("super admin seed binding missing permission_id %s", permission.PermissionID)
+		}
+	}
 }

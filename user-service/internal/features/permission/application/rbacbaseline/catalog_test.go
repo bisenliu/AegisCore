@@ -67,6 +67,49 @@ func TestDefaultPermissionsStableBaseline(t *testing.T) {
 	}
 }
 
+func TestDefaultPermissionsCoverAuthorizableRoutes(t *testing.T) {
+	expected := map[string]struct{}{
+		"GET /api/v1/users":                                        {},
+		"POST /api/v1/users":                                       {},
+		"GET /api/v1/users/:user_id":                               {},
+		"GET /api/v1/permissions":                                  {},
+		"POST /api/v1/permissions":                                 {},
+		"GET /api/v1/permissions/route-diff":                       {},
+		"GET /api/v1/permissions/users/:user_id/effective":         {},
+		"GET /api/v1/permissions/:permission_id":                   {},
+		"PUT /api/v1/permissions/:permission_id":                   {},
+		"POST /api/v1/permissions/:permission_id/enable":           {},
+		"POST /api/v1/permissions/:permission_id/disable":          {},
+		"GET /api/v1/roles":                                        {},
+		"POST /api/v1/roles":                                       {},
+		"GET /api/v1/roles/:role_id":                               {},
+		"PATCH /api/v1/roles/:role_id":                             {},
+		"PATCH /api/v1/roles/:role_id/status":                      {},
+		"GET /api/v1/users/:user_id/roles":                         {},
+		"PUT /api/v1/users/:user_id/roles":                         {},
+		"POST /api/v1/users/:user_id/roles":                        {},
+		"DELETE /api/v1/users/:user_id/roles/:role_id":             {},
+		"GET /api/v1/roles/:role_id/permissions":                   {},
+		"PUT /api/v1/roles/:role_id/permissions":                   {},
+		"POST /api/v1/roles/:role_id/permissions":                  {},
+		"DELETE /api/v1/roles/:role_id/permissions/:permission_id": {},
+	}
+	actual := make(map[string]struct{}, len(DefaultPermissions()))
+	for _, permission := range DefaultPermissions() {
+		actual[permission.Method+" "+permission.PathTemplate] = struct{}{}
+	}
+	for route := range expected {
+		if _, ok := actual[route]; !ok {
+			t.Fatalf("permission catalog missing route %s", route)
+		}
+	}
+	for route := range actual {
+		if _, ok := expected[route]; !ok {
+			t.Fatalf("permission catalog has unexpected route %s", route)
+		}
+	}
+}
+
 func TestDefaultRolePermissionsReferenceBaseline(t *testing.T) {
 	roles := make(map[string]struct{})
 	for _, role := range DefaultRoles() {
@@ -89,5 +132,14 @@ func TestDefaultRolePermissionsReferenceBaseline(t *testing.T) {
 			t.Fatalf("duplicate role permission binding %s", key)
 		}
 		seen[key] = struct{}{}
+	}
+	if len(seen) != len(permissions) {
+		t.Fatalf("bindings = %d, want one super admin binding per permission %d", len(seen), len(permissions))
+	}
+	for permissionID := range permissions {
+		key := SuperAdminRoleID + ":" + permissionID
+		if _, ok := seen[key]; !ok {
+			t.Fatalf("super admin binding missing permission_id %s", permissionID)
+		}
 	}
 }
