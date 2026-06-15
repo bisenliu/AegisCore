@@ -8,6 +8,8 @@ import (
 	casbinlib "github.com/casbin/casbin/v2"
 	"github.com/google/uuid"
 	"go.uber.org/fx"
+
+	commoncasbin "github.com/aegiscore/common/security/casbin"
 )
 
 // Engine 使用内存 Casbin enforcer 执行权限判断。
@@ -48,7 +50,7 @@ func (e *Engine) Enforce(ctx context.Context, userID uuid.UUID, pathTemplate str
 	if enforcer == nil {
 		return false, nil
 	}
-	return enforcer.Enforce(userSubject(userID), pathTemplate, method)
+	return commoncasbin.Enforce(ctx, enforcer, commoncasbin.Request{Subject: userSubject(userID), Object: pathTemplate, Action: method})
 }
 
 // Reload 全量重建 policy，只有构造成功后才替换当前内存 enforcer。
