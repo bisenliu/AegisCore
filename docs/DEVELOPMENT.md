@@ -44,7 +44,8 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 ## 4. Local Runtime And Deployment Assets
 
 - 本地直接运行用户服务：先准备 PostgreSQL 和 Redis，再执行 `make run-user-service`。
-- RBAC 系统角色、系统权限和系统角色权限绑定需要显式初始化或更新：推荐顺序为先执行数据库 migration，再执行 `make seed-rbac`，最后启动 HTTP server。seed 不会在 `serve` 启动时自动执行。
+- RBAC 系统角色、系统权限和系统角色权限绑定需要显式初始化或更新：推荐顺序为先执行数据库 migration，再执行 `make seed-rbac`，最后启动 HTTP server。seed 不会在 `serve` 启动时自动执行，也不会发布运行期 policy refresh；不要把 `make seed-rbac` 当作在线授权变更入口。
+- 生产环境若必须在已有 HTTP 副本运行中执行 `make seed-rbac` 或 `rbac assign-super-admin`，执行后需要滚动重启服务副本，或通过正式 RBAC 管理接口触发一次在线 policy refresh，确保所有副本的内存 Casbin policy 重新加载。日常在线权限、角色状态、用户角色绑定和角色权限绑定变更应使用 HTTP RBAC 管理接口，该路径会通过 Redis policy version、Pub/Sub 和版本补偿检查同步多副本。
 - 新增或调整进入 RBAC 授权中间件的业务路由时，必须同步更新 `user-service/internal/shared/rbacbaseline` 中的系统权限 URL catalog，重新执行 `make seed-rbac`，并通过 `GET /api/v1/permissions/route-diff` 检查权限目录与已注册路由是否仍一致。
 - 构建用户服务容器镜像：从仓库根目录执行 `docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .`。该 Dockerfile 依赖仓库根目录作为 build context，以便复制 `go.work`、`common/` 和 `user-service/`。
 - 本地 Compose 文件归属 `deployments/compose/`。当前没有可运行 Compose file；若本地没有 PostgreSQL/Redis，需要按 `user-service/configs/config.yaml` 中的配置自行准备依赖。

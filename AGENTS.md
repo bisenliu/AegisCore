@@ -95,6 +95,7 @@
 - 权限目录管理：权限创建、更新、启停、分页查询、详情查询、用户有效权限查询和路由差异查询。
 - 角色管理：角色创建、更新、启停、分页查询、详情查询、用户角色绑定查询/替换/增删，以及角色权限绑定查询/替换/增删。
 - RBAC HTTP 授权：JWT 认证后对用户、角色、权限业务接口执行 Casbin 授权；Casbin 使用 `user:<user_uuid>`、`role:<role_uuid>`、Gin route template 和 HTTP method，不依赖 `roles.code`。
+- RBAC policy 同步：在线 RBAC 管理接口变更权限、角色启停、用户角色绑定或角色权限绑定后，通过本实例 reload、Redis policy version、Pub/Sub 和定时版本补偿刷新其他副本的内存 Casbin policy；授权热路径不做每请求 Redis 强一致版本门控。`rbac seed` 和 `rbac assign-super-admin` 是离线运维入口，应在 migrate 与启动 HTTP server 之间执行；若在已有副本运行中执行，必须滚动重启或另行触发在线 policy refresh。
 - HTTP 服务运行时：启动、运行、路由注册和优雅停止。
 - 未来入站 gRPC transport 边界：如用户服务暴露真实 gRPC API，放在对应 feature 的 `transport/grpc`；当前不实现 gRPC API、proto、generated code 或 server runtime。
 - 外部系统防腐层边界：`internal/integration/http`、`grpc`、`events` 只承载真实外部调用的协议适配规则，当前不实现真实 client；`internal/integration/grpc` 是出站 external client adapter，不是本服务 gRPC server transport；`internal/integration/events` 是外部事件系统 producer/consumer 协议 adapter，不是 feature consumer handler、业务事件编排或 outbox。
@@ -150,7 +151,7 @@
 - HTTP request/response DTO、Swagger model、请求 DTO 清洗、绑定后的输入规范化、简单字段解析和 application command/query 构造放在对应 feature 的 `transport/http/request.go`、`response.go`、`input.go`。Controller 的输入处理最多保留两步：`binding.BindOrAbort` 和一个 feature-local preparer；不得在 controller 中串联多个 `NormalizeXXX`、`ParseXXX` helper。Input preparer 不得导入 Ent、Redis、service、infrastructure，不得查询 store、调用 use case、写 HTTP 响应、执行授权或业务存在性判断。
 - 未来 gRPC request/response DTO、protobuf 映射、metadata/status 适配和边界 validation 放在对应 feature 的 `transport/grpc`。没有真实 gRPC API 时，只允许 README 或 package doc 占位，不得新增空 handler、空 service、proto、generated code 或 gRPC runtime 依赖。
 - Controller 或未来 gRPC handler 必须把 transport DTO 映射为 application command/query 后再调用 service 或 use case，service/use case 不接收 HTTP request/response DTO 或 protobuf DTO。
-- RBAC 授权由 permission feature 拥有，系统 RBAC 基线由 `internal/shared/rbacbaseline` 拥有：系统超级管理员角色、系统权限和默认角色权限绑定的唯一长期入口是 `internal/shared/rbacbaseline`；Gin RBAC middleware 位于 `permission/transport/http`，可复用 `common/http/middleware` 的 Casbin 授权骨架，但用户身份解析、路由模板语义和错误响应映射仍由 permission transport 拥有；授权 application wrapper 位于 `permission/application/authorization`，Casbin policy loader/enforcer 位于 `permission/infrastructure/casbin`；loader 只加载启用角色、启用权限和未删除用户的绑定，并基于 `rbacbaseline.SuperAdminRoleID` 补充内置 `super_admin` wildcard policy。路由差异查询是只读诊断能力，只能返回 missing/stale 差异，不得写权限目录、不得绑定角色。
+- RBAC 授权由 permission feature 拥有，系统 RBAC 基线由 `internal/shared/rbacbaseline` 拥有：系统超级管理员角色、系统权限和默认角色权限绑定的唯一长期入口是 `internal/shared/rbacbaseline`；Gin RBAC middleware 位于 `permission/transport/http`，可复用 `common/http/middleware` 的 Casbin 授权骨架，但用户身份解析、路由模板语义和错误响应映射仍由 permission transport 拥有；授权 application wrapper 位于 `permission/application/authorization`，Casbin policy loader/enforcer 位于 `permission/infrastructure/casbin`；loader 只加载启用角色、启用权限和未删除用户的绑定，并基于 `rbacbaseline.SuperAdminRoleID` 补充内置 `super_admin` wildcard policy；在线 RBAC 写路径必须触发 policy refresh 编排，通过 Redis version/Pub/Sub 和版本补偿同步多副本，CLI seed/assign-super-admin 不作为运行期刷新机制。路由差异查询是只读诊断能力，只能返回 missing/stale 差异，不得写权限目录、不得绑定角色。
 
 | 层 | 可以依赖 | 禁止依赖 |
 |---|---|---|

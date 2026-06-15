@@ -86,6 +86,8 @@ RBAC 授权由 permission feature 拥有，系统 RBAC 基线由 `internal/share
 
 Casbin policy loader 只加载未删除用户、启用角色、启用权限以及仍存在的用户角色和角色权限绑定，并基于 `rbacbaseline.SuperAdminRoleID` 补充内置 `super_admin` wildcard policy。角色 feature 绑定权限前只通过 permission application port 校验权限存在且启用，不直接依赖 permission infrastructure 或 Casbin 包。Permission route diff 是只读诊断能力，只比较 Gin 已注册可授权路由与正式权限目录的 missing/stale 差异，不创建权限、不修改权限状态、不绑定角色。
 
+在线 RBAC 管理接口完成权限、角色状态、用户角色绑定或角色权限绑定变更后，必须触发 permission feature 的 policy refresh 编排：本实例先全量 reload 内存 Casbin policy，再通过 Redis policy version 与 Pub/Sub 通知其他副本；其他副本收到通知后 reload，并通过定时版本补偿检查覆盖漏收消息场景。因此 HTTP 授权链路不在每次请求前读取 Redis 做强一致版本门控，运行时策略同步语义是短暂最终一致。`rbac seed` 和 `rbac assign-super-admin` 是离线运维入口，不由 HTTP `serve` 自动执行，也不承担运行期跨副本刷新；生产环境应在 migrate 与启动 HTTP server 之间执行，若必须在已有副本运行中执行，则需安排滚动重启或另行触发在线 policy refresh。
+
 不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。跨 feature 的共享业务代码也不要默认放到 `internal/shared`；只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并需在本文件补充 owner、消费方、准入理由和禁止事项。
 
 ### User Service Shared Kernel
