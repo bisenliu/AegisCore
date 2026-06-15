@@ -25,6 +25,7 @@ import (
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
+	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
@@ -50,6 +51,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	log := zap.New(core)
 	jwtService := commonauth.NewJWTService(cfg.Auth)
 	tokenVersions := &routeTokenVersionValidator{version: 1}
+	authorizer := &routeAuthorizer{allowed: true}
 	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log})
 	if err != nil {
 		t.Fatalf("NewGinEngine: %v", err)
@@ -64,6 +66,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		Engine:        engine,
 		JWT:           jwtService,
 		TokenVersions: tokenVersions,
+		Authorizer:    authorizer,
 		AuthController: authhttp.NewAuthController(authhttp.AuthControllerParams{
 			Login:          &routeAuthAuthUseCases{},
 			Refresh:        &routeAuthAuthUseCases{},
@@ -105,6 +108,9 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 				t.Fatalf("X-Trace-ID = %q, want trace-public-test", recorder.Header().Get("X-Trace-ID"))
 			}
 		})
+	}
+	if authorizer.calls != 0 {
+		t.Fatalf("public route authorizer calls = %d, want 0", authorizer.calls)
 	}
 
 	t.Run("healthz returns configured service name", func(t *testing.T) {
@@ -161,6 +167,9 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, contracterrors.CodeUnauthenticated)
 	})
+	if authorizer.calls != 0 {
+		t.Fatalf("auth route authorizer calls = %d, want 0", authorizer.calls)
+	}
 
 	t.Run("query with invalid token returns token invalid", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
@@ -175,6 +184,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
 		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		request.Header.Set("X-Trace-ID", "trace-auth-test")
+		authorizer.reset()
 		engine.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
@@ -183,6 +193,9 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			t.Fatalf("X-Trace-ID = %q, want trace-auth-test", recorder.Header().Get("X-Trace-ID"))
 		}
 		assertSuccessEnvelope(t, recorder)
+		if authorizer.calls != 1 || authorizer.userID != routeAuthUserID || authorizer.pathTemplate != "/api/v1/users/:user_id" || authorizer.method != http.MethodGet {
+			t.Fatalf("authorizer call = %#v", authorizer)
+		}
 
 		entries := logs.FilterMessage("http request completed").All()
 		if len(entries) == 0 {
@@ -197,6 +210,20 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		}
 		if _, ok := fields["client_ip"]; !ok {
 			t.Fatalf("request log missing client_ip: %#v", fields)
+		}
+	})
+
+	t.Run("query denied by rbac returns forbidden before controller", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
+		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		authorizer.reset()
+		authorizer.allowed = false
+		defer func() { authorizer.allowed = true }()
+		engine.ServeHTTP(recorder, request)
+		assertFailureEnvelope(t, recorder, http.StatusForbidden, contracterrors.CodeForbidden)
+		if authorizer.calls != 1 {
+			t.Fatalf("authorizer calls = %d, want 1", authorizer.calls)
 		}
 	})
 
@@ -272,6 +299,33 @@ type routeAuthAuthUseCases struct{}
 
 type routeTokenVersionValidator struct {
 	version int64
+}
+
+var _ permissionauthorization.Authorizer = (*routeAuthorizer)(nil)
+
+type routeAuthorizer struct {
+	allowed      bool
+	err          error
+	calls        int
+	userID       string
+	pathTemplate string
+	method       string
+}
+
+func (a *routeAuthorizer) Enforce(_ context.Context, userID string, pathTemplate string, method string) (bool, error) {
+	a.calls++
+	a.userID = userID
+	a.pathTemplate = pathTemplate
+	a.method = method
+	return a.allowed, a.err
+}
+
+func (a *routeAuthorizer) reset() {
+	a.calls = 0
+	a.userID = ""
+	a.pathTemplate = ""
+	a.method = ""
+	a.err = nil
 }
 
 func (s *routeTokenVersionValidator) ValidateTokenVersion(_ context.Context, _ string, tokenVersion int64) error {

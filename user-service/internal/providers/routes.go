@@ -8,6 +8,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
+	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
 	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
@@ -24,6 +25,7 @@ type RegisterRouteParams struct {
 	JWT    *commonauth.JWTService
 	// TokenVersions 是可选依赖，使公开路由和测试可以在不提供撤销能力时挂载中间件。
 	TokenVersions        commonauth.TokenVersionValidator `optional:"true"`
+	Authorizer           permissionauthorization.Authorizer
 	AuthController       *authhttp.AuthController
 	PermissionController *permissionhttp.PermissionController `optional:"true"`
 	RoleController       *rolehttp.RoleController             `optional:"true"`
@@ -39,6 +41,7 @@ func RegisterRoutes(params RegisterRouteParams) {
 		JWT:                   params.JWT,
 		AuthConfig:            params.Config.Auth,
 		TokenVersionValidator: params.TokenVersions,
+		Authorizer:            params.Authorizer,
 		AuthController:        params.AuthController,
 		PermissionController:  params.PermissionController,
 		RoleController:        params.RoleController,

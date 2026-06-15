@@ -4,6 +4,7 @@ import (
 	"go.uber.org/fx"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
+	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	permissioncommand "github.com/aegiscore/user-service/internal/features/permission/application/command"
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 	permissioncasbin "github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin"
@@ -16,6 +17,8 @@ var Module = fx.Module("feature-permission",
 	fx.Provide(
 		permissioncasbin.NewPolicyLoader,
 		permissioncasbin.NewEngine,
+		newAuthorizationEngine,
+		fx.Annotate(permissionauthorization.NewAuthorizer, fx.As(new(permissionauthorization.Authorizer))),
 		fx.Annotate(permissionpostgres.NewPermissionStore, fx.As(new(permissionapplication.PermissionStore))),
 		fx.Annotate(permissionhttp.NewRouteCatalogScanner, fx.As(new(permissionapplication.RouteCatalogScanner))),
 		permissioncommand.NewPermissionCommandService,
@@ -23,3 +26,7 @@ var Module = fx.Module("feature-permission",
 		permissionhttp.NewPermissionController,
 	),
 )
+
+func newAuthorizationEngine(engine *permissioncasbin.Engine) permissionauthorization.Engine {
+	return engine
+}

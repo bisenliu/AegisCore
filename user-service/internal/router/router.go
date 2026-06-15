@@ -8,6 +8,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
+	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
 	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
@@ -21,6 +22,7 @@ type RouteParams struct {
 	JWT                   *commonauth.JWTService
 	AuthConfig            config.AuthConfig
 	TokenVersionValidator commonauth.TokenVersionValidator
+	Authorizer            permissionauthorization.Authorizer
 	AuthController        *authhttp.AuthController
 	PermissionController  *permissionhttp.PermissionController
 	RoleController        *rolehttp.RoleController
@@ -44,8 +46,8 @@ func registerV1Routes(engine *gin.Engine, params RouteParams) {
 
 	authhttp.RegisterProtectedRoutes(authenticated.Group("/auth"), params.AuthController)
 
-	// 未来 Casbin 授权中间件应在认证之后挂载到该分组。
 	authorized := authenticated.Group("")
+	authorized.Use(permissionhttp.Authorize(params.Authorizer))
 	if params.PermissionController != nil {
 		permissionhttp.RegisterRoutes(authorized.Group("/permissions"), params.PermissionController)
 	}
