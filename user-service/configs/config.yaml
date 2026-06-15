@@ -47,6 +47,10 @@ auth:
   # 同一用户最多保留的活跃 Refresh Token 会话数；0 表示不限制。
   max_active_sessions_per_user: 5
 
+ent:
+  # 是否开启 Ent SQL debug 日志；开启后 SQL 与参数会写入 all/sql 日志，生产环境应谨慎启用。
+  sql_debug: false
+
 log:
   # 日志最低输出级别；常用值为 debug、info、warn、error。
   level: info

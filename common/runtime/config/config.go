@@ -13,6 +13,7 @@ type Config struct {
 	App      AppConfig                 `mapstructure:"app"`
 	HTTP     HTTPConfig                `mapstructure:"http"`
 	Auth     AuthConfig                `mapstructure:"auth"`
+	Ent      EntConfig                 `mapstructure:"ent"`
 	Log      LogConfig                 `mapstructure:"log"`
 	Redis    map[string]RedisConfig    `mapstructure:"redis"`
 	Postgres map[string]PostgresConfig `mapstructure:"postgres"`
@@ -46,6 +47,11 @@ type AuthConfig struct {
 	TokenVersionCacheTTL     time.Duration `mapstructure:"token_version_cache_ttl"`
 	RefreshTokenRotation     bool          `mapstructure:"refresh_token_rotation"`
 	MaxActiveSessionsPerUser int           `mapstructure:"max_active_sessions_per_user"`
+}
+
+// EntConfig 控制 Ent 运行时行为。
+type EntConfig struct {
+	SQLDebug bool `mapstructure:"sql_debug"`
 }
 
 // JWTConfig 包含 JWT 签发和校验设置。

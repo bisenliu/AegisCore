@@ -10,6 +10,9 @@ import (
 // TraceIDField 是请求关联 ID 使用的 zap 字段名。
 const TraceIDField = "trace_id"
 
+// SQLLoggerName 是 SQL 诊断日志使用的命名 logger。
+const SQLLoggerName = "sql"
+
 type traceIDContextKey struct{}
 type loggerContextKey struct{}
 
@@ -54,6 +57,14 @@ func WithContext(ctx context.Context, base *zap.Logger) *zap.Logger {
 		base = getDefault()
 	}
 	return base.With(zap.String(TraceIDField, TraceIDFromContext(ctx)))
+}
+
+// SQL 返回写入 SQL 专用日志流的命名 logger。
+func SQL(base *zap.Logger) *zap.Logger {
+	if base == nil {
+		base = getDefault()
+	}
+	return base.Named(SQLLoggerName)
 }
 
 // ToContext 返回携带 log 的 context，供 FromContext 作为基础 logger 使用。

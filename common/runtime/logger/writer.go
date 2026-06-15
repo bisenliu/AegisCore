@@ -16,6 +16,7 @@ type fileWriters struct {
 	info    zapcore.WriteSyncer
 	warning zapcore.WriteSyncer
 	error   zapcore.WriteSyncer
+	sql     zapcore.WriteSyncer
 }
 
 func newFileWriters(cfg config.LogConfig) (fileWriters, error) {
@@ -36,6 +37,7 @@ func newFileWriters(cfg config.LogConfig) (fileWriters, error) {
 		info:    newDailyLumberjackWriteSyncer(filepath.Join(dir, filename+".info.log"), cfg),
 		warning: newDailyLumberjackWriteSyncer(filepath.Join(dir, filename+".warning.log"), cfg),
 		error:   newDailyLumberjackWriteSyncer(filepath.Join(dir, filename+".error.log"), cfg),
+		sql:     newDailyLumberjackWriteSyncer(filepath.Join(dir, filename+".sql.log"), cfg),
 	}, nil
 }
 
