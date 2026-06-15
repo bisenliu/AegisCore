@@ -1,0 +1,25 @@
+package query
+
+import (
+	"context"
+
+	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
+)
+
+// PermissionQueryService 定义权限目录读侧用例。
+type PermissionQueryService interface {
+	ListPermissions(ctx context.Context, query ListPermissionsQuery) (*ListPermissionsResult, error)
+	GetPermission(ctx context.Context, query GetPermissionQuery) (*PermissionResult, error)
+	ListUserEffectivePermissions(ctx context.Context, query UserEffectivePermissionsQuery) (*UserEffectivePermissionsResult, error)
+	GetRouteDiff(ctx context.Context) (*RouteDiffResult, error)
+}
+
+type permissionQueryService struct {
+	scanner permissionapplication.RouteCatalogScanner
+	store   permissionapplication.PermissionStore
+}
+
+// NewPermissionQueryService 根据仓储和路由扫描依赖构造权限读侧服务。
+func NewPermissionQueryService(store permissionapplication.PermissionStore, scanner permissionapplication.RouteCatalogScanner) PermissionQueryService {
+	return &permissionQueryService{store: store, scanner: scanner}
+}

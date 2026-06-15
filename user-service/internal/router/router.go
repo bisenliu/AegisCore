@@ -8,6 +8,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
+	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 )
 
@@ -20,6 +21,7 @@ type RouteParams struct {
 	AuthConfig            config.AuthConfig
 	TokenVersionValidator commonauth.TokenVersionValidator
 	AuthController        *authhttp.AuthController
+	PermissionController  *permissionhttp.PermissionController
 	UserController        *userhttp.UserController
 }
 
@@ -42,5 +44,8 @@ func registerV1Routes(engine *gin.Engine, params RouteParams) {
 
 	// 未来 Casbin 授权中间件应在认证之后挂载到该分组。
 	authorized := authenticated.Group("")
+	if params.PermissionController != nil {
+		permissionhttp.RegisterRoutes(authorized.Group("/permissions"), params.PermissionController)
+	}
 	userhttp.RegisterRoutes(authorized.Group("/users"), params.UserController)
 }
