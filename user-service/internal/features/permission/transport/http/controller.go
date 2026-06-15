@@ -2,7 +2,6 @@ package permissionhttp
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 
 	"github.com/aegiscore/common/http/binding"
 	"github.com/aegiscore/common/http/response"
@@ -46,13 +45,13 @@ func (ctl *PermissionController) ListPermissions(c *gin.Context) {
 	if !binding.BindOrAbort(ctl.validator, c, &req, binding.QueryBinder) {
 		return
 	}
-	NormalizeListPermissions(&req)
-	cursor, err := ParseListCursor(req)
+
+	query, err := prepareListPermissionsQuery(req)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	result, err := ctl.queries.ListPermissions(c.Request.Context(), permissionquery.ListPermissionsQuery{Cursor: cursor, PageSize: req.PageSize, Limit: req.Limit, Module: req.Module, HTTPMethod: req.HTTPMethod, Active: req.Active, IsSystem: req.System})
+	result, err := ctl.queries.ListPermissions(c.Request.Context(), query)
 	if err != nil {
 		response.Fail(c, toPermissionHTTPError(err))
 		return
@@ -80,8 +79,13 @@ func (ctl *PermissionController) CreatePermission(c *gin.Context) {
 	if !binding.BindOrAbort(ctl.validator, c, &req, binding.JSONBinder) {
 		return
 	}
-	NormalizeCreatePermission(&req)
-	result, err := ctl.commands.CreatePermission(c.Request.Context(), permissioncommand.CreatePermissionCommand{Name: req.Name, Description: req.Description, Module: req.Module, HTTPMethod: req.HTTPMethod, PathTemplate: req.PathTemplate, Active: req.Active, IsSystem: req.System})
+
+	cmd, err := prepareCreatePermissionCommand(req)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	result, err := ctl.commands.CreatePermission(c.Request.Context(), cmd)
 	if err != nil {
 		response.Fail(c, toPermissionHTTPError(err))
 		return
@@ -104,11 +108,17 @@ func (ctl *PermissionController) CreatePermission(c *gin.Context) {
 // @Security BearerAuth
 // @Router /permissions/{permission_id} [get]
 func (ctl *PermissionController) GetPermission(c *gin.Context) {
-	permissionID, ok := ctl.parsePermissionID(c)
-	if !ok {
+	req := PermissionIDRequest{}
+	if !binding.BindOrAbort(ctl.validator, c, &req, binding.URIBinder) {
 		return
 	}
-	result, err := ctl.queries.GetPermission(c.Request.Context(), permissionquery.GetPermissionQuery{PermissionID: permissionID})
+
+	query, err := prepareGetPermissionQuery(req)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	result, err := ctl.queries.GetPermission(c.Request.Context(), query)
 	if err != nil {
 		response.Fail(c, toPermissionHTTPError(err))
 		return
@@ -134,16 +144,17 @@ func (ctl *PermissionController) GetPermission(c *gin.Context) {
 // @Security BearerAuth
 // @Router /permissions/{permission_id} [put]
 func (ctl *PermissionController) UpdatePermission(c *gin.Context) {
-	permissionID, ok := ctl.parsePermissionID(c)
-	if !ok {
+	req := UpdatePermissionHTTPRequest{}
+	if !binding.BindOrAbort(ctl.validator, c, &req, binding.Compose(binding.URIBinder, binding.JSONBinder)) {
 		return
 	}
-	req := UpdatePermissionRequest{}
-	if !binding.BindOrAbort(ctl.validator, c, &req, binding.JSONBinder) {
+
+	cmd, err := prepareUpdatePermissionCommand(req)
+	if err != nil {
+		response.Fail(c, err)
 		return
 	}
-	NormalizeUpdatePermission(&req)
-	result, err := ctl.commands.UpdatePermission(c.Request.Context(), permissioncommand.UpdatePermissionCommand{PermissionID: permissionID, Name: req.Name, Description: req.Description, Module: req.Module, HTTPMethod: req.HTTPMethod, PathTemplate: req.PathTemplate, Active: req.Active})
+	result, err := ctl.commands.UpdatePermission(c.Request.Context(), cmd)
 	if err != nil {
 		response.Fail(c, toPermissionHTTPError(err))
 		return
@@ -205,12 +216,13 @@ func (ctl *PermissionController) ListUserEffectivePermissions(c *gin.Context) {
 	if !binding.BindOrAbort(ctl.validator, c, &req, binding.URIBinder) {
 		return
 	}
-	userID, err := ParseUserID(req)
+
+	query, err := prepareUserEffectivePermissionsQuery(req)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	result, err := ctl.queries.ListUserEffectivePermissions(c.Request.Context(), permissionquery.UserEffectivePermissionsQuery{UserID: userID})
+	result, err := ctl.queries.ListUserEffectivePermissions(c.Request.Context(), query)
 	if err != nil {
 		response.Fail(c, toPermissionHTTPError(err))
 		return
@@ -238,27 +250,18 @@ func (ctl *PermissionController) GetRouteDiff(c *gin.Context) {
 	response.OK(c, toRouteDiffResponse(result))
 }
 
-func (ctl *PermissionController) parsePermissionID(c *gin.Context) (uuid.UUID, bool) {
+func (ctl *PermissionController) setPermissionActive(c *gin.Context, active bool) {
 	req := PermissionIDRequest{}
 	if !binding.BindOrAbort(ctl.validator, c, &req, binding.URIBinder) {
-		return uuid.Nil, false
-	}
-	permissionID, err := ParsePermissionID(req)
-	if err != nil {
-		response.Fail(c, err)
-		return uuid.Nil, false
-	}
-	return permissionID, true
-}
-
-func (ctl *PermissionController) setPermissionActive(c *gin.Context, active bool) {
-	permissionID, ok := ctl.parsePermissionID(c)
-	if !ok {
 		return
 	}
-	cmd := permissioncommand.SetPermissionActiveCommand{PermissionID: permissionID}
+
+	cmd, err := prepareSetPermissionActiveCommand(req)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
 	var result *permissioncommand.PermissionResult
-	var err error
 	if active {
 		result, err = ctl.commands.EnablePermission(c.Request.Context(), cmd)
 	} else {

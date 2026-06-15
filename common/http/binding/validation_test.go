@@ -195,6 +195,60 @@ func TestBinders(t *testing.T) {
 			t.Fatalf("embedded request = %#v", req)
 		}
 	})
+
+	t.Run("header", func(t *testing.T) {
+		type request struct {
+			Token string `header:"Authorization" validate:"required"`
+		}
+		ctx := newRequestContext(http.MethodGet, "/users", "")
+		ctx.Request.Header.Set("Authorization", "Bearer token")
+		var req request
+		if err := Bind(validator, ctx, &req, HeaderBinder); err != nil {
+			t.Fatalf("Bind: %v", err)
+		}
+		if req.Token != "Bearer token" {
+			t.Fatalf("Token = %q, want Bearer token", req.Token)
+		}
+	})
+
+	t.Run("compose", func(t *testing.T) {
+		type request struct {
+			ID   int64  `uri:"id" validate:"required,gt=0"`
+			Name string `json:"name" validate:"required"`
+		}
+		ctx := newRequestContext(http.MethodPost, "/users/123", `{"name":"aegis"}`)
+		ctx.Request.Header.Set("Content-Type", "application/json")
+		ctx.Params = gin.Params{{Key: "id", Value: "123"}}
+		var req request
+		if err := Bind(validator, ctx, &req, Compose(URIBinder, JSONBinder)); err != nil {
+			t.Fatalf("Bind: %v", err)
+		}
+		if req.ID != 123 || req.Name != "aegis" {
+			t.Fatalf("request = %#v", req)
+		}
+	})
+
+	t.Run("compose returns first error", func(t *testing.T) {
+		type request struct {
+			ID   int64  `uri:"id" validate:"required,gt=0" label:"用户ID"`
+			Name string `json:"name" validate:"required"`
+		}
+		ctx := newRequestContext(http.MethodPost, "/users/bad", `{"name":"aegis"}`)
+		ctx.Request.Header.Set("Content-Type", "application/json")
+		ctx.Params = gin.Params{{Key: "id", Value: "bad"}}
+		var req request
+		err := Bind(validator, ctx, &req, Compose(URIBinder, JSONBinder))
+		var validationErr *validation.Error
+		if !errors.As(err, &validationErr) {
+			t.Fatalf("Bind error = %T, want *Error", err)
+		}
+		if got, want := validationErr.Message, "用户ID字段类型不正确，应为整数类型"; got != want {
+			t.Fatalf("Message = %q, want %q", got, want)
+		}
+		if req.Name != "" {
+			t.Fatalf("JSON binder should not run after URI error, req = %#v", req)
+		}
+	})
 }
 
 func TestBindOrAbort(t *testing.T) {

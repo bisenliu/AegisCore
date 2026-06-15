@@ -46,9 +46,23 @@ type UpdateRoleRequest struct {
 	Active      bool   `json:"active" label:"是否启用" example:"true"`
 }
 
+// UpdateRoleHTTPRequest 是角色更新的 URI 与 JSON 合并请求。
+type UpdateRoleHTTPRequest struct {
+	RoleID      string `uri:"role_id" validate:"required,uuid" label:"角色ID" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
+	Name        string `json:"name" validate:"required,min=1,max=128" label:"角色名称" example:"管理员"`
+	Description string `json:"description" validate:"max=512" label:"角色说明" example:"管理后台角色"`
+	Active      bool   `json:"active" label:"是否启用" example:"true"`
+}
+
 // SetRoleStatusRequest 是启停角色的 JSON 请求体。
 type SetRoleStatusRequest struct {
 	Active bool `json:"active" label:"是否启用" example:"true"`
+}
+
+// SetRoleStatusHTTPRequest 是角色启停的 URI 与 JSON 合并请求。
+type SetRoleStatusHTTPRequest struct {
+	RoleID string `uri:"role_id" validate:"required,uuid" label:"角色ID" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
+	Active bool   `json:"active" label:"是否启用" example:"true"`
 }
 
 // RoleIDsRequest 是替换用户角色集合的 JSON 请求体。
@@ -61,6 +75,18 @@ type RoleIDBodyRequest struct {
 	RoleID string `json:"role_id" validate:"required,uuid" label:"角色ID" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
 }
 
+// ReplaceUserRolesHTTPRequest 是替换用户角色的 URI 与 JSON 合并请求。
+type ReplaceUserRolesHTTPRequest struct {
+	UserID  string   `uri:"user_id" validate:"required,uuid" label:"用户ID" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
+	RoleIDs []string `json:"role_ids" validate:"required,dive,uuid" label:"角色ID列表"`
+}
+
+// UserRoleHTTPRequest 是单个用户角色绑定的 URI 与 JSON 合并请求。
+type UserRoleHTTPRequest struct {
+	UserID string `uri:"user_id" validate:"required,uuid" label:"用户ID" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
+	RoleID string `json:"role_id" uri:"role_id" validate:"required,uuid" label:"角色ID" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
+}
+
 // PermissionIDsRequest 是替换角色权限集合的 JSON 请求体。
 type PermissionIDsRequest struct {
 	PermissionIDs []string `json:"permission_ids" validate:"required,dive,uuid" label:"权限ID列表"`
@@ -69,4 +95,16 @@ type PermissionIDsRequest struct {
 // PermissionIDBodyRequest 是新增单个角色权限绑定的 JSON 请求体。
 type PermissionIDBodyRequest struct {
 	PermissionID string `json:"permission_id" validate:"required,uuid" label:"权限ID" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
+}
+
+// ReplaceRolePermissionsHTTPRequest 是替换角色权限的 URI 与 JSON 合并请求。
+type ReplaceRolePermissionsHTTPRequest struct {
+	RoleID        string   `uri:"role_id" validate:"required,uuid" label:"角色ID" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
+	PermissionIDs []string `json:"permission_ids" validate:"required,dive,uuid" label:"权限ID列表"`
+}
+
+// RolePermissionHTTPRequest 是单个角色权限绑定的 URI 与 JSON 合并请求。
+type RolePermissionHTTPRequest struct {
+	RoleID       string `uri:"role_id" validate:"required,uuid" label:"角色ID" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
+	PermissionID string `json:"permission_id" uri:"permission_id" validate:"required,uuid" label:"权限ID" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
 }

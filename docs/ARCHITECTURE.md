@@ -49,7 +49,7 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 | 中间件链 | `user-service/internal/providers/gin.go` | 创建 Gin engine，注册 trace-id、panic recovery、request logging、CORS |
 | 路由 provider | `user-service/internal/providers/routes.go` | 将 Fx 依赖适配为 router route params |
 | 路由总装 | `user-service/internal/router/router.go`、`health.go`、`swagger.go` | `router.go` 创建 public/protected route groups 并总装 route graph，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向 |
-| 参数解析 | `features/*/transport/http/controller.go` | 绑定 HTTP DTO，执行边界校验，并映射为 command/query |
+| 参数解析 | `features/*/transport/http/controller.go`、`features/*/transport/http/input.go` | Controller 使用 `binding.BindOrAbort` 绑定 HTTP DTO 并执行结构校验；feature-local input preparer 负责绑定后的裁剪、默认值归一化、UUID/cursor/token 解析，并映射为 command/query |
 | 业务调用 | `features/*/application/` | 编排用户资料、认证会话、角色管理、权限目录和 RBAC 授权用例；用户资料 feature 的读写用例分别位于 `application/query` 与 `application/command`，认证会话 feature 的登录、刷新、强制改密和登出用例位于 `application/command`，角色 feature 使用 command/query 管理角色与绑定，permission feature 使用 command/query 管理权限目录、有效权限、route diff 和 authorization wrapper，并复用 `authctx`、`credentials`、`tokens`、`sessions` application 组件 |
 | 数据访问 | `features/*/infrastructure/postgres/`, `features/*/infrastructure/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
 | 响应输出 | `common/http/response/` + `common/contract/response/` | 通过 Gin writer 输出统一 `success/code/message/data` 信封，并复用稳定错误码与分页契约 |
@@ -69,14 +69,14 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 |---|---|
 | `application/` | service、commands、queries、ports、use case mapper 和业务编排；可按 feature 需要细分为 `command/`、`query/`、`validators/` 和稳定组件包。Auth 当前使用扁平 `command/` 承载登录、刷新、强制改密和登出 use case；使用 `authctx/` 承载认证上下文 helper；使用 `credentials/` 承载凭据校验和强制改密凭据更新；使用 `tokens/` 承载 JWT 签发解析和 token result DTO；使用 `sessions/` 承载 refresh session 生命周期、token version fallback、每用户活跃 refresh session 上限策略和会话撤销；使用 `validators/` 承载 transport-neutral 输入辅助、token version 撤销校验和 refresh session 一致性校验。Auth 当前没有真实读侧 query，`application/query` 只保留 README 边界说明 |
 | `domain/` | 领域实体、值对象、枚举、领域错误和纯业务规则；可按真实需要细分 `services/` 承载跨实体或跨值对象的纯领域服务规则，`events/` 承载纯领域事件模型 |
-| `transport/http/` | 当前已实现的入站 HTTP transport，承载 Gin controller、route registration、HTTP request/response DTO、Swagger 文档模型、HTTP DTO validation 和边界映射 |
+| `transport/http/` | 当前已实现的入站 HTTP transport，承载 Gin controller、route registration、HTTP request/response DTO、Swagger 文档模型、HTTP DTO validation、feature-local input preparer 和边界映射 |
 | `transport/grpc/` | 未来本服务暴露入站 gRPC API 时的 feature-local transport，承载 gRPC handler、server-side protobuf request/response 映射、gRPC 边界 validation 和 application command/query 映射；当前没有真实 gRPC API 时不得新增业务代码、空 handler、空 service、未使用 proto 或 generated code，只可按需保留 README 或 package doc |
 | `infrastructure/postgres/` | Ent/PostgreSQL adapter 和 predicate 构造 |
 | `infrastructure/redis/` | Redis adapter；仅在 feature 需要 Redis 时存在 |
 | `infrastructure/consumers/` | 未来 feature-local 入站事件 consumer adapter；仅当该 feature 有真实外部事件消费需求时新增，负责把已归一化的事件输入映射为 application command/query 或 port 调用 |
 | `fx.go` | Feature-local Fx module，组装 application、transport 和 infrastructure provider |
 
-Feature transport 可以按入站协议拆分在同一 feature 的 `transport/` 下。`transport/http` 和未来 `transport/grpc` 都必须把协议 DTO 映射为 transport-neutral application command/query 后再调用用例，不得互相导入对方 controller、DTO 或 route。可复用的输入辅助优先沉淀到 application `validators/`、`authctx/`、domain 值对象或其他 transport-neutral 层，而不是在 HTTP 和 gRPC transport 之间横向复用协议 DTO。
+Feature transport 可以按入站协议拆分在同一 feature 的 `transport/` 下。`transport/http` 和未来 `transport/grpc` 都必须把协议 DTO 映射为 transport-neutral application command/query 后再调用用例，不得互相导入对方 controller、DTO 或 route。HTTP controller 的输入处理应保持两步式：第一步固定调用 `binding.BindOrAbort` 完成绑定和结构校验，第二步调用 feature-local input preparer 完成绑定后的裁剪、默认值归一化、UUID/cursor/token 解析和 command/query 构造；controller 不直接串联多个 `NormalizeXXX`、`ParseXXX` helper。可复用的输入辅助优先沉淀到 application `validators/`、`authctx/`、domain 值对象或其他 transport-neutral 层，而不是在 HTTP 和 gRPC transport 之间横向复用协议 DTO。
 
 `domain/services` 和 `domain/events` 是按需子目录，只在存在真实纯领域服务规则或领域事件模型时创建；不要为了目录完整新增空 package、空 struct、空 interface 或只含占位注释的业务代码。简单实体、值对象、枚举、领域错误和单实体短方法仍可留在 `domain/` 根部。Auth 当前将 token/session validation helper 保留在 `application/validators`；当前没有领域事件模型，也没有事件总线实现。
 
@@ -110,7 +110,7 @@ Casbin policy loader 只加载未删除用户、启用角色、启用权限以�
 
 Ports 由消费侧 feature 拥有。Infrastructure adapter 只实现 application 层定义的最小接口，不为了自身方便定义大接口。Auth 的每用户活跃 refresh session 上限属于 application 持有的安全策略，通过 application port 传入 Redis adapter 同步执行；该策略不得下沉为 Redis adapter 私有配置，也不得交给后台 worker 异步补偿。
 
-Controller 或未来 gRPC handler 必须把 transport DTO 映射为 application command/query 后再调用 service 或用例。Service 和 command/query 用例不接收 HTTP request/response DTO 或 protobuf DTO，也不导入 Gin、Ent predicate、Redis client、HTTP binder 或 gRPC runtime。
+Controller 或未来 gRPC handler 必须把 transport DTO 映射为 application command/query 后再调用 service 或用例。HTTP controller 应通过 feature-local input preparer 完成 HTTP DTO 到 application command/query 的输入准备，preparer 不查询 store、不调用 use case、不写响应、不承载授权或业务存在性判断。Service 和 command/query 用例不接收 HTTP request/response DTO 或 protobuf DTO，也不导入 Gin、Ent predicate、Redis client、HTTP binder 或 gRPC runtime。
 
 Ent predicate 构造封装在 `infrastructure/postgres` 内。Adapter 可以做字段裁剪、模型转换和存储错误转换，但不得承载复杂业务编排、登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
 
@@ -126,7 +126,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - `common/contract/pagination/`：跨服务稳定 Cursor/Keyset 分页响应模型、分页大小边界和分页数据包装 helper。
 - `common/contract/response/`：HTTP 响应信封 DTO 和默认响应消息；不承载错误码、应用错误或分页 re-export。
 - `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、Redis key 构造规则、后台任务池、运行时资源名和时区初始化。
-- `common/http/`：HTTP/Gin 边界适配，例如 middleware、`http/binding` 请求绑定/校验失败响应适配层和 `http/response` 输出 helper；其中 Casbin 授权中间件只提供 resolver、authorizer 和 error handler 组合骨架。
+- `common/http/`：HTTP/Gin 边界适配，例如 middleware、`http/binding` 请求绑定/校验失败响应适配层、无业务语义的 binder 组合/HTTP header 绑定和 `http/response` 输出 helper；其中 Casbin 授权中间件只提供 resolver、authorizer 和 error handler 组合骨架。
 - `common/security/`：安全与凭证原语，例如 JWT、Bearer 传输常量、认证上下文、密码 hash helper 和无业务语义的 Casbin 三元组/enforcer 包装。
 - `common/testing/`：跨模块测试基础设施和无业务语义 fixture，仅供测试代码使用；真实 PostgreSQL/Redis integration helper 放在 `testing/containers`，基础测试值生成放在 `testing/fixtures`。
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。

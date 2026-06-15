@@ -6,7 +6,6 @@ import (
 
 	"github.com/aegiscore/common/http/binding"
 	"github.com/aegiscore/common/http/response"
-	commonauth "github.com/aegiscore/common/security/auth"
 	commonvalidation "github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
@@ -63,7 +62,9 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 	if !binding.BindOrAbort(ctl.validator, c, &req, binding.JSONBinder) {
 		return
 	}
-	if err := NormalizeLogin(&req); err != nil {
+
+	cmd, err := prepareLoginCommand(req)
+	if err != nil {
 		response.Fail(c, err)
 		return
 	}
@@ -71,10 +72,7 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 		ClientIP:  c.ClientIP(),
 		UserAgent: c.GetHeader("User-Agent"),
 	})
-	tokens, err := ctl.login.Login(ctx, authcommand.LoginCommand{
-		Username: req.Username,
-		Password: req.Password,
-	})
+	tokens, err := ctl.login.Login(ctx, cmd)
 	if err != nil {
 		response.Fail(c, toAuthHTTPError(err))
 		return
@@ -99,13 +97,13 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 	if !binding.BindOrAbort(ctl.validator, c, &req, binding.JSONBinder) {
 		return
 	}
-	if err := NormalizeRefresh(&req); err != nil {
+
+	cmd, err := prepareRefreshTokenCommand(req)
+	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	tokens, err := ctl.refresh.Refresh(c.Request.Context(), authcommand.RefreshTokenCommand{
-		RefreshToken: req.RefreshToken,
-	})
+	tokens, err := ctl.refresh.Refresh(c.Request.Context(), cmd)
 	if err != nil {
 		response.Fail(c, toAuthHTTPError(err))
 		return
@@ -127,18 +125,17 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Router /auth/change-password [post]
 func (ctl *AuthController) ChangePassword(c *gin.Context) {
-	req := ChangePasswordRequest{Token: c.GetHeader(commonauth.AuthorizationHeader)}
-	if !binding.BindOrAbort(ctl.validator, c, &req, binding.JSONBinder) {
+	req := ChangePasswordRequest{}
+	if !binding.BindOrAbort(ctl.validator, c, &req, binding.Compose(binding.HeaderBinder, binding.JSONBinder)) {
 		return
 	}
-	if err := NormalizeChangePassword(&req); err != nil {
+
+	cmd, err := prepareChangePasswordCommand(req)
+	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	result, err := ctl.changePassword.ChangePassword(c.Request.Context(), authcommand.ChangePasswordCommand{
-		Token:       req.Token,
-		NewPassword: req.NewPassword,
-	})
+	result, err := ctl.changePassword.ChangePassword(c.Request.Context(), cmd)
 	if err != nil {
 		response.Fail(c, toAuthHTTPError(err))
 		return

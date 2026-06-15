@@ -15,6 +15,18 @@ import (
 // Binder 将 Gin context 中的请求数据绑定到 dst。
 type Binder func(*gin.Context, any) error
 
+// Compose 按顺序执行多个 binder，并由调用方统一执行校验。
+func Compose(binders ...Binder) Binder {
+	return func(c *gin.Context, dst any) error {
+		for _, binder := range binders {
+			if err := binder(c, dst); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
 // URIBinder 使用 uri tag 将 Gin 路径参数绑定到 dst。
 func URIBinder(c *gin.Context, dst any) error {
 	values := make(url.Values, len(c.Params))
@@ -27,6 +39,17 @@ func URIBinder(c *gin.Context, dst any) error {
 // QueryBinder 使用 query 和 form tag 将 URL 查询参数绑定到 dst。
 func QueryBinder(c *gin.Context, dst any) error {
 	return validation.BindValues(dst, c.Request.URL.Query(), validation.TagQuery, validation.TagForm)
+}
+
+// HeaderBinder 使用 header tag 将 HTTP header 绑定到 dst。
+func HeaderBinder(c *gin.Context, dst any) error {
+	values := make(url.Values, len(c.Request.Header))
+	for name, rawValues := range c.Request.Header {
+		for _, value := range rawValues {
+			values.Add(name, value)
+		}
+	}
+	return validation.BindValues(dst, values, validation.TagHeader)
 }
 
 // JSONBinder 将 JSON 请求体绑定到 dst，并允许未知字段。

@@ -41,3 +41,14 @@ type UpdatePermissionRequest struct {
 	PathTemplate string `json:"path_template" validate:"required" label:"路径模板" example:"/api/v1/users"`
 	Active       bool   `json:"active" label:"是否启用" example:"true"`
 }
+
+// UpdatePermissionHTTPRequest 是权限更新的 URI 与 JSON 合并请求。
+type UpdatePermissionHTTPRequest struct {
+	PermissionID string `uri:"permission_id" validate:"required,uuid" label:"权限ID" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
+	Name         string `json:"name" validate:"required,min=1,max=128" label:"权限名称" example:"查询用户列表"`
+	Description  string `json:"description" validate:"max=512" label:"权限说明" example:"允许分页查询用户资料"`
+	Module       string `json:"module" validate:"required,min=1,max=64" label:"模块" example:"user"`
+	HTTPMethod   string `json:"http_method" validate:"required" label:"HTTP方法" example:"GET"`
+	PathTemplate string `json:"path_template" validate:"required" label:"路径模板" example:"/api/v1/users"`
+	Active       bool   `json:"active" label:"是否启用" example:"true"`
+}
