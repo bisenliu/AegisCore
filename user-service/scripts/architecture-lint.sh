@@ -59,6 +59,16 @@ run_rg "shared packages must not import feature packages" \
   'github\.com/aegiscore/user-service/internal/features/' \
   "${service_dir}/internal/shared"
 
+for forbidden_shared_dir in errors enums types utils helpers; do
+  if [[ -d "${service_dir}/internal/shared/${forbidden_shared_dir}" ]]; then
+    report "internal/shared/${forbidden_shared_dir} is a forbidden root-level catch-all package; put shared errors/enums/types in the owning shared kernel package"
+  fi
+done
+
+if [[ -e "${service_dir}/internal/shared/identity/status.go" ]]; then
+  report "internal/shared/identity/status.go should be named user_status.go to keep shared enum files subject-specific"
+fi
+
 run_rg "shared packages must not import forbidden runtime or transport dependencies" \
   'github\.com/gin-gonic/gin|github\.com/aegiscore/user-service/ent(/|")|github\.com/redis/go-redis|database/sql|github\.com/jackc/pgx|go\.uber\.org/fx|github\.com/aegiscore/common/http/response|github\.com/aegiscore/common/contract/response|github\.com/aegiscore/common/runtime/(config|logger|datastore)' \
   "${service_dir}/internal/shared"

@@ -94,9 +94,11 @@ Casbin policy loader 只加载未删除用户、启用角色、启用权限以�
 
 `internal/shared` 禁止导入或承载 Gin、Ent、Redis、SQL、Fx provider、controller、transport DTO、Swagger DTO、store port、application use case、feature infrastructure adapter、feature application service、HTTP response helper、配置读取、日志副作用、外部系统调用、数据库访问或缓存访问。
 
+Shared 按稳定业务内核子域建包，不按 feature 名称或技术类型建兜底目录。不得新增根级 `shared/errors`、`shared/enums`、`shared/types`、`shared/utils` 或 `shared/helpers`。公共错误放在 owning shared 子包的 `errors.go`；公共枚举按业务语义命名为 `<subject>_status.go`、`<subject>_type.go` 或 `<subject>_kind.go`；系统内置规格或目录数据放在 owning shared 子包的 `catalog.go` 或更具体的 `<subject>_catalog.go`。`deployments/` 下的 Docker、Compose、Kubernetes 和 Helm 资产不属于 shared，不能迁入 `internal/shared`。
+
 当前允许的 shared 子包只有：
 
-- `internal/shared/identity`：user/auth 共同业务内核，owner 是 user 与 auth。该包承载用户状态、账号生命周期判断和用户身份错误。用户资料创建、查询、认证登录、强制改密、凭据 adapter、角色用户绑定查询等需要用户状态或用户身份错误时，统一消费该包，不在 feature domain 内保留兼容 alias 或重复错误。
+- `internal/shared/identity`：user/auth 共同业务内核，owner 是 user 与 auth。该包承载用户状态、账号生命周期判断和用户身份错误；用户状态文件命名为 `user_status.go`，用户身份错误保留在 `errors.go`。用户资料创建、查询、认证登录、强制改密、凭据 adapter、角色用户绑定查询等需要用户状态或用户身份错误时，统一消费该包，不在 feature domain 内保留兼容 alias 或重复错误。
 - `internal/shared/rbacbaseline`：role/permission 共同 RBAC 系统规格，owner 是 role 与 permission。该包承载系统超级管理员角色、系统权限和默认角色权限绑定规格。Permission 继续拥有权限目录生命周期、有效权限查询、只读 route diff、authorization wrapper、Gin RBAC middleware 和 Casbin adapter；Role 继续拥有角色生命周期和角色绑定 use case；shared baseline 只表达系统初始规格，不做目录写入、不加载 policy、不访问 store。
 
 服务级 provider 统一放在 `user-service/internal/providers`。该包只负责把共享 runtime、common security、Gin、router 和 Ent 适配为用户服务 Fx 依赖；不得承载 feature 业务逻辑、HTTP route 定义或跨服务共享基础能力。`internal/bootstrap` 只负责 `fx.New`、顶层 `AppModule` 总装和 HTTP server 生命周期。
@@ -177,7 +179,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - 用户服务认证 Redis adapter 对登录和 refresh rotation 的 refresh session 写入执行同步 Redis Lua 原子操作，并按 application 传入的每用户活跃 session 上限裁剪最旧 session；该裁剪影响 refresh token 可续期能力，不通过 worker pool 异步执行。
 - 用户服务认证 Redis adapter 使用 `common/runtime/workerpool` 管理退出全部设备后的 detached session 后台物理清理；该 worker pool 只负责受控后台执行，不是 MQ、eventbus、outbox、通用 job system、可靠投递框架或 session 上限策略执行器。
 - 用户服务的外部系统防腐层边界位于 `user-service/internal/integration/`；其中 `integration/grpc` 只表示出站外部 gRPC client adapter，不表示本服务入站 gRPC transport；`integration/events` 只表示外部事件系统协议 adapter，不表示 feature consumer handler 或业务事件编排；当前没有 order、payment 等真实外部 client，也没有 Kafka、RabbitMQ、NATS、Redis Stream 等 broker dependency；当前也没有事件总线、outbox、publisher、subscriber、consumer handler 或异步投递 worker。
-- 部署资产位于 `deployments/`：用户服务 Dockerfile 位于 `deployments/docker/user-service.Dockerfile`，并要求从仓库根目录执行 build；`deployments/compose/` 承载本地依赖或本地服务启动配置，`deployments/k8s/` 承载 Kubernetes YAML，`deployments/helm/` 承载 Helm chart。
+- 部署资产位于 `deployments/`：用户服务 Dockerfile 位于 `deployments/docker/user-service.Dockerfile`，并要求从仓库根目录执行 build；`deployments/compose/` 承载本地依赖或本地服务启动配置，`deployments/k8s/` 承载 Kubernetes YAML，`deployments/helm/` 承载 Helm chart。部署清单、配置模板、Secret/ConfigMap 示例、探针、资源配额和服务暴露方式都留在 `deployments/` 或对应部署模板中，不迁入 `user-service/internal/shared`。
 - 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace header 为 `X-Trace-ID`，Gin context key 和日志字段统一为 `trace_id`。
 - HTTP access log 标准字段为 `trace_id`、`user_id`、`client_ip`、`method`、`path`、`status`、`latency_ms`；认证失败安全事件日志应额外记录 `user_agent`，但不得记录 password、token、Authorization header、Cookie 或原始请求体。
 - 代码注释统一使用中文，函数和方法注释必须使用中文；必要的协议名、库名、HTTP/JWT/Redis/PostgreSQL/Ent/Fx/Gin/trace-id 等技术术语可保留英文。人工维护源码不得新增英文注释；生成代码和第三方代码不为翻译注释而手写修改。
