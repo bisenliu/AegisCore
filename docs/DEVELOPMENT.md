@@ -50,6 +50,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - 构建用户服务容器镜像：从仓库根目录执行 `docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .`。该 Dockerfile 依赖仓库根目录作为 build context，以便复制 `go.work`、`common/` 和 `user-service/`。
 - 本地 Compose 文件归属 `deployments/compose/`。当前没有可运行 Compose file；若本地没有 PostgreSQL/Redis，需要按 `user-service/configs/config.yaml` 中的配置自行准备依赖。
 - Kubernetes YAML 归属 `deployments/k8s/`，Helm chart 归属 `deployments/helm/`。当前目录只声明边界，不提供可直接部署的生产资源。
+- 用户服务探针路径为：`/livez` 用于 liveness，`/readyz` 用于 readiness，`/startupz` 用于 startup probe。`/readyz` 和 `/startupz` 会检查 PostgreSQL、Redis、Casbin policy 加载状态和 RBAC policy watcher 状态。
 
 ## 5. Configuration
 

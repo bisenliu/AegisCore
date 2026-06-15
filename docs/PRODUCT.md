@@ -16,7 +16,7 @@ AegisCore 是面向多服务后端能力的 Go 项目底座。当前仓库已具
 ## 3. Current Core Scenarios
 
 1. 服务消费者调用 `GET /api/v1/users/:user_id` 获取用户资料，或调用 `GET /api/v1/users` 分页获取用户列表。
-2. 运维系统调用 `/healthz` 判断用户服务是否在线。
+2. 运维系统调用 `/livez` 判断用户服务进程是否在线，调用 `/readyz` 判断是否可以接入业务流量，调用 `/startupz` 判断启动关键依赖是否完成初始化。
 3. 服务进程通过配置文件和环境变量加载 HTTP、日志、Redis、Postgres 参数。
 4. HTTP 请求经过 trace-id、日志、panic recovery 和 CORS 中间件。
 5. 业务错误被映射为统一的 API 响应信封和错误码。
@@ -36,7 +36,7 @@ AegisCore 是面向多服务后端能力的 Go 项目底座。当前仓库已具
 - 当前仓库仍处于基础服务阶段，已有 API 较少，主规格应描述已存在的稳定能力而非愿景功能。
 - 用户数据由 PostgreSQL 中 Ent `User` schema 表达，`username` 唯一，内部 `id` 不对外暴露，对外使用 UUID `user_id`。
 - API 调用方依赖统一 JSON 响应结构，新增接口应保持兼容。
-- 服务启动依赖 Redis 和 PostgreSQL 可用，健康检查目前只代表 HTTP 进程在线，不代表所有下游依赖健康。
+- 服务启动依赖 Redis 和 PostgreSQL 可用。`/livez` 只代表 HTTP 进程在线；`/readyz` 和 `/startupz` 会检查 PostgreSQL、Redis、Casbin policy 加载状态和 RBAC policy watcher 状态。
 - 数据库结构变更必须通过可审查的 SQL migration 表达，运行时不自动修改 schema。
 
 ## 6. Non-Goals For Current Baseline

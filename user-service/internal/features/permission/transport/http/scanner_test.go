@@ -16,7 +16,7 @@ import (
 func TestRouteCatalogScanner(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.GET("/healthz", func(*gin.Context) {})
+	engine.GET("/livez", func(*gin.Context) {})
 	engine.POST("/api/v1/auth/login", func(*gin.Context) {})
 	engine.GET("/api/v1/users", func(*gin.Context) {})
 	engine.POST("/api/v1/users", func(*gin.Context) {})
@@ -34,7 +34,7 @@ func TestRouteCatalogScanner(t *testing.T) {
 func TestRouteCatalogScannerFiltersAuthorizableRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	engine.GET("/healthz", func(*gin.Context) {})
+	engine.GET("/livez", func(*gin.Context) {})
 	engine.OPTIONS("/api/v1/users", func(*gin.Context) {})
 	engine.POST("/api/v1/auth/login", func(*gin.Context) {})
 	engine.POST("/api/v1/auth/refresh", func(*gin.Context) {})

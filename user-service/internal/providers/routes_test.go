@@ -84,7 +84,9 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		path   string
 		body   string
 	}{
-		{method: http.MethodGet, path: "/healthz"},
+		{method: http.MethodGet, path: "/livez"},
+		{method: http.MethodGet, path: "/readyz"},
+		{method: http.MethodGet, path: "/startupz"},
 		{method: http.MethodGet, path: "/swagger/index.html"},
 		{method: http.MethodGet, path: "/docs"},
 		{method: http.MethodGet, path: "/api-docs"},
@@ -114,22 +116,24 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		t.Fatalf("public route authorizer calls = %d, want 0", authorizer.calls)
 	}
 
-	t.Run("healthz returns configured service name", func(t *testing.T) {
-		recorder := httptest.NewRecorder()
-		request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-		engine.ServeHTTP(recorder, request)
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
-		}
-		var health struct {
-			Status  string `json:"status"`
-			Service string `json:"service"`
-		}
-		if err := json.Unmarshal(recorder.Body.Bytes(), &health); err != nil {
-			t.Fatalf("unmarshal health response: %v", err)
-		}
-		if health.Status != "ok" || health.Service != cfg.App.Name {
-			t.Fatalf("health = %#v, want configured service name", health)
+	t.Run("probes return configured service name", func(t *testing.T) {
+		for _, path := range []string{"/livez", "/readyz", "/startupz"} {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, path, nil)
+			engine.ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("%s status = %d, want %d", path, recorder.Code, http.StatusOK)
+			}
+			var health struct {
+				Status  string `json:"status"`
+				Service string `json:"service"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &health); err != nil {
+				t.Fatalf("unmarshal health response: %v", err)
+			}
+			if health.Status != "ok" || health.Service != cfg.App.Name {
+				t.Fatalf("%s health = %#v, want configured service name", path, health)
+			}
 		}
 	})
 

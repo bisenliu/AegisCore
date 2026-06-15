@@ -318,19 +318,19 @@ const docTemplate = `{
                 }
             }
         },
-        "/healthz": {
+        "/livez": {
             "get": {
-                "description": "返回用户服务最小健康状态。",
+                "description": "返回用户服务最小存活状态，不检查 PostgreSQL、Redis 或 RBAC policy。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "系统"
                 ],
-                "summary": "服务健康检查",
+                "summary": "服务存活检查",
                 "responses": {
                     "200": {
-                        "description": "服务健康",
+                        "description": "服务存活",
                         "schema": {
                             "$ref": "#/definitions/HealthResponse"
                         }
@@ -959,6 +959,32 @@ const docTemplate = `{
                         "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/readyz": {
+            "get": {
+                "description": "检查 PostgreSQL、Redis、Casbin policy 和 RBAC policy watcher 是否就绪。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统"
+                ],
+                "summary": "服务就绪检查",
+                "responses": {
+                    "200": {
+                        "description": "服务就绪",
+                        "schema": {
+                            "$ref": "#/definitions/HealthResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "服务未就绪",
+                        "schema": {
+                            "$ref": "#/definitions/HealthResponse"
                         }
                     }
                 }
@@ -1724,6 +1750,32 @@ const docTemplate = `{
                         "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/Envelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/startupz": {
+            "get": {
+                "description": "检查用户服务启动所需关键依赖是否已完成初始化。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统"
+                ],
+                "summary": "服务启动检查",
+                "responses": {
+                    "200": {
+                        "description": "服务启动完成",
+                        "schema": {
+                            "$ref": "#/definitions/HealthResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "服务启动未完成",
+                        "schema": {
+                            "$ref": "#/definitions/HealthResponse"
                         }
                     }
                 }
@@ -2501,15 +2553,57 @@ const docTemplate = `{
                 }
             }
         },
+        "HealthCheckResult": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "dependency unavailable"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "postgres.user_db"
+                },
+                "status": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/HealthCheckStatus"
+                        }
+                    ],
+                    "example": "ok"
+                }
+            }
+        },
+        "HealthCheckStatus": {
+            "type": "string",
+            "enum": [
+                "ok",
+                "unavailable"
+            ],
+            "x-enum-varnames": [
+                "HealthCheckStatusOK",
+                "HealthCheckStatusUnavailable"
+            ]
+        },
         "HealthResponse": {
             "type": "object",
             "properties": {
+                "checks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/HealthCheckResult"
+                    }
+                },
                 "service": {
                     "type": "string",
                     "example": "aegiscore-user-services"
                 },
                 "status": {
-                    "type": "string",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/HealthCheckStatus"
+                        }
+                    ],
                     "example": "ok"
                 }
             }

@@ -30,6 +30,17 @@ type Store struct {
 	log        *zap.Logger
 }
 
+type policySubscriber interface {
+	Receive(ctx context.Context) (interface{}, error)
+	Channel(opts ...rediscmd.ChannelOption) <-chan *rediscmd.Message
+	Close() error
+}
+
+type policySubscriptionStore interface {
+	CurrentVersion(ctx context.Context) (int64, error)
+	Subscribe(ctx context.Context) policySubscriber
+}
+
 // NewStore 构造 RBAC policy Redis store。
 func NewStore(params StoreParams) (*Store, error) {
 	keys, err := NewKeyCatalog(params.Cfg.App.Name)
@@ -84,7 +95,7 @@ func (s *Store) CurrentVersion(ctx context.Context) (int64, error) {
 }
 
 // Subscribe 订阅 RBAC policy 刷新 channel。
-func (s *Store) Subscribe(ctx context.Context) *rediscmd.PubSub {
+func (s *Store) Subscribe(ctx context.Context) policySubscriber {
 	return s.client.Subscribe(ctx, s.keys.PolicyChannel())
 }
 

@@ -23,7 +23,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 3. `user-service/internal/bootstrap.AppModule` 导入共享 runtime module、feature modules、`providers.Module`，并提供 HTTP server 生命周期。
 4. `user-service/internal/providers.Module` 显式提供 Redis/PostgreSQL named providers、Ent clients、JWT service、Gin engine 和 HTTP route registration。
 5. User/Auth/Role/Permission feature modules 自己组装 feature-local infrastructure adapter、application service 或 command/query use case、授权组件和 HTTP controller。
-6. `user-service/internal/providers/routes.go` 适配依赖并调用 `router.RegisterUserServiceHTTPRoutes`；`router.go` 负责 route graph 总装和 `/api/v1` 分组，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向。
+6. `user-service/internal/providers/routes.go` 适配依赖并调用 `router.RegisterUserServiceHTTPRoutes`；`router.go` 负责 route graph 总装和 `/api/v1` 分组，`health.go` 注册 `/livez`、`/readyz`、`/startupz` 探针，`swagger.go` 注册 Swagger UI 和文档重定向。
 7. Fx lifecycle 启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
 `aegiscore-user-services` 是当前运行时 CLI/service name，不是仓库目录名或 Go module path；代码位置和 module path 统一使用 `user-service`。
@@ -48,7 +48,7 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 |---|---|---|
 | 中间件链 | `user-service/internal/providers/gin.go` | 创建 Gin engine，注册 trace-id、panic recovery、request logging、CORS |
 | 路由 provider | `user-service/internal/providers/routes.go` | 将 Fx 依赖适配为 router route params |
-| 路由总装 | `user-service/internal/router/router.go`、`health.go`、`swagger.go` | `router.go` 创建 public/protected route groups 并总装 route graph，`health.go` 注册 `/healthz`，`swagger.go` 注册 Swagger UI 和文档重定向 |
+| 路由总装 | `user-service/internal/router/router.go`、`health.go`、`swagger.go` | `router.go` 创建 public/protected route groups 并总装 route graph，`health.go` 注册 `/livez`、`/readyz`、`/startupz` 探针，`swagger.go` 注册 Swagger UI 和文档重定向 |
 | 参数解析 | `features/*/transport/http/controller.go`、`features/*/transport/http/input.go` | Controller 使用 `binding.BindOrAbort` 绑定 HTTP DTO 并执行结构校验；feature-local input preparer 负责绑定后的裁剪、默认值归一化、UUID/cursor/token 解析，并映射为 command/query |
 | 业务调用 | `features/*/application/` | 编排用户资料、认证会话、角色管理、权限目录和 RBAC 授权用例；用户资料 feature 的读写用例分别位于 `application/query` 与 `application/command`，认证会话 feature 的登录、刷新、强制改密和登出用例位于 `application/command`，角色 feature 使用 command/query 管理角色与绑定，permission feature 使用 command/query 管理权限目录、有效权限、route diff 和 authorization wrapper，并复用 `authctx`、`credentials`、`tokens`、`sessions` application 组件 |
 | 数据访问 | `features/*/infrastructure/postgres/`, `features/*/infrastructure/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
@@ -184,6 +184,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - 部署资产位于 `deployments/`：用户服务 Dockerfile 位于 `deployments/docker/user-service.Dockerfile`，并要求从仓库根目录执行 build；`deployments/compose/` 承载本地依赖或本地服务启动配置，`deployments/k8s/` 承载 Kubernetes YAML，`deployments/helm/` 承载 Helm chart。部署清单、配置模板、Secret/ConfigMap 示例、探针、资源配额和服务暴露方式都留在 `deployments/` 或对应部署模板中，不迁入 `user-service/internal/shared`。
 - 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace header 为 `X-Trace-ID`，Gin context key 和日志字段统一为 `trace_id`。
 - HTTP access log 标准字段为 `trace_id`、`user_id`、`client_ip`、`method`、`path`、`status`、`latency_ms`；认证失败安全事件日志应额外记录 `user_agent`，但不得记录 password、token、Authorization header、Cookie 或原始请求体。
+- 用户服务 HTTP 探针由 `internal/router/health.go` 拥有：`/livez` 只表示 Gin 进程可响应请求；`/readyz` 和 `/startupz` 由 `internal/providers/health.go` 注入 PostgreSQL `user_db`、Redis `cache_redis`、Casbin `LastError` 和 RBAC policy watcher 状态检查，失败时返回 HTTP 503 且不暴露 DSN、token、Cookie、SQL 或 stacktrace。
 - 代码注释统一使用中文，函数和方法注释必须使用中文；必要的协议名、库名、HTTP/JWT/Redis/PostgreSQL/Ent/Fx/Gin/trace-id 等技术术语可保留英文。人工维护源码不得新增英文注释；生成代码和第三方代码不为翻译注释而手写修改。
 - Log 日志消息内容必须全部使用英文，日志字段名使用稳定英文 snake_case。日志级别必须匹配场景严重性：`Debug` 用于生命周期细节和调试信息，`Info` 用于服务启动停止、资源连接关闭和重要成功业务动作，`Warn` 用于预期业务拒绝、客户端输入问题、认证拒绝、缓存降级和非致命冲突，`Error` 用于系统异常、外部依赖失败、数据访问失败、后台任务失败和 panic recover。业务日志优先使用 `common/runtime/logger` context helper，避免丢失 trace-id。
 
@@ -200,7 +201,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 
 ## 12. Current Constraints
 
-- 当前 HTTP API 暴露健康检查、Swagger、用户资料、认证会话、角色管理、权限目录、用户有效权限查询、只读 route diff 和 RBAC 授权保护的业务接口。
+- 当前 HTTP API 暴露 `/livez`、`/readyz`、`/startupz` 健康探针、Swagger、用户资料、认证会话、角色管理、权限目录、用户有效权限查询、只读 route diff 和 RBAC 授权保护的业务接口。
 - 当前没有真实 gRPC API、`.proto` schema、protobuf generated code 或 gRPC server runtime；如未来暴露入站 gRPC API，应先在对应 feature 的 `transport/grpc` 建立真实 API 设计，并单独设计服务级 runtime wiring。
 - 当前没有真实外部系统 client；`internal/integration` 只声明 HTTP、gRPC 和 events 防腐层边界。
 - 当前没有真实 MQ/broker、eventbus、outbox、producer、subscriber、consumer handler、后台投递 worker 或事件驱动事务语义；事件发布、事件消费和可靠投递能力都需要单独变更设计。

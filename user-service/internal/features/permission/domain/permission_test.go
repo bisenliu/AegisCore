@@ -24,7 +24,7 @@ func TestRouteIdentityValidation(t *testing.T) {
 	})
 
 	t.Run("rejects invalid path", func(t *testing.T) {
-		_, err := NewRouteIdentity("GET", "/healthz")
+		_, err := NewRouteIdentity("GET", "/livez")
 		if !errors.Is(err, ErrPermissionInvalid) {
 			t.Fatalf("err = %v, want ErrPermissionInvalid", err)
 		}

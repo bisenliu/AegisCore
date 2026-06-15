@@ -146,14 +146,40 @@ definitions:
       success:
         type: boolean
     type: object
+  HealthCheckResult:
+    properties:
+      message:
+        example: dependency unavailable
+        type: string
+      name:
+        example: postgres.user_db
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/HealthCheckStatus'
+        example: ok
+    type: object
+  HealthCheckStatus:
+    enum:
+    - ok
+    - unavailable
+    type: string
+    x-enum-varnames:
+    - HealthCheckStatusOK
+    - HealthCheckStatusUnavailable
   HealthResponse:
     properties:
+      checks:
+        items:
+          $ref: '#/definitions/HealthCheckResult'
+        type: array
       service:
         example: aegiscore-user-services
         type: string
       status:
+        allOf:
+        - $ref: '#/definitions/HealthCheckStatus'
         example: ok
-        type: string
     type: object
   LoginRequest:
     properties:
@@ -615,17 +641,17 @@ paths:
       summary: 刷新 Access Token
       tags:
       - 认证
-  /healthz:
+  /livez:
     get:
-      description: 返回用户服务最小健康状态。
+      description: 返回用户服务最小存活状态，不检查 PostgreSQL、Redis 或 RBAC policy。
       produces:
       - application/json
       responses:
         "200":
-          description: 服务健康
+          description: 服务存活
           schema:
             $ref: '#/definitions/HealthResponse'
-      summary: 服务健康检查
+      summary: 服务存活检查
       tags:
       - 系统
   /permissions:
@@ -1008,6 +1034,23 @@ paths:
       summary: 查询用户有效权限
       tags:
       - 权限
+  /readyz:
+    get:
+      description: 检查 PostgreSQL、Redis、Casbin policy 和 RBAC policy watcher 是否就绪。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 服务就绪
+          schema:
+            $ref: '#/definitions/HealthResponse'
+        "503":
+          description: 服务未就绪
+          schema:
+            $ref: '#/definitions/HealthResponse'
+      summary: 服务就绪检查
+      tags:
+      - 系统
   /roles:
     get:
       description: 查询角色列表。业务接口由 JWT 和 RBAC 保护，Casbin 使用 role_id 作为策略主体，不依赖 roles.code。
@@ -1477,6 +1520,23 @@ paths:
       summary: 启停角色
       tags:
       - 角色
+  /startupz:
+    get:
+      description: 检查用户服务启动所需关键依赖是否已完成初始化。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 服务启动完成
+          schema:
+            $ref: '#/definitions/HealthResponse'
+        "503":
+          description: 服务启动未完成
+          schema:
+            $ref: '#/definitions/HealthResponse'
+      summary: 服务启动检查
+      tags:
+      - 系统
   /users:
     get:
       description: 基于 user_id keyset 分页查询用户资料列表，支持按用户昵称、用户名和用户状态过滤，默认排除软删除用户。page_size

@@ -27,12 +27,14 @@ var Module = fx.Module("feature-permission",
 		permissionredis.NewVersionTracker,
 		newPolicyVersionPublisher,
 		newPolicyVersionTracker,
+		newPolicyWatcherStatus,
 		fx.Annotate(permissionapplication.NewPolicyRefreshCoordinator, fx.As(new(permissionapplication.PolicyChangeNotifier))),
 		permissioncommand.NewPermissionCommandService,
 		permissionquery.NewPermissionQueryService,
 		permissionhttp.NewPermissionController,
+		permissionredis.NewWatcher,
 	),
-	fx.Invoke(permissionredis.NewWatcher),
+	fx.Invoke(func(*permissionredis.Watcher) {}),
 )
 
 func newAuthorizationEngine(engine *permissioncasbin.Engine) permissionauthorization.Engine {
@@ -49,4 +51,8 @@ func newPolicyVersionPublisher(store *permissionredis.Store) permissionapplicati
 
 func newPolicyVersionTracker(tracker *permissionredis.VersionTracker) permissionapplication.PolicyVersionTracker {
 	return tracker
+}
+
+func newPolicyWatcherStatus(watcher *permissionredis.Watcher) permissionredis.WatcherStatus {
+	return watcher
 }

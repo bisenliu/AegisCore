@@ -104,6 +104,45 @@ func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
 	}
 }
 
+func TestWatcherRunningStatus(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	store := NewStoreWithInstance(client, "aegiscore-user-services", "instance-a", nil)
+	watcher := NewWatcherForTest(store, NewVersionTracker(), &stubReloadEngine{}, nil, time.Hour)
+
+	if watcher.Running() {
+		t.Fatal("Running = true before start, want false")
+	}
+	watcher.Start(context.Background())
+	if !watcher.Running() {
+		t.Fatal("Running = false after start, want true")
+	}
+	if err := watcher.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if watcher.Running() {
+		t.Fatal("Running = true after stop, want false")
+	}
+	if watcher.LastError() != nil {
+		t.Fatalf("LastError = %v, want nil for normal stop", watcher.LastError())
+	}
+}
+
+func TestWatcherRecordsUnexpectedChannelClose(t *testing.T) {
+	watcher := NewWatcherForTest(&closedChannelStore{}, NewVersionTracker(), &stubReloadEngine{}, nil, time.Hour)
+
+	watcher.Start(context.Background())
+	waitForWatcherStopped(t, watcher)
+
+	if watcher.Running() {
+		t.Fatal("Running = true after channel close, want false")
+	}
+	if watcher.LastError() == nil {
+		t.Fatal("LastError = nil, want channel close error")
+	}
+}
+
 type stubReloadEngine struct {
 	calls int
 	err   error
@@ -112,4 +151,47 @@ type stubReloadEngine struct {
 func (e *stubReloadEngine) Reload(context.Context) error {
 	e.calls++
 	return e.err
+}
+
+type closedChannelStore struct{}
+
+func (s *closedChannelStore) CurrentVersion(context.Context) (int64, error) {
+	return 0, nil
+}
+
+func (s *closedChannelStore) Subscribe(context.Context) policySubscriber {
+	return closedPolicySubscriber{}
+}
+
+type closedPolicySubscriber struct{}
+
+func (s closedPolicySubscriber) Receive(context.Context) (any, error) {
+	return nil, nil
+}
+
+func (s closedPolicySubscriber) Channel(...rediscmd.ChannelOption) <-chan *rediscmd.Message {
+	ch := make(chan *rediscmd.Message)
+	close(ch)
+	return ch
+}
+
+func (s closedPolicySubscriber) Close() error {
+	return nil
+}
+
+func waitForWatcherStopped(t *testing.T, watcher *Watcher) {
+	t.Helper()
+	deadline := time.After(time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("watcher did not stop")
+		case <-ticker.C:
+			if !watcher.Running() {
+				return
+			}
+		}
+	}
 }

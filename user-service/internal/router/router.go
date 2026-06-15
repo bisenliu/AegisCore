@@ -21,6 +21,7 @@ type RouteParams struct {
 	Log                   *zap.Logger
 	JWT                   *commonauth.JWTService
 	AuthConfig            config.AuthConfig
+	HealthChecks          HealthChecks
 	TokenVersionValidator commonauth.TokenVersionValidator
 	Authorizer            permissionauthorization.Authorizer
 	AuthController        *authhttp.AuthController
@@ -31,7 +32,7 @@ type RouteParams struct {
 
 // RegisterUserServiceHTTPRoutes 挂载健康检查、Swagger、认证和用户 API 路由。
 func RegisterUserServiceHTTPRoutes(engine *gin.Engine, params RouteParams) {
-	registerHealthRoutes(engine, params.ServiceName)
+	registerHealthRoutes(engine, params.ServiceName, params.HealthChecks)
 	RegisterSwagger(engine, params.Environment)
 	registerV1Routes(engine, params)
 }

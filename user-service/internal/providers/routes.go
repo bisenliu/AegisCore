@@ -23,6 +23,7 @@ type RegisterRouteParams struct {
 	Log    *zap.Logger
 	Engine *gin.Engine
 	JWT    *commonauth.JWTService
+	Health router.HealthChecks
 	// TokenVersions 是可选依赖，使公开路由和测试可以在不提供撤销能力时挂载中间件。
 	TokenVersions        commonauth.TokenVersionValidator `optional:"true"`
 	Authorizer           permissionauthorization.Authorizer
@@ -40,6 +41,7 @@ func RegisterRoutes(params RegisterRouteParams) {
 		Log:                   params.Log,
 		JWT:                   params.JWT,
 		AuthConfig:            params.Config.Auth,
+		HealthChecks:          params.Health,
 		TokenVersionValidator: params.TokenVersions,
 		Authorizer:            params.Authorizer,
 		AuthController:        params.AuthController,
