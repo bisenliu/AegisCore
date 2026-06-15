@@ -3,7 +3,7 @@ USER_SERVICE_DIR := user-service
 USER_SERVICE_CONFIG ?= ./user-service/configs/config.yaml
 USER_SERVICE_BIN ?= ./bin/user-service
 
-.PHONY: help build build-user-service test test-common test-user-service lint lint-common lint-user-service run-user-service generate migrate-diff migrate-validate migrate-apply swagger-generate
+.PHONY: help build build-user-service test test-common test-user-service lint lint-common lint-user-service run-user-service seed-rbac generate migrate-diff migrate-validate migrate-apply swagger-generate
 
 help: ## Show available commands.
 	@awk 'BEGIN {FS = ":.*##"; printf "Available commands:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -32,6 +32,9 @@ lint-user-service: ## Run user-service module lint.
 
 run-user-service: ## Run user-service with USER_SERVICE_CONFIG.
 	go run ./$(USER_SERVICE_DIR)/cmd serve --config $(USER_SERVICE_CONFIG)
+
+seed-rbac: ## Seed user-service RBAC data with USER_SERVICE_CONFIG.
+	go run ./$(USER_SERVICE_DIR)/cmd rbac --config $(USER_SERVICE_CONFIG) seed
 
 generate: ## Generate user-service Ent code.
 	cd $(USER_SERVICE_DIR) && go generate ./ent

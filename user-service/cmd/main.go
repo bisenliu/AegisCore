@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/aegiscore/user-service/internal/bootstrap"
@@ -44,6 +45,10 @@ var newLifecycleApp = func(configPath string) lifecycleApp {
 	return bootstrap.NewApp(configPath)
 }
 
+var runRBACSeed = runRBACSeedCommand
+
+var runAssignSuperAdmin = runAssignSuperAdminCommand
+
 func main() {
 	if err := newRootCommand().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -53,6 +58,10 @@ func main() {
 
 func newRootCommand() *cobra.Command {
 	var configPath string
+	var rbacConfigPath string
+	var reactivateSystem bool
+	var syncSystemBindings bool
+	var superAdminUserID string
 
 	root := &cobra.Command{
 		Use:   "aegiscore-user-services",
@@ -68,6 +77,39 @@ func newRootCommand() *cobra.Command {
 	}
 	serve.Flags().StringVar(&configPath, "config", "./configs/config.yaml", "path to YAML configuration file")
 	root.AddCommand(serve)
+
+	rbac := &cobra.Command{
+		Use:   "rbac",
+		Short: "Manage RBAC seed data and bootstrap bindings",
+	}
+	rbac.PersistentFlags().StringVar(&rbacConfigPath, "config", "./configs/config.yaml", "path to YAML configuration file")
+
+	seed := &cobra.Command{
+		Use:   "seed",
+		Short: "Seed default RBAC system roles, permissions, and bindings",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runRBACSeed(cmd.Context(), rbacConfigPath, rbacSeedOptions{reactivateSystem: reactivateSystem, syncSystemBindings: syncSystemBindings})
+		},
+	}
+	seed.Flags().BoolVar(&reactivateSystem, "reactivate-system", false, "reactivate catalog-managed system roles and permissions")
+	seed.Flags().BoolVar(&syncSystemBindings, "sync-system-bindings", false, "synchronize catalog-managed system role permission bindings exactly")
+	rbac.AddCommand(seed)
+
+	assignSuperAdmin := &cobra.Command{
+		Use:   "assign-super-admin --user-id <uuid>",
+		Short: "Assign the built-in super admin role to a user",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			userID, err := uuid.Parse(superAdminUserID)
+			if err != nil {
+				return fmt.Errorf("invalid --user-id: %w", err)
+			}
+			return runAssignSuperAdmin(cmd.Context(), rbacConfigPath, userID)
+		},
+	}
+	assignSuperAdmin.Flags().StringVar(&superAdminUserID, "user-id", "", "user UUID to receive the built-in super admin role")
+	_ = assignSuperAdmin.MarkFlagRequired("user-id")
+	rbac.AddCommand(assignSuperAdmin)
+	root.AddCommand(rbac)
 
 	return root
 }

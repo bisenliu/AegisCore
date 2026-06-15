@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/aegiscore/common/runtime/config"
@@ -27,9 +28,15 @@ func (a testLifecycleApp) Stop(ctx context.Context) error {
 
 func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testing.T) {
 	originalFactory := newLifecycleApp
+	originalSeed := runRBACSeed
 	t.Cleanup(func() {
 		newLifecycleApp = originalFactory
+		runRBACSeed = originalSeed
 	})
+	runRBACSeed = func(context.Context, string, rbacSeedOptions) error {
+		t.Fatal("serve must not invoke RBAC seed")
+		return nil
+	}
 
 	key := testContextKey("trace-id")
 	parent := context.WithValue(context.Background(), key, "test-trace")
@@ -77,10 +84,13 @@ func TestRootCommandSurface(t *testing.T) {
 	}
 
 	var serve *cobra.Command
+	var rbac *cobra.Command
 	for _, cmd := range root.Commands() {
-		if cmd.Use == "serve" {
+		switch cmd.Use {
+		case "serve":
 			serve = cmd
-			break
+		case "rbac":
+			rbac = cmd
 		}
 	}
 	if serve == nil {
@@ -93,6 +103,84 @@ func TestRootCommandSurface(t *testing.T) {
 	}
 	if flag.DefValue != "./configs/config.yaml" {
 		t.Fatalf("serve --config default = %q, want ./configs/config.yaml", flag.DefValue)
+	}
+	if rbac == nil {
+		t.Fatal("rbac command not registered")
+	}
+	if flag := rbac.PersistentFlags().Lookup("config"); flag == nil || flag.DefValue != "./configs/config.yaml" {
+		t.Fatalf("rbac --config flag = %#v", flag)
+	}
+	if findSubcommand(rbac, "seed") == nil {
+		t.Fatal("rbac seed command not registered")
+	}
+	if findSubcommand(rbac, "assign-super-admin") == nil {
+		t.Fatal("rbac assign-super-admin command not registered")
+	}
+}
+
+func TestRBACSeedCommandFlags(t *testing.T) {
+	originalSeed := runRBACSeed
+	t.Cleanup(func() { runRBACSeed = originalSeed })
+	called := false
+	runRBACSeed = func(_ context.Context, configPath string, opts rbacSeedOptions) error {
+		called = true
+		if configPath != "test-config.yaml" {
+			t.Fatalf("configPath = %q", configPath)
+		}
+		if !opts.reactivateSystem || !opts.syncSystemBindings {
+			t.Fatalf("opts = %#v", opts)
+		}
+		return nil
+	}
+
+	root := newRootCommand()
+	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "seed", "--reactivate-system", "--sync-system-bindings"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !called {
+		t.Fatal("runRBACSeed not called")
+	}
+}
+
+func TestAssignSuperAdminCommandValidatesUserID(t *testing.T) {
+	originalAssign := runAssignSuperAdmin
+	t.Cleanup(func() { runAssignSuperAdmin = originalAssign })
+	runAssignSuperAdmin = func(_ context.Context, _ string, _ uuid.UUID) error {
+		t.Fatal("runAssignSuperAdmin should not be called for invalid UUID")
+		return nil
+	}
+
+	root := newRootCommand()
+	root.SetArgs([]string{"rbac", "assign-super-admin", "--user-id", "not-a-uuid"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("Execute err = nil, want invalid UUID error")
+	}
+}
+
+func TestAssignSuperAdminCommandRuns(t *testing.T) {
+	originalAssign := runAssignSuperAdmin
+	t.Cleanup(func() { runAssignSuperAdmin = originalAssign })
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000001")
+	called := false
+	runAssignSuperAdmin = func(_ context.Context, configPath string, got uuid.UUID) error {
+		called = true
+		if configPath != "test-config.yaml" {
+			t.Fatalf("configPath = %q", configPath)
+		}
+		if got != userID {
+			t.Fatalf("userID = %s", got)
+		}
+		return nil
+	}
+
+	root := newRootCommand()
+	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "assign-super-admin", "--user-id", userID.String()})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !called {
+		t.Fatal("runAssignSuperAdmin not called")
 	}
 }
 
@@ -108,4 +196,13 @@ func TestFxAppLifecycleTimeouts(t *testing.T) {
 	if fxAppStopTimeout < cfg.HTTP.ShutdownTimeout {
 		t.Fatalf("fxAppStopTimeout = %s, want at least configured http.shutdown_timeout %s", fxAppStopTimeout, cfg.HTTP.ShutdownTimeout)
 	}
+}
+
+func findSubcommand(parent *cobra.Command, use string) *cobra.Command {
+	for _, cmd := range parent.Commands() {
+		if cmd.Use == use || cmd.Name() == use {
+			return cmd
+		}
+	}
+	return nil
 }

@@ -20,6 +20,7 @@ type RolePermissionStore struct {
 }
 
 var _ roleapplication.RolePermissionStore = (*RolePermissionStore)(nil)
+var _ roleapplication.SeedRolePermissionStore = (*RolePermissionStore)(nil)
 
 // RolePermissionStoreParams 包含 PostgreSQL-backed 角色权限绑定 store 所需的 Fx 输入。
 type RolePermissionStoreParams struct {
@@ -109,6 +110,86 @@ func (s *RolePermissionStore) Remove(ctx context.Context, roleID uuid.UUID, perm
 	return nil
 }
 
+// EnsureSystemBindings 补齐系统角色权限绑定，不删除额外绑定。
+func (s *RolePermissionStore) EnsureSystemBindings(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) (int, error) {
+	role, err := s.getRoleByExternalID(ctx, roleID)
+	if err != nil {
+		return 0, err
+	}
+	permissions, err := s.permissionsByExternalIDs(ctx, permissionIDs)
+	if err != nil {
+		return 0, err
+	}
+	existing, err := s.existingPermissionIDs(ctx, role.ID)
+	if err != nil {
+		return 0, err
+	}
+	added := 0
+	for _, permission := range permissions {
+		if _, ok := existing[permission.ID]; ok {
+			continue
+		}
+		if _, err := s.client.RolePermission.Create().SetRoleID(role.ID).SetPermissionID(permission.ID).Save(ctx); err != nil {
+			if ent.IsConstraintError(err) {
+				continue
+			}
+			return added, fmt.Errorf("create seed role permission role %s permission %s: %w", roleID.String(), permission.PermissionID.String(), err)
+		}
+		added++
+	}
+	return added, nil
+}
+
+// SyncSystemBindings 精确同步系统角色权限绑定。
+func (s *RolePermissionStore) SyncSystemBindings(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) (int, int, error) {
+	role, err := s.getRoleByExternalID(ctx, roleID)
+	if err != nil {
+		return 0, 0, err
+	}
+	permissions, err := s.permissionsByExternalIDs(ctx, permissionIDs)
+	if err != nil {
+		return 0, 0, err
+	}
+	desired := make(map[int64]*ent.Permission, len(permissions))
+	for _, permission := range permissions {
+		desired[permission.ID] = permission
+	}
+	existing, err := s.existingPermissionIDs(ctx, role.ID)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return 0, 0, fmt.Errorf("begin sync seed role permissions: %w", err)
+	}
+	removed := 0
+	for permissionID := range existing {
+		if _, ok := desired[permissionID]; ok {
+			continue
+		}
+		deleted, err := tx.RolePermission.Delete().Where(entrolepermission.RoleIDEQ(role.ID), entrolepermission.PermissionIDEQ(permissionID)).Exec(ctx)
+		if err != nil {
+			return 0, 0, rollback(tx, fmt.Errorf("delete seed role permission role %s permission %d: %w", roleID.String(), permissionID, err))
+		}
+		removed += deleted
+	}
+	added := 0
+	for permissionID, permission := range desired {
+		if _, ok := existing[permissionID]; ok {
+			continue
+		}
+		if _, err := tx.RolePermission.Create().SetRoleID(role.ID).SetPermissionID(permissionID).Save(ctx); err != nil {
+			return 0, 0, rollback(tx, fmt.Errorf("create seed role permission role %s permission %s: %w", roleID.String(), permission.PermissionID.String(), err))
+		}
+		added++
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, 0, fmt.Errorf("commit sync seed role permissions: %w", err)
+	}
+	return added, removed, nil
+}
+
 func (s *RolePermissionStore) getRoleByExternalID(ctx context.Context, roleID uuid.UUID) (*ent.Role, error) {
 	role, err := s.client.Role.Query().Where(entrole.RoleIDEQ(roleID)).Only(ctx)
 	if err == nil {
@@ -129,6 +210,35 @@ func (s *RolePermissionStore) getPermissionByExternalID(ctx context.Context, per
 		return nil, roledomain.ErrRolePermissionNotFound
 	}
 	return nil, fmt.Errorf("query permission by permission_id %s: %w", permissionID.String(), err)
+}
+
+func (s *RolePermissionStore) permissionsByExternalIDs(ctx context.Context, permissionIDs []uuid.UUID) ([]*ent.Permission, error) {
+	permissions := make([]*ent.Permission, 0, len(permissionIDs))
+	seen := make(map[uuid.UUID]struct{}, len(permissionIDs))
+	for _, permissionID := range permissionIDs {
+		if _, ok := seen[permissionID]; ok {
+			continue
+		}
+		seen[permissionID] = struct{}{}
+		permission, err := s.getPermissionByExternalID(ctx, permissionID)
+		if err != nil {
+			return nil, err
+		}
+		permissions = append(permissions, permission)
+	}
+	return permissions, nil
+}
+
+func (s *RolePermissionStore) existingPermissionIDs(ctx context.Context, roleID int64) (map[int64]struct{}, error) {
+	bindings, err := s.client.RolePermission.Query().Where(entrolepermission.RoleIDEQ(roleID)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list seed role permissions for role %d: %w", roleID, err)
+	}
+	existing := make(map[int64]struct{}, len(bindings))
+	for _, binding := range bindings {
+		existing[binding.PermissionID] = struct{}{}
+	}
+	return existing, nil
 }
 
 func toPermissionReference(permission *ent.Permission) *roleapplication.PermissionReference {

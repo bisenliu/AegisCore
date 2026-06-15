@@ -21,6 +21,7 @@ type UserRoleStore struct {
 }
 
 var _ roleapplication.UserRoleStore = (*UserRoleStore)(nil)
+var _ roleapplication.SeedUserRoleStore = (*UserRoleStore)(nil)
 
 // UserRoleStoreParams 包含 PostgreSQL-backed 用户角色绑定 store 所需的 Fx 输入。
 type UserRoleStoreParams struct {
@@ -108,6 +109,18 @@ func (s *UserRoleStore) Remove(ctx context.Context, userID uuid.UUID, roleID uui
 		return roledomain.ErrUserRoleNotFound
 	}
 	return nil
+}
+
+// AssignRole 幂等新增用户角色绑定，已存在时返回 added=false。
+func (s *UserRoleStore) AssignRole(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) (bool, error) {
+	err := s.Add(ctx, userID, roleID)
+	if err == nil {
+		return true, nil
+	}
+	if err == roledomain.ErrUserRoleAlreadyExists {
+		return false, nil
+	}
+	return false, err
 }
 
 func (s *UserRoleStore) getUserAndRole(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) (*ent.User, *ent.Role, error) {

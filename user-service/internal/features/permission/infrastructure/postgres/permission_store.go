@@ -22,6 +22,7 @@ type PermissionStore struct {
 }
 
 var _ permissionapplication.PermissionStore = (*PermissionStore)(nil)
+var _ permissionapplication.SeedPermissionStore = (*PermissionStore)(nil)
 
 // PermissionStoreParams 包含 PostgreSQL-backed 权限 store 所需的 Fx 输入。
 type PermissionStoreParams struct {
@@ -153,6 +154,57 @@ func (s *PermissionStore) SetActive(ctx context.Context, permissionID uuid.UUID,
 		return nil, fmt.Errorf("set permission active %s: %w", permissionID.String(), err)
 	}
 	return s.GetByPermissionID(ctx, permissionID)
+}
+
+// UpsertSystemPermission 按 permission_id 或路由身份幂等写入系统权限 seed 数据。
+func (s *PermissionStore) UpsertSystemPermission(ctx context.Context, input permissionapplication.SeedPermissionInput) (*permissiondomain.Permission, bool, error) {
+	existing, err := s.client.Permission.Query().Where(entpermission.PermissionIDEQ(input.PermissionID)).Only(ctx)
+	if err != nil && !ent.IsNotFound(err) {
+		return nil, false, fmt.Errorf("query seed permission %s: %w", input.PermissionID.String(), err)
+	}
+	if ent.IsNotFound(err) {
+		existing, err = s.client.Permission.Query().Where(entpermission.HTTPMethodEQ(input.HTTPMethod), entpermission.PathTemplateEQ(input.PathTemplate)).Only(ctx)
+		if err != nil && !ent.IsNotFound(err) {
+			return nil, false, fmt.Errorf("query seed permission %s %s: %w", input.HTTPMethod, input.PathTemplate, err)
+		}
+	}
+	if ent.IsNotFound(err) {
+		created, err := s.client.Permission.Create().
+			SetPermissionID(input.PermissionID).
+			SetName(input.Name).
+			SetDescription(input.Description).
+			SetModule(input.Module).
+			SetHTTPMethod(input.HTTPMethod).
+			SetPathTemplate(input.PathTemplate).
+			SetActive(input.Active).
+			SetIsSystem(true).
+			Save(ctx)
+		if err != nil {
+			if ent.IsConstraintError(err) {
+				return s.UpsertSystemPermission(ctx, input)
+			}
+			return nil, false, fmt.Errorf("create seed permission %s %s: %w", input.HTTPMethod, input.PathTemplate, err)
+		}
+		return toModel(created), true, nil
+	}
+
+	active := existing.Active
+	if input.ReactivateSystem {
+		active = input.Active
+	}
+	updated, err := s.client.Permission.UpdateOneID(existing.ID).
+		SetName(input.Name).
+		SetDescription(input.Description).
+		SetModule(input.Module).
+		SetHTTPMethod(input.HTTPMethod).
+		SetPathTemplate(input.PathTemplate).
+		SetActive(active).
+		SetIsSystem(true).
+		Save(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("update seed permission %s %s: %w", input.HTTPMethod, input.PathTemplate, err)
+	}
+	return toModel(updated), false, nil
 }
 
 func toModel(entPermission *ent.Permission) *permissiondomain.Permission {

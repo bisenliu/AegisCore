@@ -19,6 +19,11 @@ type PermissionStore interface {
 	SetActive(ctx context.Context, permissionID uuid.UUID, active bool) (*permissiondomain.Permission, error)
 }
 
+// SeedPermissionStore 定义 RBAC seed 消费的权限持久化端口。
+type SeedPermissionStore interface {
+	UpsertSystemPermission(ctx context.Context, input SeedPermissionInput) (*permissiondomain.Permission, bool, error)
+}
+
 // RouteCatalogScanner 定义权限目录对已注册 HTTP 路由的只读扫描端口。
 type RouteCatalogScanner interface {
 	DiscoverRoutes(ctx context.Context) ([]DiscoveredRoute, error)
@@ -34,6 +39,19 @@ type CreatePermissionInput struct {
 	PathTemplate string
 	Active       bool
 	IsSystem     bool
+}
+
+// SeedPermissionInput 包含系统权限 seed 规范化后的写入数据。
+type SeedPermissionInput struct {
+	PermissionID     uuid.UUID
+	Name             string
+	Description      string
+	Module           string
+	HTTPMethod       string
+	PathTemplate     string
+	Active           bool
+	IsSystem         bool
+	ReactivateSystem bool
 }
 
 // UpdatePermissionInput 包含规范化后的权限更新数据。

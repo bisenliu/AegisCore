@@ -17,6 +17,11 @@ type RoleStore interface {
 	SetActive(ctx context.Context, roleID uuid.UUID, active bool) (*roledomain.Role, error)
 }
 
+// SeedRoleStore 定义 RBAC seed 消费的角色持久化端口。
+type SeedRoleStore interface {
+	UpsertSystemRole(ctx context.Context, input SeedRoleInput) (*roledomain.Role, bool, error)
+}
+
 // UserRoleStore 定义用户角色绑定 use case 实际消费的持久化端口。
 type UserRoleStore interface {
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]roledomain.Role, error)
@@ -25,12 +30,23 @@ type UserRoleStore interface {
 	Remove(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) error
 }
 
+// SeedUserRoleStore 定义 RBAC seed 消费的用户角色绑定端口。
+type SeedUserRoleStore interface {
+	AssignRole(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) (bool, error)
+}
+
 // RolePermissionStore 定义角色权限绑定 use case 实际消费的持久化端口。
 type RolePermissionStore interface {
 	ListByRoleID(ctx context.Context, roleID uuid.UUID) ([]PermissionReference, error)
 	Add(ctx context.Context, roleID uuid.UUID, permission PermissionReference) error
 	Replace(ctx context.Context, roleID uuid.UUID, permissions []PermissionReference) ([]PermissionReference, error)
 	Remove(ctx context.Context, roleID uuid.UUID, permissionID uuid.UUID) error
+}
+
+// SeedRolePermissionStore 定义 RBAC seed 消费的系统角色权限绑定端口。
+type SeedRolePermissionStore interface {
+	EnsureSystemBindings(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) (int, error)
+	SyncSystemBindings(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) (int, int, error)
 }
 
 // PermissionLookup 定义角色绑定权限前对权限目录的只读校验端口。
@@ -45,6 +61,16 @@ type CreateRoleInput struct {
 	Description string
 	Active      bool
 	IsSystem    bool
+}
+
+// SeedRoleInput 包含系统角色 seed 规范化后的写入数据。
+type SeedRoleInput struct {
+	RoleID           uuid.UUID
+	Name             string
+	Description      string
+	Active           bool
+	IsSystem         bool
+	ReactivateSystem bool
 }
 
 // UpdateRoleInput 包含规范化后的角色更新数据。

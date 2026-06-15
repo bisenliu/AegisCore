@@ -18,6 +18,7 @@ type RoleStore struct {
 }
 
 var _ roleapplication.RoleStore = (*RoleStore)(nil)
+var _ roleapplication.SeedRoleStore = (*RoleStore)(nil)
 
 // RoleStoreParams 包含 PostgreSQL-backed 角色 store 所需的 Fx 输入。
 type RoleStoreParams struct {
@@ -112,6 +113,45 @@ func (s *RoleStore) SetActive(ctx context.Context, roleID uuid.UUID, active bool
 		return nil, fmt.Errorf("set role active %s: %w", roleID.String(), err)
 	}
 	return s.GetByRoleID(ctx, roleID)
+}
+
+// UpsertSystemRole 按 role_id 幂等写入系统角色 seed 数据。
+func (s *RoleStore) UpsertSystemRole(ctx context.Context, input roleapplication.SeedRoleInput) (*roledomain.Role, bool, error) {
+	existing, err := s.client.Role.Query().Where(entrole.RoleIDEQ(input.RoleID)).Only(ctx)
+	if err != nil && !ent.IsNotFound(err) {
+		return nil, false, fmt.Errorf("query seed role %s: %w", input.RoleID.String(), err)
+	}
+	if ent.IsNotFound(err) {
+		created, err := s.client.Role.Create().
+			SetRoleID(input.RoleID).
+			SetName(input.Name).
+			SetDescription(input.Description).
+			SetActive(input.Active).
+			SetIsSystem(true).
+			Save(ctx)
+		if err != nil {
+			if ent.IsConstraintError(err) {
+				return s.UpsertSystemRole(ctx, input)
+			}
+			return nil, false, fmt.Errorf("create seed role %s: %w", input.RoleID.String(), err)
+		}
+		return toRoleModel(created), true, nil
+	}
+
+	active := existing.Active
+	if input.ReactivateSystem {
+		active = input.Active
+	}
+	updated, err := s.client.Role.UpdateOneID(existing.ID).
+		SetName(input.Name).
+		SetDescription(input.Description).
+		SetActive(active).
+		SetIsSystem(true).
+		Save(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("update seed role %s: %w", input.RoleID.String(), err)
+	}
+	return toRoleModel(updated), false, nil
 }
 
 func toRoleModel(entRole *ent.Role) *roledomain.Role {
