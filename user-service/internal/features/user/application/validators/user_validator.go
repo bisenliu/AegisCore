@@ -1,11 +1,11 @@
 package validators
 
-import userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+import "github.com/aegiscore/user-service/internal/shared/identity"
 
 // CreateUserStatus 返回创建用户命令实际使用的用户状态。
-func CreateUserStatus(status *userdomain.UserStatus) userdomain.UserStatus {
+func CreateUserStatus(status *identity.UserStatus) identity.UserStatus {
 	if status == nil {
-		return userdomain.UserStatusNormal
+		return identity.UserStatusNormal
 	}
 	return *status
 }

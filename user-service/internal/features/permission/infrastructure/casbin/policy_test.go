@@ -10,7 +10,7 @@ import (
 
 	"github.com/aegiscore/user-service/ent"
 	"github.com/aegiscore/user-service/ent/enttest"
-	"github.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline"
+	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
 func TestPolicyLoaderLoadsActiveBindings(t *testing.T) {

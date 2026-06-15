@@ -17,10 +17,11 @@
 - `user-service/`：用户服务 HTTP 运行时和 Go module，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration，以及按 feature 组织的业务代码。
 - `user-service/internal/providers/`：用户服务级 Fx provider，集中承载 Gin engine、HTTP route registration、JWT service、PostgreSQL/Redis named resources 和 Ent clients 的服务侧组装；不得承载 feature 业务逻辑。
 - `user-service/internal/integration/`：用户服务访问外部系统的防腐层边界，按 `http/`、`grpc/`、`events/` 分类组织；`integration/events` 仅承载外部事件系统 producer/consumer 协议 adapter、envelope/topic 映射和 broker 错误语义归一化，不承载 feature consumer handler、业务编排、outbox persistence 或本服务持久化访问；当前没有真实外部系统调用时只保留 README 或 package doc，占位不得引入未使用代码。
+- `user-service/internal/shared/`：用户服务内稳定业务内核边界，只允许已被至少两个 feature 真实消费、边界稳定且不能归入 `common` 的纯类型、值对象、系统内置规格、稳定错误和无副作用判断；当前只开放 `identity` 与 `rbacbaseline`。`identity` 由 user/auth 共同消费，承载用户状态、账号生命周期判断和用户身份错误；`rbacbaseline` 由 role/permission 共同消费，承载系统内置 RBAC 角色、权限和默认角色权限绑定规格。新增 shared 子包必须同步在本文件和 `docs/ARCHITECTURE.md` 说明 owner、消费方、准入理由和禁止事项；不得放 Gin、Ent、Redis、SQL、Fx provider、controller、DTO、store port、use case、配置读取、日志副作用或外部调用。
 - `user-service/internal/features/user/`：用户资料 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；`domain/` 可在有真实纯领域规则或事件模型时按需新增 `services/`、`events/`；`application/command` 承载写侧用例，`application/query` 承载读侧用例，`application/validators` 承载 transport-neutral application 输入辅助；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`；未来如暴露本服务入站 gRPC API，使用 feature-local `transport/grpc`，当前没有真实 gRPC API 时不得新增业务代码、proto 或 generated code；未来如消费外部事件，使用 feature-local `infrastructure/consumers` 承载入站事件到 application command/query 的 adapter，当前没有真实消费者时不得新增业务代码。
 - `user-service/internal/features/auth/`：认证会话 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/redis/` 和 `fx.go` 分层；`domain/services`、`domain/events` 仅在有真实领域服务或领域事件模型时新增；`application/command` 保持扁平并承载登录、刷新、强制改密、退出当前设备和退出全部设备 use case；`application/authctx` 承载认证上下文和客户端审计上下文 helper；`application/credentials` 承载凭据校验和强制改密凭据更新 application 组件；`application/tokens` 承载 JWT 签发解析和 token result DTO；`application/sessions` 承载 refresh session 生命周期、token version fallback、每用户活跃 refresh session 上限策略和会话撤销；`application/validators` 承载 transport-neutral application 输入辅助、token version 撤销校验和 refresh session 一致性校验；`application/ports.go` 继续拥有凭据、token version 和 session ports；`application/query` 只有存在真实 auth 读侧用例时才放实现，当前只可保留 README；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`；未来如暴露本服务入站 gRPC API，使用 feature-local `transport/grpc`，当前没有真实 gRPC API 时不得新增业务代码、proto 或 generated code；未来如消费外部事件，使用 feature-local `infrastructure/consumers` 承载入站事件到 application command/query 的 adapter，当前没有真实消费者时不得新增业务代码。
 - `user-service/internal/features/role/`：角色管理 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；`domain/` 承载角色实体、系统角色保护规则和领域错误；`application/command` 承载角色生命周期、用户绑定角色和角色绑定权限写侧用例；`application/query` 承载角色、用户角色和角色权限读侧用例；`application/validators` 承载 transport-neutral 输入辅助；`application/ports.go` 拥有 RoleStore、UserRoleStore、RolePermissionStore 和 PermissionLookup 消费侧端口；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`；PostgreSQL adapter 使用 Ent 访问 roles、user_roles、role_permissions，并通过 permission feature application 端口校验权限存在且启用，不直接依赖 permission infrastructure。
-- `user-service/internal/features/permission/`：权限目录和 RBAC 授权 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/casbin/` 和 `fx.go` 分层；承载权限生命周期、权限查询、有效权限查询、只读路由差异查询、`application/authorization` 授权端口适配、`application/rbacbaseline` 系统 RBAC 基线、Gin RBAC 授权中间件和 Casbin policy loader/enforcer/reload；系统 RBAC 基线的超级管理员角色、系统权限和默认角色权限绑定只能由 `application/rbacbaseline` 拥有，role seed 和 Casbin adapter 只消费该基线；角色 feature 只能通过 application port 查询权限，不得直接访问 permission infrastructure；Casbin policy subject 使用 `role_id`（`role:<role_uuid>`），不要求 `roles.code` 字段；route diff 只能做已注册路由与正式权限的差异校验，不得创建正式权限或绑定角色。
+- `user-service/internal/features/permission/`：权限目录和 RBAC 授权 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/casbin/` 和 `fx.go` 分层；承载权限生命周期、权限查询、有效权限查询、只读路由差异查询、`application/authorization` 授权端口适配、Gin RBAC 授权中间件和 Casbin policy loader/enforcer/reload；系统 RBAC 基线的超级管理员角色、系统权限和默认角色权限绑定由 `internal/shared/rbacbaseline` 拥有，permission seeding、route diff、Casbin adapter 和 role seed 只消费该基线；角色 feature 只能通过 application port 查询权限，不得直接访问 permission infrastructure；Casbin policy subject 使用 `role_id`（`role:<role_uuid>`），不要求 `roles.code` 字段；route diff 只能做已注册路由与正式权限的差异校验，不得创建正式权限或绑定角色。
 - `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产；`deployments/docker` 放 Dockerfile 或统一构建资产，`deployments/compose` 放本地依赖或本地服务启动配置，`deployments/k8s` 放 Kubernetes YAML，`deployments/helm` 放 Helm chart。
 
 ## 3. Key Entry Points
@@ -68,7 +69,8 @@
 - 权限 controller：`user-service/internal/features/permission/transport/http/controller.go`
 - 权限 HTTP DTO：`user-service/internal/features/permission/transport/http/request.go`、`user-service/internal/features/permission/transport/http/response.go`
 - 权限 RBAC application 授权适配：`user-service/internal/features/permission/application/authorization/authorization.go`
-- 权限系统 RBAC 基线：`user-service/internal/features/permission/application/rbacbaseline/catalog.go`
+- 用户服务共享身份规格：`user-service/internal/shared/identity/status.go`、`user-service/internal/shared/identity/errors.go`
+- 用户服务共享 RBAC 基线：`user-service/internal/shared/rbacbaseline/catalog.go`
 - 权限 PostgreSQL adapter：`user-service/internal/features/permission/infrastructure/postgres/permission_store.go`
 - 权限 Casbin adapter：`user-service/internal/features/permission/infrastructure/casbin/policy.go`、`user-service/internal/features/permission/infrastructure/casbin/enforcer.go`
 - 共享 Casbin 授权 helper：`common/security/casbin/authorizer.go`
@@ -105,6 +107,8 @@
 - 查看统一入口：`make help`。
 - 构建用户服务二进制：`make build` 或 `make build-user-service`。
 - 运行全部测试：`make test`。
+- 运行架构边界检查：`make architecture-lint`。
+- 运行完整本地验证：`make verify`。
 - 运行用户服务：`make run-user-service`。
 - 构建用户服务 Docker 镜像：`docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .`。
 - 运行单模块测试：`make test-common` 或 `make test-user-service`。
@@ -141,12 +145,12 @@
 - 代码注释统一使用中文，函数和方法注释必须使用中文；必要的协议名、库名、HTTP/JWT/Redis/PostgreSQL/Ent/Fx/Gin/trace-id 等技术术语可保留英文。不要为了翻译注释而修改 Go identifier、错误字符串、HTTP 响应消息、配置 key、数据库字段、Redis key 或生成代码。
 - Log 日志消息内容必须全部使用英文，日志字段名使用稳定英文 snake_case；HTTP access log 标准字段为 `trace_id`、`user_id`、`client_ip`、`method`、`path`、`status`、`latency_ms`，认证失败安全事件日志额外记录 `user_agent`，但不得记录 password、token、Authorization header、Cookie 或原始请求体；日志级别必须匹配场景严重性，预期业务拒绝不得用 `Error`，系统异常、外部依赖失败、后台任务失败和 panic recover 不得降级为 `Info`。业务日志优先使用 `common/runtime/logger` context helper，避免丢失 trace-id。
 - 配置通过 YAML 与 `AEGISCORE_` 环境变量覆盖加载，Redis/PostgreSQL 使用 `redis.<name>` 与 `postgres.<name>` 命名实例，避免硬编码运行时配置。
-- `internal/shared` 默认禁止新增。只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并且必须在 `docs/ARCHITECTURE.md` 说明 owner、准入理由和禁止事项。
+- `internal/shared` 默认禁止新增。只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并且必须在本文件和 `docs/ARCHITECTURE.md` 说明 owner、消费方、准入理由和禁止事项。Shared 只允许纯类型、值对象、系统内置规格、少量无副作用判断方法和跨 feature 共享的稳定错误；不得导入 feature 包、Gin、Ent、Redis、SQL、Fx、HTTP response、runtime config/logger/datastore provider，不得承载 controller、transport DTO、Swagger DTO、store port、application use case、infrastructure adapter、配置读取、日志副作用、外部系统调用或数据库/缓存访问。当前允许的子包只有 `internal/shared/identity` 和 `internal/shared/rbacbaseline`；用户状态与用户身份错误统一使用 `shared/identity`，系统 RBAC 基线统一使用 `shared/rbacbaseline`，不要在 feature 内保留兼容 alias 或重复常量。
 - Ports 由消费侧 feature 拥有：用户资料 command/query 消费的接口放在 `internal/features/user/application/ports.go`，认证 command use case 和 application 组件消费的凭据、token version 和 session 接口放在 `internal/features/auth/application/ports.go`。不要为了 adapter 方便在 infrastructure 包或共享根包定义大接口。影响 refresh token 可续期能力的 session 上限策略由 auth `application/sessions` 持有，并通过 application port 传给 Redis adapter 同步落地；批量物理清理才可使用 `common/runtime/workerpool` 异步执行。
 - HTTP request/response DTO、Swagger model、请求 DTO 清洗、绑定后的输入规范化、简单字段解析和 application command/query 构造放在对应 feature 的 `transport/http/request.go`、`response.go`、`input.go`。Controller 的输入处理最多保留两步：`binding.BindOrAbort` 和一个 feature-local preparer；不得在 controller 中串联多个 `NormalizeXXX`、`ParseXXX` helper。Input preparer 不得导入 Ent、Redis、service、infrastructure，不得查询 store、调用 use case、写 HTTP 响应、执行授权或业务存在性判断。
 - 未来 gRPC request/response DTO、protobuf 映射、metadata/status 适配和边界 validation 放在对应 feature 的 `transport/grpc`。没有真实 gRPC API 时，只允许 README 或 package doc 占位，不得新增空 handler、空 service、proto、generated code 或 gRPC runtime 依赖。
 - Controller 或未来 gRPC handler 必须把 transport DTO 映射为 application command/query 后再调用 service 或 use case，service/use case 不接收 HTTP request/response DTO 或 protobuf DTO。
-- RBAC 授权和系统 RBAC 基线由 permission feature 拥有：系统超级管理员角色、系统权限和默认角色权限绑定的唯一长期入口是 `permission/application/rbacbaseline`；Gin RBAC middleware 位于 `permission/transport/http`，可复用 `common/http/middleware` 的 Casbin 授权骨架，但用户身份解析、路由模板语义和错误响应映射仍由 permission transport 拥有；授权 application wrapper 位于 `permission/application/authorization`，Casbin policy loader/enforcer 位于 `permission/infrastructure/casbin`；loader 只加载启用角色、启用权限和未删除用户的绑定，并基于 `rbacbaseline.SuperAdminRoleID` 补充内置 `super_admin` wildcard policy。路由差异查询是只读诊断能力，只能返回 missing/stale 差异，不得写权限目录、不得绑定角色。
+- RBAC 授权由 permission feature 拥有，系统 RBAC 基线由 `internal/shared/rbacbaseline` 拥有：系统超级管理员角色、系统权限和默认角色权限绑定的唯一长期入口是 `internal/shared/rbacbaseline`；Gin RBAC middleware 位于 `permission/transport/http`，可复用 `common/http/middleware` 的 Casbin 授权骨架，但用户身份解析、路由模板语义和错误响应映射仍由 permission transport 拥有；授权 application wrapper 位于 `permission/application/authorization`，Casbin policy loader/enforcer 位于 `permission/infrastructure/casbin`；loader 只加载启用角色、启用权限和未删除用户的绑定，并基于 `rbacbaseline.SuperAdminRoleID` 补充内置 `super_admin` wildcard policy。路由差异查询是只读诊断能力，只能返回 missing/stale 差异，不得写权限目录、不得绑定角色。
 
 | 层 | 可以依赖 | 禁止依赖 |
 |---|---|---|
@@ -158,6 +162,7 @@
 | `infrastructure/redis` | Redis client、application ports、domain、common runtime primitive | Gin、HTTP response |
 | `infrastructure/consumers` | feature application、feature domain、必要的归一化事件输入 DTO | broker SDK subscription loop、Ent/Redis 直接业务访问、Gin、跨 feature orchestration |
 | `integration/*` | 外部 SDK/client、feature application ports、domain、common runtime/security 原语 | Gin response、Ent、feature service 业务编排、service-owned persistence adapter |
+| `internal/shared/*` | 标准库、稳定无副作用值对象 | feature 包、Gin、Ent、Redis、SQL、Fx、HTTP response、runtime config/logger/datastore provider、controller、DTO、store port、use case |
 | `fx.go` | Fx、feature 内部包 | 业务逻辑 |
 
 Adapter 可以做字段裁剪和模型转换，但不得承载复杂业务编排。禁止在 adapter 中实现登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。

@@ -19,6 +19,7 @@ import (
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 const controllerTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
@@ -31,7 +32,7 @@ func TestUserControllerGetByUserID(t *testing.T) {
 	t.Run("valid ID", func(t *testing.T) {
 		createdAt := int64(1780048800000)
 		updatedAt := int64(1780052400000)
-		service := &stubUserQueries{response: &userquery.GetUserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}}
+		service := &stubUserQueries{response: &userquery.GetUserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Aegis", Username: "aegis", Status: identity.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}}
 
 		status, envelope := executeGetByUserID(t, service, controllerTestUserID)
 
@@ -48,7 +49,7 @@ func TestUserControllerGetByUserID(t *testing.T) {
 		if !ok {
 			t.Fatalf("data = %T, want map", envelope.Data)
 		}
-		if data["user_id"] != controllerTestUserID || data["nickname"] != "Aegis" || data["username"] != "aegis" || data["status"] != float64(userdomain.UserStatusNormal) || data["created_at"] != float64(createdAt) || data["updated_at"] != float64(updatedAt) {
+		if data["user_id"] != controllerTestUserID || data["nickname"] != "Aegis" || data["username"] != "aegis" || data["status"] != float64(identity.UserStatusNormal) || data["created_at"] != float64(createdAt) || data["updated_at"] != float64(updatedAt) {
 			t.Fatalf("data = %#v", data)
 		}
 		if _, ok := data["id"]; ok {
@@ -65,7 +66,7 @@ func TestUserControllerGetByUserID(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		status, envelope := executeGetByUserID(t, &stubUserQueries{err: userdomain.ErrUserNotFound}, controllerTestUserID)
+		status, envelope := executeGetByUserID(t, &stubUserQueries{err: identity.ErrUserNotFound}, controllerTestUserID)
 		if status != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", status, http.StatusNotFound)
 		}
@@ -89,7 +90,7 @@ func TestUserControllerCreate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	createdUser := &usercommand.CreateUserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}
+	createdUser := &usercommand.CreateUserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: identity.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}
 
 	t.Run("valid body", func(t *testing.T) {
 		service := &stubUserCommands{createResponse: createdUser}
@@ -99,14 +100,14 @@ func TestUserControllerCreate(t *testing.T) {
 		if status != http.StatusCreated {
 			t.Fatalf("status = %d, want %d", status, http.StatusCreated)
 		}
-		if service.gotCreate.Nickname != "Alice" || service.gotCreate.Username != "alice" || service.gotCreate.Password != "secret" || service.gotCreate.Status == nil || *service.gotCreate.Status != userdomain.UserStatusNormal {
+		if service.gotCreate.Nickname != "Alice" || service.gotCreate.Username != "alice" || service.gotCreate.Password != "secret" || service.gotCreate.Status == nil || *service.gotCreate.Status != identity.UserStatusNormal {
 			t.Fatalf("gotCreate = %#v", service.gotCreate)
 		}
 		if !envelope.Success || envelope.Code != contracterrors.CodeOK || envelope.Message != "created" {
 			t.Fatalf("envelope = %#v", envelope)
 		}
 		data, ok := envelope.Data.(map[string]any)
-		if !ok || data["user_id"] != controllerTestUserID || data["nickname"] != "Alice" || data["username"] != "alice" || data["status"] != float64(userdomain.UserStatusNormal) || data["created_at"] != float64(createdAt) {
+		if !ok || data["user_id"] != controllerTestUserID || data["nickname"] != "Alice" || data["username"] != "alice" || data["status"] != float64(identity.UserStatusNormal) || data["created_at"] != float64(createdAt) {
 			t.Fatalf("data = %#v", envelope.Data)
 		}
 		if _, ok := data["id"]; ok {
@@ -161,7 +162,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("user already exists", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserCommands{createErr: userdomain.ErrUserAlreadyExists}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
+		status, envelope := executeCreate(t, &stubUserCommands{createErr: identity.ErrUserAlreadyExists}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
 		if status != http.StatusConflict {
 			t.Fatalf("status = %d, want %d", status, http.StatusConflict)
 		}
@@ -185,7 +186,7 @@ func TestUserControllerList(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createdAt := int64(1780048800000)
-	listResponse := &userquery.ListUsersResult{Items: []userdomain.User{{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, PageSize: 20, NextCursor: controllerTestUserID, HasNext: true}
+	listResponse := &userquery.ListUsersResult{Items: []userdomain.User{{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: identity.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, PageSize: 20, NextCursor: controllerTestUserID, HasNext: true}
 
 	t.Run("default pagination", func(t *testing.T) {
 		service := &stubUserQueries{listResponse: &userquery.ListUsersResult{Items: []userdomain.User{}, PageSize: 10}}
@@ -212,7 +213,7 @@ func TestUserControllerList(t *testing.T) {
 		if service.gotList.Cursor == nil || service.gotList.Cursor.String() != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4d" || service.gotList.PageSize != 20 || service.gotList.Limit != 20 || service.gotList.Nickname != "Ali" || service.gotList.Username != "alice" {
 			t.Fatalf("gotList = %#v", service.gotList)
 		}
-		if service.gotList.Status == nil || *service.gotList.Status != userdomain.UserStatusNormal {
+		if service.gotList.Status == nil || *service.gotList.Status != identity.UserStatusNormal {
 			t.Fatalf("status = %#v", service.gotList.Status)
 		}
 		assertPaginatedEnvelope(t, envelope, 20, controllerTestUserID, true, 1)
@@ -388,7 +389,7 @@ func assertPaginatedEnvelope(t *testing.T, envelope response.Envelope, pageSize 
 	}
 	if itemCount > 0 {
 		item, ok := items[0].(map[string]any)
-		if !ok || item["user_id"] != controllerTestUserID || item["nickname"] != "Alice" || item["username"] != "alice" || item["status"] != float64(userdomain.UserStatusNormal) {
+		if !ok || item["user_id"] != controllerTestUserID || item["nickname"] != "Alice" || item["username"] != "alice" || item["status"] != float64(identity.UserStatusNormal) {
 			t.Fatalf("item = %#v", items[0])
 		}
 		if _, ok := item["id"]; ok {

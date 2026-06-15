@@ -8,6 +8,7 @@ import (
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 func toUserResponse(user userdomain.User) UserResponse {
@@ -38,9 +39,9 @@ func toUserListResponse(result *userquery.ListUsersResult) pagination.PaginatedD
 
 func toUserHTTPError(err error) error {
 	switch {
-	case errors.Is(err, userdomain.ErrUserAlreadyExists):
+	case errors.Is(err, identity.ErrUserAlreadyExists):
 		return contracterrors.ConflictError(messages.UserAlreadyExists)
-	case errors.Is(err, userdomain.ErrUserNotFound):
+	case errors.Is(err, identity.ErrUserNotFound):
 		return contracterrors.NotFoundError(messages.UserNotFound)
 	default:
 		return contracterrors.FromError(err)

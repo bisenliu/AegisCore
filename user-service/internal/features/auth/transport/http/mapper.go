@@ -7,8 +7,8 @@ import (
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 func toTokenResponse(result *authtokens.TokenResult) TokenResponse {
@@ -37,7 +37,7 @@ func toAuthHTTPError(err error) error {
 		return contracterrors.UnauthenticatedError(messages.MissingSession)
 	case errors.Is(err, authdomain.ErrTokenInvalid):
 		return contracterrors.TokenInvalidError(messages.MissingSession)
-	case errors.Is(err, userdomain.ErrUserNotFound):
+	case errors.Is(err, identity.ErrUserNotFound):
 		return contracterrors.NotFoundError(messages.UserNotFound)
 	default:
 		return contracterrors.FromError(err)

@@ -4,12 +4,12 @@ import (
 	"testing"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 func TestPrepareListUsersQuery(t *testing.T) {
-	status := userdomain.UserStatusNormal
+	status := identity.UserStatusNormal
 	query, err := prepareListUsersQuery(ListUsersRequest{
 		Cursor:   " 018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e ",
 		PageSize: 101,

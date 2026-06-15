@@ -1,4 +1,4 @@
-package domain
+package identity
 
 import (
 	"encoding/json"
@@ -39,6 +39,11 @@ func (s UserStatus) AllowedValues() []string {
 // CanLogin 返回 s 是否允许常规登录和 access token 使用。
 func (s UserStatus) CanLogin() bool {
 	return s == UserStatusNormal
+}
+
+// RequiresPasswordChange 返回 s 是否要求先完成强制改密流程。
+func (s UserStatus) RequiresPasswordChange() bool {
+	return s == UserStatusMustChangePassword
 }
 
 // UnmarshalText 将 query 或 form 文本解析为用户状态值。

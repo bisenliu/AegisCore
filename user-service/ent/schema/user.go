@@ -11,7 +11,7 @@ import (
 )
 
 // defaultUserStatus 是 users.status 的持久化默认值，调用方未显式传入状态时新用户默认为正常状态。
-// 该值必须与 domain.UserStatusNormal 保持一致，避免 schema 默认值和领域默认值漂移。
+// 该值必须与 identity.UserStatusNormal 保持一致，避免 schema 默认值和共享身份规格漂移。
 const defaultUserStatus = 100
 
 // User 是 users 表的 Ent schema。

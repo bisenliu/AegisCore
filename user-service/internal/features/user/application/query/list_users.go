@@ -9,6 +9,7 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 // ListUsersQuery 包含用户列表查询使用的规范化分页和过滤条件。
@@ -18,7 +19,7 @@ type ListUsersQuery struct {
 	Limit    int
 	Nickname string
 	Username string
-	Status   *userdomain.UserStatus
+	Status   *identity.UserStatus
 }
 
 // ListUsersResult 是用户列表查询用例的 transport-neutral 分页输出。

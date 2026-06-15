@@ -1,18 +1,22 @@
 package domain
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/aegiscore/user-service/internal/shared/identity"
+)
 
 func TestUserStateRules(t *testing.T) {
 	tests := []struct {
 		name                  string
-		status                UserStatus
+		status                identity.UserStatus
 		wantCanLogin          bool
 		wantPasswordChange    bool
 		wantCanChangePassword bool
 	}{
-		{name: "normal can login", status: UserStatusNormal, wantCanLogin: true},
-		{name: "disabled cannot login", status: UserStatusDisabled},
-		{name: "must change password cannot login", status: UserStatusMustChangePassword, wantPasswordChange: true, wantCanChangePassword: true},
+		{name: "normal can login", status: identity.UserStatusNormal, wantCanLogin: true},
+		{name: "disabled cannot login", status: identity.UserStatusDisabled},
+		{name: "must change password cannot login", status: identity.UserStatusMustChangePassword, wantPasswordChange: true, wantCanChangePassword: true},
 	}
 
 	for _, tt := range tests {

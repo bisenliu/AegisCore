@@ -7,10 +7,10 @@ import (
 	"github.com/google/uuid"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
-	"github.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline"
 	permissionvalidators "github.com/aegiscore/user-service/internal/features/permission/application/validators"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	rolevalidators "github.com/aegiscore/user-service/internal/features/role/application/validators"
+	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
 // Service 编排 RBAC 系统数据 seed 与超级管理员绑定。

@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 var sessionTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
@@ -81,7 +81,7 @@ func (s *sessionUserStoreStub) GetTokenVersion(_ context.Context, userID uuid.UU
 func (s *sessionUserStoreStub) IncrementTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
 	s.incrementedUserID = userID
 	if s.newVersion == 0 {
-		return 0, userdomain.ErrUserNotFound
+		return 0, identity.ErrUserNotFound
 	}
 	return s.newVersion, nil
 }

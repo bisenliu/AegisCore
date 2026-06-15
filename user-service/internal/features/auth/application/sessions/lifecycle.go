@@ -13,7 +13,7 @@ import (
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 // Lifecycle 为 auth application use case 创建、校验和撤销认证会话。
@@ -53,9 +53,9 @@ func (m *lifecycle) CreateTokenSession(ctx context.Context, userID string, sessi
 func (m *lifecycle) ValidatePasswordChangeClaims(ctx context.Context, claims *commonauth.Claims) error {
 	currentVersion, err := m.CurrentTokenVersion(ctx, claims.UserID)
 	if err != nil {
-		if errors.Is(err, userdomain.ErrUserNotFound) {
+		if errors.Is(err, identity.ErrUserNotFound) {
 			logger.Warn(ctx, "password change user not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-			return userdomain.ErrUserNotFound
+			return identity.ErrUserNotFound
 		}
 		logger.Error(ctx, "get password change token version failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
 		return err
@@ -84,9 +84,9 @@ func (m *lifecycle) ValidateRefreshSession(ctx context.Context, claims *commonau
 	}
 	currentVersion, err := m.CurrentTokenVersion(ctx, claims.UserID)
 	if err != nil {
-		if errors.Is(err, userdomain.ErrUserNotFound) {
+		if errors.Is(err, identity.ErrUserNotFound) {
 			logger.Warn(ctx, "refresh user not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-			return authdomain.AuthSession{}, 0, userdomain.ErrUserNotFound
+			return authdomain.AuthSession{}, 0, identity.ErrUserNotFound
 		}
 		logger.Error(ctx, "get refresh token version failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
 		return authdomain.AuthSession{}, 0, err

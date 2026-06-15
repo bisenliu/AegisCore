@@ -11,7 +11,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | 模块 | 责任 | 关键位置 |
 |---|---|---|
 | `common` | 跨服务稳定契约与基础能力；不得承载服务特定 helper 或业务语义 | `common/contract/`, `common/runtime/`, `common/http/`, `common/security/`, `common/testing/`, `common/validation/` |
-| `user-service` | 用户服务运行时、用户资料、认证会话、角色管理、权限目录与 RBAC 授权 feature、外部系统防腐层边界、Ent schema、Atlas migration、Swagger 文档 | `user-service/cmd/`, `user-service/internal/`, `user-service/internal/integration/`, `user-service/ent/`, `user-service/migrations/`, `user-service/docs/` |
+| `user-service` | 用户服务运行时、用户服务内共享业务内核、用户资料、认证会话、角色管理、权限目录与 RBAC 授权 feature、外部系统防腐层边界、Ent schema、Atlas migration、Swagger 文档 | `user-service/cmd/`, `user-service/internal/`, `user-service/internal/shared/`, `user-service/internal/integration/`, `user-service/ent/`, `user-service/migrations/`, `user-service/docs/` |
 | `deployments` | 本地和生产部署资产；Docker build、Compose、本地依赖、Kubernetes YAML 和 Helm chart 的归属边界 | `deployments/docker/user-service.Dockerfile`, `deployments/compose/`, `deployments/k8s/`, `deployments/helm/` |
 
 仓库根目录是 workspace，不是业务 Go module。运行 Go 命令时通常进入 `common/` 或 `user-service/`。
@@ -60,7 +60,7 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 
 - `user`：用户资料创建、查询和分页列表。
 - `auth`：登录、刷新、强制改密、退出当前设备、退出全部设备。
-- `permission`：权限目录生命周期、分页查询、用户有效权限查询、只读已注册 HTTP 路由差异查询、系统 RBAC 基线和 RBAC 授权；`application/rbacbaseline` 是系统超级管理员角色、系统权限和默认角色权限绑定的唯一 owner，`application/authorization` 负责授权端口适配，`transport/http` 拥有 Gin RBAC middleware，`infrastructure/casbin` 拥有 Casbin policy loader/enforcer/reload。
+- `permission`：权限目录生命周期、分页查询、用户有效权限查询、只读已注册 HTTP 路由差异查询和 RBAC 授权；系统 RBAC 基线由 `internal/shared/rbacbaseline` 统一拥有，permission 只消费该基线，`application/authorization` 负责授权端口适配，`transport/http` 拥有 Gin RBAC middleware，`infrastructure/casbin` 拥有 Casbin policy loader/enforcer/reload。
 - `role`：角色生命周期、用户角色绑定、角色权限绑定和角色查询；角色绑定权限前通过 permission feature application 端口校验权限存在且启用，不直接依赖 permission infrastructure。
 
 每个 feature 使用以下分层：
@@ -82,11 +82,22 @@ Feature transport 可以按入站协议拆分在同一 feature 的 `transport/` 
 
 ### RBAC Authorization Boundary
 
-RBAC 授权和系统 RBAC 基线由 permission feature 拥有。`permission/application/rbacbaseline` 是系统超级管理员角色、系统权限和默认角色权限绑定的唯一长期入口；role seed 和 Casbin adapter 只消费该基线，不再各自维护重复常量。HTTP route graph 中，JWT 认证先写入用户上下文，Gin RBAC middleware 再对用户、角色、权限等业务接口执行授权；健康检查、Swagger、公有 auth 路由、已认证但不做 RBAC 的 auth session 路由和 `OPTIONS` 请求不进入 RBAC 授权。Casbin object 使用 Gin `c.FullPath()` 得到的 route template，action 使用 HTTP method，subject 使用 `user:<user_uuid>` 和 `role:<role_uuid>`；policy loader 使用角色 UUID 作为 `role_id` 主体，不要求 `roles.code` 字段。
+RBAC 授权由 permission feature 拥有，系统 RBAC 基线由 `internal/shared/rbacbaseline` 拥有。`internal/shared/rbacbaseline` 是系统超级管理员角色、系统权限和默认角色权限绑定的唯一长期入口；role seed、permission route diff 和 Casbin adapter 只消费该基线，不再各自维护重复常量。HTTP route graph 中，JWT 认证先写入用户上下文，Gin RBAC middleware 再对用户、角色、权限等业务接口执行授权；健康检查、Swagger、公有 auth 路由、已认证但不做 RBAC 的 auth session 路由和 `OPTIONS` 请求不进入 RBAC 授权。Casbin object 使用 Gin `c.FullPath()` 得到的 route template，action 使用 HTTP method，subject 使用 `user:<user_uuid>` 和 `role:<role_uuid>`；policy loader 使用角色 UUID 作为 `role_id` 主体，不要求 `roles.code` 字段。
 
 Casbin policy loader 只加载未删除用户、启用角色、启用权限以及仍存在的用户角色和角色权限绑定，并基于 `rbacbaseline.SuperAdminRoleID` 补充内置 `super_admin` wildcard policy。角色 feature 绑定权限前只通过 permission application port 校验权限存在且启用，不直接依赖 permission infrastructure 或 Casbin 包。Permission route diff 是只读诊断能力，只比较 Gin 已注册可授权路由与正式权限目录的 missing/stale 差异，不创建权限、不修改权限状态、不绑定角色。
 
-不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。跨 feature 的共享业务代码也不要默认放到 `internal/shared`；只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并需在本文件补充 owner、准入理由和禁止事项。
+不要新增横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包。跨 feature 的共享业务代码也不要默认放到 `internal/shared`；只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并需在本文件补充 owner、消费方、准入理由和禁止事项。
+
+### User Service Shared Kernel
+
+`user-service/internal/shared` 是用户服务内稳定业务内核边界，不是跨服务公共库，也不是 feature 外的 helper 兜底目录。进入 shared 的能力必须同时满足：已被至少两个用户服务 feature 真实消费；表达稳定业务规格、纯类型、值对象、系统内置规格、稳定错误或少量无副作用判断方法；不能归入跨服务无业务语义的 `common`；新增子包时同步更新 `AGENTS.md` 和本文档说明 owner、消费方、准入理由和禁止事项。
+
+`internal/shared` 禁止导入或承载 Gin、Ent、Redis、SQL、Fx provider、controller、transport DTO、Swagger DTO、store port、application use case、feature infrastructure adapter、feature application service、HTTP response helper、配置读取、日志副作用、外部系统调用、数据库访问或缓存访问。
+
+当前允许的 shared 子包只有：
+
+- `internal/shared/identity`：user/auth 共同业务内核，owner 是 user 与 auth。该包承载用户状态、账号生命周期判断和用户身份错误。用户资料创建、查询、认证登录、强制改密、凭据 adapter、角色用户绑定查询等需要用户状态或用户身份错误时，统一消费该包，不在 feature domain 内保留兼容 alias 或重复错误。
+- `internal/shared/rbacbaseline`：role/permission 共同 RBAC 系统规格，owner 是 role 与 permission。该包承载系统超级管理员角色、系统权限和默认角色权限绑定规格。Permission 继续拥有权限目录生命周期、有效权限查询、只读 route diff、authorization wrapper、Gin RBAC middleware 和 Casbin adapter；Role 继续拥有角色生命周期和角色绑定 use case；shared baseline 只表达系统初始规格，不做目录写入、不加载 policy、不访问 store。
 
 服务级 provider 统一放在 `user-service/internal/providers`。该包只负责把共享 runtime、common security、Gin、router 和 Ent 适配为用户服务 Fx 依赖；不得承载 feature 业务逻辑、HTTP route 定义或跨服务共享基础能力。`internal/bootstrap` 只负责 `fx.New`、顶层 `AppModule` 总装和 HTTP server 生命周期。
 
@@ -106,6 +117,7 @@ Casbin policy loader 只加载未删除用户、启用角色、启用权限以�
 | `infrastructure/redis` | Redis client、application ports、domain、common runtime primitive | Gin、HTTP response |
 | `infrastructure/consumers` | feature application、feature domain、必要的归一化事件输入 DTO | broker SDK subscription loop、Ent/Redis 直接业务访问、Gin、跨 feature orchestration |
 | `integration/*` | 外部 SDK/client、feature application ports、domain、common runtime/security 原语 | Gin response、Ent、feature service 业务编排、service-owned persistence adapter |
+| `internal/shared/*` | 标准库、稳定无副作用值对象 | feature 包、Gin、Ent、Redis、SQL、Fx、HTTP response、runtime config/logger/datastore provider、controller、DTO、store port、use case |
 | `fx.go` | Fx、feature 内部包 | 业务逻辑 |
 
 Ports 由消费侧 feature 拥有。Infrastructure adapter 只实现 application 层定义的最小接口，不为了自身方便定义大接口。Auth 的每用户活跃 refresh session 上限属于 application 持有的安全策略，通过 application port 传入 Redis adapter 同步执行；该策略不得下沉为 Redis adapter 私有配置，也不得交给后台 worker 异步补偿。

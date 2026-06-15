@@ -8,9 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
-	"github.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline"
 	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
+	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
 func TestRouteCatalogScanner(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/common/testing/fixtures"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 type userResponse struct {
@@ -53,7 +53,7 @@ func TestHTTPAuthUserFlow(t *testing.T) {
 		Nickname: faker.Name("Bootstrap Admin"),
 		Username: faker.Username("bootstrap-admin"),
 		Password: "bootstrap-secret",
-		Status:   userdomain.UserStatusNormal,
+		Status:   identity.UserStatusNormal,
 	})
 	bootstrapTokens := login(t, harness, bootstrapUser.Username, bootstrapUser.Password)
 
@@ -62,9 +62,9 @@ func TestHTTPAuthUserFlow(t *testing.T) {
 		"nickname": faker.Name("Password Change"),
 		"username": faker.Username("password-change"),
 		"password": mustChangePassword,
-		"status":   int64(userdomain.UserStatusMustChangePassword),
+		"status":   int64(identity.UserStatusMustChangePassword),
 	})
-	getUser(t, harness, bootstrapTokens.AccessToken, targetUser.UserID, targetUser.Username, int64(userdomain.UserStatusMustChangePassword))
+	getUser(t, harness, bootstrapTokens.AccessToken, targetUser.UserID, targetUser.Username, int64(identity.UserStatusMustChangePassword))
 
 	passwordChangeTokens := login(t, harness, targetUser.Username, mustChangePassword)
 	if !passwordChangeTokens.PasswordChangeRequired || passwordChangeTokens.RefreshToken != "" {
@@ -79,7 +79,7 @@ func TestHTTPAuthUserFlow(t *testing.T) {
 	if targetTokens.PasswordChangeRequired || targetTokens.RefreshToken == "" {
 		t.Fatalf("normal login returned password_change_required=%v refresh_present=%v, want false true", targetTokens.PasswordChangeRequired, targetTokens.RefreshToken != "")
 	}
-	getUser(t, harness, targetTokens.AccessToken, targetUser.UserID, targetUser.Username, int64(userdomain.UserStatusNormal))
+	getUser(t, harness, targetTokens.AccessToken, targetUser.UserID, targetUser.Username, int64(identity.UserStatusNormal))
 
 	expectMissingAuthorization(t, harness, targetUser.UserID)
 	logoutCurrent(t, harness, targetTokens.AccessToken)
@@ -90,7 +90,7 @@ type seededUserInput struct {
 	Nickname string
 	Username string
 	Password string
-	Status   userdomain.UserStatus
+	Status   identity.UserStatus
 }
 
 func seedUser(t *testing.T, harness *httpFlowHarness, input seededUserInput) seededUser {

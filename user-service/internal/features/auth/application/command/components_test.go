@@ -21,7 +21,7 @@ import (
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 func TestCredentialVerifierAcceptsMustChangePasswordUser(t *testing.T) {
@@ -29,7 +29,7 @@ func TestCredentialVerifierAcceptsMustChangePasswordUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	verifier := authcredentials.NewVerifier(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}})
+	verifier := authcredentials.NewVerifier(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}})
 
 	user, err := verifier.VerifyPassword(context.Background(), "alice", "secret")
 
@@ -46,7 +46,7 @@ func TestCredentialVerifierRejectsDisabledUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	verifier := authcredentials.NewVerifier(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusDisabled, TokenVersion: 2}})
+	verifier := authcredentials.NewVerifier(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}})
 
 	_, err = verifier.VerifyPassword(context.Background(), "alice", "secret")
 
@@ -71,8 +71,8 @@ func TestCredentialVerifierLoginFailureLogsClientContext(t *testing.T) {
 		wantStatus bool
 	}{
 		{name: "user not found", repo: &authRepoStub{}, username: "alice", password: "secret", message: "login user not found"},
-		{name: "password mismatch", repo: &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}, username: "alice", password: "wrong", message: "login password mismatch", wantUserID: true},
-		{name: "status rejected", repo: &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusDisabled, TokenVersion: 2}}, username: "alice", password: "secret", message: "login user status rejected", wantUserID: true, wantStatus: true},
+		{name: "password mismatch", repo: &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}, username: "alice", password: "wrong", message: "login password mismatch", wantUserID: true},
+		{name: "status rejected", repo: &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}}, username: "alice", password: "secret", message: "login user status rejected", wantUserID: true, wantStatus: true},
 	}
 
 	for _, tt := range tests {
@@ -98,8 +98,8 @@ func TestCredentialVerifierLoginFailureLogsClientContext(t *testing.T) {
 			if tt.wantUserID && fields["user_id"] != authTestUserID.String() {
 				t.Fatalf("user_id = %#v, want %s; fields = %#v", fields["user_id"], authTestUserID.String(), fields)
 			}
-			if tt.wantStatus && fields["status"] != int64(userdomain.UserStatusDisabled) {
-				t.Fatalf("status = %#v, want %d; fields = %#v", fields["status"], userdomain.UserStatusDisabled, fields)
+			if tt.wantStatus && fields["status"] != int64(identity.UserStatusDisabled) {
+				t.Fatalf("status = %#v, want %d; fields = %#v", fields["status"], identity.UserStatusDisabled, fields)
 			}
 		})
 	}
@@ -110,7 +110,7 @@ func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, PasswordHash: oldHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
+	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, PasswordHash: oldHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
 	verifier := authcredentials.NewVerifier(repo)
 
 	result, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
@@ -121,7 +121,7 @@ func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	if result.UserID != authTestUserID || result.TokenVersion != 3 {
 		t.Fatalf("result = %#v", result)
 	}
-	if repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != userdomain.UserStatusNormal {
+	if repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != identity.UserStatusNormal {
 		t.Fatalf("updated input = %#v", repo.updatedInput)
 	}
 	matched, err := password.VerifyContext(context.Background(), "new-secret", repo.updatedInput.PasswordHash)
@@ -135,13 +135,13 @@ func TestCredentialVerifierChangePasswordMapsUserNotFound(t *testing.T) {
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
-	if !errors.Is(err, userdomain.ErrUserNotFound) {
+	if !errors.Is(err, identity.ErrUserNotFound) {
 		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
 }
 
 func TestCredentialVerifierChangePasswordRejectsInvalidStatus(t *testing.T) {
-	verifier := authcredentials.NewVerifier(&authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: userdomain.UserStatusNormal, TokenVersion: 2}})
+	verifier := authcredentials.NewVerifier(&authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusNormal, TokenVersion: 2}})
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
@@ -152,7 +152,7 @@ func TestCredentialVerifierChangePasswordRejectsInvalidStatus(t *testing.T) {
 
 func TestCredentialVerifierChangePasswordMapsUpdateError(t *testing.T) {
 	updateErr := errors.New("update failed")
-	verifier := authcredentials.NewVerifier(&authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: updateErr})
+	verifier := authcredentials.NewVerifier(&authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: updateErr})
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
@@ -328,11 +328,11 @@ func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T) {
 	store := &sessionStoreStub{}
-	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{incrementErr: userdomain.ErrUserNotFound}, store)
+	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{incrementErr: identity.ErrUserNotFound}, store)
 
 	_, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
-	if !errors.Is(err, userdomain.ErrUserNotFound) {
+	if !errors.Is(err, identity.ErrUserNotFound) {
 		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
 	if store.cached || store.deletedAll {

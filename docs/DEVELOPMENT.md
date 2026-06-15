@@ -30,6 +30,8 @@
 | 运行全部 lint | `make lint` | 仓库根目录 |
 | 运行共享模块 lint | `make lint-common` | 仓库根目录 |
 | 运行用户服务 lint | `make lint-user-service` | 仓库根目录 |
+| 运行架构边界检查 | `make architecture-lint` | 仓库根目录 |
+| 运行完整本地验证 | `make verify` | 仓库根目录 |
 | 生成 Ent 代码 | `make generate` | 仓库根目录 |
 | 生成用户服务数据库迁移 | `make migrate-diff name=<name>` | 仓库根目录 |
 | 校验用户服务迁移目录 | `make migrate-validate` | 仓库根目录 |
@@ -43,7 +45,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 
 - 本地直接运行用户服务：先准备 PostgreSQL 和 Redis，再执行 `make run-user-service`。
 - RBAC 系统角色、系统权限和系统角色权限绑定需要显式初始化或更新：推荐顺序为先执行数据库 migration，再执行 `make seed-rbac`，最后启动 HTTP server。seed 不会在 `serve` 启动时自动执行。
-- 新增或调整进入 RBAC 授权中间件的业务路由时，必须同步更新 `user-service/internal/features/permission/application/rbacbaseline` 中的系统权限 URL catalog，重新执行 `make seed-rbac`，并通过 `GET /api/v1/permissions/route-diff` 检查权限目录与已注册路由是否仍一致。
+- 新增或调整进入 RBAC 授权中间件的业务路由时，必须同步更新 `user-service/internal/shared/rbacbaseline` 中的系统权限 URL catalog，重新执行 `make seed-rbac`，并通过 `GET /api/v1/permissions/route-diff` 检查权限目录与已注册路由是否仍一致。
 - 构建用户服务容器镜像：从仓库根目录执行 `docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .`。该 Dockerfile 依赖仓库根目录作为 build context，以便复制 `go.work`、`common/` 和 `user-service/`。
 - 本地 Compose 文件归属 `deployments/compose/`。当前没有可运行 Compose file；若本地没有 PostgreSQL/Redis，需要按 `user-service/configs/config.yaml` 中的配置自行准备依赖。
 - Kubernetes YAML 归属 `deployments/k8s/`，Helm chart 归属 `deployments/helm/`。当前目录只声明边界，不提供可直接部署的生产资源。

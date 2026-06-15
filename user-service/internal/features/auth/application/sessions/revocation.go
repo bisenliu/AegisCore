@@ -10,16 +10,16 @@ import (
 
 	"github.com/aegiscore/common/runtime/logger"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 // RevokeAllUserSessions 递增 token version、刷新缓存并删除全部 refresh 会话。
 func (m *lifecycle) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*authdomain.SessionRevocationResult, error) {
 	tokenVersion, err := m.users.IncrementTokenVersion(ctx, userID)
 	if err != nil {
-		if errors.Is(err, userdomain.ErrUserNotFound) {
+		if errors.Is(err, identity.ErrUserNotFound) {
 			logger.Warn(ctx, "revoke all user sessions user not found", zap.String("user_id", userID.String()))
-			return nil, userdomain.ErrUserNotFound
+			return nil, identity.ErrUserNotFound
 		}
 		logger.Error(ctx, "increment token version failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
 		return nil, err

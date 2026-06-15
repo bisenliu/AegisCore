@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+service_dir="${repo_root}/user-service"
+
+failures=0
+
+report() {
+  printf 'architecture-lint: %s\n' "$*" >&2
+  failures=$((failures + 1))
+}
+
+run_rg() {
+  local description="$1"
+  local pattern="$2"
+  shift 2
+  local output
+  if output="$(rg -n --glob '*.go' "$pattern" "$@" 2>/dev/null)"; then
+    report "${description}"$'\n'"${output}"
+  fi
+}
+
+run_rg_any() {
+  local description="$1"
+  local pattern="$2"
+  shift 2
+  local output
+  if output="$(rg -n "$pattern" "$@" 2>/dev/null)"; then
+    report "${description}"$'\n'"${output}"
+  fi
+}
+
+if [[ -d "${service_dir}/internal/features/permission/application/rbacbaseline" ]]; then
+  report "old permission/application/rbacbaseline package still exists"
+fi
+
+run_rg "old RBAC baseline import remains" \
+  'github\.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline' \
+  "${service_dir}/internal"
+
+run_rg "old user-domain status reference remains" \
+  'userdomain\.UserStatus|github\.com/aegiscore/user-service/internal/features/user/domain.*UserStatus' \
+  "${service_dir}/internal/features" "${service_dir}/ent/schema"
+
+if [[ -e "${service_dir}/internal/features/user/domain/user_status.go" ]]; then
+  report "old user/domain/user_status.go still exists; use internal/shared/identity"
+fi
+
+run_rg "auth feature must not import user domain" \
+  'github\.com/aegiscore/user-service/internal/features/user/domain' \
+  "${service_dir}/internal/features/auth"
+
+run_rg "role feature must not import user domain; use shared/identity for user identity errors" \
+  'github\.com/aegiscore/user-service/internal/features/user/domain' \
+  "${service_dir}/internal/features/role"
+
+run_rg "shared packages must not import feature packages" \
+  'github\.com/aegiscore/user-service/internal/features/' \
+  "${service_dir}/internal/shared"
+
+run_rg "shared packages must not import forbidden runtime or transport dependencies" \
+  'github\.com/gin-gonic/gin|github\.com/aegiscore/user-service/ent(/|")|github\.com/redis/go-redis|database/sql|github\.com/jackc/pgx|go\.uber\.org/fx|github\.com/aegiscore/common/http/response|github\.com/aegiscore/common/contract/response|github\.com/aegiscore/common/runtime/(config|logger|datastore)' \
+  "${service_dir}/internal/shared"
+
+run_rg "application/domain/infrastructure must not import feature HTTP transport DTO/controller packages" \
+  'github\.com/aegiscore/user-service/internal/features/.*/transport/http' \
+  "${service_dir}/internal/features/*/application" \
+  "${service_dir}/internal/features/*/domain" \
+  "${service_dir}/internal/features/*/infrastructure"
+
+run_rg "gRPC transport must not import feature HTTP transport packages" \
+  'github\.com/aegiscore/user-service/internal/features/.*/transport/http' \
+  "${service_dir}/internal/features/*/transport/grpc"
+
+run_rg_any "Swagger generated files have uncommitted drift" \
+  '^user-service/docs/(docs\.go|swagger\.json|swagger\.yaml)$' \
+  <(cd "${repo_root}" && git diff --name-only -- user-service/docs/docs.go user-service/docs/swagger.json user-service/docs/swagger.yaml)
+
+run_rg_any "Ent generated files have uncommitted drift; run make generate and commit generated output" \
+  '^user-service/ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update|permission|permission_create|permission_delete|permission_query|permission_update|role|role_create|role_delete|role_query|role_update|rolepermission|rolepermission_create|rolepermission_delete|rolepermission_query|rolepermission_update|userrole|userrole_create|userrole_delete|userrole_query|userrole_update)\.go$|^user-service/ent/(enttest|hook|migrate|predicate|runtime|user|permission|role|rolepermission|userrole)/' \
+  <(cd "${repo_root}" && git diff --name-only -- user-service/ent)
+
+if [[ "${failures}" -gt 0 ]]; then
+  printf 'architecture-lint: failed with %d issue(s)\n' "${failures}" >&2
+  exit 1
+fi
+
+printf 'architecture-lint: ok\n'

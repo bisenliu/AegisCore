@@ -11,7 +11,7 @@ import (
 	entuser "github.com/aegiscore/user-service/ent/user"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 type CredentialStore struct {
@@ -40,7 +40,7 @@ func (s *CredentialStore) GetByUsername(ctx context.Context, username string) (*
 		return toCredential(found), nil
 	}
 	if ent.IsNotFound(err) {
-		return nil, userdomain.ErrUserNotFound
+		return nil, identity.ErrUserNotFound
 	}
 	return nil, fmt.Errorf("query user by username %s: %w", username, err)
 }
@@ -52,7 +52,7 @@ func (s *CredentialStore) GetCredentialByUserID(ctx context.Context, userID uuid
 		return toCredential(found), nil
 	}
 	if ent.IsNotFound(err) {
-		return nil, userdomain.ErrUserNotFound
+		return nil, identity.ErrUserNotFound
 	}
 	return nil, fmt.Errorf("query user credential by user_id %s: %w", userID.String(), err)
 }
@@ -64,7 +64,7 @@ func (s *CredentialStore) GetTokenVersion(ctx context.Context, userID uuid.UUID)
 		return found.TokenVersion, nil
 	}
 	if ent.IsNotFound(err) {
-		return 0, userdomain.ErrUserNotFound
+		return 0, identity.ErrUserNotFound
 	}
 	return 0, fmt.Errorf("query user token version by user_id %s: %w", userID.String(), err)
 }
@@ -75,7 +75,7 @@ func (s *CredentialStore) IncrementTokenVersion(ctx context.Context, userID uuid
 	if err == nil {
 		if updated == 0 {
 			// Ent Update().Save 返回受影响行数，0 表示过滤条件未匹配到用户。
-			return 0, userdomain.ErrUserNotFound
+			return 0, identity.ErrUserNotFound
 		}
 		return s.GetTokenVersion(ctx, userID)
 	}
@@ -93,7 +93,7 @@ func (s *CredentialStore) UpdateCredentials(ctx context.Context, input authdomai
 	if err == nil {
 		if updated == 0 {
 			// Ent Update().Save 返回受影响行数，0 表示过滤条件未匹配到用户。
-			return 0, userdomain.ErrUserNotFound
+			return 0, identity.ErrUserNotFound
 		}
 		return s.GetTokenVersion(ctx, input.UserID)
 	}
@@ -108,7 +108,7 @@ func toCredential(entUser *ent.User) *authdomain.UserCredential {
 		UserID:       entUser.UserID,
 		Username:     entUser.Username,
 		PasswordHash: entUser.PasswordHash,
-		Status:       userdomain.UserStatus(entUser.Status),
+		Status:       identity.UserStatus(entUser.Status),
 		TokenVersion: entUser.TokenVersion,
 	}
 }

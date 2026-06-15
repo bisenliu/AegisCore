@@ -30,6 +30,7 @@ import (
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 const routeAuthUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
@@ -357,14 +358,14 @@ func (s *routeAuthAuthUseCases) LogoutAllSessions(context.Context) (*authcommand
 
 func (s *routeAuthUserCommands) CreateUser(context.Context, usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error) {
 	now := time.Now().UnixMilli()
-	return &usercommand.CreateUserResult{User: userdomain.User{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
+	return &usercommand.CreateUserResult{User: userdomain.User{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Alice", Username: "alice", Status: identity.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
 }
 
 func (s *routeAuthUserQueries) GetUserByID(_ context.Context, req userquery.GetUserByIDQuery) (*userquery.GetUserResult, error) {
 	userID := req.UserID
 	userIDString := userID.String()
 	if userIDString == routeAuthNotFoundUserID {
-		return nil, userdomain.ErrUserNotFound
+		return nil, identity.ErrUserNotFound
 	}
 	if userIDString == routeAuthForbiddenUserID {
 		return nil, contracterrors.ForbiddenError("forbidden")
@@ -373,7 +374,7 @@ func (s *routeAuthUserQueries) GetUserByID(_ context.Context, req userquery.GetU
 		return nil, errors.New("database down")
 	}
 	now := time.Now().UnixMilli()
-	return &userquery.GetUserResult{User: userdomain.User{UserID: userID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
+	return &userquery.GetUserResult{User: userdomain.User{UserID: userID, Nickname: "Aegis", Username: "aegis", Status: identity.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
 }
 
 func assertSuccessEnvelope(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -403,7 +404,7 @@ func assertFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wa
 
 func (s *routeAuthUserQueries) ListUsers(context.Context, userquery.ListUsersQuery) (*userquery.ListUsersResult, error) {
 	now := time.Now().UnixMilli()
-	items := []userdomain.User{{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
+	items := []userdomain.User{{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Aegis", Username: "aegis", Status: identity.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
 	return &userquery.ListUsersResult{Items: items, PageSize: 10}, nil
 }
 

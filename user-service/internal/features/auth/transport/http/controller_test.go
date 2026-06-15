@@ -19,8 +19,8 @@ import (
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 var errAuthDatabaseDown = errors.New("database down")
@@ -114,7 +114,7 @@ func TestAuthControllerChangePasswordNormalizesToCommand(t *testing.T) {
 
 func TestAuthControllerChangePasswordMapsNotFound(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service := &stubAuthUseCases{changeErr: userdomain.ErrUserNotFound}
+	service := &stubAuthUseCases{changeErr: identity.ErrUserNotFound}
 
 	status, envelope := executeAuthChangePassword(t, service, commonauth.TokenPrefix+"password-token", `{"new_password":"new-secret"}`)
 

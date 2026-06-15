@@ -13,7 +13,7 @@ import (
 	entuserrole "github.com/aegiscore/user-service/ent/userrole"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 type UserRoleStore struct {
@@ -141,7 +141,7 @@ func (s *UserRoleStore) getUserByExternalID(ctx context.Context, userID uuid.UUI
 		return user, nil
 	}
 	if ent.IsNotFound(err) {
-		return nil, userdomain.ErrUserNotFound
+		return nil, identity.ErrUserNotFound
 	}
 	return nil, fmt.Errorf("query user by user_id %s: %w", userID.String(), err)
 }

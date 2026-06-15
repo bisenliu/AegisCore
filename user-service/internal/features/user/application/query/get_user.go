@@ -9,6 +9,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/logger"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 // GetUserByIDQuery 包含按外部用户 ID 查询用户资料所需的应用层输入。
@@ -26,9 +27,9 @@ func (s *userQueryService) GetUserByID(ctx context.Context, query GetUserByIDQue
 	logger.Info(ctx, "query user profile", zap.String("user_id", query.UserID.String()))
 	user, err := s.store.GetByUserID(ctx, query.UserID)
 	if err != nil {
-		if errors.Is(err, userdomain.ErrUserNotFound) {
+		if errors.Is(err, identity.ErrUserNotFound) {
 			logger.Warn(ctx, "query user profile not found", zap.String("user_id", query.UserID.String()))
-			return nil, userdomain.ErrUserNotFound
+			return nil, identity.ErrUserNotFound
 		}
 		logger.Error(ctx, "query user profile failed", logger.StackTrace(zap.String("user_id", query.UserID.String()), zap.Error(err))...)
 		return nil, err

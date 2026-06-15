@@ -3,7 +3,7 @@ USER_SERVICE_DIR := user-service
 USER_SERVICE_CONFIG ?= ./user-service/configs/config.yaml
 USER_SERVICE_BIN ?= ./bin/user-service
 
-.PHONY: help build build-user-service test test-common test-user-service lint lint-common lint-user-service run-user-service seed-rbac generate migrate-diff migrate-validate migrate-apply swagger-generate
+.PHONY: help build build-user-service test test-common test-user-service lint lint-common lint-user-service architecture-lint verify run-user-service seed-rbac generate migrate-diff migrate-validate migrate-apply swagger-generate
 
 help: ## Show available commands.
 	@awk 'BEGIN {FS = ":.*##"; printf "Available commands:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -29,6 +29,12 @@ lint-common: ## Run common module lint.
 
 lint-user-service: ## Run user-service module lint.
 	cd $(USER_SERVICE_DIR) && golangci-lint run ./...
+
+architecture-lint: ## Run user-service architecture boundary checks.
+	cd $(USER_SERVICE_DIR) && ./scripts/architecture-lint.sh
+
+verify: lint architecture-lint test swagger-generate ## Run full local verification.
+	git diff --exit-code
 
 run-user-service: ## Run user-service with USER_SERVICE_CONFIG.
 	go run ./$(USER_SERVICE_DIR)/cmd serve --config $(USER_SERVICE_CONFIG)

@@ -7,10 +7,10 @@ import (
 	"github.com/google/uuid"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
-	"github.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
+	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
 func TestSeedServiceDefaultEnsureAndRepeat(t *testing.T) {

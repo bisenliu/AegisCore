@@ -10,8 +10,8 @@ import (
 	rolecommand "github.com/aegiscore/user-service/internal/features/role/application/command"
 	rolequery "github.com/aegiscore/user-service/internal/features/role/application/query"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/messages"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 func toRoleResponse(role roledomain.Role) RoleResponse {
@@ -65,7 +65,7 @@ func toRoleHTTPError(err error) error {
 		return contracterrors.ConflictError(messages.RolePermissionAlreadyExists)
 	case errors.Is(err, roledomain.ErrRolePermissionNotFound):
 		return contracterrors.NotFoundError(messages.RolePermissionNotFound)
-	case errors.Is(err, userdomain.ErrUserNotFound):
+	case errors.Is(err, identity.ErrUserNotFound):
 		return contracterrors.NotFoundError(messages.UserNotFound)
 	case errors.Is(err, permissiondomain.ErrPermissionNotFound):
 		return contracterrors.NotFoundError(messages.PermissionNotFound)

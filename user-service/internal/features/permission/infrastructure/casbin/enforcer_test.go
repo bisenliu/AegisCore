@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline"
+	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
 func TestEngineEnforceAllowDenyAndDoesNotReload(t *testing.T) {

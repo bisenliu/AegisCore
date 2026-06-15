@@ -13,7 +13,7 @@ import (
 	entrolepermission "github.com/aegiscore/user-service/ent/rolepermission"
 	entuser "github.com/aegiscore/user-service/ent/user"
 	entuserrole "github.com/aegiscore/user-service/ent/userrole"
-	"github.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline"
+	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
 const policyWildcard = "*"
