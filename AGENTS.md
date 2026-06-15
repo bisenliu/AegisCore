@@ -19,7 +19,8 @@
 - `user-service/internal/integration/`：用户服务访问外部系统的防腐层边界，按 `http/`、`grpc/`、`events/` 分类组织；`integration/events` 仅承载外部事件系统 producer/consumer 协议 adapter、envelope/topic 映射和 broker 错误语义归一化，不承载 feature consumer handler、业务编排、outbox persistence 或本服务持久化访问；当前没有真实外部系统调用时只保留 README 或 package doc，占位不得引入未使用代码。
 - `user-service/internal/features/user/`：用户资料 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；`domain/` 可在有真实纯领域规则或事件模型时按需新增 `services/`、`events/`；`application/command` 承载写侧用例，`application/query` 承载读侧用例，`application/validators` 承载 transport-neutral application 输入辅助；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`；未来如暴露本服务入站 gRPC API，使用 feature-local `transport/grpc`，当前没有真实 gRPC API 时不得新增业务代码、proto 或 generated code；未来如消费外部事件，使用 feature-local `infrastructure/consumers` 承载入站事件到 application command/query 的 adapter，当前没有真实消费者时不得新增业务代码。
 - `user-service/internal/features/auth/`：认证会话 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/`、`infrastructure/redis/` 和 `fx.go` 分层；`domain/services`、`domain/events` 仅在有真实领域服务或领域事件模型时新增；`application/command` 保持扁平并承载登录、刷新、强制改密、退出当前设备和退出全部设备 use case；`application/authctx` 承载认证上下文和客户端审计上下文 helper；`application/credentials` 承载凭据校验和强制改密凭据更新 application 组件；`application/tokens` 承载 JWT 签发解析和 token result DTO；`application/sessions` 承载 refresh session 生命周期、token version fallback、每用户活跃 refresh session 上限策略和会话撤销；`application/validators` 承载 transport-neutral application 输入辅助、token version 撤销校验和 refresh session 一致性校验；`application/ports.go` 继续拥有凭据、token version 和 session ports；`application/query` 只有存在真实 auth 读侧用例时才放实现，当前只可保留 README；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`；未来如暴露本服务入站 gRPC API，使用 feature-local `transport/grpc`，当前没有真实 gRPC API 时不得新增业务代码、proto 或 generated code；未来如消费外部事件，使用 feature-local `infrastructure/consumers` 承载入站事件到 application command/query 的 adapter，当前没有真实消费者时不得新增业务代码。
-- `user-service/internal/features/role/`、`user-service/internal/features/permission/`：未来 RBAC 能力的最小 feature skeleton，仅保留 README 标注边界；当前不注册路由、不提供 Fx module、不新增 application/domain/infrastructure 代码、不新增 Ent schema 或数据库表。
+- `user-service/internal/features/role/`：角色管理 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；`domain/` 承载角色实体、系统角色保护规则和领域错误；`application/command` 承载角色生命周期、用户绑定角色和角色绑定权限写侧用例；`application/query` 承载角色、用户角色和角色权限读侧用例；`application/validators` 承载 transport-neutral 输入辅助；`application/ports.go` 拥有 RoleStore、UserRoleStore、RolePermissionStore 和 PermissionLookup 消费侧端口；HTTP request/response DTO 位于 `transport/http/request.go`、`response.go`；PostgreSQL adapter 使用 Ent 访问 roles、user_roles、role_permissions，并通过 permission feature application 端口校验权限存在且启用，不直接依赖 permission infrastructure。
+- `user-service/internal/features/permission/`：权限目录 feature，按 `application/`、`domain/`、`transport/http/`、`infrastructure/postgres/` 和 `fx.go` 分层；承载权限生命周期、权限查询、有效权限查询和路由差异查询；角色 feature 只能通过 application port 查询权限，不得直接访问 permission infrastructure。
 - `deployments/`：Docker、Compose、Kubernetes 和 Helm 部署资产；`deployments/docker` 放 Dockerfile 或统一构建资产，`deployments/compose` 放本地依赖或本地服务启动配置，`deployments/k8s` 放 Kubernetes YAML，`deployments/helm` 放 Helm chart。
 
 ## 3. Key Entry Points
@@ -57,6 +58,16 @@
 - 认证 application validators：`user-service/internal/features/auth/application/validators/auth_validator.go`、`user-service/internal/features/auth/application/validators/token_version_validator.go`、`user-service/internal/features/auth/application/validators/session_policy.go`
 - 认证 PostgreSQL adapter：`user-service/internal/features/auth/infrastructure/postgres/credential_store.go`
 - 认证 Redis adapter：`user-service/internal/features/auth/infrastructure/redis/session_store.go`
+- 角色 feature module：`user-service/internal/features/role/fx.go`
+- 角色 controller：`user-service/internal/features/role/transport/http/controller.go`
+- 角色 HTTP DTO：`user-service/internal/features/role/transport/http/request.go`、`user-service/internal/features/role/transport/http/response.go`
+- 角色写侧 command service：`user-service/internal/features/role/application/command/role.go`、`user-service/internal/features/role/application/command/binding.go`
+- 角色读侧 query service：`user-service/internal/features/role/application/query/roles.go`
+- 角色 PostgreSQL adapter：`user-service/internal/features/role/infrastructure/postgres/role_store.go`、`user-service/internal/features/role/infrastructure/postgres/user_role_store.go`、`user-service/internal/features/role/infrastructure/postgres/role_permission_store.go`
+- 权限 feature module：`user-service/internal/features/permission/fx.go`
+- 权限 controller：`user-service/internal/features/permission/transport/http/controller.go`
+- 权限 HTTP DTO：`user-service/internal/features/permission/transport/http/request.go`、`user-service/internal/features/permission/transport/http/response.go`
+- 权限 PostgreSQL adapter：`user-service/internal/features/permission/infrastructure/postgres/permission_store.go`
 - 共享配置加载：`common/runtime/config/loader.go`
 - 共享配置 Fx provider：`common/runtime/config/fx.go`
 - 共享日志 Fx provider：`common/runtime/logger/fx.go`
@@ -74,7 +85,8 @@
 - 用户资料创建：`POST /api/v1/users`
 - 用户列表分页查询：`GET /api/v1/users`
 - 认证会话控制：登录、刷新、强制改密、退出当前设备、退出全部设备，以及每用户活跃 refresh session 上限治理。
-- RBAC future feature skeleton：`internal/features/role` 和 `internal/features/permission` 只标注未来角色权限边界，当前不实现角色权限业务。
+- 权限目录管理：权限创建、更新、启停、分页查询、详情查询、用户有效权限查询和路由差异查询。
+- 角色管理：角色创建、更新、启停、分页查询、详情查询、用户角色绑定查询/替换/增删，以及角色权限绑定查询/替换/增删。
 - HTTP 服务运行时：启动、运行、路由注册和优雅停止。
 - 未来入站 gRPC transport 边界：如用户服务暴露真实 gRPC API，放在对应 feature 的 `transport/grpc`；当前不实现 gRPC API、proto、generated code 或 server runtime。
 - 外部系统防腐层边界：`internal/integration/http`、`grpc`、`events` 只承载真实外部调用的协议适配规则，当前不实现真实 client；`internal/integration/grpc` 是出站 external client adapter，不是本服务 gRPC server transport；`internal/integration/events` 是外部事件系统 producer/consumer 协议 adapter，不是 feature consumer handler、业务事件编排或 outbox。

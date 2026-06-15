@@ -23,4 +23,20 @@ const (
 	PermissionNotFound = "权限不存在，请检查后重试"
 	// SystemPermissionProtected 是系统权限受保护字段被修改时展示给用户的消息。
 	SystemPermissionProtected = "系统权限受保护，不能修改关键字段"
+	// InvalidRole 是角色输入无效时展示给用户的消息。
+	InvalidRole = "角色参数不正确，请检查后重试"
+	// RoleAlreadyExists 是角色唯一性冲突时展示给用户的消息。
+	RoleAlreadyExists = "角色已存在，请检查后重试"
+	// RoleNotFound 是角色资源不存在时展示给用户的消息。
+	RoleNotFound = "角色不存在，请检查后重试"
+	// SystemRoleProtected 是系统角色受保护字段被修改时展示给用户的消息。
+	SystemRoleProtected = "系统角色受保护，不能修改关键字段"
+	// UserRoleAlreadyExists 是用户角色绑定重复时展示给用户的消息。
+	UserRoleAlreadyExists = "用户角色绑定已存在"
+	// UserRoleNotFound 是用户角色绑定不存在时展示给用户的消息。
+	UserRoleNotFound = "用户角色绑定不存在"
+	// RolePermissionAlreadyExists 是角色权限绑定重复时展示给用户的消息。
+	RolePermissionAlreadyExists = "角色权限绑定已存在"
+	// RolePermissionNotFound 是角色权限绑定不存在时展示给用户的消息。
+	RolePermissionNotFound = "角色权限绑定不存在"
 )

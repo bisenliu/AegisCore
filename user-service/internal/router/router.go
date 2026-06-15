@@ -9,6 +9,7 @@ import (
 	commonauth "github.com/aegiscore/common/security/auth"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
+	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 )
 
@@ -22,6 +23,7 @@ type RouteParams struct {
 	TokenVersionValidator commonauth.TokenVersionValidator
 	AuthController        *authhttp.AuthController
 	PermissionController  *permissionhttp.PermissionController
+	RoleController        *rolehttp.RoleController
 	UserController        *userhttp.UserController
 }
 
@@ -46,6 +48,10 @@ func registerV1Routes(engine *gin.Engine, params RouteParams) {
 	authorized := authenticated.Group("")
 	if params.PermissionController != nil {
 		permissionhttp.RegisterRoutes(authorized.Group("/permissions"), params.PermissionController)
+	}
+	if params.RoleController != nil {
+		rolehttp.RegisterRoleRoutes(authorized.Group("/roles"), params.RoleController)
+		rolehttp.RegisterUserRoleRoutes(authorized.Group("/users"), params.RoleController)
 	}
 	userhttp.RegisterRoutes(authorized.Group("/users"), params.UserController)
 }

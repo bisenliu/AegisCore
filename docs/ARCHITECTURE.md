@@ -60,11 +60,8 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 
 - `user`：用户资料创建、查询和分页列表。
 - `auth`：登录、刷新、强制改密、退出当前设备、退出全部设备。
-
-当前也保留以下 future feature skeleton，仅用于标记后续 RBAC 能力边界，不属于已实现 HTTP/API 能力：
-
-- `role`：未来角色聚合、角色生命周期和角色相关应用用例的归属边界；当前只保留最小 README，不注册路由、不提供 Fx module、不声明 Ent schema。
-- `permission`：未来权限定义、权限查询和权限边界规则的归属边界；当前只保留最小 README，不注册路由、不提供 Fx module、不声明 Ent schema。
+- `permission`：权限目录生命周期、分页查询、用户有效权限查询和已注册 HTTP 路由差异查询。
+- `role`：角色生命周期、用户角色绑定、角色权限绑定和角色查询；角色绑定权限前通过 permission feature application 端口校验权限存在且启用，不直接依赖 permission infrastructure。
 
 每个 feature 使用以下分层：
 
