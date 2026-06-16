@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
+	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 )
 
 func TestRoleStoreUpsertSystemRole(t *testing.T) {
@@ -70,22 +72,23 @@ func TestRolePermissionStoreSeedEnsureAndSync(t *testing.T) {
 		t.Fatalf("Create extra permission: %v", err)
 	}
 
-	added, err := bindingStore.EnsureSystemBindings(ctx, roleID, []uuid.UUID{permissionID})
+	added, err := bindingStore.EnsureSystemBindings(ctx, roleID, []uuid.UUID{permissionID, extraPermissionID})
 	if err != nil {
 		t.Fatalf("EnsureSystemBindings: %v", err)
 	}
-	if added != 1 {
-		t.Fatalf("added = %d, want 1", added)
+	if added != 2 {
+		t.Fatalf("added = %d, want 2", added)
 	}
-	added, err = bindingStore.EnsureSystemBindings(ctx, roleID, []uuid.UUID{permissionID})
+	added, err = bindingStore.EnsureSystemBindings(ctx, roleID, []uuid.UUID{permissionID, extraPermissionID, permissionID})
 	if err != nil {
 		t.Fatalf("EnsureSystemBindings repeat: %v", err)
 	}
 	if added != 0 {
 		t.Fatalf("repeat added = %d, want 0", added)
 	}
-	if added, err = bindingStore.EnsureSystemBindings(ctx, roleID, []uuid.UUID{extraPermissionID}); err != nil || added != 1 {
-		t.Fatalf("add extra added=%d err=%v", added, err)
+	missingPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000204")
+	if _, err = bindingStore.EnsureSystemBindings(ctx, roleID, []uuid.UUID{missingPermissionID}); !errors.Is(err, roledomain.ErrRolePermissionNotFound) {
+		t.Fatalf("EnsureSystemBindings missing err = %v, want %v", err, roledomain.ErrRolePermissionNotFound)
 	}
 	added, removed, err := bindingStore.SyncSystemBindings(ctx, roleID, []uuid.UUID{permissionID})
 	if err != nil {

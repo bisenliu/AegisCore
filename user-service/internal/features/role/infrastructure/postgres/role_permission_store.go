@@ -213,16 +213,31 @@ func (s *RolePermissionStore) getPermissionByExternalID(ctx context.Context, per
 }
 
 func (s *RolePermissionStore) permissionsByExternalIDs(ctx context.Context, permissionIDs []uuid.UUID) ([]*ent.Permission, error) {
-	permissions := make([]*ent.Permission, 0, len(permissionIDs))
+	uniqueIDs := make([]uuid.UUID, 0, len(permissionIDs))
 	seen := make(map[uuid.UUID]struct{}, len(permissionIDs))
 	for _, permissionID := range permissionIDs {
 		if _, ok := seen[permissionID]; ok {
 			continue
 		}
 		seen[permissionID] = struct{}{}
-		permission, err := s.getPermissionByExternalID(ctx, permissionID)
-		if err != nil {
-			return nil, err
+		uniqueIDs = append(uniqueIDs, permissionID)
+	}
+	if len(uniqueIDs) == 0 {
+		return []*ent.Permission{}, nil
+	}
+	found, err := s.client.Permission.Query().Where(entpermission.PermissionIDIn(uniqueIDs...)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("query permissions by permission_ids: %w", err)
+	}
+	byExternalID := make(map[uuid.UUID]*ent.Permission, len(found))
+	for _, permission := range found {
+		byExternalID[permission.PermissionID] = permission
+	}
+	permissions := make([]*ent.Permission, 0, len(uniqueIDs))
+	for _, permissionID := range uniqueIDs {
+		permission, ok := byExternalID[permissionID]
+		if !ok {
+			return nil, fmt.Errorf("%w: permission_id %s", roledomain.ErrRolePermissionNotFound, permissionID.String())
 		}
 		permissions = append(permissions, permission)
 	}
