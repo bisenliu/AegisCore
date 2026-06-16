@@ -2,13 +2,20 @@ package providers
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
+	contracterrors "github.com/aegiscore/common/contract/errors"
+	commonresponse "github.com/aegiscore/common/http/response"
 	"github.com/aegiscore/common/runtime/config"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 )
@@ -115,6 +122,113 @@ func TestNewGinEngineSkipsHealthProbeTracing(t *testing.T) {
 	}
 }
 
+func TestNewGinEngineMarksServerErrorSpanStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	if err != nil {
+		t.Fatalf("NewGinEngine: %v", err)
+	}
+	engine.GET("/api/v1/fail", func(c *gin.Context) {
+		commonresponse.Fail(c, errors.New("database password token"))
+	})
+
+	recorderHTTP := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/fail", nil)
+	engine.ServeHTTP(recorderHTTP, request)
+
+	if recorderHTTP.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", recorderHTTP.Code)
+	}
+	span := endedGinSpan(t, recorder)
+	if got := span.Status().Code; got != codes.Error {
+		t.Fatalf("span status = %s, want Error", got)
+	}
+}
+
+func TestNewGinEngineDoesNotMarkClientErrorSpanStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	if err != nil {
+		t.Fatalf("NewGinEngine: %v", err)
+	}
+	engine.GET("/api/v1/bad-request", func(c *gin.Context) {
+		commonresponse.BadRequest(c, "请求格式错误")
+	})
+
+	recorderHTTP := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/bad-request", nil)
+	engine.ServeHTTP(recorderHTTP, request)
+
+	if recorderHTTP.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", recorderHTTP.Code)
+	}
+	span := endedGinSpan(t, recorder)
+	if got := span.Status().Code; got != codes.Unset {
+		t.Fatalf("span status = %s, want Unset", got)
+	}
+}
+
+func TestNewGinEngineRecordsPanicSpanError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	if err != nil {
+		t.Fatalf("NewGinEngine: %v", err)
+	}
+	engine.GET("/api/v1/panic", func(_ *gin.Context) {
+		panic("route boom password token")
+	})
+
+	recorderHTTP := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/panic", nil)
+	engine.ServeHTTP(recorderHTTP, request)
+
+	if recorderHTTP.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", recorderHTTP.Code)
+	}
+	var body struct {
+		Success bool                `json:"success"`
+		Code    contracterrors.Code `json:"code"`
+	}
+	if err := json.NewDecoder(recorderHTTP.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Success || body.Code != contracterrors.CodeInternalError {
+		t.Fatalf("body = %#v, want internal failure envelope", body)
+	}
+	span := endedGinSpan(t, recorder)
+	if got := span.Status().Code; got != codes.Error {
+		t.Fatalf("span status = %s, want Error", got)
+	}
+	if !spanHasEvent(span, "exception") {
+		t.Fatalf("span events = %#v, want exception event", span.Events())
+	}
+}
+
+func TestNewGinEngineSkipsSuccessfulHealthProbeErrorStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	if err != nil {
+		t.Fatalf("NewGinEngine: %v", err)
+	}
+	engine.GET("/livez", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/livez", nil))
+
+	if spans := recorder.Ended(); len(spans) != 0 {
+		t.Fatalf("ended spans = %d, want 0 for successful health probe", len(spans))
+	}
+}
+
 func TestHTTPServerSpanName(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -159,4 +273,30 @@ func newGinTestTracingProvider(t *testing.T, cfg *config.Config) *commontracing.
 		}
 	})
 	return provider
+}
+
+func newGinTestTracingProviderWithRecorder(t *testing.T, cfg *config.Config) (*commontracing.Provider, *tracetest.SpanRecorder) {
+	t.Helper()
+	provider := newGinTestTracingProvider(t, cfg)
+	recorder := tracetest.NewSpanRecorder()
+	provider.TracerProvider().RegisterSpanProcessor(recorder)
+	return provider, recorder
+}
+
+func endedGinSpan(t *testing.T, recorder *tracetest.SpanRecorder) sdktrace.ReadOnlySpan {
+	t.Helper()
+	spans := recorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("ended spans = %d, want 1", len(spans))
+	}
+	return spans[0]
+}
+
+func spanHasEvent(span sdktrace.ReadOnlySpan, name string) bool {
+	for _, event := range span.Events() {
+		if event.Name == name {
+			return true
+		}
+	}
+	return false
 }

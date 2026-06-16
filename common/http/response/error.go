@@ -12,7 +12,7 @@ import (
 func Fail(c *gin.Context, err error) {
 	appErr := contracterrors.FromError(err)
 	// 字段级校验明细由 ValidationFailedWithErrors 输出，通用失败保持信封简洁。
-	JSON(c, statusCode(appErr), errorEnvelope(appErr))
+	WriteError(c, appErr)
 }
 
 // WriteError 写入已归一化的应用错误。
@@ -20,6 +20,7 @@ func WriteError(c *gin.Context, err *contracterrors.Error) {
 	if err == nil {
 		err = contracterrors.InternalError(nil)
 	}
+	annotateAppErrorOnSpan(c.Request.Context(), err)
 	JSON(c, statusCode(err), errorEnvelope(err))
 }
 
@@ -35,6 +36,7 @@ func ValidationFailed(c *gin.Context, format string, args ...any) {
 
 // ValidationFailedWithErrors 写入包含结构化字段明细的 400 校验失败信封。
 func ValidationFailedWithErrors(c *gin.Context, message string, errors any) {
+	annotateAppErrorOnSpan(c.Request.Context(), contracterrors.ValidationFailedError(message))
 	JSON(c, http.StatusBadRequest, validationEnvelope(message, errors))
 }
 

@@ -16,6 +16,7 @@ func Recovery(log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if r := recover(); r != nil {
+				recordPanicOnSpan(c.Request.Context())
 				logger.WithContext(c.Request.Context(), log).Error("panic recovered",
 					zap.Any("panic", r),
 					zap.String("stack", string(debug.Stack())),

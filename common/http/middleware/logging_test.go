@@ -8,6 +8,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -154,6 +157,46 @@ func TestRequestLoggerSelectsLevelByStatus(t *testing.T) {
 	}
 }
 
+func TestRequestLoggerMarksOnlyServerErrorSpanStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name       string
+		status     int
+		wantStatus codes.Code
+	}{
+		{name: "success", status: http.StatusOK, wantStatus: codes.Unset},
+		{name: "client error", status: http.StatusNotFound, wantStatus: codes.Unset},
+		{name: "server error", status: http.StatusInternalServerError, wantStatus: codes.Error},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			core, logs := observer.New(zap.DebugLevel)
+			spanRecorder := tracetest.NewSpanRecorder()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+			defer shutdownTracerProvider(t, provider)
+			engine := gin.New()
+			engine.Use(recordingSpanMiddleware(provider), RequestLogger(zap.New(core)))
+			engine.GET("/status", func(c *gin.Context) { c.Status(tt.status) })
+
+			req := httptest.NewRequest(http.MethodGet, "/status", nil)
+			engine.ServeHTTP(httptest.NewRecorder(), req)
+
+			entries := logs.FilterMessage("http request completed").All()
+			if len(entries) != 1 {
+				t.Fatalf("request log count = %d, want 1", len(entries))
+			}
+			span := endedSpan(t, spanRecorder)
+			if got := span.Status().Code; got != tt.wantStatus {
+				t.Fatalf("span status = %s, want %s", got, tt.wantStatus)
+			}
+			if tt.status >= http.StatusInternalServerError {
+				assertSpanIntAttribute(t, span, spanAttrHTTPStatus, tt.status)
+			}
+		})
+	}
+}
+
 func TestRequestLoggerIncludesUserIDFromRequestContext(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	core, logs := observer.New(zap.InfoLevel)
@@ -234,6 +277,43 @@ func TestRecoveryIncludesTraceAndSpanIDAndEnvelope(t *testing.T) {
 	}
 }
 
+func TestRecoveryRecordsPanicOnSpan(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zap.ErrorLevel)
+	spanRecorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spanRecorder))
+	defer shutdownTracerProvider(t, provider)
+	engine := gin.New()
+	engine.Use(recordingSpanMiddleware(provider), Recovery(zap.New(core)))
+	engine.GET("/panic", func(_ *gin.Context) { panic("boom stacktrace token password") })
+
+	req := httptest.NewRequest(http.MethodGet, "/panic", nil)
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `"success":false`) {
+		t.Fatalf("response body = %s, want failure envelope", rec.Body.String())
+	}
+	if entries := logs.FilterMessage("panic recovered").All(); len(entries) != 1 {
+		t.Fatalf("panic recovered logs = %d, want 1", len(entries))
+	}
+	span := endedSpan(t, spanRecorder)
+	if got := span.Status().Code; got != codes.Error {
+		t.Fatalf("span status = %s, want Error", got)
+	}
+	event := findSpanEvent(t, span, "exception")
+	assertSpanEventStringAttribute(t, event, spanAttrErrorType, spanErrorTypePanic)
+	for _, attr := range event.Attributes {
+		text := attr.Value.Emit()
+		if strings.Contains(text, "stacktrace") || strings.Contains(text, "token") || strings.Contains(text, "password") {
+			t.Fatalf("panic span event leaked sensitive text: %#v", event.Attributes)
+		}
+	}
+}
+
 func otelTraceMiddleware(t *testing.T, traceIDHex string, spanIDHex string) gin.HandlerFunc {
 	t.Helper()
 	return func(c *gin.Context) {
@@ -258,4 +338,67 @@ func contextWithSpanContext(t *testing.T, ctx context.Context, traceIDHex string
 		Remote:  true,
 	})
 	return trace.ContextWithSpanContext(ctx, spanContext)
+}
+
+func recordingSpanMiddleware(provider *sdktrace.TracerProvider) gin.HandlerFunc {
+	tracer := provider.Tracer("common-http-middleware-test")
+	return func(c *gin.Context) {
+		ctx, span := tracer.Start(c.Request.Context(), c.Request.Method+" "+c.Request.URL.Path)
+		c.Request = c.Request.WithContext(ctx)
+		defer span.End()
+		c.Next()
+	}
+}
+
+func shutdownTracerProvider(t *testing.T, provider *sdktrace.TracerProvider) {
+	t.Helper()
+	if err := provider.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown tracer provider: %v", err)
+	}
+}
+
+func endedSpan(t *testing.T, recorder *tracetest.SpanRecorder) sdktrace.ReadOnlySpan {
+	t.Helper()
+	spans := recorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("ended span count = %d, want 1", len(spans))
+	}
+	return spans[0]
+}
+
+func assertSpanIntAttribute(t *testing.T, span sdktrace.ReadOnlySpan, key string, want int) {
+	t.Helper()
+	for _, attr := range span.Attributes() {
+		if string(attr.Key) == key {
+			if got := int(attr.Value.AsInt64()); got != want {
+				t.Fatalf("span attribute %s = %d, want %d", key, got, want)
+			}
+			return
+		}
+	}
+	t.Fatalf("span attribute %s missing in %#v", key, span.Attributes())
+}
+
+func findSpanEvent(t *testing.T, span sdktrace.ReadOnlySpan, name string) sdktrace.Event {
+	t.Helper()
+	for _, event := range span.Events() {
+		if event.Name == name {
+			return event
+		}
+	}
+	t.Fatalf("span event %q missing in %#v", name, span.Events())
+	return sdktrace.Event{}
+}
+
+func assertSpanEventStringAttribute(t *testing.T, event sdktrace.Event, key string, want string) {
+	t.Helper()
+	for _, attr := range event.Attributes {
+		if string(attr.Key) == key {
+			if got := attr.Value.AsString(); got != want {
+				t.Fatalf("span event attribute %s = %q, want %q", key, got, want)
+			}
+			return
+		}
+	}
+	t.Fatalf("span event attribute %s missing in %#v", key, event.Attributes)
 }
