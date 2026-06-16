@@ -158,13 +158,15 @@ func (s *UserRoleStore) getRoleByExternalID(ctx context.Context, roleID uuid.UUI
 }
 
 func (s *UserRoleStore) rolesByExternalIDs(ctx context.Context, roleIDs []uuid.UUID) ([]*ent.Role, error) {
-	roles := make([]*ent.Role, 0, len(roleIDs))
-	for _, roleID := range roleIDs {
-		role, err := s.getRoleByExternalID(ctx, roleID)
-		if err != nil {
-			return nil, err
-		}
-		roles = append(roles, role)
+	if len(roleIDs) == 0 {
+		return []*ent.Role{}, nil
+	}
+	roles, err := s.client.Role.Query().Where(entrole.RoleIDIn(roleIDs...)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("query roles by role_ids: %w", err)
+	}
+	if len(roles) != len(roleIDs) {
+		return nil, roledomain.ErrRoleNotFound
 	}
 	return roles, nil
 }

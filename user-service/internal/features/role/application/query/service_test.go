@@ -77,6 +77,10 @@ func (s *stubRoleStore) GetByRoleID(context.Context, uuid.UUID) (*roledomain.Rol
 	return &s.role, nil
 }
 
+func (s *stubRoleStore) GetByRoleIDs(context.Context, []uuid.UUID) ([]roledomain.Role, error) {
+	return s.items, nil
+}
+
 func (s *stubRoleStore) List(_ context.Context, input roleapplication.ListRolesInput) ([]roledomain.Role, bool, error) {
 	s.listInput = input
 	return s.items, s.hasNext, nil

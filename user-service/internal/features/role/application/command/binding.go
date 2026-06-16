@@ -46,12 +46,11 @@ func (s *roleCommandService) AddUserRole(ctx context.Context, cmd UserRoleComman
 
 // ReplaceUserRoles 幂等替换用户的完整角色绑定集合。
 func (s *roleCommandService) ReplaceUserRoles(ctx context.Context, cmd ReplaceUserRolesCommand) (*RolesResult, error) {
-	for _, roleID := range uniqueUUIDs(cmd.RoleIDs) {
-		if _, err := s.roles.GetByRoleID(ctx, roleID); err != nil {
-			return nil, err
-		}
+	roleIDs := uniqueUUIDs(cmd.RoleIDs)
+	if _, err := s.roles.GetByRoleIDs(ctx, roleIDs); err != nil {
+		return nil, err
 	}
-	items, err := s.userRoles.Replace(ctx, cmd.UserID, uniqueUUIDs(cmd.RoleIDs))
+	items, err := s.userRoles.Replace(ctx, cmd.UserID, roleIDs)
 	if err != nil {
 		return nil, err
 	}

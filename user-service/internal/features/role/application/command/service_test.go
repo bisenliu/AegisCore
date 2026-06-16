@@ -89,6 +89,9 @@ func TestRoleCommandServiceUserRoleBindings(t *testing.T) {
 	if !reflect.DeepEqual(userRoles.replaceRoleIDs, []uuid.UUID{roleID, otherRoleID}) {
 		t.Fatalf("replace role ids = %#v", userRoles.replaceRoleIDs)
 	}
+	if len(roles.batchLookupRoleIDs) != 1 || !reflect.DeepEqual(roles.batchLookupRoleIDs[0], []uuid.UUID{roleID, otherRoleID}) {
+		t.Fatalf("batch lookup role ids = %#v", roles.batchLookupRoleIDs)
+	}
 	if len(replaced.Items) != 2 {
 		t.Fatalf("replaced items = %#v", replaced.Items)
 	}
@@ -148,11 +151,12 @@ func (n *stubRolePolicyChangeNotifier) NotifyPolicyChanged(_ context.Context, re
 }
 
 type stubRoleStore struct {
-	role            roledomain.Role
-	rolesByID       map[uuid.UUID]roledomain.Role
-	createInput     roleapplication.CreateRoleInput
-	updateCalled    bool
-	setActiveCalled bool
+	role               roledomain.Role
+	rolesByID          map[uuid.UUID]roledomain.Role
+	createInput        roleapplication.CreateRoleInput
+	updateCalled       bool
+	setActiveCalled    bool
+	batchLookupRoleIDs [][]uuid.UUID
 }
 
 func (s *stubRoleStore) Create(_ context.Context, input roleapplication.CreateRoleInput) (*roledomain.Role, error) {
@@ -173,6 +177,19 @@ func (s *stubRoleStore) GetByRoleID(_ context.Context, roleID uuid.UUID) (*roled
 		return nil, roledomain.ErrRoleNotFound
 	}
 	return &s.role, nil
+}
+
+func (s *stubRoleStore) GetByRoleIDs(_ context.Context, roleIDs []uuid.UUID) ([]roledomain.Role, error) {
+	s.batchLookupRoleIDs = append(s.batchLookupRoleIDs, append([]uuid.UUID(nil), roleIDs...))
+	roles := make([]roledomain.Role, 0, len(roleIDs))
+	for _, roleID := range roleIDs {
+		role, err := s.GetByRoleID(context.Background(), roleID)
+		if err != nil {
+			return nil, err
+		}
+		roles = append(roles, *role)
+	}
+	return roles, nil
 }
 
 func (s *stubRoleStore) List(context.Context, roleapplication.ListRolesInput) ([]roledomain.Role, bool, error) {

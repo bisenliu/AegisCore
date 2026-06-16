@@ -62,6 +62,21 @@ func (s *RoleStore) GetByRoleID(ctx context.Context, roleID uuid.UUID) (*roledom
 	return nil, fmt.Errorf("query role by role_id %s: %w", roleID.String(), err)
 }
 
+// GetByRoleIDs 按外部 UUID 集合一次性返回角色记录。
+func (s *RoleStore) GetByRoleIDs(ctx context.Context, roleIDs []uuid.UUID) ([]roledomain.Role, error) {
+	if len(roleIDs) == 0 {
+		return []roledomain.Role{}, nil
+	}
+	roles, err := s.client.Role.Query().Where(entrole.RoleIDIn(roleIDs...)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("query roles by role_ids: %w", err)
+	}
+	if len(roles) != len(roleIDs) {
+		return nil, roledomain.ErrRoleNotFound
+	}
+	return toRoleModels(roles), nil
+}
+
 // List 返回一页角色记录，以及是否存在下一页。
 func (s *RoleStore) List(ctx context.Context, input roleapplication.ListRolesInput) ([]roledomain.Role, bool, error) {
 	predicates := buildListPredicates(input)
