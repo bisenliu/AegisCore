@@ -37,6 +37,10 @@ var (
 		"verify-ca":   {},
 		"verify-full": {},
 	}
+	validTracingExporters = map[string]struct{}{
+		"none": {},
+		"otlp": {},
+	}
 	productionLikeEnvironments = map[string]struct{}{
 		"prod":       {},
 		"production": {},
@@ -90,6 +94,7 @@ func (c Config) Validate() error {
 	errs = append(errs, c.validateHTTP()...)
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.validateLog()...)
+	errs = append(errs, c.validateObservability()...)
 	errs = append(errs, c.validateRedis()...)
 	errs = append(errs, c.validatePostgres()...)
 
@@ -177,6 +182,34 @@ func (c Config) validateLog() []error {
 	errs = append(errs, validateNonNegativeInt("log.max_age_days", c.Log.MaxAgeDays)...)
 	errs = append(errs, validateNonNegativeInt("log.max_size_mb", c.Log.MaxSizeMB)...)
 	errs = append(errs, validateNonNegativeInt("log.max_backups", c.Log.MaxBackups)...)
+	return errs
+}
+
+func (c Config) validateObservability() []error {
+	var errs []error
+	metricsPath := strings.TrimSpace(c.Observability.Metrics.Path)
+	if metricsPath == "" {
+		errs = append(errs, configFieldError("observability.metrics.path", "is required"))
+	} else if c.Observability.Metrics.Enabled && !strings.HasPrefix(metricsPath, "/") {
+		errs = append(errs, configFieldError("observability.metrics.path", "must start with / when metrics is enabled"))
+	}
+	if c.Observability.Tracing.SampleRatio < 0 || c.Observability.Tracing.SampleRatio > 1 {
+		errs = append(errs, configFieldError("observability.tracing.sample_ratio", "must be between 0 and 1"))
+	}
+	exporter := strings.ToLower(strings.TrimSpace(c.Observability.Tracing.Exporter))
+	if exporter == "" {
+		errs = append(errs, configFieldError("observability.tracing.exporter", "is required"))
+	} else if _, ok := validTracingExporters[exporter]; !ok {
+		errs = append(errs, configFieldError("observability.tracing.exporter", "must be one of none, otlp"))
+	}
+	if exporter == "otlp" {
+		if strings.TrimSpace(c.Observability.Tracing.OTLPEndpoint) == "" {
+			errs = append(errs, configFieldError("observability.tracing.otlp_endpoint", "is required when exporter is otlp"))
+		}
+		if c.isProductionLike() && c.Observability.Tracing.Insecure {
+			errs = append(errs, configFieldError("observability.tracing.insecure", "must not be true with otlp exporter in production-like environments"))
+		}
+	}
 	return errs
 }
 

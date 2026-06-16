@@ -77,6 +77,26 @@ log:
   # 每类日志最多保留的历史备份文件数量。
   max_backups: 30
 
+observability:
+  metrics:
+    # 是否开启 metrics 配置入口；当前阶段不注册 /metrics 路由或 exporter。
+    enabled: false
+    # 未来 HTTP metrics 暴露路径；当前仅作为配置契约保留。
+    path: /metrics
+    # 未来 metrics 实现是否包含 Go runtime/process 指标。
+    include_runtime: true
+  tracing:
+    # 是否开启 tracing 配置入口；当前阶段不创建 tracer provider 或 Gin middleware。
+    enabled: true
+    # tracing 采样比例，范围为 0.0 到 1.0。
+    sample_ratio: 1.0
+    # exporter 为 none 时不向外部 Collector 导出，本地开发不要求部署 OTLP Collector。
+    exporter: none
+    # exporter 为 otlp 时填写 Collector endpoint；不要在 endpoint 中放 token、账号密码或其他凭据。
+    otlp_endpoint: ""
+    # 是否允许 insecure OTLP 连接；生产类环境会拒绝 otlp + insecure 组合。
+    insecure: false
+
 # Redis 基础连接模板。
 # 具体实例通过 YAML merge 继承该模板，并覆盖 db、timeout 等差异字段。
 .redis_base: &redis_base

@@ -141,7 +141,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - `common/contract/errors/`：跨服务稳定应用错误码、可渲染应用错误类型和错误转换 helper。
 - `common/contract/pagination/`：跨服务稳定 Cursor/Keyset 分页响应模型、分页大小边界和分页数据包装 helper。
 - `common/contract/response/`：HTTP 响应信封 DTO 和默认响应消息；不承载错误码、应用错误或分页 re-export。
-- `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、进程内短 TTL 缓存、Redis key 构造规则、后台任务池、定时任务调度器、运行时资源名和时区初始化。
+- `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、进程内短 TTL 缓存、Redis key 构造规则、后台任务池、定时任务调度器、可观测性配置契约、运行时资源名和时区初始化。
 - `common/http/`：HTTP/Gin 边界适配和 HTTP API 构建期辅助能力，例如 middleware、`http/binding` 请求绑定/校验失败响应适配层、无业务语义的 binder 组合/HTTP header 绑定、`http/response` 输出 helper、`http/pprof` Go runtime pprof 路由注册 helper，以及 `http/openapi` Swagger/OpenAPI 转换、规范化、序列化和 Go embed 渲染 helper；其中 Casbin 授权中间件只提供 resolver、authorizer 和 error handler 组合骨架，pprof helper 只负责挂载标准诊断端点，不决定是否开启、监听地址、鉴权、allowlist 或网关暴露策略，OpenAPI helper 不承载服务 API server、健康探针路径、认证方案描述、源码扫描范围或生成输出目录。
 - `common/security/`：安全与凭证原语，例如 JWT、Bearer 传输常量、认证上下文、密码 hash helper 和无业务语义的 Casbin 三元组/enforcer 包装。
 - `common/testing/`：跨模块测试基础设施和无业务语义 fixture，仅供测试代码使用；真实 PostgreSQL/Redis integration helper 放在 `testing/containers`，基础测试值生成放在 `testing/fixtures`。
@@ -154,6 +154,8 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 `common/runtime/rediskey` 是跨服务稳定、无业务语义的 Redis key 构造 primitive，只承载 namespace、分段拼接、prefix 和 Redis Cluster hash tag 等通用规则。它不得承载 auth/user/role/permission 等 feature key schema。Feature 私有缓存、索引、会话、投影和临时 key 由对应 `features/<feature>/infrastructure/redis` 拥有；未来真正通用的 runtime primitive（例如 rate limiter、distributed lock、idempotency）如果进入 `common/runtime/<primitive>`，由该 primitive 自己拥有自己的 key schema。
 
 `common/runtime/scheduler` 是跨服务稳定、无业务语义的定时任务调度 primitive，当前基于 `github.com/robfig/cron/v3` v3 API 封装，并提供任务级本机防重叠、调度器全局并发限制、任务级分布式锁接口、Redis 锁实现、锁续租、优雅关闭和 `Metrics` 指标接口。Redis 锁等待由任务级 `WaitTimeout` 表达总等待上限，锁实现内部使用 `RetryPolicy` 做指数退避、最大单次间隔、可选最大尝试次数和 jitter，避免多副本锁竞争时形成固定频率 Redis 轮询。Scheduler 不得承载 feature 业务规则、业务 DTO、业务 Redis key schema、跨 feature 编排、可靠消息语义、outbox 持久化或具体 Prometheus registry wiring。需要多副本单实例执行的任务必须在任务级声明 `LockPolicy`，锁 TTL 必须解析为正值；长任务应启用续租，续租失败默认取消任务，避免锁失效后继续执行有副作用的业务逻辑。Prometheus 接入应通过服务侧实现 `Metrics` 接口完成，指标 label 中的 job key 必须是固定枚举式任务名，不得写入用户 ID、订单 ID 等高基数动态值。
+
+`common/runtime/config` 拥有跨服务稳定的 observability 配置契约，根配置段为 `observability.metrics` 与 `observability.tracing`。该契约只表达 metrics 是否开启、未来 HTTP metrics path、是否包含 runtime 指标、tracing 是否开启、采样率、exporter 类型、OTLP endpoint 和 insecure 开关；配置加载和生产类环境安全校验由 `common/runtime/config` 统一完成。当前阶段不实现 metrics exporter、中间件、`/metrics` 路由、OpenTelemetry tracer provider、Gin tracing middleware、span 创建或日志字段迁移。`common/runtime/observability/metrics` 与 `common/runtime/observability/tracing` 当前只保留未来跨服务 runtime primitive 边界，不得承载用户服务业务指标、dashboard、告警规则、部署清单、feature span 名称或业务 attribute。
 
 `common/security/casbin` 是跨服务稳定、无业务语义的 Casbin 授权 primitive，只承载 `subject/object/action` 请求三元组、通用 enforcer 调用包装、拒绝和未配置错误。`common/http/middleware` 中的 Casbin 授权中间件只负责 Gin 调用骨架，必须通过服务侧 resolver、authorizer 和 error handler 注入业务语义。它不得承载 user-service 的 `user:<user_uuid>`、`role:<role_uuid>` subject schema、权限目录、policy loader、super admin baseline、route diff 或服务特定错误码。
 
@@ -180,6 +182,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 ## 9. Infrastructure
 
 - 配置加载由 `common/runtime/config/loader.go` 负责，支持 YAML 文件和 `AEGISCORE_` 环境变量覆盖。
+- 可观测性配置由 `common/runtime/config` 的 `observability.metrics` 和 `observability.tracing` 承载；用户服务当前只提供本地默认配置，不会因为配置存在而自动注册 `/metrics`、创建 exporter 或启动 tracing middleware。
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前只声明并连接 `postgres.user_db`。配置中出现其他 PostgreSQL 命名实例不代表用户服务会自动连接或迁移它们。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`。
 - 进程内短 TTL 缓存使用 `common/runtime/localcache`；消费侧负责选择 TTL、key 类型和值类型，并负责业务失效策略。
