@@ -2,30 +2,38 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/getkin/kin-openapi/openapi2"
-	"github.com/getkin/kin-openapi/openapi2conv"
-	"github.com/getkin/kin-openapi/openapi3"
-	"gopkg.in/yaml.v3"
+	commonopenapi "github.com/aegiscore/common/http/openapi"
 )
 
 const (
-	openAPIVersion    = "3.0.3"
-	businessServerURL = "/api/v1"
-	rootServerURL     = "/"
-	bearerAuthName    = "BearerAuth"
+	defaultOpenAPIVersion    = "3.0.3"
+	defaultBusinessServerURL = "/api/v1"
+	defaultRootServerURL     = "/"
+	defaultBearerAuthName    = "BearerAuth"
+	defaultBearerAuthDesc    = "输入 Bearer token，格式为：Bearer <token>"
+	defaultGoPackageName     = "docs"
+	defaultGeneratedBy       = "scripts/openapi-generate.sh"
+	defaultBearerAuthType    = "http"
+	defaultBearerAuthScheme  = "bearer"
+	defaultBearerAuthFormat  = "JWT"
 )
 
-var rootHealthPaths = map[string]struct{}{
-	"/livez":    {},
-	"/readyz":   {},
-	"/startupz": {},
+var defaultRootHealthPaths = []string{"/livez", "/readyz", "/startupz"}
+
+type stringList []string
+
+func (values *stringList) String() string {
+	return fmt.Sprint([]string(*values))
+}
+
+func (values *stringList) Set(value string) error {
+	*values = append(*values, value)
+	return nil
 }
 
 func main() {
@@ -34,120 +42,77 @@ func main() {
 	var yamlOutputPath string
 	var goOutputPath string
 	var goPackageName string
+	var openAPIVersion string
+	var serverURL string
+	var rootServerURL string
+	var bearerAuthName string
+	var bearerAuthDescription string
+	var generatedBy string
+	rootPaths := stringList(defaultRootHealthPaths)
 
 	flag.StringVar(&inputPath, "input", "", "temporary Swagger 2 JSON input path")
 	flag.StringVar(&jsonOutputPath, "json", "", "OpenAPI 3 JSON output path")
 	flag.StringVar(&yamlOutputPath, "yaml", "", "OpenAPI 3 YAML output path")
 	flag.StringVar(&goOutputPath, "go", "", "OpenAPI 3 Go embed output path")
-	flag.StringVar(&goPackageName, "package", "docs", "Go package name for the embed output")
+	flag.StringVar(&goPackageName, "package", defaultGoPackageName, "Go package name for the embed output")
+	flag.StringVar(&openAPIVersion, "openapi-version", defaultOpenAPIVersion, "OpenAPI version for the generated document")
+	flag.StringVar(&serverURL, "server", defaultBusinessServerURL, "default OpenAPI server URL")
+	flag.StringVar(&rootServerURL, "root-server", defaultRootServerURL, "OpenAPI server URL for root paths")
+	flag.Var(&rootPaths, "root-path", "path that should use the root server URL")
+	flag.StringVar(&bearerAuthName, "bearer-auth-name", defaultBearerAuthName, "Bearer auth security scheme name")
+	flag.StringVar(&bearerAuthDescription, "bearer-auth-description", defaultBearerAuthDesc, "Bearer auth security scheme description")
+	flag.StringVar(&generatedBy, "generated-by", defaultGeneratedBy, "generator label for the Go embed file")
 	flag.Parse()
 
 	if inputPath == "" || jsonOutputPath == "" || yamlOutputPath == "" || goOutputPath == "" {
 		failf("input, json, yaml and go output paths are required")
 	}
 
-	doc, jsonData, yamlData, err := convert(inputPath)
+	doc, err := commonopenapi.ConvertSwagger2File(context.Background(), inputPath, convertOptions(openAPIVersion, serverURL, rootServerURL, rootPaths, bearerAuthName, bearerAuthDescription))
 	if err != nil {
 		failf("%v", err)
 	}
 
-	if err := writeFile(jsonOutputPath, jsonData); err != nil {
+	goData, err := commonopenapi.RenderGoDocument(doc.JSON, commonopenapi.GoDocumentOptions{PackageName: goPackageName, GeneratedBy: generatedBy})
+	if err != nil {
+		failf("render Go output: %v", err)
+	}
+
+	if err := writeFile(jsonOutputPath, doc.JSON); err != nil {
 		failf("write JSON output: %v", err)
 	}
-	if err := writeFile(yamlOutputPath, yamlData); err != nil {
+	if err := writeFile(yamlOutputPath, doc.YAML); err != nil {
 		failf("write YAML output: %v", err)
 	}
-	if err := writeFile(goOutputPath, renderGoDocument(goPackageName, jsonData)); err != nil {
+	if err := writeFile(goOutputPath, goData); err != nil {
 		failf("write Go output: %v", err)
 	}
 
-	fmt.Printf("generated OpenAPI %s document with %d paths\n", doc.OpenAPI, doc.Paths.Len())
+	fmt.Printf("generated OpenAPI %s document with %d paths\n", doc.OpenAPI, doc.PathCount)
 }
 
-func convert(inputPath string) (*openapi3.T, []byte, []byte, error) {
-	data, err := os.ReadFile(inputPath)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("read Swagger input: %w", err)
+func convertOptions(openAPIVersion string, serverURL string, rootServerURL string, rootPaths []string, bearerAuthName string, bearerAuthDescription string) commonopenapi.ConvertOptions {
+	pathServers := make(map[string][]commonopenapi.Server, len(rootPaths))
+	for _, path := range rootPaths {
+		pathServers[path] = []commonopenapi.Server{{URL: rootServerURL}}
 	}
 
-	var doc2 openapi2.T
-	if err := json.Unmarshal(data, &doc2); err != nil {
-		return nil, nil, nil, fmt.Errorf("decode Swagger input: %w", err)
-	}
-
-	doc3, err := openapi2conv.ToV3(&doc2)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("convert to OpenAPI 3: %w", err)
-	}
-
-	normalizeDocument(doc3)
-	if err := doc3.Validate(context.Background()); err != nil {
-		return nil, nil, nil, fmt.Errorf("validate OpenAPI 3 document: %w", err)
-	}
-
-	jsonData, err := json.MarshalIndent(doc3, "", "  ")
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("marshal OpenAPI JSON: %w", err)
-	}
-	jsonData = append(jsonData, '\n')
-
-	yamlData, err := yaml.Marshal(doc3)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("marshal OpenAPI YAML: %w", err)
-	}
-
-	return doc3, jsonData, yamlData, nil
-}
-
-func normalizeDocument(doc *openapi3.T) {
-	doc.OpenAPI = openAPIVersion
-	doc.Servers = openapi3.Servers{{URL: businessServerURL}}
-
-	for path, item := range doc.Paths.Map() {
-		if _, ok := rootHealthPaths[path]; ok {
-			item.Servers = openapi3.Servers{{URL: rootServerURL}}
+	securitySchemes := map[string]commonopenapi.SecurityScheme{}
+	if bearerAuthName != "" {
+		securitySchemes[bearerAuthName] = commonopenapi.SecurityScheme{
+			Type:         defaultBearerAuthType,
+			Scheme:       defaultBearerAuthScheme,
+			BearerFormat: defaultBearerAuthFormat,
+			Description:  bearerAuthDescription,
 		}
 	}
 
-	if doc.Components == nil {
-		doc.Components = &openapi3.Components{}
+	return commonopenapi.ConvertOptions{
+		OpenAPIVersion:  openAPIVersion,
+		Servers:         []commonopenapi.Server{{URL: serverURL}},
+		PathServers:     pathServers,
+		SecuritySchemes: securitySchemes,
 	}
-	if doc.Components.SecuritySchemes == nil {
-		doc.Components.SecuritySchemes = openapi3.SecuritySchemes{}
-	}
-
-	doc.Components.SecuritySchemes[bearerAuthName] = &openapi3.SecuritySchemeRef{
-		Value: openapi3.NewJWTSecurityScheme().
-			WithDescription("输入 Bearer token，格式为：Bearer <token>"),
-	}
-}
-
-func renderGoDocument(packageName string, jsonData []byte) []byte {
-	source := fmt.Sprintf(`// Code generated by scripts/openapi-generate.sh; DO NOT EDIT.
-
-package %s
-
-// ReadOpenAPI 返回生成的 OpenAPI 3 JSON 文档。
-func ReadOpenAPI() []byte {
-	return []byte(openAPIDocument)
-}
-
-const openAPIDocument = %s
-`, packageName, rawStringLiteral(string(jsonData)))
-
-	return []byte(source)
-}
-
-func rawStringLiteral(value string) string {
-	if !strings.Contains(value, "`") {
-		return "`" + value + "`"
-	}
-
-	quoted, err := json.Marshal(value)
-	if err != nil {
-		panic(err)
-	}
-	return string(quoted)
 }
 
 func writeFile(path string, data []byte) error {

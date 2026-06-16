@@ -11,7 +11,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 | 模块 | 责任 | 关键位置 |
 |---|---|---|
 | `common` | 跨服务稳定契约与基础能力；不得承载服务特定 helper 或业务语义 | `common/contract/`, `common/runtime/`, `common/http/`, `common/security/`, `common/testing/`, `common/validation/` |
-| `user-service` | 用户服务运行时、用户服务内共享业务内核、用户资料、认证会话、角色管理、权限目录与 RBAC 授权 feature、外部系统防腐层边界、Ent schema、Atlas migration、OpenAPI 3 文档 | `user-service/cmd/`, `user-service/internal/`, `user-service/internal/shared/`, `user-service/internal/integration/`, `user-service/ent/`, `user-service/migrations/`, `user-service/docs/` |
+| `user-service` | 用户服务运行时、用户服务内共享业务内核、用户资料、认证会话、角色管理、权限目录与 RBAC 授权 feature、外部系统防腐层边界、Ent schema、Atlas migration、服务侧 OpenAPI 生成脚本和 OpenAPI 3 文档 | `user-service/cmd/`, `user-service/internal/`, `user-service/internal/shared/`, `user-service/internal/integration/`, `user-service/ent/`, `user-service/migrations/`, `user-service/docs/` |
 | `deployments` | 本地和生产部署资产；Docker build、Compose、本地依赖、Kubernetes YAML 和 Helm chart 的归属边界 | `deployments/docker/user-service.Dockerfile`, `deployments/compose/`, `deployments/k8s/`, `deployments/helm/` |
 
 仓库根目录是 workspace，不是业务 Go module。运行 Go 命令时通常进入 `common/` 或 `user-service/`。
@@ -142,7 +142,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - `common/contract/pagination/`：跨服务稳定 Cursor/Keyset 分页响应模型、分页大小边界和分页数据包装 helper。
 - `common/contract/response/`：HTTP 响应信封 DTO 和默认响应消息；不承载错误码、应用错误或分页 re-export。
 - `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、Redis key 构造规则、后台任务池、定时任务调度器、运行时资源名和时区初始化。
-- `common/http/`：HTTP/Gin 边界适配，例如 middleware、`http/binding` 请求绑定/校验失败响应适配层、无业务语义的 binder 组合/HTTP header 绑定和 `http/response` 输出 helper；其中 Casbin 授权中间件只提供 resolver、authorizer 和 error handler 组合骨架。
+- `common/http/`：HTTP/Gin 边界适配和 HTTP API 构建期辅助能力，例如 middleware、`http/binding` 请求绑定/校验失败响应适配层、无业务语义的 binder 组合/HTTP header 绑定、`http/response` 输出 helper，以及 `http/openapi` Swagger/OpenAPI 转换、规范化、序列化和 Go embed 渲染 helper；其中 Casbin 授权中间件只提供 resolver、authorizer 和 error handler 组合骨架，OpenAPI helper 不承载服务 API server、健康探针路径、认证方案描述、源码扫描范围或生成输出目录。
 - `common/security/`：安全与凭证原语，例如 JWT、Bearer 传输常量、认证上下文、密码 hash helper 和无业务语义的 Casbin 三元组/enforcer 包装。
 - `common/testing/`：跨模块测试基础设施和无业务语义 fixture，仅供测试代码使用；真实 PostgreSQL/Redis integration helper 放在 `testing/containers`，基础测试值生成放在 `testing/fixtures`。
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。
@@ -154,6 +154,8 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 `common/runtime/scheduler` 是跨服务稳定、无业务语义的定时任务调度 primitive，当前基于 `github.com/robfig/cron/v3` v3 API 封装，并提供任务级本机防重叠、调度器全局并发限制、任务级分布式锁接口、Redis 锁实现、锁续租、优雅关闭和 `Metrics` 指标接口。Redis 锁等待由任务级 `WaitTimeout` 表达总等待上限，锁实现内部使用 `RetryPolicy` 做指数退避、最大单次间隔、可选最大尝试次数和 jitter，避免多副本锁竞争时形成固定频率 Redis 轮询。Scheduler 不得承载 feature 业务规则、业务 DTO、业务 Redis key schema、跨 feature 编排、可靠消息语义、outbox 持久化或具体 Prometheus registry wiring。需要多副本单实例执行的任务必须在任务级声明 `LockPolicy`，锁 TTL 必须解析为正值；长任务应启用续租，续租失败默认取消任务，避免锁失效后继续执行有副作用的业务逻辑。Prometheus 接入应通过服务侧实现 `Metrics` 接口完成，指标 label 中的 job key 必须是固定枚举式任务名，不得写入用户 ID、订单 ID 等高基数动态值。
 
 `common/security/casbin` 是跨服务稳定、无业务语义的 Casbin 授权 primitive，只承载 `subject/object/action` 请求三元组、通用 enforcer 调用包装、拒绝和未配置错误。`common/http/middleware` 中的 Casbin 授权中间件只负责 Gin 调用骨架，必须通过服务侧 resolver、authorizer 和 error handler 注入业务语义。它不得承载 user-service 的 `user:<user_uuid>`、`role:<role_uuid>` subject schema、权限目录、policy loader、super admin baseline、route diff 或服务特定错误码。
+
+`common/http/openapi` 是跨服务稳定、无服务业务语义的 OpenAPI 构建期辅助包，只负责 Swagger/OpenAPI 文档转换、调用方显式传入的规范化、JSON/YAML 序列化和 Go embed 源码渲染。服务自己的 OpenAPI 生成脚本或薄 wrapper 负责 `swag init` 源码扫描范围、API server URL、根路径健康检查、认证方案名称和描述、输出目录与生成文件包名。用户服务生成产物继续位于 `user-service/docs/`，运行时 OpenAPI UI/JSON 路由继续由 `user-service/internal/router/openapi.go` 拥有。
 
 新增共享代码进入 `common` 前必须满足跨服务稳定、无业务语义、边界清晰。服务独有规则、DTO 映射、infrastructure adapter 行为或只为未来可能复用的 helper 应保留在对应服务模块内。未来 `common/runtime/eventbus` 只有在至少两个服务需要同一稳定 runtime primitive，且 API 不含用户服务业务语义时才可新增；它不得承载 user-service event name、feature port、业务 DTO 或 speculative broker abstraction。未来 outbox 若要进入 `common/runtime/outbox`，必须先通过单独变更设计 transaction boundary、存储模型、投递 worker、重试、幂等和失败策略；在该设计前不得新增 outbox table、Ent hook、transaction wrapper 或 dispatcher。
 

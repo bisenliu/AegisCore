@@ -39,7 +39,7 @@
 | 生成 OpenAPI 3 文档 | `make openapi-generate`；或 `cd user-service && ./scripts/openapi-generate.sh` | 仓库根目录；或 `user-service/` |
 | 格式化 Go 文件 | `gofmt -w <files>` | 任意目录 |
 
-Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user-service/` 执行，迁移和 OpenAPI 操作仍委托 `user-service/scripts/` 下的现有脚本。OpenAPI 生成脚本从 `user-service/` 模块目录运行，将解析范围限定为 `github.com/aegiscore/user-service` 包前缀，先从源码注解生成临时 Swagger 2 输入，再通过 `kin-openapi` 转换为最终 OpenAPI 3 文档；直接运行底层命令仍然可用，排错时可参考对应脚本和执行目录。
+Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user-service/` 执行，迁移和 OpenAPI 操作仍委托 `user-service/scripts/` 下的现有脚本。OpenAPI 生成脚本从 `user-service/` 模块目录运行，将解析范围限定为 `github.com/aegiscore/user-service` 包前缀，先从源码注解生成临时 Swagger 2 输入，再通过 `common/http/openapi` 的共享转换 helper 生成最终 OpenAPI 3 文档；服务侧脚本或薄 wrapper 继续拥有 API server、健康探针路径、认证方案和输出目录等服务语义。直接运行底层命令仍然可用，排错时可参考对应脚本和执行目录。
 
 ## 4. Local Runtime And Deployment Assets
 
@@ -76,7 +76,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - Domain 层负责实体、值对象、枚举、领域错误和纯业务规则；只有存在真实跨实体/跨值对象领域规则或领域事件模型时，才在 feature 内新增 `domain/services` 或 `domain/events`，不得为了目录完整添加空业务代码。Domain services/events 不依赖 Gin、Ent、Redis、config、logger、application ports 或 infrastructure adapter。
 - Infrastructure adapter 层负责 Ent/PostgreSQL、Redis 访问、存储模型转换和存储错误转换，具体放在对应 feature 的 `infrastructure/postgres` 或 `infrastructure/redis` 下。
 - 服务级 Fx provider 放在 `user-service/internal/providers`，用于组装 Gin engine、HTTP route registration、JWT service、PostgreSQL/Redis named resources 和 Ent clients；`internal/bootstrap` 只保留顶层 AppModule 和 HTTP server lifecycle。
-- 共享中间件、响应模型、配置和基础设施放在 `common/` 的对应能力分类目录中：响应 DTO 契约使用 `common/contract/response`，Gin 请求绑定和校验失败响应适配使用 `common/http/binding`，Gin 响应输出使用 `common/http/response`，运行时基础能力使用 `common/runtime`，HTTP/Gin 适配使用 `common/http`，安全凭证原语使用 `common/security`，通用校验核心使用 `common/validation`。
+- 共享中间件、响应模型、配置和基础设施放在 `common/` 的对应能力分类目录中：响应 DTO 契约使用 `common/contract/response`，Gin 请求绑定和校验失败响应适配使用 `common/http/binding`，Gin 响应输出使用 `common/http/response`，OpenAPI 构建期转换和 Go embed 渲染 helper 使用 `common/http/openapi`，运行时基础能力使用 `common/runtime`，HTTP/Gin 适配使用 `common/http`，安全凭证原语使用 `common/security`，通用校验核心使用 `common/validation`。
 - `common` 只承载跨服务稳定契约和基础能力；用户服务独有规则、DTO 映射、infrastructure adapter 行为或仅为未来可能复用的 helper 应保留在 `user-service` 内。
 - Ent 生成代码不要手动编辑；修改 schema 后重新生成。生成代码边界、`go generate ./ent` 用法和新增 Entity Schema 流程见 `user-service/ent/README.md`。
 - Go 文件提交前运行 `gofmt`。
@@ -180,7 +180,7 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 
 1. 先阅读 `docs/ARCHITECTURE.md`，确认新能力属于哪个模块、feature 和层。
 2. 新增服务内业务能力时，优先放在 `user-service/internal/features/<feature>/`；已有 feature 内按 `application/`、`domain/`、`transport/http/`、`infrastructure/*/` 和 `fx.go` 分层扩展，HTTP DTO 放在 `transport/http/request.go` 和 `response.go`。用户资料 feature 的写侧用例放在 `application/command`，读侧用例放在 `application/query`，transport-neutral application 输入辅助放在 `application/validators`；认证 feature 的会话控制 use case 放在扁平 `application/command`，支撑组件按职责放在 `application/authctx`、`application/credentials`、`application/tokens`、`application/sessions`，认证输入辅助、token version 撤销校验和 session 一致性校验放在 `application/validators`。`domain/services` 和 `domain/events` 只在有真实纯领域规则或事件模型时创建；事件总线、broker、outbox、publisher、subscriber 或异步投递需要单独设计。
-3. 新增跨服务稳定基础能力时，按 `common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation` 归类。
+3. 新增跨服务稳定基础能力时，按 `common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation` 归类；OpenAPI 转换这类 HTTP API 构建期辅助能力归入 `common/http`，但服务路径、认证描述和源码扫描范围仍留在各服务脚本或 wrapper。
 4. 跨 feature、跨模块、外部 API、配置、数据库 schema 或目录结构变更，应在 issue、PR 描述或开发记录中写清目标、影响范围和验证方式。
 5. 增加或更新测试，并在受影响模块目录运行相关 `go test` 命令；跨模块变更时分别在 `common/` 和 `user-service/` 运行。
 
@@ -188,7 +188,7 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 
 1. 先确认共享代码是否属于跨服务稳定契约、运行时基础能力、HTTP/Gin 适配、安全凭证原语或通用校验核心。
 2. 如能力只服务于用户服务请求清洗、状态规则、DTO 映射、infrastructure adapter 行为或业务编排，保留在 `user-service` 对应分层内。
-3. 如确需进入 `common`，选择对应目录：`common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation`，并在 `docs/ARCHITECTURE.md` 更新边界说明。
+3. 如确需进入 `common`，选择对应目录：`common/contract`、`common/runtime`、`common/http`、`common/security` 或 `common/validation`，并在 `docs/ARCHITECTURE.md` 更新边界说明。进入 `common/http/openapi` 的能力不得包含某个服务的 API server、认证方案描述、健康探针路径、源码扫描范围或生成输出目录。
 4. 新增或迁移共享 API 时同步更新 Go imports、测试和文档。
 
 ## 12. Local Runtime Notes
