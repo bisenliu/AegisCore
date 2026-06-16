@@ -32,7 +32,8 @@ func RequestLoggerWithOptions(log *zap.Logger, options RequestLoggerOptions) gin
 		}
 
 		reqLog := logger.WithContext(c.Request.Context(), log)
-		fields := requestLogFields(c, time.Since(start))
+		fieldsRef := requestLogFields(c, time.Since(start))
+		fields := *fieldsRef
 
 		status := c.Writer.Status()
 		switch {
@@ -44,6 +45,7 @@ func RequestLoggerWithOptions(log *zap.Logger, options RequestLoggerOptions) gin
 		default:
 			reqLog.Info("http request completed", fields...)
 		}
+		releaseRequestLogFields(fieldsRef)
 	}
 }
 
