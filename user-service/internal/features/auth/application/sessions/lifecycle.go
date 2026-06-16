@@ -32,11 +32,16 @@ type lifecycle struct {
 	users                    authapplication.UserTokenVersionStore
 	sessions                 authapplication.AuthSessionStore
 	maxActiveSessionsPerUser int
+	tokenVersions            authvalidators.TokenVersionLocalInvalidator
 }
 
 // NewLifecycle 构造认证会话生命周期组件。
-func NewLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, maxActiveSessionsPerUser int) Lifecycle {
-	return &lifecycle{users: users, sessions: sessions, maxActiveSessionsPerUser: maxActiveSessionsPerUser}
+func NewLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, maxActiveSessionsPerUser int, tokenVersions ...authvalidators.TokenVersionLocalInvalidator) Lifecycle {
+	lifecycle := &lifecycle{users: users, sessions: sessions, maxActiveSessionsPerUser: maxActiveSessionsPerUser}
+	if len(tokenVersions) > 0 {
+		lifecycle.tokenVersions = tokenVersions[0]
+	}
+	return lifecycle
 }
 
 // CreateTokenSession 为新签发的 token pair 持久化 refresh 会话元数据。
@@ -125,4 +130,10 @@ func (m *lifecycle) DeleteSession(ctx context.Context, userID string, sessionID 
 // CurrentTokenVersion 返回用户当前 token version，优先使用缓存并在 miss 时回源。
 func (m *lifecycle) CurrentTokenVersion(ctx context.Context, userID string) (int64, error) {
 	return authvalidators.Current(ctx, m.users, m.sessions, userID)
+}
+
+func (m *lifecycle) invalidateLocalTokenVersion(userID string) {
+	if m.tokenVersions != nil {
+		m.tokenVersions.InvalidateTokenVersion(userID)
+	}
 }

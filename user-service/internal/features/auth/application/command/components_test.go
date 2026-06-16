@@ -378,7 +378,8 @@ func TestAuthSessionLifecycleRevokeUserSessionsAtVersionReturnsProjectionError(t
 	cacheErr := errors.New("cache refresh failed")
 	deleteErr := errors.New("delete all failed")
 	store := &sessionStoreStub{cacheErr: cacheErr, deleteAllErr: deleteErr}
-	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{newVersion: 99}, store)
+	invalidator := &tokenVersionInvalidatorStub{}
+	lifecycle := authsessions.NewLifecycle(&authRepoStub{newVersion: 99}, store, 5, invalidator)
 
 	err := lifecycle.RevokeUserSessionsAtVersion(context.Background(), authTestUserID, 4)
 
@@ -390,6 +391,9 @@ func TestAuthSessionLifecycleRevokeUserSessionsAtVersionReturnsProjectionError(t
 	}
 	if store.cached || store.cachedVersion != 0 {
 		t.Fatalf("cache should not be marked refreshed after cache error: %#v", store)
+	}
+	if invalidator.calls == 0 || invalidator.userID != authTestUserID.String() {
+		t.Fatalf("invalidator = %#v, want user %s", invalidator, authTestUserID.String())
 	}
 }
 
@@ -416,4 +420,14 @@ func authRefreshTestSession(sessionID string, tokenVersion int64) authdomain.Aut
 
 func newTestAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) authsessions.Lifecycle {
 	return authsessions.NewLifecycle(users, sessions, 5)
+}
+
+type tokenVersionInvalidatorStub struct {
+	calls  int
+	userID string
+}
+
+func (s *tokenVersionInvalidatorStub) InvalidateTokenVersion(userID string) {
+	s.calls++
+	s.userID = userID
 }

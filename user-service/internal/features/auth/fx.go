@@ -4,6 +4,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/aegiscore/common/runtime/config"
+	commonauth "github.com/aegiscore/common/security/auth"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
@@ -35,7 +36,7 @@ var Module = fx.Module("feature-auth",
 			fx.As(new(authredis.PurgeTaskPool)),
 			fx.ResultTags(`name:"auth_session_purge_pool"`),
 		),
-		authvalidators.NewValidator,
+		newTokenVersionValidator,
 		authcredentials.NewVerifier,
 		authtokens.NewIssuer,
 		newAuthSessionLifecycle,
@@ -49,6 +50,18 @@ var Module = fx.Module("feature-auth",
 	),
 )
 
-func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, cfg *config.Config) authsessions.Lifecycle {
-	return authsessions.NewLifecycle(users, sessions, cfg.Auth.MaxActiveSessionsPerUser)
+func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, tokenVersions authvalidators.TokenVersionLocalInvalidator, cfg *config.Config) authsessions.Lifecycle {
+	return authsessions.NewLifecycle(users, sessions, cfg.Auth.MaxActiveSessionsPerUser, tokenVersions)
+}
+
+type tokenVersionValidatorResult struct {
+	fx.Out
+
+	Validator   commonauth.TokenVersionValidator
+	Invalidator authvalidators.TokenVersionLocalInvalidator
+}
+
+func newTokenVersionValidator(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) tokenVersionValidatorResult {
+	validator := authvalidators.NewCachingValidator(users, sessions)
+	return tokenVersionValidatorResult{Validator: validator, Invalidator: validator}
 }

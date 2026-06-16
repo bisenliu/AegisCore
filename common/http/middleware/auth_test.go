@@ -140,6 +140,30 @@ func TestAuthMiddleware(t *testing.T) {
 	}
 }
 
+func TestAuthMiddlewareExpiredTokenDoesNotCallVersionValidator(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}}
+	expiredToken := signAuthTestToken(t, "secret", authTestUserID, 1, "s-123", time.Now().Add(-time.Hour))
+	validator := &recordingTokenVersionValidator{}
+	engine := gin.New()
+	engine.Use(AuthWithTokenVersionValidator(zap.NewNop(), auth.NewJWTService(cfg), cfg, validator))
+	engine.GET("/*path", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
+	request.Header.Set(auth.AuthorizationHeader, auth.TokenPrefix+expiredToken)
+	engine.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	}
+	if validator.calls != 0 {
+		t.Fatalf("validator calls = %d, want 0", validator.calls)
+	}
+}
+
 func assertAuthLog(t *testing.T, logs *observer.ObservedLogs, wantLevel zapcore.Level, wantMsg string) observer.LoggedEntry {
 	t.Helper()
 	entries := logs.All()
@@ -195,4 +219,13 @@ func signAuthSubjectTestToken(t *testing.T, secret, subject, userID string, toke
 		t.Fatalf("SignedString: %v", err)
 	}
 	return token
+}
+
+type recordingTokenVersionValidator struct {
+	calls int
+}
+
+func (v *recordingTokenVersionValidator) ValidateTokenVersion(context.Context, string, int64) error {
+	v.calls++
+	return nil
 }

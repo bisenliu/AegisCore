@@ -141,13 +141,15 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - `common/contract/errors/`：跨服务稳定应用错误码、可渲染应用错误类型和错误转换 helper。
 - `common/contract/pagination/`：跨服务稳定 Cursor/Keyset 分页响应模型、分页大小边界和分页数据包装 helper。
 - `common/contract/response/`：HTTP 响应信封 DTO 和默认响应消息；不承载错误码、应用错误或分页 re-export。
-- `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、Redis key 构造规则、后台任务池、定时任务调度器、运行时资源名和时区初始化。
+- `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、进程内短 TTL 缓存、Redis key 构造规则、后台任务池、定时任务调度器、运行时资源名和时区初始化。
 - `common/http/`：HTTP/Gin 边界适配和 HTTP API 构建期辅助能力，例如 middleware、`http/binding` 请求绑定/校验失败响应适配层、无业务语义的 binder 组合/HTTP header 绑定、`http/response` 输出 helper，以及 `http/openapi` Swagger/OpenAPI 转换、规范化、序列化和 Go embed 渲染 helper；其中 Casbin 授权中间件只提供 resolver、authorizer 和 error handler 组合骨架，OpenAPI helper 不承载服务 API server、健康探针路径、认证方案描述、源码扫描范围或生成输出目录。
 - `common/security/`：安全与凭证原语，例如 JWT、Bearer 传输常量、认证上下文、密码 hash helper 和无业务语义的 Casbin 三元组/enforcer 包装。
 - `common/testing/`：跨模块测试基础设施和无业务语义 fixture，仅供测试代码使用；真实 PostgreSQL/Redis integration helper 放在 `testing/containers`，基础测试值生成放在 `testing/fixtures`。
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。
 
 `common/runtime/workerpool` 是跨服务稳定、无业务语义的后台任务池 primitive，当前基于 ants 封装并提供并发限制、池满阻塞背压、错误日志、统计快照和 Fx 生命周期关闭。它只能承载运行时任务执行能力，不承载 feature 业务规则、业务 DTO、跨 feature 编排、事件投递语义、outbox 持久化、可靠消息语义或影响 token 有效性的 session 安全策略。Feature application 不应依赖 worker pool；需要后台清理的 infrastructure adapter 可以把它作为内部 runtime 依赖使用。高并发正式系统中后台池应按用途命名为专用 Fx 资源，例如 auth session purge 使用 `auth_session_purge_pool`，不得把多个业务场景混用到一个全局共享池。监控接入可使用 worker pool stats 中的 running、free、waiting、queued、failed 和 panicked 等稳定快照字段。
+
+`common/runtime/localcache` 是跨服务稳定、无业务语义的进程内短 TTL 缓存 primitive，只承载按 key 读取、写入、过期判断和主动删除能力。它不得承载 auth/user/role/permission 等 feature 缓存策略、缓存 key schema、远端缓存访问、撤销广播、容量治理或后台清理。需要强容量控制、跨实例失效或业务一致性策略时，应由消费侧 feature 或单独 runtime primitive 设计承担。
 
 `common/runtime/rediskey` 是跨服务稳定、无业务语义的 Redis key 构造 primitive，只承载 namespace、分段拼接、prefix 和 Redis Cluster hash tag 等通用规则。它不得承载 auth/user/role/permission 等 feature key schema。Feature 私有缓存、索引、会话、投影和临时 key 由对应 `features/<feature>/infrastructure/redis` 拥有；未来真正通用的 runtime primitive（例如 rate limiter、distributed lock、idempotency）如果进入 `common/runtime/<primitive>`，由该 primitive 自己拥有自己的 key schema。
 
@@ -180,6 +182,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - 配置加载由 `common/runtime/config/loader.go` 负责，支持 YAML 文件和 `AEGISCORE_` 环境变量覆盖。
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前只声明并连接 `postgres.user_db`。配置中出现其他 PostgreSQL 命名实例不代表用户服务会自动连接或迁移它们。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`。
+- 进程内短 TTL 缓存使用 `common/runtime/localcache`；消费侧负责选择 TTL、key 类型和值类型，并负责业务失效策略。
 - Redis key 使用 `common/runtime/rediskey` 统一 namespace、分段拼接、prefix 和 Redis Cluster hash tag 构造规则；具体 key schema 由 owning feature 的 `infrastructure/redis` 或 owning runtime primitive 管理。
 - 定时任务调度能力使用 `common/runtime/scheduler`；服务侧负责按用途创建调度器、注入既有 Redis client 到 `RedisLocker`、实现监控指标适配并在 Fx 生命周期中启动和关闭调度器。任务很多或资源敏感时可配置全局并发上限；是否需要分布式锁由每个任务的 `LockPolicy` 声明，不使用全局单开关替代任务级语义。
 - 用户服务的 Redis/PostgreSQL named resource、JWT service、Gin engine 和 Ent clients 由 `user-service/internal/providers/` 提供，其中 Ent clients 由 `providers/ent.go` 基于具名 `*sql.DB` 构建。

@@ -51,7 +51,8 @@ func TestLifecycleCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
 func TestLifecycleRevokeAllUserSessions(t *testing.T) {
 	users := &sessionUserStoreStub{newVersion: 4}
 	store := &sessionStoreStub{}
-	lifecycle := NewLifecycle(users, store, 5)
+	invalidator := &tokenVersionInvalidatorStub{}
+	lifecycle := NewLifecycle(users, store, 5, invalidator)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), sessionTestUserID)
 
@@ -63,6 +64,9 @@ func TestLifecycleRevokeAllUserSessions(t *testing.T) {
 	}
 	if users.incrementedUserID != sessionTestUserID || !store.cached || store.cachedVersion != 4 || !store.deletedAll {
 		t.Fatalf("users=%#v store=%#v", users, store)
+	}
+	if invalidator.calls == 0 || invalidator.userID != sessionTestUserID.String() {
+		t.Fatalf("invalidator = %#v, want user %s", invalidator, sessionTestUserID.String())
 	}
 }
 
@@ -130,4 +134,14 @@ func (s *sessionStoreStub) DeleteSession(context.Context, string, string) error 
 func (s *sessionStoreStub) DeleteAllUserSessions(context.Context, string) error {
 	s.deletedAll = true
 	return nil
+}
+
+type tokenVersionInvalidatorStub struct {
+	calls  int
+	userID string
+}
+
+func (s *tokenVersionInvalidatorStub) InvalidateTokenVersion(userID string) {
+	s.calls++
+	s.userID = userID
 }
