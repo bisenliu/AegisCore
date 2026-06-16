@@ -44,7 +44,7 @@ var defaultCORSOptions = CORSOptions{
 	// 共享默认策略对服务内 API 保持宽松，部署环境可传入更严格的选项。
 	AllowedOrigins: []string{"*"},
 	AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-	AllowedHeaders: []string{auth.AuthorizationHeader, "Content-Type", HeaderTraceID},
+	AllowedHeaders: []string{auth.AuthorizationHeader, "Content-Type"},
 }
 
 // CORS 返回使用包默认 CORS 策略的中间件。

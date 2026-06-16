@@ -16,7 +16,12 @@ import (
 
 func TestModuleResolvesServiceLevelProviders(t *testing.T) {
 	err := fx.ValidateApp(
-		fx.Supply(&config.Config{}, zap.NewNop()),
+		fx.Supply(&config.Config{
+			App: config.AppConfig{Name: "configured-user-service", Environment: "test"},
+			Observability: config.ObservabilityConfig{
+				Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1, Exporter: "none"},
+			},
+		}, zap.NewNop()),
 		validation.Module,
 		authfeature.Module,
 		permissionfeature.Module,

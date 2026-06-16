@@ -65,7 +65,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - 用户服务当前声明 `cache_redis` 和 `user_db`；其他命名实例可存在于配置中作为示例或其他服务配置，但不代表用户服务会自动连接对应资源或启用相关业务。
 - Redis key 的通用构造规则使用 `common/runtime/rediskey`；具体 key schema 放在 owning feature 的 `infrastructure/redis` 或 owning runtime primitive 内，不放入 `common` 的通用 key 大表。
 - 可观测性配置位于 `observability`：`observability.metrics.enabled` 控制未来 metrics wiring 是否消费该开关，`observability.metrics.path` 默认 `/metrics`，`observability.metrics.include_runtime` 控制未来是否包含 Go runtime/process 指标；`observability.tracing.enabled` 控制 tracing provider 是否启用采样记录，`observability.tracing.sample_ratio` 范围为 `0.0` 到 `1.0`，`observability.tracing.exporter` 当前配置契约支持 `none` 和 `otlp`，`observability.tracing.otlp_endpoint` 只在 `exporter: otlp` 时必填，`observability.tracing.insecure` 在生产类环境中不能与 `otlp` exporter 同时使用。
-- 当前阶段 observability 不注册 `/metrics` 路由、不创建 metrics exporter、不接入 Gin tracing middleware，也不改造 logger。`common/runtime/observability/tracing` 支持本地 OpenTelemetry SDK provider；用户服务本地默认 `observability.tracing.exporter: none`，该模式会生成标准 trace ID 和 span ID，但不导出 span，因此不强制部署 `otel-collector:4317`，也不会在 trace UI 中看到链路。
+- 当前阶段 observability 不注册 `/metrics` 路由、不创建 metrics exporter，也不接入外部 client tracing。`common/runtime/observability/tracing` 支持本地 OpenTelemetry SDK provider；用户服务 HTTP 入站请求通过 OTel Gin middleware 创建 server span，并使用 W3C `traceparent` / `tracestate` 传播。用户服务本地默认 `observability.tracing.exporter: none`，该模式会生成标准 trace ID 和 span ID，但不导出 span，因此不强制部署 `otel-collector:4317`，也不会在 trace UI 中看到链路。
 - OTLP endpoint 不应包含 token、Authorization header、账号密码、Cookie 或其他敏感凭据；未来 exporter 认证需要单独设计 Secret 注入方式。
 - `common/runtime/config.Load` 会读取 YAML、应用 `AEGISCORE_` 覆盖、反序列化为配置对象，并在返回前执行结构化字段校验；缺失必填字段、非法端口、非正超时、无效 Redis/PostgreSQL named config 或生产环境不安全配置会在启动期被拒绝。
 
@@ -170,14 +170,14 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 - 响应信封字段为 `success`、`code`、`message`、`data`。
 - API 错误码目前包括 `OK`、`BAD_REQUEST`、`NOT_FOUND`、`INTERNAL_ERROR`。
 
-## 9. Logging And Trace ID
+## 9. Logging And Trace Context
 
 - 日志使用 `common/runtime/logger` 提供的 Zap 封装和 context API。
-- HTTP trace header 是 `X-Trace-ID`，Gin context key 和日志字段统一为 `trace_id`。
+- HTTP trace 传播使用 W3C `traceparent` / `tracestate`；用户服务不读取、回传或兼容 `X-Trace-ID`。
 - HTTP access log 标准字段为 `trace_id`、`user_id`、`client_ip`、`method`、`path`、`status`、`latency_ms`；认证失败安全事件日志额外记录 `user_agent`。
 - 认证失败日志不得记录 password、token、Authorization header、Cookie 或原始请求体。
-- trace-id 中间件会将 trace-id 写入 Gin context、Go `context.Context` 和响应头。
-- 业务代码优先通过 `common/runtime/logger.Info(ctx, ...)`、`Warn(ctx, ...)`、`Error(ctx, ...)` 输出日志，避免绕过 context helper 导致 trace-id 丢失。
+- OTel Gin middleware 会将 server span 写入 Go `context.Context`；日志字段 `trace_id` 优先来自当前 OTel span context。
+- 业务代码优先通过 `common/runtime/logger.Info(ctx, ...)`、`Warn(ctx, ...)`、`Error(ctx, ...)` 输出日志，避免绕过 context helper 导致 trace context 丢失。
 - Error 级别日志默认不自动添加 stacktrace；关键运行时错误需要显式传入 `logger.StackTrace(...)` 或 `zap.Stack("stacktrace")`。
 - 文件日志按天写入带日期的分类文件，例如 `aegiscore-user-services.2026-06-02.info.log`；其中 `aegiscore-user-services` 是运行时 service name，不是目录名。
 

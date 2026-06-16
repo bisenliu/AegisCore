@@ -46,7 +46,7 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 
 | 步骤 | 代码位置 | 行为 |
 |---|---|---|
-| 中间件链 | `user-service/internal/providers/gin.go` | 创建 Gin engine，注册 trace-id、panic recovery、request logging、CORS |
+| 中间件链 | `user-service/internal/providers/gin.go` | 创建 Gin engine，注册 OTel Gin tracing、panic recovery、request logging、CORS |
 | 路由 provider | `user-service/internal/providers/routes.go` | 将 Fx 依赖适配为 router route params |
 | 路由总装 | `user-service/internal/router/router.go`、`health.go`、`openapi.go` | `router.go` 创建 public/protected route groups 并总装 route graph，`health.go` 注册 `/livez`、`/readyz`、`/startupz` 探针，`openapi.go` 注册 OpenAPI UI、OpenAPI JSON 和文档重定向 |
 | 参数解析 | `features/*/transport/http/controller.go`、`features/*/transport/http/input.go` | Controller 使用 `binding.BindOrAbort` 绑定 HTTP DTO 并执行结构校验；feature-local input preparer 负责绑定后的裁剪、默认值归一化、UUID/cursor/token 解析，并映射为 command/query |
@@ -155,7 +155,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 
 `common/runtime/scheduler` 是跨服务稳定、无业务语义的定时任务调度 primitive，当前基于 `github.com/robfig/cron/v3` v3 API 封装，并提供任务级本机防重叠、调度器全局并发限制、任务级分布式锁接口、Redis 锁实现、锁续租、优雅关闭和 `Metrics` 指标接口。Redis 锁等待由任务级 `WaitTimeout` 表达总等待上限，锁实现内部使用 `RetryPolicy` 做指数退避、最大单次间隔、可选最大尝试次数和 jitter，避免多副本锁竞争时形成固定频率 Redis 轮询。Scheduler 不得承载 feature 业务规则、业务 DTO、业务 Redis key schema、跨 feature 编排、可靠消息语义、outbox 持久化或具体 Prometheus registry wiring。需要多副本单实例执行的任务必须在任务级声明 `LockPolicy`，锁 TTL 必须解析为正值；长任务应启用续租，续租失败默认取消任务，避免锁失效后继续执行有副作用的业务逻辑。Prometheus 接入应通过服务侧实现 `Metrics` 接口完成，指标 label 中的 job key 必须是固定枚举式任务名，不得写入用户 ID、订单 ID 等高基数动态值。
 
-`common/runtime/config` 拥有跨服务稳定的 observability 配置契约，根配置段为 `observability.metrics` 与 `observability.tracing`。该契约只表达 metrics 是否开启、未来 HTTP metrics path、是否包含 runtime 指标、tracing 是否开启、采样率、exporter 类型、OTLP endpoint 和 insecure 开关；配置加载和生产类环境安全校验由 `common/runtime/config` 统一完成。当前阶段不实现 metrics exporter、中间件、`/metrics` 路由、Gin tracing middleware 或日志字段迁移。`common/runtime/observability/tracing` 已提供本地 OpenTelemetry SDK tracer provider、parent-based sampler、resource attributes、W3C TraceContext/Baggage propagator 和 Fx 生命周期关闭；`exporter: none` 不创建 OTLP exporter、不连接 Collector，只生成标准 trace/span context，供后续日志关联和上下文传播使用。`common/runtime/observability/metrics` 当前只保留未来跨服务 runtime primitive 边界；observability 包不得承载用户服务业务指标、dashboard、告警规则、部署清单、feature span 名称或业务 attribute。
+`common/runtime/config` 拥有跨服务稳定的 observability 配置契约，根配置段为 `observability.metrics` 与 `observability.tracing`。该契约只表达 metrics 是否开启、未来 HTTP metrics path、是否包含 runtime 指标、tracing 是否开启、采样率、exporter 类型、OTLP endpoint 和 insecure 开关；配置加载和生产类环境安全校验由 `common/runtime/config` 统一完成。当前阶段不实现 metrics exporter、`/metrics` 路由、OTLP exporter 或外部 client tracing。`common/runtime/observability/tracing` 已提供本地 OpenTelemetry SDK tracer provider、parent-based sampler、resource attributes、W3C TraceContext/Baggage propagator 和 Fx 生命周期关闭；用户服务通过 OTel Gin middleware 为 HTTP 入站请求创建 server span，`exporter: none` 不创建 OTLP exporter、不连接 Collector，只生成标准 trace/span context，供日志关联和上下文传播使用。`common/runtime/observability/metrics` 当前只保留未来跨服务 runtime primitive 边界；observability 包不得承载用户服务业务指标、dashboard、告警规则、部署清单、feature span 名称或业务 attribute。
 
 `common/security/casbin` 是跨服务稳定、无业务语义的 Casbin 授权 primitive，只承载 `subject/object/action` 请求三元组、通用 enforcer 调用包装、拒绝和未配置错误。`common/http/middleware` 中的 Casbin 授权中间件只负责 Gin 调用骨架，必须通过服务侧 resolver、authorizer 和 error handler 注入业务语义。它不得承载 user-service 的 `user:<user_uuid>`、`role:<role_uuid>` subject schema、权限目录、policy loader、super admin baseline、route diff 或服务特定错误码。
 
@@ -182,7 +182,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 ## 9. Infrastructure
 
 - 配置加载由 `common/runtime/config/loader.go` 负责，支持 YAML 文件和 `AEGISCORE_` 环境变量覆盖。
-- 可观测性配置由 `common/runtime/config` 的 `observability.metrics` 和 `observability.tracing` 承载；用户服务当前只提供本地默认配置，不会因为配置存在而自动注册 `/metrics`、创建 OTLP exporter 或启动 tracing middleware。`common/runtime/observability/tracing` 的 `exporter: none` provider 可在无 Collector 环境创建和关闭，并生成标准 OTel trace ID 与 span ID，但不提供 trace 可视化。
+- 可观测性配置由 `common/runtime/config` 的 `observability.metrics` 和 `observability.tracing` 承载；用户服务当前只提供本地默认配置，不会因为配置存在而自动注册 `/metrics` 或创建 OTLP exporter。`common/runtime/observability/tracing` 的 `exporter: none` provider 可在无 Collector 环境创建和关闭；OTel Gin middleware 会为 HTTP 入站请求生成标准 OTel trace ID 与 span ID，但不提供 trace 可视化。
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前只声明并连接 `postgres.user_db`。配置中出现其他 PostgreSQL 命名实例不代表用户服务会自动连接或迁移它们。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`。
 - 进程内短 TTL 缓存使用 `common/runtime/localcache`；消费侧负责选择 TTL、key 类型和值类型，并负责业务失效策略。
@@ -193,7 +193,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - 用户服务认证 Redis adapter 使用 `common/runtime/workerpool` 管理退出全部设备后的 detached session 后台物理清理；该 worker pool 只负责受控后台执行，不是 MQ、eventbus、outbox、通用 job system、可靠投递框架或 session 上限策略执行器。
 - 用户服务的外部系统防腐层边界位于 `user-service/internal/integration/`；其中 `integration/grpc` 只表示出站外部 gRPC client adapter，不表示本服务入站 gRPC transport；`integration/events` 只表示外部事件系统协议 adapter，不表示 feature consumer handler 或业务事件编排；当前没有 order、payment 等真实外部 client，也没有 Kafka、RabbitMQ、NATS、Redis Stream 等 broker dependency；当前也没有事件总线、outbox、publisher、subscriber、consumer handler 或异步投递 worker。
 - 部署资产位于 `deployments/`：用户服务 Dockerfile 位于 `deployments/docker/user-service.Dockerfile`，并要求从仓库根目录执行 build；`deployments/compose/` 承载本地依赖或本地服务启动配置，`deployments/k8s/` 承载 Kubernetes YAML，`deployments/helm/` 承载 Helm chart。部署清单、配置模板、Secret/ConfigMap 示例、探针、资源配额和服务暴露方式都留在 `deployments/` 或对应部署模板中，不迁入 `user-service/internal/shared`。
-- 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace header 为 `X-Trace-ID`，Gin context key 和日志字段统一为 `trace_id`。
+- 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace 传播使用 W3C `traceparent` / `tracestate`，日志字段 `trace_id` 来源于当前 OTel span context。
 - HTTP access log 标准字段为 `trace_id`、`user_id`、`client_ip`、`method`、`path`、`status`、`latency_ms`；认证失败安全事件日志应额外记录 `user_agent`，但不得记录 password、token、Authorization header、Cookie 或原始请求体。
 - 用户服务 HTTP 探针由 `internal/router/health.go` 拥有：`/livez` 只表示 Gin 进程可响应请求；`/readyz` 和 `/startupz` 由 `internal/providers/health.go` 注入 PostgreSQL `user_db`、Redis `cache_redis`、Casbin `LastError` 和 RBAC policy watcher 状态检查，失败时返回 HTTP 503 且不暴露 DSN、token、Cookie、SQL 或 stacktrace。
 - 代码注释统一使用中文，函数和方法注释必须使用中文；必要的协议名、库名、HTTP/JWT/Redis/PostgreSQL/Ent/Fx/Gin/trace-id 等技术术语可保留英文。人工维护源码不得新增英文注释；生成代码和第三方代码不为翻译注释而手写修改。

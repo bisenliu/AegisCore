@@ -1,12 +1,14 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -15,109 +17,19 @@ import (
 	"github.com/aegiscore/common/security/auth"
 )
 
-func TestTraceIDPropagatesHeaderToGinAndGoContext(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	engine := gin.New()
-	engine.Use(TraceID())
-	engine.GET("/trace", func(c *gin.Context) {
-		v, ok := c.Get(TraceIDKey)
-		if !ok || v != "trace-123" {
-			t.Fatalf("gin context trace id = %#v, %v; want trace-123, true", v, ok)
-		}
-		if got := traceID(c); got != "trace-123" {
-			t.Fatalf("traceID(c) = %q, want trace-123", got)
-		}
-		if got := logger.TraceIDFromContext(c.Request.Context()); got != "trace-123" {
-			t.Fatalf("TraceIDFromContext = %q, want trace-123", got)
-		}
-		c.Status(http.StatusNoContent)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/trace", nil)
-	req.Header.Set("X-Trace-ID", "trace-123")
-	rec := httptest.NewRecorder()
-	engine.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want 204", rec.Code)
-	}
-	if got := rec.Header().Get("X-Trace-ID"); got != "trace-123" {
-		t.Fatalf("X-Trace-ID = %q, want trace-123", got)
-	}
-}
-
-func TestTraceIDGeneratesWhenMissing(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	engine := gin.New()
-	engine.Use(TraceID())
-	engine.GET("/trace", func(c *gin.Context) {
-		got := traceID(c)
-		if got == "" {
-			t.Fatal("traceID(c) = empty, want generated value")
-		}
-		if ctxTraceID := logger.TraceIDFromContext(c.Request.Context()); ctxTraceID != got {
-			t.Fatalf("TraceIDFromContext = %q, want %q", ctxTraceID, got)
-		}
-		c.Status(http.StatusNoContent)
-	})
-
-	rec := httptest.NewRecorder()
-	engine.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/trace", nil))
-
-	if got := rec.Header().Get("X-Trace-ID"); got == "" {
-		t.Fatal("X-Trace-ID = empty, want generated value")
-	}
-}
-
-func TestTraceIDReplacesUnsafeInboundValue(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	engine := gin.New()
-	engine.Use(TraceIDWithOptions(TraceIDOptions{MaxLength: 8, Validate: func(value string) bool { return !strings.Contains(value, " ") }}))
-	engine.GET("/trace", func(c *gin.Context) {
-		got := traceID(c)
-		if got == "unsafe trace value" || got == "" {
-			t.Fatalf("traceID(c) = %q, want generated replacement", got)
-		}
-		if ctxTraceID := logger.TraceIDFromContext(c.Request.Context()); ctxTraceID != got {
-			t.Fatalf("TraceIDFromContext = %q, want %q", ctxTraceID, got)
-		}
-		c.Status(http.StatusNoContent)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/trace", nil)
-	req.Header.Set(HeaderTraceID, "unsafe trace value")
-	rec := httptest.NewRecorder()
-	engine.ServeHTTP(rec, req)
-
-	if got := rec.Header().Get(HeaderTraceID); got == "unsafe trace value" || got == "" {
-		t.Fatalf("X-Trace-ID = %q, want generated replacement", got)
-	}
-}
-
-func TestTraceIDStoresBaseLoggerInRequestContext(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+func TestContextLoggerUsesOTelTraceID(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core)
-	engine := gin.New()
-	engine.Use(func(c *gin.Context) {
-		c.Set(ContextKeyLogger, log)
-		c.Next()
-	}, TraceID())
-	engine.GET("/trace", func(c *gin.Context) {
-		logger.Info(c.Request.Context(), "context logger used")
-		c.Status(http.StatusNoContent)
-	})
+	ctx := logger.ToContext(contextWithTraceID(t, context.Background(), "00112233445566778899aabbccddeeff"), log)
 
-	req := httptest.NewRequest(http.MethodGet, "/trace", nil)
-	req.Header.Set(HeaderTraceID, "trace-context-log")
-	engine.ServeHTTP(httptest.NewRecorder(), req)
+	logger.Info(ctx, "context logger used")
 
 	entries := logs.FilterMessage("context logger used").All()
 	if len(entries) != 1 {
 		t.Fatalf("context log count = %d, want 1", len(entries))
 	}
-	if got := entries[0].ContextMap()[logger.TraceIDField]; got != "trace-context-log" {
-		t.Fatalf("%s = %q, want trace-context-log", logger.TraceIDField, got)
+	if got := entries[0].ContextMap()[logger.TraceIDField]; got != "00112233445566778899aabbccddeeff" {
+		t.Fatalf("%s = %q, want OTel trace id", logger.TraceIDField, got)
 	}
 }
 
@@ -127,7 +39,6 @@ func TestCORSWithOptions(t *testing.T) {
 	engine.Use(CORSWithOptions(CORSOptions{
 		AllowedMethods:   []string{http.MethodGet},
 		AllowedHeaders:   []string{"Content-Type"},
-		ExposedHeaders:   []string{HeaderTraceID},
 		AllowCredentials: true,
 		MaxAgeSeconds:    600,
 		ReflectOrigin:    true,
@@ -145,8 +56,8 @@ func TestCORSWithOptions(t *testing.T) {
 	if got := rec.Header().Get(HeaderVary); got != HeaderOrigin {
 		t.Fatalf("vary = %q", got)
 	}
-	if got := rec.Header().Get(HeaderAccessControlExposeHeaders); got != HeaderTraceID {
-		t.Fatalf("expose headers = %q", got)
+	if got := rec.Header().Get(HeaderAccessControlExposeHeaders); got != "" {
+		t.Fatalf("expose headers = %q, want empty", got)
 	}
 	if got := rec.Header().Get(HeaderAccessControlAllowCredentials); got != "true" {
 		t.Fatalf("allow credentials = %q", got)
@@ -161,11 +72,10 @@ func TestRequestLoggerIncludesTraceIDAndRequestFields(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core)
 	engine := gin.New()
-	engine.Use(TraceID(), RequestLogger(log))
+	engine.Use(otelTraceMiddleware(t, "00112233445566778899aabbccddeeff"), RequestLogger(log))
 	engine.GET("/ok", func(c *gin.Context) { c.Status(http.StatusAccepted) })
 
 	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
-	req.Header.Set("X-Trace-ID", "trace-log")
 	engine.ServeHTTP(httptest.NewRecorder(), req)
 
 	entries := logs.FilterMessage("http request completed").All()
@@ -173,7 +83,7 @@ func TestRequestLoggerIncludesTraceIDAndRequestFields(t *testing.T) {
 		t.Fatalf("request log count = %d, want 1", len(entries))
 	}
 	fields := entries[0].ContextMap()
-	if fields[logger.TraceIDField] != "trace-log" || fields["method"] != http.MethodGet || fields["path"] != "/ok" || fields["status"] != int64(http.StatusAccepted) || fields[auth.UserIDKey] != anonymousUserID {
+	if fields[logger.TraceIDField] != "00112233445566778899aabbccddeeff" || fields["method"] != http.MethodGet || fields["path"] != "/ok" || fields["status"] != int64(http.StatusAccepted) || fields[auth.UserIDKey] != anonymousUserID {
 		t.Fatalf("request log fields = %#v", fields)
 	}
 	if _, ok := fields["latency_ms"]; !ok {
@@ -189,11 +99,10 @@ func TestRequestLoggerUsesSharedClientIPExtraction(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core)
 	engine := gin.New()
-	engine.Use(TraceID(), RequestLogger(log))
+	engine.Use(RequestLogger(log))
 	engine.GET("/ok", func(c *gin.Context) { c.Status(http.StatusAccepted) })
 
 	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
-	req.Header.Set("X-Trace-ID", "trace-log")
 	req.Header.Set("X-Forwarded-For", "203.0.113.10, 10.0.0.1")
 	engine.ServeHTTP(httptest.NewRecorder(), req)
 
@@ -225,11 +134,10 @@ func TestRequestLoggerSelectsLevelByStatus(t *testing.T) {
 			core, logs := observer.New(zap.DebugLevel)
 			log := zap.New(core)
 			engine := gin.New()
-			engine.Use(TraceID(), RequestLogger(log))
+			engine.Use(RequestLogger(log))
 			engine.GET("/status", func(c *gin.Context) { c.Status(tt.status) })
 
 			req := httptest.NewRequest(http.MethodGet, "/status", nil)
-			req.Header.Set(HeaderTraceID, "trace-level")
 			engine.ServeHTTP(httptest.NewRecorder(), req)
 
 			entries := logs.FilterMessage("http request completed").All()
@@ -248,14 +156,13 @@ func TestRequestLoggerIncludesUserIDFromRequestContext(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core)
 	engine := gin.New()
-	engine.Use(TraceID(), RequestLogger(log))
+	engine.Use(RequestLogger(log))
 	engine.GET("/me", func(c *gin.Context) {
 		c.Request = c.Request.WithContext(auth.WithUserID(c.Request.Context(), "u-123"))
 		c.Status(http.StatusOK)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/me", nil)
-	req.Header.Set(HeaderTraceID, "trace-user")
 	engine.ServeHTTP(httptest.NewRecorder(), req)
 
 	entries := logs.FilterMessage("http request completed").All()
@@ -273,7 +180,7 @@ func TestRequestLoggerWithOptionsSkipsMatchingRequest(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core)
 	engine := gin.New()
-	engine.Use(TraceID(), RequestLoggerWithOptions(log, RequestLoggerOptions{
+	engine.Use(RequestLoggerWithOptions(log, RequestLoggerOptions{
 		Skip: func(c *gin.Context) bool {
 			return c.FullPath() == "/skip"
 		},
@@ -298,11 +205,10 @@ func TestRecoveryIncludesTraceIDAndEnvelope(t *testing.T) {
 	core, logs := observer.New(zap.ErrorLevel)
 	log := zap.New(core)
 	engine := gin.New()
-	engine.Use(TraceID(), Recovery(log))
+	engine.Use(otelTraceMiddleware(t, "00112233445566778899aabbccddeeff"), Recovery(log))
 	engine.GET("/panic", func(_ *gin.Context) { panic("boom") })
 
 	req := httptest.NewRequest(http.MethodGet, "/panic", nil)
-	req.Header.Set("X-Trace-ID", "trace-panic")
 	rec := httptest.NewRecorder()
 	engine.ServeHTTP(rec, req)
 
@@ -317,10 +223,36 @@ func TestRecoveryIncludesTraceIDAndEnvelope(t *testing.T) {
 		t.Fatalf("recovery log count = %d, want 1", len(entries))
 	}
 	fields := entries[0].ContextMap()
-	if fields[logger.TraceIDField] != "trace-panic" || fields["panic"] != "boom" {
+	if fields[logger.TraceIDField] != "00112233445566778899aabbccddeeff" || fields["panic"] != "boom" {
 		t.Fatalf("recovery log fields = %#v", fields)
 	}
 	if _, ok := fields["stack"]; !ok {
 		t.Fatalf("recovery log missing stack: %#v", fields)
 	}
+}
+
+func otelTraceMiddleware(t *testing.T, traceIDHex string) gin.HandlerFunc {
+	t.Helper()
+	return func(c *gin.Context) {
+		c.Request = c.Request.WithContext(contextWithTraceID(t, c.Request.Context(), traceIDHex))
+		c.Next()
+	}
+}
+
+func contextWithTraceID(t *testing.T, ctx context.Context, traceIDHex string) context.Context {
+	t.Helper()
+	traceID, err := trace.TraceIDFromHex(traceIDHex)
+	if err != nil {
+		t.Fatalf("TraceIDFromHex: %v", err)
+	}
+	spanID, err := trace.SpanIDFromHex("0102030405060708")
+	if err != nil {
+		t.Fatalf("SpanIDFromHex: %v", err)
+	}
+	spanContext := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: traceID,
+		SpanID:  spanID,
+		Remote:  true,
+	})
+	return trace.ContextWithSpanContext(ctx, spanContext)
 }

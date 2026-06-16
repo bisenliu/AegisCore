@@ -2,13 +2,17 @@ package providers
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
 	commonmw "github.com/aegiscore/common/http/middleware"
 	"github.com/aegiscore/common/runtime/config"
+	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 	"github.com/aegiscore/user-service/internal/router"
 )
 
@@ -18,10 +22,14 @@ type GinParams struct {
 
 	Config *config.Config
 	Log    *zap.Logger
+	Trace  *commontracing.Provider
 }
 
 // NewGinEngine 创建 Gin engine，应用可信代理配置并安装共享中间件。
 func NewGinEngine(params GinParams) (*gin.Engine, error) {
+	if params.Trace == nil || params.Trace.TracerProvider() == nil {
+		return nil, fmt.Errorf("tracing provider is required")
+	}
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	if len(params.Config.HTTP.TrustedProxies) > 0 {
@@ -30,7 +38,12 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 		}
 	}
 	engine.Use(
-		commonmw.TraceID(),
+		otelgin.Middleware(params.Config.App.Name,
+			otelgin.WithTracerProvider(params.Trace.TracerProvider()),
+			otelgin.WithPropagators(params.Trace.TextMapPropagator()),
+			otelgin.WithFilter(traceBusinessRequest),
+		),
+		renameHTTPServerSpan(),
 		commonmw.Recovery(params.Log),
 		commonmw.RequestLoggerWithOptions(params.Log, commonmw.RequestLoggerOptions{Skip: skipSuccessfulHealthProbeLog}),
 		commonmw.CORS(),
@@ -40,4 +53,25 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 
 func skipSuccessfulHealthProbeLog(c *gin.Context) bool {
 	return c.Writer.Status() < 400 && router.IsHealthProbePath(c.Request.URL.Path)
+}
+
+func traceBusinessRequest(request *http.Request) bool {
+	return !router.IsHealthProbePath(request.URL.Path)
+}
+
+func renameHTTPServerSpan() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Next()
+		if span := trace.SpanFromContext(c.Request.Context()); span.SpanContext().IsValid() {
+			span.SetName(httpServerSpanName(c))
+		}
+	}
+}
+
+func httpServerSpanName(c *gin.Context) string {
+	path := c.FullPath()
+	if path == "" {
+		path = c.Request.URL.Path
+	}
+	return c.Request.Method + " " + path
 }

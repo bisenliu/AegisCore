@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -47,8 +48,14 @@ func TraceIDFromContext(ctx context.Context) string {
 	if ctx == nil {
 		return ""
 	}
-	traceID, _ := ctx.Value(traceIDContextKey{}).(string)
-	return traceID
+	if traceID, _ := ctx.Value(traceIDContextKey{}).(string); traceID != "" {
+		return traceID
+	}
+	spanContext := trace.SpanContextFromContext(ctx)
+	if !spanContext.TraceID().IsValid() {
+		return ""
+	}
+	return spanContext.TraceID().String()
 }
 
 // WithContext 基于 base 派生 logger，并附加 ctx 中的 trace-id 字段。

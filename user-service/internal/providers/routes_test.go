@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
+	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
@@ -47,13 +49,17 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		Auth: config.AuthConfig{
 			JWT: config.JWTConfig{Secret: "secret"},
 		},
+		Observability: config.ObservabilityConfig{
+			Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1, Exporter: "none"},
+		},
 	}
 	core, logs := observer.New(zap.DebugLevel)
 	log := zap.New(core)
 	jwtService := commonauth.NewJWTService(cfg.Auth)
 	tokenVersions := &routeTokenVersionValidator{version: 1}
 	authorizer := &routeAuthorizer{allowed: true}
-	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log})
+	traceProvider := newRouteTestTracingProvider(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log, Trace: traceProvider})
 	if err != nil {
 		t.Fatalf("NewGinEngine: %v", err)
 	}
@@ -100,16 +106,12 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
 			request.Header.Set("Content-Type", "application/json")
-			request.Header.Set("X-Trace-ID", "trace-public-test")
 			if tt.path == "/api/v1/auth/change-password" {
 				request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+"password-change-token")
 			}
 			engine.ServeHTTP(recorder, request)
 			if recorder.Code == http.StatusUnauthorized {
 				t.Fatalf("%s status = %d, want not unauthorized", tt.path, recorder.Code)
-			}
-			if recorder.Header().Get("X-Trace-ID") != "trace-public-test" {
-				t.Fatalf("X-Trace-ID = %q, want trace-public-test", recorder.Header().Get("X-Trace-ID"))
 			}
 		})
 	}
@@ -193,14 +195,10 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
 		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
-		request.Header.Set("X-Trace-ID", "trace-auth-test")
 		authorizer.reset()
 		engine.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
-		}
-		if recorder.Header().Get("X-Trace-ID") != "trace-auth-test" {
-			t.Fatalf("X-Trace-ID = %q, want trace-auth-test", recorder.Header().Get("X-Trace-ID"))
 		}
 		assertSuccessEnvelope(t, recorder)
 		if authorizer.calls != 1 || authorizer.userID != routeAuthUserID || authorizer.pathTemplate != "/api/v1/users/:user_id" || authorizer.method != http.MethodGet {
@@ -212,7 +210,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			t.Fatal("request log count = 0, want at least one")
 		}
 		fields := entries[len(entries)-1].ContextMap()
-		if fields[logger.TraceIDField] != "trace-auth-test" || fields["method"] != http.MethodGet || fields["path"] != "/api/v1/users/:user_id" || fields["status"] != int64(http.StatusOK) || fields[commonauth.UserIDKey] != routeAuthUserID {
+		if !validTraceIDField(fields[logger.TraceIDField]) || fields["method"] != http.MethodGet || fields["path"] != "/api/v1/users/:user_id" || fields["status"] != int64(http.StatusOK) || fields[commonauth.UserIDKey] != routeAuthUserID {
 			t.Fatalf("request log fields = %#v", fields)
 		}
 		if _, ok := fields["latency_ms"]; !ok {
@@ -273,7 +271,6 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		engine.GET("/panic-route-chain", func(_ *gin.Context) { panic("route-chain boom") })
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/panic-route-chain", nil)
-		request.Header.Set("X-Trace-ID", "trace-panic-route-chain")
 		engine.ServeHTTP(recorder, request)
 
 		assertFailureEnvelope(t, recorder, http.StatusInternalServerError, contracterrors.CodeInternalError)
@@ -282,7 +279,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			t.Fatalf("panic recovered logs = %d, want 1", len(entries))
 		}
 		fields := entries[0].ContextMap()
-		if fields[logger.TraceIDField] != "trace-panic-route-chain" || fields["panic"] != "route-chain boom" {
+		if !validTraceIDField(fields[logger.TraceIDField]) || fields["panic"] != "route-chain boom" {
 			t.Fatalf("recovery log fields = %#v", fields)
 		}
 		if _, ok := fields["stack"]; !ok {
@@ -299,6 +296,33 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
 		}
 	})
+}
+
+func newRouteTestTracingProvider(t *testing.T, cfg *config.Config) *commontracing.Provider {
+	t.Helper()
+	provider, err := commontracing.NewProvider(context.Background(), commontracing.Options{
+		Config:      cfg.Observability.Tracing,
+		ServiceName: cfg.App.Name,
+		Environment: cfg.App.Environment,
+	})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := provider.Shutdown(context.Background()); err != nil {
+			t.Fatalf("Shutdown tracing provider: %v", err)
+		}
+	})
+	return provider
+}
+
+func validTraceIDField(value any) bool {
+	text, ok := value.(string)
+	if !ok {
+		return false
+	}
+	traceID, err := oteltrace.TraceIDFromHex(text)
+	return err == nil && traceID.IsValid()
 }
 
 type routeAuthUserCommands struct{}

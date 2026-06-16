@@ -18,6 +18,8 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
+	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.49.0
+	go.opentelemetry.io/otel/trace v1.24.0
 	go.uber.org/fx v1.23.0
 	go.uber.org/zap v1.26.0
 	golang.org/x/sync v0.12.0
@@ -43,6 +45,8 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
 	github.com/getkin/kin-openapi v0.140.0 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
+	github.com/go-logr/logr v1.4.1 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/inflect v0.19.0 // indirect
 	github.com/go-openapi/jsonpointer v0.22.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.6 // indirect
@@ -90,6 +94,9 @@ require (
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	github.com/zclconf/go-cty v1.14.4 // indirect
 	github.com/zclconf/go-cty-yaml v1.1.0 // indirect
+	go.opentelemetry.io/otel v1.24.0 // indirect
+	go.opentelemetry.io/otel/metric v1.24.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.24.0 // indirect
 	go.uber.org/dig v1.18.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/arch v0.8.0 // indirect

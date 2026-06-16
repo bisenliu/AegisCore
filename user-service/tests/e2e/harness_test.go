@@ -22,7 +22,6 @@ import (
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
-	commonmw "github.com/aegiscore/common/http/middleware"
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/testing/containers"
@@ -34,7 +33,6 @@ const envTestE2E = "AEGISCORE_TEST_E2E"
 type httpFlowHarness struct {
 	engine      *gin.Engine
 	postgresDSN string
-	traceID     string
 }
 
 type testEnvelope struct {
@@ -70,7 +68,7 @@ func newHTTPFlowHarness(t *testing.T) *httpFlowHarness {
 	app.RequireStart()
 	t.Cleanup(func() { app.RequireStop() })
 
-	return &httpFlowHarness{engine: engine, postgresDSN: postgres.DSN, traceID: "trace-http-flow"}
+	return &httpFlowHarness{engine: engine, postgresDSN: postgres.DSN}
 }
 
 func requireE2EEnabled(t *testing.T) {
@@ -199,7 +197,6 @@ func (h *httpFlowHarness) request(t *testing.T, method string, path string, body
 	request := httptest.NewRequest(method, path, bytes.NewReader(payload))
 	request.RemoteAddr = "203.0.113.10:12345"
 	request.Header.Set("User-Agent", "user-service-http-flow-test")
-	request.Header.Set(commonmw.HeaderTraceID, h.traceID)
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
@@ -208,9 +205,6 @@ func (h *httpFlowHarness) request(t *testing.T, method string, path string, body
 	}
 	recorder := httptest.NewRecorder()
 	h.engine.ServeHTTP(recorder, request)
-	if got := recorder.Header().Get(commonmw.HeaderTraceID); got != h.traceID {
-		t.Fatalf("%s %s trace header = %q, want %q", method, path, got, h.traceID)
-	}
 	return recorder
 }
 
