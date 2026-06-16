@@ -30,7 +30,7 @@ type AppConfig struct {
 	Environment string `mapstructure:"environment"`
 }
 
-// HTTPConfig 包含服务地址、超时、关闭和代理设置。
+// HTTPConfig 包含服务地址、超时、关闭、代理和诊断端点设置。
 type HTTPConfig struct {
 	Host            string        `mapstructure:"host"`
 	Port            int           `mapstructure:"port"`
@@ -39,6 +39,13 @@ type HTTPConfig struct {
 	IdleTimeout     time.Duration `mapstructure:"idle_timeout"`
 	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
 	TrustedProxies  []string      `mapstructure:"trusted_proxies"`
+	Pprof           PprofConfig   `mapstructure:"pprof"`
+}
+
+// PprofConfig 控制服务是否挂载 Go runtime pprof 诊断端点。
+type PprofConfig struct {
+	Enabled  bool   `mapstructure:"enabled"`
+	BasePath string `mapstructure:"base_path"`
 }
 
 // AuthConfig 包含认证 token 与会话校验设置。

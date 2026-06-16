@@ -5,6 +5,7 @@ import (
 	"go.uber.org/zap"
 
 	commonmw "github.com/aegiscore/common/http/middleware"
+	commonpprof "github.com/aegiscore/common/http/pprof"
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
@@ -20,6 +21,7 @@ type RouteParams struct {
 	Environment           string
 	Log                   *zap.Logger
 	JWT                   *commonauth.JWTService
+	HTTPConfig            config.HTTPConfig
 	AuthConfig            config.AuthConfig
 	HealthChecks          HealthChecks
 	TokenVersionValidator commonauth.TokenVersionValidator
@@ -34,7 +36,15 @@ type RouteParams struct {
 func RegisterUserServiceHTTPRoutes(engine *gin.Engine, params RouteParams) {
 	registerHealthRoutes(engine, params.ServiceName, params.HealthChecks)
 	RegisterOpenAPI(engine, params.Environment)
+	registerPprofRoutes(engine, params.HTTPConfig.Pprof)
 	registerV1Routes(engine, params)
+}
+
+func registerPprofRoutes(engine *gin.Engine, cfg config.PprofConfig) {
+	if !cfg.Enabled {
+		return
+	}
+	commonpprof.Register(engine, commonpprof.Options{BasePath: cfg.BasePath})
 }
 
 func registerV1Routes(engine *gin.Engine, params RouteParams) {

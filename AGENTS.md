@@ -13,7 +13,7 @@
 ## 2. Repository Shape
 
 - `go.work`：Go workspace，包含 `common` 和 `user-service` 两个模块。
-- `common/`：跨服务稳定契约和基础能力，按 `contract`、`runtime`、`http`、`security`、`testing`、`validation` 分类组织；`contract/errors` 承载全局错误码，`contract/pagination` 承载分页契约，`contract/response` 承载 HTTP 响应信封 DTO，`http/binding` 承载 Gin 请求绑定和校验失败响应适配层，`http/response` 承载 Gin 响应输出 helper，`http/middleware` 可承载无业务语义的 Gin 中间件骨架，`http/openapi` 承载无服务业务语义的 OpenAPI 构建期转换和 Go embed 渲染 helper，`security/casbin` 承载无业务语义的 Casbin 三元组和 enforcer 包装，`runtime/localcache` 承载无业务语义的进程内短 TTL 缓存 primitive，`runtime/rediskey` 承载无业务语义 Redis key 构造规则，`runtime/workerpool` 承载基于 ants 的无业务语义后台任务池 primitive，`runtime/scheduler` 承载基于 cron 的无业务语义定时调度 primitive、任务级分布式锁接口和监控指标接口，`testing` 仅承载跨模块测试基础设施和无业务语义 fixture；未来 `runtime/eventbus` 或 `runtime/outbox` 只有在存在跨服务稳定 runtime primitive 和单独设计时才可新增；不得作为服务特定 helper 的兜底目录。
+- `common/`：跨服务稳定契约和基础能力，按 `contract`、`runtime`、`http`、`security`、`testing`、`validation` 分类组织；`contract/errors` 承载全局错误码，`contract/pagination` 承载分页契约，`contract/response` 承载 HTTP 响应信封 DTO，`http/binding` 承载 Gin 请求绑定和校验失败响应适配层，`http/response` 承载 Gin 响应输出 helper，`http/middleware` 可承载无业务语义的 Gin 中间件骨架，`http/openapi` 承载无服务业务语义的 OpenAPI 构建期转换和 Go embed 渲染 helper，`http/pprof` 承载无业务语义的 Go runtime pprof 路由注册 helper，`security/casbin` 承载无业务语义的 Casbin 三元组和 enforcer 包装，`runtime/localcache` 承载无业务语义的进程内短 TTL 缓存 primitive，`runtime/rediskey` 承载无业务语义 Redis key 构造规则，`runtime/workerpool` 承载基于 ants 的无业务语义后台任务池 primitive，`runtime/scheduler` 承载基于 cron 的无业务语义定时调度 primitive、任务级分布式锁接口和监控指标接口，`testing` 仅承载跨模块测试基础设施和无业务语义 fixture；未来 `runtime/eventbus` 或 `runtime/outbox` 只有在存在跨服务稳定 runtime primitive 和单独设计时才可新增；不得作为服务特定 helper 的兜底目录。
 - `user-service/`：用户服务 HTTP 运行时和 Go module，包含 Cobra 入口、Fx 组装、Gin 路由、Ent schema、Atlas migration、服务侧 OpenAPI 生成脚本和薄 wrapper，以及按 feature 组织的业务代码。
 - `user-service/internal/providers/`：用户服务级 Fx provider，集中承载 Gin engine、HTTP route registration、JWT service、PostgreSQL/Redis named resources 和 Ent clients 的服务侧组装；不得承载 feature 业务逻辑。
 - `user-service/internal/integration/`：用户服务访问外部系统的防腐层边界，按 `http/`、`grpc/`、`events/` 分类组织；`integration/events` 仅承载外部事件系统 producer/consumer 协议 adapter、envelope/topic 映射和 broker 错误语义归一化，不承载 feature consumer handler、业务编排、outbox persistence 或本服务持久化访问；当前没有真实外部系统调用时只保留 README 或 package doc，占位不得引入未使用代码。
@@ -76,6 +76,7 @@
 - 共享 Casbin 授权 helper：`common/security/casbin/authorizer.go`
 - 共享 Gin Casbin 授权中间件骨架：`common/http/middleware/casbin.go`
 - 共享 OpenAPI 构建期转换 helper：`common/http/openapi`
+- 共享 pprof 路由注册 helper：`common/http/pprof`
 - 共享配置加载：`common/runtime/config/loader.go`
 - 共享配置 Fx provider：`common/runtime/config/fx.go`
 - 共享日志 Fx provider：`common/runtime/logger/fx.go`

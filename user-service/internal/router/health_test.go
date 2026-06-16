@@ -100,7 +100,7 @@ type staticHealthChecker struct {
 }
 
 func (c staticHealthChecker) Check(context.Context) HealthCheckResult {
-	return HealthCheckResult{Name: c.Name, Status: c.Status, Message: c.Message}
+	return HealthCheckResult(c)
 }
 
 func executeHealthRequest(engine *gin.Engine, path string) *httptest.ResponseRecorder {

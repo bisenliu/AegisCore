@@ -40,6 +40,7 @@ func RegisterRoutes(params RegisterRouteParams) {
 		Environment:           params.Config.App.Environment,
 		Log:                   params.Log,
 		JWT:                   params.JWT,
+		HTTPConfig:            params.Config.HTTP,
 		AuthConfig:            params.Config.Auth,
 		HealthChecks:          params.Health,
 		TokenVersionValidator: params.TokenVersions,

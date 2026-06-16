@@ -23,6 +23,9 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cfg.HTTP.Port != 18080 {
 		t.Fatalf("HTTP.Port = %d, want 18080", cfg.HTTP.Port)
 	}
+	if !cfg.HTTP.Pprof.Enabled || cfg.HTTP.Pprof.BasePath != "/internal/debug/pprof" {
+		t.Fatalf("HTTP.Pprof = %#v, want enabled /internal/debug/pprof", cfg.HTTP.Pprof)
+	}
 	if cfg.Auth.JWT.Secret != "test-secret" {
 		t.Fatalf("Auth.JWT.Secret = %q, want test-secret", cfg.Auth.JWT.Secret)
 	}
@@ -500,6 +503,9 @@ http:
   shutdown_timeout: 10s
   trusted_proxies:
     - 127.0.0.1
+  pprof:
+    enabled: true
+    base_path: /internal/debug/pprof
 
 auth:
   jwt:
@@ -586,7 +592,10 @@ func configYAMLWithSection(section string) string {
   idle_timeout: 60s
   shutdown_timeout: 10s
   trusted_proxies:
-    - 127.0.0.1`,
+    - 127.0.0.1
+  pprof:
+    enabled: false
+    base_path: /debug/pprof`,
 		"auth": `auth:
   jwt:
     secret: test-secret

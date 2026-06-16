@@ -27,6 +27,11 @@ http:
   trusted_proxies:
     # 本地回环代理地址；生产环境应替换为网关、Ingress 或负载均衡器地址段。
     - 127.0.0.1
+  pprof:
+    # 是否挂载 Go runtime pprof 诊断端点；会暴露进程运行时信息，生产环境默认保持关闭。
+    enabled: false
+    # pprof 路由根路径；开启后可用 go tool pprof 访问 /debug/pprof/heap 等 profile。
+    base_path: /debug/pprof
 
 auth:
   jwt:
