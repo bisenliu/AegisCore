@@ -147,7 +147,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - `common/testing/`：跨模块测试基础设施和无业务语义 fixture，仅供测试代码使用；真实 PostgreSQL/Redis integration helper 放在 `testing/containers`，基础测试值生成放在 `testing/fixtures`。
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。
 
-`common/runtime/workerpool` 是跨服务稳定、无业务语义的后台任务池 primitive，当前基于 ants 封装并提供并发限制、满载拒绝、错误日志、内存统计和 Fx 生命周期关闭。它只能承载运行时任务执行能力，不承载 feature 业务规则、业务 DTO、跨 feature 编排、事件投递语义、outbox 持久化、可靠消息语义或影响 token 有效性的 session 安全策略。Feature application 不应依赖 worker pool；需要后台清理的 infrastructure adapter 可以把它作为内部 runtime 依赖使用。高并发正式系统中后台池应按用途命名为专用 Fx 资源，例如 auth session purge 使用 `auth_session_purge_pool`，不得把多个业务场景混用到一个全局共享池。
+`common/runtime/workerpool` 是跨服务稳定、无业务语义的后台任务池 primitive，当前基于 ants 封装并提供并发限制、池满阻塞背压、错误日志、统计快照和 Fx 生命周期关闭。它只能承载运行时任务执行能力，不承载 feature 业务规则、业务 DTO、跨 feature 编排、事件投递语义、outbox 持久化、可靠消息语义或影响 token 有效性的 session 安全策略。Feature application 不应依赖 worker pool；需要后台清理的 infrastructure adapter 可以把它作为内部 runtime 依赖使用。高并发正式系统中后台池应按用途命名为专用 Fx 资源，例如 auth session purge 使用 `auth_session_purge_pool`，不得把多个业务场景混用到一个全局共享池。监控接入可使用 worker pool stats 中的 running、free、waiting、queued、failed 和 panicked 等稳定快照字段。
 
 `common/runtime/rediskey` 是跨服务稳定、无业务语义的 Redis key 构造 primitive，只承载 namespace、分段拼接、prefix 和 Redis Cluster hash tag 等通用规则。它不得承载 auth/user/role/permission 等 feature key schema。Feature 私有缓存、索引、会话、投影和临时 key 由对应 `features/<feature>/infrastructure/redis` 拥有；未来真正通用的 runtime primitive（例如 rate limiter、distributed lock、idempotency）如果进入 `common/runtime/<primitive>`，由该 primitive 自己拥有自己的 key schema。
 

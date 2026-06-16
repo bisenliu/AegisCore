@@ -40,7 +40,6 @@ type Pool struct {
 	cancel      context.CancelFunc
 	workersPool *ants.Pool
 
-	mu        sync.Mutex
 	closeOnce sync.Once
 	closed    atomic.Bool
 
@@ -72,7 +71,7 @@ func NewUnmanaged(log *zap.Logger, opts Options) (*Pool, error) {
 		log = zap.NewNop()
 	}
 
-	antsPool, err := ants.NewPool(opts.Workers, ants.WithNonblocking(true))
+	antsPool, err := ants.NewPool(opts.Workers, ants.WithPreAlloc(true))
 	if err != nil {
 		return nil, fmt.Errorf("create worker pool %s: %w", name, err)
 	}
@@ -89,7 +88,7 @@ func NewUnmanaged(log *zap.Logger, opts Options) (*Pool, error) {
 	return pool, nil
 }
 
-// Submit 将任务提交给 ants 执行；当池已满时立即返回 ErrQueueFull，避免调用方被后台清理阻塞。
+// Submit 将任务提交给 ants 执行；当池已满时阻塞等待空闲 worker。
 // 任务执行时同时受提交方 context 和 pool 生命周期 context 控制。
 func (p *Pool) Submit(ctx context.Context, task Task) error {
 	if ctx == nil {
@@ -104,8 +103,6 @@ func (p *Pool) Submit(ctx context.Context, task Task) error {
 	default:
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	if p.closed.Load() {
 		p.counters.rejected.Add(1)
 		return ErrClosed
@@ -120,7 +117,8 @@ func (p *Pool) Submit(ctx context.Context, task Task) error {
 		p.counters.queued.Add(-1)
 		p.counters.rejected.Add(1)
 		if errors.Is(err, ants.ErrPoolOverload) {
-			p.log.Warn("worker pool full", p.fields(task, zap.Int("workers", p.workers))...)
+			// 当前池使用阻塞提交，普通池满会等待；该分支保留给未来启用 ants 过载保护时统一映射错误。
+			p.log.Warn("worker pool overloaded", p.fields(task, zap.Int("workers", p.workers))...)
 			return ErrQueueFull
 		}
 		if errors.Is(err, ants.ErrPoolClosed) {
@@ -145,6 +143,8 @@ func (p *Pool) Stats() Stats {
 		Panicked:  p.counters.panicked.Load(),
 		Queued:    p.counters.queued.Load(),
 		Running:   p.counters.running.Load(),
+		Free:      p.freeWorkers(),
+		Waiting:   p.waitingSubmitters(),
 		Closed:    p.closed.Load(),
 	}
 }
@@ -156,9 +156,7 @@ func (p *Pool) Stop(ctx context.Context) error {
 	}
 	shouldRelease := false
 	p.closeOnce.Do(func() {
-		p.mu.Lock()
 		p.closed.Store(true)
-		p.mu.Unlock()
 		shouldRelease = true
 	})
 	if !shouldRelease {
@@ -221,6 +219,14 @@ func (p *Pool) fields(task Task, fields ...zap.Field) []zap.Field {
 	all = append(all, task.Fields...)
 	all = append(all, fields...)
 	return all
+}
+
+func (p *Pool) freeWorkers() int64 {
+	return int64(p.workersPool.Free())
+}
+
+func (p *Pool) waitingSubmitters() int64 {
+	return int64(p.workersPool.Waiting())
 }
 
 func validateTask(task Task) error {

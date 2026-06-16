@@ -46,8 +46,8 @@ func TestPoolLimitsConcurrency(t *testing.T) {
 	}
 }
 
-func TestPoolQueueFull(t *testing.T) {
-	pool := newTestPool(t, Options{Name: "test-queue-full", Workers: 1})
+func TestPoolSubmitWaitsWhenWorkersAreBusy(t *testing.T) {
+	pool := newTestPool(t, Options{Name: "test-submit-waits", Workers: 1})
 	defer stopTestPool(t, pool)
 
 	release := make(chan struct{})
@@ -56,15 +56,22 @@ func TestPoolQueueFull(t *testing.T) {
 	}
 	waitForPool(t, pool, func(stats Stats) bool { return stats.Running == 1 })
 
-	err := pool.Submit(context.Background(), Task{Name: "rejected", Run: func(context.Context) error { return nil }})
+	accepted := make(chan error, 1)
+	go func() {
+		accepted <- pool.Submit(context.Background(), Task{Name: "waiting", Run: func(context.Context) error { return nil }})
+	}()
+	waitForPool(t, pool, func(stats Stats) bool { return stats.Waiting == 1 && stats.Queued == 1 })
 
-	if !errors.Is(err, ErrQueueFull) {
-		t.Fatalf("Submit err = %v, want ErrQueueFull", err)
-	}
-	if got := pool.Stats().Rejected; got != 1 {
-		t.Fatalf("Rejected = %d, want 1", got)
-	}
 	close(release)
+	select {
+	case err := <-accepted:
+		if err != nil {
+			t.Fatalf("Submit waiting: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Submit did not return after worker became available")
+	}
+	waitForPool(t, pool, func(stats Stats) bool { return stats.Completed == 2 && stats.Rejected == 0 })
 }
 
 func TestPoolTaskErrorIsObservable(t *testing.T) {
@@ -210,6 +217,44 @@ func TestPoolStopWaitsForAcceptedTasks(t *testing.T) {
 	}
 	if completed.Load() != 2 {
 		t.Fatalf("completed = %d, want 2", completed.Load())
+	}
+}
+
+func TestPoolStopDoesNotWaitForBlockedSubmitLock(t *testing.T) {
+	pool := newTestPool(t, Options{Name: "test-stop-during-blocked-submit", Workers: 1})
+	release := make(chan struct{})
+	if err := pool.Submit(context.Background(), Task{Name: "running", Run: waitTask(release)}); err != nil {
+		t.Fatalf("Submit running: %v", err)
+	}
+	waitForPool(t, pool, func(stats Stats) bool { return stats.Running == 1 })
+
+	submitDone := make(chan error, 1)
+	go func() {
+		submitDone <- pool.Submit(context.Background(), Task{Name: "waiting", Run: func(context.Context) error { return nil }})
+	}()
+	waitForPool(t, pool, func(stats Stats) bool { return stats.Waiting == 1 })
+
+	stopDone := make(chan error, 1)
+	go func() {
+		stopDone <- pool.Stop(context.Background())
+	}()
+	close(release)
+
+	select {
+	case err := <-stopDone:
+		if err != nil {
+			t.Fatalf("Stop: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Stop did not return")
+	}
+	select {
+	case err := <-submitDone:
+		if err != nil && !errors.Is(err, ErrClosed) {
+			t.Fatalf("blocked Submit err = %v, want nil or ErrClosed", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("blocked Submit did not return")
 	}
 }
 
