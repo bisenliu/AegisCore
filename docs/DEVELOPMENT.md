@@ -176,7 +176,7 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 - HTTP trace 传播使用 W3C `traceparent` / `tracestate`；用户服务不读取、回传或兼容 `X-Trace-ID`。
 - HTTP access log 标准字段为 `trace_id`、`user_id`、`client_ip`、`method`、`path`、`status`、`latency_ms`；认证失败安全事件日志额外记录 `user_agent`。
 - 认证失败日志不得记录 password、token、Authorization header、Cookie 或原始请求体。
-- OTel Gin middleware 会将 server span 写入 Go `context.Context`；日志字段 `trace_id` 优先来自当前 OTel span context。
+- OTel Gin middleware 会将 server span 写入 Go `context.Context`；`common/runtime/logger` context helper 会从当前 OTel span context 自动追加 `trace_id` 与 `span_id`，无有效 span context 时不伪造 trace/span 字段。
 - 业务代码优先通过 `common/runtime/logger.Info(ctx, ...)`、`Warn(ctx, ...)`、`Error(ctx, ...)` 输出日志，避免绕过 context helper 导致 trace context 丢失。
 - Error 级别日志默认不自动添加 stacktrace；关键运行时错误需要显式传入 `logger.StackTrace(...)` 或 `zap.Stack("stacktrace")`。
 - 文件日志按天写入带日期的分类文件，例如 `aegiscore-user-services.2026-06-02.info.log`；其中 `aegiscore-user-services` 是运行时 service name，不是目录名。

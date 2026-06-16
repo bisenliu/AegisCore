@@ -210,7 +210,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			t.Fatal("request log count = 0, want at least one")
 		}
 		fields := entries[len(entries)-1].ContextMap()
-		if !validTraceIDField(fields[logger.TraceIDField]) || fields["method"] != http.MethodGet || fields["path"] != "/api/v1/users/:user_id" || fields["status"] != int64(http.StatusOK) || fields[commonauth.UserIDKey] != routeAuthUserID {
+		if !validTraceIDField(fields[logger.TraceIDField]) || !validSpanIDField(fields[logger.SpanIDField]) || fields["method"] != http.MethodGet || fields["path"] != "/api/v1/users/:user_id" || fields["status"] != int64(http.StatusOK) || fields[commonauth.UserIDKey] != routeAuthUserID {
 			t.Fatalf("request log fields = %#v", fields)
 		}
 		if _, ok := fields["latency_ms"]; !ok {
@@ -267,7 +267,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		assertFailureEnvelope(t, recorder, http.StatusInternalServerError, contracterrors.CodeInternalError)
 	})
 
-	t.Run("panic recovery returns envelope and logs trace id", func(t *testing.T) {
+	t.Run("panic recovery returns envelope and logs trace and span ids", func(t *testing.T) {
 		engine.GET("/panic-route-chain", func(_ *gin.Context) { panic("route-chain boom") })
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/panic-route-chain", nil)
@@ -279,7 +279,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			t.Fatalf("panic recovered logs = %d, want 1", len(entries))
 		}
 		fields := entries[0].ContextMap()
-		if !validTraceIDField(fields[logger.TraceIDField]) || fields["panic"] != "route-chain boom" {
+		if !validTraceIDField(fields[logger.TraceIDField]) || !validSpanIDField(fields[logger.SpanIDField]) || fields["panic"] != "route-chain boom" {
 			t.Fatalf("recovery log fields = %#v", fields)
 		}
 		if _, ok := fields["stack"]; !ok {
@@ -323,6 +323,15 @@ func validTraceIDField(value any) bool {
 	}
 	traceID, err := oteltrace.TraceIDFromHex(text)
 	return err == nil && traceID.IsValid()
+}
+
+func validSpanIDField(value any) bool {
+	text, ok := value.(string)
+	if !ok {
+		return false
+	}
+	spanID, err := oteltrace.SpanIDFromHex(text)
+	return err == nil && spanID.IsValid()
 }
 
 type routeAuthUserCommands struct{}

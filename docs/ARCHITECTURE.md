@@ -193,11 +193,11 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - 用户服务认证 Redis adapter 使用 `common/runtime/workerpool` 管理退出全部设备后的 detached session 后台物理清理；该 worker pool 只负责受控后台执行，不是 MQ、eventbus、outbox、通用 job system、可靠投递框架或 session 上限策略执行器。
 - 用户服务的外部系统防腐层边界位于 `user-service/internal/integration/`；其中 `integration/grpc` 只表示出站外部 gRPC client adapter，不表示本服务入站 gRPC transport；`integration/events` 只表示外部事件系统协议 adapter，不表示 feature consumer handler 或业务事件编排；当前没有 order、payment 等真实外部 client，也没有 Kafka、RabbitMQ、NATS、Redis Stream 等 broker dependency；当前也没有事件总线、outbox、publisher、subscriber、consumer handler 或异步投递 worker。
 - 部署资产位于 `deployments/`：用户服务 Dockerfile 位于 `deployments/docker/user-service.Dockerfile`，并要求从仓库根目录执行 build；`deployments/compose/` 承载本地依赖或本地服务启动配置，`deployments/k8s/` 承载 Kubernetes YAML，`deployments/helm/` 承载 Helm chart。部署清单、配置模板、Secret/ConfigMap 示例、探针、资源配额和服务暴露方式都留在 `deployments/` 或对应部署模板中，不迁入 `user-service/internal/shared`。
-- 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace 传播使用 W3C `traceparent` / `tracestate`，日志字段 `trace_id` 来源于当前 OTel span context。
+- 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace 传播使用 W3C `traceparent` / `tracestate`，`common/runtime/logger` context helper 从当前 OTel span context 自动追加 `trace_id` 与 `span_id`，无有效 span context 时不伪造 trace/span 字段。
 - HTTP access log 标准字段为 `trace_id`、`user_id`、`client_ip`、`method`、`path`、`status`、`latency_ms`；认证失败安全事件日志应额外记录 `user_agent`，但不得记录 password、token、Authorization header、Cookie 或原始请求体。
 - 用户服务 HTTP 探针由 `internal/router/health.go` 拥有：`/livez` 只表示 Gin 进程可响应请求；`/readyz` 和 `/startupz` 由 `internal/providers/health.go` 注入 PostgreSQL `user_db`、Redis `cache_redis`、Casbin `LastError` 和 RBAC policy watcher 状态检查，失败时返回 HTTP 503 且不暴露 DSN、token、Cookie、SQL 或 stacktrace。
 - 代码注释统一使用中文，函数和方法注释必须使用中文；必要的协议名、库名、HTTP/JWT/Redis/PostgreSQL/Ent/Fx/Gin/trace-id 等技术术语可保留英文。人工维护源码不得新增英文注释；生成代码和第三方代码不为翻译注释而手写修改。
-- Log 日志消息内容必须全部使用英文，日志字段名使用稳定英文 snake_case。日志级别必须匹配场景严重性：`Debug` 用于生命周期细节和调试信息，`Info` 用于服务启动停止、资源连接关闭和重要成功业务动作，`Warn` 用于预期业务拒绝、客户端输入问题、认证拒绝、缓存降级和非致命冲突，`Error` 用于系统异常、外部依赖失败、数据访问失败、后台任务失败和 panic recover。业务日志优先使用 `common/runtime/logger` context helper，避免丢失 trace-id。
+- Log 日志消息内容必须全部使用英文，日志字段名使用稳定英文 snake_case。日志级别必须匹配场景严重性：`Debug` 用于生命周期细节和调试信息，`Info` 用于服务启动停止、资源连接关闭和重要成功业务动作，`Warn` 用于预期业务拒绝、客户端输入问题、认证拒绝、缓存降级和非致命冲突，`Error` 用于系统异常、外部依赖失败、数据访问失败、后台任务失败和 panic recover。业务日志优先使用 `common/runtime/logger` context helper，避免丢失 trace/span context。
 
 ## 10. Database Migrations
 

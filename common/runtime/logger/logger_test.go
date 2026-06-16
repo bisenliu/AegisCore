@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
@@ -30,7 +31,7 @@ func TestNewWritesClassifiedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWithConfig: %v", err)
 	}
-	ctx := WithTraceID(context.Background(), "trace-123")
+	ctx := contextWithSpanContext(t, context.Background(), "00112233445566778899aabbccddeeff", "0102030405060708")
 	ctx = ToContext(ctx, log)
 
 	Debug(ctx, "debug message")
@@ -42,7 +43,7 @@ func TestNewWritesClassifiedFiles(t *testing.T) {
 	}
 
 	date := time.Now().Format("2006-01-02")
-	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "all"), "debug message", "info message", "warn message", "error message", `"trace_id":"trace-123"`)
+	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "all"), "debug message", "info message", "warn message", "error message", `"trace_id":"00112233445566778899aabbccddeeff"`, `"span_id":"0102030405060708"`)
 	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "info"), "info message")
 	assertFileNotContains(t, datedPath(dir, "aegiscore-test", date, "info"), "warn message", "error message")
 	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "warning"), "warn message")
@@ -134,13 +135,39 @@ func TestExplicitStacktraceField(t *testing.T) {
 	assertFileContains(t, datedPath(dir, "aegiscore-test", time.Now().Format("2006-01-02"), "error"), "error with stacktrace", `"stacktrace"`)
 }
 
-func TestTraceIDHelpers(t *testing.T) {
-	ctx := WithTraceID(context.Background(), "trace-abc")
-	if got := TraceIDFromContext(ctx); got != "trace-abc" {
-		t.Fatalf("TraceIDFromContext = %q, want trace-abc", got)
+func TestWithContextAddsOTelTraceAndSpanFields(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core)
+	ctx := contextWithSpanContext(t, context.Background(), "00112233445566778899aabbccddeeff", "0102030405060708")
+
+	WithContext(ctx, log).Info("otel fields")
+
+	entries := logs.FilterMessage("otel fields").All()
+	if len(entries) != 1 {
+		t.Fatalf("log count = %d, want 1", len(entries))
 	}
-	if got := TraceIDFromContext(context.Background()); got != "" {
-		t.Fatalf("TraceIDFromContext empty = %q, want empty", got)
+	fields := entries[0].ContextMap()
+	if fields[TraceIDField] != "00112233445566778899aabbccddeeff" || fields[SpanIDField] != "0102030405060708" {
+		t.Fatalf("otel fields = %#v", fields)
+	}
+}
+
+func TestWithContextOmitsTraceAndSpanFieldsWithoutValidSpan(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core)
+
+	WithContext(context.Background(), log).Info("no span fields")
+
+	entries := logs.FilterMessage("no span fields").All()
+	if len(entries) != 1 {
+		t.Fatalf("log count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if _, ok := fields[TraceIDField]; ok {
+		t.Fatalf("unexpected trace field: %#v", fields)
+	}
+	if _, ok := fields[SpanIDField]; ok {
+		t.Fatalf("unexpected span field: %#v", fields)
 	}
 }
 
@@ -312,4 +339,22 @@ func assertFileMissingOrNotContains(t *testing.T, path string, wants ...string) 
 
 func datedPath(dir string, prefix string, date string, level string) string {
 	return filepath.Join(dir, prefix+"."+date+"."+level+".log")
+}
+
+func contextWithSpanContext(t *testing.T, ctx context.Context, traceIDHex string, spanIDHex string) context.Context {
+	t.Helper()
+	traceID, err := trace.TraceIDFromHex(traceIDHex)
+	if err != nil {
+		t.Fatalf("TraceIDFromHex: %v", err)
+	}
+	spanID, err := trace.SpanIDFromHex(spanIDHex)
+	if err != nil {
+		t.Fatalf("SpanIDFromHex: %v", err)
+	}
+	spanContext := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: traceID,
+		SpanID:  spanID,
+		Remote:  true,
+	})
+	return trace.ContextWithSpanContext(ctx, spanContext)
 }

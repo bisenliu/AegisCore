@@ -17,10 +17,10 @@ import (
 	"github.com/aegiscore/common/security/auth"
 )
 
-func TestContextLoggerUsesOTelTraceID(t *testing.T) {
+func TestContextLoggerUsesOTelTraceAndSpanID(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core)
-	ctx := logger.ToContext(contextWithTraceID(t, context.Background(), "00112233445566778899aabbccddeeff"), log)
+	ctx := logger.ToContext(contextWithSpanContext(t, context.Background(), "00112233445566778899aabbccddeeff", "0102030405060708"), log)
 
 	logger.Info(ctx, "context logger used")
 
@@ -30,6 +30,9 @@ func TestContextLoggerUsesOTelTraceID(t *testing.T) {
 	}
 	if got := entries[0].ContextMap()[logger.TraceIDField]; got != "00112233445566778899aabbccddeeff" {
 		t.Fatalf("%s = %q, want OTel trace id", logger.TraceIDField, got)
+	}
+	if got := entries[0].ContextMap()[logger.SpanIDField]; got != "0102030405060708" {
+		t.Fatalf("%s = %q, want OTel span id", logger.SpanIDField, got)
 	}
 }
 
@@ -67,12 +70,12 @@ func TestCORSWithOptions(t *testing.T) {
 	}
 }
 
-func TestRequestLoggerIncludesTraceIDAndRequestFields(t *testing.T) {
+func TestRequestLoggerIncludesTraceAndSpanIDAndRequestFields(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core)
 	engine := gin.New()
-	engine.Use(otelTraceMiddleware(t, "00112233445566778899aabbccddeeff"), RequestLogger(log))
+	engine.Use(otelTraceMiddleware(t, "00112233445566778899aabbccddeeff", "0102030405060708"), RequestLogger(log))
 	engine.GET("/ok", func(c *gin.Context) { c.Status(http.StatusAccepted) })
 
 	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
@@ -83,7 +86,7 @@ func TestRequestLoggerIncludesTraceIDAndRequestFields(t *testing.T) {
 		t.Fatalf("request log count = %d, want 1", len(entries))
 	}
 	fields := entries[0].ContextMap()
-	if fields[logger.TraceIDField] != "00112233445566778899aabbccddeeff" || fields["method"] != http.MethodGet || fields["path"] != "/ok" || fields["status"] != int64(http.StatusAccepted) || fields[auth.UserIDKey] != anonymousUserID {
+	if fields[logger.TraceIDField] != "00112233445566778899aabbccddeeff" || fields[logger.SpanIDField] != "0102030405060708" || fields["method"] != http.MethodGet || fields["path"] != "/ok" || fields["status"] != int64(http.StatusAccepted) || fields[auth.UserIDKey] != anonymousUserID {
 		t.Fatalf("request log fields = %#v", fields)
 	}
 	if _, ok := fields["latency_ms"]; !ok {
@@ -200,12 +203,12 @@ func TestRequestLoggerWithOptionsSkipsMatchingRequest(t *testing.T) {
 	}
 }
 
-func TestRecoveryIncludesTraceIDAndEnvelope(t *testing.T) {
+func TestRecoveryIncludesTraceAndSpanIDAndEnvelope(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	core, logs := observer.New(zap.ErrorLevel)
 	log := zap.New(core)
 	engine := gin.New()
-	engine.Use(otelTraceMiddleware(t, "00112233445566778899aabbccddeeff"), Recovery(log))
+	engine.Use(otelTraceMiddleware(t, "00112233445566778899aabbccddeeff", "0102030405060708"), Recovery(log))
 	engine.GET("/panic", func(_ *gin.Context) { panic("boom") })
 
 	req := httptest.NewRequest(http.MethodGet, "/panic", nil)
@@ -223,7 +226,7 @@ func TestRecoveryIncludesTraceIDAndEnvelope(t *testing.T) {
 		t.Fatalf("recovery log count = %d, want 1", len(entries))
 	}
 	fields := entries[0].ContextMap()
-	if fields[logger.TraceIDField] != "00112233445566778899aabbccddeeff" || fields["panic"] != "boom" {
+	if fields[logger.TraceIDField] != "00112233445566778899aabbccddeeff" || fields[logger.SpanIDField] != "0102030405060708" || fields["panic"] != "boom" {
 		t.Fatalf("recovery log fields = %#v", fields)
 	}
 	if _, ok := fields["stack"]; !ok {
@@ -231,21 +234,21 @@ func TestRecoveryIncludesTraceIDAndEnvelope(t *testing.T) {
 	}
 }
 
-func otelTraceMiddleware(t *testing.T, traceIDHex string) gin.HandlerFunc {
+func otelTraceMiddleware(t *testing.T, traceIDHex string, spanIDHex string) gin.HandlerFunc {
 	t.Helper()
 	return func(c *gin.Context) {
-		c.Request = c.Request.WithContext(contextWithTraceID(t, c.Request.Context(), traceIDHex))
+		c.Request = c.Request.WithContext(contextWithSpanContext(t, c.Request.Context(), traceIDHex, spanIDHex))
 		c.Next()
 	}
 }
 
-func contextWithTraceID(t *testing.T, ctx context.Context, traceIDHex string) context.Context {
+func contextWithSpanContext(t *testing.T, ctx context.Context, traceIDHex string, spanIDHex string) context.Context {
 	t.Helper()
 	traceID, err := trace.TraceIDFromHex(traceIDHex)
 	if err != nil {
 		t.Fatalf("TraceIDFromHex: %v", err)
 	}
-	spanID, err := trace.SpanIDFromHex("0102030405060708")
+	spanID, err := trace.SpanIDFromHex(spanIDHex)
 	if err != nil {
 		t.Fatalf("SpanIDFromHex: %v", err)
 	}

@@ -139,21 +139,21 @@ OTel Gin middleware 必须使用标准传播协议：
 
 ## Logger And Recovery Transition
 
-本变更不要求立即把日志字段升级为 `span_id`，也不新增响应 header。需要处理的是现有 logger helper 对自定义 `trace_id` context 的依赖：
+本变更不要求立即把日志字段升级为 `span_id`，也不新增响应 header。后续 `derive-logger-fields-from-otel-context` 变更会完成 `span_id` 字段、删除自定义 trace-id context key，并把 logger 字段来源收敛到 OTel span context。本阶段需要处理的是现有 logger helper 对自定义 `trace_id` context 的依赖：
 
 - `commonmw.RequestLogger` 不应要求 `TraceID()` 先把 `trace_id` 写入 context。
 - `commonmw.Recovery` 不应要求 `TraceID()` 先把 `trace_id` 写入 context。
 - 日志仍可保留字段名 `trace_id`，但值应优先从 `trace.SpanContextFromContext(ctx).TraceID().String()` 获取。
 - 当 OTel span context 无效时，日志字段可以为空，或省略该字段；不要生成私有 fallback trace ID。
 
-建议在 `common/runtime/logger` 增加无业务语义 helper：
+本阶段可在 `common/runtime/logger` 增加无业务语义 helper：
 
 ```go
 func WithOTelTraceID(ctx context.Context) context.Context
 func TraceIDFromContext(ctx context.Context) string
 ```
 
-或者直接调整 `TraceIDFromContext`：先读取现有 context value，再读取 OTel span context。这样能兼容少量非 HTTP 测试中手动 `logger.WithTraceID` 的用法，同时让 HTTP 请求自然从 OTel context 得到 `trace_id`。
+或者直接调整 `TraceIDFromContext`：先读取现有 context value，再读取 OTel span context。这样能兼容少量非 HTTP 测试中手动 `logger.WithTraceID` 的用法，同时让 HTTP 请求自然从 OTel context 得到 `trace_id`。该兼容路径只属于过渡状态，后续 `derive-logger-fields-from-otel-context` 会迁移调用方并删除 `WithTraceID` / `TraceIDFromContext`。
 
 `common/http/middleware/trace_id.go` 删除后，`common/http/middleware` 中仍可以保留 `ContextKeyLogger`，但应迁移到 request logger 或独立 constants 文件，避免常量随 trace-id middleware 删除而消失。
 
@@ -198,7 +198,7 @@ spanContext := trace.SpanContextFromContext(c.Request.Context())
 更新 `common/http/middleware` 测试：
 
 - 删除 `TraceID` 专属测试。
-- Request logger 测试使用 OTel span context 或 `logger.WithTraceID` 直连 context，不再安装 `TraceID()`。
+- Request logger 测试使用 OTel span context，不再安装 `TraceID()`。
 - Recovery 测试使用 OTel span context 或明确断言没有自定义 trace header 也能记录 panic。
 - CORS 测试不再默认暴露 `X-Trace-ID`。
 
