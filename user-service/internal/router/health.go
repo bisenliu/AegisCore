@@ -12,6 +12,9 @@ const (
 	HealthCheckStatusOK          HealthCheckStatus = "ok"
 	HealthCheckStatusUnavailable HealthCheckStatus = "unavailable"
 	healthProbeTimeout                             = 500 * time.Millisecond
+	healthPathLivez                                = "/livez"
+	healthPathReadyz                               = "/readyz"
+	healthPathStartupz                             = "/startupz"
 )
 
 // HealthCheckStatus 表示单个健康检查项的状态。
@@ -43,9 +46,19 @@ type HealthResponse struct {
 }
 
 func registerHealthRoutes(engine *gin.Engine, serviceName string, checks HealthChecks) {
-	engine.GET("/livez", livez(serviceName))
-	engine.GET("/readyz", readyz(serviceName, checks.Readiness))
-	engine.GET("/startupz", startupz(serviceName, checks.Startup))
+	engine.GET(healthPathLivez, livez(serviceName))
+	engine.GET(healthPathReadyz, readyz(serviceName, checks.Readiness))
+	engine.GET(healthPathStartupz, startupz(serviceName, checks.Startup))
+}
+
+// IsHealthProbePath 判断 path 是否为用户服务健康探针路径。
+func IsHealthProbePath(path string) bool {
+	switch path {
+	case healthPathLivez, healthPathReadyz, healthPathStartupz:
+		return true
+	default:
+		return false
+	}
 }
 
 // livez 返回服务的最小存活响应。

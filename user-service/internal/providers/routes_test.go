@@ -118,6 +118,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	}
 
 	t.Run("probes return configured service name", func(t *testing.T) {
+		initialLogCount := logs.Len()
 		for _, path := range []string{"/livez", "/readyz", "/startupz"} {
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, path, nil)
@@ -135,6 +136,9 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			if health.Status != "ok" || health.Service != cfg.App.Name {
 				t.Fatalf("%s health = %#v, want configured service name", path, health)
 			}
+		}
+		if logs.Len() != initialLogCount {
+			t.Fatalf("request log count changed from %d to %d, want successful probes skipped", initialLogCount, logs.Len())
 		}
 	})
 

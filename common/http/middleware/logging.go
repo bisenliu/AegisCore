@@ -12,11 +12,24 @@ import (
 
 const anonymousUserID = "anonymous"
 
+// RequestLoggerOptions 配置 HTTP access log 的请求过滤规则。
+type RequestLoggerOptions struct {
+	Skip func(*gin.Context) bool
+}
+
 // RequestLogger 使用携带 trace 的 context 记录每个完成的 HTTP 请求，并按状态码选择日志级别。
 func RequestLogger(log *zap.Logger) gin.HandlerFunc {
+	return RequestLoggerWithOptions(log, RequestLoggerOptions{})
+}
+
+// RequestLoggerWithOptions 使用自定义过滤规则记录完成的 HTTP 请求。
+func RequestLoggerWithOptions(log *zap.Logger, options RequestLoggerOptions) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
+		if options.Skip != nil && options.Skip(c) {
+			return
+		}
 
 		reqLog := logger.WithContext(c.Request.Context(), log)
 		fields := requestLogFields(c, time.Since(start))

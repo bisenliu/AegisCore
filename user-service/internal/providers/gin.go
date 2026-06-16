@@ -9,6 +9,7 @@ import (
 
 	commonmw "github.com/aegiscore/common/http/middleware"
 	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/user-service/internal/router"
 )
 
 // GinParams 包含创建 Gin engine 所需的 Fx 输入。
@@ -31,8 +32,12 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 	engine.Use(
 		commonmw.TraceID(),
 		commonmw.Recovery(params.Log),
-		commonmw.RequestLogger(params.Log),
+		commonmw.RequestLoggerWithOptions(params.Log, commonmw.RequestLoggerOptions{Skip: skipSuccessfulHealthProbeLog}),
 		commonmw.CORS(),
 	)
 	return engine, nil
+}
+
+func skipSuccessfulHealthProbeLog(c *gin.Context) bool {
+	return c.Writer.Status() < 400 && router.IsHealthProbePath(c.Request.URL.Path)
 }

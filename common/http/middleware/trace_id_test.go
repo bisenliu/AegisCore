@@ -268,6 +268,31 @@ func TestRequestLoggerIncludesUserIDFromRequestContext(t *testing.T) {
 	}
 }
 
+func TestRequestLoggerWithOptionsSkipsMatchingRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core)
+	engine := gin.New()
+	engine.Use(TraceID(), RequestLoggerWithOptions(log, RequestLoggerOptions{
+		Skip: func(c *gin.Context) bool {
+			return c.FullPath() == "/skip"
+		},
+	}))
+	engine.GET("/skip", func(c *gin.Context) { c.Status(http.StatusOK) })
+	engine.GET("/keep", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/skip", nil))
+	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/keep", nil))
+
+	entries := logs.FilterMessage("http request completed").All()
+	if len(entries) != 1 {
+		t.Fatalf("request log count = %d, want 1", len(entries))
+	}
+	if got := entries[0].ContextMap()["path"]; got != "/keep" {
+		t.Fatalf("logged path = %q, want /keep", got)
+	}
+}
+
 func TestRecoveryIncludesTraceIDAndEnvelope(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	core, logs := observer.New(zap.ErrorLevel)
