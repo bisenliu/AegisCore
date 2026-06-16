@@ -3,7 +3,7 @@ USER_SERVICE_DIR := user-service
 USER_SERVICE_CONFIG ?= ./user-service/configs/config.yaml
 USER_SERVICE_BIN ?= ./bin/user-service
 
-.PHONY: help build build-user-service test test-common test-user-service lint lint-common lint-user-service architecture-lint verify run-user-service seed-rbac generate migrate-diff migrate-validate migrate-apply swagger-generate
+.PHONY: help build build-user-service test test-common test-user-service lint lint-common lint-user-service architecture-lint verify run-user-service seed-rbac generate migrate-diff migrate-validate migrate-apply openapi-generate
 
 help: ## Show available commands.
 	@awk 'BEGIN {FS = ":.*##"; printf "Available commands:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -33,7 +33,7 @@ lint-user-service: ## Run user-service module lint.
 architecture-lint: ## Run user-service architecture boundary checks.
 	cd $(USER_SERVICE_DIR) && ./scripts/architecture-lint.sh
 
-verify: lint architecture-lint test swagger-generate ## Run full local verification.
+verify: lint architecture-lint test openapi-generate ## Run full local verification.
 	git diff --exit-code
 
 run-user-service: ## Run user-service with USER_SERVICE_CONFIG.
@@ -55,5 +55,5 @@ migrate-validate: ## Validate user-service migrations.
 migrate-apply: ## Apply user-service migrations using DATABASE_URL.
 	cd $(USER_SERVICE_DIR) && ./scripts/migrate-apply.sh
 
-swagger-generate: ## Generate user-service Swagger documentation.
-	cd $(USER_SERVICE_DIR) && ./scripts/swagger-generate.sh
+openapi-generate: ## Generate user-service OpenAPI 3 documentation.
+	cd $(USER_SERVICE_DIR) && ./scripts/openapi-generate.sh

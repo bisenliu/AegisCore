@@ -16,7 +16,7 @@ type PermissionResponse struct {
 	UpdatedAt    int64  `json:"updated_at" example:"1780288800000"`
 }
 
-// PermissionListResponseDoc 描述分页权限列表 Swagger 响应载荷。
+// PermissionListResponseDoc 描述分页权限列表 OpenAPI 响应载荷。
 type PermissionListResponseDoc struct {
 	Items      []PermissionResponse  `json:"items"`
 	Pagination pagination.Pagination `json:"pagination"`

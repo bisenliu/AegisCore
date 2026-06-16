@@ -83,9 +83,9 @@ run_rg "gRPC transport must not import feature HTTP transport packages" \
   'github\.com/aegiscore/user-service/internal/features/.*/transport/http' \
   "${service_dir}/internal/features/*/transport/grpc"
 
-run_rg_any "Swagger generated files have uncommitted drift" \
-  '^user-service/docs/(docs\.go|swagger\.json|swagger\.yaml)$' \
-  <(cd "${repo_root}" && git diff --name-only -- user-service/docs/docs.go user-service/docs/swagger.json user-service/docs/swagger.yaml)
+run_rg_any "OpenAPI generated files have uncommitted drift" \
+  '^user-service/docs/(openapi\.go|openapi\.json|openapi\.yaml)$' \
+  <(cd "${repo_root}" && git diff --name-only -- user-service/docs/openapi.go user-service/docs/openapi.json user-service/docs/openapi.yaml)
 
 run_rg_any "Ent generated files have uncommitted drift; run make generate and commit generated output" \
   '^user-service/ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update|permission|permission_create|permission_delete|permission_query|permission_update|role|role_create|role_delete|role_query|role_update|rolepermission|rolepermission_create|rolepermission_delete|rolepermission_query|rolepermission_update|userrole|userrole_create|userrole_delete|userrole_query|userrole_update)\.go$|^user-service/ent/(enttest|hook|migrate|predicate|runtime|user|permission|role|rolepermission|userrole)/' \

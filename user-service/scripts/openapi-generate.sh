@@ -1,0 +1,33 @@
+#!/usr/bin/env sh
+set -eu
+
+# 基于源码注解生成用户服务 OpenAPI 3 文档。
+#
+# 用法：
+#   make openapi-generate
+#   cd user-service && ./scripts/openapi-generate.sh
+#   ./scripts/openapi-generate.sh
+#
+# 生成产物：
+#   user-service/docs/openapi.go
+#   user-service/docs/openapi.json
+#   user-service/docs/openapi.yaml
+
+cd "$(dirname "$0")/.."
+
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
+
+go run github.com/swaggo/swag/cmd/swag@v1.16.6 init \
+  -d ./cmd,./internal/router,./internal/features/auth/transport/http,./internal/features/user/transport/http,./internal/features/role/transport/http,./internal/features/permission/transport/http \
+  -g main.go \
+  -o "$tmp_dir/swagger" \
+  --useStructName \
+  --parseDependency \
+  --parseInternal
+
+go run ./internal/tools/openapi-convert \
+  -input "$tmp_dir/swagger/swagger.json" \
+  -json docs/openapi.json \
+  -yaml docs/openapi.yaml \
+  -go docs/openapi.go

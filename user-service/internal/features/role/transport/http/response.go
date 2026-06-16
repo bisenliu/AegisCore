@@ -13,7 +13,7 @@ type RoleResponse struct {
 	UpdatedAt   int64  `json:"updated_at" example:"1780288800000"`
 }
 
-// RoleListResponseDoc 描述分页角色列表 Swagger 响应载荷。
+// RoleListResponseDoc 描述分页角色列表 OpenAPI 响应载荷。
 type RoleListResponseDoc struct {
 	Items      []RoleResponse        `json:"items"`
 	Pagination pagination.Pagination `json:"pagination"`

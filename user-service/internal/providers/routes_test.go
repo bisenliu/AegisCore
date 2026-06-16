@@ -40,7 +40,7 @@ const routeAuthInternalErrorUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3500"
 
 func TestGinEngineAuthMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("SWAGGER_ENABLED", "true")
+	t.Setenv("OPENAPI_ENABLED", "true")
 
 	cfg := &config.Config{
 		App: config.AppConfig{Name: "configured-user-service", Environment: "local"},
@@ -87,7 +87,8 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		{method: http.MethodGet, path: "/livez"},
 		{method: http.MethodGet, path: "/readyz"},
 		{method: http.MethodGet, path: "/startupz"},
-		{method: http.MethodGet, path: "/swagger/index.html"},
+		{method: http.MethodGet, path: "/openapi/index.html"},
+		{method: http.MethodGet, path: "/openapi.json"},
 		{method: http.MethodGet, path: "/docs"},
 		{method: http.MethodGet, path: "/api-docs"},
 		{method: http.MethodPost, path: "/api/v1/auth/login", body: `{"username":"alice","password":"secret"}`},
