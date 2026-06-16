@@ -3,7 +3,7 @@ package domain
 import (
 	"github.com/google/uuid"
 
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 // UserCredential 是认证能力需要的最小用户凭据模型。
@@ -11,7 +11,7 @@ type UserCredential struct {
 	UserID       uuid.UUID
 	Username     string
 	PasswordHash string
-	Status       userdomain.UserStatus
+	Status       identity.UserStatus
 	TokenVersion int64
 }
 
@@ -22,7 +22,7 @@ func (u UserCredential) CanLogin() bool {
 
 // RequiresPasswordChange 返回用户是否必须完成强制改密流程。
 func (u UserCredential) RequiresPasswordChange() bool {
-	return u.Status == userdomain.UserStatusMustChangePassword
+	return u.Status == identity.UserStatusMustChangePassword
 }
 
 // CanChangePassword 返回用户是否可通过受限 token 流程修改密码。
@@ -40,5 +40,5 @@ type CredentialUpdateResult struct {
 type UpdateCredentialsInput struct {
 	UserID       uuid.UUID
 	PasswordHash string
-	Status       userdomain.UserStatus
+	Status       identity.UserStatus
 }

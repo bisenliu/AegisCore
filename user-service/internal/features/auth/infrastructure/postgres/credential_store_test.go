@@ -13,7 +13,7 @@ import (
 	"github.com/aegiscore/user-service/ent/enttest"
 	entuser "github.com/aegiscore/user-service/ent/user"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 const deletedAtForCredentialTest int64 = 1710000000000
@@ -23,7 +23,7 @@ type credentialTestUserInput struct {
 	UserID       uuid.UUID
 	Username     string
 	PasswordHash string
-	Status       userdomain.UserStatus
+	Status       identity.UserStatus
 }
 
 func TestCredentialStoreDomainErrors(t *testing.T) {
@@ -32,106 +32,106 @@ func TestCredentialStoreDomainErrors(t *testing.T) {
 	t.Run("get by username returns domain not found", func(t *testing.T) {
 		_, err := repo.GetByUsername(context.Background(), "missing")
 
-		if !errors.Is(err, userdomain.ErrUserNotFound) {
-			t.Fatalf("err = %v, want userdomain.ErrUserNotFound", err)
+		if !errors.Is(err, identity.ErrUserNotFound) {
+			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
 		}
 	})
 
 	t.Run("get by username ignores soft deleted user", func(t *testing.T) {
 		ctx := context.Background()
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000410")
-		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Username", UserID: userID, Username: "deleted-username", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Username", UserID: userID, Username: "deleted-username", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
 		_, err := repo.GetByUsername(ctx, "deleted-username")
 
-		if !errors.Is(err, userdomain.ErrUserNotFound) {
-			t.Fatalf("err = %v, want userdomain.ErrUserNotFound", err)
+		if !errors.Is(err, identity.ErrUserNotFound) {
+			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
 		}
 	})
 
 	t.Run("get credential by user id returns domain not found", func(t *testing.T) {
 		_, err := repo.GetCredentialByUserID(context.Background(), uuid.MustParse("018f0000-0000-7000-8000-000000000411"))
 
-		if !errors.Is(err, userdomain.ErrUserNotFound) {
-			t.Fatalf("err = %v, want userdomain.ErrUserNotFound", err)
+		if !errors.Is(err, identity.ErrUserNotFound) {
+			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
 		}
 	})
 
 	t.Run("get credential by user id ignores soft deleted user", func(t *testing.T) {
 		ctx := context.Background()
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000412")
-		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Credential", UserID: userID, Username: "deleted-credential", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Credential", UserID: userID, Username: "deleted-credential", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
 		_, err := repo.GetCredentialByUserID(ctx, userID)
 
-		if !errors.Is(err, userdomain.ErrUserNotFound) {
-			t.Fatalf("err = %v, want userdomain.ErrUserNotFound", err)
+		if !errors.Is(err, identity.ErrUserNotFound) {
+			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
 		}
 	})
 
 	t.Run("get token version returns domain not found", func(t *testing.T) {
 		_, err := repo.GetTokenVersion(context.Background(), uuid.MustParse("018f0000-0000-7000-8000-000000000413"))
 
-		if !errors.Is(err, userdomain.ErrUserNotFound) {
-			t.Fatalf("err = %v, want userdomain.ErrUserNotFound", err)
+		if !errors.Is(err, identity.ErrUserNotFound) {
+			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
 		}
 	})
 
 	t.Run("get token version ignores soft deleted user", func(t *testing.T) {
 		ctx := context.Background()
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000414")
-		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Token", UserID: userID, Username: "deleted-token", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Token", UserID: userID, Username: "deleted-token", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
 		_, err := repo.GetTokenVersion(ctx, userID)
 
-		if !errors.Is(err, userdomain.ErrUserNotFound) {
-			t.Fatalf("err = %v, want userdomain.ErrUserNotFound", err)
+		if !errors.Is(err, identity.ErrUserNotFound) {
+			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
 		}
 	})
 
 	t.Run("increment token version returns domain not found", func(t *testing.T) {
 		_, err := repo.IncrementTokenVersion(context.Background(), uuid.MustParse("018f0000-0000-7000-8000-000000000415"))
 
-		if !errors.Is(err, userdomain.ErrUserNotFound) {
-			t.Fatalf("err = %v, want userdomain.ErrUserNotFound", err)
+		if !errors.Is(err, identity.ErrUserNotFound) {
+			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
 		}
 	})
 
 	t.Run("increment token version ignores soft deleted user", func(t *testing.T) {
 		ctx := context.Background()
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000416")
-		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Increment", UserID: userID, Username: "deleted-increment", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Increment", UserID: userID, Username: "deleted-increment", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
 		_, err := repo.IncrementTokenVersion(ctx, userID)
 
-		if !errors.Is(err, userdomain.ErrUserNotFound) {
-			t.Fatalf("err = %v, want userdomain.ErrUserNotFound", err)
+		if !errors.Is(err, identity.ErrUserNotFound) {
+			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
 		}
 	})
 
 	t.Run("update credentials returns domain not found", func(t *testing.T) {
-		_, err := repo.UpdateCredentials(context.Background(), authdomain.UpdateCredentialsInput{UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000417"), PasswordHash: "new-hash", Status: userdomain.UserStatusNormal})
+		_, err := repo.UpdateCredentials(context.Background(), authdomain.UpdateCredentialsInput{UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000417"), PasswordHash: "new-hash", Status: identity.UserStatusNormal})
 
-		if !errors.Is(err, userdomain.ErrUserNotFound) {
-			t.Fatalf("err = %v, want userdomain.ErrUserNotFound", err)
+		if !errors.Is(err, identity.ErrUserNotFound) {
+			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
 		}
 	})
 
 	t.Run("update credentials ignores soft deleted user", func(t *testing.T) {
 		ctx := context.Background()
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000418")
-		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Credentials", UserID: userID, Username: "deleted-credentials", PasswordHash: "old-hash", Status: userdomain.UserStatusMustChangePassword})
+		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Credentials", UserID: userID, Username: "deleted-credentials", PasswordHash: "old-hash", Status: identity.UserStatusMustChangePassword})
 
-		_, err := repo.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: userID, PasswordHash: "new-hash", Status: userdomain.UserStatusNormal})
+		_, err := repo.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: userID, PasswordHash: "new-hash", Status: identity.UserStatusNormal})
 
-		if !errors.Is(err, userdomain.ErrUserNotFound) {
-			t.Fatalf("err = %v, want userdomain.ErrUserNotFound", err)
+		if !errors.Is(err, identity.ErrUserNotFound) {
+			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
 		}
 		stored, err := repo.client.User.Query().Where(entuser.UserIDEQ(userID)).Only(ctx)
 		if err != nil {
 			t.Fatalf("query soft deleted user: %v", err)
 		}
-		if stored.PasswordHash != "old-hash" || stored.Status != int64(userdomain.UserStatusMustChangePassword) || stored.TokenVersion != 1 {
+		if stored.PasswordHash != "old-hash" || stored.Status != int64(identity.UserStatusMustChangePassword) || stored.TokenVersion != 1 {
 			t.Fatalf("soft deleted user was updated: %#v", stored)
 		}
 	})
@@ -146,7 +146,7 @@ func TestCredentialStoreReturnsCredentials(t *testing.T) {
 		UserID:       userID,
 		Username:     "credential-alice",
 		PasswordHash: "hash",
-		Status:       userdomain.UserStatusMustChangePassword,
+		Status:       identity.UserStatusMustChangePassword,
 	})
 
 	byUsername, err := repo.GetByUsername(ctx, "credential-alice")
@@ -167,7 +167,7 @@ func TestCredentialStoreTokenVersionPersistence(t *testing.T) {
 		repo := newTestCredentialStore(t)
 		ctx := context.Background()
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000601")
-		createCredentialTestUser(t, repo, credentialTestUserInput{Nickname: "Version Alice", UserID: userID, Username: "version-alice", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		createCredentialTestUser(t, repo, credentialTestUserInput{Nickname: "Version Alice", UserID: userID, Username: "version-alice", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
 		first, err := repo.GetTokenVersion(ctx, userID)
 		if err != nil {
@@ -186,7 +186,7 @@ func TestCredentialStoreTokenVersionPersistence(t *testing.T) {
 		repo := newTestCredentialStore(t)
 		ctx := context.Background()
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000602")
-		createCredentialTestUser(t, repo, credentialTestUserInput{Nickname: "Increment Alice", UserID: userID, Username: "increment-alice", PasswordHash: "hash", Status: userdomain.UserStatusNormal})
+		createCredentialTestUser(t, repo, credentialTestUserInput{Nickname: "Increment Alice", UserID: userID, Username: "increment-alice", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
 		version, err := repo.IncrementTokenVersion(ctx, userID)
 		if err != nil {
@@ -218,9 +218,9 @@ func TestCredentialStoreUpdateCredentials(t *testing.T) {
 	repo := newTestCredentialStore(t)
 	ctx := context.Background()
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000701")
-	createCredentialTestUser(t, repo, credentialTestUserInput{Nickname: "Update Alice", UserID: userID, Username: "update-alice", PasswordHash: "old-hash", Status: userdomain.UserStatusMustChangePassword})
+	createCredentialTestUser(t, repo, credentialTestUserInput{Nickname: "Update Alice", UserID: userID, Username: "update-alice", PasswordHash: "old-hash", Status: identity.UserStatusMustChangePassword})
 
-	version, err := repo.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: userID, PasswordHash: "new-hash", Status: userdomain.UserStatusNormal})
+	version, err := repo.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: userID, PasswordHash: "new-hash", Status: identity.UserStatusNormal})
 	if err != nil {
 		t.Fatalf("UpdateCredentials: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestCredentialStoreUpdateCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query updated user: %v", err)
 	}
-	if stored.PasswordHash != "new-hash" || stored.Status != int64(userdomain.UserStatusNormal) || stored.TokenVersion != 2 {
+	if stored.PasswordHash != "new-hash" || stored.Status != int64(identity.UserStatusNormal) || stored.TokenVersion != 2 {
 		t.Fatalf("stored user = %#v, want updated credentials", stored)
 	}
 }
@@ -272,7 +272,7 @@ func assertSameCredential(t *testing.T, got *authdomain.UserCredential, want *en
 	if got == nil || want == nil {
 		t.Fatalf("got=%#v want=%#v", got, want)
 	}
-	if got.UserID != want.UserID || got.Username != want.Username || got.PasswordHash != want.PasswordHash || got.Status != userdomain.UserStatus(want.Status) || got.TokenVersion != want.TokenVersion {
+	if got.UserID != want.UserID || got.Username != want.Username || got.PasswordHash != want.PasswordHash || got.Status != identity.UserStatus(want.Status) || got.TokenVersion != want.TokenVersion {
 		t.Fatalf("got credential = %#v, want user fields from %#v", got, want)
 	}
 }

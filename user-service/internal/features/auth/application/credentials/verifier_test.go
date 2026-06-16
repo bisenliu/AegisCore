@@ -9,7 +9,7 @@ import (
 
 	"github.com/aegiscore/common/security/password"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 var verifierTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
@@ -19,7 +19,7 @@ func TestVerifierAcceptsMustChangePasswordUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	verifier := NewVerifier(&credentialStoreStub{userByUsername: &authdomain.UserCredential{UserID: verifierTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}})
+	verifier := NewVerifier(&credentialStoreStub{userByUsername: &authdomain.UserCredential{UserID: verifierTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}})
 
 	user, err := verifier.VerifyPassword(context.Background(), "alice", "secret")
 
@@ -36,7 +36,7 @@ func TestVerifierRejectsDisabledUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	verifier := NewVerifier(&credentialStoreStub{userByUsername: &authdomain.UserCredential{UserID: verifierTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusDisabled, TokenVersion: 2}})
+	verifier := NewVerifier(&credentialStoreStub{userByUsername: &authdomain.UserCredential{UserID: verifierTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}})
 
 	_, err = verifier.VerifyPassword(context.Background(), "alice", "secret")
 
@@ -50,7 +50,7 @@ func TestVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	store := &credentialStoreStub{userByID: &authdomain.UserCredential{UserID: verifierTestUserID, PasswordHash: oldHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
+	store := &credentialStoreStub{userByID: &authdomain.UserCredential{UserID: verifierTestUserID, PasswordHash: oldHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
 	verifier := NewVerifier(store)
 
 	result, err := verifier.ChangePassword(context.Background(), verifierTestUserID, "new-secret")
@@ -61,7 +61,7 @@ func TestVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	if result.UserID != verifierTestUserID || result.TokenVersion != 3 {
 		t.Fatalf("result = %#v", result)
 	}
-	if store.updatedInput.UserID != verifierTestUserID || store.updatedInput.Status != userdomain.UserStatusNormal {
+	if store.updatedInput.UserID != verifierTestUserID || store.updatedInput.Status != identity.UserStatusNormal {
 		t.Fatalf("updated input = %#v", store.updatedInput)
 	}
 }
@@ -75,14 +75,14 @@ type credentialStoreStub struct {
 
 func (s *credentialStoreStub) GetByUsername(context.Context, string) (*authdomain.UserCredential, error) {
 	if s.userByUsername == nil {
-		return nil, userdomain.ErrUserNotFound
+		return nil, identity.ErrUserNotFound
 	}
 	return s.userByUsername, nil
 }
 
 func (s *credentialStoreStub) GetCredentialByUserID(context.Context, uuid.UUID) (*authdomain.UserCredential, error) {
 	if s.userByID == nil {
-		return nil, userdomain.ErrUserNotFound
+		return nil, identity.ErrUserNotFound
 	}
 	return s.userByID, nil
 }

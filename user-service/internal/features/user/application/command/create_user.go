@@ -13,6 +13,7 @@ import (
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	"github.com/aegiscore/user-service/internal/features/user/application/validators"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 // CreateUserCommand 包含创建用户所需的应用层输入。
@@ -20,7 +21,7 @@ type CreateUserCommand struct {
 	Nickname string
 	Username string
 	Password string
-	Status   *userdomain.UserStatus
+	Status   *identity.UserStatus
 }
 
 // CreateUserResult 是创建用户用例的 transport-neutral 输出。
@@ -61,9 +62,9 @@ func (s *createUserService) CreateUser(ctx context.Context, cmd CreateUserComman
 
 	user, err := s.store.Create(ctx, userapplication.CreateUserInput{Nickname: cmd.Nickname, UserID: userID, Username: cmd.Username, PasswordHash: passwordHash, Status: status})
 	if err != nil {
-		if errors.Is(err, userdomain.ErrUserAlreadyExists) {
+		if errors.Is(err, identity.ErrUserAlreadyExists) {
 			logger.Warn(ctx, "create user conflict", zap.String("username", cmd.Username), zap.Int64("status", int64(status)))
-			return nil, userdomain.ErrUserAlreadyExists
+			return nil, identity.ErrUserAlreadyExists
 		}
 		logger.Error(ctx, "create user failed", logger.StackTrace(zap.String("username", cmd.Username), zap.String("user_id", userID.String()), zap.Int64("status", int64(status)), zap.Error(err))...)
 		return nil, err

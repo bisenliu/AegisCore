@@ -18,6 +18,24 @@
 - Runtime/Infrastructure：Fx 生命周期启动与停止，HTTP server 使用配置中的 host/port/timeouts，用户服务声明 `cache_redis`、`user_db`，依赖不可用或底层库拒绝配置时启动失败。
 - Logging：Zap logger 初始化、分类日志文件、trace-id 字段和无 request context 时的日志行为。
 
+## 2.1 RBAC Regression Scope
+
+RBAC 相关变更需要覆盖以下回归范围：role command/query、用户角色绑定、角色权限绑定、permission command/query、route diff、Casbin policy loader/enforcer/reload 和 Gin RBAC middleware。重点场景包括授权成功、用户无角色被拒绝、角色停用被拒绝、权限停用被拒绝、用户解绑角色后被拒绝、角色解绑权限后被拒绝，以及内置 `super_admin` wildcard 允许访问。
+
+Route diff 测试必须证明它是只读诊断能力：只能返回已注册路由和正式权限目录之间的 missing/stale 差异，不得创建正式权限、修改权限状态或绑定角色。Casbin 授权使用 `role_id` 作为 `role:<role_uuid>` policy subject，不要求 `roles.code` 字段；测试和文档不得把 `roles.code` 描述为授权必需字段。
+
+RBAC 变更建议先运行聚焦测试，再运行用户服务或全仓库测试：
+
+```bash
+cd user-service
+go test ./internal/features/role/... ./internal/features/permission/...
+```
+
+```bash
+make test-user-service
+make test
+```
+
 ## 3. External Dependencies
 
 用户服务启动会连接 Redis 和 PostgreSQL。单元测试应尽量隔离外部依赖；需要真实 Redis/PostgreSQL 的测试应明确作为集成测试，并在文档或测试名中说明依赖。

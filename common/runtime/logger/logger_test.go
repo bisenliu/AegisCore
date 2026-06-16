@@ -49,6 +49,37 @@ func TestNewWritesClassifiedFiles(t *testing.T) {
 	assertFileNotContains(t, datedPath(dir, "aegiscore-test", date, "warning"), "info message", "error message")
 	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "error"), "error message")
 	assertFileNotContains(t, datedPath(dir, "aegiscore-test", date, "error"), "info message", "warn message")
+	assertFileMissingOrNotContains(t, datedPath(dir, "aegiscore-test", date, "sql"), "debug message", "info message", "warn message", "error message")
+}
+
+func TestSQLLoggerWritesAllAndSQLFiles(t *testing.T) {
+	dir := t.TempDir()
+	log, err := NewWithConfig(config.LogConfig{
+		Level:      "info",
+		Format:     "json",
+		Directory:  dir,
+		Filename:   "aegiscore-test",
+		Console:    false,
+		MaxAgeDays: 1,
+		MaxSizeMB:  1,
+		MaxBackups: 1,
+	})
+	if err != nil {
+		t.Fatalf("NewWithConfig: %v", err)
+	}
+
+	Info(ToContext(context.Background(), SQL(log)), "ent sql debug", zap.String("statement", "SELECT 1"))
+	Info(ToContext(context.Background(), log), "regular info")
+	if err := log.Sync(); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
+	date := time.Now().Format("2006-01-02")
+	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "all"), "ent sql debug", "regular info", "SELECT 1")
+	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "sql"), "ent sql debug", "SELECT 1")
+	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "info"), "regular info")
+	assertFileNotContains(t, datedPath(dir, "aegiscore-test", date, "sql"), "regular info")
+	assertFileNotContains(t, datedPath(dir, "aegiscore-test", date, "info"), "ent sql debug", "SELECT 1")
 }
 
 func TestErrorDoesNotIncludeStacktraceByDefault(t *testing.T) {
@@ -258,6 +289,23 @@ func assertFileNotContains(t *testing.T, path string, wants ...string) {
 	for _, want := range wants {
 		if strings.Contains(text, want) {
 			t.Fatalf("%s contains %q; content: %s", path, want, text)
+		}
+	}
+}
+
+func assertFileMissingOrNotContains(t *testing.T, path string, wants ...string) {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return
+	}
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	text := string(content)
+	for _, want := range wants {
+		if strings.Contains(text, want) {
+			t.Fatalf("file %s contains %q; content=%s", path, want, text)
 		}
 	}
 }

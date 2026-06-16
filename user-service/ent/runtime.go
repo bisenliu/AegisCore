@@ -3,14 +3,166 @@
 package ent
 
 import (
+	"github.com/aegiscore/user-service/ent/permission"
+	"github.com/aegiscore/user-service/ent/role"
+	"github.com/aegiscore/user-service/ent/rolepermission"
 	"github.com/aegiscore/user-service/ent/schema"
 	"github.com/aegiscore/user-service/ent/user"
+	"github.com/aegiscore/user-service/ent/userrole"
 )
 
 // The init function reads all schema descriptors with runtime code
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	permissionFields := schema.Permission{}.Fields()
+	_ = permissionFields
+	// permissionDescName is the schema descriptor for name field.
+	permissionDescName := permissionFields[2].Descriptor()
+	// permission.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	permission.NameValidator = func() func(string) error {
+		validators := permissionDescName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(name string) error {
+			for _, fn := range fns {
+				if err := fn(name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// permissionDescDescription is the schema descriptor for description field.
+	permissionDescDescription := permissionFields[3].Descriptor()
+	// permission.DefaultDescription holds the default value on creation for the description field.
+	permission.DefaultDescription = permissionDescDescription.Default.(string)
+	// permission.DescriptionValidator is a validator for the "description" field. It is called by the builders before save.
+	permission.DescriptionValidator = permissionDescDescription.Validators[0].(func(string) error)
+	// permissionDescModule is the schema descriptor for module field.
+	permissionDescModule := permissionFields[4].Descriptor()
+	// permission.ModuleValidator is a validator for the "module" field. It is called by the builders before save.
+	permission.ModuleValidator = func() func(string) error {
+		validators := permissionDescModule.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(module string) error {
+			for _, fn := range fns {
+				if err := fn(module); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// permissionDescHTTPMethod is the schema descriptor for http_method field.
+	permissionDescHTTPMethod := permissionFields[5].Descriptor()
+	// permission.HTTPMethodValidator is a validator for the "http_method" field. It is called by the builders before save.
+	permission.HTTPMethodValidator = func() func(string) error {
+		validators := permissionDescHTTPMethod.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(http_method string) error {
+			for _, fn := range fns {
+				if err := fn(http_method); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// permissionDescPathTemplate is the schema descriptor for path_template field.
+	permissionDescPathTemplate := permissionFields[6].Descriptor()
+	// permission.PathTemplateValidator is a validator for the "path_template" field. It is called by the builders before save.
+	permission.PathTemplateValidator = func() func(string) error {
+		validators := permissionDescPathTemplate.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(path_template string) error {
+			for _, fn := range fns {
+				if err := fn(path_template); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// permissionDescActive is the schema descriptor for active field.
+	permissionDescActive := permissionFields[7].Descriptor()
+	// permission.DefaultActive holds the default value on creation for the active field.
+	permission.DefaultActive = permissionDescActive.Default.(bool)
+	// permissionDescIsSystem is the schema descriptor for is_system field.
+	permissionDescIsSystem := permissionFields[8].Descriptor()
+	// permission.DefaultIsSystem holds the default value on creation for the is_system field.
+	permission.DefaultIsSystem = permissionDescIsSystem.Default.(bool)
+	// permissionDescCreatedAt is the schema descriptor for created_at field.
+	permissionDescCreatedAt := permissionFields[9].Descriptor()
+	// permission.DefaultCreatedAt holds the default value on creation for the created_at field.
+	permission.DefaultCreatedAt = permissionDescCreatedAt.Default.(func() int64)
+	// permissionDescUpdatedAt is the schema descriptor for updated_at field.
+	permissionDescUpdatedAt := permissionFields[10].Descriptor()
+	// permission.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	permission.DefaultUpdatedAt = permissionDescUpdatedAt.Default.(func() int64)
+	// permission.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	permission.UpdateDefaultUpdatedAt = permissionDescUpdatedAt.UpdateDefault.(func() int64)
+	roleFields := schema.Role{}.Fields()
+	_ = roleFields
+	// roleDescName is the schema descriptor for name field.
+	roleDescName := roleFields[2].Descriptor()
+	// role.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	role.NameValidator = func() func(string) error {
+		validators := roleDescName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(name string) error {
+			for _, fn := range fns {
+				if err := fn(name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// roleDescDescription is the schema descriptor for description field.
+	roleDescDescription := roleFields[3].Descriptor()
+	// role.DefaultDescription holds the default value on creation for the description field.
+	role.DefaultDescription = roleDescDescription.Default.(string)
+	// role.DescriptionValidator is a validator for the "description" field. It is called by the builders before save.
+	role.DescriptionValidator = roleDescDescription.Validators[0].(func(string) error)
+	// roleDescActive is the schema descriptor for active field.
+	roleDescActive := roleFields[4].Descriptor()
+	// role.DefaultActive holds the default value on creation for the active field.
+	role.DefaultActive = roleDescActive.Default.(bool)
+	// roleDescIsSystem is the schema descriptor for is_system field.
+	roleDescIsSystem := roleFields[5].Descriptor()
+	// role.DefaultIsSystem holds the default value on creation for the is_system field.
+	role.DefaultIsSystem = roleDescIsSystem.Default.(bool)
+	// roleDescCreatedAt is the schema descriptor for created_at field.
+	roleDescCreatedAt := roleFields[6].Descriptor()
+	// role.DefaultCreatedAt holds the default value on creation for the created_at field.
+	role.DefaultCreatedAt = roleDescCreatedAt.Default.(func() int64)
+	// roleDescUpdatedAt is the schema descriptor for updated_at field.
+	roleDescUpdatedAt := roleFields[7].Descriptor()
+	// role.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	role.DefaultUpdatedAt = roleDescUpdatedAt.Default.(func() int64)
+	// role.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	role.UpdateDefaultUpdatedAt = roleDescUpdatedAt.UpdateDefault.(func() int64)
+	rolepermissionFields := schema.RolePermission{}.Fields()
+	_ = rolepermissionFields
+	// rolepermissionDescCreatedAt is the schema descriptor for created_at field.
+	rolepermissionDescCreatedAt := rolepermissionFields[3].Descriptor()
+	// rolepermission.DefaultCreatedAt holds the default value on creation for the created_at field.
+	rolepermission.DefaultCreatedAt = rolepermissionDescCreatedAt.Default.(func() int64)
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescNickname is the schema descriptor for nickname field.
@@ -71,4 +223,10 @@ func init() {
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() int64)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	user.UpdateDefaultUpdatedAt = userDescUpdatedAt.UpdateDefault.(func() int64)
+	userroleFields := schema.UserRole{}.Fields()
+	_ = userroleFields
+	// userroleDescCreatedAt is the schema descriptor for created_at field.
+	userroleDescCreatedAt := userroleFields[3].Descriptor()
+	// userrole.DefaultCreatedAt holds the default value on creation for the created_at field.
+	userrole.DefaultCreatedAt = userroleDescCreatedAt.Default.(func() int64)
 }

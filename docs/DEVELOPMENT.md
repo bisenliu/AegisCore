@@ -23,27 +23,34 @@
 | 构建用户服务二进制 | `make build` 或 `make build-user-service` | 仓库根目录 |
 | 运行全部测试 | `make test` | 仓库根目录 |
 | 运行用户服务 | `make run-user-service` | 仓库根目录 |
+| 初始化或更新 RBAC 系统数据 | `make seed-rbac` | 仓库根目录 |
 | 构建用户服务 Docker 镜像 | `docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .` | 仓库根目录 |
 | 运行共享模块测试 | `make test-common` | 仓库根目录 |
 | 运行用户服务测试 | `make test-user-service` | 仓库根目录 |
 | 运行全部 lint | `make lint` | 仓库根目录 |
 | 运行共享模块 lint | `make lint-common` | 仓库根目录 |
 | 运行用户服务 lint | `make lint-user-service` | 仓库根目录 |
+| 运行架构边界检查 | `make architecture-lint` | 仓库根目录 |
+| 运行完整本地验证 | `make verify` | 仓库根目录 |
 | 生成 Ent 代码 | `make generate` | 仓库根目录 |
 | 生成用户服务数据库迁移 | `make migrate-diff name=<name>` | 仓库根目录 |
 | 校验用户服务迁移目录 | `make migrate-validate` | 仓库根目录 |
 | 执行用户服务数据库迁移 | `DATABASE_URL='<postgres-url>' make migrate-apply` | 仓库根目录 |
-| 生成 Swagger 文档 | `make swagger-generate`；或 `cd user-service && ./scripts/swagger-generate.sh` | 仓库根目录；或 `user-service/` |
+| 生成 OpenAPI 3 文档 | `make openapi-generate`；或 `cd user-service && ./scripts/openapi-generate.sh` | 仓库根目录；或 `user-service/` |
 | 格式化 Go 文件 | `gofmt -w <files>` | 任意目录 |
 
-Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user-service/` 执行，迁移和 Swagger 操作仍委托 `user-service/scripts/` 下的现有脚本。Swagger 生成脚本从 `user-service/` 模块目录运行，将解析范围限定为 `github.com/aegiscore/user-service` 包前缀，并使用 Go struct/type 名称生成 schema definition；直接运行底层命令仍然可用，排错时可参考对应脚本和执行目录。
+Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user-service/` 执行，迁移和 OpenAPI 操作仍委托 `user-service/scripts/` 下的现有脚本。OpenAPI 生成脚本从 `user-service/` 模块目录运行，将解析范围限定为 `github.com/aegiscore/user-service` 包前缀，先从源码注解生成临时 Swagger 2 输入，再通过 `kin-openapi` 转换为最终 OpenAPI 3 文档；直接运行底层命令仍然可用，排错时可参考对应脚本和执行目录。
 
 ## 4. Local Runtime And Deployment Assets
 
 - 本地直接运行用户服务：先准备 PostgreSQL 和 Redis，再执行 `make run-user-service`。
+- RBAC 系统角色、系统权限和系统角色权限绑定需要显式初始化或更新：推荐顺序为先执行数据库 migration，再执行 `make seed-rbac`，最后启动 HTTP server。seed 不会在 `serve` 启动时自动执行，也不会发布运行期 policy refresh；不要把 `make seed-rbac` 当作在线授权变更入口。
+- 生产环境若必须在已有 HTTP 副本运行中执行 `make seed-rbac` 或 `rbac assign-super-admin`，执行后需要滚动重启服务副本，或通过正式 RBAC 管理接口触发一次在线 policy refresh，确保所有副本的内存 Casbin policy 重新加载。日常在线权限、角色状态、用户角色绑定和角色权限绑定变更应使用 HTTP RBAC 管理接口，该路径会通过 Redis policy version、Pub/Sub 和版本补偿检查同步多副本。
+- 新增或调整进入 RBAC 授权中间件的业务路由时，必须同步更新 `user-service/internal/shared/rbacbaseline` 中的系统权限 URL catalog，重新执行 `make seed-rbac`，并通过 `GET /api/v1/permissions/route-diff` 检查权限目录与已注册路由是否仍一致。
 - 构建用户服务容器镜像：从仓库根目录执行 `docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .`。该 Dockerfile 依赖仓库根目录作为 build context，以便复制 `go.work`、`common/` 和 `user-service/`。
 - 本地 Compose 文件归属 `deployments/compose/`。当前没有可运行 Compose file；若本地没有 PostgreSQL/Redis，需要按 `user-service/configs/config.yaml` 中的配置自行准备依赖。
 - Kubernetes YAML 归属 `deployments/k8s/`，Helm chart 归属 `deployments/helm/`。当前目录只声明边界，不提供可直接部署的生产资源。
+- 用户服务探针路径为：`/livez` 用于 liveness，`/readyz` 用于 readiness，`/startupz` 用于 startup probe。`/readyz` 和 `/startupz` 会检查 PostgreSQL、Redis、Casbin policy 加载状态和 RBAC policy watcher 状态。
 
 ## 5. Configuration
 
@@ -64,7 +71,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 ## 6. Coding Conventions
 
 - HTTP 层只处理请求解析、参数校验和响应输出。
-- HTTP request/response DTO 和 Swagger model 放在对应 feature 的 `transport/http/request.go`、`response.go`，Swagger 生成使用稳定 Go struct/type 名称，避免生成文档暴露 `transport/http` 目录派生名称；不要新增 feature-level `api/` DTO 包。
+- HTTP request/response DTO 和 OpenAPI 文档 model 放在对应 feature 的 `transport/http/request.go`、`response.go`，OpenAPI 生成使用稳定 Go struct/type 名称，避免生成文档暴露 `transport/http` 目录派生名称；不要新增 feature-level `api/` DTO 包。
 - Application service/use case 层负责业务编排、command/query 处理和 DTO 映射；已有 feature 可在 `application/command`、`application/query`、`application/validators` 和稳定组件包下继续细分读写用例与 transport-neutral 输入辅助。Auth 的登录、刷新、强制改密和登出流程放在扁平 `application/command`；认证上下文 helper 放在 `application/authctx`；凭据校验和强制改密凭据更新放在 `application/credentials`；JWT 签发解析和 token result DTO 放在 `application/tokens`；refresh session 生命周期、token version fallback、session 上限和会话撤销放在 `application/sessions`；认证 application 输入辅助、token version 撤销校验和 refresh session 一致性校验放在 `application/validators`。
 - Domain 层负责实体、值对象、枚举、领域错误和纯业务规则；只有存在真实跨实体/跨值对象领域规则或领域事件模型时，才在 feature 内新增 `domain/services` 或 `domain/events`，不得为了目录完整添加空业务代码。Domain services/events 不依赖 Gin、Ent、Redis、config、logger、application ports 或 infrastructure adapter。
 - Infrastructure adapter 层负责 Ent/PostgreSQL、Redis 访问、存储模型转换和存储错误转换，具体放在对应 feature 的 `infrastructure/postgres` 或 `infrastructure/redis` 下。

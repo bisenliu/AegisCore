@@ -25,10 +25,12 @@ import (
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
+	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 const routeAuthUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
@@ -38,7 +40,7 @@ const routeAuthInternalErrorUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3500"
 
 func TestGinEngineAuthMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("SWAGGER_ENABLED", "true")
+	t.Setenv("OPENAPI_ENABLED", "true")
 
 	cfg := &config.Config{
 		App: config.AppConfig{Name: "configured-user-service", Environment: "local"},
@@ -50,6 +52,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	log := zap.New(core)
 	jwtService := commonauth.NewJWTService(cfg.Auth)
 	tokenVersions := &routeTokenVersionValidator{version: 1}
+	authorizer := &routeAuthorizer{allowed: true}
 	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log})
 	if err != nil {
 		t.Fatalf("NewGinEngine: %v", err)
@@ -64,6 +67,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		Engine:        engine,
 		JWT:           jwtService,
 		TokenVersions: tokenVersions,
+		Authorizer:    authorizer,
 		AuthController: authhttp.NewAuthController(authhttp.AuthControllerParams{
 			Login:          &routeAuthAuthUseCases{},
 			Refresh:        &routeAuthAuthUseCases{},
@@ -80,8 +84,11 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		path   string
 		body   string
 	}{
-		{method: http.MethodGet, path: "/healthz"},
-		{method: http.MethodGet, path: "/swagger/index.html"},
+		{method: http.MethodGet, path: "/livez"},
+		{method: http.MethodGet, path: "/readyz"},
+		{method: http.MethodGet, path: "/startupz"},
+		{method: http.MethodGet, path: "/openapi/index.html"},
+		{method: http.MethodGet, path: "/openapi.json"},
 		{method: http.MethodGet, path: "/docs"},
 		{method: http.MethodGet, path: "/api-docs"},
 		{method: http.MethodPost, path: "/api/v1/auth/login", body: `{"username":"alice","password":"secret"}`},
@@ -106,23 +113,28 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			}
 		})
 	}
+	if authorizer.calls != 0 {
+		t.Fatalf("public route authorizer calls = %d, want 0", authorizer.calls)
+	}
 
-	t.Run("healthz returns configured service name", func(t *testing.T) {
-		recorder := httptest.NewRecorder()
-		request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-		engine.ServeHTTP(recorder, request)
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
-		}
-		var health struct {
-			Status  string `json:"status"`
-			Service string `json:"service"`
-		}
-		if err := json.Unmarshal(recorder.Body.Bytes(), &health); err != nil {
-			t.Fatalf("unmarshal health response: %v", err)
-		}
-		if health.Status != "ok" || health.Service != cfg.App.Name {
-			t.Fatalf("health = %#v, want configured service name", health)
+	t.Run("probes return configured service name", func(t *testing.T) {
+		for _, path := range []string{"/livez", "/readyz", "/startupz"} {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, path, nil)
+			engine.ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("%s status = %d, want %d", path, recorder.Code, http.StatusOK)
+			}
+			var health struct {
+				Status  string `json:"status"`
+				Service string `json:"service"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &health); err != nil {
+				t.Fatalf("unmarshal health response: %v", err)
+			}
+			if health.Status != "ok" || health.Service != cfg.App.Name {
+				t.Fatalf("%s health = %#v, want configured service name", path, health)
+			}
 		}
 	})
 
@@ -161,6 +173,9 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		engine.ServeHTTP(recorder, request)
 		assertAuthFailureEnvelope(t, recorder, contracterrors.CodeUnauthenticated)
 	})
+	if authorizer.calls != 0 {
+		t.Fatalf("auth route authorizer calls = %d, want 0", authorizer.calls)
+	}
 
 	t.Run("query with invalid token returns token invalid", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
@@ -175,6 +190,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
 		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		request.Header.Set("X-Trace-ID", "trace-auth-test")
+		authorizer.reset()
 		engine.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
@@ -183,6 +199,9 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			t.Fatalf("X-Trace-ID = %q, want trace-auth-test", recorder.Header().Get("X-Trace-ID"))
 		}
 		assertSuccessEnvelope(t, recorder)
+		if authorizer.calls != 1 || authorizer.userID != routeAuthUserID || authorizer.pathTemplate != "/api/v1/users/:user_id" || authorizer.method != http.MethodGet {
+			t.Fatalf("authorizer call = %#v", authorizer)
+		}
 
 		entries := logs.FilterMessage("http request completed").All()
 		if len(entries) == 0 {
@@ -197,6 +216,20 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		}
 		if _, ok := fields["client_ip"]; !ok {
 			t.Fatalf("request log missing client_ip: %#v", fields)
+		}
+	})
+
+	t.Run("query denied by rbac returns forbidden before controller", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
+		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
+		authorizer.reset()
+		authorizer.allowed = false
+		defer func() { authorizer.allowed = true }()
+		engine.ServeHTTP(recorder, request)
+		assertFailureEnvelope(t, recorder, http.StatusForbidden, contracterrors.CodeForbidden)
+		if authorizer.calls != 1 {
+			t.Fatalf("authorizer calls = %d, want 1", authorizer.calls)
 		}
 	})
 
@@ -274,6 +307,33 @@ type routeTokenVersionValidator struct {
 	version int64
 }
 
+var _ permissionauthorization.Authorizer = (*routeAuthorizer)(nil)
+
+type routeAuthorizer struct {
+	allowed      bool
+	err          error
+	calls        int
+	userID       string
+	pathTemplate string
+	method       string
+}
+
+func (a *routeAuthorizer) Enforce(_ context.Context, userID string, pathTemplate string, method string) (bool, error) {
+	a.calls++
+	a.userID = userID
+	a.pathTemplate = pathTemplate
+	a.method = method
+	return a.allowed, a.err
+}
+
+func (a *routeAuthorizer) reset() {
+	a.calls = 0
+	a.userID = ""
+	a.pathTemplate = ""
+	a.method = ""
+	a.err = nil
+}
+
 func (s *routeTokenVersionValidator) ValidateTokenVersion(_ context.Context, _ string, tokenVersion int64) error {
 	if tokenVersion != s.version {
 		return &commonauth.TokenVersionMismatchError{Current: s.version, Token: tokenVersion}
@@ -303,14 +363,14 @@ func (s *routeAuthAuthUseCases) LogoutAllSessions(context.Context) (*authcommand
 
 func (s *routeAuthUserCommands) CreateUser(context.Context, usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error) {
 	now := time.Now().UnixMilli()
-	return &usercommand.CreateUserResult{User: userdomain.User{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
+	return &usercommand.CreateUserResult{User: userdomain.User{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Alice", Username: "alice", Status: identity.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
 }
 
 func (s *routeAuthUserQueries) GetUserByID(_ context.Context, req userquery.GetUserByIDQuery) (*userquery.GetUserResult, error) {
 	userID := req.UserID
 	userIDString := userID.String()
 	if userIDString == routeAuthNotFoundUserID {
-		return nil, userdomain.ErrUserNotFound
+		return nil, identity.ErrUserNotFound
 	}
 	if userIDString == routeAuthForbiddenUserID {
 		return nil, contracterrors.ForbiddenError("forbidden")
@@ -319,7 +379,7 @@ func (s *routeAuthUserQueries) GetUserByID(_ context.Context, req userquery.GetU
 		return nil, errors.New("database down")
 	}
 	now := time.Now().UnixMilli()
-	return &userquery.GetUserResult{User: userdomain.User{UserID: userID, Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
+	return &userquery.GetUserResult{User: userdomain.User{UserID: userID, Nickname: "Aegis", Username: "aegis", Status: identity.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}, nil
 }
 
 func assertSuccessEnvelope(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -349,7 +409,7 @@ func assertFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wa
 
 func (s *routeAuthUserQueries) ListUsers(context.Context, userquery.ListUsersQuery) (*userquery.ListUsersResult, error) {
 	now := time.Now().UnixMilli()
-	items := []userdomain.User{{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Aegis", Username: "aegis", Status: userdomain.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
+	items := []userdomain.User{{UserID: uuid.MustParse(routeAuthUserID), Nickname: "Aegis", Username: "aegis", Status: identity.UserStatusNormal, CreatedAt: now, UpdatedAt: now}}
 	return &userquery.ListUsersResult{Items: items, PageSize: 10}, nil
 }
 

@@ -13,7 +13,7 @@ import (
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 // Verifier 校验登录凭证并完成强制改密。
@@ -35,7 +35,7 @@ func NewVerifier(repo authapplication.UserCredentialStore) Verifier {
 func (v *verifier) VerifyPassword(ctx context.Context, username string, plainPassword string) (*authdomain.UserCredential, error) {
 	credential, err := v.repo.GetByUsername(ctx, username)
 	if err != nil {
-		if errors.Is(err, userdomain.ErrUserNotFound) {
+		if errors.Is(err, identity.ErrUserNotFound) {
 			fields := append([]zap.Field{zap.String("username", username)}, authctx.ClientContextFields(ctx)...)
 			logger.Warn(ctx, "login user not found", fields...)
 			return nil, authdomain.ErrInvalidCredentials
@@ -67,9 +67,9 @@ func (v *verifier) VerifyPassword(ctx context.Context, username string, plainPas
 func (v *verifier) ChangePassword(ctx context.Context, userID uuid.UUID, newPassword string) (*authdomain.CredentialUpdateResult, error) {
 	credential, err := v.repo.GetCredentialByUserID(ctx, userID)
 	if err != nil {
-		if errors.Is(err, userdomain.ErrUserNotFound) {
+		if errors.Is(err, identity.ErrUserNotFound) {
 			logger.Warn(ctx, "change password user not found", zap.String("user_id", userID.String()))
-			return nil, userdomain.ErrUserNotFound
+			return nil, identity.ErrUserNotFound
 		}
 		logger.Error(ctx, "query change password user failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
 		return nil, err
@@ -84,11 +84,11 @@ func (v *verifier) ChangePassword(ctx context.Context, userID uuid.UUID, newPass
 		logger.Error(ctx, "hash changed password failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
 		return nil, fmt.Errorf("hash changed password: %w", err)
 	}
-	tokenVersion, err := v.repo.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: userID, PasswordHash: passwordHash, Status: userdomain.UserStatusNormal})
+	tokenVersion, err := v.repo.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: userID, PasswordHash: passwordHash, Status: identity.UserStatusNormal})
 	if err != nil {
-		if errors.Is(err, userdomain.ErrUserNotFound) {
+		if errors.Is(err, identity.ErrUserNotFound) {
 			logger.Warn(ctx, "update credentials user not found", zap.String("user_id", userID.String()))
-			return nil, userdomain.ErrUserNotFound
+			return nil, identity.ErrUserNotFound
 		}
 		logger.Error(ctx, "update credentials failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
 		return nil, err

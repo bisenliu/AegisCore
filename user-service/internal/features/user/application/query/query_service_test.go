@@ -9,6 +9,7 @@ import (
 
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 var testUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
@@ -17,7 +18,7 @@ func TestUserQueryServiceGetUserByID(t *testing.T) {
 	createdAt := int64(1780048800000)
 
 	t.Run("success", func(t *testing.T) {
-		repo := &stubUserRepository{getByUserIDUser: &userdomain.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}
+		repo := &stubUserRepository{getByUserIDUser: &userdomain.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: identity.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}
 		svc := NewUserQueryService(repo)
 
 		user, err := svc.GetUserByID(context.Background(), GetUserByIDQuery{UserID: testUserID})
@@ -34,11 +35,11 @@ func TestUserQueryServiceGetUserByID(t *testing.T) {
 	})
 
 	t.Run("map domain not found", func(t *testing.T) {
-		svc := NewUserQueryService(&stubUserRepository{getByUserIDErr: userdomain.ErrUserNotFound})
+		svc := NewUserQueryService(&stubUserRepository{getByUserIDErr: identity.ErrUserNotFound})
 
 		_, err := svc.GetUserByID(context.Background(), GetUserByIDQuery{UserID: testUserID})
 
-		if !errors.Is(err, userdomain.ErrUserNotFound) {
+		if !errors.Is(err, identity.ErrUserNotFound) {
 			t.Fatalf("err = %v, want ErrUserNotFound", err)
 		}
 	})
@@ -79,8 +80,8 @@ func TestUserQueryServiceListUsers(t *testing.T) {
 	})
 
 	t.Run("explicit cursor pagination and filters", func(t *testing.T) {
-		status := userdomain.UserStatusNormal
-		repo := &stubUserRepository{listUsers: []userdomain.User{{ID: 1, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: userdomain.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, listHasNext: true}
+		status := identity.UserStatusNormal
+		repo := &stubUserRepository{listUsers: []userdomain.User{{ID: 1, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: identity.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, listHasNext: true}
 		svc := NewUserQueryService(repo)
 		afterUserID := uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4d")
 
@@ -92,7 +93,7 @@ func TestUserQueryServiceListUsers(t *testing.T) {
 		if repo.listInput.AfterUserID == nil || *repo.listInput.AfterUserID != afterUserID || repo.listInput.Limit != 20 || repo.listInput.Nickname != "Ali" || repo.listInput.Username != "alice" {
 			t.Fatalf("listInput = %#v", repo.listInput)
 		}
-		if repo.listInput.Status == nil || *repo.listInput.Status != userdomain.UserStatusNormal {
+		if repo.listInput.Status == nil || *repo.listInput.Status != identity.UserStatusNormal {
 			t.Fatalf("status = %#v", repo.listInput.Status)
 		}
 		if len(users.Items) != 1 || users.Items[0].UserID != testUserID || users.Items[0].Username != "alice" || users.Items[0].CreatedAt != createdAt {

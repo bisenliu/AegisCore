@@ -1,6 +1,10 @@
 package domain
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+
+	"github.com/aegiscore/user-service/internal/shared/identity"
+)
 
 // User 是 application 端口与 infrastructure adapter 之间传递的标准领域用户模型。
 type User struct {
@@ -9,7 +13,7 @@ type User struct {
 	Nickname     string
 	Username     string
 	PasswordHash string
-	Status       UserStatus
+	Status       identity.UserStatus
 	TokenVersion int64
 	CreatedAt    int64
 	UpdatedAt    int64
@@ -22,7 +26,7 @@ func (u User) CanLogin() bool {
 
 // RequiresPasswordChange 返回用户是否必须完成强制改密流程。
 func (u User) RequiresPasswordChange() bool {
-	return u.Status == UserStatusMustChangePassword
+	return u.Status.RequiresPasswordChange()
 }
 
 // CanChangePassword 返回用户是否可通过受限 token 流程修改密码。

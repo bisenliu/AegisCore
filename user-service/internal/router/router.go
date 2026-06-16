@@ -8,6 +8,9 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
+	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
+	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
+	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 )
 
@@ -18,15 +21,19 @@ type RouteParams struct {
 	Log                   *zap.Logger
 	JWT                   *commonauth.JWTService
 	AuthConfig            config.AuthConfig
+	HealthChecks          HealthChecks
 	TokenVersionValidator commonauth.TokenVersionValidator
+	Authorizer            permissionauthorization.Authorizer
 	AuthController        *authhttp.AuthController
+	PermissionController  *permissionhttp.PermissionController
+	RoleController        *rolehttp.RoleController
 	UserController        *userhttp.UserController
 }
 
-// RegisterUserServiceHTTPRoutes 挂载健康检查、Swagger、认证和用户 API 路由。
+// RegisterUserServiceHTTPRoutes 挂载健康检查、OpenAPI、认证和用户 API 路由。
 func RegisterUserServiceHTTPRoutes(engine *gin.Engine, params RouteParams) {
-	registerHealthRoutes(engine, params.ServiceName)
-	RegisterSwagger(engine, params.Environment)
+	registerHealthRoutes(engine, params.ServiceName, params.HealthChecks)
+	RegisterOpenAPI(engine, params.Environment)
 	registerV1Routes(engine, params)
 }
 
@@ -40,7 +47,14 @@ func registerV1Routes(engine *gin.Engine, params RouteParams) {
 
 	authhttp.RegisterProtectedRoutes(authenticated.Group("/auth"), params.AuthController)
 
-	// 未来 Casbin 授权中间件应在认证之后挂载到该分组。
 	authorized := authenticated.Group("")
+	authorized.Use(permissionhttp.Authorize(params.Authorizer))
+	if params.PermissionController != nil {
+		permissionhttp.RegisterRoutes(authorized.Group("/permissions"), params.PermissionController)
+	}
+	if params.RoleController != nil {
+		rolehttp.RegisterRoleRoutes(authorized.Group("/roles"), params.RoleController)
+		rolehttp.RegisterUserRoleRoutes(authorized.Group("/users"), params.RoleController)
+	}
 	userhttp.RegisterRoutes(authorized.Group("/users"), params.UserController)
 }

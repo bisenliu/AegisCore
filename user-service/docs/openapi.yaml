@@ -1,0 +1,2193 @@
+components:
+    schemas:
+        ChangePasswordRequest:
+            properties:
+                new_password:
+                    example: new-secret
+                    minLength: 1
+                    type: string
+            required:
+                - new_password
+            type: object
+        ChangePasswordResponse:
+            properties:
+                changed:
+                    example: true
+                    type: boolean
+            type: object
+        Code:
+            enum:
+                - 0
+                - 10000
+                - 10001
+                - 20000
+                - 20001
+                - 20002
+                - 20003
+                - 20004
+                - 20005
+                - 30000
+                - 40000
+                - 50000
+                - 90000
+            type: integer
+            x-enum-varnames:
+                - CodeOK
+                - CodeBadRequest
+                - CodeValidationFailed
+                - CodeUnauthenticated
+                - CodeTokenInvalid
+                - CodeTokenExpired
+                - CodeTokenRevoked
+                - CodeMFARequired
+                - CodeUserAccountLocked
+                - CodeForbidden
+                - CodeConflict
+                - CodeNotFound
+                - CodeInternalError
+        CreatePermissionRequest:
+            properties:
+                active:
+                    example: true
+                    type: boolean
+                description:
+                    example: 允许分页查询用户资料
+                    maxLength: 512
+                    type: string
+                http_method:
+                    example: GET
+                    type: string
+                module:
+                    example: user
+                    maxLength: 64
+                    minLength: 1
+                    type: string
+                name:
+                    example: 查询用户列表
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                path_template:
+                    example: /api/v1/users
+                    type: string
+                system:
+                    example: false
+                    type: boolean
+            required:
+                - http_method
+                - module
+                - name
+                - path_template
+            type: object
+        CreateRoleRequest:
+            properties:
+                active:
+                    example: true
+                    type: boolean
+                description:
+                    example: 管理后台角色
+                    maxLength: 512
+                    type: string
+                name:
+                    example: 管理员
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                system:
+                    example: false
+                    type: boolean
+            required:
+                - name
+            type: object
+        CreateUserRequest:
+            properties:
+                nickname:
+                    example: Alice
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                password:
+                    example: secret
+                    minLength: 1
+                    type: string
+                status:
+                    allOf:
+                        - $ref: '#/components/schemas/UserStatus'
+                    example: 100
+                username:
+                    example: alice
+                    maxLength: 255
+                    minLength: 1
+                    type: string
+            required:
+                - nickname
+                - password
+                - username
+            type: object
+        DiscoveredRouteResponse:
+            properties:
+                http_method:
+                    example: GET
+                    type: string
+                path:
+                    example: /api/v1/users
+                    type: string
+            type: object
+        Envelope:
+            properties:
+                code:
+                    $ref: '#/components/schemas/Code'
+                data: {}
+                errors: {}
+                message:
+                    type: string
+                success:
+                    type: boolean
+            type: object
+        HealthCheckResult:
+            properties:
+                message:
+                    example: dependency unavailable
+                    type: string
+                name:
+                    example: postgres.user_db
+                    type: string
+                status:
+                    allOf:
+                        - $ref: '#/components/schemas/HealthCheckStatus'
+                    example: ok
+            type: object
+        HealthCheckStatus:
+            enum:
+                - ok
+                - unavailable
+            type: string
+            x-enum-varnames:
+                - HealthCheckStatusOK
+                - HealthCheckStatusUnavailable
+        HealthResponse:
+            properties:
+                checks:
+                    items:
+                        $ref: '#/components/schemas/HealthCheckResult'
+                    type: array
+                service:
+                    example: aegiscore-user-services
+                    type: string
+                status:
+                    allOf:
+                        - $ref: '#/components/schemas/HealthCheckStatus'
+                    example: ok
+            type: object
+        LoginRequest:
+            properties:
+                password:
+                    example: secret
+                    minLength: 1
+                    type: string
+                username:
+                    example: alice
+                    maxLength: 255
+                    minLength: 1
+                    type: string
+            required:
+                - password
+                - username
+            type: object
+        LogoutResponse:
+            properties:
+                logged_out:
+                    example: true
+                    type: boolean
+            type: object
+        Pagination:
+            properties:
+                has_next:
+                    example: true
+                    type: boolean
+                next_cursor:
+                    example: 0190c8d2-8d8a-7a01-9f43-0f91fb4e2b7c
+                    type: string
+                page_size:
+                    example: 50
+                    type: integer
+            type: object
+        PermissionIDBodyRequest:
+            properties:
+                permission_id:
+                    example: 018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e
+                    type: string
+            required:
+                - permission_id
+            type: object
+        PermissionIDsRequest:
+            properties:
+                permission_ids:
+                    items:
+                        type: string
+                    type: array
+            required:
+                - permission_ids
+            type: object
+        PermissionListResponseDoc:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/PermissionResponse'
+                    type: array
+                pagination:
+                    $ref: '#/components/schemas/Pagination'
+            type: object
+        PermissionResponse:
+            properties:
+                active:
+                    example: true
+                    type: boolean
+                created_at:
+                    example: 1.7802888e+12
+                    type: integer
+                description:
+                    example: 允许分页查询用户资料
+                    type: string
+                http_method:
+                    example: GET
+                    type: string
+                module:
+                    example: user
+                    type: string
+                name:
+                    example: 查询用户列表
+                    type: string
+                path_template:
+                    example: /api/v1/users
+                    type: string
+                permission_id:
+                    example: 018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e
+                    type: string
+                system:
+                    example: true
+                    type: boolean
+                updated_at:
+                    example: 1.7802888e+12
+                    type: integer
+            type: object
+        RefreshTokenRequest:
+            properties:
+                refresh_token:
+                    example: eyJhbGciOi...
+                    minLength: 1
+                    type: string
+            required:
+                - refresh_token
+            type: object
+        RoleIDBodyRequest:
+            properties:
+                role_id:
+                    example: 018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e
+                    type: string
+            required:
+                - role_id
+            type: object
+        RoleIDsRequest:
+            properties:
+                role_ids:
+                    items:
+                        type: string
+                    type: array
+            required:
+                - role_ids
+            type: object
+        RoleListResponseDoc:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/RoleResponse'
+                    type: array
+                pagination:
+                    $ref: '#/components/schemas/Pagination'
+            type: object
+        RoleResponse:
+            properties:
+                active:
+                    example: true
+                    type: boolean
+                created_at:
+                    example: 1.7802888e+12
+                    type: integer
+                description:
+                    example: 管理后台角色
+                    type: string
+                name:
+                    example: 管理员
+                    type: string
+                role_id:
+                    example: 018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e
+                    type: string
+                system:
+                    example: false
+                    type: boolean
+                updated_at:
+                    example: 1.7802888e+12
+                    type: integer
+            type: object
+        RouteDiffResponse:
+            properties:
+                missing_in_permissions:
+                    items:
+                        $ref: '#/components/schemas/DiscoveredRouteResponse'
+                    type: array
+                stale_permissions:
+                    items:
+                        $ref: '#/components/schemas/PermissionResponse'
+                    type: array
+            type: object
+        SetRoleStatusRequest:
+            properties:
+                active:
+                    example: true
+                    type: boolean
+            type: object
+        TokenResponse:
+            properties:
+                access_token:
+                    example: eyJhbGciOi...
+                    type: string
+                expires_in:
+                    example: 900
+                    type: integer
+                password_change_required:
+                    example: true
+                    type: boolean
+                refresh_token:
+                    example: eyJhbGciOi...
+                    type: string
+                token_type:
+                    example: Bearer
+                    type: string
+            type: object
+        UpdatePermissionRequest:
+            properties:
+                active:
+                    example: true
+                    type: boolean
+                description:
+                    example: 允许分页查询用户资料
+                    maxLength: 512
+                    type: string
+                http_method:
+                    example: GET
+                    type: string
+                module:
+                    example: user
+                    maxLength: 64
+                    minLength: 1
+                    type: string
+                name:
+                    example: 查询用户列表
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+                path_template:
+                    example: /api/v1/users
+                    type: string
+            required:
+                - http_method
+                - module
+                - name
+                - path_template
+            type: object
+        UpdateRoleRequest:
+            properties:
+                active:
+                    example: true
+                    type: boolean
+                description:
+                    example: 管理后台角色
+                    maxLength: 512
+                    type: string
+                name:
+                    example: 管理员
+                    maxLength: 128
+                    minLength: 1
+                    type: string
+            required:
+                - name
+            type: object
+        UserListResponseDoc:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/UserResponseDoc'
+                    type: array
+                pagination:
+                    $ref: '#/components/schemas/Pagination'
+            type: object
+        UserResponseDoc:
+            properties:
+                created_at:
+                    example: 1.7802888e+12
+                    type: integer
+                nickname:
+                    example: Alice
+                    type: string
+                status:
+                    example: 100
+                    type: integer
+                updated_at:
+                    example: 1.7802888e+12
+                    type: integer
+                user_id:
+                    example: 018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e
+                    type: string
+                username:
+                    example: alice
+                    type: string
+            type: object
+        UserStatus:
+            enum:
+                - 100
+                - 200
+                - 300
+            format: int64
+            type: integer
+            x-enum-varnames:
+                - UserStatusNormal
+                - UserStatusDisabled
+                - UserStatusMustChangePassword
+    securitySchemes:
+        BearerAuth:
+            bearerFormat: JWT
+            description: 输入 Bearer token，格式为：Bearer <token>
+            scheme: bearer
+            type: http
+info:
+    contact: {}
+    description: AegisCore 用户服务 API 文档，覆盖认证会话、用户资料、角色管理、权限目录、RBAC 授权保护的业务接口和服务健康检查。
+    title: AegisCore User Services API
+    version: 1.0.0
+openapi: 3.0.3
+paths:
+    /auth/change-password:
+        post:
+            description: 使用登录后返回的受限改密凭据修改密码，并将用户状态恢复为正常。
+            parameters:
+                - description: Bearer password-change-token
+                  in: header
+                  name: Authorization
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ChangePasswordRequest'
+                description: 修改密码请求
+                required: true
+                x-originalParamName: request
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/ChangePasswordResponse'
+                                      type: object
+                    description: 修改成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求体错误或参数校验失败
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 改密凭据无效或已失效
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            summary: 修改密码
+            tags:
+                - 认证
+    /auth/login:
+        post:
+            description: 校验用户名和密码，创建可撤销会话并返回 Access Token 与 Refresh Token。
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/LoginRequest'
+                description: 登录请求
+                required: true
+                x-originalParamName: request
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/TokenResponse'
+                                      type: object
+                    description: 登录成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求体错误或参数校验失败
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 用户名或密码错误
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            summary: 用户登录
+            tags:
+                - 认证
+    /auth/logout:
+        post:
+            description: 删除当前会话的 Refresh Token 会话记录，不修改用户 token_version。
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/LogoutResponse'
+                                      type: object
+                    description: 退出成功
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 退出当前设备
+            tags:
+                - 认证
+    /auth/logout-all:
+        post:
+            description: 递增用户 token_version 并清理该用户所有 Refresh Token 会话。
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/LogoutResponse'
+                                      type: object
+                    description: 退出成功
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 退出全部设备
+            tags:
+                - 认证
+    /auth/refresh:
+        post:
+            description: 使用仍有效且未撤销的 Refresh Token 换取新的 Access Token。
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RefreshTokenRequest'
+                description: 刷新请求
+                required: true
+                x-originalParamName: request
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/TokenResponse'
+                                      type: object
+                    description: 刷新成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求体错误或参数校验失败
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: Refresh Token 无效或会话已失效
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            summary: 刷新 Access Token
+            tags:
+                - 认证
+    /livez:
+        get:
+            description: 返回用户服务最小存活状态，不检查 PostgreSQL、Redis 或 RBAC policy。
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HealthResponse'
+                    description: 服务存活
+            summary: 服务存活检查
+            tags:
+                - 系统
+        servers:
+            - url: /
+    /permissions:
+        get:
+            description: 查询权限目录。业务接口由 JWT 和 RBAC 保护。
+            parameters:
+                - description: 分页游标
+                  in: query
+                  name: cursor
+                  schema:
+                    type: string
+                - description: 每页数量
+                  in: query
+                  name: page_size
+                  schema:
+                    type: integer
+                - description: 模块
+                  in: query
+                  name: module
+                  schema:
+                    type: string
+                - description: HTTP 方法
+                  in: query
+                  name: http_method
+                  schema:
+                    type: string
+                - description: 是否启用
+                  in: query
+                  name: active
+                  schema:
+                    type: boolean
+                - description: 是否系统权限
+                  in: query
+                  name: system
+                  schema:
+                    type: boolean
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/PermissionListResponseDoc'
+                                      type: object
+                    description: 查询成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 查询参数错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 分页查询权限
+            tags:
+                - 权限
+        post:
+            description: 创建正式权限目录记录。业务接口由 JWT 和 RBAC 保护。
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreatePermissionRequest'
+                description: 创建权限请求
+                required: true
+                x-originalParamName: request
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/PermissionResponse'
+                                      type: object
+                    description: 创建成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求体错误或参数校验失败
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 权限已存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 创建权限
+            tags:
+                - 权限
+    /permissions/{permission_id}:
+        get:
+            description: 通过权限 ID 查询权限目录记录。
+            parameters:
+                - description: 权限ID
+                  in: path
+                  name: permission_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/PermissionResponse'
+                                      type: object
+                    description: 查询成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 权限 ID 参数错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 权限不存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 查询权限详情
+            tags:
+                - 权限
+        put:
+            description: 更新权限目录记录。系统权限身份字段受保护。
+            parameters:
+                - description: 权限ID
+                  in: path
+                  name: permission_id
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdatePermissionRequest'
+                description: 更新权限请求
+                required: true
+                x-originalParamName: request
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/PermissionResponse'
+                                      type: object
+                    description: 更新成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求错误或系统权限受保护
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 权限不存在
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 权限已存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 更新权限
+            tags:
+                - 权限
+    /permissions/{permission_id}/disable:
+        post:
+            description: 停用权限目录记录。停用后相关 RBAC 授权应被拒绝。
+            parameters:
+                - description: 权限ID
+                  in: path
+                  name: permission_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/PermissionResponse'
+                                      type: object
+                    description: 停用成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 权限 ID 参数错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 权限不存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 停用权限
+            tags:
+                - 权限
+    /permissions/{permission_id}/enable:
+        post:
+            description: 启用权限目录记录。
+            parameters:
+                - description: 权限ID
+                  in: path
+                  name: permission_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/PermissionResponse'
+                                      type: object
+                    description: 启用成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 权限 ID 参数错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 权限不存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 启用权限
+            tags:
+                - 权限
+    /permissions/route-diff:
+        get:
+            description: 只读比较 Gin 已注册业务路由和正式权限目录差异；不会创建权限，也不会绑定角色。
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/RouteDiffResponse'
+                                      type: object
+                    description: 查询成功
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 查询权限路由差异
+            tags:
+                - 权限
+    /permissions/users/{user_id}/effective:
+        get:
+            description: 查询用户经角色绑定后当前生效的权限集合。
+            parameters:
+                - description: 用户ID
+                  in: path
+                  name: user_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            items:
+                                                $ref: '#/components/schemas/PermissionResponse'
+                                            type: array
+                                      type: object
+                    description: 查询成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 用户 ID 参数错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 查询用户有效权限
+            tags:
+                - 权限
+    /readyz:
+        get:
+            description: 检查 PostgreSQL、Redis、Casbin policy 和 RBAC policy watcher 是否就绪。
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HealthResponse'
+                    description: 服务就绪
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HealthResponse'
+                    description: 服务未就绪
+            summary: 服务就绪检查
+            tags:
+                - 系统
+        servers:
+            - url: /
+    /roles:
+        get:
+            description: 查询角色列表。业务接口由 JWT 和 RBAC 保护，Casbin 使用 role_id 作为策略主体，不依赖 roles.code。
+            parameters:
+                - description: 分页游标
+                  in: query
+                  name: cursor
+                  schema:
+                    type: string
+                - description: 每页数量
+                  in: query
+                  name: page_size
+                  schema:
+                    type: integer
+                - description: 是否启用
+                  in: query
+                  name: active
+                  schema:
+                    type: boolean
+                - description: 是否系统角色
+                  in: query
+                  name: system
+                  schema:
+                    type: boolean
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/RoleListResponseDoc'
+                                      type: object
+                    description: 查询成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 查询参数错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 分页查询角色
+            tags:
+                - 角色
+        post:
+            description: 创建角色。业务接口由 JWT 和 RBAC 保护。
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRoleRequest'
+                description: 创建角色请求
+                required: true
+                x-originalParamName: request
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/RoleResponse'
+                                      type: object
+                    description: 创建成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求体错误或参数校验失败
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 角色已存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 创建角色
+            tags:
+                - 角色
+    /roles/{role_id}:
+        get:
+            description: 通过角色 ID 查询角色详情。业务接口由 JWT 和 RBAC 保护。
+            parameters:
+                - description: 角色ID
+                  in: path
+                  name: role_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/RoleResponse'
+                                      type: object
+                    description: 查询成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 角色 ID 参数错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 角色不存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 查询角色详情
+            tags:
+                - 角色
+        patch:
+            description: 更新角色元数据。系统角色受保护字段不可破坏性修改。
+            parameters:
+                - description: 角色ID
+                  in: path
+                  name: role_id
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateRoleRequest'
+                description: 更新角色请求
+                required: true
+                x-originalParamName: request
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/RoleResponse'
+                                      type: object
+                    description: 更新成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求错误或系统角色受保护
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 角色不存在
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 角色已存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 更新角色
+            tags:
+                - 角色
+    /roles/{role_id}/permissions:
+        get:
+            description: 查询角色绑定的权限列表。
+            parameters:
+                - description: 角色ID
+                  in: path
+                  name: role_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            items:
+                                                $ref: '#/components/schemas/PermissionResponse'
+                                            type: array
+                                      type: object
+                    description: 查询成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 角色 ID 参数错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 查询角色权限
+            tags:
+                - 角色
+        post:
+            description: 为角色新增一个启用权限绑定。
+            parameters:
+                - description: 角色ID
+                  in: path
+                  name: role_id
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PermissionIDBodyRequest'
+                description: 权限ID
+                required: true
+                x-originalParamName: request
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            items:
+                                                $ref: '#/components/schemas/PermissionResponse'
+                                            type: array
+                                      type: object
+                    description: 绑定成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 角色或启用权限不存在
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 绑定已存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 绑定角色权限
+            tags:
+                - 角色
+        put:
+            description: 幂等替换角色完整权限集合，角色权限解绑后相关 RBAC 授权应被拒绝。
+            parameters:
+                - description: 角色ID
+                  in: path
+                  name: role_id
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PermissionIDsRequest'
+                description: 权限ID列表
+                required: true
+                x-originalParamName: request
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            items:
+                                                $ref: '#/components/schemas/PermissionResponse'
+                                            type: array
+                                      type: object
+                    description: 替换成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 角色或权限不存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 替换角色权限
+            tags:
+                - 角色
+    /roles/{role_id}/permissions/{permission_id}:
+        delete:
+            description: 删除角色权限绑定，解绑后相关 RBAC 授权应被拒绝。
+            parameters:
+                - description: 角色ID
+                  in: path
+                  name: role_id
+                  required: true
+                  schema:
+                    type: string
+                - description: 权限ID
+                  in: path
+                  name: permission_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            items:
+                                                $ref: '#/components/schemas/PermissionResponse'
+                                            type: array
+                                      type: object
+                    description: 解绑成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 绑定不存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 解绑角色权限
+            tags:
+                - 角色
+    /roles/{role_id}/status:
+        patch:
+            description: 启用或停用角色。停用角色后相关 RBAC 授权应被拒绝。
+            parameters:
+                - description: 角色ID
+                  in: path
+                  name: role_id
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetRoleStatusRequest'
+                description: 角色状态请求
+                required: true
+                x-originalParamName: request
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/RoleResponse'
+                                      type: object
+                    description: 操作成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求错误或系统角色受保护
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 角色不存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 启停角色
+            tags:
+                - 角色
+    /startupz:
+        get:
+            description: 检查用户服务启动所需关键依赖是否已完成初始化。
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HealthResponse'
+                    description: 服务启动完成
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HealthResponse'
+                    description: 服务启动未完成
+            summary: 服务启动检查
+            tags:
+                - 系统
+        servers:
+            - url: /
+    /users:
+        get:
+            description: 基于 user_id keyset 分页查询用户资料列表，支持按用户昵称、用户名和用户状态过滤，默认排除软删除用户。page_size 未传或小于 1 时使用默认值 10，超过 100 时按 100 处理。
+            parameters:
+                - description: 分页游标，上一页最后一条用户的 user_id
+                  in: query
+                  name: cursor
+                  schema:
+                    type: string
+                - description: 每页数量，未传或小于 1 时默认为 10，超过 100 时按 100 处理
+                  in: query
+                  name: page_size
+                  schema:
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - description: 用户昵称模糊匹配
+                  in: query
+                  name: nickname
+                  schema:
+                    type: string
+                - description: 用户名精确匹配
+                  in: query
+                  name: username
+                  schema:
+                    type: string
+                - description: 用户状态：100 正常，200 冻结/停用，300 必须修改密码
+                  in: query
+                  name: status
+                  schema:
+                    enum:
+                        - 100
+                        - 200
+                        - 300
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/UserListResponseDoc'
+                                      type: object
+                    description: 查询成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 查询参数错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 分页查询用户列表
+            tags:
+                - 用户
+        post:
+            description: 创建一个新的用户资料。请求体使用共享校验器校验，用户名必须唯一，status 缺省为 100。
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateUserRequest'
+                description: 创建用户请求
+                required: true
+                x-originalParamName: request
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/UserResponseDoc'
+                                      type: object
+                    description: 创建成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求体错误或参数校验失败
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 用户已存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 创建用户
+            tags:
+                - 用户
+    /users/{user_id}:
+        get:
+            description: 通过外部 UUID 用户 ID 查询用户基础资料。
+            parameters:
+                - description: 用户ID
+                  in: path
+                  name: user_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            $ref: '#/components/schemas/UserResponseDoc'
+                                      type: object
+                    description: 查询成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 用户 ID 参数错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 用户不存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 查询用户资料
+            tags:
+                - 用户
+    /users/{user_id}/roles:
+        get:
+            description: 查询用户当前绑定的角色列表。
+            parameters:
+                - description: 用户ID
+                  in: path
+                  name: user_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            items:
+                                                $ref: '#/components/schemas/RoleResponse'
+                                            type: array
+                                      type: object
+                    description: 查询成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 用户 ID 参数错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 查询用户角色
+            tags:
+                - 角色
+        post:
+            description: 为用户新增一个角色绑定。
+            parameters:
+                - description: 用户ID
+                  in: path
+                  name: user_id
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RoleIDBodyRequest'
+                description: 角色ID
+                required: true
+                x-originalParamName: request
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            items:
+                                                $ref: '#/components/schemas/RoleResponse'
+                                            type: array
+                                      type: object
+                    description: 绑定成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 角色不存在
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 绑定已存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 绑定用户角色
+            tags:
+                - 角色
+        put:
+            description: 幂等替换用户完整角色集合，用户角色解绑后相关 RBAC 授权应被拒绝。
+            parameters:
+                - description: 用户ID
+                  in: path
+                  name: user_id
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RoleIDsRequest'
+                description: 角色ID列表
+                required: true
+                x-originalParamName: request
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            items:
+                                                $ref: '#/components/schemas/RoleResponse'
+                                            type: array
+                                      type: object
+                    description: 替换成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 角色不存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 替换用户角色
+            tags:
+                - 角色
+    /users/{user_id}/roles/{role_id}:
+        delete:
+            description: 删除用户角色绑定，解绑后相关 RBAC 授权应被拒绝。
+            parameters:
+                - description: 用户ID
+                  in: path
+                  name: user_id
+                  required: true
+                  schema:
+                    type: string
+                - description: 角色ID
+                  in: path
+                  name: role_id
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: '#/components/schemas/Envelope'
+                                    - properties:
+                                        data:
+                                            items:
+                                                $ref: '#/components/schemas/RoleResponse'
+                                            type: array
+                                      type: object
+                    description: 解绑成功
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 请求错误
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 未认证或 token 无效
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 无访问权限
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 绑定不存在
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Envelope'
+                    description: 服务器内部错误
+            security:
+                - BearerAuth: []
+            summary: 解绑用户角色
+            tags:
+                - 角色
+servers:
+    - url: /api/v1

@@ -8,6 +8,9 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
+	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
+	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
+	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 	"github.com/aegiscore/user-service/internal/router"
 )
@@ -20,10 +23,14 @@ type RegisterRouteParams struct {
 	Log    *zap.Logger
 	Engine *gin.Engine
 	JWT    *commonauth.JWTService
+	Health router.HealthChecks
 	// TokenVersions 是可选依赖，使公开路由和测试可以在不提供撤销能力时挂载中间件。
-	TokenVersions  commonauth.TokenVersionValidator `optional:"true"`
-	AuthController *authhttp.AuthController
-	UserController *userhttp.UserController
+	TokenVersions        commonauth.TokenVersionValidator `optional:"true"`
+	Authorizer           permissionauthorization.Authorizer
+	AuthController       *authhttp.AuthController
+	PermissionController *permissionhttp.PermissionController `optional:"true"`
+	RoleController       *rolehttp.RoleController             `optional:"true"`
+	UserController       *userhttp.UserController
 }
 
 // RegisterRoutes 将服务级 provider 依赖适配为 router 层路由注册参数。
@@ -34,8 +41,12 @@ func RegisterRoutes(params RegisterRouteParams) {
 		Log:                   params.Log,
 		JWT:                   params.JWT,
 		AuthConfig:            params.Config.Auth,
+		HealthChecks:          params.Health,
 		TokenVersionValidator: params.TokenVersions,
+		Authorizer:            params.Authorizer,
 		AuthController:        params.AuthController,
+		PermissionController:  params.PermissionController,
+		RoleController:        params.RoleController,
 		UserController:        params.UserController,
 	})
 }

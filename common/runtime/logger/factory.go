@@ -23,7 +23,7 @@ func New(cfg *config.Config) (*zap.Logger, error) {
 func NewWithConfig(cfg config.LogConfig) (*zap.Logger, error) {
 	level := parseLevel(cfg.Level)
 	encoder := newEncoder(cfg.Format)
-	cores := make([]zapcore.Core, 0, 5)
+	cores := make([]zapcore.Core, 0, 6)
 
 	if cfg.Directory != "" || cfg.Filename != "" {
 		writers, err := newFileWriters(cfg)
@@ -33,9 +33,10 @@ func NewWithConfig(cfg config.LogConfig) (*zap.Logger, error) {
 		cores = append(cores,
 			// 文件日志同时写入聚合日志和按级别拆分的运维日志流。
 			zapcore.NewCore(encoder, writers.all, level),
-			zapcore.NewCore(encoder, writers.info, exactLevelAtOrAbove(zapcore.InfoLevel, level)),
-			zapcore.NewCore(encoder, writers.warning, exactLevelAtOrAbove(zapcore.WarnLevel, level)),
-			zapcore.NewCore(encoder, writers.error, levelAtOrAbove(zapcore.ErrorLevel, level)),
+			newExcludedLoggerCore(zapcore.NewCore(encoder, writers.info, exactLevelAtOrAbove(zapcore.InfoLevel, level)), SQLLoggerName),
+			newExcludedLoggerCore(zapcore.NewCore(encoder, writers.warning, exactLevelAtOrAbove(zapcore.WarnLevel, level)), SQLLoggerName),
+			newExcludedLoggerCore(zapcore.NewCore(encoder, writers.error, levelAtOrAbove(zapcore.ErrorLevel, level)), SQLLoggerName),
+			newNamedLoggerCore(zapcore.NewCore(encoder, writers.sql, level), SQLLoggerName),
 		)
 	}
 

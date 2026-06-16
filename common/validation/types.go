@@ -26,13 +26,15 @@ const (
 	TagJSON = "json"
 	// TagForm 是用于提取表单请求字段名的结构体标签。
 	TagForm = "form"
+	// TagHeader 是用于提取 HTTP header 请求字段名的结构体标签。
+	TagHeader = "header"
 	// TagURI 是用于提取 URI 参数字段名的结构体标签。
 	TagURI = "uri"
 	// TagQuery 是用于提取 query 参数字段名的结构体标签。
 	TagQuery = "query"
 )
 
-var requestTags = []string{TagJSON, TagForm, TagURI, TagQuery}
+var requestTags = []string{TagJSON, TagForm, TagHeader, TagURI, TagQuery}
 
 // Defaultable 标记可在校验前填充安全默认值的请求值。
 type Defaultable interface {

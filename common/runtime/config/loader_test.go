@@ -44,6 +44,9 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cfg.Auth.MaxActiveSessionsPerUser != 5 {
 		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 5", cfg.Auth.MaxActiveSessionsPerUser)
 	}
+	if !cfg.Ent.SQLDebug {
+		t.Fatal("Ent.SQLDebug = false, want true")
+	}
 	if cfg.Log.Directory != "./logs" {
 		t.Fatalf("Log.Directory = %q, want ./logs", cfg.Log.Directory)
 	}
@@ -243,6 +246,7 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_AUTH_JWT_REFRESH_TOKEN_TTL", "720h")
 	t.Setenv("AEGISCORE_AUTH_TOKEN_VERSION_CACHE_TTL", "30s")
 	t.Setenv("AEGISCORE_AUTH_MAX_ACTIVE_SESSIONS_PER_USER", "7")
+	t.Setenv("AEGISCORE_ENT_SQL_DEBUG", "false")
 	t.Setenv("AEGISCORE_REDIS_CACHE_REDIS_DB", "9")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_PASSWORD", "env-secret")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_MAX_OPEN_CONNS", "30")
@@ -268,6 +272,9 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	}
 	if cfg.Auth.MaxActiveSessionsPerUser != 7 {
 		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 7", cfg.Auth.MaxActiveSessionsPerUser)
+	}
+	if cfg.Ent.SQLDebug {
+		t.Fatal("Ent.SQLDebug = true, want env override false")
 	}
 	if cfg.Redis["cache_redis"].DB != 9 {
 		t.Fatalf("cache_redis.DB = %d, want 9", cfg.Redis["cache_redis"].DB)
@@ -505,6 +512,9 @@ auth:
   refresh_token_rotation: true
   max_active_sessions_per_user: 5
 
+ent:
+  sql_debug: true
+
 log:
   level: info
   format: json
@@ -587,6 +597,8 @@ func configYAMLWithSection(section string) string {
   token_version_cache_ttl: 30s
   refresh_token_rotation: true
   max_active_sessions_per_user: 5`,
+		"ent": `ent:
+  sql_debug: false`,
 		"log": `log:
   level: info
   format: json
@@ -627,8 +639,8 @@ func configYAMLWithSection(section string) string {
 			break
 		}
 	}
-	ordered := []string{sections["system"], sections["app"], sections["http"], sections["auth"], sections["log"], sections["redis"], sections["postgres"]}
-	return fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n", ordered[0], ordered[1], ordered[2], ordered[3], ordered[4], ordered[5], ordered[6])
+	ordered := []string{sections["system"], sections["app"], sections["http"], sections["auth"], sections["ent"], sections["log"], sections["redis"], sections["postgres"]}
+	return fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n", ordered[0], ordered[1], ordered[2], ordered[3], ordered[4], ordered[5], ordered[6], ordered[7])
 }
 
 func loadConfigFromYAML(t *testing.T, content string) *Config {

@@ -11,7 +11,7 @@
 
 禁止放置：
 
-- 本服务 Gin controller、route registration 或 Swagger DTO。
+- 本服务 Gin controller、route registration 或 OpenAPI 文档 DTO。
 - `common/http/response` 输出逻辑。
 - Ent、SQL、Redis store 或本服务持久化 adapter。
 - 尚无真实调用方的 order/payment 等预设 client。

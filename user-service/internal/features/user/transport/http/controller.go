@@ -44,20 +44,12 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 		return
 	}
 
-	NormalizeListUsers(&req)
-	cursor, err := ParseListCursor(req)
+	query, err := prepareListUsersQuery(req)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	users, err := ctl.queries.ListUsers(c.Request.Context(), userquery.ListUsersQuery{
-		Cursor:   cursor,
-		PageSize: req.PageSize,
-		Limit:    req.Limit,
-		Nickname: req.Nickname,
-		Username: req.Username,
-		Status:   req.Status,
-	})
+	users, err := ctl.queries.ListUsers(c.Request.Context(), query)
 	if err != nil {
 		response.Fail(c, toUserHTTPError(err))
 		return
@@ -84,17 +76,14 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 	if !binding.BindOrAbort(ctl.validator, c, &req, binding.JSONBinder) {
 		return
 	}
-	if err := NormalizeCreateUser(&req); err != nil {
+
+	cmd, err := prepareCreateUserCommand(req)
+	if err != nil {
 		response.Fail(c, err)
 		return
 	}
 
-	user, err := ctl.commands.CreateUser(c.Request.Context(), usercommand.CreateUserCommand{
-		Nickname: req.Nickname,
-		Username: req.Username,
-		Password: req.Password,
-		Status:   req.Status,
-	})
+	user, err := ctl.commands.CreateUser(c.Request.Context(), cmd)
 	if err != nil {
 		response.Fail(c, toUserHTTPError(err))
 		return
@@ -120,13 +109,14 @@ func (ctl *UserController) GetByUserID(c *gin.Context) {
 	if !binding.BindOrAbort(ctl.validator, c, &req, binding.URIBinder) {
 		return
 	}
-	userID, err := ParseUserID(req)
+
+	query, err := prepareGetUserByIDQuery(req)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
 
-	user, err := ctl.queries.GetUserByID(c.Request.Context(), userquery.GetUserByIDQuery{UserID: userID})
+	user, err := ctl.queries.GetUserByID(c.Request.Context(), query)
 	if err != nil {
 		response.Fail(c, toUserHTTPError(err))
 		return

@@ -1,0 +1,23 @@
+# Tasks
+
+- [x] 更新 `AGENTS.md`，明确 `internal/shared` 只允许用户服务内稳定业务内核，并登记 `identity` 与 `rbacbaseline` 的 owner、消费方和禁止事项。
+- [x] 更新 `docs/ARCHITECTURE.md`，同步 `internal/shared` 边界、依赖规则、RBAC baseline ownership 和架构 lint 门禁说明。
+- [x] 新增 `user-service/internal/shared/identity`，迁移 `UserStatus` 枚举、解析方法和账号生命周期判断。
+- [x] 新增 `shared/identity` 单元测试，覆盖状态合法性、allowed values、登录判断、强制改密判断和 text/json 解析。
+- [x] 更新 user feature 使用 `identity.UserStatus`，包括 domain model、application input、validators、HTTP DTO/response 和 PostgreSQL adapter。
+- [x] 更新 auth feature 使用 `identity.UserStatus`，包括 domain credential、credentials verifier、command tests 和 PostgreSQL adapter。
+- [x] 更新 Ent schema 默认值测试，使 `users.status` 默认值与 `identity.UserStatusNormal` 对齐。
+- [x] 删除 `user-service/internal/features/user/domain/user_status.go` 中的旧状态定义，不保留 alias、兼容常量或 wrapper 入口。
+- [x] 新增 `user-service/internal/shared/rbacbaseline`，迁移系统角色、系统权限和默认角色权限绑定规格。
+- [x] 新增或迁移 `shared/rbacbaseline` 测试，覆盖 ID 唯一性、route identity 唯一性、默认绑定引用完整性和超级管理员角色存在性。
+- [x] 更新 role seed 使用 `internal/shared/rbacbaseline`。
+- [x] 更新 permission route scanner、route diff 相关测试和 Casbin policy loader 使用 `internal/shared/rbacbaseline`。
+- [x] 删除 `user-service/internal/features/permission/application/rbacbaseline` 旧包，不保留兼容层。
+- [x] 保持 role 通过 permission application port 校验权限存在且启用，不搬迁该 use case 级依赖。
+- [x] 新增 `user-service/scripts/architecture-lint.sh`，检查 feature 间 import 白名单、HTTP DTO 泄漏、`internal/shared` 禁止依赖、旧 baseline 包残留、旧状态入口残留、Swagger drift 和 Ent generated code drift。
+- [x] 更新 `Makefile`，新增 `architecture-lint` 和 `verify` target。
+- [x] 更新 CI，使主验证链执行 `make lint`、`make architecture-lint`、`make test`、`make swagger-generate` 和 `git diff --exit-code`。
+- [x] 运行 `gofmt`。
+- [x] 运行 `make architecture-lint`。
+- [x] 运行 `make verify`。
+- [x] 扫描确认无旧引用：`rg -n "userdomain\\.UserStatus|features/permission/application/rbacbaseline" user-service/internal user-service/ent/schema`，并确认 auth/role 不再导入 `internal/features/user/domain`。

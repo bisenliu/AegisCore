@@ -11,6 +11,7 @@ import (
 	entuser "github.com/aegiscore/user-service/ent/user"
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 type UserStore struct {
@@ -44,7 +45,7 @@ func (s *UserStore) Create(ctx context.Context, input userapplication.CreateUser
 		return toModel(created), nil
 	}
 	if ent.IsConstraintError(err) {
-		return nil, userdomain.ErrUserAlreadyExists
+		return nil, identity.ErrUserAlreadyExists
 	}
 	return nil, fmt.Errorf("create user username %s: %w", input.Username, err)
 }
@@ -56,7 +57,7 @@ func (s *UserStore) GetByUserID(ctx context.Context, userID uuid.UUID) (*userdom
 		return toModel(found), nil
 	}
 	if ent.IsNotFound(err) {
-		return nil, userdomain.ErrUserNotFound
+		return nil, identity.ErrUserNotFound
 	}
 	return nil, fmt.Errorf("query user by user_id %s: %w", userID.String(), err)
 }
@@ -93,7 +94,7 @@ func toModel(entUser *ent.User) *userdomain.User {
 		Nickname:     entUser.Nickname,
 		Username:     entUser.Username,
 		PasswordHash: entUser.PasswordHash,
-		Status:       userdomain.UserStatus(entUser.Status),
+		Status:       identity.UserStatus(entUser.Status),
 		TokenVersion: entUser.TokenVersion,
 		CreatedAt:    entUser.CreatedAt,
 		UpdatedAt:    entUser.UpdatedAt,

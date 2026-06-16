@@ -16,7 +16,7 @@ import (
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 var authTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
@@ -26,7 +26,7 @@ func TestAuthUseCaseLogin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}
+	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 
@@ -61,7 +61,7 @@ func TestAuthUseCaseLoginUsesDefaultTTLs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}
+	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthUseCasesWithConfig(repo, store, config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"}})
 
@@ -85,7 +85,7 @@ func TestAuthUseCaseLoginUsesExplicitTTLs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}
+	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	accessTTL := time.Minute
 	refreshTTL := 2 * time.Hour
@@ -109,7 +109,7 @@ func TestAuthUseCaseLoginPassesMaxActiveSessionsPerUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}
+	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthUseCasesWithConfig(repo, store, config.AuthConfig{
 		JWT:                      config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour},
@@ -134,7 +134,7 @@ func TestAuthUseCaseLoginDoesNotReturnTokenWhenSessionCreateFails(t *testing.T) 
 		t.Fatalf("Hash: %v", err)
 	}
 	createErr := errors.New("create session failed")
-	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}
+	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2, createErr: createErr}
 	svc := newTestAuthUseCases(repo, store, true)
 
@@ -153,7 +153,7 @@ func TestAuthUseCaseLoginRejectsInvalidCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	svc := newTestAuthUseCases(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusNormal, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
+	svc := newTestAuthUseCases(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
 
 	_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "wrong"})
 
@@ -167,7 +167,7 @@ func TestAuthUseCaseLoginRejectsInactiveStatuses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	for _, status := range []userdomain.UserStatus{userdomain.UserStatusDisabled} {
+	for _, status := range []identity.UserStatus{identity.UserStatusDisabled} {
 		svc := newTestAuthUseCases(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: status, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
 
 		_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
@@ -183,7 +183,7 @@ func TestAuthUseCaseLoginIssuesPasswordChangeToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}}
+	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 
@@ -212,7 +212,7 @@ func TestAuthUseCaseChangePassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
+	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
@@ -225,7 +225,7 @@ func TestAuthUseCaseChangePassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChangePassword: %v", err)
 	}
-	if !result.Changed || repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != userdomain.UserStatusNormal || repo.incrementedUserID != uuid.Nil || !store.cached || store.cachedVersion != 3 || !store.deletedAll {
+	if !result.Changed || repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != identity.UserStatusNormal || repo.incrementedUserID != uuid.Nil || !store.cached || store.cachedVersion != 3 || !store.deletedAll {
 		t.Fatalf("result=%#v repo=%#v store=%#v", result, repo, store)
 	}
 	matched, err := password.VerifyContext(context.Background(), "new-secret", repo.updatedInput.PasswordHash)
@@ -239,7 +239,7 @@ func TestAuthUseCaseChangePasswordIncrementsTokenVersionOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
+	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
@@ -268,7 +268,7 @@ func TestAuthUseCaseChangePasswordSucceedsWhenRevocationProjectionFails(t *testi
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
+	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
 	store := &sessionStoreStub{version: 2, cacheErr: errors.New("cache failed"), deleteAllErr: errors.New("delete failed")}
 	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
@@ -293,7 +293,7 @@ func TestAuthUseCaseChangePasswordSucceedsWhenRevocationProjectionFails(t *testi
 }
 
 func TestAuthUseCaseChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
-	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: userdomain.ErrUserNotFound}
+	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: identity.ErrUserNotFound}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
@@ -303,13 +303,13 @@ func TestAuthUseCaseChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
 
 	_, err = svc.ChangePassword(context.Background(), ChangePasswordCommand{Token: token, NewPassword: "new-secret"})
 
-	if !errors.Is(err, userdomain.ErrUserNotFound) {
+	if !errors.Is(err, identity.ErrUserNotFound) {
 		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
 }
 
 func TestAuthUseCaseChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
-	svc := newTestAuthUseCases(&authRepoStub{tokenVersionErr: userdomain.ErrUserNotFound}, &sessionStoreStub{cacheMiss: true}, true)
+	svc := newTestAuthUseCases(&authRepoStub{tokenVersionErr: identity.ErrUserNotFound}, &sessionStoreStub{cacheMiss: true}, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
@@ -317,13 +317,13 @@ func TestAuthUseCaseChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
 
 	_, err = svc.ChangePassword(context.Background(), ChangePasswordCommand{Token: token, NewPassword: "new-secret"})
 
-	if !errors.Is(err, userdomain.ErrUserNotFound) {
+	if !errors.Is(err, identity.ErrUserNotFound) {
 		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
 }
 
 func TestAuthUseCaseChangePasswordRejectsAccessToken(t *testing.T) {
-	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: userdomain.UserStatusMustChangePassword, TokenVersion: 2}}
+	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignAccessToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
@@ -523,7 +523,7 @@ func TestAuthUseCaseRefreshRejectsVersionChange(t *testing.T) {
 
 func TestAuthUseCaseRefreshMapsTokenVersionUserNotFound(t *testing.T) {
 	store := &sessionStoreStub{session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}, cacheMiss: true}
-	svc := newTestAuthUseCases(&authRepoStub{tokenVersionErr: userdomain.ErrUserNotFound}, store, true)
+	svc := newTestAuthUseCases(&authRepoStub{tokenVersionErr: identity.ErrUserNotFound}, store, true)
 	refresh, err := testJWTService().SignRefreshToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
@@ -531,7 +531,7 @@ func TestAuthUseCaseRefreshMapsTokenVersionUserNotFound(t *testing.T) {
 
 	_, err = svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: refresh})
 
-	if !errors.Is(err, userdomain.ErrUserNotFound) {
+	if !errors.Is(err, identity.ErrUserNotFound) {
 		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
 }
@@ -575,14 +575,14 @@ func TestAuthUseCaseLogoutAllSucceedsWhenRevocationProjectionFails(t *testing.T)
 }
 
 func TestAuthUseCaseLogoutAllMapsIncrementUserNotFound(t *testing.T) {
-	repo := &authRepoStub{incrementErr: userdomain.ErrUserNotFound}
+	repo := &authRepoStub{incrementErr: identity.ErrUserNotFound}
 	store := &sessionStoreStub{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 
 	_, err := svc.LogoutAllSessions(ctx)
 
-	if !errors.Is(err, userdomain.ErrUserNotFound) {
+	if !errors.Is(err, identity.ErrUserNotFound) {
 		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
 	if store.cached || store.deletedAll {
@@ -642,14 +642,14 @@ type authRepoStub struct {
 
 func (r *authRepoStub) GetCredentialByUserID(_ context.Context, _ uuid.UUID) (*authdomain.UserCredential, error) {
 	if r.userByID == nil {
-		return nil, userdomain.ErrUserNotFound
+		return nil, identity.ErrUserNotFound
 	}
 	return r.userByID, nil
 }
 func (r *authRepoStub) GetByUsername(_ context.Context, username string) (*authdomain.UserCredential, error) {
 	r.gotUsername = username
 	if r.userByUsername == nil {
-		return nil, userdomain.ErrUserNotFound
+		return nil, identity.ErrUserNotFound
 	}
 	return r.userByUsername, nil
 }

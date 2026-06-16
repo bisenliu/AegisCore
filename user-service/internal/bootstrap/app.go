@@ -10,6 +10,8 @@ import (
 	commontz "github.com/aegiscore/common/runtime/timezone"
 	"github.com/aegiscore/common/validation"
 	authfeature "github.com/aegiscore/user-service/internal/features/auth"
+	permissionfeature "github.com/aegiscore/user-service/internal/features/permission"
+	rolefeature "github.com/aegiscore/user-service/internal/features/role"
 	userfeature "github.com/aegiscore/user-service/internal/features/user"
 	"github.com/aegiscore/user-service/internal/providers"
 )
@@ -31,6 +33,8 @@ var AppModule = fx.Module("aegiscore-user-services",
 	commontz.Module,
 	validation.Module,
 	authfeature.Module,
+	permissionfeature.Module,
+	rolefeature.Module,
 	userfeature.Module,
 	providers.Module,
 	fx.Provide(
