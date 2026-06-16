@@ -64,8 +64,8 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - PostgreSQL 使用 `postgres.<name>` 命名实例，例如 `postgres.user_db`、`postgres.pay_db`。
 - 用户服务当前声明 `cache_redis` 和 `user_db`；其他命名实例可存在于配置中作为示例或其他服务配置，但不代表用户服务会自动连接对应资源或启用相关业务。
 - Redis key 的通用构造规则使用 `common/runtime/rediskey`；具体 key schema 放在 owning feature 的 `infrastructure/redis` 或 owning runtime primitive 内，不放入 `common` 的通用 key 大表。
-- 可观测性配置位于 `observability`：`observability.metrics.enabled` 控制未来 metrics wiring 是否消费该开关，`observability.metrics.path` 默认 `/metrics`，`observability.metrics.include_runtime` 控制未来是否包含 Go runtime/process 指标；`observability.tracing.enabled` 控制 tracing 配置入口，`observability.tracing.sample_ratio` 范围为 `0.0` 到 `1.0`，`observability.tracing.exporter` 当前支持 `none` 和 `otlp`，`observability.tracing.otlp_endpoint` 只在 `exporter: otlp` 时必填，`observability.tracing.insecure` 在生产类环境中不能与 `otlp` exporter 同时使用。
-- 当前阶段 observability 只建立配置契约，不注册 `/metrics` 路由、不创建 metrics exporter、不创建 OpenTelemetry tracer provider、不接入 Gin tracing middleware。用户服务本地默认 `observability.tracing.exporter: none`，因此不强制部署 `otel-collector:4317`。
+- 可观测性配置位于 `observability`：`observability.metrics.enabled` 控制未来 metrics wiring 是否消费该开关，`observability.metrics.path` 默认 `/metrics`，`observability.metrics.include_runtime` 控制未来是否包含 Go runtime/process 指标；`observability.tracing.enabled` 控制 tracing provider 是否启用采样记录，`observability.tracing.sample_ratio` 范围为 `0.0` 到 `1.0`，`observability.tracing.exporter` 当前配置契约支持 `none` 和 `otlp`，`observability.tracing.otlp_endpoint` 只在 `exporter: otlp` 时必填，`observability.tracing.insecure` 在生产类环境中不能与 `otlp` exporter 同时使用。
+- 当前阶段 observability 不注册 `/metrics` 路由、不创建 metrics exporter、不接入 Gin tracing middleware，也不改造 logger。`common/runtime/observability/tracing` 支持本地 OpenTelemetry SDK provider；用户服务本地默认 `observability.tracing.exporter: none`，该模式会生成标准 trace ID 和 span ID，但不导出 span，因此不强制部署 `otel-collector:4317`，也不会在 trace UI 中看到链路。
 - OTLP endpoint 不应包含 token、Authorization header、账号密码、Cookie 或其他敏感凭据；未来 exporter 认证需要单独设计 Secret 注入方式。
 - `common/runtime/config.Load` 会读取 YAML、应用 `AEGISCORE_` 覆盖、反序列化为配置对象，并在返回前执行结构化字段校验；缺失必填字段、非法端口、非正超时、无效 Redis/PostgreSQL named config 或生产环境不安全配置会在启动期被拒绝。
 
