@@ -37,6 +37,12 @@ func TestLabelKeyConstants(t *testing.T) {
 		"LabelRoute":       LabelRoute,
 		"LabelStatusClass": LabelStatusClass,
 		"LabelCode":        LabelCode,
+		"LabelResource":    LabelResource,
+		"LabelPool":        LabelPool,
+		"LabelJob":         LabelJob,
+		"LabelEvent":       LabelEvent,
+		"LabelStatus":      LabelStatus,
+		"LabelReason":      LabelReason,
 	}
 	wants := map[string]string{
 		"LabelService":     "service",
@@ -45,6 +51,12 @@ func TestLabelKeyConstants(t *testing.T) {
 		"LabelRoute":       "route",
 		"LabelStatusClass": "status_class",
 		"LabelCode":        "code",
+		"LabelResource":    "resource",
+		"LabelPool":        "pool",
+		"LabelJob":         "job",
+		"LabelEvent":       "event",
+		"LabelStatus":      "status",
+		"LabelReason":      "reason",
 	}
 	for name, got := range tests {
 		if got != wants[name] {
@@ -54,7 +66,20 @@ func TestLabelKeyConstants(t *testing.T) {
 }
 
 func TestValidateLowCardinalityLabelKey(t *testing.T) {
-	for _, key := range []string{LabelService, LabelEnvironment, LabelMethod, LabelRoute, LabelStatusClass, LabelCode} {
+	for _, key := range []string{
+		LabelService,
+		LabelEnvironment,
+		LabelMethod,
+		LabelRoute,
+		LabelStatusClass,
+		LabelCode,
+		LabelResource,
+		LabelPool,
+		LabelJob,
+		LabelEvent,
+		LabelStatus,
+		LabelReason,
+	} {
 		if err := ValidateLowCardinalityLabelKey(key); err != nil {
 			t.Fatalf("ValidateLowCardinalityLabelKey(%q): %v", key, err)
 		}

@@ -18,6 +18,18 @@ const (
 	LabelStatusClass = "status_class"
 	// LabelCode 标识稳定错误码或结果码，不能使用原始错误字符串。
 	LabelCode = "code"
+	// LabelResource 标识固定运行时资源名，例如 user_db 或 cache_redis。
+	LabelResource = "resource"
+	// LabelPool 标识固定后台任务池名称。
+	LabelPool = "pool"
+	// LabelJob 标识固定定时任务名称。
+	LabelJob = "job"
+	// LabelEvent 标识固定运行时事件名称。
+	LabelEvent = "event"
+	// LabelStatus 标识固定运行时状态。
+	LabelStatus = "status"
+	// LabelReason 标识固定跳过或失败原因枚举。
+	LabelReason = "reason"
 )
 
 var allowedLowCardinalityLabelKeys = map[string]struct{}{
@@ -27,6 +39,12 @@ var allowedLowCardinalityLabelKeys = map[string]struct{}{
 	LabelRoute:       {},
 	LabelStatusClass: {},
 	LabelCode:        {},
+	LabelResource:    {},
+	LabelPool:        {},
+	LabelJob:         {},
+	LabelEvent:       {},
+	LabelStatus:      {},
+	LabelReason:      {},
 }
 
 // ErrUnsupportedLabelKey 表示 label key 不属于当前跨服务低基数约定。

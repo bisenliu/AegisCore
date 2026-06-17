@@ -9,12 +9,14 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 
+	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commoncasbin "github.com/aegiscore/common/security/casbin"
 )
 
 // Engine 使用内存 Casbin enforcer 执行权限判断。
 type Engine struct {
-	loader Loader
+	loader  Loader
+	metrics commonmetrics.ReloadMetrics
 
 	mu       sync.RWMutex
 	enforcer *casbinlib.Enforcer
@@ -25,12 +27,17 @@ type Engine struct {
 type Params struct {
 	fx.In
 
-	Loader Loader
+	Loader  Loader
+	Metrics commonmetrics.ReloadMetrics `optional:"true"`
 }
 
 // NewEngine 构造 Casbin Engine，初始化失败时保持 fail-closed。
 func NewEngine(params Params) *Engine {
-	engine := &Engine{loader: params.Loader}
+	metrics := params.Metrics
+	if metrics == nil {
+		metrics = commonmetrics.NopReloadMetrics()
+	}
+	engine := &Engine{loader: params.Loader, metrics: metrics}
 	if err := engine.Reload(context.Background()); err != nil {
 		engine.mu.Lock()
 		engine.lastErr = err
@@ -60,12 +67,16 @@ func (e *Engine) Reload(ctx context.Context) error {
 		e.mu.Lock()
 		e.lastErr = err
 		e.mu.Unlock()
+		e.metrics.ReloadFailed()
+		e.metrics.SetLastStatus(false)
 		return err
 	}
 	e.mu.Lock()
 	e.enforcer = enforcer
 	e.lastErr = nil
 	e.mu.Unlock()
+	e.metrics.ReloadSucceeded()
+	e.metrics.SetLastStatus(true)
 	return nil
 }
 

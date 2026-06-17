@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,9 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	_ "github.com/mattn/go-sqlite3"
+	rediscmd "github.com/redis/go-redis/v9"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -23,6 +27,8 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	"github.com/aegiscore/common/runtime/resources"
+	"github.com/aegiscore/common/runtime/workerpool"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
@@ -90,6 +96,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RegisterRoutes: %v", err)
 	}
+	registerRouteTestRuntimeMetrics(t, cfg, metricsProvider)
 
 	publicRequests := []struct {
 		method string
@@ -140,6 +147,16 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		}
 		if body := recorder.Body.String(); !strings.Contains(body, "go_goroutines") {
 			t.Fatalf("body missing runtime metric: %s", body)
+		}
+		for _, family := range []string{
+			"aegiscore_postgres_pool_open_connections",
+			"aegiscore_redis_up",
+			"aegiscore_workerpool_tasks_total",
+			"aegiscore_runtime_component_running",
+		} {
+			if body := recorder.Body.String(); !strings.Contains(body, family) {
+				t.Fatalf("body missing runtime dependency metric %q: %s", family, body)
+			}
 		}
 		if authorizer.calls != 0 {
 			t.Fatalf("authorizer calls = %d, want 0", authorizer.calls)
@@ -393,6 +410,35 @@ func newRouteTestMetricsProvider(t *testing.T, cfg *config.Config) *commonmetric
 	return provider
 }
 
+func registerRouteTestRuntimeMetrics(t *testing.T, cfg *config.Config, provider *commonmetrics.Provider) {
+	t.Helper()
+	db, err := sql.Open("sqlite3", "file:route_runtime_metrics?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	redisServer := miniredis.RunT(t)
+	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+
+	if cfg.Redis == nil {
+		cfg.Redis = make(map[string]config.RedisConfig)
+	}
+	cfg.Redis[resources.NameCacheRedis] = config.RedisConfig{PingTimeout: time.Second}
+
+	if err := RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{
+		Config:           cfg,
+		Metrics:          provider,
+		UserDB:           db,
+		CacheRedis:       client,
+		SessionPurgePool: routePurgeTaskPool{stats: workerpool.Stats{Name: "auth.redis.session_purge", Workers: 4, Submitted: 1}},
+		PolicyWatcher:    stubWatcherStatus{running: true},
+	}); err != nil {
+		t.Fatalf("RegisterRuntimeDependencyMetrics: %v", err)
+	}
+}
+
 func mustRouteTestValidator(t *testing.T) *validation.Validator {
 	t.Helper()
 	validator, err := validation.NewDefault()
@@ -425,6 +471,18 @@ type routeAuthUserCommands struct{}
 type routeAuthUserQueries struct{}
 
 type routeAuthAuthUseCases struct{}
+
+type routePurgeTaskPool struct {
+	stats workerpool.Stats
+}
+
+func (p routePurgeTaskPool) Submit(context.Context, workerpool.Task) error {
+	return nil
+}
+
+func (p routePurgeTaskPool) Stats() workerpool.Stats {
+	return p.stats
+}
 
 type routeTokenVersionValidator struct {
 	version int64

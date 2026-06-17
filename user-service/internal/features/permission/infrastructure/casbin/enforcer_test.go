@@ -55,7 +55,8 @@ func TestEngineSuperAdminWildcard(t *testing.T) {
 
 func TestEngineFailClosedWhenInitialLoadFails(t *testing.T) {
 	loadErr := errors.New("load failed")
-	engine := NewEngine(Params{Loader: &fakeLoader{err: loadErr}})
+	metrics := &fakeReloadMetrics{}
+	engine := NewEngine(Params{Loader: &fakeLoader{err: loadErr}, Metrics: metrics})
 	allowed, err := engine.Enforce(context.Background(), uuid.New(), "/api/v1/users", "GET")
 	if err != nil {
 		t.Fatalf("Enforce: %v", err)
@@ -65,6 +66,9 @@ func TestEngineFailClosedWhenInitialLoadFails(t *testing.T) {
 	}
 	if !errors.Is(engine.LastError(), loadErr) {
 		t.Fatalf("LastError = %v, want %v", engine.LastError(), loadErr)
+	}
+	if metrics.failed != 1 || metrics.lastSuccess {
+		t.Fatalf("metrics = %#v, want one failure and last failure", metrics)
 	}
 }
 
@@ -76,7 +80,8 @@ func TestEngineReloadFailurePreservesPreviousPolicy(t *testing.T) {
 		GroupingPolicies: []GroupingPolicy{{UserID: userID, RoleID: roleID}},
 		PermissionRules:  []PermissionRule{{RoleID: roleID, PathTemplate: "/api/v1/users", HTTPMethod: "GET"}},
 	}}
-	engine := NewEngine(Params{Loader: loader})
+	metrics := &fakeReloadMetrics{}
+	engine := NewEngine(Params{Loader: loader, Metrics: metrics})
 	loader.err = loadErr
 	if err := engine.Reload(context.Background()); !errors.Is(err, loadErr) {
 		t.Fatalf("Reload err = %v, want %v", err, loadErr)
@@ -88,13 +93,17 @@ func TestEngineReloadFailurePreservesPreviousPolicy(t *testing.T) {
 	if !allowed {
 		t.Fatal("previous policy was not preserved after reload failure")
 	}
+	if metrics.succeeded != 1 || metrics.failed != 1 || metrics.lastSuccess {
+		t.Fatalf("metrics = %#v, want init success then reload failure", metrics)
+	}
 }
 
 func TestEngineReloadSuccessReplacesPolicyAndClearsError(t *testing.T) {
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000503")
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000504")
+	metrics := &fakeReloadMetrics{}
 	loader := &fakeLoader{err: errors.New("initial load failed")}
-	engine := NewEngine(Params{Loader: loader})
+	engine := NewEngine(Params{Loader: loader, Metrics: metrics})
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
 	if err != nil {
 		t.Fatalf("Enforce after failed init: %v", err)
@@ -121,6 +130,9 @@ func TestEngineReloadSuccessReplacesPolicyAndClearsError(t *testing.T) {
 	if engine.LastError() != nil {
 		t.Fatalf("LastError = %v, want nil", engine.LastError())
 	}
+	if metrics.succeeded != 1 || metrics.failed != 1 || !metrics.lastSuccess {
+		t.Fatalf("metrics = %#v, want one failure and final success", metrics)
+	}
 }
 
 type fakeLoader struct {
@@ -135,4 +147,22 @@ func (l *fakeLoader) LoadPolicies(context.Context) (PolicySet, error) {
 		return PolicySet{}, l.err
 	}
 	return l.policies, nil
+}
+
+type fakeReloadMetrics struct {
+	succeeded   int
+	failed      int
+	lastSuccess bool
+}
+
+func (m *fakeReloadMetrics) ReloadSucceeded() {
+	m.succeeded++
+}
+
+func (m *fakeReloadMetrics) ReloadFailed() {
+	m.failed++
+}
+
+func (m *fakeReloadMetrics) SetLastStatus(success bool) {
+	m.lastSuccess = success
 }

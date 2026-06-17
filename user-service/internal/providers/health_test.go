@@ -4,12 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	_ "github.com/mattn/go-sqlite3"
 	rediscmd "github.com/redis/go-redis/v9"
 
+	"github.com/aegiscore/common/runtime/config"
+	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	"github.com/aegiscore/common/runtime/workerpool"
+	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
 	"github.com/aegiscore/user-service/internal/router"
 )
 
@@ -85,6 +92,59 @@ func TestWatcherHealthChecker(t *testing.T) {
 	}
 }
 
+func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
+	db, err := sql.Open("sqlite3", "file:runtime_metrics?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	redisServer := miniredis.RunT(t)
+	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+
+	cfg := &config.Config{
+		App: config.AppConfig{Name: "aegiscore-user-service-test", Environment: "test"},
+		Redis: map[string]config.RedisConfig{
+			"cache_redis": {PingTimeout: time.Second},
+		},
+		Observability: config.ObservabilityConfig{
+			Metrics: config.MetricsConfig{Enabled: true, Path: "/metrics"},
+		},
+	}
+	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+		Config:      cfg.Observability.Metrics,
+		ServiceName: cfg.App.Name,
+		Environment: cfg.App.Environment,
+	})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+
+	if err := RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{
+		Config:           cfg,
+		Metrics:          provider,
+		UserDB:           db,
+		CacheRedis:       client,
+		SessionPurgePool: fakePurgeTaskPool{stats: workerpool.Stats{Name: "auth.redis.session_purge", Workers: 4, Submitted: 3}},
+		PolicyWatcher:    stubWatcherStatus{running: true},
+	}); err != nil {
+		t.Fatalf("RegisterRuntimeDependencyMetrics: %v", err)
+	}
+
+	body := gatherProviderText(t, provider)
+	for _, want := range []string{
+		`aegiscore_postgres_pool_open_connections{environment="test",resource="user_db",service="aegiscore-user-service-test"}`,
+		`aegiscore_redis_up{environment="test",resource="cache_redis",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_workerpool_tasks_total{environment="test",event="submitted",pool="auth_session_purge_pool",service="aegiscore-user-service-test"} 3`,
+		`aegiscore_runtime_component_running{environment="test",resource="rbac_policy_watcher",service="aegiscore-user-service-test"} 1`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("metrics body missing %q:\n%s", want, body)
+		}
+	}
+}
+
 type stubLastError struct {
 	err error
 }
@@ -104,4 +164,46 @@ func (s stubWatcherStatus) Running() bool {
 
 func (s stubWatcherStatus) LastError() error {
 	return s.err
+}
+
+type fakePurgeTaskPool struct {
+	authredis.PurgeTaskPool
+	stats workerpool.Stats
+}
+
+func (p fakePurgeTaskPool) Stats() workerpool.Stats {
+	return p.stats
+}
+
+func gatherProviderText(t *testing.T, provider *commonmetrics.Provider) string {
+	t.Helper()
+	families, err := provider.Gatherer().Gather()
+	if err != nil {
+		t.Fatalf("Gather: %v", err)
+	}
+	var builder strings.Builder
+	for _, family := range families {
+		for _, metric := range family.GetMetric() {
+			builder.WriteString(family.GetName())
+			builder.WriteByte('{')
+			for i, label := range metric.GetLabel() {
+				if i > 0 {
+					builder.WriteByte(',')
+				}
+				builder.WriteString(label.GetName())
+				builder.WriteString(`="`)
+				builder.WriteString(label.GetValue())
+				builder.WriteByte('"')
+			}
+			builder.WriteString("} ")
+			switch {
+			case metric.GetGauge() != nil:
+				builder.WriteString(strings.TrimRight(strings.TrimRight(fmt.Sprintf("%f", metric.GetGauge().GetValue()), "0"), "."))
+			case metric.GetCounter() != nil:
+				builder.WriteString(strings.TrimRight(strings.TrimRight(fmt.Sprintf("%f", metric.GetCounter().GetValue()), "0"), "."))
+			}
+			builder.WriteByte('\n')
+		}
+	}
+	return builder.String()
 }

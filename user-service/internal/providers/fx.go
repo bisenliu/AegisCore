@@ -19,5 +19,8 @@ var Module = fx.Module("user-service-providers",
 		ProvideHealthChecks,
 		NewGinEngine,
 	),
-	fx.Invoke(RegisterRoutes),
+	fx.Invoke(
+		RegisterRuntimeDependencyMetrics,
+		RegisterRoutes,
+	),
 )

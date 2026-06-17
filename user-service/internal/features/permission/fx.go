@@ -3,6 +3,7 @@ package permission
 import (
 	"go.uber.org/fx"
 
+	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	permissioncommand "github.com/aegiscore/user-service/internal/features/permission/application/command"
@@ -17,6 +18,7 @@ import (
 var Module = fx.Module("feature-permission",
 	fx.Provide(
 		permissioncasbin.NewPolicyLoader,
+		newCasbinReloadMetrics,
 		permissioncasbin.NewEngine,
 		newAuthorizationEngine,
 		newPolicyReloadEngine,
@@ -36,6 +38,10 @@ var Module = fx.Module("feature-permission",
 	),
 	fx.Invoke(func(*permissionredis.Watcher) {}),
 )
+
+func newCasbinReloadMetrics(provider *commonmetrics.Provider) commonmetrics.ReloadMetrics {
+	return commonmetrics.NewCasbinPolicyReloadMetrics(provider)
+}
 
 func newAuthorizationEngine(engine *permissioncasbin.Engine) permissionauthorization.Engine {
 	return engine
