@@ -1,0 +1,145 @@
+groups:
+  - name: aegiscore-user-service.rules
+    rules:
+      - alert: AegisCoreUserServiceHigh5xxRatio
+        expr: |
+          (
+            sum(rate(http_server_requests_total{service="aegiscore-user-services",status_class="5xx"}[5m]))
+            /
+            clamp_min(sum(rate(http_server_requests_total{service="aegiscore-user-services"}[5m])), 1)
+          ) > 0.05
+        for: 10m
+        labels:
+          service: aegiscore-user-services
+          severity: critical
+        annotations:
+          summary: "用户服务 5xx 比例超过 5%"
+          description: "用户服务 HTTP 请求中超过 5% 在最近 10 分钟返回 5xx。请查看 HTTP RED dashboard，并通过 trace_id 关联错误日志。"
+          runbook_url: "docs/observability/user-service-runbook.md#http-5xx-ratio"
+
+      - alert: AegisCoreUserServiceHighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(http_server_request_duration_seconds_bucket{service="aegiscore-user-services"}[5m])
+            )
+          ) > 1
+        for: 10m
+        labels:
+          service: aegiscore-user-services
+          severity: warning
+        annotations:
+          summary: "用户服务 P95 延迟超过 1 秒"
+          description: "HTTP server P95 延迟已连续 10 分钟超过 1 秒。请检查 route 级延迟、依赖面板和最近 deployment 变更。"
+          runbook_url: "docs/observability/user-service-runbook.md#http-latency"
+
+      - alert: AegisCoreUserServiceReadyzFailure
+        expr: |
+          probe_success{job=~".*readyz.*"} == 0
+        for: 5m
+        labels:
+          service: aegiscore-user-services
+          severity: critical
+        annotations:
+          summary: "用户服务 readyz 探测失败"
+          description: "外部 readyz 探测已连续 5 分钟失败。该规则需要 blackbox exporter、Kubernetes probe metrics 或等价外部探测。"
+          runbook_url: "docs/observability/user-service-runbook.md#readiness-failure"
+
+      - alert: AegisCoreUserServicePostgresPoolUnavailable
+        expr: |
+          absent(aegiscore_postgres_pool_open_connections{service="aegiscore-user-services",resource="user_db"})
+          or
+          aegiscore_postgres_pool_open_connections{service="aegiscore-user-services",resource="user_db"} == 0
+        for: 5m
+        labels:
+          service: aegiscore-user-services
+          severity: critical
+        annotations:
+          summary: "用户服务 PostgreSQL pool 可能不可用"
+          description: "user_db PostgreSQL pool 指标缺失，或 open connections 为 0。请检查 readyz、数据库连通性和 user_db pool 配置。"
+          runbook_url: "docs/observability/user-service-runbook.md#postgresql-unavailable-or-pool-pressure"
+
+      - alert: AegisCoreUserServicePostgresPoolWaitPressure
+        expr: |
+          rate(aegiscore_postgres_pool_wait_count_total{service="aegiscore-user-services",resource="user_db"}[5m]) > 0
+        for: 10m
+        labels:
+          service: aegiscore-user-services
+          severity: warning
+        annotations:
+          summary: "用户服务 PostgreSQL pool 持续等待连接"
+          description: "user_db pool 已连续 10 分钟出现连接等待。请检查 in-use/open connections、慢请求和数据库容量。"
+          runbook_url: "docs/observability/user-service-runbook.md#postgresql-unavailable-or-pool-pressure"
+
+      - alert: AegisCoreUserServiceRedisUnavailable
+        expr: |
+          aegiscore_redis_up{service="aegiscore-user-services",resource="cache_redis"} == 0
+        for: 5m
+        labels:
+          service: aegiscore-user-services
+          severity: critical
+        annotations:
+          summary: "用户服务 Redis cache_redis 不可用"
+          description: "cache_redis 的 Redis ping 已连续 5 分钟失败。请检查 Redis 可用性、网络路径和 readyz。"
+          runbook_url: "docs/observability/user-service-runbook.md#redis-unavailable"
+
+      - alert: AegisCoreUserServiceRBACWatcherStopped
+        expr: |
+          aegiscore_runtime_component_running{service="aegiscore-user-services",resource="rbac_policy_watcher"} == 0
+        for: 5m
+        labels:
+          service: aegiscore-user-services
+          severity: critical
+        annotations:
+          summary: "RBAC policy watcher 已停止"
+          description: "RBAC policy watcher 已连续 5 分钟报告 stopped。Policy 更新可能无法在副本之间传播。"
+          runbook_url: "docs/observability/user-service-runbook.md#rbac-watcher-stopped"
+
+      - alert: AegisCoreUserServicePolicyReloadFailed
+        expr: |
+          increase(aegiscore_casbin_policy_reloads_total{service="aegiscore-user-services",status="failure"}[10m]) > 0
+        for: 0m
+        labels:
+          service: aegiscore-user-services
+          severity: critical
+        annotations:
+          summary: "Casbin policy reload 失败"
+          description: "最近 10 分钟至少发生一次 Casbin policy reload 失败。请检查 policy reload 日志和 RBAC datastore 健康状态。"
+          runbook_url: "docs/observability/user-service-runbook.md#casbin-policy-reload-failed"
+
+      - alert: AegisCoreUserServiceWorkerpoolFailedOrPanicked
+        expr: |
+          increase(aegiscore_workerpool_tasks_total{service="aegiscore-user-services",pool="auth_session_purge_pool",event=~"failed|panicked"}[10m]) > 0
+        for: 0m
+        labels:
+          service: aegiscore-user-services
+          severity: warning
+        annotations:
+          summary: "Auth session purge workerpool task 失败或 panic"
+          description: "auth session purge workerpool 最近 10 分钟报告 failed 或 panicked task。请检查 Redis 健康状态和 workerpool 日志。"
+          runbook_url: "docs/observability/user-service-runbook.md#workerpool-failed-or-panicked"
+
+      - alert: AegisCoreUserServiceSchedulerJobFailed
+        expr: |
+          increase(aegiscore_scheduler_jobs_total{service="aegiscore-user-services",event="failed"}[10m]) > 0
+        for: 0m
+        labels:
+          service: aegiscore-user-services
+          severity: warning
+        annotations:
+          summary: "用户服务 scheduler job 失败"
+          description: "最近 10 分钟至少有一个 scheduler job 失败。请检查 job label、scheduler dashboard 和失败 job 的日志。"
+          runbook_url: "docs/observability/user-service-runbook.md#scheduler-job-failed"
+
+      - alert: AegisCoreUserServiceSchedulerLockRenewFailed
+        expr: |
+          increase(aegiscore_scheduler_jobs_total{service="aegiscore-user-services",event="lock_renew_failed"}[10m]) > 0
+        for: 0m
+        labels:
+          service: aegiscore-user-services
+          severity: warning
+        annotations:
+          summary: "用户服务 scheduler lock 续租失败"
+          description: "最近 10 分钟至少有一个 scheduler job 报告 lock renewal failure。请检查 Redis lock 连通性和长时间运行的 job。"
+          runbook_url: "docs/observability/user-service-runbook.md#scheduler-job-failed"

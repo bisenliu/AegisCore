@@ -9,3 +9,5 @@
 - `GET /livez` 作为 liveness probe。
 - `GET /readyz` 作为 readiness probe。
 - `GET /startupz` 作为 startup probe。
+
+Prometheus/Grafana dashboard、alert rule 示例和 runbook 链接位于 `deployments/observability/`；本目录未来可在单独变更中接入 ServiceMonitor、PodMonitor 或 blackbox readyz probe。
