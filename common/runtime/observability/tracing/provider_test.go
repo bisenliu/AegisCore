@@ -6,9 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aegiscore/common/runtime/config"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 func TestNewProviderWithNoneExporterCreatesSpanContext(t *testing.T) {

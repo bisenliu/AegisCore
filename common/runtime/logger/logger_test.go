@@ -31,7 +31,7 @@ func TestNewWritesClassifiedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWithConfig: %v", err)
 	}
-	ctx := contextWithSpanContext(t, context.Background(), "00112233445566778899aabbccddeeff", "0102030405060708")
+	ctx := contextWithSpanContext(context.Background(), t, "00112233445566778899aabbccddeeff", "0102030405060708")
 	ctx = ToContext(ctx, log)
 
 	Debug(ctx, "debug message")
@@ -138,7 +138,7 @@ func TestExplicitStacktraceField(t *testing.T) {
 func TestWithContextAddsOTelTraceAndSpanFields(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core)
-	ctx := contextWithSpanContext(t, context.Background(), "00112233445566778899aabbccddeeff", "0102030405060708")
+	ctx := contextWithSpanContext(context.Background(), t, "00112233445566778899aabbccddeeff", "0102030405060708")
 
 	WithContext(ctx, log).Info("otel fields")
 
@@ -341,7 +341,7 @@ func datedPath(dir string, prefix string, date string, level string) string {
 	return filepath.Join(dir, prefix+"."+date+"."+level+".log")
 }
 
-func contextWithSpanContext(t *testing.T, ctx context.Context, traceIDHex string, spanIDHex string) context.Context {
+func contextWithSpanContext(ctx context.Context, t *testing.T, traceIDHex string, spanIDHex string) context.Context {
 	t.Helper()
 	traceID, err := trace.TraceIDFromHex(traceIDHex)
 	if err != nil {

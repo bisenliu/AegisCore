@@ -173,7 +173,7 @@ DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&sear
 ## 9. Logging And Trace Context
 
 - 日志使用 `common/runtime/logger` 提供的 Zap 封装和 context API。
-- HTTP trace 传播使用 W3C `traceparent` / `tracestate`；用户服务不读取、回传或兼容 `X-Trace-ID`。
+- HTTP trace 传播使用 W3C `traceparent` / `tracestate`；用户服务不读取、回传或兼容私有 trace header，客户端不应依赖服务返回 trace header。
 - HTTP access log 标准字段为 `trace_id`、`user_id`、`client_ip`、`method`、`path`、`status`、`latency_ms`；认证失败安全事件日志额外记录 `user_agent`。
 - 认证失败日志不得记录 password、token、Authorization header、Cookie 或原始请求体。
 - OTel Gin middleware 会将 server span 写入 Go `context.Context`；`common/runtime/logger` context helper 会从当前 OTel span context 自动追加 `trace_id` 与 `span_id`，无有效 span context 时不伪造 trace/span 字段。

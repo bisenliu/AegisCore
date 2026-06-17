@@ -30,7 +30,7 @@ func TestEntSQLDebugEnabledRequiresConfigFlag(t *testing.T) {
 func TestEntSQLDebugLogFuncWritesSQLDiagnosticLog(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core).Named(logger.SQLLoggerName)
-	ctx := contextWithSpanContext(t, context.Background(), "00112233445566778899aabbccddeeff", "0102030405060708")
+	ctx := contextWithSpanContext(context.Background(), t, "00112233445566778899aabbccddeeff", "0102030405060708")
 
 	entSQLDebugLogFunc(log)(ctx, "driver.Query: query=SELECT * FROM users WHERE id = $1 args=[1]")
 
@@ -92,7 +92,7 @@ func TestCloseEntClientCallsCloser(t *testing.T) {
 	}
 }
 
-func contextWithSpanContext(t *testing.T, ctx context.Context, traceIDHex string, spanIDHex string) context.Context {
+func contextWithSpanContext(ctx context.Context, t *testing.T, traceIDHex string, spanIDHex string) context.Context {
 	t.Helper()
 	traceID, err := trace.TraceIDFromHex(traceIDHex)
 	if err != nil {

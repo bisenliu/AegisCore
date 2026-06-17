@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aegiscore/common/runtime/config"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 const (

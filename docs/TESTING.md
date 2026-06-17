@@ -13,10 +13,10 @@
 - Controller：路径参数解析、校验失败、application service 或 command/query use case 错误映射、成功响应。
 - Application service/command/query：infrastructure adapter 返回值到 DTO 的字段映射，领域或应用错误通过 `contract/errors.FromError` 转换；auth command use case 测试位于 `user-service/internal/features/auth/application/command/`，auth component 测试位于 `application/authctx/`、`application/credentials/`、`application/tokens/`、`application/sessions/`，auth validators 测试位于 `user-service/internal/features/auth/application/validators/`，auth token version 策略通过 sessions lifecycle、validators 和 Redis adapter 测试覆盖。
 - Infrastructure adapter：Ent not found 转应用层 not found 错误，其他查询错误保留 cause 并映射为 internal error；Redis adapter 覆盖 key、TTL、索引和清理语义。
-- Middleware：trace-id 透传/生成、写入 Gin context/Go context/响应头、panic recovery 输出统一错误、request logging 携带 trace-id、CORS 处理 OPTIONS。
+- Middleware：OTel Gin middleware 创建或传播有效 server span context、panic recovery 输出统一错误、request logging 携带 OTel `trace_id` / `span_id`、CORS 处理 OPTIONS。
 - Config loader：显式配置加载、`AEGISCORE_` 环境变量覆盖、命名 Redis/PostgreSQL 实例反序列化；`common/runtime/config.Load` 不应因 required/range 字段校验拒绝缺失或零值配置。
 - Runtime/Infrastructure：Fx 生命周期启动与停止，HTTP server 使用配置中的 host/port/timeouts，用户服务声明 `cache_redis`、`user_db`，依赖不可用或底层库拒绝配置时启动失败。
-- Logging：Zap logger 初始化、分类日志文件、trace-id 字段和无 request context 时的日志行为。
+- Logging：Zap logger 初始化、分类日志文件、有效 OTel span context 下的 `trace_id` / `span_id` 字段，以及无有效 span context 时不伪造 trace/span 字段的日志行为。
 
 ## 2.1 RBAC Regression Scope
 
@@ -83,7 +83,7 @@ cd user-service
 AEGISCORE_TEST_CONTAINERS=1 go test ./tests/e2e -count=1
 ```
 
-该测试覆盖登录、受保护用户 API、强制改密、旧密码拒绝、登出当前设备、refresh session 失效、trace-id 响应头和统一 response envelope。测试通过 `httptest` 请求 Gin engine，不直接调用 controller 方法；除最小 bootstrap 用户 seed 外，关键业务行为均通过 HTTP API 执行。测试 schema 初始化必须来自 Atlas SQL migration，不得使用 `client.Schema.Create(ctx)`。
+该测试覆盖登录、受保护用户 API、强制改密、旧密码拒绝、登出当前设备、refresh session 失效、真实 Gin engine 上的 OTel tracing middleware 和统一 response envelope。测试不设置或断言私有 trace 请求头、响应头；如需要验证 trace 传播，应使用 W3C `traceparent` 或断言请求 context 中存在有效 OTel span context。测试通过 `httptest` 请求 Gin engine，不直接调用 controller 方法；除最小 bootstrap 用户 seed 外，关键业务行为均通过 HTTP API 执行。测试 schema 初始化必须来自 Atlas SQL migration，不得使用 `client.Schema.Create(ctx)`。
 
 未设置 `AEGISCORE_TEST_E2E` 或 `AEGISCORE_TEST_CONTAINERS` 时，`go test ./tests/e2e` 应稳定跳过并通过。设置开关后，如果 Docker、镜像、端口映射、PostgreSQL/Redis ping 或 migration apply 不可用，测试应失败并暴露具体错误。
 

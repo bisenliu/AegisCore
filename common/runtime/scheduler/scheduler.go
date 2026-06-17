@@ -245,7 +245,7 @@ func (s *Scheduler) runJob(cfg JobConfig, localGate chan struct{}) {
 		gateAcquired       bool
 		globalGateAcquired bool
 		lock               Lock
-		jobCancel          context.CancelFunc
+		jobCancel          context.CancelFunc = func() {}
 		stopRenew          func()
 		renewErrCh         <-chan error
 		started            bool
@@ -263,9 +263,7 @@ func (s *Scheduler) runJob(cfg JobConfig, localGate chan struct{}) {
 				jobErr = fmt.Errorf("lock renew failed: %w", renewErr)
 			}
 		}
-		if jobCancel != nil {
-			jobCancel()
-		}
+		jobCancel()
 		if lock != nil {
 			s.unlock(cfg.Key, lock)
 		}
@@ -334,9 +332,10 @@ func (s *Scheduler) runJob(cfg JobConfig, localGate chan struct{}) {
 	lock = acquiredLock
 
 	jobCtx := s.root
-	jobCancel = func() {}
 	if cfg.Timeout > 0 {
-		jobCtx, jobCancel = context.WithTimeout(s.root, cfg.Timeout)
+		var cancel context.CancelFunc
+		jobCtx, cancel = context.WithTimeout(s.root, cfg.Timeout)
+		jobCancel = cancel
 	}
 	if lock != nil && cfg.Lock.AutoRenew {
 		stopRenew, renewErrCh = s.startRenew(jobCtx, jobCancel, cfg, lock)

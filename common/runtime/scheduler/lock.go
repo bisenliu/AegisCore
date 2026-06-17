@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aegiscore/common/runtime/rediskey"
 	redis "github.com/redis/go-redis/v9"
+
+	"github.com/aegiscore/common/runtime/rediskey"
 )
 
 // Locker 定义调度器使用的分布式锁能力。

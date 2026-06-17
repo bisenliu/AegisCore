@@ -19,7 +19,8 @@ import (
 
 const defaultTokenVersionLocalCacheTTL = time.Second
 
-type tokenVersionValidator struct {
+// TokenVersionValidator 使用本地短缓存和后端存储校验 token version。
+type TokenVersionValidator struct {
 	users    authapplication.UserTokenVersionStore
 	sessions authapplication.AuthSessionStore
 	cache    *localcache.Cache[string, int64]
@@ -37,12 +38,12 @@ func NewValidator(users authapplication.UserTokenVersionStore, sessions authappl
 }
 
 // NewCachingValidator 构造带本地短缓存的 token version 校验器。
-func NewCachingValidator(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) *tokenVersionValidator {
-	return &tokenVersionValidator{users: users, sessions: sessions, cache: localcache.New[string, int64](defaultTokenVersionLocalCacheTTL)}
+func NewCachingValidator(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) *TokenVersionValidator {
+	return &TokenVersionValidator{users: users, sessions: sessions, cache: localcache.New[string, int64](defaultTokenVersionLocalCacheTTL)}
 }
 
 // ValidateTokenVersion 拒绝 version 不再匹配当前用户版本的 token。
-func (v *tokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
+func (v *TokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
 	currentVersion, err := v.Current(ctx, userID)
 	if err != nil {
 		return err
@@ -51,7 +52,7 @@ func (v *tokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID
 }
 
 // Current 返回本实例缓存或后端存储中的当前 token version。
-func (v *tokenVersionValidator) Current(ctx context.Context, userID string) (int64, error) {
+func (v *TokenVersionValidator) Current(ctx context.Context, userID string) (int64, error) {
 	if currentVersion, ok := v.cache.Get(userID); ok {
 		return currentVersion, nil
 	}
@@ -73,7 +74,7 @@ func (v *tokenVersionValidator) Current(ctx context.Context, userID string) (int
 }
 
 // InvalidateTokenVersion 删除本实例内指定用户的 token version 本地缓存。
-func (v *tokenVersionValidator) InvalidateTokenVersion(userID string) {
+func (v *TokenVersionValidator) InvalidateTokenVersion(userID string) {
 	v.cache.Delete(userID)
 	v.group.Forget(userID)
 }

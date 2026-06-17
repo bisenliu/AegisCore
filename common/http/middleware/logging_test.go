@@ -23,7 +23,7 @@ import (
 func TestContextLoggerUsesOTelTraceAndSpanID(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core)
-	ctx := logger.ToContext(contextWithSpanContext(t, context.Background(), "00112233445566778899aabbccddeeff", "0102030405060708"), log)
+	ctx := logger.ToContext(contextWithSpanContext(context.Background(), t, "00112233445566778899aabbccddeeff", "0102030405060708"), log)
 
 	logger.Info(ctx, "context logger used")
 
@@ -317,12 +317,12 @@ func TestRecoveryRecordsPanicOnSpan(t *testing.T) {
 func otelTraceMiddleware(t *testing.T, traceIDHex string, spanIDHex string) gin.HandlerFunc {
 	t.Helper()
 	return func(c *gin.Context) {
-		c.Request = c.Request.WithContext(contextWithSpanContext(t, c.Request.Context(), traceIDHex, spanIDHex))
+		c.Request = c.Request.WithContext(contextWithSpanContext(c.Request.Context(), t, traceIDHex, spanIDHex))
 		c.Next()
 	}
 }
 
-func contextWithSpanContext(t *testing.T, ctx context.Context, traceIDHex string, spanIDHex string) context.Context {
+func contextWithSpanContext(ctx context.Context, t *testing.T, traceIDHex string, spanIDHex string) context.Context {
 	t.Helper()
 	traceID, err := trace.TraceIDFromHex(traceIDHex)
 	if err != nil {

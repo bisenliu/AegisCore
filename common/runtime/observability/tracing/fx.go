@@ -3,8 +3,9 @@ package tracing
 import (
 	"context"
 
-	"github.com/aegiscore/common/runtime/config"
 	"go.uber.org/fx"
+
+	"github.com/aegiscore/common/runtime/config"
 )
 
 // FxParams 描述 Fx 构造 tracing provider 所需依赖。
