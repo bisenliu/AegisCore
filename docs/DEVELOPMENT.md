@@ -64,8 +64,8 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - PostgreSQL 使用 `postgres.<name>` 命名实例，例如 `postgres.user_db`、`postgres.pay_db`。
 - 用户服务当前声明 `cache_redis` 和 `user_db`；其他命名实例可存在于配置中作为示例或其他服务配置，但不代表用户服务会自动连接对应资源或启用相关业务。
 - Redis key 的通用构造规则使用 `common/runtime/rediskey`；具体 key schema 放在 owning feature 的 `infrastructure/redis` 或 owning runtime primitive 内，不放入 `common` 的通用 key 大表。
-- 可观测性配置位于 `observability`：`observability.metrics.enabled` 控制 Prometheus metrics provider 是否创建独立 registry，`observability.metrics.path` 默认 `/metrics` 但不会自动注册路由，`observability.metrics.include_runtime` 控制是否注册 Go runtime/process 指标；`observability.tracing.enabled` 控制 tracing provider 是否启用采样记录，`observability.tracing.sample_ratio` 范围为 `0.0` 到 `1.0`，`observability.tracing.exporter` 当前配置契约支持 `none` 和 `otlp`，`observability.tracing.otlp_endpoint` 只在 `exporter: otlp` 时必填，`observability.tracing.insecure` 在生产类环境中不能与 `otlp` exporter 同时使用。
-- 当前阶段用户服务不注册 `/metrics` 路由，也不接入外部 client tracing。`common/runtime/observability/metrics` 支持本地 Prometheus registry/provider，disabled 模式零副作用，enabled 模式使用独立 registry 且可选注册 Go runtime/process collector；服务侧如需暴露 `observability.metrics.path`，必须单独显式挂载。`common/runtime/observability/tracing` 支持本地 OpenTelemetry SDK provider；用户服务 HTTP 入站请求通过 OTel Gin middleware 创建 server span，并使用 W3C `traceparent` / `tracestate` 传播。用户服务本地默认 `observability.tracing.exporter: none`，该模式会生成标准 trace ID 和 span ID，但不导出 span，因此不强制部署 `otel-collector:4317`，也不会在 trace UI 中看到链路。
+- 可观测性配置位于 `observability`：`observability.metrics.enabled` 控制 Prometheus metrics provider 是否创建独立 registry，并控制用户服务是否挂载 `observability.metrics.path`；`observability.metrics.path` 默认 `/metrics`；`observability.metrics.include_runtime` 控制是否注册 Go runtime/process 指标；`observability.tracing.enabled` 控制 tracing provider 是否启用采样记录，`observability.tracing.sample_ratio` 范围为 `0.0` 到 `1.0`，`observability.tracing.exporter` 当前配置契约支持 `none` 和 `otlp`，`observability.tracing.otlp_endpoint` 只在 `exporter: otlp` 时必填，`observability.tracing.insecure` 在生产类环境中不能与 `otlp` exporter 同时使用。
+- 用户服务启用 metrics 时会在配置路径暴露 Prometheus scrape endpoint，默认 `/metrics`。`common/runtime/observability/metrics` 支持本地 Prometheus registry/provider，disabled 模式零副作用，enabled 模式使用独立 registry 且可选注册 Go runtime/process collector；metrics endpoint 不经过 RBAC 授权，是否需要网络侧保护由部署层决定。用户服务当前不接入外部 client tracing。`common/runtime/observability/tracing` 支持本地 OpenTelemetry SDK provider；用户服务 HTTP 入站请求通过 OTel Gin middleware 创建 server span，并使用 W3C `traceparent` / `tracestate` 传播。用户服务本地默认 `observability.tracing.exporter: none`，该模式会生成标准 trace ID 和 span ID，但不导出 span，因此不强制部署 `otel-collector:4317`，也不会在 trace UI 中看到链路。
 - OTLP endpoint 不应包含 token、Authorization header、账号密码、Cookie 或其他敏感凭据；未来 exporter 认证需要单独设计 Secret 注入方式。
 - `common/runtime/config.Load` 会读取 YAML、应用 `AEGISCORE_` 覆盖、反序列化为配置对象，并在返回前执行结构化字段校验；缺失必填字段、非法端口、非正超时、无效 Redis/PostgreSQL named config 或生产环境不安全配置会在启动期被拒绝。
 
@@ -73,7 +73,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 
 示例：`AEGISCORE_OBSERVABILITY_TRACING_EXPORTER=otlp` 可覆盖 `observability.tracing.exporter`，配套 `AEGISCORE_OBSERVABILITY_TRACING_OTLP_ENDPOINT=localhost:4317` 可设置本地 Collector endpoint。
 
-示例：`AEGISCORE_OBSERVABILITY_METRICS_ENABLED=true` 可创建本地 Prometheus provider；仍需后续服务侧路由变更才会暴露 `/metrics`。
+示例：`AEGISCORE_OBSERVABILITY_METRICS_ENABLED=true` 会创建本地 Prometheus provider，并让用户服务暴露默认 `/metrics` scrape endpoint。
 
 ## 6. Coding Conventions
 

@@ -41,22 +41,26 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 		otelgin.Middleware(params.Config.App.Name,
 			otelgin.WithTracerProvider(params.Trace.TracerProvider()),
 			otelgin.WithPropagators(params.Trace.TextMapPropagator()),
-			otelgin.WithFilter(traceBusinessRequest),
+			otelgin.WithFilter(traceBusinessRequest(params.Config.Observability.Metrics)),
 		),
 		renameHTTPServerSpan(),
 		commonmw.Recovery(params.Log),
-		commonmw.RequestLoggerWithOptions(params.Log, commonmw.RequestLoggerOptions{Skip: skipSuccessfulHealthProbeLog}),
+		commonmw.RequestLoggerWithOptions(params.Log, commonmw.RequestLoggerOptions{Skip: skipSuccessfulRuntimeEndpointLog(params.Config.Observability.Metrics)}),
 		commonmw.CORS(),
 	)
 	return engine, nil
 }
 
-func skipSuccessfulHealthProbeLog(c *gin.Context) bool {
-	return c.Writer.Status() < 400 && router.IsHealthProbePath(c.Request.URL.Path)
+func skipSuccessfulRuntimeEndpointLog(metricsCfg config.MetricsConfig) func(*gin.Context) bool {
+	return func(c *gin.Context) bool {
+		return c.Writer.Status() < 400 && router.IsLowNoiseRuntimePath(c.Request.URL.Path, metricsCfg)
+	}
 }
 
-func traceBusinessRequest(request *http.Request) bool {
-	return !router.IsHealthProbePath(request.URL.Path)
+func traceBusinessRequest(metricsCfg config.MetricsConfig) func(*http.Request) bool {
+	return func(request *http.Request) bool {
+		return !router.IsLowNoiseRuntimePath(request.URL.Path, metricsCfg)
+	}
 }
 
 func renameHTTPServerSpan() gin.HandlerFunc {

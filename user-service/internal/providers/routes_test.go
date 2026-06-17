@@ -21,6 +21,7 @@ import (
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
+	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
@@ -50,6 +51,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			JWT: config.JWTConfig{Secret: "secret"},
 		},
 		Observability: config.ObservabilityConfig{
+			Metrics: config.MetricsConfig{Enabled: true, Path: "/metrics", IncludeRuntime: true},
 			Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1, Exporter: "none"},
 		},
 	}
@@ -58,6 +60,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	jwtService := commonauth.NewJWTService(cfg.Auth)
 	tokenVersions := &routeTokenVersionValidator{version: 1}
 	authorizer := &routeAuthorizer{allowed: true}
+	metricsProvider := newRouteTestMetricsProvider(t, cfg)
 	traceProvider := newRouteTestTracingProvider(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log, Trace: traceProvider})
 	if err != nil {
@@ -67,13 +70,14 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDefault: %v", err)
 	}
-	RegisterRoutes(RegisterRouteParams{
+	if err := RegisterRoutes(RegisterRouteParams{
 		Config:        cfg,
 		Log:           log,
 		Engine:        engine,
 		JWT:           jwtService,
 		TokenVersions: tokenVersions,
 		Authorizer:    authorizer,
+		Metrics:       metricsProvider,
 		AuthController: authhttp.NewAuthController(authhttp.AuthControllerParams{
 			Login:          &routeAuthAuthUseCases{},
 			Refresh:        &routeAuthAuthUseCases{},
@@ -83,7 +87,9 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			Validator:      validator,
 		}),
 		UserController: userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
-	})
+	}); err != nil {
+		t.Fatalf("RegisterRoutes: %v", err)
+	}
 
 	publicRequests := []struct {
 		method string
@@ -97,6 +103,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		{method: http.MethodGet, path: "/openapi.json"},
 		{method: http.MethodGet, path: "/docs"},
 		{method: http.MethodGet, path: "/api-docs"},
+		{method: http.MethodGet, path: "/metrics"},
 		{method: http.MethodPost, path: "/api/v1/auth/login", body: `{"username":"alice","password":"secret"}`},
 		{method: http.MethodPost, path: "/api/v1/auth/refresh", body: `{"refresh_token":"refresh"}`},
 		{method: http.MethodPost, path: "/api/v1/auth/change-password", body: `{"new_password":"NewPassword123!"}`},
@@ -118,6 +125,29 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	if authorizer.calls != 0 {
 		t.Fatalf("public route authorizer calls = %d, want 0", authorizer.calls)
 	}
+
+	t.Run("metrics route returns prometheus text without auth or rbac", func(t *testing.T) {
+		initialLogCount := logs.Len()
+		authorizer.reset()
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		engine.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+		}
+		if contentType := recorder.Header().Get("Content-Type"); !strings.Contains(contentType, "text/plain") {
+			t.Fatalf("content type = %q, want prometheus text", contentType)
+		}
+		if body := recorder.Body.String(); !strings.Contains(body, "go_goroutines") {
+			t.Fatalf("body missing runtime metric: %s", body)
+		}
+		if authorizer.calls != 0 {
+			t.Fatalf("authorizer calls = %d, want 0", authorizer.calls)
+		}
+		if logs.Len() != initialLogCount {
+			t.Fatalf("request log count changed from %d to %d, want successful metrics scrape skipped", initialLogCount, logs.Len())
+		}
+	})
 
 	t.Run("probes return configured service name", func(t *testing.T) {
 		initialLogCount := logs.Len()
@@ -298,6 +328,40 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	})
 }
 
+func TestRegisterRoutesRejectsMetricsPathConflict(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		App: config.AppConfig{Name: "configured-user-service", Environment: "local"},
+		Auth: config.AuthConfig{
+			JWT: config.JWTConfig{Secret: "secret"},
+		},
+		Observability: config.ObservabilityConfig{
+			Metrics: config.MetricsConfig{Enabled: true, Path: "/api/v1/metrics"},
+		},
+	}
+	validator := mustRouteTestValidator(t)
+	err := RegisterRoutes(RegisterRouteParams{
+		Config:     cfg,
+		Log:        zap.NewNop(),
+		Engine:     gin.New(),
+		JWT:        commonauth.NewJWTService(cfg.Auth),
+		Authorizer: &routeAuthorizer{allowed: true},
+		Metrics:    newRouteTestMetricsProvider(t, cfg),
+		AuthController: authhttp.NewAuthController(authhttp.AuthControllerParams{
+			Login:          &routeAuthAuthUseCases{},
+			Refresh:        &routeAuthAuthUseCases{},
+			ChangePassword: &routeAuthAuthUseCases{},
+			LogoutCurrent:  &routeAuthAuthUseCases{},
+			LogoutAll:      &routeAuthAuthUseCases{},
+			Validator:      validator,
+		}),
+		UserController: userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
+	})
+	if err == nil || !strings.Contains(err.Error(), "invalid metrics path") {
+		t.Fatalf("RegisterRoutes error = %v, want invalid metrics path", err)
+	}
+}
+
 func newRouteTestTracingProvider(t *testing.T, cfg *config.Config) *commontracing.Provider {
 	t.Helper()
 	provider, err := commontracing.NewProvider(context.Background(), commontracing.Options{
@@ -314,6 +378,28 @@ func newRouteTestTracingProvider(t *testing.T, cfg *config.Config) *commontracin
 		}
 	})
 	return provider
+}
+
+func newRouteTestMetricsProvider(t *testing.T, cfg *config.Config) *commonmetrics.Provider {
+	t.Helper()
+	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+		Config:      cfg.Observability.Metrics,
+		ServiceName: cfg.App.Name,
+		Environment: cfg.App.Environment,
+	})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	return provider
+}
+
+func mustRouteTestValidator(t *testing.T) *validation.Validator {
+	t.Helper()
+	validator, err := validation.NewDefault()
+	if err != nil {
+		t.Fatalf("NewDefault: %v", err)
+	}
+	return validator
 }
 
 func validTraceIDField(value any) bool {

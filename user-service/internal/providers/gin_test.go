@@ -20,29 +20,36 @@ import (
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 )
 
-func TestSkipSuccessfulHealthProbeLog(t *testing.T) {
+func TestSkipSuccessfulRuntimeEndpointLog(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
+	skip := skipSuccessfulRuntimeEndpointLog(config.MetricsConfig{Enabled: true, Path: "/metrics"})
 	engine.GET("/livez", func(c *gin.Context) {
 		c.Status(http.StatusOK)
-		if !skipSuccessfulHealthProbeLog(c) {
-			t.Fatal("skipSuccessfulHealthProbeLog = false, want true")
+		if !skip(c) {
+			t.Fatal("skipSuccessfulRuntimeEndpointLog = false, want true")
 		}
 	})
 	engine.GET("/readyz", func(c *gin.Context) {
 		c.Status(http.StatusServiceUnavailable)
-		if skipSuccessfulHealthProbeLog(c) {
-			t.Fatal("skipSuccessfulHealthProbeLog = true, want false")
+		if skip(c) {
+			t.Fatal("skipSuccessfulRuntimeEndpointLog = true, want false")
+		}
+	})
+	engine.GET("/metrics", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+		if !skip(c) {
+			t.Fatal("skipSuccessfulRuntimeEndpointLog = false, want true")
 		}
 	})
 	engine.GET("/api/v1/users", func(c *gin.Context) {
 		c.Status(http.StatusOK)
-		if skipSuccessfulHealthProbeLog(c) {
-			t.Fatal("skipSuccessfulHealthProbeLog = true, want false")
+		if skip(c) {
+			t.Fatal("skipSuccessfulRuntimeEndpointLog = true, want false")
 		}
 	})
 
-	for _, path := range []string{"/livez", "/readyz", "/api/v1/users"} {
+	for _, path := range []string{"/livez", "/readyz", "/metrics", "/api/v1/users"} {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		engine.ServeHTTP(recorder, request)
@@ -119,6 +126,29 @@ func TestNewGinEngineSkipsHealthProbeTracing(t *testing.T) {
 
 	if spanContext.TraceID().IsValid() || spanContext.SpanID().IsValid() {
 		t.Fatalf("health probe span context = %v, want invalid because tracing is filtered", spanContext)
+	}
+}
+
+func TestNewGinEngineSkipsMetricsTracingWhenEnabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true, Path: "/metrics"}
+	provider := newGinTestTracingProvider(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	if err != nil {
+		t.Fatalf("NewGinEngine: %v", err)
+	}
+
+	var spanContext trace.SpanContext
+	engine.GET("/metrics", func(c *gin.Context) {
+		spanContext = trace.SpanContextFromContext(c.Request.Context())
+		c.Status(http.StatusOK)
+	})
+
+	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/metrics", nil))
+
+	if spanContext.TraceID().IsValid() || spanContext.SpanID().IsValid() {
+		t.Fatalf("metrics span context = %v, want invalid because tracing is filtered", spanContext)
 	}
 }
 

@@ -79,11 +79,11 @@ log:
 
 observability:
   metrics:
-    # 是否开启 metrics 配置入口；当前阶段不注册 /metrics 路由或 exporter。
+    # 是否开启 Prometheus metrics provider；开启后会挂载下方 path 作为 scrape endpoint。
     enabled: false
-    # 未来 HTTP metrics 暴露路径；当前仅作为配置契约保留。
+    # HTTP metrics 暴露路径；默认 /metrics，不经过 RBAC，网络侧保护由部署层负责。
     path: /metrics
-    # 未来 metrics 实现是否包含 Go runtime/process 指标。
+    # 是否包含 Go runtime/process 指标；不包含 auth/user/role/permission 业务指标。
     include_runtime: true
   tracing:
     # 是否开启 tracing 配置入口；当前阶段不创建 tracer provider 或 Gin middleware。

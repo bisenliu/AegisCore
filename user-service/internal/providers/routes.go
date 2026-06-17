@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
+	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
@@ -19,11 +20,12 @@ import (
 type RegisterRouteParams struct {
 	fx.In
 
-	Config *config.Config
-	Log    *zap.Logger
-	Engine *gin.Engine
-	JWT    *commonauth.JWTService
-	Health router.HealthChecks
+	Config  *config.Config
+	Log     *zap.Logger
+	Engine  *gin.Engine
+	JWT     *commonauth.JWTService
+	Health  router.HealthChecks
+	Metrics *commonmetrics.Provider
 	// TokenVersions 是可选依赖，使公开路由和测试可以在不提供撤销能力时挂载中间件。
 	TokenVersions        commonauth.TokenVersionValidator `optional:"true"`
 	Authorizer           permissionauthorization.Authorizer
@@ -34,15 +36,17 @@ type RegisterRouteParams struct {
 }
 
 // RegisterRoutes 将服务级 provider 依赖适配为 router 层路由注册参数。
-func RegisterRoutes(params RegisterRouteParams) {
-	router.RegisterUserServiceHTTPRoutes(params.Engine, router.RouteParams{
+func RegisterRoutes(params RegisterRouteParams) error {
+	return router.RegisterUserServiceHTTPRoutes(params.Engine, router.RouteParams{
 		ServiceName:           params.Config.App.Name,
 		Environment:           params.Config.App.Environment,
 		Log:                   params.Log,
 		JWT:                   params.JWT,
 		HTTPConfig:            params.Config.HTTP,
 		AuthConfig:            params.Config.Auth,
+		MetricsConfig:         params.Config.Observability.Metrics,
 		HealthChecks:          params.Health,
+		Metrics:               params.Metrics,
 		TokenVersionValidator: params.TokenVersions,
 		Authorizer:            params.Authorizer,
 		AuthController:        params.AuthController,
