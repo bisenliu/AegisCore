@@ -12,6 +12,7 @@ import (
 
 	commonmw "github.com/aegiscore/common/http/middleware"
 	"github.com/aegiscore/common/runtime/config"
+	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 	"github.com/aegiscore/user-service/internal/router"
 )
@@ -20,9 +21,10 @@ import (
 type GinParams struct {
 	fx.In
 
-	Config *config.Config
-	Log    *zap.Logger
-	Trace  *commontracing.Provider
+	Config  *config.Config
+	Log     *zap.Logger
+	Metrics *commonmetrics.Provider
+	Trace   *commontracing.Provider
 }
 
 // NewGinEngine 创建 Gin engine，应用可信代理配置并安装共享中间件。
@@ -44,6 +46,11 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 			otelgin.WithFilter(traceBusinessRequest(params.Config.Observability.Metrics)),
 		),
 		renameHTTPServerSpan(),
+		commonmw.HTTPServerMetrics(commonmw.HTTPMetricsOptions{
+			Provider:   params.Metrics,
+			Skip:       skipMetricsScrapeRequest(params.Config.Observability.Metrics),
+			SkipResult: skipSuccessfulRuntimeEndpointMetrics(params.Config.Observability.Metrics),
+		}),
 		commonmw.Recovery(params.Log),
 		commonmw.RequestLoggerWithOptions(params.Log, commonmw.RequestLoggerOptions{Skip: skipSuccessfulRuntimeEndpointLog(params.Config.Observability.Metrics)}),
 		commonmw.CORS(),
@@ -54,6 +61,18 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 func skipSuccessfulRuntimeEndpointLog(metricsCfg config.MetricsConfig) func(*gin.Context) bool {
 	return func(c *gin.Context) bool {
 		return c.Writer.Status() < 400 && router.IsLowNoiseRuntimePath(c.Request.URL.Path, metricsCfg)
+	}
+}
+
+func skipMetricsScrapeRequest(metricsCfg config.MetricsConfig) func(*gin.Context) bool {
+	return func(c *gin.Context) bool {
+		return router.IsMetricsPath(c.Request.URL.Path, metricsCfg)
+	}
+}
+
+func skipSuccessfulRuntimeEndpointMetrics(metricsCfg config.MetricsConfig) func(*gin.Context) bool {
+	return func(c *gin.Context) bool {
+		return c.Writer.Status() < http.StatusBadRequest && router.IsLowNoiseRuntimePath(c.Request.URL.Path, metricsCfg)
 	}
 }
 

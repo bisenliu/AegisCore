@@ -4,7 +4,7 @@
 
 Provider 基于 `common/runtime/config.MetricsConfig`、服务名和部署环境创建。启用模式使用独立 `prometheus.Registry`，不会写入 Prometheus 默认全局 registry。禁用模式保持零副作用：不创建 registry、不注册 collector、不注册 Go runtime/process collector，调用 `Register` 也不会产生效果。
 
-本 package 不挂载 `/metrics` HTTP 路由。服务侧后续如需暴露 Prometheus endpoint，应显式检查 `Provider.Enabled()`，再使用 `Provider.Gatherer()` 挂载自己的路由。
+本 package 不挂载 `/metrics` HTTP 路由。服务侧如需暴露 Prometheus endpoint，应显式检查 `Provider.Enabled()`，再使用 `Provider.Gatherer()` 挂载自己的路由。
 
 ## 可以放置
 
@@ -28,7 +28,7 @@ Provider 基于 `common/runtime/config.MetricsConfig`、服务名和部署环境
 - `observability.metrics.enabled: true`：创建独立 Prometheus registry。
 - `observability.metrics.include_runtime: true`：注册 Go runtime collector 和 process collector。
 - `observability.metrics.include_runtime: false`：不注册 Go runtime/process collector。
-- `observability.metrics.path`：只表达未来 HTTP metrics 暴露路径；本 package 不自动挂载该路径。
+- `observability.metrics.path`：表达服务侧 HTTP metrics 暴露路径；本 package 不自动挂载该路径。
 
 ## Label 约定
 
@@ -50,18 +50,35 @@ Provider 基于 `common/runtime/config.MetricsConfig`、服务名和部署环境
 - SQL、Redis key、JWT、Authorization header、Cookie、原始错误消息。
 - 任意高基数或敏感值。
 
+## HTTP Server RED 指标
+
+`common/http/middleware.HTTPServerMetrics` 提供 Gin HTTP 入站请求 RED 指标采集。该 middleware 只依赖 Gin request lifecycle 和本 package 的 `Provider`，不承载服务业务语义，也不挂载 scrape route。
+
+当前 HTTP server 指标：
+
+| Metric | Type | Labels |
+|---|---|---|
+| `http_server_requests_total` | counter | `service`,`environment`,`method`,`route`,`status_class` |
+| `http_server_request_duration_seconds` | histogram | `service`,`environment`,`method`,`route`,`status_class` |
+| `http_server_in_flight_requests` | gauge | `service`,`environment`,`method`,`route` |
+
+`service` 和 `environment` 由 provider 作为 const label 注入。`route` 使用 Gin route template，例如 `/api/v1/users/:user_id`；未匹配路由使用固定 fallback，例如 `__unmatched__`，不得使用 raw path。用户服务接入时会过滤成功健康探针和成功 metrics scrape，避免污染业务 RED 面板；失败运行时端点仍可按服务侧策略记录或通过日志观察。
+
+第一阶段 HTTP middleware 不记录应用错误码 `code` label。后续若需要加入，必须由响应或错误处理层显式提供稳定低基数错误码，middleware 不得解析 response body 或原始错误。
+
 ## 命名约定
 
 - 指标名使用 Prometheus snake_case。
-- AegisCore runtime primitive 指标使用 `aegiscore_` 前缀。
+- AegisCore runtime primitive 指标默认使用 `aegiscore_` 前缀；HTTP server RED 指标使用 Prometheus 社区常见的 `http_server_` 前缀。
 - 服务名和环境不写入 metric name，使用 `service` 和 `environment` label。
 
 预留命名：
 
 | Area | Metric | Type | Labels |
 |---|---|---|---|
-| HTTP | `aegiscore_http_requests_total` | counter | `service`,`environment`,`method`,`route`,`status_class`,`code` |
-| HTTP | `aegiscore_http_request_duration_seconds` | histogram | `service`,`environment`,`method`,`route`,`status_class` |
+| HTTP | `http_server_requests_total` | counter | `service`,`environment`,`method`,`route`,`status_class` |
+| HTTP | `http_server_request_duration_seconds` | histogram | `service`,`environment`,`method`,`route`,`status_class` |
+| HTTP | `http_server_in_flight_requests` | gauge | `service`,`environment`,`method`,`route` |
 | Scheduler | `aegiscore_scheduler_jobs_total` | counter | `service`,`environment`,`job`,`event`,`code` |
 | Scheduler | `aegiscore_scheduler_job_duration_seconds` | histogram | `service`,`environment`,`job`,`status` |
 | Workerpool | `aegiscore_workerpool_tasks_total` | counter | `service`,`environment`,`pool`,`event`,`code` |
@@ -72,4 +89,4 @@ Provider 基于 `common/runtime/config.MetricsConfig`、服务名和部署环境
 
 ## 当前状态
 
-当前 package 提供 `NewProvider`、`NewFxProvider`、`Provider.Register`、`Provider.Registerer`、`Provider.Gatherer`、`StatusClass` 和 label key 常量。Scheduler、workerpool 和 HTTP 指标采集 adapter 尚未接入；后续实现应继续保持本包无业务语义，并由服务侧显式挂载 `/metrics` 路由。
+当前 package 提供 `NewProvider`、`NewFxProvider`、`Provider.Register`、`Provider.Registerer`、`Provider.Gatherer`、`StatusClass` 和 label key 常量。HTTP server RED 采集由 `common/http/middleware` 接入本 provider；scheduler 和 workerpool 指标 adapter 尚未接入。后续实现应继续保持本包无业务语义，并由服务侧显式挂载 `/metrics` 路由。

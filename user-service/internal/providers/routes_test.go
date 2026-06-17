@@ -62,7 +62,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	authorizer := &routeAuthorizer{allowed: true}
 	metricsProvider := newRouteTestMetricsProvider(t, cfg)
 	traceProvider := newRouteTestTracingProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log, Trace: traceProvider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log, Metrics: metricsProvider, Trace: traceProvider})
 	if err != nil {
 		t.Fatalf("NewGinEngine: %v", err)
 	}

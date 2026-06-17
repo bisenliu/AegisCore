@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	dto "github.com/prometheus/client_model/go"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -17,6 +18,7 @@ import (
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	commonresponse "github.com/aegiscore/common/http/response"
 	"github.com/aegiscore/common/runtime/config"
+	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 )
 
@@ -149,6 +151,118 @@ func TestNewGinEngineSkipsMetricsTracingWhenEnabled(t *testing.T) {
 
 	if spanContext.TraceID().IsValid() || spanContext.SpanID().IsValid() {
 		t.Fatalf("metrics span context = %v, want invalid because tracing is filtered", spanContext)
+	}
+}
+
+func TestNewGinEngineRecordsHTTPServerMetrics(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true, Path: "/metrics"}
+	traceProvider := newGinTestTracingProvider(t, cfg)
+	metricsProvider := newGinTestMetricsProvider(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider})
+	if err != nil {
+		t.Fatalf("NewGinEngine: %v", err)
+	}
+	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
+	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil))
+
+	metric := findGinMetricByLabels(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), map[string]string{
+		commonmetrics.LabelMethod:      http.MethodGet,
+		commonmetrics.LabelRoute:       "/api/v1/users/:user_id",
+		commonmetrics.LabelStatusClass: "2xx",
+	})
+	if got := metric.GetCounter().GetValue(); got != 1 {
+		t.Fatalf("request counter = %v, want 1", got)
+	}
+	duration := findGinMetricByLabels(t, gatherGinMetricFamily(t, metricsProvider, "http_server_request_duration_seconds"), map[string]string{
+		commonmetrics.LabelMethod:      http.MethodGet,
+		commonmetrics.LabelRoute:       "/api/v1/users/:user_id",
+		commonmetrics.LabelStatusClass: "2xx",
+	})
+	if got := duration.GetHistogram().GetSampleCount(); got != 1 {
+		t.Fatalf("duration sample count = %d, want 1", got)
+	}
+	assertGinMetricFamilyMissingLabelValue(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), "/api/v1/users/123")
+}
+
+func TestNewGinEngineSkipsSuccessfulRuntimeEndpointMetrics(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true, Path: "/metrics"}
+	traceProvider := newGinTestTracingProvider(t, cfg)
+	metricsProvider := newGinTestMetricsProvider(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider})
+	if err != nil {
+		t.Fatalf("NewGinEngine: %v", err)
+	}
+	for _, path := range []string{"/livez", "/readyz", "/startupz", "/metrics"} {
+		path := path
+		engine.GET(path, func(c *gin.Context) {
+			c.Status(http.StatusOK)
+		})
+		engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, path, nil))
+	}
+
+	assertGinMetricFamilyMissing(t, metricsProvider, "http_server_requests_total")
+	assertGinMetricFamilyMissing(t, metricsProvider, "http_server_request_duration_seconds")
+	assertGinMetricFamilyMissing(t, metricsProvider, "http_server_in_flight_requests")
+}
+
+func TestNewGinEngineRecordsUnmatchedRouteWithStableFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true, Path: "/metrics"}
+	traceProvider := newGinTestTracingProvider(t, cfg)
+	metricsProvider := newGinTestMetricsProvider(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider})
+	if err != nil {
+		t.Fatalf("NewGinEngine: %v", err)
+	}
+
+	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil))
+
+	metric := findGinMetricByLabels(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), map[string]string{
+		commonmetrics.LabelMethod:      http.MethodGet,
+		commonmetrics.LabelRoute:       "__unmatched__",
+		commonmetrics.LabelStatusClass: "4xx",
+	})
+	if got := metric.GetCounter().GetValue(); got != 1 {
+		t.Fatalf("unmatched counter = %v, want 1", got)
+	}
+	assertGinMetricFamilyMissingLabelValue(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), "/api/v1/users/123")
+}
+
+func TestNewGinEngineRecordsPanicHTTPServerMetrics(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true, Path: "/metrics"}
+	traceProvider := newGinTestTracingProvider(t, cfg)
+	metricsProvider := newGinTestMetricsProvider(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider})
+	if err != nil {
+		t.Fatalf("NewGinEngine: %v", err)
+	}
+	engine.GET("/api/v1/panic", func(_ *gin.Context) {
+		panic("metrics panic test")
+	})
+
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/panic", nil))
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", recorder.Code)
+	}
+
+	metric := findGinMetricByLabels(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), map[string]string{
+		commonmetrics.LabelMethod:      http.MethodGet,
+		commonmetrics.LabelRoute:       "/api/v1/panic",
+		commonmetrics.LabelStatusClass: "5xx",
+	})
+	if got := metric.GetCounter().GetValue(); got != 1 {
+		t.Fatalf("panic counter = %v, want 1", got)
 	}
 }
 
@@ -311,6 +425,88 @@ func newGinTestTracingProviderWithRecorder(t *testing.T, cfg *config.Config) (*c
 	recorder := tracetest.NewSpanRecorder()
 	provider.TracerProvider().RegisterSpanProcessor(recorder)
 	return provider, recorder
+}
+
+func newGinTestMetricsProvider(t *testing.T, cfg *config.Config) *commonmetrics.Provider {
+	t.Helper()
+	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+		Config:      cfg.Observability.Metrics,
+		ServiceName: cfg.App.Name,
+		Environment: cfg.App.Environment,
+	})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	return provider
+}
+
+func gatherGinMetricFamily(t *testing.T, provider *commonmetrics.Provider, name string) *dto.MetricFamily {
+	t.Helper()
+	families, err := provider.Gatherer().Gather()
+	if err != nil {
+		t.Fatalf("Gather: %v", err)
+	}
+	for _, family := range families {
+		if family.GetName() == name {
+			return family
+		}
+	}
+	t.Fatalf("metric family %q not found", name)
+	return nil
+}
+
+func findGinMetricByLabels(t *testing.T, family *dto.MetricFamily, labels map[string]string) *dto.Metric {
+	t.Helper()
+	for _, metric := range family.GetMetric() {
+		if ginMetricHasLabels(metric, labels) {
+			return metric
+		}
+	}
+	t.Fatalf("metric family %q missing labels %#v", family.GetName(), labels)
+	return nil
+}
+
+func ginMetricHasLabels(metric *dto.Metric, labels map[string]string) bool {
+	for key, want := range labels {
+		found := false
+		for _, label := range metric.GetLabel() {
+			if label.GetName() == key {
+				if label.GetValue() != want {
+					return false
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func assertGinMetricFamilyMissing(t *testing.T, provider *commonmetrics.Provider, name string) {
+	t.Helper()
+	families, err := provider.Gatherer().Gather()
+	if err != nil {
+		t.Fatalf("Gather: %v", err)
+	}
+	for _, family := range families {
+		if family.GetName() == name {
+			t.Fatalf("metric family %q exists, want missing", name)
+		}
+	}
+}
+
+func assertGinMetricFamilyMissingLabelValue(t *testing.T, family *dto.MetricFamily, value string) {
+	t.Helper()
+	for _, metric := range family.GetMetric() {
+		for _, label := range metric.GetLabel() {
+			if label.GetValue() == value {
+				t.Fatalf("metric family %q has forbidden label value %q", family.GetName(), value)
+			}
+		}
+	}
 }
 
 func endedGinSpan(t *testing.T, recorder *tracetest.SpanRecorder) sdktrace.ReadOnlySpan {
