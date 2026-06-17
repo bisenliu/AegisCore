@@ -17,6 +17,7 @@ import (
 // Module 组装权限目录 feature 的应用服务、控制器和基础设施 adapter。
 var Module = fx.Module("feature-permission",
 	fx.Provide(
+		newPermissionMetrics,
 		permissioncasbin.NewPolicyLoader,
 		newCasbinReloadMetrics,
 		permissioncasbin.NewEngine,

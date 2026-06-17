@@ -19,6 +19,7 @@ import (
 // Module 组装认证功能的应用服务、HTTP 传输层和基础设施适配器。
 var Module = fx.Module("feature-auth",
 	fx.Provide(
+		newAuthMetrics,
 		fx.Annotate(
 			authpostgres.NewCredentialStore,
 			fx.As(new(authapplication.UserCredentialStore)),
@@ -61,7 +62,7 @@ type tokenVersionValidatorResult struct {
 	Invalidator authvalidators.TokenVersionLocalInvalidator
 }
 
-func newTokenVersionValidator(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) tokenVersionValidatorResult {
+func newTokenVersionValidator(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, metrics authapplication.Metrics) tokenVersionValidatorResult {
 	validator := authvalidators.NewCachingValidator(users, sessions)
-	return tokenVersionValidatorResult{Validator: validator, Invalidator: validator}
+	return tokenVersionValidatorResult{Validator: authvalidators.NewMetricsTokenVersionValidator(validator, metrics), Invalidator: validator}
 }

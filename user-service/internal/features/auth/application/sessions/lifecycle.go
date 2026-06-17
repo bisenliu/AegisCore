@@ -78,7 +78,7 @@ func (m *lifecycle) ValidateRefreshSession(ctx context.Context, claims *commonau
 	if err != nil {
 		if errors.Is(err, authdomain.ErrAuthSessionNotFound) {
 			logger.Warn(ctx, "refresh session not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-			return authdomain.AuthSession{}, 0, authdomain.ErrTokenInvalid
+			return authdomain.AuthSession{}, 0, errors.Join(authdomain.ErrTokenInvalid, authdomain.ErrAuthSessionNotFound)
 		}
 		logger.Error(ctx, "get refresh session failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
 		return authdomain.AuthSession{}, 0, err

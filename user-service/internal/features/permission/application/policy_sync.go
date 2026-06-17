@@ -35,11 +35,15 @@ type PolicyRefreshCoordinator struct {
 	publisher PolicyVersionPublisher
 	tracker   PolicyVersionTracker
 	log       *zap.Logger
+	metrics   Metrics
 }
 
 // NewPolicyRefreshCoordinator 构造 RBAC policy 刷新编排器。
-func NewPolicyRefreshCoordinator(engine PolicyReloadEngine, publisher PolicyVersionPublisher, tracker PolicyVersionTracker, log *zap.Logger) *PolicyRefreshCoordinator {
-	return &PolicyRefreshCoordinator{engine: engine, publisher: publisher, tracker: tracker, log: log}
+func NewPolicyRefreshCoordinator(engine PolicyReloadEngine, publisher PolicyVersionPublisher, tracker PolicyVersionTracker, log *zap.Logger, metrics Metrics) *PolicyRefreshCoordinator {
+	if metrics == nil {
+		metrics = NopMetrics()
+	}
+	return &PolicyRefreshCoordinator{engine: engine, publisher: publisher, tracker: tracker, log: log, metrics: metrics}
 }
 
 // NotifyPolicyChanged 在 RBAC 数据变更成功后刷新本实例并通知其他实例。
@@ -48,14 +52,18 @@ func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, reas
 		return
 	}
 	if err := c.engine.Reload(ctx); err != nil {
+		c.metrics.PolicyReloadFailed(ctx, MetricsSourceLocalChange, MetricsReasonReloadFailed)
 		logger.Error(ctx, "rbac policy local refresh failed", logger.StackTrace(zap.String("reason", reason), zap.Error(err))...)
 		return
 	}
+	c.metrics.PolicyReloadSucceeded(ctx, MetricsSourceLocalChange)
 	version, err := c.publisher.PublishPolicyChanged(ctx, reason)
 	if err != nil {
+		c.metrics.PolicyPublishFailed(ctx, MetricsReasonPublishFailed)
 		logger.Error(ctx, "rbac policy version publish failed", logger.StackTrace(zap.String("reason", reason), zap.Error(err))...)
 		return
 	}
+	c.metrics.PolicyPublishSucceeded(ctx)
 	c.tracker.MarkApplied(version)
 	logger.Info(ctx, "rbac policy local refresh succeeded", zap.Int64("policy_version", version), zap.String("reason", reason))
 }

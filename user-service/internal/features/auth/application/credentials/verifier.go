@@ -57,7 +57,7 @@ func (v *verifier) VerifyPassword(ctx context.Context, username string, plainPas
 		// 必须改密用户只允许通过登录以获取受限 token；其他禁用状态直接登录失败。
 		fields := append([]zap.Field{zap.String("username", username), zap.String("user_id", credential.UserID.String()), zap.Int64("status", int64(credential.Status))}, authctx.ClientContextFields(ctx)...)
 		logger.Warn(ctx, "login user status rejected", fields...)
-		return nil, authdomain.ErrInvalidCredentials
+		return nil, errors.Join(authdomain.ErrInvalidCredentials, authdomain.ErrUserStatusRejected)
 	}
 
 	return credential, nil

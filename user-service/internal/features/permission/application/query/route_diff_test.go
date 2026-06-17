@@ -34,6 +34,27 @@ func TestRouteDiff(t *testing.T) {
 	}
 }
 
+func TestRouteDiffRecordsMetrics(t *testing.T) {
+	store := &stubPermissionStore{permissions: []permissiondomain.Permission{
+		{PermissionID: uuid.MustParse("018f0000-0000-7000-8000-000000000021"), HTTPMethod: "GET", PathTemplate: "/api/v1/users"},
+		{PermissionID: uuid.MustParse("018f0000-0000-7000-8000-000000000022"), HTTPMethod: "GET", PathTemplate: "/api/v1/stale"},
+	}}
+	scanner := &stubRouteScanner{routes: []permissionapplication.DiscoveredRoute{
+		{Method: "GET", Path: "/api/v1/users"},
+		{Method: "POST", Path: "/api/v1/users"},
+	}}
+	metrics := &routeDiffMetricsSpy{}
+	service := NewPermissionQueryService(store, scanner, metrics)
+
+	_, err := service.GetRouteDiff(context.Background())
+	if err != nil {
+		t.Fatalf("GetRouteDiff: %v", err)
+	}
+	if metrics.missing != 1 || metrics.stale != 1 {
+		t.Fatalf("route diff metrics missing=%d stale=%d, want 1/1", metrics.missing, metrics.stale)
+	}
+}
+
 func TestRouteDiffNormalizesSortsAndStaysReadOnly(t *testing.T) {
 	store := &stubPermissionStore{permissions: []permissiondomain.Permission{
 		{PermissionID: uuid.MustParse("018f0000-0000-7000-8000-000000000011"), HTTPMethod: "DELETE", PathTemplate: "/api/v1/stale-b"},
@@ -64,15 +85,22 @@ func TestRouteDiffNormalizesSortsAndStaysReadOnly(t *testing.T) {
 
 func TestRouteDiffPropagatesScannerAndStoreErrors(t *testing.T) {
 	scannerErr := errors.New("scan failed")
-	service := NewPermissionQueryService(&stubPermissionStore{}, &stubRouteScanner{err: scannerErr})
+	metrics := &routeDiffMetricsSpy{}
+	service := NewPermissionQueryService(&stubPermissionStore{}, &stubRouteScanner{err: scannerErr}, metrics)
 	if _, err := service.GetRouteDiff(context.Background()); !errors.Is(err, scannerErr) {
 		t.Fatalf("scanner err = %v", err)
 	}
+	if metrics.called {
+		t.Fatal("metrics updated after scanner error")
+	}
 
 	storeErr := errors.New("list all failed")
-	service = NewPermissionQueryService(&stubPermissionStore{listAllErr: storeErr}, &stubRouteScanner{})
+	service = NewPermissionQueryService(&stubPermissionStore{listAllErr: storeErr}, &stubRouteScanner{}, metrics)
 	if _, err := service.GetRouteDiff(context.Background()); !errors.Is(err, storeErr) {
 		t.Fatalf("store err = %v", err)
+	}
+	if metrics.called {
+		t.Fatal("metrics updated after store error")
 	}
 }
 
@@ -129,4 +157,17 @@ func (s *stubRouteScanner) DiscoverRoutes(context.Context) ([]permissionapplicat
 		return nil, s.err
 	}
 	return s.routes, nil
+}
+
+type routeDiffMetricsSpy struct {
+	permissionapplication.Metrics
+	called  bool
+	missing int
+	stale   int
+}
+
+func (m *routeDiffMetricsSpy) RouteDiffObserved(_ context.Context, missing int, stale int) {
+	m.called = true
+	m.missing = missing
+	m.stale = stale
 }

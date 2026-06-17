@@ -20,6 +20,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/workerpool"
 	commonauth "github.com/aegiscore/common/security/auth"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
@@ -796,6 +797,8 @@ func TestSessionStoreDeleteAllUserSessionsDoesNotDeleteNewSessionsAfterDetach(t 
 func TestSessionStoreDeleteAllUserSessionsReturnsSubmitError(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
+	metrics := &sessionStoreMetricsSpy{}
+	store.metrics = metrics
 	store.purgePool = rejectingPurgeTaskPool{err: workerpool.ErrQueueFull}
 	ctx := context.Background()
 	if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-rejected", TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser()); err != nil {
@@ -809,6 +812,9 @@ func TestSessionStoreDeleteAllUserSessionsReturnsSubmitError(t *testing.T) {
 	}
 	if err == nil || !strings.Contains(err.Error(), "submit delete user auth sessions purge") {
 		t.Fatalf("DeleteAllUserSessions err = %v, want submit context", err)
+	}
+	if metrics.sessionPurgeFailures != 1 {
+		t.Fatalf("session purge submit metrics = %d, want 1", metrics.sessionPurgeFailures)
 	}
 }
 
@@ -1076,7 +1082,7 @@ func newTestSessionStore(redisServer *miniredis.Miniredis) *SessionStore {
 
 func newTestSessionStoreWithConfig(redisServer *miniredis.Miniredis, authCfg config.AuthConfig) *SessionStore {
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
-	return &SessionStore{redis: client, keys: MustKeyCatalog(""), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL, purgePool: directPurgeTaskPool{}}
+	return &SessionStore{redis: client, keys: MustKeyCatalog(""), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL, purgePool: directPurgeTaskPool{}, metrics: authapplication.NopMetrics()}
 }
 
 func defaultMaxActiveSessionsPerUser() int {
@@ -1164,6 +1170,15 @@ type recordingPurgeTaskPool struct {
 	taskName  string
 	err       error
 	failed    int64
+}
+
+type sessionStoreMetricsSpy struct {
+	authapplication.Metrics
+	sessionPurgeFailures int
+}
+
+func (m *sessionStoreMetricsSpy) SessionPurgeSubmitFailed(context.Context) {
+	m.sessionPurgeFailures++
 }
 
 func (p *recordingPurgeTaskPool) Submit(ctx context.Context, task workerpool.Task) error {
