@@ -14,7 +14,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "10.0.0"
+      "version": "11.2.2"
     },
     {
       "type": "datasource",
@@ -63,7 +63,7 @@
       }
     ]
   },
-  "description": "用户服务运维总览，覆盖 HTTP RED、auth/RBAC 结果、运行时依赖、workerpool、scheduler、RBAC watcher、policy reload 和 Go runtime 指标。",
+  "description": "用户服务运维总览，覆盖 HTTP RED、auth/RBAC、依赖资源、后台任务、scheduler、policy reload 和 Go runtime 指标。",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -104,14 +104,44 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "showPoints": "never"
+          "color": {
+            "mode": "palette-classic"
           },
-          "unit": "reqps"
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "unit": "reqps",
+          "noValue": "No data",
+          "decimals": 3
         },
         "overrides": []
       },
@@ -124,7 +154,9 @@
       "id": 2,
       "options": {
         "legend": {
-          "calcs": [],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
@@ -147,8 +179,9 @@
           "refId": "A"
         }
       ],
-      "title": "按 route 统计的请求速率",
-      "type": "timeseries"
+      "title": "HTTP 请求速率（按 route）",
+      "type": "timeseries",
+      "description": "按 HTTP method 和 Gin route template 展示 5 分钟滑动请求速率。"
     },
     {
       "datasource": {
@@ -157,12 +190,40 @@
       },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
             "drawStyle": "line",
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "showPoints": "never"
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "thresholds": {
             "mode": "absolute",
@@ -181,7 +242,9 @@
               }
             ]
           },
-          "unit": "percentunit"
+          "unit": "percentunit",
+          "noValue": "No data",
+          "decimals": 2
         },
         "overrides": []
       },
@@ -197,7 +260,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -219,8 +282,9 @@
           "refId": "A"
         }
       ],
-      "title": "5xx 比例",
-      "type": "timeseries"
+      "title": "HTTP 5xx 比例",
+      "type": "timeseries",
+      "description": "5xx 请求速率除以全部请求速率，使用 5 分钟滑动窗口。"
     },
     {
       "datasource": {
@@ -232,6 +296,8 @@
           "color": {
             "mode": "thresholds"
           },
+          "unit": "short",
+          "noValue": "No data",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -248,8 +314,7 @@
                 "value": 100
               }
             ]
-          },
-          "unit": "short"
+          }
         },
         "overrides": []
       },
@@ -261,9 +326,9 @@
       },
       "id": 4,
       "options": {
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "area",
-        "justifyMode": "auto",
+        "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
@@ -272,7 +337,7 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "textMode": "value"
       },
       "targets": [
         {
@@ -287,8 +352,9 @@
           "refId": "A"
         }
       ],
-      "title": "进行中的请求",
-      "type": "stat"
+      "title": "HTTP 并发请求",
+      "type": "stat",
+      "description": "当前正在处理的 HTTP 请求数量。"
     },
     {
       "datasource": {
@@ -297,14 +363,44 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "showPoints": "never"
+          "color": {
+            "mode": "palette-classic"
           },
-          "unit": "s"
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "unit": "s",
+          "noValue": "No data",
+          "decimals": 3
         },
         "overrides": []
       },
@@ -353,8 +449,9 @@
           "refId": "B"
         }
       ],
-      "title": "按 route 统计的 P95/P99 延迟",
-      "type": "timeseries"
+      "title": "HTTP P95/P99 延迟（按 route）",
+      "type": "timeseries",
+      "description": "基于 http_server_request_duration_seconds_bucket 计算 route 维度的 P95/P99。"
     },
     {
       "datasource": {
@@ -363,9 +460,75 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps"
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "No data",
+          "unit": "reqps",
+          "decimals": 3
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status_class"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Status"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "method"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Method"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "route"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Route"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "错误速率"
+              },
+              {
+                "id": "unit",
+                "value": "reqps"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -384,7 +547,13 @@
           ],
           "show": false
         },
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "错误速率"
+          }
+        ]
       },
       "targets": [
         {
@@ -401,8 +570,9 @@
           "refId": "A"
         }
       ],
-      "title": "按 status class 统计的 HTTP 错误结果",
-      "type": "table"
+      "title": "HTTP 错误速率明细",
+      "type": "table",
+      "description": "按 status_class、method 和 route 展示 4xx/5xx 请求速率。"
     },
     {
       "collapsed": false,
@@ -414,7 +584,7 @@
       },
       "id": 7,
       "panels": [],
-      "title": "Auth 和 RBAC 结果",
+      "title": "Auth / RBAC",
       "type": "row"
     },
     {
@@ -424,7 +594,44 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "ops"
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "ops",
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data",
+          "decimals": 3
         },
         "overrides": []
       },
@@ -437,8 +644,10 @@
       "id": 8,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -460,7 +669,7 @@
           "refId": "A"
         }
       ],
-      "title": "按原因统计的 Auth 失败",
+      "title": "Auth 失败速率（按原因）",
       "type": "timeseries"
     },
     {
@@ -470,7 +679,44 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "ops"
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "ops",
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data",
+          "decimals": 3
         },
         "overrides": []
       },
@@ -483,8 +729,10 @@
       "id": 9,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -506,7 +754,7 @@
           "refId": "A"
         }
       ],
-      "title": "RBAC policy 同步失败",
+      "title": "RBAC policy 同步失败速率",
       "type": "timeseries"
     },
     {
@@ -519,6 +767,8 @@
           "color": {
             "mode": "thresholds"
           },
+          "unit": "short",
+          "noValue": "No data",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -529,10 +779,13 @@
               {
                 "color": "orange",
                 "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
               }
             ]
-          },
-          "unit": "short"
+          }
         },
         "overrides": []
       },
@@ -544,9 +797,9 @@
       },
       "id": 10,
       "options": {
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "area",
-        "justifyMode": "auto",
+        "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
@@ -555,7 +808,7 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "textMode": "value_and_name"
       },
       "targets": [
         {
@@ -570,7 +823,7 @@
           "refId": "A"
         }
       ],
-      "title": "Permission route diff 最新值",
+      "title": "Permission route diff",
       "type": "stat"
     },
     {
@@ -593,7 +846,44 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data",
+          "decimals": 0
         },
         "overrides": []
       },
@@ -609,7 +899,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -653,7 +943,7 @@
           "refId": "C"
         }
       ],
-      "title": "PostgreSQL user_db 连接池",
+      "title": "PostgreSQL 连接池",
       "type": "timeseries"
     },
     {
@@ -663,7 +953,44 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "ops"
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "ops",
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data",
+          "decimals": 3
         },
         "overrides": []
       },
@@ -679,7 +1006,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -722,13 +1049,42 @@
       },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
             "drawStyle": "line",
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "showPoints": "never"
-          }
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data"
         },
         "overrides": [
           {
@@ -744,13 +1100,29 @@
               {
                 "id": "custom.axisPlacement",
                 "value": "left"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
               }
             ]
           },
           {
             "matcher": {
-              "id": "byRegexp",
-              "options": ".*duration.*"
+              "id": "byName",
+              "options": "ping 耗时"
             },
             "properties": [
               {
@@ -758,8 +1130,52 @@
                 "value": "s"
               },
               {
+                "id": "decimals",
+                "value": 4
+              },
+              {
                 "id": "custom.axisPlacement",
                 "value": "right"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ping 失败速率"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ops"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 0.1
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
               }
             ]
           }
@@ -775,9 +1191,10 @@
       "options": {
         "legend": {
           "calcs": [
-            "lastNotNull"
+            "lastNotNull",
+            "max"
           ],
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -821,7 +1238,7 @@
           "refId": "C"
         }
       ],
-      "title": "Redis cache_redis 可用性",
+      "title": "Redis 可用性与延迟",
       "type": "timeseries"
     },
     {
@@ -834,7 +1251,7 @@
       },
       "id": 15,
       "panels": [],
-      "title": "后台任务和 policy 同步",
+      "title": "后台任务 / Scheduler",
       "type": "row"
     },
     {
@@ -844,7 +1261,44 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data",
+          "decimals": 0
         },
         "overrides": []
       },
@@ -860,7 +1314,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -904,7 +1358,7 @@
           "refId": "C"
         }
       ],
-      "title": "Auth session purge workerpool",
+      "title": "Auth session purge 队列",
       "type": "timeseries"
     },
     {
@@ -914,6 +1368,9 @@
       },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -924,10 +1381,48 @@
               {
                 "color": "orange",
                 "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
               }
             ]
           },
-          "unit": "short"
+          "unit": "short",
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data",
+          "decimals": 0
         },
         "overrides": []
       },
@@ -943,7 +1438,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -965,7 +1460,7 @@
           "refId": "A"
         }
       ],
-      "title": "Workerpool 失败和 panic 任务",
+      "title": "Workerpool 异常任务",
       "type": "timeseries"
     },
     {
@@ -975,7 +1470,61 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
         },
         "overrides": []
       },
@@ -991,7 +1540,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1007,13 +1556,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (job, event) (increase(aegiscore_scheduler_jobs_total{service=\"$service\",environment=\"$environment\",event=~\"failed|skipped|lock_renew_failed\"}[15m]))",
-          "legendFormat": "{{job}} {{event}}",
+          "expr": "sum by (scheduler_job, event) (increase(aegiscore_scheduler_jobs_total{service=\"$service\",environment=\"$environment\",scheduler_job=~\"$scheduler_job\",event=~\"failed|skipped|lock_renew_failed\"}[15m]))",
+          "legendFormat": "{{scheduler_job}} {{event}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Scheduler 失败、跳过和 lock 续租失败",
+      "title": "Scheduler 异常事件",
       "type": "timeseries"
     },
     {
@@ -1023,7 +1572,44 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "s"
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s",
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data",
+          "decimals": 3
         },
         "overrides": []
       },
@@ -1037,9 +1623,10 @@
       "options": {
         "legend": {
           "calcs": [
-            "lastNotNull"
+            "lastNotNull",
+            "max"
           ],
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1055,13 +1642,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, job, status) (rate(aegiscore_scheduler_job_duration_seconds_bucket{service=\"$service\",environment=\"$environment\"}[5m])))",
-          "legendFormat": "p95 {{job}} {{status}}",
+          "expr": "histogram_quantile(0.95, sum by (le, scheduler_job, status) (rate(aegiscore_scheduler_job_duration_seconds_bucket{service=\"$service\",environment=\"$environment\",scheduler_job=~\"$scheduler_job\"}[5m])))",
+          "legendFormat": "p95 {{scheduler_job}} {{status}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Scheduler job P95 耗时",
+      "title": "Scheduler P95 耗时",
       "type": "timeseries"
     },
     {
@@ -1071,22 +1658,117 @@
       },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "noValue": "No data",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "red",
                 "value": 1
               }
             ]
-          },
-          "unit": "short"
+          }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "运行中"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "停止"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "运行中"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "最近错误"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "无错误"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "有错误"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -1096,9 +1778,9 @@
       },
       "id": 20,
       "options": {
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "area",
-        "justifyMode": "auto",
+        "justifyMode": "center",
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
@@ -1107,7 +1789,7 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "textMode": "value_and_name"
       },
       "targets": [
         {
@@ -1133,7 +1815,7 @@
           "refId": "B"
         }
       ],
-      "title": "RBAC policy watcher",
+      "title": "RBAC policy watcher 状态",
       "type": "stat"
     },
     {
@@ -1143,7 +1825,44 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data",
+          "decimals": 0
         },
         "overrides": []
       },
@@ -1159,7 +1878,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1186,8 +1905,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aegiscore_casbin_policy_reload_last_status{service=\"$service\",environment=\"$environment\",status=\"failure\"}",
-          "legendFormat": "最近失败状态",
+          "expr": "aegiscore_casbin_policy_reload_last_success{service=\"$service\",environment=\"$environment\"}",
+          "legendFormat": "最近成功状态",
           "range": true,
           "refId": "B"
         }
@@ -1205,7 +1924,7 @@
       },
       "id": 22,
       "panels": [],
-      "title": "Go runtime 和进程",
+      "title": "Go runtime / 进程",
       "type": "row"
     },
     {
@@ -1215,7 +1934,44 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data",
+          "decimals": 0
         },
         "overrides": []
       },
@@ -1231,7 +1987,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1253,7 +2009,7 @@
           "refId": "A"
         }
       ],
-      "title": "Go goroutine 数量",
+      "title": "Go goroutines",
       "type": "timeseries"
     },
     {
@@ -1263,7 +2019,44 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "bytes",
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data",
+          "decimals": 0
         },
         "overrides": []
       },
@@ -1279,7 +2072,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1312,7 +2105,7 @@
           "refId": "B"
         }
       ],
-      "title": "内存",
+      "title": "内存使用",
       "type": "timeseries"
     },
     {
@@ -1322,18 +2115,103 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "noValue": "No data",
+          "decimals": 2
         },
         "overrides": [
           {
             "matcher": {
-              "id": "byRegexp",
-              "options": ".*cpu.*"
+              "id": "byName",
+              "options": "GC CPU 占比"
             },
             "properties": [
               {
                 "id": "unit",
                 "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "进程 CPU cores"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "打开 FD"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
               }
             ]
           }
@@ -1351,7 +2229,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
@@ -1379,7 +2257,7 @@
           },
           "editorMode": "code",
           "expr": "rate(process_cpu_seconds_total{service=\"$service\",environment=\"$environment\"}[5m])",
-          "legendFormat": "进程 CPU 秒数速率",
+          "legendFormat": "进程 CPU cores",
           "range": true,
           "refId": "B"
         },
@@ -1390,12 +2268,12 @@
           },
           "editorMode": "code",
           "expr": "process_open_fds{service=\"$service\",environment=\"$environment\"}",
-          "legendFormat": "打开 fd 数",
+          "legendFormat": "打开 FD",
           "range": true,
           "refId": "C"
         }
       ],
-      "title": "GC、CPU 和打开文件数",
+      "title": "GC、CPU 和 FD",
       "type": "timeseries"
     },
     {
@@ -1412,10 +2290,10 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "当前 HTTP RED 指标暴露的是 status_class，而不是应用错误码。请使用 HTTP 错误结果表查看 4xx/5xx status class 趋势，并使用 auth/RBAC 原因面板查看当前低基数应用结果细节。只有在稳定低基数 code 指标或 recording rule 存在后，才新增真实 code 面板。",
+        "content": "### 读图提示\n\n- HTTP RED 面板使用 Gin route template，避免 raw path 带来的高基数。\n- HTTP 错误表展示 status_class；应用层原因请看 Auth / RBAC 面板。\n- Scheduler 指标在 Prometheus 中使用 `scheduler_job` 表示业务 job 名称，这是为了避开 scrape job 标签冲突。\n- `No data` 通常表示当前服务未注册对应 collector 或测试窗口内没有事件。",
         "mode": "markdown"
       },
-      "title": "错误结果说明",
+      "title": "读图说明",
       "type": "text"
     }
   ],
@@ -1498,7 +2376,7 @@
         "hide": 0,
         "includeAll": true,
         "label": "路由",
-        "multi": false,
+        "multi": true,
         "name": "route",
         "options": [],
         "query": {
@@ -1538,6 +2416,34 @@
         "skipUrlSync": false,
         "sort": 1,
         "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(aegiscore_scheduler_jobs_total{service=\"$service\",environment=\"$environment\"}, scheduler_job)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Scheduler Job",
+        "multi": true,
+        "name": "scheduler_job",
+        "options": [],
+        "query": {
+          "query": "label_values(aegiscore_scheduler_jobs_total{service=\"$service\",environment=\"$environment\"}, scheduler_job)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
       }
     ]
   },
@@ -1545,10 +2451,26 @@
     "from": "now-6h",
     "to": "now"
   },
-  "timepicker": {},
-  "timezone": "",
+  "timepicker": {
+    "refresh_intervals": [
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m"
+    ],
+    "time_options": [
+      "15m",
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "7d"
+    ]
+  },
+  "timezone": "browser",
   "title": "AegisCore 用户服务总览",
   "uid": "aegiscore-user-service-overview",
   "version": 1,
-  "weekStart": ""
+  "weekStart": "monday"
 }

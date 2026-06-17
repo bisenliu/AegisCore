@@ -13,9 +13,9 @@ const (
 	statusRunningMetricHelp    = "Whether the runtime component reports itself as running."
 	statusLastErrorMetricHelp  = "Whether the runtime component has a last error."
 	casbinReloadsMetricName    = "aegiscore_casbin_policy_reloads_total"
-	casbinReloadLastMetricName = "aegiscore_casbin_policy_reload_last_status"
-	casbinReloadsMetricHelp    = "Total number of Casbin policy reload results."
-	casbinReloadLastMetricHelp = "Last Casbin policy reload status represented as a one-hot gauge."
+	casbinReloadLastMetricName = "aegiscore_casbin_policy_reload_last_success"
+	casbinReloadsMetricHelp    = "Total number of Casbin policy reload results by status."
+	casbinReloadLastMetricHelp = "Whether the latest Casbin policy reload succeeded."
 	// StatusSuccess 表示运行时操作成功。
 	StatusSuccess = "success"
 	// StatusFailure 表示运行时操作失败。
@@ -91,7 +91,7 @@ func (nopReloadMetrics) SetLastStatus(bool) {}
 
 type casbinPolicyReloadMetrics struct {
 	reloads    *prometheus.CounterVec
-	lastStatus *prometheus.GaugeVec
+	lastStatus prometheus.Gauge
 }
 
 // NewCasbinPolicyReloadMetrics 构造 Casbin policy reload Prometheus recorder。
@@ -104,10 +104,10 @@ func NewCasbinPolicyReloadMetrics(provider *Provider) ReloadMetrics {
 			Name: casbinReloadsMetricName,
 			Help: casbinReloadsMetricHelp,
 		}, []string{LabelStatus}),
-		lastStatus: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		lastStatus: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: casbinReloadLastMetricName,
 			Help: casbinReloadLastMetricHelp,
-		}, []string{LabelStatus}),
+		}),
 	}
 	provider.MustRegister(recorder.reloads)
 	provider.MustRegister(recorder.lastStatus)
@@ -124,10 +124,8 @@ func (m *casbinPolicyReloadMetrics) ReloadFailed() {
 
 func (m *casbinPolicyReloadMetrics) SetLastStatus(success bool) {
 	if success {
-		m.lastStatus.WithLabelValues(StatusSuccess).Set(1)
-		m.lastStatus.WithLabelValues(StatusFailure).Set(0)
+		m.lastStatus.Set(1)
 		return
 	}
-	m.lastStatus.WithLabelValues(StatusSuccess).Set(0)
-	m.lastStatus.WithLabelValues(StatusFailure).Set(1)
+	m.lastStatus.Set(0)
 }

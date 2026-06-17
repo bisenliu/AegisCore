@@ -7,7 +7,19 @@
 - `docker-compose.yml`：启动 PostgreSQL、Redis、用户服务、Prometheus 和 Grafana，并在用户服务启动前执行 Atlas migration 与 RBAC seed。
 - `prometheus/prometheus.yml`：抓取用户服务 `/metrics`，并加载 `deployments/observability/prometheus/user-service-alerts.yaml`。
 - `grafana/provisioning/`：自动配置 Prometheus datasource 和用户服务看板。
-- `grafana/dashboards/user-service-overview.json`：基于 `deployments/observability/grafana/user-service-overview.json` 的本地自动导入副本，datasource uid 固定为 `prometheus`。
+- `grafana/dashboards/user-service-overview.json`：由 `deployments/observability/grafana/user-service-overview.json` 生成的本地自动导入副本，datasource uid 固定为 `prometheus`；不要手动编辑该文件。
+
+更新 Grafana 看板时，只修改通用源文件 `deployments/observability/grafana/user-service-overview.json`，然后从仓库根目录生成 Compose 版本：
+
+```bash
+make compose-dashboard-generate
+```
+
+提交前可检查生成文件是否已同步：
+
+```bash
+make compose-dashboard-check
+```
 
 从仓库根目录启动：
 

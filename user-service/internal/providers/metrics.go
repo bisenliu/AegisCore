@@ -3,6 +3,7 @@ package providers
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
@@ -17,6 +18,7 @@ import (
 const (
 	authSessionPurgePoolMetricsName = "auth_session_purge_pool"
 	rbacPolicyWatcherMetricsName    = "rbac_policy_watcher"
+	redisMetricsMinProbeInterval    = 15 * time.Second
 )
 
 // RuntimeDependencyMetricsParams 包含注册运行时依赖指标所需的服务级依赖。
@@ -50,9 +52,10 @@ func RegisterRuntimeDependencyMetrics(params RuntimeDependencyMetricsParams) err
 
 	redisCfg, _ := params.Config.RedisConfig(resources.NameCacheRedis)
 	redisCollector, err := commonmetrics.NewRedisPingCollector(commonmetrics.RedisPingCollectorOptions{
-		Resource: resources.NameCacheRedis,
-		Pinger:   commonmetrics.NewRedisClientPinger(params.CacheRedis),
-		Timeout:  redisCfg.PingTimeout,
+		Resource:    resources.NameCacheRedis,
+		Pinger:      commonmetrics.NewRedisClientPinger(params.CacheRedis),
+		Timeout:     redisCfg.PingTimeout,
+		MinInterval: redisMetricsMinProbeInterval,
 	})
 	if err != nil {
 		return fmt.Errorf("create redis metrics collector: %w", err)

@@ -158,6 +158,7 @@ rate(aegiscore_redis_ping_failures_total{service="aegiscore-user-services",resou
 
 - 检查 `/readyz`。
 - 确认 `redis.cache_redis` 地址和网络路径。
+- Redis ping 指标使用最小探测间隔复用最近结果，Prometheus scrape 频率不等同于真实 Redis PING 频率。
 - 查看 auth session、RBAC policy watcher 和 scheduler lock 相关信号，因为它们可能依赖 Redis。
 - 检查 Redis 连接错误日志。不要把 Redis key 或原始错误写入 metrics label。
 
@@ -201,7 +202,7 @@ PromQL：
 
 ```promql
 increase(aegiscore_casbin_policy_reloads_total{service="aegiscore-user-services",status="failure"}[10m])
-aegiscore_casbin_policy_reload_last_status{service="aegiscore-user-services",status="failure"}
+aegiscore_casbin_policy_reload_last_success{service="aegiscore-user-services"} == 0
 ```
 
 第一批检查：
@@ -242,7 +243,7 @@ increase(aegiscore_workerpool_tasks_total{service="aegiscore-user-services",pool
 
 - Scheduler failed/skipped/lock renew failed 事件
 - Scheduler job 耗时
-- 如果 job 使用分布式锁，查看 Redis availability
+- 如果 scheduler job 使用分布式锁，查看 Redis availability
 
 PromQL：
 
@@ -253,10 +254,10 @@ increase(aegiscore_scheduler_jobs_total{service="aegiscore-user-services",event=
 
 第一批检查：
 
-- 使用固定低基数 `job` label 定位失败任务。
+- 使用固定低基数 `scheduler_job` label 定位失败任务。
 - 检查 scheduler duration，判断是否有长时间运行的任务。
-- 如果 job 使用分布式锁，检查 Redis。
-- 检查该 job 运行时段附近的日志。不要把用户 ID、token、Redis key 或原始错误文本加入 metric label。
+- 如果 scheduler job 使用分布式锁，检查 Redis。
+- 检查该 scheduler job 运行时段附近的日志。不要把用户 ID、token、Redis key 或原始错误文本加入 metric label。
 
 <a id="tracing-and-log-correlation"></a>
 

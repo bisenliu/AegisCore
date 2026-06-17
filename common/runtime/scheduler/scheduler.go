@@ -178,7 +178,6 @@ func (s *Scheduler) AddJob(cfg JobConfig) (cron.EntryID, error) {
 		return 0, err
 	}
 	s.jobs[cfg.Key] = id
-	s.metrics.JobRegistered(cfg.Key)
 	s.logger.Info("scheduler job registered", zap.String("job", cfg.Key), zap.String("spec", cfg.Spec), zap.Int("entry_id", int(id)))
 	return id, nil
 }

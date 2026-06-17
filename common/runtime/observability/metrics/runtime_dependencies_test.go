@@ -6,10 +6,11 @@ import (
 	"database/sql/driver"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/prometheus/client_model/go"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 
 	"github.com/aegiscore/common/runtime/scheduler"
 	"github.com/aegiscore/common/runtime/workerpool"
@@ -51,10 +52,12 @@ func TestSQLDBCollectorRejectsInvalidOptions(t *testing.T) {
 func TestRedisPingCollectorExportsSuccessFailureAndTimeout(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		provider := newTestProvider(t, true, false)
+		pinger := &countingRedisPinger{}
 		collector, err := NewRedisPingCollector(RedisPingCollectorOptions{
-			Resource: "cache_redis",
-			Pinger:   fakeRedisPinger{},
-			Timeout:  time.Second,
+			Resource:    "cache_redis",
+			Pinger:      pinger,
+			Timeout:     time.Second,
+			MinInterval: time.Minute,
 		})
 		if err != nil {
 			t.Fatalf("NewRedisPingCollector: %v", err)
@@ -72,6 +75,10 @@ func TestRedisPingCollectorExportsSuccessFailureAndTimeout(t *testing.T) {
 		failures := firstMetric(t, familyFrom(t, families, redisPingFailuresMetricName))
 		if got := failures.GetCounter().GetValue(); got != 0 {
 			t.Fatalf("redis failures = %v, want 0", got)
+		}
+		gatherFamilies(t, provider)
+		if got := pinger.calls.Load(); got != 1 {
+			t.Fatalf("redis ping calls = %d, want cached single probe", got)
 		}
 	})
 
@@ -152,17 +159,13 @@ func TestWorkerpoolCollectorExportsStatsSnapshot(t *testing.T) {
 	assertMetricWithLabelsValue(t, tasks, map[string]string{LabelPool: "auth_session_purge_pool", LabelEvent: workerpoolEventPanicked}, 1)
 	assertGaugeValue(t, gatherFamily(t, provider, workerpoolQueuedMetricName), 2)
 	assertGaugeValue(t, gatherFamily(t, provider, workerpoolRunningMetricName), 3)
-	assertGaugeValue(t, gatherFamily(t, provider, workerpoolFreeMetricName), 1)
 	assertGaugeValue(t, gatherFamily(t, provider, workerpoolWaitingMetricName), 5)
-	assertGaugeValue(t, gatherFamily(t, provider, workerpoolClosedMetricName), 1)
-	assertGaugeValue(t, gatherFamily(t, provider, workerpoolWorkersMetricName), 4)
 }
 
 func TestSchedulerMetricsAdapterRecordsEvents(t *testing.T) {
 	provider := newTestProvider(t, true, false)
 	recorder := NewSchedulerMetrics(provider, SchedulerMetricsOptions{DurationBuckets: []float64{0.01, 0.1, 1}})
 
-	recorder.JobRegistered("rbac_policy_version_check")
 	recorder.JobTriggered("rbac_policy_version_check")
 	recorder.JobStarted("rbac_policy_version_check")
 	recorder.JobCompleted("rbac_policy_version_check", 50*time.Millisecond)
@@ -172,27 +175,27 @@ func TestSchedulerMetricsAdapterRecordsEvents(t *testing.T) {
 
 	jobs := gatherFamily(t, provider, schedulerJobsMetricName)
 	assertMetricWithLabelsValue(t, jobs, map[string]string{
-		LabelJob:    "rbac_policy_version_check",
-		LabelEvent:  schedulerEventCompleted,
-		LabelStatus: schedulerStatusSuccess,
-		LabelReason: schedulerReasonNone,
+		LabelSchedulerJob: "rbac_policy_version_check",
+		LabelEvent:        schedulerEventCompleted,
+		LabelStatus:       schedulerStatusSuccess,
+		LabelReason:       schedulerReasonNone,
 	}, 1)
 	assertMetricWithLabelsValue(t, jobs, map[string]string{
-		LabelJob:    "rbac_policy_version_check",
-		LabelEvent:  schedulerEventSkipped,
-		LabelStatus: schedulerStatusSkipped,
-		LabelReason: "lock_busy",
+		LabelSchedulerJob: "rbac_policy_version_check",
+		LabelEvent:        schedulerEventSkipped,
+		LabelStatus:       schedulerStatusSkipped,
+		LabelReason:       "lock_busy",
 	}, 1)
 	assertMetricWithLabelsValue(t, jobs, map[string]string{
-		LabelJob:    "rbac_policy_version_check",
-		LabelEvent:  schedulerEventLockRenewFailed,
-		LabelStatus: schedulerStatusFailure,
-		LabelReason: schedulerReasonNone,
+		LabelSchedulerJob: "rbac_policy_version_check",
+		LabelEvent:        schedulerEventLockRenewFailed,
+		LabelStatus:       schedulerStatusFailure,
+		LabelReason:       schedulerReasonNone,
 	}, 1)
 
 	duration := gatherFamily(t, provider, schedulerJobDurationMetricName)
-	assertHistogramSampleCount(t, duration, map[string]string{LabelJob: "rbac_policy_version_check", LabelStatus: schedulerStatusSuccess}, 1)
-	assertHistogramSampleCount(t, duration, map[string]string{LabelJob: "rbac_policy_version_check", LabelStatus: schedulerStatusFailure}, 1)
+	assertHistogramSampleCount(t, duration, map[string]string{LabelSchedulerJob: "rbac_policy_version_check", LabelStatus: schedulerStatusSuccess}, 1)
+	assertHistogramSampleCount(t, duration, map[string]string{LabelSchedulerJob: "rbac_policy_version_check", LabelStatus: schedulerStatusFailure}, 1)
 }
 
 func TestSchedulerMetricsAdapterDisabledProviderReturnsNop(t *testing.T) {
@@ -238,8 +241,7 @@ func TestCasbinPolicyReloadMetricsRecordsStatus(t *testing.T) {
 	assertMetricWithLabelsValue(t, reloads, map[string]string{LabelStatus: StatusSuccess}, 1)
 	assertMetricWithLabelsValue(t, reloads, map[string]string{LabelStatus: StatusFailure}, 1)
 	lastStatus := gatherFamily(t, provider, casbinReloadLastMetricName)
-	assertMetricWithLabelsValue(t, lastStatus, map[string]string{LabelStatus: StatusSuccess}, 0)
-	assertMetricWithLabelsValue(t, lastStatus, map[string]string{LabelStatus: StatusFailure}, 1)
+	assertGaugeValue(t, lastStatus, 0)
 }
 
 type fakeRedisPinger struct {
@@ -248,6 +250,15 @@ type fakeRedisPinger struct {
 
 func (p fakeRedisPinger) Ping(context.Context) error {
 	return p.err
+}
+
+type countingRedisPinger struct {
+	calls atomic.Uint64
+}
+
+func (p *countingRedisPinger) Ping(context.Context) error {
+	p.calls.Add(1)
+	return nil
 }
 
 type blockingRedisPinger struct{}

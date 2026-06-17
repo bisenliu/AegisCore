@@ -22,8 +22,8 @@ const (
 	LabelResource = "resource"
 	// LabelPool 标识固定后台任务池名称。
 	LabelPool = "pool"
-	// LabelJob 标识固定定时任务名称。
-	LabelJob = "job"
+	// LabelSchedulerJob 标识固定定时任务名称，避免与 Prometheus scrape job label 冲突。
+	LabelSchedulerJob = "scheduler_job"
 	// LabelEvent 标识固定运行时事件名称。
 	LabelEvent = "event"
 	// LabelStatus 标识固定运行时状态。
@@ -33,18 +33,18 @@ const (
 )
 
 var allowedLowCardinalityLabelKeys = map[string]struct{}{
-	LabelService:     {},
-	LabelEnvironment: {},
-	LabelMethod:      {},
-	LabelRoute:       {},
-	LabelStatusClass: {},
-	LabelCode:        {},
-	LabelResource:    {},
-	LabelPool:        {},
-	LabelJob:         {},
-	LabelEvent:       {},
-	LabelStatus:      {},
-	LabelReason:      {},
+	LabelService:      {},
+	LabelEnvironment:  {},
+	LabelMethod:       {},
+	LabelRoute:        {},
+	LabelStatusClass:  {},
+	LabelCode:         {},
+	LabelResource:     {},
+	LabelPool:         {},
+	LabelSchedulerJob: {},
+	LabelEvent:        {},
+	LabelStatus:       {},
+	LabelReason:       {},
 }
 
 // ErrUnsupportedLabelKey 表示 label key 不属于当前跨服务低基数约定。

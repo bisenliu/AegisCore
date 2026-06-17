@@ -14,6 +14,9 @@ const (
 	authOperationsMetricName           = "aegiscore_user_service_auth_operations_total"
 	authTokenVersionMismatchMetricName = "aegiscore_user_service_auth_token_version_mismatches_total"
 	authSessionPurgeSubmitMetricName   = "aegiscore_user_service_auth_session_purge_submit_failures_total"
+	authOperationsMetricHelp           = "Total number of auth operation results by fixed operation, result, and reason."
+	authTokenVersionMismatchMetricHelp = "Total number of auth token version mismatches by fixed token source."
+	authSessionPurgeSubmitMetricHelp   = "Total number of auth session purge task submission failures."
 )
 
 type prometheusMetrics struct {
@@ -29,15 +32,15 @@ func newAuthMetrics(provider *commonmetrics.Provider) (authapplication.Metrics, 
 	recorder := &prometheusMetrics{
 		operations: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: authOperationsMetricName,
-			Help: "Total number of auth business operation results.",
+			Help: authOperationsMetricHelp,
 		}, []string{"operation", "result", "reason"}),
 		tokenVersionMismatches: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: authTokenVersionMismatchMetricName,
-			Help: "Total number of auth token version mismatches.",
+			Help: authTokenVersionMismatchMetricHelp,
 		}, []string{"source"}),
 		sessionPurgeFailures: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: authSessionPurgeSubmitMetricName,
-			Help: "Total number of auth session purge submit failures.",
+			Help: authSessionPurgeSubmitMetricHelp,
 		}),
 	}
 	if err := provider.Register(recorder.operations); err != nil {

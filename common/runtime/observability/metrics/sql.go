@@ -15,18 +15,12 @@ const (
 	sqlWaitCountMetricName          = "aegiscore_postgres_pool_wait_count_total"
 	sqlWaitDurationMetricName       = "aegiscore_postgres_pool_wait_duration_seconds_total"
 	sqlMaxOpenConnectionsMetricName = "aegiscore_postgres_pool_max_open_connections"
-	sqlMaxIdleClosedMetricName      = "aegiscore_postgres_pool_max_idle_closed_total"
-	sqlMaxIdleTimeClosedMetricName  = "aegiscore_postgres_pool_max_idle_time_closed_total"
-	sqlMaxLifetimeClosedMetricName  = "aegiscore_postgres_pool_max_lifetime_closed_total"
 	sqlOpenConnectionsMetricHelp    = "Current number of established PostgreSQL pool connections."
 	sqlInUseConnectionsMetricHelp   = "Current number of in-use PostgreSQL pool connections."
 	sqlIdleConnectionsMetricHelp    = "Current number of idle PostgreSQL pool connections."
 	sqlWaitCountMetricHelp          = "Total number of PostgreSQL pool waits for a free connection."
 	sqlWaitDurationMetricHelp       = "Total time spent waiting for PostgreSQL pool connections in seconds."
 	sqlMaxOpenConnectionsMetricHelp = "Configured maximum number of open PostgreSQL pool connections."
-	sqlMaxIdleClosedMetricHelp      = "Total number of PostgreSQL connections closed due to SetMaxIdleConns."
-	sqlMaxIdleTimeClosedMetricHelp  = "Total number of PostgreSQL connections closed due to SetConnMaxIdleTime."
-	sqlMaxLifetimeClosedMetricHelp  = "Total number of PostgreSQL connections closed due to SetConnMaxLifetime."
 )
 
 // SQLDBCollectorOptions 配置 PostgreSQL 连接池指标 collector。
@@ -46,9 +40,6 @@ type SQLDBCollector struct {
 	waitCount          *prometheus.Desc
 	waitDuration       *prometheus.Desc
 	maxOpenConnections *prometheus.Desc
-	maxIdleClosed      *prometheus.Desc
-	maxIdleTimeClosed  *prometheus.Desc
-	maxLifetimeClosed  *prometheus.Desc
 }
 
 // NewSQLDBCollector 构造 PostgreSQL 连接池指标 collector。
@@ -71,9 +62,6 @@ func NewSQLDBCollector(opts SQLDBCollectorOptions) (*SQLDBCollector, error) {
 		waitCount:          prometheus.NewDesc(sqlWaitCountMetricName, sqlWaitCountMetricHelp, labels, nil),
 		waitDuration:       prometheus.NewDesc(sqlWaitDurationMetricName, sqlWaitDurationMetricHelp, labels, nil),
 		maxOpenConnections: prometheus.NewDesc(sqlMaxOpenConnectionsMetricName, sqlMaxOpenConnectionsMetricHelp, labels, nil),
-		maxIdleClosed:      prometheus.NewDesc(sqlMaxIdleClosedMetricName, sqlMaxIdleClosedMetricHelp, labels, nil),
-		maxIdleTimeClosed:  prometheus.NewDesc(sqlMaxIdleTimeClosedMetricName, sqlMaxIdleTimeClosedMetricHelp, labels, nil),
-		maxLifetimeClosed:  prometheus.NewDesc(sqlMaxLifetimeClosedMetricName, sqlMaxLifetimeClosedMetricHelp, labels, nil),
 	}, nil
 }
 
@@ -85,9 +73,6 @@ func (c *SQLDBCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.waitCount
 	ch <- c.waitDuration
 	ch <- c.maxOpenConnections
-	ch <- c.maxIdleClosed
-	ch <- c.maxIdleTimeClosed
-	ch <- c.maxLifetimeClosed
 }
 
 // Collect 实现 prometheus.Collector。
@@ -99,7 +84,4 @@ func (c *SQLDBCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(c.waitCount, prometheus.CounterValue, float64(stats.WaitCount), c.resource)
 	ch <- prometheus.MustNewConstMetric(c.waitDuration, prometheus.CounterValue, stats.WaitDuration.Seconds(), c.resource)
 	ch <- prometheus.MustNewConstMetric(c.maxOpenConnections, prometheus.GaugeValue, float64(stats.MaxOpenConnections), c.resource)
-	ch <- prometheus.MustNewConstMetric(c.maxIdleClosed, prometheus.CounterValue, float64(stats.MaxIdleClosed), c.resource)
-	ch <- prometheus.MustNewConstMetric(c.maxIdleTimeClosed, prometheus.CounterValue, float64(stats.MaxIdleTimeClosed), c.resource)
-	ch <- prometheus.MustNewConstMetric(c.maxLifetimeClosed, prometheus.CounterValue, float64(stats.MaxLifetimeClosed), c.resource)
 }

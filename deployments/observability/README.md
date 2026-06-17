@@ -6,7 +6,7 @@
 
 | 路径 | 用途 |
 |---|---|
-| `grafana/user-service-overview.json` | 用户服务 Grafana 看板，覆盖 HTTP RED、auth/RBAC 信号、PostgreSQL、Redis、workerpool、scheduler、RBAC watcher、policy reload 和 Go runtime 面板。 |
+| `grafana/user-service-overview.json` | 用户服务 Grafana 看板的通用源文件，覆盖 HTTP RED、auth/RBAC 信号、PostgreSQL、Redis、workerpool、scheduler、RBAC watcher、policy reload 和 Go runtime 面板。Compose 自动导入副本由它生成。 |
 | `prometheus/user-service-alerts.yaml` | 第一版生产告警基线的 Prometheus rule groups；同一个 `groups` block 可以复制到 Prometheus Operator 的 `PrometheusRule.spec.groups`。 |
 | `../../docs/observability/user-service-runbook.md` | 告警 annotations 指向的稳定排障手册入口。 |
 
@@ -15,7 +15,7 @@
 - 用户服务通过 `observability.metrics.enabled: true` 启用 metrics。
 - Prometheus 会抓取配置的 metrics path，默认 `/metrics`。
 - Metrics endpoint 不经过 RBAC。请通过部署网络边界、Ingress 策略、service mesh 或等价控制保护暴露范围。
-- Runtime collector 只使用低基数 label，例如 `service`、`environment`、`resource`、`pool`、`job`、`event`、`status` 和 `reason`。
+- Runtime collector 只使用低基数 label，例如 `service`、`environment`、`resource`、`pool`、`scheduler_job`、`event`、`status` 和 `reason`。
 - 本目录不提供 OpenTelemetry Collector、trace backend、云厂商 monitor、ServiceMonitor、PodMonitor 或完整 Helm chart。
 
 ## Grafana 导入
@@ -26,6 +26,14 @@
 4. 确认 HTTP RED、依赖、workerpool、scheduler、RBAC 和 runtime 面板能够加载。
 
 如果某个面板为空，先确认 Prometheus 中是否存在对应指标。`observability.metrics.include_runtime: false` 时，Go runtime/process 面板可以为空。
+
+本地 Docker Compose 自动导入的 dashboard 是生成产物，路径为 `deployments/compose/grafana/dashboards/user-service-overview.json`。更新通用 dashboard 后，从仓库根目录执行：
+
+```bash
+make compose-dashboard-generate
+```
+
+提交前可执行 `make compose-dashboard-check`，确认生成产物没有漂移。
 
 ## Prometheus 规则
 

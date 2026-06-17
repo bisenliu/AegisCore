@@ -40,7 +40,7 @@ x-user-service-environment: &user-service-environment
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:latest
     environment:
       POSTGRES_USER: aegiscore
       POSTGRES_PASSWORD: aegiscore
@@ -49,7 +49,7 @@ services:
     ports:
       - "15432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql
     networks:
       - aegiscore-runtime
     healthcheck:
@@ -61,7 +61,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7.2-alpine
+    image: redis:latest
     command: ["redis-server", "--appendonly", "yes"]
     environment:
       TZ: Asia/Shanghai
@@ -81,7 +81,7 @@ services:
 
   user-service-migrate:
     build: *user-service-build
-    image: aegiscore-user-services:local
+    image: aegiscore-user-services:latest
     entrypoint: ["/app/user-service/scripts/migrate-apply.sh"]
     environment:
       DATABASE_URL: postgres://aegiscore:aegiscore@postgres:5432/aegiscore_user?sslmode=disable&search_path=public
@@ -95,7 +95,7 @@ services:
 
   rbac-seed:
     build: *user-service-build
-    image: aegiscore-user-services:local
+    image: aegiscore-user-services:latest
     command:
       - /app/user-service/bin/user-services
       - rbac
@@ -119,7 +119,7 @@ services:
 
   user-service:
     build: *user-service-build
-    image: aegiscore-user-services:local
+    image: aegiscore-user-services:latest
     environment:
       <<: *user-service-environment
     ports:
@@ -150,7 +150,7 @@ services:
         max-file: "5"
 
   prometheus:
-    image: prom/prometheus:v2.54.1
+    image: prom/prometheus:latest
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -177,7 +177,7 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:11.2.2
+    image: grafana/grafana:latest
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin

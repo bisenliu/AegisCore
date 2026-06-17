@@ -49,15 +49,13 @@ groups:
       - alert: AegisCoreUserServicePostgresPoolUnavailable
         expr: |
           absent(aegiscore_postgres_pool_open_connections{service="aegiscore-user-services",resource="user_db"})
-          or
-          aegiscore_postgres_pool_open_connections{service="aegiscore-user-services",resource="user_db"} == 0
         for: 5m
         labels:
           service: aegiscore-user-services
           severity: critical
         annotations:
           summary: "用户服务 PostgreSQL pool 可能不可用"
-          description: "user_db PostgreSQL pool 指标缺失，或 open connections 为 0。请检查 readyz、数据库连通性和 user_db pool 配置。"
+          description: "user_db PostgreSQL pool 指标缺失。请检查 readyz、数据库连通性和 user_db pool 配置。"
           runbook_url: "docs/observability/user-service-runbook.md#postgresql-unavailable-or-pool-pressure"
 
       - alert: AegisCoreUserServicePostgresPoolWaitPressure
@@ -129,7 +127,7 @@ groups:
           severity: warning
         annotations:
           summary: "用户服务 scheduler job 失败"
-          description: "最近 10 分钟至少有一个 scheduler job 失败。请检查 job label、scheduler dashboard 和失败 job 的日志。"
+          description: "最近 10 分钟至少有一个 scheduler job 失败。请检查 `scheduler_job` label、scheduler dashboard 和失败 scheduler job 的日志。"
           runbook_url: "docs/observability/user-service-runbook.md#scheduler-job-failed"
 
       - alert: AegisCoreUserServiceSchedulerLockRenewFailed
@@ -141,5 +139,5 @@ groups:
           severity: warning
         annotations:
           summary: "用户服务 scheduler lock 续租失败"
-          description: "最近 10 分钟至少有一个 scheduler job 报告 lock renewal failure。请检查 Redis lock 连通性和长时间运行的 job。"
+          description: "最近 10 分钟至少有一个 scheduler job 报告 lock renewal failure。请检查 Redis lock 连通性和长时间运行的 scheduler job。"
           runbook_url: "docs/observability/user-service-runbook.md#scheduler-job-failed"

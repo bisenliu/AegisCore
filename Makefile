@@ -3,7 +3,7 @@ USER_SERVICE_DIR := user-service
 USER_SERVICE_CONFIG ?= ./user-service/configs/config.yaml
 USER_SERVICE_BIN ?= ./bin/user-service
 
-.PHONY: help build build-user-service test test-common test-user-service lint lint-common lint-user-service architecture-lint verify run-user-service seed-rbac generate migrate-diff migrate-validate migrate-apply openapi-generate
+.PHONY: help build build-user-service test test-common test-user-service lint lint-common lint-user-service architecture-lint verify run-user-service seed-rbac compose-dashboard-generate compose-dashboard-check generate migrate-diff migrate-validate migrate-apply openapi-generate
 
 help: ## Show available commands.
 	@awk 'BEGIN {FS = ":.*##"; printf "Available commands:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -41,6 +41,12 @@ run-user-service: ## Run user-service with USER_SERVICE_CONFIG.
 
 seed-rbac: ## Seed user-service RBAC data with USER_SERVICE_CONFIG.
 	go run ./$(USER_SERVICE_DIR)/cmd rbac --config $(USER_SERVICE_CONFIG) seed
+
+compose-dashboard-generate: ## Generate the Compose Grafana dashboard from the generic observability dashboard.
+	./deployments/compose/scripts/generate-grafana-dashboard.sh
+
+compose-dashboard-check: ## Check that the Compose Grafana dashboard is generated and up to date.
+	./deployments/compose/scripts/generate-grafana-dashboard.sh --check
 
 generate: ## Generate user-service Ent code.
 	cd $(USER_SERVICE_DIR) && go generate ./ent

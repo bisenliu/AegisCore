@@ -13,17 +13,11 @@ const (
 	workerpoolTasksMetricName   = "aegiscore_workerpool_tasks_total"
 	workerpoolQueuedMetricName  = "aegiscore_workerpool_queued"
 	workerpoolRunningMetricName = "aegiscore_workerpool_running"
-	workerpoolFreeMetricName    = "aegiscore_workerpool_free"
 	workerpoolWaitingMetricName = "aegiscore_workerpool_waiting"
-	workerpoolClosedMetricName  = "aegiscore_workerpool_closed"
-	workerpoolWorkersMetricName = "aegiscore_workerpool_workers"
-	workerpoolTasksMetricHelp   = "Total number of workerpool tasks by lifecycle event."
+	workerpoolTasksMetricHelp   = "Total number of workerpool tasks by fixed pool and lifecycle event."
 	workerpoolQueuedMetricHelp  = "Current number of queued workerpool tasks."
 	workerpoolRunningMetricHelp = "Current number of running workerpool tasks."
-	workerpoolFreeMetricHelp    = "Current number of free workerpool workers."
 	workerpoolWaitingMetricHelp = "Current number of submitters waiting for workerpool workers."
-	workerpoolClosedMetricHelp  = "Whether the workerpool is closed."
-	workerpoolWorkersMetricHelp = "Configured number of workerpool workers."
 	workerpoolEventSubmitted    = "submitted"
 	workerpoolEventRejected     = "rejected"
 	workerpoolEventStarted      = "started"
@@ -46,10 +40,7 @@ type WorkerpoolCollector struct {
 	tasks   *prometheus.Desc
 	queued  *prometheus.Desc
 	running *prometheus.Desc
-	free    *prometheus.Desc
 	waiting *prometheus.Desc
-	closed  *prometheus.Desc
-	workers *prometheus.Desc
 }
 
 // NewWorkerpoolCollector 构造后台任务池指标 collector。
@@ -71,10 +62,7 @@ func NewWorkerpoolCollector(opts WorkerpoolCollectorOptions) (*WorkerpoolCollect
 		tasks:   prometheus.NewDesc(workerpoolTasksMetricName, workerpoolTasksMetricHelp, []string{LabelPool, LabelEvent}, nil),
 		queued:  prometheus.NewDesc(workerpoolQueuedMetricName, workerpoolQueuedMetricHelp, []string{LabelPool}, nil),
 		running: prometheus.NewDesc(workerpoolRunningMetricName, workerpoolRunningMetricHelp, []string{LabelPool}, nil),
-		free:    prometheus.NewDesc(workerpoolFreeMetricName, workerpoolFreeMetricHelp, []string{LabelPool}, nil),
 		waiting: prometheus.NewDesc(workerpoolWaitingMetricName, workerpoolWaitingMetricHelp, []string{LabelPool}, nil),
-		closed:  prometheus.NewDesc(workerpoolClosedMetricName, workerpoolClosedMetricHelp, []string{LabelPool}, nil),
-		workers: prometheus.NewDesc(workerpoolWorkersMetricName, workerpoolWorkersMetricHelp, []string{LabelPool}, nil),
 	}, nil
 }
 
@@ -83,10 +71,7 @@ func (c *WorkerpoolCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.tasks
 	ch <- c.queued
 	ch <- c.running
-	ch <- c.free
 	ch <- c.waiting
-	ch <- c.closed
-	ch <- c.workers
 }
 
 // Collect 实现 prometheus.Collector。
@@ -100,10 +85,7 @@ func (c *WorkerpoolCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(c.tasks, prometheus.CounterValue, float64(stats.Panicked), c.pool, workerpoolEventPanicked)
 	ch <- prometheus.MustNewConstMetric(c.queued, prometheus.GaugeValue, float64(stats.Queued), c.pool)
 	ch <- prometheus.MustNewConstMetric(c.running, prometheus.GaugeValue, float64(stats.Running), c.pool)
-	ch <- prometheus.MustNewConstMetric(c.free, prometheus.GaugeValue, float64(stats.Free), c.pool)
 	ch <- prometheus.MustNewConstMetric(c.waiting, prometheus.GaugeValue, float64(stats.Waiting), c.pool)
-	ch <- prometheus.MustNewConstMetric(c.closed, prometheus.GaugeValue, boolFloat(stats.Closed), c.pool)
-	ch <- prometheus.MustNewConstMetric(c.workers, prometheus.GaugeValue, float64(stats.Workers), c.pool)
 }
 
 func boolFloat(value bool) float64 {

@@ -44,7 +44,7 @@ Provider 基于 `common/runtime/config.MetricsConfig`、服务名和部署环境
 | `code` | 稳定错误码或结果码 | 必须来自有限集合，不得填入原始错误字符串 |
 | `resource` | datastore 或 runtime 组件名 | 固定枚举值，例如 `user_db`、`cache_redis`、`rbac_policy_watcher` |
 | `pool` | workerpool 名称 | 固定按用途命名的 pool |
-| `job` | scheduler job key | 固定任务名，不得来自用户输入 |
+| `scheduler_job` | scheduler job key | 固定任务名，不得来自用户输入 |
 | `event` | runtime 生命周期事件 | 固定枚举值，例如 `submitted`、`failed` |
 | `status` | runtime 结果状态 | 固定枚举值，例如 `success`、`failure` |
 | `reason` | scheduler skip 原因 | 固定枚举值，不得填入错误消息 |
@@ -94,20 +94,20 @@ Provider 基于 `common/runtime/config.MetricsConfig`、服务名和部署环境
 | Redis | `aegiscore_redis_up` | gauge | `service`,`environment`,`resource` |
 | Redis | `aegiscore_redis_ping_duration_seconds` | gauge | `service`,`environment`,`resource` |
 | Redis | `aegiscore_redis_ping_failures_total` | counter | `service`,`environment`,`resource` |
-| Scheduler | `aegiscore_scheduler_jobs_total` | counter | `service`,`environment`,`job`,`event`,`status`,`reason` |
-| Scheduler | `aegiscore_scheduler_job_duration_seconds` | histogram | `service`,`environment`,`job`,`status` |
+| Scheduler | `aegiscore_scheduler_jobs_total` | counter | `service`,`environment`,`scheduler_job`,`event`,`status`,`reason` |
+| Scheduler | `aegiscore_scheduler_job_duration_seconds` | histogram | `service`,`environment`,`scheduler_job`,`status` |
 | Workerpool | `aegiscore_workerpool_tasks_total` | counter | `service`,`environment`,`pool`,`event` |
 | Workerpool | `aegiscore_workerpool_running` | gauge | `service`,`environment`,`pool` |
 | Workerpool | `aegiscore_workerpool_queued` | gauge | `service`,`environment`,`pool` |
 | Runtime component | `aegiscore_runtime_component_running` | gauge | `service`,`environment`,`resource` |
 | Runtime component | `aegiscore_runtime_component_last_error` | gauge | `service`,`environment`,`resource` |
 | Casbin policy | `aegiscore_casbin_policy_reloads_total` | counter | `service`,`environment`,`status` |
-| Casbin policy | `aegiscore_casbin_policy_reload_last_status` | gauge | `service`,`environment`,`status` |
+| Casbin policy | `aegiscore_casbin_policy_reload_last_success` | gauge | `service`,`environment` |
 
-`resource`、`job`、`pool`、`event`、`status` 和 `reason` 也必须是固定枚举式低基数值。Scheduler job key 和 workerpool name 不得来自用户输入或业务实体 ID。Redis ping collector 在 scrape 时只执行 `PING`，不记录 key、command 参数、addr、DB number、payload 或错误消息。
+`resource`、`scheduler_job`、`pool`、`event`、`status` 和 `reason` 也必须是固定枚举式低基数值。Scheduler job key 和 workerpool name 不得来自用户输入或业务实体 ID。Redis ping collector 使用最小探测间隔复用最近结果，过期后才执行 `PING`；它不记录 key、command 参数、addr、DB number、payload 或错误消息。
 
 ## 当前状态
 
-当前 package 提供 `NewProvider`、`NewFxProvider`、`Provider.Register`、`Provider.Registerer`、`Provider.Gatherer`、`StatusClass`、label key 常量、SQL DB stats collector、Redis ping collector、workerpool stats collector、scheduler Prometheus adapter、runtime component status collector 和 Casbin policy reload recorder。HTTP server RED 采集由 `common/http/middleware` 接入本 provider；用户服务通过服务级 provider 显式注册 `user_db`、`cache_redis`、`auth_session_purge_pool`、RBAC policy watcher 和 Casbin policy reload 指标。后续实现应继续保持本包无业务语义，并由服务侧显式挂载 `/metrics` 路由。
+当前 package 提供 `NewProvider`、`NewFxProvider`、`Provider.Register`、`Provider.Registerer`、`Provider.Gatherer`、`StatusClass`、label key 常量、SQL DB stats collector、带最小探测间隔的 Redis ping collector、workerpool stats collector、scheduler Prometheus adapter、runtime component status collector 和 Casbin policy reload recorder。HTTP server RED 采集由 `common/http/middleware` 接入本 provider；用户服务通过服务级 provider 显式注册 `user_db`、`cache_redis`、`auth_session_purge_pool`、RBAC policy watcher 和 Casbin policy reload 指标。后续实现应继续保持本包无业务语义，并由服务侧显式挂载 `/metrics` 路由。
 
 用户服务业务指标由 owning feature 自己定义和注入 recorder，例如 auth feature 的登录、refresh、logout、token version mismatch、session purge submit failure，以及 permission feature 的 RBAC policy sync 和 route diff 指标。这些指标可以复用本 package 的 `Provider` 和低基数 label 约定，但 metric name、业务 operation、业务 reason、feature recorder 和测试必须留在 user-service feature 边界内，不进入 common runtime package。

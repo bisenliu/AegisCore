@@ -14,6 +14,9 @@ const (
 	rbacPolicySyncMetricName      = "aegiscore_user_service_rbac_policy_sync_operations_total"
 	rbacPolicyMismatchMetricName  = "aegiscore_user_service_rbac_policy_version_mismatches_total"
 	permissionRouteDiffMetricName = "aegiscore_user_service_permission_route_diff"
+	rbacPolicySyncMetricHelp      = "Total number of RBAC policy sync operation results by fixed operation, result, reason, and source."
+	rbacPolicyMismatchMetricHelp  = "Total number of RBAC policy version mismatches by fixed watcher source."
+	permissionRouteDiffMetricHelp = "Latest permission route diff counts by fixed diff kind."
 )
 
 type prometheusMetrics struct {
@@ -29,15 +32,15 @@ func newPermissionMetrics(provider *commonmetrics.Provider) (permissionapplicati
 	recorder := &prometheusMetrics{
 		policySync: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: rbacPolicySyncMetricName,
-			Help: "Total number of RBAC policy sync business operation results.",
+			Help: rbacPolicySyncMetricHelp,
 		}, []string{"operation", "result", "reason", "source"}),
 		versionMismatch: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: rbacPolicyMismatchMetricName,
-			Help: "Total number of RBAC policy version mismatches detected by watchers.",
+			Help: rbacPolicyMismatchMetricHelp,
 		}, []string{"source"}),
 		routeDiff: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: permissionRouteDiffMetricName,
-			Help: "Latest permission route diff counts by kind.",
+			Help: permissionRouteDiffMetricHelp,
 		}, []string{"kind"}),
 	}
 	if err := provider.Register(recorder.policySync); err != nil {

@@ -1556,8 +1556,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (exported_job, event) (increase(aegiscore_scheduler_jobs_total{service=\"$service\",environment=\"$environment\",exported_job=~\"$scheduler_job\",event=~\"failed|skipped|lock_renew_failed\"}[15m]))",
-          "legendFormat": "{{exported_job}} {{event}}",
+          "expr": "sum by (scheduler_job, event) (increase(aegiscore_scheduler_jobs_total{service=\"$service\",environment=\"$environment\",scheduler_job=~\"$scheduler_job\",event=~\"failed|skipped|lock_renew_failed\"}[15m]))",
+          "legendFormat": "{{scheduler_job}} {{event}}",
           "range": true,
           "refId": "A"
         }
@@ -1642,8 +1642,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, exported_job, status) (rate(aegiscore_scheduler_job_duration_seconds_bucket{service=\"$service\",environment=\"$environment\",exported_job=~\"$scheduler_job\"}[5m])))",
-          "legendFormat": "p95 {{exported_job}} {{status}}",
+          "expr": "histogram_quantile(0.95, sum by (le, scheduler_job, status) (rate(aegiscore_scheduler_job_duration_seconds_bucket{service=\"$service\",environment=\"$environment\",scheduler_job=~\"$scheduler_job\"}[5m])))",
+          "legendFormat": "p95 {{scheduler_job}} {{status}}",
           "range": true,
           "refId": "A"
         }
@@ -1905,8 +1905,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "aegiscore_casbin_policy_reload_last_status{service=\"$service\",environment=\"$environment\",status=\"failure\"}",
-          "legendFormat": "最近失败状态",
+          "expr": "aegiscore_casbin_policy_reload_last_success{service=\"$service\",environment=\"$environment\"}",
+          "legendFormat": "最近成功状态",
           "range": true,
           "refId": "B"
         }
@@ -2290,7 +2290,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "### 读图提示\n\n- HTTP RED 面板使用 Gin route template，避免 raw path 带来的高基数。\n- HTTP 错误表展示 status_class；应用层原因请看 Auth / RBAC 面板。\n- Scheduler 指标在 Prometheus 中使用 `exported_job` 表示业务 job 名称，这是为了避开 scrape job 标签冲突。\n- `No data` 通常表示当前服务未注册对应 collector 或测试窗口内没有事件。",
+        "content": "### 读图提示\n\n- HTTP RED 面板使用 Gin route template，避免 raw path 带来的高基数。\n- HTTP 错误表展示 status_class；应用层原因请看 Auth / RBAC 面板。\n- Scheduler 指标在 Prometheus 中使用 `scheduler_job` 表示业务 job 名称，这是为了避开 scrape job 标签冲突。\n- `No data` 通常表示当前服务未注册对应 collector 或测试窗口内没有事件。",
         "mode": "markdown"
       },
       "title": "读图说明",
@@ -2428,7 +2428,7 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(aegiscore_scheduler_jobs_total{service=\"$service\",environment=\"$environment\"}, exported_job)",
+        "definition": "label_values(aegiscore_scheduler_jobs_total{service=\"$service\",environment=\"$environment\"}, scheduler_job)",
         "hide": 0,
         "includeAll": true,
         "label": "Scheduler Job",
@@ -2436,7 +2436,7 @@
         "name": "scheduler_job",
         "options": [],
         "query": {
-          "query": "label_values(aegiscore_scheduler_jobs_total{service=\"$service\",environment=\"$environment\"}, exported_job)",
+          "query": "label_values(aegiscore_scheduler_jobs_total{service=\"$service\",environment=\"$environment\"}, scheduler_job)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,

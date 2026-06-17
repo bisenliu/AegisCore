@@ -12,9 +12,8 @@ import (
 const (
 	schedulerJobsMetricName         = "aegiscore_scheduler_jobs_total"
 	schedulerJobDurationMetricName  = "aegiscore_scheduler_job_duration_seconds"
-	schedulerJobsMetricHelp         = "Total number of scheduler job lifecycle events."
+	schedulerJobsMetricHelp         = "Total number of scheduler job runtime events by fixed scheduler job, event, status, and reason."
 	schedulerJobDurationMetricHelp  = "Duration of scheduler job executions in seconds."
-	schedulerEventRegistered        = "registered"
 	schedulerEventTriggered         = "triggered"
 	schedulerEventStarted           = "started"
 	schedulerEventCompleted         = "completed"
@@ -53,20 +52,16 @@ func NewSchedulerMetrics(provider *Provider, opts SchedulerMetricsOptions) sched
 		jobs: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: schedulerJobsMetricName,
 			Help: schedulerJobsMetricHelp,
-		}, []string{LabelJob, LabelEvent, LabelStatus, LabelReason}),
+		}, []string{LabelSchedulerJob, LabelEvent, LabelStatus, LabelReason}),
 		duration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    schedulerJobDurationMetricName,
 			Help:    schedulerJobDurationMetricHelp,
 			Buckets: buckets,
-		}, []string{LabelJob, LabelStatus}),
+		}, []string{LabelSchedulerJob, LabelStatus}),
 	}
 	provider.MustRegister(recorder.jobs)
 	provider.MustRegister(recorder.duration)
 	return recorder
-}
-
-func (m *schedulerMetrics) JobRegistered(jobKey string) {
-	m.record(jobKey, schedulerEventRegistered, schedulerStatusSuccess, schedulerReasonNone)
 }
 
 func (m *schedulerMetrics) JobTriggered(jobKey string) {

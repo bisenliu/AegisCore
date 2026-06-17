@@ -24,6 +24,8 @@
 | 运行全部测试 | `make test` | 仓库根目录 |
 | 运行用户服务 | `make run-user-service` | 仓库根目录 |
 | 初始化或更新 RBAC 系统数据 | `make seed-rbac` | 仓库根目录 |
+| 生成 Compose Grafana dashboard | `make compose-dashboard-generate` | 仓库根目录 |
+| 检查 Compose Grafana dashboard 是否同步 | `make compose-dashboard-check` | 仓库根目录 |
 | 构建用户服务 Docker 镜像 | `docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .` | 仓库根目录 |
 | 运行共享模块测试 | `make test-common` | 仓库根目录 |
 | 运行用户服务测试 | `make test-user-service` | 仓库根目录 |
@@ -48,7 +50,7 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - 生产环境若必须在已有 HTTP 副本运行中执行 `make seed-rbac` 或 `rbac assign-super-admin`，执行后需要滚动重启服务副本，或通过正式 RBAC 管理接口触发一次在线 policy refresh，确保所有副本的内存 Casbin policy 重新加载。日常在线权限、角色状态、用户角色绑定和角色权限绑定变更应使用 HTTP RBAC 管理接口，该路径会通过 Redis policy version、Pub/Sub 和版本补偿检查同步多副本。
 - 新增或调整进入 RBAC 授权中间件的业务路由时，必须同步更新 `user-service/internal/shared/rbacbaseline` 中的系统权限 URL catalog，重新执行 `make seed-rbac`，并通过 `GET /api/v1/permissions/route-diff` 检查权限目录与已注册路由是否仍一致。
 - 构建用户服务容器镜像：从仓库根目录执行 `docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .`。该 Dockerfile 依赖仓库根目录作为 build context，以便复制 `go.work`、`common/` 和 `user-service/`。
-- 本地 Compose 文件归属 `deployments/compose/`。当前没有可运行 Compose file；若本地没有 PostgreSQL/Redis，需要按 `user-service/configs/config.yaml` 中的配置自行准备依赖。
+- 本地 Compose 文件归属 `deployments/compose/`，可启动 PostgreSQL、Redis、用户服务、Prometheus 和 Grafana。Compose 自动导入的 Grafana dashboard 由 `deployments/observability/grafana/user-service-overview.json` 生成；更新通用 dashboard 后执行 `make compose-dashboard-generate`，不要手动同步两份 JSON。
 - Kubernetes YAML 归属 `deployments/k8s/`，Helm chart 归属 `deployments/helm/`。当前目录只声明边界，不提供可直接部署的生产资源。
 - 用户服务第一版 Prometheus/Grafana 观测资产位于 `deployments/observability/`，包含 dashboard、alert rule 示例和导入/验证说明；告警排障入口位于 `docs/observability/user-service-runbook.md`。
 - 用户服务探针路径为：`/livez` 用于 liveness，`/readyz` 用于 readiness，`/startupz` 用于 startup probe。`/readyz` 和 `/startupz` 会检查 PostgreSQL、Redis、Casbin policy 加载状态和 RBAC policy watcher 状态。
@@ -66,8 +68,8 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 - 用户服务当前声明 `cache_redis` 和 `user_db`；其他命名实例可存在于配置中作为示例或其他服务配置，但不代表用户服务会自动连接对应资源或启用相关业务。
 - Redis key 的通用构造规则使用 `common/runtime/rediskey`；具体 key schema 放在 owning feature 的 `infrastructure/redis` 或 owning runtime primitive 内，不放入 `common` 的通用 key 大表。
 - 可观测性配置位于 `observability`：`observability.metrics.enabled` 控制 Prometheus metrics provider 是否创建独立 registry，并控制用户服务是否挂载 `observability.metrics.path`；`observability.metrics.path` 默认 `/metrics`；`observability.metrics.include_runtime` 控制是否注册 Go runtime/process 指标；`observability.tracing.enabled` 控制 tracing provider 是否启用采样记录，`observability.tracing.sample_ratio` 范围为 `0.0` 到 `1.0`，`observability.tracing.exporter` 当前配置契约支持 `none` 和 `otlp`，`observability.tracing.otlp_endpoint` 只在 `exporter: otlp` 时必填，`observability.tracing.insecure` 在生产类环境中不能与 `otlp` exporter 同时使用。
-- 用户服务启用 metrics 时会在配置路径暴露 Prometheus scrape endpoint，默认 `/metrics`。`common/runtime/observability/metrics` 支持本地 Prometheus registry/provider，disabled 模式零副作用，enabled 模式使用独立 registry 且可选注册 Go runtime/process collector；用户服务还会注册 PostgreSQL `user_db` pool stats、Redis `cache_redis` ping 状态、auth session purge workerpool stats、RBAC policy watcher 状态和 Casbin policy reload 状态。auth 和 permission feature 通过各自 Fx module 注入 feature-owned business metrics recorder，记录登录、refresh、logout、token version mismatch、session purge submit failure、policy reload/publish、watcher version mismatch 和 route diff missing/stale 数量。metrics endpoint 不经过 RBAC 授权，是否需要网络侧保护由部署层决定；runtime dependency 和业务指标都只允许固定低基数 label，不得写入用户 ID、用户名、角色 ID、权限 ID、session ID、token version、policy version、route template、Redis key、SQL、DSN 或错误消息全文。用户服务当前不接入外部 client tracing。`common/runtime/observability/tracing` 支持本地 OpenTelemetry SDK provider；用户服务 HTTP 入站请求通过 OTel Gin middleware 创建 server span，并使用 W3C `traceparent` / `tracestate` 传播。用户服务本地默认 `observability.tracing.exporter: none`，该模式会生成标准 trace ID 和 span ID，但不导出 span，因此不强制部署 `otel-collector:4317`，也不会在 trace UI 中看到链路。
-- `deployments/observability/` 提供可导入的 Grafana dashboard 和 Prometheus alert rule 基线。它们只消费已有低基数指标，不新增业务指标；本地没有 Collector 时 tracing 仍只提供日志中的 `trace_id` / `span_id` 关联，不提供 trace UI。
+- 用户服务启用 metrics 时会在配置路径暴露 Prometheus scrape endpoint，默认 `/metrics`。`common/runtime/observability/metrics` 支持本地 Prometheus registry/provider，disabled 模式零副作用，enabled 模式使用独立 registry 且可选注册 Go runtime/process collector；用户服务还会注册 PostgreSQL `user_db` pool stats、带最小探测间隔的 Redis `cache_redis` ping 状态、auth session purge workerpool stats、RBAC policy watcher 状态和 Casbin policy reload 状态。auth 和 permission feature 通过各自 Fx module 注入 feature-owned business metrics recorder，记录登录、refresh、logout、token version mismatch、session purge submit failure、policy reload/publish、watcher version mismatch 和 route diff missing/stale 数量。metrics endpoint 不经过 RBAC 授权，是否需要网络侧保护由部署层决定；runtime dependency 和业务指标都只允许固定低基数 label，不得写入用户 ID、用户名、角色 ID、权限 ID、session ID、token version、policy version、route template、Redis key、SQL、DSN 或错误消息全文。用户服务当前不接入外部 client tracing。`common/runtime/observability/tracing` 支持本地 OpenTelemetry SDK provider；用户服务 HTTP 入站请求通过 OTel Gin middleware 创建 server span，并使用 W3C `traceparent` / `tracestate` 传播。用户服务本地默认 `observability.tracing.exporter: none`，该模式会生成标准 trace ID 和 span ID，但不导出 span，因此不强制部署 `otel-collector:4317`，也不会在 trace UI 中看到链路。
+- `deployments/observability/` 提供可导入的 Grafana dashboard 和 Prometheus alert rule 基线。通用 dashboard 是 Compose 自动导入副本的唯一源文件；本地没有 Collector 时 tracing 仍只提供日志中的 `trace_id` / `span_id` 关联，不提供 trace UI。
 - OTLP endpoint 不应包含 token、Authorization header、账号密码、Cookie 或其他敏感凭据；未来 exporter 认证需要单独设计 Secret 注入方式。
 - `common/runtime/config.Load` 会读取 YAML、应用 `AEGISCORE_` 覆盖、反序列化为配置对象，并在返回前执行结构化字段校验；缺失必填字段、非法端口、非正超时、无效 Redis/PostgreSQL named config 或生产环境不安全配置会在启动期被拒绝。
 
