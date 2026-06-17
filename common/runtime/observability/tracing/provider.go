@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -19,6 +22,8 @@ const (
 	exporterNone = "none"
 	exporterOTLP = "otlp"
 
+	defaultOTLPTimeout = 5 * time.Second
+
 	attributeServiceName           = "service.name"
 	attributeDeploymentEnvironment = "deployment.environment"
 	attributeServiceVersion        = "service.version"
@@ -26,8 +31,6 @@ const (
 )
 
 var (
-	// ErrOTLPExporterUnsupported 表示当前阶段尚未实现 OTLP exporter。
-	ErrOTLPExporterUnsupported = errors.New("otlp tracing exporter is not implemented")
 	// ErrUnsupportedExporter 表示 tracing exporter 不在当前支持集合中。
 	ErrUnsupportedExporter = errors.New("unsupported tracing exporter")
 )
@@ -69,10 +72,7 @@ func NewProvider(ctx context.Context, opts Options) (*Provider, error) {
 	if exporter == "" {
 		return nil, errors.New("tracing exporter is required")
 	}
-	if exporter == exporterOTLP {
-		return nil, ErrOTLPExporterUnsupported
-	}
-	if exporter != exporterNone {
+	if exporter != exporterNone && exporter != exporterOTLP {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedExporter, exporter)
 	}
 
@@ -80,11 +80,12 @@ func NewProvider(ctx context.Context, opts Options) (*Provider, error) {
 	sampler := sdktrace.ParentBased(sdktrace.TraceIDRatioBased(sampleRatio))
 	if !opts.Config.Enabled {
 		sampler = sdktrace.NeverSample()
+		exporter = exporterNone
 	}
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sampler),
-	)
+	tp, err := newTracerProvider(ctx, opts.Config, exporter, res, sampler)
+	if err != nil {
+		return nil, err
+	}
 	return &Provider{
 		tracerProvider: tp,
 		resource:       res,
@@ -93,6 +94,51 @@ func NewProvider(ctx context.Context, opts Options) (*Provider, error) {
 			propagation.Baggage{},
 		),
 	}, nil
+}
+
+func newTracerProvider(
+	ctx context.Context,
+	cfg config.TracingConfig,
+	exporter string,
+	res *resource.Resource,
+	sampler sdktrace.Sampler,
+) (*sdktrace.TracerProvider, error) {
+	options := []sdktrace.TracerProviderOption{
+		sdktrace.WithResource(res),
+		sdktrace.WithSampler(sampler),
+	}
+	switch exporter {
+	case exporterNone:
+		return sdktrace.NewTracerProvider(options...), nil
+	case exporterOTLP:
+		traceExporter, err := newOTLPExporter(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		options = append(options, sdktrace.WithBatcher(traceExporter))
+		return sdktrace.NewTracerProvider(options...), nil
+	default:
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedExporter, exporter)
+	}
+}
+
+func newOTLPExporter(ctx context.Context, cfg config.TracingConfig) (*otlptrace.Exporter, error) {
+	endpoint := strings.TrimSpace(cfg.OTLPEndpoint)
+	if endpoint == "" {
+		return nil, errors.New("otlp tracing endpoint is required")
+	}
+	clientOptions := []otlptracegrpc.Option{
+		otlptracegrpc.WithEndpoint(endpoint),
+		otlptracegrpc.WithTimeout(defaultOTLPTimeout),
+	}
+	if cfg.Insecure {
+		clientOptions = append(clientOptions, otlptracegrpc.WithInsecure())
+	}
+	traceExporter, err := otlptrace.New(ctx, otlptracegrpc.NewClient(clientOptions...))
+	if err != nil {
+		return nil, errors.New("create otlp tracing exporter")
+	}
+	return traceExporter, nil
 }
 
 // TracerProvider 返回底层 OpenTelemetry SDK provider。

@@ -98,19 +98,47 @@ func TestProviderShutdown(t *testing.T) {
 	}
 }
 
-func TestNewProviderRejectsUnsupportedExporter(t *testing.T) {
+func TestNewProviderWithOTLPExporterCreatesProvider(t *testing.T) {
+	provider, err := NewProvider(context.Background(), Options{
+		Config: config.TracingConfig{
+			Enabled:      true,
+			SampleRatio:  0.0,
+			Exporter:     exporterOTLP,
+			OTLPEndpoint: "collector.internal:4317",
+			Insecure:     true,
+		},
+		ServiceName: "aegiscore-test",
+		Environment: "local",
+	})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	defer shutdownProvider(t, provider)
+
+	_, span := provider.Tracer("test").Start(context.Background(), "operation")
+	defer span.End()
+
+	if !span.SpanContext().TraceID().IsValid() {
+		t.Fatal("trace ID is invalid")
+	}
+	if span.SpanContext().IsSampled() {
+		t.Fatal("span is sampled")
+	}
+}
+
+func TestNewProviderWithOTLPExporterRejectsMissingEndpoint(t *testing.T) {
 	_, err := NewProvider(context.Background(), Options{
 		Config: config.TracingConfig{
 			Enabled:      true,
 			SampleRatio:  1.0,
 			Exporter:     exporterOTLP,
-			OTLPEndpoint: "collector.internal:4317?token=secret",
+			OTLPEndpoint: "   ",
 		},
 		ServiceName: "aegiscore-test",
 		Environment: "local",
 	})
-	if !errors.Is(err, ErrOTLPExporterUnsupported) {
-		t.Fatalf("error = %v, want ErrOTLPExporterUnsupported", err)
+	if err == nil || !strings.Contains(err.Error(), "endpoint") {
+		t.Fatalf("error = %v, want endpoint error", err)
 	}
 	if strings.Contains(err.Error(), "collector.internal") || strings.Contains(err.Error(), "secret") {
 		t.Fatalf("error leaked endpoint: %v", err)
@@ -121,6 +149,21 @@ func TestNewProviderRejectsUnknownExporter(t *testing.T) {
 	_, err := NewProvider(context.Background(), Options{
 		Config: config.TracingConfig{
 			Enabled:     true,
+			SampleRatio: 1.0,
+			Exporter:    "zipkin",
+		},
+		ServiceName: "aegiscore-test",
+		Environment: "local",
+	})
+	if !errors.Is(err, ErrUnsupportedExporter) {
+		t.Fatalf("error = %v, want ErrUnsupportedExporter", err)
+	}
+}
+
+func TestNewProviderRejectsUnknownExporterWhenDisabled(t *testing.T) {
+	_, err := NewProvider(context.Background(), Options{
+		Config: config.TracingConfig{
+			Enabled:     false,
 			SampleRatio: 1.0,
 			Exporter:    "zipkin",
 		},

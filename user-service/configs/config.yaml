@@ -86,11 +86,11 @@ observability:
     # 是否包含 Go runtime/process 指标；不包含 auth/user/role/permission 业务指标。
     include_runtime: true
   tracing:
-    # 是否开启 tracing 配置入口；当前阶段不创建 tracer provider 或 Gin middleware。
+    # 是否开启 tracing；关闭时仍保留传播器和 no-op 采样语义，不连接外部 Collector。
     enabled: true
     # tracing 采样比例，范围为 0.0 到 1.0。
     sample_ratio: 1.0
-    # exporter 为 none 时不向外部 Collector 导出，本地开发不要求部署 OTLP Collector。
+    # exporter 为 none 时不向外部 Collector 导出；otlp 使用下方 endpoint 导出。
     exporter: none
     # exporter 为 otlp 时填写 Collector endpoint；不要在 endpoint 中放 token、账号密码或其他凭据。
     otlp_endpoint: ""

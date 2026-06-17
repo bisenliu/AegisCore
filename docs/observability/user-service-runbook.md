@@ -282,7 +282,7 @@ increase(aegiscore_scheduler_jobs_total{service="aegiscore-user-services",event=
 - `latency_ms`
 - `user_agent`，用于认证失败安全事件
 
-如需后续增加 trace 可视化，先部署 OpenTelemetry Collector 和 trace backend，再配置：
+如需 trace 可视化，先部署 OpenTelemetry Collector 和 trace backend，再配置：
 
 ```bash
 AEGISCORE_OBSERVABILITY_TRACING_EXPORTER=otlp
