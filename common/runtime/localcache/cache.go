@@ -23,7 +23,6 @@ import (
 //	cache.Delete("user-1")
 type Cache[K comparable, V any] struct {
 	ttl    time.Duration
-	now    func() time.Time
 	values sync.Map
 }
 
@@ -52,7 +51,7 @@ func New[K comparable, V any](ttl time.Duration) *Cache[K, V] {
 	if ttl <= 0 {
 		ttl = time.Second
 	}
-	return &Cache[K, V]{ttl: ttl, now: time.Now}
+	return &Cache[K, V]{ttl: ttl}
 }
 
 // Get 读取缓存项，并在缓存不存在或过期时返回未命中。
@@ -86,7 +85,7 @@ func (c *Cache[K, V]) Get(key K) (V, bool) {
 		c.values.Delete(key)
 		return zero, false
 	}
-	if !c.now().Before(cacheEntry.expiresAt) {
+	if !time.Now().Before(cacheEntry.expiresAt) {
 		c.values.Delete(key)
 		return zero, false
 	}
@@ -110,7 +109,7 @@ func (c *Cache[K, V]) Get(key K) (V, bool) {
 //	cache := localcache.New[string, int64](time.Second)
 //	cache.Set("user-1", 7)
 func (c *Cache[K, V]) Set(key K, value V) {
-	c.values.Store(key, entry[V]{value: value, expiresAt: c.now().Add(c.ttl)})
+	c.values.Store(key, entry[V]{value: value, expiresAt: time.Now().Add(c.ttl)})
 }
 
 // Delete 删除缓存项。
@@ -131,8 +130,4 @@ func (c *Cache[K, V]) Set(key K, value V) {
 //	cache.Delete("user-1")
 func (c *Cache[K, V]) Delete(key K) {
 	c.values.Delete(key)
-}
-
-func (c *Cache[K, V]) setNowForTest(now func() time.Time) {
-	c.now = now
 }

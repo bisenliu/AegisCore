@@ -21,11 +21,6 @@ type Service struct {
 	userRoles       roleapplication.SeedUserRoleStore
 }
 
-// NewService 构造 RBAC seed 服务。
-func NewService(roles roleapplication.SeedRoleStore, permissions permissionapplication.SeedPermissionStore, rolePermissions roleapplication.SeedRolePermissionStore, userRoles roleapplication.SeedUserRoleStore) *Service {
-	return &Service{roles: roles, permissions: permissions, rolePermissions: rolePermissions, userRoles: userRoles}
-}
-
 // SeedOptions 控制系统 RBAC seed 的可选行为。
 type SeedOptions struct {
 	ReactivateSystem   bool
@@ -45,6 +40,11 @@ type SeedResult struct {
 // AssignSuperAdminResult 汇总超级管理员绑定结果。
 type AssignSuperAdminResult struct {
 	Added bool
+}
+
+// NewService 构造 RBAC seed 服务。
+func NewService(roles roleapplication.SeedRoleStore, permissions permissionapplication.SeedPermissionStore, rolePermissions roleapplication.SeedRolePermissionStore, userRoles roleapplication.SeedUserRoleStore) *Service {
+	return &Service{roles: roles, permissions: permissions, rolePermissions: rolePermissions, userRoles: userRoles}
 }
 
 // Seed 写入系统角色、系统权限和系统角色权限绑定。

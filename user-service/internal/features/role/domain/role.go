@@ -14,6 +14,12 @@ type Role struct {
 	UpdatedAt   int64
 }
 
+// RoleMutation 是系统角色保护规则关注的目标角色状态。
+type RoleMutation struct {
+	Name   string
+	Active bool
+}
+
 // ProtectSystemMutation 校验系统角色是否允许修改为目标状态。
 func (r Role) ProtectSystemMutation(next RoleMutation) error {
 	if !r.IsSystem {
@@ -23,10 +29,4 @@ func (r Role) ProtectSystemMutation(next RoleMutation) error {
 		return ErrSystemRoleProtected
 	}
 	return nil
-}
-
-// RoleMutation 是系统角色保护规则关注的目标角色状态。
-type RoleMutation struct {
-	Name   string
-	Active bool
 }

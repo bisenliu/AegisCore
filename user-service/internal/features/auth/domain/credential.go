@@ -15,6 +15,19 @@ type UserCredential struct {
 	TokenVersion int64
 }
 
+// CredentialUpdateResult 返回凭证替换后的用户和 token version。
+type CredentialUpdateResult struct {
+	UserID       uuid.UUID
+	TokenVersion int64
+}
+
+// UpdateCredentialsInput 包含改密时使用的新凭证和目标状态。
+type UpdateCredentialsInput struct {
+	UserID       uuid.UUID
+	PasswordHash string
+	Status       identity.UserStatus
+}
+
 // CanLogin 返回当前状态是否允许普通认证。
 func (u UserCredential) CanLogin() bool {
 	return u.Status.CanLogin()
@@ -28,17 +41,4 @@ func (u UserCredential) RequiresPasswordChange() bool {
 // CanChangePassword 返回用户是否可通过受限 token 流程修改密码。
 func (u UserCredential) CanChangePassword() bool {
 	return u.RequiresPasswordChange()
-}
-
-// CredentialUpdateResult 返回凭证替换后的用户和 token version。
-type CredentialUpdateResult struct {
-	UserID       uuid.UUID
-	TokenVersion int64
-}
-
-// UpdateCredentialsInput 包含改密时使用的新凭证和目标状态。
-type UpdateCredentialsInput struct {
-	UserID       uuid.UUID
-	PasswordHash string
-	Status       identity.UserStatus
 }

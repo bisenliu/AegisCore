@@ -27,6 +27,10 @@ type rbacSeedOptions struct {
 	syncSystemBindings bool
 }
 
+type rbacSeedDependencies struct {
+	service *roleseed.Service
+}
+
 func runRBACSeedCommand(ctx context.Context, configPath string, opts rbacSeedOptions) error {
 	deps, cleanup, err := newRBACSeedDependencies(ctx, configPath)
 	if err != nil {
@@ -59,10 +63,6 @@ func runAssignSuperAdminCommand(ctx context.Context, configPath string, userID u
 		fmt.Printf("Super admin role already assigned to user %s\n", userID.String())
 	}
 	return nil
-}
-
-type rbacSeedDependencies struct {
-	service *roleseed.Service
 }
 
 func newRBACSeedDependencies(parent context.Context, configPath string) (rbacSeedDependencies, func(), error) {

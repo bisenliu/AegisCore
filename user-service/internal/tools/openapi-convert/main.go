@@ -50,7 +50,7 @@ func main() {
 	var generatedBy string
 	rootPaths := stringList(defaultRootHealthPaths)
 
-	flag.StringVar(&inputPath, "input", "", "temporary Swagger 2 JSON input path")
+	flag.StringVar(&inputPath, "input", "", "Swagger 2 JSON input path")
 	flag.StringVar(&jsonOutputPath, "json", "", "OpenAPI 3 JSON output path")
 	flag.StringVar(&yamlOutputPath, "yaml", "", "OpenAPI 3 YAML output path")
 	flag.StringVar(&goOutputPath, "go", "", "OpenAPI 3 Go embed output path")

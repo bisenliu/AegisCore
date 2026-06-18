@@ -47,6 +47,12 @@ type RedisLocker struct {
 	retry   RetryPolicy
 }
 
+type redisLock struct {
+	client redis.UniversalClient
+	key    string
+	token  string
+}
+
 // NewRedisLocker 使用已有 Redis client 构造分布式锁实现。
 func NewRedisLocker(client redis.UniversalClient, opts RedisLockerOptions) (*RedisLocker, error) {
 	if client == nil {
@@ -134,12 +140,6 @@ func (l *RedisLocker) Acquire(ctx context.Context, key string, ttl time.Duration
 		attempt++
 		nextDelay = nextRetryDelay(nextDelay, l.retry.MaxInterval)
 	}
-}
-
-type redisLock struct {
-	client redis.UniversalClient
-	key    string
-	token  string
 }
 
 // Unlock 仅在当前 token 仍持有锁时释放 Redis key。

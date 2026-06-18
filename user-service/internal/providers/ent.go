@@ -32,6 +32,10 @@ type NamedEntClients struct {
 	UserClient *ent.Client `name:"user_db"`
 }
 
+type nonClosingEntDriver struct {
+	dialect.Driver
+}
+
 // ProvideEntClients 将具名 SQL 连接池包装为 Ent client，并注册 Ent client 关闭 hook。
 func ProvideEntClients(params NamedEntClientParams) NamedEntClients {
 	userClient := newEntClient(params.UserDB, params.Config, logger.SQL(params.Log))
@@ -70,10 +74,6 @@ func entSQLDebugLogFunc(log *zap.Logger) func(context.Context, ...any) {
 	return func(ctx context.Context, args ...any) {
 		logger.WithContext(ctx, log).Info("ent sql debug", zap.String("statement", fmt.Sprint(args...)))
 	}
-}
-
-type nonClosingEntDriver struct {
-	dialect.Driver
 }
 
 func (d nonClosingEntDriver) Close() error {

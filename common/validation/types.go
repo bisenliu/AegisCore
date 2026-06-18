@@ -84,6 +84,17 @@ type bindFieldError struct {
 	err   error
 }
 
+// Options 配置 Validator 构造行为。
+type Options struct {
+	Locale string
+}
+
+// Validator 用 AegisCore 翻译和规范化规则包装 go-playground validator。
+type Validator struct {
+	validate *validator.Validate
+	trans    ut.Translator
+}
+
 func (e *bindFieldError) Error() string {
 	return e.err.Error()
 }
@@ -98,15 +109,4 @@ func (e *Error) Error() string {
 		return ""
 	}
 	return e.Message
-}
-
-// Options 配置 Validator 构造行为。
-type Options struct {
-	Locale string
-}
-
-// Validator 用 AegisCore 翻译和规范化规则包装 go-playground validator。
-type Validator struct {
-	validate *validator.Validate
-	trans    ut.Translator
 }

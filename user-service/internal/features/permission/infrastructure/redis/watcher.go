@@ -52,7 +52,7 @@ type Watcher struct {
 
 // NewWatcher 构造并注册 RBAC policy watcher 生命周期。
 func NewWatcher(params WatcherParams) *Watcher {
-	watcher := NewWatcherForTestWithMetrics(params.Store, params.Tracker, params.Engine, params.Log, defaultCheckInterval, params.Metrics)
+	watcher := newWatcherWithMetrics(params.Store, params.Tracker, params.Engine, params.Log, defaultCheckInterval, params.Metrics)
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			watcher.Start(ctx)
@@ -65,16 +65,14 @@ func NewWatcher(params WatcherParams) *Watcher {
 	return watcher
 }
 
-// NewWatcherForTest 构造可指定检查间隔的 RBAC policy watcher。
-func NewWatcherForTest(store policySubscriptionStore, tracker *VersionTracker, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, checkInterval time.Duration) *Watcher {
+func newWatcher(store policySubscriptionStore, tracker *VersionTracker, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, checkInterval time.Duration) *Watcher {
 	if checkInterval <= 0 {
 		checkInterval = defaultCheckInterval
 	}
-	return NewWatcherForTestWithMetrics(store, tracker, engine, log, checkInterval, nil)
+	return newWatcherWithMetrics(store, tracker, engine, log, checkInterval, nil)
 }
 
-// NewWatcherForTestWithMetrics 构造可指定 metrics 的 RBAC policy watcher。
-func NewWatcherForTestWithMetrics(store policySubscriptionStore, tracker *VersionTracker, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, checkInterval time.Duration, metrics permissionapplication.Metrics) *Watcher {
+func newWatcherWithMetrics(store policySubscriptionStore, tracker *VersionTracker, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, checkInterval time.Duration, metrics permissionapplication.Metrics) *Watcher {
 	if checkInterval <= 0 {
 		checkInterval = defaultCheckInterval
 	}

@@ -61,6 +61,15 @@ type entLoader struct {
 	superAdminRoleID uuid.UUID
 }
 
+type entUserRoleResolver struct {
+	cache   *localcache.Cache[uuid.UUID, []uuid.UUID]
+	client  *ent.Client
+	group   singleflight.Group
+	mu      sync.RWMutex
+	ttl     time.Duration
+	version uint64
+}
+
 // NewPolicyLoader 构造基于 Ent 的 Casbin policy loader。
 func NewPolicyLoader(params LoaderParams) Loader {
 	return &entLoader{client: params.Client, superAdminRoleID: uuid.MustParse(rbacbaseline.SuperAdminRoleID)}
@@ -101,15 +110,6 @@ func (l *entLoader) loadPermissionRules(ctx context.Context) ([]PermissionRule, 
 		rules = append(rules, PermissionRule{RoleID: role.RoleID, PathTemplate: permission.PathTemplate, HTTPMethod: permission.HTTPMethod})
 	}
 	return rules, nil
-}
-
-type entUserRoleResolver struct {
-	cache   *localcache.Cache[uuid.UUID, []uuid.UUID]
-	client  *ent.Client
-	group   singleflight.Group
-	mu      sync.RWMutex
-	ttl     time.Duration
-	version uint64
 }
 
 // NewUserRoleResolver 构造按用户短 TTL 缓存的角色解析器。

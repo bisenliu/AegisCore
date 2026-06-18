@@ -130,7 +130,9 @@ Controller 或未来 gRPC handler 必须把 transport DTO 映射为 application 
 
 Ent predicate 构造封装在 `infrastructure/postgres` 内。Adapter 可以做字段裁剪、模型转换和存储错误转换，但不得承载复杂业务编排、登录状态机、密码校验、token 签发、跨 store 事务编排或 HTTP 错误映射。
 
-边界检查不仅覆盖 import 依赖，也覆盖人工维护 Go 文件中的函数定义、声明和调用顺序。检查时应确认类型、Fx 参数结构和输出结构位于依赖它们的构造函数或 provider 前；构造函数和 provider 位于公开 handler、service 或 use case 方法前；HTTP controller 的 handler 顺序尽量与同包 `routes.go` 注册顺序一致；私有 helper 可以紧跟主要调用方，也可以在文件尾按调用链组织。若顺序导致可读性差、依赖关系混乱或潜在运行错误风险，应在不改变功能的前提下整理。Ent、OpenAPI 等生成代码不为顺序检查手写调整，必须通过对应生成流程更新。
+边界检查不仅覆盖 import 依赖，也覆盖人工维护 Go 文件中的函数定义、声明和调用顺序。检查时应确认 const、var、sentinel error、类型、接口、Fx 参数结构和输出结构位于依赖它们的构造函数或 provider 前；构造函数和 provider 位于公开 handler、service 或 use case 方法前；HTTP controller 的 handler 顺序尽量与同包 `routes.go` 注册顺序一致；私有 helper 可以紧跟主要调用方，也可以在文件尾按调用链组织。无关的 type、const 或 var 不应穿插在两个主要函数之间打断阅读主线。测试文件可以按场景组织 helper，但 helper 不应打断主要测试用例的阅读主线。若顺序导致可读性差、依赖关系混乱或潜在运行错误风险，应在不改变功能的前提下整理。Ent、OpenAPI 等生成代码不为顺序检查手写调整，必须通过对应生成流程更新。
+
+正式代码不得暴露仅为测试服务的构造函数、方法、hook、flag 或可替换入口，例如 `NewXForTest`、`testHook`、`setNowForTest` 这类测试语义 API。确实需要可替换性时，必须有清晰运行时职责并使用运行时语义命名，例如消费侧端口、Fx provider 参数、clock/ID generator 等稳定运行时依赖；否则测试替身、fake、stub、fixture、时间控制和特殊断言入口应留在 `_test.go`、`common/testing` 或对应测试基础设施中。不得为了让测试方便而把临时分支、测试专用参数或无运行时职责的 helper 留在正式构建产物里。
 
 Domain services 可以承载跨实体或跨值对象的纯领域判断，但不得替代 application use case。密码 hash 属于 `application/credentials` 或 common security 原语，JWT 签发/解析和 Bearer token 处理属于 `application/tokens` 或 common security 原语，Redis session 生命周期和 token version cache/database fallback 属于 `application/sessions`、`application/validators` 或 infrastructure adapter，日志和配置读取仍属于 application、common runtime 或 infrastructure 边界。Redis key catalog 是 Redis adapter 的存储契约，放在 feature-local `infrastructure/redis` 或 owning runtime primitive 内，不是 domain service 准入样例。Domain events 只承载领域事实的数据模型；事件总线、broker、outbox、publisher、subscriber 或后台投递 worker 必须另开变更设计。
 

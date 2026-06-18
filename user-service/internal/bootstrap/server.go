@@ -31,6 +31,14 @@ type HTTPServerParams struct {
 	Engine     *gin.Engine
 }
 
+// httpDrainTracker 跟踪正在执行的 HTTP handler，保护后续资源关闭顺序。
+type httpDrainTracker struct {
+	handler http.Handler
+	mu      sync.Mutex
+	cond    *sync.Cond
+	active  int
+}
+
 // NewHTTPServer 创建 HTTP server，并注册 Fx start/stop 生命周期 hook。
 func NewHTTPServer(params HTTPServerParams) *http.Server {
 	addr := fmt.Sprintf("%s:%d", params.Config.HTTP.Host, params.Config.HTTP.Port)
@@ -81,14 +89,6 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 	})
 
 	return server
-}
-
-// httpDrainTracker 跟踪正在执行的 HTTP handler，保护后续资源关闭顺序。
-type httpDrainTracker struct {
-	handler http.Handler
-	mu      sync.Mutex
-	cond    *sync.Cond
-	active  int
 }
 
 // newHTTPDrainTracker 创建可等待活跃 handler 归零的 HTTP handler wrapper。

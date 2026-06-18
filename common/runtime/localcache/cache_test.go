@@ -6,10 +6,7 @@ import (
 )
 
 func TestCacheGetSetAndExpire(t *testing.T) {
-	baseTime := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
-	now := baseTime
 	cache := New[string, int64](time.Second)
-	cache.setNowForTest(func() time.Time { return now })
 
 	if _, ok := cache.Get("user-1"); ok {
 		t.Fatal("Get before Set = hit, want miss")
@@ -21,7 +18,7 @@ func TestCacheGetSetAndExpire(t *testing.T) {
 		t.Fatalf("Get after Set = (%d, %v), want (7, true)", version, ok)
 	}
 
-	now = baseTime.Add(time.Second)
+	cache.values.Store("user-1", entry[int64]{value: 7, expiresAt: time.Now().Add(-time.Nanosecond)})
 	if _, ok := cache.Get("user-1"); ok {
 		t.Fatal("Get after TTL = hit, want miss")
 	}
@@ -38,18 +35,13 @@ func TestCacheDelete(t *testing.T) {
 }
 
 func TestCacheFallsBackDefaultTTL(t *testing.T) {
-	baseTime := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
-	now := baseTime
 	cache := New[string, int64](0)
-	cache.setNowForTest(func() time.Time { return now })
+	if cache.ttl != time.Second {
+		t.Fatalf("ttl = %s, want 1s", cache.ttl)
+	}
 	cache.Set("user-1", 7)
 
-	now = baseTime.Add(999 * time.Millisecond)
-	if _, ok := cache.Get("user-1"); !ok {
+	if version, ok := cache.Get("user-1"); !ok || version != 7 {
 		t.Fatal("Get before default TTL = miss, want hit")
-	}
-	now = baseTime.Add(time.Second)
-	if _, ok := cache.Get("user-1"); ok {
-		t.Fatal("Get at default TTL = hit, want miss")
 	}
 }

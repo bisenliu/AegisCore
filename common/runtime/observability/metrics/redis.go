@@ -51,6 +51,16 @@ type RedisPingCollector struct {
 	pingFailures *prometheus.Desc
 }
 
+type redisPingSnapshot struct {
+	up         float64
+	duration   time.Duration
+	observedAt time.Time
+}
+
+type redisClientPinger struct {
+	client *redis.Client
+}
+
 // NewRedisClientPinger 将 go-redis client 适配为 RedisPinger。
 func NewRedisClientPinger(client *redis.Client) RedisPinger {
 	if client == nil {
@@ -129,16 +139,6 @@ func (c *RedisPingCollector) snapshot() redisPingSnapshot {
 		observedAt: now,
 	}
 	return c.last
-}
-
-type redisPingSnapshot struct {
-	up         float64
-	duration   time.Duration
-	observedAt time.Time
-}
-
-type redisClientPinger struct {
-	client *redis.Client
 }
 
 func (p redisClientPinger) Ping(ctx context.Context) error {

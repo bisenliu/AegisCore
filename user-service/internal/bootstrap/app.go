@@ -16,18 +16,6 @@ import (
 	"github.com/aegiscore/user-service/internal/providers"
 )
 
-// NewApp 构建包含共享配置、日志和服务模块的 user-service Fx 应用。
-func NewApp(configPath string) *fx.App {
-	return fx.New(
-		fx.Supply(config.ConfigPath(configPath)),
-		fx.Provide(
-			config.NewConfig,
-			logger.NewLogger,
-		),
-		AppModule,
-	)
-}
-
 // AppModule 组装 user-service 顶层模块、服务级 provider 和 HTTP server 生命周期。
 var AppModule = fx.Module("aegiscore-user-services",
 	commontz.Module,
@@ -45,3 +33,15 @@ var AppModule = fx.Module("aegiscore-user-services",
 		func(*http.Server) {},
 	),
 )
+
+// NewApp 构建包含共享配置、日志和服务模块的 user-service Fx 应用。
+func NewApp(configPath string) *fx.App {
+	return fx.New(
+		fx.Supply(config.ConfigPath(configPath)),
+		fx.Provide(
+			config.NewConfig,
+			logger.NewLogger,
+		),
+		AppModule,
+	)
+}

@@ -42,6 +42,29 @@ type ComponentStatusCollector struct {
 	lastErr  *prometheus.Desc
 }
 
+// ReloadMetrics 记录 Casbin policy reload 结果。
+type ReloadMetrics interface {
+	ReloadSucceeded()
+	ReloadFailed()
+	SetLastStatus(success bool)
+}
+
+type nopReloadMetrics struct{}
+
+type casbinPolicyReloadMetrics struct {
+	reloads    *prometheus.CounterVec
+	lastStatus prometheus.Gauge
+}
+
+// NopReloadMetrics 返回 policy reload metrics 的空实现。
+func NopReloadMetrics() ReloadMetrics {
+	return nopReloadMetrics{}
+}
+
+func (nopReloadMetrics) ReloadSucceeded()   {}
+func (nopReloadMetrics) ReloadFailed()      {}
+func (nopReloadMetrics) SetLastStatus(bool) {}
+
 // NewComponentStatusCollector 构造运行时组件状态 collector。
 func NewComponentStatusCollector(opts ComponentStatusCollectorOptions) (*ComponentStatusCollector, error) {
 	resource := strings.TrimSpace(opts.Resource)
@@ -69,29 +92,6 @@ func (c *ComponentStatusCollector) Describe(ch chan<- *prometheus.Desc) {
 func (c *ComponentStatusCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(c.running, prometheus.GaugeValue, boolFloat(c.source.Running()), c.resource)
 	ch <- prometheus.MustNewConstMetric(c.lastErr, prometheus.GaugeValue, boolFloat(c.source.LastError() != nil), c.resource)
-}
-
-// ReloadMetrics 记录 Casbin policy reload 结果。
-type ReloadMetrics interface {
-	ReloadSucceeded()
-	ReloadFailed()
-	SetLastStatus(success bool)
-}
-
-type nopReloadMetrics struct{}
-
-// NopReloadMetrics 返回 policy reload metrics 的空实现。
-func NopReloadMetrics() ReloadMetrics {
-	return nopReloadMetrics{}
-}
-
-func (nopReloadMetrics) ReloadSucceeded()   {}
-func (nopReloadMetrics) ReloadFailed()      {}
-func (nopReloadMetrics) SetLastStatus(bool) {}
-
-type casbinPolicyReloadMetrics struct {
-	reloads    *prometheus.CounterVec
-	lastStatus prometheus.Gauge
 }
 
 // NewCasbinPolicyReloadMetrics 构造 Casbin policy reload Prometheus recorder。

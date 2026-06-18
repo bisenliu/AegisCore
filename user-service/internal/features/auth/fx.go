@@ -16,6 +16,13 @@ import (
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 )
 
+type tokenVersionValidatorResult struct {
+	fx.Out
+
+	Validator   commonauth.TokenVersionValidator
+	Invalidator authvalidators.TokenVersionLocalInvalidator
+}
+
 // Module 组装认证功能的应用服务、HTTP 传输层和基础设施适配器。
 var Module = fx.Module("feature-auth",
 	fx.Provide(
@@ -53,13 +60,6 @@ var Module = fx.Module("feature-auth",
 
 func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, tokenVersions authvalidators.TokenVersionLocalInvalidator, cfg *config.Config) authsessions.Lifecycle {
 	return authsessions.NewLifecycle(users, sessions, cfg.Auth.MaxActiveSessionsPerUser, tokenVersions)
-}
-
-type tokenVersionValidatorResult struct {
-	fx.Out
-
-	Validator   commonauth.TokenVersionValidator
-	Invalidator authvalidators.TokenVersionLocalInvalidator
 }
 
 func newTokenVersionValidator(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, metrics authapplication.Metrics) tokenVersionValidatorResult {

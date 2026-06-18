@@ -23,6 +23,10 @@ type AuthorizationWhitelistRule = commonmiddleware.CasbinAuthorizationWhitelistR
 // AuthorizationOption 配置 RBAC 授权中间件。
 type AuthorizationOption = commonmiddleware.CasbinAuthorizationOption
 
+type authorizationAdapter struct {
+	authz authorization.Authorizer
+}
+
 // WithAuthorizationWhitelist 配置按 HTTP 方法和 Gin 路由模板匹配的授权白名单。
 func WithAuthorizationWhitelist(rules ...AuthorizationWhitelistRule) AuthorizationOption {
 	return commonmiddleware.WithCasbinAuthorizationWhitelist(rules...)
@@ -43,10 +47,6 @@ func authenticatedUserID(c *gin.Context) (string, bool) {
 		return userID, ok && userID != ""
 	}
 	return commonauth.UserIDFromContext(c.Request.Context())
-}
-
-type authorizationAdapter struct {
-	authz authorization.Authorizer
 }
 
 func (a authorizationAdapter) Authorize(ctx context.Context, req commoncasbin.Request) error {

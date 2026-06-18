@@ -52,6 +52,15 @@ type PolicyChange struct {
 	PermissionID uuid.UUID
 }
 
+// PolicyRefreshCoordinator 负责本实例 policy reload 和分布式版本通知编排。
+type PolicyRefreshCoordinator struct {
+	engine    PolicyReloadEngine
+	publisher PolicyVersionPublisher
+	tracker   PolicyVersionTracker
+	log       *zap.Logger
+	metrics   Metrics
+}
+
 // NewPolicyReloadChange 构造需要重建角色权限策略的变更。
 func NewPolicyReloadChange(reason string) PolicyChange {
 	return PolicyChange{Kind: PolicyChangeKindPolicy, Reason: reason}
@@ -76,15 +85,6 @@ func (c PolicyChange) ReasonText() string {
 		return string(c.Kind)
 	}
 	return "policy_changed"
-}
-
-// PolicyRefreshCoordinator 负责本实例 policy reload 和分布式版本通知编排。
-type PolicyRefreshCoordinator struct {
-	engine    PolicyReloadEngine
-	publisher PolicyVersionPublisher
-	tracker   PolicyVersionTracker
-	log       *zap.Logger
-	metrics   Metrics
 }
 
 // NewPolicyRefreshCoordinator 构造 RBAC policy 刷新编排器。

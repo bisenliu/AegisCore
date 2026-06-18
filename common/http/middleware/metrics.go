@@ -43,6 +43,12 @@ type HTTPMetricsOptions struct {
 	DurationBuckets []float64
 }
 
+type httpServerMetricsRecorder struct {
+	requests *prometheus.CounterVec
+	duration *prometheus.HistogramVec
+	inFlight *prometheus.GaugeVec
+}
+
 // HTTPServerMetrics 记录 Gin HTTP 入站请求的 RED 指标。
 func HTTPServerMetrics(options HTTPMetricsOptions) gin.HandlerFunc {
 	recorder := newHTTPServerMetricsRecorder(options)
@@ -81,12 +87,6 @@ func HTTPServerMetrics(options HTTPMetricsOptions) gin.HandlerFunc {
 
 		c.Next()
 	}
-}
-
-type httpServerMetricsRecorder struct {
-	requests *prometheus.CounterVec
-	duration *prometheus.HistogramVec
-	inFlight *prometheus.GaugeVec
 }
 
 func newHTTPServerMetricsRecorder(options HTTPMetricsOptions) *httpServerMetricsRecorder {
