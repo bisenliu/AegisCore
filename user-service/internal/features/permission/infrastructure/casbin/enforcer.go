@@ -15,8 +15,9 @@ import (
 
 // Engine 使用内存 Casbin enforcer 执行权限判断。
 type Engine struct {
-	loader  Loader
-	metrics commonmetrics.ReloadMetrics
+	loader    Loader
+	metrics   commonmetrics.ReloadMetrics
+	userRoles UserRoleResolver
 
 	mu       sync.RWMutex
 	enforcer *casbinlib.Enforcer
@@ -27,8 +28,9 @@ type Engine struct {
 type Params struct {
 	fx.In
 
-	Loader  Loader
-	Metrics commonmetrics.ReloadMetrics `optional:"true"`
+	Loader    Loader
+	Metrics   commonmetrics.ReloadMetrics `optional:"true"`
+	UserRoles UserRoleResolver
 }
 
 // NewEngine 构造 Casbin Engine，初始化失败时保持 fail-closed。
@@ -37,7 +39,7 @@ func NewEngine(params Params) *Engine {
 	if metrics == nil {
 		metrics = commonmetrics.NopReloadMetrics()
 	}
-	engine := &Engine{loader: params.Loader, metrics: metrics}
+	engine := &Engine{loader: params.Loader, metrics: metrics, userRoles: params.UserRoles}
 	if err := engine.Reload(context.Background()); err != nil {
 		engine.mu.Lock()
 		engine.lastErr = err
@@ -57,7 +59,20 @@ func (e *Engine) Enforce(ctx context.Context, userID uuid.UUID, pathTemplate str
 	if enforcer == nil {
 		return false, nil
 	}
-	return commoncasbin.Enforce(ctx, enforcer, commoncasbin.Request{Subject: userSubject(userID), Object: pathTemplate, Action: method})
+	if e.userRoles == nil {
+		return false, nil
+	}
+	roleIDs, err := e.userRoles.RolesForUser(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, roleID := range roleIDs {
+		allowed, err := commoncasbin.Enforce(ctx, enforcer, commoncasbin.Request{Subject: roleSubject(roleID), Object: pathTemplate, Action: method})
+		if err != nil || allowed {
+			return allowed, err
+		}
+	}
+	return false, nil
 }
 
 // Reload 全量重建 policy，只有构造成功后才替换当前内存 enforcer。
@@ -103,15 +118,26 @@ func (e *Engine) buildEnforcer(ctx context.Context) (*casbinlib.Enforcer, error)
 	if err != nil {
 		return nil, fmt.Errorf("create casbin enforcer: %w", err)
 	}
-	for _, group := range policySet.GroupingPolicies {
-		if _, err := enforcer.AddGroupingPolicy(userSubject(group.UserID), roleSubject(group.RoleID)); err != nil {
-			return nil, fmt.Errorf("add casbin grouping policy: %w", err)
-		}
-	}
 	for _, rule := range policySet.PermissionRules {
 		if _, err := enforcer.AddPolicy(roleSubject(rule.RoleID), rule.PathTemplate, rule.HTTPMethod); err != nil {
 			return nil, fmt.Errorf("add casbin permission policy: %w", err)
 		}
 	}
 	return enforcer, nil
+}
+
+// InvalidateUserRole 删除指定用户的角色授权缓存。
+func (e *Engine) InvalidateUserRole(userID uuid.UUID) {
+	if e.userRoles == nil {
+		return
+	}
+	e.userRoles.InvalidateUserRole(userID)
+}
+
+// InvalidateAllUserRoles 清空本实例用户角色授权缓存。
+func (e *Engine) InvalidateAllUserRoles() {
+	if e.userRoles == nil {
+		return
+	}
+	e.userRoles.InvalidateAllUserRoles()
 }

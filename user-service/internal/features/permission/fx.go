@@ -19,6 +19,7 @@ var Module = fx.Module("feature-permission",
 	fx.Provide(
 		newPermissionMetrics,
 		permissioncasbin.NewPolicyLoader,
+		permissioncasbin.NewUserRoleResolver,
 		newCasbinReloadMetrics,
 		permissioncasbin.NewEngine,
 		newAuthorizationEngine,

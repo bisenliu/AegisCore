@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 )
@@ -81,6 +82,9 @@ func TestRoleCommandServiceUserRoleBindings(t *testing.T) {
 	if notifier.reasons[0] != "user_role_added" {
 		t.Fatalf("notifier = %#v", notifier.reasons)
 	}
+	if notifier.changes[0].Kind != permissionapplication.PolicyChangeKindUserRole || notifier.changes[0].UserID != userID || notifier.changes[0].RoleID != roleID {
+		t.Fatalf("user role change = %#v", notifier.changes[0])
+	}
 
 	replaced, err := service.ReplaceUserRoles(context.Background(), ReplaceUserRolesCommand{UserID: userID, RoleIDs: []uuid.UUID{roleID, otherRoleID, roleID}})
 	if err != nil {
@@ -97,6 +101,9 @@ func TestRoleCommandServiceUserRoleBindings(t *testing.T) {
 	}
 	if notifier.reasons[1] != "user_roles_replaced" {
 		t.Fatalf("notifier = %#v", notifier.reasons)
+	}
+	if notifier.changes[1].Kind != permissionapplication.PolicyChangeKindUserRole || notifier.changes[1].UserID != userID || notifier.changes[1].RoleID != uuid.Nil {
+		t.Fatalf("replace user role change = %#v", notifier.changes[1])
 	}
 }
 
@@ -123,6 +130,9 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	if notifier.reasons[0] != "role_permission_added" {
 		t.Fatalf("notifier = %#v", notifier.reasons)
 	}
+	if notifier.changes[0].Kind != permissionapplication.PolicyChangeKindPolicy {
+		t.Fatalf("role permission change = %#v", notifier.changes[0])
+	}
 
 	replaced, err := service.ReplaceRolePermissions(context.Background(), ReplaceRolePermissionsCommand{RoleID: roleID, PermissionIDs: []uuid.UUID{permissionID, otherPermissionID, permissionID}})
 	if err != nil {
@@ -144,10 +154,12 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 
 type stubRolePolicyChangeNotifier struct {
 	reasons []string
+	changes []permissionapplication.PolicyChange
 }
 
-func (n *stubRolePolicyChangeNotifier) NotifyPolicyChanged(_ context.Context, reason string) {
-	n.reasons = append(n.reasons, reason)
+func (n *stubRolePolicyChangeNotifier) NotifyPolicyChanged(_ context.Context, change permissionapplication.PolicyChange) {
+	n.reasons = append(n.reasons, change.Reason)
+	n.changes = append(n.changes, change)
 }
 
 type stubRoleStore struct {

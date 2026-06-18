@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/google/uuid"
 	rediscmd "github.com/redis/go-redis/v9"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -22,8 +23,9 @@ func TestStorePublishPolicyChangedIncrementsVersionAndPublishes(t *testing.T) {
 	if _, err := pubsub.Receive(context.Background()); err != nil {
 		t.Fatalf("Receive subscribe: %v", err)
 	}
+	change := permissionapplication.NewPolicyReloadChange("role_permission_added")
 
-	version, err := store.PublishPolicyChanged(context.Background(), "role_permission_added")
+	version, err := store.PublishPolicyChanged(context.Background(), change)
 	if err != nil {
 		t.Fatalf("PublishPolicyChanged: %v", err)
 	}
@@ -38,17 +40,17 @@ func TestStorePublishPolicyChangedIncrementsVersionAndPublishes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodePolicyRefreshMessage: %v", err)
 	}
-	if decoded.Version != 1 || decoded.InstanceID != "instance-a" || decoded.Reason != "role_permission_added" {
+	if decoded.Version != 1 || decoded.InstanceID != "instance-a" || decoded.Kind != permissionapplication.PolicyChangeKindPolicy || decoded.Reason != "role_permission_added" {
 		t.Fatalf("message = %#v", decoded)
 	}
 }
 
-func TestWatcherHandlePayloadReloadsOnlyNewerVersions(t *testing.T) {
+func TestWatcherHandlePayloadReloadsPolicyOnlyForNewerVersions(t *testing.T) {
 	engine := &stubReloadEngine{}
 	tracker := NewVersionTracker()
 	metrics := &watcherMetricsSpy{}
 	watcher := NewWatcherForTestWithMetrics(nil, tracker, engine, nil, time.Second, metrics)
-	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(3, "instance-b", "user_role_added"))
+	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(3, "instance-b", permissionapplication.NewPolicyReloadChange("role_permission_added")))
 	if err != nil {
 		t.Fatalf("encodePolicyRefreshMessage: %v", err)
 	}
@@ -59,11 +61,38 @@ func TestWatcherHandlePayloadReloadsOnlyNewerVersions(t *testing.T) {
 	if engine.calls != 1 {
 		t.Fatalf("reload calls = %d, want 1", engine.calls)
 	}
+	if engine.invalidateAll != 1 {
+		t.Fatalf("invalidate all calls = %d, want 1", engine.invalidateAll)
+	}
 	if tracker.Applied() != 3 {
 		t.Fatalf("applied version = %d, want 3", tracker.Applied())
 	}
 	if metrics.reloadSuccess[permissionapplication.MetricsSourceWatcherPubSub] != 1 {
 		t.Fatalf("reload success metrics = %#v", metrics.reloadSuccess)
+	}
+}
+
+func TestWatcherHandlePayloadInvalidatesUserRoleWithoutReload(t *testing.T) {
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000701")
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000702")
+	engine := &stubReloadEngine{}
+	tracker := NewVersionTracker()
+	watcher := NewWatcherForTestWithMetrics(nil, tracker, engine, nil, time.Second, &watcherMetricsSpy{})
+	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(4, "instance-b", permissionapplication.NewUserRoleChange("user_role_added", userID, roleID)))
+	if err != nil {
+		t.Fatalf("encodePolicyRefreshMessage: %v", err)
+	}
+
+	watcher.HandlePayload(context.Background(), payload)
+
+	if engine.calls != 0 {
+		t.Fatalf("reload calls = %d, want 0", engine.calls)
+	}
+	if engine.invalidatedUser != userID || engine.invalidateAll != 0 {
+		t.Fatalf("invalidation = user:%s all:%d", engine.invalidatedUser, engine.invalidateAll)
+	}
+	if tracker.Applied() != 4 {
+		t.Fatalf("applied version = %d, want 4", tracker.Applied())
 	}
 }
 
@@ -86,6 +115,9 @@ func TestWatcherCheckVersionCompensatesMissedMessage(t *testing.T) {
 	if engine.calls != 1 {
 		t.Fatalf("reload calls = %d, want 1", engine.calls)
 	}
+	if engine.invalidateAll != 1 {
+		t.Fatalf("invalidate all calls = %d, want 1", engine.invalidateAll)
+	}
 	if tracker.Applied() != 8 {
 		t.Fatalf("applied version = %d, want 8", tracker.Applied())
 	}
@@ -103,7 +135,7 @@ func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
 	tracker.MarkApplied(2)
 	metrics := &watcherMetricsSpy{}
 	watcher := NewWatcherForTestWithMetrics(nil, tracker, engine, nil, time.Second, metrics)
-	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(5, "instance-b", "permission_updated"))
+	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(5, "instance-b", permissionapplication.NewPolicyReloadChange("permission_updated")))
 	if err != nil {
 		t.Fatalf("encodePolicyRefreshMessage: %v", err)
 	}
@@ -161,13 +193,23 @@ func TestWatcherRecordsUnexpectedChannelClose(t *testing.T) {
 }
 
 type stubReloadEngine struct {
-	calls int
-	err   error
+	calls           int
+	err             error
+	invalidatedUser uuid.UUID
+	invalidateAll   int
 }
 
 func (e *stubReloadEngine) Reload(context.Context) error {
 	e.calls++
 	return e.err
+}
+
+func (e *stubReloadEngine) InvalidateUserRole(userID uuid.UUID) {
+	e.invalidatedUser = userID
+}
+
+func (e *stubReloadEngine) InvalidateAllUserRoles() {
+	e.invalidateAll++
 }
 
 type closedChannelStore struct{}

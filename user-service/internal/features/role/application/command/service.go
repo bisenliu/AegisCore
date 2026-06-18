@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"go.uber.org/fx"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -37,5 +38,12 @@ func (s *roleCommandService) notifyPolicyChanged(ctx context.Context, reason str
 	if s.policyChanges == nil {
 		return
 	}
-	s.policyChanges.NotifyPolicyChanged(ctx, reason)
+	s.policyChanges.NotifyPolicyChanged(ctx, permissionapplication.NewPolicyReloadChange(reason))
+}
+
+func (s *roleCommandService) notifyUserRoleChanged(ctx context.Context, reason string, userID uuid.UUID, roleID uuid.UUID) {
+	if s.policyChanges == nil {
+		return
+	}
+	s.policyChanges.NotifyPolicyChanged(ctx, permissionapplication.NewUserRoleChange(reason, userID, roleID))
 }

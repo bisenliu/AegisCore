@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestPolicyRefreshCoordinatorReloadsPublishesAndTracksVersion(t *testing.T) {
@@ -13,10 +15,13 @@ func TestPolicyRefreshCoordinatorReloadsPublishesAndTracksVersion(t *testing.T) 
 	metrics := &policyMetricsSpy{}
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	coordinator.NotifyPolicyChanged(context.Background(), "role_permission_added")
+	coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("role_permission_added"))
 
 	if engine.calls != 1 {
 		t.Fatalf("reload calls = %d, want 1", engine.calls)
+	}
+	if engine.invalidateAll != 1 {
+		t.Fatalf("invalidate all calls = %d, want 1", engine.invalidateAll)
 	}
 	if publisher.reason != "role_permission_added" || publisher.calls != 1 {
 		t.Fatalf("publisher calls = %d reason = %q", publisher.calls, publisher.reason)
@@ -37,7 +42,7 @@ func TestPolicyRefreshCoordinatorSkipsPublishWhenReloadFails(t *testing.T) {
 	metrics := &policyMetricsSpy{}
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	coordinator.NotifyPolicyChanged(context.Background(), "permission_updated")
+	coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("permission_updated"))
 
 	if publisher.calls != 0 {
 		t.Fatalf("publisher calls = %d, want 0", publisher.calls)
@@ -58,7 +63,7 @@ func TestPolicyRefreshCoordinatorDoesNotTrackWhenPublishFails(t *testing.T) {
 	metrics := &policyMetricsSpy{}
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	coordinator.NotifyPolicyChanged(context.Background(), "permission_active_changed")
+	coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("permission_active_changed"))
 
 	if engine.calls != 1 || publisher.calls != 1 {
 		t.Fatalf("calls = reload:%d publish:%d", engine.calls, publisher.calls)
@@ -71,9 +76,39 @@ func TestPolicyRefreshCoordinatorDoesNotTrackWhenPublishFails(t *testing.T) {
 	}
 }
 
+func TestPolicyRefreshCoordinatorUserRoleChangeInvalidatesWithoutReload(t *testing.T) {
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000901")
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000902")
+	engine := &stubPolicyEngine{}
+	publisher := &stubPolicyPublisher{version: 7}
+	tracker := &stubPolicyTracker{}
+	metrics := &policyMetricsSpy{}
+	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
+
+	coordinator.NotifyPolicyChanged(context.Background(), NewUserRoleChange("user_role_added", userID, roleID))
+
+	if engine.calls != 0 {
+		t.Fatalf("reload calls = %d, want 0", engine.calls)
+	}
+	if engine.invalidatedUser != userID || engine.invalidateAll != 0 {
+		t.Fatalf("invalidation = user:%s all:%d", engine.invalidatedUser, engine.invalidateAll)
+	}
+	if publisher.change.Kind != PolicyChangeKindUserRole || publisher.change.UserID != userID || publisher.change.RoleID != roleID {
+		t.Fatalf("published change = %#v", publisher.change)
+	}
+	if tracker.applied != 7 {
+		t.Fatalf("applied version = %d, want 7", tracker.applied)
+	}
+	if metrics.reloadSuccess[MetricsSourceLocalChange] != 0 {
+		t.Fatalf("reload success metrics = %#v, want no reload metric", metrics.reloadSuccess)
+	}
+}
+
 type stubPolicyEngine struct {
-	calls int
-	err   error
+	calls           int
+	err             error
+	invalidatedUser uuid.UUID
+	invalidateAll   int
 }
 
 func (e *stubPolicyEngine) Reload(context.Context) error {
@@ -81,16 +116,26 @@ func (e *stubPolicyEngine) Reload(context.Context) error {
 	return e.err
 }
 
+func (e *stubPolicyEngine) InvalidateUserRole(userID uuid.UUID) {
+	e.invalidatedUser = userID
+}
+
+func (e *stubPolicyEngine) InvalidateAllUserRoles() {
+	e.invalidateAll++
+}
+
 type stubPolicyPublisher struct {
 	calls   int
 	reason  string
+	change  PolicyChange
 	version int64
 	err     error
 }
 
-func (p *stubPolicyPublisher) PublishPolicyChanged(_ context.Context, reason string) (int64, error) {
+func (p *stubPolicyPublisher) PublishPolicyChanged(_ context.Context, change PolicyChange) (int64, error) {
 	p.calls++
-	p.reason = reason
+	p.reason = change.Reason
+	p.change = change
 	return p.version, p.err
 }
 

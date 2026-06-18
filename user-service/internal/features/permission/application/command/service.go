@@ -30,5 +30,5 @@ func (s *permissionCommandService) notifyPolicyChanged(ctx context.Context, reas
 	if s.policyChanges == nil {
 		return
 	}
-	s.policyChanges.NotifyPolicyChanged(ctx, reason)
+	s.policyChanges.NotifyPolicyChanged(ctx, permissionapplication.NewPolicyReloadChange(reason))
 }

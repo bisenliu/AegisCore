@@ -119,9 +119,9 @@ type stubPolicyChangeNotifier struct {
 	reasons []string
 }
 
-func (n *stubPolicyChangeNotifier) NotifyPolicyChanged(_ context.Context, reason string) {
+func (n *stubPolicyChangeNotifier) NotifyPolicyChanged(_ context.Context, change permissionapplication.PolicyChange) {
 	n.calls++
-	n.reasons = append(n.reasons, reason)
+	n.reasons = append(n.reasons, change.Reason)
 }
 
 type stubPermissionStore struct {
