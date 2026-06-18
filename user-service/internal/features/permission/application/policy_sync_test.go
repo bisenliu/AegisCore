@@ -15,7 +15,9 @@ func TestPolicyRefreshCoordinatorReloadsPublishesAndTracksVersion(t *testing.T) 
 	metrics := &policyMetricsSpy{}
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("role_permission_added"))
+	if err := coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("role_permission_added")); err != nil {
+		t.Fatalf("NotifyPolicyChanged: %v", err)
+	}
 
 	if engine.calls != 1 {
 		t.Fatalf("reload calls = %d, want 1", engine.calls)
@@ -42,7 +44,10 @@ func TestPolicyRefreshCoordinatorSkipsPublishWhenReloadFails(t *testing.T) {
 	metrics := &policyMetricsSpy{}
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("permission_updated"))
+	err := coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("permission_updated"))
+	if !errors.Is(err, reloadErr) {
+		t.Fatalf("err = %v, want reloadErr", err)
+	}
 
 	if publisher.calls != 0 {
 		t.Fatalf("publisher calls = %d, want 0", publisher.calls)
@@ -63,7 +68,10 @@ func TestPolicyRefreshCoordinatorDoesNotTrackWhenPublishFails(t *testing.T) {
 	metrics := &policyMetricsSpy{}
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("permission_active_changed"))
+	err := coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("permission_active_changed"))
+	if !errors.Is(err, publishErr) {
+		t.Fatalf("err = %v, want publishErr", err)
+	}
 
 	if engine.calls != 1 || publisher.calls != 1 {
 		t.Fatalf("calls = reload:%d publish:%d", engine.calls, publisher.calls)
@@ -85,7 +93,9 @@ func TestPolicyRefreshCoordinatorUserRoleChangeInvalidatesWithoutReload(t *testi
 	metrics := &policyMetricsSpy{}
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	coordinator.NotifyPolicyChanged(context.Background(), NewUserRoleChange("user_role_added", userID, roleID))
+	if err := coordinator.NotifyPolicyChanged(context.Background(), NewUserRoleChange("user_role_added", userID, roleID)); err != nil {
+		t.Fatalf("NotifyPolicyChanged: %v", err)
+	}
 
 	if engine.calls != 0 {
 		t.Fatalf("reload calls = %d, want 0", engine.calls)

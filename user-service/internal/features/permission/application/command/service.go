@@ -26,9 +26,9 @@ func NewPermissionCommandService(params PermissionCommandParams) PermissionComma
 	return &permissionCommandService{store: params.Store, policyChanges: params.PolicyChanges}
 }
 
-func (s *permissionCommandService) notifyPolicyChanged(ctx context.Context, reason string) {
+func (s *permissionCommandService) notifyPolicyChanged(ctx context.Context, reason string) error {
 	if s.policyChanges == nil {
-		return
+		return nil
 	}
-	s.policyChanges.NotifyPolicyChanged(ctx, permissionapplication.NewPolicyReloadChange(reason))
+	return s.policyChanges.NotifyPolicyChanged(ctx, permissionapplication.NewPolicyReloadChange(reason))
 }

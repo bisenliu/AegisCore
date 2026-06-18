@@ -4,7 +4,9 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
+	"github.com/aegiscore/common/runtime/logger"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 )
 
@@ -40,7 +42,10 @@ func (s *roleCommandService) AddUserRole(ctx context.Context, cmd UserRoleComman
 	if err := s.userRoles.Add(ctx, cmd.UserID, cmd.RoleID); err != nil {
 		return nil, err
 	}
-	s.notifyUserRoleChanged(ctx, "user_role_added", cmd.UserID, cmd.RoleID)
+	if err := s.notifyUserRoleChanged(ctx, "user_role_added", cmd.UserID, cmd.RoleID); err != nil {
+		logger.Error(ctx, "refresh rbac policy after user role add failed", logger.StackTrace(zap.String("user_id", cmd.UserID.String()), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
+		return nil, err
+	}
 	return s.listUserRoles(ctx, cmd.UserID)
 }
 
@@ -54,7 +59,10 @@ func (s *roleCommandService) ReplaceUserRoles(ctx context.Context, cmd ReplaceUs
 	if err != nil {
 		return nil, err
 	}
-	s.notifyUserRoleChanged(ctx, "user_roles_replaced", cmd.UserID, uuid.Nil)
+	if err := s.notifyUserRoleChanged(ctx, "user_roles_replaced", cmd.UserID, uuid.Nil); err != nil {
+		logger.Error(ctx, "refresh rbac policy after user roles replace failed", logger.StackTrace(zap.String("user_id", cmd.UserID.String()), zap.Error(err))...)
+		return nil, err
+	}
 	return &RolesResult{Items: items}, nil
 }
 
@@ -63,7 +71,10 @@ func (s *roleCommandService) RemoveUserRole(ctx context.Context, cmd UserRoleCom
 	if err := s.userRoles.Remove(ctx, cmd.UserID, cmd.RoleID); err != nil {
 		return nil, err
 	}
-	s.notifyUserRoleChanged(ctx, "user_role_removed", cmd.UserID, cmd.RoleID)
+	if err := s.notifyUserRoleChanged(ctx, "user_role_removed", cmd.UserID, cmd.RoleID); err != nil {
+		logger.Error(ctx, "refresh rbac policy after user role remove failed", logger.StackTrace(zap.String("user_id", cmd.UserID.String()), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
+		return nil, err
+	}
 	return s.listUserRoles(ctx, cmd.UserID)
 }
 
@@ -79,7 +90,10 @@ func (s *roleCommandService) AddRolePermission(ctx context.Context, cmd RolePerm
 	if err := s.rolePermissions.Add(ctx, cmd.RoleID, *permission); err != nil {
 		return nil, err
 	}
-	s.notifyPolicyChanged(ctx, "role_permission_added")
+	if err := s.notifyPolicyChanged(ctx, "role_permission_added"); err != nil {
+		logger.Error(ctx, "refresh rbac policy after role permission add failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
+		return nil, err
+	}
 	return s.listRolePermissions(ctx, cmd.RoleID)
 }
 
@@ -101,7 +115,10 @@ func (s *roleCommandService) ReplaceRolePermissions(ctx context.Context, cmd Rep
 	if err != nil {
 		return nil, err
 	}
-	s.notifyPolicyChanged(ctx, "role_permissions_replaced")
+	if err := s.notifyPolicyChanged(ctx, "role_permissions_replaced"); err != nil {
+		logger.Error(ctx, "refresh rbac policy after role permissions replace failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
+		return nil, err
+	}
 	return &PermissionsResult{Items: items}, nil
 }
 
@@ -110,7 +127,10 @@ func (s *roleCommandService) RemoveRolePermission(ctx context.Context, cmd RoleP
 	if err := s.rolePermissions.Remove(ctx, cmd.RoleID, cmd.PermissionID); err != nil {
 		return nil, err
 	}
-	s.notifyPolicyChanged(ctx, "role_permission_removed")
+	if err := s.notifyPolicyChanged(ctx, "role_permission_removed"); err != nil {
+		logger.Error(ctx, "refresh rbac policy after role permission remove failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
+		return nil, err
+	}
 	return s.listRolePermissions(ctx, cmd.RoleID)
 }
 

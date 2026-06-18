@@ -34,16 +34,16 @@ func NewRoleCommandService(params RoleCommandParams) RoleCommandService {
 	return &roleCommandService{roles: params.Roles, userRoles: params.UserRoles, rolePermissions: params.RolePermissions, permissions: params.Permissions, policyChanges: params.PolicyChanges}
 }
 
-func (s *roleCommandService) notifyPolicyChanged(ctx context.Context, reason string) {
+func (s *roleCommandService) notifyPolicyChanged(ctx context.Context, reason string) error {
 	if s.policyChanges == nil {
-		return
+		return nil
 	}
-	s.policyChanges.NotifyPolicyChanged(ctx, permissionapplication.NewPolicyReloadChange(reason))
+	return s.policyChanges.NotifyPolicyChanged(ctx, permissionapplication.NewPolicyReloadChange(reason))
 }
 
-func (s *roleCommandService) notifyUserRoleChanged(ctx context.Context, reason string, userID uuid.UUID, roleID uuid.UUID) {
+func (s *roleCommandService) notifyUserRoleChanged(ctx context.Context, reason string, userID uuid.UUID, roleID uuid.UUID) error {
 	if s.policyChanges == nil {
-		return
+		return nil
 	}
-	s.policyChanges.NotifyPolicyChanged(ctx, permissionapplication.NewUserRoleChange(reason, userID, roleID))
+	return s.policyChanges.NotifyPolicyChanged(ctx, permissionapplication.NewUserRoleChange(reason, userID, roleID))
 }

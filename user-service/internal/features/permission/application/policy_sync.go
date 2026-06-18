@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -29,7 +30,7 @@ type PolicyVersionTracker interface {
 
 // PolicyChangeNotifier 定义 RBAC policy 变更后的刷新通知端口。
 type PolicyChangeNotifier interface {
-	NotifyPolicyChanged(ctx context.Context, change PolicyChange)
+	NotifyPolicyChanged(ctx context.Context, change PolicyChange) error
 }
 
 // PolicyChangeKind 表示 RBAC policy 同步变更类别。
@@ -95,16 +96,16 @@ func NewPolicyRefreshCoordinator(engine PolicyReloadEngine, publisher PolicyVers
 }
 
 // NotifyPolicyChanged 在 RBAC 数据变更成功后刷新本实例并通知其他实例。
-func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, change PolicyChange) {
+func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, change PolicyChange) error {
 	if c == nil {
-		return
+		return nil
 	}
 	reason := change.ReasonText()
 	if change.RequiresReload() {
 		if err := c.engine.Reload(ctx); err != nil {
 			c.metrics.PolicyReloadFailed(ctx, MetricsSourceLocalChange, MetricsReasonReloadFailed)
 			logger.Error(ctx, "rbac policy local refresh failed", logger.StackTrace(zap.String("reason", reason), zap.Error(err))...)
-			return
+			return fmt.Errorf("reload rbac policy after %s: %w", reason, err)
 		}
 		c.engine.InvalidateAllUserRoles()
 		c.metrics.PolicyReloadSucceeded(ctx, MetricsSourceLocalChange)
@@ -117,9 +118,10 @@ func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, chan
 	if err != nil {
 		c.metrics.PolicyPublishFailed(ctx, MetricsReasonPublishFailed)
 		logger.Error(ctx, "rbac policy version publish failed", logger.StackTrace(zap.String("reason", reason), zap.Error(err))...)
-		return
+		return fmt.Errorf("publish rbac policy change after %s: %w", reason, err)
 	}
 	c.metrics.PolicyPublishSucceeded(ctx)
 	c.tracker.MarkApplied(version)
 	logger.Info(ctx, "rbac policy local refresh succeeded", zap.Int64("policy_version", version), zap.String("reason", reason))
+	return nil
 }
