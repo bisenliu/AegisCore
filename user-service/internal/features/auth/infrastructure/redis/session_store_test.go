@@ -938,7 +938,10 @@ func TestSessionStorePurgeUserSessionsKeyKeepsHashTag(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 
-	purgeKey := store.purgeUserSessionsKey(sessionTestUserID.String())
+	purgeKey, err := store.purgeUserSessionsKey(sessionTestUserID.String())
+	if err != nil {
+		t.Fatalf("purgeUserSessionsKey: %v", err)
+	}
 
 	if !strings.HasPrefix(purgeKey, "auth:user:sessions:{"+sessionTestUserID.String()+"}:purge:") {
 		t.Fatalf("purge key = %q, want unprefixed purge key prefix", purgeKey)
@@ -952,7 +955,10 @@ func TestSessionStorePurgeUserSessionsKeyUsesAppNamePrefix(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStoreWithAppName(t, redisServer, " aegiscore-user-services ")
 
-	purgeKey := store.purgeUserSessionsKey(sessionTestUserID.String())
+	purgeKey, err := store.purgeUserSessionsKey(sessionTestUserID.String())
+	if err != nil {
+		t.Fatalf("purgeUserSessionsKey: %v", err)
+	}
 
 	if !strings.HasPrefix(purgeKey, "aegiscore-user-services:auth:user:sessions:{"+sessionTestUserID.String()+"}:purge:") {
 		t.Fatalf("purge key = %q, want app-name-prefixed purge key", purgeKey)

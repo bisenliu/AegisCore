@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 
+	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/user-service/ent/enttest"
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
@@ -212,7 +213,7 @@ func newTestUserStore(t *testing.T) *UserStore {
 	t.Helper()
 	// 当前 store 只使用可移植的 Ent query/update 语义，因此 SQLite
 	// 足以覆盖 integration boundary，不需要依赖只能通过 Docker 运行的 PostgreSQL 测试。
-	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:user_store_test_%s?mode=memory&cache=shared&_fk=1", uuid.NewString()))
+	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:user_store_test_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
 	t.Cleanup(func() { _ = client.Close() })
 	return NewUserStore(UserStoreParams{Client: client})
 }

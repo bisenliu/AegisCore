@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 
+	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/user-service/ent"
 	"github.com/aegiscore/user-service/ent/enttest"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -131,7 +132,7 @@ func TestUserRoleStoreAssignRoleIdempotent(t *testing.T) {
 
 func newRoleSeedTestClient(t *testing.T) *ent.Client {
 	t.Helper()
-	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:role_seed_test_%s?mode=memory&cache=shared&_fk=1", uuid.NewString()))
+	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:role_seed_test_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
 	t.Cleanup(func() { _ = client.Close() })
 	return client
 }

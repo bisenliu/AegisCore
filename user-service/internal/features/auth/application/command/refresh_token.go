@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/google/uuid"
-
 	commonauth "github.com/aegiscore/common/security/auth"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
@@ -77,7 +75,11 @@ func (u *refreshTokenUseCase) refreshWithoutRotation(ctx context.Context, claims
 }
 
 func (u *refreshTokenUseCase) refreshWithRotation(ctx context.Context, claims *commonauth.Claims, oldSession authdomain.AuthSession, currentVersion int64) (*authtokens.TokenResult, error) {
-	sessionID := uuid.NewString()
+	sessionID, err := newAuthSessionID()
+	if err != nil {
+		u.deps.metricsRecorder().RefreshFailed(ctx, authapplication.MetricsReasonTokenIssueFailed)
+		return nil, err
+	}
 	tokens, err := u.deps.tokens.IssueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
 	if err != nil {
 		u.deps.metricsRecorder().RefreshFailed(ctx, authapplication.MetricsReasonTokenIssueFailed)

@@ -2,10 +2,12 @@ package command
 
 import (
 	"context"
+	"fmt"
 
 	"go.uber.org/fx"
 
 	"github.com/aegiscore/common/runtime/config"
+	runtimeid "github.com/aegiscore/common/runtime/id"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
@@ -55,6 +57,14 @@ func (d *UseCaseDeps) issueTokenPair(ctx context.Context, userID string, tokenVe
 		return nil, authapplication.MetricsReasonSessionCreateFailed, err
 	}
 	return tokens.Response, authapplication.MetricsReasonNone, nil
+}
+
+func newAuthSessionID() (string, error) {
+	sessionID, err := runtimeid.NewUUIDString()
+	if err != nil {
+		return "", fmt.Errorf("generate auth session id: %w", err)
+	}
+	return sessionID, nil
 }
 
 func (d *UseCaseDeps) metricsRecorder() authapplication.Metrics {

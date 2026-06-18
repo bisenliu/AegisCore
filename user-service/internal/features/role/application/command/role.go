@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/logger"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	"github.com/aegiscore/user-service/internal/features/role/application/validators"
@@ -69,7 +70,7 @@ func (s *roleCommandService) CreateRole(ctx context.Context, cmd CreateRoleComma
 	if err != nil {
 		return nil, err
 	}
-	roleID, err := uuid.NewV7()
+	roleID, err := runtimeid.NewUUID()
 	if err != nil {
 		logger.Error(ctx, "generate role id failed", logger.StackTrace(zap.Error(err))...)
 		return nil, fmt.Errorf("generate role id: %w", err)

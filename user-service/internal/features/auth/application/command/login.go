@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
@@ -51,7 +50,13 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*authtokens
 	if user.RequiresPasswordChange() {
 		// 必须改密用户只认证到可获取受限改密 token 的程度。
 		logger.Warn(ctx, "login requires password change", zap.String("username", cmd.Username), zap.String("user_id", user.UserID.String()), zap.Int64("token_version", user.TokenVersion))
-		tokens, err := u.deps.tokens.IssuePasswordChangeToken(ctx, user.UserID.String(), user.TokenVersion, uuid.NewString())
+		sessionID, err := newAuthSessionID()
+		if err != nil {
+			logger.Error(ctx, "generate auth session id failed", logger.StackTrace(zap.String("username", cmd.Username), zap.String("user_id", user.UserID.String()), zap.Int64("token_version", user.TokenVersion), zap.Error(err))...)
+			u.deps.metricsRecorder().LoginFailed(ctx, authapplication.MetricsReasonPasswordChangeRequiredIssueFailed)
+			return nil, err
+		}
+		tokens, err := u.deps.tokens.IssuePasswordChangeToken(ctx, user.UserID.String(), user.TokenVersion, sessionID)
 		if err != nil {
 			u.deps.metricsRecorder().LoginFailed(ctx, authapplication.MetricsReasonPasswordChangeRequiredIssueFailed)
 			return nil, err
@@ -61,7 +66,13 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*authtokens
 	}
 
 	logger.Info(ctx, "login user authenticated", zap.String("username", cmd.Username), zap.String("user_id", user.UserID.String()), zap.Int64("token_version", user.TokenVersion))
-	tokens, reason, err := u.deps.issueTokenPair(ctx, user.UserID.String(), user.TokenVersion, uuid.NewString())
+	sessionID, err := newAuthSessionID()
+	if err != nil {
+		logger.Error(ctx, "generate auth session id failed", logger.StackTrace(zap.String("username", cmd.Username), zap.String("user_id", user.UserID.String()), zap.Int64("token_version", user.TokenVersion), zap.Error(err))...)
+		u.deps.metricsRecorder().LoginFailed(ctx, authapplication.MetricsReasonTokenIssueFailed)
+		return nil, err
+	}
+	tokens, reason, err := u.deps.issueTokenPair(ctx, user.UserID.String(), user.TokenVersion, sessionID)
 	if err != nil {
 		u.deps.metricsRecorder().LoginFailed(ctx, reason)
 		return nil, err

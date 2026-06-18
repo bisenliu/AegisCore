@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/password"
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
@@ -54,7 +54,7 @@ func (s *createUserService) CreateUser(ctx context.Context, cmd CreateUserComman
 		return nil, fmt.Errorf("hash user password: %w", err)
 	}
 
-	userID, err := uuid.NewV7()
+	userID, err := runtimeid.NewUUID()
 	if err != nil {
 		logger.Error(ctx, "generate user id failed", logger.StackTrace(zap.String("username", cmd.Username), zap.Int64("status", int64(status)), zap.Error(err))...)
 		return nil, fmt.Errorf("generate user id: %w", err)

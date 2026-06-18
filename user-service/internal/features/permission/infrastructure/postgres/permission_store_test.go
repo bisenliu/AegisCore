@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 
+	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/user-service/ent/enttest"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
@@ -117,7 +118,7 @@ func TestPermissionStoreUpsertSystemPermissionMatchesRouteIdentity(t *testing.T)
 
 func newTestPermissionStore(t *testing.T) *PermissionStore {
 	t.Helper()
-	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:permission_store_test_%s?mode=memory&cache=shared&_fk=1", uuid.NewString()))
+	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:permission_store_test_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
 	t.Cleanup(func() { _ = client.Close() })
 	return NewPermissionStore(PermissionStoreParams{Client: client})
 }

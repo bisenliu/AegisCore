@@ -8,12 +8,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
+	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/workerpool"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
@@ -254,7 +254,10 @@ func (r *SessionStore) DeleteSession(ctx context.Context, userID string, session
 // DeleteAllUserSessions 删除用户所有存活 refresh token 会话，并删除用户索引。
 func (r *SessionStore) DeleteAllUserSessions(ctx context.Context, userID string) error {
 	userSessions := r.userSessionsKey(userID)
-	purgeKey := r.purgeUserSessionsKey(userID)
+	purgeKey, err := r.purgeUserSessionsKey(userID)
+	if err != nil {
+		return err
+	}
 	cutTime := time.Now()
 	result, err := detachUserSessionsScript.Run(ctx, r.redis, []string{userSessions, purgeKey}, seconds(deleteAllUserSessionsPurgeTTL)).Int64()
 	if err != nil {
@@ -346,8 +349,12 @@ func (r *SessionStore) userSessionsKey(userID string) string {
 	return r.keys.AuthUserSessions(userID)
 }
 
-func (r *SessionStore) purgeUserSessionsKey(userID string) string {
-	return r.keys.AuthUserSessionsPurge(userID, uuid.NewString())
+func (r *SessionStore) purgeUserSessionsKey(userID string) (string, error) {
+	purgeID, err := runtimeid.NewUUIDString()
+	if err != nil {
+		return "", fmt.Errorf("generate auth sessions purge id: %w", err)
+	}
+	return r.keys.AuthUserSessionsPurge(userID, purgeID), nil
 }
 
 func redisScore(t time.Time) string {

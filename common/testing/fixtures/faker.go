@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/google/uuid"
+	runtimeid "github.com/aegiscore/common/runtime/id"
 )
 
 var nonSlugChars = regexp.MustCompile(`[^a-z0-9]+`)
@@ -23,7 +23,7 @@ func NewFaker(t testing.TB) *Faker {
 	if base == "" {
 		base = "test"
 	}
-	return &Faker{base: base + "-" + uuid.NewString()[:8]}
+	return &Faker{base: base + "-" + newUUIDString()[:8]}
 }
 
 func (f *Faker) UniqueSuffix() string {
@@ -48,7 +48,11 @@ func (f *Faker) Name(prefix string) string {
 }
 
 func (f *Faker) UUIDString() string {
-	return uuid.NewString()
+	return newUUIDString()
+}
+
+func newUUIDString() string {
+	return runtimeid.MustNewUUIDString()
 }
 
 func joinSlug(prefix, suffix string) string {

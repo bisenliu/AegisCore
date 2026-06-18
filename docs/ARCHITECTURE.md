@@ -143,7 +143,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - `common/contract/errors/`：跨服务稳定应用错误码、可渲染应用错误类型和错误转换 helper。
 - `common/contract/pagination/`：跨服务稳定 Cursor/Keyset 分页响应模型、分页大小边界和分页数据包装 helper。
 - `common/contract/response/`：HTTP 响应信封 DTO 和默认响应消息；不承载错误码、应用错误或分页 re-export。
-- `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、进程内短 TTL 缓存、Redis key 构造规则、后台任务池、定时任务调度器、可观测性配置契约、运行时资源名和时区初始化。
+- `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、跨服务默认 UUID 生成、进程内短 TTL 缓存、Redis key 构造规则、后台任务池、定时任务调度器、可观测性配置契约、运行时资源名和时区初始化。
 - `common/http/`：HTTP/Gin 边界适配和 HTTP API 构建期辅助能力，例如 middleware、`http/binding` 请求绑定/校验失败响应适配层、无业务语义的 binder 组合/HTTP header 绑定、`http/response` 输出 helper、`http/pprof` Go runtime pprof 路由注册 helper，以及 `http/openapi` Swagger/OpenAPI 转换、规范化、序列化和 Go embed 渲染 helper；其中 Casbin 授权中间件只提供 resolver、authorizer 和 error handler 组合骨架，pprof helper 只负责挂载标准诊断端点，不决定是否开启、监听地址、鉴权、allowlist 或网关暴露策略，OpenAPI helper 不承载服务 API server、健康探针路径、认证方案描述、源码扫描范围或生成输出目录。
 - `common/security/`：安全与凭证原语，例如 JWT、Bearer 传输常量、认证上下文、密码 hash helper 和无业务语义的 Casbin 三元组/enforcer 包装。
 - `common/testing/`：跨模块测试基础设施和无业务语义 fixture，仅供测试代码使用；真实 PostgreSQL/Redis integration helper 放在 `testing/containers`，基础测试值生成放在 `testing/fixtures`。
@@ -154,6 +154,8 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 `common/runtime/localcache` 是跨服务稳定、无业务语义的进程内短 TTL 缓存 primitive，只承载按 key 读取、写入、过期判断和主动删除能力。它不得承载 auth/user/role/permission 等 feature 缓存策略、缓存 key schema、远端缓存访问、撤销广播、容量治理或后台清理。需要强容量控制、跨实例失效或业务一致性策略时，应由消费侧 feature 或单独 runtime primitive 设计承担。
 
 `common/runtime/rediskey` 是跨服务稳定、无业务语义的 Redis key 构造 primitive，只承载 namespace、分段拼接、prefix 和 Redis Cluster hash tag 等通用规则。它不得承载 auth/user/role/permission 等 feature key schema。Feature 私有缓存、索引、会话、投影和临时 key 由对应 `features/<feature>/infrastructure/redis` 拥有；未来真正通用的 runtime primitive（例如 rate limiter、distributed lock、idempotency）如果进入 `common/runtime/<primitive>`，由该 primitive 自己拥有自己的 key schema。
+
+`common/runtime/id` 是跨服务稳定、无业务语义的默认 UUID 生成 primitive。当前默认实现使用 UUIDv7；调用方应通过 `NewUUID` 或 `NewUUIDString` 显式处理生成错误，测试 fixture 或静态初始化可使用 Must 版本。该包不得承载用户、角色、权限、会话等业务 ID 语义、数据库主键规则、Redis key schema、trace/span ID 生成或服务特定 ID 前缀；未来默认版本从 UUIDv7 切换到 UUIDv8 时，应集中修改该 primitive 并同步验证排序、兼容性和存储影响。
 
 `common/runtime/scheduler` 是跨服务稳定、无业务语义的定时任务调度 primitive，当前基于 `github.com/robfig/cron/v3` v3 API 封装，并提供任务级本机防重叠、调度器全局并发限制、任务级分布式锁接口、Redis 锁实现、锁续租、优雅关闭和 `Metrics` 指标接口。Redis 锁等待由任务级 `WaitTimeout` 表达总等待上限，锁实现内部使用 `RetryPolicy` 做指数退避、最大单次间隔、可选最大尝试次数和 jitter，避免多副本锁竞争时形成固定频率 Redis 轮询。Scheduler 不得承载 feature 业务规则、业务 DTO、业务 Redis key schema、跨 feature 编排、可靠消息语义、outbox 持久化或具体 Prometheus registry wiring。需要多副本单实例执行的任务必须在任务级声明 `LockPolicy`，锁 TTL 必须解析为正值；长任务应启用续租，续租失败默认取消任务，避免锁失效后继续执行有副作用的业务逻辑。Prometheus 接入应通过服务侧实现 `Metrics` 接口完成，指标 label 中的 job key 必须是固定枚举式任务名，不得写入用户 ID、订单 ID 等高基数动态值。
 
@@ -187,6 +189,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - 可观测性配置由 `common/runtime/config` 的 `observability.metrics` 和 `observability.tracing` 承载；`common/runtime/observability/metrics` 的 provider 可按配置创建 Prometheus 独立 registry 并可选注册 Go runtime/process collector，用户服务在 `observability.metrics.enabled: true` 时通过服务级 router 显式挂载 `observability.metrics.path`，默认 `/metrics`。该 endpoint 不经过 RBAC 授权；是否需要网络侧保护由部署层决定。用户服务 HTTP 入站 RED 指标由 `common/http/middleware.HTTPServerMetrics` 采集，route label 使用 Gin route template，未匹配路由使用稳定 fallback，成功健康探针和成功 metrics scrape 默认过滤。用户服务服务级 provider 注册 `user_db` PostgreSQL pool stats、`cache_redis` Redis ping 状态、auth session purge workerpool stats、RBAC policy watcher 状态和 Casbin policy reload 状态；auth 和 permission feature 额外注册 feature-owned business metrics，覆盖认证会话、token version mismatch、RBAC policy 同步和 route diff 诊断数量。这些指标不改变 health probe 语义，不暴露 DSN、SQL、Redis key、错误消息全文或业务实体 ID。`common/runtime/observability/tracing` 的 `exporter: none` provider 可在无 Collector 环境创建和关闭；`exporter: otlp` 会连接配置的 OTLP Collector 并导出 span；OTel Gin middleware 会为 HTTP 入站请求生成标准 OTel trace ID 与 span ID。
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前只声明并连接 `postgres.user_db`。配置中出现其他 PostgreSQL 命名实例不代表用户服务会自动连接或迁移它们。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`。
+- 默认 UUID 生成使用 `common/runtime/id`；业务 ID 创建优先使用 `NewUUID` 或 `NewUUIDString` 并显式处理错误。
 - 进程内短 TTL 缓存使用 `common/runtime/localcache`；消费侧负责选择 TTL、key 类型和值类型，并负责业务失效策略。
 - Redis key 使用 `common/runtime/rediskey` 统一 namespace、分段拼接、prefix 和 Redis Cluster hash tag 构造规则；具体 key schema 由 owning feature 的 `infrastructure/redis` 或 owning runtime primitive 管理。
 - 定时任务调度能力使用 `common/runtime/scheduler`；服务侧负责按用途创建调度器、注入既有 Redis client 到 `RedisLocker`、实现监控指标适配并在 Fx 生命周期中启动和关闭调度器。任务很多或资源敏感时可配置全局并发上限；是否需要分布式锁由每个任务的 `LockPolicy` 声明，不使用全局单开关替代任务级语义。

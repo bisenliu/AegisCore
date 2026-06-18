@@ -24,6 +24,7 @@ import (
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
+	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/logger"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
@@ -617,9 +618,9 @@ func signRouteAuthTokenWithVersion(t *testing.T, secret, userID string, tokenVer
 	if _, err := uuid.Parse(userID); err != nil {
 		t.Fatalf("parse userID: %v", err)
 	}
-	tokenID, err := uuid.NewV7()
+	tokenID, err := runtimeid.NewUUID()
 	if err != nil {
-		t.Fatalf("NewV7: %v", err)
+		t.Fatalf("NewUUID: %v", err)
 	}
 	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, commonauth.Claims{
 		UserID:           userID,

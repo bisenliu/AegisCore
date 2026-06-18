@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/logger"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	"github.com/aegiscore/user-service/internal/features/permission/application/validators"
@@ -44,7 +44,7 @@ func (s *permissionCommandService) CreatePermission(ctx context.Context, cmd Cre
 	if err != nil {
 		return nil, err
 	}
-	permissionID, err := uuid.NewV7()
+	permissionID, err := runtimeid.NewUUID()
 	if err != nil {
 		logger.Error(ctx, "generate permission id failed", logger.StackTrace(zap.Error(err))...)
 		return nil, fmt.Errorf("generate permission id: %w", err)

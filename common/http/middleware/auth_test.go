@@ -12,7 +12,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -20,6 +19,7 @@ import (
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
+	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/security/auth"
 )
 
@@ -205,9 +205,9 @@ func signAuthTestToken(t *testing.T, secret, userID string, tokenVersion int64, 
 
 func signAuthSubjectTestToken(t *testing.T, secret, subject, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {
 	t.Helper()
-	tokenID, err := uuid.NewV7()
+	tokenID, err := runtimeid.NewUUID()
 	if err != nil {
-		t.Fatalf("NewV7: %v", err)
+		t.Fatalf("NewUUID: %v", err)
 	}
 	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, auth.Claims{
 		UserID:           userID,

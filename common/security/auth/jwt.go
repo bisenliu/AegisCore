@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/aegiscore/common/runtime/config"
+	runtimeid "github.com/aegiscore/common/runtime/id"
 )
 
 var (
@@ -192,7 +193,7 @@ func (s *JWTService) sign(input SignInput, subject string) (string, error) {
 	if input.SessionID == "" {
 		return "", ErrMissingSessionID
 	}
-	tokenID, err := uuid.NewV7()
+	tokenID, err := runtimeid.NewUUID()
 	if err != nil {
 		return "", fmt.Errorf("generate jwt jti: %w", err)
 	}
