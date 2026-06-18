@@ -1,0 +1,33 @@
+schema: spec-driven
+
+context: |
+  项目：AegisCore。
+  输出语言：简体中文。OpenSpec 主规格、change artifacts 和 OPSX 相关文档的正文、标题、需求、场景、任务和面向协作者的说明必须使用简体中文；技术术语、路径、命令、配置项名称、Go symbol、HTTP 方法和 OpenSpec 关键字可以保留英文原文。
+  技术栈：Go 1.26 workspace、Gin、Fx、Ent、Atlas、PostgreSQL、Redis、Casbin、Prometheus、OpenTelemetry、Docker、Compose、Kubernetes、Helm。
+  代码结构：common 为跨服务共享模块；user-service 为用户服务模块；deployments 为 Docker、Compose、Kubernetes、Helm、Prometheus 和 Grafana 资产；docs 为项目文档；openspec/specs 为主规格；openspec/changes 为待实施或待归档的 change artifacts。
+  运行入口：user-service/cmd/main.go 提供 serve 和 rbac CLI；user-service/internal/router/router.go 挂载健康检查、OpenAPI、metrics、pprof、认证、权限、角色和用户 API。
+  业务边界：auth 管理认证会话；user 管理用户资料；permission 管理权限目录和授权扫描；role 管理角色、角色权限、用户角色绑定和 RBAC seed；common 维护跨服务契约和 runtime primitive。
+  常用验证：make test、make lint、make verify、make user-service-architecture-lint、make user-service-openapi-generate、make user-service-migrate-validate、make compose-dashboard-check。
+
+rules:
+  proposal:
+    - 必须说明 why、what changes、capabilities 和 impact。
+    - capability 使用 kebab-case，并优先对应稳定业务能力，而不是临时实现任务或目录名。
+    - 如果会影响 API、数据库 schema、OpenAPI、部署、观测、安全或共享契约，必须在 impact 中明确说明。
+    - 不得把 OpenSpec instruction 的 context 或 rules 原文复制进 artifact 正文。
+  specs:
+    - 主规格描述长期稳定能力，change specs 描述本次 delta；不得把一次性重构任务伪装成 capability。
+    - 每个 Requirement 必须至少包含一个 Scenario；复杂能力需要覆盖主流程、异常流程和边界条件。
+    - OpenSpec delta 文件使用 CLI 要求的英文结构标记，例如 ADDED Requirements、Requirement、Scenario；场景内容使用中文。
+    - 归档后的主规格正文使用中文结构，保留 Requirement 和 Scenario 关键字以满足 OpenSpec 解析。
+    - 需求语句使用 MUST 或 SHALL 表达强约束；避免使用无法验证的泛化描述。
+  design:
+    - 必须说明受影响路径、关键技术决策、备选方案、风险、回滚方式和验证方式。
+    - 明确是否影响 Go 代码、HTTP API、数据库 migration、OpenAPI 生成物、部署清单、观测资产或安全边界。
+    - 对跨模块 change，必须说明 common、user-service、deployments 和 docs/openspec 的同步关系。
+    - 不写逐行实现细节；实现步骤放入 tasks。
+  tasks:
+    - 使用可解析的 `- [ ]` checkbox 格式，任务按 1-2 小时粒度拆分。
+    - 任务必须按依赖顺序排列，并包含必要的文件产物和验证命令。
+    - 完成实现后立即把对应 checkbox 改为 `- [x]`。
+    - 涉及生成物的任务必须包含 drift 检查，例如 `git diff --exit-code` 或对应生成脚本的 `--check`。

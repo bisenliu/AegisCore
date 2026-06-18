@@ -88,7 +88,7 @@ run_rg_any "OpenAPI generated files have uncommitted drift" \
   <(cd "${repo_root}" && git diff --name-only -- user-service/docs/openapi.go user-service/docs/openapi.json user-service/docs/openapi.yaml)
 
 run_rg_any "OpenSpec/OPSX markdown must use Simplified Chinese instead of default English templates" \
-  '(^|[[:space:]#*-])(Requirements|Requirement|Scenario|Scenarios|Proposal|Design|Tasks|Overview|Summary|Acceptance Criteria|Migration Notes|Implementation Plan|Rollout Plan|Out of Scope|Open Questions)([[:space:]:#-]|$)' \
+  '(<!--|-->|What problem does this solve|Describe what will change|brief description|condition|expected outcome|Overview|Summary|Acceptance Criteria|Migration Notes|Implementation Plan|Rollout Plan|Out of Scope)' \
   "${repo_root}/openspec/specs" \
   "${repo_root}/openspec/changes" \
   "${repo_root}/docs/opsx"

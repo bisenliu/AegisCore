@@ -18,7 +18,17 @@ cd "$(dirname "$0")/.."
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-go run github.com/swaggo/swag/cmd/swag@v1.16.6 init \
+if [ "$(go env GOOS)" = "darwin" ]; then
+  swag_go_run() {
+    go run -ldflags='-linkmode=external' github.com/swaggo/swag/cmd/swag@v1.16.6 "$@"
+  }
+else
+  swag_go_run() {
+    go run github.com/swaggo/swag/cmd/swag@v1.16.6 "$@"
+  }
+fi
+
+swag_go_run init \
   -d ./cmd,./internal/router,./internal/features/auth/transport/http,./internal/features/user/transport/http,./internal/features/role/transport/http,./internal/features/permission/transport/http \
   -g main.go \
   -o "$tmp_dir/swagger" \

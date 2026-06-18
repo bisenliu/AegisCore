@@ -49,7 +49,7 @@ cd user-service && golangci-lint run ./...
 
 Import 检查之外，code review 还应检查类型、构造函数、provider、handler、helper 的顺序是否服务阅读主线。Ent、OpenAPI 等生成代码不因排序手写调整。
 
-Architecture-lint 还必须检查 `openspec/specs/`、`openspec/changes/` 和 `docs/opsx/` 下的 Markdown 文档，拒绝保留默认英文 OpenSpec 模板标题或英文模板说明。OpenSpec 主规格、change artifacts 和 OPSX 相关文档的正文、标题、需求、场景、任务和说明必须使用简体中文；技术标识符、路径、命令和 Go symbol 可保留英文原文。
+Architecture-lint 还必须检查 `openspec/specs/`、`openspec/changes/` 和 `docs/opsx/` 下的 Markdown 文档，拒绝保留默认英文 OpenSpec 模板占位、占位注释或非必要英文模板说明。OpenSpec 主规格、change artifacts 和 OPSX 相关文档的正文、标题、需求、场景、任务和说明必须使用简体中文；技术标识符、路径、命令、Go symbol 以及 OpenSpec 解析所需的 `Requirement`、`Scenario`、`ADDED Requirements` 等约定性关键字可保留英文原文。
 
 ## Governance
 
