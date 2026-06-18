@@ -62,7 +62,7 @@ spec:
 1. 启用 metrics：
 
 ```bash
-AEGISCORE_OBSERVABILITY_METRICS_ENABLED=true make run-user-service
+AEGISCORE_OBSERVABILITY_METRICS_ENABLED=true make user-service-run
 ```
 
 2. 确认 metrics endpoint：

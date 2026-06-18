@@ -1,65 +1,80 @@
 COMMON_DIR := common
 USER_SERVICE_DIR := user-service
-USER_SERVICE_CONFIG ?= ./user-service/configs/config.yaml
-USER_SERVICE_BIN ?= ./bin/user-service
+USER_SERVICE_CONFIG ?= $(CURDIR)/user-service/configs/config.yaml
+USER_SERVICE_BIN ?= $(CURDIR)/bin/user-service
+ADMIN_USERNAME ?= admin
+ADMIN_NICKNAME ?= Admin
+ADMIN_RESET_PASSWORD ?= false
 
-.PHONY: help build build-user-service test test-common test-user-service lint lint-common lint-user-service architecture-lint verify run-user-service seed-rbac compose-dashboard-generate compose-dashboard-check generate migrate-diff migrate-validate migrate-apply openapi-generate
+.PHONY: help build test lint verify
+.PHONY: common-test common-lint common-verify
+.PHONY: user-service-build user-service-run user-service-test user-service-lint user-service-verify user-service-architecture-lint
+.PHONY: user-service-seed-rbac user-service-create-super-admin
+.PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-migrate-apply user-service-openapi-generate
+.PHONY: compose-dashboard-generate compose-dashboard-check
 
-help: ## Show available commands.
-	@awk 'BEGIN {FS = ":.*##"; printf "Available commands:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+help: ## 查看可用命令。
+	@awk 'BEGIN {FS = ":.*##"; printf "可用命令：\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-36s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-build: build-user-service ## Build all service binaries.
+build: user-service-build ## 构建全部服务二进制。
 
-build-user-service: ## Build the user-service binary.
-	@mkdir -p $(dir $(USER_SERVICE_BIN))
-	go build -o $(USER_SERVICE_BIN) ./$(USER_SERVICE_DIR)/cmd
+test: common-test user-service-test ## 运行全部 Go 模块测试。
 
-test: test-common test-user-service ## Run tests for all Go modules.
+lint: common-lint user-service-lint ## 运行全部 Go 模块 lint。
 
-test-common: ## Run common module tests.
-	cd $(COMMON_DIR) && go test ./...
-
-test-user-service: ## Run user-service module tests.
-	cd $(USER_SERVICE_DIR) && go test ./...
-
-lint: lint-common lint-user-service ## Run lint for all Go modules.
-
-lint-common: ## Run common module lint.
-	cd $(COMMON_DIR) && golangci-lint run ./...
-
-lint-user-service: ## Run user-service module lint.
-	cd $(USER_SERVICE_DIR) && golangci-lint run ./...
-
-architecture-lint: ## Run user-service architecture boundary checks.
-	cd $(USER_SERVICE_DIR) && ./scripts/architecture-lint.sh
-
-verify: lint architecture-lint test openapi-generate ## Run full local verification.
+verify: lint user-service-architecture-lint test user-service-openapi-generate ## 运行完整本地验证。
 	git diff --exit-code
 
-run-user-service: ## Run user-service with USER_SERVICE_CONFIG.
-	go run ./$(USER_SERVICE_DIR)/cmd serve --config $(USER_SERVICE_CONFIG)
+common-test: ## 运行 common 模块测试。
+	$(MAKE) -C $(COMMON_DIR) test
 
-seed-rbac: ## Seed user-service RBAC data with USER_SERVICE_CONFIG.
-	go run ./$(USER_SERVICE_DIR)/cmd rbac --config $(USER_SERVICE_CONFIG) seed
+common-lint: ## 运行 common 模块 lint。
+	$(MAKE) -C $(COMMON_DIR) lint
 
-compose-dashboard-generate: ## Generate the Compose Grafana dashboard from the generic observability dashboard.
+common-verify: ## 运行 common 模块验证。
+	$(MAKE) -C $(COMMON_DIR) verify
+
+user-service-build: ## 构建 user-service 二进制。
+	$(MAKE) -C $(USER_SERVICE_DIR) build USER_SERVICE_BIN='$(USER_SERVICE_BIN)'
+
+user-service-run: ## 使用 USER_SERVICE_CONFIG 运行 user-service。
+	$(MAKE) -C $(USER_SERVICE_DIR) run USER_SERVICE_CONFIG='$(USER_SERVICE_CONFIG)'
+
+user-service-test: ## 运行 user-service 测试。
+	$(MAKE) -C $(USER_SERVICE_DIR) test
+
+user-service-lint: ## 运行 user-service lint。
+	$(MAKE) -C $(USER_SERVICE_DIR) lint
+
+user-service-verify: ## 运行 user-service 验证。
+	$(MAKE) -C $(USER_SERVICE_DIR) verify
+
+user-service-architecture-lint: ## 运行 user-service 架构边界检查。
+	$(MAKE) -C $(USER_SERVICE_DIR) architecture-lint
+
+user-service-seed-rbac: ## 使用 USER_SERVICE_CONFIG 初始化 user-service RBAC 系统数据。
+	$(MAKE) -C $(USER_SERVICE_DIR) seed-rbac USER_SERVICE_CONFIG='$(USER_SERVICE_CONFIG)'
+
+user-service-create-super-admin: ## 为 user-service 创建管理员用户并绑定超级管理员角色；需要 ADMIN_PASSWORD 环境变量。
+	$(MAKE) -C $(USER_SERVICE_DIR) create-super-admin USER_SERVICE_CONFIG='$(USER_SERVICE_CONFIG)' ADMIN_USERNAME='$(ADMIN_USERNAME)' ADMIN_NICKNAME='$(ADMIN_NICKNAME)' ADMIN_RESET_PASSWORD='$(ADMIN_RESET_PASSWORD)'
+
+user-service-generate: ## 生成 user-service Ent 代码。
+	$(MAKE) -C $(USER_SERVICE_DIR) generate
+
+user-service-migrate-diff: ## 生成 user-service migration，需传入 name=<migration-name>。
+	$(MAKE) -C $(USER_SERVICE_DIR) migrate-diff name='$(name)'
+
+user-service-migrate-validate: ## 校验 user-service migrations。
+	$(MAKE) -C $(USER_SERVICE_DIR) migrate-validate
+
+user-service-migrate-apply: ## 使用 DATABASE_URL 执行 user-service migrations。
+	$(MAKE) -C $(USER_SERVICE_DIR) migrate-apply
+
+user-service-openapi-generate: ## 生成 user-service OpenAPI 3 文档。
+	$(MAKE) -C $(USER_SERVICE_DIR) openapi-generate
+
+compose-dashboard-generate: ## 从通用观测 dashboard 生成 Compose Grafana dashboard。
 	./deployments/compose/scripts/generate-grafana-dashboard.sh
 
-compose-dashboard-check: ## Check that the Compose Grafana dashboard is generated and up to date.
+compose-dashboard-check: ## 检查 Compose Grafana dashboard 是否已生成且无 drift。
 	./deployments/compose/scripts/generate-grafana-dashboard.sh --check
-
-generate: ## Generate user-service Ent code.
-	cd $(USER_SERVICE_DIR) && go generate ./ent
-
-migrate-diff: ## Generate a user-service migration with name=<migration-name>.
-	@test -n "$(name)" || (echo "Usage: make migrate-diff name=<migration-name>" >&2; exit 2)
-	cd $(USER_SERVICE_DIR) && ./scripts/migrate-diff.sh "$(name)"
-
-migrate-validate: ## Validate user-service migrations.
-	cd $(USER_SERVICE_DIR) && ./scripts/migrate-validate.sh
-
-migrate-apply: ## Apply user-service migrations using DATABASE_URL.
-	cd $(USER_SERVICE_DIR) && ./scripts/migrate-apply.sh
-
-openapi-generate: ## Generate user-service OpenAPI 3 documentation.
-	cd $(USER_SERVICE_DIR) && ./scripts/openapi-generate.sh

@@ -29,12 +29,18 @@ func (a testLifecycleApp) Stop(ctx context.Context) error {
 func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testing.T) {
 	originalFactory := newLifecycleApp
 	originalSeed := runRBACSeed
+	originalCreateSuperAdmin := runCreateSuperAdmin
 	t.Cleanup(func() {
 		newLifecycleApp = originalFactory
 		runRBACSeed = originalSeed
+		runCreateSuperAdmin = originalCreateSuperAdmin
 	})
 	runRBACSeed = func(context.Context, string, rbacSeedOptions) error {
 		t.Fatal("serve must not invoke RBAC seed")
+		return nil
+	}
+	runCreateSuperAdmin = func(context.Context, string, rbacCreateSuperAdminOptions) error {
+		t.Fatal("serve must not invoke super admin creation")
 		return nil
 	}
 
@@ -116,6 +122,9 @@ func TestRootCommandSurface(t *testing.T) {
 	if findSubcommand(rbac, "assign-super-admin") == nil {
 		t.Fatal("rbac assign-super-admin command not registered")
 	}
+	if findSubcommand(rbac, "create-super-admin") == nil {
+		t.Fatal("rbac create-super-admin command not registered")
+	}
 }
 
 func TestRBACSeedCommandFlags(t *testing.T) {
@@ -181,6 +190,77 @@ func TestAssignSuperAdminCommandRuns(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("runAssignSuperAdmin not called")
+	}
+}
+
+func TestCreateSuperAdminCommandRunsWithDefaults(t *testing.T) {
+	originalCreateSuperAdmin := runCreateSuperAdmin
+	t.Cleanup(func() { runCreateSuperAdmin = originalCreateSuperAdmin })
+	called := false
+	runCreateSuperAdmin = func(_ context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
+		called = true
+		if configPath != "test-config.yaml" {
+			t.Fatalf("configPath = %q", configPath)
+		}
+		if opts.username != defaultCreateSuperAdminUsername || opts.nickname != defaultCreateSuperAdminNickname || opts.passwordEnv != defaultCreateSuperAdminPasswordEnv || opts.resetPassword {
+			t.Fatalf("opts = %#v", opts)
+		}
+		return nil
+	}
+
+	root := newRootCommand()
+	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "create-super-admin"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !called {
+		t.Fatal("runCreateSuperAdmin not called")
+	}
+}
+
+func TestCreateSuperAdminCommandRunsWithFlags(t *testing.T) {
+	originalCreateSuperAdmin := runCreateSuperAdmin
+	t.Cleanup(func() { runCreateSuperAdmin = originalCreateSuperAdmin })
+	called := false
+	runCreateSuperAdmin = func(_ context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
+		called = true
+		if configPath != "test-config.yaml" {
+			t.Fatalf("configPath = %q", configPath)
+		}
+		if opts.username != "root" || opts.nickname != "Root" || opts.passwordEnv != "ADMIN_SECRET" || !opts.resetPassword {
+			t.Fatalf("opts = %#v", opts)
+		}
+		return nil
+	}
+
+	root := newRootCommand()
+	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "create-super-admin", "--username", "root", "--nickname", "Root", "--password-env", "ADMIN_SECRET", "--reset-password"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !called {
+		t.Fatal("runCreateSuperAdmin not called")
+	}
+}
+
+func TestNormalizeCreateSuperAdminOptionsRequiresPasswordEnv(t *testing.T) {
+	t.Setenv(defaultCreateSuperAdminPasswordEnv, "")
+
+	_, err := normalizeCreateSuperAdminOptions(rbacCreateSuperAdminOptions{username: "admin", nickname: "Admin", passwordEnv: "MISSING_ADMIN_PASSWORD"})
+	if err == nil {
+		t.Fatal("normalizeCreateSuperAdminOptions err = nil, want missing env error")
+	}
+}
+
+func TestNormalizeCreateSuperAdminOptionsReadsPasswordEnv(t *testing.T) {
+	t.Setenv("ADMIN_SECRET", "  secret  ")
+
+	opts, err := normalizeCreateSuperAdminOptions(rbacCreateSuperAdminOptions{username: " ADMIN ", nickname: " ", passwordEnv: "ADMIN_SECRET", resetPassword: true})
+	if err != nil {
+		t.Fatalf("normalizeCreateSuperAdminOptions: %v", err)
+	}
+	if opts.username != "admin" || opts.nickname != "admin" || opts.password != "secret" || opts.passwordEnv != "ADMIN_SECRET" || !opts.resetPassword {
+		t.Fatalf("opts = %#v", opts)
 	}
 }
 

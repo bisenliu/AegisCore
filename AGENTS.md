@@ -1,6 +1,6 @@
 # AegisCore Agent Guide
 
-本文件是 AI 代理和协作者的仓库入口规则。结构规则以本文件和 `docs/ARCHITECTURE.md` 为准；本仓库不再维护 OpenSpec/OPSX 工件，不要重新新增 `openspec/` 或 `docs/opsx/`。
+本文件是 AI 代理和协作者的仓库入口规则。结构规则以本文件、`docs/ARCHITECTURE.md` 和 `openspec/specs/` 的当前有效主规格为准；OPSX/OpenSpec 工件位于 `docs/opsx/` 与 `openspec/`。OpenSpec 主规格、change artifacts 和 OPSX 相关文档的正文、标题、需求、场景、任务和说明必须使用简体中文；包名、路径、HTTP method、配置 key、CLI 命令、Go symbol、错误码、数据库字段等技术标识符可以保留英文原文。
 
 ## 1. Quick Start
 
@@ -9,6 +9,8 @@
 - 产品上下文：`docs/PRODUCT.md`
 - 测试说明：`docs/TESTING.md`
 - Lint 自动化：`docs/GO_LINT_AUTOMATION.md`
+- OPSX 能力地图：`docs/opsx/CAPABILITY_MAP.md`
+- OPSX 工作流：`docs/opsx/CHANGE_WORKFLOW.md`
 
 ## 2. Repository Shape
 
@@ -100,7 +102,7 @@
 - 权限目录管理：权限创建、更新、启停、分页查询、详情查询、用户有效权限查询和路由差异查询。
 - 角色管理：角色创建、更新、启停、分页查询、详情查询、用户角色绑定查询/替换/增删，以及角色权限绑定查询/替换/增删。
 - RBAC HTTP 授权：JWT 认证后对用户、角色、权限业务接口执行 Casbin 授权；Casbin 使用 `user:<user_uuid>`、`role:<role_uuid>`、Gin route template 和 HTTP method，不依赖 `roles.code`。
-- RBAC policy 同步：在线 RBAC 管理接口变更权限、角色启停、用户角色绑定或角色权限绑定后，通过本实例 reload、Redis policy version、Pub/Sub 和定时版本补偿刷新其他副本的内存 Casbin policy；授权热路径不做每请求 Redis 强一致版本门控。`rbac seed` 和 `rbac assign-super-admin` 是离线运维入口，应在独立 migration job 成功后、启动或滚动更新 HTTP server 前执行；若在已有副本运行中执行，必须滚动重启或另行触发在线 policy refresh。
+- RBAC policy 同步：在线 RBAC 管理接口变更权限、角色启停、用户角色绑定或角色权限绑定后，通过本实例 reload、Redis policy version、Pub/Sub 和定时版本补偿刷新其他副本的内存 Casbin policy；授权热路径不做每请求 Redis 强一致版本门控。`rbac seed`、`rbac assign-super-admin` 和 `rbac create-super-admin` 是离线运维入口，应在独立 migration job 成功后、启动或滚动更新 HTTP server 前执行；若在已有副本运行中执行，必须滚动重启或另行触发在线 policy refresh。`rbac seed` 不得自动创建真实业务用户或分配超级管理员角色；`rbac create-super-admin` 必须与 seed 分离显式执行，必须通过环境变量读取密码，不得内置默认密码，已有管理员默认不得重置密码，只有显式 `--reset-password` 或 `ADMIN_RESET_PASSWORD=true` 时才允许重置。
 - HTTP 服务运行时：启动、运行、路由注册和优雅停止。
 - 未来入站 gRPC transport 边界：如用户服务暴露真实 gRPC API，放在对应 feature 的 `transport/grpc`；当前不实现 gRPC API、proto、generated code 或 server runtime。
 - 外部系统防腐层边界：`internal/integration/http`、`grpc`、`events` 只承载真实外部调用的协议适配规则，当前不实现真实 client；`internal/integration/grpc` 是出站 external client adapter，不是本服务 gRPC server transport；`internal/integration/events` 是外部事件系统 producer/consumer 协议 adapter，不是 feature consumer handler、业务事件编排或 outbox。
@@ -112,26 +114,29 @@
 ## 5. Development Commands
 
 - 查看统一入口：`make help`。
-- 构建用户服务二进制：`make build` 或 `make build-user-service`。
+- 查看模块级入口：`make -C common help` 或 `make -C user-service help`。
+- 根 `Makefile` 中服务私有目标必须带服务名前缀，例如 `user-service-seed-rbac`；不要新增 `seed-rbac` 这类无服务上下文的根目标。
+- 构建用户服务二进制：`make user-service-build`。
 - 运行全部测试：`make test`。
-- 运行架构边界检查：`make architecture-lint`。
+- 运行架构边界检查：`make user-service-architecture-lint`。
 - 运行完整本地验证：`make verify`。
-- 运行用户服务：`make run-user-service`。
+- 运行用户服务：`make user-service-run`。
+- 创建或复用超级管理员账号：`ADMIN_PASSWORD='<password>' make user-service-create-super-admin`；重置已有账号密码需显式追加 `ADMIN_RESET_PASSWORD=true`。
 - 构建用户服务 Docker 镜像：`docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .`。
-- 运行单模块测试：`make test-common` 或 `make test-user-service`。
-- 生成 Ent 代码：`make generate`。
-- 生成迁移：`make migrate-diff name=<name>`。
-- 校验迁移：`make migrate-validate`。
-- 执行迁移：`DATABASE_URL='<postgres-url>' make migrate-apply`。
-- 生成 OpenAPI 3 文档：`make openapi-generate`。
+- 运行单模块测试：`make common-test` 或 `make user-service-test`。
+- 生成 Ent 代码：`make user-service-generate`。
+- 生成迁移：`make user-service-migrate-diff name=<name>`。
+- 校验迁移：`make user-service-migrate-validate`。
+- 执行迁移：`DATABASE_URL='<postgres-url>' make user-service-migrate-apply`。
+- 生成 OpenAPI 3 文档：`make user-service-openapi-generate`。
 - 格式化 Go 代码：`gofmt -w <files>`。
-- 运行 lint：`make lint`，或按模块运行 `make lint-common`、`make lint-user-service`。
+- 运行 lint：`make lint`，或按模块运行 `make common-lint`、`make user-service-lint`。
 
 ## 6. Change Workflow
 
-1. 先阅读 `docs/ARCHITECTURE.md`，确认改动属于哪个模块、feature 和层。
-2. 小改动直接实现；跨 feature、跨模块、目录结构或外部契约变更，应先在 issue、PR 描述或开发记录中写清目标、影响范围和验证方式。
-3. 修改结构规则时，同步更新 `AGENTS.md` 和 `docs/ARCHITECTURE.md`。
+1. 先阅读 `docs/ARCHITECTURE.md`、`docs/opsx/CAPABILITY_MAP.md` 和相关 `openspec/specs/*/spec.md`，确认改动属于哪个模块、feature、层和能力规格。
+2. 小改动直接实现；跨 feature、跨模块、目录结构、外部契约或行为规格变更，应先通过 OPSX change 或 PR 描述写清目标、影响范围和验证方式。
+3. 修改结构规则或稳定行为时，同步更新 `AGENTS.md`、`docs/ARCHITECTURE.md`、能力地图和相关 `openspec/specs/*/spec.md`，并确保所有 OpenSpec/OPSX 正文、标题、需求、场景、任务和说明使用简体中文。
 4. 实现后运行与改动范围匹配的测试；跨模块变更分别在 `common/` 和 `user-service/` 验证。
 
 ## 7. Repository Rules
@@ -151,6 +156,7 @@
 - 边界检查不仅看 import 依赖，也要检查人工维护 Go 文件中的函数定义、声明和调用顺序是否服务阅读主线：类型和 Fx 参数结构应位于构造函数或 provider 前；构造函数应位于公开 handler/use case 方法前；HTTP controller handler 顺序应尽量与 `routes.go` 注册顺序一致；私有 helper 可紧跟主要调用方或放在文件尾；发现因顺序导致可读性差、依赖关系混乱或潜在运行错误风险时，应在不改变行为的前提下调整。不得为了排序手写 Ent/OpenAPI 生成代码。
 - 正式代码不得暴露仅为测试服务的构造函数、方法、hook、flag 或可替换入口，例如 `NewXForTest`、`testHook`、`setNowForTest` 这类测试语义 API。确实需要可替换性时，必须有清晰运行时职责并用运行时语义命名；否则测试替身、fake、stub、fixture、时间控制和特殊断言入口应放在 `_test.go`、`common/testing` 或对应测试基础设施中。不得为了让测试方便而把临时分支、测试专用参数或无运行时职责的 helper 留在正式构建产物里。
 - 代码注释统一使用中文，函数和方法注释必须使用中文；必要的协议名、库名、HTTP/JWT/Redis/PostgreSQL/Ent/Fx/Gin/trace-id 等技术术语可保留英文。不要为了翻译注释而修改 Go identifier、错误字符串、HTTP 响应消息、配置 key、数据库字段、Redis key 或生成代码。
+- `openspec/specs/`、`openspec/changes/` 和 `docs/opsx/` 下的主规格、change artifacts、工作流和能力地图必须使用简体中文；后续生成或更新时不得保留英文模板正文、标题、需求、场景或任务说明。技术标识符、路径、命令和 Go symbol 可保留英文原文。
 - Log 日志消息内容必须全部使用英文，日志字段名使用稳定英文 snake_case；HTTP trace 传播使用 W3C `traceparent` / `tracestate`，`common/runtime/logger` context helper 从当前 OTel span context 自动追加 `trace_id` 与 `span_id`，无有效 span context 时不得伪造 trace/span 字段；HTTP access log 标准字段为 `trace_id`、`user_id`、`client_ip`、`method`、`path`、`status`、`latency_ms`，认证失败安全事件日志额外记录 `user_agent`，但不得记录 password、token、Authorization header、Cookie 或原始请求体；日志级别必须匹配场景严重性，预期业务拒绝不得用 `Error`，系统异常、外部依赖失败、后台任务失败和 panic recover 不得降级为 `Info`。业务日志优先使用 `common/runtime/logger` context helper，避免丢失 trace context。
 - 配置通过 YAML 与 `AEGISCORE_` 环境变量覆盖加载，Redis/PostgreSQL 使用 `redis.<name>` 与 `postgres.<name>` 命名实例，避免硬编码运行时配置。
 - `internal/shared` 默认禁止新增。只有当能力已被至少两个 feature 真实消费、边界稳定、且不能归入 `common` 时，才可以新增，并且必须在本文件和 `docs/ARCHITECTURE.md` 说明 owner、消费方、准入理由和禁止事项。Shared 只允许纯类型、值对象、系统内置规格、少量无副作用判断方法和跨 feature 共享的稳定错误；不得导入 feature 包、Gin、Ent、Redis、SQL、Fx、HTTP response、runtime config/logger/datastore provider，不得承载 controller、transport DTO、OpenAPI 文档 DTO、store port、application use case、infrastructure adapter、配置读取、日志副作用、外部系统调用、数据库/缓存访问或部署资产。当前允许的子包只有 `internal/shared/identity` 和 `internal/shared/rbacbaseline`；用户状态与用户身份错误统一使用 `shared/identity`，系统 RBAC 基线统一使用 `shared/rbacbaseline`，不要在 feature 内保留兼容 alias 或重复常量。不得新增根级 `shared/errors`、`shared/enums`、`shared/types`、`shared/utils` 或 `shared/helpers`；公共错误、枚举和值对象必须放入 owning shared 子包，并使用 `errors.go`、`<subject>_status.go`、`<subject>_type.go`、`<subject>_kind.go` 等具体文件名表达语义。

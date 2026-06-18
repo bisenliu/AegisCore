@@ -50,8 +50,8 @@ func TestHTTPAuthUserFlow(t *testing.T) {
 	faker := fixtures.NewFaker(t)
 
 	bootstrapUser := seedUser(t, harness, seededUserInput{
-		Nickname: faker.Name("Bootstrap Admin"),
-		Username: faker.Username("bootstrap-admin"),
+		Nickname: faker.Name("Flow Admin"),
+		Username: faker.Username("flow-admin"),
 		Password: "bootstrap-secret",
 		Status:   identity.UserStatusNormal,
 	})

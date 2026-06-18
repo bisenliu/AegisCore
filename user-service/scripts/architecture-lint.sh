@@ -87,6 +87,12 @@ run_rg_any "OpenAPI generated files have uncommitted drift" \
   '^user-service/docs/(openapi\.go|openapi\.json|openapi\.yaml)$' \
   <(cd "${repo_root}" && git diff --name-only -- user-service/docs/openapi.go user-service/docs/openapi.json user-service/docs/openapi.yaml)
 
+run_rg_any "OpenSpec/OPSX markdown must use Simplified Chinese instead of default English templates" \
+  '(^|[[:space:]#*-])(Requirements|Requirement|Scenario|Scenarios|Proposal|Design|Tasks|Overview|Summary|Acceptance Criteria|Migration Notes|Implementation Plan|Rollout Plan|Out of Scope|Open Questions)([[:space:]:#-]|$)' \
+  "${repo_root}/openspec/specs" \
+  "${repo_root}/openspec/changes" \
+  "${repo_root}/docs/opsx"
+
 run_rg_any "Ent generated files have uncommitted drift; run make generate and commit generated output" \
   '^user-service/ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update|permission|permission_create|permission_delete|permission_query|permission_update|role|role_create|role_delete|role_query|role_update|rolepermission|rolepermission_create|rolepermission_delete|rolepermission_query|rolepermission_update|userrole|userrole_create|userrole_delete|userrole_query|userrole_update)\.go$|^user-service/ent/(enttest|hook|migrate|predicate|runtime|user|permission|role|rolepermission|userrole)/' \
   <(cd "${repo_root}" && git diff --name-only -- user-service/ent)

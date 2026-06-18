@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"entgo.io/ent/dialect"
@@ -14,21 +17,50 @@ import (
 	"github.com/aegiscore/common/runtime/datastore"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/runtime/resources"
+	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/user-service/ent"
+	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
+	authpostgres "github.com/aegiscore/user-service/internal/features/auth/infrastructure/postgres"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
 	roleseed "github.com/aegiscore/user-service/internal/features/role/application/seed"
 	rolepostgres "github.com/aegiscore/user-service/internal/features/role/infrastructure/postgres"
+	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
+	userpostgres "github.com/aegiscore/user-service/internal/features/user/infrastructure/postgres"
+	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 const rbacCommandTimeout = 30 * time.Second
+
+const (
+	defaultCreateSuperAdminUsername    = "admin"
+	defaultCreateSuperAdminNickname    = "Admin"
+	defaultCreateSuperAdminPasswordEnv = "ADMIN_PASSWORD"
+)
 
 type rbacSeedOptions struct {
 	reactivateSystem   bool
 	syncSystemBindings bool
 }
 
+type rbacCreateSuperAdminOptions struct {
+	username      string
+	nickname      string
+	password      string
+	passwordEnv   string
+	resetPassword bool
+}
+
+type rbacCreateSuperAdminResult struct {
+	userID          uuid.UUID
+	created         bool
+	passwordUpdated bool
+	roleAdded       bool
+}
+
 type rbacSeedDependencies struct {
-	service *roleseed.Service
+	service     *roleseed.Service
+	users       usercommand.CreateUserService
+	credentials *authpostgres.CredentialStore
 }
 
 func runRBACSeedCommand(ctx context.Context, configPath string, opts rbacSeedOptions) error {
@@ -63,6 +95,69 @@ func runAssignSuperAdminCommand(ctx context.Context, configPath string, userID u
 		fmt.Printf("Super admin role already assigned to user %s\n", userID.String())
 	}
 	return nil
+}
+
+func runCreateSuperAdminCommand(ctx context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
+	deps, cleanup, err := newRBACSeedDependencies(ctx, configPath)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	result, err := createSuperAdmin(ctx, deps, opts)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Super admin create complete: username=%s user_id=%s created=%t password_updated=%t super_admin_role_added=%t\n", normalizeUsername(opts.username), result.userID.String(), result.created, result.passwordUpdated, result.roleAdded)
+	return nil
+}
+
+func createSuperAdmin(ctx context.Context, deps rbacSeedDependencies, opts rbacCreateSuperAdminOptions) (rbacCreateSuperAdminResult, error) {
+	normalized, err := normalizeCreateSuperAdminOptions(opts)
+	if err != nil {
+		return rbacCreateSuperAdminResult{}, err
+	}
+
+	credential, err := deps.credentials.GetByUsername(ctx, normalized.username)
+	if err != nil && !errors.Is(err, identity.ErrUserNotFound) {
+		return rbacCreateSuperAdminResult{}, err
+	}
+
+	result := rbacCreateSuperAdminResult{}
+	if errors.Is(err, identity.ErrUserNotFound) {
+		status := identity.UserStatusNormal
+		created, err := deps.users.CreateUser(ctx, usercommand.CreateUserCommand{Nickname: normalized.nickname, Username: normalized.username, Password: normalized.password, Status: &status})
+		if err != nil {
+			return rbacCreateSuperAdminResult{}, err
+		}
+		result.userID = created.User.UserID
+		result.created = true
+	} else {
+		result.userID = credential.UserID
+		if !normalized.resetPassword {
+			assigned, err := deps.service.AssignSuperAdmin(ctx, result.userID)
+			if err != nil {
+				return rbacCreateSuperAdminResult{}, err
+			}
+			result.roleAdded = assigned.Added
+			return result, nil
+		}
+		passwordHash, err := password.HashContext(ctx, normalized.password)
+		if err != nil {
+			return rbacCreateSuperAdminResult{}, fmt.Errorf("hash create super admin password: %w", err)
+		}
+		if _, err := deps.credentials.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: credential.UserID, PasswordHash: passwordHash, Status: identity.UserStatusNormal}); err != nil {
+			return rbacCreateSuperAdminResult{}, err
+		}
+		result.passwordUpdated = true
+	}
+
+	assigned, err := deps.service.AssignSuperAdmin(ctx, result.userID)
+	if err != nil {
+		return rbacCreateSuperAdminResult{}, err
+	}
+	result.roleAdded = assigned.Added
+	return result, nil
 }
 
 func newRBACSeedDependencies(parent context.Context, configPath string) (rbacSeedDependencies, func(), error) {
@@ -103,9 +198,12 @@ func newRBACSeedDependencies(parent context.Context, configPath string) (rbacSee
 	roleStore := rolepostgres.NewRoleStore(rolepostgres.RoleStoreParams{Client: client})
 	rolePermissionStore := rolepostgres.NewRolePermissionStore(rolepostgres.RolePermissionStoreParams{Client: client})
 	userRoleStore := rolepostgres.NewUserRoleStore(rolepostgres.UserRoleStoreParams{Client: client})
+	userStore := userpostgres.NewUserStore(userpostgres.UserStoreParams{Client: client})
+	credentialStore := authpostgres.NewCredentialStore(authpostgres.CredentialStoreParams{Client: client})
 	service := roleseed.NewService(roleStore, permissionStore, rolePermissionStore, userRoleStore)
+	userCreator := usercommand.NewCreateUserService(userStore)
 
-	return rbacSeedDependencies{service: service}, cleanup, nil
+	return rbacSeedDependencies{service: service, users: userCreator, credentials: credentialStore}, cleanup, nil
 }
 
 func newRBACEntClient(db *sql.DB) *ent.Client {
@@ -118,4 +216,36 @@ func chainCleanup(first func(), second func()) func() {
 		second()
 		first()
 	}
+}
+
+func normalizeCreateSuperAdminOptions(opts rbacCreateSuperAdminOptions) (rbacCreateSuperAdminOptions, error) {
+	passwordEnv := strings.TrimSpace(opts.passwordEnv)
+	if passwordEnv == "" {
+		passwordEnv = defaultCreateSuperAdminPasswordEnv
+	}
+	adminPassword, ok := os.LookupEnv(passwordEnv)
+	if !ok {
+		return rbacCreateSuperAdminOptions{}, fmt.Errorf("%s environment variable is required", passwordEnv)
+	}
+	normalized := rbacCreateSuperAdminOptions{
+		username:      normalizeUsername(opts.username),
+		nickname:      strings.TrimSpace(opts.nickname),
+		password:      strings.TrimSpace(adminPassword),
+		passwordEnv:   passwordEnv,
+		resetPassword: opts.resetPassword,
+	}
+	if normalized.username == "" {
+		return rbacCreateSuperAdminOptions{}, fmt.Errorf("admin username is required")
+	}
+	if normalized.nickname == "" {
+		normalized.nickname = normalized.username
+	}
+	if strings.TrimSpace(adminPassword) == "" {
+		return rbacCreateSuperAdminOptions{}, fmt.Errorf("admin password is required")
+	}
+	return normalized, nil
+}
+
+func normalizeUsername(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
 }

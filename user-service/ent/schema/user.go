@@ -19,6 +19,11 @@ type User struct {
 	ent.Schema
 }
 
+// Mixin 返回 users 表复用的公共 schema mixin。
+func (User) Mixin() []ent.Mixin {
+	return []ent.Mixin{databaseCommentMixin{}}
+}
+
 // Fields 返回 users 表列定义，包括认证字段和时间戳默认值。
 func (User) Fields() []ent.Field {
 	return []ent.Field{

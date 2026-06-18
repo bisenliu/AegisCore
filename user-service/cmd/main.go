@@ -49,6 +49,8 @@ var runRBACSeed = runRBACSeedCommand
 
 var runAssignSuperAdmin = runAssignSuperAdminCommand
 
+var runCreateSuperAdmin = runCreateSuperAdminCommand
+
 func main() {
 	if err := newRootCommand().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -62,6 +64,7 @@ func newRootCommand() *cobra.Command {
 	var reactivateSystem bool
 	var syncSystemBindings bool
 	var superAdminUserID string
+	createSuperAdminOpts := rbacCreateSuperAdminOptions{username: defaultCreateSuperAdminUsername, nickname: defaultCreateSuperAdminNickname, passwordEnv: defaultCreateSuperAdminPasswordEnv}
 
 	root := &cobra.Command{
 		Use:   "aegiscore-user-services",
@@ -109,6 +112,19 @@ func newRootCommand() *cobra.Command {
 	assignSuperAdmin.Flags().StringVar(&superAdminUserID, "user-id", "", "user UUID to receive the built-in super admin role")
 	_ = assignSuperAdmin.MarkFlagRequired("user-id")
 	rbac.AddCommand(assignSuperAdmin)
+
+	createSuperAdmin := &cobra.Command{
+		Use:   "create-super-admin",
+		Short: "Create the default admin user and assign the built-in super admin role",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runCreateSuperAdmin(cmd.Context(), rbacConfigPath, createSuperAdminOpts)
+		},
+	}
+	createSuperAdmin.Flags().StringVar(&createSuperAdminOpts.username, "username", defaultCreateSuperAdminUsername, "admin username to create or bind")
+	createSuperAdmin.Flags().StringVar(&createSuperAdminOpts.nickname, "nickname", defaultCreateSuperAdminNickname, "admin display nickname")
+	createSuperAdmin.Flags().StringVar(&createSuperAdminOpts.passwordEnv, "password-env", defaultCreateSuperAdminPasswordEnv, "environment variable containing the admin password")
+	createSuperAdmin.Flags().BoolVar(&createSuperAdminOpts.resetPassword, "reset-password", false, "reset password when the admin user already exists")
+	rbac.AddCommand(createSuperAdmin)
 	root.AddCommand(rbac)
 
 	return root

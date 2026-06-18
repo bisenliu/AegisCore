@@ -14,6 +14,11 @@ type RolePermission struct {
 	ent.Schema
 }
 
+// Mixin 返回 role_permissions 表复用的公共 schema mixin。
+func (RolePermission) Mixin() []ent.Mixin {
+	return []ent.Mixin{databaseCommentMixin{}}
+}
+
 // Fields 返回角色权限绑定表字段定义。
 func (RolePermission) Fields() []ent.Field {
 	return []ent.Field{

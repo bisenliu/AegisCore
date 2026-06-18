@@ -14,6 +14,11 @@ type UserRole struct {
 	ent.Schema
 }
 
+// Mixin 返回 user_roles 表复用的公共 schema mixin。
+func (UserRole) Mixin() []ent.Mixin {
+	return []ent.Mixin{databaseCommentMixin{}}
+}
+
 // Fields 返回用户角色绑定表字段定义。
 func (UserRole) Fields() []ent.Field {
 	return []ent.Field{
