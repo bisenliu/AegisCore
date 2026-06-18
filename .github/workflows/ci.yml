@@ -42,7 +42,7 @@ jobs:
           make lint
           make architecture-lint
           make test
-          make swagger-generate
+          make openapi-generate
           git diff --exit-code
 
   test:
