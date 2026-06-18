@@ -64,7 +64,6 @@ func (s *permissionCommandService) CreatePermission(ctx context.Context, cmd Cre
 	}
 	if err := s.notifyPolicyChanged(ctx, "permission_created"); err != nil {
 		logger.Error(ctx, "refresh rbac policy after permission creation failed", logger.StackTrace(zap.String("permission_id", permissionID.String()), zap.Error(err))...)
-		return nil, err
 	}
 	return &PermissionResult{Permission: *created}, nil
 }

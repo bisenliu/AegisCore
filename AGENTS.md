@@ -99,13 +99,14 @@
 - 权限目录管理：权限创建、更新、启停、分页查询、详情查询、用户有效权限查询和路由差异查询。
 - 角色管理：角色创建、更新、启停、分页查询、详情查询、用户角色绑定查询/替换/增删，以及角色权限绑定查询/替换/增删。
 - RBAC HTTP 授权：JWT 认证后对用户、角色、权限业务接口执行 Casbin 授权；Casbin 使用 `user:<user_uuid>`、`role:<role_uuid>`、Gin route template 和 HTTP method，不依赖 `roles.code`。
-- RBAC policy 同步：在线 RBAC 管理接口变更权限、角色启停、用户角色绑定或角色权限绑定后，通过本实例 reload、Redis policy version、Pub/Sub 和定时版本补偿刷新其他副本的内存 Casbin policy；授权热路径不做每请求 Redis 强一致版本门控。`rbac seed` 和 `rbac assign-super-admin` 是离线运维入口，应在 migrate 与启动 HTTP server 之间执行；若在已有副本运行中执行，必须滚动重启或另行触发在线 policy refresh。
+- RBAC policy 同步：在线 RBAC 管理接口变更权限、角色启停、用户角色绑定或角色权限绑定后，通过本实例 reload、Redis policy version、Pub/Sub 和定时版本补偿刷新其他副本的内存 Casbin policy；授权热路径不做每请求 Redis 强一致版本门控。`rbac seed` 和 `rbac assign-super-admin` 是离线运维入口，应在独立 migration job 成功后、启动或滚动更新 HTTP server 前执行；若在已有副本运行中执行，必须滚动重启或另行触发在线 policy refresh。
 - HTTP 服务运行时：启动、运行、路由注册和优雅停止。
 - 未来入站 gRPC transport 边界：如用户服务暴露真实 gRPC API，放在对应 feature 的 `transport/grpc`；当前不实现 gRPC API、proto、generated code 或 server runtime。
 - 外部系统防腐层边界：`internal/integration/http`、`grpc`、`events` 只承载真实外部调用的协议适配规则，当前不实现真实 client；`internal/integration/grpc` 是出站 external client adapter，不是本服务 gRPC server transport；`internal/integration/events` 是外部事件系统 producer/consumer 协议 adapter，不是 feature consumer handler、业务事件编排或 outbox。
 - 共享基础设施：配置、日志、Redis/PostgreSQL/Ent 运行时依赖。
 - API 响应契约：统一成功/失败响应信封、全局错误码和分页响应模型。
 - 数据库迁移：通过 Ent schema 和 Atlas 维护用户服务 SQL migration。
+- 生产迁移执行：通过 CI/CD release job 或独立 migration Job 在 HTTP server rollout 前显式执行；容器 `entrypoint.sh` 只有在 `RUN_MIGRATIONS=true` 时作为简单部署或兼容场景执行迁移。
 
 ## 5. Development Commands
 

@@ -44,7 +44,6 @@ func (s *roleCommandService) AddUserRole(ctx context.Context, cmd UserRoleComman
 	}
 	if err := s.notifyUserRoleChanged(ctx, "user_role_added", cmd.UserID, cmd.RoleID); err != nil {
 		logger.Error(ctx, "refresh rbac policy after user role add failed", logger.StackTrace(zap.String("user_id", cmd.UserID.String()), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
-		return nil, err
 	}
 	return s.listUserRoles(ctx, cmd.UserID)
 }
@@ -61,7 +60,6 @@ func (s *roleCommandService) ReplaceUserRoles(ctx context.Context, cmd ReplaceUs
 	}
 	if err := s.notifyUserRoleChanged(ctx, "user_roles_replaced", cmd.UserID, uuid.Nil); err != nil {
 		logger.Error(ctx, "refresh rbac policy after user roles replace failed", logger.StackTrace(zap.String("user_id", cmd.UserID.String()), zap.Error(err))...)
-		return nil, err
 	}
 	return &RolesResult{Items: items}, nil
 }
@@ -73,7 +71,6 @@ func (s *roleCommandService) RemoveUserRole(ctx context.Context, cmd UserRoleCom
 	}
 	if err := s.notifyUserRoleChanged(ctx, "user_role_removed", cmd.UserID, cmd.RoleID); err != nil {
 		logger.Error(ctx, "refresh rbac policy after user role remove failed", logger.StackTrace(zap.String("user_id", cmd.UserID.String()), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
-		return nil, err
 	}
 	return s.listUserRoles(ctx, cmd.UserID)
 }
@@ -92,7 +89,6 @@ func (s *roleCommandService) AddRolePermission(ctx context.Context, cmd RolePerm
 	}
 	if err := s.notifyPolicyChanged(ctx, "role_permission_added"); err != nil {
 		logger.Error(ctx, "refresh rbac policy after role permission add failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
-		return nil, err
 	}
 	return s.listRolePermissions(ctx, cmd.RoleID)
 }
@@ -117,7 +113,6 @@ func (s *roleCommandService) ReplaceRolePermissions(ctx context.Context, cmd Rep
 	}
 	if err := s.notifyPolicyChanged(ctx, "role_permissions_replaced"); err != nil {
 		logger.Error(ctx, "refresh rbac policy after role permissions replace failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
-		return nil, err
 	}
 	return &PermissionsResult{Items: items}, nil
 }
@@ -129,7 +124,6 @@ func (s *roleCommandService) RemoveRolePermission(ctx context.Context, cmd RoleP
 	}
 	if err := s.notifyPolicyChanged(ctx, "role_permission_removed"); err != nil {
 		logger.Error(ctx, "refresh rbac policy after role permission remove failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
-		return nil, err
 	}
 	return s.listRolePermissions(ctx, cmd.RoleID)
 }

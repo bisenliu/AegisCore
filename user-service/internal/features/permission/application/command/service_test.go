@@ -114,56 +114,60 @@ func TestPermissionCommandServiceEnablePermission(t *testing.T) {
 	}
 }
 
-func TestPermissionCommandServiceReturnsRefreshFailure(t *testing.T) {
+func TestPermissionCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing.T) {
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000004")
 	refreshErr := errors.New("refresh failed")
 
 	tests := []struct {
 		name       string
-		run        func(*testing.T, PermissionCommandService)
+		run        func(*testing.T, PermissionCommandService) *PermissionResult
 		wantReason string
 	}{
 		{
 			name: "create",
-			run: func(t *testing.T, service PermissionCommandService) {
+			run: func(t *testing.T, service PermissionCommandService) *PermissionResult {
 				t.Helper()
-				_, err := service.CreatePermission(context.Background(), CreatePermissionCommand{Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users"})
-				if !errors.Is(err, refreshErr) {
-					t.Fatalf("err = %v, want refreshErr", err)
+				result, err := service.CreatePermission(context.Background(), CreatePermissionCommand{Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users"})
+				if err != nil {
+					t.Fatalf("CreatePermission: %v", err)
 				}
+				return result
 			},
 			wantReason: "permission_created",
 		},
 		{
 			name: "update",
-			run: func(t *testing.T, service PermissionCommandService) {
+			run: func(t *testing.T, service PermissionCommandService) *PermissionResult {
 				t.Helper()
-				_, err := service.UpdatePermission(context.Background(), UpdatePermissionCommand{PermissionID: permissionID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true})
-				if !errors.Is(err, refreshErr) {
-					t.Fatalf("err = %v, want refreshErr", err)
+				result, err := service.UpdatePermission(context.Background(), UpdatePermissionCommand{PermissionID: permissionID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true})
+				if err != nil {
+					t.Fatalf("UpdatePermission: %v", err)
 				}
+				return result
 			},
 			wantReason: "permission_updated",
 		},
 		{
 			name: "enable",
-			run: func(t *testing.T, service PermissionCommandService) {
+			run: func(t *testing.T, service PermissionCommandService) *PermissionResult {
 				t.Helper()
-				_, err := service.EnablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
-				if !errors.Is(err, refreshErr) {
-					t.Fatalf("err = %v, want refreshErr", err)
+				result, err := service.EnablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
+				if err != nil {
+					t.Fatalf("EnablePermission: %v", err)
 				}
+				return result
 			},
 			wantReason: "permission_active_changed",
 		},
 		{
 			name: "disable",
-			run: func(t *testing.T, service PermissionCommandService) {
+			run: func(t *testing.T, service PermissionCommandService) *PermissionResult {
 				t.Helper()
-				_, err := service.DisablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
-				if !errors.Is(err, refreshErr) {
-					t.Fatalf("err = %v, want refreshErr", err)
+				result, err := service.DisablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
+				if err != nil {
+					t.Fatalf("DisablePermission: %v", err)
 				}
+				return result
 			},
 			wantReason: "permission_active_changed",
 		},
@@ -175,8 +179,11 @@ func TestPermissionCommandServiceReturnsRefreshFailure(t *testing.T) {
 			notifier := &stubPolicyChangeNotifier{err: refreshErr}
 			service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: notifier})
 
-			tt.run(t, service)
+			result := tt.run(t, service)
 
+			if result == nil || result.Permission.PermissionID == uuid.Nil {
+				t.Fatalf("result = %#v", result)
+			}
 			if notifier.calls != 1 || notifier.reasons[0] != tt.wantReason {
 				t.Fatalf("notifier calls = %d reasons = %#v", notifier.calls, notifier.reasons)
 			}

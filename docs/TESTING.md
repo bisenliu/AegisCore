@@ -101,12 +101,14 @@ Ent 生成代码通常不需要逐文件测试。测试应覆盖 schema 约束�
 4. 在 `user-service/` 运行 `./scripts/migrate-validate.sh`；Atlas 配置位于 `user-service/migrations/atlas.hcl`。
 5. 确认运行时没有通过 `client.Schema.Create(ctx)` 自动修改 schema。
 
+涉及部署迁移流程的变更还应确认生产发布顺序仍为独立 migration job、RBAC seed、HTTP server rollout；测试或 e2e schema 初始化仍必须来自 Atlas SQL migration，不得改回运行时自动建表。
+
 ## 8. Change Verification
 
 每个 change 实现完成后至少执行：
 
 1. 与改动范围匹配的测试；全仓库使用 `make test`，跨模块变更也可分别在 `common/` 和 `user-service/` 执行 `go test ./...`。
 2. 如涉及 Ent schema，执行 `go generate ./ent` 并检查生成结果。
-3. 如涉及 migration，执行 `./scripts/migrate-validate.sh` 并检查 `atlas.sum` 与 SQL 文件一致。
+3. 如涉及 migration，执行 `./scripts/migrate-validate.sh` 并检查 `atlas.sum` 与 SQL 文件一致；如涉及发布流程，确认 migration 在独立 Job 或 CI/CD release job 中执行，而不是依赖服务容器默认启动迁移。
 4. 如涉及 HTTP API，验证成功和失败响应均符合 `common/contract/response.Envelope`。
 5. 如涉及配置或启动流程，验证 loader 行为、依赖不可用和优雅停止场景。

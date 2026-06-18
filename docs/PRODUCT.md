@@ -20,7 +20,7 @@ AegisCore 是面向多服务后端能力的 Go 项目底座。当前仓库已具
 3. 服务进程通过配置文件和环境变量加载 HTTP、日志、Redis、Postgres 参数。
 4. HTTP 请求经过 OTel tracing、日志、panic recovery 和 CORS 中间件。
 5. 业务错误被映射为统一的 API 响应信封和错误码。
-6. 数据库 schema 变更通过 Ent schema 和 Atlas SQL migration 生成、审查、校验并在服务启动前执行。
+6. 数据库 schema 变更通过 Ent schema 和 Atlas SQL migration 生成、审查、校验，并在发布流程中通过独立 migration job 显式执行。
 
 ## 4. Stable Capabilities
 
@@ -37,7 +37,7 @@ AegisCore 是面向多服务后端能力的 Go 项目底座。当前仓库已具
 - 用户数据由 PostgreSQL 中 Ent `User` schema 表达，`username` 唯一，内部 `id` 不对外暴露，对外使用 UUID `user_id`。
 - API 调用方依赖统一 JSON 响应结构，新增接口应保持兼容。
 - 服务启动依赖 Redis 和 PostgreSQL 可用。`/livez` 只代表 HTTP 进程在线；`/readyz` 和 `/startupz` 会检查 PostgreSQL、Redis、Casbin policy 加载状态和 RBAC policy watcher 状态。
-- 数据库结构变更必须通过可审查的 SQL migration 表达，运行时不自动修改 schema。
+- 数据库结构变更必须通过可审查的 SQL migration 表达，运行时不自动修改 schema；普通服务容器默认不执行 migration。
 
 ## 6. Non-Goals For Current Baseline
 

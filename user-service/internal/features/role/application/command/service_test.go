@@ -152,7 +152,7 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	}
 }
 
-func TestRoleCommandServiceReturnsRefreshFailure(t *testing.T) {
+func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing.T) {
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000009")
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000010")
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000011")
@@ -160,94 +160,102 @@ func TestRoleCommandServiceReturnsRefreshFailure(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		run        func(*testing.T, RoleCommandService)
+		run        func(*testing.T, RoleCommandService) any
 		wantReason string
 	}{
 		{
 			name: "update role",
-			run: func(t *testing.T, service RoleCommandService) {
+			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
-				_, err := service.UpdateRole(context.Background(), UpdateRoleCommand{RoleID: roleID, Name: "operator", Active: true})
-				if !errors.Is(err, refreshErr) {
-					t.Fatalf("err = %v, want refreshErr", err)
+				result, err := service.UpdateRole(context.Background(), UpdateRoleCommand{RoleID: roleID, Name: "operator", Active: true})
+				if err != nil {
+					t.Fatalf("UpdateRole: %v", err)
 				}
+				return result
 			},
 			wantReason: "role_updated",
 		},
 		{
 			name: "set role active",
-			run: func(t *testing.T, service RoleCommandService) {
+			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
-				_, err := service.SetRoleActive(context.Background(), SetRoleActiveCommand{RoleID: roleID, Active: false})
-				if !errors.Is(err, refreshErr) {
-					t.Fatalf("err = %v, want refreshErr", err)
+				result, err := service.SetRoleActive(context.Background(), SetRoleActiveCommand{RoleID: roleID, Active: false})
+				if err != nil {
+					t.Fatalf("SetRoleActive: %v", err)
 				}
+				return result
 			},
 			wantReason: "role_active_changed",
 		},
 		{
 			name: "add user role",
-			run: func(t *testing.T, service RoleCommandService) {
+			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
-				_, err := service.AddUserRole(context.Background(), UserRoleCommand{UserID: userID, RoleID: roleID})
-				if !errors.Is(err, refreshErr) {
-					t.Fatalf("err = %v, want refreshErr", err)
+				result, err := service.AddUserRole(context.Background(), UserRoleCommand{UserID: userID, RoleID: roleID})
+				if err != nil {
+					t.Fatalf("AddUserRole: %v", err)
 				}
+				return result
 			},
 			wantReason: "user_role_added",
 		},
 		{
 			name: "replace user roles",
-			run: func(t *testing.T, service RoleCommandService) {
+			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
-				_, err := service.ReplaceUserRoles(context.Background(), ReplaceUserRolesCommand{UserID: userID, RoleIDs: []uuid.UUID{roleID}})
-				if !errors.Is(err, refreshErr) {
-					t.Fatalf("err = %v, want refreshErr", err)
+				result, err := service.ReplaceUserRoles(context.Background(), ReplaceUserRolesCommand{UserID: userID, RoleIDs: []uuid.UUID{roleID}})
+				if err != nil {
+					t.Fatalf("ReplaceUserRoles: %v", err)
 				}
+				return result
 			},
 			wantReason: "user_roles_replaced",
 		},
 		{
 			name: "remove user role",
-			run: func(t *testing.T, service RoleCommandService) {
+			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
-				_, err := service.RemoveUserRole(context.Background(), UserRoleCommand{UserID: userID, RoleID: roleID})
-				if !errors.Is(err, refreshErr) {
-					t.Fatalf("err = %v, want refreshErr", err)
+				result, err := service.RemoveUserRole(context.Background(), UserRoleCommand{UserID: userID, RoleID: roleID})
+				if err != nil {
+					t.Fatalf("RemoveUserRole: %v", err)
 				}
+				return result
 			},
 			wantReason: "user_role_removed",
 		},
 		{
 			name: "add role permission",
-			run: func(t *testing.T, service RoleCommandService) {
+			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
-				_, err := service.AddRolePermission(context.Background(), RolePermissionCommand{RoleID: roleID, PermissionID: permissionID})
-				if !errors.Is(err, refreshErr) {
-					t.Fatalf("err = %v, want refreshErr", err)
+				result, err := service.AddRolePermission(context.Background(), RolePermissionCommand{RoleID: roleID, PermissionID: permissionID})
+				if err != nil {
+					t.Fatalf("AddRolePermission: %v", err)
 				}
+				return result
 			},
 			wantReason: "role_permission_added",
 		},
 		{
 			name: "replace role permissions",
-			run: func(t *testing.T, service RoleCommandService) {
+			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
-				_, err := service.ReplaceRolePermissions(context.Background(), ReplaceRolePermissionsCommand{RoleID: roleID, PermissionIDs: []uuid.UUID{permissionID}})
-				if !errors.Is(err, refreshErr) {
-					t.Fatalf("err = %v, want refreshErr", err)
+				result, err := service.ReplaceRolePermissions(context.Background(), ReplaceRolePermissionsCommand{RoleID: roleID, PermissionIDs: []uuid.UUID{permissionID}})
+				if err != nil {
+					t.Fatalf("ReplaceRolePermissions: %v", err)
 				}
+				return result
 			},
 			wantReason: "role_permissions_replaced",
 		},
 		{
 			name: "remove role permission",
-			run: func(t *testing.T, service RoleCommandService) {
+			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
-				_, err := service.RemoveRolePermission(context.Background(), RolePermissionCommand{RoleID: roleID, PermissionID: permissionID})
-				if !errors.Is(err, refreshErr) {
-					t.Fatalf("err = %v, want refreshErr", err)
+				result, err := service.RemoveRolePermission(context.Background(), RolePermissionCommand{RoleID: roleID, PermissionID: permissionID})
+				if err != nil {
+					t.Fatalf("RemoveRolePermission: %v", err)
 				}
+				return result
 			},
 			wantReason: "role_permission_removed",
 		},
@@ -262,8 +270,11 @@ func TestRoleCommandServiceReturnsRefreshFailure(t *testing.T) {
 			notifier := &stubRolePolicyChangeNotifier{err: refreshErr}
 			service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &stubUserRoleStore{}, RolePermissions: &stubRolePermissionStore{}, Permissions: permissions, PolicyChanges: notifier})
 
-			tt.run(t, service)
+			result := tt.run(t, service)
 
+			if result == nil {
+				t.Fatalf("result is nil")
+			}
 			if len(notifier.reasons) != 1 || notifier.reasons[0] != tt.wantReason {
 				t.Fatalf("notifier = %#v", notifier.reasons)
 			}

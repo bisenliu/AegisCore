@@ -4,7 +4,7 @@
 
 当前提供可直接运行的本地 Compose 编排：
 
-- `docker-compose.yml`：启动 PostgreSQL、Redis、用户服务、Prometheus 和 Grafana，并在用户服务启动前执行 Atlas migration 与 RBAC seed。
+- `docker-compose.yml`：启动 PostgreSQL、Redis、用户服务、Prometheus 和 Grafana，并通过独立 `user-service-migrate` one-shot 服务在用户服务启动前执行 Atlas migration，再执行 RBAC seed。
 - `prometheus/prometheus.yml`：抓取用户服务 `/metrics`，并加载 `deployments/observability/prometheus/user-service-alerts.yaml`。
 - `grafana/provisioning/`：自动配置 Prometheus datasource 和用户服务看板。
 - `grafana/dashboards/user-service-overview.json`：由 `deployments/observability/grafana/user-service-overview.json` 生成的本地自动导入副本，datasource uid 固定为 `prometheus`；不要手动编辑该文件。
@@ -42,3 +42,5 @@ docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-ser
 ```
 
 Compose 文件使用仓库根目录作为 build context，并通过 `deployments/docker/user-service.Dockerfile` 构建用户服务镜像。
+
+Compose 中的 `user-service-migrate` 是本地 release migration job 的模拟：它使用同一用户服务镜像执行 `/app/user-service/scripts/migrate-apply.sh`，成功后才允许 `rbac-seed` 和 `user-service` 启动。`user-service` 容器显式设置 `RUN_MIGRATIONS=false`，普通服务容器本身不默认执行 migration。生产多副本发布也应使用独立 migration Job 或 CI/CD release job，而不是依赖服务副本启动时迁移。

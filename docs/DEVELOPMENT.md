@@ -46,11 +46,11 @@ Makefile 只是统一入口：测试和 lint 仍分别进入 `common/` 与 `user
 ## 4. Local Runtime And Deployment Assets
 
 - 本地直接运行用户服务：先准备 PostgreSQL 和 Redis，再执行 `make run-user-service`。
-- RBAC 系统角色、系统权限和系统角色权限绑定需要显式初始化或更新：推荐顺序为先执行数据库 migration，再执行 `make seed-rbac`，最后启动 HTTP server。seed 不会在 `serve` 启动时自动执行，也不会发布运行期 policy refresh；不要把 `make seed-rbac` 当作在线授权变更入口。
+- RBAC 系统角色、系统权限和系统角色权限绑定需要显式初始化或更新：推荐发布顺序为先执行独立数据库 migration job 或 CI/CD release job，再执行 `make seed-rbac`，最后启动或滚动更新 HTTP server。seed 不会在 `serve` 启动时自动执行，也不会发布运行期 policy refresh；不要把 `make seed-rbac` 当作在线授权变更入口。
 - 生产环境若必须在已有 HTTP 副本运行中执行 `make seed-rbac` 或 `rbac assign-super-admin`，执行后需要滚动重启服务副本，或通过正式 RBAC 管理接口触发一次在线 policy refresh，确保所有副本的内存 Casbin policy 重新加载。日常在线权限、角色状态、用户角色绑定和角色权限绑定变更应使用 HTTP RBAC 管理接口，该路径会通过 Redis policy version、Pub/Sub 和版本补偿检查同步多副本。
 - 新增或调整进入 RBAC 授权中间件的业务路由时，必须同步更新 `user-service/internal/shared/rbacbaseline` 中的系统权限 URL catalog，重新执行 `make seed-rbac`，并通过 `GET /api/v1/permissions/route-diff` 检查权限目录与已注册路由是否仍一致。
 - 构建用户服务容器镜像：从仓库根目录执行 `docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .`。该 Dockerfile 依赖仓库根目录作为 build context，以便复制 `go.work`、`common/` 和 `user-service/`。
-- 本地 Compose 文件归属 `deployments/compose/`，可启动 PostgreSQL、Redis、用户服务、Prometheus 和 Grafana。Compose 自动导入的 Grafana dashboard 由 `deployments/observability/grafana/user-service-overview.json` 生成；更新通用 dashboard 后执行 `make compose-dashboard-generate`，不要手动同步两份 JSON。
+- 本地 Compose 文件归属 `deployments/compose/`，可启动 PostgreSQL、Redis、用户服务、Prometheus 和 Grafana，并通过独立 `user-service-migrate` one-shot 服务模拟 release migration job。Compose 自动导入的 Grafana dashboard 由 `deployments/observability/grafana/user-service-overview.json` 生成；更新通用 dashboard 后执行 `make compose-dashboard-generate`，不要手动同步两份 JSON。
 - Kubernetes YAML 归属 `deployments/k8s/`，Helm chart 归属 `deployments/helm/`。当前目录只声明边界，不提供可直接部署的生产资源。
 - 用户服务第一版 Prometheus/Grafana 观测资产位于 `deployments/observability/`，包含 dashboard、alert rule 示例和导入/验证说明；告警排障入口位于 `docs/observability/user-service-runbook.md`。
 - 用户服务探针路径为：`/livez` 用于 liveness，`/readyz` 用于 readiness，`/startupz` 用于 startup probe。`/readyz` 和 `/startupz` 会检查 PostgreSQL、Redis、Casbin policy 加载状态和 RBAC policy watcher 状态。
@@ -155,9 +155,9 @@ atlas migrate hash --dir file://migrations
 
 如果 SQL 文件与 `atlas.sum` 不一致，`atlas migrate validate --dir file://migrations` 会失败，CI/CD 不得继续部署。
 
-### 7.4 Apply In CI/CD Or Entrypoint
+### 7.4 Apply In Release Job
 
-推荐在 CI/CD release job 中执行迁移，再启动或滚动发布服务：
+推荐在 CI/CD release job 或独立 migration Job 中执行迁移，再执行 RBAC seed，并最后启动或滚动发布服务：
 
 ```bash
 cd user-service
@@ -165,7 +165,7 @@ cd user-service
 DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&search_path=public' ./scripts/migrate-apply.sh
 ```
 
-如果发布平台无法提供独立 migration job，也可以使用容器 `entrypoint.sh` 在启动前执行迁移。容器启动前迁移会增加启动耗时，并且多副本并发启动时需要依赖 Atlas migration lock 和发布平台副本策略；生产环境优先使用单独 migration job。
+容器 `entrypoint.sh` 默认不执行 migration。只有显式设置 `RUN_MIGRATIONS=true` 时，入口脚本才会在启动 HTTP server 前执行 `migrate-apply.sh`。该模式仅适合简单部署或兼容过渡；多副本生产发布不应让普通服务副本竞争 Atlas migration lock，迁移失败也应在应用 rollout 前阻断发布。
 
 `DATABASE_URL` 必须指向用户服务拥有的 `user_db`，不要因为配置中存在其他 PostgreSQL 命名实例而迁移非目标数据库。
 

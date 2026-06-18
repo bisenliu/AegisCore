@@ -203,7 +203,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 
 - 用户服务使用服务内迁移目录 `user-service/migrations/`，Atlas 配置位于 `user-service/migrations/atlas.hcl`。
 - Ent schema 是期望数据库结构来源；开发期通过 `go generate ./ent` 生成 Ent 代码，通过 `./scripts/migrate-diff.sh <name>` 生成 SQL migration，并通过 `./scripts/migrate-validate.sh` 校验 `atlas.sum`。
-- 运行时不得通过 `client.Schema.Create(ctx)` 自动创建或修改 schema；迁移应由 CI/CD release job 或容器 entrypoint 在 HTTP runtime 启动前执行。
+- 运行时不得通过 `client.Schema.Create(ctx)` 自动创建或修改 schema；生产迁移应由 CI/CD release job 或独立 migration Job 在 HTTP runtime rollout 前执行。容器 `entrypoint.sh` 仅在显式设置 `RUN_MIGRATIONS=true` 时作为简单部署或兼容场景执行迁移，不作为多副本生产发布的默认编排手段。
 - 迁移执行应面向用户服务拥有的 `user_db`，不得因为配置中存在其他数据库配置而迁移非目标数据库。
 
 ## 11. Generated Code
