@@ -3,6 +3,8 @@ package casbin
 import (
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -117,6 +119,61 @@ func TestUserRoleResolverCachesAndInvalidatesActiveRoles(t *testing.T) {
 		t.Fatalf("RolesForUser reloaded: %v", err)
 	}
 	assertRoleIDs(t, reloaded, []uuid.UUID{activeRoleID, laterRoleID})
+}
+
+func TestUserRoleResolverCoalescesConcurrentMisses(t *testing.T) {
+	client := newPolicyTestClient(t)
+	ctx := context.Background()
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000401")
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000402")
+	user := createPolicyTestUser(t, client, userID, "resolver-concurrent@example.com")
+	role := createPolicyTestRole(t, client, roleID, true)
+	createPolicyTestUserRole(t, client, user.ID, role.ID)
+
+	var roleQueries atomic.Int64
+	queryStarted := make(chan struct{})
+	releaseQuery := make(chan struct{})
+	client.Role.Intercept(ent.InterceptFunc(func(next ent.Querier) ent.Querier {
+		return ent.QuerierFunc(func(ctx context.Context, q ent.Query) (ent.Value, error) {
+			if roleQueries.Add(1) == 1 {
+				close(queryStarted)
+				<-releaseQuery
+			}
+			return next.Query(ctx, q)
+		})
+	}))
+
+	resolver := newUserRoleResolver(client, time.Minute)
+	const calls = 8
+	var wg sync.WaitGroup
+	wg.Add(calls)
+	errCh := make(chan error, calls)
+	for range calls {
+		go func() {
+			defer wg.Done()
+			roleIDs, err := resolver.RolesForUser(ctx, userID)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			if len(roleIDs) != 1 || roleIDs[0] != roleID {
+				errCh <- fmt.Errorf("role ids = %#v, want [%s]", roleIDs, roleID)
+			}
+		}()
+	}
+
+	<-queryStarted
+	close(releaseQuery)
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := roleQueries.Load(); got != 1 {
+		t.Fatalf("role query count = %d, want 1", got)
+	}
 }
 
 func newPolicyTestClient(t *testing.T) *ent.Client {
