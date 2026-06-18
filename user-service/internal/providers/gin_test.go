@@ -385,10 +385,18 @@ func TestHTTPServerSpanName(t *testing.T) {
 
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil))
 
-	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	c.Request = httptest.NewRequest(http.MethodPatch, "/not-found", nil)
-	if got := httpServerSpanName(c); got != "PATCH /not-found" {
-		t.Fatalf("fallback span name = %q, want URL path", got)
+	unmatchedNames := make(map[string]struct{})
+	for _, path := range []string{"/not-found/1", "/not-found/2"} {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPatch, path, nil)
+		got := httpServerSpanName(c)
+		if got != "PATCH route not found" {
+			t.Fatalf("fallback span name = %q, want stable unmatched route name", got)
+		}
+		unmatchedNames[got] = struct{}{}
+	}
+	if len(unmatchedNames) != 1 {
+		t.Fatalf("unmatched span names = %v, want single low-cardinality fallback", unmatchedNames)
 	}
 }
 

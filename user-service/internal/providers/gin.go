@@ -17,6 +17,8 @@ import (
 	"github.com/aegiscore/user-service/internal/router"
 )
 
+const httpServerUnmatchedRouteSpanTarget = "route not found"
+
 // GinParams 包含创建 Gin engine 所需的 Fx 输入。
 type GinParams struct {
 	fx.In
@@ -92,9 +94,8 @@ func renameHTTPServerSpan() gin.HandlerFunc {
 }
 
 func httpServerSpanName(c *gin.Context) string {
-	path := c.FullPath()
-	if path == "" {
-		path = c.Request.URL.Path
+	if path := c.FullPath(); path != "" {
+		return c.Request.Method + " " + path
 	}
-	return c.Request.Method + " " + path
+	return c.Request.Method + " " + httpServerUnmatchedRouteSpanTarget
 }
