@@ -61,6 +61,26 @@
 - **WHEN** `openspec/specs/`、`openspec/changes/` 或 `docs/opsx/` 下 Markdown 保留默认英文模板标题或说明
 - **THEN** 架构 lint MUST 失败并要求改为简体中文正文
 
+#### Scenario: feature-first 组织违规
+
+- **WHEN** 服务内业务代码新增到横向 `internal/controller`、`internal/service`、`internal/repository`、`internal/api` 或 `internal/domain` 包
+- **THEN** 架构 lint 或 review MUST 阻止该变更，并要求代码放入所属 `internal/features/<feature>/`
+
+#### Scenario: HTTP controller 边界
+
+- **WHEN** HTTP controller 处理请求输入
+- **THEN** controller MUST 先调用 `binding.BindOrAbort`，再调用一个 feature-local input preparer，且 MUST NOT 直接导入 Ent、Redis client、SQL package 或基础设施 adapter
+
+#### Scenario: domain 依赖保护
+
+- **WHEN** feature domain 层新增 import
+- **THEN** domain MUST NOT 导入 Gin、Ent、Redis、config、logger、response envelope、application ports 或 infrastructure adapter
+
+#### Scenario: 生产代码测试专用 API
+
+- **WHEN** 测试需要 fake、stub、fixture、时间控制或特殊断言入口
+- **THEN** 这些能力 SHOULD 位于 `_test.go`、`common/testing` 或对应测试基础设施；正式代码 MUST NOT 暴露 `NewXForTest`、`testHook`、`setNowForTest` 等仅为测试服务的 API，除非它们具有清晰运行时职责
+
 ### Requirement: 代码生成与数据库迁移
 
 系统 MUST 提供 Ent 代码生成、Atlas migration diff、migration validate 和 migration apply 入口，并要求 schema 相关变更同步生成物。
@@ -73,12 +93,22 @@
 #### Scenario: 生成 migration
 
 - **WHEN** 数据库 schema 变化需要生成 migration
-- **THEN** 协作者 MUST 执行 `make user-service-migrate-diff name=<migration-name>` 生成 Atlas migration
+- **THEN** 协作者 MUST 执行 `make user-service-generate` 和 `make user-service-migrate-diff name=<migration-name>` 生成 Ent 代码与 Atlas migration，并审查 SQL 与 `atlas.sum`
 
 #### Scenario: 校验并应用 migration
 
 - **WHEN** migration 准备进入环境或发布流程
 - **THEN** 系统 MUST 支持 `make user-service-migrate-validate` 校验 migration，并通过 `DATABASE_URL` 执行 `make user-service-migrate-apply`
+
+#### Scenario: 手动调整 migration SQL
+
+- **WHEN** 生成的 SQL migration 被手动调整
+- **THEN** 协作者 MUST 刷新并提交 `atlas.sum`，且 MUST 确保 `make user-service-migrate-validate` 通过
+
+#### Scenario: 运行时不修改 schema
+
+- **WHEN** user-service 正常启动或 E2E 初始化数据库 schema
+- **THEN** schema MUST 来自已提交 Atlas SQL migration，运行时服务代码 MUST NOT 使用 `client.Schema.Create(ctx)` 表达 schema 变更
 
 ### Requirement: 发布和部署资产
 
@@ -89,12 +119,37 @@
 - **WHEN** 协作者执行 Docker build 命令并指定 `deployments/docker/user-service.Dockerfile`
 - **THEN** 系统 MUST 能从仓库根目录构建 user-service 镜像
 
+#### Scenario: Dockerfile 路径约束
+
+- **WHEN** 调整 user-service Dockerfile、entrypoint 或 COPY 规则
+- **THEN** 路径 MUST 继续以仓库根 build context 为基准，容器内迁移脚本和 Atlas 配置 MUST 与 `user-service/migrations/` 当前布局兼容
+
 #### Scenario: 本地 Compose 启动
 
 - **WHEN** 协作者使用 `deployments/compose` 运行本地环境
 - **THEN** 系统 MUST 提供 user-service 所需的数据库、缓存和观测服务配置
 
+#### Scenario: Compose 启动顺序
+
+- **WHEN** 使用本地 Compose 启动包含 migration、RBAC seed 和 user-service 的环境
+- **THEN** migration MUST 先于 RBAC seed 执行，RBAC seed MUST 先于 user-service app 启动
+
 #### Scenario: 生产发布顺序
 
 - **WHEN** user-service 发布到生产环境
-- **THEN** 运维 MUST 先执行 user-service `user_db` Atlas migration，再执行 `make user-service-seed-rbac`，按需创建超级管理员，最后启动或滚动更新 HTTP 副本
+- **THEN** 运维 MUST 先通过独立 migration Job 或 CI/CD release job 执行 user-service `user_db` Atlas migration，再执行 RBAC seed Job，按需显式创建或分配超级管理员，最后启动或滚动更新 HTTP 副本
+
+#### Scenario: 容器启动 migration 兼容模式
+
+- **WHEN** `RUN_MIGRATIONS` 未设置或不为 `true`
+- **THEN** user-service 容器 MUST 直接启动服务，不得应用 migration
+
+#### Scenario: 显式启用入口脚本 migration
+
+- **WHEN** `RUN_MIGRATIONS=true`
+- **THEN** entrypoint MAY 在启动 HTTP server 前执行 migration，但该模式只适用于简单部署或兼容场景，多副本生产发布 SHOULD 使用独立 migration Job
+
+#### Scenario: Kubernetes 和 Helm 占位边界
+
+- **WHEN** Kubernetes 或 Helm 目录当前只用于声明边界
+- **THEN** 系统 MUST NOT 为填充目录而新增未验证的 Deployment、Service、Ingress、Secret 或 chart template；生产可用资产 MUST 伴随验证方式和发布顺序说明

@@ -21,7 +21,12 @@
 #### Scenario: 路由差异分析
 
 - **WHEN** 系统扫描已注册 HTTP 路由并与权限目录比较
-- **THEN** 系统 MUST 能识别缺失、冗余或不一致的权限定义
+- **THEN** 系统 MUST 能识别 missing、stale 或不一致的权限定义，且 MUST NOT 创建权限、修改权限状态或绑定角色
+
+#### Scenario: 可授权路由发现
+
+- **WHEN** 系统构造 route diff 诊断输入
+- **THEN** 系统 MUST 排除 `OPTIONS`、`/api/v1/` 外路径和认证公开或会话控制路由，且 application 层 MUST NOT 直接依赖 Gin engine
 
 ### Requirement: 角色与权限绑定
 
@@ -36,6 +41,16 @@
 
 - **WHEN** 角色绑定请求引用不存在或不可用的权限
 - **THEN** 系统 MUST 拒绝绑定并保持已有角色权限关系不被破坏
+
+#### Scenario: 角色通过权限端口校验
+
+- **WHEN** 角色 application 需要校验权限 ID
+- **THEN** 角色 feature MUST 通过权限 application 查询端口校验，不得导入 permission infrastructure
+
+#### Scenario: 停用角色
+
+- **WHEN** 角色已停用
+- **THEN** 通过该角色形成的绑定 MUST NOT 在有效权限查询或 Casbin policy 加载中授予访问权限
 
 #### Scenario: 查询角色列表
 
@@ -61,9 +76,14 @@
 - **WHEN** 系统或调用方查询某用户有效权限
 - **THEN** 系统 MUST 聚合用户角色和角色权限，返回该用户当前可访问的权限集合
 
+#### Scenario: 用户无角色
+
+- **WHEN** 已认证用户没有有效角色绑定并访问 RBAC 保护路由
+- **THEN** 系统 MUST 拒绝访问
+
 ### Requirement: Casbin 授权保护
 
-系统 MUST 使用 RBAC 授权中间件保护权限、角色和用户业务接口，并在认证通过后执行资源级授权判断。
+系统 MUST 使用 RBAC 授权中间件保护权限、角色和用户业务接口，并在认证通过后执行资源级授权判断。Casbin subject/object/action MUST 分别使用 `user:<user_uuid>`、`role:<role_uuid>`、Gin route template 和 HTTP method。
 
 #### Scenario: 授权通过
 
@@ -80,6 +100,40 @@
 - **WHEN** 权限、角色或绑定发生变化
 - **THEN** 系统 MUST 同步或刷新授权策略，避免旧策略长期影响授权判断
 
+#### Scenario: Casbin policy 权威来源
+
+- **WHEN** policy loader 从持久化层构造授权策略
+- **THEN** 策略 MUST 由启用角色、启用权限、角色权限绑定和用户角色绑定派生，不得以独立 `casbin_rules` 表作为业务权威来源
+
+#### Scenario: Casbin subject 稳定格式
+
+- **WHEN** 角色参与 policy 构造或授权判断
+- **THEN** 角色 subject MUST 使用 `role:<role_uuid>`，不得依赖 `roles.code`；用户身份解析 MUST 排除已软删除用户
+
+#### Scenario: 超级管理员通配授权
+
+- **WHEN** 用户拥有 `internal/shared/rbacbaseline` 中稳定的内置超级管理员角色
+- **THEN** policy loader MUST 补充 wildcard policy，使其可访问受保护业务接口，且 MUST NOT 在 role 或 permission feature 内重复定义超级管理员常量
+
+### Requirement: 策略同步
+
+系统 MUST 在在线 RBAC 写操作成功后触发本实例策略刷新，并通过 Redis policy version、Pub/Sub 和定时版本补偿同步其他副本。
+
+#### Scenario: 在线角色绑定变更
+
+- **WHEN** 用户角色绑定通过 HTTP API 变更成功
+- **THEN** 本实例 MUST 执行策略刷新或用户角色缓存失效，并通知其他副本
+
+#### Scenario: 在线权限策略变更
+
+- **WHEN** 在线 RBAC 管理接口修改权限、角色启停或角色权限绑定并提交成功
+- **THEN** 本实例 MUST 执行 policy reload，并通过 Redis policy version 和 Pub/Sub 通知其他副本；其他副本 MUST 通过 Pub/Sub 和周期性版本补偿感知变更
+
+#### Scenario: 授权热路径
+
+- **WHEN** 业务请求进入 RBAC 授权中间件
+- **THEN** 授权 MUST 使用本实例内存 Casbin enforcer 和本地可用的用户角色解析结果，MUST NOT 每请求读取 Redis policy version 做强一致门控
+
 ### Requirement: RBAC 系统数据引导
 
 系统 MUST 提供 CLI 能力初始化系统角色、系统权限、系统绑定，并支持为用户分配或创建超级管理员。
@@ -87,14 +141,24 @@
 #### Scenario: 初始化 RBAC 系统数据
 
 - **WHEN** 运维执行 `aegiscore-user-services rbac seed`
-- **THEN** 系统 MUST 创建或更新默认系统角色、权限和绑定，并输出插入、更新、绑定增删统计
+- **THEN** 系统 MUST 创建或更新默认系统角色、权限和绑定，并输出插入、更新、绑定增删统计；seed MUST NOT 自动创建真实业务用户或为任意业务用户分配超级管理员角色
+
+#### Scenario: 分配超级管理员
+
+- **WHEN** 运维执行 `rbac assign-super-admin --user-id <uuid>`
+- **THEN** 系统 MUST 为指定已存在用户绑定内置超级管理员角色
 
 #### Scenario: 创建超级管理员
 
 - **WHEN** 运维执行 `create-super-admin` 并提供管理员密码环境变量
-- **THEN** 系统 MUST 创建或复用管理员用户，按需更新密码，并绑定内置超级管理员角色
+- **THEN** 系统 MUST 创建或复用管理员用户并绑定内置超级管理员角色；已有管理员默认 MUST NOT 重置密码，只有显式传入 `--reset-password` 或 `ADMIN_RESET_PASSWORD=true` 时才允许重置密码
 
 #### Scenario: 缺少管理员密码
 
 - **WHEN** 创建超级管理员时缺少配置的密码环境变量或密码为空
 - **THEN** 系统 MUST 拒绝执行并返回明确错误
+
+#### Scenario: 运行中执行离线 RBAC 命令
+
+- **WHEN** HTTP 副本已经运行时执行 `rbac seed`、`rbac assign-super-admin` 或 `rbac create-super-admin`
+- **THEN** 命令只修改持久化数据，不得被视为运行期 policy refresh；运维 MUST 滚动重启副本或触发在线 RBAC 刷新

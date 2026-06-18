@@ -11,7 +11,7 @@
 #### Scenario: 创建正常用户
 
 - **WHEN** 调用用户创建能力并提供合法用户名、昵称、密码和正常状态
-- **THEN** 系统 MUST 创建用户资料、初始化认证凭证，并返回可用于后续查询和授权绑定的用户 ID
+- **THEN** 系统 MUST 创建用户资料、初始化认证凭证，并返回可用于后续查询和授权绑定的 UUID `user_id`
 
 #### Scenario: 用户名不合法
 
@@ -30,7 +30,7 @@
 #### Scenario: 查询存在的用户
 
 - **WHEN** 授权调用方按有效用户 ID 查询用户资料
-- **THEN** 系统 MUST 返回该用户的 ID、用户名、昵称、状态和创建更新时间等公开资料字段
+- **THEN** 系统 MUST 返回该用户的 UUID `user_id`、用户名、昵称、状态和创建更新时间等公开资料字段，并 MUST NOT 暴露内部数字数据库 ID
 
 #### Scenario: 查询不存在的用户
 
@@ -41,6 +41,25 @@
 
 - **WHEN** 调用方按分页参数列出用户
 - **THEN** 系统 MUST 返回用户列表和共享 pagination 信息，并对无效分页参数执行校验
+
+### Requirement: 用户 feature 分层
+
+系统 MUST 将用户资料能力按 feature-local 分层组织，保证用户 use case、协议 DTO 和 Ent adapter 归属清晰。
+
+#### Scenario: 新增用户写侧用例
+
+- **WHEN** 新增创建、更新或其他用户写侧操作
+- **THEN** 用例 MUST 位于 `user-service/internal/features/user/application/command`，并通过用户 feature application 拥有的端口访问基础设施
+
+#### Scenario: 新增用户读侧用例
+
+- **WHEN** 新增用户查询或列表读侧操作
+- **THEN** 查询实现 MUST 位于 `user-service/internal/features/user/application/query`，并消费用户 feature application 拥有的端口
+
+#### Scenario: 用户 HTTP DTO 和输入准备
+
+- **WHEN** 用户 HTTP controller 处理 path、query 或 body 字段
+- **THEN** HTTP request/response DTO MUST 位于 `transport/http`，协议无关输入辅助 SHOULD 位于 `application/validators`，Ent 访问 MUST 留在 `infrastructure/postgres`
 
 ### Requirement: 用户状态约束
 

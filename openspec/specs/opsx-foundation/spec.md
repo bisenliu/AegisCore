@@ -23,6 +23,25 @@
 - **WHEN** OPSX 基础框架被创建
 - **THEN** 系统 MUST NOT 修改 Go 业务代码、数据库 migration、OpenAPI 生成物或部署清单的运行时行为
 
+### Requirement: 仓库架构来源
+
+系统 MUST 将 `AGENTS.md`、`docs/ARCHITECTURE.md` 和 `openspec/specs/` 作为当前有效结构、分层和能力规格来源，保证代理和协作者围绕同一组规则工作。
+
+#### Scenario: 判断结构规则
+
+- **WHEN** 协作者需要判断目录归属、feature 分层或共享边界
+- **THEN** 系统 MUST 在 `AGENTS.md`、`docs/ARCHITECTURE.md` 和相关主规格中提供一致规则，并避免把临时目录草稿作为正式来源
+
+#### Scenario: Go workspace 模块归属
+
+- **WHEN** 协作者需要构建、测试、lint 或生成代码
+- **THEN** 系统 MUST 通过根 `Makefile` 入口或在 `common/`、`user-service/` 模块目录内执行模块级命令，且 MUST NOT 把仓库根目录当作单一 Go module
+
+#### Scenario: 服务私有命令命名
+
+- **WHEN** 单个服务的 Makefile 目标暴露在仓库根目录
+- **THEN** 目标名 MUST 带服务名前缀，例如 `user-service-seed-rbac`，避免使用缺少服务上下文的根目标名
+
 ### Requirement: 仓库级 OpenSpec 配置
 
 系统 MUST 在 `openspec/config.yaml` 中声明仓库级上下文和 artifact 规则，使后续 `/opsx:*` 产出遵循 AegisCore 的语言、技术栈、分层和验证约束。
@@ -42,6 +61,11 @@
 - **WHEN** 新 change 生成 artifacts
 - **THEN** proposal、specs、design 和 tasks MUST 分别遵循配置中定义的能力命名、场景格式、影响分析和验证任务规则
 
+#### Scenario: 归并既有能力
+
+- **WHEN** 新需求可以落入现有主规格表达的稳定 capability
+- **THEN** change MUST 优先更新既有 `openspec/specs/<capability>/spec.md` 或对应 delta，避免按旧目录名、临时任务名或一次性重构名创建重复 spec
+
 ### Requirement: 代理导航文档
 
 系统 MUST 提供 `AGENTS.md` 作为 AI 代理和协作者的快速导航图，并将详细说明链接到 `docs/` 与 `openspec/`。
@@ -50,6 +74,11 @@
 
 - **WHEN** 新代理首次处理 AegisCore 任务
 - **THEN** `AGENTS.md` MUST 指向架构、开发、产品、测试、能力地图、OPSX 工作流和主规格入口
+
+#### Scenario: 代理入口包含关键边界
+
+- **WHEN** 代理需要修改 `common/`、feature、`internal/shared`、`internal/integration`、Ent migration、OpenAPI 或部署资产
+- **THEN** `AGENTS.md` MUST 提供可扫读的关键入口、高风险区域、架构边界和验证命令
 
 #### Scenario: 变更入口清晰
 
