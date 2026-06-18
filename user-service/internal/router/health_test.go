@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -15,11 +16,11 @@ func TestRegisterHealthRoutes(t *testing.T) {
 	engine := gin.New()
 	registerHealthRoutes(engine, "aegiscore-user-services", HealthChecks{
 		Readiness: []HealthChecker{
-			staticHealthChecker{Name: "postgres.user_db", Status: HealthCheckStatusOK},
-			staticHealthChecker{Name: "redis.cache_redis", Status: HealthCheckStatusOK},
+			staticHealthChecker{name: "postgres.user_db", status: HealthCheckStatusOK},
+			staticHealthChecker{name: "redis.cache_redis", status: HealthCheckStatusOK},
 		},
 		Startup: []HealthChecker{
-			staticHealthChecker{Name: "rbac.casbin_policy", Status: HealthCheckStatusOK},
+			staticHealthChecker{name: "rbac.casbin_policy", status: HealthCheckStatusOK},
 		},
 	})
 
@@ -68,11 +69,11 @@ func TestProbezReturnsUnavailableWhenAnyCheckFails(t *testing.T) {
 	engine := gin.New()
 	registerHealthRoutes(engine, "aegiscore-user-services", HealthChecks{
 		Readiness: []HealthChecker{
-			staticHealthChecker{Name: "postgres.user_db", Status: HealthCheckStatusOK},
-			staticHealthChecker{Name: "redis.cache_redis", Status: HealthCheckStatusUnavailable, Message: "redis unavailable"},
+			staticHealthChecker{name: "postgres.user_db", status: HealthCheckStatusOK},
+			staticHealthChecker{name: "redis.cache_redis", status: HealthCheckStatusUnavailable, message: "redis unavailable"},
 		},
 		Startup: []HealthChecker{
-			staticHealthChecker{Name: "rbac.policy_watcher", Status: HealthCheckStatusUnavailable, Message: "rbac policy watcher stopped"},
+			staticHealthChecker{name: "rbac.policy_watcher", status: HealthCheckStatusUnavailable, message: "rbac policy watcher stopped"},
 		},
 	})
 
@@ -93,14 +94,109 @@ func TestProbezReturnsUnavailableWhenAnyCheckFails(t *testing.T) {
 	}
 }
 
+func TestProbezRunsChecksConcurrently(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	registerHealthRoutes(engine, "aegiscore-user-services", HealthChecks{
+		Readiness: []HealthChecker{
+			delayedHealthChecker{name: "postgres.user_db", delay: 300 * time.Millisecond, status: HealthCheckStatusOK},
+			delayedHealthChecker{name: "redis.cache_redis", delay: 300 * time.Millisecond, status: HealthCheckStatusOK},
+		},
+	})
+
+	startedAt := time.Now()
+	recorder := executeHealthRequest(engine, "/readyz")
+	elapsed := time.Since(startedAt)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	if elapsed >= healthProbeTimeout {
+		t.Fatalf("elapsed = %s, want less than %s to prove concurrent checks", elapsed, healthProbeTimeout)
+	}
+
+	health := decodeHealthResponse(t, recorder)
+	if len(health.Checks) != 2 {
+		t.Fatalf("checks = %#v, want 2 checks", health.Checks)
+	}
+	if health.Checks[0].Name != "postgres.user_db" || health.Checks[1].Name != "redis.cache_redis" {
+		t.Fatalf("checks = %#v, want configured order", health.Checks)
+	}
+}
+
+func TestProbezReturnsUnavailableForTimedOutCheck(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	release := make(chan struct{})
+	defer close(release)
+	registerHealthRoutes(engine, "aegiscore-user-services", HealthChecks{
+		Readiness: []HealthChecker{
+			staticHealthChecker{name: "postgres.user_db", status: HealthCheckStatusOK},
+			blockingHealthChecker{name: "redis.cache_redis", release: release},
+		},
+	})
+
+	recorder := executeHealthRequest(engine, "/readyz")
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusServiceUnavailable, recorder.Body.String())
+	}
+
+	health := decodeHealthResponse(t, recorder)
+	if health.Status != HealthCheckStatusUnavailable {
+		t.Fatalf("status = %q, want %q", health.Status, HealthCheckStatusUnavailable)
+	}
+	if len(health.Checks) != 2 {
+		t.Fatalf("checks = %#v, want 2 checks", health.Checks)
+	}
+	if health.Checks[1].Name != "redis.cache_redis" || health.Checks[1].Status != HealthCheckStatusUnavailable || health.Checks[1].Message != "health check timeout" {
+		t.Fatalf("timed out check = %#v, want redis timeout", health.Checks[1])
+	}
+}
+
 type staticHealthChecker struct {
-	Name    string
-	Status  HealthCheckStatus
-	Message string
+	name    string
+	status  HealthCheckStatus
+	message string
+}
+
+func (c staticHealthChecker) Name() string {
+	return c.name
 }
 
 func (c staticHealthChecker) Check(context.Context) HealthCheckResult {
-	return HealthCheckResult(c)
+	return HealthCheckResult{Name: c.name, Status: c.status, Message: c.message}
+}
+
+type delayedHealthChecker struct {
+	name   string
+	delay  time.Duration
+	status HealthCheckStatus
+}
+
+func (c delayedHealthChecker) Name() string {
+	return c.name
+}
+
+func (c delayedHealthChecker) Check(ctx context.Context) HealthCheckResult {
+	select {
+	case <-time.After(c.delay):
+		return HealthCheckResult{Name: c.name, Status: c.status}
+	case <-ctx.Done():
+		return HealthCheckResult{Name: c.name, Status: HealthCheckStatusUnavailable, Message: "dependency unavailable"}
+	}
+}
+
+type blockingHealthChecker struct {
+	name    string
+	release <-chan struct{}
+}
+
+func (c blockingHealthChecker) Name() string {
+	return c.name
+}
+
+func (c blockingHealthChecker) Check(context.Context) HealthCheckResult {
+	<-c.release
+	return HealthCheckResult{Name: c.name, Status: HealthCheckStatusOK}
 }
 
 func executeHealthRequest(engine *gin.Engine, path string) *httptest.ResponseRecorder {

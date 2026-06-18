@@ -22,6 +22,7 @@ type HealthCheckStatus string
 
 // HealthChecker 定义健康检查端点消费的最小依赖检查能力。
 type HealthChecker interface {
+	Name() string
 	Check(ctx context.Context) HealthCheckResult
 }
 
@@ -43,6 +44,11 @@ type HealthResponse struct {
 	Status  HealthCheckStatus   `json:"status" example:"ok"`
 	Service string              `json:"service" example:"aegiscore-user-services"`
 	Checks  []HealthCheckResult `json:"checks,omitempty"`
+}
+
+type healthCheckOutcome struct {
+	index  int
+	result HealthCheckResult
 }
 
 func registerHealthRoutes(engine *gin.Engine, serviceName string, checks HealthChecks) {
@@ -103,20 +109,12 @@ func probez(serviceName string, checks []HealthChecker) gin.HandlerFunc {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), healthProbeTimeout)
 		defer cancel()
 
+		results := runHealthChecks(ctx, checks)
 		status := HealthCheckStatusOK
-		results := make([]HealthCheckResult, 0, len(checks))
-		for _, checker := range checks {
-			if checker == nil {
-				continue
-			}
-			result := checker.Check(ctx)
-			if result.Status == "" {
-				result.Status = HealthCheckStatusUnavailable
-			}
+		for _, result := range results {
 			if result.Status != HealthCheckStatusOK {
 				status = HealthCheckStatusUnavailable
 			}
-			results = append(results, result)
 		}
 
 		httpStatus := http.StatusOK
@@ -125,4 +123,60 @@ func probez(serviceName string, checks []HealthChecker) gin.HandlerFunc {
 		}
 		c.JSON(httpStatus, HealthResponse{Status: status, Service: serviceName, Checks: results})
 	}
+}
+
+func runHealthChecks(ctx context.Context, checks []HealthChecker) []HealthCheckResult {
+	results := make([]HealthCheckResult, len(checks))
+	pending := make(map[int]HealthChecker, len(checks))
+	resultCh := make(chan healthCheckOutcome, len(checks))
+
+	for index, checker := range checks {
+		if checker == nil {
+			continue
+		}
+		pending[index] = checker
+		go func() {
+			resultCh <- healthCheckOutcome{index: index, result: normalizeHealthCheckResult(checker, checker.Check(ctx))}
+		}()
+	}
+
+	for len(pending) > 0 {
+		select {
+		case outcome := <-resultCh:
+			results[outcome.index] = outcome.result
+			delete(pending, outcome.index)
+		case <-ctx.Done():
+			for index, checker := range pending {
+				results[index] = HealthCheckResult{
+					Name:    checker.Name(),
+					Status:  HealthCheckStatusUnavailable,
+					Message: "health check timeout",
+				}
+			}
+			return compactHealthCheckResults(results)
+		}
+	}
+
+	return compactHealthCheckResults(results)
+}
+
+func normalizeHealthCheckResult(checker HealthChecker, result HealthCheckResult) HealthCheckResult {
+	if result.Name == "" {
+		result.Name = checker.Name()
+	}
+	if result.Status == "" {
+		result.Status = HealthCheckStatusUnavailable
+	}
+	return result
+}
+
+func compactHealthCheckResults(results []HealthCheckResult) []HealthCheckResult {
+	compacted := make([]HealthCheckResult, 0, len(results))
+	for _, result := range results {
+		if result.Name == "" && result.Status == "" && result.Message == "" {
+			continue
+		}
+		compacted = append(compacted, result)
+	}
+	return compacted
 }

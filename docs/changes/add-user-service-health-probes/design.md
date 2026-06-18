@@ -99,7 +99,7 @@ Fx startup already orders datastore pings, Casbin engine construction, watcher s
 
 ### Timeouts and cancellation
 
-Probe handlers should derive a bounded child context from `c.Request.Context()` for dependency checks. Start with a conservative per-probe timeout such as 500ms to avoid tying up request workers during dependency stalls. Individual checkers can use the same context rather than introducing independent global goroutines.
+Probe handlers should derive a bounded child context from `c.Request.Context()` for dependency checks. Start with a conservative per-probe timeout such as 500ms to avoid tying up request workers during dependency stalls. Readiness and startup dependency checks should run concurrently under that same per-request context so one slow but healthy dependency does not consume the deadline needed by later checks. Late or non-returning checks should be reported as unavailable with a stable timeout message and without exposing dependency internals.
 
 ### Documentation and deployment guidance
 

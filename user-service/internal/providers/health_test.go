@@ -27,13 +27,17 @@ func TestPostgresHealthChecker(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	result := postgresHealthChecker{name: "postgres.user_db", db: db}.Check(context.Background())
+	checker := postgresHealthChecker{name: "postgres.user_db", db: db}
+	if checker.Name() != "postgres.user_db" {
+		t.Fatalf("name = %q, want postgres.user_db", checker.Name())
+	}
+	result := checker.Check(context.Background())
 	if result.Status != router.HealthCheckStatusOK {
 		t.Fatalf("result = %#v, want ok", result)
 	}
 
 	_ = db.Close()
-	result = postgresHealthChecker{name: "postgres.user_db", db: db}.Check(context.Background())
+	result = checker.Check(context.Background())
 	if result.Status != router.HealthCheckStatusUnavailable || result.Message == "" {
 		t.Fatalf("result = %#v, want unavailable", result)
 	}
@@ -44,13 +48,17 @@ func TestRedisHealthChecker(t *testing.T) {
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 
-	result := redisHealthChecker{name: "redis.cache_redis", client: client}.Check(context.Background())
+	checker := redisHealthChecker{name: "redis.cache_redis", client: client}
+	if checker.Name() != "redis.cache_redis" {
+		t.Fatalf("name = %q, want redis.cache_redis", checker.Name())
+	}
+	result := checker.Check(context.Background())
 	if result.Status != router.HealthCheckStatusOK {
 		t.Fatalf("result = %#v, want ok", result)
 	}
 
 	redisServer.Close()
-	result = redisHealthChecker{name: "redis.cache_redis", client: client}.Check(context.Background())
+	result = checker.Check(context.Background())
 	if result.Status != router.HealthCheckStatusUnavailable || result.Message == "" {
 		t.Fatalf("result = %#v, want unavailable", result)
 	}
@@ -58,6 +66,9 @@ func TestRedisHealthChecker(t *testing.T) {
 
 func TestCasbinPolicyHealthChecker(t *testing.T) {
 	checker := casbinPolicyHealthChecker{engine: stubLastError{}}
+	if checker.Name() != "rbac.casbin_policy" {
+		t.Fatalf("name = %q, want rbac.casbin_policy", checker.Name())
+	}
 	if result := checker.Check(context.Background()); result.Status != router.HealthCheckStatusOK {
 		t.Fatalf("result = %#v, want ok", result)
 	}
@@ -71,6 +82,9 @@ func TestCasbinPolicyHealthChecker(t *testing.T) {
 
 func TestWatcherHealthChecker(t *testing.T) {
 	checker := watcherHealthChecker{watcher: stubWatcherStatus{running: true}}
+	if checker.Name() != "rbac.policy_watcher" {
+		t.Fatalf("name = %q, want rbac.policy_watcher", checker.Name())
+	}
 	if result := checker.Check(context.Background()); result.Status != router.HealthCheckStatusOK {
 		t.Fatalf("result = %#v, want ok", result)
 	}
