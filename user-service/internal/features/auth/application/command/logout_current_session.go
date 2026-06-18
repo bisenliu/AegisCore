@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 )
 
@@ -33,10 +34,13 @@ func (u *logoutCurrentSessionUseCase) LogoutCurrentSession(ctx context.Context) 
 	userID, sessionID, err := authctx.AuthenticatedSession(ctx)
 	if err != nil {
 		logger.Warn(ctx, "logout missing authenticated session", zap.Error(err))
+		u.deps.metricsRecorder().LogoutFailed(ctx, authapplication.MetricsOperationLogoutCurrent, authapplication.MetricsReasonAuthContextMissing)
 		return nil, err
 	}
 	if err := u.deps.sessions.DeleteSession(ctx, userID, sessionID); err != nil {
+		u.deps.metricsRecorder().LogoutFailed(ctx, authapplication.MetricsOperationLogoutCurrent, authapplication.MetricsReasonSessionDeleteFailed)
 		return nil, err
 	}
+	u.deps.metricsRecorder().LogoutSucceeded(ctx, authapplication.MetricsOperationLogoutCurrent)
 	return &LogoutResult{LoggedOut: true}, nil
 }

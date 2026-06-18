@@ -54,6 +54,10 @@ func ProvideHealthChecks(params HealthCheckParams) router.HealthChecks {
 	return router.HealthChecks{Readiness: checks, Startup: checks}
 }
 
+func (c postgresHealthChecker) Name() string {
+	return c.name
+}
+
 func (c postgresHealthChecker) Check(ctx context.Context) router.HealthCheckResult {
 	if c.db == nil {
 		return unavailableHealthResult(c.name, "postgres unavailable")
@@ -62,6 +66,10 @@ func (c postgresHealthChecker) Check(ctx context.Context) router.HealthCheckResu
 		return unavailableHealthResult(c.name, "postgres unavailable")
 	}
 	return okHealthResult(c.name)
+}
+
+func (c redisHealthChecker) Name() string {
+	return c.name
 }
 
 func (c redisHealthChecker) Check(ctx context.Context) router.HealthCheckResult {
@@ -74,8 +82,12 @@ func (c redisHealthChecker) Check(ctx context.Context) router.HealthCheckResult 
 	return okHealthResult(c.name)
 }
 
+func (c casbinPolicyHealthChecker) Name() string {
+	return "rbac.casbin_policy"
+}
+
 func (c casbinPolicyHealthChecker) Check(context.Context) router.HealthCheckResult {
-	const name = "rbac.casbin_policy"
+	name := c.Name()
 	if c.engine == nil {
 		return unavailableHealthResult(name, "casbin policy unavailable")
 	}
@@ -85,8 +97,12 @@ func (c casbinPolicyHealthChecker) Check(context.Context) router.HealthCheckResu
 	return okHealthResult(name)
 }
 
+func (c watcherHealthChecker) Name() string {
+	return "rbac.policy_watcher"
+}
+
 func (c watcherHealthChecker) Check(context.Context) router.HealthCheckResult {
-	const name = "rbac.policy_watcher"
+	name := c.Name()
 	if c.watcher == nil {
 		return unavailableHealthResult(name, "rbac policy watcher unavailable")
 	}

@@ -167,7 +167,7 @@ func TestHTTPAuthUserFlow(t *testing.T)
 - response JSON 可解码为 `common/contract/response.Envelope` 或当前 response helper 的 envelope 类型。
 - `success`、`code`、`message` 与成功/失败预期一致。
 - 成功响应 `data` 中的关键字段存在且类型正确。
-- 响应头包含 trace-id；当请求传入 `X-Trace-ID` 时响应保持同一个值。
+- 请求进入 handler 后存在有效 OTel span context；HTTP trace 传播使用 W3C `traceparent` / `tracestate`，测试不依赖自定义 trace 响应头。
 - 受保护路由缺少 Authorization、token 无效、登出后 session 无效等至少一个失败路径返回认证错误信封。
 
 Token 断言不应打印或记录完整 token。测试失败信息也不要输出 Authorization header、refresh token 或原始密码。Bootstrap seed 只允许写入测试数据库以建立第一个可认证用户，不得绕过后续 HTTP flow 的核心行为。

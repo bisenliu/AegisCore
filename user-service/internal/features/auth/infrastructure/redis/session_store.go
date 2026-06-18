@@ -15,6 +15,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/workerpool"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
@@ -56,7 +57,8 @@ type SessionStoreParams struct {
 
 	Redis     *rediscache.Client `name:"cache_redis"`
 	Cfg       *config.Config
-	PurgePool PurgeTaskPool `name:"auth_session_purge_pool"`
+	PurgePool PurgeTaskPool           `name:"auth_session_purge_pool"`
+	Metrics   authapplication.Metrics `optional:"true"`
 }
 
 type SessionStore struct {
@@ -64,6 +66,7 @@ type SessionStore struct {
 	keys                 KeyCatalog
 	tokenVersionCacheTTL time.Duration
 	purgePool            PurgeTaskPool
+	metrics              authapplication.Metrics
 }
 
 // PurgeTaskPool 是认证 Redis 适配器消费的后台清理任务池窄接口。
@@ -78,11 +81,16 @@ func NewSessionStore(params SessionStoreParams) (*SessionStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("new auth redis keys: %w", err)
 	}
+	metrics := params.Metrics
+	if metrics == nil {
+		metrics = authapplication.NopMetrics()
+	}
 	return &SessionStore{
 		redis:                params.Redis,
 		keys:                 keys,
 		tokenVersionCacheTTL: params.Cfg.Auth.TokenVersionCacheTTL,
 		purgePool:            params.PurgePool,
+		metrics:              metrics,
 	}, nil
 }
 
@@ -273,6 +281,7 @@ func (r *SessionStore) DeleteAllUserSessions(ctx context.Context, userID string)
 			},
 		}
 		if err := r.purgePool.Submit(context.WithoutCancel(ctx), task); err != nil {
+			r.metricsRecorder().SessionPurgeSubmitFailed(ctx)
 			return fmt.Errorf("submit delete user auth sessions purge: %w", err)
 		}
 		return nil
@@ -316,6 +325,13 @@ func (r *SessionStore) purgeDetachedUserSessions(ctx context.Context, purgeKey s
 		return fmt.Errorf("unlink detached user sessions index: %w", err)
 	}
 	return nil
+}
+
+func (r *SessionStore) metricsRecorder() authapplication.Metrics {
+	if r == nil || r.metrics == nil {
+		return authapplication.NopMetrics()
+	}
+	return r.metrics
 }
 
 func (r *SessionStore) tokenVersionKey(userID string) string {

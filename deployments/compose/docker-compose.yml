@@ -1,0 +1,217 @@
+name: aegiscore-local
+
+x-user-service-build: &user-service-build
+  context: ../..
+  dockerfile: deployments/docker/user-service.Dockerfile
+
+x-user-service-environment: &user-service-environment
+  TZ: Asia/Shanghai
+  AEGISCORE_SYSTEM_TIMEZONE: Asia/Shanghai
+  RUN_MIGRATIONS: "false"
+  DATABASE_URL: postgres://aegiscore:aegiscore@postgres:5432/aegiscore_user?sslmode=disable&search_path=public
+  AEGISCORE_APP_ENVIRONMENT: local
+  AEGISCORE_HTTP_HOST: 0.0.0.0
+  AEGISCORE_HTTP_PORT: "8080"
+  AEGISCORE_HTTP_TRUSTED_PROXIES: 127.0.0.1,172.16.0.0/12
+  AEGISCORE_AUTH_JWT_SECRET: local-compose-change-me-please
+  AEGISCORE_LOG_DIRECTORY: /tmp/aegiscore-user-services/logs
+  AEGISCORE_LOG_CONSOLE: "true"
+  AEGISCORE_OBSERVABILITY_METRICS_ENABLED: "true"
+  AEGISCORE_OBSERVABILITY_METRICS_PATH: /metrics
+  AEGISCORE_OBSERVABILITY_METRICS_INCLUDE_RUNTIME: "true"
+  AEGISCORE_OBSERVABILITY_TRACING_ENABLED: "true"
+  AEGISCORE_OBSERVABILITY_TRACING_EXPORTER: none
+  AEGISCORE_OBSERVABILITY_TRACING_OTLP_ENDPOINT: ""
+  AEGISCORE_OBSERVABILITY_TRACING_INSECURE: "false"
+  AEGISCORE_REDIS_CACHE_REDIS_ADDR: redis:6379
+  AEGISCORE_REDIS_QUEUE_REDIS_ADDR: redis:6379
+  AEGISCORE_POSTGRES_USER_DB_HOST: postgres
+  AEGISCORE_POSTGRES_USER_DB_PORT: "5432"
+  AEGISCORE_POSTGRES_USER_DB_USERNAME: aegiscore
+  AEGISCORE_POSTGRES_USER_DB_PASSWORD: aegiscore
+  AEGISCORE_POSTGRES_USER_DB_DB_NAME: aegiscore_user
+  AEGISCORE_POSTGRES_USER_DB_SSLMODE: disable
+  AEGISCORE_POSTGRES_PAY_DB_HOST: postgres
+  AEGISCORE_POSTGRES_PAY_DB_PORT: "5432"
+  AEGISCORE_POSTGRES_PAY_DB_USERNAME: aegiscore
+  AEGISCORE_POSTGRES_PAY_DB_PASSWORD: aegiscore
+  AEGISCORE_POSTGRES_PAY_DB_DB_NAME: aegiscore_pay
+  AEGISCORE_POSTGRES_PAY_DB_SSLMODE: disable
+
+services:
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: aegiscore
+      POSTGRES_PASSWORD: aegiscore
+      POSTGRES_DB: aegiscore_user
+      TZ: Asia/Shanghai
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    networks:
+      - aegiscore-runtime
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegiscore -d aegiscore_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:latest
+    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "16379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - aegiscore-runtime
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  user-service-migrate:
+    build: *user-service-build
+    image: aegiscore-user-services:latest
+    entrypoint: ["/app/user-service/scripts/migrate-apply.sh"]
+    environment:
+      DATABASE_URL: postgres://aegiscore:aegiscore@postgres:5432/aegiscore_user?sslmode=disable&search_path=public
+      TZ: Asia/Shanghai
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - aegiscore-runtime
+    restart: "no"
+
+  rbac-seed:
+    build: *user-service-build
+    image: aegiscore-user-services:latest
+    command:
+      - /app/user-service/bin/user-services
+      - rbac
+      - --config
+      - /app/user-service/configs/config.yaml
+      - seed
+      - --reactivate-system
+      - --sync-system-bindings
+    environment:
+      <<: *user-service-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      user-service-migrate:
+        condition: service_completed_successfully
+    networks:
+      - aegiscore-runtime
+    restart: "no"
+
+  user-service:
+    build: *user-service-build
+    image: aegiscore-user-services:latest
+    environment:
+      <<: *user-service-environment
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      user-service-migrate:
+        condition: service_completed_successfully
+      rbac-seed:
+        condition: service_completed_successfully
+    networks:
+      - aegiscore-runtime
+      - aegiscore-observability
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/readyz | grep -q '\"status\":\"ok\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus-data:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/prometheus/user-service-alerts.yaml:/etc/prometheus/rules/user-service-alerts.yaml:ro
+    depends_on:
+      user-service:
+        condition: service_started
+    networks:
+      - aegiscore-observability
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/aegiscore/user-service-overview.json
+      TZ: Asia/Shanghai
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards/aegiscore:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    networks:
+      - aegiscore-observability
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  aegiscore-runtime:
+    driver: bridge
+  aegiscore-observability:
+    driver: bridge

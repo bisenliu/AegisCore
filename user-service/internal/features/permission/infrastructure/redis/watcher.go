@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
@@ -30,6 +31,7 @@ type WatcherParams struct {
 	Tracker   *VersionTracker
 	Engine    permissionapplication.PolicyReloadEngine
 	Log       *zap.Logger
+	Metrics   permissionapplication.Metrics
 }
 
 // Watcher 监听 RBAC policy 分布式版本并执行补偿 reload。
@@ -38,6 +40,7 @@ type Watcher struct {
 	tracker       *VersionTracker
 	engine        permissionapplication.PolicyReloadEngine
 	log           *zap.Logger
+	metrics       permissionapplication.Metrics
 	checkInterval time.Duration
 
 	mu      sync.Mutex
@@ -49,7 +52,7 @@ type Watcher struct {
 
 // NewWatcher 构造并注册 RBAC policy watcher 生命周期。
 func NewWatcher(params WatcherParams) *Watcher {
-	watcher := NewWatcherForTest(params.Store, params.Tracker, params.Engine, params.Log, defaultCheckInterval)
+	watcher := NewWatcherForTestWithMetrics(params.Store, params.Tracker, params.Engine, params.Log, defaultCheckInterval, params.Metrics)
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			watcher.Start(ctx)
@@ -67,7 +70,18 @@ func NewWatcherForTest(store policySubscriptionStore, tracker *VersionTracker, e
 	if checkInterval <= 0 {
 		checkInterval = defaultCheckInterval
 	}
-	return &Watcher{store: store, tracker: tracker, engine: engine, log: log, checkInterval: checkInterval}
+	return NewWatcherForTestWithMetrics(store, tracker, engine, log, checkInterval, nil)
+}
+
+// NewWatcherForTestWithMetrics 构造可指定 metrics 的 RBAC policy watcher。
+func NewWatcherForTestWithMetrics(store policySubscriptionStore, tracker *VersionTracker, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, checkInterval time.Duration, metrics permissionapplication.Metrics) *Watcher {
+	if checkInterval <= 0 {
+		checkInterval = defaultCheckInterval
+	}
+	if metrics == nil {
+		metrics = permissionapplication.NopMetrics()
+	}
+	return &Watcher{store: store, tracker: tracker, engine: engine, log: log, metrics: metrics, checkInterval: checkInterval}
 }
 
 // Start 启动 Pub/Sub 监听和定时版本补偿检查。
@@ -127,6 +141,7 @@ func (w *Watcher) LastError() error {
 func (w *Watcher) CheckVersion(ctx context.Context) {
 	remoteVersion, err := w.store.CurrentVersion(ctx)
 	if err != nil {
+		w.metrics.WatcherCheckFailed(ctx, permissionapplication.MetricsReasonStoreUnavailable)
 		logger.Error(ctx, "rbac policy version check failed", logger.StackTrace(zap.Error(err))...)
 		return
 	}
@@ -135,7 +150,8 @@ func (w *Watcher) CheckVersion(ctx context.Context) {
 		return
 	}
 	logger.Warn(ctx, "rbac policy version mismatch detected", zap.Int64("local_policy_version", localVersion), zap.Int64("remote_policy_version", remoteVersion))
-	w.reloadIfNewer(ctx, remoteVersion, "version_check", "")
+	w.metrics.WatcherVersionMismatch(ctx, permissionapplication.MetricsSourceWatcherVersionCheck)
+	w.applyIfNewer(ctx, remoteVersion, permissionapplication.NewPolicyReloadChange("version_check"), "", permissionapplication.MetricsSourceWatcherVersionCheck)
 }
 
 // HandlePayload 处理一条 RBAC policy Pub/Sub payload。
@@ -146,7 +162,7 @@ func (w *Watcher) HandlePayload(ctx context.Context, payload string) {
 		return
 	}
 	logger.Info(ctx, "rbac policy refresh received", zap.Int64("remote_policy_version", message.Version), zap.Int64("local_policy_version", w.tracker.Applied()), zap.String("instance_id", message.InstanceID), zap.String("reason", message.Reason))
-	w.reloadIfNewer(ctx, message.Version, message.Reason, message.InstanceID)
+	w.applyIfNewer(ctx, message.Version, message.policyChange(), message.InstanceID, permissionapplication.MetricsSourceWatcherPubSub)
 }
 
 func (w *Watcher) run(ctx context.Context, done chan struct{}) {
@@ -183,14 +199,24 @@ func (w *Watcher) run(ctx context.Context, done chan struct{}) {
 	}
 }
 
-func (w *Watcher) reloadIfNewer(ctx context.Context, version int64, reason string, instanceID string) {
+func (w *Watcher) applyIfNewer(ctx context.Context, version int64, change permissionapplication.PolicyChange, instanceID string, source string) {
 	localVersion := w.tracker.Applied()
 	if version <= localVersion {
 		return
 	}
-	if err := w.engine.Reload(ctx); err != nil {
-		logger.Error(ctx, "rbac policy remote refresh failed", logger.StackTrace(zap.Int64("policy_version", version), zap.Int64("local_policy_version", localVersion), zap.String("instance_id", instanceID), zap.String("reason", reason), zap.Error(err))...)
-		return
+	reason := change.ReasonText()
+	if change.RequiresReload() {
+		if err := w.engine.Reload(ctx); err != nil {
+			w.metrics.WatcherReloadFailed(ctx, source, permissionapplication.MetricsReasonReloadFailed)
+			logger.Error(ctx, "rbac policy remote refresh failed", logger.StackTrace(zap.Int64("policy_version", version), zap.Int64("local_policy_version", localVersion), zap.String("instance_id", instanceID), zap.String("reason", reason), zap.Error(err))...)
+			return
+		}
+		w.engine.InvalidateAllUserRoles()
+		w.metrics.WatcherReloadSucceeded(ctx, source)
+	} else if change.UserID != uuid.Nil {
+		w.engine.InvalidateUserRole(change.UserID)
+	} else {
+		w.engine.InvalidateAllUserRoles()
 	}
 	w.tracker.MarkApplied(version)
 	logger.Info(ctx, "rbac policy remote refresh succeeded", zap.Int64("policy_version", version), zap.Int64("local_policy_version", w.tracker.Applied()), zap.String("instance_id", instanceID), zap.String("reason", reason))

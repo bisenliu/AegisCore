@@ -62,6 +62,18 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cfg.Log.MaxAgeDays != 7 || cfg.Log.MaxSizeMB != 100 || cfg.Log.MaxBackups != 30 {
 		t.Fatalf("Log rotation = (%d,%d,%d), want (7,100,30)", cfg.Log.MaxAgeDays, cfg.Log.MaxSizeMB, cfg.Log.MaxBackups)
 	}
+	if !cfg.Observability.Metrics.Enabled {
+		t.Fatal("Observability.Metrics.Enabled = false, want true")
+	}
+	if cfg.Observability.Metrics.Path != "/metrics" || !cfg.Observability.Metrics.IncludeRuntime {
+		t.Fatalf("Observability.Metrics = %#v, want path /metrics with runtime metrics", cfg.Observability.Metrics)
+	}
+	if !cfg.Observability.Tracing.Enabled {
+		t.Fatal("Observability.Tracing.Enabled = false, want true")
+	}
+	if cfg.Observability.Tracing.SampleRatio != 0.25 || cfg.Observability.Tracing.Exporter != "otlp" || cfg.Observability.Tracing.OTLPEndpoint != "collector:4317" || cfg.Observability.Tracing.Insecure {
+		t.Fatalf("Observability.Tracing = %#v, want otlp collector config", cfg.Observability.Tracing)
+	}
 	cacheRedis, ok := cfg.RedisConfig("cache_redis")
 	if !ok {
 		t.Fatal("RedisConfig(cache_redis) ok = false")
@@ -224,16 +236,30 @@ func TestLoadAggregatesConfigValidationErrors(t *testing.T) {
 }
 
 func TestLoadRejectsProductionLikeInsecureConfig(t *testing.T) {
-	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`app:
+	err := loadConfigErrorFromYAML(t, configYAMLWithSections(`app:
   name: aegiscore-test
-  environment: prod`))
+  environment: prod`, `observability:
+  metrics:
+    enabled: false
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: true
+    sample_ratio: 1.0
+    exporter: otlp
+    otlp_endpoint: collector.internal:4317
+    insecure: true`))
 
 	assertConfigLoadErrorContains(t, err,
 		"auth.jwt.secret must not use a development default in production-like environments",
 		"postgres.user_db.sslmode must not be disable in production-like environments",
+		"observability.tracing.insecure must not be true with otlp exporter in production-like environments",
 	)
 	if strings.Contains(err.Error(), "test-secret") {
 		t.Fatalf("Load error leaks sensitive JWT secret: %q", err.Error())
+	}
+	if strings.Contains(err.Error(), "collector.internal:4317") {
+		t.Fatalf("Load error leaks OTLP endpoint: %q", err.Error())
 	}
 }
 
@@ -250,6 +276,14 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_AUTH_TOKEN_VERSION_CACHE_TTL", "30s")
 	t.Setenv("AEGISCORE_AUTH_MAX_ACTIVE_SESSIONS_PER_USER", "7")
 	t.Setenv("AEGISCORE_ENT_SQL_DEBUG", "false")
+	t.Setenv("AEGISCORE_OBSERVABILITY_METRICS_ENABLED", "false")
+	t.Setenv("AEGISCORE_OBSERVABILITY_METRICS_PATH", "/internal/metrics")
+	t.Setenv("AEGISCORE_OBSERVABILITY_METRICS_INCLUDE_RUNTIME", "false")
+	t.Setenv("AEGISCORE_OBSERVABILITY_TRACING_ENABLED", "false")
+	t.Setenv("AEGISCORE_OBSERVABILITY_TRACING_SAMPLE_RATIO", "0.5")
+	t.Setenv("AEGISCORE_OBSERVABILITY_TRACING_EXPORTER", "none")
+	t.Setenv("AEGISCORE_OBSERVABILITY_TRACING_OTLP_ENDPOINT", "env-collector:4317")
+	t.Setenv("AEGISCORE_OBSERVABILITY_TRACING_INSECURE", "true")
 	t.Setenv("AEGISCORE_REDIS_CACHE_REDIS_DB", "9")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_PASSWORD", "env-secret")
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_MAX_OPEN_CONNS", "30")
@@ -278,6 +312,18 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	}
 	if cfg.Ent.SQLDebug {
 		t.Fatal("Ent.SQLDebug = true, want env override false")
+	}
+	if cfg.Observability.Metrics.Enabled {
+		t.Fatal("Observability.Metrics.Enabled = true, want env override false")
+	}
+	if cfg.Observability.Metrics.Path != "/internal/metrics" {
+		t.Fatalf("Observability.Metrics.Path = %q, want /internal/metrics", cfg.Observability.Metrics.Path)
+	}
+	if cfg.Observability.Metrics.IncludeRuntime {
+		t.Fatal("Observability.Metrics.IncludeRuntime = true, want env override false")
+	}
+	if cfg.Observability.Tracing.Enabled || cfg.Observability.Tracing.SampleRatio != 0.5 || cfg.Observability.Tracing.Exporter != "none" || cfg.Observability.Tracing.OTLPEndpoint != "env-collector:4317" || !cfg.Observability.Tracing.Insecure {
+		t.Fatalf("Observability.Tracing = %#v, want env overrides", cfg.Observability.Tracing)
 	}
 	if cfg.Redis["cache_redis"].DB != 9 {
 		t.Fatalf("cache_redis.DB = %d, want 9", cfg.Redis["cache_redis"].DB)
@@ -364,6 +410,112 @@ func TestLoadValidatesAuthSessionLimit(t *testing.T) {
   refresh_token_rotation: true
   max_active_sessions_per_user: -1`))
 	assertConfigLoadErrorContains(t, err, "auth.max_active_sessions_per_user must be >= 0")
+}
+
+func TestLoadValidatesObservabilityConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		section string
+		wants   []string
+	}{
+		{
+			name: "empty metrics path",
+			section: `observability:
+  metrics:
+    enabled: false
+    path: ""
+    include_runtime: true
+  tracing:
+    enabled: true
+    sample_ratio: 1.0
+    exporter: none
+    otlp_endpoint: ""
+    insecure: false`,
+			wants: []string{"observability.metrics.path is required"},
+		},
+		{
+			name: "invalid enabled metrics path",
+			section: `observability:
+  metrics:
+    enabled: true
+    path: metrics
+    include_runtime: true
+  tracing:
+    enabled: true
+    sample_ratio: 1.0
+    exporter: none
+    otlp_endpoint: ""
+    insecure: false`,
+			wants: []string{"observability.metrics.path must start with / when metrics is enabled"},
+		},
+		{
+			name: "sample ratio below range",
+			section: `observability:
+  metrics:
+    enabled: false
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: true
+    sample_ratio: -0.1
+    exporter: none
+    otlp_endpoint: ""
+    insecure: false`,
+			wants: []string{"observability.tracing.sample_ratio must be between 0 and 1"},
+		},
+		{
+			name: "sample ratio above range",
+			section: `observability:
+  metrics:
+    enabled: false
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: true
+    sample_ratio: 1.1
+    exporter: none
+    otlp_endpoint: ""
+    insecure: false`,
+			wants: []string{"observability.tracing.sample_ratio must be between 0 and 1"},
+		},
+		{
+			name: "invalid tracing exporter",
+			section: `observability:
+  metrics:
+    enabled: false
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: true
+    sample_ratio: 1.0
+    exporter: zipkin
+    otlp_endpoint: ""
+    insecure: false`,
+			wants: []string{"observability.tracing.exporter must be one of none, otlp"},
+		},
+		{
+			name: "otlp endpoint required",
+			section: `observability:
+  metrics:
+    enabled: false
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: true
+    sample_ratio: 1.0
+    exporter: otlp
+    otlp_endpoint: ""
+    insecure: false`,
+			wants: []string{"observability.tracing.otlp_endpoint is required when exporter is otlp"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := loadConfigErrorFromYAML(t, configYAMLWithSection(tt.section))
+			assertConfigLoadErrorContains(t, err, tt.wants...)
+		})
+	}
 }
 
 func TestLoadYAMLMergeForNamedDatastores(t *testing.T) {
@@ -531,6 +683,18 @@ log:
   max_size_mb: 100
   max_backups: 30
 
+observability:
+  metrics:
+    enabled: true
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: true
+    sample_ratio: 0.25
+    exporter: otlp
+    otlp_endpoint: collector:4317
+    insecure: false
+
 .redis_base: &redis_base
   addr: 127.0.0.1:6379
   username: ""
@@ -578,6 +742,10 @@ postgres:
 }
 
 func configYAMLWithSection(section string) string {
+	return configYAMLWithSections(section)
+}
+
+func configYAMLWithSections(overrides ...string) string {
 	sections := map[string]string{
 		"system": `system:
   timezone: Asia/Shanghai`,
@@ -617,6 +785,17 @@ func configYAMLWithSection(section string) string {
   max_age_days: 7
   max_size_mb: 100
   max_backups: 30`,
+		"observability": `observability:
+  metrics:
+    enabled: false
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: true
+    sample_ratio: 1.0
+    exporter: none
+    otlp_endpoint: ""
+    insecure: false`,
 		"redis": `redis:
   cache_redis:
     addr: 127.0.0.1:6379
@@ -642,14 +821,16 @@ func configYAMLWithSection(section string) string {
     conn_max_idle_time: 12m
     ping_timeout: 7s`,
 	}
-	for name := range sections {
-		if strings.HasPrefix(section, name+":") {
-			sections[name] = section
-			break
+	for _, override := range overrides {
+		for name := range sections {
+			if strings.HasPrefix(override, name+":") {
+				sections[name] = override
+				break
+			}
 		}
 	}
-	ordered := []string{sections["system"], sections["app"], sections["http"], sections["auth"], sections["ent"], sections["log"], sections["redis"], sections["postgres"]}
-	return fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n", ordered[0], ordered[1], ordered[2], ordered[3], ordered[4], ordered[5], ordered[6], ordered[7])
+	ordered := []string{sections["system"], sections["app"], sections["http"], sections["auth"], sections["ent"], sections["log"], sections["observability"], sections["redis"], sections["postgres"]}
+	return fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n", ordered[0], ordered[1], ordered[2], ordered[3], ordered[4], ordered[5], ordered[6], ordered[7], ordered[8])
 }
 
 func loadConfigFromYAML(t *testing.T, content string) *Config {

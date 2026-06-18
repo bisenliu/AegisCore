@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 )
@@ -81,6 +82,9 @@ func TestRoleCommandServiceUserRoleBindings(t *testing.T) {
 	if notifier.reasons[0] != "user_role_added" {
 		t.Fatalf("notifier = %#v", notifier.reasons)
 	}
+	if notifier.changes[0].Kind != permissionapplication.PolicyChangeKindUserRole || notifier.changes[0].UserID != userID || notifier.changes[0].RoleID != roleID {
+		t.Fatalf("user role change = %#v", notifier.changes[0])
+	}
 
 	replaced, err := service.ReplaceUserRoles(context.Background(), ReplaceUserRolesCommand{UserID: userID, RoleIDs: []uuid.UUID{roleID, otherRoleID, roleID}})
 	if err != nil {
@@ -97,6 +101,9 @@ func TestRoleCommandServiceUserRoleBindings(t *testing.T) {
 	}
 	if notifier.reasons[1] != "user_roles_replaced" {
 		t.Fatalf("notifier = %#v", notifier.reasons)
+	}
+	if notifier.changes[1].Kind != permissionapplication.PolicyChangeKindUserRole || notifier.changes[1].UserID != userID || notifier.changes[1].RoleID != uuid.Nil {
+		t.Fatalf("replace user role change = %#v", notifier.changes[1])
 	}
 }
 
@@ -123,6 +130,9 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	if notifier.reasons[0] != "role_permission_added" {
 		t.Fatalf("notifier = %#v", notifier.reasons)
 	}
+	if notifier.changes[0].Kind != permissionapplication.PolicyChangeKindPolicy {
+		t.Fatalf("role permission change = %#v", notifier.changes[0])
+	}
 
 	replaced, err := service.ReplaceRolePermissions(context.Background(), ReplaceRolePermissionsCommand{RoleID: roleID, PermissionIDs: []uuid.UUID{permissionID, otherPermissionID, permissionID}})
 	if err != nil {
@@ -142,12 +152,135 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	}
 }
 
-type stubRolePolicyChangeNotifier struct {
-	reasons []string
+func TestRoleCommandServiceReturnsRefreshFailure(t *testing.T) {
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000009")
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000010")
+	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000011")
+	refreshErr := errors.New("refresh failed")
+
+	tests := []struct {
+		name       string
+		run        func(*testing.T, RoleCommandService)
+		wantReason string
+	}{
+		{
+			name: "update role",
+			run: func(t *testing.T, service RoleCommandService) {
+				t.Helper()
+				_, err := service.UpdateRole(context.Background(), UpdateRoleCommand{RoleID: roleID, Name: "operator", Active: true})
+				if !errors.Is(err, refreshErr) {
+					t.Fatalf("err = %v, want refreshErr", err)
+				}
+			},
+			wantReason: "role_updated",
+		},
+		{
+			name: "set role active",
+			run: func(t *testing.T, service RoleCommandService) {
+				t.Helper()
+				_, err := service.SetRoleActive(context.Background(), SetRoleActiveCommand{RoleID: roleID, Active: false})
+				if !errors.Is(err, refreshErr) {
+					t.Fatalf("err = %v, want refreshErr", err)
+				}
+			},
+			wantReason: "role_active_changed",
+		},
+		{
+			name: "add user role",
+			run: func(t *testing.T, service RoleCommandService) {
+				t.Helper()
+				_, err := service.AddUserRole(context.Background(), UserRoleCommand{UserID: userID, RoleID: roleID})
+				if !errors.Is(err, refreshErr) {
+					t.Fatalf("err = %v, want refreshErr", err)
+				}
+			},
+			wantReason: "user_role_added",
+		},
+		{
+			name: "replace user roles",
+			run: func(t *testing.T, service RoleCommandService) {
+				t.Helper()
+				_, err := service.ReplaceUserRoles(context.Background(), ReplaceUserRolesCommand{UserID: userID, RoleIDs: []uuid.UUID{roleID}})
+				if !errors.Is(err, refreshErr) {
+					t.Fatalf("err = %v, want refreshErr", err)
+				}
+			},
+			wantReason: "user_roles_replaced",
+		},
+		{
+			name: "remove user role",
+			run: func(t *testing.T, service RoleCommandService) {
+				t.Helper()
+				_, err := service.RemoveUserRole(context.Background(), UserRoleCommand{UserID: userID, RoleID: roleID})
+				if !errors.Is(err, refreshErr) {
+					t.Fatalf("err = %v, want refreshErr", err)
+				}
+			},
+			wantReason: "user_role_removed",
+		},
+		{
+			name: "add role permission",
+			run: func(t *testing.T, service RoleCommandService) {
+				t.Helper()
+				_, err := service.AddRolePermission(context.Background(), RolePermissionCommand{RoleID: roleID, PermissionID: permissionID})
+				if !errors.Is(err, refreshErr) {
+					t.Fatalf("err = %v, want refreshErr", err)
+				}
+			},
+			wantReason: "role_permission_added",
+		},
+		{
+			name: "replace role permissions",
+			run: func(t *testing.T, service RoleCommandService) {
+				t.Helper()
+				_, err := service.ReplaceRolePermissions(context.Background(), ReplaceRolePermissionsCommand{RoleID: roleID, PermissionIDs: []uuid.UUID{permissionID}})
+				if !errors.Is(err, refreshErr) {
+					t.Fatalf("err = %v, want refreshErr", err)
+				}
+			},
+			wantReason: "role_permissions_replaced",
+		},
+		{
+			name: "remove role permission",
+			run: func(t *testing.T, service RoleCommandService) {
+				t.Helper()
+				_, err := service.RemoveRolePermission(context.Background(), RolePermissionCommand{RoleID: roleID, PermissionID: permissionID})
+				if !errors.Is(err, refreshErr) {
+					t.Fatalf("err = %v, want refreshErr", err)
+				}
+			},
+			wantReason: "role_permission_removed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			roles := &stubRoleStore{role: roledomain.Role{RoleID: roleID, Name: "operator", Active: true}}
+			permissions := &stubPermissionLookup{items: map[uuid.UUID]roleapplication.PermissionReference{
+				permissionID: {PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true},
+			}}
+			notifier := &stubRolePolicyChangeNotifier{err: refreshErr}
+			service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &stubUserRoleStore{}, RolePermissions: &stubRolePermissionStore{}, Permissions: permissions, PolicyChanges: notifier})
+
+			tt.run(t, service)
+
+			if len(notifier.reasons) != 1 || notifier.reasons[0] != tt.wantReason {
+				t.Fatalf("notifier = %#v", notifier.reasons)
+			}
+		})
+	}
 }
 
-func (n *stubRolePolicyChangeNotifier) NotifyPolicyChanged(_ context.Context, reason string) {
-	n.reasons = append(n.reasons, reason)
+type stubRolePolicyChangeNotifier struct {
+	reasons []string
+	changes []permissionapplication.PolicyChange
+	err     error
+}
+
+func (n *stubRolePolicyChangeNotifier) NotifyPolicyChanged(_ context.Context, change permissionapplication.PolicyChange) error {
+	n.reasons = append(n.reasons, change.Reason)
+	n.changes = append(n.changes, change)
+	return n.err
 }
 
 type stubRoleStore struct {

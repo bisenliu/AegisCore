@@ -54,5 +54,6 @@ func (s *permissionQueryService) GetRouteDiff(ctx context.Context) (*RouteDiffRe
 	sort.Slice(stale, func(i, j int) bool {
 		return stale[i].HTTPMethod+stale[i].PathTemplate < stale[j].HTTPMethod+stale[j].PathTemplate
 	})
+	s.metrics.RouteDiffObserved(ctx, len(missing), len(stale))
 	return &RouteDiffResult{MissingInPermissions: missing, StalePermissions: stale}, nil
 }

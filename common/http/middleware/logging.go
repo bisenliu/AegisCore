@@ -27,6 +27,8 @@ func RequestLoggerWithOptions(log *zap.Logger, options RequestLoggerOptions) gin
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
+		status := c.Writer.Status()
+		markServerErrorStatus(c.Request.Context(), status)
 		if options.Skip != nil && options.Skip(c) {
 			return
 		}
@@ -35,7 +37,6 @@ func RequestLoggerWithOptions(log *zap.Logger, options RequestLoggerOptions) gin
 		fieldsRef := requestLogFields(c, time.Since(start))
 		fields := *fieldsRef
 
-		status := c.Writer.Status()
 		switch {
 		// 5xx 表示服务端失败，4xx 通常表示调用方输入或授权状态问题。
 		case status >= 500:

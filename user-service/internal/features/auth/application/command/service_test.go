@@ -46,6 +46,51 @@ func TestAuthUseCaseLogin(t *testing.T) {
 	}
 }
 
+func TestAuthUseCaseLoginRecordsMetrics(t *testing.T) {
+	passwordHash, err := password.HashContext(context.Background(), "secret")
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+	metrics := &authMetricsSpy{}
+	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
+	store := &sessionStoreStub{version: 2}
+	svc := newTestAuthUseCasesWithMetrics(repo, store, true, metrics)
+
+	_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if metrics.loginSucceeded != 1 {
+		t.Fatalf("login success metrics = %d, want 1", metrics.loginSucceeded)
+	}
+}
+
+func TestAuthUseCaseLoginRecordsFailureReasons(t *testing.T) {
+	passwordHash, err := password.HashContext(context.Background(), "secret")
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
+	}
+	metrics := &authMetricsSpy{}
+	svc := newTestAuthUseCasesWithMetrics(&authRepoStub{}, &sessionStoreStub{}, true, metrics)
+	_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: " "})
+	if !errors.Is(err, authdomain.ErrInvalidCredentials) {
+		t.Fatalf("err = %v, want invalid credentials", err)
+	}
+	if got := metrics.loginFailed[authapplication.MetricsReasonValidationFailed]; got != 1 {
+		t.Fatalf("validation failure metrics = %d, want 1", got)
+	}
+
+	metrics = &authMetricsSpy{}
+	svc = newTestAuthUseCasesWithMetrics(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true, metrics)
+	_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	if !errors.Is(err, authdomain.ErrInvalidCredentials) {
+		t.Fatalf("err = %v, want invalid credentials", err)
+	}
+	if got := metrics.loginFailed[authapplication.MetricsReasonUserStatusRejected]; got != 1 {
+		t.Fatalf("status rejected metrics = %d, want 1", got)
+	}
+}
+
 func TestAuthUseCaseLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 	svc := newTestAuthUseCases(&authRepoStub{}, &sessionStoreStub{}, true)
 
@@ -508,7 +553,8 @@ func TestAuthUseCaseRefreshRejectsAccessTokenSubject(t *testing.T) {
 
 func TestAuthUseCaseRefreshRejectsVersionChange(t *testing.T) {
 	store := &sessionStoreStub{version: 3, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
-	svc := newTestAuthUseCases(&authRepoStub{}, store, true)
+	metrics := &authMetricsSpy{}
+	svc := newTestAuthUseCasesWithMetrics(&authRepoStub{}, store, true, metrics)
 	refresh, err := testJWTService().SignRefreshToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
@@ -518,6 +564,12 @@ func TestAuthUseCaseRefreshRejectsVersionChange(t *testing.T) {
 
 	if !errors.Is(err, authdomain.ErrTokenInvalid) {
 		t.Fatalf("err = %v, want authdomain.ErrTokenInvalid", err)
+	}
+	if got := metrics.refreshFailed[authapplication.MetricsReasonTokenVersionMismatch]; got != 1 {
+		t.Fatalf("token version mismatch refresh metrics = %d, want 1", got)
+	}
+	if got := metrics.tokenVersionMismatches[authapplication.MetricsSourceRefreshToken]; got != 1 {
+		t.Fatalf("refresh token version mismatch metrics = %d, want 1", got)
 	}
 }
 
@@ -539,7 +591,8 @@ func TestAuthUseCaseRefreshMapsTokenVersionUserNotFound(t *testing.T) {
 func TestAuthUseCaseLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 	repo := &authRepoStub{newVersion: 3}
 	store := &sessionStoreStub{version: 2}
-	svc := newTestAuthUseCases(repo, store, true)
+	metrics := &authMetricsSpy{}
+	svc := newTestAuthUseCasesWithMetrics(repo, store, true, metrics)
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 
 	result, err := svc.LogoutAllSessions(ctx)
@@ -549,6 +602,9 @@ func TestAuthUseCaseLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 	}
 	if !result.LoggedOut || repo.incrementedUserID != authTestUserID || !store.cached || store.cachedVersion != 3 || !store.deletedAll {
 		t.Fatalf("result=%#v repo=%#v store=%#v", result, repo, store)
+	}
+	if got := metrics.logoutSucceeded[authapplication.MetricsOperationLogoutAll]; got != 1 {
+		t.Fatalf("logout all success metrics = %d, want 1", got)
 	}
 }
 
@@ -596,12 +652,22 @@ func newTestAuthUseCases(repo *authRepoStub, store authapplication.AuthSessionSt
 }
 
 func newTestAuthUseCasesWithConfig(repo *authRepoStub, store authapplication.AuthSessionStore, authCfg config.AuthConfig) testAuthUseCases {
+	return newTestAuthUseCasesWithConfigAndMetrics(repo, store, authCfg, nil)
+}
+
+func newTestAuthUseCasesWithMetrics(repo *authRepoStub, store authapplication.AuthSessionStore, rotation bool, metrics authapplication.Metrics) testAuthUseCases {
+	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 5}
+	return newTestAuthUseCasesWithConfigAndMetrics(repo, store, cfg, metrics)
+}
+
+func newTestAuthUseCasesWithConfigAndMetrics(repo *authRepoStub, store authapplication.AuthSessionStore, authCfg config.AuthConfig, metrics authapplication.Metrics) testAuthUseCases {
 	cfg := &config.Config{Auth: authCfg}
 	deps := NewUseCaseDeps(UseCaseDepsParams{
 		Credentials: authcredentials.NewVerifier(repo),
 		Tokens:      authtokens.NewIssuer(commonauth.NewJWTService(cfg.Auth), cfg),
 		Sessions:    authsessions.NewLifecycle(repo, store, cfg.Auth.MaxActiveSessionsPerUser),
 		Config:      cfg,
+		Metrics:     metrics,
 	})
 	return testAuthUseCases{
 		LoginUseCase:                NewLoginUseCase(deps),
@@ -610,6 +676,75 @@ func newTestAuthUseCasesWithConfig(repo *authRepoStub, store authapplication.Aut
 		LogoutCurrentSessionUseCase: NewLogoutCurrentSessionUseCase(deps),
 		LogoutAllSessionsUseCase:    NewLogoutAllSessionsUseCase(deps),
 	}
+}
+
+type authMetricsSpy struct {
+	loginSucceeded         int
+	loginFailed            map[string]int
+	refreshSucceeded       int
+	refreshFailed          map[string]int
+	logoutSucceeded        map[string]int
+	logoutFailed           map[string]map[string]int
+	tokenVersionMismatches map[string]int
+	sessionPurgeFailures   int
+}
+
+func (m *authMetricsSpy) ensure() {
+	if m.loginFailed == nil {
+		m.loginFailed = map[string]int{}
+	}
+	if m.refreshFailed == nil {
+		m.refreshFailed = map[string]int{}
+	}
+	if m.logoutSucceeded == nil {
+		m.logoutSucceeded = map[string]int{}
+	}
+	if m.logoutFailed == nil {
+		m.logoutFailed = map[string]map[string]int{}
+	}
+	if m.tokenVersionMismatches == nil {
+		m.tokenVersionMismatches = map[string]int{}
+	}
+}
+
+func (m *authMetricsSpy) LoginSucceeded(context.Context) {
+	m.loginSucceeded++
+}
+
+func (m *authMetricsSpy) LoginFailed(_ context.Context, reason string) {
+	m.ensure()
+	m.loginFailed[reason]++
+}
+
+func (m *authMetricsSpy) RefreshSucceeded(context.Context) {
+	m.refreshSucceeded++
+}
+
+func (m *authMetricsSpy) RefreshFailed(_ context.Context, reason string) {
+	m.ensure()
+	m.refreshFailed[reason]++
+}
+
+func (m *authMetricsSpy) LogoutSucceeded(_ context.Context, operation string) {
+	m.ensure()
+	m.logoutSucceeded[operation]++
+}
+
+func (m *authMetricsSpy) LogoutFailed(_ context.Context, operation string, reason string) {
+	m.ensure()
+	if m.logoutFailed[operation] == nil {
+		m.logoutFailed[operation] = map[string]int{}
+	}
+	m.logoutFailed[operation][reason]++
+}
+
+func (m *authMetricsSpy) TokenVersionMismatch(_ context.Context, source string) {
+	m.ensure()
+	m.tokenVersionMismatches[source]++
+}
+
+func (m *authMetricsSpy) SessionPurgeSubmitFailed(context.Context) {
+	m.sessionPurgeFailures++
 }
 
 type testAuthUseCases struct {

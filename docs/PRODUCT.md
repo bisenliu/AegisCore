@@ -18,7 +18,7 @@ AegisCore 是面向多服务后端能力的 Go 项目底座。当前仓库已具
 1. 服务消费者调用 `GET /api/v1/users/:user_id` 获取用户资料，或调用 `GET /api/v1/users` 分页获取用户列表。
 2. 运维系统调用 `/livez` 判断用户服务进程是否在线，调用 `/readyz` 判断是否可以接入业务流量，调用 `/startupz` 判断启动关键依赖是否完成初始化。
 3. 服务进程通过配置文件和环境变量加载 HTTP、日志、Redis、Postgres 参数。
-4. HTTP 请求经过 trace-id、日志、panic recovery 和 CORS 中间件。
+4. HTTP 请求经过 OTel tracing、日志、panic recovery 和 CORS 中间件。
 5. 业务错误被映射为统一的 API 响应信封和错误码。
 6. 数据库 schema 变更通过 Ent schema 和 Atlas SQL migration 生成、审查、校验并在服务启动前执行。
 

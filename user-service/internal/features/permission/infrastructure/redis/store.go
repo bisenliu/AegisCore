@@ -11,6 +11,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
+	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 
 // StoreParams 包含 RBAC policy Redis store 所需依赖。
@@ -63,14 +64,15 @@ func newStore(client *rediscmd.Client, keys KeyCatalog, instanceID string, log *
 }
 
 // PublishPolicyChanged 递增 RBAC policy 版本并发布刷新消息。
-func (s *Store) PublishPolicyChanged(ctx context.Context, reason string) (int64, error) {
+func (s *Store) PublishPolicyChanged(ctx context.Context, change permissionapplication.PolicyChange) (int64, error) {
+	reason := change.ReasonText()
 	version, err := s.client.Incr(ctx, s.keys.PolicyVersionKey()).Result()
 	if err != nil {
 		logger.Error(ctx, "rbac policy version increment failed", logger.StackTrace(zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))...)
 		return 0, fmt.Errorf("increment rbac policy version: %w", err)
 	}
 	logger.Info(ctx, "rbac policy version incremented", zap.Int64("policy_version", version), zap.String("instance_id", s.instanceID), zap.String("reason", reason))
-	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(version, s.instanceID, reason))
+	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(version, s.instanceID, change))
 	if err != nil {
 		return 0, err
 	}

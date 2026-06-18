@@ -1,6 +1,10 @@
 # Tracing Boundary
 
-`common/runtime/observability/tracing` 是未来跨服务链路追踪 runtime primitive 的边界。只有当至少两个服务需要同一套稳定、无业务语义的 tracing 基础能力时，才应在这里新增真实代码。
+`common/runtime/observability/tracing` 是跨服务链路追踪 runtime primitive 的边界。当前支持基于 OpenTelemetry SDK 的 tracer provider、parent-based sampler、resource attributes、W3C TraceContext/Baggage propagator、OTLP trace exporter 和 Fx 生命周期关闭。
+
+`exporter: none` 是本地默认模式：它会创建 SDK provider，并生成标准 OTel trace ID 与 span ID，但不会创建 OTLP exporter、不会连接 Collector，也不会把 span 导出到 Jaeger、Tempo 或其他 trace UI。该模式只提供日志关联和标准上下文传播基础，不提供 trace 可视化。
+
+`exporter: otlp` 会基于配置的 OTLP gRPC endpoint 创建 trace exporter，并通过 SDK batch processor 导出 span。生产类环境中 `insecure: true` 会在配置校验阶段被拒绝；endpoint 不应包含 token、账号密码、Cookie 或其他敏感凭据。
 
 ## 可以放置
 
@@ -12,12 +16,14 @@
 
 ## 禁止放置
 
-- 尚无真实跨服务需求的 OpenTelemetry、Jaeger、Zipkin 或其他 tracing 依赖。
 - 用户服务专属的 span 名称、业务 attribute、feature event 或 use case 编排。
 - Gin controller、HTTP route、Ent、Redis、SQL 或服务持久化访问。
 - 认证、用户、角色、权限等 feature 的业务状态、领域事件或应用 command/query。
+- Collector、Jaeger、Tempo、Zipkin、Grafana dashboard、告警规则或部署清单。
 - 为单个服务临时方便而扩张的 tracing facade 或通用大接口。
 
 ## 当前状态
 
-当前没有真实跨服务 tracing runtime primitive。本目录只保留未来边界说明；新增实现前应先明确调用方、初始化方式、配置来源、exporter 行为、采样策略和测试方式。
+当前 package 提供 `NewProvider` 和 `NewFxProvider`。构造函数不会隐式安装 OpenTelemetry global tracer provider 或 global propagator，调用方需要显式使用返回的 provider 和 propagator；未来如果服务侧需要全局安装，应通过单独 wiring 明确接入。
+
+当前实现 `exporter: none` 和 `exporter: otlp`。禁用 tracing 时会使用 `NeverSample` 且不创建 OTLP exporter，避免关闭状态仍连接 Collector。后续接入 exporter 认证、logger trace/span 字段或外部调用 instrumentation 时，应继续保持本包无业务语义，并单独说明认证和脱敏规则。

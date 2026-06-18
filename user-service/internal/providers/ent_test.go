@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"entgo.io/ent/dialect"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
@@ -29,7 +30,7 @@ func TestEntSQLDebugEnabledRequiresConfigFlag(t *testing.T) {
 func TestEntSQLDebugLogFuncWritesSQLDiagnosticLog(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core).Named(logger.SQLLoggerName)
-	ctx := logger.WithTraceID(context.Background(), "trace-sql-test")
+	ctx := contextWithSpanContext(context.Background(), t, "00112233445566778899aabbccddeeff", "0102030405060708")
 
 	entSQLDebugLogFunc(log)(ctx, "driver.Query: query=SELECT * FROM users WHERE id = $1 args=[1]")
 
@@ -38,8 +39,11 @@ func TestEntSQLDebugLogFuncWritesSQLDiagnosticLog(t *testing.T) {
 		t.Fatalf("log count = %d, want 1", len(entries))
 	}
 	fields := entries[0].ContextMap()
-	if fields[logger.TraceIDField] != "trace-sql-test" {
-		t.Fatalf("trace_id = %v, want trace-sql-test", fields[logger.TraceIDField])
+	if fields[logger.TraceIDField] != "00112233445566778899aabbccddeeff" {
+		t.Fatalf("trace_id = %v, want OTel trace ID", fields[logger.TraceIDField])
+	}
+	if fields[logger.SpanIDField] != "0102030405060708" {
+		t.Fatalf("span_id = %v, want OTel span ID", fields[logger.SpanIDField])
 	}
 	if fields["statement"] != "driver.Query: query=SELECT * FROM users WHERE id = $1 args=[1]" {
 		t.Fatalf("statement = %v", fields["statement"])
@@ -86,4 +90,22 @@ func TestCloseEntClientCallsCloser(t *testing.T) {
 	if !closed {
 		t.Fatal("client close was not called")
 	}
+}
+
+func contextWithSpanContext(ctx context.Context, t *testing.T, traceIDHex string, spanIDHex string) context.Context {
+	t.Helper()
+	traceID, err := trace.TraceIDFromHex(traceIDHex)
+	if err != nil {
+		t.Fatalf("TraceIDFromHex: %v", err)
+	}
+	spanID, err := trace.SpanIDFromHex(spanIDHex)
+	if err != nil {
+		t.Fatalf("SpanIDFromHex: %v", err)
+	}
+	spanContext := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: traceID,
+		SpanID:  spanID,
+		Remote:  true,
+	})
+	return trace.ContextWithSpanContext(ctx, spanContext)
 }

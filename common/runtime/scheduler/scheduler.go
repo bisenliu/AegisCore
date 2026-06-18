@@ -178,7 +178,6 @@ func (s *Scheduler) AddJob(cfg JobConfig) (cron.EntryID, error) {
 		return 0, err
 	}
 	s.jobs[cfg.Key] = id
-	s.metrics.JobRegistered(cfg.Key)
 	s.logger.Info("scheduler job registered", zap.String("job", cfg.Key), zap.String("spec", cfg.Spec), zap.Int("entry_id", int(id)))
 	return id, nil
 }
@@ -245,7 +244,7 @@ func (s *Scheduler) runJob(cfg JobConfig, localGate chan struct{}) {
 		gateAcquired       bool
 		globalGateAcquired bool
 		lock               Lock
-		jobCancel          context.CancelFunc
+		jobCancel          context.CancelFunc = func() {}
 		stopRenew          func()
 		renewErrCh         <-chan error
 		started            bool
@@ -263,9 +262,7 @@ func (s *Scheduler) runJob(cfg JobConfig, localGate chan struct{}) {
 				jobErr = fmt.Errorf("lock renew failed: %w", renewErr)
 			}
 		}
-		if jobCancel != nil {
-			jobCancel()
-		}
+		jobCancel()
 		if lock != nil {
 			s.unlock(cfg.Key, lock)
 		}
@@ -334,9 +331,10 @@ func (s *Scheduler) runJob(cfg JobConfig, localGate chan struct{}) {
 	lock = acquiredLock
 
 	jobCtx := s.root
-	jobCancel = func() {}
 	if cfg.Timeout > 0 {
-		jobCtx, jobCancel = context.WithTimeout(s.root, cfg.Timeout)
+		var cancel context.CancelFunc
+		jobCtx, cancel = context.WithTimeout(s.root, cfg.Timeout)
+		jobCancel = cancel
 	}
 	if lock != nil && cfg.Lock.AutoRenew {
 		stopRenew, renewErrCh = s.startRenew(jobCtx, jobCancel, cfg, lock)

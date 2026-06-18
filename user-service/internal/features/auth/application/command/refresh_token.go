@@ -2,10 +2,12 @@ package command
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 
 	commonauth "github.com/aegiscore/common/security/auth"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
@@ -33,11 +35,17 @@ func NewRefreshTokenUseCase(deps *UseCaseDeps) RefreshTokenUseCase {
 // Refresh 校验 refresh 会话并签发新的 token 响应。
 func (u *refreshTokenUseCase) Refresh(ctx context.Context, cmd RefreshTokenCommand) (*authtokens.TokenResult, error) {
 	if err := authvalidators.ValidateRefreshToken(cmd.RefreshToken); err != nil {
+		u.deps.metricsRecorder().RefreshFailed(ctx, authapplication.MetricsReasonValidationFailed)
 		return nil, err
 	}
 
 	claims, session, currentVersion, err := u.parseAndValidateRefreshSession(ctx, cmd.RefreshToken)
 	if err != nil {
+		reason := refreshFailureReason(err)
+		u.deps.metricsRecorder().RefreshFailed(ctx, reason)
+		if reason == authapplication.MetricsReasonTokenVersionMismatch {
+			u.deps.metricsRecorder().TokenVersionMismatch(ctx, authapplication.MetricsSourceRefreshToken)
+		}
 		return nil, err
 	}
 	if !u.deps.refreshTokenRotation {
@@ -59,18 +67,42 @@ func (u *refreshTokenUseCase) parseAndValidateRefreshSession(ctx context.Context
 }
 
 func (u *refreshTokenUseCase) refreshWithoutRotation(ctx context.Context, claims *commonauth.Claims, session authdomain.AuthSession, currentVersion int64) (*authtokens.TokenResult, error) {
-	return u.deps.issueTokenPair(ctx, claims.UserID, currentVersion, session.SessionID)
+	tokens, reason, err := u.deps.issueTokenPair(ctx, claims.UserID, currentVersion, session.SessionID)
+	if err != nil {
+		u.deps.metricsRecorder().RefreshFailed(ctx, reason)
+		return nil, err
+	}
+	u.deps.metricsRecorder().RefreshSucceeded(ctx)
+	return tokens, nil
 }
 
 func (u *refreshTokenUseCase) refreshWithRotation(ctx context.Context, claims *commonauth.Claims, oldSession authdomain.AuthSession, currentVersion int64) (*authtokens.TokenResult, error) {
 	sessionID := uuid.NewString()
 	tokens, err := u.deps.tokens.IssueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
 	if err != nil {
+		u.deps.metricsRecorder().RefreshFailed(ctx, authapplication.MetricsReasonTokenIssueFailed)
 		return nil, err
 	}
 	newSession := authdomain.AuthSession{UserID: claims.UserID, SessionID: sessionID, TokenVersion: currentVersion}
 	if err := u.deps.sessions.RotateTokenSession(ctx, oldSession, newSession, tokens.RefreshTTL); err != nil {
+		u.deps.metricsRecorder().RefreshFailed(ctx, authapplication.MetricsReasonSessionRotateFailed)
 		return nil, err
 	}
+	u.deps.metricsRecorder().RefreshSucceeded(ctx)
 	return tokens.Response, nil
+}
+
+func refreshFailureReason(err error) string {
+	switch {
+	case errors.Is(err, commonauth.ErrTokenVersionMismatch):
+		return authapplication.MetricsReasonTokenVersionMismatch
+	case errors.Is(err, authdomain.ErrAuthSessionNotFound):
+		return authapplication.MetricsReasonRefreshSessionInvalid
+	case errors.Is(err, authdomain.ErrAuthSessionMismatch):
+		return authapplication.MetricsReasonRefreshSessionMismatch
+	case errors.Is(err, authdomain.ErrTokenInvalid):
+		return authapplication.MetricsReasonRefreshTokenInvalid
+	default:
+		return authapplication.MetricsReasonSystemError
+	}
 }

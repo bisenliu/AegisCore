@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,9 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	_ "github.com/mattn/go-sqlite3"
+	rediscmd "github.com/redis/go-redis/v9"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
@@ -20,6 +25,10 @@ import (
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
+	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	"github.com/aegiscore/common/runtime/resources"
+	"github.com/aegiscore/common/runtime/workerpool"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
@@ -47,13 +56,19 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		Auth: config.AuthConfig{
 			JWT: config.JWTConfig{Secret: "secret"},
 		},
+		Observability: config.ObservabilityConfig{
+			Metrics: config.MetricsConfig{Enabled: true, Path: "/metrics", IncludeRuntime: true},
+			Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1, Exporter: "none"},
+		},
 	}
 	core, logs := observer.New(zap.DebugLevel)
 	log := zap.New(core)
 	jwtService := commonauth.NewJWTService(cfg.Auth)
 	tokenVersions := &routeTokenVersionValidator{version: 1}
 	authorizer := &routeAuthorizer{allowed: true}
-	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log})
+	metricsProvider := newRouteTestMetricsProvider(t, cfg)
+	traceProvider := newRouteTestTracingProvider(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log, Metrics: metricsProvider, Trace: traceProvider})
 	if err != nil {
 		t.Fatalf("NewGinEngine: %v", err)
 	}
@@ -61,13 +76,14 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDefault: %v", err)
 	}
-	RegisterRoutes(RegisterRouteParams{
+	if err := RegisterRoutes(RegisterRouteParams{
 		Config:        cfg,
 		Log:           log,
 		Engine:        engine,
 		JWT:           jwtService,
 		TokenVersions: tokenVersions,
 		Authorizer:    authorizer,
+		Metrics:       metricsProvider,
 		AuthController: authhttp.NewAuthController(authhttp.AuthControllerParams{
 			Login:          &routeAuthAuthUseCases{},
 			Refresh:        &routeAuthAuthUseCases{},
@@ -77,7 +93,10 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			Validator:      validator,
 		}),
 		UserController: userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
-	})
+	}); err != nil {
+		t.Fatalf("RegisterRoutes: %v", err)
+	}
+	registerRouteTestRuntimeMetrics(t, cfg, metricsProvider)
 
 	publicRequests := []struct {
 		method string
@@ -91,6 +110,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		{method: http.MethodGet, path: "/openapi.json"},
 		{method: http.MethodGet, path: "/docs"},
 		{method: http.MethodGet, path: "/api-docs"},
+		{method: http.MethodGet, path: "/metrics"},
 		{method: http.MethodPost, path: "/api/v1/auth/login", body: `{"username":"alice","password":"secret"}`},
 		{method: http.MethodPost, path: "/api/v1/auth/refresh", body: `{"refresh_token":"refresh"}`},
 		{method: http.MethodPost, path: "/api/v1/auth/change-password", body: `{"new_password":"NewPassword123!"}`},
@@ -100,7 +120,6 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
 			request.Header.Set("Content-Type", "application/json")
-			request.Header.Set("X-Trace-ID", "trace-public-test")
 			if tt.path == "/api/v1/auth/change-password" {
 				request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+"password-change-token")
 			}
@@ -108,14 +127,44 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			if recorder.Code == http.StatusUnauthorized {
 				t.Fatalf("%s status = %d, want not unauthorized", tt.path, recorder.Code)
 			}
-			if recorder.Header().Get("X-Trace-ID") != "trace-public-test" {
-				t.Fatalf("X-Trace-ID = %q, want trace-public-test", recorder.Header().Get("X-Trace-ID"))
-			}
 		})
 	}
 	if authorizer.calls != 0 {
 		t.Fatalf("public route authorizer calls = %d, want 0", authorizer.calls)
 	}
+
+	t.Run("metrics route returns prometheus text without auth or rbac", func(t *testing.T) {
+		initialLogCount := logs.Len()
+		authorizer.reset()
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		engine.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+		}
+		if contentType := recorder.Header().Get("Content-Type"); !strings.Contains(contentType, "text/plain") {
+			t.Fatalf("content type = %q, want prometheus text", contentType)
+		}
+		if body := recorder.Body.String(); !strings.Contains(body, "go_goroutines") {
+			t.Fatalf("body missing runtime metric: %s", body)
+		}
+		for _, family := range []string{
+			"aegiscore_postgres_pool_open_connections",
+			"aegiscore_redis_up",
+			"aegiscore_workerpool_tasks_total",
+			"aegiscore_runtime_component_running",
+		} {
+			if body := recorder.Body.String(); !strings.Contains(body, family) {
+				t.Fatalf("body missing runtime dependency metric %q: %s", family, body)
+			}
+		}
+		if authorizer.calls != 0 {
+			t.Fatalf("authorizer calls = %d, want 0", authorizer.calls)
+		}
+		if logs.Len() != initialLogCount {
+			t.Fatalf("request log count changed from %d to %d, want successful metrics scrape skipped", initialLogCount, logs.Len())
+		}
+	})
 
 	t.Run("probes return configured service name", func(t *testing.T) {
 		initialLogCount := logs.Len()
@@ -193,14 +242,10 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+routeAuthUserID, nil)
 		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
-		request.Header.Set("X-Trace-ID", "trace-auth-test")
 		authorizer.reset()
 		engine.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
-		}
-		if recorder.Header().Get("X-Trace-ID") != "trace-auth-test" {
-			t.Fatalf("X-Trace-ID = %q, want trace-auth-test", recorder.Header().Get("X-Trace-ID"))
 		}
 		assertSuccessEnvelope(t, recorder)
 		if authorizer.calls != 1 || authorizer.userID != routeAuthUserID || authorizer.pathTemplate != "/api/v1/users/:user_id" || authorizer.method != http.MethodGet {
@@ -212,7 +257,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			t.Fatal("request log count = 0, want at least one")
 		}
 		fields := entries[len(entries)-1].ContextMap()
-		if fields[logger.TraceIDField] != "trace-auth-test" || fields["method"] != http.MethodGet || fields["path"] != "/api/v1/users/:user_id" || fields["status"] != int64(http.StatusOK) || fields[commonauth.UserIDKey] != routeAuthUserID {
+		if !validTraceIDField(fields[logger.TraceIDField]) || !validSpanIDField(fields[logger.SpanIDField]) || fields["method"] != http.MethodGet || fields["path"] != "/api/v1/users/:user_id" || fields["status"] != int64(http.StatusOK) || fields[commonauth.UserIDKey] != routeAuthUserID {
 			t.Fatalf("request log fields = %#v", fields)
 		}
 		if _, ok := fields["latency_ms"]; !ok {
@@ -269,11 +314,10 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		assertFailureEnvelope(t, recorder, http.StatusInternalServerError, contracterrors.CodeInternalError)
 	})
 
-	t.Run("panic recovery returns envelope and logs trace id", func(t *testing.T) {
+	t.Run("panic recovery returns envelope and logs trace and span ids", func(t *testing.T) {
 		engine.GET("/panic-route-chain", func(_ *gin.Context) { panic("route-chain boom") })
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/panic-route-chain", nil)
-		request.Header.Set("X-Trace-ID", "trace-panic-route-chain")
 		engine.ServeHTTP(recorder, request)
 
 		assertFailureEnvelope(t, recorder, http.StatusInternalServerError, contracterrors.CodeInternalError)
@@ -282,7 +326,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			t.Fatalf("panic recovered logs = %d, want 1", len(entries))
 		}
 		fields := entries[0].ContextMap()
-		if fields[logger.TraceIDField] != "trace-panic-route-chain" || fields["panic"] != "route-chain boom" {
+		if !validTraceIDField(fields[logger.TraceIDField]) || !validSpanIDField(fields[logger.SpanIDField]) || fields["panic"] != "route-chain boom" {
 			t.Fatalf("recovery log fields = %#v", fields)
 		}
 		if _, ok := fields["stack"]; !ok {
@@ -301,11 +345,144 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	})
 }
 
+func TestRegisterRoutesRejectsMetricsPathConflict(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		App: config.AppConfig{Name: "configured-user-service", Environment: "local"},
+		Auth: config.AuthConfig{
+			JWT: config.JWTConfig{Secret: "secret"},
+		},
+		Observability: config.ObservabilityConfig{
+			Metrics: config.MetricsConfig{Enabled: true, Path: "/api/v1/metrics"},
+		},
+	}
+	validator := mustRouteTestValidator(t)
+	err := RegisterRoutes(RegisterRouteParams{
+		Config:     cfg,
+		Log:        zap.NewNop(),
+		Engine:     gin.New(),
+		JWT:        commonauth.NewJWTService(cfg.Auth),
+		Authorizer: &routeAuthorizer{allowed: true},
+		Metrics:    newRouteTestMetricsProvider(t, cfg),
+		AuthController: authhttp.NewAuthController(authhttp.AuthControllerParams{
+			Login:          &routeAuthAuthUseCases{},
+			Refresh:        &routeAuthAuthUseCases{},
+			ChangePassword: &routeAuthAuthUseCases{},
+			LogoutCurrent:  &routeAuthAuthUseCases{},
+			LogoutAll:      &routeAuthAuthUseCases{},
+			Validator:      validator,
+		}),
+		UserController: userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
+	})
+	if err == nil || !strings.Contains(err.Error(), "invalid metrics path") {
+		t.Fatalf("RegisterRoutes error = %v, want invalid metrics path", err)
+	}
+}
+
+func newRouteTestTracingProvider(t *testing.T, cfg *config.Config) *commontracing.Provider {
+	t.Helper()
+	provider, err := commontracing.NewProvider(context.Background(), commontracing.Options{
+		Config:      cfg.Observability.Tracing,
+		ServiceName: cfg.App.Name,
+		Environment: cfg.App.Environment,
+	})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := provider.Shutdown(context.Background()); err != nil {
+			t.Fatalf("Shutdown tracing provider: %v", err)
+		}
+	})
+	return provider
+}
+
+func newRouteTestMetricsProvider(t *testing.T, cfg *config.Config) *commonmetrics.Provider {
+	t.Helper()
+	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+		Config:      cfg.Observability.Metrics,
+		ServiceName: cfg.App.Name,
+		Environment: cfg.App.Environment,
+	})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	return provider
+}
+
+func registerRouteTestRuntimeMetrics(t *testing.T, cfg *config.Config, provider *commonmetrics.Provider) {
+	t.Helper()
+	db, err := sql.Open("sqlite3", "file:route_runtime_metrics?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	redisServer := miniredis.RunT(t)
+	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+
+	if cfg.Redis == nil {
+		cfg.Redis = make(map[string]config.RedisConfig)
+	}
+	cfg.Redis[resources.NameCacheRedis] = config.RedisConfig{PingTimeout: time.Second}
+
+	if err := RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{
+		Config:           cfg,
+		Metrics:          provider,
+		UserDB:           db,
+		CacheRedis:       client,
+		SessionPurgePool: routePurgeTaskPool{stats: workerpool.Stats{Name: "auth.redis.session_purge", Workers: 4, Submitted: 1}},
+		PolicyWatcher:    stubWatcherStatus{running: true},
+	}); err != nil {
+		t.Fatalf("RegisterRuntimeDependencyMetrics: %v", err)
+	}
+}
+
+func mustRouteTestValidator(t *testing.T) *validation.Validator {
+	t.Helper()
+	validator, err := validation.NewDefault()
+	if err != nil {
+		t.Fatalf("NewDefault: %v", err)
+	}
+	return validator
+}
+
+func validTraceIDField(value any) bool {
+	text, ok := value.(string)
+	if !ok {
+		return false
+	}
+	traceID, err := oteltrace.TraceIDFromHex(text)
+	return err == nil && traceID.IsValid()
+}
+
+func validSpanIDField(value any) bool {
+	text, ok := value.(string)
+	if !ok {
+		return false
+	}
+	spanID, err := oteltrace.SpanIDFromHex(text)
+	return err == nil && spanID.IsValid()
+}
+
 type routeAuthUserCommands struct{}
 
 type routeAuthUserQueries struct{}
 
 type routeAuthAuthUseCases struct{}
+
+type routePurgeTaskPool struct {
+	stats workerpool.Stats
+}
+
+func (p routePurgeTaskPool) Submit(context.Context, workerpool.Task) error {
+	return nil
+}
+
+func (p routePurgeTaskPool) Stats() workerpool.Stats {
+	return p.stats
+}
 
 type routeTokenVersionValidator struct {
 	version int64

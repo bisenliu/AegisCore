@@ -12,7 +12,7 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 |---|---|---|
 | `common` | 跨服务稳定契约与基础能力；不得承载服务特定 helper 或业务语义 | `common/contract/`, `common/runtime/`, `common/http/`, `common/security/`, `common/testing/`, `common/validation/` |
 | `user-service` | 用户服务运行时、用户服务内共享业务内核、用户资料、认证会话、角色管理、权限目录与 RBAC 授权 feature、外部系统防腐层边界、Ent schema、Atlas migration、服务侧 OpenAPI 生成脚本和 OpenAPI 3 文档 | `user-service/cmd/`, `user-service/internal/`, `user-service/internal/shared/`, `user-service/internal/integration/`, `user-service/ent/`, `user-service/migrations/`, `user-service/docs/` |
-| `deployments` | 本地和生产部署资产；Docker build、Compose、本地依赖、Kubernetes YAML 和 Helm chart 的归属边界 | `deployments/docker/user-service.Dockerfile`, `deployments/compose/`, `deployments/k8s/`, `deployments/helm/` |
+| `deployments` | 本地和生产部署资产；Docker build、Compose、本地依赖、Kubernetes YAML、Helm chart 和观测 dashboard/alert 资产的归属边界 | `deployments/docker/user-service.Dockerfile`, `deployments/compose/`, `deployments/k8s/`, `deployments/helm/`, `deployments/observability/` |
 
 仓库根目录是 workspace，不是业务 Go module。运行 Go 命令时通常进入 `common/` 或 `user-service/`。
 
@@ -21,9 +21,9 @@ AegisCore 是 Go 1.26 workspace，当前包含共享基础模块 `common` 和用
 1. `user-service/cmd/main.go` 创建 `aegiscore-user-services` CLI，并注册 `serve` 子命令。
 2. `serve` 调用 `bootstrap.NewApp(configPath)` 创建 Fx 应用。
 3. `user-service/internal/bootstrap.AppModule` 导入共享 runtime module、feature modules、`providers.Module`，并提供 HTTP server 生命周期。
-4. `user-service/internal/providers.Module` 显式提供 Redis/PostgreSQL named providers、Ent clients、JWT service、Gin engine 和 HTTP route registration。
+4. `user-service/internal/providers.Module` 显式提供 Redis/PostgreSQL named providers、Ent clients、JWT service、metrics provider、Gin engine 和 HTTP route registration。
 5. User/Auth/Role/Permission feature modules 自己组装 feature-local infrastructure adapter、application service 或 command/query use case、授权组件和 HTTP controller。
-6. `user-service/internal/providers/routes.go` 适配依赖并调用 `router.RegisterUserServiceHTTPRoutes`；`router.go` 负责 route graph 总装和 `/api/v1` 分组，`health.go` 注册 `/livez`、`/readyz`、`/startupz` 探针，`openapi.go` 注册 OpenAPI UI、OpenAPI JSON 和文档重定向。
+6. `user-service/internal/providers/routes.go` 适配依赖并调用 `router.RegisterUserServiceHTTPRoutes`；`router.go` 负责 route graph 总装和 `/api/v1` 分组，`health.go` 注册 `/livez`、`/readyz`、`/startupz` 探针，`metrics.go` 在启用 metrics 时注册配置化 Prometheus scrape endpoint，`openapi.go` 注册 OpenAPI UI、OpenAPI JSON 和文档重定向。
 7. Fx lifecycle 启动 HTTP server，并在进程收到中断或 SIGTERM 时优雅关闭。
 
 `aegiscore-user-services` 是当前运行时 CLI/service name，不是仓库目录名或 Go module path；代码位置和 module path 统一使用 `user-service`。
@@ -46,9 +46,9 @@ Fx 的 `OnStop` hook 按成功 `OnStart` hook 的反向注册顺序执行。`App
 
 | 步骤 | 代码位置 | 行为 |
 |---|---|---|
-| 中间件链 | `user-service/internal/providers/gin.go` | 创建 Gin engine，注册 trace-id、panic recovery、request logging、CORS |
+| 中间件链 | `user-service/internal/providers/gin.go` | 创建 Gin engine，注册 OTel Gin tracing、HTTP server RED metrics、panic recovery、request logging、CORS |
 | 路由 provider | `user-service/internal/providers/routes.go` | 将 Fx 依赖适配为 router route params |
-| 路由总装 | `user-service/internal/router/router.go`、`health.go`、`openapi.go` | `router.go` 创建 public/protected route groups 并总装 route graph，`health.go` 注册 `/livez`、`/readyz`、`/startupz` 探针，`openapi.go` 注册 OpenAPI UI、OpenAPI JSON 和文档重定向 |
+| 路由总装 | `user-service/internal/router/router.go`、`health.go`、`metrics.go`、`openapi.go` | `router.go` 创建 public/protected route groups 并总装 route graph，`health.go` 注册 `/livez`、`/readyz`、`/startupz` 探针，`metrics.go` 在启用 metrics 时注册配置化 Prometheus scrape endpoint，`openapi.go` 注册 OpenAPI UI、OpenAPI JSON 和文档重定向 |
 | 参数解析 | `features/*/transport/http/controller.go`、`features/*/transport/http/input.go` | Controller 使用 `binding.BindOrAbort` 绑定 HTTP DTO 并执行结构校验；feature-local input preparer 负责绑定后的裁剪、默认值归一化、UUID/cursor/token 解析，并映射为 command/query |
 | 业务调用 | `features/*/application/` | 编排用户资料、认证会话、角色管理、权限目录和 RBAC 授权用例；用户资料 feature 的读写用例分别位于 `application/query` 与 `application/command`，认证会话 feature 的登录、刷新、强制改密和登出用例位于 `application/command`，角色 feature 使用 command/query 管理角色与绑定，permission feature 使用 command/query 管理权限目录、有效权限、route diff 和 authorization wrapper，并复用 `authctx`、`credentials`、`tokens`、`sessions` application 组件 |
 | 数据访问 | `features/*/infrastructure/postgres/`, `features/*/infrastructure/redis/` | 使用 Ent 或 Redis 访问持久化细节，转换存储层错误 |
@@ -141,19 +141,21 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - `common/contract/errors/`：跨服务稳定应用错误码、可渲染应用错误类型和错误转换 helper。
 - `common/contract/pagination/`：跨服务稳定 Cursor/Keyset 分页响应模型、分页大小边界和分页数据包装 helper。
 - `common/contract/response/`：HTTP 响应信封 DTO 和默认响应消息；不承载错误码、应用错误或分页 re-export。
-- `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、进程内短 TTL 缓存、Redis key 构造规则、后台任务池、定时任务调度器、运行时资源名和时区初始化。
+- `common/runtime/`：服务运行时基础能力，例如配置、日志、datastore 构造、具名 Redis/PostgreSQL Fx provider、进程内短 TTL 缓存、Redis key 构造规则、后台任务池、定时任务调度器、可观测性配置契约、运行时资源名和时区初始化。
 - `common/http/`：HTTP/Gin 边界适配和 HTTP API 构建期辅助能力，例如 middleware、`http/binding` 请求绑定/校验失败响应适配层、无业务语义的 binder 组合/HTTP header 绑定、`http/response` 输出 helper、`http/pprof` Go runtime pprof 路由注册 helper，以及 `http/openapi` Swagger/OpenAPI 转换、规范化、序列化和 Go embed 渲染 helper；其中 Casbin 授权中间件只提供 resolver、authorizer 和 error handler 组合骨架，pprof helper 只负责挂载标准诊断端点，不决定是否开启、监听地址、鉴权、allowlist 或网关暴露策略，OpenAPI helper 不承载服务 API server、健康探针路径、认证方案描述、源码扫描范围或生成输出目录。
 - `common/security/`：安全与凭证原语，例如 JWT、Bearer 传输常量、认证上下文、密码 hash helper 和无业务语义的 Casbin 三元组/enforcer 包装。
 - `common/testing/`：跨模块测试基础设施和无业务语义 fixture，仅供测试代码使用；真实 PostgreSQL/Redis integration helper 放在 `testing/containers`，基础测试值生成放在 `testing/fixtures`。
 - `common/validation/`：不依赖 Gin 的通用结构体校验核心、字段名解析、错误归一化和自定义 rule。
 
-`common/runtime/workerpool` 是跨服务稳定、无业务语义的后台任务池 primitive，当前基于 ants 封装并提供并发限制、池满阻塞背压、错误日志、统计快照和 Fx 生命周期关闭。它只能承载运行时任务执行能力，不承载 feature 业务规则、业务 DTO、跨 feature 编排、事件投递语义、outbox 持久化、可靠消息语义或影响 token 有效性的 session 安全策略。Feature application 不应依赖 worker pool；需要后台清理的 infrastructure adapter 可以把它作为内部 runtime 依赖使用。高并发正式系统中后台池应按用途命名为专用 Fx 资源，例如 auth session purge 使用 `auth_session_purge_pool`，不得把多个业务场景混用到一个全局共享池。监控接入可使用 worker pool stats 中的 running、free、waiting、queued、failed 和 panicked 等稳定快照字段。
+`common/runtime/workerpool` 是跨服务稳定、无业务语义的后台任务池 primitive，当前基于 ants 封装并提供并发限制、池满阻塞背压、错误日志、统计快照和 Fx 生命周期关闭。它只能承载运行时任务执行能力，不承载 feature 业务规则、业务 DTO、跨 feature 编排、事件投递语义、outbox 持久化、可靠消息语义或影响 token 有效性的 session 安全策略。Feature application 不应依赖 worker pool；需要后台清理的 infrastructure adapter 可以把它作为内部 runtime 依赖使用。高并发正式系统中后台池应按用途命名为专用 Fx 资源，例如 auth session purge 使用 `auth_session_purge_pool`，不得把多个业务场景混用到一个全局共享池。监控接入使用 worker pool 的 queued、running、waiting、failed 和 panicked 等低基数运行信号；静态 worker 数和可由 running 推导的 free workers 不导出为 Prometheus 指标。
 
 `common/runtime/localcache` 是跨服务稳定、无业务语义的进程内短 TTL 缓存 primitive，只承载按 key 读取、写入、过期判断和主动删除能力。它不得承载 auth/user/role/permission 等 feature 缓存策略、缓存 key schema、远端缓存访问、撤销广播、容量治理或后台清理。需要强容量控制、跨实例失效或业务一致性策略时，应由消费侧 feature 或单独 runtime primitive 设计承担。
 
 `common/runtime/rediskey` 是跨服务稳定、无业务语义的 Redis key 构造 primitive，只承载 namespace、分段拼接、prefix 和 Redis Cluster hash tag 等通用规则。它不得承载 auth/user/role/permission 等 feature key schema。Feature 私有缓存、索引、会话、投影和临时 key 由对应 `features/<feature>/infrastructure/redis` 拥有；未来真正通用的 runtime primitive（例如 rate limiter、distributed lock、idempotency）如果进入 `common/runtime/<primitive>`，由该 primitive 自己拥有自己的 key schema。
 
 `common/runtime/scheduler` 是跨服务稳定、无业务语义的定时任务调度 primitive，当前基于 `github.com/robfig/cron/v3` v3 API 封装，并提供任务级本机防重叠、调度器全局并发限制、任务级分布式锁接口、Redis 锁实现、锁续租、优雅关闭和 `Metrics` 指标接口。Redis 锁等待由任务级 `WaitTimeout` 表达总等待上限，锁实现内部使用 `RetryPolicy` 做指数退避、最大单次间隔、可选最大尝试次数和 jitter，避免多副本锁竞争时形成固定频率 Redis 轮询。Scheduler 不得承载 feature 业务规则、业务 DTO、业务 Redis key schema、跨 feature 编排、可靠消息语义、outbox 持久化或具体 Prometheus registry wiring。需要多副本单实例执行的任务必须在任务级声明 `LockPolicy`，锁 TTL 必须解析为正值；长任务应启用续租，续租失败默认取消任务，避免锁失效后继续执行有副作用的业务逻辑。Prometheus 接入应通过服务侧实现 `Metrics` 接口完成，指标 label 中的 job key 必须是固定枚举式任务名，不得写入用户 ID、订单 ID 等高基数动态值。
+
+`common/runtime/config` 拥有跨服务稳定的 observability 配置契约，根配置段为 `observability.metrics` 与 `observability.tracing`。该契约表达 metrics 是否开启、HTTP metrics path、是否包含 runtime 指标、tracing 是否开启、采样率、exporter 类型、OTLP endpoint 和 insecure 开关；配置加载和生产类环境安全校验由 `common/runtime/config` 统一完成。`common/runtime/observability/metrics` 已提供 Prometheus 独立 registry/provider、可选 Go runtime/process collector、统一 label key、低基数约定、Fx 友好 provider wiring、SQL DB stats collector、Redis ping collector、workerpool stats collector、scheduler Metrics adapter、runtime component status collector 和 Casbin policy reload recorder；禁用模式必须零副作用，启用模式不得使用 Prometheus 默认全局 registry，且 common package 不会自动挂载 `/metrics` 路由。用户服务通过服务级 provider 和 router 在 `observability.metrics.enabled: true` 时显式暴露 `observability.metrics.path`，默认 `/metrics`；该 endpoint 不进入 `/api/v1` feature route graph，不经过 RBAC 授权，成功 scrape 可跳过 access log。用户服务 Gin engine 通过 `common/http/middleware.HTTPServerMetrics` 记录 HTTP server RED 指标：`http_server_requests_total`、`http_server_request_duration_seconds` 和 `http_server_in_flight_requests`；业务请求使用 Gin route template 作为 `route` label，未匹配路由使用稳定 fallback，成功健康探针和成功 metrics scrape 不进入业务 RED 指标。用户服务服务级 provider 额外注册 PostgreSQL `user_db`、Redis `cache_redis`、auth session purge workerpool、RBAC policy watcher 和 Casbin policy reload 指标；这些指标只使用固定 `resource`、`pool`、`scheduler_job`、`event`、`status` 或 `reason` label，不改变 `/livez`、`/readyz`、`/startupz` 语义。用户服务 auth 和 permission feature 可以在各自 application 边界定义业务 metrics 窄接口，并由 feature Fx 通过同一个 provider 注入 Prometheus recorder；当前业务指标覆盖登录、refresh、logout、token version mismatch、session purge submit failure、RBAC policy reload/publish、watcher version mismatch 和 route diff missing/stale 数量。业务指标仍归 owning feature 拥有，不进入 `common/runtime/observability/metrics`，label 只能使用固定 `operation`、`result`、`reason`、`source`、`kind` 等枚举值，不得写入用户 ID、用户名、角色 ID、权限 ID、session ID、token version、policy version、route template、raw path、SQL、Redis key 或原始错误消息。HTTP、scheduler 和 workerpool 的 Prometheus 接入应通过 metrics adapter 或服务侧 wiring 完成，不得让 scheduler/workerpool 反向依赖具体 exporter；指标 label 不得写入用户 ID、token、trace ID、raw path、SQL、Redis key 或原始错误消息。`common/runtime/observability/tracing` 已提供 OpenTelemetry SDK tracer provider、parent-based sampler、resource attributes、W3C TraceContext/Baggage propagator、OTLP trace exporter 和 Fx 生命周期关闭；用户服务通过 OTel Gin middleware 为 HTTP 入站请求创建 server span，`exporter: none` 不创建 OTLP exporter、不连接 Collector，只生成标准 trace/span context，供日志关联和上下文传播使用，`exporter: otlp` 使用配置的 Collector endpoint 导出 span。Observability 包不得承载用户服务业务指标、dashboard、告警规则、部署清单、feature span 名称或业务 attribute。
 
 `common/security/casbin` 是跨服务稳定、无业务语义的 Casbin 授权 primitive，只承载 `subject/object/action` 请求三元组、通用 enforcer 调用包装、拒绝和未配置错误。`common/http/middleware` 中的 Casbin 授权中间件只负责 Gin 调用骨架，必须通过服务侧 resolver、authorizer 和 error handler 注入业务语义。它不得承载 user-service 的 `user:<user_uuid>`、`role:<role_uuid>` subject schema、权限目录、policy loader、super admin baseline、route diff 或服务特定错误码。
 
@@ -180,6 +182,7 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 ## 9. Infrastructure
 
 - 配置加载由 `common/runtime/config/loader.go` 负责，支持 YAML 文件和 `AEGISCORE_` 环境变量覆盖。
+- 可观测性配置由 `common/runtime/config` 的 `observability.metrics` 和 `observability.tracing` 承载；`common/runtime/observability/metrics` 的 provider 可按配置创建 Prometheus 独立 registry 并可选注册 Go runtime/process collector，用户服务在 `observability.metrics.enabled: true` 时通过服务级 router 显式挂载 `observability.metrics.path`，默认 `/metrics`。该 endpoint 不经过 RBAC 授权；是否需要网络侧保护由部署层决定。用户服务 HTTP 入站 RED 指标由 `common/http/middleware.HTTPServerMetrics` 采集，route label 使用 Gin route template，未匹配路由使用稳定 fallback，成功健康探针和成功 metrics scrape 默认过滤。用户服务服务级 provider 注册 `user_db` PostgreSQL pool stats、`cache_redis` Redis ping 状态、auth session purge workerpool stats、RBAC policy watcher 状态和 Casbin policy reload 状态；auth 和 permission feature 额外注册 feature-owned business metrics，覆盖认证会话、token version mismatch、RBAC policy 同步和 route diff 诊断数量。这些指标不改变 health probe 语义，不暴露 DSN、SQL、Redis key、错误消息全文或业务实体 ID。`common/runtime/observability/tracing` 的 `exporter: none` provider 可在无 Collector 环境创建和关闭；`exporter: otlp` 会连接配置的 OTLP Collector 并导出 span；OTel Gin middleware 会为 HTTP 入站请求生成标准 OTel trace ID 与 span ID。
 - PostgreSQL 使用 `postgres.<name>` 命名实例配置；用户服务当前只声明并连接 `postgres.user_db`。配置中出现其他 PostgreSQL 命名实例不代表用户服务会自动连接或迁移它们。
 - Redis 使用 `redis.<name>` 命名实例配置；用户服务当前声明并连接 `redis.cache_redis`。
 - 进程内短 TTL 缓存使用 `common/runtime/localcache`；消费侧负责选择 TTL、key 类型和值类型，并负责业务失效策略。
@@ -189,12 +192,12 @@ Integration adapter 可以做外部协议 DTO 转换、调用错误归一化和 
 - 用户服务认证 Redis adapter 对登录和 refresh rotation 的 refresh session 写入执行同步 Redis Lua 原子操作，并按 application 传入的每用户活跃 session 上限裁剪最旧 session；该裁剪影响 refresh token 可续期能力，不通过 worker pool 异步执行。
 - 用户服务认证 Redis adapter 使用 `common/runtime/workerpool` 管理退出全部设备后的 detached session 后台物理清理；该 worker pool 只负责受控后台执行，不是 MQ、eventbus、outbox、通用 job system、可靠投递框架或 session 上限策略执行器。
 - 用户服务的外部系统防腐层边界位于 `user-service/internal/integration/`；其中 `integration/grpc` 只表示出站外部 gRPC client adapter，不表示本服务入站 gRPC transport；`integration/events` 只表示外部事件系统协议 adapter，不表示 feature consumer handler 或业务事件编排；当前没有 order、payment 等真实外部 client，也没有 Kafka、RabbitMQ、NATS、Redis Stream 等 broker dependency；当前也没有事件总线、outbox、publisher、subscriber、consumer handler 或异步投递 worker。
-- 部署资产位于 `deployments/`：用户服务 Dockerfile 位于 `deployments/docker/user-service.Dockerfile`，并要求从仓库根目录执行 build；`deployments/compose/` 承载本地依赖或本地服务启动配置，`deployments/k8s/` 承载 Kubernetes YAML，`deployments/helm/` 承载 Helm chart。部署清单、配置模板、Secret/ConfigMap 示例、探针、资源配额和服务暴露方式都留在 `deployments/` 或对应部署模板中，不迁入 `user-service/internal/shared`。
-- 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace header 为 `X-Trace-ID`，Gin context key 和日志字段统一为 `trace_id`。
+- 部署资产位于 `deployments/`：用户服务 Dockerfile 位于 `deployments/docker/user-service.Dockerfile`，并要求从仓库根目录执行 build；`deployments/compose/` 承载本地依赖或本地服务启动配置，`deployments/k8s/` 承载 Kubernetes YAML，`deployments/helm/` 承载 Helm chart，`deployments/observability/` 承载 Prometheus/Grafana dashboard 和 alert 示例。部署清单、配置模板、Secret/ConfigMap 示例、探针、资源配额、服务暴露方式、dashboard 和告警规则都留在 `deployments/` 或对应部署模板中，不迁入 `user-service/internal/shared`、`common` 或 feature 代码目录。
+- 日志基于 Zap，由 `common/runtime/logger` 提供底层构造和 Fx provider；HTTP trace 传播使用 W3C `traceparent` / `tracestate`，服务端不承诺返回 trace header；`common/runtime/logger` context helper 从当前 OTel span context 自动追加 `trace_id` 与 `span_id`，无有效 span context 时不伪造 trace/span 字段。
 - HTTP access log 标准字段为 `trace_id`、`user_id`、`client_ip`、`method`、`path`、`status`、`latency_ms`；认证失败安全事件日志应额外记录 `user_agent`，但不得记录 password、token、Authorization header、Cookie 或原始请求体。
 - 用户服务 HTTP 探针由 `internal/router/health.go` 拥有：`/livez` 只表示 Gin 进程可响应请求；`/readyz` 和 `/startupz` 由 `internal/providers/health.go` 注入 PostgreSQL `user_db`、Redis `cache_redis`、Casbin `LastError` 和 RBAC policy watcher 状态检查，失败时返回 HTTP 503 且不暴露 DSN、token、Cookie、SQL 或 stacktrace。
 - 代码注释统一使用中文，函数和方法注释必须使用中文；必要的协议名、库名、HTTP/JWT/Redis/PostgreSQL/Ent/Fx/Gin/trace-id 等技术术语可保留英文。人工维护源码不得新增英文注释；生成代码和第三方代码不为翻译注释而手写修改。
-- Log 日志消息内容必须全部使用英文，日志字段名使用稳定英文 snake_case。日志级别必须匹配场景严重性：`Debug` 用于生命周期细节和调试信息，`Info` 用于服务启动停止、资源连接关闭和重要成功业务动作，`Warn` 用于预期业务拒绝、客户端输入问题、认证拒绝、缓存降级和非致命冲突，`Error` 用于系统异常、外部依赖失败、数据访问失败、后台任务失败和 panic recover。业务日志优先使用 `common/runtime/logger` context helper，避免丢失 trace-id。
+- Log 日志消息内容必须全部使用英文，日志字段名使用稳定英文 snake_case。日志级别必须匹配场景严重性：`Debug` 用于生命周期细节和调试信息，`Info` 用于服务启动停止、资源连接关闭和重要成功业务动作，`Warn` 用于预期业务拒绝、客户端输入问题、认证拒绝、缓存降级和非致命冲突，`Error` 用于系统异常、外部依赖失败、数据访问失败、后台任务失败和 panic recover。业务日志优先使用 `common/runtime/logger` context helper，避免丢失 trace/span context。
 
 ## 10. Database Migrations
 

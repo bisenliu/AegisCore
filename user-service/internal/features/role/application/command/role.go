@@ -104,7 +104,10 @@ func (s *roleCommandService) UpdateRole(ctx context.Context, cmd UpdateRoleComma
 		logger.Error(ctx, "update role failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
 		return nil, err
 	}
-	s.notifyPolicyChanged(ctx, "role_updated")
+	if err := s.notifyPolicyChanged(ctx, "role_updated"); err != nil {
+		logger.Error(ctx, "refresh rbac policy after role update failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
+		return nil, err
+	}
 	return &RoleResult{Role: *updated}, nil
 }
 
@@ -122,6 +125,9 @@ func (s *roleCommandService) SetRoleActive(ctx context.Context, cmd SetRoleActiv
 		logger.Error(ctx, "set role active failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Bool("active", cmd.Active), zap.Error(err))...)
 		return nil, err
 	}
-	s.notifyPolicyChanged(ctx, "role_active_changed")
+	if err := s.notifyPolicyChanged(ctx, "role_active_changed"); err != nil {
+		logger.Error(ctx, "refresh rbac policy after role active state change failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Bool("active", cmd.Active), zap.Error(err))...)
+		return nil, err
+	}
 	return &RoleResult{Role: *updated}, nil
 }

@@ -9,14 +9,15 @@ import (
 
 // Config 是 AegisCore 服务的根配置对象。
 type Config struct {
-	System   SystemConfig              `mapstructure:"system"`
-	App      AppConfig                 `mapstructure:"app"`
-	HTTP     HTTPConfig                `mapstructure:"http"`
-	Auth     AuthConfig                `mapstructure:"auth"`
-	Ent      EntConfig                 `mapstructure:"ent"`
-	Log      LogConfig                 `mapstructure:"log"`
-	Redis    map[string]RedisConfig    `mapstructure:"redis"`
-	Postgres map[string]PostgresConfig `mapstructure:"postgres"`
+	System        SystemConfig              `mapstructure:"system"`
+	App           AppConfig                 `mapstructure:"app"`
+	HTTP          HTTPConfig                `mapstructure:"http"`
+	Auth          AuthConfig                `mapstructure:"auth"`
+	Ent           EntConfig                 `mapstructure:"ent"`
+	Log           LogConfig                 `mapstructure:"log"`
+	Observability ObservabilityConfig       `mapstructure:"observability"`
+	Redis         map[string]RedisConfig    `mapstructure:"redis"`
+	Postgres      map[string]PostgresConfig `mapstructure:"postgres"`
 }
 
 // SystemConfig 包含进程级运行时设置。
@@ -80,6 +81,28 @@ type LogConfig struct {
 	MaxAgeDays int    `mapstructure:"max_age_days"`
 	MaxSizeMB  int    `mapstructure:"max_size_mb"`
 	MaxBackups int    `mapstructure:"max_backups"`
+}
+
+// ObservabilityConfig 包含可观测性运行时配置入口。
+type ObservabilityConfig struct {
+	Metrics MetricsConfig `mapstructure:"metrics"`
+	Tracing TracingConfig `mapstructure:"tracing"`
+}
+
+// MetricsConfig 包含 metrics 采集和暴露的配置契约。
+type MetricsConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
+	Path           string `mapstructure:"path"`
+	IncludeRuntime bool   `mapstructure:"include_runtime"`
+}
+
+// TracingConfig 包含 tracing 采样和 exporter 的配置契约。
+type TracingConfig struct {
+	Enabled      bool    `mapstructure:"enabled"`
+	SampleRatio  float64 `mapstructure:"sample_ratio"`
+	Exporter     string  `mapstructure:"exporter"`
+	OTLPEndpoint string  `mapstructure:"otlp_endpoint"`
+	Insecure     bool    `mapstructure:"insecure"`
 }
 
 // RedisConfig 包含一个具名 Redis 客户端配置。

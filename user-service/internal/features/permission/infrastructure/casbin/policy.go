@@ -3,10 +3,13 @@ package casbin
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 
+	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/user-service/ent"
 	entpermission "github.com/aegiscore/user-service/ent/permission"
 	entrole "github.com/aegiscore/user-service/ent/role"
@@ -18,16 +21,11 @@ import (
 
 const policyWildcard = "*"
 
+const defaultUserRoleCacheTTL = 5 * time.Second
+
 // PolicySet 包含一次全量加载得到的 Casbin policy 数据。
 type PolicySet struct {
-	GroupingPolicies []GroupingPolicy
-	PermissionRules  []PermissionRule
-}
-
-// GroupingPolicy 描述用户 subject 到角色 subject 的 Casbin g policy。
-type GroupingPolicy struct {
-	UserID uuid.UUID
-	RoleID uuid.UUID
+	PermissionRules []PermissionRule
 }
 
 // PermissionRule 描述角色 subject 到路由权限的 Casbin p policy。
@@ -40,6 +38,13 @@ type PermissionRule struct {
 // Loader 定义 Casbin 引擎构造 policy 时消费的数据加载端口。
 type Loader interface {
 	LoadPolicies(ctx context.Context) (PolicySet, error)
+}
+
+// UserRoleResolver 定义授权热路径按需解析用户启用角色的端口。
+type UserRoleResolver interface {
+	RolesForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
+	InvalidateUserRole(userID uuid.UUID)
+	InvalidateAllUserRoles()
 }
 
 // LoaderParams 包含 Ent-backed policy loader 的 Fx 输入。
@@ -60,44 +65,12 @@ func NewPolicyLoader(params LoaderParams) Loader {
 }
 
 func (l *entLoader) LoadPolicies(ctx context.Context) (PolicySet, error) {
-	groups, err := l.loadGroupingPolicies(ctx)
-	if err != nil {
-		return PolicySet{}, err
-	}
 	rules, err := l.loadPermissionRules(ctx)
 	if err != nil {
 		return PolicySet{}, err
 	}
 	rules = append(rules, PermissionRule{RoleID: l.superAdminRoleID, PathTemplate: policyWildcard, HTTPMethod: policyWildcard})
-	return PolicySet{GroupingPolicies: groups, PermissionRules: rules}, nil
-}
-
-func (l *entLoader) loadGroupingPolicies(ctx context.Context) ([]GroupingPolicy, error) {
-	bindings, err := l.client.UserRole.Query().
-		Where(
-			entuserrole.HasUserWith(entuser.DeletedAtIsNil()),
-			entuserrole.HasRoleWith(entrole.ActiveEQ(true)),
-		).
-		WithUser().
-		WithRole().
-		Order(entuserrole.ByUserID(), entuserrole.ByRoleID()).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("load casbin grouping policies: %w", err)
-	}
-	groups := make([]GroupingPolicy, 0, len(bindings))
-	for _, binding := range bindings {
-		user, err := binding.Edges.UserOrErr()
-		if err != nil {
-			return nil, fmt.Errorf("load casbin grouping policy user edge: %w", err)
-		}
-		role, err := binding.Edges.RoleOrErr()
-		if err != nil {
-			return nil, fmt.Errorf("load casbin grouping policy role edge: %w", err)
-		}
-		groups = append(groups, GroupingPolicy{UserID: user.UserID, RoleID: role.RoleID})
-	}
-	return groups, nil
+	return PolicySet{PermissionRules: rules}, nil
 }
 
 func (l *entLoader) loadPermissionRules(ctx context.Context) ([]PermissionRule, error) {
@@ -128,8 +101,88 @@ func (l *entLoader) loadPermissionRules(ctx context.Context) ([]PermissionRule, 
 	return rules, nil
 }
 
-func userSubject(userID uuid.UUID) string {
-	return "user:" + userID.String()
+type entUserRoleResolver struct {
+	cache  *localcache.Cache[uuid.UUID, []uuid.UUID]
+	client *ent.Client
+	mu     sync.RWMutex
+	ttl    time.Duration
+}
+
+// NewUserRoleResolver 构造按用户短 TTL 缓存的角色解析器。
+func NewUserRoleResolver(params LoaderParams) UserRoleResolver {
+	return newUserRoleResolver(params.Client, defaultUserRoleCacheTTL)
+}
+
+func newUserRoleResolver(client *ent.Client, ttl time.Duration) *entUserRoleResolver {
+	if ttl <= 0 {
+		ttl = defaultUserRoleCacheTTL
+	}
+	return &entUserRoleResolver{client: client, ttl: ttl, cache: localcache.New[uuid.UUID, []uuid.UUID](ttl)}
+}
+
+// RolesForUser 返回用户当前绑定的启用角色 ID。
+func (r *entUserRoleResolver) RolesForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	cache := r.currentCache()
+	if roleIDs, ok := cache.Get(userID); ok {
+		return cloneRoleIDs(roleIDs), nil
+	}
+	roleIDs, err := r.loadRolesForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	cache.Set(userID, cloneRoleIDs(roleIDs))
+	return roleIDs, nil
+}
+
+// InvalidateUserRole 删除单个用户的本地角色缓存。
+func (r *entUserRoleResolver) InvalidateUserRole(userID uuid.UUID) {
+	r.currentCache().Delete(userID)
+}
+
+// InvalidateAllUserRoles 清空本实例全部用户角色缓存。
+func (r *entUserRoleResolver) InvalidateAllUserRoles() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cache = localcache.New[uuid.UUID, []uuid.UUID](r.ttl)
+}
+
+func (r *entUserRoleResolver) currentCache() *localcache.Cache[uuid.UUID, []uuid.UUID] {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.cache
+}
+
+func (r *entUserRoleResolver) loadRolesForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	var rows []struct {
+		RoleID uuid.UUID `json:"role_id,omitempty"`
+	}
+	err := r.client.Role.Query().
+		Where(
+			entrole.ActiveEQ(true),
+			entrole.HasUserRolesWith(
+				entuserrole.HasUserWith(entuser.UserIDEQ(userID), entuser.DeletedAtIsNil()),
+			),
+		).
+		Order(entrole.ByRoleID()).
+		Select(entrole.FieldRoleID).
+		Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("load user role policy subjects for user %s: %w", userID.String(), err)
+	}
+	roleIDs := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		roleIDs = append(roleIDs, row.RoleID)
+	}
+	return roleIDs, nil
+}
+
+func cloneRoleIDs(roleIDs []uuid.UUID) []uuid.UUID {
+	if len(roleIDs) == 0 {
+		return []uuid.UUID{}
+	}
+	cloned := make([]uuid.UUID, len(roleIDs))
+	copy(cloned, roleIDs)
+	return cloned
 }
 
 func roleSubject(roleID uuid.UUID) string {

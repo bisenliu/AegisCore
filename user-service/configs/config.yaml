@@ -77,6 +77,26 @@ log:
   # 每类日志最多保留的历史备份文件数量。
   max_backups: 30
 
+observability:
+  metrics:
+    # 是否开启 Prometheus metrics provider；开启后会挂载下方 path 作为 scrape endpoint。
+    enabled: false
+    # HTTP metrics 暴露路径；默认 /metrics，不经过 RBAC，网络侧保护由部署层负责。
+    path: /metrics
+    # 是否包含 Go runtime/process 指标；不包含 auth/user/role/permission 业务指标。
+    include_runtime: true
+  tracing:
+    # 是否开启 tracing；关闭时仍保留传播器和 no-op 采样语义，不连接外部 Collector。
+    enabled: true
+    # tracing 采样比例，范围为 0.0 到 1.0。
+    sample_ratio: 1.0
+    # exporter 为 none 时不向外部 Collector 导出；otlp 使用下方 endpoint 导出。
+    exporter: none
+    # exporter 为 otlp 时填写 Collector endpoint；不要在 endpoint 中放 token、账号密码或其他凭据。
+    otlp_endpoint: ""
+    # 是否允许 insecure OTLP 连接；生产类环境会拒绝 otlp + insecure 组合。
+    insecure: false
+
 # Redis 基础连接模板。
 # 具体实例通过 YAML merge 继承该模板，并覆盖 db、timeout 等差异字段。
 .redis_base: &redis_base

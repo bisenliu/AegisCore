@@ -55,6 +55,12 @@ func TestDefaultConfigHTTPTimeouts(t *testing.T) {
 	if cfg.Auth.JWT.AccessTokenTTL != 15*time.Minute || cfg.Auth.JWT.RefreshTokenTTL != 168*time.Hour || cfg.Auth.TokenVersionCacheTTL != 30*time.Second {
 		t.Fatalf("auth TTLs = (%s,%s,%s), want (15m,168h,30s)", cfg.Auth.JWT.AccessTokenTTL, cfg.Auth.JWT.RefreshTokenTTL, cfg.Auth.TokenVersionCacheTTL)
 	}
+	if cfg.Observability.Metrics.Enabled || cfg.Observability.Metrics.Path != "/metrics" || !cfg.Observability.Metrics.IncludeRuntime {
+		t.Fatalf("observability metrics = %#v, want disabled /metrics with runtime metrics", cfg.Observability.Metrics)
+	}
+	if !cfg.Observability.Tracing.Enabled || cfg.Observability.Tracing.SampleRatio != 1.0 || cfg.Observability.Tracing.Exporter != "none" || cfg.Observability.Tracing.OTLPEndpoint != "" || cfg.Observability.Tracing.Insecure {
+		t.Fatalf("observability tracing = %#v, want local none exporter default", cfg.Observability.Tracing)
+	}
 }
 
 func TestHTTPServerUsesConfiguredTimeouts(t *testing.T) {

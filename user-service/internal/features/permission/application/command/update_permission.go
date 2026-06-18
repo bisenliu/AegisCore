@@ -46,6 +46,9 @@ func (s *permissionCommandService) UpdatePermission(ctx context.Context, cmd Upd
 		logger.Error(ctx, "update permission failed", logger.StackTrace(zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
 		return nil, err
 	}
-	s.notifyPolicyChanged(ctx, "permission_updated")
+	if err := s.notifyPolicyChanged(ctx, "permission_updated"); err != nil {
+		logger.Error(ctx, "refresh rbac policy after permission update failed", logger.StackTrace(zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
+		return nil, err
+	}
 	return &PermissionResult{Permission: *updated}, nil
 }

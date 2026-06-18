@@ -278,18 +278,12 @@ func assertSkipped(t *testing.T, metrics *recordingMetrics, jobKey string, reaso
 
 type recordingMetrics struct {
 	mu              sync.Mutex
-	registered      map[string]int
 	triggered       map[string]int
 	started         map[string]int
 	completed       map[string]int
 	failed          map[string]int
 	skipped         map[string]int
 	lockRenewFailed map[string]int
-}
-
-func (m *recordingMetrics) JobRegistered(jobKey string) {
-	m.ensure()
-	m.add(m.registered, jobKey)
 }
 
 func (m *recordingMetrics) JobTriggered(jobKey string) {
@@ -346,8 +340,7 @@ func (m *recordingMetrics) ensure() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.registered == nil {
-		m.registered = make(map[string]int)
+	if m.triggered == nil {
 		m.triggered = make(map[string]int)
 		m.started = make(map[string]int)
 		m.completed = make(map[string]int)

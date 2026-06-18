@@ -16,15 +16,11 @@ func TestEmbeddedModelWildcardMatcher(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEnforcer: %v", err)
 	}
-	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000001")
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000002")
-	if _, err := enforcer.AddGroupingPolicy(userSubject(userID), roleSubject(roleID)); err != nil {
-		t.Fatalf("AddGroupingPolicy: %v", err)
-	}
 	if _, err := enforcer.AddPolicy(roleSubject(roleID), policyWildcard, policyWildcard); err != nil {
 		t.Fatalf("AddPolicy: %v", err)
 	}
-	allowed, err := enforcer.Enforce(userSubject(userID), "/api/v1/users/:id", "DELETE")
+	allowed, err := enforcer.Enforce(roleSubject(roleID), "/api/v1/users/:id", "DELETE")
 	if err != nil {
 		t.Fatalf("Enforce: %v", err)
 	}

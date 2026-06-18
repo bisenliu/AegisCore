@@ -114,14 +114,86 @@ func TestPermissionCommandServiceEnablePermission(t *testing.T) {
 	}
 }
 
+func TestPermissionCommandServiceReturnsRefreshFailure(t *testing.T) {
+	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000004")
+	refreshErr := errors.New("refresh failed")
+
+	tests := []struct {
+		name       string
+		run        func(*testing.T, PermissionCommandService)
+		wantReason string
+	}{
+		{
+			name: "create",
+			run: func(t *testing.T, service PermissionCommandService) {
+				t.Helper()
+				_, err := service.CreatePermission(context.Background(), CreatePermissionCommand{Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users"})
+				if !errors.Is(err, refreshErr) {
+					t.Fatalf("err = %v, want refreshErr", err)
+				}
+			},
+			wantReason: "permission_created",
+		},
+		{
+			name: "update",
+			run: func(t *testing.T, service PermissionCommandService) {
+				t.Helper()
+				_, err := service.UpdatePermission(context.Background(), UpdatePermissionCommand{PermissionID: permissionID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true})
+				if !errors.Is(err, refreshErr) {
+					t.Fatalf("err = %v, want refreshErr", err)
+				}
+			},
+			wantReason: "permission_updated",
+		},
+		{
+			name: "enable",
+			run: func(t *testing.T, service PermissionCommandService) {
+				t.Helper()
+				_, err := service.EnablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
+				if !errors.Is(err, refreshErr) {
+					t.Fatalf("err = %v, want refreshErr", err)
+				}
+			},
+			wantReason: "permission_active_changed",
+		},
+		{
+			name: "disable",
+			run: func(t *testing.T, service PermissionCommandService) {
+				t.Helper()
+				_, err := service.DisablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
+				if !errors.Is(err, refreshErr) {
+					t.Fatalf("err = %v, want refreshErr", err)
+				}
+			},
+			wantReason: "permission_active_changed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &stubPermissionStore{permission: permissiondomain.Permission{PermissionID: permissionID, Name: "List Users", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}}
+			notifier := &stubPolicyChangeNotifier{err: refreshErr}
+			service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: notifier})
+
+			tt.run(t, service)
+
+			if notifier.calls != 1 || notifier.reasons[0] != tt.wantReason {
+				t.Fatalf("notifier calls = %d reasons = %#v", notifier.calls, notifier.reasons)
+			}
+		})
+	}
+}
+
 type stubPolicyChangeNotifier struct {
 	calls   int
 	reasons []string
+	err     error
 }
 
-func (n *stubPolicyChangeNotifier) NotifyPolicyChanged(_ context.Context, reason string) {
+func (n *stubPolicyChangeNotifier) NotifyPolicyChanged(_ context.Context, change permissionapplication.PolicyChange) error {
 	n.calls++
-	n.reasons = append(n.reasons, reason)
+	n.reasons = append(n.reasons, change.Reason)
+	return n.err
 }
 
 type stubPermissionStore struct {

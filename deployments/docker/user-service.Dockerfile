@@ -16,7 +16,7 @@ FROM arigaio/atlas:latest AS atlas
 FROM alpine:3.20
 WORKDIR /app
 
-RUN addgroup -S aegiscore && adduser -S aegiscore -G aegiscore
+RUN apk add --no-cache tzdata && addgroup -S aegiscore && adduser -S aegiscore -G aegiscore
 
 COPY --from=builder /out/user-services /app/user-service/bin/user-services
 COPY --from=atlas /atlas /usr/local/bin/atlas

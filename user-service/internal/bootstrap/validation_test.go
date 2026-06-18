@@ -29,7 +29,7 @@ var appModuleTestDriverSeq atomic.Int64
 
 func TestAppModuleResolvesSharedValidationDependency(t *testing.T) {
 	err := fx.ValidateApp(
-		fx.Supply(&config.Config{}, zap.NewNop()),
+		fx.Supply(appModuleValidationTestConfig(), zap.NewNop()),
 		AppModule,
 		fx.Invoke(func(*validation.Validator, *userhttp.UserController) {}),
 	)
@@ -40,7 +40,7 @@ func TestAppModuleResolvesSharedValidationDependency(t *testing.T) {
 
 func TestAppModuleIncludesSharedTimezoneDependency(t *testing.T) {
 	err := fx.ValidateApp(
-		fx.Supply(&config.Config{}, zap.NewNop()),
+		fx.Supply(appModuleValidationTestConfig(), zap.NewNop()),
 		AppModule,
 		fx.Invoke(func(*validation.Validator, *userhttp.UserController) {}),
 	)
@@ -160,6 +160,20 @@ func appModuleLifecycleTestConfig(driverName string, redisAddr string, httpPort 
 		Postgres: map[string]config.PostgresConfig{
 			resources.NameUserDB: appModulePostgresConfig(driverName, "aegiscore_user"),
 		},
+		Observability: appModuleTestObservabilityConfig(),
+	}
+}
+
+func appModuleValidationTestConfig() *config.Config {
+	return &config.Config{
+		App:           config.AppConfig{Name: "aegiscore-user-services", Environment: "test"},
+		Observability: appModuleTestObservabilityConfig(),
+	}
+}
+
+func appModuleTestObservabilityConfig() config.ObservabilityConfig {
+	return config.ObservabilityConfig{
+		Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1, Exporter: "none"},
 	}
 }
 

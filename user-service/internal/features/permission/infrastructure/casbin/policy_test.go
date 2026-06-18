@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
@@ -16,13 +17,10 @@ import (
 func TestPolicyLoaderLoadsActiveBindings(t *testing.T) {
 	client := newPolicyTestClient(t)
 	ctx := context.Background()
-	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000101")
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000102")
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000103")
-	user := createPolicyTestUser(t, client, userID, "active@example.com")
 	role := createPolicyTestRole(t, client, roleID, true)
 	permission := createPolicyTestPermission(t, client, permissionID, "GET", "/api/v1/users", true)
-	createPolicyTestUserRole(t, client, user.ID, role.ID)
 	createPolicyTestRolePermission(t, client, role.ID, permission.ID)
 
 	loader := NewPolicyLoader(LoaderParams{Client: client})
@@ -30,27 +28,20 @@ func TestPolicyLoaderLoadsActiveBindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPolicies: %v", err)
 	}
-	assertHasGroup(t, policies.GroupingPolicies, userID, roleID)
 	assertHasRule(t, policies.PermissionRules, roleID, "/api/v1/users", "GET")
 }
 
 func TestPolicyLoaderSkipsInactiveRolesAndPermissions(t *testing.T) {
 	client := newPolicyTestClient(t)
 	ctx := context.Background()
-	activeUserID := uuid.MustParse("018f0000-0000-7000-8000-000000000201")
-	inactiveRoleUserID := uuid.MustParse("018f0000-0000-7000-8000-000000000202")
 	activeRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000203")
 	inactiveRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000204")
 	activePermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000205")
 	inactivePermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000206")
-	activeUser := createPolicyTestUser(t, client, activeUserID, "active-filter@example.com")
-	inactiveRoleUser := createPolicyTestUser(t, client, inactiveRoleUserID, "inactive-role@example.com")
 	activeRole := createPolicyTestRole(t, client, activeRoleID, true)
 	inactiveRole := createPolicyTestRole(t, client, inactiveRoleID, false)
 	activePermission := createPolicyTestPermission(t, client, activePermissionID, "GET", "/api/v1/active", true)
 	inactivePermission := createPolicyTestPermission(t, client, inactivePermissionID, "POST", "/api/v1/inactive", false)
-	createPolicyTestUserRole(t, client, activeUser.ID, activeRole.ID)
-	createPolicyTestUserRole(t, client, inactiveRoleUser.ID, inactiveRole.ID)
 	createPolicyTestRolePermission(t, client, activeRole.ID, activePermission.ID)
 	createPolicyTestRolePermission(t, client, activeRole.ID, inactivePermission.ID)
 	createPolicyTestRolePermission(t, client, inactiveRole.ID, activePermission.ID)
@@ -60,8 +51,6 @@ func TestPolicyLoaderSkipsInactiveRolesAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPolicies: %v", err)
 	}
-	assertHasGroup(t, policies.GroupingPolicies, activeUserID, activeRoleID)
-	assertMissingGroup(t, policies.GroupingPolicies, inactiveRoleUserID, inactiveRoleID)
 	assertHasRule(t, policies.PermissionRules, activeRoleID, "/api/v1/active", "GET")
 	assertMissingRule(t, policies.PermissionRules, activeRoleID, "/api/v1/inactive", "POST")
 	assertMissingRule(t, policies.PermissionRules, inactiveRoleID, "/api/v1/active", "GET")
@@ -80,13 +69,10 @@ func TestPolicyLoaderAddsSuperAdminWildcard(t *testing.T) {
 func TestPolicyLoaderUsesRoleIDSubjectWithoutRoleCode(t *testing.T) {
 	client := newPolicyTestClient(t)
 	ctx := context.Background()
-	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000207")
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000208")
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000209")
-	user := createPolicyTestUser(t, client, userID, "role-id-subject@example.com")
 	role := createPolicyTestRole(t, client, roleID, true)
 	permission := createPolicyTestPermission(t, client, permissionID, "PATCH", "/api/v1/roles/:role_id", true)
-	createPolicyTestUserRole(t, client, user.ID, role.ID)
 	createPolicyTestRolePermission(t, client, role.ID, permission.ID)
 
 	loader := NewPolicyLoader(LoaderParams{Client: client})
@@ -94,8 +80,43 @@ func TestPolicyLoaderUsesRoleIDSubjectWithoutRoleCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadPolicies: %v", err)
 	}
-	assertHasGroup(t, policies.GroupingPolicies, userID, roleID)
 	assertHasRule(t, policies.PermissionRules, roleID, "/api/v1/roles/:role_id", "PATCH")
+}
+
+func TestUserRoleResolverCachesAndInvalidatesActiveRoles(t *testing.T) {
+	client := newPolicyTestClient(t)
+	ctx := context.Background()
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000301")
+	activeRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000302")
+	laterRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000303")
+	inactiveRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000304")
+	user := createPolicyTestUser(t, client, userID, "resolver@example.com")
+	activeRole := createPolicyTestRole(t, client, activeRoleID, true)
+	laterRole := createPolicyTestRole(t, client, laterRoleID, true)
+	inactiveRole := createPolicyTestRole(t, client, inactiveRoleID, false)
+	createPolicyTestUserRole(t, client, user.ID, activeRole.ID)
+	createPolicyTestUserRole(t, client, user.ID, inactiveRole.ID)
+	resolver := newUserRoleResolver(client, time.Minute)
+
+	first, err := resolver.RolesForUser(ctx, userID)
+	if err != nil {
+		t.Fatalf("RolesForUser first: %v", err)
+	}
+	assertRoleIDs(t, first, []uuid.UUID{activeRoleID})
+
+	createPolicyTestUserRole(t, client, user.ID, laterRole.ID)
+	cached, err := resolver.RolesForUser(ctx, userID)
+	if err != nil {
+		t.Fatalf("RolesForUser cached: %v", err)
+	}
+	assertRoleIDs(t, cached, []uuid.UUID{activeRoleID})
+
+	resolver.InvalidateUserRole(userID)
+	reloaded, err := resolver.RolesForUser(ctx, userID)
+	if err != nil {
+		t.Fatalf("RolesForUser reloaded: %v", err)
+	}
+	assertRoleIDs(t, reloaded, []uuid.UUID{activeRoleID, laterRoleID})
 }
 
 func newPolicyTestClient(t *testing.T) *ent.Client {
@@ -146,25 +167,6 @@ func createPolicyTestRolePermission(t *testing.T, client *ent.Client, roleID int
 	}
 }
 
-func assertHasGroup(t *testing.T, groups []GroupingPolicy, userID uuid.UUID, roleID uuid.UUID) {
-	t.Helper()
-	for _, group := range groups {
-		if group.UserID == userID && group.RoleID == roleID {
-			return
-		}
-	}
-	t.Fatalf("missing group user=%s role=%s in %#v", userID, roleID, groups)
-}
-
-func assertMissingGroup(t *testing.T, groups []GroupingPolicy, userID uuid.UUID, roleID uuid.UUID) {
-	t.Helper()
-	for _, group := range groups {
-		if group.UserID == userID && group.RoleID == roleID {
-			t.Fatalf("unexpected group user=%s role=%s", userID, roleID)
-		}
-	}
-}
-
 func assertHasRule(t *testing.T, rules []PermissionRule, roleID uuid.UUID, path string, method string) {
 	t.Helper()
 	for _, rule := range rules {
@@ -180,6 +182,18 @@ func assertMissingRule(t *testing.T, rules []PermissionRule, roleID uuid.UUID, p
 	for _, rule := range rules {
 		if rule.RoleID == roleID && rule.PathTemplate == path && rule.HTTPMethod == method {
 			t.Fatalf("unexpected rule role=%s path=%s method=%s", roleID, path, method)
+		}
+	}
+}
+
+func assertRoleIDs(t *testing.T, got []uuid.UUID, want []uuid.UUID) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("role ids = %#v, want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("role ids = %#v, want %#v", got, want)
 		}
 	}
 }
