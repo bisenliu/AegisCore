@@ -146,10 +146,6 @@ func NewUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult,
 	return UserRoleResolverResult{Resolver: &entUserRoleResolver{cache: cache}, Stats: cache}, nil
 }
 
-func newUserRoleResolver(cache *localcache.Cache[uuid.UUID, []uuid.UUID]) *entUserRoleResolver {
-	return &entUserRoleResolver{cache: cache}
-}
-
 // RolesForUser 返回用户当前绑定的启用角色 ID。
 func (r *entUserRoleResolver) RolesForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	roleIDs, err := r.cache.GetOrLoad(ctx, userID)

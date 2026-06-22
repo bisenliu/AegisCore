@@ -200,7 +200,7 @@ func newTestUserRoleResolver(t *testing.T, client *ent.Client, ttl time.Duration
 		t.Fatalf("New localcache: %v", err)
 	}
 	t.Cleanup(cache.Close)
-	return newUserRoleResolver(cache)
+	return &entUserRoleResolver{cache: cache}
 }
 
 func createPolicyTestUser(t *testing.T, client *ent.Client, userID uuid.UUID, username string) *ent.User {
