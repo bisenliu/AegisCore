@@ -1,11 +1,10 @@
 package metrics
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/expfmt"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 
 	"github.com/aegiscore/common/runtime/localcache"
 )
@@ -35,23 +34,17 @@ func TestLocalcacheCollectorExportsStats(t *testing.T) {
 		t.Fatalf("Register: %v", err)
 	}
 
-	body := gatherRegistryText(t, registry)
-	for _, want := range []string{
-		`aegiscore_localcache_requests_total{cache="auth_token_version",result="hit"} 10`,
-		`aegiscore_localcache_requests_total{cache="auth_token_version",result="miss"} 3`,
-		`aegiscore_localcache_loads_total{cache="auth_token_version",result="success"} 1`,
-		`aegiscore_localcache_loads_total{cache="auth_token_version",result="error"} 1`,
-		`aegiscore_localcache_singleflight_total{cache="auth_token_version",event="shared"} 4`,
-		`aegiscore_localcache_singleflight_total{cache="auth_token_version",event="double_check_hit"} 1`,
-		`aegiscore_localcache_writes_total{cache="auth_token_version",event="set_dropped"} 5`,
-		`aegiscore_localcache_writes_total{cache="auth_token_version",event="rejected"} 6`,
-		`aegiscore_localcache_evictions_total{cache="auth_token_version"} 7`,
-		`aegiscore_localcache_capacity{cache="auth_token_version"} 1000`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("metrics body missing %q:\n%s", want, body)
-		}
-	}
+	families := gatherRegistryFamilies(t, registry)
+	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheRequestsMetricName), map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultHit}, 10)
+	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheRequestsMetricName), map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultMiss}, 3)
+	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheLoadsMetricName), map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultSuccess}, 1)
+	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheLoadsMetricName), map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultError}, 1)
+	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheSingleflightMetricName), map[string]string{LabelCache: "auth_token_version", LabelEvent: localcacheEventShared}, 4)
+	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheSingleflightMetricName), map[string]string{LabelCache: "auth_token_version", LabelEvent: localcacheEventDoubleCheck}, 1)
+	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheWritesMetricName), map[string]string{LabelCache: "auth_token_version", LabelEvent: localcacheEventSetDropped}, 5)
+	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheWritesMetricName), map[string]string{LabelCache: "auth_token_version", LabelEvent: localcacheEventRejected}, 6)
+	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheEvictionsMetricName), map[string]string{LabelCache: "auth_token_version"}, 7)
+	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheCapacityMetricName), map[string]string{LabelCache: "auth_token_version"}, 1000)
 }
 
 func TestLocalcacheCollectorAllowsMultipleCaches(t *testing.T) {
@@ -69,15 +62,9 @@ func TestLocalcacheCollectorAllowsMultipleCaches(t *testing.T) {
 		}
 	}
 
-	body := gatherRegistryText(t, registry)
-	for _, want := range []string{
-		`aegiscore_localcache_requests_total{cache="auth_token_version",result="hit"} 1`,
-		`aegiscore_localcache_requests_total{cache="rbac_user_roles",result="miss"} 2`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("metrics body missing %q:\n%s", want, body)
-		}
-	}
+	family := familyFrom(t, gatherRegistryFamilies(t, registry), localcacheRequestsMetricName)
+	assertMetricWithLabelsValue(t, family, map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultHit}, 1)
+	assertMetricWithLabelsValue(t, family, map[string]string{LabelCache: "rbac_user_roles", LabelResult: localcacheResultMiss}, 2)
 }
 
 type fakeLocalcacheStatsSource struct {
@@ -93,17 +80,11 @@ func (s fakeLocalcacheStatsSource) Stats() localcache.Stats {
 	return s.stats
 }
 
-func gatherRegistryText(t *testing.T, gatherer prometheus.Gatherer) string {
+func gatherRegistryFamilies(t *testing.T, gatherer prometheus.Gatherer) []*io_prometheus_client.MetricFamily {
 	t.Helper()
 	families, err := gatherer.Gather()
 	if err != nil {
 		t.Fatalf("Gather: %v", err)
 	}
-	var builder strings.Builder
-	for _, family := range families {
-		if _, err := expfmt.MetricFamilyToText(&builder, family); err != nil {
-			t.Fatalf("MetricFamilyToText: %v", err)
-		}
-	}
-	return builder.String()
+	return families
 }
