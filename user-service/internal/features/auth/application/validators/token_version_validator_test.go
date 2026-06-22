@@ -167,12 +167,7 @@ func TestTokenVersionValidatorInvalidateReloads(t *testing.T) {
 	}
 }
 
-type testTokenVersionValidator struct {
-	*TokenVersionValidator
-	cache *localcache.Cache[string, int64]
-}
-
-func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, ttl time.Duration) testTokenVersionValidator {
+func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, ttl time.Duration) *TokenVersionValidator {
 	t.Helper()
 	cache, err := localcache.New[string, int64](localcache.Config[string]{
 		Name:        "auth_token_version_test",
@@ -187,7 +182,7 @@ func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenV
 		t.Fatalf("New localcache: %v", err)
 	}
 	t.Cleanup(cache.Close)
-	return testTokenVersionValidator{TokenVersionValidator: NewCachingValidator(cache), cache: cache}
+	return NewCachingValidator(cache)
 }
 
 type tokenVersionUserStoreStub struct {
