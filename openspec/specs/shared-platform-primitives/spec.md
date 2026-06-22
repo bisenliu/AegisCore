@@ -59,12 +59,12 @@
 
 ### Requirement: Runtime primitive 基础
 
-系统 MUST 在 `common/runtime/` 中维护配置加载、数据存储、logger、metrics、tracing、scheduler、workerpool、localcache、Redis key 和 timezone 等 runtime primitive。
+系统 MUST 在 `common/runtime/` 中维护配置加载、数据存储、logger、metrics、tracing、scheduler、workerpool、localcache、Redis key 和 timezone 等 runtime primitive。`common/runtime/config` MUST 将 `local_cache` 表达为通用具名缓存实例集合，并 MUST NOT 固定 user-service 的 `auth_token_version`、`rbac_user_roles` 或其他业务缓存名。
 
 #### Scenario: 服务启动加载配置
 
 - **WHEN** 服务通过配置文件启动
-- **THEN** 系统 MUST 使用共享配置 loader 与 validation 解析 runtime、HTTP、auth、Postgres、Redis、metrics、tracing 和 logger 配置
+- **THEN** 系统 MUST 使用共享配置 loader 与 validation 解析 runtime、HTTP、auth、Postgres、Redis、metrics、tracing、logger 和通用 `local_cache` 配置
 
 #### Scenario: runtime 依赖初始化
 
@@ -75,6 +75,24 @@
 
 - **WHEN** 服务需要执行定时任务、分布式锁或固定 worker pool 任务
 - **THEN** 系统 MUST 使用共享 scheduler、lock、workerpool 和 metrics 约束，并记录失败、拒绝、panic 和完成事件
+
+#### Scenario: 本地缓存配置解析
+
+- **WHEN** 配置文件包含 `local_cache.<name>` entry
+- **THEN** `common/runtime/config` MUST 将其解析为以 `<name>` 为 key 的 `LocalCacheInstanceConfig`
+- **AND** 配置 key MUST 保持原样供服务按名称读取
+
+#### Scenario: 本地缓存配置通用校验
+
+- **WHEN** `local_cache` 中存在一个或多个 entry
+- **THEN** validation MUST 遍历所有 entry 并校验 `capacity > 0`、`ttl > 0`、`load_timeout > 0`、`num_counters >= 0` 和 `buffer_items >= 0`
+- **AND** 校验错误 MUST 包含对应 `local_cache.<name>.<field>` 路径
+
+#### Scenario: 拒绝 common 固化业务缓存名
+
+- **WHEN** user-service 或其他服务需要声明必需本地缓存实例
+- **THEN** 必需缓存名、缺失实例检查和业务含义 MUST 位于对应服务的 feature/provider 边界
+- **AND** `common/runtime/config` MUST NOT 增加该业务缓存的固定字段或专用校验
 
 #### Scenario: auth Redis key schema
 
@@ -90,6 +108,56 @@
 
 - **WHEN** 定时任务具有多实例副作用
 - **THEN** 任务 MUST 声明锁策略，锁 TTL MUST 为正值，长任务 SHOULD 具备续租策略
+
+### Requirement: 有界本地缓存 primitive
+
+系统 MUST 在 `common/runtime/localcache` 中提供有明确容量上限、TTL、回源合并、主动失效、统计快照和关闭语义的本地缓存 primitive。缓存实例 MUST 通过显式配置创建，配置 MUST 包含名称、容量、TTL 和 key string 编码；旧的仅传入 TTL 的构造方式 MUST 被移除。
+
+#### Scenario: 创建有界本地缓存
+
+- **WHEN** 服务创建 `localcache` 实例
+- **THEN** 系统 MUST 要求配置 `Name`、正数 `Capacity`、正数 `TTL` 和 `KeyString`
+- **AND** 系统 MUST 将 `Capacity` 作为本地缓存容量预算，第一版以 `cost=1` 表示最大条目预算
+
+#### Scenario: 拒绝无效缓存配置
+
+- **WHEN** 服务使用空名称、非正数容量、非正数 TTL、空 key string 编码或空 loader 创建 loading cache
+- **THEN** 系统 MUST 返回明确错误并拒绝创建缓存
+
+#### Scenario: 缓存读取与回源
+
+- **WHEN** 调用方通过 `GetOrLoad` 读取 key 且本地缓存 miss
+- **THEN** 系统 MUST 使用 `singleflight` 合并同 key 并发回源
+- **AND** 系统 MUST 在回源成功后尝试写入本地缓存
+- **AND** 系统 MUST NOT 缓存 loader 返回的错误
+
+#### Scenario: 缓存对象隔离
+
+- **WHEN** 缓存 value 类型可被调用方修改
+- **THEN** 系统 MUST 允许调用方提供 `CloneFunc`
+- **AND** 系统 MUST 使用 clone 隔离 loader 返回对象、缓存内部对象和调用方返回对象
+
+#### Scenario: 关闭后的访问
+
+- **WHEN** 缓存实例已经调用 `Close`
+- **THEN** `GetOrLoad` 和 `Set` MUST 返回 `ErrClosed`
+- **AND** `Get` MUST 返回未命中
+- **AND** `Delete` 和 `Clear` MUST 不再触碰底层缓存
+
+#### Scenario: 统计不污染命中率
+
+- **WHEN** `GetOrLoad` 进入 singleflight 后执行 double-check 并命中缓存
+- **THEN** 系统 MUST 记录 double-check 命中
+- **AND** 系统 MUST NOT 将该内部命中计入业务 hit 统计
+
+### Requirement: localcache 包内结构保持稳定契约
+
+系统 MUST 允许 `common/runtime/localcache` 按错误变量、公开类型和核心实现拆分包内文件，同时保持 `package localcache`、导出 API、错误变量和运行时行为不变。
+
+#### Scenario: 拆分包内文件
+
+- **WHEN** `common/runtime/localcache` 将错误变量、公开类型和 `Cache` 实现拆分到不同源码文件
+- **THEN** 系统 MUST 保持原有导出符号、错误语义、Ristretto 配置、TTL、singleflight、stats 和 `Close` 行为不变
 
 ### Requirement: 服务内 shared kernel
 

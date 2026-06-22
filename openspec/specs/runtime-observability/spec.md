@@ -54,12 +54,12 @@
 
 ### Requirement: Metrics 和 tracing
 
-系统 MUST 提供 Prometheus metrics 与 OpenTelemetry tracing 基础能力，并通过共享 provider 保持服务、环境和资源标签一致。
+系统 MUST 提供 Prometheus metrics 与 OpenTelemetry tracing 基础能力，并通过共享 provider 保持服务、环境和资源标签一致。runtime metrics 中的 localcache 指标 MUST 保持稳定的指标名称、label key、label value 和数值语义，使测试和观测消费方能够按结构化 metric family 验证 `cache`、`result`、`event` 等低基数标签。
 
 #### Scenario: 访问 metrics
 
 - **WHEN** metrics 配置允许暴露指标
-- **THEN** user-service MUST 在 `/api/v1` 外注册配置化 metrics 路由，并导出 HTTP、SQL、Redis、runtime、scheduler 或 workerpool 相关指标；metrics 路由 MUST NOT 经过 RBAC 授权
+- **THEN** user-service MUST 在 `/api/v1` 外注册配置化 metrics 路由，并导出 HTTP、SQL、Redis、runtime、scheduler、workerpool 或 localcache 相关指标；metrics 路由 MUST NOT 经过 RBAC 授权
 
 #### Scenario: metrics 配置禁用
 
@@ -71,6 +71,11 @@
 - **WHEN** 系统记录 metrics 标签
 - **THEN** 标签 MUST 保持低基数，MUST NOT 包含用户 ID、角色 ID、权限 ID、会话 ID、token ID、trace/span ID、raw path、IP、邮箱、用户名、SQL、Redis key 或原始错误
 
+#### Scenario: localcache metrics 结构化输出
+
+- **WHEN** localcache collector 导出命中、未命中、加载、singleflight、写入、驱逐和容量指标
+- **THEN** 指标 MUST 使用稳定的 Prometheus metric family 表达固定 cache 名称、`result` 或 `event` label 和对应数值，且 MUST NOT 依赖文本格式解析才能验证这些结构化字段
+
 #### Scenario: tracing provider 初始化
 
 - **WHEN** tracing 配置启用
@@ -80,6 +85,40 @@
 
 - **WHEN** HTTP 请求携带 W3C `traceparent` 或 `tracestate`
 - **THEN** 系统 MUST 使用 OpenTelemetry 上下文传播；日志 helper MUST 只从有效 span context 派生 `trace_id` 和 `span_id`，无有效 span context 时 MUST 省略这些字段
+
+### Requirement: 本地缓存运行时指标
+
+系统 MUST 为 `common/runtime/localcache` 提供 Prometheus metrics collector，导出低基数本地缓存运行时指标，用于观察命中率、回源率、回源错误、singleflight 合并、内部 double-check、写入丢弃、准入拒绝和淘汰。
+
+#### Scenario: 导出本地缓存请求指标
+
+- **WHEN** metrics 配置启用且服务注册 localcache collector
+- **THEN** 系统 MUST 导出本地缓存 hit 和 miss counter
+- **AND** 指标标签 MUST 只包含固定缓存名和固定枚举结果
+
+#### Scenario: 导出本地缓存回源指标
+
+- **WHEN** `GetOrLoad` 因 miss 执行 loader 或 loader 返回错误
+- **THEN** 系统 MUST 导出 loader 调用和 loader 错误 counter
+- **AND** 指标 MUST NOT 包含用户 ID、角色 ID、权限 ID、token、raw key、SQL、Redis key 或原始错误
+
+#### Scenario: 导出防击穿指标
+
+- **WHEN** `singleflight` 合并同 key 并发 miss 或内部 double-check 命中
+- **THEN** 系统 MUST 导出 shared result 和 double-check hit counter
+- **AND** 这些指标 MUST NOT 计入业务缓存 hit ratio
+
+#### Scenario: 导出淘汰与拒绝指标
+
+- **WHEN** Ristretto 丢弃写入、拒绝准入或淘汰缓存项
+- **THEN** 系统 MUST 导出 set dropped、admission rejected 和 evicted counter
+- **AND** SRE MUST 能通过这些指标判断容量、TTL 或 key 基数是否需要调整
+
+#### Scenario: metrics 禁用
+
+- **WHEN** metrics provider 被禁用或未配置
+- **THEN** 系统 MUST 不注册 localcache Prometheus collector
+- **AND** localcache 自身 MUST 继续维护可通过 `Stats()` 读取的本地统计快照
 
 ### Requirement: 日志与错误可观测性
 
