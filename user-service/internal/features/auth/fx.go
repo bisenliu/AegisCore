@@ -93,7 +93,10 @@ func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessio
 }
 
 func newTokenVersionLocalCache(params tokenVersionCacheParams) (tokenVersionCacheResult, error) {
-	cfg := params.Config.LocalCache.AuthTokenVersion
+	cfg, ok := params.Config.LocalCache.Instance(authTokenVersionCacheName)
+	if !ok {
+		return tokenVersionCacheResult{}, fmt.Errorf("local_cache.%s is required", authTokenVersionCacheName)
+	}
 	cache, err := localcache.New[string, int64](localcache.Config[string]{
 		Name:        authTokenVersionCacheName,
 		Capacity:    cfg.Capacity,

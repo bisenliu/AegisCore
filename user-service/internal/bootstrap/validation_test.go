@@ -175,8 +175,8 @@ func appModuleValidationTestConfig() *config.Config {
 
 func appModuleTestLocalCacheConfig() config.LocalCacheConfig {
 	return config.LocalCacheConfig{
-		AuthTokenVersion: config.LocalCacheInstanceConfig{Capacity: 1000, TTL: time.Second, LoadTimeout: time.Second},
-		RBACUserRoles:    config.LocalCacheInstanceConfig{Capacity: 1000, TTL: time.Second, LoadTimeout: time.Second},
+		"auth_token_version": config.LocalCacheInstanceConfig{Capacity: 1000, TTL: time.Second, LoadTimeout: time.Second},
+		"rbac_user_roles":    config.LocalCacheInstanceConfig{Capacity: 1000, TTL: time.Second, LoadTimeout: time.Second},
 	}
 }
 

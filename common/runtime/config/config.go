@@ -107,9 +107,12 @@ type TracingConfig struct {
 }
 
 // LocalCacheConfig 包含服务内进程缓存实例配置。
-type LocalCacheConfig struct {
-	AuthTokenVersion LocalCacheInstanceConfig `mapstructure:"auth_token_version"`
-	RBACUserRoles    LocalCacheInstanceConfig `mapstructure:"rbac_user_roles"`
+type LocalCacheConfig map[string]LocalCacheInstanceConfig
+
+// Instance 返回指定名称的本地缓存实例配置及其是否存在。
+func (c LocalCacheConfig) Instance(name string) (LocalCacheInstanceConfig, bool) {
+	cfg, ok := c[name]
+	return cfg, ok
 }
 
 // LocalCacheInstanceConfig 描述单个本地缓存实例的容量和生命周期。

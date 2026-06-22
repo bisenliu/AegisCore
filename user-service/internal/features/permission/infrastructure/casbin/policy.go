@@ -123,7 +123,10 @@ func (l *entLoader) loadPermissionRules(ctx context.Context) ([]PermissionRule, 
 
 // NewUserRoleResolver 构造按用户 bounded TTL 缓存的角色解析器。
 func NewUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult, error) {
-	cfg := params.Config.LocalCache.RBACUserRoles
+	cfg, ok := params.Config.LocalCache.Instance(rbacUserRolesCacheName)
+	if !ok {
+		return UserRoleResolverResult{}, fmt.Errorf("local_cache.%s is required", rbacUserRolesCacheName)
+	}
 	cache, err := localcache.New[uuid.UUID, []uuid.UUID](localcache.Config[uuid.UUID]{
 		Name:        rbacUserRolesCacheName,
 		Capacity:    cfg.Capacity,

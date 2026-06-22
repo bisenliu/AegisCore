@@ -216,8 +216,14 @@ func (c Config) validateObservability() []error {
 
 func (c Config) validateLocalCache() []error {
 	var errs []error
-	errs = append(errs, validateLocalCacheInstance("local_cache.auth_token_version", c.LocalCache.AuthTokenVersion)...)
-	errs = append(errs, validateLocalCacheInstance("local_cache.rbac_user_roles", c.LocalCache.RBACUserRoles)...)
+	for _, name := range sortedLocalCacheNames(c.LocalCache) {
+		cacheCfg := c.LocalCache[name]
+		if strings.TrimSpace(name) == "" {
+			errs = append(errs, configFieldError("local_cache", "must not contain an empty named instance"))
+			continue
+		}
+		errs = append(errs, validateLocalCacheInstance("local_cache."+name, cacheCfg)...)
+	}
 	return errs
 }
 
@@ -370,6 +376,15 @@ func sortedRedisNames(values map[string]RedisConfig) []string {
 }
 
 func sortedPostgresNames(values map[string]PostgresConfig) []string {
+	names := make([]string, 0, len(values))
+	for name := range values {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func sortedLocalCacheNames(values LocalCacheConfig) []string {
 	names := make([]string, 0, len(values))
 	for name := range values {
 		names = append(names, name)

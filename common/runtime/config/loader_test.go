@@ -46,14 +46,20 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cfg.Auth.MaxActiveSessionsPerUser != 5 {
 		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 5", cfg.Auth.MaxActiveSessionsPerUser)
 	}
-	if cfg.LocalCache.AuthTokenVersion.Capacity != 1000 || cfg.LocalCache.AuthTokenVersion.TTL != time.Second || cfg.LocalCache.AuthTokenVersion.LoadTimeout != 300*time.Millisecond {
-		t.Fatalf("LocalCache.AuthTokenVersion = %#v, want capacity 1000 ttl 1s load timeout 300ms", cfg.LocalCache.AuthTokenVersion)
+	authTokenVersion := requireLocalCacheInstance(t, cfg, "auth_token_version")
+	if authTokenVersion.Capacity != 1000 || authTokenVersion.TTL != time.Second || authTokenVersion.LoadTimeout != 300*time.Millisecond {
+		t.Fatalf("LocalCache[auth_token_version] = %#v, want capacity 1000 ttl 1s load timeout 300ms", authTokenVersion)
 	}
-	if cfg.LocalCache.AuthTokenVersion.NumCounters != 2000 || cfg.LocalCache.AuthTokenVersion.BufferItems != 128 {
-		t.Fatalf("LocalCache.AuthTokenVersion tuning = (%d,%d), want (2000,128)", cfg.LocalCache.AuthTokenVersion.NumCounters, cfg.LocalCache.AuthTokenVersion.BufferItems)
+	if authTokenVersion.NumCounters != 2000 || authTokenVersion.BufferItems != 128 {
+		t.Fatalf("LocalCache[auth_token_version] tuning = (%d,%d), want (2000,128)", authTokenVersion.NumCounters, authTokenVersion.BufferItems)
 	}
-	if cfg.LocalCache.RBACUserRoles.Capacity != 2000 || cfg.LocalCache.RBACUserRoles.TTL != 5*time.Second || cfg.LocalCache.RBACUserRoles.LoadTimeout != 500*time.Millisecond {
-		t.Fatalf("LocalCache.RBACUserRoles = %#v, want capacity 2000 ttl 5s load timeout 500ms", cfg.LocalCache.RBACUserRoles)
+	rbacUserRoles := requireLocalCacheInstance(t, cfg, "rbac_user_roles")
+	if rbacUserRoles.Capacity != 2000 || rbacUserRoles.TTL != 5*time.Second || rbacUserRoles.LoadTimeout != 500*time.Millisecond {
+		t.Fatalf("LocalCache[rbac_user_roles] = %#v, want capacity 2000 ttl 5s load timeout 500ms", rbacUserRoles)
+	}
+	backgroundJobs := requireLocalCacheInstance(t, cfg, "background_jobs")
+	if backgroundJobs.Capacity != 300 || backgroundJobs.TTL != 10*time.Second || backgroundJobs.LoadTimeout != 200*time.Millisecond {
+		t.Fatalf("LocalCache[background_jobs] = %#v, want capacity 300 ttl 10s load timeout 200ms", backgroundJobs)
 	}
 	if !cfg.Ent.SQLDebug {
 		t.Fatal("Ent.SQLDebug = false, want true")
@@ -134,6 +140,15 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cfg.Postgres["pay_db"].DBName != "aegiscore_pay" {
 		t.Fatalf("pay_db.DBName = %q, want aegiscore_pay", cfg.Postgres["pay_db"].DBName)
 	}
+}
+
+func requireLocalCacheInstance(t *testing.T, cfg *Config, name string) LocalCacheInstanceConfig {
+	t.Helper()
+	cacheCfg, ok := cfg.LocalCache.Instance(name)
+	if !ok {
+		t.Fatalf("LocalCache.Instance(%q) ok = false", name)
+	}
+	return cacheCfg
 }
 
 func TestLoadValidatesMissingPrimaryConfigFields(t *testing.T) {
@@ -288,6 +303,7 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_LOCAL_CACHE_AUTH_TOKEN_VERSION_LOAD_TIMEOUT", "400ms")
 	t.Setenv("AEGISCORE_LOCAL_CACHE_RBAC_USER_ROLES_CAPACITY", "4000")
 	t.Setenv("AEGISCORE_LOCAL_CACHE_RBAC_USER_ROLES_BUFFER_ITEMS", "256")
+	t.Setenv("AEGISCORE_LOCAL_CACHE_BACKGROUND_JOBS_TTL", "15s")
 	t.Setenv("AEGISCORE_ENT_SQL_DEBUG", "false")
 	t.Setenv("AEGISCORE_OBSERVABILITY_METRICS_ENABLED", "false")
 	t.Setenv("AEGISCORE_OBSERVABILITY_METRICS_PATH", "/internal/metrics")
@@ -323,11 +339,17 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	if cfg.Auth.MaxActiveSessionsPerUser != 7 {
 		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 7", cfg.Auth.MaxActiveSessionsPerUser)
 	}
-	if cfg.LocalCache.AuthTokenVersion.Capacity != 3000 || cfg.LocalCache.AuthTokenVersion.TTL != 2*time.Second || cfg.LocalCache.AuthTokenVersion.LoadTimeout != 400*time.Millisecond {
-		t.Fatalf("LocalCache.AuthTokenVersion = %#v, want env overrides", cfg.LocalCache.AuthTokenVersion)
+	authTokenVersion := requireLocalCacheInstance(t, cfg, "auth_token_version")
+	if authTokenVersion.Capacity != 3000 || authTokenVersion.TTL != 2*time.Second || authTokenVersion.LoadTimeout != 400*time.Millisecond {
+		t.Fatalf("LocalCache[auth_token_version] = %#v, want env overrides", authTokenVersion)
 	}
-	if cfg.LocalCache.RBACUserRoles.Capacity != 4000 || cfg.LocalCache.RBACUserRoles.BufferItems != 256 {
-		t.Fatalf("LocalCache.RBACUserRoles = %#v, want env overrides", cfg.LocalCache.RBACUserRoles)
+	rbacUserRoles := requireLocalCacheInstance(t, cfg, "rbac_user_roles")
+	if rbacUserRoles.Capacity != 4000 || rbacUserRoles.BufferItems != 256 {
+		t.Fatalf("LocalCache[rbac_user_roles] = %#v, want env overrides", rbacUserRoles)
+	}
+	backgroundJobs := requireLocalCacheInstance(t, cfg, "background_jobs")
+	if backgroundJobs.TTL != 15*time.Second {
+		t.Fatalf("LocalCache[background_jobs].TTL = %s, want env override 15s", backgroundJobs.TTL)
 	}
 	if cfg.Ent.SQLDebug {
 		t.Fatal("Ent.SQLDebug = true, want env override false")
@@ -444,6 +466,12 @@ func TestLoadValidatesLocalCacheConfig(t *testing.T) {
     ttl: 0s
     load_timeout: 0s
     num_counters: -1
+    buffer_items: -1
+  background_jobs:
+    capacity: -1
+    ttl: 0s
+    load_timeout: 0s
+    num_counters: -1
     buffer_items: -1`))
 
 	assertConfigLoadErrorContains(t, err,
@@ -457,7 +485,24 @@ func TestLoadValidatesLocalCacheConfig(t *testing.T) {
 		"local_cache.rbac_user_roles.load_timeout must be > 0",
 		"local_cache.rbac_user_roles.num_counters must be >= 0",
 		"local_cache.rbac_user_roles.buffer_items must be >= 0",
+		"local_cache.background_jobs.capacity must be > 0",
+		"local_cache.background_jobs.ttl must be > 0",
+		"local_cache.background_jobs.load_timeout must be > 0",
+		"local_cache.background_jobs.num_counters must be >= 0",
+		"local_cache.background_jobs.buffer_items must be >= 0",
 	)
+}
+
+func TestConfigValidateRejectsEmptyLocalCacheName(t *testing.T) {
+	err := Config{
+		LocalCache: LocalCacheConfig{
+			"": LocalCacheInstanceConfig{Capacity: 1, TTL: time.Second, LoadTimeout: time.Second},
+		},
+	}.validateLocalCache()
+
+	if len(err) != 1 || err[0].Error() != "local_cache must not contain an empty named instance" {
+		t.Fatalf("validateLocalCache() = %#v, want empty instance name error", err)
+	}
 }
 
 func TestLoadValidatesObservabilityConfig(t *testing.T) {
@@ -756,6 +801,12 @@ local_cache:
     load_timeout: 500ms
     num_counters: 0
     buffer_items: 0
+  background_jobs:
+    capacity: 300
+    ttl: 10s
+    load_timeout: 200ms
+    num_counters: 1000
+    buffer_items: 64
 
 .redis_base: &redis_base
   addr: 127.0.0.1:6379

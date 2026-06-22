@@ -3,6 +3,7 @@ package casbin
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 
+	"github.com/aegiscore/common/runtime/config"
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/user-service/ent"
@@ -175,6 +177,17 @@ func TestUserRoleResolverCoalescesConcurrentMisses(t *testing.T) {
 	}
 	if got := roleQueries.Load(); got != 1 {
 		t.Fatalf("role query count = %d, want 1", got)
+	}
+}
+
+func TestNewUserRoleResolverRequiresConfigInstance(t *testing.T) {
+	_, err := NewUserRoleResolver(UserRoleResolverParams{
+		Config: &config.Config{LocalCache: config.LocalCacheConfig{}},
+		Client: newPolicyTestClient(t),
+	})
+
+	if err == nil || !strings.Contains(err.Error(), "local_cache.rbac_user_roles is required") {
+		t.Fatalf("NewUserRoleResolver error = %v, want missing local cache config", err)
 	}
 }
 
