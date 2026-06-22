@@ -2,9 +2,9 @@
 
 `common` 是跨服务共享 Go module，模块路径为 `github.com/aegiscore/common`。它只承载稳定、业务中立、可被多个服务复用的契约和 runtime primitive，不承载 user-service 特定业务语义。
 
-## Package Areas
+## 包区域
 
-| Area | Purpose |
+| 区域 | 作用 |
 |---|---|
 | `contract/errors` | 稳定应用错误码和可渲染错误类型 |
 | `contract/pagination` | Cursor/Keyset 分页契约 |
@@ -20,14 +20,18 @@
 | `runtime/id` | 跨服务默认 UUID 生成策略 |
 | `runtime/localcache` | 进程内短 TTL cache primitive |
 | `runtime/rediskey` | 通用 Redis key 构造规则 |
+| `runtime/resources` | 稳定 runtime 资源命名 |
 | `runtime/workerpool` | 受控后台任务池 primitive |
 | `runtime/scheduler` | 定时任务、锁、续租和 metrics adapter primitive |
 | `runtime/observability` | Prometheus metrics 和 OpenTelemetry tracing provider |
-| `security` | JWT、Bearer、密码和 Casbin generic helper |
+| `runtime/timezone` | 时区加载和时间位置 helper |
+| `security/auth` | JWT、Bearer、认证上下文和 token version helper |
+| `security/casbin` | 通用请求三元组和 Casbin authorizer wrapper |
+| `security/password` | 密码哈希和校验 helper |
 | `testing` | 跨模块测试基础设施和无业务语义 fixture |
 | `validation` | 通用结构校验核心 |
 
-## Rules
+## 规则
 
 - 不放 user-service 业务 DTO、权限目录、policy loader、route diff、auth/session/role/permission 语义。
 - 不放 feature Redis key schema、缓存策略、session 策略或外部系统业务编排。
@@ -35,16 +39,16 @@
 - `scheduler` 不是 feature orchestration、outbox 或具体 Prometheus registry wiring。
 - `openapi` helper 不拥有服务 API server、auth scheme、source scan range 或输出目录。
 
-## Development
+## 开发
 
-From repository root:
+从仓库根目录执行：
 
 ```bash
 make common-test
 make common-lint
 ```
 
-Or inside `common/`:
+在 `common/` 目录内执行：
 
 ```bash
 go test ./...

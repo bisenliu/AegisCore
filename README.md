@@ -32,6 +32,7 @@ make test
 make lint
 make verify
 make user-service-run
+make user-service-seed-rbac
 ADMIN_PASSWORD='<password>' make user-service-create-super-admin
 ```
 
