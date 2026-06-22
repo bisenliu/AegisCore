@@ -14,6 +14,7 @@ import (
 	rediscmd "github.com/redis/go-redis/v9"
 
 	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/localcache"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	"github.com/aegiscore/common/runtime/workerpool"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
@@ -142,6 +143,8 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 		CacheRedis:       client,
 		SessionPurgePool: fakePurgeTaskPool{stats: workerpool.Stats{Name: "auth.redis.session_purge", Workers: 4, Submitted: 3}},
 		PolicyWatcher:    stubWatcherStatus{running: true},
+		AuthTokenCache:   fakeLocalcacheStatsSource{name: "auth_token_version", stats: localcache.Stats{Hit: 3, Capacity: 1000}},
+		RBACRolesCache:   fakeLocalcacheStatsSource{name: "rbac_user_roles", stats: localcache.Stats{Miss: 2, Capacity: 2000}},
 	}); err != nil {
 		t.Fatalf("RegisterRuntimeDependencyMetrics: %v", err)
 	}
@@ -151,6 +154,8 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 		`aegiscore_postgres_pool_open_connections{environment="test",resource="user_db",service="aegiscore-user-service-test"}`,
 		`aegiscore_redis_up{environment="test",resource="cache_redis",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_workerpool_tasks_total{environment="test",event="submitted",pool="auth_session_purge_pool",service="aegiscore-user-service-test"} 3`,
+		`aegiscore_localcache_requests_total{cache="auth_token_version",environment="test",result="hit",service="aegiscore-user-service-test"} 3`,
+		`aegiscore_localcache_requests_total{cache="rbac_user_roles",environment="test",result="miss",service="aegiscore-user-service-test"} 2`,
 		`aegiscore_runtime_component_running{environment="test",resource="rbac_policy_watcher",service="aegiscore-user-service-test"} 1`,
 	} {
 		if !strings.Contains(body, want) {
@@ -187,6 +192,19 @@ type fakePurgeTaskPool struct {
 
 func (p fakePurgeTaskPool) Stats() workerpool.Stats {
 	return p.stats
+}
+
+type fakeLocalcacheStatsSource struct {
+	name  string
+	stats localcache.Stats
+}
+
+func (s fakeLocalcacheStatsSource) Name() string {
+	return s.name
+}
+
+func (s fakeLocalcacheStatsSource) Stats() localcache.Stats {
+	return s.stats
 }
 
 func gatherProviderText(t *testing.T, provider *commonmetrics.Provider) string {

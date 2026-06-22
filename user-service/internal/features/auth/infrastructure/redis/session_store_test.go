@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/common/runtime/workerpool"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
@@ -194,7 +195,7 @@ func TestTokenVersionValidatorBackfillsMiniredisCacheOnMiss(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	users := &tokenVersionRepositoryStub{version: 7}
-	validator := authvalidators.NewValidator(users, store)
+	validator := newTestTokenVersionValidator(t, users, store)
 	ctx := context.Background()
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 7)
@@ -229,7 +230,7 @@ func TestTokenVersionValidatorUsesMiniredisCacheHitWithoutRepositoryLookup(t *te
 		t.Fatalf("CacheTokenVersion: %v", err)
 	}
 	users := &tokenVersionRepositoryStub{err: errors.New("database should not be read")}
-	validator := authvalidators.NewValidator(users, store)
+	validator := newTestTokenVersionValidator(t, users, store)
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 8)
 
@@ -249,7 +250,7 @@ func TestTokenVersionValidatorRejectsStaleTokenUsingMiniredisCache(t *testing.T)
 		t.Fatalf("CacheTokenVersion: %v", err)
 	}
 	users := &tokenVersionRepositoryStub{err: errors.New("database should not be read")}
-	validator := authvalidators.NewValidator(users, store)
+	validator := newTestTokenVersionValidator(t, users, store)
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 8)
 
@@ -277,7 +278,7 @@ func TestTokenVersionCacheRefreshMakesStaleTokenObservable(t *testing.T) {
 	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
 		t.Fatalf("DeleteAllUserSessions: %v", err)
 	}
-	validator := authvalidators.NewValidator(&tokenVersionRepositoryStub{err: errors.New("database should not be read")}, store)
+	validator := newTestTokenVersionValidator(t, &tokenVersionRepositoryStub{err: errors.New("database should not be read")}, store)
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 5)
 
@@ -1093,6 +1094,24 @@ func newTestSessionStoreWithConfig(redisServer *miniredis.Miniredis, authCfg con
 
 func defaultMaxActiveSessionsPerUser() int {
 	return 5
+}
+
+func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) commonauth.TokenVersionValidator {
+	t.Helper()
+	cache, err := localcache.New[string, int64](localcache.Config[string]{
+		Name:        "auth_token_version_test",
+		Capacity:    100,
+		TTL:         time.Minute,
+		LoadTimeout: time.Second,
+		KeyString:   func(key string) string { return key },
+	}, func(ctx context.Context, userID string) (int64, error) {
+		return authvalidators.Current(ctx, users, sessions, userID)
+	}, nil)
+	if err != nil {
+		t.Fatalf("New localcache: %v", err)
+	}
+	t.Cleanup(cache.Close)
+	return authvalidators.NewCachingValidator(cache)
 }
 
 func newTestSessionStoreWithAppName(t testing.TB, redisServer *miniredis.Miniredis, appName string) *SessionStore {

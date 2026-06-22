@@ -148,6 +148,7 @@ func appModuleLifecycleTestConfig(driverName string, redisAddr string, httpPort 
 			TokenVersionCacheTTL:     time.Minute,
 			MaxActiveSessionsPerUser: 5,
 		},
+		LocalCache: appModuleTestLocalCacheConfig(),
 		Redis: map[string]config.RedisConfig{
 			resources.NameCacheRedis: {
 				Addr:         redisAddr,
@@ -167,7 +168,15 @@ func appModuleLifecycleTestConfig(driverName string, redisAddr string, httpPort 
 func appModuleValidationTestConfig() *config.Config {
 	return &config.Config{
 		App:           config.AppConfig{Name: "aegiscore-user-services", Environment: "test"},
+		LocalCache:    appModuleTestLocalCacheConfig(),
 		Observability: appModuleTestObservabilityConfig(),
+	}
+}
+
+func appModuleTestLocalCacheConfig() config.LocalCacheConfig {
+	return config.LocalCacheConfig{
+		AuthTokenVersion: config.LocalCacheInstanceConfig{Capacity: 1000, TTL: time.Second, LoadTimeout: time.Second},
+		RBACUserRoles:    config.LocalCacheInstanceConfig{Capacity: 1000, TTL: time.Second, LoadTimeout: time.Second},
 	}
 }
 

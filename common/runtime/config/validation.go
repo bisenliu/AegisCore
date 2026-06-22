@@ -95,6 +95,7 @@ func (c Config) Validate() error {
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.validateLog()...)
 	errs = append(errs, c.validateObservability()...)
+	errs = append(errs, c.validateLocalCache()...)
 	errs = append(errs, c.validateRedis()...)
 	errs = append(errs, c.validatePostgres()...)
 
@@ -213,6 +214,23 @@ func (c Config) validateObservability() []error {
 	return errs
 }
 
+func (c Config) validateLocalCache() []error {
+	var errs []error
+	errs = append(errs, validateLocalCacheInstance("local_cache.auth_token_version", c.LocalCache.AuthTokenVersion)...)
+	errs = append(errs, validateLocalCacheInstance("local_cache.rbac_user_roles", c.LocalCache.RBACUserRoles)...)
+	return errs
+}
+
+func validateLocalCacheInstance(base string, cfg LocalCacheInstanceConfig) []error {
+	var errs []error
+	errs = append(errs, validatePositiveInt64(base+".capacity", cfg.Capacity)...)
+	errs = append(errs, validatePositiveDuration(base+".ttl", cfg.TTL)...)
+	errs = append(errs, validatePositiveDuration(base+".load_timeout", cfg.LoadTimeout)...)
+	errs = append(errs, validateNonNegativeInt64(base+".num_counters", cfg.NumCounters)...)
+	errs = append(errs, validateNonNegativeInt64(base+".buffer_items", cfg.BufferItems)...)
+	return errs
+}
+
 func (c Config) validateRedis() []error {
 	var errs []error
 	for _, name := range sortedRedisNames(c.Redis) {
@@ -317,7 +335,21 @@ func validatePositiveInt(path string, value int) []error {
 	return nil
 }
 
+func validatePositiveInt64(path string, value int64) []error {
+	if value <= 0 {
+		return []error{configFieldError(path, "must be > 0")}
+	}
+	return nil
+}
+
 func validateNonNegativeInt(path string, value int) []error {
+	if value < 0 {
+		return []error{configFieldError(path, "must be >= 0")}
+	}
+	return nil
+}
+
+func validateNonNegativeInt64(path string, value int64) []error {
 	if value < 0 {
 		return []error{configFieldError(path, "must be >= 0")}
 	}

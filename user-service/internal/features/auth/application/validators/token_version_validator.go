@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"golang.org/x/sync/singleflight"
 
 	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/common/runtime/logger"
@@ -17,14 +15,9 @@ import (
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
-const defaultTokenVersionLocalCacheTTL = time.Second
-
-// TokenVersionValidator 使用本地短缓存和后端存储校验 token version。
+// TokenVersionValidator 使用 bounded localcache 校验 token version。
 type TokenVersionValidator struct {
-	users    authapplication.UserTokenVersionStore
-	sessions authapplication.AuthSessionStore
-	cache    *localcache.Cache[string, int64]
-	group    singleflight.Group
+	cache *localcache.Cache[string, int64]
 }
 
 // TokenVersionLocalInvalidator 失效本实例内 token version 本地缓存。
@@ -32,14 +25,9 @@ type TokenVersionLocalInvalidator interface {
 	InvalidateTokenVersion(userID string)
 }
 
-// NewValidator 构造由缓存和持久化存储支撑的 token version 校验器。
-func NewValidator(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) commonauth.TokenVersionValidator {
-	return NewCachingValidator(users, sessions)
-}
-
-// NewCachingValidator 构造带本地短缓存的 token version 校验器。
-func NewCachingValidator(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) *TokenVersionValidator {
-	return &TokenVersionValidator{users: users, sessions: sessions, cache: localcache.New[string, int64](defaultTokenVersionLocalCacheTTL)}
+// NewCachingValidator 构造使用外部注入 localcache 的 token version 校验器。
+func NewCachingValidator(cache *localcache.Cache[string, int64]) *TokenVersionValidator {
+	return &TokenVersionValidator{cache: cache}
 }
 
 // ValidateTokenVersion 拒绝 version 不再匹配当前用户版本的 token。
@@ -53,30 +41,12 @@ func (v *TokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID
 
 // Current 返回本实例缓存或后端存储中的当前 token version。
 func (v *TokenVersionValidator) Current(ctx context.Context, userID string) (int64, error) {
-	if currentVersion, ok := v.cache.Get(userID); ok {
-		return currentVersion, nil
-	}
-	value, err, _ := v.group.Do(userID, func() (any, error) {
-		if currentVersion, ok := v.cache.Get(userID); ok {
-			return currentVersion, nil
-		}
-		currentVersion, err := Current(ctx, v.users, v.sessions, userID)
-		if err != nil {
-			return int64(0), err
-		}
-		v.cache.Set(userID, currentVersion)
-		return currentVersion, nil
-	})
-	if err != nil {
-		return 0, err
-	}
-	return value.(int64), nil
+	return v.cache.GetOrLoad(ctx, userID)
 }
 
 // InvalidateTokenVersion 删除本实例内指定用户的 token version 本地缓存。
 func (v *TokenVersionValidator) InvalidateTokenVersion(userID string) {
-	v.cache.Delete(userID)
-	v.group.Forget(userID)
+	_ = v.cache.Delete(userID)
 }
 
 // Current 使用 Redis token version cache，并在 miss 时回源用户凭据存储。

@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
@@ -398,7 +399,7 @@ func TestAuthSessionLifecycleRevokeUserSessionsAtVersionReturnsProjectionError(t
 }
 
 func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing.T) {
-	validator := authvalidators.NewValidator(&authRepoStub{tokenVersionErr: errors.New("database should not be read")}, &sessionStoreStub{version: 4})
+	validator := newTestTokenVersionValidator(t, &authRepoStub{tokenVersionErr: errors.New("database should not be read")}, &sessionStoreStub{version: 4})
 
 	err := validator.ValidateTokenVersion(context.Background(), authTestUserID.String(), 3)
 
@@ -412,6 +413,24 @@ func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing
 	if mismatch.Current != 4 || mismatch.Token != 3 {
 		t.Fatalf("mismatch = %#v, want current=4 token=3", mismatch)
 	}
+}
+
+func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) commonauth.TokenVersionValidator {
+	t.Helper()
+	cache, err := localcache.New[string, int64](localcache.Config[string]{
+		Name:        "auth_token_version_test",
+		Capacity:    100,
+		TTL:         time.Minute,
+		LoadTimeout: time.Second,
+		KeyString:   func(key string) string { return key },
+	}, func(ctx context.Context, userID string) (int64, error) {
+		return authvalidators.Current(ctx, users, sessions, userID)
+	}, nil)
+	if err != nil {
+		t.Fatalf("New localcache: %v", err)
+	}
+	t.Cleanup(cache.Close)
+	return authvalidators.NewCachingValidator(cache)
 }
 
 func authRefreshTestSession(sessionID string, tokenVersion int64) authdomain.AuthSession {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/localcache"
 	commonauth "github.com/aegiscore/common/security/auth"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
@@ -20,7 +21,7 @@ var tokenVersionOtherUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d
 func TestTokenVersionValidatorUsesLocalCache(t *testing.T) {
 	users := &tokenVersionUserStoreStub{version: 7}
 	sessions := &tokenVersionSessionStoreStub{cacheMiss: true}
-	validator := NewCachingValidator(users, sessions)
+	validator := newTestTokenVersionValidator(t, users, sessions, time.Minute)
 
 	if err := validator.ValidateTokenVersion(context.Background(), tokenVersionTestUserID.String(), 7); err != nil {
 		t.Fatalf("ValidateTokenVersion first: %v", err)
@@ -37,8 +38,7 @@ func TestTokenVersionValidatorUsesLocalCache(t *testing.T) {
 func TestTokenVersionValidatorReloadsAfterLocalCacheExpires(t *testing.T) {
 	users := &tokenVersionUserStoreStub{version: 7}
 	sessions := &tokenVersionSessionStoreStub{cacheMiss: true}
-	validator := NewCachingValidator(users, sessions)
-	validator.cache = localcache.New[string, int64](time.Nanosecond)
+	validator := newTestTokenVersionValidator(t, users, sessions, time.Nanosecond)
 
 	if err := validator.ValidateTokenVersion(context.Background(), tokenVersionTestUserID.String(), 7); err != nil {
 		t.Fatalf("ValidateTokenVersion first: %v", err)
@@ -54,8 +54,12 @@ func TestTokenVersionValidatorReloadsAfterLocalCacheExpires(t *testing.T) {
 }
 
 func TestTokenVersionValidatorRejectsMismatchFromLocalCache(t *testing.T) {
-	validator := NewCachingValidator(&tokenVersionUserStoreStub{}, &tokenVersionSessionStoreStub{})
-	validator.cache.Set(tokenVersionTestUserID.String(), 8)
+	users := &tokenVersionUserStoreStub{version: 8}
+	sessions := &tokenVersionSessionStoreStub{cacheMiss: true}
+	validator := newTestTokenVersionValidator(t, users, sessions, time.Minute)
+	if err := validator.ValidateTokenVersion(context.Background(), tokenVersionTestUserID.String(), 8); err != nil {
+		t.Fatalf("ValidateTokenVersion warmup: %v", err)
+	}
 
 	err := validator.ValidateTokenVersion(context.Background(), tokenVersionTestUserID.String(), 7)
 
@@ -72,7 +76,7 @@ func TestTokenVersionValidatorDoesNotCacheLoaderError(t *testing.T) {
 	cacheErr := errors.New("redis failed")
 	users := &tokenVersionUserStoreStub{version: 7}
 	sessions := &tokenVersionSessionStoreStub{getErr: cacheErr}
-	validator := NewCachingValidator(users, sessions)
+	validator := newTestTokenVersionValidator(t, users, sessions, time.Minute)
 
 	for i := 0; i < 2; i++ {
 		_, err := validator.Current(context.Background(), tokenVersionTestUserID.String())
@@ -89,7 +93,7 @@ func TestTokenVersionValidatorDoesNotCacheLoaderError(t *testing.T) {
 func TestTokenVersionValidatorSingleflightCoalescesSameUser(t *testing.T) {
 	users := &tokenVersionUserStoreStub{version: 7, wait: make(chan struct{}), started: make(chan struct{})}
 	sessions := &tokenVersionSessionStoreStub{cacheMiss: true}
-	validator := NewCachingValidator(users, sessions)
+	validator := newTestTokenVersionValidator(t, users, sessions, time.Minute)
 	started := users.started
 	const goroutines = 8
 
@@ -120,7 +124,7 @@ func TestTokenVersionValidatorSingleflightCoalescesSameUser(t *testing.T) {
 func TestTokenVersionValidatorSingleflightKeepsUsersSeparate(t *testing.T) {
 	users := &tokenVersionUserStoreStub{versions: map[uuid.UUID]int64{tokenVersionTestUserID: 7, tokenVersionOtherUserID: 9}}
 	sessions := &tokenVersionSessionStoreStub{cacheMiss: true}
-	validator := NewCachingValidator(users, sessions)
+	validator := newTestTokenVersionValidator(t, users, sessions, time.Minute)
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
@@ -148,7 +152,7 @@ func TestTokenVersionValidatorSingleflightKeepsUsersSeparate(t *testing.T) {
 func TestTokenVersionValidatorInvalidateReloads(t *testing.T) {
 	users := &tokenVersionUserStoreStub{version: 7}
 	sessions := &tokenVersionSessionStoreStub{cacheMiss: true}
-	validator := NewCachingValidator(users, sessions)
+	validator := newTestTokenVersionValidator(t, users, sessions, time.Minute)
 
 	if err := validator.ValidateTokenVersion(context.Background(), tokenVersionTestUserID.String(), 7); err != nil {
 		t.Fatalf("ValidateTokenVersion first: %v", err)
@@ -161,6 +165,29 @@ func TestTokenVersionValidatorInvalidateReloads(t *testing.T) {
 	if users.getCalls != 2 || sessions.getCachedCalls != 2 {
 		t.Fatalf("calls users=%d getCached=%d, want 2/2", users.getCalls, sessions.getCachedCalls)
 	}
+}
+
+type testTokenVersionValidator struct {
+	*TokenVersionValidator
+	cache *localcache.Cache[string, int64]
+}
+
+func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, ttl time.Duration) testTokenVersionValidator {
+	t.Helper()
+	cache, err := localcache.New[string, int64](localcache.Config[string]{
+		Name:        "auth_token_version_test",
+		Capacity:    100,
+		TTL:         ttl,
+		LoadTimeout: time.Second,
+		KeyString:   func(key string) string { return key },
+	}, func(ctx context.Context, userID string) (int64, error) {
+		return Current(ctx, users, sessions, userID)
+	}, nil)
+	if err != nil {
+		t.Fatalf("New localcache: %v", err)
+	}
+	t.Cleanup(cache.Close)
+	return testTokenVersionValidator{TokenVersionValidator: NewCachingValidator(cache), cache: cache}
 }
 
 type tokenVersionUserStoreStub struct {

@@ -25,6 +25,7 @@ import (
 	"github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/runtime/config"
 	runtimeid "github.com/aegiscore/common/runtime/id"
+	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/common/runtime/logger"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
@@ -435,6 +436,8 @@ func registerRouteTestRuntimeMetrics(t *testing.T, cfg *config.Config, provider 
 		CacheRedis:       client,
 		SessionPurgePool: routePurgeTaskPool{stats: workerpool.Stats{Name: "auth.redis.session_purge", Workers: 4, Submitted: 1}},
 		PolicyWatcher:    stubWatcherStatus{running: true},
+		AuthTokenCache:   fakeLocalcacheStatsSource{name: "auth_token_version", stats: localcache.Stats{Capacity: 1000}},
+		RBACRolesCache:   fakeLocalcacheStatsSource{name: "rbac_user_roles", stats: localcache.Stats{Capacity: 2000}},
 	}); err != nil {
 		t.Fatalf("RegisterRuntimeDependencyMetrics: %v", err)
 	}

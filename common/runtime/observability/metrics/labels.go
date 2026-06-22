@@ -18,8 +18,12 @@ const (
 	LabelStatusClass = "status_class"
 	// LabelCode 标识稳定错误码或结果码，不能使用原始错误字符串。
 	LabelCode = "code"
+	// LabelResult 标识固定结果枚举，例如 hit、miss、success 或 error。
+	LabelResult = "result"
 	// LabelResource 标识固定运行时资源名，例如 user_db 或 cache_redis。
 	LabelResource = "resource"
+	// LabelCache 标识固定本地缓存实例名。
+	LabelCache = "cache"
 	// LabelPool 标识固定后台任务池名称。
 	LabelPool = "pool"
 	// LabelSchedulerJob 标识固定定时任务名称，避免与 Prometheus scrape job label 冲突。
@@ -39,7 +43,9 @@ var allowedLowCardinalityLabelKeys = map[string]struct{}{
 	LabelRoute:        {},
 	LabelStatusClass:  {},
 	LabelCode:         {},
+	LabelResult:       {},
 	LabelResource:     {},
+	LabelCache:        {},
 	LabelPool:         {},
 	LabelSchedulerJob: {},
 	LabelEvent:        {},

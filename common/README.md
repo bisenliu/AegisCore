@@ -18,7 +18,7 @@
 | `runtime/logger` | Zap logger、context trace/span 字段 helper 和 Fx provider |
 | `runtime/datastore` | Named Redis/PostgreSQL provider |
 | `runtime/id` | 跨服务默认 UUID 生成策略 |
-| `runtime/localcache` | 进程内短 TTL cache primitive |
+| `runtime/localcache` | 有容量上限的进程内 TTL loading cache primitive |
 | `runtime/rediskey` | 通用 Redis key 构造规则 |
 | `runtime/resources` | 稳定 runtime 资源命名 |
 | `runtime/workerpool` | 受控后台任务池 primitive |

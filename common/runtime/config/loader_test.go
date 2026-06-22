@@ -2,7 +2,6 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -46,6 +45,15 @@ func TestLoadExplicitConfig(t *testing.T) {
 	}
 	if cfg.Auth.MaxActiveSessionsPerUser != 5 {
 		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 5", cfg.Auth.MaxActiveSessionsPerUser)
+	}
+	if cfg.LocalCache.AuthTokenVersion.Capacity != 1000 || cfg.LocalCache.AuthTokenVersion.TTL != time.Second || cfg.LocalCache.AuthTokenVersion.LoadTimeout != 300*time.Millisecond {
+		t.Fatalf("LocalCache.AuthTokenVersion = %#v, want capacity 1000 ttl 1s load timeout 300ms", cfg.LocalCache.AuthTokenVersion)
+	}
+	if cfg.LocalCache.AuthTokenVersion.NumCounters != 2000 || cfg.LocalCache.AuthTokenVersion.BufferItems != 128 {
+		t.Fatalf("LocalCache.AuthTokenVersion tuning = (%d,%d), want (2000,128)", cfg.LocalCache.AuthTokenVersion.NumCounters, cfg.LocalCache.AuthTokenVersion.BufferItems)
+	}
+	if cfg.LocalCache.RBACUserRoles.Capacity != 2000 || cfg.LocalCache.RBACUserRoles.TTL != 5*time.Second || cfg.LocalCache.RBACUserRoles.LoadTimeout != 500*time.Millisecond {
+		t.Fatalf("LocalCache.RBACUserRoles = %#v, want capacity 2000 ttl 5s load timeout 500ms", cfg.LocalCache.RBACUserRoles)
 	}
 	if !cfg.Ent.SQLDebug {
 		t.Fatal("Ent.SQLDebug = false, want true")
@@ -275,6 +283,11 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_AUTH_JWT_REFRESH_TOKEN_TTL", "720h")
 	t.Setenv("AEGISCORE_AUTH_TOKEN_VERSION_CACHE_TTL", "30s")
 	t.Setenv("AEGISCORE_AUTH_MAX_ACTIVE_SESSIONS_PER_USER", "7")
+	t.Setenv("AEGISCORE_LOCAL_CACHE_AUTH_TOKEN_VERSION_CAPACITY", "3000")
+	t.Setenv("AEGISCORE_LOCAL_CACHE_AUTH_TOKEN_VERSION_TTL", "2s")
+	t.Setenv("AEGISCORE_LOCAL_CACHE_AUTH_TOKEN_VERSION_LOAD_TIMEOUT", "400ms")
+	t.Setenv("AEGISCORE_LOCAL_CACHE_RBAC_USER_ROLES_CAPACITY", "4000")
+	t.Setenv("AEGISCORE_LOCAL_CACHE_RBAC_USER_ROLES_BUFFER_ITEMS", "256")
 	t.Setenv("AEGISCORE_ENT_SQL_DEBUG", "false")
 	t.Setenv("AEGISCORE_OBSERVABILITY_METRICS_ENABLED", "false")
 	t.Setenv("AEGISCORE_OBSERVABILITY_METRICS_PATH", "/internal/metrics")
@@ -309,6 +322,12 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	}
 	if cfg.Auth.MaxActiveSessionsPerUser != 7 {
 		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 7", cfg.Auth.MaxActiveSessionsPerUser)
+	}
+	if cfg.LocalCache.AuthTokenVersion.Capacity != 3000 || cfg.LocalCache.AuthTokenVersion.TTL != 2*time.Second || cfg.LocalCache.AuthTokenVersion.LoadTimeout != 400*time.Millisecond {
+		t.Fatalf("LocalCache.AuthTokenVersion = %#v, want env overrides", cfg.LocalCache.AuthTokenVersion)
+	}
+	if cfg.LocalCache.RBACUserRoles.Capacity != 4000 || cfg.LocalCache.RBACUserRoles.BufferItems != 256 {
+		t.Fatalf("LocalCache.RBACUserRoles = %#v, want env overrides", cfg.LocalCache.RBACUserRoles)
 	}
 	if cfg.Ent.SQLDebug {
 		t.Fatal("Ent.SQLDebug = true, want env override false")
@@ -410,6 +429,35 @@ func TestLoadValidatesAuthSessionLimit(t *testing.T) {
   refresh_token_rotation: true
   max_active_sessions_per_user: -1`))
 	assertConfigLoadErrorContains(t, err, "auth.max_active_sessions_per_user must be >= 0")
+}
+
+func TestLoadValidatesLocalCacheConfig(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`local_cache:
+  auth_token_version:
+    capacity: 0
+    ttl: 0s
+    load_timeout: 0s
+    num_counters: -1
+    buffer_items: -1
+  rbac_user_roles:
+    capacity: -1
+    ttl: 0s
+    load_timeout: 0s
+    num_counters: -1
+    buffer_items: -1`))
+
+	assertConfigLoadErrorContains(t, err,
+		"local_cache.auth_token_version.capacity must be > 0",
+		"local_cache.auth_token_version.ttl must be > 0",
+		"local_cache.auth_token_version.load_timeout must be > 0",
+		"local_cache.auth_token_version.num_counters must be >= 0",
+		"local_cache.auth_token_version.buffer_items must be >= 0",
+		"local_cache.rbac_user_roles.capacity must be > 0",
+		"local_cache.rbac_user_roles.ttl must be > 0",
+		"local_cache.rbac_user_roles.load_timeout must be > 0",
+		"local_cache.rbac_user_roles.num_counters must be >= 0",
+		"local_cache.rbac_user_roles.buffer_items must be >= 0",
+	)
 }
 
 func TestLoadValidatesObservabilityConfig(t *testing.T) {
@@ -695,6 +743,20 @@ observability:
     otlp_endpoint: collector:4317
     insecure: false
 
+local_cache:
+  auth_token_version:
+    capacity: 1000
+    ttl: 1s
+    load_timeout: 300ms
+    num_counters: 2000
+    buffer_items: 128
+  rbac_user_roles:
+    capacity: 2000
+    ttl: 5s
+    load_timeout: 500ms
+    num_counters: 0
+    buffer_items: 0
+
 .redis_base: &redis_base
   addr: 127.0.0.1:6379
   username: ""
@@ -796,6 +858,19 @@ func configYAMLWithSections(overrides ...string) string {
     exporter: none
     otlp_endpoint: ""
     insecure: false`,
+		"local_cache": `local_cache:
+  auth_token_version:
+    capacity: 1000
+    ttl: 1s
+    load_timeout: 300ms
+    num_counters: 0
+    buffer_items: 0
+  rbac_user_roles:
+    capacity: 2000
+    ttl: 5s
+    load_timeout: 500ms
+    num_counters: 0
+    buffer_items: 0`,
 		"redis": `redis:
   cache_redis:
     addr: 127.0.0.1:6379
@@ -829,8 +904,8 @@ func configYAMLWithSections(overrides ...string) string {
 			}
 		}
 	}
-	ordered := []string{sections["system"], sections["app"], sections["http"], sections["auth"], sections["ent"], sections["log"], sections["observability"], sections["redis"], sections["postgres"]}
-	return fmt.Sprintf("%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s\n", ordered[0], ordered[1], ordered[2], ordered[3], ordered[4], ordered[5], ordered[6], ordered[7], ordered[8])
+	ordered := []string{sections["system"], sections["app"], sections["http"], sections["auth"], sections["local_cache"], sections["ent"], sections["log"], sections["observability"], sections["redis"], sections["postgres"]}
+	return strings.Join(ordered, "\n\n") + "\n"
 }
 
 func loadConfigFromYAML(t *testing.T, content string) *Config {

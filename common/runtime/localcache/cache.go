@@ -1,133 +1,294 @@
 package localcache
 
 import (
-	"sync"
+	"context"
+	"errors"
+	"fmt"
+	"sync/atomic"
 	"time"
+
+	"github.com/dgraph-io/ristretto/v2"
+	"golang.org/x/sync/singleflight"
 )
 
-// Cache 是进程内短 TTL 缓存，用于减少同一实例内重复读取远端缓存或存储的开销。
-//
-// 用途：
-//   - 缓存可以按 key 保存任意类型的值，并在 TTL 到期后自动在读取时失效。
-//   - 适合极短生命周期、可容忍短暂过期窗口的热点数据，例如请求链路中的版本号、本地投影或只读配置片段。
-//   - 缓存不启动后台 goroutine，也不做容量淘汰；高基数或长 TTL 场景应使用带容量控制的专用缓存实现。
-//
-// 使用示例：
-//
-//	cache := localcache.New[string, int64](time.Second)
-//	cache.Set("user-1", 7)
-//	version, ok := cache.Get("user-1")
-//	if ok {
-//		_ = version
-//	}
-//	cache.Delete("user-1")
+const defaultBufferItems int64 = 64
+
+var (
+	// ErrNameRequired 表示本地缓存缺少稳定实例名。
+	ErrNameRequired = errors.New("localcache name is required")
+	// ErrCapacityRequired 表示本地缓存容量预算必须为正数。
+	ErrCapacityRequired = errors.New("localcache capacity must be positive")
+	// ErrTTLRequired 表示本地缓存 TTL 必须为正数。
+	ErrTTLRequired = errors.New("localcache ttl must be positive")
+	// ErrKeyStringRequired 表示本地缓存缺少 key 编码函数。
+	ErrKeyStringRequired = errors.New("localcache key string function is required")
+	// ErrLoaderRequired 表示 loading cache 缺少回源函数。
+	ErrLoaderRequired = errors.New("localcache loader is required")
+	// ErrClosed 表示缓存实例已关闭并拒绝新操作。
+	ErrClosed = errors.New("localcache is closed")
+)
+
+// Loader 定义缓存 miss 后的回源函数。
+type Loader[K comparable, V any] func(context.Context, K) (V, error)
+
+// CloneFunc 返回 value 副本，用于隔离 loader、cache 和调用方持有的可变对象。
+type CloneFunc[V any] func(V) V
+
+// Config 描述一个本地缓存实例。
+type Config[K comparable] struct {
+	Name        string
+	Capacity    int64
+	TTL         time.Duration
+	LoadTimeout time.Duration
+	KeyString   func(K) string
+	NumCounters int64
+	BufferItems int64
+}
+
+// Stats 是 localcache 暴露给 metrics collector 的稳定统计快照。
+type Stats struct {
+	Hit            uint64
+	Miss           uint64
+	Load           uint64
+	LoadError      uint64
+	Shared         uint64
+	DoubleCheckHit uint64
+	SetDropped     uint64
+	Rejected       uint64
+	Evicted        uint64
+	Capacity       int64
+}
+
+// StatsSource 定义可导出 localcache 统计快照的类型。
+type StatsSource interface {
+	Name() string
+	Stats() Stats
+}
+
+// Cache 是基于 Ristretto 的 bounded TTL loading cache。
 type Cache[K comparable, V any] struct {
-	ttl    time.Duration
-	values sync.Map
+	name        string
+	capacity    int64
+	client      *ristretto.Cache[string, V]
+	group       singleflight.Group
+	ttl         time.Duration
+	loadTimeout time.Duration
+	keyString   func(K) string
+	loader      Loader[K, V]
+	clone       CloneFunc[V]
+	closed      atomic.Bool
+
+	hit            atomic.Uint64
+	miss           atomic.Uint64
+	load           atomic.Uint64
+	loadError      atomic.Uint64
+	shared         atomic.Uint64
+	doubleCheckHit atomic.Uint64
+	setDropped     atomic.Uint64
+	rejected       atomic.Uint64
+	evicted        atomic.Uint64
 }
 
-type entry[V any] struct {
-	value     V
-	expiresAt time.Time
-}
-
-// New 创建一个进程内短 TTL 缓存。
-//
-// 用途：
-//   - 创建可并发访问的本地缓存实例，用于在单个进程内复用短时间有效的数据。
-//
-// 参数说明：
-//   - ttl：每个缓存项从写入开始的有效期；ttl 小于等于 0 时会回退为 1 秒，避免创建永久缓存项。
-//
-// 返回值说明：
-//   - *Cache[K, V]：可直接调用 Get、Set、Delete 的缓存实例。
-//
-// 使用示例：
-//
-//	cache := localcache.New[string, int64](500 * time.Millisecond)
-//	cache.Set("token-version:user-1", 3)
-//	version, ok := cache.Get("token-version:user-1")
-func New[K comparable, V any](ttl time.Duration) *Cache[K, V] {
-	if ttl <= 0 {
-		ttl = time.Second
+// New 创建本地 loading cache。
+func New[K comparable, V any](cfg Config[K], loader Loader[K, V], clone CloneFunc[V]) (*Cache[K, V], error) {
+	if cfg.Name == "" {
+		return nil, ErrNameRequired
 	}
-	return &Cache[K, V]{ttl: ttl}
+	if cfg.Capacity <= 0 {
+		return nil, ErrCapacityRequired
+	}
+	if cfg.TTL <= 0 {
+		return nil, ErrTTLRequired
+	}
+	if cfg.KeyString == nil {
+		return nil, ErrKeyStringRequired
+	}
+	if loader == nil {
+		return nil, ErrLoaderRequired
+	}
+	if clone == nil {
+		clone = func(v V) V { return v }
+	}
+
+	numCounters := cfg.NumCounters
+	if numCounters <= 0 {
+		numCounters = cfg.Capacity * 10
+	}
+	bufferItems := cfg.BufferItems
+	if bufferItems <= 0 {
+		bufferItems = defaultBufferItems
+	}
+
+	cache := &Cache[K, V]{
+		name:        cfg.Name,
+		capacity:    cfg.Capacity,
+		ttl:         cfg.TTL,
+		loadTimeout: cfg.LoadTimeout,
+		keyString:   cfg.KeyString,
+		loader:      loader,
+		clone:       clone,
+	}
+
+	client, err := ristretto.NewCache(&ristretto.Config[string, V]{
+		NumCounters:        numCounters,
+		MaxCost:            cfg.Capacity,
+		BufferItems:        bufferItems,
+		IgnoreInternalCost: true,
+		Metrics:            false,
+		OnReject:           func(*ristretto.Item[V]) { cache.rejected.Add(1) },
+		OnEvict:            func(*ristretto.Item[V]) { cache.evicted.Add(1) },
+	})
+	if err != nil {
+		return nil, fmt.Errorf("init localcache %q: %w", cfg.Name, err)
+	}
+	cache.client = client
+	return cache, nil
 }
 
-// Get 读取缓存项，并在缓存不存在或过期时返回未命中。
-//
-// 用途：
-//   - 在访问远端缓存、数据库或其他昂贵依赖前，先尝试读取本进程内的短期值。
-//   - 如果缓存项已过期，Get 会删除该项并返回未命中。
-//
-// 参数说明：
-//   - key：缓存键，类型必须与创建 Cache 时的 K 一致。
-//
-// 返回值说明：
-//   - V：缓存命中时返回对应值；未命中时返回 V 的零值。
-//   - bool：true 表示命中且未过期；false 表示不存在、类型异常或已过期。
-//
-// 使用示例：
-//
-//	cache := localcache.New[string, int64](time.Second)
-//	cache.Set("user-1", 7)
-//	if version, ok := cache.Get("user-1"); ok {
-//		_ = version
-//	}
-func (c *Cache[K, V]) Get(key K) (V, bool) {
+// Name 返回缓存实例名称。
+func (c *Cache[K, V]) Name() string {
+	return c.name
+}
+
+// Get 读取缓存，并记录业务 hit/miss。
+func (c *Cache[K, V]) Get(key K) (V, bool, error) {
 	var zero V
-	value, ok := c.values.Load(key)
-	if !ok {
-		return zero, false
+	if c.closed.Load() {
+		return zero, false, ErrClosed
 	}
-	cacheEntry, ok := value.(entry[V])
-	if !ok {
-		c.values.Delete(key)
-		return zero, false
+	value, ok := c.lookup(c.keyString(key))
+	if ok {
+		c.hit.Add(1)
+		return c.clone(value), true, nil
 	}
-	if !time.Now().Before(cacheEntry.expiresAt) {
-		c.values.Delete(key)
-		return zero, false
-	}
-	return cacheEntry.value, true
+	c.miss.Add(1)
+	return zero, false, nil
 }
 
-// Set 写入或覆盖缓存项。
-//
-// 用途：
-//   - 在远端缓存或数据库加载成功后，把结果写入本进程缓存，供后续短时间内的同 key 请求复用。
-//
-// 参数说明：
-//   - key：缓存键，类型必须与创建 Cache 时的 K 一致。
-//   - value：需要缓存的值，类型必须与创建 Cache 时的 V 一致。
-//
-// 返回值说明：
-//   - Set 不返回值；写入后缓存项会在构造 Cache 时指定的 TTL 到期。
-//
-// 使用示例：
-//
-//	cache := localcache.New[string, int64](time.Second)
-//	cache.Set("user-1", 7)
-func (c *Cache[K, V]) Set(key K, value V) {
-	c.values.Store(key, entry[V]{value: value, expiresAt: time.Now().Add(c.ttl)})
+// GetOrLoad 读取缓存；miss 时通过 singleflight 合并同 key 回源。
+func (c *Cache[K, V]) GetOrLoad(ctx context.Context, key K) (V, error) {
+	var zero V
+	if c.closed.Load() {
+		return zero, ErrClosed
+	}
+
+	cacheKey := c.keyString(key)
+	if value, ok := c.lookup(cacheKey); ok {
+		c.hit.Add(1)
+		return c.clone(value), nil
+	}
+	c.miss.Add(1)
+
+	ch := c.group.DoChan(cacheKey, func() (any, error) {
+		if c.closed.Load() {
+			return zero, ErrClosed
+		}
+		if value, ok := c.lookup(cacheKey); ok {
+			c.doubleCheckHit.Add(1)
+			return c.clone(value), nil
+		}
+
+		c.load.Add(1)
+		loadCtx, cancel := c.loadContext(ctx)
+		defer cancel()
+
+		loaded, err := c.loader(loadCtx, key)
+		if err != nil {
+			c.loadError.Add(1)
+			return zero, err
+		}
+
+		cached := c.clone(loaded)
+		if ok := c.client.SetWithTTL(cacheKey, cached, 1, c.ttl); !ok {
+			c.setDropped.Add(1)
+		} else {
+			c.client.Wait()
+		}
+		return loaded, nil
+	})
+
+	select {
+	case <-ctx.Done():
+		return zero, ctx.Err()
+	case result := <-ch:
+		if result.Shared {
+			c.shared.Add(1)
+		}
+		if result.Err != nil {
+			return zero, result.Err
+		}
+		return result.Val.(V), nil
+	}
 }
 
-// Delete 删除缓存项。
-//
-// 用途：
-//   - 当调用方知道某个 key 对应的数据已变更或被撤销时，主动删除本进程缓存，避免等待 TTL 自然过期。
-//
-// 参数说明：
-//   - key：需要删除的缓存键，类型必须与创建 Cache 时的 K 一致。
-//
-// 返回值说明：
-//   - Delete 不返回值；key 不存在时也不会报错。
-//
-// 使用示例：
-//
-//	cache := localcache.New[string, int64](time.Second)
-//	cache.Set("user-1", 7)
-//	cache.Delete("user-1")
-func (c *Cache[K, V]) Delete(key K) {
-	c.values.Delete(key)
+// Set 写入缓存，适合预热或业务主动刷新。
+func (c *Cache[K, V]) Set(key K, value V) (bool, error) {
+	if c.closed.Load() {
+		return false, ErrClosed
+	}
+	cached := c.clone(value)
+	ok := c.client.SetWithTTL(c.keyString(key), cached, 1, c.ttl)
+	if !ok {
+		c.setDropped.Add(1)
+	} else {
+		c.client.Wait()
+	}
+	return ok, nil
+}
+
+// Delete 删除单个缓存项。
+func (c *Cache[K, V]) Delete(key K) error {
+	if c.closed.Load() {
+		return ErrClosed
+	}
+	c.client.Del(c.keyString(key))
+	c.client.Wait()
+	return nil
+}
+
+// Clear 清空缓存。
+func (c *Cache[K, V]) Clear() error {
+	if c.closed.Load() {
+		return ErrClosed
+	}
+	c.client.Clear()
+	c.client.Wait()
+	return nil
+}
+
+// Stats 返回当前统计快照。
+func (c *Cache[K, V]) Stats() Stats {
+	return Stats{
+		Hit:            c.hit.Load(),
+		Miss:           c.miss.Load(),
+		Load:           c.load.Load(),
+		LoadError:      c.loadError.Load(),
+		Shared:         c.shared.Load(),
+		DoubleCheckHit: c.doubleCheckHit.Load(),
+		SetDropped:     c.setDropped.Load(),
+		Rejected:       c.rejected.Load(),
+		Evicted:        c.evicted.Load(),
+		Capacity:       c.capacity,
+	}
+}
+
+// Close 关闭缓存后台资源。
+func (c *Cache[K, V]) Close() {
+	if c.closed.CompareAndSwap(false, true) {
+		c.client.Close()
+	}
+}
+
+func (c *Cache[K, V]) lookup(cacheKey string) (V, bool) {
+	return c.client.Get(cacheKey)
+}
+
+// loadContext 会刻意解除请求 ctx 的取消信号，避免 singleflight leader
+// 因客户端断开导致所有 follower 一起收到 context.Canceled；LoadTimeout
+// 用于给回源路径重新建立独立上限。
+func (c *Cache[K, V]) loadContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if c.loadTimeout <= 0 {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(context.WithoutCancel(ctx), c.loadTimeout)
 }

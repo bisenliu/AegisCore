@@ -16,6 +16,7 @@ type Config struct {
 	Ent           EntConfig                 `mapstructure:"ent"`
 	Log           LogConfig                 `mapstructure:"log"`
 	Observability ObservabilityConfig       `mapstructure:"observability"`
+	LocalCache    LocalCacheConfig          `mapstructure:"local_cache"`
 	Redis         map[string]RedisConfig    `mapstructure:"redis"`
 	Postgres      map[string]PostgresConfig `mapstructure:"postgres"`
 }
@@ -103,6 +104,21 @@ type TracingConfig struct {
 	Exporter     string  `mapstructure:"exporter"`
 	OTLPEndpoint string  `mapstructure:"otlp_endpoint"`
 	Insecure     bool    `mapstructure:"insecure"`
+}
+
+// LocalCacheConfig 包含服务内进程缓存实例配置。
+type LocalCacheConfig struct {
+	AuthTokenVersion LocalCacheInstanceConfig `mapstructure:"auth_token_version"`
+	RBACUserRoles    LocalCacheInstanceConfig `mapstructure:"rbac_user_roles"`
+}
+
+// LocalCacheInstanceConfig 描述单个本地缓存实例的容量和生命周期。
+type LocalCacheInstanceConfig struct {
+	Capacity    int64         `mapstructure:"capacity"`
+	TTL         time.Duration `mapstructure:"ttl"`
+	LoadTimeout time.Duration `mapstructure:"load_timeout"`
+	NumCounters int64         `mapstructure:"num_counters"`
+	BufferItems int64         `mapstructure:"buffer_items"`
 }
 
 // RedisConfig 包含一个具名 Redis 客户端配置。

@@ -1,9 +1,13 @@
 package auth
 
 import (
+	"context"
+	"fmt"
+
 	"go.uber.org/fx"
 
 	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/localcache"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
@@ -15,6 +19,31 @@ import (
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 )
+
+const authTokenVersionCacheName = "auth_token_version"
+
+type tokenVersionCacheParams struct {
+	fx.In
+
+	Lifecycle fx.Lifecycle
+	Config    *config.Config
+	Users     authapplication.UserTokenVersionStore
+	Sessions  authapplication.AuthSessionStore
+}
+
+type tokenVersionCacheResult struct {
+	fx.Out
+
+	Cache *localcache.Cache[string, int64] `name:"auth_token_version_cache"`
+	Stats localcache.StatsSource           `name:"auth_token_version_cache"`
+}
+
+type tokenVersionValidatorParams struct {
+	fx.In
+
+	Cache   *localcache.Cache[string, int64] `name:"auth_token_version_cache"`
+	Metrics authapplication.Metrics
+}
 
 type tokenVersionValidatorResult struct {
 	fx.Out
@@ -44,6 +73,7 @@ var Module = fx.Module("feature-auth",
 			fx.As(new(authredis.PurgeTaskPool)),
 			fx.ResultTags(`name:"auth_session_purge_pool"`),
 		),
+		newTokenVersionLocalCache,
 		newTokenVersionValidator,
 		authcredentials.NewVerifier,
 		authtokens.NewIssuer,
@@ -62,7 +92,31 @@ func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessio
 	return authsessions.NewLifecycle(users, sessions, cfg.Auth.MaxActiveSessionsPerUser, tokenVersions)
 }
 
-func newTokenVersionValidator(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, metrics authapplication.Metrics) tokenVersionValidatorResult {
-	validator := authvalidators.NewCachingValidator(users, sessions)
-	return tokenVersionValidatorResult{Validator: authvalidators.NewMetricsTokenVersionValidator(validator, metrics), Invalidator: validator}
+func newTokenVersionLocalCache(params tokenVersionCacheParams) (tokenVersionCacheResult, error) {
+	cfg := params.Config.LocalCache.AuthTokenVersion
+	cache, err := localcache.New[string, int64](localcache.Config[string]{
+		Name:        authTokenVersionCacheName,
+		Capacity:    cfg.Capacity,
+		TTL:         cfg.TTL,
+		LoadTimeout: cfg.LoadTimeout,
+		KeyString:   func(key string) string { return key },
+		NumCounters: cfg.NumCounters,
+		BufferItems: cfg.BufferItems,
+	}, func(ctx context.Context, userID string) (int64, error) {
+		return authvalidators.Current(ctx, params.Users, params.Sessions, userID)
+	}, nil)
+	if err != nil {
+		return tokenVersionCacheResult{}, fmt.Errorf("create auth token version localcache: %w", err)
+	}
+
+	params.Lifecycle.Append(fx.Hook{OnStop: func(context.Context) error {
+		cache.Close()
+		return nil
+	}})
+	return tokenVersionCacheResult{Cache: cache, Stats: cache}, nil
+}
+
+func newTokenVersionValidator(params tokenVersionValidatorParams) tokenVersionValidatorResult {
+	validator := authvalidators.NewCachingValidator(params.Cache)
+	return tokenVersionValidatorResult{Validator: authvalidators.NewMetricsTokenVersionValidator(validator, params.Metrics), Invalidator: validator}
 }

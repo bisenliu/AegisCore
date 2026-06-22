@@ -120,6 +120,19 @@ auth:
   token_version_cache_ttl: 5s
   refresh_token_rotation: true
   max_active_sessions_per_user: 5
+local_cache:
+  auth_token_version:
+    capacity: 1000
+    ttl: 1s
+    load_timeout: 300ms
+    num_counters: 0
+    buffer_items: 0
+  rbac_user_roles:
+    capacity: 1000
+    ttl: 5s
+    load_timeout: 500ms
+    num_counters: 0
+    buffer_items: 0
 log:
   level: error
   format: json

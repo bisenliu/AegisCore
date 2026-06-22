@@ -12,6 +12,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	runtimeid "github.com/aegiscore/common/runtime/id"
+	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/user-service/ent"
 	"github.com/aegiscore/user-service/ent/enttest"
 	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
@@ -99,7 +100,7 @@ func TestUserRoleResolverCachesAndInvalidatesActiveRoles(t *testing.T) {
 	inactiveRole := createPolicyTestRole(t, client, inactiveRoleID, false)
 	createPolicyTestUserRole(t, client, user.ID, activeRole.ID)
 	createPolicyTestUserRole(t, client, user.ID, inactiveRole.ID)
-	resolver := newUserRoleResolver(client, time.Minute)
+	resolver := newTestUserRoleResolver(t, client, time.Minute)
 
 	first, err := resolver.RolesForUser(ctx, userID)
 	if err != nil {
@@ -144,7 +145,7 @@ func TestUserRoleResolverCoalescesConcurrentMisses(t *testing.T) {
 		})
 	}))
 
-	resolver := newUserRoleResolver(client, time.Minute)
+	resolver := newTestUserRoleResolver(t, client, time.Minute)
 	const calls = 8
 	var wg sync.WaitGroup
 	wg.Add(calls)
@@ -182,6 +183,24 @@ func newPolicyTestClient(t *testing.T) *ent.Client {
 	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:casbin_policy_test_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
 	t.Cleanup(func() { _ = client.Close() })
 	return client
+}
+
+func newTestUserRoleResolver(t *testing.T, client *ent.Client, ttl time.Duration) *entUserRoleResolver {
+	t.Helper()
+	cache, err := localcache.New[uuid.UUID, []uuid.UUID](localcache.Config[uuid.UUID]{
+		Name:        "rbac_user_roles_test",
+		Capacity:    100,
+		TTL:         ttl,
+		LoadTimeout: time.Second,
+		KeyString:   func(userID uuid.UUID) string { return userID.String() },
+	}, func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+		return loadRolesForUser(ctx, client, userID)
+	}, cloneRoleIDs)
+	if err != nil {
+		t.Fatalf("New localcache: %v", err)
+	}
+	t.Cleanup(cache.Close)
+	return newUserRoleResolver(cache)
 }
 
 func createPolicyTestUser(t *testing.T, client *ent.Client, userID uuid.UUID, username string) *ent.User {

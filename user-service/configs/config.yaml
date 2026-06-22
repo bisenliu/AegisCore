@@ -52,6 +52,30 @@ auth:
   # 同一用户最多保留的活跃 Refresh Token 会话数；0 表示不限制。
   max_active_sessions_per_user: 5
 
+local_cache:
+  auth_token_version:
+    # 认证热路径 token_version 本地缓存容量预算；cost=1 时等价于最多条目数。
+    capacity: 100000
+    # 进程内 token_version 缓存窗口；Redis 投影和 PostgreSQL 仍是权威数据源。
+    ttl: 1s
+    # singleflight leader 回源最大耗时，避免授权中间件被慢依赖长期拖住。
+    load_timeout: 300ms
+    # 0 表示使用 localcache 默认值 capacity * 10。
+    num_counters: 0
+    # 0 表示使用 localcache 默认并发写入缓冲。
+    buffer_items: 0
+  rbac_user_roles:
+    # RBAC 用户角色本地缓存容量预算；cost=1 时等价于最多用户条目数。
+    capacity: 100000
+    # 角色授权热路径本地缓存窗口，角色变更会通过主动失效缩短可见延迟。
+    ttl: 5s
+    # 用户角色回源最大耗时，避免授权链路在数据库抖动时无限等待。
+    load_timeout: 500ms
+    # 0 表示使用 localcache 默认值 capacity * 10。
+    num_counters: 0
+    # 0 表示使用 localcache 默认并发写入缓冲。
+    buffer_items: 0
+
 ent:
   # 是否开启 Ent SQL debug 日志；开启后 SQL 与参数会写入 all/sql 日志，生产环境应谨慎启用。
   sql_debug: false

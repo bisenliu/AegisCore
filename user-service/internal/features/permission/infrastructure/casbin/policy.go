@@ -3,14 +3,11 @@ package casbin
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/fx"
-	"golang.org/x/sync/singleflight"
 
+	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/user-service/ent"
 	entpermission "github.com/aegiscore/user-service/ent/permission"
@@ -23,7 +20,7 @@ import (
 
 const policyWildcard = "*"
 
-const defaultUserRoleCacheTTL = 5 * time.Second
+const rbacUserRolesCacheName = "rbac_user_roles"
 
 // PolicySet 包含一次全量加载得到的 Casbin policy 数据。
 type PolicySet struct {
@@ -56,18 +53,30 @@ type LoaderParams struct {
 	Client *ent.Client `name:"user_db"`
 }
 
+// UserRoleResolverParams 包含用户角色 resolver 的 Fx 输入。
+type UserRoleResolverParams struct {
+	fx.In
+
+	Lifecycle fx.Lifecycle
+	Config    *config.Config
+	Client    *ent.Client `name:"user_db"`
+}
+
+// UserRoleResolverResult 暴露 resolver 和对应的缓存统计源。
+type UserRoleResolverResult struct {
+	fx.Out
+
+	Resolver UserRoleResolver
+	Stats    localcache.StatsSource `name:"rbac_user_roles_cache"`
+}
+
 type entLoader struct {
 	client           *ent.Client
 	superAdminRoleID uuid.UUID
 }
 
 type entUserRoleResolver struct {
-	cache   *localcache.Cache[uuid.UUID, []uuid.UUID]
-	client  *ent.Client
-	group   singleflight.Group
-	mu      sync.RWMutex
-	ttl     time.Duration
-	version uint64
+	cache *localcache.Cache[uuid.UUID, []uuid.UUID]
 }
 
 // NewPolicyLoader 构造基于 Ent 的 Casbin policy loader。
@@ -112,80 +121,59 @@ func (l *entLoader) loadPermissionRules(ctx context.Context) ([]PermissionRule, 
 	return rules, nil
 }
 
-// NewUserRoleResolver 构造按用户短 TTL 缓存的角色解析器。
-func NewUserRoleResolver(params LoaderParams) UserRoleResolver {
-	return newUserRoleResolver(params.Client, defaultUserRoleCacheTTL)
+// NewUserRoleResolver 构造按用户 bounded TTL 缓存的角色解析器。
+func NewUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult, error) {
+	cfg := params.Config.LocalCache.RBACUserRoles
+	cache, err := localcache.New[uuid.UUID, []uuid.UUID](localcache.Config[uuid.UUID]{
+		Name:        rbacUserRolesCacheName,
+		Capacity:    cfg.Capacity,
+		TTL:         cfg.TTL,
+		LoadTimeout: cfg.LoadTimeout,
+		KeyString:   func(userID uuid.UUID) string { return userID.String() },
+		NumCounters: cfg.NumCounters,
+		BufferItems: cfg.BufferItems,
+	}, func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+		return loadRolesForUser(ctx, params.Client, userID)
+	}, cloneRoleIDs)
+	if err != nil {
+		return UserRoleResolverResult{}, fmt.Errorf("create rbac user roles localcache: %w", err)
+	}
+
+	params.Lifecycle.Append(fx.Hook{OnStop: func(context.Context) error {
+		cache.Close()
+		return nil
+	}})
+	return UserRoleResolverResult{Resolver: &entUserRoleResolver{cache: cache}, Stats: cache}, nil
 }
 
-func newUserRoleResolver(client *ent.Client, ttl time.Duration) *entUserRoleResolver {
-	if ttl <= 0 {
-		ttl = defaultUserRoleCacheTTL
-	}
-	return &entUserRoleResolver{client: client, ttl: ttl, cache: localcache.New[uuid.UUID, []uuid.UUID](ttl)}
+func newUserRoleResolver(cache *localcache.Cache[uuid.UUID, []uuid.UUID]) *entUserRoleResolver {
+	return &entUserRoleResolver{cache: cache}
 }
 
 // RolesForUser 返回用户当前绑定的启用角色 ID。
 func (r *entUserRoleResolver) RolesForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-	cache, version := r.currentCache()
-	if roleIDs, ok := cache.Get(userID); ok {
-		return cloneRoleIDs(roleIDs), nil
-	}
-	value, err, _ := r.group.Do(userRoleCacheFlightKey(userID, version), func() (any, error) {
-		cache, version := r.currentCache()
-		if roleIDs, ok := cache.Get(userID); ok {
-			return cloneRoleIDs(roleIDs), nil
-		}
-		roleIDs, err := r.loadRolesForUser(ctx, userID)
-		if err != nil {
-			return nil, err
-		}
-		r.setCacheIfCurrent(userID, roleIDs, version)
-		return cloneRoleIDs(roleIDs), nil
-	})
+	roleIDs, err := r.cache.GetOrLoad(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	return cloneRoleIDs(value.([]uuid.UUID)), nil
+	return roleIDs, nil
 }
 
 // InvalidateUserRole 删除单个用户的本地角色缓存。
 func (r *entUserRoleResolver) InvalidateUserRole(userID uuid.UUID) {
-	r.mu.Lock()
-	version := r.version
-	r.cache.Delete(userID)
-	r.version++
-	r.mu.Unlock()
-	r.group.Forget(userRoleCacheFlightKey(userID, version))
+	_ = r.cache.Delete(userID)
 }
 
 // InvalidateAllUserRoles 清空本实例全部用户角色缓存。
 func (r *entUserRoleResolver) InvalidateAllUserRoles() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.cache = localcache.New[uuid.UUID, []uuid.UUID](r.ttl)
-	r.version++
+	_ = r.cache.Clear()
 }
 
-func (r *entUserRoleResolver) currentCache() (*localcache.Cache[uuid.UUID, []uuid.UUID], uint64) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.cache, r.version
-}
-
-func (r *entUserRoleResolver) setCacheIfCurrent(userID uuid.UUID, roleIDs []uuid.UUID, version uint64) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if r.version != version {
-		return
-	}
-	r.cache.Set(userID, cloneRoleIDs(roleIDs))
-}
-
-func (r *entUserRoleResolver) loadRolesForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+func loadRolesForUser(ctx context.Context, client *ent.Client, userID uuid.UUID) ([]uuid.UUID, error) {
 	var rows []struct {
 		RoleID uuid.UUID `json:"role_id,omitempty"`
 	}
-	err := r.client.Role.Query().
+	err := client.Role.Query().
 		Where(
 			entrole.ActiveEQ(true),
 			entrole.HasUserRolesWith(
@@ -212,10 +200,6 @@ func cloneRoleIDs(roleIDs []uuid.UUID) []uuid.UUID {
 	cloned := make([]uuid.UUID, len(roleIDs))
 	copy(cloned, roleIDs)
 	return cloned
-}
-
-func userRoleCacheFlightKey(userID uuid.UUID, version uint64) string {
-	return userID.String() + ":" + strconv.FormatUint(version, 10)
 }
 
 func roleSubject(roleID uuid.UUID) string {

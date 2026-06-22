@@ -9,6 +9,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/localcache"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	"github.com/aegiscore/common/runtime/resources"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
@@ -31,6 +32,8 @@ type RuntimeDependencyMetricsParams struct {
 	CacheRedis       *redis.Client           `name:"cache_redis"`
 	SessionPurgePool authredis.PurgeTaskPool `name:"auth_session_purge_pool"`
 	PolicyWatcher    permissionredis.WatcherStatus
+	AuthTokenCache   localcache.StatsSource `name:"auth_token_version_cache"`
+	RBACRolesCache   localcache.StatsSource `name:"rbac_user_roles_cache"`
 }
 
 // RegisterRuntimeDependencyMetrics 注册用户服务运行时依赖 Prometheus collector。
@@ -72,6 +75,26 @@ func RegisterRuntimeDependencyMetrics(params RuntimeDependencyMetricsParams) err
 		return fmt.Errorf("create workerpool metrics collector: %w", err)
 	}
 	if err := params.Metrics.Register(workerpoolCollector); err != nil {
+		return err
+	}
+
+	authTokenCacheCollector, err := commonmetrics.NewLocalcacheCollector(commonmetrics.LocalcacheCollectorOptions{
+		Source: params.AuthTokenCache,
+	})
+	if err != nil {
+		return fmt.Errorf("create auth token version cache metrics collector: %w", err)
+	}
+	if err := params.Metrics.Register(authTokenCacheCollector); err != nil {
+		return err
+	}
+
+	rbacRolesCacheCollector, err := commonmetrics.NewLocalcacheCollector(commonmetrics.LocalcacheCollectorOptions{
+		Source: params.RBACRolesCache,
+	})
+	if err != nil {
+		return fmt.Errorf("create rbac user roles cache metrics collector: %w", err)
+	}
+	if err := params.Metrics.Register(rbacRolesCacheCollector); err != nil {
 		return err
 	}
 
