@@ -564,6 +564,12 @@ report_service_metric_presence() {
     aegiscore_user_service_rbac_policy_sync_operations_total
     aegiscore_user_service_rbac_policy_version_mismatches_total
     aegiscore_user_service_permission_route_diff
+    aegiscore_localcache_requests_total
+    aegiscore_localcache_loads_total
+    aegiscore_localcache_singleflight_total
+    aegiscore_localcache_writes_total
+    aegiscore_localcache_evictions_total
+    aegiscore_localcache_capacity
     aegiscore_scheduler_jobs_total
     aegiscore_scheduler_job_duration_seconds
   )
@@ -615,6 +621,12 @@ summarize_results() {
     'aegiscore_redis_up'
     'aegiscore_redis_ping_failures_total'
     'aegiscore_postgres_pool_open_connections'
+    'sum by (cache, result) (aegiscore_localcache_requests_total)'
+    'sum by (cache, result) (aegiscore_localcache_loads_total)'
+    'sum by (cache, event) (aegiscore_localcache_singleflight_total)'
+    'sum by (cache, event) (aegiscore_localcache_writes_total)'
+    'sum by (cache) (aegiscore_localcache_evictions_total)'
+    'aegiscore_localcache_capacity'
     'sum by (event) (aegiscore_workerpool_tasks_total)'
     'sum by (scheduler_job, event, status, reason) (aegiscore_scheduler_jobs_total)'
     'sum by (scheduler_job, status) (aegiscore_scheduler_job_duration_seconds_count)'

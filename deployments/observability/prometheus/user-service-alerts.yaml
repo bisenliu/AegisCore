@@ -82,6 +82,53 @@ groups:
           description: "cache_redis 的 Redis ping 已连续 5 分钟失败。请检查 Redis 可用性、网络路径和 readyz。"
           runbook_url: "docs/observability/user-service-runbook.md#redis-unavailable"
 
+      - alert: AegisCoreUserServiceLocalcacheLoadErrors
+        expr: |
+          sum by (cache) (
+            increase(aegiscore_localcache_loads_total{service="aegiscore-user-services",result="error"}[10m])
+          ) > 0
+        for: 0m
+        labels:
+          service: aegiscore-user-services
+          severity: warning
+        annotations:
+          summary: "用户服务 localcache 回源失败"
+          description: "localcache {{ $labels.cache }} 最近 10 分钟出现 loader error。请检查回源依赖、缓存注册状态和对应 feature 日志。"
+          runbook_url: "docs/observability/user-service-runbook.md#localcache-load-errors"
+
+      - alert: AegisCoreUserServiceLocalcacheWriteDropsOrRejects
+        expr: |
+          sum by (cache, event) (
+            increase(aegiscore_localcache_writes_total{service="aegiscore-user-services",event=~"set_dropped|rejected"}[10m])
+          ) > 0
+        for: 5m
+        labels:
+          service: aegiscore-user-services
+          severity: warning
+        annotations:
+          summary: "用户服务 localcache 写入被丢弃或准入拒绝"
+          description: "localcache {{ $labels.cache }} 最近 10 分钟持续报告 {{ $labels.event }}。请检查容量、TTL、key 基数和写入突增。"
+          runbook_url: "docs/observability/user-service-runbook.md#localcache-write-drops-or-rejects"
+
+      - alert: AegisCoreUserServiceLocalcacheEvictionPressure
+        expr: |
+          sum by (cache) (
+            increase(aegiscore_localcache_evictions_total{service="aegiscore-user-services"}[15m])
+          )
+          /
+          clamp_min(
+            max by (cache) (aegiscore_localcache_capacity{service="aegiscore-user-services"}),
+            1
+          ) > 0.2
+        for: 15m
+        labels:
+          service: aegiscore-user-services
+          severity: warning
+        annotations:
+          summary: "用户服务 localcache 淘汰压力升高"
+          description: "localcache {{ $labels.cache }} 最近 15 分钟淘汰增量超过容量预算的 20%。请检查容量、TTL、key 基数和缓存命中率。"
+          runbook_url: "docs/observability/user-service-runbook.md#localcache-eviction-pressure"
+
       - alert: AegisCoreUserServiceRBACWatcherStopped
         expr: |
           aegiscore_runtime_component_running{service="aegiscore-user-services",resource="rbac_policy_watcher"} == 0

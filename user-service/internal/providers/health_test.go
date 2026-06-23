@@ -156,6 +156,11 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 		`aegiscore_workerpool_tasks_total{environment="test",event="submitted",pool="auth_session_purge_pool",service="aegiscore-user-service-test"} 3`,
 		`aegiscore_localcache_requests_total{cache="auth_token_version",environment="test",result="hit",service="aegiscore-user-service-test"} 3`,
 		`aegiscore_localcache_requests_total{cache="rbac_user_roles",environment="test",result="miss",service="aegiscore-user-service-test"} 2`,
+		`aegiscore_localcache_loads_total{cache="auth_token_version",environment="test",result="success",service="aegiscore-user-service-test"} 0`,
+		`aegiscore_localcache_singleflight_total{cache="auth_token_version",environment="test",event="shared",service="aegiscore-user-service-test"} 0`,
+		`aegiscore_localcache_writes_total{cache="auth_token_version",environment="test",event="set_dropped",service="aegiscore-user-service-test"} 0`,
+		`aegiscore_localcache_evictions_total{cache="auth_token_version",environment="test",service="aegiscore-user-service-test"} 0`,
+		`aegiscore_localcache_capacity{cache="auth_token_version",environment="test",service="aegiscore-user-service-test"} 1000`,
 		`aegiscore_runtime_component_running{environment="test",resource="rbac_policy_watcher",service="aegiscore-user-service-test"} 1`,
 	} {
 		if !strings.Contains(body, want) {
