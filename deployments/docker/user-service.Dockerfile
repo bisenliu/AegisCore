@@ -1,7 +1,7 @@
 # Build from the repository root:
 #   docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
 
-FROM golang:1.26-alpine AS builder
+FROM golang:1.26-alpine3.22 AS builder
 WORKDIR /src
 
 COPY go.work go.work.sum ./
@@ -13,7 +13,7 @@ RUN go build -o /out/user-services ./cmd
 
 FROM arigaio/atlas:latest AS atlas
 
-FROM alpine:3.20
+FROM alpine:3.22
 WORKDIR /app
 
 RUN apk add --no-cache tzdata && addgroup -S aegiscore && adduser -S aegiscore -G aegiscore

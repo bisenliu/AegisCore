@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	mathrand "math/rand/v2"
+	"math/big"
 	"strings"
 	"time"
 
@@ -210,7 +210,11 @@ func (l *RedisLocker) retryDelay(delay time.Duration) time.Duration {
 		min = time.Millisecond
 	}
 	spread := delay - min
-	return min + time.Duration(mathrand.Int64N(int64(spread)+1))
+	offset, err := rand.Int(rand.Reader, big.NewInt(int64(spread)+1))
+	if err != nil {
+		return delay
+	}
+	return min + time.Duration(offset.Int64())
 }
 
 func nextRetryDelay(current time.Duration, max time.Duration) time.Duration {

@@ -403,7 +403,7 @@ func TestRecoveryRecordsPanicOnSpan(t *testing.T) {
 	event := findSpanEvent(t, span, "exception")
 	assertSpanEventStringAttribute(t, event, spanAttrErrorType, spanErrorTypePanic)
 	for _, attr := range event.Attributes {
-		text := attr.Value.Emit()
+		text := attr.Value.String()
 		if strings.Contains(text, "stacktrace") || strings.Contains(text, "token") || strings.Contains(text, "password") {
 			t.Fatalf("panic span event leaked sensitive text: %#v", event.Attributes)
 		}

@@ -185,7 +185,7 @@ func TestFailureResponseAnnotatesSpan(t *testing.T) {
 		assertSpanIntAttribute(t, ended, spanAttrErrorCode, int(contracterrors.CodeValidationFailed))
 		assertSpanIntAttribute(t, ended, spanAttrHTTPStatus, http.StatusBadRequest)
 		for _, attr := range ended.Attributes() {
-			text := attr.Value.Emit()
+			text := attr.Value.String()
 			if strings.Contains(text, "password") || strings.Contains(text, "token") || strings.Contains(text, "Authorization") || strings.Contains(text, "Cookie") {
 				t.Fatalf("validation span attribute leaked field detail: %#v", ended.Attributes())
 			}
@@ -284,7 +284,7 @@ func assertSpanEventStringAttribute(t *testing.T, event sdktrace.Event, key stri
 func assertNoSensitiveSpanEventText(t *testing.T, event sdktrace.Event, forbidden ...string) {
 	t.Helper()
 	for _, attr := range event.Attributes {
-		text := attr.Value.Emit()
+		text := attr.Value.String()
 		for _, item := range forbidden {
 			if strings.Contains(text, item) {
 				t.Fatalf("span event leaked %q in %#v", item, event.Attributes)

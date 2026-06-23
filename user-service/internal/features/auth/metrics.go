@@ -12,7 +12,7 @@ import (
 
 const (
 	authOperationsMetricName           = "aegiscore_user_service_auth_operations_total"
-	authTokenVersionMismatchMetricName = "aegiscore_user_service_auth_token_version_mismatches_total"
+	authTokenVersionMismatchMetricName = "aegiscore_user_service_auth_token_version_mismatches_total" // #nosec G101 -- 指标名称，不包含真实凭据。
 	authSessionPurgeSubmitMetricName   = "aegiscore_user_service_auth_session_purge_submit_failures_total"
 	authOperationsMetricHelp           = "Total number of auth operation results by fixed operation, result, and reason."
 	authTokenVersionMismatchMetricHelp = "Total number of auth token version mismatches by fixed token source."

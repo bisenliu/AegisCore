@@ -12,7 +12,7 @@ import (
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 )
 
-const authTokenVersionCacheName = "auth_token_version"
+const authTokenVersionCacheName = "auth_token_version" // #nosec G101 -- 本地缓存名称，不包含真实凭据。
 
 type tokenVersionCacheParams struct {
 	fx.In

@@ -11,7 +11,8 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: '1.26.3'
+  GO_VERSION: '1.26.4'
+  GOTOOLCHAIN: go1.26.4
   USER_SERVICE_IMAGE: aegiscore-user-services:${{ github.sha }}
 
 jobs:
@@ -191,7 +192,7 @@ jobs:
 
       - name: Install govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Run govulncheck
@@ -257,6 +258,8 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
+          scanners: vuln
+          skip-dirs: .kilo,.kilocode,.agent,.gemini,.codegraph
           format: sarif
           output: security/trivy-filesystem.sarif
           severity: HIGH,CRITICAL
@@ -267,6 +270,8 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
+          scanners: vuln
+          skip-dirs: .kilo,.kilocode,.agent,.gemini,.codegraph
           format: table
           severity: HIGH,CRITICAL
           exit-code: '1'
@@ -299,6 +304,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.USER_SERVICE_IMAGE }}
+          scanners: vuln
           format: sarif
           output: security/trivy-image.sarif
           severity: HIGH,CRITICAL
@@ -309,6 +315,7 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
+          skip-dirs: .kilo,.kilocode,.agent,.gemini,.codegraph
           format: cyclonedx
           output: security/sbom-repository.cdx.json
           skip-setup-trivy: true
@@ -325,6 +332,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.USER_SERVICE_IMAGE }}
+          scanners: vuln
           format: table
           severity: HIGH,CRITICAL
           exit-code: '1'

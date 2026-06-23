@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"sort"
@@ -405,19 +406,55 @@ func (s *providerTestRedisServer) handle(conn net.Conn) {
 		if err != nil {
 			return
 		}
-		command := strings.ToUpper(string(buf[:n]))
-		switch {
-		case strings.Contains(command, "PING"):
-			s.pings.Add(1)
-			_, _ = conn.Write([]byte("+PONG\r\n"))
-		case strings.Contains(command, "HELLO"):
-			_, _ = conn.Write([]byte("-ERR unknown command 'HELLO'\r\n"))
-		case strings.Contains(command, "CLIENT"):
-			_, _ = conn.Write([]byte("+OK\r\n"))
-		default:
-			_, _ = conn.Write([]byte("+OK\r\n"))
+		if err := s.writeResponses(conn, strings.ToUpper(string(buf[:n]))); err != nil {
+			return
 		}
 	}
+}
+
+func (s *providerTestRedisServer) writeResponses(w io.Writer, command string) error {
+	responded := false
+	for {
+		idx, name := nextProviderRedisCommand(command)
+		if name == "" {
+			if responded {
+				return nil
+			}
+			_, err := w.Write([]byte("+OK\r\n"))
+			return err
+		}
+		responded = true
+		command = command[idx+len(name):]
+		switch name {
+		case "PING":
+			s.pings.Add(1)
+			if _, err := w.Write([]byte("+PONG\r\n")); err != nil {
+				return err
+			}
+		case "HELLO":
+			if _, err := w.Write([]byte("-ERR unknown command 'HELLO'\r\n")); err != nil {
+				return err
+			}
+		default:
+			if _, err := w.Write([]byte("+OK\r\n")); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func nextProviderRedisCommand(command string) (int, string) {
+	candidates := []string{"PING", "HELLO", "CLIENT"}
+	bestIndex := -1
+	bestName := ""
+	for _, candidate := range candidates {
+		idx := strings.Index(command, candidate)
+		if idx >= 0 && (bestIndex < 0 || idx < bestIndex) {
+			bestIndex = idx
+			bestName = candidate
+		}
+	}
+	return bestIndex, bestName
 }
 
 func (s *providerTestRedisServer) requireClosed(t *testing.T) {

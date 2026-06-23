@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -234,9 +235,12 @@ func parsePasswordHash(encodedHash string) (passwordParams, []byte, []byte, erro
 	if err != nil || len(key) == 0 {
 		return passwordParams{}, nil, nil, ErrInvalidHash
 	}
+	if len(salt) > math.MaxUint32 || len(key) > math.MaxUint32 {
+		return passwordParams{}, nil, nil, ErrInvalidHash
+	}
 
-	parsedParams.saltLength = uint32(len(salt))
-	parsedParams.keyLength = uint32(len(key))
+	parsedParams.saltLength = uint32(len(salt)) // #nosec G115 -- encodedHash 最大 512 字节，长度已受控。
+	parsedParams.keyLength = uint32(len(key))   // #nosec G115 -- encodedHash 最大 512 字节，长度已受控。
 
 	if !isPasswordParamsAllowed(parsedParams) {
 		return passwordParams{}, nil, nil, ErrInvalidHash
@@ -275,7 +279,7 @@ func parsePasswordParams(value string) (passwordParams, error) {
 	m, okM := values["m"]
 	t, okT := values["t"]
 	p, okP := values["p"]
-	if !okM || !okT || !okP || p > 255 {
+	if !okM || !okT || !okP || m > math.MaxUint32 || t > math.MaxUint32 || p > math.MaxUint8 {
 		return passwordParams{}, ErrInvalidHash
 	}
 

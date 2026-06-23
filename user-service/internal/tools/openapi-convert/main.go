@@ -15,7 +15,7 @@ const (
 	defaultBusinessServerURL = "/api/v1"
 	defaultRootServerURL     = "/"
 	defaultBearerAuthName    = "BearerAuth"
-	defaultBearerAuthDesc    = "输入 Bearer token，格式为：Bearer <token>"
+	defaultBearerAuthDesc    = "输入 Bearer token，格式为：Bearer <token>" // #nosec G101 -- OpenAPI 展示文案，不包含真实凭据。
 	defaultGoPackageName     = "docs"
 	defaultGeneratedBy       = "scripts/openapi-generate.sh"
 	defaultBearerAuthType    = "http"

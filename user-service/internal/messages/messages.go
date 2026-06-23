@@ -6,9 +6,9 @@ const (
 	// InvalidUserID 是外部用户 ID 输入无效时展示给用户的消息。
 	InvalidUserID = "用户ID格式不正确，请检查后重试"
 	// InvalidPassword 是密码为空或无效时展示给用户的消息。
-	InvalidPassword = "请输入密码"
+	InvalidPassword = "请输入密码" // #nosec G101 -- 用户提示文案，不包含真实凭据。
 	// InvalidCredentials 是登录凭证失败时展示给用户的消息。
-	InvalidCredentials = "用户名或密码不正确，请检查后重试"
+	InvalidCredentials = "用户名或密码不正确，请检查后重试" // #nosec G101 -- 用户提示文案，不包含真实凭据。
 	// UserAlreadyExists 是 username 唯一性冲突时展示给用户的消息。
 	UserAlreadyExists = "用户已存在，请更换用户名后重试"
 	// UserNotFound 是用户资源不存在时展示给用户的消息。
