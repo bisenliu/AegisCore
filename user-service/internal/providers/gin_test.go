@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
+	commonmiddleware "github.com/aegiscore/common/http/middleware"
 	commonresponse "github.com/aegiscore/common/http/response"
 	"github.com/aegiscore/common/runtime/config"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
@@ -106,6 +107,107 @@ func TestNewGinEngineExtractsTraceparent(t *testing.T) {
 
 	if got := spanContext.TraceID().String(); got != "00112233445566778899aabbccddeeff" {
 		t.Fatalf("trace id = %q, want propagated traceparent trace id", got)
+	}
+}
+
+func TestNewGinEnginePassesThroughRequestID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	provider := newGinTestTracingProvider(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	if err != nil {
+		t.Fatalf("NewGinEngine: %v", err)
+	}
+
+	var requestID string
+	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
+		var ok bool
+		requestID, ok = commonmiddleware.RequestIDFromContext(c.Request.Context())
+		if !ok {
+			t.Fatal("request id missing from context")
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
+	request.Header.Set(commonmiddleware.HeaderRequestID, "client-request-123")
+	engine.ServeHTTP(recorder, request)
+
+	if got := recorder.Header().Get(commonmiddleware.HeaderRequestID); got != "client-request-123" {
+		t.Fatalf("response request id = %q, want client-request-123", got)
+	}
+	if requestID != "client-request-123" {
+		t.Fatalf("context request id = %q, want client-request-123", requestID)
+	}
+}
+
+func TestNewGinEngineGeneratesRequestID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	provider := newGinTestTracingProvider(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	if err != nil {
+		t.Fatalf("NewGinEngine: %v", err)
+	}
+
+	var requestID string
+	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
+		var ok bool
+		requestID, ok = commonmiddleware.RequestIDFromContext(c.Request.Context())
+		if !ok {
+			t.Fatal("request id missing from context")
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil))
+
+	responseRequestID := recorder.Header().Get(commonmiddleware.HeaderRequestID)
+	if responseRequestID == "" {
+		t.Fatal("response request id is empty")
+	}
+	if requestID != responseRequestID {
+		t.Fatalf("context request id = %q, want response request id %q", requestID, responseRequestID)
+	}
+}
+
+func TestNewGinEngineKeepsTraceparentAndRequestID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	provider := newGinTestTracingProvider(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	if err != nil {
+		t.Fatalf("NewGinEngine: %v", err)
+	}
+
+	var spanContext trace.SpanContext
+	var requestID string
+	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
+		spanContext = trace.SpanContextFromContext(c.Request.Context())
+		var ok bool
+		requestID, ok = commonmiddleware.RequestIDFromContext(c.Request.Context())
+		if !ok {
+			t.Fatal("request id missing from context")
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
+	request.Header.Set("traceparent", "00-00112233445566778899aabbccddeeff-0102030405060708-01")
+	request.Header.Set(commonmiddleware.HeaderRequestID, "client-request-123")
+	engine.ServeHTTP(recorder, request)
+
+	if got := spanContext.TraceID().String(); got != "00112233445566778899aabbccddeeff" {
+		t.Fatalf("trace id = %q, want propagated traceparent trace id", got)
+	}
+	if requestID != "client-request-123" {
+		t.Fatalf("context request id = %q, want client-request-123", requestID)
+	}
+	if got := recorder.Header().Get(commonmiddleware.HeaderRequestID); got != "client-request-123" {
+		t.Fatalf("response request id = %q, want client-request-123", got)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -78,10 +79,11 @@ func TestRequestLoggerIncludesTraceAndSpanIDAndRequestFields(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core)
 	engine := gin.New()
-	engine.Use(otelTraceMiddleware(t, "00112233445566778899aabbccddeeff", "0102030405060708"), RequestLogger(log))
+	engine.Use(otelTraceMiddleware(t, "00112233445566778899aabbccddeeff", "0102030405060708"), RequestID(), RequestLogger(log))
 	engine.GET("/ok", func(c *gin.Context) { c.Status(http.StatusAccepted) })
 
 	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
+	req.Header.Set(HeaderRequestID, "client-request-123")
 	engine.ServeHTTP(httptest.NewRecorder(), req)
 
 	entries := logs.FilterMessage("http request completed").All()
@@ -89,7 +91,7 @@ func TestRequestLoggerIncludesTraceAndSpanIDAndRequestFields(t *testing.T) {
 		t.Fatalf("request log count = %d, want 1", len(entries))
 	}
 	fields := entries[0].ContextMap()
-	if fields[logger.TraceIDField] != "00112233445566778899aabbccddeeff" || fields[logger.SpanIDField] != "0102030405060708" || fields["method"] != http.MethodGet || fields["path"] != "/ok" || fields["status"] != int64(http.StatusAccepted) || fields[auth.UserIDKey] != anonymousUserID {
+	if fields[logger.TraceIDField] != "00112233445566778899aabbccddeeff" || fields[logger.SpanIDField] != "0102030405060708" || fields[RequestIDField] != "client-request-123" || fields["method"] != http.MethodGet || fields["path"] != "/ok" || fields["status"] != int64(http.StatusAccepted) || fields[auth.UserIDKey] != anonymousUserID {
 		t.Fatalf("request log fields = %#v", fields)
 	}
 	if _, ok := fields["latency_ms"]; !ok {
@@ -97,6 +99,98 @@ func TestRequestLoggerIncludesTraceAndSpanIDAndRequestFields(t *testing.T) {
 	}
 	if _, ok := fields["client_ip"]; !ok {
 		t.Fatalf("request log missing client_ip: %#v", fields)
+	}
+}
+
+func TestRequestIDPassesThroughHeaderAndContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.Use(RequestID())
+	engine.GET("/request-id", func(c *gin.Context) {
+		requestID, ok := RequestIDFromContext(c.Request.Context())
+		if !ok {
+			t.Fatal("request id missing from context")
+		}
+		c.String(http.StatusOK, requestID)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/request-id", nil)
+	req.Header.Set(HeaderRequestID, "client-request-123")
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get(HeaderRequestID); got != "client-request-123" {
+		t.Fatalf("response request id = %q, want client-request-123", got)
+	}
+	if got := rec.Body.String(); got != "client-request-123" {
+		t.Fatalf("context request id = %q, want client-request-123", got)
+	}
+}
+
+func TestRequestIDGeneratesMissingHeader(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.Use(RequestID())
+	engine.GET("/request-id", func(c *gin.Context) {
+		requestID, ok := RequestIDFromContext(c.Request.Context())
+		if !ok {
+			t.Fatal("request id missing from context")
+		}
+		c.String(http.StatusOK, requestID)
+	})
+
+	rec := httptest.NewRecorder()
+	engine.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/request-id", nil))
+
+	requestID := rec.Header().Get(HeaderRequestID)
+	if !uuidStringPattern.MatchString(requestID) {
+		t.Fatalf("generated request id = %q, want UUID string", requestID)
+	}
+	if got := rec.Body.String(); got != requestID {
+		t.Fatalf("context request id = %q, want response request id %q", got, requestID)
+	}
+}
+
+func TestRequestIDRejectsInvalidHeader(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "blank", value: "   "},
+		{name: "too long", value: strings.Repeat("a", maxRequestIDLength+1)},
+		{name: "control character", value: "client\nrequest"},
+		{name: "delete character", value: "client" + string(rune(0x7f)) + "request"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := gin.New()
+			engine.Use(RequestID())
+			engine.GET("/request-id", func(c *gin.Context) {
+				requestID, ok := RequestIDFromContext(c.Request.Context())
+				if !ok {
+					t.Fatal("request id missing from context")
+				}
+				c.String(http.StatusOK, requestID)
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/request-id", nil)
+			req.Header.Set(HeaderRequestID, tt.value)
+			rec := httptest.NewRecorder()
+			engine.ServeHTTP(rec, req)
+
+			requestID := rec.Header().Get(HeaderRequestID)
+			if requestID == strings.TrimSpace(tt.value) {
+				t.Fatalf("response request id reused invalid value %q", requestID)
+			}
+			if !uuidStringPattern.MatchString(requestID) {
+				t.Fatalf("generated request id = %q, want UUID string", requestID)
+			}
+			if got := rec.Body.String(); got != requestID {
+				t.Fatalf("context request id = %q, want response request id %q", got, requestID)
+			}
+		})
 	}
 }
 
@@ -276,6 +370,8 @@ func TestRecoveryIncludesTraceAndSpanIDAndEnvelope(t *testing.T) {
 		t.Fatalf("recovery log missing stack: %#v", fields)
 	}
 }
+
+var uuidStringPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func TestRecoveryRecordsPanicOnSpan(t *testing.T) {
 	gin.SetMode(gin.TestMode)

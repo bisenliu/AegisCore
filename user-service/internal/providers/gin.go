@@ -48,6 +48,7 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 			otelgin.WithFilter(traceBusinessRequest(params.Config.Observability.Metrics)),
 		),
 		renameHTTPServerSpan(),
+		commonmw.RequestID(),
 		commonmw.HTTPServerMetrics(commonmw.HTTPMetricsOptions{
 			Provider:   params.Metrics,
 			Skip:       skipMetricsScrapeRequest(params.Config.Observability.Metrics),
