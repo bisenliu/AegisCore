@@ -23,4 +23,4 @@ jobs:
         uses: ariga/setup-atlas@v0
 
       - name: Validate user-service migrations
-        run: make migrate-validate
+        run: make user-service-migrate-validate

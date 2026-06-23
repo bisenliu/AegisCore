@@ -40,9 +40,9 @@ jobs:
       - name: Run full verification
         run: |
           make lint
-          make architecture-lint
+          make user-service-architecture-lint
           make test
-          make openapi-generate
+          make user-service-openapi-generate
           git diff --exit-code
 
   test:
