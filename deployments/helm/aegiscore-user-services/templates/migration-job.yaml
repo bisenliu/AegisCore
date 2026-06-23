@@ -1,0 +1,49 @@
+{{- if .Values.migrationJob.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-%s" (include "aegiscore-user-services.fullname" .) .Values.migrationJob.nameSuffix | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "aegiscore-user-services.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+spec:
+  backoffLimit: {{ .Values.migrationJob.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrationJob.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.migrationJob.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "aegiscore-user-services.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "aegiscore-user-services.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "aegiscore-user-services.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            {{- toYaml .Values.migrationJob.command | nindent 12 }}
+          env:
+            - name: TZ
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "aegiscore-user-services.configMapName" . }}
+                  key: TZ
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aegiscore-user-services.secretName" . }}
+                  key: {{ .Values.secret.keys.databaseUrl }}
+          resources:
+            {{- toYaml .Values.migrationJob.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            {{- toYaml .Values.migrationJob.volumeMounts | nindent 12 }}
+      volumes:
+        {{- toYaml .Values.migrationJob.volumes | nindent 8 }}
+{{- end }}

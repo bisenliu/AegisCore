@@ -1,14 +1,48 @@
 # Helm 部署
 
-本目录承载 AegisCore 服务的 Helm charts。
+本目录承载 AegisCore 服务的 Helm charts。当前可用 chart 位于 `aegiscore-user-services/`，用于模板化 user-service 的 Kubernetes 运行时资源和发布前置 Job。
 
-当前状态：
+## Chart
 
-- `aegiscore-user-services/` 预留给未来用户服务 chart。
-- 当前没有提交可直接运行的 chart templates 或 values。
+| 路径 | 作用 |
+|---|---|
+| `aegiscore-user-services/Chart.yaml` | chart 元数据 |
+| `aegiscore-user-services/values.yaml` | 生产基线默认值 |
+| `aegiscore-user-services/values-local.yaml` | 本地或临时环境覆盖示例 |
+| `aegiscore-user-services/templates/` | Deployment、Service、ConfigMap、Job、PDB、HPA、NetworkPolicy 等模板 |
 
-未来新增 charts 时，应将服务特定 templates 放在对应 chart 目录下，并使用由 `deployments/docker/user-service.Dockerfile` 构建的镜像。没有单独变更设计前，不要新增云厂商特定资源。
+## 发布顺序
 
-未来用户服务 chart 应提供独立 migration Job 配置边界，例如启用开关、镜像 tag 复用、`DATABASE_URL` Secret 引用和 Job 重试策略。Deployment 默认不启用 startup migration；发布顺序应是 migration Job 成功、RBAC seed 完成、再滚动用户服务副本。是否使用 Helm hook 需要结合具体发布平台另行设计，不在当前占位 chart 中预设。
+chart 会渲染 migration Job、RBAC seed Job 和 HTTP Deployment，但 Helm 本身不保证这些资源按业务顺序等待完成。生产流水线必须显式编排：
 
-用户服务 Prometheus/Grafana 观测资产位于 `deployments/observability/`。当前这些资产作为独立示例维护，不要求本目录提供完整可生产运行的 chart templates。
+1. 准备或更新 `secret.existingSecret` 指向的外部 Secret。
+2. 渲染并执行 migration Job，等待成功。
+3. 渲染并执行 RBAC seed Job，等待成功。
+4. 执行 `helm upgrade --install` 滚动 HTTP Deployment，并在最终 rollout 阶段关闭 Job 渲染。
+
+Deployment 默认不设置 `RUN_MIGRATIONS=true`，普通服务副本不执行 Atlas migration。
+
+## 验证
+
+```bash
+helm lint deployments/helm/aegiscore-user-services
+helm template aegiscore-user-services deployments/helm/aegiscore-user-services \
+  --values deployments/helm/aegiscore-user-services/values.yaml
+```
+
+渲染输出中应能看到：
+
+- `Deployment` 的 `/livez`、`/readyz`、`/startupz` 探针。
+- migration `Job` 的 `/app/user-service/scripts/migrate-apply.sh` command。
+- RBAC seed `Job` 的 `rbac seed --reactivate-system --sync-system-bindings` command。
+- `PodDisruptionBudget`、`HorizontalPodAutoscaler` 和 `NetworkPolicy`。
+
+生产流水线如果用 `helm template` 分阶段应用 Job，最终执行 `helm upgrade --install` 时应追加：
+
+```bash
+--set migrationJob.enabled=false --set rbacSeedJob.enabled=false
+```
+
+## 观测资产
+
+Prometheus/Grafana dashboard、alert rule 示例和 runbook 链接位于 `deployments/observability/`。当前 chart 不默认封装 ServiceMonitor、PodMonitor 或 Grafana dashboard。

@@ -1,0 +1,48 @@
+# 本文件定义 user-service 的非敏感运行时配置。
+# 适用于 Deployment 和 RBAC seed Job 通过 envFrom 注入 `AEGISCORE_*` 环境变量。
+# 敏感配置必须放入 Secret；本 ConfigMap 只保存可审查的默认运行参数。
+apiVersion: v1 # ConfigMap 属于 Kubernetes core/v1 API。
+kind: ConfigMap # 声明非敏感键值配置资源。
+metadata: # ConfigMap 的元数据。
+  name: aegiscore-user-services-config # ConfigMap 名称，Deployment 和 Job 会引用它。
+  labels: # 资源标签，便于归类和查询。
+    app.kubernetes.io/name: aegiscore-user-services # 应用名称标签。
+    app.kubernetes.io/component: config # 组件类型；config 表示运行时配置。
+    app.kubernetes.io/part-of: aegiscore # 系统归属标签。
+data: # 非敏感环境变量键值；所有值都会以字符串注入容器。
+  TZ: Asia/Shanghai # 容器进程时区；影响系统时间显示和日志轮转。
+  AEGISCORE_SYSTEM_TIMEZONE: Asia/Shanghai # AegisCore 配置中的 system.timezone。
+  AEGISCORE_APP_ENVIRONMENT: production # 运行环境标识；生产类环境会启用更严格配置校验。
+  AEGISCORE_HTTP_HOST: 0.0.0.0 # HTTP 监听地址；容器内应监听全部网卡。
+  AEGISCORE_HTTP_PORT: "8080" # HTTP 监听端口；需与 Service targetPort 和容器端口一致。
+  AEGISCORE_HTTP_TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16 # Gin trusted proxies；按集群网关或代理网段调整。
+  AEGISCORE_LOG_LEVEL: info # 日志级别；可选 debug、info、warn、error。
+  AEGISCORE_LOG_FORMAT: json # 日志格式；生产建议 json，便于采集检索。
+  AEGISCORE_LOG_DIRECTORY: /tmp/aegiscore-user-services/logs # 文件日志目录；只读根文件系统下使用可写 /tmp。
+  AEGISCORE_LOG_FILENAME: aegiscore-user-services # 日志文件名前缀。
+  AEGISCORE_LOG_CONSOLE: "true" # 是否输出到 stdout/stderr；容器环境应保持 true。
+  AEGISCORE_OBSERVABILITY_METRICS_ENABLED: "true" # 是否暴露 Prometheus metrics endpoint。
+  AEGISCORE_OBSERVABILITY_METRICS_PATH: /metrics # metrics 路径；网络侧需保护该端点。
+  AEGISCORE_OBSERVABILITY_METRICS_INCLUDE_RUNTIME: "true" # 是否包含 Go runtime/process 指标。
+  AEGISCORE_OBSERVABILITY_TRACING_ENABLED: "true" # 是否启用 tracing provider。
+  AEGISCORE_OBSERVABILITY_TRACING_EXPORTER: none # tracing exporter；可选 none 或 otlp。
+  AEGISCORE_OBSERVABILITY_TRACING_OTLP_ENDPOINT: "" # OTLP endpoint；exporter 为 otlp 时必须设置。
+  AEGISCORE_OBSERVABILITY_TRACING_INSECURE: "false" # 是否允许 insecure OTLP；生产类环境应保持 false。
+  AEGISCORE_AUTH_JWT_ISSUER: aegiscore-user-services # JWT issuer 校验值。
+  AEGISCORE_AUTH_JWT_AUDIENCE: aegiscore-users # JWT audience 校验值。
+  AEGISCORE_POSTGRES_USER_DB_HOST: postgres # user_db PostgreSQL 主机或 Service DNS。
+  AEGISCORE_POSTGRES_USER_DB_PORT: "5432" # user_db PostgreSQL 端口。
+  AEGISCORE_POSTGRES_USER_DB_DB_NAME: aegiscore_user # user_db 数据库名。
+  AEGISCORE_POSTGRES_USER_DB_DRIVER: pgx # database/sql driver 名称；当前仅支持 pgx。
+  AEGISCORE_POSTGRES_USER_DB_SSLMODE: require # PostgreSQL SSL 模式；按数据库安全策略调整。
+  AEGISCORE_POSTGRES_USER_DB_MAX_OPEN_CONNS: "50" # user_db 最大打开连接数；需匹配数据库容量。
+  AEGISCORE_POSTGRES_USER_DB_MAX_IDLE_CONNS: "10" # user_db 最大空闲连接数。
+  AEGISCORE_POSTGRES_USER_DB_CONN_MAX_LIFETIME: 30m # 单连接最大生命周期。
+  AEGISCORE_POSTGRES_USER_DB_CONN_MAX_IDLE_TIME: 10m # 空闲连接最大保留时间。
+  AEGISCORE_POSTGRES_USER_DB_PING_TIMEOUT: 5s # 启动时数据库 ping 超时。
+  AEGISCORE_REDIS_CACHE_REDIS_ADDR: redis:6379 # cache_redis 地址，格式为 host:port。
+  AEGISCORE_REDIS_CACHE_REDIS_DB: "0" # Redis logical database 编号。
+  AEGISCORE_REDIS_CACHE_REDIS_DIAL_TIMEOUT: 5s # Redis 建连超时。
+  AEGISCORE_REDIS_CACHE_REDIS_READ_TIMEOUT: 3s # Redis 读超时。
+  AEGISCORE_REDIS_CACHE_REDIS_WRITE_TIMEOUT: 3s # Redis 写超时。
+  AEGISCORE_REDIS_CACHE_REDIS_PING_TIMEOUT: 5s # 启动时 Redis ping 超时。

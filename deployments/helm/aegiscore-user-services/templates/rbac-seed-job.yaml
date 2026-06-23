@@ -1,0 +1,43 @@
+{{- if .Values.rbacSeedJob.enabled -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-%s" (include "aegiscore-user-services.fullname" .) .Values.rbacSeedJob.nameSuffix | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "aegiscore-user-services.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rbac-seed
+spec:
+  backoffLimit: {{ .Values.rbacSeedJob.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.rbacSeedJob.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.rbacSeedJob.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "aegiscore-user-services.labels" . | nindent 8 }}
+        app.kubernetes.io/component: rbac-seed
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "aegiscore-user-services.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: rbac-seed
+          image: {{ include "aegiscore-user-services.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            {{- toYaml .Values.rbacSeedJob.command | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "aegiscore-user-services.configMapName" . }}
+          env:
+            {{- include "aegiscore-user-services.secretEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.rbacSeedJob.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          volumeMounts:
+            {{- toYaml .Values.rbacSeedJob.volumeMounts | nindent 12 }}
+      volumes:
+        {{- toYaml .Values.rbacSeedJob.volumes | nindent 8 }}
+{{- end }}

@@ -1,0 +1,9 @@
+# 本文件创建 AegisCore 服务使用的 Kubernetes namespace。
+# 适用于首次安装或独立环境初始化；已有 namespace 时可由平台预先创建。
+# 关键资源是 `aegiscore` namespace，用于隔离 user-service 运行时资源。
+apiVersion: v1 # Namespace 属于 Kubernetes core/v1 API。
+kind: Namespace # 声明创建命名空间资源。
+metadata: # namespace 的元数据。
+  name: aegiscore # namespace 名称；其他清单默认部署到该空间。
+  labels: # namespace 级标签，便于资产归类和策略选择。
+    app.kubernetes.io/part-of: aegiscore # 标识该 namespace 属于 AegisCore 系统。

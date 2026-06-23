@@ -1,11 +1,68 @@
 # aegiscore-user-services Helm Chart
 
-本目录预留给未来运行时名称为 `aegiscore-user-services` 的用户服务 Helm chart。
+本 chart 为 user-service 渲染云厂商无关的 Kubernetes 资源，包括 HTTP Deployment、Service、ConfigMap、ServiceAccount、RBAC、migration Job、RBAC seed Job、PDB、HPA 和 NetworkPolicy。
 
-当前没有提交 Chart 元数据、配置值或模板。只有在变更中明确支持的部署配置和验证步骤后，才新增这些内容。
+## Values
 
-未来新增 chart templates 时，应将数据库 migration 建模为独立 Job，而不是用户服务 Deployment 的默认启动动作。建议预留 `migrationJob.enabled`、image、command、Secret 引用和重试策略等配置边界；Job command 为 `/app/user-service/scripts/migrate-apply.sh`，且默认使用当前发布镜像。Deployment 默认不设置 `RUN_MIGRATIONS=true`。
+| 值 | 作用 |
+|---|---|
+| `image.repository`、`image.tag` | user-service 发布镜像 |
+| `config` | 非敏感 `AEGISCORE_*` 运行时配置 |
+| `secret.existingSecret` | 外部 Secret 名称；chart 只引用不渲染真实 Secret |
+| `secret.keys.*` | Secret 键名映射 |
+| `resources` | HTTP 副本 requests/limits |
+| `probes` | `/livez`、`/readyz`、`/startupz` 探针配置 |
+| `autoscaling` | HPA 配置 |
+| `pdb` | PodDisruptionBudget 配置 |
+| `networkPolicy` | ingress/egress 网络意图 |
+| `migrationJob` | Atlas migration Job 配置 |
+| `rbacSeedJob` | RBAC seed Job 配置 |
 
-未来新增 chart probe values 或 templates 时，应将 liveness、readiness 和 startup probe 分别指向 `/livez`、`/readyz` 和 `/startupz`。
+默认 `values.yaml` 不包含真实敏感值，也不设置 `RUN_MIGRATIONS=true`。生产环境必须提前创建 `secret.existingSecret` 指向的 Secret。
 
-Prometheus/Grafana dashboard、alert rule 示例和 runbook 链接位于 `deployments/observability/`；本 chart 目录当前不封装这些资产。
+## Secret 键名
+
+默认 Secret 名称为 `aegiscore-user-services-runtime`，默认键名如下：
+
+- `DATABASE_URL`
+- `AEGISCORE_AUTH_JWT_SECRET`
+- `AEGISCORE_POSTGRES_USER_DB_USERNAME`
+- `AEGISCORE_POSTGRES_USER_DB_PASSWORD`
+- `AEGISCORE_REDIS_CACHE_REDIS_USERNAME`
+- `AEGISCORE_REDIS_CACHE_REDIS_PASSWORD`
+
+如果集群使用外部 Secret 管理器，应保持这些键名，或通过 `secret.keys` 显式覆盖。
+
+## 渲染和验证
+
+```bash
+helm lint deployments/helm/aegiscore-user-services
+helm template aegiscore-user-services deployments/helm/aegiscore-user-services \
+  --values deployments/helm/aegiscore-user-services/values.yaml
+```
+
+本地覆盖示例：
+
+```bash
+helm template aegiscore-user-services deployments/helm/aegiscore-user-services \
+  --values deployments/helm/aegiscore-user-services/values.yaml \
+  --values deployments/helm/aegiscore-user-services/values-local.yaml
+```
+
+## 发布流程
+
+生产流水线应按顺序执行：
+
+1. 创建或更新 `secret.existingSecret`。
+2. 使用当前发布镜像执行 migration Job，等待 Job 成功。
+3. 执行 RBAC seed Job，等待 Job 成功。
+4. 执行 `helm upgrade --install aegiscore-user-services deployments/helm/aegiscore-user-services --values <env-values> --set migrationJob.enabled=false --set rbacSeedJob.enabled=false`。
+5. 等待 Deployment rollout 完成。
+
+Helm 渲染的 Jobs 可由 GitOps 或 CI/CD 流水线分阶段应用。不要依赖普通服务副本启动时执行 migration。
+
+## 回滚边界
+
+Deployment rollout 失败时，可回滚 Helm release 或回退镜像 tag。已经成功执行的 Atlas migration 不应由 Helm rollback 隐式撤销；数据库回滚必须走独立 migration 流程。
+
+如果在已有副本运行时重新执行 RBAC seed，需要滚动重启副本或触发在线 policy refresh，确保授权缓存及时收敛。
