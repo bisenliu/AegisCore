@@ -88,7 +88,7 @@
 
 ### Requirement: 本地缓存运行时指标
 
-系统 MUST 为 `common/runtime/localcache` 提供 Prometheus metrics collector，导出低基数本地缓存运行时指标，用于观察命中率、回源率、回源错误、singleflight 合并、内部 double-check、写入丢弃、准入拒绝和淘汰。
+系统 MUST 为 `common/runtime/localcache` 提供 Prometheus metrics collector，导出低基数本地缓存运行时指标，用于观察命中率、回源率、回源错误、singleflight 合并、内部 double-check、写入丢弃、准入拒绝、淘汰和容量。部署观测资产、真实 metrics load 脚本和运行手册 MUST 消费当前稳定的 `aegiscore_localcache_*` metric family，并 MUST NOT 保留旧 metric name、旧 label 或兼容 PromQL。
 
 #### Scenario: 导出本地缓存请求指标
 
@@ -114,11 +114,62 @@
 - **THEN** 系统 MUST 导出 set dropped、admission rejected 和 evicted counter
 - **AND** SRE MUST 能通过这些指标判断容量、TTL 或 key 基数是否需要调整
 
+#### Scenario: dashboard 消费 localcache 指标
+
+- **WHEN** Grafana dashboard 展示 user-service runtime 依赖状态
+- **THEN** dashboard MUST 使用 `aegiscore_localcache_requests_total`、`aegiscore_localcache_loads_total`、`aegiscore_localcache_singleflight_total`、`aegiscore_localcache_writes_total`、`aegiscore_localcache_evictions_total` 和 `aegiscore_localcache_capacity`
+- **AND** PromQL MUST 按 `cache`、`result` 或 `event` 等固定 label 聚合，不得引用旧 metric name、旧 label 或 raw cache key
+
+#### Scenario: alert 消费 localcache 指标
+
+- **WHEN** Prometheus alert rules 评估本地缓存异常
+- **THEN** alert MUST 使用当前 `aegiscore_localcache_*` metric family 表达 loader error、set dropped、admission rejected 或 eviction pressure 等可行动信号
+- **AND** alert annotation MUST 指向稳定 runbook，并说明优先检查容量、TTL、key 基数、回源依赖和缓存注册状态
+
+#### Scenario: metrics load 验证 localcache 指标
+
+- **WHEN** 执行真实 metrics load 脚本采样 `/metrics` 和 Prometheus 查询
+- **THEN** 脚本 MUST 检查 localcache metric family 的服务端 presence
+- **AND** Prometheus sample query MUST 覆盖请求、回源、singleflight、写入、淘汰和容量指标，确保 collector 缺失或 PromQL 漂移能够被发现
+
 #### Scenario: metrics 禁用
 
 - **WHEN** metrics provider 被禁用或未配置
 - **THEN** 系统 MUST 不注册 localcache Prometheus collector
 - **AND** localcache 自身 MUST 继续维护可通过 `Stats()` 读取的本地统计快照
+
+### Requirement: HTTP 请求 ID 关联
+
+系统 MUST 为 HTTP 请求提供可由调用方观察的 request ID 关联能力。入站请求携带合法 `X-Request-ID` 时系统 MUST 透传该值；缺失或不合法时系统 MUST 生成新的请求 ID。最终 request ID MUST 写入响应头 `X-Request-ID`，并 MUST 以 `request_id` 字段出现在请求日志中。
+
+#### Scenario: 透传入站请求 ID
+
+- **WHEN** HTTP 请求携带合法 `X-Request-ID`
+- **THEN** 系统 MUST 在响应头 `X-Request-ID` 中回传相同值
+- **AND** 请求日志 MUST 使用 `request_id` 字段记录相同值
+
+#### Scenario: 生成缺失请求 ID
+
+- **WHEN** HTTP 请求未携带 `X-Request-ID`
+- **THEN** 系统 MUST 生成新的请求 ID
+- **AND** 响应头 `X-Request-ID` 与请求日志字段 `request_id` MUST 使用该生成值
+
+#### Scenario: 拒绝不合法请求 ID
+
+- **WHEN** HTTP 请求携带空白、超长或包含控制字符的 `X-Request-ID`
+- **THEN** 系统 MUST 不透传该不合法值
+- **AND** 系统 MUST 生成新的请求 ID 并写入响应头和请求日志
+
+#### Scenario: request ID 与 tracing 并存
+
+- **WHEN** HTTP 请求携带 W3C `traceparent` 且系统生成或透传 `X-Request-ID`
+- **THEN** 请求日志 MUST 在 span context 有效时同时包含 `trace_id`、`span_id` 和 `request_id`
+- **AND** request ID 行为 MUST NOT 改变现有 `traceparent` 或 `tracestate` 传播语义
+
+#### Scenario: metrics 标签不包含请求 ID
+
+- **WHEN** 系统记录 HTTP 或 runtime metrics 标签
+- **THEN** metrics 标签 MUST NOT 包含 `request_id`、`X-Request-ID` 或任何等价高基数请求标识
 
 ### Requirement: 日志与错误可观测性
 
