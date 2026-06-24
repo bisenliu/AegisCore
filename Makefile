@@ -10,7 +10,7 @@ ADMIN_RESET_PASSWORD ?= false
 .PHONY: common-test common-lint common-verify
 .PHONY: user-service-build user-service-run user-service-test user-service-lint user-service-verify user-service-architecture-lint
 .PHONY: user-service-seed-rbac user-service-create-super-admin
-.PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-migrate-apply user-service-openapi-generate
+.PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-migrate-apply user-service-openapi-generate user-service-fxgraph-generate user-service-fxgraph-check
 .PHONY: compose-dashboard-generate compose-dashboard-check
 
 help: ## 查看可用命令。
@@ -72,6 +72,12 @@ user-service-migrate-apply: ## 使用 DATABASE_URL 执行 user-service migration
 
 user-service-openapi-generate: ## 生成 user-service OpenAPI 3 文档。
 	$(MAKE) -C $(USER_SERVICE_DIR) openapi-generate
+
+user-service-fxgraph-generate: ## 生成 user-service Fx 依赖图。
+	$(MAKE) -C $(USER_SERVICE_DIR) fxgraph-generate USER_SERVICE_CONFIG='$(USER_SERVICE_CONFIG)'
+
+user-service-fxgraph-check: ## 检查 user-service Fx 依赖图是否存在 drift。
+	$(MAKE) -C $(USER_SERVICE_DIR) fxgraph-check USER_SERVICE_CONFIG='$(USER_SERVICE_CONFIG)'
 
 compose-dashboard-generate: ## 从通用观测 dashboard 生成 Compose Grafana dashboard。
 	./deployments/compose/scripts/generate-grafana-dashboard.sh

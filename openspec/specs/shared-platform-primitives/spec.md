@@ -109,6 +109,27 @@
 - **WHEN** 定时任务具有多实例副作用
 - **THEN** 任务 MUST 声明锁策略，锁 TTL MUST 为正值，长任务 SHOULD 具备续租策略
 
+### Requirement: Fx 依赖图 runtime primitive
+
+系统 MUST 在 `common/` 中提供业务中立的 Fx 依赖图构建与渲染能力，使服务可以从自身 Fx module 或 app option 生成稳定、可审查的依赖图文本。
+
+#### Scenario: 生成业务中立依赖图
+
+- **WHEN** 服务将 Fx option 或 module 传入共享依赖图 helper
+- **THEN** 系统 MUST 返回描述 provider、invoke、输入输出依赖或等价 Fx 依赖关系的图文本
+- **AND** 该 helper MUST NOT 引入 user-service feature、HTTP route、RBAC policy、Ent schema 或服务专用配置语义
+
+#### Scenario: 输出稳定图文本
+
+- **WHEN** 相同 Fx module 在代码未变化的情况下重复生成依赖图
+- **THEN** 系统 MUST 输出稳定排序的图文本，避免产生无意义 diff
+
+#### Scenario: 拒绝放入服务内 shared kernel
+
+- **WHEN** Fx 依赖图能力与具体业务 feature 无关
+- **THEN** 系统 MUST 将公共方法放在 `common/` 的 runtime primitive 边界
+- **AND** 系统 MUST NOT 将该能力放入 `user-service/internal/shared` 或任一 feature 包
+
 ### Requirement: 有界本地缓存 primitive
 
 系统 MUST 在 `common/runtime/localcache` 中提供有明确容量上限、TTL、回源合并、主动失效、统计快照和关闭语义的本地缓存 primitive。缓存实例 MUST 通过显式配置创建，配置 MUST 包含名称、容量、TTL 和 key string 编码；旧的仅传入 TTL 的构造方式 MUST 被移除。

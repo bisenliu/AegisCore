@@ -64,6 +64,8 @@ func newRootCommand() *cobra.Command {
 	var reactivateSystem bool
 	var syncSystemBindings bool
 	var superAdminUserID string
+	var fxGraphConfigPath string
+	var fxGraphOutputPath string
 	createSuperAdminOpts := rbacCreateSuperAdminOptions{username: defaultCreateSuperAdminUsername, nickname: defaultCreateSuperAdminNickname, passwordEnv: defaultCreateSuperAdminPasswordEnv}
 
 	root := &cobra.Command{
@@ -126,6 +128,17 @@ func newRootCommand() *cobra.Command {
 	createSuperAdmin.Flags().BoolVar(&createSuperAdminOpts.resetPassword, "reset-password", false, "reset password when the admin user already exists")
 	rbac.AddCommand(createSuperAdmin)
 	root.AddCommand(rbac)
+
+	fxGraph := &cobra.Command{
+		Use:   "fxgraph",
+		Short: "Generate the user-service Fx dependency graph",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runFxGraphCommand(fxGraphConfigPath, fxGraphOutputPath)
+		},
+	}
+	fxGraph.Flags().StringVar(&fxGraphConfigPath, "config", "./configs/config.yaml", "path to YAML configuration file")
+	fxGraph.Flags().StringVar(&fxGraphOutputPath, "output", defaultFxGraphOutputPath, "path to write DOT dependency graph")
+	root.AddCommand(fxGraph)
 
 	return root
 }

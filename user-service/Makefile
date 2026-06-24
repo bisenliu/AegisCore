@@ -4,7 +4,7 @@ ADMIN_USERNAME ?= admin
 ADMIN_NICKNAME ?= Admin
 ADMIN_RESET_PASSWORD ?= false
 
-.PHONY: help build run test lint architecture-lint verify seed-rbac create-super-admin generate migrate-diff migrate-validate migrate-apply openapi-generate
+.PHONY: help build run test lint architecture-lint verify seed-rbac create-super-admin generate migrate-diff migrate-validate migrate-apply openapi-generate fxgraph-generate fxgraph-check
 
 help: ## 查看 user-service 可用命令。
 	@awk 'BEGIN {FS = ":.*##"; printf "user-service 可用命令：\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -50,3 +50,9 @@ migrate-apply: ## 使用 DATABASE_URL 执行 migrations。
 
 openapi-generate: ## 生成 OpenAPI 3 文档。
 	./scripts/openapi-generate.sh
+
+fxgraph-generate: ## 生成 user-service Fx 依赖图。
+	go run ./cmd fxgraph --config $(USER_SERVICE_CONFIG) --output ./docs/fx-dependency-graph.dot
+
+fxgraph-check: fxgraph-generate ## 检查 user-service Fx 依赖图是否存在 drift。
+	git diff --exit-code -- docs/fx-dependency-graph.dot

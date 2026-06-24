@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	"go.uber.org/fx"
 
 	"github.com/aegiscore/common/runtime/config"
 )
@@ -91,12 +92,15 @@ func TestRootCommandSurface(t *testing.T) {
 
 	var serve *cobra.Command
 	var rbac *cobra.Command
+	var fxGraph *cobra.Command
 	for _, cmd := range root.Commands() {
 		switch cmd.Use {
 		case "serve":
 			serve = cmd
 		case "rbac":
 			rbac = cmd
+		case "fxgraph":
+			fxGraph = cmd
 		}
 	}
 	if serve == nil {
@@ -124,6 +128,40 @@ func TestRootCommandSurface(t *testing.T) {
 	}
 	if findSubcommand(rbac, "create-super-admin") == nil {
 		t.Fatal("rbac create-super-admin command not registered")
+	}
+	if fxGraph == nil {
+		t.Fatal("fxgraph command not registered")
+	}
+	if flag := fxGraph.Flags().Lookup("config"); flag == nil || flag.DefValue != "./configs/config.yaml" {
+		t.Fatalf("fxgraph --config flag = %#v", flag)
+	}
+	if flag := fxGraph.Flags().Lookup("output"); flag == nil || flag.DefValue != defaultFxGraphOutputPath {
+		t.Fatalf("fxgraph --output flag = %#v", flag)
+	}
+}
+
+func TestFxGraphCommandWritesGraph(t *testing.T) {
+	originalWrite := writeFxGraph
+	t.Cleanup(func() { writeFxGraph = originalWrite })
+	called := false
+	writeFxGraph = func(path string, opts ...fx.Option) (string, error) {
+		called = true
+		if path != "docs/test.dot" {
+			t.Fatalf("path = %q", path)
+		}
+		if len(opts) == 0 {
+			t.Fatal("opts is empty")
+		}
+		return "digraph {}\n", nil
+	}
+
+	root := newRootCommand()
+	root.SetArgs([]string{"fxgraph", "--config", "test-config.yaml", "--output", "docs/test.dot"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !called {
+		t.Fatal("writeFxGraph not called")
 	}
 }
 
