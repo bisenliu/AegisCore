@@ -138,20 +138,30 @@ func TestSessionStoreDeleteCachedTokenVersion(t *testing.T) {
 }
 
 func TestSessionStoreTokenVersionCacheUsesDefaultTTL(t *testing.T) {
-	redisServer := miniredis.RunT(t)
-	store := newTestSessionStoreWithConfig(redisServer, config.AuthConfig{})
+	for _, tc := range []struct {
+		name string
+		ttl  time.Duration
+	}{
+		{name: "zero", ttl: 0},
+		{name: "negative", ttl: -time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			redisServer := miniredis.RunT(t)
+			store := newTestSessionStoreWithConfig(redisServer, config.AuthConfig{TokenVersionCacheTTL: tc.ttl})
 
-	err := store.CacheTokenVersion(context.Background(), sessionTestUserID.String(), 7)
+			err := store.CacheTokenVersion(context.Background(), sessionTestUserID.String(), 7)
 
-	if err != nil {
-		t.Fatalf("CacheTokenVersion: %v", err)
-	}
-	ttl, err := store.redis.TTL(context.Background(), store.tokenVersionKey(sessionTestUserID.String())).Result()
-	if err != nil {
-		t.Fatalf("TTL: %v", err)
-	}
-	if ttl <= 0 || ttl > defaultTokenVersionCacheTTL {
-		t.Fatalf("TTL = %s, want within default %s", ttl, defaultTokenVersionCacheTTL)
+			if err != nil {
+				t.Fatalf("CacheTokenVersion: %v", err)
+			}
+			ttl, err := store.redis.TTL(context.Background(), store.tokenVersionKey(sessionTestUserID.String())).Result()
+			if err != nil {
+				t.Fatalf("TTL: %v", err)
+			}
+			if ttl <= 0 || ttl > defaultTokenVersionCacheTTL {
+				t.Fatalf("TTL = %s, want within default %s", ttl, defaultTokenVersionCacheTTL)
+			}
+		})
 	}
 }
 

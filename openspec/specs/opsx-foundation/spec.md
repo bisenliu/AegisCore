@@ -61,6 +61,12 @@
 - **WHEN** 新 change 生成 artifacts
 - **THEN** proposal、specs、design 和 tasks MUST 分别遵循配置中定义的能力命名、场景格式、影响分析和验证任务规则
 
+#### Scenario: OpenSpec 任务完成门禁
+
+- **WHEN** 协作者执行 OpenSpec change 的 tasks 并准备将任务或 change 标记为完成
+- **THEN** 系统 MUST 要求相关单元测试、`make lint` 和 `make verify` 全部通过
+- **AND** 任一验证未通过或未运行时，该任务或 change MUST NOT 被视为完成
+
 #### Scenario: 归并既有能力
 
 - **WHEN** 新需求可以落入现有主规格表达的稳定 capability

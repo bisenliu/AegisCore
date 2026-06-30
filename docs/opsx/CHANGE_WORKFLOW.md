@@ -172,7 +172,7 @@ tasks 必须使用 `- [ ]` checkbox，完成后立即改为 `- [x]`。
 1. `openspec status --change <change-name>` 显示 apply 依赖已完成。
 2. proposal、design、spec delta 和 tasks 内容一致。
 3. capability 已在 `docs/opsx/CAPABILITY_MAP.md` 或本次 delta 中说明。
-4. tasks 包含必要验证命令。
+4. tasks 包含相关单元测试、lint 检查和 `make verify` 验证命令。
 
 ## 10. 验证和归档
 
@@ -189,6 +189,6 @@ make verify
 change 完成后：
 
 1. 确认 tasks 全部为 `- [x]`。
-2. 确认验证命令通过，或在交付说明中记录未运行原因。
+2. 确认相关单元测试、`make lint` 和 `make verify` 全部通过；任一验证未通过或未运行时，不得将 OpenSpec 任务或 change 视为完成。
 3. 运行 `/opsx:archive <change-name>`，把 delta specs 合并到 `openspec/specs/`。
 4. 检查主规格、能力地图和 README 入口是否仍一致。

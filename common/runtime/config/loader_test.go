@@ -232,6 +232,55 @@ func TestLoadValidatesInvalidBasicValues(t *testing.T) {
 	)
 }
 
+func TestLoadAllowsNonPositiveTokenVersionCacheTTL(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		yaml string
+		want time.Duration
+	}{
+		{name: "zero", yaml: "0s", want: 0},
+		{name: "negative", yaml: "-1s", want: -time.Second},
+		{name: "positive", yaml: "30s", want: 30 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := loadConfigFromYAML(t, configYAMLWithSection(`auth:
+  jwt:
+    secret: test-secret
+    issuer: aegiscore-test
+    audience: aegiscore-users
+    access_token_ttl: 15m
+    refresh_token_ttl: 168h
+  token_version_cache_ttl: `+tc.yaml+`
+  refresh_token_rotation: true
+  max_active_sessions_per_user: 5`))
+			if cfg.Auth.TokenVersionCacheTTL != tc.want {
+				t.Fatalf("Auth.TokenVersionCacheTTL = %s, want %s", cfg.Auth.TokenVersionCacheTTL, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadStillRejectsNonPositiveJWTTTL(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`auth:
+  jwt:
+    secret: test-secret
+    issuer: aegiscore-test
+    audience: aegiscore-users
+    access_token_ttl: 0s
+    refresh_token_ttl: -1s
+  token_version_cache_ttl: 0s
+  refresh_token_rotation: true
+  max_active_sessions_per_user: 5`))
+
+	assertConfigLoadErrorContains(t, err,
+		"auth.jwt.access_token_ttl must be > 0",
+		"auth.jwt.refresh_token_ttl must be > 0",
+	)
+	if strings.Contains(err.Error(), "auth.token_version_cache_ttl") {
+		t.Fatalf("Load error rejects token version cache TTL: %q", err.Error())
+	}
+}
+
 func TestLoadAggregatesConfigValidationErrors(t *testing.T) {
 	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`postgres:
   user_db:

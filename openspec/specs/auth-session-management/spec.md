@@ -69,7 +69,7 @@
 
 ### Requirement: 会话与 token version 策略
 
-系统 MUST 在 auth application 中拥有 token version 校验、refresh session 生命周期、每用户活跃 refresh session 上限和会话撤销语义。受保护路由的 token version 本地缓存 MUST 使用有容量上限的 `common/runtime/localcache` loading cache，并且 MUST 将 Redis token version 投影和 PostgreSQL 当前值作为回源路径。user-service auth/provider 边界 MUST 拥有 `auth_token_version` 缓存实例名，并 MUST 在缺少该配置实例时拒绝服务装配。
+系统 MUST 在 auth application 中拥有 token version 校验、refresh session 生命周期、每用户活跃 refresh session 上限和会话撤销语义。受保护路由的 token version 本地缓存 MUST 使用有容量上限的 `common/runtime/localcache` loading cache，并且 MUST 将 Redis token version 投影和 PostgreSQL 当前值作为回源路径。user-service auth/provider 边界 MUST 拥有 `auth_token_version` 缓存实例名，并 MUST 在缺少该配置实例时拒绝服务装配。`auth.token_version_cache_ttl` MUST 允许正数 duration 表示显式 Redis token version 投影 TTL，并 MUST 允许非正数 duration 表示使用服务默认 TTL；非正数配置 MUST NOT 创建永久 Redis token version 投影。
 
 #### Scenario: 活跃 session 上限
 
@@ -94,6 +94,17 @@
 - **WHEN** user-service 装配 auth token version validator
 - **THEN** auth/provider MUST 使用本服务常量读取 `local_cache.auth_token_version`
 - **AND** 缺少该配置实例时 MUST 返回明确错误并拒绝继续装配 token version 本地缓存
+
+#### Scenario: token version 投影 TTL 默认值
+
+- **WHEN** `auth.token_version_cache_ttl` 配置为 `0` 或负数，且系统写入 Redis token version 投影
+- **THEN** 系统 MUST 使用服务默认 TTL 写入 Redis token version 投影
+- **AND** 系统 MUST NOT 写入无过期时间的 token version 投影
+
+#### Scenario: token version 投影 TTL 显式值
+
+- **WHEN** `auth.token_version_cache_ttl` 配置为正数 duration，且系统写入 Redis token version 投影
+- **THEN** 系统 MUST 使用该显式 TTL 写入 Redis token version 投影
 
 #### Scenario: token version 投影刷新
 

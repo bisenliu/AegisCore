@@ -132,7 +132,7 @@ func newRootCommand() *cobra.Command {
 	fxGraph := &cobra.Command{
 		Use:   "fxgraph",
 		Short: "Generate the user-service Fx dependency graph",
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return runFxGraphCommand(fxGraphConfigPath, fxGraphOutputPath)
 		},
 	}

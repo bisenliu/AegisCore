@@ -153,7 +153,6 @@ func (c Config) validateAuth() []error {
 	}
 	errs = append(errs, validatePositiveDuration("auth.jwt.access_token_ttl", c.Auth.JWT.AccessTokenTTL)...)
 	errs = append(errs, validatePositiveDuration("auth.jwt.refresh_token_ttl", c.Auth.JWT.RefreshTokenTTL)...)
-	errs = append(errs, validatePositiveDuration("auth.token_version_cache_ttl", c.Auth.TokenVersionCacheTTL)...)
 	errs = append(errs, validateNonNegativeInt("auth.max_active_sessions_per_user", c.Auth.MaxActiveSessionsPerUser)...)
 	return errs
 }
