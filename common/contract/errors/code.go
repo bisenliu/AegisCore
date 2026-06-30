@@ -43,4 +43,7 @@ const (
 
 	// CodeInternalError 表示服务内部错误。
 	CodeInternalError Code = 90000
+
+	// CodeServiceUnavailable 表示服务实例或依赖暂时不可用。
+	CodeServiceUnavailable Code = 90001
 )

@@ -60,6 +60,16 @@ func NotFoundError(format string, args ...any) *Error {
 	return NewError(CodeNotFound, formatMessage(format, args), http.StatusNotFound)
 }
 
+// ServiceUnavailableError 创建表示服务实例或依赖暂时不可用的 503 错误。
+func ServiceUnavailableError(format string, args ...any) *Error {
+	return NewError(CodeServiceUnavailable, formatMessage(format, args), http.StatusServiceUnavailable)
+}
+
+// WrapServiceUnavailable 创建 503 错误，并将 err 保留为内部原因。
+func WrapServiceUnavailable(err error, publicMessage string) *Error {
+	return Wrap(err, CodeServiceUnavailable, publicMessage, http.StatusServiceUnavailable)
+}
+
 // WrapInternal 创建 500 错误，并在响应中使用 publicMessage 隐藏 err 细节。
 func WrapInternal(err error, publicMessage string) *Error {
 	return Wrap(err, CodeInternalError, publicMessage, http.StatusInternalServerError)

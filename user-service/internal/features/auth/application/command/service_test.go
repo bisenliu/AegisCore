@@ -89,6 +89,19 @@ func TestAuthUseCaseLoginRecordsFailureReasons(t *testing.T) {
 	if got := metrics.loginFailed[authapplication.MetricsReasonUserStatusRejected]; got != 1 {
 		t.Fatalf("status rejected metrics = %d, want 1", got)
 	}
+
+	metrics = &authMetricsSpy{}
+	svc = newTestAuthUseCasesWithCredentialsAndMetrics(&credentialsStub{verifyErr: password.ErrPasswordKDFBusy}, metrics)
+	tokens, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	if !errors.Is(err, password.ErrPasswordKDFBusy) {
+		t.Fatalf("err = %v, want ErrPasswordKDFBusy", err)
+	}
+	if tokens != nil {
+		t.Fatalf("tokens = %#v, want nil", tokens)
+	}
+	if got := metrics.loginFailed[authapplication.MetricsReasonPasswordKDFBusy]; got != 1 {
+		t.Fatalf("kdf busy metrics = %d, want 1", got)
+	}
 }
 
 func TestAuthUseCaseLoginRejectsBlankTrimmedCredentials(t *testing.T) {
@@ -678,6 +691,18 @@ func newTestAuthUseCasesWithConfigAndMetrics(repo *authRepoStub, store *sessionS
 	}
 }
 
+func newTestAuthUseCasesWithCredentialsAndMetrics(credentials authcredentials.Verifier, metrics authapplication.Metrics) testAuthUseCases {
+	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: true, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 5}}
+	deps := NewUseCaseDeps(UseCaseDepsParams{
+		Credentials: credentials,
+		Tokens:      authtokens.NewIssuer(commonauth.NewJWTService(cfg.Auth), cfg),
+		Sessions:    authsessions.NewLifecycle(&authRepoStub{}, &sessionStoreStub{}, &sessionStoreStub{}, cfg.Auth.MaxActiveSessionsPerUser),
+		Config:      cfg,
+		Metrics:     metrics,
+	})
+	return testAuthUseCases{LoginUseCase: NewLoginUseCase(deps)}
+}
+
 func mustTestPasswordService() *password.Service {
 	service, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
 	if err != nil {
@@ -714,6 +739,22 @@ type authMetricsSpy struct {
 	logoutFailed           map[string]map[string]int
 	tokenVersionMismatches map[string]int
 	sessionPurgeFailures   int
+}
+
+type credentialsStub struct {
+	user      *authdomain.UserCredential
+	verifyErr error
+}
+
+func (s *credentialsStub) VerifyPassword(context.Context, string, string) (*authdomain.UserCredential, error) {
+	if s.verifyErr != nil {
+		return nil, s.verifyErr
+	}
+	return s.user, nil
+}
+
+func (s *credentialsStub) ChangePassword(context.Context, uuid.UUID, string) (*authdomain.CredentialUpdateResult, error) {
+	return nil, errors.New("not implemented")
 }
 
 func (m *authMetricsSpy) ensure() {

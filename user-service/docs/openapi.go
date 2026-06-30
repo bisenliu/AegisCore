@@ -46,7 +46,8 @@ const openAPIDocument = `{
           30000,
           40000,
           50000,
-          90000
+          90000,
+          90001
         ],
         "type": "integer",
         "x-enum-varnames": [
@@ -62,7 +63,8 @@ const openAPIDocument = `{
           "CodeForbidden",
           "CodeConflict",
           "CodeNotFound",
-          "CodeInternalError"
+          "CodeInternalError",
+          "CodeServiceUnavailable"
         ]
       },
       "CreatePermissionRequest": {
@@ -814,6 +816,16 @@ const openAPIDocument = `{
               }
             },
             "description": "服务器内部错误"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "认证服务繁忙"
           }
         },
         "summary": "用户登录",

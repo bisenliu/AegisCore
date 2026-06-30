@@ -46,6 +46,11 @@ func (v *verifier) VerifyPassword(ctx context.Context, username string, plainPas
 	}
 	matched, err := v.passwordService.VerifyContext(ctx, plainPassword, credential.PasswordHash)
 	if err != nil {
+		if errors.Is(err, password.ErrPasswordKDFBusy) {
+			fields := append([]zap.Field{zap.String("username", username), zap.String("user_id", credential.UserID.String()), zap.Error(err)}, authctx.ClientContextFields(ctx)...)
+			logger.Warn(ctx, "password kdf busy", fields...)
+			return nil, err
+		}
 		logger.Error(ctx, "verify login password failed", logger.StackTrace(zap.String("username", username), zap.String("user_id", credential.UserID.String()), zap.Error(err))...)
 		return nil, authdomain.ErrInvalidCredentials
 	}

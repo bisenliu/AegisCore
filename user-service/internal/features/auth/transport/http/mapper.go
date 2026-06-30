@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
+	"github.com/aegiscore/common/security/password"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
@@ -31,6 +32,8 @@ func toLogoutResponse(result *authcommand.LogoutResult) LogoutResponse {
 
 func toAuthHTTPError(err error) error {
 	switch {
+	case errors.Is(err, password.ErrPasswordKDFBusy):
+		return contracterrors.WrapServiceUnavailable(err, messages.AuthServiceBusy)
 	case errors.Is(err, authdomain.ErrInvalidCredentials):
 		return contracterrors.UnauthenticatedError(messages.InvalidCredentials)
 	case errors.Is(err, authdomain.ErrMissingSession):

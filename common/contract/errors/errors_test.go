@@ -25,6 +25,7 @@ func TestCodeValues(t *testing.T) {
 		{name: "conflict", code: CodeConflict, want: 40000},
 		{name: "not found", code: CodeNotFound, want: 50000},
 		{name: "internal error", code: CodeInternalError, want: 90000},
+		{name: "service unavailable", code: CodeServiceUnavailable, want: 90001},
 	}
 
 	for _, tt := range tests {
@@ -53,6 +54,7 @@ func TestErrorConstructors(t *testing.T) {
 		{name: "forbidden", err: ForbiddenError("无权访问"), wantCode: CodeForbidden, wantStatus: http.StatusForbidden, wantMsg: "无权访问"},
 		{name: "conflict", err: ConflictError("当前状态不允许操作"), wantCode: CodeConflict, wantStatus: http.StatusConflict, wantMsg: "当前状态不允许操作"},
 		{name: "not found", err: NotFoundError("用户不存在"), wantCode: CodeNotFound, wantStatus: http.StatusNotFound, wantMsg: "用户不存在"},
+		{name: "service unavailable", err: ServiceUnavailableError("服务繁忙，请稍后重试"), wantCode: CodeServiceUnavailable, wantStatus: http.StatusServiceUnavailable, wantMsg: "服务繁忙，请稍后重试"},
 	}
 
 	for _, tt := range tests {
@@ -85,6 +87,17 @@ func TestWrapInternalAndFromError(t *testing.T) {
 	}
 	if !stderrors.Is(wrapped, cause) {
 		t.Fatalf("FromError does not unwrap cause")
+	}
+}
+
+func TestWrapServiceUnavailable(t *testing.T) {
+	cause := stderrors.New("argon2 queue full")
+	err := WrapServiceUnavailable(cause, "认证服务繁忙，请稍后重试")
+	if err.Code != CodeServiceUnavailable || err.HTTPStatus != http.StatusServiceUnavailable || err.Message != "认证服务繁忙，请稍后重试" {
+		t.Fatalf("WrapServiceUnavailable = %#v", err)
+	}
+	if !stderrors.Is(err, cause) {
+		t.Fatalf("WrapServiceUnavailable does not unwrap cause")
 	}
 }
 

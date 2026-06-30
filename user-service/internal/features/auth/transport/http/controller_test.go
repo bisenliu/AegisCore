@@ -14,6 +14,7 @@ import (
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
 	commonauth "github.com/aegiscore/common/security/auth"
+	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
@@ -73,6 +74,20 @@ func TestAuthControllerLoginMapsInvalidCredentials(t *testing.T) {
 		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
 	}
 	if envelope.Success || envelope.Code != contracterrors.CodeUnauthenticated || envelope.Message != messages.InvalidCredentials {
+		t.Fatalf("envelope = %#v", envelope)
+	}
+}
+
+func TestAuthControllerLoginMapsPasswordKDFBusy(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	service := &stubAuthUseCases{loginErr: password.ErrPasswordKDFBusy}
+
+	status, envelope := executeAuthLogin(t, service, `{"username":"alice","password":"secret"}`)
+
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", status, http.StatusServiceUnavailable)
+	}
+	if envelope.Success || envelope.Code != contracterrors.CodeServiceUnavailable || envelope.Message != messages.AuthServiceBusy {
 		t.Fatalf("envelope = %#v", envelope)
 	}
 }

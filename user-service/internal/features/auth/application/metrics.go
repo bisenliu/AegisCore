@@ -18,6 +18,8 @@ const (
 	MetricsReasonValidationFailed = "validation_failed"
 	// MetricsReasonCredentialInvalid 表示登录凭据无效。
 	MetricsReasonCredentialInvalid = "credential_invalid" // #nosec G101 -- 指标标签值，不包含真实凭据。
+	// MetricsReasonPasswordKDFBusy 表示密码 KDF 资源池繁忙。
+	MetricsReasonPasswordKDFBusy = "password_kdf_busy"
 	// MetricsReasonUserStatusRejected 表示用户状态拒绝登录。
 	MetricsReasonUserStatusRejected = "user_status_rejected"
 	// MetricsReasonPasswordChangeRequiredIssueFailed 表示强制改密 token 签发失败。

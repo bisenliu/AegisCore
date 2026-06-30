@@ -55,6 +55,7 @@ func NewAuthController(params AuthControllerParams) *AuthController {
 // @Success 200 {object} response.Envelope{data=authhttp.TokenResponse} "登录成功"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
 // @Failure 401 {object} response.Envelope "用户名或密码错误"
+// @Failure 503 {object} response.Envelope "认证服务繁忙"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Router /auth/login [post]
 func (ctl *AuthController) LoginUser(c *gin.Context) {
