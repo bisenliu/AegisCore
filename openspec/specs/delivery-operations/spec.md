@@ -127,6 +127,11 @@
 - **WHEN** 测试需要 fake、stub、fixture、时间控制或特殊断言入口
 - **THEN** 这些能力 SHOULD 位于 `_test.go`、`common/testing` 或对应测试基础设施；正式代码 MUST NOT 暴露 `NewXForTest`、`testHook`、`setNowForTest` 等仅为测试服务的 API，除非它们具有清晰运行时职责
 
+#### Scenario: 避免测试驱动的冗余生产代码
+
+- **WHEN** 新增或调整单元测试
+- **THEN** 测试 MUST 基于现有实现和合理的可测试性设计；正式代码 MUST NOT 仅为了单元测试而引入与业务无关的额外逻辑、分支、接口或适配层
+
 ### Requirement: 代码生成与数据库迁移
 
 系统 MUST 提供 Ent 代码生成、Atlas migration diff、migration validate 和 migration apply 入口，并要求 schema 相关变更同步生成物。

@@ -24,6 +24,7 @@ rules:
     - 归档后的主规格正文使用中文结构，保留 Requirement 和 Scenario 关键字以满足 OpenSpec 解析。
     - 需求语句使用 MUST 或 SHALL 表达强约束；避免使用无法验证的泛化描述。
     - 新增或拆分 capability 前必须先检查 docs/opsx/CAPABILITY_MAP.md；能归入现有主规格时优先更新既有 capability，避免按临时目录名创建重复 spec。
+    - 不得仅为了单元测试而要求或设计冗余生产代码；测试应基于现有实现和合理的可测试性设计，不引入与业务无关的额外逻辑、分支、接口或适配层。
   design:
     - 必须说明受影响路径、关键技术决策、备选方案、风险、回滚方式和验证方式。
     - 明确是否影响 Go 代码、HTTP API、数据库 migration、OpenAPI 生成物、部署清单、观测资产或安全边界。
