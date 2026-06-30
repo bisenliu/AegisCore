@@ -49,7 +49,14 @@ func (a *Authorizer) Authorize(ctx context.Context, req Request) error {
 	if a == nil {
 		return ErrNotConfigured
 	}
-	return Authorize(ctx, a.enforcer, req)
+	allowed, err := Enforce(ctx, a.enforcer, req)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return ErrDenied
+	}
+	return nil
 }
 
 // Enforce 使用传入的 enforcer 执行 Casbin 三元组校验。
@@ -65,18 +72,6 @@ func Enforce(ctx context.Context, enforcer Enforcer, req Request) (bool, error) 
 		return false, fmt.Errorf("casbin enforce: %w", err)
 	}
 	return allowed, nil
-}
-
-// Authorize 使用传入的 enforcer 执行 Casbin 三元组校验，拒绝时返回 ErrDenied。
-func Authorize(ctx context.Context, enforcer Enforcer, req Request) error {
-	allowed, err := Enforce(ctx, enforcer, req)
-	if err != nil {
-		return err
-	}
-	if !allowed {
-		return ErrDenied
-	}
-	return nil
 }
 
 func isNilEnforcer(enforcer Enforcer) bool {

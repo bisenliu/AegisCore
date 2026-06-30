@@ -25,6 +25,9 @@ func (f TokenVersionValidatorFunc) ValidateTokenVersion(ctx context.Context, use
 }
 
 // Auth 返回不执行 token version 撤销校验的 JWT 认证中间件。
+//
+// Deprecated: 使用 AuthWithTokenVersionValidator(log, jwtService, cfg, nil)
+// 显式表达不执行 token version 撤销校验。
 func Auth(log *zap.Logger, jwtService *auth.JWTService, cfg config.AuthConfig) gin.HandlerFunc {
 	return AuthWithTokenVersionValidator(log, jwtService, cfg, nil)
 }
