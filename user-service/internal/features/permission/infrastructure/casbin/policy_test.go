@@ -200,6 +200,7 @@ func newPolicyTestClient(t *testing.T) *ent.Client {
 
 func newTestUserRoleResolver(t *testing.T, client *ent.Client, ttl time.Duration) *entUserRoleResolver {
 	t.Helper()
+	resolver := &entUserRoleResolver{client: client}
 	cache, err := localcache.New[uuid.UUID, []uuid.UUID](localcache.Config[uuid.UUID]{
 		Name:        "rbac_user_roles_test",
 		Capacity:    100,
@@ -207,13 +208,14 @@ func newTestUserRoleResolver(t *testing.T, client *ent.Client, ttl time.Duration
 		LoadTimeout: time.Second,
 		KeyString:   func(userID uuid.UUID) string { return userID.String() },
 	}, func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-		return loadRolesForUser(ctx, client, userID)
+		return resolver.loadRolesForUser(ctx, userID)
 	}, cloneRoleIDs)
 	if err != nil {
 		t.Fatalf("New localcache: %v", err)
 	}
+	resolver.cache = cache
 	t.Cleanup(cache.Close)
-	return &entUserRoleResolver{cache: cache}
+	return resolver
 }
 
 func createPolicyTestUser(t *testing.T, client *ent.Client, userID uuid.UUID, username string) *ent.User {

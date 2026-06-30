@@ -37,6 +37,7 @@ func NewUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult,
 	if !ok {
 		return UserRoleResolverResult{}, fmt.Errorf("local_cache.%s is required", rbacUserRolesCacheName)
 	}
+	resolver := &entUserRoleResolver{client: params.Client}
 	cache, err := localcache.New[uuid.UUID, []uuid.UUID](localcache.Config[uuid.UUID]{
 		Name:        rbacUserRolesCacheName,
 		Capacity:    cfg.Capacity,
@@ -46,15 +47,16 @@ func NewUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult,
 		NumCounters: cfg.NumCounters,
 		BufferItems: cfg.BufferItems,
 	}, func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-		return loadRolesForUser(ctx, params.Client, userID)
+		return resolver.loadRolesForUser(ctx, userID)
 	}, cloneRoleIDs)
 	if err != nil {
 		return UserRoleResolverResult{}, fmt.Errorf("create rbac user roles localcache: %w", err)
 	}
+	resolver.cache = cache
 
 	params.Lifecycle.Append(fx.Hook{OnStop: func(context.Context) error {
 		cache.Close()
 		return nil
 	}})
-	return UserRoleResolverResult{Resolver: &entUserRoleResolver{cache: cache}, Stats: cache}, nil
+	return UserRoleResolverResult{Resolver: resolver, Stats: cache}, nil
 }
