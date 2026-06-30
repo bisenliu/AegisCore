@@ -163,17 +163,20 @@
 
 ### Requirement: 发布和部署资产
 
-系统 MUST 维护 Docker、Compose、Kubernetes、Helm 和观测部署资产，并明确生产发布中 migration 与 RBAC seed 的顺序。
+系统 MUST 维护 Docker、Compose、Kubernetes、Helm 和观测部署资产，并明确生产发布中 migration 与 RBAC seed 的顺序。user-service 普通运行时镜像 MUST NOT 包含 Atlas 二进制；数据库 migration MUST 由独立 Atlas/migration 镜像在发布前置 Job 或 CI/CD release job 中执行。
 
 #### Scenario: 构建 Docker 镜像
 
 - **WHEN** 协作者执行 Docker build 命令并指定 `deployments/docker/user-service.Dockerfile`
-- **THEN** 系统 MUST 能从仓库根目录构建 user-service 镜像
+- **THEN** 系统 MUST 能从仓库根目录构建 user-service 运行时镜像
+- **AND** 运行时镜像 MUST NOT 包含 `/usr/local/bin/atlas` 或其他 Atlas CLI 二进制
 
 #### Scenario: Dockerfile 路径约束
 
-- **WHEN** 调整 user-service Dockerfile、entrypoint 或 COPY 规则
-- **THEN** 路径 MUST 继续以仓库根 build context 为基准，容器内迁移脚本和 Atlas 配置 MUST 与 `user-service/migrations/` 当前布局兼容
+- **WHEN** 调整 user-service Dockerfile、entrypoint、migration Dockerfile 或 COPY 规则
+- **THEN** 路径 MUST 继续以仓库根 build context 为基准
+- **AND** 专用 migration 镜像 MUST 能访问 `user-service/migrations/` 当前布局和 `migrations/atlas.hcl`
+- **AND** user-service 运行时镜像 MUST NOT 为了执行 migration 而复制 `user-service/migrations/` 或 Atlas 二进制
 
 #### Scenario: 本地 Compose 启动
 
@@ -183,22 +186,24 @@
 #### Scenario: Compose 启动顺序
 
 - **WHEN** 使用本地 Compose 启动包含 migration、RBAC seed 和 user-service 的环境
-- **THEN** migration MUST 先于 RBAC seed 执行，RBAC seed MUST 先于 user-service app 启动
+- **THEN** migration MUST 通过独立 Atlas/migration 镜像先于 RBAC seed 执行，RBAC seed MUST 先于 user-service app 启动
 
 #### Scenario: 生产发布顺序
 
 - **WHEN** user-service 发布到生产环境
-- **THEN** 运维 MUST 先通过独立 migration Job 或 CI/CD release job 执行 user-service `user_db` Atlas migration，再执行 RBAC seed Job，按需显式创建或分配超级管理员，最后启动或滚动更新 HTTP 副本
+- **THEN** 运维 MUST 先通过独立 Atlas/migration 镜像或 CI/CD release job 执行 user-service `user_db` Atlas migration，再执行 RBAC seed Job，按需显式创建或分配超级管理员，最后启动或滚动更新 HTTP 副本
 
-#### Scenario: 容器启动 migration 兼容模式
+#### Scenario: 普通容器启动不执行 migration
 
-- **WHEN** `RUN_MIGRATIONS` 未设置或不为 `true`
-- **THEN** user-service 容器 MUST 直接启动服务，不得应用 migration
+- **WHEN** user-service 普通运行时容器启动
+- **THEN** 容器 MUST 直接启动服务或执行显式传入的 user-service CLI 命令，不得应用 migration
+- **AND** `RUN_MIGRATIONS=true` MUST NOT 使普通运行时镜像尝试执行 Atlas migration
 
-#### Scenario: 显式启用入口脚本 migration
+#### Scenario: 显式执行 migration
 
-- **WHEN** `RUN_MIGRATIONS=true`
-- **THEN** entrypoint MAY 在启动 HTTP server 前执行 migration，但该模式只适用于简单部署或兼容场景，多副本生产发布 SHOULD 使用独立 migration Job
+- **WHEN** 简单部署或发布流程需要在启动 HTTP 服务前应用 migration
+- **THEN** 部署流程 MUST 先运行独立 Atlas/migration 镜像完成 `atlas migrate apply`
+- **AND** 部署流程 MUST 在 migration 成功后再启动 user-service 运行时镜像
 
 ### Requirement: 用户服务 Kubernetes 生产清单
 
@@ -226,12 +231,14 @@
 
 ### Requirement: Kubernetes 发布前置作业
 
-系统 MUST 为 user-service Kubernetes 发布提供独立 migration Job 和 RBAC seed Job，并明确它们先于 HTTP Deployment rollout 执行。
+系统 MUST 为 user-service Kubernetes 发布提供独立 migration Job 和 RBAC seed Job，并明确它们先于 HTTP Deployment rollout 执行。migration Job MUST 使用独立 Atlas/migration 镜像；RBAC seed Job MUST 使用当前 user-service 发布镜像。
 
 #### Scenario: Migration Job
 
 - **WHEN** 发布流水线执行 user-service 数据库迁移
-- **THEN** migration Job MUST 使用当前发布镜像执行 `/app/user-service/scripts/migrate-apply.sh`，并 MUST 通过 Secret 或部署系统注入 `DATABASE_URL`
+- **THEN** migration Job MUST 使用独立 Atlas/migration 镜像执行已提交的 `user-service/migrations/` SQL migration
+- **AND** migration Job MUST 通过 Secret 或部署系统注入 `DATABASE_URL`
+- **AND** migration Job MUST NOT 使用 user-service HTTP 运行时镜像执行 `/app/user-service/scripts/migrate-apply.sh`
 
 #### Scenario: RBAC seed Job
 
@@ -248,14 +255,20 @@
 - **WHEN** migration Job 或 RBAC seed Job 失败
 - **THEN** 发布流程 MUST 停止 HTTP Deployment rollout，并保留 Job 日志用于诊断
 
+#### Scenario: 镜像版本一致性
+
+- **WHEN** 发布系统设置 user-service 镜像和 migration 镜像
+- **THEN** migration 镜像 MUST 与 user-service 发布版本来自同一 release 工件集合或使用同一 release tag
+- **AND** 发布说明 MUST 禁止混用新版 user-service 运行时镜像和旧版 migration Job 模板
+
 ### Requirement: 用户服务 Helm chart
 
-系统 MUST 为 `aegiscore-user-services` 提供 Helm chart，用 values 模板化同等 Kubernetes 交付能力，并保持默认值不包含真实生产 Secret。
+系统 MUST 为 `aegiscore-user-services` 提供 Helm chart，用 values 模板化同等 Kubernetes 交付能力，并保持默认值不包含真实生产 Secret。chart MUST 支持为 migration Job 配置独立 Atlas/migration 镜像，同时保持 RBAC seed Job 和 HTTP Deployment 使用 user-service 镜像。
 
 #### Scenario: Helm chart 元数据和 values
 
 - **WHEN** 协作者查看 `deployments/helm/aegiscore-user-services/`
-- **THEN** chart MUST 包含 `Chart.yaml`、`values.yaml`、templates、README 和环境覆盖示例，并 MUST 暴露 image、service、config、Secret 引用、resources、probes、autoscaling、PDB、NetworkPolicy、migration Job、RBAC seed Job 和 rollout 配置
+- **THEN** chart MUST 包含 `Chart.yaml`、`values.yaml`、templates、README 和环境覆盖示例，并 MUST 暴露 image、migration image、service、config、Secret 引用、resources、probes、autoscaling、PDB、NetworkPolicy、migration Job、RBAC seed Job 和 rollout 配置
 
 #### Scenario: Helm 渲染 Secret 引用
 
@@ -265,12 +278,16 @@
 #### Scenario: Helm 渲染发布作业
 
 - **WHEN** Helm values 启用 migration Job 和 RBAC seed Job
-- **THEN** chart MUST 渲染使用当前发布镜像的两个独立 Job，并保持 Job command 与 Kubernetes 原生清单一致
+- **THEN** chart MUST 渲染两个独立 Job
+- **AND** migration Job MUST 使用独立 Atlas/migration 镜像执行 migration command
+- **AND** RBAC seed Job MUST 使用 user-service 发布镜像执行 `rbac seed`
+- **AND** 两个 Job MUST 保持 command 与 Kubernetes 原生清单的职责边界一致
 
 #### Scenario: Helm Deployment 默认行为
 
 - **WHEN** Helm chart 渲染 user-service Deployment
 - **THEN** Deployment MUST 默认不设置 `RUN_MIGRATIONS=true`，并 MUST 渲染 `/livez`、`/readyz`、`/startupz` 探针和资源 requests/limits
+- **AND** Deployment 使用的 user-service 镜像 MUST NOT 依赖 Atlas 二进制或 migration SQL 文件启动 HTTP 服务
 
 ### Requirement: Kubernetes 和 Helm 验证说明
 
