@@ -7,6 +7,7 @@
 | 值 | 作用 |
 |---|---|
 | `image.repository`、`image.tag` | user-service 发布镜像 |
+| `migrationJob.image.repository`、`migrationJob.image.tag` | Atlas/migration 发布镜像 |
 | `config` | 非敏感 `AEGISCORE_*` 运行时配置 |
 | `secret.existingSecret` | 外部 Secret 名称；chart 只引用不渲染真实 Secret |
 | `secret.keys.*` | Secret 键名映射 |
@@ -18,7 +19,7 @@
 | `migrationJob` | Atlas migration Job 配置 |
 | `rbacSeedJob` | RBAC seed Job 配置 |
 
-默认 `values.yaml` 不包含真实敏感值，也不设置 `RUN_MIGRATIONS=true`。生产环境必须提前创建 `secret.existingSecret` 指向的 Secret。
+默认 `values.yaml` 不包含真实敏感值，也不设置 `RUN_MIGRATIONS=true`。普通 user-service 镜像不包含 Atlas；migration Job 使用 `migrationJob.image` 指向的专用 Atlas/migration 镜像。生产环境必须提前创建 `secret.existingSecret` 指向的 Secret，并确保 `image.tag` 与 `migrationJob.image.tag` 来自同一 release。
 
 ## Secret 键名
 
@@ -54,12 +55,12 @@ helm template aegiscore-user-services deployments/helm/aegiscore-user-services \
 生产流水线应按顺序执行：
 
 1. 创建或更新 `secret.existingSecret`。
-2. 使用当前发布镜像执行 migration Job，等待 Job 成功。
+2. 使用当前 release 的 Atlas/migration 镜像执行 migration Job，等待 Job 成功。
 3. 执行 RBAC seed Job，等待 Job 成功。
 4. 执行 `helm upgrade --install aegiscore-user-services deployments/helm/aegiscore-user-services --values <env-values> --set migrationJob.enabled=false --set rbacSeedJob.enabled=false`。
 5. 等待 Deployment rollout 完成。
 
-Helm 渲染的 Jobs 可由 GitOps 或 CI/CD 流水线分阶段应用。不要依赖普通服务副本启动时执行 migration。
+Helm 渲染的 Jobs 可由 GitOps 或 CI/CD 流水线分阶段应用。不要依赖普通服务副本启动时执行 migration，也不要混用新版无 Atlas 的 user-service 镜像和旧版使用 user-service 镜像执行 migration 的 Job 模板。
 
 ## 回滚边界
 

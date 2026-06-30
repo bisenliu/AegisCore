@@ -122,11 +122,11 @@ AegisCore 是 Go 1.26 workspace，当前由三个主要部分组成：
 1. Ent schema 变化后执行 `make user-service-generate`。
 2. 使用 `make user-service-migrate-diff name=<migration-name>` 生成 Atlas migration。
 3. 使用 `make user-service-migrate-validate` 校验 migration。
-4. 发布时使用 `DATABASE_URL` 执行 `make user-service-migrate-apply`。
+4. 发布时使用专用 Atlas/migration 镜像或 CI/CD release job 注入 `DATABASE_URL` 并执行 `atlas migrate apply`；本地也可使用 `DATABASE_URL` 执行 `make user-service-migrate-apply`。
 
 ## 7. 部署和观测
 
-- Dockerfile：`deployments/docker/user-service.Dockerfile`。
+- Dockerfile：`deployments/docker/user-service.Dockerfile` 提供无 Atlas 的运行时镜像，`deployments/docker/user-service-migration.Dockerfile` 提供专用 migration 镜像。
 - Compose：`deployments/compose/docker-compose.yml`。
 - Kubernetes：`deployments/k8s/user-services/`。
 - Helm：`deployments/helm/aegiscore-user-services/`。

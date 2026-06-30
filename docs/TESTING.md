@@ -89,6 +89,8 @@ make user-service-migrate-validate
 DATABASE_URL='<postgres-url>' make user-service-migrate-apply
 ```
 
+部署资产变更还应构建并检查专用 migration 镜像，确认其中包含 Atlas CLI、`user-service/migrations/` 和 `migrations/atlas.hcl`；普通 user-service 运行时镜像应确认不包含 `/usr/local/bin/atlas`。
+
 ## 7. 观测资产验证
 
 通用 Grafana dashboard 变化后执行：

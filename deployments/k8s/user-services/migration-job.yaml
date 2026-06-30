@@ -1,6 +1,6 @@
 # 本文件定义 user-service 数据库 migration 发布前置 Job。
 # 适用于 HTTP Deployment rollout 前执行 Atlas SQL migration；成功后再执行 RBAC seed。
-# Job 使用当前发布镜像内的 `/app/user-service/scripts/migrate-apply.sh`，并只依赖 `DATABASE_URL` Secret。
+# Job 使用独立 Atlas/migration 镜像，并只依赖 `DATABASE_URL` Secret。
 apiVersion: batch/v1 # Job 使用 batch/v1 API。
 kind: Job # 声明一次性任务资源。
 metadata: # Job 的元数据。
@@ -32,10 +32,16 @@ spec: # Job 执行规格。
           type: RuntimeDefault # 使用运行时默认 seccomp profile。
       containers: # Job Pod 中的容器列表。
         - name: migrate # 容器名称。
-          image: aegiscore-user-services:latest # 示例镜像；生产应使用当前发布的不可变镜像。
+          image: aegiscore-user-services-migration:latest # 示例 migration 镜像；生产应使用与服务同 release 的不可变镜像。
           imagePullPolicy: IfNotPresent # 本地已有镜像时不重复拉取；固定 tag 可改 Always。
-          command: # 覆盖镜像默认 CMD，直接执行 migration 脚本。
-            - /app/user-service/scripts/migrate-apply.sh # Atlas migration apply 脚本路径。
+          command: # 覆盖镜像默认入口，显式执行 Atlas migration。
+            - /atlas # Atlas CLI。
+            - migrate # migration 子命令。
+            - apply # 应用已提交 SQL migration。
+            - --config # 指定 Atlas 配置文件。
+            - file://migrations/atlas.hcl # migration 镜像内的 Atlas 配置路径。
+            - --env # 指定 Atlas 环境。
+            - deploy # 使用 deploy 环境读取 DATABASE_URL。
           env: # Job 所需环境变量。
             - name: TZ # 容器时区环境变量。
               valueFrom: # 从 ConfigMap 读取值。

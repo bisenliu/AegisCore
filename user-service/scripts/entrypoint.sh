@@ -8,18 +8,16 @@ set -eu
 #   CMD ["/app/user-service/bin/user-services", "serve", "--config", "/app/user-service/configs/config.yaml"]
 #
 # 行为：
-#   - RUN_MIGRATIONS 设置为 "true" 时，先执行 Atlas 迁移，再启动服务。
-#   - RUN_MIGRATIONS 未设置或设置为其他值时，跳过迁移。
+#   - 普通 user-service 运行时镜像不包含 Atlas，不执行数据库迁移。
+#   - RUN_MIGRATIONS 设置为 "true" 时立即失败，避免误以为服务镜像会执行迁移。
 #   - 使用 CMD 或 docker run 传入的命令替换当前 shell 进程。
 #
-# 启用迁移时必需的环境变量：
-#   DATABASE_URL='postgres://user:pass@host:5432/aegiscore_user?sslmode=require&search_path=public'
-#
 # 注意：
-#   生产环境优先使用单独的 CI/CD release job 或 migration Job 执行迁移。入口脚本迁移只
-#   适合简单部署或兼容场景；多副本滚动发布不应让普通服务副本竞争 Atlas migration lock。
+#   数据库迁移必须先通过专用 Atlas/migration 镜像或 CI/CD release job 执行，成功后再
+#   启动本运行时镜像。
 if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
-  /app/user-service/scripts/migrate-apply.sh
+  echo "RUN_MIGRATIONS=true 已废弃；请先运行专用 migration 镜像执行 Atlas 迁移" >&2
+  exit 2
 fi
 
 exec "$@"

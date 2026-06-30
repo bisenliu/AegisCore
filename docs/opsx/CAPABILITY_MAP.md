@@ -12,7 +12,7 @@
 | `auth-session-management` | 登录、令牌签发、刷新、退出、改密、会话和 token version 校验 | `user-service/internal/features/auth/`、`common/security/auth/`、`common/security/password/` | `openspec/specs/auth-session-management/spec.md` | ready |
 | `rbac-access-control` | 权限目录、角色、角色权限、用户角色、Casbin 授权、RBAC seed 和超级管理员引导 | `user-service/internal/features/permission/`、`user-service/internal/features/role/`、`common/security/casbin/`、`user-service/cmd/rbac.go` | `openspec/specs/rbac-access-control/spec.md` | ready |
 | `runtime-observability` | 健康检查、OpenAPI、metrics、tracing、logging、pprof、Prometheus/Grafana 资产 | `user-service/internal/router/`、`common/runtime/observability/`、`common/http/middleware/`、`deployments/observability/`、`deployments/compose/grafana/` | `openspec/specs/runtime-observability/spec.md` | ready |
-| `delivery-operations` | 构建、测试、lint、OpenAPI 生成、Ent/Atlas migration、Docker、Compose、Kubernetes、Helm 和发布顺序 | `Makefile`、`user-service/Makefile`、`user-service/scripts/`、`deployments/` | `openspec/specs/delivery-operations/spec.md` | ready |
+| `delivery-operations` | 构建、测试、lint、OpenAPI 生成、Ent/Atlas migration、运行时镜像、migration 镜像、Docker、Compose、Kubernetes、Helm 和发布顺序 | `Makefile`、`user-service/Makefile`、`user-service/scripts/`、`deployments/` | `openspec/specs/delivery-operations/spec.md` | ready |
 
 ## 2. 关键入口点
 
@@ -32,7 +32,7 @@
 - `auth-session-management` 依赖 `user-identity-management` 的用户状态和用户 ID，也依赖 `shared-platform-primitives` 的 JWT、password、Redis 和 response helper。
 - `rbac-access-control` 依赖用户 ID、权限目录、角色绑定、Casbin authorizer 和 HTTP route scanner。
 - `runtime-observability` 横跨 `common/runtime/observability/`、HTTP middleware、router、deployments 和 dashboard 生成脚本。
-- `delivery-operations` 横跨 Makefile、脚本、Ent、Atlas、OpenAPI、Docker、Compose、Kubernetes、Helm 和发布说明。
+- `delivery-operations` 横跨 Makefile、脚本、Ent、Atlas、OpenAPI、运行时镜像、migration 镜像、Docker、Compose、Kubernetes、Helm 和发布说明。
 - `opsx-foundation` 不改变业务行为，但约束所有后续 capability 的文档和变更流程。
 
 ## 4. 待补能力

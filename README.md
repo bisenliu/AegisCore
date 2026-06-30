@@ -50,6 +50,7 @@ Docker 镜像：
 
 ```bash
 docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
+docker build -f deployments/docker/user-service-migration.Dockerfile -t aegiscore-user-services-migration .
 ```
 
 ## OPSX 工作流
@@ -67,8 +68,8 @@ OpenSpec 主规格、change artifacts 和 OPSX 相关文档必须使用简体中
 
 生产发布应在 HTTP rollout 前执行数据库迁移和 RBAC seed：
 
-1. 对 user-service `user_db` 执行 Atlas migration。
+1. 使用专用 Atlas/migration 镜像或 CI/CD release job 对 user-service `user_db` 执行 Atlas migration。
 2. 执行 `make user-service-seed-rbac` 初始化 RBAC 系统数据，按需通过 `ADMIN_PASSWORD='<password>' make user-service-create-super-admin` 创建或复用超级管理员账号。
 3. 启动或滚动更新 user-service HTTP 副本。
 
-普通服务容器默认不执行 migration；`RUN_MIGRATIONS=true` 仅适合简单部署或兼容场景。
+普通服务容器不包含 Atlas，也不执行 migration；`RUN_MIGRATIONS=true` 在运行时镜像中已废弃。简单部署也应先运行 migration 镜像，成功后再启动服务镜像。

@@ -20,7 +20,7 @@ chart 会渲染 migration Job、RBAC seed Job 和 HTTP Deployment，但 Helm 本
 3. 渲染并执行 RBAC seed Job，等待成功。
 4. 执行 `helm upgrade --install` 滚动 HTTP Deployment，并在最终 rollout 阶段关闭 Job 渲染。
 
-Deployment 默认不设置 `RUN_MIGRATIONS=true`，普通服务副本不执行 Atlas migration。
+Deployment 默认不设置 `RUN_MIGRATIONS=true`，普通服务副本不执行 Atlas migration，user-service 运行时镜像不包含 Atlas。migration Job 使用 `migrationJob.image` 指向的独立 Atlas/migration 镜像。
 
 ## 验证
 
@@ -33,7 +33,7 @@ helm template aegiscore-user-services deployments/helm/aegiscore-user-services \
 渲染输出中应能看到：
 
 - `Deployment` 的 `/livez`、`/readyz`、`/startupz` 探针。
-- migration `Job` 的 `/app/user-service/scripts/migrate-apply.sh` command。
+- migration `Job` 的 `/atlas migrate apply --config file://migrations/atlas.hcl --env deploy` command 和独立 migration image。
 - RBAC seed `Job` 的 `rbac seed --reactivate-system --sync-system-bindings` command。
 - `PodDisruptionBudget`、`HorizontalPodAutoscaler` 和 `NetworkPolicy`。
 

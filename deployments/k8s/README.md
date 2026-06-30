@@ -21,7 +21,8 @@
 3. 执行 RBAC seed Job，并等待完成。
 4. 创建或滚动更新 user-service Deployment、Service、PDB、HPA 和 NetworkPolicy。
 
-普通 HTTP Deployment 默认不设置 `RUN_MIGRATIONS=true`，不参与 Atlas migration lock 竞争。
+普通 HTTP Deployment 默认不设置 `RUN_MIGRATIONS=true`，运行时镜像不包含 Atlas，不参与 Atlas migration lock 竞争。
+migration Job 使用独立 Atlas/migration 镜像，生产发布应确保 migration 镜像与 user-service 镜像来自同一 release。
 `kustomization.yaml` 用于发现和验证完整资源集合；生产首次发布不要用一次性 `kubectl apply -k` 跳过 Job 等待步骤。
 
 ## Secret 边界

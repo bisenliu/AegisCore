@@ -145,7 +145,7 @@ openspec init --tools none --force
 - 数据库 schema 和 migration：`user-service/ent/schema/`、`user-service/migrations/`。
 - OpenAPI 生成物：`user-service/docs/openapi.go`、`user-service/docs/openapi.json`、`user-service/docs/openapi.yaml`。
 - 可观测性：`common/runtime/observability/`、`common/runtime/logger/`、`common/http/middleware/`、`deployments/observability/`、`deployments/compose/grafana/`。
-- 部署发布：生产优先使用独立 migration Job 或 CI/CD release job；普通服务容器默认不执行 migration，`RUN_MIGRATIONS=true` 只适用于简单部署或兼容场景。
+- 部署发布：生产优先使用独立 Atlas/migration 镜像的 migration Job 或 CI/CD release job；普通 user-service 运行时镜像不包含 Atlas，不执行 migration，`RUN_MIGRATIONS=true` 已废弃。
 
 ## 10. 交付检查
 

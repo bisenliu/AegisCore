@@ -1,6 +1,6 @@
 # user-services Kubernetes 清单
 
-本目录提供 user-service 的云厂商无关 Kubernetes 生产基线。清单使用 `aegiscore-user-services:latest` 作为示例镜像，生产发布应替换为不可变 tag 或 digest。
+本目录提供 user-service 的云厂商无关 Kubernetes 生产基线。运行时清单使用 `aegiscore-user-services:latest` 作为示例镜像，migration Job 使用 `aegiscore-user-services-migration:latest` 作为示例镜像；生产发布应替换为同一 release 的不可变 tag 或 digest。
 
 ## 资源
 
@@ -70,7 +70,7 @@
 - readiness probe：`GET /readyz`
 - startup probe：`GET /startupz`
 
-Deployment 默认只启动 HTTP 服务，不设置 `RUN_MIGRATIONS=true`。多副本生产发布必须使用独立 migration Job 或 CI/CD release job。
+Deployment 默认只启动 HTTP 服务，不设置 `RUN_MIGRATIONS=true`，运行时镜像不包含 Atlas。多副本生产发布必须使用独立 Atlas/migration 镜像的 migration Job 或 CI/CD release job。
 
 ## 失败诊断和回滚
 
@@ -78,6 +78,7 @@ Deployment 默认只启动 HTTP 服务，不设置 `RUN_MIGRATIONS=true`。多�
 - RBAC seed Job 失败时，停止 rollout，查看 `kubectl logs job/aegiscore-user-services-rbac-seed -n aegiscore`。
 - Deployment rollout 失败时，查看 Pod 事件和日志，并回滚到上一镜像或上一套 manifest。
 - 已成功应用的数据库 migration 不应通过 Deployment 回滚隐式撤销；按 Atlas migration 的独立流程处理。
+- 回滚时不要混用新版无 Atlas 的 user-service 运行时镜像和旧版使用运行时镜像执行 migration 的 Job 模板。
 
 如果在已有副本运行时重新执行 RBAC seed，需要滚动重启副本或触发在线 policy refresh，确保授权缓存及时收敛。
 

@@ -3,7 +3,7 @@
 # 敏感值只通过 `secret.existingSecret` 引用外部 Secret，默认不在 chart 中渲染真实 Secret。
 replicaCount: 2 # 默认 HTTP 副本数；autoscaling.enabled=true 时由 HPA 控制。
 
-image: # user-service 镜像配置，运行时和发布 Job 默认共用。
+image: # user-service 镜像配置，用于 HTTP Deployment 和 RBAC seed Job。
   repository: aegiscore-user-services # 镜像仓库地址；生产建议使用完整 registry 路径。
   tag: latest # 镜像 tag；生产建议替换为不可变 tag 或 digest。
   pullPolicy: IfNotPresent # 拉取策略；固定 tag 可用 IfNotPresent，浮动 tag 可改 Always。
@@ -179,12 +179,23 @@ networkPolicy: # NetworkPolicy 配置。
 
 migrationJob: # Atlas migration 发布前置 Job 配置。
   enabled: true # 是否渲染 migration Job。
+  image: # 专用 migration 镜像配置；应与 user-service 镜像来自同一 release。
+    repository: aegiscore-user-services-migration # 镜像仓库地址；生产建议使用完整 registry 路径。
+    tag: latest # 镜像 tag；生产建议与 user-service release tag 对齐。
+    pullPolicy: IfNotPresent # 拉取策略；固定 tag 可用 IfNotPresent，浮动 tag 可改 Always。
   nameSuffix: migrate # Job 名称后缀。
   backoffLimit: 3 # 失败重试次数上限。
   activeDeadlineSeconds: 900 # Job 最大运行时间。
   ttlSecondsAfterFinished: 86400 # Job 完成后保留时间。
   command: # migration 容器命令。
-    - /app/user-service/scripts/migrate-apply.sh # Atlas migration apply 脚本。
+    - /atlas # Atlas CLI。
+  args: # migration 容器参数。
+    - migrate # migration 子命令。
+    - apply # 应用已提交 SQL migration。
+    - --config # 指定 Atlas 配置文件。
+    - file://migrations/atlas.hcl # migration 镜像内的 Atlas 配置路径。
+    - --env # 指定 Atlas 环境。
+    - deploy # 使用 deploy 环境读取 DATABASE_URL。
   resources: # migration 容器资源边界。
     requests: # 调度使用的资源请求。
       cpu: 100m # 请求 0.1 CPU。

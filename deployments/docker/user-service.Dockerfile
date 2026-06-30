@@ -1,4 +1,4 @@
-# Build from the repository root:
+# 从仓库根目录构建：
 #   docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
 
 FROM golang:1.26-alpine3.22 AS builder
@@ -11,20 +11,16 @@ COPY user-service ./user-service
 WORKDIR /src/user-service
 RUN go build -o /out/user-services ./cmd
 
-FROM arigaio/atlas:latest AS atlas
-
 FROM alpine:3.22
 WORKDIR /app
 
-RUN apk add --no-cache tzdata && addgroup -S aegiscore && adduser -S aegiscore -G aegiscore
+RUN apk add --no-cache tzdata \
+  && addgroup -g 10001 -S aegiscore \
+  && adduser -u 10001 -S aegiscore -G aegiscore
 
-COPY --from=builder /out/user-services /app/user-service/bin/user-services
-COPY --from=atlas /atlas /usr/local/bin/atlas
+COPY --from=builder --chmod=0755 /out/user-services /app/user-service/bin/user-services
 COPY user-service/configs /app/user-service/configs
-COPY user-service/migrations /app/user-service/migrations
-COPY user-service/scripts /app/user-service/scripts
-
-RUN chmod +x /app/user-service/scripts/*.sh /app/user-service/bin/user-services
+COPY --chmod=0755 user-service/scripts/entrypoint.sh /app/user-service/scripts/entrypoint.sh
 
 USER aegiscore
 ENTRYPOINT ["/app/user-service/scripts/entrypoint.sh"]

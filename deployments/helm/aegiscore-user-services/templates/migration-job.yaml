@@ -23,10 +23,12 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: migrate
-          image: {{ include "aegiscore-user-services.image" . | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: {{ include "aegiscore-user-services.migrationImage" . | quote }}
+          imagePullPolicy: {{ .Values.migrationJob.image.pullPolicy }}
           command:
             {{- toYaml .Values.migrationJob.command | nindent 12 }}
+          args:
+            {{- toYaml .Values.migrationJob.args | nindent 12 }}
           env:
             - name: TZ
               valueFrom:

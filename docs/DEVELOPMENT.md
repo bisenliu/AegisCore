@@ -7,7 +7,7 @@
 - `golangci-lint`。
 - Docker，用于本地依赖、Compose 和 Testcontainers 场景。
 - OpenSpec CLI，用于 `/opsx:*` 变更工作流。
-- Atlas 相关脚本通过 `user-service/scripts/` 调用。
+- Atlas 相关本地脚本通过 `user-service/scripts/` 调用；容器化发布使用专用 Atlas/migration 镜像。
 
 ## 2. 查看命令
 
@@ -97,6 +97,8 @@ make user-service-migrate-validate
 DATABASE_URL='<postgres-url>' make user-service-migrate-apply
 ```
 
+普通 user-service 运行时镜像不包含 Atlas。容器化环境应先运行 `deployments/docker/user-service-migration.Dockerfile` 构建的 migration 镜像完成 `atlas migrate apply`，再启动服务镜像。
+
 ## 6. OpenAPI
 
 生成 OpenAPI 3 文档：
@@ -157,6 +159,7 @@ make compose-dashboard-check
 
 ```bash
 docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
+docker build -f deployments/docker/user-service-migration.Dockerfile -t aegiscore-user-services-migration .
 ```
 
 ## 9. OPSX 初始化和变更

@@ -72,9 +72,11 @@ ADMIN_PASSWORD='<password>' make create-super-admin
 
 推荐发布顺序：
 
-1. 对服务拥有的 `user_db` 执行 Atlas migration。
+1. 使用专用 Atlas/migration 镜像、CI/CD release job 或本地 `make user-service-migrate-apply` 对服务拥有的 `user_db` 执行 Atlas migration。
 2. 执行 `rbac seed`、`make user-service-seed-rbac` 或在服务目录执行 `make seed-rbac` 初始化系统 RBAC 数据。
 3. 按需通过 `ADMIN_PASSWORD='<password>' make user-service-create-super-admin`，或在服务目录执行 `ADMIN_PASSWORD='<password>' make create-super-admin`，创建或复用超级管理员账号；重置已有账号密码需显式追加 `ADMIN_RESET_PASSWORD=true`。
 4. 启动或滚动更新 HTTP server 副本。
 
 如果 seed、超级管理员分配或 `create-super-admin` 在副本运行中执行，必须滚动重启副本或触发在线 policy refresh。这些命令是离线运维工具，不是运行期 policy sync。
+
+普通 user-service 运行时镜像不包含 Atlas，也不会因 `RUN_MIGRATIONS=true` 执行 migration。容器化发布必须先运行专用 migration 镜像，成功后再启动或滚动 HTTP 副本。

@@ -35,12 +35,18 @@ docker compose -f deployments/compose/docker-compose.yml up --build
 - Prometheus：http://localhost:9090
 - Grafana：http://localhost:3000，默认账号密码为 `admin` / `admin`
 
-从仓库根目录单独构建用户服务镜像：
+从仓库根目录单独构建用户服务运行时镜像：
 
 ```bash
 docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
 ```
 
-Compose 文件使用仓库根目录作为 build context，并通过 `deployments/docker/user-service.Dockerfile` 构建用户服务镜像。
+从仓库根目录单独构建 migration 镜像：
 
-Compose 中的 `user-service-migrate` 是本地 release migration job 的模拟：它使用同一用户服务镜像执行 `/app/user-service/scripts/migrate-apply.sh`，成功后才允许 `rbac-seed` 和 `user-service` 启动。`user-service` 容器显式设置 `RUN_MIGRATIONS=false`，普通服务容器本身不默认执行 migration。生产多副本发布也应使用独立 migration Job 或 CI/CD release job，而不是依赖服务副本启动时迁移。
+```bash
+docker build -f deployments/docker/user-service-migration.Dockerfile -t aegiscore-user-services-migration .
+```
+
+Compose 文件使用仓库根目录作为 build context，并分别通过 `deployments/docker/user-service.Dockerfile` 构建用户服务运行时镜像、通过 `deployments/docker/user-service-migration.Dockerfile` 构建 Atlas/migration 镜像。
+
+Compose 中的 `user-service-migrate` 是本地 release migration job 的模拟：它使用专用 `aegiscore-user-services-migration` 镜像执行 `atlas migrate apply`，成功后才允许 `rbac-seed` 和 `user-service` 启动。普通 `aegiscore-user-services` 运行时镜像不包含 Atlas，也不支持通过 `RUN_MIGRATIONS=true` 在服务容器启动时执行 migration。生产多副本发布也应使用独立 migration Job 或 CI/CD release job，而不是依赖服务副本启动时迁移。
