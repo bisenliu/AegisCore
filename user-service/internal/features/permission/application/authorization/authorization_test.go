@@ -2,6 +2,7 @@ package authorization
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -27,8 +28,8 @@ func TestAuthorizerEnforceInvalidUserIDFailsClosed(t *testing.T) {
 	engine := &fakeEngine{allowed: true}
 	authz := NewAuthorizer(engine)
 	allowed, err := authz.Enforce(context.Background(), "not-a-uuid", "/api/v1/users", "GET")
-	if err != nil {
-		t.Fatalf("Enforce: %v", err)
+	if !errors.Is(err, ErrInvalidSubjectUserID) {
+		t.Fatalf("Enforce err = %v, want %v", err, ErrInvalidSubjectUserID)
 	}
 	if allowed {
 		t.Fatal("invalid user allowed")

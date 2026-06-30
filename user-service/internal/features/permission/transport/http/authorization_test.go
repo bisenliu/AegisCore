@@ -13,6 +13,7 @@ import (
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
 	commonauth "github.com/aegiscore/common/security/auth"
+	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 )
 
 const authorizationTestUserID = "018f0000-0000-7000-8000-000000000801"
@@ -103,6 +104,22 @@ func TestAuthorizeDeniedAndErrorResponses(t *testing.T) {
 
 			assertAuthorizationEnvelope(t, response, tt.wantStatus, tt.wantCode)
 		})
+	}
+}
+
+func TestAuthorizeMapsInvalidSubjectToUnauthenticated(t *testing.T) {
+	authz := &fakeAuthorizer{err: permissionauthorization.ErrInvalidSubjectUserID}
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) { c.Set(commonauth.UserIDKey, "not-a-uuid") }, Authorize(authz), func(c *gin.Context) { c.Status(http.StatusOK) })
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+authorizationTestUserID, nil)
+
+	engine.ServeHTTP(response, request)
+
+	assertAuthorizationEnvelope(t, response, http.StatusUnauthorized, contracterrors.CodeUnauthenticated)
+	if authz.calls != 1 || authz.userID != "not-a-uuid" || authz.pathTemplate != "/api/v1/users/:user_id" || authz.method != http.MethodGet {
+		t.Fatalf("authorizer call = %#v", authz)
 	}
 }
 

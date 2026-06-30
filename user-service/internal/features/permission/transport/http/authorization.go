@@ -55,6 +55,9 @@ func (a authorizationAdapter) Authorize(ctx context.Context, req commoncasbin.Re
 	}
 	allowed, err := a.authz.Enforce(ctx, req.Subject, req.Object, req.Action)
 	if err != nil {
+		if errors.Is(err, authorization.ErrInvalidSubjectUserID) {
+			return errAuthorizationUnauthenticated
+		}
 		return err
 	}
 	if !allowed {
