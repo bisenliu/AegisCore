@@ -45,6 +45,11 @@ auth:
     access_token_ttl: 15m
     # Refresh Token 有效期；用于长期会话续签 Access Token。
     refresh_token_ttl: 168h
+  password_kdf:
+    # Argon2id 同一服务实例内最大并发执行数；默认 2 约等于 128MiB KDF 工作内存。
+    argon2_concurrency: 2
+    # Argon2id 执行中和等待执行的请求总数上限，避免 handler goroutine 无限堆积。
+    argon2_queue_size: 16
   # 用户 token_version Redis 投影的最长缓存窗口；缓存未命中时回源 PostgreSQL。
   token_version_cache_ttl: 30s
   # 刷新时是否轮转 Refresh Token，开启后旧 Refresh Token 会话失效。

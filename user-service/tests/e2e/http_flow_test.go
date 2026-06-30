@@ -98,7 +98,11 @@ func seedUser(t *testing.T, harness *httpFlowHarness, input seededUserInput) see
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	passwordHash, err := password.HashContext(ctx, input.Password)
+	passwordService, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
+	if err != nil {
+		t.Fatalf("create password service: %v", err)
+	}
+	passwordHash, err := passwordService.HashContext(ctx, input.Password)
 	if err != nil {
 		t.Fatalf("hash bootstrap password: %v", err)
 	}

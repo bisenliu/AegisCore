@@ -46,6 +46,9 @@ func TestLoadExplicitConfig(t *testing.T) {
 	if cfg.Auth.MaxActiveSessionsPerUser != 5 {
 		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 5", cfg.Auth.MaxActiveSessionsPerUser)
 	}
+	if cfg.Auth.PasswordKDF.Argon2Concurrency != 2 || cfg.Auth.PasswordKDF.Argon2QueueSize != 16 {
+		t.Fatalf("Auth.PasswordKDF = %#v, want concurrency 2 queue 16", cfg.Auth.PasswordKDF)
+	}
 	authTokenVersion := requireLocalCacheInstance(t, cfg, "auth_token_version")
 	if authTokenVersion.Capacity != 1000 || authTokenVersion.TTL != time.Second || authTokenVersion.LoadTimeout != 300*time.Millisecond {
 		t.Fatalf("LocalCache[auth_token_version] = %#v, want capacity 1000 ttl 1s load timeout 300ms", authTokenVersion)
@@ -175,6 +178,8 @@ postgres:
 		"http.host is required",
 		"http.port must be between 1 and 65535",
 		"auth.jwt.secret is required",
+		"auth.password_kdf.argon2_concurrency must be > 0",
+		"auth.password_kdf.argon2_queue_size must be > 0",
 		"redis.cache_redis.addr is required",
 		"postgres.user_db.host is required",
 	)
@@ -250,6 +255,9 @@ func TestLoadAllowsNonPositiveTokenVersionCacheTTL(t *testing.T) {
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
+  password_kdf:
+    argon2_concurrency: 2
+    argon2_queue_size: 16
   token_version_cache_ttl: `+tc.yaml+`
   refresh_token_rotation: true
   max_active_sessions_per_user: 5`))
@@ -268,6 +276,9 @@ func TestLoadStillRejectsNonPositiveJWTTTL(t *testing.T) {
     audience: aegiscore-users
     access_token_ttl: 0s
     refresh_token_ttl: -1s
+  password_kdf:
+    argon2_concurrency: 2
+    argon2_queue_size: 16
   token_version_cache_ttl: 0s
   refresh_token_rotation: true
   max_active_sessions_per_user: 5`))
@@ -345,6 +356,8 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_AUTH_JWT_SECRET", "env-secret")
 	t.Setenv("AEGISCORE_AUTH_JWT_ISSUER", "env-issuer")
 	t.Setenv("AEGISCORE_AUTH_JWT_REFRESH_TOKEN_TTL", "720h")
+	t.Setenv("AEGISCORE_AUTH_PASSWORD_KDF_ARGON2_CONCURRENCY", "3")
+	t.Setenv("AEGISCORE_AUTH_PASSWORD_KDF_ARGON2_QUEUE_SIZE", "9")
 	t.Setenv("AEGISCORE_AUTH_TOKEN_VERSION_CACHE_TTL", "30s")
 	t.Setenv("AEGISCORE_AUTH_MAX_ACTIVE_SESSIONS_PER_USER", "7")
 	t.Setenv("AEGISCORE_LOCAL_CACHE_AUTH_TOKEN_VERSION_CAPACITY", "3000")
@@ -387,6 +400,9 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	}
 	if cfg.Auth.MaxActiveSessionsPerUser != 7 {
 		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 7", cfg.Auth.MaxActiveSessionsPerUser)
+	}
+	if cfg.Auth.PasswordKDF.Argon2Concurrency != 3 || cfg.Auth.PasswordKDF.Argon2QueueSize != 9 {
+		t.Fatalf("Auth.PasswordKDF = %#v, want env overrides", cfg.Auth.PasswordKDF)
 	}
 	authTokenVersion := requireLocalCacheInstance(t, cfg, "auth_token_version")
 	if authTokenVersion.Capacity != 3000 || authTokenVersion.TTL != 2*time.Second || authTokenVersion.LoadTimeout != 400*time.Millisecond {
@@ -474,6 +490,41 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
 	}
 }
 
+func TestLoadValidatesPasswordKDFConfig(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`auth:
+  jwt:
+    secret: test-secret
+    issuer: aegiscore-test
+    audience: aegiscore-users
+    access_token_ttl: 15m
+    refresh_token_ttl: 168h
+  password_kdf:
+    argon2_concurrency: 0
+    argon2_queue_size: -1
+  token_version_cache_ttl: 30s
+  refresh_token_rotation: true
+  max_active_sessions_per_user: 5`))
+	assertConfigLoadErrorContains(t, err,
+		"auth.password_kdf.argon2_concurrency must be > 0",
+		"auth.password_kdf.argon2_queue_size must be > 0",
+	)
+
+	err = loadConfigErrorFromYAML(t, configYAMLWithSection(`auth:
+  jwt:
+    secret: test-secret
+    issuer: aegiscore-test
+    audience: aegiscore-users
+    access_token_ttl: 15m
+    refresh_token_ttl: 168h
+  password_kdf:
+    argon2_concurrency: 3
+    argon2_queue_size: 2
+  token_version_cache_ttl: 30s
+  refresh_token_rotation: true
+  max_active_sessions_per_user: 5`))
+	assertConfigLoadErrorContains(t, err, "auth.password_kdf.argon2_queue_size must be >= auth.password_kdf.argon2_concurrency")
+}
+
 func TestLoadValidatesAuthSessionLimit(t *testing.T) {
 	cfg := loadConfigFromYAML(t, configYAMLWithSection(`auth:
   jwt:
@@ -482,6 +533,9 @@ func TestLoadValidatesAuthSessionLimit(t *testing.T) {
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
+  password_kdf:
+    argon2_concurrency: 2
+    argon2_queue_size: 16
   token_version_cache_ttl: 30s
   refresh_token_rotation: true
   max_active_sessions_per_user: 0`))
@@ -496,6 +550,9 @@ func TestLoadValidatesAuthSessionLimit(t *testing.T) {
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
+  password_kdf:
+    argon2_concurrency: 2
+    argon2_queue_size: 16
   token_version_cache_ttl: 30s
   refresh_token_rotation: true
   max_active_sessions_per_user: -1`))
@@ -808,6 +865,9 @@ auth:
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
+  password_kdf:
+    argon2_concurrency: 2
+    argon2_queue_size: 16
   token_version_cache_ttl: 30s
   refresh_token_rotation: true
   max_active_sessions_per_user: 5
@@ -933,6 +993,9 @@ func configYAMLWithSections(overrides ...string) string {
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
+  password_kdf:
+    argon2_concurrency: 2
+    argon2_queue_size: 16
   token_version_cache_ttl: 30s
   refresh_token_rotation: true
   max_active_sessions_per_user: 5`,

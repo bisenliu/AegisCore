@@ -153,6 +153,11 @@ func (c Config) validateAuth() []error {
 	}
 	errs = append(errs, validatePositiveDuration("auth.jwt.access_token_ttl", c.Auth.JWT.AccessTokenTTL)...)
 	errs = append(errs, validatePositiveDuration("auth.jwt.refresh_token_ttl", c.Auth.JWT.RefreshTokenTTL)...)
+	errs = append(errs, validatePositiveInt("auth.password_kdf.argon2_concurrency", c.Auth.PasswordKDF.Argon2Concurrency)...)
+	errs = append(errs, validatePositiveInt("auth.password_kdf.argon2_queue_size", c.Auth.PasswordKDF.Argon2QueueSize)...)
+	if c.Auth.PasswordKDF.Argon2Concurrency > 0 && c.Auth.PasswordKDF.Argon2QueueSize > 0 && c.Auth.PasswordKDF.Argon2QueueSize < c.Auth.PasswordKDF.Argon2Concurrency {
+		errs = append(errs, configFieldError("auth.password_kdf.argon2_queue_size", "must be >= auth.password_kdf.argon2_concurrency"))
+	}
 	errs = append(errs, validateNonNegativeInt("auth.max_active_sessions_per_user", c.Auth.MaxActiveSessionsPerUser)...)
 	return errs
 }

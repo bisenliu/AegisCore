@@ -20,7 +20,7 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 
 	t.Run("success uses normalized fields and defaults status", func(t *testing.T) {
 		repo := &stubUserRepository{created: &userdomain.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: identity.UserStatusNormal, TokenVersion: 1, CreatedAt: createdAt, UpdatedAt: createdAt}}
-		svc := NewCreateUserService(repo)
+		svc := NewCreateUserService(repo, testPasswordService(t))
 
 		user, err := svc.CreateUser(context.Background(), CreateUserCommand{Nickname: "Alice", Username: "alice", Password: "secret"})
 
@@ -30,7 +30,7 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 		if repo.createdInput.Nickname != "Alice" || repo.createdInput.Username != "alice" || repo.createdInput.UserID == uuid.Nil || repo.createdInput.Status != identity.UserStatusNormal {
 			t.Fatalf("createdInput = %#v", repo.createdInput)
 		}
-		matched, err := password.VerifyContext(context.Background(), "secret", repo.createdInput.PasswordHash)
+		matched, err := verifyTestPassword(t, "secret", repo.createdInput.PasswordHash)
 		if err != nil || !matched {
 			t.Fatalf("created password was not hashed correctly: matched=%v err=%v", matched, err)
 		}
@@ -40,7 +40,7 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 	})
 
 	t.Run("map domain create conflict", func(t *testing.T) {
-		svc := NewCreateUserService(&stubUserRepository{createErr: identity.ErrUserAlreadyExists})
+		svc := NewCreateUserService(&stubUserRepository{createErr: identity.ErrUserAlreadyExists}, testPasswordService(t))
 
 		_, err := svc.CreateUser(context.Background(), CreateUserCommand{Nickname: "Alice", Username: "alice", Password: "secret"})
 
@@ -51,7 +51,7 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 
 	t.Run("maps uppercase duplicate after normalization", func(t *testing.T) {
 		repo := &stubUserRepository{createErr: identity.ErrUserAlreadyExists}
-		svc := NewCreateUserService(repo)
+		svc := NewCreateUserService(repo, testPasswordService(t))
 
 		_, err := svc.CreateUser(context.Background(), CreateUserCommand{Nickname: "Alice", Username: "alice", Password: "secret"})
 
@@ -84,4 +84,18 @@ func (r *stubUserRepository) GetByUserID(context.Context, uuid.UUID) (*userdomai
 
 func (r *stubUserRepository) ListUsers(context.Context, userapplication.ListUsersInput) ([]userdomain.User, bool, error) {
 	return nil, false, nil
+}
+
+func testPasswordService(t testing.TB) *password.Service {
+	t.Helper()
+	service, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	return service
+}
+
+func verifyTestPassword(t testing.TB, plain, encodedHash string) (bool, error) {
+	t.Helper()
+	return testPasswordService(t).VerifyContext(context.Background(), plain, encodedHash)
 }

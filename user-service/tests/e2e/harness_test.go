@@ -117,6 +117,9 @@ auth:
     audience: aegiscore-users
     access_token_ttl: 5m
     refresh_token_ttl: 30m
+  password_kdf:
+    argon2_concurrency: 2
+    argon2_queue_size: 16
   token_version_cache_ttl: 5s
   refresh_token_rotation: true
   max_active_sessions_per_user: 5

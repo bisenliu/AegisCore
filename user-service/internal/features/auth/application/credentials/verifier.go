@@ -23,12 +23,13 @@ type Verifier interface {
 }
 
 type verifier struct {
-	repo authapplication.UserCredentialStore
+	repo            authapplication.UserCredentialStore
+	passwordService *password.Service
 }
 
 // NewVerifier 构造凭据校验组件。
-func NewVerifier(repo authapplication.UserCredentialStore) Verifier {
-	return &verifier{repo: repo}
+func NewVerifier(repo authapplication.UserCredentialStore, passwordService *password.Service) Verifier {
+	return &verifier{repo: repo, passwordService: passwordService}
 }
 
 // VerifyPassword 校验 username/password 组合，并执行登录状态规则。
@@ -43,7 +44,7 @@ func (v *verifier) VerifyPassword(ctx context.Context, username string, plainPas
 		logger.Error(ctx, "query login user failed", logger.StackTrace(zap.String("username", username), zap.Error(err))...)
 		return nil, err
 	}
-	matched, err := password.VerifyContext(ctx, plainPassword, credential.PasswordHash)
+	matched, err := v.passwordService.VerifyContext(ctx, plainPassword, credential.PasswordHash)
 	if err != nil {
 		logger.Error(ctx, "verify login password failed", logger.StackTrace(zap.String("username", username), zap.String("user_id", credential.UserID.String()), zap.Error(err))...)
 		return nil, authdomain.ErrInvalidCredentials
@@ -79,7 +80,7 @@ func (v *verifier) ChangePassword(ctx context.Context, userID uuid.UUID, newPass
 		logger.Warn(ctx, "change password status rejected", zap.String("user_id", userID.String()), zap.Int64("status", int64(credential.Status)))
 		return nil, authdomain.ErrTokenInvalid
 	}
-	passwordHash, err := password.HashContext(ctx, newPassword)
+	passwordHash, err := v.passwordService.HashContext(ctx, newPassword)
 	if err != nil {
 		logger.Error(ctx, "hash changed password failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
 		return nil, fmt.Errorf("hash changed password: %w", err)

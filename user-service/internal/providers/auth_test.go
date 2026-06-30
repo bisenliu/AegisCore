@@ -39,3 +39,31 @@ func TestNewJWTServiceAcceptsValidTokenTTLPolicy(t *testing.T) {
 		t.Fatal("NewJWTService = nil")
 	}
 }
+
+func TestNewPasswordServiceUsesConfiguredKDFBudget(t *testing.T) {
+	cfg := &config.Config{Auth: config.AuthConfig{
+		PasswordKDF: config.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1},
+	}}
+
+	service, err := NewPasswordService(cfg)
+	if err != nil {
+		t.Fatalf("NewPasswordService: %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewPasswordService = nil")
+	}
+}
+
+func TestNewPasswordServiceRejectsInvalidKDFBudget(t *testing.T) {
+	cfg := &config.Config{Auth: config.AuthConfig{
+		PasswordKDF: config.PasswordKDFConfig{Argon2Concurrency: 2, Argon2QueueSize: 1},
+	}}
+
+	_, err := NewPasswordService(cfg)
+	if err == nil {
+		t.Fatal("NewPasswordService error = nil")
+	}
+	if !strings.Contains(err.Error(), "password argon2 queue size must be >= concurrency") {
+		t.Fatalf("NewPasswordService error = %q, want queue policy", err.Error())
+	}
+}

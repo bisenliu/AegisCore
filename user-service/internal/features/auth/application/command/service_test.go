@@ -22,7 +22,7 @@ import (
 var authTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
 
 func TestAuthUseCaseLogin(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "secret")
+	passwordHash, err := hashTestPassword(t, "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestAuthUseCaseLogin(t *testing.T) {
 }
 
 func TestAuthUseCaseLoginRecordsMetrics(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "secret")
+	passwordHash, err := hashTestPassword(t, "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestAuthUseCaseLoginRecordsMetrics(t *testing.T) {
 }
 
 func TestAuthUseCaseLoginRecordsFailureReasons(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "secret")
+	passwordHash, err := hashTestPassword(t, "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestAuthUseCaseLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 }
 
 func TestAuthUseCaseLoginUsesDefaultTTLs(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "secret")
+	passwordHash, err := hashTestPassword(t, "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestAuthUseCaseLoginUsesDefaultTTLs(t *testing.T) {
 }
 
 func TestAuthUseCaseLoginUsesExplicitTTLs(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "secret")
+	passwordHash, err := hashTestPassword(t, "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestAuthUseCaseLoginUsesExplicitTTLs(t *testing.T) {
 }
 
 func TestAuthUseCaseLoginPassesMaxActiveSessionsPerUser(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "secret")
+	passwordHash, err := hashTestPassword(t, "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestAuthUseCaseLoginPassesMaxActiveSessionsPerUser(t *testing.T) {
 }
 
 func TestAuthUseCaseLoginDoesNotReturnTokenWhenSessionCreateFails(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "secret")
+	passwordHash, err := hashTestPassword(t, "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestAuthUseCaseLoginDoesNotReturnTokenWhenSessionCreateFails(t *testing.T) 
 }
 
 func TestAuthUseCaseLoginRejectsInvalidCredentials(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "secret")
+	passwordHash, err := hashTestPassword(t, "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestAuthUseCaseLoginRejectsInvalidCredentials(t *testing.T) {
 }
 
 func TestAuthUseCaseLoginRejectsInactiveStatuses(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "secret")
+	passwordHash, err := hashTestPassword(t, "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestAuthUseCaseLoginRejectsInactiveStatuses(t *testing.T) {
 }
 
 func TestAuthUseCaseLoginIssuesPasswordChangeToken(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "secret")
+	passwordHash, err := hashTestPassword(t, "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestAuthUseCaseLoginIssuesPasswordChangeToken(t *testing.T) {
 }
 
 func TestAuthUseCaseChangePassword(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "old-secret")
+	passwordHash, err := hashTestPassword(t, "old-secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -273,14 +273,14 @@ func TestAuthUseCaseChangePassword(t *testing.T) {
 	if !result.Changed || repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != identity.UserStatusNormal || repo.incrementedUserID != uuid.Nil || !store.cached || store.cachedVersion != 3 || !store.deletedAll {
 		t.Fatalf("result=%#v repo=%#v store=%#v", result, repo, store)
 	}
-	matched, err := password.VerifyContext(context.Background(), "new-secret", repo.updatedInput.PasswordHash)
+	matched, err := verifyTestPassword(t, "new-secret", repo.updatedInput.PasswordHash)
 	if err != nil || !matched {
 		t.Fatalf("updated password hash mismatch: matched=%v err=%v", matched, err)
 	}
 }
 
 func TestAuthUseCaseChangePasswordIncrementsTokenVersionOnce(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "old-secret")
+	passwordHash, err := hashTestPassword(t, "old-secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestAuthUseCaseChangePasswordIncrementsTokenVersionOnce(t *testing.T) {
 }
 
 func TestAuthUseCaseChangePasswordSucceedsWhenRevocationProjectionFails(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "old-secret")
+	passwordHash, err := hashTestPassword(t, "old-secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -663,7 +663,7 @@ func newTestAuthUseCasesWithMetrics(repo *authRepoStub, store authapplication.Au
 func newTestAuthUseCasesWithConfigAndMetrics(repo *authRepoStub, store authapplication.AuthSessionStore, authCfg config.AuthConfig, metrics authapplication.Metrics) testAuthUseCases {
 	cfg := &config.Config{Auth: authCfg}
 	deps := NewUseCaseDeps(UseCaseDepsParams{
-		Credentials: authcredentials.NewVerifier(repo),
+		Credentials: authcredentials.NewVerifier(repo, mustTestPasswordService()),
 		Tokens:      authtokens.NewIssuer(commonauth.NewJWTService(cfg.Auth), cfg),
 		Sessions:    authsessions.NewLifecycle(repo, store, cfg.Auth.MaxActiveSessionsPerUser),
 		Config:      cfg,
@@ -676,6 +676,33 @@ func newTestAuthUseCasesWithConfigAndMetrics(repo *authRepoStub, store authappli
 		LogoutCurrentSessionUseCase: NewLogoutCurrentSessionUseCase(deps),
 		LogoutAllSessionsUseCase:    NewLogoutAllSessionsUseCase(deps),
 	}
+}
+
+func mustTestPasswordService() *password.Service {
+	service, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
+	if err != nil {
+		panic(err)
+	}
+	return service
+}
+
+func testPasswordService(t testing.TB) *password.Service {
+	t.Helper()
+	service, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	return service
+}
+
+func hashTestPassword(t testing.TB, plain string) (string, error) {
+	t.Helper()
+	return testPasswordService(t).HashContext(context.Background(), plain)
+}
+
+func verifyTestPassword(t testing.TB, plain, encodedHash string) (bool, error) {
+	t.Helper()
+	return testPasswordService(t).VerifyContext(context.Background(), plain, encodedHash)
 }
 
 type authMetricsSpy struct {

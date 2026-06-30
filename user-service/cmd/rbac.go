@@ -58,9 +58,10 @@ type rbacCreateSuperAdminResult struct {
 }
 
 type rbacSeedDependencies struct {
-	service     *roleseed.Service
-	users       usercommand.CreateUserService
-	credentials *authpostgres.CredentialStore
+	service         *roleseed.Service
+	users           usercommand.CreateUserService
+	credentials     *authpostgres.CredentialStore
+	passwordService *password.Service
 }
 
 func runRBACSeedCommand(ctx context.Context, configPath string, opts rbacSeedOptions) error {
@@ -142,7 +143,7 @@ func createSuperAdmin(ctx context.Context, deps rbacSeedDependencies, opts rbacC
 			result.roleAdded = assigned.Added
 			return result, nil
 		}
-		passwordHash, err := password.HashContext(ctx, normalized.password)
+		passwordHash, err := deps.passwordService.HashContext(ctx, normalized.password)
 		if err != nil {
 			return rbacCreateSuperAdminResult{}, fmt.Errorf("hash create super admin password: %w", err)
 		}
@@ -165,6 +166,14 @@ func newRBACSeedDependencies(parent context.Context, configPath string) (rbacSee
 	cleanup := func() { cancel() }
 
 	cfg, err := config.Load(configPath)
+	if err != nil {
+		cleanup()
+		return rbacSeedDependencies{}, func() {}, err
+	}
+	passwordService, err := password.NewService(password.Options{
+		Concurrency: cfg.Auth.PasswordKDF.Argon2Concurrency,
+		QueueSize:   cfg.Auth.PasswordKDF.Argon2QueueSize,
+	})
 	if err != nil {
 		cleanup()
 		return rbacSeedDependencies{}, func() {}, err
@@ -201,9 +210,9 @@ func newRBACSeedDependencies(parent context.Context, configPath string) (rbacSee
 	userStore := userpostgres.NewUserStore(userpostgres.UserStoreParams{Client: client})
 	credentialStore := authpostgres.NewCredentialStore(authpostgres.CredentialStoreParams{Client: client})
 	service := roleseed.NewService(roleStore, permissionStore, rolePermissionStore, userRoleStore)
-	userCreator := usercommand.NewCreateUserService(userStore)
+	userCreator := usercommand.NewCreateUserService(userStore, passwordService)
 
-	return rbacSeedDependencies{service: service, users: userCreator, credentials: credentialStore}, cleanup, nil
+	return rbacSeedDependencies{service: service, users: userCreator, credentials: credentialStore, passwordService: passwordService}, cleanup, nil
 }
 
 func newRBACEntClient(db *sql.DB) *ent.Client {

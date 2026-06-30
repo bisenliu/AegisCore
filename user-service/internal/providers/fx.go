@@ -12,6 +12,7 @@ var Module = fx.Module("user-service-providers",
 	fx.Provide(
 		commonmetrics.NewFxProvider,
 		commontracing.NewFxProvider,
+		NewPasswordService,
 		ProvidePostgresPools,
 		ProvideRedisClients,
 		NewJWTService,

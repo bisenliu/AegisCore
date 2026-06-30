@@ -52,10 +52,17 @@ type PprofConfig struct {
 
 // AuthConfig 包含认证 token 与会话校验设置。
 type AuthConfig struct {
-	JWT                      JWTConfig     `mapstructure:"jwt"`
-	TokenVersionCacheTTL     time.Duration `mapstructure:"token_version_cache_ttl"`
-	RefreshTokenRotation     bool          `mapstructure:"refresh_token_rotation"`
-	MaxActiveSessionsPerUser int           `mapstructure:"max_active_sessions_per_user"`
+	JWT                      JWTConfig         `mapstructure:"jwt"`
+	PasswordKDF              PasswordKDFConfig `mapstructure:"password_kdf"`
+	TokenVersionCacheTTL     time.Duration     `mapstructure:"token_version_cache_ttl"`
+	RefreshTokenRotation     bool              `mapstructure:"refresh_token_rotation"`
+	MaxActiveSessionsPerUser int               `mapstructure:"max_active_sessions_per_user"`
+}
+
+// PasswordKDFConfig 包含密码 Argon2id KDF 的实例级资源预算。
+type PasswordKDFConfig struct {
+	Argon2Concurrency int `mapstructure:"argon2_concurrency"`
+	Argon2QueueSize   int `mapstructure:"argon2_queue_size"`
 }
 
 // EntConfig 控制 Ent 运行时行为。

@@ -35,12 +35,13 @@ type CreateUserService interface {
 }
 
 type createUserService struct {
-	store userapplication.UserProfileStore
+	store           userapplication.UserProfileStore
+	passwordService *password.Service
 }
 
 // NewCreateUserService 根据仓储依赖构造用户资料写侧服务。
-func NewCreateUserService(store userapplication.UserProfileStore) CreateUserService {
-	return &createUserService{store: store}
+func NewCreateUserService(store userapplication.UserProfileStore, passwordService *password.Service) CreateUserService {
+	return &createUserService{store: store, passwordService: passwordService}
 }
 
 // CreateUser 创建新用户资料，哈希密码，并将 username 冲突映射为领域错误。
@@ -48,7 +49,7 @@ func (s *createUserService) CreateUser(ctx context.Context, cmd CreateUserComman
 	status := validators.CreateUserStatus(cmd.Status)
 
 	logger.Info(ctx, "create user", zap.String("username", cmd.Username), zap.Int64("status", int64(status)))
-	passwordHash, err := password.HashContext(ctx, cmd.Password)
+	passwordHash, err := s.passwordService.HashContext(ctx, cmd.Password)
 	if err != nil {
 		logger.Error(ctx, "hash user password failed", logger.StackTrace(zap.String("username", cmd.Username), zap.Int64("status", int64(status)), zap.Error(err))...)
 		return nil, fmt.Errorf("hash user password: %w", err)

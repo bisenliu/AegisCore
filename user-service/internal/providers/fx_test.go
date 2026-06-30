@@ -18,6 +18,9 @@ func TestModuleResolvesServiceLevelProviders(t *testing.T) {
 	err := fx.ValidateApp(
 		fx.Supply(&config.Config{
 			App: config.AppConfig{Name: "configured-user-service", Environment: "test"},
+			Auth: config.AuthConfig{
+				PasswordKDF: config.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1},
+			},
 			Observability: config.ObservabilityConfig{
 				Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1, Exporter: "none"},
 			},

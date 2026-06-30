@@ -145,6 +145,7 @@ func appModuleLifecycleTestConfig(driverName string, redisAddr string, httpPort 
 				AccessTokenTTL:  time.Minute,
 				RefreshTokenTTL: time.Hour,
 			},
+			PasswordKDF:              config.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1},
 			TokenVersionCacheTTL:     time.Minute,
 			MaxActiveSessionsPerUser: 5,
 		},

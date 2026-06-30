@@ -14,7 +14,6 @@ import (
 	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/security/password"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
@@ -26,11 +25,11 @@ import (
 )
 
 func TestCredentialVerifierAcceptsMustChangePasswordUser(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "secret")
+	passwordHash, err := hashTestPassword(t, "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	verifier := authcredentials.NewVerifier(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}})
+	verifier := authcredentials.NewVerifier(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}}, testPasswordService(t))
 
 	user, err := verifier.VerifyPassword(context.Background(), "alice", "secret")
 
@@ -43,11 +42,11 @@ func TestCredentialVerifierAcceptsMustChangePasswordUser(t *testing.T) {
 }
 
 func TestCredentialVerifierRejectsDisabledUser(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "secret")
+	passwordHash, err := hashTestPassword(t, "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	verifier := authcredentials.NewVerifier(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}})
+	verifier := authcredentials.NewVerifier(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}}, testPasswordService(t))
 
 	_, err = verifier.VerifyPassword(context.Background(), "alice", "secret")
 
@@ -57,7 +56,7 @@ func TestCredentialVerifierRejectsDisabledUser(t *testing.T) {
 }
 
 func TestCredentialVerifierLoginFailureLogsClientContext(t *testing.T) {
-	passwordHash, err := password.HashContext(context.Background(), "secret")
+	passwordHash, err := hashTestPassword(t, "secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
@@ -81,7 +80,7 @@ func TestCredentialVerifierLoginFailureLogsClientContext(t *testing.T) {
 			core, logs := observer.New(zap.WarnLevel)
 			ctx := logger.ToContext(context.Background(), zap.New(core))
 			ctx = authctx.WithClientContext(ctx, authctx.ClientContext{ClientIP: "203.0.113.30", UserAgent: "auth-command-test"})
-			verifier := authcredentials.NewVerifier(tt.repo)
+			verifier := authcredentials.NewVerifier(tt.repo, testPasswordService(t))
 
 			_, err := verifier.VerifyPassword(ctx, tt.username, tt.password)
 
@@ -107,12 +106,12 @@ func TestCredentialVerifierLoginFailureLogsClientContext(t *testing.T) {
 }
 
 func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
-	oldHash, err := password.HashContext(context.Background(), "old-secret")
+	oldHash, err := hashTestPassword(t, "old-secret")
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
 	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, PasswordHash: oldHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
-	verifier := authcredentials.NewVerifier(repo)
+	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
 
 	result, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
@@ -125,14 +124,14 @@ func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	if repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != identity.UserStatusNormal {
 		t.Fatalf("updated input = %#v", repo.updatedInput)
 	}
-	matched, err := password.VerifyContext(context.Background(), "new-secret", repo.updatedInput.PasswordHash)
+	matched, err := verifyTestPassword(t, "new-secret", repo.updatedInput.PasswordHash)
 	if err != nil || !matched {
 		t.Fatalf("updated password hash mismatch: matched=%v err=%v", matched, err)
 	}
 }
 
 func TestCredentialVerifierChangePasswordMapsUserNotFound(t *testing.T) {
-	verifier := authcredentials.NewVerifier(&authRepoStub{})
+	verifier := authcredentials.NewVerifier(&authRepoStub{}, testPasswordService(t))
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
@@ -142,7 +141,7 @@ func TestCredentialVerifierChangePasswordMapsUserNotFound(t *testing.T) {
 }
 
 func TestCredentialVerifierChangePasswordRejectsInvalidStatus(t *testing.T) {
-	verifier := authcredentials.NewVerifier(&authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusNormal, TokenVersion: 2}})
+	verifier := authcredentials.NewVerifier(&authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusNormal, TokenVersion: 2}}, testPasswordService(t))
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
@@ -153,7 +152,7 @@ func TestCredentialVerifierChangePasswordRejectsInvalidStatus(t *testing.T) {
 
 func TestCredentialVerifierChangePasswordMapsUpdateError(t *testing.T) {
 	updateErr := errors.New("update failed")
-	verifier := authcredentials.NewVerifier(&authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: updateErr})
+	verifier := authcredentials.NewVerifier(&authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: updateErr}, testPasswordService(t))
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
