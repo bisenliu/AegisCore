@@ -44,9 +44,13 @@ func (Permission) Edges() []ent.Edge {
 	}
 }
 
-// Indexes 返回权限表唯一约束定义。
+// Indexes 返回权限表唯一约束和列表过滤索引定义。
 func (Permission) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("http_method", "path_template").Unique(),
+		index.Fields("active", "permission_id"),
+		index.Fields("module", "permission_id"),
+		index.Fields("http_method", "permission_id"),
+		index.Fields("is_system", "permission_id"),
 	}
 }

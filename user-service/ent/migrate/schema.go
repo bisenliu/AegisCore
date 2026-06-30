@@ -3,6 +3,7 @@
 package migrate
 
 import (
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/dialect/sql/schema"
 	"entgo.io/ent/schema/field"
 )
@@ -10,17 +11,17 @@ import (
 var (
 	// PermissionsColumns holds the columns for the "permissions" table.
 	PermissionsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt64, Increment: true},
-		{Name: "permission_id", Type: field.TypeUUID, Unique: true},
-		{Name: "name", Type: field.TypeString, Size: 128},
-		{Name: "description", Type: field.TypeString, Size: 512, Default: ""},
-		{Name: "module", Type: field.TypeString, Size: 64},
-		{Name: "http_method", Type: field.TypeString, Size: 16},
-		{Name: "path_template", Type: field.TypeString, Size: 512},
-		{Name: "active", Type: field.TypeBool, Default: true},
-		{Name: "is_system", Type: field.TypeBool, Default: false},
-		{Name: "created_at", Type: field.TypeInt64},
-		{Name: "updated_at", Type: field.TypeInt64},
+		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "权限ID"},
+		{Name: "permission_id", Type: field.TypeUUID, Unique: true, Comment: "外部权限ID"},
+		{Name: "name", Type: field.TypeString, Size: 128, Comment: "权限名称"},
+		{Name: "description", Type: field.TypeString, Size: 512, Comment: "权限说明", Default: ""},
+		{Name: "module", Type: field.TypeString, Size: 64, Comment: "权限所属模块"},
+		{Name: "http_method", Type: field.TypeString, Size: 16, Comment: "HTTP 方法"},
+		{Name: "path_template", Type: field.TypeString, Size: 512, Comment: "路径模板"},
+		{Name: "active", Type: field.TypeBool, Comment: "权限是否启用", Default: true},
+		{Name: "is_system", Type: field.TypeBool, Comment: "是否系统权限", Default: false},
+		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
+		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
 	}
 	// PermissionsTable holds the schema information for the "permissions" table.
 	PermissionsTable = &schema.Table{
@@ -33,31 +34,63 @@ var (
 				Unique:  true,
 				Columns: []*schema.Column{PermissionsColumns[5], PermissionsColumns[6]},
 			},
+			{
+				Name:    "permission_active_permission_id",
+				Unique:  false,
+				Columns: []*schema.Column{PermissionsColumns[7], PermissionsColumns[1]},
+			},
+			{
+				Name:    "permission_module_permission_id",
+				Unique:  false,
+				Columns: []*schema.Column{PermissionsColumns[4], PermissionsColumns[1]},
+			},
+			{
+				Name:    "permission_http_method_permission_id",
+				Unique:  false,
+				Columns: []*schema.Column{PermissionsColumns[5], PermissionsColumns[1]},
+			},
+			{
+				Name:    "permission_is_system_permission_id",
+				Unique:  false,
+				Columns: []*schema.Column{PermissionsColumns[8], PermissionsColumns[1]},
+			},
 		},
 	}
 	// RolesColumns holds the columns for the "roles" table.
 	RolesColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt64, Increment: true},
-		{Name: "role_id", Type: field.TypeUUID, Unique: true},
-		{Name: "name", Type: field.TypeString, Size: 128},
-		{Name: "description", Type: field.TypeString, Size: 512, Default: ""},
-		{Name: "active", Type: field.TypeBool, Default: true},
-		{Name: "is_system", Type: field.TypeBool, Default: false},
-		{Name: "created_at", Type: field.TypeInt64},
-		{Name: "updated_at", Type: field.TypeInt64},
+		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "角色ID"},
+		{Name: "role_id", Type: field.TypeUUID, Unique: true, Comment: "外部角色ID"},
+		{Name: "name", Type: field.TypeString, Size: 128, Comment: "角色名称"},
+		{Name: "description", Type: field.TypeString, Size: 512, Comment: "角色说明", Default: ""},
+		{Name: "active", Type: field.TypeBool, Comment: "角色是否启用", Default: true},
+		{Name: "is_system", Type: field.TypeBool, Comment: "是否系统角色", Default: false},
+		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
+		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
 	}
 	// RolesTable holds the schema information for the "roles" table.
 	RolesTable = &schema.Table{
 		Name:       "roles",
 		Columns:    RolesColumns,
 		PrimaryKey: []*schema.Column{RolesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "role_active_role_id",
+				Unique:  false,
+				Columns: []*schema.Column{RolesColumns[4], RolesColumns[1]},
+			},
+			{
+				Name:    "role_is_system_role_id",
+				Unique:  false,
+				Columns: []*schema.Column{RolesColumns[5], RolesColumns[1]},
+			},
+		},
 	}
 	// RolePermissionsColumns holds the columns for the "role_permissions" table.
 	RolePermissionsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt64, Increment: true},
-		{Name: "created_at", Type: field.TypeInt64},
-		{Name: "permission_id", Type: field.TypeInt64},
-		{Name: "role_id", Type: field.TypeInt64},
+		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "角色权限绑定ID"},
+		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
+		{Name: "permission_id", Type: field.TypeInt64, Comment: "权限内部ID"},
+		{Name: "role_id", Type: field.TypeInt64, Comment: "角色内部ID"},
 	}
 	// RolePermissionsTable holds the schema information for the "role_permissions" table.
 	RolePermissionsTable = &schema.Table{
@@ -84,20 +117,25 @@ var (
 				Unique:  true,
 				Columns: []*schema.Column{RolePermissionsColumns[3], RolePermissionsColumns[2]},
 			},
+			{
+				Name:    "rolepermission_permission_id_role_id",
+				Unique:  false,
+				Columns: []*schema.Column{RolePermissionsColumns[2], RolePermissionsColumns[3]},
+			},
 		},
 	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt64, Increment: true},
-		{Name: "user_id", Type: field.TypeUUID, Unique: true},
-		{Name: "nickname", Type: field.TypeString, Size: 128},
-		{Name: "username", Type: field.TypeString, Unique: true, Size: 255},
-		{Name: "password_hash", Type: field.TypeString},
-		{Name: "token_version", Type: field.TypeInt64, Default: 1},
-		{Name: "status", Type: field.TypeInt64, Default: 100},
-		{Name: "deleted_at", Type: field.TypeInt64, Nullable: true},
-		{Name: "created_at", Type: field.TypeInt64},
-		{Name: "updated_at", Type: field.TypeInt64},
+		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "用户ID"},
+		{Name: "user_id", Type: field.TypeUUID, Unique: true, Comment: "外部用户ID"},
+		{Name: "nickname", Type: field.TypeString, Size: 128, Comment: "用户昵称"},
+		{Name: "username", Type: field.TypeString, Unique: true, Size: 255, Comment: "用户名"},
+		{Name: "password_hash", Type: field.TypeString, Comment: "密码哈希"},
+		{Name: "token_version", Type: field.TypeInt64, Comment: "认证令牌版本", Default: 1},
+		{Name: "status", Type: field.TypeInt64, Comment: "用户状态：100 正常，200 冻结/停用，300 必须修改密码", Default: 100},
+		{Name: "deleted_at", Type: field.TypeInt64, Nullable: true, Comment: "软删除时间戳毫秒，NULL 表示未删除"},
+		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
+		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{
@@ -106,9 +144,15 @@ var (
 		PrimaryKey: []*schema.Column{UsersColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "user_nickname",
+				Name:    "users_nickname_trgm",
 				Unique:  false,
 				Columns: []*schema.Column{UsersColumns[2]},
+				Annotation: &entsql.IndexAnnotation{
+					OpClass: "gin_trgm_ops",
+					Types: map[string]string{
+						"postgres": "GIN",
+					},
+				},
 			},
 			{
 				Name:    "user_status",
@@ -134,10 +178,10 @@ var (
 	}
 	// UserRolesColumns holds the columns for the "user_roles" table.
 	UserRolesColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt64, Increment: true},
-		{Name: "created_at", Type: field.TypeInt64},
-		{Name: "role_id", Type: field.TypeInt64},
-		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "用户角色绑定ID"},
+		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
+		{Name: "role_id", Type: field.TypeInt64, Comment: "角色内部ID"},
+		{Name: "user_id", Type: field.TypeInt64, Comment: "用户内部ID"},
 	}
 	// UserRolesTable holds the schema information for the "user_roles" table.
 	UserRolesTable = &schema.Table{
@@ -163,6 +207,11 @@ var (
 				Name:    "userrole_user_id_role_id",
 				Unique:  true,
 				Columns: []*schema.Column{UserRolesColumns[3], UserRolesColumns[2]},
+			},
+			{
+				Name:    "userrole_role_id_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{UserRolesColumns[2], UserRolesColumns[3]},
 			},
 		},
 	}

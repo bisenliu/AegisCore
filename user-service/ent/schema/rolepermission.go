@@ -37,9 +37,10 @@ func (RolePermission) Edges() []ent.Edge {
 	}
 }
 
-// Indexes 返回角色权限绑定表唯一约束定义。
+// Indexes 返回角色权限绑定表唯一约束和反向查询索引定义。
 func (RolePermission) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("role_id", "permission_id").Unique(),
+		index.Fields("permission_id", "role_id"),
 	}
 }

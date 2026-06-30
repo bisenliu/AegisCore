@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -47,10 +49,15 @@ func (User) Edges() []ent.Edge {
 	}
 }
 
-// Indexes 返回支持 nickname、status、软删除过滤和 user_id keyset 列表查询的索引。
+// Indexes 返回支持 nickname contains、status、软删除过滤和 user_id keyset 列表查询的索引。
 func (User) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("nickname"),
+		index.Fields("nickname").
+			StorageKey("users_nickname_trgm").
+			Annotations(
+				entsql.IndexTypes(map[string]string{dialect.Postgres: "GIN"}),
+				entsql.OpClass("gin_trgm_ops"),
+			),
 		index.Fields("status"),
 		index.Fields("deleted_at"),
 		index.Fields("deleted_at", "user_id"),

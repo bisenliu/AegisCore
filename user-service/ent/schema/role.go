@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 	"github.com/google/uuid"
 )
 
@@ -38,5 +39,13 @@ func (Role) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("user_roles", UserRole.Type),
 		edge.To("role_permissions", RolePermission.Type),
+	}
+}
+
+// Indexes 返回支持角色列表过滤和授权回源排序的索引。
+func (Role) Indexes() []ent.Index {
+	return []ent.Index{
+		index.Fields("active", "role_id"),
+		index.Fields("is_system", "role_id"),
 	}
 }

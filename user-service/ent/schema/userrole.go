@@ -37,9 +37,10 @@ func (UserRole) Edges() []ent.Edge {
 	}
 }
 
-// Indexes 返回用户角色绑定表唯一约束定义。
+// Indexes 返回用户角色绑定表唯一约束和反向查询索引定义。
 func (UserRole) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("user_id", "role_id").Unique(),
+		index.Fields("role_id", "user_id"),
 	}
 }
