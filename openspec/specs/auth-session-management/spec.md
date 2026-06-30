@@ -6,7 +6,7 @@
 
 ### Requirement: 用户登录与令牌签发
 
-系统 MUST 提供用户名密码登录能力，并在凭证、用户状态和会话策略校验通过后签发访问令牌与刷新令牌。
+系统 MUST 提供用户名密码登录能力，并在凭证、用户状态和会话策略校验通过后签发访问令牌与刷新令牌。系统 MUST 将密码 KDF 资源池繁忙视为临时服务不可用，而不是无效凭据。
 
 #### Scenario: 登录成功
 
@@ -27,6 +27,14 @@
 
 - **WHEN** 用户凭据有效但账号状态要求强制修改密码
 - **THEN** 系统 MUST 只签发 subject 为 `password_change` 的受限 token，不得创建普通 refresh session，也不得返回 refresh token
+
+#### Scenario: 密码 KDF 资源繁忙
+
+- **WHEN** 登录凭据校验进入密码 KDF 但实例内 Argon2 执行和等待队列已达资源上限
+- **THEN** 系统 MUST 拒绝本次登录并返回 `503 Service Unavailable`
+- **AND** 系统 MUST NOT 将该错误映射为无效凭据
+- **AND** 系统 MUST NOT 签发 access token、refresh token 或 password change token
+- **AND** 系统 MUST NOT 泄露用户名存在性、密码匹配状态、队列长度或 Argon2 并发配置
 
 #### Scenario: token 缺少 jti
 
@@ -69,7 +77,7 @@
 
 ### Requirement: 会话与 token version 策略
 
-系统 MUST 在 auth application 中拥有 token version 校验、refresh session 生命周期、每用户活跃 refresh session 上限和会话撤销语义。受保护路由的 token version 本地缓存 MUST 使用有容量上限的 `common/runtime/localcache` loading cache，并且 MUST 将 Redis token version 投影和 PostgreSQL 当前值作为回源路径。user-service auth/provider 边界 MUST 拥有 `auth_token_version` 缓存实例名，并 MUST 在缺少该配置实例时拒绝服务装配。`auth.token_version_cache_ttl` MUST 允许正数 duration 表示显式 Redis token version 投影 TTL，并 MUST 允许非正数 duration 表示使用服务默认 TTL；非正数配置 MUST NOT 创建永久 Redis token version 投影。
+系统 MUST 在 auth application 中拥有 token version 校验、refresh session 生命周期、每用户活跃 refresh session 上限和会话撤销语义。受保护路由的 token version 本地缓存 MUST 使用有容量上限的 `common/runtime/localcache` loading cache，并且 MUST 将 Redis token version 投影和 PostgreSQL 当前值作为回源路径。user-service auth/provider 边界 MUST 拥有 `auth_token_version` 缓存实例名，并 MUST 在缺少该配置实例时拒绝服务装配。`auth.token_version_cache_ttl` MUST 允许正数 duration 表示显式 Redis token version 投影 TTL，并 MUST 允许非正数 duration 表示使用服务默认 TTL；非正数配置 MUST NOT 创建永久 Redis token version 投影。auth application port MUST 将 PostgreSQL token version 持久化、Redis token version 投影和 refresh session 生命周期拆分为最小依赖接口，业务组件 MUST 只依赖自身所需的 port。
 
 #### Scenario: 活跃 session 上限
 
@@ -82,6 +90,7 @@
 - **THEN** 受保护路由 MUST 按有界本地缓存、Redis token version 投影、PostgreSQL 当前值回源的顺序解析当前版本
 - **AND** Redis miss 后 MAY 回源数据库并回填 Redis
 - **AND** 系统 MUST NOT 缓存错误结果
+- **AND** token version validator MUST NOT 依赖 refresh session 创建、轮换、查询或批量删除 port
 
 #### Scenario: token version 本地缓存容量
 
@@ -111,10 +120,12 @@
 - **WHEN** 用户执行全部会话退出或强制改密导致当前 `token_version` 变化
 - **THEN** 系统 MUST 使本实例本地 token version 缓存失效，并刷新 Redis token version 投影
 - **AND** 旧版本 MUST NOT 覆盖 Redis 中已存在的较新版本
+- **AND** Redis token version 投影刷新失败时，系统 MUST 尝试删除 Redis 投影，使后续校验能够回源 PostgreSQL
+- **AND** 投影刷新失败 MUST 被记录并可测试，不得被静默忽略
 
 ### Requirement: 会话退出
 
-系统 MUST 支持退出当前会话和退出全部会话，并保证退出后令牌无法继续访问受保护资源。
+系统 MUST 支持退出当前会话和退出全部会话，并保证退出后令牌无法继续访问受保护资源。全部会话退出 MUST 以 PostgreSQL token version 递增作为旧 access token 失效的主事实，并 MUST 明确表达 Redis token version 投影刷新和 refresh session 删除失败时的最终一致处理语义。
 
 #### Scenario: 退出当前会话
 
@@ -125,6 +136,8 @@
 
 - **WHEN** 已认证用户请求退出全部会话
 - **THEN** 系统 MUST 递增用户 `token_version` 并撤销该用户的所有活跃 refresh session，使旧 token 无法继续刷新或访问
+- **AND** PostgreSQL token version 递增成功后，旧 access token MUST 因 token version 不匹配而无法继续访问受保护资源
+- **AND** Redis token version 投影刷新或 refresh session 删除失败时，系统 MUST 返回、记录或暴露可观察的投影失败信号，使调用方和测试能区分主事实成功与投影失败
 
 #### Scenario: 全部会话后台清理
 
@@ -157,7 +170,7 @@
 
 ### Requirement: 认证 HTTP 边界
 
-系统 MUST 将公开认证路由和受保护认证路由分开挂载，并通过共享认证中间件保护需要 bearer token 的接口。
+系统 MUST 将公开认证路由和受保护认证路由分开挂载，并通过共享认证中间件保护需要 bearer token 的接口。认证 HTTP 边界 MUST 区分凭据认证失败和认证服务临时不可用。
 
 #### Scenario: 公开登录路由
 
@@ -173,6 +186,13 @@
 
 - **WHEN** 受保护认证路由收到缺失、过期、格式错误或签名无效的 bearer token
 - **THEN** 系统 MUST 在进入业务处理前拒绝请求
+
+#### Scenario: 登录 KDF busy HTTP 响应
+
+- **WHEN** 登录 use case 返回 `password.ErrPasswordKDFBusy`
+- **THEN** 认证 HTTP 边界 MUST 返回 `503 Service Unavailable`
+- **AND** 响应 envelope MUST 使用服务不可用错误分类和认证服务繁忙消息
+- **AND** OpenAPI MUST 声明登录接口可能返回 503
 
 ### Requirement: 认证包组织
 

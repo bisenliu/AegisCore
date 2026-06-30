@@ -6,7 +6,7 @@
 
 ### Requirement: 跨服务契约基础
 
-系统 MUST 在 `common/` 中维护跨服务共享的错误、响应 envelope、分页和 HTTP response helper，以保证服务之间的外部契约保持一致，并保持业务中立。
+系统 MUST 在 `common/` 中维护跨服务共享的错误、响应 envelope、分页和 HTTP response helper，以保证服务之间的外部契约保持一致，并保持业务中立。共享错误契约 MUST 能表达临时服务不可用状态，供服务在资源池耗尽或依赖临时不可用时返回稳定 HTTP 响应。
 
 #### Scenario: 返回统一响应
 
@@ -27,6 +27,13 @@
 
 - **WHEN** 需要在 `common/contract/errors` 新增跨服务错误分类
 - **THEN** 错误码 MUST 保持业务中立，并可通过公共响应 helper 渲染
+
+#### Scenario: 服务不可用错误
+
+- **WHEN** 服务需要表达临时资源池繁忙、依赖暂时不可用或实例无法处理当前请求
+- **THEN** 共享错误契约 MUST 提供业务中立的服务不可用错误分类
+- **AND** 该错误 MUST 渲染为 `503 Service Unavailable`
+- **AND** 具体业务边界 MUST 提供不泄露内部实现细节的公开消息
 
 ### Requirement: HTTP 与安全中间件基础
 
@@ -56,6 +63,63 @@
 
 - **WHEN** OpenAPI 元数据描述 user-service API server、认证方案、源码扫描范围、健康路径或输出目录
 - **THEN** 元数据 MUST 位于 user-service 脚本或薄 wrapper，不得放入 `common/http/openapi`
+
+### Requirement: 共享认证授权 helper API 治理
+
+系统 MUST 在 `common/http` 和 `common/security` 中保持认证、授权 helper 的导出 API 语义清晰且避免重复简写入口；当共享 helper 只包装另一个推荐入口且没有额外稳定语义时，系统 MUST 通过显式推荐入口、废弃标记或移除策略治理该 helper。
+
+#### Scenario: Casbin 授权 helper 收紧
+
+- **WHEN** 调用方需要获得 Casbin 三元组授权的原始允许结果
+- **THEN** 系统 MUST 提供 `common/security/casbin.Enforce` 作为返回 `bool` 和 `error` 的推荐入口
+- **AND** 拒绝访问转换为 `ErrDenied` 的 error-only 语义 MUST 由 `Authorizer.Authorize` 或调用方显式处理
+
+#### Scenario: JWT middleware 无 token version 校验
+
+- **WHEN** 服务需要创建不执行 token version 撤销校验的 JWT 认证中间件
+- **THEN** 系统 MUST 推荐调用 `AuthWithTokenVersionValidator(log, jwtService, cfg, nil)` 显式表达该行为
+- **AND** 仅作为兼容保留的简写 helper MUST 标记为废弃或在确认无消费者后移除
+
+#### Scenario: 行为保持不变
+
+- **WHEN** 共享认证授权 helper 的重复入口被废弃或移除
+- **THEN** 系统 MUST 保持 JWT 解析、token version 校验、Casbin 三元组校验、`ErrNotConfigured`、`ErrDenied` 和 HTTP 响应语义不变
+- **AND** user-service 的认证路由挂载和 RBAC 保护路由 MUST 不因该 API 治理发生行为变化
+
+### Requirement: 密码 KDF 显式实例化
+
+系统 MUST 在 `common/security/password` 中提供可显式实例化的 Argon2id 密码哈希与校验 primitive。调用方 MUST 通过实例方法执行密码哈希和校验，并 MUST 在构造实例时声明本实例的 Argon2id 并发上限和队列上限。`common/security/password` MUST NOT 暴露包级密码哈希、包级密码校验或包级可变 Argon2id 门控入口。
+
+#### Scenario: 创建密码 KDF 服务实例
+
+- **WHEN** 服务、CLI 或测试需要执行密码哈希或校验
+- **THEN** 调用方 MUST 显式创建 `common/security/password` 的密码 KDF 服务实例
+- **AND** 构造参数 MUST 包含正数 Argon2id 并发上限和正数队列上限
+- **AND** 队列上限 MUST 大于或等于并发上限
+
+#### Scenario: 拒绝无效 KDF 资源预算
+
+- **WHEN** 调用方使用非正数并发上限、非正数队列上限或小于并发上限的队列上限创建密码 KDF 服务
+- **THEN** 系统 MUST 返回明确错误并拒绝创建实例
+
+#### Scenario: 通过实例执行密码哈希
+
+- **WHEN** 调用方使用密码 KDF 服务实例对合法明文密码执行哈希
+- **THEN** 系统 MUST 使用 Argon2id 当前安全参数生成包含算法、版本、内存、迭代、并行度、盐和派生密钥的编码哈希
+- **AND** 系统 MUST 使用该实例的队列和并发预算限制本实例内执行中和等待中的 KDF 请求
+
+#### Scenario: 通过实例执行密码校验
+
+- **WHEN** 调用方使用密码 KDF 服务实例校验合法明文密码和受支持的编码哈希
+- **THEN** 系统 MUST 解析编码哈希中的算法、版本和参数
+- **AND** 系统 MUST 只接受当前策略允许的 Argon2id 参数
+- **AND** 系统 MUST 使用常量时间比较返回密码是否匹配
+
+#### Scenario: KDF 门控只属于实例
+
+- **WHEN** 多个服务组件、CLI 或测试在同一进程内需要不同密码 KDF 资源预算
+- **THEN** 系统 MUST 允许它们持有不同密码 KDF 服务实例
+- **AND** 一个实例的队列和并发占用 MUST NOT 消耗另一个实例的队列和并发预算
 
 ### Requirement: Runtime primitive 基础
 

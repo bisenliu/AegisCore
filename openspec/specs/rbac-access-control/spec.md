@@ -124,7 +124,7 @@
 
 ### Requirement: Casbin 授权保护
 
-系统 MUST 使用 RBAC 授权中间件保护权限、角色和用户业务接口，并在认证通过后执行资源级授权判断。Casbin subject/object/action MUST 分别使用 `user:<user_uuid>`、`role:<role_uuid>`、Gin route template 和 HTTP method。
+系统 MUST 使用 RBAC 授权中间件保护权限、角色和用户业务接口，并在认证通过后执行资源级授权判断。Casbin subject/object/action MUST 分别使用 `user:<user_uuid>`、`role:<role_uuid>`、Gin route template 和 HTTP method。授权服务 MUST 区分认证 subject 非法与策略拒绝，且在 subject 非法时 MUST 拒绝请求并返回明确错误，不得将解析失败静默折叠为普通权限拒绝。
 
 #### Scenario: 授权通过
 
@@ -135,6 +135,13 @@
 
 - **WHEN** 已认证用户缺少当前 HTTP 方法和路径对应权限
 - **THEN** 系统 MUST 拒绝请求并返回授权失败错误
+
+#### Scenario: 非法认证 subject
+
+- **WHEN** 授权服务收到无法解析为用户 UUID 的认证 subject
+- **THEN** 系统 MUST 拒绝请求并返回明确错误
+- **AND** 系统 MUST NOT 调用底层授权 engine
+- **AND** 调用方 MUST 能通过错误区分该场景与普通策略拒绝
 
 #### Scenario: 权限策略更新
 
