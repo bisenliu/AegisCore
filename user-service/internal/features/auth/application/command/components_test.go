@@ -321,6 +321,9 @@ func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
 	if result.UserID != authTestUserID || result.TokenVersion != 4 {
 		t.Fatalf("result = %#v", result)
 	}
+	if result.ProjectionError != nil {
+		t.Fatalf("projection error = %v, want nil", result.ProjectionError)
+	}
 	if repo.incrementedUserID != authTestUserID || !store.cached || store.cachedVersion != 4 || !store.deletedAll {
 		t.Fatalf("repo=%#v store=%#v", repo, store)
 	}
@@ -341,7 +344,8 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T)
 }
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t *testing.T) {
-	store := &sessionStoreStub{cacheErr: errors.New("cache refresh failed")}
+	cacheErr := errors.New("cache refresh failed")
+	store := &sessionStoreStub{cacheErr: cacheErr}
 	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{newVersion: 4}, store)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
@@ -351,6 +355,9 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t
 	}
 	if result.UserID != authTestUserID || result.TokenVersion != 4 {
 		t.Fatalf("result = %#v", result)
+	}
+	if !errors.Is(result.ProjectionError, cacheErr) {
+		t.Fatalf("projection error = %v, want cache error", result.ProjectionError)
 	}
 	if !store.cacheDeleted || store.deletedCachedUserID != authTestUserID.String() || !store.deletedAll {
 		t.Fatalf("store = %#v", store)
@@ -358,7 +365,8 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t
 }
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsSucceedsAfterDeleteAllProjectionError(t *testing.T) {
-	store := &sessionStoreStub{deleteAllErr: errors.New("delete all failed")}
+	deleteErr := errors.New("delete all failed")
+	store := &sessionStoreStub{deleteAllErr: deleteErr}
 	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{newVersion: 4}, store)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
@@ -368,6 +376,9 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsSucceedsAfterDeleteAllProjecti
 	}
 	if result.UserID != authTestUserID || result.TokenVersion != 4 {
 		t.Fatalf("result = %#v", result)
+	}
+	if !errors.Is(result.ProjectionError, deleteErr) {
+		t.Fatalf("projection error = %v, want delete error", result.ProjectionError)
 	}
 	if !store.cached || store.cachedVersion != 4 {
 		t.Fatalf("token version cache was not refreshed before delete failure: %#v", store)
@@ -377,16 +388,17 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsSucceedsAfterDeleteAllProjecti
 func TestAuthSessionLifecycleRevokeUserSessionsAtVersionReturnsProjectionError(t *testing.T) {
 	cacheErr := errors.New("cache refresh failed")
 	deleteErr := errors.New("delete all failed")
-	store := &sessionStoreStub{cacheErr: cacheErr, deleteAllErr: deleteErr}
+	deleteCacheErr := errors.New("delete cache failed")
+	store := &sessionStoreStub{cacheErr: cacheErr, deleteCacheErr: deleteCacheErr, deleteAllErr: deleteErr}
 	invalidator := &tokenVersionInvalidatorStub{}
-	lifecycle := authsessions.NewLifecycle(&authRepoStub{newVersion: 99}, store, 5, invalidator)
+	lifecycle := authsessions.NewLifecycle(&authRepoStub{newVersion: 99}, store, store, 5, invalidator)
 
 	err := lifecycle.RevokeUserSessionsAtVersion(context.Background(), authTestUserID, 4)
 
-	if !errors.Is(err, cacheErr) || !errors.Is(err, deleteErr) {
-		t.Fatalf("err = %v, want cache and delete errors", err)
+	if !errors.Is(err, cacheErr) || !errors.Is(err, deleteCacheErr) || !errors.Is(err, deleteErr) {
+		t.Fatalf("err = %v, want cache, cache delete, and session delete errors", err)
 	}
-	if !store.cacheDeleted || store.deletedCachedUserID != authTestUserID.String() {
+	if store.cacheDeleted || store.deletedCachedUserID != "" {
 		t.Fatalf("cache eviction = %#v", store)
 	}
 	if store.cached || store.cachedVersion != 0 {
@@ -414,7 +426,7 @@ func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing
 	}
 }
 
-func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) commonauth.TokenVersionValidator {
+func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenVersionStore, tokenCache authapplication.TokenVersionCache) commonauth.TokenVersionValidator {
 	t.Helper()
 	cache, err := localcache.New[string, int64](localcache.Config[string]{
 		Name:        "auth_token_version_test",
@@ -423,7 +435,7 @@ func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenV
 		LoadTimeout: time.Second,
 		KeyString:   func(key string) string { return key },
 	}, func(ctx context.Context, userID string) (int64, error) {
-		return authvalidators.Current(ctx, users, sessions, userID)
+		return authvalidators.Current(ctx, users, tokenCache, userID)
 	}, nil)
 	if err != nil {
 		t.Fatalf("New localcache: %v", err)
@@ -436,8 +448,8 @@ func authRefreshTestSession(sessionID string, tokenVersion int64) authdomain.Aut
 	return authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: sessionID, TokenVersion: tokenVersion}
 }
 
-func newTestAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) authsessions.Lifecycle {
-	return authsessions.NewLifecycle(users, sessions, 5)
+func newTestAuthSessionLifecycle(users authapplication.UserTokenVersionStore, store *sessionStoreStub) authsessions.Lifecycle {
+	return authsessions.NewLifecycle(users, store, store, 5)
 }
 
 type tokenVersionInvalidatorStub struct {

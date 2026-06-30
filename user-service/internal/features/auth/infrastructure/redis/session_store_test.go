@@ -1106,7 +1106,7 @@ func defaultMaxActiveSessionsPerUser() int {
 	return 5
 }
 
-func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore) commonauth.TokenVersionValidator {
+func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenVersionStore, tokenCache authapplication.TokenVersionCache) commonauth.TokenVersionValidator {
 	t.Helper()
 	cache, err := localcache.New[string, int64](localcache.Config[string]{
 		Name:        "auth_token_version_test",
@@ -1115,7 +1115,7 @@ func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenV
 		LoadTimeout: time.Second,
 		KeyString:   func(key string) string { return key },
 	}, func(ctx context.Context, userID string) (int64, error) {
-		return authvalidators.Current(ctx, users, sessions, userID)
+		return authvalidators.Current(ctx, users, tokenCache, userID)
 	}, nil)
 	if err != nil {
 		t.Fatalf("New localcache: %v", err)

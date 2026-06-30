@@ -20,7 +20,7 @@ type tokenVersionCacheParams struct {
 	Lifecycle fx.Lifecycle
 	Config    *config.Config
 	Users     authapplication.UserTokenVersionStore
-	Sessions  authapplication.AuthSessionStore
+	Cache     authapplication.TokenVersionCache
 }
 
 type tokenVersionCacheResult struct {
@@ -44,7 +44,7 @@ func newTokenVersionLocalCache(params tokenVersionCacheParams) (tokenVersionCach
 		NumCounters: cfg.NumCounters,
 		BufferItems: cfg.BufferItems,
 	}, func(ctx context.Context, userID string) (int64, error) {
-		return authvalidators.Current(ctx, params.Users, params.Sessions, userID)
+		return authvalidators.Current(ctx, params.Users, params.Cache, userID)
 	}, nil)
 	if err != nil {
 		return tokenVersionCacheResult{}, fmt.Errorf("create auth token version localcache: %w", err)

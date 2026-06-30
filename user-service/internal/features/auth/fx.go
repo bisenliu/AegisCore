@@ -45,7 +45,8 @@ var Module = fx.Module("feature-auth",
 		),
 		fx.Annotate(
 			authredis.NewSessionStore,
-			fx.As(new(authapplication.AuthSessionStore)),
+			fx.As(new(authapplication.TokenVersionCache)),
+			fx.As(new(authapplication.RefreshSessionStore)),
 		),
 		fx.Annotate(
 			authredis.NewSessionPurgePool,
@@ -67,8 +68,8 @@ var Module = fx.Module("feature-auth",
 	),
 )
 
-func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, tokenVersions authvalidators.TokenVersionLocalInvalidator, cfg *config.Config) authsessions.Lifecycle {
-	return authsessions.NewLifecycle(users, sessions, cfg.Auth.MaxActiveSessionsPerUser, tokenVersions)
+func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, tokenVersionCache authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, tokenVersions authvalidators.TokenVersionLocalInvalidator, cfg *config.Config) authsessions.Lifecycle {
+	return authsessions.NewLifecycle(users, tokenVersionCache, sessions, cfg.Auth.MaxActiveSessionsPerUser, tokenVersions)
 }
 
 func newTokenVersionValidator(params tokenVersionValidatorParams) tokenVersionValidatorResult {

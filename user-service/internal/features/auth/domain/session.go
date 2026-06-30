@@ -16,6 +16,7 @@ type AuthSession struct {
 
 // SessionRevocationResult 返回撤销用户全部会话后的新 token version。
 type SessionRevocationResult struct {
-	UserID       uuid.UUID
-	TokenVersion int64
+	UserID          uuid.UUID
+	TokenVersion    int64
+	ProjectionError error
 }

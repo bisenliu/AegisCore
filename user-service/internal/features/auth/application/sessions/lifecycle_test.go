@@ -17,7 +17,8 @@ var sessionTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
 func TestLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T) {
 	for _, err := range []error{authdomain.ErrAuthSessionNotFound, authdomain.ErrAuthSessionMismatch} {
 		t.Run(err.Error(), func(t *testing.T) {
-			lifecycle := NewLifecycle(&sessionUserStoreStub{}, &sessionStoreStub{rotateErr: err}, 5)
+			store := &sessionStoreStub{rotateErr: err}
+			lifecycle := NewLifecycle(&sessionUserStoreStub{}, store, store, 5)
 			oldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
 			newSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 2}
 
@@ -33,7 +34,7 @@ func TestLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T) {
 func TestLifecycleCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
 	users := &sessionUserStoreStub{tokenVersion: 7}
 	store := &sessionStoreStub{cacheMiss: true}
-	lifecycle := NewLifecycle(users, store, 5)
+	lifecycle := NewLifecycle(users, store, store, 5)
 
 	version, err := lifecycle.CurrentTokenVersion(context.Background(), sessionTestUserID.String())
 
@@ -52,7 +53,7 @@ func TestLifecycleRevokeAllUserSessions(t *testing.T) {
 	users := &sessionUserStoreStub{newVersion: 4}
 	store := &sessionStoreStub{}
 	invalidator := &tokenVersionInvalidatorStub{}
-	lifecycle := NewLifecycle(users, store, 5, invalidator)
+	lifecycle := NewLifecycle(users, store, store, 5, invalidator)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), sessionTestUserID)
 
@@ -61,6 +62,9 @@ func TestLifecycleRevokeAllUserSessions(t *testing.T) {
 	}
 	if result.UserID != sessionTestUserID || result.TokenVersion != 4 {
 		t.Fatalf("result = %#v", result)
+	}
+	if result.ProjectionError != nil {
+		t.Fatalf("projection error = %v, want nil", result.ProjectionError)
 	}
 	if users.incrementedUserID != sessionTestUserID || !store.cached || store.cachedVersion != 4 || !store.deletedAll {
 		t.Fatalf("users=%#v store=%#v", users, store)

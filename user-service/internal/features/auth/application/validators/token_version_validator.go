@@ -50,9 +50,9 @@ func (v *TokenVersionValidator) InvalidateTokenVersion(userID string) {
 }
 
 // Current 使用 Redis token version cache，并在 miss 时回源用户凭据存储。
-func Current(ctx context.Context, users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, userID string) (int64, error) {
+func Current(ctx context.Context, users authapplication.UserTokenVersionStore, cache authapplication.TokenVersionCache, userID string) (int64, error) {
 	// access token 中间件对延迟敏感，因此先查 Redis，再回退到仓储。
-	currentVersion, err := sessions.GetCachedTokenVersion(ctx, userID)
+	currentVersion, err := cache.GetCachedTokenVersion(ctx, userID)
 	if err == nil {
 		return currentVersion, nil
 	}
@@ -69,7 +69,7 @@ func Current(ctx context.Context, users authapplication.UserTokenVersionStore, s
 	if err != nil {
 		return 0, fmt.Errorf("get token version from database: %w", err)
 	}
-	if err := sessions.CacheTokenVersion(ctx, userID, currentVersion); err != nil {
+	if err := cache.CacheTokenVersion(ctx, userID, currentVersion); err != nil {
 		logger.Error(ctx, "backfill token version cache failed", logger.StackTrace(zap.String("user_id", userID), zap.Int64("token_version", currentVersion), zap.Error(err))...)
 		return 0, fmt.Errorf("backfill token version cache: %w", err)
 	}

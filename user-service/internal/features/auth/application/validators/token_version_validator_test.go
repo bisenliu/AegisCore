@@ -167,7 +167,7 @@ func TestTokenVersionValidatorInvalidateReloads(t *testing.T) {
 	}
 }
 
-func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenVersionStore, sessions authapplication.AuthSessionStore, ttl time.Duration) *TokenVersionValidator {
+func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenVersionStore, tokenCache authapplication.TokenVersionCache, ttl time.Duration) *TokenVersionValidator {
 	t.Helper()
 	cache, err := localcache.New[string, int64](localcache.Config[string]{
 		Name:        "auth_token_version_test",
@@ -176,7 +176,7 @@ func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenV
 		LoadTimeout: time.Second,
 		KeyString:   func(key string) string { return key },
 	}, func(ctx context.Context, userID string) (int64, error) {
-		return Current(ctx, users, sessions, userID)
+		return Current(ctx, users, tokenCache, userID)
 	}, nil)
 	if err != nil {
 		t.Fatalf("New localcache: %v", err)
@@ -251,25 +251,5 @@ func (s *tokenVersionSessionStoreStub) CacheTokenVersion(context.Context, string
 }
 
 func (s *tokenVersionSessionStoreStub) DeleteCachedTokenVersion(context.Context, string) error {
-	return nil
-}
-
-func (s *tokenVersionSessionStoreStub) CreateSession(context.Context, authdomain.AuthSession, time.Duration, int) error {
-	return nil
-}
-
-func (s *tokenVersionSessionStoreStub) RotateSession(context.Context, authdomain.AuthSession, authdomain.AuthSession, time.Duration, int) error {
-	return nil
-}
-
-func (s *tokenVersionSessionStoreStub) GetSession(context.Context, string, string) (authdomain.AuthSession, error) {
-	return authdomain.AuthSession{}, authdomain.ErrAuthSessionNotFound
-}
-
-func (s *tokenVersionSessionStoreStub) DeleteSession(context.Context, string, string) error {
-	return nil
-}
-
-func (s *tokenVersionSessionStoreStub) DeleteAllUserSessions(context.Context, string) error {
 	return nil
 }

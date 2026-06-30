@@ -69,6 +69,11 @@ type SessionStore struct {
 	metrics              authapplication.Metrics
 }
 
+var (
+	_ authapplication.TokenVersionCache   = (*SessionStore)(nil)
+	_ authapplication.RefreshSessionStore = (*SessionStore)(nil)
+)
+
 // PurgeTaskPool 是认证 Redis 适配器消费的后台清理任务池窄接口。
 type PurgeTaskPool interface {
 	Submit(ctx context.Context, task workerpool.Task) error

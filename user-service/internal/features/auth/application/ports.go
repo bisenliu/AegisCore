@@ -22,11 +22,15 @@ type UserTokenVersionStore interface {
 	IncrementTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error)
 }
 
-// AuthSessionStore 管理 token version 缓存和 refresh token 会话撤销状态。
-type AuthSessionStore interface {
+// TokenVersionCache 管理 Redis token version 投影。
+type TokenVersionCache interface {
 	GetCachedTokenVersion(ctx context.Context, userID string) (int64, error)
 	CacheTokenVersion(ctx context.Context, userID string, tokenVersion int64) error
 	DeleteCachedTokenVersion(ctx context.Context, userID string) error
+}
+
+// RefreshSessionStore 管理 refresh token 会话生命周期。
+type RefreshSessionStore interface {
 	CreateSession(ctx context.Context, session authdomain.AuthSession, ttl time.Duration, maxActiveSessionsPerUser int) error
 	RotateSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, ttl time.Duration, maxActiveSessionsPerUser int) error
 	GetSession(ctx context.Context, userID string, sessionID string) (authdomain.AuthSession, error)

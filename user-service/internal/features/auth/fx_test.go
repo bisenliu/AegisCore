@@ -16,9 +16,9 @@ import (
 
 func TestNewTokenVersionLocalCacheRequiresConfigInstance(t *testing.T) {
 	_, err := newTokenVersionLocalCache(tokenVersionCacheParams{
-		Config:   &config.Config{LocalCache: config.LocalCacheConfig{}},
-		Users:    fakeTokenVersionStore{},
-		Sessions: fakeAuthSessionStore{},
+		Config: &config.Config{LocalCache: config.LocalCacheConfig{}},
+		Users:  fakeTokenVersionStore{},
+		Cache:  fakeAuthStore{},
 	})
 
 	if err == nil || !strings.Contains(err.Error(), "local_cache.auth_token_version is required") {
@@ -27,7 +27,8 @@ func TestNewTokenVersionLocalCacheRequiresConfigInstance(t *testing.T) {
 }
 
 var _ authapplication.UserTokenVersionStore = fakeTokenVersionStore{}
-var _ authapplication.AuthSessionStore = fakeAuthSessionStore{}
+var _ authapplication.TokenVersionCache = fakeAuthStore{}
+var _ authapplication.RefreshSessionStore = fakeAuthStore{}
 
 type fakeTokenVersionStore struct{}
 
@@ -39,36 +40,36 @@ func (fakeTokenVersionStore) IncrementTokenVersion(context.Context, uuid.UUID) (
 	return 0, errors.New("not implemented")
 }
 
-type fakeAuthSessionStore struct{}
+type fakeAuthStore struct{}
 
-func (fakeAuthSessionStore) GetCachedTokenVersion(context.Context, string) (int64, error) {
+func (fakeAuthStore) GetCachedTokenVersion(context.Context, string) (int64, error) {
 	return 0, authdomain.ErrTokenVersionCacheMiss
 }
 
-func (fakeAuthSessionStore) CacheTokenVersion(context.Context, string, int64) error {
+func (fakeAuthStore) CacheTokenVersion(context.Context, string, int64) error {
 	return nil
 }
 
-func (fakeAuthSessionStore) DeleteCachedTokenVersion(context.Context, string) error {
+func (fakeAuthStore) DeleteCachedTokenVersion(context.Context, string) error {
 	return nil
 }
 
-func (fakeAuthSessionStore) CreateSession(context.Context, authdomain.AuthSession, time.Duration, int) error {
+func (fakeAuthStore) CreateSession(context.Context, authdomain.AuthSession, time.Duration, int) error {
 	return nil
 }
 
-func (fakeAuthSessionStore) RotateSession(context.Context, authdomain.AuthSession, authdomain.AuthSession, time.Duration, int) error {
+func (fakeAuthStore) RotateSession(context.Context, authdomain.AuthSession, authdomain.AuthSession, time.Duration, int) error {
 	return nil
 }
 
-func (fakeAuthSessionStore) GetSession(context.Context, string, string) (authdomain.AuthSession, error) {
+func (fakeAuthStore) GetSession(context.Context, string, string) (authdomain.AuthSession, error) {
 	return authdomain.AuthSession{}, errors.New("not implemented")
 }
 
-func (fakeAuthSessionStore) DeleteSession(context.Context, string, string) error {
+func (fakeAuthStore) DeleteSession(context.Context, string, string) error {
 	return nil
 }
 
-func (fakeAuthSessionStore) DeleteAllUserSessions(context.Context, string) error {
+func (fakeAuthStore) DeleteAllUserSessions(context.Context, string) error {
 	return nil
 }

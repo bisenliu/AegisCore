@@ -646,26 +646,26 @@ func TestAuthUseCaseLogoutAllMapsIncrementUserNotFound(t *testing.T) {
 	}
 }
 
-func newTestAuthUseCases(repo *authRepoStub, store authapplication.AuthSessionStore, rotation bool) testAuthUseCases {
+func newTestAuthUseCases(repo *authRepoStub, store *sessionStoreStub, rotation bool) testAuthUseCases {
 	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 5}}
 	return newTestAuthUseCasesWithConfig(repo, store, cfg.Auth)
 }
 
-func newTestAuthUseCasesWithConfig(repo *authRepoStub, store authapplication.AuthSessionStore, authCfg config.AuthConfig) testAuthUseCases {
+func newTestAuthUseCasesWithConfig(repo *authRepoStub, store *sessionStoreStub, authCfg config.AuthConfig) testAuthUseCases {
 	return newTestAuthUseCasesWithConfigAndMetrics(repo, store, authCfg, nil)
 }
 
-func newTestAuthUseCasesWithMetrics(repo *authRepoStub, store authapplication.AuthSessionStore, rotation bool, metrics authapplication.Metrics) testAuthUseCases {
+func newTestAuthUseCasesWithMetrics(repo *authRepoStub, store *sessionStoreStub, rotation bool, metrics authapplication.Metrics) testAuthUseCases {
 	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 5}
 	return newTestAuthUseCasesWithConfigAndMetrics(repo, store, cfg, metrics)
 }
 
-func newTestAuthUseCasesWithConfigAndMetrics(repo *authRepoStub, store authapplication.AuthSessionStore, authCfg config.AuthConfig, metrics authapplication.Metrics) testAuthUseCases {
+func newTestAuthUseCasesWithConfigAndMetrics(repo *authRepoStub, store *sessionStoreStub, authCfg config.AuthConfig, metrics authapplication.Metrics) testAuthUseCases {
 	cfg := &config.Config{Auth: authCfg}
 	deps := NewUseCaseDeps(UseCaseDepsParams{
 		Credentials: authcredentials.NewVerifier(repo, mustTestPasswordService()),
 		Tokens:      authtokens.NewIssuer(commonauth.NewJWTService(cfg.Auth), cfg),
-		Sessions:    authsessions.NewLifecycle(repo, store, cfg.Auth.MaxActiveSessionsPerUser),
+		Sessions:    authsessions.NewLifecycle(repo, store, store, cfg.Auth.MaxActiveSessionsPerUser),
 		Config:      cfg,
 		Metrics:     metrics,
 	})
