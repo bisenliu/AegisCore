@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
 
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
@@ -26,8 +27,8 @@ func TestAuthUseCaseLogin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
-	store := &sessionStoreStub{version: 2}
+	repo := &authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
+	store := &authSessionTestStore{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 
 	tokens, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
@@ -51,9 +52,9 @@ func TestAuthUseCaseLoginRecordsMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	metrics := &authMetricsSpy{}
-	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
-	store := &sessionStoreStub{version: 2}
+	metrics := &recordingAuthMetrics{}
+	repo := &authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
+	store := &authSessionTestStore{version: 2}
 	svc := newTestAuthUseCasesWithMetrics(repo, store, true, metrics)
 
 	_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
@@ -70,8 +71,8 @@ func TestAuthUseCaseLoginRecordsFailureReasons(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	metrics := &authMetricsSpy{}
-	svc := newTestAuthUseCasesWithMetrics(&authRepoStub{}, &sessionStoreStub{}, true, metrics)
+	metrics := &recordingAuthMetrics{}
+	svc := newTestAuthUseCasesWithMetrics(&authCredentialTestStore{}, &authSessionTestStore{}, true, metrics)
 	_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: " "})
 	if !errors.Is(err, authdomain.ErrInvalidCredentials) {
 		t.Fatalf("err = %v, want invalid credentials", err)
@@ -80,8 +81,8 @@ func TestAuthUseCaseLoginRecordsFailureReasons(t *testing.T) {
 		t.Fatalf("validation failure metrics = %d, want 1", got)
 	}
 
-	metrics = &authMetricsSpy{}
-	svc = newTestAuthUseCasesWithMetrics(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true, metrics)
+	metrics = &recordingAuthMetrics{}
+	svc = newTestAuthUseCasesWithMetrics(&authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}}, &authSessionTestStore{version: 2}, true, metrics)
 	_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 	if !errors.Is(err, authdomain.ErrInvalidCredentials) {
 		t.Fatalf("err = %v, want invalid credentials", err)
@@ -90,8 +91,11 @@ func TestAuthUseCaseLoginRecordsFailureReasons(t *testing.T) {
 		t.Fatalf("status rejected metrics = %d, want 1", got)
 	}
 
-	metrics = &authMetricsSpy{}
-	svc = newTestAuthUseCasesWithCredentialsAndMetrics(&credentialsStub{verifyErr: password.ErrPasswordKDFBusy}, metrics)
+	metrics = &recordingAuthMetrics{}
+	ctrl := gomock.NewController(t)
+	credentials := NewMockVerifier(ctrl)
+	credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(nil, password.ErrPasswordKDFBusy)
+	svc = newTestAuthUseCasesWithCredentialsAndMetrics(credentials, metrics)
 	tokens, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 	if !errors.Is(err, password.ErrPasswordKDFBusy) {
 		t.Fatalf("err = %v, want ErrPasswordKDFBusy", err)
@@ -105,7 +109,7 @@ func TestAuthUseCaseLoginRecordsFailureReasons(t *testing.T) {
 }
 
 func TestAuthUseCaseLoginRejectsBlankTrimmedCredentials(t *testing.T) {
-	svc := newTestAuthUseCases(&authRepoStub{}, &sessionStoreStub{}, true)
+	svc := newTestAuthUseCases(&authCredentialTestStore{}, &authSessionTestStore{}, true)
 
 	_, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: " "})
 
@@ -119,8 +123,8 @@ func TestAuthUseCaseLoginUsesDefaultTTLs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
-	store := &sessionStoreStub{version: 2}
+	repo := &authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
+	store := &authSessionTestStore{version: 2}
 	svc := newTestAuthUseCasesWithConfig(repo, store, config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"}})
 
 	tokens, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
@@ -143,8 +147,8 @@ func TestAuthUseCaseLoginUsesExplicitTTLs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
-	store := &sessionStoreStub{version: 2}
+	repo := &authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
+	store := &authSessionTestStore{version: 2}
 	accessTTL := time.Minute
 	refreshTTL := 2 * time.Hour
 	svc := newTestAuthUseCasesWithConfig(repo, store, config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: accessTTL, RefreshTokenTTL: refreshTTL}})
@@ -167,8 +171,8 @@ func TestAuthUseCaseLoginPassesMaxActiveSessionsPerUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
-	store := &sessionStoreStub{version: 2}
+	repo := &authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
+	store := &authSessionTestStore{version: 2}
 	svc := newTestAuthUseCasesWithConfig(repo, store, config.AuthConfig{
 		JWT:                      config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour},
 		TokenVersionCacheTTL:     time.Minute,
@@ -192,8 +196,8 @@ func TestAuthUseCaseLoginDoesNotReturnTokenWhenSessionCreateFails(t *testing.T) 
 		t.Fatalf("Hash: %v", err)
 	}
 	createErr := errors.New("create session failed")
-	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
-	store := &sessionStoreStub{version: 2, createErr: createErr}
+	repo := &authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}
+	store := &authSessionTestStore{version: 2, createErr: createErr}
 	svc := newTestAuthUseCases(repo, store, true)
 
 	tokens, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
@@ -211,7 +215,7 @@ func TestAuthUseCaseLoginRejectsInvalidCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	svc := newTestAuthUseCases(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
+	svc := newTestAuthUseCases(&authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}, &authSessionTestStore{version: 2}, true)
 
 	_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "wrong"})
 
@@ -226,7 +230,7 @@ func TestAuthUseCaseLoginRejectsInactiveStatuses(t *testing.T) {
 		t.Fatalf("Hash: %v", err)
 	}
 	for _, status := range []identity.UserStatus{identity.UserStatusDisabled} {
-		svc := newTestAuthUseCases(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: status, TokenVersion: 2}}, &sessionStoreStub{version: 2}, true)
+		svc := newTestAuthUseCases(&authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: status, TokenVersion: 2}}, &authSessionTestStore{version: 2}, true)
 
 		_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 
@@ -241,8 +245,8 @@ func TestAuthUseCaseLoginIssuesPasswordChangeToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}}
-	store := &sessionStoreStub{version: 2}
+	repo := &authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}}
+	store := &authSessionTestStore{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 
 	tokens, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
@@ -270,8 +274,8 @@ func TestAuthUseCaseChangePassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
-	store := &sessionStoreStub{version: 2}
+	repo := &authCredentialTestStore{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
+	store := &authSessionTestStore{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
@@ -297,8 +301,8 @@ func TestAuthUseCaseChangePasswordIncrementsTokenVersionOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
-	store := &sessionStoreStub{version: 2}
+	repo := &authCredentialTestStore{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
+	store := &authSessionTestStore{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
@@ -326,8 +330,8 @@ func TestAuthUseCaseChangePasswordSucceedsWhenRevocationProjectionFails(t *testi
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
-	store := &sessionStoreStub{version: 2, cacheErr: errors.New("cache failed"), deleteAllErr: errors.New("delete failed")}
+	repo := &authCredentialTestStore{userByID: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
+	store := &authSessionTestStore{version: 2, cacheErr: errors.New("cache failed"), deleteAllErr: errors.New("delete failed")}
 	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
@@ -351,8 +355,8 @@ func TestAuthUseCaseChangePasswordSucceedsWhenRevocationProjectionFails(t *testi
 }
 
 func TestAuthUseCaseChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
-	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: identity.ErrUserNotFound}
-	store := &sessionStoreStub{version: 2}
+	repo := &authCredentialTestStore{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: identity.ErrUserNotFound}
+	store := &authSessionTestStore{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
@@ -367,7 +371,7 @@ func TestAuthUseCaseChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
 }
 
 func TestAuthUseCaseChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
-	svc := newTestAuthUseCases(&authRepoStub{tokenVersionErr: identity.ErrUserNotFound}, &sessionStoreStub{cacheMiss: true}, true)
+	svc := newTestAuthUseCases(&authCredentialTestStore{tokenVersionErr: identity.ErrUserNotFound}, &authSessionTestStore{cacheMiss: true}, true)
 	token, err := testJWTService().SignPasswordChangeToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "pc-123", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignPasswordChangeToken: %v", err)
@@ -381,8 +385,8 @@ func TestAuthUseCaseChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
 }
 
 func TestAuthUseCaseChangePasswordRejectsAccessToken(t *testing.T) {
-	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}}
-	store := &sessionStoreStub{version: 2}
+	repo := &authCredentialTestStore{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}}
+	store := &authSessionTestStore{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 	token, err := testJWTService().SignAccessToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
 	if err != nil {
@@ -397,8 +401,8 @@ func TestAuthUseCaseChangePasswordRejectsAccessToken(t *testing.T) {
 }
 
 func TestAuthUseCaseRefreshRotatesSession(t *testing.T) {
-	store := &sessionStoreStub{version: 2, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
-	svc := newTestAuthUseCases(&authRepoStub{}, store, true)
+	store := &authSessionTestStore{version: 2, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
+	svc := newTestAuthUseCases(&authCredentialTestStore{}, store, true)
 	refresh, err := testJWTService().SignRefreshToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
@@ -421,8 +425,8 @@ func TestAuthUseCaseRefreshRotatesSession(t *testing.T) {
 }
 
 func TestAuthUseCaseRefreshRotationPassesMaxActiveSessionsPerUser(t *testing.T) {
-	store := &sessionStoreStub{version: 2, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
-	svc := newTestAuthUseCasesWithConfig(&authRepoStub{}, store, config.AuthConfig{
+	store := &authSessionTestStore{version: 2, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
+	svc := newTestAuthUseCasesWithConfig(&authCredentialTestStore{}, store, config.AuthConfig{
 		JWT:                      config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour},
 		TokenVersionCacheTTL:     time.Minute,
 		RefreshTokenRotation:     true,
@@ -444,7 +448,7 @@ func TestAuthUseCaseRefreshRotationPassesMaxActiveSessionsPerUser(t *testing.T) 
 }
 
 func TestAuthUseCaseRefreshRejectsInvalidNormalizedToken(t *testing.T) {
-	svc := newTestAuthUseCases(&authRepoStub{}, &sessionStoreStub{}, false)
+	svc := newTestAuthUseCases(&authCredentialTestStore{}, &authSessionTestStore{}, false)
 
 	for _, token := range []string{"", " ", commonauth.TokenTypeBearer, commonauth.TokenPrefix} {
 		_, err := svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: token})
@@ -532,8 +536,8 @@ func TestAuthUseCaseRefreshRotationReturnsTokenAfterNewSessionAndOldRevocation(t
 }
 
 func TestAuthUseCaseRefreshUsesNormalizedToken(t *testing.T) {
-	store := &sessionStoreStub{version: 2, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
-	svc := newTestAuthUseCases(&authRepoStub{}, store, false)
+	store := &authSessionTestStore{version: 2, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
+	svc := newTestAuthUseCases(&authCredentialTestStore{}, store, false)
 	refresh, err := testJWTService().SignRefreshToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
@@ -550,8 +554,8 @@ func TestAuthUseCaseRefreshUsesNormalizedToken(t *testing.T) {
 }
 
 func TestAuthUseCaseRefreshRejectsAccessTokenSubject(t *testing.T) {
-	store := &sessionStoreStub{version: 2, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
-	svc := newTestAuthUseCases(&authRepoStub{}, store, false)
+	store := &authSessionTestStore{version: 2, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
+	svc := newTestAuthUseCases(&authCredentialTestStore{}, store, false)
 	access, err := testJWTService().SignAccessToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignAccessToken: %v", err)
@@ -565,9 +569,9 @@ func TestAuthUseCaseRefreshRejectsAccessTokenSubject(t *testing.T) {
 }
 
 func TestAuthUseCaseRefreshRejectsVersionChange(t *testing.T) {
-	store := &sessionStoreStub{version: 3, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
-	metrics := &authMetricsSpy{}
-	svc := newTestAuthUseCasesWithMetrics(&authRepoStub{}, store, true, metrics)
+	store := &authSessionTestStore{version: 3, session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}}
+	metrics := &recordingAuthMetrics{}
+	svc := newTestAuthUseCasesWithMetrics(&authCredentialTestStore{}, store, true, metrics)
 	refresh, err := testJWTService().SignRefreshToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
@@ -587,8 +591,8 @@ func TestAuthUseCaseRefreshRejectsVersionChange(t *testing.T) {
 }
 
 func TestAuthUseCaseRefreshMapsTokenVersionUserNotFound(t *testing.T) {
-	store := &sessionStoreStub{session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}, cacheMiss: true}
-	svc := newTestAuthUseCases(&authRepoStub{tokenVersionErr: identity.ErrUserNotFound}, store, true)
+	store := &authSessionTestStore{session: authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}, cacheMiss: true}
+	svc := newTestAuthUseCases(&authCredentialTestStore{tokenVersionErr: identity.ErrUserNotFound}, store, true)
 	refresh, err := testJWTService().SignRefreshToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-old", TTL: time.Hour})
 	if err != nil {
 		t.Fatalf("SignRefreshToken: %v", err)
@@ -602,9 +606,9 @@ func TestAuthUseCaseRefreshMapsTokenVersionUserNotFound(t *testing.T) {
 }
 
 func TestAuthUseCaseLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
-	repo := &authRepoStub{newVersion: 3}
-	store := &sessionStoreStub{version: 2}
-	metrics := &authMetricsSpy{}
+	repo := &authCredentialTestStore{newVersion: 3}
+	store := &authSessionTestStore{version: 2}
+	metrics := &recordingAuthMetrics{}
 	svc := newTestAuthUseCasesWithMetrics(repo, store, true, metrics)
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 
@@ -622,8 +626,8 @@ func TestAuthUseCaseLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 }
 
 func TestAuthUseCaseLogoutAllSucceedsWhenRevocationProjectionFails(t *testing.T) {
-	repo := &authRepoStub{newVersion: 3}
-	store := &sessionStoreStub{version: 2, cacheErr: errors.New("cache failed"), deleteAllErr: errors.New("delete failed")}
+	repo := &authCredentialTestStore{newVersion: 3}
+	store := &authSessionTestStore{version: 2, cacheErr: errors.New("cache failed"), deleteAllErr: errors.New("delete failed")}
 	svc := newTestAuthUseCases(repo, store, true)
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 
@@ -644,8 +648,8 @@ func TestAuthUseCaseLogoutAllSucceedsWhenRevocationProjectionFails(t *testing.T)
 }
 
 func TestAuthUseCaseLogoutAllMapsIncrementUserNotFound(t *testing.T) {
-	repo := &authRepoStub{incrementErr: identity.ErrUserNotFound}
-	store := &sessionStoreStub{version: 2}
+	repo := &authCredentialTestStore{incrementErr: identity.ErrUserNotFound}
+	store := &authSessionTestStore{version: 2}
 	svc := newTestAuthUseCases(repo, store, true)
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 
@@ -659,21 +663,21 @@ func TestAuthUseCaseLogoutAllMapsIncrementUserNotFound(t *testing.T) {
 	}
 }
 
-func newTestAuthUseCases(repo *authRepoStub, store *sessionStoreStub, rotation bool) testAuthUseCases {
+func newTestAuthUseCases(repo *authCredentialTestStore, store *authSessionTestStore, rotation bool) testAuthUseCases {
 	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 5}}
 	return newTestAuthUseCasesWithConfig(repo, store, cfg.Auth)
 }
 
-func newTestAuthUseCasesWithConfig(repo *authRepoStub, store *sessionStoreStub, authCfg config.AuthConfig) testAuthUseCases {
+func newTestAuthUseCasesWithConfig(repo *authCredentialTestStore, store *authSessionTestStore, authCfg config.AuthConfig) testAuthUseCases {
 	return newTestAuthUseCasesWithConfigAndMetrics(repo, store, authCfg, nil)
 }
 
-func newTestAuthUseCasesWithMetrics(repo *authRepoStub, store *sessionStoreStub, rotation bool, metrics authapplication.Metrics) testAuthUseCases {
+func newTestAuthUseCasesWithMetrics(repo *authCredentialTestStore, store *authSessionTestStore, rotation bool, metrics authapplication.Metrics) testAuthUseCases {
 	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 5}
 	return newTestAuthUseCasesWithConfigAndMetrics(repo, store, cfg, metrics)
 }
 
-func newTestAuthUseCasesWithConfigAndMetrics(repo *authRepoStub, store *sessionStoreStub, authCfg config.AuthConfig, metrics authapplication.Metrics) testAuthUseCases {
+func newTestAuthUseCasesWithConfigAndMetrics(repo *authCredentialTestStore, store *authSessionTestStore, authCfg config.AuthConfig, metrics authapplication.Metrics) testAuthUseCases {
 	cfg := &config.Config{Auth: authCfg}
 	deps := NewUseCaseDeps(UseCaseDepsParams{
 		Credentials: authcredentials.NewVerifier(repo, mustTestPasswordService()),
@@ -696,7 +700,7 @@ func newTestAuthUseCasesWithCredentialsAndMetrics(credentials authcredentials.Ve
 	deps := NewUseCaseDeps(UseCaseDepsParams{
 		Credentials: credentials,
 		Tokens:      authtokens.NewIssuer(commonauth.NewJWTService(cfg.Auth), cfg),
-		Sessions:    authsessions.NewLifecycle(&authRepoStub{}, &sessionStoreStub{}, &sessionStoreStub{}, cfg.Auth.MaxActiveSessionsPerUser),
+		Sessions:    authsessions.NewLifecycle(&authCredentialTestStore{}, &authSessionTestStore{}, &authSessionTestStore{}, cfg.Auth.MaxActiveSessionsPerUser),
 		Config:      cfg,
 		Metrics:     metrics,
 	})
@@ -730,7 +734,7 @@ func verifyTestPassword(t testing.TB, plain, encodedHash string) (bool, error) {
 	return testPasswordService(t).VerifyContext(context.Background(), plain, encodedHash)
 }
 
-type authMetricsSpy struct {
+type recordingAuthMetrics struct {
 	loginSucceeded         int
 	loginFailed            map[string]int
 	refreshSucceeded       int
@@ -741,23 +745,7 @@ type authMetricsSpy struct {
 	sessionPurgeFailures   int
 }
 
-type credentialsStub struct {
-	user      *authdomain.UserCredential
-	verifyErr error
-}
-
-func (s *credentialsStub) VerifyPassword(context.Context, string, string) (*authdomain.UserCredential, error) {
-	if s.verifyErr != nil {
-		return nil, s.verifyErr
-	}
-	return s.user, nil
-}
-
-func (s *credentialsStub) ChangePassword(context.Context, uuid.UUID, string) (*authdomain.CredentialUpdateResult, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (m *authMetricsSpy) ensure() {
+func (m *recordingAuthMetrics) ensure() {
 	if m.loginFailed == nil {
 		m.loginFailed = map[string]int{}
 	}
@@ -775,30 +763,30 @@ func (m *authMetricsSpy) ensure() {
 	}
 }
 
-func (m *authMetricsSpy) LoginSucceeded(context.Context) {
+func (m *recordingAuthMetrics) LoginSucceeded(context.Context) {
 	m.loginSucceeded++
 }
 
-func (m *authMetricsSpy) LoginFailed(_ context.Context, reason string) {
+func (m *recordingAuthMetrics) LoginFailed(_ context.Context, reason string) {
 	m.ensure()
 	m.loginFailed[reason]++
 }
 
-func (m *authMetricsSpy) RefreshSucceeded(context.Context) {
+func (m *recordingAuthMetrics) RefreshSucceeded(context.Context) {
 	m.refreshSucceeded++
 }
 
-func (m *authMetricsSpy) RefreshFailed(_ context.Context, reason string) {
+func (m *recordingAuthMetrics) RefreshFailed(_ context.Context, reason string) {
 	m.ensure()
 	m.refreshFailed[reason]++
 }
 
-func (m *authMetricsSpy) LogoutSucceeded(_ context.Context, operation string) {
+func (m *recordingAuthMetrics) LogoutSucceeded(_ context.Context, operation string) {
 	m.ensure()
 	m.logoutSucceeded[operation]++
 }
 
-func (m *authMetricsSpy) LogoutFailed(_ context.Context, operation string, reason string) {
+func (m *recordingAuthMetrics) LogoutFailed(_ context.Context, operation string, reason string) {
 	m.ensure()
 	if m.logoutFailed[operation] == nil {
 		m.logoutFailed[operation] = map[string]int{}
@@ -806,12 +794,12 @@ func (m *authMetricsSpy) LogoutFailed(_ context.Context, operation string, reaso
 	m.logoutFailed[operation][reason]++
 }
 
-func (m *authMetricsSpy) TokenVersionMismatch(_ context.Context, source string) {
+func (m *recordingAuthMetrics) TokenVersionMismatch(_ context.Context, source string) {
 	m.ensure()
 	m.tokenVersionMismatches[source]++
 }
 
-func (m *authMetricsSpy) SessionPurgeSubmitFailed(context.Context) {
+func (m *recordingAuthMetrics) SessionPurgeSubmitFailed(context.Context) {
 	m.sessionPurgeFailures++
 }
 
@@ -827,7 +815,7 @@ func testJWTService() *commonauth.JWTService {
 	return commonauth.NewJWTService(config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}})
 }
 
-type authRepoStub struct {
+type authCredentialTestStore struct {
 	userByUsername    *authdomain.UserCredential
 	userByID          *authdomain.UserCredential
 	gotUsername       string
@@ -843,27 +831,27 @@ type authRepoStub struct {
 	getTokenVersionID uuid.UUID
 }
 
-func (r *authRepoStub) GetCredentialByUserID(_ context.Context, _ uuid.UUID) (*authdomain.UserCredential, error) {
+func (r *authCredentialTestStore) GetCredentialByUserID(_ context.Context, _ uuid.UUID) (*authdomain.UserCredential, error) {
 	if r.userByID == nil {
 		return nil, identity.ErrUserNotFound
 	}
 	return r.userByID, nil
 }
-func (r *authRepoStub) GetByUsername(_ context.Context, username string) (*authdomain.UserCredential, error) {
+func (r *authCredentialTestStore) GetByUsername(_ context.Context, username string) (*authdomain.UserCredential, error) {
 	r.gotUsername = username
 	if r.userByUsername == nil {
 		return nil, identity.ErrUserNotFound
 	}
 	return r.userByUsername, nil
 }
-func (r *authRepoStub) GetTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
+func (r *authCredentialTestStore) GetTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
 	r.getTokenVersionID = userID
 	if r.tokenVersionErr != nil {
 		return 0, r.tokenVersionErr
 	}
 	return r.tokenVersion, nil
 }
-func (r *authRepoStub) IncrementTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
+func (r *authCredentialTestStore) IncrementTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
 	r.incrementCalls++
 	r.incrementedUserID = userID
 	if r.incrementErr != nil {
@@ -871,7 +859,7 @@ func (r *authRepoStub) IncrementTokenVersion(_ context.Context, userID uuid.UUID
 	}
 	return r.newVersion, nil
 }
-func (r *authRepoStub) UpdateCredentials(_ context.Context, input authdomain.UpdateCredentialsInput) (int64, error) {
+func (r *authCredentialTestStore) UpdateCredentials(_ context.Context, input authdomain.UpdateCredentialsInput) (int64, error) {
 	r.updateCalls++
 	r.updatedInput = input
 	if r.updateErr != nil {
@@ -880,7 +868,7 @@ func (r *authRepoStub) UpdateCredentials(_ context.Context, input authdomain.Upd
 	return r.newVersion, nil
 }
 
-type sessionStoreStub struct {
+type authSessionTestStore struct {
 	version                         int64
 	session                         authdomain.AuthSession
 	created                         authdomain.AuthSession
@@ -904,7 +892,7 @@ type sessionStoreStub struct {
 	createErr                       error
 }
 
-func (s *sessionStoreStub) GetCachedTokenVersion(context.Context, string) (int64, error) {
+func (s *authSessionTestStore) GetCachedTokenVersion(context.Context, string) (int64, error) {
 	if s.getVersionErr != nil {
 		return 0, s.getVersionErr
 	}
@@ -913,7 +901,7 @@ func (s *sessionStoreStub) GetCachedTokenVersion(context.Context, string) (int64
 	}
 	return s.version, nil
 }
-func (s *sessionStoreStub) CacheTokenVersion(_ context.Context, userID string, tokenVersion int64) error {
+func (s *authSessionTestStore) CacheTokenVersion(_ context.Context, userID string, tokenVersion int64) error {
 	if s.cacheErr != nil {
 		return s.cacheErr
 	}
@@ -922,7 +910,7 @@ func (s *sessionStoreStub) CacheTokenVersion(_ context.Context, userID string, t
 	s.cachedVersion = tokenVersion
 	return nil
 }
-func (s *sessionStoreStub) DeleteCachedTokenVersion(_ context.Context, userID string) error {
+func (s *authSessionTestStore) DeleteCachedTokenVersion(_ context.Context, userID string) error {
 	if s.deleteCacheErr != nil {
 		return s.deleteCacheErr
 	}
@@ -930,7 +918,7 @@ func (s *sessionStoreStub) DeleteCachedTokenVersion(_ context.Context, userID st
 	s.deletedCachedUserID = userID
 	return nil
 }
-func (s *sessionStoreStub) CreateSession(_ context.Context, session authdomain.AuthSession, ttl time.Duration, maxActiveSessionsPerUser int) error {
+func (s *authSessionTestStore) CreateSession(_ context.Context, session authdomain.AuthSession, ttl time.Duration, maxActiveSessionsPerUser int) error {
 	if s.createErr != nil {
 		return s.createErr
 	}
@@ -939,7 +927,7 @@ func (s *sessionStoreStub) CreateSession(_ context.Context, session authdomain.A
 	s.createdMaxActiveSessionsPerUser = maxActiveSessionsPerUser
 	return nil
 }
-func (s *sessionStoreStub) RotateSession(_ context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, ttl time.Duration, maxActiveSessionsPerUser int) error {
+func (s *authSessionTestStore) RotateSession(_ context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, ttl time.Duration, maxActiveSessionsPerUser int) error {
 	if s.rotateErr != nil {
 		return s.rotateErr
 	}
@@ -950,13 +938,13 @@ func (s *sessionStoreStub) RotateSession(_ context.Context, oldSession authdomai
 	s.rotatedMaxActiveSessionsPerUser = maxActiveSessionsPerUser
 	return nil
 }
-func (s *sessionStoreStub) GetSession(context.Context, string, string) (authdomain.AuthSession, error) {
+func (s *authSessionTestStore) GetSession(context.Context, string, string) (authdomain.AuthSession, error) {
 	if s.session.SessionID == "" {
 		return authdomain.AuthSession{}, authdomain.ErrAuthSessionNotFound
 	}
 	return s.session, nil
 }
-func (s *sessionStoreStub) DeleteSession(_ context.Context, _ string, sessionID string) error {
+func (s *authSessionTestStore) DeleteSession(_ context.Context, _ string, sessionID string) error {
 	if sessionID == "error" {
 		return errors.New("delete failed")
 	}
@@ -964,7 +952,7 @@ func (s *sessionStoreStub) DeleteSession(_ context.Context, _ string, sessionID 
 	s.deletedSessionID = sessionID
 	return nil
 }
-func (s *sessionStoreStub) DeleteAllUserSessions(context.Context, string) error {
+func (s *authSessionTestStore) DeleteAllUserSessions(context.Context, string) error {
 	if s.deleteAllErr != nil {
 		return s.deleteAllErr
 	}

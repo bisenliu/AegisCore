@@ -22,7 +22,7 @@ test: common-test user-service-test ## 运行全部 Go 模块测试。
 
 lint: common-lint user-service-lint ## 运行全部 Go 模块 lint。
 
-verify: lint user-service-architecture-lint test user-service-openapi-generate ## 运行完整本地验证。
+verify: lint user-service-architecture-lint user-service-generate test user-service-openapi-generate ## 运行完整本地验证。
 	git diff --exit-code
 
 common-test: ## 运行 common 模块测试。
@@ -58,7 +58,7 @@ user-service-seed-rbac: ## 使用 USER_SERVICE_CONFIG 初始化 user-service RBA
 user-service-create-super-admin: ## 为 user-service 创建管理员用户并绑定超级管理员角色；需要 ADMIN_PASSWORD 环境变量。
 	$(MAKE) -C $(USER_SERVICE_DIR) create-super-admin USER_SERVICE_CONFIG='$(USER_SERVICE_CONFIG)' ADMIN_USERNAME='$(ADMIN_USERNAME)' ADMIN_NICKNAME='$(ADMIN_NICKNAME)' ADMIN_RESET_PASSWORD='$(ADMIN_RESET_PASSWORD)'
 
-user-service-generate: ## 生成 user-service Ent 代码。
+user-service-generate: ## 生成 user-service Go 生成物。
 	$(MAKE) -C $(USER_SERVICE_DIR) generate
 
 user-service-migrate-diff: ## 生成 user-service migration，需传入 name=<migration-name>。

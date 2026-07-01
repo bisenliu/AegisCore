@@ -29,7 +29,7 @@ func TestCredentialVerifierAcceptsMustChangePasswordUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	verifier := authcredentials.NewVerifier(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}}, testPasswordService(t))
+	verifier := authcredentials.NewVerifier(&authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}}, testPasswordService(t))
 
 	user, err := verifier.VerifyPassword(context.Background(), "alice", "secret")
 
@@ -46,7 +46,7 @@ func TestCredentialVerifierRejectsDisabledUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	verifier := authcredentials.NewVerifier(&authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}}, testPasswordService(t))
+	verifier := authcredentials.NewVerifier(&authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}}, testPasswordService(t))
 
 	_, err = verifier.VerifyPassword(context.Background(), "alice", "secret")
 
@@ -63,16 +63,16 @@ func TestCredentialVerifierLoginFailureLogsClientContext(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		repo       *authRepoStub
+		repo       *authCredentialTestStore
 		username   string
 		password   string
 		message    string
 		wantUserID bool
 		wantStatus bool
 	}{
-		{name: "user not found", repo: &authRepoStub{}, username: "alice", password: "secret", message: "login user not found"},
-		{name: "password mismatch", repo: &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}, username: "alice", password: "wrong", message: "login password mismatch", wantUserID: true},
-		{name: "status rejected", repo: &authRepoStub{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}}, username: "alice", password: "secret", message: "login user status rejected", wantUserID: true, wantStatus: true},
+		{name: "user not found", repo: &authCredentialTestStore{}, username: "alice", password: "secret", message: "login user not found"},
+		{name: "password mismatch", repo: &authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}, username: "alice", password: "wrong", message: "login password mismatch", wantUserID: true},
+		{name: "status rejected", repo: &authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}}, username: "alice", password: "secret", message: "login user status rejected", wantUserID: true, wantStatus: true},
 	}
 
 	for _, tt := range tests {
@@ -110,7 +110,7 @@ func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, PasswordHash: oldHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
+	repo := &authCredentialTestStore{userByID: &authdomain.UserCredential{UserID: authTestUserID, PasswordHash: oldHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
 	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
 
 	result, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
@@ -131,7 +131,7 @@ func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 }
 
 func TestCredentialVerifierChangePasswordMapsUserNotFound(t *testing.T) {
-	verifier := authcredentials.NewVerifier(&authRepoStub{}, testPasswordService(t))
+	verifier := authcredentials.NewVerifier(&authCredentialTestStore{}, testPasswordService(t))
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
@@ -141,7 +141,7 @@ func TestCredentialVerifierChangePasswordMapsUserNotFound(t *testing.T) {
 }
 
 func TestCredentialVerifierChangePasswordRejectsInvalidStatus(t *testing.T) {
-	verifier := authcredentials.NewVerifier(&authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusNormal, TokenVersion: 2}}, testPasswordService(t))
+	verifier := authcredentials.NewVerifier(&authCredentialTestStore{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusNormal, TokenVersion: 2}}, testPasswordService(t))
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
@@ -152,7 +152,7 @@ func TestCredentialVerifierChangePasswordRejectsInvalidStatus(t *testing.T) {
 
 func TestCredentialVerifierChangePasswordMapsUpdateError(t *testing.T) {
 	updateErr := errors.New("update failed")
-	verifier := authcredentials.NewVerifier(&authRepoStub{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: updateErr}, testPasswordService(t))
+	verifier := authcredentials.NewVerifier(&authCredentialTestStore{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: updateErr}, testPasswordService(t))
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
@@ -181,7 +181,7 @@ func TestAuthTokenIssuerParsesBearerRefreshToken(t *testing.T) {
 }
 
 func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
-	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{version: 3, session: authRefreshTestSession("s-123", 2)})
+	lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{}, &authSessionTestStore{version: 3, session: authRefreshTestSession("s-123", 2)})
 	claims := &commonauth.Claims{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123"}
 
 	_, _, err := lifecycle.ValidateRefreshSession(context.Background(), claims)
@@ -194,7 +194,7 @@ func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
 func TestAuthSessionLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T) {
 	for _, err := range []error{authdomain.ErrAuthSessionNotFound, authdomain.ErrAuthSessionMismatch} {
 		t.Run(err.Error(), func(t *testing.T) {
-			lifecycle := newTestAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{rotateErr: err})
+			lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{}, &authSessionTestStore{rotateErr: err})
 			oldSession := authRefreshTestSession("s-old", 2)
 			newSession := authRefreshTestSession("s-new", 2)
 
@@ -209,7 +209,7 @@ func TestAuthSessionLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T)
 
 func TestAuthSessionLifecycleRotateTokenSessionMapsUnexpectedError(t *testing.T) {
 	rotateErr := errors.New("redis failed")
-	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{}, &sessionStoreStub{rotateErr: rotateErr})
+	lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{}, &authSessionTestStore{rotateErr: rotateErr})
 	oldSession := authRefreshTestSession("s-old", 2)
 	newSession := authRefreshTestSession("s-new", 2)
 
@@ -221,8 +221,8 @@ func TestAuthSessionLifecycleRotateTokenSessionMapsUnexpectedError(t *testing.T)
 }
 
 func TestAuthSessionLifecycleCurrentTokenVersionUsesCacheHit(t *testing.T) {
-	repo := &authRepoStub{tokenVersionErr: errors.New("database should not be read")}
-	lifecycle := newTestAuthSessionLifecycle(repo, &sessionStoreStub{version: 2})
+	repo := &authCredentialTestStore{tokenVersionErr: errors.New("database should not be read")}
+	lifecycle := newTestAuthSessionLifecycle(repo, &authSessionTestStore{version: 2})
 
 	version, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
 
@@ -238,8 +238,8 @@ func TestAuthSessionLifecycleCurrentTokenVersionUsesCacheHit(t *testing.T) {
 }
 
 func TestAuthSessionLifecycleCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
-	repo := &authRepoStub{tokenVersion: 7}
-	store := &sessionStoreStub{cacheMiss: true}
+	repo := &authCredentialTestStore{tokenVersion: 7}
+	store := &authSessionTestStore{cacheMiss: true}
 	lifecycle := newTestAuthSessionLifecycle(repo, store)
 
 	version, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
@@ -259,9 +259,9 @@ func TestAuthSessionLifecycleCurrentTokenVersionCacheMissReadsRepository(t *test
 }
 
 func TestAuthSessionLifecycleCurrentTokenVersionCacheErrorReturnsInfrastructureError(t *testing.T) {
-	repo := &authRepoStub{tokenVersion: 7}
+	repo := &authCredentialTestStore{tokenVersion: 7}
 	cacheErr := errors.New("redis failed")
-	store := &sessionStoreStub{getVersionErr: cacheErr}
+	store := &authSessionTestStore{getVersionErr: cacheErr}
 	lifecycle := newTestAuthSessionLifecycle(repo, store)
 
 	_, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
@@ -279,8 +279,8 @@ func TestAuthSessionLifecycleCurrentTokenVersionCacheErrorReturnsInfrastructureE
 
 func TestAuthSessionLifecycleCurrentTokenVersionDatabaseFallbackErrorReturnsInfrastructureError(t *testing.T) {
 	dbErr := errors.New("database failed")
-	repo := &authRepoStub{tokenVersionErr: dbErr}
-	store := &sessionStoreStub{cacheMiss: true}
+	repo := &authCredentialTestStore{tokenVersionErr: dbErr}
+	store := &authSessionTestStore{cacheMiss: true}
 	lifecycle := newTestAuthSessionLifecycle(repo, store)
 
 	_, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
@@ -298,8 +298,8 @@ func TestAuthSessionLifecycleCurrentTokenVersionDatabaseFallbackErrorReturnsInfr
 
 func TestAuthSessionLifecycleCurrentTokenVersionBackfillErrorReturnsInfrastructureError(t *testing.T) {
 	cacheErr := errors.New("redis set failed")
-	store := &sessionStoreStub{cacheMiss: true, cacheErr: cacheErr}
-	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{tokenVersion: 7}, store)
+	store := &authSessionTestStore{cacheMiss: true, cacheErr: cacheErr}
+	lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{tokenVersion: 7}, store)
 
 	_, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
 
@@ -309,8 +309,8 @@ func TestAuthSessionLifecycleCurrentTokenVersionBackfillErrorReturnsInfrastructu
 }
 
 func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
-	repo := &authRepoStub{newVersion: 4}
-	store := &sessionStoreStub{}
+	repo := &authCredentialTestStore{newVersion: 4}
+	store := &authSessionTestStore{}
 	lifecycle := newTestAuthSessionLifecycle(repo, store)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
@@ -330,8 +330,8 @@ func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
 }
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T) {
-	store := &sessionStoreStub{}
-	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{incrementErr: identity.ErrUserNotFound}, store)
+	store := &authSessionTestStore{}
+	lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{incrementErr: identity.ErrUserNotFound}, store)
 
 	_, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
@@ -345,8 +345,8 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T)
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t *testing.T) {
 	cacheErr := errors.New("cache refresh failed")
-	store := &sessionStoreStub{cacheErr: cacheErr}
-	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{newVersion: 4}, store)
+	store := &authSessionTestStore{cacheErr: cacheErr}
+	lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{newVersion: 4}, store)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
@@ -366,8 +366,8 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsSucceedsAfterDeleteAllProjectionError(t *testing.T) {
 	deleteErr := errors.New("delete all failed")
-	store := &sessionStoreStub{deleteAllErr: deleteErr}
-	lifecycle := newTestAuthSessionLifecycle(&authRepoStub{newVersion: 4}, store)
+	store := &authSessionTestStore{deleteAllErr: deleteErr}
+	lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{newVersion: 4}, store)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
@@ -389,9 +389,9 @@ func TestAuthSessionLifecycleRevokeUserSessionsAtVersionReturnsProjectionError(t
 	cacheErr := errors.New("cache refresh failed")
 	deleteErr := errors.New("delete all failed")
 	deleteCacheErr := errors.New("delete cache failed")
-	store := &sessionStoreStub{cacheErr: cacheErr, deleteCacheErr: deleteCacheErr, deleteAllErr: deleteErr}
-	invalidator := &tokenVersionInvalidatorStub{}
-	lifecycle := authsessions.NewLifecycle(&authRepoStub{newVersion: 99}, store, store, 5, invalidator)
+	store := &authSessionTestStore{cacheErr: cacheErr, deleteCacheErr: deleteCacheErr, deleteAllErr: deleteErr}
+	invalidator := &tokenVersionRecordingInvalidator{}
+	lifecycle := authsessions.NewLifecycle(&authCredentialTestStore{newVersion: 99}, store, store, 5, invalidator)
 
 	err := lifecycle.RevokeUserSessionsAtVersion(context.Background(), authTestUserID, 4)
 
@@ -410,7 +410,7 @@ func TestAuthSessionLifecycleRevokeUserSessionsAtVersionReturnsProjectionError(t
 }
 
 func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing.T) {
-	validator := newTestTokenVersionValidator(t, &authRepoStub{tokenVersionErr: errors.New("database should not be read")}, &sessionStoreStub{version: 4})
+	validator := newTestTokenVersionValidator(t, &authCredentialTestStore{tokenVersionErr: errors.New("database should not be read")}, &authSessionTestStore{version: 4})
 
 	err := validator.ValidateTokenVersion(context.Background(), authTestUserID.String(), 3)
 
@@ -448,16 +448,16 @@ func authRefreshTestSession(sessionID string, tokenVersion int64) authdomain.Aut
 	return authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: sessionID, TokenVersion: tokenVersion}
 }
 
-func newTestAuthSessionLifecycle(users authapplication.UserTokenVersionStore, store *sessionStoreStub) authsessions.Lifecycle {
+func newTestAuthSessionLifecycle(users authapplication.UserTokenVersionStore, store *authSessionTestStore) authsessions.Lifecycle {
 	return authsessions.NewLifecycle(users, store, store, 5)
 }
 
-type tokenVersionInvalidatorStub struct {
+type tokenVersionRecordingInvalidator struct {
 	calls  int
 	userID string
 }
 
-func (s *tokenVersionInvalidatorStub) InvalidateTokenVersion(userID string) {
+func (s *tokenVersionRecordingInvalidator) InvalidateTokenVersion(userID string) {
 	s.calls++
 	s.userID = userID
 }

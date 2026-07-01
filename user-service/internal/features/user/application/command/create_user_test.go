@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
 
 	"github.com/aegiscore/common/security/password"
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
@@ -19,7 +20,12 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 	createdAt := int64(1780048800000)
 
 	t.Run("success uses normalized fields and defaults status", func(t *testing.T) {
-		repo := &stubUserRepository{created: &userdomain.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: identity.UserStatusNormal, TokenVersion: 1, CreatedAt: createdAt, UpdatedAt: createdAt}}
+		repo := NewMockUserProfileStore(gomock.NewController(t))
+		var createdInput userapplication.CreateUserInput
+		repo.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, input userapplication.CreateUserInput) (*userdomain.User, error) {
+			createdInput = input
+			return &userdomain.User{ID: 123, UserID: testUserID, Nickname: "Alice", Username: "alice", Status: identity.UserStatusNormal, TokenVersion: 1, CreatedAt: createdAt, UpdatedAt: createdAt}, nil
+		})
 		svc := NewCreateUserService(repo, testPasswordService(t))
 
 		user, err := svc.CreateUser(context.Background(), CreateUserCommand{Nickname: "Alice", Username: "alice", Password: "secret"})
@@ -27,10 +33,10 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateUser: %v", err)
 		}
-		if repo.createdInput.Nickname != "Alice" || repo.createdInput.Username != "alice" || repo.createdInput.UserID == uuid.Nil || repo.createdInput.Status != identity.UserStatusNormal {
-			t.Fatalf("createdInput = %#v", repo.createdInput)
+		if createdInput.Nickname != "Alice" || createdInput.Username != "alice" || createdInput.UserID == uuid.Nil || createdInput.Status != identity.UserStatusNormal {
+			t.Fatalf("createdInput = %#v", createdInput)
 		}
-		matched, err := verifyTestPassword(t, "secret", repo.createdInput.PasswordHash)
+		matched, err := verifyTestPassword(t, "secret", createdInput.PasswordHash)
 		if err != nil || !matched {
 			t.Fatalf("created password was not hashed correctly: matched=%v err=%v", matched, err)
 		}
@@ -40,7 +46,9 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 	})
 
 	t.Run("map domain create conflict", func(t *testing.T) {
-		svc := NewCreateUserService(&stubUserRepository{createErr: identity.ErrUserAlreadyExists}, testPasswordService(t))
+		repo := NewMockUserProfileStore(gomock.NewController(t))
+		repo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, identity.ErrUserAlreadyExists)
+		svc := NewCreateUserService(repo, testPasswordService(t))
 
 		_, err := svc.CreateUser(context.Background(), CreateUserCommand{Nickname: "Alice", Username: "alice", Password: "secret"})
 
@@ -50,40 +58,23 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 	})
 
 	t.Run("maps uppercase duplicate after normalization", func(t *testing.T) {
-		repo := &stubUserRepository{createErr: identity.ErrUserAlreadyExists}
+		repo := NewMockUserProfileStore(gomock.NewController(t))
+		var createdInput userapplication.CreateUserInput
+		repo.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, input userapplication.CreateUserInput) (*userdomain.User, error) {
+			createdInput = input
+			return nil, identity.ErrUserAlreadyExists
+		})
 		svc := NewCreateUserService(repo, testPasswordService(t))
 
 		_, err := svc.CreateUser(context.Background(), CreateUserCommand{Nickname: "Alice", Username: "alice", Password: "secret"})
 
-		if repo.createdInput.Username != "alice" {
-			t.Fatalf("created username = %q", repo.createdInput.Username)
+		if createdInput.Username != "alice" {
+			t.Fatalf("created username = %q", createdInput.Username)
 		}
 		if !errors.Is(err, identity.ErrUserAlreadyExists) {
 			t.Fatalf("err = %v, want ErrUserAlreadyExists", err)
 		}
 	})
-}
-
-type stubUserRepository struct {
-	created      *userdomain.User
-	createErr    error
-	createdInput userapplication.CreateUserInput
-}
-
-func (r *stubUserRepository) Create(_ context.Context, input userapplication.CreateUserInput) (*userdomain.User, error) {
-	r.createdInput = input
-	if r.createErr != nil {
-		return nil, r.createErr
-	}
-	return r.created, nil
-}
-
-func (r *stubUserRepository) GetByUserID(context.Context, uuid.UUID) (*userdomain.User, error) {
-	return nil, nil
-}
-
-func (r *stubUserRepository) ListUsers(context.Context, userapplication.ListUsersInput) ([]userdomain.User, bool, error) {
-	return nil, false, nil
 }
 
 func testPasswordService(t testing.TB) *password.Service {

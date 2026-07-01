@@ -15,18 +15,18 @@ import (
 func TestCasbinAuthorization(t *testing.T) {
 	tests := []struct {
 		name       string
-		authorizer *fakeCasbinAuthorizer
+		authorizer *recordingCasbinAuthorizer
 		resolver   CasbinRequestResolver
 		opts       []CasbinAuthorizationOption
 		wantStatus int
 		wantCalls  int
 	}{
-		{name: "allowed", authorizer: &fakeCasbinAuthorizer{}, resolver: testCasbinResolver, wantStatus: http.StatusOK, wantCalls: 1},
-		{name: "denied", authorizer: &fakeCasbinAuthorizer{err: commoncasbin.ErrDenied}, resolver: testCasbinResolver, wantStatus: http.StatusForbidden, wantCalls: 1},
-		{name: "resolver error", authorizer: &fakeCasbinAuthorizer{}, resolver: func(*gin.Context) (commoncasbin.Request, error) {
+		{name: "allowed", authorizer: &recordingCasbinAuthorizer{}, resolver: testCasbinResolver, wantStatus: http.StatusOK, wantCalls: 1},
+		{name: "denied", authorizer: &recordingCasbinAuthorizer{err: commoncasbin.ErrDenied}, resolver: testCasbinResolver, wantStatus: http.StatusForbidden, wantCalls: 1},
+		{name: "resolver error", authorizer: &recordingCasbinAuthorizer{}, resolver: func(*gin.Context) (commoncasbin.Request, error) {
 			return commoncasbin.Request{}, errors.New("missing subject")
 		}, wantStatus: http.StatusInternalServerError},
-		{name: "whitelist", authorizer: &fakeCasbinAuthorizer{err: commoncasbin.ErrDenied}, resolver: testCasbinResolver, opts: []CasbinAuthorizationOption{WithCasbinAuthorizationWhitelist(CasbinAuthorizationWhitelistRule{Method: http.MethodGet, PathTemplate: "/api/v1/users/:user_id"})}, wantStatus: http.StatusOK},
+		{name: "whitelist", authorizer: &recordingCasbinAuthorizer{err: commoncasbin.ErrDenied}, resolver: testCasbinResolver, opts: []CasbinAuthorizationOption{WithCasbinAuthorizationWhitelist(CasbinAuthorizationWhitelistRule{Method: http.MethodGet, PathTemplate: "/api/v1/users/:user_id"})}, wantStatus: http.StatusOK},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -52,7 +52,7 @@ func TestCasbinAuthorizationUsesCustomErrorHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.GET("/api/v1/users/:user_id", CasbinAuthorization(
-		&fakeCasbinAuthorizer{err: commoncasbin.ErrDenied},
+		&recordingCasbinAuthorizer{err: commoncasbin.ErrDenied},
 		testCasbinResolver,
 		WithCasbinAuthorizationErrorHandler(func(c *gin.Context, _ error) {
 			c.AbortWithStatus(http.StatusTeapot)
@@ -72,13 +72,13 @@ func testCasbinResolver(c *gin.Context) (commoncasbin.Request, error) {
 	return commoncasbin.Request{Subject: "user:1", Object: c.FullPath(), Action: c.Request.Method}, nil
 }
 
-type fakeCasbinAuthorizer struct {
+type recordingCasbinAuthorizer struct {
 	err   error
 	calls int
 	req   commoncasbin.Request
 }
 
-func (a *fakeCasbinAuthorizer) Authorize(_ context.Context, req commoncasbin.Request) error {
+func (a *recordingCasbinAuthorizer) Authorize(_ context.Context, req commoncasbin.Request) error {
 	a.calls++
 	a.req = req
 	return a.err

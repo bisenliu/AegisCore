@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
@@ -32,15 +33,20 @@ func TestUserControllerGetByUserID(t *testing.T) {
 	t.Run("valid ID", func(t *testing.T) {
 		createdAt := int64(1780048800000)
 		updatedAt := int64(1780052400000)
-		service := &stubUserQueries{response: &userquery.GetUserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Aegis", Username: "aegis", Status: identity.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}}
+		service := NewMockUserQueryService(gomock.NewController(t))
+		var gotID uuid.UUID
+		service.EXPECT().GetUserByID(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query userquery.GetUserByIDQuery) (*userquery.GetUserResult, error) {
+			gotID = query.UserID
+			return &userquery.GetUserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Aegis", Username: "aegis", Status: identity.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: updatedAt}}, nil
+		})
 
 		status, envelope := executeGetByUserID(t, service, controllerTestUserID)
 
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if service.gotID.String() != controllerTestUserID {
-			t.Fatalf("gotID = %q", service.gotID)
+		if gotID.String() != controllerTestUserID {
+			t.Fatalf("gotID = %q", gotID)
 		}
 		if !envelope.Success || envelope.Code != contracterrors.CodeOK || envelope.Message != "ok" {
 			t.Fatalf("envelope = %#v", envelope)
@@ -61,12 +67,14 @@ func TestUserControllerGetByUserID(t *testing.T) {
 	})
 
 	t.Run("invalid UUID", func(t *testing.T) {
-		status, envelope := executeGetByUserID(t, &stubUserQueries{}, "abc")
+		status, envelope := executeGetByUserID(t, NewMockUserQueryService(gomock.NewController(t)), "abc")
 		assertInvalidUserID(t, status, envelope, validation.ErrValidationFailed)
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		status, envelope := executeGetByUserID(t, &stubUserQueries{err: identity.ErrUserNotFound}, controllerTestUserID)
+		service := NewMockUserQueryService(gomock.NewController(t))
+		service.EXPECT().GetUserByID(gomock.Any(), gomock.Any()).Return(nil, identity.ErrUserNotFound)
+		status, envelope := executeGetByUserID(t, service, controllerTestUserID)
 		if status != http.StatusNotFound {
 			t.Fatalf("status = %d, want %d", status, http.StatusNotFound)
 		}
@@ -76,7 +84,9 @@ func TestUserControllerGetByUserID(t *testing.T) {
 	})
 
 	t.Run("service error", func(t *testing.T) {
-		status, envelope := executeGetByUserID(t, &stubUserQueries{err: errors.New("database down")}, controllerTestUserID)
+		service := NewMockUserQueryService(gomock.NewController(t))
+		service.EXPECT().GetUserByID(gomock.Any(), gomock.Any()).Return(nil, errors.New("database down"))
+		status, envelope := executeGetByUserID(t, service, controllerTestUserID)
 		if status != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 		}
@@ -93,15 +103,20 @@ func TestUserControllerCreate(t *testing.T) {
 	createdUser := &usercommand.CreateUserResult{User: userdomain.User{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: identity.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}
 
 	t.Run("valid body", func(t *testing.T) {
-		service := &stubUserCommands{createResponse: createdUser}
+		service := NewMockCreateUserService(gomock.NewController(t))
+		var gotCreate usercommand.CreateUserCommand
+		service.EXPECT().CreateUser(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, cmd usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error) {
+			gotCreate = cmd
+			return createdUser, nil
+		})
 
 		status, envelope := executeCreate(t, service, `{"nickname":"Alice","username":"ALICE","password":"secret"}`)
 
 		if status != http.StatusCreated {
 			t.Fatalf("status = %d, want %d", status, http.StatusCreated)
 		}
-		if service.gotCreate.Nickname != "Alice" || service.gotCreate.Username != "alice" || service.gotCreate.Password != "secret" || service.gotCreate.Status == nil || *service.gotCreate.Status != identity.UserStatusNormal {
-			t.Fatalf("gotCreate = %#v", service.gotCreate)
+		if gotCreate.Nickname != "Alice" || gotCreate.Username != "alice" || gotCreate.Password != "secret" || gotCreate.Status == nil || *gotCreate.Status != identity.UserStatusNormal {
+			t.Fatalf("gotCreate = %#v", gotCreate)
 		}
 		if !envelope.Success || envelope.Code != contracterrors.CodeOK || envelope.Message != "created" {
 			t.Fatalf("envelope = %#v", envelope)
@@ -119,7 +134,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("empty body", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserCommands{}, "")
+		status, envelope := executeCreate(t, NewMockCreateUserService(gomock.NewController(t)), "")
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
@@ -129,7 +144,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("validation failed", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserCommands{}, `{"nickname":"Alice","password":"secret"}`)
+		status, envelope := executeCreate(t, NewMockCreateUserService(gomock.NewController(t)), `{"nickname":"Alice","password":"secret"}`)
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
@@ -140,7 +155,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("invalid status validation failed", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserCommands{}, `{"nickname":"Alice","username":"alice","password":"secret","status":999}`)
+		status, envelope := executeCreate(t, NewMockCreateUserService(gomock.NewController(t)), `{"nickname":"Alice","username":"alice","password":"secret","status":999}`)
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
@@ -151,7 +166,7 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("missing password validation failed", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserCommands{}, `{"nickname":"Alice","username":"alice"}`)
+		status, envelope := executeCreate(t, NewMockCreateUserService(gomock.NewController(t)), `{"nickname":"Alice","username":"alice"}`)
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
@@ -162,7 +177,9 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("user already exists", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserCommands{createErr: identity.ErrUserAlreadyExists}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
+		service := NewMockCreateUserService(gomock.NewController(t))
+		service.EXPECT().CreateUser(gomock.Any(), gomock.Any()).Return(nil, identity.ErrUserAlreadyExists)
+		status, envelope := executeCreate(t, service, `{"nickname":"Alice","username":"alice","password":"secret"}`)
 		if status != http.StatusConflict {
 			t.Fatalf("status = %d, want %d", status, http.StatusConflict)
 		}
@@ -172,7 +189,9 @@ func TestUserControllerCreate(t *testing.T) {
 	})
 
 	t.Run("service error", func(t *testing.T) {
-		status, envelope := executeCreate(t, &stubUserCommands{createErr: errors.New("database down")}, `{"nickname":"Alice","username":"alice","password":"secret"}`)
+		service := NewMockCreateUserService(gomock.NewController(t))
+		service.EXPECT().CreateUser(gomock.Any(), gomock.Any()).Return(nil, errors.New("database down"))
+		status, envelope := executeCreate(t, service, `{"nickname":"Alice","username":"alice","password":"secret"}`)
 		if status != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 		}
@@ -189,60 +208,72 @@ func TestUserControllerList(t *testing.T) {
 	listResponse := &userquery.ListUsersResult{Items: []userdomain.User{{UserID: controllerTestUUID, Nickname: "Alice", Username: "alice", Status: identity.UserStatusNormal, CreatedAt: createdAt, UpdatedAt: createdAt}}, PageSize: 20, NextCursor: controllerTestUserID, HasNext: true}
 
 	t.Run("default pagination", func(t *testing.T) {
-		service := &stubUserQueries{listResponse: &userquery.ListUsersResult{Items: []userdomain.User{}, PageSize: 10}}
+		service := NewMockUserQueryService(gomock.NewController(t))
+		var gotList userquery.ListUsersQuery
+		service.EXPECT().ListUsers(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query userquery.ListUsersQuery) (*userquery.ListUsersResult, error) {
+			gotList = query
+			return &userquery.ListUsersResult{Items: []userdomain.User{}, PageSize: 10}, nil
+		})
 
 		status, envelope := executeList(t, service, "/api/v1/users")
 
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if service.gotList.Cursor != nil || service.gotList.PageSize != 10 || service.gotList.Limit != 10 {
-			t.Fatalf("gotList = %#v", service.gotList)
+		if gotList.Cursor != nil || gotList.PageSize != 10 || gotList.Limit != 10 {
+			t.Fatalf("gotList = %#v", gotList)
 		}
 		assertPaginatedEnvelope(t, envelope, 10, "", false, 0)
 	})
 
 	t.Run("explicit query", func(t *testing.T) {
-		service := &stubUserQueries{listResponse: listResponse}
+		service := NewMockUserQueryService(gomock.NewController(t))
+		var gotList userquery.ListUsersQuery
+		service.EXPECT().ListUsers(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query userquery.ListUsersQuery) (*userquery.ListUsersResult, error) {
+			gotList = query
+			return listResponse, nil
+		})
 
 		status, envelope := executeList(t, service, "/api/v1/users?cursor=018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4d&page_size=20&nickname=%20Ali%20&username=%20alice%20&status=100")
 
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if service.gotList.Cursor == nil || service.gotList.Cursor.String() != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4d" || service.gotList.PageSize != 20 || service.gotList.Limit != 20 || service.gotList.Nickname != "Ali" || service.gotList.Username != "alice" {
-			t.Fatalf("gotList = %#v", service.gotList)
+		if gotList.Cursor == nil || gotList.Cursor.String() != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4d" || gotList.PageSize != 20 || gotList.Limit != 20 || gotList.Nickname != "Ali" || gotList.Username != "alice" {
+			t.Fatalf("gotList = %#v", gotList)
 		}
-		if service.gotList.Status == nil || *service.gotList.Status != identity.UserStatusNormal {
-			t.Fatalf("status = %#v", service.gotList.Status)
+		if gotList.Status == nil || *gotList.Status != identity.UserStatusNormal {
+			t.Fatalf("status = %#v", gotList.Status)
 		}
 		assertPaginatedEnvelope(t, envelope, 20, controllerTestUserID, true, 1)
 	})
 
 	t.Run("page size capped", func(t *testing.T) {
-		service := &stubUserQueries{listResponse: &userquery.ListUsersResult{Items: []userdomain.User{}, PageSize: 100}}
+		service := NewMockUserQueryService(gomock.NewController(t))
+		var gotList userquery.ListUsersQuery
+		service.EXPECT().ListUsers(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query userquery.ListUsersQuery) (*userquery.ListUsersResult, error) {
+			gotList = query
+			return &userquery.ListUsersResult{Items: []userdomain.User{}, PageSize: 100}, nil
+		})
 
 		status, envelope := executeList(t, service, "/api/v1/users?page_size=101")
 
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, want %d", status, http.StatusOK)
 		}
-		if service.gotList.PageSize != 100 || service.gotList.Limit != 100 {
-			t.Fatalf("gotList = %#v", service.gotList)
+		if gotList.PageSize != 100 || gotList.Limit != 100 {
+			t.Fatalf("gotList = %#v", gotList)
 		}
 		assertPaginatedEnvelope(t, envelope, 100, "", false, 0)
 	})
 
 	t.Run("invalid cursor", func(t *testing.T) {
-		service := &stubUserQueries{}
+		service := NewMockUserQueryService(gomock.NewController(t))
 
 		status, envelope := executeList(t, service, "/api/v1/users?cursor=abc")
 
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
-		}
-		if service.gotList.Limit != 0 {
-			t.Fatalf("service should not be called, gotList = %#v", service.gotList)
 		}
 		if envelope.Success || envelope.Code != contracterrors.CodeBadRequest || envelope.Message != messages.InvalidUserID {
 			t.Fatalf("envelope = %#v", envelope)
@@ -250,7 +281,7 @@ func TestUserControllerList(t *testing.T) {
 	})
 
 	t.Run("invalid status", func(t *testing.T) {
-		status, envelope := executeList(t, &stubUserQueries{}, "/api/v1/users?status=999")
+		status, envelope := executeList(t, NewMockUserQueryService(gomock.NewController(t)), "/api/v1/users?status=999")
 		if status != http.StatusBadRequest {
 			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 		}
@@ -261,7 +292,9 @@ func TestUserControllerList(t *testing.T) {
 	})
 
 	t.Run("service error", func(t *testing.T) {
-		status, envelope := executeList(t, &stubUserQueries{listErr: errors.New("database down")}, "/api/v1/users")
+		service := NewMockUserQueryService(gomock.NewController(t))
+		service.EXPECT().ListUsers(gomock.Any(), gomock.Any()).Return(nil, errors.New("database down"))
+		status, envelope := executeList(t, service, "/api/v1/users")
 		if status != http.StatusInternalServerError {
 			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
 		}
@@ -271,52 +304,13 @@ func TestUserControllerList(t *testing.T) {
 	})
 }
 
-type stubUserCommands struct {
-	createResponse *usercommand.CreateUserResult
-	createErr      error
-	gotCreate      usercommand.CreateUserCommand
-}
-
-type stubUserQueries struct {
-	response     *userquery.GetUserResult
-	err          error
-	gotID        uuid.UUID
-	listResponse *userquery.ListUsersResult
-	listErr      error
-	gotList      userquery.ListUsersQuery
-}
-
-func (s *stubUserCommands) CreateUser(_ context.Context, req usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error) {
-	s.gotCreate = req
-	if s.createErr != nil {
-		return nil, s.createErr
-	}
-	return s.createResponse, nil
-}
-
-func (s *stubUserQueries) GetUserByID(_ context.Context, req userquery.GetUserByIDQuery) (*userquery.GetUserResult, error) {
-	s.gotID = req.UserID
-	if s.err != nil {
-		return nil, s.err
-	}
-	return s.response, nil
-}
-
-func (s *stubUserQueries) ListUsers(_ context.Context, req userquery.ListUsersQuery) (*userquery.ListUsersResult, error) {
-	s.gotList = req
-	if s.listErr != nil {
-		return nil, s.listErr
-	}
-	return s.listResponse, nil
-}
-
-func executeCreate(t *testing.T, commands *stubUserCommands, body string) (int, response.Envelope) {
+func executeCreate(t *testing.T, commands usercommand.CreateUserService, body string) (int, response.Envelope) {
 	t.Helper()
 	validator, err := validation.NewDefault()
 	if err != nil {
 		t.Fatalf("NewDefault: %v", err)
 	}
-	ctl := NewUserController(commands, &stubUserQueries{}, validator)
+	ctl := NewUserController(commands, NewMockUserQueryService(gomock.NewController(t)), validator)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(body))
@@ -333,13 +327,13 @@ func executeCreate(t *testing.T, commands *stubUserCommands, body string) (int, 
 	return recorder.Code, envelope
 }
 
-func executeGetByUserID(t *testing.T, queries *stubUserQueries, id string) (int, response.Envelope) {
+func executeGetByUserID(t *testing.T, queries userquery.UserQueryService, id string) (int, response.Envelope) {
 	t.Helper()
 	validator, err := validation.NewDefault()
 	if err != nil {
 		t.Fatalf("NewDefault: %v", err)
 	}
-	ctl := NewUserController(&stubUserCommands{}, queries, validator)
+	ctl := NewUserController(NewMockCreateUserService(gomock.NewController(t)), queries, validator)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/v1/users/"+id, nil)
@@ -354,13 +348,13 @@ func executeGetByUserID(t *testing.T, queries *stubUserQueries, id string) (int,
 	return recorder.Code, envelope
 }
 
-func executeList(t *testing.T, queries *stubUserQueries, path string) (int, response.Envelope) {
+func executeList(t *testing.T, queries userquery.UserQueryService, path string) (int, response.Envelope) {
 	t.Helper()
 	validator, err := validation.NewDefault()
 	if err != nil {
 		t.Fatalf("NewDefault: %v", err)
 	}
-	ctl := NewUserController(&stubUserCommands{}, queries, validator)
+	ctl := NewUserController(NewMockCreateUserService(gomock.NewController(t)), queries, validator)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, path, nil)

@@ -14,8 +14,8 @@ import (
 )
 
 func TestRoleCommandServiceCreateRoleDefaultsAndNormalizes(t *testing.T) {
-	roles := &stubRoleStore{}
-	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &stubUserRoleStore{}, RolePermissions: &stubRolePermissionStore{}, Permissions: &stubPermissionLookup{}, PolicyChanges: &stubRolePolicyChangeNotifier{}})
+	roles := &roleTestStore{}
+	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &userRoleTestStore{}, RolePermissions: &rolePermissionTestStore{}, Permissions: &permissionLookupTestStore{}, PolicyChanges: &recordingRolePolicyChangeNotifier{}})
 
 	result, err := service.CreateRole(context.Background(), CreateRoleCommand{Name: "  Operator  ", Description: "  Ops user  ", IsSystem: true})
 	if err != nil {
@@ -34,8 +34,8 @@ func TestRoleCommandServiceCreateRoleDefaultsAndNormalizes(t *testing.T) {
 
 func TestRoleCommandServiceUpdateRoleProtectsSystemRole(t *testing.T) {
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000001")
-	roles := &stubRoleStore{role: roledomain.Role{RoleID: roleID, Name: "super_admin", Active: true, IsSystem: true}}
-	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &stubUserRoleStore{}, RolePermissions: &stubRolePermissionStore{}, Permissions: &stubPermissionLookup{}, PolicyChanges: &stubRolePolicyChangeNotifier{}})
+	roles := &roleTestStore{role: roledomain.Role{RoleID: roleID, Name: "super_admin", Active: true, IsSystem: true}}
+	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &userRoleTestStore{}, RolePermissions: &rolePermissionTestStore{}, Permissions: &permissionLookupTestStore{}, PolicyChanges: &recordingRolePolicyChangeNotifier{}})
 
 	_, err := service.UpdateRole(context.Background(), UpdateRoleCommand{RoleID: roleID, Name: "renamed", Description: "system", Active: true})
 	if !errors.Is(err, roledomain.ErrSystemRoleProtected) {
@@ -48,8 +48,8 @@ func TestRoleCommandServiceUpdateRoleProtectsSystemRole(t *testing.T) {
 
 func TestRoleCommandServiceSetRoleActiveProtectsSystemRole(t *testing.T) {
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000002")
-	roles := &stubRoleStore{role: roledomain.Role{RoleID: roleID, Name: "super_admin", Active: true, IsSystem: true}}
-	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &stubUserRoleStore{}, RolePermissions: &stubRolePermissionStore{}, Permissions: &stubPermissionLookup{}, PolicyChanges: &stubRolePolicyChangeNotifier{}})
+	roles := &roleTestStore{role: roledomain.Role{RoleID: roleID, Name: "super_admin", Active: true, IsSystem: true}}
+	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &userRoleTestStore{}, RolePermissions: &rolePermissionTestStore{}, Permissions: &permissionLookupTestStore{}, PolicyChanges: &recordingRolePolicyChangeNotifier{}})
 
 	_, err := service.SetRoleActive(context.Background(), SetRoleActiveCommand{RoleID: roleID, Active: false})
 	if !errors.Is(err, roledomain.ErrSystemRoleProtected) {
@@ -64,13 +64,13 @@ func TestRoleCommandServiceUserRoleBindings(t *testing.T) {
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000003")
 	otherRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000004")
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000005")
-	roles := &stubRoleStore{rolesByID: map[uuid.UUID]roledomain.Role{
+	roles := &roleTestStore{rolesByID: map[uuid.UUID]roledomain.Role{
 		roleID:      {RoleID: roleID, Name: "operator", Active: true},
 		otherRoleID: {RoleID: otherRoleID, Name: "auditor", Active: true},
 	}}
-	userRoles := &stubUserRoleStore{items: []roledomain.Role{{RoleID: roleID, Name: "operator", Active: true}}}
-	notifier := &stubRolePolicyChangeNotifier{}
-	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: userRoles, RolePermissions: &stubRolePermissionStore{}, Permissions: &stubPermissionLookup{}, PolicyChanges: notifier})
+	userRoles := &userRoleTestStore{items: []roledomain.Role{{RoleID: roleID, Name: "operator", Active: true}}}
+	notifier := &recordingRolePolicyChangeNotifier{}
+	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: userRoles, RolePermissions: &rolePermissionTestStore{}, Permissions: &permissionLookupTestStore{}, PolicyChanges: notifier})
 
 	result, err := service.AddUserRole(context.Background(), UserRoleCommand{UserID: userID, RoleID: roleID})
 	if err != nil {
@@ -111,14 +111,14 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000006")
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000007")
 	otherPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000008")
-	roles := &stubRoleStore{role: roledomain.Role{RoleID: roleID, Name: "operator", Active: true}}
-	permissions := &stubPermissionLookup{items: map[uuid.UUID]roleapplication.PermissionReference{
+	roles := &roleTestStore{role: roledomain.Role{RoleID: roleID, Name: "operator", Active: true}}
+	permissions := &permissionLookupTestStore{items: map[uuid.UUID]roleapplication.PermissionReference{
 		permissionID:      {PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true},
 		otherPermissionID: {PermissionID: otherPermissionID, HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true},
 	}}
-	rolePermissions := &stubRolePermissionStore{items: []roleapplication.PermissionReference{{PermissionID: permissionID, Active: true}}}
-	notifier := &stubRolePolicyChangeNotifier{}
-	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &stubUserRoleStore{}, RolePermissions: rolePermissions, Permissions: permissions, PolicyChanges: notifier})
+	rolePermissions := &rolePermissionTestStore{items: []roleapplication.PermissionReference{{PermissionID: permissionID, Active: true}}}
+	notifier := &recordingRolePolicyChangeNotifier{}
+	service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &userRoleTestStore{}, RolePermissions: rolePermissions, Permissions: permissions, PolicyChanges: notifier})
 
 	result, err := service.AddRolePermission(context.Background(), RolePermissionCommand{RoleID: roleID, PermissionID: permissionID})
 	if err != nil {
@@ -263,12 +263,12 @@ func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			roles := &stubRoleStore{role: roledomain.Role{RoleID: roleID, Name: "operator", Active: true}}
-			permissions := &stubPermissionLookup{items: map[uuid.UUID]roleapplication.PermissionReference{
+			roles := &roleTestStore{role: roledomain.Role{RoleID: roleID, Name: "operator", Active: true}}
+			permissions := &permissionLookupTestStore{items: map[uuid.UUID]roleapplication.PermissionReference{
 				permissionID: {PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true},
 			}}
-			notifier := &stubRolePolicyChangeNotifier{err: refreshErr}
-			service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &stubUserRoleStore{}, RolePermissions: &stubRolePermissionStore{}, Permissions: permissions, PolicyChanges: notifier})
+			notifier := &recordingRolePolicyChangeNotifier{err: refreshErr}
+			service := NewRoleCommandService(RoleCommandParams{Roles: roles, UserRoles: &userRoleTestStore{}, RolePermissions: &rolePermissionTestStore{}, Permissions: permissions, PolicyChanges: notifier})
 
 			result := tt.run(t, service)
 
@@ -282,19 +282,19 @@ func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing
 	}
 }
 
-type stubRolePolicyChangeNotifier struct {
+type recordingRolePolicyChangeNotifier struct {
 	reasons []string
 	changes []permissionapplication.PolicyChange
 	err     error
 }
 
-func (n *stubRolePolicyChangeNotifier) NotifyPolicyChanged(_ context.Context, change permissionapplication.PolicyChange) error {
+func (n *recordingRolePolicyChangeNotifier) NotifyPolicyChanged(_ context.Context, change permissionapplication.PolicyChange) error {
 	n.reasons = append(n.reasons, change.Reason)
 	n.changes = append(n.changes, change)
 	return n.err
 }
 
-type stubRoleStore struct {
+type roleTestStore struct {
 	role               roledomain.Role
 	rolesByID          map[uuid.UUID]roledomain.Role
 	createInput        roleapplication.CreateRoleInput
@@ -303,13 +303,13 @@ type stubRoleStore struct {
 	batchLookupRoleIDs [][]uuid.UUID
 }
 
-func (s *stubRoleStore) Create(_ context.Context, input roleapplication.CreateRoleInput) (*roledomain.Role, error) {
+func (s *roleTestStore) Create(_ context.Context, input roleapplication.CreateRoleInput) (*roledomain.Role, error) {
 	s.createInput = input
 	s.role = roledomain.Role{RoleID: input.RoleID, Name: input.Name, Description: input.Description, Active: input.Active, IsSystem: input.IsSystem}
 	return &s.role, nil
 }
 
-func (s *stubRoleStore) GetByRoleID(_ context.Context, roleID uuid.UUID) (*roledomain.Role, error) {
+func (s *roleTestStore) GetByRoleID(_ context.Context, roleID uuid.UUID) (*roledomain.Role, error) {
 	if s.rolesByID != nil {
 		role, ok := s.rolesByID[roleID]
 		if !ok {
@@ -323,7 +323,7 @@ func (s *stubRoleStore) GetByRoleID(_ context.Context, roleID uuid.UUID) (*roled
 	return &s.role, nil
 }
 
-func (s *stubRoleStore) GetByRoleIDs(_ context.Context, roleIDs []uuid.UUID) ([]roledomain.Role, error) {
+func (s *roleTestStore) GetByRoleIDs(_ context.Context, roleIDs []uuid.UUID) ([]roledomain.Role, error) {
 	s.batchLookupRoleIDs = append(s.batchLookupRoleIDs, append([]uuid.UUID(nil), roleIDs...))
 	roles := make([]roledomain.Role, 0, len(roleIDs))
 	for _, roleID := range roleIDs {
@@ -336,41 +336,41 @@ func (s *stubRoleStore) GetByRoleIDs(_ context.Context, roleIDs []uuid.UUID) ([]
 	return roles, nil
 }
 
-func (s *stubRoleStore) List(context.Context, roleapplication.ListRolesInput) ([]roledomain.Role, bool, error) {
+func (s *roleTestStore) List(context.Context, roleapplication.ListRolesInput) ([]roledomain.Role, bool, error) {
 	return []roledomain.Role{s.role}, false, nil
 }
 
-func (s *stubRoleStore) Update(_ context.Context, input roleapplication.UpdateRoleInput) (*roledomain.Role, error) {
+func (s *roleTestStore) Update(_ context.Context, input roleapplication.UpdateRoleInput) (*roledomain.Role, error) {
 	s.updateCalled = true
 	s.role = roledomain.Role{RoleID: input.RoleID, Name: input.Name, Description: input.Description, Active: input.Active}
 	return &s.role, nil
 }
 
-func (s *stubRoleStore) SetActive(_ context.Context, roleID uuid.UUID, active bool) (*roledomain.Role, error) {
+func (s *roleTestStore) SetActive(_ context.Context, roleID uuid.UUID, active bool) (*roledomain.Role, error) {
 	s.setActiveCalled = true
 	s.role.RoleID = roleID
 	s.role.Active = active
 	return &s.role, nil
 }
 
-type stubUserRoleStore struct {
+type userRoleTestStore struct {
 	items          []roledomain.Role
 	addUserID      uuid.UUID
 	addRoleID      uuid.UUID
 	replaceRoleIDs []uuid.UUID
 }
 
-func (s *stubUserRoleStore) ListByUserID(context.Context, uuid.UUID) ([]roledomain.Role, error) {
+func (s *userRoleTestStore) ListByUserID(context.Context, uuid.UUID) ([]roledomain.Role, error) {
 	return s.items, nil
 }
 
-func (s *stubUserRoleStore) Add(_ context.Context, userID uuid.UUID, roleID uuid.UUID) error {
+func (s *userRoleTestStore) Add(_ context.Context, userID uuid.UUID, roleID uuid.UUID) error {
 	s.addUserID = userID
 	s.addRoleID = roleID
 	return nil
 }
 
-func (s *stubUserRoleStore) Replace(_ context.Context, _ uuid.UUID, roleIDs []uuid.UUID) ([]roledomain.Role, error) {
+func (s *userRoleTestStore) Replace(_ context.Context, _ uuid.UUID, roleIDs []uuid.UUID) ([]roledomain.Role, error) {
 	s.replaceRoleIDs = append([]uuid.UUID(nil), roleIDs...)
 	items := make([]roledomain.Role, 0, len(roleIDs))
 	for _, roleID := range roleIDs {
@@ -379,38 +379,38 @@ func (s *stubUserRoleStore) Replace(_ context.Context, _ uuid.UUID, roleIDs []uu
 	return items, nil
 }
 
-func (s *stubUserRoleStore) Remove(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+func (s *userRoleTestStore) Remove(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 
-type stubRolePermissionStore struct {
+type rolePermissionTestStore struct {
 	items              []roleapplication.PermissionReference
 	addRoleID          uuid.UUID
 	addPermission      roleapplication.PermissionReference
 	replacePermissions []roleapplication.PermissionReference
 }
 
-func (s *stubRolePermissionStore) ListByRoleID(context.Context, uuid.UUID) ([]roleapplication.PermissionReference, error) {
+func (s *rolePermissionTestStore) ListByRoleID(context.Context, uuid.UUID) ([]roleapplication.PermissionReference, error) {
 	return s.items, nil
 }
 
-func (s *stubRolePermissionStore) Add(_ context.Context, roleID uuid.UUID, permission roleapplication.PermissionReference) error {
+func (s *rolePermissionTestStore) Add(_ context.Context, roleID uuid.UUID, permission roleapplication.PermissionReference) error {
 	s.addRoleID = roleID
 	s.addPermission = permission
 	return nil
 }
 
-func (s *stubRolePermissionStore) Replace(_ context.Context, _ uuid.UUID, permissions []roleapplication.PermissionReference) ([]roleapplication.PermissionReference, error) {
+func (s *rolePermissionTestStore) Replace(_ context.Context, _ uuid.UUID, permissions []roleapplication.PermissionReference) ([]roleapplication.PermissionReference, error) {
 	s.replacePermissions = append([]roleapplication.PermissionReference(nil), permissions...)
 	return permissions, nil
 }
 
-func (s *stubRolePermissionStore) Remove(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+func (s *rolePermissionTestStore) Remove(context.Context, uuid.UUID, uuid.UUID) error { return nil }
 
-type stubPermissionLookup struct {
+type permissionLookupTestStore struct {
 	items map[uuid.UUID]roleapplication.PermissionReference
 	calls []uuid.UUID
 }
 
-func (s *stubPermissionLookup) GetActiveByPermissionID(_ context.Context, permissionID uuid.UUID) (*roleapplication.PermissionReference, error) {
+func (s *permissionLookupTestStore) GetActiveByPermissionID(_ context.Context, permissionID uuid.UUID) (*roleapplication.PermissionReference, error) {
 	s.calls = append(s.calls, permissionID)
 	permission, ok := s.items[permissionID]
 	if !ok {

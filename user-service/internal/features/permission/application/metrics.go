@@ -2,6 +2,8 @@ package application
 
 import "context"
 
+//go:generate go run github.com/aegiscore/common/runtime/observability/metrics/nopgen -source metrics.go -type Metrics -output metrics_nop_gen.go -struct nopMetrics -func NopMetrics -comment "NopMetrics 返回 permission/RBAC 业务指标空实现。"
+
 const (
 	// MetricsOperationPolicyReload 表示 RBAC policy reload 操作。
 	MetricsOperationPolicyReload = "policy_reload"
@@ -48,20 +50,3 @@ type Metrics interface {
 	WatcherVersionMismatch(ctx context.Context, source string)
 	RouteDiffObserved(ctx context.Context, missing int, stale int)
 }
-
-type nopMetrics struct{}
-
-// NopMetrics 返回 permission/RBAC 业务指标空实现。
-func NopMetrics() Metrics {
-	return nopMetrics{}
-}
-
-func (nopMetrics) PolicyReloadSucceeded(context.Context, string)       {}
-func (nopMetrics) PolicyReloadFailed(context.Context, string, string)  {}
-func (nopMetrics) PolicyPublishSucceeded(context.Context)              {}
-func (nopMetrics) PolicyPublishFailed(context.Context, string)         {}
-func (nopMetrics) WatcherCheckFailed(context.Context, string)          {}
-func (nopMetrics) WatcherReloadSucceeded(context.Context, string)      {}
-func (nopMetrics) WatcherReloadFailed(context.Context, string, string) {}
-func (nopMetrics) WatcherVersionMismatch(context.Context, string)      {}
-func (nopMetrics) RouteDiffObserved(context.Context, int, int)         {}

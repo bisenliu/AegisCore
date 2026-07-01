@@ -19,8 +19,8 @@ var tokenVersionTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4
 var tokenVersionOtherUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4f")
 
 func TestTokenVersionValidatorUsesLocalCache(t *testing.T) {
-	users := &tokenVersionUserStoreStub{version: 7}
-	sessions := &tokenVersionSessionStoreStub{cacheMiss: true}
+	users := &tokenVersionUserTestStore{version: 7}
+	sessions := &tokenVersionSessionTestStore{cacheMiss: true}
 	validator := newTestTokenVersionValidator(t, users, sessions, time.Minute)
 
 	if err := validator.ValidateTokenVersion(context.Background(), tokenVersionTestUserID.String(), 7); err != nil {
@@ -36,8 +36,8 @@ func TestTokenVersionValidatorUsesLocalCache(t *testing.T) {
 }
 
 func TestTokenVersionValidatorReloadsAfterLocalCacheExpires(t *testing.T) {
-	users := &tokenVersionUserStoreStub{version: 7}
-	sessions := &tokenVersionSessionStoreStub{cacheMiss: true}
+	users := &tokenVersionUserTestStore{version: 7}
+	sessions := &tokenVersionSessionTestStore{cacheMiss: true}
 	validator := newTestTokenVersionValidator(t, users, sessions, time.Nanosecond)
 
 	if err := validator.ValidateTokenVersion(context.Background(), tokenVersionTestUserID.String(), 7); err != nil {
@@ -54,8 +54,8 @@ func TestTokenVersionValidatorReloadsAfterLocalCacheExpires(t *testing.T) {
 }
 
 func TestTokenVersionValidatorRejectsMismatchFromLocalCache(t *testing.T) {
-	users := &tokenVersionUserStoreStub{version: 8}
-	sessions := &tokenVersionSessionStoreStub{cacheMiss: true}
+	users := &tokenVersionUserTestStore{version: 8}
+	sessions := &tokenVersionSessionTestStore{cacheMiss: true}
 	validator := newTestTokenVersionValidator(t, users, sessions, time.Minute)
 	if err := validator.ValidateTokenVersion(context.Background(), tokenVersionTestUserID.String(), 8); err != nil {
 		t.Fatalf("ValidateTokenVersion warmup: %v", err)
@@ -74,8 +74,8 @@ func TestTokenVersionValidatorRejectsMismatchFromLocalCache(t *testing.T) {
 
 func TestTokenVersionValidatorDoesNotCacheLoaderError(t *testing.T) {
 	cacheErr := errors.New("redis failed")
-	users := &tokenVersionUserStoreStub{version: 7}
-	sessions := &tokenVersionSessionStoreStub{getErr: cacheErr}
+	users := &tokenVersionUserTestStore{version: 7}
+	sessions := &tokenVersionSessionTestStore{getErr: cacheErr}
 	validator := newTestTokenVersionValidator(t, users, sessions, time.Minute)
 
 	for i := 0; i < 2; i++ {
@@ -91,8 +91,8 @@ func TestTokenVersionValidatorDoesNotCacheLoaderError(t *testing.T) {
 }
 
 func TestTokenVersionValidatorSingleflightCoalescesSameUser(t *testing.T) {
-	users := &tokenVersionUserStoreStub{version: 7, wait: make(chan struct{}), started: make(chan struct{})}
-	sessions := &tokenVersionSessionStoreStub{cacheMiss: true}
+	users := &tokenVersionUserTestStore{version: 7, wait: make(chan struct{}), started: make(chan struct{})}
+	sessions := &tokenVersionSessionTestStore{cacheMiss: true}
 	validator := newTestTokenVersionValidator(t, users, sessions, time.Minute)
 	started := users.started
 	const goroutines = 8
@@ -122,8 +122,8 @@ func TestTokenVersionValidatorSingleflightCoalescesSameUser(t *testing.T) {
 }
 
 func TestTokenVersionValidatorSingleflightKeepsUsersSeparate(t *testing.T) {
-	users := &tokenVersionUserStoreStub{versions: map[uuid.UUID]int64{tokenVersionTestUserID: 7, tokenVersionOtherUserID: 9}}
-	sessions := &tokenVersionSessionStoreStub{cacheMiss: true}
+	users := &tokenVersionUserTestStore{versions: map[uuid.UUID]int64{tokenVersionTestUserID: 7, tokenVersionOtherUserID: 9}}
+	sessions := &tokenVersionSessionTestStore{cacheMiss: true}
 	validator := newTestTokenVersionValidator(t, users, sessions, time.Minute)
 
 	var wg sync.WaitGroup
@@ -150,8 +150,8 @@ func TestTokenVersionValidatorSingleflightKeepsUsersSeparate(t *testing.T) {
 }
 
 func TestTokenVersionValidatorInvalidateReloads(t *testing.T) {
-	users := &tokenVersionUserStoreStub{version: 7}
-	sessions := &tokenVersionSessionStoreStub{cacheMiss: true}
+	users := &tokenVersionUserTestStore{version: 7}
+	sessions := &tokenVersionSessionTestStore{cacheMiss: true}
 	validator := newTestTokenVersionValidator(t, users, sessions, time.Minute)
 
 	if err := validator.ValidateTokenVersion(context.Background(), tokenVersionTestUserID.String(), 7); err != nil {
@@ -185,7 +185,7 @@ func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenV
 	return NewCachingValidator(cache)
 }
 
-type tokenVersionUserStoreStub struct {
+type tokenVersionUserTestStore struct {
 	mu       sync.Mutex
 	version  int64
 	versions map[uuid.UUID]int64
@@ -195,7 +195,7 @@ type tokenVersionUserStoreStub struct {
 	getCalls int
 }
 
-func (s *tokenVersionUserStoreStub) GetTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
+func (s *tokenVersionUserTestStore) GetTokenVersion(_ context.Context, userID uuid.UUID) (int64, error) {
 	s.mu.Lock()
 	s.getCalls++
 	if s.started != nil {
@@ -216,11 +216,11 @@ func (s *tokenVersionUserStoreStub) GetTokenVersion(_ context.Context, userID uu
 	return s.version, nil
 }
 
-func (s *tokenVersionUserStoreStub) IncrementTokenVersion(context.Context, uuid.UUID) (int64, error) {
+func (s *tokenVersionUserTestStore) IncrementTokenVersion(context.Context, uuid.UUID) (int64, error) {
 	return 0, errors.New("not implemented")
 }
 
-type tokenVersionSessionStoreStub struct {
+type tokenVersionSessionTestStore struct {
 	mu             sync.Mutex
 	version        int64
 	getErr         error
@@ -230,7 +230,7 @@ type tokenVersionSessionStoreStub struct {
 	cacheCalls     int
 }
 
-func (s *tokenVersionSessionStoreStub) GetCachedTokenVersion(context.Context, string) (int64, error) {
+func (s *tokenVersionSessionTestStore) GetCachedTokenVersion(context.Context, string) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.getCachedCalls++
@@ -243,13 +243,13 @@ func (s *tokenVersionSessionStoreStub) GetCachedTokenVersion(context.Context, st
 	return s.version, nil
 }
 
-func (s *tokenVersionSessionStoreStub) CacheTokenVersion(context.Context, string, int64) error {
+func (s *tokenVersionSessionTestStore) CacheTokenVersion(context.Context, string, int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cacheCalls++
 	return s.cacheErr
 }
 
-func (s *tokenVersionSessionStoreStub) DeleteCachedTokenVersion(context.Context, string) error {
+func (s *tokenVersionSessionTestStore) DeleteCachedTokenVersion(context.Context, string) error {
 	return nil
 }

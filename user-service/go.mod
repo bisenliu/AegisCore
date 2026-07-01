@@ -116,6 +116,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	go.uber.org/dig v1.18.0 // indirect
+	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/arch v0.27.0 // indirect
@@ -138,3 +139,5 @@ require (
 )
 
 replace github.com/aegiscore/common => ../common
+
+tool go.uber.org/mock/mockgen

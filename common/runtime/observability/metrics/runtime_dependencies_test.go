@@ -86,7 +86,7 @@ func TestRedisPingCollectorExportsSuccessFailureAndTimeout(t *testing.T) {
 		provider := newTestProvider(t, true, false)
 		collector, err := NewRedisPingCollector(RedisPingCollectorOptions{
 			Resource: "cache_redis",
-			Pinger:   fakeRedisPinger{err: errors.New("ping failed")},
+			Pinger:   staticRedisPinger{err: errors.New("ping failed")},
 			Timeout:  time.Second,
 		})
 		if err != nil {
@@ -130,7 +130,7 @@ func TestRedisPingCollectorExportsSuccessFailureAndTimeout(t *testing.T) {
 
 func TestWorkerpoolCollectorExportsStatsSnapshot(t *testing.T) {
 	provider := newTestProvider(t, true, false)
-	source := fakeWorkerpoolStatsSource{stats: workerpool.Stats{
+	source := staticWorkerpoolStatsSource{stats: workerpool.Stats{
 		Name:      "auth.redis.session_purge",
 		Workers:   4,
 		Submitted: 10,
@@ -209,7 +209,7 @@ func TestComponentStatusCollectorExportsRunningAndLastError(t *testing.T) {
 	provider := newTestProvider(t, true, false)
 	collector, err := NewComponentStatusCollector(ComponentStatusCollectorOptions{
 		Resource: "rbac_policy_watcher",
-		Source:   fakeComponentStatus{running: true, err: errors.New("subscribe failed")},
+		Source:   staticComponentStatusSource{running: true, err: errors.New("subscribe failed")},
 	})
 	if err != nil {
 		t.Fatalf("NewComponentStatusCollector: %v", err)
@@ -244,11 +244,11 @@ func TestCasbinPolicyReloadMetricsRecordsStatus(t *testing.T) {
 	assertGaugeValue(t, lastStatus, 0)
 }
 
-type fakeRedisPinger struct {
+type staticRedisPinger struct {
 	err error
 }
 
-func (p fakeRedisPinger) Ping(context.Context) error {
+func (p staticRedisPinger) Ping(context.Context) error {
 	return p.err
 }
 
@@ -268,24 +268,24 @@ func (blockingRedisPinger) Ping(ctx context.Context) error {
 	return ctx.Err()
 }
 
-type fakeWorkerpoolStatsSource struct {
+type staticWorkerpoolStatsSource struct {
 	stats workerpool.Stats
 }
 
-func (s fakeWorkerpoolStatsSource) Stats() workerpool.Stats {
+func (s staticWorkerpoolStatsSource) Stats() workerpool.Stats {
 	return s.stats
 }
 
-type fakeComponentStatus struct {
+type staticComponentStatusSource struct {
 	running bool
 	err     error
 }
 
-func (s fakeComponentStatus) Running() bool {
+func (s staticComponentStatusSource) Running() bool {
 	return s.running
 }
 
-func (s fakeComponentStatus) LastError() error {
+func (s staticComponentStatusSource) LastError() error {
 	return s.err
 }
 

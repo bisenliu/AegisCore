@@ -6,10 +6,20 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
 )
 
 func TestAuthorizerEnforceDelegatesValidUserID(t *testing.T) {
-	engine := &fakeEngine{allowed: true}
+	engine := NewMockEngine(gomock.NewController(t))
+	var gotUserID uuid.UUID
+	var gotPathTemplate string
+	var gotMethod string
+	engine.EXPECT().Enforce(gomock.Any(), gomock.Any(), "/api/v1/users/:user_id", "GET").DoAndReturn(func(_ context.Context, userID uuid.UUID, pathTemplate string, method string) (bool, error) {
+		gotUserID = userID
+		gotPathTemplate = pathTemplate
+		gotMethod = method
+		return true, nil
+	})
 	authz := NewAuthorizer(engine)
 	userID := "018f0000-0000-7000-8000-000000000701"
 	allowed, err := authz.Enforce(context.Background(), userID, "/api/v1/users/:user_id", "GET")
@@ -19,13 +29,13 @@ func TestAuthorizerEnforceDelegatesValidUserID(t *testing.T) {
 	if !allowed {
 		t.Fatal("allowed = false, want true")
 	}
-	if engine.calls != 1 || engine.userID.String() != userID || engine.pathTemplate != "/api/v1/users/:user_id" || engine.method != "GET" {
-		t.Fatalf("engine call = %#v", engine)
+	if gotUserID.String() != userID || gotPathTemplate != "/api/v1/users/:user_id" || gotMethod != "GET" {
+		t.Fatalf("engine call userID=%s path=%s method=%s", gotUserID, gotPathTemplate, gotMethod)
 	}
 }
 
 func TestAuthorizerEnforceInvalidUserIDFailsClosed(t *testing.T) {
-	engine := &fakeEngine{allowed: true}
+	engine := NewMockEngine(gomock.NewController(t))
 	authz := NewAuthorizer(engine)
 	allowed, err := authz.Enforce(context.Background(), "not-a-uuid", "/api/v1/users", "GET")
 	if !errors.Is(err, ErrInvalidSubjectUserID) {
@@ -34,23 +44,4 @@ func TestAuthorizerEnforceInvalidUserIDFailsClosed(t *testing.T) {
 	if allowed {
 		t.Fatal("invalid user allowed")
 	}
-	if engine.calls != 0 {
-		t.Fatalf("engine calls = %d, want 0", engine.calls)
-	}
-}
-
-type fakeEngine struct {
-	allowed      bool
-	calls        int
-	userID       uuid.UUID
-	pathTemplate string
-	method       string
-}
-
-func (e *fakeEngine) Enforce(_ context.Context, userID uuid.UUID, pathTemplate string, method string) (bool, error) {
-	e.calls++
-	e.userID = userID
-	e.pathTemplate = pathTemplate
-	e.method = method
-	return e.allowed, nil
 }

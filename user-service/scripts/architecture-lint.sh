@@ -35,6 +35,18 @@ if [[ -d "${service_dir}/internal/features/permission/application/rbacbaseline" 
   report "old permission/application/rbacbaseline package still exists"
 fi
 
+for forbidden_mock_dir in \
+  "${repo_root}/mocks" \
+  "${repo_root}/testmocks" \
+  "${repo_root}/common/mocks" \
+  "${repo_root}/common/testmocks" \
+  "${service_dir}/mocks" \
+  "${service_dir}/testmocks"; do
+  if [[ -d "${forbidden_mock_dir}" ]]; then
+    report "central mock repository is forbidden: ${forbidden_mock_dir}; put generated mocks next to the consuming feature tests"
+  fi
+done
+
 run_rg "old RBAC baseline import remains" \
   'github\.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline' \
   "${service_dir}/internal"

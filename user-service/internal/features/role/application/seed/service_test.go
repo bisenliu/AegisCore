@@ -14,21 +14,21 @@ import (
 )
 
 func TestSeedServiceDefaultEnsureAndRepeat(t *testing.T) {
-	fakes := newSeedFakes()
-	service := NewService(fakes.roles, fakes.permissions, fakes.rolePermissions, fakes.userRoles)
+	stores := newSeedTestStores()
+	service := NewService(stores.roles, stores.permissions, stores.rolePermissions, stores.userRoles)
 	permissionCount := len(rbacbaseline.DefaultPermissions())
 
 	result, err := service.Seed(context.Background(), SeedOptions{})
 	if err != nil {
 		t.Fatalf("Seed: %v", err)
 	}
-	if result.RolesInserted != 1 || result.PermissionsInserted != permissionCount || result.RolePermissionBindingsAdd != permissionCount || fakes.rolePermissions.syncCalled {
-		t.Fatalf("first result=%#v syncCalled=%v", result, fakes.rolePermissions.syncCalled)
+	if result.RolesInserted != 1 || result.PermissionsInserted != permissionCount || result.RolePermissionBindingsAdd != permissionCount || stores.rolePermissions.syncCalled {
+		t.Fatalf("first result=%#v syncCalled=%v", result, stores.rolePermissions.syncCalled)
 	}
-	if fakes.roles.lastReactivate || fakes.permissions.lastReactivate {
+	if stores.roles.lastReactivate || stores.permissions.lastReactivate {
 		t.Fatal("default seed unexpectedly requested reactivation")
 	}
-	assertSuperAdminSeedBindings(t, fakes.rolePermissions.bindings)
+	assertSuperAdminSeedBindings(t, stores.rolePermissions.bindings)
 
 	result, err = service.Seed(context.Background(), SeedOptions{})
 	if err != nil {
@@ -40,24 +40,24 @@ func TestSeedServiceDefaultEnsureAndRepeat(t *testing.T) {
 }
 
 func TestSeedServiceReactivateAndSyncOptions(t *testing.T) {
-	fakes := newSeedFakes()
-	service := NewService(fakes.roles, fakes.permissions, fakes.rolePermissions, fakes.userRoles)
+	stores := newSeedTestStores()
+	service := NewService(stores.roles, stores.permissions, stores.rolePermissions, stores.userRoles)
 
 	_, err := service.Seed(context.Background(), SeedOptions{ReactivateSystem: true, SyncSystemBindings: true})
 	if err != nil {
 		t.Fatalf("Seed: %v", err)
 	}
-	if !fakes.roles.lastReactivate || !fakes.permissions.lastReactivate {
+	if !stores.roles.lastReactivate || !stores.permissions.lastReactivate {
 		t.Fatal("reactivate option was not propagated")
 	}
-	if !fakes.rolePermissions.syncCalled {
+	if !stores.rolePermissions.syncCalled {
 		t.Fatal("sync option did not call SyncSystemBindings")
 	}
 }
 
 func TestSeedServiceAssignSuperAdmin(t *testing.T) {
-	fakes := newSeedFakes()
-	service := NewService(fakes.roles, fakes.permissions, fakes.rolePermissions, fakes.userRoles)
+	stores := newSeedTestStores()
+	service := NewService(stores.roles, stores.permissions, stores.rolePermissions, stores.userRoles)
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000001")
 
 	result, err := service.AssignSuperAdmin(context.Background(), userID)
@@ -67,8 +67,8 @@ func TestSeedServiceAssignSuperAdmin(t *testing.T) {
 	if !result.Added {
 		t.Fatal("first assignment Added=false")
 	}
-	if fakes.userRoles.lastRoleID.String() != rbacbaseline.SuperAdminRoleID {
-		t.Fatalf("roleID = %s", fakes.userRoles.lastRoleID)
+	if stores.userRoles.lastRoleID.String() != rbacbaseline.SuperAdminRoleID {
+		t.Fatalf("roleID = %s", stores.userRoles.lastRoleID)
 	}
 
 	result, err = service.AssignSuperAdmin(context.Background(), userID)
@@ -80,23 +80,23 @@ func TestSeedServiceAssignSuperAdmin(t *testing.T) {
 	}
 }
 
-type seedFakes struct {
-	permissions     *fakeSeedPermissionStore
-	roles           *fakeSeedRoleStore
-	rolePermissions *fakeSeedRolePermissionStore
-	userRoles       *fakeSeedUserRoleStore
+type seedTestStores struct {
+	permissions     *seedPermissionTestStore
+	roles           *seedRoleTestStore
+	rolePermissions *seedRolePermissionTestStore
+	userRoles       *seedUserRoleTestStore
 }
 
-func newSeedFakes() seedFakes {
-	return seedFakes{permissions: &fakeSeedPermissionStore{items: map[uuid.UUID]permissiondomain.Permission{}}, roles: &fakeSeedRoleStore{items: map[uuid.UUID]roledomain.Role{}}, rolePermissions: &fakeSeedRolePermissionStore{bindings: map[uuid.UUID]map[uuid.UUID]struct{}{}}, userRoles: &fakeSeedUserRoleStore{bindings: map[uuid.UUID]map[uuid.UUID]struct{}{}}}
+func newSeedTestStores() seedTestStores {
+	return seedTestStores{permissions: &seedPermissionTestStore{items: map[uuid.UUID]permissiondomain.Permission{}}, roles: &seedRoleTestStore{items: map[uuid.UUID]roledomain.Role{}}, rolePermissions: &seedRolePermissionTestStore{bindings: map[uuid.UUID]map[uuid.UUID]struct{}{}}, userRoles: &seedUserRoleTestStore{bindings: map[uuid.UUID]map[uuid.UUID]struct{}{}}}
 }
 
-type fakeSeedRoleStore struct {
+type seedRoleTestStore struct {
 	items          map[uuid.UUID]roledomain.Role
 	lastReactivate bool
 }
 
-func (s *fakeSeedRoleStore) UpsertSystemRole(_ context.Context, input roleapplication.SeedRoleInput) (*roledomain.Role, bool, error) {
+func (s *seedRoleTestStore) UpsertSystemRole(_ context.Context, input roleapplication.SeedRoleInput) (*roledomain.Role, bool, error) {
 	s.lastReactivate = input.ReactivateSystem
 	role := roledomain.Role{RoleID: input.RoleID, Name: input.Name, Description: input.Description, Active: input.Active, IsSystem: input.IsSystem}
 	_, exists := s.items[input.RoleID]
@@ -104,12 +104,12 @@ func (s *fakeSeedRoleStore) UpsertSystemRole(_ context.Context, input roleapplic
 	return &role, !exists, nil
 }
 
-type fakeSeedPermissionStore struct {
+type seedPermissionTestStore struct {
 	items          map[uuid.UUID]permissiondomain.Permission
 	lastReactivate bool
 }
 
-func (s *fakeSeedPermissionStore) UpsertSystemPermission(_ context.Context, input permissionapplication.SeedPermissionInput) (*permissiondomain.Permission, bool, error) {
+func (s *seedPermissionTestStore) UpsertSystemPermission(_ context.Context, input permissionapplication.SeedPermissionInput) (*permissiondomain.Permission, bool, error) {
 	s.lastReactivate = input.ReactivateSystem
 	permission := permissiondomain.Permission{PermissionID: input.PermissionID, Name: input.Name, Description: input.Description, Module: input.Module, HTTPMethod: input.HTTPMethod, PathTemplate: input.PathTemplate, Active: input.Active, IsSystem: input.IsSystem}
 	_, exists := s.items[input.PermissionID]
@@ -117,12 +117,12 @@ func (s *fakeSeedPermissionStore) UpsertSystemPermission(_ context.Context, inpu
 	return &permission, !exists, nil
 }
 
-type fakeSeedRolePermissionStore struct {
+type seedRolePermissionTestStore struct {
 	bindings   map[uuid.UUID]map[uuid.UUID]struct{}
 	syncCalled bool
 }
 
-func (s *fakeSeedRolePermissionStore) EnsureSystemBindings(_ context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) (int, error) {
+func (s *seedRolePermissionTestStore) EnsureSystemBindings(_ context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) (int, error) {
 	if s.bindings[roleID] == nil {
 		s.bindings[roleID] = map[uuid.UUID]struct{}{}
 	}
@@ -137,18 +137,18 @@ func (s *fakeSeedRolePermissionStore) EnsureSystemBindings(_ context.Context, ro
 	return added, nil
 }
 
-func (s *fakeSeedRolePermissionStore) SyncSystemBindings(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) (int, int, error) {
+func (s *seedRolePermissionTestStore) SyncSystemBindings(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) (int, int, error) {
 	s.syncCalled = true
 	added, err := s.EnsureSystemBindings(ctx, roleID, permissionIDs)
 	return added, 0, err
 }
 
-type fakeSeedUserRoleStore struct {
+type seedUserRoleTestStore struct {
 	bindings   map[uuid.UUID]map[uuid.UUID]struct{}
 	lastRoleID uuid.UUID
 }
 
-func (s *fakeSeedUserRoleStore) AssignRole(_ context.Context, userID uuid.UUID, roleID uuid.UUID) (bool, error) {
+func (s *seedUserRoleTestStore) AssignRole(_ context.Context, userID uuid.UUID, roleID uuid.UUID) (bool, error) {
 	s.lastRoleID = roleID
 	if s.bindings[userID] == nil {
 		s.bindings[userID] = map[uuid.UUID]struct{}{}

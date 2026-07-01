@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
 
 	"github.com/aegiscore/common/security/password"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
@@ -19,7 +20,9 @@ func TestVerifierAcceptsMustChangePasswordUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	verifier := NewVerifier(&credentialStoreStub{userByUsername: &authdomain.UserCredential{UserID: verifierTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}}, testPasswordService(t))
+	store := NewMockUserCredentialStore(gomock.NewController(t))
+	store.EXPECT().GetByUsername(gomock.Any(), "alice").Return(&authdomain.UserCredential{UserID: verifierTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, nil)
+	verifier := NewVerifier(store, testPasswordService(t))
 
 	user, err := verifier.VerifyPassword(context.Background(), "alice", "secret")
 
@@ -36,7 +39,9 @@ func TestVerifierRejectsDisabledUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	verifier := NewVerifier(&credentialStoreStub{userByUsername: &authdomain.UserCredential{UserID: verifierTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}}, testPasswordService(t))
+	store := NewMockUserCredentialStore(gomock.NewController(t))
+	store.EXPECT().GetByUsername(gomock.Any(), "alice").Return(&authdomain.UserCredential{UserID: verifierTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}, nil)
+	verifier := NewVerifier(store, testPasswordService(t))
 
 	_, err = verifier.VerifyPassword(context.Background(), "alice", "secret")
 
@@ -50,7 +55,13 @@ func TestVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	store := &credentialStoreStub{userByID: &authdomain.UserCredential{UserID: verifierTestUserID, PasswordHash: oldHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
+	store := NewMockUserCredentialStore(gomock.NewController(t))
+	var updatedInput authdomain.UpdateCredentialsInput
+	store.EXPECT().GetCredentialByUserID(gomock.Any(), verifierTestUserID).Return(&authdomain.UserCredential{UserID: verifierTestUserID, PasswordHash: oldHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, nil)
+	store.EXPECT().UpdateCredentials(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, input authdomain.UpdateCredentialsInput) (int64, error) {
+		updatedInput = input
+		return int64(3), nil
+	})
 	verifier := NewVerifier(store, testPasswordService(t))
 
 	result, err := verifier.ChangePassword(context.Background(), verifierTestUserID, "new-secret")
@@ -61,35 +72,9 @@ func TestVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	if result.UserID != verifierTestUserID || result.TokenVersion != 3 {
 		t.Fatalf("result = %#v", result)
 	}
-	if store.updatedInput.UserID != verifierTestUserID || store.updatedInput.Status != identity.UserStatusNormal {
-		t.Fatalf("updated input = %#v", store.updatedInput)
+	if updatedInput.UserID != verifierTestUserID || updatedInput.Status != identity.UserStatusNormal {
+		t.Fatalf("updated input = %#v", updatedInput)
 	}
-}
-
-type credentialStoreStub struct {
-	userByUsername *authdomain.UserCredential
-	userByID       *authdomain.UserCredential
-	newVersion     int64
-	updatedInput   authdomain.UpdateCredentialsInput
-}
-
-func (s *credentialStoreStub) GetByUsername(context.Context, string) (*authdomain.UserCredential, error) {
-	if s.userByUsername == nil {
-		return nil, identity.ErrUserNotFound
-	}
-	return s.userByUsername, nil
-}
-
-func (s *credentialStoreStub) GetCredentialByUserID(context.Context, uuid.UUID) (*authdomain.UserCredential, error) {
-	if s.userByID == nil {
-		return nil, identity.ErrUserNotFound
-	}
-	return s.userByID, nil
-}
-
-func (s *credentialStoreStub) UpdateCredentials(_ context.Context, input authdomain.UpdateCredentialsInput) (int64, error) {
-	s.updatedInput = input
-	return s.newVersion, nil
 }
 
 func testPasswordService(t testing.TB) *password.Service {

@@ -2,6 +2,8 @@ package application
 
 import "context"
 
+//go:generate go run github.com/aegiscore/common/runtime/observability/metrics/nopgen -source metrics.go -type Metrics -output metrics_nop_gen.go -struct nopMetrics -func NopMetrics -comment "NopMetrics 返回 auth 业务指标空实现。"
+
 const (
 	// MetricsOperationLogin 表示用户名密码登录流程。
 	MetricsOperationLogin = "login"
@@ -66,19 +68,3 @@ type Metrics interface {
 	TokenVersionMismatch(context.Context, string)
 	SessionPurgeSubmitFailed(context.Context)
 }
-
-type nopMetrics struct{}
-
-// NopMetrics 返回 auth 业务指标空实现。
-func NopMetrics() Metrics {
-	return nopMetrics{}
-}
-
-func (nopMetrics) LoginSucceeded(context.Context)               {}
-func (nopMetrics) LoginFailed(context.Context, string)          {}
-func (nopMetrics) RefreshSucceeded(context.Context)             {}
-func (nopMetrics) RefreshFailed(context.Context, string)        {}
-func (nopMetrics) LogoutSucceeded(context.Context, string)      {}
-func (nopMetrics) LogoutFailed(context.Context, string, string) {}
-func (nopMetrics) TokenVersionMismatch(context.Context, string) {}
-func (nopMetrics) SessionPurgeSubmitFailed(context.Context)     {}

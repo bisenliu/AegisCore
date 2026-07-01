@@ -10,7 +10,7 @@ import (
 )
 
 func TestLocalcacheCollectorExportsStats(t *testing.T) {
-	source := fakeLocalcacheStatsSource{
+	source := staticLocalcacheStatsSource{
 		name: "auth_token_version",
 		stats: localcache.Stats{
 			Hit:            10,
@@ -49,7 +49,7 @@ func TestLocalcacheCollectorExportsStats(t *testing.T) {
 
 func TestLocalcacheCollectorAllowsMultipleCaches(t *testing.T) {
 	registry := prometheus.NewRegistry()
-	for _, source := range []fakeLocalcacheStatsSource{
+	for _, source := range []staticLocalcacheStatsSource{
 		{name: "auth_token_version", stats: localcache.Stats{Hit: 1, Capacity: 100}},
 		{name: "rbac_user_roles", stats: localcache.Stats{Miss: 2, Capacity: 200}},
 	} {
@@ -67,16 +67,16 @@ func TestLocalcacheCollectorAllowsMultipleCaches(t *testing.T) {
 	assertMetricWithLabelsValue(t, family, map[string]string{LabelCache: "rbac_user_roles", LabelResult: localcacheResultMiss}, 2)
 }
 
-type fakeLocalcacheStatsSource struct {
+type staticLocalcacheStatsSource struct {
 	name  string
 	stats localcache.Stats
 }
 
-func (s fakeLocalcacheStatsSource) Name() string {
+func (s staticLocalcacheStatsSource) Name() string {
 	return s.name
 }
 
-func (s fakeLocalcacheStatsSource) Stats() localcache.Stats {
+func (s staticLocalcacheStatsSource) Stats() localcache.Stats {
 	return s.stats
 }
 

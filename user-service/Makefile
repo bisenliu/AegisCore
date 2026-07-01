@@ -25,7 +25,7 @@ lint: ## 运行 user-service lint。
 architecture-lint: ## 运行 user-service 架构边界检查。
 	./scripts/architecture-lint.sh
 
-verify: lint architecture-lint test openapi-generate ## 运行 user-service 验证。
+verify: lint architecture-lint generate test openapi-generate ## 运行 user-service 验证。
 	git diff --exit-code
 
 seed-rbac: ## 使用 USER_SERVICE_CONFIG 初始化 RBAC 系统数据。
@@ -35,8 +35,8 @@ create-super-admin: ## 创建管理员用户并绑定超级管理员角色；需
 	@test -n "$${ADMIN_PASSWORD}" || (echo "必须设置 ADMIN_PASSWORD" >&2; exit 2)
 	ADMIN_PASSWORD="$${ADMIN_PASSWORD}" go run ./cmd rbac --config $(USER_SERVICE_CONFIG) create-super-admin --username '$(ADMIN_USERNAME)' --nickname '$(ADMIN_NICKNAME)' --reset-password=$(ADMIN_RESET_PASSWORD)
 
-generate: ## 生成 user-service Ent 代码。
-	go generate ./ent
+generate: ## 生成 user-service Go 生成物。
+	go generate ./...
 
 migrate-diff: ## 生成 migration，需传入 name=<migration-name>。
 	@test -n "$(name)" || (echo "用法：make migrate-diff name=<migration-name>" >&2; exit 2)
