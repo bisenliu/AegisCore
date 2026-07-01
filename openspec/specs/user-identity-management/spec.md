@@ -51,11 +51,11 @@
 - **WHEN** 调用方按软删除状态、用户状态或用户 ID cursor 分页列出用户
 - **THEN** 数据库 schema MUST 提供支持未软删除过滤、状态过滤和 `user_id` keyset 排序的索引
 
-#### Scenario: 用户昵称 contains 查询索引
+#### Scenario: 用户昵称普通索引
 
-- **WHEN** 用户列表按昵称 contains 条件过滤
-- **THEN** PostgreSQL schema MUST 提供适合前置通配符文本匹配的索引策略
-- **AND** 系统 MUST NOT 依赖普通 B-tree 索引作为昵称 contains 查询的主要性能支撑
+- **WHEN** 用户资料 schema 定义 `nickname` 字段索引
+- **THEN** 数据库 schema MUST 为 `users.nickname` 提供 Ent 可生成的普通索引
+- **AND** 系统 MUST NOT 依赖 PostgreSQL GIN、`gin_trgm_ops` 或插件相关索引作为昵称字段的持久化要求
 
 #### Scenario: 用户身份索引不改变业务语义
 
