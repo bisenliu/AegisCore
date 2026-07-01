@@ -13,8 +13,16 @@ CREATE TABLE "permissions" (
   "updated_at" bigint NOT NULL,
   PRIMARY KEY ("id")
 );
+-- Create index "permission_active_permission_id" to table: "permissions"
+CREATE INDEX "permission_active_permission_id" ON "permissions" ("active", "permission_id");
 -- Create index "permission_http_method_path_template" to table: "permissions"
 CREATE UNIQUE INDEX "permission_http_method_path_template" ON "permissions" ("http_method", "path_template");
+-- Create index "permission_http_method_permission_id" to table: "permissions"
+CREATE INDEX "permission_http_method_permission_id" ON "permissions" ("http_method", "permission_id");
+-- Create index "permission_is_system_permission_id" to table: "permissions"
+CREATE INDEX "permission_is_system_permission_id" ON "permissions" ("is_system", "permission_id");
+-- Create index "permission_module_permission_id" to table: "permissions"
+CREATE INDEX "permission_module_permission_id" ON "permissions" ("module", "permission_id");
 -- Create index "permissions_permission_id_key" to table: "permissions"
 CREATE UNIQUE INDEX "permissions_permission_id_key" ON "permissions" ("permission_id");
 -- Set comment to column: "id" on table: "permissions"
@@ -51,6 +59,10 @@ CREATE TABLE "roles" (
   "updated_at" bigint NOT NULL,
   PRIMARY KEY ("id")
 );
+-- Create index "role_active_role_id" to table: "roles"
+CREATE INDEX "role_active_role_id" ON "roles" ("active", "role_id");
+-- Create index "role_is_system_role_id" to table: "roles"
+CREATE INDEX "role_is_system_role_id" ON "roles" ("is_system", "role_id");
 -- Create index "roles_role_id_key" to table: "roles"
 CREATE UNIQUE INDEX "roles_role_id_key" ON "roles" ("role_id");
 -- Set comment to column: "id" on table: "roles"
@@ -79,6 +91,8 @@ CREATE TABLE "role_permissions" (
   CONSTRAINT "role_permissions_permissions_role_permissions" FOREIGN KEY ("permission_id") REFERENCES "permissions" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION,
   CONSTRAINT "role_permissions_roles_role_permissions" FOREIGN KEY ("role_id") REFERENCES "roles" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION
 );
+-- Create index "rolepermission_permission_id_role_id" to table: "role_permissions"
+CREATE INDEX "rolepermission_permission_id_role_id" ON "role_permissions" ("permission_id", "role_id");
 -- Create index "rolepermission_role_id_permission_id" to table: "role_permissions"
 CREATE UNIQUE INDEX "rolepermission_role_id_permission_id" ON "role_permissions" ("role_id", "permission_id");
 -- Set comment to column: "id" on table: "role_permissions"
@@ -147,6 +161,8 @@ CREATE TABLE "user_roles" (
   CONSTRAINT "user_roles_roles_user_roles" FOREIGN KEY ("role_id") REFERENCES "roles" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION,
   CONSTRAINT "user_roles_users_user_roles" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION
 );
+-- Create index "userrole_role_id_user_id" to table: "user_roles"
+CREATE INDEX "userrole_role_id_user_id" ON "user_roles" ("role_id", "user_id");
 -- Create index "userrole_user_id_role_id" to table: "user_roles"
 CREATE UNIQUE INDEX "userrole_user_id_role_id" ON "user_roles" ("user_id", "role_id");
 -- Set comment to column: "id" on table: "user_roles"
