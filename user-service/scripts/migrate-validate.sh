@@ -17,7 +17,7 @@ set -eu
 #   ./scripts/migrate-validate.sh
 #
 # 推荐用法：
-#   在 CI 中、Docker 构建前或 `migrate-apply.sh` 执行前运行，避免部署损坏的迁移目录。
+#   在 CI、SQL 工单提交前或受控发布平台执行前运行，避免交付损坏的迁移目录。
 cd "$(dirname "$0")/.."
 
 atlas migrate validate --dir file://migrations

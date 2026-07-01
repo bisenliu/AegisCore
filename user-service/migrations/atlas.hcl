@@ -1,6 +1,6 @@
 variable "dev_url" {
   type    = string
-  default = "docker://postgres/15/dev?search_path=public"
+  default = "docker+postgres://_/aegiscore-atlas-postgres-pgtrgm:15/dev?search_path=public"
 }
 
 env "local" {

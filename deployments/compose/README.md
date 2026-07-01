@@ -4,7 +4,7 @@
 
 当前提供可直接运行的本地 Compose 编排：
 
-- `docker-compose.yml`：启动 PostgreSQL、Redis、用户服务、Prometheus 和 Grafana，并通过独立 `user-service-migrate` one-shot 服务在用户服务启动前执行 Atlas migration，再执行 RBAC seed。
+- `docker-compose.yml`：启动 PostgreSQL、Redis、用户服务、Prometheus 和 Grafana，并在数据库 SQL migration 已受控执行后先执行 RBAC seed，再启动用户服务。
 - `prometheus/prometheus.yml`：抓取用户服务 `/metrics`，并加载 `deployments/observability/prometheus/user-service-alerts.yaml`。
 - `grafana/provisioning/`：自动配置 Prometheus datasource 和用户服务看板。
 - `grafana/dashboards/user-service-overview.json`：由 `deployments/observability/grafana/user-service-overview.json` 生成的本地自动导入副本，datasource uid 固定为 `prometheus`；不要手动编辑该文件。
@@ -41,12 +41,6 @@ docker compose -f deployments/compose/docker-compose.yml up --build
 docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
 ```
 
-从仓库根目录单独构建 migration 镜像：
+Compose 文件使用仓库根目录作为 build context，通过 `deployments/docker/user-service.Dockerfile` 构建用户服务运行时镜像。
 
-```bash
-docker build -f deployments/docker/user-service-migration.Dockerfile -t aegiscore-user-services-migration .
-```
-
-Compose 文件使用仓库根目录作为 build context，并分别通过 `deployments/docker/user-service.Dockerfile` 构建用户服务运行时镜像、通过 `deployments/docker/user-service-migration.Dockerfile` 构建 Atlas/migration 镜像。
-
-Compose 中的 `user-service-migrate` 是本地 release migration job 的模拟：它使用专用 `aegiscore-user-services-migration` 镜像执行 `atlas migrate apply`，成功后才允许 `rbac-seed` 和 `user-service` 启动。普通 `aegiscore-user-services` 运行时镜像不包含 Atlas，也不支持通过 `RUN_MIGRATIONS=true` 在服务容器启动时执行 migration。生产多副本发布也应使用独立 migration Job 或 CI/CD release job，而不是依赖服务副本启动时迁移。
+数据库 schema 变更流程是：Ent schema -> Atlas diff 生成 SQL -> Atlas validate/hash 校验 SQL 目录 -> SQL 进 Git -> DBA 工单或受控发布平台执行。Compose 不会自动执行 `atlas migrate apply`；启动 `rbac-seed` 和 `user-service` 前，应先确认本地或目标数据库已执行对应 SQL migration。普通 `aegiscore-user-services` 运行时镜像不包含 Atlas，也不支持通过 `RUN_MIGRATIONS=true` 在服务容器启动时执行 migration。

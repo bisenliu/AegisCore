@@ -7,7 +7,7 @@
 - `golangci-lint`。
 - Docker，用于本地依赖、Compose 和 Testcontainers 场景。
 - OpenSpec CLI，用于 `/opsx:*` 变更工作流。
-- Atlas 相关本地脚本通过 `user-service/scripts/` 调用；容器化发布使用专用 Atlas/migration 镜像。
+- Atlas 相关本地脚本通过 `user-service/scripts/` 生成和校验 SQL；数据库变更执行由 DBA 工单或受控发布平台完成。
 
 ## 2. 查看命令
 
@@ -91,13 +91,13 @@ make user-service-migrate-diff name=<migration-name>
 make user-service-migrate-validate
 ```
 
-应用 migration：
+提交和执行 migration：
 
-```bash
-DATABASE_URL='<postgres-url>' make user-service-migrate-apply
-```
+1. 运行 `make user-service-migrate-validate` 校验 SQL 目录和 `atlas.sum`。
+2. 将 SQL migration 和 `atlas.sum` 提交到 Git。
+3. 通过 DBA 工单或受控发布平台执行 SQL migration；如 SQL 包含 `CREATE EXTENSION IF NOT EXISTS pg_trgm;`，确认目标库权限或 DBA 前置动作。
 
-普通 user-service 运行时镜像不包含 Atlas。容器化环境应先运行 `deployments/docker/user-service-migration.Dockerfile` 构建的 migration 镜像完成 `atlas migrate apply`，再启动服务镜像。
+普通 user-service 运行时镜像不包含 Atlas。容器化环境应先确认数据库 SQL migration 已受控执行，再启动服务镜像。
 
 ## 6. OpenAPI
 
@@ -159,7 +159,6 @@ make compose-dashboard-check
 
 ```bash
 docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
-docker build -f deployments/docker/user-service-migration.Dockerfile -t aegiscore-user-services-migration .
 ```
 
 ## 9. OPSX 初始化和变更

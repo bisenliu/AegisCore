@@ -121,12 +121,12 @@ CREATE TABLE "users" (
 CREATE INDEX "user_deleted_at" ON "users" ("deleted_at");
 -- Create index "user_deleted_at_user_id" to table: "users"
 CREATE INDEX "user_deleted_at_user_id" ON "users" ("deleted_at", "user_id");
--- Create index "user_nickname" to table: "users"
-CREATE INDEX "user_nickname" ON "users" ("nickname");
 -- Create index "user_status" to table: "users"
 CREATE INDEX "user_status" ON "users" ("status");
 -- Create index "user_status_deleted_at_user_id" to table: "users"
 CREATE INDEX "user_status_deleted_at_user_id" ON "users" ("status", "deleted_at", "user_id");
+-- Create index "users_nickname_trgm" to table: "users"
+CREATE INDEX "users_nickname_trgm" ON "users" USING GIN ("nickname" gin_trgm_ops);
 -- Create index "users_user_id_key" to table: "users"
 CREATE UNIQUE INDEX "users_user_id_key" ON "users" ("user_id");
 -- Create index "users_username_key" to table: "users"

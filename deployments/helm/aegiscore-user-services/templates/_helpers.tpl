@@ -82,13 +82,6 @@ Image reference.
 {{- end -}}
 
 {{/*
-Migration image reference.
-*/}}
-{{- define "aegiscore-user-services.migrationImage" -}}
-{{- printf "%s:%s" .Values.migrationJob.image.repository (.Values.migrationJob.image.tag | default (.Values.image.tag | default .Chart.AppVersion)) -}}
-{{- end -}}
-
-{{/*
 Secret-backed runtime env.
 */}}
 {{- define "aegiscore-user-services.secretEnv" -}}

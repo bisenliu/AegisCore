@@ -10,7 +10,7 @@ ADMIN_RESET_PASSWORD ?= false
 .PHONY: common-test common-lint common-verify
 .PHONY: user-service-build user-service-run user-service-test user-service-lint user-service-verify user-service-architecture-lint
 .PHONY: user-service-seed-rbac user-service-create-super-admin
-.PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-migrate-apply user-service-openapi-generate user-service-fxgraph-generate user-service-fxgraph-check
+.PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-openapi-generate user-service-fxgraph-generate user-service-fxgraph-check
 .PHONY: compose-dashboard-generate compose-dashboard-check
 
 help: ## 查看可用命令。
@@ -66,9 +66,6 @@ user-service-migrate-diff: ## 生成 user-service migration，需传入 name=<mi
 
 user-service-migrate-validate: ## 校验 user-service migrations。
 	$(MAKE) -C $(USER_SERVICE_DIR) migrate-validate
-
-user-service-migrate-apply: ## 使用 DATABASE_URL 执行 user-service migrations。
-	$(MAKE) -C $(USER_SERVICE_DIR) migrate-apply
 
 user-service-openapi-generate: ## 生成 user-service OpenAPI 3 文档。
 	$(MAKE) -C $(USER_SERVICE_DIR) openapi-generate

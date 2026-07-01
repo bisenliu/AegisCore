@@ -83,7 +83,6 @@ make user-service-test
 make user-service-generate
 make user-service-migrate-diff name=<migration-name>
 make user-service-migrate-validate
-DATABASE_URL='<postgres-url>' make user-service-migrate-apply
 make user-service-openapi-generate
 ```
 
@@ -145,7 +144,7 @@ openspec init --tools none --force
 - 数据库 schema 和 migration：`user-service/ent/schema/`、`user-service/migrations/`。
 - OpenAPI 生成物：`user-service/docs/openapi.go`、`user-service/docs/openapi.json`、`user-service/docs/openapi.yaml`。
 - 可观测性：`common/runtime/observability/`、`common/runtime/logger/`、`common/http/middleware/`、`deployments/observability/`、`deployments/compose/grafana/`。
-- 部署发布：生产优先使用独立 Atlas/migration 镜像的 migration Job 或 CI/CD release job；普通 user-service 运行时镜像不包含 Atlas，不执行 migration，`RUN_MIGRATIONS=true` 已废弃。
+- 部署发布：SQL migration 通过 DBA 工单或受控发布平台人工或受控执行；普通 user-service 运行时镜像不包含 Atlas，不执行 migration，`RUN_MIGRATIONS=true` 已废弃。
 
 ## 10. 交付检查
 

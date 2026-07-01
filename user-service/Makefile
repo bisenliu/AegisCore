@@ -4,7 +4,7 @@ ADMIN_USERNAME ?= admin
 ADMIN_NICKNAME ?= Admin
 ADMIN_RESET_PASSWORD ?= false
 
-.PHONY: help build run test lint architecture-lint verify seed-rbac create-super-admin generate migrate-diff migrate-validate migrate-apply openapi-generate fxgraph-generate fxgraph-check
+.PHONY: help build run test lint architecture-lint verify seed-rbac create-super-admin generate migrate-diff migrate-validate openapi-generate fxgraph-generate fxgraph-check
 
 help: ## 查看 user-service 可用命令。
 	@awk 'BEGIN {FS = ":.*##"; printf "user-service 可用命令：\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -44,9 +44,6 @@ migrate-diff: ## 生成 migration，需传入 name=<migration-name>。
 
 migrate-validate: ## 校验 migrations。
 	./scripts/migrate-validate.sh
-
-migrate-apply: ## 使用 DATABASE_URL 执行 migrations。
-	./scripts/migrate-apply.sh
 
 openapi-generate: ## 生成 OpenAPI 3 文档。
 	./scripts/openapi-generate.sh

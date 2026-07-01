@@ -4,14 +4,9 @@ x-user-service-build: &user-service-build
   context: ../..
   dockerfile: deployments/docker/user-service.Dockerfile
 
-x-user-service-migration-build: &user-service-migration-build
-  context: ../..
-  dockerfile: deployments/docker/user-service-migration.Dockerfile
-
 x-user-service-environment: &user-service-environment
   TZ: Asia/Shanghai
   AEGISCORE_SYSTEM_TIMEZONE: Asia/Shanghai
-  DATABASE_URL: postgres://aegiscore:aegiscore@postgres:5432/aegiscore_user?sslmode=disable&search_path=public
   AEGISCORE_APP_ENVIRONMENT: local
   AEGISCORE_HTTP_HOST: 0.0.0.0
   AEGISCORE_HTTP_PORT: "8080"
@@ -82,20 +77,6 @@ services:
       start_period: 5s
     restart: unless-stopped
 
-  user-service-migrate:
-    build: *user-service-migration-build
-    image: aegiscore-user-services-migration:latest
-    command: ["migrate", "apply", "--config", "file://migrations/atlas.hcl", "--env", "deploy"]
-    environment:
-      DATABASE_URL: postgres://aegiscore:aegiscore@postgres:5432/aegiscore_user?sslmode=disable&search_path=public
-      TZ: Asia/Shanghai
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - aegiscore-runtime
-    restart: "no"
-
   rbac-seed:
     build: *user-service-build
     image: aegiscore-user-services:latest
@@ -114,8 +95,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      user-service-migrate:
-        condition: service_completed_successfully
     networks:
       - aegiscore-runtime
     restart: "no"
@@ -132,8 +111,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      user-service-migrate:
-        condition: service_completed_successfully
       rbac-seed:
         condition: service_completed_successfully
     networks:

@@ -13,10 +13,9 @@ set -eu
 #   - 使用 CMD 或 docker run 传入的命令替换当前 shell 进程。
 #
 # 注意：
-#   数据库迁移必须先通过专用 Atlas/migration 镜像或 CI/CD release job 执行，成功后再
-#   启动本运行时镜像。
+#   数据库迁移必须先通过 DBA 工单或受控发布平台执行，成功后再启动本运行时镜像。
 if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
-  echo "RUN_MIGRATIONS=true 已废弃；请先运行专用 migration 镜像执行 Atlas 迁移" >&2
+  echo "RUN_MIGRATIONS=true 已废弃；请先通过 DBA 工单或受控发布平台执行 SQL migration" >&2
   exit 2
 fi
 

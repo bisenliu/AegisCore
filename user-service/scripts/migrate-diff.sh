@@ -17,6 +17,7 @@ set -eu
 #
 # 行为：
 #   - 切换到 user-service 目录，使 Atlas 读取 ./migrations/atlas.hcl 和 ./migrations。
+#   - 确保 Atlas dev database 镜像预置 pg_trgm，支持 Ent schema 中的 gin_trgm_ops。
 #   - 使用 Atlas `ent://ent/schema` 作为期望 schema 来源。
 #   - 在 dev database 上回放已有迁移，将结果与 Ent schema 对比；如有差异，
 #     在 user-service/migrations/ 下写入新的 SQL 文件。
@@ -32,6 +33,12 @@ if [ "$#" -ne 1 ]; then
 fi
 
 cd "$(dirname "$0")/.."
+
+ATLAS_DEV_IMAGE="aegiscore-atlas-postgres-pgtrgm:15"
+ATLAS_DEV_DOCKERFILE="../deployments/docker/atlas-postgres-pgtrgm.Dockerfile"
+if ! docker image inspect "$ATLAS_DEV_IMAGE" >/dev/null 2>&1; then
+  docker build -f "$ATLAS_DEV_DOCKERFILE" -t "$ATLAS_DEV_IMAGE" ..
+fi
 
 # Atlas 读取 ent:// schema source 时会以 -mod=mod 调用 Go；GOWORK=off 用于避免 workspace 模式冲突。
 GOWORK=off atlas migrate diff "$1" --config file://migrations/atlas.hcl --env local

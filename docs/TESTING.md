@@ -83,13 +83,9 @@ make user-service-migrate-diff name=<migration-name>
 make user-service-migrate-validate
 ```
 
-应用到环境前使用：
+进入环境或发布流程前，确认 SQL migration 和 `atlas.sum` 已提交到 Git，并通过 DBA 工单或受控发布平台执行。若 SQL 包含 `CREATE EXTENSION IF NOT EXISTS pg_trgm;`，测试记录应说明目标库是否需要 DBA 权限或前置动作。
 
-```bash
-DATABASE_URL='<postgres-url>' make user-service-migrate-apply
-```
-
-部署资产变更还应构建并检查专用 migration 镜像，确认其中包含 Atlas CLI、`user-service/migrations/` 和 `migrations/atlas.hcl`；普通 user-service 运行时镜像应确认不包含 `/usr/local/bin/atlas`。
+部署资产变更还应检查 Compose、Kubernetes 和 Helm 渲染结果不包含自动执行 `atlas migrate apply` 的 Job、service、command 或 args；普通 user-service 运行时镜像应确认不包含 `/usr/local/bin/atlas`。
 
 ## 7. 观测资产验证
 
