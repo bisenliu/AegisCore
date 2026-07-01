@@ -186,7 +186,7 @@
 
 #### Scenario: Dockerfile 路径约束
 
-- **WHEN** 调整 user-service Dockerfile、entrypoint、migration 相关 Dockerfile 或 COPY 规则
+- **WHEN** 调整 user-service Dockerfile、migration 相关 Dockerfile 或 COPY 规则
 - **THEN** 路径 MUST 继续以仓库根 build context 为基准
 - **AND** user-service 运行时镜像 MUST NOT 为了执行 migration 而复制 `user-service/migrations/` 或 Atlas 二进制
 - **AND** 仓库 Docker 资产 MUST NOT 暴露默认执行 `atlas migrate apply` 的入口

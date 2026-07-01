@@ -81,7 +81,6 @@ services:
     build: *user-service-build
     image: aegiscore-user-services:latest
     command:
-      - /app/user-service/bin/user-services
       - rbac
       - --config
       - /app/user-service/configs/config.yaml

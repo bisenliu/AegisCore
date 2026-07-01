@@ -20,8 +20,7 @@ RUN apk add --no-cache tzdata \
 
 COPY --from=builder --chmod=0755 /out/user-services /app/user-service/bin/user-services
 COPY user-service/configs /app/user-service/configs
-COPY --chmod=0755 user-service/scripts/entrypoint.sh /app/user-service/scripts/entrypoint.sh
 
 USER aegiscore
-ENTRYPOINT ["/app/user-service/scripts/entrypoint.sh"]
-CMD ["/app/user-service/bin/user-services", "serve", "--config", "/app/user-service/configs/config.yaml"]
+ENTRYPOINT ["/app/user-service/bin/user-services"]
+CMD ["serve", "--config", "/app/user-service/configs/config.yaml"]
