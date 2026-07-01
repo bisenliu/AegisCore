@@ -134,7 +134,7 @@
 
 ### Requirement: 代码生成与数据库迁移
 
-系统 MUST 提供 Ent 代码生成、Atlas migration diff、migration validate 和 migration apply 入口，并要求 schema 相关变更同步生成物。
+系统 MUST 提供 Ent 代码生成、Atlas migration diff、migration validate 和 migration hash 校验入口，并要求 schema 相关变更同步生成物。系统 MUST NOT 提供通过仓库 Makefile、脚本或部署资产直接连接数据库并执行 `atlas migrate apply` 的入口。
 
 #### Scenario: 生成 Ent 代码
 
@@ -146,15 +146,28 @@
 - **WHEN** 数据库 schema 变化需要生成 migration
 - **THEN** 协作者 MUST 执行 `make user-service-generate` 和 `make user-service-migrate-diff name=<migration-name>` 生成 Ent 代码与 Atlas migration，并审查 SQL 与 `atlas.sum`
 
-#### Scenario: 校验并应用 migration
+#### Scenario: 校验 migration
 
 - **WHEN** migration 准备进入环境或发布流程
-- **THEN** 系统 MUST 支持 `make user-service-migrate-validate` 校验 migration，并通过 `DATABASE_URL` 执行 `make user-service-migrate-apply`
+- **THEN** 系统 MUST 支持 `make user-service-migrate-validate` 校验已提交 SQL migration 和 `atlas.sum`
+- **AND** 系统 MUST NOT 支持通过 `DATABASE_URL` 执行 `make user-service-migrate-apply` 或等价仓库命令连接数据库自动应用 migration
 
 #### Scenario: 手动调整 migration SQL
 
 - **WHEN** 生成的 SQL migration 被手动调整
 - **THEN** 协作者 MUST 刷新并提交 `atlas.sum`，且 MUST 确保 `make user-service-migrate-validate` 通过
+
+#### Scenario: 受控执行 SQL migration
+
+- **WHEN** SQL migration 已通过 validate 并准备进入目标数据库
+- **THEN** 协作者 MUST 将 SQL migration 和权限要求提交到 Git，并通过 DBA 工单或受控发布平台人工或受控执行
+- **AND** 仓库文档 MUST 将标准流程描述为 Ent schema -> Atlas diff 生成 SQL -> Atlas validate/hash 校验 SQL 目录 -> SQL 进 Git -> DBA 工单或受控发布平台执行
+
+#### Scenario: pg_trgm 扩展前置
+
+- **WHEN** SQL migration 使用 `gin_trgm_ops` 或其他 `pg_trgm` 能力
+- **THEN** 首个 SQL migration 文件 MUST 在相关索引创建前包含 `CREATE EXTENSION IF NOT EXISTS pg_trgm;`
+- **AND** 文档或任务 MUST 提醒生产库执行该语句可能需要 DBA 权限
 
 #### Scenario: 运行时不修改 schema
 
@@ -163,7 +176,7 @@
 
 ### Requirement: 发布和部署资产
 
-系统 MUST 维护 Docker、Compose、Kubernetes、Helm 和观测部署资产，并明确生产发布中 migration 与 RBAC seed 的顺序。user-service 普通运行时镜像 MUST NOT 包含 Atlas 二进制；数据库 migration MUST 由独立 Atlas/migration 镜像在发布前置 Job 或 CI/CD release job 中执行。
+系统 MUST 维护 Docker、Compose、Kubernetes、Helm 和观测部署资产，并明确生产发布中数据库 SQL 执行与 RBAC seed 的顺序。user-service 普通运行时镜像 MUST NOT 包含 Atlas 二进制；仓库提供的部署资产 MUST NOT 自动执行 Atlas migration apply，数据库 SQL migration MUST 由 DBA 工单或受控发布平台在 HTTP rollout 前完成。
 
 #### Scenario: 构建 Docker 镜像
 
@@ -173,25 +186,26 @@
 
 #### Scenario: Dockerfile 路径约束
 
-- **WHEN** 调整 user-service Dockerfile、entrypoint、migration Dockerfile 或 COPY 规则
+- **WHEN** 调整 user-service Dockerfile、entrypoint、migration 相关 Dockerfile 或 COPY 规则
 - **THEN** 路径 MUST 继续以仓库根 build context 为基准
-- **AND** 专用 migration 镜像 MUST 能访问 `user-service/migrations/` 当前布局和 `migrations/atlas.hcl`
 - **AND** user-service 运行时镜像 MUST NOT 为了执行 migration 而复制 `user-service/migrations/` 或 Atlas 二进制
+- **AND** 仓库 Docker 资产 MUST NOT 暴露默认执行 `atlas migrate apply` 的入口
 
 #### Scenario: 本地 Compose 启动
 
 - **WHEN** 协作者使用 `deployments/compose` 运行本地环境
 - **THEN** 系统 MUST 提供 user-service 所需的数据库、缓存和观测服务配置
+- **AND** Compose 资产 MUST NOT 自动执行 `atlas migrate apply`
 
 #### Scenario: Compose 启动顺序
 
-- **WHEN** 使用本地 Compose 启动包含 migration、RBAC seed 和 user-service 的环境
-- **THEN** migration MUST 通过独立 Atlas/migration 镜像先于 RBAC seed 执行，RBAC seed MUST 先于 user-service app 启动
+- **WHEN** 使用本地 Compose 启动包含 RBAC seed 和 user-service 的环境
+- **THEN** RBAC seed MUST 只在目标数据库已完成对应 SQL migration 后执行，RBAC seed MUST 先于 user-service app 启动
 
 #### Scenario: 生产发布顺序
 
 - **WHEN** user-service 发布到生产环境
-- **THEN** 运维 MUST 先通过独立 Atlas/migration 镜像或 CI/CD release job 执行 user-service `user_db` Atlas migration，再执行 RBAC seed Job，按需显式创建或分配超级管理员，最后启动或滚动更新 HTTP 副本
+- **THEN** 运维 MUST 先确认 user-service `user_db` 的已提交 SQL migration 已通过 DBA 工单或受控发布平台执行，再执行 RBAC seed Job，按需显式创建或分配超级管理员，最后启动或滚动更新 HTTP 副本
 
 #### Scenario: 普通容器启动不执行 migration
 
@@ -199,11 +213,11 @@
 - **THEN** 容器 MUST 直接启动服务或执行显式传入的 user-service CLI 命令，不得应用 migration
 - **AND** `RUN_MIGRATIONS=true` MUST NOT 使普通运行时镜像尝试执行 Atlas migration
 
-#### Scenario: 显式执行 migration
+#### Scenario: 禁止显式自动 apply 入口
 
-- **WHEN** 简单部署或发布流程需要在启动 HTTP 服务前应用 migration
-- **THEN** 部署流程 MUST 先运行独立 Atlas/migration 镜像完成 `atlas migrate apply`
-- **AND** 部署流程 MUST 在 migration 成功后再启动 user-service 运行时镜像
+- **WHEN** 简单部署、Compose、Kubernetes、Helm 或发布文档描述 HTTP 服务启动前的数据库准备
+- **THEN** 部署流程 MUST 指向已提交 SQL migration 的 DBA 工单或受控发布平台执行结果
+- **AND** 仓库资产 MUST NOT 提供可直接运行 `atlas migrate apply` 的 migration Job、service、Helm 默认 command 或 Makefile 目标
 
 ### Requirement: 用户服务 Kubernetes 生产清单
 
@@ -231,44 +245,44 @@
 
 ### Requirement: Kubernetes 发布前置作业
 
-系统 MUST 为 user-service Kubernetes 发布提供独立 migration Job 和 RBAC seed Job，并明确它们先于 HTTP Deployment rollout 执行。migration Job MUST 使用独立 Atlas/migration 镜像；RBAC seed Job MUST 使用当前 user-service 发布镜像。
+系统 MUST 为 user-service Kubernetes 发布提供 RBAC seed Job，并明确数据库 SQL migration 已由 DBA 工单或受控发布平台完成后，才允许执行 RBAC seed 和 HTTP Deployment rollout。仓库 Kubernetes 资产 MUST NOT 提供自动执行 `atlas migrate apply` 的 migration Job。
 
-#### Scenario: Migration Job
+#### Scenario: 数据库迁移前置确认
 
-- **WHEN** 发布流水线执行 user-service 数据库迁移
-- **THEN** migration Job MUST 使用独立 Atlas/migration 镜像执行已提交的 `user-service/migrations/` SQL migration
-- **AND** migration Job MUST 通过 Secret 或部署系统注入 `DATABASE_URL`
-- **AND** migration Job MUST NOT 使用 user-service HTTP 运行时镜像执行 `/app/user-service/scripts/migrate-apply.sh`
+- **WHEN** 发布流水线准备发布 user-service 到 Kubernetes 环境
+- **THEN** 发布流程 MUST 先确认目标环境已执行本 release 对应的已提交 SQL migration
+- **AND** 确认来源 MUST 是 DBA 工单、发布平台记录或等价受控执行记录
 
 #### Scenario: RBAC seed Job
 
-- **WHEN** migration Job 成功完成后
+- **WHEN** 数据库 SQL migration 已确认完成后
 - **THEN** RBAC seed Job MUST 使用当前发布镜像执行 `rbac seed`，并 MUST 支持 `--reactivate-system` 与 `--sync-system-bindings` 选项
 
 #### Scenario: 发布顺序
 
 - **WHEN** user-service 发布到 Kubernetes 环境
-- **THEN** 发布流程 MUST 等待 migration Job 成功，再等待 RBAC seed Job 成功，最后创建或滚动更新 HTTP Deployment
+- **THEN** 发布流程 MUST 等待数据库 SQL migration 完成确认，再等待 RBAC seed Job 成功，最后创建或滚动更新 HTTP Deployment
 
-#### Scenario: 前置作业失败
+#### Scenario: 前置确认或作业失败
 
-- **WHEN** migration Job 或 RBAC seed Job 失败
-- **THEN** 发布流程 MUST 停止 HTTP Deployment rollout，并保留 Job 日志用于诊断
+- **WHEN** 数据库 SQL migration 未确认完成或 RBAC seed Job 失败
+- **THEN** 发布流程 MUST 停止 HTTP Deployment rollout，并保留可诊断记录
 
 #### Scenario: 镜像版本一致性
 
-- **WHEN** 发布系统设置 user-service 镜像和 migration 镜像
-- **THEN** migration 镜像 MUST 与 user-service 发布版本来自同一 release 工件集合或使用同一 release tag
-- **AND** 发布说明 MUST 禁止混用新版 user-service 运行时镜像和旧版 migration Job 模板
+- **WHEN** 发布系统设置 user-service 镜像
+- **THEN** RBAC seed Job 和 HTTP Deployment MUST 使用同一 release 工件集合或同一 release tag
+- **AND** 发布说明 MUST 禁止混用新版 user-service 运行时镜像和旧版 RBAC seed Job 模板
 
 ### Requirement: 用户服务 Helm chart
 
-系统 MUST 为 `aegiscore-user-services` 提供 Helm chart，用 values 模板化同等 Kubernetes 交付能力，并保持默认值不包含真实生产 Secret。chart MUST 支持为 migration Job 配置独立 Atlas/migration 镜像，同时保持 RBAC seed Job 和 HTTP Deployment 使用 user-service 镜像。
+系统 MUST 为 `aegiscore-user-services` 提供 Helm chart，用 values 模板化 Kubernetes 交付能力，并保持默认值不包含真实生产 Secret。chart MUST 支持 RBAC seed Job 和 HTTP Deployment 使用 user-service 镜像，且 MUST NOT 渲染或默认配置自动执行 `atlas migrate apply` 的 migration Job。
 
 #### Scenario: Helm chart 元数据和 values
 
 - **WHEN** 协作者查看 `deployments/helm/aegiscore-user-services/`
-- **THEN** chart MUST 包含 `Chart.yaml`、`values.yaml`、templates、README 和环境覆盖示例，并 MUST 暴露 image、migration image、service、config、Secret 引用、resources、probes、autoscaling、PDB、NetworkPolicy、migration Job、RBAC seed Job 和 rollout 配置
+- **THEN** chart MUST 包含 `Chart.yaml`、`values.yaml`、templates、README 和环境覆盖示例，并 MUST 暴露 image、service、config、Secret 引用、resources、probes、autoscaling、PDB、NetworkPolicy、RBAC seed Job 和 rollout 配置
+- **AND** chart MUST NOT 暴露默认执行 `atlas migrate apply` 的 migration Job 配置
 
 #### Scenario: Helm 渲染 Secret 引用
 
@@ -277,11 +291,10 @@
 
 #### Scenario: Helm 渲染发布作业
 
-- **WHEN** Helm values 启用 migration Job 和 RBAC seed Job
-- **THEN** chart MUST 渲染两个独立 Job
-- **AND** migration Job MUST 使用独立 Atlas/migration 镜像执行 migration command
+- **WHEN** Helm values 启用 RBAC seed Job
+- **THEN** chart MUST 渲染 RBAC seed Job
 - **AND** RBAC seed Job MUST 使用 user-service 发布镜像执行 `rbac seed`
-- **AND** 两个 Job MUST 保持 command 与 Kubernetes 原生清单的职责边界一致
+- **AND** chart MUST NOT 渲染自动执行 `atlas migrate apply` 的 migration Job
 
 #### Scenario: Helm Deployment 默认行为
 
@@ -297,11 +310,13 @@
 
 - **WHEN** 协作者修改 `deployments/k8s/user-services/`
 - **THEN** tasks 或 README MUST 指明用于校验 YAML、Kubernetes schema 或 server-side dry-run 的命令
+- **AND** 验证说明 MUST 包含检查仓库清单不再提供自动执行 `atlas migrate apply` 的 migration Job
 
 #### Scenario: 验证 Helm chart
 
 - **WHEN** 协作者修改 `deployments/helm/aegiscore-user-services/`
-- **THEN** tasks 或 README MUST 指明 `helm lint` 和 `helm template` 的验证命令，并说明如何检查 migration Job、RBAC seed Job 和 Deployment 的关键字段
+- **THEN** tasks 或 README MUST 指明 `helm lint` 和 `helm template` 的验证命令，并说明如何检查 RBAC seed Job 和 Deployment 的关键字段
+- **AND** 验证说明 MUST 包含检查 Helm 渲染结果不再包含自动执行 `atlas migrate apply` 的 migration Job
 
 #### Scenario: 架构文档验证
 
