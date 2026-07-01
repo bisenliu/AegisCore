@@ -65,13 +65,6 @@ func NewWatcher(params WatcherParams) *Watcher {
 	return watcher
 }
 
-func newWatcher(store policySubscriptionStore, tracker *VersionTracker, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, checkInterval time.Duration) *Watcher {
-	if checkInterval <= 0 {
-		checkInterval = defaultCheckInterval
-	}
-	return newWatcherWithMetrics(store, tracker, engine, log, checkInterval, nil)
-}
-
 func newWatcherWithMetrics(store policySubscriptionStore, tracker *VersionTracker, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, checkInterval time.Duration, metrics permissionapplication.Metrics) *Watcher {
 	if checkInterval <= 0 {
 		checkInterval = defaultCheckInterval

@@ -158,7 +158,7 @@ func TestWatcherRunningStatus(t *testing.T) {
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 	store := NewStoreWithInstance(client, "aegiscore-user-services", "instance-a", nil)
-	watcher := newWatcher(store, NewVersionTracker(), &stubReloadEngine{}, nil, time.Hour)
+	watcher := newWatcherWithMetrics(store, NewVersionTracker(), &stubReloadEngine{}, nil, time.Hour, nil)
 
 	if watcher.Running() {
 		t.Fatal("Running = true before start, want false")
@@ -179,7 +179,7 @@ func TestWatcherRunningStatus(t *testing.T) {
 }
 
 func TestWatcherRecordsUnexpectedChannelClose(t *testing.T) {
-	watcher := newWatcher(&closedChannelStore{}, NewVersionTracker(), &stubReloadEngine{}, nil, time.Hour)
+	watcher := newWatcherWithMetrics(&closedChannelStore{}, NewVersionTracker(), &stubReloadEngine{}, nil, time.Hour, nil)
 
 	watcher.Start(context.Background())
 	waitForWatcherStopped(t, watcher)
