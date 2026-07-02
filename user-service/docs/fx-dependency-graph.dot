@@ -123,7 +123,8 @@ digraph {
 			label = "reflect";
 			constructor_11 [shape=plaintext label="makeFuncStub"];
 			
-			"application.AuthSessionStore" [label=<application.AuthSessionStore>];
+			"application.TokenVersionCache" [label=<application.TokenVersionCache>];
+			"application.RefreshSessionStore" [label=<application.RefreshSessionStore>];
 			
 		}
 		
@@ -166,7 +167,7 @@ digraph {
 		
 			constructor_13 -> "application.UserTokenVersionStore" [ltail=cluster_13];
 		
-			constructor_13 -> "application.AuthSessionStore" [ltail=cluster_13];
+			constructor_13 -> "application.TokenVersionCache" [ltail=cluster_13];
 		
 		
 		subgraph cluster_14 {
@@ -193,6 +194,8 @@ digraph {
 		
 			constructor_15 -> "application.UserCredentialStore" [ltail=cluster_15];
 		
+			constructor_15 -> "*password.Service" [ltail=cluster_15];
+		
 		
 		subgraph cluster_16 {
 			label = "github.com/aegiscore/user-service/internal/features/auth/application/tokens";
@@ -217,7 +220,9 @@ digraph {
 		
 			constructor_17 -> "application.UserTokenVersionStore" [ltail=cluster_17];
 		
-			constructor_17 -> "application.AuthSessionStore" [ltail=cluster_17];
+			constructor_17 -> "application.TokenVersionCache" [ltail=cluster_17];
+		
+			constructor_17 -> "application.RefreshSessionStore" [ltail=cluster_17];
 		
 			constructor_17 -> "validators.TokenVersionLocalInvalidator" [ltail=cluster_17];
 		
@@ -690,6 +695,8 @@ digraph {
 		
 			constructor_53 -> "application.UserProfileStore" [ltail=cluster_53];
 		
+			constructor_53 -> "*password.Service" [ltail=cluster_53];
+		
 		
 		subgraph cluster_54 {
 			label = "github.com/aegiscore/user-service/internal/features/user/application/query";
@@ -743,24 +750,20 @@ digraph {
 		
 		subgraph cluster_58 {
 			label = "github.com/aegiscore/user-service/internal/providers";
-			constructor_58 [shape=plaintext label="ProvidePostgresPools"];
+			constructor_58 [shape=plaintext label="NewPasswordService"];
 			
-			"*sql.DB[name=user_db]" [label=<*sql.DB<BR /><FONT POINT-SIZE="10">Name: user_db</FONT>>];
+			"*password.Service" [label=<*password.Service>];
 			
 		}
 		
-			constructor_58 -> "fx.Lifecycle" [ltail=cluster_58];
-		
 			constructor_58 -> "*config.Config" [ltail=cluster_58];
-		
-			constructor_58 -> "*zap.Logger" [ltail=cluster_58];
 		
 		
 		subgraph cluster_59 {
 			label = "github.com/aegiscore/user-service/internal/providers";
-			constructor_59 [shape=plaintext label="ProvideRedisClients"];
+			constructor_59 [shape=plaintext label="ProvidePostgresPools"];
 			
-			"*redis.Client[name=cache_redis]" [label=<*redis.Client<BR /><FONT POINT-SIZE="10">Name: cache_redis</FONT>>];
+			"*sql.DB[name=user_db]" [label=<*sql.DB<BR /><FONT POINT-SIZE="10">Name: user_db</FONT>>];
 			
 		}
 		
@@ -773,69 +776,84 @@ digraph {
 		
 		subgraph cluster_60 {
 			label = "github.com/aegiscore/user-service/internal/providers";
-			constructor_60 [shape=plaintext label="NewJWTService"];
+			constructor_60 [shape=plaintext label="ProvideRedisClients"];
+			
+			"*redis.Client[name=cache_redis]" [label=<*redis.Client<BR /><FONT POINT-SIZE="10">Name: cache_redis</FONT>>];
+			
+		}
+		
+			constructor_60 -> "fx.Lifecycle" [ltail=cluster_60];
+		
+			constructor_60 -> "*config.Config" [ltail=cluster_60];
+		
+			constructor_60 -> "*zap.Logger" [ltail=cluster_60];
+		
+		
+		subgraph cluster_61 {
+			label = "github.com/aegiscore/user-service/internal/providers";
+			constructor_61 [shape=plaintext label="NewJWTService"];
 			
 			"*auth.JWTService" [label=<*auth.JWTService>];
 			
 		}
 		
-			constructor_60 -> "*config.Config" [ltail=cluster_60];
+			constructor_61 -> "*config.Config" [ltail=cluster_61];
 		
 		
-		subgraph cluster_61 {
+		subgraph cluster_62 {
 			label = "github.com/aegiscore/user-service/internal/providers";
-			constructor_61 [shape=plaintext label="ProvideEntClients"];
+			constructor_62 [shape=plaintext label="ProvideEntClients"];
 			
 			"*ent.Client[name=user_db]" [label=<*ent.Client<BR /><FONT POINT-SIZE="10">Name: user_db</FONT>>];
 			
 		}
 		
-			constructor_61 -> "fx.Lifecycle" [ltail=cluster_61];
+			constructor_62 -> "fx.Lifecycle" [ltail=cluster_62];
 		
-			constructor_61 -> "*config.Config" [ltail=cluster_61];
+			constructor_62 -> "*config.Config" [ltail=cluster_62];
 		
-			constructor_61 -> "*zap.Logger" [ltail=cluster_61];
+			constructor_62 -> "*zap.Logger" [ltail=cluster_62];
 		
-			constructor_61 -> "*sql.DB[name=user_db]" [ltail=cluster_61];
+			constructor_62 -> "*sql.DB[name=user_db]" [ltail=cluster_62];
 		
 		
-		subgraph cluster_62 {
+		subgraph cluster_63 {
 			label = "github.com/aegiscore/user-service/internal/providers";
-			constructor_62 [shape=plaintext label="ProvideHealthChecks"];
+			constructor_63 [shape=plaintext label="ProvideHealthChecks"];
 			
 			"router.HealthChecks" [label=<router.HealthChecks>];
 			
 		}
 		
-			constructor_62 -> "*sql.DB[name=user_db]" [ltail=cluster_62];
+			constructor_63 -> "*sql.DB[name=user_db]" [ltail=cluster_63];
 		
-			constructor_62 -> "*redis.Client[name=cache_redis]" [ltail=cluster_62];
+			constructor_63 -> "*redis.Client[name=cache_redis]" [ltail=cluster_63];
 		
-			constructor_62 -> "*casbin.Engine" [ltail=cluster_62];
+			constructor_63 -> "*casbin.Engine" [ltail=cluster_63];
 		
-			constructor_62 -> "redis.WatcherStatus" [ltail=cluster_62];
+			constructor_63 -> "redis.WatcherStatus" [ltail=cluster_63];
 		
 		
-		subgraph cluster_63 {
+		subgraph cluster_64 {
 			label = "github.com/aegiscore/user-service/internal/providers";
-			constructor_63 [shape=plaintext label="NewGinEngine"];
+			constructor_64 [shape=plaintext label="NewGinEngine"];
 			
 			"*gin.Engine" [label=<*gin.Engine>];
 			
 		}
 		
-			constructor_63 -> "*config.Config" [ltail=cluster_63];
+			constructor_64 -> "*config.Config" [ltail=cluster_64];
 		
-			constructor_63 -> "*zap.Logger" [ltail=cluster_63];
+			constructor_64 -> "*zap.Logger" [ltail=cluster_64];
 		
-			constructor_63 -> "*metrics.Provider" [ltail=cluster_63];
+			constructor_64 -> "*metrics.Provider" [ltail=cluster_64];
 		
-			constructor_63 -> "*tracing.Provider" [ltail=cluster_63];
+			constructor_64 -> "*tracing.Provider" [ltail=cluster_64];
 		
 		
-		subgraph cluster_64 {
+		subgraph cluster_65 {
 			label = "go.uber.org/fx";
-			constructor_64 [shape=plaintext label="init.func1"];
+			constructor_65 [shape=plaintext label="init.func1"];
 			
 			"fxevent.Logger" [label=<fxevent.Logger>];
 			
