@@ -54,8 +54,8 @@ type Watcher struct {
 func NewWatcher(params WatcherParams) *Watcher {
 	watcher := newWatcherWithMetrics(params.Store, params.Tracker, params.Engine, params.Log, defaultCheckInterval, params.Metrics)
 	params.Lifecycle.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			watcher.Start(ctx)
+		OnStart: func(context.Context) error {
+			watcher.Start()
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
@@ -76,7 +76,7 @@ func newWatcherWithMetrics(store policySubscriptionStore, tracker *VersionTracke
 }
 
 // Start 启动 Pub/Sub 监听和定时版本补偿检查。
-func (w *Watcher) Start(context.Context) {
+func (w *Watcher) Start() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.cancel != nil {

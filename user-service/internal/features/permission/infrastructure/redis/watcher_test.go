@@ -9,6 +9,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	rediscmd "github.com/redis/go-redis/v9"
+	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -158,7 +159,7 @@ func TestWatcherRunningStatus(t *testing.T) {
 	if watcher.Running() {
 		t.Fatal("Running = true before start, want false")
 	}
-	watcher.Start(context.Background())
+	watcher.Start()
 	if !watcher.Running() {
 		t.Fatal("Running = false after start, want true")
 	}
@@ -177,7 +178,7 @@ func TestWatcherRecordsUnexpectedChannelClose(t *testing.T) {
 	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
 	watcher := newWatcherWithMetrics(&closedChannelStore{}, NewVersionTracker(), engine, nil, time.Hour, nil)
 
-	watcher.Start(context.Background())
+	watcher.Start()
 	waitForWatcherStopped(t, watcher)
 
 	if watcher.Running() {
@@ -185,6 +186,37 @@ func TestWatcherRecordsUnexpectedChannelClose(t *testing.T) {
 	}
 	if watcher.LastError() == nil {
 		t.Fatal("LastError = nil, want channel close error")
+	}
+}
+
+func TestWatcherLifecycleStartContextDoesNotControlBackgroundLoop(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	store := NewStoreWithInstance(client, "aegiscore-user-services", "instance-a", nil)
+	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
+	lifecycle := fxtest.NewLifecycle(t)
+	watcher := NewWatcher(WatcherParams{
+		Lifecycle: lifecycle,
+		Store:     store,
+		Tracker:   NewVersionTracker(),
+		Engine:    engine,
+	})
+	t.Cleanup(func() { _ = watcher.Stop(context.Background()) })
+
+	startCtx, cancelStart := context.WithCancel(context.Background())
+	if err := lifecycle.Start(startCtx); err != nil {
+		t.Fatalf("lifecycle Start: %v", err)
+	}
+	cancelStart()
+
+	requireWatcherRunningFor(t, watcher, 100*time.Millisecond)
+
+	if err := lifecycle.Stop(context.Background()); err != nil {
+		t.Fatalf("lifecycle Stop: %v", err)
+	}
+	if watcher.Running() {
+		t.Fatal("Running = true after lifecycle stop, want false")
 	}
 }
 
@@ -226,6 +258,26 @@ func waitForWatcherStopped(t *testing.T, watcher *Watcher) {
 		case <-ticker.C:
 			if !watcher.Running() {
 				return
+			}
+		}
+	}
+}
+
+func requireWatcherRunningFor(t *testing.T, watcher *Watcher, duration time.Duration) {
+	t.Helper()
+	deadline := time.After(duration)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-deadline:
+			if !watcher.Running() {
+				t.Fatal("watcher stopped before running window completed")
+			}
+			return
+		case <-ticker.C:
+			if !watcher.Running() {
+				t.Fatal("watcher stopped after start context cancellation")
 			}
 		}
 	}
