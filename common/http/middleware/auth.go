@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"errors"
 
 	"github.com/gin-gonic/gin"
@@ -15,14 +14,6 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/auth"
 )
-
-// TokenVersionValidatorFunc 将函数适配为 TokenVersionValidator 接口。
-type TokenVersionValidatorFunc func(ctx context.Context, userID string, tokenVersion int64) error
-
-// ValidateTokenVersion 将 token version 校验委托给 f。
-func (f TokenVersionValidatorFunc) ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
-	return f(ctx, userID, tokenVersion)
-}
 
 // AuthWithTokenVersionValidator 返回支持可选 token version 校验的 JWT 认证中间件。
 func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService, _ config.AuthConfig, validator auth.TokenVersionValidator) gin.HandlerFunc {
