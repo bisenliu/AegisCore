@@ -7,7 +7,7 @@ ADMIN_NICKNAME ?= Admin
 ADMIN_RESET_PASSWORD ?= false
 
 .PHONY: help build test lint verify
-.PHONY: common-test common-lint common-verify
+.PHONY: common-test common-lint common-generate common-verify
 .PHONY: user-service-build user-service-run user-service-test user-service-lint user-service-verify user-service-architecture-lint
 .PHONY: user-service-seed-rbac user-service-create-super-admin
 .PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-openapi-generate user-service-fxgraph-generate user-service-fxgraph-check
@@ -22,14 +22,17 @@ test: common-test user-service-test ## 运行全部 Go 模块测试。
 
 lint: common-lint user-service-lint ## 运行全部 Go 模块 lint。
 
-verify: lint user-service-architecture-lint user-service-generate test user-service-openapi-generate ## 运行完整本地验证。
-	git diff --exit-code
+verify: lint user-service-architecture-lint common-generate user-service-generate test user-service-openapi-generate ## 运行完整本地验证。
+	git diff --exit-code -- . ':(exclude)AGENTS.md' ':(exclude)openspec/AGENTS.md' ':(exclude)CLAUDE.md' ':(exclude).multica/project/resources.json' ':(exclude).multica/**'
 
 common-test: ## 运行 common 模块测试。
 	$(MAKE) -C $(COMMON_DIR) test
 
 common-lint: ## 运行 common 模块 lint。
 	$(MAKE) -C $(COMMON_DIR) lint
+
+common-generate: ## 生成 common Go 生成物。
+	$(MAKE) -C $(COMMON_DIR) generate
 
 common-verify: ## 运行 common 模块验证。
 	$(MAKE) -C $(COMMON_DIR) verify

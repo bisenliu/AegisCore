@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -35,17 +35,17 @@ func TestAuthMiddleware(t *testing.T) {
 	passwordChangeToken := signAuthSubjectTestToken(t, "secret", auth.SubjectPasswordChange, authTestUserID, 1, "pc-123", time.Now().Add(time.Hour))
 
 	tests := []struct {
-		name          string
-		path          string
-		cfg           *config.AuthConfig
-		authorization string
-		wantStatus    int
-		wantCode      contracterrors.Code
-		wantHandled   bool
-		validator     auth.TokenVersionValidator
-		wantLogLevel  zapcore.Level
-		wantLogMsg    string
-		wantMismatch  bool
+		name           string
+		path           string
+		cfg            *config.AuthConfig
+		authorization  string
+		wantStatus     int
+		wantCode       contracterrors.Code
+		wantHandled    bool
+		setupValidator func(ctrl *gomock.Controller) auth.TokenVersionValidator
+		wantLogLevel   zapcore.Level
+		wantLogMsg     string
+		wantMismatch   bool
 	}{
 		{name: "missing header", path: "/api/v1/users/123", wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeUnauthenticated, wantLogLevel: zapcore.InfoLevel, wantLogMsg: "missing authorization header"},
 		{name: "invalid format", path: "/api/v1/users/123", authorization: "Token abc", wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "invalid authorization header format"},
@@ -55,30 +55,40 @@ func TestAuthMiddleware(t *testing.T) {
 		{name: "missing token version", path: "/api/v1/users/123", authorization: auth.TokenPrefix + missingVersionToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
 		{name: "missing session id", path: "/api/v1/users/123", authorization: auth.TokenPrefix + missingSessionToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
 		{name: "password change token rejected", path: "/api/v1/users/123", authorization: auth.TokenPrefix + passwordChangeToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token validation failed"},
-		{name: "token version mismatch", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error {
-			return fmt.Errorf("validate token version: %w", &auth.TokenVersionMismatchError{Current: 3, Token: 1})
-		}), wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token version mismatch", wantMismatch: true},
-		{name: "token version infrastructure error", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusInternalServerError, wantCode: contracterrors.CodeInternalError, validator: TokenVersionValidatorFunc(func(context.Context, string, int64) error { return errors.New("redis unavailable") }), wantLogLevel: zapcore.ErrorLevel, wantLogMsg: "token version validation failed"},
+		{name: "token version mismatch", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, setupValidator: func(ctrl *gomock.Controller) auth.TokenVersionValidator {
+			validator := NewMockTokenVersionValidator(ctrl)
+			validator.EXPECT().ValidateTokenVersion(gomock.Any(), authTestUserID, int64(1)).Return(fmt.Errorf("validate token version: %w", &auth.TokenVersionMismatchError{Current: 3, Token: 1}))
+			return validator
+		}, wantLogLevel: zapcore.WarnLevel, wantLogMsg: "token version mismatch", wantMismatch: true},
+		{name: "token version infrastructure error", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusInternalServerError, wantCode: contracterrors.CodeInternalError, setupValidator: func(ctrl *gomock.Controller) auth.TokenVersionValidator {
+			validator := NewMockTokenVersionValidator(ctrl)
+			validator.EXPECT().ValidateTokenVersion(gomock.Any(), authTestUserID, int64(1)).Return(errors.New("redis unavailable"))
+			return validator
+		}, wantLogLevel: zapcore.ErrorLevel, wantLogMsg: "token version validation failed"},
 		{name: "missing jwt secret", path: "/api/v1/users/123", cfg: &config.AuthConfig{}, authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.ErrorLevel, wantLogMsg: "token validation failed"},
 		{name: "valid token", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true},
 		{name: "valid token with lowercase bearer prefix", path: "/api/v1/users/123", authorization: "bearer " + validToken, wantStatus: http.StatusOK, wantHandled: true},
 		{name: "valid token with uppercase bearer prefix", path: "/api/v1/users/123", authorization: "BEARER " + validToken, wantStatus: http.StatusOK, wantHandled: true},
-		{name: "valid token with version validator", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true, validator: TokenVersionValidatorFunc(func(_ context.Context, userID string, version int64) error {
-			if userID != authTestUserID || version != 1 {
-				return errors.New("unexpected token version input")
-			}
-			return nil
-		})},
+		{name: "valid token with version validator", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true, setupValidator: func(ctrl *gomock.Controller) auth.TokenVersionValidator {
+			validator := NewMockTokenVersionValidator(ctrl)
+			validator.EXPECT().ValidateTokenVersion(gomock.Any(), authTestUserID, int64(1)).Return(nil)
+			return validator
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			var validator auth.TokenVersionValidator
+			if tt.setupValidator != nil {
+				validator = tt.setupValidator(ctrl)
+			}
 			testCfg := cfg
 			if tt.cfg != nil {
 				testCfg = *tt.cfg
 			}
 			core, logs := observer.New(zapcore.DebugLevel)
 			engine := gin.New()
-			engine.Use(AuthWithTokenVersionValidator(zap.New(core), auth.NewJWTService(testCfg), testCfg, tt.validator))
+			engine.Use(AuthWithTokenVersionValidator(zap.New(core), auth.NewJWTService(testCfg), testCfg, validator))
 			handled := false
 			engine.GET("/*path", func(c *gin.Context) {
 				handled = true
@@ -144,7 +154,7 @@ func TestAuthMiddlewareExpiredTokenDoesNotCallVersionValidator(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}}
 	expiredToken := signAuthTestToken(t, "secret", authTestUserID, 1, "s-123", time.Now().Add(-time.Hour))
-	validator := &recordingTokenVersionValidator{}
+	validator := NewMockTokenVersionValidator(gomock.NewController(t))
 	engine := gin.New()
 	engine.Use(AuthWithTokenVersionValidator(zap.NewNop(), auth.NewJWTService(cfg), cfg, validator))
 	engine.GET("/*path", func(c *gin.Context) {
@@ -158,9 +168,6 @@ func TestAuthMiddlewareExpiredTokenDoesNotCallVersionValidator(t *testing.T) {
 
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
-	}
-	if validator.calls != 0 {
-		t.Fatalf("validator calls = %d, want 0", validator.calls)
 	}
 }
 
@@ -219,13 +226,4 @@ func signAuthSubjectTestToken(t *testing.T, secret, subject, userID string, toke
 		t.Fatalf("SignedString: %v", err)
 	}
 	return token
-}
-
-type recordingTokenVersionValidator struct {
-	calls int
-}
-
-func (v *recordingTokenVersionValidator) ValidateTokenVersion(context.Context, string, int64) error {
-	v.calls++
-	return nil
 }

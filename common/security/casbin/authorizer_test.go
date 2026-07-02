@@ -4,41 +4,51 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"go.uber.org/mock/gomock"
 )
 
-var errRecordingEnforcerUnavailable = errors.New("engine unavailable")
+var errMockEnforcerUnavailable = errors.New("engine unavailable")
 
 func TestAuthorizerAuthorize(t *testing.T) {
 	tests := []struct {
-		name     string
-		authz    *Authorizer
-		wantErr  error
-		wantCall bool
+		name    string
+		setup   func(ctrl *gomock.Controller) *Authorizer
+		wantErr error
 	}{
-		{name: "allowed", authz: NewAuthorizer(&recordingEnforcer{allowed: true}), wantCall: true},
-		{name: "denied", authz: NewAuthorizer(&recordingEnforcer{allowed: false}), wantErr: ErrDenied, wantCall: true},
-		{name: "error", authz: NewAuthorizer(&recordingEnforcer{err: errRecordingEnforcerUnavailable}), wantErr: errRecordingEnforcerUnavailable, wantCall: true},
+		{name: "allowed", setup: func(ctrl *gomock.Controller) *Authorizer {
+			enforcer := NewMockEnforcer(ctrl)
+			enforcer.EXPECT().Enforce("user:1", "/api/v1/users/:id", "GET").Return(true, nil)
+			return NewAuthorizer(enforcer)
+		}},
+		{name: "denied", setup: func(ctrl *gomock.Controller) *Authorizer {
+			enforcer := NewMockEnforcer(ctrl)
+			enforcer.EXPECT().Enforce("user:1", "/api/v1/users/:id", "GET").Return(false, nil)
+			return NewAuthorizer(enforcer)
+		}, wantErr: ErrDenied},
+		{name: "error", setup: func(ctrl *gomock.Controller) *Authorizer {
+			enforcer := NewMockEnforcer(ctrl)
+			enforcer.EXPECT().Enforce("user:1", "/api/v1/users/:id", "GET").Return(false, errMockEnforcerUnavailable)
+			return NewAuthorizer(enforcer)
+		}, wantErr: errMockEnforcerUnavailable},
 		{name: "missing authorizer", wantErr: ErrNotConfigured},
-		{name: "missing enforcer", authz: NewAuthorizer(nil), wantErr: ErrNotConfigured},
+		{name: "missing enforcer", setup: func(*gomock.Controller) *Authorizer {
+			return NewAuthorizer(nil)
+		}, wantErr: ErrNotConfigured},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.authz.Authorize(context.Background(), Request{Subject: "user:1", Object: "/api/v1/users/:id", Action: "GET"})
+			ctrl := gomock.NewController(t)
+			var authz *Authorizer
+			if tt.setup != nil {
+				authz = tt.setup(ctrl)
+			}
+			err := authz.Authorize(context.Background(), Request{Subject: "user:1", Object: "/api/v1/users/:id", Action: "GET"})
 			if tt.wantErr == nil && err != nil {
 				t.Fatalf("Authorize error = %v, want nil", err)
 			}
 			if tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
 				t.Fatalf("Authorize error = %v, want %v", err, tt.wantErr)
-			}
-			if !tt.wantCall {
-				return
-			}
-			enforcer, ok := tt.authz.enforcer.(*recordingEnforcer)
-			if !ok {
-				t.Fatalf("enforcer = %T, want *recordingEnforcer", tt.authz.enforcer)
-			}
-			if enforcer.subject != "user:1" || enforcer.object != "/api/v1/users/:id" || enforcer.action != "GET" {
-				t.Fatalf("enforcer call = %#v", enforcer)
 			}
 		})
 	}
@@ -47,19 +57,39 @@ func TestAuthorizerAuthorize(t *testing.T) {
 func TestEnforce(t *testing.T) {
 	tests := []struct {
 		name        string
-		enforcer    Enforcer
+		setup       func(ctrl *gomock.Controller) Enforcer
 		wantAllowed bool
 		wantErr     error
 	}{
-		{name: "allowed", enforcer: &recordingEnforcer{allowed: true}, wantAllowed: true},
-		{name: "denied", enforcer: &recordingEnforcer{allowed: false}},
-		{name: "error", enforcer: &recordingEnforcer{err: errRecordingEnforcerUnavailable}, wantErr: errRecordingEnforcerUnavailable},
+		{name: "allowed", setup: func(ctrl *gomock.Controller) Enforcer {
+			enforcer := NewMockEnforcer(ctrl)
+			enforcer.EXPECT().Enforce("user:1", "/users", "GET").Return(true, nil)
+			return enforcer
+		}, wantAllowed: true},
+		{name: "denied", setup: func(ctrl *gomock.Controller) Enforcer {
+			enforcer := NewMockEnforcer(ctrl)
+			enforcer.EXPECT().Enforce("user:1", "/users", "GET").Return(false, nil)
+			return enforcer
+		}},
+		{name: "error", setup: func(ctrl *gomock.Controller) Enforcer {
+			enforcer := NewMockEnforcer(ctrl)
+			enforcer.EXPECT().Enforce("user:1", "/users", "GET").Return(false, errMockEnforcerUnavailable)
+			return enforcer
+		}, wantErr: errMockEnforcerUnavailable},
 		{name: "missing enforcer", wantErr: ErrNotConfigured},
-		{name: "typed nil enforcer", enforcer: (*recordingEnforcer)(nil), wantErr: ErrNotConfigured},
+		{name: "typed nil enforcer", setup: func(*gomock.Controller) Enforcer {
+			var enforcer *MockEnforcer
+			return enforcer
+		}, wantErr: ErrNotConfigured},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			allowed, err := Enforce(context.Background(), tt.enforcer, Request{Subject: "user:1", Object: "/users", Action: "GET"})
+			ctrl := gomock.NewController(t)
+			var enforcer Enforcer
+			if tt.setup != nil {
+				enforcer = tt.setup(ctrl)
+			}
+			allowed, err := Enforce(context.Background(), enforcer, Request{Subject: "user:1", Object: "/users", Action: "GET"})
 			if allowed != tt.wantAllowed {
 				t.Fatalf("Enforce allowed = %v, want %v", allowed, tt.wantAllowed)
 			}
@@ -76,29 +106,9 @@ func TestEnforce(t *testing.T) {
 func TestEnforceHonorsContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	allowed, err := Enforce(ctx, &recordingEnforcer{allowed: true}, Request{Subject: "user:1", Object: "/users", Action: "GET"})
+	enforcer := NewMockEnforcer(gomock.NewController(t))
+	allowed, err := Enforce(ctx, enforcer, Request{Subject: "user:1", Object: "/users", Action: "GET"})
 	if allowed || !errors.Is(err, context.Canceled) {
 		t.Fatalf("Enforce = (%v, %v), want false, context.Canceled", allowed, err)
 	}
-}
-
-type recordingEnforcer struct {
-	allowed bool
-	err     error
-	subject string
-	object  string
-	action  string
-}
-
-func (e *recordingEnforcer) Enforce(args ...interface{}) (bool, error) {
-	if e == nil {
-		return false, ErrNotConfigured
-	}
-	if len(args) != 3 {
-		return false, errors.New("unexpected argument count")
-	}
-	e.subject, _ = args[0].(string)
-	e.object, _ = args[1].(string)
-	e.action, _ = args[2].(string)
-	return e.allowed, e.err
 }
