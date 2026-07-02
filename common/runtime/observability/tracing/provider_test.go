@@ -98,6 +98,36 @@ func TestProviderShutdown(t *testing.T) {
 	}
 }
 
+func TestProviderTracerFallsBackToNoopWhenProviderIsNil(t *testing.T) {
+	var provider *Provider
+
+	tracer := provider.Tracer("test")
+	if tracer == nil {
+		t.Fatal("Tracer = nil")
+	}
+	_, span := tracer.Start(context.Background(), "operation")
+	defer span.End()
+
+	if span.SpanContext().IsValid() {
+		t.Fatal("span context is valid, want noop span")
+	}
+}
+
+func TestProviderTracerFallsBackToNoopWhenTracerProviderIsNil(t *testing.T) {
+	provider := &Provider{}
+
+	tracer := provider.Tracer("test")
+	if tracer == nil {
+		t.Fatal("Tracer = nil")
+	}
+	_, span := tracer.Start(context.Background(), "operation")
+	defer span.End()
+
+	if span.SpanContext().IsValid() {
+		t.Fatal("span context is valid, want noop span")
+	}
+}
+
 func TestNewProviderWithOTLPExporterCreatesProvider(t *testing.T) {
 	provider, err := NewProvider(context.Background(), Options{
 		Config: config.TracingConfig{

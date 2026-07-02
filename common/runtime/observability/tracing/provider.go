@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/aegiscore/common/runtime/config"
 )
@@ -167,6 +168,9 @@ func (p *Provider) TextMapPropagator() propagation.TextMapPropagator {
 
 // Tracer 返回底层 provider 创建的 tracer。
 func (p *Provider) Tracer(name string, opts ...trace.TracerOption) trace.Tracer {
+	if p == nil || p.tracerProvider == nil {
+		return noop.NewTracerProvider().Tracer(name, opts...)
+	}
 	return p.tracerProvider.Tracer(name, opts...)
 }
 
