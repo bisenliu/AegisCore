@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -126,6 +127,53 @@ func TestRedisPingCollectorExportsSuccessFailureAndTimeout(t *testing.T) {
 			t.Fatalf("redis up = %v, want 0", got)
 		}
 	})
+}
+
+func TestRedisPingCollectorUsesGatherContextCancellation(t *testing.T) {
+	provider := newTestProvider(t, true, false)
+	pinger := newObservingRedisPinger()
+	collector, err := NewRedisPingCollector(RedisPingCollectorOptions{
+		Resource:    "cache_redis",
+		Pinger:      pinger,
+		Timeout:     time.Second,
+		MinInterval: time.Nanosecond,
+	})
+	if err != nil {
+		t.Fatalf("NewRedisPingCollector: %v", err)
+	}
+	if err := provider.Register(collector); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := provider.GatherContext(ctx)
+		done <- err
+	}()
+
+	select {
+	case <-pinger.started:
+	case <-time.After(time.Second):
+		t.Fatal("redis ping did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("GatherContext: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("GatherContext did not finish after request context cancellation")
+	}
+	if got := pinger.ctxErr(); !errors.Is(got, context.Canceled) {
+		t.Fatalf("redis ping context error = %v, want context.Canceled", got)
+	}
+	up := firstMetric(t, gatherFamily(t, provider, redisUpMetricName))
+	if got := up.GetGauge().GetValue(); got != 0 {
+		t.Fatalf("redis up after canceled ping = %v, want 0", got)
+	}
 }
 
 func TestWorkerpoolCollectorExportsStatsSnapshot(t *testing.T) {
@@ -266,6 +314,32 @@ type blockingRedisPinger struct{}
 func (blockingRedisPinger) Ping(ctx context.Context) error {
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+type observingRedisPinger struct {
+	started chan struct{}
+	once    sync.Once
+	err     error
+	mu      sync.Mutex
+}
+
+func newObservingRedisPinger() *observingRedisPinger {
+	return &observingRedisPinger{started: make(chan struct{})}
+}
+
+func (p *observingRedisPinger) Ping(ctx context.Context) error {
+	p.once.Do(func() { close(p.started) })
+	<-ctx.Done()
+	p.mu.Lock()
+	p.err = ctx.Err()
+	p.mu.Unlock()
+	return ctx.Err()
+}
+
+func (p *observingRedisPinger) ctxErr() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.err
 }
 
 type staticWorkerpoolStatsSource struct {

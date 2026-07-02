@@ -108,13 +108,21 @@ func (c *RedisPingCollector) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect 实现 prometheus.Collector。
 func (c *RedisPingCollector) Collect(ch chan<- prometheus.Metric) {
-	snapshot := c.snapshot()
+	c.CollectContext(context.Background(), ch)
+}
+
+// CollectContext 使用调用方 context 执行 Redis PING 并导出指标。
+func (c *RedisPingCollector) CollectContext(ctx context.Context, ch chan<- prometheus.Metric) {
+	snapshot := c.snapshot(ctx)
 	ch <- prometheus.MustNewConstMetric(c.up, prometheus.GaugeValue, snapshot.up, c.resource)
 	ch <- prometheus.MustNewConstMetric(c.pingDuration, prometheus.GaugeValue, snapshot.duration.Seconds(), c.resource)
 	ch <- prometheus.MustNewConstMetric(c.pingFailures, prometheus.CounterValue, float64(c.failures.Load()), c.resource)
 }
 
-func (c *RedisPingCollector) snapshot() redisPingSnapshot {
+func (c *RedisPingCollector) snapshot(parent context.Context) redisPingSnapshot {
+	if parent == nil {
+		parent = context.Background()
+	}
 	now := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -124,7 +132,7 @@ func (c *RedisPingCollector) snapshot() redisPingSnapshot {
 	}
 
 	startedAt := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	ctx, cancel := context.WithTimeout(parent, c.timeout)
 	err := c.pinger.Ping(ctx)
 	cancel()
 

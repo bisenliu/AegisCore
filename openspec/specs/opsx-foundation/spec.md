@@ -64,7 +64,8 @@
 #### Scenario: OpenSpec 任务完成门禁
 
 - **WHEN** 协作者执行 OpenSpec change 的 tasks 并准备将任务或 change 标记为完成
-- **THEN** 系统 MUST 要求相关单元测试、`make lint` 和 `make verify` 全部通过
+- **THEN** 系统 MUST 要求 OpenSpec 的实现、规格和文档任务全部完成后，先暂存本次预期变更，再执行 `make lint` 和 `make verify`
+- **AND** 系统 MUST 要求相关单元测试、`make lint` 和 `make verify` 全部通过
 - **AND** 任一验证未通过或未运行时，该任务或 change MUST NOT 被视为完成
 
 #### Scenario: 归并既有能力

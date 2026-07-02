@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"go.uber.org/fx/fxtest"
 
 	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
@@ -18,6 +19,9 @@ func TestEngineEnforceAllowDenyAndDoesNotReload(t *testing.T) {
 	}}
 	roles := &fakeUserRoleResolver{roles: map[uuid.UUID][]uuid.UUID{userID: {roleID}}}
 	engine := NewEngine(Params{Loader: loader, UserRoles: roles})
+	if err := engine.Reload(context.Background()); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
 	if err != nil {
 		t.Fatalf("Enforce allow: %v", err)
@@ -44,6 +48,9 @@ func TestEngineSuperAdminWildcard(t *testing.T) {
 	engine := NewEngine(Params{Loader: &fakeLoader{policies: PolicySet{
 		PermissionRules: []PermissionRule{{RoleID: superAdminRoleID, PathTemplate: policyWildcard, HTTPMethod: policyWildcard}},
 	}}, UserRoles: roles})
+	if err := engine.Reload(context.Background()); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/anything/:id", "DELETE")
 	if err != nil {
 		t.Fatalf("Enforce: %v", err)
@@ -57,6 +64,11 @@ func TestEngineFailClosedWhenInitialLoadFails(t *testing.T) {
 	loadErr := errors.New("load failed")
 	metrics := &fakeReloadMetrics{}
 	engine := NewEngine(Params{Loader: &fakeLoader{err: loadErr}, Metrics: metrics, UserRoles: &fakeUserRoleResolver{}})
+	lc := fxtest.NewLifecycle(t)
+	RegisterInitialLoad(lc, engine)
+	if err := lc.Start(context.Background()); err != nil {
+		t.Fatalf("lifecycle Start: %v", err)
+	}
 	allowed, err := engine.Enforce(context.Background(), uuid.New(), "/api/v1/users", "GET")
 	if err != nil {
 		t.Fatalf("Enforce: %v", err)
@@ -82,6 +94,9 @@ func TestEngineReloadFailurePreservesPreviousPolicy(t *testing.T) {
 	roles := &fakeUserRoleResolver{roles: map[uuid.UUID][]uuid.UUID{userID: {roleID}}}
 	metrics := &fakeReloadMetrics{}
 	engine := NewEngine(Params{Loader: loader, Metrics: metrics, UserRoles: roles})
+	if err := engine.Reload(context.Background()); err != nil {
+		t.Fatalf("initial Reload: %v", err)
+	}
 	loader.err = loadErr
 	if err := engine.Reload(context.Background()); !errors.Is(err, loadErr) {
 		t.Fatalf("Reload err = %v, want %v", err, loadErr)
@@ -105,6 +120,11 @@ func TestEngineReloadSuccessReplacesPolicyAndClearsError(t *testing.T) {
 	loader := &fakeLoader{err: errors.New("initial load failed")}
 	roles := &fakeUserRoleResolver{roles: map[uuid.UUID][]uuid.UUID{userID: {roleID}}}
 	engine := NewEngine(Params{Loader: loader, Metrics: metrics, UserRoles: roles})
+	lc := fxtest.NewLifecycle(t)
+	RegisterInitialLoad(lc, engine)
+	if err := lc.Start(context.Background()); err != nil {
+		t.Fatalf("lifecycle Start: %v", err)
+	}
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
 	if err != nil {
 		t.Fatalf("Enforce after failed init: %v", err)
@@ -135,6 +155,35 @@ func TestEngineReloadSuccessReplacesPolicyAndClearsError(t *testing.T) {
 	}
 }
 
+func TestEngineInitialLoadUsesLifecycleContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	loader := &fakeLoader{cancelOnLoad: cancel}
+	metrics := &fakeReloadMetrics{}
+	engine := NewEngine(Params{Loader: loader, Metrics: metrics, UserRoles: &fakeUserRoleResolver{}})
+	lc := fxtest.NewLifecycle(t)
+	RegisterInitialLoad(lc, engine)
+
+	if err := lc.Start(ctx); err != nil {
+		t.Fatalf("lifecycle Start: %v", err)
+	}
+	if loader.calls != 1 {
+		t.Fatalf("loader calls = %d, want 1", loader.calls)
+	}
+	if !errors.Is(engine.LastError(), context.Canceled) {
+		t.Fatalf("LastError = %v, want context.Canceled", engine.LastError())
+	}
+	if metrics.failed != 1 || metrics.lastSuccess {
+		t.Fatalf("metrics = %#v, want canceled initial load failure", metrics)
+	}
+	allowed, err := engine.Enforce(context.Background(), uuid.New(), "/api/v1/users", "GET")
+	if err != nil {
+		t.Fatalf("Enforce: %v", err)
+	}
+	if allowed {
+		t.Fatal("canceled initialization allowed request")
+	}
+}
+
 func TestEngineInvalidatesUserRoleResolver(t *testing.T) {
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000505")
 	roles := &fakeUserRoleResolver{}
@@ -149,13 +198,20 @@ func TestEngineInvalidatesUserRoleResolver(t *testing.T) {
 }
 
 type fakeLoader struct {
-	policies PolicySet
-	err      error
-	calls    int
+	policies     PolicySet
+	err          error
+	calls        int
+	cancelOnLoad func()
 }
 
-func (l *fakeLoader) LoadPolicies(context.Context) (PolicySet, error) {
+func (l *fakeLoader) LoadPolicies(ctx context.Context) (PolicySet, error) {
 	l.calls++
+	if l.cancelOnLoad != nil {
+		l.cancelOnLoad()
+	}
+	if err := ctx.Err(); err != nil {
+		return PolicySet{}, err
+	}
 	if l.err != nil {
 		return PolicySet{}, l.err
 	}

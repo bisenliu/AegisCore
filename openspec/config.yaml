@@ -9,7 +9,7 @@ context: |
   业务边界：auth 管理认证会话、强制改密、refresh session 和 token version；user 管理用户资料；permission 管理权限目录、route diff、授权中间件、Casbin policy loader 和 policy sync；role 管理角色、角色权限、用户角色绑定、RBAC seed 和超级管理员绑定；common 维护跨服务契约和无业务语义 runtime primitive。
   结构边界：服务内业务代码按 feature-first 组织；user-service/internal/shared 当前只开放 identity 与 rbacbaseline；user-service/internal/integration 只承载真实外部系统防腐层；当前没有真实入站 gRPC、MQ/broker、eventbus 或 outbox。
   运维边界：Ent schema 是数据库结构来源，Atlas SQL migration 是可审查迁移工件；生产优先通过独立 migration Job 或 CI/CD release job 在 HTTP rollout 前执行 migration，再执行 RBAC seed，最后滚动 HTTP 副本。
-  常用验证：make test、make lint、make verify、make user-service-architecture-lint、make user-service-openapi-generate、make user-service-migrate-validate、make compose-dashboard-check。
+  常用验证：make test、make user-service-architecture-lint、make user-service-openapi-generate、make user-service-migrate-validate、make compose-dashboard-check。OpenSpec 流程全部完成后，先将本次预期代码和文档变更加到暂存区，再执行 make lint 和 make verify，避免 verify 的最终 git diff --exit-code 被未暂存的预期变更阻塞。
 
 rules:
   proposal:
@@ -33,7 +33,7 @@ rules:
     - 不写逐行实现细节；实现步骤放入 tasks。
   tasks:
     - 使用可解析的 `- [ ]` checkbox 格式，任务按 1-2 小时粒度拆分。
-    - 任务必须按依赖顺序排列，并包含必要的文件产物、单元测试、lint 检查和 `make verify` 验证命令。
-    - OpenSpec 任务执行完成后，必须通过相关单元测试、`make lint` 和 `make verify` 后方可视为完成；任一验证未通过或未运行时，不得把对应任务或 change 标记为完成。
+    - 任务必须按依赖顺序排列，并包含必要的文件产物、单元测试、暂存本次预期变更、`make lint` 和 `make verify` 验证命令。
+    - OpenSpec 全部实现、规格和文档任务完成后，必须先将本次预期代码和文档变更加到暂存区，再执行 `make lint` 和 `make verify`；任一验证未通过或未运行时，不得把对应任务或 change 标记为完成。
     - 完成实现并通过要求的验证后，立即把对应 checkbox 改为 `- [x]`。
     - 涉及生成物的任务必须包含 drift 检查，例如 `git diff --exit-code` 或对应生成脚本的 `--check`。

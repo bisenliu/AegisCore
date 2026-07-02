@@ -38,7 +38,10 @@ var Module = fx.Module("feature-permission",
 		permissionhttp.NewPermissionController,
 		permissionredis.NewWatcher,
 	),
-	fx.Invoke(func(*permissionredis.Watcher) {}),
+	fx.Invoke(
+		permissioncasbin.RegisterInitialLoad,
+		func(*permissionredis.Watcher) {},
+	),
 )
 
 func newCasbinReloadMetrics(provider *commonmetrics.Provider) commonmetrics.ReloadMetrics {

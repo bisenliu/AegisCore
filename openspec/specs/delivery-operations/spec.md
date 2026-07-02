@@ -25,7 +25,7 @@
 
 ### Requirement: 测试、lint 和完整验证
 
-系统 MUST 提供统一测试、lint、架构边界检查和完整 verify 入口。
+系统 MUST 提供统一测试、lint、架构边界检查和完整 verify 入口。OpenSpec change 的最终 `make lint` 和 `make verify` MUST 在全部实现、规格和文档任务完成后执行，且执行前 MUST 先暂存本次预期变更。
 
 #### Scenario: 运行全部测试
 
@@ -37,10 +37,23 @@
 - **WHEN** 协作者执行 `make lint`
 - **THEN** 系统 MUST 运行各 Go 模块的 `golangci-lint`
 
+#### Scenario: OpenSpec 最终 lint 顺序
+
+- **WHEN** 协作者准备完成 OpenSpec change 并执行最终 `make lint`
+- **THEN** 协作者 MUST 已完成该 change 的实现、规格和文档任务
+- **AND** 协作者 MUST 先将本次预期代码和文档变更加到暂存区
+
 #### Scenario: 运行完整验证
 
 - **WHEN** 协作者执行 `make verify`
 - **THEN** 系统 MUST 依次执行 lint、user-service 架构边界检查、测试、OpenAPI 生成，并通过 `git diff --exit-code` 暴露生成物 drift
+
+#### Scenario: OpenSpec 最终 verify 顺序
+
+- **WHEN** 协作者准备完成 OpenSpec change 并执行最终 `make verify`
+- **THEN** 协作者 MUST 已完成该 change 的实现、规格和文档任务
+- **AND** 协作者 MUST 先将本次预期代码和文档变更加到暂存区
+- **AND** `make verify` 的最终 `git diff --exit-code` MUST 用于暴露生成物 drift 或未纳入暂存区的意外变更
 
 ### Requirement: Go 生成物 drift 校验
 

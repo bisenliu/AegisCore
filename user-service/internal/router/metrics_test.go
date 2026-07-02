@@ -1,11 +1,14 @@
 package router
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -63,6 +66,42 @@ func TestRegisterMetricsRoute(t *testing.T) {
 		}
 		if recorder := executeMetricsRequest(engine, "/internal/metrics"); recorder.Code != http.StatusOK {
 			t.Fatalf("custom status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+		}
+	})
+
+	t.Run("request context cancels context-aware collector", func(t *testing.T) {
+		engine := gin.New()
+		provider := newRouterTestMetricsProvider(t, true, "/metrics")
+		collector := newRouterBlockingCollector()
+		if err := provider.Register(collector); err != nil {
+			t.Fatalf("Register collector: %v", err)
+		}
+		if err := registerMetricsRoute(engine, MetricsRouteParams{Config: metricsRouteConfig(true, "/metrics"), Provider: provider}); err != nil {
+			t.Fatalf("registerMetricsRoute: %v", err)
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		request := httptest.NewRequest(http.MethodGet, "/metrics", nil).WithContext(ctx)
+		done := make(chan struct{})
+		go func() {
+			engine.ServeHTTP(httptest.NewRecorder(), request)
+			close(done)
+		}()
+
+		select {
+		case <-collector.started:
+		case <-time.After(time.Second):
+			t.Fatal("context-aware collector did not start")
+		}
+		cancel()
+
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("metrics request did not finish after request context cancellation")
+		}
+		if err := collector.ctxErr(); !errors.Is(err, context.Canceled) {
+			t.Fatalf("collector context error = %v, want context.Canceled", err)
 		}
 	})
 }
@@ -150,4 +189,42 @@ func executeMetricsRequest(engine *gin.Engine, requestPath string) *httptest.Res
 	request := httptest.NewRequest(http.MethodGet, requestPath, nil)
 	engine.ServeHTTP(recorder, request)
 	return recorder
+}
+
+type routerBlockingCollector struct {
+	desc    *prometheus.Desc
+	started chan struct{}
+	once    sync.Once
+	err     error
+	mu      sync.Mutex
+}
+
+func newRouterBlockingCollector() *routerBlockingCollector {
+	return &routerBlockingCollector{
+		desc:    prometheus.NewDesc("aegiscore_router_context_test", "Router context propagation test metric.", nil, nil),
+		started: make(chan struct{}),
+	}
+}
+
+func (c *routerBlockingCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.desc
+}
+
+func (c *routerBlockingCollector) Collect(ch chan<- prometheus.Metric) {
+	c.CollectContext(context.Background(), ch)
+}
+
+func (c *routerBlockingCollector) CollectContext(ctx context.Context, ch chan<- prometheus.Metric) {
+	c.once.Do(func() { close(c.started) })
+	<-ctx.Done()
+	c.mu.Lock()
+	c.err = ctx.Err()
+	c.mu.Unlock()
+	ch <- prometheus.MustNewConstMetric(c.desc, prometheus.GaugeValue, 0)
+}
+
+func (c *routerBlockingCollector) ctxErr() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.err
 }

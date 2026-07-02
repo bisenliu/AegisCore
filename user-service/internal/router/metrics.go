@@ -36,11 +36,11 @@ func registerMetricsRoute(engine *gin.Engine, params MetricsRouteParams) error {
 	if err := validateMetricsPath(metricsPath, params.Pprof); err != nil {
 		return err
 	}
-	gatherer := params.Provider.Gatherer()
-	if gatherer == nil {
+	handler := params.Provider.HTTPHandler(promhttp.HandlerOpts{})
+	if handler == nil {
 		return nil
 	}
-	engine.GET(metricsPath, gin.WrapH(promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{})))
+	engine.GET(metricsPath, gin.WrapH(handler))
 	return nil
 }
 

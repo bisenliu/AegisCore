@@ -33,19 +33,23 @@ type Params struct {
 	UserRoles UserRoleResolver
 }
 
-// NewEngine 构造 Casbin Engine，初始化失败时保持 fail-closed。
+// NewEngine 构造 Casbin Engine；初始 policy 加载由 Fx lifecycle 执行。
 func NewEngine(params Params) *Engine {
 	metrics := params.Metrics
 	if metrics == nil {
 		metrics = commonmetrics.NopReloadMetrics()
 	}
-	engine := &Engine{loader: params.Loader, metrics: metrics, userRoles: params.UserRoles}
-	if err := engine.Reload(context.Background()); err != nil {
-		engine.mu.Lock()
-		engine.lastErr = err
-		engine.mu.Unlock()
-	}
-	return engine
+	return &Engine{loader: params.Loader, metrics: metrics, userRoles: params.UserRoles}
+}
+
+// RegisterInitialLoad 在 Fx 启动阶段执行初始 policy 加载，失败时保持 fail-closed。
+func RegisterInitialLoad(lc fx.Lifecycle, engine *Engine) {
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			_ = engine.Reload(ctx)
+			return nil
+		},
+	})
 }
 
 // Enforce 基于已加载的内存 policy 判断用户是否允许访问指定路由模板和 HTTP 方法。
