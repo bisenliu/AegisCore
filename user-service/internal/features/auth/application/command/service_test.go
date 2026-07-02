@@ -167,8 +167,11 @@ func TestAuthUseCaseLoginPassesMaxActiveSessionsPerUser(t *testing.T) {
 	tokenVersions := NewMockTokenVersionCache(ctrl)
 	sessions := NewMockRefreshSessionStore(ctrl)
 	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: true, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 3}
-	deps := newUseCaseDeps(cfg, credentials, tokens, authsessions.NewLifecycle(users, tokenVersions, sessions, cfg.MaxActiveSessionsPerUser), nil)
-	svc := NewLoginUseCase(deps)
+	svc := NewLoginUseCase(LoginDeps{
+		Credentials: credentials,
+		Tokens:      tokens,
+		Sessions:    authsessions.NewLifecycle(users, tokenVersions, sessions, cfg.MaxActiveSessionsPerUser),
+	})
 
 	credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(normalCredential(), nil)
 	tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", 900, time.Hour), nil)
@@ -370,14 +373,16 @@ func TestAuthUseCaseRefreshRotatesSession(t *testing.T) {
 
 func TestAuthUseCaseRefreshRotationPassesMaxActiveSessionsPerUser(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	credentials := NewMockVerifier(ctrl)
 	tokens := NewMockIssuer(ctrl)
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenVersions := NewMockTokenVersionCache(ctrl)
 	sessions := NewMockRefreshSessionStore(ctrl)
 	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, TokenVersionCacheTTL: time.Minute, RefreshTokenRotation: true, MaxActiveSessionsPerUser: 4}
-	deps := newUseCaseDeps(cfg, credentials, tokens, authsessions.NewLifecycle(users, tokenVersions, sessions, cfg.MaxActiveSessionsPerUser), nil)
-	svc := NewRefreshTokenUseCase(deps)
+	svc := NewRefreshTokenUseCase(RefreshTokenDeps{
+		Tokens:   tokens,
+		Sessions: authsessions.NewLifecycle(users, tokenVersions, sessions, cfg.MaxActiveSessionsPerUser),
+		Config:   &config.Config{Auth: cfg},
+	})
 	claims := refreshClaims("s-old", 2)
 	oldSession := authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
 
@@ -660,29 +665,39 @@ func newAuthCommandFixtureWithController(ctrl *gomock.Controller, authCfg config
 	credentials := NewMockVerifier(ctrl)
 	tokens := NewMockIssuer(ctrl)
 	sessions := NewMockLifecycle(ctrl)
-	deps := newUseCaseDeps(authCfg, credentials, tokens, sessions, metrics)
+	cfg := &config.Config{Auth: authCfg}
 	return &authCommandFixture{
 		testAuthUseCases: testAuthUseCases{
-			LoginUseCase:                NewLoginUseCase(deps),
-			RefreshTokenUseCase:         NewRefreshTokenUseCase(deps),
-			ChangePasswordUseCase:       NewChangePasswordUseCase(deps),
-			LogoutCurrentSessionUseCase: NewLogoutCurrentSessionUseCase(deps),
-			LogoutAllSessionsUseCase:    NewLogoutAllSessionsUseCase(deps),
+			LoginUseCase: NewLoginUseCase(LoginDeps{
+				Credentials: credentials,
+				Tokens:      tokens,
+				Sessions:    sessions,
+				Metrics:     metrics,
+			}),
+			RefreshTokenUseCase: NewRefreshTokenUseCase(RefreshTokenDeps{
+				Tokens:   tokens,
+				Sessions: sessions,
+				Config:   cfg,
+				Metrics:  metrics,
+			}),
+			ChangePasswordUseCase: NewChangePasswordUseCase(ChangePasswordDeps{
+				Credentials: credentials,
+				Tokens:      tokens,
+				Sessions:    sessions,
+			}),
+			LogoutCurrentSessionUseCase: NewLogoutCurrentSessionUseCase(LogoutCurrentSessionDeps{
+				Sessions: sessions,
+				Metrics:  metrics,
+			}),
+			LogoutAllSessionsUseCase: NewLogoutAllSessionsUseCase(LogoutAllSessionsDeps{
+				Sessions: sessions,
+				Metrics:  metrics,
+			}),
 		},
 		credentials: credentials,
 		tokens:      tokens,
 		sessions:    sessions,
 	}
-}
-
-func newUseCaseDeps(authCfg config.AuthConfig, credentials *MockVerifier, tokens *MockIssuer, sessions authsessions.Lifecycle, metrics authapplication.Metrics) *UseCaseDeps {
-	return NewUseCaseDeps(UseCaseDepsParams{
-		Credentials: credentials,
-		Tokens:      tokens,
-		Sessions:    sessions,
-		Config:      &config.Config{Auth: authCfg},
-		Metrics:     metrics,
-	})
 }
 
 func defaultAuthConfig(rotation bool) config.AuthConfig {

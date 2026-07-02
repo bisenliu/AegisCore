@@ -9,6 +9,8 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/password"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
+	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
+	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
@@ -26,25 +28,33 @@ type LoginCommand struct {
 }
 
 type loginUseCase struct {
-	deps *UseCaseDeps
+	credentials authcredentials.Verifier
+	tokens      authtokens.Issuer
+	sessions    authsessions.Lifecycle
+	metrics     authapplication.Metrics
 }
 
 // NewLoginUseCase 构造登录 use case。
-func NewLoginUseCase(deps *UseCaseDeps) LoginUseCase {
-	return &loginUseCase{deps: deps}
+func NewLoginUseCase(deps LoginDeps) LoginUseCase {
+	return &loginUseCase{
+		credentials: deps.Credentials,
+		tokens:      deps.Tokens,
+		sessions:    deps.Sessions,
+		metrics:     metricsOrNop(deps.Metrics),
+	}
 }
 
 // Login 校验凭证，并签发普通 token 或受限改密 token。
 func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*authtokens.TokenResult, error) {
 	if err := authvalidators.ValidateLoginCommand(cmd.Username, cmd.Password); err != nil {
-		u.deps.metricsRecorder().LoginFailed(ctx, authapplication.MetricsReasonValidationFailed)
+		u.metrics.LoginFailed(ctx, authapplication.MetricsReasonValidationFailed)
 		return nil, err
 	}
 
 	logger.Info(ctx, "login user", zap.String("username", cmd.Username))
-	user, err := u.deps.credentials.VerifyPassword(ctx, cmd.Username, cmd.Password)
+	user, err := u.credentials.VerifyPassword(ctx, cmd.Username, cmd.Password)
 	if err != nil {
-		u.deps.metricsRecorder().LoginFailed(ctx, loginFailureReason(err))
+		u.metrics.LoginFailed(ctx, loginFailureReason(err))
 		return nil, err
 	}
 
@@ -54,15 +64,15 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*authtokens
 		sessionID, err := newAuthSessionID()
 		if err != nil {
 			logger.Error(ctx, "generate auth session id failed", logger.StackTrace(zap.String("username", cmd.Username), zap.String("user_id", user.UserID.String()), zap.Int64("token_version", user.TokenVersion), zap.Error(err))...)
-			u.deps.metricsRecorder().LoginFailed(ctx, authapplication.MetricsReasonPasswordChangeRequiredIssueFailed)
+			u.metrics.LoginFailed(ctx, authapplication.MetricsReasonPasswordChangeRequiredIssueFailed)
 			return nil, err
 		}
-		tokens, err := u.deps.tokens.IssuePasswordChangeToken(ctx, user.UserID.String(), user.TokenVersion, sessionID)
+		tokens, err := u.tokens.IssuePasswordChangeToken(ctx, user.UserID.String(), user.TokenVersion, sessionID)
 		if err != nil {
-			u.deps.metricsRecorder().LoginFailed(ctx, authapplication.MetricsReasonPasswordChangeRequiredIssueFailed)
+			u.metrics.LoginFailed(ctx, authapplication.MetricsReasonPasswordChangeRequiredIssueFailed)
 			return nil, err
 		}
-		u.deps.metricsRecorder().LoginSucceeded(ctx)
+		u.metrics.LoginSucceeded(ctx)
 		return tokens, nil
 	}
 
@@ -70,15 +80,15 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*authtokens
 	sessionID, err := newAuthSessionID()
 	if err != nil {
 		logger.Error(ctx, "generate auth session id failed", logger.StackTrace(zap.String("username", cmd.Username), zap.String("user_id", user.UserID.String()), zap.Int64("token_version", user.TokenVersion), zap.Error(err))...)
-		u.deps.metricsRecorder().LoginFailed(ctx, authapplication.MetricsReasonTokenIssueFailed)
+		u.metrics.LoginFailed(ctx, authapplication.MetricsReasonTokenIssueFailed)
 		return nil, err
 	}
-	tokens, reason, err := u.deps.issueTokenPair(ctx, user.UserID.String(), user.TokenVersion, sessionID)
+	tokens, reason, err := issueTokenPair(ctx, u.tokens, u.sessions, user.UserID.String(), user.TokenVersion, sessionID)
 	if err != nil {
-		u.deps.metricsRecorder().LoginFailed(ctx, reason)
+		u.metrics.LoginFailed(ctx, reason)
 		return nil, err
 	}
-	u.deps.metricsRecorder().LoginSucceeded(ctx)
+	u.metrics.LoginSucceeded(ctx)
 	return tokens, nil
 }
 

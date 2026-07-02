@@ -14,46 +14,64 @@ import (
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 )
 
-// UseCaseDepsParams 包含构造 auth command use case 共享依赖所需的 Fx 输入。
-type UseCaseDepsParams struct {
+// LoginDeps 包含登录 use case 所需的最小依赖。
+type LoginDeps struct {
 	fx.In
 
 	Credentials authcredentials.Verifier
 	Tokens      authtokens.Issuer
 	Sessions    authsessions.Lifecycle
-	Config      *config.Config
 	Metrics     authapplication.Metrics `optional:"true"`
 }
 
-type UseCaseDeps struct {
-	credentials          authcredentials.Verifier
-	tokens               authtokens.Issuer
-	sessions             authsessions.Lifecycle
-	metrics              authapplication.Metrics
-	refreshTokenRotation bool
+// RefreshTokenDeps 包含 refresh token use case 所需的最小依赖。
+type RefreshTokenDeps struct {
+	fx.In
+
+	Tokens   authtokens.Issuer
+	Sessions authsessions.Lifecycle
+	Config   *config.Config
+	Metrics  authapplication.Metrics `optional:"true"`
 }
 
-// NewUseCaseDeps 组合凭证、token、会话和轮换依赖，供具体 command use case 使用。
-func NewUseCaseDeps(params UseCaseDepsParams) *UseCaseDeps {
-	metrics := params.Metrics
+// ChangePasswordDeps 包含强制改密 use case 所需的最小依赖。
+type ChangePasswordDeps struct {
+	fx.In
+
+	Credentials authcredentials.Verifier
+	Tokens      authtokens.Issuer
+	Sessions    authsessions.Lifecycle
+}
+
+// LogoutCurrentSessionDeps 包含当前会话登出 use case 所需的最小依赖。
+type LogoutCurrentSessionDeps struct {
+	fx.In
+
+	Sessions authsessions.Lifecycle
+	Metrics  authapplication.Metrics `optional:"true"`
+}
+
+// LogoutAllSessionsDeps 包含全部会话登出 use case 所需的最小依赖。
+type LogoutAllSessionsDeps struct {
+	fx.In
+
+	Sessions authsessions.Lifecycle
+	Metrics  authapplication.Metrics `optional:"true"`
+}
+
+func metricsOrNop(metrics authapplication.Metrics) authapplication.Metrics {
 	if metrics == nil {
-		metrics = authapplication.NopMetrics()
+		return authapplication.NopMetrics()
 	}
-	return &UseCaseDeps{
-		credentials:          params.Credentials,
-		tokens:               params.Tokens,
-		sessions:             params.Sessions,
-		metrics:              metrics,
-		refreshTokenRotation: params.Config.Auth.RefreshTokenRotation,
-	}
+	return metrics
 }
 
-func (d *UseCaseDeps) issueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*authtokens.TokenResult, string, error) {
-	tokens, err := d.tokens.IssueTokenPair(ctx, userID, tokenVersion, sessionID)
+func issueTokenPair(ctx context.Context, issuer authtokens.Issuer, sessions authsessions.Lifecycle, userID string, tokenVersion int64, sessionID string) (*authtokens.TokenResult, string, error) {
+	tokens, err := issuer.IssueTokenPair(ctx, userID, tokenVersion, sessionID)
 	if err != nil {
 		return nil, authapplication.MetricsReasonTokenIssueFailed, err
 	}
-	if err := d.sessions.CreateTokenSession(ctx, userID, sessionID, tokenVersion, tokens.RefreshTTL); err != nil {
+	if err := sessions.CreateTokenSession(ctx, userID, sessionID, tokenVersion, tokens.RefreshTTL); err != nil {
 		return nil, authapplication.MetricsReasonSessionCreateFailed, err
 	}
 	return tokens.Response, authapplication.MetricsReasonNone, nil
@@ -65,11 +83,4 @@ func newAuthSessionID() (string, error) {
 		return "", fmt.Errorf("generate auth session id: %w", err)
 	}
 	return sessionID, nil
-}
-
-func (d *UseCaseDeps) metricsRecorder() authapplication.Metrics {
-	if d == nil || d.metrics == nil {
-		return authapplication.NopMetrics()
-	}
-	return d.metrics
 }

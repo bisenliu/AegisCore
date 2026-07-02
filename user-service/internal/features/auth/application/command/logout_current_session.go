@@ -8,6 +8,7 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
+	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
 )
 
 // LogoutCurrentSessionUseCase 处理当前认证会话登出。
@@ -21,12 +22,16 @@ type LogoutResult struct {
 }
 
 type logoutCurrentSessionUseCase struct {
-	deps *UseCaseDeps
+	sessions authsessions.Lifecycle
+	metrics  authapplication.Metrics
 }
 
 // NewLogoutCurrentSessionUseCase 构造当前会话登出 use case。
-func NewLogoutCurrentSessionUseCase(deps *UseCaseDeps) LogoutCurrentSessionUseCase {
-	return &logoutCurrentSessionUseCase{deps: deps}
+func NewLogoutCurrentSessionUseCase(deps LogoutCurrentSessionDeps) LogoutCurrentSessionUseCase {
+	return &logoutCurrentSessionUseCase{
+		sessions: deps.Sessions,
+		metrics:  metricsOrNop(deps.Metrics),
+	}
 }
 
 // LogoutCurrentSession 撤销当前 refresh token 会话，但不修改用户 token version。
@@ -34,13 +39,13 @@ func (u *logoutCurrentSessionUseCase) LogoutCurrentSession(ctx context.Context) 
 	userID, sessionID, err := authctx.AuthenticatedSession(ctx)
 	if err != nil {
 		logger.Warn(ctx, "logout missing authenticated session", zap.Error(err))
-		u.deps.metricsRecorder().LogoutFailed(ctx, authapplication.MetricsOperationLogoutCurrent, authapplication.MetricsReasonAuthContextMissing)
+		u.metrics.LogoutFailed(ctx, authapplication.MetricsOperationLogoutCurrent, authapplication.MetricsReasonAuthContextMissing)
 		return nil, err
 	}
-	if err := u.deps.sessions.DeleteSession(ctx, userID, sessionID); err != nil {
-		u.deps.metricsRecorder().LogoutFailed(ctx, authapplication.MetricsOperationLogoutCurrent, authapplication.MetricsReasonSessionDeleteFailed)
+	if err := u.sessions.DeleteSession(ctx, userID, sessionID); err != nil {
+		u.metrics.LogoutFailed(ctx, authapplication.MetricsOperationLogoutCurrent, authapplication.MetricsReasonSessionDeleteFailed)
 		return nil, err
 	}
-	u.deps.metricsRecorder().LogoutSucceeded(ctx, authapplication.MetricsOperationLogoutCurrent)
+	u.metrics.LogoutSucceeded(ctx, authapplication.MetricsOperationLogoutCurrent)
 	return &LogoutResult{LoggedOut: true}, nil
 }
