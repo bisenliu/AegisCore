@@ -36,8 +36,16 @@ swag_go_run init \
   --parseDependency \
   --parseInternal
 
-go run ./internal/tools/openapi-convert \
+go run ../tools/openapi-convert \
   -input "$tmp_dir/swagger/swagger.json" \
   -json docs/openapi.json \
   -yaml docs/openapi.yaml \
-  -go docs/openapi.go
+  -go docs/openapi.go \
+  -server /api/v1 \
+  -root-server / \
+  -root-path /livez \
+  -root-path /readyz \
+  -root-path /startupz \
+  -bearer-auth-name BearerAuth \
+  -bearer-auth-description "输入 Bearer token，格式为：Bearer <token>" \
+  -generated-by scripts/openapi-generate.sh

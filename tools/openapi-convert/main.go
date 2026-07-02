@@ -11,19 +11,13 @@ import (
 )
 
 const (
-	defaultOpenAPIVersion    = "3.0.3"
-	defaultBusinessServerURL = "/api/v1"
-	defaultRootServerURL     = "/"
-	defaultBearerAuthName    = "BearerAuth"
-	defaultBearerAuthDesc    = "输入 Bearer token，格式为：Bearer <token>" // #nosec G101 -- OpenAPI 展示文案，不包含真实凭据。
-	defaultGoPackageName     = "docs"
-	defaultGeneratedBy       = "scripts/openapi-generate.sh"
-	defaultBearerAuthType    = "http"
-	defaultBearerAuthScheme  = "bearer"
-	defaultBearerAuthFormat  = "JWT"
+	defaultOpenAPIVersion   = "3.0.3"
+	defaultGoPackageName    = "docs"
+	defaultGeneratedBy      = "tools/openapi-convert"
+	defaultBearerAuthType   = "http"
+	defaultBearerAuthScheme = "bearer"
+	defaultBearerAuthFormat = "JWT"
 )
-
-var defaultRootHealthPaths = []string{"/livez", "/readyz", "/startupz"}
 
 type stringList []string
 
@@ -48,7 +42,7 @@ func main() {
 	var bearerAuthName string
 	var bearerAuthDescription string
 	var generatedBy string
-	rootPaths := stringList(defaultRootHealthPaths)
+	rootPaths := stringList{}
 
 	flag.StringVar(&inputPath, "input", "", "Swagger 2 JSON input path")
 	flag.StringVar(&jsonOutputPath, "json", "", "OpenAPI 3 JSON output path")
@@ -56,16 +50,19 @@ func main() {
 	flag.StringVar(&goOutputPath, "go", "", "OpenAPI 3 Go embed output path")
 	flag.StringVar(&goPackageName, "package", defaultGoPackageName, "Go package name for the embed output")
 	flag.StringVar(&openAPIVersion, "openapi-version", defaultOpenAPIVersion, "OpenAPI version for the generated document")
-	flag.StringVar(&serverURL, "server", defaultBusinessServerURL, "default OpenAPI server URL")
-	flag.StringVar(&rootServerURL, "root-server", defaultRootServerURL, "OpenAPI server URL for root paths")
+	flag.StringVar(&serverURL, "server", "", "default OpenAPI server URL")
+	flag.StringVar(&rootServerURL, "root-server", "", "OpenAPI server URL for root paths")
 	flag.Var(&rootPaths, "root-path", "path that should use the root server URL")
-	flag.StringVar(&bearerAuthName, "bearer-auth-name", defaultBearerAuthName, "Bearer auth security scheme name")
-	flag.StringVar(&bearerAuthDescription, "bearer-auth-description", defaultBearerAuthDesc, "Bearer auth security scheme description")
+	flag.StringVar(&bearerAuthName, "bearer-auth-name", "", "Bearer auth security scheme name")
+	flag.StringVar(&bearerAuthDescription, "bearer-auth-description", "", "Bearer auth security scheme description")
 	flag.StringVar(&generatedBy, "generated-by", defaultGeneratedBy, "generator label for the Go embed file")
 	flag.Parse()
 
 	if inputPath == "" || jsonOutputPath == "" || yamlOutputPath == "" || goOutputPath == "" {
 		failf("input, json, yaml and go output paths are required")
+	}
+	if len(rootPaths) > 0 && rootServerURL == "" {
+		failf("root-server is required when root-path is set")
 	}
 
 	doc, err := commonopenapi.ConvertSwagger2File(context.Background(), inputPath, convertOptions(openAPIVersion, serverURL, rootServerURL, rootPaths, bearerAuthName, bearerAuthDescription))
@@ -92,6 +89,11 @@ func main() {
 }
 
 func convertOptions(openAPIVersion string, serverURL string, rootServerURL string, rootPaths []string, bearerAuthName string, bearerAuthDescription string) commonopenapi.ConvertOptions {
+	var servers []commonopenapi.Server
+	if serverURL != "" {
+		servers = []commonopenapi.Server{{URL: serverURL}}
+	}
+
 	pathServers := make(map[string][]commonopenapi.Server, len(rootPaths))
 	for _, path := range rootPaths {
 		pathServers[path] = []commonopenapi.Server{{URL: rootServerURL}}
@@ -109,7 +111,7 @@ func convertOptions(openAPIVersion string, serverURL string, rootServerURL strin
 
 	return commonopenapi.ConvertOptions{
 		OpenAPIVersion:  openAPIVersion,
-		Servers:         []commonopenapi.Server{{URL: serverURL}},
+		Servers:         servers,
 		PathServers:     pathServers,
 		SecuritySchemes: securitySchemes,
 	}

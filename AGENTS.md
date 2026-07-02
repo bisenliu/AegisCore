@@ -18,9 +18,10 @@
 
 | 路径 | 作用 |
 |---|---|
-| `go.work` | Go workspace，包含 `common` 和 `user-service` 两个模块；仓库根目录不是单一 Go module |
+| `go.work` | Go workspace，包含 `common`、`user-service` 和仓库级工具模块；仓库根目录不是单一 Go module |
 | `common/` | 跨服务共享契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力 |
 | `user-service/` | 用户服务 CLI、Fx/Gin runtime、feature 业务代码、Ent schema、migration 和 OpenAPI 生成 |
+| `tools/` | 仓库级交付工具，例如跨服务复用的 OpenAPI 转换 CLI |
 | `deployments/` | Docker、Compose、Kubernetes、Helm、Prometheus 和 Grafana 部署观测资产 |
 | `docs/` | 架构、开发、产品、测试和 OPSX 工作流说明 |
 | `openspec/specs/` | 当前有效主规格，描述长期稳定 capability |
@@ -51,7 +52,7 @@
 - 用户路由：`user-service/internal/features/user/transport/http/routes.go`。
 - RBAC seed：`user-service/internal/features/role/application/seed/`，系统基线来自 `user-service/internal/shared/rbacbaseline/`。
 - Ent schema 和 migration：`user-service/ent/schema/`、`user-service/migrations/atlas.hcl`、`user-service/migrations/*.sql`。
-- OpenAPI 生成：`user-service/scripts/openapi-generate.sh`、`user-service/docs/openapi.go`、`openapi.json`、`openapi.yaml`。
+- OpenAPI 生成：`user-service/scripts/openapi-generate.sh` 调用 `tools/openapi-convert`，生成 `user-service/docs/openapi.go`、`openapi.json`、`openapi.yaml`。
 
 ## 4. 当前能力
 
@@ -123,7 +124,7 @@ openspec init --tools none --force
 ## 8. 架构边界
 
 - `common/` 不依赖 `user-service/internal/features/`，也不承载 user-service 业务 DTO、feature key schema、policy loader、route diff、OpenAPI 服务元数据、eventbus/outbox 设计或推测性 helper。
-- `common/http/openapi` 只承载 Swagger/OpenAPI 转换、规范化、序列化和 Go embed 渲染 helper；服务 API server、认证方案、扫描范围和输出目录由服务脚本或薄 wrapper 拥有。
+- `common/http/openapi` 只承载 Swagger/OpenAPI 转换、规范化、序列化和 Go embed 渲染 helper；`tools/openapi-convert` 承载仓库级转换 CLI；服务 API server、认证方案、扫描范围和输出目录由服务脚本拥有。
 - `common/security/casbin` 只承载通用请求三元组和 authorizer 包装；user-service subject schema、权限目录、策略加载、超级管理员基线和 route diff 留在 permission/shared 边界。
 - `common/runtime/workerpool`、`scheduler`、`rediskey`、`localcache` 只提供无业务语义 primitive；auth/user/role/permission 的 key schema、缓存策略和安全语义留在对应 feature。
 - `user-service/internal/shared/` 只允许至少两个 feature 真实消费、边界稳定且不能归入 `common` 的服务内业务内核；当前只开放 `identity` 与 `rbacbaseline`。
