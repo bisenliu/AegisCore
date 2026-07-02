@@ -57,7 +57,7 @@
 
 ### Requirement: Go 生成物 drift 校验
 
-系统 MUST 将 mock 生成物和 metrics no-op 生成物纳入 Go 生成与交付验证流程。完整验证 MUST 能在生成物过期、缺失或未提交时通过 drift 检查失败。
+系统 MUST 将 mock 生成物和 metrics no-op 生成物纳入 Go 生成与交付验证流程。完整验证 MUST 能在生成物过期、缺失或未提交时通过 drift 检查失败。认证 HTTP controller 使用的 use case mock MUST 由 auth HTTP transport 本地 `mock_generate.go` 声明，并由仓库约定生成命令维护。
 
 #### Scenario: 生成 mock 和 metrics no-op
 
@@ -76,6 +76,13 @@
 - **WHEN** 新增或更新 mock 生成入口
 - **THEN** 对应 Go module MUST 显式声明 `go.uber.org/mock/mockgen` 工具依赖或等价可复现工具入口
 - **AND** 生成流程 MUST NOT 依赖开发者机器上的隐式全局 `mockgen` 二进制
+
+#### Scenario: auth HTTP controller mockgen 入口
+
+- **WHEN** 认证 HTTP controller 测试需要模拟 `LoginUseCase`、`RefreshTokenUseCase`、`ChangePasswordUseCase`、`LogoutCurrentSessionUseCase` 或 `LogoutAllSessionsUseCase`
+- **THEN** mockgen 入口 MUST 位于 `user-service/internal/features/auth/transport/http/mock_generate.go`
+- **AND** 生成 mock MUST 位于 `auth/transport/http` 测试包内
+- **AND** 生成物 MUST NOT 进入全局 `mocks/` 目录或跨 feature mock 包
 
 ### Requirement: CI 工作流使用存在的服务前缀根目标
 

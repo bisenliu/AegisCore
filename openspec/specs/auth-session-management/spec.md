@@ -170,7 +170,7 @@
 
 ### Requirement: 认证 HTTP 边界
 
-系统 MUST 将公开认证路由和受保护认证路由分开挂载，并通过共享认证中间件保护需要 bearer token 的接口。认证 HTTP 边界 MUST 区分凭据认证失败和认证服务临时不可用。
+系统 MUST 将公开认证路由和受保护认证路由分开挂载，并通过共享认证中间件保护需要 bearer token 的接口。认证 HTTP 边界 MUST 区分凭据认证失败和认证服务临时不可用。认证 HTTP controller 测试 MUST 使用 feature-local `gomock` 生成 mock 表达 use case 调用契约，不得保留手写 `stubAuthUseCases` 兼容入口。
 
 #### Scenario: 公开登录路由
 
@@ -193,6 +193,91 @@
 - **THEN** 认证 HTTP 边界 MUST 返回 `503 Service Unavailable`
 - **AND** 响应 envelope MUST 使用服务不可用错误分类和认证服务繁忙消息
 - **AND** OpenAPI MUST 声明登录接口可能返回 503
+
+#### Scenario: controller 测试验证 use case 调用契约
+
+- **WHEN** 认证 HTTP controller 测试覆盖登录、刷新、改密、退出当前会话或退出全部会话流程
+- **THEN** 测试 MUST 使用 `auth/transport/http` 测试包内的 `gomock` 生成 mock 设置 use case expectation
+- **AND** 测试 MUST 通过 expectation、matcher 或 `DoAndReturn` 验证命令归一化、client context 注入和错误映射
+- **AND** 测试 MUST NOT 通过手写 `stubAuthUseCases` 或只服务于该 stub 的状态字段表达调用契约
+
+### Requirement: 认证 command 测试协作者契约
+
+认证 command use case 测试 MUST 使用该包已有 `mockgen` 生成物表达 credential、refresh session、token version、token issuer/verifier、metrics 和 lifecycle 等外部协作者契约。测试 MUST NOT 通过手写 collaborator double 兼容或隐藏这些 port 的调用、失败路径、调用顺序或指标记录。
+
+#### Scenario: 登录测试使用生成 mock
+
+- **WHEN** command 包测试覆盖登录成功、凭证失败、用户状态失败、强制改密或 token 签发失败路径
+- **THEN** 测试 MUST 通过生成 mock 的 expectation 表达 credential store、password verifier、token issuer、refresh session store 和 metrics 调用
+- **AND** 测试 MUST NOT 使用手写 credential、session、token issuer 或 metrics collaborator double 承载这些外部依赖
+
+#### Scenario: 刷新测试使用生成 mock
+
+- **WHEN** command 包测试覆盖 refresh token 解析、session 查询、token version 校验、rotation 或 rotation 失败路径
+- **THEN** 测试 MUST 通过生成 mock 的 expectation、`gomock.InOrder`、matcher 或 `DoAndReturn` 表达 token verifier/issuer、refresh session store、token version store/cache 和 metrics 调用
+- **AND** refresh session 与 token claims 一致性、rotation 原子失败和指标失败 reason MUST 由 expectation 或 matcher 明确断言
+
+#### Scenario: 改密与退出测试使用生成 mock
+
+- **WHEN** command 包测试覆盖修改密码、退出当前会话或退出全部会话的成功与失败路径
+- **THEN** 测试 MUST 通过生成 mock 表达 credential store、token version store/cache、refresh session store、session lifecycle 和 metrics 调用
+- **AND** token version 递增、本地缓存失效、Redis 投影刷新、refresh session 删除和 purge 提交失败等安全相关行为 MUST 通过 expectation 或 `DoAndReturn` 明确断言
+
+#### Scenario: 保留纯构造 helper
+
+- **WHEN** command 包测试需要复用用户凭据、token claims、auth session、密码 verifier 或 use case 构造逻辑
+- **THEN** 测试 MAY 保留不实现外部 collaborator port 的纯构造 helper 或真实轻量纯函数依赖
+- **AND** 这些 helper MUST NOT 替代 `mockgen` 生成物记录 collaborator 调用或隐藏失败注入
+
+### Requirement: session lifecycle 测试使用生成 mock 表达端口契约
+
+`auth-session-management` 的 `user-service/internal/features/auth/application/sessions` 包测试 MUST 使用已有 gomock 生成物或真实领域值验证 session lifecycle 端口交互，不得在 `lifecycle_test.go` 中继续保留 `sessionUserTestStore`、`authSessionTestStore` 或 `tokenVersionRecordingInvalidator` 手写兼容路径。测试 MUST 通过 expectation 明确表达 token version 回源、refresh session 旋转、全量撤销和本地 token version cache 失效语义。
+
+#### Scenario: token version 回源测试
+
+- **WHEN** session lifecycle 测试覆盖 Redis token version 投影 miss 后回源 PostgreSQL 并回填投影的路径
+- **THEN** 测试 MUST 使用生成的 `UserTokenVersionStore` 和 `TokenVersionCache` mock 表达读取、回源和回填 expectation
+- **AND** 测试 MUST NOT 使用手写 store 状态字段替代这些端口调用断言
+
+#### Scenario: refresh session 旋转测试
+
+- **WHEN** session lifecycle 测试覆盖 refresh session rotation 创建新 session 并替换旧 session 的路径
+- **THEN** 测试 MUST 使用生成的 `RefreshSessionStore` mock 表达 session 参数、rotation 结果和失败分支 expectation
+- **AND** 测试 MUST 使用 matcher 或 `DoAndReturn` 捕获需要校验的领域值
+
+#### Scenario: 全量撤销和本地缓存失效测试
+
+- **WHEN** session lifecycle 测试覆盖全部会话退出、token version 提升、Redis token version 投影刷新和本地 cache 失效
+- **THEN** 测试 MUST 使用生成的 store mock 和 `TokenVersionLocalInvalidator` mock 表达调用顺序、失败信号和 cache invalidation expectation
+- **AND** 测试 MUST NOT 通过 `tokenVersionRecordingInvalidator` 记录字段表达本地 cache 失效
+
+### Requirement: token version validator 测试替身一致性
+
+token version validator 的单元测试 MUST 使用本包已有 gomock 生成物表达 `UserTokenVersionStore` 与 `TokenVersionCache` 依赖交互，并 MUST 保留真实 `localcache` 实例验证本地缓存行为。测试 MUST NOT 保留 `tokenVersionUserTestStore` 或 `tokenVersionSessionTestStore` 手写兼容替身。
+
+#### Scenario: Redis miss 后回源并回填
+
+- **WHEN** token version validator 在本地缓存未命中且 Redis token version 投影未命中时执行校验
+- **THEN** 测试 MUST 通过 gomock expectation 表达 Redis miss、PostgreSQL 当前值回源和 Redis 投影回填
+- **AND** 测试 MUST 继续使用真实 `localcache` 验证后续本地缓存命中
+
+#### Scenario: singleflight 合并并发回源
+
+- **WHEN** 同一用户的多个并发 token version 校验同时触发回源路径
+- **THEN** 测试 MUST 通过 `DoAndReturn`、channel、mutex 或 atomic 计数表达并发控制
+- **AND** 测试 MUST 断言 PostgreSQL 当前值回源被 singleflight 合并
+
+#### Scenario: 按用户隔离并发校验
+
+- **WHEN** 不同用户的并发 token version 校验同时触发回源路径
+- **THEN** 测试 MUST 表达不同用户之间不共享 singleflight 结果
+- **AND** 每个用户的依赖调用 MUST 通过 gomock expectation 独立断言
+
+#### Scenario: 失效后重新加载
+
+- **WHEN** token version validator 的本地 token version 缓存被失效后再次校验同一用户
+- **THEN** 测试 MUST 通过 gomock expectation 表达重新读取 Redis 或 PostgreSQL 当前值
+- **AND** 旧本地缓存值 MUST NOT 继续作为校验依据
 
 ### Requirement: 认证包组织
 

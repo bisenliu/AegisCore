@@ -192,6 +192,68 @@
 - **WHEN** 用户拥有 `internal/shared/rbacbaseline` 中稳定的内置超级管理员角色
 - **THEN** policy loader MUST 补充 wildcard policy，使其可访问受保护业务接口，且 MUST NOT 在 role 或 permission feature 内重复定义超级管理员常量
 
+### Requirement: Casbin 初始 policy 加载上下文传播
+
+系统 MUST 在 user-service 启动 lifecycle 中执行 Casbin Engine 初始 policy 加载，并将 Fx `OnStart` 提供的启动 context 传播到 policy loader 及其持久化查询。Casbin Engine 构造器 MUST NOT 在 provider 构造阶段执行不可取消的初始 policy reload。
+
+#### Scenario: 启动 context 传播到初始加载
+
+- **WHEN** user-service 通过 Fx 启动 permission/RBAC 模块并初始化 Casbin Engine
+- **THEN** 初始 policy reload MUST 使用 Fx `OnStart` 传入的 context 调用 `Loader.LoadPolicies(ctx)`
+- **AND** 启动 context 取消或超时时，底层 policy loader MUST 能观察到对应取消信号
+
+#### Scenario: 初始加载失败保持 fail-closed
+
+- **WHEN** Casbin 初始 policy 加载失败或因启动 context 取消而未构造可用 enforcer
+- **THEN** Engine MUST 记录最近错误并更新 policy reload 失败指标
+- **AND** 后续授权判断 MUST fail-closed，不得放行缺少可用 policy 的请求
+- **AND** 服务装配行为 MUST 保持既有语义，不因本场景自动改为启动失败
+
+#### Scenario: 手动 reload 继续使用调用方 context
+
+- **WHEN** 在线 RBAC 写操作或 watcher 触发 Casbin policy reload
+- **THEN** `Reload(ctx)` MUST 继续使用调用方传入的 context 执行 policy loader
+- **AND** 本次变更不得改变 policy 权威来源、用户角色缓存失效或 Redis policy sync 语义
+
+### Requirement: Permission HTTP 授权中间件请求构造与旁路行为
+
+permission HTTP 授权中间件 MUST 在真实 Gin 路由上下文中解析授权请求，并将认证用户 ID、Gin route template 和 HTTP method 传递给 permission authorization service；白名单和 `OPTIONS` 请求 MUST 绕过授权服务调用。
+
+#### Scenario: 授权请求使用 Gin route template
+
+- **WHEN** 已认证用户访问受 RBAC 保护的 permission HTTP 路由
+- **THEN** 授权中间件 MUST 使用认证用户 ID 作为授权 subject
+- **AND** 授权中间件 MUST 使用 Gin `FullPath()` route template 作为授权 object
+- **AND** 授权中间件 MUST 使用 HTTP method 作为授权 action
+
+#### Scenario: 认证用户来自请求上下文
+
+- **WHEN** 已认证用户 ID 存在于 request context 且 Gin context 未设置用户 ID
+- **THEN** 授权中间件 MUST 使用 request context 中的用户 ID 构造授权请求
+
+#### Scenario: 缺失或非法用户不调用授权服务
+
+- **WHEN** 请求缺少认证用户 ID 或 Gin context 中的用户 ID 类型非法
+- **THEN** 授权中间件 MUST 拒绝请求并返回未认证错误
+- **AND** 授权中间件 MUST NOT 调用 permission authorization service
+
+#### Scenario: 白名单请求绕过授权服务
+
+- **WHEN** 请求方法和 Gin route template 命中显式授权白名单
+- **THEN** 授权中间件 MUST 允许请求继续处理
+- **AND** 授权中间件 MUST NOT 调用 permission authorization service
+
+#### Scenario: OPTIONS 请求绕过授权服务
+
+- **WHEN** 请求使用 `OPTIONS` 方法访问已注册路由
+- **THEN** 授权中间件 MUST 允许请求继续处理
+- **AND** 授权中间件 MUST NOT 调用 permission authorization service
+
+#### Scenario: 授权服务拒绝或错误映射响应
+
+- **WHEN** permission authorization service 返回拒绝、执行错误或 invalid subject 错误
+- **THEN** 授权中间件 MUST 分别返回禁止访问、内部错误或未认证错误响应
+
 ### Requirement: 策略同步
 
 系统 MUST 在在线 RBAC 写操作成功后触发本实例策略刷新，并通过 Redis policy version、Pub/Sub 和定时版本补偿同步其他副本。
