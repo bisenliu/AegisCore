@@ -61,8 +61,10 @@ Thumbs.db
 
 # Ai Agent
 .agent
+.agent_context
 .codex
 .gemini
+.multica
 
 # Code Graph
 .codegraph
