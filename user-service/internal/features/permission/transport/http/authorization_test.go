@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/mock/gomock"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
@@ -19,7 +20,8 @@ import (
 const authorizationTestUserID = "018f0000-0000-7000-8000-000000000801"
 
 func TestAuthorizeAllowsRequestAndUsesFullPath(t *testing.T) {
-	engine, authz := newAuthorizationTestEngine(&fakeAuthorizer{allowed: true})
+	engine, authz := newAuthorizationTestEngine(t)
+	authz.EXPECT().Enforce(gomock.Any(), authorizationTestUserID, "/api/v1/users/:user_id", http.MethodGet).Return(true, nil)
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+authorizationTestUserID, nil)
 	response := httptest.NewRecorder()
 
@@ -28,13 +30,11 @@ func TestAuthorizeAllowsRequestAndUsesFullPath(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 	}
-	if authz.calls != 1 || authz.userID != authorizationTestUserID || authz.pathTemplate != "/api/v1/users/:user_id" || authz.method != http.MethodGet {
-		t.Fatalf("authorizer call = %#v", authz)
-	}
 }
 
 func TestAuthorizeReadsUserIDFromRequestContext(t *testing.T) {
-	authz := &fakeAuthorizer{allowed: true}
+	authz := NewMockAuthorizer(gomock.NewController(t))
+	authz.EXPECT().Enforce(gomock.Any(), authorizationTestUserID, "/api/v1/users/:user_id", http.MethodGet).Return(true, nil)
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.GET("/api/v1/users/:user_id", Authorize(authz), func(c *gin.Context) { c.Status(http.StatusOK) })
@@ -46,9 +46,6 @@ func TestAuthorizeReadsUserIDFromRequestContext(t *testing.T) {
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
-	}
-	if authz.userID != authorizationTestUserID {
-		t.Fatalf("authorizer userID = %q, want %q", authz.userID, authorizationTestUserID)
 	}
 }
 
@@ -63,7 +60,7 @@ func TestAuthorizeRejectsMissingOrInvalidUserID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			authz := &fakeAuthorizer{allowed: true}
+			authz := NewMockAuthorizer(gomock.NewController(t))
 			gin.SetMode(gin.TestMode)
 			engine := gin.New()
 			engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
@@ -77,9 +74,6 @@ func TestAuthorizeRejectsMissingOrInvalidUserID(t *testing.T) {
 			engine.ServeHTTP(response, request)
 
 			assertAuthorizationEnvelope(t, response, http.StatusUnauthorized, tt.wantCode)
-			if authz.calls != 0 {
-				t.Fatalf("authorizer calls = %d, want 0", authz.calls)
-			}
 		})
 	}
 }
@@ -87,16 +81,18 @@ func TestAuthorizeRejectsMissingOrInvalidUserID(t *testing.T) {
 func TestAuthorizeDeniedAndErrorResponses(t *testing.T) {
 	tests := []struct {
 		name       string
-		authz      *fakeAuthorizer
+		allowed    bool
+		err        error
 		wantStatus int
 		wantCode   contracterrors.Code
 	}{
-		{name: "denied", authz: &fakeAuthorizer{allowed: false}, wantStatus: http.StatusForbidden, wantCode: contracterrors.CodeForbidden},
-		{name: "error", authz: &fakeAuthorizer{err: errors.New("engine unavailable")}, wantStatus: http.StatusInternalServerError, wantCode: contracterrors.CodeInternalError},
+		{name: "denied", allowed: false, wantStatus: http.StatusForbidden, wantCode: contracterrors.CodeForbidden},
+		{name: "error", err: errors.New("engine unavailable"), wantStatus: http.StatusInternalServerError, wantCode: contracterrors.CodeInternalError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			engine, _ := newAuthorizationTestEngine(tt.authz)
+			engine, authz := newAuthorizationTestEngine(t)
+			authz.EXPECT().Enforce(gomock.Any(), authorizationTestUserID, "/api/v1/users/:user_id", http.MethodGet).Return(tt.allowed, tt.err)
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+authorizationTestUserID, nil)
 
@@ -108,7 +104,8 @@ func TestAuthorizeDeniedAndErrorResponses(t *testing.T) {
 }
 
 func TestAuthorizeMapsInvalidSubjectToUnauthenticated(t *testing.T) {
-	authz := &fakeAuthorizer{err: permissionauthorization.ErrInvalidSubjectUserID}
+	authz := NewMockAuthorizer(gomock.NewController(t))
+	authz.EXPECT().Enforce(gomock.Any(), "not-a-uuid", "/api/v1/users/:user_id", http.MethodGet).Return(false, permissionauthorization.ErrInvalidSubjectUserID)
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) { c.Set(commonauth.UserIDKey, "not-a-uuid") }, Authorize(authz), func(c *gin.Context) { c.Status(http.StatusOK) })
@@ -118,9 +115,6 @@ func TestAuthorizeMapsInvalidSubjectToUnauthenticated(t *testing.T) {
 	engine.ServeHTTP(response, request)
 
 	assertAuthorizationEnvelope(t, response, http.StatusUnauthorized, contracterrors.CodeUnauthenticated)
-	if authz.calls != 1 || authz.userID != "not-a-uuid" || authz.pathTemplate != "/api/v1/users/:user_id" || authz.method != http.MethodGet {
-		t.Fatalf("authorizer call = %#v", authz)
-	}
 }
 
 func TestAuthorizeDeniesRBACNegativeScenarios(t *testing.T) {
@@ -133,22 +127,21 @@ func TestAuthorizeDeniesRBACNegativeScenarios(t *testing.T) {
 	}
 	for _, name := range tests {
 		t.Run(name, func(t *testing.T) {
-			engine, authz := newAuthorizationTestEngine(&fakeAuthorizer{allowed: false})
+			engine, authz := newAuthorizationTestEngine(t)
+			authz.EXPECT().Enforce(gomock.Any(), authorizationTestUserID, "/api/v1/users/:user_id", http.MethodGet).Return(false, nil)
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, "/api/v1/users/"+authorizationTestUserID, nil)
 
 			engine.ServeHTTP(response, request)
 
 			assertAuthorizationEnvelope(t, response, http.StatusForbidden, contracterrors.CodeForbidden)
-			if authz.calls != 1 || authz.pathTemplate != "/api/v1/users/:user_id" || authz.method != http.MethodGet {
-				t.Fatalf("authorizer call = %#v", authz)
-			}
 		})
 	}
 }
 
 func TestAuthorizeAllowsSuperAdminWildcardDecision(t *testing.T) {
-	engine, authz := newAuthorizationTestEngine(&fakeAuthorizer{allowed: true})
+	engine, authz := newAuthorizationTestEngine(t)
+	authz.EXPECT().Enforce(gomock.Any(), authorizationTestUserID, "/api/v1/users/:user_id", http.MethodDelete).Return(true, nil)
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodDelete, "/api/v1/users/"+authorizationTestUserID, nil)
 
@@ -157,9 +150,6 @@ func TestAuthorizeAllowsSuperAdminWildcardDecision(t *testing.T) {
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
-	}
-	if authz.calls != 1 || authz.method != http.MethodDelete || authz.pathTemplate != "/api/v1/users/:user_id" {
-		t.Fatalf("authorizer call = %#v", authz)
 	}
 }
 
@@ -174,7 +164,7 @@ func TestAuthorizeWhitelistAndOptionsBypass(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			authz := &fakeAuthorizer{allowed: false}
+			authz := NewMockAuthorizer(gomock.NewController(t))
 			gin.SetMode(gin.TestMode)
 			engine := gin.New()
 			engine.Handle(tt.method, "/api/v1/users/:user_id", func(c *gin.Context) { c.Set(commonauth.UserIDKey, authorizationTestUserID) }, Authorize(authz, tt.options...), func(c *gin.Context) { c.Status(http.StatusOK) })
@@ -186,14 +176,13 @@ func TestAuthorizeWhitelistAndOptionsBypass(t *testing.T) {
 			if response.Code != http.StatusOK {
 				t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
 			}
-			if authz.calls != 0 {
-				t.Fatalf("authorizer calls = %d, want 0", authz.calls)
-			}
 		})
 	}
 }
 
-func newAuthorizationTestEngine(authz *fakeAuthorizer) (*gin.Engine, *fakeAuthorizer) {
+func newAuthorizationTestEngine(t *testing.T) (*gin.Engine, *MockAuthorizer) {
+	t.Helper()
+	authz := NewMockAuthorizer(gomock.NewController(t))
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) { c.Set(commonauth.UserIDKey, authorizationTestUserID) }, Authorize(authz), func(c *gin.Context) { c.Status(http.StatusOK) })
@@ -212,21 +201,4 @@ func assertAuthorizationEnvelope(t *testing.T, recorder *httptest.ResponseRecord
 	if envelope.Success || envelope.Code != wantCode {
 		t.Fatalf("envelope = %#v, want failure code %d", envelope, wantCode)
 	}
-}
-
-type fakeAuthorizer struct {
-	allowed      bool
-	err          error
-	calls        int
-	userID       string
-	pathTemplate string
-	method       string
-}
-
-func (a *fakeAuthorizer) Enforce(_ context.Context, userID string, pathTemplate string, method string) (bool, error) {
-	a.calls++
-	a.userID = userID
-	a.pathTemplate = pathTemplate
-	a.method = method
-	return a.allowed, a.err
 }
