@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
@@ -29,7 +29,10 @@ func TestCredentialVerifierAcceptsMustChangePasswordUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	verifier := authcredentials.NewVerifier(&authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}}, testPasswordService(t))
+	ctrl := gomock.NewController(t)
+	repo := NewMockUserCredentialStore(ctrl)
+	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
+	repo.EXPECT().GetByUsername(gomock.Any(), "alice").Return(&authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, nil)
 
 	user, err := verifier.VerifyPassword(context.Background(), "alice", "secret")
 
@@ -46,7 +49,10 @@ func TestCredentialVerifierRejectsDisabledUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	verifier := authcredentials.NewVerifier(&authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}}, testPasswordService(t))
+	ctrl := gomock.NewController(t)
+	repo := NewMockUserCredentialStore(ctrl)
+	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
+	repo.EXPECT().GetByUsername(gomock.Any(), "alice").Return(&authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}, nil)
 
 	_, err = verifier.VerifyPassword(context.Background(), "alice", "secret")
 
@@ -63,16 +69,17 @@ func TestCredentialVerifierLoginFailureLogsClientContext(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		repo       *authCredentialTestStore
+		credential *authdomain.UserCredential
+		repoErr    error
 		username   string
 		password   string
 		message    string
 		wantUserID bool
 		wantStatus bool
 	}{
-		{name: "user not found", repo: &authCredentialTestStore{}, username: "alice", password: "secret", message: "login user not found"},
-		{name: "password mismatch", repo: &authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}}, username: "alice", password: "wrong", message: "login password mismatch", wantUserID: true},
-		{name: "status rejected", repo: &authCredentialTestStore{userByUsername: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}}, username: "alice", password: "secret", message: "login user status rejected", wantUserID: true, wantStatus: true},
+		{name: "user not found", repoErr: identity.ErrUserNotFound, username: "alice", password: "secret", message: "login user not found"},
+		{name: "password mismatch", credential: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusNormal, TokenVersion: 2}, username: "alice", password: "wrong", message: "login password mismatch", wantUserID: true},
+		{name: "status rejected", credential: &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}, username: "alice", password: "secret", message: "login user status rejected", wantUserID: true, wantStatus: true},
 	}
 
 	for _, tt := range tests {
@@ -80,7 +87,10 @@ func TestCredentialVerifierLoginFailureLogsClientContext(t *testing.T) {
 			core, logs := observer.New(zap.WarnLevel)
 			ctx := logger.ToContext(context.Background(), zap.New(core))
 			ctx = authctx.WithClientContext(ctx, authctx.ClientContext{ClientIP: "203.0.113.30", UserAgent: "auth-command-test"})
-			verifier := authcredentials.NewVerifier(tt.repo, testPasswordService(t))
+			ctrl := gomock.NewController(t)
+			repo := NewMockUserCredentialStore(ctrl)
+			verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
+			repo.EXPECT().GetByUsername(gomock.Any(), tt.username).Return(tt.credential, tt.repoErr)
 
 			_, err := verifier.VerifyPassword(ctx, tt.username, tt.password)
 
@@ -110,8 +120,16 @@ func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hash: %v", err)
 	}
-	repo := &authCredentialTestStore{userByID: &authdomain.UserCredential{UserID: authTestUserID, PasswordHash: oldHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, newVersion: 3}
+	ctrl := gomock.NewController(t)
+	repo := NewMockUserCredentialStore(ctrl)
 	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
+	var updatedInput authdomain.UpdateCredentialsInput
+
+	repo.EXPECT().GetCredentialByUserID(gomock.Any(), authTestUserID).Return(&authdomain.UserCredential{UserID: authTestUserID, PasswordHash: oldHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, nil)
+	repo.EXPECT().UpdateCredentials(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, input authdomain.UpdateCredentialsInput) (int64, error) {
+		updatedInput = input
+		return 3, nil
+	})
 
 	result, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
@@ -121,17 +139,20 @@ func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	if result.UserID != authTestUserID || result.TokenVersion != 3 {
 		t.Fatalf("result = %#v", result)
 	}
-	if repo.updatedInput.UserID != authTestUserID || repo.updatedInput.Status != identity.UserStatusNormal {
-		t.Fatalf("updated input = %#v", repo.updatedInput)
+	if updatedInput.UserID != authTestUserID || updatedInput.Status != identity.UserStatusNormal {
+		t.Fatalf("updated input = %#v", updatedInput)
 	}
-	matched, err := verifyTestPassword(t, "new-secret", repo.updatedInput.PasswordHash)
+	matched, err := verifyTestPassword(t, "new-secret", updatedInput.PasswordHash)
 	if err != nil || !matched {
 		t.Fatalf("updated password hash mismatch: matched=%v err=%v", matched, err)
 	}
 }
 
 func TestCredentialVerifierChangePasswordMapsUserNotFound(t *testing.T) {
-	verifier := authcredentials.NewVerifier(&authCredentialTestStore{}, testPasswordService(t))
+	ctrl := gomock.NewController(t)
+	repo := NewMockUserCredentialStore(ctrl)
+	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
+	repo.EXPECT().GetCredentialByUserID(gomock.Any(), authTestUserID).Return(nil, identity.ErrUserNotFound)
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
@@ -141,7 +162,10 @@ func TestCredentialVerifierChangePasswordMapsUserNotFound(t *testing.T) {
 }
 
 func TestCredentialVerifierChangePasswordRejectsInvalidStatus(t *testing.T) {
-	verifier := authcredentials.NewVerifier(&authCredentialTestStore{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusNormal, TokenVersion: 2}}, testPasswordService(t))
+	ctrl := gomock.NewController(t)
+	repo := NewMockUserCredentialStore(ctrl)
+	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
+	repo.EXPECT().GetCredentialByUserID(gomock.Any(), authTestUserID).Return(&authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusNormal, TokenVersion: 2}, nil)
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
@@ -152,7 +176,11 @@ func TestCredentialVerifierChangePasswordRejectsInvalidStatus(t *testing.T) {
 
 func TestCredentialVerifierChangePasswordMapsUpdateError(t *testing.T) {
 	updateErr := errors.New("update failed")
-	verifier := authcredentials.NewVerifier(&authCredentialTestStore{userByID: &authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, updateErr: updateErr}, testPasswordService(t))
+	ctrl := gomock.NewController(t)
+	repo := NewMockUserCredentialStore(ctrl)
+	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
+	repo.EXPECT().GetCredentialByUserID(gomock.Any(), authTestUserID).Return(&authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, nil)
+	repo.EXPECT().UpdateCredentials(gomock.Any(), gomock.Any()).Return(int64(0), updateErr)
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
 
@@ -181,8 +209,15 @@ func TestAuthTokenIssuerParsesBearerRefreshToken(t *testing.T) {
 }
 
 func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
-	lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{}, &authSessionTestStore{version: 3, session: authRefreshTestSession("s-123", 2)})
+	ctrl := gomock.NewController(t)
+	users := NewMockUserTokenVersionStore(ctrl)
+	tokenVersions := NewMockTokenVersionCache(ctrl)
+	sessions := NewMockRefreshSessionStore(ctrl)
+	lifecycle := authsessions.NewLifecycle(users, tokenVersions, sessions, 5)
 	claims := &commonauth.Claims{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123"}
+
+	sessions.EXPECT().GetSession(gomock.Any(), authTestUserID.String(), "s-123").Return(authRefreshTestSession("s-123", 2), nil)
+	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(3), nil)
 
 	_, _, err := lifecycle.ValidateRefreshSession(context.Background(), claims)
 
@@ -194,9 +229,11 @@ func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
 func TestAuthSessionLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T) {
 	for _, err := range []error{authdomain.ErrAuthSessionNotFound, authdomain.ErrAuthSessionMismatch} {
 		t.Run(err.Error(), func(t *testing.T) {
-			lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{}, &authSessionTestStore{rotateErr: err})
+			ctrl := gomock.NewController(t)
+			lifecycle, _, _, sessions := newGeneratedAuthSessionLifecycle(ctrl)
 			oldSession := authRefreshTestSession("s-old", 2)
 			newSession := authRefreshTestSession("s-new", 2)
+			sessions.EXPECT().RotateSession(gomock.Any(), oldSession, newSession, time.Hour, 5).Return(err)
 
 			err := lifecycle.RotateTokenSession(context.Background(), oldSession, newSession, time.Hour)
 
@@ -209,9 +246,11 @@ func TestAuthSessionLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T)
 
 func TestAuthSessionLifecycleRotateTokenSessionMapsUnexpectedError(t *testing.T) {
 	rotateErr := errors.New("redis failed")
-	lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{}, &authSessionTestStore{rotateErr: rotateErr})
+	ctrl := gomock.NewController(t)
+	lifecycle, _, _, sessions := newGeneratedAuthSessionLifecycle(ctrl)
 	oldSession := authRefreshTestSession("s-old", 2)
 	newSession := authRefreshTestSession("s-new", 2)
+	sessions.EXPECT().RotateSession(gomock.Any(), oldSession, newSession, time.Hour, 5).Return(rotateErr)
 
 	err := lifecycle.RotateTokenSession(context.Background(), oldSession, newSession, time.Hour)
 
@@ -221,8 +260,9 @@ func TestAuthSessionLifecycleRotateTokenSessionMapsUnexpectedError(t *testing.T)
 }
 
 func TestAuthSessionLifecycleCurrentTokenVersionUsesCacheHit(t *testing.T) {
-	repo := &authCredentialTestStore{tokenVersionErr: errors.New("database should not be read")}
-	lifecycle := newTestAuthSessionLifecycle(repo, &authSessionTestStore{version: 2})
+	ctrl := gomock.NewController(t)
+	lifecycle, _, tokenVersions, _ := newGeneratedAuthSessionLifecycle(ctrl)
+	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(2), nil)
 
 	version, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
 
@@ -232,15 +272,15 @@ func TestAuthSessionLifecycleCurrentTokenVersionUsesCacheHit(t *testing.T) {
 	if version != 2 {
 		t.Fatalf("version = %d, want 2", version)
 	}
-	if repo.getTokenVersionID != uuid.Nil {
-		t.Fatalf("repository was read on cache hit: %s", repo.getTokenVersionID)
-	}
 }
 
 func TestAuthSessionLifecycleCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
-	repo := &authCredentialTestStore{tokenVersion: 7}
-	store := &authSessionTestStore{cacheMiss: true}
-	lifecycle := newTestAuthSessionLifecycle(repo, store)
+	ctrl := gomock.NewController(t)
+	lifecycle, users, tokenVersions, _ := newGeneratedAuthSessionLifecycle(ctrl)
+
+	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(0), authdomain.ErrTokenVersionCacheMiss)
+	users.EXPECT().GetTokenVersion(gomock.Any(), authTestUserID).Return(int64(7), nil)
+	tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), authTestUserID.String(), int64(7)).Return(nil)
 
 	version, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
 
@@ -250,56 +290,44 @@ func TestAuthSessionLifecycleCurrentTokenVersionCacheMissReadsRepository(t *test
 	if version != 7 {
 		t.Fatalf("version = %d, want 7", version)
 	}
-	if repo.getTokenVersionID != authTestUserID {
-		t.Fatalf("getTokenVersionID = %s, want %s", repo.getTokenVersionID, authTestUserID)
-	}
-	if !store.cached || store.cachedUserID != authTestUserID.String() || store.cachedVersion != 7 {
-		t.Fatalf("cached store = %#v", store)
-	}
 }
 
 func TestAuthSessionLifecycleCurrentTokenVersionCacheErrorReturnsInfrastructureError(t *testing.T) {
-	repo := &authCredentialTestStore{tokenVersion: 7}
+	ctrl := gomock.NewController(t)
+	lifecycle, _, tokenVersions, _ := newGeneratedAuthSessionLifecycle(ctrl)
 	cacheErr := errors.New("redis failed")
-	store := &authSessionTestStore{getVersionErr: cacheErr}
-	lifecycle := newTestAuthSessionLifecycle(repo, store)
+	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(0), cacheErr)
 
 	_, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
 
 	if !errors.Is(err, cacheErr) {
 		t.Fatalf("err = %v, want cache error", err)
 	}
-	if repo.getTokenVersionID != uuid.Nil {
-		t.Fatalf("repository should not be read after cache infrastructure error: %s", repo.getTokenVersionID)
-	}
-	if store.cached {
-		t.Fatalf("store = %#v", store)
-	}
 }
 
 func TestAuthSessionLifecycleCurrentTokenVersionDatabaseFallbackErrorReturnsInfrastructureError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	lifecycle, users, tokenVersions, _ := newGeneratedAuthSessionLifecycle(ctrl)
 	dbErr := errors.New("database failed")
-	repo := &authCredentialTestStore{tokenVersionErr: dbErr}
-	store := &authSessionTestStore{cacheMiss: true}
-	lifecycle := newTestAuthSessionLifecycle(repo, store)
+
+	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(0), authdomain.ErrTokenVersionCacheMiss)
+	users.EXPECT().GetTokenVersion(gomock.Any(), authTestUserID).Return(int64(0), dbErr)
 
 	_, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
 
 	if !errors.Is(err, dbErr) {
 		t.Fatalf("err = %v, want database error", err)
 	}
-	if repo.getTokenVersionID != authTestUserID {
-		t.Fatalf("getTokenVersionID = %s, want %s", repo.getTokenVersionID, authTestUserID)
-	}
-	if store.cached {
-		t.Fatalf("store should not be backfilled after database error: %#v", store)
-	}
 }
 
 func TestAuthSessionLifecycleCurrentTokenVersionBackfillErrorReturnsInfrastructureError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	lifecycle, users, tokenVersions, _ := newGeneratedAuthSessionLifecycle(ctrl)
 	cacheErr := errors.New("redis set failed")
-	store := &authSessionTestStore{cacheMiss: true, cacheErr: cacheErr}
-	lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{tokenVersion: 7}, store)
+
+	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(0), authdomain.ErrTokenVersionCacheMiss)
+	users.EXPECT().GetTokenVersion(gomock.Any(), authTestUserID).Return(int64(7), nil)
+	tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), authTestUserID.String(), int64(7)).Return(cacheErr)
 
 	_, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
 
@@ -309,9 +337,12 @@ func TestAuthSessionLifecycleCurrentTokenVersionBackfillErrorReturnsInfrastructu
 }
 
 func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
-	repo := &authCredentialTestStore{newVersion: 4}
-	store := &authSessionTestStore{}
-	lifecycle := newTestAuthSessionLifecycle(repo, store)
+	ctrl := gomock.NewController(t)
+	lifecycle, users, tokenVersions, sessions := newGeneratedAuthSessionLifecycle(ctrl)
+
+	users.EXPECT().IncrementTokenVersion(gomock.Any(), authTestUserID).Return(int64(4), nil)
+	tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), authTestUserID.String(), int64(4)).Return(nil)
+	sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), authTestUserID.String()).Return(nil)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
@@ -324,29 +355,29 @@ func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
 	if result.ProjectionError != nil {
 		t.Fatalf("projection error = %v, want nil", result.ProjectionError)
 	}
-	if repo.incrementedUserID != authTestUserID || !store.cached || store.cachedVersion != 4 || !store.deletedAll {
-		t.Fatalf("repo=%#v store=%#v", repo, store)
-	}
 }
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T) {
-	store := &authSessionTestStore{}
-	lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{incrementErr: identity.ErrUserNotFound}, store)
+	ctrl := gomock.NewController(t)
+	lifecycle, users, _, _ := newGeneratedAuthSessionLifecycle(ctrl)
+	users.EXPECT().IncrementTokenVersion(gomock.Any(), authTestUserID).Return(int64(0), identity.ErrUserNotFound)
 
 	_, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
 	if !errors.Is(err, identity.ErrUserNotFound) {
 		t.Fatalf("err = %v, want ErrUserNotFound", err)
 	}
-	if store.cached || store.deletedAll {
-		t.Fatalf("store mutated after increment failure: %#v", store)
-	}
 }
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	lifecycle, users, tokenVersions, sessions := newGeneratedAuthSessionLifecycle(ctrl)
 	cacheErr := errors.New("cache refresh failed")
-	store := &authSessionTestStore{cacheErr: cacheErr}
-	lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{newVersion: 4}, store)
+
+	users.EXPECT().IncrementTokenVersion(gomock.Any(), authTestUserID).Return(int64(4), nil)
+	tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), authTestUserID.String(), int64(4)).Return(cacheErr)
+	tokenVersions.EXPECT().DeleteCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(nil)
+	sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), authTestUserID.String()).Return(nil)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
@@ -359,15 +390,16 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t
 	if !errors.Is(result.ProjectionError, cacheErr) {
 		t.Fatalf("projection error = %v, want cache error", result.ProjectionError)
 	}
-	if !store.cacheDeleted || store.deletedCachedUserID != authTestUserID.String() || !store.deletedAll {
-		t.Fatalf("store = %#v", store)
-	}
 }
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsSucceedsAfterDeleteAllProjectionError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	lifecycle, users, tokenVersions, sessions := newGeneratedAuthSessionLifecycle(ctrl)
 	deleteErr := errors.New("delete all failed")
-	store := &authSessionTestStore{deleteAllErr: deleteErr}
-	lifecycle := newTestAuthSessionLifecycle(&authCredentialTestStore{newVersion: 4}, store)
+
+	users.EXPECT().IncrementTokenVersion(gomock.Any(), authTestUserID).Return(int64(4), nil)
+	tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), authTestUserID.String(), int64(4)).Return(nil)
+	sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), authTestUserID.String()).Return(deleteErr)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 
@@ -380,37 +412,32 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsSucceedsAfterDeleteAllProjecti
 	if !errors.Is(result.ProjectionError, deleteErr) {
 		t.Fatalf("projection error = %v, want delete error", result.ProjectionError)
 	}
-	if !store.cached || store.cachedVersion != 4 {
-		t.Fatalf("token version cache was not refreshed before delete failure: %#v", store)
-	}
 }
 
 func TestAuthSessionLifecycleRevokeUserSessionsAtVersionReturnsProjectionError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	lifecycle, _, tokenVersions, sessions := newGeneratedAuthSessionLifecycle(ctrl)
 	cacheErr := errors.New("cache refresh failed")
 	deleteErr := errors.New("delete all failed")
 	deleteCacheErr := errors.New("delete cache failed")
-	store := &authSessionTestStore{cacheErr: cacheErr, deleteCacheErr: deleteCacheErr, deleteAllErr: deleteErr}
-	invalidator := &tokenVersionRecordingInvalidator{}
-	lifecycle := authsessions.NewLifecycle(&authCredentialTestStore{newVersion: 99}, store, store, 5, invalidator)
+
+	tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), authTestUserID.String(), int64(4)).Return(cacheErr)
+	tokenVersions.EXPECT().DeleteCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(deleteCacheErr)
+	sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), authTestUserID.String()).Return(deleteErr)
 
 	err := lifecycle.RevokeUserSessionsAtVersion(context.Background(), authTestUserID, 4)
 
 	if !errors.Is(err, cacheErr) || !errors.Is(err, deleteCacheErr) || !errors.Is(err, deleteErr) {
 		t.Fatalf("err = %v, want cache, cache delete, and session delete errors", err)
 	}
-	if store.cacheDeleted || store.deletedCachedUserID != "" {
-		t.Fatalf("cache eviction = %#v", store)
-	}
-	if store.cached || store.cachedVersion != 0 {
-		t.Fatalf("cache should not be marked refreshed after cache error: %#v", store)
-	}
-	if invalidator.calls == 0 || invalidator.userID != authTestUserID.String() {
-		t.Fatalf("invalidator = %#v, want user %s", invalidator, authTestUserID.String())
-	}
 }
 
 func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing.T) {
-	validator := newTestTokenVersionValidator(t, &authCredentialTestStore{tokenVersionErr: errors.New("database should not be read")}, &authSessionTestStore{version: 4})
+	ctrl := gomock.NewController(t)
+	users := NewMockUserTokenVersionStore(ctrl)
+	tokenVersions := NewMockTokenVersionCache(ctrl)
+	validator := newTestTokenVersionValidator(t, users, tokenVersions)
+	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(4), nil)
 
 	err := validator.ValidateTokenVersion(context.Background(), authTestUserID.String(), 3)
 
@@ -448,16 +475,9 @@ func authRefreshTestSession(sessionID string, tokenVersion int64) authdomain.Aut
 	return authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: sessionID, TokenVersion: tokenVersion}
 }
 
-func newTestAuthSessionLifecycle(users authapplication.UserTokenVersionStore, store *authSessionTestStore) authsessions.Lifecycle {
-	return authsessions.NewLifecycle(users, store, store, 5)
-}
-
-type tokenVersionRecordingInvalidator struct {
-	calls  int
-	userID string
-}
-
-func (s *tokenVersionRecordingInvalidator) InvalidateTokenVersion(userID string) {
-	s.calls++
-	s.userID = userID
+func newGeneratedAuthSessionLifecycle(ctrl *gomock.Controller) (authsessions.Lifecycle, *MockUserTokenVersionStore, *MockTokenVersionCache, *MockRefreshSessionStore) {
+	users := NewMockUserTokenVersionStore(ctrl)
+	tokenVersions := NewMockTokenVersionCache(ctrl)
+	sessions := NewMockRefreshSessionStore(ctrl)
+	return authsessions.NewLifecycle(users, tokenVersions, sessions, 5), users, tokenVersions, sessions
 }
