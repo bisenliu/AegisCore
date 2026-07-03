@@ -2,12 +2,12 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/require"
 
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/user-service/ent"
@@ -32,10 +32,9 @@ func TestCredentialStoreDomainErrors(t *testing.T) {
 
 	t.Run("get by username returns domain not found", func(t *testing.T) {
 		_, err := repo.GetByUsername(context.Background(), "missing")
+		require.ErrorIs(t, err, identity.ErrUserNotFound,
+			"err = %v, want identity.ErrUserNotFound", err)
 
-		if !errors.Is(err, identity.ErrUserNotFound) {
-			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
-		}
 	})
 
 	t.Run("get by username ignores soft deleted user", func(t *testing.T) {
@@ -44,18 +43,16 @@ func TestCredentialStoreDomainErrors(t *testing.T) {
 		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Username", UserID: userID, Username: "deleted-username", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
 		_, err := repo.GetByUsername(ctx, "deleted-username")
+		require.ErrorIs(t, err, identity.ErrUserNotFound,
+			"err = %v, want identity.ErrUserNotFound", err)
 
-		if !errors.Is(err, identity.ErrUserNotFound) {
-			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
-		}
 	})
 
 	t.Run("get credential by user id returns domain not found", func(t *testing.T) {
 		_, err := repo.GetCredentialByUserID(context.Background(), uuid.MustParse("018f0000-0000-7000-8000-000000000411"))
+		require.ErrorIs(t, err, identity.ErrUserNotFound,
+			"err = %v, want identity.ErrUserNotFound", err)
 
-		if !errors.Is(err, identity.ErrUserNotFound) {
-			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
-		}
 	})
 
 	t.Run("get credential by user id ignores soft deleted user", func(t *testing.T) {
@@ -64,18 +61,16 @@ func TestCredentialStoreDomainErrors(t *testing.T) {
 		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Credential", UserID: userID, Username: "deleted-credential", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
 		_, err := repo.GetCredentialByUserID(ctx, userID)
+		require.ErrorIs(t, err, identity.ErrUserNotFound,
+			"err = %v, want identity.ErrUserNotFound", err)
 
-		if !errors.Is(err, identity.ErrUserNotFound) {
-			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
-		}
 	})
 
 	t.Run("get token version returns domain not found", func(t *testing.T) {
 		_, err := repo.GetTokenVersion(context.Background(), uuid.MustParse("018f0000-0000-7000-8000-000000000413"))
+		require.ErrorIs(t, err, identity.ErrUserNotFound,
+			"err = %v, want identity.ErrUserNotFound", err)
 
-		if !errors.Is(err, identity.ErrUserNotFound) {
-			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
-		}
 	})
 
 	t.Run("get token version ignores soft deleted user", func(t *testing.T) {
@@ -84,18 +79,16 @@ func TestCredentialStoreDomainErrors(t *testing.T) {
 		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Token", UserID: userID, Username: "deleted-token", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
 		_, err := repo.GetTokenVersion(ctx, userID)
+		require.ErrorIs(t, err, identity.ErrUserNotFound,
+			"err = %v, want identity.ErrUserNotFound", err)
 
-		if !errors.Is(err, identity.ErrUserNotFound) {
-			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
-		}
 	})
 
 	t.Run("increment token version returns domain not found", func(t *testing.T) {
 		_, err := repo.IncrementTokenVersion(context.Background(), uuid.MustParse("018f0000-0000-7000-8000-000000000415"))
+		require.ErrorIs(t, err, identity.ErrUserNotFound,
+			"err = %v, want identity.ErrUserNotFound", err)
 
-		if !errors.Is(err, identity.ErrUserNotFound) {
-			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
-		}
 	})
 
 	t.Run("increment token version ignores soft deleted user", func(t *testing.T) {
@@ -104,18 +97,16 @@ func TestCredentialStoreDomainErrors(t *testing.T) {
 		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Increment", UserID: userID, Username: "deleted-increment", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
 		_, err := repo.IncrementTokenVersion(ctx, userID)
+		require.ErrorIs(t, err, identity.ErrUserNotFound,
+			"err = %v, want identity.ErrUserNotFound", err)
 
-		if !errors.Is(err, identity.ErrUserNotFound) {
-			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
-		}
 	})
 
 	t.Run("update credentials returns domain not found", func(t *testing.T) {
 		_, err := repo.UpdateCredentials(context.Background(), authdomain.UpdateCredentialsInput{UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000417"), PasswordHash: "new-hash", Status: identity.UserStatusNormal})
+		require.ErrorIs(t, err, identity.ErrUserNotFound,
+			"err = %v, want identity.ErrUserNotFound", err)
 
-		if !errors.Is(err, identity.ErrUserNotFound) {
-			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
-		}
 	})
 
 	t.Run("update credentials ignores soft deleted user", func(t *testing.T) {
@@ -124,17 +115,15 @@ func TestCredentialStoreDomainErrors(t *testing.T) {
 		createSoftDeletedCredentialUser(t, repo, credentialTestUserInput{Nickname: "Deleted Credentials", UserID: userID, Username: "deleted-credentials", PasswordHash: "old-hash", Status: identity.UserStatusMustChangePassword})
 
 		_, err := repo.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: userID, PasswordHash: "new-hash", Status: identity.UserStatusNormal})
+		require.ErrorIs(t, err, identity.ErrUserNotFound,
+			"err = %v, want identity.ErrUserNotFound", err)
 
-		if !errors.Is(err, identity.ErrUserNotFound) {
-			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
-		}
 		stored, err := repo.client.User.Query().Where(entuser.UserIDEQ(userID)).Only(ctx)
-		if err != nil {
-			t.Fatalf("query soft deleted user: %v", err)
-		}
-		if stored.PasswordHash != "old-hash" || stored.Status != int64(identity.UserStatusMustChangePassword) || stored.TokenVersion != 1 {
-			t.Fatalf("soft deleted user was updated: %#v", stored)
-		}
+		require.NoError(t, err,
+			"query soft deleted user: %v", err)
+		require.False(t, stored.PasswordHash != "old-hash" || stored.Status != int64(identity.UserStatusMustChangePassword) || stored.TokenVersion != 1,
+			"soft deleted user was updated: %#v", stored)
+
 	})
 }
 
@@ -151,15 +140,15 @@ func TestCredentialStoreReturnsCredentials(t *testing.T) {
 	})
 
 	byUsername, err := repo.GetByUsername(ctx, "credential-alice")
-	if err != nil {
-		t.Fatalf("GetByUsername: %v", err)
-	}
+	require.NoError(t, err,
+		"GetByUsername: %v", err)
+
 	assertSameCredential(t, byUsername, user)
 
 	byUserID, err := repo.GetCredentialByUserID(ctx, userID)
-	if err != nil {
-		t.Fatalf("GetCredentialByUserID: %v", err)
-	}
+	require.NoError(t, err,
+		"GetCredentialByUserID: %v", err)
+
 	assertSameCredential(t, byUserID, user)
 }
 
@@ -171,16 +160,15 @@ func TestCredentialStoreTokenVersionPersistence(t *testing.T) {
 		createCredentialTestUser(t, repo, credentialTestUserInput{Nickname: "Version Alice", UserID: userID, Username: "version-alice", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
 		first, err := repo.GetTokenVersion(ctx, userID)
-		if err != nil {
-			t.Fatalf("GetTokenVersion first: %v", err)
-		}
+		require.NoError(t, err,
+			"GetTokenVersion first: %v", err)
+
 		second, err := repo.GetTokenVersion(ctx, userID)
-		if err != nil {
-			t.Fatalf("GetTokenVersion second: %v", err)
-		}
-		if first != 1 || second != 1 {
-			t.Fatalf("versions = %d, %d; want stable initial 1", first, second)
-		}
+		require.NoError(t, err,
+			"GetTokenVersion second: %v", err)
+		require.False(t, first != 1 || second != 1,
+			"versions = %d, %d; want stable initial 1", first, second)
+
 	})
 
 	t.Run("increment token version persists and returns new version", func(t *testing.T) {
@@ -190,28 +178,23 @@ func TestCredentialStoreTokenVersionPersistence(t *testing.T) {
 		createCredentialTestUser(t, repo, credentialTestUserInput{Nickname: "Increment Alice", UserID: userID, Username: "increment-alice", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
 		version, err := repo.IncrementTokenVersion(ctx, userID)
-		if err != nil {
-			t.Fatalf("IncrementTokenVersion first: %v", err)
-		}
-		if version != 2 {
-			t.Fatalf("first increment version = %d, want 2", version)
-		}
+		require.NoError(t, err,
+			"IncrementTokenVersion first: %v", err)
+		require.EqualValues(t, 2, version,
+			"first increment version = %d, want 2", version)
 
 		stored, err := repo.GetTokenVersion(ctx, userID)
-		if err != nil {
-			t.Fatalf("GetTokenVersion after increment: %v", err)
-		}
-		if stored != 2 {
-			t.Fatalf("stored version = %d, want 2", stored)
-		}
+		require.NoError(t, err,
+			"GetTokenVersion after increment: %v", err)
+		require.EqualValues(t, 2, stored,
+			"stored version = %d, want 2", stored)
 
 		version, err = repo.IncrementTokenVersion(ctx, userID)
-		if err != nil {
-			t.Fatalf("IncrementTokenVersion second: %v", err)
-		}
-		if version != 3 {
-			t.Fatalf("second increment version = %d, want 3", version)
-		}
+		require.NoError(t, err,
+			"IncrementTokenVersion second: %v", err)
+		require.EqualValues(t, 3, version,
+			"second increment version = %d, want 3", version)
+
 	})
 }
 
@@ -222,19 +205,17 @@ func TestCredentialStoreUpdateCredentials(t *testing.T) {
 	createCredentialTestUser(t, repo, credentialTestUserInput{Nickname: "Update Alice", UserID: userID, Username: "update-alice", PasswordHash: "old-hash", Status: identity.UserStatusMustChangePassword})
 
 	version, err := repo.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: userID, PasswordHash: "new-hash", Status: identity.UserStatusNormal})
-	if err != nil {
-		t.Fatalf("UpdateCredentials: %v", err)
-	}
-	if version != 2 {
-		t.Fatalf("version = %d, want 2", version)
-	}
+	require.NoError(t, err,
+		"UpdateCredentials: %v", err)
+	require.EqualValues(t, 2, version,
+		"version = %d, want 2", version)
+
 	stored, err := repo.client.User.Query().Where(entuser.UserIDEQ(userID)).Only(ctx)
-	if err != nil {
-		t.Fatalf("query updated user: %v", err)
-	}
-	if stored.PasswordHash != "new-hash" || stored.Status != int64(identity.UserStatusNormal) || stored.TokenVersion != 2 {
-		t.Fatalf("stored user = %#v, want updated credentials", stored)
-	}
+	require.NoError(t, err,
+		"query updated user: %v", err)
+	require.False(t, stored.PasswordHash != "new-hash" || stored.Status != int64(identity.UserStatusNormal) || stored.TokenVersion != 2,
+		"stored user = %#v, want updated credentials", stored)
+
 }
 
 func newTestCredentialStore(t *testing.T) *CredentialStore {
@@ -253,9 +234,9 @@ func createCredentialTestUser(t *testing.T, repo *CredentialStore, input credent
 		SetPasswordHash(input.PasswordHash).
 		SetStatus(int64(input.Status)).
 		Save(context.Background())
-	if err != nil {
-		t.Fatalf("Create user %q: %v", input.Username, err)
-	}
+	require.NoError(t, err,
+		"Create user %q: %v", input.Username, err)
+
 	return created
 }
 
@@ -263,17 +244,21 @@ func createSoftDeletedCredentialUser(t *testing.T, repo *CredentialStore, input 
 	t.Helper()
 	ctx := context.Background()
 	created := createCredentialTestUser(t, repo, input)
-	if _, err := repo.client.User.UpdateOneID(created.ID).SetDeletedAt(deletedAtForCredentialTest).Save(ctx); err != nil {
-		t.Fatalf("soft delete user: %v", err)
+	{
+		_, err := repo.client.User.UpdateOneID(created.ID).SetDeletedAt(deletedAtForCredentialTest).Save(ctx)
+		require.NoError(t, err,
+			"soft delete user: %v", err)
 	}
+
 }
 
 func assertSameCredential(t *testing.T, got *authdomain.UserCredential, want *ent.User) {
 	t.Helper()
-	if got == nil || want == nil {
-		t.Fatalf("got=%#v want=%#v", got, want)
-	}
-	if got.UserID != want.UserID || got.Username != want.Username || got.PasswordHash != want.PasswordHash || got.Status != identity.UserStatus(want.Status) || got.TokenVersion != want.TokenVersion {
-		t.Fatalf("got credential = %#v, want user fields from %#v", got, want)
-	}
+	require.NotNil(t, got)
+	require.NotNil(t, want)
+	require.Equal(t, want.UserID, got.UserID)
+	require.Equal(t, want.Username, got.Username)
+	require.Equal(t, want.PasswordHash, got.PasswordHash)
+	require.Equal(t, identity.UserStatus(want.Status), got.Status)
+	require.Equal(t, want.TokenVersion, got.TokenVersion)
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
@@ -42,28 +43,21 @@ func TestUserControllerGetByUserID(t *testing.T) {
 
 		status, envelope := executeGetByUserID(t, service, controllerTestUserID)
 
-		if status != http.StatusOK {
-			t.Fatalf("status = %d, want %d", status, http.StatusOK)
-		}
-		if gotID.String() != controllerTestUserID {
-			t.Fatalf("gotID = %q", gotID)
-		}
-		if !envelope.Success || envelope.Code != contracterrors.CodeOK || envelope.Message != "ok" {
-			t.Fatalf("envelope = %#v", envelope)
-		}
+		require.Equal(t, http.StatusOK, status)
+		require.Equal(t, controllerTestUserID, gotID.String())
+		require.True(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeOK, envelope.Code)
+		require.Equal(t, "ok", envelope.Message)
 		data, ok := envelope.Data.(map[string]any)
-		if !ok {
-			t.Fatalf("data = %T, want map", envelope.Data)
-		}
-		if data["user_id"] != controllerTestUserID || data["nickname"] != "Aegis" || data["username"] != "aegis" || data["status"] != float64(identity.UserStatusNormal) || data["created_at"] != float64(createdAt) || data["updated_at"] != float64(updatedAt) {
-			t.Fatalf("data = %#v", data)
-		}
-		if _, ok := data["id"]; ok {
-			t.Fatalf("data = %#v", data)
-		}
-		if _, ok := data["e"+"mail"]; ok {
-			t.Fatalf("data = %#v", data)
-		}
+		require.True(t, ok)
+		require.Equal(t, controllerTestUserID, data["user_id"])
+		require.Equal(t, "Aegis", data["nickname"])
+		require.Equal(t, "aegis", data["username"])
+		require.Equal(t, float64(identity.UserStatusNormal), data["status"])
+		require.Equal(t, float64(createdAt), data["created_at"])
+		require.Equal(t, float64(updatedAt), data["updated_at"])
+		require.NotContains(t, data, "id")
+		require.NotContains(t, data, "e"+"mail")
 	})
 
 	t.Run("invalid UUID", func(t *testing.T) {
@@ -75,24 +69,20 @@ func TestUserControllerGetByUserID(t *testing.T) {
 		service := NewMockUserQueryService(gomock.NewController(t))
 		service.EXPECT().GetUserByID(gomock.Any(), gomock.Any()).Return(nil, identity.ErrUserNotFound)
 		status, envelope := executeGetByUserID(t, service, controllerTestUserID)
-		if status != http.StatusNotFound {
-			t.Fatalf("status = %d, want %d", status, http.StatusNotFound)
-		}
-		if envelope.Success || envelope.Code != contracterrors.CodeNotFound || envelope.Message != messages.UserNotFound {
-			t.Fatalf("envelope = %#v", envelope)
-		}
+		require.Equal(t, http.StatusNotFound, status)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeNotFound, envelope.Code)
+		require.Equal(t, messages.UserNotFound, envelope.Message)
 	})
 
 	t.Run("service error", func(t *testing.T) {
 		service := NewMockUserQueryService(gomock.NewController(t))
 		service.EXPECT().GetUserByID(gomock.Any(), gomock.Any()).Return(nil, errors.New("database down"))
 		status, envelope := executeGetByUserID(t, service, controllerTestUserID)
-		if status != http.StatusInternalServerError {
-			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
-		}
-		if envelope.Success || envelope.Code != contracterrors.CodeInternalError || envelope.Message != "internal server error" {
-			t.Fatalf("envelope = %#v", envelope)
-		}
+		require.Equal(t, http.StatusInternalServerError, status)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeInternalError, envelope.Code)
+		require.Equal(t, "internal server error", envelope.Message)
 	})
 }
 
@@ -112,67 +102,58 @@ func TestUserControllerCreate(t *testing.T) {
 
 		status, envelope := executeCreate(t, service, `{"nickname":"Alice","username":"ALICE","password":"secret"}`)
 
-		if status != http.StatusCreated {
-			t.Fatalf("status = %d, want %d", status, http.StatusCreated)
-		}
-		if gotCreate.Nickname != "Alice" || gotCreate.Username != "alice" || gotCreate.Password != "secret" || gotCreate.Status == nil || *gotCreate.Status != identity.UserStatusNormal {
-			t.Fatalf("gotCreate = %#v", gotCreate)
-		}
-		if !envelope.Success || envelope.Code != contracterrors.CodeOK || envelope.Message != "created" {
-			t.Fatalf("envelope = %#v", envelope)
-		}
+		require.Equal(t, http.StatusCreated, status)
+		require.Equal(t, "Alice", gotCreate.Nickname)
+		require.Equal(t, "alice", gotCreate.Username)
+		require.Equal(t, "secret", gotCreate.Password)
+		require.NotNil(t, gotCreate.Status)
+		require.Equal(t, identity.UserStatusNormal, *gotCreate.Status)
+		require.True(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeOK, envelope.Code)
+		require.Equal(t, "created", envelope.Message)
 		data, ok := envelope.Data.(map[string]any)
-		if !ok || data["user_id"] != controllerTestUserID || data["nickname"] != "Alice" || data["username"] != "alice" || data["status"] != float64(identity.UserStatusNormal) || data["created_at"] != float64(createdAt) {
-			t.Fatalf("data = %#v", envelope.Data)
-		}
-		if _, ok := data["id"]; ok {
-			t.Fatalf("data = %#v", envelope.Data)
-		}
-		if _, ok := data["e"+"mail"]; ok {
-			t.Fatalf("data = %#v", envelope.Data)
-		}
+		require.True(t, ok)
+		require.Equal(t, controllerTestUserID, data["user_id"])
+		require.Equal(t, "Alice", data["nickname"])
+		require.Equal(t, "alice", data["username"])
+		require.Equal(t, float64(identity.UserStatusNormal), data["status"])
+		require.Equal(t, float64(createdAt), data["created_at"])
+		require.NotContains(t, data, "id")
+		require.NotContains(t, data, "e"+"mail")
 	})
 
 	t.Run("empty body", func(t *testing.T) {
 		status, envelope := executeCreate(t, NewMockCreateUserService(gomock.NewController(t)), "")
-		if status != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
-		}
-		if envelope.Success || envelope.Code != contracterrors.CodeBadRequest || envelope.Message != validation.ErrEmptyRequestBody {
-			t.Fatalf("envelope = %#v", envelope)
-		}
+		require.Equal(t, http.StatusBadRequest, status)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeBadRequest, envelope.Code)
+		require.Equal(t, validation.ErrEmptyRequestBody, envelope.Message)
 	})
 
 	t.Run("validation failed", func(t *testing.T) {
 		status, envelope := executeCreate(t, NewMockCreateUserService(gomock.NewController(t)), `{"nickname":"Alice","password":"secret"}`)
-		if status != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
-		}
-		if envelope.Success || envelope.Code != contracterrors.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
-			t.Fatalf("envelope = %#v", envelope)
-		}
+		require.Equal(t, http.StatusBadRequest, status)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeValidationFailed, envelope.Code)
+		require.Equal(t, validation.ErrValidationFailed, envelope.Message)
 		assertFieldError(t, envelope, "username", "用户名", "required", "用户名为必填字段")
 	})
 
 	t.Run("invalid status validation failed", func(t *testing.T) {
 		status, envelope := executeCreate(t, NewMockCreateUserService(gomock.NewController(t)), `{"nickname":"Alice","username":"alice","password":"secret","status":999}`)
-		if status != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
-		}
-		if envelope.Success || envelope.Code != contracterrors.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
-			t.Fatalf("envelope = %#v", envelope)
-		}
+		require.Equal(t, http.StatusBadRequest, status)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeValidationFailed, envelope.Code)
+		require.Equal(t, validation.ErrValidationFailed, envelope.Message)
 		assertFieldError(t, envelope, "status", "用户状态", "enum", "用户状态取值不合法，允许值为：100、200、300")
 	})
 
 	t.Run("missing password validation failed", func(t *testing.T) {
 		status, envelope := executeCreate(t, NewMockCreateUserService(gomock.NewController(t)), `{"nickname":"Alice","username":"alice"}`)
-		if status != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
-		}
-		if envelope.Success || envelope.Code != contracterrors.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
-			t.Fatalf("envelope = %#v", envelope)
-		}
+		require.Equal(t, http.StatusBadRequest, status)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeValidationFailed, envelope.Code)
+		require.Equal(t, validation.ErrValidationFailed, envelope.Message)
 		assertFieldError(t, envelope, "password", "密码", "required", "密码为必填字段")
 	})
 
@@ -180,24 +161,20 @@ func TestUserControllerCreate(t *testing.T) {
 		service := NewMockCreateUserService(gomock.NewController(t))
 		service.EXPECT().CreateUser(gomock.Any(), gomock.Any()).Return(nil, identity.ErrUserAlreadyExists)
 		status, envelope := executeCreate(t, service, `{"nickname":"Alice","username":"alice","password":"secret"}`)
-		if status != http.StatusConflict {
-			t.Fatalf("status = %d, want %d", status, http.StatusConflict)
-		}
-		if envelope.Success || envelope.Code != contracterrors.CodeConflict || envelope.Message != messages.UserAlreadyExists {
-			t.Fatalf("envelope = %#v", envelope)
-		}
+		require.Equal(t, http.StatusConflict, status)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeConflict, envelope.Code)
+		require.Equal(t, messages.UserAlreadyExists, envelope.Message)
 	})
 
 	t.Run("service error", func(t *testing.T) {
 		service := NewMockCreateUserService(gomock.NewController(t))
 		service.EXPECT().CreateUser(gomock.Any(), gomock.Any()).Return(nil, errors.New("database down"))
 		status, envelope := executeCreate(t, service, `{"nickname":"Alice","username":"alice","password":"secret"}`)
-		if status != http.StatusInternalServerError {
-			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
-		}
-		if envelope.Success || envelope.Code != contracterrors.CodeInternalError || envelope.Message != "internal server error" {
-			t.Fatalf("envelope = %#v", envelope)
-		}
+		require.Equal(t, http.StatusInternalServerError, status)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeInternalError, envelope.Code)
+		require.Equal(t, "internal server error", envelope.Message)
 	})
 }
 
@@ -217,12 +194,10 @@ func TestUserControllerList(t *testing.T) {
 
 		status, envelope := executeList(t, service, "/api/v1/users")
 
-		if status != http.StatusOK {
-			t.Fatalf("status = %d, want %d", status, http.StatusOK)
-		}
-		if gotList.Cursor != nil || gotList.PageSize != 10 || gotList.Limit != 10 {
-			t.Fatalf("gotList = %#v", gotList)
-		}
+		require.Equal(t, http.StatusOK, status)
+		require.Nil(t, gotList.Cursor)
+		require.Equal(t, 10, gotList.PageSize)
+		require.Equal(t, 10, gotList.Limit)
 		assertPaginatedEnvelope(t, envelope, 10, "", false, 0)
 	})
 
@@ -236,15 +211,15 @@ func TestUserControllerList(t *testing.T) {
 
 		status, envelope := executeList(t, service, "/api/v1/users?cursor=018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4d&page_size=20&nickname=%20Ali%20&username=%20alice%20&status=100")
 
-		if status != http.StatusOK {
-			t.Fatalf("status = %d, want %d", status, http.StatusOK)
-		}
-		if gotList.Cursor == nil || gotList.Cursor.String() != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4d" || gotList.PageSize != 20 || gotList.Limit != 20 || gotList.Nickname != "Ali" || gotList.Username != "alice" {
-			t.Fatalf("gotList = %#v", gotList)
-		}
-		if gotList.Status == nil || *gotList.Status != identity.UserStatusNormal {
-			t.Fatalf("status = %#v", gotList.Status)
-		}
+		require.Equal(t, http.StatusOK, status)
+		require.NotNil(t, gotList.Cursor)
+		require.Equal(t, "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4d", gotList.Cursor.String())
+		require.Equal(t, 20, gotList.PageSize)
+		require.Equal(t, 20, gotList.Limit)
+		require.Equal(t, "Ali", gotList.Nickname)
+		require.Equal(t, "alice", gotList.Username)
+		require.NotNil(t, gotList.Status)
+		require.Equal(t, identity.UserStatusNormal, *gotList.Status)
 		assertPaginatedEnvelope(t, envelope, 20, controllerTestUserID, true, 1)
 	})
 
@@ -258,12 +233,9 @@ func TestUserControllerList(t *testing.T) {
 
 		status, envelope := executeList(t, service, "/api/v1/users?page_size=101")
 
-		if status != http.StatusOK {
-			t.Fatalf("status = %d, want %d", status, http.StatusOK)
-		}
-		if gotList.PageSize != 100 || gotList.Limit != 100 {
-			t.Fatalf("gotList = %#v", gotList)
-		}
+		require.Equal(t, http.StatusOK, status)
+		require.Equal(t, 100, gotList.PageSize)
+		require.Equal(t, 100, gotList.Limit)
 		assertPaginatedEnvelope(t, envelope, 100, "", false, 0)
 	})
 
@@ -272,22 +244,18 @@ func TestUserControllerList(t *testing.T) {
 
 		status, envelope := executeList(t, service, "/api/v1/users?cursor=abc")
 
-		if status != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
-		}
-		if envelope.Success || envelope.Code != contracterrors.CodeBadRequest || envelope.Message != messages.InvalidUserID {
-			t.Fatalf("envelope = %#v", envelope)
-		}
+		require.Equal(t, http.StatusBadRequest, status)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeBadRequest, envelope.Code)
+		require.Equal(t, messages.InvalidUserID, envelope.Message)
 	})
 
 	t.Run("invalid status", func(t *testing.T) {
 		status, envelope := executeList(t, NewMockUserQueryService(gomock.NewController(t)), "/api/v1/users?status=999")
-		if status != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
-		}
-		if envelope.Success || envelope.Code != contracterrors.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
-			t.Fatalf("envelope = %#v", envelope)
-		}
+		require.Equal(t, http.StatusBadRequest, status)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeValidationFailed, envelope.Code)
+		require.Equal(t, validation.ErrValidationFailed, envelope.Message)
 		assertFieldError(t, envelope, "status", "用户状态", "enum", "用户状态取值不合法，允许值为：100、200、300")
 	})
 
@@ -295,21 +263,17 @@ func TestUserControllerList(t *testing.T) {
 		service := NewMockUserQueryService(gomock.NewController(t))
 		service.EXPECT().ListUsers(gomock.Any(), gomock.Any()).Return(nil, errors.New("database down"))
 		status, envelope := executeList(t, service, "/api/v1/users")
-		if status != http.StatusInternalServerError {
-			t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
-		}
-		if envelope.Success || envelope.Code != contracterrors.CodeInternalError || envelope.Message != response.MessageInternalError {
-			t.Fatalf("envelope = %#v", envelope)
-		}
+		require.Equal(t, http.StatusInternalServerError, status)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeInternalError, envelope.Code)
+		require.Equal(t, response.MessageInternalError, envelope.Message)
 	})
 }
 
 func executeCreate(t *testing.T, commands usercommand.CreateUserService, body string) (int, response.Envelope) {
 	t.Helper()
 	validator, err := validation.NewDefault()
-	if err != nil {
-		t.Fatalf("NewDefault: %v", err)
-	}
+	require.NoError(t, err)
 	ctl := NewUserController(commands, NewMockUserQueryService(gomock.NewController(t)), validator)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -321,18 +285,14 @@ func executeCreate(t *testing.T, commands usercommand.CreateUserService, body st
 	ctl.CreateUser(ctx)
 
 	var envelope response.Envelope
-	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
 	return recorder.Code, envelope
 }
 
 func executeGetByUserID(t *testing.T, queries userquery.UserQueryService, id string) (int, response.Envelope) {
 	t.Helper()
 	validator, err := validation.NewDefault()
-	if err != nil {
-		t.Fatalf("NewDefault: %v", err)
-	}
+	require.NoError(t, err)
 	ctl := NewUserController(NewMockCreateUserService(gomock.NewController(t)), queries, validator)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -342,18 +302,14 @@ func executeGetByUserID(t *testing.T, queries userquery.UserQueryService, id str
 	ctl.GetByUserID(ctx)
 
 	var envelope response.Envelope
-	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
 	return recorder.Code, envelope
 }
 
 func executeList(t *testing.T, queries userquery.UserQueryService, path string) (int, response.Envelope) {
 	t.Helper()
 	validator, err := validation.NewDefault()
-	if err != nil {
-		t.Fatalf("NewDefault: %v", err)
-	}
+	require.NoError(t, err)
 	ctl := NewUserController(NewMockCreateUserService(gomock.NewController(t)), queries, validator)
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -362,76 +318,62 @@ func executeList(t *testing.T, queries userquery.UserQueryService, path string) 
 	ctl.ListUsers(ctx)
 
 	var envelope response.Envelope
-	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
 	return recorder.Code, envelope
 }
 
 func assertPaginatedEnvelope(t *testing.T, envelope response.Envelope, pageSize int, nextCursor string, hasNext bool, itemCount int) {
 	t.Helper()
-	if !envelope.Success || envelope.Code != contracterrors.CodeOK || envelope.Message != response.MessageOK {
-		t.Fatalf("envelope = %#v", envelope)
-	}
+	require.True(t, envelope.Success)
+	require.Equal(t, contracterrors.CodeOK, envelope.Code)
+	require.Equal(t, response.MessageOK, envelope.Message)
 	data, ok := envelope.Data.(map[string]any)
-	if !ok {
-		t.Fatalf("data = %T, want map", envelope.Data)
-	}
+	require.True(t, ok)
 	items, ok := data["items"].([]any)
-	if !ok || len(items) != itemCount {
-		t.Fatalf("items = %#v", data["items"])
-	}
+	require.True(t, ok)
+	require.Len(t, items, itemCount)
 	if itemCount > 0 {
 		item, ok := items[0].(map[string]any)
-		if !ok || item["user_id"] != controllerTestUserID || item["nickname"] != "Alice" || item["username"] != "alice" || item["status"] != float64(identity.UserStatusNormal) {
-			t.Fatalf("item = %#v", items[0])
-		}
-		if _, ok := item["id"]; ok {
-			t.Fatalf("item = %#v", item)
-		}
-		if _, ok := item["e"+"mail"]; ok {
-			t.Fatalf("item = %#v", item)
-		}
+		require.True(t, ok)
+		require.Equal(t, controllerTestUserID, item["user_id"])
+		require.Equal(t, "Alice", item["nickname"])
+		require.Equal(t, "alice", item["username"])
+		require.Equal(t, float64(identity.UserStatusNormal), item["status"])
+		require.NotContains(t, item, "id")
+		require.NotContains(t, item, "e"+"mail")
 	}
 	pagination, ok := data["pagination"].(map[string]any)
-	if !ok {
-		t.Fatalf("pagination = %#v", data["pagination"])
-	}
-	if pagination["page_size"] != float64(pageSize) || pagination["has_next"] != hasNext {
-		t.Fatalf("pagination = %#v", pagination)
-	}
+	require.True(t, ok)
+	require.Equal(t, float64(pageSize), pagination["page_size"])
+	require.Equal(t, hasNext, pagination["has_next"])
 	if nextCursor == "" {
-		if _, ok := pagination["next_cursor"]; ok {
-			t.Fatalf("pagination = %#v, want next_cursor omitted", pagination)
-		}
+		require.NotContains(t, pagination, "next_cursor")
 	} else if pagination["next_cursor"] != nextCursor {
-		t.Fatalf("pagination = %#v", pagination)
+		require.Equal(t, nextCursor, pagination["next_cursor"])
 	}
 	for _, removed := range []string{"page", "offset", "total", "total_pages"} {
-		if _, ok := pagination[removed]; ok {
-			t.Fatalf("pagination contains removed field %q: %#v", removed, pagination)
-		}
+		require.NotContains(t, pagination, removed)
 	}
 }
 
 func assertInvalidUserID(t *testing.T, status int, envelope response.Envelope, message string) {
 	t.Helper()
-	if status != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
-	}
-	if envelope.Success || envelope.Code != contracterrors.CodeValidationFailed || envelope.Message != message || envelope.Message == "invalid user id" {
-		t.Fatalf("envelope = %#v", envelope)
-	}
+	require.Equal(t, http.StatusBadRequest, status)
+	require.False(t, envelope.Success)
+	require.Equal(t, contracterrors.CodeValidationFailed, envelope.Code)
+	require.Equal(t, message, envelope.Message)
+	require.NotEqual(t, "invalid user id", envelope.Message)
 }
 
 func assertFieldError(t *testing.T, envelope response.Envelope, field, label, rule, message string) {
 	t.Helper()
 	errors, ok := envelope.Errors.([]any)
-	if !ok || len(errors) != 1 {
-		t.Fatalf("errors = %#v", envelope.Errors)
-	}
+	require.True(t, ok)
+	require.Len(t, errors, 1)
 	fieldError, ok := errors[0].(map[string]any)
-	if !ok || fieldError["field"] != field || fieldError["label"] != label || fieldError["rule"] != rule || fieldError["message"] != message {
-		t.Fatalf("field error = %#v", errors[0])
-	}
+	require.True(t, ok)
+	require.Equal(t, field, fieldError["field"])
+	require.Equal(t, label, fieldError["label"])
+	require.Equal(t, rule, fieldError["rule"])
+	require.Equal(t, message, fieldError["message"])
 }

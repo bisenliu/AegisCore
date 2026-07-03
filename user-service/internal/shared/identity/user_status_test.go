@@ -2,8 +2,9 @@ package identity
 
 import (
 	"encoding/json"
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestUserStatusIsValid(t *testing.T) {
@@ -19,9 +20,7 @@ func TestUserStatusIsValid(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.status.IsValid(); got != tt.want {
-				t.Fatalf("IsValid() = %v, want %v", got, tt.want)
-			}
+			require.Equal(t, tt.want, tt.status.IsValid())
 		})
 	}
 }
@@ -29,9 +28,7 @@ func TestUserStatusIsValid(t *testing.T) {
 func TestUserStatusAllowedValues(t *testing.T) {
 	got := UserStatusNormal.AllowedValues()
 	want := []string{"100", "200", "300"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("AllowedValues() = %#v, want %#v", got, want)
-	}
+	require.Equal(t, want, got)
 }
 
 func TestUserStatusLifecycleRules(t *testing.T) {
@@ -47,39 +44,25 @@ func TestUserStatusLifecycleRules(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.status.CanLogin(); got != tt.wantCanLogin {
-				t.Fatalf("CanLogin() = %v, want %v", got, tt.wantCanLogin)
-			}
-			if got := tt.status.RequiresPasswordChange(); got != tt.wantRequiresChangePass {
-				t.Fatalf("RequiresPasswordChange() = %v, want %v", got, tt.wantRequiresChangePass)
-			}
+			require.Equal(t, tt.wantCanLogin, tt.status.CanLogin())
+			require.Equal(t, tt.wantRequiresChangePass, tt.status.RequiresPasswordChange())
 		})
 	}
 }
 
 func TestUserStatusUnmarshalText(t *testing.T) {
 	var status UserStatus
-	if err := status.UnmarshalText([]byte("300")); err != nil {
-		t.Fatalf("UnmarshalText() error = %v", err)
-	}
-	if status != UserStatusMustChangePassword {
-		t.Fatalf("status = %d, want %d", status, UserStatusMustChangePassword)
-	}
+	require.NoError(t, status.UnmarshalText([]byte("300")))
+	require.Equal(t, UserStatusMustChangePassword, status)
 }
 
 func TestUserStatusUnmarshalJSON(t *testing.T) {
 	var status UserStatus
-	if err := json.Unmarshal([]byte("200"), &status); err != nil {
-		t.Fatalf("UnmarshalJSON() error = %v", err)
-	}
-	if status != UserStatusDisabled {
-		t.Fatalf("status = %d, want %d", status, UserStatusDisabled)
-	}
+	require.NoError(t, json.Unmarshal([]byte("200"), &status))
+	require.Equal(t, UserStatusDisabled, status)
 }
 
 func TestUserStatusRejectsInvalidText(t *testing.T) {
 	var status UserStatus
-	if err := status.UnmarshalText([]byte("invalid")); err == nil {
-		t.Fatal("UnmarshalText() error = nil, want error")
-	}
+	require.Error(t, status.UnmarshalText([]byte("invalid")))
 }

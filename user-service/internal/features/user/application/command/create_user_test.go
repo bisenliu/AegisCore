@@ -2,10 +2,10 @@ package command
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/aegiscore/common/security/password"
@@ -30,19 +30,18 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 
 		user, err := svc.CreateUser(context.Background(), CreateUserCommand{Nickname: "Alice", Username: "alice", Password: "secret"})
 
-		if err != nil {
-			t.Fatalf("CreateUser: %v", err)
-		}
-		if createdInput.Nickname != "Alice" || createdInput.Username != "alice" || createdInput.UserID == uuid.Nil || createdInput.Status != identity.UserStatusNormal {
-			t.Fatalf("createdInput = %#v", createdInput)
-		}
+		require.NoError(t, err)
+		require.Equal(t, "Alice", createdInput.Nickname)
+		require.Equal(t, "alice", createdInput.Username)
+		require.NotEqual(t, uuid.Nil, createdInput.UserID)
+		require.Equal(t, identity.UserStatusNormal, createdInput.Status)
 		matched, err := verifyTestPassword(t, "secret", createdInput.PasswordHash)
-		if err != nil || !matched {
-			t.Fatalf("created password was not hashed correctly: matched=%v err=%v", matched, err)
-		}
-		if user.User.UserID != testUserID || user.User.Username != "alice" || user.User.CreatedAt != createdAt || user.User.UpdatedAt != createdAt {
-			t.Fatalf("user = %#v", user)
-		}
+		require.NoError(t, err)
+		require.True(t, matched)
+		require.Equal(t, testUserID, user.User.UserID)
+		require.Equal(t, "alice", user.User.Username)
+		require.Equal(t, createdAt, user.User.CreatedAt)
+		require.Equal(t, createdAt, user.User.UpdatedAt)
 	})
 
 	t.Run("map domain create conflict", func(t *testing.T) {
@@ -52,9 +51,7 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 
 		_, err := svc.CreateUser(context.Background(), CreateUserCommand{Nickname: "Alice", Username: "alice", Password: "secret"})
 
-		if !errors.Is(err, identity.ErrUserAlreadyExists) {
-			t.Fatalf("err = %v, want ErrUserAlreadyExists", err)
-		}
+		require.ErrorIs(t, err, identity.ErrUserAlreadyExists)
 	})
 
 	t.Run("maps uppercase duplicate after normalization", func(t *testing.T) {
@@ -68,21 +65,15 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 
 		_, err := svc.CreateUser(context.Background(), CreateUserCommand{Nickname: "Alice", Username: "alice", Password: "secret"})
 
-		if createdInput.Username != "alice" {
-			t.Fatalf("created username = %q", createdInput.Username)
-		}
-		if !errors.Is(err, identity.ErrUserAlreadyExists) {
-			t.Fatalf("err = %v, want ErrUserAlreadyExists", err)
-		}
+		require.Equal(t, "alice", createdInput.Username)
+		require.ErrorIs(t, err, identity.ErrUserAlreadyExists)
 	})
 }
 
 func testPasswordService(t testing.TB) *password.Service {
 	t.Helper()
 	service, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
+	require.NoError(t, err)
 	return service
 }
 

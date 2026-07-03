@@ -3,16 +3,14 @@ package validators
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 func TestCreateUserStatus(t *testing.T) {
-	if got := CreateUserStatus(nil); got != identity.UserStatusNormal {
-		t.Fatalf("CreateUserStatus(nil) = %d, want %d", got, identity.UserStatusNormal)
-	}
+	require.Equal(t, identity.UserStatusNormal, CreateUserStatus(nil))
 
 	status := identity.UserStatusDisabled
-	if got := CreateUserStatus(&status); got != identity.UserStatusDisabled {
-		t.Fatalf("CreateUserStatus(disabled) = %d, want %d", got, identity.UserStatusDisabled)
-	}
+	require.Equal(t, identity.UserStatusDisabled, CreateUserStatus(&status))
 }

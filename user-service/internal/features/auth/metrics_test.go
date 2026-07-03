@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/aegiscore/common/runtime/config"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
@@ -17,13 +19,13 @@ func TestAuthPrometheusMetrics(t *testing.T) {
 		ServiceName: "aegiscore-user-service-test",
 		Environment: "test",
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
+	require.NoError(t, err,
+		"NewProvider: %v", err)
+
 	recorder, err := newAuthMetrics(provider)
-	if err != nil {
-		t.Fatalf("newAuthMetrics: %v", err)
-	}
+	require.NoError(t, err,
+		"newAuthMetrics: %v", err)
+
 	recorder.LoginSucceeded(context.Background())
 	recorder.RefreshFailed(context.Background(), authapplication.MetricsReasonTokenVersionMismatch)
 	recorder.TokenVersionMismatch(context.Background(), authapplication.MetricsSourceAccessToken)
@@ -36,9 +38,9 @@ func TestAuthPrometheusMetrics(t *testing.T) {
 		`aegiscore_user_service_auth_token_version_mismatches_total{environment="test",service="aegiscore-user-service-test",source="access_token"} 1`,
 		`aegiscore_user_service_auth_session_purge_submit_failures_total{environment="test",service="aegiscore-user-service-test"} 1`,
 	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("metrics missing %q:\n%s", want, text)
-		}
+		require.True(t, strings.Contains(text, want),
+			"metrics missing %q:\n%s", want, text)
+
 	}
 }
 
@@ -48,24 +50,27 @@ func TestAuthMetricsDisabledUsesNoop(t *testing.T) {
 		ServiceName: "aegiscore-user-service-test",
 		Environment: "test",
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
+	require.NoError(t, err,
+		"NewProvider: %v", err)
+
 	recorder, err := newAuthMetrics(provider)
-	if err != nil {
-		t.Fatalf("newAuthMetrics: %v", err)
+	require.NoError(t, err,
+		"newAuthMetrics: %v", err)
+	{
+
+		_, ok := recorder.(interface{ LoginSucceeded(context.Context) })
+		require.True(t, ok,
+			"recorder does not implement auth metrics")
 	}
-	if _, ok := recorder.(interface{ LoginSucceeded(context.Context) }); !ok {
-		t.Fatalf("recorder does not implement auth metrics")
-	}
+
 }
 
 func gatherAuthMetricText(t *testing.T, provider *commonmetrics.Provider) string {
 	t.Helper()
 	families, err := provider.Gatherer().Gather()
-	if err != nil {
-		t.Fatalf("Gather: %v", err)
-	}
+	require.NoError(t, err,
+		"Gather: %v", err)
+
 	var builder strings.Builder
 	for _, family := range families {
 		for _, metric := range family.GetMetric() {

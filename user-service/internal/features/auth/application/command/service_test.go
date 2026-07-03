@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/aegiscore/common/runtime/config"
@@ -29,27 +30,25 @@ func TestAuthUseCaseLogin(t *testing.T) {
 	fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(credential, nil)
 	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).
 		DoAndReturn(func(_ context.Context, _ string, _ int64, sessionID string) (*authtokens.IssuedTokenPair, error) {
-			if sessionID == "" {
-				t.Fatal("sessionID is empty")
-			}
+			require.NotEqual(t, "", sessionID,
+				"sessionID is empty")
+
 			return issued, nil
 		})
 	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), gomock.Any(), int64(2), time.Hour).
 		DoAndReturn(func(_ context.Context, _ string, sessionID string, _ int64, _ time.Duration) error {
-			if sessionID == "" {
-				t.Fatal("sessionID is empty")
-			}
+			require.NotEqual(t, "", sessionID,
+				"sessionID is empty")
+
 			return nil
 		})
 
 	tokens, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	require.NoError(t, err,
+		"Login: %v", err)
+	require.False(t, tokens.AccessToken != "access" || tokens.RefreshToken != "refresh" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn != 900,
+		"tokens = %#v", tokens)
 
-	if err != nil {
-		t.Fatalf("Login: %v", err)
-	}
-	if tokens.AccessToken != "access" || tokens.RefreshToken != "refresh" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn != 900 {
-		t.Fatalf("tokens = %#v", tokens)
-	}
 }
 
 func TestAuthUseCaseLoginRecordsMetrics(t *testing.T) {
@@ -63,9 +62,9 @@ func TestAuthUseCaseLoginRecordsMetrics(t *testing.T) {
 	metrics.EXPECT().LoginSucceeded(gomock.Any())
 
 	_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
-	if err != nil {
-		t.Fatalf("Login: %v", err)
-	}
+	require.NoError(t, err,
+		"Login: %v", err)
+
 }
 
 func TestAuthUseCaseLoginRecordsFailureReasons(t *testing.T) {
@@ -76,9 +75,9 @@ func TestAuthUseCaseLoginRecordsFailureReasons(t *testing.T) {
 		metrics.EXPECT().LoginFailed(gomock.Any(), authapplication.MetricsReasonValidationFailed)
 
 		_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: " "})
-		if !errors.Is(err, authdomain.ErrInvalidCredentials) {
-			t.Fatalf("err = %v, want invalid credentials", err)
-		}
+		require.ErrorIs(t, err, authdomain.ErrInvalidCredentials,
+			"err = %v, want invalid credentials", err)
+
 	})
 
 	t.Run("status rejected", func(t *testing.T) {
@@ -89,9 +88,9 @@ func TestAuthUseCaseLoginRecordsFailureReasons(t *testing.T) {
 		metrics.EXPECT().LoginFailed(gomock.Any(), authapplication.MetricsReasonUserStatusRejected)
 
 		_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
-		if !errors.Is(err, authdomain.ErrInvalidCredentials) {
-			t.Fatalf("err = %v, want invalid credentials", err)
-		}
+		require.ErrorIs(t, err, authdomain.ErrInvalidCredentials,
+			"err = %v, want invalid credentials", err)
+
 	})
 
 	t.Run("kdf busy", func(t *testing.T) {
@@ -102,12 +101,11 @@ func TestAuthUseCaseLoginRecordsFailureReasons(t *testing.T) {
 		metrics.EXPECT().LoginFailed(gomock.Any(), authapplication.MetricsReasonPasswordKDFBusy)
 
 		tokens, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
-		if !errors.Is(err, password.ErrPasswordKDFBusy) {
-			t.Fatalf("err = %v, want ErrPasswordKDFBusy", err)
-		}
-		if tokens != nil {
-			t.Fatalf("tokens = %#v, want nil", tokens)
-		}
+		require.ErrorIs(t, err, password.ErrPasswordKDFBusy,
+			"err = %v, want ErrPasswordKDFBusy", err)
+		require.Nil(t, tokens,
+			"tokens = %#v, want nil", tokens)
+
 	})
 }
 
@@ -115,10 +113,9 @@ func TestAuthUseCaseLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
 
 	_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: " "})
+	require.ErrorIs(t, err, authdomain.ErrInvalidCredentials,
+		"err = %v, want authdomain.ErrInvalidCredentials", err)
 
-	if !errors.Is(err, authdomain.ErrInvalidCredentials) {
-		t.Fatalf("err = %v, want authdomain.ErrInvalidCredentials", err)
-	}
 }
 
 func TestAuthUseCaseLoginUsesDefaultTTLs(t *testing.T) {
@@ -131,13 +128,11 @@ func TestAuthUseCaseLoginUsesDefaultTTLs(t *testing.T) {
 	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), gomock.Any(), int64(2), defaultRefreshTokenTTL).Return(nil)
 
 	tokens, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	require.NoError(t, err,
+		"Login: %v", err)
+	require.Equal(t, int64(defaultAccessTokenTTL.Seconds()), tokens.ExpiresIn,
+		"ExpiresIn = %d, want %d", tokens.ExpiresIn, int64(defaultAccessTokenTTL.Seconds()))
 
-	if err != nil {
-		t.Fatalf("Login: %v", err)
-	}
-	if tokens.ExpiresIn != int64(defaultAccessTokenTTL.Seconds()) {
-		t.Fatalf("ExpiresIn = %d, want %d", tokens.ExpiresIn, int64(defaultAccessTokenTTL.Seconds()))
-	}
 }
 
 func TestAuthUseCaseLoginUsesExplicitTTLs(t *testing.T) {
@@ -150,13 +145,11 @@ func TestAuthUseCaseLoginUsesExplicitTTLs(t *testing.T) {
 	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), gomock.Any(), int64(2), refreshTTL).Return(nil)
 
 	tokens, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	require.NoError(t, err,
+		"Login: %v", err)
+	require.Equal(t, int64(accessTTL.Seconds()), tokens.ExpiresIn,
+		"ExpiresIn = %d, want %d", tokens.ExpiresIn, int64(accessTTL.Seconds()))
 
-	if err != nil {
-		t.Fatalf("Login: %v", err)
-	}
-	if tokens.ExpiresIn != int64(accessTTL.Seconds()) {
-		t.Fatalf("ExpiresIn = %d, want %d", tokens.ExpiresIn, int64(accessTTL.Seconds()))
-	}
 }
 
 func TestAuthUseCaseLoginPassesMaxActiveSessionsPerUser(t *testing.T) {
@@ -176,16 +169,16 @@ func TestAuthUseCaseLoginPassesMaxActiveSessionsPerUser(t *testing.T) {
 	credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(normalCredential(), nil)
 	tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", 900, time.Hour), nil)
 	sessions.EXPECT().CreateSession(gomock.Any(), gomock.Any(), time.Hour, 3).DoAndReturn(func(_ context.Context, session authdomain.AuthSession, _ time.Duration, _ int) error {
-		if session.UserID != authTestUserID.String() || session.SessionID == "" || session.TokenVersion != 2 {
-			t.Fatalf("session = %#v", session)
-		}
+		require.False(t, session.UserID != authTestUserID.String() || session.SessionID == "" || session.TokenVersion != 2,
+			"session = %#v", session)
+
 		return nil
 	})
 
 	_, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
-	if err != nil {
-		t.Fatalf("Login: %v", err)
-	}
+	require.NoError(t, err,
+		"Login: %v", err)
+
 }
 
 func TestAuthUseCaseLoginDoesNotReturnTokenWhenSessionCreateFails(t *testing.T) {
@@ -197,13 +190,11 @@ func TestAuthUseCaseLoginDoesNotReturnTokenWhenSessionCreateFails(t *testing.T) 
 	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), gomock.Any(), int64(2), time.Hour).Return(createErr)
 
 	tokens, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	require.ErrorIs(t, err, createErr,
+		"Login err = %v, want create session error", err)
+	require.Nil(t, tokens,
+		"tokens = %#v, want nil", tokens)
 
-	if !errors.Is(err, createErr) {
-		t.Fatalf("Login err = %v, want create session error", err)
-	}
-	if tokens != nil {
-		t.Fatalf("tokens = %#v, want nil", tokens)
-	}
 }
 
 func TestAuthUseCaseLoginRejectsInvalidCredentials(t *testing.T) {
@@ -211,10 +202,9 @@ func TestAuthUseCaseLoginRejectsInvalidCredentials(t *testing.T) {
 	fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "wrong").Return(nil, authdomain.ErrInvalidCredentials)
 
 	_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "wrong"})
+	require.ErrorIs(t, err, authdomain.ErrInvalidCredentials,
+		"err = %v, want authdomain.ErrInvalidCredentials", err)
 
-	if !errors.Is(err, authdomain.ErrInvalidCredentials) {
-		t.Fatalf("err = %v, want authdomain.ErrInvalidCredentials", err)
-	}
 }
 
 func TestAuthUseCaseLoginRejectsInactiveStatuses(t *testing.T) {
@@ -223,10 +213,9 @@ func TestAuthUseCaseLoginRejectsInactiveStatuses(t *testing.T) {
 		fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(nil, errors.Join(authdomain.ErrInvalidCredentials, authdomain.ErrUserStatusRejected))
 
 		_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+		require.ErrorIs(t, err, authdomain.ErrInvalidCredentials,
+			"status %d err = %v, want authdomain.ErrInvalidCredentials", status, err)
 
-		if !errors.Is(err, authdomain.ErrInvalidCredentials) {
-			t.Fatalf("status %d err = %v, want authdomain.ErrInvalidCredentials", status, err)
-		}
 	}
 }
 
@@ -239,13 +228,11 @@ func TestAuthUseCaseLoginIssuesPasswordChangeToken(t *testing.T) {
 	fixture.tokens.EXPECT().IssuePasswordChangeToken(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(passwordChange, nil)
 
 	tokens, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	require.NoError(t, err,
+		"Login: %v", err)
+	require.False(t, tokens.AccessToken != "password-change" || tokens.RefreshToken != "" || !tokens.PasswordChangeRequired,
+		"tokens = %#v", tokens)
 
-	if err != nil {
-		t.Fatalf("Login: %v", err)
-	}
-	if tokens.AccessToken != "password-change" || tokens.RefreshToken != "" || !tokens.PasswordChangeRequired {
-		t.Fatalf("tokens = %#v", tokens)
-	}
 }
 
 func TestAuthUseCaseChangePassword(t *testing.T) {
@@ -260,13 +247,11 @@ func TestAuthUseCaseChangePassword(t *testing.T) {
 	)
 
 	result, err := fixture.ChangePassword(context.Background(), ChangePasswordCommand{Token: "password-change", NewPassword: "new-secret"})
+	require.NoError(t, err,
+		"ChangePassword: %v", err)
+	require.False(t, result == nil || !result.Changed,
+		"result=%#v", result)
 
-	if err != nil {
-		t.Fatalf("ChangePassword: %v", err)
-	}
-	if result == nil || !result.Changed {
-		t.Fatalf("result=%#v", result)
-	}
 }
 
 func TestAuthUseCaseChangePasswordIncrementsTokenVersionOnce(t *testing.T) {
@@ -279,10 +264,9 @@ func TestAuthUseCaseChangePasswordIncrementsTokenVersionOnce(t *testing.T) {
 	fixture.sessions.EXPECT().RevokeUserSessionsAtVersion(gomock.Any(), authTestUserID, int64(3)).Return(nil).Times(1)
 
 	_, err := fixture.ChangePassword(context.Background(), ChangePasswordCommand{Token: "password-change", NewPassword: "new-secret"})
+	require.NoError(t, err,
+		"ChangePassword: %v", err)
 
-	if err != nil {
-		t.Fatalf("ChangePassword: %v", err)
-	}
 }
 
 func TestAuthUseCaseChangePasswordSucceedsWhenRevocationProjectionFails(t *testing.T) {
@@ -295,13 +279,11 @@ func TestAuthUseCaseChangePasswordSucceedsWhenRevocationProjectionFails(t *testi
 	fixture.sessions.EXPECT().RevokeUserSessionsAtVersion(gomock.Any(), authTestUserID, int64(3)).Return(errors.New("projection failed"))
 
 	result, err := fixture.ChangePassword(context.Background(), ChangePasswordCommand{Token: "password-change", NewPassword: "new-secret"})
+	require.NoError(t, err,
+		"ChangePassword: %v", err)
+	require.False(t, result == nil || !result.Changed,
+		"result = %#v", result)
 
-	if err != nil {
-		t.Fatalf("ChangePassword: %v", err)
-	}
-	if result == nil || !result.Changed {
-		t.Fatalf("result = %#v", result)
-	}
 }
 
 func TestAuthUseCaseChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
@@ -313,10 +295,9 @@ func TestAuthUseCaseChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {
 	fixture.credentials.EXPECT().ChangePassword(gomock.Any(), authTestUserID, "new-secret").Return(nil, identity.ErrUserNotFound)
 
 	_, err := fixture.ChangePassword(context.Background(), ChangePasswordCommand{Token: "password-change", NewPassword: "new-secret"})
+	require.ErrorIs(t, err, identity.ErrUserNotFound,
+		"err = %v, want ErrUserNotFound", err)
 
-	if !errors.Is(err, identity.ErrUserNotFound) {
-		t.Fatalf("err = %v, want ErrUserNotFound", err)
-	}
 }
 
 func TestAuthUseCaseChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
@@ -327,10 +308,9 @@ func TestAuthUseCaseChangePasswordMapsTokenVersionUserNotFound(t *testing.T) {
 	fixture.sessions.EXPECT().ValidatePasswordChangeClaims(gomock.Any(), claims).Return(identity.ErrUserNotFound)
 
 	_, err := fixture.ChangePassword(context.Background(), ChangePasswordCommand{Token: "password-change", NewPassword: "new-secret"})
+	require.ErrorIs(t, err, identity.ErrUserNotFound,
+		"err = %v, want ErrUserNotFound", err)
 
-	if !errors.Is(err, identity.ErrUserNotFound) {
-		t.Fatalf("err = %v, want ErrUserNotFound", err)
-	}
 }
 
 func TestAuthUseCaseChangePasswordRejectsAccessToken(t *testing.T) {
@@ -338,10 +318,9 @@ func TestAuthUseCaseChangePasswordRejectsAccessToken(t *testing.T) {
 	fixture.tokens.EXPECT().ParsePasswordChangeToken(gomock.Any(), "access").Return(nil, uuid.Nil, authdomain.ErrTokenInvalid)
 
 	_, err := fixture.ChangePassword(context.Background(), ChangePasswordCommand{Token: "access", NewPassword: "new-secret"})
+	require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
+		"err = %v, want authdomain.ErrTokenInvalid", err)
 
-	if !errors.Is(err, authdomain.ErrTokenInvalid) {
-		t.Fatalf("err = %v, want authdomain.ErrTokenInvalid", err)
-	}
 }
 
 func TestAuthUseCaseRefreshRotatesSession(t *testing.T) {
@@ -354,21 +333,19 @@ func TestAuthUseCaseRefreshRotatesSession(t *testing.T) {
 		fixture.sessions.EXPECT().ValidateRefreshSession(gomock.Any(), claims).Return(oldSession, int64(2), nil),
 		fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil),
 		fixture.sessions.EXPECT().RotateTokenSession(gomock.Any(), oldSession, gomock.Any(), time.Hour).DoAndReturn(func(_ context.Context, _ authdomain.AuthSession, newSession authdomain.AuthSession, _ time.Duration) error {
-			if newSession.UserID != authTestUserID.String() || newSession.SessionID == "" || newSession.SessionID == "s-old" || newSession.TokenVersion != 2 {
-				t.Fatalf("new session = %#v", newSession)
-			}
+			require.False(t, newSession.UserID != authTestUserID.String() || newSession.SessionID == "" || newSession.SessionID == "s-old" || newSession.TokenVersion != 2,
+				"new session = %#v", newSession)
+
 			return nil
 		}),
 	)
 
 	tokens, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: commonauth.TokenPrefix + "refresh"})
+	require.NoError(t, err,
+		"Refresh: %v", err)
+	require.False(t, tokens.AccessToken != "access" || tokens.RefreshToken != "refresh-new",
+		"tokens = %#v", tokens)
 
-	if err != nil {
-		t.Fatalf("Refresh: %v", err)
-	}
-	if tokens.AccessToken != "access" || tokens.RefreshToken != "refresh-new" {
-		t.Fatalf("tokens = %#v", tokens)
-	}
 }
 
 func TestAuthUseCaseRefreshRotationPassesMaxActiveSessionsPerUser(t *testing.T) {
@@ -393,9 +370,9 @@ func TestAuthUseCaseRefreshRotationPassesMaxActiveSessionsPerUser(t *testing.T) 
 	sessions.EXPECT().RotateSession(gomock.Any(), oldSession, gomock.Any(), time.Hour, 4).Return(nil)
 
 	_, err := svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
-	if err != nil {
-		t.Fatalf("Refresh: %v", err)
-	}
+	require.NoError(t, err,
+		"Refresh: %v", err)
+
 }
 
 func TestAuthUseCaseRefreshRejectsInvalidNormalizedToken(t *testing.T) {
@@ -403,10 +380,9 @@ func TestAuthUseCaseRefreshRejectsInvalidNormalizedToken(t *testing.T) {
 
 	for _, token := range []string{"", " ", commonauth.TokenTypeBearer, commonauth.TokenPrefix} {
 		_, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: token})
+		require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
+			"token %q err = %v, want authdomain.ErrTokenInvalid", token, err)
 
-		if !errors.Is(err, authdomain.ErrTokenInvalid) {
-			t.Fatalf("token %q err = %v, want authdomain.ErrTokenInvalid", token, err)
-		}
 	}
 }
 
@@ -421,10 +397,9 @@ func TestAuthUseCaseRefreshRotationKeepsOldSessionWhenTokenSigningFails(t *testi
 	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(nil, signErr)
 
 	_, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
+	require.ErrorIs(t, err, signErr,
+		"Refresh err = %v, want sign error", err)
 
-	if !errors.Is(err, signErr) {
-		t.Fatalf("Refresh err = %v, want sign error", err)
-	}
 }
 
 func TestAuthUseCaseRefreshRotationKeepsOldSessionWhenNewSessionCreateFails(t *testing.T) {
@@ -439,13 +414,11 @@ func TestAuthUseCaseRefreshRotationKeepsOldSessionWhenNewSessionCreateFails(t *t
 	fixture.sessions.EXPECT().RotateTokenSession(gomock.Any(), oldSession, gomock.Any(), time.Hour).Return(createErr)
 
 	tokens, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
+	require.ErrorIs(t, err, createErr,
+		"Refresh err = %v, want create error", err)
+	require.Nil(t, tokens,
+		"tokens = %#v, want nil", tokens)
 
-	if !errors.Is(err, createErr) {
-		t.Fatalf("Refresh err = %v, want create error", err)
-	}
-	if tokens != nil {
-		t.Fatalf("tokens = %#v, want nil", tokens)
-	}
 }
 
 func TestAuthUseCaseRefreshRotationFailureDoesNotReturnToken(t *testing.T) {
@@ -460,13 +433,11 @@ func TestAuthUseCaseRefreshRotationFailureDoesNotReturnToken(t *testing.T) {
 	fixture.sessions.EXPECT().RotateTokenSession(gomock.Any(), oldSession, gomock.Any(), time.Hour).Return(rotateErr)
 
 	tokens, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
+	require.ErrorIs(t, err, rotateErr,
+		"Refresh err = %v, want rotate error", err)
+	require.Nil(t, tokens,
+		"tokens = %#v, want nil", tokens)
 
-	if !errors.Is(err, rotateErr) {
-		t.Fatalf("Refresh err = %v, want rotate error", err)
-	}
-	if tokens != nil {
-		t.Fatalf("tokens = %#v, want nil", tokens)
-	}
 }
 
 func TestAuthUseCaseRefreshRotationReturnsTokenAfterNewSessionAndOldRevocation(t *testing.T) {
@@ -480,13 +451,11 @@ func TestAuthUseCaseRefreshRotationReturnsTokenAfterNewSessionAndOldRevocation(t
 	fixture.sessions.EXPECT().RotateTokenSession(gomock.Any(), oldSession, gomock.Any(), time.Hour).Return(nil)
 
 	tokens, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
+	require.NoError(t, err,
+		"Refresh: %v", err)
+	require.False(t, tokens == nil || tokens.AccessToken != "access" || tokens.RefreshToken != "refresh-new",
+		"tokens = %#v", tokens)
 
-	if err != nil {
-		t.Fatalf("Refresh: %v", err)
-	}
-	if tokens == nil || tokens.AccessToken != "access" || tokens.RefreshToken != "refresh-new" {
-		t.Fatalf("tokens = %#v", tokens)
-	}
 }
 
 func TestAuthUseCaseRefreshUsesNormalizedToken(t *testing.T) {
@@ -500,13 +469,11 @@ func TestAuthUseCaseRefreshUsesNormalizedToken(t *testing.T) {
 	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), "s-old", int64(2), time.Hour).Return(nil)
 
 	tokens, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
+	require.NoError(t, err,
+		"Refresh: %v", err)
+	require.False(t, tokens.AccessToken != "access" || tokens.RefreshToken != "refresh-new",
+		"tokens = %#v", tokens)
 
-	if err != nil {
-		t.Fatalf("Refresh: %v", err)
-	}
-	if tokens.AccessToken != "access" || tokens.RefreshToken != "refresh-new" {
-		t.Fatalf("tokens = %#v", tokens)
-	}
 }
 
 func TestAuthUseCaseRefreshRejectsAccessTokenSubject(t *testing.T) {
@@ -514,10 +481,9 @@ func TestAuthUseCaseRefreshRejectsAccessTokenSubject(t *testing.T) {
 	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "access").Return(nil, authdomain.ErrTokenInvalid)
 
 	_, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "access"})
+	require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
+		"err = %v, want authdomain.ErrTokenInvalid", err)
 
-	if !errors.Is(err, authdomain.ErrTokenInvalid) {
-		t.Fatalf("err = %v, want authdomain.ErrTokenInvalid", err)
-	}
 }
 
 func TestAuthUseCaseRefreshRejectsVersionChange(t *testing.T) {
@@ -532,10 +498,9 @@ func TestAuthUseCaseRefreshRejectsVersionChange(t *testing.T) {
 	metrics.EXPECT().TokenVersionMismatch(gomock.Any(), authapplication.MetricsSourceRefreshToken)
 
 	_, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
+	require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
+		"err = %v, want authdomain.ErrTokenInvalid", err)
 
-	if !errors.Is(err, authdomain.ErrTokenInvalid) {
-		t.Fatalf("err = %v, want authdomain.ErrTokenInvalid", err)
-	}
 }
 
 func TestAuthUseCaseRefreshMapsTokenVersionUserNotFound(t *testing.T) {
@@ -546,10 +511,9 @@ func TestAuthUseCaseRefreshMapsTokenVersionUserNotFound(t *testing.T) {
 	fixture.sessions.EXPECT().ValidateRefreshSession(gomock.Any(), claims).Return(authdomain.AuthSession{}, int64(0), identity.ErrUserNotFound)
 
 	_, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
+	require.ErrorIs(t, err, identity.ErrUserNotFound,
+		"err = %v, want ErrUserNotFound", err)
 
-	if !errors.Is(err, identity.ErrUserNotFound) {
-		t.Fatalf("err = %v, want ErrUserNotFound", err)
-	}
 }
 
 func TestAuthUseCaseLogoutCurrentDeletesSession(t *testing.T) {
@@ -562,13 +526,11 @@ func TestAuthUseCaseLogoutCurrentDeletesSession(t *testing.T) {
 	metrics.EXPECT().LogoutSucceeded(gomock.Any(), authapplication.MetricsOperationLogoutCurrent)
 
 	result, err := fixture.LogoutCurrentSession(ctx)
+	require.NoError(t, err,
+		"LogoutCurrentSession: %v", err)
+	require.False(t, result == nil || !result.LoggedOut,
+		"result = %#v", result)
 
-	if err != nil {
-		t.Fatalf("LogoutCurrentSession: %v", err)
-	}
-	if result == nil || !result.LoggedOut {
-		t.Fatalf("result = %#v", result)
-	}
 }
 
 func TestAuthUseCaseLogoutCurrentRecordsDeleteFailure(t *testing.T) {
@@ -582,10 +544,9 @@ func TestAuthUseCaseLogoutCurrentRecordsDeleteFailure(t *testing.T) {
 	metrics.EXPECT().LogoutFailed(gomock.Any(), authapplication.MetricsOperationLogoutCurrent, authapplication.MetricsReasonSessionDeleteFailed)
 
 	_, err := fixture.LogoutCurrentSession(ctx)
+	require.ErrorIs(t, err, deleteErr,
+		"err = %v, want delete error", err)
 
-	if !errors.Is(err, deleteErr) {
-		t.Fatalf("err = %v, want delete error", err)
-	}
 }
 
 func TestAuthUseCaseLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
@@ -599,13 +560,11 @@ func TestAuthUseCaseLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 	metrics.EXPECT().LogoutSucceeded(gomock.Any(), authapplication.MetricsOperationLogoutAll)
 
 	result, err := fixture.LogoutAllSessions(ctx)
+	require.NoError(t, err,
+		"LogoutAll: %v", err)
+	require.False(t, result == nil || !result.LoggedOut,
+		"result=%#v", result)
 
-	if err != nil {
-		t.Fatalf("LogoutAll: %v", err)
-	}
-	if result == nil || !result.LoggedOut {
-		t.Fatalf("result=%#v", result)
-	}
 }
 
 func TestAuthUseCaseLogoutAllSucceedsWhenRevocationProjectionFails(t *testing.T) {
@@ -616,13 +575,11 @@ func TestAuthUseCaseLogoutAllSucceedsWhenRevocationProjectionFails(t *testing.T)
 	fixture.sessions.EXPECT().RevokeAllUserSessions(gomock.Any(), authTestUserID).Return(revocation, nil)
 
 	result, err := fixture.LogoutAllSessions(ctx)
+	require.NoError(t, err,
+		"LogoutAll: %v", err)
+	require.False(t, result == nil || !result.LoggedOut,
+		"result = %#v", result)
 
-	if err != nil {
-		t.Fatalf("LogoutAll: %v", err)
-	}
-	if result == nil || !result.LoggedOut {
-		t.Fatalf("result = %#v", result)
-	}
 }
 
 func TestAuthUseCaseLogoutAllMapsIncrementUserNotFound(t *testing.T) {
@@ -635,10 +592,9 @@ func TestAuthUseCaseLogoutAllMapsIncrementUserNotFound(t *testing.T) {
 	metrics.EXPECT().LogoutFailed(gomock.Any(), authapplication.MetricsOperationLogoutAll, authapplication.MetricsReasonSessionRevokeFailed)
 
 	_, err := fixture.LogoutAllSessions(ctx)
+	require.ErrorIs(t, err, identity.ErrUserNotFound,
+		"err = %v, want ErrUserNotFound", err)
 
-	if !errors.Is(err, identity.ErrUserNotFound) {
-		t.Fatalf("err = %v, want ErrUserNotFound", err)
-	}
 }
 
 type testAuthUseCases struct {
@@ -726,9 +682,9 @@ func passwordChangeClaims(sessionID string, tokenVersion int64) *commonauth.Clai
 func testPasswordService(t testing.TB) *password.Service {
 	t.Helper()
 	service, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
+	require.NoError(t, err,
+		"NewService: %v", err)
+
 	return service
 }
 

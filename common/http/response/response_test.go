@@ -99,6 +99,66 @@ func TestFailureResponseErrors(t *testing.T) {
 	})
 }
 
+func TestFailureResponseWrappers(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name        string
+		write       func(*gin.Context)
+		wantStatus  int
+		wantCode    contracterrors.Code
+		wantMessage string
+	}{
+		{
+			name:        "validation failed",
+			write:       func(ctx *gin.Context) { ValidationFailed(ctx, "字段 %s 无效", "email") },
+			wantStatus:  http.StatusBadRequest,
+			wantCode:    contracterrors.CodeValidationFailed,
+			wantMessage: "字段 email 无效",
+		},
+		{
+			name:        "unauthenticated",
+			write:       func(ctx *gin.Context) { Unauthenticated(ctx, "请先登录") },
+			wantStatus:  http.StatusUnauthorized,
+			wantCode:    contracterrors.CodeUnauthenticated,
+			wantMessage: "请先登录",
+		},
+		{
+			name:        "forbidden",
+			write:       func(ctx *gin.Context) { Forbidden(ctx, "没有权限") },
+			wantStatus:  http.StatusForbidden,
+			wantCode:    contracterrors.CodeForbidden,
+			wantMessage: "没有权限",
+		},
+		{
+			name:        "conflict",
+			write:       func(ctx *gin.Context) { Conflict(ctx, "资源状态冲突") },
+			wantStatus:  http.StatusConflict,
+			wantCode:    contracterrors.CodeConflict,
+			wantMessage: "资源状态冲突",
+		},
+		{
+			name:        "not found",
+			write:       func(ctx *gin.Context) { NotFound(ctx, "用户不存在") },
+			wantStatus:  http.StatusNotFound,
+			wantCode:    contracterrors.CodeNotFound,
+			wantMessage: "用户不存在",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, recorder := newTestContext()
+
+			tt.write(ctx)
+
+			envelope := requireEnvelope(t, recorder, tt.wantStatus, false, tt.wantCode, tt.wantMessage)
+			require.Nil(t, envelope.Data)
+			require.Nil(t, envelope.Errors)
+		})
+	}
+}
+
 func TestFailureResponseAnnotatesSpan(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -166,6 +226,32 @@ func TestFailureResponseAnnotatesSpan(t *testing.T) {
 	})
 }
 
+func TestSuccessResponseWrappers(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("created writes created envelope", func(t *testing.T) {
+		ctx, recorder := newTestContext()
+
+		Created(ctx, map[string]string{"id": "user-1", "name": "Alice"})
+
+		envelope := requireEnvelope(t, recorder, http.StatusCreated, true, contracterrors.CodeOK, contractresponse.MessageCreated)
+		data, ok := envelope.Data.(map[string]any)
+		require.True(t, ok)
+		require.Equal(t, "user-1", data["id"])
+		require.Equal(t, "Alice", data["name"])
+		require.Nil(t, envelope.Errors)
+	})
+
+	t.Run("no content writes status without body", func(t *testing.T) {
+		ctx, recorder := newTestContext()
+
+		NoContent(ctx)
+
+		require.Equal(t, http.StatusNoContent, ctx.Writer.Status())
+		require.Empty(t, recorder.Body.String())
+	})
+}
+
 func TestOKWithPaginatedData(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, recorder := newTestContext()
@@ -182,6 +268,25 @@ func TestOKWithPaginatedData(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, float64(1), data["id"])
 	require.Equal(t, "Alice", data["name"])
+}
+
+func requireEnvelope(
+	t *testing.T,
+	recorder *httptest.ResponseRecorder,
+	wantStatus int,
+	wantSuccess bool,
+	wantCode contracterrors.Code,
+	wantMessage string,
+) contractresponse.Envelope {
+	t.Helper()
+
+	var envelope contractresponse.Envelope
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+	require.Equal(t, wantStatus, recorder.Code)
+	require.Equal(t, wantSuccess, envelope.Success)
+	require.Equal(t, wantCode, envelope.Code)
+	require.Equal(t, wantMessage, envelope.Message)
+	return envelope
 }
 
 func newTestContext() (*gin.Context, *httptest.ResponseRecorder) {

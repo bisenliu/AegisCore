@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
@@ -25,12 +26,10 @@ func TestUserQueryServiceGetUserByID(t *testing.T) {
 
 		user, err := svc.GetUserByID(context.Background(), GetUserByIDQuery{UserID: testUserID})
 
-		if err != nil {
-			t.Fatalf("GetUserByID: %v", err)
-		}
-		if user.User.UserID != testUserID || user.User.Username != "alice" || user.User.CreatedAt != createdAt {
-			t.Fatalf("user = %#v", user)
-		}
+		require.NoError(t, err)
+		require.Equal(t, testUserID, user.User.UserID)
+		require.Equal(t, "alice", user.User.Username)
+		require.Equal(t, createdAt, user.User.CreatedAt)
 	})
 
 	t.Run("map domain not found", func(t *testing.T) {
@@ -40,9 +39,7 @@ func TestUserQueryServiceGetUserByID(t *testing.T) {
 
 		_, err := svc.GetUserByID(context.Background(), GetUserByIDQuery{UserID: testUserID})
 
-		if !errors.Is(err, identity.ErrUserNotFound) {
-			t.Fatalf("err = %v, want ErrUserNotFound", err)
-		}
+		require.ErrorIs(t, err, identity.ErrUserNotFound)
 	})
 
 	t.Run("wrap repository error", func(t *testing.T) {
@@ -53,9 +50,7 @@ func TestUserQueryServiceGetUserByID(t *testing.T) {
 
 		_, err := svc.GetUserByID(context.Background(), GetUserByIDQuery{UserID: testUserID})
 
-		if err == nil || !errors.Is(err, repoErr) {
-			t.Fatalf("err = %v, want %v", err, repoErr)
-		}
+		require.ErrorIs(t, err, repoErr)
 	})
 }
 
@@ -73,18 +68,13 @@ func TestUserQueryServiceListUsers(t *testing.T) {
 
 		users, err := svc.ListUsers(context.Background(), ListUsersQuery{PageSize: 10, Limit: 10})
 
-		if err != nil {
-			t.Fatalf("ListUsers: %v", err)
-		}
-		if listInput.AfterUserID != nil || listInput.Limit != 10 {
-			t.Fatalf("listInput = %#v", listInput)
-		}
-		if len(users.Items) != 0 {
-			t.Fatalf("items = %#v", users.Items)
-		}
-		if users.PageSize != 10 || users.NextCursor != "" || users.HasNext {
-			t.Fatalf("pagination result = %#v", users)
-		}
+		require.NoError(t, err)
+		require.Nil(t, listInput.AfterUserID)
+		require.Equal(t, 10, listInput.Limit)
+		require.Empty(t, users.Items)
+		require.Equal(t, 10, users.PageSize)
+		require.Empty(t, users.NextCursor)
+		require.False(t, users.HasNext)
 	})
 
 	t.Run("explicit cursor pagination and filters", func(t *testing.T) {
@@ -100,21 +90,21 @@ func TestUserQueryServiceListUsers(t *testing.T) {
 
 		users, err := svc.ListUsers(context.Background(), ListUsersQuery{Cursor: &afterUserID, PageSize: 20, Limit: 20, Nickname: "Ali", Username: "alice", Status: &status})
 
-		if err != nil {
-			t.Fatalf("ListUsers: %v", err)
-		}
-		if listInput.AfterUserID == nil || *listInput.AfterUserID != afterUserID || listInput.Limit != 20 || listInput.Nickname != "Ali" || listInput.Username != "alice" {
-			t.Fatalf("listInput = %#v", listInput)
-		}
-		if listInput.Status == nil || *listInput.Status != identity.UserStatusNormal {
-			t.Fatalf("status = %#v", listInput.Status)
-		}
-		if len(users.Items) != 1 || users.Items[0].UserID != testUserID || users.Items[0].Username != "alice" || users.Items[0].CreatedAt != createdAt {
-			t.Fatalf("items = %#v", users.Items)
-		}
-		if users.PageSize != 20 || users.NextCursor != testUserID.String() || !users.HasNext {
-			t.Fatalf("pagination result = %#v", users)
-		}
+		require.NoError(t, err)
+		require.NotNil(t, listInput.AfterUserID)
+		require.Equal(t, afterUserID, *listInput.AfterUserID)
+		require.Equal(t, 20, listInput.Limit)
+		require.Equal(t, "Ali", listInput.Nickname)
+		require.Equal(t, "alice", listInput.Username)
+		require.NotNil(t, listInput.Status)
+		require.Equal(t, identity.UserStatusNormal, *listInput.Status)
+		require.Len(t, users.Items, 1)
+		require.Equal(t, testUserID, users.Items[0].UserID)
+		require.Equal(t, "alice", users.Items[0].Username)
+		require.Equal(t, createdAt, users.Items[0].CreatedAt)
+		require.Equal(t, 20, users.PageSize)
+		require.Equal(t, testUserID.String(), users.NextCursor)
+		require.True(t, users.HasNext)
 	})
 
 	t.Run("wrap repository error", func(t *testing.T) {
@@ -125,8 +115,6 @@ func TestUserQueryServiceListUsers(t *testing.T) {
 
 		_, err := svc.ListUsers(context.Background(), ListUsersQuery{PageSize: 10, Limit: 10})
 
-		if err == nil || !errors.Is(err, repoErr) {
-			t.Fatalf("err = %v, want %v", err, repoErr)
-		}
+		require.ErrorIs(t, err, repoErr)
 	})
 }

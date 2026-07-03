@@ -2,12 +2,12 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/require"
 
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/user-service/ent/enttest"
@@ -24,9 +24,7 @@ func TestUserRepositoryDomainErrors(t *testing.T) {
 	t.Run("get by user id returns domain not found", func(t *testing.T) {
 		_, err := repo.GetByUserID(context.Background(), uuid.MustParse("018f0000-0000-7000-8000-000000000999"))
 
-		if !errors.Is(err, identity.ErrUserNotFound) {
-			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
-		}
+		require.ErrorIs(t, err, identity.ErrUserNotFound)
 	})
 
 	t.Run("get by user id ignores soft deleted user", func(t *testing.T) {
@@ -36,38 +34,28 @@ func TestUserRepositoryDomainErrors(t *testing.T) {
 
 		_, err := repo.GetByUserID(ctx, userID)
 
-		if !errors.Is(err, identity.ErrUserNotFound) {
-			t.Fatalf("err = %v, want identity.ErrUserNotFound", err)
-		}
+		require.ErrorIs(t, err, identity.ErrUserNotFound)
 	})
 
 	t.Run("create uniqueness violation returns domain already exists", func(t *testing.T) {
 		ctx := context.Background()
 		_, err := repo.Create(ctx, userapplication.CreateUserInput{Nickname: "Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000001"), Username: "alice", PasswordHash: "hash", Status: identity.UserStatusNormal})
-		if err != nil {
-			t.Fatalf("Create initial user: %v", err)
-		}
+		require.NoError(t, err)
 
 		_, err = repo.Create(ctx, userapplication.CreateUserInput{Nickname: "Alice 2", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000002"), Username: "alice", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
-		if !errors.Is(err, identity.ErrUserAlreadyExists) {
-			t.Fatalf("err = %v, want identity.ErrUserAlreadyExists", err)
-		}
+		require.ErrorIs(t, err, identity.ErrUserAlreadyExists)
 	})
 
 	t.Run("create duplicate user id returns domain already exists", func(t *testing.T) {
 		ctx := context.Background()
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000013")
 		_, err := repo.Create(ctx, userapplication.CreateUserInput{Nickname: "Duplicate ID", UserID: userID, Username: "duplicate-id", PasswordHash: "hash", Status: identity.UserStatusNormal})
-		if err != nil {
-			t.Fatalf("Create initial user: %v", err)
-		}
+		require.NoError(t, err)
 
 		_, err = repo.Create(ctx, userapplication.CreateUserInput{Nickname: "Duplicate ID 2", UserID: userID, Username: "duplicate-id-2", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
-		if !errors.Is(err, identity.ErrUserAlreadyExists) {
-			t.Fatalf("err = %v, want identity.ErrUserAlreadyExists", err)
-		}
+		require.ErrorIs(t, err, identity.ErrUserAlreadyExists)
 	})
 
 	t.Run("soft deleted username remains reserved", func(t *testing.T) {
@@ -76,9 +64,7 @@ func TestUserRepositoryDomainErrors(t *testing.T) {
 
 		_, err := repo.Create(ctx, userapplication.CreateUserInput{Nickname: "New Alice", UserID: uuid.MustParse("018f0000-0000-7000-8000-000000000004"), Username: "reserved-alice", PasswordHash: "hash", Status: identity.UserStatusNormal})
 
-		if !errors.Is(err, identity.ErrUserAlreadyExists) {
-			t.Fatalf("err = %v, want identity.ErrUserAlreadyExists", err)
-		}
+		require.ErrorIs(t, err, identity.ErrUserAlreadyExists)
 	})
 }
 
@@ -88,27 +74,29 @@ func TestUserRepositoryReturnsDomainUsers(t *testing.T) {
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000101")
 
 	created, err := repo.Create(ctx, userapplication.CreateUserInput{Nickname: "Domain Alice", UserID: userID, Username: "domain-alice", PasswordHash: "hash", Status: identity.UserStatusMustChangePassword})
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-	if created.ID == 0 || created.UserID != userID || created.Nickname != "Domain Alice" || created.Username != "domain-alice" || created.PasswordHash != "hash" || created.Status != identity.UserStatusMustChangePassword || created.TokenVersion != 1 || created.CreatedAt == 0 || created.UpdatedAt == 0 {
-		t.Fatalf("created = %#v", created)
-	}
+	require.NoError(t, err)
+	require.NotZero(t, created.ID)
+	require.Equal(t, userID, created.UserID)
+	require.Equal(t, "Domain Alice", created.Nickname)
+	require.Equal(t, "domain-alice", created.Username)
+	require.Equal(t, "hash", created.PasswordHash)
+	require.Equal(t, identity.UserStatusMustChangePassword, created.Status)
+	require.Equal(t, int64(1), created.TokenVersion)
+	require.NotZero(t, created.CreatedAt)
+	require.NotZero(t, created.UpdatedAt)
 
 	byID, err := repo.GetByUserID(ctx, userID)
-	if err != nil {
-		t.Fatalf("GetByUserID: %v", err)
-	}
+	require.NoError(t, err)
 	assertSameUser(t, byID, created)
 
 	status := identity.UserStatusMustChangePassword
 	users, hasNext, err := repo.ListUsers(ctx, userapplication.ListUsersInput{Limit: 10, Username: "domain-alice", Status: &status})
-	if err != nil {
-		t.Fatalf("ListUsers: %v", err)
-	}
-	if hasNext || len(users) != 1 || users[0].UserID != userID || users[0].Username != "domain-alice" || users[0].Status != identity.UserStatusMustChangePassword {
-		t.Fatalf("users=%#v hasNext=%v", users, hasNext)
-	}
+	require.NoError(t, err)
+	require.False(t, hasNext)
+	require.Len(t, users, 1)
+	require.Equal(t, userID, users[0].UserID)
+	require.Equal(t, "domain-alice", users[0].Username)
+	require.Equal(t, identity.UserStatusMustChangePassword, users[0].Status)
 }
 
 func TestUserRepositoryListUsersBoundaries(t *testing.T) {
@@ -117,12 +105,9 @@ func TestUserRepositoryListUsersBoundaries(t *testing.T) {
 
 		users, hasNext, err := repo.ListUsers(context.Background(), userapplication.ListUsersInput{Limit: 10})
 
-		if err != nil {
-			t.Fatalf("ListUsers: %v", err)
-		}
-		if hasNext || len(users) != 0 {
-			t.Fatalf("users=%#v hasNext=%v, want empty page", users, hasNext)
-		}
+		require.NoError(t, err)
+		require.False(t, hasNext)
+		require.Empty(t, users)
 	})
 
 	t.Run("paginates with stable user id order", func(t *testing.T) {
@@ -134,25 +119,18 @@ func TestUserRepositoryListUsersBoundaries(t *testing.T) {
 
 		users, hasNext, err := repo.ListUsers(ctx, userapplication.ListUsersInput{Limit: 2})
 
-		if err != nil {
-			t.Fatalf("ListUsers: %v", err)
-		}
-		if !hasNext || len(users) != 2 {
-			t.Fatalf("users=%#v hasNext=%v, want 2 with next page", users, hasNext)
-		}
-		if first.UserID.String() >= second.UserID.String() || second.UserID.String() >= third.UserID.String() {
-			t.Fatalf("seed user IDs not increasing: first=%s second=%s third=%s", first.UserID, second.UserID, third.UserID)
-		}
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Len(t, users, 2)
+		require.Less(t, first.UserID.String(), second.UserID.String())
+		require.Less(t, second.UserID.String(), third.UserID.String())
 		assertSameUserValue(t, users[0], first)
 		assertSameUserValue(t, users[1], second)
 
 		users, hasNext, err = repo.ListUsers(ctx, userapplication.ListUsersInput{AfterUserID: &second.UserID, Limit: 2})
-		if err != nil {
-			t.Fatalf("ListUsers after cursor: %v", err)
-		}
-		if hasNext || len(users) != 1 {
-			t.Fatalf("users=%#v hasNext=%v, want final page", users, hasNext)
-		}
+		require.NoError(t, err)
+		require.False(t, hasNext)
+		require.Len(t, users, 1)
 		assertSameUserValue(t, users[0], third)
 	})
 
@@ -171,12 +149,9 @@ func TestUserRepositoryListUsersBoundaries(t *testing.T) {
 		assertListUsernames(t, repo, userapplication.ListUsersInput{Limit: 10, Nickname: "Alice", Username: "alice-audit", Status: &disabled}, []string{"alice-audit"})
 
 		users, hasNext, err := repo.ListUsers(ctx, userapplication.ListUsersInput{Limit: 10, Nickname: "Missing"})
-		if err != nil {
-			t.Fatalf("ListUsers missing filter: %v", err)
-		}
-		if hasNext || len(users) != 0 {
-			t.Fatalf("users=%#v hasNext=%v, want no matches", users, hasNext)
-		}
+		require.NoError(t, err)
+		require.False(t, hasNext)
+		require.Empty(t, users)
 	})
 
 	t.Run("excludes soft deleted users from rows and has next", func(t *testing.T) {
@@ -187,26 +162,19 @@ func TestUserRepositoryListUsersBoundaries(t *testing.T) {
 
 		users, hasNext, err := repo.ListUsers(ctx, userapplication.ListUsersInput{Limit: 10, Nickname: "Alice"})
 
-		if err != nil {
-			t.Fatalf("ListUsers: %v", err)
-		}
-		if hasNext || len(users) != 1 {
-			t.Fatalf("users=%#v hasNext=%v, want only active user", users, hasNext)
-		}
+		require.NoError(t, err)
+		require.False(t, hasNext)
+		require.Len(t, users, 1)
 		assertSameUserValue(t, users[0], active)
 	})
 }
 
 func TestUserListPredicates(t *testing.T) {
-	if got := buildListPredicates(userapplication.ListUsersInput{}); len(got) != 1 {
-		t.Fatalf("predicates = %d, want 1", len(got))
-	}
+	require.Len(t, buildListPredicates(userapplication.ListUsersInput{}), 1)
 
 	status := identity.UserStatusNormal
 	got := buildListPredicates(userapplication.ListUsersInput{Nickname: "Ali", Username: "alice", Status: &status})
-	if len(got) != 4 {
-		t.Fatalf("predicates = %d, want 4", len(got))
-	}
+	require.Len(t, got, 4)
 }
 
 func newTestUserStore(t *testing.T) *UserStore {
@@ -221,9 +189,7 @@ func newTestUserStore(t *testing.T) *UserStore {
 func createTestUser(t *testing.T, repo *UserStore, input userapplication.CreateUserInput) *userdomain.User {
 	t.Helper()
 	created, err := repo.Create(context.Background(), input)
-	if err != nil {
-		t.Fatalf("Create user %q: %v", input.Username, err)
-	}
+	require.NoError(t, err)
 	return created
 }
 
@@ -231,44 +197,33 @@ func createSoftDeletedUser(t *testing.T, repo *UserStore, input userapplication.
 	t.Helper()
 	ctx := context.Background()
 	created, err := repo.Create(ctx, input)
-	if err != nil {
-		t.Fatalf("Create soft deleted user: %v", err)
-	}
-	if _, err := repo.client.User.UpdateOneID(created.ID).SetDeletedAt(deletedAtForTest).Save(ctx); err != nil {
-		t.Fatalf("soft delete user: %v", err)
-	}
+	require.NoError(t, err)
+	_, err = repo.client.User.UpdateOneID(created.ID).SetDeletedAt(deletedAtForTest).Save(ctx)
+	require.NoError(t, err)
 }
 
 func assertSameUser(t *testing.T, got, want *userdomain.User) {
 	t.Helper()
-	if got == nil || want == nil {
-		t.Fatalf("got=%#v want=%#v", got, want)
-	}
+	require.NotNil(t, got)
+	require.NotNil(t, want)
 	assertSameUserValue(t, *got, want)
 }
 
 func assertSameUserValue(t *testing.T, got userdomain.User, want *userdomain.User) {
 	t.Helper()
-	if want == nil {
-		t.Fatal("want user is nil")
-	}
-	if got.ID != want.ID || got.UserID != want.UserID || got.Nickname != want.Nickname || got.Username != want.Username || got.PasswordHash != want.PasswordHash || got.Status != want.Status || got.TokenVersion != want.TokenVersion || got.CreatedAt != want.CreatedAt || got.UpdatedAt != want.UpdatedAt {
-		t.Fatalf("got user = %#v, want %#v", got, want)
-	}
+	require.NotNil(t, want)
+	require.Equal(t, *want, got)
 }
 
 func assertListUsernames(t *testing.T, repo *UserStore, input userapplication.ListUsersInput, want []string) {
 	t.Helper()
 	users, hasNext, err := repo.ListUsers(context.Background(), input)
-	if err != nil {
-		t.Fatalf("ListUsers(%#v): %v", input, err)
-	}
-	if hasNext || len(users) != len(want) {
-		t.Fatalf("users=%#v hasNext=%v, want usernames %v", users, hasNext, want)
-	}
+	require.NoError(t, err)
+	require.False(t, hasNext)
+	require.Len(t, users, len(want))
+	got := make([]string, 0, len(users))
 	for i := range want {
-		if users[i].Username != want[i] {
-			t.Fatalf("users[%d].Username = %q, want %q; users=%#v", i, users[i].Username, want[i], users)
-		}
+		got = append(got, users[i].Username)
 	}
+	require.Equal(t, want, got)
 }

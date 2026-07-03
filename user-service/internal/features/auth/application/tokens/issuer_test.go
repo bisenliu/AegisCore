@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 )
@@ -16,16 +18,13 @@ func TestIssuerUsesDefaultTTLs(t *testing.T) {
 	issuer := NewIssuer(commonauth.NewJWTService(cfg.Auth), cfg)
 
 	tokens, err := issuer.IssueTokenPair(context.Background(), issuerTestUserID, 2, "s-123")
+	require.NoError(t, err,
+		"IssueTokenPair: %v", err)
+	require.Equal(t, int64(defaultAccessTokenTTL.Seconds()), tokens.Response.ExpiresIn,
+		"ExpiresIn = %d, want %d", tokens.Response.ExpiresIn, int64(defaultAccessTokenTTL.Seconds()))
+	require.Equal(t, defaultRefreshTokenTTL, tokens.RefreshTTL,
+		"RefreshTTL = %s, want %s", tokens.RefreshTTL, defaultRefreshTokenTTL)
 
-	if err != nil {
-		t.Fatalf("IssueTokenPair: %v", err)
-	}
-	if tokens.Response.ExpiresIn != int64(defaultAccessTokenTTL.Seconds()) {
-		t.Fatalf("ExpiresIn = %d, want %d", tokens.Response.ExpiresIn, int64(defaultAccessTokenTTL.Seconds()))
-	}
-	if tokens.RefreshTTL != defaultRefreshTokenTTL {
-		t.Fatalf("RefreshTTL = %s, want %s", tokens.RefreshTTL, defaultRefreshTokenTTL)
-	}
 }
 
 func TestIssuerIssuesPasswordChangeToken(t *testing.T) {
@@ -34,20 +33,17 @@ func TestIssuerIssuesPasswordChangeToken(t *testing.T) {
 	issuer := NewIssuer(jwt, cfg)
 
 	tokens, err := issuer.IssuePasswordChangeToken(context.Background(), issuerTestUserID, 2, "pc-123")
-	if err != nil {
-		t.Fatalf("IssuePasswordChangeToken: %v", err)
-	}
-	if tokens.AccessToken == "" || tokens.RefreshToken != "" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn != int64((15*time.Minute).Seconds()) || !tokens.PasswordChangeRequired {
-		t.Fatalf("tokens = %#v", tokens)
-	}
+	require.NoError(t, err,
+		"IssuePasswordChangeToken: %v", err)
+	require.False(t, tokens.AccessToken == "" || tokens.RefreshToken != "" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn != int64((15*time.Minute).Seconds()) || !tokens.PasswordChangeRequired,
+		"tokens = %#v", tokens)
 
 	claims, parsedUserID, err := issuer.ParsePasswordChangeToken(context.Background(), tokens.AccessToken)
-	if err != nil {
-		t.Fatalf("ParsePasswordChangeToken: %v", err)
-	}
-	if parsedUserID.String() != issuerTestUserID || claims.Subject != commonauth.SubjectPasswordChange || claims.SessionID != "pc-123" || claims.TokenVersion != 2 {
-		t.Fatalf("claims = %#v parsedUserID = %s", claims, parsedUserID.String())
-	}
+	require.NoError(t, err,
+		"ParsePasswordChangeToken: %v", err)
+	require.False(t, parsedUserID.String() != issuerTestUserID || claims.Subject != commonauth.SubjectPasswordChange || claims.SessionID != "pc-123" || claims.TokenVersion != 2,
+		"claims = %#v parsedUserID = %s", claims, parsedUserID.String())
+
 }
 
 func TestIssuerParsesBearerRefreshToken(t *testing.T) {
@@ -55,16 +51,13 @@ func TestIssuerParsesBearerRefreshToken(t *testing.T) {
 	jwt := commonauth.NewJWTService(cfg.Auth)
 	issuer := NewIssuer(jwt, cfg)
 	refresh, err := jwt.SignRefreshToken(commonauth.SignInput{UserID: issuerTestUserID, TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
-	if err != nil {
-		t.Fatalf("SignRefreshToken: %v", err)
-	}
+	require.NoError(t, err,
+		"SignRefreshToken: %v", err)
 
 	claims, err := issuer.ParseRefreshToken(context.Background(), "Bearer "+refresh)
+	require.NoError(t, err,
+		"ParseRefreshToken: %v", err)
+	require.False(t, claims.UserID != issuerTestUserID || claims.SessionID != "s-123" || claims.Subject != commonauth.SubjectRefresh,
+		"claims = %#v", claims)
 
-	if err != nil {
-		t.Fatalf("ParseRefreshToken: %v", err)
-	}
-	if claims.UserID != issuerTestUserID || claims.SessionID != "s-123" || claims.Subject != commonauth.SubjectRefresh {
-		t.Fatalf("claims = %#v", claims)
-	}
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 
 	"github.com/aegiscore/common/runtime/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
@@ -20,10 +21,9 @@ func TestNewTokenVersionLocalCacheRequiresConfigInstance(t *testing.T) {
 		Users:  fakeTokenVersionStore{},
 		Cache:  fakeAuthStore{},
 	})
+	require.False(t, err == nil || !strings.Contains(err.Error(), "local_cache.auth_token_version is required"),
+		"newTokenVersionLocalCache error = %v, want missing local cache config", err)
 
-	if err == nil || !strings.Contains(err.Error(), "local_cache.auth_token_version is required") {
-		t.Fatalf("newTokenVersionLocalCache error = %v, want missing local cache config", err)
-	}
 }
 
 var _ authapplication.UserTokenVersionStore = fakeTokenVersionStore{}

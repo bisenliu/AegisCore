@@ -13,6 +13,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
@@ -33,108 +34,118 @@ func TestSessionStoreTokenVersionCacheMiss(t *testing.T) {
 	store := newTestSessionStore(redisServer)
 
 	_, err := store.GetCachedTokenVersion(context.Background(), sessionTestUserID.String())
-	if !errors.Is(err, authdomain.ErrTokenVersionCacheMiss) {
-		t.Fatalf("GetCachedTokenVersion err = %v, want cache miss", err)
-	}
-	if redisServer.Exists(store.tokenVersionKey(sessionTestUserID.String())) {
-		t.Fatal("cache miss should not create token version key")
-	}
+	require.ErrorIs(t, err, authdomain.ErrTokenVersionCacheMiss,
+		"GetCachedTokenVersion err = %v, want cache miss", err)
+	require.False(t, redisServer.Exists(store.tokenVersionKey(sessionTestUserID.String())),
+		"cache miss should not create token version key")
+
 }
 
 func TestSessionStoreCachesAndGetsTokenVersion(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
+	{
 
-	if err := store.CacheTokenVersion(context.Background(), sessionTestUserID.String(), 7); err != nil {
-		t.Fatalf("CacheTokenVersion: %v", err)
+		err := store.CacheTokenVersion(context.Background(), sessionTestUserID.String(), 7)
+		require.NoError(t, err,
+			"CacheTokenVersion: %v", err)
 	}
+
 	version, err := store.GetCachedTokenVersion(context.Background(), sessionTestUserID.String())
-	if err != nil {
-		t.Fatalf("GetCachedTokenVersion: %v", err)
-	}
-	if version != 7 {
-		t.Fatalf("version = %d, want 7", version)
-	}
+	require.NoError(t, err,
+		"GetCachedTokenVersion: %v", err)
+	require.EqualValues(t, 7, version,
+		"version = %d, want 7", version)
+
 	got, err := redisServer.Get(store.tokenVersionKey(sessionTestUserID.String()))
-	if err != nil {
-		t.Fatalf("Get cached token version: %v", err)
-	}
-	if got != "7" {
-		t.Fatalf("cached token version = %q, want 7", got)
-	}
+	require.NoError(t, err,
+		"Get cached token version: %v", err)
+	require.Equal(t, "7", got,
+		"cached token version = %q, want 7", got)
+
 }
 
 func TestSessionStoreCacheTokenVersionOverwritesStaleValue(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
+	{
 
-	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7); err != nil {
-		t.Fatalf("CacheTokenVersion old: %v", err)
+		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7)
+		require.NoError(t, err,
+			"CacheTokenVersion old: %v", err)
 	}
-	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 8); err != nil {
-		t.Fatalf("CacheTokenVersion new: %v", err)
+	{
+
+		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 8)
+		require.NoError(t, err,
+			"CacheTokenVersion new: %v", err)
 	}
 
 	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
-	if err != nil {
-		t.Fatalf("GetCachedTokenVersion: %v", err)
-	}
-	if version != 8 {
-		t.Fatalf("version = %d, want 8", version)
-	}
+	require.NoError(t, err,
+		"GetCachedTokenVersion: %v", err)
+	require.EqualValues(t, 8, version,
+		"version = %d, want 8", version)
+
 	ttl, err := store.redis.TTL(ctx, store.tokenVersionKey(sessionTestUserID.String())).Result()
-	if err != nil {
-		t.Fatalf("TTL: %v", err)
-	}
-	if ttl <= 0 || ttl > time.Minute {
-		t.Fatalf("TTL = %s, want within explicit %s", ttl, time.Minute)
-	}
+	require.NoError(t, err,
+		"TTL: %v", err)
+	require.False(t, ttl <= 0 || ttl > time.Minute,
+		"TTL = %s, want within explicit %s", ttl, time.Minute)
+
 }
 
 func TestSessionStoreCacheTokenVersionDoesNotOverwriteNewerValue(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
+	{
 
-	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 9); err != nil {
-		t.Fatalf("CacheTokenVersion new: %v", err)
+		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 9)
+		require.NoError(t, err,
+			"CacheTokenVersion new: %v", err)
 	}
-	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 8); err != nil {
-		t.Fatalf("CacheTokenVersion stale: %v", err)
+	{
+
+		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 8)
+		require.NoError(t, err,
+			"CacheTokenVersion stale: %v", err)
 	}
 
 	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
-	if err != nil {
-		t.Fatalf("GetCachedTokenVersion: %v", err)
-	}
-	if version != 9 {
-		t.Fatalf("version = %d, want 9", version)
-	}
+	require.NoError(t, err,
+		"GetCachedTokenVersion: %v", err)
+	require.EqualValues(t, 9, version,
+		"version = %d, want 9", version)
+
 }
 
 func TestSessionStoreDeleteCachedTokenVersion(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
+	{
 
-	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7); err != nil {
-		t.Fatalf("CacheTokenVersion: %v", err)
+		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7)
+		require.NoError(t, err,
+			"CacheTokenVersion: %v", err)
 	}
-	if err := store.DeleteCachedTokenVersion(ctx, sessionTestUserID.String()); err != nil {
-		t.Fatalf("DeleteCachedTokenVersion: %v", err)
+	{
+
+		err := store.DeleteCachedTokenVersion(ctx, sessionTestUserID.String())
+		require.NoError(t, err,
+			"DeleteCachedTokenVersion: %v", err)
 	}
 
 	_, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
-	if !errors.Is(err, authdomain.ErrTokenVersionCacheMiss) {
-		t.Fatalf("GetCachedTokenVersion err = %v, want cache miss", err)
-	}
-	if redisServer.Exists(store.tokenVersionKey(sessionTestUserID.String())) {
-		t.Fatal("token version cache key still exists")
-	}
-	if store.tokenVersionKey(sessionTestUserID.String()) != "auth:user:token_version:{"+sessionTestUserID.String()+"}" {
-		t.Fatalf("token version key changed: %q", store.tokenVersionKey(sessionTestUserID.String()))
-	}
+	require.ErrorIs(t, err, authdomain.ErrTokenVersionCacheMiss,
+		"GetCachedTokenVersion err = %v, want cache miss", err)
+	require.False(t, redisServer.Exists(store.tokenVersionKey(sessionTestUserID.String())),
+		"token version cache key still exists")
+	require.Equal(t, "auth:user:token_version:{"+sessionTestUserID.String()+"}", store.tokenVersionKey(sessionTestUserID.String()),
+		"token version key changed: %q", store.tokenVersionKey(sessionTestUserID.String()))
+
 }
 
 func TestSessionStoreTokenVersionCacheUsesDefaultTTL(t *testing.T) {
@@ -150,17 +161,15 @@ func TestSessionStoreTokenVersionCacheUsesDefaultTTL(t *testing.T) {
 			store := newTestSessionStoreWithConfig(redisServer, config.AuthConfig{TokenVersionCacheTTL: tc.ttl})
 
 			err := store.CacheTokenVersion(context.Background(), sessionTestUserID.String(), 7)
+			require.NoError(t, err,
+				"CacheTokenVersion: %v", err)
 
-			if err != nil {
-				t.Fatalf("CacheTokenVersion: %v", err)
-			}
 			ttl, err := store.redis.TTL(context.Background(), store.tokenVersionKey(sessionTestUserID.String())).Result()
-			if err != nil {
-				t.Fatalf("TTL: %v", err)
-			}
-			if ttl <= 0 || ttl > defaultTokenVersionCacheTTL {
-				t.Fatalf("TTL = %s, want within default %s", ttl, defaultTokenVersionCacheTTL)
-			}
+			require.NoError(t, err,
+				"TTL: %v", err)
+			require.False(t, ttl <= 0 || ttl > defaultTokenVersionCacheTTL,
+				"TTL = %s, want within default %s", ttl, defaultTokenVersionCacheTTL)
+
 		})
 	}
 }
@@ -171,17 +180,15 @@ func TestSessionStoreTokenVersionCacheUsesExplicitTTL(t *testing.T) {
 	store := newTestSessionStoreWithConfig(redisServer, config.AuthConfig{TokenVersionCacheTTL: explicitTTL})
 
 	err := store.CacheTokenVersion(context.Background(), sessionTestUserID.String(), 7)
+	require.NoError(t, err,
+		"CacheTokenVersion: %v", err)
 
-	if err != nil {
-		t.Fatalf("CacheTokenVersion: %v", err)
-	}
 	ttl, err := store.redis.TTL(context.Background(), store.tokenVersionKey(sessionTestUserID.String())).Result()
-	if err != nil {
-		t.Fatalf("TTL: %v", err)
-	}
-	if ttl <= 0 || ttl > explicitTTL {
-		t.Fatalf("TTL = %s, want within explicit %s", ttl, explicitTTL)
-	}
+	require.NoError(t, err,
+		"TTL: %v", err)
+	require.False(t, ttl <= 0 || ttl > explicitTTL,
+		"TTL = %s, want within explicit %s", ttl, explicitTTL)
+
 }
 
 func TestSessionStoreTokenVersionInvalidCacheReportsMiss(t *testing.T) {
@@ -191,13 +198,16 @@ func TestSessionStoreTokenVersionInvalidCacheReportsMiss(t *testing.T) {
 	key := store.tokenVersionKey(sessionTestUserID.String())
 
 	for _, value := range []string{"not-an-int", "0"} {
-		if err := store.redis.Set(ctx, key, value, time.Minute).Err(); err != nil {
-			t.Fatalf("Set token version cache: %v", err)
+		{
+			err := store.redis.Set(ctx, key, value, time.Minute).Err()
+			require.NoError(t, err,
+				"Set token version cache: %v", err)
 		}
+
 		_, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
-		if !errors.Is(err, authdomain.ErrTokenVersionCacheMiss) {
-			t.Fatalf("GetCachedTokenVersion(%q) err = %v, want cache miss", value, err)
-		}
+		require.ErrorIs(t, err, authdomain.ErrTokenVersionCacheMiss,
+			"GetCachedTokenVersion(%q) err = %v, want cache miss", value, err)
+
 	}
 }
 
@@ -209,99 +219,107 @@ func TestTokenVersionValidatorBackfillsMiniredisCacheOnMiss(t *testing.T) {
 	ctx := context.Background()
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 7)
+	require.NoError(t, err,
+		"ValidateTokenVersion: %v", err)
+	require.False(t, users.getTokenVersionCalls != 1 || users.gotUserID != sessionTestUserID,
+		"users repo calls=%d userID=%s, want one call for %s", users.getTokenVersionCalls, users.gotUserID, sessionTestUserID)
 
-	if err != nil {
-		t.Fatalf("ValidateTokenVersion: %v", err)
-	}
-	if users.getTokenVersionCalls != 1 || users.gotUserID != sessionTestUserID {
-		t.Fatalf("users repo calls=%d userID=%s, want one call for %s", users.getTokenVersionCalls, users.gotUserID, sessionTestUserID)
-	}
 	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
-	if err != nil {
-		t.Fatalf("GetCachedTokenVersion after backfill: %v", err)
-	}
-	if version != 7 {
-		t.Fatalf("cached version = %d, want 7", version)
-	}
+	require.NoError(t, err,
+		"GetCachedTokenVersion after backfill: %v", err)
+	require.EqualValues(t, 7, version,
+		"cached version = %d, want 7", version)
+
 	ttl, err := store.redis.TTL(ctx, store.tokenVersionKey(sessionTestUserID.String())).Result()
-	if err != nil {
-		t.Fatalf("TTL: %v", err)
-	}
-	if ttl <= 0 || ttl > time.Minute {
-		t.Fatalf("TTL = %s, want within explicit %s", ttl, time.Minute)
-	}
+	require.NoError(t, err,
+		"TTL: %v", err)
+	require.False(t, ttl <= 0 || ttl > time.Minute,
+		"TTL = %s, want within explicit %s", ttl, time.Minute)
+
 }
 
 func TestTokenVersionValidatorUsesMiniredisCacheHitWithoutRepositoryLookup(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
-	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 8); err != nil {
-		t.Fatalf("CacheTokenVersion: %v", err)
+	{
+		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 8)
+		require.NoError(t, err,
+			"CacheTokenVersion: %v", err)
 	}
+
 	users := &tokenVersionRepositoryStub{err: errors.New("database should not be read")}
 	validator := newTestTokenVersionValidator(t, users, store)
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 8)
+	require.NoError(t, err,
+		"ValidateTokenVersion: %v", err)
+	require.EqualValues(t, 0, users.getTokenVersionCalls,
+		"users repo calls = %d, want 0 on cache hit", users.getTokenVersionCalls)
 
-	if err != nil {
-		t.Fatalf("ValidateTokenVersion: %v", err)
-	}
-	if users.getTokenVersionCalls != 0 {
-		t.Fatalf("users repo calls = %d, want 0 on cache hit", users.getTokenVersionCalls)
-	}
 }
 
 func TestTokenVersionValidatorRejectsStaleTokenUsingMiniredisCache(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
-	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 9); err != nil {
-		t.Fatalf("CacheTokenVersion: %v", err)
+	{
+		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 9)
+		require.NoError(t, err,
+			"CacheTokenVersion: %v", err)
 	}
+
 	users := &tokenVersionRepositoryStub{err: errors.New("database should not be read")}
 	validator := newTestTokenVersionValidator(t, users, store)
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 8)
+	require.ErrorIs(t, err, commonauth.ErrTokenVersionMismatch,
+		"err = %v, want token version mismatch", err)
+	require.EqualValues(t, 0, users.getTokenVersionCalls,
+		"users repo calls = %d, want 0 on cache hit mismatch", users.getTokenVersionCalls)
 
-	if !errors.Is(err, commonauth.ErrTokenVersionMismatch) {
-		t.Fatalf("err = %v, want token version mismatch", err)
-	}
-	if users.getTokenVersionCalls != 0 {
-		t.Fatalf("users repo calls = %d, want 0 on cache hit mismatch", users.getTokenVersionCalls)
-	}
 }
 
 func TestTokenVersionCacheRefreshMakesStaleTokenObservable(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
-	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 5); err != nil {
-		t.Fatalf("CacheTokenVersion old: %v", err)
+	{
+		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 5)
+		require.NoError(t, err,
+			"CacheTokenVersion old: %v", err)
 	}
-	if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-stale", TokenVersion: 5}, time.Hour, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("CreateSession: %v", err)
+	{
+
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-stale", TokenVersion: 5}, time.Hour, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession: %v", err)
 	}
-	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 6); err != nil {
-		t.Fatalf("CacheTokenVersion refreshed: %v", err)
+	{
+
+		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 6)
+		require.NoError(t, err,
+			"CacheTokenVersion refreshed: %v", err)
 	}
-	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
-		t.Fatalf("DeleteAllUserSessions: %v", err)
+	{
+
+		err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String())
+		require.NoError(t, err,
+			"DeleteAllUserSessions: %v", err)
 	}
+
 	validator := newTestTokenVersionValidator(t, &tokenVersionRepositoryStub{err: errors.New("database should not be read")}, store)
 
 	err := validator.ValidateTokenVersion(ctx, sessionTestUserID.String(), 5)
+	require.ErrorIs(t, err, commonauth.ErrTokenVersionMismatch,
+		"err = %v, want token version mismatch", err)
 
-	if !errors.Is(err, commonauth.ErrTokenVersionMismatch) {
-		t.Fatalf("err = %v, want token version mismatch", err)
-	}
 	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
-	if err != nil {
-		t.Fatalf("GetCachedTokenVersion: %v", err)
-	}
-	if version != 6 {
-		t.Fatalf("cached version = %d, want 6", version)
-	}
+	require.NoError(t, err,
+		"GetCachedTokenVersion: %v", err)
+	require.EqualValues(t, 6, version,
+		"cached version = %d, want 6", version)
+
 	waitForRedisCondition(t, func() bool {
 		return !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-stale")) &&
 			!redisServer.Exists(store.userSessionsKey(sessionTestUserID.String()))
@@ -316,76 +334,87 @@ func TestSessionStoreCreateGetAndDeleteSession(t *testing.T) {
 	ttl := time.Hour
 	mismatchedExpiresAt := time.Now().Add(24 * time.Hour).Truncate(time.Second)
 	session := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-123", TokenVersion: 1, ExpiresAt: mismatchedExpiresAt}
-	if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err(); err != nil {
-		t.Fatalf("ZAdd expired session: %v", err)
+	{
+		err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err()
+		require.NoError(t, err,
+			"ZAdd expired session: %v", err)
 	}
 
 	beforeCreate := time.Now()
-	if err := store.CreateSession(ctx, session, ttl, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("CreateSession: %v", err)
+	{
+		err := store.CreateSession(ctx, session, ttl, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession: %v", err)
 	}
+
 	afterCreate := time.Now()
 	stored, err := store.GetSession(ctx, sessionTestUserID.String(), "s-123")
-	if err != nil {
-		t.Fatalf("GetSession: %v", err)
-	}
-	if stored.UserID != sessionTestUserID.String() || stored.SessionID != "s-123" || stored.TokenVersion != 1 {
-		t.Fatalf("stored = %#v", stored)
-	}
-	if stored.ExpiresAt.Before(beforeCreate.Add(ttl)) || stored.ExpiresAt.After(afterCreate.Add(ttl)) {
-		t.Fatalf("stored ExpiresAt = %s, want derived from ttl %s", stored.ExpiresAt, ttl)
-	}
-	if stored.ExpiresAt.Unix() == mismatchedExpiresAt.Unix() {
-		t.Fatalf("stored ExpiresAt used caller-provided mismatched value %s", mismatchedExpiresAt)
-	}
+	require.NoError(t, err,
+		"GetSession: %v", err)
+	require.False(t, stored.UserID != sessionTestUserID.String() || stored.SessionID != "s-123" || stored.TokenVersion != 1,
+		"stored = %#v", stored)
+	require.False(t, stored.ExpiresAt.Before(beforeCreate.Add(ttl)) || stored.ExpiresAt.After(afterCreate.Add(ttl)),
+		"stored ExpiresAt = %s, want derived from ttl %s", stored.ExpiresAt, ttl)
+	require.NotEqual(t, mismatchedExpiresAt.Unix(), stored.ExpiresAt.Unix(),
+		"stored ExpiresAt used caller-provided mismatched value %s", mismatchedExpiresAt)
+
 	score, err := store.redis.ZScore(ctx, indexKey, "s-123").Result()
-	if err != nil {
-		t.Fatalf("ZScore: %v", err)
-	}
-	if int64(score) != stored.ExpiresAt.Unix() {
-		t.Fatalf("ZScore = %d, want %d", int64(score), stored.ExpiresAt.Unix())
-	}
+	require.NoError(t, err,
+		"ZScore: %v", err)
+	require.Equal(t, stored.ExpiresAt.Unix(), int64(score),
+		"ZScore = %d, want %d", int64(score), stored.ExpiresAt.Unix())
+
 	sessionTTL, err := store.redis.TTL(ctx, store.sessionKey(sessionTestUserID.String(), "s-123")).Result()
-	if err != nil {
-		t.Fatalf("session TTL: %v", err)
-	}
-	if sessionTTL <= 0 || sessionTTL > ttl {
-		t.Fatalf("session TTL = %s, want within %s", sessionTTL, ttl)
-	}
+	require.NoError(t, err,
+		"session TTL: %v", err)
+	require.False(t, sessionTTL <= 0 || sessionTTL > ttl,
+		"session TTL = %s, want within %s", sessionTTL, ttl)
+
 	indexTTL, err := store.redis.TTL(ctx, indexKey).Result()
-	if err != nil {
-		t.Fatalf("index TTL: %v", err)
+	require.NoError(t, err,
+		"index TTL: %v", err)
+	require.False(t, indexTTL <= ttl || indexTTL > ttl+authSessionIndexTTLBuffer,
+		"index TTL = %s, want between session ttl and %s", indexTTL, ttl+authSessionIndexTTLBuffer)
+	{
+
+		_, err := store.redis.ZScore(ctx, indexKey, "expired-session").Result()
+		require.ErrorIs(t, err, rediscache.Nil,
+			"expired session ZScore err = %v, want redis.Nil", err)
 	}
-	if indexTTL <= ttl || indexTTL > ttl+authSessionIndexTTLBuffer {
-		t.Fatalf("index TTL = %s, want between session ttl and %s", indexTTL, ttl+authSessionIndexTTLBuffer)
-	}
-	if _, err := store.redis.ZScore(ctx, indexKey, "expired-session").Result(); !errors.Is(err, rediscache.Nil) {
-		t.Fatalf("expired session ZScore err = %v, want redis.Nil", err)
-	}
+
 	typ, err := store.redis.Type(ctx, indexKey).Result()
-	if err != nil {
-		t.Fatalf("Type: %v", err)
+	require.NoError(t, err,
+		"Type: %v", err)
+	require.Equal(t, "zset", typ,
+		"session index type = %q, want zset", typ)
+	{
+
+		err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-on-delete"}).Err()
+		require.NoError(t, err,
+			"ZAdd expired-on-delete: %v", err)
 	}
-	if typ != "zset" {
-		t.Fatalf("session index type = %q, want zset", typ)
+	{
+
+		err := store.DeleteSession(ctx, sessionTestUserID.String(), "s-123")
+		require.NoError(t, err,
+			"DeleteSession: %v", err)
 	}
 
-	if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-on-delete"}).Err(); err != nil {
-		t.Fatalf("ZAdd expired-on-delete: %v", err)
+	require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-123")),
+		"session key still exists")
+	{
+
+		_, err := store.redis.ZScore(ctx, indexKey, "s-123").Result()
+		require.ErrorIs(t, err, rediscache.Nil,
+			"deleted session ZScore err = %v, want redis.Nil", err)
+	}
+	{
+
+		_, err := store.redis.ZScore(ctx, indexKey, "expired-on-delete").Result()
+		require.ErrorIs(t, err, rediscache.Nil,
+			"expired-on-delete ZScore err = %v, want redis.Nil", err)
 	}
 
-	if err := store.DeleteSession(ctx, sessionTestUserID.String(), "s-123"); err != nil {
-		t.Fatalf("DeleteSession: %v", err)
-	}
-	if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-123")) {
-		t.Fatal("session key still exists")
-	}
-	if _, err := store.redis.ZScore(ctx, indexKey, "s-123").Result(); !errors.Is(err, rediscache.Nil) {
-		t.Fatalf("deleted session ZScore err = %v, want redis.Nil", err)
-	}
-	if _, err := store.redis.ZScore(ctx, indexKey, "expired-on-delete").Result(); !errors.Is(err, rediscache.Nil) {
-		t.Fatalf("expired-on-delete ZScore err = %v, want redis.Nil", err)
-	}
 }
 
 func TestSessionStoreCreateSessionPrunesOldestWhenLimitExceeded(t *testing.T) {
@@ -396,31 +425,33 @@ func TestSessionStoreCreateSessionPrunesOldestWhenLimitExceeded(t *testing.T) {
 
 	for i := 0; i < 6; i++ {
 		sessionID := "s-" + strconv.Itoa(i)
-		if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: sessionID, TokenVersion: 1}, time.Hour, limit); err != nil {
-			t.Fatalf("CreateSession(%s): %v", sessionID, err)
+		{
+			err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: sessionID, TokenVersion: 1}, time.Hour, limit)
+			require.NoError(t, err,
+				"CreateSession(%s): %v", sessionID, err)
 		}
+
 		time.Sleep(time.Millisecond)
 	}
 
 	members, err := store.redis.ZRange(ctx, store.userSessionsKey(sessionTestUserID.String()), 0, -1).Result()
-	if err != nil {
-		t.Fatalf("ZRange: %v", err)
-	}
+	require.NoError(t, err,
+		"ZRange: %v", err)
+
 	wantMembers := []string{"s-1", "s-2", "s-3", "s-4", "s-5"}
-	if strings.Join(members, ",") != strings.Join(wantMembers, ",") {
-		t.Fatalf("members = %v, want %v", members, wantMembers)
-	}
-	if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-0")) {
-		t.Fatal("oldest session key still exists")
-	}
+	require.Equal(t, strings.Join(wantMembers, ","), strings.Join(members, ","),
+		"members = %v, want %v", members, wantMembers)
+	require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-0")),
+		"oldest session key still exists")
+
 	_, err = store.GetSession(ctx, sessionTestUserID.String(), "s-0")
-	if !errors.Is(err, authdomain.ErrAuthSessionNotFound) {
-		t.Fatalf("GetSession pruned err = %v, want session not found", err)
-	}
+	require.ErrorIs(t, err, authdomain.ErrAuthSessionNotFound,
+		"GetSession pruned err = %v, want session not found", err)
+
 	for _, sessionID := range wantMembers {
-		if !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), sessionID)) {
-			t.Fatalf("kept session key %s does not exist", sessionID)
-		}
+		require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), sessionID)),
+			"kept session key %s does not exist", sessionID)
+
 	}
 }
 
@@ -432,23 +463,25 @@ func TestSessionStoreCreateSessionAllowsUnlimitedWhenLimitDisabled(t *testing.T)
 
 	for i := 0; i < 6; i++ {
 		sessionID := "s-" + strconv.Itoa(i)
-		if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: sessionID, TokenVersion: 1}, time.Hour, limit); err != nil {
-			t.Fatalf("CreateSession(%s): %v", sessionID, err)
+		{
+			err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: sessionID, TokenVersion: 1}, time.Hour, limit)
+			require.NoError(t, err,
+				"CreateSession(%s): %v", sessionID, err)
 		}
+
 	}
 
 	count, err := store.redis.ZCard(ctx, store.userSessionsKey(sessionTestUserID.String())).Result()
-	if err != nil {
-		t.Fatalf("ZCard: %v", err)
-	}
-	if count != 6 {
-		t.Fatalf("session count = %d, want 6", count)
-	}
+	require.NoError(t, err,
+		"ZCard: %v", err)
+	require.EqualValues(t, 6, count,
+		"session count = %d, want 6", count)
+
 	for i := 0; i < 6; i++ {
 		sessionID := "s-" + strconv.Itoa(i)
-		if !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), sessionID)) {
-			t.Fatalf("session key %s does not exist", sessionID)
-		}
+		require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), sessionID)),
+			"session key %s does not exist", sessionID)
+
 	}
 }
 
@@ -458,27 +491,32 @@ func TestSessionStoreCreateSessionCleansExpiredIndexBeforePruning(t *testing.T) 
 	ctx := context.Background()
 	indexKey := store.userSessionsKey(sessionTestUserID.String())
 	limit := 1
-	if err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID.String(), "expired-session"), "stale", time.Hour).Err(); err != nil {
-		t.Fatalf("Set expired session: %v", err)
+	{
+		err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID.String(), "expired-session"), "stale", time.Hour).Err()
+		require.NoError(t, err,
+			"Set expired session: %v", err)
 	}
-	if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: redisScoreFloat(time.Now().Add(-time.Minute)), Member: "expired-session"}).Err(); err != nil {
-		t.Fatalf("ZAdd expired session: %v", err)
-	}
+	{
 
-	if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 1}, time.Hour, limit); err != nil {
-		t.Fatalf("CreateSession: %v", err)
+		err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: redisScoreFloat(time.Now().Add(-time.Minute)), Member: "expired-session"}).Err()
+		require.NoError(t, err,
+			"ZAdd expired session: %v", err)
+	}
+	{
+
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 1}, time.Hour, limit)
+		require.NoError(t, err,
+			"CreateSession: %v", err)
 	}
 
 	members, err := store.redis.ZRange(ctx, indexKey, 0, -1).Result()
-	if err != nil {
-		t.Fatalf("ZRange: %v", err)
-	}
-	if len(members) != 1 || members[0] != "s-new" {
-		t.Fatalf("members = %v, want only s-new", members)
-	}
-	if !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "expired-session")) {
-		t.Fatal("expired payload key should be left for its own TTL")
-	}
+	require.NoError(t, err,
+		"ZRange: %v", err)
+	require.False(t, len(members) != 1 || members[0] != "s-new",
+		"members = %v, want only s-new", members)
+	require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "expired-session")),
+		"expired payload key should be left for its own TTL")
+
 }
 
 func TestSessionStoreCreateSessionConcurrentAttemptsRespectLimit(t *testing.T) {
@@ -505,17 +543,16 @@ func TestSessionStoreCreateSessionConcurrentAttemptsRespectLimit(t *testing.T) {
 	wg.Wait()
 	close(errs)
 	for err := range errs {
-		if err != nil {
-			t.Fatalf("CreateSession concurrent: %v", err)
-		}
+		require.NoError(t, err,
+			"CreateSession concurrent: %v", err)
+
 	}
 	count, err := store.redis.ZCard(ctx, store.userSessionsKey(sessionTestUserID.String())).Result()
-	if err != nil {
-		t.Fatalf("ZCard: %v", err)
-	}
-	if count != int64(limit) {
-		t.Fatalf("session count = %d, want %d", count, limit)
-	}
+	require.NoError(t, err,
+		"ZCard: %v", err)
+	require.Equal(t, int64(limit), count,
+		"session count = %d, want %d", count, limit)
+
 }
 
 func TestSessionStoreRotateSession(t *testing.T) {
@@ -526,55 +563,63 @@ func TestSessionStoreRotateSession(t *testing.T) {
 	ttl := time.Hour
 	oldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 1}
 	newSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 1, ExpiresAt: time.Now().Add(24 * time.Hour)}
-	if err := store.CreateSession(ctx, oldSession, ttl, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("CreateSession: %v", err)
+	{
+		err := store.CreateSession(ctx, oldSession, ttl, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession: %v", err)
 	}
-	if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err(); err != nil {
-		t.Fatalf("ZAdd expired session: %v", err)
+	{
+
+		err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err()
+		require.NoError(t, err,
+			"ZAdd expired session: %v", err)
 	}
 
 	beforeRotate := time.Now()
-	if err := store.RotateSession(ctx, oldSession, newSession, ttl, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("RotateSession: %v", err)
+	{
+		err := store.RotateSession(ctx, oldSession, newSession, ttl, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"RotateSession: %v", err)
 	}
-	afterRotate := time.Now()
 
-	if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-old")) {
-		t.Fatal("old session key still exists")
-	}
+	afterRotate := time.Now()
+	require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-old")),
+		"old session key still exists")
+
 	stored, err := store.GetSession(ctx, sessionTestUserID.String(), "s-new")
-	if err != nil {
-		t.Fatalf("GetSession(new): %v", err)
+	require.NoError(t, err,
+		"GetSession(new): %v", err)
+	require.False(t, stored.UserID != sessionTestUserID.String() || stored.SessionID != "s-new" || stored.TokenVersion != 1,
+		"stored = %#v", stored)
+	require.False(t, stored.ExpiresAt.Before(beforeRotate.Add(ttl)) || stored.ExpiresAt.After(afterRotate.Add(ttl)),
+		"stored ExpiresAt = %s, want derived from ttl %s", stored.ExpiresAt, ttl)
+	require.NotEqual(t, newSession.ExpiresAt.Unix(), stored.ExpiresAt.Unix(),
+		"stored ExpiresAt used caller-provided mismatched value %s", newSession.ExpiresAt)
+	{
+
+		_, err := store.redis.ZScore(ctx, indexKey, "s-old").Result()
+		require.ErrorIs(t, err, rediscache.Nil,
+			"old session ZScore err = %v, want redis.Nil", err)
 	}
-	if stored.UserID != sessionTestUserID.String() || stored.SessionID != "s-new" || stored.TokenVersion != 1 {
-		t.Fatalf("stored = %#v", stored)
-	}
-	if stored.ExpiresAt.Before(beforeRotate.Add(ttl)) || stored.ExpiresAt.After(afterRotate.Add(ttl)) {
-		t.Fatalf("stored ExpiresAt = %s, want derived from ttl %s", stored.ExpiresAt, ttl)
-	}
-	if stored.ExpiresAt.Unix() == newSession.ExpiresAt.Unix() {
-		t.Fatalf("stored ExpiresAt used caller-provided mismatched value %s", newSession.ExpiresAt)
-	}
-	if _, err := store.redis.ZScore(ctx, indexKey, "s-old").Result(); !errors.Is(err, rediscache.Nil) {
-		t.Fatalf("old session ZScore err = %v, want redis.Nil", err)
-	}
+
 	score, err := store.redis.ZScore(ctx, indexKey, "s-new").Result()
-	if err != nil {
-		t.Fatalf("new session ZScore: %v", err)
+	require.NoError(t, err,
+		"new session ZScore: %v", err)
+	require.Equal(t, stored.ExpiresAt.Unix(), int64(score),
+		"new session score = %d, want %d", int64(score), stored.ExpiresAt.Unix())
+	{
+
+		_, err := store.redis.ZScore(ctx, indexKey, "expired-session").Result()
+		require.ErrorIs(t, err, rediscache.Nil,
+			"expired session ZScore err = %v, want redis.Nil", err)
 	}
-	if int64(score) != stored.ExpiresAt.Unix() {
-		t.Fatalf("new session score = %d, want %d", int64(score), stored.ExpiresAt.Unix())
-	}
-	if _, err := store.redis.ZScore(ctx, indexKey, "expired-session").Result(); !errors.Is(err, rediscache.Nil) {
-		t.Fatalf("expired session ZScore err = %v, want redis.Nil", err)
-	}
+
 	indexTTL, err := store.redis.TTL(ctx, indexKey).Result()
-	if err != nil {
-		t.Fatalf("index TTL: %v", err)
-	}
-	if indexTTL <= ttl || indexTTL > ttl+authSessionIndexTTLBuffer {
-		t.Fatalf("index TTL = %s, want between session ttl and %s", indexTTL, ttl+authSessionIndexTTLBuffer)
-	}
+	require.NoError(t, err,
+		"index TTL: %v", err)
+	require.False(t, indexTTL <= ttl || indexTTL > ttl+authSessionIndexTTLBuffer,
+		"index TTL = %s, want between session ttl and %s", indexTTL, ttl+authSessionIndexTTLBuffer)
+
 }
 
 func TestSessionStoreRotateSessionPrunesOldestWhenLimitExceeded(t *testing.T) {
@@ -587,39 +632,47 @@ func TestSessionStoreRotateSessionPrunesOldestWhenLimitExceeded(t *testing.T) {
 		sessionID := "s-" + strconv.Itoa(i)
 		session := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: sessionID, TokenVersion: 1}
 		data, err := json.Marshal(session)
-		if err != nil {
-			t.Fatalf("Marshal session %s: %v", sessionID, err)
+		require.NoError(t, err,
+			"Marshal session %s: %v", sessionID, err)
+		{
+
+			err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID.String(), sessionID), data, time.Hour).Err()
+			require.NoError(t, err,
+				"Set session %s: %v", sessionID, err)
 		}
-		if err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID.String(), sessionID), data, time.Hour).Err(); err != nil {
-			t.Fatalf("Set session %s: %v", sessionID, err)
+		{
+
+			err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: redisScoreFloat(time.Now().Add(time.Duration(i) * time.Minute)), Member: sessionID}).Err()
+			require.NoError(t, err,
+				"ZAdd session %s: %v", sessionID, err)
 		}
-		if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: redisScoreFloat(time.Now().Add(time.Duration(i) * time.Minute)), Member: sessionID}).Err(); err != nil {
-			t.Fatalf("ZAdd session %s: %v", sessionID, err)
-		}
+
 	}
 	oldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-4", TokenVersion: 1}
 	newSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 1}
+	{
 
-	if err := store.RotateSession(ctx, oldSession, newSession, time.Hour, limit); err != nil {
-		t.Fatalf("RotateSession: %v", err)
+		err := store.RotateSession(ctx, oldSession, newSession, time.Hour, limit)
+		require.NoError(t, err,
+			"RotateSession: %v", err)
 	}
 
 	members, err := store.redis.ZRange(ctx, indexKey, 0, -1).Result()
-	if err != nil {
-		t.Fatalf("ZRange: %v", err)
-	}
+	require.NoError(t, err,
+		"ZRange: %v", err)
+
 	wantMembers := []string{"s-2", "s-3", "s-new"}
-	if strings.Join(members, ",") != strings.Join(wantMembers, ",") {
-		t.Fatalf("members = %v, want %v", members, wantMembers)
-	}
+	require.Equal(t, strings.Join(wantMembers, ","), strings.Join(members, ","),
+		"members = %v, want %v", members, wantMembers)
+
 	for _, sessionID := range []string{"s-1", "s-4"} {
-		if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), sessionID)) {
-			t.Fatalf("pruned or rotated session key %s still exists", sessionID)
-		}
+		require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), sessionID)),
+			"pruned or rotated session key %s still exists", sessionID)
+
 	}
-	if !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-new")) {
-		t.Fatal("new rotated session key does not exist")
-	}
+	require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-new")),
+		"new rotated session key does not exist")
+
 }
 
 func TestSessionStoreRotateSessionRejectsMissingOldSession(t *testing.T) {
@@ -630,13 +683,11 @@ func TestSessionStoreRotateSessionRejectsMissingOldSession(t *testing.T) {
 	newSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 1}
 
 	err := store.RotateSession(ctx, oldSession, newSession, time.Hour, defaultMaxActiveSessionsPerUser())
+	require.ErrorIs(t, err, authdomain.ErrAuthSessionNotFound,
+		"err = %v, want session not found", err)
+	require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-new")),
+		"new session was created after missing old session")
 
-	if !errors.Is(err, authdomain.ErrAuthSessionNotFound) {
-		t.Fatalf("err = %v, want session not found", err)
-	}
-	if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-new")) {
-		t.Fatal("new session was created after missing old session")
-	}
 }
 
 func TestSessionStoreRotateSessionRejectsOldSessionMismatch(t *testing.T) {
@@ -644,23 +695,23 @@ func TestSessionStoreRotateSessionRejectsOldSessionMismatch(t *testing.T) {
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
 	storedOldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 1}
-	if err := store.CreateSession(ctx, storedOldSession, time.Hour, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("CreateSession: %v", err)
+	{
+		err := store.CreateSession(ctx, storedOldSession, time.Hour, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession: %v", err)
 	}
+
 	oldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
 	newSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 2}
 
 	err := store.RotateSession(ctx, oldSession, newSession, time.Hour, defaultMaxActiveSessionsPerUser())
+	require.ErrorIs(t, err, authdomain.ErrAuthSessionMismatch,
+		"err = %v, want session mismatch", err)
+	require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-old")),
+		"old session was deleted after mismatch")
+	require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-new")),
+		"new session was created after mismatch")
 
-	if !errors.Is(err, authdomain.ErrAuthSessionMismatch) {
-		t.Fatalf("err = %v, want session mismatch", err)
-	}
-	if !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-old")) {
-		t.Fatal("old session was deleted after mismatch")
-	}
-	if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-new")) {
-		t.Fatal("new session was created after mismatch")
-	}
 }
 
 func TestSessionStoreRotateSessionConcurrentAttemptsSucceedOnce(t *testing.T) {
@@ -668,9 +719,12 @@ func TestSessionStoreRotateSessionConcurrentAttemptsSucceedOnce(t *testing.T) {
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
 	oldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 1}
-	if err := store.CreateSession(ctx, oldSession, time.Hour, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("CreateSession: %v", err)
+	{
+		err := store.CreateSession(ctx, oldSession, time.Hour, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession: %v", err)
 	}
+
 	const attempts = 8
 	start := make(chan struct{})
 	var wg sync.WaitGroup
@@ -695,20 +749,19 @@ func TestSessionStoreRotateSessionConcurrentAttemptsSucceedOnce(t *testing.T) {
 			successes++
 			continue
 		}
-		if !errors.Is(err, authdomain.ErrAuthSessionNotFound) {
-			t.Fatalf("err = %v, want session not found for failed concurrent rotation", err)
-		}
+		require.ErrorIs(t, err, authdomain.ErrAuthSessionNotFound,
+			"err = %v, want session not found for failed concurrent rotation", err)
+
 	}
-	if successes != 1 {
-		t.Fatalf("successes = %d, want 1", successes)
-	}
+	require.EqualValues(t, 1, successes,
+		"successes = %d, want 1", successes)
+
 	members, err := store.redis.ZRange(ctx, store.userSessionsKey(sessionTestUserID.String()), 0, -1).Result()
-	if err != nil {
-		t.Fatalf("ZRange: %v", err)
-	}
-	if len(members) != 1 {
-		t.Fatalf("members = %v, want exactly one new session", members)
-	}
+	require.NoError(t, err,
+		"ZRange: %v", err)
+	require.EqualValues(t, 1, len(members),
+		"members = %v, want exactly one new session", members)
+
 }
 
 func TestSessionStoreDeleteAllUserSessions(t *testing.T) {
@@ -717,30 +770,45 @@ func TestSessionStoreDeleteAllUserSessions(t *testing.T) {
 	ctx := context.Background()
 	indexKey := store.userSessionsKey(sessionTestUserID.String())
 	for _, sessionID := range []string{"s-1", "s-2"} {
-		if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: sessionID, TokenVersion: 1, ExpiresAt: time.Now().Add(time.Hour)}, time.Hour, defaultMaxActiveSessionsPerUser()); err != nil {
-			t.Fatalf("CreateSession: %v", err)
+		{
+			err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: sessionID, TokenVersion: 1, ExpiresAt: time.Now().Add(time.Hour)}, time.Hour, defaultMaxActiveSessionsPerUser())
+			require.NoError(t, err,
+				"CreateSession: %v", err)
 		}
+
 	}
-	if err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID.String(), "expired-session"), "stale", 0).Err(); err != nil {
-		t.Fatalf("Set expired session: %v", err)
+	{
+		err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID.String(), "expired-session"), "stale", 0).Err()
+		require.NoError(t, err,
+			"Set expired session: %v", err)
 	}
-	if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err(); err != nil {
-		t.Fatalf("ZAdd expired session: %v", err)
+	{
+
+		err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(-time.Minute).Unix()), Member: "expired-session"}).Err()
+		require.NoError(t, err,
+			"ZAdd expired session: %v", err)
 	}
-	if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(time.Hour).Unix()), Member: "missing-session"}).Err(); err != nil {
-		t.Fatalf("ZAdd missing session: %v", err)
+	{
+
+		err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(time.Hour).Unix()), Member: "missing-session"}).Err()
+		require.NoError(t, err,
+			"ZAdd missing session: %v", err)
 	}
-	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
-		t.Fatalf("DeleteAllUserSessions: %v", err)
+	{
+
+		err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String())
+		require.NoError(t, err,
+			"DeleteAllUserSessions: %v", err)
 	}
+
 	waitForRedisCondition(t, func() bool {
 		return !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-1")) &&
 			!redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-2")) &&
 			!redisServer.Exists(indexKey)
 	}, "user sessions were not fully deleted")
-	if !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "expired-session")) {
-		t.Fatal("expired session key was deleted despite expired index member cleanup")
-	}
+	require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "expired-session")),
+		"expired session key was deleted despite expired index member cleanup")
+
 }
 
 func TestSessionStoreDeleteAllUserSessionsPurgesInBatches(t *testing.T) {
@@ -751,16 +819,24 @@ func TestSessionStoreDeleteAllUserSessionsPurgesInBatches(t *testing.T) {
 	sessionCount := int(deleteAllUserSessionsBatchSize)*2 + 1
 	for i := 0; i < sessionCount; i++ {
 		sessionID := "bulk-" + strconv.Itoa(i)
-		if err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID.String(), sessionID), "{}", time.Hour).Err(); err != nil {
-			t.Fatalf("Set session %d: %v", i, err)
+		{
+			err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID.String(), sessionID), "{}", time.Hour).Err()
+			require.NoError(t, err,
+				"Set session %d: %v", i, err)
 		}
-		if err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(time.Hour).Unix()), Member: sessionID}).Err(); err != nil {
-			t.Fatalf("ZAdd session %d: %v", i, err)
-		}
-	}
+		{
 
-	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
-		t.Fatalf("DeleteAllUserSessions: %v", err)
+			err := store.redis.ZAdd(ctx, indexKey, rediscache.Z{Score: float64(time.Now().Add(time.Hour).Unix()), Member: sessionID}).Err()
+			require.NoError(t, err,
+				"ZAdd session %d: %v", i, err)
+		}
+
+	}
+	{
+
+		err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String())
+		require.NoError(t, err,
+			"DeleteAllUserSessions: %v", err)
 	}
 
 	waitForRedisCondition(t, func() bool {
@@ -779,30 +855,36 @@ func TestSessionStoreDeleteAllUserSessionsDoesNotDeleteNewSessionsAfterDetach(t 
 	ctx := context.Background()
 	oldSessionID := "old-before-detach"
 	newSessionID := "new-after-detach"
-	if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: oldSessionID, TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("CreateSession old: %v", err)
+	{
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: oldSessionID, TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession old: %v", err)
 	}
+	{
 
-	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
-		t.Fatalf("DeleteAllUserSessions: %v", err)
+		err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String())
+		require.NoError(t, err,
+			"DeleteAllUserSessions: %v", err)
 	}
-	if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: newSessionID, TokenVersion: 2}, time.Hour, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("CreateSession new: %v", err)
+	{
+
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: newSessionID, TokenVersion: 2}, time.Hour, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession new: %v", err)
 	}
 
 	waitForRedisCondition(t, func() bool {
 		return !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), oldSessionID))
 	}, "detached old session was not purged")
-	if !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), newSessionID)) {
-		t.Fatal("new session created after detach was deleted")
-	}
+	require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), newSessionID)),
+		"new session created after detach was deleted")
+
 	members, err := store.redis.ZRange(ctx, store.userSessionsKey(sessionTestUserID.String()), 0, -1).Result()
-	if err != nil {
-		t.Fatalf("ZRange new index: %v", err)
-	}
-	if len(members) != 1 || members[0] != newSessionID {
-		t.Fatalf("members = %v, want only new session", members)
-	}
+	require.NoError(t, err,
+		"ZRange new index: %v", err)
+	require.False(t, len(members) != 1 || members[0] != newSessionID,
+		"members = %v, want only new session", members)
+
 }
 
 func TestSessionStoreDeleteAllUserSessionsReturnsSubmitError(t *testing.T) {
@@ -812,21 +894,20 @@ func TestSessionStoreDeleteAllUserSessionsReturnsSubmitError(t *testing.T) {
 	store.metrics = metrics
 	store.purgePool = rejectingPurgeTaskPool{err: workerpool.ErrQueueFull}
 	ctx := context.Background()
-	if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-rejected", TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("CreateSession: %v", err)
+	{
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-rejected", TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession: %v", err)
 	}
 
 	err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String())
+	require.ErrorIs(t, err, workerpool.ErrQueueFull,
+		"DeleteAllUserSessions err = %v, want ErrQueueFull", err)
+	require.False(t, err == nil || !strings.Contains(err.Error(), "submit delete user auth sessions purge"),
+		"DeleteAllUserSessions err = %v, want submit context", err)
+	require.EqualValues(t, 1, metrics.sessionPurgeFailures,
+		"session purge submit metrics = %d, want 1", metrics.sessionPurgeFailures)
 
-	if !errors.Is(err, workerpool.ErrQueueFull) {
-		t.Fatalf("DeleteAllUserSessions err = %v, want ErrQueueFull", err)
-	}
-	if err == nil || !strings.Contains(err.Error(), "submit delete user auth sessions purge") {
-		t.Fatalf("DeleteAllUserSessions err = %v, want submit context", err)
-	}
-	if metrics.sessionPurgeFailures != 1 {
-		t.Fatalf("session purge submit metrics = %d, want 1", metrics.sessionPurgeFailures)
-	}
 }
 
 func TestSessionStoreDeleteAllUserSessionsPurgeFailureIsObservable(t *testing.T) {
@@ -835,22 +916,25 @@ func TestSessionStoreDeleteAllUserSessionsPurgeFailureIsObservable(t *testing.T)
 	pool := &recordingPurgeTaskPool{beforeRun: redisServer.Close}
 	store.purgePool = pool
 	ctx := context.Background()
-	if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-fails", TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("CreateSession: %v", err)
+	{
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-fails", TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession: %v", err)
 	}
-	if err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String()); err != nil {
-		t.Fatalf("DeleteAllUserSessions: %v", err)
+	{
+
+		err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String())
+		require.NoError(t, err,
+			"DeleteAllUserSessions: %v", err)
 	}
 
-	if pool.Stats().Failed != 1 {
-		t.Fatalf("Failed stats = %d, want 1", pool.Stats().Failed)
-	}
-	if pool.err == nil || !strings.Contains(pool.err.Error(), "read detached user sessions") {
-		t.Fatalf("purge err = %v, want read detached user sessions", pool.err)
-	}
-	if pool.taskName != "auth.redis.purge_detached_user_sessions" {
-		t.Fatalf("task name = %q, want auth.redis.purge_detached_user_sessions", pool.taskName)
-	}
+	require.EqualValues(t, 1, pool.Stats().Failed,
+		"Failed stats = %d, want 1", pool.Stats().Failed)
+	require.False(t, pool.err == nil || !strings.Contains(pool.err.Error(), "read detached user sessions"),
+		"purge err = %v, want read detached user sessions", pool.err)
+	require.Equal(t, "auth.redis.purge_detached_user_sessions", pool.taskName,
+		"task name = %q, want auth.redis.purge_detached_user_sessions", pool.taskName)
+
 }
 
 func TestSessionStorePurgePoolStopHookPrecedesRedisStopHook(t *testing.T) {
@@ -868,23 +952,21 @@ func TestSessionStorePurgePoolStopHookPrecedesRedisStopHook(t *testing.T) {
 		Redis:     client,
 		Log:       zap.NewNop(),
 	})
-	if err != nil {
-		t.Fatalf("NewSessionPurgePool: %v", err)
-	}
+	require.NoError(t, err,
+		"NewSessionPurgePool: %v", err)
+
 	store, err := NewSessionStore(SessionStoreParams{
 		Redis:     client,
 		Cfg:       &config.Config{},
 		PurgePool: pool,
 	})
-	if err != nil {
-		t.Fatalf("NewSessionStore: %v", err)
-	}
-	if store.purgePool == nil {
-		t.Fatal("purgePool = nil")
-	}
-	if len(lifecycle.hooks) != 2 {
-		t.Fatalf("lifecycle hooks = %d, want redis and purge pool hooks", len(lifecycle.hooks))
-	}
+	require.NoError(t, err,
+		"NewSessionStore: %v", err)
+	require.NotNil(t, store.purgePool,
+		"purgePool = nil")
+	require.EqualValues(t, 2, len(lifecycle.hooks),
+		"lifecycle hooks = %d, want redis and purge pool hooks", len(lifecycle.hooks))
+
 	purgeStop := lifecycle.hooks[1].OnStop
 	lifecycle.hooks[1].OnStop = func(ctx context.Context) error {
 		stopOrder = append(stopOrder, "purge_pool")
@@ -898,13 +980,16 @@ func TestSessionStorePurgePoolStopHookPrecedesRedisStopHook(t *testing.T) {
 		if hook.OnStop == nil {
 			continue
 		}
-		if err := hook.OnStop(stopCtx); err != nil {
-			t.Fatalf("OnStop hook %d: %v", i, err)
+		{
+			err := hook.OnStop(stopCtx)
+			require.NoError(t, err,
+				"OnStop hook %d: %v", i, err)
 		}
+
 	}
-	if strings.Join(stopOrder, ",") != "purge_pool,redis" {
-		t.Fatalf("stop order = %v, want purge_pool before redis", stopOrder)
-	}
+	require.Equal(t, "purge_pool,redis", strings.Join(stopOrder, ","),
+		"stop order = %v, want purge_pool before redis", stopOrder)
+
 }
 
 func TestSessionStoreConsumesNamedPurgePool(t *testing.T) {
@@ -937,12 +1022,11 @@ func TestSessionStoreConsumesNamedPurgePool(t *testing.T) {
 	app.RequireStart()
 	app.RequireStop()
 	_ = client.Close()
-	if store == nil {
-		t.Fatal("store = nil")
-	}
-	if store.purgePool == nil {
-		t.Fatal("purgePool = nil")
-	}
+	require.NotNil(t, store,
+		"store = nil")
+	require.NotNil(t, store.purgePool,
+		"purgePool = nil")
+
 }
 
 func TestSessionStorePurgeUserSessionsKeyKeepsHashTag(t *testing.T) {
@@ -950,16 +1034,13 @@ func TestSessionStorePurgeUserSessionsKeyKeepsHashTag(t *testing.T) {
 	store := newTestSessionStore(redisServer)
 
 	purgeKey, err := store.purgeUserSessionsKey(sessionTestUserID.String())
-	if err != nil {
-		t.Fatalf("purgeUserSessionsKey: %v", err)
-	}
+	require.NoError(t, err,
+		"purgeUserSessionsKey: %v", err)
+	require.True(t, strings.HasPrefix(purgeKey, "auth:user:sessions:{"+sessionTestUserID.String()+"}:purge:"),
+		"purge key = %q, want unprefixed purge key prefix", purgeKey)
+	require.True(t, strings.Contains(purgeKey, "{"+sessionTestUserID.String()+"}"),
+		"purge key = %q, want user hash tag", purgeKey)
 
-	if !strings.HasPrefix(purgeKey, "auth:user:sessions:{"+sessionTestUserID.String()+"}:purge:") {
-		t.Fatalf("purge key = %q, want unprefixed purge key prefix", purgeKey)
-	}
-	if !strings.Contains(purgeKey, "{"+sessionTestUserID.String()+"}") {
-		t.Fatalf("purge key = %q, want user hash tag", purgeKey)
-	}
 }
 
 func TestSessionStorePurgeUserSessionsKeyUsesAppNamePrefix(t *testing.T) {
@@ -967,16 +1048,13 @@ func TestSessionStorePurgeUserSessionsKeyUsesAppNamePrefix(t *testing.T) {
 	store := newTestSessionStoreWithAppName(t, redisServer, " aegiscore-user-services ")
 
 	purgeKey, err := store.purgeUserSessionsKey(sessionTestUserID.String())
-	if err != nil {
-		t.Fatalf("purgeUserSessionsKey: %v", err)
-	}
+	require.NoError(t, err,
+		"purgeUserSessionsKey: %v", err)
+	require.True(t, strings.HasPrefix(purgeKey, "aegiscore-user-services:auth:user:sessions:{"+sessionTestUserID.String()+"}:purge:"),
+		"purge key = %q, want app-name-prefixed purge key", purgeKey)
+	require.True(t, strings.Contains(purgeKey, "{"+sessionTestUserID.String()+"}"),
+		"purge key = %q, want user hash tag", purgeKey)
 
-	if !strings.HasPrefix(purgeKey, "aegiscore-user-services:auth:user:sessions:{"+sessionTestUserID.String()+"}:purge:") {
-		t.Fatalf("purge key = %q, want app-name-prefixed purge key", purgeKey)
-	}
-	if !strings.Contains(purgeKey, "{"+sessionTestUserID.String()+"}") {
-		t.Fatalf("purge key = %q, want user hash tag", purgeKey)
-	}
 }
 
 func TestSessionStoreUserSessionsIndexTTLIsNotShortened(t *testing.T) {
@@ -986,31 +1064,33 @@ func TestSessionStoreUserSessionsIndexTTLIsNotShortened(t *testing.T) {
 	indexKey := store.userSessionsKey(sessionTestUserID.String())
 	longTTL := 2 * time.Hour
 	shortTTL := time.Hour
+	{
 
-	if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "long", TokenVersion: 1}, longTTL, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("CreateSession(long): %v", err)
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "long", TokenVersion: 1}, longTTL, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession(long): %v", err)
 	}
+
 	longIndexTTL, err := store.redis.TTL(ctx, indexKey).Result()
-	if err != nil {
-		t.Fatalf("long index TTL: %v", err)
-	}
-	if longIndexTTL <= longTTL || longIndexTTL > longTTL+authSessionIndexTTLBuffer {
-		t.Fatalf("long index TTL = %s, want between session ttl and %s", longIndexTTL, longTTL+authSessionIndexTTLBuffer)
+	require.NoError(t, err,
+		"long index TTL: %v", err)
+	require.False(t, longIndexTTL <= longTTL || longIndexTTL > longTTL+authSessionIndexTTLBuffer,
+		"long index TTL = %s, want between session ttl and %s", longIndexTTL, longTTL+authSessionIndexTTLBuffer)
+	{
+
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "short", TokenVersion: 1}, shortTTL, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession(short): %v", err)
 	}
 
-	if err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "short", TokenVersion: 1}, shortTTL, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("CreateSession(short): %v", err)
-	}
 	afterShortIndexTTL, err := store.redis.TTL(ctx, indexKey).Result()
-	if err != nil {
-		t.Fatalf("after short index TTL: %v", err)
-	}
-	if afterShortIndexTTL <= shortTTL+authSessionIndexTTLBuffer {
-		t.Fatalf("index TTL was shortened to %s after short session", afterShortIndexTTL)
-	}
-	if afterShortIndexTTL > longTTL+authSessionIndexTTLBuffer {
-		t.Fatalf("index TTL = %s, want at most %s", afterShortIndexTTL, longTTL+authSessionIndexTTLBuffer)
-	}
+	require.NoError(t, err,
+		"after short index TTL: %v", err)
+	require.False(t, afterShortIndexTTL <= shortTTL+authSessionIndexTTLBuffer,
+		"index TTL was shortened to %s after short session", afterShortIndexTTL)
+	require.False(t, afterShortIndexTTL > longTTL+authSessionIndexTTLBuffer,
+		"index TTL = %s, want at most %s", afterShortIndexTTL, longTTL+authSessionIndexTTLBuffer)
+
 }
 
 func TestSessionStoreKeysUseAppNamePrefixWithNewFormat(t *testing.T) {
@@ -1018,26 +1098,28 @@ func TestSessionStoreKeysUseAppNamePrefixWithNewFormat(t *testing.T) {
 	store := newTestSessionStoreWithAppName(t, redisServer, " aegiscore-user-services ")
 	ctx := context.Background()
 	session := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-prefixed", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
+	{
 
-	if err := store.CreateSession(ctx, session, time.Hour, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("CreateSession: %v", err)
+		err := store.CreateSession(ctx, session, time.Hour, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession: %v", err)
 	}
-	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7); err != nil {
-		t.Fatalf("CacheTokenVersion: %v", err)
+	{
+
+		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7)
+		require.NoError(t, err,
+			"CacheTokenVersion: %v", err)
 	}
 
-	if !redisServer.Exists("aegiscore-user-services:auth:session:{" + sessionTestUserID.String() + "}:s-prefixed") {
-		t.Fatal("prefixed new session key does not exist")
-	}
-	if !redisServer.Exists("aegiscore-user-services:auth:user:sessions:{" + sessionTestUserID.String() + "}") {
-		t.Fatal("prefixed new user sessions key does not exist")
-	}
-	if !redisServer.Exists("aegiscore-user-services:auth:user:token_version:{" + sessionTestUserID.String() + "}") {
-		t.Fatal("prefixed new token version key does not exist")
-	}
-	if redisServer.Exists("auth:session:{"+sessionTestUserID.String()+"}:s-prefixed") || redisServer.Exists("auth:user:sessions:{"+sessionTestUserID.String()+"}") || redisServer.Exists("auth:user:token_version:{"+sessionTestUserID.String()+"}") {
-		t.Fatal("unprefixed Redis keys should not exist when app.name is set")
-	}
+	require.True(t, redisServer.Exists("aegiscore-user-services:auth:session:{"+sessionTestUserID.String()+"}:s-prefixed"),
+		"prefixed new session key does not exist")
+	require.True(t, redisServer.Exists("aegiscore-user-services:auth:user:sessions:{"+sessionTestUserID.String()+"}"),
+		"prefixed new user sessions key does not exist")
+	require.True(t, redisServer.Exists("aegiscore-user-services:auth:user:token_version:{"+sessionTestUserID.String()+"}"),
+		"prefixed new token version key does not exist")
+	require.False(t, redisServer.Exists("auth:session:{"+sessionTestUserID.String()+"}:s-prefixed") || redisServer.Exists("auth:user:sessions:{"+sessionTestUserID.String()+"}") || redisServer.Exists("auth:user:token_version:{"+sessionTestUserID.String()+"}"),
+		"unprefixed Redis keys should not exist when app.name is set")
+
 }
 
 func TestSessionStoreKeysRemainUnprefixedWhenAppNameEmpty(t *testing.T) {
@@ -1045,26 +1127,28 @@ func TestSessionStoreKeysRemainUnprefixedWhenAppNameEmpty(t *testing.T) {
 	store := newTestSessionStoreWithAppName(t, redisServer, "   ")
 	ctx := context.Background()
 	session := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-empty-prefix", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
+	{
 
-	if err := store.CreateSession(ctx, session, time.Hour, defaultMaxActiveSessionsPerUser()); err != nil {
-		t.Fatalf("CreateSession: %v", err)
+		err := store.CreateSession(ctx, session, time.Hour, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession: %v", err)
 	}
-	if err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7); err != nil {
-		t.Fatalf("CacheTokenVersion: %v", err)
+	{
+
+		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7)
+		require.NoError(t, err,
+			"CacheTokenVersion: %v", err)
 	}
 
-	if !redisServer.Exists("auth:session:{" + sessionTestUserID.String() + "}:s-empty-prefix") {
-		t.Fatal("unprefixed new session key does not exist")
-	}
-	if !redisServer.Exists("auth:user:sessions:{" + sessionTestUserID.String() + "}") {
-		t.Fatal("unprefixed new user sessions key does not exist")
-	}
-	if !redisServer.Exists("auth:user:token_version:{" + sessionTestUserID.String() + "}") {
-		t.Fatal("unprefixed new token version key does not exist")
-	}
-	if redisServer.Exists("aegiscore-user-services:auth:session:{"+sessionTestUserID.String()+"}:s-empty-prefix") || redisServer.Exists("aegiscore-user-services:auth:user:sessions:{"+sessionTestUserID.String()+"}") || redisServer.Exists("aegiscore-user-services:auth:user:token_version:{"+sessionTestUserID.String()+"}") {
-		t.Fatal("default service-name Redis keys should not exist when app.name is empty")
-	}
+	require.True(t, redisServer.Exists("auth:session:{"+sessionTestUserID.String()+"}:s-empty-prefix"),
+		"unprefixed new session key does not exist")
+	require.True(t, redisServer.Exists("auth:user:sessions:{"+sessionTestUserID.String()+"}"),
+		"unprefixed new user sessions key does not exist")
+	require.True(t, redisServer.Exists("auth:user:token_version:{"+sessionTestUserID.String()+"}"),
+		"unprefixed new token version key does not exist")
+	require.False(t, redisServer.Exists("aegiscore-user-services:auth:session:{"+sessionTestUserID.String()+"}:s-empty-prefix") || redisServer.Exists("aegiscore-user-services:auth:user:sessions:{"+sessionTestUserID.String()+"}") || redisServer.Exists("aegiscore-user-services:auth:user:token_version:{"+sessionTestUserID.String()+"}"),
+		"default service-name Redis keys should not exist when app.name is empty")
+
 }
 
 func TestSessionStoreIgnoresLegacyKeys(t *testing.T) {
@@ -1073,24 +1157,29 @@ func TestSessionStoreIgnoresLegacyKeys(t *testing.T) {
 	ctx := context.Background()
 	legacySession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-legacy", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
 	data, err := json.Marshal(legacySession)
-	if err != nil {
-		t.Fatalf("Marshal legacy session: %v", err)
+	require.NoError(t, err,
+		"Marshal legacy session: %v", err)
+	{
+
+		err := store.redis.Set(ctx, "auth:session:s-legacy", data, time.Hour).Err()
+		require.NoError(t, err,
+			"Set legacy session: %v", err)
 	}
-	if err := store.redis.Set(ctx, "auth:session:s-legacy", data, time.Hour).Err(); err != nil {
-		t.Fatalf("Set legacy session: %v", err)
-	}
-	if err := store.redis.Set(ctx, "auth:user:"+sessionTestUserID.String()+":token_version", "7", time.Hour).Err(); err != nil {
-		t.Fatalf("Set legacy token version: %v", err)
+	{
+
+		err := store.redis.Set(ctx, "auth:user:"+sessionTestUserID.String()+":token_version", "7", time.Hour).Err()
+		require.NoError(t, err,
+			"Set legacy token version: %v", err)
 	}
 
 	_, err = store.GetSession(ctx, sessionTestUserID.String(), "s-legacy")
-	if !errors.Is(err, authdomain.ErrAuthSessionNotFound) {
-		t.Fatalf("GetSession err = %v, want session not found", err)
-	}
+	require.ErrorIs(t, err, authdomain.ErrAuthSessionNotFound,
+		"GetSession err = %v, want session not found", err)
+
 	_, err = store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
-	if !errors.Is(err, authdomain.ErrTokenVersionCacheMiss) {
-		t.Fatalf("GetCachedTokenVersion err = %v, want cache miss", err)
-	}
+	require.ErrorIs(t, err, authdomain.ErrTokenVersionCacheMiss,
+		"GetCachedTokenVersion err = %v, want cache miss", err)
+
 }
 
 func newTestSessionStore(redisServer *miniredis.Miniredis) *SessionStore {
@@ -1117,9 +1206,9 @@ func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenV
 	}, func(ctx context.Context, userID string) (int64, error) {
 		return authvalidators.Current(ctx, users, tokenCache, userID)
 	}, nil)
-	if err != nil {
-		t.Fatalf("New localcache: %v", err)
-	}
+	require.NoError(t, err,
+		"New localcache: %v", err)
+
 	t.Cleanup(cache.Close)
 	return authvalidators.NewCachingValidator(cache)
 }
@@ -1135,9 +1224,9 @@ func newTestSessionStoreWithAppName(t testing.TB, redisServer *miniredis.Minired
 		},
 		PurgePool: directPurgeTaskPool{},
 	})
-	if err != nil {
-		t.Fatalf("NewSessionStore: %v", err)
-	}
+	require.NoError(t, err,
+		"NewSessionStore: %v", err)
+
 	t.Cleanup(func() {
 		_ = client.Close()
 	})
@@ -1146,14 +1235,7 @@ func newTestSessionStoreWithAppName(t testing.TB, redisServer *miniredis.Minired
 
 func waitForRedisCondition(t *testing.T, condition func() bool, message string) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if condition() {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal(message)
+	require.Eventually(t, condition, 2*time.Second, 10*time.Millisecond, message)
 }
 
 type tokenVersionRepositoryStub struct {

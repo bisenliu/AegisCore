@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/aegiscore/common/runtime/config"
 )
 
@@ -16,12 +18,11 @@ func TestNewJWTServiceRejectsInvalidTokenTTLPolicy(t *testing.T) {
 	}}}
 
 	_, err := NewJWTService(cfg)
-	if err == nil {
-		t.Fatal("NewJWTService error = nil")
-	}
-	if !strings.Contains(err.Error(), "auth jwt refresh_token_ttl must be greater than access_token_ttl") {
-		t.Fatalf("NewJWTService error = %q, want refresh ttl policy", err.Error())
-	}
+	require.Error(t, err,
+		"NewJWTService error = nil")
+	require.True(t, strings.Contains(err.Error(), "auth jwt refresh_token_ttl must be greater than access_token_ttl"),
+		"NewJWTService error = %q, want refresh ttl policy", err.Error())
+
 }
 
 func TestNewJWTServiceAcceptsValidTokenTTLPolicy(t *testing.T) {
@@ -32,12 +33,11 @@ func TestNewJWTServiceAcceptsValidTokenTTLPolicy(t *testing.T) {
 	}}}
 
 	service, err := NewJWTService(cfg)
-	if err != nil {
-		t.Fatalf("NewJWTService: %v", err)
-	}
-	if service == nil {
-		t.Fatal("NewJWTService = nil")
-	}
+	require.NoError(t, err,
+		"NewJWTService: %v", err)
+	require.NotNil(t, service,
+		"NewJWTService = nil")
+
 }
 
 func TestNewPasswordServiceUsesConfiguredKDFBudget(t *testing.T) {
@@ -46,12 +46,11 @@ func TestNewPasswordServiceUsesConfiguredKDFBudget(t *testing.T) {
 	}}
 
 	service, err := NewPasswordService(cfg)
-	if err != nil {
-		t.Fatalf("NewPasswordService: %v", err)
-	}
-	if service == nil {
-		t.Fatal("NewPasswordService = nil")
-	}
+	require.NoError(t, err,
+		"NewPasswordService: %v", err)
+	require.NotNil(t, service,
+		"NewPasswordService = nil")
+
 }
 
 func TestNewPasswordServiceRejectsInvalidKDFBudget(t *testing.T) {
@@ -60,10 +59,9 @@ func TestNewPasswordServiceRejectsInvalidKDFBudget(t *testing.T) {
 	}}
 
 	_, err := NewPasswordService(cfg)
-	if err == nil {
-		t.Fatal("NewPasswordService error = nil")
-	}
-	if !strings.Contains(err.Error(), "password argon2 queue size must be >= concurrency") {
-		t.Fatalf("NewPasswordService error = %q, want queue policy", err.Error())
-	}
+	require.Error(t, err,
+		"NewPasswordService error = nil")
+	require.True(t, strings.Contains(err.Error(), "password argon2 queue size must be >= concurrency"),
+		"NewPasswordService error = %q, want queue policy", err.Error())
+
 }

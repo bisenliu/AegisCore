@@ -1,8 +1,9 @@
 package validators
 
 import (
-	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
@@ -21,9 +22,9 @@ func TestValidateTokenVersionMatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateTokenVersionMatch(tt.currentVersion, tt.tokenVersion)
-			if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("err = %v, want %v", err, tt.wantErr)
-			}
+			require.ErrorIs(t, err, tt.wantErr,
+				"err = %v, want %v", err, tt.wantErr)
+
 		})
 	}
 }
@@ -45,9 +46,9 @@ func TestValidateRefreshSessionClaims(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateRefreshSessionClaims(session, tt.userID, tt.tokenVersion)
-			if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("err = %v, want %v", err, tt.wantErr)
-			}
+			require.ErrorIs(t, err, tt.wantErr,
+				"err = %v, want %v", err, tt.wantErr)
+
 		})
 	}
 }

@@ -10,6 +10,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/common/runtime/logger"
@@ -26,46 +28,42 @@ import (
 
 func TestCredentialVerifierAcceptsMustChangePasswordUser(t *testing.T) {
 	passwordHash, err := hashTestPassword(t, "secret")
-	if err != nil {
-		t.Fatalf("Hash: %v", err)
-	}
+	require.NoError(t, err,
+		"Hash: %v", err)
+
 	ctrl := gomock.NewController(t)
 	repo := NewMockUserCredentialStore(ctrl)
 	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
 	repo.EXPECT().GetByUsername(gomock.Any(), "alice").Return(&authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, nil)
 
 	user, err := verifier.VerifyPassword(context.Background(), "alice", "secret")
+	require.NoError(t, err,
+		"VerifyPassword: %v", err)
+	require.True(t, user.RequiresPasswordChange(),
+		"user status = %d, want must change password", user.Status)
 
-	if err != nil {
-		t.Fatalf("VerifyPassword: %v", err)
-	}
-	if !user.RequiresPasswordChange() {
-		t.Fatalf("user status = %d, want must change password", user.Status)
-	}
 }
 
 func TestCredentialVerifierRejectsDisabledUser(t *testing.T) {
 	passwordHash, err := hashTestPassword(t, "secret")
-	if err != nil {
-		t.Fatalf("Hash: %v", err)
-	}
+	require.NoError(t, err,
+		"Hash: %v", err)
+
 	ctrl := gomock.NewController(t)
 	repo := NewMockUserCredentialStore(ctrl)
 	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
 	repo.EXPECT().GetByUsername(gomock.Any(), "alice").Return(&authdomain.UserCredential{UserID: authTestUserID, Username: "alice", PasswordHash: passwordHash, Status: identity.UserStatusDisabled, TokenVersion: 2}, nil)
 
 	_, err = verifier.VerifyPassword(context.Background(), "alice", "secret")
+	require.ErrorIs(t, err, authdomain.ErrInvalidCredentials,
+		"err = %v, want authdomain.ErrInvalidCredentials", err)
 
-	if !errors.Is(err, authdomain.ErrInvalidCredentials) {
-		t.Fatalf("err = %v, want authdomain.ErrInvalidCredentials", err)
-	}
 }
 
 func TestCredentialVerifierLoginFailureLogsClientContext(t *testing.T) {
 	passwordHash, err := hashTestPassword(t, "secret")
-	if err != nil {
-		t.Fatalf("Hash: %v", err)
-	}
+	require.NoError(t, err,
+		"Hash: %v", err)
 
 	tests := []struct {
 		name       string
@@ -93,33 +91,30 @@ func TestCredentialVerifierLoginFailureLogsClientContext(t *testing.T) {
 			repo.EXPECT().GetByUsername(gomock.Any(), tt.username).Return(tt.credential, tt.repoErr)
 
 			_, err := verifier.VerifyPassword(ctx, tt.username, tt.password)
+			require.ErrorIs(t, err, authdomain.ErrInvalidCredentials,
+				"err = %v, want authdomain.ErrInvalidCredentials", err)
 
-			if !errors.Is(err, authdomain.ErrInvalidCredentials) {
-				t.Fatalf("err = %v, want authdomain.ErrInvalidCredentials", err)
-			}
 			entries := logs.FilterMessage(tt.message).All()
-			if len(entries) != 1 {
-				t.Fatalf("log count = %d, want 1", len(entries))
-			}
+			require.EqualValues(t, 1, len(entries),
+				"log count = %d, want 1", len(entries))
+
 			fields := entries[0].ContextMap()
-			if fields["username"] != tt.username || fields["client_ip"] != "203.0.113.30" || fields["user_agent"] != "auth-command-test" {
-				t.Fatalf("log fields = %#v", fields)
-			}
-			if tt.wantUserID && fields["user_id"] != authTestUserID.String() {
-				t.Fatalf("user_id = %#v, want %s; fields = %#v", fields["user_id"], authTestUserID.String(), fields)
-			}
-			if tt.wantStatus && fields["status"] != int64(identity.UserStatusDisabled) {
-				t.Fatalf("status = %#v, want %d; fields = %#v", fields["status"], identity.UserStatusDisabled, fields)
-			}
+			require.False(t, fields["username"] != tt.username || fields["client_ip"] != "203.0.113.30" || fields["user_agent"] != "auth-command-test",
+				"log fields = %#v", fields)
+			require.False(t, tt.wantUserID && fields["user_id"] != authTestUserID.String(),
+				"user_id = %#v, want %s; fields = %#v", fields["user_id"], authTestUserID.String(), fields)
+			require.False(t, tt.wantStatus && fields["status"] != int64(identity.UserStatusDisabled),
+				"status = %#v, want %d; fields = %#v", fields["status"], identity.UserStatusDisabled, fields)
+
 		})
 	}
 }
 
 func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	oldHash, err := hashTestPassword(t, "old-secret")
-	if err != nil {
-		t.Fatalf("Hash: %v", err)
-	}
+	require.NoError(t, err,
+		"Hash: %v", err)
+
 	ctrl := gomock.NewController(t)
 	repo := NewMockUserCredentialStore(ctrl)
 	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
@@ -132,20 +127,17 @@ func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	})
 
 	result, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
+	require.NoError(t, err,
+		"ChangePassword: %v", err)
+	require.False(t, result.UserID != authTestUserID || result.TokenVersion != 3,
+		"result = %#v", result)
+	require.False(t, updatedInput.UserID != authTestUserID || updatedInput.Status != identity.UserStatusNormal,
+		"updated input = %#v", updatedInput)
 
-	if err != nil {
-		t.Fatalf("ChangePassword: %v", err)
-	}
-	if result.UserID != authTestUserID || result.TokenVersion != 3 {
-		t.Fatalf("result = %#v", result)
-	}
-	if updatedInput.UserID != authTestUserID || updatedInput.Status != identity.UserStatusNormal {
-		t.Fatalf("updated input = %#v", updatedInput)
-	}
 	matched, err := verifyTestPassword(t, "new-secret", updatedInput.PasswordHash)
-	if err != nil || !matched {
-		t.Fatalf("updated password hash mismatch: matched=%v err=%v", matched, err)
-	}
+	require.False(t, err != nil || !matched,
+		"updated password hash mismatch: matched=%v err=%v", matched, err)
+
 }
 
 func TestCredentialVerifierChangePasswordMapsUserNotFound(t *testing.T) {
@@ -155,10 +147,9 @@ func TestCredentialVerifierChangePasswordMapsUserNotFound(t *testing.T) {
 	repo.EXPECT().GetCredentialByUserID(gomock.Any(), authTestUserID).Return(nil, identity.ErrUserNotFound)
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
+	require.ErrorIs(t, err, identity.ErrUserNotFound,
+		"err = %v, want ErrUserNotFound", err)
 
-	if !errors.Is(err, identity.ErrUserNotFound) {
-		t.Fatalf("err = %v, want ErrUserNotFound", err)
-	}
 }
 
 func TestCredentialVerifierChangePasswordRejectsInvalidStatus(t *testing.T) {
@@ -168,10 +159,9 @@ func TestCredentialVerifierChangePasswordRejectsInvalidStatus(t *testing.T) {
 	repo.EXPECT().GetCredentialByUserID(gomock.Any(), authTestUserID).Return(&authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusNormal, TokenVersion: 2}, nil)
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
+	require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
+		"err = %v, want authdomain.ErrTokenInvalid", err)
 
-	if !errors.Is(err, authdomain.ErrTokenInvalid) {
-		t.Fatalf("err = %v, want authdomain.ErrTokenInvalid", err)
-	}
 }
 
 func TestCredentialVerifierChangePasswordMapsUpdateError(t *testing.T) {
@@ -183,10 +173,9 @@ func TestCredentialVerifierChangePasswordMapsUpdateError(t *testing.T) {
 	repo.EXPECT().UpdateCredentials(gomock.Any(), gomock.Any()).Return(int64(0), updateErr)
 
 	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
+	require.ErrorIs(t, err, updateErr,
+		"err = %v, want %v", err, updateErr)
 
-	if !errors.Is(err, updateErr) {
-		t.Fatalf("err = %v, want %v", err, updateErr)
-	}
 }
 
 func TestAuthTokenIssuerParsesBearerRefreshToken(t *testing.T) {
@@ -194,18 +183,15 @@ func TestAuthTokenIssuerParsesBearerRefreshToken(t *testing.T) {
 	jwt := commonauth.NewJWTService(cfg.Auth)
 	issuer := authtokens.NewIssuer(jwt, cfg)
 	refresh, err := jwt.SignRefreshToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
-	if err != nil {
-		t.Fatalf("SignRefreshToken: %v", err)
-	}
+	require.NoError(t, err,
+		"SignRefreshToken: %v", err)
 
 	claims, err := issuer.ParseRefreshToken(context.Background(), "Bearer "+refresh)
+	require.NoError(t, err,
+		"ParseRefreshToken: %v", err)
+	require.False(t, claims.UserID != authTestUserID.String() || claims.SessionID != "s-123" || claims.Subject != commonauth.SubjectRefresh,
+		"claims = %#v", claims)
 
-	if err != nil {
-		t.Fatalf("ParseRefreshToken: %v", err)
-	}
-	if claims.UserID != authTestUserID.String() || claims.SessionID != "s-123" || claims.Subject != commonauth.SubjectRefresh {
-		t.Fatalf("claims = %#v", claims)
-	}
 }
 
 func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
@@ -220,10 +206,9 @@ func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
 	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(3), nil)
 
 	_, _, err := lifecycle.ValidateRefreshSession(context.Background(), claims)
+	require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
+		"err = %v, want authdomain.ErrTokenInvalid", err)
 
-	if !errors.Is(err, authdomain.ErrTokenInvalid) {
-		t.Fatalf("err = %v, want authdomain.ErrTokenInvalid", err)
-	}
 }
 
 func TestAuthSessionLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T) {
@@ -236,10 +221,9 @@ func TestAuthSessionLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T)
 			sessions.EXPECT().RotateSession(gomock.Any(), oldSession, newSession, time.Hour, 5).Return(err)
 
 			err := lifecycle.RotateTokenSession(context.Background(), oldSession, newSession, time.Hour)
+			require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
+				"err = %v, want authdomain.ErrTokenInvalid", err)
 
-			if !errors.Is(err, authdomain.ErrTokenInvalid) {
-				t.Fatalf("err = %v, want authdomain.ErrTokenInvalid", err)
-			}
 		})
 	}
 }
@@ -253,10 +237,9 @@ func TestAuthSessionLifecycleRotateTokenSessionMapsUnexpectedError(t *testing.T)
 	sessions.EXPECT().RotateSession(gomock.Any(), oldSession, newSession, time.Hour, 5).Return(rotateErr)
 
 	err := lifecycle.RotateTokenSession(context.Background(), oldSession, newSession, time.Hour)
+	require.ErrorIs(t, err, rotateErr,
+		"err = %v, want %v", err, rotateErr)
 
-	if !errors.Is(err, rotateErr) {
-		t.Fatalf("err = %v, want %v", err, rotateErr)
-	}
 }
 
 func TestAuthSessionLifecycleCurrentTokenVersionUsesCacheHit(t *testing.T) {
@@ -265,13 +248,11 @@ func TestAuthSessionLifecycleCurrentTokenVersionUsesCacheHit(t *testing.T) {
 	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(2), nil)
 
 	version, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
+	require.NoError(t, err,
+		"currentTokenVersion: %v", err)
+	require.EqualValues(t, 2, version,
+		"version = %d, want 2", version)
 
-	if err != nil {
-		t.Fatalf("currentTokenVersion: %v", err)
-	}
-	if version != 2 {
-		t.Fatalf("version = %d, want 2", version)
-	}
 }
 
 func TestAuthSessionLifecycleCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
@@ -283,13 +264,11 @@ func TestAuthSessionLifecycleCurrentTokenVersionCacheMissReadsRepository(t *test
 	tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), authTestUserID.String(), int64(7)).Return(nil)
 
 	version, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
+	require.NoError(t, err,
+		"currentTokenVersion: %v", err)
+	require.EqualValues(t, 7, version,
+		"version = %d, want 7", version)
 
-	if err != nil {
-		t.Fatalf("currentTokenVersion: %v", err)
-	}
-	if version != 7 {
-		t.Fatalf("version = %d, want 7", version)
-	}
 }
 
 func TestAuthSessionLifecycleCurrentTokenVersionCacheErrorReturnsInfrastructureError(t *testing.T) {
@@ -299,10 +278,9 @@ func TestAuthSessionLifecycleCurrentTokenVersionCacheErrorReturnsInfrastructureE
 	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(0), cacheErr)
 
 	_, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
+	require.ErrorIs(t, err, cacheErr,
+		"err = %v, want cache error", err)
 
-	if !errors.Is(err, cacheErr) {
-		t.Fatalf("err = %v, want cache error", err)
-	}
 }
 
 func TestAuthSessionLifecycleCurrentTokenVersionDatabaseFallbackErrorReturnsInfrastructureError(t *testing.T) {
@@ -314,10 +292,9 @@ func TestAuthSessionLifecycleCurrentTokenVersionDatabaseFallbackErrorReturnsInfr
 	users.EXPECT().GetTokenVersion(gomock.Any(), authTestUserID).Return(int64(0), dbErr)
 
 	_, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
+	require.ErrorIs(t, err, dbErr,
+		"err = %v, want database error", err)
 
-	if !errors.Is(err, dbErr) {
-		t.Fatalf("err = %v, want database error", err)
-	}
 }
 
 func TestAuthSessionLifecycleCurrentTokenVersionBackfillErrorReturnsInfrastructureError(t *testing.T) {
@@ -330,10 +307,9 @@ func TestAuthSessionLifecycleCurrentTokenVersionBackfillErrorReturnsInfrastructu
 	tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), authTestUserID.String(), int64(7)).Return(cacheErr)
 
 	_, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
+	require.ErrorIs(t, err, cacheErr,
+		"err = %v, want cache backfill error", err)
 
-	if !errors.Is(err, cacheErr) {
-		t.Fatalf("err = %v, want cache backfill error", err)
-	}
 }
 
 func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
@@ -345,16 +321,13 @@ func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
 	sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), authTestUserID.String()).Return(nil)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
+	require.NoError(t, err,
+		"RevokeAllUserSessions: %v", err)
+	require.False(t, result.UserID != authTestUserID || result.TokenVersion != 4,
+		"result = %#v", result)
+	require.NoError(t, result.ProjectionError,
+		"projection error = %v, want nil", result.ProjectionError)
 
-	if err != nil {
-		t.Fatalf("RevokeAllUserSessions: %v", err)
-	}
-	if result.UserID != authTestUserID || result.TokenVersion != 4 {
-		t.Fatalf("result = %#v", result)
-	}
-	if result.ProjectionError != nil {
-		t.Fatalf("projection error = %v, want nil", result.ProjectionError)
-	}
 }
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T) {
@@ -363,10 +336,9 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T)
 	users.EXPECT().IncrementTokenVersion(gomock.Any(), authTestUserID).Return(int64(0), identity.ErrUserNotFound)
 
 	_, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
+	require.ErrorIs(t, err, identity.ErrUserNotFound,
+		"err = %v, want ErrUserNotFound", err)
 
-	if !errors.Is(err, identity.ErrUserNotFound) {
-		t.Fatalf("err = %v, want ErrUserNotFound", err)
-	}
 }
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t *testing.T) {
@@ -380,16 +352,13 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t
 	sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), authTestUserID.String()).Return(nil)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
+	require.NoError(t, err,
+		"RevokeAllUserSessions: %v", err)
+	require.False(t, result.UserID != authTestUserID || result.TokenVersion != 4,
+		"result = %#v", result)
+	require.ErrorIs(t, result.ProjectionError, cacheErr,
+		"projection error = %v, want cache error", result.ProjectionError)
 
-	if err != nil {
-		t.Fatalf("RevokeAllUserSessions: %v", err)
-	}
-	if result.UserID != authTestUserID || result.TokenVersion != 4 {
-		t.Fatalf("result = %#v", result)
-	}
-	if !errors.Is(result.ProjectionError, cacheErr) {
-		t.Fatalf("projection error = %v, want cache error", result.ProjectionError)
-	}
 }
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsSucceedsAfterDeleteAllProjectionError(t *testing.T) {
@@ -402,16 +371,13 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsSucceedsAfterDeleteAllProjecti
 	sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), authTestUserID.String()).Return(deleteErr)
 
 	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
+	require.NoError(t, err,
+		"RevokeAllUserSessions: %v", err)
+	require.False(t, result.UserID != authTestUserID || result.TokenVersion != 4,
+		"result = %#v", result)
+	require.ErrorIs(t, result.ProjectionError, deleteErr,
+		"projection error = %v, want delete error", result.ProjectionError)
 
-	if err != nil {
-		t.Fatalf("RevokeAllUserSessions: %v", err)
-	}
-	if result.UserID != authTestUserID || result.TokenVersion != 4 {
-		t.Fatalf("result = %#v", result)
-	}
-	if !errors.Is(result.ProjectionError, deleteErr) {
-		t.Fatalf("projection error = %v, want delete error", result.ProjectionError)
-	}
 }
 
 func TestAuthSessionLifecycleRevokeUserSessionsAtVersionReturnsProjectionError(t *testing.T) {
@@ -426,10 +392,9 @@ func TestAuthSessionLifecycleRevokeUserSessionsAtVersionReturnsProjectionError(t
 	sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), authTestUserID.String()).Return(deleteErr)
 
 	err := lifecycle.RevokeUserSessionsAtVersion(context.Background(), authTestUserID, 4)
+	require.False(t, !errors.Is(err, cacheErr) || !errors.Is(err, deleteCacheErr) || !errors.Is(err, deleteErr),
+		"err = %v, want cache, cache delete, and session delete errors", err)
 
-	if !errors.Is(err, cacheErr) || !errors.Is(err, deleteCacheErr) || !errors.Is(err, deleteErr) {
-		t.Fatalf("err = %v, want cache, cache delete, and session delete errors", err)
-	}
 }
 
 func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing.T) {
@@ -440,17 +405,15 @@ func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing
 	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(4), nil)
 
 	err := validator.ValidateTokenVersion(context.Background(), authTestUserID.String(), 3)
+	require.ErrorIs(t, err, commonauth.ErrTokenVersionMismatch,
+		"err = %v, want common token version mismatch", err)
 
-	if !errors.Is(err, commonauth.ErrTokenVersionMismatch) {
-		t.Fatalf("err = %v, want common token version mismatch", err)
-	}
 	var mismatch *commonauth.TokenVersionMismatchError
-	if !errors.As(err, &mismatch) {
-		t.Fatalf("err = %v, want structured token version mismatch", err)
-	}
-	if mismatch.Current != 4 || mismatch.Token != 3 {
-		t.Fatalf("mismatch = %#v, want current=4 token=3", mismatch)
-	}
+	require.ErrorAs(t, err, &mismatch,
+		"err = %v, want structured token version mismatch", err)
+	require.False(t, mismatch.Current != 4 || mismatch.Token != 3,
+		"mismatch = %#v, want current=4 token=3", mismatch)
+
 }
 
 func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenVersionStore, tokenCache authapplication.TokenVersionCache) commonauth.TokenVersionValidator {
@@ -464,9 +427,9 @@ func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenV
 	}, func(ctx context.Context, userID string) (int64, error) {
 		return authvalidators.Current(ctx, users, tokenCache, userID)
 	}, nil)
-	if err != nil {
-		t.Fatalf("New localcache: %v", err)
-	}
+	require.NoError(t, err,
+		"New localcache: %v", err)
+
 	t.Cleanup(cache.Close)
 	return authvalidators.NewCachingValidator(cache)
 }

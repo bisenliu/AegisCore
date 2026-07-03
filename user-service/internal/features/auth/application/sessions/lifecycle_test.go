@@ -2,11 +2,11 @@ package sessions
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
@@ -25,10 +25,9 @@ func TestLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T) {
 				Return(err)
 
 			err := fixture.lifecycle.RotateTokenSession(context.Background(), oldSession, newSession, time.Hour)
+			require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
+				"err = %v, want ErrTokenInvalid", err)
 
-			if !errors.Is(err, authdomain.ErrTokenInvalid) {
-				t.Fatalf("err = %v, want ErrTokenInvalid", err)
-			}
 		})
 	}
 }
@@ -42,13 +41,11 @@ func TestLifecycleCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
 	)
 
 	version, err := fixture.lifecycle.CurrentTokenVersion(context.Background(), sessionTestUserID.String())
+	require.NoError(t, err,
+		"CurrentTokenVersion: %v", err)
+	require.EqualValues(t, 7, version,
+		"version = %d, want 7", version)
 
-	if err != nil {
-		t.Fatalf("CurrentTokenVersion: %v", err)
-	}
-	if version != 7 {
-		t.Fatalf("version = %d, want 7", version)
-	}
 }
 
 func TestLifecycleRevokeAllUserSessions(t *testing.T) {
@@ -63,16 +60,13 @@ func TestLifecycleRevokeAllUserSessions(t *testing.T) {
 	)
 
 	result, err := fixture.lifecycle.RevokeAllUserSessions(context.Background(), sessionTestUserID)
+	require.NoError(t, err,
+		"RevokeAllUserSessions: %v", err)
+	require.False(t, result.UserID != sessionTestUserID || result.TokenVersion != 4,
+		"result = %#v", result)
+	require.NoError(t, result.ProjectionError,
+		"projection error = %v, want nil", result.ProjectionError)
 
-	if err != nil {
-		t.Fatalf("RevokeAllUserSessions: %v", err)
-	}
-	if result.UserID != sessionTestUserID || result.TokenVersion != 4 {
-		t.Fatalf("result = %#v", result)
-	}
-	if result.ProjectionError != nil {
-		t.Fatalf("projection error = %v, want nil", result.ProjectionError)
-	}
 }
 
 type lifecycleTestFixture struct {

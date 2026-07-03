@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
@@ -31,28 +32,26 @@ func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctl, mocks := newTestAuthController(t)
 	mocks.login.EXPECT().Login(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, cmd authcommand.LoginCommand) (*authtokens.TokenResult, error) {
-		if cmd.Username != "alice" || cmd.Password != "secret" {
-			t.Fatalf("cmd = %#v", cmd)
-		}
+		require.False(t, cmd.Username != "alice" || cmd.Password != "secret",
+			"cmd = %#v", cmd)
+
 		clientContext, ok := authctx.ClientContextFromContext(ctx)
-		if !ok || clientContext.ClientIP != "203.0.113.20" || clientContext.UserAgent != "auth-controller-test" {
-			t.Fatalf("clientContext = %#v, %v", clientContext, ok)
-		}
+		require.False(t, !ok || clientContext.ClientIP != "203.0.113.20" || clientContext.UserAgent != "auth-controller-test",
+			"clientContext = %#v, %v", clientContext, ok)
+
 		return &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}, nil
 	})
 
 	status, envelope := executeAuthLogin(t, ctl, `{"username":" alice ","password":" secret "}`)
+	require.Equal(t, http.StatusOK, status,
+		"status = %d, want %d", status, http.StatusOK)
+	require.False(t, !envelope.Success || envelope.Code != contracterrors.CodeOK,
+		"envelope = %#v", envelope)
 
-	if status != http.StatusOK {
-		t.Fatalf("status = %d, want %d", status, http.StatusOK)
-	}
-	if !envelope.Success || envelope.Code != contracterrors.CodeOK {
-		t.Fatalf("envelope = %#v", envelope)
-	}
 	data, ok := envelope.Data.(map[string]any)
-	if !ok || data["access_token"] != "access" || data["refresh_token"] != "refresh" || data["token_type"] != commonauth.TokenTypeBearer || data["expires_in"] != float64(900) {
-		t.Fatalf("data = %#v", envelope.Data)
-	}
+	require.False(t, !ok || data["access_token"] != "access" || data["refresh_token"] != "refresh" || data["token_type"] != commonauth.TokenTypeBearer || data["expires_in"] != float64(900),
+		"data = %#v", envelope.Data)
+
 }
 
 func TestAuthControllerLoginMapsPasswordChangeRequired(t *testing.T) {
@@ -61,26 +60,29 @@ func TestAuthControllerLoginMapsPasswordChangeRequired(t *testing.T) {
 	mocks.login.EXPECT().Login(gomock.Any(), authcommand.LoginCommand{Username: "alice", Password: "secret"}).Return(&authtokens.TokenResult{AccessToken: "password-change", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900, PasswordChangeRequired: true}, nil)
 
 	status, envelope := executeAuthLogin(t, ctl, `{"username":"alice","password":"secret"}`)
+	require.Equal(t, http.StatusOK, status,
+		"status = %d, want %d", status, http.StatusOK)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodePasswordChangeRequired || envelope.Message != messages.PasswordChangeRequired,
+		"envelope = %#v", envelope)
 
-	if status != http.StatusOK {
-		t.Fatalf("status = %d, want %d", status, http.StatusOK)
-	}
-	if envelope.Success || envelope.Code != contracterrors.CodePasswordChangeRequired || envelope.Message != messages.PasswordChangeRequired {
-		t.Fatalf("envelope = %#v", envelope)
-	}
 	data, ok := envelope.Data.(map[string]any)
-	if !ok {
-		t.Fatalf("data = %#v", envelope.Data)
+	require.True(t, ok,
+		"data = %#v", envelope.Data)
+	require.False(t, data["access_token"] != "password-change" || data["token_type"] != commonauth.TokenTypeBearer || data["expires_in"] != float64(900),
+		"data = %#v", envelope.Data)
+	{
+
+		_, ok := data["refresh_token"]
+		require.False(t, ok,
+			"refresh_token = %#v, want omitted", data["refresh_token"])
 	}
-	if data["access_token"] != "password-change" || data["token_type"] != commonauth.TokenTypeBearer || data["expires_in"] != float64(900) {
-		t.Fatalf("data = %#v", envelope.Data)
+	{
+
+		_, ok := data["password_change_required"]
+		require.False(t, ok,
+			"password_change_required = %#v, want omitted", data["password_change_required"])
 	}
-	if _, ok := data["refresh_token"]; ok {
-		t.Fatalf("refresh_token = %#v, want omitted", data["refresh_token"])
-	}
-	if _, ok := data["password_change_required"]; ok {
-		t.Fatalf("password_change_required = %#v, want omitted", data["password_change_required"])
-	}
+
 }
 
 func TestAuthControllerLoginRejectsBlankTrimmedCredentials(t *testing.T) {
@@ -88,13 +90,11 @@ func TestAuthControllerLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 	ctl, _ := newTestAuthController(t)
 
 	status, envelope := executeAuthLogin(t, ctl, `{"username":"alice","password":" "}`)
+	require.Equal(t, http.StatusUnauthorized, status,
+		"status = %d, want %d", status, http.StatusUnauthorized)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeUnauthenticated,
+		"envelope=%#v", envelope)
 
-	if status != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
-	}
-	if envelope.Success || envelope.Code != contracterrors.CodeUnauthenticated {
-		t.Fatalf("envelope=%#v", envelope)
-	}
 }
 
 func TestAuthControllerLoginMapsInvalidCredentials(t *testing.T) {
@@ -103,13 +103,11 @@ func TestAuthControllerLoginMapsInvalidCredentials(t *testing.T) {
 	mocks.login.EXPECT().Login(gomock.Any(), authcommand.LoginCommand{Username: "alice", Password: "secret"}).Return(nil, authdomain.ErrInvalidCredentials)
 
 	status, envelope := executeAuthLogin(t, ctl, `{"username":"alice","password":"secret"}`)
+	require.Equal(t, http.StatusUnauthorized, status,
+		"status = %d, want %d", status, http.StatusUnauthorized)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeUnauthenticated || envelope.Message != messages.InvalidCredentials,
+		"envelope = %#v", envelope)
 
-	if status != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
-	}
-	if envelope.Success || envelope.Code != contracterrors.CodeUnauthenticated || envelope.Message != messages.InvalidCredentials {
-		t.Fatalf("envelope = %#v", envelope)
-	}
 }
 
 func TestAuthControllerLoginMapsPasswordKDFBusy(t *testing.T) {
@@ -118,13 +116,11 @@ func TestAuthControllerLoginMapsPasswordKDFBusy(t *testing.T) {
 	mocks.login.EXPECT().Login(gomock.Any(), authcommand.LoginCommand{Username: "alice", Password: "secret"}).Return(nil, password.ErrPasswordKDFBusy)
 
 	status, envelope := executeAuthLogin(t, ctl, `{"username":"alice","password":"secret"}`)
+	require.Equal(t, http.StatusServiceUnavailable, status,
+		"status = %d, want %d", status, http.StatusServiceUnavailable)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeServiceUnavailable || envelope.Message != messages.AuthServiceBusy,
+		"envelope = %#v", envelope)
 
-	if status != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want %d", status, http.StatusServiceUnavailable)
-	}
-	if envelope.Success || envelope.Code != contracterrors.CodeServiceUnavailable || envelope.Message != messages.AuthServiceBusy {
-		t.Fatalf("envelope = %#v", envelope)
-	}
 }
 
 func TestAuthControllerLoginMapsServiceError(t *testing.T) {
@@ -133,13 +129,11 @@ func TestAuthControllerLoginMapsServiceError(t *testing.T) {
 	mocks.login.EXPECT().Login(gomock.Any(), authcommand.LoginCommand{Username: "alice", Password: "secret"}).Return(nil, errAuthDatabaseDown)
 
 	status, envelope := executeAuthLogin(t, ctl, `{"username":"alice","password":"secret"}`)
+	require.Equal(t, http.StatusInternalServerError, status,
+		"status = %d, want %d", status, http.StatusInternalServerError)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeInternalError || envelope.Message != response.MessageInternalError,
+		"envelope = %#v", envelope)
 
-	if status != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", status, http.StatusInternalServerError)
-	}
-	if envelope.Success || envelope.Code != contracterrors.CodeInternalError || envelope.Message != response.MessageInternalError {
-		t.Fatalf("envelope = %#v", envelope)
-	}
 }
 
 func TestAuthControllerChangePasswordNormalizesToCommand(t *testing.T) {
@@ -148,17 +142,15 @@ func TestAuthControllerChangePasswordNormalizesToCommand(t *testing.T) {
 	mocks.changePassword.EXPECT().ChangePassword(gomock.Any(), authcommand.ChangePasswordCommand{Token: "password-token", NewPassword: "new-secret"}).Return(&authcommand.ChangePasswordResult{Changed: true}, nil)
 
 	status, envelope := executeAuthChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":" new-secret "}`)
+	require.Equal(t, http.StatusOK, status,
+		"status = %d, want %d", status, http.StatusOK)
+	require.False(t, !envelope.Success || envelope.Code != contracterrors.CodeOK,
+		"envelope = %#v", envelope)
 
-	if status != http.StatusOK {
-		t.Fatalf("status = %d, want %d", status, http.StatusOK)
-	}
-	if !envelope.Success || envelope.Code != contracterrors.CodeOK {
-		t.Fatalf("envelope = %#v", envelope)
-	}
 	data, ok := envelope.Data.(map[string]any)
-	if !ok || data["changed"] != true {
-		t.Fatalf("data = %#v", envelope.Data)
-	}
+	require.False(t, !ok || data["changed"] != true,
+		"data = %#v", envelope.Data)
+
 }
 
 func TestAuthControllerChangePasswordMapsNotFound(t *testing.T) {
@@ -167,13 +159,11 @@ func TestAuthControllerChangePasswordMapsNotFound(t *testing.T) {
 	mocks.changePassword.EXPECT().ChangePassword(gomock.Any(), authcommand.ChangePasswordCommand{Token: "password-token", NewPassword: "new-secret"}).Return(nil, identity.ErrUserNotFound)
 
 	status, envelope := executeAuthChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":"new-secret"}`)
+	require.Equal(t, http.StatusNotFound, status,
+		"status = %d, want %d", status, http.StatusNotFound)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeNotFound || envelope.Message != messages.UserNotFound,
+		"envelope = %#v", envelope)
 
-	if status != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", status, http.StatusNotFound)
-	}
-	if envelope.Success || envelope.Code != contracterrors.CodeNotFound || envelope.Message != messages.UserNotFound {
-		t.Fatalf("envelope = %#v", envelope)
-	}
 }
 
 func TestAuthControllerRefreshNormalizesToCommand(t *testing.T) {
@@ -182,13 +172,11 @@ func TestAuthControllerRefreshNormalizesToCommand(t *testing.T) {
 	mocks.refresh.EXPECT().Refresh(gomock.Any(), authcommand.RefreshTokenCommand{RefreshToken: "refresh-token"}).Return(&authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}, nil)
 
 	status, envelope := executeAuthRefresh(t, ctl, `{"refresh_token":" Bearer refresh-token "}`)
+	require.Equal(t, http.StatusOK, status,
+		"status = %d, want %d", status, http.StatusOK)
+	require.False(t, !envelope.Success || envelope.Code != contracterrors.CodeOK,
+		"envelope = %#v", envelope)
 
-	if status != http.StatusOK {
-		t.Fatalf("status = %d, want %d", status, http.StatusOK)
-	}
-	if !envelope.Success || envelope.Code != contracterrors.CodeOK {
-		t.Fatalf("envelope = %#v", envelope)
-	}
 }
 
 func TestAuthControllerRefreshRejectsBearerOnlyToken(t *testing.T) {
@@ -196,13 +184,11 @@ func TestAuthControllerRefreshRejectsBearerOnlyToken(t *testing.T) {
 	ctl, _ := newTestAuthController(t)
 
 	status, envelope := executeAuthRefresh(t, ctl, `{"refresh_token":" Bearer "}`)
+	require.Equal(t, http.StatusUnauthorized, status,
+		"status = %d, want %d", status, http.StatusUnauthorized)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeTokenInvalid,
+		"envelope=%#v", envelope)
 
-	if status != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
-	}
-	if envelope.Success || envelope.Code != contracterrors.CodeTokenInvalid {
-		t.Fatalf("envelope=%#v", envelope)
-	}
 }
 
 func TestAuthControllerRefreshMapsTokenInvalid(t *testing.T) {
@@ -211,13 +197,11 @@ func TestAuthControllerRefreshMapsTokenInvalid(t *testing.T) {
 	mocks.refresh.EXPECT().Refresh(gomock.Any(), authcommand.RefreshTokenCommand{RefreshToken: "refresh-token"}).Return(nil, authdomain.ErrTokenInvalid)
 
 	status, envelope := executeAuthRefresh(t, ctl, `{"refresh_token":"refresh-token"}`)
+	require.Equal(t, http.StatusUnauthorized, status,
+		"status = %d, want %d", status, http.StatusUnauthorized)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeTokenInvalid || envelope.Message != messages.MissingSession,
+		"envelope = %#v", envelope)
 
-	if status != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
-	}
-	if envelope.Success || envelope.Code != contracterrors.CodeTokenInvalid || envelope.Message != messages.MissingSession {
-		t.Fatalf("envelope = %#v", envelope)
-	}
 }
 
 type authControllerMocks struct {
@@ -259,9 +243,9 @@ func executeAuthRefresh(t *testing.T, ctl *AuthController, body string) (int, re
 func newTestAuthController(t *testing.T) (*AuthController, authControllerMocks) {
 	t.Helper()
 	validator, err := validation.NewDefault()
-	if err != nil {
-		t.Fatalf("NewDefault: %v", err)
-	}
+	require.NoError(t, err,
+		"NewDefault: %v", err)
+
 	ctrl := gomock.NewController(t)
 	mocks := authControllerMocks{
 		login:          NewMockLoginUseCase(ctrl),
@@ -295,8 +279,11 @@ func newAuthJSONContext(method, path, body string) (*httptest.ResponseRecorder, 
 func decodeAuthEnvelope(t *testing.T, recorder *httptest.ResponseRecorder) (int, response.Envelope) {
 	t.Helper()
 	var envelope response.Envelope
-	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
+	{
+		err := json.Unmarshal(recorder.Body.Bytes(), &envelope)
+		require.NoError(t, err,
+			"unmarshal response: %v", err)
 	}
+
 	return recorder.Code, envelope
 }

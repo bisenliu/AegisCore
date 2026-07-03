@@ -1,8 +1,9 @@
 package validators
 
 import (
-	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
@@ -22,10 +23,9 @@ func TestValidateLoginCommandRejectsBlankFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateLoginCommand(tt.username, tt.password)
+			require.ErrorIs(t, err, authdomain.ErrInvalidCredentials,
+				"err = %v, want ErrInvalidCredentials", err)
 
-			if !errors.Is(err, authdomain.ErrInvalidCredentials) {
-				t.Fatalf("err = %v, want ErrInvalidCredentials", err)
-			}
 		})
 	}
 }
@@ -33,18 +33,23 @@ func TestValidateLoginCommandRejectsBlankFields(t *testing.T) {
 func TestValidateRefreshTokenRejectsBlankToken(t *testing.T) {
 	for _, token := range []string{"", " ", commonauth.TokenTypeBearer, commonauth.TokenPrefix} {
 		err := ValidateRefreshToken(token)
+		require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
+			"token %q err = %v, want ErrTokenInvalid", token, err)
 
-		if !errors.Is(err, authdomain.ErrTokenInvalid) {
-			t.Fatalf("token %q err = %v, want ErrTokenInvalid", token, err)
-		}
 	}
 }
 
 func TestValidateChangePasswordCommandRejectsInvalidInput(t *testing.T) {
-	if err := ValidateChangePasswordCommand("", "new-secret"); !errors.Is(err, authdomain.ErrTokenInvalid) {
-		t.Fatalf("missing token err = %v, want ErrTokenInvalid", err)
+	{
+		err := ValidateChangePasswordCommand("", "new-secret")
+		require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
+			"missing token err = %v, want ErrTokenInvalid", err)
 	}
-	if err := ValidateChangePasswordCommand("password-token", " "); !errors.Is(err, password.ErrEmptyPassword) {
-		t.Fatalf("missing password err = %v, want ErrEmptyPassword", err)
+	{
+
+		err := ValidateChangePasswordCommand("password-token", " ")
+		require.ErrorIs(t, err, password.ErrEmptyPassword,
+			"missing password err = %v, want ErrEmptyPassword", err)
 	}
+
 }

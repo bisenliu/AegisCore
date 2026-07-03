@@ -3,6 +3,8 @@ package authhttp
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/user-service/internal/messages"
@@ -10,40 +12,34 @@ import (
 
 func TestPrepareLoginCommand(t *testing.T) {
 	cmd, err := prepareLoginCommand(LoginRequest{Username: " alice ", Password: " secret "})
-	if err != nil {
-		t.Fatalf("prepareLoginCommand: %v", err)
-	}
-	if cmd.Username != "alice" || cmd.Password != "secret" {
-		t.Fatalf("cmd = %#v", cmd)
-	}
+	require.NoError(t, err,
+		"prepareLoginCommand: %v", err)
+	require.False(t, cmd.Username != "alice" || cmd.Password != "secret",
+		"cmd = %#v", cmd)
 
 	_, err = prepareLoginCommand(LoginRequest{Username: "alice", Password: " "})
 	appErr := contracterrors.FromError(err)
-	if appErr.Code != contracterrors.CodeUnauthenticated || appErr.Message != messages.InvalidCredentials {
-		t.Fatalf("err = %#v", appErr)
-	}
+	require.False(t, appErr.Code != contracterrors.CodeUnauthenticated || appErr.Message != messages.InvalidCredentials,
+		"err = %#v", appErr)
+
 }
 
 func TestPrepareTokenCommands(t *testing.T) {
 	refresh, err := prepareRefreshTokenCommand(RefreshTokenRequest{RefreshToken: " " + commonauth.TokenPrefix + "refresh-token "})
-	if err != nil {
-		t.Fatalf("prepareRefreshTokenCommand: %v", err)
-	}
-	if refresh.RefreshToken != "refresh-token" {
-		t.Fatalf("refresh = %#v", refresh)
-	}
+	require.NoError(t, err,
+		"prepareRefreshTokenCommand: %v", err)
+	require.Equal(t, "refresh-token", refresh.RefreshToken,
+		"refresh = %#v", refresh)
 
 	change, err := prepareChangePasswordCommand(ChangePasswordRequest{Token: " " + commonauth.TokenPrefix + "password-token ", NewPassword: " new-secret "})
-	if err != nil {
-		t.Fatalf("prepareChangePasswordCommand: %v", err)
-	}
-	if change.Token != "password-token" || change.NewPassword != "new-secret" {
-		t.Fatalf("change = %#v", change)
-	}
+	require.NoError(t, err,
+		"prepareChangePasswordCommand: %v", err)
+	require.False(t, change.Token != "password-token" || change.NewPassword != "new-secret",
+		"change = %#v", change)
 
 	_, err = prepareRefreshTokenCommand(RefreshTokenRequest{RefreshToken: " " + commonauth.TokenPrefix})
 	appErr := contracterrors.FromError(err)
-	if appErr.Code != contracterrors.CodeTokenInvalid || appErr.Message != messages.MissingSession {
-		t.Fatalf("err = %#v", appErr)
-	}
+	require.False(t, appErr.Code != contracterrors.CodeTokenInvalid || appErr.Message != messages.MissingSession,
+		"err = %#v", appErr)
+
 }

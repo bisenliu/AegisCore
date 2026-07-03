@@ -3,6 +3,8 @@ package redis
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestRedisLuaScriptsDeclareContracts(t *testing.T) {
@@ -52,9 +54,9 @@ func TestRedisLuaScriptsDeclareContracts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, metadata := range tt.metadata {
-				if !strings.Contains(tt.source, metadata) {
-					t.Fatalf("script metadata %q not found", metadata)
-				}
+				require.True(t, strings.Contains(tt.source, metadata),
+					"script metadata %q not found", metadata)
+
 			}
 		})
 	}
