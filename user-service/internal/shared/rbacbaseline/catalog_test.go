@@ -4,53 +4,42 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDefaultRolesStableBaseline(t *testing.T) {
 	roles := DefaultRoles()
-	if len(roles) == 0 {
-		t.Fatal("DefaultRoles is empty")
-	}
+	require.NotEmpty(t, roles)
+
 	seen := make(map[string]struct{})
 	var hasSuperAdmin bool
 	for _, role := range roles {
-		if _, err := uuid.Parse(role.RoleID); err != nil {
-			t.Fatalf("RoleID %q is not UUID: %v", role.RoleID, err)
-		}
-		if _, ok := seen[role.RoleID]; ok {
-			t.Fatalf("duplicate role_id %s", role.RoleID)
-		}
+		_, err := uuid.Parse(role.RoleID)
+		require.NoError(t, err, "RoleID %q must be UUID", role.RoleID)
+		require.NotContains(t, seen, role.RoleID)
 		seen[role.RoleID] = struct{}{}
 		if role.RoleID == SuperAdminRoleID && role.System && role.Name != "" && role.Description != "" {
 			hasSuperAdmin = true
 		}
 	}
-	if !hasSuperAdmin {
-		t.Fatal("super admin role missing or incomplete")
-	}
+	require.True(t, hasSuperAdmin, "super admin role missing or incomplete")
 }
 
 func TestDefaultPermissionsStableBaseline(t *testing.T) {
 	permissions := DefaultPermissions()
-	if len(permissions) == 0 {
-		t.Fatal("DefaultPermissions is empty")
-	}
+	require.NotEmpty(t, permissions)
+
 	seenIDs := make(map[string]struct{})
 	seenRoutes := make(map[string]struct{})
 	var hasListUsers bool
 	var hasCreateUser bool
 	for _, permission := range permissions {
-		if _, err := uuid.Parse(permission.PermissionID); err != nil {
-			t.Fatalf("PermissionID %q is not UUID: %v", permission.PermissionID, err)
-		}
-		if _, ok := seenIDs[permission.PermissionID]; ok {
-			t.Fatalf("duplicate permission_id %s", permission.PermissionID)
-		}
+		_, err := uuid.Parse(permission.PermissionID)
+		require.NoError(t, err, "PermissionID %q must be UUID", permission.PermissionID)
+		require.NotContains(t, seenIDs, permission.PermissionID)
 		seenIDs[permission.PermissionID] = struct{}{}
 		routeKey := permission.Method + " " + permission.PathTemplate
-		if _, ok := seenRoutes[routeKey]; ok {
-			t.Fatalf("duplicate route %s", routeKey)
-		}
+		require.NotContains(t, seenRoutes, routeKey)
 		seenRoutes[routeKey] = struct{}{}
 		if permission.Method == "GET" && permission.PathTemplate == "/api/v1/users" {
 			hasListUsers = true
@@ -59,12 +48,8 @@ func TestDefaultPermissionsStableBaseline(t *testing.T) {
 			hasCreateUser = true
 		}
 	}
-	if !hasListUsers {
-		t.Fatal("GET /api/v1/users permission missing")
-	}
-	if !hasCreateUser {
-		t.Fatal("POST /api/v1/users permission missing")
-	}
+	require.True(t, hasListUsers, "GET /api/v1/users permission missing")
+	require.True(t, hasCreateUser, "POST /api/v1/users permission missing")
 }
 
 func TestDefaultPermissionsCoverAuthorizableRoutes(t *testing.T) {
@@ -99,14 +84,10 @@ func TestDefaultPermissionsCoverAuthorizableRoutes(t *testing.T) {
 		actual[permission.Method+" "+permission.PathTemplate] = struct{}{}
 	}
 	for route := range expected {
-		if _, ok := actual[route]; !ok {
-			t.Fatalf("permission catalog missing route %s", route)
-		}
+		require.Contains(t, actual, route, "permission catalog missing route")
 	}
 	for route := range actual {
-		if _, ok := expected[route]; !ok {
-			t.Fatalf("permission catalog has unexpected route %s", route)
-		}
+		require.Contains(t, expected, route, "permission catalog has unexpected route")
 	}
 }
 
@@ -121,25 +102,15 @@ func TestDefaultRolePermissionsReferenceBaseline(t *testing.T) {
 	}
 	seen := make(map[string]struct{})
 	for _, binding := range DefaultRolePermissions() {
-		if _, ok := roles[binding.RoleID]; !ok {
-			t.Fatalf("binding references unknown role_id %s", binding.RoleID)
-		}
-		if _, ok := permissions[binding.PermissionID]; !ok {
-			t.Fatalf("binding references unknown permission_id %s", binding.PermissionID)
-		}
+		require.Contains(t, roles, binding.RoleID, "binding references unknown role_id")
+		require.Contains(t, permissions, binding.PermissionID, "binding references unknown permission_id")
 		key := binding.RoleID + ":" + binding.PermissionID
-		if _, ok := seen[key]; ok {
-			t.Fatalf("duplicate role permission binding %s", key)
-		}
+		require.NotContains(t, seen, key, "duplicate role permission binding")
 		seen[key] = struct{}{}
 	}
-	if len(seen) != len(permissions) {
-		t.Fatalf("bindings = %d, want one super admin binding per permission %d", len(seen), len(permissions))
-	}
+	require.Len(t, seen, len(permissions), "want one super admin binding per permission")
 	for permissionID := range permissions {
 		key := SuperAdminRoleID + ":" + permissionID
-		if _, ok := seen[key]; !ok {
-			t.Fatalf("super admin binding missing permission_id %s", permissionID)
-		}
+		require.Contains(t, seen, key, "super admin binding missing permission_id")
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -27,20 +28,18 @@ func TestSeedServiceDefaultEnsureAndRepeat(t *testing.T) {
 	inOrder(append(firstCalls, repeatCalls...))
 
 	result, err := service.Seed(context.Background(), SeedOptions{})
-	if err != nil {
-		t.Fatalf("Seed: %v", err)
-	}
-	if result.RolesInserted != len(rbacbaseline.DefaultRoles()) || result.PermissionsInserted != permissionCount || result.RolePermissionBindingsAdd != permissionCount {
-		t.Fatalf("first result=%#v", result)
-	}
+	require.NoError(t, err)
+	require.Equal(t, len(rbacbaseline.DefaultRoles()), result.RolesInserted)
+	require.Equal(t, permissionCount, result.PermissionsInserted)
+	require.Equal(t, permissionCount, result.RolePermissionBindingsAdd)
 
 	result, err = service.Seed(context.Background(), SeedOptions{})
-	if err != nil {
-		t.Fatalf("Seed repeat: %v", err)
-	}
-	if result.RolesInserted != 0 || result.RolesUpdated != len(rbacbaseline.DefaultRoles()) || result.PermissionsInserted != 0 || result.PermissionsUpdated != permissionCount || result.RolePermissionBindingsAdd != 0 {
-		t.Fatalf("repeat result=%#v", result)
-	}
+	require.NoError(t, err)
+	require.Zero(t, result.RolesInserted)
+	require.Equal(t, len(rbacbaseline.DefaultRoles()), result.RolesUpdated)
+	require.Zero(t, result.PermissionsInserted)
+	require.Equal(t, permissionCount, result.PermissionsUpdated)
+	require.Zero(t, result.RolePermissionBindingsAdd)
 }
 
 func TestSeedServiceReactivateAndSyncOptions(t *testing.T) {
@@ -54,12 +53,11 @@ func TestSeedServiceReactivateAndSyncOptions(t *testing.T) {
 	inOrder(calls)
 
 	result, err := service.Seed(context.Background(), SeedOptions{ReactivateSystem: true, SyncSystemBindings: true})
-	if err != nil {
-		t.Fatalf("Seed: %v", err)
-	}
-	if result.RolesInserted != len(rbacbaseline.DefaultRoles()) || result.PermissionsInserted != permissionCount || result.RolePermissionBindingsAdd != permissionCount || result.RolePermissionBindingsDel != 0 {
-		t.Fatalf("sync result=%#v", result)
-	}
+	require.NoError(t, err)
+	require.Equal(t, len(rbacbaseline.DefaultRoles()), result.RolesInserted)
+	require.Equal(t, permissionCount, result.PermissionsInserted)
+	require.Equal(t, permissionCount, result.RolePermissionBindingsAdd)
+	require.Zero(t, result.RolePermissionBindingsDel)
 }
 
 func TestSeedServiceAssignSuperAdmin(t *testing.T) {
@@ -75,20 +73,12 @@ func TestSeedServiceAssignSuperAdmin(t *testing.T) {
 	)
 
 	result, err := service.AssignSuperAdmin(context.Background(), userID)
-	if err != nil {
-		t.Fatalf("AssignSuperAdmin: %v", err)
-	}
-	if !result.Added {
-		t.Fatal("first assignment Added=false")
-	}
+	require.NoError(t, err)
+	require.True(t, result.Added)
 
 	result, err = service.AssignSuperAdmin(context.Background(), userID)
-	if err != nil {
-		t.Fatalf("AssignSuperAdmin repeat: %v", err)
-	}
-	if result.Added {
-		t.Fatal("repeat assignment Added=true")
-	}
+	require.NoError(t, err)
+	require.False(t, result.Added)
 }
 
 type seedMockStores struct {

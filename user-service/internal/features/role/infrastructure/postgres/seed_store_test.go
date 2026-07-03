@@ -2,12 +2,12 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/require"
 
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/user-service/ent"
@@ -26,31 +26,26 @@ func TestRoleStoreUpsertSystemRole(t *testing.T) {
 	input := roleapplication.SeedRoleInput{RoleID: roleID, Name: "Super Admin", Description: "all", Active: true, IsSystem: true}
 
 	created, inserted, err := store.UpsertSystemRole(ctx, input)
-	if err != nil {
-		t.Fatalf("UpsertSystemRole create: %v", err)
-	}
-	if !inserted || created.RoleID != roleID || !created.Active || !created.IsSystem {
-		t.Fatalf("created=%#v inserted=%v", created, inserted)
-	}
-	if _, err := store.SetActive(ctx, roleID, false); err != nil {
-		t.Fatalf("SetActive: %v", err)
-	}
+	require.NoError(t, err)
+	require.True(t, inserted)
+	require.Equal(t, roleID, created.RoleID)
+	require.True(t, created.Active)
+	require.True(t, created.IsSystem)
+	_, err = store.SetActive(ctx, roleID, false)
+	require.NoError(t, err)
+
 	input.Name = "Super Admin Updated"
 	updated, inserted, err := store.UpsertSystemRole(ctx, input)
-	if err != nil {
-		t.Fatalf("UpsertSystemRole update: %v", err)
-	}
-	if inserted || updated.Active || updated.Name != "Super Admin Updated" {
-		t.Fatalf("updated=%#v inserted=%v", updated, inserted)
-	}
+	require.NoError(t, err)
+	require.False(t, inserted)
+	require.False(t, updated.Active)
+	require.Equal(t, "Super Admin Updated", updated.Name)
+
 	input.ReactivateSystem = true
 	updated, inserted, err = store.UpsertSystemRole(ctx, input)
-	if err != nil {
-		t.Fatalf("UpsertSystemRole reactivate: %v", err)
-	}
-	if inserted || !updated.Active {
-		t.Fatalf("reactivated=%#v inserted=%v", updated, inserted)
-	}
+	require.NoError(t, err)
+	require.False(t, inserted)
+	require.True(t, updated.Active)
 }
 
 func TestRolePermissionStoreSeedEnsureAndSync(t *testing.T) {
@@ -63,41 +58,29 @@ func TestRolePermissionStoreSeedEnsureAndSync(t *testing.T) {
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000202")
 	extraPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000203")
 
-	if _, _, err := roleStore.UpsertSystemRole(ctx, roleapplication.SeedRoleInput{RoleID: roleID, Name: "System", Active: true, IsSystem: true}); err != nil {
-		t.Fatalf("UpsertSystemRole: %v", err)
-	}
-	if _, err := permissionStore.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: permissionID, Name: "List", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true, IsSystem: true}); err != nil {
-		t.Fatalf("Create permission: %v", err)
-	}
-	if _, err := permissionStore.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: extraPermissionID, Name: "Create", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true, IsSystem: true}); err != nil {
-		t.Fatalf("Create extra permission: %v", err)
-	}
+	_, _, err := roleStore.UpsertSystemRole(ctx, roleapplication.SeedRoleInput{RoleID: roleID, Name: "System", Active: true, IsSystem: true})
+	require.NoError(t, err)
+	_, err = permissionStore.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: permissionID, Name: "List", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true, IsSystem: true})
+	require.NoError(t, err)
+	_, err = permissionStore.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: extraPermissionID, Name: "Create", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true, IsSystem: true})
+	require.NoError(t, err)
 
 	added, err := bindingStore.EnsureSystemBindings(ctx, roleID, []uuid.UUID{permissionID, extraPermissionID})
-	if err != nil {
-		t.Fatalf("EnsureSystemBindings: %v", err)
-	}
-	if added != 2 {
-		t.Fatalf("added = %d, want 2", added)
-	}
+	require.NoError(t, err)
+	require.Equal(t, 2, added)
+
 	added, err = bindingStore.EnsureSystemBindings(ctx, roleID, []uuid.UUID{permissionID, extraPermissionID, permissionID})
-	if err != nil {
-		t.Fatalf("EnsureSystemBindings repeat: %v", err)
-	}
-	if added != 0 {
-		t.Fatalf("repeat added = %d, want 0", added)
-	}
+	require.NoError(t, err)
+	require.Zero(t, added)
+
 	missingPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000204")
-	if _, err = bindingStore.EnsureSystemBindings(ctx, roleID, []uuid.UUID{missingPermissionID}); !errors.Is(err, roledomain.ErrRolePermissionNotFound) {
-		t.Fatalf("EnsureSystemBindings missing err = %v, want %v", err, roledomain.ErrRolePermissionNotFound)
-	}
+	_, err = bindingStore.EnsureSystemBindings(ctx, roleID, []uuid.UUID{missingPermissionID})
+	require.ErrorIs(t, err, roledomain.ErrRolePermissionNotFound)
+
 	added, removed, err := bindingStore.SyncSystemBindings(ctx, roleID, []uuid.UUID{permissionID})
-	if err != nil {
-		t.Fatalf("SyncSystemBindings: %v", err)
-	}
-	if added != 0 || removed != 1 {
-		t.Fatalf("added=%d removed=%d", added, removed)
-	}
+	require.NoError(t, err)
+	require.Zero(t, added)
+	require.Equal(t, 1, removed)
 }
 
 func TestUserRoleStoreAssignRoleIdempotent(t *testing.T) {
@@ -107,27 +90,18 @@ func TestUserRoleStoreAssignRoleIdempotent(t *testing.T) {
 	userRoleStore := NewUserRoleStore(UserRoleStoreParams{Client: client})
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000301")
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000302")
-	if _, err := client.User.Create().SetUserID(userID).SetNickname("Admin").SetUsername("admin@example.com").SetPasswordHash("hash").Save(ctx); err != nil {
-		t.Fatalf("Create user: %v", err)
-	}
-	if _, _, err := roleStore.UpsertSystemRole(ctx, roleapplication.SeedRoleInput{RoleID: roleID, Name: "System", Active: true, IsSystem: true}); err != nil {
-		t.Fatalf("UpsertSystemRole: %v", err)
-	}
+	_, err := client.User.Create().SetUserID(userID).SetNickname("Admin").SetUsername("admin@example.com").SetPasswordHash("hash").Save(ctx)
+	require.NoError(t, err)
+	_, _, err = roleStore.UpsertSystemRole(ctx, roleapplication.SeedRoleInput{RoleID: roleID, Name: "System", Active: true, IsSystem: true})
+	require.NoError(t, err)
 
 	added, err := userRoleStore.AssignRole(ctx, userID, roleID)
-	if err != nil {
-		t.Fatalf("AssignRole: %v", err)
-	}
-	if !added {
-		t.Fatal("first AssignRole added=false")
-	}
+	require.NoError(t, err)
+	require.True(t, added)
+
 	added, err = userRoleStore.AssignRole(ctx, userID, roleID)
-	if err != nil {
-		t.Fatalf("AssignRole repeat: %v", err)
-	}
-	if added {
-		t.Fatal("repeat AssignRole added=true")
-	}
+	require.NoError(t, err)
+	require.False(t, added)
 }
 
 func newRoleSeedTestClient(t *testing.T) *ent.Client {

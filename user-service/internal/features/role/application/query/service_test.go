@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
@@ -23,15 +24,11 @@ func TestRoleQueryServiceListRolesNormalizesLimitAndNextCursor(t *testing.T) {
 	service := NewRoleQueryService(roles, NewMockUserRoleStore(gomock.NewController(t)), NewMockRolePermissionStore(gomock.NewController(t)))
 
 	result, err := service.ListRoles(context.Background(), ListRolesQuery{})
-	if err != nil {
-		t.Fatalf("ListRoles: %v", err)
-	}
-	if listInput.Limit <= 0 || result.PageSize != listInput.Limit {
-		t.Fatalf("page size = %d, store limit = %d", result.PageSize, listInput.Limit)
-	}
-	if !result.HasNext || result.NextCursor != lastRoleID.String() {
-		t.Fatalf("pagination result = %#v", result)
-	}
+	require.NoError(t, err)
+	require.Greater(t, listInput.Limit, 0)
+	require.Equal(t, listInput.Limit, result.PageSize)
+	require.True(t, result.HasNext)
+	require.Equal(t, lastRoleID.String(), result.NextCursor)
 }
 
 func TestRoleQueryServiceGetAndBindingQueriesPassThrough(t *testing.T) {
@@ -47,26 +44,17 @@ func TestRoleQueryServiceGetAndBindingQueriesPassThrough(t *testing.T) {
 	service := NewRoleQueryService(roles, userRoles, rolePermissions)
 
 	roleResult, err := service.GetRole(context.Background(), GetRoleQuery{RoleID: roleID})
-	if err != nil {
-		t.Fatalf("GetRole: %v", err)
-	}
-	if roleResult.Role.RoleID != roleID || roleResult.Role.Name != "operator" {
-		t.Fatalf("role result = %#v", roleResult.Role)
-	}
+	require.NoError(t, err)
+	require.Equal(t, roleID, roleResult.Role.RoleID)
+	require.Equal(t, "operator", roleResult.Role.Name)
 
 	rolesResult, err := service.ListUserRoles(context.Background(), UserRolesQuery{UserID: userID})
-	if err != nil {
-		t.Fatalf("ListUserRoles: %v", err)
-	}
-	if len(rolesResult.Items) != 1 || rolesResult.Items[0].RoleID != roleID {
-		t.Fatalf("user roles = %#v", rolesResult.Items)
-	}
+	require.NoError(t, err)
+	require.Len(t, rolesResult.Items, 1)
+	require.Equal(t, roleID, rolesResult.Items[0].RoleID)
 
 	permissionsResult, err := service.ListRolePermissions(context.Background(), RolePermissionsQuery{RoleID: roleID})
-	if err != nil {
-		t.Fatalf("ListRolePermissions: %v", err)
-	}
-	if len(permissionsResult.Items) != 1 || permissionsResult.Items[0].PermissionID != permissionID {
-		t.Fatalf("role permissions = %#v", permissionsResult.Items)
-	}
+	require.NoError(t, err)
+	require.Len(t, permissionsResult.Items, 1)
+	require.Equal(t, permissionID, permissionsResult.Items[0].PermissionID)
 }

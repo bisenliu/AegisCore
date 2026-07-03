@@ -3,11 +3,11 @@ package command
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -19,28 +19,21 @@ import (
 func TestRoleCommandServiceCreateRoleDefaultsAndNormalizes(t *testing.T) {
 	fixture := newRoleCommandFixture(t)
 	fixture.roles.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, input roleapplication.CreateRoleInput) (*roledomain.Role, error) {
-		if input.RoleID == uuid.Nil {
-			t.Fatalf("role id is nil")
-		}
-		if input.Name != "Operator" || input.Description != "Ops user" || !input.Active || !input.IsSystem {
-			t.Fatalf("create input = %#v", input)
-		}
+		require.NotEqual(t, uuid.Nil, input.RoleID)
+		require.Equal(t, "Operator", input.Name)
+		require.Equal(t, "Ops user", input.Description)
+		require.True(t, input.Active)
+		require.True(t, input.IsSystem)
 		return &roledomain.Role{RoleID: input.RoleID, Name: input.Name, Description: input.Description, Active: input.Active, IsSystem: input.IsSystem}, nil
 	})
 
 	result, err := fixture.service.CreateRole(context.Background(), CreateRoleCommand{Name: "  Operator  ", Description: "  Ops user  ", IsSystem: true})
-	if err != nil {
-		t.Fatalf("CreateRole: %v", err)
-	}
-	if result.Role.RoleID == uuid.Nil {
-		t.Fatalf("role id is nil")
-	}
-	if !result.Role.Active || !result.Role.IsSystem {
-		t.Fatalf("role flags = active:%v system:%v", result.Role.Active, result.Role.IsSystem)
-	}
-	if result.Role.Name != "Operator" || result.Role.Description != "Ops user" {
-		t.Fatalf("role = %#v", result.Role)
-	}
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, result.Role.RoleID)
+	require.True(t, result.Role.Active)
+	require.True(t, result.Role.IsSystem)
+	require.Equal(t, "Operator", result.Role.Name)
+	require.Equal(t, "Ops user", result.Role.Description)
 }
 
 func TestRoleCommandServiceCreateRoleReturnsStoreError(t *testing.T) {
@@ -48,12 +41,8 @@ func TestRoleCommandServiceCreateRoleReturnsStoreError(t *testing.T) {
 	fixture.roles.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, roledomain.ErrRoleAlreadyExists)
 
 	result, err := fixture.service.CreateRole(context.Background(), CreateRoleCommand{Name: "operator"})
-	if !errors.Is(err, roledomain.ErrRoleAlreadyExists) {
-		t.Fatalf("err = %v, want ErrRoleAlreadyExists", err)
-	}
-	if result != nil {
-		t.Fatalf("result = %#v, want nil", result)
-	}
+	require.ErrorIs(t, err, roledomain.ErrRoleAlreadyExists)
+	require.Nil(t, result)
 }
 
 func TestRoleCommandServiceUpdateRoleProtectsSystemRole(t *testing.T) {
@@ -64,9 +53,7 @@ func TestRoleCommandServiceUpdateRoleProtectsSystemRole(t *testing.T) {
 	fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).Times(0)
 
 	_, err := fixture.service.UpdateRole(context.Background(), UpdateRoleCommand{RoleID: roleID, Name: "renamed", Description: "system", Active: true})
-	if !errors.Is(err, roledomain.ErrSystemRoleProtected) {
-		t.Fatalf("err = %v, want ErrSystemRoleProtected", err)
-	}
+	require.ErrorIs(t, err, roledomain.ErrSystemRoleProtected)
 }
 
 func TestRoleCommandServiceSetRoleActiveProtectsSystemRole(t *testing.T) {
@@ -77,9 +64,7 @@ func TestRoleCommandServiceSetRoleActiveProtectsSystemRole(t *testing.T) {
 	fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).Times(0)
 
 	_, err := fixture.service.SetRoleActive(context.Background(), SetRoleActiveCommand{RoleID: roleID, Active: false})
-	if !errors.Is(err, roledomain.ErrSystemRoleProtected) {
-		t.Fatalf("err = %v, want ErrSystemRoleProtected", err)
-	}
+	require.ErrorIs(t, err, roledomain.ErrSystemRoleProtected)
 }
 
 func TestRoleCommandServiceUserRoleBindings(t *testing.T) {
@@ -98,12 +83,9 @@ func TestRoleCommandServiceUserRoleBindings(t *testing.T) {
 	)
 
 	result, err := fixture.service.AddUserRole(context.Background(), UserRoleCommand{UserID: userID, RoleID: roleID})
-	if err != nil {
-		t.Fatalf("AddUserRole: %v", err)
-	}
-	if len(result.Items) != 1 || result.Items[0].RoleID != roleID {
-		t.Fatalf("add result = %#v", result.Items)
-	}
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, roleID, result.Items[0].RoleID)
 
 	gomock.InOrder(
 		fixture.roles.EXPECT().GetByRoleIDs(gomock.Any(), uuidSliceMatches(roleID, otherRoleID)).Return([]roledomain.Role{role, otherRole}, nil),
@@ -112,12 +94,10 @@ func TestRoleCommandServiceUserRoleBindings(t *testing.T) {
 	)
 
 	replaced, err := fixture.service.ReplaceUserRoles(context.Background(), ReplaceUserRolesCommand{UserID: userID, RoleIDs: []uuid.UUID{roleID, otherRoleID, roleID}})
-	if err != nil {
-		t.Fatalf("ReplaceUserRoles: %v", err)
-	}
-	if len(replaced.Items) != 2 || replaced.Items[0].RoleID != roleID || replaced.Items[1].RoleID != otherRoleID {
-		t.Fatalf("replaced items = %#v", replaced.Items)
-	}
+	require.NoError(t, err)
+	require.Len(t, replaced.Items, 2)
+	require.Equal(t, roleID, replaced.Items[0].RoleID)
+	require.Equal(t, otherRoleID, replaced.Items[1].RoleID)
 }
 
 func TestRoleCommandServiceUserRoleLookupFailureSkipsWriteAndNotify(t *testing.T) {
@@ -129,12 +109,8 @@ func TestRoleCommandServiceUserRoleLookupFailureSkipsWriteAndNotify(t *testing.T
 	fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).Times(0)
 
 	result, err := fixture.service.AddUserRole(context.Background(), UserRoleCommand{UserID: userID, RoleID: roleID})
-	if !errors.Is(err, roledomain.ErrRoleNotFound) {
-		t.Fatalf("err = %v, want ErrRoleNotFound", err)
-	}
-	if result != nil {
-		t.Fatalf("result = %#v, want nil", result)
-	}
+	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
+	require.Nil(t, result)
 }
 
 func TestRoleCommandServiceReplaceUserRolesLookupFailureSkipsWriteAndNotify(t *testing.T) {
@@ -146,12 +122,8 @@ func TestRoleCommandServiceReplaceUserRolesLookupFailureSkipsWriteAndNotify(t *t
 	fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).Times(0)
 
 	result, err := fixture.service.ReplaceUserRoles(context.Background(), ReplaceUserRolesCommand{UserID: userID, RoleIDs: []uuid.UUID{roleID, roleID}})
-	if !errors.Is(err, roledomain.ErrRoleNotFound) {
-		t.Fatalf("err = %v, want ErrRoleNotFound", err)
-	}
-	if result != nil {
-		t.Fatalf("result = %#v, want nil", result)
-	}
+	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
+	require.Nil(t, result)
 }
 
 func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
@@ -172,12 +144,9 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	)
 
 	result, err := fixture.service.AddRolePermission(context.Background(), RolePermissionCommand{RoleID: roleID, PermissionID: permissionID})
-	if err != nil {
-		t.Fatalf("AddRolePermission: %v", err)
-	}
-	if len(result.Items) != 1 || result.Items[0].PermissionID != permissionID {
-		t.Fatalf("add result = %#v", result.Items)
-	}
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, permissionID, result.Items[0].PermissionID)
 
 	gomock.InOrder(
 		fixture.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil),
@@ -188,12 +157,10 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	)
 
 	replaced, err := fixture.service.ReplaceRolePermissions(context.Background(), ReplaceRolePermissionsCommand{RoleID: roleID, PermissionIDs: []uuid.UUID{permissionID, otherPermissionID, permissionID}})
-	if err != nil {
-		t.Fatalf("ReplaceRolePermissions: %v", err)
-	}
-	if len(replaced.Items) != 2 || replaced.Items[0].PermissionID != permissionID || replaced.Items[1].PermissionID != otherPermissionID {
-		t.Fatalf("replaced items = %#v", replaced.Items)
-	}
+	require.NoError(t, err)
+	require.Len(t, replaced.Items, 2)
+	require.Equal(t, permissionID, replaced.Items[0].PermissionID)
+	require.Equal(t, otherPermissionID, replaced.Items[1].PermissionID)
 }
 
 func TestRoleCommandServiceRolePermissionLookupFailureSkipsWriteAndNotify(t *testing.T) {
@@ -202,7 +169,7 @@ func TestRoleCommandServiceRolePermissionLookupFailureSkipsWriteAndNotify(t *tes
 	otherPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000027")
 	role := roledomain.Role{RoleID: roleID, Name: "operator", Active: true}
 	permission := roleapplication.PermissionReference{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}
-	inactiveErr := fmt.Errorf("%w: permission inactive", permissiondomain.ErrPermissionNotFound)
+	inactiveErr := errors.Join(permissiondomain.ErrPermissionNotFound, errors.New("permission inactive"))
 
 	t.Run("add skips binding write when permission is unavailable", func(t *testing.T) {
 		fixture := newRoleCommandFixture(t)
@@ -214,12 +181,8 @@ func TestRoleCommandServiceRolePermissionLookupFailureSkipsWriteAndNotify(t *tes
 		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).Times(0)
 
 		result, err := fixture.service.AddRolePermission(context.Background(), RolePermissionCommand{RoleID: roleID, PermissionID: permissionID})
-		if !errors.Is(err, permissiondomain.ErrPermissionNotFound) {
-			t.Fatalf("err = %v, want ErrPermissionNotFound", err)
-		}
-		if result != nil {
-			t.Fatalf("result = %#v, want nil", result)
-		}
+		require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
+		require.Nil(t, result)
 	})
 
 	t.Run("replace skips binding write when any permission lookup fails", func(t *testing.T) {
@@ -233,12 +196,8 @@ func TestRoleCommandServiceRolePermissionLookupFailureSkipsWriteAndNotify(t *tes
 		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).Times(0)
 
 		result, err := fixture.service.ReplaceRolePermissions(context.Background(), ReplaceRolePermissionsCommand{RoleID: roleID, PermissionIDs: []uuid.UUID{permissionID, otherPermissionID, permissionID}})
-		if !errors.Is(err, permissiondomain.ErrPermissionNotFound) {
-			t.Fatalf("err = %v, want ErrPermissionNotFound", err)
-		}
-		if result != nil {
-			t.Fatalf("result = %#v, want nil", result)
-		}
+		require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
+		require.Nil(t, result)
 	})
 }
 
@@ -267,9 +226,7 @@ func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing
 			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
 				result, err := service.UpdateRole(context.Background(), UpdateRoleCommand{RoleID: roleID, Name: "operator", Active: true})
-				if err != nil {
-					t.Fatalf("UpdateRole: %v", err)
-				}
+				require.NoError(t, err)
 				return result
 			},
 		},
@@ -287,9 +244,7 @@ func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing
 			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
 				result, err := service.SetRoleActive(context.Background(), SetRoleActiveCommand{RoleID: roleID, Active: false})
-				if err != nil {
-					t.Fatalf("SetRoleActive: %v", err)
-				}
+				require.NoError(t, err)
 				return result
 			},
 		},
@@ -306,9 +261,7 @@ func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing
 			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
 				result, err := service.AddUserRole(context.Background(), UserRoleCommand{UserID: userID, RoleID: roleID})
-				if err != nil {
-					t.Fatalf("AddUserRole: %v", err)
-				}
+				require.NoError(t, err)
 				return result
 			},
 		},
@@ -324,9 +277,7 @@ func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing
 			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
 				result, err := service.ReplaceUserRoles(context.Background(), ReplaceUserRolesCommand{UserID: userID, RoleIDs: []uuid.UUID{roleID}})
-				if err != nil {
-					t.Fatalf("ReplaceUserRoles: %v", err)
-				}
+				require.NoError(t, err)
 				return result
 			},
 		},
@@ -342,9 +293,7 @@ func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing
 			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
 				result, err := service.RemoveUserRole(context.Background(), UserRoleCommand{UserID: userID, RoleID: roleID})
-				if err != nil {
-					t.Fatalf("RemoveUserRole: %v", err)
-				}
+				require.NoError(t, err)
 				return result
 			},
 		},
@@ -362,9 +311,7 @@ func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing
 			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
 				result, err := service.AddRolePermission(context.Background(), RolePermissionCommand{RoleID: roleID, PermissionID: permissionID})
-				if err != nil {
-					t.Fatalf("AddRolePermission: %v", err)
-				}
+				require.NoError(t, err)
 				return result
 			},
 		},
@@ -381,9 +328,7 @@ func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing
 			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
 				result, err := service.ReplaceRolePermissions(context.Background(), ReplaceRolePermissionsCommand{RoleID: roleID, PermissionIDs: []uuid.UUID{permissionID}})
-				if err != nil {
-					t.Fatalf("ReplaceRolePermissions: %v", err)
-				}
+				require.NoError(t, err)
 				return result
 			},
 		},
@@ -399,9 +344,7 @@ func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing
 			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
 				result, err := service.RemoveRolePermission(context.Background(), RolePermissionCommand{RoleID: roleID, PermissionID: permissionID})
-				if err != nil {
-					t.Fatalf("RemoveRolePermission: %v", err)
-				}
+				require.NoError(t, err)
 				return result
 			},
 		},
@@ -413,9 +356,7 @@ func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing
 			tt.setup(fixture)
 
 			result := tt.run(t, fixture.service)
-			if result == nil {
-				t.Fatalf("result is nil")
-			}
+			require.NotNil(t, result)
 		})
 	}
 }

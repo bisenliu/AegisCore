@@ -3,24 +3,26 @@ package rolehttp
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/user-service/internal/messages"
 )
 
 func TestPrepareListRolesQuery(t *testing.T) {
 	query, err := prepareListRolesQuery(ListRolesRequest{Cursor: " 018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e ", PageSize: 101})
-	if err != nil {
-		t.Fatalf("prepareListRolesQuery: %v", err)
-	}
-	if query.Cursor == nil || query.Cursor.String() != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e" || query.PageSize != 100 || query.Limit != 100 {
-		t.Fatalf("query = %#v", query)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, query.Cursor)
+	require.Equal(t, "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e", query.Cursor.String())
+	require.Equal(t, 100, query.PageSize)
+	require.Equal(t, 100, query.Limit)
 
 	_, err = prepareListRolesQuery(ListRolesRequest{Cursor: "bad"})
+	require.Error(t, err)
 	appErr := contracterrors.FromError(err)
-	if appErr.Code != contracterrors.CodeBadRequest || appErr.Message != messages.InvalidRole {
-		t.Fatalf("err = %#v", appErr)
-	}
+	require.NotNil(t, appErr)
+	require.Equal(t, contracterrors.CodeBadRequest, appErr.Code)
+	require.Equal(t, messages.InvalidRole, appErr.Message)
 }
 
 func TestPrepareRoleBindingCommands(t *testing.T) {
@@ -28,30 +30,26 @@ func TestPrepareRoleBindingCommands(t *testing.T) {
 		UserID:  "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e",
 		RoleIDs: []string{" 018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4f "},
 	})
-	if err != nil {
-		t.Fatalf("prepareReplaceUserRolesCommand: %v", err)
-	}
-	if replaceUserRoles.UserID.String() != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e" || len(replaceUserRoles.RoleIDs) != 1 || replaceUserRoles.RoleIDs[0].String() != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4f" {
-		t.Fatalf("replaceUserRoles = %#v", replaceUserRoles)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e", replaceUserRoles.UserID.String())
+	require.Len(t, replaceUserRoles.RoleIDs, 1)
+	require.Equal(t, "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4f", replaceUserRoles.RoleIDs[0].String())
 
 	rolePermission, err := prepareRolePermissionCommand(RolePermissionHTTPRequest{
 		RoleID:       "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4f",
 		PermissionID: "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d50",
 	})
-	if err != nil {
-		t.Fatalf("prepareRolePermissionCommand: %v", err)
-	}
-	if rolePermission.RoleID.String() != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4f" || rolePermission.PermissionID.String() != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d50" {
-		t.Fatalf("rolePermission = %#v", rolePermission)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4f", rolePermission.RoleID.String())
+	require.Equal(t, "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d50", rolePermission.PermissionID.String())
 
 	_, err = prepareReplaceRolePermissionsCommand(ReplaceRolePermissionsHTTPRequest{
 		RoleID:        "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4f",
 		PermissionIDs: []string{"bad"},
 	})
+	require.Error(t, err)
 	appErr := contracterrors.FromError(err)
-	if appErr.Code != contracterrors.CodeBadRequest || appErr.Message != messages.InvalidPermission {
-		t.Fatalf("err = %#v", appErr)
-	}
+	require.NotNil(t, appErr)
+	require.Equal(t, contracterrors.CodeBadRequest, appErr.Code)
+	require.Equal(t, messages.InvalidPermission, appErr.Message)
 }

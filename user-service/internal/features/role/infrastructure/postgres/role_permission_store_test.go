@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"testing"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/stretchr/testify/require"
 
 	"github.com/aegiscore/common/testing/containers"
 	"github.com/aegiscore/user-service/ent"
@@ -29,28 +29,18 @@ func TestRolePermissionStorePostgresAddRechecksPermissionActiveState(t *testing.
 	permissionStore := permissionpostgres.NewPermissionStore(permissionpostgres.PermissionStoreParams{Client: client})
 	bindingStore := NewRolePermissionStore(RolePermissionStoreParams{Client: client})
 
-	if _, err := roleStore.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: "Operator", Active: true}); err != nil {
-		t.Fatalf("Create role: %v", err)
-	}
+	_, err := roleStore.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: "Operator", Active: true})
+	require.NoError(t, err)
 	createdPermission, err := permissionStore.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: permissionID, Name: "Create User", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true})
-	if err != nil {
-		t.Fatalf("Create permission: %v", err)
-	}
-	if _, err := permissionStore.SetActive(ctx, permissionID, false); err != nil {
-		t.Fatalf("SetActive: %v", err)
-	}
+	require.NoError(t, err)
+	_, err = permissionStore.SetActive(ctx, permissionID, false)
+	require.NoError(t, err)
 
 	err = bindingStore.Add(ctx, roleID, roleapplication.PermissionReference{ID: createdPermission.ID, PermissionID: createdPermission.PermissionID})
-	if !errors.Is(err, permissiondomain.ErrPermissionNotFound) {
-		t.Fatalf("Add err = %v, want %v", err, permissiondomain.ErrPermissionNotFound)
-	}
+	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
 	items, err := bindingStore.ListByRoleID(ctx, roleID)
-	if err != nil {
-		t.Fatalf("ListByRoleID: %v", err)
-	}
-	if len(items) != 0 {
-		t.Fatalf("bindings = %d, want 0", len(items))
-	}
+	require.NoError(t, err)
+	require.Empty(t, items)
 }
 
 func TestRolePermissionStorePostgresReplaceRechecksPermissionActiveState(t *testing.T) {
@@ -63,38 +53,26 @@ func TestRolePermissionStorePostgresReplaceRechecksPermissionActiveState(t *test
 	permissionStore := permissionpostgres.NewPermissionStore(permissionpostgres.PermissionStoreParams{Client: client})
 	bindingStore := NewRolePermissionStore(RolePermissionStoreParams{Client: client})
 
-	if _, err := roleStore.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: "Auditor", Active: true}); err != nil {
-		t.Fatalf("Create role: %v", err)
-	}
+	_, err := roleStore.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: "Auditor", Active: true})
+	require.NoError(t, err)
 	activePermission, err := permissionStore.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: activePermissionID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true})
-	if err != nil {
-		t.Fatalf("Create active permission: %v", err)
-	}
+	require.NoError(t, err)
 	inactivePermission, err := permissionStore.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: inactivePermissionID, Name: "Delete User", Module: "user", HTTPMethod: "DELETE", PathTemplate: "/api/v1/users/:id", Active: true})
-	if err != nil {
-		t.Fatalf("Create inactive permission: %v", err)
-	}
-	if _, err := bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{{PermissionID: activePermissionID}}); err != nil {
-		t.Fatalf("Replace initial: %v", err)
-	}
-	if _, err := permissionStore.SetActive(ctx, inactivePermissionID, false); err != nil {
-		t.Fatalf("SetActive: %v", err)
-	}
+	require.NoError(t, err)
+	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{{PermissionID: activePermissionID}})
+	require.NoError(t, err)
+	_, err = permissionStore.SetActive(ctx, inactivePermissionID, false)
+	require.NoError(t, err)
 
 	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{
 		{ID: activePermission.ID, PermissionID: activePermission.PermissionID},
 		{ID: inactivePermission.ID, PermissionID: inactivePermission.PermissionID},
 	})
-	if !errors.Is(err, permissiondomain.ErrPermissionNotFound) {
-		t.Fatalf("Replace err = %v, want %v", err, permissiondomain.ErrPermissionNotFound)
-	}
+	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
 	items, err := bindingStore.ListByRoleID(ctx, roleID)
-	if err != nil {
-		t.Fatalf("ListByRoleID: %v", err)
-	}
-	if len(items) != 1 || items[0].PermissionID != activePermissionID {
-		t.Fatalf("bindings = %#v, want only %s", items, activePermissionID.String())
-	}
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, activePermissionID, items[0].PermissionID)
 }
 
 func newRolePermissionPostgresTestClient(t *testing.T) *ent.Client {
@@ -104,15 +82,11 @@ func newRolePermissionPostgresTestClient(t *testing.T) *ent.Client {
 
 	postgres := containers.StartPostgres(ctx, t, containers.PostgresOptions{})
 	db, err := sql.Open("pgx", postgres.DSN)
-	if err != nil {
-		t.Fatalf("open PostgreSQL database/sql client: %v", err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
 	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.Postgres, db)))
-	if err := client.Schema.Create(ctx); err != nil {
-		t.Fatalf("create PostgreSQL test schema: %v", err)
-	}
+	require.NoError(t, client.Schema.Create(ctx))
 	t.Cleanup(func() { _ = client.Close() })
 	return client
 }
