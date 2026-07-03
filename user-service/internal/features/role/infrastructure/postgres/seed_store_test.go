@@ -19,7 +19,7 @@ import (
 )
 
 func TestRoleStoreUpsertSystemRole(t *testing.T) {
-	client := newRoleSeedTestClient(t)
+	client := newRoleStoreTestClient(t)
 	store := NewRoleStore(RoleStoreParams{Client: client})
 	ctx := context.Background()
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000101")
@@ -49,7 +49,7 @@ func TestRoleStoreUpsertSystemRole(t *testing.T) {
 }
 
 func TestRolePermissionStoreSeedEnsureAndSync(t *testing.T) {
-	client := newRoleSeedTestClient(t)
+	client := newRoleStoreTestClient(t)
 	ctx := context.Background()
 	roleStore := NewRoleStore(RoleStoreParams{Client: client})
 	permissionStore := permissionpostgres.NewPermissionStore(permissionpostgres.PermissionStoreParams{Client: client})
@@ -84,7 +84,7 @@ func TestRolePermissionStoreSeedEnsureAndSync(t *testing.T) {
 }
 
 func TestUserRoleStoreAssignRoleIdempotent(t *testing.T) {
-	client := newRoleSeedTestClient(t)
+	client := newRoleStoreTestClient(t)
 	ctx := context.Background()
 	roleStore := NewRoleStore(RoleStoreParams{Client: client})
 	userRoleStore := NewUserRoleStore(UserRoleStoreParams{Client: client})
@@ -104,7 +104,7 @@ func TestUserRoleStoreAssignRoleIdempotent(t *testing.T) {
 	require.False(t, added)
 }
 
-func newRoleSeedTestClient(t *testing.T) *ent.Client {
+func newRoleStoreTestClient(t *testing.T) *ent.Client {
 	t.Helper()
 	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:role_seed_test_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
 	t.Cleanup(func() { _ = client.Close() })

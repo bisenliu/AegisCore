@@ -18,7 +18,105 @@ import (
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
+	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 )
+
+func TestRolePermissionStorePostgresAddListAndRemove(t *testing.T) {
+	client := newRolePermissionPostgresTestClient(t)
+	ctx := context.Background()
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000601")
+	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000602")
+	missingRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000699")
+	missingPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000698")
+	roleStore := NewRoleStore(RoleStoreParams{Client: client})
+	permissionStore := permissionpostgres.NewPermissionStore(permissionpostgres.PermissionStoreParams{Client: client})
+	bindingStore := NewRolePermissionStore(RolePermissionStoreParams{Client: client})
+	createRoleForTest(ctx, t, roleStore, roleID, "Permission Operator", true, false)
+	permission := createPermissionForTest(ctx, t, permissionStore, permissionID, "List Operators", "GET", "/api/v1/operators", true)
+
+	err := bindingStore.Add(ctx, roleID, permission)
+	require.NoError(t, err)
+	err = bindingStore.Add(ctx, roleID, permission)
+	require.ErrorIs(t, err, roledomain.ErrRolePermissionAlreadyExists)
+
+	items, err := bindingStore.ListByRoleID(ctx, roleID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{permissionID}, permissionIDsForTest(items))
+	_, err = bindingStore.ListByRoleID(ctx, missingRoleID)
+	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
+
+	err = bindingStore.Add(ctx, missingRoleID, permission)
+	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
+	err = bindingStore.Add(ctx, roleID, roleapplication.PermissionReference{PermissionID: missingPermissionID})
+	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
+
+	err = bindingStore.Remove(ctx, roleID, permissionID)
+	require.NoError(t, err)
+	items, err = bindingStore.ListByRoleID(ctx, roleID)
+	require.NoError(t, err)
+	require.Empty(t, items)
+	err = bindingStore.Remove(ctx, roleID, permissionID)
+	require.ErrorIs(t, err, roledomain.ErrRolePermissionNotFound)
+	err = bindingStore.Remove(ctx, missingRoleID, permissionID)
+	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
+	err = bindingStore.Remove(ctx, roleID, missingPermissionID)
+	require.ErrorIs(t, err, roledomain.ErrRolePermissionNotFound)
+}
+
+func TestRolePermissionStorePostgresReplace(t *testing.T) {
+	client := newRolePermissionPostgresTestClient(t)
+	ctx := context.Background()
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000701")
+	missingRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000799")
+	permissionAID := uuid.MustParse("018f0000-0000-7000-8000-000000000702")
+	permissionBID := uuid.MustParse("018f0000-0000-7000-8000-000000000703")
+	permissionCID := uuid.MustParse("018f0000-0000-7000-8000-000000000704")
+	inactivePermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000705")
+	missingPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000798")
+	roleStore := NewRoleStore(RoleStoreParams{Client: client})
+	permissionStore := permissionpostgres.NewPermissionStore(permissionpostgres.PermissionStoreParams{Client: client})
+	bindingStore := NewRolePermissionStore(RolePermissionStoreParams{Client: client})
+	createRoleForTest(ctx, t, roleStore, roleID, "Permission Auditor", true, false)
+	permissionA := createPermissionForTest(ctx, t, permissionStore, permissionAID, "Read Reports", "GET", "/api/v1/reports", true)
+	permissionB := createPermissionForTest(ctx, t, permissionStore, permissionBID, "Create Reports", "POST", "/api/v1/reports", true)
+	permissionC := createPermissionForTest(ctx, t, permissionStore, permissionCID, "Delete Reports", "DELETE", "/api/v1/reports/:id", true)
+	inactivePermission := createPermissionForTest(ctx, t, permissionStore, inactivePermissionID, "Archive Reports", "PATCH", "/api/v1/reports/:id/archive", false)
+
+	replaced, err := bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{permissionA, permissionB})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []uuid.UUID{permissionAID, permissionBID}, permissionIDsForTest(replaced))
+	items, err := bindingStore.ListByRoleID(ctx, roleID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []uuid.UUID{permissionAID, permissionBID}, permissionIDsForTest(items))
+
+	replaced, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{permissionC, permissionC})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{permissionCID}, permissionIDsForTest(replaced))
+	items, err = bindingStore.ListByRoleID(ctx, roleID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{permissionCID}, permissionIDsForTest(items))
+
+	_, err = bindingStore.Replace(ctx, missingRoleID, []roleapplication.PermissionReference{permissionA})
+	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
+	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{permissionA, inactivePermission})
+	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
+	items, err = bindingStore.ListByRoleID(ctx, roleID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{permissionCID}, permissionIDsForTest(items))
+
+	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{{PermissionID: missingPermissionID}})
+	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
+	items, err = bindingStore.ListByRoleID(ctx, roleID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{permissionCID}, permissionIDsForTest(items))
+
+	replaced, err = bindingStore.Replace(ctx, roleID, nil)
+	require.NoError(t, err)
+	require.Empty(t, replaced)
+	items, err = bindingStore.ListByRoleID(ctx, roleID)
+	require.NoError(t, err)
+	require.Empty(t, items)
+}
 
 func TestRolePermissionStorePostgresAddRechecksPermissionActiveState(t *testing.T) {
 	client := newRolePermissionPostgresTestClient(t)
@@ -84,9 +182,45 @@ func newRolePermissionPostgresTestClient(t *testing.T) *ent.Client {
 	db, err := sql.Open("pgx", postgres.DSN)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
+	_, err = db.ExecContext(ctx, "CREATE EXTENSION IF NOT EXISTS pg_trgm")
+	require.NoError(t, err)
 
 	client := ent.NewClient(ent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 	require.NoError(t, client.Schema.Create(ctx))
 	t.Cleanup(func() { _ = client.Close() })
 	return client
+}
+
+func createPermissionForTest(ctx context.Context, t *testing.T, store *permissionpostgres.PermissionStore, permissionID uuid.UUID, name string, method string, path string, active bool) roleapplication.PermissionReference {
+	t.Helper()
+	permission, err := store.Create(ctx, permissionapplication.CreatePermissionInput{
+		PermissionID: permissionID,
+		Name:         name,
+		Module:       "role",
+		HTTPMethod:   method,
+		PathTemplate: path,
+		Active:       active,
+	})
+	require.NoError(t, err)
+	return roleapplication.PermissionReference{
+		ID:           permission.ID,
+		PermissionID: permission.PermissionID,
+		Name:         permission.Name,
+		Description:  permission.Description,
+		Module:       permission.Module,
+		HTTPMethod:   permission.HTTPMethod,
+		PathTemplate: permission.PathTemplate,
+		Active:       permission.Active,
+		IsSystem:     permission.IsSystem,
+		CreatedAt:    permission.CreatedAt,
+		UpdatedAt:    permission.UpdatedAt,
+	}
+}
+
+func permissionIDsForTest(permissions []roleapplication.PermissionReference) []uuid.UUID {
+	result := make([]uuid.UUID, 0, len(permissions))
+	for _, permission := range permissions {
+		result = append(result, permission.PermissionID)
+	}
+	return result
 }
