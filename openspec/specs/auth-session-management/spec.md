@@ -28,6 +28,30 @@
 - **WHEN** 用户凭据有效但账号状态要求强制修改密码
 - **THEN** 系统 MUST 只签发 subject 为 `password_change` 的受限 token，不得创建普通 refresh session，也不得返回 refresh token
 
+#### Scenario: 强制改密登录返回专用 code
+
+- **WHEN** 用户凭据有效但账号状态要求强制修改密码
+- **THEN** 登录响应 MUST 返回 HTTP `200 OK`
+- **AND** 登录响应 envelope MUST 携带 `CodePasswordChangeRequired`
+- **AND** 登录响应 envelope 的 `success` MUST 为 `false`
+- **AND** 登录响应 MUST NOT 使用 `CodeOK` 表达该分支
+- **AND** 登录响应 MUST 携带 subject 为 `password_change` 的受限 token 数据
+- **AND** 登录响应 MUST NOT 携带 refresh token
+
+#### Scenario: 普通登录仍返回成功 code
+
+- **WHEN** 用户凭据有效且账号状态允许普通登录
+- **THEN** 登录响应 envelope MUST 携带 `CodeOK`
+- **AND** 登录响应 MUST 携带 access token 与 refresh token
+- **AND** 登录响应 MUST NOT 携带 `CodePasswordChangeRequired`
+
+#### Scenario: 强制改密分支不创建普通会话
+
+- **WHEN** 用户凭据有效但账号状态要求强制修改密码
+- **THEN** 系统 MUST 只签发 subject 为 `password_change` 的受限 token
+- **AND** 系统 MUST NOT 创建普通 refresh session
+- **AND** 系统 MUST NOT 签发 refresh token
+
 #### Scenario: 密码 KDF 资源繁忙
 
 - **WHEN** 登录凭据校验进入密码 KDF 但实例内 Argon2 执行和等待队列已达资源上限
@@ -122,6 +146,34 @@
 - **AND** 旧版本 MUST NOT 覆盖 Redis 中已存在的较新版本
 - **AND** Redis token version 投影刷新失败时，系统 MUST 尝试删除 Redis 投影，使后续校验能够回源 PostgreSQL
 - **AND** 投影刷新失败 MUST 被记录并可测试，不得被静默忽略
+
+### Requirement: 认证 command use case 最小依赖边界
+
+认证 command use case MUST 通过自身 constructor 声明最小依赖，并且结构体 MUST 只保存该 use case 实际需要的 collaborator。系统 MUST NOT 通过跨多个 command use case 的共享依赖容器向单个 use case 暴露无关的 credential、token、session、metrics 或配置依赖。
+
+#### Scenario: 退出当前会话不能访问无关凭证依赖
+
+- **WHEN** 实现或维护退出当前会话 use case
+- **THEN** 该 use case MUST 只注入撤销当前 refresh session 和记录退出指标所需的依赖
+- **AND** 该 use case MUST NOT 通过共享依赖容器访问 credential verifier、token issuer、refresh token rotation 配置或其他无关 collaborator
+
+#### Scenario: 登录与刷新复用签发逻辑不扩大依赖面
+
+- **WHEN** 登录或刷新 use case 复用 access token、refresh token 和 refresh session 创建逻辑
+- **THEN** 复用逻辑 MUST 以显式参数或窄 helper 表达所需的 token issuer 与 session lifecycle
+- **AND** 复用逻辑 MUST NOT 要求调用方持有覆盖其他 use case 的公共依赖容器
+
+#### Scenario: Fx 装配表达 use case 真实依赖
+
+- **WHEN** user-service 装配 auth command use case
+- **THEN** Fx provider MUST 直接提供各 use case constructor 所需的最小参数结构
+- **AND** 系统 MUST NOT 继续 provide 或消费 `UseCaseDeps` 作为 auth command use case 的公共装配入口
+
+#### Scenario: 测试 fixture 不隐藏依赖边界
+
+- **WHEN** command 包测试构造登录、刷新、改密、退出当前会话或退出全部会话 use case
+- **THEN** 测试 MUST 按被测 use case 的最小 constructor 参数直接提供 mock collaborator
+- **AND** 测试 MUST NOT 通过公共 `UseCaseDeps` fixture 隐藏单个 use case 的真实依赖面
 
 ### Requirement: 会话退出
 

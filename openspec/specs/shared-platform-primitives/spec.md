@@ -26,6 +26,18 @@
 - **WHEN** 需要在 `common/contract/errors` 新增跨服务错误分类
 - **THEN** 错误码 MUST 保持业务中立，并可通过公共响应 helper 渲染
 
+#### Scenario: 强制改密错误码稳定
+
+- **WHEN** 服务需要表达用户凭据有效但账号要求强制修改密码
+- **THEN** 系统 MUST 使用 `CodePasswordChangeRequired`
+- **AND** 该 code 的数值 MUST 为 `20006`
+
+#### Scenario: 错误码保持业务中立
+
+- **WHEN** `common/contract/errors` 新增 `CodePasswordChangeRequired`
+- **THEN** `common` MUST 只定义共享错误码和通用错误构造能力
+- **AND** `common` MUST NOT 承载 user-service 的受限 token 签发、强制改密状态判断或登录响应编排逻辑
+
 #### Scenario: 服务不可用错误
 
 - **WHEN** 服务需要表达临时资源池繁忙、依赖暂时不可用或实例无法处理当前请求
@@ -77,6 +89,12 @@
 - **WHEN** 服务需要创建不执行 token version 撤销校验的 JWT 认证中间件
 - **THEN** 系统 MUST 推荐调用 `AuthWithTokenVersionValidator(log, jwtService, cfg, nil)` 显式表达该行为
 - **AND** 仅作为兼容保留的简写 helper MUST 标记为废弃或在确认无消费者后移除
+
+#### Scenario: token version validator 函数适配器移除
+
+- **WHEN** 服务需要为共享 JWT 认证 middleware 提供 token version 撤销校验
+- **THEN** 调用方 MUST 直接提供实现 `common/security/auth.TokenVersionValidator` 的具体类型
+- **AND** `common/http/middleware` MUST NOT 暴露只将函数包装为 `TokenVersionValidator` 的 `TokenVersionValidatorFunc` 适配器
 
 #### Scenario: 行为保持不变
 
@@ -366,4 +384,3 @@
 - **WHEN** `common` 测试对象需要复杂内存状态、并发协调、scheduler 生命周期或比 expectation mock 更清晰的测试夹具
 - **THEN** 测试 MAY 保留 package-local 状态型 harness
 - **AND** 该 harness MUST NOT 被迁移到中央 mock 仓库或导出为跨 package 测试依赖
-
