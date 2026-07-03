@@ -3,25 +3,26 @@ package schema
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 func TestUserStatusDefaultMatchesDomainNormalStatus(t *testing.T) {
+	var statusDefault any
+	found := false
 	for _, userField := range (User{}).Fields() {
 		desc := userField.Descriptor()
 		if desc.Name != "status" {
 			continue
 		}
 
-		defaultStatus, ok := desc.Default.(int64)
-		if !ok {
-			t.Fatalf("status default has type %T, want int64", desc.Default)
-		}
-		if defaultStatus != int64(identity.UserStatusNormal) {
-			t.Fatalf("status default = %d, want UserStatusNormal %d", defaultStatus, identity.UserStatusNormal)
-		}
-		return
+		statusDefault = desc.Default
+		found = true
+		break
 	}
 
-	t.Fatal("status field not found")
+	require.True(t, found)
+	require.IsType(t, int64(0), statusDefault)
+	require.Equal(t, int64(identity.UserStatusNormal), statusDefault)
 }

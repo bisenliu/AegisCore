@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
 	"github.com/aegiscore/common/runtime/config"
@@ -31,17 +33,19 @@ func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testin
 	originalFactory := newLifecycleApp
 	originalSeed := runRBACSeed
 	originalCreateSuperAdmin := runCreateSuperAdmin
+	seedCalled := false
+	createSuperAdminCalled := false
 	t.Cleanup(func() {
 		newLifecycleApp = originalFactory
 		runRBACSeed = originalSeed
 		runCreateSuperAdmin = originalCreateSuperAdmin
 	})
 	runRBACSeed = func(context.Context, string, rbacSeedOptions) error {
-		t.Fatal("serve must not invoke RBAC seed")
+		seedCalled = true
 		return nil
 	}
 	runCreateSuperAdmin = func(context.Context, string, rbacCreateSuperAdminOptions) error {
-		t.Fatal("serve must not invoke super admin creation")
+		createSuperAdminCalled = true
 		return nil
 	}
 
@@ -50,9 +54,7 @@ func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testin
 	ctx, cancel := context.WithCancel(parent)
 
 	newLifecycleApp = func(configPath string) lifecycleApp {
-		if configPath != "test-config.yaml" {
-			t.Fatalf("configPath = %q, want test-config.yaml", configPath)
-		}
+		require.Equal(t, "test-config.yaml", configPath)
 
 		return testLifecycleApp{
 			start: func(_ context.Context) error {
@@ -60,35 +62,26 @@ func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testin
 				return nil
 			},
 			stop: func(ctx context.Context) error {
-				if got := ctx.Value(key); got != "test-trace" {
-					t.Fatalf("stop context value = %v, want test-trace", got)
-				}
-				if err := ctx.Err(); err != nil {
-					t.Fatalf("stop context is already canceled: %v", err)
-				}
+				require.Equal(t, "test-trace", ctx.Value(key))
+				require.NoError(t, ctx.Err())
 				deadline, ok := ctx.Deadline()
-				if !ok {
-					t.Fatal("stop context has no deadline")
-				}
+				require.True(t, ok)
 				remaining := time.Until(deadline)
-				if remaining <= 0 || remaining > fxAppStopTimeout {
-					t.Fatalf("stop context remaining timeout = %s, want within %s", remaining, fxAppStopTimeout)
-				}
+				require.Greater(t, remaining, time.Duration(0))
+				require.LessOrEqual(t, remaining, fxAppStopTimeout)
 				return nil
 			},
 		}
 	}
 
-	if err := runServe(ctx, "test-config.yaml"); err != nil {
-		t.Fatalf("runServe: %v", err)
-	}
+	require.NoError(t, runServe(ctx, "test-config.yaml"))
+	require.False(t, seedCalled)
+	require.False(t, createSuperAdminCalled)
 }
 
 func TestRootCommandSurface(t *testing.T) {
 	root := newRootCommand()
-	if root.Use != "aegiscore-user-services" {
-		t.Fatalf("root Use = %q, want aegiscore-user-services", root.Use)
-	}
+	require.Equal(t, "aegiscore-user-services", root.Use)
 
 	var serve *cobra.Command
 	var rbac *cobra.Command
@@ -103,41 +96,25 @@ func TestRootCommandSurface(t *testing.T) {
 			fxGraph = cmd
 		}
 	}
-	if serve == nil {
-		t.Fatal("serve command not registered")
-	}
+	require.NotNil(t, serve)
 
 	flag := serve.Flags().Lookup("config")
-	if flag == nil {
-		t.Fatal("serve --config flag not registered")
-	}
-	if flag.DefValue != "./configs/config.yaml" {
-		t.Fatalf("serve --config default = %q, want ./configs/config.yaml", flag.DefValue)
-	}
-	if rbac == nil {
-		t.Fatal("rbac command not registered")
-	}
-	if flag := rbac.PersistentFlags().Lookup("config"); flag == nil || flag.DefValue != "./configs/config.yaml" {
-		t.Fatalf("rbac --config flag = %#v", flag)
-	}
-	if findSubcommand(rbac, "seed") == nil {
-		t.Fatal("rbac seed command not registered")
-	}
-	if findSubcommand(rbac, "assign-super-admin") == nil {
-		t.Fatal("rbac assign-super-admin command not registered")
-	}
-	if findSubcommand(rbac, "create-super-admin") == nil {
-		t.Fatal("rbac create-super-admin command not registered")
-	}
-	if fxGraph == nil {
-		t.Fatal("fxgraph command not registered")
-	}
-	if flag := fxGraph.Flags().Lookup("config"); flag == nil || flag.DefValue != "./configs/config.yaml" {
-		t.Fatalf("fxgraph --config flag = %#v", flag)
-	}
-	if flag := fxGraph.Flags().Lookup("output"); flag == nil || flag.DefValue != defaultFxGraphOutputPath {
-		t.Fatalf("fxgraph --output flag = %#v", flag)
-	}
+	require.NotNil(t, flag)
+	assert.Equal(t, "./configs/config.yaml", flag.DefValue)
+	require.NotNil(t, rbac)
+	flag = rbac.PersistentFlags().Lookup("config")
+	require.NotNil(t, flag)
+	assert.Equal(t, "./configs/config.yaml", flag.DefValue)
+	assert.NotNil(t, findSubcommand(rbac, "seed"))
+	assert.NotNil(t, findSubcommand(rbac, "assign-super-admin"))
+	assert.NotNil(t, findSubcommand(rbac, "create-super-admin"))
+	require.NotNil(t, fxGraph)
+	flag = fxGraph.Flags().Lookup("config")
+	require.NotNil(t, flag)
+	assert.Equal(t, "./configs/config.yaml", flag.DefValue)
+	flag = fxGraph.Flags().Lookup("output")
+	require.NotNil(t, flag)
+	assert.Equal(t, defaultFxGraphOutputPath, flag.DefValue)
 }
 
 func TestFxGraphCommandWritesGraph(t *testing.T) {
@@ -146,23 +123,15 @@ func TestFxGraphCommandWritesGraph(t *testing.T) {
 	called := false
 	writeFxGraph = func(path string, opts ...fx.Option) (string, error) {
 		called = true
-		if path != "docs/test.dot" {
-			t.Fatalf("path = %q", path)
-		}
-		if len(opts) == 0 {
-			t.Fatal("opts is empty")
-		}
+		require.Equal(t, "docs/test.dot", path)
+		require.NotEmpty(t, opts)
 		return "digraph {}\n", nil
 	}
 
 	root := newRootCommand()
 	root.SetArgs([]string{"fxgraph", "--config", "test-config.yaml", "--output", "docs/test.dot"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if !called {
-		t.Fatal("writeFxGraph not called")
-	}
+	require.NoError(t, root.Execute())
+	require.True(t, called)
 }
 
 func TestRBACSeedCommandFlags(t *testing.T) {
@@ -171,38 +140,31 @@ func TestRBACSeedCommandFlags(t *testing.T) {
 	called := false
 	runRBACSeed = func(_ context.Context, configPath string, opts rbacSeedOptions) error {
 		called = true
-		if configPath != "test-config.yaml" {
-			t.Fatalf("configPath = %q", configPath)
-		}
-		if !opts.reactivateSystem || !opts.syncSystemBindings {
-			t.Fatalf("opts = %#v", opts)
-		}
+		require.Equal(t, "test-config.yaml", configPath)
+		assert.True(t, opts.reactivateSystem)
+		assert.True(t, opts.syncSystemBindings)
 		return nil
 	}
 
 	root := newRootCommand()
 	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "seed", "--reactivate-system", "--sync-system-bindings"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if !called {
-		t.Fatal("runRBACSeed not called")
-	}
+	require.NoError(t, root.Execute())
+	require.True(t, called)
 }
 
 func TestAssignSuperAdminCommandValidatesUserID(t *testing.T) {
 	originalAssign := runAssignSuperAdmin
 	t.Cleanup(func() { runAssignSuperAdmin = originalAssign })
+	called := false
 	runAssignSuperAdmin = func(_ context.Context, _ string, _ uuid.UUID) error {
-		t.Fatal("runAssignSuperAdmin should not be called for invalid UUID")
+		called = true
 		return nil
 	}
 
 	root := newRootCommand()
 	root.SetArgs([]string{"rbac", "assign-super-admin", "--user-id", "not-a-uuid"})
-	if err := root.Execute(); err == nil {
-		t.Fatal("Execute err = nil, want invalid UUID error")
-	}
+	require.ErrorContains(t, root.Execute(), "invalid")
+	require.False(t, called)
 }
 
 func TestAssignSuperAdminCommandRuns(t *testing.T) {
@@ -212,23 +174,15 @@ func TestAssignSuperAdminCommandRuns(t *testing.T) {
 	called := false
 	runAssignSuperAdmin = func(_ context.Context, configPath string, got uuid.UUID) error {
 		called = true
-		if configPath != "test-config.yaml" {
-			t.Fatalf("configPath = %q", configPath)
-		}
-		if got != userID {
-			t.Fatalf("userID = %s", got)
-		}
+		require.Equal(t, "test-config.yaml", configPath)
+		require.Equal(t, userID, got)
 		return nil
 	}
 
 	root := newRootCommand()
 	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "assign-super-admin", "--user-id", userID.String()})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if !called {
-		t.Fatal("runAssignSuperAdmin not called")
-	}
+	require.NoError(t, root.Execute())
+	require.True(t, called)
 }
 
 func TestCreateSuperAdminCommandRunsWithDefaults(t *testing.T) {
@@ -237,23 +191,18 @@ func TestCreateSuperAdminCommandRunsWithDefaults(t *testing.T) {
 	called := false
 	runCreateSuperAdmin = func(_ context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
 		called = true
-		if configPath != "test-config.yaml" {
-			t.Fatalf("configPath = %q", configPath)
-		}
-		if opts.username != defaultCreateSuperAdminUsername || opts.nickname != defaultCreateSuperAdminNickname || opts.passwordEnv != defaultCreateSuperAdminPasswordEnv || opts.resetPassword {
-			t.Fatalf("opts = %#v", opts)
-		}
+		require.Equal(t, "test-config.yaml", configPath)
+		assert.Equal(t, defaultCreateSuperAdminUsername, opts.username)
+		assert.Equal(t, defaultCreateSuperAdminNickname, opts.nickname)
+		assert.Equal(t, defaultCreateSuperAdminPasswordEnv, opts.passwordEnv)
+		assert.False(t, opts.resetPassword)
 		return nil
 	}
 
 	root := newRootCommand()
 	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "create-super-admin"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if !called {
-		t.Fatal("runCreateSuperAdmin not called")
-	}
+	require.NoError(t, root.Execute())
+	require.True(t, called)
 }
 
 func TestCreateSuperAdminCommandRunsWithFlags(t *testing.T) {
@@ -262,58 +211,45 @@ func TestCreateSuperAdminCommandRunsWithFlags(t *testing.T) {
 	called := false
 	runCreateSuperAdmin = func(_ context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
 		called = true
-		if configPath != "test-config.yaml" {
-			t.Fatalf("configPath = %q", configPath)
-		}
-		if opts.username != "root" || opts.nickname != "Root" || opts.passwordEnv != "ADMIN_SECRET" || !opts.resetPassword {
-			t.Fatalf("opts = %#v", opts)
-		}
+		require.Equal(t, "test-config.yaml", configPath)
+		assert.Equal(t, "root", opts.username)
+		assert.Equal(t, "Root", opts.nickname)
+		assert.Equal(t, "ADMIN_SECRET", opts.passwordEnv)
+		assert.True(t, opts.resetPassword)
 		return nil
 	}
 
 	root := newRootCommand()
 	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "create-super-admin", "--username", "root", "--nickname", "Root", "--password-env", "ADMIN_SECRET", "--reset-password"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if !called {
-		t.Fatal("runCreateSuperAdmin not called")
-	}
+	require.NoError(t, root.Execute())
+	require.True(t, called)
 }
 
 func TestNormalizeCreateSuperAdminOptionsRequiresPasswordEnv(t *testing.T) {
 	t.Setenv(defaultCreateSuperAdminPasswordEnv, "")
 
 	_, err := normalizeCreateSuperAdminOptions(rbacCreateSuperAdminOptions{username: "admin", nickname: "Admin", passwordEnv: "MISSING_ADMIN_PASSWORD"})
-	if err == nil {
-		t.Fatal("normalizeCreateSuperAdminOptions err = nil, want missing env error")
-	}
+	require.ErrorContains(t, err, "MISSING_ADMIN_PASSWORD")
 }
 
 func TestNormalizeCreateSuperAdminOptionsReadsPasswordEnv(t *testing.T) {
 	t.Setenv("ADMIN_SECRET", "  secret  ")
 
 	opts, err := normalizeCreateSuperAdminOptions(rbacCreateSuperAdminOptions{username: " ADMIN ", nickname: " ", passwordEnv: "ADMIN_SECRET", resetPassword: true})
-	if err != nil {
-		t.Fatalf("normalizeCreateSuperAdminOptions: %v", err)
-	}
-	if opts.username != "admin" || opts.nickname != "admin" || opts.password != "secret" || opts.passwordEnv != "ADMIN_SECRET" || !opts.resetPassword {
-		t.Fatalf("opts = %#v", opts)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "admin", opts.username)
+	assert.Equal(t, "admin", opts.nickname)
+	assert.Equal(t, "secret", opts.password)
+	assert.Equal(t, "ADMIN_SECRET", opts.passwordEnv)
+	assert.True(t, opts.resetPassword)
 }
 
 func TestFxAppLifecycleTimeouts(t *testing.T) {
-	if fxAppStartTimeout != 15*time.Second {
-		t.Fatalf("fxAppStartTimeout = %s, want 15s", fxAppStartTimeout)
-	}
+	require.Equal(t, 15*time.Second, fxAppStartTimeout)
 
 	cfg, err := config.Load("../configs/config.yaml")
-	if err != nil {
-		t.Fatalf("Load default config: %v", err)
-	}
-	if fxAppStopTimeout < cfg.HTTP.ShutdownTimeout {
-		t.Fatalf("fxAppStopTimeout = %s, want at least configured http.shutdown_timeout %s", fxAppStopTimeout, cfg.HTTP.ShutdownTimeout)
-	}
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, fxAppStopTimeout, cfg.HTTP.ShutdownTimeout)
 }
 
 func findSubcommand(parent *cobra.Command, use string) *cobra.Command {
