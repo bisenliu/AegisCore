@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 
@@ -24,23 +25,13 @@ func TestEngineEnforceAllowDenyAndDoesNotReload(t *testing.T) {
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return([]uuid.UUID{roleID}, nil).Times(2)
 	engine := NewEngine(Params{Loader: loader, UserRoles: roles})
-	if err := engine.Reload(context.Background()); err != nil {
-		t.Fatalf("Reload: %v", err)
-	}
+	require.NoError(t, engine.Reload(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
-	if err != nil {
-		t.Fatalf("Enforce allow: %v", err)
-	}
-	if !allowed {
-		t.Fatal("matching policy denied")
-	}
+	require.NoError(t, err)
+	require.True(t, allowed)
 	denied, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "POST")
-	if err != nil {
-		t.Fatalf("Enforce deny: %v", err)
-	}
-	if denied {
-		t.Fatal("missing policy allowed")
-	}
+	require.NoError(t, err)
+	require.False(t, denied)
 }
 
 func TestEngineSuperAdminWildcard(t *testing.T) {
@@ -54,16 +45,10 @@ func TestEngineSuperAdminWildcard(t *testing.T) {
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return([]uuid.UUID{superAdminRoleID}, nil)
 	engine := NewEngine(Params{Loader: loader, UserRoles: roles})
-	if err := engine.Reload(context.Background()); err != nil {
-		t.Fatalf("Reload: %v", err)
-	}
+	require.NoError(t, engine.Reload(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/anything/:id", "DELETE")
-	if err != nil {
-		t.Fatalf("Enforce: %v", err)
-	}
-	if !allowed {
-		t.Fatal("super admin wildcard denied")
-	}
+	require.NoError(t, err)
+	require.True(t, allowed)
 }
 
 func TestEngineFailClosedWhenInitialLoadFails(t *testing.T) {
@@ -80,19 +65,11 @@ func TestEngineFailClosedWhenInitialLoadFails(t *testing.T) {
 	engine := NewEngine(Params{Loader: loader, Metrics: metrics, UserRoles: roles})
 	lc := fxtest.NewLifecycle(t)
 	RegisterInitialLoad(lc, engine)
-	if err := lc.Start(context.Background()); err != nil {
-		t.Fatalf("lifecycle Start: %v", err)
-	}
+	require.NoError(t, lc.Start(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), uuid.New(), "/api/v1/users", "GET")
-	if err != nil {
-		t.Fatalf("Enforce: %v", err)
-	}
-	if allowed {
-		t.Fatal("failed initialization allowed request")
-	}
-	if !errors.Is(engine.LastError(), loadErr) {
-		t.Fatalf("LastError = %v, want %v", engine.LastError(), loadErr)
-	}
+	require.NoError(t, err)
+	require.False(t, allowed)
+	require.ErrorIs(t, engine.LastError(), loadErr)
 }
 
 func TestEngineReloadFailurePreservesPreviousPolicy(t *testing.T) {
@@ -118,19 +95,11 @@ func TestEngineReloadFailurePreservesPreviousPolicy(t *testing.T) {
 		metrics.EXPECT().SetLastStatus(false),
 	)
 	engine := NewEngine(Params{Loader: loader, Metrics: metrics, UserRoles: roles})
-	if err := engine.Reload(context.Background()); err != nil {
-		t.Fatalf("initial Reload: %v", err)
-	}
-	if err := engine.Reload(context.Background()); !errors.Is(err, loadErr) {
-		t.Fatalf("Reload err = %v, want %v", err, loadErr)
-	}
+	require.NoError(t, engine.Reload(context.Background()))
+	require.ErrorIs(t, engine.Reload(context.Background()), loadErr)
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
-	if err != nil {
-		t.Fatalf("Enforce: %v", err)
-	}
-	if !allowed {
-		t.Fatal("previous policy was not preserved after reload failure")
-	}
+	require.NoError(t, err)
+	require.True(t, allowed)
 }
 
 func TestEngineReloadSuccessReplacesPolicyAndClearsError(t *testing.T) {
@@ -158,30 +127,16 @@ func TestEngineReloadSuccessReplacesPolicyAndClearsError(t *testing.T) {
 	engine := NewEngine(Params{Loader: loader, Metrics: metrics, UserRoles: roles})
 	lc := fxtest.NewLifecycle(t)
 	RegisterInitialLoad(lc, engine)
-	if err := lc.Start(context.Background()); err != nil {
-		t.Fatalf("lifecycle Start: %v", err)
-	}
+	require.NoError(t, lc.Start(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
-	if err != nil {
-		t.Fatalf("Enforce after failed init: %v", err)
-	}
-	if allowed {
-		t.Fatal("failed initialization allowed request")
-	}
+	require.NoError(t, err)
+	require.False(t, allowed)
 
-	if err := engine.Reload(context.Background()); err != nil {
-		t.Fatalf("Reload: %v", err)
-	}
+	require.NoError(t, engine.Reload(context.Background()))
 	allowed, err = engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
-	if err != nil {
-		t.Fatalf("Enforce after reload: %v", err)
-	}
-	if !allowed {
-		t.Fatal("reloaded policy denied matching request")
-	}
-	if engine.LastError() != nil {
-		t.Fatalf("LastError = %v, want nil", engine.LastError())
-	}
+	require.NoError(t, err)
+	require.True(t, allowed)
+	require.NoError(t, engine.LastError())
 }
 
 func TestEngineEnforceReturnsRoleResolverError(t *testing.T) {
@@ -197,16 +152,10 @@ func TestEngineEnforceReturnsRoleResolverError(t *testing.T) {
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return(nil, resolveErr)
 	engine := NewEngine(Params{Loader: loader, UserRoles: roles})
-	if err := engine.Reload(context.Background()); err != nil {
-		t.Fatalf("Reload: %v", err)
-	}
+	require.NoError(t, engine.Reload(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
-	if !errors.Is(err, resolveErr) {
-		t.Fatalf("Enforce err = %v, want %v", err, resolveErr)
-	}
-	if allowed {
-		t.Fatal("resolver error allowed request")
-	}
+	require.ErrorIs(t, err, resolveErr)
+	require.False(t, allowed)
 }
 
 func TestEngineInitialLoadUsesLifecycleContext(t *testing.T) {
@@ -230,19 +179,11 @@ func TestEngineInitialLoadUsesLifecycleContext(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	RegisterInitialLoad(lc, engine)
 
-	if err := lc.Start(ctx); err != nil {
-		t.Fatalf("lifecycle Start: %v", err)
-	}
-	if !errors.Is(engine.LastError(), context.Canceled) {
-		t.Fatalf("LastError = %v, want context.Canceled", engine.LastError())
-	}
+	require.NoError(t, lc.Start(ctx))
+	require.ErrorIs(t, engine.LastError(), context.Canceled)
 	allowed, err := engine.Enforce(context.Background(), uuid.New(), "/api/v1/users", "GET")
-	if err != nil {
-		t.Fatalf("Enforce: %v", err)
-	}
-	if allowed {
-		t.Fatal("canceled initialization allowed request")
-	}
+	require.NoError(t, err)
+	require.False(t, allowed)
 }
 
 func TestEngineInvalidatesUserRoleResolver(t *testing.T) {

@@ -8,6 +8,9 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 )
@@ -26,15 +29,13 @@ func TestRouteDiff(t *testing.T) {
 	service := NewPermissionQueryService(store, scanner)
 
 	result, err := service.GetRouteDiff(context.Background())
-	if err != nil {
-		t.Fatalf("GetRouteDiff: %v", err)
-	}
-	if len(result.MissingInPermissions) != 1 || result.MissingInPermissions[0].Method != "POST" || result.MissingInPermissions[0].Path != "/api/v1/users" {
-		t.Fatalf("missing = %#v", result.MissingInPermissions)
-	}
-	if len(result.StalePermissions) != 1 || result.StalePermissions[0].PathTemplate != "/api/v1/stale" {
-		t.Fatalf("stale = %#v", result.StalePermissions)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.MissingInPermissions, 1)
+	assert.Equal(t, "POST", result.MissingInPermissions[0].Method)
+	assert.Equal(t, "/api/v1/users", result.MissingInPermissions[0].Path)
+	require.Len(t, result.StalePermissions, 1)
+	assert.Equal(t, "/api/v1/stale", result.StalePermissions[0].PathTemplate)
 }
 
 func TestRouteDiffRecordsMetrics(t *testing.T) {
@@ -53,9 +54,7 @@ func TestRouteDiffRecordsMetrics(t *testing.T) {
 	service := NewPermissionQueryService(store, scanner, metrics)
 
 	_, err := service.GetRouteDiff(context.Background())
-	if err != nil {
-		t.Fatalf("GetRouteDiff: %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestRouteDiffNormalizesSortsAndStaysReadOnly(t *testing.T) {
@@ -74,15 +73,16 @@ func TestRouteDiffNormalizesSortsAndStaysReadOnly(t *testing.T) {
 	service := NewPermissionQueryService(store, scanner)
 
 	result, err := service.GetRouteDiff(context.Background())
-	if err != nil {
-		t.Fatalf("GetRouteDiff: %v", err)
-	}
-	if got := result.MissingInPermissions; len(got) != 2 || got[0].Method != "DELETE" || got[0].Path != "/api/v1/users/:user_id" || got[1].Method != "POST" || got[1].Path != "/api/v1/users" {
-		t.Fatalf("missing = %#v", got)
-	}
-	if got := result.StalePermissions; len(got) != 2 || got[0].PathTemplate != "/api/v1/stale-b" || got[1].PathTemplate != "/api/v1/stale-a" {
-		t.Fatalf("stale = %#v", got)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.MissingInPermissions, 2)
+	assert.Equal(t, "DELETE", result.MissingInPermissions[0].Method)
+	assert.Equal(t, "/api/v1/users/:user_id", result.MissingInPermissions[0].Path)
+	assert.Equal(t, "POST", result.MissingInPermissions[1].Method)
+	assert.Equal(t, "/api/v1/users", result.MissingInPermissions[1].Path)
+	require.Len(t, result.StalePermissions, 2)
+	assert.Equal(t, "/api/v1/stale-b", result.StalePermissions[0].PathTemplate)
+	assert.Equal(t, "/api/v1/stale-a", result.StalePermissions[1].PathTemplate)
 }
 
 func TestRouteDiffPropagatesScannerAndStoreErrors(t *testing.T) {
@@ -91,9 +91,8 @@ func TestRouteDiffPropagatesScannerAndStoreErrors(t *testing.T) {
 	scanner := NewMockRouteCatalogScanner(gomock.NewController(t))
 	scanner.EXPECT().DiscoverRoutes(gomock.Any()).Return(nil, scannerErr)
 	service := NewPermissionQueryService(NewMockPermissionStore(gomock.NewController(t)), scanner, metrics)
-	if _, err := service.GetRouteDiff(context.Background()); !errors.Is(err, scannerErr) {
-		t.Fatalf("scanner err = %v", err)
-	}
+	_, err := service.GetRouteDiff(context.Background())
+	require.ErrorIs(t, err, scannerErr)
 
 	storeErr := errors.New("list all failed")
 	scanner = NewMockRouteCatalogScanner(gomock.NewController(t))
@@ -101,9 +100,8 @@ func TestRouteDiffPropagatesScannerAndStoreErrors(t *testing.T) {
 	store := NewMockPermissionStore(gomock.NewController(t))
 	store.EXPECT().ListAll(gomock.Any()).Return(nil, storeErr)
 	service = NewPermissionQueryService(store, scanner, metrics)
-	if _, err := service.GetRouteDiff(context.Background()); !errors.Is(err, storeErr) {
-		t.Fatalf("store err = %v", err)
-	}
+	_, err = service.GetRouteDiff(context.Background())
+	require.ErrorIs(t, err, storeErr)
 }
 
 func TestRouteDiffRejectsInvalidDiscoveredRoute(t *testing.T) {
@@ -112,7 +110,6 @@ func TestRouteDiffRejectsInvalidDiscoveredRoute(t *testing.T) {
 	store := NewMockPermissionStore(gomock.NewController(t))
 	store.EXPECT().ListAll(gomock.Any()).Return(nil, nil)
 	service := NewPermissionQueryService(store, scanner)
-	if _, err := service.GetRouteDiff(context.Background()); err == nil {
-		t.Fatalf("err is nil for invalid discovered route")
-	}
+	_, err := service.GetRouteDiff(context.Background())
+	require.Error(t, err)
 }

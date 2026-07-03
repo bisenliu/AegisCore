@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -30,12 +31,8 @@ func TestPolicyRefreshCoordinatorReloadsPublishesAndTracksVersion(t *testing.T) 
 
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	if err := coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("role_permission_added")); err != nil {
-		t.Fatalf("NotifyPolicyChanged: %v", err)
-	}
-	if published.Reason != "role_permission_added" {
-		t.Fatalf("published reason = %q", published.Reason)
-	}
+	require.NoError(t, coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("role_permission_added")))
+	require.Equal(t, "role_permission_added", published.Reason)
 }
 
 func TestPolicyRefreshCoordinatorSkipsPublishWhenReloadFails(t *testing.T) {
@@ -51,9 +48,7 @@ func TestPolicyRefreshCoordinatorSkipsPublishWhenReloadFails(t *testing.T) {
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
 	err := coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("permission_updated"))
-	if !errors.Is(err, reloadErr) {
-		t.Fatalf("err = %v, want reloadErr", err)
-	}
+	require.ErrorIs(t, err, reloadErr)
 }
 
 func TestPolicyRefreshCoordinatorDoesNotTrackWhenPublishFails(t *testing.T) {
@@ -73,9 +68,7 @@ func TestPolicyRefreshCoordinatorDoesNotTrackWhenPublishFails(t *testing.T) {
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
 	err := coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("permission_active_changed"))
-	if !errors.Is(err, publishErr) {
-		t.Fatalf("err = %v, want publishErr", err)
-	}
+	require.ErrorIs(t, err, publishErr)
 }
 
 func TestPolicyRefreshCoordinatorUserRoleChangeInvalidatesWithoutReload(t *testing.T) {
@@ -99,10 +92,8 @@ func TestPolicyRefreshCoordinatorUserRoleChangeInvalidatesWithoutReload(t *testi
 
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	if err := coordinator.NotifyPolicyChanged(context.Background(), NewUserRoleChange("user_role_added", userID, roleID)); err != nil {
-		t.Fatalf("NotifyPolicyChanged: %v", err)
-	}
-	if published.Kind != PolicyChangeKindUserRole || published.UserID != userID || published.RoleID != roleID {
-		t.Fatalf("published change = %#v", published)
-	}
+	require.NoError(t, coordinator.NotifyPolicyChanged(context.Background(), NewUserRoleChange("user_role_added", userID, roleID)))
+	require.Equal(t, PolicyChangeKindUserRole, published.Kind)
+	require.Equal(t, userID, published.UserID)
+	require.Equal(t, roleID, published.RoleID)
 }

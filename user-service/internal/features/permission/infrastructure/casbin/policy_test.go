@@ -2,8 +2,8 @@ package casbin
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/require"
 
 	"github.com/aegiscore/common/runtime/config"
 	runtimeid "github.com/aegiscore/common/runtime/id"
@@ -31,9 +32,7 @@ func TestPolicyLoaderLoadsActiveBindings(t *testing.T) {
 
 	loader := NewPolicyLoader(LoaderParams{Client: client})
 	policies, err := loader.LoadPolicies(ctx)
-	if err != nil {
-		t.Fatalf("LoadPolicies: %v", err)
-	}
+	require.NoError(t, err)
 	assertHasRule(t, policies.PermissionRules, roleID, "/api/v1/users", "GET")
 }
 
@@ -54,9 +53,7 @@ func TestPolicyLoaderSkipsInactiveRolesAndPermissions(t *testing.T) {
 
 	loader := NewPolicyLoader(LoaderParams{Client: client})
 	policies, err := loader.LoadPolicies(ctx)
-	if err != nil {
-		t.Fatalf("LoadPolicies: %v", err)
-	}
+	require.NoError(t, err)
 	assertHasRule(t, policies.PermissionRules, activeRoleID, "/api/v1/active", "GET")
 	assertMissingRule(t, policies.PermissionRules, activeRoleID, "/api/v1/inactive", "POST")
 	assertMissingRule(t, policies.PermissionRules, inactiveRoleID, "/api/v1/active", "GET")
@@ -66,9 +63,7 @@ func TestPolicyLoaderAddsSuperAdminWildcard(t *testing.T) {
 	client := newPolicyTestClient(t)
 	loader := NewPolicyLoader(LoaderParams{Client: client})
 	policies, err := loader.LoadPolicies(context.Background())
-	if err != nil {
-		t.Fatalf("LoadPolicies: %v", err)
-	}
+	require.NoError(t, err)
 	assertHasRule(t, policies.PermissionRules, uuid.MustParse(rbacbaseline.SuperAdminRoleID), policyWildcard, policyWildcard)
 }
 
@@ -83,9 +78,7 @@ func TestPolicyLoaderUsesRoleIDSubjectWithoutRoleCode(t *testing.T) {
 
 	loader := NewPolicyLoader(LoaderParams{Client: client})
 	policies, err := loader.LoadPolicies(ctx)
-	if err != nil {
-		t.Fatalf("LoadPolicies: %v", err)
-	}
+	require.NoError(t, err)
 	assertHasRule(t, policies.PermissionRules, roleID, "/api/v1/roles/:role_id", "PATCH")
 }
 
@@ -105,23 +98,17 @@ func TestUserRoleResolverCachesAndInvalidatesActiveRoles(t *testing.T) {
 	resolver := newTestUserRoleResolver(t, client, time.Minute)
 
 	first, err := resolver.RolesForUser(ctx, userID)
-	if err != nil {
-		t.Fatalf("RolesForUser first: %v", err)
-	}
+	require.NoError(t, err)
 	assertRoleIDs(t, first, []uuid.UUID{activeRoleID})
 
 	createPolicyTestUserRole(t, client, user.ID, laterRole.ID)
 	cached, err := resolver.RolesForUser(ctx, userID)
-	if err != nil {
-		t.Fatalf("RolesForUser cached: %v", err)
-	}
+	require.NoError(t, err)
 	assertRoleIDs(t, cached, []uuid.UUID{activeRoleID})
 
 	resolver.InvalidateUserRole(userID)
 	reloaded, err := resolver.RolesForUser(ctx, userID)
-	if err != nil {
-		t.Fatalf("RolesForUser reloaded: %v", err)
-	}
+	require.NoError(t, err)
 	assertRoleIDs(t, reloaded, []uuid.UUID{activeRoleID, laterRoleID})
 }
 
@@ -161,7 +148,7 @@ func TestUserRoleResolverCoalescesConcurrentMisses(t *testing.T) {
 				return
 			}
 			if len(roleIDs) != 1 || roleIDs[0] != roleID {
-				errCh <- fmt.Errorf("role ids = %#v, want [%s]", roleIDs, roleID)
+				errCh <- errors.New("unexpected role ids")
 			}
 		}()
 	}
@@ -171,13 +158,9 @@ func TestUserRoleResolverCoalescesConcurrentMisses(t *testing.T) {
 	wg.Wait()
 	close(errCh)
 	for err := range errCh {
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	}
-	if got := roleQueries.Load(); got != 1 {
-		t.Fatalf("role query count = %d, want 1", got)
-	}
+	require.Equal(t, int64(1), roleQueries.Load())
 }
 
 func TestNewUserRoleResolverRequiresConfigInstance(t *testing.T) {
@@ -186,9 +169,8 @@ func TestNewUserRoleResolverRequiresConfigInstance(t *testing.T) {
 		Client: newPolicyTestClient(t),
 	})
 
-	if err == nil || !strings.Contains(err.Error(), "local_cache.rbac_user_roles is required") {
-		t.Fatalf("NewUserRoleResolver error = %v, want missing local cache config", err)
-	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "local_cache.rbac_user_roles is required")
 }
 
 func newPolicyTestClient(t *testing.T) *ent.Client {
@@ -210,9 +192,7 @@ func newTestUserRoleResolver(t *testing.T, client *ent.Client, ttl time.Duration
 	}, func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 		return resolver.loadRolesForUser(ctx, userID)
 	}, cloneRoleIDs)
-	if err != nil {
-		t.Fatalf("New localcache: %v", err)
-	}
+	require.NoError(t, err)
 	resolver.cache = cache
 	t.Cleanup(cache.Close)
 	return resolver
@@ -221,71 +201,49 @@ func newTestUserRoleResolver(t *testing.T, client *ent.Client, ttl time.Duration
 func createPolicyTestUser(t *testing.T, client *ent.Client, userID uuid.UUID, username string) *ent.User {
 	t.Helper()
 	user, err := client.User.Create().SetUserID(userID).SetNickname(username).SetUsername(username).SetPasswordHash("hash").Save(context.Background())
-	if err != nil {
-		t.Fatalf("create user: %v", err)
-	}
+	require.NoError(t, err)
 	return user
 }
 
 func createPolicyTestRole(t *testing.T, client *ent.Client, roleID uuid.UUID, active bool) *ent.Role {
 	t.Helper()
 	role, err := client.Role.Create().SetRoleID(roleID).SetName(roleID.String()).SetActive(active).Save(context.Background())
-	if err != nil {
-		t.Fatalf("create role: %v", err)
-	}
+	require.NoError(t, err)
 	return role
 }
 
 func createPolicyTestPermission(t *testing.T, client *ent.Client, permissionID uuid.UUID, method string, path string, active bool) *ent.Permission {
 	t.Helper()
 	permission, err := client.Permission.Create().SetPermissionID(permissionID).SetName(permissionID.String()).SetModule("test").SetHTTPMethod(method).SetPathTemplate(path).SetActive(active).Save(context.Background())
-	if err != nil {
-		t.Fatalf("create permission: %v", err)
-	}
+	require.NoError(t, err)
 	return permission
 }
 
 func createPolicyTestUserRole(t *testing.T, client *ent.Client, userID int64, roleID int64) {
 	t.Helper()
-	if _, err := client.UserRole.Create().SetUserID(userID).SetRoleID(roleID).Save(context.Background()); err != nil {
-		t.Fatalf("create user role: %v", err)
-	}
+	_, err := client.UserRole.Create().SetUserID(userID).SetRoleID(roleID).Save(context.Background())
+	require.NoError(t, err)
 }
 
 func createPolicyTestRolePermission(t *testing.T, client *ent.Client, roleID int64, permissionID int64) {
 	t.Helper()
-	if _, err := client.RolePermission.Create().SetRoleID(roleID).SetPermissionID(permissionID).Save(context.Background()); err != nil {
-		t.Fatalf("create role permission: %v", err)
-	}
+	_, err := client.RolePermission.Create().SetRoleID(roleID).SetPermissionID(permissionID).Save(context.Background())
+	require.NoError(t, err)
 }
 
 func assertHasRule(t *testing.T, rules []PermissionRule, roleID uuid.UUID, path string, method string) {
 	t.Helper()
-	for _, rule := range rules {
-		if rule.RoleID == roleID && rule.PathTemplate == path && rule.HTTPMethod == method {
-			return
-		}
-	}
-	t.Fatalf("missing rule role=%s path=%s method=%s in %#v", roleID, path, method, rules)
+	require.Contains(t, rules, PermissionRule{RoleID: roleID, PathTemplate: path, HTTPMethod: method})
 }
 
 func assertMissingRule(t *testing.T, rules []PermissionRule, roleID uuid.UUID, path string, method string) {
 	t.Helper()
 	for _, rule := range rules {
-		if rule.RoleID == roleID && rule.PathTemplate == path && rule.HTTPMethod == method {
-			t.Fatalf("unexpected rule role=%s path=%s method=%s", roleID, path, method)
-		}
+		require.NotEqual(t, PermissionRule{RoleID: roleID, PathTemplate: path, HTTPMethod: method}, rule)
 	}
 }
 
 func assertRoleIDs(t *testing.T, got []uuid.UUID, want []uuid.UUID) {
 	t.Helper()
-	if len(got) != len(want) {
-		t.Fatalf("role ids = %#v, want %#v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("role ids = %#v, want %#v", got, want)
-		}
-	}
+	require.Equal(t, want, got)
 }

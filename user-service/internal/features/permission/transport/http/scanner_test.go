@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/stretchr/testify/require"
+
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
@@ -24,12 +26,8 @@ func TestRouteCatalogScanner(t *testing.T) {
 
 	scanner := NewRouteCatalogScanner(RouteCatalogScannerParams{Engine: engine})
 	routes, err := scanner.DiscoverRoutes(context.Background())
-	if err != nil {
-		t.Fatalf("DiscoverRoutes: %v", err)
-	}
-	if len(routes) != 2 {
-		t.Fatalf("routes = %#v, want 2 authorizable routes", routes)
-	}
+	require.NoError(t, err)
+	require.Len(t, routes, 2)
 }
 
 func TestRouteCatalogScannerFiltersAuthorizableRoutes(t *testing.T) {
@@ -49,12 +47,8 @@ func TestRouteCatalogScannerFiltersAuthorizableRoutes(t *testing.T) {
 
 	scanner := NewRouteCatalogScanner(RouteCatalogScannerParams{Engine: engine})
 	routes, err := scanner.DiscoverRoutes(context.Background())
-	if err != nil {
-		t.Fatalf("DiscoverRoutes: %v", err)
-	}
-	if len(routes) != 2 {
-		t.Fatalf("routes = %#v, want 2 authorizable routes", routes)
-	}
+	require.NoError(t, err)
+	require.Len(t, routes, 2)
 	assertDiscoveredRoute(t, routes, http.MethodGet, "/api/v1/roles")
 	assertDiscoveredRoute(t, routes, http.MethodGet, "/api/v1/permissions/route-diff")
 }
@@ -70,31 +64,20 @@ func TestRouteCatalogScannerMatchesRBACBaseline(t *testing.T) {
 
 	scanner := NewRouteCatalogScanner(RouteCatalogScannerParams{Engine: engine})
 	routes, err := scanner.DiscoverRoutes(context.Background())
-	if err != nil {
-		t.Fatalf("DiscoverRoutes: %v", err)
-	}
+	require.NoError(t, err)
 	discovered := discoveredRouteSet(routes)
 	baseline := baselineRouteSet()
 	for route := range baseline {
-		if _, ok := discovered[route]; !ok {
-			t.Fatalf("scanner missing baseline route %s", route)
-		}
+		require.Contains(t, discovered, route, "scanner missing baseline route")
 	}
 	for route := range discovered {
-		if _, ok := baseline[route]; !ok {
-			t.Fatalf("baseline missing scanned route %s", route)
-		}
+		require.Contains(t, baseline, route, "baseline missing scanned route")
 	}
 }
 
 func assertDiscoveredRoute(t *testing.T, routes []permissionapplication.DiscoveredRoute, method string, path string) {
 	t.Helper()
-	for _, route := range routes {
-		if route.Method == method && route.Path == path {
-			return
-		}
-	}
-	t.Fatalf("missing route %s %s in %#v", method, path, routes)
+	require.Contains(t, discoveredRouteSet(routes), method+" "+path)
 }
 
 func discoveredRouteSet(routes []permissionapplication.DiscoveredRoute) map[string]struct{} {

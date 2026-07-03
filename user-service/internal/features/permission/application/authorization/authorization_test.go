@@ -2,10 +2,10 @@ package authorization
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -23,25 +23,17 @@ func TestAuthorizerEnforceDelegatesValidUserID(t *testing.T) {
 	authz := NewAuthorizer(engine)
 	userID := "018f0000-0000-7000-8000-000000000701"
 	allowed, err := authz.Enforce(context.Background(), userID, "/api/v1/users/:user_id", "GET")
-	if err != nil {
-		t.Fatalf("Enforce: %v", err)
-	}
-	if !allowed {
-		t.Fatal("allowed = false, want true")
-	}
-	if gotUserID.String() != userID || gotPathTemplate != "/api/v1/users/:user_id" || gotMethod != "GET" {
-		t.Fatalf("engine call userID=%s path=%s method=%s", gotUserID, gotPathTemplate, gotMethod)
-	}
+	require.NoError(t, err)
+	require.True(t, allowed)
+	require.Equal(t, userID, gotUserID.String())
+	require.Equal(t, "/api/v1/users/:user_id", gotPathTemplate)
+	require.Equal(t, "GET", gotMethod)
 }
 
 func TestAuthorizerEnforceInvalidUserIDFailsClosed(t *testing.T) {
 	engine := NewMockEngine(gomock.NewController(t))
 	authz := NewAuthorizer(engine)
 	allowed, err := authz.Enforce(context.Background(), "not-a-uuid", "/api/v1/users", "GET")
-	if !errors.Is(err, ErrInvalidSubjectUserID) {
-		t.Fatalf("Enforce err = %v, want %v", err, ErrInvalidSubjectUserID)
-	}
-	if allowed {
-		t.Fatal("invalid user allowed")
-	}
+	require.ErrorIs(t, err, ErrInvalidSubjectUserID)
+	require.False(t, allowed)
 }

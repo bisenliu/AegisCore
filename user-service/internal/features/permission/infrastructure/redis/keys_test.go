@@ -1,17 +1,15 @@
 package redis
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestKeyCatalogBuildsRBACPolicyKeys(t *testing.T) {
 	catalog, err := NewKeyCatalog(" aegiscore-user-services ")
-	if err != nil {
-		t.Fatalf("NewKeyCatalog: %v", err)
-	}
+	require.NoError(t, err)
 
-	if got := catalog.PolicyVersionKey(); got != "aegiscore-user-services:rbac:policy:version" {
-		t.Fatalf("PolicyVersionKey = %q", got)
-	}
-	if got := catalog.PolicyChannel(); got != "aegiscore-user-services:rbac:policy:refresh" {
-		t.Fatalf("PolicyChannel = %q", got)
-	}
+	require.Equal(t, "aegiscore-user-services:rbac:policy:version", catalog.PolicyVersionKey())
+	require.Equal(t, "aegiscore-user-services:rbac:policy:refresh", catalog.PolicyChannel())
 }

@@ -11,6 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/mock/gomock"
 
+	"github.com/stretchr/testify/require"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
 	commonauth "github.com/aegiscore/common/security/auth"
@@ -27,9 +29,7 @@ func TestAuthorizeAllowsRequestAndUsesFullPath(t *testing.T) {
 
 	engine.ServeHTTP(response, request)
 
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
-	}
+	require.Equal(t, http.StatusOK, response.Code, "body=%s", response.Body.String())
 }
 
 func TestAuthorizeReadsUserIDFromRequestContext(t *testing.T) {
@@ -44,9 +44,7 @@ func TestAuthorizeReadsUserIDFromRequestContext(t *testing.T) {
 
 	engine.ServeHTTP(response, request)
 
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
-	}
+	require.Equal(t, http.StatusOK, response.Code, "body=%s", response.Body.String())
 }
 
 func TestAuthorizeRejectsMissingOrInvalidUserID(t *testing.T) {
@@ -148,9 +146,7 @@ func TestAuthorizeAllowsSuperAdminWildcardDecision(t *testing.T) {
 	engine.DELETE("/api/v1/users/:user_id", func(c *gin.Context) { c.Set(commonauth.UserIDKey, authorizationTestUserID) }, Authorize(authz), func(c *gin.Context) { c.Status(http.StatusOK) })
 	engine.ServeHTTP(response, request)
 
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
-	}
+	require.Equal(t, http.StatusOK, response.Code, "body=%s", response.Body.String())
 }
 
 func TestAuthorizeWhitelistAndOptionsBypass(t *testing.T) {
@@ -173,9 +169,7 @@ func TestAuthorizeWhitelistAndOptionsBypass(t *testing.T) {
 
 			engine.ServeHTTP(response, request)
 
-			if response.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body.String())
-			}
+			require.Equal(t, http.StatusOK, response.Code, "body=%s", response.Body.String())
 		})
 	}
 }
@@ -191,14 +185,9 @@ func newAuthorizationTestEngine(t *testing.T) (*gin.Engine, *MockAuthorizer) {
 
 func assertAuthorizationEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantStatus int, wantCode contracterrors.Code) {
 	t.Helper()
-	if recorder.Code != wantStatus {
-		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, wantStatus, recorder.Body.String())
-	}
+	require.Equal(t, wantStatus, recorder.Code, "body=%s", recorder.Body.String())
 	var envelope contractresponse.Envelope
-	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
-	if envelope.Success || envelope.Code != wantCode {
-		t.Fatalf("envelope = %#v, want failure code %d", envelope, wantCode)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+	require.False(t, envelope.Success)
+	require.Equal(t, wantCode, envelope.Code)
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	rediscmd "github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 
@@ -22,29 +23,21 @@ func TestStorePublishPolicyChangedIncrementsVersionAndPublishes(t *testing.T) {
 	store := NewStoreWithInstance(client, "aegiscore-user-services", "instance-a", nil)
 	pubsub := client.Subscribe(context.Background(), store.keys.PolicyChannel())
 	t.Cleanup(func() { _ = pubsub.Close() })
-	if _, err := pubsub.Receive(context.Background()); err != nil {
-		t.Fatalf("Receive subscribe: %v", err)
-	}
+	_, err := pubsub.Receive(context.Background())
+	require.NoError(t, err)
 	change := permissionapplication.NewPolicyReloadChange("role_permission_added")
 
 	version, err := store.PublishPolicyChanged(context.Background(), change)
-	if err != nil {
-		t.Fatalf("PublishPolicyChanged: %v", err)
-	}
-	if version != 1 {
-		t.Fatalf("version = %d, want 1", version)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(1), version)
 	message, err := pubsub.ReceiveMessage(context.Background())
-	if err != nil {
-		t.Fatalf("ReceiveMessage: %v", err)
-	}
+	require.NoError(t, err)
 	decoded, err := decodePolicyRefreshMessage(message.Payload)
-	if err != nil {
-		t.Fatalf("decodePolicyRefreshMessage: %v", err)
-	}
-	if decoded.Version != 1 || decoded.InstanceID != "instance-a" || decoded.Kind != permissionapplication.PolicyChangeKindPolicy || decoded.Reason != "role_permission_added" {
-		t.Fatalf("message = %#v", decoded)
-	}
+	require.NoError(t, err)
+	require.Equal(t, int64(1), decoded.Version)
+	require.Equal(t, "instance-a", decoded.InstanceID)
+	require.Equal(t, permissionapplication.PolicyChangeKindPolicy, decoded.Kind)
+	require.Equal(t, "role_permission_added", decoded.Reason)
 }
 
 func TestWatcherHandlePayloadReloadsPolicyOnlyForNewerVersions(t *testing.T) {
@@ -54,9 +47,7 @@ func TestWatcherHandlePayloadReloadsPolicyOnlyForNewerVersions(t *testing.T) {
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherWithMetrics(nil, tracker, engine, nil, time.Second, metrics)
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(3, "instance-b", permissionapplication.NewPolicyReloadChange("role_permission_added")))
-	if err != nil {
-		t.Fatalf("encodePolicyRefreshMessage: %v", err)
-	}
+	require.NoError(t, err)
 
 	gomock.InOrder(
 		engine.EXPECT().Reload(gomock.Any()).Return(nil),
@@ -67,9 +58,7 @@ func TestWatcherHandlePayloadReloadsPolicyOnlyForNewerVersions(t *testing.T) {
 	watcher.HandlePayload(context.Background(), payload)
 	watcher.HandlePayload(context.Background(), payload)
 
-	if tracker.Applied() != 3 {
-		t.Fatalf("applied version = %d, want 3", tracker.Applied())
-	}
+	require.Equal(t, int64(3), tracker.Applied())
 }
 
 func TestWatcherHandlePayloadInvalidatesUserRoleWithoutReload(t *testing.T) {
@@ -81,17 +70,13 @@ func TestWatcherHandlePayloadInvalidatesUserRoleWithoutReload(t *testing.T) {
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherWithMetrics(nil, tracker, engine, nil, time.Second, metrics)
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(4, "instance-b", permissionapplication.NewUserRoleChange("user_role_added", userID, roleID)))
-	if err != nil {
-		t.Fatalf("encodePolicyRefreshMessage: %v", err)
-	}
+	require.NoError(t, err)
 
 	engine.EXPECT().InvalidateUserRole(userID)
 
 	watcher.HandlePayload(context.Background(), payload)
 
-	if tracker.Applied() != 4 {
-		t.Fatalf("applied version = %d, want 4", tracker.Applied())
-	}
+	require.Equal(t, int64(4), tracker.Applied())
 }
 
 func TestWatcherCheckVersionCompensatesMissedMessage(t *testing.T) {
@@ -99,9 +84,7 @@ func TestWatcherCheckVersionCompensatesMissedMessage(t *testing.T) {
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 	store := NewStoreWithInstance(client, "aegiscore-user-services", "instance-a", nil)
-	if err := client.Set(context.Background(), store.keys.PolicyVersionKey(), 8, 0).Err(); err != nil {
-		t.Fatalf("Set version: %v", err)
-	}
+	require.NoError(t, client.Set(context.Background(), store.keys.PolicyVersionKey(), 8, 0).Err())
 	ctrl := gomock.NewController(t)
 	engine := NewMockPolicyReloadEngine(ctrl)
 	tracker := NewVersionTracker()
@@ -118,9 +101,7 @@ func TestWatcherCheckVersionCompensatesMissedMessage(t *testing.T) {
 
 	watcher.CheckVersion(context.Background())
 
-	if tracker.Applied() != 8 {
-		t.Fatalf("applied version = %d, want 8", tracker.Applied())
-	}
+	require.Equal(t, int64(8), tracker.Applied())
 }
 
 func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
@@ -132,9 +113,7 @@ func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherWithMetrics(nil, tracker, engine, nil, time.Second, metrics)
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(5, "instance-b", permissionapplication.NewPolicyReloadChange("permission_updated")))
-	if err != nil {
-		t.Fatalf("encodePolicyRefreshMessage: %v", err)
-	}
+	require.NoError(t, err)
 
 	gomock.InOrder(
 		engine.EXPECT().Reload(gomock.Any()).Return(reloadErr),
@@ -143,9 +122,7 @@ func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
 
 	watcher.HandlePayload(context.Background(), payload)
 
-	if tracker.Applied() != 2 {
-		t.Fatalf("applied version = %d, want 2", tracker.Applied())
-	}
+	require.Equal(t, int64(2), tracker.Applied())
 }
 
 func TestWatcherRunningStatus(t *testing.T) {
@@ -156,22 +133,12 @@ func TestWatcherRunningStatus(t *testing.T) {
 	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
 	watcher := newWatcherWithMetrics(store, NewVersionTracker(), engine, nil, time.Hour, nil)
 
-	if watcher.Running() {
-		t.Fatal("Running = true before start, want false")
-	}
+	require.False(t, watcher.Running())
 	watcher.Start()
-	if !watcher.Running() {
-		t.Fatal("Running = false after start, want true")
-	}
-	if err := watcher.Stop(context.Background()); err != nil {
-		t.Fatalf("Stop: %v", err)
-	}
-	if watcher.Running() {
-		t.Fatal("Running = true after stop, want false")
-	}
-	if watcher.LastError() != nil {
-		t.Fatalf("LastError = %v, want nil for normal stop", watcher.LastError())
-	}
+	require.True(t, watcher.Running())
+	require.NoError(t, watcher.Stop(context.Background()))
+	require.False(t, watcher.Running())
+	require.NoError(t, watcher.LastError())
 }
 
 func TestWatcherRecordsUnexpectedChannelClose(t *testing.T) {
@@ -181,12 +148,8 @@ func TestWatcherRecordsUnexpectedChannelClose(t *testing.T) {
 	watcher.Start()
 	waitForWatcherStopped(t, watcher)
 
-	if watcher.Running() {
-		t.Fatal("Running = true after channel close, want false")
-	}
-	if watcher.LastError() == nil {
-		t.Fatal("LastError = nil, want channel close error")
-	}
+	require.False(t, watcher.Running())
+	require.Error(t, watcher.LastError())
 }
 
 func TestWatcherLifecycleStartContextDoesNotControlBackgroundLoop(t *testing.T) {
@@ -205,19 +168,13 @@ func TestWatcherLifecycleStartContextDoesNotControlBackgroundLoop(t *testing.T) 
 	t.Cleanup(func() { _ = watcher.Stop(context.Background()) })
 
 	startCtx, cancelStart := context.WithCancel(context.Background())
-	if err := lifecycle.Start(startCtx); err != nil {
-		t.Fatalf("lifecycle Start: %v", err)
-	}
+	require.NoError(t, lifecycle.Start(startCtx))
 	cancelStart()
 
 	requireWatcherRunningFor(t, watcher, 100*time.Millisecond)
 
-	if err := lifecycle.Stop(context.Background()); err != nil {
-		t.Fatalf("lifecycle Stop: %v", err)
-	}
-	if watcher.Running() {
-		t.Fatal("Running = true after lifecycle stop, want false")
-	}
+	require.NoError(t, lifecycle.Stop(context.Background()))
+	require.False(t, watcher.Running())
 }
 
 type closedChannelStore struct{}
@@ -248,37 +205,14 @@ func (s closedPolicySubscriber) Close() error {
 
 func waitForWatcherStopped(t *testing.T, watcher *Watcher) {
 	t.Helper()
-	deadline := time.After(time.Second)
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("watcher did not stop")
-		case <-ticker.C:
-			if !watcher.Running() {
-				return
-			}
-		}
-	}
+	require.Eventually(t, func() bool {
+		return !watcher.Running()
+	}, time.Second, 10*time.Millisecond)
 }
 
 func requireWatcherRunningFor(t *testing.T, watcher *Watcher, duration time.Duration) {
 	t.Helper()
-	deadline := time.After(duration)
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-deadline:
-			if !watcher.Running() {
-				t.Fatal("watcher stopped before running window completed")
-			}
-			return
-		case <-ticker.C:
-			if !watcher.Running() {
-				t.Fatal("watcher stopped after start context cancellation")
-			}
-		}
-	}
+	require.Never(t, func() bool {
+		return !watcher.Running()
+	}, duration, 10*time.Millisecond)
 }

@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 
+	"github.com/stretchr/testify/require"
+
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 )
@@ -23,15 +25,13 @@ func TestPermissionQueryServiceListPermissionsNormalizesFiltersAndCursor(t *test
 	service := NewPermissionQueryService(store, NewMockRouteCatalogScanner(gomock.NewController(t)))
 
 	result, err := service.ListPermissions(context.Background(), ListPermissionsQuery{PageSize: 20, Limit: 10, Module: "  user  ", HTTPMethod: "post"})
-	if err != nil {
-		t.Fatalf("ListPermissions: %v", err)
-	}
-	if listInput.Module != "user" || listInput.HTTPMethod != "POST" || listInput.Limit != 10 {
-		t.Fatalf("list input = %#v", listInput)
-	}
-	if !result.HasNext || result.NextCursor != lastID.String() || result.PageSize != 20 {
-		t.Fatalf("result = %#v", result)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "user", listInput.Module)
+	require.Equal(t, "POST", listInput.HTTPMethod)
+	require.Equal(t, 10, listInput.Limit)
+	require.True(t, result.HasNext)
+	require.Equal(t, lastID.String(), result.NextCursor)
+	require.Equal(t, 20, result.PageSize)
 }
 
 func TestPermissionQueryServiceGetAndEffectivePermissionsPassThrough(t *testing.T) {
@@ -43,18 +43,11 @@ func TestPermissionQueryServiceGetAndEffectivePermissionsPassThrough(t *testing.
 	service := NewPermissionQueryService(store, NewMockRouteCatalogScanner(gomock.NewController(t)))
 
 	permissionResult, err := service.GetPermission(context.Background(), GetPermissionQuery{PermissionID: permissionID})
-	if err != nil {
-		t.Fatalf("GetPermission: %v", err)
-	}
-	if permissionResult.Permission.PermissionID != permissionID {
-		t.Fatalf("permission result = %#v", permissionResult.Permission)
-	}
+	require.NoError(t, err)
+	require.Equal(t, permissionID, permissionResult.Permission.PermissionID)
 
 	effectiveResult, err := service.ListUserEffectivePermissions(context.Background(), UserEffectivePermissionsQuery{UserID: userID})
-	if err != nil {
-		t.Fatalf("ListUserEffectivePermissions: %v", err)
-	}
-	if len(effectiveResult.Items) != 1 || effectiveResult.Items[0].PermissionID != permissionID {
-		t.Fatalf("effective result = %#v", effectiveResult.Items)
-	}
+	require.NoError(t, err)
+	require.Len(t, effectiveResult.Items, 1)
+	require.Equal(t, permissionID, effectiveResult.Items[0].PermissionID)
 }

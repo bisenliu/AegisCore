@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/aegiscore/common/runtime/config"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -17,13 +19,9 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 		ServiceName: "aegiscore-user-service-test",
 		Environment: "test",
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
+	require.NoError(t, err)
 	recorder, err := newPermissionMetrics(provider)
-	if err != nil {
-		t.Fatalf("newPermissionMetrics: %v", err)
-	}
+	require.NoError(t, err)
 	recorder.PolicyReloadSucceeded(context.Background(), permissionapplication.MetricsSourceLocalChange)
 	recorder.PolicyPublishFailed(context.Background(), permissionapplication.MetricsReasonPublishFailed)
 	recorder.WatcherVersionMismatch(context.Background(), permissionapplication.MetricsSourceWatcherVersionCheck)
@@ -37,9 +35,7 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 		`aegiscore_user_service_permission_route_diff{environment="test",kind="missing",service="aegiscore-user-service-test"} 2`,
 		`aegiscore_user_service_permission_route_diff{environment="test",kind="stale",service="aegiscore-user-service-test"} 1`,
 	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("metrics missing %q:\n%s", want, text)
-		}
+		require.Contains(t, text, want)
 	}
 }
 
@@ -49,20 +45,15 @@ func TestPermissionMetricsDisabledUsesNoop(t *testing.T) {
 		ServiceName: "aegiscore-user-service-test",
 		Environment: "test",
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
-	if _, err := newPermissionMetrics(provider); err != nil {
-		t.Fatalf("newPermissionMetrics disabled: %v", err)
-	}
+	require.NoError(t, err)
+	_, err = newPermissionMetrics(provider)
+	require.NoError(t, err)
 }
 
 func gatherPermissionMetricText(t *testing.T, provider *commonmetrics.Provider) string {
 	t.Helper()
 	families, err := provider.Gatherer().Gather()
-	if err != nil {
-		t.Fatalf("Gather: %v", err)
-	}
+	require.NoError(t, err)
 	var builder strings.Builder
 	for _, family := range families {
 		for _, metric := range family.GetMetric() {

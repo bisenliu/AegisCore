@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -19,28 +20,22 @@ func TestPermissionCommandServiceCreateAndProtectSystemPermission(t *testing.T) 
 		return &permissiondomain.Permission{PermissionID: input.PermissionID, Name: input.Name, Description: input.Description, Module: input.Module, HTTPMethod: input.HTTPMethod, PathTemplate: input.PathTemplate, Active: input.Active, IsSystem: input.IsSystem}, nil
 	})
 	notifier.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, change permissionapplication.PolicyChange) error {
-		if change.Reason != "permission_created" {
-			t.Fatalf("reason = %q", change.Reason)
-		}
+		require.Equal(t, "permission_created", change.Reason)
 		return nil
 	})
 	service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: notifier})
 
 	created, err := service.CreatePermission(context.Background(), CreatePermissionCommand{Name: "List Users", Module: "user", HTTPMethod: "get", PathTemplate: "/api/v1/users", IsSystem: true})
-	if err != nil {
-		t.Fatalf("CreatePermission: %v", err)
-	}
-	if created.Permission.HTTPMethod != "GET" || !created.Permission.Active || !created.Permission.IsSystem {
-		t.Fatalf("created = %#v", created.Permission)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "GET", created.Permission.HTTPMethod)
+	require.True(t, created.Permission.Active)
+	require.True(t, created.Permission.IsSystem)
 
 	store = NewMockPermissionStore(gomock.NewController(t))
 	service = NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: NewMockPolicyChangeNotifier(gomock.NewController(t))})
 	store.EXPECT().GetByPermissionID(gomock.Any(), created.Permission.PermissionID).Return(&created.Permission, nil)
 	_, err = service.UpdatePermission(context.Background(), UpdatePermissionCommand{PermissionID: created.Permission.PermissionID, Name: "List Users", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true})
-	if !errors.Is(err, permissiondomain.ErrSystemPermissionProtected) {
-		t.Fatalf("err = %v, want ErrSystemPermissionProtected", err)
-	}
+	require.ErrorIs(t, err, permissiondomain.ErrSystemPermissionProtected)
 }
 
 func TestPermissionCommandServiceSetActive(t *testing.T) {
@@ -49,20 +44,14 @@ func TestPermissionCommandServiceSetActive(t *testing.T) {
 	notifier := NewMockPolicyChangeNotifier(gomock.NewController(t))
 	store.EXPECT().SetActive(gomock.Any(), permissionID, false).Return(&permissiondomain.Permission{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: false}, nil)
 	notifier.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, change permissionapplication.PolicyChange) error {
-		if change.Reason != "permission_active_changed" {
-			t.Fatalf("reason = %q", change.Reason)
-		}
+		require.Equal(t, "permission_active_changed", change.Reason)
 		return nil
 	})
 	service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: notifier})
 
 	result, err := service.DisablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
-	if err != nil {
-		t.Fatalf("DisablePermission: %v", err)
-	}
-	if result.Permission.Active {
-		t.Fatalf("permission remains active")
-	}
+	require.NoError(t, err)
+	require.False(t, result.Permission.Active)
 }
 
 func TestPermissionCommandServiceCreateMapsDuplicateAndShortCircuitsValidation(t *testing.T) {
@@ -71,16 +60,12 @@ func TestPermissionCommandServiceCreateMapsDuplicateAndShortCircuitsValidation(t
 	service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: NewMockPolicyChangeNotifier(gomock.NewController(t))})
 
 	_, err := service.CreatePermission(context.Background(), CreatePermissionCommand{Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users"})
-	if !errors.Is(err, permissiondomain.ErrPermissionAlreadyExists) {
-		t.Fatalf("err = %v, want ErrPermissionAlreadyExists", err)
-	}
+	require.ErrorIs(t, err, permissiondomain.ErrPermissionAlreadyExists)
 
 	store = NewMockPermissionStore(gomock.NewController(t))
 	service = NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: NewMockPolicyChangeNotifier(gomock.NewController(t))})
 	_, err = service.CreatePermission(context.Background(), CreatePermissionCommand{Name: "", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users"})
-	if err == nil {
-		t.Fatalf("err is nil for invalid input")
-	}
+	require.Error(t, err)
 }
 
 func TestPermissionCommandServiceUpdateNonSystemNormalizesAndMapsDuplicate(t *testing.T) {
@@ -89,30 +74,26 @@ func TestPermissionCommandServiceUpdateNonSystemNormalizesAndMapsDuplicate(t *te
 	notifier := NewMockPolicyChangeNotifier(gomock.NewController(t))
 	store.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permissiondomain.Permission{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}, nil)
 	store.EXPECT().Update(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, input permissionapplication.UpdatePermissionInput) (*permissiondomain.Permission, error) {
-		if input.HTTPMethod != "POST" || input.PathTemplate != "/api/v1/users" {
-			t.Fatalf("update input = %#v", input)
-		}
+		require.Equal(t, "POST", input.HTTPMethod)
+		require.Equal(t, "/api/v1/users", input.PathTemplate)
 		return &permissiondomain.Permission{PermissionID: permissionID, Name: input.Name, Description: input.Description, Module: input.Module, HTTPMethod: input.HTTPMethod, PathTemplate: input.PathTemplate, Active: input.Active}, nil
 	})
 	notifier.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).Return(nil)
 	service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: notifier})
 
 	result, err := service.UpdatePermission(context.Background(), UpdatePermissionCommand{PermissionID: permissionID, Name: "  Create User  ", Description: "  Create users  ", Module: "  user  ", HTTPMethod: "post", PathTemplate: "/api/v1/users", Active: true})
-	if err != nil {
-		t.Fatalf("UpdatePermission: %v", err)
-	}
-	if result.Permission.Name != "Create User" || result.Permission.Description != "Create users" || result.Permission.Module != "user" || result.Permission.HTTPMethod != "POST" {
-		t.Fatalf("updated permission = %#v", result.Permission)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "Create User", result.Permission.Name)
+	require.Equal(t, "Create users", result.Permission.Description)
+	require.Equal(t, "user", result.Permission.Module)
+	require.Equal(t, "POST", result.Permission.HTTPMethod)
 
 	store = NewMockPermissionStore(gomock.NewController(t))
 	service = NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: NewMockPolicyChangeNotifier(gomock.NewController(t))})
 	store.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permissiondomain.Permission{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}, nil)
 	store.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil, permissiondomain.ErrPermissionAlreadyExists)
 	_, err = service.UpdatePermission(context.Background(), UpdatePermissionCommand{PermissionID: permissionID, Name: "Create User", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true})
-	if !errors.Is(err, permissiondomain.ErrPermissionAlreadyExists) {
-		t.Fatalf("err = %v, want ErrPermissionAlreadyExists", err)
-	}
+	require.ErrorIs(t, err, permissiondomain.ErrPermissionAlreadyExists)
 }
 
 func TestPermissionCommandServiceEnablePermission(t *testing.T) {
@@ -124,12 +105,8 @@ func TestPermissionCommandServiceEnablePermission(t *testing.T) {
 	service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: notifier})
 
 	result, err := service.EnablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
-	if err != nil {
-		t.Fatalf("EnablePermission: %v", err)
-	}
-	if !result.Permission.Active {
-		t.Fatalf("permission remains inactive")
-	}
+	require.NoError(t, err)
+	require.True(t, result.Permission.Active)
 }
 
 func TestPermissionCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing.T) {
@@ -144,18 +121,14 @@ func TestPermissionCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *t
 	}{
 		{name: "create", run: func(t *testing.T, service PermissionCommandService) *PermissionResult {
 			result, err := service.CreatePermission(context.Background(), CreatePermissionCommand{Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users"})
-			if err != nil {
-				t.Fatalf("CreatePermission: %v", err)
-			}
+			require.NoError(t, err)
 			return result
 		}, setupStore: func(store *MockPermissionStore) {
 			store.EXPECT().Create(gomock.Any(), gomock.Any()).Return(&permissiondomain.Permission{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}, nil)
 		}, wantReason: "permission_created"},
 		{name: "update", run: func(t *testing.T, service PermissionCommandService) *PermissionResult {
 			result, err := service.UpdatePermission(context.Background(), UpdatePermissionCommand{PermissionID: permissionID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true})
-			if err != nil {
-				t.Fatalf("UpdatePermission: %v", err)
-			}
+			require.NoError(t, err)
 			return result
 		}, setupStore: func(store *MockPermissionStore) {
 			store.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permissiondomain.Permission{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}, nil)
@@ -163,18 +136,14 @@ func TestPermissionCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *t
 		}, wantReason: "permission_updated"},
 		{name: "enable", run: func(t *testing.T, service PermissionCommandService) *PermissionResult {
 			result, err := service.EnablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
-			if err != nil {
-				t.Fatalf("EnablePermission: %v", err)
-			}
+			require.NoError(t, err)
 			return result
 		}, setupStore: func(store *MockPermissionStore) {
 			store.EXPECT().SetActive(gomock.Any(), permissionID, true).Return(&permissiondomain.Permission{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}, nil)
 		}, wantReason: "permission_active_changed"},
 		{name: "disable", run: func(t *testing.T, service PermissionCommandService) *PermissionResult {
 			result, err := service.DisablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
-			if err != nil {
-				t.Fatalf("DisablePermission: %v", err)
-			}
+			require.NoError(t, err)
 			return result
 		}, setupStore: func(store *MockPermissionStore) {
 			store.EXPECT().SetActive(gomock.Any(), permissionID, false).Return(&permissiondomain.Permission{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: false}, nil)
@@ -187,16 +156,13 @@ func TestPermissionCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *t
 			tt.setupStore(store)
 			notifier := NewMockPolicyChangeNotifier(gomock.NewController(t))
 			notifier.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, change permissionapplication.PolicyChange) error {
-				if change.Reason != tt.wantReason {
-					t.Fatalf("reason = %q", change.Reason)
-				}
+				require.Equal(t, tt.wantReason, change.Reason)
 				return refreshErr
 			})
 			service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: notifier})
 			result := tt.run(t, service)
-			if result == nil || result.Permission.PermissionID == uuid.Nil {
-				t.Fatalf("result = %#v", result)
-			}
+			require.NotNil(t, result)
+			require.NotEqual(t, uuid.Nil, result.Permission.PermissionID)
 		})
 	}
 }

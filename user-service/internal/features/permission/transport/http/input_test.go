@@ -3,6 +3,8 @@ package permissionhttp
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/user-service/internal/messages"
 )
@@ -14,18 +16,18 @@ func TestPrepareListPermissionsQuery(t *testing.T) {
 		Module:     " user ",
 		HTTPMethod: " GET ",
 	})
-	if err != nil {
-		t.Fatalf("prepareListPermissionsQuery: %v", err)
-	}
-	if query.Cursor == nil || query.Cursor.String() != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e" || query.PageSize != 10 || query.Limit != 10 || query.Module != "user" || query.HTTPMethod != "GET" {
-		t.Fatalf("query = %#v", query)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, query.Cursor)
+	require.Equal(t, "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e", query.Cursor.String())
+	require.Equal(t, 10, query.PageSize)
+	require.Equal(t, 10, query.Limit)
+	require.Equal(t, "user", query.Module)
+	require.Equal(t, "GET", query.HTTPMethod)
 
 	_, err = prepareListPermissionsQuery(ListPermissionsRequest{Cursor: "bad"})
 	appErr := contracterrors.FromError(err)
-	if appErr.Code != contracterrors.CodeBadRequest || appErr.Message != messages.InvalidPermission {
-		t.Fatalf("err = %#v", appErr)
-	}
+	require.Equal(t, contracterrors.CodeBadRequest, appErr.Code)
+	require.Equal(t, messages.InvalidPermission, appErr.Message)
 }
 
 func TestPrepareUpdatePermissionCommand(t *testing.T) {
@@ -38,10 +40,12 @@ func TestPrepareUpdatePermissionCommand(t *testing.T) {
 		PathTemplate: " /api/v1/users ",
 		Active:       true,
 	})
-	if err != nil {
-		t.Fatalf("prepareUpdatePermissionCommand: %v", err)
-	}
-	if cmd.PermissionID.String() != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e" || cmd.Name != "List Users" || cmd.Description != "Allows listing users" || cmd.Module != "user" || cmd.HTTPMethod != "GET" || cmd.PathTemplate != "/api/v1/users" || !cmd.Active {
-		t.Fatalf("cmd = %#v", cmd)
-	}
+	require.NoError(t, err)
+	require.Equal(t, "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e", cmd.PermissionID.String())
+	require.Equal(t, "List Users", cmd.Name)
+	require.Equal(t, "Allows listing users", cmd.Description)
+	require.Equal(t, "user", cmd.Module)
+	require.Equal(t, "GET", cmd.HTTPMethod)
+	require.Equal(t, "/api/v1/users", cmd.PathTemplate)
+	require.True(t, cmd.Active)
 }
