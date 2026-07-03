@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStartPostgresIntegration(t *testing.T) {
@@ -15,18 +16,15 @@ func TestStartPostgresIntegration(t *testing.T) {
 
 	pg := StartPostgres(ctx, t, PostgresOptions{})
 	db, err := sql.Open("pgx", pg.DSN)
-	if err != nil {
-		t.Fatalf("open PostgreSQL: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
-	if err := db.PingContext(ctx); err != nil {
-		t.Fatalf("ping PostgreSQL: %v", err)
-	}
+	require.NoError(t, db.PingContext(ctx))
 
 	cfg := pg.Config()
-	if cfg.Driver != "pgx" || cfg.Host == "" || cfg.Port == 0 || cfg.DBName != DefaultPostgresDatabase {
-		t.Fatalf("Postgres config = %#v", cfg)
-	}
+	require.Equal(t, "pgx", cfg.Driver)
+	require.NotEmpty(t, cfg.Host)
+	require.NotZero(t, cfg.Port)
+	require.Equal(t, DefaultPostgresDatabase, cfg.DBName)
 }
 
 func TestStartRedisIntegration(t *testing.T) {
@@ -36,12 +34,10 @@ func TestStartRedisIntegration(t *testing.T) {
 	redisContainer := StartRedis(ctx, t, RedisOptions{})
 	client := redis.NewClient(redisContainer.Options())
 	defer client.Close()
-	if err := client.Ping(ctx).Err(); err != nil {
-		t.Fatalf("ping Redis: %v", err)
-	}
+	require.NoError(t, client.Ping(ctx).Err())
 
 	cfg := redisContainer.Config()
-	if cfg.Addr == "" || cfg.DB != 0 || cfg.PingTimeout <= 0 {
-		t.Fatalf("Redis config = %#v", cfg)
-	}
+	require.NotEmpty(t, cfg.Addr)
+	require.Zero(t, cfg.DB)
+	require.Positive(t, cfg.PingTimeout)
 }

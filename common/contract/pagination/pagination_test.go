@@ -1,6 +1,10 @@
 package pagination
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestNormalizePageSize(t *testing.T) {
 	tests := []struct {
@@ -17,29 +21,27 @@ func TestNormalizePageSize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := NormalizePageSize(tt.pageSize)
-			if got != tt.want {
-				t.Fatalf("NormalizePageSize = %d, want %d", got, tt.want)
-			}
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
 
 func TestNewPagination(t *testing.T) {
 	pagination := NewPagination(20, "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e", true)
-	if pagination.PageSize != 20 || pagination.NextCursor != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e" || !pagination.HasNext {
-		t.Fatalf("pagination = %#v", pagination)
-	}
+	require.Equal(t, 20, pagination.PageSize)
+	require.Equal(t, "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e", pagination.NextCursor)
+	require.True(t, pagination.HasNext)
 
 	empty := NewPagination(0, "", false)
-	if empty.PageSize != DefaultPageSize || empty.NextCursor != "" || empty.HasNext {
-		t.Fatalf("empty pagination = %#v", empty)
-	}
+	require.Equal(t, DefaultPageSize, empty.PageSize)
+	require.Empty(t, empty.NextCursor)
+	require.False(t, empty.HasNext)
 }
 
 func TestNewPaginatedData(t *testing.T) {
 	meta := NewPagination(0, "", false)
 	data := NewPaginatedData[string](nil, meta)
-	if data.Items == nil || len(data.Items) != 0 || data.Pagination != meta {
-		t.Fatalf("paginated data = %#v", data)
-	}
+	require.NotNil(t, data.Items)
+	require.Empty(t, data.Items)
+	require.Equal(t, meta, data.Pagination)
 }

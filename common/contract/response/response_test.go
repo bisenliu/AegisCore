@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestEnvelopeJSONShape(t *testing.T) {
@@ -16,20 +18,14 @@ func TestEnvelopeJSONShape(t *testing.T) {
 	}
 
 	body, err := json.Marshal(envelope)
-	if err != nil {
-		t.Fatalf("marshal envelope: %v", err)
-	}
+	require.NoError(t, err)
 
 	var got map[string]any
-	if err := json.Unmarshal(body, &got); err != nil {
-		t.Fatalf("unmarshal envelope: %v", err)
-	}
-	if got["success"] != true || got["code"] != float64(contracterrors.CodeOK) || got["message"] != MessageOK {
-		t.Fatalf("envelope = %#v", got)
-	}
-	if _, ok := got["errors"]; ok {
-		t.Fatalf("errors = %#v, want omitted", got["errors"])
-	}
+	require.NoError(t, json.Unmarshal(body, &got))
+	require.Equal(t, true, got["success"])
+	require.Equal(t, float64(contracterrors.CodeOK), got["code"])
+	require.Equal(t, MessageOK, got["message"])
+	require.NotContains(t, got, "errors")
 }
 
 func TestFailureEnvelopeJSONShape(t *testing.T) {
@@ -41,28 +37,22 @@ func TestFailureEnvelopeJSONShape(t *testing.T) {
 	}
 
 	body, err := json.Marshal(envelope)
-	if err != nil {
-		t.Fatalf("marshal envelope: %v", err)
-	}
+	require.NoError(t, err)
 
 	var got map[string]any
-	if err := json.Unmarshal(body, &got); err != nil {
-		t.Fatalf("unmarshal envelope: %v", err)
-	}
-	if got["success"] != false || got["code"] != float64(contracterrors.CodeValidationFailed) || got["message"] != "请求参数验证失败" {
-		t.Fatalf("envelope = %#v", got)
-	}
-	if _, ok := got["data"]; ok {
-		t.Fatalf("data = %#v, want omitted", got["data"])
-	}
+	require.NoError(t, json.Unmarshal(body, &got))
+	require.Equal(t, false, got["success"])
+	require.Equal(t, float64(contracterrors.CodeValidationFailed), got["code"])
+	require.Equal(t, "请求参数验证失败", got["message"])
+	require.NotContains(t, got, "data")
 	errors, ok := got["errors"].([]any)
-	if !ok || len(errors) != 1 {
-		t.Fatalf("errors = %#v, want one error", got["errors"])
-	}
+	require.True(t, ok)
+	require.Len(t, errors, 1)
 }
 
 func TestMessages(t *testing.T) {
-	if MessageOK != "ok" || MessageCreated != "created" || MessageInternalError != contracterrors.MessageInternalError || MessageAuthInvalid == "" {
-		t.Fatalf("messages = (%q,%q,%q,%q)", MessageOK, MessageCreated, MessageInternalError, MessageAuthInvalid)
-	}
+	require.Equal(t, "ok", MessageOK)
+	require.Equal(t, "created", MessageCreated)
+	require.Equal(t, contracterrors.MessageInternalError, MessageInternalError)
+	require.NotEmpty(t, MessageAuthInvalid)
 }

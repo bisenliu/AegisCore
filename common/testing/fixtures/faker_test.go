@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFakerGeneratesReadableUniqueValues(t *testing.T) {
@@ -13,28 +14,22 @@ func TestFakerGeneratesReadableUniqueValues(t *testing.T) {
 
 	first := faker.UniqueSuffix()
 	second := faker.UniqueSuffix()
-	if first == "" || second == "" || first == second {
-		t.Fatalf("suffixes = %q, %q; want non-empty unique values", first, second)
-	}
+	require.NotEmpty(t, first)
+	require.NotEmpty(t, second)
+	require.NotEqual(t, first, second)
 
 	username := faker.Username("Admin User")
-	if !strings.HasPrefix(username, "admin-user-") {
-		t.Fatalf("username = %q, want sanitized prefix", username)
-	}
+	require.True(t, strings.HasPrefix(username, "admin-user-"))
 
 	email := faker.Email("Login")
-	if !strings.HasPrefix(email, "login-") || !strings.HasSuffix(email, "@example.test") {
-		t.Fatalf("email = %q, want stable test email", email)
-	}
+	require.True(t, strings.HasPrefix(email, "login-"))
+	require.True(t, strings.HasSuffix(email, "@example.test"))
 
 	name := faker.Name("Display Name")
-	if !strings.HasPrefix(name, "Display Name ") {
-		t.Fatalf("name = %q, want readable prefix", name)
-	}
+	require.True(t, strings.HasPrefix(name, "Display Name "))
 
-	if _, err := uuid.Parse(faker.UUIDString()); err != nil {
-		t.Fatalf("UUIDString returned invalid UUID: %v", err)
-	}
+	_, err := uuid.Parse(faker.UUIDString())
+	require.NoError(t, err)
 }
 
 func TestFakerSupportsParallelUse(t *testing.T) {
@@ -55,9 +50,7 @@ func TestFakerSupportsParallelUse(t *testing.T) {
 
 	seen := make(map[string]struct{}, count)
 	for value := range values {
-		if _, ok := seen[value]; ok {
-			t.Fatalf("duplicate faker value %q", value)
-		}
+		require.NotContains(t, seen, value)
 		seen[value] = struct{}{}
 	}
 }
