@@ -55,6 +55,34 @@ func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 	}
 }
 
+func TestAuthControllerLoginMapsPasswordChangeRequired(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctl, mocks := newTestAuthController(t)
+	mocks.login.EXPECT().Login(gomock.Any(), authcommand.LoginCommand{Username: "alice", Password: "secret"}).Return(&authtokens.TokenResult{AccessToken: "password-change", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900, PasswordChangeRequired: true}, nil)
+
+	status, envelope := executeAuthLogin(t, ctl, `{"username":"alice","password":"secret"}`)
+
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", status, http.StatusOK)
+	}
+	if envelope.Success || envelope.Code != contracterrors.CodePasswordChangeRequired || envelope.Message != messages.PasswordChangeRequired {
+		t.Fatalf("envelope = %#v", envelope)
+	}
+	data, ok := envelope.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("data = %#v", envelope.Data)
+	}
+	if data["access_token"] != "password-change" || data["token_type"] != commonauth.TokenTypeBearer || data["expires_in"] != float64(900) {
+		t.Fatalf("data = %#v", envelope.Data)
+	}
+	if _, ok := data["refresh_token"]; ok {
+		t.Fatalf("refresh_token = %#v, want omitted", data["refresh_token"])
+	}
+	if _, ok := data["password_change_required"]; ok {
+		t.Fatalf("password_change_required = %#v, want omitted", data["password_change_required"])
+	}
+}
+
 func TestAuthControllerLoginRejectsBlankTrimmedCredentials(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctl, _ := newTestAuthController(t)

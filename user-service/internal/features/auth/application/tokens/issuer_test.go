@@ -28,6 +28,28 @@ func TestIssuerUsesDefaultTTLs(t *testing.T) {
 	}
 }
 
+func TestIssuerIssuesPasswordChangeToken(t *testing.T) {
+	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}}}
+	jwt := commonauth.NewJWTService(cfg.Auth)
+	issuer := NewIssuer(jwt, cfg)
+
+	tokens, err := issuer.IssuePasswordChangeToken(context.Background(), issuerTestUserID, 2, "pc-123")
+	if err != nil {
+		t.Fatalf("IssuePasswordChangeToken: %v", err)
+	}
+	if tokens.AccessToken == "" || tokens.RefreshToken != "" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn != int64((15*time.Minute).Seconds()) || !tokens.PasswordChangeRequired {
+		t.Fatalf("tokens = %#v", tokens)
+	}
+
+	claims, parsedUserID, err := issuer.ParsePasswordChangeToken(context.Background(), tokens.AccessToken)
+	if err != nil {
+		t.Fatalf("ParsePasswordChangeToken: %v", err)
+	}
+	if parsedUserID.String() != issuerTestUserID || claims.Subject != commonauth.SubjectPasswordChange || claims.SessionID != "pc-123" || claims.TokenVersion != 2 {
+		t.Fatalf("claims = %#v parsedUserID = %s", claims, parsedUserID.String())
+	}
+}
+
 func TestIssuerParsesBearerRefreshToken(t *testing.T) {
 	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}}}
 	jwt := commonauth.NewJWTService(cfg.Auth)

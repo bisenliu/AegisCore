@@ -25,11 +25,10 @@ type userResponse struct {
 }
 
 type tokenResponse struct {
-	AccessToken            string `json:"access_token"`
-	RefreshToken           string `json:"refresh_token"`
-	TokenType              string `json:"token_type"`
-	ExpiresIn              int64  `json:"expires_in"`
-	PasswordChangeRequired bool   `json:"password_change_required"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int64  `json:"expires_in"`
 }
 
 type changePasswordResponse struct {
@@ -66,18 +65,15 @@ func TestHTTPAuthUserFlow(t *testing.T) {
 	})
 	getUser(t, harness, bootstrapTokens.AccessToken, targetUser.UserID, targetUser.Username, int64(identity.UserStatusMustChangePassword))
 
-	passwordChangeTokens := login(t, harness, targetUser.Username, mustChangePassword)
-	if !passwordChangeTokens.PasswordChangeRequired || passwordChangeTokens.RefreshToken != "" {
-		t.Fatalf("password-change login returned password_change_required=%v refresh_present=%v, want true false", passwordChangeTokens.PasswordChangeRequired, passwordChangeTokens.RefreshToken != "")
-	}
+	passwordChangeTokens := loginPasswordChangeRequired(t, harness, targetUser.Username, mustChangePassword)
 
 	newPassword := "changed-secret"
 	changePassword(t, harness, passwordChangeTokens.AccessToken, newPassword)
 	expectLoginFailure(t, harness, targetUser.Username, mustChangePassword)
 
 	targetTokens := login(t, harness, targetUser.Username, newPassword)
-	if targetTokens.PasswordChangeRequired || targetTokens.RefreshToken == "" {
-		t.Fatalf("normal login returned password_change_required=%v refresh_present=%v, want false true", targetTokens.PasswordChangeRequired, targetTokens.RefreshToken != "")
+	if targetTokens.RefreshToken == "" {
+		t.Fatal("normal login returned empty refresh token")
 	}
 	getUser(t, harness, targetTokens.AccessToken, targetUser.UserID, targetUser.Username, int64(identity.UserStatusNormal))
 
@@ -140,6 +136,20 @@ func login(t *testing.T, harness *httpFlowHarness, username string, plainPasswor
 	tokens := decodeData[tokenResponse](t, envelope)
 	if tokens.AccessToken == "" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn <= 0 {
 		t.Fatalf("login token metadata invalid: access_present=%v token_type=%q expires_in=%d", tokens.AccessToken != "", tokens.TokenType, tokens.ExpiresIn)
+	}
+	return tokens
+}
+
+func loginPasswordChangeRequired(t *testing.T, harness *httpFlowHarness, username string, plainPassword string) tokenResponse {
+	t.Helper()
+	recorder := harness.request(t, http.MethodPost, "/api/v1/auth/login", map[string]any{
+		"username": username,
+		"password": plainPassword,
+	}, "")
+	envelope := expectEnvelope(t, recorder, http.StatusOK, false, contracterrors.CodePasswordChangeRequired)
+	tokens := decodeData[tokenResponse](t, envelope)
+	if tokens.AccessToken == "" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn <= 0 || tokens.RefreshToken != "" {
+		t.Fatalf("password-change login token invalid: access_present=%v token_type=%q expires_in=%d refresh_present=%v", tokens.AccessToken != "", tokens.TokenType, tokens.ExpiresIn, tokens.RefreshToken != "")
 	}
 	return tokens
 }

@@ -21,6 +21,7 @@ func TestCodeValues(t *testing.T) {
 		{name: "token revoked", code: CodeTokenRevoked, want: 20003},
 		{name: "mfa required", code: CodeMFARequired, want: 20004},
 		{name: "user account locked", code: CodeUserAccountLocked, want: 20005},
+		{name: "password change required", code: CodePasswordChangeRequired, want: 20006},
 		{name: "forbidden", code: CodeForbidden, want: 30000},
 		{name: "conflict", code: CodeConflict, want: 40000},
 		{name: "not found", code: CodeNotFound, want: 50000},

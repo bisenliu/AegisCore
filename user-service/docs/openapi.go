@@ -43,6 +43,7 @@ const openAPIDocument = `{
           20003,
           20004,
           20005,
+          20006,
           30000,
           40000,
           50000,
@@ -60,6 +61,7 @@ const openAPIDocument = `{
           "CodeTokenRevoked",
           "CodeMFARequired",
           "CodeUserAccountLocked",
+          "CodePasswordChangeRequired",
           "CodeForbidden",
           "CodeConflict",
           "CodeNotFound",
@@ -510,10 +512,6 @@ const openAPIDocument = `{
             "example": 900,
             "type": "integer"
           },
-          "password_change_required": {
-            "example": true,
-            "type": "boolean"
-          },
           "refresh_token": {
             "example": "eyJhbGciOi...",
             "type": "string"
@@ -751,7 +749,7 @@ const openAPIDocument = `{
     },
     "/auth/login": {
       "post": {
-        "description": "校验用户名和密码，创建可撤销会话并返回 Access Token 与 Refresh Token。",
+        "description": "校验用户名和密码；普通登录返回 CodeOK、Access Token 与 Refresh Token，强制改密登录返回 CodePasswordChangeRequired 与受限改密 Token。",
         "requestBody": {
           "content": {
             "application/json": {
@@ -785,7 +783,7 @@ const openAPIDocument = `{
                 }
               }
             },
-            "description": "登录成功"
+            "description": "登录成功或需要强制改密"
           },
           "400": {
             "content": {

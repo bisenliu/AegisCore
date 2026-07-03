@@ -1,6 +1,8 @@
 package authhttp
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"go.uber.org/fx"
 
@@ -47,12 +49,12 @@ func NewAuthController(params AuthControllerParams) *AuthController {
 
 // LoginUser 处理用户名和密码登录请求。
 // @Summary 用户登录
-// @Description 校验用户名和密码，创建可撤销会话并返回 Access Token 与 Refresh Token。
+// @Description 校验用户名和密码；普通登录返回 CodeOK、Access Token 与 Refresh Token，强制改密登录返回 CodePasswordChangeRequired 与受限改密 Token。
 // @Tags 认证
 // @Accept json
 // @Produce json
 // @Param request body authhttp.LoginRequest true "登录请求"
-// @Success 200 {object} response.Envelope{data=authhttp.TokenResponse} "登录成功"
+// @Success 200 {object} response.Envelope{data=authhttp.TokenResponse} "登录成功或需要强制改密"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
 // @Failure 401 {object} response.Envelope "用户名或密码错误"
 // @Failure 503 {object} response.Envelope "认证服务繁忙"
@@ -76,6 +78,10 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 	tokens, err := ctl.login.Login(ctx, cmd)
 	if err != nil {
 		response.Fail(c, toAuthHTTPError(err))
+		return
+	}
+	if tokens.PasswordChangeRequired {
+		response.JSON(c, http.StatusOK, toPasswordChangeRequiredEnvelope(tokens))
 		return
 	}
 	response.OK(c, toTokenResponse(tokens))

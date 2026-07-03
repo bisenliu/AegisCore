@@ -11,6 +11,8 @@ const (
 	InvalidCredentials = "用户名或密码不正确，请检查后重试" // #nosec G101 -- 用户提示文案，不包含真实凭据。
 	// AuthServiceBusy 是认证服务资源繁忙时展示给用户的消息。
 	AuthServiceBusy = "认证服务繁忙，请稍后重试"
+	// PasswordChangeRequired 是账号必须先完成密码修改时展示给用户的消息。
+	PasswordChangeRequired = "请先修改密码"
 	// UserAlreadyExists 是 username 唯一性冲突时展示给用户的消息。
 	UserAlreadyExists = "用户已存在，请更换用户名后重试"
 	// UserNotFound 是用户资源不存在时展示给用户的消息。

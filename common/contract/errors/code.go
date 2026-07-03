@@ -32,6 +32,9 @@ const (
 	// CodeUserAccountLocked 表示用户账号已被冻结或封禁。
 	CodeUserAccountLocked Code = 20005
 
+	// CodePasswordChangeRequired 表示用户凭据有效，但必须先完成密码修改。
+	CodePasswordChangeRequired Code = 20006
+
 	// CodeForbidden 表示用户无权访问资源或执行操作。
 	CodeForbidden Code = 30000
 

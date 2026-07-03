@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
+	contractresponse "github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/security/password"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
@@ -14,11 +15,19 @@ import (
 
 func toTokenResponse(result *authtokens.TokenResult) TokenResponse {
 	return TokenResponse{
-		AccessToken:            result.AccessToken,
-		RefreshToken:           result.RefreshToken,
-		TokenType:              result.TokenType,
-		ExpiresIn:              result.ExpiresIn,
-		PasswordChangeRequired: result.PasswordChangeRequired,
+		AccessToken:  result.AccessToken,
+		RefreshToken: result.RefreshToken,
+		TokenType:    result.TokenType,
+		ExpiresIn:    result.ExpiresIn,
+	}
+}
+
+func toPasswordChangeRequiredEnvelope(result *authtokens.TokenResult) contractresponse.Envelope {
+	return contractresponse.Envelope{
+		Success: false,
+		Code:    contracterrors.CodePasswordChangeRequired,
+		Message: messages.PasswordChangeRequired,
+		Data:    toTokenResponse(result),
 	}
 }
 
