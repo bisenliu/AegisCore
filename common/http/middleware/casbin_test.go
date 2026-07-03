@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	commoncasbin "github.com/aegiscore/common/security/casbin"
@@ -50,9 +51,7 @@ func TestCasbinAuthorization(t *testing.T) {
 
 			engine.ServeHTTP(recorder, request)
 
-			if recorder.Code != tt.wantStatus {
-				t.Fatalf("status = %d, want %d; body=%s", recorder.Code, tt.wantStatus, recorder.Body.String())
-			}
+			require.Equal(t, tt.wantStatus, recorder.Code, recorder.Body.String())
 		})
 	}
 }
@@ -74,9 +73,7 @@ func TestCasbinAuthorizationUsesCustomErrorHandler(t *testing.T) {
 
 	engine.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusTeapot {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusTeapot)
-	}
+	require.Equal(t, http.StatusTeapot, recorder.Code)
 }
 
 func testCasbinRequest() commoncasbin.Request {

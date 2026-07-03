@@ -2,7 +2,6 @@ package binding
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -30,12 +30,8 @@ func TestJSONBinder(t *testing.T) {
 	t.Run("valid body", func(t *testing.T) {
 		ctx := newJSONContext(`{"id":123}`)
 		var req request
-		if err := Bind(validator, ctx, &req, JSONBinder); err != nil {
-			t.Fatalf("Bind: %v", err)
-		}
-		if req.ID != 123 {
-			t.Fatalf("ID = %d, want 123", req.ID)
-		}
+		require.NoError(t, Bind(validator, ctx, &req, JSONBinder))
+		require.Equal(t, int64(123), req.ID)
 	})
 
 	t.Run("empty body", func(t *testing.T) {
@@ -43,15 +39,9 @@ func TestJSONBinder(t *testing.T) {
 		var req request
 		err := Bind(validator, ctx, &req, JSONBinder)
 		var validationErr *validation.Error
-		if !errors.As(err, &validationErr) {
-			t.Fatalf("Bind error = %T, want *Error", err)
-		}
-		if validationErr.Message != validation.ErrEmptyRequestBody {
-			t.Fatalf("Message = %q, want %q", validationErr.Message, validation.ErrEmptyRequestBody)
-		}
-		if validationErr.Code != contracterrors.CodeBadRequest {
-			t.Fatalf("Code = %d, want %d", validationErr.Code, contracterrors.CodeBadRequest)
-		}
+		require.ErrorAs(t, err, &validationErr)
+		require.Equal(t, validation.ErrEmptyRequestBody, validationErr.Message)
+		require.Equal(t, contracterrors.CodeBadRequest, validationErr.Code)
 	})
 
 	t.Run("type mismatch", func(t *testing.T) {
@@ -59,15 +49,9 @@ func TestJSONBinder(t *testing.T) {
 		var req request
 		err := Bind(validator, ctx, &req, JSONBinder)
 		var validationErr *validation.Error
-		if !errors.As(err, &validationErr) {
-			t.Fatalf("Bind error = %T, want *Error", err)
-		}
-		if got, want := validationErr.Message, "用户ID字段类型不正确，应为整数类型"; got != want {
-			t.Fatalf("Message = %q, want %q", got, want)
-		}
-		if validationErr.Code != contracterrors.CodeBadRequest {
-			t.Fatalf("Code = %d, want %d", validationErr.Code, contracterrors.CodeBadRequest)
-		}
+		require.ErrorAs(t, err, &validationErr)
+		require.Equal(t, "用户ID字段类型不正确，应为整数类型", validationErr.Message)
+		require.Equal(t, contracterrors.CodeBadRequest, validationErr.Code)
 	})
 
 	t.Run("trailing body", func(t *testing.T) {
@@ -75,28 +59,21 @@ func TestJSONBinder(t *testing.T) {
 		var req request
 		err := Bind(validator, ctx, &req, JSONBinder)
 		var validationErr *validation.Error
-		if !errors.As(err, &validationErr) {
-			t.Fatalf("Bind error = %T, want *Error", err)
-		}
-		if validationErr.Message != validation.ErrTrailingJSONBody || validationErr.Code != contracterrors.CodeBadRequest {
-			t.Fatalf("validation error = %#v", validationErr)
-		}
+		require.ErrorAs(t, err, &validationErr)
+		require.Equal(t, validation.ErrTrailingJSONBody, validationErr.Message)
+		require.Equal(t, contracterrors.CodeBadRequest, validationErr.Code)
 	})
 
 	t.Run("unknown field compatible by default", func(t *testing.T) {
 		ctx := newJSONContext(`{"id":123,"extra":true}`)
 		var req request
-		if err := Bind(validator, ctx, &req, JSONBinder); err != nil {
-			t.Fatalf("Bind: %v", err)
-		}
+		require.NoError(t, Bind(validator, ctx, &req, JSONBinder))
 	})
 
 	t.Run("unknown field rejected in strict mode", func(t *testing.T) {
 		ctx := newJSONContext(`{"id":123,"extra":true}`)
 		var req request
-		if err := Bind(validator, ctx, &req, StrictJSONBinder); err == nil {
-			t.Fatal("Bind error = nil, want unknown field error")
-		}
+		require.Error(t, Bind(validator, ctx, &req, StrictJSONBinder))
 	})
 }
 
@@ -110,12 +87,8 @@ func TestBinders(t *testing.T) {
 		ctx := newRequestContext(http.MethodGet, "/users/123", "")
 		ctx.Params = gin.Params{{Key: "id", Value: "123"}}
 		var req request
-		if err := Bind(validator, ctx, &req, URIBinder); err != nil {
-			t.Fatalf("Bind: %v", err)
-		}
-		if req.ID != 123 {
-			t.Fatalf("ID = %d, want 123", req.ID)
-		}
+		require.NoError(t, Bind(validator, ctx, &req, URIBinder))
+		require.Equal(t, int64(123), req.ID)
 	})
 
 	t.Run("uri type mismatch", func(t *testing.T) {
@@ -127,15 +100,9 @@ func TestBinders(t *testing.T) {
 		var req request
 		err := Bind(validator, ctx, &req, URIBinder)
 		var validationErr *validation.Error
-		if !errors.As(err, &validationErr) {
-			t.Fatalf("Bind error = %T, want *Error", err)
-		}
-		if got, want := validationErr.Message, "用户ID字段类型不正确，应为整数类型"; got != want {
-			t.Fatalf("Message = %q, want %q", got, want)
-		}
-		if validationErr.Code != contracterrors.CodeBadRequest {
-			t.Fatalf("Code = %d, want %d", validationErr.Code, contracterrors.CodeBadRequest)
-		}
+		require.ErrorAs(t, err, &validationErr)
+		require.Equal(t, "用户ID字段类型不正确，应为整数类型", validationErr.Message)
+		require.Equal(t, contracterrors.CodeBadRequest, validationErr.Code)
 	})
 
 	t.Run("query", func(t *testing.T) {
@@ -144,12 +111,8 @@ func TestBinders(t *testing.T) {
 		}
 		ctx := newRequestContext(http.MethodGet, "/users?page=2", "")
 		var req request
-		if err := Bind(validator, ctx, &req, QueryBinder); err != nil {
-			t.Fatalf("Bind: %v", err)
-		}
-		if req.Page != 2 {
-			t.Fatalf("Page = %d, want 2", req.Page)
-		}
+		require.NoError(t, Bind(validator, ctx, &req, QueryBinder))
+		require.Equal(t, 2, req.Page)
 	})
 
 	t.Run("form", func(t *testing.T) {
@@ -159,12 +122,8 @@ func TestBinders(t *testing.T) {
 		ctx := newRequestContext(http.MethodPost, "/users", "name=aegis")
 		ctx.Request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		var req request
-		if err := Bind(validator, ctx, &req, FormBinder); err != nil {
-			t.Fatalf("Bind: %v", err)
-		}
-		if req.Name != "aegis" {
-			t.Fatalf("Name = %q, want aegis", req.Name)
-		}
+		require.NoError(t, Bind(validator, ctx, &req, FormBinder))
+		require.Equal(t, "aegis", req.Name)
 	})
 
 	t.Run("custom text unmarshaler and duration", func(t *testing.T) {
@@ -174,12 +133,9 @@ func TestBinders(t *testing.T) {
 		}
 		ctx := newRequestContext(http.MethodGet, "/users?status=active&ttl=5s", "")
 		var req request
-		if err := Bind(validator, ctx, &req, QueryBinder); err != nil {
-			t.Fatalf("Bind: %v", err)
-		}
-		if req.Status != testTextValue("parsed:active") || req.TTL != 5*time.Second {
-			t.Fatalf("request = %#v", req)
-		}
+		require.NoError(t, Bind(validator, ctx, &req, QueryBinder))
+		require.Equal(t, testTextValue("parsed:active"), req.Status)
+		require.Equal(t, 5*time.Second, req.TTL)
 	})
 
 	t.Run("embedded pointer struct", func(t *testing.T) {
@@ -188,12 +144,9 @@ func TestBinders(t *testing.T) {
 		}
 		ctx := newRequestContext(http.MethodGet, "/users?page=3", "")
 		var req request
-		if err := Bind(validator, ctx, &req, QueryBinder); err != nil {
-			t.Fatalf("Bind: %v", err)
-		}
-		if req.TestEmbedded == nil || req.Page != 3 {
-			t.Fatalf("embedded request = %#v", req)
-		}
+		require.NoError(t, Bind(validator, ctx, &req, QueryBinder))
+		require.NotNil(t, req.TestEmbedded)
+		require.Equal(t, 3, req.Page)
 	})
 
 	t.Run("header", func(t *testing.T) {
@@ -203,12 +156,8 @@ func TestBinders(t *testing.T) {
 		ctx := newRequestContext(http.MethodGet, "/users", "")
 		ctx.Request.Header.Set("Authorization", "Bearer token")
 		var req request
-		if err := Bind(validator, ctx, &req, HeaderBinder); err != nil {
-			t.Fatalf("Bind: %v", err)
-		}
-		if req.Token != "Bearer token" {
-			t.Fatalf("Token = %q, want Bearer token", req.Token)
-		}
+		require.NoError(t, Bind(validator, ctx, &req, HeaderBinder))
+		require.Equal(t, "Bearer token", req.Token)
 	})
 
 	t.Run("compose", func(t *testing.T) {
@@ -220,12 +169,9 @@ func TestBinders(t *testing.T) {
 		ctx.Request.Header.Set("Content-Type", "application/json")
 		ctx.Params = gin.Params{{Key: "id", Value: "123"}}
 		var req request
-		if err := Bind(validator, ctx, &req, Compose(URIBinder, JSONBinder)); err != nil {
-			t.Fatalf("Bind: %v", err)
-		}
-		if req.ID != 123 || req.Name != "aegis" {
-			t.Fatalf("request = %#v", req)
-		}
+		require.NoError(t, Bind(validator, ctx, &req, Compose(URIBinder, JSONBinder)))
+		require.Equal(t, int64(123), req.ID)
+		require.Equal(t, "aegis", req.Name)
 	})
 
 	t.Run("compose returns first error", func(t *testing.T) {
@@ -239,15 +185,9 @@ func TestBinders(t *testing.T) {
 		var req request
 		err := Bind(validator, ctx, &req, Compose(URIBinder, JSONBinder))
 		var validationErr *validation.Error
-		if !errors.As(err, &validationErr) {
-			t.Fatalf("Bind error = %T, want *Error", err)
-		}
-		if got, want := validationErr.Message, "用户ID字段类型不正确，应为整数类型"; got != want {
-			t.Fatalf("Message = %q, want %q", got, want)
-		}
-		if req.Name != "" {
-			t.Fatalf("JSON binder should not run after URI error, req = %#v", req)
-		}
+		require.ErrorAs(t, err, &validationErr)
+		require.Equal(t, "用户ID字段类型不正确，应为整数类型", validationErr.Message)
+		require.Empty(t, req.Name)
 	})
 }
 
@@ -259,44 +199,29 @@ func TestBindOrAbort(t *testing.T) {
 	}
 	ctx, recorder := newJSONContextWithRecorder(`{}`)
 	var req request
-	if BindOrAbort(validator, ctx, &req, JSONBinder) {
-		t.Fatal("BindOrAbort = true, want false")
-	}
-	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
-	}
+	require.False(t, BindOrAbort(validator, ctx, &req, JSONBinder))
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
 	var envelope response.Envelope
-	if err := jsonUnmarshal(recorder.Body.String(), &envelope); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
-	if envelope.Success || envelope.Code != contracterrors.CodeValidationFailed || envelope.Message != validation.ErrValidationFailed {
-		t.Fatalf("envelope = %#v", envelope)
-	}
-	if len(envelope.Errors.([]any)) != 1 {
-		t.Fatalf("errors = %#v, want one error", envelope.Errors)
-	}
+	require.NoError(t, jsonUnmarshal(recorder.Body.String(), &envelope))
+	require.False(t, envelope.Success)
+	require.Equal(t, contracterrors.CodeValidationFailed, envelope.Code)
+	require.Equal(t, validation.ErrValidationFailed, envelope.Message)
+	envelopeErrors, ok := envelope.Errors.([]any)
+	require.True(t, ok)
+	require.Len(t, envelopeErrors, 1)
 	entries := logs.All()
-	if len(entries) != 1 {
-		t.Fatalf("log entries = %d, want 1", len(entries))
-	}
+	require.Len(t, entries, 1)
 	entry := entries[0]
-	if entry.Level != zapcore.WarnLevel || entry.Message != "invalid request" {
-		t.Fatalf("log entry = level %s message %q, want warn invalid request", entry.Level, entry.Message)
-	}
+	require.Equal(t, zapcore.WarnLevel, entry.Level)
+	require.Equal(t, "invalid request", entry.Message)
 	fields := entry.ContextMap()
-	if fields["path"] != "/" {
-		t.Fatalf("log path = %#v, want /", fields["path"])
-	}
-	if fields["error"] == nil {
-		t.Fatalf("log error field missing: %#v", fields)
-	}
+	require.Equal(t, "/", fields["path"])
+	require.NotNil(t, fields["error"])
 	errorsField, ok := fields["errors"].([]validation.FieldError)
-	if !ok || len(errorsField) != 1 {
-		t.Fatalf("log errors = %#v, want one FieldError", fields["errors"])
-	}
-	if errorsField[0].Field != "name" || errorsField[0].Rule != "required" {
-		t.Fatalf("log field error = %#v", errorsField[0])
-	}
+	require.True(t, ok)
+	require.Len(t, errorsField, 1)
+	require.Equal(t, "name", errorsField[0].Field)
+	require.Equal(t, "required", errorsField[0].Rule)
 }
 
 func TestBindOrAbortTypeMismatchUsesBadRequest(t *testing.T) {
@@ -308,40 +233,23 @@ func TestBindOrAbortTypeMismatchUsesBadRequest(t *testing.T) {
 	ctx, recorder := newRequestContextWithRecorder(http.MethodGet, "/users/bad", "")
 	ctx.Params = gin.Params{{Key: "id", Value: "bad"}}
 	var req request
-	if BindOrAbort(validator, ctx, &req, URIBinder) {
-		t.Fatal("BindOrAbort = true, want false")
-	}
-	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
-	}
+	require.False(t, BindOrAbort(validator, ctx, &req, URIBinder))
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
 	var envelope response.Envelope
-	if err := jsonUnmarshal(recorder.Body.String(), &envelope); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
-	if envelope.Success || envelope.Code != contracterrors.CodeBadRequest || envelope.Message != "用户ID字段类型不正确，应为整数类型" {
-		t.Fatalf("envelope = %#v", envelope)
-	}
-	if envelope.Errors != nil {
-		t.Fatalf("errors = %#v, want nil", envelope.Errors)
-	}
+	require.NoError(t, jsonUnmarshal(recorder.Body.String(), &envelope))
+	require.False(t, envelope.Success)
+	require.Equal(t, contracterrors.CodeBadRequest, envelope.Code)
+	require.Equal(t, "用户ID字段类型不正确，应为整数类型", envelope.Message)
+	require.Nil(t, envelope.Errors)
 	entries := logs.All()
-	if len(entries) != 1 {
-		t.Fatalf("log entries = %d, want 1", len(entries))
-	}
+	require.Len(t, entries, 1)
 	entry := entries[0]
-	if entry.Level != zapcore.WarnLevel || entry.Message != "invalid request" {
-		t.Fatalf("log entry = level %s message %q, want warn invalid request", entry.Level, entry.Message)
-	}
+	require.Equal(t, zapcore.WarnLevel, entry.Level)
+	require.Equal(t, "invalid request", entry.Message)
 	fields := entry.ContextMap()
-	if fields["path"] != "/users/bad" {
-		t.Fatalf("log path = %#v, want /users/bad", fields["path"])
-	}
-	if fields["error"] == nil {
-		t.Fatalf("log error field missing: %#v", fields)
-	}
-	if _, ok := fields["errors"]; ok {
-		t.Fatalf("log errors = %#v, want omitted", fields["errors"])
-	}
+	require.Equal(t, "/users/bad", fields["path"])
+	require.NotNil(t, fields["error"])
+	require.NotContains(t, fields, "errors")
 }
 
 type testTextValue string
@@ -358,9 +266,7 @@ type TestEmbedded struct {
 func newTestValidator(t *testing.T) *validation.Validator {
 	t.Helper()
 	validator, err := validation.NewDefault()
-	if err != nil {
-		t.Fatalf("NewDefault: %v", err)
-	}
+	require.NoError(t, err)
 	return validator
 }
 

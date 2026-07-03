@@ -6,10 +6,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -27,12 +27,11 @@ func TestFailureResponseErrors(t *testing.T) {
 		Fail(ctx, nil)
 
 		var envelope contractresponse.Envelope
-		if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
-			t.Fatalf("unmarshal response: %v", err)
-		}
-		if recorder.Code != http.StatusInternalServerError || envelope.Success || envelope.Code != contracterrors.CodeInternalError || envelope.Message != contractresponse.MessageInternalError {
-			t.Fatalf("response = status %d envelope %#v", recorder.Code, envelope)
-		}
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+		require.Equal(t, http.StatusInternalServerError, recorder.Code)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeInternalError, envelope.Code)
+		require.Equal(t, contractresponse.MessageInternalError, envelope.Message)
 	})
 
 	t.Run("ordinary failure omits errors", func(t *testing.T) {
@@ -41,15 +40,12 @@ func TestFailureResponseErrors(t *testing.T) {
 		BadRequest(ctx, "请求格式错误")
 
 		var envelope contractresponse.Envelope
-		if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
-			t.Fatalf("unmarshal response: %v", err)
-		}
-		if recorder.Code != http.StatusBadRequest || envelope.Success || envelope.Code != contracterrors.CodeBadRequest || envelope.Message != "请求格式错误" {
-			t.Fatalf("response = status %d envelope %#v", recorder.Code, envelope)
-		}
-		if envelope.Errors != nil {
-			t.Fatalf("errors = %#v, want nil", envelope.Errors)
-		}
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+		require.Equal(t, http.StatusBadRequest, recorder.Code)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeBadRequest, envelope.Code)
+		require.Equal(t, "请求格式错误", envelope.Message)
+		require.Nil(t, envelope.Errors)
 	})
 
 	t.Run("token invalid failure", func(t *testing.T) {
@@ -58,12 +54,11 @@ func TestFailureResponseErrors(t *testing.T) {
 		TokenInvalid(ctx, contractresponse.MessageAuthInvalid)
 
 		var envelope contractresponse.Envelope
-		if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
-			t.Fatalf("unmarshal response: %v", err)
-		}
-		if recorder.Code != http.StatusUnauthorized || envelope.Success || envelope.Code != contracterrors.CodeTokenInvalid || envelope.Message != contractresponse.MessageAuthInvalid {
-			t.Fatalf("response = status %d envelope %#v", recorder.Code, envelope)
-		}
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+		require.Equal(t, http.StatusUnauthorized, recorder.Code)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeTokenInvalid, envelope.Code)
+		require.Equal(t, contractresponse.MessageAuthInvalid, envelope.Message)
 	})
 
 	t.Run("token expired failure", func(t *testing.T) {
@@ -72,12 +67,11 @@ func TestFailureResponseErrors(t *testing.T) {
 		TokenExpired(ctx, contractresponse.MessageAuthInvalid)
 
 		var envelope contractresponse.Envelope
-		if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
-			t.Fatalf("unmarshal response: %v", err)
-		}
-		if recorder.Code != http.StatusUnauthorized || envelope.Success || envelope.Code != contracterrors.CodeTokenExpired || envelope.Message != contractresponse.MessageAuthInvalid {
-			t.Fatalf("response = status %d envelope %#v", recorder.Code, envelope)
-		}
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+		require.Equal(t, http.StatusUnauthorized, recorder.Code)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeTokenExpired, envelope.Code)
+		require.Equal(t, contractresponse.MessageAuthInvalid, envelope.Message)
 	})
 
 	t.Run("validation failure includes errors", func(t *testing.T) {
@@ -87,23 +81,21 @@ func TestFailureResponseErrors(t *testing.T) {
 		ValidationFailedWithErrors(ctx, "请求参数验证失败", details)
 
 		var body map[string]any
-		if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-			t.Fatalf("unmarshal response: %v", err)
-		}
-		if recorder.Code != http.StatusBadRequest || body["success"] != false || body["code"] != float64(contracterrors.CodeValidationFailed) || body["message"] != "请求参数验证失败" {
-			t.Fatalf("response = status %d body %#v", recorder.Code, body)
-		}
-		if _, ok := body["data"]; ok {
-			t.Fatalf("data = %#v, want omitted", body["data"])
-		}
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+		require.Equal(t, http.StatusBadRequest, recorder.Code)
+		require.Equal(t, false, body["success"])
+		require.Equal(t, float64(contracterrors.CodeValidationFailed), body["code"])
+		require.Equal(t, "请求参数验证失败", body["message"])
+		require.NotContains(t, body, "data")
 		errors, ok := body["errors"].([]any)
-		if !ok || len(errors) != 1 {
-			t.Fatalf("errors = %#v, want one error", body["errors"])
-		}
+		require.True(t, ok)
+		require.Len(t, errors, 1)
 		field, ok := errors[0].(map[string]any)
-		if !ok || field["field"] != "email" || field["label"] != "邮箱" || field["rule"] != "email" || field["message"] != "邮箱格式不正确" {
-			t.Fatalf("field error = %#v", errors[0])
-		}
+		require.True(t, ok)
+		require.Equal(t, "email", field["field"])
+		require.Equal(t, "邮箱", field["label"])
+		require.Equal(t, "email", field["rule"])
+		require.Equal(t, "邮箱格式不正确", field["message"])
 	})
 }
 
@@ -115,13 +107,9 @@ func TestFailureResponseAnnotatesSpan(t *testing.T) {
 
 		WriteError(ctx, contracterrors.InternalError(errors.New("database password token stacktrace leaked")))
 
-		if recorder.Code != http.StatusInternalServerError {
-			t.Fatalf("status = %d, want 500", recorder.Code)
-		}
+		require.Equal(t, http.StatusInternalServerError, recorder.Code)
 		ended := endSpan(t, span)
-		if got := ended.Status().Code; got != codes.Error {
-			t.Fatalf("span status = %s, want Error", got)
-		}
+		require.Equal(t, codes.Error, ended.Status().Code)
 		assertSpanIntAttribute(t, ended, spanAttrErrorCode, int(contracterrors.CodeInternalError))
 		assertSpanIntAttribute(t, ended, spanAttrHTTPStatus, http.StatusInternalServerError)
 		event := findSpanEvent(t, ended, "exception")
@@ -134,16 +122,10 @@ func TestFailureResponseAnnotatesSpan(t *testing.T) {
 
 		BadRequest(ctx, "请求格式错误 password token")
 
-		if recorder.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want 400", recorder.Code)
-		}
+		require.Equal(t, http.StatusBadRequest, recorder.Code)
 		ended := endSpan(t, span)
-		if got := ended.Status().Code; got != codes.Unset {
-			t.Fatalf("span status = %s, want Unset", got)
-		}
-		if len(ended.Events()) != 0 {
-			t.Fatalf("span events = %#v, want none", ended.Events())
-		}
+		require.Equal(t, codes.Unset, ended.Status().Code)
+		require.Empty(t, ended.Events())
 		assertSpanIntAttribute(t, ended, spanAttrErrorCode, int(contracterrors.CodeBadRequest))
 		assertSpanIntAttribute(t, ended, spanAttrHTTPStatus, http.StatusBadRequest)
 	})
@@ -153,13 +135,9 @@ func TestFailureResponseAnnotatesSpan(t *testing.T) {
 
 		Fail(ctx, errors.New("sql args password token"))
 
-		if recorder.Code != http.StatusInternalServerError {
-			t.Fatalf("status = %d, want 500", recorder.Code)
-		}
+		require.Equal(t, http.StatusInternalServerError, recorder.Code)
 		ended := endSpan(t, span)
-		if got := ended.Status().Code; got != codes.Error {
-			t.Fatalf("span status = %s, want Error", got)
-		}
+		require.Equal(t, codes.Error, ended.Status().Code)
 		assertSpanIntAttribute(t, ended, spanAttrErrorCode, int(contracterrors.CodeInternalError))
 		assertSpanIntAttribute(t, ended, spanAttrHTTPStatus, http.StatusInternalServerError)
 		event := findSpanEvent(t, ended, "exception")
@@ -172,23 +150,18 @@ func TestFailureResponseAnnotatesSpan(t *testing.T) {
 
 		ValidationFailedWithErrors(ctx, "请求参数验证失败", details)
 
-		if recorder.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want 400", recorder.Code)
-		}
+		require.Equal(t, http.StatusBadRequest, recorder.Code)
 		ended := endSpan(t, span)
-		if got := ended.Status().Code; got != codes.Unset {
-			t.Fatalf("span status = %s, want Unset", got)
-		}
-		if len(ended.Events()) != 0 {
-			t.Fatalf("span events = %#v, want none", ended.Events())
-		}
+		require.Equal(t, codes.Unset, ended.Status().Code)
+		require.Empty(t, ended.Events())
 		assertSpanIntAttribute(t, ended, spanAttrErrorCode, int(contracterrors.CodeValidationFailed))
 		assertSpanIntAttribute(t, ended, spanAttrHTTPStatus, http.StatusBadRequest)
 		for _, attr := range ended.Attributes() {
 			text := attr.Value.String()
-			if strings.Contains(text, "password") || strings.Contains(text, "token") || strings.Contains(text, "Authorization") || strings.Contains(text, "Cookie") {
-				t.Fatalf("validation span attribute leaked field detail: %#v", ended.Attributes())
-			}
+			require.NotContains(t, text, "password")
+			require.NotContains(t, text, "token")
+			require.NotContains(t, text, "Authorization")
+			require.NotContains(t, text, "Cookie")
 		}
 	})
 }
@@ -200,16 +173,15 @@ func TestOKWithPaginatedData(t *testing.T) {
 	OK(ctx, map[string]any{"id": 1, "name": "Alice"})
 
 	var body map[string]any
-	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
-	if recorder.Code != http.StatusOK || body["success"] != true || body["code"] != float64(contracterrors.CodeOK) || body["message"] != contractresponse.MessageOK {
-		t.Fatalf("response = status %d body %#v", recorder.Code, body)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, true, body["success"])
+	require.Equal(t, float64(contracterrors.CodeOK), body["code"])
+	require.Equal(t, contractresponse.MessageOK, body["message"])
 	data, ok := body["data"].(map[string]any)
-	if !ok || data["id"] != float64(1) || data["name"] != "Alice" {
-		t.Fatalf("data = %#v", body["data"])
-	}
+	require.True(t, ok)
+	require.Equal(t, float64(1), data["id"])
+	require.Equal(t, "Alice", data["name"])
 }
 
 func newTestContext() (*gin.Context, *httptest.ResponseRecorder) {
@@ -231,9 +203,7 @@ func newTestContextWithSpan(t *testing.T) (*gin.Context, *httptest.ResponseRecor
 		if span.IsRecording() {
 			span.End()
 		}
-		if err := provider.Shutdown(context.Background()); err != nil {
-			t.Fatalf("Shutdown tracer provider: %v", err)
-		}
+		require.NoError(t, provider.Shutdown(context.Background()))
 	})
 	return ctx, recorder, spanRecorder.Started()[0]
 }
@@ -246,39 +216,45 @@ func endSpan(t *testing.T, span sdktrace.ReadWriteSpan) sdktrace.ReadOnlySpan {
 
 func assertSpanIntAttribute(t *testing.T, span sdktrace.ReadOnlySpan, key string, want int) {
 	t.Helper()
+	var got *int
 	for _, attr := range span.Attributes() {
 		if string(attr.Key) == key {
-			if got := int(attr.Value.AsInt64()); got != want {
-				t.Fatalf("span attribute %s = %d, want %d", key, got, want)
-			}
-			return
+			value := int(attr.Value.AsInt64())
+			got = &value
+			break
 		}
 	}
-	t.Fatalf("span attribute %s missing in %#v", key, span.Attributes())
+	require.NotNil(t, got, "span attribute %s missing in %#v", key, span.Attributes())
+	require.Equal(t, want, *got)
 }
 
 func findSpanEvent(t *testing.T, span sdktrace.ReadOnlySpan, name string) sdktrace.Event {
 	t.Helper()
+	var found sdktrace.Event
+	foundEvent := false
 	for _, event := range span.Events() {
 		if event.Name == name {
-			return event
+			found = event
+			foundEvent = true
+			break
 		}
 	}
-	t.Fatalf("span event %q missing in %#v", name, span.Events())
-	return sdktrace.Event{}
+	require.True(t, foundEvent, "span event %q missing in %#v", name, span.Events())
+	return found
 }
 
 func assertSpanEventStringAttribute(t *testing.T, event sdktrace.Event, key string, want string) {
 	t.Helper()
+	var got *string
 	for _, attr := range event.Attributes {
 		if string(attr.Key) == key {
-			if got := attr.Value.AsString(); got != want {
-				t.Fatalf("span event attribute %s = %q, want %q", key, got, want)
-			}
-			return
+			value := attr.Value.AsString()
+			got = &value
+			break
 		}
 	}
-	t.Fatalf("span event attribute %s missing in %#v", key, event.Attributes)
+	require.NotNil(t, got, "span event attribute %s missing in %#v", key, event.Attributes)
+	require.Equal(t, want, *got)
 }
 
 func assertNoSensitiveSpanEventText(t *testing.T, event sdktrace.Event, forbidden ...string) {
@@ -286,9 +262,7 @@ func assertNoSensitiveSpanEventText(t *testing.T, event sdktrace.Event, forbidde
 	for _, attr := range event.Attributes {
 		text := attr.Value.String()
 		for _, item := range forbidden {
-			if strings.Contains(text, item) {
-				t.Fatalf("span event leaked %q in %#v", item, event.Attributes)
-			}
+			require.NotContains(t, text, item)
 		}
 	}
 }

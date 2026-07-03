@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -29,15 +30,9 @@ func TestContextLoggerUsesOTelTraceAndSpanID(t *testing.T) {
 	logger.Info(ctx, "context logger used")
 
 	entries := logs.FilterMessage("context logger used").All()
-	if len(entries) != 1 {
-		t.Fatalf("context log count = %d, want 1", len(entries))
-	}
-	if got := entries[0].ContextMap()[logger.TraceIDField]; got != "00112233445566778899aabbccddeeff" {
-		t.Fatalf("%s = %q, want OTel trace id", logger.TraceIDField, got)
-	}
-	if got := entries[0].ContextMap()[logger.SpanIDField]; got != "0102030405060708" {
-		t.Fatalf("%s = %q, want OTel span id", logger.SpanIDField, got)
-	}
+	require.Len(t, entries, 1)
+	require.Equal(t, "00112233445566778899aabbccddeeff", entries[0].ContextMap()[logger.TraceIDField])
+	require.Equal(t, "0102030405060708", entries[0].ContextMap()[logger.SpanIDField])
 }
 
 func TestCORSWithOptions(t *testing.T) {
@@ -57,21 +52,11 @@ func TestCORSWithOptions(t *testing.T) {
 	rec := httptest.NewRecorder()
 	engine.ServeHTTP(rec, req)
 
-	if got := rec.Header().Get(HeaderAccessControlAllowOrigin); got != "https://example.test" {
-		t.Fatalf("allow origin = %q", got)
-	}
-	if got := rec.Header().Get(HeaderVary); got != HeaderOrigin {
-		t.Fatalf("vary = %q", got)
-	}
-	if got := rec.Header().Get(HeaderAccessControlExposeHeaders); got != "" {
-		t.Fatalf("expose headers = %q, want empty", got)
-	}
-	if got := rec.Header().Get(HeaderAccessControlAllowCredentials); got != "true" {
-		t.Fatalf("allow credentials = %q", got)
-	}
-	if got := rec.Header().Get(HeaderAccessControlMaxAge); got != "600" {
-		t.Fatalf("max age = %q", got)
-	}
+	require.Equal(t, "https://example.test", rec.Header().Get(HeaderAccessControlAllowOrigin))
+	require.Equal(t, HeaderOrigin, rec.Header().Get(HeaderVary))
+	require.Empty(t, rec.Header().Get(HeaderAccessControlExposeHeaders))
+	require.Equal(t, "true", rec.Header().Get(HeaderAccessControlAllowCredentials))
+	require.Equal(t, "600", rec.Header().Get(HeaderAccessControlMaxAge))
 }
 
 func TestRequestLoggerIncludesTraceAndSpanIDAndRequestFields(t *testing.T) {
@@ -87,19 +72,17 @@ func TestRequestLoggerIncludesTraceAndSpanIDAndRequestFields(t *testing.T) {
 	engine.ServeHTTP(httptest.NewRecorder(), req)
 
 	entries := logs.FilterMessage("http request completed").All()
-	if len(entries) != 1 {
-		t.Fatalf("request log count = %d, want 1", len(entries))
-	}
+	require.Len(t, entries, 1)
 	fields := entries[0].ContextMap()
-	if fields[logger.TraceIDField] != "00112233445566778899aabbccddeeff" || fields[logger.SpanIDField] != "0102030405060708" || fields[RequestIDField] != "client-request-123" || fields["method"] != http.MethodGet || fields["path"] != "/ok" || fields["status"] != int64(http.StatusAccepted) || fields[auth.UserIDKey] != anonymousUserID {
-		t.Fatalf("request log fields = %#v", fields)
-	}
-	if _, ok := fields["latency_ms"]; !ok {
-		t.Fatalf("request log missing latency_ms: %#v", fields)
-	}
-	if _, ok := fields["client_ip"]; !ok {
-		t.Fatalf("request log missing client_ip: %#v", fields)
-	}
+	require.Equal(t, "00112233445566778899aabbccddeeff", fields[logger.TraceIDField])
+	require.Equal(t, "0102030405060708", fields[logger.SpanIDField])
+	require.Equal(t, "client-request-123", fields[RequestIDField])
+	require.Equal(t, http.MethodGet, fields["method"])
+	require.Equal(t, "/ok", fields["path"])
+	require.Equal(t, int64(http.StatusAccepted), fields["status"])
+	require.Equal(t, anonymousUserID, fields[auth.UserIDKey])
+	require.Contains(t, fields, "latency_ms")
+	require.Contains(t, fields, "client_ip")
 }
 
 func TestRequestIDPassesThroughHeaderAndContext(t *testing.T) {
@@ -108,9 +91,7 @@ func TestRequestIDPassesThroughHeaderAndContext(t *testing.T) {
 	engine.Use(RequestID())
 	engine.GET("/request-id", func(c *gin.Context) {
 		requestID, ok := RequestIDFromContext(c.Request.Context())
-		if !ok {
-			t.Fatal("request id missing from context")
-		}
+		require.True(t, ok)
 		c.String(http.StatusOK, requestID)
 	})
 
@@ -119,12 +100,8 @@ func TestRequestIDPassesThroughHeaderAndContext(t *testing.T) {
 	rec := httptest.NewRecorder()
 	engine.ServeHTTP(rec, req)
 
-	if got := rec.Header().Get(HeaderRequestID); got != "client-request-123" {
-		t.Fatalf("response request id = %q, want client-request-123", got)
-	}
-	if got := rec.Body.String(); got != "client-request-123" {
-		t.Fatalf("context request id = %q, want client-request-123", got)
-	}
+	require.Equal(t, "client-request-123", rec.Header().Get(HeaderRequestID))
+	require.Equal(t, "client-request-123", rec.Body.String())
 }
 
 func TestRequestIDGeneratesMissingHeader(t *testing.T) {
@@ -133,9 +110,7 @@ func TestRequestIDGeneratesMissingHeader(t *testing.T) {
 	engine.Use(RequestID())
 	engine.GET("/request-id", func(c *gin.Context) {
 		requestID, ok := RequestIDFromContext(c.Request.Context())
-		if !ok {
-			t.Fatal("request id missing from context")
-		}
+		require.True(t, ok)
 		c.String(http.StatusOK, requestID)
 	})
 
@@ -143,12 +118,8 @@ func TestRequestIDGeneratesMissingHeader(t *testing.T) {
 	engine.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/request-id", nil))
 
 	requestID := rec.Header().Get(HeaderRequestID)
-	if !uuidStringPattern.MatchString(requestID) {
-		t.Fatalf("generated request id = %q, want UUID string", requestID)
-	}
-	if got := rec.Body.String(); got != requestID {
-		t.Fatalf("context request id = %q, want response request id %q", got, requestID)
-	}
+	require.Regexp(t, uuidStringPattern, requestID)
+	require.Equal(t, requestID, rec.Body.String())
 }
 
 func TestRequestIDRejectsInvalidHeader(t *testing.T) {
@@ -169,9 +140,7 @@ func TestRequestIDRejectsInvalidHeader(t *testing.T) {
 			engine.Use(RequestID())
 			engine.GET("/request-id", func(c *gin.Context) {
 				requestID, ok := RequestIDFromContext(c.Request.Context())
-				if !ok {
-					t.Fatal("request id missing from context")
-				}
+				require.True(t, ok)
 				c.String(http.StatusOK, requestID)
 			})
 
@@ -181,15 +150,9 @@ func TestRequestIDRejectsInvalidHeader(t *testing.T) {
 			engine.ServeHTTP(rec, req)
 
 			requestID := rec.Header().Get(HeaderRequestID)
-			if requestID == strings.TrimSpace(tt.value) {
-				t.Fatalf("response request id reused invalid value %q", requestID)
-			}
-			if !uuidStringPattern.MatchString(requestID) {
-				t.Fatalf("generated request id = %q, want UUID string", requestID)
-			}
-			if got := rec.Body.String(); got != requestID {
-				t.Fatalf("context request id = %q, want response request id %q", got, requestID)
-			}
+			require.NotEqual(t, strings.TrimSpace(tt.value), requestID)
+			require.Regexp(t, uuidStringPattern, requestID)
+			require.Equal(t, requestID, rec.Body.String())
 		})
 	}
 }
@@ -207,13 +170,9 @@ func TestRequestLoggerUsesSharedClientIPExtraction(t *testing.T) {
 	engine.ServeHTTP(httptest.NewRecorder(), req)
 
 	entries := logs.FilterMessage("http request completed").All()
-	if len(entries) != 1 {
-		t.Fatalf("request log count = %d, want 1", len(entries))
-	}
+	require.Len(t, entries, 1)
 	fields := entries[0].ContextMap()
-	if fields["client_ip"] != "203.0.113.10" {
-		t.Fatalf("client_ip = %q, want 203.0.113.10; fields = %#v", fields["client_ip"], fields)
-	}
+	require.Equal(t, "203.0.113.10", fields["client_ip"])
 }
 
 func TestRequestLoggerSelectsLevelByStatus(t *testing.T) {
@@ -241,12 +200,8 @@ func TestRequestLoggerSelectsLevelByStatus(t *testing.T) {
 			engine.ServeHTTP(httptest.NewRecorder(), req)
 
 			entries := logs.FilterMessage("http request completed").All()
-			if len(entries) != 1 {
-				t.Fatalf("request log count = %d, want 1", len(entries))
-			}
-			if entries[0].Level != tt.level {
-				t.Fatalf("level = %s, want %s", entries[0].Level, tt.level)
-			}
+			require.Len(t, entries, 1)
+			require.Equal(t, tt.level, entries[0].Level)
 		})
 	}
 }
@@ -277,13 +232,9 @@ func TestRequestLoggerMarksOnlyServerErrorSpanStatus(t *testing.T) {
 			engine.ServeHTTP(httptest.NewRecorder(), req)
 
 			entries := logs.FilterMessage("http request completed").All()
-			if len(entries) != 1 {
-				t.Fatalf("request log count = %d, want 1", len(entries))
-			}
+			require.Len(t, entries, 1)
 			span := endedSpan(t, spanRecorder)
-			if got := span.Status().Code; got != tt.wantStatus {
-				t.Fatalf("span status = %s, want %s", got, tt.wantStatus)
-			}
+			require.Equal(t, tt.wantStatus, span.Status().Code)
 			if tt.status >= http.StatusInternalServerError {
 				assertSpanIntAttribute(t, span, spanAttrHTTPStatus, tt.status)
 			}
@@ -306,13 +257,9 @@ func TestRequestLoggerIncludesUserIDFromRequestContext(t *testing.T) {
 	engine.ServeHTTP(httptest.NewRecorder(), req)
 
 	entries := logs.FilterMessage("http request completed").All()
-	if len(entries) != 1 {
-		t.Fatalf("request log count = %d, want 1", len(entries))
-	}
+	require.Len(t, entries, 1)
 	fields := entries[0].ContextMap()
-	if fields[auth.UserIDKey] != "u-123" {
-		t.Fatalf("user_id = %q, want u-123; fields = %#v", fields[auth.UserIDKey], fields)
-	}
+	require.Equal(t, "u-123", fields[auth.UserIDKey])
 }
 
 func TestRequestLoggerWithOptionsSkipsMatchingRequest(t *testing.T) {
@@ -332,12 +279,8 @@ func TestRequestLoggerWithOptionsSkipsMatchingRequest(t *testing.T) {
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/keep", nil))
 
 	entries := logs.FilterMessage("http request completed").All()
-	if len(entries) != 1 {
-		t.Fatalf("request log count = %d, want 1", len(entries))
-	}
-	if got := entries[0].ContextMap()["path"]; got != "/keep" {
-		t.Fatalf("logged path = %q, want /keep", got)
-	}
+	require.Len(t, entries, 1)
+	require.Equal(t, "/keep", entries[0].ContextMap()["path"])
 }
 
 func TestRecoveryIncludesTraceAndSpanIDAndEnvelope(t *testing.T) {
@@ -352,23 +295,15 @@ func TestRecoveryIncludesTraceAndSpanIDAndEnvelope(t *testing.T) {
 	rec := httptest.NewRecorder()
 	engine.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", rec.Code)
-	}
-	if !strings.Contains(rec.Body.String(), `"success":false`) {
-		t.Fatalf("response body = %s, want failure envelope", rec.Body.String())
-	}
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Contains(t, rec.Body.String(), `"success":false`)
 	entries := logs.FilterMessage("panic recovered").All()
-	if len(entries) != 1 {
-		t.Fatalf("recovery log count = %d, want 1", len(entries))
-	}
+	require.Len(t, entries, 1)
 	fields := entries[0].ContextMap()
-	if fields[logger.TraceIDField] != "00112233445566778899aabbccddeeff" || fields[logger.SpanIDField] != "0102030405060708" || fields["panic"] != "boom" {
-		t.Fatalf("recovery log fields = %#v", fields)
-	}
-	if _, ok := fields["stack"]; !ok {
-		t.Fatalf("recovery log missing stack: %#v", fields)
-	}
+	require.Equal(t, "00112233445566778899aabbccddeeff", fields[logger.TraceIDField])
+	require.Equal(t, "0102030405060708", fields[logger.SpanIDField])
+	require.Equal(t, "boom", fields["panic"])
+	require.Contains(t, fields, "stack")
 }
 
 var uuidStringPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -387,26 +322,18 @@ func TestRecoveryRecordsPanicOnSpan(t *testing.T) {
 	rec := httptest.NewRecorder()
 	engine.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", rec.Code)
-	}
-	if !strings.Contains(rec.Body.String(), `"success":false`) {
-		t.Fatalf("response body = %s, want failure envelope", rec.Body.String())
-	}
-	if entries := logs.FilterMessage("panic recovered").All(); len(entries) != 1 {
-		t.Fatalf("panic recovered logs = %d, want 1", len(entries))
-	}
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Contains(t, rec.Body.String(), `"success":false`)
+	require.Len(t, logs.FilterMessage("panic recovered").All(), 1)
 	span := endedSpan(t, spanRecorder)
-	if got := span.Status().Code; got != codes.Error {
-		t.Fatalf("span status = %s, want Error", got)
-	}
+	require.Equal(t, codes.Error, span.Status().Code)
 	event := findSpanEvent(t, span, "exception")
 	assertSpanEventStringAttribute(t, event, spanAttrErrorType, spanErrorTypePanic)
 	for _, attr := range event.Attributes {
 		text := attr.Value.String()
-		if strings.Contains(text, "stacktrace") || strings.Contains(text, "token") || strings.Contains(text, "password") {
-			t.Fatalf("panic span event leaked sensitive text: %#v", event.Attributes)
-		}
+		require.NotContains(t, text, "stacktrace")
+		require.NotContains(t, text, "token")
+		require.NotContains(t, text, "password")
 	}
 }
 
@@ -421,13 +348,9 @@ func otelTraceMiddleware(t *testing.T, traceIDHex string, spanIDHex string) gin.
 func contextWithSpanContext(ctx context.Context, t *testing.T, traceIDHex string, spanIDHex string) context.Context {
 	t.Helper()
 	traceID, err := trace.TraceIDFromHex(traceIDHex)
-	if err != nil {
-		t.Fatalf("TraceIDFromHex: %v", err)
-	}
+	require.NoError(t, err)
 	spanID, err := trace.SpanIDFromHex(spanIDHex)
-	if err != nil {
-		t.Fatalf("SpanIDFromHex: %v", err)
-	}
+	require.NoError(t, err)
 	spanContext := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID: traceID,
 		SpanID:  spanID,
@@ -448,53 +371,55 @@ func recordingSpanMiddleware(provider *sdktrace.TracerProvider) gin.HandlerFunc 
 
 func shutdownTracerProvider(t *testing.T, provider *sdktrace.TracerProvider) {
 	t.Helper()
-	if err := provider.Shutdown(context.Background()); err != nil {
-		t.Fatalf("Shutdown tracer provider: %v", err)
-	}
+	require.NoError(t, provider.Shutdown(context.Background()))
 }
 
 func endedSpan(t *testing.T, recorder *tracetest.SpanRecorder) sdktrace.ReadOnlySpan {
 	t.Helper()
 	spans := recorder.Ended()
-	if len(spans) != 1 {
-		t.Fatalf("ended span count = %d, want 1", len(spans))
-	}
+	require.Len(t, spans, 1)
 	return spans[0]
 }
 
 func assertSpanIntAttribute(t *testing.T, span sdktrace.ReadOnlySpan, key string, want int) {
 	t.Helper()
+	var got *int
 	for _, attr := range span.Attributes() {
 		if string(attr.Key) == key {
-			if got := int(attr.Value.AsInt64()); got != want {
-				t.Fatalf("span attribute %s = %d, want %d", key, got, want)
-			}
-			return
+			value := int(attr.Value.AsInt64())
+			got = &value
+			break
 		}
 	}
-	t.Fatalf("span attribute %s missing in %#v", key, span.Attributes())
+	require.NotNil(t, got, "span attribute %s missing in %#v", key, span.Attributes())
+	require.Equal(t, want, *got)
 }
 
 func findSpanEvent(t *testing.T, span sdktrace.ReadOnlySpan, name string) sdktrace.Event {
 	t.Helper()
+	var found sdktrace.Event
+	foundEvent := false
 	for _, event := range span.Events() {
 		if event.Name == name {
-			return event
+			found = event
+			foundEvent = true
+			break
 		}
 	}
-	t.Fatalf("span event %q missing in %#v", name, span.Events())
-	return sdktrace.Event{}
+	require.True(t, foundEvent, "span event %q missing in %#v", name, span.Events())
+	return found
 }
 
 func assertSpanEventStringAttribute(t *testing.T, event sdktrace.Event, key string, want string) {
 	t.Helper()
+	var got *string
 	for _, attr := range event.Attributes {
 		if string(attr.Key) == key {
-			if got := attr.Value.AsString(); got != want {
-				t.Fatalf("span event attribute %s = %q, want %q", key, got, want)
-			}
-			return
+			value := attr.Value.AsString()
+			got = &value
+			break
 		}
 	}
-	t.Fatalf("span event attribute %s missing in %#v", key, event.Attributes)
+	require.NotNil(t, got, "span event attribute %s missing in %#v", key, event.Attributes)
+	require.Equal(t, want, *got)
 }

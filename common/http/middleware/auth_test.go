@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -94,16 +95,20 @@ func TestAuthMiddleware(t *testing.T) {
 				handled = true
 				if tt.authorization != "" && tt.wantStatus == http.StatusOK {
 					if got, ok := c.Get(auth.UserIDKey); !ok || got != authTestUserID {
-						t.Fatalf("gin user id = %#v, %v; want %s, true", got, ok, authTestUserID)
+						require.True(t, ok)
+						require.Equal(t, authTestUserID, got)
 					}
 					if got, ok := auth.UserIDFromContext(c.Request.Context()); !ok || got != authTestUserID {
-						t.Fatalf("context user id = %q, %v; want %s, true", got, ok, authTestUserID)
+						require.True(t, ok)
+						require.Equal(t, authTestUserID, got)
 					}
 					if got, ok := c.Get(auth.SessionIDKey); !ok || got != "s-123" {
-						t.Fatalf("gin session id = %#v, %v; want s-123, true", got, ok)
+						require.True(t, ok)
+						require.Equal(t, "s-123", got)
 					}
 					if got, ok := auth.SessionIDFromContext(c.Request.Context()); !ok || got != "s-123" {
-						t.Fatalf("context session id = %q, %v; want s-123, true", got, ok)
+						require.True(t, ok)
+						require.Equal(t, "s-123", got)
 					}
 				}
 				c.Status(http.StatusOK)
@@ -117,34 +122,28 @@ func TestAuthMiddleware(t *testing.T) {
 			}
 			engine.ServeHTTP(recorder, request)
 
-			if recorder.Code != tt.wantStatus {
-				t.Fatalf("status = %d, want %d", recorder.Code, tt.wantStatus)
-			}
-			if handled != tt.wantHandled {
-				t.Fatalf("handled = %v, want %v", handled, tt.wantHandled)
-			}
+			require.Equal(t, tt.wantStatus, recorder.Code)
+			require.Equal(t, tt.wantHandled, handled)
 			entry := assertAuthLog(t, logs, tt.wantLogLevel, tt.wantLogMsg)
 			if tt.wantLogMsg != "" {
 				assertAuthFailureFields(t, entry.ContextMap(), tt.path)
 				if tt.wantMismatch {
 					fields := entry.ContextMap()
-					if fields["user_id"] != authTestUserID || fields["current_token_version"] != int64(3) || fields["token_version"] != int64(1) {
-						t.Fatalf("token mismatch fields = %#v", fields)
-					}
+					require.Equal(t, authTestUserID, fields["user_id"])
+					require.Equal(t, int64(3), fields["current_token_version"])
+					require.Equal(t, int64(1), fields["token_version"])
 				}
 			}
 			if tt.wantCode != 0 {
 				var envelope response.Envelope
-				if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
-					t.Fatalf("unmarshal response: %v", err)
-				}
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
 				wantMessage := response.MessageAuthInvalid
 				if tt.wantStatus == http.StatusInternalServerError {
 					wantMessage = response.MessageInternalError
 				}
-				if envelope.Success || envelope.Code != tt.wantCode || envelope.Message != wantMessage {
-					t.Fatalf("envelope = %#v", envelope)
-				}
+				require.False(t, envelope.Success)
+				require.Equal(t, tt.wantCode, envelope.Code)
+				require.Equal(t, wantMessage, envelope.Message)
 			}
 		})
 	}
@@ -166,44 +165,40 @@ func TestAuthMiddlewareExpiredTokenDoesNotCallVersionValidator(t *testing.T) {
 	request.Header.Set(auth.AuthorizationHeader, auth.TokenPrefix+expiredToken)
 	engine.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
-	}
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
 }
 
 func assertAuthLog(t *testing.T, logs *observer.ObservedLogs, wantLevel zapcore.Level, wantMsg string) observer.LoggedEntry {
 	t.Helper()
 	entries := logs.All()
 	if wantMsg == "" {
-		if len(entries) != 0 {
-			t.Fatalf("logs = %#v, want none", entries)
-		}
+		require.Empty(t, entries)
 		return observer.LoggedEntry{}
 	}
 
 	for _, entry := range entries {
-		if wantLevel < zapcore.ErrorLevel && entry.Level >= zapcore.ErrorLevel {
-			t.Fatalf("unexpected error log: level=%s msg=%q", entry.Level, entry.Message)
-		}
+		require.False(t, wantLevel < zapcore.ErrorLevel && entry.Level >= zapcore.ErrorLevel, "unexpected error log: level=%s msg=%q", entry.Level, entry.Message)
 	}
 
+	var found observer.LoggedEntry
+	foundEntry := false
 	for _, entry := range entries {
 		if entry.Level == wantLevel && entry.Message == wantMsg {
-			return entry
+			found = entry
+			foundEntry = true
+			break
 		}
 	}
-	t.Fatalf("missing log level=%s msg=%q in %#v", wantLevel, wantMsg, entries)
-	return observer.LoggedEntry{}
+	require.True(t, foundEntry, "missing log level=%s msg=%q in %#v", wantLevel, wantMsg, entries)
+	return found
 }
 
 func assertAuthFailureFields(t *testing.T, fields map[string]any, _ string) {
 	t.Helper()
-	if fields["method"] != http.MethodGet || fields["path"] != "/*path" || fields["user_agent"] != "auth-test-agent" {
-		t.Fatalf("auth failure log fields = %#v", fields)
-	}
-	if _, ok := fields["client_ip"]; !ok {
-		t.Fatalf("auth failure log missing client_ip: %#v", fields)
-	}
+	require.Equal(t, http.MethodGet, fields["method"])
+	require.Equal(t, "/*path", fields["path"])
+	require.Equal(t, "auth-test-agent", fields["user_agent"])
+	require.Contains(t, fields, "client_ip")
 }
 
 func signAuthTestToken(t *testing.T, secret, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {
@@ -213,17 +208,13 @@ func signAuthTestToken(t *testing.T, secret, userID string, tokenVersion int64, 
 func signAuthSubjectTestToken(t *testing.T, secret, subject, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {
 	t.Helper()
 	tokenID, err := runtimeid.NewUUID()
-	if err != nil {
-		t.Fatalf("NewUUID: %v", err)
-	}
+	require.NoError(t, err)
 	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, auth.Claims{
 		UserID:           userID,
 		TokenVersion:     tokenVersion,
 		SessionID:        sessionID,
 		RegisteredClaims: jwtv5.RegisteredClaims{ID: tokenID.String(), Subject: subject, ExpiresAt: jwtv5.NewNumericDate(expiresAt)},
 	}).SignedString([]byte(secret))
-	if err != nil {
-		t.Fatalf("SignedString: %v", err)
-	}
+	require.NoError(t, err)
 	return token
 }

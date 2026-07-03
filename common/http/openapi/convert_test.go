@@ -3,10 +3,10 @@ package openapi
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConvertSwagger2JSONAppliesOptions(t *testing.T) {
@@ -23,89 +23,53 @@ func TestConvertSwagger2JSONAppliesOptions(t *testing.T) {
 			},
 		},
 	})
-	if err != nil {
-		t.Fatalf("ConvertSwagger2JSON() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	var doc openapi3.T
-	if err := json.Unmarshal(document.JSON, &doc); err != nil {
-		t.Fatalf("unmarshal OpenAPI JSON: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(document.JSON, &doc))
 
-	if document.OpenAPI != "3.0.3" || doc.OpenAPI != "3.0.3" {
-		t.Fatalf("OpenAPI version = %q/%q, want 3.0.3", document.OpenAPI, doc.OpenAPI)
-	}
-	if document.PathCount != 2 {
-		t.Fatalf("PathCount = %d, want 2", document.PathCount)
-	}
-	if len(doc.Servers) != 1 || doc.Servers[0].URL != "/service" {
-		t.Fatalf("global servers = %#v, want /service", doc.Servers)
-	}
+	require.Equal(t, "3.0.3", document.OpenAPI)
+	require.Equal(t, "3.0.3", doc.OpenAPI)
+	require.Equal(t, 2, document.PathCount)
+	require.Len(t, doc.Servers, 1)
+	require.Equal(t, "/service", doc.Servers[0].URL)
 
 	healthPath := doc.Paths.Find("/healthz")
-	if healthPath == nil {
-		t.Fatal("missing /healthz path")
-	}
-	if len(healthPath.Servers) != 1 || healthPath.Servers[0].URL != "/" {
-		t.Fatalf("/healthz servers = %#v, want /", healthPath.Servers)
-	}
+	require.NotNil(t, healthPath)
+	require.Len(t, healthPath.Servers, 1)
+	require.Equal(t, "/", healthPath.Servers[0].URL)
 
 	scheme := doc.Components.SecuritySchemes["TokenAuth"]
-	if scheme == nil || scheme.Value == nil {
-		t.Fatal("missing TokenAuth security scheme")
-	}
-	if scheme.Value.Type != "http" || scheme.Value.Scheme != "bearer" || scheme.Value.BearerFormat != "JWT" {
-		t.Fatalf("TokenAuth = %#v, want JWT bearer scheme", scheme.Value)
-	}
-	if scheme.Value.Description != "输入访问令牌。" {
-		t.Fatalf("TokenAuth description = %q", scheme.Value.Description)
-	}
-	if len(document.YAML) == 0 {
-		t.Fatal("YAML output is empty")
-	}
+	require.NotNil(t, scheme)
+	require.NotNil(t, scheme.Value)
+	require.Equal(t, "http", scheme.Value.Type)
+	require.Equal(t, "bearer", scheme.Value.Scheme)
+	require.Equal(t, "JWT", scheme.Value.BearerFormat)
+	require.Equal(t, "输入访问令牌。", scheme.Value.Description)
+	require.NotEmpty(t, document.YAML)
 }
 
 func TestConvertSwagger2JSONWithoutOptionsDoesNotInjectServiceValues(t *testing.T) {
 	document, err := ConvertSwagger2JSON(context.Background(), swaggerFixture(), ConvertOptions{})
-	if err != nil {
-		t.Fatalf("ConvertSwagger2JSON() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	var doc openapi3.T
-	if err := json.Unmarshal(document.JSON, &doc); err != nil {
-		t.Fatalf("unmarshal OpenAPI JSON: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(document.JSON, &doc))
 
-	if doc.OpenAPI != DefaultOpenAPIVersion {
-		t.Fatalf("OpenAPI version = %q, want %q", doc.OpenAPI, DefaultOpenAPIVersion)
-	}
-	if len(doc.Servers) != 0 {
-		t.Fatalf("servers = %#v, want none", doc.Servers)
-	}
-	if strings.Contains(string(document.JSON), "/service") {
-		t.Fatal("JSON output contains option-specific /service")
-	}
-	if strings.Contains(string(document.JSON), "TokenAuth") {
-		t.Fatal("JSON output contains option-specific TokenAuth")
-	}
+	require.Equal(t, DefaultOpenAPIVersion, doc.OpenAPI)
+	require.Empty(t, doc.Servers)
+	require.NotContains(t, string(document.JSON), "/service")
+	require.NotContains(t, string(document.JSON), "TokenAuth")
 
 	healthPath := doc.Paths.Find("/healthz")
-	if healthPath == nil {
-		t.Fatal("missing /healthz path")
-	}
-	if len(healthPath.Servers) != 0 {
-		t.Fatalf("/healthz servers = %#v, want none", healthPath.Servers)
-	}
+	require.NotNil(t, healthPath)
+	require.Empty(t, healthPath.Servers)
 }
 
 func TestConvertSwagger2JSONRejectsInvalidInput(t *testing.T) {
 	_, err := ConvertSwagger2JSON(context.Background(), []byte("{"), ConvertOptions{})
-	if err == nil {
-		t.Fatal("ConvertSwagger2JSON() error = nil, want error")
-	}
-	if !strings.Contains(err.Error(), "decode Swagger input") {
-		t.Fatalf("error = %q, want decode Swagger input", err)
-	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "decode Swagger input")
 }
 
 func swaggerFixture() []byte {
