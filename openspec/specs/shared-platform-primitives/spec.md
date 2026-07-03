@@ -357,6 +357,34 @@
 - **WHEN** 测试需要生成用户、角色、权限或其他输入数据
 - **THEN** 测试 MUST 优先使用共享 fixture 或本 feature 内明确的 builder，避免随机数据破坏可重复性
 
+### Requirement: 测试断言与失败处理风格
+
+测试代码中的断言与失败处理 MUST 优先使用 `testify/require`，以提升测试可读性、减少手写失败判断样板代码、统一阻塞式失败处理方式，并提供一致、清晰的失败诊断信息。
+
+#### Scenario: 常见阻塞式断言
+
+- **WHEN** 测试需要检查错误返回值、前置条件、对象相等性、布尔条件、集合长度、错误类型或状态
+- **THEN** 测试 MUST 使用语义化的 `require` 断言方法，例如 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.True`、`require.False`、`require.Len`、`require.NotNil`
+- **AND** 测试 SHOULD NOT 直接使用 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf` 表达这些常见断言
+
+#### Scenario: 避免机械 Fail 替换
+
+- **WHEN** 测试迁移手写失败判断或新增失败处理
+- **THEN** 测试 SHOULD NOT 将 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf` 机械替换为 `require.FailNow`、`require.FailNowf`、`require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf`
+- **AND** 当存在明确的语义化 `require` 或 `assert` 断言方法时，测试 MUST 优先使用对应断言方法
+
+#### Scenario: 非阻塞式独立断言
+
+- **WHEN** 单个测试用例需要在一次执行中继续收集多个相互独立的断言失败
+- **THEN** 测试 MAY 使用 `testify/assert` 进行非阻塞式断言
+- **AND** 初始化失败、前置条件失败或后续检查依赖当前结果的场景 MUST 使用 `testify/require` 立即终止当前测试
+
+#### Scenario: 保留特殊失败控制流
+
+- **WHEN** 测试存在无法通过现有 `require` 或 `assert` 语义化断言清晰表达的自定义测试控制流、特殊诊断输出，或测试辅助工具不适合依赖 `testify`
+- **THEN** 测试 MAY 直接使用 `t.Fatal`、`t.Fatalf`、`t.Error`、`t.Errorf`、`require.FailNowf` 或 `assert.Failf`
+- **AND** 此类用法 SHOULD 让保留原因在代码上下文中保持清晰
+
 ### Requirement: common 边界 mock 生成规范
 
 系统 MUST 为 `common` 中适合 expectation 表达的边界 interface 测试 double 提供 package-local mockgen 生成入口。生成 mock MUST 仅用于对应 package 的测试，系统 MUST NOT 创建 `common/mocks`、全局 `mocks/`、`testmocks/` 或等价中央 mock 仓库。

@@ -45,7 +45,43 @@ user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration
 make user-service-test
 ```
 
-## 4. 架构边界测试
+## 4. 断言和失败处理
+
+测试断言与失败处理优先使用 `testify/require`，用阻塞式失败减少后续空指针、错误状态级联和手写判断样板。常见检查应使用语义化断言方法：
+
+- 错误返回值：`require.NoError`、`require.Error`、`require.ErrorIs`。
+- 对象和值：`require.Equal`、`require.NotEqual`、`require.Nil`、`require.NotNil`。
+- 布尔条件和状态：`require.True`、`require.False`。
+- 集合和字符串：`require.Len`、`require.Empty`、`require.NotEmpty`、`require.Contains`。
+
+不要把手写失败判断机械替换成 `require.FailNow`、`require.FailNowf`、`require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf`。存在明确语义化断言时，必须优先使用对应的 `require` 或 `assert` 方法。
+
+可接受示例：
+
+```go
+got, err := service.Handle(ctx, input)
+require.NoError(t, err)
+require.NotNil(t, got)
+require.Equal(t, wantID, got.ID)
+require.Len(t, got.Items, 2)
+```
+
+避免示例：
+
+```go
+if err != nil {
+    t.Fatalf("handle failed: %v", err)
+}
+if got.ID != wantID {
+    t.Errorf("id = %s, want %s", got.ID, wantID)
+}
+```
+
+当一个测试需要在单次执行中收集多个相互独立的断言失败时，可以使用 `testify/assert`。初始化失败、前置条件失败，或后续检查依赖当前结果时，仍然使用 `require` 立即终止当前测试。
+
+直接使用 `t.Fatal`、`t.Fatalf`、`t.Error`、`t.Errorf`、`require.FailNowf` 或 `assert.Failf` 仅限于无法通过现有语义化断言清晰表达的自定义测试控制流、特殊诊断输出，或测试辅助工具不适合依赖 `testify` 的场景。保留此类用法时，应让原因在代码上下文中保持清晰。
+
+## 5. 架构边界测试
 
 架构检查脚本位于 `user-service/scripts/architecture-lint.sh`，覆盖：
 
@@ -62,7 +98,7 @@ make user-service-test
 make user-service-architecture-lint
 ```
 
-## 5. OpenAPI drift
+## 6. OpenAPI drift
 
 API 注解、路由、request、response 或共享 OpenAPI helper 变化后，执行：
 
@@ -73,7 +109,7 @@ git diff -- user-service/docs/openapi.go user-service/docs/openapi.json user-ser
 
 若生成物有变化，应随代码一起提交。
 
-## 6. Ent 和 migration 验证
+## 7. Ent 和 migration 验证
 
 Ent schema 变化后执行：
 
@@ -87,7 +123,7 @@ make user-service-migrate-validate
 
 部署资产变更还应检查 Compose、Kubernetes 和 Helm 渲染结果不包含自动执行 `atlas migrate apply` 的 Job、service、command 或 args；普通 user-service 运行时镜像应确认不包含 `/usr/local/bin/atlas`。
 
-## 7. 观测资产验证
+## 8. 观测资产验证
 
 通用 Grafana dashboard 变化后执行：
 
@@ -98,7 +134,7 @@ make compose-dashboard-check
 
 Prometheus alert 或 dashboard 变更需要同时检查 `deployments/observability/` 和 `deployments/compose/` 中的对应资产。
 
-## 8. OPSX 文档和规格验证
+## 9. OPSX 文档和规格验证
 
 变更 OPSX 文档或 OpenSpec specs 后执行：
 
