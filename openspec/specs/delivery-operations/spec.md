@@ -53,6 +53,39 @@
 - **AND** 协作者 MUST 先将本次预期代码和文档变更加到暂存区
 - **AND** `make verify` 的最终 `git diff --exit-code` MUST 用于暴露生成物 drift 或未纳入暂存区的意外变更
 
+### Requirement: Go 测试断言与失败处理
+
+Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、数值、集合、字符串、专属类型和前置条件等语义化断言，并通过立即失败机制减少后续空指针、错误状态级联和手写判断样板。当 `testify` 已提供更具体的语义化断言时，测试 MUST 使用对应断言，而不是通过 `True`、`False`、手写 `if` 或组合多个基础断言来表达同一语义。
+
+#### Scenario: 使用语义化 require 断言
+
+- **WHEN** Go 测试断言错误返回值、对象和值、数值范围、集合、字符串或专属类型行为
+- **THEN** 测试 MUST 优先使用 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.ErrorContains`、`require.Equal`、`require.NotEqual`、`require.Nil`、`require.NotNil`、`require.Greater`、`require.Less`、`require.GreaterOrEqual`、`require.Len`、`require.Empty`、`require.Contains`、`require.ElementsMatch`、`require.JSONEq`、`require.Regexp`、`require.WithinDuration`、`require.Panics` 或等价语义化断言
+- **AND** 测试 MUST NOT 使用 `require.True`、`require.False`、手写 `if` 或多个基础断言拼凑上述已有语义化断言可以清晰覆盖的检查
+
+#### Scenario: 布尔状态断言例外
+
+- **WHEN** 测试断言对象自身暴露的布尔状态、channel 是否关闭等本质上就是布尔值的结果，且 `testify` 没有更具体的语义化断言
+- **THEN** 测试 MAY 使用 `require.True` 或 `require.False`
+
+#### Scenario: 多个独立失败收集
+
+- **WHEN** 单个测试需要在一次执行中收集多个相互独立的断言失败，且后续检查不依赖前置检查成功
+- **THEN** 测试 MAY 使用 `testify/assert` 表达这些独立检查
+- **AND** 初始化失败、前置条件失败或后续检查依赖当前结果时，测试 MUST 使用 `require` 立即终止当前测试
+
+#### Scenario: 禁止机械 Fail 替换
+
+- **WHEN** 测试迁移或新增失败处理
+- **THEN** 测试 MUST NOT 将手写失败判断机械替换成 `require.FailNow`、`require.FailNowf`、`require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf`
+- **AND** 存在明确语义化断言时，测试 MUST 优先使用对应的 `require` 或 `assert` 方法
+
+#### Scenario: 保留 testing.T 失败方法例外
+
+- **WHEN** 测试仍直接使用 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf`
+- **THEN** 该用法 MUST 属于无法通过现有语义化断言清晰表达的自定义测试控制流、特殊诊断输出，或测试辅助工具不适合依赖 `testify` 的场景
+- **AND** 保留原因 MUST 在代码上下文中保持清晰
+
 ### Requirement: Go 生成物 drift 校验
 
 系统 MUST 将 mock 生成物和 metrics no-op 生成物纳入 Go 生成与交付验证流程。完整验证 MUST 能在生成物过期、缺失或未提交时通过 drift 检查失败。认证 HTTP controller 使用的 use case mock MUST 由 auth HTTP transport 本地 `mock_generate.go` 声明，并由仓库约定生成命令维护。

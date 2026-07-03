@@ -47,12 +47,16 @@ make user-service-test
 
 ## 4. 断言和失败处理
 
-测试断言与失败处理优先使用 `testify/require`，用阻塞式失败减少后续空指针、错误状态级联和手写判断样板。常见检查应使用语义化断言方法：
+测试断言与失败处理优先使用 `testify/require`，通过立即失败机制减少后续空指针、错误状态级联和手写判断样板。测试应优先使用能够准确表达意图的语义化断言，而不是通过 `True`、`False`、手写 `if` 或组合多个基础断言来表达同一语义。
 
-- 错误返回值：`require.NoError`、`require.Error`、`require.ErrorIs`。
+当 `testify` 已提供更具体的语义化断言时，应优先使用对应断言，从而让失败信息包含具体差异、缺失项或冲突项，而不是只输出模糊的 `Expected true, got false`。常见检查应使用语义化断言方法：
+
+- 错误返回值：`require.NoError`、`require.Error`、`require.ErrorIs`、`require.ErrorContains`。
 - 对象和值：`require.Equal`、`require.NotEqual`、`require.Nil`、`require.NotNil`。
-- 布尔条件和状态：`require.True`、`require.False`。
-- 集合和字符串：`require.Len`、`require.Empty`、`require.NotEmpty`、`require.Contains`。
+- 数值与范围：`require.Greater`、`require.Less`、`require.GreaterOrEqual`、`require.LessOrEqual`。
+- 集合和字符串：`require.Len`、`require.Empty`、`require.NotEmpty`、`require.Contains`、`require.ElementsMatch`。
+- 专属类型断言：当知晓 `testify` 已提供更精确匹配的专属方法时，优先使用 `require.JSONEq`、`require.Regexp`、`require.WithinDuration`、`require.Panics` 等方法，避免组合多个基础断言拼凑复杂自定义逻辑。
+- 布尔状态：只有断言本身就是布尔状态，或没有更具体的语义化方法时，才使用 `require.True` 或 `require.False`。
 
 不要把手写失败判断机械替换成 `require.FailNow`、`require.FailNowf`、`require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf`。存在明确语义化断言时，必须优先使用对应的 `require` 或 `assert` 方法。
 
@@ -64,6 +68,9 @@ require.NoError(t, err)
 require.NotNil(t, got)
 require.Equal(t, wantID, got.ID)
 require.Len(t, got.Items, 2)
+require.ElementsMatch(t, wantTags, got.Tags)
+require.Greater(t, got.Score, 0)
+require.True(t, cache.IsReady())
 ```
 
 避免示例：
@@ -75,11 +82,14 @@ if err != nil {
 if got.ID != wantID {
     t.Errorf("id = %s, want %s", got.ID, wantID)
 }
+require.True(t, len(got.Items) == 2)
+require.True(t, got.Score > 0)
+require.True(t, strings.Contains(err.Error(), "timeout"))
 ```
 
 当一个测试需要在单次执行中收集多个相互独立的断言失败时，可以使用 `testify/assert`。初始化失败、前置条件失败，或后续检查依赖当前结果时，仍然使用 `require` 立即终止当前测试。
 
-直接使用 `t.Fatal`、`t.Fatalf`、`t.Error`、`t.Errorf`、`require.FailNowf` 或 `assert.Failf` 仅限于无法通过现有语义化断言清晰表达的自定义测试控制流、特殊诊断输出，或测试辅助工具不适合依赖 `testify` 的场景。保留此类用法时，应让原因在代码上下文中保持清晰。
+直接使用 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf` 仅限于无法通过现有语义化断言清晰表达的自定义测试控制流、特殊诊断输出，或测试辅助工具不适合依赖 `testify` 的场景。保留此类用法时，应让原因在代码上下文中保持清晰。
 
 ## 5. 架构边界测试
 
