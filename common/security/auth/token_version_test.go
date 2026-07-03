@@ -1,25 +1,19 @@
 package auth
 
 import (
-	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateTokenVersion(t *testing.T) {
-	if err := ValidateTokenVersion(2, 2); err != nil {
-		t.Fatalf("ValidateTokenVersion matched version: %v", err)
-	}
+	require.NoError(t, ValidateTokenVersion(2, 2))
 
 	err := ValidateTokenVersion(1, 2)
-	if !errors.Is(err, ErrTokenVersionMismatch) {
-		t.Fatalf("err = %v, want ErrTokenVersionMismatch", err)
-	}
+	require.ErrorIs(t, err, ErrTokenVersionMismatch)
 
 	var mismatch *TokenVersionMismatchError
-	if !errors.As(err, &mismatch) {
-		t.Fatalf("err = %T, want TokenVersionMismatchError", err)
-	}
-	if mismatch.Token != 1 || mismatch.Current != 2 {
-		t.Fatalf("mismatch = %#v, want token=1 current=2", mismatch)
-	}
+	require.ErrorAs(t, err, &mismatch)
+	require.Equal(t, int64(1), mismatch.Token)
+	require.Equal(t, int64(2), mismatch.Current)
 }

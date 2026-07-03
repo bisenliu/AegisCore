@@ -2,12 +2,12 @@ package scheduler
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	redis "github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRedisLockerAcquireUnlockAndReacquire(t *testing.T) {
@@ -15,38 +15,21 @@ func TestRedisLockerAcquireUnlockAndReacquire(t *testing.T) {
 	locker := newTestRedisLocker(t, client)
 
 	lock, ok, err := locker.Acquire(context.Background(), "nightly", time.Minute, 0)
-	if err != nil {
-		t.Fatalf("Acquire: %v", err)
-	}
-	if !ok {
-		t.Fatal("Acquire ok = false, want true")
-	}
-	if !server.Exists("aegiscore:cron:nightly") {
-		t.Fatal("lock key was not created")
-	}
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.True(t, server.Exists("aegiscore:cron:nightly"), "lock key was not created")
 
 	secondLock, ok, err := locker.Acquire(context.Background(), "nightly", time.Minute, 0)
-	if err != nil {
-		t.Fatalf("second Acquire: %v", err)
-	}
-	if ok || secondLock != nil {
-		t.Fatalf("second Acquire = (%v, %v), want busy", secondLock, ok)
-	}
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.Nil(t, secondLock)
 
-	if err := lock.Unlock(context.Background()); err != nil {
-		t.Fatalf("Unlock: %v", err)
-	}
-	if server.Exists("aegiscore:cron:nightly") {
-		t.Fatal("lock key still exists after unlock")
-	}
+	require.NoError(t, lock.Unlock(context.Background()))
+	require.False(t, server.Exists("aegiscore:cron:nightly"), "lock key still exists after unlock")
 
 	_, ok, err = locker.Acquire(context.Background(), "nightly", time.Minute, 0)
-	if err != nil {
-		t.Fatalf("reacquire: %v", err)
-	}
-	if !ok {
-		t.Fatal("reacquire ok = false, want true")
-	}
+	require.NoError(t, err)
+	require.True(t, ok)
 }
 
 func TestRedisLockUnlockRejectsLostOwnership(t *testing.T) {
@@ -54,20 +37,12 @@ func TestRedisLockUnlockRejectsLostOwnership(t *testing.T) {
 	locker := newTestRedisLocker(t, client)
 
 	lock, ok, err := locker.Acquire(context.Background(), "nightly", time.Minute, 0)
-	if err != nil {
-		t.Fatalf("Acquire: %v", err)
-	}
-	if !ok {
-		t.Fatal("Acquire ok = false, want true")
-	}
-	if err := client.Set(context.Background(), "aegiscore:cron:nightly", "other-owner", time.Minute).Err(); err != nil {
-		t.Fatalf("Set other owner: %v", err)
-	}
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.NoError(t, client.Set(context.Background(), "aegiscore:cron:nightly", "other-owner", time.Minute).Err())
 
 	err = lock.Unlock(context.Background())
-	if !errors.Is(err, ErrLockNotOwned) {
-		t.Fatalf("Unlock err = %v, want ErrLockNotOwned", err)
-	}
+	require.ErrorIs(t, err, ErrLockNotOwned)
 }
 
 func TestRedisLockRenewExtendsTTL(t *testing.T) {
@@ -75,22 +50,14 @@ func TestRedisLockRenewExtendsTTL(t *testing.T) {
 	locker := newTestRedisLocker(t, client)
 
 	lock, ok, err := locker.Acquire(context.Background(), "nightly", 2*time.Second, 0)
-	if err != nil {
-		t.Fatalf("Acquire: %v", err)
-	}
-	if !ok {
-		t.Fatal("Acquire ok = false, want true")
-	}
+	require.NoError(t, err)
+	require.True(t, ok)
 
 	server.FastForward(1500 * time.Millisecond)
-	if err := lock.Renew(context.Background(), 5*time.Second); err != nil {
-		t.Fatalf("Renew: %v", err)
-	}
+	require.NoError(t, lock.Renew(context.Background(), 5*time.Second))
 
 	ttl := server.TTL("aegiscore:cron:nightly")
-	if ttl <= 3*time.Second {
-		t.Fatalf("ttl = %s, want renewed ttl over 3s", ttl)
-	}
+	require.Greater(t, ttl, 3*time.Second)
 }
 
 func TestRedisLockerWaitTimeoutReturnsBusy(t *testing.T) {
@@ -98,27 +65,18 @@ func TestRedisLockerWaitTimeoutReturnsBusy(t *testing.T) {
 	locker := newTestRedisLocker(t, client)
 
 	firstLock, ok, err := locker.Acquire(context.Background(), "nightly", time.Minute, 0)
-	if err != nil {
-		t.Fatalf("first Acquire: %v", err)
-	}
-	if !ok {
-		t.Fatal("first Acquire ok = false, want true")
-	}
+	require.NoError(t, err)
+	require.True(t, ok)
 	defer func() {
 		_ = firstLock.Unlock(context.Background())
 	}()
 
 	startedAt := time.Now()
 	lock, ok, err := locker.Acquire(context.Background(), "nightly", time.Minute, 25*time.Millisecond)
-	if err != nil {
-		t.Fatalf("second Acquire: %v", err)
-	}
-	if ok || lock != nil {
-		t.Fatalf("second Acquire = (%v, %v), want busy", lock, ok)
-	}
-	if elapsed := time.Since(startedAt); elapsed < 20*time.Millisecond {
-		t.Fatalf("wait elapsed = %s, want at least 20ms", elapsed)
-	}
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.Nil(t, lock)
+	require.GreaterOrEqual(t, time.Since(startedAt), 20*time.Millisecond)
 }
 
 func TestRedisLockerMaxAttemptsLimitsRetries(t *testing.T) {
@@ -132,59 +90,36 @@ func TestRedisLockerMaxAttemptsLimitsRetries(t *testing.T) {
 			MaxAttempts:     1,
 		},
 	})
-	if err != nil {
-		t.Fatalf("NewRedisLocker: %v", err)
-	}
+	require.NoError(t, err)
 
 	firstLock, ok, err := locker.Acquire(context.Background(), "nightly", time.Minute, 0)
-	if err != nil {
-		t.Fatalf("first Acquire: %v", err)
-	}
-	if !ok {
-		t.Fatal("first Acquire ok = false, want true")
-	}
+	require.NoError(t, err)
+	require.True(t, ok)
 	defer func() {
 		_ = firstLock.Unlock(context.Background())
 	}()
 
 	startedAt := time.Now()
 	lock, ok, err := locker.Acquire(context.Background(), "nightly", time.Minute, time.Second)
-	if err != nil {
-		t.Fatalf("second Acquire: %v", err)
-	}
-	if ok || lock != nil {
-		t.Fatalf("second Acquire = (%v, %v), want busy", lock, ok)
-	}
-	if elapsed := time.Since(startedAt); elapsed > 100*time.Millisecond {
-		t.Fatalf("elapsed = %s, want fast return after max attempts", elapsed)
-	}
+	require.NoError(t, err)
+	require.False(t, ok)
+	require.Nil(t, lock)
+	require.LessOrEqual(t, time.Since(startedAt), 100*time.Millisecond)
 }
 
 func TestRetryPolicyDefaultsAndBackoff(t *testing.T) {
 	policy, err := normalizeRetryPolicy(RetryPolicy{})
-	if err != nil {
-		t.Fatalf("normalizeRetryPolicy: %v", err)
-	}
-	if policy.InitialInterval != 50*time.Millisecond {
-		t.Fatalf("initial interval = %s, want 50ms", policy.InitialInterval)
-	}
-	if policy.MaxInterval != time.Second {
-		t.Fatalf("max interval = %s, want 1s", policy.MaxInterval)
-	}
+	require.NoError(t, err)
+	require.Equal(t, 50*time.Millisecond, policy.InitialInterval)
+	require.Equal(t, time.Second, policy.MaxInterval)
 
 	delay := policy.InitialInterval
 	delay = nextRetryDelay(delay, policy.MaxInterval)
-	if delay != 100*time.Millisecond {
-		t.Fatalf("first backoff = %s, want 100ms", delay)
-	}
+	require.Equal(t, 100*time.Millisecond, delay)
 	delay = nextRetryDelay(800*time.Millisecond, policy.MaxInterval)
-	if delay != time.Second {
-		t.Fatalf("capped backoff = %s, want 1s", delay)
-	}
+	require.Equal(t, time.Second, delay)
 	delay = nextRetryDelay(time.Second, policy.MaxInterval)
-	if delay != time.Second {
-		t.Fatalf("max backoff = %s, want 1s", delay)
-	}
+	require.Equal(t, time.Second, delay)
 }
 
 func TestRetryPolicyRejectsInvalidIntervals(t *testing.T) {
@@ -192,9 +127,7 @@ func TestRetryPolicyRejectsInvalidIntervals(t *testing.T) {
 		InitialInterval: time.Second,
 		MaxInterval:     time.Millisecond,
 	})
-	if !errors.Is(err, ErrInvalidLock) {
-		t.Fatalf("normalizeRetryPolicy err = %v, want ErrInvalidLock", err)
-	}
+	require.ErrorIs(t, err, ErrInvalidLock)
 }
 
 func newMiniRedisClient(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
@@ -202,9 +135,7 @@ func newMiniRedisClient(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 	server := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
 	t.Cleanup(func() {
-		if err := client.Close(); err != nil {
-			t.Fatalf("Close redis client: %v", err)
-		}
+		require.NoError(t, client.Close())
 	})
 	return server, client
 }
@@ -219,8 +150,6 @@ func newTestRedisLocker(t *testing.T, client redis.UniversalClient) *RedisLocker
 			MaxInterval:     5 * time.Millisecond,
 		},
 	})
-	if err != nil {
-		t.Fatalf("NewRedisLocker: %v", err)
-	}
+	require.NoError(t, err)
 	return locker
 }

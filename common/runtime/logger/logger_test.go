@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -28,9 +29,7 @@ func TestNewWritesClassifiedFiles(t *testing.T) {
 		MaxSizeMB:  1,
 		MaxBackups: 1,
 	})
-	if err != nil {
-		t.Fatalf("NewWithConfig: %v", err)
-	}
+	require.NoError(t, err, "NewWithConfig")
 	ctx := contextWithSpanContext(context.Background(), t, "00112233445566778899aabbccddeeff", "0102030405060708")
 	ctx = ToContext(ctx, log)
 
@@ -38,9 +37,7 @@ func TestNewWritesClassifiedFiles(t *testing.T) {
 	Info(ctx, "info message", zap.String("example", "logger.Info(ctx, ...)"))
 	Warn(ctx, "warn message")
 	Error(ctx, "error message")
-	if err := log.Sync(); err != nil {
-		t.Fatalf("Sync: %v", err)
-	}
+	require.NoError(t, log.Sync(), "Sync")
 
 	date := time.Now().Format("2006-01-02")
 	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "all"), "debug message", "info message", "warn message", "error message", `"trace_id":"00112233445566778899aabbccddeeff"`, `"span_id":"0102030405060708"`)
@@ -65,15 +62,11 @@ func TestSQLLoggerWritesAllAndSQLFiles(t *testing.T) {
 		MaxSizeMB:  1,
 		MaxBackups: 1,
 	})
-	if err != nil {
-		t.Fatalf("NewWithConfig: %v", err)
-	}
+	require.NoError(t, err, "NewWithConfig")
 
 	Info(ToContext(context.Background(), SQL(log)), "ent sql debug", zap.String("statement", "SELECT 1"))
 	Info(ToContext(context.Background(), log), "regular info")
-	if err := log.Sync(); err != nil {
-		t.Fatalf("Sync: %v", err)
-	}
+	require.NoError(t, log.Sync(), "Sync")
 
 	date := time.Now().Format("2006-01-02")
 	assertFileContains(t, datedPath(dir, "aegiscore-test", date, "all"), "ent sql debug", "regular info", "SELECT 1")
@@ -95,15 +88,11 @@ func TestErrorDoesNotIncludeStacktraceByDefault(t *testing.T) {
 		MaxSizeMB:  1,
 		MaxBackups: 1,
 	})
-	if err != nil {
-		t.Fatalf("NewWithConfig: %v", err)
-	}
+	require.NoError(t, err, "NewWithConfig")
 	ctx := ToContext(context.Background(), log)
 
 	Error(ctx, "error without stacktrace")
-	if err := log.Sync(); err != nil {
-		t.Fatalf("Sync: %v", err)
-	}
+	require.NoError(t, log.Sync(), "Sync")
 
 	path := datedPath(dir, "aegiscore-test", time.Now().Format("2006-01-02"), "error")
 	assertFileContains(t, path, "error without stacktrace", `"caller"`)
@@ -122,15 +111,11 @@ func TestExplicitStacktraceField(t *testing.T) {
 		MaxSizeMB:  1,
 		MaxBackups: 1,
 	})
-	if err != nil {
-		t.Fatalf("NewWithConfig: %v", err)
-	}
+	require.NoError(t, err, "NewWithConfig")
 	ctx := ToContext(context.Background(), log)
 
 	Error(ctx, "error with stacktrace", StackTrace()...)
-	if err := log.Sync(); err != nil {
-		t.Fatalf("Sync: %v", err)
-	}
+	require.NoError(t, log.Sync(), "Sync")
 
 	assertFileContains(t, datedPath(dir, "aegiscore-test", time.Now().Format("2006-01-02"), "error"), "error with stacktrace", `"stacktrace"`)
 }
@@ -143,13 +128,10 @@ func TestWithContextAddsOTelTraceAndSpanFields(t *testing.T) {
 	WithContext(ctx, log).Info("otel fields")
 
 	entries := logs.FilterMessage("otel fields").All()
-	if len(entries) != 1 {
-		t.Fatalf("log count = %d, want 1", len(entries))
-	}
+	require.Len(t, entries, 1, "log count")
 	fields := entries[0].ContextMap()
-	if fields[TraceIDField] != "00112233445566778899aabbccddeeff" || fields[SpanIDField] != "0102030405060708" {
-		t.Fatalf("otel fields = %#v", fields)
-	}
+	require.Equal(t, "00112233445566778899aabbccddeeff", fields[TraceIDField])
+	require.Equal(t, "0102030405060708", fields[SpanIDField])
 }
 
 func TestWithContextOmitsTraceAndSpanFieldsWithoutValidSpan(t *testing.T) {
@@ -159,16 +141,10 @@ func TestWithContextOmitsTraceAndSpanFieldsWithoutValidSpan(t *testing.T) {
 	WithContext(context.Background(), log).Info("no span fields")
 
 	entries := logs.FilterMessage("no span fields").All()
-	if len(entries) != 1 {
-		t.Fatalf("log count = %d, want 1", len(entries))
-	}
+	require.Len(t, entries, 1, "log count")
 	fields := entries[0].ContextMap()
-	if _, ok := fields[TraceIDField]; ok {
-		t.Fatalf("unexpected trace field: %#v", fields)
-	}
-	if _, ok := fields[SpanIDField]; ok {
-		t.Fatalf("unexpected span field: %#v", fields)
-	}
+	require.NotContains(t, fields, TraceIDField)
+	require.NotContains(t, fields, SpanIDField)
 }
 
 func TestContextLoggerReportsCallerFromCallSite(t *testing.T) {
@@ -192,16 +168,10 @@ func TestDefaultLoggerReportsCallerFromCallSite(t *testing.T) {
 
 func assertCallerFromLoggerTest(t *testing.T, entries []observer.LoggedEntry) {
 	t.Helper()
-	if len(entries) != 1 {
-		t.Fatalf("log count = %d, want 1", len(entries))
-	}
+	require.Len(t, entries, 1, "log count")
 	caller := entries[0].Caller
-	if strings.HasSuffix(caller.File, "common/runtime/logger/context.go") {
-		t.Fatalf("caller = %s:%d, want test call site", caller.File, caller.Line)
-	}
-	if !strings.HasSuffix(caller.File, "common/runtime/logger/logger_test.go") {
-		t.Fatalf("caller file = %s, want logger_test.go", caller.File)
-	}
+	require.Falsef(t, strings.HasSuffix(caller.File, "common/runtime/logger/context.go"), "caller = %s:%d, want test call site", caller.File, caller.Line)
+	require.Truef(t, strings.HasSuffix(caller.File, "common/runtime/logger/logger_test.go"), "caller file = %s, want logger_test.go", caller.File)
 }
 
 func contextLoggerCallerProbe(ctx context.Context) {
@@ -229,21 +199,15 @@ func TestDailyWriterRotatesWhenDateChanges(t *testing.T) {
 	dir := t.TempDir()
 	writer := newDailyLumberjackWriteSyncer(filepath.Join(dir, "aegiscore-test.all.log"), config.LogConfig{MaxAgeDays: 1, MaxSizeMB: 1, MaxBackups: 1})
 	daily, ok := writer.(*dailyLumberjackWriteSyncer)
-	if !ok {
-		t.Fatalf("writer type = %T, want *dailyLumberjackWriteSyncer", writer)
-	}
+	require.Truef(t, ok, "writer type = %T, want *dailyLumberjackWriteSyncer", writer)
 	now := time.Date(2026, 5, 29, 8, 0, 0, 0, time.Local)
 	daily.newClock = func() time.Time { return now }
-	if _, err := daily.Write([]byte("first day\n")); err != nil {
-		t.Fatalf("Write first day: %v", err)
-	}
+	_, err := daily.Write([]byte("first day\n"))
+	require.NoError(t, err, "Write first day")
 	now = now.AddDate(0, 0, 1)
-	if _, err := daily.Write([]byte("second day\n")); err != nil {
-		t.Fatalf("Write second day: %v", err)
-	}
-	if err := daily.Sync(); err != nil {
-		t.Fatalf("Sync: %v", err)
-	}
+	_, err = daily.Write([]byte("second day\n"))
+	require.NoError(t, err, "Write second day")
+	require.NoError(t, daily.Sync(), "Sync")
 	assertFileContains(t, datedPath(dir, "aegiscore-test", "2026-05-29", "all"), "first day")
 	assertFileContains(t, datedPath(dir, "aegiscore-test", "2026-05-30", "all"), "second day")
 	assertFileNotContains(t, datedPath(dir, "aegiscore-test", "2026-05-29", "all"), "second day")
@@ -253,21 +217,15 @@ func TestDailyWriterSyncDoesNotPreventFurtherWrites(t *testing.T) {
 	dir := t.TempDir()
 	writer := newDailyLumberjackWriteSyncer(filepath.Join(dir, "aegiscore-test.all.log"), config.LogConfig{MaxAgeDays: 1, MaxSizeMB: 1, MaxBackups: 1})
 	daily, ok := writer.(*dailyLumberjackWriteSyncer)
-	if !ok {
-		t.Fatalf("writer type = %T, want *dailyLumberjackWriteSyncer", writer)
-	}
+	require.Truef(t, ok, "writer type = %T, want *dailyLumberjackWriteSyncer", writer)
 	now := time.Date(2026, 5, 29, 8, 0, 0, 0, time.Local)
 	daily.newClock = func() time.Time { return now }
 
-	if _, err := daily.Write([]byte("before sync\n")); err != nil {
-		t.Fatalf("Write before sync: %v", err)
-	}
-	if err := daily.Sync(); err != nil {
-		t.Fatalf("Sync: %v", err)
-	}
-	if _, err := daily.Write([]byte("after sync\n")); err != nil {
-		t.Fatalf("Write after sync: %v", err)
-	}
+	_, err := daily.Write([]byte("before sync\n"))
+	require.NoError(t, err, "Write before sync")
+	require.NoError(t, daily.Sync(), "Sync")
+	_, err = daily.Write([]byte("after sync\n"))
+	require.NoError(t, err, "Write after sync")
 
 	assertFileContains(t, datedPath(dir, "aegiscore-test", "2026-05-29", "all"), "before sync", "after sync")
 }
@@ -278,45 +236,29 @@ func TestDailyWriterAppliesLumberjackConfig(t *testing.T) {
 	daily := writer.(*dailyLumberjackWriteSyncer)
 	daily.mu.Lock()
 	defer daily.mu.Unlock()
-	if daily.logger.MaxSize != 6 {
-		t.Fatalf("MaxSize = %d, want 6", daily.logger.MaxSize)
-	}
-	if daily.logger.MaxBackups != 7 {
-		t.Fatalf("MaxBackups = %d, want 7", daily.logger.MaxBackups)
-	}
-	if daily.logger.MaxAge != 5 {
-		t.Fatalf("MaxAge = %d, want 5", daily.logger.MaxAge)
-	}
-	if daily.logger.Filename != datedPath(dir, "aegiscore-test", daily.date, "all") {
-		t.Fatalf("Filename = %q, want dated file", daily.logger.Filename)
-	}
+	require.Equal(t, 6, daily.logger.MaxSize)
+	require.Equal(t, 7, daily.logger.MaxBackups)
+	require.Equal(t, 5, daily.logger.MaxAge)
+	require.Equal(t, datedPath(dir, "aegiscore-test", daily.date, "all"), daily.logger.Filename)
 }
 
 func assertFileContains(t *testing.T, path string, wants ...string) {
 	t.Helper()
 	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", path, err)
-	}
+	require.NoErrorf(t, err, "ReadFile(%s)", path)
 	text := string(content)
 	for _, want := range wants {
-		if !strings.Contains(text, want) {
-			t.Fatalf("%s does not contain %q; content: %s", path, want, text)
-		}
+		require.Containsf(t, text, want, "%s content", path)
 	}
 }
 
 func assertFileNotContains(t *testing.T, path string, wants ...string) {
 	t.Helper()
 	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", path, err)
-	}
+	require.NoErrorf(t, err, "ReadFile(%s)", path)
 	text := string(content)
 	for _, want := range wants {
-		if strings.Contains(text, want) {
-			t.Fatalf("%s contains %q; content: %s", path, want, text)
-		}
+		require.NotContainsf(t, text, want, "%s content", path)
 	}
 }
 
@@ -326,14 +268,10 @@ func assertFileMissingOrNotContains(t *testing.T, path string, wants ...string) 
 	if os.IsNotExist(err) {
 		return
 	}
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", path, err)
-	}
+	require.NoErrorf(t, err, "ReadFile(%s)", path)
 	text := string(content)
 	for _, want := range wants {
-		if strings.Contains(text, want) {
-			t.Fatalf("file %s contains %q; content=%s", path, want, text)
-		}
+		require.NotContainsf(t, text, want, "file %s content", path)
 	}
 }
 
@@ -344,13 +282,9 @@ func datedPath(dir string, prefix string, date string, level string) string {
 func contextWithSpanContext(ctx context.Context, t *testing.T, traceIDHex string, spanIDHex string) context.Context {
 	t.Helper()
 	traceID, err := trace.TraceIDFromHex(traceIDHex)
-	if err != nil {
-		t.Fatalf("TraceIDFromHex: %v", err)
-	}
+	require.NoError(t, err, "TraceIDFromHex")
 	spanID, err := trace.SpanIDFromHex(spanIDHex)
-	if err != nil {
-		t.Fatalf("SpanIDFromHex: %v", err)
-	}
+	require.NoError(t, err, "SpanIDFromHex")
 	spanContext := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID: traceID,
 		SpanID:  spanID,

@@ -1,156 +1,89 @@
 package config
 
 import (
-	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadExplicitConfig(t *testing.T) {
 	cfg := loadConfigFromYAML(t, explicitConfigYAML())
 
-	if cfg.App.Name != "aegiscore-test" {
-		t.Fatalf("App.Name = %q, want aegiscore-test", cfg.App.Name)
-	}
-	if cfg.System.Timezone != "Asia/Shanghai" {
-		t.Fatalf("System.Timezone = %q, want Asia/Shanghai", cfg.System.Timezone)
-	}
-	if cfg.HTTP.Port != 18080 {
-		t.Fatalf("HTTP.Port = %d, want 18080", cfg.HTTP.Port)
-	}
-	if !cfg.HTTP.Pprof.Enabled || cfg.HTTP.Pprof.BasePath != "/internal/debug/pprof" {
-		t.Fatalf("HTTP.Pprof = %#v, want enabled /internal/debug/pprof", cfg.HTTP.Pprof)
-	}
-	if cfg.Auth.JWT.Secret != "test-secret" {
-		t.Fatalf("Auth.JWT.Secret = %q, want test-secret", cfg.Auth.JWT.Secret)
-	}
-	if cfg.Auth.JWT.Issuer != "aegiscore-test" || cfg.Auth.JWT.Audience != "aegiscore-users" {
-		t.Fatalf("Auth.JWT issuer/audience = (%q,%q), want (aegiscore-test,aegiscore-users)", cfg.Auth.JWT.Issuer, cfg.Auth.JWT.Audience)
-	}
-	if cfg.Auth.JWT.AccessTokenTTL != 15*time.Minute {
-		t.Fatalf("Auth.JWT.AccessTokenTTL = %s, want 15m", cfg.Auth.JWT.AccessTokenTTL)
-	}
-	if cfg.Auth.JWT.RefreshTokenTTL != 168*time.Hour {
-		t.Fatalf("Auth.JWT.RefreshTokenTTL = %s, want 168h", cfg.Auth.JWT.RefreshTokenTTL)
-	}
-	if cfg.Auth.TokenVersionCacheTTL != 30*time.Second {
-		t.Fatalf("Auth.TokenVersionCacheTTL = %s, want 30s", cfg.Auth.TokenVersionCacheTTL)
-	}
-	if !cfg.Auth.RefreshTokenRotation {
-		t.Fatal("Auth.RefreshTokenRotation = false, want true")
-	}
-	if cfg.Auth.MaxActiveSessionsPerUser != 5 {
-		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 5", cfg.Auth.MaxActiveSessionsPerUser)
-	}
-	if cfg.Auth.PasswordKDF.Argon2Concurrency != 2 || cfg.Auth.PasswordKDF.Argon2QueueSize != 16 {
-		t.Fatalf("Auth.PasswordKDF = %#v, want concurrency 2 queue 16", cfg.Auth.PasswordKDF)
-	}
+	require.Equal(t, "aegiscore-test", cfg.App.Name)
+	require.Equal(t, "Asia/Shanghai", cfg.System.Timezone)
+	require.Equal(t, 18080, cfg.HTTP.Port)
+	require.True(t, cfg.HTTP.Pprof.Enabled)
+	require.Equal(t, "/internal/debug/pprof", cfg.HTTP.Pprof.BasePath)
+	require.Equal(t, "test-secret", cfg.Auth.JWT.Secret)
+	require.Equal(t, "aegiscore-test", cfg.Auth.JWT.Issuer)
+	require.Equal(t, "aegiscore-users", cfg.Auth.JWT.Audience)
+	require.Equal(t, 15*time.Minute, cfg.Auth.JWT.AccessTokenTTL)
+	require.Equal(t, 168*time.Hour, cfg.Auth.JWT.RefreshTokenTTL)
+	require.Equal(t, 30*time.Second, cfg.Auth.TokenVersionCacheTTL)
+	require.True(t, cfg.Auth.RefreshTokenRotation)
+	require.Equal(t, 5, cfg.Auth.MaxActiveSessionsPerUser)
+	require.Equal(t, 2, cfg.Auth.PasswordKDF.Argon2Concurrency)
+	require.Equal(t, 16, cfg.Auth.PasswordKDF.Argon2QueueSize)
 	authTokenVersion := requireLocalCacheInstance(t, cfg, "auth_token_version")
-	if authTokenVersion.Capacity != 1000 || authTokenVersion.TTL != time.Second || authTokenVersion.LoadTimeout != 300*time.Millisecond {
-		t.Fatalf("LocalCache[auth_token_version] = %#v, want capacity 1000 ttl 1s load timeout 300ms", authTokenVersion)
-	}
-	if authTokenVersion.NumCounters != 2000 || authTokenVersion.BufferItems != 128 {
-		t.Fatalf("LocalCache[auth_token_version] tuning = (%d,%d), want (2000,128)", authTokenVersion.NumCounters, authTokenVersion.BufferItems)
-	}
+	require.Equal(t, int64(1000), authTokenVersion.Capacity)
+	require.Equal(t, time.Second, authTokenVersion.TTL)
+	require.Equal(t, 300*time.Millisecond, authTokenVersion.LoadTimeout)
+	require.Equal(t, int64(2000), authTokenVersion.NumCounters)
+	require.Equal(t, int64(128), authTokenVersion.BufferItems)
 	rbacUserRoles := requireLocalCacheInstance(t, cfg, "rbac_user_roles")
-	if rbacUserRoles.Capacity != 2000 || rbacUserRoles.TTL != 5*time.Second || rbacUserRoles.LoadTimeout != 500*time.Millisecond {
-		t.Fatalf("LocalCache[rbac_user_roles] = %#v, want capacity 2000 ttl 5s load timeout 500ms", rbacUserRoles)
-	}
+	require.Equal(t, int64(2000), rbacUserRoles.Capacity)
+	require.Equal(t, 5*time.Second, rbacUserRoles.TTL)
+	require.Equal(t, 500*time.Millisecond, rbacUserRoles.LoadTimeout)
 	backgroundJobs := requireLocalCacheInstance(t, cfg, "background_jobs")
-	if backgroundJobs.Capacity != 300 || backgroundJobs.TTL != 10*time.Second || backgroundJobs.LoadTimeout != 200*time.Millisecond {
-		t.Fatalf("LocalCache[background_jobs] = %#v, want capacity 300 ttl 10s load timeout 200ms", backgroundJobs)
-	}
-	if !cfg.Ent.SQLDebug {
-		t.Fatal("Ent.SQLDebug = false, want true")
-	}
-	if cfg.Log.Directory != "./logs" {
-		t.Fatalf("Log.Directory = %q, want ./logs", cfg.Log.Directory)
-	}
-	if cfg.Log.Filename != "aegiscore-test" {
-		t.Fatalf("Log.Filename = %q, want aegiscore-test", cfg.Log.Filename)
-	}
-	if !cfg.Log.Console {
-		t.Fatal("Log.Console = false, want true")
-	}
-	if cfg.Log.MaxAgeDays != 7 || cfg.Log.MaxSizeMB != 100 || cfg.Log.MaxBackups != 30 {
-		t.Fatalf("Log rotation = (%d,%d,%d), want (7,100,30)", cfg.Log.MaxAgeDays, cfg.Log.MaxSizeMB, cfg.Log.MaxBackups)
-	}
-	if !cfg.Observability.Metrics.Enabled {
-		t.Fatal("Observability.Metrics.Enabled = false, want true")
-	}
-	if cfg.Observability.Metrics.Path != "/metrics" || !cfg.Observability.Metrics.IncludeRuntime {
-		t.Fatalf("Observability.Metrics = %#v, want path /metrics with runtime metrics", cfg.Observability.Metrics)
-	}
-	if !cfg.Observability.Tracing.Enabled {
-		t.Fatal("Observability.Tracing.Enabled = false, want true")
-	}
-	if cfg.Observability.Tracing.SampleRatio != 0.25 || cfg.Observability.Tracing.Exporter != "otlp" || cfg.Observability.Tracing.OTLPEndpoint != "collector:4317" || cfg.Observability.Tracing.Insecure {
-		t.Fatalf("Observability.Tracing = %#v, want otlp collector config", cfg.Observability.Tracing)
-	}
+	require.Equal(t, int64(300), backgroundJobs.Capacity)
+	require.Equal(t, 10*time.Second, backgroundJobs.TTL)
+	require.Equal(t, 200*time.Millisecond, backgroundJobs.LoadTimeout)
+	require.True(t, cfg.Ent.SQLDebug)
+	require.Equal(t, "./logs", cfg.Log.Directory)
+	require.Equal(t, "aegiscore-test", cfg.Log.Filename)
+	require.True(t, cfg.Log.Console)
+	require.Equal(t, 7, cfg.Log.MaxAgeDays)
+	require.Equal(t, 100, cfg.Log.MaxSizeMB)
+	require.Equal(t, 30, cfg.Log.MaxBackups)
+	require.True(t, cfg.Observability.Metrics.Enabled)
+	require.Equal(t, "/metrics", cfg.Observability.Metrics.Path)
+	require.True(t, cfg.Observability.Metrics.IncludeRuntime)
+	require.True(t, cfg.Observability.Tracing.Enabled)
+	require.Equal(t, 0.25, cfg.Observability.Tracing.SampleRatio)
+	require.Equal(t, "otlp", cfg.Observability.Tracing.Exporter)
+	require.Equal(t, "collector:4317", cfg.Observability.Tracing.OTLPEndpoint)
+	require.False(t, cfg.Observability.Tracing.Insecure)
 	cacheRedis, ok := cfg.RedisConfig("cache_redis")
-	if !ok {
-		t.Fatal("RedisConfig(cache_redis) ok = false")
-	}
-	if cacheRedis.DB != 2 {
-		t.Fatalf("cache_redis.DB = %d, want 2", cacheRedis.DB)
-	}
-	if cacheRedis.PingTimeout != 7*time.Second {
-		t.Fatalf("cache_redis.PingTimeout = %s, want 7s", cacheRedis.PingTimeout)
-	}
+	require.True(t, ok)
+	require.Equal(t, 2, cacheRedis.DB)
+	require.Equal(t, 7*time.Second, cacheRedis.PingTimeout)
 	queueRedis, ok := cfg.RedisConfig("queue_redis")
-	if !ok {
-		t.Fatal("RedisConfig(queue_redis) ok = false")
-	}
-	if queueRedis.DB != 1 {
-		t.Fatalf("queue_redis.DB = %d, want 1", queueRedis.DB)
-	}
+	require.True(t, ok)
+	require.Equal(t, 1, queueRedis.DB)
 
 	pg := cfg.Postgres["user_db"]
-	if pg.Host != "127.0.0.1" {
-		t.Fatalf("Host = %q, want 127.0.0.1", pg.Host)
-	}
-	if pg.Port != 15432 {
-		t.Fatalf("Port = %d, want 15432", pg.Port)
-	}
-	if pg.Driver != "pgx" {
-		t.Fatalf("Driver = %q, want pgx", pg.Driver)
-	}
-	if pg.SSLMode != "disable" {
-		t.Fatalf("SSLMode = %q, want disable", pg.SSLMode)
-	}
-	if pg.MaxOpenConns != 20 {
-		t.Fatalf("MaxOpenConns = %d, want 20", pg.MaxOpenConns)
-	}
-	if pg.MaxIdleConns != 4 {
-		t.Fatalf("MaxIdleConns = %d, want 4", pg.MaxIdleConns)
-	}
-	if pg.ConnMaxLifetime != 45*time.Minute {
-		t.Fatalf("ConnMaxLifetime = %s, want 45m", pg.ConnMaxLifetime)
-	}
-	if pg.ConnMaxIdleTime != 12*time.Minute {
-		t.Fatalf("ConnMaxIdleTime = %s, want 12m", pg.ConnMaxIdleTime)
-	}
-	if pg.PingTimeout != 7*time.Second {
-		t.Fatalf("PingTimeout = %s, want 7s", pg.PingTimeout)
-	}
-	if pg.DBName != "aegiscore_user" {
-		t.Fatalf("DBName = %q, want aegiscore_user", pg.DBName)
-	}
-	if cfg.Postgres["pay_db"].DBName != "aegiscore_pay" {
-		t.Fatalf("pay_db.DBName = %q, want aegiscore_pay", cfg.Postgres["pay_db"].DBName)
-	}
+	require.Equal(t, "127.0.0.1", pg.Host)
+	require.Equal(t, 15432, pg.Port)
+	require.Equal(t, "pgx", pg.Driver)
+	require.Equal(t, "disable", pg.SSLMode)
+	require.Equal(t, 20, pg.MaxOpenConns)
+	require.Equal(t, 4, pg.MaxIdleConns)
+	require.Equal(t, 45*time.Minute, pg.ConnMaxLifetime)
+	require.Equal(t, 12*time.Minute, pg.ConnMaxIdleTime)
+	require.Equal(t, 7*time.Second, pg.PingTimeout)
+	require.Equal(t, "aegiscore_user", pg.DBName)
+	require.Equal(t, "aegiscore_pay", cfg.Postgres["pay_db"].DBName)
 }
 
 func requireLocalCacheInstance(t *testing.T, cfg *Config, name string) LocalCacheInstanceConfig {
 	t.Helper()
 	cacheCfg, ok := cfg.LocalCache.Instance(name)
-	if !ok {
-		t.Fatalf("LocalCache.Instance(%q) ok = false", name)
-	}
+	require.True(t, ok)
 	return cacheCfg
 }
 
@@ -261,9 +194,7 @@ func TestLoadAllowsNonPositiveTokenVersionCacheTTL(t *testing.T) {
   token_version_cache_ttl: `+tc.yaml+`
   refresh_token_rotation: true
   max_active_sessions_per_user: 5`))
-			if cfg.Auth.TokenVersionCacheTTL != tc.want {
-				t.Fatalf("Auth.TokenVersionCacheTTL = %s, want %s", cfg.Auth.TokenVersionCacheTTL, tc.want)
-			}
+			require.Equal(t, tc.want, cfg.Auth.TokenVersionCacheTTL)
 		})
 	}
 }
@@ -287,9 +218,7 @@ func TestLoadStillRejectsNonPositiveJWTTTL(t *testing.T) {
 		"auth.jwt.access_token_ttl must be > 0",
 		"auth.jwt.refresh_token_ttl must be > 0",
 	)
-	if strings.Contains(err.Error(), "auth.token_version_cache_ttl") {
-		t.Fatalf("Load error rejects token version cache TTL: %q", err.Error())
-	}
+	require.NotContains(t, err.Error(), "auth.token_version_cache_ttl")
 }
 
 func TestLoadAggregatesConfigValidationErrors(t *testing.T) {
@@ -310,12 +239,8 @@ func TestLoadAggregatesConfigValidationErrors(t *testing.T) {
 
 	assertConfigLoadErrorContains(t, err, "postgres.user_db.max_idle_conns must be <= max_open_conns")
 	var validationErr *ValidationError
-	if !errors.As(err, &validationErr) {
-		t.Fatalf("Load error = %T, want ValidationError in chain", err)
-	}
-	if got := len(validationErr.Unwrap()); got != 1 {
-		t.Fatalf("validation error count = %d, want 1", got)
-	}
+	require.ErrorAs(t, err, &validationErr)
+	require.Len(t, validationErr.Unwrap(), 1)
 }
 
 func TestLoadRejectsProductionLikeInsecureConfig(t *testing.T) {
@@ -338,12 +263,8 @@ func TestLoadRejectsProductionLikeInsecureConfig(t *testing.T) {
 		"postgres.user_db.sslmode must not be disable in production-like environments",
 		"observability.tracing.insecure must not be true with otlp exporter in production-like environments",
 	)
-	if strings.Contains(err.Error(), "test-secret") {
-		t.Fatalf("Load error leaks sensitive JWT secret: %q", err.Error())
-	}
-	if strings.Contains(err.Error(), "collector.internal:4317") {
-		t.Fatalf("Load error leaks OTLP endpoint: %q", err.Error())
-	}
+	require.NotContains(t, err.Error(), "test-secret")
+	require.NotContains(t, err.Error(), "collector.internal:4317")
 }
 
 func TestLoadEnvironmentOverride(t *testing.T) {
@@ -380,66 +301,40 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_POSTGRES_USER_DB_MAX_OPEN_CONNS", "30")
 
 	cfg := loadConfigFromYAML(t, explicitConfigYAML())
-	if cfg.System.Timezone != "UTC" {
-		t.Fatalf("System.Timezone = %q, want UTC", cfg.System.Timezone)
-	}
-	if cfg.HTTP.Port != 19090 {
-		t.Fatalf("HTTP.Port = %d, want 19090", cfg.HTTP.Port)
-	}
-	if cfg.HTTP.ReadTimeout != 30*time.Second || cfg.HTTP.WriteTimeout != 60*time.Second || cfg.HTTP.IdleTimeout != 120*time.Second || cfg.HTTP.ShutdownTimeout != 25*time.Second {
-		t.Fatalf("HTTP timeouts = (%s,%s,%s,%s), want (30s,60s,120s,25s)", cfg.HTTP.ReadTimeout, cfg.HTTP.WriteTimeout, cfg.HTTP.IdleTimeout, cfg.HTTP.ShutdownTimeout)
-	}
-	if cfg.Auth.JWT.Secret != "env-secret" || cfg.Auth.JWT.Issuer != "env-issuer" {
-		t.Fatalf("Auth JWT = %#v, want env overrides", cfg.Auth.JWT)
-	}
-	if cfg.Auth.JWT.RefreshTokenTTL != 720*time.Hour {
-		t.Fatalf("Auth.JWT.RefreshTokenTTL = %s, want 720h", cfg.Auth.JWT.RefreshTokenTTL)
-	}
-	if cfg.Auth.TokenVersionCacheTTL != 30*time.Second {
-		t.Fatalf("Auth.TokenVersionCacheTTL = %s, want 30s", cfg.Auth.TokenVersionCacheTTL)
-	}
-	if cfg.Auth.MaxActiveSessionsPerUser != 7 {
-		t.Fatalf("Auth.MaxActiveSessionsPerUser = %d, want 7", cfg.Auth.MaxActiveSessionsPerUser)
-	}
-	if cfg.Auth.PasswordKDF.Argon2Concurrency != 3 || cfg.Auth.PasswordKDF.Argon2QueueSize != 9 {
-		t.Fatalf("Auth.PasswordKDF = %#v, want env overrides", cfg.Auth.PasswordKDF)
-	}
+	require.Equal(t, "UTC", cfg.System.Timezone)
+	require.Equal(t, 19090, cfg.HTTP.Port)
+	require.Equal(t, 30*time.Second, cfg.HTTP.ReadTimeout)
+	require.Equal(t, 60*time.Second, cfg.HTTP.WriteTimeout)
+	require.Equal(t, 120*time.Second, cfg.HTTP.IdleTimeout)
+	require.Equal(t, 25*time.Second, cfg.HTTP.ShutdownTimeout)
+	require.Equal(t, "env-secret", cfg.Auth.JWT.Secret)
+	require.Equal(t, "env-issuer", cfg.Auth.JWT.Issuer)
+	require.Equal(t, 720*time.Hour, cfg.Auth.JWT.RefreshTokenTTL)
+	require.Equal(t, 30*time.Second, cfg.Auth.TokenVersionCacheTTL)
+	require.Equal(t, 7, cfg.Auth.MaxActiveSessionsPerUser)
+	require.Equal(t, 3, cfg.Auth.PasswordKDF.Argon2Concurrency)
+	require.Equal(t, 9, cfg.Auth.PasswordKDF.Argon2QueueSize)
 	authTokenVersion := requireLocalCacheInstance(t, cfg, "auth_token_version")
-	if authTokenVersion.Capacity != 3000 || authTokenVersion.TTL != 2*time.Second || authTokenVersion.LoadTimeout != 400*time.Millisecond {
-		t.Fatalf("LocalCache[auth_token_version] = %#v, want env overrides", authTokenVersion)
-	}
+	require.Equal(t, int64(3000), authTokenVersion.Capacity)
+	require.Equal(t, 2*time.Second, authTokenVersion.TTL)
+	require.Equal(t, 400*time.Millisecond, authTokenVersion.LoadTimeout)
 	rbacUserRoles := requireLocalCacheInstance(t, cfg, "rbac_user_roles")
-	if rbacUserRoles.Capacity != 4000 || rbacUserRoles.BufferItems != 256 {
-		t.Fatalf("LocalCache[rbac_user_roles] = %#v, want env overrides", rbacUserRoles)
-	}
+	require.Equal(t, int64(4000), rbacUserRoles.Capacity)
+	require.Equal(t, int64(256), rbacUserRoles.BufferItems)
 	backgroundJobs := requireLocalCacheInstance(t, cfg, "background_jobs")
-	if backgroundJobs.TTL != 15*time.Second {
-		t.Fatalf("LocalCache[background_jobs].TTL = %s, want env override 15s", backgroundJobs.TTL)
-	}
-	if cfg.Ent.SQLDebug {
-		t.Fatal("Ent.SQLDebug = true, want env override false")
-	}
-	if cfg.Observability.Metrics.Enabled {
-		t.Fatal("Observability.Metrics.Enabled = true, want env override false")
-	}
-	if cfg.Observability.Metrics.Path != "/internal/metrics" {
-		t.Fatalf("Observability.Metrics.Path = %q, want /internal/metrics", cfg.Observability.Metrics.Path)
-	}
-	if cfg.Observability.Metrics.IncludeRuntime {
-		t.Fatal("Observability.Metrics.IncludeRuntime = true, want env override false")
-	}
-	if cfg.Observability.Tracing.Enabled || cfg.Observability.Tracing.SampleRatio != 0.5 || cfg.Observability.Tracing.Exporter != "none" || cfg.Observability.Tracing.OTLPEndpoint != "env-collector:4317" || !cfg.Observability.Tracing.Insecure {
-		t.Fatalf("Observability.Tracing = %#v, want env overrides", cfg.Observability.Tracing)
-	}
-	if cfg.Redis["cache_redis"].DB != 9 {
-		t.Fatalf("cache_redis.DB = %d, want 9", cfg.Redis["cache_redis"].DB)
-	}
-	if cfg.Postgres["user_db"].Password != "env-secret" {
-		t.Fatalf("user_db.Password = %q, want env-secret", cfg.Postgres["user_db"].Password)
-	}
-	if cfg.Postgres["user_db"].MaxOpenConns != 30 {
-		t.Fatalf("user_db.MaxOpenConns = %d, want 30", cfg.Postgres["user_db"].MaxOpenConns)
-	}
+	require.Equal(t, 15*time.Second, backgroundJobs.TTL)
+	require.False(t, cfg.Ent.SQLDebug)
+	require.False(t, cfg.Observability.Metrics.Enabled)
+	require.Equal(t, "/internal/metrics", cfg.Observability.Metrics.Path)
+	require.False(t, cfg.Observability.Metrics.IncludeRuntime)
+	require.False(t, cfg.Observability.Tracing.Enabled)
+	require.Equal(t, 0.5, cfg.Observability.Tracing.SampleRatio)
+	require.Equal(t, "none", cfg.Observability.Tracing.Exporter)
+	require.Equal(t, "env-collector:4317", cfg.Observability.Tracing.OTLPEndpoint)
+	require.True(t, cfg.Observability.Tracing.Insecure)
+	require.Equal(t, 9, cfg.Redis["cache_redis"].DB)
+	require.Equal(t, "env-secret", cfg.Postgres["user_db"].Password)
+	require.Equal(t, 30, cfg.Postgres["user_db"].MaxOpenConns)
 }
 
 func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
@@ -450,9 +345,7 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
   write_timeout: 10s
   idle_timeout: 60s
   shutdown_timeout: 10s`))
-	if len(cfg.HTTP.TrustedProxies) != 0 {
-		t.Fatalf("HTTP.TrustedProxies = %v, want empty", cfg.HTTP.TrustedProxies)
-	}
+	require.Empty(t, cfg.HTTP.TrustedProxies)
 
 	cfg = loadConfigFromYAML(t, configYAMLWithSection(`redis:
   cache_redis:
@@ -462,12 +355,8 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
     read_timeout: 3s
     write_timeout: 3s
     ping_timeout: 7s`))
-	if cfg.Redis["cache_redis"].Username != "" {
-		t.Fatalf("Redis.Username = %q, want empty", cfg.Redis["cache_redis"].Username)
-	}
-	if cfg.Redis["cache_redis"].Password != "" {
-		t.Fatalf("Redis.Password = %q, want empty", cfg.Redis["cache_redis"].Password)
-	}
+	require.Empty(t, cfg.Redis["cache_redis"].Username)
+	require.Empty(t, cfg.Redis["cache_redis"].Password)
 
 	cfg = loadConfigFromYAML(t, configYAMLWithSection(`postgres:
   user_db:
@@ -482,12 +371,9 @@ func TestLoadAllowsOmittedOptionalConfigFields(t *testing.T) {
     conn_max_lifetime: 45m
     conn_max_idle_time: 12m
     ping_timeout: 7s`))
-	if cfg.Postgres["user_db"].Password != "" {
-		t.Fatalf("Postgres.Password = %q, want empty", cfg.Postgres["user_db"].Password)
-	}
-	if _, ok := cfg.PostgresDatabaseConfig("pay_db"); ok {
-		t.Fatal("PostgresDatabaseConfig(pay_db) ok = true")
-	}
+	require.Empty(t, cfg.Postgres["user_db"].Password)
+	_, ok := cfg.PostgresDatabaseConfig("pay_db")
+	require.False(t, ok)
 }
 
 func TestLoadValidatesPasswordKDFConfig(t *testing.T) {
@@ -539,9 +425,7 @@ func TestLoadValidatesAuthSessionLimit(t *testing.T) {
   token_version_cache_ttl: 30s
   refresh_token_rotation: true
   max_active_sessions_per_user: 0`))
-	if cfg.Auth.MaxActiveSessionsPerUser != 0 {
-		t.Fatalf("MaxActiveSessionsPerUser = %d, want 0", cfg.Auth.MaxActiveSessionsPerUser)
-	}
+	require.Equal(t, 0, cfg.Auth.MaxActiveSessionsPerUser)
 
 	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`auth:
   jwt:
@@ -606,9 +490,8 @@ func TestConfigValidateRejectsEmptyLocalCacheName(t *testing.T) {
 		},
 	}.validateLocalCache()
 
-	if len(err) != 1 || err[0].Error() != "local_cache must not contain an empty named instance" {
-		t.Fatalf("validateLocalCache() = %#v, want empty instance name error", err)
-	}
+	require.Len(t, err, 1)
+	require.EqualError(t, err[0], "local_cache must not contain an empty named instance")
 }
 
 func TestLoadValidatesObservabilityConfig(t *testing.T) {
@@ -720,18 +603,10 @@ func TestLoadValidatesObservabilityConfig(t *testing.T) {
 func TestLoadYAMLMergeForNamedDatastores(t *testing.T) {
 	cfg := loadConfigFromYAML(t, explicitConfigYAML())
 
-	if got := cfg.Redis["queue_redis"].DialTimeout; got != 10*time.Second {
-		t.Fatalf("queue_redis.DialTimeout = %s, want 10s", got)
-	}
-	if got := cfg.Redis["queue_redis"].ReadTimeout; got != 3*time.Second {
-		t.Fatalf("queue_redis.ReadTimeout = %s, want 3s", got)
-	}
-	if got := cfg.Postgres["user_db"].MaxOpenConns; got != 20 {
-		t.Fatalf("user_db.MaxOpenConns = %d, want 20", got)
-	}
-	if got := cfg.Postgres["pay_db"].MaxOpenConns; got != 25 {
-		t.Fatalf("pay_db.MaxOpenConns = %d, want 25", got)
-	}
+	require.Equal(t, 10*time.Second, cfg.Redis["queue_redis"].DialTimeout)
+	require.Equal(t, 3*time.Second, cfg.Redis["queue_redis"].ReadTimeout)
+	require.Equal(t, 20, cfg.Postgres["user_db"].MaxOpenConns)
+	require.Equal(t, 25, cfg.Postgres["pay_db"].MaxOpenConns)
 }
 
 func TestPostgresNamedDatabaseDSNs(t *testing.T) {
@@ -786,55 +661,33 @@ func TestPostgresNamedDatabaseDSNs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db, ok := cfg.PostgresDatabaseConfig(tt.name)
-			if !ok {
-				t.Fatalf("PostgresDatabaseConfig(%q) ok = false", tt.name)
-			}
+			require.True(t, ok)
 			parsed, err := url.Parse(db.DSN)
-			if err != nil {
-				t.Fatalf("Parse DSN: %v", err)
-			}
-			if parsed.Scheme != "postgres" {
-				t.Fatalf("Scheme = %q, want postgres", parsed.Scheme)
-			}
-			if parsed.Host != "db.example.internal:15432" {
-				t.Fatalf("Host = %q, want db.example.internal:15432", parsed.Host)
-			}
-			if got := strings.TrimPrefix(parsed.Path, "/"); got != tt.wantDBName {
-				t.Fatalf("database name = %q, want %q", got, tt.wantDBName)
-			}
-			if parsed.User.Username() != "user@example.com" {
-				t.Fatalf("username = %q, want user@example.com", parsed.User.Username())
-			}
+			require.NoError(t, err)
+			require.Equal(t, "postgres", parsed.Scheme)
+			require.Equal(t, "db.example.internal:15432", parsed.Host)
+			require.Equal(t, tt.wantDBName, strings.TrimPrefix(parsed.Path, "/"))
+			require.Equal(t, "user@example.com", parsed.User.Username())
 			password, ok := parsed.User.Password()
-			if !ok || password != "p@ss/w:rd" {
-				t.Fatalf("password = %q, %v; want p@ss/w:rd, true", password, ok)
-			}
-			if parsed.Query().Get("sslmode") != "disable" {
-				t.Fatalf("sslmode = %q, want disable", parsed.Query().Get("sslmode"))
-			}
+			require.True(t, ok)
+			require.Equal(t, "p@ss/w:rd", password)
+			require.Equal(t, "disable", parsed.Query().Get("sslmode"))
 		})
 	}
 
-	if _, ok := cfg.PostgresDatabaseConfig("pay_db"); !ok {
-		t.Fatal("PostgresDatabaseConfig(pay_db) ok = false")
-	}
-	if _, ok := cfg.PostgresDatabaseConfig("missing_db"); ok {
-		t.Fatal("PostgresDatabaseConfig(missing_db) ok = true")
-	}
+	_, ok := cfg.PostgresDatabaseConfig("pay_db")
+	require.True(t, ok)
+	_, ok = cfg.PostgresDatabaseConfig("missing_db")
+	require.False(t, ok)
 }
 
 func TestRedisConfigLookup(t *testing.T) {
 	cfg := loadConfigFromYAML(t, explicitConfigYAML())
 	redisCfg, ok := cfg.RedisConfig("cache_redis")
-	if !ok {
-		t.Fatal("RedisConfig(cache_redis) ok = false")
-	}
-	if redisCfg.Addr != "127.0.0.1:6379" {
-		t.Fatalf("Addr = %q, want 127.0.0.1:6379", redisCfg.Addr)
-	}
-	if _, ok := cfg.RedisConfig("missing_redis"); ok {
-		t.Fatal("RedisConfig(missing_redis) ok = true")
-	}
+	require.True(t, ok)
+	require.Equal(t, "127.0.0.1:6379", redisCfg.Addr)
+	_, ok = cfg.RedisConfig("missing_redis")
+	require.False(t, ok)
 }
 
 func explicitConfigYAML() string {
@@ -1074,42 +927,30 @@ func configYAMLWithSections(overrides ...string) string {
 func loadConfigFromYAML(t *testing.T, content string) *Config {
 	t.Helper()
 	cfg, err := Load(writeTempConfig(t, content))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	require.NoError(t, err)
 	return cfg
 }
 
 func loadConfigErrorFromYAML(t *testing.T, content string) error {
 	t.Helper()
 	_, err := Load(writeTempConfig(t, content))
-	if err == nil {
-		t.Fatal("Load error = nil, want validation error")
-	}
+	require.Error(t, err)
 	return err
 }
 
 func assertConfigLoadErrorContains(t *testing.T, err error, wants ...string) {
 	t.Helper()
-	if err == nil {
-		t.Fatal("Load error = nil, want error")
-	}
+	require.Error(t, err)
 	var validationErr *ValidationError
-	if !errors.As(err, &validationErr) {
-		t.Fatalf("Load error = %T, want ValidationError in chain: %v", err, err)
-	}
+	require.ErrorAs(t, err, &validationErr)
 	for _, want := range wants {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("Load error = %q, want %q", err.Error(), want)
-		}
+		require.Contains(t, err.Error(), want)
 	}
 }
 
 func writeTempConfig(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 	return path
 }

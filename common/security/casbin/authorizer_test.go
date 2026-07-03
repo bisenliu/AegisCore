@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -44,12 +45,11 @@ func TestAuthorizerAuthorize(t *testing.T) {
 				authz = tt.setup(ctrl)
 			}
 			err := authz.Authorize(context.Background(), Request{Subject: "user:1", Object: "/api/v1/users/:id", Action: "GET"})
-			if tt.wantErr == nil && err != nil {
-				t.Fatalf("Authorize error = %v, want nil", err)
+			if tt.wantErr == nil {
+				require.NoError(t, err)
+				return
 			}
-			if tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
-				t.Fatalf("Authorize error = %v, want %v", err, tt.wantErr)
-			}
+			require.ErrorIs(t, err, tt.wantErr)
 		})
 	}
 }
@@ -90,15 +90,12 @@ func TestEnforce(t *testing.T) {
 				enforcer = tt.setup(ctrl)
 			}
 			allowed, err := Enforce(context.Background(), enforcer, Request{Subject: "user:1", Object: "/users", Action: "GET"})
-			if allowed != tt.wantAllowed {
-				t.Fatalf("Enforce allowed = %v, want %v", allowed, tt.wantAllowed)
+			require.Equal(t, tt.wantAllowed, allowed)
+			if tt.wantErr == nil {
+				require.NoError(t, err)
+				return
 			}
-			if tt.wantErr == nil && err != nil {
-				t.Fatalf("Enforce error = %v, want nil", err)
-			}
-			if tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
-				t.Fatalf("Enforce error = %v, want %v", err, tt.wantErr)
-			}
+			require.ErrorIs(t, err, tt.wantErr)
 		})
 	}
 }
@@ -108,7 +105,6 @@ func TestEnforceHonorsContext(t *testing.T) {
 	cancel()
 	enforcer := NewMockEnforcer(gomock.NewController(t))
 	allowed, err := Enforce(ctx, enforcer, Request{Subject: "user:1", Object: "/users", Action: "GET"})
-	if allowed || !errors.Is(err, context.Canceled) {
-		t.Fatalf("Enforce = (%v, %v), want false, context.Canceled", allowed, err)
-	}
+	require.False(t, allowed)
+	require.ErrorIs(t, err, context.Canceled)
 }

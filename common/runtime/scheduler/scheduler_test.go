@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -31,12 +32,8 @@ func TestRunJobRecoversPanicAndReleasesLocalGate(t *testing.T) {
 	s.runJob(cfg, localGate)
 
 	metrics := s.metrics.(*recordingMetrics)
-	if got := metrics.failedCount("panic-job"); got != 1 {
-		t.Fatalf("failed count = %d, want 1", got)
-	}
-	if got := metrics.completedCount("panic-job"); got != 1 {
-		t.Fatalf("completed count = %d, want 1", got)
-	}
+	require.Equal(t, 1, metrics.failedCount("panic-job"))
+	require.Equal(t, 1, metrics.completedCount("panic-job"))
 }
 
 func TestRunJobSkipsWhenLocalOverlapExists(t *testing.T) {
@@ -53,9 +50,7 @@ func TestRunJobSkipsWhenLocalOverlapExists(t *testing.T) {
 		},
 	}, localGate)
 
-	if executed.Load() {
-		t.Fatal("task executed while local gate was not available")
-	}
+	require.False(t, executed.Load(), "task executed while local gate was not available")
 	assertSkipped(t, s.metrics.(*recordingMetrics), "overlap-job", "local_overlap")
 }
 
@@ -74,9 +69,7 @@ func TestRunJobSkipsWhenGlobalConcurrencyLimitReached(t *testing.T) {
 		},
 	}, localGate)
 
-	if executed.Load() {
-		t.Fatal("task executed while global gate was full")
-	}
+	require.False(t, executed.Load(), "task executed while global gate was full")
 	assertSkipped(t, s.metrics.(*recordingMetrics), "global-limit-job", "global_concurrency_limit")
 
 	select {
@@ -102,15 +95,11 @@ func TestLockModeSkipForcesZeroWaitTimeout(t *testing.T) {
 			return nil
 		},
 	}
-	if err := s.validateJob(&cfg); err != nil {
-		t.Fatalf("validateJob: %v", err)
-	}
+	require.NoError(t, s.validateJob(&cfg))
 
 	s.runJob(cfg, newLocalGate())
 
-	if got := locker.lastWaitTimeout.Load(); got != 0 {
-		t.Fatalf("wait timeout = %s, want 0", time.Duration(got))
-	}
+	require.Equal(t, time.Duration(0), time.Duration(locker.lastWaitTimeout.Load()))
 }
 
 func TestLockModeWaitUsesConfiguredWaitTimeout(t *testing.T) {
@@ -130,15 +119,11 @@ func TestLockModeWaitUsesConfiguredWaitTimeout(t *testing.T) {
 			return nil
 		},
 	}
-	if err := s.validateJob(&cfg); err != nil {
-		t.Fatalf("validateJob: %v", err)
-	}
+	require.NoError(t, s.validateJob(&cfg))
 
 	s.runJob(cfg, newLocalGate())
 
-	if got := time.Duration(locker.lastWaitTimeout.Load()); got != waitTimeout {
-		t.Fatalf("wait timeout = %s, want %s", got, waitTimeout)
-	}
+	require.Equal(t, waitTimeout, time.Duration(locker.lastWaitTimeout.Load()))
 }
 
 func TestRenewFailureCancelsTaskAndMarksFailed(t *testing.T) {
@@ -174,15 +159,9 @@ func TestRenewFailureCancelsTaskAndMarksFailed(t *testing.T) {
 		t.Fatal("task did not observe cancellation after renew failure")
 	}
 	metrics := s.metrics.(*recordingMetrics)
-	if got := metrics.lockRenewFailedCount("renew-failure-job"); got != 1 {
-		t.Fatalf("lock renew failed count = %d, want 1", got)
-	}
-	if got := metrics.failedCount("renew-failure-job"); got != 1 {
-		t.Fatalf("failed count = %d, want 1", got)
-	}
-	if got := metrics.completedCount("renew-failure-job"); got != 0 {
-		t.Fatalf("completed count = %d, want 0", got)
-	}
+	require.Equal(t, 1, metrics.lockRenewFailedCount("renew-failure-job"))
+	require.Equal(t, 1, metrics.failedCount("renew-failure-job"))
+	require.Zero(t, metrics.completedCount("renew-failure-job"))
 }
 
 func TestAutoRenewUsesFallbackIntervals(t *testing.T) {
@@ -207,19 +186,13 @@ func TestAutoRenewUsesFallbackIntervals(t *testing.T) {
 
 	s.runJob(cfg, newLocalGate())
 
-	if got := lock.renewCount.Load(); got == 0 {
-		t.Fatal("renew was not called with fallback interval")
-	}
-	if got := s.metrics.(*recordingMetrics).completedCount("fallback-renew-job"); got != 1 {
-		t.Fatalf("completed count = %d, want 1", got)
-	}
+	require.NotZero(t, lock.renewCount.Load(), "renew was not called with fallback interval")
+	require.Equal(t, 1, s.metrics.(*recordingMetrics).completedCount("fallback-renew-job"))
 }
 
 func TestShutdownRejectsAddJobAfterStop(t *testing.T) {
 	s := newTestScheduler(t, Config{})
-	if err := s.Shutdown(context.Background()); err != nil {
-		t.Fatalf("Shutdown: %v", err)
-	}
+	require.NoError(t, s.Shutdown(context.Background()))
 
 	_, err := s.AddJob(JobConfig{
 		Key:  "after-stop",
@@ -228,9 +201,7 @@ func TestShutdownRejectsAddJobAfterStop(t *testing.T) {
 			return nil
 		},
 	})
-	if !errors.Is(err, ErrSchedulerStopped) {
-		t.Fatalf("AddJob err = %v, want ErrSchedulerStopped", err)
-	}
+	require.ErrorIs(t, err, ErrSchedulerStopped)
 }
 
 func TestAddJobRejectsDuplicateKey(t *testing.T) {
@@ -243,13 +214,10 @@ func TestAddJobRejectsDuplicateKey(t *testing.T) {
 		},
 	}
 
-	if _, err := s.AddJob(cfg); err != nil {
-		t.Fatalf("first AddJob: %v", err)
-	}
 	_, err := s.AddJob(cfg)
-	if !errors.Is(err, ErrDuplicateJobKey) {
-		t.Fatalf("second AddJob err = %v, want ErrDuplicateJobKey", err)
-	}
+	require.NoError(t, err)
+	_, err = s.AddJob(cfg)
+	require.ErrorIs(t, err, ErrDuplicateJobKey)
 }
 
 func newTestScheduler(t *testing.T, cfg Config) *Scheduler {
@@ -257,9 +225,7 @@ func newTestScheduler(t *testing.T, cfg Config) *Scheduler {
 	cfg.Logger = zap.NewNop()
 	cfg.Metrics = &recordingMetrics{}
 	s, err := New(cfg)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	require.NoError(t, err)
 	return s
 }
 
@@ -271,9 +237,7 @@ func newLocalGate() chan struct{} {
 
 func assertSkipped(t *testing.T, metrics *recordingMetrics, jobKey string, reason string) {
 	t.Helper()
-	if got := metrics.skippedCount(jobKey, reason); got != 1 {
-		t.Fatalf("skipped count for %s/%s = %d, want 1", jobKey, reason, got)
-	}
+	require.Equal(t, 1, metrics.skippedCount(jobKey, reason))
 }
 
 type recordingMetrics struct {

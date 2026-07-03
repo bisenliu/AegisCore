@@ -1,51 +1,40 @@
 package rediskey
 
 import (
-	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuilderKeyUsesNamespaceScopeAndHashTag(t *testing.T) {
 	builder, err := NewBuilder(Options{Namespace: " aegiscore-user-services "})
-	if err != nil {
-		t.Fatalf("NewBuilder: %v", err)
-	}
+	require.NoError(t, err)
 	scoped := builder.MustScoped("auth")
 
 	got := scoped.MustKey("session", HashTag("u-123"), "s-123")
-	if got != "aegiscore-user-services:auth:session:{u-123}:s-123" {
-		t.Fatalf("Key = %q", got)
-	}
+	require.Equal(t, "aegiscore-user-services:auth:session:{u-123}:s-123", got)
 }
 
 func TestBuilderOmitsEmptyNamespace(t *testing.T) {
 	builder, err := NewBuilder(Options{Namespace: "   "})
-	if err != nil {
-		t.Fatalf("NewBuilder: %v", err)
-	}
+	require.NoError(t, err)
 
 	got := builder.MustKey("auth", "user", "token_version", HashTag("u-123"))
-	if got != "auth:user:token_version:{u-123}" {
-		t.Fatalf("Key = %q", got)
-	}
+	require.Equal(t, "auth:user:token_version:{u-123}", got)
 }
 
 func TestBuilderPrefixAddsTrailingSeparator(t *testing.T) {
 	builder := MustBuilder(Options{Namespace: "aegiscore-user-services"}).MustScoped("auth")
 
 	got := builder.MustPrefix("session", HashTag("u-123"))
-	if got != "aegiscore-user-services:auth:session:{u-123}:" {
-		t.Fatalf("Prefix = %q", got)
-	}
+	require.Equal(t, "aegiscore-user-services:auth:session:{u-123}:", got)
 }
 
 func TestBuilderAllowsSeparatorInsideHashTag(t *testing.T) {
 	builder := MustBuilder(Options{}).MustScoped("external")
 
 	got := builder.MustKey("ref", HashTag("github:user:123"))
-	if got != "external:ref:{github:user:123}" {
-		t.Fatalf("Key = %q", got)
-	}
+	require.Equal(t, "external:ref:{github:user:123}", got)
 }
 
 func TestBuilderRejectsInvalidSegments(t *testing.T) {
@@ -97,20 +86,12 @@ func TestBuilderRejectsInvalidSegments(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.build()
-			if !errors.Is(err, ErrInvalidSegment) {
-				t.Fatalf("error = %v, want ErrInvalidSegment", err)
-			}
+			require.ErrorIs(t, err, ErrInvalidSegment)
 		})
 	}
 }
 
 func TestMustKeyPanicsWhenSegmentInvalid(t *testing.T) {
-	defer func() {
-		if recovered := recover(); recovered == nil {
-			t.Fatal("MustKey did not panic")
-		}
-	}()
-
 	builder := MustBuilder(Options{})
-	_ = builder.MustKey("auth", "")
+	require.Panics(t, func() { _ = builder.MustKey("auth", "") })
 }

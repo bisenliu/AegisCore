@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewValidatesConfig(t *testing.T) {
@@ -28,12 +30,8 @@ func TestNewValidatesConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cache, err := New[string, int](tt.cfg, tt.load, nil)
-			if !errors.Is(err, tt.want) {
-				t.Fatalf("New error = %v, want %v", err, tt.want)
-			}
-			if cache != nil {
-				t.Fatal("New cache != nil, want nil")
-			}
+			require.ErrorIs(t, err, tt.want)
+			require.Nil(t, cache)
 		})
 	}
 }
@@ -42,22 +40,22 @@ func TestCacheGetSetAndExpire(t *testing.T) {
 	cache := newTestCache[int](t, Config[string]{Name: "test", Capacity: 10, TTL: 20 * time.Millisecond, KeyString: identityString}, nil)
 	defer cache.Close()
 
-	if _, ok, err := cache.Get("user-1"); err != nil || ok {
-		t.Fatal("Get before Set = hit, want miss")
-	}
-	if ok, err := cache.Set("user-1", 7); err != nil || !ok {
-		t.Fatalf("Set = (%v, %v), want (true, nil)", ok, err)
-	}
+	_, ok, err := cache.Get("user-1")
+	require.NoError(t, err)
+	require.False(t, ok, "Get before Set = hit, want miss")
+	ok, err = cache.Set("user-1", 7)
+	require.NoError(t, err)
+	require.True(t, ok)
 	cache.client.Wait()
 	version, ok, err := cache.Get("user-1")
-	if err != nil || !ok || version != 7 {
-		t.Fatalf("Get after Set = (%d, %v, %v), want (7, true, nil)", version, ok, err)
-	}
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, 7, version)
 
 	time.Sleep(50 * time.Millisecond)
-	if _, ok, err := cache.Get("user-1"); err != nil || ok {
-		t.Fatal("Get after TTL = hit, want miss")
-	}
+	_, ok, err = cache.Get("user-1")
+	require.NoError(t, err)
+	require.False(t, ok, "Get after TTL = hit, want miss")
 }
 
 func TestCacheDeleteAndClear(t *testing.T) {
@@ -68,24 +66,20 @@ func TestCacheDeleteAndClear(t *testing.T) {
 	_, _ = cache.Set("b", 2)
 	cache.client.Wait()
 
-	if err := cache.Delete("a"); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
+	require.NoError(t, cache.Delete("a"), "Delete")
 	cache.client.Wait()
-	if _, ok, err := cache.Get("a"); err != nil || ok {
-		t.Fatal("Get after Delete = hit, want miss")
-	}
-	if _, ok, err := cache.Get("b"); err != nil || !ok {
-		t.Fatalf("Get unaffected key = (%v, %v), want hit", ok, err)
-	}
+	_, ok, err := cache.Get("a")
+	require.NoError(t, err)
+	require.False(t, ok, "Get after Delete = hit, want miss")
+	_, ok, err = cache.Get("b")
+	require.NoError(t, err)
+	require.True(t, ok, "Get unaffected key = miss, want hit")
 
-	if err := cache.Clear(); err != nil {
-		t.Fatalf("Clear: %v", err)
-	}
+	require.NoError(t, cache.Clear(), "Clear")
 	cache.client.Wait()
-	if _, ok, err := cache.Get("b"); err != nil || ok {
-		t.Fatal("Get after Clear = hit, want miss")
-	}
+	_, ok, err = cache.Get("b")
+	require.NoError(t, err)
+	require.False(t, ok, "Get after Clear = hit, want miss")
 }
 
 func TestCacheGetOrLoadCoalescesConcurrentMisses(t *testing.T) {
@@ -121,23 +115,13 @@ func TestCacheGetOrLoadCoalescesConcurrentMisses(t *testing.T) {
 	close(errs)
 
 	for err := range errs {
-		if err != nil {
-			t.Fatalf("GetOrLoad concurrent: %v", err)
-		}
+		require.NoError(t, err, "GetOrLoad concurrent")
 	}
-	if got := loads.Load(); got != 1 {
-		t.Fatalf("loads = %d, want 1", got)
-	}
+	require.EqualValues(t, 1, loads.Load(), "loads")
 	stats := cache.Stats()
-	if stats.Load != 1 {
-		t.Fatalf("stats.Load = %d, want 1", stats.Load)
-	}
-	if stats.Shared == 0 {
-		t.Fatal("stats.Shared = 0, want shared singleflight result")
-	}
-	if stats.Hit != 0 {
-		t.Fatalf("stats.Hit = %d, want 0 for double-check-free initial miss wave", stats.Hit)
-	}
+	require.EqualValues(t, 1, stats.Load)
+	require.NotZero(t, stats.Shared, "stats.Shared = 0, want shared singleflight result")
+	require.Zero(t, stats.Hit, "stats.Hit want 0 for double-check-free initial miss wave")
 }
 
 func TestCacheGetOrLoadDoesNotCacheErrors(t *testing.T) {
@@ -150,16 +134,11 @@ func TestCacheGetOrLoadDoesNotCacheErrors(t *testing.T) {
 	defer cache.Close()
 
 	for i := 0; i < 2; i++ {
-		if _, err := cache.GetOrLoad(context.Background(), "alice"); !errors.Is(err, loadErr) {
-			t.Fatalf("GetOrLoad err = %v, want loadErr", err)
-		}
+		_, err := cache.GetOrLoad(context.Background(), "alice")
+		require.ErrorIs(t, err, loadErr)
 	}
-	if got := loads.Load(); got != 2 {
-		t.Fatalf("loads = %d, want 2", got)
-	}
-	if got := cache.Stats().LoadError; got != 2 {
-		t.Fatalf("LoadError = %d, want 2", got)
-	}
+	require.EqualValues(t, 2, loads.Load(), "loads")
+	require.EqualValues(t, 2, cache.Stats().LoadError, "LoadError")
 }
 
 func TestCacheCloneIsolatesLoaderCacheAndCaller(t *testing.T) {
@@ -170,46 +149,36 @@ func TestCacheCloneIsolatesLoaderCacheAndCaller(t *testing.T) {
 	defer cache.Close()
 
 	first, err := cache.GetOrLoad(context.Background(), "k")
-	if err != nil {
-		t.Fatalf("GetOrLoad first: %v", err)
-	}
+	require.NoError(t, err, "GetOrLoad first")
 	first[0] = 99
 	loaded[1] = 88
 	cache.client.Wait()
 
 	second, ok, err := cache.Get("k")
-	if err != nil || !ok {
-		t.Fatalf("Get cached = (%v, %v), want hit", ok, err)
-	}
-	if second[0] != 1 || second[1] != 2 {
-		t.Fatalf("cached value = %#v, want [1 2]", second)
-	}
+	require.NoError(t, err)
+	require.True(t, ok, "Get cached = miss, want hit")
+	require.Equal(t, []int{1, 2}, second)
 	second[0] = 77
 	third, ok, err := cache.Get("k")
-	if err != nil || !ok || third[0] != 1 {
-		t.Fatalf("third cached value = (%#v, %v, %v), want ([1 2], true, nil)", third, ok, err)
-	}
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, []int{1, 2}, third)
 }
 
 func TestCacheCloseRejectsNewOperations(t *testing.T) {
 	cache := newTestCache[int](t, Config[string]{Name: "test", Capacity: 10, TTL: time.Minute, KeyString: identityString}, nil)
 	cache.Close()
 
-	if _, ok, err := cache.Get("k"); !errors.Is(err, ErrClosed) || ok {
-		t.Fatalf("Get after Close = (%v, %v), want (false, ErrClosed)", ok, err)
-	}
-	if _, err := cache.GetOrLoad(context.Background(), "k"); !errors.Is(err, ErrClosed) {
-		t.Fatalf("GetOrLoad after Close err = %v, want ErrClosed", err)
-	}
-	if ok, err := cache.Set("k", 1); !errors.Is(err, ErrClosed) || ok {
-		t.Fatalf("Set after Close = (%v, %v), want (false, ErrClosed)", ok, err)
-	}
-	if err := cache.Delete("k"); !errors.Is(err, ErrClosed) {
-		t.Fatalf("Delete after Close err = %v, want ErrClosed", err)
-	}
-	if err := cache.Clear(); !errors.Is(err, ErrClosed) {
-		t.Fatalf("Clear after Close err = %v, want ErrClosed", err)
-	}
+	_, ok, err := cache.Get("k")
+	require.ErrorIs(t, err, ErrClosed)
+	require.False(t, ok)
+	_, err = cache.GetOrLoad(context.Background(), "k")
+	require.ErrorIs(t, err, ErrClosed)
+	ok, err = cache.Set("k", 1)
+	require.ErrorIs(t, err, ErrClosed)
+	require.False(t, ok)
+	require.ErrorIs(t, cache.Delete("k"), ErrClosed)
+	require.ErrorIs(t, cache.Clear(), ErrClosed)
 	cache.Close()
 }
 
@@ -232,12 +201,8 @@ func TestCacheLoadTimeoutDetachesRequestCancellation(t *testing.T) {
 		defer cancel()
 		return cache.loader(loadCtx, "k")
 	})
-	if err != nil {
-		t.Fatalf("detached loader err = %v, want nil", err)
-	}
-	if result.(int) != 7 {
-		t.Fatalf("detached loader result = %v, want 7", result)
-	}
+	require.NoError(t, err, "detached loader")
+	require.Equal(t, 7, result)
 }
 
 func newTestCache[V any](t *testing.T, cfg Config[string], loader Loader[string, V], clone ...CloneFunc[V]) *Cache[string, V] {
@@ -253,9 +218,7 @@ func newTestCache[V any](t *testing.T, cfg Config[string], loader Loader[string,
 		cloneFunc = clone[0]
 	}
 	cache, err := New[string, V](cfg, loader, cloneFunc)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	require.NoError(t, err, "New")
 	return cache
 }
 

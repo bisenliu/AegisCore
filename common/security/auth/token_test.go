@@ -1,8 +1,9 @@
 package auth
 
 import (
-	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseBearerAuthorization(t *testing.T) {
@@ -28,17 +29,11 @@ func TestParseBearerAuthorization(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ParseBearerAuthorization(tt.input)
 			if tt.wantErr != nil {
-				if !errors.Is(err, tt.wantErr) {
-					t.Fatalf("ParseBearerAuthorization(%q) error = %v; want %v", tt.input, err, tt.wantErr)
-				}
+				require.ErrorIs(t, err, tt.wantErr)
 				return
 			}
-			if err != nil {
-				t.Fatalf("ParseBearerAuthorization(%q) error = %v", tt.input, err)
-			}
-			if got != tt.want {
-				t.Fatalf("ParseBearerAuthorization(%q) = %q; want %q", tt.input, got, tt.want)
-			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -60,9 +55,7 @@ func TestStripBearerPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := StripBearerPrefix(tt.input); got != tt.want {
-				t.Fatalf("StripBearerPrefix(%q) = %q; want %q", tt.input, got, tt.want)
-			}
+			require.Equal(t, tt.want, StripBearerPrefix(tt.input))
 		})
 	}
 }

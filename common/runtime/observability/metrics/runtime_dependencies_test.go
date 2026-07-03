@@ -5,13 +5,13 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	io_prometheus_client "github.com/prometheus/client_model/go"
+	"github.com/stretchr/testify/require"
 
 	"github.com/aegiscore/common/runtime/scheduler"
 	"github.com/aegiscore/common/runtime/workerpool"
@@ -24,30 +24,22 @@ func TestSQLDBCollectorExportsPoolStats(t *testing.T) {
 	db.SetMaxOpenConns(7)
 
 	collector, err := NewSQLDBCollector(SQLDBCollectorOptions{Resource: "user_db", DB: db})
-	if err != nil {
-		t.Fatalf("NewSQLDBCollector: %v", err)
-	}
-	if err := provider.Register(collector); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
+	require.NoError(t, err, "NewSQLDBCollector")
+	require.NoError(t, provider.Register(collector), "Register")
 
 	metric := firstMetric(t, gatherFamily(t, provider, sqlMaxOpenConnectionsMetricName))
 	assertMetricLabel(t, metric, LabelResource, "user_db")
-	if got := metric.GetGauge().GetValue(); got != 7 {
-		t.Fatalf("max open gauge = %v, want 7", got)
-	}
+	require.Equal(t, float64(7), metric.GetGauge().GetValue(), "max open gauge")
 	assertHasFamily(t, provider, sqlOpenConnectionsMetricName)
 	assertHasFamily(t, provider, sqlWaitCountMetricName)
 	assertHasFamily(t, provider, sqlWaitDurationMetricName)
 }
 
 func TestSQLDBCollectorRejectsInvalidOptions(t *testing.T) {
-	if _, err := NewSQLDBCollector(SQLDBCollectorOptions{}); err == nil || !strings.Contains(err.Error(), "resource") {
-		t.Fatalf("empty resource error = %v, want resource error", err)
-	}
-	if _, err := NewSQLDBCollector(SQLDBCollectorOptions{Resource: "user_db"}); err == nil || !strings.Contains(err.Error(), "db") {
-		t.Fatalf("nil db error = %v, want db error", err)
-	}
+	_, err := NewSQLDBCollector(SQLDBCollectorOptions{})
+	require.ErrorContains(t, err, "resource")
+	_, err = NewSQLDBCollector(SQLDBCollectorOptions{Resource: "user_db"})
+	require.ErrorContains(t, err, "db")
 }
 
 func TestRedisPingCollectorExportsSuccessFailureAndTimeout(t *testing.T) {
@@ -60,27 +52,17 @@ func TestRedisPingCollectorExportsSuccessFailureAndTimeout(t *testing.T) {
 			Timeout:     time.Second,
 			MinInterval: time.Minute,
 		})
-		if err != nil {
-			t.Fatalf("NewRedisPingCollector: %v", err)
-		}
-		if err := provider.Register(collector); err != nil {
-			t.Fatalf("Register: %v", err)
-		}
+		require.NoError(t, err, "NewRedisPingCollector")
+		require.NoError(t, provider.Register(collector), "Register")
 
 		families := gatherFamilies(t, provider)
 		up := firstMetric(t, familyFrom(t, families, redisUpMetricName))
 		assertMetricLabel(t, up, LabelResource, "cache_redis")
-		if got := up.GetGauge().GetValue(); got != 1 {
-			t.Fatalf("redis up = %v, want 1", got)
-		}
+		require.Equal(t, float64(1), up.GetGauge().GetValue(), "redis up")
 		failures := firstMetric(t, familyFrom(t, families, redisPingFailuresMetricName))
-		if got := failures.GetCounter().GetValue(); got != 0 {
-			t.Fatalf("redis failures = %v, want 0", got)
-		}
+		require.Zero(t, failures.GetCounter().GetValue(), "redis failures")
 		gatherFamilies(t, provider)
-		if got := pinger.calls.Load(); got != 1 {
-			t.Fatalf("redis ping calls = %d, want cached single probe", got)
-		}
+		require.EqualValues(t, 1, pinger.calls.Load(), "redis ping calls want cached single probe")
 	})
 
 	t.Run("failure", func(t *testing.T) {
@@ -90,22 +72,14 @@ func TestRedisPingCollectorExportsSuccessFailureAndTimeout(t *testing.T) {
 			Pinger:   staticRedisPinger{err: errors.New("ping failed")},
 			Timeout:  time.Second,
 		})
-		if err != nil {
-			t.Fatalf("NewRedisPingCollector: %v", err)
-		}
-		if err := provider.Register(collector); err != nil {
-			t.Fatalf("Register: %v", err)
-		}
+		require.NoError(t, err, "NewRedisPingCollector")
+		require.NoError(t, provider.Register(collector), "Register")
 
 		families := gatherFamilies(t, provider)
 		up := firstMetric(t, familyFrom(t, families, redisUpMetricName))
-		if got := up.GetGauge().GetValue(); got != 0 {
-			t.Fatalf("redis up = %v, want 0", got)
-		}
+		require.Zero(t, up.GetGauge().GetValue(), "redis up")
 		failures := firstMetric(t, familyFrom(t, families, redisPingFailuresMetricName))
-		if got := failures.GetCounter().GetValue(); got != 1 {
-			t.Fatalf("redis failures = %v, want 1", got)
-		}
+		require.Equal(t, float64(1), failures.GetCounter().GetValue(), "redis failures")
 	})
 
 	t.Run("timeout", func(t *testing.T) {
@@ -115,17 +89,11 @@ func TestRedisPingCollectorExportsSuccessFailureAndTimeout(t *testing.T) {
 			Pinger:   blockingRedisPinger{},
 			Timeout:  10 * time.Millisecond,
 		})
-		if err != nil {
-			t.Fatalf("NewRedisPingCollector: %v", err)
-		}
-		if err := provider.Register(collector); err != nil {
-			t.Fatalf("Register: %v", err)
-		}
+		require.NoError(t, err, "NewRedisPingCollector")
+		require.NoError(t, provider.Register(collector), "Register")
 
 		up := firstMetric(t, gatherFamily(t, provider, redisUpMetricName))
-		if got := up.GetGauge().GetValue(); got != 0 {
-			t.Fatalf("redis up = %v, want 0", got)
-		}
+		require.Zero(t, up.GetGauge().GetValue(), "redis up")
 	})
 }
 
@@ -138,12 +106,8 @@ func TestRedisPingCollectorUsesGatherContextCancellation(t *testing.T) {
 		Timeout:     time.Second,
 		MinInterval: time.Nanosecond,
 	})
-	if err != nil {
-		t.Fatalf("NewRedisPingCollector: %v", err)
-	}
-	if err := provider.Register(collector); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
+	require.NoError(t, err, "NewRedisPingCollector")
+	require.NoError(t, provider.Register(collector), "Register")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -161,19 +125,13 @@ func TestRedisPingCollectorUsesGatherContextCancellation(t *testing.T) {
 
 	select {
 	case err := <-done:
-		if err != nil {
-			t.Fatalf("GatherContext: %v", err)
-		}
+		require.NoError(t, err, "GatherContext")
 	case <-time.After(time.Second):
 		t.Fatal("GatherContext did not finish after request context cancellation")
 	}
-	if got := pinger.ctxErr(); !errors.Is(got, context.Canceled) {
-		t.Fatalf("redis ping context error = %v, want context.Canceled", got)
-	}
+	require.ErrorIs(t, pinger.ctxErr(), context.Canceled, "redis ping context error")
 	up := firstMetric(t, gatherFamily(t, provider, redisUpMetricName))
-	if got := up.GetGauge().GetValue(); got != 0 {
-		t.Fatalf("redis up after canceled ping = %v, want 0", got)
-	}
+	require.Zero(t, up.GetGauge().GetValue(), "redis up after canceled ping")
 }
 
 func TestWorkerpoolCollectorExportsStatsSnapshot(t *testing.T) {
@@ -194,12 +152,8 @@ func TestWorkerpoolCollectorExportsStatsSnapshot(t *testing.T) {
 		Closed:    true,
 	}}
 	collector, err := NewWorkerpoolCollector(WorkerpoolCollectorOptions{Pool: "auth_session_purge_pool", Source: source})
-	if err != nil {
-		t.Fatalf("NewWorkerpoolCollector: %v", err)
-	}
-	if err := provider.Register(collector); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
+	require.NoError(t, err, "NewWorkerpoolCollector")
+	require.NoError(t, provider.Register(collector), "Register")
 
 	tasks := gatherFamily(t, provider, workerpoolTasksMetricName)
 	assertMetricWithLabelsValue(t, tasks, map[string]string{LabelPool: "auth_session_purge_pool", LabelEvent: workerpoolEventSubmitted}, 10)
@@ -248,9 +202,7 @@ func TestSchedulerMetricsAdapterRecordsEvents(t *testing.T) {
 
 func TestSchedulerMetricsAdapterDisabledProviderReturnsNop(t *testing.T) {
 	recorder := NewSchedulerMetrics(newTestProvider(t, false, false), SchedulerMetricsOptions{})
-	if _, ok := recorder.(scheduler.NopMetrics); !ok {
-		t.Fatalf("recorder type = %T, want scheduler.NopMetrics", recorder)
-	}
+	require.IsType(t, scheduler.NopMetrics{}, recorder)
 }
 
 func TestComponentStatusCollectorExportsRunningAndLastError(t *testing.T) {
@@ -259,22 +211,14 @@ func TestComponentStatusCollectorExportsRunningAndLastError(t *testing.T) {
 		Resource: "rbac_policy_watcher",
 		Source:   staticComponentStatusSource{running: true, err: errors.New("subscribe failed")},
 	})
-	if err != nil {
-		t.Fatalf("NewComponentStatusCollector: %v", err)
-	}
-	if err := provider.Register(collector); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
+	require.NoError(t, err, "NewComponentStatusCollector")
+	require.NoError(t, provider.Register(collector), "Register")
 
 	running := firstMetric(t, gatherFamily(t, provider, statusRunningMetricName))
 	assertMetricLabel(t, running, LabelResource, "rbac_policy_watcher")
-	if got := running.GetGauge().GetValue(); got != 1 {
-		t.Fatalf("running = %v, want 1", got)
-	}
+	require.Equal(t, float64(1), running.GetGauge().GetValue(), "running")
 	lastErr := firstMetric(t, gatherFamily(t, provider, statusLastErrorMetricName))
-	if got := lastErr.GetGauge().GetValue(); got != 1 {
-		t.Fatalf("last error = %v, want 1", got)
-	}
+	require.Equal(t, float64(1), lastErr.GetGauge().GetValue(), "last error")
 }
 
 func TestCasbinPolicyReloadMetricsRecordsStatus(t *testing.T) {
@@ -365,36 +309,32 @@ func (s staticComponentStatusSource) LastError() error {
 
 func assertGaugeValue(t *testing.T, family *io_prometheus_client.MetricFamily, want float64) {
 	t.Helper()
-	if got := firstMetric(t, family).GetGauge().GetValue(); got != want {
-		t.Fatalf("%s gauge = %v, want %v", family.GetName(), got, want)
-	}
+	require.Equalf(t, want, firstMetric(t, family).GetGauge().GetValue(), "%s gauge", family.GetName())
 }
 
 func assertMetricWithLabelsValue(t *testing.T, family *io_prometheus_client.MetricFamily, labels map[string]string, want float64) {
 	t.Helper()
 	metric := findMetricWithLabels(t, family, labels)
-	if got := metricValue(metric); got != want {
-		t.Fatalf("%s labels %#v value = %v, want %v", family.GetName(), labels, got, want)
-	}
+	require.Equalf(t, want, metricValue(metric), "%s labels %#v value", family.GetName(), labels)
 }
 
 func assertHistogramSampleCount(t *testing.T, family *io_prometheus_client.MetricFamily, labels map[string]string, want uint64) {
 	t.Helper()
 	metric := findMetricWithLabels(t, family, labels)
-	if got := metric.GetHistogram().GetSampleCount(); got != want {
-		t.Fatalf("%s labels %#v sample count = %d, want %d", family.GetName(), labels, got, want)
-	}
+	require.Equalf(t, want, metric.GetHistogram().GetSampleCount(), "%s labels %#v sample count", family.GetName(), labels)
 }
 
 func findMetricWithLabels(t *testing.T, family *io_prometheus_client.MetricFamily, labels map[string]string) *io_prometheus_client.Metric {
 	t.Helper()
+	var found *io_prometheus_client.Metric
 	for _, metric := range family.GetMetric() {
 		if metricHasLabels(metric, labels) {
-			return metric
+			found = metric
+			break
 		}
 	}
-	t.Fatalf("metric family %q missing labels %#v", family.GetName(), labels)
-	return nil
+	require.NotNilf(t, found, "metric family %q missing labels %#v", family.GetName(), labels)
+	return found
 }
 
 func metricHasLabels(metric *io_prometheus_client.Metric, labels map[string]string) bool {
@@ -427,21 +367,21 @@ func metricValue(metric *io_prometheus_client.Metric) float64 {
 func gatherFamilies(t *testing.T, provider *Provider) []*io_prometheus_client.MetricFamily {
 	t.Helper()
 	families, err := provider.Gatherer().Gather()
-	if err != nil {
-		t.Fatalf("Gather: %v", err)
-	}
+	require.NoError(t, err, "Gather")
 	return families
 }
 
 func familyFrom(t *testing.T, families []*io_prometheus_client.MetricFamily, name string) *io_prometheus_client.MetricFamily {
 	t.Helper()
+	var found *io_prometheus_client.MetricFamily
 	for _, family := range families {
 		if family.GetName() == name {
-			return family
+			found = family
+			break
 		}
 	}
-	t.Fatalf("metric family %q not found", name)
-	return nil
+	require.NotNilf(t, found, "metric family %q not found", name)
+	return found
 }
 
 type noopConnector struct{}

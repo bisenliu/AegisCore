@@ -1,8 +1,9 @@
 package metrics
 
 import (
-	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestStatusClass(t *testing.T) {
@@ -22,9 +23,7 @@ func TestStatusClass(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
-			if got := StatusClass(tt.status); got != tt.want {
-				t.Fatalf("StatusClass(%d) = %q, want %q", tt.status, got, tt.want)
-			}
+			require.Equalf(t, tt.want, StatusClass(tt.status), "StatusClass(%d)", tt.status)
 		})
 	}
 }
@@ -63,9 +62,7 @@ func TestLabelKeyConstants(t *testing.T) {
 		"LabelReason":       "reason",
 	}
 	for name, got := range tests {
-		if got != wants[name] {
-			t.Fatalf("%s = %q, want %q", name, got, wants[name])
-		}
+		require.Equalf(t, wants[name], got, "%s", name)
 	}
 }
 
@@ -86,12 +83,8 @@ func TestValidateLowCardinalityLabelKey(t *testing.T) {
 		LabelStatus,
 		LabelReason,
 	} {
-		if err := ValidateLowCardinalityLabelKey(key); err != nil {
-			t.Fatalf("ValidateLowCardinalityLabelKey(%q): %v", key, err)
-		}
+		require.NoErrorf(t, ValidateLowCardinalityLabelKey(key), "ValidateLowCardinalityLabelKey(%q)", key)
 	}
 
-	if err := ValidateLowCardinalityLabelKey("user_id"); !errors.Is(err, ErrUnsupportedLabelKey) {
-		t.Fatalf("ValidateLowCardinalityLabelKey(user_id) = %v, want ErrUnsupportedLabelKey", err)
-	}
+	require.ErrorIs(t, ValidateLowCardinalityLabelKey("user_id"), ErrUnsupportedLabelKey)
 }

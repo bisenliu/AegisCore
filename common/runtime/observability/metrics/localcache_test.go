@@ -5,6 +5,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	io_prometheus_client "github.com/prometheus/client_model/go"
+	"github.com/stretchr/testify/require"
 
 	"github.com/aegiscore/common/runtime/localcache"
 )
@@ -26,13 +27,9 @@ func TestLocalcacheCollectorExportsStats(t *testing.T) {
 		},
 	}
 	collector, err := NewLocalcacheCollector(LocalcacheCollectorOptions{Source: source})
-	if err != nil {
-		t.Fatalf("NewLocalcacheCollector: %v", err)
-	}
+	require.NoError(t, err, "NewLocalcacheCollector")
 	registry := prometheus.NewRegistry()
-	if err := registry.Register(collector); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
+	require.NoError(t, registry.Register(collector), "Register")
 
 	families := gatherRegistryFamilies(t, registry)
 	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheRequestsMetricName), map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultHit}, 10)
@@ -54,12 +51,8 @@ func TestLocalcacheCollectorAllowsMultipleCaches(t *testing.T) {
 		{name: "rbac_user_roles", stats: localcache.Stats{Miss: 2, Capacity: 200}},
 	} {
 		collector, err := NewLocalcacheCollector(LocalcacheCollectorOptions{Source: source})
-		if err != nil {
-			t.Fatalf("NewLocalcacheCollector(%s): %v", source.name, err)
-		}
-		if err := registry.Register(collector); err != nil {
-			t.Fatalf("Register(%s): %v", source.name, err)
-		}
+		require.NoErrorf(t, err, "NewLocalcacheCollector(%s)", source.name)
+		require.NoErrorf(t, registry.Register(collector), "Register(%s)", source.name)
 	}
 
 	family := familyFrom(t, gatherRegistryFamilies(t, registry), localcacheRequestsMetricName)
@@ -83,8 +76,6 @@ func (s staticLocalcacheStatsSource) Stats() localcache.Stats {
 func gatherRegistryFamilies(t *testing.T, gatherer prometheus.Gatherer) []*io_prometheus_client.MetricFamily {
 	t.Helper()
 	families, err := gatherer.Gather()
-	if err != nil {
-		t.Fatalf("Gather: %v", err)
-	}
+	require.NoError(t, err, "Gather")
 	return families
 }

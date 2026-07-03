@@ -2,27 +2,24 @@ package timezone
 
 import (
 	"os"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/aegiscore/common/runtime/config"
 )
 
 func TestInitConfigUsesDefaultTimezone(t *testing.T) {
 	withIsolatedTimezone(t, func() {
-		if err := InitConfig(&config.Config{}); err != nil {
-			t.Fatalf("InitConfig: %v", err)
-		}
+		require.NoError(t, InitConfig(&config.Config{}))
 		assertTimezone(t, DefaultTimezone)
 	})
 }
 
 func TestInitConfigUsesConfiguredTimezone(t *testing.T) {
 	withIsolatedTimezone(t, func() {
-		if err := InitConfig(&config.Config{System: config.SystemConfig{Timezone: "UTC"}}); err != nil {
-			t.Fatalf("InitConfig: %v", err)
-		}
+		require.NoError(t, InitConfig(&config.Config{System: config.SystemConfig{Timezone: "UTC"}}))
 		assertTimezone(t, "UTC")
 	})
 }
@@ -30,50 +27,32 @@ func TestInitConfigUsesConfiguredTimezone(t *testing.T) {
 func TestInitConfigReturnsErrorForInvalidTimezone(t *testing.T) {
 	withIsolatedTimezone(t, func() {
 		err := InitConfig(&config.Config{System: config.SystemConfig{Timezone: "Invalid/Timezone"}})
-		if err == nil {
-			t.Fatal("InitConfig error = nil")
-		}
-		if !strings.Contains(err.Error(), `load timezone "Invalid/Timezone"`) {
-			t.Fatalf("InitConfig error = %q, want load timezone context", err.Error())
-		}
-		if time.Local.String() == "Invalid/Timezone" {
-			t.Fatal("time.Local was set for invalid timezone")
-		}
+		require.Error(t, err)
+		require.Contains(t, err.Error(), `load timezone "Invalid/Timezone"`)
+		require.NotEqual(t, "Invalid/Timezone", time.Local.String())
 	})
 }
 
 func TestInitConfigOnlyInitializesOnceAfterSuccess(t *testing.T) {
 	withIsolatedTimezone(t, func() {
-		if err := InitConfig(&config.Config{System: config.SystemConfig{Timezone: "UTC"}}); err != nil {
-			t.Fatalf("InitConfig first call: %v", err)
-		}
-		if err := InitConfig(&config.Config{System: config.SystemConfig{Timezone: DefaultTimezone}}); err != nil {
-			t.Fatalf("InitConfig second call: %v", err)
-		}
+		require.NoError(t, InitConfig(&config.Config{System: config.SystemConfig{Timezone: "UTC"}}))
+		require.NoError(t, InitConfig(&config.Config{System: config.SystemConfig{Timezone: DefaultTimezone}}))
 		assertTimezone(t, "UTC")
 	})
 }
 
 func TestInitConfigCanRetryAfterFailure(t *testing.T) {
 	withIsolatedTimezone(t, func() {
-		if err := InitConfig(&config.Config{System: config.SystemConfig{Timezone: "Invalid/Timezone"}}); err == nil {
-			t.Fatal("InitConfig invalid error = nil")
-		}
-		if err := InitConfig(&config.Config{System: config.SystemConfig{Timezone: "UTC"}}); err != nil {
-			t.Fatalf("InitConfig retry: %v", err)
-		}
+		require.Error(t, InitConfig(&config.Config{System: config.SystemConfig{Timezone: "Invalid/Timezone"}}))
+		require.NoError(t, InitConfig(&config.Config{System: config.SystemConfig{Timezone: "UTC"}}))
 		assertTimezone(t, "UTC")
 	})
 }
 
 func assertTimezone(t *testing.T, want string) {
 	t.Helper()
-	if got := time.Local.String(); got != want {
-		t.Fatalf("time.Local = %q, want %q", got, want)
-	}
-	if got := os.Getenv("TZ"); got != want {
-		t.Fatalf("TZ = %q, want %q", got, want)
-	}
+	require.Equal(t, want, time.Local.String())
+	require.Equal(t, want, os.Getenv("TZ"))
 }
 
 func withIsolatedTimezone(t *testing.T, fn func()) {

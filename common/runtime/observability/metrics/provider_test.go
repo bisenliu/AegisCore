@@ -1,12 +1,11 @@
 package metrics
 
 import (
-	"errors"
-	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+	"github.com/stretchr/testify/require"
 
 	"github.com/aegiscore/common/runtime/config"
 )
@@ -14,48 +13,30 @@ import (
 func TestNewProviderDisabledHasNoSideEffects(t *testing.T) {
 	provider := newTestProvider(t, false, true)
 
-	if provider.Enabled() {
-		t.Fatal("provider is enabled")
-	}
-	if provider.Registerer() != nil {
-		t.Fatal("disabled provider has registerer")
-	}
-	if provider.Gatherer() != nil {
-		t.Fatal("disabled provider has gatherer")
-	}
+	require.False(t, provider.Enabled(), "provider is enabled")
+	require.Nil(t, provider.Registerer(), "disabled provider has registerer")
+	require.Nil(t, provider.Gatherer(), "disabled provider has gatherer")
 
 	counter := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "aegiscore_disabled_test_total",
 		Help: "Disabled test counter.",
 	})
-	if err := provider.Register(counter); err != nil {
-		t.Fatalf("Register on disabled provider: %v", err)
-	}
-	if err := provider.Register(nil); err != nil {
-		t.Fatalf("Register nil on disabled provider: %v", err)
-	}
+	require.NoError(t, provider.Register(counter), "Register on disabled provider")
+	require.NoError(t, provider.Register(nil), "Register nil on disabled provider")
 }
 
 func TestNewProviderEnabledCreatesRegistry(t *testing.T) {
 	provider := newTestProvider(t, true, false)
 
-	if !provider.Enabled() {
-		t.Fatal("provider is disabled")
-	}
-	if provider.Registerer() == nil {
-		t.Fatal("provider registerer is nil")
-	}
-	if provider.Gatherer() == nil {
-		t.Fatal("provider gatherer is nil")
-	}
+	require.True(t, provider.Enabled(), "provider is disabled")
+	require.NotNil(t, provider.Registerer(), "provider registerer is nil")
+	require.NotNil(t, provider.Gatherer(), "provider gatherer is nil")
 
 	counter := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "aegiscore_enabled_test_total",
 		Help: "Enabled test counter.",
 	})
-	if err := provider.Register(counter); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
+	require.NoError(t, provider.Register(counter), "Register")
 	counter.Inc()
 
 	metric := firstMetric(t, gatherFamily(t, provider, "aegiscore_enabled_test_total"))
@@ -80,12 +61,8 @@ func TestRegisterIgnoresAlreadyRegistered(t *testing.T) {
 		Help: "Duplicate test counter.",
 	})
 
-	if err := provider.Register(counter); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-	if err := provider.Register(counter); err != nil {
-		t.Fatalf("second Register: %v", err)
-	}
+	require.NoError(t, provider.Register(counter), "Register")
+	require.NoError(t, provider.Register(counter), "second Register")
 }
 
 func TestRegisterKeepsNonDuplicateErrors(t *testing.T) {
@@ -99,22 +76,15 @@ func TestRegisterKeepsNonDuplicateErrors(t *testing.T) {
 		Help: "Second help.",
 	})
 
-	if err := provider.Register(first); err != nil {
-		t.Fatalf("Register first: %v", err)
-	}
-	if err := provider.Register(second); err == nil {
-		t.Fatal("Register second succeeded, want conflict error")
-	} else if !strings.Contains(err.Error(), "register metrics collector") {
-		t.Fatalf("error = %v, want wrapped register error", err)
-	}
+	require.NoError(t, provider.Register(first), "Register first")
+	err := provider.Register(second)
+	require.ErrorContains(t, err, "register metrics collector")
 }
 
 func TestRegisterRejectsNilCollector(t *testing.T) {
 	provider := newTestProvider(t, true, false)
 
-	if err := provider.Register(nil); !errors.Is(err, ErrNilCollector) {
-		t.Fatalf("Register nil = %v, want ErrNilCollector", err)
-	}
+	require.ErrorIs(t, provider.Register(nil), ErrNilCollector)
 }
 
 func TestMustRegisterDoesNotPanicOnDuplicate(t *testing.T) {
@@ -154,9 +124,7 @@ func TestNewProviderRejectsMissingServiceIdentity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := NewProvider(tt.opts)
-			if err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("error = %v, want containing %q", err, tt.want)
-			}
+			require.ErrorContains(t, err, tt.want)
 		})
 	}
 }
@@ -173,19 +141,14 @@ func TestNewFxProviderUsesSharedConfig(t *testing.T) {
 			},
 		},
 	})
-	if err != nil {
-		t.Fatalf("NewFxProvider: %v", err)
-	}
-	if provider == nil || !provider.Enabled() {
-		t.Fatalf("provider = %#v, want enabled provider", provider)
-	}
+	require.NoError(t, err, "NewFxProvider")
+	require.NotNil(t, provider)
+	require.True(t, provider.Enabled(), "provider = %#v, want enabled provider", provider)
 }
 
 func TestNewFxProviderRejectsMissingConfig(t *testing.T) {
 	_, err := NewFxProvider(FxParams{})
-	if err == nil || !strings.Contains(err.Error(), "metrics config") {
-		t.Fatalf("error = %v, want metrics config error", err)
-	}
+	require.ErrorContains(t, err, "metrics config")
 }
 
 func newTestProvider(t *testing.T, enabled bool, includeRuntime bool) *Provider {
@@ -195,9 +158,7 @@ func newTestProvider(t *testing.T, enabled bool, includeRuntime bool) *Provider 
 		ServiceName: "aegiscore-test",
 		Environment: "local",
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
+	require.NoError(t, err, "NewProvider")
 	return provider
 }
 
@@ -212,23 +173,21 @@ func testMetricsConfig(enabled bool, includeRuntime bool) config.MetricsConfig {
 func gatherFamily(t *testing.T, provider *Provider, name string) *dto.MetricFamily {
 	t.Helper()
 	families, err := provider.Gatherer().Gather()
-	if err != nil {
-		t.Fatalf("Gather: %v", err)
-	}
+	require.NoError(t, err, "Gather")
+	var found *dto.MetricFamily
 	for _, family := range families {
 		if family.GetName() == name {
-			return family
+			found = family
+			break
 		}
 	}
-	t.Fatalf("metric family %q not found", name)
-	return nil
+	require.NotNilf(t, found, "metric family %q not found", name)
+	return found
 }
 
 func firstMetric(t *testing.T, family *dto.MetricFamily) *dto.Metric {
 	t.Helper()
-	if len(family.GetMetric()) == 0 {
-		t.Fatalf("metric family %q has no metrics", family.GetName())
-	}
+	require.NotEmptyf(t, family.GetMetric(), "metric family %q has no metrics", family.GetName())
 	return family.GetMetric()[0]
 }
 
@@ -240,25 +199,22 @@ func assertHasFamily(t *testing.T, provider *Provider, name string) {
 func assertMissingFamily(t *testing.T, provider *Provider, name string) {
 	t.Helper()
 	families, err := provider.Gatherer().Gather()
-	if err != nil {
-		t.Fatalf("Gather: %v", err)
-	}
+	require.NoError(t, err, "Gather")
 	for _, family := range families {
-		if family.GetName() == name {
-			t.Fatalf("metric family %q exists, want missing", name)
-		}
+		require.NotEqualf(t, name, family.GetName(), "metric family %q exists, want missing", name)
 	}
 }
 
 func assertMetricLabel(t *testing.T, metric *dto.Metric, name string, want string) {
 	t.Helper()
+	var got *string
 	for _, label := range metric.GetLabel() {
 		if label.GetName() == name {
-			if label.GetValue() != want {
-				t.Fatalf("label %s = %q, want %q", name, label.GetValue(), want)
-			}
-			return
+			value := label.GetValue()
+			got = &value
+			break
 		}
 	}
-	t.Fatalf("label %s not found", name)
+	require.NotNilf(t, got, "label %s not found", name)
+	require.Equalf(t, want, *got, "label %s", name)
 }

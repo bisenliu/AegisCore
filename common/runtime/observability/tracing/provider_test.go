@@ -2,10 +2,9 @@ package tracing
 
 import (
 	"context"
-	"errors"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 
@@ -20,15 +19,9 @@ func TestNewProviderWithNoneExporterCreatesSpanContext(t *testing.T) {
 	defer span.End()
 
 	spanCtx := span.SpanContext()
-	if !spanCtx.TraceID().IsValid() {
-		t.Fatal("trace ID is invalid")
-	}
-	if !spanCtx.SpanID().IsValid() {
-		t.Fatal("span ID is invalid")
-	}
-	if !spanCtx.IsSampled() {
-		t.Fatal("span is not sampled")
-	}
+	require.True(t, spanCtx.TraceID().IsValid(), "trace ID is invalid")
+	require.True(t, spanCtx.SpanID().IsValid(), "span ID is invalid")
+	require.True(t, spanCtx.IsSampled(), "span is not sampled")
 }
 
 func TestNewProviderWithZeroSampleRatioKeepsValidIDsButNotSampled(t *testing.T) {
@@ -39,15 +32,9 @@ func TestNewProviderWithZeroSampleRatioKeepsValidIDsButNotSampled(t *testing.T) 
 	defer span.End()
 
 	spanCtx := span.SpanContext()
-	if !spanCtx.TraceID().IsValid() {
-		t.Fatal("trace ID is invalid")
-	}
-	if !spanCtx.SpanID().IsValid() {
-		t.Fatal("span ID is invalid")
-	}
-	if spanCtx.IsSampled() {
-		t.Fatal("span is sampled")
-	}
+	require.True(t, spanCtx.TraceID().IsValid(), "trace ID is invalid")
+	require.True(t, spanCtx.SpanID().IsValid(), "span ID is invalid")
+	require.False(t, spanCtx.IsSampled(), "span is sampled")
 }
 
 func TestParentBasedSamplerHonorsSampledParent(t *testing.T) {
@@ -58,9 +45,7 @@ func TestParentBasedSamplerHonorsSampledParent(t *testing.T) {
 	_, span := provider.Tracer("test").Start(parent, "child")
 	defer span.End()
 
-	if !span.SpanContext().IsSampled() {
-		t.Fatal("child span is not sampled")
-	}
+	require.True(t, span.SpanContext().IsSampled(), "child span is not sampled")
 }
 
 func TestProviderResourceAttributes(t *testing.T) {
@@ -75,9 +60,7 @@ func TestProviderResourceAttributes(t *testing.T) {
 		Version:     "1.2.3",
 		InstanceID:  "instance-1",
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
+	require.NoError(t, err, "NewProvider")
 	defer shutdownProvider(t, provider)
 
 	attrs := resourceAttributes(provider)
@@ -90,42 +73,30 @@ func TestProviderResourceAttributes(t *testing.T) {
 func TestProviderShutdown(t *testing.T) {
 	provider := newTestProvider(t, 1.0)
 
-	if err := provider.Shutdown(context.Background()); err != nil {
-		t.Fatalf("Shutdown: %v", err)
-	}
-	if err := provider.Shutdown(context.Background()); err != nil {
-		t.Fatalf("second Shutdown: %v", err)
-	}
+	require.NoError(t, provider.Shutdown(context.Background()), "Shutdown")
+	require.NoError(t, provider.Shutdown(context.Background()), "second Shutdown")
 }
 
 func TestProviderTracerFallsBackToNoopWhenProviderIsNil(t *testing.T) {
 	var provider *Provider
 
 	tracer := provider.Tracer("test")
-	if tracer == nil {
-		t.Fatal("Tracer = nil")
-	}
+	require.NotNil(t, tracer, "Tracer = nil")
 	_, span := tracer.Start(context.Background(), "operation")
 	defer span.End()
 
-	if span.SpanContext().IsValid() {
-		t.Fatal("span context is valid, want noop span")
-	}
+	require.False(t, span.SpanContext().IsValid(), "span context is valid, want noop span")
 }
 
 func TestProviderTracerFallsBackToNoopWhenTracerProviderIsNil(t *testing.T) {
 	provider := &Provider{}
 
 	tracer := provider.Tracer("test")
-	if tracer == nil {
-		t.Fatal("Tracer = nil")
-	}
+	require.NotNil(t, tracer, "Tracer = nil")
 	_, span := tracer.Start(context.Background(), "operation")
 	defer span.End()
 
-	if span.SpanContext().IsValid() {
-		t.Fatal("span context is valid, want noop span")
-	}
+	require.False(t, span.SpanContext().IsValid(), "span context is valid, want noop span")
 }
 
 func TestNewProviderWithOTLPExporterCreatesProvider(t *testing.T) {
@@ -140,20 +111,14 @@ func TestNewProviderWithOTLPExporterCreatesProvider(t *testing.T) {
 		ServiceName: "aegiscore-test",
 		Environment: "local",
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
+	require.NoError(t, err, "NewProvider")
 	defer shutdownProvider(t, provider)
 
 	_, span := provider.Tracer("test").Start(context.Background(), "operation")
 	defer span.End()
 
-	if !span.SpanContext().TraceID().IsValid() {
-		t.Fatal("trace ID is invalid")
-	}
-	if span.SpanContext().IsSampled() {
-		t.Fatal("span is sampled")
-	}
+	require.True(t, span.SpanContext().TraceID().IsValid(), "trace ID is invalid")
+	require.False(t, span.SpanContext().IsSampled(), "span is sampled")
 }
 
 func TestNewProviderWithOTLPExporterRejectsMissingEndpoint(t *testing.T) {
@@ -167,12 +132,9 @@ func TestNewProviderWithOTLPExporterRejectsMissingEndpoint(t *testing.T) {
 		ServiceName: "aegiscore-test",
 		Environment: "local",
 	})
-	if err == nil || !strings.Contains(err.Error(), "endpoint") {
-		t.Fatalf("error = %v, want endpoint error", err)
-	}
-	if strings.Contains(err.Error(), "collector.internal") || strings.Contains(err.Error(), "secret") {
-		t.Fatalf("error leaked endpoint: %v", err)
-	}
+	require.ErrorContains(t, err, "endpoint")
+	require.NotContains(t, err.Error(), "collector.internal")
+	require.NotContains(t, err.Error(), "secret")
 }
 
 func TestNewProviderRejectsUnknownExporter(t *testing.T) {
@@ -185,9 +147,7 @@ func TestNewProviderRejectsUnknownExporter(t *testing.T) {
 		ServiceName: "aegiscore-test",
 		Environment: "local",
 	})
-	if !errors.Is(err, ErrUnsupportedExporter) {
-		t.Fatalf("error = %v, want ErrUnsupportedExporter", err)
-	}
+	require.ErrorIs(t, err, ErrUnsupportedExporter)
 }
 
 func TestNewProviderRejectsUnknownExporterWhenDisabled(t *testing.T) {
@@ -200,9 +160,7 @@ func TestNewProviderRejectsUnknownExporterWhenDisabled(t *testing.T) {
 		ServiceName: "aegiscore-test",
 		Environment: "local",
 	})
-	if !errors.Is(err, ErrUnsupportedExporter) {
-		t.Fatalf("error = %v, want ErrUnsupportedExporter", err)
-	}
+	require.ErrorIs(t, err, ErrUnsupportedExporter)
 }
 
 func TestNewProviderRejectsMissingServiceIdentity(t *testing.T) {
@@ -231,9 +189,7 @@ func TestNewProviderRejectsMissingServiceIdentity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := NewProvider(context.Background(), tt.opts)
-			if err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("error = %v, want containing %q", err, tt.want)
-			}
+			require.ErrorContains(t, err, tt.want)
 		})
 	}
 }
@@ -248,9 +204,7 @@ func TestNewProviderRejectsInvalidSampleRatio(t *testing.T) {
 		ServiceName: "aegiscore-test",
 		Environment: "local",
 	})
-	if err == nil || !strings.Contains(err.Error(), "sample ratio") {
-		t.Fatalf("error = %v, want sample ratio error", err)
-	}
+	require.ErrorContains(t, err, "sample ratio")
 }
 
 func TestTextMapPropagatorUsesTraceContextAndBaggage(t *testing.T) {
@@ -277,18 +231,11 @@ func TestNewFxProviderRegistersShutdown(t *testing.T) {
 			},
 		},
 	})
-	if err != nil {
-		t.Fatalf("NewFxProvider: %v", err)
-	}
-	if provider == nil {
-		t.Fatal("provider is nil")
-	}
-	if len(lifecycle.hooks) != 1 || lifecycle.hooks[0].OnStop == nil {
-		t.Fatalf("registered hooks = %#v, want one OnStop hook", lifecycle.hooks)
-	}
-	if err := lifecycle.hooks[0].OnStop(context.Background()); err != nil {
-		t.Fatalf("OnStop: %v", err)
-	}
+	require.NoError(t, err, "NewFxProvider")
+	require.NotNil(t, provider, "provider is nil")
+	require.Len(t, lifecycle.hooks, 1, "registered hooks")
+	require.NotNil(t, lifecycle.hooks[0].OnStop, "registered OnStop hook")
+	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()), "OnStop")
 }
 
 func newTestProvider(t *testing.T, sampleRatio float64) *Provider {
@@ -298,9 +245,7 @@ func newTestProvider(t *testing.T, sampleRatio float64) *Provider {
 		ServiceName: "aegiscore-test",
 		Environment: "local",
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
+	require.NoError(t, err, "NewProvider")
 	return provider
 }
 
@@ -314,21 +259,15 @@ func testTracingConfig(sampleRatio float64) config.TracingConfig {
 
 func shutdownProvider(t *testing.T, provider *Provider) {
 	t.Helper()
-	if err := provider.Shutdown(context.Background()); err != nil {
-		t.Fatalf("Shutdown: %v", err)
-	}
+	require.NoError(t, provider.Shutdown(context.Background()), "Shutdown")
 }
 
 func sampledRemoteParent(t *testing.T) context.Context {
 	t.Helper()
 	traceID, err := trace.TraceIDFromHex("00112233445566778899aabbccddeeff")
-	if err != nil {
-		t.Fatalf("TraceIDFromHex: %v", err)
-	}
+	require.NoError(t, err, "TraceIDFromHex")
 	spanID, err := trace.SpanIDFromHex("0011223344556677")
-	if err != nil {
-		t.Fatalf("SpanIDFromHex: %v", err)
-	}
+	require.NoError(t, err, "SpanIDFromHex")
 	spanCtx := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    traceID,
 		SpanID:     spanID,
@@ -348,9 +287,7 @@ func resourceAttributes(provider *Provider) map[string]string {
 
 func assertAttribute(t *testing.T, attrs map[string]string, key string, want string) {
 	t.Helper()
-	if got := attrs[key]; got != want {
-		t.Fatalf("%s = %q, want %q", key, got, want)
-	}
+	require.Equalf(t, want, attrs[key], "%s", key)
 }
 
 func assertContains(t *testing.T, values []string, want string) {
@@ -360,7 +297,7 @@ func assertContains(t *testing.T, values []string, want string) {
 			return
 		}
 	}
-	t.Fatalf("%q not found in %v", want, values)
+	require.Contains(t, values, want)
 }
 
 type lifecycleRecorder struct {

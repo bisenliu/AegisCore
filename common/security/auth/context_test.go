@@ -3,42 +3,42 @@ package auth
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestUserIDContext(t *testing.T) {
 	var nilContext context.Context
-	if got, ok := UserIDFromContext(nilContext); ok || got != "" {
-		t.Fatalf("UserIDFromContext nil = %q, %v; want empty, false", got, ok)
-	}
-	if got, ok := UserIDFromContext(context.Background()); ok || got != "" {
-		t.Fatalf("UserIDFromContext empty = %q, %v; want empty, false", got, ok)
-	}
-	if got, ok := UserIDFromContext(WithUserID(context.Background(), "")); ok || got != "" {
-		t.Fatalf("UserIDFromContext blank = %q, %v; want empty, false", got, ok)
-	}
+	got, ok := UserIDFromContext(nilContext)
+	require.False(t, ok)
+	require.Empty(t, got)
+	got, ok = UserIDFromContext(context.Background())
+	require.False(t, ok)
+	require.Empty(t, got)
+	got, ok = UserIDFromContext(WithUserID(context.Background(), ""))
+	require.False(t, ok)
+	require.Empty(t, got)
 
 	ctx := WithUserID(context.Background(), "u-123")
-	got, ok := UserIDFromContext(ctx)
-	if !ok || got != "u-123" {
-		t.Fatalf("UserIDFromContext = %q, %v; want u-123, true", got, ok)
-	}
+	got, ok = UserIDFromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, "u-123", got)
 }
 
 func TestSessionIDContext(t *testing.T) {
 	var nilContext context.Context
-	if got, ok := SessionIDFromContext(nilContext); ok || got != "" {
-		t.Fatalf("SessionIDFromContext nil = %q, %v; want empty, false", got, ok)
-	}
-	if got, ok := SessionIDFromContext(context.Background()); ok || got != "" {
-		t.Fatalf("SessionIDFromContext empty = %q, %v; want empty, false", got, ok)
-	}
-	if got, ok := SessionIDFromContext(WithSessionID(context.Background(), "")); ok || got != "" {
-		t.Fatalf("SessionIDFromContext blank = %q, %v; want empty, false", got, ok)
-	}
+	got, ok := SessionIDFromContext(nilContext)
+	require.False(t, ok)
+	require.Empty(t, got)
+	got, ok = SessionIDFromContext(context.Background())
+	require.False(t, ok)
+	require.Empty(t, got)
+	got, ok = SessionIDFromContext(WithSessionID(context.Background(), ""))
+	require.False(t, ok)
+	require.Empty(t, got)
 
 	ctx := WithSessionID(context.Background(), "s-123")
-	got, ok := SessionIDFromContext(ctx)
-	if !ok || got != "s-123" {
-		t.Fatalf("SessionIDFromContext = %q, %v; want s-123, true", got, ok)
-	}
+	got, ok = SessionIDFromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, "s-123", got)
 }
