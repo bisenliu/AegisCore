@@ -8,12 +8,12 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -42,25 +42,26 @@ func (r *shutdownRecorder) Shutdown(...fx.ShutdownOption) error {
 
 func TestDefaultConfigHTTPTimeouts(t *testing.T) {
 	cfg, err := config.Load("../../configs/config.yaml")
-	if err != nil {
-		t.Fatalf("Load default config: %v", err)
-	}
+	require.NoError(t, err)
 
-	if cfg.HTTP.ReadTimeout != 30*time.Second || cfg.HTTP.WriteTimeout != 60*time.Second || cfg.HTTP.IdleTimeout != 120*time.Second || cfg.HTTP.ShutdownTimeout != 25*time.Second {
-		t.Fatalf("HTTP timeouts = (%s,%s,%s,%s), want (30s,60s,120s,25s)", cfg.HTTP.ReadTimeout, cfg.HTTP.WriteTimeout, cfg.HTTP.IdleTimeout, cfg.HTTP.ShutdownTimeout)
-	}
-	if cfg.Auth.JWT.Secret == "" || cfg.Auth.JWT.Issuer != "aegiscore-user-services" || cfg.Auth.JWT.Audience != "aegiscore-users" {
-		t.Fatalf("Auth.JWT = %#v, want default auth config", cfg.Auth.JWT)
-	}
-	if cfg.Auth.JWT.AccessTokenTTL != 15*time.Minute || cfg.Auth.JWT.RefreshTokenTTL != 168*time.Hour || cfg.Auth.TokenVersionCacheTTL != 30*time.Second {
-		t.Fatalf("auth TTLs = (%s,%s,%s), want (15m,168h,30s)", cfg.Auth.JWT.AccessTokenTTL, cfg.Auth.JWT.RefreshTokenTTL, cfg.Auth.TokenVersionCacheTTL)
-	}
-	if cfg.Observability.Metrics.Enabled || cfg.Observability.Metrics.Path != "/metrics" || !cfg.Observability.Metrics.IncludeRuntime {
-		t.Fatalf("observability metrics = %#v, want disabled /metrics with runtime metrics", cfg.Observability.Metrics)
-	}
-	if !cfg.Observability.Tracing.Enabled || cfg.Observability.Tracing.SampleRatio != 1.0 || cfg.Observability.Tracing.Exporter != "none" || cfg.Observability.Tracing.OTLPEndpoint != "" || cfg.Observability.Tracing.Insecure {
-		t.Fatalf("observability tracing = %#v, want local none exporter default", cfg.Observability.Tracing)
-	}
+	require.Equal(t, 30*time.Second, cfg.HTTP.ReadTimeout)
+	require.Equal(t, 60*time.Second, cfg.HTTP.WriteTimeout)
+	require.Equal(t, 120*time.Second, cfg.HTTP.IdleTimeout)
+	require.Equal(t, 25*time.Second, cfg.HTTP.ShutdownTimeout)
+	require.NotEmpty(t, cfg.Auth.JWT.Secret)
+	require.Equal(t, "aegiscore-user-services", cfg.Auth.JWT.Issuer)
+	require.Equal(t, "aegiscore-users", cfg.Auth.JWT.Audience)
+	require.Equal(t, 15*time.Minute, cfg.Auth.JWT.AccessTokenTTL)
+	require.Equal(t, 168*time.Hour, cfg.Auth.JWT.RefreshTokenTTL)
+	require.Equal(t, 30*time.Second, cfg.Auth.TokenVersionCacheTTL)
+	require.False(t, cfg.Observability.Metrics.Enabled)
+	require.Equal(t, "/metrics", cfg.Observability.Metrics.Path)
+	require.True(t, cfg.Observability.Metrics.IncludeRuntime)
+	require.True(t, cfg.Observability.Tracing.Enabled)
+	require.Equal(t, 1.0, cfg.Observability.Tracing.SampleRatio)
+	require.Equal(t, "none", cfg.Observability.Tracing.Exporter)
+	require.Empty(t, cfg.Observability.Tracing.OTLPEndpoint)
+	require.False(t, cfg.Observability.Tracing.Insecure)
 }
 
 func TestHTTPServerUsesConfiguredTimeouts(t *testing.T) {
@@ -82,19 +83,16 @@ func TestHTTPServerUsesConfiguredTimeouts(t *testing.T) {
 		Engine:    gin.New(),
 	})
 
-	if server.ReadTimeout != cfg.HTTP.ReadTimeout || server.WriteTimeout != cfg.HTTP.WriteTimeout || server.IdleTimeout != cfg.HTTP.IdleTimeout {
-		t.Fatalf("server timeouts = (%s,%s,%s), want (%s,%s,%s)", server.ReadTimeout, server.WriteTimeout, server.IdleTimeout, cfg.HTTP.ReadTimeout, cfg.HTTP.WriteTimeout, cfg.HTTP.IdleTimeout)
-	}
-	if len(lifecycle.hooks) != 1 || lifecycle.hooks[0].OnStop == nil {
-		t.Fatalf("lifecycle hooks = %#v, want one shutdown hook", lifecycle.hooks)
-	}
+	require.Equal(t, cfg.HTTP.ReadTimeout, server.ReadTimeout)
+	require.Equal(t, cfg.HTTP.WriteTimeout, server.WriteTimeout)
+	require.Equal(t, cfg.HTTP.IdleTimeout, server.IdleTimeout)
+	require.Len(t, lifecycle.hooks, 1)
+	require.NotNil(t, lifecycle.hooks[0].OnStop)
 }
 
 func TestHTTPServerStartReturnsListenError(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("reserve listener: %v", err)
-	}
+	require.NoError(t, err)
 	defer listener.Close()
 
 	addr := listener.Addr().(*net.TCPAddr)
@@ -109,16 +107,10 @@ func TestHTTPServerStartReturnsListenError(t *testing.T) {
 		Engine: gin.New(),
 	})
 
-	if len(lifecycle.hooks) != 1 || lifecycle.hooks[0].OnStart == nil {
-		t.Fatalf("lifecycle hooks = %#v, want one start hook", lifecycle.hooks)
-	}
+	require.Len(t, lifecycle.hooks, 1)
+	require.NotNil(t, lifecycle.hooks[0].OnStart)
 	err = lifecycle.hooks[0].OnStart(context.Background())
-	if err == nil {
-		t.Fatal("OnStart error = nil, want listen error")
-	}
-	if !strings.Contains(err.Error(), "listen http server") {
-		t.Fatalf("OnStart error = %q, want listen http server context", err.Error())
-	}
+	require.ErrorContains(t, err, "listen http server")
 }
 
 func TestHTTPServerUnexpectedServeErrorTriggersShutdown(t *testing.T) {
@@ -128,15 +120,11 @@ func TestHTTPServerUnexpectedServeErrorTriggersShutdown(t *testing.T) {
 
 	shutdownOnHTTPServeError(zap.New(core), shutdowner, serveErr)
 
-	if shutdowner.calls != 1 {
-		t.Fatalf("shutdown calls = %d, want 1", shutdowner.calls)
-	}
+	require.Equal(t, 1, shutdowner.calls)
 	entries := logs.FilterMessage("http server failed").All()
-	if len(entries) != 1 {
-		t.Fatalf("http server failed logs = %d, want 1", len(entries))
-	}
+	require.Len(t, entries, 1)
 	if loggedErr, ok := entries[0].ContextMap()["error"].(string); !ok || loggedErr != serveErr.Error() {
-		t.Fatalf("logged error = %#v, want %q", entries[0].ContextMap()["error"], serveErr.Error())
+		require.Equal(t, serveErr.Error(), loggedErr)
 	}
 }
 
@@ -147,15 +135,11 @@ func TestHTTPServerUnexpectedServeErrorLogsShutdownFailure(t *testing.T) {
 
 	shutdownOnHTTPServeError(zap.New(core), shutdowner, errors.New("serve failed"))
 
-	if shutdowner.calls != 1 {
-		t.Fatalf("shutdown calls = %d, want 1", shutdowner.calls)
-	}
+	require.Equal(t, 1, shutdowner.calls)
 	entries := logs.FilterMessage("shutdown after http server failure failed").All()
-	if len(entries) != 1 {
-		t.Fatalf("shutdown failure logs = %d, want 1", len(entries))
-	}
+	require.Len(t, entries, 1)
 	if loggedErr, ok := entries[0].ContextMap()["error"].(string); !ok || loggedErr != shutdownErr.Error() {
-		t.Fatalf("logged shutdown error = %#v, want %q", entries[0].ContextMap()["error"], shutdownErr.Error())
+		require.Equal(t, shutdownErr.Error(), loggedErr)
 	}
 }
 
@@ -166,19 +150,13 @@ func TestHTTPServerClosedServeErrorDoesNotTriggerShutdown(t *testing.T) {
 	shutdownOnHTTPServeError(zap.New(core), shutdowner, http.ErrServerClosed)
 	shutdownOnHTTPServeError(zap.New(core), shutdowner, nil)
 
-	if shutdowner.calls != 0 {
-		t.Fatalf("shutdown calls = %d, want 0", shutdowner.calls)
-	}
-	if logs.Len() != 0 {
-		t.Fatalf("error logs = %d, want 0", logs.Len())
-	}
+	require.Equal(t, 0, shutdowner.calls)
+	require.Equal(t, 0, logs.Len())
 }
 
 func TestHTTPServerLifecycleCancelStopsServeGoroutine(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
+	require.NoError(t, err)
 
 	core, logs := observer.New(zapcore.DebugLevel)
 	shutdowner := &shutdownRecorder{}
@@ -190,25 +168,13 @@ func TestHTTPServerLifecycleCancelStopsServeGoroutine(t *testing.T) {
 	}()
 
 	cancel()
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("serve goroutine did not exit after lifecycle context cancellation")
-	}
+	requireEventuallyClosed(t, done, time.Second)
 
-	if shutdowner.calls != 0 {
-		t.Fatalf("shutdown calls = %d, want 0", shutdowner.calls)
-	}
-	if entries := logs.FilterMessage("http server failed").All(); len(entries) != 0 {
-		t.Fatalf("http server failed logs = %d, want 0", len(entries))
-	}
+	require.Equal(t, 0, shutdowner.calls)
+	require.Empty(t, logs.FilterMessage("http server failed").All())
 	entries := logs.FilterMessage("http server goroutine stopped").All()
-	if len(entries) != 1 {
-		t.Fatalf("http server goroutine stopped logs = %d, want 1", len(entries))
-	}
-	if reason := entries[0].ContextMap()["reason"]; reason != "lifecycle_canceled" {
-		t.Fatalf("goroutine stop reason = %#v, want lifecycle_canceled", reason)
-	}
+	require.Len(t, entries, 1)
+	require.Equal(t, "lifecycle_canceled", entries[0].ContextMap()["reason"])
 }
 
 func TestHTTPServerStartAndStop(t *testing.T) {
@@ -224,17 +190,13 @@ func TestHTTPServerStartAndStop(t *testing.T) {
 		Engine: gin.New(),
 	})
 
-	if len(lifecycle.hooks) != 1 || lifecycle.hooks[0].OnStart == nil || lifecycle.hooks[0].OnStop == nil {
-		t.Fatalf("lifecycle hooks = %#v, want one start/stop hook", lifecycle.hooks)
-	}
-	if err := lifecycle.hooks[0].OnStart(context.Background()); err != nil {
-		t.Fatalf("OnStart: %v", err)
-	}
+	require.Len(t, lifecycle.hooks, 1)
+	require.NotNil(t, lifecycle.hooks[0].OnStart)
+	require.NotNil(t, lifecycle.hooks[0].OnStop)
+	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
 	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := lifecycle.hooks[0].OnStop(stopCtx); err != nil {
-		t.Fatalf("OnStop: %v", err)
-	}
+	require.NoError(t, lifecycle.hooks[0].OnStop(stopCtx))
 }
 
 func TestHTTPServerStopWaitsForActiveRequest(t *testing.T) {
@@ -267,41 +229,35 @@ func TestHTTPServerStopWaitsForActiveRequest(t *testing.T) {
 		Engine: engine,
 	})
 
-	if err := lifecycle.hooks[0].OnStart(context.Background()); err != nil {
-		t.Fatalf("OnStart: %v", err)
-	}
+	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
 	defer func() {
 		stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		_ = lifecycle.hooks[0].OnStop(stopCtx)
 	}()
 
-	responseDone := make(chan error, 1)
+	type responseResult struct {
+		status int
+		err    error
+	}
+	responseDone := make(chan responseResult, 1)
 	go func() {
 		client := &http.Client{Timeout: 2 * time.Second}
 		resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/slow", port))
 		if err != nil {
-			responseDone <- err
+			responseDone <- responseResult{err: err}
 			return
 		}
 		defer resp.Body.Close()
 		_, err = io.ReadAll(resp.Body)
 		if err != nil {
-			responseDone <- err
+			responseDone <- responseResult{err: err}
 			return
 		}
-		if resp.StatusCode != http.StatusOK {
-			responseDone <- fmt.Errorf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-			return
-		}
-		responseDone <- nil
+		responseDone <- responseResult{status: resp.StatusCode}
 	}()
 
-	select {
-	case <-started:
-	case <-time.After(time.Second):
-		t.Fatal("request handler did not start")
-	}
+	requireEventuallyClosed(t, started, time.Second)
 
 	stopDone := make(chan error, 1)
 	go func() {
@@ -310,19 +266,20 @@ func TestHTTPServerStopWaitsForActiveRequest(t *testing.T) {
 		stopDone <- lifecycle.hooks[0].OnStop(stopCtx)
 	}()
 
-	select {
-	case err := <-stopDone:
-		t.Fatalf("OnStop returned before active request finished: %v", err)
-	case <-time.After(100 * time.Millisecond):
-	}
+	require.Never(t, func() bool {
+		select {
+		case <-stopDone:
+			return true
+		default:
+			return false
+		}
+	}, 100*time.Millisecond, 10*time.Millisecond)
 
 	releaseRequest()
-	if err := <-stopDone; err != nil {
-		t.Fatalf("OnStop: %v", err)
-	}
-	if err := <-responseDone; err != nil {
-		t.Fatalf("GET /slow: %v", err)
-	}
+	require.NoError(t, <-stopDone)
+	result := <-responseDone
+	require.NoError(t, result.err)
+	require.Equal(t, http.StatusOK, result.status)
 }
 
 func TestHTTPServerStopClosesAndDrainsActiveRequestAfterShutdownTimeout(t *testing.T) {
@@ -348,9 +305,7 @@ func TestHTTPServerStopClosesAndDrainsActiveRequestAfterShutdownTimeout(t *testi
 		Engine: engine,
 	})
 
-	if err := lifecycle.hooks[0].OnStart(context.Background()); err != nil {
-		t.Fatalf("OnStart: %v", err)
-	}
+	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
 	defer func() {
 		stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -370,32 +325,15 @@ func TestHTTPServerStopClosesAndDrainsActiveRequestAfterShutdownTimeout(t *testi
 		responseDone <- err
 	}()
 
-	select {
-	case <-started:
-	case <-time.After(time.Second):
-		t.Fatal("request handler did not start")
-	}
+	requireEventuallyClosed(t, started, time.Second)
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	err := lifecycle.hooks[0].OnStop(stopCtx)
-	if err == nil {
-		t.Fatal("OnStop error = nil, want graceful shutdown timeout")
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("OnStop error = %v, want context deadline exceeded", err)
-	}
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 
-	select {
-	case <-exited:
-	default:
-		t.Fatal("OnStop returned before blocked handler exited")
-	}
-	select {
-	case <-responseDone:
-	case <-time.After(time.Second):
-		t.Fatal("client request did not finish after forced HTTP close")
-	}
+	requireEventuallyClosed(t, exited, time.Second)
+	requireEventuallyReceives(t, responseDone, time.Second)
 }
 
 func TestHTTPServerStartLogIncludesRuntimeIdentity(t *testing.T) {
@@ -416,32 +354,25 @@ func TestHTTPServerStartLogIncludesRuntimeIdentity(t *testing.T) {
 		Engine: gin.New(),
 	})
 
-	if len(lifecycle.hooks) != 1 || lifecycle.hooks[0].OnStart == nil || lifecycle.hooks[0].OnStop == nil {
-		t.Fatalf("lifecycle hooks = %#v, want one start/stop hook", lifecycle.hooks)
-	}
-	if err := lifecycle.hooks[0].OnStart(context.Background()); err != nil {
-		t.Fatalf("OnStart: %v", err)
-	}
+	require.Len(t, lifecycle.hooks, 1)
+	require.NotNil(t, lifecycle.hooks[0].OnStart)
+	require.NotNil(t, lifecycle.hooks[0].OnStop)
+	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
 	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if err := lifecycle.hooks[0].OnStop(stopCtx); err != nil {
-		t.Fatalf("OnStop: %v", err)
-	}
+	require.NoError(t, lifecycle.hooks[0].OnStop(stopCtx))
 
 	entries := logs.FilterMessage("starting http server").All()
-	if len(entries) != 1 {
-		t.Fatalf("starting http server logs = %d, want 1", len(entries))
-	}
+	require.Len(t, entries, 1)
 	fields := entries[0].ContextMap()
-	if fields["addr"] != "127.0.0.1:0" || fields["service"] != "aegiscore-user-services" || fields["environment"] != "local" || fields["timezone"] != "Asia/Shanghai" {
-		t.Fatalf("startup log fields = %#v", fields)
-	}
+	require.Equal(t, "127.0.0.1:0", fields["addr"])
+	require.Equal(t, "aegiscore-user-services", fields["service"])
+	require.Equal(t, "local", fields["environment"])
+	require.Equal(t, "Asia/Shanghai", fields["timezone"])
 }
 
 func TestDefaultHTTPShutdownTimeout(t *testing.T) {
-	if defaultHTTPShutdownTimeout != 10*time.Second {
-		t.Fatalf("defaultHTTPShutdownTimeout = %s, want 10s", defaultHTTPShutdownTimeout)
-	}
+	require.Equal(t, 10*time.Second, defaultHTTPShutdownTimeout)
 }
 
 func TestHTTPDrainTrackerWaitsForActiveHandlers(t *testing.T) {
@@ -459,27 +390,15 @@ func TestHTTPDrainTrackerWaitsForActiveHandlers(t *testing.T) {
 		tracker.ServeHTTP(httptest.NewRecorder(), request)
 	}()
 
-	select {
-	case <-started:
-	case <-time.After(time.Second):
-		t.Fatal("tracked handler did not start")
-	}
+	requireEventuallyClosed(t, started, time.Second)
 
 	waitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	if err := tracker.Wait(waitCtx); !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Wait error = %v, want context deadline exceeded", err)
-	}
+	require.ErrorIs(t, tracker.Wait(waitCtx), context.DeadlineExceeded)
 
 	close(release)
-	if err := tracker.Wait(context.Background()); err != nil {
-		t.Fatalf("Wait after release: %v", err)
-	}
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("tracked handler did not exit")
-	}
+	require.NoError(t, tracker.Wait(context.Background()))
+	requireEventuallyClosed(t, done, time.Second)
 }
 
 func TestHTTPDrainTrackerReturnsContextErrorWithActiveHandlers(t *testing.T) {
@@ -490,21 +409,39 @@ func TestHTTPDrainTrackerReturnsContextErrorWithActiveHandlers(t *testing.T) {
 	waitCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if err := tracker.Wait(waitCtx); !errors.Is(err, context.Canceled) {
-		t.Fatalf("Wait error = %v, want context canceled", err)
-	}
+	require.ErrorIs(t, tracker.Wait(waitCtx), context.Canceled)
 }
 
 func reserveHTTPTestPort(t *testing.T) int {
 	t.Helper()
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("reserve listener: %v", err)
-	}
+	require.NoError(t, err)
 	port := listener.Addr().(*net.TCPAddr).Port
-	if err := listener.Close(); err != nil {
-		t.Fatalf("close reserved listener: %v", err)
-	}
+	require.NoError(t, listener.Close())
 	return port
+}
+
+func requireEventuallyClosed(t *testing.T, ch <-chan struct{}, waitFor time.Duration) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		select {
+		case <-ch:
+			return true
+		default:
+			return false
+		}
+	}, waitFor, 10*time.Millisecond)
+}
+
+func requireEventuallyReceives[T any](t *testing.T, ch <-chan T, waitFor time.Duration) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		select {
+		case <-ch:
+			return true
+		default:
+			return false
+		}
+	}, waitFor, 10*time.Millisecond)
 }

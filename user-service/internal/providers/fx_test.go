@@ -3,6 +3,7 @@ package providers
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
@@ -32,7 +33,5 @@ func TestModuleResolvesServiceLevelProviders(t *testing.T) {
 		Module,
 		fx.Invoke(func(*userhttp.UserController) {}),
 	)
-	if err != nil {
-		t.Fatalf("ValidateApp error = %v", err)
-	}
+	require.NoError(t, err)
 }

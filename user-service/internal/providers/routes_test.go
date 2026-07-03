@@ -17,6 +17,8 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	rediscmd "github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -71,14 +73,10 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	metricsProvider := newRouteTestMetricsProvider(t, cfg)
 	traceProvider := newRouteTestTracingProvider(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log, Metrics: metricsProvider, Trace: traceProvider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 	validator, err := validation.NewDefault()
-	if err != nil {
-		t.Fatalf("NewDefault: %v", err)
-	}
-	if err := RegisterRoutes(RegisterRouteParams{
+	require.NoError(t, err)
+	err = RegisterRoutes(RegisterRouteParams{
 		Config:        cfg,
 		Log:           log,
 		Engine:        engine,
@@ -95,9 +93,8 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			Validator:      validator,
 		}),
 		UserController: userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
-	}); err != nil {
-		t.Fatalf("RegisterRoutes: %v", err)
-	}
+	})
+	require.NoError(t, err)
 	registerRouteTestRuntimeMetrics(t, cfg, metricsProvider)
 
 	publicRequests := []struct {
@@ -126,14 +123,10 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 				request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+"password-change-token")
 			}
 			engine.ServeHTTP(recorder, request)
-			if recorder.Code == http.StatusUnauthorized {
-				t.Fatalf("%s status = %d, want not unauthorized", tt.path, recorder.Code)
-			}
+			require.NotEqual(t, http.StatusUnauthorized, recorder.Code)
 		})
 	}
-	if authorizer.calls != 0 {
-		t.Fatalf("public route authorizer calls = %d, want 0", authorizer.calls)
-	}
+	require.Equal(t, 0, authorizer.calls)
 
 	t.Run("metrics route returns prometheus text without auth or rbac", func(t *testing.T) {
 		initialLogCount := logs.Len()
@@ -141,15 +134,10 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 		engine.ServeHTTP(recorder, request)
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
-		}
-		if contentType := recorder.Header().Get("Content-Type"); !strings.Contains(contentType, "text/plain") {
-			t.Fatalf("content type = %q, want prometheus text", contentType)
-		}
-		if body := recorder.Body.String(); !strings.Contains(body, "go_goroutines") {
-			t.Fatalf("body missing runtime metric: %s", body)
-		}
+		require.Equal(t, http.StatusOK, recorder.Code, "body=%s", recorder.Body.String())
+		require.Contains(t, recorder.Header().Get("Content-Type"), "text/plain")
+		require.Contains(t, recorder.Body.String(), "go_goroutines")
+		body := recorder.Body.String()
 		for _, family := range []string{
 			"aegiscore_postgres_pool_open_connections",
 			"aegiscore_redis_up",
@@ -162,16 +150,10 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			"aegiscore_localcache_capacity",
 			"aegiscore_runtime_component_running",
 		} {
-			if body := recorder.Body.String(); !strings.Contains(body, family) {
-				t.Fatalf("body missing runtime dependency metric %q: %s", family, body)
-			}
+			assert.Contains(t, body, family)
 		}
-		if authorizer.calls != 0 {
-			t.Fatalf("authorizer calls = %d, want 0", authorizer.calls)
-		}
-		if logs.Len() != initialLogCount {
-			t.Fatalf("request log count changed from %d to %d, want successful metrics scrape skipped", initialLogCount, logs.Len())
-		}
+		require.Equal(t, 0, authorizer.calls)
+		require.Equal(t, initialLogCount, logs.Len())
 	})
 
 	t.Run("probes return configured service name", func(t *testing.T) {
@@ -180,23 +162,16 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, path, nil)
 			engine.ServeHTTP(recorder, request)
-			if recorder.Code != http.StatusOK {
-				t.Fatalf("%s status = %d, want %d", path, recorder.Code, http.StatusOK)
-			}
+			require.Equal(t, http.StatusOK, recorder.Code)
 			var health struct {
 				Status  string `json:"status"`
 				Service string `json:"service"`
 			}
-			if err := json.Unmarshal(recorder.Body.Bytes(), &health); err != nil {
-				t.Fatalf("unmarshal health response: %v", err)
-			}
-			if health.Status != "ok" || health.Service != cfg.App.Name {
-				t.Fatalf("%s health = %#v, want configured service name", path, health)
-			}
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &health))
+			require.Equal(t, "ok", health.Status)
+			require.Equal(t, cfg.App.Name, health.Service)
 		}
-		if logs.Len() != initialLogCount {
-			t.Fatalf("request log count changed from %d to %d, want successful probes skipped", initialLogCount, logs.Len())
-		}
+		require.Equal(t, initialLogCount, logs.Len())
 	})
 
 	t.Run("query requires auth", func(t *testing.T) {
@@ -235,7 +210,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		assertAuthFailureEnvelope(t, recorder, contracterrors.CodeUnauthenticated)
 	})
 	if authorizer.calls != 0 {
-		t.Fatalf("auth route authorizer calls = %d, want 0", authorizer.calls)
+		require.Equal(t, 0, authorizer.calls)
 	}
 
 	t.Run("query with invalid token returns token invalid", func(t *testing.T) {
@@ -252,28 +227,24 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		authorizer.reset()
 		engine.ServeHTTP(recorder, request)
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
-		}
+		require.Equal(t, http.StatusOK, recorder.Code, "body=%s", recorder.Body.String())
 		assertSuccessEnvelope(t, recorder)
-		if authorizer.calls != 1 || authorizer.userID != routeAuthUserID || authorizer.pathTemplate != "/api/v1/users/:user_id" || authorizer.method != http.MethodGet {
-			t.Fatalf("authorizer call = %#v", authorizer)
-		}
+		require.Equal(t, 1, authorizer.calls)
+		require.Equal(t, routeAuthUserID, authorizer.userID)
+		require.Equal(t, "/api/v1/users/:user_id", authorizer.pathTemplate)
+		require.Equal(t, http.MethodGet, authorizer.method)
 
 		entries := logs.FilterMessage("http request completed").All()
-		if len(entries) == 0 {
-			t.Fatal("request log count = 0, want at least one")
-		}
+		require.NotEmpty(t, entries)
 		fields := entries[len(entries)-1].ContextMap()
-		if !validTraceIDField(fields[logger.TraceIDField]) || !validSpanIDField(fields[logger.SpanIDField]) || fields["method"] != http.MethodGet || fields["path"] != "/api/v1/users/:user_id" || fields["status"] != int64(http.StatusOK) || fields[commonauth.UserIDKey] != routeAuthUserID {
-			t.Fatalf("request log fields = %#v", fields)
-		}
-		if _, ok := fields["latency_ms"]; !ok {
-			t.Fatalf("request log missing latency_ms: %#v", fields)
-		}
-		if _, ok := fields["client_ip"]; !ok {
-			t.Fatalf("request log missing client_ip: %#v", fields)
-		}
+		assert.True(t, validTraceIDField(fields[logger.TraceIDField]), "fields=%#v", fields)
+		assert.True(t, validSpanIDField(fields[logger.SpanIDField]), "fields=%#v", fields)
+		assert.Equal(t, http.MethodGet, fields["method"])
+		assert.Equal(t, "/api/v1/users/:user_id", fields["path"])
+		assert.Equal(t, int64(http.StatusOK), fields["status"])
+		assert.Equal(t, routeAuthUserID, fields[commonauth.UserIDKey])
+		assert.Contains(t, fields, "latency_ms")
+		assert.Contains(t, fields, "client_ip")
 	})
 
 	t.Run("query denied by rbac returns forbidden before controller", func(t *testing.T) {
@@ -285,9 +256,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		defer func() { authorizer.allowed = true }()
 		engine.ServeHTTP(recorder, request)
 		assertFailureEnvelope(t, recorder, http.StatusForbidden, contracterrors.CodeForbidden)
-		if authorizer.calls != 1 {
-			t.Fatalf("authorizer calls = %d, want 1", authorizer.calls)
-		}
+		require.Equal(t, 1, authorizer.calls)
 	})
 
 	t.Run("query with mismatched token version returns token invalid", func(t *testing.T) {
@@ -330,16 +299,12 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 
 		assertFailureEnvelope(t, recorder, http.StatusInternalServerError, contracterrors.CodeInternalError)
 		entries := logs.FilterMessage("panic recovered").All()
-		if len(entries) != 1 {
-			t.Fatalf("panic recovered logs = %d, want 1", len(entries))
-		}
+		require.Len(t, entries, 1)
 		fields := entries[0].ContextMap()
-		if !validTraceIDField(fields[logger.TraceIDField]) || !validSpanIDField(fields[logger.SpanIDField]) || fields["panic"] != "route-chain boom" {
-			t.Fatalf("recovery log fields = %#v", fields)
-		}
-		if _, ok := fields["stack"]; !ok {
-			t.Fatalf("recovery log missing stack: %#v", fields)
-		}
+		assert.True(t, validTraceIDField(fields[logger.TraceIDField]), "fields=%#v", fields)
+		assert.True(t, validSpanIDField(fields[logger.SpanIDField]), "fields=%#v", fields)
+		assert.Equal(t, "route-chain boom", fields["panic"])
+		assert.Contains(t, fields, "stack")
 	})
 
 	t.Run("query validation still runs after auth", func(t *testing.T) {
@@ -347,9 +312,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/api/v1/users/abc", nil)
 		request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+signRouteAuthToken(t, "secret", routeAuthUserID))
 		engine.ServeHTTP(recorder, request)
-		if recorder.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
-		}
+		require.Equal(t, http.StatusBadRequest, recorder.Code)
 	})
 }
 
@@ -382,9 +345,7 @@ func TestRegisterRoutesRejectsMetricsPathConflict(t *testing.T) {
 		}),
 		UserController: userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
 	})
-	if err == nil || !strings.Contains(err.Error(), "invalid metrics path") {
-		t.Fatalf("RegisterRoutes error = %v, want invalid metrics path", err)
-	}
+	require.ErrorContains(t, err, "invalid metrics path")
 }
 
 func newRouteTestTracingProvider(t *testing.T, cfg *config.Config) *commontracing.Provider {
@@ -394,13 +355,9 @@ func newRouteTestTracingProvider(t *testing.T, cfg *config.Config) *commontracin
 		ServiceName: cfg.App.Name,
 		Environment: cfg.App.Environment,
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() {
-		if err := provider.Shutdown(context.Background()); err != nil {
-			t.Fatalf("Shutdown tracing provider: %v", err)
-		}
+		require.NoError(t, provider.Shutdown(context.Background()))
 	})
 	return provider
 }
@@ -412,18 +369,14 @@ func newRouteTestMetricsProvider(t *testing.T, cfg *config.Config) *commonmetric
 		ServiceName: cfg.App.Name,
 		Environment: cfg.App.Environment,
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
+	require.NoError(t, err)
 	return provider
 }
 
 func registerRouteTestRuntimeMetrics(t *testing.T, cfg *config.Config, provider *commonmetrics.Provider) {
 	t.Helper()
 	db, err := sql.Open("sqlite3", "file:route_runtime_metrics?mode=memory&cache=shared")
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
 	redisServer := miniredis.RunT(t)
@@ -435,7 +388,7 @@ func registerRouteTestRuntimeMetrics(t *testing.T, cfg *config.Config, provider 
 	}
 	cfg.Redis[resources.NameCacheRedis] = config.RedisConfig{PingTimeout: time.Second}
 
-	if err := RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{
+	err = RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{
 		Config:           cfg,
 		Metrics:          provider,
 		UserDB:           db,
@@ -444,17 +397,14 @@ func registerRouteTestRuntimeMetrics(t *testing.T, cfg *config.Config, provider 
 		PolicyWatcher:    stubWatcherStatus{running: true},
 		AuthTokenCache:   fakeLocalcacheStatsSource{name: "auth_token_version", stats: localcache.Stats{Capacity: 1000}},
 		RBACRolesCache:   fakeLocalcacheStatsSource{name: "rbac_user_roles", stats: localcache.Stats{Capacity: 2000}},
-	}); err != nil {
-		t.Fatalf("RegisterRuntimeDependencyMetrics: %v", err)
-	}
+	})
+	require.NoError(t, err)
 }
 
 func mustRouteTestValidator(t *testing.T) *validation.Validator {
 	t.Helper()
 	validator, err := validation.NewDefault()
-	if err != nil {
-		t.Fatalf("NewDefault: %v", err)
-	}
+	require.NoError(t, err)
 	return validator
 }
 
@@ -576,26 +526,18 @@ func (s *routeAuthUserQueries) GetUserByID(_ context.Context, req userquery.GetU
 func assertSuccessEnvelope(t *testing.T, recorder *httptest.ResponseRecorder) {
 	t.Helper()
 	var envelope response.Envelope
-	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
-	if !envelope.Success || envelope.Code != contracterrors.CodeOK {
-		t.Fatalf("envelope = %#v, want success OK", envelope)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+	require.True(t, envelope.Success)
+	require.Equal(t, contracterrors.CodeOK, envelope.Code)
 }
 
 func assertFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantStatus int, wantCode contracterrors.Code) {
 	t.Helper()
-	if recorder.Code != wantStatus {
-		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, wantStatus, recorder.Body.String())
-	}
+	require.Equal(t, wantStatus, recorder.Code, "body=%s", recorder.Body.String())
 	var envelope response.Envelope
-	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
-	if envelope.Success || envelope.Code != wantCode {
-		t.Fatalf("envelope = %#v, want failure code %d", envelope, wantCode)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+	require.False(t, envelope.Success)
+	require.Equal(t, wantCode, envelope.Code)
 }
 
 func (s *routeAuthUserQueries) ListUsers(context.Context, userquery.ListUsersQuery) (*userquery.ListUsersResult, error) {
@@ -606,16 +548,11 @@ func (s *routeAuthUserQueries) ListUsers(context.Context, userquery.ListUsersQue
 
 func assertAuthFailureEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, wantCode contracterrors.Code) {
 	t.Helper()
-	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
-	}
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
 	var envelope response.Envelope
-	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
-	if envelope.Success || envelope.Code != wantCode {
-		t.Fatalf("envelope = %#v", envelope)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+	require.False(t, envelope.Success)
+	require.Equal(t, wantCode, envelope.Code)
 }
 
 func signRouteAuthToken(t *testing.T, secret, userID string) string {
@@ -624,21 +561,16 @@ func signRouteAuthToken(t *testing.T, secret, userID string) string {
 
 func signRouteAuthTokenWithVersion(t *testing.T, secret, userID string, tokenVersion int64) string {
 	t.Helper()
-	if _, err := uuid.Parse(userID); err != nil {
-		t.Fatalf("parse userID: %v", err)
-	}
+	_, err := uuid.Parse(userID)
+	require.NoError(t, err)
 	tokenID, err := runtimeid.NewUUID()
-	if err != nil {
-		t.Fatalf("NewUUID: %v", err)
-	}
+	require.NoError(t, err)
 	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, commonauth.Claims{
 		UserID:           userID,
 		TokenVersion:     tokenVersion,
 		SessionID:        "s-123",
 		RegisteredClaims: jwtv5.RegisteredClaims{ID: tokenID.String(), Subject: commonauth.SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))},
 	}).SignedString([]byte(secret))
-	if err != nil {
-		t.Fatalf("SignedString: %v", err)
-	}
+	require.NoError(t, err)
 	return token
 }

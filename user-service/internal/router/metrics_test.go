@@ -2,16 +2,15 @@ package router
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/require"
 
 	"github.com/aegiscore/common/runtime/config"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
@@ -24,13 +23,9 @@ func TestRegisterMetricsRoute(t *testing.T) {
 		engine := gin.New()
 		provider := newRouterTestMetricsProvider(t, false, "/metrics")
 		err := registerMetricsRoute(engine, MetricsRouteParams{Config: metricsRouteConfig(false, "/metrics"), Provider: provider})
-		if err != nil {
-			t.Fatalf("registerMetricsRoute: %v", err)
-		}
+		require.NoError(t, err)
 		recorder := executeMetricsRequest(engine, "/metrics")
-		if recorder.Code != http.StatusNotFound {
-			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNotFound)
-		}
+		require.Equal(t, http.StatusNotFound, recorder.Code)
 	})
 
 	t.Run("enabled exposes prometheus text", func(t *testing.T) {
@@ -38,19 +33,11 @@ func TestRegisterMetricsRoute(t *testing.T) {
 		provider := newRouterTestMetricsProvider(t, true, "/metrics")
 		registerRouterTestCounter(t, provider)
 		err := registerMetricsRoute(engine, MetricsRouteParams{Config: metricsRouteConfig(true, "/metrics"), Provider: provider})
-		if err != nil {
-			t.Fatalf("registerMetricsRoute: %v", err)
-		}
+		require.NoError(t, err)
 		recorder := executeMetricsRequest(engine, "/metrics")
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
-		}
-		if contentType := recorder.Header().Get("Content-Type"); !strings.Contains(contentType, "text/plain") {
-			t.Fatalf("content type = %q, want prometheus text", contentType)
-		}
-		if body := recorder.Body.String(); !strings.Contains(body, "aegiscore_router_test_total") {
-			t.Fatalf("body = %q, want test metric family", body)
-		}
+		require.Equal(t, http.StatusOK, recorder.Code, "body=%s", recorder.Body.String())
+		require.Contains(t, recorder.Header().Get("Content-Type"), "text/plain")
+		require.Contains(t, recorder.Body.String(), "aegiscore_router_test_total")
 	})
 
 	t.Run("custom path does not also expose default path", func(t *testing.T) {
@@ -58,27 +45,19 @@ func TestRegisterMetricsRoute(t *testing.T) {
 		provider := newRouterTestMetricsProvider(t, true, "/internal/metrics")
 		registerRouterTestCounter(t, provider)
 		err := registerMetricsRoute(engine, MetricsRouteParams{Config: metricsRouteConfig(true, "/internal/metrics"), Provider: provider})
-		if err != nil {
-			t.Fatalf("registerMetricsRoute: %v", err)
-		}
-		if recorder := executeMetricsRequest(engine, "/metrics"); recorder.Code != http.StatusNotFound {
-			t.Fatalf("default status = %d, want %d", recorder.Code, http.StatusNotFound)
-		}
-		if recorder := executeMetricsRequest(engine, "/internal/metrics"); recorder.Code != http.StatusOK {
-			t.Fatalf("custom status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
-		}
+		require.NoError(t, err)
+		recorder := executeMetricsRequest(engine, "/metrics")
+		require.Equal(t, http.StatusNotFound, recorder.Code)
+		recorder = executeMetricsRequest(engine, "/internal/metrics")
+		require.Equal(t, http.StatusOK, recorder.Code, "body=%s", recorder.Body.String())
 	})
 
 	t.Run("request context cancels context-aware collector", func(t *testing.T) {
 		engine := gin.New()
 		provider := newRouterTestMetricsProvider(t, true, "/metrics")
 		collector := newRouterBlockingCollector()
-		if err := provider.Register(collector); err != nil {
-			t.Fatalf("Register collector: %v", err)
-		}
-		if err := registerMetricsRoute(engine, MetricsRouteParams{Config: metricsRouteConfig(true, "/metrics"), Provider: provider}); err != nil {
-			t.Fatalf("registerMetricsRoute: %v", err)
-		}
+		require.NoError(t, provider.Register(collector))
+		require.NoError(t, registerMetricsRoute(engine, MetricsRouteParams{Config: metricsRouteConfig(true, "/metrics"), Provider: provider}))
 
 		ctx, cancel := context.WithCancel(context.Background())
 		request := httptest.NewRequest(http.MethodGet, "/metrics", nil).WithContext(ctx)
@@ -88,21 +67,25 @@ func TestRegisterMetricsRoute(t *testing.T) {
 			close(done)
 		}()
 
-		select {
-		case <-collector.started:
-		case <-time.After(time.Second):
-			t.Fatal("context-aware collector did not start")
-		}
+		require.Eventually(t, func() bool {
+			select {
+			case <-collector.started:
+				return true
+			default:
+				return false
+			}
+		}, time.Second, 10*time.Millisecond)
 		cancel()
 
-		select {
-		case <-done:
-		case <-time.After(time.Second):
-			t.Fatal("metrics request did not finish after request context cancellation")
-		}
-		if err := collector.ctxErr(); !errors.Is(err, context.Canceled) {
-			t.Fatalf("collector context error = %v, want context.Canceled", err)
-		}
+		require.Eventually(t, func() bool {
+			select {
+			case <-done:
+				return true
+			default:
+				return false
+			}
+		}, time.Second, 10*time.Millisecond)
+		require.ErrorIs(t, collector.ctxErr(), context.Canceled)
 	})
 }
 
@@ -135,24 +118,17 @@ func TestRegisterMetricsRouteRejectsInvalidPaths(t *testing.T) {
 				Pprof:    config.PprofConfig{Enabled: true, BasePath: "/internal/debug/pprof"},
 				Provider: provider,
 			})
-			if !errors.Is(err, ErrInvalidMetricsPath) {
-				t.Fatalf("error = %v, want ErrInvalidMetricsPath", err)
-			}
+			require.ErrorIs(t, err, ErrInvalidMetricsPath)
 		})
 	}
 }
 
 func TestIsLowNoiseRuntimePath(t *testing.T) {
 	cfg := metricsRouteConfig(true, "/metrics")
-	if !IsLowNoiseRuntimePath("/livez", cfg) || !IsLowNoiseRuntimePath("/metrics", cfg) {
-		t.Fatal("runtime path check = false, want health and metrics paths to be low noise")
-	}
-	if IsLowNoiseRuntimePath("/api/v1/users", cfg) {
-		t.Fatal("business route marked low noise")
-	}
-	if IsLowNoiseRuntimePath("/metrics", metricsRouteConfig(false, "/metrics")) {
-		t.Fatal("disabled metrics path marked low noise")
-	}
+	require.True(t, IsLowNoiseRuntimePath("/livez", cfg))
+	require.True(t, IsLowNoiseRuntimePath("/metrics", cfg))
+	require.False(t, IsLowNoiseRuntimePath("/api/v1/users", cfg))
+	require.False(t, IsLowNoiseRuntimePath("/metrics", metricsRouteConfig(false, "/metrics")))
 }
 
 func newRouterTestMetricsProvider(t *testing.T, enabled bool, metricsPath string) *commonmetrics.Provider {
@@ -162,9 +138,7 @@ func newRouterTestMetricsProvider(t *testing.T, enabled bool, metricsPath string
 		ServiceName: "aegiscore-user-service-test",
 		Environment: "test",
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
+	require.NoError(t, err)
 	return provider
 }
 
@@ -175,9 +149,7 @@ func registerRouterTestCounter(t *testing.T, provider *commonmetrics.Provider) {
 		Help: "Router metrics endpoint test counter.",
 	})
 	counter.Inc()
-	if err := provider.Register(counter); err != nil {
-		t.Fatalf("Register counter: %v", err)
-	}
+	require.NoError(t, provider.Register(counter))
 }
 
 func metricsRouteConfig(enabled bool, metricsPath string) config.MetricsConfig {

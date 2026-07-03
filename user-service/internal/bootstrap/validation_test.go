@@ -4,14 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
@@ -33,9 +34,7 @@ func TestAppModuleResolvesSharedValidationDependency(t *testing.T) {
 		AppModule,
 		fx.Invoke(func(*validation.Validator, *userhttp.UserController) {}),
 	)
-	if err != nil {
-		t.Fatalf("ValidateApp error = %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestAppModuleIncludesSharedTimezoneDependency(t *testing.T) {
@@ -44,9 +43,7 @@ func TestAppModuleIncludesSharedTimezoneDependency(t *testing.T) {
 		AppModule,
 		fx.Invoke(func(*validation.Validator, *userhttp.UserController) {}),
 	)
-	if err != nil {
-		t.Fatalf("ValidateApp with timezone module error = %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestAppWiresCommonDependenciesExplicitly(t *testing.T) {
@@ -59,29 +56,19 @@ func TestAppWiresCommonDependenciesExplicitly(t *testing.T) {
 		AppModule,
 		fx.Invoke(func(*config.Config, *zap.Logger, *userhttp.UserController) {}),
 	)
-	if err != nil {
-		t.Fatalf("ValidateApp with explicit common providers error = %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestRuntimeModuleNamingReflectsCompositionRootScope(t *testing.T) {
 	content, err := os.ReadFile("app.go")
-	if err != nil {
-		t.Fatalf("ReadFile app.go error = %v", err)
-	}
+	require.NoError(t, err)
 
 	source := string(content)
 	legacyName := "User" + "ServiceModule"
-	if strings.Contains(source, legacyName) {
-		t.Fatalf("app.go contains legacy service-layer-like module name %q", legacyName)
-	}
+	require.NotContains(t, source, legacyName)
 	supersededName := "User" + "ServiceRuntimeModule"
-	if strings.Contains(source, supersededName) {
-		t.Fatalf("app.go contains superseded runtime module name %q", supersededName)
-	}
-	if !strings.Contains(source, "AppModule") {
-		t.Fatal("app.go does not contain composition-root module name AppModule")
-	}
+	require.NotContains(t, source, supersededName)
+	require.Contains(t, source, "AppModule")
 }
 
 func TestAppModuleStopsHTTPBeforeDatastoreResources(t *testing.T) {
@@ -105,24 +92,12 @@ func TestAppModuleStopsHTTPBeforeDatastoreResources(t *testing.T) {
 	httpStopIndex := indexMessage(messages, "stopping http server")
 	redisCloseIndex := indexMessage(messages, "redis closed")
 	postgresCloseIndex := indexMessage(messages, "postgres closed")
-	if httpStopIndex < 0 {
-		t.Fatalf("logs missing stopping http server: %v", messages)
-	}
-	if redisCloseIndex < 0 {
-		t.Fatalf("logs missing redis closed: %v", messages)
-	}
-	if postgresCloseIndex < 0 {
-		t.Fatalf("logs missing postgres closed: %v", messages)
-	}
-	if httpStopIndex > redisCloseIndex {
-		t.Fatalf("log order = %v, want http stop before redis close", messages)
-	}
-	if httpStopIndex > postgresCloseIndex {
-		t.Fatalf("log order = %v, want http stop before postgres close", messages)
-	}
-	if got := drv.closes.Load(); got != 1 {
-		t.Fatalf("postgres closes = %d, want 1", got)
-	}
+	require.GreaterOrEqual(t, httpStopIndex, 0, "messages=%v", messages)
+	require.GreaterOrEqual(t, redisCloseIndex, 0, "messages=%v", messages)
+	require.GreaterOrEqual(t, postgresCloseIndex, 0, "messages=%v", messages)
+	require.Less(t, httpStopIndex, redisCloseIndex, "messages=%v", messages)
+	require.Less(t, httpStopIndex, postgresCloseIndex, "messages=%v", messages)
+	require.Equal(t, int64(1), drv.closes.Load())
 }
 
 func appModuleLifecycleTestConfig(driverName string, redisAddr string, httpPort int) *config.Config {
@@ -234,7 +209,7 @@ type appModuleTestSQLConn struct {
 }
 
 func (c *appModuleTestSQLConn) Prepare(string) (driver.Stmt, error) {
-	return nil, fmt.Errorf("prepare not implemented")
+	return nil, errors.New("prepare not implemented")
 }
 
 func (c *appModuleTestSQLConn) Close() error {
@@ -243,7 +218,7 @@ func (c *appModuleTestSQLConn) Close() error {
 }
 
 func (c *appModuleTestSQLConn) Begin() (driver.Tx, error) {
-	return nil, fmt.Errorf("begin not implemented")
+	return nil, errors.New("begin not implemented")
 }
 
 func (c *appModuleTestSQLConn) Ping(context.Context) error {

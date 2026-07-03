@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -18,10 +17,7 @@ func TestNewJWTServiceRejectsInvalidTokenTTLPolicy(t *testing.T) {
 	}}}
 
 	_, err := NewJWTService(cfg)
-	require.Error(t, err,
-		"NewJWTService error = nil")
-	require.True(t, strings.Contains(err.Error(), "auth jwt refresh_token_ttl must be greater than access_token_ttl"),
-		"NewJWTService error = %q, want refresh ttl policy", err.Error())
+	require.ErrorContains(t, err, "auth jwt refresh_token_ttl must be greater than access_token_ttl")
 
 }
 
@@ -33,10 +29,8 @@ func TestNewJWTServiceAcceptsValidTokenTTLPolicy(t *testing.T) {
 	}}}
 
 	service, err := NewJWTService(cfg)
-	require.NoError(t, err,
-		"NewJWTService: %v", err)
-	require.NotNil(t, service,
-		"NewJWTService = nil")
+	require.NoError(t, err)
+	require.NotNil(t, service)
 
 }
 
@@ -46,10 +40,8 @@ func TestNewPasswordServiceUsesConfiguredKDFBudget(t *testing.T) {
 	}}
 
 	service, err := NewPasswordService(cfg)
-	require.NoError(t, err,
-		"NewPasswordService: %v", err)
-	require.NotNil(t, service,
-		"NewPasswordService = nil")
+	require.NoError(t, err)
+	require.NotNil(t, service)
 
 }
 
@@ -59,9 +51,6 @@ func TestNewPasswordServiceRejectsInvalidKDFBudget(t *testing.T) {
 	}}
 
 	_, err := NewPasswordService(cfg)
-	require.Error(t, err,
-		"NewPasswordService error = nil")
-	require.True(t, strings.Contains(err.Error(), "password argon2 queue size must be >= concurrency"),
-		"NewPasswordService error = %q, want queue policy", err.Error())
+	require.ErrorContains(t, err, "password argon2 queue size must be >= concurrency")
 
 }

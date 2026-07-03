@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 
 	"github.com/aegiscore/common/runtime/config"
 )
@@ -18,9 +19,7 @@ func TestRegisterPprofRoutes(t *testing.T) {
 		registerPprofRoutes(engine, config.PprofConfig{})
 
 		recorder := executePprofRequest(engine, "/debug/pprof/")
-		if recorder.Code != http.StatusNotFound {
-			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNotFound)
-		}
+		require.Equal(t, http.StatusNotFound, recorder.Code)
 	})
 
 	t.Run("enabled exposes configured base path", func(t *testing.T) {
@@ -28,9 +27,7 @@ func TestRegisterPprofRoutes(t *testing.T) {
 		registerPprofRoutes(engine, config.PprofConfig{Enabled: true, BasePath: "/debug/pprof"})
 
 		recorder := executePprofRequest(engine, "/debug/pprof/goroutine?debug=1")
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
-		}
+		require.Equal(t, http.StatusOK, recorder.Code, "body=%s", recorder.Body.String())
 	})
 }
 

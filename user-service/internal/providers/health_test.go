@@ -12,6 +12,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	_ "github.com/mattn/go-sqlite3"
 	rediscmd "github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
@@ -23,25 +25,18 @@ import (
 
 func TestPostgresHealthChecker(t *testing.T) {
 	db, err := sql.Open("sqlite3", "file:health_checker?mode=memory&cache=shared")
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
 	checker := postgresHealthChecker{name: "postgres.user_db", db: db}
-	if checker.Name() != "postgres.user_db" {
-		t.Fatalf("name = %q, want postgres.user_db", checker.Name())
-	}
+	require.Equal(t, "postgres.user_db", checker.Name())
 	result := checker.Check(context.Background())
-	if result.Status != router.HealthCheckStatusOK {
-		t.Fatalf("result = %#v, want ok", result)
-	}
+	require.Equal(t, router.HealthCheckStatusOK, result.Status)
 
 	_ = db.Close()
 	result = checker.Check(context.Background())
-	if result.Status != router.HealthCheckStatusUnavailable || result.Message == "" {
-		t.Fatalf("result = %#v, want unavailable", result)
-	}
+	require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
+	require.NotEmpty(t, result.Message)
 }
 
 func TestRedisHealthChecker(t *testing.T) {
@@ -50,45 +45,33 @@ func TestRedisHealthChecker(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	checker := redisHealthChecker{name: "redis.cache_redis", client: client}
-	if checker.Name() != "redis.cache_redis" {
-		t.Fatalf("name = %q, want redis.cache_redis", checker.Name())
-	}
+	require.Equal(t, "redis.cache_redis", checker.Name())
 	result := checker.Check(context.Background())
-	if result.Status != router.HealthCheckStatusOK {
-		t.Fatalf("result = %#v, want ok", result)
-	}
+	require.Equal(t, router.HealthCheckStatusOK, result.Status)
 
 	redisServer.Close()
 	result = checker.Check(context.Background())
-	if result.Status != router.HealthCheckStatusUnavailable || result.Message == "" {
-		t.Fatalf("result = %#v, want unavailable", result)
-	}
+	require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
+	require.NotEmpty(t, result.Message)
 }
 
 func TestCasbinPolicyHealthChecker(t *testing.T) {
 	checker := casbinPolicyHealthChecker{engine: stubLastError{}}
-	if checker.Name() != "rbac.casbin_policy" {
-		t.Fatalf("name = %q, want rbac.casbin_policy", checker.Name())
-	}
-	if result := checker.Check(context.Background()); result.Status != router.HealthCheckStatusOK {
-		t.Fatalf("result = %#v, want ok", result)
-	}
+	require.Equal(t, "rbac.casbin_policy", checker.Name())
+	result := checker.Check(context.Background())
+	require.Equal(t, router.HealthCheckStatusOK, result.Status)
 
 	checker = casbinPolicyHealthChecker{engine: stubLastError{err: errors.New("load failed")}}
-	result := checker.Check(context.Background())
-	if result.Status != router.HealthCheckStatusUnavailable || result.Message == "" {
-		t.Fatalf("result = %#v, want unavailable", result)
-	}
+	result = checker.Check(context.Background())
+	require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
+	require.NotEmpty(t, result.Message)
 }
 
 func TestWatcherHealthChecker(t *testing.T) {
 	checker := watcherHealthChecker{watcher: stubWatcherStatus{running: true}}
-	if checker.Name() != "rbac.policy_watcher" {
-		t.Fatalf("name = %q, want rbac.policy_watcher", checker.Name())
-	}
-	if result := checker.Check(context.Background()); result.Status != router.HealthCheckStatusOK {
-		t.Fatalf("result = %#v, want ok", result)
-	}
+	require.Equal(t, "rbac.policy_watcher", checker.Name())
+	result := checker.Check(context.Background())
+	require.Equal(t, router.HealthCheckStatusOK, result.Status)
 
 	cases := []struct {
 		name    string
@@ -100,18 +83,15 @@ func TestWatcherHealthChecker(t *testing.T) {
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			result := watcherHealthChecker{watcher: tt.watcher}.Check(context.Background())
-			if result.Status != router.HealthCheckStatusUnavailable || result.Message == "" {
-				t.Fatalf("result = %#v, want unavailable", result)
-			}
+			require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
+			require.NotEmpty(t, result.Message)
 		})
 	}
 }
 
 func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 	db, err := sql.Open("sqlite3", "file:runtime_metrics?mode=memory&cache=shared")
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
 	redisServer := miniredis.RunT(t)
@@ -132,11 +112,9 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 		ServiceName: cfg.App.Name,
 		Environment: cfg.App.Environment,
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
+	require.NoError(t, err)
 
-	if err := RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{
+	err = RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{
 		Config:           cfg,
 		Metrics:          provider,
 		UserDB:           db,
@@ -145,9 +123,8 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 		PolicyWatcher:    stubWatcherStatus{running: true},
 		AuthTokenCache:   fakeLocalcacheStatsSource{name: "auth_token_version", stats: localcache.Stats{Hit: 3, Capacity: 1000}},
 		RBACRolesCache:   fakeLocalcacheStatsSource{name: "rbac_user_roles", stats: localcache.Stats{Miss: 2, Capacity: 2000}},
-	}); err != nil {
-		t.Fatalf("RegisterRuntimeDependencyMetrics: %v", err)
-	}
+	})
+	require.NoError(t, err)
 
 	body := gatherProviderText(t, provider)
 	for _, want := range []string{
@@ -163,9 +140,7 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 		`aegiscore_localcache_capacity{cache="auth_token_version",environment="test",service="aegiscore-user-service-test"} 1000`,
 		`aegiscore_runtime_component_running{environment="test",resource="rbac_policy_watcher",service="aegiscore-user-service-test"} 1`,
 	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("metrics body missing %q:\n%s", want, body)
-		}
+		assert.Contains(t, body, want)
 	}
 }
 
@@ -215,9 +190,7 @@ func (s fakeLocalcacheStatsSource) Stats() localcache.Stats {
 func gatherProviderText(t *testing.T, provider *commonmetrics.Provider) string {
 	t.Helper()
 	families, err := provider.Gatherer().Gather()
-	if err != nil {
-		t.Fatalf("Gather: %v", err)
-	}
+	require.NoError(t, err)
 	var builder strings.Builder
 	for _, family := range families {
 		for _, metric := range family.GetMetric() {

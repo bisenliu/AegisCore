@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRegisterHealthRoutes(t *testing.T) {
@@ -26,41 +27,28 @@ func TestRegisterHealthRoutes(t *testing.T) {
 
 	t.Run("livez returns liveness without dependency checks", func(t *testing.T) {
 		recorder := executeHealthRequest(engine, "/livez")
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
-		}
+		require.Equal(t, http.StatusOK, recorder.Code)
 		health := decodeHealthResponse(t, recorder)
-		if health.Status != HealthCheckStatusOK {
-			t.Fatalf("status = %q, want %q", health.Status, HealthCheckStatusOK)
-		}
-		if health.Service != "aegiscore-user-services" {
-			t.Fatalf("service = %q, want aegiscore-user-services", health.Service)
-		}
-		if len(health.Checks) != 0 {
-			t.Fatalf("checks = %#v, want empty liveness checks", health.Checks)
-		}
+		require.Equal(t, HealthCheckStatusOK, health.Status)
+		require.Equal(t, "aegiscore-user-services", health.Service)
+		require.Empty(t, health.Checks)
 	})
 
 	t.Run("readyz returns component checks", func(t *testing.T) {
 		recorder := executeHealthRequest(engine, "/readyz")
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
-		}
+		require.Equal(t, http.StatusOK, recorder.Code)
 		health := decodeHealthResponse(t, recorder)
-		if health.Status != HealthCheckStatusOK || len(health.Checks) != 2 {
-			t.Fatalf("health = %#v, want ok with 2 checks", health)
-		}
+		require.Equal(t, HealthCheckStatusOK, health.Status)
+		require.Len(t, health.Checks, 2)
 	})
 
 	t.Run("startupz returns startup checks", func(t *testing.T) {
 		recorder := executeHealthRequest(engine, "/startupz")
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
-		}
+		require.Equal(t, http.StatusOK, recorder.Code)
 		health := decodeHealthResponse(t, recorder)
-		if health.Status != HealthCheckStatusOK || len(health.Checks) != 1 || health.Checks[0].Name != "rbac.casbin_policy" {
-			t.Fatalf("health = %#v, want startup checks", health)
-		}
+		require.Equal(t, HealthCheckStatusOK, health.Status)
+		require.Len(t, health.Checks, 1)
+		require.Equal(t, "rbac.casbin_policy", health.Checks[0].Name)
 	})
 }
 
@@ -80,16 +68,10 @@ func TestProbezReturnsUnavailableWhenAnyCheckFails(t *testing.T) {
 	for _, path := range []string{"/readyz", "/startupz"} {
 		t.Run(path, func(t *testing.T) {
 			recorder := executeHealthRequest(engine, path)
-			if recorder.Code != http.StatusServiceUnavailable {
-				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
-			}
+			require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 			health := decodeHealthResponse(t, recorder)
-			if health.Status != HealthCheckStatusUnavailable {
-				t.Fatalf("status = %q, want %q", health.Status, HealthCheckStatusUnavailable)
-			}
-			if len(health.Checks) == 0 {
-				t.Fatal("checks empty, want failed component")
-			}
+			require.Equal(t, HealthCheckStatusUnavailable, health.Status)
+			require.NotEmpty(t, health.Checks)
 		})
 	}
 }
@@ -107,20 +89,13 @@ func TestProbezRunsChecksConcurrently(t *testing.T) {
 	startedAt := time.Now()
 	recorder := executeHealthRequest(engine, "/readyz")
 	elapsed := time.Since(startedAt)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
-	}
-	if elapsed >= healthProbeTimeout {
-		t.Fatalf("elapsed = %s, want less than %s to prove concurrent checks", elapsed, healthProbeTimeout)
-	}
+	require.Equal(t, http.StatusOK, recorder.Code, "body=%s", recorder.Body.String())
+	require.Less(t, elapsed, healthProbeTimeout)
 
 	health := decodeHealthResponse(t, recorder)
-	if len(health.Checks) != 2 {
-		t.Fatalf("checks = %#v, want 2 checks", health.Checks)
-	}
-	if health.Checks[0].Name != "postgres.user_db" || health.Checks[1].Name != "redis.cache_redis" {
-		t.Fatalf("checks = %#v, want configured order", health.Checks)
-	}
+	require.Len(t, health.Checks, 2)
+	require.Equal(t, "postgres.user_db", health.Checks[0].Name)
+	require.Equal(t, "redis.cache_redis", health.Checks[1].Name)
 }
 
 func TestProbezReturnsUnavailableForTimedOutCheck(t *testing.T) {
@@ -136,20 +111,16 @@ func TestProbezReturnsUnavailableForTimedOutCheck(t *testing.T) {
 	})
 
 	recorder := executeHealthRequest(engine, "/readyz")
-	if recorder.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusServiceUnavailable, recorder.Body.String())
-	}
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code, "body=%s", recorder.Body.String())
 
 	health := decodeHealthResponse(t, recorder)
-	if health.Status != HealthCheckStatusUnavailable {
-		t.Fatalf("status = %q, want %q", health.Status, HealthCheckStatusUnavailable)
-	}
-	if len(health.Checks) != 2 {
-		t.Fatalf("checks = %#v, want 2 checks", health.Checks)
-	}
-	if health.Checks[1].Name != "redis.cache_redis" || health.Checks[1].Status != HealthCheckStatusUnavailable || health.Checks[1].Message != "health check timeout" {
-		t.Fatalf("timed out check = %#v, want redis timeout", health.Checks[1])
-	}
+	require.Equal(t, HealthCheckStatusUnavailable, health.Status)
+	require.Len(t, health.Checks, 2)
+	require.Equal(t, HealthCheckResult{
+		Name:    "redis.cache_redis",
+		Status:  HealthCheckStatusUnavailable,
+		Message: "health check timeout",
+	}, health.Checks[1])
 }
 
 type staticHealthChecker struct {
@@ -209,8 +180,6 @@ func executeHealthRequest(engine *gin.Engine, path string) *httptest.ResponseRec
 func decodeHealthResponse(t *testing.T, recorder *httptest.ResponseRecorder) HealthResponse {
 	t.Helper()
 	var health HealthResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &health); err != nil {
-		t.Fatalf("unmarshal health response: %v", err)
-	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &health))
 	return health
 }

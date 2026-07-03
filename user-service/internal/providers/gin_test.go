@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	dto "github.com/prometheus/client_model/go"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -27,29 +28,22 @@ func TestSkipSuccessfulRuntimeEndpointLog(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	skip := skipSuccessfulRuntimeEndpointLog(config.MetricsConfig{Enabled: true, Path: "/metrics"})
+	results := make(map[string]bool)
 	engine.GET("/livez", func(c *gin.Context) {
 		c.Status(http.StatusOK)
-		if !skip(c) {
-			t.Fatal("skipSuccessfulRuntimeEndpointLog = false, want true")
-		}
+		results["/livez"] = skip(c)
 	})
 	engine.GET("/readyz", func(c *gin.Context) {
 		c.Status(http.StatusServiceUnavailable)
-		if skip(c) {
-			t.Fatal("skipSuccessfulRuntimeEndpointLog = true, want false")
-		}
+		results["/readyz"] = skip(c)
 	})
 	engine.GET("/metrics", func(c *gin.Context) {
 		c.Status(http.StatusOK)
-		if !skip(c) {
-			t.Fatal("skipSuccessfulRuntimeEndpointLog = false, want true")
-		}
+		results["/metrics"] = skip(c)
 	})
 	engine.GET("/api/v1/users", func(c *gin.Context) {
 		c.Status(http.StatusOK)
-		if skip(c) {
-			t.Fatal("skipSuccessfulRuntimeEndpointLog = true, want false")
-		}
+		results["/api/v1/users"] = skip(c)
 	})
 
 	for _, path := range []string{"/livez", "/readyz", "/metrics", "/api/v1/users"} {
@@ -57,6 +51,10 @@ func TestSkipSuccessfulRuntimeEndpointLog(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		engine.ServeHTTP(recorder, request)
 	}
+	require.True(t, results["/livez"])
+	require.False(t, results["/readyz"])
+	require.True(t, results["/metrics"])
+	require.False(t, results["/api/v1/users"])
 }
 
 func TestNewGinEngineCreatesOTelServerSpan(t *testing.T) {
@@ -64,9 +62,7 @@ func TestNewGinEngineCreatesOTelServerSpan(t *testing.T) {
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 
 	var spanContext trace.SpanContext
 	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
@@ -78,12 +74,9 @@ func TestNewGinEngineCreatesOTelServerSpan(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil)
 	engine.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want 204", recorder.Code)
-	}
-	if !spanContext.TraceID().IsValid() || !spanContext.SpanID().IsValid() {
-		t.Fatalf("span context = %v, want valid trace and span IDs", spanContext)
-	}
+	require.Equal(t, http.StatusNoContent, recorder.Code)
+	require.True(t, spanContext.TraceID().IsValid())
+	require.True(t, spanContext.SpanID().IsValid())
 }
 
 func TestNewGinEngineExtractsTraceparent(t *testing.T) {
@@ -91,9 +84,7 @@ func TestNewGinEngineExtractsTraceparent(t *testing.T) {
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 
 	var spanContext trace.SpanContext
 	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
@@ -105,9 +96,7 @@ func TestNewGinEngineExtractsTraceparent(t *testing.T) {
 	request.Header.Set("traceparent", "00-00112233445566778899aabbccddeeff-0102030405060708-01")
 	engine.ServeHTTP(httptest.NewRecorder(), request)
 
-	if got := spanContext.TraceID().String(); got != "00112233445566778899aabbccddeeff" {
-		t.Fatalf("trace id = %q, want propagated traceparent trace id", got)
-	}
+	require.Equal(t, "00112233445566778899aabbccddeeff", spanContext.TraceID().String())
 }
 
 func TestNewGinEnginePassesThroughRequestID(t *testing.T) {
@@ -115,17 +104,13 @@ func TestNewGinEnginePassesThroughRequestID(t *testing.T) {
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 
 	var requestID string
 	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
 		var ok bool
 		requestID, ok = commonmiddleware.RequestIDFromContext(c.Request.Context())
-		if !ok {
-			t.Fatal("request id missing from context")
-		}
+		require.True(t, ok)
 		c.Status(http.StatusNoContent)
 	})
 
@@ -134,12 +119,8 @@ func TestNewGinEnginePassesThroughRequestID(t *testing.T) {
 	request.Header.Set(commonmiddleware.HeaderRequestID, "client-request-123")
 	engine.ServeHTTP(recorder, request)
 
-	if got := recorder.Header().Get(commonmiddleware.HeaderRequestID); got != "client-request-123" {
-		t.Fatalf("response request id = %q, want client-request-123", got)
-	}
-	if requestID != "client-request-123" {
-		t.Fatalf("context request id = %q, want client-request-123", requestID)
-	}
+	require.Equal(t, "client-request-123", recorder.Header().Get(commonmiddleware.HeaderRequestID))
+	require.Equal(t, "client-request-123", requestID)
 }
 
 func TestNewGinEngineGeneratesRequestID(t *testing.T) {
@@ -147,17 +128,13 @@ func TestNewGinEngineGeneratesRequestID(t *testing.T) {
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 
 	var requestID string
 	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
 		var ok bool
 		requestID, ok = commonmiddleware.RequestIDFromContext(c.Request.Context())
-		if !ok {
-			t.Fatal("request id missing from context")
-		}
+		require.True(t, ok)
 		c.Status(http.StatusNoContent)
 	})
 
@@ -165,12 +142,8 @@ func TestNewGinEngineGeneratesRequestID(t *testing.T) {
 	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil))
 
 	responseRequestID := recorder.Header().Get(commonmiddleware.HeaderRequestID)
-	if responseRequestID == "" {
-		t.Fatal("response request id is empty")
-	}
-	if requestID != responseRequestID {
-		t.Fatalf("context request id = %q, want response request id %q", requestID, responseRequestID)
-	}
+	require.NotEmpty(t, responseRequestID)
+	require.Equal(t, responseRequestID, requestID)
 }
 
 func TestNewGinEngineKeepsTraceparentAndRequestID(t *testing.T) {
@@ -178,9 +151,7 @@ func TestNewGinEngineKeepsTraceparentAndRequestID(t *testing.T) {
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 
 	var spanContext trace.SpanContext
 	var requestID string
@@ -188,9 +159,7 @@ func TestNewGinEngineKeepsTraceparentAndRequestID(t *testing.T) {
 		spanContext = trace.SpanContextFromContext(c.Request.Context())
 		var ok bool
 		requestID, ok = commonmiddleware.RequestIDFromContext(c.Request.Context())
-		if !ok {
-			t.Fatal("request id missing from context")
-		}
+		require.True(t, ok)
 		c.Status(http.StatusNoContent)
 	})
 
@@ -200,15 +169,9 @@ func TestNewGinEngineKeepsTraceparentAndRequestID(t *testing.T) {
 	request.Header.Set(commonmiddleware.HeaderRequestID, "client-request-123")
 	engine.ServeHTTP(recorder, request)
 
-	if got := spanContext.TraceID().String(); got != "00112233445566778899aabbccddeeff" {
-		t.Fatalf("trace id = %q, want propagated traceparent trace id", got)
-	}
-	if requestID != "client-request-123" {
-		t.Fatalf("context request id = %q, want client-request-123", requestID)
-	}
-	if got := recorder.Header().Get(commonmiddleware.HeaderRequestID); got != "client-request-123" {
-		t.Fatalf("response request id = %q, want client-request-123", got)
-	}
+	require.Equal(t, "00112233445566778899aabbccddeeff", spanContext.TraceID().String())
+	require.Equal(t, "client-request-123", requestID)
+	require.Equal(t, "client-request-123", recorder.Header().Get(commonmiddleware.HeaderRequestID))
 }
 
 func TestNewGinEngineSkipsHealthProbeTracing(t *testing.T) {
@@ -216,9 +179,7 @@ func TestNewGinEngineSkipsHealthProbeTracing(t *testing.T) {
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 
 	var spanContext trace.SpanContext
 	engine.GET("/livez", func(c *gin.Context) {
@@ -228,9 +189,8 @@ func TestNewGinEngineSkipsHealthProbeTracing(t *testing.T) {
 
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/livez", nil))
 
-	if spanContext.TraceID().IsValid() || spanContext.SpanID().IsValid() {
-		t.Fatalf("health probe span context = %v, want invalid because tracing is filtered", spanContext)
-	}
+	require.False(t, spanContext.TraceID().IsValid())
+	require.False(t, spanContext.SpanID().IsValid())
 }
 
 func TestNewGinEngineSkipsMetricsTracingWhenEnabled(t *testing.T) {
@@ -239,9 +199,7 @@ func TestNewGinEngineSkipsMetricsTracingWhenEnabled(t *testing.T) {
 	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true, Path: "/metrics"}
 	provider := newGinTestTracingProvider(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 
 	var spanContext trace.SpanContext
 	engine.GET("/metrics", func(c *gin.Context) {
@@ -251,9 +209,8 @@ func TestNewGinEngineSkipsMetricsTracingWhenEnabled(t *testing.T) {
 
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/metrics", nil))
 
-	if spanContext.TraceID().IsValid() || spanContext.SpanID().IsValid() {
-		t.Fatalf("metrics span context = %v, want invalid because tracing is filtered", spanContext)
-	}
+	require.False(t, spanContext.TraceID().IsValid())
+	require.False(t, spanContext.SpanID().IsValid())
 }
 
 func TestNewGinEngineRecordsHTTPServerMetrics(t *testing.T) {
@@ -263,9 +220,7 @@ func TestNewGinEngineRecordsHTTPServerMetrics(t *testing.T) {
 	traceProvider := newGinTestTracingProvider(t, cfg)
 	metricsProvider := newGinTestMetricsProvider(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	})
@@ -277,17 +232,13 @@ func TestNewGinEngineRecordsHTTPServerMetrics(t *testing.T) {
 		commonmetrics.LabelRoute:       "/api/v1/users/:user_id",
 		commonmetrics.LabelStatusClass: "2xx",
 	})
-	if got := metric.GetCounter().GetValue(); got != 1 {
-		t.Fatalf("request counter = %v, want 1", got)
-	}
+	require.Equal(t, float64(1), metric.GetCounter().GetValue())
 	duration := findGinMetricByLabels(t, gatherGinMetricFamily(t, metricsProvider, "http_server_request_duration_seconds"), map[string]string{
 		commonmetrics.LabelMethod:      http.MethodGet,
 		commonmetrics.LabelRoute:       "/api/v1/users/:user_id",
 		commonmetrics.LabelStatusClass: "2xx",
 	})
-	if got := duration.GetHistogram().GetSampleCount(); got != 1 {
-		t.Fatalf("duration sample count = %d, want 1", got)
-	}
+	require.Equal(t, uint64(1), duration.GetHistogram().GetSampleCount())
 	assertGinMetricFamilyMissingLabelValue(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), "/api/v1/users/123")
 }
 
@@ -298,9 +249,7 @@ func TestNewGinEngineSkipsSuccessfulRuntimeEndpointMetrics(t *testing.T) {
 	traceProvider := newGinTestTracingProvider(t, cfg)
 	metricsProvider := newGinTestMetricsProvider(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 	for _, path := range []string{"/livez", "/readyz", "/startupz", "/metrics"} {
 		path := path
 		engine.GET(path, func(c *gin.Context) {
@@ -321,9 +270,7 @@ func TestNewGinEngineRecordsUnmatchedRouteWithStableFallback(t *testing.T) {
 	traceProvider := newGinTestTracingProvider(t, cfg)
 	metricsProvider := newGinTestMetricsProvider(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil))
 
@@ -332,9 +279,7 @@ func TestNewGinEngineRecordsUnmatchedRouteWithStableFallback(t *testing.T) {
 		commonmetrics.LabelRoute:       "__unmatched__",
 		commonmetrics.LabelStatusClass: "4xx",
 	})
-	if got := metric.GetCounter().GetValue(); got != 1 {
-		t.Fatalf("unmatched counter = %v, want 1", got)
-	}
+	require.Equal(t, float64(1), metric.GetCounter().GetValue())
 	assertGinMetricFamilyMissingLabelValue(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), "/api/v1/users/123")
 }
 
@@ -345,27 +290,21 @@ func TestNewGinEngineRecordsPanicHTTPServerMetrics(t *testing.T) {
 	traceProvider := newGinTestTracingProvider(t, cfg)
 	metricsProvider := newGinTestMetricsProvider(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 	engine.GET("/api/v1/panic", func(_ *gin.Context) {
 		panic("metrics panic test")
 	})
 
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/panic", nil))
-	if recorder.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", recorder.Code)
-	}
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 
 	metric := findGinMetricByLabels(t, gatherGinMetricFamily(t, metricsProvider, "http_server_requests_total"), map[string]string{
 		commonmetrics.LabelMethod:      http.MethodGet,
 		commonmetrics.LabelRoute:       "/api/v1/panic",
 		commonmetrics.LabelStatusClass: "5xx",
 	})
-	if got := metric.GetCounter().GetValue(); got != 1 {
-		t.Fatalf("panic counter = %v, want 1", got)
-	}
+	require.Equal(t, float64(1), metric.GetCounter().GetValue())
 }
 
 func TestNewGinEngineMarksServerErrorSpanStatus(t *testing.T) {
@@ -373,24 +312,19 @@ func TestNewGinEngineMarksServerErrorSpanStatus(t *testing.T) {
 	cfg := ginTestConfig()
 	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
+	failResponse := commonresponse.Fail
 	engine.GET("/api/v1/fail", func(c *gin.Context) {
-		commonresponse.Fail(c, errors.New("database password token"))
+		failResponse(c, errors.New("database password token"))
 	})
 
 	recorderHTTP := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/fail", nil)
 	engine.ServeHTTP(recorderHTTP, request)
 
-	if recorderHTTP.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", recorderHTTP.Code)
-	}
+	require.Equal(t, http.StatusInternalServerError, recorderHTTP.Code)
 	span := endedGinSpan(t, recorder)
-	if got := span.Status().Code; got != codes.Error {
-		t.Fatalf("span status = %s, want Error", got)
-	}
+	require.Equal(t, codes.Error, span.Status().Code)
 }
 
 func TestNewGinEngineDoesNotMarkClientErrorSpanStatus(t *testing.T) {
@@ -398,9 +332,7 @@ func TestNewGinEngineDoesNotMarkClientErrorSpanStatus(t *testing.T) {
 	cfg := ginTestConfig()
 	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 	engine.GET("/api/v1/bad-request", func(c *gin.Context) {
 		commonresponse.BadRequest(c, "请求格式错误")
 	})
@@ -409,13 +341,9 @@ func TestNewGinEngineDoesNotMarkClientErrorSpanStatus(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/bad-request", nil)
 	engine.ServeHTTP(recorderHTTP, request)
 
-	if recorderHTTP.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", recorderHTTP.Code)
-	}
+	require.Equal(t, http.StatusBadRequest, recorderHTTP.Code)
 	span := endedGinSpan(t, recorder)
-	if got := span.Status().Code; got != codes.Unset {
-		t.Fatalf("span status = %s, want Unset", got)
-	}
+	require.Equal(t, codes.Unset, span.Status().Code)
 }
 
 func TestNewGinEngineRecordsPanicSpanError(t *testing.T) {
@@ -423,9 +351,7 @@ func TestNewGinEngineRecordsPanicSpanError(t *testing.T) {
 	cfg := ginTestConfig()
 	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 	engine.GET("/api/v1/panic", func(_ *gin.Context) {
 		panic("route boom password token")
 	})
@@ -434,26 +360,17 @@ func TestNewGinEngineRecordsPanicSpanError(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/panic", nil)
 	engine.ServeHTTP(recorderHTTP, request)
 
-	if recorderHTTP.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", recorderHTTP.Code)
-	}
+	require.Equal(t, http.StatusInternalServerError, recorderHTTP.Code)
 	var body struct {
 		Success bool                `json:"success"`
 		Code    contracterrors.Code `json:"code"`
 	}
-	if err := json.NewDecoder(recorderHTTP.Body).Decode(&body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body.Success || body.Code != contracterrors.CodeInternalError {
-		t.Fatalf("body = %#v, want internal failure envelope", body)
-	}
+	require.NoError(t, json.NewDecoder(recorderHTTP.Body).Decode(&body))
+	require.False(t, body.Success)
+	require.Equal(t, contracterrors.CodeInternalError, body.Code)
 	span := endedGinSpan(t, recorder)
-	if got := span.Status().Code; got != codes.Error {
-		t.Fatalf("span status = %s, want Error", got)
-	}
-	if !spanHasEvent(span, "exception") {
-		t.Fatalf("span events = %#v, want exception event", span.Events())
-	}
+	require.Equal(t, codes.Error, span.Status().Code)
+	require.True(t, spanHasEvent(span, "exception"), "events=%#v", span.Events())
 }
 
 func TestNewGinEngineSkipsSuccessfulHealthProbeErrorStatus(t *testing.T) {
@@ -461,27 +378,21 @@ func TestNewGinEngineSkipsSuccessfulHealthProbeErrorStatus(t *testing.T) {
 	cfg := ginTestConfig()
 	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
 	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
-	if err != nil {
-		t.Fatalf("NewGinEngine: %v", err)
-	}
+	require.NoError(t, err)
 	engine.GET("/livez", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
 
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/livez", nil))
 
-	if spans := recorder.Ended(); len(spans) != 0 {
-		t.Fatalf("ended spans = %d, want 0 for successful health probe", len(spans))
-	}
+	require.Empty(t, recorder.Ended())
 }
 
 func TestHTTPServerSpanName(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
-		if got := httpServerSpanName(c); got != "GET /api/v1/users/:user_id" {
-			t.Fatalf("span name = %q, want route template", got)
-		}
+		require.Equal(t, "GET /api/v1/users/:user_id", httpServerSpanName(c))
 		c.Status(http.StatusNoContent)
 	})
 
@@ -492,14 +403,10 @@ func TestHTTPServerSpanName(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Request = httptest.NewRequest(http.MethodPatch, path, nil)
 		got := httpServerSpanName(c)
-		if got != "PATCH route not found" {
-			t.Fatalf("fallback span name = %q, want stable unmatched route name", got)
-		}
+		require.Equal(t, "PATCH route not found", got)
 		unmatchedNames[got] = struct{}{}
 	}
-	if len(unmatchedNames) != 1 {
-		t.Fatalf("unmatched span names = %v, want single low-cardinality fallback", unmatchedNames)
-	}
+	require.Len(t, unmatchedNames, 1)
 }
 
 func ginTestConfig() *config.Config {
@@ -518,13 +425,9 @@ func newGinTestTracingProvider(t *testing.T, cfg *config.Config) *commontracing.
 		ServiceName: cfg.App.Name,
 		Environment: cfg.App.Environment,
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() {
-		if err := provider.Shutdown(context.Background()); err != nil {
-			t.Fatalf("Shutdown tracing provider: %v", err)
-		}
+		require.NoError(t, provider.Shutdown(context.Background()))
 	})
 	return provider
 }
@@ -544,36 +447,36 @@ func newGinTestMetricsProvider(t *testing.T, cfg *config.Config) *commonmetrics.
 		ServiceName: cfg.App.Name,
 		Environment: cfg.App.Environment,
 	})
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
+	require.NoError(t, err)
 	return provider
 }
 
 func gatherGinMetricFamily(t *testing.T, provider *commonmetrics.Provider, name string) *dto.MetricFamily {
 	t.Helper()
 	families, err := provider.Gatherer().Gather()
-	if err != nil {
-		t.Fatalf("Gather: %v", err)
-	}
+	require.NoError(t, err)
+	var found *dto.MetricFamily
 	for _, family := range families {
 		if family.GetName() == name {
-			return family
+			found = family
+			break
 		}
 	}
-	t.Fatalf("metric family %q not found", name)
-	return nil
+	require.NotNil(t, found, "metric family %q not found", name)
+	return found
 }
 
 func findGinMetricByLabels(t *testing.T, family *dto.MetricFamily, labels map[string]string) *dto.Metric {
 	t.Helper()
+	var found *dto.Metric
 	for _, metric := range family.GetMetric() {
 		if ginMetricHasLabels(metric, labels) {
-			return metric
+			found = metric
+			break
 		}
 	}
-	t.Fatalf("metric family %q missing labels %#v", family.GetName(), labels)
-	return nil
+	require.NotNil(t, found, "metric family %q missing labels %#v", family.GetName(), labels)
+	return found
 }
 
 func ginMetricHasLabels(metric *dto.Metric, labels map[string]string) bool {
@@ -598,13 +501,9 @@ func ginMetricHasLabels(metric *dto.Metric, labels map[string]string) bool {
 func assertGinMetricFamilyMissing(t *testing.T, provider *commonmetrics.Provider, name string) {
 	t.Helper()
 	families, err := provider.Gatherer().Gather()
-	if err != nil {
-		t.Fatalf("Gather: %v", err)
-	}
+	require.NoError(t, err)
 	for _, family := range families {
-		if family.GetName() == name {
-			t.Fatalf("metric family %q exists, want missing", name)
-		}
+		require.NotEqual(t, name, family.GetName())
 	}
 }
 
@@ -612,9 +511,7 @@ func assertGinMetricFamilyMissingLabelValue(t *testing.T, family *dto.MetricFami
 	t.Helper()
 	for _, metric := range family.GetMetric() {
 		for _, label := range metric.GetLabel() {
-			if label.GetValue() == value {
-				t.Fatalf("metric family %q has forbidden label value %q", family.GetName(), value)
-			}
+			require.NotEqual(t, value, label.GetValue(), "metric family %q has forbidden label value", family.GetName())
 		}
 	}
 }
@@ -622,9 +519,7 @@ func assertGinMetricFamilyMissingLabelValue(t *testing.T, family *dto.MetricFami
 func endedGinSpan(t *testing.T, recorder *tracetest.SpanRecorder) sdktrace.ReadOnlySpan {
 	t.Helper()
 	spans := recorder.Ended()
-	if len(spans) != 1 {
-		t.Fatalf("ended spans = %d, want 1", len(spans))
-	}
+	require.Len(t, spans, 1)
 	return spans[0]
 }
 

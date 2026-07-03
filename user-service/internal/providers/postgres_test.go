@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
@@ -48,21 +49,13 @@ func TestProvidePostgresPoolsProvidesUserDatabase(t *testing.T) {
 	app.RequireStart()
 	app.RequireStop()
 
-	if got.UserDB == nil {
-		t.Fatal("UserDB = nil")
-	}
+	require.NotNil(t, got.UserDB)
 
 	dbNames := drv.databaseNames()
 	want := []string{"aegiscore_user"}
-	if strings.Join(dbNames, ",") != strings.Join(want, ",") {
-		t.Fatalf("opened databases = %v, want %v", dbNames, want)
-	}
-	if got := drv.pings.Load(); got != 1 {
-		t.Fatalf("pings = %d, want 1", got)
-	}
-	if got := drv.closes.Load(); got != 1 {
-		t.Fatalf("closes = %d, want 1", got)
-	}
+	require.ElementsMatch(t, want, dbNames)
+	require.Equal(t, int64(1), drv.pings.Load())
+	require.Equal(t, int64(1), drv.closes.Load())
 }
 
 func TestProvidePostgresPoolsDoesNotRequireSharedDBConfig(t *testing.T) {
@@ -76,27 +69,15 @@ func TestProvidePostgresPoolsDoesNotRequireSharedDBConfig(t *testing.T) {
 		Config:    cfg,
 		Log:       log,
 	})
-	if err != nil {
-		t.Fatalf("ProvidePostgresPools: %v", err)
-	}
-	if got.UserDB == nil {
-		t.Fatal("UserDB = nil")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, got.UserDB)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if err := lc.Start(ctx); err != nil {
-		t.Fatalf("lifecycle start: %v", err)
-	}
-	if err := lc.Stop(ctx); err != nil {
-		t.Fatalf("lifecycle stop: %v", err)
-	}
-	if got := drv.pings.Load(); got != 1 {
-		t.Fatalf("pings = %d, want 1", got)
-	}
-	if got := drv.closes.Load(); got != 1 {
-		t.Fatalf("driver closes = %d, want 1", got)
-	}
+	require.NoError(t, lc.Start(ctx))
+	require.NoError(t, lc.Stop(ctx))
+	require.Equal(t, int64(1), drv.pings.Load())
+	require.Equal(t, int64(1), drv.closes.Load())
 }
 
 func TestProvidePostgresPoolsDoesNotProvideSharedDatabase(t *testing.T) {
@@ -110,12 +91,7 @@ func TestProvidePostgresPoolsDoesNotProvideSharedDatabase(t *testing.T) {
 		fx.Provide(ProvidePostgresPools),
 		fx.Invoke(func(pools) {}),
 	)
-	if err == nil {
-		t.Fatal("ValidateApp error = nil")
-	}
-	if !strings.Contains(err.Error(), `name="shared_db"`) {
-		t.Fatalf("ValidateApp error = %q, want missing named shared_db", err.Error())
-	}
+	require.ErrorContains(t, err, `name="shared_db"`)
 }
 
 func TestProvidePostgresPoolsDoesNotProvidePayDatabase(t *testing.T) {
@@ -129,26 +105,17 @@ func TestProvidePostgresPoolsDoesNotProvidePayDatabase(t *testing.T) {
 		fx.Provide(ProvidePostgresPools),
 		fx.Invoke(func(pools) {}),
 	)
-	if err == nil {
-		t.Fatal("ValidateApp error = nil")
-	}
-	if !strings.Contains(err.Error(), `name="pay_db"`) {
-		t.Fatalf("ValidateApp error = %q, want missing named pay_db", err.Error())
-	}
+	require.ErrorContains(t, err, `name="pay_db"`)
 }
 
 func TestProvideEntClientsProvidesUserServiceEntClient(t *testing.T) {
 	drv := registerProviderTestSQLDriver(t)
 	userDB, err := sql.Open(drv.name, "postgres://aegiscore:secret@127.0.0.1/aegiscore_user")
-	if err != nil {
-		t.Fatalf("open user db: %v", err)
-	}
+	require.NoError(t, err)
 	defer userDB.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if err := userDB.PingContext(ctx); err != nil {
-		t.Fatalf("ping user db: %v", err)
-	}
+	require.NoError(t, userDB.PingContext(ctx))
 
 	lc := fxtest.NewLifecycle(t)
 	got := ProvideEntClients(NamedEntClientParams{
@@ -157,22 +124,12 @@ func TestProvideEntClientsProvidesUserServiceEntClient(t *testing.T) {
 		UserDB:    userDB,
 	})
 
-	if got.UserClient == nil {
-		t.Fatal("UserClient = nil")
-	}
-	if got := drv.closes.Load(); got != 0 {
-		t.Fatalf("closes before lifecycle stop = %d, want 0", got)
-	}
+	require.NotNil(t, got.UserClient)
+	require.Equal(t, int64(0), drv.closes.Load())
 
-	if err := lc.Start(ctx); err != nil {
-		t.Fatalf("lifecycle start: %v", err)
-	}
-	if err := lc.Stop(ctx); err != nil {
-		t.Fatalf("lifecycle stop: %v", err)
-	}
-	if got := drv.closes.Load(); got != 0 {
-		t.Fatalf("closes after ent lifecycle stop = %d, want 0", got)
-	}
+	require.NoError(t, lc.Start(ctx))
+	require.NoError(t, lc.Stop(ctx))
+	require.Equal(t, int64(0), drv.closes.Load())
 }
 
 func TestPostgresPoolsAndEntClientsClosePoolOnce(t *testing.T) {
@@ -195,15 +152,9 @@ func TestPostgresPoolsAndEntClientsClosePoolOnce(t *testing.T) {
 	app.RequireStart()
 	app.RequireStop()
 
-	if got.UserClient == nil {
-		t.Fatal("UserClient = nil")
-	}
-	if got := drv.pings.Load(); got != 1 {
-		t.Fatalf("pings = %d, want 1", got)
-	}
-	if got := drv.closes.Load(); got != 1 {
-		t.Fatalf("closes after composed lifecycle stop = %d, want 1", got)
-	}
+	require.NotNil(t, got.UserClient)
+	require.Equal(t, int64(1), drv.pings.Load())
+	require.Equal(t, int64(1), drv.closes.Load())
 }
 
 func TestProvideRedisClientsProvidesCacheRedis(t *testing.T) {
@@ -244,15 +195,9 @@ func TestProvideRedisClientsProvidesCacheRedis(t *testing.T) {
 	app.RequireStart()
 	app.RequireStop()
 
-	if got.CacheRedis == nil {
-		t.Fatal("CacheRedis = nil")
-	}
-	if got.CacheRedis.Options().Addr != redisServer.addr {
-		t.Fatalf("CacheRedis addr = %q, want %q", got.CacheRedis.Options().Addr, redisServer.addr)
-	}
-	if got := redisServer.pings.Load(); got != 1 {
-		t.Fatalf("redis pings = %d, want 1", got)
-	}
+	require.NotNil(t, got.CacheRedis)
+	require.Equal(t, redisServer.addr, got.CacheRedis.Options().Addr)
+	require.Equal(t, int64(1), redisServer.pings.Load())
 	redisServer.requireClosed(t)
 }
 
@@ -268,12 +213,7 @@ func TestProvideRedisClientsDoesNotProvideQueueRedis(t *testing.T) {
 		fx.Provide(ProvideRedisClients),
 		fx.Invoke(func(clients) {}),
 	)
-	if err == nil {
-		t.Fatal("ValidateApp error = nil")
-	}
-	if !strings.Contains(err.Error(), `name="queue_redis"`) {
-		t.Fatalf("ValidateApp error = %q, want missing named queue_redis", err.Error())
-	}
+	require.ErrorContains(t, err, `name="queue_redis"`)
 }
 
 func TestProvideRedisClientsReturnsErrorForMissingCacheRedisConfig(t *testing.T) {
@@ -285,12 +225,7 @@ func TestProvideRedisClientsReturnsErrorForMissingCacheRedisConfig(t *testing.T)
 		Config:    &config.Config{},
 		Log:       log,
 	})
-	if err == nil {
-		t.Fatal("ProvideRedisClients error = nil")
-	}
-	if !strings.Contains(err.Error(), `redis config "`+resources.NameCacheRedis+`" not found`) {
-		t.Fatalf("ProvideRedisClients error = %q, want missing cache_redis config", err.Error())
-	}
+	require.ErrorContains(t, err, `redis config "`+resources.NameCacheRedis+`" not found`)
 }
 
 func TestProvideRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
@@ -307,16 +242,12 @@ func TestProvideRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 		},
 	}}
 
-	if _, err := ProvideRedisClients(NamedRedisParams{Lifecycle: lc, Config: cfg, Log: log}); err != nil {
-		t.Fatalf("ProvideRedisClients: %v", err)
-	}
+	_, err := ProvideRedisClients(NamedRedisParams{Lifecycle: lc, Config: cfg, Log: log})
+	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if err := lc.Start(ctx); err == nil {
-		t.Fatal("Lifecycle Start error = nil")
-	} else if !strings.Contains(err.Error(), "ping redis cache_redis") {
-		t.Fatalf("Lifecycle Start error = %q, want ping redis cache_redis", err.Error())
-	}
+	err = lc.Start(ctx)
+	require.ErrorContains(t, err, "ping redis cache_redis")
 }
 
 func providerTestConfig(driverName string) *config.Config {
@@ -365,9 +296,7 @@ func providerTestConfig(driverName string) *config.Config {
 func newProviderTestRedisServer(t *testing.T) *providerTestRedisServer {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Listen: %v", err)
-	}
+	require.NoError(t, err)
 	server := &providerTestRedisServer{
 		addr:   listener.Addr().String(),
 		closed: make(chan struct{}, 1),
@@ -459,11 +388,14 @@ func nextProviderRedisCommand(command string) (int, string) {
 
 func (s *providerTestRedisServer) requireClosed(t *testing.T) {
 	t.Helper()
-	select {
-	case <-s.closed:
-	case <-time.After(time.Second):
-		t.Fatal("redis connection was not closed")
-	}
+	require.Eventually(t, func() bool {
+		select {
+		case <-s.closed:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 10*time.Millisecond)
 }
 
 func registerProviderTestSQLDriver(t *testing.T) *providerTestSQLDriver {
