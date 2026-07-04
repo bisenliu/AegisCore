@@ -57,19 +57,37 @@ type rbacCreateSuperAdminResult struct {
 	roleAdded       bool
 }
 
-type rbacSeedDependencies struct {
-	service         *roleseed.Service
-	users           usercommand.CreateUserService
-	credentials     *authpostgres.CredentialStore
-	passwordService *password.Service
+type rbacSeedService interface {
+	Seed(ctx context.Context, opts roleseed.SeedOptions) (roleseed.SeedResult, error)
+	AssignSuperAdmin(ctx context.Context, userID uuid.UUID) (roleseed.AssignSuperAdminResult, error)
 }
 
-func runRBACSeedCommand(ctx context.Context, configPath string, opts rbacSeedOptions) error {
+type rbacCredentialStore interface {
+	GetByUsername(ctx context.Context, username string) (*authdomain.UserCredential, error)
+	UpdateCredentials(ctx context.Context, input authdomain.UpdateCredentialsInput) (int64, error)
+}
+
+type rbacPasswordHasher interface {
+	HashContext(ctx context.Context, plain string) (string, error)
+}
+
+type rbacSeedDependencies struct {
+	service         rbacSeedService
+	users           usercommand.CreateUserService
+	credentials     rbacCredentialStore
+	passwordService rbacPasswordHasher
+}
+
+var newRBACSeedDependencies = defaultRBACSeedDependencies
+
+func runRBACSeedCommand(ctx context.Context, configPath string, opts rbacSeedOptions) (err error) {
 	deps, cleanup, err := newRBACSeedDependencies(ctx, configPath)
 	if err != nil {
 		return err
 	}
-	defer cleanup()
+	defer func() {
+		err = errors.Join(err, cleanup())
+	}()
 
 	result, err := deps.service.Seed(ctx, roleseed.SeedOptions{ReactivateSystem: opts.reactivateSystem, SyncSystemBindings: opts.syncSystemBindings})
 	if err != nil {
@@ -79,12 +97,14 @@ func runRBACSeedCommand(ctx context.Context, configPath string, opts rbacSeedOpt
 	return nil
 }
 
-func runAssignSuperAdminCommand(ctx context.Context, configPath string, userID uuid.UUID) error {
+func runAssignSuperAdminCommand(ctx context.Context, configPath string, userID uuid.UUID) (err error) {
 	deps, cleanup, err := newRBACSeedDependencies(ctx, configPath)
 	if err != nil {
 		return err
 	}
-	defer cleanup()
+	defer func() {
+		err = errors.Join(err, cleanup())
+	}()
 
 	result, err := deps.service.AssignSuperAdmin(ctx, userID)
 	if err != nil {
@@ -98,12 +118,14 @@ func runAssignSuperAdminCommand(ctx context.Context, configPath string, userID u
 	return nil
 }
 
-func runCreateSuperAdminCommand(ctx context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
+func runCreateSuperAdminCommand(ctx context.Context, configPath string, opts rbacCreateSuperAdminOptions) (err error) {
 	deps, cleanup, err := newRBACSeedDependencies(ctx, configPath)
 	if err != nil {
 		return err
 	}
-	defer cleanup()
+	defer func() {
+		err = errors.Join(err, cleanup())
+	}()
 
 	result, err := createSuperAdmin(ctx, deps, opts)
 	if err != nil {
@@ -161,48 +183,58 @@ func createSuperAdmin(ctx context.Context, deps rbacSeedDependencies, opts rbacC
 	return result, nil
 }
 
-func newRBACSeedDependencies(parent context.Context, configPath string) (rbacSeedDependencies, func(), error) {
+func defaultRBACSeedDependencies(parent context.Context, configPath string) (rbacSeedDependencies, func() error, error) {
 	ctx, cancel := context.WithTimeout(parent, rbacCommandTimeout)
-	cleanup := func() { cancel() }
+	cleanup := func() error {
+		cancel()
+		return nil
+	}
+	fail := func(err error) (rbacSeedDependencies, func() error, error) {
+		cleanupErr := cleanup()
+		return rbacSeedDependencies{}, func() error { return nil }, errors.Join(err, cleanupErr)
+	}
 
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		cleanup()
-		return rbacSeedDependencies{}, func() {}, err
+		return fail(err)
 	}
 	passwordService, err := password.NewService(password.Options{
 		Concurrency: cfg.Auth.PasswordKDF.Argon2Concurrency,
 		QueueSize:   cfg.Auth.PasswordKDF.Argon2QueueSize,
 	})
 	if err != nil {
-		cleanup()
-		return rbacSeedDependencies{}, func() {}, err
+		return fail(err)
 	}
 	log, err := logger.New(cfg)
 	if err != nil {
-		cleanup()
-		return rbacSeedDependencies{}, func() {}, err
+		return fail(err)
 	}
-	cleanup = chainCleanup(cleanup, func() { _ = log.Sync() })
+	cleanup = chainCleanup(cleanup, func() error {
+		_ = log.Sync()
+		return nil
+	})
 
 	dbCfg, ok := cfg.PostgresDatabaseConfig(resources.NameUserDB)
 	if !ok {
-		cleanup()
-		return rbacSeedDependencies{}, func() {}, fmt.Errorf("postgres.%s config not found", resources.NameUserDB)
+		return fail(fmt.Errorf("postgres.%s config not found", resources.NameUserDB))
 	}
 	db, err := datastore.OpenPostgres(resources.NameUserDB, dbCfg)
 	if err != nil {
-		cleanup()
-		return rbacSeedDependencies{}, func() {}, err
+		return fail(err)
 	}
-	cleanup = chainCleanup(cleanup, func() { _ = db.Close() })
+	cleanup = chainCleanup(cleanup, func() error {
+		_ = db.Close()
+		return nil
+	})
 	if err := db.PingContext(ctx); err != nil {
-		cleanup()
-		return rbacSeedDependencies{}, func() {}, fmt.Errorf("ping postgres %s: %w", resources.NameUserDB, err)
+		return fail(fmt.Errorf("ping postgres %s: %w", resources.NameUserDB, err))
 	}
 
 	client := newRBACEntClient(db)
-	cleanup = chainCleanup(cleanup, func() { _ = client.Close() })
+	cleanup = chainCleanup(cleanup, func() error {
+		_ = client.Close()
+		return nil
+	})
 	permissionStore := permissionpostgres.NewPermissionStore(permissionpostgres.PermissionStoreParams{Client: client})
 	roleStore := rolepostgres.NewRoleStore(rolepostgres.RoleStoreParams{Client: client})
 	rolePermissionStore := rolepostgres.NewRolePermissionStore(rolepostgres.RolePermissionStoreParams{Client: client})
@@ -220,10 +252,9 @@ func newRBACEntClient(db *sql.DB) *ent.Client {
 	return ent.NewClient(ent.Driver(driver))
 }
 
-func chainCleanup(first func(), second func()) func() {
-	return func() {
-		second()
-		first()
+func chainCleanup(first func() error, second func() error) func() error {
+	return func() error {
+		return errors.Join(second(), first())
 	}
 }
 

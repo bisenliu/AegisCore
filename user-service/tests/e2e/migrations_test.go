@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/stretchr/testify/require"
 )
 
 func applyMigrations(ctx context.Context, t *testing.T, dsn string) {
@@ -18,12 +19,8 @@ func applyMigrations(ctx context.Context, t *testing.T, dsn string) {
 	db := openPostgres(t, dsn)
 	migrationsDir := filepath.Join(userServiceRoot(t), "migrations")
 	files, err := filepath.Glob(filepath.Join(migrationsDir, "*.sql"))
-	if err != nil {
-		t.Fatalf("list migrations: %v", err)
-	}
-	if len(files) == 0 {
-		t.Fatalf("no SQL migrations found in %s", migrationsDir)
-	}
+	require.NoError(t, err, "list migrations")
+	require.NotEmpty(t, files, "no SQL migrations found in %s", migrationsDir)
 	sort.Strings(files)
 	for _, file := range files {
 		applyMigrationFile(ctx, t, db, file)
@@ -33,26 +30,19 @@ func applyMigrations(ctx context.Context, t *testing.T, dsn string) {
 func applyMigrationFile(ctx context.Context, t *testing.T, db *sql.DB, file string) {
 	t.Helper()
 	content, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatalf("read migration %s: %v", filepath.Base(file), err)
-	}
+	require.NoError(t, err, "read migration %s", filepath.Base(file))
 	statements, err := splitSQLStatements(string(content))
-	if err != nil {
-		t.Fatalf("split migration %s: %v", filepath.Base(file), err)
-	}
+	require.NoError(t, err, "split migration %s", filepath.Base(file))
 	for i, statement := range statements {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
-			t.Fatalf("apply migration %s statement %d: %v", filepath.Base(file), i+1, err)
-		}
+		_, err := db.ExecContext(ctx, statement)
+		require.NoError(t, err, "apply migration %s statement %d", filepath.Base(file), i+1)
 	}
 }
 
 func userServiceRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get working directory: %v", err)
-	}
+	require.NoError(t, err, "get working directory")
 	for {
 		goMod := filepath.Join(dir, "go.mod")
 		content, err := os.ReadFile(goMod)
@@ -60,9 +50,7 @@ func userServiceRoot(t *testing.T) string {
 			return dir
 		}
 		next := filepath.Dir(dir)
-		if next == dir {
-			t.Fatalf("locate user-service root from working directory")
-		}
+		require.NotEqual(t, dir, next, "locate user-service root from working directory")
 		dir = next
 	}
 }

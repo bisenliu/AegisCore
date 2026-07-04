@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	commonauth "github.com/aegiscore/common/security/auth"
@@ -72,9 +74,7 @@ func TestHTTPAuthUserFlow(t *testing.T) {
 	expectLoginFailure(t, harness, targetUser.Username, mustChangePassword)
 
 	targetTokens := login(t, harness, targetUser.Username, newPassword)
-	if targetTokens.RefreshToken == "" {
-		t.Fatal("normal login returned empty refresh token")
-	}
+	require.NotEmpty(t, targetTokens.RefreshToken, "normal login returned empty refresh token")
 	getUser(t, harness, targetTokens.AccessToken, targetUser.UserID, targetUser.Username, int64(identity.UserStatusNormal))
 
 	expectMissingAuthorization(t, harness, targetUser.UserID)
@@ -95,13 +95,9 @@ func seedUser(t *testing.T, harness *httpFlowHarness, input seededUserInput) see
 	defer cancel()
 
 	passwordService, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
-	if err != nil {
-		t.Fatalf("create password service: %v", err)
-	}
+	require.NoError(t, err, "create password service")
 	passwordHash, err := passwordService.HashContext(ctx, input.Password)
-	if err != nil {
-		t.Fatalf("hash bootstrap password: %v", err)
-	}
+	require.NoError(t, err, "hash bootstrap password")
 	userID := uuid.New()
 	now := time.Now().UnixMilli()
 	db := openPostgres(t, harness.postgresDSN)
@@ -109,9 +105,7 @@ func seedUser(t *testing.T, harness *httpFlowHarness, input seededUserInput) see
 INSERT INTO users (user_id, nickname, username, password_hash, token_version, status, created_at, updated_at)
 VALUES ($1, $2, $3, $4, 1, $5, $6, $7)
 `, userID, input.Nickname, input.Username, passwordHash, int64(input.Status), now, now)
-	if err != nil {
-		t.Fatalf("seed bootstrap user: %v", err)
-	}
+	require.NoError(t, err, "seed bootstrap user")
 	return seededUser{Username: input.Username, Password: input.Password}
 }
 
@@ -120,9 +114,8 @@ func createUser(t *testing.T, harness *httpFlowHarness, token string, body map[s
 	recorder := harness.request(t, http.MethodPost, "/api/v1/users", body, token)
 	envelope := expectEnvelope(t, recorder, http.StatusCreated, true, contracterrors.CodeOK)
 	created := decodeData[userResponse](t, envelope)
-	if created.UserID == "" || created.Username != body["username"] {
-		t.Fatalf("created user = user_id %q username %q, want username %q", created.UserID, created.Username, body["username"])
-	}
+	require.NotEmpty(t, created.UserID, "created user_id")
+	require.Equal(t, body["username"], created.Username, "created username")
 	return created
 }
 
@@ -134,9 +127,9 @@ func login(t *testing.T, harness *httpFlowHarness, username string, plainPasswor
 	}, "")
 	envelope := expectEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK)
 	tokens := decodeData[tokenResponse](t, envelope)
-	if tokens.AccessToken == "" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn <= 0 {
-		t.Fatalf("login token metadata invalid: access_present=%v token_type=%q expires_in=%d", tokens.AccessToken != "", tokens.TokenType, tokens.ExpiresIn)
-	}
+	require.NotEmpty(t, tokens.AccessToken, "login access token")
+	assert.Equal(t, commonauth.TokenTypeBearer, tokens.TokenType, "login token type")
+	assert.Greater(t, tokens.ExpiresIn, int64(0), "login expires_in")
 	return tokens
 }
 
@@ -148,9 +141,10 @@ func loginPasswordChangeRequired(t *testing.T, harness *httpFlowHarness, usernam
 	}, "")
 	envelope := expectEnvelope(t, recorder, http.StatusOK, false, contracterrors.CodePasswordChangeRequired)
 	tokens := decodeData[tokenResponse](t, envelope)
-	if tokens.AccessToken == "" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn <= 0 || tokens.RefreshToken != "" {
-		t.Fatalf("password-change login token invalid: access_present=%v token_type=%q expires_in=%d refresh_present=%v", tokens.AccessToken != "", tokens.TokenType, tokens.ExpiresIn, tokens.RefreshToken != "")
-	}
+	require.NotEmpty(t, tokens.AccessToken, "password-change access token")
+	assert.Equal(t, commonauth.TokenTypeBearer, tokens.TokenType, "password-change token type")
+	assert.Greater(t, tokens.ExpiresIn, int64(0), "password-change expires_in")
+	assert.Empty(t, tokens.RefreshToken, "password-change refresh token")
 	return tokens
 }
 
@@ -159,9 +153,9 @@ func getUser(t *testing.T, harness *httpFlowHarness, token string, userID string
 	recorder := harness.request(t, http.MethodGet, "/api/v1/users/"+userID, nil, token)
 	envelope := expectEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK)
 	user := decodeData[userResponse](t, envelope)
-	if user.UserID != userID || user.Username != username || user.Status != status {
-		t.Fatalf("user response = user_id %q username %q status %d, want user_id %q username %q status %d", user.UserID, user.Username, user.Status, userID, username, status)
-	}
+	assert.Equal(t, userID, user.UserID, "user response user_id")
+	assert.Equal(t, username, user.Username, "user response username")
+	assert.Equal(t, status, user.Status, "user response status")
 	return user
 }
 
@@ -172,9 +166,7 @@ func changePassword(t *testing.T, harness *httpFlowHarness, passwordChangeToken 
 	}, passwordChangeToken)
 	envelope := expectEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK)
 	result := decodeData[changePasswordResponse](t, envelope)
-	if !result.Changed {
-		t.Fatal("change password response changed=false, want true")
-	}
+	require.Equal(t, true, result.Changed, "change password response changed")
 }
 
 func logoutCurrent(t *testing.T, harness *httpFlowHarness, token string) {
@@ -182,9 +174,7 @@ func logoutCurrent(t *testing.T, harness *httpFlowHarness, token string) {
 	recorder := harness.request(t, http.MethodPost, "/api/v1/auth/logout", nil, token)
 	envelope := expectEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK)
 	result := decodeData[logoutResponse](t, envelope)
-	if !result.LoggedOut {
-		t.Fatal("logout response logged_out=false, want true")
-	}
+	require.Equal(t, true, result.LoggedOut, "logout response logged_out")
 }
 
 func expectLoginFailure(t *testing.T, harness *httpFlowHarness, username string, plainPassword string) {

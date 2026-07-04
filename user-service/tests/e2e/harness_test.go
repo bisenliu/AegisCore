@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -176,27 +178,20 @@ postgres:
 		postgres.Host, postgres.Port, postgres.Username, postgres.Password, postgres.DBName, postgres.Driver, postgres.SSLMode, postgres.MaxOpenConns, postgres.MaxIdleConns, postgres.ConnMaxLifetime, postgres.ConnMaxIdleTime, postgres.PingTimeout,
 	)
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatalf("write test config: %v", err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600), "write test config")
 	return path
 }
 
 func freeTCPPort(t *testing.T) int {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen free tcp port: %v", err)
-	}
+	require.NoError(t, err, "listen free tcp port")
 	defer func() { _ = listener.Close() }()
 	_, portText, err := net.SplitHostPort(listener.Addr().String())
-	if err != nil {
-		t.Fatalf("split free tcp port: %v", err)
-	}
+	require.NoError(t, err, "split free tcp port")
 	port, err := strconv.Atoi(portText)
-	if err != nil {
-		t.Fatalf("parse free tcp port: %v", err)
-	}
+	require.NoError(t, err, "parse free tcp port")
+	require.Greater(t, port, 0, "free tcp port")
 	return port
 }
 
@@ -206,9 +201,7 @@ func (h *httpFlowHarness) request(t *testing.T, method string, path string, body
 	if body != nil {
 		var err error
 		payload, err = json.Marshal(body)
-		if err != nil {
-			t.Fatalf("marshal request body for %s %s: %v", method, path, err)
-		}
+		require.NoError(t, err, "marshal request body for %s %s", method, path)
 	}
 	request := httptest.NewRequest(method, path, bytes.NewReader(payload))
 	request.RemoteAddr = "203.0.113.10:12345"
@@ -229,23 +222,21 @@ func decodeEnvelope(t *testing.T, recorder *httptest.ResponseRecorder) testEnvel
 	var envelope testEnvelope
 	decoder := json.NewDecoder(recorder.Body)
 	decoder.UseNumber()
-	if err := decoder.Decode(&envelope); err != nil {
-		t.Fatalf("decode response envelope: status=%d error=%v", recorder.Code, err)
-	}
+	require.NoError(t, decoder.Decode(&envelope), "decode response envelope: status=%d", recorder.Code)
 	return envelope
 }
 
 func expectEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, status int, success bool, code contracterrors.Code) testEnvelope {
 	t.Helper()
 	envelope := decodeEnvelope(t, recorder)
-	if recorder.Code != status || envelope.Success != success || envelope.Code != code {
-		t.Fatalf("response = status %d success %v code %d message %q, want status %d success %v code %d", recorder.Code, envelope.Success, envelope.Code, envelope.Message, status, success, code)
+	assert.Equal(t, status, recorder.Code, "response status: message=%q", envelope.Message)
+	assert.Equal(t, success, envelope.Success, "response success: message=%q", envelope.Message)
+	assert.Equal(t, code, envelope.Code, "response code: message=%q", envelope.Message)
+	if success && status != http.StatusCreated {
+		assert.Equal(t, contractresponse.MessageOK, envelope.Message, "success message")
 	}
-	if success && envelope.Message != contractresponse.MessageOK && status != http.StatusCreated {
-		t.Fatalf("success message = %q, want %q", envelope.Message, contractresponse.MessageOK)
-	}
-	if success && status == http.StatusCreated && envelope.Message != contractresponse.MessageCreated {
-		t.Fatalf("created message = %q, want %q", envelope.Message, contractresponse.MessageCreated)
+	if success && status == http.StatusCreated {
+		assert.Equal(t, contractresponse.MessageCreated, envelope.Message, "created message")
 	}
 	return envelope
 }
@@ -253,21 +244,15 @@ func expectEnvelope(t *testing.T, recorder *httptest.ResponseRecorder, status in
 func decodeData[T any](t *testing.T, envelope testEnvelope) T {
 	t.Helper()
 	var data T
-	if len(envelope.Data) == 0 {
-		t.Fatal("response data is empty")
-	}
-	if err := json.Unmarshal(envelope.Data, &data); err != nil {
-		t.Fatalf("decode response data: %v", err)
-	}
+	require.NotEmpty(t, envelope.Data, "response data")
+	require.NoError(t, json.Unmarshal(envelope.Data, &data), "decode response data")
 	return data
 }
 
 func openPostgres(t *testing.T, dsn string) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("pgx", dsn)
-	if err != nil {
-		t.Fatalf("open PostgreSQL: %v", err)
-	}
+	require.NoError(t, err, "open PostgreSQL")
 	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
