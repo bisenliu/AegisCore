@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	roleseed "github.com/aegiscore/user-service/internal/features/role/application/seed"
@@ -24,21 +25,19 @@ func TestRunRBACSeedCommand(t *testing.T) {
 		withRBACSeedDependencyFactory(t, func(_ context.Context, configPath string) (rbacSeedDependencies, func() error, error) {
 			require.Equal(t, "test-config.yaml", configPath)
 			return rbacSeedDependencies{
-					service: fakeRBACSeedService{
-						seed: func(_ context.Context, opts roleseed.SeedOptions) (roleseed.SeedResult, error) {
-							seedCalled = true
-							require.True(t, opts.ReactivateSystem)
-							require.True(t, opts.SyncSystemBindings)
-							return roleseed.SeedResult{
-								RolesInserted:             1,
-								RolesUpdated:              2,
-								PermissionsInserted:       3,
-								PermissionsUpdated:        4,
-								RolePermissionBindingsAdd: 5,
-								RolePermissionBindingsDel: 6,
-							}, nil
-						},
-					},
+					service: newRBACSeedServiceMock(t, func(_ context.Context, opts roleseed.SeedOptions) (roleseed.SeedResult, error) {
+						seedCalled = true
+						require.True(t, opts.ReactivateSystem)
+						require.True(t, opts.SyncSystemBindings)
+						return roleseed.SeedResult{
+							RolesInserted:             1,
+							RolesUpdated:              2,
+							PermissionsInserted:       3,
+							PermissionsUpdated:        4,
+							RolePermissionBindingsAdd: 5,
+							RolePermissionBindingsDel: 6,
+						}, nil
+					}, nil),
 				}, func() error {
 					cleanupCalled = true
 					return nil
@@ -71,11 +70,9 @@ func TestRunRBACSeedCommand(t *testing.T) {
 		cleanupErr := errors.New("cleanup failed")
 		withRBACSeedDependencyFactory(t, func(context.Context, string) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
-					service: fakeRBACSeedService{
-						seed: func(context.Context, roleseed.SeedOptions) (roleseed.SeedResult, error) {
-							return roleseed.SeedResult{}, seedErr
-						},
-					},
+					service: newRBACSeedServiceMock(t, func(context.Context, roleseed.SeedOptions) (roleseed.SeedResult, error) {
+						return roleseed.SeedResult{}, seedErr
+					}, nil),
 				}, func() error {
 					return cleanupErr
 				}, nil
@@ -114,13 +111,11 @@ func TestRunAssignSuperAdminCommand(t *testing.T) {
 			withRBACSeedDependencyFactory(t, func(_ context.Context, configPath string) (rbacSeedDependencies, func() error, error) {
 				require.Equal(t, "test-config.yaml", configPath)
 				return rbacSeedDependencies{
-						service: fakeRBACSeedService{
-							assign: func(_ context.Context, got uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
-								assignCalled = true
-								require.Equal(t, userID, got)
-								return roleseed.AssignSuperAdminResult{Added: tc.added}, nil
-							},
-						},
+						service: newRBACSeedServiceMock(t, nil, func(_ context.Context, got uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
+							assignCalled = true
+							require.Equal(t, userID, got)
+							return roleseed.AssignSuperAdminResult{Added: tc.added}, nil
+						}),
 					}, func() error {
 						cleanupCalled = true
 						return nil
@@ -154,11 +149,9 @@ func TestRunAssignSuperAdminCommand(t *testing.T) {
 		cleanupCalled := false
 		withRBACSeedDependencyFactory(t, func(context.Context, string) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
-					service: fakeRBACSeedService{
-						assign: func(context.Context, uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
-							return roleseed.AssignSuperAdminResult{}, assignErr
-						},
-					},
+					service: newRBACSeedServiceMock(t, nil, func(context.Context, uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
+						return roleseed.AssignSuperAdminResult{}, assignErr
+					}),
 				}, func() error {
 					cleanupCalled = true
 					return nil
@@ -181,18 +174,14 @@ func TestRunCreateSuperAdminCommand(t *testing.T) {
 		withRBACSeedDependencyFactory(t, func(_ context.Context, configPath string) (rbacSeedDependencies, func() error, error) {
 			require.Equal(t, "test-config.yaml", configPath)
 			return rbacSeedDependencies{
-					service: fakeRBACSeedService{
-						assign: func(_ context.Context, got uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
-							require.Equal(t, userID, got)
-							return roleseed.AssignSuperAdminResult{Added: true}, nil
-						},
-					},
-					credentials: fakeRBACCredentialStore{
-						getByUsername: func(_ context.Context, username string) (*authdomain.UserCredential, error) {
-							require.Equal(t, "admin", username)
-							return &authdomain.UserCredential{UserID: userID, Username: username, Status: identity.UserStatusNormal}, nil
-						},
-					},
+					service: newRBACSeedServiceMock(t, nil, func(_ context.Context, got uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
+						require.Equal(t, userID, got)
+						return roleseed.AssignSuperAdminResult{Added: true}, nil
+					}),
+					credentials: newRBACCredentialStoreMock(t, func(_ context.Context, username string) (*authdomain.UserCredential, error) {
+						require.Equal(t, "admin", username)
+						return &authdomain.UserCredential{UserID: userID, Username: username, Status: identity.UserStatusNormal}, nil
+					}, nil),
 				}, func() error {
 					cleanupCalled = true
 					return nil
@@ -225,11 +214,9 @@ func TestRunCreateSuperAdminCommand(t *testing.T) {
 		cleanupErr := errors.New("cleanup failed")
 		withRBACSeedDependencyFactory(t, func(context.Context, string) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
-					credentials: fakeRBACCredentialStore{
-						getByUsername: func(context.Context, string) (*authdomain.UserCredential, error) {
-							return nil, getErr
-						},
-					},
+					credentials: newRBACCredentialStoreMock(t, func(context.Context, string) (*authdomain.UserCredential, error) {
+						return nil, getErr
+					}, nil),
 				}, func() error {
 					return cleanupErr
 				}, nil
@@ -249,25 +236,19 @@ func TestCreateSuperAdmin(t *testing.T) {
 		var createdCmd usercommand.CreateUserCommand
 		assignCalled := false
 		deps := rbacSeedDependencies{
-			service: fakeRBACSeedService{
-				assign: func(_ context.Context, got uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
-					assignCalled = true
-					require.Equal(t, userID, got)
-					return roleseed.AssignSuperAdminResult{Added: true}, nil
-				},
-			},
-			users: fakeCreateUserService{
-				create: func(_ context.Context, cmd usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error) {
-					createdCmd = cmd
-					return &usercommand.CreateUserResult{User: userdomain.User{UserID: userID}}, nil
-				},
-			},
-			credentials: fakeRBACCredentialStore{
-				getByUsername: func(_ context.Context, username string) (*authdomain.UserCredential, error) {
-					require.Equal(t, "admin", username)
-					return nil, identity.ErrUserNotFound
-				},
-			},
+			service: newRBACSeedServiceMock(t, nil, func(_ context.Context, got uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
+				assignCalled = true
+				require.Equal(t, userID, got)
+				return roleseed.AssignSuperAdminResult{Added: true}, nil
+			}),
+			users: newCreateUserServiceMock(t, func(_ context.Context, cmd usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error) {
+				createdCmd = cmd
+				return &usercommand.CreateUserResult{User: userdomain.User{UserID: userID}}, nil
+			}),
+			credentials: newRBACCredentialStoreMock(t, func(_ context.Context, username string) (*authdomain.UserCredential, error) {
+				require.Equal(t, "admin", username)
+				return nil, identity.ErrUserNotFound
+			}, nil),
 		}
 
 		result, err := createSuperAdmin(context.Background(), deps, rbacCreateSuperAdminOptions{username: " ADMIN ", nickname: " Root ", passwordEnv: "ADMIN_SECRET"})
@@ -289,18 +270,14 @@ func TestCreateSuperAdmin(t *testing.T) {
 		t.Setenv("ADMIN_SECRET", "secret")
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000302")
 		deps := rbacSeedDependencies{
-			service: fakeRBACSeedService{
-				assign: func(_ context.Context, got uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
-					require.Equal(t, userID, got)
-					return roleseed.AssignSuperAdminResult{Added: false}, nil
-				},
-			},
-			credentials: fakeRBACCredentialStore{
-				getByUsername: func(_ context.Context, username string) (*authdomain.UserCredential, error) {
-					require.Equal(t, "admin", username)
-					return &authdomain.UserCredential{UserID: userID, Username: username, Status: identity.UserStatusNormal}, nil
-				},
-			},
+			service: newRBACSeedServiceMock(t, nil, func(_ context.Context, got uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
+				require.Equal(t, userID, got)
+				return roleseed.AssignSuperAdminResult{Added: false}, nil
+			}),
+			credentials: newRBACCredentialStoreMock(t, func(_ context.Context, username string) (*authdomain.UserCredential, error) {
+				require.Equal(t, "admin", username)
+				return &authdomain.UserCredential{UserID: userID, Username: username, Status: identity.UserStatusNormal}, nil
+			}, nil),
 		}
 
 		result, err := createSuperAdmin(context.Background(), deps, rbacCreateSuperAdminOptions{username: "admin", passwordEnv: "ADMIN_SECRET"})
@@ -317,27 +294,20 @@ func TestCreateSuperAdmin(t *testing.T) {
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000303")
 		var updateInput authdomain.UpdateCredentialsInput
 		deps := rbacSeedDependencies{
-			service: fakeRBACSeedService{
-				assign: func(_ context.Context, got uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
-					require.Equal(t, userID, got)
-					return roleseed.AssignSuperAdminResult{Added: true}, nil
-				},
-			},
-			credentials: fakeRBACCredentialStore{
-				getByUsername: func(context.Context, string) (*authdomain.UserCredential, error) {
-					return &authdomain.UserCredential{UserID: userID, Username: "admin", Status: identity.UserStatusMustChangePassword}, nil
-				},
-				updateCredentials: func(_ context.Context, input authdomain.UpdateCredentialsInput) (int64, error) {
-					updateInput = input
-					return 3, nil
-				},
-			},
-			passwordService: fakePasswordHasher{
-				hash: func(_ context.Context, plain string) (string, error) {
-					require.Equal(t, "secret", plain)
-					return "hashed-secret", nil
-				},
-			},
+			service: newRBACSeedServiceMock(t, nil, func(_ context.Context, got uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
+				require.Equal(t, userID, got)
+				return roleseed.AssignSuperAdminResult{Added: true}, nil
+			}),
+			credentials: newRBACCredentialStoreMock(t, func(context.Context, string) (*authdomain.UserCredential, error) {
+				return &authdomain.UserCredential{UserID: userID, Username: "admin", Status: identity.UserStatusMustChangePassword}, nil
+			}, func(_ context.Context, input authdomain.UpdateCredentialsInput) (int64, error) {
+				updateInput = input
+				return 3, nil
+			}),
+			passwordService: newRBACPasswordHasherMock(t, func(_ context.Context, plain string) (string, error) {
+				require.Equal(t, "secret", plain)
+				return "hashed-secret", nil
+			}),
 		}
 
 		result, err := createSuperAdmin(context.Background(), deps, rbacCreateSuperAdminOptions{username: "admin", passwordEnv: "ADMIN_SECRET", resetPassword: true})
@@ -357,11 +327,9 @@ func TestCreateSuperAdminPropagatesErrors(t *testing.T) {
 		t.Setenv("ADMIN_SECRET", "secret")
 		getErr := errors.New("credential store failed")
 		deps := rbacSeedDependencies{
-			credentials: fakeRBACCredentialStore{
-				getByUsername: func(context.Context, string) (*authdomain.UserCredential, error) {
-					return nil, getErr
-				},
-			},
+			credentials: newRBACCredentialStoreMock(t, func(context.Context, string) (*authdomain.UserCredential, error) {
+				return nil, getErr
+			}, nil),
 		}
 
 		_, err := createSuperAdmin(context.Background(), deps, rbacCreateSuperAdminOptions{username: "admin", passwordEnv: "ADMIN_SECRET"})
@@ -373,16 +341,12 @@ func TestCreateSuperAdminPropagatesErrors(t *testing.T) {
 		t.Setenv("ADMIN_SECRET", "secret")
 		createErr := errors.New("create failed")
 		deps := rbacSeedDependencies{
-			users: fakeCreateUserService{
-				create: func(context.Context, usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error) {
-					return nil, createErr
-				},
-			},
-			credentials: fakeRBACCredentialStore{
-				getByUsername: func(context.Context, string) (*authdomain.UserCredential, error) {
-					return nil, identity.ErrUserNotFound
-				},
-			},
+			users: newCreateUserServiceMock(t, func(context.Context, usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error) {
+				return nil, createErr
+			}),
+			credentials: newRBACCredentialStoreMock(t, func(context.Context, string) (*authdomain.UserCredential, error) {
+				return nil, identity.ErrUserNotFound
+			}, nil),
 		}
 
 		_, err := createSuperAdmin(context.Background(), deps, rbacCreateSuperAdminOptions{username: "admin", passwordEnv: "ADMIN_SECRET"})
@@ -395,16 +359,12 @@ func TestCreateSuperAdminPropagatesErrors(t *testing.T) {
 		hashErr := errors.New("hash failed")
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000401")
 		deps := rbacSeedDependencies{
-			credentials: fakeRBACCredentialStore{
-				getByUsername: func(context.Context, string) (*authdomain.UserCredential, error) {
-					return &authdomain.UserCredential{UserID: userID}, nil
-				},
-			},
-			passwordService: fakePasswordHasher{
-				hash: func(context.Context, string) (string, error) {
-					return "", hashErr
-				},
-			},
+			credentials: newRBACCredentialStoreMock(t, func(context.Context, string) (*authdomain.UserCredential, error) {
+				return &authdomain.UserCredential{UserID: userID}, nil
+			}, nil),
+			passwordService: newRBACPasswordHasherMock(t, func(context.Context, string) (string, error) {
+				return "", hashErr
+			}),
 		}
 
 		_, err := createSuperAdmin(context.Background(), deps, rbacCreateSuperAdminOptions{username: "admin", passwordEnv: "ADMIN_SECRET", resetPassword: true})
@@ -418,19 +378,14 @@ func TestCreateSuperAdminPropagatesErrors(t *testing.T) {
 		updateErr := errors.New("update failed")
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000402")
 		deps := rbacSeedDependencies{
-			credentials: fakeRBACCredentialStore{
-				getByUsername: func(context.Context, string) (*authdomain.UserCredential, error) {
-					return &authdomain.UserCredential{UserID: userID}, nil
-				},
-				updateCredentials: func(context.Context, authdomain.UpdateCredentialsInput) (int64, error) {
-					return 0, updateErr
-				},
-			},
-			passwordService: fakePasswordHasher{
-				hash: func(context.Context, string) (string, error) {
-					return "hashed-secret", nil
-				},
-			},
+			credentials: newRBACCredentialStoreMock(t, func(context.Context, string) (*authdomain.UserCredential, error) {
+				return &authdomain.UserCredential{UserID: userID}, nil
+			}, func(context.Context, authdomain.UpdateCredentialsInput) (int64, error) {
+				return 0, updateErr
+			}),
+			passwordService: newRBACPasswordHasherMock(t, func(context.Context, string) (string, error) {
+				return "hashed-secret", nil
+			}),
 		}
 
 		_, err := createSuperAdmin(context.Background(), deps, rbacCreateSuperAdminOptions{username: "admin", passwordEnv: "ADMIN_SECRET", resetPassword: true})
@@ -443,16 +398,12 @@ func TestCreateSuperAdminPropagatesErrors(t *testing.T) {
 		assignErr := errors.New("assign failed")
 		userID := uuid.MustParse("018f0000-0000-7000-8000-000000000403")
 		deps := rbacSeedDependencies{
-			service: fakeRBACSeedService{
-				assign: func(context.Context, uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
-					return roleseed.AssignSuperAdminResult{}, assignErr
-				},
-			},
-			credentials: fakeRBACCredentialStore{
-				getByUsername: func(context.Context, string) (*authdomain.UserCredential, error) {
-					return &authdomain.UserCredential{UserID: userID}, nil
-				},
-			},
+			service: newRBACSeedServiceMock(t, nil, func(context.Context, uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
+				return roleseed.AssignSuperAdminResult{}, assignErr
+			}),
+			credentials: newRBACCredentialStoreMock(t, func(context.Context, string) (*authdomain.UserCredential, error) {
+				return &authdomain.UserCredential{UserID: userID}, nil
+			}, nil),
 		}
 
 		_, err := createSuperAdmin(context.Background(), deps, rbacCreateSuperAdminOptions{username: "admin", passwordEnv: "ADMIN_SECRET"})
@@ -546,62 +497,40 @@ func captureStdout(t *testing.T, fn func() error) (string, error) {
 	return string(output), runErr
 }
 
-type fakeRBACSeedService struct {
-	seed   func(context.Context, roleseed.SeedOptions) (roleseed.SeedResult, error)
-	assign func(context.Context, uuid.UUID) (roleseed.AssignSuperAdminResult, error)
-}
-
-func (s fakeRBACSeedService) Seed(ctx context.Context, opts roleseed.SeedOptions) (roleseed.SeedResult, error) {
-	if s.seed == nil {
-		return roleseed.SeedResult{}, errors.New("unexpected seed call")
+func newRBACSeedServiceMock(t testing.TB, seed func(context.Context, roleseed.SeedOptions) (roleseed.SeedResult, error), assign func(context.Context, uuid.UUID) (roleseed.AssignSuperAdminResult, error)) *MockrbacSeedService {
+	t.Helper()
+	service := NewMockrbacSeedService(gomock.NewController(t))
+	if seed != nil {
+		service.EXPECT().Seed(gomock.Any(), gomock.Any()).DoAndReturn(seed)
 	}
-	return s.seed(ctx, opts)
-}
-
-func (s fakeRBACSeedService) AssignSuperAdmin(ctx context.Context, userID uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
-	if s.assign == nil {
-		return roleseed.AssignSuperAdminResult{}, errors.New("unexpected assign super admin call")
+	if assign != nil {
+		service.EXPECT().AssignSuperAdmin(gomock.Any(), gomock.Any()).DoAndReturn(assign)
 	}
-	return s.assign(ctx, userID)
+	return service
 }
 
-type fakeCreateUserService struct {
-	create func(context.Context, usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error)
+func newCreateUserServiceMock(t testing.TB, create func(context.Context, usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error)) *MockCreateUserService {
+	t.Helper()
+	service := NewMockCreateUserService(gomock.NewController(t))
+	service.EXPECT().CreateUser(gomock.Any(), gomock.Any()).DoAndReturn(create)
+	return service
 }
 
-func (s fakeCreateUserService) CreateUser(ctx context.Context, cmd usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error) {
-	if s.create == nil {
-		return nil, errors.New("unexpected create user call")
+func newRBACCredentialStoreMock(t testing.TB, getByUsername func(context.Context, string) (*authdomain.UserCredential, error), updateCredentials func(context.Context, authdomain.UpdateCredentialsInput) (int64, error)) *MockrbacCredentialStore {
+	t.Helper()
+	store := NewMockrbacCredentialStore(gomock.NewController(t))
+	if getByUsername != nil {
+		store.EXPECT().GetByUsername(gomock.Any(), gomock.Any()).DoAndReturn(getByUsername)
 	}
-	return s.create(ctx, cmd)
-}
-
-type fakeRBACCredentialStore struct {
-	getByUsername     func(context.Context, string) (*authdomain.UserCredential, error)
-	updateCredentials func(context.Context, authdomain.UpdateCredentialsInput) (int64, error)
-}
-
-func (s fakeRBACCredentialStore) GetByUsername(ctx context.Context, username string) (*authdomain.UserCredential, error) {
-	if s.getByUsername == nil {
-		return nil, errors.New("unexpected get by username call")
+	if updateCredentials != nil {
+		store.EXPECT().UpdateCredentials(gomock.Any(), gomock.Any()).DoAndReturn(updateCredentials)
 	}
-	return s.getByUsername(ctx, username)
+	return store
 }
 
-func (s fakeRBACCredentialStore) UpdateCredentials(ctx context.Context, input authdomain.UpdateCredentialsInput) (int64, error) {
-	if s.updateCredentials == nil {
-		return 0, errors.New("unexpected update credentials call")
-	}
-	return s.updateCredentials(ctx, input)
-}
-
-type fakePasswordHasher struct {
-	hash func(context.Context, string) (string, error)
-}
-
-func (s fakePasswordHasher) HashContext(ctx context.Context, plain string) (string, error) {
-	if s.hash == nil {
-		return "", errors.New("unexpected password hash call")
-	}
-	return s.hash(ctx, plain)
+func newRBACPasswordHasherMock(t testing.TB, hash func(context.Context, string) (string, error)) *MockrbacPasswordHasher {
+	t.Helper()
+	hasher := NewMockrbacPasswordHasher(gomock.NewController(t))
+	hasher.EXPECT().HashContext(gomock.Any(), gomock.Any()).DoAndReturn(hash)
+	return hasher
 }

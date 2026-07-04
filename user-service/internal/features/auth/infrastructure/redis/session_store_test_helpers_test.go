@@ -1,0 +1,142 @@
+package redis
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/google/uuid"
+	rediscache "github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/fx"
+
+	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/localcache"
+	"github.com/aegiscore/common/runtime/workerpool"
+	commonauth "github.com/aegiscore/common/security/auth"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
+	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
+)
+
+var sessionTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
+
+func newTestSessionStore(redisServer *miniredis.Miniredis) *SessionStore {
+	return newTestSessionStoreWithConfig(redisServer, config.AuthConfig{TokenVersionCacheTTL: time.Minute})
+}
+
+func newTestSessionStoreWithConfig(redisServer *miniredis.Miniredis, authCfg config.AuthConfig) *SessionStore {
+	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
+	return &SessionStore{redis: client, keys: MustKeyCatalog(""), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL, purgePool: directPurgeTaskPool{}, metrics: authapplication.NopMetrics()}
+}
+
+func defaultMaxActiveSessionsPerUser() int {
+	return 5
+}
+
+func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenVersionStore, tokenCache authapplication.TokenVersionCache) commonauth.TokenVersionValidator {
+	t.Helper()
+	cache, err := localcache.New[string, int64](localcache.Config[string]{
+		Name:        "auth_token_version_test",
+		Capacity:    100,
+		TTL:         time.Minute,
+		LoadTimeout: time.Second,
+		KeyString:   func(key string) string { return key },
+	}, func(ctx context.Context, userID string) (int64, error) {
+		return authvalidators.Current(ctx, users, tokenCache, userID)
+	}, nil)
+	require.NoError(t, err,
+		"New localcache: %v", err)
+
+	t.Cleanup(cache.Close)
+	return authvalidators.NewCachingValidator(cache)
+}
+
+func newTestSessionStoreWithAppName(t testing.TB, redisServer *miniredis.Miniredis, appName string) *SessionStore {
+	t.Helper()
+	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
+	store, err := NewSessionStore(SessionStoreParams{
+		Redis: client,
+		Cfg: &config.Config{
+			App:  config.AppConfig{Name: appName},
+			Auth: config.AuthConfig{TokenVersionCacheTTL: time.Minute},
+		},
+		PurgePool: directPurgeTaskPool{},
+	})
+	require.NoError(t, err,
+		"NewSessionStore: %v", err)
+
+	t.Cleanup(func() {
+		_ = client.Close()
+	})
+	return store
+}
+
+func waitForRedisCondition(t *testing.T, condition func() bool, message string) {
+	t.Helper()
+	require.Eventually(t, condition, 2*time.Second, 10*time.Millisecond, message)
+}
+
+type rejectingPurgeTaskPool struct {
+	err error
+}
+
+func (p rejectingPurgeTaskPool) Submit(context.Context, workerpool.Task) error {
+	return p.err
+}
+
+func (p rejectingPurgeTaskPool) Stats() workerpool.Stats {
+	return workerpool.Stats{}
+}
+
+type directPurgeTaskPool struct{}
+
+func (directPurgeTaskPool) Submit(ctx context.Context, task workerpool.Task) error {
+	if task.Run == nil {
+		return workerpool.ErrInvalidTask
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	return task.Run(ctx)
+}
+
+func (directPurgeTaskPool) Stats() workerpool.Stats {
+	return workerpool.Stats{}
+}
+
+type recordingPurgeTaskPool struct {
+	beforeRun func()
+	taskName  string
+	err       error
+	failed    int64
+}
+
+func (p *recordingPurgeTaskPool) Submit(ctx context.Context, task workerpool.Task) error {
+	p.taskName = task.Name
+	if p.beforeRun != nil {
+		p.beforeRun()
+	}
+	p.err = task.Run(ctx)
+	if p.err != nil {
+		p.failed++
+	}
+	return nil
+}
+
+func (p *recordingPurgeTaskPool) Stats() workerpool.Stats {
+	return workerpool.Stats{Failed: p.failed}
+}
+
+type lifecycleRecorder struct {
+	hooks []fx.Hook
+}
+
+func (r *lifecycleRecorder) Append(hook fx.Hook) {
+	r.hooks = append(r.hooks, hook)
+}
