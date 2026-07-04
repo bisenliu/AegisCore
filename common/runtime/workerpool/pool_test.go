@@ -80,6 +80,7 @@ func TestPoolTaskErrorIsObservable(t *testing.T) {
 	})
 	require.NoError(t, err)
 	waitForPool(t, pool, func(stats Stats) bool { return stats.Failed == 1 })
+	waitForPoolLog(t, logs, "worker pool task failed", 1)
 
 	require.Zero(t, pool.Stats().Completed)
 	require.Equal(t, 1, logs.FilterMessage("worker pool task failed").Len())
@@ -98,6 +99,7 @@ func TestPoolTaskPanicIsRecovered(t *testing.T) {
 	})
 	require.NoError(t, err)
 	waitForPool(t, pool, func(stats Stats) bool { return stats.Panicked == 1 })
+	waitForPoolLog(t, logs, "worker pool task panicked", 1)
 
 	require.Equal(t, 1, logs.FilterMessage("worker pool task panicked").Len())
 }
@@ -282,6 +284,13 @@ func waitForPool(t *testing.T, pool *Pool, condition func(Stats) bool) {
 	require.Eventually(t, func() bool {
 		return condition(pool.Stats())
 	}, time.Second, 5*time.Millisecond, "condition not met; stats=%+v", pool.Stats())
+}
+
+func waitForPoolLog(t *testing.T, logs *observer.ObservedLogs, message string, count int) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		return logs.FilterMessage(message).Len() == count
+	}, time.Second, 5*time.Millisecond, "log %q count=%d, want %d", message, logs.FilterMessage(message).Len(), count)
 }
 
 func updateMax(max *atomic.Int64, value int64) {
