@@ -14,7 +14,8 @@ const openAPIDocument = `{
         "properties": {
           "new_password": {
             "example": "new-secret",
-            "minLength": 1,
+            "maxLength": 256,
+            "minLength": 8,
             "type": "string"
           }
         },

@@ -14,5 +14,5 @@ type RefreshTokenRequest struct {
 // ChangePasswordRequest 是使用 Authorization token 完成强制改密的请求。
 type ChangePasswordRequest struct {
 	Token       string `json:"-" header:"Authorization" label:"Authorization"`
-	NewPassword string `json:"new_password" validate:"required,min=1" label:"新密码" example:"new-secret"`
+	NewPassword string `json:"new_password" validate:"required,min=8,max=256" label:"新密码" example:"new-secret"`
 }

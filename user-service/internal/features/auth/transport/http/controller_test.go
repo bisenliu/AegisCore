@@ -139,9 +139,9 @@ func TestAuthControllerLoginMapsServiceError(t *testing.T) {
 func TestAuthControllerChangePasswordNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctl, mocks := newTestAuthController(t)
-	mocks.changePassword.EXPECT().ChangePassword(gomock.Any(), authcommand.ChangePasswordCommand{Token: "password-token", NewPassword: "new-secret"}).Return(&authcommand.ChangePasswordResult{Changed: true}, nil)
+	mocks.changePassword.EXPECT().ChangePassword(gomock.Any(), authcommand.ChangePasswordCommand{Token: "password-token", NewPassword: "new-secret-123"}).Return(&authcommand.ChangePasswordResult{Changed: true}, nil)
 
-	status, envelope := executeAuthChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":" new-secret "}`)
+	status, envelope := executeAuthChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":" new-secret-123 "}`)
 	require.Equal(t, http.StatusOK, status,
 		"status = %d, want %d", status, http.StatusOK)
 	require.False(t, !envelope.Success || envelope.Code != contracterrors.CodeOK,
@@ -153,12 +153,50 @@ func TestAuthControllerChangePasswordNormalizesToCommand(t *testing.T) {
 
 }
 
+func TestAuthControllerChangePasswordRejectsShortPassword(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctl, _ := newTestAuthController(t)
+
+	status, envelope := executeAuthChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":"short"}`)
+	require.Equal(t, http.StatusBadRequest, status,
+		"status = %d, want %d", status, http.StatusBadRequest)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeValidationFailed,
+		"envelope=%#v", envelope)
+	assertAuthValidationFieldRule(t, envelope, "new_password", "min")
+}
+
+func TestAuthControllerChangePasswordRejectsLongPassword(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctl, _ := newTestAuthController(t)
+
+	status, envelope := executeAuthChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":"`+strings.Repeat("a", 257)+`"}`)
+	require.Equal(t, http.StatusBadRequest, status,
+		"status = %d, want %d", status, http.StatusBadRequest)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeValidationFailed,
+		"envelope=%#v", envelope)
+	assertAuthValidationFieldRule(t, envelope, "new_password", "max")
+}
+
+func assertAuthValidationFieldRule(t *testing.T, envelope response.Envelope, fieldName string, rule string) {
+	t.Helper()
+
+	errors, ok := envelope.Errors.([]any)
+	require.True(t, ok,
+		"errors = %#v", envelope.Errors)
+	require.Len(t, errors, 1)
+	field, ok := errors[0].(map[string]any)
+	require.True(t, ok,
+		"field = %#v", errors[0])
+	require.Equal(t, fieldName, field["field"])
+	require.Equal(t, rule, field["rule"])
+}
+
 func TestAuthControllerChangePasswordMapsNotFound(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctl, mocks := newTestAuthController(t)
-	mocks.changePassword.EXPECT().ChangePassword(gomock.Any(), authcommand.ChangePasswordCommand{Token: "password-token", NewPassword: "new-secret"}).Return(nil, identity.ErrUserNotFound)
+	mocks.changePassword.EXPECT().ChangePassword(gomock.Any(), authcommand.ChangePasswordCommand{Token: "password-token", NewPassword: "new-secret-123"}).Return(nil, identity.ErrUserNotFound)
 
-	status, envelope := executeAuthChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":"new-secret"}`)
+	status, envelope := executeAuthChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":"new-secret-123"}`)
 	require.Equal(t, http.StatusNotFound, status,
 		"status = %d, want %d", status, http.StatusNotFound)
 	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeNotFound || envelope.Message != messages.UserNotFound,
