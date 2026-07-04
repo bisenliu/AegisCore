@@ -107,6 +107,8 @@ func (c *RedisPingCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 // Collect 实现 prometheus.Collector。
+// Prometheus 标准 Collector 不携带 scrape context；真实 HTTP scrape 取消只在通过
+// Provider.GatherContext 或 Provider.HTTPHandler 采集时传递给 CollectContext。
 func (c *RedisPingCollector) Collect(ch chan<- prometheus.Metric) {
 	c.CollectContext(context.Background(), ch)
 }

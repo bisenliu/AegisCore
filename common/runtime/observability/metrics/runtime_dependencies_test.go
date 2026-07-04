@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 
@@ -132,6 +133,45 @@ func TestRedisPingCollectorUsesGatherContextCancellation(t *testing.T) {
 	require.ErrorIs(t, pinger.ctxErr(), context.Canceled, "redis ping context error")
 	up := firstMetric(t, gatherFamily(t, provider, redisUpMetricName))
 	require.Zero(t, up.GetGauge().GetValue(), "redis up after canceled ping")
+}
+
+func TestRedisPingCollectorDirectCollectUsesBackgroundFallback(t *testing.T) {
+	pinger := newObservingRedisPinger()
+	collector, err := NewRedisPingCollector(RedisPingCollectorOptions{
+		Resource:    "cache_redis",
+		Pinger:      pinger,
+		Timeout:     10 * time.Millisecond,
+		MinInterval: time.Nanosecond,
+	})
+	require.NoError(t, err, "NewRedisPingCollector")
+
+	ch := make(chan prometheus.Metric, 3)
+	go func() {
+		collector.Collect(ch)
+		close(ch)
+	}()
+
+	select {
+	case <-pinger.started:
+	case <-time.After(time.Second):
+		t.Fatal("redis ping did not start")
+	}
+
+	var collected []prometheus.Metric
+	select {
+	case metric := <-ch:
+		collected = append(collected, metric)
+	case <-time.After(time.Second):
+		t.Fatal("Collect did not finish after collector timeout")
+	}
+	for metric := range ch {
+		collected = append(collected, metric)
+	}
+	require.Len(t, collected, 3, "direct Collect metrics")
+	dtoMetric := &io_prometheus_client.Metric{}
+	require.NoError(t, collected[0].Write(dtoMetric), "Write metric")
+	assertMetricLabel(t, dtoMetric, LabelResource, "cache_redis")
+	require.ErrorIs(t, pinger.ctxErr(), context.DeadlineExceeded, "direct Collect context error")
 }
 
 func TestWorkerpoolCollectorExportsStatsSnapshot(t *testing.T) {

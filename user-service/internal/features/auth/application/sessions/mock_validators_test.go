@@ -40,9 +40,11 @@ func (m *MockTokenVersionLocalInvalidator) EXPECT() *MockTokenVersionLocalInvali
 }
 
 // InvalidateTokenVersion mocks base method.
-func (m *MockTokenVersionLocalInvalidator) InvalidateTokenVersion(userID string) {
+func (m *MockTokenVersionLocalInvalidator) InvalidateTokenVersion(userID string) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "InvalidateTokenVersion", userID)
+	ret := m.ctrl.Call(m, "InvalidateTokenVersion", userID)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // InvalidateTokenVersion indicates an expected call of InvalidateTokenVersion.

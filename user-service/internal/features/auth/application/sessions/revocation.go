@@ -36,7 +36,10 @@ func (m *lifecycle) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID)
 func (m *lifecycle) RevokeUserSessionsAtVersion(ctx context.Context, userID uuid.UUID, tokenVersion int64) error {
 	userIDString := userID.String()
 	var projectionErr error
-	m.invalidateLocalTokenVersion(userIDString)
+	// 先清理本实例已有的旧 token version，降低撤销开始后继续命中本地旧值的窗口。
+	if err := m.invalidateLocalTokenVersion(ctx, userIDString); err != nil {
+		projectionErr = errors.Join(projectionErr, fmt.Errorf("invalidate local token version cache before projection: %w", err))
+	}
 	if err := m.tokenVersions.CacheTokenVersion(ctx, userIDString, tokenVersion); err != nil {
 		logger.Error(ctx, "refresh token version cache failed", logger.StackTrace(zap.String("user_id", userIDString), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		projectionErr = errors.Join(projectionErr, fmt.Errorf("refresh token version cache: %w", err))
@@ -45,11 +48,17 @@ func (m *lifecycle) RevokeUserSessionsAtVersion(ctx context.Context, userID uuid
 			projectionErr = errors.Join(projectionErr, fmt.Errorf("delete token version cache: %w", evictErr))
 		}
 	}
-	m.invalidateLocalTokenVersion(userIDString)
+	// Redis 投影刷新期间并发校验可能重新加载旧值；刷新后再清一次，确保后续 miss 回源新投影或数据库主事实。
+	if err := m.invalidateLocalTokenVersion(ctx, userIDString); err != nil {
+		projectionErr = errors.Join(projectionErr, fmt.Errorf("invalidate local token version cache after projection: %w", err))
+	}
 	if err := m.sessions.DeleteAllUserSessions(ctx, userIDString); err != nil {
 		logger.Error(ctx, "delete all user sessions failed", logger.StackTrace(zap.String("user_id", userIDString), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		projectionErr = errors.Join(projectionErr, fmt.Errorf("delete all user sessions: %w", err))
 	}
-	m.invalidateLocalTokenVersion(userIDString)
+	// refresh session 删除不改变 token version；这里作为撤销流程结束前的最终兜底，清掉过程中可能产生的本地值。
+	if err := m.invalidateLocalTokenVersion(ctx, userIDString); err != nil {
+		projectionErr = errors.Join(projectionErr, fmt.Errorf("invalidate local token version cache after session deletion: %w", err))
+	}
 	return projectionErr
 }

@@ -240,13 +240,34 @@ func TestTokenVersionValidatorInvalidateReloads(t *testing.T) {
 			"ValidateTokenVersion first: %v", err)
 	}
 
-	validator.InvalidateTokenVersion(userID)
+	require.NoError(t, validator.InvalidateTokenVersion(userID),
+		"InvalidateTokenVersion")
 	{
 		err := validator.ValidateTokenVersion(context.Background(), userID, 7)
 		require.NoError(t, err,
 			"ValidateTokenVersion second: %v", err)
 	}
 
+}
+
+func TestTokenVersionValidatorInvalidateReturnsDeleteError(t *testing.T) {
+	cache, err := localcache.New[string, int64](localcache.Config[string]{
+		Name:        "auth_token_version_invalidate_error_test",
+		Capacity:    100,
+		TTL:         time.Minute,
+		LoadTimeout: time.Second,
+		KeyString:   func(key string) string { return key },
+	}, func(context.Context, string) (int64, error) {
+		return 0, nil
+	}, nil)
+	require.NoError(t, err,
+		"New localcache: %v", err)
+	cache.Close()
+
+	validator := NewCachingValidator(cache)
+	err = validator.InvalidateTokenVersion(tokenVersionTestUserID.String())
+	require.ErrorIs(t, err, localcache.ErrClosed,
+		"err = %v, want ErrClosed", err)
 }
 
 func newTestTokenVersionValidator(t *testing.T, users *MockUserTokenVersionStore, tokenCache *MockTokenVersionCache, ttl time.Duration) *TokenVersionValidator {

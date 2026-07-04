@@ -22,7 +22,7 @@ type TokenVersionValidator struct {
 
 // TokenVersionLocalInvalidator 失效本实例内 token version 本地缓存。
 type TokenVersionLocalInvalidator interface {
-	InvalidateTokenVersion(userID string)
+	InvalidateTokenVersion(userID string) error
 }
 
 // NewCachingValidator 构造使用外部注入 localcache 的 token version 校验器。
@@ -45,8 +45,11 @@ func (v *TokenVersionValidator) Current(ctx context.Context, userID string) (int
 }
 
 // InvalidateTokenVersion 删除本实例内指定用户的 token version 本地缓存。
-func (v *TokenVersionValidator) InvalidateTokenVersion(userID string) {
-	_ = v.cache.Delete(userID)
+func (v *TokenVersionValidator) InvalidateTokenVersion(userID string) error {
+	if err := v.cache.Delete(userID); err != nil {
+		return fmt.Errorf("delete local token version cache: %w", err)
+	}
+	return nil
 }
 
 // Current 使用 Redis token version cache，并在 miss 时回源用户凭据存储。

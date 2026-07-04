@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -52,11 +53,11 @@ func TestLifecycleRevokeAllUserSessions(t *testing.T) {
 	fixture := newLifecycleTestFixture(t, true)
 	gomock.InOrder(
 		fixture.users.EXPECT().IncrementTokenVersion(gomock.Any(), sessionTestUserID).Return(int64(4), nil),
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()),
+		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
 		fixture.tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), sessionTestUserID.String(), int64(4)).Return(nil),
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()),
+		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
 		fixture.sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), sessionTestUserID.String()).Return(nil),
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()),
+		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
 	)
 
 	result, err := fixture.lifecycle.RevokeAllUserSessions(context.Background(), sessionTestUserID)
@@ -67,6 +68,24 @@ func TestLifecycleRevokeAllUserSessions(t *testing.T) {
 	require.NoError(t, result.ProjectionError,
 		"projection error = %v, want nil", result.ProjectionError)
 
+}
+
+func TestLifecycleRevokeUserSessionsAtVersionReturnsLocalInvalidationErrors(t *testing.T) {
+	fixture := newLifecycleTestFixture(t, true)
+	userID := sessionTestUserID.String()
+	invalidateErr := errors.New("local cache closed")
+	gomock.InOrder(
+		fixture.invalidator.EXPECT().InvalidateTokenVersion(userID).Return(invalidateErr),
+		fixture.tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), userID, int64(4)).Return(nil),
+		fixture.invalidator.EXPECT().InvalidateTokenVersion(userID).Return(nil),
+		fixture.sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), userID).Return(nil),
+		fixture.invalidator.EXPECT().InvalidateTokenVersion(userID).Return(nil),
+	)
+
+	err := fixture.lifecycle.RevokeUserSessionsAtVersion(context.Background(), sessionTestUserID, 4)
+	require.ErrorIs(t, err, invalidateErr,
+		"err = %v, want local invalidation error", err)
+	require.ErrorContains(t, err, "invalidate local token version cache before projection")
 }
 
 type lifecycleTestFixture struct {
