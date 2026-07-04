@@ -6,6 +6,8 @@
 !go.work.sum
 !common/
 !common/**
+!tools/
+!tools/**
 !user-service/
 !user-service/**
 

@@ -6,6 +6,7 @@ WORKDIR /src
 
 COPY go.work go.work.sum ./
 COPY common ./common
+COPY tools ./tools
 COPY user-service ./user-service
 
 WORKDIR /src/user-service
