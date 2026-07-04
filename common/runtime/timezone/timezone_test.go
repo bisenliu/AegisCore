@@ -60,15 +60,15 @@ func withIsolatedTimezone(t *testing.T, fn func()) {
 
 	oldLocal := time.Local
 	oldTZ, hadTZ := os.LookupEnv("TZ")
+	if hadTZ {
+		t.Setenv("TZ", oldTZ)
+	} else {
+		t.Setenv("TZ", "")
+	}
 	state = timezoneState{}
 	t.Cleanup(func() {
 		state = timezoneState{}
 		time.Local = oldLocal
-		if hadTZ {
-			_ = os.Setenv("TZ", oldTZ)
-			return
-		}
-		_ = os.Unsetenv("TZ")
 	})
 
 	fn()

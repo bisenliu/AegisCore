@@ -4,10 +4,16 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
 	commonopenapi "github.com/aegiscore/common/http/openapi"
+)
+
+const (
+	exitOK    = 0
+	exitError = 1
 )
 
 const (
@@ -31,6 +37,10 @@ func (values *stringList) Set(value string) error {
 }
 
 func main() {
+	os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
+}
+
+func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
 	var inputPath string
 	var jsonOutputPath string
 	var yamlOutputPath string
@@ -44,48 +54,60 @@ func main() {
 	var generatedBy string
 	rootPaths := stringList{}
 
-	flag.StringVar(&inputPath, "input", "", "Swagger 2 JSON input path")
-	flag.StringVar(&jsonOutputPath, "json", "", "OpenAPI 3 JSON output path")
-	flag.StringVar(&yamlOutputPath, "yaml", "", "OpenAPI 3 YAML output path")
-	flag.StringVar(&goOutputPath, "go", "", "OpenAPI 3 Go embed output path")
-	flag.StringVar(&goPackageName, "package", defaultGoPackageName, "Go package name for the embed output")
-	flag.StringVar(&openAPIVersion, "openapi-version", defaultOpenAPIVersion, "OpenAPI version for the generated document")
-	flag.StringVar(&serverURL, "server", "", "default OpenAPI server URL")
-	flag.StringVar(&rootServerURL, "root-server", "", "OpenAPI server URL for root paths")
-	flag.Var(&rootPaths, "root-path", "path that should use the root server URL")
-	flag.StringVar(&bearerAuthName, "bearer-auth-name", "", "Bearer auth security scheme name")
-	flag.StringVar(&bearerAuthDescription, "bearer-auth-description", "", "Bearer auth security scheme description")
-	flag.StringVar(&generatedBy, "generated-by", defaultGeneratedBy, "generator label for the Go embed file")
-	flag.Parse()
+	flags := flag.NewFlagSet("openapi-convert", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	flags.StringVar(&inputPath, "input", "", "Swagger 2 JSON input path")
+	flags.StringVar(&jsonOutputPath, "json", "", "OpenAPI 3 JSON output path")
+	flags.StringVar(&yamlOutputPath, "yaml", "", "OpenAPI 3 YAML output path")
+	flags.StringVar(&goOutputPath, "go", "", "OpenAPI 3 Go embed output path")
+	flags.StringVar(&goPackageName, "package", defaultGoPackageName, "Go package name for the embed output")
+	flags.StringVar(&openAPIVersion, "openapi-version", defaultOpenAPIVersion, "OpenAPI version for the generated document")
+	flags.StringVar(&serverURL, "server", "", "default OpenAPI server URL")
+	flags.StringVar(&rootServerURL, "root-server", "", "OpenAPI server URL for root paths")
+	flags.Var(&rootPaths, "root-path", "path that should use the root server URL")
+	flags.StringVar(&bearerAuthName, "bearer-auth-name", "", "Bearer auth security scheme name")
+	flags.StringVar(&bearerAuthDescription, "bearer-auth-description", "", "Bearer auth security scheme description")
+	flags.StringVar(&generatedBy, "generated-by", defaultGeneratedBy, "generator label for the Go embed file")
+	if err := flags.Parse(args); err != nil {
+		return exitError
+	}
 
 	if inputPath == "" || jsonOutputPath == "" || yamlOutputPath == "" || goOutputPath == "" {
-		failf("input, json, yaml and go output paths are required")
+		failf(stderr, "input, json, yaml and go output paths are required")
+		return exitError
 	}
 	if len(rootPaths) > 0 && rootServerURL == "" {
-		failf("root-server is required when root-path is set")
+		failf(stderr, "root-server is required when root-path is set")
+		return exitError
 	}
 
-	doc, err := commonopenapi.ConvertSwagger2File(context.Background(), inputPath, convertOptions(openAPIVersion, serverURL, rootServerURL, rootPaths, bearerAuthName, bearerAuthDescription))
+	doc, err := commonopenapi.ConvertSwagger2File(ctx, inputPath, convertOptions(openAPIVersion, serverURL, rootServerURL, rootPaths, bearerAuthName, bearerAuthDescription))
 	if err != nil {
-		failf("%v", err)
+		failf(stderr, "%v", err)
+		return exitError
 	}
 
 	goData, err := commonopenapi.RenderGoDocument(doc.JSON, commonopenapi.GoDocumentOptions{PackageName: goPackageName, GeneratedBy: generatedBy})
 	if err != nil {
-		failf("render Go output: %v", err)
+		failf(stderr, "render Go output: %v", err)
+		return exitError
 	}
 
 	if err := writeFile(jsonOutputPath, doc.JSON); err != nil {
-		failf("write JSON output: %v", err)
+		failf(stderr, "write JSON output: %v", err)
+		return exitError
 	}
 	if err := writeFile(yamlOutputPath, doc.YAML); err != nil {
-		failf("write YAML output: %v", err)
+		failf(stderr, "write YAML output: %v", err)
+		return exitError
 	}
 	if err := writeFile(goOutputPath, goData); err != nil {
-		failf("write Go output: %v", err)
+		failf(stderr, "write Go output: %v", err)
+		return exitError
 	}
 
-	fmt.Printf("generated OpenAPI %s document with %d paths\n", doc.OpenAPI, doc.PathCount)
+	fmt.Fprintf(stdout, "generated OpenAPI %s document with %d paths\n", doc.OpenAPI, doc.PathCount)
+	return exitOK
 }
 
 func convertOptions(openAPIVersion string, serverURL string, rootServerURL string, rootPaths []string, bearerAuthName string, bearerAuthDescription string) commonopenapi.ConvertOptions {
@@ -124,7 +146,6 @@ func writeFile(path string, data []byte) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-func failf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
-	os.Exit(1)
+func failf(stderr io.Writer, format string, args ...any) {
+	fmt.Fprintf(stderr, format+"\n", args...)
 }

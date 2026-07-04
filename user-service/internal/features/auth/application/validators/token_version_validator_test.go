@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -70,8 +71,12 @@ func TestTokenVersionValidatorReloadsAfterLocalCacheExpires(t *testing.T) {
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenCache := NewMockTokenVersionCache(ctrl)
 	userID := tokenVersionTestUserID.String()
+	var userLoads atomic.Int64
 	tokenCache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID).Return(int64(0), authdomain.ErrTokenVersionCacheMiss).Times(2)
-	users.EXPECT().GetTokenVersion(gomock.Any(), tokenVersionTestUserID).Return(int64(7), nil).Times(2)
+	users.EXPECT().GetTokenVersion(gomock.Any(), tokenVersionTestUserID).DoAndReturn(func(context.Context, uuid.UUID) (int64, error) {
+		userLoads.Add(1)
+		return int64(7), nil
+	}).Times(2)
 	tokenCache.EXPECT().CacheTokenVersion(gomock.Any(), userID, int64(7)).Return(nil).Times(2)
 	validator := newTestTokenVersionValidator(t, users, tokenCache, time.Nanosecond)
 	{
@@ -80,13 +85,14 @@ func TestTokenVersionValidatorReloadsAfterLocalCacheExpires(t *testing.T) {
 		require.NoError(t, err,
 			"ValidateTokenVersion first: %v", err)
 	}
+	require.EqualValues(t, 1, userLoads.Load())
 
-	time.Sleep(time.Millisecond)
-	{
+	require.Eventually(t, func() bool {
 		err := validator.ValidateTokenVersion(context.Background(), userID, 7)
 		require.NoError(t, err,
 			"ValidateTokenVersion second: %v", err)
-	}
+		return userLoads.Load() == 2
+	}, time.Second, time.Millisecond)
 
 }
 

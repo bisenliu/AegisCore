@@ -1,4 +1,5 @@
 COMMON_DIR := common
+TOOLS_OPENAPI_CONVERT_DIR := tools/openapi-convert
 USER_SERVICE_DIR := user-service
 USER_SERVICE_CONFIG ?= $(CURDIR)/user-service/configs/config.yaml
 USER_SERVICE_BIN ?= $(CURDIR)/bin/user-service
@@ -8,6 +9,7 @@ ADMIN_RESET_PASSWORD ?= false
 
 .PHONY: help build test lint verify
 .PHONY: common-test common-lint common-generate common-verify
+.PHONY: tools-openapi-convert-test
 .PHONY: user-service-build user-service-run user-service-test user-service-lint user-service-verify user-service-architecture-lint
 .PHONY: user-service-seed-rbac user-service-create-super-admin
 .PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-openapi-generate user-service-fxgraph-generate user-service-fxgraph-check
@@ -18,7 +20,7 @@ help: ## 查看可用命令。
 
 build: user-service-build ## 构建全部服务二进制。
 
-test: common-test user-service-test ## 运行全部 Go 模块测试。
+test: common-test user-service-test tools-openapi-convert-test ## 运行全部 Go 模块测试。
 
 lint: common-lint user-service-lint ## 运行全部 Go 模块 lint。
 
@@ -36,6 +38,9 @@ common-generate: ## 生成 common Go 生成物。
 
 common-verify: ## 运行 common 模块验证。
 	$(MAKE) -C $(COMMON_DIR) verify
+
+tools-openapi-convert-test: ## 运行 OpenAPI 转换工具测试。
+	$(MAKE) -C $(TOOLS_OPENAPI_CONVERT_DIR) test
 
 user-service-build: ## 构建 user-service 二进制。
 	$(MAKE) -C $(USER_SERVICE_DIR) build USER_SERVICE_BIN='$(USER_SERVICE_BIN)'

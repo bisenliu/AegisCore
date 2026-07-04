@@ -52,10 +52,11 @@ func TestCacheGetSetAndExpire(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, 7, version)
 
-	time.Sleep(50 * time.Millisecond)
-	_, ok, err = cache.Get("user-1")
-	require.NoError(t, err)
-	require.False(t, ok, "Get after TTL = hit, want miss")
+	require.Eventually(t, func() bool {
+		_, ok, err = cache.Get("user-1")
+		require.NoError(t, err)
+		return !ok
+	}, time.Second, 10*time.Millisecond, "Get after TTL = hit, want miss")
 }
 
 func TestCacheDeleteAndClear(t *testing.T) {
@@ -84,9 +85,14 @@ func TestCacheDeleteAndClear(t *testing.T) {
 
 func TestCacheGetOrLoadCoalescesConcurrentMisses(t *testing.T) {
 	var loads atomic.Int64
+	var loaderStarted sync.Once
+	callersReady := make(chan struct{}, 20)
+	callersReleased := make(chan struct{})
+	loaderEntered := make(chan struct{})
 	start := make(chan struct{})
 	cache := newTestCache(t, Config[string]{Name: "test", Capacity: 10, TTL: time.Minute, KeyString: identityString}, func(_ context.Context, key string) (int, error) {
 		loads.Add(1)
+		loaderStarted.Do(func() { close(loaderEntered) })
 		<-start
 		return len(key), nil
 	})
@@ -99,6 +105,8 @@ func TestCacheGetOrLoadCoalescesConcurrentMisses(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			callersReady <- struct{}{}
+			<-callersReleased
 			value, err := cache.GetOrLoad(context.Background(), "alice")
 			if err != nil {
 				errs <- err
@@ -109,7 +117,9 @@ func TestCacheGetOrLoadCoalescesConcurrentMisses(t *testing.T) {
 			}
 		}()
 	}
-	time.Sleep(20 * time.Millisecond)
+	waitForCacheTestSignals(t, callersReady, goroutines)
+	close(callersReleased)
+	waitForCacheTestSignal(t, loaderEntered)
 	close(start)
 	wg.Wait()
 	close(errs)
@@ -122,6 +132,22 @@ func TestCacheGetOrLoadCoalescesConcurrentMisses(t *testing.T) {
 	require.EqualValues(t, 1, stats.Load)
 	require.NotZero(t, stats.Shared, "stats.Shared = 0, want shared singleflight result")
 	require.Zero(t, stats.Hit, "stats.Hit want 0 for double-check-free initial miss wave")
+}
+
+func waitForCacheTestSignal(t *testing.T, ch <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for cache test signal")
+	}
+}
+
+func waitForCacheTestSignals(t *testing.T, ch <-chan struct{}, count int) {
+	t.Helper()
+	for i := 0; i < count; i++ {
+		waitForCacheTestSignal(t, ch)
+	}
 }
 
 func TestCacheGetOrLoadDoesNotCacheErrors(t *testing.T) {

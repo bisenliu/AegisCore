@@ -224,7 +224,9 @@ func TestAutoRenewUsesFallbackIntervals(t *testing.T) {
 			AutoRenew: true,
 		},
 		Task: func(context.Context) error {
-			time.Sleep(40 * time.Millisecond)
+			require.Eventually(t, func() bool {
+				return lock.renewCount.Load() > 0
+			}, time.Second, 5*time.Millisecond, "renew was not called with fallback interval")
 			return nil
 		},
 	}

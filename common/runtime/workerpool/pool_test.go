@@ -170,12 +170,12 @@ func TestPoolStopWaitsForAcceptedTasks(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
+	waitForPool(t, pool, func(stats Stats) bool { return stats.Running == 2 })
 
 	done := make(chan error, 1)
 	go func() {
 		done <- pool.Stop(context.Background())
 	}()
-	time.Sleep(20 * time.Millisecond)
 	require.Zero(t, completed.Load())
 	close(release)
 
@@ -279,14 +279,9 @@ func waitForCount(t *testing.T, ch <-chan struct{}, count int) {
 
 func waitForPool(t *testing.T, pool *Pool, condition func(Stats) bool) {
 	t.Helper()
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		if condition(pool.Stats()) {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("condition not met; stats=%+v", pool.Stats())
+	require.Eventually(t, func() bool {
+		return condition(pool.Stats())
+	}, time.Second, 5*time.Millisecond, "condition not met; stats=%+v", pool.Stats())
 }
 
 func updateMax(max *atomic.Int64, value int64) {

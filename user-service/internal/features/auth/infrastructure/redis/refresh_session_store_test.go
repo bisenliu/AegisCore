@@ -111,6 +111,7 @@ func TestSessionStoreCreateSessionPrunesOldestWhenLimitExceeded(t *testing.T) {
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
 	limit := 5
+	baseScoreTime := time.Now().Add(time.Hour)
 
 	for i := 0; i < 6; i++ {
 		sessionID := "s-" + strconv.Itoa(i)
@@ -119,8 +120,12 @@ func TestSessionStoreCreateSessionPrunesOldestWhenLimitExceeded(t *testing.T) {
 			require.NoError(t, err,
 				"CreateSession(%s): %v", sessionID, err)
 		}
-
-		time.Sleep(time.Millisecond)
+		if i < limit {
+			score := redisScoreFloat(baseScoreTime.Add(time.Duration(i-limit) * time.Second))
+			err := store.redis.ZAdd(ctx, store.userSessionsKey(sessionTestUserID.String()), rediscache.Z{Score: score, Member: sessionID}).Err()
+			require.NoError(t, err,
+				"ZAdd deterministic score for %s: %v", sessionID, err)
+		}
 	}
 
 	members, err := store.redis.ZRange(ctx, store.userSessionsKey(sessionTestUserID.String()), 0, -1).Result()
