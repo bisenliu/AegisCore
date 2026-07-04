@@ -197,7 +197,6 @@ func newRouterRegistrationRouteParams(t *testing.T, opts routerRegistrationRoute
 		Log:           zap.NewNop(),
 		JWT:           commonauth.NewJWTService(authCfg),
 		HTTPConfig:    config.HTTPConfig{Pprof: opts.pprof},
-		AuthConfig:    authCfg,
 		MetricsConfig: metricsCfg,
 		Metrics:       newRouterTestMetricsProvider(t, metricsCfg.Enabled, metricsCfg.Path),
 		Authorizer:    opts.authorizer,

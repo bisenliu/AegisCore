@@ -10,13 +10,12 @@ import (
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
 	"github.com/aegiscore/common/http/response"
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/security/auth"
 )
 
 // AuthWithTokenVersionValidator 返回支持可选 token version 校验的 JWT 认证中间件。
-func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService, _ config.AuthConfig, validator auth.TokenVersionValidator) gin.HandlerFunc {
+func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService, validator auth.TokenVersionValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		reqLog := logger.WithContext(ctx, log)

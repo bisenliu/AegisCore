@@ -43,7 +43,6 @@ func RegisterRoutes(params RegisterRouteParams) error {
 		Log:                   params.Log,
 		JWT:                   params.JWT,
 		HTTPConfig:            params.Config.HTTP,
-		AuthConfig:            params.Config.Auth,
 		MetricsConfig:         params.Config.Observability.Metrics,
 		HealthChecks:          params.Health,
 		Metrics:               params.Metrics,

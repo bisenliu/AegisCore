@@ -89,7 +89,7 @@ func TestAuthMiddleware(t *testing.T) {
 			}
 			core, logs := observer.New(zapcore.DebugLevel)
 			engine := gin.New()
-			engine.Use(AuthWithTokenVersionValidator(zap.New(core), auth.NewJWTService(testCfg), testCfg, validator))
+			engine.Use(AuthWithTokenVersionValidator(zap.New(core), auth.NewJWTService(testCfg), validator))
 			handled := false
 			engine.GET("/*path", func(c *gin.Context) {
 				handled = true
@@ -155,7 +155,7 @@ func TestAuthMiddlewareExpiredTokenDoesNotCallVersionValidator(t *testing.T) {
 	expiredToken := signAuthTestToken(t, "secret", authTestUserID, 1, "s-123", time.Now().Add(-time.Hour))
 	validator := NewMockTokenVersionValidator(gomock.NewController(t))
 	engine := gin.New()
-	engine.Use(AuthWithTokenVersionValidator(zap.NewNop(), auth.NewJWTService(cfg), cfg, validator))
+	engine.Use(AuthWithTokenVersionValidator(zap.NewNop(), auth.NewJWTService(cfg), validator))
 	engine.GET("/*path", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})

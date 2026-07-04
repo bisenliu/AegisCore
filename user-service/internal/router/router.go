@@ -23,7 +23,6 @@ type RouteParams struct {
 	Log                   *zap.Logger
 	JWT                   *commonauth.JWTService
 	HTTPConfig            config.HTTPConfig
-	AuthConfig            config.AuthConfig
 	MetricsConfig         config.MetricsConfig
 	HealthChecks          HealthChecks
 	Metrics               *commonmetrics.Provider
@@ -60,7 +59,7 @@ func registerV1Routes(engine *gin.Engine, params RouteParams) {
 	authhttp.RegisterPublicRoutes(v1.Group("/auth"), params.AuthController)
 
 	authenticated := v1.Group("")
-	authenticated.Use(commonmw.AuthWithTokenVersionValidator(params.Log, params.JWT, params.AuthConfig, params.TokenVersionValidator))
+	authenticated.Use(commonmw.AuthWithTokenVersionValidator(params.Log, params.JWT, params.TokenVersionValidator))
 
 	authhttp.RegisterProtectedRoutes(authenticated.Group("/auth"), params.AuthController)
 
