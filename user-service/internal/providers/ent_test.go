@@ -3,16 +3,21 @@ package providers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"entgo.io/ent/dialect"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/aegiscore/common/runtime/config"
+	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/user-service/ent/enttest"
 )
 
 func TestEntSQLDebugEnabledRequiresConfigFlag(t *testing.T) {
@@ -62,6 +67,80 @@ func TestCloseEntClientCallsCloser(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, closed)
+}
+
+func TestEntQueryObservabilityRecordsSpanAndMetrics(t *testing.T) {
+	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:ent_observability_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	cfg := ginTestConfig()
+	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true}
+	tracingProvider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
+	metricsProvider := newGinTestMetricsProvider(t, cfg)
+	metrics, err := newEntQueryMetrics(metricsProvider)
+	require.NoError(t, err)
+	installEntQueryObservability(client, tracingProvider.Tracer("ent-test"), metrics)
+
+	ctx, span := tracingProvider.Tracer("ent-test").Start(context.Background(), "parent")
+	count, err := client.User.Query().Count(ctx)
+	span.End()
+
+	require.NoError(t, err)
+	require.Zero(t, count)
+	require.True(t, hasEntQuerySpan(recorder.Ended()), "spans=%v", entSpanNames(recorder.Ended()))
+	latency := gatherGinMetricFamily(t, metricsProvider, entQueryLatencyMetricName)
+	latencyMetric := findGinMetricByLabels(t, latency, map[string]string{
+		"entity": "user",
+		"query":  entQueryOperation,
+		"result": entResultSuccess,
+	})
+	require.Equal(t, uint64(1), latencyMetric.GetHistogram().GetSampleCount())
+}
+
+func TestEntQueryObservabilityRecordsErrorMetric(t *testing.T) {
+	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:ent_observability_error_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
+	cfg := ginTestConfig()
+	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true}
+	metricsProvider := newGinTestMetricsProvider(t, cfg)
+	metrics, err := newEntQueryMetrics(metricsProvider)
+	require.NoError(t, err)
+	installEntQueryObservability(client, nil, metrics)
+	require.NoError(t, client.Close())
+
+	_, err = client.User.Query().Count(context.Background())
+	require.Error(t, err)
+	errorFamily := gatherGinMetricFamily(t, metricsProvider, entQueryErrorMetricName)
+	errorMetric := findGinMetricByLabels(t, errorFamily, map[string]string{
+		"entity": "user",
+		"query":  entQueryOperation,
+	})
+	require.Equal(t, float64(1), errorMetric.GetCounter().GetValue())
+}
+
+func TestEntQueryObservabilityDisabledKeepsQueryResult(t *testing.T) {
+	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:ent_observability_disabled_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	require.NoError(t, installEntObservability(client, nil, nil))
+
+	count, err := client.User.Query().Count(context.Background())
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+func hasEntQuerySpan(spans []sdktrace.ReadOnlySpan) bool {
+	for _, span := range spans {
+		if span.Name() == "ent.query" {
+			return true
+		}
+	}
+	return false
+}
+
+func entSpanNames(spans []sdktrace.ReadOnlySpan) []string {
+	names := make([]string, 0, len(spans))
+	for _, span := range spans {
+		names = append(names, span.Name())
+	}
+	return names
 }
 
 func contextWithSpanContext(ctx context.Context, t *testing.T, traceIDHex string, spanIDHex string) context.Context {

@@ -563,7 +563,11 @@ report_service_metric_presence() {
     aegiscore_user_service_auth_session_purge_submit_failures_total
     aegiscore_user_service_rbac_policy_sync_operations_total
     aegiscore_user_service_rbac_policy_version_mismatches_total
+    aegiscore_user_service_rbac_enforce_total
+    aegiscore_user_service_rbac_enforce_duration_seconds
     aegiscore_user_service_permission_route_diff
+    aegiscore_user_service_ent_query_duration_seconds
+    aegiscore_user_service_ent_query_errors_total
     aegiscore_localcache_requests_total
     aegiscore_localcache_loads_total
     aegiscore_localcache_singleflight_total
@@ -588,11 +592,11 @@ report_service_metric_presence() {
   fi
 }
 
-# histogram 在 /metrics 中会以 _bucket/_sum/_count 输出，所以单独兼容 scheduler duration。
+# histogram 在 /metrics 中会以 _bucket/_sum/_count 输出，所以单独兼容 duration 类指标。
 service_metric_present() {
   local metric="$1"
   case "$metric" in
-    aegiscore_scheduler_job_duration_seconds)
+    aegiscore_scheduler_job_duration_seconds|aegiscore_user_service_rbac_enforce_duration_seconds|aegiscore_user_service_ent_query_duration_seconds)
       grep -Eq "^${metric}(_bucket|_sum|_count)(\\{| |$)|^# HELP ${metric}( |$)" "$SERVICE_METRICS_FILE"
       ;;
     *)
@@ -615,9 +619,13 @@ summarize_results() {
     'aegiscore_user_service_auth_session_purge_submit_failures_total'
     'sum by (operation, result, reason, source) (aegiscore_user_service_rbac_policy_sync_operations_total)'
     'sum by (operation, reason, source) (aegiscore_user_service_rbac_policy_sync_operations_total{result="failure"})'
+    'sum by (method, route_template, result) (aegiscore_user_service_rbac_enforce_total)'
+    'sum by (method, route_template, result) (aegiscore_user_service_rbac_enforce_duration_seconds_count)'
     'sum by (source) (aegiscore_user_service_rbac_policy_version_mismatches_total)'
     'sum by (kind) (aegiscore_user_service_permission_route_diff)'
     'sum by (status) (aegiscore_casbin_policy_reloads_total)'
+    'sum by (entity, query, result) (aegiscore_user_service_ent_query_duration_seconds_count)'
+    'sum by (entity, query) (aegiscore_user_service_ent_query_errors_total)'
     'aegiscore_redis_up'
     'aegiscore_redis_ping_failures_total'
     'aegiscore_postgres_pool_open_connections'

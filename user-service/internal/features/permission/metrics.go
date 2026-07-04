@@ -3,6 +3,7 @@ package permission
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -14,15 +15,21 @@ const (
 	rbacPolicySyncMetricName      = "aegiscore_user_service_rbac_policy_sync_operations_total"
 	rbacPolicyMismatchMetricName  = "aegiscore_user_service_rbac_policy_version_mismatches_total"
 	permissionRouteDiffMetricName = "aegiscore_user_service_permission_route_diff"
+	rbacEnforceMetricName         = "aegiscore_user_service_rbac_enforce_total"
+	rbacEnforceLatencyMetricName  = "aegiscore_user_service_rbac_enforce_duration_seconds"
 	rbacPolicySyncMetricHelp      = "Total number of RBAC policy sync operation results by fixed operation, result, reason, and source."
 	rbacPolicyMismatchMetricHelp  = "Total number of RBAC policy version mismatches by fixed watcher source."
 	permissionRouteDiffMetricHelp = "Latest permission route diff counts by fixed diff kind."
+	rbacEnforceMetricHelp         = "Total number of RBAC enforce decisions by fixed result, method, and route template."
+	rbacEnforceLatencyMetricHelp  = "RBAC enforce latency in seconds by fixed result, method, and route template."
 )
 
 type prometheusMetrics struct {
 	policySync      *prometheus.CounterVec
 	versionMismatch *prometheus.CounterVec
 	routeDiff       *prometheus.GaugeVec
+	enforce         *prometheus.CounterVec
+	enforceLatency  *prometheus.HistogramVec
 }
 
 func newPermissionMetrics(provider *commonmetrics.Provider) (permissionapplication.Metrics, error) {
@@ -42,6 +49,15 @@ func newPermissionMetrics(provider *commonmetrics.Provider) (permissionapplicati
 			Name: permissionRouteDiffMetricName,
 			Help: permissionRouteDiffMetricHelp,
 		}, []string{"kind"}),
+		enforce: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: rbacEnforceMetricName,
+			Help: rbacEnforceMetricHelp,
+		}, []string{"result", "method", "route_template"}),
+		enforceLatency: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    rbacEnforceLatencyMetricName,
+			Help:    rbacEnforceLatencyMetricHelp,
+			Buckets: prometheus.DefBuckets,
+		}, []string{"result", "method", "route_template"}),
 	}
 	if err := provider.Register(recorder.policySync); err != nil {
 		return nil, fmt.Errorf("register rbac policy sync metrics: %w", err)
@@ -52,6 +68,13 @@ func newPermissionMetrics(provider *commonmetrics.Provider) (permissionapplicati
 	if err := provider.Register(recorder.routeDiff); err != nil {
 		return nil, fmt.Errorf("register permission route diff metrics: %w", err)
 	}
+	if err := provider.Register(recorder.enforce); err != nil {
+		return nil, fmt.Errorf("register rbac enforce metrics: %w", err)
+	}
+	if err := provider.Register(recorder.enforceLatency); err != nil {
+		return nil, fmt.Errorf("register rbac enforce latency metrics: %w", err)
+	}
+	recorder.RouteDiffObserved(context.Background(), 0, 0)
 	return recorder, nil
 }
 
@@ -92,6 +115,12 @@ func (m *prometheusMetrics) RouteDiffObserved(_ context.Context, missing int, st
 	m.routeDiff.WithLabelValues(permissionapplication.MetricsRouteDiffStale).Set(float64(stale))
 }
 
+func (m *prometheusMetrics) EnforceObserved(_ context.Context, result string, method string, routeTemplate string, duration time.Duration) {
+	result = rbacEnforceResult(result)
+	m.enforce.WithLabelValues(result, method, routeTemplate).Inc()
+	m.enforceLatency.WithLabelValues(result, method, routeTemplate).Observe(duration.Seconds())
+}
+
 func rbacSource(source string) string {
 	switch source {
 	case permissionapplication.MetricsSourceLocalChange,
@@ -113,5 +142,16 @@ func rbacReason(reason string) string {
 		return reason
 	default:
 		return permissionapplication.MetricsReasonSystemError
+	}
+}
+
+func rbacEnforceResult(result string) string {
+	switch result {
+	case permissionapplication.MetricsEnforceResultAllow,
+		permissionapplication.MetricsEnforceResultDeny,
+		permissionapplication.MetricsEnforceResultError:
+		return result
+	default:
+		return permissionapplication.MetricsEnforceResultError
 	}
 }

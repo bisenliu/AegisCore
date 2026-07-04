@@ -816,7 +816,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "按 operation/source/result/reason 展示 RBAC policy reload、publish 和 watcher 同步结果。",
+      "description": "按 operation/source/result/reason 展示 RBAC policy reload、publish、watcher 同步结果，并按 method/route_template/result 展示 RBAC Enforce 判定速率。",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -893,9 +893,20 @@
           "legendFormat": "{{operation}} / {{source}} / {{result}} / {{reason}}",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (method, route_template, result) (rate(aegiscore_user_service_rbac_enforce_total{service=\"$service\",environment=\"$environment\"}[5m]))",
+          "legendFormat": "enforce {{method}} {{route_template}} / {{result}}",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "RBAC 策略同步速率",
+      "title": "RBAC 策略与授权速率",
       "type": "timeseries"
     },
     {
@@ -1513,7 +1524,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "连接池等待空闲连接的次数速率。",
+      "description": "连接池等待空闲连接的次数速率，以及 Ent query 成功和错误速率。",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1590,9 +1601,31 @@
           "legendFormat": "wait count",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (entity, query, result) (rate(aegiscore_user_service_ent_query_duration_seconds_count{service=\"$service\",environment=\"$environment\"}[5m]))",
+          "legendFormat": "ent {{entity}} {{query}} / {{result}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (entity, query) (rate(aegiscore_user_service_ent_query_errors_total{service=\"$service\",environment=\"$environment\"}[5m]))",
+          "legendFormat": "ent {{entity}} {{query}} / error",
+          "range": true,
+          "refId": "C"
         }
       ],
-      "title": "PostgreSQL 等待次数",
+      "title": "PostgreSQL 等待与 Ent 查询速率",
       "type": "timeseries"
     },
     {

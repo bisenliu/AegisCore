@@ -12,6 +12,7 @@ package application
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
@@ -190,6 +191,18 @@ func NewMockMetrics(ctrl *gomock.Controller) *MockMetrics {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockMetrics) EXPECT() *MockMetricsMockRecorder {
 	return m.recorder
+}
+
+// EnforceObserved mocks base method.
+func (m *MockMetrics) EnforceObserved(ctx context.Context, result, method, routeTemplate string, duration time.Duration) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "EnforceObserved", ctx, result, method, routeTemplate, duration)
+}
+
+// EnforceObserved indicates an expected call of EnforceObserved.
+func (mr *MockMetricsMockRecorder) EnforceObserved(ctx, result, method, routeTemplate, duration any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnforceObserved", reflect.TypeOf((*MockMetrics)(nil).EnforceObserved), ctx, result, method, routeTemplate, duration)
 }
 
 // PolicyPublishFailed mocks base method.

@@ -15,6 +15,9 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
@@ -155,6 +158,51 @@ func TestNewRedisClientRegistersLifecycle(t *testing.T) {
 	require.Equal(t, int64(1), redisServer.pings.Load())
 }
 
+func TestOpenRedisClientCreatesTracingSpan(t *testing.T) {
+	redisServer := newTestRedisServer(t)
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	previousProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previousProvider)
+		require.NoError(t, provider.Shutdown(context.Background()))
+	})
+
+	client := OpenRedisClient(config.RedisConfig{
+		Addr:         redisServer.addr,
+		DB:           0,
+		DialTimeout:  time.Second,
+		ReadTimeout:  time.Second,
+		WriteTimeout: time.Second,
+	})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+	ctx, parent := provider.Tracer("datastore-test").Start(context.Background(), "parent")
+	require.NoError(t, client.Ping(ctx).Err())
+	parent.End()
+
+	spans := recorder.Ended()
+	require.GreaterOrEqual(t, len(spans), 2)
+	require.True(t, hasRedisSpan(spans), "spans=%v", spanNames(spans))
+	require.Equal(t, int64(1), redisServer.pings.Load())
+}
+
+func TestOpenRedisClientWorksWithNoopTracing(t *testing.T) {
+	redisServer := newTestRedisServer(t)
+	client := OpenRedisClient(config.RedisConfig{
+		Addr:         redisServer.addr,
+		DB:           0,
+		DialTimeout:  time.Second,
+		ReadTimeout:  time.Second,
+		WriteTimeout: time.Second,
+	})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+	require.NoError(t, client.Ping(context.Background()).Err())
+	require.Equal(t, int64(1), redisServer.pings.Load())
+}
+
 func TestExplicitCommonProvidersDoNotProvideRedisClient(t *testing.T) {
 	type params struct {
 		fx.In
@@ -169,6 +217,23 @@ func TestExplicitCommonProvidersDoNotProvideRedisClient(t *testing.T) {
 	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), `name="cache_redis"`)
+}
+
+func hasRedisSpan(spans []sdktrace.ReadOnlySpan) bool {
+	for _, span := range spans {
+		if span.Name() == "ping" || span.Name() == "redis.dial" {
+			return true
+		}
+	}
+	return false
+}
+
+func spanNames(spans []sdktrace.ReadOnlySpan) []string {
+	names := make([]string, 0, len(spans))
+	for _, span := range spans {
+		names = append(names, span.Name())
+	}
+	return names
 }
 
 func TestProvideNamedPostgresProvidesOnlyDeclaredPool(t *testing.T) {

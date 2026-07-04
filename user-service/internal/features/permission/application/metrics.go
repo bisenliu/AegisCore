@@ -1,6 +1,9 @@
 package application
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 //go:generate go run github.com/aegiscore/common/runtime/observability/metrics/nopgen -source metrics.go -type Metrics -output metrics_nop_gen.go -struct nopMetrics -func NopMetrics -comment "NopMetrics 返回 permission/RBAC 业务指标空实现。"
 
@@ -36,6 +39,13 @@ const (
 	MetricsRouteDiffMissing = "missing"
 	// MetricsRouteDiffStale 表示正式权限没有对应已注册路由。
 	MetricsRouteDiffStale = "stale"
+
+	// MetricsEnforceResultAllow 表示授权判定通过。
+	MetricsEnforceResultAllow = "allow"
+	// MetricsEnforceResultDeny 表示授权判定拒绝。
+	MetricsEnforceResultDeny = "deny"
+	// MetricsEnforceResultError 表示授权判定异常。
+	MetricsEnforceResultError = "error"
 )
 
 // Metrics 记录 permission/RBAC feature 的低基数业务指标。
@@ -49,4 +59,5 @@ type Metrics interface {
 	WatcherReloadFailed(ctx context.Context, source string, reason string)
 	WatcherVersionMismatch(ctx context.Context, source string)
 	RouteDiffObserved(ctx context.Context, missing int, stale int)
+	EnforceObserved(ctx context.Context, result string, method string, routeTemplate string, duration time.Duration)
 }

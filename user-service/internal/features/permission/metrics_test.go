@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -26,6 +27,9 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 	recorder.PolicyPublishFailed(context.Background(), permissionapplication.MetricsReasonPublishFailed)
 	recorder.WatcherVersionMismatch(context.Background(), permissionapplication.MetricsSourceWatcherVersionCheck)
 	recorder.RouteDiffObserved(context.Background(), 2, 1)
+	recorder.EnforceObserved(context.Background(), permissionapplication.MetricsEnforceResultAllow, "GET", "/api/v1/users/:user_id", 10*time.Millisecond)
+	recorder.EnforceObserved(context.Background(), permissionapplication.MetricsEnforceResultDeny, "DELETE", "/api/v1/users/:user_id", 20*time.Millisecond)
+	recorder.EnforceObserved(context.Background(), "unexpected", "PATCH", "/api/v1/users/:user_id", 30*time.Millisecond)
 
 	text := gatherPermissionMetricText(t, provider)
 	for _, want := range []string{
@@ -34,9 +38,16 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 		`aegiscore_user_service_rbac_policy_version_mismatches_total{environment="test",service="aegiscore-user-service-test",source="watcher_version_check"} 1`,
 		`aegiscore_user_service_permission_route_diff{environment="test",kind="missing",service="aegiscore-user-service-test"} 2`,
 		`aegiscore_user_service_permission_route_diff{environment="test",kind="stale",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_user_service_rbac_enforce_total{environment="test",method="GET",result="allow",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_user_service_rbac_enforce_total{environment="test",method="DELETE",result="deny",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_user_service_rbac_enforce_total{environment="test",method="PATCH",result="error",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_user_service_rbac_enforce_duration_seconds{environment="test",method="GET",result="allow",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
 	} {
 		require.Contains(t, text, want)
 	}
+	require.NotContains(t, text, "user_id=\"")
+	require.NotContains(t, text, "raw_path=")
+	require.NotContains(t, text, "error=")
 }
 
 func TestPermissionMetricsDisabledUsesNoop(t *testing.T) {
@@ -74,6 +85,8 @@ func gatherPermissionMetricText(t *testing.T, provider *commonmetrics.Provider) 
 				builder.WriteString(strings.TrimRight(strings.TrimRight(strconv.FormatFloat(metric.GetCounter().GetValue(), 'f', 6, 64), "0"), "."))
 			case metric.GetGauge() != nil:
 				builder.WriteString(strings.TrimRight(strings.TrimRight(strconv.FormatFloat(metric.GetGauge().GetValue(), 'f', 6, 64), "0"), "."))
+			case metric.GetHistogram() != nil:
+				builder.WriteString(strconv.FormatUint(metric.GetHistogram().GetSampleCount(), 10))
 			}
 			builder.WriteString("\n")
 		}

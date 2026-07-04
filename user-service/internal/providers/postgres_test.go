@@ -118,11 +118,12 @@ func TestProvideEntClientsProvidesUserServiceEntClient(t *testing.T) {
 	require.NoError(t, userDB.PingContext(ctx))
 
 	lc := fxtest.NewLifecycle(t)
-	got := ProvideEntClients(NamedEntClientParams{
+	got, err := ProvideEntClients(NamedEntClientParams{
 		Lifecycle: lc,
 		Log:       zap.NewNop(),
 		UserDB:    userDB,
 	})
+	require.NoError(t, err)
 
 	require.NotNil(t, got.UserClient)
 	require.Equal(t, int64(0), drv.closes.Load())
