@@ -3,7 +3,6 @@ package scheduler
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
 // validateJob 校验任务配置，并归一化锁策略中的默认值。
@@ -52,7 +51,7 @@ func (s *Scheduler) validateJob(cfg *JobConfig) error {
 			return fmt.Errorf("%w: renew interval must be positive and less than ttl", ErrInvalidLock)
 		}
 		if cfg.Lock.RenewTimeout <= 0 {
-			cfg.Lock.RenewTimeout = 5 * time.Second
+			cfg.Lock.RenewTimeout = defaultLockRenewTimeout
 		}
 		if cfg.Lock.RenewTimeout >= cfg.Lock.TTL {
 			return fmt.Errorf("%w: renew timeout must be less than ttl", ErrInvalidLock)

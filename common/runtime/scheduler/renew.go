@@ -16,7 +16,7 @@ func (s *Scheduler) startRenew(jobCtx context.Context, cancelJob context.CancelF
 	}
 	renewTimeout := cfg.Lock.RenewTimeout
 	if renewTimeout <= 0 {
-		renewTimeout = 5 * time.Second
+		renewTimeout = defaultLockRenewTimeout
 	}
 
 	renewCtx, cancelRenew := context.WithCancel(s.root)

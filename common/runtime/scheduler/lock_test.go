@@ -54,7 +54,7 @@ func TestRedisLockRenewExtendsTTL(t *testing.T) {
 	require.True(t, ok)
 
 	server.FastForward(1500 * time.Millisecond)
-	require.NoError(t, lock.Renew(context.Background(), 5*time.Second))
+	require.NoError(t, lock.Renew(context.Background(), time.Second*5))
 
 	ttl := server.TTL("aegiscore:cron:nightly")
 	require.Greater(t, ttl, 3*time.Second)

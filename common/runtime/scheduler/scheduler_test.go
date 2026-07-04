@@ -126,6 +126,51 @@ func TestLockModeWaitUsesConfiguredWaitTimeout(t *testing.T) {
 	require.Equal(t, waitTimeout, time.Duration(locker.lastWaitTimeout.Load()))
 }
 
+func TestUnlockUsesDefaultTimeout(t *testing.T) {
+	lock := &recordingLock{}
+	locker := &recordingLocker{lock: lock}
+	s := newTestScheduler(t, Config{Locker: locker, DefaultLockTTL: time.Minute})
+
+	cfg := JobConfig{
+		Key:  "unlock-timeout-job",
+		Spec: "@every 1s",
+		Lock: LockPolicy{
+			Enabled: true,
+			Mode:    LockModeSkipIfLocked,
+		},
+		Task: func(context.Context) error {
+			return nil
+		},
+	}
+	require.NoError(t, s.validateJob(&cfg))
+
+	s.runJob(cfg, newLocalGate())
+
+	require.True(t, lock.unlocked.Load())
+	requireTimeoutNear(t, lock.unlockTimeout(), defaultLockUnlockTimeout)
+}
+
+func TestValidateJobUsesDefaultRenewTimeout(t *testing.T) {
+	s := newTestScheduler(t, Config{Locker: &recordingLocker{}, DefaultLockTTL: time.Minute})
+	cfg := JobConfig{
+		Key:  "renew-timeout-job",
+		Spec: "@every 1s",
+		Lock: LockPolicy{
+			Enabled:   true,
+			TTL:       30 * time.Second,
+			Mode:      LockModeSkipIfLocked,
+			AutoRenew: true,
+		},
+		Task: func(context.Context) error {
+			return nil
+		},
+	}
+
+	require.NoError(t, s.validateJob(&cfg))
+
+	require.Equal(t, defaultLockRenewTimeout, cfg.Lock.RenewTimeout)
+}
+
 func TestRenewFailureCancelsTaskAndMarksFailed(t *testing.T) {
 	renewErr := errors.New("renew failed")
 	locker := &recordingLocker{lock: &recordingLock{renewErr: renewErr}}
@@ -187,6 +232,7 @@ func TestAutoRenewUsesFallbackIntervals(t *testing.T) {
 	s.runJob(cfg, newLocalGate())
 
 	require.NotZero(t, lock.renewCount.Load(), "renew was not called with fallback interval")
+	requireTimeoutNear(t, lock.renewTimeout(), defaultLockRenewTimeout)
 	require.Equal(t, 1, s.metrics.(*recordingMetrics).completedCount("fallback-renew-job"))
 }
 
@@ -238,6 +284,12 @@ func newLocalGate() chan struct{} {
 func assertSkipped(t *testing.T, metrics *recordingMetrics, jobKey string, reason string) {
 	t.Helper()
 	require.Equal(t, 1, metrics.skippedCount(jobKey, reason))
+}
+
+func requireTimeoutNear(t *testing.T, timeout time.Duration, want time.Duration) {
+	t.Helper()
+	require.Greater(t, timeout, want-500*time.Millisecond)
+	require.LessOrEqual(t, timeout, want)
 }
 
 type recordingMetrics struct {
@@ -345,17 +397,38 @@ func (l *recordingLocker) Acquire(_ context.Context, _ string, _ time.Duration, 
 }
 
 type recordingLock struct {
-	renewErr   error
-	renewCount atomic.Int64
-	unlocked   atomic.Bool
+	mu             sync.Mutex
+	renewErr       error
+	renewCount     atomic.Int64
+	unlocked       atomic.Bool
+	unlockDeadline time.Time
+	renewDeadline  time.Time
 }
 
-func (l *recordingLock) Unlock(context.Context) error {
+func (l *recordingLock) Unlock(ctx context.Context) error {
+	l.mu.Lock()
+	l.unlockDeadline, _ = ctx.Deadline()
+	l.mu.Unlock()
 	l.unlocked.Store(true)
 	return nil
 }
 
-func (l *recordingLock) Renew(context.Context, time.Duration) error {
+func (l *recordingLock) Renew(ctx context.Context, _ time.Duration) error {
+	l.mu.Lock()
+	l.renewDeadline, _ = ctx.Deadline()
+	l.mu.Unlock()
 	l.renewCount.Add(1)
 	return l.renewErr
+}
+
+func (l *recordingLock) unlockTimeout() time.Duration {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return time.Until(l.unlockDeadline)
+}
+
+func (l *recordingLock) renewTimeout() time.Duration {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return time.Until(l.renewDeadline)
 }

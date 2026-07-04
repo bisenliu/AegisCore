@@ -24,12 +24,13 @@ const (
 	// EnvTestContainers 控制是否启用真实 Docker-backed integration containers。
 	EnvTestContainers = "AEGISCORE_TEST_CONTAINERS"
 
-	DefaultPostgresImage    = "postgres:15-alpine"
-	DefaultPostgresDatabase = "aegiscore_test"
-	DefaultPostgresUsername = "aegiscore"
-	DefaultPostgresPassword = "secret"
-	DefaultStartupTimeout   = 90 * time.Second
-	defaultPostgresPort     = "5432/tcp"
+	DefaultPostgresImage           = "postgres:15-alpine"
+	DefaultPostgresDatabase        = "aegiscore_test"
+	DefaultPostgresUsername        = "aegiscore"
+	DefaultPostgresPassword        = "secret"
+	DefaultStartupTimeout          = 90 * time.Second
+	defaultPostgresPort            = "5432/tcp"
+	defaultDockerPortProbeInterval = time.Millisecond * 100
 )
 
 type PostgresOptions struct {
@@ -173,7 +174,7 @@ func dockerMappedPort(ctx context.Context, t testing.TB, containerID, containerP
 		} else {
 			lastErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr+out))
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(defaultDockerPortProbeInterval)
 	}
 	t.Fatalf("resolve mapped Docker port %s for %s: %v", containerPort, containerID, lastErr)
 	return "", 0
