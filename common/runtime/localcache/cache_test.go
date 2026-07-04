@@ -120,6 +120,7 @@ func TestCacheGetOrLoadCoalescesConcurrentMisses(t *testing.T) {
 	waitForCacheTestSignals(t, callersReady, goroutines)
 	close(callersReleased)
 	waitForCacheTestSignal(t, loaderEntered)
+	waitForCacheTestMisses(t, cache, goroutines)
 	close(start)
 	wg.Wait()
 	close(errs)
@@ -130,8 +131,10 @@ func TestCacheGetOrLoadCoalescesConcurrentMisses(t *testing.T) {
 	require.EqualValues(t, 1, loads.Load(), "loads")
 	stats := cache.Stats()
 	require.EqualValues(t, 1, stats.Load)
-	require.NotZero(t, stats.Shared, "stats.Shared = 0, want shared singleflight result")
-	require.Zero(t, stats.Hit, "stats.Hit want 0 for double-check-free initial miss wave")
+	require.EqualValues(t, goroutines, stats.Miss)
+	require.GreaterOrEqual(t, stats.Shared+stats.DoubleCheckHit, uint64(goroutines-1),
+		"concurrent misses should be served by shared singleflight result or post-load double-check")
+	require.Zero(t, stats.Hit, "initial miss wave should not observe a direct cache hit")
 }
 
 func waitForCacheTestSignal(t *testing.T, ch <-chan struct{}) {
@@ -148,6 +151,13 @@ func waitForCacheTestSignals(t *testing.T, ch <-chan struct{}, count int) {
 	for i := 0; i < count; i++ {
 		waitForCacheTestSignal(t, ch)
 	}
+}
+
+func waitForCacheTestMisses[V any](t *testing.T, cache *Cache[string, V], count int) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		return cache.Stats().Miss == uint64(count)
+	}, time.Second, time.Millisecond, "timed out waiting for cache miss wave")
 }
 
 func TestCacheGetOrLoadDoesNotCacheErrors(t *testing.T) {
