@@ -84,9 +84,13 @@ func (s *UserRoleStore) Replace(ctx context.Context, userID uuid.UUID, roleIDs [
 	if _, err := tx.UserRole.Delete().Where(entuserrole.UserIDEQ(user.ID)).Exec(ctx); err != nil {
 		return nil, rollback(tx, fmt.Errorf("delete user roles for user %s: %w", userID.String(), err))
 	}
+	builders := make([]*ent.UserRoleCreate, 0, len(roles))
 	for _, role := range roles {
-		if _, err := tx.UserRole.Create().SetUserID(user.ID).SetRoleID(role.ID).Save(ctx); err != nil {
-			return nil, rollback(tx, fmt.Errorf("create replacement user role user %s role %s: %w", userID.String(), role.RoleID.String(), err))
+		builders = append(builders, tx.UserRole.Create().SetUserID(user.ID).SetRoleID(role.ID))
+	}
+	if len(builders) > 0 {
+		if _, err := tx.UserRole.CreateBulk(builders...).Save(ctx); err != nil {
+			return nil, rollback(tx, fmt.Errorf("create replacement user roles for user %s: %w", userID.String(), err))
 		}
 	}
 	if err := tx.Commit(); err != nil {

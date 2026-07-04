@@ -52,24 +52,29 @@ func TestRoleStoreCRUDAndDomainErrors(t *testing.T) {
 	_, err = store.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: "Duplicate", Active: true})
 	require.ErrorIs(t, err, roledomain.ErrRoleAlreadyExists)
 
-	_, err = store.Update(ctx, roleapplication.UpdateRoleInput{RoleID: missingRoleID, Name: "Missing", Active: true})
+	err = store.Update(ctx, roleapplication.UpdateRoleInput{RoleID: missingRoleID, Name: "Missing", Active: true})
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
-	updated, err := store.Update(ctx, roleapplication.UpdateRoleInput{
+	err = store.Update(ctx, roleapplication.UpdateRoleInput{
 		RoleID:      roleID,
 		Name:        "Operator Updated",
 		Description: "updated description",
 		Active:      false,
 	})
 	require.NoError(t, err)
+	updated, err := store.GetByRoleID(ctx, roleID)
+	require.NoError(t, err)
 	require.Equal(t, "Operator Updated", updated.Name)
 	require.Equal(t, "updated description", updated.Description)
 	require.False(t, updated.Active)
 
-	activated, err := store.SetActive(ctx, roleID, true)
+	err = store.SetActive(ctx, roleID, true)
+	require.NoError(t, err)
+	activated, err := store.GetByRoleID(ctx, roleID)
 	require.NoError(t, err)
 	require.True(t, activated.Active)
-	_, err = store.SetActive(ctx, missingRoleID, true)
+	err = store.SetActive(ctx, missingRoleID, true)
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
+
 }
 
 func TestRoleStoreListFiltersAndPagination(t *testing.T) {

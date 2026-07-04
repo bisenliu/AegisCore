@@ -122,7 +122,7 @@ func (s *PermissionStore) ListEffectiveByUserID(ctx context.Context, userID uuid
 }
 
 // Update 更新权限记录，并将唯一约束冲突映射为 ErrPermissionAlreadyExists。
-func (s *PermissionStore) Update(ctx context.Context, input permissionapplication.UpdatePermissionInput) (*permissiondomain.Permission, error) {
+func (s *PermissionStore) Update(ctx context.Context, input permissionapplication.UpdatePermissionInput) error {
 	updated, err := s.client.Permission.Update().
 		Where(entpermission.PermissionIDEQ(input.PermissionID)).
 		SetName(input.Name).
@@ -133,27 +133,27 @@ func (s *PermissionStore) Update(ctx context.Context, input permissionapplicatio
 		SetActive(input.Active).
 		Save(ctx)
 	if err == nil && updated == 0 {
-		return nil, permissiondomain.ErrPermissionNotFound
+		return permissiondomain.ErrPermissionNotFound
 	}
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			return nil, permissiondomain.ErrPermissionAlreadyExists
+			return permissiondomain.ErrPermissionAlreadyExists
 		}
-		return nil, fmt.Errorf("update permission %s: %w", input.PermissionID.String(), err)
+		return fmt.Errorf("update permission %s: %w", input.PermissionID.String(), err)
 	}
-	return s.GetByPermissionID(ctx, input.PermissionID)
+	return nil
 }
 
 // SetActive 启用或停用权限记录。
-func (s *PermissionStore) SetActive(ctx context.Context, permissionID uuid.UUID, active bool) (*permissiondomain.Permission, error) {
+func (s *PermissionStore) SetActive(ctx context.Context, permissionID uuid.UUID, active bool) error {
 	updated, err := s.client.Permission.Update().Where(entpermission.PermissionIDEQ(permissionID)).SetActive(active).Save(ctx)
 	if err == nil && updated == 0 {
-		return nil, permissiondomain.ErrPermissionNotFound
+		return permissiondomain.ErrPermissionNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("set permission active %s: %w", permissionID.String(), err)
+		return fmt.Errorf("set permission active %s: %w", permissionID.String(), err)
 	}
-	return s.GetByPermissionID(ctx, permissionID)
+	return nil
 }
 
 // UpsertSystemPermission 按 permission_id 或路由身份幂等写入系统权限 seed 数据。

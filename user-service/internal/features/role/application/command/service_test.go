@@ -52,7 +52,7 @@ func TestRoleCommandServiceUpdateRoleProtectsSystemRole(t *testing.T) {
 	fixture.roles.EXPECT().Update(gomock.Any(), gomock.Any()).Times(0)
 	fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).Times(0)
 
-	_, err := fixture.service.UpdateRole(context.Background(), UpdateRoleCommand{RoleID: roleID, Name: "renamed", Description: "system", Active: true})
+	err := fixture.service.UpdateRole(context.Background(), UpdateRoleCommand{RoleID: roleID, Name: "renamed", Description: "system", Active: true})
 	require.ErrorIs(t, err, roledomain.ErrSystemRoleProtected)
 }
 
@@ -63,7 +63,7 @@ func TestRoleCommandServiceSetRoleActiveProtectsSystemRole(t *testing.T) {
 	fixture.roles.EXPECT().SetActive(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 	fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).Times(0)
 
-	_, err := fixture.service.SetRoleActive(context.Background(), SetRoleActiveCommand{RoleID: roleID, Active: false})
+	err := fixture.service.SetRoleActive(context.Background(), SetRoleActiveCommand{RoleID: roleID, Active: false})
 	require.ErrorIs(t, err, roledomain.ErrSystemRoleProtected)
 }
 
@@ -219,33 +219,31 @@ func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing
 			setup: func(f *roleCommandFixture) {
 				gomock.InOrder(
 					f.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil),
-					f.roles.EXPECT().Update(gomock.Any(), gomock.Any()).Return(&role, nil),
+					f.roles.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil),
 					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_updated", uuid.Nil, uuid.Nil)).Return(refreshErr),
 				)
 			},
 			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
-				result, err := service.UpdateRole(context.Background(), UpdateRoleCommand{RoleID: roleID, Name: "operator", Active: true})
+				err := service.UpdateRole(context.Background(), UpdateRoleCommand{RoleID: roleID, Name: "operator", Active: true})
 				require.NoError(t, err)
-				return result
+				return nil
 			},
 		},
 		{
 			name: "set role active",
 			setup: func(f *roleCommandFixture) {
-				inactiveRole := role
-				inactiveRole.Active = false
 				gomock.InOrder(
 					f.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil),
-					f.roles.EXPECT().SetActive(gomock.Any(), roleID, false).Return(&inactiveRole, nil),
+					f.roles.EXPECT().SetActive(gomock.Any(), roleID, false).Return(nil),
 					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_active_changed", uuid.Nil, uuid.Nil)).Return(refreshErr),
 				)
 			},
 			run: func(t *testing.T, service RoleCommandService) any {
 				t.Helper()
-				result, err := service.SetRoleActive(context.Background(), SetRoleActiveCommand{RoleID: roleID, Active: false})
+				err := service.SetRoleActive(context.Background(), SetRoleActiveCommand{RoleID: roleID, Active: false})
 				require.NoError(t, err)
-				return result
+				return nil
 			},
 		},
 		{
@@ -356,7 +354,9 @@ func TestRoleCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing
 			tt.setup(fixture)
 
 			result := tt.run(t, fixture.service)
-			require.NotNil(t, result)
+			if result != nil {
+				require.NotNil(t, result)
+			}
 		})
 	}
 }

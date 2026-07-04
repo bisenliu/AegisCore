@@ -15,8 +15,8 @@ type PermissionStore interface {
 	List(ctx context.Context, input ListPermissionsInput) ([]permissiondomain.Permission, bool, error)
 	ListAll(ctx context.Context) ([]permissiondomain.Permission, error)
 	ListEffectiveByUserID(ctx context.Context, userID uuid.UUID) ([]permissiondomain.Permission, error)
-	Update(ctx context.Context, input UpdatePermissionInput) (*permissiondomain.Permission, error)
-	SetActive(ctx context.Context, permissionID uuid.UUID, active bool) (*permissiondomain.Permission, error)
+	Update(ctx context.Context, input UpdatePermissionInput) error
+	SetActive(ctx context.Context, permissionID uuid.UUID, active bool) error
 }
 
 // SeedPermissionStore 定义 RBAC seed 消费的权限持久化端口。

@@ -132,7 +132,7 @@ func (ctl *RoleController) GetRole(c *gin.Context) {
 // @Produce json
 // @Param role_id path string true "角色ID"
 // @Param request body rolehttp.UpdateRoleRequest true "更新角色请求"
-// @Success 200 {object} response.Envelope{data=rolehttp.RoleResponse} "更新成功"
+// @Success 204 "更新成功"
 // @Failure 400 {object} response.Envelope "请求错误或系统角色受保护"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
@@ -152,12 +152,12 @@ func (ctl *RoleController) UpdateRole(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	result, err := ctl.commands.UpdateRole(c.Request.Context(), cmd)
+	err = ctl.commands.UpdateRole(c.Request.Context(), cmd)
 	if err != nil {
 		response.Fail(c, toRoleHTTPError(err))
 		return
 	}
-	response.OK(c, toRoleResponse(result.Role))
+	response.NoContent(c)
 }
 
 // SetRoleStatus 处理角色启停请求。
@@ -168,7 +168,7 @@ func (ctl *RoleController) UpdateRole(c *gin.Context) {
 // @Produce json
 // @Param role_id path string true "角色ID"
 // @Param request body rolehttp.SetRoleStatusRequest true "角色状态请求"
-// @Success 200 {object} response.Envelope{data=rolehttp.RoleResponse} "操作成功"
+// @Success 204 "操作成功"
 // @Failure 400 {object} response.Envelope "请求错误或系统角色受保护"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
@@ -187,10 +187,10 @@ func (ctl *RoleController) SetRoleStatus(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	result, err := ctl.commands.SetRoleActive(c.Request.Context(), cmd)
+	err = ctl.commands.SetRoleActive(c.Request.Context(), cmd)
 	if err != nil {
 		response.Fail(c, toRoleHTTPError(err))
 		return
 	}
-	response.OK(c, toRoleResponse(result.Role))
+	response.NoContent(c)
 }

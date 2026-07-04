@@ -33,9 +33,9 @@ type PermissionResult struct {
 // PermissionCommandService 定义权限目录写侧用例。
 type PermissionCommandService interface {
 	CreatePermission(ctx context.Context, cmd CreatePermissionCommand) (*PermissionResult, error)
-	UpdatePermission(ctx context.Context, cmd UpdatePermissionCommand) (*PermissionResult, error)
-	EnablePermission(ctx context.Context, cmd SetPermissionActiveCommand) (*PermissionResult, error)
-	DisablePermission(ctx context.Context, cmd SetPermissionActiveCommand) (*PermissionResult, error)
+	UpdatePermission(ctx context.Context, cmd UpdatePermissionCommand) error
+	EnablePermission(ctx context.Context, cmd SetPermissionActiveCommand) error
+	DisablePermission(ctx context.Context, cmd SetPermissionActiveCommand) error
 }
 
 // CreatePermission 创建权限目录记录。

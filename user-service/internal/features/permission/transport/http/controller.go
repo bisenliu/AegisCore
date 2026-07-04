@@ -134,7 +134,7 @@ func (ctl *PermissionController) GetPermission(c *gin.Context) {
 // @Produce json
 // @Param permission_id path string true "权限ID"
 // @Param request body permissionhttp.UpdatePermissionRequest true "更新权限请求"
-// @Success 200 {object} response.Envelope{data=permissionhttp.PermissionResponse} "更新成功"
+// @Success 204 "更新成功"
 // @Failure 400 {object} response.Envelope "请求错误或系统权限受保护"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
@@ -154,12 +154,12 @@ func (ctl *PermissionController) UpdatePermission(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	result, err := ctl.commands.UpdatePermission(c.Request.Context(), cmd)
+	err = ctl.commands.UpdatePermission(c.Request.Context(), cmd)
 	if err != nil {
 		response.Fail(c, toPermissionHTTPError(err))
 		return
 	}
-	response.OK(c, toPermissionResponse(result.Permission))
+	response.NoContent(c)
 }
 
 // EnablePermission 处理权限启用请求。
@@ -168,7 +168,7 @@ func (ctl *PermissionController) UpdatePermission(c *gin.Context) {
 // @Tags 权限
 // @Produce json
 // @Param permission_id path string true "权限ID"
-// @Success 200 {object} response.Envelope{data=permissionhttp.PermissionResponse} "启用成功"
+// @Success 204 "启用成功"
 // @Failure 400 {object} response.Envelope "权限 ID 参数错误"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
@@ -186,7 +186,7 @@ func (ctl *PermissionController) EnablePermission(c *gin.Context) {
 // @Tags 权限
 // @Produce json
 // @Param permission_id path string true "权限ID"
-// @Success 200 {object} response.Envelope{data=permissionhttp.PermissionResponse} "停用成功"
+// @Success 204 "停用成功"
 // @Failure 400 {object} response.Envelope "权限 ID 参数错误"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
@@ -261,15 +261,14 @@ func (ctl *PermissionController) setPermissionActive(c *gin.Context, active bool
 		response.Fail(c, err)
 		return
 	}
-	var result *permissioncommand.PermissionResult
 	if active {
-		result, err = ctl.commands.EnablePermission(c.Request.Context(), cmd)
+		err = ctl.commands.EnablePermission(c.Request.Context(), cmd)
 	} else {
-		result, err = ctl.commands.DisablePermission(c.Request.Context(), cmd)
+		err = ctl.commands.DisablePermission(c.Request.Context(), cmd)
 	}
 	if err != nil {
 		response.Fail(c, toPermissionHTTPError(err))
 		return
 	}
-	response.OK(c, toPermissionResponse(result.Permission))
+	response.NoContent(c)
 }

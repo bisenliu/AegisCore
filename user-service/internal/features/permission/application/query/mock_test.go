@@ -120,12 +120,11 @@ func (mr *MockPermissionStoreMockRecorder) ListEffectiveByUserID(ctx, userID any
 }
 
 // SetActive mocks base method.
-func (m *MockPermissionStore) SetActive(ctx context.Context, permissionID uuid.UUID, active bool) (*domain.Permission, error) {
+func (m *MockPermissionStore) SetActive(ctx context.Context, permissionID uuid.UUID, active bool) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetActive", ctx, permissionID, active)
-	ret0, _ := ret[0].(*domain.Permission)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // SetActive indicates an expected call of SetActive.
@@ -135,12 +134,11 @@ func (mr *MockPermissionStoreMockRecorder) SetActive(ctx, permissionID, active a
 }
 
 // Update mocks base method.
-func (m *MockPermissionStore) Update(ctx context.Context, input application.UpdatePermissionInput) (*domain.Permission, error) {
+func (m *MockPermissionStore) Update(ctx context.Context, input application.UpdatePermissionInput) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Update", ctx, input)
-	ret0, _ := ret[0].(*domain.Permission)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Update indicates an expected call of Update.

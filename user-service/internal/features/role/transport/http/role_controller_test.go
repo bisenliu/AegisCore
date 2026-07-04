@@ -193,26 +193,23 @@ func TestRoleControllerGetRole(t *testing.T) {
 }
 
 func TestRoleControllerUpdateRole(t *testing.T) {
-	t.Run("success trims fields and maps role response", func(t *testing.T) {
+	t.Run("success trims fields and returns no content", func(t *testing.T) {
 		engine, commands, _ := newRoleHTTPTestHarness(t)
-		role := roleHTTPTestRole(roleHTTPTestRoleUUID, "审计员")
-		role.Active = false
 		var gotCommand rolecommand.UpdateRoleCommand
-		commands.EXPECT().UpdateRole(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, cmd rolecommand.UpdateRoleCommand) (*rolecommand.RoleResult, error) {
+		commands.EXPECT().UpdateRole(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, cmd rolecommand.UpdateRoleCommand) error {
 			gotCommand = cmd
-			return &rolecommand.RoleResult{Role: role}, nil
+			return nil
 		})
 
 		body := `{"name":" 审计员 ","description":" 审计角色 ","active":false}`
 		recorder := performRoleHTTPRequest(t, engine, http.MethodPatch, "/api/v1/roles/"+roleHTTPTestRoleID, jsonBody(body))
-		envelope := expectRoleEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK, contractresponse.MessageOK)
-		payload := decodeRoleHTTPData[RoleResponse](t, envelope)
+		require.Equal(t, http.StatusNoContent, recorder.Code)
+		require.Empty(t, recorder.Body.String())
 
 		require.Equal(t, roleHTTPTestRoleUUID, gotCommand.RoleID)
 		require.Equal(t, "审计员", gotCommand.Name)
 		require.Equal(t, "审计角色", gotCommand.Description)
 		require.False(t, gotCommand.Active)
-		assertRoleHTTPResponse(t, role, payload)
 	})
 
 	t.Run("validation failure is rejected before command service", func(t *testing.T) {
@@ -223,7 +220,7 @@ func TestRoleControllerUpdateRole(t *testing.T) {
 
 	t.Run("protected system role maps to conflict envelope", func(t *testing.T) {
 		engine, commands, _ := newRoleHTTPTestHarness(t)
-		commands.EXPECT().UpdateRole(gomock.Any(), gomock.Any()).Return(nil, roledomain.ErrSystemRoleProtected)
+		commands.EXPECT().UpdateRole(gomock.Any(), gomock.Any()).Return(roledomain.ErrSystemRoleProtected)
 
 		recorder := performRoleHTTPRequest(t, engine, http.MethodPatch, "/api/v1/roles/"+roleHTTPTestRoleID, jsonBody(`{"name":"管理员","active":false}`))
 		expectRoleEnvelope(t, recorder, http.StatusConflict, false, contracterrors.CodeConflict, messages.SystemRoleProtected)
@@ -233,21 +230,18 @@ func TestRoleControllerUpdateRole(t *testing.T) {
 func TestRoleControllerSetRoleStatus(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		engine, commands, _ := newRoleHTTPTestHarness(t)
-		role := roleHTTPTestRole(roleHTTPTestRoleUUID, "管理员")
-		role.Active = false
 		var gotCommand rolecommand.SetRoleActiveCommand
-		commands.EXPECT().SetRoleActive(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, cmd rolecommand.SetRoleActiveCommand) (*rolecommand.RoleResult, error) {
+		commands.EXPECT().SetRoleActive(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, cmd rolecommand.SetRoleActiveCommand) error {
 			gotCommand = cmd
-			return &rolecommand.RoleResult{Role: role}, nil
+			return nil
 		})
 
 		recorder := performRoleHTTPRequest(t, engine, http.MethodPatch, "/api/v1/roles/"+roleHTTPTestRoleID+"/status", jsonBody(`{"active":false}`))
-		envelope := expectRoleEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK, contractresponse.MessageOK)
-		payload := decodeRoleHTTPData[RoleResponse](t, envelope)
+		require.Equal(t, http.StatusNoContent, recorder.Code)
+		require.Empty(t, recorder.Body.String())
 
 		require.Equal(t, roleHTTPTestRoleUUID, gotCommand.RoleID)
 		require.False(t, gotCommand.Active)
-		assertRoleHTTPResponse(t, role, payload)
 	})
 
 	t.Run("invalid role id is rejected before command service", func(t *testing.T) {
@@ -258,7 +252,7 @@ func TestRoleControllerSetRoleStatus(t *testing.T) {
 
 	t.Run("command service error maps to internal error", func(t *testing.T) {
 		engine, commands, _ := newRoleHTTPTestHarness(t)
-		commands.EXPECT().SetRoleActive(gomock.Any(), gomock.Any()).Return(nil, errors.New("database down"))
+		commands.EXPECT().SetRoleActive(gomock.Any(), gomock.Any()).Return(errors.New("database down"))
 
 		recorder := performRoleHTTPRequest(t, engine, http.MethodPatch, "/api/v1/roles/"+roleHTTPTestRoleID+"/status", jsonBody(`{"active":true}`))
 		expectRoleEnvelope(t, recorder, http.StatusInternalServerError, false, contracterrors.CodeInternalError, contractresponse.MessageInternalError)

@@ -147,12 +147,11 @@ func (mr *MockRoleCommandServiceMockRecorder) ReplaceUserRoles(ctx, cmd any) *go
 }
 
 // SetRoleActive mocks base method.
-func (m *MockRoleCommandService) SetRoleActive(ctx context.Context, cmd command.SetRoleActiveCommand) (*command.RoleResult, error) {
+func (m *MockRoleCommandService) SetRoleActive(ctx context.Context, cmd command.SetRoleActiveCommand) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetRoleActive", ctx, cmd)
-	ret0, _ := ret[0].(*command.RoleResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // SetRoleActive indicates an expected call of SetRoleActive.
@@ -162,12 +161,11 @@ func (mr *MockRoleCommandServiceMockRecorder) SetRoleActive(ctx, cmd any) *gomoc
 }
 
 // UpdateRole mocks base method.
-func (m *MockRoleCommandService) UpdateRole(ctx context.Context, cmd command.UpdateRoleCommand) (*command.RoleResult, error) {
+func (m *MockRoleCommandService) UpdateRole(ctx context.Context, cmd command.UpdateRoleCommand) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateRole", ctx, cmd)
-	ret0, _ := ret[0].(*command.RoleResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // UpdateRole indicates an expected call of UpdateRole.

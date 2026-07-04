@@ -200,20 +200,18 @@ func TestPermissionControllerGetPermission(t *testing.T) {
 }
 
 func TestPermissionControllerUpdatePermission(t *testing.T) {
-	t.Run("success trims fields and maps permission response", func(t *testing.T) {
+	t.Run("success trims fields and returns no content", func(t *testing.T) {
 		engine, commands, _ := newPermissionHTTPTestHarness(t)
-		permission := permissionHTTPTestPermission(permissionHTTPTestPermissionUUID, "更新用户")
-		permission.Active = false
 		var gotCommand permissioncommand.UpdatePermissionCommand
-		commands.EXPECT().UpdatePermission(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, cmd permissioncommand.UpdatePermissionCommand) (*permissioncommand.PermissionResult, error) {
+		commands.EXPECT().UpdatePermission(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, cmd permissioncommand.UpdatePermissionCommand) error {
 			gotCommand = cmd
-			return &permissioncommand.PermissionResult{Permission: permission}, nil
+			return nil
 		})
 
 		body := `{"name":" 更新用户 ","description":" 更新用户资料 ","module":" user ","http_method":" PUT ","path_template":" /api/v1/users/:id ","active":false}`
 		recorder := performPermissionHTTPRequest(t, engine, http.MethodPut, "/api/v1/permissions/"+permissionHTTPTestPermissionID, jsonBody(body))
-		envelope := expectPermissionEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK, contractresponse.MessageOK)
-		payload := decodePermissionHTTPData[PermissionResponse](t, envelope)
+		require.Equal(t, http.StatusNoContent, recorder.Code)
+		require.Empty(t, recorder.Body.String())
 
 		require.Equal(t, permissionHTTPTestPermissionUUID, gotCommand.PermissionID)
 		require.Equal(t, "更新用户", gotCommand.Name)
@@ -222,7 +220,6 @@ func TestPermissionControllerUpdatePermission(t *testing.T) {
 		require.Equal(t, "PUT", gotCommand.HTTPMethod)
 		require.Equal(t, "/api/v1/users/:id", gotCommand.PathTemplate)
 		require.Equal(t, false, gotCommand.Active)
-		assertPermissionHTTPResponse(t, permission, payload)
 	})
 
 	t.Run("invalid permission id is rejected before command service", func(t *testing.T) {
@@ -240,7 +237,7 @@ func TestPermissionControllerUpdatePermission(t *testing.T) {
 
 	t.Run("protected system permission maps to conflict envelope", func(t *testing.T) {
 		engine, commands, _ := newPermissionHTTPTestHarness(t)
-		commands.EXPECT().UpdatePermission(gomock.Any(), gomock.Any()).Return(nil, permissiondomain.ErrSystemPermissionProtected)
+		commands.EXPECT().UpdatePermission(gomock.Any(), gomock.Any()).Return(permissiondomain.ErrSystemPermissionProtected)
 
 		body := `{"name":"系统权限","module":"user","http_method":"PUT","path_template":"/api/v1/users/:id","active":true}`
 		recorder := performPermissionHTTPRequest(t, engine, http.MethodPut, "/api/v1/permissions/"+permissionHTTPTestPermissionID, jsonBody(body))
@@ -249,7 +246,7 @@ func TestPermissionControllerUpdatePermission(t *testing.T) {
 
 	t.Run("command service error maps to internal error", func(t *testing.T) {
 		engine, commands, _ := newPermissionHTTPTestHarness(t)
-		commands.EXPECT().UpdatePermission(gomock.Any(), gomock.Any()).Return(nil, errors.New("database down"))
+		commands.EXPECT().UpdatePermission(gomock.Any(), gomock.Any()).Return(errors.New("database down"))
 
 		body := `{"name":"更新用户","module":"user","http_method":"PUT","path_template":"/api/v1/users/:id","active":true}`
 		recorder := performPermissionHTTPRequest(t, engine, http.MethodPut, "/api/v1/permissions/"+permissionHTTPTestPermissionID, jsonBody(body))
@@ -260,37 +257,32 @@ func TestPermissionControllerUpdatePermission(t *testing.T) {
 func TestPermissionControllerSetPermissionActive(t *testing.T) {
 	t.Run("enable success", func(t *testing.T) {
 		engine, commands, _ := newPermissionHTTPTestHarness(t)
-		permission := permissionHTTPTestPermission(permissionHTTPTestPermissionUUID, "查询用户")
 		var gotCommand permissioncommand.SetPermissionActiveCommand
-		commands.EXPECT().EnablePermission(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, cmd permissioncommand.SetPermissionActiveCommand) (*permissioncommand.PermissionResult, error) {
+		commands.EXPECT().EnablePermission(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, cmd permissioncommand.SetPermissionActiveCommand) error {
 			gotCommand = cmd
-			return &permissioncommand.PermissionResult{Permission: permission}, nil
+			return nil
 		})
 
 		recorder := performPermissionHTTPRequest(t, engine, http.MethodPost, "/api/v1/permissions/"+permissionHTTPTestPermissionID+"/enable", nil)
-		envelope := expectPermissionEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK, contractresponse.MessageOK)
-		payload := decodePermissionHTTPData[PermissionResponse](t, envelope)
+		require.Equal(t, http.StatusNoContent, recorder.Code)
+		require.Empty(t, recorder.Body.String())
 
 		require.Equal(t, permissionHTTPTestPermissionUUID, gotCommand.PermissionID)
-		assertPermissionHTTPResponse(t, permission, payload)
 	})
 
 	t.Run("disable success", func(t *testing.T) {
 		engine, commands, _ := newPermissionHTTPTestHarness(t)
-		permission := permissionHTTPTestPermission(permissionHTTPTestPermissionUUID, "查询用户")
-		permission.Active = false
 		var gotCommand permissioncommand.SetPermissionActiveCommand
-		commands.EXPECT().DisablePermission(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, cmd permissioncommand.SetPermissionActiveCommand) (*permissioncommand.PermissionResult, error) {
+		commands.EXPECT().DisablePermission(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, cmd permissioncommand.SetPermissionActiveCommand) error {
 			gotCommand = cmd
-			return &permissioncommand.PermissionResult{Permission: permission}, nil
+			return nil
 		})
 
 		recorder := performPermissionHTTPRequest(t, engine, http.MethodPost, "/api/v1/permissions/"+permissionHTTPTestPermissionID+"/disable", nil)
-		envelope := expectPermissionEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK, contractresponse.MessageOK)
-		payload := decodePermissionHTTPData[PermissionResponse](t, envelope)
+		require.Equal(t, http.StatusNoContent, recorder.Code)
+		require.Empty(t, recorder.Body.String())
 
 		require.Equal(t, permissionHTTPTestPermissionUUID, gotCommand.PermissionID)
-		assertPermissionHTTPResponse(t, permission, payload)
 	})
 
 	t.Run("invalid permission id is rejected before command service", func(t *testing.T) {
@@ -301,7 +293,7 @@ func TestPermissionControllerSetPermissionActive(t *testing.T) {
 
 	t.Run("enable not found maps to not found envelope", func(t *testing.T) {
 		engine, commands, _ := newPermissionHTTPTestHarness(t)
-		commands.EXPECT().EnablePermission(gomock.Any(), gomock.Any()).Return(nil, permissiondomain.ErrPermissionNotFound)
+		commands.EXPECT().EnablePermission(gomock.Any(), gomock.Any()).Return(permissiondomain.ErrPermissionNotFound)
 
 		recorder := performPermissionHTTPRequest(t, engine, http.MethodPost, "/api/v1/permissions/"+permissionHTTPTestPermissionID+"/enable", nil)
 		expectPermissionEnvelope(t, recorder, http.StatusNotFound, false, contracterrors.CodeNotFound, messages.PermissionNotFound)
@@ -309,7 +301,7 @@ func TestPermissionControllerSetPermissionActive(t *testing.T) {
 
 	t.Run("disable command service error maps to internal error", func(t *testing.T) {
 		engine, commands, _ := newPermissionHTTPTestHarness(t)
-		commands.EXPECT().DisablePermission(gomock.Any(), gomock.Any()).Return(nil, errors.New("database down"))
+		commands.EXPECT().DisablePermission(gomock.Any(), gomock.Any()).Return(errors.New("database down"))
 
 		recorder := performPermissionHTTPRequest(t, engine, http.MethodPost, "/api/v1/permissions/"+permissionHTTPTestPermissionID+"/disable", nil)
 		expectPermissionEnvelope(t, recorder, http.StatusInternalServerError, false, contracterrors.CodeInternalError, contractresponse.MessageInternalError)

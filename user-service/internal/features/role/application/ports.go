@@ -14,8 +14,8 @@ type RoleStore interface {
 	GetByRoleID(ctx context.Context, roleID uuid.UUID) (*roledomain.Role, error)
 	GetByRoleIDs(ctx context.Context, roleIDs []uuid.UUID) ([]roledomain.Role, error)
 	List(ctx context.Context, input ListRolesInput) ([]roledomain.Role, bool, error)
-	Update(ctx context.Context, input UpdateRoleInput) (*roledomain.Role, error)
-	SetActive(ctx context.Context, roleID uuid.UUID, active bool) (*roledomain.Role, error)
+	Update(ctx context.Context, input UpdateRoleInput) error
+	SetActive(ctx context.Context, roleID uuid.UUID, active bool) error
 }
 
 // SeedRoleStore 定义 RBAC seed 消费的角色持久化端口。

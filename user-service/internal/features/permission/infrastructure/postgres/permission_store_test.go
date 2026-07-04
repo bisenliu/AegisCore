@@ -39,7 +39,9 @@ func TestPermissionStoreListAndSetActive(t *testing.T) {
 	require.True(t, created.Active)
 	require.True(t, created.IsSystem)
 
-	disabled, err := store.SetActive(ctx, permissionID, false)
+	err = store.SetActive(ctx, permissionID, false)
+	require.NoError(t, err)
+	disabled, err := store.GetByPermissionID(ctx, permissionID)
 	require.NoError(t, err)
 	require.False(t, disabled.Active)
 
@@ -63,7 +65,7 @@ func TestPermissionStoreUpsertSystemPermission(t *testing.T) {
 	require.Equal(t, permissionID, created.PermissionID)
 	require.True(t, created.Active)
 	require.True(t, created.IsSystem)
-	_, err = store.SetActive(ctx, permissionID, false)
+	err = store.SetActive(ctx, permissionID, false)
 	require.NoError(t, err)
 	input.Name = "List Users Updated"
 	updated, inserted, err := store.UpsertSystemPermission(ctx, input)
@@ -91,6 +93,33 @@ func TestPermissionStoreUpsertSystemPermissionMatchesRouteIdentity(t *testing.T)
 	require.Equal(t, existingID, created.PermissionID)
 	require.True(t, created.IsSystem)
 	require.Equal(t, "Create User", created.Name)
+}
+
+func TestPermissionStoreUpdateAndSetActiveErrors(t *testing.T) {
+	store := newTestPermissionStore(t)
+	ctx := context.Background()
+	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000041")
+	otherPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000042")
+	missingPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000049")
+
+	_, err := store.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: permissionID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true})
+	require.NoError(t, err)
+	_, err = store.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: otherPermissionID, Name: "Create Users", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true})
+	require.NoError(t, err)
+
+	err = store.Update(ctx, permissionapplication.UpdatePermissionInput{PermissionID: permissionID, Name: "List Users Updated", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: false})
+	require.NoError(t, err)
+	updated, err := store.GetByPermissionID(ctx, permissionID)
+	require.NoError(t, err)
+	require.Equal(t, "List Users Updated", updated.Name)
+	require.False(t, updated.Active)
+
+	err = store.Update(ctx, permissionapplication.UpdatePermissionInput{PermissionID: missingPermissionID, Name: "Missing", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/missing", Active: true})
+	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
+	err = store.Update(ctx, permissionapplication.UpdatePermissionInput{PermissionID: permissionID, Name: "Duplicate", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true})
+	require.ErrorIs(t, err, permissiondomain.ErrPermissionAlreadyExists)
+	err = store.SetActive(ctx, missingPermissionID, true)
+	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
 }
 
 func newTestPermissionStore(t *testing.T) *PermissionStore {

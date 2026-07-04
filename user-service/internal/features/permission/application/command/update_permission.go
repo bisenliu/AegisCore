@@ -25,29 +25,29 @@ type UpdatePermissionCommand struct {
 }
 
 // UpdatePermission 更新权限元数据并保护系统权限身份。
-func (s *permissionCommandService) UpdatePermission(ctx context.Context, cmd UpdatePermissionCommand) (*PermissionResult, error) {
+func (s *permissionCommandService) UpdatePermission(ctx context.Context, cmd UpdatePermissionCommand) error {
 	name, description, module, identity, err := validators.NormalizePermissionFields(cmd.Name, cmd.Description, cmd.Module, cmd.HTTPMethod, cmd.PathTemplate)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	current, err := s.store.GetByPermissionID(ctx, cmd.PermissionID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if err := current.ProtectSystemIdentity(identity); err != nil {
 		logger.Warn(ctx, "reject system permission identity update", zap.String("permission_id", cmd.PermissionID.String()))
-		return nil, err
+		return err
 	}
-	updated, err := s.store.Update(ctx, permissionapplication.UpdatePermissionInput{PermissionID: cmd.PermissionID, Name: name, Description: description, Module: module, HTTPMethod: identity.Method, PathTemplate: identity.PathTemplate, Active: cmd.Active})
+	err = s.store.Update(ctx, permissionapplication.UpdatePermissionInput{PermissionID: cmd.PermissionID, Name: name, Description: description, Module: module, HTTPMethod: identity.Method, PathTemplate: identity.PathTemplate, Active: cmd.Active})
 	if err != nil {
 		if errors.Is(err, permissiondomain.ErrPermissionAlreadyExists) {
-			return nil, permissiondomain.ErrPermissionAlreadyExists
+			return permissiondomain.ErrPermissionAlreadyExists
 		}
 		logger.Error(ctx, "update permission failed", logger.StackTrace(zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
-		return nil, err
+		return err
 	}
 	if err := s.notifyPolicyChanged(ctx, "permission_updated"); err != nil {
 		logger.Error(ctx, "refresh rbac policy after permission update failed", logger.StackTrace(zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
 	}
-	return &PermissionResult{Permission: *updated}, nil
+	return nil
 }

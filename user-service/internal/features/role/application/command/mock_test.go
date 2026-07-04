@@ -105,12 +105,11 @@ func (mr *MockRoleStoreMockRecorder) List(ctx, input any) *gomock.Call {
 }
 
 // SetActive mocks base method.
-func (m *MockRoleStore) SetActive(ctx context.Context, roleID uuid.UUID, active bool) (*domain.Role, error) {
+func (m *MockRoleStore) SetActive(ctx context.Context, roleID uuid.UUID, active bool) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetActive", ctx, roleID, active)
-	ret0, _ := ret[0].(*domain.Role)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // SetActive indicates an expected call of SetActive.
@@ -120,12 +119,11 @@ func (mr *MockRoleStoreMockRecorder) SetActive(ctx, roleID, active any) *gomock.
 }
 
 // Update mocks base method.
-func (m *MockRoleStore) Update(ctx context.Context, input application.UpdateRoleInput) (*domain.Role, error) {
+func (m *MockRoleStore) Update(ctx context.Context, input application.UpdateRoleInput) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Update", ctx, input)
-	ret0, _ := ret[0].(*domain.Role)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Update indicates an expected call of Update.

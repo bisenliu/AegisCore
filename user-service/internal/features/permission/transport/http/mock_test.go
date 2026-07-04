@@ -57,12 +57,11 @@ func (mr *MockPermissionCommandServiceMockRecorder) CreatePermission(ctx, cmd an
 }
 
 // DisablePermission mocks base method.
-func (m *MockPermissionCommandService) DisablePermission(ctx context.Context, cmd command.SetPermissionActiveCommand) (*command.PermissionResult, error) {
+func (m *MockPermissionCommandService) DisablePermission(ctx context.Context, cmd command.SetPermissionActiveCommand) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DisablePermission", ctx, cmd)
-	ret0, _ := ret[0].(*command.PermissionResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // DisablePermission indicates an expected call of DisablePermission.
@@ -72,12 +71,11 @@ func (mr *MockPermissionCommandServiceMockRecorder) DisablePermission(ctx, cmd a
 }
 
 // EnablePermission mocks base method.
-func (m *MockPermissionCommandService) EnablePermission(ctx context.Context, cmd command.SetPermissionActiveCommand) (*command.PermissionResult, error) {
+func (m *MockPermissionCommandService) EnablePermission(ctx context.Context, cmd command.SetPermissionActiveCommand) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EnablePermission", ctx, cmd)
-	ret0, _ := ret[0].(*command.PermissionResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // EnablePermission indicates an expected call of EnablePermission.
@@ -87,12 +85,11 @@ func (mr *MockPermissionCommandServiceMockRecorder) EnablePermission(ctx, cmd an
 }
 
 // UpdatePermission mocks base method.
-func (m *MockPermissionCommandService) UpdatePermission(ctx context.Context, cmd command.UpdatePermissionCommand) (*command.PermissionResult, error) {
+func (m *MockPermissionCommandService) UpdatePermission(ctx context.Context, cmd command.UpdatePermissionCommand) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdatePermission", ctx, cmd)
-	ret0, _ := ret[0].(*command.PermissionResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // UpdatePermission indicates an expected call of UpdatePermission.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 
@@ -94,9 +95,13 @@ func (s *RolePermissionStore) Replace(ctx context.Context, roleID uuid.UUID, per
 	if _, err := tx.RolePermission.Delete().Where(entrolepermission.RoleIDEQ(role.ID)).Exec(ctx); err != nil {
 		return nil, rollback(tx, fmt.Errorf("delete role permissions for role %s: %w", roleID.String(), err))
 	}
+	builders := make([]*ent.RolePermissionCreate, 0, len(activePermissions))
 	for _, permission := range activePermissions {
-		if _, err := tx.RolePermission.Create().SetRoleID(role.ID).SetPermissionID(permission.ID).Save(ctx); err != nil {
-			return nil, rollback(tx, fmt.Errorf("create replacement role permission role %s permission %s: %w", roleID.String(), permission.PermissionID.String(), err))
+		builders = append(builders, tx.RolePermission.Create().SetRoleID(role.ID).SetPermissionID(permission.ID))
+	}
+	if len(builders) > 0 {
+		if _, err := tx.RolePermission.CreateBulk(builders...).Save(ctx); err != nil {
+			return nil, rollback(tx, fmt.Errorf("create replacement role permissions for role %s: %w", roleID.String(), err))
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -139,20 +144,23 @@ func (s *RolePermissionStore) EnsureSystemBindings(ctx context.Context, roleID u
 	if err != nil {
 		return 0, err
 	}
-	added := 0
+	builders := make([]*ent.RolePermissionCreate, 0, len(permissions))
 	for _, permission := range permissions {
 		if _, ok := existing[permission.ID]; ok {
 			continue
 		}
-		if _, err := s.client.RolePermission.Create().SetRoleID(role.ID).SetPermissionID(permission.ID).Save(ctx); err != nil {
-			if ent.IsConstraintError(err) {
-				continue
-			}
-			return added, fmt.Errorf("create seed role permission role %s permission %s: %w", roleID.String(), permission.PermissionID.String(), err)
-		}
-		added++
+		builders = append(builders, s.client.RolePermission.Create().SetRoleID(role.ID).SetPermissionID(permission.ID))
 	}
-	return added, nil
+	if len(builders) == 0 {
+		return 0, nil
+	}
+	if err := s.client.RolePermission.CreateBulk(builders...).
+		OnConflict(sql.ConflictColumns(entrolepermission.FieldRoleID, entrolepermission.FieldPermissionID)).
+		DoNothing().
+		Exec(ctx); err != nil {
+		return 0, fmt.Errorf("create seed role permissions for role %s: %w", roleID.String(), err)
+	}
+	return len(builders), nil
 }
 
 // SyncSystemBindings 精确同步系统角色权限绑定。
@@ -189,15 +197,21 @@ func (s *RolePermissionStore) SyncSystemBindings(ctx context.Context, roleID uui
 		}
 		removed += deleted
 	}
-	added := 0
+	builders := make([]*ent.RolePermissionCreate, 0, len(desired))
 	for permissionID, permission := range desired {
 		if _, ok := existing[permissionID]; ok {
 			continue
 		}
-		if _, err := tx.RolePermission.Create().SetRoleID(role.ID).SetPermissionID(permissionID).Save(ctx); err != nil {
-			return 0, 0, rollback(tx, fmt.Errorf("create seed role permission role %s permission %s: %w", roleID.String(), permission.PermissionID.String(), err))
+		builders = append(builders, tx.RolePermission.Create().SetRoleID(role.ID).SetPermissionID(permission.ID))
+	}
+	added := len(builders)
+	if len(builders) > 0 {
+		if err := tx.RolePermission.CreateBulk(builders...).
+			OnConflict(sql.ConflictColumns(entrolepermission.FieldRoleID, entrolepermission.FieldPermissionID)).
+			DoNothing().
+			Exec(ctx); err != nil {
+			return 0, 0, rollback(tx, fmt.Errorf("create seed role permissions for role %s: %w", roleID.String(), err))
 		}
-		added++
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, 0, fmt.Errorf("commit sync seed role permissions: %w", err)

@@ -99,7 +99,7 @@ func (s *RoleStore) List(ctx context.Context, input roleapplication.ListRolesInp
 }
 
 // Update 更新角色记录，并将唯一约束冲突映射为 ErrRoleAlreadyExists。
-func (s *RoleStore) Update(ctx context.Context, input roleapplication.UpdateRoleInput) (*roledomain.Role, error) {
+func (s *RoleStore) Update(ctx context.Context, input roleapplication.UpdateRoleInput) error {
 	updated, err := s.client.Role.Update().
 		Where(entrole.RoleIDEQ(input.RoleID)).
 		SetName(input.Name).
@@ -107,27 +107,27 @@ func (s *RoleStore) Update(ctx context.Context, input roleapplication.UpdateRole
 		SetActive(input.Active).
 		Save(ctx)
 	if err == nil && updated == 0 {
-		return nil, roledomain.ErrRoleNotFound
+		return roledomain.ErrRoleNotFound
 	}
 	if err != nil {
 		if ent.IsConstraintError(err) {
-			return nil, roledomain.ErrRoleAlreadyExists
+			return roledomain.ErrRoleAlreadyExists
 		}
-		return nil, fmt.Errorf("update role %s: %w", input.RoleID.String(), err)
+		return fmt.Errorf("update role %s: %w", input.RoleID.String(), err)
 	}
-	return s.GetByRoleID(ctx, input.RoleID)
+	return nil
 }
 
 // SetActive 启用或停用角色记录。
-func (s *RoleStore) SetActive(ctx context.Context, roleID uuid.UUID, active bool) (*roledomain.Role, error) {
+func (s *RoleStore) SetActive(ctx context.Context, roleID uuid.UUID, active bool) error {
 	updated, err := s.client.Role.Update().Where(entrole.RoleIDEQ(roleID)).SetActive(active).Save(ctx)
 	if err == nil && updated == 0 {
-		return nil, roledomain.ErrRoleNotFound
+		return roledomain.ErrRoleNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("set role active %s: %w", roleID.String(), err)
+		return fmt.Errorf("set role active %s: %w", roleID.String(), err)
 	}
-	return s.GetByRoleID(ctx, roleID)
+	return nil
 }
 
 // UpsertSystemRole 按 role_id 幂等写入系统角色 seed 数据。

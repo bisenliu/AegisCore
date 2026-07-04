@@ -17,8 +17,8 @@ import (
 // RoleCommandService 定义角色管理写侧用例。
 type RoleCommandService interface {
 	CreateRole(ctx context.Context, cmd CreateRoleCommand) (*RoleResult, error)
-	UpdateRole(ctx context.Context, cmd UpdateRoleCommand) (*RoleResult, error)
-	SetRoleActive(ctx context.Context, cmd SetRoleActiveCommand) (*RoleResult, error)
+	UpdateRole(ctx context.Context, cmd UpdateRoleCommand) error
+	SetRoleActive(ctx context.Context, cmd SetRoleActiveCommand) error
 	AddUserRole(ctx context.Context, cmd UserRoleCommand) (*RolesResult, error)
 	ReplaceUserRoles(ctx context.Context, cmd ReplaceUserRolesCommand) (*RolesResult, error)
 	RemoveUserRole(ctx context.Context, cmd UserRoleCommand) (*RolesResult, error)
@@ -88,45 +88,45 @@ func (s *roleCommandService) CreateRole(ctx context.Context, cmd CreateRoleComma
 }
 
 // UpdateRole 更新角色记录。
-func (s *roleCommandService) UpdateRole(ctx context.Context, cmd UpdateRoleCommand) (*RoleResult, error) {
+func (s *roleCommandService) UpdateRole(ctx context.Context, cmd UpdateRoleCommand) error {
 	name, description, err := validators.NormalizeRoleFields(cmd.Name, cmd.Description)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	current, err := s.roles.GetByRoleID(ctx, cmd.RoleID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if err := current.ProtectSystemMutation(roledomain.RoleMutation{Name: name, Active: cmd.Active}); err != nil {
-		return nil, err
+		return err
 	}
-	updated, err := s.roles.Update(ctx, roleapplication.UpdateRoleInput{RoleID: cmd.RoleID, Name: name, Description: description, Active: cmd.Active})
+	err = s.roles.Update(ctx, roleapplication.UpdateRoleInput{RoleID: cmd.RoleID, Name: name, Description: description, Active: cmd.Active})
 	if err != nil {
 		logger.Error(ctx, "update role failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
-		return nil, err
+		return err
 	}
 	if err := s.notifyPolicyChanged(ctx, "role_updated"); err != nil {
 		logger.Error(ctx, "refresh rbac policy after role update failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
 	}
-	return &RoleResult{Role: *updated}, nil
+	return nil
 }
 
 // SetRoleActive 启用或停用角色。
-func (s *roleCommandService) SetRoleActive(ctx context.Context, cmd SetRoleActiveCommand) (*RoleResult, error) {
+func (s *roleCommandService) SetRoleActive(ctx context.Context, cmd SetRoleActiveCommand) error {
 	current, err := s.roles.GetByRoleID(ctx, cmd.RoleID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if err := current.ProtectSystemMutation(roledomain.RoleMutation{Name: current.Name, Active: cmd.Active}); err != nil {
-		return nil, err
+		return err
 	}
-	updated, err := s.roles.SetActive(ctx, cmd.RoleID, cmd.Active)
+	err = s.roles.SetActive(ctx, cmd.RoleID, cmd.Active)
 	if err != nil {
 		logger.Error(ctx, "set role active failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Bool("active", cmd.Active), zap.Error(err))...)
-		return nil, err
+		return err
 	}
 	if err := s.notifyPolicyChanged(ctx, "role_active_changed"); err != nil {
 		logger.Error(ctx, "refresh rbac policy after role active state change failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Bool("active", cmd.Active), zap.Error(err))...)
 	}
-	return &RoleResult{Role: *updated}, nil
+	return nil
 }

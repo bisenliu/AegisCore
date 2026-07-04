@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/aegiscore/user-service/ent/permission"
@@ -19,6 +20,7 @@ type PermissionCreate struct {
 	config
 	mutation *PermissionMutation
 	hooks    []Hook
+	conflict []sql.ConflictOption
 }
 
 // SetPermissionID sets the "permission_id" field.
@@ -284,6 +286,7 @@ func (_c *PermissionCreate) createSpec() (*Permission, *sqlgraph.CreateSpec) {
 		_node = &Permission{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(permission.Table, sqlgraph.NewFieldSpec(permission.FieldID, field.TypeInt64))
 	)
+	_spec.OnConflict = _c.conflict
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
@@ -347,11 +350,369 @@ func (_c *PermissionCreate) createSpec() (*Permission, *sqlgraph.CreateSpec) {
 	return _node, _spec
 }
 
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.Permission.Create().
+//		SetPermissionID(v).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.PermissionUpsert) {
+//			SetPermissionID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *PermissionCreate) OnConflict(opts ...sql.ConflictOption) *PermissionUpsertOne {
+	_c.conflict = opts
+	return &PermissionUpsertOne{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.Permission.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *PermissionCreate) OnConflictColumns(columns ...string) *PermissionUpsertOne {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &PermissionUpsertOne{
+		create: _c,
+	}
+}
+
+type (
+	// PermissionUpsertOne is the builder for "upsert"-ing
+	//  one Permission node.
+	PermissionUpsertOne struct {
+		create *PermissionCreate
+	}
+
+	// PermissionUpsert is the "OnConflict" setter.
+	PermissionUpsert struct {
+		*sql.UpdateSet
+	}
+)
+
+// SetName sets the "name" field.
+func (u *PermissionUpsert) SetName(v string) *PermissionUpsert {
+	u.Set(permission.FieldName, v)
+	return u
+}
+
+// UpdateName sets the "name" field to the value that was provided on create.
+func (u *PermissionUpsert) UpdateName() *PermissionUpsert {
+	u.SetExcluded(permission.FieldName)
+	return u
+}
+
+// SetDescription sets the "description" field.
+func (u *PermissionUpsert) SetDescription(v string) *PermissionUpsert {
+	u.Set(permission.FieldDescription, v)
+	return u
+}
+
+// UpdateDescription sets the "description" field to the value that was provided on create.
+func (u *PermissionUpsert) UpdateDescription() *PermissionUpsert {
+	u.SetExcluded(permission.FieldDescription)
+	return u
+}
+
+// SetModule sets the "module" field.
+func (u *PermissionUpsert) SetModule(v string) *PermissionUpsert {
+	u.Set(permission.FieldModule, v)
+	return u
+}
+
+// UpdateModule sets the "module" field to the value that was provided on create.
+func (u *PermissionUpsert) UpdateModule() *PermissionUpsert {
+	u.SetExcluded(permission.FieldModule)
+	return u
+}
+
+// SetHTTPMethod sets the "http_method" field.
+func (u *PermissionUpsert) SetHTTPMethod(v string) *PermissionUpsert {
+	u.Set(permission.FieldHTTPMethod, v)
+	return u
+}
+
+// UpdateHTTPMethod sets the "http_method" field to the value that was provided on create.
+func (u *PermissionUpsert) UpdateHTTPMethod() *PermissionUpsert {
+	u.SetExcluded(permission.FieldHTTPMethod)
+	return u
+}
+
+// SetPathTemplate sets the "path_template" field.
+func (u *PermissionUpsert) SetPathTemplate(v string) *PermissionUpsert {
+	u.Set(permission.FieldPathTemplate, v)
+	return u
+}
+
+// UpdatePathTemplate sets the "path_template" field to the value that was provided on create.
+func (u *PermissionUpsert) UpdatePathTemplate() *PermissionUpsert {
+	u.SetExcluded(permission.FieldPathTemplate)
+	return u
+}
+
+// SetActive sets the "active" field.
+func (u *PermissionUpsert) SetActive(v bool) *PermissionUpsert {
+	u.Set(permission.FieldActive, v)
+	return u
+}
+
+// UpdateActive sets the "active" field to the value that was provided on create.
+func (u *PermissionUpsert) UpdateActive() *PermissionUpsert {
+	u.SetExcluded(permission.FieldActive)
+	return u
+}
+
+// SetIsSystem sets the "is_system" field.
+func (u *PermissionUpsert) SetIsSystem(v bool) *PermissionUpsert {
+	u.Set(permission.FieldIsSystem, v)
+	return u
+}
+
+// UpdateIsSystem sets the "is_system" field to the value that was provided on create.
+func (u *PermissionUpsert) UpdateIsSystem() *PermissionUpsert {
+	u.SetExcluded(permission.FieldIsSystem)
+	return u
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *PermissionUpsert) SetUpdatedAt(v int64) *PermissionUpsert {
+	u.Set(permission.FieldUpdatedAt, v)
+	return u
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *PermissionUpsert) UpdateUpdatedAt() *PermissionUpsert {
+	u.SetExcluded(permission.FieldUpdatedAt)
+	return u
+}
+
+// AddUpdatedAt adds v to the "updated_at" field.
+func (u *PermissionUpsert) AddUpdatedAt(v int64) *PermissionUpsert {
+	u.Add(permission.FieldUpdatedAt, v)
+	return u
+}
+
+// UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
+// Using this option is equivalent to using:
+//
+//	client.Permission.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(permission.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *PermissionUpsertOne) UpdateNewValues() *PermissionUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		if _, exists := u.create.mutation.ID(); exists {
+			s.SetIgnore(permission.FieldID)
+		}
+		if _, exists := u.create.mutation.PermissionID(); exists {
+			s.SetIgnore(permission.FieldPermissionID)
+		}
+		if _, exists := u.create.mutation.CreatedAt(); exists {
+			s.SetIgnore(permission.FieldCreatedAt)
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.Permission.Create().
+//	    OnConflict(sql.ResolveWithIgnore()).
+//	    Exec(ctx)
+func (u *PermissionUpsertOne) Ignore() *PermissionUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *PermissionUpsertOne) DoNothing() *PermissionUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the PermissionCreate.OnConflict
+// documentation for more info.
+func (u *PermissionUpsertOne) Update(set func(*PermissionUpsert)) *PermissionUpsertOne {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&PermissionUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetName sets the "name" field.
+func (u *PermissionUpsertOne) SetName(v string) *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetName(v)
+	})
+}
+
+// UpdateName sets the "name" field to the value that was provided on create.
+func (u *PermissionUpsertOne) UpdateName() *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateName()
+	})
+}
+
+// SetDescription sets the "description" field.
+func (u *PermissionUpsertOne) SetDescription(v string) *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetDescription(v)
+	})
+}
+
+// UpdateDescription sets the "description" field to the value that was provided on create.
+func (u *PermissionUpsertOne) UpdateDescription() *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateDescription()
+	})
+}
+
+// SetModule sets the "module" field.
+func (u *PermissionUpsertOne) SetModule(v string) *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetModule(v)
+	})
+}
+
+// UpdateModule sets the "module" field to the value that was provided on create.
+func (u *PermissionUpsertOne) UpdateModule() *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateModule()
+	})
+}
+
+// SetHTTPMethod sets the "http_method" field.
+func (u *PermissionUpsertOne) SetHTTPMethod(v string) *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetHTTPMethod(v)
+	})
+}
+
+// UpdateHTTPMethod sets the "http_method" field to the value that was provided on create.
+func (u *PermissionUpsertOne) UpdateHTTPMethod() *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateHTTPMethod()
+	})
+}
+
+// SetPathTemplate sets the "path_template" field.
+func (u *PermissionUpsertOne) SetPathTemplate(v string) *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetPathTemplate(v)
+	})
+}
+
+// UpdatePathTemplate sets the "path_template" field to the value that was provided on create.
+func (u *PermissionUpsertOne) UpdatePathTemplate() *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdatePathTemplate()
+	})
+}
+
+// SetActive sets the "active" field.
+func (u *PermissionUpsertOne) SetActive(v bool) *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetActive(v)
+	})
+}
+
+// UpdateActive sets the "active" field to the value that was provided on create.
+func (u *PermissionUpsertOne) UpdateActive() *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateActive()
+	})
+}
+
+// SetIsSystem sets the "is_system" field.
+func (u *PermissionUpsertOne) SetIsSystem(v bool) *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetIsSystem(v)
+	})
+}
+
+// UpdateIsSystem sets the "is_system" field to the value that was provided on create.
+func (u *PermissionUpsertOne) UpdateIsSystem() *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateIsSystem()
+	})
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *PermissionUpsertOne) SetUpdatedAt(v int64) *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// AddUpdatedAt adds v to the "updated_at" field.
+func (u *PermissionUpsertOne) AddUpdatedAt(v int64) *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.AddUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *PermissionUpsertOne) UpdateUpdatedAt() *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateUpdatedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *PermissionUpsertOne) Exec(ctx context.Context) error {
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for PermissionCreate.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *PermissionUpsertOne) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// Exec executes the UPSERT query and returns the inserted/updated ID.
+func (u *PermissionUpsertOne) ID(ctx context.Context) (id int64, err error) {
+	node, err := u.create.Save(ctx)
+	if err != nil {
+		return id, err
+	}
+	return node.ID, nil
+}
+
+// IDX is like ID, but panics if an error occurs.
+func (u *PermissionUpsertOne) IDX(ctx context.Context) int64 {
+	id, err := u.ID(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // PermissionCreateBulk is the builder for creating many Permission entities in bulk.
 type PermissionCreateBulk struct {
 	config
 	err      error
 	builders []*PermissionCreate
+	conflict []sql.ConflictOption
 }
 
 // Save creates the Permission entities in the database.
@@ -381,6 +742,7 @@ func (_c *PermissionCreateBulk) Save(ctx context.Context) ([]*Permission, error)
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
+					spec.OnConflict = _c.conflict
 					// Invoke the actual operation on the latest mutation in the chain.
 					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
@@ -431,6 +793,245 @@ func (_c *PermissionCreateBulk) Exec(ctx context.Context) error {
 // ExecX is like Exec, but panics if an error occurs.
 func (_c *PermissionCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
+// OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
+// of the `INSERT` statement. For example:
+//
+//	client.Permission.CreateBulk(builders...).
+//		OnConflict(
+//			// Update the row with the new values
+//			// the was proposed for insertion.
+//			sql.ResolveWithNewValues(),
+//		).
+//		// Override some of the fields with custom
+//		// update values.
+//		Update(func(u *ent.PermissionUpsert) {
+//			SetPermissionID(v+v).
+//		}).
+//		Exec(ctx)
+func (_c *PermissionCreateBulk) OnConflict(opts ...sql.ConflictOption) *PermissionUpsertBulk {
+	_c.conflict = opts
+	return &PermissionUpsertBulk{
+		create: _c,
+	}
+}
+
+// OnConflictColumns calls `OnConflict` and configures the columns
+// as conflict target. Using this option is equivalent to using:
+//
+//	client.Permission.Create().
+//		OnConflict(sql.ConflictColumns(columns...)).
+//		Exec(ctx)
+func (_c *PermissionCreateBulk) OnConflictColumns(columns ...string) *PermissionUpsertBulk {
+	_c.conflict = append(_c.conflict, sql.ConflictColumns(columns...))
+	return &PermissionUpsertBulk{
+		create: _c,
+	}
+}
+
+// PermissionUpsertBulk is the builder for "upsert"-ing
+// a bulk of Permission nodes.
+type PermissionUpsertBulk struct {
+	create *PermissionCreateBulk
+}
+
+// UpdateNewValues updates the mutable fields using the new values that
+// were set on create. Using this option is equivalent to using:
+//
+//	client.Permission.Create().
+//		OnConflict(
+//			sql.ResolveWithNewValues(),
+//			sql.ResolveWith(func(u *sql.UpdateSet) {
+//				u.SetIgnore(permission.FieldID)
+//			}),
+//		).
+//		Exec(ctx)
+func (u *PermissionUpsertBulk) UpdateNewValues() *PermissionUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithNewValues())
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
+		for _, b := range u.create.builders {
+			if _, exists := b.mutation.ID(); exists {
+				s.SetIgnore(permission.FieldID)
+			}
+			if _, exists := b.mutation.PermissionID(); exists {
+				s.SetIgnore(permission.FieldPermissionID)
+			}
+			if _, exists := b.mutation.CreatedAt(); exists {
+				s.SetIgnore(permission.FieldCreatedAt)
+			}
+		}
+	}))
+	return u
+}
+
+// Ignore sets each column to itself in case of conflict.
+// Using this option is equivalent to using:
+//
+//	client.Permission.Create().
+//		OnConflict(sql.ResolveWithIgnore()).
+//		Exec(ctx)
+func (u *PermissionUpsertBulk) Ignore() *PermissionUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWithIgnore())
+	return u
+}
+
+// DoNothing configures the conflict_action to `DO NOTHING`.
+// Supported only by SQLite and PostgreSQL.
+func (u *PermissionUpsertBulk) DoNothing() *PermissionUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.DoNothing())
+	return u
+}
+
+// Update allows overriding fields `UPDATE` values. See the PermissionCreateBulk.OnConflict
+// documentation for more info.
+func (u *PermissionUpsertBulk) Update(set func(*PermissionUpsert)) *PermissionUpsertBulk {
+	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(update *sql.UpdateSet) {
+		set(&PermissionUpsert{UpdateSet: update})
+	}))
+	return u
+}
+
+// SetName sets the "name" field.
+func (u *PermissionUpsertBulk) SetName(v string) *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetName(v)
+	})
+}
+
+// UpdateName sets the "name" field to the value that was provided on create.
+func (u *PermissionUpsertBulk) UpdateName() *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateName()
+	})
+}
+
+// SetDescription sets the "description" field.
+func (u *PermissionUpsertBulk) SetDescription(v string) *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetDescription(v)
+	})
+}
+
+// UpdateDescription sets the "description" field to the value that was provided on create.
+func (u *PermissionUpsertBulk) UpdateDescription() *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateDescription()
+	})
+}
+
+// SetModule sets the "module" field.
+func (u *PermissionUpsertBulk) SetModule(v string) *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetModule(v)
+	})
+}
+
+// UpdateModule sets the "module" field to the value that was provided on create.
+func (u *PermissionUpsertBulk) UpdateModule() *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateModule()
+	})
+}
+
+// SetHTTPMethod sets the "http_method" field.
+func (u *PermissionUpsertBulk) SetHTTPMethod(v string) *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetHTTPMethod(v)
+	})
+}
+
+// UpdateHTTPMethod sets the "http_method" field to the value that was provided on create.
+func (u *PermissionUpsertBulk) UpdateHTTPMethod() *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateHTTPMethod()
+	})
+}
+
+// SetPathTemplate sets the "path_template" field.
+func (u *PermissionUpsertBulk) SetPathTemplate(v string) *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetPathTemplate(v)
+	})
+}
+
+// UpdatePathTemplate sets the "path_template" field to the value that was provided on create.
+func (u *PermissionUpsertBulk) UpdatePathTemplate() *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdatePathTemplate()
+	})
+}
+
+// SetActive sets the "active" field.
+func (u *PermissionUpsertBulk) SetActive(v bool) *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetActive(v)
+	})
+}
+
+// UpdateActive sets the "active" field to the value that was provided on create.
+func (u *PermissionUpsertBulk) UpdateActive() *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateActive()
+	})
+}
+
+// SetIsSystem sets the "is_system" field.
+func (u *PermissionUpsertBulk) SetIsSystem(v bool) *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetIsSystem(v)
+	})
+}
+
+// UpdateIsSystem sets the "is_system" field to the value that was provided on create.
+func (u *PermissionUpsertBulk) UpdateIsSystem() *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateIsSystem()
+	})
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *PermissionUpsertBulk) SetUpdatedAt(v int64) *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// AddUpdatedAt adds v to the "updated_at" field.
+func (u *PermissionUpsertBulk) AddUpdatedAt(v int64) *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.AddUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *PermissionUpsertBulk) UpdateUpdatedAt() *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateUpdatedAt()
+	})
+}
+
+// Exec executes the query.
+func (u *PermissionUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
+	for i, b := range u.create.builders {
+		if len(b.conflict) != 0 {
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the PermissionCreateBulk instead", i)
+		}
+	}
+	if len(u.create.conflict) == 0 {
+		return errors.New("ent: missing options for PermissionCreateBulk.OnConflict")
+	}
+	return u.create.Exec(ctx)
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (u *PermissionUpsertBulk) ExecX(ctx context.Context) {
+	if err := u.create.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

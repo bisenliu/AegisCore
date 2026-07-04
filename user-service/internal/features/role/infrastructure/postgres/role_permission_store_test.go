@@ -237,7 +237,7 @@ func TestRolePermissionStorePostgresAddRechecksPermissionActiveState(t *testing.
 	require.NoError(t, err)
 	createdPermission, err := permissionStore.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: permissionID, Name: "Create User", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true})
 	require.NoError(t, err)
-	_, err = permissionStore.SetActive(ctx, permissionID, false)
+	err = permissionStore.SetActive(ctx, permissionID, false)
 	require.NoError(t, err)
 
 	err = bindingStore.Add(ctx, roleID, roleapplication.PermissionReference{ID: createdPermission.ID, PermissionID: createdPermission.PermissionID})
@@ -265,7 +265,7 @@ func TestRolePermissionStorePostgresReplaceRechecksPermissionActiveState(t *test
 	require.NoError(t, err)
 	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{{PermissionID: activePermissionID}})
 	require.NoError(t, err)
-	_, err = permissionStore.SetActive(ctx, inactivePermissionID, false)
+	err = permissionStore.SetActive(ctx, inactivePermissionID, false)
 	require.NoError(t, err)
 
 	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{
