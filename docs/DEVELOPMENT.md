@@ -9,6 +9,37 @@
 - OpenSpec CLI，用于 `/opsx:*` 变更工作流。
 - Atlas 相关本地脚本通过 `user-service/scripts/` 生成和校验 SQL；数据库变更执行由 DBA 工单或受控发布平台完成。
 
+### 1.1 Go 工具链版本治理
+
+Go 工具链使用固定版本声明和 Renovate 升级 PR/MR 治理。CI 合并门禁不得使用 `stable`、`latest` 或 `GOTOOLCHAIN=auto`，避免 lint、`go tool`、analyzer、生成物和测试行为随运行时间漂移。
+
+当前固定声明位置：
+
+- `go.work` 的 `toolchain go1.x.y`。
+- 各 Go module 的 `go.mod` 中 `toolchain go1.x.y`。
+- GitHub Actions workflow 的 `GO_VERSION` 和 `GOTOOLCHAIN`。
+- 未来 GitLab CI 的 `.gitlab-ci.yml` 或 `.gitlab/ci/*.yml` 中 `GO_VERSION` 和 `GOTOOLCHAIN`。
+
+`go 1.x` 表示模块语言和语义基线；`toolchain go1.x.y`、`GO_VERSION` 和 `GOTOOLCHAIN` 表示实际使用的 Go patch 工具链。所有位置必须保持一致。
+
+Go patch、minor 和 major 升级由 Renovate 根据仓库根目录 `renovate.json` 自动创建 PR/MR：
+
+- patch 升级在必需检查通过后允许 Renovate 自动合并。
+- minor 和 major 升级必须人工 review，确认 `make verify`、生成物 diff、lint/analyzer 行为和构建结果。
+- GitHub Actions、GitLab CI include/component、Dockerfile 和 Go module 依赖同样由 Renovate 创建升级 PR/MR。
+
+本地验证 Renovate 配置：
+
+```bash
+git add -N renovate.json
+npx --yes --package renovate renovate --platform=local --onboarding=false --require-config=required --dry-run=lookup
+git reset -- renovate.json
+```
+
+`RE2 not usable, falling back to RegExp` 是本地 `npx` 临时安装缺少可选正则加速依赖的警告，可忽略。查询 GitHub release 可能需要 `GITHUB_COM_TOKEN` 以避免 API 限流。
+
+GitHub 使用 Renovate GitHub App 读取 `renovate.json`。迁移 GitLab 后继续保留同一份 `renovate.json`，通过 scheduled pipeline 运行 `renovate/renovate:latest`，并配置 `RENOVATE_TOKEN` 创建 MR。
+
 ## 2. 查看命令
 
 ```bash

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits"
+  ],
+  "timezone": "Asia/Shanghai",
+  "dependencyDashboard": true,
+  "rangeStrategy": "bump",
+  "enabledManagers": [
+    "github-actions",
+    "gitlabci",
+    "gomod",
+    "dockerfile",
+    "custom.regex"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": [
+        "(^|/)go\\.work$",
+        "(^|/)go\\.mod$",
+        "^\\.github/workflows/.*\\.ya?ml$",
+        "^\\.gitlab-ci\\.ya?ml$",
+        "^\\.gitlab/ci/.*\\.ya?ml$"
+      ],
+      "matchStrings": [
+        "toolchain\\s+go(?<currentValue>\\d+\\.\\d+\\.\\d+)",
+        "GO_VERSION:\\s*['\"](?<currentValue>\\d+\\.\\d+\\.\\d+)['\"]",
+        "GOTOOLCHAIN:\\s*go(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "golang/go",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^go(?<version>\\d+\\.\\d+\\.\\d+)$"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Keep the Go toolchain baseline current across workspace, modules, and CI.",
+      "matchDepNames": [
+        "golang/go"
+      ],
+      "groupName": "go toolchain",
+      "rangeStrategy": "bump"
+    },
+    {
+      "description": "Automerge Go toolchain patch upgrades after required checks pass.",
+      "matchDepNames": [
+        "golang/go"
+      ],
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Require human review for Go toolchain minor and major upgrades.",
+      "matchDepNames": [
+        "golang/go"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "major"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Keep GitHub Actions current, including major upgrades.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "rangeStrategy": "bump",
+      "automerge": false
+    },
+    {
+      "description": "Keep GitLab CI includes and components current, including major upgrades.",
+      "matchManagers": [
+        "gitlabci"
+      ],
+      "rangeStrategy": "bump",
+      "automerge": false
+    }
+  ]
+}
