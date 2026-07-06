@@ -1,17 +1,30 @@
 ## Purpose
 
 定义 user-service 的 RBAC 访问控制能力，覆盖权限目录、角色、角色权限、用户角色、Casbin 授权、系统 seed 和超级管理员引导。
-
 ## Requirements
-
 ### Requirement: 权限目录管理
 
-系统 MUST 提供权限目录创建、更新、启停、查询、列表和路由差异分析能力，用于描述可授权的 HTTP 资源和动作。
+系统 MUST 提供权限目录创建、更新、启停、查询、列表和路由差异分析能力，用于描述可授权的 HTTP 资源和动作。权限创建 MUST 返回新建权限实体；权限更新、启用和停用成功后 MUST 返回无实体成功响应，调用方如需最新实体 MUST 使用查询接口读取。
 
 #### Scenario: 创建权限
 
 - **WHEN** 授权调用方提供合法权限标识、方法、路径和描述
 - **THEN** 系统 MUST 创建权限记录，并使其可参与后续角色绑定和授权判断
+- **AND** 系统 MUST 返回新建权限实体
+
+#### Scenario: 更新权限不返回实体
+
+- **WHEN** 授权调用方更新存在的权限目录记录且输入合法
+- **THEN** 系统 MUST 持久化权限元数据变更
+- **AND** 成功响应 MUST NOT 包含权限实体响应体
+- **AND** 持久化层 MUST NOT 为构造成功响应而在更新后重新查询该权限实体
+
+#### Scenario: 启停权限不返回实体
+
+- **WHEN** 授权调用方启用或停用存在的权限目录记录
+- **THEN** 系统 MUST 持久化权限启用状态变更
+- **AND** 成功响应 MUST NOT 包含权限实体响应体
+- **AND** 持久化层 MUST NOT 为构造成功响应而在更新后重新查询该权限实体
 
 #### Scenario: 权限输入非法
 
@@ -30,12 +43,26 @@
 
 ### Requirement: 角色与权限绑定
 
-系统 MUST 提供角色创建、更新、查询、列表和角色权限绑定能力，并保证绑定引用的权限存在且状态可用。
+系统 MUST 提供角色创建、更新、查询、列表和角色权限绑定能力，并保证绑定引用的权限存在且状态可用。角色创建 MUST 返回新建角色实体；角色更新、启用和停用成功后 MUST 返回无实体成功响应。角色权限绑定的替换、系统绑定补齐和系统绑定同步 MUST 使用批量写入方式新增多条绑定，并保持事务性和错误语义。
 
 #### Scenario: 创建角色并绑定权限
 
 - **WHEN** 授权调用方创建角色并指定合法权限集合
 - **THEN** 系统 MUST 持久化角色、写入角色权限绑定，并使授权策略可同步使用
+
+#### Scenario: 更新角色不返回实体
+
+- **WHEN** 授权调用方更新存在的角色记录且输入合法
+- **THEN** 系统 MUST 持久化角色元数据变更
+- **AND** 成功响应 MUST NOT 包含角色实体响应体
+- **AND** 持久化层 MUST NOT 为构造成功响应而在更新后重新查询该角色实体
+
+#### Scenario: 启停角色不返回实体
+
+- **WHEN** 授权调用方启用或停用存在的角色记录
+- **THEN** 系统 MUST 持久化角色启用状态变更
+- **AND** 成功响应 MUST NOT 包含角色实体响应体
+- **AND** 持久化层 MUST NOT 为构造成功响应而在更新后重新查询该角色实体
 
 #### Scenario: 绑定不存在权限
 
@@ -56,6 +83,19 @@
 
 - **WHEN** 授权调用方分页查询角色
 - **THEN** 系统 MUST 返回角色列表、权限摘要和共享 pagination 信息
+
+#### Scenario: 批量替换角色权限绑定
+
+- **WHEN** 授权调用方使用合法权限集合替换角色的完整权限绑定
+- **THEN** 系统 MUST 在同一事务中删除旧绑定并批量写入新绑定
+- **AND** 任一新增绑定发生非幂等错误时，系统 MUST 回滚本次删除和新增
+
+#### Scenario: 批量维护系统角色权限绑定
+
+- **WHEN** RBAC seed 补齐或同步系统角色权限绑定
+- **THEN** 系统 MUST 批量新增缺失绑定
+- **AND** 已存在绑定的唯一冲突 MUST 保持幂等成功语义
+- **AND** 非唯一冲突错误 MUST 使本次操作失败并保持既有事务回滚语义
 
 ### Requirement: RBAC 查询索引支撑
 
@@ -88,7 +128,7 @@
 
 ### Requirement: 用户角色绑定
 
-系统 MUST 支持将角色绑定到用户，并为授权判断提供用户有效权限查询能力。
+系统 MUST 支持将角色绑定到用户，并为授权判断提供用户有效权限查询能力。用户角色替换 MUST 使用批量写入方式新增多条绑定，并保持事务性和错误语义。
 
 #### Scenario: 绑定角色给用户
 
@@ -109,6 +149,12 @@
 
 - **WHEN** 已认证用户没有有效角色绑定并访问 RBAC 保护路由
 - **THEN** 系统 MUST 拒绝访问
+
+#### Scenario: 批量替换用户角色绑定
+
+- **WHEN** 授权调用方使用合法角色集合替换用户的完整角色绑定
+- **THEN** 系统 MUST 在同一事务中删除旧绑定并批量写入新绑定
+- **AND** 任一新增绑定失败时，系统 MUST 回滚本次删除和新增
 
 ### Requirement: 授权热路径用户角色本地缓存
 
@@ -278,7 +324,7 @@ permission HTTP 授权中间件 MUST 在真实 Gin 路由上下文中解析授�
 
 ### Requirement: 策略同步
 
-系统 MUST 在在线 RBAC 写操作成功后触发本实例策略刷新，并通过 Redis policy version、Pub/Sub 和定时版本补偿同步其他副本。
+系统 MUST 在在线 RBAC 写操作成功后触发本实例策略刷新，并通过 Redis policy version、Pub/Sub 和定时版本补偿同步其他副本。写操作成功响应是否包含实体 MUST NOT 影响 policy reload、用户角色缓存失效或跨副本同步语义。
 
 #### Scenario: 在线角色绑定变更
 
@@ -294,6 +340,11 @@ permission HTTP 授权中间件 MUST 在真实 Gin 路由上下文中解析授�
 
 - **WHEN** 业务请求进入 RBAC 授权中间件
 - **THEN** 授权 MUST 使用本实例内存 Casbin enforcer 和本地可用的用户角色解析结果，MUST NOT 每请求读取 Redis policy version 做强一致门控
+
+#### Scenario: 写响应契约不影响同步
+
+- **WHEN** 权限、角色、用户角色绑定或角色权限绑定写操作成功且响应不包含更新后实体
+- **THEN** 系统 MUST 继续按既有规则触发本实例 policy reload、用户角色缓存失效和跨副本 policy version 通知
 
 ### Requirement: RBAC 系统数据引导
 
@@ -391,3 +442,389 @@ RBAC seed service 测试 MUST 使用 `user-service/internal/features/role/applic
 - **WHEN** seed 包测试需要复用 service fixture、输入 matcher、UUID 解析或 baseline 期望构造逻辑
 - **THEN** 保留的 helper MUST NOT 实现 `SeedRoleStore`、`SeedPermissionStore`、`SeedRolePermissionStore` 或 `SeedUserRoleStore` port
 - **AND** 这些 helper MUST NOT 替代生成 mock 记录 collaborator 调用或隐藏失败注入
+
+### Requirement: common Casbin wrapper 测试断言迁移
+
+`common/security/casbin` 的测试 MUST 使用统一断言规范验证共享 Casbin authorizer wrapper、请求三元组、允许、拒绝、未配置和底层错误路径。断言迁移 MUST 保持 Casbin 三元组授权、`ErrNotConfigured`、`ErrDenied`、返回 bool/error 的 `Enforce` 语义和 error-only `Authorizer.Authorize` 语义不变。
+
+#### Scenario: Casbin 允许和拒绝断言
+
+- **WHEN** `common/security/casbin` 测试验证允许访问、策略拒绝或底层 enforcer 返回错误
+- **THEN** 测试 MUST 使用 `require` 表达 bool 结果、错误存在性、错误类型和错误包装断言
+- **AND** 迁移 MUST NOT 改变 `Enforce` 或 `Authorizer.Authorize` 的授权结果语义
+
+#### Scenario: 未配置 authorizer 断言
+
+- **WHEN** 测试验证 nil enforcer、未配置 authorizer 或非法请求三元组路径
+- **THEN** 测试 MUST 使用语义化断言表达 `ErrNotConfigured`、`ErrDenied` 或参数校验结果
+- **AND** 迁移 MUST NOT 将未配置、拒绝访问或底层错误折叠为无法区分的测试结果
+
+#### Scenario: 不影响 user-service RBAC
+
+- **WHEN** common Casbin wrapper 测试迁移断言风格
+- **THEN** user-service 的权限目录、角色绑定、用户角色绑定、policy loader、policy sync、超级管理员通配授权和 RBAC HTTP 授权行为 MUST 保持不变
+- **AND** 迁移 MUST NOT 修改 user-service feature 测试或 RBAC 生产代码
+
+### Requirement: Permission 测试断言规范
+
+permission feature 的 Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、状态、集合、字符串和授权结果等语义化断言。只有当单个测试需要收集多个互相独立的字段失败，且后续检查不依赖前置检查成功时，测试 MAY 使用 `testify/assert`。permission 测试 MUST NOT 通过机械 `Fail` / `Failf` 替换、自定义兼容 helper、旧字段断言或旧接口断言来保留历史断言形态。
+
+#### Scenario: 迁移 permission 历史断言
+- **WHEN** permission catalog、authorization、policy sync、route diff、HTTP boundary、Casbin adapter、PostgreSQL store、Redis watcher 或 metrics 测试检查错误返回、对象字段、布尔状态、集合长度、字符串内容或授权结果
+- **THEN** 测试 MUST 使用 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.NotNil`、`require.True`、`require.False`、`require.Len`、`require.Contains` 等语义化断言表达预期
+- **AND** 测试 MUST NOT 使用 `t.Fatalf`、`t.Fatal`、`t.Errorf`、`t.Error` 或 `Fail` 类调用表达已有语义化断言可以清晰覆盖的失败
+
+#### Scenario: 收集互相独立字段失败
+- **WHEN** route diff 或多字段 HTTP 响应测试需要在一次执行中展示多个互相独立字段的差异
+- **THEN** 测试 MAY 使用 `assert` 收集这些字段失败
+- **AND** 初始化失败、错误返回、nil 检查、响应解析或后续检查依赖的前置条件仍然 MUST 使用 `require` 立即终止当前测试
+
+#### Scenario: 保持 collaborator 契约表达
+- **WHEN** permission application、transport/http、Casbin adapter、PostgreSQL store 或 Redis watcher 测试依赖已有 gomock 生成物表达外部协作者调用、失败注入或调用顺序
+- **THEN** 测试 MUST 保持既有生成 mock 使用方式
+- **AND** 本次断言迁移 MUST NOT 回退为手写 collaborator double 或通过 helper 隐藏 collaborator expectation
+
+#### Scenario: 不保留旧兼容断言
+- **WHEN** permission 测试迁移断言表达
+- **THEN** 测试 MUST NOT 新增旧 permission 字段、旧 route scanner 输出、旧 watcher 签名或旧授权白名单兼容断言
+- **AND** 测试 MUST NOT 新增机械 `require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf` 替换来模拟历史手写失败判断
+
+#### Scenario: 残留手写失败调用符合例外
+- **WHEN** `rg "t\\.Fatalf|t\\.Fatal\\(|t\\.Errorf|t\\.Error\\(|Failf?\\(" user-service/internal/features/permission --glob '*_test.go'` 在迁移后仍有命中
+- **THEN** 每个剩余命中 MUST 属于 `docs/TESTING.md` 允许的自定义测试控制流、特殊诊断输出或测试辅助工具不适合依赖 `testify` 的场景
+- **AND** 实现任务记录 MUST 列明这些剩余命中及其保留原因
+
+### Requirement: Role 与 RBAC baseline 测试断言规范
+
+role feature 和 shared RBAC baseline 的 Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、状态、集合、字符串、HTTP response、store 结果和 baseline catalog 等语义化断言。只有当单个测试需要收集多个互相独立的字段失败，且后续检查不依赖前置检查成功时，测试 MAY 使用 `testify/assert`。role 与 baseline 测试 MUST NOT 通过机械 `Fail` / `Failf` 替换、自定义兼容 helper、旧字段断言、旧 binding 断言或旧 baseline catalog 断言来保留历史断言形态。
+
+#### Scenario: 迁移 role 历史断言
+
+- **WHEN** role command、query、seed、domain、HTTP boundary、PostgreSQL store、RoleStore、UserRoleStore 或 RolePermissionStore 测试检查错误返回、对象字段、布尔状态、集合长度、字符串内容、HTTP status 或绑定结果
+- **THEN** 测试 MUST 使用 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.NotNil`、`require.True`、`require.False`、`require.Len`、`require.Contains` 等语义化断言表达预期
+- **AND** 测试 MUST NOT 使用 `t.Fatalf`、`t.Fatal`、`t.Errorf`、`t.Error` 或 `Fail` 类调用表达已有语义化断言可以清晰覆盖的失败
+
+#### Scenario: 迁移 baseline catalog 历史断言
+
+- **WHEN** shared RBAC baseline 测试检查系统角色、系统权限、默认绑定、超级管理员常量或 catalog 唯一性
+- **THEN** 测试 MUST 使用 `require` 或必要时 `assert` 表达错误、相等性、包含关系、空值、非空值、长度、唯一性和布尔预期
+- **AND** 测试 MUST NOT 新增旧 baseline 常量、旧 catalog 条目或旧绑定关系兼容断言
+
+#### Scenario: 收集互相独立字段失败
+
+- **WHEN** 多字段 HTTP response、角色列表摘要、权限摘要或 baseline catalog 测试需要在一次执行中展示多个互相独立字段的差异
+- **THEN** 测试 MAY 使用 `assert` 收集这些字段失败
+- **AND** 初始化失败、错误返回、nil 检查、响应解析、store 连接或后续检查依赖的前置条件仍然 MUST 使用 `require` 立即终止当前测试
+
+#### Scenario: 保持 collaborator 契约表达
+
+- **WHEN** role application、transport/http、seed 或 store 相关测试依赖已有 gomock 生成物表达外部协作者调用、失败注入或调用顺序
+- **THEN** 测试 MUST 保持既有生成 mock 使用方式
+- **AND** 本次断言迁移 MUST NOT 回退为手写 store double、notifier double、fake 或通过 helper 隐藏 collaborator expectation
+
+#### Scenario: 不保留旧兼容断言
+
+- **WHEN** role 与 baseline 测试迁移断言表达
+- **THEN** 测试 MUST NOT 新增旧 role 字段、旧 binding 行为、旧 baseline catalog、旧 fake 或旧 helper 兼容断言
+- **AND** 测试 MUST NOT 新增机械 `require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf` 替换来模拟历史手写失败判断
+
+#### Scenario: 残留手写失败调用符合例外
+
+- **WHEN** `rg "t\\.Fatalf|t\\.Fatal\\(|t\\.Errorf|t\\.Error\\(|Failf?\\(" user-service/internal/features/role user-service/internal/shared/rbacbaseline --glob '*_test.go'` 在迁移后仍有命中
+- **THEN** 每个剩余命中 MUST 属于 `docs/TESTING.md` 允许的自定义测试控制流、特殊诊断输出或测试辅助工具不适合依赖 `testify` 的场景
+- **AND** 实现任务记录 MUST 列明这些剩余命中及其保留原因
+
+### Requirement: Role HTTP boundary 测试覆盖
+
+role feature 的 HTTP boundary 测试 MUST 直接覆盖角色生命周期、角色权限绑定和用户角色绑定 controller。测试 MUST 固定请求绑定、input preparer、application command/query port 调用、错误映射和 response envelope 的当前契约，并 MUST NOT 通过旧 role 字段、旧请求字段别名、旧 binding 行为、旧 envelope 形态、旧错误码或兼容 helper 表达预期。
+
+#### Scenario: 角色生命周期 handler 成功路径
+
+- **WHEN** role HTTP 测试覆盖角色列表、创建、详情、更新和启停 handler 的合法请求
+- **THEN** 测试 MUST 验证 controller 调用对应 role application command/query port，并传入由当前 URI、query 和 JSON body 归一化得到的 command/query
+- **AND** 测试 MUST 验证成功响应使用当前 response envelope、HTTP status 和 role response 字段映射
+
+#### Scenario: 角色权限绑定 handler 成功路径
+
+- **WHEN** role HTTP 测试覆盖查询、替换、新增和移除角色权限绑定 handler 的合法请求
+- **THEN** 测试 MUST 验证 controller 调用对应 role application command/query port，并传入当前 role ID、permission ID 或 permission ID 集合
+- **AND** 测试 MUST 验证成功响应使用当前 response envelope、HTTP status 和 permission response 字段映射
+
+#### Scenario: 用户角色绑定 handler 成功路径
+
+- **WHEN** role HTTP 测试覆盖查询、替换、新增和移除用户角色绑定 handler 的合法请求
+- **THEN** 测试 MUST 验证 controller 调用对应 role application command/query port，并传入当前 user ID、role ID 或 role ID 集合
+- **AND** 测试 MUST 验证成功响应使用当前 response envelope、HTTP status 和 role response 字段映射
+
+#### Scenario: 请求绑定和输入解析失败
+
+- **WHEN** role HTTP controller 收到非法 URI UUID、非法 cursor、非法 query 参数、非法 JSON body 或缺失必填字段
+- **THEN** 测试 MUST 验证请求在 HTTP boundary 被拒绝并返回当前 bad request 或 validation failed envelope
+- **AND** 测试 MUST 验证对应 application command/query port 未被调用
+
+#### Scenario: application 错误映射
+
+- **WHEN** role application command/query port 返回 domain、validation、not found、conflict 或内部错误
+- **THEN** role HTTP boundary 测试 MUST 验证 controller 通过当前 `toRoleHTTPError` 映射为对应 HTTP status 和 envelope code
+- **AND** 测试 MUST NOT 新增旧错误码、旧 message 或旧 envelope 兼容断言
+
+#### Scenario: 保持 role HTTP 测试边界
+
+- **WHEN** role HTTP boundary 测试需要构造 collaborator、请求上下文或响应断言
+- **THEN** 测试 MUST 使用现有 gomock 生成物或既有生成入口维护的 mock 表达 application port 调用
+- **AND** 测试 MUST NOT 引入 infrastructure store、Ent client、PostgreSQL、Casbin engine、RBAC seed 或跨 feature adapter 作为 controller 单元测试依赖
+
+#### Scenario: 不保留旧兼容路径
+
+- **WHEN** role HTTP boundary 测试新增或调整断言
+- **THEN** 测试 MUST NOT 新增旧 role 字段、旧 request body 字段别名、旧 binding 行为、旧 response envelope、旧错误码或旧 helper 兼容断言
+- **AND** 测试 MUST 使用 `testify/require` 或必要的 `assert` 表达语义化断言，MUST NOT 使用机械 `Fail` / `Failf` 替换来模拟历史手写失败判断
+
+### Requirement: Role PostgreSQL store 持久化契约
+
+系统 MUST 使用当前 Ent schema 和外部 UUID 字段实现 Role PostgreSQL store 的角色、用户角色绑定和角色权限绑定持久化；join 表内部外键只用于数据库关联，不得暴露为 role feature 的业务查询入口。store MUST 将当前领域错误稳定映射给 application 层，并在替换绑定失败时保持已有绑定不被部分破坏。
+
+#### Scenario: 角色按外部 UUID 持久化和查询
+
+- **WHEN** role infrastructure store 创建、查询、批量查询、列表、更新或启停角色
+- **THEN** 系统 MUST 以 `roles.role_id` 作为稳定业务标识执行查询和排序
+- **AND** 唯一约束冲突 MUST 映射为 `ErrRoleAlreadyExists`
+- **AND** 未找到目标角色 MUST 映射为 `ErrRoleNotFound`
+
+#### Scenario: 用户角色绑定使用当前用户和角色身份
+
+- **WHEN** role infrastructure store 查询、添加、替换或移除用户角色绑定
+- **THEN** 系统 MUST 通过用户外部 UUID 和角色外部 UUID 解析当前未软删除用户与角色
+- **AND** 空绑定集合 MUST 返回空结果且不得创建兼容占位数据
+- **AND** 重复或不存在的绑定引用 MUST 返回当前领域错误并保持已有绑定关系不被破坏
+
+#### Scenario: 角色权限绑定复核当前启用权限
+
+- **WHEN** role infrastructure store 添加或替换角色权限绑定
+- **THEN** 系统 MUST 在写入前按权限外部 UUID 复核权限存在且处于启用状态
+- **AND** 不存在或已停用权限 MUST 映射为当前权限或角色绑定领域错误
+- **AND** 替换失败 MUST 回滚事务并保留替换前的角色权限绑定
+
+#### Scenario: 不引入旧兼容查询和绑定语义
+
+- **WHEN** Role PostgreSQL store 测试或实现覆盖角色与绑定持久化
+- **THEN** 系统 MUST NOT 新增旧 internal ID 查询入口、旧 role code 字段、旧 binding 行为或兼容查询 helper
+- **AND** 测试 MUST 以当前 Ent schema、当前外部 UUID 字段和当前领域错误为准
+
+### Requirement: Permission HTTP boundary 测试覆盖
+
+permission feature 的 HTTP boundary 测试 MUST 直接覆盖权限目录生命周期、用户有效权限查询和 route diff controller。测试 MUST 固定请求绑定、input preparer、application command/query port 调用、错误映射、分页 envelope、有效权限 response 和 route diff response 的当前契约，并 MUST NOT 通过旧权限资源路径、旧 action/resource 字段语义、旧错误 envelope、旧授权绕过、旧 route scanner 输出或兼容 helper 表达预期。
+
+#### Scenario: 权限目录 handler 成功路径
+
+- **WHEN** permission HTTP 测试覆盖权限列表、创建、详情、更新、启用和停用 handler 的合法请求
+- **THEN** 测试 MUST 验证 controller 调用对应 permission application command/query port，并传入由当前 URI、query 和 JSON body 归一化得到的 command/query
+- **AND** 测试 MUST 验证成功响应使用当前 response envelope、HTTP status、分页信息和 permission response 字段映射
+
+#### Scenario: 用户有效权限 handler 成功路径
+
+- **WHEN** permission HTTP 测试覆盖查询用户有效权限 handler 的合法请求
+- **THEN** 测试 MUST 验证 controller 调用当前 permission query port，并传入当前 user ID
+- **AND** 测试 MUST 验证成功响应使用当前 response envelope 和有效权限 response 字段映射
+
+#### Scenario: route diff handler 成功路径
+
+- **WHEN** permission HTTP 测试覆盖 route diff handler 的合法请求
+- **THEN** 测试 MUST 验证 controller 调用当前 permission query port 获取 route diff 结果
+- **AND** 测试 MUST 验证成功响应使用当前 response envelope 和 missing、stale、mismatch 诊断字段映射
+
+#### Scenario: 请求绑定和输入解析失败
+
+- **WHEN** permission HTTP controller 收到非法 URI UUID、非法 cursor、非法 query 参数、非法 JSON body 或缺失必填字段
+- **THEN** 测试 MUST 验证请求在 HTTP boundary 被拒绝并返回当前 bad request 或 validation failed envelope
+- **AND** 测试 MUST 验证对应 application command/query port 未被调用
+
+#### Scenario: application 错误映射
+
+- **WHEN** permission application command/query port 返回 domain、validation、not found、conflict 或内部错误
+- **THEN** permission HTTP boundary 测试 MUST 验证 controller 通过当前 permission HTTP error mapper 映射为对应 HTTP status 和 envelope code
+- **AND** 测试 MUST NOT 新增旧错误码、旧 message 或旧 envelope 兼容断言
+
+#### Scenario: 保持 permission HTTP 测试边界
+
+- **WHEN** permission HTTP boundary 测试需要构造 collaborator、请求上下文或响应断言
+- **THEN** 测试 MUST 使用现有 gomock 生成物或既有生成入口维护的 mock 表达 application port 调用
+- **AND** 测试 MUST NOT 引入 infrastructure store、Ent client、PostgreSQL、Redis、Casbin engine、RBAC seed 或跨 feature adapter 作为 controller 单元测试依赖
+
+#### Scenario: 语义化断言和不保留旧兼容路径
+
+- **WHEN** permission HTTP boundary 测试新增或调整断言
+- **THEN** 测试 MUST 优先使用 `testify/require` 和 `Len`、`Greater`、`ErrorContains`、`ElementsMatch`、`JSONEq`、`Regexp` 等更具体语义化断言
+- **AND** 测试 MUST NOT 新增机械 `Fail` / `Failf` / `FailNow` / `FailNowf` 替换、旧权限资源路径、旧 action/resource 字段、旧 binding、旧 response envelope、旧授权绕过或旧 helper 兼容断言
+
+### Requirement: RBAC CLI 测试断言规范
+
+RBAC CLI 测试 MUST 优先使用 `testify/require` 表达 seed、assign-super-admin、create-super-admin、password/env normalization、command construction、error handling 和 cleanup behavior 等语义化断言。只有当单个测试需要收集多个互相独立的命令属性失败，且后续检查不依赖前置检查成功时，测试 MAY 使用 `testify/assert`。
+
+#### Scenario: 迁移 RBAC command 历史断言
+
+- **WHEN** `user-service/cmd` 测试检查 `rbac seed`、`rbac assign-super-admin`、`rbac create-super-admin` 或相关 helper 的错误返回、输出文本、flag/env 归一化、password 输入、cleanup error 或 command metadata
+- **THEN** 测试 MUST 使用 `require.NoError`、`require.Error`、`require.ErrorContains`、`require.Equal`、`require.NotNil`、`require.Len`、`require.Contains`、`require.Regexp` 或等价语义化断言表达预期
+- **AND** 测试 MUST NOT 使用 `t.Fatalf`、`t.Fatal`、`t.Errorf`、`t.Error` 或 `Fail` 类调用表达已有语义化断言可以清晰覆盖的失败
+
+#### Scenario: 不保留旧 RBAC CLI 兼容断言
+
+- **WHEN** RBAC CLI 测试迁移断言表达
+- **THEN** 测试 MUST NOT 新增旧 root command alias、旧 RBAC command path、旧 flag/env 名、旧 password handling 或旧 cleanup behavior 兼容断言
+- **AND** 迁移 MUST NOT 改变 RBAC seed、超级管理员角色绑定、密码哈希、用户状态或权限目录生产语义
+
+#### Scenario: RBAC CLI 残留手写失败调用符合例外
+
+- **WHEN** `rg "t\\.Fatalf|t\\.Fatal\\(|t\\.Errorf|t\\.Error\\(|Fail(Now)?f?\\(" user-service/cmd --glob '*_test.go'` 在迁移后仍有命中
+- **THEN** 每个剩余命中 MUST 属于 `docs/TESTING.md` 允许的自定义测试控制流、特殊诊断输出或测试辅助工具不适合依赖 `testify` 的场景
+- **AND** 实现任务记录 MUST 列明这些剩余命中及其保留原因
+
+### Requirement: RBAC 路由注册测试覆盖
+系统 MUST 使用 router 包测试覆盖权限、角色和用户角色路由在 user-service 聚合路由中的注册结果，确保 RBAC 保护接口只注册在当前 `/api/v1` 路由图并经过当前认证和授权中间件链。
+
+#### Scenario: 权限和角色路由注册
+- **WHEN** PermissionController 和 RoleController 均已提供给 `registerV1Routes`
+- **THEN** 测试 MUST 验证权限目录、route diff、用户有效权限、角色生命周期、角色权限绑定和用户角色绑定路由注册在 `/api/v1` 下
+- **AND** 测试 MUST 验证这些路由进入当前认证和 RBAC 授权中间件链
+
+#### Scenario: 可选 controller 条件注册
+- **WHEN** PermissionController 或 RoleController 为 nil
+- **THEN** `registerV1Routes` MUST 不注册对应权限或角色可选路由
+- **AND** auth 路由和 user 路由 MUST 继续按当前路径注册
+- **AND** 测试 MUST NOT 通过旧路径兼容别名补偿缺失的可选路由
+
+### Requirement: RBAC CLI 命令测试覆盖
+
+`rbac-access-control` 的 user-service RBAC CLI 测试 MUST 直接覆盖当前 `user-service rbac` seed、assign-super-admin 和 create-super-admin 命令契约。测试 MUST 固定当前配置来源、参数归一化、依赖装配、错误传播和 cleanup 语义，并 MUST NOT 为旧命令名、旧 flag、旧环境变量、旧 root Makefile 无服务前缀入口或旧 bootstrap 行为新增兼容断言。
+
+#### Scenario: seed 命令 runner 传递当前选项
+
+- **WHEN** `runRBACSeedCommand` 使用当前配置路径和 seed options 执行
+- **THEN** 测试 MUST 验证 runner 通过当前 RBAC seed service 接收 `reactivateSystem` 和 `syncSystemBindings`
+- **AND** 测试 MUST 验证成功路径执行 cleanup
+
+#### Scenario: assign-super-admin 命令 runner 绑定指定用户
+
+- **WHEN** `runAssignSuperAdminCommand` 收到合法用户 UUID
+- **THEN** 测试 MUST 验证 runner 将该 UUID 传递给当前超级管理员绑定流程
+- **AND** 测试 MUST 覆盖绑定已存在和新增绑定两类当前输出语义
+
+#### Scenario: create-super-admin 命令 runner 使用当前创建流程
+
+- **WHEN** `runCreateSuperAdminCommand` 收到当前 create-super-admin options
+- **THEN** 测试 MUST 验证 runner 使用当前配置路径初始化依赖并调用 `createSuperAdmin`
+- **AND** 测试 MUST 验证输出中的 username 使用当前 username 归一化规则
+
+#### Scenario: createSuperAdmin 覆盖用户存在性分支
+
+- **WHEN** `createSuperAdmin` 处理不存在用户、已存在用户不重置密码或已存在用户重置密码
+- **THEN** 测试 MUST 验证新建用户、角色绑定、密码 hash 和凭据更新按当前契约发生
+- **AND** 测试 MUST 验证用户读取、创建、hash、凭据更新和角色绑定错误会 fail-fast 返回
+
+#### Scenario: RBAC CLI 初始化和 cleanup 错误可见
+
+- **WHEN** RBAC CLI 依赖初始化失败或命令执行后 cleanup 返回错误
+- **THEN** 测试 MUST 验证命令返回明确错误
+- **AND** 如果命令错误和 cleanup 错误同时存在，测试 MUST 验证两者都保留在返回错误中
+
+### Requirement: RBAC CLI 参数归一化测试
+
+`rbac-access-control` 的 create-super-admin 参数归一化测试 MUST 固定当前 username、nickname、password env、password value 和 reset password 语义。测试 MUST 只验证当前 `ADMIN_PASSWORD` 默认来源和当前 flag/env 契约，不得新增旧环境变量或旧默认值兼容路径。
+
+#### Scenario: create-super-admin 使用默认 password env
+
+- **WHEN** `passwordEnv` 为空且 `ADMIN_PASSWORD` 存在
+- **THEN** `normalizeCreateSuperAdminOptions` MUST 使用 `ADMIN_PASSWORD`
+- **AND** username MUST trim 后转小写，空 nickname MUST 回退为归一化 username
+
+#### Scenario: create-super-admin 拒绝缺失必要输入
+
+- **WHEN** password env 不存在、username 为空或 password value 为空
+- **THEN** `normalizeCreateSuperAdminOptions` MUST 返回明确错误
+- **AND** 测试 MUST 使用 `require.ErrorContains` 或等价语义化断言表达错误内容
+
+#### Scenario: reset password 标志保持当前值
+
+- **WHEN** create-super-admin options 启用 reset password
+- **THEN** 归一化结果 MUST 保留 `resetPassword=true`
+- **AND** 测试 MUST NOT 通过旧 flag 或旧环境变量表达重置密码预期
+
+### Requirement: 受保护 HTTP flow 授权边界断言规范
+系统 MUST 使用语义化断言覆盖 user-service E2E HTTP flow 中受保护用户接口的认证和授权边界。断言迁移 MUST 保持当前认证中间件、RBAC 授权中间件、错误 envelope 和受保护路由语义不变。
+
+#### Scenario: 授权上下文访问用户接口
+- **WHEN** E2E flow 使用当前测试前置条件中的有效 bearer token 访问用户创建或用户详情接口
+- **THEN** 测试 MUST 使用语义化断言验证请求进入当前受保护 HTTP flow 并返回预期 response envelope
+- **AND** 迁移 MUST NOT 绕过认证或 RBAC 中间件，也 MUST NOT 新增旧授权兼容断言
+
+#### Scenario: 缺失认证访问受保护接口
+- **WHEN** E2E flow 未提供 bearer token 访问受保护用户接口
+- **THEN** 测试 MUST 使用语义化断言验证 HTTP `401 Unauthorized`、`success=false` 和 `CodeUnauthenticated`
+- **AND** 测试 MUST NOT 接受旧认证绕过路径、旧错误码或旧 envelope 格式
+
+#### Scenario: 跨 feature 响应断言保持边界
+- **WHEN** E2E flow 同时经过认证、RBAC 和用户资料 feature 的响应边界
+- **THEN** 测试 MUST 只迁移断言表达
+- **AND** 测试 MUST NOT 修改 Casbin policy、RBAC seed、角色权限绑定、用户角色绑定、受保护路由路径或授权结果语义
+
+### Requirement: 角色权限绑定基础设施关键路径测试
+
+role infrastructure MUST 提供默认可执行的测试覆盖角色权限绑定中不依赖 PostgreSQL 行锁的持久化路径，包括列表、删除、系统绑定同步、缺失权限、重复输入去重、失败保持和映射 helper。依赖 `FOR UPDATE` 的新增和替换路径 MUST 保持生产 PostgreSQL 锁语义不变，并 MAY 由显式 Docker-backed PostgreSQL 集成测试覆盖。
+
+#### Scenario: 默认测试覆盖非锁定绑定路径
+- **WHEN** 协作者执行 `go test -cover ./user-service/internal/features/role/infrastructure/postgres`
+- **THEN** 测试 MUST 默认执行 `RolePermissionStore.ListByRoleID`、`Remove`、`EnsureSystemBindings`、`SyncSystemBindings` 和映射 helper 的成功与错误路径
+- **AND** 默认覆盖率 MUST 达到 70% 以上
+
+#### Scenario: 同步失败保持原绑定
+- **WHEN** `RolePermissionStore.SyncSystemBindings` 请求引用缺失权限
+- **THEN** 测试 MUST 断言方法返回明确错误
+- **AND** 测试 MUST 断言失败前已有角色权限绑定保持不变
+
+#### Scenario: 默认测试覆盖系统绑定同步
+- **WHEN** 默认测试执行 `RolePermissionStore.SyncSystemBindings`
+- **THEN** 测试 MUST 覆盖新增缺失绑定、删除多余绑定和保留既有绑定
+- **AND** 测试 MUST 断言返回的新增与删除统计符合持久化结果
+
+#### Scenario: 同步失败保持可诊断结果
+- **WHEN** `SyncSystemBindings` 因缺失权限、查询失败或事务写入失败无法完成
+- **THEN** 测试 MUST 覆盖错误映射或 rollback 路径
+- **AND** 测试 MUST 断言不会把部分成功伪装为完整同步成功
+
+#### Scenario: PostgreSQL 集成测试不承担默认覆盖唯一来源
+- **WHEN** `AEGISCORE_TEST_CONTAINERS` 未设置
+- **THEN** 默认测试 MAY 跳过 Docker-backed PostgreSQL 集成测试
+- **AND** 默认测试仍 MUST 覆盖角色权限绑定非锁定核心路径
+- **AND** 生产代码 MUST NOT 为 SQLite 测试新增跳过 `FOR UPDATE` 的兼容分支
+
+### Requirement: RBAC Enforce 低基数指标
+
+系统 MUST 为每次 permission authorization service 的 RBAC Enforce 判定导出低基数 Prometheus metrics，用于观察授权通过、授权拒绝、授权异常和授权耗时。指标 MUST 不改变 Casbin policy、用户角色缓存、policy sync、超级管理员通配授权或 HTTP 授权结果语义。
+
+#### Scenario: 授权通过指标
+
+- **WHEN** 已认证用户拥有当前 HTTP method 和 route template 对应权限，RBAC Enforce 返回允许
+- **THEN** 系统 MUST 将 RBAC Enforce counter 记录为 `result="allow"`
+- **AND** 系统 MUST 将本次 Enforce 耗时写入 RBAC Enforce latency histogram
+- **AND** 指标标签 MUST 只包含 `result`、`method` 和 `route_template`
+
+#### Scenario: 授权拒绝指标
+
+- **WHEN** 已认证用户缺少当前 HTTP method 和 route template 对应权限，RBAC Enforce 返回拒绝
+- **THEN** 系统 MUST 将 RBAC Enforce counter 记录为 `result="deny"`
+- **AND** 系统 MUST 将本次 Enforce 耗时写入 RBAC Enforce latency histogram
+- **AND** 系统 MUST 保持授权拒绝响应语义不变
+
+#### Scenario: 授权异常指标
+
+- **WHEN** RBAC Enforce 因非法 subject、context 取消、用户角色回源失败或 Casbin 执行失败返回错误
+- **THEN** 系统 MUST 将 RBAC Enforce counter 记录为 `result="error"`
+- **AND** 系统 MUST 将本次 Enforce 耗时写入 RBAC Enforce latency histogram
+- **AND** 系统 MUST 保持 fail-closed 行为，不得因指标记录失败放行请求
+
+#### Scenario: Enforce 指标禁止高基数字段
+
+- **WHEN** 系统记录 RBAC Enforce metrics
+- **THEN** 指标 MUST NOT 包含用户 ID、角色 ID、权限 ID、token ID、trace/span ID、raw path、IP、邮箱、用户名、Redis key、SQL、SQL 参数或原始错误
+- **AND** route 标签 MUST 使用 Gin route template 或等价稳定模板，不得使用真实请求 path
+

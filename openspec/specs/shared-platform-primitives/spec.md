@@ -76,7 +76,7 @@
 
 ### Requirement: 共享认证授权 helper API 治理
 
-系统 MUST 在 `common/http` 和 `common/security` 中保持认证、授权 helper 的导出 API 语义清晰且避免重复简写入口；当共享 helper 只包装另一个推荐入口且没有额外稳定语义时，系统 MUST 通过显式推荐入口、废弃标记或移除策略治理该 helper。
+系统 MUST 在 `common/http` 和 `common/security` 中保持认证、授权 helper 的导出 API 语义清晰且避免重复简写入口；当共享 helper 只包装另一个推荐入口、暴露未参与行为的参数或没有额外稳定语义时，系统 MUST 通过显式推荐入口、废弃标记或移除策略治理该 helper。
 
 #### Scenario: Casbin 授权 helper 收紧
 
@@ -87,8 +87,15 @@
 #### Scenario: JWT middleware 无 token version 校验
 
 - **WHEN** 服务需要创建不执行 token version 撤销校验的 JWT 认证中间件
-- **THEN** 系统 MUST 推荐调用 `AuthWithTokenVersionValidator(log, jwtService, cfg, nil)` 显式表达该行为
+- **THEN** 系统 MUST 推荐调用 `AuthWithTokenVersionValidator(log, jwtService, nil)` 显式表达该行为
 - **AND** 仅作为兼容保留的简写 helper MUST 标记为废弃或在确认无消费者后移除
+
+#### Scenario: JWT middleware 不接收无效配置参数
+
+- **WHEN** 服务需要创建共享 JWT 认证 middleware
+- **THEN** `AuthWithTokenVersionValidator` MUST 只接收 logger、JWT service 和可选 token version validator 作为调用参数
+- **AND** `AuthWithTokenVersionValidator` MUST NOT 接收 `config.AuthConfig` 或其他不参与运行时认证行为的配置参数
+- **AND** JWT 配置 MUST 由 `auth.NewJWTService(config.AuthConfig)` 消费后通过 `JWTService` 注入 middleware
 
 #### Scenario: token version validator 函数适配器移除
 
@@ -98,7 +105,7 @@
 
 #### Scenario: 行为保持不变
 
-- **WHEN** 共享认证授权 helper 的重复入口被废弃或移除
+- **WHEN** 共享认证授权 helper 的重复入口或无效参数被废弃或移除
 - **THEN** 系统 MUST 保持 JWT 解析、token version 校验、Casbin 三元组校验、`ErrNotConfigured`、`ErrDenied` 和 HTTP 响应语义不变
 - **AND** user-service 的认证路由挂载和 RBAC 保护路由 MUST 不因该 API 治理发生行为变化
 
@@ -359,13 +366,20 @@
 
 ### Requirement: 测试断言与失败处理风格
 
-测试代码中的断言与失败处理 MUST 优先使用 `testify/require`，以提升测试可读性、减少手写失败判断样板代码、统一阻塞式失败处理方式，并提供一致、清晰的失败诊断信息。
+测试代码中的断言与失败处理 MUST 优先使用 `testify/require`，以提升测试可读性、减少手写失败判断样板代码、统一阻塞式失败处理方式，并提供一致、清晰的失败诊断信息。`common/contract`、`common/validation` 和 `common/testing` 的历史测试迁移或新增测试 MUST 将常见错误、相等性、集合、fixture 和容器测试断言表达为语义化 `require` 方法，除非该失败调用属于测试控制流、特殊诊断输出或测试框架边界。
 
 #### Scenario: 常见阻塞式断言
 
 - **WHEN** 测试需要检查错误返回值、前置条件、对象相等性、布尔条件、集合长度、错误类型或状态
 - **THEN** 测试 MUST 使用语义化的 `require` 断言方法，例如 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.True`、`require.False`、`require.Len`、`require.NotNil`
 - **AND** 测试 SHOULD NOT 直接使用 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf` 表达这些常见断言
+
+#### Scenario: 共享基础包历史测试迁移
+
+- **WHEN** `common/contract`、`common/validation` 或 `common/testing` 的 `_test.go` 文件迁移历史断言或新增常见阻塞式断言
+- **THEN** 测试 MUST 优先使用 `require.NoError`、`require.ErrorIs`、`require.Equal`、`require.Len`、`require.Contains`、`require.NotNil` 或等价语义化 `require` 方法
+- **AND** 目标模块 MUST 直接声明实际使用的 `github.com/stretchr/testify` 测试依赖
+- **AND** 迁移 MUST NOT 改变对应生产包的公开 API、错误语义或运行时行为
 
 #### Scenario: 避免机械 Fail 替换
 
@@ -384,6 +398,7 @@
 - **WHEN** 测试存在无法通过现有 `require` 或 `assert` 语义化断言清晰表达的自定义测试控制流、特殊诊断输出，或测试辅助工具不适合依赖 `testify`
 - **THEN** 测试 MAY 直接使用 `t.Fatal`、`t.Fatalf`、`t.Error`、`t.Errorf`、`require.FailNowf` 或 `assert.Failf`
 - **AND** 此类用法 SHOULD 让保留原因在代码上下文中保持清晰
+- **AND** 在 `common/contract`、`common/validation` 或 `common/testing` 迁移完成时，剩余命中 MUST 在实施任务记录中列明并确认符合例外规则
 
 ### Requirement: common 边界 mock 生成规范
 
@@ -412,3 +427,332 @@
 - **WHEN** `common` 测试对象需要复杂内存状态、并发协调、scheduler 生命周期或比 expectation mock 更清晰的测试夹具
 - **THEN** 测试 MAY 保留 package-local 状态型 harness
 - **AND** 该 harness MUST NOT 被迁移到中央 mock 仓库或导出为跨 package 测试依赖
+
+### Requirement: common HTTP 测试断言规范
+
+系统 MUST 在 `common/http/**/*_test.go` 中使用语义化 `testify` 断言验证共享 HTTP helper、binding、middleware、response、OpenAPI 和 pprof 相关行为。初始化失败、前置条件失败以及后续检查依赖当前结果的场景 MUST 使用 `testify/require`；只有需要在单次测试执行中收集多个相互独立响应字段失败时，系统 MAY 使用 `testify/assert`。
+
+#### Scenario: 验证 HTTP status 和 header
+
+- **WHEN** `common/http` 测试验证 HTTP 响应状态码、响应 header 或中间件写入结果
+- **THEN** 测试 MUST 优先使用 `require.Equal`、`require.Contains`、`require.NotEmpty` 或等价语义化断言
+- **AND** 测试 MUST NOT 将可语义化表达的检查迁移为 `require.Fail*`、`assert.Fail*`、`t.Fatal*` 或 `t.Error*`
+
+#### Scenario: 验证 JSON envelope
+
+- **WHEN** `common/http` 测试验证 JSON response envelope、错误详情或分页结构
+- **THEN** 测试 MUST 优先使用 `require.JSONEq` 或在 `require.NoError` 解析后使用语义化字段断言
+- **AND** 测试 MUST 验证当前稳定 envelope 结构，不得新增旧 envelope 兼容断言或双写断言
+
+#### Scenario: 验证 binding 错误
+
+- **WHEN** `common/http/binding` 测试验证请求绑定、校验失败或错误响应
+- **THEN** 测试 MUST 使用 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.Contains` 或等价语义化断言表达预期
+- **AND** 只有无法通过现有语义化断言清晰表达的自定义测试控制流或特殊诊断输出 MAY 保留直接 `t.Fatal*`、`t.Error*` 或 `Fail*`
+
+#### Scenario: 验证迁移完成度
+
+- **WHEN** 断言迁移完成
+- **THEN** `rg "t\\.Fatalf|t\\.Fatal\\(|t\\.Errorf|t\\.Error\\(|Failf?\\(" common/http --glob '*_test.go'` 的剩余命中 MUST 均符合 `docs/TESTING.md` 特殊例外规则
+- **AND** `rg "github.com/stretchr/testify/(require|assert)" common/http --glob '*_test.go'` MUST 能定位到迁移后的实际使用点
+
+### Requirement: common 测试断言统一迁移
+
+`common/runtime` 和 `common/security` 的测试代码 MUST 优先使用 `testify/require` 表达可语义化的常见断言，包括错误返回、错误类型、对象和值相等性、nil、布尔条件、集合长度、字符串包含关系和状态检查。测试代码 MUST NOT 将历史手写失败判断机械替换为 `require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf`；当存在明确语义化断言方法时，MUST 使用对应的 `require` 或 `assert` 方法。
+
+#### Scenario: 迁移常见断言
+
+- **WHEN** `common/runtime` 或 `common/security` 的 `_test.go` 需要检查错误、对象状态、布尔条件、集合或字符串结果
+- **THEN** 测试 MUST 使用 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.True`、`require.False`、`require.Len`、`require.NotNil` 或等价语义化断言
+- **AND** 测试 SHOULD NOT 使用 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf` 表达这些常见断言
+
+#### Scenario: 独立字段聚合诊断
+
+- **WHEN** 单个测试需要在一次执行中收集多个相互独立字段、指标或统计值的失败信息
+- **THEN** 测试 MAY 使用 `testify/assert` 进行非阻塞式断言
+- **AND** 初始化失败、前置条件失败或后续检查依赖当前结果的场景 MUST 使用 `testify/require`
+
+#### Scenario: 避免 Fail helper 机械替换
+
+- **WHEN** 迁移历史手写失败判断
+- **THEN** 测试 MUST NOT 使用 `require.Fail`、`require.Failf`、`require.FailNow`、`require.FailNowf`、`assert.Fail` 或 `assert.Failf` 替代可语义化表达的普通断言
+
+#### Scenario: 特殊失败控制流例外
+
+- **WHEN** 测试存在并发协调、panic/recovery、benchmark、goroutine 内控制流、测试框架边界或无法通过现有语义化断言清晰表达的特殊诊断
+- **THEN** 测试 MAY 保留 `t.Fatal`、`t.Fatalf`、`t.Error`、`t.Errorf` 或 `Fail*` 用法
+- **AND** 保留项 MUST 能通过代码上下文或实施任务清单说明其符合 `docs/TESTING.md` 的例外规则
+
+#### Scenario: 不引入兼容 helper
+
+- **WHEN** 统一 common 测试断言风格
+- **THEN** 系统 MUST NOT 新增旧断言风格兼容 helper、双写断言 wrapper 或仅服务于断言迁移的生产代码
+
+### Requirement: HTTP response helper wrapper 覆盖
+
+系统 MUST 在 `common/http/response` 中为共享 HTTP response helper wrapper 保持直接单元测试覆盖，测试 MUST 锁定当前统一 response envelope、应用错误码、公开 message、HTTP status、`data` 或 `errors` 字段行为，并 MUST NOT 接受旧 envelope、旧错误消息格式、旧 helper alias 或旧 HTTP status 的兼容路径。
+
+#### Scenario: 创建成功响应
+
+- **WHEN** 调用方使用 `Created` 写入创建成功响应
+- **THEN** 系统 MUST 返回 `201 Created`
+- **AND** 响应 envelope MUST 为 `success=true`、`code=CodeOK`、`message=MessageCreated`
+- **AND** 响应 envelope MUST 携带调用方传入的 `data`
+
+#### Scenario: 无内容成功响应
+
+- **WHEN** 调用方使用 `NoContent` 写入无内容成功响应
+- **THEN** 系统 MUST 返回 `204 No Content`
+- **AND** 响应 body MUST 为空
+
+#### Scenario: 校验失败响应
+
+- **WHEN** 调用方使用 `ValidationFailed` 写入字段语义校验失败响应
+- **THEN** 系统 MUST 返回 `400 Bad Request`
+- **AND** 响应 envelope MUST 为 `success=false`、`code=CodeValidationFailed`
+- **AND** 响应 envelope MUST 使用调用方提供的公开 message
+
+#### Scenario: 未认证响应
+
+- **WHEN** 调用方使用 `Unauthenticated` 写入未认证响应
+- **THEN** 系统 MUST 返回 `401 Unauthorized`
+- **AND** 响应 envelope MUST 为 `success=false`、`code=CodeUnauthenticated`
+- **AND** 响应 envelope MUST 使用调用方提供的公开 message
+
+#### Scenario: 权限不足响应
+
+- **WHEN** 调用方使用 `Forbidden` 写入权限不足响应
+- **THEN** 系统 MUST 返回 `403 Forbidden`
+- **AND** 响应 envelope MUST 为 `success=false`、`code=CodeForbidden`
+- **AND** 响应 envelope MUST 使用调用方提供的公开 message
+
+#### Scenario: 冲突响应
+
+- **WHEN** 调用方使用 `Conflict` 写入领域冲突或资源状态冲突响应
+- **THEN** 系统 MUST 返回 `409 Conflict`
+- **AND** 响应 envelope MUST 为 `success=false`、`code=CodeConflict`
+- **AND** 响应 envelope MUST 使用调用方提供的公开 message
+
+#### Scenario: 未找到响应
+
+- **WHEN** 调用方使用 `NotFound` 写入资源不存在响应
+- **THEN** 系统 MUST 返回 `404 Not Found`
+- **AND** 响应 envelope MUST 为 `success=false`、`code=CodeNotFound`
+- **AND** 响应 envelope MUST 使用调用方提供的公开 message
+
+### Requirement: 共享 CORS 默认入口覆盖
+
+系统 MUST 在 `common/http/middleware` 中为共享 CORS 默认入口 `CORS()` 保持直接单元测试覆盖。测试 MUST 锁定当前默认策略：允许来源为 `*`，允许方法为 `GET,POST,PUT,PATCH,DELETE,OPTIONS`，允许请求头为 `Authorization,Content-Type`；测试 MUST 验证 `CORS()` 与 `CORSWithOptions(defaultCORSOptions)` 的外部响应行为一致，并 MUST NOT 接受旧 origin 反射默认值、旧 header、旧 wildcard+credentials 兼容行为或旧安全兼容开关。
+
+#### Scenario: 默认响应头
+
+- **WHEN** 普通 HTTP 请求经过 `CORS()` middleware
+- **THEN** 响应 MUST 包含 `Access-Control-Allow-Origin=*`
+- **AND** 响应 MUST 包含 `Access-Control-Allow-Methods=GET,POST,PUT,PATCH,DELETE,OPTIONS`
+- **AND** 响应 MUST 包含 `Access-Control-Allow-Headers=Authorization,Content-Type`
+- **AND** 默认响应 MUST NOT 包含 `Access-Control-Allow-Credentials`、`Access-Control-Max-Age`、`Access-Control-Expose-Headers` 或 `Vary: Origin`
+
+#### Scenario: 默认预检短路
+
+- **WHEN** `OPTIONS` 预检请求经过 `CORS()` middleware
+- **THEN** 系统 MUST 返回 `204 No Content`
+- **AND** 业务 handler MUST NOT 被继续调用
+- **AND** 响应 MUST 继续包含当前默认 CORS 响应头
+
+#### Scenario: 默认普通请求传递
+
+- **WHEN** 非 `OPTIONS` 普通请求经过 `CORS()` middleware
+- **THEN** 系统 MUST 继续调用后续业务 handler
+- **AND** 业务 handler 写入的 HTTP status 和 body MUST 保持可见
+- **AND** `CORS()` 的相关响应结果 MUST 与 `CORSWithOptions(defaultCORSOptions)` 一致
+
+#### Scenario: CORS 测试断言风格
+
+- **WHEN** 新增或修改 `common/http/middleware` 的 CORS 测试
+- **THEN** 常见错误、状态、相等性、布尔条件、集合或字符串断言 MUST 使用语义化 `require` 或允许边界内的 `assert`
+- **AND** 测试 MUST NOT 通过机械 `require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf` 替换常见断言
+
+### Requirement: Go 测试断言依赖与例外规范
+
+服务测试 MUST 可以直接使用标准 `testify/require` 与 `testify/assert` 断言库表达常见错误、对象、布尔、集合、字符串和诊断预期。系统 MUST NOT 为迁移历史测试断言新增跨服务兼容 helper、机械失败包装器或隐藏标准断言语义的共享抽象。
+
+#### Scenario: 服务模块声明直接测试依赖
+
+- **WHEN** 服务模块的测试代码直接导入 `github.com/stretchr/testify/require` 或 `github.com/stretchr/testify/assert`
+- **THEN** 该 Go module MUST 在自身 `go.mod` 中直接声明 `github.com/stretchr/testify`
+- **AND** `go mod tidy` 后依赖文件 MUST NOT 出现与本次测试断言迁移无关的漂移
+
+#### Scenario: 优先使用语义化断言
+
+- **WHEN** 测试需要验证错误、对象和值、布尔状态、集合长度、字符串内容或 nil 状态
+- **THEN** 测试 MUST 优先使用 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.NotEqual`、`require.Nil`、`require.NotNil`、`require.True`、`require.False`、`require.Len`、`require.Empty`、`require.NotEmpty` 或 `require.Contains` 等语义化断言
+- **AND** 测试 MUST NOT 将普通手写失败判断机械替换为 `require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf`
+
+#### Scenario: 保留直接 testing.T 失败调用的例外
+
+- **WHEN** 测试保留 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf`
+- **THEN** 该调用 MUST 用于无法通过现有语义化断言清晰表达的自定义测试控制流、特殊诊断输出或不适合依赖 `testify` 的测试辅助工具
+- **AND** 普通前置条件失败、错误返回值、相等性、包含关系、长度、空值或布尔状态断言 MUST 使用 `require` 或必要时 `assert`
+
+### Requirement: 服务测试断言依赖与例外规范
+
+服务测试 MUST 可以直接使用标准 `testify/require` 与 `testify/assert` 断言库表达常见错误、对象、布尔、集合、字符串和诊断预期。系统 MUST NOT 为迁移 user 与 shared identity 历史测试断言新增跨服务兼容 helper、机械失败包装器或隐藏标准断言语义的共享抽象。
+
+#### Scenario: 服务模块声明直接测试依赖
+
+- **WHEN** 服务模块的测试代码直接导入 `github.com/stretchr/testify/require` 或 `github.com/stretchr/testify/assert`
+- **THEN** 该 Go module MUST 在自身 `go.mod` 中直接声明 `github.com/stretchr/testify`
+- **AND** `go mod tidy` 后依赖文件 MUST NOT 出现与本次测试断言迁移无关的漂移
+
+#### Scenario: 优先使用语义化断言
+
+- **WHEN** 测试需要验证错误、对象和值、布尔状态、集合长度、字符串内容、类型、nil 状态、HTTP response 字段或 pagination 字段
+- **THEN** 测试 MUST 优先使用 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.NotEqual`、`require.Nil`、`require.NotNil`、`require.True`、`require.False`、`require.Len`、`require.Empty`、`require.NotEmpty`、`require.Contains` 或等价语义化断言
+- **AND** 测试 MUST NOT 将普通手写失败判断机械替换为 `require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf`
+
+#### Scenario: 多字段响应诊断可以使用 assert
+
+- **WHEN** 单个 HTTP response、pagination 或 DTO 测试需要同时收集多个互不依赖字段的失败信息
+- **THEN** 测试 MAY 使用 `testify/assert` 验证这些独立字段
+- **AND** 任何会影响后续解码、类型断言或字段访问安全性的前置条件 MUST 使用 `require`
+
+#### Scenario: 保留直接 testing.T 失败调用的例外
+
+- **WHEN** 测试保留 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf`
+- **THEN** 该调用 MUST 用于无法通过现有语义化断言清晰表达的自定义测试控制流、特殊诊断输出或不适合依赖 `testify` 的测试辅助工具
+- **AND** 普通前置条件失败、错误返回值、相等性、包含关系、长度、空值或布尔状态断言 MUST 使用 `require` 或必要时 `assert`
+
+### Requirement: 服务装配边界测试断言依赖与例外治理
+
+服务装配边界测试 MUST 可以直接使用标准 `testify/require` 与 `testify/assert` 表达常见错误、对象、数值范围、集合、字符串、JSON、正则、时间和 panic 断言。系统 MUST NOT 为迁移 router、provider 或 bootstrap 历史测试断言新增跨服务兼容 helper、机械失败包装器、共享断言 facade 或仅服务于测试的生产 API。
+
+#### Scenario: 直接使用标准 testify 断言
+
+- **WHEN** `user-service/internal/router`、`providers` 或 `bootstrap` 测试需要验证错误、对象和值、数值范围、集合长度、元素集合、字符串包含、JSON 等价、正则匹配、时间边界或 panic 行为
+- **THEN** 测试 MUST 优先使用 `require.NoError`、`require.Error`、`require.ErrorContains`、`require.Equal`、`require.NotNil`、`require.Len`、`require.Greater`、`require.Less`、`require.ElementsMatch`、`require.JSONEq`、`require.Regexp`、`require.WithinDuration`、`require.Panics` 或等价语义化断言
+- **AND** 测试 MUST NOT 使用 `require.True`、`require.False`、手写 `if` 或多个基础断言拼凑上述已有语义化断言可以清晰覆盖的检查
+
+#### Scenario: 多个独立检查可使用 assert
+
+- **WHEN** 单个测试需要在一次执行中收集多个互相独立的 route、provider 输出、metric family、label、日志字段或 health check 结果失败
+- **THEN** 测试 MAY 使用 `testify/assert` 进行非阻塞式断言
+- **AND** 初始化失败、前置条件失败或后续检查依赖当前结果时 MUST 使用 `testify/require`
+
+#### Scenario: 禁止新增断言兼容层
+
+- **WHEN** 迁移历史 `t.Fatal`、`t.Error` 或泛化布尔断言
+- **THEN** 系统 MUST NOT 新增旧断言风格兼容 helper、共享 wrapper、机械 `Fail*` 替换、测试专用生产分支或仅为单元测试暴露的运行时 API
+- **AND** 迁移 MUST 基于现有实现和合理的测试可读性完成
+
+#### Scenario: testing.T 直接失败例外
+
+- **WHEN** 目标测试保留直接 `testing.T` 失败方法或 `Fail*` 调用
+- **THEN** 保留项 MUST 符合 `docs/TESTING.md` 中自定义测试控制流、特殊诊断输出或测试辅助工具不适合依赖 `testify` 的例外规则
+- **AND** 普通错误、相等性、包含关系、长度、空值、数值范围、字符串、JSON、正则、时间或 panic 断言 MUST 使用语义化 `require` 或必要时 `assert`
+
+### Requirement: cmd 与 Ent schema 测试断言依赖与例外治理
+
+cmd 与 Ent schema 测试 MUST 可以直接使用标准 `testify/require` 与 `testify/assert` 表达常见错误、对象、数值范围、集合、字符串、JSON、正则、时间和 panic 断言。系统 MUST NOT 为迁移 CLI 或 Ent schema 历史测试断言新增跨服务兼容 helper、机械失败包装器、共享断言 facade 或仅服务于测试的生产 API。
+
+#### Scenario: 直接使用标准 testify 断言
+
+- **WHEN** `user-service/cmd` 或 `user-service/ent/schema` 测试需要验证错误、对象和值、数值范围、集合长度、元素集合、字符串包含、JSON 等价、正则匹配、时间边界或 panic 行为
+- **THEN** 测试 MUST 优先使用 `require.NoError`、`require.Error`、`require.ErrorContains`、`require.Equal`、`require.NotNil`、`require.Len`、`require.Greater`、`require.Less`、`require.ElementsMatch`、`require.JSONEq`、`require.Regexp`、`require.WithinDuration`、`require.Panics` 或等价语义化断言
+- **AND** 测试 MUST NOT 使用 `require.True`、`require.False`、手写 `if` 或多个基础断言拼凑上述已有语义化断言可以清晰覆盖的检查
+
+#### Scenario: 多个独立检查可使用 assert
+
+- **WHEN** 单个测试需要在一次执行中收集多个互相独立的 command property、flag metadata、schema field、schema edge、schema index、annotation 或 validator 结果失败
+- **THEN** 测试 MAY 使用 `testify/assert` 进行非阻塞式断言
+- **AND** 初始化失败、前置条件失败或后续检查依赖当前结果时 MUST 使用 `testify/require`
+
+#### Scenario: 禁止新增断言兼容层
+
+- **WHEN** 迁移历史 `t.Fatal`、`t.Error` 或泛化布尔断言
+- **THEN** 系统 MUST NOT 新增旧断言风格兼容 helper、共享 wrapper、机械 `Fail*` 替换、测试专用生产分支或仅为单元测试暴露的运行时 API
+- **AND** 迁移 MUST 基于现有实现和合理的测试可读性完成
+
+#### Scenario: testing.T 直接失败例外
+
+- **WHEN** 目标测试保留直接 `testing.T` 失败方法或 `Fail*` 调用
+- **THEN** 保留项 MUST 符合 `docs/TESTING.md` 中自定义测试控制流、特殊诊断输出或测试辅助工具不适合依赖 `testify` 的例外规则
+- **AND** 普通错误、相等性、包含关系、长度、空值、数值范围、字符串、JSON、正则、时间或 panic 断言 MUST 使用语义化 `require` 或必要时 `assert`
+
+### Requirement: runtime primitive 内部默认值可追踪
+
+系统 MUST 在 `common/runtime` 和 `common/testing` 中使用命名常量表达包内默认超时、轮询间隔和探测间隔，避免在核心执行路径或测试基础设施中保留难以追踪的内联时间魔法值。命名常量 MUST 保持私有，除非该值已经是明确的跨模块公开契约。
+
+#### Scenario: scheduler 锁默认超时命名化
+
+- **WHEN** scheduler 需要为锁释放或锁续租设置内部默认超时
+- **THEN** 系统 MUST 通过 `common/runtime/scheduler` 包内私有命名常量表达该默认值
+- **AND** `executor.go`、`renew.go` 和 `validation.go` MUST NOT 分别内联重复的 `5 * time.Second` 默认值
+
+#### Scenario: 测试容器探测间隔命名化
+
+- **WHEN** `common/testing/containers` 需要轮询 Docker mapped port 或依赖 readiness
+- **THEN** 系统 MUST 通过测试 helper 包内私有命名常量表达探测或轮询间隔
+- **AND** PostgreSQL 测试容器 helper MUST NOT 在端口探测循环中直接内联 `100 * time.Millisecond`
+
+### Requirement: scheduler 任务执行流程可维护
+
+系统 MUST 保持 `common/runtime/scheduler` 的任务执行流程职责清晰。`runJob()` MUST 作为一次任务触发的编排入口，核心子流程 MUST 通过私有函数承载执行权获取、分布式锁获取、任务上下文和续租准备、执行后 cleanup、执行结果记录，且 MUST 保持导出 API 和运行时行为不变。
+
+#### Scenario: 拆分任务执行子流程
+
+- **WHEN** scheduler 执行一次已注册任务
+- **THEN** `runJob()` MUST 继续按本地 overlap gate、全局并发 gate、分布式锁、任务上下文、自动续租、任务执行和收尾记录的顺序编排
+- **AND** 各子流程 MUST 由 `common/runtime/scheduler` 包内私有函数或私有类型承载
+
+#### Scenario: 保持任务执行语义
+
+- **WHEN** `runJob()` 被拆分为私有函数
+- **THEN** 系统 MUST 保持任务触发、跳过原因、开始、完成、失败、panic recovery、锁释放、续租失败处理、gate 归还和 shutdown 语义不变
+- **AND** 系统 MUST NOT 新增公开 executor 类型、公开接口或仅服务测试的生产适配层
+
+### Requirement: common 模块依赖保持 tidy
+
+系统 MUST 保持 `common` 模块依赖图与当前源码和工具入口一致。`common/go.mod` 和 `common/go.sum` MUST 通过 `GOWORK=off go mod tidy` 校验，不得手工保留当前模块不再需要的间接依赖残留。
+
+#### Scenario: common 依赖清理
+
+- **WHEN** `common` 模块完成 runtime primitive 或测试基础设施维护性变更
+- **THEN** 系统 MUST 在 `common` 目录使用 `GOWORK=off go mod tidy` 整理依赖
+- **AND** `common/go.mod` 和 `common/go.sum` MUST 只保留 Go 工具链按当前源码、测试和 tool 指令判定需要的模块项
+
+#### Scenario: 不误删真实导入链依赖
+
+- **WHEN** 某个间接依赖由 Gin、Swagger UI、Prometheus 或其他当前源码真实导入链带入
+- **THEN** 系统 MUST 以 `go mod why -m` 和 `go mod tidy -diff` 结果为准判断是否清理
+- **AND** 系统 MUST NOT 为降低依赖数量而手工删除 tidy 仍要求保留的模块项
+
+### Requirement: 共享 runtime primitive 测试稳定性
+
+`common/runtime` 中 localcache、workerpool、scheduler 和 timezone 等共享 runtime primitive 的测试 MUST 避免使用固定 `time.Sleep` 或手动 `os.Setenv` 恢复来表达异步进度、过期状态或全局环境隔离。测试 MUST 使用可观察条件、通道同步、testing 环境隔离或确定性输入表达预期。
+
+#### Scenario: localcache 过期测试使用条件等待
+- **WHEN** localcache 测试验证 TTL 过期后缓存未命中
+- **THEN** 测试 MUST 使用 `require.Eventually` 或等价条件等待断言未命中状态
+- **AND** 测试 MUST NOT 在固定 `time.Sleep` 后立即断言过期结果
+
+#### Scenario: localcache 并发回源测试使用通道同步
+- **WHEN** localcache 测试验证同 key 并发 miss 被 `singleflight` 合并
+- **THEN** 测试 MUST 通过通道、atomic 计数或 wait group 明确确认 goroutine 已进入目标等待点
+- **AND** 测试 MUST NOT 依赖固定 `time.Sleep` 猜测 goroutine 调度状态
+
+#### Scenario: workerpool 状态等待使用条件断言
+- **WHEN** workerpool 测试等待任务进入 running、waiting、completed、failed 或 stopped 状态
+- **THEN** 测试 MUST 使用条件等待 helper、`require.Eventually` 或通道信号
+- **AND** 测试 MUST NOT 使用固定 `time.Sleep` 表达后台状态已经变化
+
+#### Scenario: scheduler 自动续租测试使用可观察条件
+- **WHEN** scheduler 测试验证自动续租或任务取消行为
+- **THEN** 测试 MUST 通过锁记录、任务通道或 eventually-style 条件断言观察续租结果
+- **AND** 测试 MUST NOT 仅通过任务内部固定 sleep 制造续租窗口
+
+#### Scenario: timezone 测试隔离全局环境
+- **WHEN** timezone 测试修改 `TZ`、`time.Local` 或包级初始化状态
+- **THEN** 测试 MUST 使用 `t.Setenv` 管理环境变量
+- **AND** 测试 MUST 通过 `t.Cleanup` 恢复 `time.Local` 和包级状态
+- **AND** 这些测试 MUST NOT 使用 `t.Parallel`
+

@@ -1,9 +1,7 @@
 ## Purpose
 
 定义 user-service 的认证会话能力，覆盖登录、令牌签发、刷新、退出、改密、会话状态和 token version 校验。
-
 ## Requirements
-
 ### Requirement: 用户登录与令牌签发
 
 系统 MUST 提供用户名密码登录能力，并在凭证、用户状态和会话策略校验通过后签发访问令牌与刷新令牌。系统 MUST 将密码 KDF 资源池繁忙视为临时服务不可用，而不是无效凭据。
@@ -101,7 +99,7 @@
 
 ### Requirement: 会话与 token version 策略
 
-系统 MUST 在 auth application 中拥有 token version 校验、refresh session 生命周期、每用户活跃 refresh session 上限和会话撤销语义。受保护路由的 token version 本地缓存 MUST 使用有容量上限的 `common/runtime/localcache` loading cache，并且 MUST 将 Redis token version 投影和 PostgreSQL 当前值作为回源路径。user-service auth/provider 边界 MUST 拥有 `auth_token_version` 缓存实例名，并 MUST 在缺少该配置实例时拒绝服务装配。`auth.token_version_cache_ttl` MUST 允许正数 duration 表示显式 Redis token version 投影 TTL，并 MUST 允许非正数 duration 表示使用服务默认 TTL；非正数配置 MUST NOT 创建永久 Redis token version 投影。auth application port MUST 将 PostgreSQL token version 持久化、Redis token version 投影和 refresh session 生命周期拆分为最小依赖接口，业务组件 MUST 只依赖自身所需的 port。
+系统 MUST 在 auth application 中拥有 token version 校验、refresh session 生命周期、每用户活跃 refresh session 上限和会话撤销语义。受保护路由的 token version 本地缓存 MUST 使用有容量上限的 `common/runtime/localcache` loading cache，并且 MUST 将 Redis token version 投影和 PostgreSQL 当前值作为回源路径。user-service auth/provider 边界 MUST 拥有 `auth_token_version` 缓存实例名，并 MUST 在缺少该配置实例时拒绝服务装配。`auth.token_version_cache_ttl` MUST 允许正数 duration 表示显式 Redis token version 投影 TTL，并 MUST 允许非正数 duration 表示使用服务默认 TTL；非正数配置 MUST NOT 创建永久 Redis token version 投影。auth application port MUST 将 PostgreSQL token version 持久化、Redis token version 投影和 refresh session 生命周期拆分为最小依赖接口，业务组件 MUST 只依赖自身所需的 port。token version 本地缓存失效接口 MUST 返回失败错误；会话撤销流程 MUST 记录本地失效失败并将其纳入投影错误返回，MUST NOT 静默忽略本地 cache 删除失败。
 
 #### Scenario: 活跃 session 上限
 
@@ -147,6 +145,13 @@
 - **AND** Redis token version 投影刷新失败时，系统 MUST 尝试删除 Redis 投影，使后续校验能够回源 PostgreSQL
 - **AND** 投影刷新失败 MUST 被记录并可测试，不得被静默忽略
 
+#### Scenario: token version 本地缓存失效失败
+
+- **WHEN** 用户执行全部会话退出或强制改密导致系统尝试删除本实例本地 token version cache，且本地 cache 删除返回错误
+- **THEN** 系统 MUST 记录包含 `user_id` 和错误信息的日志
+- **AND** 会话撤销流程 MUST 将该错误纳入投影错误返回
+- **AND** 系统 MUST NOT 继续静默忽略本地 token version cache 删除失败
+
 ### Requirement: 认证 command use case 最小依赖边界
 
 认证 command use case MUST 通过自身 constructor 声明最小依赖，并且结构体 MUST 只保存该 use case 实际需要的 collaborator。系统 MUST NOT 通过跨多个 command use case 的共享依赖容器向单个 use case 暴露无关的 credential、token、session、metrics 或配置依赖。
@@ -177,7 +182,7 @@
 
 ### Requirement: 会话退出
 
-系统 MUST 支持退出当前会话和退出全部会话，并保证退出后令牌无法继续访问受保护资源。全部会话退出 MUST 以 PostgreSQL token version 递增作为旧 access token 失效的主事实，并 MUST 明确表达 Redis token version 投影刷新和 refresh session 删除失败时的最终一致处理语义。
+系统 MUST 支持退出当前会话和退出全部会话，并保证退出后令牌无法继续访问受保护资源。全部会话退出 MUST 以 PostgreSQL token version 递增作为旧 access token 失效的主事实，并 MUST 明确表达本地 token version cache 失效、Redis token version 投影刷新和 refresh session 删除失败时的最终一致处理语义。
 
 #### Scenario: 退出当前会话
 
@@ -189,7 +194,7 @@
 - **WHEN** 已认证用户请求退出全部会话
 - **THEN** 系统 MUST 递增用户 `token_version` 并撤销该用户的所有活跃 refresh session，使旧 token 无法继续刷新或访问
 - **AND** PostgreSQL token version 递增成功后，旧 access token MUST 因 token version 不匹配而无法继续访问受保护资源
-- **AND** Redis token version 投影刷新或 refresh session 删除失败时，系统 MUST 返回、记录或暴露可观察的投影失败信号，使调用方和测试能区分主事实成功与投影失败
+- **AND** 本地 token version cache 失效、Redis token version 投影刷新或 refresh session 删除失败时，系统 MUST 返回、记录或暴露可观察的投影失败信号，使调用方和测试能区分主事实成功与投影失败
 
 #### Scenario: 全部会话后台清理
 
@@ -344,3 +349,137 @@ token version validator 的单元测试 MUST 使用本包已有 gomock 生成物
 
 - **WHEN** 新行为涉及 JWT 签发解析、refresh session 生命周期、token version fallback 或会话撤销
 - **THEN** 业务语义 MUST 位于 `application/tokens`、`application/sessions`、`application/validators` 或 command 编排中，Redis adapter 只实现存储契约
+
+### Requirement: shared auth 和 password 测试断言迁移
+
+`common/security/auth` 和 `common/security/password` 的测试 MUST 使用统一断言规范验证 JWT、token subject、token version、password KDF、密码哈希和密码校验行为。断言迁移 MUST 保持 JWT claims 解析、token subject 校验、token version 校验、Argon2id 参数、KDF 资源预算、队列繁忙错误、密码哈希编码和常量时间校验语义不变。
+
+#### Scenario: JWT 和 token 断言
+
+- **WHEN** `common/security/auth` 测试验证 token 签发、解析、过期、subject、`jti`、token version 或错误路径
+- **THEN** 测试 MUST 使用 `require` 表达错误、claims、时间、subject 和版本匹配断言
+- **AND** 迁移 MUST NOT 改变 token 格式、claims 名称、过期校验或 subject 隔离语义
+
+#### Scenario: password KDF 断言
+
+- **WHEN** `common/security/password` 测试验证 Argon2id 哈希、校验、参数解析、资源预算或队列繁忙路径
+- **THEN** 测试 MUST 使用 `require` 表达构造错误、哈希格式、校验结果、错误类型和资源边界断言
+- **AND** 迁移 MUST NOT 改变 Argon2id 参数、哈希编码、队列上限、并发上限或 `ErrPasswordKDFBusy` 语义
+
+#### Scenario: 安全失败路径不放宽
+
+- **WHEN** auth 或 password 测试迁移历史 `t.Fatal`、`t.Error` 手写判断
+- **THEN** 测试 MUST 保持原有安全失败路径覆盖
+- **AND** 迁移 MUST NOT 通过兼容 helper、生产分支或弱化断言使非法 token、错误密码、过期 token 或资源繁忙路径被放行
+
+### Requirement: auth 测试语义化断言规范
+
+auth 范围内的 Go 测试 MUST 使用语义化断言验证认证会话、credential、refresh session、token、password change、HTTP response、Redis/PostgreSQL adapter、metrics 和 provider 行为。测试 MUST NOT 通过旧手写 if 断言、机械 `Fail` / `Failf` 替换或兼容 helper 隐藏失败信息。
+
+#### Scenario: application 测试使用 require 表达安全路径断言
+
+- **WHEN** auth application、credentials、sessions、tokens、validators 或 authctx 测试覆盖登录、刷新、强制改密、改密、退出、token version 或 client/session context 行为
+- **THEN** 测试 MUST 优先使用 `testify/require` 的错误、对象、布尔、集合、字符串和类型断言表达预期
+- **AND** 后续检查依赖当前结果时 MUST 使用阻塞式 `require` 避免级联失败
+
+#### Scenario: HTTP controller 和 input 测试使用语义化断言
+
+- **WHEN** auth HTTP transport 测试覆盖请求输入归一化、use case 调用、HTTP status、response envelope、强制改密响应、错误码或响应 data 字段
+- **THEN** 测试 MUST 使用 `require` 或必要时 `assert` 验证状态码、envelope code、success 标记、data shape 和字段存在性
+- **AND** 测试 MUST NOT 增加旧 auth HTTP 字段、旧错误码、旧 token 类型或旧状态兼容断言
+
+#### Scenario: adapter 和 provider 测试使用语义化断言
+
+- **WHEN** auth Redis/PostgreSQL infrastructure、metrics、Fx/provider 或 `user-service/internal/providers/auth_test.go` 测试覆盖 store、key schema、TTL、token version cache、credential update、metrics collector 或 provider 构造行为
+- **THEN** 测试 MUST 使用 `require` 或必要时 `assert` 表达错误、相等性、包含关系、空值、非空值、长度和布尔预期
+- **AND** 生产 Redis key、PostgreSQL schema、JWT claims、配置和 provider 装配语义 MUST 保持不变
+
+#### Scenario: 剩余 testing.T 直接失败调用受限
+
+- **WHEN** auth 目标范围内的 `_test.go` 文件保留 `t.Fatal`、`t.Fatalf`、`t.Error`、`t.Errorf`、`require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf`
+- **THEN** 每个剩余命中 MUST 属于 `docs/TESTING.md` 允许的自定义测试控制流、特殊诊断输出或测试辅助工具场景
+- **AND** change tasks MUST 列明剩余例外，证明其不是可由现有语义化断言清晰表达的普通断言
+
+### Requirement: 认证领域状态判断测试覆盖
+
+`auth-session-management` 的 auth domain 测试 MUST 直接覆盖 `UserCredential` 对用户状态的领域判断。测试 MUST 固定普通登录、强制改密登录和受限改密流程当前使用的状态语义，并 MUST NOT 通过旧状态别名、旧 token 类型复用、旧错误码、旧字段或兼容 helper 表达预期。
+
+#### Scenario: 普通状态允许普通登录
+
+- **WHEN** `UserCredential.Status` 为 `identity.UserStatusNormal`
+- **THEN** `CanLogin` MUST 返回 `true`
+- **AND** `RequiresPasswordChange` MUST 返回 `false`
+- **AND** `CanChangePassword` MUST 返回 `false`
+
+#### Scenario: 强制改密状态只允许受限改密流程
+
+- **WHEN** `UserCredential.Status` 为 `identity.UserStatusMustChangePassword`
+- **THEN** `CanLogin` MUST 返回 `false`
+- **AND** `RequiresPasswordChange` MUST 返回 `true`
+- **AND** `CanChangePassword` MUST 返回 `true`
+
+#### Scenario: 不可登录状态拒绝认证流程
+
+- **WHEN** `UserCredential.Status` 为 `identity.UserStatusDisabled` 或未知状态值
+- **THEN** `CanLogin` MUST 返回 `false`
+- **AND** `RequiresPasswordChange` MUST 返回 `false`
+- **AND** `CanChangePassword` MUST 返回 `false`
+
+#### Scenario: auth domain 测试使用语义化断言
+
+- **WHEN** auth domain 测试覆盖 `UserCredential` 状态判断
+- **THEN** 测试 MUST 使用 `testify/require` 或等价语义化断言表达布尔和值预期
+- **AND** 测试 MUST NOT 使用机械 `Fail` / `Failf` 替换或旧手写断言兼容 helper
+
+### Requirement: 认证路由注册测试覆盖
+系统 MUST 使用 router 包测试覆盖认证公开路由和认证保护路由在 user-service 聚合路由中的注册结果，确保认证入口仅存在于当前 `/api/v1/auth` 路由图中。
+
+#### Scenario: 认证公开路由注册
+- **WHEN** `registerV1Routes` 注册当前 `/api/v1` 路由组
+- **THEN** 测试 MUST 验证登录、refresh 和强制改密入口注册在 `/api/v1/auth` 下
+- **AND** 测试 MUST 验证这些公开认证路由不经过普通 access token 认证中间件
+
+#### Scenario: 认证保护路由注册
+- **WHEN** `registerV1Routes` 注册当前 `/api/v1` 路由组
+- **THEN** 测试 MUST 验证退出当前会话和退出全部会话入口注册在 `/api/v1/auth` 下
+- **AND** 测试 MUST 验证这些路由进入当前认证中间件链
+- **AND** 测试 MUST NOT 为旧认证绕过路径或 `/api`、`/v1` 旧别名保留兼容断言
+
+### Requirement: 认证会话 E2E flow 断言规范
+系统 MUST 使用语义化断言覆盖 user-service E2E HTTP flow 中的认证会话行为，包括普通登录、强制改密登录、修改密码、旧密码登录失败、登出当前会话和 refresh token 失效。断言迁移 MUST 保持当前认证会话、token、错误码和 response envelope 语义不变。
+
+#### Scenario: 普通登录 token 断言
+- **WHEN** E2E flow 使用合法用户名和密码完成普通登录
+- **THEN** 测试 MUST 使用 `require.NotEmpty`、`require.Equal`、`require.Greater` 或必要 `assert` 验证 access token、refresh token、token type 和 expires_in
+- **AND** 测试 MUST NOT 接受缺失 refresh token、旧 token type、旧错误码或旧响应字段兼容分支
+
+#### Scenario: 强制改密登录断言
+- **WHEN** E2E flow 使用强制改密用户凭据登录
+- **THEN** 测试 MUST 使用语义化断言验证 HTTP `200 OK`、`success=false`、`CodePasswordChangeRequired`、受限 access token metadata 和空 refresh token
+- **AND** 测试 MUST NOT 将强制改密分支断言为普通 `CodeOK` 成功登录
+
+#### Scenario: 改密、登出和 refresh 失败断言
+- **WHEN** E2E flow 完成改密、使用旧密码重试登录、登出当前会话并使用旧 refresh token 刷新
+- **THEN** 测试 MUST 使用语义化断言验证改密成功、旧密码认证失败、登出成功和 refresh token 失效的当前 HTTP status 与应用错误码
+- **AND** 迁移 MUST NOT 改变 refresh session、token version、password change token 或 logout 运行时语义
+
+### Requirement: 认证会话测试时间确定性
+
+认证会话、refresh session 和 token version validator 测试 MUST 避免使用固定 `time.Sleep` 作为 Redis session 排序、本地缓存过期或异步状态变化的唯一依据。测试 MUST 使用确定性 score/clock、可观察条件或真实 cache 的 eventually-style 断言表达预期。
+
+#### Scenario: refresh session 上限裁剪测试使用确定性顺序
+- **WHEN** Redis refresh session store 测试验证超过每用户活跃 session 上限时裁剪最旧 session
+- **THEN** 测试 MUST 使用确定性 Redis score、可注入时间输入或可观察排序条件建立 session 顺序
+- **AND** 测试 MUST NOT 依赖循环中的固定 `time.Sleep` 制造不同创建时间
+
+#### Scenario: token version 本地缓存过期测试使用条件等待
+- **WHEN** token version validator 测试验证本地缓存 TTL 过期后重新回源
+- **THEN** 测试 MUST 使用 `require.Eventually` 或等价条件等待直到重新回源发生
+- **AND** 测试 MUST 保留真实 `localcache` 实例验证缓存行为
+- **AND** 测试 MUST NOT 在固定 `time.Sleep` 后直接断言回源调用次数
+
+#### Scenario: 认证测试不引入测试专用生产 API
+- **WHEN** 认证测试需要控制时间、顺序或异步状态
+- **THEN** 测试 MUST 优先使用现有可观测存储状态、测试数据构造、gomock expectation、通道或局部 helper
+- **AND** 正式代码 MUST NOT 仅为了测试新增无运行时职责的全局 clock、test hook 或兼容分支
+
