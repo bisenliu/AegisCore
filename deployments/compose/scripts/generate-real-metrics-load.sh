@@ -625,6 +625,8 @@ summarize_results() {
     'sum by (kind) (aegiscore_user_service_permission_route_diff)'
     'sum by (status) (aegiscore_casbin_policy_reloads_total)'
     'sum by (entity, query, result) (aegiscore_user_service_ent_query_duration_seconds_count)'
+    'sum by (entity, query, result) (rate(aegiscore_user_service_ent_query_duration_seconds_sum[5m])) / clamp_min(sum by (entity, query, result) (rate(aegiscore_user_service_ent_query_duration_seconds_count[5m])), 0.000001)'
+    'histogram_quantile(0.95, sum by (le, entity, query, result) (rate(aegiscore_user_service_ent_query_duration_seconds_bucket[5m])))'
     'sum by (entity, query) (aegiscore_user_service_ent_query_errors_total)'
     'aegiscore_redis_up'
     'aegiscore_redis_ping_failures_total'

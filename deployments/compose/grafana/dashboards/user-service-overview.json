@@ -1230,12 +1230,110 @@
       "type": "stat"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "按 method、route_template 和 result 展示 RBAC Enforce 耗时直方图的 P95 与 P99。",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "unit": "s",
+          "noValue": "No data",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 41
+      },
+      "id": 51,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, method, route_template, result) (rate(aegiscore_user_service_rbac_enforce_duration_seconds_bucket{service=\"$service\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "P95 {{method}} {{route_template}} / {{result}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le, method, route_template, result) (rate(aegiscore_user_service_rbac_enforce_duration_seconds_bucket{service=\"$service\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "P99 {{method}} {{route_template}} / {{result}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "RBAC Enforce P95/P99 延迟",
+      "type": "timeseries"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 49
       },
       "id": 16,
       "panels": [],
@@ -1295,7 +1393,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 47
+        "y": 55
       },
       "id": 17,
       "options": {
@@ -1400,7 +1498,7 @@
         "h": 5,
         "w": 12,
         "x": 0,
-        "y": 42
+        "y": 50
       },
       "id": 18,
       "options": {
@@ -1484,7 +1582,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 42
+        "y": 50
       },
       "id": 19,
       "options": {
@@ -1572,7 +1670,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 47
+        "y": 55
       },
       "id": 20,
       "options": {
@@ -1681,7 +1779,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 47
+        "y": 55
       },
       "id": 21,
       "options": {
@@ -1720,7 +1818,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "连接池累计等待时长的 5 分钟变化速率。",
+      "description": "连接池累计等待时长的 5 分钟变化速率，以及 Ent SQL 查询平均耗时和 p95 耗时。",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1768,7 +1866,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 55
+        "y": 63
       },
       "id": 22,
       "options": {
@@ -1797,9 +1895,31 @@
           "legendFormat": "wait duration",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (entity, query, result) (rate(aegiscore_user_service_ent_query_duration_seconds_sum{service=\"$service\",environment=\"$environment\"}[5m])) / clamp_min(sum by (entity, query, result) (rate(aegiscore_user_service_ent_query_duration_seconds_count{service=\"$service\",environment=\"$environment\"}[5m])), 0.000001)",
+          "legendFormat": "ent {{entity}} {{query}} / {{result}} avg",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, entity, query, result) (rate(aegiscore_user_service_ent_query_duration_seconds_bucket{service=\"$service\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "ent {{entity}} {{query}} / {{result}} p95",
+          "range": true,
+          "refId": "C"
         }
       ],
-      "title": "PostgreSQL 等待时长",
+      "title": "PostgreSQL 等待与 Ent SQL 耗时",
       "type": "timeseries"
     },
     {
@@ -1855,7 +1975,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 55
+        "y": 63
       },
       "id": 23,
       "options": {
@@ -1945,7 +2065,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 55
+        "y": 63
       },
       "id": 24,
       "options": {
@@ -2004,7 +2124,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 85
+        "y": 93
       },
       "id": 25,
       "panels": [],
@@ -2064,7 +2184,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 91
+        "y": 99
       },
       "id": 26,
       "options": {
@@ -2176,7 +2296,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 99
+        "y": 107
       },
       "id": 27,
       "options": {
@@ -2285,7 +2405,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 99
+        "y": 107
       },
       "id": 28,
       "options": {
@@ -2391,7 +2511,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 91
+        "y": 99
       },
       "id": 29,
       "options": {
@@ -2474,7 +2594,7 @@
         "h": 5,
         "w": 8,
         "x": 0,
-        "y": 86
+        "y": 94
       },
       "id": 30,
       "options": {
@@ -2558,7 +2678,7 @@
         "h": 5,
         "w": 8,
         "x": 8,
-        "y": 86
+        "y": 94
       },
       "id": 31,
       "options": {
@@ -2646,7 +2766,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 91
+        "y": 99
       },
       "id": 32,
       "options": {
@@ -2729,7 +2849,7 @@
         "h": 5,
         "w": 8,
         "x": 16,
-        "y": 86
+        "y": 94
       },
       "id": 33,
       "options": {
@@ -2770,7 +2890,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 107
+        "y": 115
       },
       "id": 34,
       "panels": [],
@@ -2830,7 +2950,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 108
+        "y": 116
       },
       "id": 35,
       "options": {
@@ -2917,7 +3037,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 108
+        "y": 116
       },
       "id": 36,
       "options": {
@@ -3015,7 +3135,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 108
+        "y": 116
       },
       "id": 37,
       "options": {
@@ -3102,7 +3222,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 116
+        "y": 124
       },
       "id": 38,
       "options": {
@@ -3189,7 +3309,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 116
+        "y": 124
       },
       "id": 39,
       "options": {
@@ -3228,7 +3348,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 116
+        "y": 124
       },
       "id": 40,
       "options": {
@@ -3249,7 +3369,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 63
+        "y": 71
       },
       "id": 41,
       "panels": [],
@@ -3294,7 +3414,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 64
+        "y": 72
       },
       "id": 42,
       "options": {
@@ -3382,7 +3502,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 69
+        "y": 77
       },
       "id": 43,
       "options": {
@@ -3469,7 +3589,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 69
+        "y": 77
       },
       "id": 44,
       "options": {
@@ -3556,7 +3676,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 77
+        "y": 85
       },
       "id": 45,
       "options": {
@@ -3643,7 +3763,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 77
+        "y": 85
       },
       "id": 46,
       "options": {
@@ -3730,7 +3850,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 77
+        "y": 85
       },
       "id": 47,
       "options": {
@@ -3794,7 +3914,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 64
+        "y": 72
       },
       "id": 48,
       "options": {
@@ -3867,7 +3987,7 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 64
+        "y": 72
       },
       "id": 49,
       "options": {
@@ -3936,7 +4056,7 @@
         "h": 5,
         "w": 6,
         "x": 12,
-        "y": 64
+        "y": 72
       },
       "id": 50,
       "options": {
@@ -4118,6 +4238,6 @@
   "timezone": "browser",
   "title": "AegisCore 用户服务总览",
   "uid": "aegiscore-user-service-overview",
-  "version": 5,
+  "version": 6,
   "weekStart": "monday"
 }
