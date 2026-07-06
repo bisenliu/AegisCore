@@ -11,6 +11,8 @@ var (
 	ErrRoleInvalid = errors.New("role invalid")
 	// ErrSystemRoleProtected 表示系统角色不允许被破坏性修改。
 	ErrSystemRoleProtected = errors.New("system role protected")
+	// ErrRoleInactive 表示目标角色已停用，不能用于新的用户角色绑定。
+	ErrRoleInactive = errors.New("role inactive")
 	// ErrUserRoleAlreadyExists 表示用户角色绑定已存在。
 	ErrUserRoleAlreadyExists = errors.New("user role already exists")
 	// ErrUserRoleNotFound 表示用户角色绑定不存在。

@@ -57,6 +57,8 @@ func toRoleHTTPError(err error) error {
 		return contracterrors.ValidationFailedError(messages.InvalidRole)
 	case errors.Is(err, roledomain.ErrSystemRoleProtected):
 		return contracterrors.ConflictError(messages.SystemRoleProtected)
+	case errors.Is(err, roledomain.ErrRoleInactive):
+		return contracterrors.ConflictError(messages.RoleInactive)
 	case errors.Is(err, roledomain.ErrUserRoleAlreadyExists):
 		return contracterrors.ConflictError(messages.UserRoleAlreadyExists)
 	case errors.Is(err, roledomain.ErrUserRoleNotFound):

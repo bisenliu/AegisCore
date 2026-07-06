@@ -8,6 +8,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/logger"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
+	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 )
 
 // UserRoleCommand 包含单个用户角色绑定变更输入。
@@ -36,8 +37,15 @@ type ReplaceRolePermissionsCommand struct {
 
 // AddUserRole 为用户新增角色绑定；重复绑定由 store 映射为明确冲突语义。
 func (s *roleCommandService) AddUserRole(ctx context.Context, cmd UserRoleCommand) (*RolesResult, error) {
-	if _, err := s.roles.GetByRoleID(ctx, cmd.RoleID); err != nil {
+	role, err := s.roles.GetByRoleID(ctx, cmd.RoleID)
+	if err != nil {
 		return nil, err
+	}
+	if role == nil {
+		return nil, roledomain.ErrRoleNotFound
+	}
+	if !role.Active {
+		return nil, roledomain.ErrRoleInactive
 	}
 	if err := s.userRoles.Add(ctx, cmd.UserID, cmd.RoleID); err != nil {
 		return nil, err
@@ -51,8 +59,14 @@ func (s *roleCommandService) AddUserRole(ctx context.Context, cmd UserRoleComman
 // ReplaceUserRoles 幂等替换用户的完整角色绑定集合。
 func (s *roleCommandService) ReplaceUserRoles(ctx context.Context, cmd ReplaceUserRolesCommand) (*RolesResult, error) {
 	roleIDs := uniqueUUIDs(cmd.RoleIDs)
-	if _, err := s.roles.GetByRoleIDs(ctx, roleIDs); err != nil {
+	roles, err := s.roles.GetByRoleIDs(ctx, roleIDs)
+	if err != nil {
 		return nil, err
+	}
+	for _, role := range roles {
+		if !role.Active {
+			return nil, roledomain.ErrRoleInactive
+		}
 	}
 	items, err := s.userRoles.Replace(ctx, cmd.UserID, roleIDs)
 	if err != nil {

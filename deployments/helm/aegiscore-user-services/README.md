@@ -19,6 +19,25 @@
 
 默认 `values.yaml` 不包含真实敏感值，也不设置 `RUN_MIGRATIONS=true`。普通 user-service 镜像不包含 Atlas，chart 不渲染自动执行 Atlas apply 的 migration Job。生产环境必须提前创建 `secret.existingSecret` 指向的 Secret，并确保数据库 SQL migration 已通过 DBA 工单或受控发布平台执行完成。
 
+## NetworkPolicy 安全边界
+
+默认 `networkPolicy` 仅允许 `ingress-system` namespace 中带 `aegiscore.io/allow-user-service: "true"` 的受控上游访问 user-service HTTP 端口，并将 PostgreSQL、Redis 和 OTLP Collector egress 分别约束到明确 namespace 与 Pod selector。生产环境必须通过 admission policy 或等价准入控制限制 `aegiscore.io/allow-user-service` 标签只能由受信任 namespace 或受控 workload 使用；仓库原生清单提供了 `deployments/k8s/user-services/admissionpolicy.yaml` 作为参考资产。
+
+如果目标环境使用集群外 PostgreSQL、Redis 或 OTLP Collector，应在环境 values 中使用精确 `ipBlock.cidr` 或等价明确目的地覆盖对应 egress 规则。不得删除 `to` 字段恢复对任意目的地址开放 `5432`、`6379`、`4317` 或 `4318`。
+
+外部 PostgreSQL 覆盖示例：
+
+```yaml
+networkPolicy:
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.20.30.40/32
+      ports:
+        - protocol: TCP
+          port: 5432
+```
+
 ## Secret 键名
 
 默认 Secret 名称为 `aegiscore-user-services-runtime`，默认键名如下：

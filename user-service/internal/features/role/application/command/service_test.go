@@ -126,6 +126,36 @@ func TestRoleCommandServiceReplaceUserRolesLookupFailureSkipsWriteAndNotify(t *t
 	require.Nil(t, result)
 }
 
+func TestRoleCommandServiceInactiveUserRoleSkipsWriteAndNotify(t *testing.T) {
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000025")
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000026")
+	role := roledomain.Role{RoleID: roleID, Name: "inactive", Active: false}
+	fixture := newRoleCommandFixture(t)
+	fixture.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil)
+	fixture.userRoles.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).Times(0)
+
+	result, err := fixture.service.AddUserRole(context.Background(), UserRoleCommand{UserID: userID, RoleID: roleID})
+	require.ErrorIs(t, err, roledomain.ErrRoleInactive)
+	require.Nil(t, result)
+}
+
+func TestRoleCommandServiceReplaceInactiveUserRoleSkipsWriteAndNotify(t *testing.T) {
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000027")
+	otherRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000028")
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000029")
+	role := roledomain.Role{RoleID: roleID, Name: "operator", Active: true}
+	inactiveRole := roledomain.Role{RoleID: otherRoleID, Name: "inactive", Active: false}
+	fixture := newRoleCommandFixture(t)
+	fixture.roles.EXPECT().GetByRoleIDs(gomock.Any(), uuidSliceMatches(roleID, otherRoleID)).Return([]roledomain.Role{role, inactiveRole}, nil)
+	fixture.userRoles.EXPECT().Replace(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).Times(0)
+
+	result, err := fixture.service.ReplaceUserRoles(context.Background(), ReplaceUserRolesCommand{UserID: userID, RoleIDs: []uuid.UUID{roleID, otherRoleID}})
+	require.ErrorIs(t, err, roledomain.ErrRoleInactive)
+	require.Nil(t, result)
+}
+
 func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000006")
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000007")

@@ -87,6 +87,14 @@ func TestRoleControllerReplaceUserRoles(t *testing.T) {
 		recorder := performRoleHTTPRequest(t, engine, http.MethodPut, "/api/v1/users/"+roleHTTPTestUserID+"/roles", jsonBody(`{"role_ids":["`+roleHTTPTestRoleID+`"]}`))
 		expectRoleEnvelope(t, recorder, http.StatusNotFound, false, contracterrors.CodeNotFound, messages.RoleNotFound)
 	})
+
+	t.Run("inactive role maps to conflict envelope", func(t *testing.T) {
+		engine, commands, _ := newRoleHTTPTestHarness(t)
+		commands.EXPECT().ReplaceUserRoles(gomock.Any(), gomock.Any()).Return(nil, roledomain.ErrRoleInactive)
+
+		recorder := performRoleHTTPRequest(t, engine, http.MethodPut, "/api/v1/users/"+roleHTTPTestUserID+"/roles", jsonBody(`{"role_ids":["`+roleHTTPTestRoleID+`"]}`))
+		expectRoleEnvelope(t, recorder, http.StatusConflict, false, contracterrors.CodeConflict, messages.RoleInactive)
+	})
 }
 
 func TestRoleControllerAddUserRole(t *testing.T) {
@@ -121,6 +129,14 @@ func TestRoleControllerAddUserRole(t *testing.T) {
 
 		recorder := performRoleHTTPRequest(t, engine, http.MethodPost, "/api/v1/users/"+roleHTTPTestUserID+"/roles", jsonBody(`{"role_id":"`+roleHTTPTestRoleID+`"}`))
 		expectRoleEnvelope(t, recorder, http.StatusConflict, false, contracterrors.CodeConflict, messages.UserRoleAlreadyExists)
+	})
+
+	t.Run("inactive role maps to conflict envelope", func(t *testing.T) {
+		engine, commands, _ := newRoleHTTPTestHarness(t)
+		commands.EXPECT().AddUserRole(gomock.Any(), gomock.Any()).Return(nil, roledomain.ErrRoleInactive)
+
+		recorder := performRoleHTTPRequest(t, engine, http.MethodPost, "/api/v1/users/"+roleHTTPTestUserID+"/roles", jsonBody(`{"role_id":"`+roleHTTPTestRoleID+`"}`))
+		expectRoleEnvelope(t, recorder, http.StatusConflict, false, contracterrors.CodeConflict, messages.RoleInactive)
 	})
 
 	t.Run("command service error maps to internal error", func(t *testing.T) {

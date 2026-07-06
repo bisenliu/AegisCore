@@ -149,7 +149,9 @@ networkPolicy: # NetworkPolicy 配置。
   enabled: true # 是否渲染网络策略；需 CNI 支持策略执行。
   ingress: # 入站允许规则。
     - from: # 允许访问 user-service 的来源。
-        - namespaceSelector: {} # 允许任意 namespace，但仍需匹配 podSelector。
+        - namespaceSelector: # 仅允许受信任入口 namespace。
+            matchLabels: # namespace 标签条件。
+              kubernetes.io/metadata.name: ingress-system # 网关或受控上游所在 namespace。
           podSelector: # 来源 Pod 选择器。
             matchLabels: # 调用方需显式打上准入标签。
               aegiscore.io/allow-user-service: "true" # 允许访问 user-service 的来源标签。
@@ -157,11 +159,34 @@ networkPolicy: # NetworkPolicy 配置。
         - protocol: TCP # HTTP 使用 TCP。
           port: 8080 # user-service HTTP 端口。
   egress: # 出站允许规则。
-    - ports: # 业务依赖端口。
+    - to: # PostgreSQL 目的地限制。
+        - namespaceSelector: # 选择数据库所在 namespace。
+            matchLabels: # namespace 标签条件。
+              kubernetes.io/metadata.name: data-services # 数据服务 namespace。
+          podSelector: # 选择 PostgreSQL Pod。
+            matchLabels: # Pod 标签条件。
+              app.kubernetes.io/name: postgres # PostgreSQL 工作负载标签。
+      ports: # PostgreSQL 允许端口。
         - protocol: TCP # PostgreSQL 使用 TCP。
           port: 5432 # PostgreSQL 端口。
+    - to: # Redis 目的地限制。
+        - namespaceSelector: # 选择缓存所在 namespace。
+            matchLabels: # namespace 标签条件。
+              kubernetes.io/metadata.name: data-services # 数据服务 namespace。
+          podSelector: # 选择 Redis Pod。
+            matchLabels: # Pod 标签条件。
+              app.kubernetes.io/name: redis # Redis 工作负载标签。
+      ports: # Redis 允许端口。
         - protocol: TCP # Redis 使用 TCP。
           port: 6379 # Redis 端口。
+    - to: # OTLP Collector 目的地限制。
+        - namespaceSelector: # 选择观测组件所在 namespace。
+            matchLabels: # namespace 标签条件。
+              kubernetes.io/metadata.name: observability # 观测 namespace。
+          podSelector: # 选择 OpenTelemetry Collector Pod。
+            matchLabels: # Pod 标签条件。
+              app.kubernetes.io/name: opentelemetry-collector # Collector 工作负载标签。
+      ports: # OTLP 允许端口。
         - protocol: TCP # OTLP gRPC 使用 TCP。
           port: 4317 # OTLP gRPC 端口。
         - protocol: TCP # OTLP HTTP 使用 TCP。
