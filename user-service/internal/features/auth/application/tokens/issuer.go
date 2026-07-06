@@ -15,10 +15,12 @@ import (
 )
 
 const (
-	// defaultAccessTokenTTL 是配置为非正数时 access/改密 token 的兜底生命周期。
+	// defaultAccessTokenTTL 是配置为非正数时 access token 的兜底生命周期。
 	defaultAccessTokenTTL = 15 * time.Minute
 	// defaultRefreshTokenTTL 是配置为非正数时 refresh 会话的兜底生命周期。
 	defaultRefreshTokenTTL = 7 * 24 * time.Hour
+	// defaultPasswordChangeTokenTTL 是配置为非正数时改密 token 的兜底生命周期。
+	defaultPasswordChangeTokenTTL = 5 * time.Minute
 )
 
 // Issuer 签发和解析认证流程使用的 JWT。
@@ -67,13 +69,22 @@ func (i *authTokenIssuer) IssueTokenPair(ctx context.Context, userID string, tok
 
 // IssuePasswordChangeToken 签发受限 token，并有意不返回 refresh token。
 func (i *authTokenIssuer) IssuePasswordChangeToken(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*TokenResult, error) {
-	ttl := i.accessTokenTTL()
+	ttl := i.passwordChangeTokenTTL()
 	token, err := i.jwt.SignPasswordChangeToken(commonauth.SignInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: ttl})
 	if err != nil {
 		logger.Error(ctx, "sign password change token failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return nil, fmt.Errorf("sign password change token: %w", err)
 	}
 	return &TokenResult{AccessToken: token, TokenType: commonauth.TokenTypeBearer, ExpiresIn: int64(ttl.Seconds()), PasswordChangeRequired: true}, nil
+}
+
+func (i *authTokenIssuer) passwordChangeTokenTTL() time.Duration {
+	ttl := i.config.Auth.JWT.PasswordChangeTokenTTL
+	if ttl <= 0 {
+		// 非正数 TTL 配置使用默认值，确保改密 token 始终短期有效。
+		return defaultPasswordChangeTokenTTL
+	}
+	return ttl
 }
 
 // ParseRefreshToken 规范化可选 Bearer 输入并校验 refresh token claims。

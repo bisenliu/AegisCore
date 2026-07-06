@@ -143,6 +143,54 @@ func (mr *MockMetricsMockRecorder) LogoutSucceeded(arg0, arg1 any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutSucceeded", reflect.TypeOf((*MockMetrics)(nil).LogoutSucceeded), arg0, arg1)
 }
 
+// PasswordChangeRevocationCompensationFailed mocks base method.
+func (m *MockMetrics) PasswordChangeRevocationCompensationFailed(arg0 context.Context, arg1 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "PasswordChangeRevocationCompensationFailed", arg0, arg1)
+}
+
+// PasswordChangeRevocationCompensationFailed indicates an expected call of PasswordChangeRevocationCompensationFailed.
+func (mr *MockMetricsMockRecorder) PasswordChangeRevocationCompensationFailed(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PasswordChangeRevocationCompensationFailed", reflect.TypeOf((*MockMetrics)(nil).PasswordChangeRevocationCompensationFailed), arg0, arg1)
+}
+
+// PasswordChangeRevocationProjectionFailed mocks base method.
+func (m *MockMetrics) PasswordChangeRevocationProjectionFailed(arg0 context.Context, arg1 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "PasswordChangeRevocationProjectionFailed", arg0, arg1)
+}
+
+// PasswordChangeRevocationProjectionFailed indicates an expected call of PasswordChangeRevocationProjectionFailed.
+func (mr *MockMetricsMockRecorder) PasswordChangeRevocationProjectionFailed(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PasswordChangeRevocationProjectionFailed", reflect.TypeOf((*MockMetrics)(nil).PasswordChangeRevocationProjectionFailed), arg0, arg1)
+}
+
+// PasswordChangeSessionConsumeFailed mocks base method.
+func (m *MockMetrics) PasswordChangeSessionConsumeFailed(arg0 context.Context, arg1 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "PasswordChangeSessionConsumeFailed", arg0, arg1)
+}
+
+// PasswordChangeSessionConsumeFailed indicates an expected call of PasswordChangeSessionConsumeFailed.
+func (mr *MockMetricsMockRecorder) PasswordChangeSessionConsumeFailed(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PasswordChangeSessionConsumeFailed", reflect.TypeOf((*MockMetrics)(nil).PasswordChangeSessionConsumeFailed), arg0, arg1)
+}
+
+// PasswordChangeSessionReuseRejected mocks base method.
+func (m *MockMetrics) PasswordChangeSessionReuseRejected(arg0 context.Context) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "PasswordChangeSessionReuseRejected", arg0)
+}
+
+// PasswordChangeSessionReuseRejected indicates an expected call of PasswordChangeSessionReuseRejected.
+func (mr *MockMetricsMockRecorder) PasswordChangeSessionReuseRejected(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PasswordChangeSessionReuseRejected", reflect.TypeOf((*MockMetrics)(nil).PasswordChangeSessionReuseRejected), arg0)
+}
+
 // RefreshFailed mocks base method.
 func (m *MockMetrics) RefreshFailed(arg0 context.Context, arg1 string) {
 	m.ctrl.T.Helper()

@@ -30,6 +30,10 @@ func TestAuthPrometheusMetrics(t *testing.T) {
 	recorder.RefreshFailed(context.Background(), authapplication.MetricsReasonTokenVersionMismatch)
 	recorder.TokenVersionMismatch(context.Background(), authapplication.MetricsSourceAccessToken)
 	recorder.SessionPurgeSubmitFailed(context.Background())
+	recorder.PasswordChangeSessionConsumeFailed(context.Background(), authapplication.MetricsPasswordChangeReasonNotFound)
+	recorder.PasswordChangeSessionReuseRejected(context.Background())
+	recorder.PasswordChangeRevocationProjectionFailed(context.Background(), authapplication.MetricsPasswordChangeRevocationProjection)
+	recorder.PasswordChangeRevocationCompensationFailed(context.Background(), authapplication.MetricsPasswordChangeReasonSystemError)
 
 	text := gatherAuthMetricText(t, provider)
 	for _, want := range []string{
@@ -37,6 +41,10 @@ func TestAuthPrometheusMetrics(t *testing.T) {
 		`aegiscore_user_service_auth_operations_total{environment="test",operation="refresh",reason="token_version_mismatch",result="failure",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_user_service_auth_token_version_mismatches_total{environment="test",service="aegiscore-user-service-test",source="access_token"} 1`,
 		`aegiscore_user_service_auth_session_purge_submit_failures_total{environment="test",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_user_service_auth_password_change_session_consume_failures_total{environment="test",reason="not_found",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_user_service_auth_password_change_session_reuse_rejections_total{environment="test",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_user_service_auth_password_change_revocation_projection_failures_total{environment="test",service="aegiscore-user-service-test",step="projection"} 1`,
+		`aegiscore_user_service_auth_password_change_revocation_compensation_failures_total{environment="test",reason="system_error",service="aegiscore-user-service-test"} 1`,
 	} {
 		require.True(t, strings.Contains(text, want),
 			"metrics missing %q:\n%s", want, text)

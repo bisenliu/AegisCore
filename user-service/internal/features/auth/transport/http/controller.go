@@ -129,6 +129,7 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 // @Success 200 {object} response.Envelope{data=authhttp.ChangePasswordResponse} "修改成功"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
 // @Failure 401 {object} response.Envelope "改密凭据无效或已失效"
+// @Failure 503 {object} response.Envelope "认证安全撤销未完成，请稍后重试"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Router /auth/change-password [post]
 func (ctl *AuthController) ChangePassword(c *gin.Context) {

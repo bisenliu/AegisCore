@@ -2,15 +2,18 @@ package command
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
+	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
 // ChangePasswordUseCase 处理强制改密。
@@ -33,6 +36,7 @@ type changePasswordUseCase struct {
 	credentials authcredentials.Verifier
 	tokens      authtokens.Issuer
 	sessions    authsessions.Lifecycle
+	metrics     authapplication.Metrics
 }
 
 // NewChangePasswordUseCase 构造强制改密 use case。
@@ -41,6 +45,7 @@ func NewChangePasswordUseCase(deps ChangePasswordDeps) ChangePasswordUseCase {
 		credentials: deps.Credentials,
 		tokens:      deps.Tokens,
 		sessions:    deps.Sessions,
+		metrics:     metricsOrNop(deps.Metrics),
 	}
 }
 
@@ -50,27 +55,29 @@ func (u *changePasswordUseCase) ChangePassword(ctx context.Context, cmd ChangePa
 		return nil, err
 	}
 
-	parsedUserID, err := u.verifyPasswordChangeToken(ctx, cmd.Token)
+	parsedUserID, tokenVersion, err := u.verifyPasswordChangeToken(ctx, cmd.Token)
 	if err != nil {
 		return nil, err
 	}
-	updated, err := u.credentials.ChangePassword(ctx, parsedUserID, cmd.NewPassword)
+	updated, err := u.credentials.ChangePassword(ctx, parsedUserID, tokenVersion, cmd.NewPassword)
 	if err != nil {
 		return nil, err
 	}
 	if err := u.sessions.RevokeUserSessionsAtVersion(ctx, updated.UserID, updated.TokenVersion); err != nil {
 		logger.Error(ctx, "password change session revocation projection failed", logger.StackTrace(zap.String("user_id", updated.UserID.String()), zap.Int64("token_version", updated.TokenVersion), zap.Error(err))...)
+		u.metrics.PasswordChangeRevocationProjectionFailed(ctx, authapplication.MetricsPasswordChangeRevocationProjection)
+		return nil, errors.Join(authdomain.ErrSessionRevocationIncomplete, err)
 	}
 	return &ChangePasswordResult{Changed: true}, nil
 }
 
-func (u *changePasswordUseCase) verifyPasswordChangeToken(ctx context.Context, token string) (uuid.UUID, error) {
+func (u *changePasswordUseCase) verifyPasswordChangeToken(ctx context.Context, token string) (uuid.UUID, int64, error) {
 	claims, parsedUserID, err := u.tokens.ParsePasswordChangeToken(ctx, token)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, 0, err
 	}
-	if err := u.sessions.ValidatePasswordChangeClaims(ctx, claims); err != nil {
-		return uuid.Nil, err
+	if err := u.sessions.ConsumePasswordChangeClaims(ctx, claims); err != nil {
+		return uuid.Nil, 0, err
 	}
-	return parsedUserID, nil
+	return parsedUserID, claims.TokenVersion, nil
 }

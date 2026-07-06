@@ -1064,9 +1064,31 @@
           "legendFormat": "submit failure",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(aegiscore_user_service_auth_password_change_revocation_projection_failures_total{service=\"$service\",environment=\"$environment\"}[15m])) or vector(0)",
+          "legendFormat": "password-change revocation failure",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(aegiscore_user_service_auth_password_change_session_consume_failures_total{service=\"$service\",environment=\"$environment\"}[15m])) or vector(0)",
+          "legendFormat": "password-change consume failure",
+          "range": true,
+          "refId": "C"
         }
       ],
-      "title": "Session purge 提交失败（15m）",
+      "title": "Auth 安全失败（15m）",
       "type": "stat"
     },
     {

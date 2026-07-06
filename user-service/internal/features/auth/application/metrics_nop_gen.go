@@ -11,11 +11,15 @@ func NopMetrics() Metrics {
 	return nopMetrics{}
 }
 
-func (nopMetrics) LoginSucceeded(context.Context)               {}
-func (nopMetrics) LoginFailed(context.Context, string)          {}
-func (nopMetrics) RefreshSucceeded(context.Context)             {}
-func (nopMetrics) RefreshFailed(context.Context, string)        {}
-func (nopMetrics) LogoutSucceeded(context.Context, string)      {}
-func (nopMetrics) LogoutFailed(context.Context, string, string) {}
-func (nopMetrics) TokenVersionMismatch(context.Context, string) {}
-func (nopMetrics) SessionPurgeSubmitFailed(context.Context)     {}
+func (nopMetrics) LoginSucceeded(context.Context)                                     {}
+func (nopMetrics) LoginFailed(context.Context, string)                                {}
+func (nopMetrics) RefreshSucceeded(context.Context)                                   {}
+func (nopMetrics) RefreshFailed(context.Context, string)                              {}
+func (nopMetrics) LogoutSucceeded(context.Context, string)                            {}
+func (nopMetrics) LogoutFailed(context.Context, string, string)                       {}
+func (nopMetrics) TokenVersionMismatch(context.Context, string)                       {}
+func (nopMetrics) SessionPurgeSubmitFailed(context.Context)                           {}
+func (nopMetrics) PasswordChangeSessionConsumeFailed(context.Context, string)         {}
+func (nopMetrics) PasswordChangeSessionReuseRejected(context.Context)                 {}
+func (nopMetrics) PasswordChangeRevocationProjectionFailed(context.Context, string)   {}
+func (nopMetrics) PasswordChangeRevocationCompensationFailed(context.Context, string) {}

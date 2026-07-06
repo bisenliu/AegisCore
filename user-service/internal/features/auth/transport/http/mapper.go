@@ -43,6 +43,8 @@ func toAuthHTTPError(err error) error {
 	switch {
 	case errors.Is(err, password.ErrPasswordKDFBusy):
 		return contracterrors.WrapServiceUnavailable(err, messages.AuthServiceBusy)
+	case errors.Is(err, authdomain.ErrSessionRevocationIncomplete):
+		return contracterrors.WrapServiceUnavailable(err, messages.AuthRevocationIncomplete)
 	case errors.Is(err, authdomain.ErrInvalidCredentials):
 		return contracterrors.UnauthenticatedError(messages.InvalidCredentials)
 	case errors.Is(err, authdomain.ErrMissingSession):

@@ -23,9 +23,11 @@ type CredentialUpdateResult struct {
 
 // UpdateCredentialsInput 包含改密时使用的新凭证和目标状态。
 type UpdateCredentialsInput struct {
-	UserID       uuid.UUID
-	PasswordHash string
-	Status       identity.UserStatus
+	UserID               uuid.UUID
+	PasswordHash         string
+	Status               identity.UserStatus
+	ExpectedStatus       *identity.UserStatus
+	ExpectedTokenVersion *int64
 }
 
 // CanLogin 返回当前状态是否允许普通认证。

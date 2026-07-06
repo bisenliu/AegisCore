@@ -37,3 +37,10 @@ type RefreshSessionStore interface {
 	DeleteSession(ctx context.Context, userID string, sessionID string) error
 	DeleteAllUserSessions(ctx context.Context, userID string) error
 }
+
+// PasswordChangeSessionStore 管理强制改密一次性会话生命周期。
+type PasswordChangeSessionStore interface {
+	CreatePasswordChangeSession(ctx context.Context, session authdomain.PasswordChangeSession, ttl time.Duration) error
+	ConsumePasswordChangeSession(ctx context.Context, expected authdomain.PasswordChangeSession) error
+	RevokePasswordChangeSession(ctx context.Context, userID string, sessionID string) error
+}

@@ -19,7 +19,7 @@ import (
 // Verifier 校验登录凭证并完成强制改密。
 type Verifier interface {
 	VerifyPassword(ctx context.Context, username string, plainPassword string) (*authdomain.UserCredential, error)
-	ChangePassword(ctx context.Context, userID uuid.UUID, newPassword string) (*authdomain.CredentialUpdateResult, error)
+	ChangePassword(ctx context.Context, userID uuid.UUID, expectedTokenVersion int64, newPassword string) (*authdomain.CredentialUpdateResult, error)
 }
 
 type verifier struct {
@@ -70,7 +70,7 @@ func (v *verifier) VerifyPassword(ctx context.Context, username string, plainPas
 }
 
 // ChangePassword 为当前受限于改密流程的用户替换凭证。
-func (v *verifier) ChangePassword(ctx context.Context, userID uuid.UUID, newPassword string) (*authdomain.CredentialUpdateResult, error) {
+func (v *verifier) ChangePassword(ctx context.Context, userID uuid.UUID, expectedTokenVersion int64, newPassword string) (*authdomain.CredentialUpdateResult, error) {
 	credential, err := v.repo.GetCredentialByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, identity.ErrUserNotFound) {
@@ -90,11 +90,16 @@ func (v *verifier) ChangePassword(ctx context.Context, userID uuid.UUID, newPass
 		logger.Error(ctx, "hash changed password failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
 		return nil, fmt.Errorf("hash changed password: %w", err)
 	}
-	tokenVersion, err := v.repo.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: userID, PasswordHash: passwordHash, Status: identity.UserStatusNormal})
+	expectedStatus := identity.UserStatusMustChangePassword
+	tokenVersion, err := v.repo.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: userID, PasswordHash: passwordHash, Status: identity.UserStatusNormal, ExpectedStatus: &expectedStatus, ExpectedTokenVersion: &expectedTokenVersion})
 	if err != nil {
 		if errors.Is(err, identity.ErrUserNotFound) {
 			logger.Warn(ctx, "update credentials user not found", zap.String("user_id", userID.String()))
 			return nil, identity.ErrUserNotFound
+		}
+		if errors.Is(err, authdomain.ErrTokenInvalid) {
+			logger.Warn(ctx, "update credentials condition rejected", zap.String("user_id", userID.String()))
+			return nil, authdomain.ErrTokenInvalid
 		}
 		logger.Error(ctx, "update credentials failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
 		return nil, err

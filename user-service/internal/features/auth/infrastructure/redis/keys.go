@@ -36,6 +36,11 @@ func (c KeyCatalog) AuthSession(userID string, sessionID string) string {
 	return c.builder.MustKey("session", rediskey.HashTag(userID), sessionID)
 }
 
+// PasswordChangeSession 返回一个强制改密一次性会话载荷的 key。
+func (c KeyCatalog) PasswordChangeSession(userID string, sessionID string) string {
+	return c.builder.MustKey("password_change_session", rediskey.HashTag(userID), sessionID)
+}
+
 // AuthSessionPrefix 返回同一用户 refresh token 会话载荷 key 的前缀。
 func (c KeyCatalog) AuthSessionPrefix(userID string) string {
 	return c.builder.MustPrefix("session", rediskey.HashTag(userID))

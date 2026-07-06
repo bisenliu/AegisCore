@@ -19,7 +19,8 @@ import (
 // Lifecycle 为 auth application use case 创建、校验和撤销认证会话。
 type Lifecycle interface {
 	CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error
-	ValidatePasswordChangeClaims(ctx context.Context, claims *commonauth.Claims) error
+	CreatePasswordChangeSession(ctx context.Context, userID string, sessionID string, tokenID string, tokenVersion int64, ttl time.Duration) error
+	ConsumePasswordChangeClaims(ctx context.Context, claims *commonauth.Claims) error
 	ValidateRefreshSession(ctx context.Context, claims *commonauth.Claims) (authdomain.AuthSession, int64, error)
 	RotateTokenSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, refreshTTL time.Duration) error
 	DeleteSession(ctx context.Context, userID string, sessionID string) error
@@ -32,13 +33,14 @@ type lifecycle struct {
 	users                    authapplication.UserTokenVersionStore
 	tokenVersions            authapplication.TokenVersionCache
 	sessions                 authapplication.RefreshSessionStore
+	passwordChangeSessions   authapplication.PasswordChangeSessionStore
 	maxActiveSessionsPerUser int
 	localTokenVersions       authvalidators.TokenVersionLocalInvalidator
 }
 
 // NewLifecycle 构造认证会话生命周期组件。
-func NewLifecycle(users authapplication.UserTokenVersionStore, tokenVersions authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, maxActiveSessionsPerUser int, localTokenVersions ...authvalidators.TokenVersionLocalInvalidator) Lifecycle {
-	lifecycle := &lifecycle{users: users, tokenVersions: tokenVersions, sessions: sessions, maxActiveSessionsPerUser: maxActiveSessionsPerUser}
+func NewLifecycle(users authapplication.UserTokenVersionStore, tokenVersions authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, maxActiveSessionsPerUser int, localTokenVersions ...authvalidators.TokenVersionLocalInvalidator) Lifecycle {
+	lifecycle := &lifecycle{users: users, tokenVersions: tokenVersions, sessions: sessions, passwordChangeSessions: passwordChangeSessions, maxActiveSessionsPerUser: maxActiveSessionsPerUser}
 	if len(localTokenVersions) > 0 {
 		lifecycle.localTokenVersions = localTokenVersions[0]
 	}
@@ -55,19 +57,26 @@ func (m *lifecycle) CreateTokenSession(ctx context.Context, userID string, sessi
 	return nil
 }
 
-// ValidatePasswordChangeClaims 校验改密 token version 是否仍为当前版本。
-func (m *lifecycle) ValidatePasswordChangeClaims(ctx context.Context, claims *commonauth.Claims) error {
-	currentVersion, err := m.CurrentTokenVersion(ctx, claims.UserID)
-	if err != nil {
-		if errors.Is(err, identity.ErrUserNotFound) {
-			logger.Warn(ctx, "password change user not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-			return identity.ErrUserNotFound
-		}
-		logger.Error(ctx, "get password change token version failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
+// CreatePasswordChangeSession 持久化强制改密一次性会话元数据。
+func (m *lifecycle) CreatePasswordChangeSession(ctx context.Context, userID string, sessionID string, tokenID string, tokenVersion int64, ttl time.Duration) error {
+	session := authdomain.PasswordChangeSession{UserID: userID, SessionID: sessionID, TokenID: tokenID, TokenVersion: tokenVersion, ExpiresAt: time.Now().Add(ttl)}
+	if err := m.passwordChangeSessions.CreatePasswordChangeSession(ctx, session, ttl); err != nil {
+		logger.Error(ctx, "create password change session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return err
 	}
-	if err := authvalidators.ValidateTokenVersionMatch(currentVersion, claims.TokenVersion); err != nil {
-		logger.Warn(ctx, "password change token version mismatch", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Int64("current_token_version", currentVersion), zap.Int64("token_version", claims.TokenVersion))
+	logger.Info(ctx, "password change session created", zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion))
+	return nil
+}
+
+// ConsumePasswordChangeClaims 原子消费强制改密 token 对应的一次性会话。
+func (m *lifecycle) ConsumePasswordChangeClaims(ctx context.Context, claims *commonauth.Claims) error {
+	expected := authdomain.PasswordChangeSession{UserID: claims.UserID, SessionID: claims.SessionID, TokenID: claims.ID, TokenVersion: claims.TokenVersion}
+	if err := m.passwordChangeSessions.ConsumePasswordChangeSession(ctx, expected); err != nil {
+		if errors.Is(err, authdomain.ErrPasswordChangeSessionNotFound) || errors.Is(err, authdomain.ErrPasswordChangeSessionMismatch) {
+			logger.Warn(ctx, "password change session rejected", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))
+			return authdomain.ErrTokenInvalid
+		}
+		logger.Error(ctx, "consume password change session failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
 		return err
 	}
 	return nil

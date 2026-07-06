@@ -44,6 +44,34 @@ func (m *MockLifecycle) EXPECT() *MockLifecycleMockRecorder {
 	return m.recorder
 }
 
+// ConsumePasswordChangeClaims mocks base method.
+func (m *MockLifecycle) ConsumePasswordChangeClaims(ctx context.Context, claims *auth.Claims) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConsumePasswordChangeClaims", ctx, claims)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ConsumePasswordChangeClaims indicates an expected call of ConsumePasswordChangeClaims.
+func (mr *MockLifecycleMockRecorder) ConsumePasswordChangeClaims(ctx, claims any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConsumePasswordChangeClaims", reflect.TypeOf((*MockLifecycle)(nil).ConsumePasswordChangeClaims), ctx, claims)
+}
+
+// CreatePasswordChangeSession mocks base method.
+func (m *MockLifecycle) CreatePasswordChangeSession(ctx context.Context, userID, sessionID, tokenID string, tokenVersion int64, ttl time.Duration) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatePasswordChangeSession", ctx, userID, sessionID, tokenID, tokenVersion, ttl)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreatePasswordChangeSession indicates an expected call of CreatePasswordChangeSession.
+func (mr *MockLifecycleMockRecorder) CreatePasswordChangeSession(ctx, userID, sessionID, tokenID, tokenVersion, ttl any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePasswordChangeSession", reflect.TypeOf((*MockLifecycle)(nil).CreatePasswordChangeSession), ctx, userID, sessionID, tokenID, tokenVersion, ttl)
+}
+
 // CreateTokenSession mocks base method.
 func (m *MockLifecycle) CreateTokenSession(ctx context.Context, userID, sessionID string, tokenVersion int64, refreshTTL time.Duration) error {
 	m.ctrl.T.Helper()
@@ -128,20 +156,6 @@ func (m *MockLifecycle) RotateTokenSession(ctx context.Context, oldSession, newS
 func (mr *MockLifecycleMockRecorder) RotateTokenSession(ctx, oldSession, newSession, refreshTTL any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RotateTokenSession", reflect.TypeOf((*MockLifecycle)(nil).RotateTokenSession), ctx, oldSession, newSession, refreshTTL)
-}
-
-// ValidatePasswordChangeClaims mocks base method.
-func (m *MockLifecycle) ValidatePasswordChangeClaims(ctx context.Context, claims *auth.Claims) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidatePasswordChangeClaims", ctx, claims)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ValidatePasswordChangeClaims indicates an expected call of ValidatePasswordChangeClaims.
-func (mr *MockLifecycleMockRecorder) ValidatePasswordChangeClaims(ctx, claims any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatePasswordChangeClaims", reflect.TypeOf((*MockLifecycle)(nil).ValidatePasswordChangeClaims), ctx, claims)
 }
 
 // ValidateRefreshSession mocks base method.

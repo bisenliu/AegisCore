@@ -29,6 +29,10 @@
 
 `aegiscore_localcache_loads_total{result="error"}` 增加表示本地缓存 miss 后的 loader 回源失败。先按 `cache` label 区分来源：`auth_token_version` 通常要检查 Redis token version 投影、PostgreSQL 用户凭据读取和 auth validator 日志；`rbac_user_roles` 通常要检查角色绑定查询、Casbin user role resolver 和 PostgreSQL 访问路径。
 
+### password-change-revocation-failed
+
+`aegiscore_user_service_auth_password_change_revocation_projection_failures_total` 或 `aegiscore_user_service_auth_password_change_revocation_compensation_failures_total` 增加表示强制改密已更新凭据但安全撤销未完整完成。优先检查 Redis `cache_redis` 可用性、auth token version 投影刷新、本地 token version cache 失效、refresh session 删除链路和 auth feature 错误日志；不要在排查记录中复制 token、jti、session ID 或 Redis key 明文。
+
 如果同时出现 Redis 或 PostgreSQL 告警，优先处理依赖不可用；如果依赖正常，检查最近部署是否改变了 loader、key 编码、TTL 或权限/认证数据路径。该指标不包含 raw key、用户 ID 或原始错误，定位具体请求需要结合日志中的稳定错误信息和 trace/span 上下文。
 
 ### localcache-write-drops-or-rejects

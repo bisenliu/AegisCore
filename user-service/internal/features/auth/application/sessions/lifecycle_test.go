@@ -89,26 +89,28 @@ func TestLifecycleRevokeUserSessionsAtVersionReturnsLocalInvalidationErrors(t *t
 }
 
 type lifecycleTestFixture struct {
-	users         *MockUserTokenVersionStore
-	tokenVersions *MockTokenVersionCache
-	sessions      *MockRefreshSessionStore
-	invalidator   *MockTokenVersionLocalInvalidator
-	lifecycle     Lifecycle
+	users           *MockUserTokenVersionStore
+	tokenVersions   *MockTokenVersionCache
+	sessions        *MockRefreshSessionStore
+	passwordChanges *MockPasswordChangeSessionStore
+	invalidator     *MockTokenVersionLocalInvalidator
+	lifecycle       Lifecycle
 }
 
 func newLifecycleTestFixture(t *testing.T, withInvalidator bool) *lifecycleTestFixture {
 	t.Helper()
 	ctrl := gomock.NewController(t)
 	fixture := &lifecycleTestFixture{
-		users:         NewMockUserTokenVersionStore(ctrl),
-		tokenVersions: NewMockTokenVersionCache(ctrl),
-		sessions:      NewMockRefreshSessionStore(ctrl),
+		users:           NewMockUserTokenVersionStore(ctrl),
+		tokenVersions:   NewMockTokenVersionCache(ctrl),
+		sessions:        NewMockRefreshSessionStore(ctrl),
+		passwordChanges: NewMockPasswordChangeSessionStore(ctrl),
 	}
 	if withInvalidator {
 		fixture.invalidator = NewMockTokenVersionLocalInvalidator(ctrl)
-		fixture.lifecycle = NewLifecycle(fixture.users, fixture.tokenVersions, fixture.sessions, 5, fixture.invalidator)
+		fixture.lifecycle = NewLifecycle(fixture.users, fixture.tokenVersions, fixture.sessions, fixture.passwordChanges, 5, fixture.invalidator)
 		return fixture
 	}
-	fixture.lifecycle = NewLifecycle(fixture.users, fixture.tokenVersions, fixture.sessions, 5)
+	fixture.lifecycle = NewLifecycle(fixture.users, fixture.tokenVersions, fixture.sessions, fixture.passwordChanges, 5)
 	return fixture
 }

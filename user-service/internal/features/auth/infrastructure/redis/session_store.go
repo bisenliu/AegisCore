@@ -24,6 +24,8 @@ const (
 	defaultTokenVersionCacheTTL = 5 * time.Minute
 	// defaultAuthSessionTTL 是调用方未提供有效时长时的会话兜底过期时间。
 	defaultAuthSessionTTL = time.Hour
+	// defaultPasswordChangeSessionTTL 是调用方未提供有效时长时改密一次性会话的兜底过期时间。
+	defaultPasswordChangeSessionTTL = 5 * time.Minute
 	// authSessionIndexTTLBuffer 让用户会话索引在最后一个会话过期后仍保留短暂窗口用于懒清理。
 	authSessionIndexTTLBuffer = 5 * time.Minute
 	// deleteAllUserSessionsPurgeTTL 限制临时清理索引在后台清理失败时的最长保留时间。
@@ -40,15 +42,18 @@ const (
 )
 
 const (
-	createSessionResultOK            int64 = 1
-	rotateSessionResultOK            int64 = 1
-	rotateSessionResultNotFound      int64 = 2
-	rotateSessionResultMismatch      int64 = 3
-	cacheTokenVersionResultStored          = 1
-	cacheTokenVersionResultSkipped         = 2
-	detachUserSessionsResultEmpty          = 0
-	detachUserSessionsResultDetached       = 1
-	detachUserSessionsResultConflict       = 2
+	createSessionResultOK                      int64 = 1
+	consumePasswordChangeSessionResultOK       int64 = 1
+	consumePasswordChangeSessionResultNotFound int64 = 2
+	consumePasswordChangeSessionResultMismatch int64 = 3
+	rotateSessionResultOK                      int64 = 1
+	rotateSessionResultNotFound                int64 = 2
+	rotateSessionResultMismatch                int64 = 3
+	cacheTokenVersionResultStored                    = 1
+	cacheTokenVersionResultSkipped                   = 2
+	detachUserSessionsResultEmpty                    = 0
+	detachUserSessionsResultDetached                 = 1
+	detachUserSessionsResultConflict                 = 2
 )
 
 // SessionStoreParams 包含 Redis 认证会话 store 所需的 Fx 输入。
@@ -70,8 +75,9 @@ type SessionStore struct {
 }
 
 var (
-	_ authapplication.TokenVersionCache   = (*SessionStore)(nil)
-	_ authapplication.RefreshSessionStore = (*SessionStore)(nil)
+	_ authapplication.TokenVersionCache          = (*SessionStore)(nil)
+	_ authapplication.RefreshSessionStore        = (*SessionStore)(nil)
+	_ authapplication.PasswordChangeSessionStore = (*SessionStore)(nil)
 )
 
 // PurgeTaskPool 是认证 Redis 适配器消费的后台清理任务池窄接口。
@@ -172,6 +178,62 @@ func (r *SessionStore) CreateSession(ctx context.Context, session authdomain.Aut
 	}
 	if result != createSessionResultOK {
 		return fmt.Errorf("create auth session: unexpected script result %d", result)
+	}
+	return nil
+}
+
+// CreatePasswordChangeSession 存储强制改密一次性会话。
+func (r *SessionStore) CreatePasswordChangeSession(ctx context.Context, session authdomain.PasswordChangeSession, ttl time.Duration) error {
+	if ttl <= 0 {
+		// 非正数 TTL 回退到短期默认值，避免创建永久一次性凭据。
+		ttl = defaultPasswordChangeSessionTTL
+	}
+	session.ExpiresAt = time.Now().Add(ttl)
+	data, err := json.Marshal(session)
+	if err != nil {
+		return fmt.Errorf("marshal password change session: %w", err)
+	}
+	created, err := r.redis.SetNX(ctx, r.passwordChangeSessionKey(session.UserID, session.SessionID), data, ttl).Result()
+	if err != nil {
+		return fmt.Errorf("create password change session: %w", err)
+	}
+	if !created {
+		return fmt.Errorf("create password change session: key exists")
+	}
+	return nil
+}
+
+// ConsumePasswordChangeSession 原子消费强制改密一次性会话。
+func (r *SessionStore) ConsumePasswordChangeSession(ctx context.Context, expected authdomain.PasswordChangeSession) error {
+	result, err := consumePasswordChangeSessionScript.Run(ctx, r.redis, []string{r.passwordChangeSessionKey(expected.UserID, expected.SessionID)},
+		expected.UserID,
+		expected.SessionID,
+		expected.TokenID,
+		formatTokenVersion(expected.TokenVersion),
+	).Int64()
+	if err != nil {
+		return fmt.Errorf("consume password change session: %w", err)
+	}
+	switch result {
+	case consumePasswordChangeSessionResultOK:
+		return nil
+	case consumePasswordChangeSessionResultNotFound:
+		r.metricsRecorder().PasswordChangeSessionConsumeFailed(ctx, authapplication.MetricsPasswordChangeReasonNotFound)
+		r.metricsRecorder().PasswordChangeSessionReuseRejected(ctx)
+		return authdomain.ErrPasswordChangeSessionNotFound
+	case consumePasswordChangeSessionResultMismatch:
+		r.metricsRecorder().PasswordChangeSessionConsumeFailed(ctx, authapplication.MetricsPasswordChangeReasonMismatch)
+		return authdomain.ErrPasswordChangeSessionMismatch
+	default:
+		r.metricsRecorder().PasswordChangeSessionConsumeFailed(ctx, authapplication.MetricsPasswordChangeReasonSystemError)
+		return fmt.Errorf("consume password change session: unexpected script result %d", result)
+	}
+}
+
+// RevokePasswordChangeSession 删除未消费的强制改密一次性会话。
+func (r *SessionStore) RevokePasswordChangeSession(ctx context.Context, userID string, sessionID string) error {
+	if err := r.redis.Del(ctx, r.passwordChangeSessionKey(userID, sessionID)).Err(); err != nil {
+		return fmt.Errorf("revoke password change session: %w", err)
 	}
 	return nil
 }
@@ -348,6 +410,10 @@ func (r *SessionStore) tokenVersionKey(userID string) string {
 
 func (r *SessionStore) sessionKey(userID string, sessionID string) string {
 	return r.keys.AuthSession(userID, sessionID)
+}
+
+func (r *SessionStore) passwordChangeSessionKey(userID string, sessionID string) string {
+	return r.keys.PasswordChangeSession(userID, sessionID)
 }
 
 func (r *SessionStore) userSessionsKey(userID string) string {

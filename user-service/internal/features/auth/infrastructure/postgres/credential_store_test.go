@@ -218,6 +218,47 @@ func TestCredentialStoreUpdateCredentials(t *testing.T) {
 
 }
 
+func TestCredentialStoreUpdateCredentialsWithExpectedStatusAndTokenVersion(t *testing.T) {
+	repo := newTestCredentialStore(t)
+	ctx := context.Background()
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000702")
+	createCredentialTestUser(t, repo, credentialTestUserInput{Nickname: "Guarded Alice", UserID: userID, Username: "guarded-alice", PasswordHash: "old-hash", Status: identity.UserStatusMustChangePassword})
+	expectedStatus := identity.UserStatusMustChangePassword
+	expectedVersion := int64(1)
+
+	version, err := repo.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: userID, PasswordHash: "new-hash", Status: identity.UserStatusNormal, ExpectedStatus: &expectedStatus, ExpectedTokenVersion: &expectedVersion})
+	require.NoError(t, err,
+		"UpdateCredentials: %v", err)
+	require.EqualValues(t, 2, version,
+		"version = %d, want 2", version)
+}
+
+func TestCredentialStoreUpdateCredentialsRejectsExpectedStatusMismatch(t *testing.T) {
+	repo := newTestCredentialStore(t)
+	ctx := context.Background()
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000703")
+	createCredentialTestUser(t, repo, credentialTestUserInput{Nickname: "Status Alice", UserID: userID, Username: "status-alice", PasswordHash: "old-hash", Status: identity.UserStatusNormal})
+	expectedStatus := identity.UserStatusMustChangePassword
+	expectedVersion := int64(1)
+
+	_, err := repo.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: userID, PasswordHash: "new-hash", Status: identity.UserStatusNormal, ExpectedStatus: &expectedStatus, ExpectedTokenVersion: &expectedVersion})
+	require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
+		"err = %v, want ErrTokenInvalid", err)
+}
+
+func TestCredentialStoreUpdateCredentialsRejectsExpectedTokenVersionMismatch(t *testing.T) {
+	repo := newTestCredentialStore(t)
+	ctx := context.Background()
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000704")
+	createCredentialTestUser(t, repo, credentialTestUserInput{Nickname: "Version Alice", UserID: userID, Username: "version-alice", PasswordHash: "old-hash", Status: identity.UserStatusMustChangePassword})
+	expectedStatus := identity.UserStatusMustChangePassword
+	expectedVersion := int64(2)
+
+	_, err := repo.UpdateCredentials(ctx, authdomain.UpdateCredentialsInput{UserID: userID, PasswordHash: "new-hash", Status: identity.UserStatusNormal, ExpectedStatus: &expectedStatus, ExpectedTokenVersion: &expectedVersion})
+	require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
+		"err = %v, want ErrTokenInvalid", err)
+}
+
 func newTestCredentialStore(t *testing.T) *CredentialStore {
 	t.Helper()
 	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:credential_store_test_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))

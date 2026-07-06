@@ -8,6 +8,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/aegiscore/user-service/ent"
+	"github.com/aegiscore/user-service/ent/predicate"
 	entuser "github.com/aegiscore/user-service/ent/user"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
@@ -84,14 +85,29 @@ func (s *CredentialStore) IncrementTokenVersion(ctx context.Context, userID uuid
 
 // UpdateCredentials 替换密码哈希和状态，递增 token version 并返回新版本。
 func (s *CredentialStore) UpdateCredentials(ctx context.Context, input authdomain.UpdateCredentialsInput) (int64, error) {
+	predicates := []predicate.User{entuser.UserIDEQ(input.UserID), entuser.DeletedAtIsNil()}
+	conditional := false
+	if input.ExpectedStatus != nil {
+		predicates = append(predicates, entuser.StatusEQ(int64(*input.ExpectedStatus)))
+		conditional = true
+	}
+	if input.ExpectedTokenVersion != nil {
+		predicates = append(predicates, entuser.TokenVersionEQ(*input.ExpectedTokenVersion))
+		conditional = true
+	}
 	updated, err := s.client.User.Update().
-		Where(entuser.UserIDEQ(input.UserID), entuser.DeletedAtIsNil()).
+		Where(predicates...).
 		SetPasswordHash(input.PasswordHash).
 		SetStatus(int64(input.Status)).
 		AddTokenVersion(1).
 		Save(ctx)
 	if err == nil {
 		if updated == 0 {
+			if conditional {
+				if _, getErr := s.GetCredentialByUserID(ctx, input.UserID); getErr == nil {
+					return 0, authdomain.ErrTokenInvalid
+				}
+			}
 			// Ent Update().Save 返回受影响行数，0 表示过滤条件未匹配到用户。
 			return 0, identity.ErrUserNotFound
 		}

@@ -16,6 +16,12 @@ func TestKeyCatalogUsesAppNamePrefixWithNewKeyFormat(t *testing.T) {
 	}
 	{
 
+		got := keys.PasswordChangeSession("u-123", "pc-123")
+		require.Equal(t, "aegiscore-user-services:auth:password_change_session:{u-123}:pc-123", got,
+			"PasswordChangeSession = %q", got)
+	}
+	{
+
 		got := keys.AuthSessionPrefix("u-123")
 		require.Equal(t, "aegiscore-user-services:auth:session:{u-123}:", got,
 			"AuthSessionPrefix = %q", got)
@@ -48,6 +54,12 @@ func TestKeyCatalogKeepsUnprefixedKeysWhenAppNameEmpty(t *testing.T) {
 		got := keys.AuthSession("u-123", "s-123")
 		require.Equal(t, "auth:session:{u-123}:s-123", got,
 			"AuthSession = %q", got)
+	}
+	{
+
+		got := keys.PasswordChangeSession("u-123", "pc-123")
+		require.Equal(t, "auth:password_change_session:{u-123}:pc-123", got,
+			"PasswordChangeSession = %q", got)
 	}
 	{
 

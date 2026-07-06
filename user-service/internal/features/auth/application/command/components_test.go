@@ -126,7 +126,7 @@ func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 		return 3, nil
 	})
 
-	result, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
+	result, err := verifier.ChangePassword(context.Background(), authTestUserID, 2, "new-secret")
 	require.NoError(t, err,
 		"ChangePassword: %v", err)
 	require.False(t, result.UserID != authTestUserID || result.TokenVersion != 3,
@@ -146,7 +146,7 @@ func TestCredentialVerifierChangePasswordMapsUserNotFound(t *testing.T) {
 	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
 	repo.EXPECT().GetCredentialByUserID(gomock.Any(), authTestUserID).Return(nil, identity.ErrUserNotFound)
 
-	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
+	_, err := verifier.ChangePassword(context.Background(), authTestUserID, 2, "new-secret")
 	require.ErrorIs(t, err, identity.ErrUserNotFound,
 		"err = %v, want ErrUserNotFound", err)
 
@@ -158,7 +158,7 @@ func TestCredentialVerifierChangePasswordRejectsInvalidStatus(t *testing.T) {
 	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
 	repo.EXPECT().GetCredentialByUserID(gomock.Any(), authTestUserID).Return(&authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusNormal, TokenVersion: 2}, nil)
 
-	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
+	_, err := verifier.ChangePassword(context.Background(), authTestUserID, 2, "new-secret")
 	require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
 		"err = %v, want authdomain.ErrTokenInvalid", err)
 
@@ -172,7 +172,7 @@ func TestCredentialVerifierChangePasswordMapsUpdateError(t *testing.T) {
 	repo.EXPECT().GetCredentialByUserID(gomock.Any(), authTestUserID).Return(&authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, nil)
 	repo.EXPECT().UpdateCredentials(gomock.Any(), gomock.Any()).Return(int64(0), updateErr)
 
-	_, err := verifier.ChangePassword(context.Background(), authTestUserID, "new-secret")
+	_, err := verifier.ChangePassword(context.Background(), authTestUserID, 2, "new-secret")
 	require.ErrorIs(t, err, updateErr,
 		"err = %v, want %v", err, updateErr)
 
@@ -199,7 +199,8 @@ func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenVersions := NewMockTokenVersionCache(ctrl)
 	sessions := NewMockRefreshSessionStore(ctrl)
-	lifecycle := authsessions.NewLifecycle(users, tokenVersions, sessions, 5)
+	passwordChanges := NewMockPasswordChangeSessionStore(ctrl)
+	lifecycle := authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, 5)
 	claims := &commonauth.Claims{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123"}
 
 	sessions.EXPECT().GetSession(gomock.Any(), authTestUserID.String(), "s-123").Return(authRefreshTestSession("s-123", 2), nil)
@@ -442,5 +443,6 @@ func newGeneratedAuthSessionLifecycle(ctrl *gomock.Controller) (authsessions.Lif
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenVersions := NewMockTokenVersionCache(ctrl)
 	sessions := NewMockRefreshSessionStore(ctrl)
-	return authsessions.NewLifecycle(users, tokenVersions, sessions, 5), users, tokenVersions, sessions
+	passwordChanges := NewMockPasswordChangeSessionStore(ctrl)
+	return authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, 5), users, tokenVersions, sessions
 }

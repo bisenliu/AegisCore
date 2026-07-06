@@ -55,6 +55,16 @@ const (
 	MetricsSourceAccessToken = "access_token"
 	// MetricsSourceRefreshToken 表示 refresh token 校验来源。
 	MetricsSourceRefreshToken = "refresh_token"
+
+	// MetricsPasswordChangeReasonNotFound 表示一次性改密会话不存在、过期或已消费。
+	MetricsPasswordChangeReasonNotFound = "not_found"
+	// MetricsPasswordChangeReasonMismatch 表示一次性改密会话与 token claims 不一致。
+	MetricsPasswordChangeReasonMismatch = "mismatch"
+	// MetricsPasswordChangeReasonSystemError 表示一次性改密流程系统异常。
+	MetricsPasswordChangeReasonSystemError = "system_error"
+
+	// MetricsPasswordChangeRevocationProjection 表示改密后撤销投影链路失败。
+	MetricsPasswordChangeRevocationProjection = "projection"
 )
 
 // Metrics 记录 auth feature 的低基数业务指标。
@@ -67,4 +77,8 @@ type Metrics interface {
 	LogoutFailed(context.Context, string, string)
 	TokenVersionMismatch(context.Context, string)
 	SessionPurgeSubmitFailed(context.Context)
+	PasswordChangeSessionConsumeFailed(context.Context, string)
+	PasswordChangeSessionReuseRejected(context.Context)
+	PasswordChangeRevocationProjectionFailed(context.Context, string)
+	PasswordChangeRevocationCompensationFailed(context.Context, string)
 }

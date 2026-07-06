@@ -159,11 +159,12 @@ func TestAuthUseCaseLoginPassesMaxActiveSessionsPerUser(t *testing.T) {
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenVersions := NewMockTokenVersionCache(ctrl)
 	sessions := NewMockRefreshSessionStore(ctrl)
+	passwordChanges := NewMockPasswordChangeSessionStore(ctrl)
 	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: true, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 3}
 	svc := NewLoginUseCase(LoginDeps{
 		Credentials: credentials,
 		Tokens:      tokens,
-		Sessions:    authsessions.NewLifecycle(users, tokenVersions, sessions, cfg.MaxActiveSessionsPerUser),
+		Sessions:    authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, cfg.MaxActiveSessionsPerUser),
 	})
 
 	credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(normalCredential(), nil)
@@ -223,9 +224,12 @@ func TestAuthUseCaseLoginIssuesPasswordChangeToken(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
 	credential := &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", Status: identity.UserStatusMustChangePassword, TokenVersion: 2}
 	passwordChange := &authtokens.TokenResult{AccessToken: "password-change", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900, PasswordChangeRequired: true}
+	claims := passwordChangeClaims("pc-123", 2)
 
 	fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(credential, nil)
 	fixture.tokens.EXPECT().IssuePasswordChangeToken(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(passwordChange, nil)
+	fixture.tokens.EXPECT().ParsePasswordChangeToken(gomock.Any(), "password-change").Return(claims, authTestUserID, nil)
+	fixture.sessions.EXPECT().CreatePasswordChangeSession(gomock.Any(), authTestUserID.String(), gomock.Any(), "jti-123", int64(2), 15*time.Minute).Return(nil)
 
 	tokens, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 	require.NoError(t, err,

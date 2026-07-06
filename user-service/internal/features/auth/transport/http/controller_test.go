@@ -204,6 +204,18 @@ func TestAuthControllerChangePasswordMapsNotFound(t *testing.T) {
 
 }
 
+func TestAuthControllerChangePasswordMapsRevocationIncomplete(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctl, mocks := newTestAuthController(t)
+	mocks.changePassword.EXPECT().ChangePassword(gomock.Any(), authcommand.ChangePasswordCommand{Token: "password-token", NewPassword: "new-secret-123"}).Return(nil, authdomain.ErrSessionRevocationIncomplete)
+
+	status, envelope := executeAuthChangePassword(t, ctl, commonauth.TokenPrefix+"password-token", `{"new_password":"new-secret-123"}`)
+	require.Equal(t, http.StatusServiceUnavailable, status,
+		"status = %d, want %d", status, http.StatusServiceUnavailable)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeServiceUnavailable || envelope.Message != messages.AuthRevocationIncomplete,
+		"envelope = %#v", envelope)
+}
+
 func TestAuthControllerRefreshNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctl, mocks := newTestAuthController(t)

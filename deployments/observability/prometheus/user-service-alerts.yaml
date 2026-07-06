@@ -165,6 +165,20 @@ groups:
           description: "auth session purge workerpool 最近 10 分钟报告 failed 或 panicked task。请检查 Redis 健康状态和 workerpool 日志。"
           runbook_url: "docs/observability/user-service-runbook.md#workerpool-failed-or-panicked"
 
+      - alert: AegisCoreUserServicePasswordChangeRevocationFailed
+        expr: |
+          increase(aegiscore_user_service_auth_password_change_revocation_projection_failures_total{service="aegiscore-user-services"}[10m]) > 0
+          or
+          increase(aegiscore_user_service_auth_password_change_revocation_compensation_failures_total{service="aegiscore-user-services"}[10m]) > 0
+        for: 0m
+        labels:
+          service: aegiscore-user-services
+          severity: critical
+        annotations:
+          summary: "强制改密安全撤销失败"
+          description: "强制改密成功更新凭据后，token version 投影、refresh session 删除或撤销补偿失败。请优先检查 Redis、auth token version 投影、本地缓存失效和 refresh session 删除链路。"
+          runbook_url: "docs/observability/user-service-runbook.md#password-change-revocation-failed"
+
       - alert: AegisCoreUserServiceSchedulerJobFailed
         expr: |
           increase(aegiscore_scheduler_jobs_total{service="aegiscore-user-services",event="failed"}[10m]) > 0

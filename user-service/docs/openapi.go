@@ -740,6 +740,16 @@ const openAPIDocument = `{
               }
             },
             "description": "服务器内部错误"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "认证安全撤销未完成，请稍后重试"
           }
         },
         "summary": "修改密码",

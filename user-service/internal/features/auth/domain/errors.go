@@ -22,3 +22,12 @@ var ErrAuthSessionMismatch = errors.New("auth session mismatch")
 
 // ErrTokenVersionCacheMiss 表示 token version 缓存未命中，需要从持久化存储回填。
 var ErrTokenVersionCacheMiss = errors.New("token version cache miss")
+
+// ErrPasswordChangeSessionNotFound 表示强制改密一次性会话不存在、过期或已消费。
+var ErrPasswordChangeSessionNotFound = errors.New("password change session not found")
+
+// ErrPasswordChangeSessionMismatch 表示强制改密一次性会话与 token claims 不一致。
+var ErrPasswordChangeSessionMismatch = errors.New("password change session mismatch")
+
+// ErrSessionRevocationIncomplete 表示安全敏感会话撤销投影未完整完成。
+var ErrSessionRevocationIncomplete = errors.New("session revocation incomplete")

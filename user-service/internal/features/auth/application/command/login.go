@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"errors"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -69,6 +70,15 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*authtokens
 		}
 		tokens, err := u.tokens.IssuePasswordChangeToken(ctx, user.UserID.String(), user.TokenVersion, sessionID)
 		if err != nil {
+			u.metrics.LoginFailed(ctx, authapplication.MetricsReasonPasswordChangeRequiredIssueFailed)
+			return nil, err
+		}
+		claims, _, err := u.tokens.ParsePasswordChangeToken(ctx, tokens.AccessToken)
+		if err != nil {
+			u.metrics.LoginFailed(ctx, authapplication.MetricsReasonPasswordChangeRequiredIssueFailed)
+			return nil, err
+		}
+		if err := u.sessions.CreatePasswordChangeSession(ctx, user.UserID.String(), sessionID, claims.ID, user.TokenVersion, time.Duration(tokens.ExpiresIn)*time.Second); err != nil {
 			u.metrics.LoginFailed(ctx, authapplication.MetricsReasonPasswordChangeRequiredIssueFailed)
 			return nil, err
 		}

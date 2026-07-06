@@ -41,6 +41,7 @@ type ChangePasswordDeps struct {
 	Credentials authcredentials.Verifier
 	Tokens      authtokens.Issuer
 	Sessions    authsessions.Lifecycle
+	Metrics     authapplication.Metrics `optional:"true"`
 }
 
 // LogoutCurrentSessionDeps 包含当前会话登出 use case 所需的最小依赖。

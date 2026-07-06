@@ -49,6 +49,15 @@ func TestRedisLuaScriptsDeclareContracts(t *testing.T) {
 				"-- version: 1",
 			},
 		},
+		{
+			name:   "consume password change session",
+			source: consumePasswordChangeSessionLua,
+			metadata: []string{
+				"-- name: auth.consume_password_change_session",
+				"-- contract: KEYS[1]=password_change_session_key, ARGV[1]=user_id, ARGV[2]=session_id, ARGV[3]=token_id, ARGV[4]=token_version",
+				"-- version: 1",
+			},
+		},
 	}
 
 	for _, tt := range tests {

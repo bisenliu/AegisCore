@@ -61,13 +61,15 @@ func TestVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	})
 	verifier := NewVerifier(store, testPasswordService(t))
 
-	result, err := verifier.ChangePassword(context.Background(), verifierTestUserID, "new-secret")
+	result, err := verifier.ChangePassword(context.Background(), verifierTestUserID, 2, "new-secret")
 	require.NoError(t, err,
 		"ChangePassword: %v", err)
 	require.False(t, result.UserID != verifierTestUserID || result.TokenVersion != 3,
 		"result = %#v", result)
 	require.False(t, updatedInput.UserID != verifierTestUserID || updatedInput.Status != identity.UserStatusNormal,
 		"updated input = %#v", updatedInput)
+	require.False(t, updatedInput.ExpectedStatus == nil || *updatedInput.ExpectedStatus != identity.UserStatusMustChangePassword || updatedInput.ExpectedTokenVersion == nil || *updatedInput.ExpectedTokenVersion != 2,
+		"updated input expected guards = %#v", updatedInput)
 
 }
 

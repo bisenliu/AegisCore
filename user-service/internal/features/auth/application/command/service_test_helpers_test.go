@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -96,7 +97,7 @@ func refreshClaims(sessionID string, tokenVersion int64) *commonauth.Claims {
 }
 
 func passwordChangeClaims(sessionID string, tokenVersion int64) *commonauth.Claims {
-	return &commonauth.Claims{UserID: authTestUserID.String(), SessionID: sessionID, TokenVersion: tokenVersion}
+	return &commonauth.Claims{UserID: authTestUserID.String(), SessionID: sessionID, TokenVersion: tokenVersion, RegisteredClaims: jwtv5.RegisteredClaims{ID: "jti-123"}}
 }
 
 func testPasswordService(t testing.TB) *password.Service {

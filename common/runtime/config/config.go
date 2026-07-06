@@ -72,11 +72,12 @@ type EntConfig struct {
 
 // JWTConfig 包含 JWT 签发和校验设置。
 type JWTConfig struct {
-	Secret          string        `mapstructure:"secret"`
-	Issuer          string        `mapstructure:"issuer"`
-	Audience        string        `mapstructure:"audience"`
-	AccessTokenTTL  time.Duration `mapstructure:"access_token_ttl"`
-	RefreshTokenTTL time.Duration `mapstructure:"refresh_token_ttl"`
+	Secret                 string        `mapstructure:"secret"`
+	Issuer                 string        `mapstructure:"issuer"`
+	Audience               string        `mapstructure:"audience"`
+	AccessTokenTTL         time.Duration `mapstructure:"access_token_ttl"`
+	RefreshTokenTTL        time.Duration `mapstructure:"refresh_token_ttl"`
+	PasswordChangeTokenTTL time.Duration `mapstructure:"password_change_token_ttl"`
 }
 
 // LogConfig 控制 zap logger 格式、输出目标和文件轮转。

@@ -24,6 +24,7 @@ func TestLoadExplicitConfig(t *testing.T) {
 	require.Equal(t, "aegiscore-users", cfg.Auth.JWT.Audience)
 	require.Equal(t, 15*time.Minute, cfg.Auth.JWT.AccessTokenTTL)
 	require.Equal(t, 168*time.Hour, cfg.Auth.JWT.RefreshTokenTTL)
+	require.Equal(t, 5*time.Minute, cfg.Auth.JWT.PasswordChangeTokenTTL)
 	require.Equal(t, 30*time.Second, cfg.Auth.TokenVersionCacheTTL)
 	require.True(t, cfg.Auth.RefreshTokenRotation)
 	require.Equal(t, 5, cfg.Auth.MaxActiveSessionsPerUser)
@@ -188,6 +189,7 @@ func TestLoadAllowsNonPositiveTokenVersionCacheTTL(t *testing.T) {
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
+    password_change_token_ttl: 5m
   password_kdf:
     argon2_concurrency: 2
     argon2_queue_size: 16
@@ -277,6 +279,7 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_AUTH_JWT_SECRET", "env-secret")
 	t.Setenv("AEGISCORE_AUTH_JWT_ISSUER", "env-issuer")
 	t.Setenv("AEGISCORE_AUTH_JWT_REFRESH_TOKEN_TTL", "720h")
+	t.Setenv("AEGISCORE_AUTH_JWT_PASSWORD_CHANGE_TOKEN_TTL", "4m")
 	t.Setenv("AEGISCORE_AUTH_PASSWORD_KDF_ARGON2_CONCURRENCY", "3")
 	t.Setenv("AEGISCORE_AUTH_PASSWORD_KDF_ARGON2_QUEUE_SIZE", "9")
 	t.Setenv("AEGISCORE_AUTH_TOKEN_VERSION_CACHE_TTL", "30s")
@@ -310,6 +313,7 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	require.Equal(t, "env-secret", cfg.Auth.JWT.Secret)
 	require.Equal(t, "env-issuer", cfg.Auth.JWT.Issuer)
 	require.Equal(t, 720*time.Hour, cfg.Auth.JWT.RefreshTokenTTL)
+	require.Equal(t, 4*time.Minute, cfg.Auth.JWT.PasswordChangeTokenTTL)
 	require.Equal(t, 30*time.Second, cfg.Auth.TokenVersionCacheTTL)
 	require.Equal(t, 7, cfg.Auth.MaxActiveSessionsPerUser)
 	require.Equal(t, 3, cfg.Auth.PasswordKDF.Argon2Concurrency)
@@ -384,6 +388,7 @@ func TestLoadValidatesPasswordKDFConfig(t *testing.T) {
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
+    password_change_token_ttl: 5m
   password_kdf:
     argon2_concurrency: 0
     argon2_queue_size: -1
@@ -402,6 +407,7 @@ func TestLoadValidatesPasswordKDFConfig(t *testing.T) {
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
+    password_change_token_ttl: 5m
   password_kdf:
     argon2_concurrency: 3
     argon2_queue_size: 2
@@ -419,6 +425,7 @@ func TestLoadValidatesAuthSessionLimit(t *testing.T) {
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
+    password_change_token_ttl: 5m
   password_kdf:
     argon2_concurrency: 2
     argon2_queue_size: 16
@@ -434,6 +441,7 @@ func TestLoadValidatesAuthSessionLimit(t *testing.T) {
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
+    password_change_token_ttl: 5m
   password_kdf:
     argon2_concurrency: 2
     argon2_queue_size: 16
@@ -718,6 +726,7 @@ auth:
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
+    password_change_token_ttl: 5m
   password_kdf:
     argon2_concurrency: 2
     argon2_queue_size: 16
@@ -846,6 +855,7 @@ func configYAMLWithSections(overrides ...string) string {
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h
+    password_change_token_ttl: 5m
   password_kdf:
     argon2_concurrency: 2
     argon2_queue_size: 16

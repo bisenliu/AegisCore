@@ -18,9 +18,13 @@ var rotateSessionLua string
 //go:embed scripts/detach_user_sessions.lua
 var detachUserSessionsLua string
 
+//go:embed scripts/consume_password_change_session.lua
+var consumePasswordChangeSessionLua string
+
 var (
-	cacheTokenVersionScript  = rediscache.NewScript(cacheTokenVersionLua)
-	createSessionScript      = rediscache.NewScript(createSessionLua)
-	rotateSessionScript      = rediscache.NewScript(rotateSessionLua)
-	detachUserSessionsScript = rediscache.NewScript(detachUserSessionsLua)
+	cacheTokenVersionScript            = rediscache.NewScript(cacheTokenVersionLua)
+	createSessionScript                = rediscache.NewScript(createSessionLua)
+	rotateSessionScript                = rediscache.NewScript(rotateSessionLua)
+	detachUserSessionsScript           = rediscache.NewScript(detachUserSessionsLua)
+	consumePasswordChangeSessionScript = rediscache.NewScript(consumePasswordChangeSessionLua)
 )

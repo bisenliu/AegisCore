@@ -28,22 +28,33 @@ func TestIssuerUsesDefaultTTLs(t *testing.T) {
 }
 
 func TestIssuerIssuesPasswordChangeToken(t *testing.T) {
-	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}}}
+	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, PasswordChangeTokenTTL: 4 * time.Minute}}}
 	jwt := commonauth.NewJWTService(cfg.Auth)
 	issuer := NewIssuer(jwt, cfg)
 
 	tokens, err := issuer.IssuePasswordChangeToken(context.Background(), issuerTestUserID, 2, "pc-123")
 	require.NoError(t, err,
 		"IssuePasswordChangeToken: %v", err)
-	require.False(t, tokens.AccessToken == "" || tokens.RefreshToken != "" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn != int64((15*time.Minute).Seconds()) || !tokens.PasswordChangeRequired,
+	require.False(t, tokens.AccessToken == "" || tokens.RefreshToken != "" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn != int64((4*time.Minute).Seconds()) || !tokens.PasswordChangeRequired,
 		"tokens = %#v", tokens)
 
 	claims, parsedUserID, err := issuer.ParsePasswordChangeToken(context.Background(), tokens.AccessToken)
 	require.NoError(t, err,
 		"ParsePasswordChangeToken: %v", err)
-	require.False(t, parsedUserID.String() != issuerTestUserID || claims.Subject != commonauth.SubjectPasswordChange || claims.SessionID != "pc-123" || claims.TokenVersion != 2,
+	require.False(t, parsedUserID.String() != issuerTestUserID || claims.Subject != commonauth.SubjectPasswordChange || claims.SessionID != "pc-123" || claims.TokenVersion != 2 || claims.ID == "",
 		"claims = %#v parsedUserID = %s", claims, parsedUserID.String())
 
+}
+
+func TestIssuerUsesDefaultPasswordChangeTokenTTL(t *testing.T) {
+	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}}}
+	issuer := NewIssuer(commonauth.NewJWTService(cfg.Auth), cfg)
+
+	tokens, err := issuer.IssuePasswordChangeToken(context.Background(), issuerTestUserID, 2, "pc-123")
+	require.NoError(t, err,
+		"IssuePasswordChangeToken: %v", err)
+	require.Equal(t, int64(defaultPasswordChangeTokenTTL.Seconds()), tokens.ExpiresIn,
+		"ExpiresIn = %d, want %d", tokens.ExpiresIn, int64(defaultPasswordChangeTokenTTL.Seconds()))
 }
 
 func TestIssuerParsesBearerRefreshToken(t *testing.T) {
