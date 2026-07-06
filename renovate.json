@@ -32,6 +32,19 @@
       "depNameTemplate": "golang/go",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^go(?<version>\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": [
+        "^\\.github/workflows/.*\\.ya?ml$",
+        "^\\.gitlab-ci\\.ya?ml$",
+        "^\\.gitlab/ci/.*\\.ya?ml$"
+      ],
+      "matchStrings": [
+        "GOSEC_VERSION:\\s*['\"]?(?<currentValue>v\\d+\\.\\d+\\.\\d+)['\"]?"
+      ],
+      "depNameTemplate": "securego/gosec",
+      "datasourceTemplate": "github-tags"
     }
   ],
   "packageRules": [
@@ -77,6 +90,14 @@
       "description": "Keep GitLab CI includes and components current, including major upgrades.",
       "matchManagers": [
         "gitlabci"
+      ],
+      "rangeStrategy": "bump",
+      "automerge": false
+    },
+    {
+      "description": "Keep gosec pinned and upgraded by Renovate instead of using @latest.",
+      "matchDepNames": [
+        "securego/gosec"
       ],
       "rangeStrategy": "bump",
       "automerge": false
