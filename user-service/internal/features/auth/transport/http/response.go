@@ -1,6 +1,6 @@
 package authhttp
 
-// TokenResponse 是登录和刷新流程返回的认证 token 载荷。
+// TokenResponse 是认证流程返回的 token 载荷。
 type TokenResponse struct {
 	AccessToken  string `json:"access_token" example:"eyJhbGciOi..."`
 	RefreshToken string `json:"refresh_token,omitempty" example:"eyJhbGciOi..."`

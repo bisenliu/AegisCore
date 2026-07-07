@@ -760,7 +760,7 @@ const openAPIDocument = `{
     },
     "/auth/login": {
       "post": {
-        "description": "校验用户名和密码；普通登录返回 CodeOK、Access Token 与 Refresh Token，强制改密登录返回 CodePasswordChangeRequired 与受限改密 Token。",
+        "description": "校验用户名和密码；普通登录返回 success=true、code=0、Access Token 与 Refresh Token，强制改密登录返回 success=false、code=20006 与受限改密 Token。",
         "requestBody": {
           "content": {
             "application/json": {

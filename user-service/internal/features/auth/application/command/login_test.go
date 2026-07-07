@@ -43,11 +43,12 @@ func TestAuthUseCaseLogin(t *testing.T) {
 			return nil
 		})
 
-	tokens, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	result, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 	require.NoError(t, err,
 		"Login: %v", err)
-	require.False(t, tokens.AccessToken != "access" || tokens.RefreshToken != "refresh" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn != 900,
-		"tokens = %#v", tokens)
+	require.False(t, result.PasswordChangeRequired)
+	require.False(t, result.Tokens.AccessToken != "access" || result.Tokens.RefreshToken != "refresh" || result.Tokens.TokenType != commonauth.TokenTypeBearer || result.Tokens.ExpiresIn != 900,
+		"tokens = %#v", result.Tokens)
 
 }
 
@@ -100,11 +101,11 @@ func TestAuthUseCaseLoginRecordsFailureReasons(t *testing.T) {
 		fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(nil, password.ErrPasswordKDFBusy)
 		metrics.EXPECT().LoginFailed(gomock.Any(), authapplication.MetricsReasonPasswordKDFBusy)
 
-		tokens, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+		result, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 		require.ErrorIs(t, err, password.ErrPasswordKDFBusy,
 			"err = %v, want ErrPasswordKDFBusy", err)
-		require.Nil(t, tokens,
-			"tokens = %#v, want nil", tokens)
+		require.Nil(t, result,
+			"result = %#v, want nil", result)
 
 	})
 }
@@ -127,11 +128,12 @@ func TestAuthUseCaseLoginUsesDefaultTTLs(t *testing.T) {
 	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", int64(defaultAccessTokenTTL.Seconds()), defaultRefreshTokenTTL), nil)
 	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), gomock.Any(), int64(2), defaultRefreshTokenTTL).Return(nil)
 
-	tokens, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	result, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 	require.NoError(t, err,
 		"Login: %v", err)
-	require.Equal(t, int64(defaultAccessTokenTTL.Seconds()), tokens.ExpiresIn,
-		"ExpiresIn = %d, want %d", tokens.ExpiresIn, int64(defaultAccessTokenTTL.Seconds()))
+	require.False(t, result.PasswordChangeRequired)
+	require.Equal(t, int64(defaultAccessTokenTTL.Seconds()), result.Tokens.ExpiresIn,
+		"ExpiresIn = %d, want %d", result.Tokens.ExpiresIn, int64(defaultAccessTokenTTL.Seconds()))
 
 }
 
@@ -144,11 +146,12 @@ func TestAuthUseCaseLoginUsesExplicitTTLs(t *testing.T) {
 	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", int64(accessTTL.Seconds()), refreshTTL), nil)
 	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), gomock.Any(), int64(2), refreshTTL).Return(nil)
 
-	tokens, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	result, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 	require.NoError(t, err,
 		"Login: %v", err)
-	require.Equal(t, int64(accessTTL.Seconds()), tokens.ExpiresIn,
-		"ExpiresIn = %d, want %d", tokens.ExpiresIn, int64(accessTTL.Seconds()))
+	require.False(t, result.PasswordChangeRequired)
+	require.Equal(t, int64(accessTTL.Seconds()), result.Tokens.ExpiresIn,
+		"ExpiresIn = %d, want %d", result.Tokens.ExpiresIn, int64(accessTTL.Seconds()))
 
 }
 
@@ -190,11 +193,11 @@ func TestAuthUseCaseLoginDoesNotReturnTokenWhenSessionCreateFails(t *testing.T) 
 	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", 900, time.Hour), nil)
 	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), gomock.Any(), int64(2), time.Hour).Return(createErr)
 
-	tokens, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	result, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 	require.ErrorIs(t, err, createErr,
 		"Login err = %v, want create session error", err)
-	require.Nil(t, tokens,
-		"tokens = %#v, want nil", tokens)
+	require.Nil(t, result,
+		"result = %#v, want nil", result)
 
 }
 
@@ -223,7 +226,7 @@ func TestAuthUseCaseLoginRejectsInactiveStatuses(t *testing.T) {
 func TestAuthUseCaseLoginIssuesPasswordChangeToken(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
 	credential := &authdomain.UserCredential{UserID: authTestUserID, Username: "alice", Status: identity.UserStatusMustChangePassword, TokenVersion: 2}
-	passwordChange := &authtokens.TokenResult{AccessToken: "password-change", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900, PasswordChangeRequired: true}
+	passwordChange := &authtokens.TokenResult{AccessToken: "password-change", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}
 	claims := passwordChangeClaims("pc-123", 2)
 
 	fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(credential, nil)
@@ -231,10 +234,11 @@ func TestAuthUseCaseLoginIssuesPasswordChangeToken(t *testing.T) {
 	fixture.tokens.EXPECT().ParsePasswordChangeToken(gomock.Any(), "password-change").Return(claims, authTestUserID, nil)
 	fixture.sessions.EXPECT().CreatePasswordChangeSession(gomock.Any(), authTestUserID.String(), gomock.Any(), "jti-123", int64(2), 15*time.Minute).Return(nil)
 
-	tokens, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	result, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 	require.NoError(t, err,
 		"Login: %v", err)
-	require.False(t, tokens.AccessToken != "password-change" || tokens.RefreshToken != "" || !tokens.PasswordChangeRequired,
-		"tokens = %#v", tokens)
+	require.True(t, result.PasswordChangeRequired)
+	require.False(t, result.Tokens.AccessToken != "password-change" || result.Tokens.RefreshToken != "",
+		"tokens = %#v", result.Tokens)
 
 }

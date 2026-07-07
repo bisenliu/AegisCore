@@ -43,10 +43,10 @@ func (m *MockLoginUseCase) EXPECT() *MockLoginUseCaseMockRecorder {
 }
 
 // Login mocks base method.
-func (m *MockLoginUseCase) Login(ctx context.Context, cmd command.LoginCommand) (*tokens.TokenResult, error) {
+func (m *MockLoginUseCase) Login(ctx context.Context, cmd command.LoginCommand) (*command.LoginResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Login", ctx, cmd)
-	ret0, _ := ret[0].(*tokens.TokenResult)
+	ret0, _ := ret[0].(*command.LoginResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

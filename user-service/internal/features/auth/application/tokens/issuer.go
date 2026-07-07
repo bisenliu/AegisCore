@@ -75,7 +75,7 @@ func (i *authTokenIssuer) IssuePasswordChangeToken(ctx context.Context, userID s
 		logger.Error(ctx, "sign password change token failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return nil, fmt.Errorf("sign password change token: %w", err)
 	}
-	return &TokenResult{AccessToken: token, TokenType: commonauth.TokenTypeBearer, ExpiresIn: int64(ttl.Seconds()), PasswordChangeRequired: true}, nil
+	return &TokenResult{AccessToken: token, TokenType: commonauth.TokenTypeBearer, ExpiresIn: int64(ttl.Seconds())}, nil
 }
 
 func (i *authTokenIssuer) passwordChangeTokenTTL() time.Duration {

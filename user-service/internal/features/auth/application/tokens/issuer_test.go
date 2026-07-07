@@ -35,7 +35,7 @@ func TestIssuerIssuesPasswordChangeToken(t *testing.T) {
 	tokens, err := issuer.IssuePasswordChangeToken(context.Background(), issuerTestUserID, 2, "pc-123")
 	require.NoError(t, err,
 		"IssuePasswordChangeToken: %v", err)
-	require.False(t, tokens.AccessToken == "" || tokens.RefreshToken != "" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn != int64((4*time.Minute).Seconds()) || !tokens.PasswordChangeRequired,
+	require.False(t, tokens.AccessToken == "" || tokens.RefreshToken != "" || tokens.TokenType != commonauth.TokenTypeBearer || tokens.ExpiresIn != int64((4*time.Minute).Seconds()),
 		"tokens = %#v", tokens)
 
 	claims, parsedUserID, err := issuer.ParsePasswordChangeToken(context.Background(), tokens.AccessToken)

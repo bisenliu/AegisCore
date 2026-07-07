@@ -26,8 +26,6 @@ const (
 	ReasonMFARequired Reason = "mfa_required"
 	// ReasonUserAccountLocked 表示用户账号被冻结或封禁。
 	ReasonUserAccountLocked Reason = "user_account_locked"
-	// ReasonPasswordChangeRequired 表示凭据有效但账号要求修改密码。
-	ReasonPasswordChangeRequired Reason = "password_change_required"
 	// ReasonForbidden 表示权限不足。
 	ReasonForbidden Reason = "forbidden"
 	// ReasonConflict 表示领域冲突。

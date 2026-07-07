@@ -49,7 +49,7 @@ func NewAuthController(params AuthControllerParams) *AuthController {
 
 // LoginUser 处理用户名和密码登录请求。
 // @Summary 用户登录
-// @Description 校验用户名和密码；普通登录返回 CodeOK、Access Token 与 Refresh Token，强制改密登录返回 CodePasswordChangeRequired 与受限改密 Token。
+// @Description 校验用户名和密码；普通登录返回 success=true、code=0、Access Token 与 Refresh Token，强制改密登录返回 success=false、code=20006 与受限改密 Token。
 // @Tags 认证
 // @Accept json
 // @Produce json
@@ -75,16 +75,16 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 		ClientIP:  c.ClientIP(),
 		UserAgent: c.GetHeader("User-Agent"),
 	})
-	tokens, err := ctl.login.Login(ctx, cmd)
+	result, err := ctl.login.Login(ctx, cmd)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	if tokens.PasswordChangeRequired {
-		response.JSON(c, http.StatusOK, toPasswordChangeRequiredEnvelope(tokens))
+	if result.PasswordChangeRequired {
+		response.JSON(c, http.StatusOK, toPasswordChangeRequiredEnvelope(result.Tokens))
 		return
 	}
-	response.OK(c, toTokenResponse(tokens))
+	response.OK(c, toTokenResponse(result.Tokens))
 }
 
 // RefreshToken 处理 refresh token 换取请求。
