@@ -1,14 +1,9 @@
 package userhttp
 
 import (
-	"errors"
-
-	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/pagination"
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
-	"github.com/aegiscore/user-service/internal/messages"
-	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 func toUserResponse(user userdomain.User) UserResponse {
@@ -35,15 +30,4 @@ func toUserListResponse(result *userquery.ListUsersResult) pagination.PaginatedD
 		})
 	}
 	return pagination.NewPaginatedData(items, pagination.NewPagination(result.PageSize, result.NextCursor, result.HasNext))
-}
-
-func toUserHTTPError(err error) error {
-	switch {
-	case errors.Is(err, identity.ErrUserAlreadyExists):
-		return contracterrors.ConflictError(messages.UserAlreadyExists)
-	case errors.Is(err, identity.ErrUserNotFound):
-		return contracterrors.NotFoundError(messages.UserNotFound)
-	default:
-		return contracterrors.FromError(err)
-	}
 }
