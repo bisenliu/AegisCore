@@ -53,7 +53,7 @@ func (ctl *PermissionController) ListPermissions(c *gin.Context) {
 	}
 	result, err := ctl.queries.ListPermissions(c.Request.Context(), query)
 	if err != nil {
-		response.Fail(c, toPermissionHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toPermissionListResponse(result))
@@ -87,7 +87,7 @@ func (ctl *PermissionController) CreatePermission(c *gin.Context) {
 	}
 	result, err := ctl.commands.CreatePermission(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toPermissionHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.Created(c, toPermissionResponse(result.Permission))
@@ -120,7 +120,7 @@ func (ctl *PermissionController) GetPermission(c *gin.Context) {
 	}
 	result, err := ctl.queries.GetPermission(c.Request.Context(), query)
 	if err != nil {
-		response.Fail(c, toPermissionHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toPermissionResponse(result.Permission))
@@ -156,7 +156,7 @@ func (ctl *PermissionController) UpdatePermission(c *gin.Context) {
 	}
 	err = ctl.commands.UpdatePermission(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toPermissionHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.NoContent(c)
@@ -224,7 +224,7 @@ func (ctl *PermissionController) ListUserEffectivePermissions(c *gin.Context) {
 	}
 	result, err := ctl.queries.ListUserEffectivePermissions(c.Request.Context(), query)
 	if err != nil {
-		response.Fail(c, toPermissionHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toPermissionResponses(result.Items))
@@ -244,7 +244,7 @@ func (ctl *PermissionController) ListUserEffectivePermissions(c *gin.Context) {
 func (ctl *PermissionController) GetRouteDiff(c *gin.Context) {
 	result, err := ctl.queries.GetRouteDiff(c.Request.Context())
 	if err != nil {
-		response.Fail(c, toPermissionHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toRouteDiffResponse(result))
@@ -267,7 +267,7 @@ func (ctl *PermissionController) setPermissionActive(c *gin.Context, active bool
 		err = ctl.commands.DisablePermission(c.Request.Context(), cmd)
 	}
 	if err != nil {
-		response.Fail(c, toPermissionHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.NoContent(c)
