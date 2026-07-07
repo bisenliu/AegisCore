@@ -83,7 +83,7 @@ func TestRoleControllerReplaceRolePermissions(t *testing.T) {
 
 	t.Run("missing permission maps to not found envelope", func(t *testing.T) {
 		engine, commands, _ := newRoleHTTPTestHarness(t)
-		commands.EXPECT().ReplaceRolePermissions(gomock.Any(), gomock.Any()).Return(nil, permissiondomain.ErrPermissionNotFound)
+		commands.EXPECT().ReplaceRolePermissions(gomock.Any(), gomock.Any()).Return(nil, errors.Join(errors.New("permission inactive"), permissiondomain.ErrPermissionNotFound))
 
 		recorder := performRoleHTTPRequest(t, engine, http.MethodPut, "/api/v1/roles/"+roleHTTPTestRoleID+"/permissions", jsonBody(`{"permission_ids":["`+roleHTTPTestPermissionID+`"]}`))
 		expectRoleEnvelope(t, recorder, http.StatusNotFound, false, contracterrors.CodeNotFound, messages.PermissionNotFound)

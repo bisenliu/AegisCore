@@ -33,7 +33,7 @@ func (ctl *RoleController) ListUserRoles(c *gin.Context) {
 	}
 	result, err := ctl.queries.ListUserRoles(c.Request.Context(), query)
 	if err != nil {
-		response.Fail(c, toRoleHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toRoleResponses(result.Items))
@@ -68,7 +68,7 @@ func (ctl *RoleController) ReplaceUserRoles(c *gin.Context) {
 	}
 	result, err := ctl.commands.ReplaceUserRoles(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toRoleHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toCommandRoleResponses(result))
@@ -104,7 +104,7 @@ func (ctl *RoleController) AddUserRole(c *gin.Context) {
 	}
 	result, err := ctl.commands.AddUserRole(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toRoleHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toCommandRoleResponses(result))
@@ -138,7 +138,7 @@ func (ctl *RoleController) RemoveUserRole(c *gin.Context) {
 	}
 	result, err := ctl.commands.RemoveUserRole(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toRoleHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toCommandRoleResponses(result))

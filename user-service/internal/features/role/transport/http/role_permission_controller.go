@@ -33,7 +33,7 @@ func (ctl *RoleController) ListRolePermissions(c *gin.Context) {
 	}
 	result, err := ctl.queries.ListRolePermissions(c.Request.Context(), query)
 	if err != nil {
-		response.Fail(c, toRoleHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toPermissionResponses(result.Items))
@@ -68,7 +68,7 @@ func (ctl *RoleController) ReplaceRolePermissions(c *gin.Context) {
 	}
 	result, err := ctl.commands.ReplaceRolePermissions(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toRoleHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toPermissionResponses(result.Items))
@@ -104,7 +104,7 @@ func (ctl *RoleController) AddRolePermission(c *gin.Context) {
 	}
 	result, err := ctl.commands.AddRolePermission(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toRoleHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toPermissionResponses(result.Items))
@@ -138,7 +138,7 @@ func (ctl *RoleController) RemoveRolePermission(c *gin.Context) {
 	}
 	result, err := ctl.commands.RemoveRolePermission(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toRoleHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toPermissionResponses(result.Items))
