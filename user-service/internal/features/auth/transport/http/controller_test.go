@@ -254,6 +254,30 @@ func TestAuthControllerRefreshMapsTokenInvalid(t *testing.T) {
 
 }
 
+func TestAuthControllerLogoutCurrentMapsRevocationIncomplete(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctl, mocks := newTestAuthController(t)
+	mocks.logoutCurrent.EXPECT().LogoutCurrentSession(gomock.Any()).Return(nil, authdomain.ErrSessionRevocationIncomplete)
+
+	status, envelope := executeAuthLogoutCurrent(t, ctl)
+	require.Equal(t, http.StatusServiceUnavailable, status,
+		"status = %d, want %d", status, http.StatusServiceUnavailable)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeServiceUnavailable || envelope.Message != messages.AuthRevocationIncomplete,
+		"envelope = %#v", envelope)
+}
+
+func TestAuthControllerLogoutAllMapsRevocationIncomplete(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctl, mocks := newTestAuthController(t)
+	mocks.logoutAll.EXPECT().LogoutAllSessions(gomock.Any()).Return(nil, authdomain.ErrSessionRevocationIncomplete)
+
+	status, envelope := executeAuthLogoutAll(t, ctl)
+	require.Equal(t, http.StatusServiceUnavailable, status,
+		"status = %d, want %d", status, http.StatusServiceUnavailable)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeServiceUnavailable || envelope.Message != messages.AuthRevocationIncomplete,
+		"envelope = %#v", envelope)
+}
+
 type authControllerMocks struct {
 	login          *MockLoginUseCase
 	refresh        *MockRefreshTokenUseCase
@@ -286,6 +310,24 @@ func executeAuthRefresh(t *testing.T, ctl *AuthController, body string) (int, re
 	recorder, ctx := newAuthJSONContext(http.MethodPost, "/api/v1/auth/refresh", body)
 
 	ctl.RefreshToken(ctx)
+
+	return decodeAuthEnvelope(t, recorder)
+}
+
+func executeAuthLogoutCurrent(t *testing.T, ctl *AuthController) (int, response.Envelope) {
+	t.Helper()
+	recorder, ctx := newAuthJSONContext(http.MethodPost, "/api/v1/auth/logout", "")
+
+	ctl.LogoutCurrentSession(ctx)
+
+	return decodeAuthEnvelope(t, recorder)
+}
+
+func executeAuthLogoutAll(t *testing.T, ctl *AuthController) (int, response.Envelope) {
+	t.Helper()
+	recorder, ctx := newAuthJSONContext(http.MethodPost, "/api/v1/auth/logout-all", "")
+
+	ctl.LogoutAllSessions(ctx)
 
 	return decodeAuthEnvelope(t, recorder)
 }

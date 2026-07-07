@@ -77,7 +77,7 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 	})
 	tokens, err := ctl.login.Login(ctx, cmd)
 	if err != nil {
-		response.Fail(c, toAuthHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	if tokens.PasswordChangeRequired {
@@ -112,7 +112,7 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 	}
 	tokens, err := ctl.refresh.Refresh(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toAuthHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toTokenResponse(tokens))
@@ -145,7 +145,7 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 	}
 	result, err := ctl.changePassword.ChangePassword(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toAuthHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toChangePasswordResponse(result))
@@ -164,7 +164,7 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 func (ctl *AuthController) LogoutCurrentSession(c *gin.Context) {
 	result, err := ctl.logoutCurrent.LogoutCurrentSession(c.Request.Context())
 	if err != nil {
-		response.Fail(c, toAuthHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toLogoutResponse(result))
@@ -183,7 +183,7 @@ func (ctl *AuthController) LogoutCurrentSession(c *gin.Context) {
 func (ctl *AuthController) LogoutAllSessions(c *gin.Context) {
 	result, err := ctl.logoutAll.LogoutAllSessions(c.Request.Context())
 	if err != nil {
-		response.Fail(c, toAuthHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toLogoutResponse(result))

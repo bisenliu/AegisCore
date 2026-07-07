@@ -1,9 +1,11 @@
 package password
 
 import (
-	"errors"
+	stderrors "errors"
 
 	"golang.org/x/crypto/argon2"
+
+	contracterrors "github.com/aegiscore/common/contract/errors"
 )
 
 const (
@@ -32,13 +34,18 @@ const (
 	defaultArgon2QueueSize = 16
 )
 
+const (
+	reasonPasswordKDFBusy  contracterrors.Reason = "password_kdf_busy"
+	messagePasswordKDFBusy string                = "认证服务繁忙，请稍后重试"
+)
+
 var (
 	// ErrEmptyPassword 表示哈希或校验收到空明文密码。
-	ErrEmptyPassword = errors.New("password is empty")
+	ErrEmptyPassword = stderrors.New("password is empty")
 	// ErrPasswordTooLong 表示明文密码超过包允许的最大长度。
-	ErrPasswordTooLong = errors.New("password is too long")
+	ErrPasswordTooLong = stderrors.New("password is too long")
 	// ErrInvalidHash 表示编码后的密码哈希格式错误或不受支持。
-	ErrInvalidHash = errors.New("password hash is invalid")
-	// ErrPasswordKDFBusy 表示密码 KDF 执行中和等待执行的请求总数已达上限。
-	ErrPasswordKDFBusy = errors.New("password kdf is busy")
+	ErrInvalidHash = stderrors.New("password hash is invalid")
+	// ErrPasswordKDFBusy 表示密码 KDF 执行中和等待执行的请求总数已达上限，并可直接渲染为服务不可用响应。
+	ErrPasswordKDFBusy = contracterrors.New(contracterrors.KindServiceUnavailable, reasonPasswordKDFBusy, contracterrors.CodeServiceUnavailable, messagePasswordKDFBusy)
 )

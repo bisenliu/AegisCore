@@ -3,12 +3,21 @@ package password
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	contracterrors "github.com/aegiscore/common/contract/errors"
+	contractresponse "github.com/aegiscore/common/contract/response"
+	httpresponse "github.com/aegiscore/common/http/response"
 )
 
 func TestNewServiceRejectsInvalidOptions(t *testing.T) {
@@ -148,6 +157,32 @@ func TestHashContextReturnsBusyWhenQueueIsFull(t *testing.T) {
 
 	_, err := service.HashContext(context.Background(), "secret")
 	require.ErrorIs(t, err, ErrPasswordKDFBusy)
+}
+
+func TestErrPasswordKDFBusyIsRenderableApplicationError(t *testing.T) {
+	wrapped := errors.Join(errors.New("outer"), ErrPasswordKDFBusy)
+	require.ErrorIs(t, wrapped, ErrPasswordKDFBusy)
+
+	var appErr *contracterrors.Error
+	require.ErrorAs(t, ErrPasswordKDFBusy, &appErr)
+	require.Equal(t, contracterrors.KindServiceUnavailable, appErr.Kind)
+	require.Equal(t, reasonPasswordKDFBusy, appErr.Reason)
+	require.Equal(t, contracterrors.CodeServiceUnavailable, appErr.Code)
+	require.Equal(t, messagePasswordKDFBusy, appErr.Message)
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/password", nil)
+
+	httpresponse.Fail(ctx, ErrPasswordKDFBusy)
+
+	var envelope contractresponse.Envelope
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	require.False(t, envelope.Success)
+	require.Equal(t, contracterrors.CodeServiceUnavailable, envelope.Code)
+	require.Equal(t, messagePasswordKDFBusy, envelope.Message)
 }
 
 func TestHashContextCancelsWhileWaitingForKDFSlot(t *testing.T) {

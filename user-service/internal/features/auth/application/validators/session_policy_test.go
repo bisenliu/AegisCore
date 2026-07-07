@@ -37,10 +37,11 @@ func TestValidateRefreshSessionClaims(t *testing.T) {
 		userID       string
 		tokenVersion int64
 		wantErr      error
+		wantSpecific error
 	}{
 		{name: "matching", userID: "user-1", tokenVersion: 2},
-		{name: "user mismatch", userID: "user-2", tokenVersion: 2, wantErr: authdomain.ErrTokenInvalid},
-		{name: "version mismatch", userID: "user-1", tokenVersion: 3, wantErr: authdomain.ErrTokenInvalid},
+		{name: "user mismatch", userID: "user-2", tokenVersion: 2, wantErr: authdomain.ErrTokenInvalid, wantSpecific: authdomain.ErrAuthSessionMismatch},
+		{name: "version mismatch", userID: "user-1", tokenVersion: 3, wantErr: authdomain.ErrTokenInvalid, wantSpecific: authdomain.ErrAuthSessionMismatch},
 	}
 
 	for _, tt := range tests {
@@ -48,6 +49,10 @@ func TestValidateRefreshSessionClaims(t *testing.T) {
 			err := ValidateRefreshSessionClaims(session, tt.userID, tt.tokenVersion)
 			require.ErrorIs(t, err, tt.wantErr,
 				"err = %v, want %v", err, tt.wantErr)
+			if tt.wantSpecific != nil {
+				require.ErrorIs(t, err, tt.wantSpecific,
+					"err = %v, want %v", err, tt.wantSpecific)
+			}
 
 		})
 	}
