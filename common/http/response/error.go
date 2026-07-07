@@ -17,11 +17,19 @@ func Fail(c *gin.Context, err error) {
 
 // WriteError 写入已归一化的应用错误。
 func WriteError(c *gin.Context, err *contracterrors.Error) {
-	if err == nil {
-		err = contracterrors.InternalError(nil)
-	}
+	err = normalizeAppError(err)
 	annotateAppErrorOnSpan(c.Request.Context(), err)
 	JSON(c, statusCode(err), errorEnvelope(err))
+}
+
+func normalizeAppError(err *contracterrors.Error) *contracterrors.Error {
+	if err == nil {
+		return contracterrors.InternalError(nil)
+	}
+	if statusCode(err) == http.StatusInternalServerError && err.Kind != contracterrors.KindInternal {
+		return contracterrors.InternalError(err)
+	}
+	return err
 }
 
 // BadRequest 写入表示请求格式错误或无法解析的 400 失败信封。
@@ -36,8 +44,9 @@ func ValidationFailed(c *gin.Context, format string, args ...any) {
 
 // ValidationFailedWithErrors 写入包含结构化字段明细的 400 校验失败信封。
 func ValidationFailedWithErrors(c *gin.Context, message string, errors any) {
-	annotateAppErrorOnSpan(c.Request.Context(), contracterrors.ValidationFailedError(message))
-	JSON(c, http.StatusBadRequest, validationEnvelope(message, errors))
+	appErr := contracterrors.ValidationFailedError(message)
+	annotateAppErrorOnSpan(c.Request.Context(), appErr)
+	JSON(c, statusCode(appErr), validationEnvelope(message, errors))
 }
 
 // Unauthenticated 写入表示缺少认证状态的 401 失败信封。

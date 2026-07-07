@@ -66,15 +66,20 @@ type FieldError struct {
 
 // Error 是规范化后的校验或绑定错误，可携带字段明细。
 type Error struct {
-	Message string              `json:"message"`
-	Fields  []FieldError        `json:"fields,omitempty"`
-	Code    contracterrors.Code `json:"-"`
+	Message string                `json:"message"`
+	Fields  []FieldError          `json:"fields,omitempty"`
+	Kind    contracterrors.Kind   `json:"-"`
+	Reason  contracterrors.Reason `json:"-"`
+	Code    contracterrors.Code   `json:"-"`
 }
 
 // Failure 包含从校验或绑定错误派生出的响应元数据。
 type Failure struct {
 	Message      string
 	Fields       []FieldError
+	Kind         contracterrors.Kind
+	Reason       contracterrors.Reason
+	Code         contracterrors.Code
 	IsValidation bool
 }
 
@@ -109,4 +114,54 @@ func (e *Error) Error() string {
 		return ""
 	}
 	return e.Message
+}
+
+// Unwrap 暴露语义应用错误，供 errors.As 识别共享错误契约。
+func (e *Error) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return validationAppError(e)
+}
+
+func validationAppError(e *Error) *contracterrors.Error {
+	kind := e.Kind
+	reason := e.Reason
+	code := e.Code
+	if kind == "" {
+		if len(e.Fields) > 0 {
+			kind = contracterrors.KindValidation
+		} else {
+			kind = contracterrors.KindBadRequest
+		}
+	}
+	if reason == "" {
+		reason = defaultReason(kind)
+	}
+	if code == 0 {
+		code = defaultCode(kind)
+	}
+	return contracterrors.New(kind, reason, code, e.Message)
+}
+
+func defaultReason(kind contracterrors.Kind) contracterrors.Reason {
+	switch kind {
+	case contracterrors.KindValidation:
+		return contracterrors.ReasonValidationFailed
+	case contracterrors.KindBadRequest:
+		return contracterrors.ReasonBadRequest
+	default:
+		return contracterrors.ReasonInternalError
+	}
+}
+
+func defaultCode(kind contracterrors.Kind) contracterrors.Code {
+	switch kind {
+	case contracterrors.KindValidation:
+		return contracterrors.CodeValidationFailed
+	case contracterrors.KindBadRequest:
+		return contracterrors.CodeBadRequest
+	default:
+		return contracterrors.CodeInternalError
+	}
 }

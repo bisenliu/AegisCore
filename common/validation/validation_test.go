@@ -26,7 +26,10 @@ func TestValidateStructAndFieldNames(t *testing.T) {
 	var validationErr *Error
 	require.ErrorAs(t, err, &validationErr)
 	require.Equal(t, ErrValidationFailed, validationErr.Message)
+	require.Equal(t, contracterrors.KindValidation, validationErr.Kind)
+	require.Equal(t, contracterrors.ReasonValidationFailed, validationErr.Reason)
 	require.Equal(t, contracterrors.CodeValidationFailed, validationErr.Code)
+	require.ErrorIs(t, validationErr, &contracterrors.Error{Kind: contracterrors.KindValidation})
 	fields := fieldDetails(validationErr.Fields)
 	checks := map[string]FieldError{
 		"name":     {Field: "name", Label: "姓名", Rule: "required"},

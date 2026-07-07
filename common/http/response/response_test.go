@@ -74,6 +74,45 @@ func TestFailureResponseErrors(t *testing.T) {
 		require.Equal(t, contractresponse.MessageAuthInvalid, envelope.Message)
 	})
 
+	t.Run("wrapped application error keeps semantic status", func(t *testing.T) {
+		ctx, recorder := newTestContext()
+
+		Fail(ctx, errors.Join(errors.New("outer"), contracterrors.NotFoundError("用户不存在")))
+
+		var envelope contractresponse.Envelope
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+		require.Equal(t, http.StatusNotFound, recorder.Code)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeNotFound, envelope.Code)
+		require.Equal(t, "用户不存在", envelope.Message)
+	})
+
+	t.Run("service unavailable failure", func(t *testing.T) {
+		ctx, recorder := newTestContext()
+
+		WriteError(ctx, contracterrors.ServiceUnavailableError("服务繁忙，请稍后重试"))
+
+		var envelope contractresponse.Envelope
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+		require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeServiceUnavailable, envelope.Code)
+		require.Equal(t, "服务繁忙，请稍后重试", envelope.Message)
+	})
+
+	t.Run("unknown application kind is sanitized as internal", func(t *testing.T) {
+		ctx, recorder := newTestContext()
+
+		WriteError(ctx, &contracterrors.Error{Kind: "future_kind", Code: contracterrors.CodeBadRequest, Message: "secret stack"})
+
+		var envelope contractresponse.Envelope
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+		require.Equal(t, http.StatusInternalServerError, recorder.Code)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeInternalError, envelope.Code)
+		require.Equal(t, contractresponse.MessageInternalError, envelope.Message)
+	})
+
 	t.Run("validation failure includes errors", func(t *testing.T) {
 		ctx, recorder := newTestContext()
 		details := []map[string]string{{"field": "email", "label": "邮箱", "rule": "email", "message": "邮箱格式不正确"}}

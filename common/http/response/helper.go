@@ -20,8 +20,23 @@ func validationEnvelope(message string, errors any) contractresponse.Envelope {
 }
 
 func statusCode(err *contracterrors.Error) int {
-	if err == nil || err.HTTPStatus == 0 {
+	if err == nil {
 		return http.StatusInternalServerError
 	}
-	return err.HTTPStatus
+	switch err.Kind {
+	case contracterrors.KindBadRequest, contracterrors.KindValidation:
+		return http.StatusBadRequest
+	case contracterrors.KindUnauthenticated:
+		return http.StatusUnauthorized
+	case contracterrors.KindForbidden:
+		return http.StatusForbidden
+	case contracterrors.KindNotFound:
+		return http.StatusNotFound
+	case contracterrors.KindConflict:
+		return http.StatusConflict
+	case contracterrors.KindServiceUnavailable:
+		return http.StatusServiceUnavailable
+	default:
+		return http.StatusInternalServerError
+	}
 }
