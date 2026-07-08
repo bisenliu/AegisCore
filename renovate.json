@@ -17,12 +17,12 @@
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": [
-        "(^|/)go\\.work$",
-        "(^|/)go\\.mod$",
-        "^\\.github/workflows/.*\\.ya?ml$",
-        "^\\.gitlab-ci\\.ya?ml$",
-        "^\\.gitlab/ci/.*\\.ya?ml$"
+      "managerFilePatterns": [
+        "/(^|/)go\\.work$/",
+        "/(^|/)go\\.mod$/",
+        "/^\\.github/workflows/.*\\.ya?ml$/",
+        "/^\\.gitlab-ci\\.ya?ml$/",
+        "/^\\.gitlab/ci/.*\\.ya?ml$/"
       ],
       "matchStrings": [
         "toolchain\\s+go(?<currentValue>\\d+\\.\\d+\\.\\d+)",
@@ -35,10 +35,10 @@
     },
     {
       "customType": "regex",
-      "fileMatch": [
-        "^\\.github/workflows/.*\\.ya?ml$",
-        "^\\.gitlab-ci\\.ya?ml$",
-        "^\\.gitlab/ci/.*\\.ya?ml$"
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.*\\.ya?ml$/",
+        "/^\\.gitlab-ci\\.ya?ml$/",
+        "/^\\.gitlab/ci/.*\\.ya?ml$/"
       ],
       "matchStrings": [
         "GOSEC_VERSION:\\s*['\"]?(?<currentValue>v\\d+\\.\\d+\\.\\d+)['\"]?"
