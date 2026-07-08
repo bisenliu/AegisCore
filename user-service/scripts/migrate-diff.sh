@@ -18,7 +18,7 @@ set -eu
 # 行为：
 #   - 切换到 user-service 目录，使 Atlas 读取 ./migrations/atlas.hcl 和 ./migrations。
 #   - 确保 Atlas dev database 镜像预置 pg_trgm，支持 Ent schema 中的 gin_trgm_ops。
-#   - 使用 Atlas `ent://ent/schema` 作为期望 schema 来源。
+#   - 使用 Atlas external schema loader 作为期望 schema 来源，并全局禁用数据库真实外键。
 #   - 先重新计算已有迁移目录 hash，避免人工拆分或删除 SQL 后 diff 前校验失败。
 #   - 在 dev database 上回放已有迁移，将结果与 Ent schema 对比；如有差异，
 #     在 user-service/migrations/ 下写入新的 SQL 文件。
@@ -44,7 +44,7 @@ fi
 # migrate diff 会先校验 migration directory；人工拆分、删除或编辑 SQL 后需要先刷新 hash。
 atlas migrate hash --dir file://migrations
 
-# Atlas 读取 ent:// schema source 时会以 -mod=mod 调用 Go；GOWORK=off 用于避免 workspace 模式冲突。
+# Atlas 通过 external schema loader 读取 Ent schema；GOWORK=off 用于避免 workspace 模式冲突。
 GOWORK=off atlas migrate diff "$1" --config file://migrations/atlas.hcl --env local
 
 # 生成迁移或人工审查并修改 SQL 后，重新计算 atlas.sum。
