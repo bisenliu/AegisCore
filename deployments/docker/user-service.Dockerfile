@@ -12,7 +12,7 @@ COPY user-service ./user-service
 WORKDIR /src/user-service
 RUN go build -o /out/user-services ./cmd
 
-FROM alpine:3.22
+FROM alpine:3.24
 WORKDIR /app
 
 RUN apk add --no-cache tzdata \
