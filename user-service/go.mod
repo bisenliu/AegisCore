@@ -2,8 +2,6 @@ module github.com/aegiscore/user-service
 
 go 1.26.5
 
-toolchain go1.26.5
-
 require (
 	entgo.io/ent v0.14.6
 	github.com/aegiscore/common v0.0.0
@@ -13,7 +11,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/mattn/go-sqlite3 v1.14.28
+	github.com/mattn/go-sqlite3 v1.14.47
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/redis/go-redis/v9 v9.7.3
