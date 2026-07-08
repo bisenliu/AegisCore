@@ -4,7 +4,7 @@
 ## Requirements
 ### Requirement: 跨服务契约基础
 
-系统 MUST 在 `common/` 中维护跨服务共享的错误、响应 envelope、分页和 HTTP response helper，以保证服务之间的外部契约保持一致，并保持业务中立。共享错误契约 MUST 能表达临时服务不可用状态，供服务在资源池耗尽或依赖临时不可用时返回稳定 HTTP 响应。
+系统 MUST 在 `common/` 中维护跨服务共享的错误、响应 envelope、分页和 HTTP response helper，以保证服务之间的外部契约保持一致，并保持业务中立。共享错误契约 MUST 使用语义驱动的应用错误模型表达错误类别、业务原因、稳定响应码、公开消息和内部原因，并 MUST NOT 在 `common/contract/errors` 中保存、暴露或推导 HTTP status。HTTP status MUST 只由 `common/http/response` 根据应用错误 `Kind` 推导。
 
 #### Scenario: 返回统一响应
 
@@ -21,10 +21,55 @@
 - **WHEN** 共享错误码、响应 envelope 或分页结构需要改变
 - **THEN** change MUST 更新相关主规格或 delta spec，并评估所有使用 `common/contract/` 的服务影响
 
-#### Scenario: 新增错误码
+#### Scenario: 新增错误分类
 
-- **WHEN** 需要在 `common/contract/errors` 新增跨服务错误分类
-- **THEN** 错误码 MUST 保持业务中立，并可通过公共响应 helper 渲染
+- **WHEN** 需要在 `common/contract/errors` 新增跨服务错误分类或原因
+- **THEN** `Kind` 和 `Reason` MUST 保持业务中立或由明确业务边界声明
+- **AND** `Kind` MUST 表达低基数错误类别
+- **AND** `Reason` MUST 表达稳定、可公开的错误原因
+- **AND** HTTP status MUST 由 `common/http/response` 根据 `Kind` 渲染
+
+#### Scenario: 应用错误不暴露 HTTP status
+
+- **WHEN** 调用方创建、包装或检查 `common/contract/errors` 应用错误
+- **THEN** 应用错误 MUST 暴露 `Kind`、`Reason`、`Code`、`Message` 和可选 `Cause`
+- **AND** 应用错误 MUST NOT 暴露 `HTTPStatus` 字段
+- **AND** 应用错误构造 API MUST NOT 接收 HTTP status 参数
+
+#### Scenario: HTTP 层推导错误状态码
+
+- **WHEN** `common/http/response` 写入应用错误响应
+- **THEN** 系统 MUST 根据应用错误 `Kind` 推导 HTTP status
+- **AND** 请求格式错误或字段校验失败 MUST 渲染为 `400 Bad Request`
+- **AND** 未认证或 token 无效、过期、撤销 MUST 渲染为 `401 Unauthorized`
+- **AND** 权限不足 MUST 渲染为 `403 Forbidden`
+- **AND** 冲突 MUST 渲染为 `409 Conflict`
+- **AND** 未找到 MUST 渲染为 `404 Not Found`
+- **AND** 服务不可用 MUST 渲染为 `503 Service Unavailable`
+- **AND** nil、未知或内部错误 MUST 渲染为 `500 Internal Server Error`
+
+#### Scenario: 应用错误转换和包装
+
+- **WHEN** 系统通过 `FromError` 归一化错误
+- **THEN** wrapped application error MUST 保留原始 `Kind`、`Reason`、`Code` 和公开 `Message`
+- **AND** nil error MUST 按内部错误处理
+- **AND** 未知 error MUST 按内部错误处理并使用非敏感公开 message
+- **AND** 原始错误 MUST 只作为内部 `Cause` 保留
+
+#### Scenario: 标准错误链支持
+
+- **WHEN** 调用方使用 `errors.As` 检查 wrapped application error
+- **THEN** 系统 MUST 能从错误链中解析出应用错误
+- **WHEN** 调用方使用 `errors.Is` 按应用错误类别或原因匹配
+- **THEN** 系统 MUST 按 `Kind` 和 `Reason` 的稳定语义进行匹配
+- **AND** 内部 `Cause` MUST 继续支持标准 `errors.Is` 和 `errors.As`
+
+#### Scenario: 校验错误响应
+
+- **WHEN** 请求绑定或字段校验失败
+- **THEN** `common/validation` 和 `common/http/binding` MUST 生成或传播语义应用错误分类
+- **AND** `common/http/response` MUST 将字段校验失败渲染为 `400 Bad Request`
+- **AND** 响应 envelope MUST 保持 `success=false`、`code=CodeValidationFailed`、公开 message 和结构化字段错误明细
 
 #### Scenario: 强制改密错误码稳定
 
@@ -41,9 +86,16 @@
 #### Scenario: 服务不可用错误
 
 - **WHEN** 服务需要表达临时资源池繁忙、依赖暂时不可用或实例无法处理当前请求
-- **THEN** 共享错误契约 MUST 提供业务中立的服务不可用错误分类
-- **AND** 该错误 MUST 渲染为 `503 Service Unavailable`
+- **THEN** 共享错误契约 MUST 提供业务中立的服务不可用 `Kind`
+- **AND** `common/http/response` MUST 将该 `Kind` 渲染为 `503 Service Unavailable`
 - **AND** 具体业务边界 MUST 提供不泄露内部实现细节的公开消息
+
+#### Scenario: 不保留旧兼容路径
+
+- **WHEN** 系统完成语义应用错误模型迁移
+- **THEN** `common/contract/errors` MUST NOT 保留旧 `HTTPStatus` 字段
+- **AND** 系统 MUST NOT 保留接收 HTTP status 的旧 factory API
+- **AND** 系统 MUST NOT 保留从旧状态码直连模型到新模型的兼容适配层
 
 ### Requirement: HTTP 与安全中间件基础
 
@@ -755,4 +807,144 @@ cmd 与 Ent schema 测试 MUST 可以直接使用标准 `testify/require` 与 `t
 - **THEN** 测试 MUST 使用 `t.Setenv` 管理环境变量
 - **AND** 测试 MUST 通过 `t.Cleanup` 恢复 `time.Local` 和包级状态
 - **AND** 这些测试 MUST NOT 使用 `t.Parallel`
+
+### Requirement: Password KDF busy 应用错误契约
+
+`common/security/password` MUST 将密码 KDF 资源繁忙表达为业务中立的应用错误，使调用方可通过共享 `response.Fail` 直接渲染为服务不可用响应，同时保持 Argon2id 参数、哈希编码、并发上限、队列上限和 `errors.Is(err, password.ErrPasswordKDFBusy)` 语义不变。
+
+#### Scenario: KDF busy 直接渲染为服务不可用
+
+- **WHEN** `common/security/password` 的 KDF 服务实例因为执行中和等待中的请求数达到实例资源预算而返回 `password.ErrPasswordKDFBusy`
+- **THEN** 该错误 MUST 携带 `KindServiceUnavailable`、稳定 `Reason` 值 `password_kdf_busy`、`CodeServiceUnavailable` 和不泄露资源预算的中文公开 message
+- **AND** `common/http/response.Fail` MUST 能通过 `contracterrors.FromError` 直接渲染该错误为 `503 Service Unavailable`
+- **AND** 该错误 MUST NOT 要求 user-service auth HTTP mapper 才能获得服务不可用语义
+
+#### Scenario: KDF busy 保持 errors.Is 语义
+
+- **WHEN** 调用方通过 `errors.Is(err, password.ErrPasswordKDFBusy)` 判断 KDF 资源繁忙
+- **THEN** 直接返回的错误和被包装后的错误 MUST 继续支持正确匹配
+- **AND** 该匹配语义 MUST NOT 依赖 HTTP transport 层的错误转换函数
+
+#### Scenario: password primitive 保持业务中立
+
+- **WHEN** `common/security/password` 定义 `password.ErrPasswordKDFBusy`
+- **THEN** `common` MUST 只表达密码 KDF 资源预算繁忙这一业务中立语义
+- **AND** `common` MUST NOT 承载 user-service 登录、用户名、认证会话、token、强制改密、撤销或认证公开消息以外的业务编排逻辑
+
+#### Scenario: KDF 安全语义不变
+
+- **WHEN** password KDF busy 错误迁移为应用错误
+- **THEN** 系统 MUST NOT 改变 Argon2id 参数、哈希编码、队列上限、并发上限、常量时间校验或资源预算触发条件
+- **AND** 测试 MUST 继续覆盖队列繁忙路径、哈希成功路径和密码校验失败路径
+
+### Requirement: Feature-local auth domain 应用错误契约
+
+系统 MUST 允许 user-service auth domain 为稳定认证业务错误定义应用错误，使这些错误同时携带 `Kind`、`Reason`、`Code`、`Message` 并可被共享 response helper 直接渲染。该契约 MUST 保持业务归属清晰，且不得把 user-service 的认证错误映射表上移到 `common`、`internal/shared` 或跨 feature 全局包。
+
+#### Scenario: auth domain 定义可渲染应用错误
+
+- **WHEN** `user-service/internal/features/auth/domain` 定义无效凭据、缺失会话、token 无效、refresh session 无效、强制改密 session 无效或撤销不完整错误
+- **THEN** 错误 MUST 携带共享错误契约所需的 `Kind`、稳定 `Reason`、`Code` 和中文公开 `Message`
+- **AND** `common/http/response.Fail` MUST 能通过 `contracterrors.FromError` 直接渲染该错误
+
+#### Scenario: auth domain 保持业务判断语义
+
+- **WHEN** 调用方通过 `errors.Is` 判断 auth domain 导出的稳定业务错误
+- **THEN** 直接返回的错误和被包装后的错误 MUST 继续支持正确匹配
+- **AND** 该匹配语义 MUST NOT 依赖 HTTP transport 层的错误转换函数
+
+#### Scenario: common 保持认证业务中立
+
+- **WHEN** auth domain 错误迁移为应用错误
+- **THEN** `common/` MUST 只提供业务中立的错误契约、应用错误构造、password primitive 和 response 渲染 helper
+- **AND** 系统 MUST NOT 在 `common` 新增 user-service 认证专用错误映射表、登录编排、session 语义、token version 语义或 Redis key schema
+
+#### Scenario: 不新增跨模块认证错误注册表
+
+- **WHEN** feature-local auth domain 应用错误需要被 HTTP controller 渲染
+- **THEN** controller MUST 通过共享 `response.Fail` 和错误自身携带的契约信息完成渲染
+- **AND** 系统 MUST NOT 新增跨模块认证错误映射注册表、compat mapper 或仅包装 `contracterrors.FromError` 的认证错误兼容函数
+
+### Requirement: Feature-local domain 应用错误契约
+
+系统 MUST 允许 user-service feature-local domain 为稳定业务错误定义应用错误，使这些错误同时携带 `Kind`、`Reason`、`Code`、`Message` 并可被共享 response helper 直接渲染。该契约 MUST 保持业务归属清晰，且不得把 user-service 的权限错误映射表上移到 `common`、`internal/shared` 或跨 feature 全局包。
+
+#### Scenario: permission domain 定义可渲染应用错误
+
+- **WHEN** `user-service/internal/features/permission/domain` 定义权限已存在、权限不存在、权限输入无效或系统权限保护错误
+- **THEN** 错误 MUST 携带共享错误契约所需的 `Kind`、稳定 `Reason`、`Code` 和中文公开 `Message`
+- **AND** `common/http/response.Fail` MUST 能通过 `contracterrors.FromError` 直接渲染该错误
+
+#### Scenario: feature-local domain 保持业务判断语义
+
+- **WHEN** 调用方通过 `errors.Is` 判断 permission domain 导出的稳定业务错误
+- **THEN** 直接返回的错误和被包装后的错误 MUST 继续支持正确匹配
+- **AND** 该匹配语义 MUST NOT 依赖 HTTP transport 层的错误转换函数
+
+#### Scenario: common 保持业务中立
+
+- **WHEN** 权限目录错误迁移为应用错误
+- **THEN** `common/` MUST 只提供业务中立的错误契约、应用错误构造和 response 渲染 helper
+- **AND** 系统 MUST NOT 在 `common` 新增权限目录专用 `Reason` 常量、公开消息、错误变量或权限错误到 HTTP 响应的全局映射表
+
+#### Scenario: 不新增跨模块权限错误注册表
+
+- **WHEN** feature-local domain 应用错误需要被 HTTP controller 渲染
+- **THEN** controller MUST 通过共享 `response.Fail` 和错误自身携带的契约信息完成渲染
+- **AND** 系统 MUST NOT 新增跨模块权限错误映射注册表、compat mapper 或仅包装 `contracterrors.FromError` 的权限错误兼容函数
+
+### Requirement: Feature-local role 应用错误契约
+
+系统 MUST 允许 user-service feature-local role domain 为稳定角色和 RBAC 绑定错误定义应用错误，使这些错误同时携带 `Kind`、`Reason`、`Code`、`Message` 并可被共享 response helper 直接渲染。该契约 MUST 保持业务归属清晰，且不得把 role、permission 或 identity 的错误映射表上移到 `common`、`internal/shared` 或跨 feature 全局包。
+
+#### Scenario: role domain 定义可渲染应用错误
+
+- **WHEN** `user-service/internal/features/role/domain` 定义角色目录、用户角色绑定或角色权限绑定错误
+- **THEN** 错误 MUST 携带共享错误契约所需的 `Kind`、稳定 `Reason`、`Code` 和中文公开 `Message`
+- **AND** `common/http/response.Fail` MUST 能通过 `contracterrors.FromError` 直接渲染该错误
+
+#### Scenario: role domain 保持业务判断语义
+
+- **WHEN** 调用方通过 `errors.Is` 判断 role domain 导出的稳定业务错误
+- **THEN** 直接返回的错误和被包装后的错误 MUST 继续支持正确匹配
+- **AND** 该匹配语义 MUST NOT 依赖 HTTP transport 层的错误转换函数
+
+#### Scenario: 消费方 feature 透传应用错误
+
+- **WHEN** role feature 接收到 `identity` 或 `permission` 边界拥有的应用错误
+- **THEN** role feature MAY 返回或包装该错误并交给共享 response helper 渲染
+- **AND** role HTTP transport MUST NOT 为这些跨 feature 错误维护重复 sentinel-to-HTTP 映射
+
+#### Scenario: common 保持业务中立
+
+- **WHEN** 角色与 RBAC 绑定错误迁移为应用错误
+- **THEN** `common/` MUST 只提供业务中立的错误契约、应用错误构造和 response 渲染 helper
+- **AND** 系统 MUST NOT 在 `common` 新增角色、用户角色绑定、角色权限绑定、permission 或 identity 专用 `Reason` 常量、公开消息、错误变量或错误到 HTTP 响应的全局映射表
+
+#### Scenario: 不新增跨模块角色错误注册表
+
+- **WHEN** feature-local role 应用错误或跨 feature 应用错误需要被 role HTTP controller 渲染
+- **THEN** controller MUST 通过共享 `response.Fail` 和错误自身携带的契约信息完成渲染
+- **AND** 系统 MUST NOT 新增跨模块角色错误映射注册表、compat mapper 或仅包装 `contracterrors.FromError` 的角色错误兼容函数
+
+### Requirement: 服务内 shared identity 应用错误契约
+
+系统 MUST 允许服务内 shared kernel 为稳定身份错误定义应用错误，使这些错误同时携带 `Kind`、`Reason`、`Code`、`Message` 并可被共享 response helper 直接渲染。该契约 MUST 保持服务内业务归属清晰，且不得把 user-service 的用户错误映射表上移到 `common` 或跨 feature 全局包。
+
+#### Scenario: shared identity 定义可渲染应用错误
+
+- **WHEN** `user-service/internal/shared/identity` 定义用户不存在或用户已存在错误
+- **THEN** 错误 MUST 携带共享错误契约所需的 `Kind`、`Reason`、`Code` 和公开 `Message`
+- **AND** `common/http/response.Fail` MUST 能通过 `contracterrors.FromError` 直接渲染该错误
+
+#### Scenario: shared identity 保持业务判断语义
+
+- **WHEN** 调用方通过 `errors.Is` 判断 `identity.ErrUserNotFound` 或 `identity.ErrUserAlreadyExists`
+- **THEN** 直接返回的错误和被包装后的错误 MUST 继续支持正确匹配
+
+#### Scenario: common 不承载用户错误映射
+
+- **WHEN** 用户身份错误迁移为应用错误
+- **THEN** `common/` MUST 只提供业务中立的错误契约、应用错误构造和 response 渲染 helper
+- **AND** 系统 MUST NOT 在 `common` 或用户 feature 外新增用户错误到 HTTP 响应的全局映射表
 

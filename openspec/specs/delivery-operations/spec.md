@@ -207,7 +207,7 @@ Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、数值、�
 
 ### Requirement: 代码生成与数据库迁移
 
-系统 MUST 提供 Ent 代码生成、Atlas migration diff、migration validate 和 migration hash 校验入口，并要求 schema 相关变更同步生成物。系统 MUST NOT 提供通过仓库 Makefile、脚本或部署资产直接连接数据库并执行 `atlas migrate apply` 的入口。user-service Ent 生成配置 MUST 启用支持 RBAC bulk insert 唯一冲突忽略所需的生成特性。
+系统 MUST 提供 Ent 代码生成、Atlas migration diff、migration validate 和 migration hash 校验入口，并要求 schema 相关变更同步生成物。系统 MUST NOT 提供通过仓库 Makefile、脚本或部署资产直接连接数据库并执行 `atlas migrate apply` 的入口。user-service Ent 生成配置 MUST 启用支持 RBAC bulk insert 唯一冲突忽略所需的生成特性。user-service Atlas migration 生成链路 MUST 全局禁用数据库真实外键，数据库 SQL migration MUST NOT 创建 `FOREIGN KEY` 或 `REFERENCES` 约束。
 
 #### Scenario: 生成 Ent 代码
 
@@ -219,6 +219,8 @@ Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、数值、�
 
 - **WHEN** 数据库 schema 变化需要生成 migration
 - **THEN** 协作者 MUST 执行 `make user-service-generate` 和 `make user-service-migrate-diff name=<migration-name>` 生成 Ent 代码与 Atlas migration，并审查 SQL 与 `atlas.sum`
+- **AND** Atlas MUST 通过 user-service 的 external schema loader 读取 Ent 目标 schema
+- **AND** external schema loader MUST 输出不含真实数据库外键的 Ent 目标 schema
 
 #### Scenario: 校验 migration
 
@@ -247,6 +249,13 @@ Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、数值、�
 
 - **WHEN** user-service 正常启动或 E2E 初始化数据库 schema
 - **THEN** schema MUST 来自已提交 Atlas SQL migration，运行时服务代码 MUST NOT 使用 `client.Schema.Create(ctx)` 表达 schema 变更
+
+#### Scenario: 禁止数据库真实外键
+
+- **WHEN** 协作者生成或审查 user-service SQL migration
+- **THEN** SQL migration MUST NOT 包含 `FOREIGN KEY` 或 `REFERENCES` 约束
+- **AND** Ent schema MUST 保留 edge、绑定表关联字段和必要唯一索引，用于代码层关联查询和重复绑定约束
+- **AND** 协作者 MUST NOT 通过删除 Ent edge、删除关联字段或绕过 Ent 关联定义来规避数据库外键生成
 
 #### Scenario: Ent 生成特性 drift 检查
 
@@ -323,7 +332,7 @@ Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、数值、�
 
 ### Requirement: 用户服务 Kubernetes 生产清单
 
-系统 MUST 为 user-service 提供云厂商无关的 Kubernetes 生产清单，并覆盖运行副本、服务发现、配置引用、Secret 引用、安全上下文、资源配额、探针、滚动更新、PDB、HPA 和 NetworkPolicy。
+系统 MUST 为 user-service 提供云厂商无关的 Kubernetes 生产清单，并覆盖运行副本、服务发现、配置引用、Secret 引用、安全上下文、资源配额、探针、滚动更新、PDB、HPA 和 NetworkPolicy。user-service NetworkPolicy MUST 默认使用显式来源与目的地约束，且准入标签 MUST 由 admission policy 或等价集群准入控制限制使用范围。
 
 #### Scenario: 渲染生产清单
 
@@ -344,6 +353,25 @@ Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、数值、�
 
 - **WHEN** user-service Pod 被调度
 - **THEN** Pod 和容器 securityContext MUST 默认使用非 root、只读根文件系统、禁止特权升级和收敛 Linux capabilities，并且容器 MUST 设置 CPU 与内存 requests/limits
+
+#### Scenario: NetworkPolicy 入站来源约束
+
+- **WHEN** user-service 原生 Kubernetes 生产清单声明 NetworkPolicy ingress
+- **THEN** ingress 来源 MUST 使用明确的 `namespaceSelector` 与 `podSelector` 组合约束允许访问 user-service HTTP 端口的上游
+- **AND** ingress MUST NOT 使用 `namespaceSelector: {}` 配合单个 Pod 标签作为生产默认来源约束
+
+#### Scenario: NetworkPolicy 出站目的地约束
+
+- **WHEN** user-service 原生 Kubernetes 生产清单声明访问 PostgreSQL、Redis 或 OTLP Collector 的 NetworkPolicy egress
+- **THEN** 每类业务依赖 egress 规则 MUST 包含 `to` 目的地约束
+- **AND** 目的地 MUST 使用目标 namespace、目标 Pod 标签或精确 `ipBlock` 约束实际 PostgreSQL、Redis 或 OTLP Collector
+- **AND** egress MUST NOT 仅按 `5432`、`6379`、`4317` 或 `4318` 端口对任意目的地址放行
+
+#### Scenario: 准入标签治理
+
+- **WHEN** 集群使用标签表达允许访问 user-service 的上游身份
+- **THEN** 部署资产 MUST 提供 admission policy 或等价准入治理说明，限制未授权 namespace 或 workload 自行设置该准入标签
+- **AND** 未授权租户 MUST NOT 能通过自行添加准入标签获得访问 user-service 的 NetworkPolicy 入站许可
 
 ### Requirement: Kubernetes 发布前置作业
 
@@ -378,7 +406,7 @@ Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、数值、�
 
 ### Requirement: 用户服务 Helm chart
 
-系统 MUST 为 `aegiscore-user-services` 提供 Helm chart，用 values 模板化 Kubernetes 交付能力，并保持默认值不包含真实生产 Secret。chart MUST 支持 RBAC seed Job 和 HTTP Deployment 使用 user-service 镜像，且 MUST NOT 渲染或默认配置自动执行 `atlas migrate apply` 的 migration Job。
+系统 MUST 为 `aegiscore-user-services` 提供 Helm chart，用 values 模板化 Kubernetes 交付能力，并保持默认值不包含真实生产 Secret。chart MUST 支持 RBAC seed Job 和 HTTP Deployment 使用 user-service 镜像，且 MUST NOT 渲染或默认配置自动执行 `atlas migrate apply` 的 migration Job。chart 的默认 NetworkPolicy values MUST 表达显式来源与目的地安全基线。
 
 #### Scenario: Helm chart 元数据和 values
 
@@ -403,6 +431,24 @@ Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、数值、�
 - **WHEN** Helm chart 渲染 user-service Deployment
 - **THEN** Deployment MUST 默认不设置 `RUN_MIGRATIONS=true`，并 MUST 渲染 `/livez`、`/readyz`、`/startupz` 探针和资源 requests/limits
 - **AND** Deployment 使用的 user-service 镜像 MUST NOT 依赖 Atlas 二进制或 migration SQL 文件启动 HTTP 服务
+
+#### Scenario: Helm 默认 NetworkPolicy 入站来源
+
+- **WHEN** 协作者使用默认 values 渲染 `aegiscore-user-services` chart
+- **THEN** 渲染出的 NetworkPolicy ingress MUST 使用明确的 namespace 与 Pod 选择器约束允许访问 user-service HTTP 端口的来源
+- **AND** 默认 values MUST NOT 使用 `namespaceSelector: {}` 配合单个 Pod 标签作为入站来源约束
+
+#### Scenario: Helm 默认 NetworkPolicy 出站目的地
+
+- **WHEN** 协作者使用默认 values 渲染 `aegiscore-user-services` chart
+- **THEN** 渲染出的 PostgreSQL、Redis 和 OTLP Collector egress 规则 MUST 分别包含 `to` 目的地约束
+- **AND** 默认 values MUST NOT 对任意目的地址开放 `5432`、`6379`、`4317` 或 `4318`
+
+#### Scenario: Helm 环境覆盖外部依赖
+
+- **WHEN** 目标环境使用集群外 PostgreSQL、Redis 或 OTLP Collector
+- **THEN** 环境 values MUST 使用精确 `ipBlock` 或等价明确目的地覆盖默认 egress 目的地
+- **AND** 环境 values MUST NOT 通过删除 `to` 字段恢复任意目的端口放行
 
 ### Requirement: Kubernetes 和 Helm 验证说明
 

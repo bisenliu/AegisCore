@@ -128,17 +128,24 @@
 
 ### Requirement: 用户角色绑定
 
-系统 MUST 支持将角色绑定到用户，并为授权判断提供用户有效权限查询能力。用户角色替换 MUST 使用批量写入方式新增多条绑定，并保持事务性和错误语义。
+系统 MUST 支持将启用角色绑定到用户，并为授权判断提供用户有效权限查询能力。用户角色替换 MUST 使用批量写入方式新增多条绑定，并保持事务性和错误语义。用户角色绑定写路径 MUST 拒绝不存在或已停用的角色，且任一角色不可绑定时 MUST 不写入新的用户角色关系。
 
 #### Scenario: 绑定角色给用户
 
-- **WHEN** 授权调用方把存在的角色绑定给存在用户
+- **WHEN** 授权调用方把存在且启用的角色绑定给存在用户
 - **THEN** 系统 MUST 写入用户角色关系，并使该用户后续访问权限生效
 
 #### Scenario: 用户或角色不存在
 
 - **WHEN** 用户角色绑定请求引用不存在的用户或角色
 - **THEN** 系统 MUST 拒绝绑定并返回明确错误
+
+#### Scenario: 绑定停用角色
+
+- **WHEN** 用户角色绑定请求引用已停用角色
+- **THEN** 系统 MUST 拒绝绑定并返回明确错误
+- **AND** 系统 MUST NOT 写入新的用户角色关系
+- **AND** 系统 MUST NOT 触发用户角色缓存失效或 policy change 通知
 
 #### Scenario: 查询用户有效权限
 
@@ -155,6 +162,13 @@
 - **WHEN** 授权调用方使用合法角色集合替换用户的完整角色绑定
 - **THEN** 系统 MUST 在同一事务中删除旧绑定并批量写入新绑定
 - **AND** 任一新增绑定失败时，系统 MUST 回滚本次删除和新增
+
+#### Scenario: 批量替换包含停用角色
+
+- **WHEN** 授权调用方替换用户角色集合且任一目标角色已停用
+- **THEN** 系统 MUST 拒绝本次替换并返回明确错误
+- **AND** 系统 MUST 保持该用户已有角色关系不变
+- **AND** 系统 MUST NOT 触发用户角色缓存失效或 policy change 通知
 
 ### Requirement: 授权热路径用户角色本地缓存
 
@@ -613,7 +627,7 @@ role feature 的 HTTP boundary 测试 MUST 直接覆盖角色生命周期、角�
 
 ### Requirement: Permission HTTP boundary 测试覆盖
 
-permission feature 的 HTTP boundary 测试 MUST 直接覆盖权限目录生命周期、用户有效权限查询和 route diff controller。测试 MUST 固定请求绑定、input preparer、application command/query port 调用、错误映射、分页 envelope、有效权限 response 和 route diff response 的当前契约，并 MUST NOT 通过旧权限资源路径、旧 action/resource 字段语义、旧错误 envelope、旧授权绕过、旧 route scanner 输出或兼容 helper 表达预期。
+permission feature 的 HTTP boundary 测试 MUST 直接覆盖权限目录生命周期、用户有效权限查询和 route diff controller。测试 MUST 固定请求绑定、input preparer、application command/query port 调用、错误直通渲染、分页 envelope、有效权限 response 和 route diff response 的当前契约，并 MUST NOT 通过旧权限资源路径、旧 action/resource 字段语义、旧错误 envelope、旧授权绕过、旧 route scanner 输出或兼容 helper 表达预期。
 
 #### Scenario: 权限目录 handler 成功路径
 
@@ -639,11 +653,12 @@ permission feature 的 HTTP boundary 测试 MUST 直接覆盖权限目录生命�
 - **THEN** 测试 MUST 验证请求在 HTTP boundary 被拒绝并返回当前 bad request 或 validation failed envelope
 - **AND** 测试 MUST 验证对应 application command/query port 未被调用
 
-#### Scenario: application 错误映射
+#### Scenario: application 错误直通渲染
 
 - **WHEN** permission application command/query port 返回 domain、validation、not found、conflict 或内部错误
-- **THEN** permission HTTP boundary 测试 MUST 验证 controller 通过当前 permission HTTP error mapper 映射为对应 HTTP status 和 envelope code
-- **AND** 测试 MUST NOT 新增旧错误码、旧 message 或旧 envelope 兼容断言
+- **THEN** permission HTTP boundary 测试 MUST 验证 controller 通过 `response.Fail(c, err)` 渲染对应 HTTP status 和 envelope code
+- **AND** 测试 MUST 覆盖权限已存在、权限不存在、权限输入无效、系统权限保护和未知内部错误响应
+- **AND** 测试 MUST NOT 新增旧错误码、旧 message、旧 envelope 或权限专用错误 mapper 兼容断言
 
 #### Scenario: 保持 permission HTTP 测试边界
 
@@ -827,4 +842,238 @@ role infrastructure MUST 提供默认可执行的测试覆盖角色权限绑定�
 - **WHEN** 系统记录 RBAC Enforce metrics
 - **THEN** 指标 MUST NOT 包含用户 ID、角色 ID、权限 ID、token ID、trace/span ID、raw path、IP、邮箱、用户名、Redis key、SQL、SQL 参数或原始错误
 - **AND** route 标签 MUST 使用 Gin route template 或等价稳定模板，不得使用真实请求 path
+
+### Requirement: 权限目录错误应用错误渲染
+
+系统 MUST 将权限目录能力中的权限已存在、权限不存在、权限输入无效和系统权限保护错误表达为可由共享 response helper 直接渲染的应用错误，并保持权限 HTTP 边界无专用 sentinel-to-HTTP 兼容映射。
+
+#### Scenario: 权限已存在渲染为冲突响应
+
+- **WHEN** 权限创建或更新流程返回 `permissiondomain.ErrPermissionAlreadyExists`
+- **THEN** 权限 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
+- **AND** 响应 message MUST 使用当前权限已存在中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `permission_already_exists`
+
+#### Scenario: 权限不存在渲染为未找到响应
+
+- **WHEN** 权限详情查询、更新或启停流程返回 `permissiondomain.ErrPermissionNotFound`
+- **THEN** 权限 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `404 Not Found` 和共享未找到业务 code
+- **AND** 响应 message MUST 使用当前权限不存在中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `permission_not_found`
+
+#### Scenario: 权限输入无效渲染为 validation 响应
+
+- **WHEN** 权限 domain validation 返回 `permissiondomain.ErrPermissionInvalid`
+- **THEN** 权限 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `400 Bad Request` 和共享 validation 业务 code
+- **AND** 响应 message MUST 使用当前权限输入无效中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `permission_invalid`
+
+#### Scenario: 系统权限保护渲染为冲突响应
+
+- **WHEN** 权限更新流程返回 `permissiondomain.ErrSystemPermissionProtected`
+- **THEN** 权限 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
+- **AND** 响应 message MUST 使用当前系统权限保护中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `system_permission_protected`
+
+#### Scenario: 权限业务错误保留 errors.Is 语义
+
+- **WHEN** permission feature 或测试需要判断权限已存在、权限不存在、权限输入无效或系统权限保护错误
+- **THEN** `errors.Is` 对直接返回的权限应用错误和被包装后的权限应用错误 MUST 继续支持正确匹配
+- **AND** 系统 MUST NOT 为 permission HTTP transport 保留 `toPermissionHTTPError` 或等价兼容函数
+
+### Requirement: 权限 HTTP transport 统一错误出口
+
+permission HTTP transport MUST 对业务 command/query 返回错误使用共享 `response.Fail` 入口，避免在 transport 层重复维护权限目录错误到 HTTP 响应的映射。授权中间件错误处理 MUST 继续使用共享 response helper，且不得复用或新增权限目录错误 mapper。
+
+#### Scenario: 权限创建业务错误
+
+- **WHEN** `CreatePermission` controller 调用权限创建 use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用权限专用错误 mapper
+
+#### Scenario: 权限详情查询业务错误
+
+- **WHEN** `GetPermission` controller 调用权限查询 use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用权限专用错误 mapper
+
+#### Scenario: 权限列表查询业务错误
+
+- **WHEN** `ListPermissions` controller 调用权限列表 use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用权限专用错误 mapper
+
+#### Scenario: 权限更新业务错误
+
+- **WHEN** `UpdatePermission` controller 调用权限更新 use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用权限专用错误 mapper
+
+#### Scenario: 权限启停业务错误
+
+- **WHEN** `EnablePermission` 或 `DisablePermission` controller 调用权限启停 use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用权限专用错误 mapper
+
+#### Scenario: 权限有效权限与 route diff 业务错误
+
+- **WHEN** `ListEffectivePermissions` 或 `DiffRoutes` controller 调用权限 query use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用权限专用错误 mapper
+
+#### Scenario: 授权 HTTP transport 不使用权限目录 mapper
+
+- **WHEN** permission HTTP 授权中间件处理缺失认证、策略拒绝或授权执行错误
+- **THEN** 授权中间件 MUST 使用共享 response helper 渲染当前未认证、禁止访问或内部错误响应
+- **AND** 授权中间件 MUST NOT 调用 `toPermissionHTTPError` 或任何权限目录错误 mapper
+
+### Requirement: 角色与绑定错误应用错误渲染
+
+系统 MUST 将角色目录、用户角色绑定和角色权限绑定能力中的稳定业务错误表达为可由共享 response helper 直接渲染的应用错误，并保持 role HTTP 边界无专用 sentinel-to-HTTP 兼容映射。
+
+#### Scenario: 角色已存在渲染为冲突响应
+
+- **WHEN** 角色创建或更新流程返回 `roledomain.ErrRoleAlreadyExists`
+- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
+- **AND** 响应 message MUST 使用当前角色已存在中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `role_already_exists`
+
+#### Scenario: 角色不存在渲染为未找到响应
+
+- **WHEN** 角色详情查询、更新、启停、用户角色绑定或角色权限绑定流程返回 `roledomain.ErrRoleNotFound`
+- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `404 Not Found` 和共享未找到业务 code
+- **AND** 响应 message MUST 使用当前角色不存在中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `role_not_found`
+
+#### Scenario: 角色输入无效渲染为 validation 响应
+
+- **WHEN** 角色 domain validation 返回 `roledomain.ErrRoleInvalid`
+- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `400 Bad Request` 和共享 validation 业务 code
+- **AND** 响应 message MUST 使用当前角色输入无效中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `role_invalid`
+
+#### Scenario: 系统角色保护渲染为冲突响应
+
+- **WHEN** 角色更新或启停流程返回 `roledomain.ErrSystemRoleProtected`
+- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
+- **AND** 响应 message MUST 使用当前系统角色保护中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `system_role_protected`
+
+#### Scenario: 停用角色渲染为冲突响应
+
+- **WHEN** 用户角色绑定流程返回 `roledomain.ErrRoleInactive`
+- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
+- **AND** 响应 message MUST 使用当前角色已停用中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `role_inactive`
+
+#### Scenario: 用户角色绑定已存在渲染为冲突响应
+
+- **WHEN** 用户角色增量绑定流程返回 `roledomain.ErrUserRoleAlreadyExists`
+- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
+- **AND** 响应 message MUST 使用当前用户角色绑定已存在中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `user_role_already_exists`
+
+#### Scenario: 用户角色绑定不存在渲染为未找到响应
+
+- **WHEN** 用户角色解绑流程返回 `roledomain.ErrUserRoleNotFound`
+- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `404 Not Found` 和共享未找到业务 code
+- **AND** 响应 message MUST 使用当前用户角色绑定不存在中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `user_role_not_found`
+
+#### Scenario: 角色权限绑定已存在渲染为冲突响应
+
+- **WHEN** 角色权限增量绑定流程返回 `roledomain.ErrRolePermissionAlreadyExists`
+- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
+- **AND** 响应 message MUST 使用当前角色权限绑定已存在中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `role_permission_already_exists`
+
+#### Scenario: 角色权限绑定不存在渲染为未找到响应
+
+- **WHEN** 角色权限解绑或绑定查询流程返回 `roledomain.ErrRolePermissionNotFound`
+- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `404 Not Found` 和共享未找到业务 code
+- **AND** 响应 message MUST 使用当前角色权限绑定不存在中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `role_permission_not_found`
+
+#### Scenario: 跨 feature 不存在错误透传
+
+- **WHEN** 用户角色绑定流程返回 `identity.ErrUserNotFound` 或角色权限绑定流程返回 `permissiondomain.ErrPermissionNotFound`
+- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 直接透传渲染失败响应
+- **AND** 用户不存在 MUST 返回 `404 Not Found` 和用户身份错误自身携带的共享未找到业务 code 与公开 message
+- **AND** 权限不存在 MUST 返回 `404 Not Found` 和权限目录错误自身携带的共享未找到业务 code 与公开 message
+- **AND** role HTTP transport MUST NOT 复制 identity 或 permission 错误映射
+
+#### Scenario: 角色业务错误保留 errors.Is 语义
+
+- **WHEN** role feature、seed 或测试需要判断角色目录、用户角色绑定或角色权限绑定错误
+- **THEN** `errors.Is` 对直接返回的角色应用错误和被包装后的角色应用错误 MUST 继续支持正确匹配
+- **AND** 系统 MUST NOT 为 role HTTP transport 保留 `toRoleHTTPError` 或等价兼容函数
+
+### Requirement: 角色 HTTP transport 统一错误出口
+
+role HTTP transport MUST 对业务 command/query 返回错误使用共享 `response.Fail` 入口，避免在 transport 层重复维护角色、用户角色绑定、角色权限绑定、identity 或 permission 错误到 HTTP 响应的映射。
+
+#### Scenario: 角色目录 controller 业务错误
+
+- **WHEN** `ListRoles`、`CreateRole`、`GetRole`、`UpdateRole` 或 `SetRoleStatus` controller 调用角色 command/query use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用角色专用错误 mapper
+
+#### Scenario: 用户角色 controller 业务错误
+
+- **WHEN** `ListUserRoles`、`ReplaceUserRoles`、`AddUserRole` 或 `RemoveUserRole` controller 调用用户角色 command/query use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用角色专用错误 mapper
+
+#### Scenario: 角色权限 controller 业务错误
+
+- **WHEN** `ListRolePermissions`、`ReplaceRolePermissions`、`AddRolePermission` 或 `RemoveRolePermission` controller 调用角色权限 command/query use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用角色专用错误 mapper
+
+#### Scenario: role transport 不保留跨 feature 错误 mapper
+
+- **WHEN** role HTTP transport 接收来自 identity、permission 或 role domain 的应用错误
+- **THEN** controller MUST 通过共享 response helper 渲染错误自身携带的 HTTP status、code 和 message
+- **AND** role HTTP transport MUST NOT 新增或保留将 role、identity 或 permission sentinel error 转换为 HTTP 应用错误的 mapper
+
+### Requirement: 角色 HTTP boundary 测试覆盖应用错误直通
+
+role feature 的 HTTP boundary 测试 MUST 覆盖角色目录、用户角色绑定和角色权限绑定 controller 的应用错误直通渲染。测试 MUST 固定请求绑定、input preparer、application command/query port 调用、错误直通渲染、角色 response 和权限 response 的当前契约，并 MUST NOT 通过旧错误 mapper 表达预期。
+
+#### Scenario: 角色目录错误直通渲染
+
+- **WHEN** role HTTP 测试覆盖角色创建、详情、更新或启停 handler 的业务错误
+- **THEN** 测试 MUST 验证 controller 通过 `response.Fail(c, err)` 渲染角色已存在、角色不存在、角色输入无效、系统角色保护和未知内部错误响应
+- **AND** 测试 MUST NOT 依赖 `toRoleHTTPError` 或等价兼容函数
+
+#### Scenario: 用户角色错误直通渲染
+
+- **WHEN** role HTTP 测试覆盖用户角色替换、增量绑定或解绑 handler 的业务错误
+- **THEN** 测试 MUST 验证 controller 通过 `response.Fail(c, err)` 渲染角色不存在、角色停用、用户角色绑定已存在、用户角色绑定不存在、用户不存在和未知内部错误响应
+- **AND** 测试 MUST NOT 在 role transport 层复制 identity 错误映射
+
+#### Scenario: 角色权限错误直通渲染
+
+- **WHEN** role HTTP 测试覆盖角色权限替换、增量绑定或解绑 handler 的业务错误
+- **THEN** 测试 MUST 验证 controller 通过 `response.Fail(c, err)` 渲染角色不存在、权限不存在、角色权限绑定已存在、角色权限绑定不存在和未知内部错误响应
+- **AND** 测试 MUST NOT 在 role transport 层复制 permission 错误映射
+
+#### Scenario: 保持 role HTTP 测试边界
+
+- **WHEN** role HTTP boundary 测试需要构造 collaborator、请求上下文或响应断言
+- **THEN** 测试 MUST 使用现有 gomock 生成物或既有生成入口维护的 mock 表达 application port 调用
+- **AND** 测试 MUST NOT 引入 infrastructure store、Ent client、PostgreSQL、Redis、Casbin engine、RBAC seed 或跨 feature adapter 作为 controller 单元测试依赖
 

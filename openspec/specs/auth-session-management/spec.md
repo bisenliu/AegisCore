@@ -4,12 +4,18 @@
 ## Requirements
 ### Requirement: 用户登录与令牌签发
 
-系统 MUST 提供用户名密码登录能力，并在凭证、用户状态和会话策略校验通过后签发访问令牌与刷新令牌。系统 MUST 将密码 KDF 资源池繁忙视为临时服务不可用，而不是无效凭据。
+系统 MUST 提供用户名密码登录能力，并在凭证、用户状态和会话策略校验通过后签发访问令牌与刷新令牌。登录 use case MUST 使用登录专属结果字段表达是否需要强制改密；登录失败仍 MUST 通过错误返回。系统 MUST 将密码 KDF 资源池繁忙视为临时服务不可用，而不是无效凭据。
 
 #### Scenario: 登录成功
 
-- **WHEN** 用户提供合法用户名和正确密码，且用户状态允许登录
-- **THEN** 系统 MUST 创建会话、签发 access token 与 refresh token，并返回会话相关过期时间
+- **WHEN** 用户提供合法用户名和正确密码，且用户状态允许普通登录
+- **THEN** 系统 MUST 创建普通 refresh session、签发 access token 与 refresh token
+- **AND** 登录 use case MUST 返回 `PasswordChangeRequired=false`
+- **AND** 登录响应 MUST 返回 HTTP `200 OK`
+- **AND** 登录响应 envelope MUST 携带 `CodeOK`
+- **AND** 登录响应 envelope 的 `success` MUST 为 `true`
+- **AND** 登录响应 data MUST 携带 access token、refresh token、token type 和 access token 过期秒数
+- **AND** 登录响应 data MUST NOT 携带登录状态枚举字段
 
 #### Scenario: 凭证错误
 
@@ -18,28 +24,32 @@
 
 #### Scenario: 用户状态禁止登录
 
-- **WHEN** 用户存在但状态不允许登录
+- **WHEN** 用户存在但状态不允许登录，且该状态不是强制改密状态
 - **THEN** 系统 MUST 拒绝签发令牌并返回明确的状态相关错误
 
 #### Scenario: 强制改密用户登录
 
 - **WHEN** 用户凭据有效但账号状态要求强制修改密码
 - **THEN** 系统 MUST 只签发 subject 为 `password_change` 的受限 token，不得创建普通 refresh session，也不得返回 refresh token
+- **AND** 登录 use case MUST 返回 `PasswordChangeRequired=true`，而不是通过 error 表达该分支
 
-#### Scenario: 强制改密登录返回专用 code
+#### Scenario: 强制改密登录返回业务码 envelope
 
 - **WHEN** 用户凭据有效但账号状态要求强制修改密码
 - **THEN** 登录响应 MUST 返回 HTTP `200 OK`
 - **AND** 登录响应 envelope MUST 携带 `CodePasswordChangeRequired`
+- **AND** 登录响应 envelope 的 `code` MUST 为 `20006`
 - **AND** 登录响应 envelope 的 `success` MUST 为 `false`
-- **AND** 登录响应 MUST NOT 使用 `CodeOK` 表达该分支
-- **AND** 登录响应 MUST 携带 subject 为 `password_change` 的受限 token 数据
+- **AND** 登录响应 envelope 的 `message` MUST 使用强制改密用户提示
+- **AND** 登录响应 data MUST 携带 subject 为 `password_change` 的受限 token 数据
 - **AND** 登录响应 MUST NOT 携带 refresh token
+- **AND** 登录响应 data MUST NOT 携带 `status`、`authenticated` 或 `password_change_required` 枚举字段
 
 #### Scenario: 普通登录仍返回成功 code
 
 - **WHEN** 用户凭据有效且账号状态允许普通登录
 - **THEN** 登录响应 envelope MUST 携带 `CodeOK`
+- **AND** 登录响应 envelope 的 `success` MUST 为 `true`
 - **AND** 登录响应 MUST 携带 access token 与 refresh token
 - **AND** 登录响应 MUST NOT 携带 `CodePasswordChangeRequired`
 
@@ -446,19 +456,23 @@ auth 范围内的 Go 测试 MUST 使用语义化断言验证认证会话、crede
 - **AND** 测试 MUST NOT 为旧认证绕过路径或 `/api`、`/v1` 旧别名保留兼容断言
 
 ### Requirement: 认证会话 E2E flow 断言规范
-系统 MUST 使用语义化断言覆盖 user-service E2E HTTP flow 中的认证会话行为，包括普通登录、强制改密登录、修改密码、旧密码登录失败、登出当前会话和 refresh token 失效。断言迁移 MUST 保持当前认证会话、token、错误码和 response envelope 语义不变。
+
+系统 MUST 使用语义化断言覆盖 user-service E2E HTTP flow 中的认证会话行为，包括普通登录、强制改密登录、修改密码、旧密码登录失败、登出当前会话和 refresh token 失效。断言迁移 MUST 保持当前认证会话、token、错误码和 response envelope 语义不变，且 MUST 以 envelope `CodePasswordChangeRequired` 作为强制改密登录分支的当前语义。
 
 #### Scenario: 普通登录 token 断言
+
 - **WHEN** E2E flow 使用合法用户名和密码完成普通登录
 - **THEN** 测试 MUST 使用 `require.NotEmpty`、`require.Equal`、`require.Greater` 或必要 `assert` 验证 access token、refresh token、token type 和 expires_in
 - **AND** 测试 MUST NOT 接受缺失 refresh token、旧 token type、旧错误码或旧响应字段兼容分支
 
 #### Scenario: 强制改密登录断言
+
 - **WHEN** E2E flow 使用强制改密用户凭据登录
 - **THEN** 测试 MUST 使用语义化断言验证 HTTP `200 OK`、`success=false`、`CodePasswordChangeRequired`、受限 access token metadata 和空 refresh token
-- **AND** 测试 MUST NOT 将强制改密分支断言为普通 `CodeOK` 成功登录
+- **AND** 测试 MUST NOT 接受 `success=true`、`CodeOK`、响应 data 状态枚举或旧 `password_change_required` 兼容字段
 
 #### Scenario: 改密、登出和 refresh 失败断言
+
 - **WHEN** E2E flow 完成改密、使用旧密码重试登录、登出当前会话并使用旧 refresh token 刷新
 - **THEN** 测试 MUST 使用语义化断言验证改密成功、旧密码认证失败、登出成功和 refresh token 失效的当前 HTTP status 与应用错误码
 - **AND** 迁移 MUST NOT 改变 refresh session、token version、password change token 或 logout 运行时语义
@@ -482,4 +496,300 @@ auth 范围内的 Go 测试 MUST 使用语义化断言验证认证会话、crede
 - **WHEN** 认证测试需要控制时间、顺序或异步状态
 - **THEN** 测试 MUST 优先使用现有可观测存储状态、测试数据构造、gomock expectation、通道或局部 helper
 - **AND** 正式代码 MUST NOT 仅为了测试新增无运行时职责的全局 clock、test hook 或兼容分支
+
+### Requirement: 强制改密一次性会话
+
+系统 MUST 为强制改密流程创建服务端一次性 password-change session，并将 `password_change` token 的 `jti`、`session_id`、`user_id` 和 `token_version` 与 Redis 状态绑定。password-change session MUST 使用独立短 TTL，并 MUST NOT 复用 refresh session 存储语义、refresh session 上限裁剪或 refresh token TTL。
+
+#### Scenario: 强制改密登录创建一次性会话
+- **WHEN** 用户凭据有效但账号状态要求强制修改密码
+- **THEN** 系统 MUST 签发 subject 为 `password_change` 的受限 token
+- **AND** 系统 MUST 创建与该 token `jti`、`session_id`、`user_id` 和 `token_version` 一致的 Redis password-change session
+- **AND** 系统 MUST NOT 创建普通 refresh session
+- **AND** 系统 MUST NOT 返回 refresh token
+
+#### Scenario: 一次性会话创建失败
+- **WHEN** 系统无法创建 Redis password-change session
+- **THEN** 登录 MUST 失败
+- **AND** 系统 MUST NOT 向客户端返回已签发的 password-change token
+
+#### Scenario: 独立改密 token TTL
+- **WHEN** 系统签发 password-change token 或创建 password-change session
+- **THEN** token 和 session MUST 使用 `auth.jwt.password_change_token_ttl`
+- **AND** 系统 MUST NOT 使用 `auth.jwt.access_token_ttl` 或 `auth.jwt.refresh_token_ttl` 作为 password-change token TTL
+
+#### Scenario: 非正数改密 token TTL
+- **WHEN** `auth.jwt.password_change_token_ttl` 未配置、配置为 `0` 或配置为负数
+- **THEN** 系统 MUST 使用 5 分钟作为默认 password-change token TTL
+- **AND** 系统 MUST NOT 创建无过期时间的 password-change token 或 password-change session
+
+### Requirement: 强制改密 token 原子消费
+
+系统 MUST 在更新密码前原子消费 password-change session。消费 MUST 同时校验 `jti`、`session_id`、`user_id` 和 `token_version`，任一不匹配、会话不存在、会话过期、会话已撤销或会话已被消费时，系统 MUST 返回统一无效凭据错误，且 MUST NOT 泄露具体失败原因。
+
+#### Scenario: 首次消费成功
+- **WHEN** 调用方提交有效且未过期的 password-change token，且 Redis password-change session 与 token claims 完全一致
+- **THEN** 系统 MUST 原子删除该 password-change session
+- **AND** 系统 MAY 继续执行密码更新
+
+#### Scenario: 重复消费被拒绝
+- **WHEN** 同一个 password-change token 已被成功消费后再次用于改密
+- **THEN** 系统 MUST 拒绝改密并返回统一无效凭据
+- **AND** 系统 MUST NOT 再次更新密码或递增 `token_version`
+
+#### Scenario: 过期会话被拒绝
+- **WHEN** password-change token 未通过 JWT 过期校验，或对应 Redis password-change session 已过期
+- **THEN** 系统 MUST 拒绝改密并返回统一无效凭据
+- **AND** 系统 MUST NOT 更新密码或递增 `token_version`
+
+#### Scenario: 撤销会话被拒绝
+- **WHEN** password-change session 已被服务端撤销或删除
+- **THEN** 系统 MUST 拒绝改密并返回统一无效凭据
+- **AND** 系统 MUST NOT 更新密码或递增 `token_version`
+
+#### Scenario: claims 不一致被拒绝
+- **WHEN** password-change token 中的 `jti`、`session_id`、`user_id` 或 `token_version` 与 Redis password-change session 不一致
+- **THEN** 系统 MUST 拒绝改密并返回统一无效凭据
+- **AND** 系统 MUST NOT 更新密码或递增 `token_version`
+
+#### Scenario: 并发消费只有一个成功
+- **WHEN** 多个请求并发使用同一个有效 password-change token 执行改密
+- **THEN** 系统 MUST 最多允许一个请求成功消费 password-change session
+- **AND** 其他请求 MUST 返回统一无效凭据
+- **AND** 系统 MUST 最多执行一次密码更新和一次 `token_version` 递增
+
+### Requirement: 强制改密凭据条件更新
+
+系统 MUST 在强制改密更新凭据时校验用户仍处于强制改密状态，且当前 PostgreSQL `token_version` 与 password-change token claims 中的旧版本一致。条件不满足时，系统 MUST 返回统一无效凭据，并 MUST NOT 更新密码、状态或 `token_version`。
+
+#### Scenario: 状态和版本匹配时更新
+- **WHEN** password-change session 已成功消费，用户仍处于强制改密状态，且 PostgreSQL `token_version` 等于 token claims 中的旧版本
+- **THEN** 系统 MUST 更新密码哈希
+- **AND** 系统 MUST 将用户状态恢复为正常
+- **AND** 系统 MUST 递增 `token_version`
+
+#### Scenario: 状态不再要求改密
+- **WHEN** password-change session 已成功消费，但用户状态不再要求强制改密
+- **THEN** 系统 MUST 拒绝改密并返回统一无效凭据
+- **AND** 系统 MUST NOT 更新密码或递增 `token_version`
+
+#### Scenario: 旧 token version 不匹配
+- **WHEN** password-change session 已成功消费，但 PostgreSQL 当前 `token_version` 不等于 token claims 中的旧版本
+- **THEN** 系统 MUST 拒绝改密并返回统一无效凭据
+- **AND** 系统 MUST NOT 更新密码或递增 `token_version`
+
+### Requirement: 强制改密后安全撤销结果
+
+系统 MUST 在强制改密成功更新凭据后刷新 token version 投影、失效本地 token version cache 并删除该用户 refresh sessions。任一撤销投影步骤失败时，系统 MUST 返回可观察的安全撤销未完成错误，MUST NOT 返回普通 `Changed: true` 成功结果。
+
+#### Scenario: 撤销全部成功
+- **WHEN** 强制改密凭据更新成功，且本地 token version cache 失效、Redis token version 投影刷新和 refresh session 删除均成功
+- **THEN** 系统 MUST 返回改密成功结果
+- **AND** 旧 access token MUST 因 `token_version` 不匹配而无法继续访问受保护资源
+- **AND** 旧 refresh token MUST 无法继续刷新
+
+#### Scenario: token version 投影失败
+- **WHEN** 强制改密凭据更新成功，但 Redis token version 投影刷新失败
+- **THEN** 系统 MUST 尝试删除 Redis token version 投影
+- **AND** 系统 MUST 返回安全撤销未完成错误
+- **AND** 系统 MUST NOT 返回普通 `Changed: true` 成功结果
+
+#### Scenario: refresh session 删除失败
+- **WHEN** 强制改密凭据更新成功，但删除该用户 refresh sessions 失败
+- **THEN** 系统 MUST 返回安全撤销未完成错误
+- **AND** 系统 MUST NOT 返回普通 `Changed: true` 成功结果
+
+#### Scenario: 本地 token version cache 失效失败
+- **WHEN** 强制改密凭据更新成功，但本实例本地 token version cache 失效失败
+- **THEN** 系统 MUST 返回安全撤销未完成错误
+- **AND** 系统 MUST NOT 返回普通 `Changed: true` 成功结果
+
+#### Scenario: HTTP 错误映射
+- **WHEN** 强制改密返回安全撤销未完成错误
+- **THEN** 认证 HTTP 边界 MUST 返回 `503 Service Unavailable`
+- **AND** 响应 MUST 表达认证服务暂时无法完成安全撤销
+- **AND** 响应 MUST NOT 泄露 Redis key、session ID、jti、SQL、stacktrace 或内部错误文本
+
+### Requirement: 认证错误应用错误渲染
+
+系统 MUST 将认证、会话、token 和撤销相关稳定错误表达为可由共享 response helper 直接渲染的应用错误，并保持 auth HTTP boundary 无专用 sentinel-to-HTTP 兼容映射。认证错误 MUST 携带稳定 `Kind`、`Reason`、`Code` 和中文公开 `Message`，且 MUST 保持 `errors.Is` 或应用错误 `Reason` 可供登录、refresh 和 logout metrics 分类。
+
+#### Scenario: 无效凭据渲染为未认证响应
+
+- **WHEN** 登录凭据校验返回 `authdomain.ErrInvalidCredentials`
+- **THEN** 认证 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `401 Unauthorized` 和 `CodeUnauthenticated`
+- **AND** 响应 message MUST 使用当前无效凭据中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `invalid_credentials`
+- **AND** 系统 MUST NOT 泄露用户名不存在、密码不匹配或用户状态拒绝的具体细节
+
+#### Scenario: 用户状态拒绝保持无效凭据公开语义
+
+- **WHEN** 登录凭据有效但用户状态不允许普通登录，且错误链包含 `authdomain.ErrUserStatusRejected`
+- **THEN** 认证 HTTP 边界 MUST 返回 `401 Unauthorized` 和 `CodeUnauthenticated`
+- **AND** 响应 message MUST 继续使用当前无效凭据中文公开文案
+- **AND** metrics MUST 能通过 `errors.Is(err, authdomain.ErrUserStatusRejected)` 或稳定 `Reason` 值 `user_status_rejected` 分类该失败
+- **AND** 系统 MUST NOT 向客户端暴露具体用户状态
+
+#### Scenario: 缺失认证会话渲染为未认证响应
+
+- **WHEN** 受保护认证 use case 返回 `authdomain.ErrMissingSession`
+- **THEN** 认证 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `401 Unauthorized` 和 `CodeUnauthenticated`
+- **AND** 响应 message MUST 使用当前登录状态失效中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `missing_session`
+
+#### Scenario: token 无效渲染为 token invalid 响应
+
+- **WHEN** token 解析、password change token 校验或受保护认证流程返回 `authdomain.ErrTokenInvalid`
+- **THEN** 认证 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `401 Unauthorized` 和 `CodeTokenInvalid`
+- **AND** 响应 message MUST 使用当前登录状态失效中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `auth_token_invalid`
+
+#### Scenario: refresh session 不存在渲染为 token invalid 响应
+
+- **WHEN** refresh token 对应会话不存在、已退出或已过期，且流程返回 `authdomain.ErrAuthSessionNotFound`
+- **THEN** 认证 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `401 Unauthorized` 和 `CodeTokenInvalid`
+- **AND** 响应 message MUST 使用当前登录状态失效中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `auth_session_not_found`
+
+#### Scenario: refresh session mismatch 渲染为 token invalid 响应
+
+- **WHEN** refresh session 中的 `user_id`、`session_id` 或 `token_version` 与 token claims 不一致，且流程返回 `authdomain.ErrAuthSessionMismatch`
+- **THEN** 认证 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `401 Unauthorized` 和 `CodeTokenInvalid`
+- **AND** 响应 message MUST 使用当前登录状态失效中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `auth_session_mismatch`
+- **AND** refresh metrics MUST 继续能分类为 refresh session mismatch
+
+#### Scenario: 强制改密一次性会话无效渲染为 token invalid 响应
+
+- **WHEN** 强制改密流程返回 `authdomain.ErrPasswordChangeSessionNotFound` 或 `authdomain.ErrPasswordChangeSessionMismatch`
+- **THEN** 认证 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `401 Unauthorized` 和 `CodeTokenInvalid`
+- **AND** 响应 message MUST 使用当前登录状态失效中文公开文案
+- **AND** 两类错误 MUST 分别使用稳定 `Reason` 值 `password_change_session_not_found` 和 `password_change_session_mismatch`
+
+#### Scenario: 撤销不完整渲染为服务不可用响应
+
+- **WHEN** 退出当前会话、退出全部会话或安全敏感撤销流程返回 `authdomain.ErrSessionRevocationIncomplete`
+- **THEN** 认证 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `503 Service Unavailable` 和 `CodeServiceUnavailable`
+- **AND** 响应 message MUST 使用当前退出登录尚未完全生效中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `session_revocation_incomplete`
+- **AND** logout metrics MUST 继续能分类撤销不完整失败
+
+#### Scenario: 密码 KDF 繁忙直接渲染为服务不可用响应
+
+- **WHEN** 登录凭据校验返回 `password.ErrPasswordKDFBusy`
+- **THEN** 认证 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 响应 MUST 为 `503 Service Unavailable` 和 `CodeServiceUnavailable`
+- **AND** 响应 message MUST 使用当前认证服务繁忙中文公开文案
+- **AND** 该错误 MUST 使用稳定 `Reason` 值 `password_kdf_busy`
+- **AND** 登录 metrics MUST 继续能通过 `errors.Is(err, password.ErrPasswordKDFBusy)` 或稳定 `Reason` 分类为 password KDF busy
+
+#### Scenario: 认证业务错误保留 errors.Is 语义
+
+- **WHEN** auth feature 或测试需要判断认证、会话、token、撤销或 KDF busy 错误
+- **THEN** `errors.Is` 对直接返回的应用错误和被包装后的应用错误 MUST 继续支持正确匹配
+- **AND** 该匹配语义 MUST NOT 依赖 HTTP transport 层的错误转换函数
+
+### Requirement: 认证 HTTP transport 统一错误出口
+
+auth HTTP transport MUST 对业务 use case 返回错误使用共享 `response.Fail` 入口，避免在 transport 层重复维护 auth domain、identity 或 password 错误到 HTTP 响应的映射。强制改密登录成功分支 MAY 继续使用现有专用 envelope 映射以携带受限 token data，但该路径 MUST NOT 作为错误 mapper 兼容入口。
+
+#### Scenario: 登录业务错误
+
+- **WHEN** `Login` controller 调用登录 use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用认证专用错误 mapper
+- **AND** controller MUST 保持强制改密成功分支的现有 HTTP `200 OK`、`success=false` 和受限 token data 响应结构
+
+#### Scenario: refresh 业务错误
+
+- **WHEN** `Refresh` controller 调用 refresh use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用认证专用错误 mapper
+
+#### Scenario: 改密业务错误
+
+- **WHEN** `ChangePassword` controller 调用改密 use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用认证专用错误 mapper
+
+#### Scenario: 退出当前会话业务错误
+
+- **WHEN** `LogoutCurrentSession` controller 调用退出当前会话 use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用认证专用错误 mapper
+
+#### Scenario: 退出全部会话业务错误
+
+- **WHEN** `LogoutAllSessions` controller 调用退出全部会话 use case 返回错误
+- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
+- **AND** controller MUST NOT 先调用认证专用错误 mapper
+
+#### Scenario: 不保留认证错误兼容 mapper
+
+- **WHEN** auth HTTP transport 完成本次迁移
+- **THEN** 系统 MUST NOT 保留 `toAuthHTTPError`
+- **AND** 系统 MUST NOT 新增等价的 sentinel-to-HTTP 兼容函数、跨模块认证错误映射注册表或仅包装 `contracterrors.FromError` 的认证错误函数
+
+### Requirement: 登录结果分支模型
+
+Auth application MUST 使用登录 use case 专属结果表达普通登录和强制改密登录分支。`TokenResult` MUST 只表达 token 载荷本身；登录业务分支 MUST 位于 `LoginResult` 或等价登录 use case 专属结果类型中，避免 token issuer 或 transport 通过 token 载荷推断业务分支。
+
+#### Scenario: 普通登录结果
+
+- **WHEN** 登录 use case 完成普通登录并创建 refresh session
+- **THEN** 返回结果 MUST 包含 `PasswordChangeRequired=false` 和普通 token 载荷
+- **AND** token 载荷 MUST 包含 access token、refresh token、token type 和 access token 过期秒数
+
+#### Scenario: 强制改密登录结果
+
+- **WHEN** 登录 use case 完成强制改密登录并创建一次性 password change session
+- **THEN** 返回结果 MUST 包含 `PasswordChangeRequired=true` 和受限 password change token 载荷
+- **AND** token 载荷 MUST NOT 包含 refresh token
+- **AND** token 载荷 MUST NOT 通过 `PasswordChangeRequired` 或等价字段表达业务分支
+- **AND** 返回结果 MUST NOT 暴露 `authenticated` 或 `password_change_required` 字符串枚举
+
+#### Scenario: token issuer 保持载荷职责
+
+- **WHEN** token issuer 签发普通 token pair 或 password change token
+- **THEN** token issuer MUST 返回 transport-neutral token 载荷
+- **AND** token issuer MUST NOT 决定登录 HTTP 响应 envelope、登录业务状态 code 或强制改密响应 shape
+
+### Requirement: 强制改密登录 HTTP 响应
+
+Auth HTTP transport MUST 将强制改密登录表达为业务码 envelope，并使用受限 token 载荷作为 data。controller MUST 使用专用 mapper 生成该 envelope，普通登录 MUST 继续使用普通成功响应。
+
+#### Scenario: controller 映射普通登录
+
+- **WHEN** 登录 use case 返回普通登录结果
+- **THEN** controller MUST 返回 HTTP `200 OK`、`CodeOK`、`success=true` 和普通登录响应 DTO
+- **AND** 响应 DTO MUST 包含 access token、refresh token、token type 和 expires_in
+- **AND** 响应 DTO MUST NOT 包含 `status` 字段
+
+#### Scenario: controller 映射强制改密登录
+
+- **WHEN** 登录 use case 返回强制改密结果
+- **THEN** controller MUST 返回 HTTP `200 OK`、`CodePasswordChangeRequired`、`success=false` 和强制改密 envelope
+- **AND** envelope data MUST 包含 access token、token type 和 expires_in
+- **AND** envelope data MUST NOT 包含 refresh token
+- **AND** controller MUST 调用 `toPasswordChangeRequiredEnvelope` 或等价专用 mapper
+
+#### Scenario: 不保留响应枚举
+
+- **WHEN** auth HTTP transport 完成本次重构
+- **THEN** 系统 MUST NOT 在登录响应 data 中返回 `status` 字段
+- **AND** 系统 MUST NOT 暴露 `authenticated` 或 `password_change_required` 响应枚举
+- **AND** 系统 MUST NOT 为登录 token 载荷保留与 `TokenResponse` 字段完全重复的 `LoginResponse` DTO
+
+#### Scenario: 登录失败仍走错误出口
+
+- **WHEN** 登录 use case 返回凭证错误、用户状态拒绝、KDF busy 或系统错误
+- **THEN** controller MUST 继续通过 `response.Fail(c, err)` 渲染失败响应
+- **AND** 系统 MUST NOT 用登录结果字段表达失败分支
 
