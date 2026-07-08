@@ -1,14 +1,16 @@
 package router
 
 import (
+	"io/fs"
+	"mime"
 	"net/http"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
+	swaggerFiles "github.com/swaggo/files/v2"
 
 	"github.com/aegiscore/user-service/docs"
 )
@@ -28,9 +30,66 @@ func RegisterOpenAPI(engine *gin.Engine, environment string) {
 	}
 
 	engine.GET(openAPIJSONPath, serveOpenAPI)
-	engine.GET("/openapi/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL(openAPIJSONPath)))
+	engine.GET("/openapi/*any", serveOpenAPIUI)
 	engine.GET("/docs", redirectToOpenAPI)
 	engine.GET("/api-docs", redirectToOpenAPI)
+}
+
+func serveOpenAPIUI(c *gin.Context) {
+	assetPath := path.Clean(strings.TrimPrefix(c.Param("any"), "/"))
+	if assetPath == "." {
+		assetPath = "index.html"
+	}
+	if strings.HasPrefix(assetPath, "../") {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	if assetPath == "index.html" {
+		serveOpenAPIIndex(c)
+		return
+	}
+	if assetPath == "swagger-initializer.js" {
+		serveOpenAPIInitializer(c)
+		return
+	}
+
+	serveOpenAPIAsset(c, assetPath)
+}
+
+func serveOpenAPIIndex(c *gin.Context) {
+	index, err := fs.ReadFile(swaggerFiles.FS, "index.html")
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
+	content := strings.ReplaceAll(string(index), "https://petstore.swagger.io/v2/swagger.json", openAPIJSONPath)
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(content))
+}
+
+func serveOpenAPIInitializer(c *gin.Context) {
+	initializer, err := fs.ReadFile(swaggerFiles.FS, "swagger-initializer.js")
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
+	content := strings.ReplaceAll(string(initializer), "https://petstore.swagger.io/v2/swagger.json", openAPIJSONPath)
+	c.Data(http.StatusOK, "application/javascript; charset=utf-8", []byte(content))
+}
+
+func serveOpenAPIAsset(c *gin.Context, assetPath string) {
+	asset, err := fs.ReadFile(swaggerFiles.FS, assetPath)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+
+	contentType := mime.TypeByExtension(path.Ext(assetPath))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	c.Data(http.StatusOK, contentType, asset)
 }
 
 func serveOpenAPI(c *gin.Context) {

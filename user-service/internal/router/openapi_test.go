@@ -43,6 +43,33 @@ func TestRegisterOpenAPIRedirects(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, openAPIUIPath, nil)
 	engine.ServeHTTP(recorder, request)
 	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "swagger-initializer.js")
+
+	recorder = httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodGet, "/openapi/swagger-initializer.js", nil)
+	engine.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), openAPIJSONPath)
+	require.NotContains(t, recorder.Body.String(), "https://petstore.swagger.io/v2/swagger.json")
+
+	for _, path := range []string{
+		"/openapi/swagger-ui.css",
+		"/openapi/swagger-ui-bundle.js",
+		"/openapi/swagger-ui-standalone-preset.js",
+		"/openapi/oauth2-redirect.html",
+		"/openapi/favicon-32x32.png",
+	} {
+		recorder = httptest.NewRecorder()
+		request = httptest.NewRequest(http.MethodGet, path, nil)
+		engine.ServeHTTP(recorder, request)
+		require.Equal(t, http.StatusOK, recorder.Code)
+		require.NotEmpty(t, recorder.Body.Bytes())
+	}
+
+	recorder = httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodGet, "/openapi/missing.asset", nil)
+	engine.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusNotFound, recorder.Code)
 
 	recorder = httptest.NewRecorder()
 	request = httptest.NewRequest(http.MethodGet, openAPIJSONPath, nil)
