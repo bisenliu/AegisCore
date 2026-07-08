@@ -42,7 +42,7 @@ jobs:
             user-service/go.sum
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           # 固定版本，避免本地和 CI 因 golangci-lint 版本漂移产生不同结果。
           version: v2.12.2
