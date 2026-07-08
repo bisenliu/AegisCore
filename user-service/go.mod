@@ -25,7 +25,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0
 	go.uber.org/fx v1.23.0
 	go.uber.org/mock v0.6.0
-	go.uber.org/zap v1.26.0
+	go.uber.org/zap v1.28.0
 )
 
 require (
