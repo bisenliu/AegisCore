@@ -88,7 +88,7 @@ jobs:
         run: make build
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: user-service-binary
           path: bin/user-service
@@ -161,7 +161,7 @@ jobs:
           go tool cover -func=../coverage/user-service.out > ../coverage/user-service.txt
 
       - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-profiles
           path: coverage/
@@ -236,7 +236,7 @@ jobs:
 
       - name: Upload gosec artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gosec-${{ matrix.module }}
           path: security/gosec-${{ matrix.module }}.sarif
@@ -280,7 +280,7 @@ jobs:
 
       - name: Upload filesystem scan artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: trivy-filesystem
           path: security/trivy-filesystem.sarif
@@ -341,7 +341,7 @@ jobs:
 
       - name: Upload image scan and SBOM artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: trivy-image-and-sbom
           path: |
