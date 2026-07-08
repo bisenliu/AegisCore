@@ -31,6 +31,57 @@ run_rg_any() {
   fi
 }
 
+go_mod_version() {
+  local file="$1"
+  awk '$1 == "go" { print $2; exit }' "${file}"
+}
+
+toolchain_version() {
+  local file="$1"
+  awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2; exit }' "${file}"
+}
+
+workflow_go_version() {
+  local file="$1"
+  sed -nE "s/^[[:space:]]*GO_VERSION:[[:space:]]*['\"]?([0-9]+\\.[0-9]+\\.[0-9]+)['\"]?.*/\\1/p" "${file}" | head -n 1
+}
+
+workflow_gotoolchain_version() {
+  local file="$1"
+  sed -nE "s/^[[:space:]]*GOTOOLCHAIN:[[:space:]]*go([0-9]+\\.[0-9]+\\.[0-9]+).*/\\1/p" "${file}" | head -n 1
+}
+
+check_go_toolchain_version() {
+  local expected
+  expected="$(go_mod_version "${repo_root}/common/go.mod")"
+  if [[ -z "${expected}" ]]; then
+    report "common/go.mod missing go version"
+    return
+  fi
+
+  local label version
+  while IFS=$'\t' read -r label version; do
+    if [[ -z "${version}" ]]; then
+      report "${label} missing Go toolchain version; expected ${expected}"
+    elif [[ "${version}" != "${expected}" ]]; then
+      report "${label} has Go version ${version}; expected ${expected}"
+    fi
+  done < <(
+    printf 'go.work go\t%s\n' "$(go_mod_version "${repo_root}/go.work")"
+    printf 'go.work toolchain\t%s\n' "$(toolchain_version "${repo_root}/go.work")"
+    for mod in common/go.mod user-service/go.mod tools/openapi-convert/go.mod; do
+      printf '%s go\t%s\n' "${mod}" "$(go_mod_version "${repo_root}/${mod}")"
+      printf '%s toolchain\t%s\n' "${mod}" "$(toolchain_version "${repo_root}/${mod}")"
+    done
+    for workflow in .github/workflows/ci.yml .github/workflows/lint.yml; do
+      printf '%s GO_VERSION\t%s\n' "${workflow}" "$(workflow_go_version "${repo_root}/${workflow}")"
+      printf '%s GOTOOLCHAIN\t%s\n' "${workflow}" "$(workflow_gotoolchain_version "${repo_root}/${workflow}")"
+    done
+  )
+}
+
+check_go_toolchain_version
+
 if [[ -d "${service_dir}/internal/features/permission/application/rbacbaseline" ]]; then
   report "old permission/application/rbacbaseline package still exists"
 fi
