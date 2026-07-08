@@ -2,6 +2,7 @@ package logger
 
 import (
 	"context"
+	"errors"
 	"syscall"
 
 	"go.uber.org/fx"
@@ -18,7 +19,7 @@ func NewLogger(lc fx.Lifecycle, cfg *config.Config) (*zap.Logger, error) {
 	}
 	lc.Append(fx.Hook{OnStop: func(context.Context) error {
 		err := log.Sync()
-		if err == syscall.EINVAL || err == syscall.ENOTTY {
+		if errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTTY) {
 			// 某些平台的 stdout/stderr 不支持 fsync，关闭流程不应因此失败。
 			return nil
 		}
