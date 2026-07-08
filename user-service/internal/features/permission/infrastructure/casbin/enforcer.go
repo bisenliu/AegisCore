@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	casbinlib "github.com/casbin/casbin/v2"
+	casbinlib "github.com/casbin/casbin/v3"
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 

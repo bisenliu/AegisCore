@@ -3,7 +3,7 @@ package casbin
 import (
 	"testing"
 
-	casbinlib "github.com/casbin/casbin/v2"
+	casbinlib "github.com/casbin/casbin/v3"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )

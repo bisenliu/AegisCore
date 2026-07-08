@@ -2,11 +2,13 @@ module github.com/aegiscore/user-service
 
 go 1.26.5
 
+toolchain go1.26.5
+
 require (
 	entgo.io/ent v0.14.6
 	github.com/aegiscore/common v0.0.0
 	github.com/alicebob/miniredis/v2 v2.38.0
-	github.com/casbin/casbin/v2 v2.135.0
+	github.com/casbin/casbin/v3 v3.10.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
