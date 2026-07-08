@@ -1,8 +1,8 @@
 module github.com/aegiscore/user-service
 
-go 1.26
+go 1.26.5
 
-toolchain go1.26.4
+toolchain go1.26.5
 
 require (
 	entgo.io/ent v0.14.6
