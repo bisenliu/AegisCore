@@ -1,7 +1,7 @@
 # 从仓库根目录构建：
 #   docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
 
-FROM golang:1.26-alpine3.22 AS builder
+FROM golang:1.26.5-alpine3.24 AS builder
 WORKDIR /src
 
 COPY go.work go.work.sum ./
