@@ -19,13 +19,19 @@ import (
 
 // LoginUseCase 处理用户名密码认证。
 type LoginUseCase interface {
-	Login(ctx context.Context, cmd LoginCommand) (*authtokens.TokenResult, error)
+	Login(ctx context.Context, cmd LoginCommand) (*LoginResult, error)
 }
 
 // LoginCommand 是用户名密码认证的应用层输入。
 type LoginCommand struct {
 	Username string
 	Password string
+}
+
+// LoginResult 是登录 use case 的成功业务结果。
+type LoginResult struct {
+	PasswordChangeRequired bool
+	Tokens                 *authtokens.TokenResult
 }
 
 type loginUseCase struct {
@@ -46,7 +52,7 @@ func NewLoginUseCase(deps LoginDeps) LoginUseCase {
 }
 
 // Login 校验凭证，并签发普通 token 或受限改密 token。
-func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*authtokens.TokenResult, error) {
+func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*LoginResult, error) {
 	if err := authvalidators.ValidateLoginCommand(cmd.Username, cmd.Password); err != nil {
 		u.metrics.LoginFailed(ctx, authapplication.MetricsReasonValidationFailed)
 		return nil, err
@@ -83,7 +89,7 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*authtokens
 			return nil, err
 		}
 		u.metrics.LoginSucceeded(ctx)
-		return tokens, nil
+		return &LoginResult{PasswordChangeRequired: true, Tokens: tokens}, nil
 	}
 
 	logger.Info(ctx, "login user authenticated", zap.String("username", cmd.Username), zap.String("user_id", user.UserID.String()), zap.Int64("token_version", user.TokenVersion))
@@ -99,7 +105,7 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*authtokens
 		return nil, err
 	}
 	u.metrics.LoginSucceeded(ctx)
-	return tokens, nil
+	return &LoginResult{Tokens: tokens}, nil
 }
 
 func loginFailureReason(err error) string {

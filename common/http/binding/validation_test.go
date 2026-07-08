@@ -41,6 +41,8 @@ func TestJSONBinder(t *testing.T) {
 		var validationErr *validation.Error
 		require.ErrorAs(t, err, &validationErr)
 		require.Equal(t, validation.ErrEmptyRequestBody, validationErr.Message)
+		require.Equal(t, contracterrors.KindBadRequest, validationErr.Kind)
+		require.Equal(t, contracterrors.ReasonEmptyRequestBody, validationErr.Reason)
 		require.Equal(t, contracterrors.CodeBadRequest, validationErr.Code)
 	})
 
@@ -51,6 +53,8 @@ func TestJSONBinder(t *testing.T) {
 		var validationErr *validation.Error
 		require.ErrorAs(t, err, &validationErr)
 		require.Equal(t, "用户ID字段类型不正确，应为整数类型", validationErr.Message)
+		require.Equal(t, contracterrors.KindBadRequest, validationErr.Kind)
+		require.Equal(t, contracterrors.ReasonRequestBindingFailed, validationErr.Reason)
 		require.Equal(t, contracterrors.CodeBadRequest, validationErr.Code)
 	})
 
@@ -61,6 +65,8 @@ func TestJSONBinder(t *testing.T) {
 		var validationErr *validation.Error
 		require.ErrorAs(t, err, &validationErr)
 		require.Equal(t, validation.ErrTrailingJSONBody, validationErr.Message)
+		require.Equal(t, contracterrors.KindBadRequest, validationErr.Kind)
+		require.Equal(t, contracterrors.ReasonTrailingJSONBody, validationErr.Reason)
 		require.Equal(t, contracterrors.CodeBadRequest, validationErr.Code)
 	})
 
@@ -102,6 +108,8 @@ func TestBinders(t *testing.T) {
 		var validationErr *validation.Error
 		require.ErrorAs(t, err, &validationErr)
 		require.Equal(t, "用户ID字段类型不正确，应为整数类型", validationErr.Message)
+		require.Equal(t, contracterrors.KindBadRequest, validationErr.Kind)
+		require.Equal(t, contracterrors.ReasonRequestBindingFailed, validationErr.Reason)
 		require.Equal(t, contracterrors.CodeBadRequest, validationErr.Code)
 	})
 

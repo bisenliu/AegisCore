@@ -172,8 +172,8 @@ func (s *routeTokenVersionValidator) ValidateTokenVersion(_ context.Context, _ s
 	return nil
 }
 
-func (s *routeAuthAuthUseCases) Login(context.Context, authcommand.LoginCommand) (*authtokens.TokenResult, error) {
-	return &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
+func (s *routeAuthAuthUseCases) Login(context.Context, authcommand.LoginCommand) (*authcommand.LoginResult, error) {
+	return &authcommand.LoginResult{Tokens: &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}}, nil
 }
 
 func (s *routeAuthAuthUseCases) Refresh(context.Context, authcommand.RefreshTokenCommand) (*authtokens.TokenResult, error) {

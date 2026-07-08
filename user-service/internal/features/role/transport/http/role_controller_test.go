@@ -142,6 +142,14 @@ func TestRoleControllerCreateRole(t *testing.T) {
 		expectRoleEnvelope(t, recorder, http.StatusConflict, false, contracterrors.CodeConflict, messages.RoleAlreadyExists)
 	})
 
+	t.Run("domain validation maps to validation envelope", func(t *testing.T) {
+		engine, commands, _ := newRoleHTTPTestHarness(t)
+		commands.EXPECT().CreateRole(gomock.Any(), gomock.Any()).Return(nil, roledomain.ErrRoleInvalid)
+
+		recorder := performRoleHTTPRequest(t, engine, http.MethodPost, "/api/v1/roles", jsonBody(`{"name":"管理员"}`))
+		expectRoleEnvelope(t, recorder, http.StatusBadRequest, false, contracterrors.CodeValidationFailed, messages.InvalidRole)
+	})
+
 	t.Run("command service error maps to internal error", func(t *testing.T) {
 		engine, commands, _ := newRoleHTTPTestHarness(t)
 		commands.EXPECT().CreateRole(gomock.Any(), gomock.Any()).Return(nil, errors.New("database down"))

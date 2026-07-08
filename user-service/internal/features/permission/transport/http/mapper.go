@@ -1,14 +1,10 @@
 package permissionhttp
 
 import (
-	"errors"
-
-	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/pagination"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
-	"github.com/aegiscore/user-service/internal/messages"
 )
 
 func toPermissionResponse(permission permissiondomain.Permission) PermissionResponse {
@@ -41,19 +37,4 @@ func toRouteDiffResponse(result *permissionquery.RouteDiffResult) RouteDiffRespo
 
 func toDiscoveredRouteResponse(route permissionapplication.DiscoveredRoute) DiscoveredRouteResponse {
 	return DiscoveredRouteResponse{HTTPMethod: route.Method, Path: route.Path}
-}
-
-func toPermissionHTTPError(err error) error {
-	switch {
-	case errors.Is(err, permissiondomain.ErrPermissionAlreadyExists):
-		return contracterrors.ConflictError(messages.PermissionAlreadyExists)
-	case errors.Is(err, permissiondomain.ErrPermissionNotFound):
-		return contracterrors.NotFoundError(messages.PermissionNotFound)
-	case errors.Is(err, permissiondomain.ErrPermissionInvalid):
-		return contracterrors.ValidationFailedError(messages.InvalidPermission)
-	case errors.Is(err, permissiondomain.ErrSystemPermissionProtected):
-		return contracterrors.ConflictError(messages.SystemPermissionProtected)
-	default:
-		return contracterrors.FromError(err)
-	}
 }

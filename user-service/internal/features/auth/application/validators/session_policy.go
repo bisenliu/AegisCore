@@ -18,7 +18,7 @@ func ValidateTokenVersionMatch(currentVersion int64, tokenVersion int64) error {
 // ValidateRefreshSessionClaims 确认持久化 refresh session 元数据与 token claims 匹配。
 func ValidateRefreshSessionClaims(session authdomain.AuthSession, userID string, tokenVersion int64) error {
 	if session.UserID != userID || session.TokenVersion != tokenVersion {
-		return errors.Join(authdomain.ErrTokenInvalid, authdomain.ErrAuthSessionMismatch)
+		return errors.Join(authdomain.ErrAuthSessionMismatch, authdomain.ErrTokenInvalid)
 	}
 	return nil
 }

@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -47,6 +48,16 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 	t.Run("map domain create conflict", func(t *testing.T) {
 		repo := NewMockUserProfileStore(gomock.NewController(t))
 		repo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, identity.ErrUserAlreadyExists)
+		svc := NewCreateUserService(repo, testPasswordService(t))
+
+		_, err := svc.CreateUser(context.Background(), CreateUserCommand{Nickname: "Alice", Username: "alice", Password: "secret"})
+
+		require.ErrorIs(t, err, identity.ErrUserAlreadyExists)
+	})
+
+	t.Run("map wrapped domain create conflict", func(t *testing.T) {
+		repo := NewMockUserProfileStore(gomock.NewController(t))
+		repo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("repository conflict: %w", identity.ErrUserAlreadyExists))
 		svc := NewCreateUserService(repo, testPasswordService(t))
 
 		_, err := svc.CreateUser(context.Background(), CreateUserCommand{Nickname: "Alice", Username: "alice", Password: "secret"})

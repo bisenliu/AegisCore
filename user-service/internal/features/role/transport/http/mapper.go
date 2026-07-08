@@ -1,17 +1,11 @@
 package rolehttp
 
 import (
-	"errors"
-
-	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/pagination"
-	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	rolecommand "github.com/aegiscore/user-service/internal/features/role/application/command"
 	rolequery "github.com/aegiscore/user-service/internal/features/role/application/query"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
-	"github.com/aegiscore/user-service/internal/messages"
-	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 func toRoleResponse(role roledomain.Role) RoleResponse {
@@ -45,33 +39,4 @@ func toPermissionResponses(items []roleapplication.PermissionReference) []Permis
 		result = append(result, toPermissionResponse(items[i]))
 	}
 	return result
-}
-
-func toRoleHTTPError(err error) error {
-	switch {
-	case errors.Is(err, roledomain.ErrRoleAlreadyExists):
-		return contracterrors.ConflictError(messages.RoleAlreadyExists)
-	case errors.Is(err, roledomain.ErrRoleNotFound):
-		return contracterrors.NotFoundError(messages.RoleNotFound)
-	case errors.Is(err, roledomain.ErrRoleInvalid):
-		return contracterrors.ValidationFailedError(messages.InvalidRole)
-	case errors.Is(err, roledomain.ErrSystemRoleProtected):
-		return contracterrors.ConflictError(messages.SystemRoleProtected)
-	case errors.Is(err, roledomain.ErrRoleInactive):
-		return contracterrors.ConflictError(messages.RoleInactive)
-	case errors.Is(err, roledomain.ErrUserRoleAlreadyExists):
-		return contracterrors.ConflictError(messages.UserRoleAlreadyExists)
-	case errors.Is(err, roledomain.ErrUserRoleNotFound):
-		return contracterrors.NotFoundError(messages.UserRoleNotFound)
-	case errors.Is(err, roledomain.ErrRolePermissionAlreadyExists):
-		return contracterrors.ConflictError(messages.RolePermissionAlreadyExists)
-	case errors.Is(err, roledomain.ErrRolePermissionNotFound):
-		return contracterrors.NotFoundError(messages.RolePermissionNotFound)
-	case errors.Is(err, identity.ErrUserNotFound):
-		return contracterrors.NotFoundError(messages.UserNotFound)
-	case errors.Is(err, permissiondomain.ErrPermissionNotFound):
-		return contracterrors.NotFoundError(messages.PermissionNotFound)
-	default:
-		return contracterrors.FromError(err)
-	}
 }

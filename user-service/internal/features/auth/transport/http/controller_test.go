@@ -31,7 +31,7 @@ var errAuthDatabaseDown = errors.New("database down")
 func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctl, mocks := newTestAuthController(t)
-	mocks.login.EXPECT().Login(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, cmd authcommand.LoginCommand) (*authtokens.TokenResult, error) {
+	mocks.login.EXPECT().Login(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, cmd authcommand.LoginCommand) (*authcommand.LoginResult, error) {
 		require.False(t, cmd.Username != "alice" || cmd.Password != "secret",
 			"cmd = %#v", cmd)
 
@@ -39,7 +39,7 @@ func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 		require.False(t, !ok || clientContext.ClientIP != "203.0.113.20" || clientContext.UserAgent != "auth-controller-test",
 			"clientContext = %#v, %v", clientContext, ok)
 
-		return &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}, nil
+		return &authcommand.LoginResult{Tokens: &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}, nil
 	})
 
 	status, envelope := executeAuthLogin(t, ctl, `{"username":" alice ","password":" secret "}`)
@@ -51,13 +51,16 @@ func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 	data, ok := envelope.Data.(map[string]any)
 	require.False(t, !ok || data["access_token"] != "access" || data["refresh_token"] != "refresh" || data["token_type"] != commonauth.TokenTypeBearer || data["expires_in"] != float64(900),
 		"data = %#v", envelope.Data)
+	_, ok = data["status"]
+	require.False(t, ok,
+		"status = %#v, want omitted", data["status"])
 
 }
 
-func TestAuthControllerLoginMapsPasswordChangeRequired(t *testing.T) {
+func TestAuthControllerLoginMapsPasswordChangeRequiredCode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctl, mocks := newTestAuthController(t)
-	mocks.login.EXPECT().Login(gomock.Any(), authcommand.LoginCommand{Username: "alice", Password: "secret"}).Return(&authtokens.TokenResult{AccessToken: "password-change", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900, PasswordChangeRequired: true}, nil)
+	mocks.login.EXPECT().Login(gomock.Any(), authcommand.LoginCommand{Username: "alice", Password: "secret"}).Return(&authcommand.LoginResult{PasswordChangeRequired: true, Tokens: &authtokens.TokenResult{AccessToken: "password-change", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}, nil)
 
 	status, envelope := executeAuthLogin(t, ctl, `{"username":"alice","password":"secret"}`)
 	require.Equal(t, http.StatusOK, status,
@@ -70,6 +73,9 @@ func TestAuthControllerLoginMapsPasswordChangeRequired(t *testing.T) {
 		"data = %#v", envelope.Data)
 	require.False(t, data["access_token"] != "password-change" || data["token_type"] != commonauth.TokenTypeBearer || data["expires_in"] != float64(900),
 		"data = %#v", envelope.Data)
+	_, ok = data["status"]
+	require.False(t, ok,
+		"status = %#v, want omitted", data["status"])
 	{
 
 		_, ok := data["refresh_token"]
@@ -254,6 +260,30 @@ func TestAuthControllerRefreshMapsTokenInvalid(t *testing.T) {
 
 }
 
+func TestAuthControllerLogoutCurrentMapsRevocationIncomplete(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctl, mocks := newTestAuthController(t)
+	mocks.logoutCurrent.EXPECT().LogoutCurrentSession(gomock.Any()).Return(nil, authdomain.ErrSessionRevocationIncomplete)
+
+	status, envelope := executeAuthLogoutCurrent(t, ctl)
+	require.Equal(t, http.StatusServiceUnavailable, status,
+		"status = %d, want %d", status, http.StatusServiceUnavailable)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeServiceUnavailable || envelope.Message != messages.AuthRevocationIncomplete,
+		"envelope = %#v", envelope)
+}
+
+func TestAuthControllerLogoutAllMapsRevocationIncomplete(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctl, mocks := newTestAuthController(t)
+	mocks.logoutAll.EXPECT().LogoutAllSessions(gomock.Any()).Return(nil, authdomain.ErrSessionRevocationIncomplete)
+
+	status, envelope := executeAuthLogoutAll(t, ctl)
+	require.Equal(t, http.StatusServiceUnavailable, status,
+		"status = %d, want %d", status, http.StatusServiceUnavailable)
+	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeServiceUnavailable || envelope.Message != messages.AuthRevocationIncomplete,
+		"envelope = %#v", envelope)
+}
+
 type authControllerMocks struct {
 	login          *MockLoginUseCase
 	refresh        *MockRefreshTokenUseCase
@@ -286,6 +316,24 @@ func executeAuthRefresh(t *testing.T, ctl *AuthController, body string) (int, re
 	recorder, ctx := newAuthJSONContext(http.MethodPost, "/api/v1/auth/refresh", body)
 
 	ctl.RefreshToken(ctx)
+
+	return decodeAuthEnvelope(t, recorder)
+}
+
+func executeAuthLogoutCurrent(t *testing.T, ctl *AuthController) (int, response.Envelope) {
+	t.Helper()
+	recorder, ctx := newAuthJSONContext(http.MethodPost, "/api/v1/auth/logout", "")
+
+	ctl.LogoutCurrentSession(ctx)
+
+	return decodeAuthEnvelope(t, recorder)
+}
+
+func executeAuthLogoutAll(t *testing.T, ctl *AuthController) (int, response.Envelope) {
+	t.Helper()
+	recorder, ctx := newAuthJSONContext(http.MethodPost, "/api/v1/auth/logout-all", "")
+
+	ctl.LogoutAllSessions(ctx)
 
 	return decodeAuthEnvelope(t, recorder)
 }

@@ -51,7 +51,7 @@ func (ctl *RoleController) ListRoles(c *gin.Context) {
 	}
 	result, err := ctl.queries.ListRoles(c.Request.Context(), query)
 	if err != nil {
-		response.Fail(c, toRoleHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toRoleListResponse(result))
@@ -85,7 +85,7 @@ func (ctl *RoleController) CreateRole(c *gin.Context) {
 	}
 	result, err := ctl.commands.CreateRole(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toRoleHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.Created(c, toRoleResponse(result.Role))
@@ -118,7 +118,7 @@ func (ctl *RoleController) GetRole(c *gin.Context) {
 	}
 	result, err := ctl.queries.GetRole(c.Request.Context(), query)
 	if err != nil {
-		response.Fail(c, toRoleHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toRoleResponse(result.Role))
@@ -154,7 +154,7 @@ func (ctl *RoleController) UpdateRole(c *gin.Context) {
 	}
 	err = ctl.commands.UpdateRole(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toRoleHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.NoContent(c)
@@ -189,7 +189,7 @@ func (ctl *RoleController) SetRoleStatus(c *gin.Context) {
 	}
 	err = ctl.commands.SetRoleActive(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toRoleHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.NoContent(c)

@@ -51,7 +51,7 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 	}
 	users, err := ctl.queries.ListUsers(c.Request.Context(), query)
 	if err != nil {
-		response.Fail(c, toUserHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toUserListResponse(users))
@@ -85,7 +85,7 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 
 	user, err := ctl.commands.CreateUser(c.Request.Context(), cmd)
 	if err != nil {
-		response.Fail(c, toUserHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.Created(c, toUserResponse(user.User))
@@ -118,7 +118,7 @@ func (ctl *UserController) GetByUserID(c *gin.Context) {
 
 	user, err := ctl.queries.GetUserByID(c.Request.Context(), query)
 	if err != nil {
-		response.Fail(c, toUserHTTPError(err))
+		response.Fail(c, err)
 		return
 	}
 	response.OK(c, toUserResponse(user.User))

@@ -6,29 +6,64 @@ import (
 	"testing"
 	"time"
 
+	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	commonauth "github.com/aegiscore/common/security/auth"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
 var sessionTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
 
 func TestLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T) {
-	for _, err := range []error{authdomain.ErrAuthSessionNotFound, authdomain.ErrAuthSessionMismatch} {
-		t.Run(err.Error(), func(t *testing.T) {
+	for _, rejectedErr := range []error{authdomain.ErrAuthSessionNotFound, authdomain.ErrAuthSessionMismatch} {
+		t.Run(rejectedErr.Error(), func(t *testing.T) {
 			fixture := newLifecycleTestFixture(t, false)
 			oldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
 			newSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 2}
 			fixture.sessions.EXPECT().
 				RotateSession(gomock.Any(), oldSession, newSession, time.Hour, 5).
-				Return(err)
+				Return(rejectedErr)
 
 			err := fixture.lifecycle.RotateTokenSession(context.Background(), oldSession, newSession, time.Hour)
 			require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
 				"err = %v, want ErrTokenInvalid", err)
+			require.ErrorIs(t, err, rejectedErr,
+				"err = %v, want rejected session error", err)
 
+		})
+	}
+}
+
+func TestLifecycleConsumePasswordChangeClaimsMapsRejectedSession(t *testing.T) {
+	for _, rejectedErr := range []error{authdomain.ErrPasswordChangeSessionNotFound, authdomain.ErrPasswordChangeSessionMismatch} {
+		t.Run(rejectedErr.Error(), func(t *testing.T) {
+			fixture := newLifecycleTestFixture(t, false)
+			claims := &commonauth.Claims{
+				UserID:       sessionTestUserID.String(),
+				SessionID:    "password-session",
+				TokenVersion: 2,
+				RegisteredClaims: jwtv5.RegisteredClaims{
+					ID: "password-token",
+				},
+			}
+			expected := authdomain.PasswordChangeSession{
+				UserID:       claims.UserID,
+				SessionID:    claims.SessionID,
+				TokenID:      claims.ID,
+				TokenVersion: claims.TokenVersion,
+			}
+			fixture.passwordChanges.EXPECT().
+				ConsumePasswordChangeSession(gomock.Any(), expected).
+				Return(rejectedErr)
+
+			err := fixture.lifecycle.ConsumePasswordChangeClaims(context.Background(), claims)
+			require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
+				"err = %v, want ErrTokenInvalid", err)
+			require.ErrorIs(t, err, rejectedErr,
+				"err = %v, want rejected password change session error", err)
 		})
 	}
 }

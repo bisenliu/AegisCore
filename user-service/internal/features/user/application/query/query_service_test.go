@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -35,6 +36,16 @@ func TestUserQueryServiceGetUserByID(t *testing.T) {
 	t.Run("map domain not found", func(t *testing.T) {
 		repo := NewMockUserProfileStore(gomock.NewController(t))
 		repo.EXPECT().GetByUserID(gomock.Any(), testUserID).Return(nil, identity.ErrUserNotFound)
+		svc := NewUserQueryService(repo)
+
+		_, err := svc.GetUserByID(context.Background(), GetUserByIDQuery{UserID: testUserID})
+
+		require.ErrorIs(t, err, identity.ErrUserNotFound)
+	})
+
+	t.Run("map wrapped domain not found", func(t *testing.T) {
+		repo := NewMockUserProfileStore(gomock.NewController(t))
+		repo.EXPECT().GetByUserID(gomock.Any(), testUserID).Return(nil, fmt.Errorf("repository miss: %w", identity.ErrUserNotFound))
 		svc := NewUserQueryService(repo)
 
 		_, err := svc.GetUserByID(context.Background(), GetUserByIDQuery{UserID: testUserID})

@@ -1,10 +1,9 @@
 package tokens
 
-// TokenResult 是登录、刷新和强制改密登录的 transport-neutral token 输出。
+// TokenResult 是认证流程的 transport-neutral token 载荷。
 type TokenResult struct {
-	AccessToken            string
-	RefreshToken           string
-	TokenType              string
-	ExpiresIn              int64
-	PasswordChangeRequired bool
+	AccessToken  string
+	RefreshToken string
+	TokenType    string
+	ExpiresIn    int64
 }

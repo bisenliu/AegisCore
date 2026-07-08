@@ -31,8 +31,8 @@ go generate ./ent
 2. 通过根 `user-service/ent/schema` 包暴露新的 schema，使 Ent codegen 和 Atlas 能从稳定 schema source 读取。
 3. 在 schema 源文件中定义字段、索引、边、注释、默认值和约束。不要通过编辑生成文件表达这些变更。
 4. 在 `user-service/` 下运行 `go generate ./ent`。
-5. 如果 schema 变更会改变数据库结构，在 `user-service/` 下运行 `./scripts/migrate-diff.sh <migration-name>` 生成 migration。
-6. 提交前审查 `user-service/migrations/` 下生成的 SQL，以及更新后的 `user-service/migrations/atlas.sum`；Atlas 配置位于 `user-service/migrations/atlas.hcl`。
+5. 如果 schema 变更会改变数据库结构，在 `user-service/` 下运行 `./scripts/migrate-diff.sh <migration-name>` 生成 migration。Atlas 通过 `scripts/atlas-schema` 读取 Ent schema，并统一关闭数据库真实外键生成。
+6. 提交前审查 `user-service/migrations/` 下生成的 SQL，确认不包含 `FOREIGN KEY` 或 `REFERENCES` 约束，以及更新后的 `user-service/migrations/atlas.sum`；Atlas 配置位于 `user-service/migrations/atlas.hcl`。
 7. 如果手动调整生成的 SQL，在 `user-service/` 下运行 `atlas migrate hash --dir file://migrations`，然后运行 `./scripts/migrate-validate.sh`。
 
 Entity Schema 变更应聚焦持久化 schema 语义。仅调整 schema 组织结构且不改变字段、索引、注释、默认值或约束时，不应新增 SQL migration。

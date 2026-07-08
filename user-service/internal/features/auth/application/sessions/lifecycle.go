@@ -74,7 +74,7 @@ func (m *lifecycle) ConsumePasswordChangeClaims(ctx context.Context, claims *com
 	if err := m.passwordChangeSessions.ConsumePasswordChangeSession(ctx, expected); err != nil {
 		if errors.Is(err, authdomain.ErrPasswordChangeSessionNotFound) || errors.Is(err, authdomain.ErrPasswordChangeSessionMismatch) {
 			logger.Warn(ctx, "password change session rejected", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))
-			return authdomain.ErrTokenInvalid
+			return errors.Join(err, authdomain.ErrTokenInvalid)
 		}
 		logger.Error(ctx, "consume password change session failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
 		return err
@@ -88,7 +88,7 @@ func (m *lifecycle) ValidateRefreshSession(ctx context.Context, claims *commonau
 	if err != nil {
 		if errors.Is(err, authdomain.ErrAuthSessionNotFound) {
 			logger.Warn(ctx, "refresh session not found", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-			return authdomain.AuthSession{}, 0, errors.Join(authdomain.ErrTokenInvalid, authdomain.ErrAuthSessionNotFound)
+			return authdomain.AuthSession{}, 0, errors.Join(authdomain.ErrAuthSessionNotFound, authdomain.ErrTokenInvalid)
 		}
 		logger.Error(ctx, "get refresh session failed", logger.StackTrace(zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID), zap.Error(err))...)
 		return authdomain.AuthSession{}, 0, err
@@ -118,7 +118,7 @@ func (m *lifecycle) RotateTokenSession(ctx context.Context, oldSession authdomai
 	if err := m.sessions.RotateSession(ctx, oldSession, newSession, refreshTTL, m.maxActiveSessionsPerUser); err != nil {
 		if errors.Is(err, authdomain.ErrAuthSessionNotFound) || errors.Is(err, authdomain.ErrAuthSessionMismatch) {
 			logger.Warn(ctx, "rotate auth session rejected", zap.String("user_id", oldSession.UserID), zap.String("old_session_id", oldSession.SessionID), zap.String("new_session_id", newSession.SessionID), zap.Error(err))
-			return authdomain.ErrTokenInvalid
+			return errors.Join(err, authdomain.ErrTokenInvalid)
 		}
 		logger.Error(ctx, "rotate auth session failed", logger.StackTrace(zap.String("user_id", oldSession.UserID), zap.String("old_session_id", oldSession.SessionID), zap.String("new_session_id", newSession.SessionID), zap.Error(err))...)
 		return err

@@ -71,7 +71,7 @@ func JSONBinderWithOptions(disallowUnknownFields bool) Binder {
 
 func jsonBinder(c *gin.Context, dst any, disallowUnknownFields bool) error {
 	if c.Request.Body == nil || c.Request.ContentLength == 0 {
-		return &validation.Error{Message: validation.ErrEmptyRequestBody, Code: contracterrors.CodeBadRequest}
+		return &validation.Error{Message: validation.ErrEmptyRequestBody, Kind: contracterrors.KindBadRequest, Reason: contracterrors.ReasonEmptyRequestBody, Code: contracterrors.CodeBadRequest}
 	}
 	decoder := json.NewDecoder(c.Request.Body)
 	if disallowUnknownFields {
@@ -83,7 +83,7 @@ func jsonBinder(c *gin.Context, dst any, disallowUnknownFields bool) error {
 	var extra any
 	// API 只接受一个 JSON 文档，避免拼接载荷隐藏尾随数据。
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return &validation.Error{Message: validation.ErrTrailingJSONBody, Code: contracterrors.CodeBadRequest}
+		return &validation.Error{Message: validation.ErrTrailingJSONBody, Kind: contracterrors.KindBadRequest, Reason: contracterrors.ReasonTrailingJSONBody, Code: contracterrors.CodeBadRequest}
 	}
 	return nil
 }

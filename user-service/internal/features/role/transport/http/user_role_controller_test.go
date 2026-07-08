@@ -184,7 +184,7 @@ func TestRoleControllerRemoveUserRole(t *testing.T) {
 
 	t.Run("missing user maps to not found envelope", func(t *testing.T) {
 		engine, commands, _ := newRoleHTTPTestHarness(t)
-		commands.EXPECT().RemoveUserRole(gomock.Any(), gomock.Any()).Return(nil, identity.ErrUserNotFound)
+		commands.EXPECT().RemoveUserRole(gomock.Any(), gomock.Any()).Return(nil, errors.Join(errors.New("lookup user"), identity.ErrUserNotFound))
 
 		recorder := performRoleHTTPRequest(t, engine, http.MethodDelete, "/api/v1/users/"+roleHTTPTestUserID+"/roles/"+roleHTTPTestRoleID, nil)
 		expectRoleEnvelope(t, recorder, http.StatusNotFound, false, contracterrors.CodeNotFound, messages.UserNotFound)
