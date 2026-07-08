@@ -2,8 +2,6 @@ module github.com/aegiscore/common
 
 go 1.26.5
 
-toolchain go1.26.5
-
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/dgraph-io/ristretto/v2 v2.4.0
@@ -31,7 +29,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0
 	go.uber.org/fx v1.23.0
 	go.uber.org/mock v0.6.0
-	go.uber.org/zap v1.26.0
+	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.53.0
 	golang.org/x/sync v0.21.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
