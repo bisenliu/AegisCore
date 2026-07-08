@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	reasonInvalidCredentials            contracterrors.Reason = "invalid_credentials"
+	reasonInvalidCredentials            contracterrors.Reason = "invalid_credentials" // #nosec G101 -- 错误 reason，不包含真实凭据。
 	reasonUserStatusRejected            contracterrors.Reason = "user_status_rejected"
 	reasonMissingSession                contracterrors.Reason = "missing_session"
-	reasonAuthTokenInvalid              contracterrors.Reason = "auth_token_invalid"
+	reasonAuthTokenInvalid              contracterrors.Reason = "auth_token_invalid" // #nosec G101 -- 错误 reason，不包含真实凭据。
 	reasonAuthSessionNotFound           contracterrors.Reason = "auth_session_not_found"
 	reasonAuthSessionMismatch           contracterrors.Reason = "auth_session_mismatch"
 	reasonPasswordChangeSessionNotFound contracterrors.Reason = "password_change_session_not_found"

@@ -36,7 +36,7 @@ const (
 
 const (
 	reasonPasswordKDFBusy  contracterrors.Reason = "password_kdf_busy"
-	messagePasswordKDFBusy string                = "认证服务繁忙，请稍后重试"
+	messagePasswordKDFBusy string                = "认证服务繁忙，请稍后重试" // #nosec G101 -- 用户提示文案，不包含真实凭据。
 )
 
 var (

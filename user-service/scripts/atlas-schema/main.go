@@ -7,15 +7,20 @@ import (
 
 	"entgo.io/ent/dialect"
 	entsqlschema "entgo.io/ent/dialect/sql/schema"
+
 	"github.com/aegiscore/user-service/ent/migrate"
 )
 
 func main() {
 	ctx := context.Background()
+	tables, err := tablesWithoutForeignKeys()
+	if err != nil {
+		log.Fatal(err)
+	}
 	ddl, err := entsqlschema.DDL(ctx, entsqlschema.DDLArgs{
 		Dialect: dialect.Postgres,
 		Version: "15.0.0",
-		Tables:  tablesWithoutForeignKeys(),
+		Tables:  tables,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -25,12 +30,13 @@ func main() {
 	}
 }
 
-func tablesWithoutForeignKeys() []*entsqlschema.Table {
-	tables := make([]*entsqlschema.Table, 0, len(migrate.Tables))
-	for _, table := range migrate.Tables {
-		clone := *table
-		clone.ForeignKeys = nil
-		tables = append(tables, &clone)
+func tablesWithoutForeignKeys() ([]*entsqlschema.Table, error) {
+	tables, err := entsqlschema.CopyTables(migrate.Tables)
+	if err != nil {
+		return nil, err
 	}
-	return tables
+	for _, table := range tables {
+		table.ForeignKeys = nil
+	}
+	return tables, nil
 }

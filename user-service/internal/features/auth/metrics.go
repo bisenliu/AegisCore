@@ -14,10 +14,10 @@ const (
 	authOperationsMetricName                 = "aegiscore_user_service_auth_operations_total"
 	authTokenVersionMismatchMetricName       = "aegiscore_user_service_auth_token_version_mismatches_total" // #nosec G101 -- 指标名称，不包含真实凭据。
 	authSessionPurgeSubmitMetricName         = "aegiscore_user_service_auth_session_purge_submit_failures_total"
-	authPasswordChangeConsumeMetricName      = "aegiscore_user_service_auth_password_change_session_consume_failures_total"
-	authPasswordChangeReuseMetricName        = "aegiscore_user_service_auth_password_change_session_reuse_rejections_total"
-	authPasswordChangeRevocationMetricName   = "aegiscore_user_service_auth_password_change_revocation_projection_failures_total"
-	authPasswordChangeCompensationMetricName = "aegiscore_user_service_auth_password_change_revocation_compensation_failures_total"
+	authPasswordChangeConsumeMetricName      = "aegiscore_user_service_auth_password_change_session_consume_failures_total"         // #nosec G101 -- 指标名称，不包含真实凭据。
+	authPasswordChangeReuseMetricName        = "aegiscore_user_service_auth_password_change_session_reuse_rejections_total"         // #nosec G101 -- 指标名称，不包含真实凭据。
+	authPasswordChangeRevocationMetricName   = "aegiscore_user_service_auth_password_change_revocation_projection_failures_total"   // #nosec G101 -- 指标名称，不包含真实凭据。
+	authPasswordChangeCompensationMetricName = "aegiscore_user_service_auth_password_change_revocation_compensation_failures_total" // #nosec G101 -- 指标名称，不包含真实凭据。
 	authOperationsMetricHelp                 = "Total number of auth operation results by fixed operation, result, and reason."
 	authTokenVersionMismatchMetricHelp       = "Total number of auth token version mismatches by fixed token source."
 	authSessionPurgeSubmitMetricHelp         = "Total number of auth session purge task submission failures."
