@@ -71,13 +71,19 @@ check_go_toolchain_version() {
     printf 'go.work toolchain\t%s\n' "$(toolchain_version "${repo_root}/go.work")"
     for mod in common/go.mod user-service/go.mod tools/openapi-convert/go.mod; do
       printf '%s go\t%s\n' "${mod}" "$(go_mod_version "${repo_root}/${mod}")"
-      printf '%s toolchain\t%s\n' "${mod}" "$(toolchain_version "${repo_root}/${mod}")"
     done
     for workflow in .github/workflows/ci.yml .github/workflows/lint.yml; do
       printf '%s GO_VERSION\t%s\n' "${workflow}" "$(workflow_go_version "${repo_root}/${workflow}")"
       printf '%s GOTOOLCHAIN\t%s\n' "${workflow}" "$(workflow_gotoolchain_version "${repo_root}/${workflow}")"
     done
   )
+
+  for mod in common/go.mod user-service/go.mod tools/openapi-convert/go.mod; do
+    version="$(toolchain_version "${repo_root}/${mod}")"
+    if [[ -n "${version}" && "${version}" != "${expected}" ]]; then
+      report "${mod} toolchain has Go version ${version}; expected ${expected}"
+    fi
+  done
 }
 
 check_go_toolchain_version

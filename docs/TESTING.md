@@ -99,7 +99,7 @@ require.True(t, strings.Contains(err.Error(), "timeout"))
 - 禁止 auth、role 直接导入 user domain。
 - 禁止 shared package 导入 feature package。
 - 禁止 application/domain/infrastructure 导入 feature HTTP transport。
-- 检查 `go.work`、各 `go.mod` 和 GitHub Actions 的 Go toolchain 版本一致。
+- 检查 `go.work`、各 `go.mod` 的 `go` 版本和 GitHub Actions 的 Go toolchain 版本一致；`go.mod` 中存在 `toolchain` 行时也必须一致。
 - 检查 OpenAPI 和 Ent 生成物 drift。
 - 检查 `openspec/specs/`、`openspec/changes/` 和 `docs/opsx/` 下 Markdown 是否保留默认英文模板内容。
 

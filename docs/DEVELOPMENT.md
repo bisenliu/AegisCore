@@ -15,12 +15,12 @@ Go 工具链使用固定版本声明和 Renovate 升级 PR/MR 治理。CI 合并
 
 当前固定声明位置：
 
-- `go.work` 的 `toolchain go1.x.y`。
-- 各 Go module 的 `go.mod` 中 `toolchain go1.x.y`。
+- `go.work` 的 `go 1.x.y` 与 `toolchain go1.x.y`。
+- 各 Go module 的 `go.mod` 中 `go 1.x.y`。
 - GitHub Actions workflow 的 `GO_VERSION` 和 `GOTOOLCHAIN`。
 - 未来 GitLab CI 的 `.gitlab-ci.yml` 或 `.gitlab/ci/*.yml` 中 `GO_VERSION` 和 `GOTOOLCHAIN`。
 
-`go 1.x` 表示模块语言和语义基线；`toolchain go1.x.y`、`GO_VERSION` 和 `GOTOOLCHAIN` 表示实际使用的 Go patch 工具链。所有位置必须保持一致。
+`go 1.x.y` 表示模块语言和语义基线以及最低 Go patch 版本；`go.work` 的 `toolchain go1.x.y`、`GO_VERSION` 和 `GOTOOLCHAIN` 表示实际使用的 Go patch 工具链。所有必需位置必须保持一致。Go module 的 `toolchain go1.x.y` 行由 Go/Renovate 工具维护，存在时必须与上述版本一致。
 
 Go patch、minor 和 major 升级由 Renovate 根据仓库根目录 `renovate.json` 自动创建 PR/MR：
 
