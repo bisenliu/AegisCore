@@ -29,10 +29,10 @@ jobs:
           - user-service
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           # 与 go.work / go.mod 中声明的工具链基线保持一致。
           go-version: ${{ env.GO_VERSION }}
@@ -42,7 +42,7 @@ jobs:
             user-service/go.sum
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           # 固定版本，避免本地和 CI 因 golangci-lint 版本漂移产生不同结果。
           version: v2.12.2
