@@ -79,6 +79,21 @@
       "automerge": false
     },
     {
+      "description": "Refresh Go workspace checksums after Go module updates.",
+      "matchManagers": [
+        "gomod"
+      ],
+      "postUpgradeTasks": {
+        "commands": [
+          "go list ./common/... ./user-service/... ./tools/openapi-convert/..."
+        ],
+        "fileFilters": [
+          "go.work.sum"
+        ],
+        "executionMode": "branch"
+      }
+    },
+    {
       "description": "Keep GitHub Actions current, including major upgrades.",
       "matchManagers": [
         "github-actions"
