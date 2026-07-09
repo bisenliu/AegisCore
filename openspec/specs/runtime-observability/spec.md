@@ -28,7 +28,7 @@
 
 ### Requirement: OpenAPI 文档
 
-系统 MUST 暴露和生成 OpenAPI 3 文档，覆盖认证会话、用户资料、角色管理、权限目录、RBAC 授权保护接口和健康检查。OpenAPI 文档 MUST 与 user-service 当前 HTTP API 的响应 shape 保持一致，尤其是登录接口 MUST 同步表达普通登录和强制改密登录两种 envelope 语义。
+系统 MUST 暴露和生成 OpenAPI 3 文档，覆盖认证会话、用户资料、角色管理、权限目录、RBAC 授权保护接口和健康检查。OpenAPI 文档 MUST 与 user-service 当前 HTTP API 的响应 shape 保持一致，尤其是登录接口 MUST 同步表达普通登录和强制改密登录两种 envelope 语义。运行时 OpenAPI UI MUST 使用 `github.com/swaggo/files/v2` 的 embedded `fs.FS` 提供 Swagger UI 静态资源，MUST NOT 保留 `github.com/swaggo/files` v1 import、旧 handler fallback 或 v1/v2 双写兼容分支。
 
 #### Scenario: 访问 OpenAPI
 
@@ -49,6 +49,13 @@
 
 - **WHEN** user-service 暴露 OpenAPI UI、JSON 或 docs redirect
 - **THEN** 路由 MUST 由 `user-service/internal/router/openapi.go` 拥有，且健康检查或 metrics endpoint MUST NOT 被当作 `/api/v1` 下的 feature 业务 API
+
+#### Scenario: Swagger UI 使用 v2 静态资源
+
+- **WHEN** user-service 注册 OpenAPI UI 路由
+- **THEN** `/openapi/*any` MUST 使用 `github.com/swaggo/files/v2` 的 embedded `fs.FS` 提供 Swagger UI 静态资源
+- **AND** 生产代码 MUST NOT import `github.com/swaggo/files` v1 模块路径
+- **AND** 生产代码 MUST NOT 保留 v1 handler fallback、`gin-swagger` wrapper、版本探测分支或旧静态资源兼容路径
 
 #### Scenario: 登录接口文档表达 envelope 分支
 
@@ -543,4 +550,3 @@ OpenAPI 转换和生成链路相关工具测试 MUST 使用语义化断言验证
 - **WHEN** 执行观测资产或 metrics load 验证脚本
 - **THEN** 验证 MUST 覆盖强制改密会话消费失败、重复消费拒绝、撤销投影失败和补偿失败指标的 presence 或 PromQL 查询
 - **AND** 指标缺失或 PromQL drift MUST 能被验证流程发现
-

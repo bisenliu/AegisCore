@@ -198,7 +198,7 @@
 
 ### Requirement: Runtime primitive 基础
 
-系统 MUST 在 `common/runtime/` 中维护配置加载、数据存储、logger、metrics、tracing、scheduler、workerpool、localcache、Redis key 和 timezone 等 runtime primitive。`common/runtime/config` MUST 将 `local_cache` 表达为通用具名缓存实例集合，并 MUST NOT 固定 user-service 的 `auth_token_version`、`rbac_user_roles` 或其他业务缓存名。
+系统 MUST 在 `common/runtime/` 中维护配置加载、数据存储、logger、metrics、tracing、scheduler、workerpool、localcache、Redis key 和 timezone 等 runtime primitive。`common/runtime/config` MUST 将 `local_cache` 表达为通用具名缓存实例集合，并 MUST NOT 固定 user-service 的 `auth_token_version`、`rbac_user_roles` 或其他业务缓存名。`common/runtime/config` MUST 使用 `github.com/go-viper/mapstructure/v2` 作为配置反序列化依赖，并 MUST NOT 保留旧版 `github.com/mitchellh/mapstructure` 导入、兼容层或旧行为 fallback。
 
 #### Scenario: 服务启动加载配置
 
@@ -247,6 +247,13 @@
 
 - **WHEN** 定时任务具有多实例副作用
 - **THEN** 任务 MUST 声明锁策略，锁 TTL MUST 为正值，长任务 SHOULD 具备续租策略
+
+#### Scenario: mapstructure v2 配置反序列化
+
+- **WHEN** `common/runtime/config` 将 Viper 读取到的配置反序列化为 `Config`
+- **THEN** 系统 MUST 使用 `github.com/go-viper/mapstructure/v2` 提供的 decode hook 和 decode 配置能力
+- **AND** duration、slice、具名 Postgres、具名 Redis 和具名 `local_cache` 配置 MUST 按 v2 标准行为解析
+- **AND** 系统 MUST NOT 导入 `github.com/mitchellh/mapstructure` 或保留面向旧版行为的兼容代码
 
 ### Requirement: scheduler 包内结构保持稳定契约
 
@@ -947,4 +954,3 @@ cmd 与 Ent schema 测试 MUST 可以直接使用标准 `testify/require` 与 `t
 - **WHEN** 用户身份错误迁移为应用错误
 - **THEN** `common/` MUST 只提供业务中立的错误契约、应用错误构造和 response 渲染 helper
 - **AND** 系统 MUST NOT 在 `common` 或用户 feature 外新增用户错误到 HTTP 响应的全局映射表
-
