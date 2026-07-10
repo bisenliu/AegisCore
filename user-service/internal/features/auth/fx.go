@@ -58,11 +58,8 @@ var Module = fx.Module("feature-auth",
 		newAuthMetrics,
 		fx.Annotate(
 			authpostgres.NewCredentialStore,
-			fx.As(new(authapplication.UserCredentialStore)),
-		),
-		fx.Annotate(
-			authpostgres.NewCredentialStore,
 			fx.As(new(authapplication.UserTokenVersionStore)),
+			fx.As(new(authapplication.UserCredentialStore)),
 		),
 		fx.Annotate(
 			authredis.NewSessionStore,
