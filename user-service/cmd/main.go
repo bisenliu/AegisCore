@@ -58,9 +58,9 @@ type rootCommandDependencies struct {
 func defaultRootCommandDependencies() rootCommandDependencies {
 	return rootCommandDependencies{
 		appFactory:             newBootstrapLifecycleApp,
-		seedRunner:             runRBACSeedCommand,
-		assignSuperAdminRunner: runAssignSuperAdminCommand,
-		createSuperAdminRunner: runCreateSuperAdminCommand,
+		seedRunner:             newRBACSeedRunner(defaultRBACSeedDependencies),
+		assignSuperAdminRunner: newRBACAssignSuperAdminRunner(defaultRBACSeedDependencies),
+		createSuperAdminRunner: newRBACCreateSuperAdminRunner(defaultRBACSeedDependencies),
 	}
 }
 
@@ -83,6 +83,24 @@ func (deps rootCommandDependencies) withDefaults() rootCommandDependencies {
 
 func newBootstrapLifecycleApp(configPath string) lifecycleApp {
 	return bootstrap.NewApp(configPath)
+}
+
+func newRBACSeedRunner(newDependencies rbacSeedDependencyFactory) rbacSeedRunner {
+	return func(ctx context.Context, configPath string, opts rbacSeedOptions) error {
+		return runRBACSeedCommand(ctx, configPath, opts, newDependencies)
+	}
+}
+
+func newRBACAssignSuperAdminRunner(newDependencies rbacSeedDependencyFactory) rbacAssignSuperAdminRunner {
+	return func(ctx context.Context, configPath string, userID uuid.UUID) error {
+		return runAssignSuperAdminCommand(ctx, configPath, userID, newDependencies)
+	}
+}
+
+func newRBACCreateSuperAdminRunner(newDependencies rbacSeedDependencyFactory) rbacCreateSuperAdminRunner {
+	return func(ctx context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
+		return runCreateSuperAdminCommand(ctx, configPath, opts, newDependencies)
+	}
 }
 
 func main() {

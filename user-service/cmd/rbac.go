@@ -78,10 +78,10 @@ type rbacSeedDependencies struct {
 	passwordService rbacPasswordHasher
 }
 
-var newRBACSeedDependencies = defaultRBACSeedDependencies
+type rbacSeedDependencyFactory func(context.Context, string) (rbacSeedDependencies, func() error, error)
 
-func runRBACSeedCommand(ctx context.Context, configPath string, opts rbacSeedOptions) (err error) {
-	deps, cleanup, err := newRBACSeedDependencies(ctx, configPath)
+func runRBACSeedCommand(ctx context.Context, configPath string, opts rbacSeedOptions, newDependencies rbacSeedDependencyFactory) (err error) {
+	deps, cleanup, err := newDependencies(ctx, configPath)
 	if err != nil {
 		return err
 	}
@@ -97,8 +97,8 @@ func runRBACSeedCommand(ctx context.Context, configPath string, opts rbacSeedOpt
 	return nil
 }
 
-func runAssignSuperAdminCommand(ctx context.Context, configPath string, userID uuid.UUID) (err error) {
-	deps, cleanup, err := newRBACSeedDependencies(ctx, configPath)
+func runAssignSuperAdminCommand(ctx context.Context, configPath string, userID uuid.UUID, newDependencies rbacSeedDependencyFactory) (err error) {
+	deps, cleanup, err := newDependencies(ctx, configPath)
 	if err != nil {
 		return err
 	}
@@ -118,8 +118,8 @@ func runAssignSuperAdminCommand(ctx context.Context, configPath string, userID u
 	return nil
 }
 
-func runCreateSuperAdminCommand(ctx context.Context, configPath string, opts rbacCreateSuperAdminOptions) (err error) {
-	deps, cleanup, err := newRBACSeedDependencies(ctx, configPath)
+func runCreateSuperAdminCommand(ctx context.Context, configPath string, opts rbacCreateSuperAdminOptions, newDependencies rbacSeedDependencyFactory) (err error) {
+	deps, cleanup, err := newDependencies(ctx, configPath)
 	if err != nil {
 		return err
 	}
