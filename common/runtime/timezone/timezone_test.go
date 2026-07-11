@@ -58,6 +58,7 @@ func assertTimezone(t *testing.T, want string) {
 func withIsolatedTimezone(t *testing.T, fn func()) {
 	t.Helper()
 
+	// timezone 初始化会修改进程级 TZ、time.Local 和包级 state；相关测试必须串行隔离，不能使用 t.Parallel。
 	oldLocal := time.Local
 	oldTZ, hadTZ := os.LookupEnv("TZ")
 	if hadTZ {
@@ -65,11 +66,17 @@ func withIsolatedTimezone(t *testing.T, fn func()) {
 	} else {
 		t.Setenv("TZ", "")
 	}
-	state = timezoneState{}
+	resetTimezoneStateForTest()
 	t.Cleanup(func() {
-		state = timezoneState{}
+		resetTimezoneStateForTest()
 		time.Local = oldLocal
 	})
 
 	fn()
+}
+
+func resetTimezoneStateForTest() {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	state.initialized = false
 }
