@@ -1,12 +1,15 @@
 package providers
 
 import (
+	"errors"
+
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/datastore"
+	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 	"github.com/aegiscore/common/runtime/resources"
 )
 
@@ -17,6 +20,7 @@ type NamedRedisParams struct {
 	Lifecycle fx.Lifecycle
 	Config    *config.Config
 	Log       *zap.Logger
+	Trace     *commontracing.Provider
 }
 
 // NamedRedisClients 包含 user-service 使用的具名 cache Redis 客户端。
@@ -28,7 +32,16 @@ type NamedRedisClients struct {
 
 // ProvideRedisClients 根据共享 datastore 配置供应具名 cache Redis 依赖。
 func ProvideRedisClients(params NamedRedisParams) (NamedRedisClients, error) {
-	cacheRedis, err := datastore.NewRedisClient(params.Lifecycle, params.Config, params.Log, resources.NameCacheRedis)
+	if params.Trace == nil || params.Trace.TracerProvider() == nil {
+		return NamedRedisClients{}, errors.New("redis tracing provider is required")
+	}
+	cacheRedis, err := datastore.NewRedisClient(
+		params.Lifecycle,
+		params.Config,
+		params.Log,
+		resources.NameCacheRedis,
+		datastore.WithRedisTracerProvider(params.Trace.TracerProvider()),
+	)
 	if err != nil {
 		return NamedRedisClients{}, err
 	}

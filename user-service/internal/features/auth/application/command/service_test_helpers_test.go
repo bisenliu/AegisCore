@@ -33,6 +33,10 @@ type authCommandFixture struct {
 	sessions    *MockLifecycle
 }
 
+type noopTokenVersionInvalidator struct{}
+
+func (noopTokenVersionInvalidator) InvalidateTokenVersion(string) error { return nil }
+
 func newAuthCommandFixture(t testing.TB, authCfg config.AuthConfig, metrics authapplication.Metrics) *authCommandFixture {
 	t.Helper()
 	return newAuthCommandFixtureWithController(gomock.NewController(t), authCfg, metrics)

@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	minPort = 1
-	maxPort = 65535
+	minPort               = 1
+	maxPort               = 65535
+	minProductionJWTBytes = 32
 )
 
 // ValidationError 聚合配置校验失败，使启动阶段能一次性报告全部非法字段。
@@ -109,6 +110,8 @@ func (c Config) validateAuth() []error {
 	} else if c.isProductionLike() {
 		if isInsecureJWTSecret(strings.ToLower(secret)) {
 			errs = append(errs, configFieldError("auth.jwt.secret", "must not use a development default in production-like environments"))
+		} else if len([]byte(secret)) < minProductionJWTBytes {
+			errs = append(errs, configFieldError("auth.jwt.secret", "must be at least 32 bytes in production-like environments"))
 		}
 	}
 	errs = append(errs, validatePositiveDuration("auth.jwt.access_token_ttl", c.Auth.JWT.AccessTokenTTL)...)

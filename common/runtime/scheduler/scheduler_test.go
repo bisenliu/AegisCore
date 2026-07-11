@@ -171,16 +171,15 @@ func TestValidateJobUsesDefaultRenewTimeout(t *testing.T) {
 	require.Equal(t, defaultLockRenewTimeout, cfg.Lock.RenewTimeout)
 }
 
-func TestRenewFailureCancelsTaskAndMarksFailed(t *testing.T) {
+func TestRenewFailureCancelsTaskWithoutTimeoutAndMarksFailed(t *testing.T) {
 	renewErr := errors.New("renew failed")
 	locker := &recordingLocker{lock: &recordingLock{renewErr: renewErr}}
 	s := newTestScheduler(t, Config{Locker: locker})
 	taskCanceled := make(chan struct{})
 
 	cfg := JobConfig{
-		Key:     "renew-failure-job",
-		Spec:    "@every 1s",
-		Timeout: time.Second,
+		Key:  "renew-failure-job",
+		Spec: "@every 1s",
 		Lock: LockPolicy{
 			Enabled:       true,
 			TTL:           90 * time.Millisecond,
@@ -190,9 +189,13 @@ func TestRenewFailureCancelsTaskAndMarksFailed(t *testing.T) {
 			RenewTimeout:  20 * time.Millisecond,
 		},
 		Task: func(ctx context.Context) error {
-			<-ctx.Done()
-			close(taskCanceled)
-			return nil
+			select {
+			case <-ctx.Done():
+				close(taskCanceled)
+				return nil
+			case <-time.After(200 * time.Millisecond):
+				return errors.New("task context was not canceled")
+			}
 		},
 	}
 

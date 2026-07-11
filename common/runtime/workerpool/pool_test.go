@@ -192,13 +192,24 @@ func TestPoolStopWaitsForAcceptedTasks(t *testing.T) {
 
 func TestPoolStopDoesNotWaitForBlockedSubmitLock(t *testing.T) {
 	pool := newTestPool(t, Options{Name: "test-stop-during-blocked-submit", Workers: 1})
-	release := make(chan struct{})
-	require.NoError(t, pool.Submit(context.Background(), Task{Name: "running", Run: waitTask(release)}))
+	releaseRunning := make(chan struct{})
+	require.NoError(t, pool.Submit(context.Background(), Task{Name: "running", Run: waitTask(releaseRunning)}))
 	waitForPool(t, pool, func(stats Stats) bool { return stats.Running == 1 })
 
+	acceptedStarted := make(chan struct{})
+	releaseAccepted := make(chan struct{})
+	acceptedDone := make(chan struct{})
 	submitDone := make(chan error, 1)
 	go func() {
-		submitDone <- pool.Submit(context.Background(), Task{Name: "waiting", Run: func(context.Context) error { return nil }})
+		submitDone <- pool.Submit(context.Background(), Task{
+			Name: "waiting",
+			Run: func(context.Context) error {
+				close(acceptedStarted)
+				<-releaseAccepted
+				close(acceptedDone)
+				return nil
+			},
+		})
 	}()
 	waitForPool(t, pool, func(stats Stats) bool { return stats.Waiting == 1 })
 
@@ -206,19 +217,32 @@ func TestPoolStopDoesNotWaitForBlockedSubmitLock(t *testing.T) {
 	go func() {
 		stopDone <- pool.Stop(context.Background())
 	}()
-	close(release)
+	waitForPool(t, pool, func(stats Stats) bool { return stats.Closed })
+	close(releaseRunning)
+
+	var submitErr error
+	select {
+	case err := <-submitDone:
+		submitErr = err
+	case <-time.After(time.Second):
+		t.Fatal("blocked Submit did not return")
+	}
+	if submitErr == nil {
+		waitForCount(t, acceptedStarted, 1)
+		probeCtx, cancelProbe := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		require.ErrorIs(t, pool.Stop(probeCtx), context.DeadlineExceeded)
+		cancelProbe()
+		close(releaseAccepted)
+		waitForCount(t, acceptedDone, 1)
+	} else {
+		require.ErrorIs(t, submitErr, ErrClosed)
+	}
 
 	select {
 	case err := <-stopDone:
 		require.NoError(t, err)
 	case <-time.After(time.Second):
 		t.Fatal("Stop did not return")
-	}
-	select {
-	case err := <-submitDone:
-		require.True(t, err == nil || errors.Is(err, ErrClosed), "blocked Submit err = %v, want nil or ErrClosed", err)
-	case <-time.After(time.Second):
-		t.Fatal("blocked Submit did not return")
 	}
 }
 
@@ -238,7 +262,34 @@ func TestPoolStopHonorsContextTimeout(t *testing.T) {
 
 	err = pool.Stop(ctx)
 
-	require.Error(t, err)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NoError(t, pool.Stop(context.Background()))
+}
+
+func TestPoolRepeatedStopWaitsForSharedDrainCompletion(t *testing.T) {
+	pool := newTestPool(t, Options{Name: "test-repeated-stop", Workers: 1})
+	started := make(chan struct{})
+	release := make(chan struct{})
+	require.NoError(t, pool.Submit(context.Background(), Task{
+		Name: "ignores-cancellation",
+		Run: func(context.Context) error {
+			close(started)
+			<-release
+			return nil
+		},
+	}))
+	waitForCount(t, started, 1)
+
+	firstCtx, cancelFirst := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancelFirst()
+	require.ErrorIs(t, pool.Stop(firstCtx), context.DeadlineExceeded)
+
+	secondCtx, cancelSecond := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancelSecond()
+	require.ErrorIs(t, pool.Stop(secondCtx), context.DeadlineExceeded)
+
+	close(release)
+	require.NoError(t, pool.Stop(context.Background()))
 }
 
 func newTestPool(t *testing.T, opts Options) *Pool {

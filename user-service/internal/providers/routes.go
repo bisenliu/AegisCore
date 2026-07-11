@@ -20,18 +20,17 @@ import (
 type RegisterRouteParams struct {
 	fx.In
 
-	Config  *config.Config
-	Log     *zap.Logger
-	Engine  *gin.Engine
-	JWT     *commonauth.JWTService
-	Health  router.HealthChecks
-	Metrics *commonmetrics.Provider
-	// TokenVersions 是可选依赖，使公开路由和测试可以在不提供撤销能力时挂载中间件。
-	TokenVersions        commonauth.TokenVersionValidator `optional:"true"`
+	Config               *config.Config
+	Log                  *zap.Logger
+	Engine               *gin.Engine
+	JWT                  *commonauth.JWTService
+	Health               router.HealthChecks
+	Metrics              *commonmetrics.Provider
+	TokenVersions        commonauth.TokenVersionValidator
 	Authorizer           permissionauthorization.Authorizer
 	AuthController       *authhttp.AuthController
-	PermissionController *permissionhttp.PermissionController `optional:"true"`
-	RoleController       *rolehttp.RoleController             `optional:"true"`
+	PermissionController *permissionhttp.PermissionController
+	RoleController       *rolehttp.RoleController
 	UserController       *userhttp.UserController
 }
 

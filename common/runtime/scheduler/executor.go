@@ -98,12 +98,16 @@ func (s *Scheduler) acquireJobLock(cfg JobConfig, state *jobRunState) bool {
 
 // prepareJobRun 创建任务上下文并按锁策略启动续租。
 func (s *Scheduler) prepareJobRun(cfg JobConfig, state *jobRunState) context.Context {
-	jobCtx := s.root
+	var (
+		jobCtx context.Context
+		cancel context.CancelFunc
+	)
 	if cfg.Timeout > 0 {
-		var cancel context.CancelFunc
 		jobCtx, cancel = context.WithTimeout(s.root, cfg.Timeout)
-		state.jobCancel = cancel
+	} else {
+		jobCtx, cancel = context.WithCancel(s.root)
 	}
+	state.jobCancel = cancel
 	if state.lock != nil && cfg.Lock.AutoRenew {
 		state.stopRenew, state.renewErrCh = s.startRenew(jobCtx, state.jobCancel, cfg, state.lock)
 	}

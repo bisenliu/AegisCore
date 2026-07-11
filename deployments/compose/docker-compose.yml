@@ -38,6 +38,7 @@ x-user-service-environment: &user-service-environment
 
 services:
   postgres:
+    # 本地开发跟随最新 PostgreSQL 镜像；正式环境建议固定具体版本或镜像 digest，避免上游变更影响发布可重复性。
     image: postgres:latest
     environment:
       POSTGRES_USER: aegiscore

@@ -39,12 +39,11 @@ type lifecycle struct {
 }
 
 // NewLifecycle 构造认证会话生命周期组件。
-func NewLifecycle(users authapplication.UserTokenVersionStore, tokenVersions authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, maxActiveSessionsPerUser int, localTokenVersions ...authvalidators.TokenVersionLocalInvalidator) Lifecycle {
-	lifecycle := &lifecycle{users: users, tokenVersions: tokenVersions, sessions: sessions, passwordChangeSessions: passwordChangeSessions, maxActiveSessionsPerUser: maxActiveSessionsPerUser}
-	if len(localTokenVersions) > 0 {
-		lifecycle.localTokenVersions = localTokenVersions[0]
+func NewLifecycle(users authapplication.UserTokenVersionStore, tokenVersions authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, maxActiveSessionsPerUser int, localTokenVersions authvalidators.TokenVersionLocalInvalidator) Lifecycle {
+	if localTokenVersions == nil {
+		panic("token version local invalidator is required")
 	}
-	return lifecycle
+	return &lifecycle{users: users, tokenVersions: tokenVersions, sessions: sessions, passwordChangeSessions: passwordChangeSessions, maxActiveSessionsPerUser: maxActiveSessionsPerUser, localTokenVersions: localTokenVersions}
 }
 
 // CreateTokenSession 为新签发的 token pair 持久化 refresh 会话元数据。
@@ -143,11 +142,9 @@ func (m *lifecycle) CurrentTokenVersion(ctx context.Context, userID string) (int
 }
 
 func (m *lifecycle) invalidateLocalTokenVersion(ctx context.Context, userID string) error {
-	if m.localTokenVersions != nil {
-		if err := m.localTokenVersions.InvalidateTokenVersion(userID); err != nil {
-			logger.Warn(ctx, "invalidate local token version cache failed", zap.String("user_id", userID), zap.Error(err))
-			return err
-		}
+	if err := m.localTokenVersions.InvalidateTokenVersion(userID); err != nil {
+		logger.Warn(ctx, "invalidate local token version cache failed", zap.String("user_id", userID), zap.Error(err))
+		return err
 	}
 	return nil
 }

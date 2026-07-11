@@ -32,6 +32,7 @@ func (s *permissionCommandService) setPermissionActive(ctx context.Context, perm
 	}
 	if err := s.notifyPolicyChanged(ctx, "permission_active_changed"); err != nil {
 		logger.Error(ctx, "refresh rbac policy after permission active state change failed", logger.StackTrace(zap.String("permission_id", permissionID.String()), zap.Bool("active", active), zap.Error(err))...)
+		return err
 	}
 	return nil
 }

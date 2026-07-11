@@ -64,7 +64,6 @@ func HTTPServerMetrics(options HTTPMetricsOptions) gin.HandlerFunc {
 			recorder.inFlight.WithLabelValues(method, inFlightRoute).Dec()
 
 			if options.SkipResult != nil && options.SkipResult(c) {
-				recorder.inFlight.DeleteLabelValues(method, inFlightRoute)
 				return
 			}
 

@@ -16,6 +16,14 @@ import (
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
+const dummyPasswordHash = "$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" // #nosec G101 -- 固定 dummy hash 仅用于隐藏用户存在性，不对应真实凭据。
+
+// PasswordService 定义凭据校验对密码 KDF 的最小依赖面。
+type PasswordService interface {
+	HashContext(ctx context.Context, plain string) (string, error)
+	VerifyContext(ctx context.Context, plain string, encodedHash string) (bool, error)
+}
+
 // Verifier 校验登录凭证并完成强制改密。
 type Verifier interface {
 	VerifyPassword(ctx context.Context, username string, plainPassword string) (*authdomain.UserCredential, error)
@@ -24,11 +32,11 @@ type Verifier interface {
 
 type verifier struct {
 	repo            authapplication.UserCredentialStore
-	passwordService *password.Service
+	passwordService PasswordService
 }
 
 // NewVerifier 构造凭据校验组件。
-func NewVerifier(repo authapplication.UserCredentialStore, passwordService *password.Service) Verifier {
+func NewVerifier(repo authapplication.UserCredentialStore, passwordService PasswordService) Verifier {
 	return &verifier{repo: repo, passwordService: passwordService}
 }
 
@@ -37,6 +45,14 @@ func (v *verifier) VerifyPassword(ctx context.Context, username string, plainPas
 	credential, err := v.repo.GetByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, identity.ErrUserNotFound) {
+			if _, verifyErr := v.passwordService.VerifyContext(ctx, plainPassword, dummyPasswordHash); verifyErr != nil {
+				if errors.Is(verifyErr, password.ErrPasswordKDFBusy) {
+					fields := append([]zap.Field{zap.String("username", username), zap.Error(verifyErr)}, authctx.ClientContextFields(ctx)...)
+					logger.Warn(ctx, "password kdf busy", fields...)
+					return nil, verifyErr
+				}
+				logger.Error(ctx, "verify dummy login password failed", logger.StackTrace(zap.String("username", username), zap.Error(verifyErr))...)
+			}
 			fields := append([]zap.Field{zap.String("username", username)}, authctx.ClientContextFields(ctx)...)
 			logger.Warn(ctx, "login user not found", fields...)
 			return nil, authdomain.ErrInvalidCredentials

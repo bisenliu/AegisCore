@@ -9,6 +9,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
 	commonauth "github.com/aegiscore/common/security/auth"
+	"github.com/aegiscore/common/security/password"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
@@ -74,7 +75,7 @@ var Module = fx.Module("feature-auth",
 		),
 		newTokenVersionLocalCache,
 		newTokenVersionValidator,
-		authcredentials.NewVerifier,
+		newCredentialVerifier,
 		authtokens.NewIssuer,
 		newAuthSessionLifecycle,
 		authcommand.NewLoginUseCase,
@@ -85,6 +86,10 @@ var Module = fx.Module("feature-auth",
 		authhttp.NewAuthController,
 	),
 )
+
+func newCredentialVerifier(store authapplication.UserCredentialStore, passwordService *password.Service) authcredentials.Verifier {
+	return authcredentials.NewVerifier(store, passwordService)
+}
 
 func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, tokenVersionCache authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, tokenVersions authvalidators.TokenVersionLocalInvalidator, cfg *config.Config) authsessions.Lifecycle {
 	return authsessions.NewLifecycle(users, tokenVersionCache, sessions, passwordChangeSessions, cfg.Auth.MaxActiveSessionsPerUser, tokenVersions)

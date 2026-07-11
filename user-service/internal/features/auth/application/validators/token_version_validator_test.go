@@ -256,7 +256,7 @@ func TestTokenVersionValidatorInvalidateReloads(t *testing.T) {
 
 }
 
-func TestTokenVersionValidatorInvalidateReturnsDeleteError(t *testing.T) {
+func TestTokenVersionValidatorInvalidateAfterCacheCloseIsNoop(t *testing.T) {
 	cache, err := localcache.New[string, int64](localcache.Config[string]{
 		Name:        "auth_token_version_invalidate_error_test",
 		Capacity:    100,
@@ -272,8 +272,7 @@ func TestTokenVersionValidatorInvalidateReturnsDeleteError(t *testing.T) {
 
 	validator := NewCachingValidator(cache)
 	err = validator.InvalidateTokenVersion(tokenVersionTestUserID.String())
-	require.ErrorIs(t, err, localcache.ErrClosed,
-		"err = %v, want ErrClosed", err)
+	require.NoError(t, err)
 }
 
 func newTestTokenVersionValidator(t *testing.T, users *MockUserTokenVersionStore, tokenCache *MockTokenVersionCache, ttl time.Duration) *TokenVersionValidator {

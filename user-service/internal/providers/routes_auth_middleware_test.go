@@ -20,6 +20,8 @@ import (
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
+	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
+	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 )
 
@@ -69,7 +71,9 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			LogoutAll:      &routeAuthAuthUseCases{},
 			Validator:      validator,
 		}),
-		UserController: userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
+		PermissionController: permissionhttp.NewPermissionController(nil, nil, validator),
+		RoleController:       rolehttp.NewRoleController(nil, nil, validator),
+		UserController:       userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
 	})
 	require.NoError(t, err)
 	registerRouteTestRuntimeMetrics(t, cfg, metricsProvider)

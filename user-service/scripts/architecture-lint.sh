@@ -86,7 +86,30 @@ check_go_toolchain_version() {
   done
 }
 
+check_atlas_postgres_version() {
+  # 当前本地交付配置默认跟随最新 PostgreSQL；正式环境建议固定具体版本或镜像 digest。
+  local expected="latest"
+  local dockerfile="${repo_root}/deployments/docker/atlas-postgres-pgtrgm.Dockerfile"
+  local migrate_script="${service_dir}/scripts/migrate-diff.sh"
+  local atlas_config="${service_dir}/migrations/atlas.hcl"
+  local compose_file="${repo_root}/deployments/compose/docker-compose.yml"
+
+  if ! rg -q "^FROM postgres:${expected}$" "${dockerfile}"; then
+    report "Atlas pg_trgm Dockerfile must use postgres:${expected}"
+  fi
+  if ! rg -q "^ATLAS_DEV_IMAGE=\"aegiscore-atlas-postgres-pgtrgm:${expected}\"$" "${migrate_script}"; then
+    report "migration diff script must build aegiscore-atlas-postgres-pgtrgm:${expected}"
+  fi
+  if ! rg -q "^[[:space:]]+default = \"docker\\+postgres://_/aegiscore-atlas-postgres-pgtrgm:${expected}/dev\\?search_path=public\"$" "${atlas_config}"; then
+    report "Atlas dev URL must use aegiscore-atlas-postgres-pgtrgm:${expected}"
+  fi
+  if ! rg -q "^[[:space:]]+image: postgres:${expected}$" "${compose_file}"; then
+    report "Compose PostgreSQL service must use postgres:${expected}"
+  fi
+}
+
 check_go_toolchain_version
+check_atlas_postgres_version
 
 if [[ -d "${service_dir}/internal/features/permission/application/rbacbaseline" ]]; then
   report "old permission/application/rbacbaseline package still exists"

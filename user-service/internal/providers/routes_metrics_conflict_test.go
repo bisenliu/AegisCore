@@ -11,6 +11,8 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
+	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
+	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 )
 
@@ -27,12 +29,13 @@ func TestRegisterRoutesRejectsMetricsPathConflict(t *testing.T) {
 	}
 	validator := mustRouteTestValidator(t)
 	err := RegisterRoutes(RegisterRouteParams{
-		Config:     cfg,
-		Log:        zap.NewNop(),
-		Engine:     gin.New(),
-		JWT:        commonauth.NewJWTService(cfg.Auth),
-		Authorizer: &routeAuthorizer{allowed: true},
-		Metrics:    newRouteTestMetricsProvider(t, cfg),
+		Config:        cfg,
+		Log:           zap.NewNop(),
+		Engine:        gin.New(),
+		JWT:           commonauth.NewJWTService(cfg.Auth),
+		TokenVersions: &routeTokenVersionValidator{version: 1},
+		Authorizer:    &routeAuthorizer{allowed: true},
+		Metrics:       newRouteTestMetricsProvider(t, cfg),
 		AuthController: authhttp.NewAuthController(authhttp.AuthControllerParams{
 			Login:          &routeAuthAuthUseCases{},
 			Refresh:        &routeAuthAuthUseCases{},
@@ -41,7 +44,9 @@ func TestRegisterRoutesRejectsMetricsPathConflict(t *testing.T) {
 			LogoutAll:      &routeAuthAuthUseCases{},
 			Validator:      validator,
 		}),
-		UserController: userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
+		PermissionController: permissionhttp.NewPermissionController(nil, nil, validator),
+		RoleController:       rolehttp.NewRoleController(nil, nil, validator),
+		UserController:       userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
 	})
 	require.ErrorContains(t, err, "invalid metrics path")
 }

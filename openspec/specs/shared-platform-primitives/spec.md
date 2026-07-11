@@ -205,15 +205,51 @@
 - **WHEN** 服务通过配置文件启动
 - **THEN** 系统 MUST 使用共享配置 loader 与 validation 解析 runtime、HTTP、auth、Postgres、Redis、metrics、tracing、logger 和通用 `local_cache` 配置
 
+#### Scenario: production-like JWT secret 长度校验
+
+- **WHEN** runtime environment 为 production-like 环境且配置包含 `auth.jwt.secret`
+- **THEN** `common/runtime/config` validation MUST 要求该 secret 至少为 32 bytes
+- **AND** development 环境 MAY 不执行该长度约束
+- **AND** 校验错误 MUST 明确定位到 `auth.jwt.secret`
+
 #### Scenario: runtime 依赖初始化
 
 - **WHEN** 服务需要连接 Postgres、Redis、logger、metrics 或 tracing provider
 - **THEN** 服务 MUST 优先复用 `common/runtime/` 中的 provider 和 Fx module
 
+#### Scenario: Postgres 启动探测失败关闭连接池
+
+- **WHEN** 共享 Postgres Fx provider 已创建连接池但启动 PING 失败
+- **THEN** provider MUST 关闭已创建的连接池
+- **AND** 返回错误 MUST 保留 PING 失败和关闭失败信息
+- **AND** 启动失败后连接池 MUST 不再泄露为可继续使用的资源
+
+#### Scenario: Redis 启动探测失败关闭 client
+
+- **WHEN** 共享 Redis Fx provider 已创建 client 但启动 PING 失败
+- **THEN** provider MUST 关闭已创建的 Redis client
+- **AND** 返回错误 MUST 保留 PING 失败和关闭失败信息
+- **AND** 启动失败后 Redis client MUST 不再泄露为可继续使用的资源
+
+#### Scenario: Redis client 显式 tracing provider
+
+- **WHEN** 服务通过 `OpenRedisClient` 或 `NewRedisClient` 创建共享 Redis client
+- **THEN** 调用方 MUST 能通过 `WithRedisTracerProvider` 显式指定 tracing provider
+- **AND** 未显式指定时 MAY 使用全局 tracing provider
+- **AND** no-op tracing provider MUST NOT 改变 Redis 命令结果、连接生命周期或启动 PING 语义
+
 #### Scenario: 后台任务执行
 
 - **WHEN** 服务需要执行定时任务、分布式锁或固定 worker pool 任务
 - **THEN** 系统 MUST 使用共享 scheduler、lock、workerpool 和 metrics 约束，并记录失败、拒绝、panic 和完成事件
+
+#### Scenario: workerpool Stop drain 语义
+
+- **WHEN** 调用方对 `common/runtime/workerpool` 执行 `Stop(ctx)`
+- **THEN** workerpool MUST 停止接收新任务并拒绝后续提交
+- **AND** workerpool MUST 等待已经登记或已经接受的任务完成 drain
+- **AND** `Stop(ctx)` 超时时 MUST 返回包装 `context.DeadlineExceeded` 的错误
+- **AND** 重复 `Stop` MUST 共享同一 drain 状态，不得重复释放底层池或丢失已接收任务
 
 #### Scenario: 本地缓存配置解析
 
@@ -768,6 +804,13 @@ cmd 与 Ent schema 测试 MUST 可以直接使用标准 `testify/require` 与 `t
 - **WHEN** `runJob()` 被拆分为私有函数
 - **THEN** 系统 MUST 保持任务触发、跳过原因、开始、完成、失败、panic recovery、锁释放、续租失败处理、gate 归还和 shutdown 语义不变
 - **AND** 系统 MUST NOT 新增公开 executor 类型、公开接口或仅服务测试的生产适配层
+
+#### Scenario: 无 timeout 任务仍可被续租失败取消
+
+- **WHEN** scheduler 执行未配置 `Timeout` 的任务且该任务启用分布式锁自动续租
+- **THEN** scheduler MUST 仍为该任务创建可取消 job context
+- **AND** 自动续租失败时 MUST 能取消任务 context 并记录续租失败
+- **AND** 系统 MUST NOT 因任务未配置 timeout 而失去续租失败取消能力
 
 ### Requirement: common 模块依赖保持 tidy
 

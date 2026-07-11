@@ -1,6 +1,8 @@
 package router
 
 import (
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
@@ -36,6 +38,9 @@ type RouteParams struct {
 
 // RegisterUserServiceHTTPRoutes 挂载健康检查、OpenAPI、metrics、认证和用户 API 路由。
 func RegisterUserServiceHTTPRoutes(engine *gin.Engine, params RouteParams) error {
+	if err := validateSecurityRouteDependencies(params); err != nil {
+		return err
+	}
 	registerHealthRoutes(engine, params.ServiceName, params.HealthChecks)
 	RegisterOpenAPI(engine, params.Environment)
 	registerPprofRoutes(engine, params.HTTPConfig.Pprof)
@@ -65,12 +70,24 @@ func registerV1Routes(engine *gin.Engine, params RouteParams) {
 
 	authorized := authenticated.Group("")
 	authorized.Use(permissionhttp.Authorize(params.Authorizer))
-	if params.PermissionController != nil {
-		permissionhttp.RegisterRoutes(authorized.Group("/permissions"), params.PermissionController)
-	}
-	if params.RoleController != nil {
-		rolehttp.RegisterRoleRoutes(authorized.Group("/roles"), params.RoleController)
-		rolehttp.RegisterUserRoleRoutes(authorized.Group("/users"), params.RoleController)
-	}
+	permissionhttp.RegisterRoutes(authorized.Group("/permissions"), params.PermissionController)
+	rolehttp.RegisterRoleRoutes(authorized.Group("/roles"), params.RoleController)
+	rolehttp.RegisterUserRoleRoutes(authorized.Group("/users"), params.RoleController)
 	userhttp.RegisterRoutes(authorized.Group("/users"), params.UserController)
+}
+
+func validateSecurityRouteDependencies(params RouteParams) error {
+	if params.TokenVersionValidator == nil {
+		return fmt.Errorf("token version validator is required")
+	}
+	if params.Authorizer == nil {
+		return fmt.Errorf("rbac authorizer is required")
+	}
+	if params.PermissionController == nil {
+		return fmt.Errorf("permission controller is required")
+	}
+	if params.RoleController == nil {
+		return fmt.Errorf("role controller is required")
+	}
+	return nil
 }

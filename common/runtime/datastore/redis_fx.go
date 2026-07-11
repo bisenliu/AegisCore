@@ -2,6 +2,7 @@ package datastore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
@@ -23,12 +24,12 @@ func ProvideNamedRedis(fxName string, configKey string) fx.Option {
 }
 
 // NewRedisClient 创建一个具名 Redis 客户端，并在 Fx 启动阶段验证可用性。
-func NewRedisClient(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name string) (*redis.Client, error) {
+func NewRedisClient(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name string, options ...RedisClientOption) (*redis.Client, error) {
 	redisCfg, ok := cfg.RedisConfig(name)
 	if !ok {
 		return nil, fmt.Errorf("redis config %q not found", name)
 	}
-	client := OpenRedisClient(redisCfg)
+	client := OpenRedisClient(redisCfg, options...)
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
@@ -36,14 +37,17 @@ func NewRedisClient(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name s
 			pingCtx, cancel := context.WithTimeout(ctx, redisCfg.PingTimeout)
 			defer cancel()
 			if err := client.Ping(pingCtx).Err(); err != nil {
-				return fmt.Errorf("ping redis %s: %w", name, err)
+				return errors.Join(
+					fmt.Errorf("ping redis %s: %w", name, err),
+					closeRedisClient(name, client),
+				)
 			}
 			logger.WithContext(ctx, log).Info("redis connected", zap.String("name", name), zap.String("addr", redisCfg.Addr))
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			if err := client.Close(); err != nil {
-				return fmt.Errorf("close redis %s: %w", name, err)
+			if err := closeRedisClient(name, client); err != nil {
+				return err
 			}
 			logger.WithContext(ctx, log).Info("redis closed", zap.String("name", name))
 			return nil
@@ -51,4 +55,11 @@ func NewRedisClient(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name s
 	})
 
 	return client, nil
+}
+
+func closeRedisClient(name string, client *redis.Client) error {
+	if err := client.Close(); err != nil {
+		return fmt.Errorf("close redis %s: %w", name, err)
+	}
+	return nil
 }

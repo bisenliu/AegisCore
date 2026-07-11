@@ -13,7 +13,8 @@ set -eu
 #
 # 可选环境变量：
 #   ATLAS_DEV_URL  migrations/atlas.hcl 使用的 Atlas dev database URL。默认使用
-#                  migrations/atlas.hcl 中的值，通常是 docker://postgres/15/dev?search_path=public。
+#                  migrations/atlas.hcl 中的值，当前使用本仓库 latest pg_trgm 镜像；
+#                  正式/受控环境建议固定具体 PostgreSQL 版本或镜像 digest。
 #
 # 行为：
 #   - 切换到 user-service 目录，使 Atlas 读取 ./migrations/atlas.hcl 和 ./migrations。
@@ -35,11 +36,10 @@ fi
 
 cd "$(dirname "$0")/.."
 
-ATLAS_DEV_IMAGE="aegiscore-atlas-postgres-pgtrgm:15"
+# 本地迁移 diff 默认跟随最新 PostgreSQL；正式环境建议固定具体版本或镜像 digest，避免生成结果漂移。
+ATLAS_DEV_IMAGE="aegiscore-atlas-postgres-pgtrgm:latest"
 ATLAS_DEV_DOCKERFILE="../deployments/docker/atlas-postgres-pgtrgm.Dockerfile"
-if ! docker image inspect "$ATLAS_DEV_IMAGE" >/dev/null 2>&1; then
-  docker build -f "$ATLAS_DEV_DOCKERFILE" -t "$ATLAS_DEV_IMAGE" ..
-fi
+docker build -f "$ATLAS_DEV_DOCKERFILE" -t "$ATLAS_DEV_IMAGE" ..
 
 # migrate diff 会先校验 migration directory；人工拆分、删除或编辑 SQL 后需要先刷新 hash。
 atlas migrate hash --dir file://migrations

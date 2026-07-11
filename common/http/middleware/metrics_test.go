@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	dto "github.com/prometheus/client_model/go"
@@ -155,7 +156,58 @@ func TestHTTPServerMetricsSkipResultFiltersSuccessfulRuntimeEndpoint(t *testing.
 		commonmetrics.LabelStatusClass: "5xx",
 	})
 	require.Equal(t, float64(1), metric.GetCounter().GetValue())
-	assertHTTPMiddlewareFamilyMissingLabelValue(t, gatherHTTPMiddlewareFamily(t, provider, httpServerInFlightRequestsName), "/runtime")
+	inFlight := findMetricByLabels(t, gatherHTTPMiddlewareFamily(t, provider, httpServerInFlightRequestsName), map[string]string{
+		commonmetrics.LabelMethod: http.MethodGet,
+		commonmetrics.LabelRoute:  "/runtime",
+	})
+	require.Zero(t, inFlight.GetGauge().GetValue())
+}
+
+func TestHTTPServerMetricsSkipResultDoesNotCorruptConcurrentInFlightGauge(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	provider := newHTTPMiddlewareMetricsProvider(t, true)
+	engine := gin.New()
+	engine.Use(HTTPServerMetrics(HTTPMetricsOptions{
+		Provider: provider,
+		SkipResult: func(c *gin.Context) bool {
+			return c.Writer.Status() < http.StatusBadRequest
+		},
+	}))
+	slowStarted := make(chan struct{})
+	releaseSlow := make(chan struct{})
+	slowDone := make(chan struct{})
+	engine.GET("/runtime/:result", func(c *gin.Context) {
+		if c.Param("result") == "slow" {
+			close(slowStarted)
+			<-releaseSlow
+			c.Status(http.StatusServiceUnavailable)
+			return
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	go func() {
+		engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/runtime/slow", nil))
+		close(slowDone)
+	}()
+	select {
+	case <-slowStarted:
+	case <-time.After(time.Second):
+		t.Fatal("slow request did not start")
+	}
+	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/runtime/filtered", nil))
+	close(releaseSlow)
+	select {
+	case <-slowDone:
+	case <-time.After(time.Second):
+		t.Fatal("slow request did not finish")
+	}
+
+	inFlight := findMetricByLabels(t, gatherHTTPMiddlewareFamily(t, provider, httpServerInFlightRequestsName), map[string]string{
+		commonmetrics.LabelMethod: http.MethodGet,
+		commonmetrics.LabelRoute:  "/runtime/:result",
+	})
+	require.Zero(t, inFlight.GetGauge().GetValue())
 }
 
 func TestHTTPServerMetricsSkipFiltersBeforeInFlight(t *testing.T) {

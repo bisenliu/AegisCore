@@ -11,6 +11,7 @@ import (
 	"github.com/aegiscore/common/validation"
 	authfeature "github.com/aegiscore/user-service/internal/features/auth"
 	permissionfeature "github.com/aegiscore/user-service/internal/features/permission"
+	rolefeature "github.com/aegiscore/user-service/internal/features/role"
 	userfeature "github.com/aegiscore/user-service/internal/features/user"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 )
@@ -29,6 +30,7 @@ func TestModuleResolvesServiceLevelProviders(t *testing.T) {
 		validation.Module,
 		authfeature.Module,
 		permissionfeature.Module,
+		rolefeature.Module,
 		userfeature.Module,
 		Module,
 		fx.Invoke(func(*userhttp.UserController) {}),

@@ -59,7 +59,11 @@ func TestNewGinEngineSkipsSuccessfulRuntimeEndpointMetrics(t *testing.T) {
 
 	assertGinMetricFamilyMissing(t, metricsProvider, "http_server_requests_total")
 	assertGinMetricFamilyMissing(t, metricsProvider, "http_server_request_duration_seconds")
-	assertGinMetricFamilyMissing(t, metricsProvider, "http_server_in_flight_requests")
+	inFlight := gatherGinMetricFamily(t, metricsProvider, "http_server_in_flight_requests")
+	require.NotEmpty(t, inFlight.GetMetric())
+	for _, metric := range inFlight.GetMetric() {
+		require.Zero(t, metric.GetGauge().GetValue())
+	}
 }
 
 func TestNewGinEngineRecordsUnmatchedRouteWithStableFallback(t *testing.T) {
