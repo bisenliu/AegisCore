@@ -159,8 +159,7 @@ func TestContextLoggerReportsCallerFromCallSite(t *testing.T) {
 func TestDefaultLoggerReportsCallerFromCallSite(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core, zap.AddCaller())
-	SetDefault(log)
-	t.Cleanup(func() { SetDefault(nil) })
+	setDefaultLoggerForTest(t, log)
 
 	contextLoggerCallerProbe(context.Background())
 	assertCallerFromLoggerTest(t, logs.FilterMessage("caller probe").All())
@@ -178,7 +177,9 @@ func contextLoggerCallerProbe(ctx context.Context) {
 	Info(ctx, "caller probe")
 }
 
-func TestDefaultLoggerConcurrentAccess(_ *testing.T) {
+func TestDefaultLoggerConcurrentAccess(t *testing.T) {
+	restoreDefaultLoggerAfterTest(t)
+
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		wg.Add(2)
@@ -192,7 +193,18 @@ func TestDefaultLoggerConcurrentAccess(_ *testing.T) {
 		}()
 	}
 	wg.Wait()
-	SetDefault(nil)
+}
+
+func setDefaultLoggerForTest(t *testing.T, log *zap.Logger) {
+	t.Helper()
+	restoreDefaultLoggerAfterTest(t)
+	SetDefault(log)
+}
+
+func restoreDefaultLoggerAfterTest(t *testing.T) {
+	t.Helper()
+	previous := getDefault()
+	t.Cleanup(func() { SetDefault(previous) })
 }
 
 func TestDailyWriterRotatesWhenDateChanges(t *testing.T) {
