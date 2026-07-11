@@ -117,7 +117,7 @@ services:
       - aegiscore-runtime
       - aegiscore-observability
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/readyz | grep -q '\"status\":\"ok\"'"]
+      test: ["CMD", "/app/user-service/bin/user-services", "healthcheck", "--url", "http://127.0.0.1:8080/readyz", "--timeout", "3s"]
       interval: 10s
       timeout: 5s
       retries: 18

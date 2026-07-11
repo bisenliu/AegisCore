@@ -68,6 +68,8 @@
 
 Deployment 默认只启动 HTTP 服务，不设置 `RUN_MIGRATIONS=true`，运行时镜像不包含 Atlas。多副本生产发布必须先确认数据库 SQL migration 已由 DBA 工单或受控发布平台执行完成。
 
+运行时镜像基于固定 digest 的 Distroless static nonroot，Deployment 和 RBAC seed Job 的 `runAsUser`、`runAsGroup`、`fsGroup` 均为 `65532`，并保持只读根文件系统、禁止提权、capabilities drop、RuntimeDefault seccomp 和 `/tmp` emptyDir。Kubernetes 探针使用 kubelet HTTP probe，不依赖容器内 shell 或原生 `healthcheck` 命令。
+
 ## 失败诊断和回滚
 
 - 数据库 SQL migration 未确认完成时，停止 rollout，查看 DBA 工单、发布平台记录或等价受控执行记录。
@@ -86,6 +88,9 @@ Deployment 默认只启动 HTTP 服务，不设置 `RUN_MIGRATIONS=true`，运�
 kubectl kustomize deployments/k8s/user-services > /tmp/aegiscore-user-services-k8s.yaml
 ruby -e 'require "yaml"; docs = YAML.load_stream(File.read("/tmp/aegiscore-user-services-k8s.yaml")); abort("no docs") if docs.empty?'
 grep -q 'atlas migrate apply\|migrate apply' /tmp/aegiscore-user-services-k8s.yaml && exit 1 || true
+grep -q 'runAsUser: 65532' /tmp/aegiscore-user-services-k8s.yaml
+grep -q 'runAsGroup: 65532' /tmp/aegiscore-user-services-k8s.yaml
+grep -q 'fsGroup: 65532' /tmp/aegiscore-user-services-k8s.yaml
 ```
 
 有可用集群或可用 OpenAPI cache 时，执行 client dry-run：

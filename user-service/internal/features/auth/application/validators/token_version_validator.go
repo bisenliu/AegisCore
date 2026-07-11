@@ -47,6 +47,9 @@ func (v *TokenVersionValidator) Current(ctx context.Context, userID string) (int
 // InvalidateTokenVersion 删除本实例内指定用户的 token version 本地缓存。
 func (v *TokenVersionValidator) InvalidateTokenVersion(userID string) error {
 	if err := v.cache.Delete(userID); err != nil {
+		if errors.Is(err, localcache.ErrClosed) {
+			return nil
+		}
 		return fmt.Errorf("delete local token version cache: %w", err)
 	}
 	return nil

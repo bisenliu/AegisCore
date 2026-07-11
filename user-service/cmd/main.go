@@ -126,6 +126,7 @@ func newRootCommand(deps rootCommandDependencies) *cobra.Command {
 	var superAdminUserID string
 	var fxGraphConfigPath string
 	var fxGraphOutputPath string
+	healthcheckOpts := healthcheckOptions{url: defaultHealthcheckURL, timeout: defaultHealthcheckTimeout}
 	createSuperAdminOpts := rbacCreateSuperAdminOptions{username: defaultCreateSuperAdminUsername, nickname: defaultCreateSuperAdminNickname, passwordEnv: defaultCreateSuperAdminPasswordEnv}
 
 	root := &cobra.Command{
@@ -199,6 +200,17 @@ func newRootCommand(deps rootCommandDependencies) *cobra.Command {
 	fxGraph.Flags().StringVar(&fxGraphConfigPath, "config", "./configs/config.yaml", "path to YAML configuration file")
 	fxGraph.Flags().StringVar(&fxGraphOutputPath, "output", defaultFxGraphOutputPath, "path to write DOT dependency graph")
 	root.AddCommand(fxGraph)
+
+	healthcheck := &cobra.Command{
+		Use:   "healthcheck",
+		Short: "Check user-service readiness without external runtime tools",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runHealthcheck(cmd.Context(), healthcheckOpts)
+		},
+	}
+	healthcheck.Flags().StringVar(&healthcheckOpts.url, "url", defaultHealthcheckURL, "HTTP health endpoint URL")
+	healthcheck.Flags().DurationVar(&healthcheckOpts.timeout, "timeout", defaultHealthcheckTimeout, "healthcheck request timeout")
+	root.AddCommand(healthcheck)
 
 	return root
 }

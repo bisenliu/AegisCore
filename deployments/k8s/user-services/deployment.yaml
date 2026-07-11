@@ -34,9 +34,9 @@ spec: # Deployment 期望状态。
       terminationGracePeriodSeconds: 35 # 终止宽限期；应大于 HTTP shutdown_timeout。
       securityContext: # Pod 级安全上下文。
         runAsNonRoot: true # 要求容器以非 root 用户运行。
-        runAsUser: 10001 # 容器进程 UID；需与镜像内非 root 用户兼容。
-        runAsGroup: 10001 # 容器进程 GID。
-        fsGroup: 10001 # 挂载卷文件所属组，便于非 root 写入。
+        runAsUser: 65532 # 容器进程 UID；与 Distroless nonroot 镜像身份一致。
+        runAsGroup: 65532 # 容器进程 GID。
+        fsGroup: 65532 # 挂载卷文件所属组，便于非 root 写入。
         seccompProfile: # seccomp 限制配置。
           type: RuntimeDefault # 使用容器运行时默认 seccomp profile。
       containers: # Pod 内容器列表。

@@ -44,6 +44,8 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 - `rbac seed`：初始化默认系统角色、权限和绑定。
 - `rbac assign-super-admin --user-id <uuid>`：为已有用户绑定超级管理员角色。
 - `rbac create-super-admin`：创建或复用管理员用户并绑定超级管理员角色。
+- `fxgraph`：生成 Fx 依赖图。
+- `healthcheck --url <url> --timeout <duration>`：在容器内无 shell、wget、curl 或 grep 依赖地检查 `/readyz`。
 
 `user-service/internal/bootstrap/` 构造应用和 HTTP server。`user-service/internal/providers/` 提供 Gin、Ent、Postgres、Redis、auth、metrics、health 和 routes provider。
 
@@ -128,10 +130,11 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 
 ## 7. 部署和观测
 
-- Dockerfile：`deployments/docker/user-service.Dockerfile` 提供无 Atlas 的运行时镜像。
-- Compose：`deployments/compose/docker-compose.yml`。
-- Kubernetes：`deployments/k8s/user-services/`。
-- Helm：`deployments/helm/aegiscore-user-services/`。
+- Dockerfile：`deployments/docker/user-service.Dockerfile` 使用 BuildKit manifest-first 依赖层、只读 Go module 解析、静态编译和固定 digest 的 `gcr.io/distroless/static-debian12:nonroot` 运行时；运行镜像身份为 UID/GID `65532`，不包含 shell、包管理器、下载工具或 Atlas。
+- Compose：`deployments/compose/docker-compose.yml` 继承 Distroless `nonroot` 身份，user-service healthcheck 使用 exec-form 调用原生 `healthcheck` CLI。
+- Kubernetes：`deployments/k8s/user-services/` 使用 UID/GID/fsGroup `65532`、只读根文件系统、`/tmp` emptyDir 和 kubelet HTTP probes。
+- Helm：`deployments/helm/aegiscore-user-services/` 渲染与原生 YAML 一致的 UID/GID `65532`、HTTP probes 和 RBAC seed Job。
+- CI：阻塞式 `test` job 设置 `AEGISCORE_TEST_CONTAINERS=1` 运行真实 PostgreSQL/Redis 测试；镜像安全 job 复用同一 BuildKit image ID 执行内容断言、Trivy HIGH/CRITICAL 门禁和 SBOM 生成。
 - Prometheus alerts：`deployments/observability/prometheus/user-service-alerts.yaml`。
 - Grafana dashboard：`deployments/observability/grafana/user-service-overview.json`。
 - Compose dashboard 由 `deployments/compose/scripts/generate-grafana-dashboard.sh` 从通用观测 dashboard 生成。

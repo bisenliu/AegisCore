@@ -8,6 +8,7 @@
 | `make lint` | 运行各模块 `golangci-lint` |
 | `make user-service-architecture-lint` | 检查 user-service 架构边界、生成物 drift 和 OPSX 文档语言约束 |
 | `make user-service-openapi-generate` | 生成 OpenAPI 3 文档 |
+| `make user-service-image-verify` | 校验 user-service Distroless 镜像静态链接、UID/GID、基础数据和禁止工具 |
 | `make compose-dashboard-check` | 检查 Compose Grafana dashboard 是否与通用 dashboard 一致 |
 | `make verify` | 运行 lint、架构 lint、测试、OpenAPI 生成和 `git diff --exit-code` |
 
@@ -37,13 +38,15 @@ make user-service-test
 - `common/testing/containers/postgres.go`
 - `common/testing/containers/redis.go`
 
-user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration 和测试 harness。
+user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration 和测试 harness。真实 PostgreSQL/Redis 测试的唯一规范开关是 `AEGISCORE_TEST_CONTAINERS=1`；CI 的阻塞式 `test` job 设置该开关并运行 `make test`，从而执行 common 容器 smoke、role PostgreSQL 集成测试和 user-service HTTP E2E。不要新增或使用 `TEST_CONTAINERS` 兼容别名；单独设置 `AEGISCORE_TEST_E2E` 只适合本地兼容触发 user-service E2E，不代表完整容器测试门禁。
 
 运行：
 
 ```bash
-make user-service-test
+AEGISCORE_TEST_CONTAINERS=1 make test
 ```
+
+容器测试门禁应记录执行测试名和耗时；Docker daemon、镜像拉取、容器启动或 migration 失败时必须使测试失败，而不是在已启用 `AEGISCORE_TEST_CONTAINERS=1` 后静默 skip。
 
 ## 4. 断言和失败处理
 
@@ -133,6 +136,15 @@ make user-service-migrate-validate
 进入环境或发布流程前，确认 SQL migration 和 `atlas.sum` 已提交到 Git，并通过 DBA 工单或受控发布平台执行。若 SQL 包含 `CREATE EXTENSION IF NOT EXISTS pg_trgm;`，测试记录应说明目标库是否需要 DBA 权限或前置动作。
 
 部署资产变更还应检查 Compose、Kubernetes 和 Helm 渲染结果不包含自动执行 `atlas migrate apply` 的 Job、service、command 或 args；普通 user-service 运行时镜像应确认不包含 `/usr/local/bin/atlas`。
+
+Distroless 运行时镜像变更还应执行：
+
+```bash
+docker buildx build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services:latest --load .
+IMAGE=aegiscore-user-services:latest make user-service-image-verify
+```
+
+该验证检查静态链接、UID/GID `65532`、CA certificates、`Asia/Shanghai` timezone、`/tmp`、CLI help，以及 shell、`apk`、`wget`、`curl`、`grep` 和 Atlas 均不存在。
 
 ## 8. 观测资产验证
 

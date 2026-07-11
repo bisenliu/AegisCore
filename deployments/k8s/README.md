@@ -23,6 +23,8 @@
 普通 HTTP Deployment 默认不设置 `RUN_MIGRATIONS=true`，运行时镜像不包含 Atlas，不参与数据库 schema 变更。
 `kustomization.yaml` 用于发现和验证完整资源集合；生产首次发布不要用一次性 `kubectl apply -k` 跳过 SQL migration 完成确认和 RBAC seed 等待步骤。
 
+user-service 运行时镜像基于 Distroless static nonroot，Kubernetes Deployment 和 RBAC seed Job 的 `runAsUser`、`runAsGroup`、`fsGroup` 均为 `65532`。探针继续使用 kubelet `httpGet` 请求 `/livez`、`/readyz` 和 `/startupz`，不依赖容器内 shell 或 healthcheck 命令。
+
 ## Secret 边界
 
 `secret.example.yaml` 只说明必需键名，不应直接用于生产。生产环境应由部署系统、GitOps Secret、密钥管理系统或 CI/CD 注入以下键：
@@ -41,6 +43,9 @@
 kubectl kustomize deployments/k8s/user-services > /tmp/aegiscore-user-services-k8s.yaml
 ruby -e 'require "yaml"; docs = YAML.load_stream(File.read("/tmp/aegiscore-user-services-k8s.yaml")); abort("no docs") if docs.empty?'
 grep -q 'atlas migrate apply\|migrate apply' /tmp/aegiscore-user-services-k8s.yaml && exit 1 || true
+grep -q 'runAsUser: 65532' /tmp/aegiscore-user-services-k8s.yaml
+grep -q 'runAsGroup: 65532' /tmp/aegiscore-user-services-k8s.yaml
+grep -q 'fsGroup: 65532' /tmp/aegiscore-user-services-k8s.yaml
 ```
 
 有可用集群或可用 OpenAPI cache 时，执行 client dry-run：

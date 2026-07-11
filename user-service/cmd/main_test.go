@@ -65,6 +65,7 @@ func TestRootCommandSurface(t *testing.T) {
 	var serve *cobra.Command
 	var rbac *cobra.Command
 	var fxGraph *cobra.Command
+	var healthcheck *cobra.Command
 	for _, cmd := range root.Commands() {
 		switch cmd.Use {
 		case "serve":
@@ -73,6 +74,8 @@ func TestRootCommandSurface(t *testing.T) {
 			rbac = cmd
 		case "fxgraph":
 			fxGraph = cmd
+		case "healthcheck":
+			healthcheck = cmd
 		}
 	}
 	require.NotNil(t, serve)
@@ -94,6 +97,13 @@ func TestRootCommandSurface(t *testing.T) {
 	flag = fxGraph.Flags().Lookup("output")
 	require.NotNil(t, flag)
 	assert.Equal(t, defaultFxGraphOutputPath, flag.DefValue)
+	require.NotNil(t, healthcheck)
+	flag = healthcheck.Flags().Lookup("url")
+	require.NotNil(t, flag)
+	assert.Equal(t, defaultHealthcheckURL, flag.DefValue)
+	flag = healthcheck.Flags().Lookup("timeout")
+	require.NotNil(t, flag)
+	assert.Equal(t, defaultHealthcheckTimeout.String(), flag.DefValue)
 }
 
 func TestFxGraphCommandWritesGraph(t *testing.T) {

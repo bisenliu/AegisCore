@@ -189,7 +189,15 @@ make compose-dashboard-check
 构建 Docker 镜像：
 
 ```bash
-docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
+docker buildx build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
+```
+
+user-service 镜像使用 BuildKit manifest-first 构建：先复制 `go.work`、`go.work.sum` 和各 workspace module 的 `go.mod`/`go.sum` 准备依赖，再复制源码编译。构建阶段挂载 `/go/pkg/mod` 和 Go build cache，并使用 `CGO_ENABLED=0`、`-mod=readonly`、`-trimpath`、固定 builder/runtime digest 和显式 VCS metadata 参数。
+
+运行时镜像基于固定 digest 的 `gcr.io/distroless/static-debian12:nonroot`，默认 UID/GID 为 `65532`，不包含 shell、`apk`、`wget`、`curl`、`grep` 或 Atlas。验证本地镜像内容：
+
+```bash
+IMAGE=aegiscore-user-services:latest make user-service-image-verify
 ```
 
 ## 9. OPSX 初始化和变更

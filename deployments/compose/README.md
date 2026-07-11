@@ -27,6 +27,8 @@ make compose-dashboard-check
 docker compose -f deployments/compose/docker-compose.yml up --build
 ```
 
+user-service 使用固定 digest 的 Distroless static nonroot 运行时镜像，容器内数值身份为 UID/GID `65532`，不包含 shell、`apk`、`wget`、`curl`、`grep` 或 Atlas。Compose healthcheck 使用 exec-form 调用镜像内原生 CLI：`/app/user-service/bin/user-services healthcheck --url http://127.0.0.1:8080/readyz`，不依赖 `CMD-SHELL` 或管道。
+
 本地端口：
 
 - 用户服务：http://localhost:8080
@@ -38,9 +40,10 @@ docker compose -f deployments/compose/docker-compose.yml up --build
 从仓库根目录单独构建用户服务运行时镜像：
 
 ```bash
-docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
+docker buildx build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services:latest --load .
+IMAGE=aegiscore-user-services:latest make user-service-image-verify
 ```
 
-Compose 文件使用仓库根目录作为 build context，通过 `deployments/docker/user-service.Dockerfile` 构建用户服务运行时镜像。
+Compose 文件使用仓库根目录作为 build context，通过 `deployments/docker/user-service.Dockerfile` 构建用户服务运行时镜像。Dockerfile 使用 BuildKit module cache 和 Go build cache；缓存只用于加速构建，`-mod=readonly`、基础镜像 digest、Trivy 门禁和 SBOM 仍是依赖与供应链验证边界。
 
 数据库 schema 变更流程是：Ent schema -> Atlas diff 生成 SQL -> Atlas validate/hash 校验 SQL 目录 -> SQL 进 Git -> DBA 工单或受控发布平台执行。Compose 不会自动执行 `atlas migrate apply`；启动 `rbac-seed` 和 `user-service` 前，应先确认本地或目标数据库已执行对应 SQL migration。普通 `aegiscore-user-services` 运行时镜像不包含 Atlas，也不支持通过 `RUN_MIGRATIONS=true` 在服务容器启动时执行 migration。

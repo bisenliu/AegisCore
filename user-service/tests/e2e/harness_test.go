@@ -55,6 +55,7 @@ func newHTTPFlowHarness(t *testing.T) *httpFlowHarness {
 	postgres := containers.StartPostgres(ctx, t, containers.PostgresOptions{})
 	redis := containers.StartRedis(ctx, t, containers.RedisOptions{})
 	applyMigrations(ctx, t, postgres.DSN)
+	seedRBACBaseline(t, postgres.DSN)
 
 	configPath := writeTestConfig(t, postgres.Config(), redis.Config())
 	var engine *gin.Engine
@@ -147,6 +148,17 @@ log:
   max_age_days: 0
   max_size_mb: 0
   max_backups: 0
+observability:
+  metrics:
+    enabled: true
+    path: /metrics
+    include_runtime: false
+  tracing:
+    enabled: true
+    sample_ratio: 0
+    exporter: none
+    otlp_endpoint: ""
+    insecure: false
 redis:
   cache_redis:
     addr: %q

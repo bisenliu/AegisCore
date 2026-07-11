@@ -22,6 +22,8 @@ chart 会渲染 RBAC seed Job 和 HTTP Deployment，但 Helm 本身不保证这�
 
 Deployment 默认不设置 `RUN_MIGRATIONS=true`，普通服务副本不执行 Atlas migration，user-service 运行时镜像不包含 Atlas。chart 不渲染自动执行 Atlas apply 的 migration Job。
 
+chart 默认与 Distroless static nonroot 镜像对齐，`podSecurityContext.runAsUser`、`runAsGroup` 和 `fsGroup` 均为 `65532`。Deployment 保持 kubelet HTTP probes；Compose 场景才使用镜像内原生 `healthcheck` CLI。
+
 ## 验证
 
 ```bash
@@ -34,6 +36,7 @@ helm template aegiscore-user-services deployments/helm/aegiscore-user-services \
 
 - `Deployment` 的 `/livez`、`/readyz`、`/startupz` 探针。
 - RBAC seed `Job` 的 `rbac seed --reactivate-system --sync-system-bindings` command。
+- Deployment 和 RBAC seed Job 的 `runAsUser`、`runAsGroup`、`fsGroup` 都为 `65532`。
 - 渲染结果不包含自动执行 `atlas migrate apply` 的 migration Job、command 或 args。
 - `PodDisruptionBudget`、`HorizontalPodAutoscaler` 和 `NetworkPolicy`。
 

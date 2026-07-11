@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/common/testing/fixtures"
 	"github.com/aegiscore/user-service/internal/shared/identity"
+	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
 type userResponse struct {
@@ -65,6 +67,7 @@ func TestHTTPAuthUserFlow(t *testing.T) {
 		"password": mustChangePassword,
 		"status":   int64(identity.UserStatusMustChangePassword),
 	})
+	bindSuperAdminRoleByUserID(t, harness.postgresDSN, targetUser.UserID)
 	getUser(t, harness, bootstrapTokens.AccessToken, targetUser.UserID, targetUser.Username, int64(identity.UserStatusMustChangePassword))
 
 	passwordChangeTokens := loginPasswordChangeRequired(t, harness, targetUser.Username, mustChangePassword)
@@ -101,12 +104,75 @@ func seedUser(t *testing.T, harness *httpFlowHarness, input seededUserInput) see
 	userID := uuid.New()
 	now := time.Now().UnixMilli()
 	db := openPostgres(t, harness.postgresDSN)
-	_, err = db.ExecContext(ctx, `
+	var userInternalID int64
+	err = db.QueryRowContext(ctx, `
 INSERT INTO users (user_id, nickname, username, password_hash, token_version, status, created_at, updated_at)
 VALUES ($1, $2, $3, $4, 1, $5, $6, $7)
-`, userID, input.Nickname, input.Username, passwordHash, int64(input.Status), now, now)
+RETURNING id
+`, userID, input.Nickname, input.Username, passwordHash, int64(input.Status), now, now).Scan(&userInternalID)
 	require.NoError(t, err, "seed bootstrap user")
+	bindSuperAdminRole(t, db, userInternalID, now)
 	return seededUser{Username: input.Username, Password: input.Password}
+}
+
+func seedRBACBaseline(t *testing.T, dsn string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	db := openPostgres(t, dsn)
+	now := time.Now().UnixMilli()
+
+	for _, role := range rbacbaseline.DefaultRoles() {
+		_, err := db.ExecContext(ctx, `
+INSERT INTO roles (role_id, name, description, active, is_system, created_at, updated_at)
+VALUES ($1, $2, $3, true, $4, $5, $5)
+ON CONFLICT (role_id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, active = true, is_system = EXCLUDED.is_system, updated_at = EXCLUDED.updated_at
+`, role.RoleID, role.Name, role.Description, role.System, now)
+		require.NoError(t, err, "seed RBAC role %s", role.RoleID)
+	}
+	for _, permission := range rbacbaseline.DefaultPermissions() {
+		_, err := db.ExecContext(ctx, `
+INSERT INTO permissions (permission_id, name, description, module, http_method, path_template, active, is_system, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $8)
+ON CONFLICT (permission_id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, module = EXCLUDED.module, http_method = EXCLUDED.http_method, path_template = EXCLUDED.path_template, active = true, is_system = EXCLUDED.is_system, updated_at = EXCLUDED.updated_at
+`, permission.PermissionID, permission.Name, permission.Description, permission.Module, permission.Method, permission.PathTemplate, permission.System, now)
+		require.NoError(t, err, "seed RBAC permission %s", permission.PermissionID)
+	}
+	for _, binding := range rbacbaseline.DefaultRolePermissions() {
+		_, err := db.ExecContext(ctx, `
+INSERT INTO role_permissions (role_id, permission_id, created_at)
+SELECT r.id, p.id, $3
+FROM roles r, permissions p
+WHERE r.role_id = $1 AND p.permission_id = $2
+ON CONFLICT (role_id, permission_id) DO NOTHING
+`, binding.RoleID, binding.PermissionID, now)
+		require.NoError(t, err, "seed RBAC role permission %s:%s", binding.RoleID, binding.PermissionID)
+	}
+}
+
+func bindSuperAdminRole(t *testing.T, db *sql.DB, userInternalID int64, now int64) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := db.ExecContext(ctx, `
+INSERT INTO user_roles (user_id, role_id, created_at)
+SELECT $1, r.id, $2
+FROM roles r
+WHERE r.role_id = $3
+ON CONFLICT (user_id, role_id) DO NOTHING
+`, userInternalID, now, rbacbaseline.SuperAdminRoleID)
+	require.NoError(t, err, "bind bootstrap user super admin role")
+}
+
+func bindSuperAdminRoleByUserID(t *testing.T, dsn string, userID string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	db := openPostgres(t, dsn)
+	var userInternalID int64
+	err := db.QueryRowContext(ctx, `SELECT id FROM users WHERE user_id = $1`, userID).Scan(&userInternalID)
+	require.NoError(t, err, "load user internal id")
+	bindSuperAdminRole(t, db, userInternalID, time.Now().UnixMilli())
 }
 
 func createUser(t *testing.T, harness *httpFlowHarness, token string, body map[string]any) userResponse {

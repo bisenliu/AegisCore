@@ -19,6 +19,8 @@
 
 默认 `values.yaml` 不包含真实敏感值，也不设置 `RUN_MIGRATIONS=true`。普通 user-service 镜像不包含 Atlas，chart 不渲染自动执行 Atlas apply 的 migration Job。生产环境必须提前创建 `secret.existingSecret` 指向的 Secret，并确保数据库 SQL migration 已通过 DBA 工单或受控发布平台执行完成。
 
+默认 `podSecurityContext.runAsUser`、`runAsGroup` 和 `fsGroup` 均为 `65532`，与 Distroless static nonroot 运行时镜像身份一致。Deployment 和 RBAC seed Job 使用同一数值身份，保持只读根文件系统、禁止提权、capabilities drop 和 RuntimeDefault seccomp；Kubernetes 探针继续由 kubelet 通过 HTTP 访问 `/livez`、`/readyz`、`/startupz`。
+
 ## NetworkPolicy 安全边界
 
 默认 `networkPolicy` 仅允许 `ingress-system` namespace 中带 `aegiscore.io/allow-user-service: "true"` 的受控上游访问 user-service HTTP 端口，并将 PostgreSQL、Redis 和 OTLP Collector egress 分别约束到明确 namespace 与 Pod selector。生产环境必须通过 admission policy 或等价准入控制限制 `aegiscore.io/allow-user-service` 标签只能由受信任 namespace 或受控 workload 使用；仓库原生清单提供了 `deployments/k8s/user-services/admissionpolicy.yaml` 作为参考资产。
@@ -57,6 +59,8 @@ helm lint deployments/helm/aegiscore-user-services
 helm template aegiscore-user-services deployments/helm/aegiscore-user-services \
   --values deployments/helm/aegiscore-user-services/values.yaml
 ```
+
+渲染结果应包含 UID/GID/fsGroup `65532`，且不包含容器内 shell healthcheck、Atlas apply 命令或 migration Job。
 
 本地覆盖示例：
 
