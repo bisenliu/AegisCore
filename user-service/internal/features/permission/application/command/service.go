@@ -23,12 +23,12 @@ type PermissionCommandParams struct {
 
 // NewPermissionCommandService 根据权限仓储依赖构造权限写侧服务。
 func NewPermissionCommandService(params PermissionCommandParams) PermissionCommandService {
+	if params.PolicyChanges == nil {
+		panic("permission policy change notifier is required")
+	}
 	return &permissionCommandService{store: params.Store, policyChanges: params.PolicyChanges}
 }
 
 func (s *permissionCommandService) notifyPolicyChanged(ctx context.Context, reason string) error {
-	if s.policyChanges == nil {
-		return nil
-	}
 	return s.policyChanges.NotifyPolicyChanged(ctx, permissionapplication.NewPolicyReloadChange(reason))
 }

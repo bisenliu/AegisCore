@@ -269,6 +269,66 @@ func TestLoadRejectsProductionLikeInsecureConfig(t *testing.T) {
 	require.NotContains(t, err.Error(), "collector.internal:4317")
 }
 
+func TestValidateAuthRequiresLongProductionJWTSecret(t *testing.T) {
+	validAuth := AuthConfig{
+		JWT: JWTConfig{
+			Secret:          strings.Repeat("a", minProductionJWTBytes),
+			AccessTokenTTL:  time.Minute,
+			RefreshTokenTTL: time.Hour,
+		},
+		PasswordKDF: PasswordKDFConfig{
+			Argon2Concurrency: 1,
+			Argon2QueueSize:   1,
+		},
+	}
+
+	production := Config{App: AppConfig{Environment: "production"}, Auth: validAuth}
+	require.Empty(t, production.validateAuth())
+
+	production.Auth.JWT.Secret = "production-secret"
+	validationErrors := production.validateAuth()
+	require.Len(t, validationErrors, 1)
+	require.Contains(t, validationErrors[0].Error(), "auth.jwt.secret must be at least 32 bytes in production-like environments")
+
+	development := production
+	development.App.Environment = "development"
+	require.Empty(t, development.validateAuth())
+}
+
+func TestConfigValidationFixedSets(t *testing.T) {
+	for _, value := range []string{"debug", "info", "warn", "error"} {
+		require.True(t, isValidLogLevel(value), value)
+	}
+	require.False(t, isValidLogLevel("trace"))
+
+	for _, value := range []string{"json", "console", "text"} {
+		require.True(t, isValidLogFormat(value), value)
+	}
+	require.False(t, isValidLogFormat("xml"))
+
+	require.True(t, isValidPostgresDriver("pgx"))
+	require.False(t, isValidPostgresDriver("postgres"))
+	for _, value := range []string{"disable", "allow", "prefer", "require", "verify-ca", "verify-full"} {
+		require.True(t, isValidPostgresSSLMode(value), value)
+	}
+	require.False(t, isValidPostgresSSLMode("invalid"))
+
+	for _, value := range []string{"none", "otlp"} {
+		require.True(t, isValidTracingExporter(value), value)
+	}
+	require.False(t, isValidTracingExporter("zipkin"))
+
+	for _, value := range []string{"changeme", "local-development-secret", "secret", "test-secret"} {
+		require.True(t, isInsecureJWTSecret(value), value)
+	}
+	require.False(t, isInsecureJWTSecret("production-secret"))
+
+	for _, value := range []string{"prod", "production", "staging", " PROD "} {
+		require.True(t, Config{App: AppConfig{Environment: value}}.isProductionLike(), value)
+	}
+	require.False(t, Config{App: AppConfig{Environment: "test"}}.isProductionLike())
+}
+
 func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_SYSTEM_TIMEZONE", "UTC")
 	t.Setenv("AEGISCORE_HTTP_PORT", "19090")

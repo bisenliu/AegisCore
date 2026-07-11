@@ -11,7 +11,7 @@ func fieldName(fld reflect.StructField) string {
 	if label := fld.Tag.Get(TagLabel); label != "" {
 		return label
 	}
-	for _, tag := range requestTags {
+	for _, tag := range [...]string{TagJSON, TagForm, TagHeader, TagURI, TagQuery} {
 		name := strings.SplitN(fld.Tag.Get(tag), ",", 2)[0]
 		if name == "-" {
 			return ""
@@ -125,7 +125,7 @@ func validationFieldNamesFromPath(dst any, namespace string) (string, string, bo
 }
 
 func requestFieldName(field reflect.StructField) string {
-	for _, tag := range requestTags {
+	for _, tag := range [...]string{TagJSON, TagForm, TagHeader, TagURI, TagQuery} {
 		name := strings.SplitN(field.Tag.Get(tag), ",", 2)[0]
 		if name == "-" {
 			return ""

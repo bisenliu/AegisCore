@@ -35,20 +35,43 @@ func TestPolicyRefreshCoordinatorReloadsPublishesAndTracksVersion(t *testing.T) 
 	require.Equal(t, "role_permission_added", published.Reason)
 }
 
-func TestPolicyRefreshCoordinatorSkipsPublishWhenReloadFails(t *testing.T) {
+func TestPolicyRefreshCoordinatorPublishesButDoesNotTrackWhenReloadFails(t *testing.T) {
 	reloadErr := errors.New("reload failed")
 	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
 	engine.EXPECT().Reload(gomock.Any()).Return(reloadErr)
 
 	publisher := NewMockPolicyVersionPublisher(gomock.NewController(t))
+	publisher.EXPECT().PublishPolicyChanged(gomock.Any(), gomock.Any()).Return(int64(13), nil)
 	tracker := NewMockPolicyVersionTracker(gomock.NewController(t))
 	metrics := NewMockMetrics(gomock.NewController(t))
 	metrics.EXPECT().PolicyReloadFailed(gomock.Any(), MetricsSourceLocalChange, MetricsReasonReloadFailed)
+	metrics.EXPECT().PolicyPublishSucceeded(gomock.Any())
 
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
 	err := coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("permission_updated"))
 	require.ErrorIs(t, err, reloadErr)
+}
+
+func TestPolicyRefreshCoordinatorJoinsReloadAndPublishFailures(t *testing.T) {
+	reloadErr := errors.New("reload failed")
+	publishErr := errors.New("publish failed")
+	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
+	engine.EXPECT().Reload(gomock.Any()).Return(reloadErr)
+
+	publisher := NewMockPolicyVersionPublisher(gomock.NewController(t))
+	publisher.EXPECT().PublishPolicyChanged(gomock.Any(), gomock.Any()).Return(int64(0), publishErr)
+
+	tracker := NewMockPolicyVersionTracker(gomock.NewController(t))
+	metrics := NewMockMetrics(gomock.NewController(t))
+	metrics.EXPECT().PolicyReloadFailed(gomock.Any(), MetricsSourceLocalChange, MetricsReasonReloadFailed)
+	metrics.EXPECT().PolicyPublishFailed(gomock.Any(), MetricsReasonPublishFailed)
+
+	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
+
+	err := coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("permission_updated"))
+	require.ErrorIs(t, err, reloadErr)
+	require.ErrorIs(t, err, publishErr)
 }
 
 func TestPolicyRefreshCoordinatorDoesNotTrackWhenPublishFails(t *testing.T) {

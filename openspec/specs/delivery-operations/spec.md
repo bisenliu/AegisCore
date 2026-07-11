@@ -221,6 +221,15 @@ Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、数值、�
 - **THEN** 协作者 MUST 执行 `make user-service-generate` 和 `make user-service-migrate-diff name=<migration-name>` 生成 Ent 代码与 Atlas migration，并审查 SQL 与 `atlas.sum`
 - **AND** Atlas MUST 通过 user-service 的 external schema loader 读取 Ent 目标 schema
 - **AND** external schema loader MUST 输出不含真实数据库外键的 Ent 目标 schema
+- **AND** `user-service/scripts/migrate-diff.sh` MUST 在 diff 前强制 build 本地 Atlas pg_trgm dev database image，确保 dev image 与仓库 Dockerfile 当前状态一致
+
+#### Scenario: 本地 Atlas dev image tag 一致
+
+- **WHEN** 维护 user-service Atlas dev database、migration diff 脚本或本地 Compose PostgreSQL 配置
+- **THEN** `deployments/docker/atlas-postgres-pgtrgm.Dockerfile`、`user-service/scripts/migrate-diff.sh`、`user-service/migrations/atlas.hcl` 和 `deployments/compose/docker-compose.yml` 中的本地 PostgreSQL image tag MUST 保持一致
+- **AND** 当前本地约定 tag MUST 使用 `latest`
+- **AND** architecture lint MUST 校验这些 tag 一致性并在 drift 时失败
+- **AND** 该约束只适用于本地交付配置，正式或受控环境 SHOULD 固定版本或 digest
 
 #### Scenario: 校验 migration
 

@@ -18,11 +18,13 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
+	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 	"github.com/aegiscore/common/runtime/resources"
 	"github.com/aegiscore/user-service/ent"
 )
@@ -160,6 +162,9 @@ func TestPostgresPoolsAndEntClientsClosePoolOnce(t *testing.T) {
 
 func TestProvideRedisClientsProvidesCacheRedis(t *testing.T) {
 	redisServer := newProviderTestRedisServer(t)
+	traceProvider := newProviderTestTracing(t)
+	spanRecorder := tracetest.NewSpanRecorder()
+	traceProvider.TracerProvider().RegisterSpanProcessor(spanRecorder)
 	cfg := providerTestConfig("")
 	cfg.Redis = map[string]config.RedisConfig{
 		resources.NameCacheRedis: {
@@ -189,7 +194,7 @@ func TestProvideRedisClientsProvidesCacheRedis(t *testing.T) {
 
 	var got clients
 	app := fxtest.New(t,
-		fx.Supply(cfg, log),
+		fx.Supply(cfg, log, traceProvider),
 		fx.Provide(ProvideRedisClients),
 		fx.Populate(&got),
 	)
@@ -199,10 +204,12 @@ func TestProvideRedisClientsProvidesCacheRedis(t *testing.T) {
 	require.NotNil(t, got.CacheRedis)
 	require.Equal(t, redisServer.addr, got.CacheRedis.Options().Addr)
 	require.Equal(t, int64(1), redisServer.pings.Load())
+	require.True(t, providerTestHasRedisSpan(spanRecorder), "spans=%v", providerTestSpanNames(spanRecorder))
 	redisServer.requireClosed(t)
 }
 
 func TestProvideRedisClientsDoesNotProvideQueueRedis(t *testing.T) {
+	traceProvider := newProviderTestTracing(t)
 	type clients struct {
 		fx.In
 
@@ -210,7 +217,7 @@ func TestProvideRedisClientsDoesNotProvideQueueRedis(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		fx.Supply(&config.Config{}, zap.NewNop()),
+		fx.Supply(&config.Config{}, zap.NewNop(), traceProvider),
 		fx.Provide(ProvideRedisClients),
 		fx.Invoke(func(clients) {}),
 	)
@@ -220,18 +227,30 @@ func TestProvideRedisClientsDoesNotProvideQueueRedis(t *testing.T) {
 func TestProvideRedisClientsReturnsErrorForMissingCacheRedisConfig(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
+	traceProvider := newProviderTestTracing(t)
 
 	_, err := ProvideRedisClients(NamedRedisParams{
 		Lifecycle: lc,
 		Config:    &config.Config{},
 		Log:       log,
+		Trace:     traceProvider,
 	})
 	require.ErrorContains(t, err, `redis config "`+resources.NameCacheRedis+`" not found`)
+}
+
+func TestProvideRedisClientsRequiresTracingProvider(t *testing.T) {
+	_, err := ProvideRedisClients(NamedRedisParams{
+		Lifecycle: fxtest.NewLifecycle(t),
+		Config:    providerTestConfig(""),
+		Log:       zap.NewNop(),
+	})
+	require.ErrorContains(t, err, "redis tracing provider is required")
 }
 
 func TestProvideRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
+	traceProvider := newProviderTestTracing(t)
 	cfg := &config.Config{Redis: map[string]config.RedisConfig{
 		resources.NameCacheRedis: {
 			Addr:         "127.0.0.1:1",
@@ -243,12 +262,49 @@ func TestProvideRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 		},
 	}}
 
-	_, err := ProvideRedisClients(NamedRedisParams{Lifecycle: lc, Config: cfg, Log: log})
+	clients, err := ProvideRedisClients(NamedRedisParams{Lifecycle: lc, Config: cfg, Log: log, Trace: traceProvider})
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	err = lc.Start(ctx)
 	require.ErrorContains(t, err, "ping redis cache_redis")
+	require.ErrorIs(t, clients.CacheRedis.Ping(ctx).Err(), redis.ErrClosed)
+}
+
+func newProviderTestTracing(t *testing.T) *commontracing.Provider {
+	t.Helper()
+	provider, err := commontracing.NewProvider(context.Background(), commontracing.Options{
+		Config: config.TracingConfig{
+			Enabled:     true,
+			SampleRatio: 1,
+			Exporter:    "none",
+		},
+		ServiceName: "provider-test",
+		Environment: "test",
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, provider.Shutdown(context.Background()))
+	})
+	return provider
+}
+
+func providerTestHasRedisSpan(recorder *tracetest.SpanRecorder) bool {
+	for _, span := range recorder.Ended() {
+		if span.Name() == "ping" || span.Name() == "redis.dial" {
+			return true
+		}
+	}
+	return false
+}
+
+func providerTestSpanNames(recorder *tracetest.SpanRecorder) []string {
+	spans := recorder.Ended()
+	names := make([]string, 0, len(spans))
+	for _, span := range spans {
+		names = append(names, span.Name())
+	}
+	return names
 }
 
 func providerTestConfig(driverName string) *config.Config {

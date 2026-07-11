@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
@@ -68,6 +69,26 @@ func TestNewPostgresRegistersLifecycle(t *testing.T) {
 
 	require.Equal(t, int64(1), drv.pings.Load())
 	require.Equal(t, int64(1), drv.closes.Load())
+}
+
+func TestNewPostgresClosesPoolWhenStartPingFails(t *testing.T) {
+	drv := registerTestSQLDriver(t)
+	drv.pingErr = errors.New("postgres unavailable")
+	drv.closeErr = errors.New("driver close failed")
+	cfg := testConfig(drv.name)
+	lc := fxtest.NewLifecycle(t)
+	log := zap.NewNop()
+
+	db, err := NewPostgres(lc, cfg, log, resources.NameUserDB)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err = lc.Start(ctx)
+	require.ErrorContains(t, err, "ping postgres user_db: postgres unavailable")
+	require.ErrorContains(t, err, "close postgres user_db: driver close failed")
+	require.Equal(t, int64(1), drv.pings.Load())
+	require.Equal(t, int64(1), drv.closes.Load())
+	require.ErrorContains(t, db.PingContext(ctx), "database is closed")
 }
 
 func TestNewPostgresPoolsRegistersSingleLifecycleForDeclaredPools(t *testing.T) {
@@ -158,12 +179,39 @@ func TestNewRedisClientRegistersLifecycle(t *testing.T) {
 	require.Equal(t, int64(1), redisServer.pings.Load())
 }
 
-func TestOpenRedisClientCreatesTracingSpan(t *testing.T) {
+func TestNewRedisClientClosesClientWhenStartPingFails(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := listener.Addr().String()
+	require.NoError(t, listener.Close())
+	cfg := &config.Config{Redis: map[string]config.RedisConfig{
+		resources.NameCacheRedis: {
+			Addr:         addr,
+			DB:           0,
+			DialTimeout:  10 * time.Millisecond,
+			ReadTimeout:  10 * time.Millisecond,
+			WriteTimeout: 10 * time.Millisecond,
+			PingTimeout:  50 * time.Millisecond,
+		},
+	}}
+	lc := fxtest.NewLifecycle(t)
+	log := zap.NewNop()
+
+	client, err := NewRedisClient(lc, cfg, log, resources.NameCacheRedis)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err = lc.Start(ctx)
+	require.ErrorContains(t, err, "ping redis cache_redis")
+	require.ErrorIs(t, client.Ping(ctx).Err(), redis.ErrClosed)
+}
+
+func TestOpenRedisClientCreatesTracingSpanWithExplicitProvider(t *testing.T) {
 	redisServer := newTestRedisServer(t)
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	previousProvider := otel.GetTracerProvider()
-	otel.SetTracerProvider(provider)
+	otel.SetTracerProvider(noop.NewTracerProvider())
 	t.Cleanup(func() {
 		otel.SetTracerProvider(previousProvider)
 		require.NoError(t, provider.Shutdown(context.Background()))
@@ -175,7 +223,7 @@ func TestOpenRedisClientCreatesTracingSpan(t *testing.T) {
 		DialTimeout:  time.Second,
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
-	})
+	}, WithRedisTracerProvider(provider))
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 
 	ctx, parent := provider.Tracer("datastore-test").Start(context.Background(), "parent")
@@ -188,8 +236,39 @@ func TestOpenRedisClientCreatesTracingSpan(t *testing.T) {
 	require.Equal(t, int64(1), redisServer.pings.Load())
 }
 
+func TestOpenRedisClientUsesGlobalTracerProviderByDefault(t *testing.T) {
+	redisServer := newTestRedisServer(t)
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	previousProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previousProvider)
+		require.NoError(t, provider.Shutdown(context.Background()))
+	})
+	client := OpenRedisClient(config.RedisConfig{
+		Addr:         redisServer.addr,
+		DB:           0,
+		DialTimeout:  time.Second,
+		ReadTimeout:  time.Second,
+		WriteTimeout: time.Second,
+	})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+	ctx, parent := provider.Tracer("datastore-global-test").Start(context.Background(), "parent")
+	require.NoError(t, client.Ping(ctx).Err())
+	parent.End()
+
+	require.Equal(t, int64(1), redisServer.pings.Load())
+	require.True(t, hasRedisSpan(recorder.Ended()), "spans=%v", spanNames(recorder.Ended()))
+}
+
 func TestOpenRedisClientWorksWithNoopTracing(t *testing.T) {
 	redisServer := newTestRedisServer(t)
+	previousProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(noop.NewTracerProvider())
+	t.Cleanup(func() { otel.SetTracerProvider(previousProvider) })
+
 	client := OpenRedisClient(config.RedisConfig{
 		Addr:         redisServer.addr,
 		DB:           0,
@@ -414,6 +493,7 @@ type testSQLDriver struct {
 	pings  atomic.Int64
 	closes atomic.Int64
 
+	pingErr  error
 	closeErr error
 }
 
@@ -440,5 +520,5 @@ func (c *testSQLConn) Begin() (driver.Tx, error) {
 
 func (c *testSQLConn) Ping(context.Context) error {
 	c.driver.pings.Add(1)
-	return nil
+	return c.driver.pingErr
 }

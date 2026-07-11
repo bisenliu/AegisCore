@@ -22,6 +22,13 @@
 - **WHEN** 用户名不存在或密码不匹配
 - **THEN** 系统 MUST 拒绝登录并返回一致的认证错误，且 MUST NOT 泄露具体凭证匹配细节
 
+#### Scenario: 未知用户登录执行 dummy 密码校验
+
+- **WHEN** 登录用户名不存在
+- **THEN** 系统 MUST 使用当前支持的密码 KDF 参数执行 dummy password verification，以降低用户存在性侧信道
+- **AND** dummy verification 返回密码 KDF 繁忙时 MUST 返回 `password.ErrPasswordKDFBusy` 对应的服务不可用错误，MUST NOT 折叠为无效凭据
+- **AND** 日志、错误和响应 MUST NOT 泄露用户名是否存在
+
 #### Scenario: 用户状态禁止登录
 
 - **WHEN** 用户存在但状态不允许登录，且该状态不是强制改密状态
@@ -162,6 +169,12 @@
 - **AND** 会话撤销流程 MUST 将该错误纳入投影错误返回
 - **AND** 系统 MUST NOT 继续静默忽略本地 token version cache 删除失败
 
+#### Scenario: session lifecycle 必需本地失效器
+
+- **WHEN** auth application 构造 refresh session lifecycle
+- **THEN** `TokenVersionLocalInvalidator` MUST 作为必需依赖提供
+- **AND** 缺失该依赖时系统 MUST fail-fast 或拒绝装配，MUST NOT 静默跳过本地 token version cache 失效
+
 ### Requirement: 认证 command use case 最小依赖边界
 
 认证 command use case MUST 通过自身 constructor 声明最小依赖，并且结构体 MUST 只保存该 use case 实际需要的 collaborator。系统 MUST NOT 通过跨多个 command use case 的共享依赖容器向单个 use case 暴露无关的 credential、token、session、metrics 或配置依赖。
@@ -205,6 +218,13 @@
 - **THEN** 系统 MUST 递增用户 `token_version` 并撤销该用户的所有活跃 refresh session，使旧 token 无法继续刷新或访问
 - **AND** PostgreSQL token version 递增成功后，旧 access token MUST 因 token version 不匹配而无法继续访问受保护资源
 - **AND** 本地 token version cache 失效、Redis token version 投影刷新或 refresh session 删除失败时，系统 MUST 返回、记录或暴露可观察的投影失败信号，使调用方和测试能区分主事实成功与投影失败
+
+#### Scenario: 全部会话退出投影失败返回撤销不完整
+
+- **WHEN** 全部会话退出已完成 PostgreSQL token version 主事实递增，但本地 token version cache 失效、Redis token version 投影刷新或 refresh session 删除投影返回错误
+- **THEN** logout all use case MUST 返回 `authdomain.ErrSessionRevocationIncomplete`，且 MUST NOT 返回普通成功结果
+- **AND** 错误链 MUST 保留底层投影错误，供日志、metrics 和测试定位失败来源
+- **AND** logout metrics MUST 将该结果记录为失败并能分类为撤销不完整
 
 #### Scenario: 全部会话后台清理
 
@@ -792,4 +812,3 @@ Auth HTTP transport MUST 将强制改密登录表达为业务码 envelope，并�
 - **WHEN** 登录 use case 返回凭证错误、用户状态拒绝、KDF busy 或系统错误
 - **THEN** controller MUST 继续通过 `response.Fail(c, err)` 渲染失败响应
 - **AND** 系统 MUST NOT 用登录结果字段表达失败分支
-

@@ -31,11 +31,9 @@ func TestRegisterUserServiceHTTPRoutesRegistersCurrentRouteGraph(t *testing.T) {
 	engine := gin.New()
 	authorizer := &routerRegistrationAuthorizer{allowed: false}
 	params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{
-		metrics:                     metricsRouteConfig(true, "/internal/metrics"),
-		pprof:                       config.PprofConfig{Enabled: true, BasePath: "/internal/debug/pprof"},
-		authorizer:                  authorizer,
-		includePermissionController: true,
-		includeRoleController:       true,
+		metrics:    metricsRouteConfig(true, "/internal/metrics"),
+		pprof:      config.PprofConfig{Enabled: true, BasePath: "/internal/debug/pprof"},
+		authorizer: authorizer,
 	})
 
 	require.NoError(t, RegisterUserServiceHTTPRoutes(engine, params))
@@ -70,25 +68,31 @@ func TestRegisterUserServiceHTTPRoutesRegistersCurrentRouteGraph(t *testing.T) {
 	require.Equal(t, 3, authorizer.calls)
 }
 
-func TestRegisterV1RoutesSkipsNilOptionalControllers(t *testing.T) {
+func TestRegisterUserServiceHTTPRoutesRejectsMissingSecurityDependencies(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	engine := gin.New()
-	params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{
-		includePermissionController: false,
-		includeRoleController:       false,
-	})
 
-	registerV1Routes(engine, params)
+	tests := []struct {
+		name    string
+		remove  func(*RouteParams)
+		wantErr string
+	}{
+		{name: "token version validator", remove: func(params *RouteParams) { params.TokenVersionValidator = nil }, wantErr: "token version validator is required"},
+		{name: "authorizer", remove: func(params *RouteParams) { params.Authorizer = nil }, wantErr: "rbac authorizer is required"},
+		{name: "permission controller", remove: func(params *RouteParams) { params.PermissionController = nil }, wantErr: "permission controller is required"},
+		{name: "role controller", remove: func(params *RouteParams) { params.RoleController = nil }, wantErr: "role controller is required"},
+	}
 
-	routes := collectRouterRegistrationRoutes(engine)
-	requireRouterRoutesContain(t, routes, []routerRegisteredRoute{
-		{method: http.MethodPost, path: "/api/v1/auth/login"},
-		{method: http.MethodPost, path: "/api/v1/auth/logout"},
-		{method: http.MethodGet, path: "/api/v1/users"},
-		{method: http.MethodPost, path: "/api/v1/users"},
-		{method: http.MethodGet, path: "/api/v1/users/:user_id"},
-	})
-	requireRouterRoutesAbsent(t, routes, append(routerRegistrationPermissionRoutes(), routerRegistrationRoleRoutes()...))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := gin.New()
+			params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{})
+			tt.remove(&params)
+
+			err := RegisterUserServiceHTTPRoutes(engine, params)
+			require.EqualError(t, err, tt.wantErr)
+			require.Empty(t, engine.Routes())
+		})
+	}
 }
 
 func TestRegisterUserServiceHTTPRoutesReturnsMetricsConfigError(t *testing.T) {
@@ -152,16 +156,20 @@ type routerRegisteredRoute struct {
 }
 
 type routerRegistrationRouteOptions struct {
-	metrics                     config.MetricsConfig
-	pprof                       config.PprofConfig
-	authorizer                  permissionauthorization.Authorizer
-	includePermissionController bool
-	includeRoleController       bool
+	metrics    config.MetricsConfig
+	pprof      config.PprofConfig
+	authorizer permissionauthorization.Authorizer
 }
 
 type routerRegistrationAuthorizer struct {
 	allowed bool
 	calls   int
+}
+
+type routerRegistrationTokenVersionValidator struct{}
+
+func (routerRegistrationTokenVersionValidator) ValidateTokenVersion(context.Context, string, int64) error {
+	return nil
 }
 
 func (a *routerRegistrationAuthorizer) Enforce(context.Context, string, string, string) (bool, error) {
@@ -182,29 +190,25 @@ func newRouterRegistrationRouteParams(t *testing.T, opts routerRegistrationRoute
 	if metricsCfg.Path == "" {
 		metricsCfg = metricsRouteConfig(false, "/metrics")
 	}
-	var permissionController *permissionhttp.PermissionController
-	if opts.includePermissionController {
-		permissionController = permissionhttp.NewPermissionController(nil, nil, validator)
+	authorizer := opts.authorizer
+	if authorizer == nil {
+		authorizer = &routerRegistrationAuthorizer{allowed: true}
 	}
-	var roleController *rolehttp.RoleController
-	if opts.includeRoleController {
-		roleController = rolehttp.NewRoleController(nil, nil, validator)
-	}
-
 	return RouteParams{
-		ServiceName:   "aegiscore-user-service-test",
-		Environment:   "test",
-		Log:           zap.NewNop(),
-		JWT:           commonauth.NewJWTService(authCfg),
-		HTTPConfig:    config.HTTPConfig{Pprof: opts.pprof},
-		MetricsConfig: metricsCfg,
-		Metrics:       newRouterTestMetricsProvider(t, metricsCfg.Enabled, metricsCfg.Path),
-		Authorizer:    opts.authorizer,
+		ServiceName:           "aegiscore-user-service-test",
+		Environment:           "test",
+		Log:                   zap.NewNop(),
+		JWT:                   commonauth.NewJWTService(authCfg),
+		HTTPConfig:            config.HTTPConfig{Pprof: opts.pprof},
+		MetricsConfig:         metricsCfg,
+		Metrics:               newRouterTestMetricsProvider(t, metricsCfg.Enabled, metricsCfg.Path),
+		TokenVersionValidator: routerRegistrationTokenVersionValidator{},
+		Authorizer:            authorizer,
 		AuthController: authhttp.NewAuthController(authhttp.AuthControllerParams{
 			Validator: validator,
 		}),
-		PermissionController: permissionController,
-		RoleController:       roleController,
+		PermissionController: permissionhttp.NewPermissionController(nil, nil, validator),
+		RoleController:       rolehttp.NewRoleController(nil, nil, validator),
 		UserController:       userhttp.NewUserController(nil, nil, validator),
 	}
 }

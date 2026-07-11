@@ -106,42 +106,42 @@ func TestPermissionCommandServiceEnablePermission(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestPermissionCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *testing.T) {
+func TestPermissionCommandServiceRequiresPolicyChangeNotifier(t *testing.T) {
+	require.PanicsWithValue(t, "permission policy change notifier is required", func() {
+		NewPermissionCommandService(PermissionCommandParams{})
+	})
+}
+
+func TestPermissionCommandServicePropagatesRefreshFailureAfterSuccessfulWrite(t *testing.T) {
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000004")
 	refreshErr := errors.New("refresh failed")
 
 	tests := []struct {
 		name       string
-		run        func(*testing.T, PermissionCommandService) any
+		run        func(PermissionCommandService) error
 		setupStore func(*MockPermissionStore)
 		wantReason string
 	}{
-		{name: "create", run: func(t *testing.T, service PermissionCommandService) any {
+		{name: "create", run: func(service PermissionCommandService) error {
 			result, err := service.CreatePermission(context.Background(), CreatePermissionCommand{Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users"})
-			require.NoError(t, err)
-			return result
+			require.Nil(t, result)
+			return err
 		}, setupStore: func(store *MockPermissionStore) {
 			store.EXPECT().Create(gomock.Any(), gomock.Any()).Return(&permissiondomain.Permission{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}, nil)
 		}, wantReason: "permission_created"},
-		{name: "update", run: func(t *testing.T, service PermissionCommandService) any {
-			err := service.UpdatePermission(context.Background(), UpdatePermissionCommand{PermissionID: permissionID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true})
-			require.NoError(t, err)
-			return nil
+		{name: "update", run: func(service PermissionCommandService) error {
+			return service.UpdatePermission(context.Background(), UpdatePermissionCommand{PermissionID: permissionID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true})
 		}, setupStore: func(store *MockPermissionStore) {
 			store.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permissiondomain.Permission{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}, nil)
 			store.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil)
 		}, wantReason: "permission_updated"},
-		{name: "enable", run: func(t *testing.T, service PermissionCommandService) any {
-			err := service.EnablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
-			require.NoError(t, err)
-			return nil
+		{name: "enable", run: func(service PermissionCommandService) error {
+			return service.EnablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
 		}, setupStore: func(store *MockPermissionStore) {
 			store.EXPECT().SetActive(gomock.Any(), permissionID, true).Return(nil)
 		}, wantReason: "permission_active_changed"},
-		{name: "disable", run: func(t *testing.T, service PermissionCommandService) any {
-			err := service.DisablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
-			require.NoError(t, err)
-			return nil
+		{name: "disable", run: func(service PermissionCommandService) error {
+			return service.DisablePermission(context.Background(), SetPermissionActiveCommand{PermissionID: permissionID})
 		}, setupStore: func(store *MockPermissionStore) {
 			store.EXPECT().SetActive(gomock.Any(), permissionID, false).Return(nil)
 		}, wantReason: "permission_active_changed"},
@@ -157,7 +157,7 @@ func TestPermissionCommandServiceSwallowsRefreshFailureAfterSuccessfulWrite(t *t
 				return refreshErr
 			})
 			service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: notifier})
-			_ = tt.run(t, service)
+			require.ErrorIs(t, tt.run(service), refreshErr)
 		})
 	}
 }

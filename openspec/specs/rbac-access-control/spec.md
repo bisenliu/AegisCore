@@ -373,7 +373,7 @@ permission HTTP 授权中间件 MUST 在真实 Gin 路由上下文中解析授�
 
 ### Requirement: 策略同步
 
-系统 MUST 在在线 RBAC 写操作成功后触发本实例策略刷新，并通过 Redis policy version、Pub/Sub 和定时版本补偿同步其他副本。写操作成功响应是否包含实体 MUST NOT 影响 policy reload、用户角色缓存失效或跨副本同步语义。
+系统 MUST 在在线 RBAC 写操作成功后触发本实例策略刷新，并通过 Redis policy version、Pub/Sub 和定时版本补偿同步其他副本。写操作成功响应是否包含实体 MUST NOT 影响 policy reload、用户角色缓存失效或跨副本同步语义。在线 RBAC 写操作持久化成功后，policy reload、用户角色缓存失效或 Redis policy version 发布失败 MUST 向调用方返回错误，MUST NOT 被成功响应掩盖。
 
 #### Scenario: 在线角色绑定变更
 
@@ -394,6 +394,27 @@ permission HTTP 授权中间件 MUST 在真实 Gin 路由上下文中解析授�
 
 - **WHEN** 权限、角色、用户角色绑定或角色权限绑定写操作成功且响应不包含更新后实体
 - **THEN** 系统 MUST 继续按既有规则触发本实例 policy reload、用户角色缓存失效和跨副本 policy version 通知
+
+#### Scenario: policy change 通知失败向调用方传播
+
+- **WHEN** 权限、角色、用户角色绑定或角色权限绑定写操作已经持久化成功，但 policy change 通知、policy reload、用户角色缓存失效或 Redis policy version 发布返回错误
+- **THEN** command service MUST 向调用方返回该错误
+- **AND** 成功响应 MUST NOT 掩盖同步失败
+- **AND** 错误链 SHOULD 保留底层同步错误，便于日志、metrics 和测试定位失败来源
+
+#### Scenario: policy change notifier 必需依赖
+
+- **WHEN** permission command service 或 role command service 被构造
+- **THEN** `PolicyChangeNotifier` MUST 作为必需依赖提供
+- **AND** 缺失 notifier 时系统 MUST fail-fast 或拒绝装配，MUST NOT 退化为 no-op 通知
+
+#### Scenario: policy refresh coordinator 局部失败处理
+
+- **WHEN** policy refresh coordinator 收到需要本实例 reload 并发布 policy version 的变更
+- **THEN** coordinator 为 nil 时 MUST 返回明确错误
+- **AND** 本地 reload 失败后仍 MUST 尝试发布 policy version，使其他副本有机会感知变更
+- **AND** reload 和 publish 同时失败时 MUST 通过 joined error 保留两者
+- **AND** 只有本地 reload 成功且 publish 成功时才可标记本实例已应用该 policy version
 
 ### Requirement: RBAC 系统数据引导
 
@@ -450,7 +471,7 @@ role command service 测试 MUST 使用 `user-service/internal/features/role/app
 
 - **WHEN** 角色写操作、用户角色绑定或角色权限绑定已经成功，但 `PolicyChangeNotifier.NotifyPolicyChanged` 返回错误
 - **THEN** 测试 MUST 通过生成 mock expectation 注入通知错误
-- **AND** 测试 MUST 断言 command service 按既有语义吞掉通知失败并返回写操作成功结果
+- **AND** 测试 MUST 断言 command service 返回通知错误，MUST NOT 吞掉通知失败并返回写操作成功结果
 
 #### Scenario: 保留纯测试 helper
 
@@ -737,11 +758,11 @@ RBAC CLI 测试 MUST 优先使用 `testify/require` 表达 seed、assign-super-a
 - **THEN** 测试 MUST 验证权限目录、route diff、用户有效权限、角色生命周期、角色权限绑定和用户角色绑定路由注册在 `/api/v1` 下
 - **AND** 测试 MUST 验证这些路由进入当前认证和 RBAC 授权中间件链
 
-#### Scenario: 可选 controller 条件注册
-- **WHEN** PermissionController 或 RoleController 为 nil
-- **THEN** `registerV1Routes` MUST 不注册对应权限或角色可选路由
-- **AND** auth 路由和 user 路由 MUST 继续按当前路径注册
-- **AND** 测试 MUST NOT 通过旧路径兼容别名补偿缺失的可选路由
+#### Scenario: RBAC 安全依赖缺失拒绝注册
+- **WHEN** `RegisterUserServiceHTTPRoutes` 或 `registerV1Routes` 缺少 token version validator、RBAC authorizer、PermissionController 或 RoleController 任一安全依赖
+- **THEN** user-service 聚合路由注册 MUST 返回明确错误
+- **AND** 系统 MUST NOT 注册部分 `/api/v1` 业务路由
+- **AND** 测试 MUST NOT 通过可选 controller 条件跳过、旧路径兼容别名或部分路由注册补偿缺失依赖
 
 ### Requirement: RBAC CLI 命令测试覆盖
 

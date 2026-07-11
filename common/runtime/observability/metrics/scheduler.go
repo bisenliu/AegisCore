@@ -27,8 +27,6 @@ const (
 	defaultSchedulerDurationBuckets = 0
 )
 
-var schedulerDurationBuckets = []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}
-
 // SchedulerMetricsOptions 配置 scheduler Prometheus adapter。
 type SchedulerMetricsOptions struct {
 	DurationBuckets []float64
@@ -46,7 +44,7 @@ func NewSchedulerMetrics(provider *Provider, opts SchedulerMetricsOptions) sched
 	}
 	buckets := opts.DurationBuckets
 	if len(buckets) == defaultSchedulerDurationBuckets {
-		buckets = schedulerDurationBuckets
+		buckets = []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}
 	}
 	recorder := &schedulerMetrics{
 		jobs: prometheus.NewCounterVec(prometheus.CounterOpts{

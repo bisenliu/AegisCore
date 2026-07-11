@@ -20,7 +20,7 @@ var sessionTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
 func TestLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T) {
 	for _, rejectedErr := range []error{authdomain.ErrAuthSessionNotFound, authdomain.ErrAuthSessionMismatch} {
 		t.Run(rejectedErr.Error(), func(t *testing.T) {
-			fixture := newLifecycleTestFixture(t, false)
+			fixture := newLifecycleTestFixture(t)
 			oldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
 			newSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 2}
 			fixture.sessions.EXPECT().
@@ -40,7 +40,7 @@ func TestLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T) {
 func TestLifecycleConsumePasswordChangeClaimsMapsRejectedSession(t *testing.T) {
 	for _, rejectedErr := range []error{authdomain.ErrPasswordChangeSessionNotFound, authdomain.ErrPasswordChangeSessionMismatch} {
 		t.Run(rejectedErr.Error(), func(t *testing.T) {
-			fixture := newLifecycleTestFixture(t, false)
+			fixture := newLifecycleTestFixture(t)
 			claims := &commonauth.Claims{
 				UserID:       sessionTestUserID.String(),
 				SessionID:    "password-session",
@@ -69,7 +69,7 @@ func TestLifecycleConsumePasswordChangeClaimsMapsRejectedSession(t *testing.T) {
 }
 
 func TestLifecycleCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
-	fixture := newLifecycleTestFixture(t, false)
+	fixture := newLifecycleTestFixture(t)
 	gomock.InOrder(
 		fixture.tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), sessionTestUserID.String()).Return(int64(0), authdomain.ErrTokenVersionCacheMiss),
 		fixture.users.EXPECT().GetTokenVersion(gomock.Any(), sessionTestUserID).Return(int64(7), nil),
@@ -84,8 +84,22 @@ func TestLifecycleCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
 
 }
 
+func TestNewLifecycleRequiresLocalTokenVersionInvalidator(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	require.PanicsWithValue(t, "token version local invalidator is required", func() {
+		NewLifecycle(
+			NewMockUserTokenVersionStore(ctrl),
+			NewMockTokenVersionCache(ctrl),
+			NewMockRefreshSessionStore(ctrl),
+			NewMockPasswordChangeSessionStore(ctrl),
+			5,
+			nil,
+		)
+	})
+}
+
 func TestLifecycleRevokeAllUserSessions(t *testing.T) {
-	fixture := newLifecycleTestFixture(t, true)
+	fixture := newLifecycleTestFixture(t)
 	gomock.InOrder(
 		fixture.users.EXPECT().IncrementTokenVersion(gomock.Any(), sessionTestUserID).Return(int64(4), nil),
 		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
@@ -106,7 +120,7 @@ func TestLifecycleRevokeAllUserSessions(t *testing.T) {
 }
 
 func TestLifecycleRevokeUserSessionsAtVersionReturnsLocalInvalidationErrors(t *testing.T) {
-	fixture := newLifecycleTestFixture(t, true)
+	fixture := newLifecycleTestFixture(t)
 	userID := sessionTestUserID.String()
 	invalidateErr := errors.New("local cache closed")
 	gomock.InOrder(
@@ -132,7 +146,7 @@ type lifecycleTestFixture struct {
 	lifecycle       Lifecycle
 }
 
-func newLifecycleTestFixture(t *testing.T, withInvalidator bool) *lifecycleTestFixture {
+func newLifecycleTestFixture(t *testing.T) *lifecycleTestFixture {
 	t.Helper()
 	ctrl := gomock.NewController(t)
 	fixture := &lifecycleTestFixture{
@@ -140,12 +154,8 @@ func newLifecycleTestFixture(t *testing.T, withInvalidator bool) *lifecycleTestF
 		tokenVersions:   NewMockTokenVersionCache(ctrl),
 		sessions:        NewMockRefreshSessionStore(ctrl),
 		passwordChanges: NewMockPasswordChangeSessionStore(ctrl),
+		invalidator:     NewMockTokenVersionLocalInvalidator(ctrl),
 	}
-	if withInvalidator {
-		fixture.invalidator = NewMockTokenVersionLocalInvalidator(ctrl)
-		fixture.lifecycle = NewLifecycle(fixture.users, fixture.tokenVersions, fixture.sessions, fixture.passwordChanges, 5, fixture.invalidator)
-		return fixture
-	}
-	fixture.lifecycle = NewLifecycle(fixture.users, fixture.tokenVersions, fixture.sessions, fixture.passwordChanges, 5)
+	fixture.lifecycle = NewLifecycle(fixture.users, fixture.tokenVersions, fixture.sessions, fixture.passwordChanges, 5, fixture.invalidator)
 	return fixture
 }

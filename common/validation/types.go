@@ -34,8 +34,6 @@ const (
 	TagQuery = "query"
 )
 
-var requestTags = []string{TagJSON, TagForm, TagHeader, TagURI, TagQuery}
-
 // Defaultable 标记可在校验前填充安全默认值的请求值。
 type Defaultable interface {
 	SetDefaults()

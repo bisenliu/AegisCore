@@ -65,18 +65,21 @@ func TestAuthUseCaseLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 
 }
 
-func TestAuthUseCaseLogoutAllSucceedsWhenRevocationProjectionFails(t *testing.T) {
-	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
+func TestAuthUseCaseLogoutAllReturnsIncompleteWhenRevocationProjectionFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	metrics := NewMockMetrics(ctrl)
+	fixture := newAuthCommandFixtureWithController(ctrl, defaultAuthConfig(true), metrics)
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
-	revocation := &authdomain.SessionRevocationResult{UserID: authTestUserID, TokenVersion: 3, ProjectionError: errors.New("projection failed")}
+	projectionErr := errors.New("projection failed")
+	revocation := &authdomain.SessionRevocationResult{UserID: authTestUserID, TokenVersion: 3, ProjectionError: projectionErr}
 
 	fixture.sessions.EXPECT().RevokeAllUserSessions(gomock.Any(), authTestUserID).Return(revocation, nil)
+	metrics.EXPECT().LogoutFailed(gomock.Any(), authapplication.MetricsOperationLogoutAll, authapplication.MetricsReasonSessionRevokeFailed)
 
 	result, err := fixture.LogoutAllSessions(ctx)
-	require.NoError(t, err,
-		"LogoutAll: %v", err)
-	require.False(t, result == nil || !result.LoggedOut,
-		"result = %#v", result)
+	require.ErrorIs(t, err, authdomain.ErrSessionRevocationIncomplete)
+	require.ErrorIs(t, err, projectionErr)
+	require.Nil(t, result)
 
 }
 

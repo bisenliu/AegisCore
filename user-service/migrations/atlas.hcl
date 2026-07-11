@@ -8,7 +8,8 @@ data "external_schema" "ent" {
 
 variable "dev_url" {
   type    = string
-  default = "docker+postgres://_/aegiscore-atlas-postgres-pgtrgm:15/dev?search_path=public"
+  # 本地 Atlas dev database 默认跟随最新 pg_trgm 镜像；正式/受控环境建议固定具体版本或镜像 digest。
+  default = "docker+postgres://_/aegiscore-atlas-postgres-pgtrgm:latest/dev?search_path=public"
 }
 
 env "local" {

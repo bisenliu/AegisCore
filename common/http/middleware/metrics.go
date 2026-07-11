@@ -23,17 +23,6 @@ const (
 	httpServerInFlightRequestsHelp = "Current number of in-flight HTTP server requests."
 )
 
-var httpMetricsCompletedLabelNames = []string{
-	commonmetrics.LabelMethod,
-	commonmetrics.LabelRoute,
-	commonmetrics.LabelStatusClass,
-}
-
-var httpMetricsInFlightLabelNames = []string{
-	commonmetrics.LabelMethod,
-	commonmetrics.LabelRoute,
-}
-
 // HTTPMetricsOptions 配置 HTTP server RED 指标中间件。
 type HTTPMetricsOptions struct {
 	Provider        *commonmetrics.Provider
@@ -75,7 +64,6 @@ func HTTPServerMetrics(options HTTPMetricsOptions) gin.HandlerFunc {
 			recorder.inFlight.WithLabelValues(method, inFlightRoute).Dec()
 
 			if options.SkipResult != nil && options.SkipResult(c) {
-				recorder.inFlight.DeleteLabelValues(method, inFlightRoute)
 				return
 			}
 
@@ -103,16 +91,16 @@ func newHTTPServerMetricsRecorder(options HTTPMetricsOptions) *httpServerMetrics
 		requests: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: httpServerRequestsMetricName,
 			Help: httpServerRequestsMetricHelp,
-		}, httpMetricsCompletedLabelNames),
+		}, []string{commonmetrics.LabelMethod, commonmetrics.LabelRoute, commonmetrics.LabelStatusClass}),
 		duration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    httpServerDurationMetricName,
 			Help:    httpServerDurationMetricHelp,
 			Buckets: buckets,
-		}, httpMetricsCompletedLabelNames),
+		}, []string{commonmetrics.LabelMethod, commonmetrics.LabelRoute, commonmetrics.LabelStatusClass}),
 		inFlight: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: httpServerInFlightRequestsName,
 			Help: httpServerInFlightRequestsHelp,
-		}, httpMetricsInFlightLabelNames),
+		}, []string{commonmetrics.LabelMethod, commonmetrics.LabelRoute}),
 	}
 
 	for _, collector := range []prometheus.Collector{recorder.requests, recorder.duration, recorder.inFlight} {

@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 
 	"go.uber.org/zap"
 
@@ -9,6 +10,7 @@ import (
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
+	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
 // LogoutAllSessionsUseCase 处理认证用户全部会话撤销。
@@ -37,9 +39,15 @@ func (u *logoutAllSessionsUseCase) LogoutAllSessions(ctx context.Context) (*Logo
 		u.metrics.LogoutFailed(ctx, authapplication.MetricsOperationLogoutAll, authapplication.MetricsReasonAuthContextMissing)
 		return nil, err
 	}
-	if _, err = u.sessions.RevokeAllUserSessions(ctx, userID); err != nil {
+	revocation, err := u.sessions.RevokeAllUserSessions(ctx, userID)
+	if err != nil {
 		u.metrics.LogoutFailed(ctx, authapplication.MetricsOperationLogoutAll, authapplication.MetricsReasonSessionRevokeFailed)
 		return nil, err
+	}
+	if revocation != nil && revocation.ProjectionError != nil {
+		logger.Error(ctx, "logout all session revocation projection incomplete", logger.StackTrace(zap.String("user_id", userID.String()), zap.Int64("token_version", revocation.TokenVersion), zap.Error(revocation.ProjectionError))...)
+		u.metrics.LogoutFailed(ctx, authapplication.MetricsOperationLogoutAll, authapplication.MetricsReasonSessionRevokeFailed)
+		return nil, errors.Join(authdomain.ErrSessionRevocationIncomplete, revocation.ProjectionError)
 	}
 	u.metrics.LogoutSucceeded(ctx, authapplication.MetricsOperationLogoutAll)
 	return &LogoutResult{LoggedOut: true}, nil

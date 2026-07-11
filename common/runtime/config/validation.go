@@ -10,48 +10,9 @@ import (
 )
 
 const (
-	minPort = 1
-	maxPort = 65535
-)
-
-var (
-	validLogLevels = map[string]struct{}{
-		"debug": {},
-		"info":  {},
-		"warn":  {},
-		"error": {},
-	}
-	validLogFormats = map[string]struct{}{
-		"json":    {},
-		"console": {},
-		"text":    {},
-	}
-	validPostgresDrivers = map[string]struct{}{
-		"pgx": {},
-	}
-	validPostgresSSLModes = map[string]struct{}{
-		"disable":     {},
-		"allow":       {},
-		"prefer":      {},
-		"require":     {},
-		"verify-ca":   {},
-		"verify-full": {},
-	}
-	validTracingExporters = map[string]struct{}{
-		"none": {},
-		"otlp": {},
-	}
-	productionLikeEnvironments = map[string]struct{}{
-		"prod":       {},
-		"production": {},
-		"staging":    {},
-	}
-	insecureJWTSecrets = map[string]struct{}{
-		"changeme":                 {},
-		"local-development-secret": {},
-		"secret":                   {},
-		"test-secret":              {},
-	}
+	minPort               = 1
+	maxPort               = 65535
+	minProductionJWTBytes = 32
 )
 
 // ValidationError 聚合配置校验失败，使启动阶段能一次性报告全部非法字段。
@@ -147,8 +108,10 @@ func (c Config) validateAuth() []error {
 	if secret == "" {
 		errs = append(errs, configFieldError("auth.jwt.secret", "is required"))
 	} else if c.isProductionLike() {
-		if _, insecure := insecureJWTSecrets[strings.ToLower(secret)]; insecure {
+		if isInsecureJWTSecret(strings.ToLower(secret)) {
 			errs = append(errs, configFieldError("auth.jwt.secret", "must not use a development default in production-like environments"))
+		} else if len([]byte(secret)) < minProductionJWTBytes {
+			errs = append(errs, configFieldError("auth.jwt.secret", "must be at least 32 bytes in production-like environments"))
 		}
 	}
 	errs = append(errs, validatePositiveDuration("auth.jwt.access_token_ttl", c.Auth.JWT.AccessTokenTTL)...)
@@ -167,13 +130,13 @@ func (c Config) validateLog() []error {
 	level := strings.ToLower(strings.TrimSpace(c.Log.Level))
 	if level == "" {
 		errs = append(errs, configFieldError("log.level", "is required"))
-	} else if _, ok := validLogLevels[level]; !ok {
+	} else if !isValidLogLevel(level) {
 		errs = append(errs, configFieldError("log.level", "must be one of debug, info, warn, error"))
 	}
 	format := strings.ToLower(strings.TrimSpace(c.Log.Format))
 	if format == "" {
 		errs = append(errs, configFieldError("log.format", "is required"))
-	} else if _, ok := validLogFormats[format]; !ok {
+	} else if !isValidLogFormat(format) {
 		errs = append(errs, configFieldError("log.format", "must be one of json, console, text"))
 	}
 	if c.Log.Directory != "" || c.Log.Filename != "" {
@@ -204,7 +167,7 @@ func (c Config) validateObservability() []error {
 	exporter := strings.ToLower(strings.TrimSpace(c.Observability.Tracing.Exporter))
 	if exporter == "" {
 		errs = append(errs, configFieldError("observability.tracing.exporter", "is required"))
-	} else if _, ok := validTracingExporters[exporter]; !ok {
+	} else if !isValidTracingExporter(exporter) {
 		errs = append(errs, configFieldError("observability.tracing.exporter", "must be one of none, otlp"))
 	}
 	if exporter == "otlp" {
@@ -284,13 +247,13 @@ func (c Config) validatePostgres() []error {
 		driver := strings.ToLower(strings.TrimSpace(pg.Driver))
 		if driver == "" {
 			errs = append(errs, configFieldError(base+".driver", "is required"))
-		} else if _, ok := validPostgresDrivers[driver]; !ok {
+		} else if !isValidPostgresDriver(driver) {
 			errs = append(errs, configFieldError(base+".driver", "must be pgx"))
 		}
 		sslMode := strings.ToLower(strings.TrimSpace(pg.SSLMode))
 		if sslMode == "" {
 			errs = append(errs, configFieldError(base+".sslmode", "is required"))
-		} else if _, ok := validPostgresSSLModes[sslMode]; !ok {
+		} else if !isValidPostgresSSLMode(sslMode) {
 			errs = append(errs, configFieldError(base+".sslmode", "must be a valid PostgreSQL sslmode"))
 		} else if c.isProductionLike() && sslMode == "disable" {
 			errs = append(errs, configFieldError(base+".sslmode", "must not be disable in production-like environments"))
@@ -308,8 +271,61 @@ func (c Config) validatePostgres() []error {
 }
 
 func (c Config) isProductionLike() bool {
-	_, ok := productionLikeEnvironments[strings.ToLower(strings.TrimSpace(c.App.Environment))]
-	return ok
+	switch strings.ToLower(strings.TrimSpace(c.App.Environment)) {
+	case "prod", "production", "staging":
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidLogLevel(value string) bool {
+	switch value {
+	case "debug", "info", "warn", "error":
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidLogFormat(value string) bool {
+	switch value {
+	case "json", "console", "text":
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidPostgresDriver(value string) bool {
+	return value == "pgx"
+}
+
+func isValidPostgresSSLMode(value string) bool {
+	switch value {
+	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidTracingExporter(value string) bool {
+	switch value {
+	case "none", "otlp":
+		return true
+	default:
+		return false
+	}
+}
+
+func isInsecureJWTSecret(value string) bool {
+	switch value {
+	case "changeme", "local-development-secret", "secret", "test-secret":
+		return true
+	default:
+		return false
+	}
 }
 
 func validateHostPort(path string, value string) []error {

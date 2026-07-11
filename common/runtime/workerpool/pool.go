@@ -40,8 +40,12 @@ type Pool struct {
 	cancel      context.CancelFunc
 	workersPool *ants.Pool
 
-	closeOnce sync.Once
-	closed    atomic.Bool
+	admissionMu sync.Mutex
+	inFlight    sync.WaitGroup
+	stopOnce    sync.Once
+	stopDone    chan struct{}
+	stopErr     error
+	closed      atomic.Bool
 
 	counters counters
 }
@@ -84,6 +88,7 @@ func NewUnmanaged(log *zap.Logger, opts Options) (*Pool, error) {
 		ctx:         ctx,
 		cancel:      cancel,
 		workersPool: antsPool,
+		stopDone:    make(chan struct{}),
 	}
 	return pool, nil
 }
@@ -108,14 +113,25 @@ func (p *Pool) Submit(ctx context.Context, task Task) error {
 		return ErrClosed
 	}
 
+	p.admissionMu.Lock()
+	if p.closed.Load() {
+		p.admissionMu.Unlock()
+		p.counters.rejected.Add(1)
+		return ErrClosed
+	}
 	p.counters.submitted.Add(1)
 	p.counters.queued.Add(1)
+	p.inFlight.Add(1)
+	p.admissionMu.Unlock()
+
 	if err := p.workersPool.Submit(func() {
+		defer p.inFlight.Done()
 		p.run(ctx, task)
 	}); err != nil {
 		p.counters.submitted.Add(-1)
 		p.counters.queued.Add(-1)
 		p.counters.rejected.Add(1)
+		p.inFlight.Done()
 		if errors.Is(err, ants.ErrPoolOverload) {
 			// 当前池使用阻塞提交，普通池满会等待；该分支保留给未来启用 ants 过载保护时统一映射错误。
 			p.log.Warn("worker pool overloaded", p.fields(task, zap.Int("workers", p.workers))...)
@@ -149,30 +165,53 @@ func (p *Pool) Stats() Stats {
 	}
 }
 
-// Stop 停止接收新任务，并使用 ants 原生生命周期等待已接收任务完成。
+// Stop 停止接收新任务，并等待已登记或已接收任务完成。
 func (p *Pool) Stop(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	shouldRelease := false
-	p.closeOnce.Do(func() {
+	p.stopOnce.Do(func() {
+		p.admissionMu.Lock()
 		p.closed.Store(true)
-		shouldRelease = true
+		p.admissionMu.Unlock()
+		go p.drain()
 	})
-	if !shouldRelease {
-		return nil
+
+	select {
+	case <-p.stopDone:
+		return p.stopErr
+	default:
 	}
 
 	stopCtx, cancel := withStopTimeout(ctx, p.stopTimeout)
 	defer cancel()
-	if err := p.workersPool.ReleaseContext(stopCtx); err != nil {
+	select {
+	case <-p.stopDone:
+		return p.stopErr
+	case <-stopCtx.Done():
+		select {
+		case <-p.stopDone:
+			return p.stopErr
+		default:
+		}
 		p.cancel()
+		err := fmt.Errorf("stop worker pool %s: %w", p.name, stopCtx.Err())
 		p.log.Error("worker pool stop failed", zap.String("pool", p.name), zap.Any("stats", p.Stats()), zap.Error(err))
-		return fmt.Errorf("stop worker pool %s: %w", p.name, err)
+		return err
 	}
+}
+
+func (p *Pool) drain() {
+	p.stopErr = p.workersPool.ReleaseContext(context.Background())
+	p.inFlight.Wait()
 	p.cancel()
-	p.log.Info("worker pool stopped", zap.String("pool", p.name), zap.Any("stats", p.Stats()))
-	return nil
+	if p.stopErr != nil {
+		p.stopErr = fmt.Errorf("stop worker pool %s: %w", p.name, p.stopErr)
+		p.log.Error("worker pool stop failed", zap.String("pool", p.name), zap.Any("stats", p.Stats()), zap.Error(p.stopErr))
+	} else {
+		p.log.Info("worker pool stopped", zap.String("pool", p.name), zap.Any("stats", p.Stats()))
+	}
+	close(p.stopDone)
 }
 
 func withStopTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {

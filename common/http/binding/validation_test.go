@@ -201,11 +201,11 @@ func TestBinders(t *testing.T) {
 
 func TestBindOrAbort(t *testing.T) {
 	validator := newTestValidator(t)
-	logs := captureValidationLogs(t)
 	type request struct {
 		Name string `json:"name" validate:"required"`
 	}
 	ctx, recorder := newJSONContextWithRecorder(`{}`)
+	logs := captureValidationLogs(t, ctx)
 	var req request
 	require.False(t, BindOrAbort(validator, ctx, &req, JSONBinder))
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -234,11 +234,11 @@ func TestBindOrAbort(t *testing.T) {
 
 func TestBindOrAbortTypeMismatchUsesBadRequest(t *testing.T) {
 	validator := newTestValidator(t)
-	logs := captureValidationLogs(t)
 	type request struct {
 		ID int64 `uri:"id" label:"用户ID"`
 	}
 	ctx, recorder := newRequestContextWithRecorder(http.MethodGet, "/users/bad", "")
+	logs := captureValidationLogs(t, ctx)
 	ctx.Params = gin.Params{{Key: "id", Value: "bad"}}
 	var req request
 	require.False(t, BindOrAbort(validator, ctx, &req, URIBinder))
@@ -308,10 +308,9 @@ func jsonUnmarshal(raw string, dst any) error {
 	return json.NewDecoder(strings.NewReader(raw)).Decode(dst)
 }
 
-func captureValidationLogs(t *testing.T) *observer.ObservedLogs {
+func captureValidationLogs(t *testing.T, ctx *gin.Context) *observer.ObservedLogs {
 	t.Helper()
 	core, logs := observer.New(zapcore.DebugLevel)
-	logger.SetDefault(zap.New(core))
-	t.Cleanup(func() { logger.SetDefault(nil) })
+	ctx.Request = ctx.Request.WithContext(logger.ToContext(ctx.Request.Context(), zap.New(core)))
 	return logs
 }

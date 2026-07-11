@@ -245,6 +245,20 @@ func TestSchedulerMetricsAdapterDisabledProviderReturnsNop(t *testing.T) {
 	require.IsType(t, scheduler.NopMetrics{}, recorder)
 }
 
+func TestSchedulerMetricsAdapterUsesDefaultDurationBuckets(t *testing.T) {
+	provider := newTestProvider(t, true, false)
+	recorder := NewSchedulerMetrics(provider, SchedulerMetricsOptions{})
+	recorder.JobCompleted("job", 50*time.Millisecond)
+
+	metric := firstMetric(t, gatherFamily(t, provider, schedulerJobDurationMetricName))
+	buckets := metric.GetHistogram().GetBucket()
+	require.Len(t, buckets, 11)
+	wants := []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}
+	for index, want := range wants {
+		require.Equal(t, want, buckets[index].GetUpperBound())
+	}
+}
+
 func TestComponentStatusCollectorExportsRunningAndLastError(t *testing.T) {
 	provider := newTestProvider(t, true, false)
 	collector, err := NewComponentStatusCollector(ComponentStatusCollectorOptions{

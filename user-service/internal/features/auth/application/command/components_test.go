@@ -200,7 +200,7 @@ func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
 	tokenVersions := NewMockTokenVersionCache(ctrl)
 	sessions := NewMockRefreshSessionStore(ctrl)
 	passwordChanges := NewMockPasswordChangeSessionStore(ctrl)
-	lifecycle := authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, 5)
+	lifecycle := authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, 5, noopTokenVersionInvalidator{})
 	claims := &commonauth.Claims{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123"}
 
 	sessions.EXPECT().GetSession(gomock.Any(), authTestUserID.String(), "s-123").Return(authRefreshTestSession("s-123", 2), nil)
@@ -444,5 +444,5 @@ func newGeneratedAuthSessionLifecycle(ctrl *gomock.Controller) (authsessions.Lif
 	tokenVersions := NewMockTokenVersionCache(ctrl)
 	sessions := NewMockRefreshSessionStore(ctrl)
 	passwordChanges := NewMockPasswordChangeSessionStore(ctrl)
-	return authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, 5), users, tokenVersions, sessions
+	return authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, 5, noopTokenVersionInvalidator{}), users, tokenVersions, sessions
 }

@@ -76,7 +76,10 @@ func registerDBLifecycle(lc fx.Lifecycle, log *zap.Logger, dbs map[string]*sql.D
 				pingCtx, cancel := context.WithTimeout(ctx, cfg.PingTimeout)
 				if err := db.PingContext(pingCtx); err != nil {
 					cancel()
-					return fmt.Errorf("ping postgres %s: %w", name, err)
+					return errors.Join(
+						fmt.Errorf("ping postgres %s: %w", name, err),
+						closePostgresPools(dbs),
+					)
 				}
 				cancel()
 				logger.WithContext(ctx, log).Info("postgres connected", zap.String("name", name))

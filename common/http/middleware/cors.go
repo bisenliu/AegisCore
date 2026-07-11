@@ -40,21 +40,18 @@ type CORSOptions struct {
 	ReflectOrigin    bool
 }
 
-var defaultCORSOptions = CORSOptions{
-	// 共享默认策略对服务内 API 保持宽松，部署环境可传入更严格的选项。
-	AllowedOrigins: []string{"*"},
-	AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-	AllowedHeaders: []string{auth.AuthorizationHeader, "Content-Type"},
-}
-
 // CORS 返回使用包默认 CORS 策略的中间件。
 func CORS() gin.HandlerFunc {
-	return CORSWithOptions(defaultCORSOptions)
+	return CORSWithOptions(defaultCORSOptions())
 }
 
 // CORSWithOptions 返回使用调用方自定义 CORS 策略的中间件。
 func CORSWithOptions(options CORSOptions) gin.HandlerFunc {
 	options = normalizeCORSOptions(options)
+	options.AllowedOrigins = append([]string(nil), options.AllowedOrigins...)
+	options.AllowedMethods = append([]string(nil), options.AllowedMethods...)
+	options.AllowedHeaders = append([]string(nil), options.AllowedHeaders...)
+	options.ExposedHeaders = append([]string(nil), options.ExposedHeaders...)
 	return func(c *gin.Context) {
 		origin := strings.Join(options.AllowedOrigins, ",")
 		if options.ReflectOrigin {
@@ -84,14 +81,24 @@ func CORSWithOptions(options CORSOptions) gin.HandlerFunc {
 }
 
 func normalizeCORSOptions(options CORSOptions) CORSOptions {
+	defaults := defaultCORSOptions()
 	if len(options.AllowedOrigins) == 0 {
-		options.AllowedOrigins = defaultCORSOptions.AllowedOrigins
+		options.AllowedOrigins = defaults.AllowedOrigins
 	}
 	if len(options.AllowedMethods) == 0 {
-		options.AllowedMethods = defaultCORSOptions.AllowedMethods
+		options.AllowedMethods = defaults.AllowedMethods
 	}
 	if len(options.AllowedHeaders) == 0 {
-		options.AllowedHeaders = defaultCORSOptions.AllowedHeaders
+		options.AllowedHeaders = defaults.AllowedHeaders
 	}
 	return options
+}
+
+func defaultCORSOptions() CORSOptions {
+	// 共享默认策略对服务内 API 保持宽松，部署环境可传入更严格的选项。
+	return CORSOptions{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
+		AllowedHeaders: []string{auth.AuthorizationHeader, "Content-Type"},
+	}
 }

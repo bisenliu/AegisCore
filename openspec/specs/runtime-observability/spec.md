@@ -85,6 +85,13 @@
 - **WHEN** 系统记录 metrics 标签
 - **THEN** 标签 MUST 保持低基数，MUST NOT 包含用户 ID、角色 ID、权限 ID、会话 ID、token ID、trace/span ID、raw path、IP、邮箱、用户名、SQL、Redis key 或原始错误
 
+#### Scenario: skip endpoint 保持 in-flight gauge 正确归零
+
+- **WHEN** HTTP metrics middleware 对 runtime endpoint 或其他被配置跳过的请求应用 skip 规则
+- **THEN** 请求总数和耗时指标 MAY 不记录该请求
+- **AND** in-flight gauge MUST 在请求结束时正确递减到 `0`
+- **AND** 系统 MUST NOT 删除该 route label value 导致并发请求计数丢失或 gauge 状态被破坏
+
 #### Scenario: localcache metrics 结构化输出
 
 - **WHEN** localcache collector 导出命中、未命中、加载、singleflight、写入、驱逐和容量指标
@@ -440,7 +447,7 @@ OpenAPI 转换和生成链路相关工具测试 MUST 使用语义化断言验证
 
 ### Requirement: Redis 命令 tracing
 
-系统 MUST 为共享 datastore 创建的 go-redis client 安装 OpenTelemetry tracing hook，使 Redis 命令在调用方 context 包含有效 trace 时产生 Redis client span。该 tracing MUST 不改变 Redis key schema、命令结果、连接生命周期、启动 ping、Redis PING metrics 或业务缓存语义。
+系统 MUST 为共享 datastore 创建的 go-redis client 安装 OpenTelemetry tracing hook，使 Redis 命令在调用方 context 包含有效 trace 时产生 Redis client span。user-service Redis provider MUST 使用服务级 tracing provider 注入 go-redis instrumentation，缺少 tracing provider 时 MUST 返回明确错误。该 tracing MUST 不改变 Redis key schema、命令结果、连接生命周期、启动 ping、Redis PING metrics 或业务缓存语义。
 
 #### Scenario: Redis 命令产生 span
 
@@ -459,6 +466,13 @@ OpenAPI 转换和生成链路相关工具测试 MUST 使用语义化断言验证
 - **WHEN** tracing provider 未启用或使用 no-op tracer provider
 - **THEN** Redis 命令 MUST 保持原有执行结果和错误语义
 - **AND** 系统 MUST NOT 因 tracing 禁用跳过 Redis 命令、启动 ping 或 Redis metrics 探测
+
+#### Scenario: Redis provider 注入服务 tracing provider
+
+- **WHEN** user-service 通过 Redis provider 创建共享 datastore Redis client
+- **THEN** provider MUST 将服务级 tracing provider 显式传递给 Redis instrumentation
+- **AND** 缺少 tracing provider 时 provider MUST 返回明确错误并拒绝继续装配 Redis client
+- **AND** Redis 启动 PING 产生 tracing span 时 MUST 保持 PING 命令结果、连接生命周期和 metrics 语义不变
 
 ### Requirement: Ent 查询观测
 
