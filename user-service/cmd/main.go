@@ -40,25 +40,61 @@ type lifecycleApp interface {
 	Stop(context.Context) error
 }
 
-// newLifecycleApp 构造服务生命周期 app，并允许测试替换。
-var newLifecycleApp = func(configPath string) lifecycleApp {
+type lifecycleAppFactory func(configPath string) lifecycleApp
+
+type rbacSeedRunner func(context.Context, string, rbacSeedOptions) error
+
+type rbacAssignSuperAdminRunner func(context.Context, string, uuid.UUID) error
+
+type rbacCreateSuperAdminRunner func(context.Context, string, rbacCreateSuperAdminOptions) error
+
+type rootCommandDependencies struct {
+	appFactory             lifecycleAppFactory
+	seedRunner             rbacSeedRunner
+	assignSuperAdminRunner rbacAssignSuperAdminRunner
+	createSuperAdminRunner rbacCreateSuperAdminRunner
+}
+
+func defaultRootCommandDependencies() rootCommandDependencies {
+	return rootCommandDependencies{
+		appFactory:             newBootstrapLifecycleApp,
+		seedRunner:             runRBACSeedCommand,
+		assignSuperAdminRunner: runAssignSuperAdminCommand,
+		createSuperAdminRunner: runCreateSuperAdminCommand,
+	}
+}
+
+func (deps rootCommandDependencies) withDefaults() rootCommandDependencies {
+	defaults := defaultRootCommandDependencies()
+	if deps.appFactory == nil {
+		deps.appFactory = defaults.appFactory
+	}
+	if deps.seedRunner == nil {
+		deps.seedRunner = defaults.seedRunner
+	}
+	if deps.assignSuperAdminRunner == nil {
+		deps.assignSuperAdminRunner = defaults.assignSuperAdminRunner
+	}
+	if deps.createSuperAdminRunner == nil {
+		deps.createSuperAdminRunner = defaults.createSuperAdminRunner
+	}
+	return deps
+}
+
+func newBootstrapLifecycleApp(configPath string) lifecycleApp {
 	return bootstrap.NewApp(configPath)
 }
 
-var runRBACSeed = runRBACSeedCommand
-
-var runAssignSuperAdmin = runAssignSuperAdminCommand
-
-var runCreateSuperAdmin = runCreateSuperAdminCommand
-
 func main() {
-	if err := newRootCommand().Execute(); err != nil {
+	if err := newRootCommand(defaultRootCommandDependencies()).Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func newRootCommand() *cobra.Command {
+func newRootCommand(deps rootCommandDependencies) *cobra.Command {
+	deps = deps.withDefaults()
+
 	var configPath string
 	var rbacConfigPath string
 	var reactivateSystem bool
@@ -77,7 +113,7 @@ func newRootCommand() *cobra.Command {
 		Use:   "serve",
 		Short: "Start the AegisCore user services HTTP server",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runServe(cmd.Context(), configPath)
+			return runServe(cmd.Context(), configPath, deps.appFactory)
 		},
 	}
 	serve.Flags().StringVar(&configPath, "config", "./configs/config.yaml", "path to YAML configuration file")
@@ -93,7 +129,7 @@ func newRootCommand() *cobra.Command {
 		Use:   "seed",
 		Short: "Seed default RBAC system roles, permissions, and bindings",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runRBACSeed(cmd.Context(), rbacConfigPath, rbacSeedOptions{reactivateSystem: reactivateSystem, syncSystemBindings: syncSystemBindings})
+			return deps.seedRunner(cmd.Context(), rbacConfigPath, rbacSeedOptions{reactivateSystem: reactivateSystem, syncSystemBindings: syncSystemBindings})
 		},
 	}
 	seed.Flags().BoolVar(&reactivateSystem, "reactivate-system", false, "reactivate catalog-managed system roles and permissions")
@@ -108,7 +144,7 @@ func newRootCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("invalid --user-id: %w", err)
 			}
-			return runAssignSuperAdmin(cmd.Context(), rbacConfigPath, userID)
+			return deps.assignSuperAdminRunner(cmd.Context(), rbacConfigPath, userID)
 		},
 	}
 	assignSuperAdmin.Flags().StringVar(&superAdminUserID, "user-id", "", "user UUID to receive the built-in super admin role")
@@ -119,7 +155,7 @@ func newRootCommand() *cobra.Command {
 		Use:   "create-super-admin",
 		Short: "Create the default admin user and assign the built-in super admin role",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runCreateSuperAdmin(cmd.Context(), rbacConfigPath, createSuperAdminOpts)
+			return deps.createSuperAdminRunner(cmd.Context(), rbacConfigPath, createSuperAdminOpts)
 		},
 	}
 	createSuperAdmin.Flags().StringVar(&createSuperAdminOpts.username, "username", defaultCreateSuperAdminUsername, "admin username to create or bind")
@@ -143,12 +179,15 @@ func newRootCommand() *cobra.Command {
 	return root
 }
 
-func runServe(ctx context.Context, configPath string) error {
+func runServe(ctx context.Context, configPath string, appFactory lifecycleAppFactory) error {
 	upstreamCtx := ctx
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	app := newLifecycleApp(configPath)
+	if appFactory == nil {
+		appFactory = newBootstrapLifecycleApp
+	}
+	app := appFactory(configPath)
 	startCtx, cancelStart := context.WithTimeout(ctx, fxAppStartTimeout)
 	defer cancelStart()
 	if err := app.Start(startCtx); err != nil {
