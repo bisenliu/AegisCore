@@ -13,14 +13,16 @@ func TestValidateStructAndFieldNames(t *testing.T) {
 	validator := newTestValidator(t)
 
 	type request struct {
-		Name    string `json:"name" validate:"required" label:"姓名"`
-		Age     int    `form:"age" validate:"gt=0"`
-		URIID   int64  `uri:"id" validate:"gt=0"`
-		QueryID int64  `query:"query_id" validate:"gt=0"`
-		Hidden  string `json:"-" validate:"-"`
+		Name     string `json:"name" validate:"required" label:"姓名"`
+		Age      int    `form:"age" validate:"gt=0"`
+		TraceID  string `header:"X-Trace-ID" validate:"required"`
+		URIID    int64  `uri:"id" validate:"gt=0"`
+		QueryID  int64  `query:"query_id" validate:"gt=0"`
+		Priority string `json:"json_priority" form:"form_priority" header:"Header-Priority" uri:"uri_priority" query:"query_priority" validate:"required"`
+		Hidden   string `json:"-" validate:"-"`
 	}
 
-	require.NoError(t, validator.Validate(&request{Name: "aegis", Age: 1, URIID: 1, QueryID: 1}))
+	require.NoError(t, validator.Validate(&request{Name: "aegis", Age: 1, TraceID: "trace", URIID: 1, QueryID: 1, Priority: "high"}))
 
 	err := validator.Validate(&request{})
 	var validationErr *Error
@@ -32,10 +34,12 @@ func TestValidateStructAndFieldNames(t *testing.T) {
 	require.ErrorIs(t, validationErr, &contracterrors.Error{Kind: contracterrors.KindValidation})
 	fields := fieldDetails(validationErr.Fields)
 	checks := map[string]FieldError{
-		"name":     {Field: "name", Label: "姓名", Rule: "required"},
-		"age":      {Field: "age", Label: "age", Rule: "gt"},
-		"id":       {Field: "id", Label: "id", Rule: "gt"},
-		"query_id": {Field: "query_id", Label: "query_id", Rule: "gt"},
+		"name":          {Field: "name", Label: "姓名", Rule: "required"},
+		"age":           {Field: "age", Label: "age", Rule: "gt"},
+		"X-Trace-ID":    {Field: "X-Trace-ID", Label: "X-Trace-ID", Rule: "required"},
+		"id":            {Field: "id", Label: "id", Rule: "gt"},
+		"query_id":      {Field: "query_id", Label: "query_id", Rule: "gt"},
+		"json_priority": {Field: "json_priority", Label: "json_priority", Rule: "required"},
 	}
 	for field, want := range checks {
 		got := fields[field]

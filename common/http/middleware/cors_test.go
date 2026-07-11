@@ -43,7 +43,7 @@ func TestCORSUsesDefaultOptions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := exerciseCORSRequest(t, CORS(), tt.method)
-			want := exerciseCORSRequest(t, CORSWithOptions(defaultCORSOptions), tt.method)
+			want := exerciseCORSRequest(t, CORSWithOptions(defaultCORSOptions()), tt.method)
 
 			requireEquivalentCORSResult(t, want, got)
 			require.Equal(t, tt.wantStatus, got.status)
@@ -52,6 +52,27 @@ func TestCORSUsesDefaultOptions(t *testing.T) {
 			requireDefaultCORSHeaders(t, got.headers)
 		})
 	}
+}
+
+func TestCORSWithOptionsCopiesSlicesAtConstruction(t *testing.T) {
+	options := CORSOptions{
+		AllowedOrigins: []string{"https://client.test"},
+		AllowedMethods: []string{http.MethodGet},
+		AllowedHeaders: []string{"Content-Type"},
+		ExposedHeaders: []string{"X-Trace-ID"},
+	}
+	middleware := CORSWithOptions(options)
+
+	options.AllowedOrigins[0] = "https://mutated.test"
+	options.AllowedMethods[0] = http.MethodDelete
+	options.AllowedHeaders[0] = "X-Mutated"
+	options.ExposedHeaders[0] = "X-Mutated"
+
+	got := exerciseCORSRequest(t, middleware, http.MethodGet)
+	require.Equal(t, "https://client.test", got.headers.Get(HeaderAccessControlAllowOrigin))
+	require.Equal(t, http.MethodGet, got.headers.Get(HeaderAccessControlAllowMethods))
+	require.Equal(t, "Content-Type", got.headers.Get(HeaderAccessControlAllowHeaders))
+	require.Equal(t, "X-Trace-ID", got.headers.Get(HeaderAccessControlExposeHeaders))
 }
 
 func TestCORSWithOptionsAppliesConfiguredHeaders(t *testing.T) {

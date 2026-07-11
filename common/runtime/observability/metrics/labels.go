@@ -36,23 +36,6 @@ const (
 	LabelReason = "reason"
 )
 
-var allowedLowCardinalityLabelKeys = map[string]struct{}{
-	LabelService:      {},
-	LabelEnvironment:  {},
-	LabelMethod:       {},
-	LabelRoute:        {},
-	LabelStatusClass:  {},
-	LabelCode:         {},
-	LabelResult:       {},
-	LabelResource:     {},
-	LabelCache:        {},
-	LabelPool:         {},
-	LabelSchedulerJob: {},
-	LabelEvent:        {},
-	LabelStatus:       {},
-	LabelReason:       {},
-}
-
 // ErrUnsupportedLabelKey 表示 label key 不属于当前跨服务低基数约定。
 var ErrUnsupportedLabelKey = errors.New("unsupported metrics label key")
 
@@ -66,8 +49,11 @@ func StatusClass(status int) string {
 
 // ValidateLowCardinalityLabelKey 校验通用 metrics helper 允许的低基数 label key。
 func ValidateLowCardinalityLabelKey(key string) error {
-	if _, ok := allowedLowCardinalityLabelKeys[key]; ok {
+	switch key {
+	case LabelService, LabelEnvironment, LabelMethod, LabelRoute, LabelStatusClass, LabelCode,
+		LabelResult, LabelResource, LabelCache, LabelPool, LabelSchedulerJob, LabelEvent, LabelStatus, LabelReason:
 		return nil
+	default:
+		return fmt.Errorf("%w: %s", ErrUnsupportedLabelKey, key)
 	}
-	return fmt.Errorf("%w: %s", ErrUnsupportedLabelKey, key)
 }

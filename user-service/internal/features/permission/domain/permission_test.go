@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -111,6 +112,24 @@ func TestRouteIdentityValidation(t *testing.T) {
 		_, err := NewRouteIdentity("GET", "/livez")
 		require.ErrorIs(t, err, ErrPermissionInvalid)
 	})
+}
+
+func TestNormalizeHTTPMethodAllowlist(t *testing.T) {
+	for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
+		t.Run(method, func(t *testing.T) {
+			got, err := NormalizeHTTPMethod(" " + strings.ToLower(method) + " ")
+			require.NoError(t, err)
+			require.Equal(t, method, got)
+		})
+	}
+
+	for _, method := range []string{"", "HEAD", "OPTIONS", "TRACE", "CONNECT"} {
+		t.Run("reject_"+method, func(t *testing.T) {
+			_, err := NormalizeHTTPMethod(method)
+			require.ErrorIs(t, err, ErrPermissionInvalid)
+			require.ErrorContains(t, err, "unsupported http method")
+		})
+	}
 }
 
 func TestSystemPermissionProtection(t *testing.T) {
