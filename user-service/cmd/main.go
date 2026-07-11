@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
+	runtimefxgraph "github.com/aegiscore/common/runtime/fxgraph"
 	"github.com/aegiscore/user-service/internal/bootstrap"
 )
 
@@ -53,6 +54,7 @@ type rootCommandDependencies struct {
 	seedRunner             rbacSeedRunner
 	assignSuperAdminRunner rbacAssignSuperAdminRunner
 	createSuperAdminRunner rbacCreateSuperAdminRunner
+	fxGraphWriter          fxGraphWriter
 }
 
 func defaultRootCommandDependencies() rootCommandDependencies {
@@ -61,6 +63,7 @@ func defaultRootCommandDependencies() rootCommandDependencies {
 		seedRunner:             newRBACSeedRunner(defaultRBACSeedDependencies),
 		assignSuperAdminRunner: newRBACAssignSuperAdminRunner(defaultRBACSeedDependencies),
 		createSuperAdminRunner: newRBACCreateSuperAdminRunner(defaultRBACSeedDependencies),
+		fxGraphWriter:          runtimefxgraph.WriteDOT,
 	}
 }
 
@@ -77,6 +80,9 @@ func (deps rootCommandDependencies) withDefaults() rootCommandDependencies {
 	}
 	if deps.createSuperAdminRunner == nil {
 		deps.createSuperAdminRunner = defaults.createSuperAdminRunner
+	}
+	if deps.fxGraphWriter == nil {
+		deps.fxGraphWriter = defaults.fxGraphWriter
 	}
 	return deps
 }
@@ -187,7 +193,7 @@ func newRootCommand(deps rootCommandDependencies) *cobra.Command {
 		Use:   "fxgraph",
 		Short: "Generate the user-service Fx dependency graph",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runFxGraphCommand(fxGraphConfigPath, fxGraphOutputPath)
+			return runFxGraphCommand(fxGraphConfigPath, fxGraphOutputPath, deps.fxGraphWriter)
 		},
 	}
 	fxGraph.Flags().StringVar(&fxGraphConfigPath, "config", "./configs/config.yaml", "path to YAML configuration file")

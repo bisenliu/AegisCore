@@ -97,17 +97,15 @@ func TestRootCommandSurface(t *testing.T) {
 }
 
 func TestFxGraphCommandWritesGraph(t *testing.T) {
-	originalWrite := writeFxGraph
-	t.Cleanup(func() { writeFxGraph = originalWrite })
 	called := false
-	writeFxGraph = func(path string, opts ...fx.Option) (string, error) {
+	deps := rootCommandDependencies{fxGraphWriter: func(path string, opts ...fx.Option) (string, error) {
 		called = true
 		require.Equal(t, "docs/test.dot", path)
-		require.NotEmpty(t, opts)
+		require.Len(t, opts, 3)
 		return "digraph {}\n", nil
-	}
+	}}
 
-	root := newRootCommand(rootCommandDependencies{})
+	root := newRootCommand(deps)
 	root.SetArgs([]string{"fxgraph", "--config", "test-config.yaml", "--output", "docs/test.dot"})
 	require.NoError(t, root.Execute())
 	require.True(t, called)
