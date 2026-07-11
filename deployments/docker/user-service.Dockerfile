@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.25
 # 从仓库根目录构建：
 #   docker buildx build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
 #
