@@ -564,3 +564,49 @@ OpenAPI 转换和生成链路相关工具测试 MUST 使用语义化断言验证
 - **WHEN** 执行观测资产或 metrics load 验证脚本
 - **THEN** 验证 MUST 覆盖强制改密会话消费失败、重复消费拒绝、撤销投影失败和补偿失败指标的 presence 或 PromQL 查询
 - **AND** 指标缺失或 PromQL drift MUST 能被验证流程发现
+
+### Requirement: Logger 默认值测试隔离
+
+系统 MUST 将 `common/runtime/logger` 中修改进程级默认 logger 的测试限定为验证默认 logger 兜底行为的用例。其他日志字段、trace/span 关联、SQL logger 或日志捕获测试 MUST 优先使用 context logger 或局部 logger 注入，并 MUST 保持生产日志字段、message、level 和 tracing 传播语义不变。
+
+#### Scenario: 非默认 logger 行为测试使用局部 logger
+
+- **WHEN** 测试验证 trace/span 字段、SQL logger、日志 message 或日志捕获结果且不需要覆盖进程级兜底 logger
+- **THEN** 测试 MUST 通过 `logger.ToContext`、`logger.WithContext` 或显式传入的局部 logger 捕获日志
+- **AND** 测试 MUST NOT 调用 `logger.SetDefault` 替换进程级默认 logger
+
+#### Scenario: 默认 logger 行为测试恢复进程状态
+
+- **WHEN** 测试必须调用 `logger.SetDefault` 验证 `FromContext` 的默认 logger 兜底行为
+- **THEN** 测试 MUST 保存调用前的默认 logger 并在 cleanup 中恢复
+- **AND** 该测试 MUST NOT 标记为并行测试
+
+#### Scenario: 生产观测契约保持不变
+
+- **WHEN** logger 默认值测试隔离完成
+- **THEN** `FromContext`、`WithContext`、`SQL` 和 `SetDefault` 的生产行为 MUST 保持不变
+- **AND** `trace_id`、`span_id`、logger name、日志 level 和 log message MUST 保持不变
+
+### Requirement: 观测只读集合不得暴露共享可写状态
+runtime observability 中用于 Prometheus label key、HTTP metrics label name 和 scheduler histogram bucket 的只读集合 MUST 使用不暴露共享可写底层状态的表达方式。实现 MUST 保持 metric family、label key、label value、label 顺序、bucket 数值和采集语义不变。
+
+#### Scenario: 低基数 label key allowlist 不可被包内误写
+- **WHEN** `common/runtime/observability/metrics` 校验 low-cardinality label key
+- **THEN** allowlist MUST 使用 `switch`、私有查询函数或等价不可共享写入的表达方式
+- **AND** 合法 label key、非法 label key 和校验错误语义 MUST 保持不变
+
+#### Scenario: HTTP metrics label names 保持顺序且不可共享写入
+- **WHEN** `common/http/middleware` 创建 HTTP server metrics counter、histogram 或 gauge descriptor
+- **THEN** descriptor 使用的 label names MUST 保持当前顺序和名称
+- **AND** 实现 MUST NOT 将可被同包未来代码修改的 package-level slice 底层数组作为 descriptor label names 的共享来源
+
+#### Scenario: scheduler duration buckets 保持数值且不可共享写入
+- **WHEN** scheduler metrics 使用默认 duration histogram buckets
+- **THEN** bucket 数值和顺序 MUST 保持当前语义
+- **AND** metrics 构造 MUST 不依赖可被同包未来代码修改的 package-level slice 底层数组作为共享来源
+
+#### Scenario: 观测契约保持不变
+- **WHEN** 只读集合表达被加固后导出 runtime 或 HTTP metrics
+- **THEN** Prometheus metric family、label key、label value、低基数约束和数值语义 MUST 保持不变
+- **AND** 系统 MUST NOT 修改 tracing、logging、request ID、pprof、OpenAPI 路由或部署观测资产
+

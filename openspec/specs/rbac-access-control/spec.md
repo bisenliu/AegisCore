@@ -4,13 +4,22 @@
 ## Requirements
 ### Requirement: 权限目录管理
 
-系统 MUST 提供权限目录创建、更新、启停、查询、列表和路由差异分析能力，用于描述可授权的 HTTP 资源和动作。权限创建 MUST 返回新建权限实体；权限更新、启用和停用成功后 MUST 返回无实体成功响应，调用方如需最新实体 MUST 使用查询接口读取。
+系统 MUST 提供权限目录创建、更新、启停、查询、列表和路由差异分析能力，用于描述可授权的 HTTP 资源和动作。权限创建 MUST 返回新建权限实体；权限更新、启用和停用成功后 MUST 返回无实体成功响应，调用方如需最新实体 MUST 使用查询接口读取。公开权限创建 API MUST NOT 接收或使用调用方提供的系统权限标记，普通创建路径 MUST 创建非系统权限。
 
 #### Scenario: 创建权限
 
 - **WHEN** 授权调用方提供合法权限标识、方法、路径和描述
 - **THEN** 系统 MUST 创建权限记录，并使其可参与后续角色绑定和授权判断
 - **AND** 系统 MUST 返回新建权限实体
+- **AND** 新建权限 MUST 为非系统权限
+- **AND** 普通权限创建路径 MUST NOT 允许调用方制造系统权限
+
+#### Scenario: 创建权限忽略或拒绝公开系统标记
+
+- **WHEN** 授权调用方通过公开权限创建 API 提交 `system` 字段
+- **THEN** 系统 MUST NOT 创建系统权限
+- **AND** 若 HTTP JSON 绑定启用未知字段拒绝，系统 MUST 返回请求错误
+- **AND** 若 HTTP JSON 绑定忽略未知字段，系统 MUST 创建非系统权限
 
 #### Scenario: 更新权限不返回实体
 
@@ -43,12 +52,21 @@
 
 ### Requirement: 角色与权限绑定
 
-系统 MUST 提供角色创建、更新、查询、列表和角色权限绑定能力，并保证绑定引用的权限存在且状态可用。角色创建 MUST 返回新建角色实体；角色更新、启用和停用成功后 MUST 返回无实体成功响应。角色权限绑定的替换、系统绑定补齐和系统绑定同步 MUST 使用批量写入方式新增多条绑定，并保持事务性和错误语义。
+系统 MUST 提供角色创建、更新、查询、列表和角色权限绑定能力，并保证绑定引用的权限存在且状态可用。角色创建 MUST 返回新建角色实体；角色更新、启用和停用成功后 MUST 返回无实体成功响应。角色权限绑定的替换、系统绑定补齐和系统绑定同步 MUST 使用批量写入方式新增多条绑定，并保持事务性和错误语义。公开角色创建 API MUST NOT 接收或使用调用方提供的系统角色标记，普通创建路径 MUST 创建非系统角色。
 
 #### Scenario: 创建角色并绑定权限
 
 - **WHEN** 授权调用方创建角色并指定合法权限集合
 - **THEN** 系统 MUST 持久化角色、写入角色权限绑定，并使授权策略可同步使用
+- **AND** 新建角色 MUST 为非系统角色
+- **AND** 普通角色创建路径 MUST NOT 允许调用方制造系统角色
+
+#### Scenario: 创建角色忽略或拒绝公开系统标记
+
+- **WHEN** 授权调用方通过公开角色创建 API 提交 `system` 字段
+- **THEN** 系统 MUST NOT 创建系统角色
+- **AND** 若 HTTP JSON 绑定启用未知字段拒绝，系统 MUST 返回请求错误
+- **AND** 若 HTTP JSON 绑定忽略未知字段，系统 MUST 创建非系统角色
 
 #### Scenario: 更新角色不返回实体
 
@@ -418,12 +436,20 @@ permission HTTP 授权中间件 MUST 在真实 Gin 路由上下文中解析授�
 
 ### Requirement: RBAC 系统数据引导
 
-系统 MUST 提供 CLI 能力初始化系统角色、系统权限、系统绑定，并支持为用户分配或创建超级管理员。
+系统 MUST 提供 CLI 能力初始化系统角色、系统权限、系统绑定，并支持为用户分配或创建超级管理员。系统角色和系统权限 MUST 仅由 RBAC seed port 根据代码基线写入或更新，普通公开 API、普通 command 和普通 store create 路径 MUST NOT 写入系统角色或系统权限。
 
 #### Scenario: 初始化 RBAC 系统数据
 
 - **WHEN** 运维执行 `aegiscore-user-services rbac seed`
 - **THEN** 系统 MUST 创建或更新默认系统角色、权限和绑定，并输出插入、更新、绑定增删统计；seed MUST NOT 自动创建真实业务用户或为任意业务用户分配超级管理员角色
+- **AND** RBAC seed port 写入的默认角色和默认权限 MUST 标记为系统数据
+- **AND** 默认系统角色和默认系统权限 MUST 来自代码基线
+
+#### Scenario: 只有 seed port 可写系统角色和系统权限
+
+- **WHEN** 非 seed 的角色或权限创建路径写入数据
+- **THEN** 系统 MUST 固定写入非系统数据
+- **AND** 系统 MUST NOT 从普通 command、普通 store create input 或公开 HTTP 请求读取系统标记
 
 #### Scenario: 分配超级管理员
 
@@ -1132,3 +1158,71 @@ role feature 的 HTTP boundary 测试 MUST 覆盖角色目录、用户角色绑�
 - **WHEN** role HTTP boundary 测试需要构造 collaborator、请求上下文或响应断言
 - **THEN** 测试 MUST 使用现有 gomock 生成物或既有生成入口维护的 mock 表达 application port 调用
 - **AND** 测试 MUST NOT 引入 infrastructure store、Ent client、PostgreSQL、Redis、Casbin engine、RBAC seed 或跨 feature adapter 作为 controller 单元测试依赖
+
+### Requirement: RBAC CLI runner 测试局部依赖注入
+
+`rbac-access-control` 的 user-service RBAC CLI command 测试 MUST 通过 root command 的本地依赖注入覆盖 `rbac seed`、`rbac assign-super-admin` 和 `rbac create-super-admin` runner。正式代码 MUST NOT 为这些 RBAC runner 暴露 package-level 可变函数变量，且本次装配重构 MUST 保持 RBAC seed、超级管理员分配、超级管理员创建、cleanup 和错误传播的生产语义不变。
+
+#### Scenario: seed command 通过本地 runner 捕获选项
+
+- **WHEN** `user-service/cmd` 测试执行 `rbac seed` 并传入 `--reactivate-system` 或 `--sync-system-bindings`
+- **THEN** 测试 MUST 通过当前 root command 实例的本地 runner 替身断言配置路径和 seed options
+- **AND** 测试 MUST NOT 通过赋值 package-level `runRBACSeed` 或等价可变全局函数变量注入 runner
+
+#### Scenario: assign-super-admin command 通过本地 runner 校验 UUID
+
+- **WHEN** `user-service/cmd` 测试执行 `rbac assign-super-admin --user-id <uuid>`
+- **THEN** 测试 MUST 通过当前 root command 实例的本地 runner 替身断言配置路径和用户 UUID
+- **AND** 非法 UUID 输入 MUST 在调用 runner 前被拒绝，且不得调用本地 runner 替身
+
+#### Scenario: create-super-admin command 通过本地 runner 捕获参数
+
+- **WHEN** `user-service/cmd` 测试执行 `rbac create-super-admin` 并传入默认值或显式 flag
+- **THEN** 测试 MUST 通过当前 root command 实例的本地 runner 替身断言 username、nickname、password env 和 reset password 选项
+- **AND** 测试 MUST NOT 通过保存和恢复 package-level `runCreateSuperAdmin` 或等价可变全局函数变量表达替身
+
+#### Scenario: RBAC CLI 生产语义保持不变
+
+- **WHEN** 运维执行 `rbac seed`、`rbac assign-super-admin` 或 `rbac create-super-admin`
+- **THEN** 系统 MUST 继续调用现有真实 RBAC runner，并保持 RBAC 系统数据初始化、超级管理员绑定、密码处理、输出文本、cleanup 和错误传播语义不变
+
+### Requirement: RBAC CLI 显式依赖装配
+
+系统 MUST 在 RBAC CLI 引导命令中使用单次命令调用范围内的显式依赖工厂装配 seed、超级管理员绑定和超级管理员创建所需资源。RBAC CLI MUST NOT 依赖可变 package-level 工厂来注入运行时依赖或测试替身。
+
+#### Scenario: 生产命令使用显式依赖工厂
+
+- **WHEN** user-service 构造 `rbac seed`、`rbac assign-super-admin` 或 `rbac create-super-admin` 命令
+- **THEN** 命令 runner MUST 通过显式参数获得依赖工厂
+- **AND** 真实依赖工厂 MUST 保持既有配置加载、数据库连接、Ent client 创建和 cleanup 顺序
+
+#### Scenario: 测试命令使用局部替身
+
+- **WHEN** RBAC command 测试需要注入依赖替身
+- **THEN** 测试 MUST 通过局部 runner、局部命令对象或局部依赖参数传入替身
+- **AND** 测试 MUST NOT 写入 package-level 可变依赖工厂
+
+#### Scenario: RBAC 业务行为保持不变
+
+- **WHEN** RBAC seed、超级管理员绑定或超级管理员创建命令在依赖创建成功后执行
+- **THEN** 系统 MUST 保持既有 RBAC seed、超级管理员绑定和超级管理员创建业务语义
+- **AND** 系统 MUST 保持既有命令超时、输出文本和 cleanup 调用语义
+
+### Requirement: Permission HTTP method allowlist 不得暴露共享可写状态
+permission domain 中用于权限目录和授权对象的 HTTP method allowlist MUST 使用不暴露共享可写底层状态的表达方式。实现 MUST 保持允许方法、大小写归一化、非法方法错误语义、route diff 和 RBAC 授权 action 语义不变。
+
+#### Scenario: HTTP method allowlist 不可被包内误写
+- **WHEN** permission domain 校验权限方法或构造 route identity
+- **THEN** 允许的 HTTP method 集合 MUST 使用 `switch`、私有查询函数或等价不可共享写入的表达方式
+- **AND** 系统 MUST NOT 暴露可被同包未来代码直接写入的 package-level map 作为 allowlist 权威来源
+
+#### Scenario: method 校验语义保持不变
+- **WHEN** 调用方传入当前允许的 HTTP method
+- **THEN** 系统 MUST 继续接受并按当前规则归一化 method
+- **AND** 调用方传入不允许的 method 时，系统 MUST 继续返回当前非法 method 错误语义
+
+#### Scenario: RBAC 授权 action 不变
+- **WHEN** 已认证用户访问 RBAC 保护路由
+- **THEN** 授权判断 MUST 继续使用当前 HTTP method 作为 Casbin action
+- **AND** 本次 allowlist 加固 MUST NOT 改变权限目录、route diff、policy loader、policy sync、超级管理员通配授权或授权失败响应语义
+

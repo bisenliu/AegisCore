@@ -830,7 +830,7 @@ cmd 与 Ent schema 测试 MUST 可以直接使用标准 `testify/require` 与 `t
 
 ### Requirement: 共享 runtime primitive 测试稳定性
 
-`common/runtime` 中 localcache、workerpool、scheduler 和 timezone 等共享 runtime primitive 的测试 MUST 避免使用固定 `time.Sleep` 或手动 `os.Setenv` 恢复来表达异步进度、过期状态或全局环境隔离。测试 MUST 使用可观察条件、通道同步、testing 环境隔离或确定性输入表达预期。
+`common/runtime` 中 localcache、workerpool、scheduler 和 timezone 等共享 runtime primitive 的测试 MUST 避免使用固定 `time.Sleep` 或手动 `os.Setenv` 恢复来表达异步进度、过期状态或全局环境隔离。测试 MUST 使用可观察条件、通道同步、testing 环境隔离或确定性输入表达预期。涉及 `TZ`、`time.Local` 或 timezone 包级初始化状态的测试 MUST 将这些进程级全局状态作为同一个隔离单元管理，并 MUST 通过包内受控 reset helper 重置初始化状态。
 
 #### Scenario: localcache 过期测试使用条件等待
 - **WHEN** localcache 测试验证 TTL 过期后缓存未命中
@@ -854,7 +854,9 @@ cmd 与 Ent schema 测试 MUST 可以直接使用标准 `testify/require` 与 `t
 
 #### Scenario: timezone 测试隔离全局环境
 - **WHEN** timezone 测试修改 `TZ`、`time.Local` 或包级初始化状态
-- **THEN** 测试 MUST 使用 `t.Setenv` 管理环境变量
+- **THEN** 测试 MUST 使用集中 helper 保存并恢复 `TZ`、`time.Local` 和包级初始化状态
+- **AND** 测试 MUST 使用 `t.Setenv` 管理环境变量恢复
+- **AND** 包级初始化状态 reset MUST 通过持有 `timezoneState` 内部锁的包内受控 helper 完成
 - **AND** 测试 MUST 通过 `t.Cleanup` 恢复 `time.Local` 和包级状态
 - **AND** 这些测试 MUST NOT 使用 `t.Parallel`
 
@@ -997,3 +999,51 @@ cmd 与 Ent schema 测试 MUST 可以直接使用标准 `testify/require` 与 `t
 - **WHEN** 用户身份错误迁移为应用错误
 - **THEN** `common/` MUST 只提供业务中立的错误契约、应用错误构造和 response 渲染 helper
 - **AND** 系统 MUST NOT 在 `common` 或用户 feature 外新增用户错误到 HTTP 响应的全局映射表
+
+### Requirement: 共享 runtime primitive 测试避免非必要进程级状态
+
+`common/` 共享 runtime primitive 的测试 MUST 避免为了日志捕获或断言便利而非必要地修改进程级可变状态。对 logger 相关测试，系统 MUST 优先使用 context logger 或局部 logger 注入；只有测试目标本身是进程级默认 logger 行为时，才 MAY 调用 `logger.SetDefault`，并 MUST 保存和恢复原状态。
+
+#### Scenario: 共享 HTTP binding 日志测试注入 request context logger
+
+- **WHEN** `common/http/binding` 测试需要捕获绑定、校验或响应相关日志
+- **THEN** 测试 MUST 通过 request context 注入局部 logger
+- **AND** 测试 MUST NOT 通过 `logger.SetDefault` 修改进程级默认 logger
+
+#### Scenario: 必要进程级状态测试具备恢复边界
+
+- **WHEN** `common/` 测试必须替换 logger 默认值或其他进程级 runtime primitive 状态
+- **THEN** 测试 MUST 在测试 helper 内保存原状态并通过 cleanup 恢复
+- **AND** 该 helper MUST 限定在相关 package 测试内，不得新增业务无关生产 API
+
+#### Scenario: 并行测试不依赖被替换的默认 logger
+
+- **WHEN** 测试使用 `t.Parallel()` 或可能与其他 package 测试同进程执行
+- **THEN** 测试 MUST NOT 依赖被 `logger.SetDefault` 替换的进程级 logger
+- **AND** 测试 MUST 使用局部 logger、context logger 或显式参数表达日志依赖
+
+### Requirement: 共享只读集合不得暴露共享可写状态
+`common` 中用于配置校验、HTTP middleware 默认策略和 validation tag 解析的只读集合或默认 struct MUST 使用不暴露共享可写底层状态的表达方式。实现 MUST 保持配置允许值、弱密钥 denylist、validation 字段名解析顺序、CORS 默认策略、公开错误消息和 HTTP 响应行为不变。
+
+#### Scenario: 配置校验集合不可被包内误写
+- **WHEN** `common/runtime/config` 校验 log level、log format、Postgres driver、Postgres SSL mode、tracing exporter、production-like environment 或 insecure JWT secret
+- **THEN** 校验逻辑 MUST 使用 `switch`、私有查询函数、局部构造或等价方式表达固定集合
+- **AND** 系统 MUST NOT 暴露可被同包未来代码直接写入的 package-level map 作为这些固定集合的权威来源
+- **AND** 合法值、非法值和错误消息 MUST 保持当前语义不变
+
+#### Scenario: 默认 CORS 配置隔离共享 slice
+- **WHEN** 调用方使用 `common/http/middleware.CORS()` 或 `CORSWithOptions` 创建 CORS middleware
+- **THEN** middleware MUST 在构造时持有与 package-level 默认值和调用方传入 slice 隔离的配置副本
+- **AND** 调用方后续修改其传入的 origins、methods、headers 或 exposed headers slice MUST NOT 改变已创建 middleware 的行为
+- **AND** `CORS()` 的默认响应 MUST 继续使用 `Access-Control-Allow-Origin=*`、`Access-Control-Allow-Methods=GET,POST,PUT,PATCH,DELETE,OPTIONS` 和 `Access-Control-Allow-Headers=Authorization,Content-Type`
+
+#### Scenario: validation request tag 顺序稳定且不可共享写入
+- **WHEN** `common/validation` 从 struct field tag 推导请求字段名
+- **THEN** tag 优先级和支持集合 MUST 保持当前顺序与语义
+- **AND** 实现 MUST NOT 依赖可被同包未来代码修改的 package-level slice 作为共享底层状态
+
+#### Scenario: 保留非只读集合变量需有理由
+- **WHEN** 实现阶段发现 package-level var 不迁移
+- **THEN** 该变量 MUST 不属于本次只读 map、slice 或默认 struct 风险范围，或具备明确保留理由
+- **AND** 合理保留理由 MAY 包括 sentinel error、regexp 编译结果、Fx Module、`sync.Pool`、atomic counter 或需要运行时状态的对象
+
