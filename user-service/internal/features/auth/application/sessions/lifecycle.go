@@ -82,6 +82,7 @@ func (m *lifecycle) ConsumePasswordChangeClaims(ctx context.Context, claims *aut
 }
 
 // ValidateRefreshSession 校验会话存在性、claim 与会话一致性以及当前 token version。
+// 校验顺序刻意先确认 session 与 claims 匹配，再读取当前 token version；这样能把丢失、重放和版本撤销映射到不同错误与指标原因。
 func (m *lifecycle) ValidateRefreshSession(ctx context.Context, claims *authtokens.Claims) (authdomain.AuthSession, int64, error) {
 	session, err := m.sessions.GetSession(ctx, claims.UserID, claims.SessionID)
 	if err != nil {

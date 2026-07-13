@@ -55,6 +55,7 @@ func (l *entLoader) LoadPolicies(ctx context.Context) (PolicySet, error) {
 	if err != nil {
 		return PolicySet{}, err
 	}
+	// 超级管理员授权是固定基线 role 的内存 wildcard policy，不来自权限目录；route diff 和权限列表不应把它当作数据库权限记录。
 	rules = append(rules, PermissionRule{RoleID: l.superAdminRoleID, PathTemplate: policyWildcard, HTTPMethod: policyWildcard})
 	return PolicySet{PermissionRules: rules}, nil
 }

@@ -8,6 +8,7 @@ import (
 )
 
 func parsePasswordHash(encodedHash string) (passwordParams, []byte, []byte, error) {
+	// 这是面向当前策略的 Argon2id hash parser，不是通用 PHC 兼容解析器；历史参数、未知算法或异常长度都会被拒绝。
 	if len(encodedHash) > maxEncodedHashLength {
 		return passwordParams{}, nil, nil, ErrInvalidHash
 	}

@@ -55,6 +55,7 @@ func (u *refreshTokenUseCase) Refresh(ctx context.Context, cmd RefreshTokenComma
 		}
 		return nil, err
 	}
+	// 关闭 rotation 时沿用原 refresh session；开启后必须原子消费旧 session 并创建新 session，以缩短 refresh token 泄漏后的重放窗口。
 	if !u.refreshTokenRotation {
 		return u.refreshWithoutRotation(ctx, claims, session, currentVersion)
 	}
@@ -94,6 +95,7 @@ func (u *refreshTokenUseCase) refreshWithRotation(ctx context.Context, claims *a
 		u.metrics.RefreshFailed(ctx, authapplication.MetricsReasonTokenIssueFailed)
 		return nil, err
 	}
+	// 先签发 token 再轮换 session；若 Redis 轮换失败，调用方不会拿到 token 响应，避免产生没有服务端会话投影的 refresh token。
 	newSession := authdomain.AuthSession{UserID: claims.UserID, SessionID: sessionID, TokenVersion: currentVersion}
 	if err := u.sessions.RotateTokenSession(ctx, oldSession, newSession, tokens.RefreshTTL); err != nil {
 		u.metrics.RefreshFailed(ctx, authapplication.MetricsReasonSessionRotateFailed)

@@ -113,6 +113,7 @@ func (c *Cache[K, V]) Get(key K) (V, bool, error) {
 }
 
 // GetOrLoad 读取缓存；miss 时通过 singleflight 合并同 key 回源。
+// leader 会二次检查并负责回源；follower 的 ctx 取消只影响自身返回，不取消 leader 的加载任务。
 func (c *Cache[K, V]) GetOrLoad(ctx context.Context, key K) (V, error) {
 	var zero V
 	if c.closed.Load() {
@@ -149,6 +150,7 @@ func (c *Cache[K, V]) GetOrLoad(ctx context.Context, key K) (V, error) {
 		if ok := c.client.SetWithTTL(cacheKey, cached, 1, c.ttl); !ok {
 			c.setDropped.Add(1)
 		} else {
+			// Ristretto 写入通过缓冲异步生效；Wait 提高后续读取和测试断言的可见性。
 			c.client.Wait()
 		}
 		return loaded, nil
@@ -169,6 +171,7 @@ func (c *Cache[K, V]) GetOrLoad(ctx context.Context, key K) (V, error) {
 }
 
 // Set 写入缓存，适合预热或业务主动刷新。
+// 返回 false 表示 Ristretto 拒绝或丢弃了本次写入，调用方不应假设后续读取一定命中。
 func (c *Cache[K, V]) Set(key K, value V) (bool, error) {
 	if c.closed.Load() {
 		return false, ErrClosed
@@ -232,7 +235,7 @@ func (c *Cache[K, V]) lookup(cacheKey string) (V, bool) {
 
 // loadContext 会刻意解除请求 ctx 的取消信号，避免 singleflight leader
 // 因客户端断开导致所有 follower 一起收到 context.Canceled；LoadTimeout
-// 用于给回源路径重新建立独立上限。
+// 用于给回源路径重新建立独立上限。LoadTimeout <= 0 时不会解除请求取消。
 func (c *Cache[K, V]) loadContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	if c.loadTimeout <= 0 {
 		return ctx, func() {}

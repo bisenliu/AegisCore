@@ -10,6 +10,7 @@ import (
 )
 
 // runJob 串联一次任务触发的本地互斥、全局并发、分布式锁、超时、续租、执行和收尾流程。
+// 所有资源释放、panic 捕获和结果记录都收口到 defer，避免任一准入阶段提前返回时泄漏 gate 或锁。
 func (s *Scheduler) runJob(cfg JobConfig, localGate chan struct{}) {
 	enteredAt := time.Now()
 	state := newJobRunState()
@@ -40,6 +41,7 @@ func (s *Scheduler) runJob(cfg JobConfig, localGate chan struct{}) {
 }
 
 type jobRunState struct {
+	// 这些字段记录本次 run 已持有的资源，cleanupJobRun 据此幂等释放未完整启动的任务。
 	gateAcquired       bool
 	globalGateAcquired bool
 	lock               Lock
@@ -121,6 +123,7 @@ func (s *Scheduler) finishJobRun(cfg JobConfig, localGate chan struct{}, state *
 }
 
 func (s *Scheduler) cleanupJobRun(cfg JobConfig, localGate chan struct{}, state *jobRunState) {
+	// 收尾顺序先停止续租并吸收续租错误，再取消任务上下文和释放锁，避免续租 goroutine 在锁释放后继续写同一 owner。
 	if state.stopRenew != nil {
 		state.stopRenew()
 	}
@@ -161,6 +164,7 @@ func (s *Scheduler) recordJobResult(cfg JobConfig, state *jobRunState, duration 
 }
 
 // acquireGlobalGate 根据全局并发策略获取执行配额。
+// wait 策略会等待直到 root context 取消；默认 skip 策略只做一次非阻塞尝试。
 func (s *Scheduler) acquireGlobalGate() bool {
 	switch s.globalConcurrencyPolicy {
 	case GlobalConcurrencyWait:

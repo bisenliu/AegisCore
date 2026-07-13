@@ -43,6 +43,7 @@ func DefaultRoles() []RoleSpec {
 }
 
 // DefaultRolePermissions 返回系统 RBAC 角色权限绑定基线。
+// 超级管理员绑定当前 DefaultPermissions 的完整集合；新增系统权限会自动进入基线，是否删除旧绑定由 seed 的 SyncSystemBindings 决定。
 func DefaultRolePermissions() []RolePermissionSpec {
 	permissions := DefaultPermissions()
 	bindings := make([]RolePermissionSpec, 0, len(permissions))

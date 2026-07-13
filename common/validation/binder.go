@@ -11,6 +11,7 @@ import (
 )
 
 // BindValues 按给定 struct tag 顺序扫描，将 URL 风格 values 绑定到结构体指针。
+// tag 按调用方传入顺序决定字段名优先级；匿名指针结构体只有出现相关输入时才分配，以保留可选过滤器语义。
 func BindValues(dst any, values url.Values, tags ...string) error {
 	value := reflect.ValueOf(dst)
 	if value.Kind() != reflect.Pointer || value.IsNil() {

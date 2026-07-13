@@ -15,6 +15,7 @@ import (
 )
 
 // AuthWithTokenVersionValidator 返回支持可选 token version 校验的 JWT 认证中间件。
+// 缺失 header 映射为未认证；Bearer 格式、空 token、签名错误和 token version mismatch 映射为 token invalid；过期 token 单独映射为 token expired。
 func AuthWithTokenVersionValidator(log *zap.Logger, verifier auth.AccessTokenVerifier, validator auth.TokenVersionValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()

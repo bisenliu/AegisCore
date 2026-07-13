@@ -141,7 +141,8 @@ func (r *SessionStore) DeleteSession(ctx context.Context, userID string, session
 	return nil
 }
 
-// DeleteAllUserSessions 删除用户所有存活 refresh token 会话，并删除用户索引。
+// DeleteAllUserSessions 从在线路径摘除用户 session 索引，并后台清理已摘除 session key。
+// 两阶段删除避免一次性阻塞请求线程；purge 只处理 cutTime 前索引里的会话，避免误删撤销开始后新建的并发会话。
 func (r *SessionStore) DeleteAllUserSessions(ctx context.Context, userID string) error {
 	userSessions := r.userSessionsKey(userID)
 	purgeKey, err := r.purgeUserSessionsKey(userID)
@@ -196,6 +197,7 @@ func (r *SessionStore) purgeDetachedUserSessions(ctx context.Context, purgeKey s
 			break
 		}
 
+		// score 早于 cutTime 的条目可能是旧索引中的过期残留；只删除 cutTime 之后仍有效的 session key，并始终移除 purge 索引项。
 		sessionKeys := make([]string, 0, len(sessions))
 		sessionIDs := make([]interface{}, 0, len(sessions))
 		for _, session := range sessions {

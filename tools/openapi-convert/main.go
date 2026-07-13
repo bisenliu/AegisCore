@@ -32,6 +32,7 @@ func (values *stringList) String() string {
 }
 
 func (values *stringList) Set(value string) error {
+	// 支持重复传入 -root-path；这里只追加不去重，后续 map 构造会让重复路径以最后一次配置为准。
 	*values = append(*values, value)
 	return nil
 }
@@ -41,6 +42,7 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
+	// 转换链路按 Swagger 2 输入 -> OpenAPI 3 规范化 -> Go embed 渲染 -> JSON/YAML/Go 写入执行；任一步失败都返回非零退出码。
 	var inputPath string
 	var jsonOutputPath string
 	var yamlOutputPath string
@@ -73,6 +75,7 @@ func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 	}
 
 	if inputPath == "" || jsonOutputPath == "" || yamlOutputPath == "" || goOutputPath == "" {
+		// 输出文件逐个写入且没有事务回滚，调用方应把这四个路径视为一次生成链路的必填集合。
 		failf(stderr, "input, json, yaml and go output paths are required")
 		return exitError
 	}
@@ -111,6 +114,7 @@ func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 }
 
 func convertOptions(openAPIVersion string, serverURL string, rootServerURL string, rootPaths []string, bearerAuthName string, bearerAuthDescription string) commonopenapi.ConvertOptions {
+	// 工具只把 CLI 参数转换为通用 openapi options，不写死 user-service 语义；root server 是路径级 server 覆盖，不是路径过滤器。
 	var servers []commonopenapi.Server
 	if serverURL != "" {
 		servers = []commonopenapi.Server{{URL: serverURL}}
@@ -123,6 +127,7 @@ func convertOptions(openAPIVersion string, serverURL string, rootServerURL strin
 
 	securitySchemes := map[string]commonopenapi.SecurityScheme{}
 	if bearerAuthName != "" {
+		// 只生成 components.securitySchemes，不自动给 operation 增加 security requirement。
 		securitySchemes[bearerAuthName] = commonopenapi.SecurityScheme{
 			Type:         defaultBearerAuthType,
 			Scheme:       defaultBearerAuthScheme,
@@ -140,6 +145,7 @@ func convertOptions(openAPIVersion string, serverURL string, rootServerURL strin
 }
 
 func writeFile(path string, data []byte) error {
+	// 适合生成物目录自动创建；不提供原子写、并发写协调或软链接安全保护。
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}

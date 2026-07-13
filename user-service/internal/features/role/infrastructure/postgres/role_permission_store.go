@@ -79,6 +79,7 @@ func (s *RolePermissionStore) Add(ctx context.Context, roleID uuid.UUID, permiss
 }
 
 // Replace 幂等替换角色的完整权限绑定集合。
+// 事务内先锁定角色和目标权限，再删除旧绑定并批量创建新绑定；ForUpdate 防止并发启停或删除导致替换结果基于过期状态。
 func (s *RolePermissionStore) Replace(ctx context.Context, roleID uuid.UUID, permissions []roleapplication.PermissionReference) ([]roleapplication.PermissionReference, error) {
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
@@ -131,6 +132,7 @@ func (s *RolePermissionStore) Remove(ctx context.Context, roleID uuid.UUID, perm
 }
 
 // EnsureSystemBindings 补齐系统角色权限绑定，不删除额外绑定。
+// 适用于安全的增量 seed：不会移除人工追加或历史残留绑定。
 func (s *RolePermissionStore) EnsureSystemBindings(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) (int, error) {
 	role, err := s.getRoleByExternalID(ctx, roleID)
 	if err != nil {
@@ -164,6 +166,7 @@ func (s *RolePermissionStore) EnsureSystemBindings(ctx context.Context, roleID u
 }
 
 // SyncSystemBindings 精确同步系统角色权限绑定。
+// 与 EnsureSystemBindings 不同，该方法会删除不在基线中的系统绑定，用于显式收敛超级管理员以外的系统角色权限集合。
 func (s *RolePermissionStore) SyncSystemBindings(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) (int, int, error) {
 	role, err := s.getRoleByExternalID(ctx, roleID)
 	if err != nil {

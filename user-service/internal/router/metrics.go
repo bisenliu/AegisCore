@@ -62,6 +62,7 @@ func IsLowNoiseRuntimePath(requestPath string, metricsCfg config.MetricsConfig) 
 }
 
 func normalizeMetricsPath(rawPath string) (string, error) {
+	// metrics endpoint 必须是规范化的绝对静态路径，避免与 Gin 参数、通配符或保留运行时路由产生歧义。
 	metricsPath := strings.TrimSpace(rawPath)
 	if metricsPath == "" {
 		return "", fmt.Errorf("%w: metrics path is required", ErrInvalidMetricsPath)
@@ -80,6 +81,7 @@ func normalizeMetricsPath(rawPath string) (string, error) {
 }
 
 func validateMetricsPath(metricsPath string, pprofCfg config.PprofConfig) error {
+	// 启动期阻断与健康检查、OpenAPI、业务 API 和 pprof 的冲突，避免后注册路由覆盖已知端点。
 	if metricsPath == "/" {
 		return fmt.Errorf("%w: metrics path must not be root", ErrInvalidMetricsPath)
 	}

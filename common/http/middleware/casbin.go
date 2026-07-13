@@ -60,6 +60,7 @@ func WithCasbinAuthorizationErrorHandler(handler CasbinErrorHandler) CasbinAutho
 }
 
 // CasbinAuthorization 返回基于 resolver 和 authorizer 的 Gin 授权中间件。
+// 白名单匹配 Gin FullPath 路由模板，不匹配原始 URL；未命中路由时 FullPath 为空，因此不会被模板白名单跳过。
 func CasbinAuthorization(authorizer CasbinAuthorizer, resolver CasbinRequestResolver, opts ...CasbinAuthorizationOption) gin.HandlerFunc {
 	cfg := casbinAuthorizationConfig{whitelist: make(map[CasbinAuthorizationWhitelistRule]struct{})}
 	for _, opt := range opts {

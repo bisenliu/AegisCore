@@ -95,6 +95,7 @@ func NewUnmanaged(log *zap.Logger, opts Options) (*Pool, error) {
 
 // Submit 将任务提交给 ants 执行；当池已满时阻塞等待空闲 worker。
 // 任务执行时同时受提交方 context 和 pool 生命周期 context 控制。
+// admissionMu 将关闭检查、计数登记和 inFlight 登记串行化，确保 Stop 不会漏等已经通过准入但尚未进入 ants 的任务。
 func (p *Pool) Submit(ctx context.Context, task Task) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -166,6 +167,7 @@ func (p *Pool) Stats() Stats {
 }
 
 // Stop 停止接收新任务，并等待已登记或已接收任务完成。
+// StopTimeout <= 0 时只使用调用方 ctx；超时会取消 pool context，通知仍在运行的任务尽快退出。
 func (p *Pool) Stop(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -202,6 +204,7 @@ func (p *Pool) Stop(ctx context.Context) error {
 }
 
 func (p *Pool) drain() {
+	// 先释放 ants 阻止新任务进入，再等待 inFlight；stopErr 在 stopDone 关闭前写入，等待方读取时已有 happens-before 保证。
 	p.stopErr = p.workersPool.ReleaseContext(context.Background())
 	p.inFlight.Wait()
 	p.cancel()
@@ -247,6 +250,7 @@ func linkedTaskContext(parent context.Context, poolCtx context.Context) (context
 	taskCtx, cancel := context.WithCancel(parent)
 	stopPoolCancel := context.AfterFunc(poolCtx, cancel)
 	return taskCtx, func() {
+		// 解除 AfterFunc 回调，避免任务正常结束后 poolCtx 取消再次触发无意义 cancel。
 		stopPoolCancel()
 		cancel()
 	}

@@ -63,6 +63,7 @@ func registerV1Routes(engine *gin.Engine, params RouteParams) {
 
 	authhttp.RegisterPublicRoutes(v1.Group("/auth"), params.AuthController)
 
+	// 路由分层必须先认证再授权：auth 保护接口只需要登录态，permission/role/user 等业务接口还需 RBAC 授权。
 	authenticated := v1.Group("")
 	authenticated.Use(commonmw.AuthWithTokenVersionValidator(params.Log, params.JWT, params.TokenVersionValidator))
 

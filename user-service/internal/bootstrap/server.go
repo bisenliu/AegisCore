@@ -32,6 +32,7 @@ type HTTPServerParams struct {
 }
 
 // httpDrainTracker 跟踪正在执行的 HTTP handler，保护后续资源关闭顺序。
+// 它只统计已经进入 Gin handler 的请求，不代表底层连接状态；Shutdown 失败后 Close 连接时用它等待 handler 退出。
 type httpDrainTracker struct {
 	handler http.Handler
 	mu      sync.Mutex
@@ -40,6 +41,7 @@ type httpDrainTracker struct {
 }
 
 // NewHTTPServer 创建 HTTP server，并注册 Fx start/stop 生命周期 hook。
+// OnStart 先完成 net.Listen 再异步 Serve，确保端口绑定失败能同步阻断启动；Serve 异常会通过 Shutdowner 触发全局停止。
 func NewHTTPServer(params HTTPServerParams) *http.Server {
 	addr := fmt.Sprintf("%s:%d", params.Config.HTTP.Host, params.Config.HTTP.Port)
 	drainTracker := newHTTPDrainTracker(params.Engine)
@@ -175,6 +177,7 @@ func wrapHTTPDrainWaitError(err error) error {
 }
 
 func serveHTTPWithLifecycle(ctx context.Context, log *zap.Logger, shutdowner fx.Shutdowner, server *http.Server, listener net.Listener) {
+	// lifecycle ctx 取消时主动关闭 listener，用于唤醒阻塞的 Serve；正常 Shutdown 产生的关闭错误由 handleHTTPServeExit 过滤。
 	stopCancelListener := context.AfterFunc(ctx, func() {
 		logger.WithContext(ctx, log).Debug("http server lifecycle context canceled")
 		if err := listener.Close(); err != nil && !isExpectedHTTPServeCloseError(err) {

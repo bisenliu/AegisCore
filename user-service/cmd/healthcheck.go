@@ -27,6 +27,7 @@ type healthcheckResponse struct {
 }
 
 func runHealthcheck(ctx context.Context, opts healthcheckOptions) error {
+	// 该命令同时要求 HTTP 2xx 和 JSON status == "ok"；LimitReader 防止异常响应体占用过多内存。
 	if strings.TrimSpace(opts.url) == "" {
 		return fmt.Errorf("healthcheck url is required")
 	}

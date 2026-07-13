@@ -78,6 +78,7 @@ func isNilEnforcer(enforcer Enforcer) bool {
 	if enforcer == nil {
 		return true
 	}
+	// 接口中可能装入 typed nil 指针，必须用反射识别，否则会绕过未配置检查并在 Enforce 时 panic。
 	value := reflect.ValueOf(enforcer)
 	switch value.Kind() {
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:

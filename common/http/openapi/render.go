@@ -12,6 +12,7 @@ const (
 )
 
 // RenderGoDocument 将 OpenAPI JSON 渲染为可被服务 docs 包编译的 Go 源码。
+// 输入应为最终 OpenAPI JSON；生成文件包含一个读取函数和一个文档常量，不负责再次校验文档内容。
 func RenderGoDocument(jsonData []byte, opts GoDocumentOptions) ([]byte, error) {
 	if opts.PackageName == "" {
 		return nil, fmt.Errorf("package name is required")
@@ -46,6 +47,7 @@ const %s = %s
 }
 
 func rawStringLiteral(value string) string {
+	// 无反引号时使用 raw string literal 保持生成文件可读；含反引号时退回 JSON quoted string，json.Marshal(string) 失败属于不可恢复内部异常。
 	if !strings.Contains(value, "`") {
 		return "`" + value + "`"
 	}

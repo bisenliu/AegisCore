@@ -33,6 +33,7 @@ func (m *lifecycle) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID)
 }
 
 // RevokeUserSessionsAtVersion 刷新 token version 投影并删除全部 refresh 会话，不修改 PostgreSQL 版本。
+// 本地 token version cache 会在 Redis 投影刷新前、刷新后和 session 删除后各失效一次，用于缩短并发校验命中旧本地值的窗口。
 func (m *lifecycle) RevokeUserSessionsAtVersion(ctx context.Context, userID uuid.UUID, tokenVersion int64) error {
 	userIDString := userID.String()
 	var projectionErr error

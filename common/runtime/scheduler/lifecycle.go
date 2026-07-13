@@ -132,6 +132,7 @@ func (s *Scheduler) RemoveJob(key string) bool {
 }
 
 // Shutdown 停止调度新任务，并等待已触发任务结束或外部 context 到期。
+// cron.Stop 不会强杀已运行任务；ctx 超时只表示停止等待，任务自身仍依赖 root context 和任务超时退出。
 func (s *Scheduler) Shutdown(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()

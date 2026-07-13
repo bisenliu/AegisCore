@@ -36,6 +36,7 @@ func RegisterOpenAPI(engine *gin.Engine, environment string) {
 }
 
 func serveOpenAPIUI(c *gin.Context) {
+	// 清理并限制 swagger 静态资源路径，阻止 ../ 逃逸；index 和 initializer 会替换默认 petstore 文档地址。
 	assetPath := path.Clean(strings.TrimPrefix(c.Param("any"), "/"))
 	if assetPath == "." {
 		assetPath = "index.html"

@@ -63,6 +63,7 @@ func (u *changePasswordUseCase) ChangePassword(ctx context.Context, cmd ChangePa
 	if err != nil {
 		return nil, err
 	}
+	// 密码已经写入后再刷新撤销投影；这里返回的错误表示“凭证已变更但会话撤销投影不完整”，调用方不能当作密码未变更处理。
 	if err := u.sessions.RevokeUserSessionsAtVersion(ctx, updated.UserID, updated.TokenVersion); err != nil {
 		logger.Error(ctx, "password change session revocation projection failed", logger.StackTrace(zap.String("user_id", updated.UserID.String()), zap.Int64("token_version", updated.TokenVersion), zap.Error(err))...)
 		u.metrics.PasswordChangeRevocationProjectionFailed(ctx, authapplication.MetricsPasswordChangeRevocationProjection)

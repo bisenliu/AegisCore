@@ -22,6 +22,7 @@ func ConvertSwagger2File(ctx context.Context, inputPath string, opts ConvertOpti
 }
 
 // ConvertSwagger2JSON 将 Swagger 2 JSON 转换为 OpenAPI 3 文档和 JSON/YAML 输出。
+// ctx 主要传递给 OpenAPI Validate 阶段；读取、decode 和序列化阶段不感知取消。data 必须是 Swagger 2 JSON，不支持直接传 YAML 或 OpenAPI 3。
 func ConvertSwagger2JSON(ctx context.Context, data []byte, opts ConvertOptions) (*Document, error) {
 	var doc2 openapi2.T
 	if err := json.Unmarshal(data, &doc2); err != nil {
@@ -58,6 +59,7 @@ func ConvertSwagger2JSON(ctx context.Context, data []byte, opts ConvertOptions) 
 }
 
 func normalizeDocument(doc *openapi3.T, opts ConvertOptions) {
+	// 规范化只覆盖调用方显式提供的部分：顶层 servers 非空才替换，PathServers 只作用于转换后已存在的 path，同名 security scheme 由参数覆盖。
 	doc.OpenAPI = opts.openAPIVersion()
 
 	if len(opts.Servers) > 0 {

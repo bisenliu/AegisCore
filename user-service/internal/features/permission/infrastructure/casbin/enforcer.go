@@ -43,6 +43,7 @@ func NewEngine(params Params) *Engine {
 }
 
 // RegisterInitialLoad 在 Fx 启动阶段执行初始 policy 加载，失败时保持 fail-closed。
+// 初始 reload 失败不会阻断服务启动；Enforce 在 enforcer 或 userRoles 缺失时返回 deny，避免因授权组件未就绪而放行请求。
 func RegisterInitialLoad(lc fx.Lifecycle, engine *Engine) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
@@ -53,6 +54,7 @@ func RegisterInitialLoad(lc fx.Lifecycle, engine *Engine) {
 }
 
 // Enforce 基于已加载的内存 policy 判断用户是否允许访问指定路由模板和 HTTP 方法。
+// 返回 false,nil 代表安全拒绝而不是系统错误，调用方应按无权限处理；只有上下文、角色解析或 Casbin 执行失败才返回 error。
 func (e *Engine) Enforce(ctx context.Context, userID uuid.UUID, pathTemplate string, method string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err

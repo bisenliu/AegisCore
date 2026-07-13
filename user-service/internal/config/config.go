@@ -52,6 +52,7 @@ func (c Config) RuntimeConfig() commonconfig.Config {
 }
 
 // Validate 在 user-service 启动前拒绝结构非法的服务配置。
+// 先复用 common runtime 校验，再追加 user-service 认证约束；返回聚合错误，便于一次性展示所有字段问题。
 func (c Config) Validate() error {
 	var errs []error
 	if err := c.Config.Validate(); err != nil {
@@ -65,6 +66,7 @@ func (c Config) Validate() error {
 }
 
 func (c Config) validateAuth() []error {
+	// production-like 环境对 JWT secret 额外加固；Argon2 queue 必须覆盖 concurrency，0 个活跃会话上限表示不裁剪。
 	var errs []error
 	secret := strings.TrimSpace(c.Auth.JWT.Secret)
 	if secret == "" {
@@ -88,6 +90,7 @@ func (c Config) validateAuth() []error {
 }
 
 func (c Config) isProductionLike() bool {
+	// staging 按生产级安全策略校验，避免预发环境使用开发默认 secret。
 	switch strings.ToLower(strings.TrimSpace(c.App.Environment)) {
 	case "prod", "production", "staging":
 		return true

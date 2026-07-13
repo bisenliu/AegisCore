@@ -129,6 +129,7 @@ func (w *Watcher) LastError() error {
 }
 
 // CheckVersion 执行一次 Redis 版本补偿检查。
+// Pub/Sub 只是快速路径，定时检查负责发现漏消息或重启期间错过的版本；版本号依赖 Redis 单调递增，落后时按 full reload 补偿。
 func (w *Watcher) CheckVersion(ctx context.Context) {
 	remoteVersion, err := w.store.CurrentVersion(ctx)
 	if err != nil {
@@ -146,6 +147,7 @@ func (w *Watcher) CheckVersion(ctx context.Context) {
 }
 
 // HandlePayload 处理一条 RBAC policy Pub/Sub payload。
+// payload 可能只要求失效某个用户角色缓存，也可能要求全量 reload；最终是否执行取决于远端版本是否新于本地已应用版本。
 func (w *Watcher) HandlePayload(ctx context.Context, payload string) {
 	message, err := decodePolicyRefreshMessage(payload)
 	if err != nil {
@@ -192,6 +194,7 @@ func (w *Watcher) run(ctx context.Context, done chan struct{}) {
 
 func (w *Watcher) applyIfNewer(ctx context.Context, version int64, change permissionapplication.PolicyChange, instanceID string, source string) {
 	localVersion := w.tracker.Applied()
+	// 版本号是跨实例幂等门禁；已经应用过的版本必须跳过，避免旧 Pub/Sub 消息覆盖后续 reload 状态。
 	if version <= localVersion {
 		return
 	}

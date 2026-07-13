@@ -30,6 +30,7 @@ type GinParams struct {
 }
 
 // NewGinEngine 创建 Gin engine，应用可信代理配置并安装共享中间件。
+// 中间件顺序保持 tracing -> span rename -> request id -> metrics -> recovery -> request log -> CORS，避免 panic 丢失指标和日志上下文。
 func NewGinEngine(params GinParams) (*gin.Engine, error) {
 	if params.Trace == nil || params.Trace.TracerProvider() == nil {
 		return nil, fmt.Errorf("tracing provider is required")
@@ -88,6 +89,7 @@ func traceBusinessRequest(metricsCfg config.MetricsConfig) func(*http.Request) b
 func renameHTTPServerSpan() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
+		// Gin 只有路由匹配后才能提供 FullPath 模板；请求结束后重命名 span 可避免按原始 URL 产生高基数 trace 名称。
 		if span := trace.SpanFromContext(c.Request.Context()); span.SpanContext().IsValid() {
 			span.SetName(httpServerSpanName(c))
 		}

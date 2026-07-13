@@ -126,6 +126,7 @@ func probez(serviceName string, checks []HealthChecker) gin.HandlerFunc {
 }
 
 func runHealthChecks(ctx context.Context, checks []HealthChecker) []HealthCheckResult {
+	// 检查项并发执行并按原 index 回填；nil checker 会在压缩结果时移除，超时会把未完成项标记为 unavailable。
 	results := make([]HealthCheckResult, len(checks))
 	pending := make(map[int]HealthChecker, len(checks))
 	resultCh := make(chan healthCheckOutcome, len(checks))
@@ -135,6 +136,7 @@ func runHealthChecks(ctx context.Context, checks []HealthChecker) []HealthCheckR
 			continue
 		}
 		pending[index] = checker
+		// 依赖 Go 1.22+ range 变量语义；如迁移到旧版本，需要显式复制 index 和 checker。
 		go func() {
 			resultCh <- healthCheckOutcome{index: index, result: normalizeHealthCheckResult(checker, checker.Check(ctx))}
 		}()

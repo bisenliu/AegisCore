@@ -89,7 +89,7 @@ func entSQLDebugLogFunc(log *zap.Logger) func(context.Context, ...any) {
 }
 
 func (d nonClosingEntDriver) Close() error {
-	// Close 有意保持为空操作，避免重复关闭由 Fx datastore provider 管理的 SQL 连接池。
+	// Close 有意保持为空操作，只屏蔽 Ent client 对底层连接池的关闭，不改变 Query/Exec 行为。
 	return nil
 }
 

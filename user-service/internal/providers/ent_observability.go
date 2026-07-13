@@ -75,6 +75,7 @@ func newEntQueryMetrics(provider *commonmetrics.Provider) (*entQueryMetrics, err
 }
 
 func installEntQueryObservability(client *ent.Client, tracer trace.Tracer, metrics *entQueryMetrics) {
+	// Ent interceptor 只覆盖 query/select 路径，不覆盖 mutation；固定 entity/query/result label 用于控制指标基数。
 	if client == nil {
 		return
 	}
@@ -112,6 +113,7 @@ func installEntQueryObservability(client *ent.Client, tracer trace.Tracer, metri
 }
 
 func entQueryEntity(query ent.Query) string {
+	// 通过 query 类型名映射低基数实体标签；新增 Ent schema 后需同步这里和 entQueryMetricEntities，否则会落到 unknown。
 	if query == nil {
 		return "unknown"
 	}

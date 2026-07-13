@@ -49,6 +49,7 @@ type rbacAssignSuperAdminRunner func(context.Context, string, uuid.UUID) error
 
 type rbacCreateSuperAdminRunner func(context.Context, string, rbacCreateSuperAdminOptions) error
 
+// rootCommandDependencies 是 CLI 命令树的依赖替换入口，用于测试和离线命令注入 runner，不承载服务运行时 provider 组装。
 type rootCommandDependencies struct {
 	appFactory             lifecycleAppFactory
 	seedRunner             rbacSeedRunner
@@ -129,6 +130,7 @@ func newRootCommand(deps rootCommandDependencies) *cobra.Command {
 	healthcheckOpts := healthcheckOptions{url: defaultHealthcheckURL, timeout: defaultHealthcheckTimeout}
 	createSuperAdminOpts := rbacCreateSuperAdminOptions{username: defaultCreateSuperAdminUsername, nickname: defaultCreateSuperAdminNickname, passwordEnv: defaultCreateSuperAdminPasswordEnv}
 
+	// serve 使用完整 Fx app；rbac 子命令使用最小离线依赖；healthcheck 和 fxgraph 只服务运维/开发辅助流程。
 	root := &cobra.Command{
 		Use:   "aegiscore-user-services",
 		Short: "AegisCore user services runtime",

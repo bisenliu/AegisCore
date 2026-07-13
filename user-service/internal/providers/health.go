@@ -44,6 +44,7 @@ type watcherHealthChecker struct {
 }
 
 // ProvideHealthChecks 构造用户服务启动和流量接入探针检查项。
+// readiness 与 startup 当前使用同一组关键依赖；Casbin policy 和 watcher 不可用时拒绝接入流量，避免授权未就绪时服务放行或误拒。
 func ProvideHealthChecks(params HealthCheckParams) router.HealthChecks {
 	checks := []router.HealthChecker{
 		postgresHealthChecker{name: "postgres." + resources.NameUserDB, db: params.UserDB},

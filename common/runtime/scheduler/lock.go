@@ -82,6 +82,7 @@ func NewRedisLocker(client redis.UniversalClient, opts RedisLockerOptions) (*Red
 }
 
 // Acquire 尝试获取 Redis 锁；waitTimeout 为 0 时只尝试一次。
+// 返回 nil,false,nil 表示锁被其他 owner 持有且本次未取得，不是系统错误；MaxAttempts 和 deadline 会共同限制重试。
 func (l *RedisLocker) Acquire(ctx context.Context, key string, ttl time.Duration, waitTimeout time.Duration) (Lock, bool, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -202,6 +203,7 @@ func normalizeRetryPolicy(policy RetryPolicy) (RetryPolicy, error) {
 }
 
 func (l *RedisLocker) retryDelay(delay time.Duration) time.Duration {
+	// jitter 在 [delay/2, delay] 内随机；随机源异常时回退原 delay，避免锁竞争路径引入额外错误。
 	if !l.retry.Jitter || delay <= 1 {
 		return delay
 	}
@@ -218,6 +220,7 @@ func (l *RedisLocker) retryDelay(delay time.Duration) time.Duration {
 }
 
 func nextRetryDelay(current time.Duration, max time.Duration) time.Duration {
+	// 倍增退避在溢出或超过上限时截断到 max。
 	if current <= 0 {
 		return max
 	}

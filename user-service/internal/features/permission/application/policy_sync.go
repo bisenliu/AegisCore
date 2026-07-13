@@ -97,6 +97,7 @@ func NewPolicyRefreshCoordinator(engine PolicyReloadEngine, publisher PolicyVers
 }
 
 // NotifyPolicyChanged 在 RBAC 数据变更成功后刷新本实例并通知其他实例。
+// 本实例先应用本地 reload 或缓存失效，再发布分布式版本；如果本地应用失败，即使发布成功也不能标记本版本已应用。
 func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, change PolicyChange) error {
 	if c == nil {
 		return errors.New("rbac policy refresh coordinator is required")

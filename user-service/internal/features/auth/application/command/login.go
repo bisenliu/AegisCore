@@ -66,7 +66,8 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*LoginResul
 	}
 
 	if user.RequiresPasswordChange() {
-		// 必须改密用户只认证到可获取受限改密 token 的程度。
+		// 必须改密用户只完成凭证确认，不创建普通 refresh session，避免旧密码仍可换取长期会话。
+		// 受限 token 的 jti、session_id 和 token_version 必须落到一次性改密会话中，后续改密时据此原子消费并防重放。
 		logger.Warn(ctx, "login requires password change", zap.String("username", cmd.Username), zap.String("user_id", user.UserID.String()), zap.Int64("token_version", user.TokenVersion))
 		sessionID, err := newAuthSessionID()
 		if err != nil {
@@ -99,6 +100,7 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*LoginResul
 		u.metrics.LoginFailed(ctx, authapplication.MetricsReasonTokenIssueFailed)
 		return nil, err
 	}
+	// refresh session 是 JWT token pair 的服务端投影；refresh、logout 和 token version 撤销都依赖该投影阻断仅凭 JWT 过期时间继续访问。
 	tokens, reason, err := issueTokenPair(ctx, u.tokens, u.sessions, user.UserID.String(), user.TokenVersion, sessionID)
 	if err != nil {
 		u.metrics.LoginFailed(ctx, reason)

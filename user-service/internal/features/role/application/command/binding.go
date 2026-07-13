@@ -58,6 +58,7 @@ func (s *roleCommandService) AddUserRole(ctx context.Context, cmd UserRoleComman
 }
 
 // ReplaceUserRoles 幂等替换用户的完整角色绑定集合。
+// 输入 role_id 会先去重再整组替换；若替换已提交但 policy 通知失败，数据库绑定已生效，调用方需要依赖 watcher 补偿或重试恢复授权缓存一致性。
 func (s *roleCommandService) ReplaceUserRoles(ctx context.Context, cmd ReplaceUserRolesCommand) (*RolesResult, error) {
 	roleIDs := uniqueUUIDs(cmd.RoleIDs)
 	roles, err := s.roles.GetByRoleIDs(ctx, roleIDs)
@@ -112,6 +113,7 @@ func (s *roleCommandService) AddRolePermission(ctx context.Context, cmd RolePerm
 }
 
 // ReplaceRolePermissions 幂等替换角色的完整权限绑定集合。
+// 替换语义以去重后的完整权限集合为准；policy reload 失败会返回错误，但已提交的绑定不会回滚到旧授权集。
 func (s *roleCommandService) ReplaceRolePermissions(ctx context.Context, cmd ReplaceRolePermissionsCommand) (*PermissionsResult, error) {
 	if _, err := s.roles.GetByRoleID(ctx, cmd.RoleID); err != nil {
 		return nil, err

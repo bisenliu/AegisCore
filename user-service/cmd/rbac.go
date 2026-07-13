@@ -43,10 +43,12 @@ type rbacSeedOptions struct {
 }
 
 type rbacCreateSuperAdminOptions struct {
-	username      string
-	nickname      string
-	password      string
-	passwordEnv   string
+	// password 由 normalizeCreateSuperAdminOptions 从 passwordEnv 读取，避免命令行参数泄露明文。
+	username    string
+	nickname    string
+	password    string
+	passwordEnv string
+	// resetPassword 只在用户已存在时更新密码并恢复 normal 状态；默认不会覆盖既有管理员凭据。
 	resetPassword bool
 }
 
@@ -136,6 +138,7 @@ func runCreateSuperAdminCommand(ctx context.Context, configPath string, opts rba
 }
 
 func createSuperAdmin(ctx context.Context, deps rbacSeedDependencies, opts rbacCreateSuperAdminOptions) (rbacCreateSuperAdminResult, error) {
+	// 命令保持幂等：不存在则创建用户，存在则默认只补超级管理员角色；显式 reset 时才更新密码和状态。
 	normalized, err := normalizeCreateSuperAdminOptions(opts)
 	if err != nil {
 		return rbacCreateSuperAdminResult{}, err
@@ -184,6 +187,7 @@ func createSuperAdmin(ctx context.Context, deps rbacSeedDependencies, opts rbacC
 }
 
 func defaultRBACSeedDependencies(parent context.Context, configPath string) (rbacSeedDependencies, func() error, error) {
+	// RBAC CLI 绕过 Fx composition root，只打开 PostgreSQL 并组装 seed 所需最小依赖；不能在这里启动 HTTP、Redis watcher 或服务生命周期。
 	ctx, cancel := context.WithTimeout(parent, rbacCommandTimeout)
 	cleanup := func() error {
 		cancel()
@@ -255,6 +259,7 @@ func newRBACEntClient(db *sql.DB) *ent.Client {
 
 func chainCleanup(first func() error, second func() error) func() error {
 	return func() error {
+		// 后注册资源先关闭，保持与 defer 栈一致的 LIFO 语义，并聚合所有关闭错误。
 		return errors.Join(second(), first())
 	}
 }
