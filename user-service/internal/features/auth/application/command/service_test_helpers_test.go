@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
@@ -37,12 +37,12 @@ type noopTokenVersionInvalidator struct{}
 
 func (noopTokenVersionInvalidator) InvalidateTokenVersion(string) error { return nil }
 
-func newAuthCommandFixture(t testing.TB, authCfg config.AuthConfig, metrics authapplication.Metrics) *authCommandFixture {
+func newAuthCommandFixture(t testing.TB, authCfg serviceconfig.AuthConfig, metrics authapplication.Metrics) *authCommandFixture {
 	t.Helper()
 	return newAuthCommandFixtureWithController(gomock.NewController(t), authCfg, metrics)
 }
 
-func newAuthCommandFixtureWithController(ctrl *gomock.Controller, authCfg config.AuthConfig, metrics authapplication.Metrics) *authCommandFixture {
+func newAuthCommandFixtureWithController(ctrl *gomock.Controller, authCfg serviceconfig.AuthConfig, metrics authapplication.Metrics) *authCommandFixture {
 	credentials := NewMockVerifier(ctrl)
 	tokens := NewMockIssuer(ctrl)
 	sessions := NewMockLifecycle(ctrl)
@@ -80,8 +80,8 @@ func newAuthCommandFixtureWithController(ctrl *gomock.Controller, authCfg config
 	}
 }
 
-func defaultAuthConfig(rotation bool) config.AuthConfig {
-	return config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 5}
+func defaultAuthConfig(rotation bool) serviceconfig.AuthConfig {
+	return serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: rotation, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 5}
 }
 
 func normalCredential() *authdomain.UserCredential {
@@ -95,12 +95,12 @@ func issuedTokenPair(accessToken string, refreshToken string, expiresIn int64, r
 	}
 }
 
-func refreshClaims(sessionID string, tokenVersion int64) *commonauth.Claims {
-	return &commonauth.Claims{UserID: authTestUserID.String(), SessionID: sessionID, TokenVersion: tokenVersion}
+func refreshClaims(sessionID string, tokenVersion int64) *authtokens.Claims {
+	return &authtokens.Claims{UserID: authTestUserID.String(), SessionID: sessionID, TokenVersion: tokenVersion}
 }
 
-func passwordChangeClaims(sessionID string, tokenVersion int64) *commonauth.Claims {
-	return &commonauth.Claims{UserID: authTestUserID.String(), SessionID: sessionID, TokenVersion: tokenVersion, RegisteredClaims: jwtv5.RegisteredClaims{ID: "jti-123"}}
+func passwordChangeClaims(sessionID string, tokenVersion int64) *authtokens.Claims {
+	return &authtokens.Claims{UserID: authTestUserID.String(), SessionID: sessionID, TokenVersion: tokenVersion, RegisteredClaims: jwtv5.RegisteredClaims{ID: "jti-123"}}
 }
 
 func testPasswordService(t testing.TB) *password.Service {

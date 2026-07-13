@@ -10,7 +10,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/datastore"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
-	"github.com/aegiscore/common/runtime/resources"
+	"github.com/aegiscore/user-service/internal/resources"
 )
 
 // NamedRedisParams 包含供应用户服务 Redis 客户端所需的 Fx 输入。

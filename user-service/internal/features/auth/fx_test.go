@@ -10,14 +10,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/config"
+	commonconfig "github.com/aegiscore/common/runtime/config"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
 func TestNewTokenVersionLocalCacheRequiresConfigInstance(t *testing.T) {
 	_, err := newTokenVersionLocalCache(tokenVersionCacheParams{
-		Config: &config.Config{LocalCache: config.LocalCacheConfig{}},
+		Config: &serviceconfig.Config{Config: commonconfig.Config{LocalCache: commonconfig.LocalCacheConfig{}}},
 		Users:  fakeTokenVersionStore{},
 		Cache:  fakeAuthStore{},
 	})

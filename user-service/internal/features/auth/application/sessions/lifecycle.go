@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
-	commonauth "github.com/aegiscore/common/security/auth"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
+	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	"github.com/aegiscore/user-service/internal/shared/identity"
@@ -20,8 +20,8 @@ import (
 type Lifecycle interface {
 	CreateTokenSession(ctx context.Context, userID string, sessionID string, tokenVersion int64, refreshTTL time.Duration) error
 	CreatePasswordChangeSession(ctx context.Context, userID string, sessionID string, tokenID string, tokenVersion int64, ttl time.Duration) error
-	ConsumePasswordChangeClaims(ctx context.Context, claims *commonauth.Claims) error
-	ValidateRefreshSession(ctx context.Context, claims *commonauth.Claims) (authdomain.AuthSession, int64, error)
+	ConsumePasswordChangeClaims(ctx context.Context, claims *authtokens.Claims) error
+	ValidateRefreshSession(ctx context.Context, claims *authtokens.Claims) (authdomain.AuthSession, int64, error)
 	RotateTokenSession(ctx context.Context, oldSession authdomain.AuthSession, newSession authdomain.AuthSession, refreshTTL time.Duration) error
 	DeleteSession(ctx context.Context, userID string, sessionID string) error
 	CurrentTokenVersion(ctx context.Context, userID string) (int64, error)
@@ -68,7 +68,7 @@ func (m *lifecycle) CreatePasswordChangeSession(ctx context.Context, userID stri
 }
 
 // ConsumePasswordChangeClaims 原子消费强制改密 token 对应的一次性会话。
-func (m *lifecycle) ConsumePasswordChangeClaims(ctx context.Context, claims *commonauth.Claims) error {
+func (m *lifecycle) ConsumePasswordChangeClaims(ctx context.Context, claims *authtokens.Claims) error {
 	expected := authdomain.PasswordChangeSession{UserID: claims.UserID, SessionID: claims.SessionID, TokenID: claims.ID, TokenVersion: claims.TokenVersion}
 	if err := m.passwordChangeSessions.ConsumePasswordChangeSession(ctx, expected); err != nil {
 		if errors.Is(err, authdomain.ErrPasswordChangeSessionNotFound) || errors.Is(err, authdomain.ErrPasswordChangeSessionMismatch) {
@@ -82,7 +82,7 @@ func (m *lifecycle) ConsumePasswordChangeClaims(ctx context.Context, claims *com
 }
 
 // ValidateRefreshSession 校验会话存在性、claim 与会话一致性以及当前 token version。
-func (m *lifecycle) ValidateRefreshSession(ctx context.Context, claims *commonauth.Claims) (authdomain.AuthSession, int64, error) {
+func (m *lifecycle) ValidateRefreshSession(ctx context.Context, claims *authtokens.Claims) (authdomain.AuthSession, int64, error) {
 	session, err := m.sessions.GetSession(ctx, claims.UserID, claims.SessionID)
 	if err != nil {
 		if errors.Is(err, authdomain.ErrAuthSessionNotFound) {

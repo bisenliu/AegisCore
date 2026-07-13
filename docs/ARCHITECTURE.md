@@ -26,13 +26,13 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 | `common/http/middleware/` | auth、casbin、cors、logging、metrics、recovery 和 span error |
 | `common/http/openapi/` | OpenAPI 转换和渲染 helper |
 | `common/http/response/` | HTTP 响应写入和错误响应 |
-| `common/runtime/config/` | YAML 配置加载和 validation |
+| `common/runtime/config/` | 跨服务 runtime 配置、通用 YAML loader 和 validation primitive |
 | `common/runtime/datastore/` | Postgres、Redis 和 Fx provider |
 | `common/runtime/logger/` | zap logger 和 writer |
 | `common/runtime/observability/` | metrics 与 tracing provider |
 | `common/runtime/scheduler/` | scheduler、lock、metrics 和 logger |
 | `common/runtime/workerpool/` | 固定 worker pool、stats 和 errors |
-| `common/security/` | JWT、token version、Casbin authorizer、password hash |
+| `common/security/` | JWT verifier、token version validator 契约、Casbin authorizer、password hash |
 | `common/testing/` | Postgres/Redis Testcontainers 和 fixtures |
 | `common/validation/` | validator、翻译、字段和错误 |
 
@@ -47,7 +47,7 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 - `fxgraph`：生成 Fx 依赖图。
 - `healthcheck --url <url> --timeout <duration>`：在容器内无 shell、wget、curl 或 grep 依赖地检查 `/readyz`。
 
-`user-service/internal/bootstrap/` 构造应用和 HTTP server。`user-service/internal/providers/` 提供 Gin、Ent、Postgres、Redis、auth、metrics、health 和 routes provider。
+`user-service/internal/bootstrap/` 构造应用和 HTTP server。`user-service/internal/config/` 拥有服务根配置、认证配置、Ent 配置和服务级校验，并复用 `common/runtime/config` 的通用 loader。`user-service/internal/providers/` 提供 Gin、Ent、Postgres、Redis、auth verifier、metrics、health 和 routes provider。
 
 ## 4. HTTP 路由结构
 
@@ -102,20 +102,20 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 1. HTTP 请求进入 `auth/transport/http` controller。
 2. application command 校验输入、凭证和用户状态。
 3. session store 写入 Redis 会话状态。
-4. token issuer 签发 access token 和 refresh token。
+4. user-service 私有 token issuer 签发 access token 和 refresh token。
 5. 响应通过共享 response helper 返回统一 envelope。
 
 ### 6.3 受保护 API 授权
 
 1. 请求进入 `/api/v1` authenticated group。
-2. JWT、auth config 和 token version validator 校验 bearer token。
+2. 共享 HTTP auth middleware 调用最小 access token verifier 接口，user-service verifier 校验 JWT、access subject、认证 claims 和 token version。
 3. RBAC 中间件读取当前用户和请求资源。
 4. permission authorizer 使用 Casbin 或同步后的 policy 判断访问权限。
 5. 通过后进入目标 controller。
 
 ### 6.4 RBAC seed 和超级管理员
 
-1. `rbac seed` 加载配置，打开 user DB，创建 Ent client。
+1. `rbac seed` 加载 user-service 私有配置，按服务私有资源名打开 user DB，创建 Ent client。
 2. role seed service 创建或更新系统角色、权限和绑定。
 3. `create-super-admin` 读取 `ADMIN_PASSWORD`，创建或复用用户，按需更新密码。
 4. seed service 绑定内置超级管理员角色。

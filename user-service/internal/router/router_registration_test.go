@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -56,7 +57,7 @@ func TestRegisterUserServiceHTTPRoutesRegistersCurrentRouteGraph(t *testing.T) {
 	protectedAuth := executeRouterRegistrationRequest(engine, http.MethodPost, "/api/v1/auth/logout", "", "")
 	require.Equal(t, http.StatusUnauthorized, protectedAuth.Code, "body=%s", protectedAuth.Body.String())
 
-	accessToken := signRouterRegistrationAccessToken(t, params.JWT)
+	accessToken := signRouterRegistrationAccessToken(t)
 	for _, route := range []routerRegisteredRoute{
 		{method: http.MethodGet, path: "/api/v1/users"},
 		{method: http.MethodGet, path: "/api/v1/permissions"},
@@ -180,12 +181,6 @@ func (a *routerRegistrationAuthorizer) Enforce(context.Context, string, string, 
 func newRouterRegistrationRouteParams(t *testing.T, opts routerRegistrationRouteOptions) RouteParams {
 	t.Helper()
 	validator := newRouterRegistrationValidator(t)
-	authCfg := config.AuthConfig{
-		JWT: config.JWTConfig{
-			Secret:         "router-registration-secret",
-			AccessTokenTTL: time.Minute,
-		},
-	}
 	metricsCfg := opts.metrics
 	if metricsCfg.Path == "" {
 		metricsCfg = metricsRouteConfig(false, "/metrics")
@@ -198,7 +193,7 @@ func newRouterRegistrationRouteParams(t *testing.T, opts routerRegistrationRoute
 		ServiceName:           "aegiscore-user-service-test",
 		Environment:           "test",
 		Log:                   zap.NewNop(),
-		JWT:                   commonauth.NewJWTService(authCfg),
+		JWT:                   routerRegistrationAccessVerifier{},
 		HTTPConfig:            config.HTTPConfig{Pprof: opts.pprof},
 		MetricsConfig:         metricsCfg,
 		Metrics:               newRouterTestMetricsProvider(t, metricsCfg.Enabled, metricsCfg.Path),
@@ -268,16 +263,32 @@ func executeRouterRegistrationRequest(engine *gin.Engine, method string, path st
 	return recorder
 }
 
-func signRouterRegistrationAccessToken(t *testing.T, jwt *commonauth.JWTService) string {
+func signRouterRegistrationAccessToken(t *testing.T) string {
 	t.Helper()
-	token, err := jwt.SignAccessToken(commonauth.SignInput{
-		UserID:       uuid.NewString(),
-		TokenVersion: 1,
-		SessionID:    uuid.NewString(),
-		TTL:          time.Minute,
-	})
+	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, routerRegistrationClaims{UserID: uuid.NewString(), TokenVersion: 1, SessionID: uuid.NewString(), RegisteredClaims: jwtv5.RegisteredClaims{Subject: "access", ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Minute))}}).SignedString([]byte("router-registration-secret"))
 	require.NoError(t, err)
 	return token
+}
+
+type routerRegistrationClaims struct {
+	UserID       string `json:"user_id"`
+	TokenVersion int64  `json:"token_version"`
+	SessionID    string `json:"session_id"`
+	jwtv5.RegisteredClaims
+}
+
+type routerRegistrationAccessVerifier struct{}
+
+func (routerRegistrationAccessVerifier) VerifyAccessToken(token string) (commonauth.AccessToken, error) {
+	claims := &routerRegistrationClaims{}
+	parsed, err := jwtv5.ParseWithClaims(token, claims, func(*jwtv5.Token) (any, error) { return []byte("router-registration-secret"), nil }, jwtv5.WithExpirationRequired())
+	if err != nil {
+		return commonauth.AccessToken{}, err
+	}
+	if parsed == nil || !parsed.Valid || claims.Subject != "access" {
+		return commonauth.AccessToken{}, jwtv5.ErrTokenInvalidClaims
+	}
+	return commonauth.AccessToken{UserID: claims.UserID, SessionID: claims.SessionID, TokenVersion: claims.TokenVersion}, nil
 }
 
 func routerRegistrationRuntimeRoutes() []routerRegisteredRoute {

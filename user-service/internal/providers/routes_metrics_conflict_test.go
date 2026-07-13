@@ -10,6 +10,8 @@ import (
 
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
 	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
@@ -20,9 +22,6 @@ func TestRegisterRoutesRejectsMetricsPathConflict(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{
 		App: config.AppConfig{Name: "configured-user-service", Environment: "local"},
-		Auth: config.AuthConfig{
-			JWT: config.JWTConfig{Secret: "secret"},
-		},
 		Observability: config.ObservabilityConfig{
 			Metrics: config.MetricsConfig{Enabled: true, Path: "/api/v1/metrics"},
 		},
@@ -32,7 +31,7 @@ func TestRegisterRoutesRejectsMetricsPathConflict(t *testing.T) {
 		Config:        cfg,
 		Log:           zap.NewNop(),
 		Engine:        gin.New(),
-		JWT:           commonauth.NewJWTService(cfg.Auth),
+		JWT:           authtokens.NewAccessTokenVerifier(commonauth.NewJWTService(commonauth.JWTConfig{Secret: "secret"}), &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret"}}}),
 		TokenVersions: &routeTokenVersionValidator{version: 1},
 		Authorizer:    &routeAuthorizer{allowed: true},
 		Metrics:       newRouteTestMetricsProvider(t, cfg),

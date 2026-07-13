@@ -15,8 +15,8 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/workerpool"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
@@ -213,7 +213,7 @@ func TestSessionStorePurgePoolStopHookPrecedesRedisStopHook(t *testing.T) {
 
 	store, err := NewSessionStore(SessionStoreParams{
 		Redis:     client,
-		Cfg:       &config.Config{},
+		Cfg:       &serviceconfig.Config{},
 		PurgePool: pool,
 	})
 	require.NoError(t, err,
@@ -254,8 +254,8 @@ func TestSessionStoreConsumesNamedPurgePool(t *testing.T) {
 	var store *SessionStore
 	app := fxtest.New(t,
 		fx.Provide(
-			func() *config.Config {
-				return &config.Config{Auth: config.AuthConfig{TokenVersionCacheTTL: time.Minute}}
+			func() *serviceconfig.Config {
+				return &serviceconfig.Config{Auth: serviceconfig.AuthConfig{TokenVersionCacheTTL: time.Minute}}
 			},
 			func() *zap.Logger {
 				return zap.NewNop()

@@ -13,6 +13,11 @@ const envPrefix = "AEGISCORE"
 
 // Load 从指定路径或默认 configs 目录读取 YAML 配置，并应用 AEGISCORE_ 环境变量覆盖。
 func Load(path string) (*Config, error) {
+	return LoadInto(path, Config.Validate)
+}
+
+// LoadInto 从配置文件加载调用方指定的配置结构，并应用 AEGISCORE_ 环境变量覆盖。
+func LoadInto[T any](path string, validate func(T) error) (*T, error) {
 	v := viper.New()
 
 	v.SetConfigType("yaml")
@@ -39,15 +44,17 @@ func Load(path string) (*Config, error) {
 		}
 	}
 
-	var cfg Config
+	var cfg T
 	if err := v.Unmarshal(&cfg, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(","),
 	))); err != nil {
 		return nil, fmt.Errorf("decode config: %w", err)
 	}
-	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("validate config: %w", err)
+	if validate != nil {
+		if err := validate(cfg); err != nil {
+			return nil, fmt.Errorf("validate config: %w", err)
+		}
 	}
 
 	return &cfg, nil

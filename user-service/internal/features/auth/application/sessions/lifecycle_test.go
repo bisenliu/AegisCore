@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	commonauth "github.com/aegiscore/common/security/auth"
+	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
@@ -41,7 +41,7 @@ func TestLifecycleConsumePasswordChangeClaimsMapsRejectedSession(t *testing.T) {
 	for _, rejectedErr := range []error{authdomain.ErrPasswordChangeSessionNotFound, authdomain.ErrPasswordChangeSessionMismatch} {
 		t.Run(rejectedErr.Error(), func(t *testing.T) {
 			fixture := newLifecycleTestFixture(t)
-			claims := &commonauth.Claims{
+			claims := &authtokens.Claims{
 				UserID:       sessionTestUserID.String(),
 				SessionID:    "password-session",
 				TokenVersion: 2,

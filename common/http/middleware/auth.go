@@ -15,7 +15,7 @@ import (
 )
 
 // AuthWithTokenVersionValidator 返回支持可选 token version 校验的 JWT 认证中间件。
-func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService, validator auth.TokenVersionValidator) gin.HandlerFunc {
+func AuthWithTokenVersionValidator(log *zap.Logger, verifier auth.AccessTokenVerifier, validator auth.TokenVersionValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		reqLog := logger.WithContext(ctx, log)
@@ -48,7 +48,7 @@ func AuthWithTokenVersionValidator(log *zap.Logger, jwtService *auth.JWTService,
 			return
 		}
 
-		claims, err := jwtService.ParseToken(tokenString)
+		claims, err := verifier.VerifyAccessToken(tokenString)
 		if err != nil {
 			fields := append(authFailureLogFields(c), zap.Error(err))
 			if errors.Is(err, auth.ErrMissingSecret) {

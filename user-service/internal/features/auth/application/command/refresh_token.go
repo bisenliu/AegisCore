@@ -61,7 +61,7 @@ func (u *refreshTokenUseCase) Refresh(ctx context.Context, cmd RefreshTokenComma
 	return u.refreshWithRotation(ctx, claims, session, currentVersion)
 }
 
-func (u *refreshTokenUseCase) parseAndValidateRefreshSession(ctx context.Context, refreshToken string) (*commonauth.Claims, authdomain.AuthSession, int64, error) {
+func (u *refreshTokenUseCase) parseAndValidateRefreshSession(ctx context.Context, refreshToken string) (*authtokens.Claims, authdomain.AuthSession, int64, error) {
 	claims, err := u.tokens.ParseRefreshToken(ctx, refreshToken)
 	if err != nil {
 		return nil, authdomain.AuthSession{}, 0, err
@@ -73,7 +73,7 @@ func (u *refreshTokenUseCase) parseAndValidateRefreshSession(ctx context.Context
 	return claims, session, currentVersion, nil
 }
 
-func (u *refreshTokenUseCase) refreshWithoutRotation(ctx context.Context, claims *commonauth.Claims, session authdomain.AuthSession, currentVersion int64) (*authtokens.TokenResult, error) {
+func (u *refreshTokenUseCase) refreshWithoutRotation(ctx context.Context, claims *authtokens.Claims, session authdomain.AuthSession, currentVersion int64) (*authtokens.TokenResult, error) {
 	tokens, reason, err := issueTokenPair(ctx, u.tokens, u.sessions, claims.UserID, currentVersion, session.SessionID)
 	if err != nil {
 		u.metrics.RefreshFailed(ctx, reason)
@@ -83,7 +83,7 @@ func (u *refreshTokenUseCase) refreshWithoutRotation(ctx context.Context, claims
 	return tokens, nil
 }
 
-func (u *refreshTokenUseCase) refreshWithRotation(ctx context.Context, claims *commonauth.Claims, oldSession authdomain.AuthSession, currentVersion int64) (*authtokens.TokenResult, error) {
+func (u *refreshTokenUseCase) refreshWithRotation(ctx context.Context, claims *authtokens.Claims, oldSession authdomain.AuthSession, currentVersion int64) (*authtokens.TokenResult, error) {
 	sessionID, err := newAuthSessionID()
 	if err != nil {
 		u.metrics.RefreshFailed(ctx, authapplication.MetricsReasonTokenIssueFailed)

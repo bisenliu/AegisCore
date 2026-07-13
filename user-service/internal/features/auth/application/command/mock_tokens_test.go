@@ -13,7 +13,6 @@ import (
 	context "context"
 	reflect "reflect"
 
-	auth "github.com/aegiscore/common/security/auth"
 	tokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
@@ -74,10 +73,10 @@ func (mr *MockIssuerMockRecorder) IssueTokenPair(ctx, userID, tokenVersion, sess
 }
 
 // ParsePasswordChangeToken mocks base method.
-func (m *MockIssuer) ParsePasswordChangeToken(ctx context.Context, token string) (*auth.Claims, uuid.UUID, error) {
+func (m *MockIssuer) ParsePasswordChangeToken(ctx context.Context, token string) (*tokens.Claims, uuid.UUID, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ParsePasswordChangeToken", ctx, token)
-	ret0, _ := ret[0].(*auth.Claims)
+	ret0, _ := ret[0].(*tokens.Claims)
 	ret1, _ := ret[1].(uuid.UUID)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -90,10 +89,10 @@ func (mr *MockIssuerMockRecorder) ParsePasswordChangeToken(ctx, token any) *gomo
 }
 
 // ParseRefreshToken mocks base method.
-func (m *MockIssuer) ParseRefreshToken(ctx context.Context, token string) (*auth.Claims, error) {
+func (m *MockIssuer) ParseRefreshToken(ctx context.Context, token string) (*tokens.Claims, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ParseRefreshToken", ctx, token)
-	ret0, _ := ret[0].(*auth.Claims)
+	ret0, _ := ret[0].(*tokens.Claims)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -5,10 +5,10 @@ import (
 
 	"go.uber.org/fx"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	commontz "github.com/aegiscore/common/runtime/timezone"
 	"github.com/aegiscore/common/validation"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authfeature "github.com/aegiscore/user-service/internal/features/auth"
 	permissionfeature "github.com/aegiscore/user-service/internal/features/permission"
 	rolefeature "github.com/aegiscore/user-service/internal/features/role"
@@ -37,9 +37,10 @@ var AppModule = fx.Module("aegiscore-user-services",
 // NewApp 构建包含共享配置、日志和服务模块的 user-service Fx 应用。
 func NewApp(configPath string) *fx.App {
 	return fx.New(
-		fx.Supply(config.ConfigPath(configPath)),
+		fx.Supply(serviceconfig.ConfigPath(configPath)),
 		fx.Provide(
-			config.NewConfig,
+			serviceconfig.NewConfig,
+			serviceconfig.NewRuntimeConfig,
 			logger.NewLogger,
 		),
 		AppModule,

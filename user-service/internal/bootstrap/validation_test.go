@@ -21,16 +21,18 @@ import (
 
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
-	"github.com/aegiscore/common/runtime/resources"
 	"github.com/aegiscore/common/validation"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
+	"github.com/aegiscore/user-service/internal/resources"
 )
 
 var appModuleTestDriverSeq atomic.Int64
 
 func TestAppModuleResolvesSharedValidationDependency(t *testing.T) {
+	serviceCfg := appModuleValidationTestConfig()
 	err := fx.ValidateApp(
-		fx.Supply(appModuleValidationTestConfig(), zap.NewNop()),
+		fx.Supply(serviceconfig.NewRuntimeConfig(serviceCfg), serviceCfg, zap.NewNop()),
 		AppModule,
 		fx.Invoke(func(*validation.Validator, *userhttp.UserController) {}),
 	)
@@ -38,8 +40,9 @@ func TestAppModuleResolvesSharedValidationDependency(t *testing.T) {
 }
 
 func TestAppModuleIncludesSharedTimezoneDependency(t *testing.T) {
+	serviceCfg := appModuleValidationTestConfig()
 	err := fx.ValidateApp(
-		fx.Supply(appModuleValidationTestConfig(), zap.NewNop()),
+		fx.Supply(serviceconfig.NewRuntimeConfig(serviceCfg), serviceCfg, zap.NewNop()),
 		AppModule,
 		fx.Invoke(func(*validation.Validator, *userhttp.UserController) {}),
 	)
@@ -48,13 +51,14 @@ func TestAppModuleIncludesSharedTimezoneDependency(t *testing.T) {
 
 func TestAppWiresCommonDependenciesExplicitly(t *testing.T) {
 	err := fx.ValidateApp(
-		fx.Supply(config.ConfigPath("../../configs/config.yaml")),
+		fx.Supply(serviceconfig.ConfigPath("../../configs/config.yaml")),
 		fx.Provide(
-			config.NewConfig,
+			serviceconfig.NewConfig,
+			serviceconfig.NewRuntimeConfig,
 			logger.NewLogger,
 		),
 		AppModule,
-		fx.Invoke(func(*config.Config, *zap.Logger, *userhttp.UserController) {}),
+		fx.Invoke(func(*config.Config, *serviceconfig.Config, *zap.Logger, *userhttp.UserController) {}),
 	)
 	require.NoError(t, err)
 }
@@ -76,10 +80,10 @@ func TestAppModuleStopsHTTPBeforeDatastoreResources(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	httpPort := reserveHTTPTestPort(t)
 	core, logs := observer.New(zapcore.InfoLevel)
-	cfg := appModuleLifecycleTestConfig(drv.name, redisServer.Addr(), httpPort)
+	serviceCfg := appModuleLifecycleTestConfig(drv.name, redisServer.Addr(), httpPort)
 
 	app := fxtest.New(t,
-		fx.Supply(cfg, zap.New(core)),
+		fx.Supply(serviceconfig.NewRuntimeConfig(serviceCfg), serviceCfg, zap.New(core)),
 		AppModule,
 	)
 	app.RequireStart()
@@ -100,53 +104,55 @@ func TestAppModuleStopsHTTPBeforeDatastoreResources(t *testing.T) {
 	require.Equal(t, int64(1), drv.closes.Load())
 }
 
-func appModuleLifecycleTestConfig(driverName string, redisAddr string, httpPort int) *config.Config {
-	return &config.Config{
-		System: config.SystemConfig{Timezone: "Asia/Shanghai"},
-		App:    config.AppConfig{Name: "aegiscore-user-services", Environment: "test"},
-		HTTP: config.HTTPConfig{
-			Host:            "127.0.0.1",
-			Port:            httpPort,
-			ReadTimeout:     time.Second,
-			WriteTimeout:    time.Second,
-			IdleTimeout:     time.Second,
-			ShutdownTimeout: time.Second,
+func appModuleLifecycleTestConfig(driverName string, redisAddr string, httpPort int) *serviceconfig.Config {
+	return &serviceconfig.Config{
+		Config: config.Config{
+			System: config.SystemConfig{Timezone: "Asia/Shanghai"},
+			App:    config.AppConfig{Name: "aegiscore-user-services", Environment: "test"},
+			HTTP: config.HTTPConfig{
+				Host:            "127.0.0.1",
+				Port:            httpPort,
+				ReadTimeout:     time.Second,
+				WriteTimeout:    time.Second,
+				IdleTimeout:     time.Second,
+				ShutdownTimeout: time.Second,
+			},
+			LocalCache: appModuleTestLocalCacheConfig(),
+			Redis: map[string]config.RedisConfig{
+				resources.NameCacheRedis: {
+					Addr:         redisAddr,
+					DialTimeout:  time.Second,
+					ReadTimeout:  time.Second,
+					WriteTimeout: time.Second,
+					PingTimeout:  time.Second,
+				},
+			},
+			Postgres: map[string]config.PostgresConfig{
+				resources.NameUserDB: appModulePostgresConfig(driverName, "aegiscore_user"),
+			},
+			Observability: appModuleTestObservabilityConfig(),
 		},
-		Auth: config.AuthConfig{
-			JWT: config.JWTConfig{
+		Auth: serviceconfig.AuthConfig{
+			JWT: serviceconfig.JWTConfig{
 				Secret:          "secret",
 				Issuer:          "aegiscore-user-services",
 				Audience:        "aegiscore-users",
 				AccessTokenTTL:  time.Minute,
 				RefreshTokenTTL: time.Hour,
 			},
-			PasswordKDF:              config.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1},
+			PasswordKDF:              serviceconfig.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1},
 			TokenVersionCacheTTL:     time.Minute,
 			MaxActiveSessionsPerUser: 5,
 		},
-		LocalCache: appModuleTestLocalCacheConfig(),
-		Redis: map[string]config.RedisConfig{
-			resources.NameCacheRedis: {
-				Addr:         redisAddr,
-				DialTimeout:  time.Second,
-				ReadTimeout:  time.Second,
-				WriteTimeout: time.Second,
-				PingTimeout:  time.Second,
-			},
-		},
-		Postgres: map[string]config.PostgresConfig{
-			resources.NameUserDB: appModulePostgresConfig(driverName, "aegiscore_user"),
-		},
-		Observability: appModuleTestObservabilityConfig(),
 	}
 }
 
-func appModuleValidationTestConfig() *config.Config {
-	return &config.Config{
+func appModuleValidationTestConfig() *serviceconfig.Config {
+	return &serviceconfig.Config{Config: config.Config{
 		App:           config.AppConfig{Name: "aegiscore-user-services", Environment: "test"},
 		LocalCache:    appModuleTestLocalCacheConfig(),
 		Observability: appModuleTestObservabilityConfig(),
-	}
+	}, Auth: serviceconfig.AuthConfig{PasswordKDF: serviceconfig.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1}}}
 }
 
 func appModuleTestLocalCacheConfig() config.LocalCacheConfig {

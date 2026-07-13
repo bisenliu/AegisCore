@@ -23,7 +23,7 @@ type RouteParams struct {
 	ServiceName           string
 	Environment           string
 	Log                   *zap.Logger
-	JWT                   *commonauth.JWTService
+	JWT                   commonauth.AccessTokenVerifier
 	HTTPConfig            config.HTTPConfig
 	MetricsConfig         config.MetricsConfig
 	HealthChecks          HealthChecks

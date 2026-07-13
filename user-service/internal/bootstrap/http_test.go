@@ -20,6 +20,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/aegiscore/common/runtime/config"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 type lifecycleRecorder struct {
@@ -41,7 +42,7 @@ func (r *shutdownRecorder) Shutdown(...fx.ShutdownOption) error {
 }
 
 func TestDefaultConfigHTTPTimeouts(t *testing.T) {
-	cfg, err := config.Load("../../configs/config.yaml")
+	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath("../../configs/config.yaml"))
 	require.NoError(t, err)
 
 	require.Equal(t, 30*time.Second, cfg.HTTP.ReadTimeout)

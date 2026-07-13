@@ -19,6 +19,8 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
 	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
@@ -36,9 +38,6 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 
 	cfg := &config.Config{
 		App: config.AppConfig{Name: "configured-user-service", Environment: "local"},
-		Auth: config.AuthConfig{
-			JWT: config.JWTConfig{Secret: "secret"},
-		},
 		Observability: config.ObservabilityConfig{
 			Metrics: config.MetricsConfig{Enabled: true, Path: "/metrics", IncludeRuntime: true},
 			Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1, Exporter: "none"},
@@ -46,7 +45,8 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	}
 	core, logs := observer.New(zap.DebugLevel)
 	log := zap.New(core)
-	jwtService := commonauth.NewJWTService(cfg.Auth)
+	serviceCfg := &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret"}}}
+	jwtService := authtokens.NewAccessTokenVerifier(commonauth.NewJWTService(commonauth.JWTConfig{Secret: serviceCfg.Auth.JWT.Secret}), serviceCfg)
 	tokenVersions := &routeTokenVersionValidator{version: 1}
 	authorizer := &routeAuthorizer{allowed: true}
 	metricsProvider := newRouteTestMetricsProvider(t, cfg)

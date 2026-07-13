@@ -8,7 +8,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/datastore"
-	"github.com/aegiscore/common/runtime/resources"
+	"github.com/aegiscore/user-service/internal/resources"
 )
 
 // NamedPostgresParams 包含供应用户服务 PostgreSQL 连接池所需的 Fx 输入。

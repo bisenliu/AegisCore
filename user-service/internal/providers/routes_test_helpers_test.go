@@ -25,7 +25,6 @@ import (
 	"github.com/aegiscore/common/runtime/localcache"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
-	"github.com/aegiscore/common/runtime/resources"
 	"github.com/aegiscore/common/runtime/workerpool"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
@@ -35,6 +34,7 @@ import (
 	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
+	"github.com/aegiscore/user-service/internal/resources"
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
@@ -255,12 +255,19 @@ func signRouteAuthTokenWithVersion(t *testing.T, secret, userID string, tokenVer
 	require.NoError(t, err)
 	tokenID, err := runtimeid.NewUUID()
 	require.NoError(t, err)
-	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, commonauth.Claims{
+	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, routeAuthClaims{
 		UserID:           userID,
 		TokenVersion:     tokenVersion,
 		SessionID:        "s-123",
-		RegisteredClaims: jwtv5.RegisteredClaims{ID: tokenID.String(), Subject: commonauth.SubjectAccess, ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))},
+		RegisteredClaims: jwtv5.RegisteredClaims{ID: tokenID.String(), Subject: "access", ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour))},
 	}).SignedString([]byte(secret))
 	require.NoError(t, err)
 	return token
+}
+
+type routeAuthClaims struct {
+	UserID       string `json:"user_id"`
+	TokenVersion int64  `json:"token_version"`
+	SessionID    string `json:"session_id"`
+	jwtv5.RegisteredClaims
 }

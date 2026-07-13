@@ -7,9 +7,9 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 
-	"github.com/aegiscore/common/runtime/resources"
 	permissioncasbin "github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin"
 	permissionredis "github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis"
+	"github.com/aegiscore/user-service/internal/resources"
 	"github.com/aegiscore/user-service/internal/router"
 )
 

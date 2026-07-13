@@ -8,7 +8,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/config"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
@@ -141,7 +141,7 @@ func TestSessionStoreTokenVersionCacheUsesDefaultTTL(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			redisServer := miniredis.RunT(t)
-			store := newTestSessionStoreWithConfig(redisServer, config.AuthConfig{TokenVersionCacheTTL: tc.ttl})
+			store := newTestSessionStoreWithConfig(redisServer, serviceconfig.AuthConfig{TokenVersionCacheTTL: tc.ttl})
 
 			err := store.CacheTokenVersion(context.Background(), sessionTestUserID.String(), 7)
 			require.NoError(t, err,
@@ -160,7 +160,7 @@ func TestSessionStoreTokenVersionCacheUsesDefaultTTL(t *testing.T) {
 func TestSessionStoreTokenVersionCacheUsesExplicitTTL(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	explicitTTL := time.Minute
-	store := newTestSessionStoreWithConfig(redisServer, config.AuthConfig{TokenVersionCacheTTL: explicitTTL})
+	store := newTestSessionStoreWithConfig(redisServer, serviceconfig.AuthConfig{TokenVersionCacheTTL: explicitTTL})
 
 	err := store.CacheTokenVersion(context.Background(), sessionTestUserID.String(), 7)
 	require.NoError(t, err,

@@ -7,13 +7,11 @@ import (
 	"time"
 )
 
-// Config 是 AegisCore 服务的根配置对象。
+// Config 是跨服务共享 runtime 配置对象。
 type Config struct {
 	System        SystemConfig              `mapstructure:"system"`
 	App           AppConfig                 `mapstructure:"app"`
 	HTTP          HTTPConfig                `mapstructure:"http"`
-	Auth          AuthConfig                `mapstructure:"auth"`
-	Ent           EntConfig                 `mapstructure:"ent"`
 	Log           LogConfig                 `mapstructure:"log"`
 	Observability ObservabilityConfig       `mapstructure:"observability"`
 	LocalCache    LocalCacheConfig          `mapstructure:"local_cache"`
@@ -48,36 +46,6 @@ type HTTPConfig struct {
 type PprofConfig struct {
 	Enabled  bool   `mapstructure:"enabled"`
 	BasePath string `mapstructure:"base_path"`
-}
-
-// AuthConfig 包含认证 token 与会话校验设置。
-type AuthConfig struct {
-	JWT                      JWTConfig         `mapstructure:"jwt"`
-	PasswordKDF              PasswordKDFConfig `mapstructure:"password_kdf"`
-	TokenVersionCacheTTL     time.Duration     `mapstructure:"token_version_cache_ttl"`
-	RefreshTokenRotation     bool              `mapstructure:"refresh_token_rotation"`
-	MaxActiveSessionsPerUser int               `mapstructure:"max_active_sessions_per_user"`
-}
-
-// PasswordKDFConfig 包含密码 Argon2id KDF 的实例级资源预算。
-type PasswordKDFConfig struct {
-	Argon2Concurrency int `mapstructure:"argon2_concurrency"`
-	Argon2QueueSize   int `mapstructure:"argon2_queue_size"`
-}
-
-// EntConfig 控制 Ent 运行时行为。
-type EntConfig struct {
-	SQLDebug bool `mapstructure:"sql_debug"`
-}
-
-// JWTConfig 包含 JWT 签发和校验设置。
-type JWTConfig struct {
-	Secret                 string        `mapstructure:"secret"`
-	Issuer                 string        `mapstructure:"issuer"`
-	Audience               string        `mapstructure:"audience"`
-	AccessTokenTTL         time.Duration `mapstructure:"access_token_ttl"`
-	RefreshTokenTTL        time.Duration `mapstructure:"refresh_token_ttl"`
-	PasswordChangeTokenTTL time.Duration `mapstructure:"password_change_token_ttl"`
 }
 
 // LogConfig 控制 zap logger 格式、输出目标和文件轮转。

@@ -11,10 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
-	"github.com/aegiscore/common/runtime/config"
+	commonconfig "github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/common/runtime/workerpool"
 	commonauth "github.com/aegiscore/common/security/auth"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 )
@@ -22,10 +23,10 @@ import (
 var sessionTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
 
 func newTestSessionStore(redisServer *miniredis.Miniredis) *SessionStore {
-	return newTestSessionStoreWithConfig(redisServer, config.AuthConfig{TokenVersionCacheTTL: time.Minute})
+	return newTestSessionStoreWithConfig(redisServer, serviceconfig.AuthConfig{TokenVersionCacheTTL: time.Minute})
 }
 
-func newTestSessionStoreWithConfig(redisServer *miniredis.Miniredis, authCfg config.AuthConfig) *SessionStore {
+func newTestSessionStoreWithConfig(redisServer *miniredis.Miniredis, authCfg serviceconfig.AuthConfig) *SessionStore {
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
 	return &SessionStore{redis: client, keys: MustKeyCatalog(""), tokenVersionCacheTTL: authCfg.TokenVersionCacheTTL, purgePool: directPurgeTaskPool{}, metrics: authapplication.NopMetrics()}
 }
@@ -57,9 +58,9 @@ func newTestSessionStoreWithAppName(t testing.TB, redisServer *miniredis.Minired
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
 	store, err := NewSessionStore(SessionStoreParams{
 		Redis: client,
-		Cfg: &config.Config{
-			App:  config.AppConfig{Name: appName},
-			Auth: config.AuthConfig{TokenVersionCacheTTL: time.Minute},
+		Cfg: &serviceconfig.Config{
+			Config: commonconfig.Config{App: commonconfig.AppConfig{Name: appName}},
+			Auth:   serviceconfig.AuthConfig{TokenVersionCacheTTL: time.Minute},
 		},
 		PurgePool: directPurgeTaskPool{},
 	})

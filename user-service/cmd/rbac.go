@@ -13,12 +13,11 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/datastore"
 	"github.com/aegiscore/common/runtime/logger"
-	"github.com/aegiscore/common/runtime/resources"
 	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/user-service/ent"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	authpostgres "github.com/aegiscore/user-service/internal/features/auth/infrastructure/postgres"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
@@ -26,6 +25,7 @@ import (
 	rolepostgres "github.com/aegiscore/user-service/internal/features/role/infrastructure/postgres"
 	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
 	userpostgres "github.com/aegiscore/user-service/internal/features/user/infrastructure/postgres"
+	"github.com/aegiscore/user-service/internal/resources"
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
@@ -194,7 +194,7 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 		return rbacSeedDependencies{}, func() error { return nil }, errors.Join(err, cleanupErr)
 	}
 
-	cfg, err := config.Load(configPath)
+	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(configPath))
 	if err != nil {
 		return fail(err)
 	}
@@ -205,7 +205,8 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 	if err != nil {
 		return fail(err)
 	}
-	log, err := logger.New(cfg)
+	runtimeCfg := cfg.RuntimeConfig()
+	log, err := logger.New(&runtimeCfg)
 	if err != nil {
 		return fail(err)
 	}

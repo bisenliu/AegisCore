@@ -6,11 +6,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/config"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 func TestNewJWTServiceRejectsInvalidTokenTTLPolicy(t *testing.T) {
-	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{
+	cfg := &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{
 		Secret:          "secret",
 		AccessTokenTTL:  time.Hour,
 		RefreshTokenTTL: time.Hour,
@@ -22,7 +22,7 @@ func TestNewJWTServiceRejectsInvalidTokenTTLPolicy(t *testing.T) {
 }
 
 func TestNewJWTServiceAcceptsValidTokenTTLPolicy(t *testing.T) {
-	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{
+	cfg := &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{
 		Secret:          "secret",
 		AccessTokenTTL:  15 * time.Minute,
 		RefreshTokenTTL: time.Hour,
@@ -35,8 +35,8 @@ func TestNewJWTServiceAcceptsValidTokenTTLPolicy(t *testing.T) {
 }
 
 func TestNewPasswordServiceUsesConfiguredKDFBudget(t *testing.T) {
-	cfg := &config.Config{Auth: config.AuthConfig{
-		PasswordKDF: config.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1},
+	cfg := &serviceconfig.Config{Auth: serviceconfig.AuthConfig{
+		PasswordKDF: serviceconfig.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1},
 	}}
 
 	service, err := NewPasswordService(cfg)
@@ -46,8 +46,8 @@ func TestNewPasswordServiceUsesConfiguredKDFBudget(t *testing.T) {
 }
 
 func TestNewPasswordServiceRejectsInvalidKDFBudget(t *testing.T) {
-	cfg := &config.Config{Auth: config.AuthConfig{
-		PasswordKDF: config.PasswordKDFConfig{Argon2Concurrency: 2, Argon2QueueSize: 1},
+	cfg := &serviceconfig.Config{Auth: serviceconfig.AuthConfig{
+		PasswordKDF: serviceconfig.PasswordKDFConfig{Argon2Concurrency: 2, Argon2QueueSize: 1},
 	}}
 
 	_, err := NewPasswordService(cfg)

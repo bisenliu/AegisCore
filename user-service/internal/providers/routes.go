@@ -23,7 +23,7 @@ type RegisterRouteParams struct {
 	Config               *config.Config
 	Log                  *zap.Logger
 	Engine               *gin.Engine
-	JWT                  *commonauth.JWTService
+	JWT                  commonauth.AccessTokenVerifier
 	Health               router.HealthChecks
 	Metrics              *commonmetrics.Provider
 	TokenVersions        commonauth.TokenVersionValidator

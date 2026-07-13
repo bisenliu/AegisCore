@@ -14,7 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
-	auth "github.com/aegiscore/common/security/auth"
+	tokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	domain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
@@ -45,7 +45,7 @@ func (m *MockLifecycle) EXPECT() *MockLifecycleMockRecorder {
 }
 
 // ConsumePasswordChangeClaims mocks base method.
-func (m *MockLifecycle) ConsumePasswordChangeClaims(ctx context.Context, claims *auth.Claims) error {
+func (m *MockLifecycle) ConsumePasswordChangeClaims(ctx context.Context, claims *tokens.Claims) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConsumePasswordChangeClaims", ctx, claims)
 	ret0, _ := ret[0].(error)
@@ -159,7 +159,7 @@ func (mr *MockLifecycleMockRecorder) RotateTokenSession(ctx, oldSession, newSess
 }
 
 // ValidateRefreshSession mocks base method.
-func (m *MockLifecycle) ValidateRefreshSession(ctx context.Context, claims *auth.Claims) (domain.AuthSession, int64, error) {
+func (m *MockLifecycle) ValidateRefreshSession(ctx context.Context, claims *tokens.Claims) (domain.AuthSession, int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateRefreshSession", ctx, claims)
 	ret0, _ := ret[0].(domain.AuthSession)

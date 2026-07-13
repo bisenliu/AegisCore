@@ -25,8 +25,9 @@ import (
 
 	"github.com/aegiscore/common/runtime/config"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
-	"github.com/aegiscore/common/runtime/resources"
 	"github.com/aegiscore/user-service/ent"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	"github.com/aegiscore/user-service/internal/resources"
 )
 
 var providerTestDriverSeq atomic.Int64
@@ -44,7 +45,7 @@ func TestProvidePostgresPoolsProvidesUserDatabase(t *testing.T) {
 
 	var got pools
 	app := fxtest.New(t,
-		fx.Supply(cfg, log),
+		fx.Supply(cfg, &serviceconfig.Config{}, log),
 		fx.Provide(ProvidePostgresPools),
 		fx.Populate(&got),
 	)
@@ -148,7 +149,7 @@ func TestPostgresPoolsAndEntClientsClosePoolOnce(t *testing.T) {
 
 	var got clients
 	app := fxtest.New(t,
-		fx.Supply(cfg, log),
+		fx.Supply(cfg, &serviceconfig.Config{}, log),
 		fx.Provide(ProvidePostgresPools, ProvideEntClients),
 		fx.Populate(&got),
 	)

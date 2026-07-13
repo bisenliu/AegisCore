@@ -5,17 +5,18 @@ import (
 	"testing"
 	"time"
 
+	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 const issuerTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
 
 func TestIssuerUsesDefaultTTLs(t *testing.T) {
-	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"}}}
-	issuer := NewIssuer(commonauth.NewJWTService(cfg.Auth), cfg)
+	cfg := testIssuerConfig(serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"})
+	issuer := NewIssuer(testJWTVerifier(cfg), cfg)
 
 	tokens, err := issuer.IssueTokenPair(context.Background(), issuerTestUserID, 2, "s-123")
 	require.NoError(t, err,
@@ -28,9 +29,8 @@ func TestIssuerUsesDefaultTTLs(t *testing.T) {
 }
 
 func TestIssuerIssuesPasswordChangeToken(t *testing.T) {
-	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, PasswordChangeTokenTTL: 4 * time.Minute}}}
-	jwt := commonauth.NewJWTService(cfg.Auth)
-	issuer := NewIssuer(jwt, cfg)
+	cfg := testIssuerConfig(serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, PasswordChangeTokenTTL: 4 * time.Minute})
+	issuer := NewIssuer(testJWTVerifier(cfg), cfg)
 
 	tokens, err := issuer.IssuePasswordChangeToken(context.Background(), issuerTestUserID, 2, "pc-123")
 	require.NoError(t, err,
@@ -41,14 +41,14 @@ func TestIssuerIssuesPasswordChangeToken(t *testing.T) {
 	claims, parsedUserID, err := issuer.ParsePasswordChangeToken(context.Background(), tokens.AccessToken)
 	require.NoError(t, err,
 		"ParsePasswordChangeToken: %v", err)
-	require.False(t, parsedUserID.String() != issuerTestUserID || claims.Subject != commonauth.SubjectPasswordChange || claims.SessionID != "pc-123" || claims.TokenVersion != 2 || claims.ID == "",
+	require.False(t, parsedUserID.String() != issuerTestUserID || claims.Subject != SubjectPasswordChange || claims.SessionID != "pc-123" || claims.TokenVersion != 2 || claims.ID == "",
 		"claims = %#v parsedUserID = %s", claims, parsedUserID.String())
 
 }
 
 func TestIssuerUsesDefaultPasswordChangeTokenTTL(t *testing.T) {
-	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}}}
-	issuer := NewIssuer(commonauth.NewJWTService(cfg.Auth), cfg)
+	cfg := testIssuerConfig(serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour})
+	issuer := NewIssuer(testJWTVerifier(cfg), cfg)
 
 	tokens, err := issuer.IssuePasswordChangeToken(context.Background(), issuerTestUserID, 2, "pc-123")
 	require.NoError(t, err,
@@ -58,17 +58,60 @@ func TestIssuerUsesDefaultPasswordChangeTokenTTL(t *testing.T) {
 }
 
 func TestIssuerParsesBearerRefreshToken(t *testing.T) {
-	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}}}
-	jwt := commonauth.NewJWTService(cfg.Auth)
-	issuer := NewIssuer(jwt, cfg)
-	refresh, err := jwt.SignRefreshToken(commonauth.SignInput{UserID: issuerTestUserID, TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
+	cfg := testIssuerConfig(serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour})
+	issuer := NewIssuer(testJWTVerifier(cfg), cfg)
+	pair, err := issuer.IssueTokenPair(context.Background(), issuerTestUserID, 2, "s-123")
 	require.NoError(t, err,
 		"SignRefreshToken: %v", err)
 
-	claims, err := issuer.ParseRefreshToken(context.Background(), "Bearer "+refresh)
+	claims, err := issuer.ParseRefreshToken(context.Background(), "Bearer "+pair.Response.RefreshToken)
 	require.NoError(t, err,
 		"ParseRefreshToken: %v", err)
-	require.False(t, claims.UserID != issuerTestUserID || claims.SessionID != "s-123" || claims.Subject != commonauth.SubjectRefresh,
+	require.False(t, claims.UserID != issuerTestUserID || claims.SessionID != "s-123" || claims.Subject != SubjectRefresh,
 		"claims = %#v", claims)
 
+}
+
+func TestIssuerRejectsWrongSubjectForAccessVerifier(t *testing.T) {
+	cfg := testIssuerConfig(serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour})
+	issuer := NewAccessTokenVerifier(testJWTVerifier(cfg), cfg)
+	passwordToken, err := NewIssuer(testJWTVerifier(cfg), cfg).IssuePasswordChangeToken(context.Background(), issuerTestUserID, 2, "pc-123")
+	require.NoError(t, err)
+
+	_, err = issuer.VerifyAccessToken(passwordToken.AccessToken)
+	require.ErrorIs(t, err, errInvalidSubject)
+}
+
+func TestIssuerRejectsRefreshTokenMissingJTI(t *testing.T) {
+	cfg := testIssuerConfig(serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour})
+	issuer := NewIssuer(testJWTVerifier(cfg), cfg)
+	token := signIssuerTestClaims(t, cfg.Auth.JWT.Secret, Claims{
+		UserID:       issuerTestUserID,
+		TokenVersion: 2,
+		SessionID:    "s-123",
+		RegisteredClaims: jwtv5.RegisteredClaims{
+			Issuer:    cfg.Auth.JWT.Issuer,
+			Audience:  jwtv5.ClaimStrings{cfg.Auth.JWT.Audience},
+			Subject:   SubjectRefresh,
+			ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour)),
+		},
+	})
+
+	_, err := issuer.ParseRefreshToken(context.Background(), token)
+	require.Error(t, err)
+}
+
+func testIssuerConfig(jwt serviceconfig.JWTConfig) *serviceconfig.Config {
+	return &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: jwt}}
+}
+
+func testJWTVerifier(cfg *serviceconfig.Config) *commonauth.JWTService {
+	return commonauth.NewJWTService(commonauth.JWTConfig{Secret: cfg.Auth.JWT.Secret, Issuer: cfg.Auth.JWT.Issuer, Audience: cfg.Auth.JWT.Audience})
+}
+
+func signIssuerTestClaims(t *testing.T, secret string, claims Claims) string {
+	t.Helper()
+	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, claims).SignedString([]byte(secret))
+	require.NoError(t, err)
+	return token
 }

@@ -8,9 +8,9 @@ import (
 	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 
-	"github.com/aegiscore/common/runtime/config"
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/workerpool"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 )
 
@@ -41,7 +41,7 @@ type SessionStoreParams struct {
 	fx.In
 
 	Redis     *rediscache.Client `name:"cache_redis"`
-	Cfg       *config.Config
+	Cfg       *serviceconfig.Config
 	PurgePool PurgeTaskPool           `name:"auth_session_purge_pool"`
 	Metrics   authapplication.Metrics `optional:"true"`
 }

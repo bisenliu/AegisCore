@@ -18,12 +18,13 @@ import (
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/user-service/ent/enttest"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 func TestEntSQLDebugEnabledRequiresConfigFlag(t *testing.T) {
 	require.False(t, entSQLDebugEnabled(nil))
-	require.False(t, entSQLDebugEnabled(&config.Config{}))
-	require.True(t, entSQLDebugEnabled(&config.Config{Ent: config.EntConfig{SQLDebug: true}}))
+	require.False(t, entSQLDebugEnabled(&serviceconfig.Config{}))
+	require.True(t, entSQLDebugEnabled(&serviceconfig.Config{Ent: serviceconfig.EntConfig{SQLDebug: true}}))
 }
 
 func TestEntSQLDebugLogFuncWritesSQLDiagnosticLog(t *testing.T) {
@@ -43,9 +44,9 @@ func TestEntSQLDebugLogFuncWritesSQLDiagnosticLog(t *testing.T) {
 }
 
 func TestNewEntDriverUsesDebugDriverOnlyWhenConfigured(t *testing.T) {
-	_, ok := newEntDriver(nil, &config.Config{}, zap.NewNop()).(*dialect.DebugDriver)
+	_, ok := newEntDriver(nil, &serviceconfig.Config{}, zap.NewNop()).(*dialect.DebugDriver)
 	require.False(t, ok)
-	_, ok = newEntDriver(nil, &config.Config{Ent: config.EntConfig{SQLDebug: true}}, zap.NewNop()).(*dialect.DebugDriver)
+	_, ok = newEntDriver(nil, &serviceconfig.Config{Ent: serviceconfig.EntConfig{SQLDebug: true}}, zap.NewNop()).(*dialect.DebugDriver)
 	require.True(t, ok)
 }
 

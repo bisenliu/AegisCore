@@ -10,9 +10,8 @@ import (
 )
 
 const (
-	minPort               = 1
-	maxPort               = 65535
-	minProductionJWTBytes = 32
+	minPort = 1
+	maxPort = 65535
 )
 
 // ValidationError 聚合配置校验失败，使启动阶段能一次性报告全部非法字段。
@@ -25,6 +24,11 @@ func newValidationError(errs []error) *ValidationError {
 		return nil
 	}
 	return &ValidationError{errs: errs}
+}
+
+// NewValidationError 聚合调用方扩展配置校验错误。
+func NewValidationError(errs []error) *ValidationError {
+	return newValidationError(errs)
 }
 
 func (e *ValidationError) Error() string {
@@ -53,7 +57,6 @@ func (c Config) Validate() error {
 	errs = append(errs, c.validateSystem()...)
 	errs = append(errs, c.validateApp()...)
 	errs = append(errs, c.validateHTTP()...)
-	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.validateLog()...)
 	errs = append(errs, c.validateObservability()...)
 	errs = append(errs, c.validateLocalCache()...)
@@ -99,29 +102,6 @@ func (c Config) validateHTTP() []error {
 	errs = append(errs, validatePositiveDuration("http.write_timeout", c.HTTP.WriteTimeout)...)
 	errs = append(errs, validatePositiveDuration("http.idle_timeout", c.HTTP.IdleTimeout)...)
 	errs = append(errs, validatePositiveDuration("http.shutdown_timeout", c.HTTP.ShutdownTimeout)...)
-	return errs
-}
-
-func (c Config) validateAuth() []error {
-	var errs []error
-	secret := strings.TrimSpace(c.Auth.JWT.Secret)
-	if secret == "" {
-		errs = append(errs, configFieldError("auth.jwt.secret", "is required"))
-	} else if c.isProductionLike() {
-		if isInsecureJWTSecret(strings.ToLower(secret)) {
-			errs = append(errs, configFieldError("auth.jwt.secret", "must not use a development default in production-like environments"))
-		} else if len([]byte(secret)) < minProductionJWTBytes {
-			errs = append(errs, configFieldError("auth.jwt.secret", "must be at least 32 bytes in production-like environments"))
-		}
-	}
-	errs = append(errs, validatePositiveDuration("auth.jwt.access_token_ttl", c.Auth.JWT.AccessTokenTTL)...)
-	errs = append(errs, validatePositiveDuration("auth.jwt.refresh_token_ttl", c.Auth.JWT.RefreshTokenTTL)...)
-	errs = append(errs, validatePositiveInt("auth.password_kdf.argon2_concurrency", c.Auth.PasswordKDF.Argon2Concurrency)...)
-	errs = append(errs, validatePositiveInt("auth.password_kdf.argon2_queue_size", c.Auth.PasswordKDF.Argon2QueueSize)...)
-	if c.Auth.PasswordKDF.Argon2Concurrency > 0 && c.Auth.PasswordKDF.Argon2QueueSize > 0 && c.Auth.PasswordKDF.Argon2QueueSize < c.Auth.PasswordKDF.Argon2Concurrency {
-		errs = append(errs, configFieldError("auth.password_kdf.argon2_queue_size", "must be >= auth.password_kdf.argon2_concurrency"))
-	}
-	errs = append(errs, validateNonNegativeInt("auth.max_active_sessions_per_user", c.Auth.MaxActiveSessionsPerUser)...)
 	return errs
 }
 
@@ -319,15 +299,6 @@ func isValidTracingExporter(value string) bool {
 	}
 }
 
-func isInsecureJWTSecret(value string) bool {
-	switch value {
-	case "changeme", "local-development-secret", "secret", "test-secret":
-		return true
-	default:
-		return false
-	}
-}
-
 func validateHostPort(path string, value string) []error {
 	host, portText, err := net.SplitHostPort(value)
 	if err != nil || strings.TrimSpace(host) == "" {
@@ -354,6 +325,11 @@ func validatePositiveDuration(path string, value time.Duration) []error {
 	return nil
 }
 
+// ValidatePositiveDuration 校验 duration 必须为正数。
+func ValidatePositiveDuration(path string, value time.Duration) []error {
+	return validatePositiveDuration(path, value)
+}
+
 func validatePositiveInt(path string, value int) []error {
 	if value <= 0 {
 		return []error{configFieldError(path, "must be > 0")}
@@ -368,11 +344,21 @@ func validatePositiveInt64(path string, value int64) []error {
 	return nil
 }
 
+// ValidatePositiveInt 校验 int 必须为正数。
+func ValidatePositiveInt(path string, value int) []error {
+	return validatePositiveInt(path, value)
+}
+
 func validateNonNegativeInt(path string, value int) []error {
 	if value < 0 {
 		return []error{configFieldError(path, "must be >= 0")}
 	}
 	return nil
+}
+
+// ValidateNonNegativeInt 校验 int 必须为非负数。
+func ValidateNonNegativeInt(path string, value int) []error {
+	return validateNonNegativeInt(path, value)
 }
 
 func validateNonNegativeInt64(path string, value int64) []error {
@@ -384,6 +370,11 @@ func validateNonNegativeInt64(path string, value int64) []error {
 
 func configFieldError(path string, message string) error {
 	return errors.New(path + " " + message)
+}
+
+// FieldError 创建与共享配置校验一致的字段错误。
+func FieldError(path string, message string) error {
+	return configFieldError(path, message)
 }
 
 func sortedRedisNames(values map[string]RedisConfig) []string {

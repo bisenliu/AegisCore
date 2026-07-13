@@ -25,12 +25,13 @@ import (
 
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
-	"github.com/aegiscore/common/runtime/resources"
 )
 
 var testDriverSeq atomic.Int64
 
 const testAuditDB = "audit_db"
+const testUserDB = "user_db"
+const testCacheRedis = "cache_redis"
 
 func TestNewPostgresReturnsErrorForMissingConfig(t *testing.T) {
 	cfg := &config.Config{}
@@ -48,7 +49,7 @@ func TestNewPostgresAppliesPoolSettings(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	db, err := NewPostgres(lc, cfg, log, resources.NameUserDB)
+	db, err := NewPostgres(lc, cfg, log, testUserDB)
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -62,7 +63,7 @@ func TestNewPostgresRegistersLifecycle(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	_, err := NewPostgres(lc, cfg, log, resources.NameUserDB)
+	_, err := NewPostgres(lc, cfg, log, testUserDB)
 	require.NoError(t, err)
 	lc.RequireStart()
 	lc.RequireStop()
@@ -79,7 +80,7 @@ func TestNewPostgresClosesPoolWhenStartPingFails(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	db, err := NewPostgres(lc, cfg, log, resources.NameUserDB)
+	db, err := NewPostgres(lc, cfg, log, testUserDB)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -94,13 +95,13 @@ func TestNewPostgresClosesPoolWhenStartPingFails(t *testing.T) {
 func TestNewPostgresPoolsRegistersSingleLifecycleForDeclaredPools(t *testing.T) {
 	drv := registerTestSQLDriver(t)
 	cfg := testConfig(drv.name)
-	cfg.Postgres[testAuditDB] = cfg.Postgres[resources.NameUserDB]
+	cfg.Postgres[testAuditDB] = cfg.Postgres[testUserDB]
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	dbs, err := NewPostgresPools(lc, cfg, log, resources.NameUserDB, testAuditDB)
+	dbs, err := NewPostgresPools(lc, cfg, log, testUserDB, testAuditDB)
 	require.NoError(t, err)
-	require.NotNil(t, dbs[resources.NameUserDB])
+	require.NotNil(t, dbs[testUserDB])
 	require.NotNil(t, dbs[testAuditDB])
 	lc.RequireStart()
 	lc.RequireStop()
@@ -113,11 +114,11 @@ func TestNewPostgresPoolsStopPreservesNamedCloseErrors(t *testing.T) {
 	drv := registerTestSQLDriver(t)
 	drv.closeErr = errors.New("driver close failed")
 	cfg := testConfig(drv.name)
-	cfg.Postgres[testAuditDB] = cfg.Postgres[resources.NameUserDB]
+	cfg.Postgres[testAuditDB] = cfg.Postgres[testUserDB]
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	_, err := NewPostgresPools(lc, cfg, log, resources.NameUserDB, testAuditDB)
+	_, err := NewPostgresPools(lc, cfg, log, testUserDB, testAuditDB)
 	require.NoError(t, err)
 	lc.RequireStart()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -158,7 +159,7 @@ func TestNewRedisClientReturnsErrorForMissingConfig(t *testing.T) {
 func TestNewRedisClientRegistersLifecycle(t *testing.T) {
 	redisServer := newTestRedisServer(t)
 	cfg := &config.Config{Redis: map[string]config.RedisConfig{
-		resources.NameCacheRedis: {
+		testCacheRedis: {
 			Addr:         redisServer.addr,
 			DB:           0,
 			DialTimeout:  time.Second,
@@ -170,7 +171,7 @@ func TestNewRedisClientRegistersLifecycle(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	client, err := NewRedisClient(lc, cfg, log, resources.NameCacheRedis)
+	client, err := NewRedisClient(lc, cfg, log, testCacheRedis)
 	require.NoError(t, err)
 	lc.RequireStart()
 	lc.RequireStop()
@@ -185,7 +186,7 @@ func TestNewRedisClientClosesClientWhenStartPingFails(t *testing.T) {
 	addr := listener.Addr().String()
 	require.NoError(t, listener.Close())
 	cfg := &config.Config{Redis: map[string]config.RedisConfig{
-		resources.NameCacheRedis: {
+		testCacheRedis: {
 			Addr:         addr,
 			DB:           0,
 			DialTimeout:  10 * time.Millisecond,
@@ -197,7 +198,7 @@ func TestNewRedisClientClosesClientWhenStartPingFails(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 
-	client, err := NewRedisClient(lc, cfg, log, resources.NameCacheRedis)
+	client, err := NewRedisClient(lc, cfg, log, testCacheRedis)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -328,7 +329,7 @@ func TestProvideNamedPostgresProvidesOnlyDeclaredPool(t *testing.T) {
 
 	app := fxtest.New(t,
 		fx.Supply(cfg, log),
-		ProvideNamedPostgres(resources.NameUserDB, resources.NameUserDB),
+		ProvideNamedPostgres(testUserDB, testUserDB),
 		fx.Populate(&got),
 	)
 	app.RequireStart()
@@ -341,7 +342,7 @@ func TestProvideNamedPostgresProvidesOnlyDeclaredPool(t *testing.T) {
 func TestProvideNamedRedisProvidesOnlyDeclaredClient(t *testing.T) {
 	redisServer := newTestRedisServer(t)
 	cfg := &config.Config{Redis: map[string]config.RedisConfig{
-		resources.NameCacheRedis: {
+		testCacheRedis: {
 			Addr:         redisServer.addr,
 			DB:           0,
 			DialTimeout:  time.Second,
@@ -368,7 +369,7 @@ func TestProvideNamedRedisProvidesOnlyDeclaredClient(t *testing.T) {
 
 	app := fxtest.New(t,
 		fx.Supply(cfg, log),
-		ProvideNamedRedis(resources.NameCacheRedis, resources.NameCacheRedis),
+		ProvideNamedRedis(testCacheRedis, testCacheRedis),
 		fx.Populate(&got),
 	)
 	app.RequireStart()
@@ -381,7 +382,7 @@ func TestProvideNamedRedisProvidesOnlyDeclaredClient(t *testing.T) {
 func testConfig(driverName string) *config.Config {
 	return &config.Config{
 		Postgres: map[string]config.PostgresConfig{
-			resources.NameUserDB: {
+			testUserDB: {
 				Host:            "127.0.0.1",
 				Port:            15432,
 				Username:        "aegiscore",

@@ -10,11 +10,11 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 	"github.com/aegiscore/user-service/ent"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 // NamedEntClientParams 包含由具名 SQL 连接池支撑 Ent client 所需的 Fx 输入。
@@ -22,7 +22,7 @@ type NamedEntClientParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Config    *config.Config
+	Config    *serviceconfig.Config
 	Log       *zap.Logger
 	Metrics   *commonmetrics.Provider `optional:"true"`
 	Tracing   *commontracing.Provider `optional:"true"`
@@ -57,7 +57,7 @@ func ProvideEntClients(params NamedEntClientParams) (NamedEntClients, error) {
 	return NamedEntClients{UserClient: userClient}, nil
 }
 
-func newEntClient(db *sql.DB, cfg *config.Config, sqlLog *zap.Logger, metricsProvider *commonmetrics.Provider, tracingProvider *commontracing.Provider) (*ent.Client, error) {
+func newEntClient(db *sql.DB, cfg *serviceconfig.Config, sqlLog *zap.Logger, metricsProvider *commonmetrics.Provider, tracingProvider *commontracing.Provider) (*ent.Client, error) {
 	client := ent.NewClient(ent.Driver(newEntDriver(db, cfg, sqlLog)))
 	if err := installEntObservability(client, metricsProvider, tracingProvider); err != nil {
 		_ = client.Close()
@@ -66,7 +66,7 @@ func newEntClient(db *sql.DB, cfg *config.Config, sqlLog *zap.Logger, metricsPro
 	return client, nil
 }
 
-func newEntDriver(db *sql.DB, cfg *config.Config, sqlLog *zap.Logger) dialect.Driver {
+func newEntDriver(db *sql.DB, cfg *serviceconfig.Config, sqlLog *zap.Logger) dialect.Driver {
 	// SQL 连接池由 datastore 生命周期 hook 持有，Ent client 不应独立关闭它们。
 	var driver dialect.Driver = nonClosingEntDriver{Driver: entsql.OpenDB(dialect.Postgres, db)}
 	if entSQLDebugEnabled(cfg) {
@@ -75,7 +75,7 @@ func newEntDriver(db *sql.DB, cfg *config.Config, sqlLog *zap.Logger) dialect.Dr
 	return driver
 }
 
-func entSQLDebugEnabled(cfg *config.Config) bool {
+func entSQLDebugEnabled(cfg *serviceconfig.Config) bool {
 	return cfg != nil && cfg.Ent.SQLDebug
 }
 

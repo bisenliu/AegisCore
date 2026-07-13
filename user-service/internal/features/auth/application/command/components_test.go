@@ -12,10 +12,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/common/runtime/logger"
 	commonauth "github.com/aegiscore/common/security/auth"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
@@ -179,17 +179,17 @@ func TestCredentialVerifierChangePasswordMapsUpdateError(t *testing.T) {
 }
 
 func TestAuthTokenIssuerParsesBearerRefreshToken(t *testing.T) {
-	cfg := &config.Config{Auth: config.AuthConfig{JWT: config.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}}}
-	jwt := commonauth.NewJWTService(cfg.Auth)
+	cfg := &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}}}
+	jwt := commonauth.NewJWTService(commonauth.JWTConfig{Secret: cfg.Auth.JWT.Secret, Issuer: cfg.Auth.JWT.Issuer, Audience: cfg.Auth.JWT.Audience})
 	issuer := authtokens.NewIssuer(jwt, cfg)
-	refresh, err := jwt.SignRefreshToken(commonauth.SignInput{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123", TTL: time.Hour})
+	pair, err := issuer.IssueTokenPair(context.Background(), authTestUserID.String(), 2, "s-123")
 	require.NoError(t, err,
-		"SignRefreshToken: %v", err)
+		"IssueTokenPair: %v", err)
 
-	claims, err := issuer.ParseRefreshToken(context.Background(), "Bearer "+refresh)
+	claims, err := issuer.ParseRefreshToken(context.Background(), "Bearer "+pair.Response.RefreshToken)
 	require.NoError(t, err,
 		"ParseRefreshToken: %v", err)
-	require.False(t, claims.UserID != authTestUserID.String() || claims.SessionID != "s-123" || claims.Subject != commonauth.SubjectRefresh,
+	require.False(t, claims.UserID != authTestUserID.String() || claims.SessionID != "s-123" || claims.Subject != authtokens.SubjectRefresh,
 		"claims = %#v", claims)
 
 }
@@ -201,7 +201,7 @@ func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
 	sessions := NewMockRefreshSessionStore(ctrl)
 	passwordChanges := NewMockPasswordChangeSessionStore(ctrl)
 	lifecycle := authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, 5, noopTokenVersionInvalidator{})
-	claims := &commonauth.Claims{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123"}
+	claims := &authtokens.Claims{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123"}
 
 	sessions.EXPECT().GetSession(gomock.Any(), authTestUserID.String(), "s-123").Return(authRefreshTestSession("s-123", 2), nil)
 	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(3), nil)

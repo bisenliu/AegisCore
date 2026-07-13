@@ -19,7 +19,6 @@ import (
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
-	"github.com/aegiscore/common/runtime/config"
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/security/auth"
 )
@@ -28,17 +27,17 @@ const authTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
 
 func TestAuthMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}}
+	verifier := testAccessTokenVerifier{secret: "secret"}
 	validToken := signAuthTestToken(t, "secret", authTestUserID, 1, "s-123", time.Now().Add(time.Hour))
 	expiredToken := signAuthTestToken(t, "secret", authTestUserID, 1, "s-123", time.Now().Add(-time.Hour))
 	missingVersionToken := signAuthTestToken(t, "secret", authTestUserID, 0, "s-123", time.Now().Add(time.Hour))
 	missingSessionToken := signAuthTestToken(t, "secret", authTestUserID, 1, "", time.Now().Add(time.Hour))
-	passwordChangeToken := signAuthSubjectTestToken(t, "secret", auth.SubjectPasswordChange, authTestUserID, 1, "pc-123", time.Now().Add(time.Hour))
+	passwordChangeToken := signAuthSubjectTestToken(t, "secret", "password_change", authTestUserID, 1, "pc-123", time.Now().Add(time.Hour))
 
 	tests := []struct {
 		name           string
 		path           string
-		cfg            *config.AuthConfig
+		verifier       auth.AccessTokenVerifier
 		authorization  string
 		wantStatus     int
 		wantCode       contracterrors.Code
@@ -66,7 +65,7 @@ func TestAuthMiddleware(t *testing.T) {
 			validator.EXPECT().ValidateTokenVersion(gomock.Any(), authTestUserID, int64(1)).Return(errors.New("redis unavailable"))
 			return validator
 		}, wantLogLevel: zapcore.ErrorLevel, wantLogMsg: "token version validation failed"},
-		{name: "missing jwt secret", path: "/api/v1/users/123", cfg: &config.AuthConfig{}, authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.ErrorLevel, wantLogMsg: "token validation failed"},
+		{name: "missing jwt secret", path: "/api/v1/users/123", verifier: testAccessTokenVerifier{}, authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusUnauthorized, wantCode: contracterrors.CodeTokenInvalid, wantLogLevel: zapcore.ErrorLevel, wantLogMsg: "token validation failed"},
 		{name: "valid token", path: "/api/v1/users/123", authorization: auth.TokenPrefix + validToken, wantStatus: http.StatusOK, wantHandled: true},
 		{name: "valid token with lowercase bearer prefix", path: "/api/v1/users/123", authorization: "bearer " + validToken, wantStatus: http.StatusOK, wantHandled: true},
 		{name: "valid token with uppercase bearer prefix", path: "/api/v1/users/123", authorization: "BEARER " + validToken, wantStatus: http.StatusOK, wantHandled: true},
@@ -83,13 +82,13 @@ func TestAuthMiddleware(t *testing.T) {
 			if tt.setupValidator != nil {
 				validator = tt.setupValidator(ctrl)
 			}
-			testCfg := cfg
-			if tt.cfg != nil {
-				testCfg = *tt.cfg
+			testVerifier := auth.AccessTokenVerifier(verifier)
+			if tt.verifier != nil {
+				testVerifier = tt.verifier
 			}
 			core, logs := observer.New(zapcore.DebugLevel)
 			engine := gin.New()
-			engine.Use(AuthWithTokenVersionValidator(zap.New(core), auth.NewJWTService(testCfg), validator))
+			engine.Use(AuthWithTokenVersionValidator(zap.New(core), testVerifier, validator))
 			handled := false
 			engine.GET("/*path", func(c *gin.Context) {
 				handled = true
@@ -151,11 +150,10 @@ func TestAuthMiddleware(t *testing.T) {
 
 func TestAuthMiddlewareExpiredTokenDoesNotCallVersionValidator(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	cfg := config.AuthConfig{JWT: config.JWTConfig{Secret: "secret"}}
 	expiredToken := signAuthTestToken(t, "secret", authTestUserID, 1, "s-123", time.Now().Add(-time.Hour))
 	validator := NewMockTokenVersionValidator(gomock.NewController(t))
 	engine := gin.New()
-	engine.Use(AuthWithTokenVersionValidator(zap.NewNop(), auth.NewJWTService(cfg), validator))
+	engine.Use(AuthWithTokenVersionValidator(zap.NewNop(), testAccessTokenVerifier{secret: "secret"}, validator))
 	engine.GET("/*path", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -202,14 +200,14 @@ func assertAuthFailureFields(t *testing.T, fields map[string]any, _ string) {
 }
 
 func signAuthTestToken(t *testing.T, secret, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {
-	return signAuthSubjectTestToken(t, secret, auth.SubjectAccess, userID, tokenVersion, sessionID, expiresAt)
+	return signAuthSubjectTestToken(t, secret, "access", userID, tokenVersion, sessionID, expiresAt)
 }
 
 func signAuthSubjectTestToken(t *testing.T, secret, subject, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {
 	t.Helper()
 	tokenID, err := runtimeid.NewUUID()
 	require.NoError(t, err)
-	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, auth.Claims{
+	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, testAuthClaims{
 		UserID:           userID,
 		TokenVersion:     tokenVersion,
 		SessionID:        sessionID,
@@ -217,4 +215,32 @@ func signAuthSubjectTestToken(t *testing.T, secret, subject, userID string, toke
 	}).SignedString([]byte(secret))
 	require.NoError(t, err)
 	return token
+}
+
+type testAuthClaims struct {
+	UserID       string `json:"user_id"`
+	TokenVersion int64  `json:"token_version"`
+	SessionID    string `json:"session_id"`
+	jwtv5.RegisteredClaims
+}
+
+type testAccessTokenVerifier struct {
+	secret string
+}
+
+func (v testAccessTokenVerifier) VerifyAccessToken(tokenString string) (auth.AccessToken, error) {
+	if v.secret == "" {
+		return auth.AccessToken{}, auth.ErrMissingSecret
+	}
+	claims := &testAuthClaims{}
+	token, err := jwtv5.ParseWithClaims(tokenString, claims, func(_ *jwtv5.Token) (any, error) {
+		return []byte(v.secret), nil
+	}, jwtv5.WithExpirationRequired())
+	if err != nil {
+		return auth.AccessToken{}, err
+	}
+	if token == nil || !token.Valid || claims.Subject != "access" || claims.TokenVersion <= 0 || claims.SessionID == "" {
+		return auth.AccessToken{}, jwtv5.ErrTokenInvalidClaims
+	}
+	return auth.AccessToken{UserID: claims.UserID, SessionID: claims.SessionID, TokenVersion: claims.TokenVersion}, nil
 }

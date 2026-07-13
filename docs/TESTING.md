@@ -19,7 +19,7 @@ Go 单元测试位于对应包内，以 `_test.go` 结尾。常见覆盖范围�
 - `common/contract/`：错误、响应和分页契约。
 - `common/http/`：binding、middleware、OpenAPI 和 response helper。
 - `common/runtime/`：config、datastore、logger、metrics、scheduler、workerpool、timezone。
-- `common/security/`：JWT、token、token version、Casbin authorizer、password。
+- `common/security/`：JWT verifier、token version validator 契约、Casbin authorizer、password；user-service token issuer 和 claims 测试位于 `user-service/internal/features/auth/`。
 - `user-service/internal/features/*/domain`：领域对象和错误。
 - `user-service/internal/features/*/application`：command、query、validator、service 和 seed。
 - `user-service/internal/features/*/transport/http`：controller、input、mapper 和 routes。

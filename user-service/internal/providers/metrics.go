@@ -11,9 +11,9 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	"github.com/aegiscore/common/runtime/resources"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
 	permissionredis "github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis"
+	"github.com/aegiscore/user-service/internal/resources"
 )
 
 const (
