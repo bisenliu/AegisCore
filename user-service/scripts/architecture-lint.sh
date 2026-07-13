@@ -5,6 +5,11 @@ repo_root="${ARCHITECTURE_LINT_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.
 service_dir="${repo_root}/user-service"
 shopt -s nullglob
 
+if ! command -v rg >/dev/null 2>&1; then
+  printf 'architecture-lint: required command not found: rg; install ripgrep before running this check\n' >&2
+  exit 1
+fi
+
 failures=0
 
 report() {
