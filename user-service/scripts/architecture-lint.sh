@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+repo_root="${ARCHITECTURE_LINT_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 service_dir="${repo_root}/user-service"
+shopt -s nullglob
 
 failures=0
 
@@ -15,20 +16,54 @@ run_rg() {
   local description="$1"
   local pattern="$2"
   shift 2
-  local output
-  if output="$(rg -n --glob '*.go' "$pattern" "$@" 2>/dev/null)"; then
-    report "${description}"$'\n'"${output}"
+  if [[ "$#" -eq 0 ]]; then
+    return
   fi
+
+  local output status
+  set +e
+  output="$(rg -n --glob '*.go' "$pattern" "$@" 2>&1)"
+  status=$?
+  set -e
+
+  case "${status}" in
+    0)
+      report "${description}"$'\n'"${output}"
+      ;;
+    1)
+      return
+      ;;
+    *)
+      report "${description}: rg execution failed"$'\n'"${output}"
+      ;;
+  esac
 }
 
 run_rg_any() {
   local description="$1"
   local pattern="$2"
   shift 2
-  local output
-  if output="$(rg -n "$pattern" "$@" 2>/dev/null)"; then
-    report "${description}"$'\n'"${output}"
+  if [[ "$#" -eq 0 ]]; then
+    return
   fi
+
+  local output status
+  set +e
+  output="$(rg -n "$pattern" "$@" 2>&1)"
+  status=$?
+  set -e
+
+  case "${status}" in
+    0)
+      report "${description}"$'\n'"${output}"
+      ;;
+    1)
+      return
+      ;;
+    *)
+      report "${description}: rg execution failed"$'\n'"${output}"
+      ;;
+  esac
 }
 
 go_mod_version() {
@@ -167,13 +202,13 @@ run_rg "shared packages must not import forbidden runtime or transport dependenc
 
 run_rg "application/domain/infrastructure must not import feature HTTP transport DTO/controller packages" \
   'github\.com/aegiscore/user-service/internal/features/.*/transport/http' \
-  "${service_dir}/internal/features/*/application" \
-  "${service_dir}/internal/features/*/domain" \
-  "${service_dir}/internal/features/*/infrastructure"
+  "${service_dir}"/internal/features/*/application \
+  "${service_dir}"/internal/features/*/domain \
+  "${service_dir}"/internal/features/*/infrastructure
 
 run_rg "gRPC transport must not import feature HTTP transport packages" \
   'github\.com/aegiscore/user-service/internal/features/.*/transport/http' \
-  "${service_dir}/internal/features/*/transport/grpc"
+  "${service_dir}"/internal/features/*/transport/grpc
 
 run_rg_any "OpenAPI generated files have uncommitted drift" \
   '^user-service/docs/(openapi\.go|openapi\.json|openapi\.yaml)$' \

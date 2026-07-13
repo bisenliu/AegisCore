@@ -4,7 +4,7 @@ ADMIN_USERNAME ?= admin
 ADMIN_NICKNAME ?= Admin
 ADMIN_RESET_PASSWORD ?= false
 
-.PHONY: help build run test lint architecture-lint verify seed-rbac create-super-admin generate migrate-diff migrate-validate openapi-generate fxgraph-generate fxgraph-check
+.PHONY: help build run test lint architecture-lint architecture-lint-test verify seed-rbac create-super-admin generate migrate-diff migrate-validate openapi-generate fxgraph-generate fxgraph-check
 
 help: ## 查看 user-service 可用命令。
 	@awk 'BEGIN {FS = ":.*##"; printf "user-service 可用命令：\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -22,8 +22,11 @@ test: ## 运行 user-service 测试。
 lint: ## 运行 user-service lint。
 	golangci-lint run ./...
 
-architecture-lint: ## 运行 user-service 架构边界检查。
+architecture-lint: architecture-lint-test ## 运行 user-service 架构边界检查。
 	./scripts/architecture-lint.sh
+
+architecture-lint-test: ## 使用故意违规 fixture 验证架构检查可命中分层污染。
+	./scripts/architecture-lint-test.sh
 
 verify: lint architecture-lint generate test openapi-generate ## 运行 user-service 验证。
 	git diff --exit-code
