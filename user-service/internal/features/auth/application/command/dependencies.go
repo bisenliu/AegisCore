@@ -4,9 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"go.uber.org/fx"
-
-	"github.com/aegiscore/common/runtime/config"
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
@@ -16,48 +13,43 @@ import (
 
 // LoginDeps 包含登录 use case 所需的最小依赖。
 type LoginDeps struct {
-	fx.In
-
 	Credentials authcredentials.Verifier
 	Tokens      authtokens.Issuer
 	Sessions    authsessions.Lifecycle
-	Metrics     authapplication.Metrics `optional:"true"`
+	Metrics     authapplication.Metrics
+}
+
+// RefreshTokenSettings 包含 refresh token use case 所需的运行时开关。
+type RefreshTokenSettings struct {
+	RefreshTokenRotation bool
 }
 
 // RefreshTokenDeps 包含 refresh token use case 所需的最小依赖。
 type RefreshTokenDeps struct {
-	fx.In
-
 	Tokens   authtokens.Issuer
 	Sessions authsessions.Lifecycle
-	Config   *config.Config
-	Metrics  authapplication.Metrics `optional:"true"`
+	Metrics  authapplication.Metrics
+	Settings RefreshTokenSettings
 }
 
 // ChangePasswordDeps 包含强制改密 use case 所需的最小依赖。
 type ChangePasswordDeps struct {
-	fx.In
-
 	Credentials authcredentials.Verifier
 	Tokens      authtokens.Issuer
 	Sessions    authsessions.Lifecycle
-	Metrics     authapplication.Metrics `optional:"true"`
+	Metrics     authapplication.Metrics
 }
 
 // LogoutCurrentSessionDeps 包含当前会话登出 use case 所需的最小依赖。
 type LogoutCurrentSessionDeps struct {
-	fx.In
-
 	Sessions authsessions.Lifecycle
-	Metrics  authapplication.Metrics `optional:"true"`
+	Metrics  authapplication.Metrics
 }
 
 // LogoutAllSessionsDeps 包含全部会话登出 use case 所需的最小依赖。
 type LogoutAllSessionsDeps struct {
-	fx.In
-
 	Sessions authsessions.Lifecycle
-	Metrics  authapplication.Metrics `optional:"true"`
+	Metrics  authapplication.Metrics
 }
 
 func metricsOrNop(metrics authapplication.Metrics) authapplication.Metrics {

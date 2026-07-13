@@ -53,7 +53,7 @@ func TestAuthUseCaseRefreshRotationPassesMaxActiveSessionsPerUser(t *testing.T) 
 	svc := NewRefreshTokenUseCase(RefreshTokenDeps{
 		Tokens:   tokens,
 		Sessions: authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, cfg.MaxActiveSessionsPerUser, noopTokenVersionInvalidator{}),
-		Config:   &config.Config{Auth: cfg},
+		Settings: RefreshTokenSettings{RefreshTokenRotation: cfg.RefreshTokenRotation},
 	})
 	claims := refreshClaims("s-old", 2)
 	oldSession := authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}

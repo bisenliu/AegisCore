@@ -53,6 +53,47 @@ type tokenVersionValidatorResult struct {
 	Invalidator authvalidators.TokenVersionLocalInvalidator
 }
 
+type loginUseCaseParams struct {
+	fx.In
+
+	Credentials authcredentials.Verifier
+	Tokens      authtokens.Issuer
+	Sessions    authsessions.Lifecycle
+	Metrics     authapplication.Metrics `optional:"true"`
+}
+
+type refreshTokenUseCaseParams struct {
+	fx.In
+
+	Tokens   authtokens.Issuer
+	Sessions authsessions.Lifecycle
+	Config   *config.Config
+	Metrics  authapplication.Metrics `optional:"true"`
+}
+
+type changePasswordUseCaseParams struct {
+	fx.In
+
+	Credentials authcredentials.Verifier
+	Tokens      authtokens.Issuer
+	Sessions    authsessions.Lifecycle
+	Metrics     authapplication.Metrics `optional:"true"`
+}
+
+type logoutCurrentSessionUseCaseParams struct {
+	fx.In
+
+	Sessions authsessions.Lifecycle
+	Metrics  authapplication.Metrics `optional:"true"`
+}
+
+type logoutAllSessionsUseCaseParams struct {
+	fx.In
+
+	Sessions authsessions.Lifecycle
+	Metrics  authapplication.Metrics `optional:"true"`
+}
+
 // Module 组装认证功能的应用服务、HTTP 传输层和基础设施适配器。
 var Module = fx.Module("feature-auth",
 	fx.Provide(
@@ -78,11 +119,11 @@ var Module = fx.Module("feature-auth",
 		newCredentialVerifier,
 		authtokens.NewIssuer,
 		newAuthSessionLifecycle,
-		authcommand.NewLoginUseCase,
-		authcommand.NewRefreshTokenUseCase,
-		authcommand.NewChangePasswordUseCase,
-		authcommand.NewLogoutCurrentSessionUseCase,
-		authcommand.NewLogoutAllSessionsUseCase,
+		newLoginUseCase,
+		newRefreshTokenUseCase,
+		newChangePasswordUseCase,
+		newLogoutCurrentSessionUseCase,
+		newLogoutAllSessionsUseCase,
 		authhttp.NewAuthController,
 	),
 )
@@ -93,6 +134,47 @@ func newCredentialVerifier(store authapplication.UserCredentialStore, passwordSe
 
 func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, tokenVersionCache authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, tokenVersions authvalidators.TokenVersionLocalInvalidator, cfg *config.Config) authsessions.Lifecycle {
 	return authsessions.NewLifecycle(users, tokenVersionCache, sessions, passwordChangeSessions, cfg.Auth.MaxActiveSessionsPerUser, tokenVersions)
+}
+
+func newLoginUseCase(params loginUseCaseParams) authcommand.LoginUseCase {
+	return authcommand.NewLoginUseCase(authcommand.LoginDeps{
+		Credentials: params.Credentials,
+		Tokens:      params.Tokens,
+		Sessions:    params.Sessions,
+		Metrics:     params.Metrics,
+	})
+}
+
+func newRefreshTokenUseCase(params refreshTokenUseCaseParams) authcommand.RefreshTokenUseCase {
+	return authcommand.NewRefreshTokenUseCase(authcommand.RefreshTokenDeps{
+		Tokens:   params.Tokens,
+		Sessions: params.Sessions,
+		Metrics:  params.Metrics,
+		Settings: authcommand.RefreshTokenSettings{RefreshTokenRotation: params.Config.Auth.RefreshTokenRotation},
+	})
+}
+
+func newChangePasswordUseCase(params changePasswordUseCaseParams) authcommand.ChangePasswordUseCase {
+	return authcommand.NewChangePasswordUseCase(authcommand.ChangePasswordDeps{
+		Credentials: params.Credentials,
+		Tokens:      params.Tokens,
+		Sessions:    params.Sessions,
+		Metrics:     params.Metrics,
+	})
+}
+
+func newLogoutCurrentSessionUseCase(params logoutCurrentSessionUseCaseParams) authcommand.LogoutCurrentSessionUseCase {
+	return authcommand.NewLogoutCurrentSessionUseCase(authcommand.LogoutCurrentSessionDeps{
+		Sessions: params.Sessions,
+		Metrics:  params.Metrics,
+	})
+}
+
+func newLogoutAllSessionsUseCase(params logoutAllSessionsUseCaseParams) authcommand.LogoutAllSessionsUseCase {
+	return authcommand.NewLogoutAllSessionsUseCase(authcommand.LogoutAllSessionsDeps{
+		Sessions: params.Sessions,
+		Metrics:  params.Metrics,
+	})
 }
 
 func newTokenVersionLocalCache(params tokenVersionCacheParams) (tokenVersionCacheResult, error) {

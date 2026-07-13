@@ -46,7 +46,6 @@ func newAuthCommandFixtureWithController(ctrl *gomock.Controller, authCfg config
 	credentials := NewMockVerifier(ctrl)
 	tokens := NewMockIssuer(ctrl)
 	sessions := NewMockLifecycle(ctrl)
-	cfg := &config.Config{Auth: authCfg}
 	return &authCommandFixture{
 		testAuthUseCases: testAuthUseCases{
 			LoginUseCase: NewLoginUseCase(LoginDeps{
@@ -58,8 +57,8 @@ func newAuthCommandFixtureWithController(ctrl *gomock.Controller, authCfg config
 			RefreshTokenUseCase: NewRefreshTokenUseCase(RefreshTokenDeps{
 				Tokens:   tokens,
 				Sessions: sessions,
-				Config:   cfg,
 				Metrics:  metrics,
+				Settings: RefreshTokenSettings{RefreshTokenRotation: authCfg.RefreshTokenRotation},
 			}),
 			ChangePasswordUseCase: NewChangePasswordUseCase(ChangePasswordDeps{
 				Credentials: credentials,

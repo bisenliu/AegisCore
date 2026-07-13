@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
@@ -36,7 +35,7 @@ func NewRefreshTokenUseCase(deps RefreshTokenDeps) RefreshTokenUseCase {
 		tokens:               deps.Tokens,
 		sessions:             deps.Sessions,
 		metrics:              metricsOrNop(deps.Metrics),
-		refreshTokenRotation: refreshTokenRotationEnabled(deps.Config),
+		refreshTokenRotation: deps.Settings.RefreshTokenRotation,
 	}
 }
 
@@ -102,13 +101,6 @@ func (u *refreshTokenUseCase) refreshWithRotation(ctx context.Context, claims *c
 	}
 	u.metrics.RefreshSucceeded(ctx)
 	return tokens.Response, nil
-}
-
-func refreshTokenRotationEnabled(cfg *config.Config) bool {
-	if cfg == nil {
-		return false
-	}
-	return cfg.Auth.RefreshTokenRotation
 }
 
 func refreshFailureReason(err error) string {
