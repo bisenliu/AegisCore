@@ -61,7 +61,6 @@ type CreateRoleInput struct {
 	Name        string
 	Description string
 	Active      bool
-	IsSystem    bool
 }
 
 // SeedRoleInput 包含系统角色 seed 规范化后的写入数据。
@@ -70,7 +69,6 @@ type SeedRoleInput struct {
 	Name             string
 	Description      string
 	Active           bool
-	IsSystem         bool
 	ReactivateSystem bool
 }
 

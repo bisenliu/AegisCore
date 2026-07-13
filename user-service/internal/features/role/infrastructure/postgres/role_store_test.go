@@ -29,7 +29,6 @@ func TestRoleStoreCRUDAndDomainErrors(t *testing.T) {
 		Name:        "Operator",
 		Description: "operate user resources",
 		Active:      true,
-		IsSystem:    false,
 	})
 	require.NoError(t, err)
 	require.Equal(t, roleID, created.RoleID)
@@ -119,12 +118,17 @@ func TestRoleStoreListFiltersAndPagination(t *testing.T) {
 
 func createRoleForTest(ctx context.Context, t *testing.T, store *RoleStore, roleID uuid.UUID, name string, active bool, system bool) roledomain.Role {
 	t.Helper()
+	if system {
+		role, _, err := store.UpsertSystemRole(ctx, roleapplication.SeedRoleInput{RoleID: roleID, Name: name, Description: name + " role", Active: active, ReactivateSystem: true})
+		require.NoError(t, err)
+		require.NotNil(t, role)
+		return *role
+	}
 	role, err := store.Create(ctx, roleapplication.CreateRoleInput{
 		RoleID:      roleID,
 		Name:        name,
 		Description: name + " role",
 		Active:      active,
-		IsSystem:    system,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, role)

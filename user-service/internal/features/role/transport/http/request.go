@@ -36,7 +36,6 @@ type CreateRoleRequest struct {
 	Name        string `json:"name" validate:"required,min=1,max=128" label:"角色名称" example:"管理员"`
 	Description string `json:"description" validate:"max=512" label:"角色说明" example:"管理后台角色"`
 	Active      *bool  `json:"active,omitempty" label:"是否启用" example:"true"`
-	System      bool   `json:"system" label:"是否系统角色" example:"false"`
 }
 
 // UpdateRoleRequest 是更新角色的 JSON 请求体。

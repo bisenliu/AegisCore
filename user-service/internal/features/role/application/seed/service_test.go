@@ -151,7 +151,6 @@ func expectedSeedRoleInput(spec rbacbaseline.RoleSpec, reactivate bool) roleappl
 		Name:             spec.Name,
 		Description:      spec.Description,
 		Active:           true,
-		IsSystem:         spec.System,
 		ReactivateSystem: reactivate,
 	}
 }
@@ -165,7 +164,6 @@ func expectedSeedPermissionInput(spec rbacbaseline.PermissionSpec, reactivate bo
 		HTTPMethod:       spec.Method,
 		PathTemplate:     spec.PathTemplate,
 		Active:           true,
-		IsSystem:         spec.System,
 		ReactivateSystem: reactivate,
 	}
 }
@@ -181,9 +179,9 @@ func expectedRolePermissionInputs() map[uuid.UUID][]uuid.UUID {
 }
 
 func roleFromSeedInput(input roleapplication.SeedRoleInput) *roledomain.Role {
-	return &roledomain.Role{RoleID: input.RoleID, Name: input.Name, Description: input.Description, Active: input.Active, IsSystem: input.IsSystem}
+	return &roledomain.Role{RoleID: input.RoleID, Name: input.Name, Description: input.Description, Active: input.Active, IsSystem: true}
 }
 
 func permissionFromSeedInput(input permissionapplication.SeedPermissionInput) *permissiondomain.Permission {
-	return &permissiondomain.Permission{PermissionID: input.PermissionID, Name: input.Name, Description: input.Description, Module: input.Module, HTTPMethod: input.HTTPMethod, PathTemplate: input.PathTemplate, Active: input.Active, IsSystem: input.IsSystem}
+	return &permissiondomain.Permission{PermissionID: input.PermissionID, Name: input.Name, Description: input.Description, Module: input.Module, HTTPMethod: input.HTTPMethod, PathTemplate: input.PathTemplate, Active: input.Active, IsSystem: true}
 }

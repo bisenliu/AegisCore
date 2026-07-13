@@ -38,7 +38,6 @@ type CreatePermissionInput struct {
 	HTTPMethod   string
 	PathTemplate string
 	Active       bool
-	IsSystem     bool
 }
 
 // SeedPermissionInput 包含系统权限 seed 规范化后的写入数据。
@@ -50,7 +49,6 @@ type SeedPermissionInput struct {
 	HTTPMethod       string
 	PathTemplate     string
 	Active           bool
-	IsSystem         bool
 	ReactivateSystem bool
 }
 

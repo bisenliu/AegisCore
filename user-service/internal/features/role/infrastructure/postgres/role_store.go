@@ -39,7 +39,7 @@ func (s *RoleStore) Create(ctx context.Context, input roleapplication.CreateRole
 		SetName(input.Name).
 		SetDescription(input.Description).
 		SetActive(input.Active).
-		SetIsSystem(input.IsSystem).
+		SetIsSystem(false).
 		Save(ctx)
 	if err == nil {
 		return toRoleModel(created), nil

@@ -100,10 +100,6 @@ const openAPIDocument = `{
           "path_template": {
             "example": "/api/v1/users",
             "type": "string"
-          },
-          "system": {
-            "example": false,
-            "type": "boolean"
           }
         },
         "required": [
@@ -130,10 +126,6 @@ const openAPIDocument = `{
             "maxLength": 128,
             "minLength": 1,
             "type": "string"
-          },
-          "system": {
-            "example": false,
-            "type": "boolean"
           }
         },
         "required": [

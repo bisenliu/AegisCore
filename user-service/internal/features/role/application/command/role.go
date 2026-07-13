@@ -32,7 +32,6 @@ type CreateRoleCommand struct {
 	Name        string
 	Description string
 	Active      *bool
-	IsSystem    bool
 }
 
 // UpdateRoleCommand 包含更新角色所需的应用层输入。
@@ -79,7 +78,7 @@ func (s *roleCommandService) CreateRole(ctx context.Context, cmd CreateRoleComma
 	if cmd.Active != nil {
 		active = *cmd.Active
 	}
-	created, err := s.roles.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: name, Description: description, Active: active, IsSystem: cmd.IsSystem})
+	created, err := s.roles.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: name, Description: description, Active: active})
 	if err != nil {
 		logger.Error(ctx, "create role failed", logger.StackTrace(zap.String("role_id", roleID.String()), zap.Error(err))...)
 		return nil, err

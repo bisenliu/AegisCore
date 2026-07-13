@@ -23,7 +23,7 @@ func TestRoleStoreUpsertSystemRole(t *testing.T) {
 	store := NewRoleStore(RoleStoreParams{Client: client})
 	ctx := context.Background()
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000101")
-	input := roleapplication.SeedRoleInput{RoleID: roleID, Name: "Super Admin", Description: "all", Active: true, IsSystem: true}
+	input := roleapplication.SeedRoleInput{RoleID: roleID, Name: "Super Admin", Description: "all", Active: true}
 
 	created, inserted, err := store.UpsertSystemRole(ctx, input)
 	require.NoError(t, err)
@@ -58,11 +58,11 @@ func TestRolePermissionStoreSeedEnsureAndSync(t *testing.T) {
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000202")
 	extraPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000203")
 
-	_, _, err := roleStore.UpsertSystemRole(ctx, roleapplication.SeedRoleInput{RoleID: roleID, Name: "System", Active: true, IsSystem: true})
+	_, _, err := roleStore.UpsertSystemRole(ctx, roleapplication.SeedRoleInput{RoleID: roleID, Name: "System", Active: true})
 	require.NoError(t, err)
-	_, err = permissionStore.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: permissionID, Name: "List", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true, IsSystem: true})
+	_, _, err = permissionStore.UpsertSystemPermission(ctx, permissionapplication.SeedPermissionInput{PermissionID: permissionID, Name: "List", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true})
 	require.NoError(t, err)
-	_, err = permissionStore.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: extraPermissionID, Name: "Create", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true, IsSystem: true})
+	_, _, err = permissionStore.UpsertSystemPermission(ctx, permissionapplication.SeedPermissionInput{PermissionID: extraPermissionID, Name: "Create", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true})
 	require.NoError(t, err)
 
 	added, err := bindingStore.EnsureSystemBindings(ctx, roleID, []uuid.UUID{permissionID, extraPermissionID})
@@ -92,7 +92,7 @@ func TestUserRoleStoreAssignRoleIdempotent(t *testing.T) {
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000302")
 	_, err := client.User.Create().SetUserID(userID).SetNickname("Admin").SetUsername("admin@example.com").SetPasswordHash("hash").Save(ctx)
 	require.NoError(t, err)
-	_, _, err = roleStore.UpsertSystemRole(ctx, roleapplication.SeedRoleInput{RoleID: roleID, Name: "System", Active: true, IsSystem: true})
+	_, _, err = roleStore.UpsertSystemRole(ctx, roleapplication.SeedRoleInput{RoleID: roleID, Name: "System", Active: true})
 	require.NoError(t, err)
 
 	added, err := userRoleStore.AssignRole(ctx, userID, roleID)

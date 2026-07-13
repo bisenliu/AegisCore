@@ -110,7 +110,7 @@ func TestPermissionControllerCreatePermission(t *testing.T) {
 			return &permissioncommand.PermissionResult{Permission: permission}, nil
 		})
 
-		body := `{"name":" 查询用户 ","description":" 查询用户列表 ","module":" user ","http_method":" GET ","path_template":" /api/v1/users ","active":false,"system":true}`
+		body := `{"name":" 查询用户 ","description":" 查询用户列表 ","module":" user ","http_method":" GET ","path_template":" /api/v1/users ","active":false}`
 		recorder := performPermissionHTTPRequest(t, engine, http.MethodPost, "/api/v1/permissions", jsonBody(body))
 		envelope := expectPermissionEnvelope(t, recorder, http.StatusCreated, true, contracterrors.CodeOK, contractresponse.MessageCreated)
 		payload := decodePermissionHTTPData[PermissionResponse](t, envelope)
@@ -122,7 +122,6 @@ func TestPermissionControllerCreatePermission(t *testing.T) {
 		require.Equal(t, "/api/v1/users", gotCommand.PathTemplate)
 		require.NotNil(t, gotCommand.Active)
 		require.Equal(t, active, *gotCommand.Active)
-		require.Equal(t, true, gotCommand.IsSystem)
 		assertPermissionHTTPResponse(t, permission, payload)
 	})
 

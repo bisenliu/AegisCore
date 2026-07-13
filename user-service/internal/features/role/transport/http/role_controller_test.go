@@ -108,7 +108,7 @@ func TestRoleControllerCreateRole(t *testing.T) {
 			return &rolecommand.RoleResult{Role: role}, nil
 		})
 
-		body := `{"name":" 管理员 ","description":" 管理后台角色 ","active":false,"system":true}`
+		body := `{"name":" 管理员 ","description":" 管理后台角色 ","active":false}`
 		recorder := performRoleHTTPRequest(t, engine, http.MethodPost, "/api/v1/roles", jsonBody(body))
 		envelope := expectRoleEnvelope(t, recorder, http.StatusCreated, true, contracterrors.CodeOK, contractresponse.MessageCreated)
 		payload := decodeRoleHTTPData[RoleResponse](t, envelope)
@@ -117,7 +117,6 @@ func TestRoleControllerCreateRole(t *testing.T) {
 		require.Equal(t, "管理后台角色", gotCommand.Description)
 		require.NotNil(t, gotCommand.Active)
 		require.False(t, *gotCommand.Active)
-		require.True(t, gotCommand.IsSystem)
 		assertRoleHTTPResponse(t, role, payload)
 	})
 

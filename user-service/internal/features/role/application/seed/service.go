@@ -147,7 +147,7 @@ func buildRoleInputs(reactivate bool) ([]roleapplication.SeedRoleInput, error) {
 		if err != nil {
 			return nil, err
 		}
-		inputs = append(inputs, roleapplication.SeedRoleInput{RoleID: roleID, Name: name, Description: description, Active: true, IsSystem: spec.System, ReactivateSystem: reactivate})
+		inputs = append(inputs, roleapplication.SeedRoleInput{RoleID: roleID, Name: name, Description: description, Active: true, ReactivateSystem: reactivate})
 	}
 	return inputs, nil
 }
@@ -174,7 +174,7 @@ func buildPermissionInputs(reactivate bool) ([]permissionapplication.SeedPermiss
 			return nil, fmt.Errorf("duplicate route identity %s in permission catalog", identity.Key())
 		}
 		seenRoutes[identity.Key()] = struct{}{}
-		inputs = append(inputs, permissionapplication.SeedPermissionInput{PermissionID: permissionID, Name: name, Description: description, Module: module, HTTPMethod: identity.Method, PathTemplate: identity.PathTemplate, Active: true, IsSystem: spec.System, ReactivateSystem: reactivate})
+		inputs = append(inputs, permissionapplication.SeedPermissionInput{PermissionID: permissionID, Name: name, Description: description, Module: module, HTTPMethod: identity.Method, PathTemplate: identity.PathTemplate, Active: true, ReactivateSystem: reactivate})
 	}
 	return inputs, nil
 }

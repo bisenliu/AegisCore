@@ -22,7 +22,6 @@ type CreatePermissionCommand struct {
 	HTTPMethod   string
 	PathTemplate string
 	Active       *bool
-	IsSystem     bool
 }
 
 // PermissionResult 是权限写侧用例的 transport-neutral 输出。
@@ -53,7 +52,7 @@ func (s *permissionCommandService) CreatePermission(ctx context.Context, cmd Cre
 	if cmd.Active != nil {
 		active = *cmd.Active
 	}
-	created, err := s.store.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: permissionID, Name: name, Description: description, Module: module, HTTPMethod: identity.Method, PathTemplate: identity.PathTemplate, Active: active, IsSystem: cmd.IsSystem})
+	created, err := s.store.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: permissionID, Name: name, Description: description, Module: module, HTTPMethod: identity.Method, PathTemplate: identity.PathTemplate, Active: active})
 	if err != nil {
 		if errors.Is(err, permissiondomain.ErrPermissionAlreadyExists) {
 			logger.Warn(ctx, "create permission conflict", zap.String("http_method", identity.Method), zap.String("path_template", identity.PathTemplate))

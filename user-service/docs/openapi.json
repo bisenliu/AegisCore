@@ -91,10 +91,6 @@
           "path_template": {
             "example": "/api/v1/users",
             "type": "string"
-          },
-          "system": {
-            "example": false,
-            "type": "boolean"
           }
         },
         "required": [
@@ -121,10 +117,6 @@
             "maxLength": 128,
             "minLength": 1,
             "type": "string"
-          },
-          "system": {
-            "example": false,
-            "type": "boolean"
           }
         },
         "required": [

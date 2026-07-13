@@ -22,7 +22,7 @@ func TestPermissionStoreDomainErrors(t *testing.T) {
 	_, err := store.GetByPermissionID(ctx, uuid.MustParse("018f0000-0000-7000-8000-000000000099"))
 	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
 
-	input := permissionapplication.CreatePermissionInput{PermissionID: uuid.MustParse("018f0000-0000-7000-8000-000000000001"), Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true, IsSystem: true}
+	input := permissionapplication.CreatePermissionInput{PermissionID: uuid.MustParse("018f0000-0000-7000-8000-000000000001"), Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}
 	_, err = store.Create(ctx, input)
 	require.NoError(t, err)
 	input.PermissionID = uuid.MustParse("018f0000-0000-7000-8000-000000000002")
@@ -34,10 +34,10 @@ func TestPermissionStoreListAndSetActive(t *testing.T) {
 	store := newTestPermissionStore(t)
 	ctx := context.Background()
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000011")
-	created, err := store.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: permissionID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true, IsSystem: true})
+	created, err := store.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: permissionID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true})
 	require.NoError(t, err)
 	require.True(t, created.Active)
-	require.True(t, created.IsSystem)
+	require.False(t, created.IsSystem)
 
 	err = store.SetActive(ctx, permissionID, false)
 	require.NoError(t, err)
@@ -45,7 +45,7 @@ func TestPermissionStoreListAndSetActive(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, disabled.Active)
 
-	system := true
+	system := false
 	items, hasNext, err := store.List(ctx, permissionapplication.ListPermissionsInput{Limit: 10, IsSystem: &system})
 	require.NoError(t, err)
 	require.False(t, hasNext)
@@ -57,7 +57,7 @@ func TestPermissionStoreUpsertSystemPermission(t *testing.T) {
 	store := newTestPermissionStore(t)
 	ctx := context.Background()
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000021")
-	input := permissionapplication.SeedPermissionInput{PermissionID: permissionID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true, IsSystem: true}
+	input := permissionapplication.SeedPermissionInput{PermissionID: permissionID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}
 
 	created, inserted, err := store.UpsertSystemPermission(ctx, input)
 	require.NoError(t, err)
@@ -84,10 +84,10 @@ func TestPermissionStoreUpsertSystemPermissionMatchesRouteIdentity(t *testing.T)
 	store := newTestPermissionStore(t)
 	ctx := context.Background()
 	existingID := uuid.MustParse("018f0000-0000-7000-8000-000000000031")
-	_, err := store.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: existingID, Name: "Old", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true, IsSystem: false})
+	_, err := store.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: existingID, Name: "Old", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true})
 	require.NoError(t, err)
 
-	created, inserted, err := store.UpsertSystemPermission(ctx, permissionapplication.SeedPermissionInput{PermissionID: uuid.MustParse("018f0000-0000-7000-8000-000000000032"), Name: "Create User", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true, IsSystem: true})
+	created, inserted, err := store.UpsertSystemPermission(ctx, permissionapplication.SeedPermissionInput{PermissionID: uuid.MustParse("018f0000-0000-7000-8000-000000000032"), Name: "Create User", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true})
 	require.NoError(t, err)
 	require.False(t, inserted)
 	require.Equal(t, existingID, created.PermissionID)

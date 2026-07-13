@@ -29,7 +29,6 @@ type CreatePermissionRequest struct {
 	HTTPMethod   string `json:"http_method" validate:"required" label:"HTTP方法" example:"GET"`
 	PathTemplate string `json:"path_template" validate:"required" label:"路径模板" example:"/api/v1/users"`
 	Active       *bool  `json:"active,omitempty" label:"是否启用" example:"true"`
-	System       bool   `json:"system" label:"是否系统权限" example:"false"`
 }
 
 // UpdatePermissionRequest 是更新权限目录记录的 JSON 请求体。

@@ -17,7 +17,7 @@ func TestPermissionCommandServiceCreateAndProtectSystemPermission(t *testing.T) 
 	store := NewMockPermissionStore(gomock.NewController(t))
 	notifier := NewMockPolicyChangeNotifier(gomock.NewController(t))
 	store.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, input permissionapplication.CreatePermissionInput) (*permissiondomain.Permission, error) {
-		return &permissiondomain.Permission{PermissionID: input.PermissionID, Name: input.Name, Description: input.Description, Module: input.Module, HTTPMethod: input.HTTPMethod, PathTemplate: input.PathTemplate, Active: input.Active, IsSystem: input.IsSystem}, nil
+		return &permissiondomain.Permission{PermissionID: input.PermissionID, Name: input.Name, Description: input.Description, Module: input.Module, HTTPMethod: input.HTTPMethod, PathTemplate: input.PathTemplate, Active: input.Active}, nil
 	})
 	notifier.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, change permissionapplication.PolicyChange) error {
 		require.Equal(t, "permission_created", change.Reason)
@@ -25,15 +25,17 @@ func TestPermissionCommandServiceCreateAndProtectSystemPermission(t *testing.T) 
 	})
 	service := NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: notifier})
 
-	created, err := service.CreatePermission(context.Background(), CreatePermissionCommand{Name: "List Users", Module: "user", HTTPMethod: "get", PathTemplate: "/api/v1/users", IsSystem: true})
+	created, err := service.CreatePermission(context.Background(), CreatePermissionCommand{Name: "List Users", Module: "user", HTTPMethod: "get", PathTemplate: "/api/v1/users"})
 	require.NoError(t, err)
 	require.Equal(t, "GET", created.Permission.HTTPMethod)
 	require.True(t, created.Permission.Active)
-	require.True(t, created.Permission.IsSystem)
+	require.False(t, created.Permission.IsSystem)
 
 	store = NewMockPermissionStore(gomock.NewController(t))
 	service = NewPermissionCommandService(PermissionCommandParams{Store: store, PolicyChanges: NewMockPolicyChangeNotifier(gomock.NewController(t))})
-	store.EXPECT().GetByPermissionID(gomock.Any(), created.Permission.PermissionID).Return(&created.Permission, nil)
+	systemPermission := created.Permission
+	systemPermission.IsSystem = true
+	store.EXPECT().GetByPermissionID(gomock.Any(), created.Permission.PermissionID).Return(&systemPermission, nil)
 	err = service.UpdatePermission(context.Background(), UpdatePermissionCommand{PermissionID: created.Permission.PermissionID, Name: "List Users", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true})
 	require.ErrorIs(t, err, permissiondomain.ErrSystemPermissionProtected)
 }

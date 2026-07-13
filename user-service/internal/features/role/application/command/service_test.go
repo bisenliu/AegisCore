@@ -23,15 +23,14 @@ func TestRoleCommandServiceCreateRoleDefaultsAndNormalizes(t *testing.T) {
 		require.Equal(t, "Operator", input.Name)
 		require.Equal(t, "Ops user", input.Description)
 		require.True(t, input.Active)
-		require.True(t, input.IsSystem)
-		return &roledomain.Role{RoleID: input.RoleID, Name: input.Name, Description: input.Description, Active: input.Active, IsSystem: input.IsSystem}, nil
+		return &roledomain.Role{RoleID: input.RoleID, Name: input.Name, Description: input.Description, Active: input.Active}, nil
 	})
 
-	result, err := fixture.service.CreateRole(context.Background(), CreateRoleCommand{Name: "  Operator  ", Description: "  Ops user  ", IsSystem: true})
+	result, err := fixture.service.CreateRole(context.Background(), CreateRoleCommand{Name: "  Operator  ", Description: "  Ops user  "})
 	require.NoError(t, err)
 	require.NotEqual(t, uuid.Nil, result.Role.RoleID)
 	require.True(t, result.Role.Active)
-	require.True(t, result.Role.IsSystem)
+	require.False(t, result.Role.IsSystem)
 	require.Equal(t, "Operator", result.Role.Name)
 	require.Equal(t, "Ops user", result.Role.Description)
 }

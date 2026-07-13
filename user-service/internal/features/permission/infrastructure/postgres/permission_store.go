@@ -46,7 +46,7 @@ func (s *PermissionStore) Create(ctx context.Context, input permissionapplicatio
 		SetHTTPMethod(input.HTTPMethod).
 		SetPathTemplate(input.PathTemplate).
 		SetActive(input.Active).
-		SetIsSystem(input.IsSystem).
+		SetIsSystem(false).
 		Save(ctx)
 	if err == nil {
 		return toModel(created), nil

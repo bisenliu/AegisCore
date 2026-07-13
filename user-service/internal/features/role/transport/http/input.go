@@ -29,7 +29,7 @@ func prepareListRolesQuery(req ListRolesRequest) (rolequery.ListRolesQuery, erro
 
 // prepareCreateRoleCommand 将创建角色 HTTP 请求转换为应用层命令。
 func prepareCreateRoleCommand(req CreateRoleRequest) (rolecommand.CreateRoleCommand, error) {
-	return rolecommand.CreateRoleCommand{Name: strings.TrimSpace(req.Name), Description: strings.TrimSpace(req.Description), Active: req.Active, IsSystem: req.System}, nil
+	return rolecommand.CreateRoleCommand{Name: strings.TrimSpace(req.Name), Description: strings.TrimSpace(req.Description), Active: req.Active}, nil
 }
 
 // prepareUpdateRoleCommand 将角色更新 HTTP 请求转换为应用层命令。

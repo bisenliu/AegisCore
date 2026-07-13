@@ -44,7 +44,6 @@ func prepareCreatePermissionCommand(req CreatePermissionRequest) (permissioncomm
 		HTTPMethod:   strings.TrimSpace(req.HTTPMethod),
 		PathTemplate: strings.TrimSpace(req.PathTemplate),
 		Active:       req.Active,
-		IsSystem:     req.System,
 	}, nil
 }
 
