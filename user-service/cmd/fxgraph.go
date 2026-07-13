@@ -22,8 +22,11 @@ func runFxGraphCommand(configPath string, outputPath string, writer fxGraphWrite
 		return fmt.Errorf("fx graph writer is required")
 	}
 	_, err := writer(outputPath,
+		// Fx 分类：开发工具 - 依赖图构建所需的启动输入与日志替身。
 		fx.Supply(config.ConfigPath(configPath), zap.NewNop()),
+		// Fx 分类：开发工具 - 依赖图构建所需的基础配置 provider。
 		fx.Provide(config.NewConfig),
+		// Fx 分类：开发工具 - 复用正式 composition root 校验完整依赖图。
 		bootstrap.AppModule,
 	)
 	if err != nil {

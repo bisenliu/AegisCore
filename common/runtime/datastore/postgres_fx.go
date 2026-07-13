@@ -15,6 +15,7 @@ import (
 
 // ProvideNamedPostgres 通过 Fx 名称到配置 key 的映射提供一个具名 PostgreSQL 连接池。
 func ProvideNamedPostgres(fxName string, configKey string) fx.Option {
+	// Fx 分类：资源 - 通用具名 PostgreSQL provider 工厂。
 	return fx.Provide(fx.Annotate(
 		func(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger) (*sql.DB, error) {
 			return NewPostgres(lc, cfg, log, configKey)

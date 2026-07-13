@@ -97,7 +97,9 @@ type logoutAllSessionsUseCaseParams struct {
 // Module 组装认证功能的应用服务、HTTP 传输层和基础设施适配器。
 var Module = fx.Module("feature-auth",
 	fx.Provide(
+		// Fx 分类：横切能力 - auth feature 指标。
 		newAuthMetrics,
+		// Fx 分类：Feature 基础设施 - PostgreSQL 与 Redis port adapter。
 		fx.Annotate(
 			authpostgres.NewCredentialStore,
 			fx.As(new(authapplication.UserTokenVersionStore)),
@@ -109,22 +111,27 @@ var Module = fx.Module("feature-auth",
 			fx.As(new(authapplication.RefreshSessionStore)),
 			fx.As(new(authapplication.PasswordChangeSessionStore)),
 		),
+		// Fx 分类：资源 - auth feature 私有清理 worker pool。
 		fx.Annotate(
 			authredis.NewSessionPurgePool,
 			fx.As(new(authredis.PurgeTaskPool)),
 			fx.ResultTags(`name:"auth_session_purge_pool"`),
 		),
+		// Fx 分类：资源 - token version 本地缓存及其生命周期。
 		newTokenVersionLocalCache,
+		// Fx 分类：Feature 应用 - token、凭据和会话安全能力。
 		newTokenVersionValidator,
 		newCredentialVerifier,
 		authtokens.NewIssuer,
 		authtokens.NewAccessTokenVerifier,
 		newAuthSessionLifecycle,
+		// Fx 分类：Feature 应用 - 认证命令用例。
 		newLoginUseCase,
 		newRefreshTokenUseCase,
 		newChangePasswordUseCase,
 		newLogoutCurrentSessionUseCase,
 		newLogoutAllSessionsUseCase,
+		// Fx 分类：传输 - auth HTTP controller。
 		authhttp.NewAuthController,
 	),
 )

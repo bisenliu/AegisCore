@@ -16,8 +16,10 @@ func RenderDOT(opts ...fx.Option) (string, error) {
 	allOpts := make([]fx.Option, 0, len(opts)+2)
 	allOpts = append(allOpts, fx.NopLogger)
 	allOpts = append(allOpts, opts...)
+	// Fx 分类：开发工具 - 提取依赖图，不启动应用生命周期。
 	allOpts = append(allOpts, fx.Populate(&graph))
 
+	// Fx 分类：开发工具 - 构建仅用于校验和渲染的 Fx 应用。
 	app := fx.New(allOpts...)
 	if err := app.Err(); err != nil {
 		return "", err

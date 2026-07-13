@@ -15,6 +15,7 @@ import (
 
 // ProvideNamedRedis 通过 Fx 名称到配置 key 的映射提供一个具名 Redis 客户端。
 func ProvideNamedRedis(fxName string, configKey string) fx.Option {
+	// Fx 分类：资源 - 通用具名 Redis provider 工厂。
 	return fx.Provide(fx.Annotate(
 		func(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger) (*redis.Client, error) {
 			return NewRedisClient(lc, cfg, log, configKey)
