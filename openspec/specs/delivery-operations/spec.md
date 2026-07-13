@@ -163,7 +163,7 @@ Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、数值、�
 
 ### Requirement: 架构边界检查
 
-系统 MUST 提供 user-service 架构 lint，用于检查 feature 分层依赖、禁止跨层违规引用，并校验 OpenSpec/OPSX Markdown 语言约束。
+系统 MUST 提供 user-service 架构 lint，用于检查 feature 分层依赖、禁止跨层违规引用，并校验 OpenSpec/OPSX Markdown 语言约束。架构 lint MUST 明确依赖 `ripgrep` 提供的 `rg` 命令，并在缺少该命令时 fail-fast 输出可诊断错误；CI 完整验证环境 MUST 在运行架构 lint 前安装该依赖。
 
 #### Scenario: 分层引用合法
 
@@ -174,6 +174,17 @@ Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、数值、�
 
 - **WHEN** 代码出现违反架构边界的 import 或跨 feature 非法依赖
 - **THEN** 架构 lint MUST 失败并输出违规位置
+
+#### Scenario: 缺少 ripgrep 前置依赖
+
+- **WHEN** 协作者在缺少 `rg` 命令的环境执行 `make user-service-architecture-lint`
+- **THEN** 架构 lint MUST fail-fast
+- **AND** 输出 MUST 明确提示需要安装 `ripgrep`
+
+#### Scenario: CI 安装架构 lint 依赖
+
+- **WHEN** GitHub Actions 执行完整验证流程
+- **THEN** workflow MUST 在运行 `make lint`、`make user-service-architecture-lint` 或 `make verify` 相关步骤前安装 `ripgrep`
 
 #### Scenario: OPSX 文档残留英文模板
 
@@ -955,4 +966,3 @@ GitHub Actions MUST 在阻塞式测试 job 中启用真实 PostgreSQL/Redis 测�
 - **WHEN** 运维执行 `aegiscore-user-services serve` 或查看 root command 帮助
 - **THEN** 系统 MUST 保持现有 command 名称、flag 名称、flag 默认值、配置路径默认值、输出语义和退出码
 - **AND** 本次依赖注入重构 MUST NOT 修改 Makefile 目标、OpenAPI 生成物、Ent schema、Atlas migration 或部署资产
-
