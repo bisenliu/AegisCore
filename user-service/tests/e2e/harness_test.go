@@ -24,10 +24,11 @@ import (
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
-	"github.com/aegiscore/common/runtime/config"
+	commonconfig "github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/testing/containers"
 	"github.com/aegiscore/user-service/internal/bootstrap"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 const envTestE2E = "AEGISCORE_TEST_E2E"
@@ -60,9 +61,10 @@ func newHTTPFlowHarness(t *testing.T) *httpFlowHarness {
 	configPath := writeTestConfig(t, postgres.Config(), redis.Config())
 	var engine *gin.Engine
 	app := fxtest.New(t,
-		fx.Supply(config.ConfigPath(configPath)),
+		fx.Supply(serviceconfig.ConfigPath(configPath)),
 		fx.Provide(
-			config.NewConfig,
+			serviceconfig.NewConfig,
+			serviceconfig.NewRuntimeConfig,
 			logger.NewLogger,
 		),
 		bootstrap.AppModule,
@@ -95,7 +97,7 @@ func envEnabled(name string) bool {
 	}
 }
 
-func writeTestConfig(t *testing.T, postgres config.PostgresConfig, redis config.RedisConfig) string {
+func writeTestConfig(t *testing.T, postgres commonconfig.PostgresConfig, redis commonconfig.RedisConfig) string {
 	t.Helper()
 	port := freeTCPPort(t)
 	logDir := filepath.Join(t.TempDir(), "logs")
