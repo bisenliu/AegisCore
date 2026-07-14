@@ -4,7 +4,7 @@
 ## Requirements
 ### Requirement: 用户登录与令牌签发
 
-系统 MUST 提供用户名密码登录能力，并在凭证、用户状态和会话策略校验通过后签发访问令牌与刷新令牌。登录 use case MUST 使用登录专属结果字段表达是否需要强制改密；登录失败仍 MUST 通过错误返回。系统 MUST 将密码 KDF 资源池繁忙视为临时服务不可用，而不是无效凭据。
+系统 MUST 提供用户名密码登录能力，并在凭证、用户状态和会话策略校验通过后签发访问令牌与刷新令牌。登录 use case MUST 使用登录专属结果字段表达是否需要强制改密；登录失败仍 MUST 通过错误返回。系统 MUST 将密码 KDF 资源池繁忙视为临时服务不可用，而不是无效凭据。user-service auth feature MUST 私有拥有 access、refresh、password-change token 的 issuer、claims schema、subject 常量和 TTL fallback，MUST NOT 依赖 `common/security/auth` 提供 token 签发能力或 user-service 专属 claims。
 
 #### Scenario: 登录成功
 
@@ -85,6 +85,13 @@
 - **WHEN** subject 为 `access`、`refresh` 或 `password_change` 的 token 被用于不匹配的认证流程
 - **THEN** 系统 MUST 拒绝该 token，且 MUST NOT 在三类 token 之间兼容复用
 
+#### Scenario: issuer 私有化
+
+- **WHEN** user-service 需要签发 access token、refresh token 或 password change token
+- **THEN** 签发逻辑 MUST 位于 user-service auth feature 私有边界
+- **AND** 签发逻辑 MUST 使用 user-service 私有 JWT 配置和 user-service 私有 claims schema
+- **AND** `common/security/auth` MUST NOT 提供这些 token 的签发入口
+
 ### Requirement: 令牌刷新
 
 系统 MUST 支持使用有效 refresh token 换取新的访问令牌，并校验会话状态、token version 和过期时间。
@@ -116,7 +123,7 @@
 
 ### Requirement: 会话与 token version 策略
 
-系统 MUST 在 auth application 中拥有 token version 校验、refresh session 生命周期、每用户活跃 refresh session 上限和会话撤销语义。受保护路由的 token version 本地缓存 MUST 使用有容量上限的 `common/runtime/localcache` loading cache，并且 MUST 将 Redis token version 投影和 PostgreSQL 当前值作为回源路径。user-service MUST 从服务自有 `resources.redis` 和 `resources.postgres` 读取认证资源，并使用 `auth.token_version_cache` 配置本地缓存，MUST NOT 从共享核心 Config 读取 Redis、PostgreSQL 或 LocalCache 业务字段。`auth.token_version_cache_ttl` MUST 允许正数 duration 表示显式 Redis token version 投影 TTL，并 MUST 允许非正数 duration 表示使用服务默认 TTL；非正数配置 MUST NOT 创建永久 Redis token version 投影。auth application port MUST 将 PostgreSQL token version 持久化、Redis token version 投影和 refresh session 生命周期拆分为最小依赖接口，业务组件 MUST 只依赖自身所需的 port。token version 本地缓存失效接口 MUST 返回失败错误；会话撤销流程 MUST 记录本地失效失败并将其纳入投影错误返回，MUST NOT 静默忽略本地 cache 删除失败。
+系统 MUST 在 auth application 中拥有 token version 校验、refresh session 生命周期、每用户活跃 refresh session 上限和会话撤销语义。受保护路由的 token version 本地缓存 MUST 使用有容量上限的 `common/runtime/localcache` loading cache，并且 MUST 将 Redis token version 投影和 PostgreSQL 当前值作为回源路径。user-service auth/provider 边界 MUST 拥有 `auth_token_version` 缓存实例名，并 MUST 在缺少该配置实例时拒绝服务装配。`auth.token_version_cache_ttl` MUST 允许正数 duration 表示显式 Redis token version 投影 TTL，并 MUST 允许非正数 duration 表示使用服务默认 TTL；非正数配置 MUST NOT 创建永久 Redis token version 投影。user-service 私有配置 MUST 拥有 `auth.token_version_cache_ttl`、`auth.refresh_token_rotation`、`auth.max_active_sessions_per_user`、JWT TTL 和 password KDF 配置校验，`common/runtime/config` MUST NOT 声明或校验这些认证策略。auth application port MUST 将 PostgreSQL token version 持久化、Redis token version 投影和 refresh session 生命周期拆分为最小依赖接口，业务组件 MUST 只依赖自身所需的 port。token version 本地缓存失效接口 MUST 返回失败错误；会话撤销流程 MUST 记录本地失效失败并将其纳入投影错误返回，MUST NOT 静默忽略本地 cache 删除失败。
 
 #### Scenario: 活跃 session 上限
 
@@ -137,12 +144,11 @@
 - **THEN** 系统 MUST 通过 `auth.token_version_cache.size` 限制进程内条目预算
 - **AND** 系统 MUST 在容量淘汰、准入拒绝或 TTL 过期后通过 Redis 或 PostgreSQL 回源恢复校验能力
 
-#### Scenario: 认证资源和缓存缺省值
+#### Scenario: token version 必需缓存配置
 
 - **WHEN** user-service 装配 auth token version validator
-- **THEN** Redis 和 PostgreSQL MUST 从 `resources.redis` 和 `resources.postgres` 的必需具名资源读取
-- **AND** 未显式配置 `auth.token_version_cache` 时 MUST 使用 `enabled=true`、`size=100000`、`ttl=1s` 和 `load_timeout=300ms`
-- **AND** `auth.token_version_cache` MUST NOT 暴露 `num_counters` 或 `buffer_items`
+- **THEN** auth/provider MUST 使用本服务常量读取 `local_cache.auth_token_version`
+- **AND** 缺少该配置实例时 MUST 返回明确错误并拒绝继续装配 token version 本地缓存
 
 #### Scenario: 校验启用的 token version cache
 
@@ -162,6 +168,13 @@
 - **THEN** user-service 配置校验 MUST 要求该 secret 至少为 32 bytes
 - **AND** development 环境 MAY 不执行该长度约束
 - **AND** 校验错误 MUST 明确定位到 `auth.jwt.secret`
+
+#### Scenario: 认证策略配置私有化
+
+- **WHEN** user-service 装配 auth issuer、password KDF、refresh use case 或 session lifecycle
+- **THEN** 系统 MUST 从 user-service 私有配置读取 JWT TTL、password KDF 预算、refresh token rotation、token version cache TTL 和每用户活跃 session 上限
+- **AND** `common/runtime/config.Config` MUST NOT 暴露 `Auth` 字段
+- **AND** user-service feature 或 provider MUST NOT 为读取这些策略而依赖 common 的 auth config 类型
 
 #### Scenario: token version 投影 TTL 默认值
 
@@ -293,7 +306,7 @@
 
 ### Requirement: 认证 HTTP 边界
 
-系统 MUST 将公开认证路由和受保护认证路由分开挂载，并通过共享认证中间件保护需要 bearer token 的接口。认证 HTTP 边界 MUST 区分凭据认证失败和认证服务临时不可用。认证 HTTP controller 测试 MUST 使用 feature-local `gomock` 生成 mock 表达 use case 调用契约，不得保留手写 `stubAuthUseCases` 兼容入口。
+系统 MUST 将公开认证路由和受保护认证路由分开挂载，并通过共享认证中间件保护需要 bearer token 的接口。认证 HTTP 边界 MUST 区分凭据认证失败和认证服务临时不可用。认证 HTTP controller 测试 MUST 使用 feature-local `gomock` 生成 mock 表达 use case 调用契约，不得保留手写 `stubAuthUseCases` 兼容入口。user-service MUST 通过服务私有 access token verifier adapter 将 user-service claims 和 subject 校验接入共享认证中间件，MUST NOT 让共享 middleware 依赖具备签发能力的 JWT concrete service。
 
 #### Scenario: 公开登录路由
 
@@ -303,12 +316,19 @@
 #### Scenario: 受保护认证路由
 
 - **WHEN** 调用方访问退出、修改密码或其他受保护认证入口
-- **THEN** 系统 MUST 先通过 JWT、auth config 和 token version validator 校验
+- **THEN** 系统 MUST 先通过 JWT、user-service 私有 auth 配置和 token version validator 校验
 
 #### Scenario: 无效 bearer token
 
 - **WHEN** 受保护认证路由收到缺失、过期、格式错误或签名无效的 bearer token
 - **THEN** 系统 MUST 在进入业务处理前拒绝请求
+
+#### Scenario: 共享 middleware 不持有签发能力
+
+- **WHEN** user-service 将认证 verifier 注入共享 HTTP middleware
+- **THEN** 注入对象 MUST 只暴露访问令牌验证能力
+- **AND** 注入对象 MUST NOT 暴露 refresh token、password-change token 或任意 token 签发能力
+- **AND** middleware MUST 通过 verifier 返回的认证上下文执行后续 token version 校验和请求上下文注入
 
 #### Scenario: 登录 KDF busy HTTP 响应
 
@@ -848,4 +868,3 @@ Auth HTTP transport MUST 将强制改密登录表达为业务码 envelope，并�
 - **WHEN** 登录 use case 返回凭证错误、用户状态拒绝、KDF busy 或系统错误
 - **THEN** controller MUST 继续通过 `response.Fail(c, err)` 渲染失败响应
 - **AND** 系统 MUST NOT 用登录结果字段表达失败分支
-
