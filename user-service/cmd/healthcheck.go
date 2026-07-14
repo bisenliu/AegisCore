@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -24,6 +26,20 @@ type healthcheckOptions struct {
 
 type healthcheckResponse struct {
 	Status string `json:"status"`
+}
+
+func newHealthcheckCommand() *cobra.Command {
+	opts := healthcheckOptions{url: defaultHealthcheckURL, timeout: defaultHealthcheckTimeout}
+	cmd := &cobra.Command{
+		Use:   "healthcheck",
+		Short: "Check user-service readiness without external runtime tools",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runHealthcheck(cmd.Context(), opts)
+		},
+	}
+	cmd.Flags().StringVar(&opts.url, "url", defaultHealthcheckURL, "HTTP health endpoint URL")
+	cmd.Flags().DurationVar(&opts.timeout, "timeout", defaultHealthcheckTimeout, "healthcheck request timeout")
+	return cmd
 }
 
 func runHealthcheck(ctx context.Context, opts healthcheckOptions) error {

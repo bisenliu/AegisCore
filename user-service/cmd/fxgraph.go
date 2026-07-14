@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
@@ -13,6 +14,21 @@ import (
 const defaultFxGraphOutputPath = "./docs/fx-dependency-graph.dot"
 
 type fxGraphWriter func(path string, opts ...fx.Option) (string, error)
+
+func newFxGraphCommand(writer fxGraphWriter) *cobra.Command {
+	var configPath string
+	var outputPath string
+	cmd := &cobra.Command{
+		Use:   "fxgraph",
+		Short: "Generate the user-service Fx dependency graph",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runFxGraphCommand(configPath, outputPath, writer)
+		},
+	}
+	cmd.Flags().StringVar(&configPath, "config", "./configs/config.yaml", "path to YAML configuration file")
+	cmd.Flags().StringVar(&outputPath, "output", defaultFxGraphOutputPath, "path to write DOT dependency graph")
+	return cmd
+}
 
 func runFxGraphCommand(configPath string, outputPath string, writer fxGraphWriter) error {
 	if outputPath == "" {
