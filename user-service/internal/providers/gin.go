@@ -29,7 +29,7 @@ type GinParams struct {
 	Trace   *commontracing.Provider
 }
 
-// NewGinEngine 创建 Gin engine，应用可信代理配置并安装共享中间件。
+// NewGinEngine 创建 Gin engine，禁用可信代理并安装共享中间件。
 // 中间件顺序保持 tracing -> span rename -> request id -> metrics -> recovery -> request log -> CORS，避免 panic 丢失指标和日志上下文。
 func NewGinEngine(params GinParams) (*gin.Engine, error) {
 	if params.Trace == nil || params.Trace.TracerProvider() == nil {
@@ -37,10 +37,9 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 	}
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
-	if len(params.Config.HTTP.TrustedProxies) > 0 {
-		if err := engine.SetTrustedProxies(params.Config.HTTP.TrustedProxies); err != nil {
-			return nil, fmt.Errorf("set trusted proxies: %w", err)
-		}
+	// 服务没有可信代理配置契约时不信任转发头，避免客户端伪造来源 IP。
+	if err := engine.SetTrustedProxies(nil); err != nil {
+		return nil, fmt.Errorf("disable trusted proxies: %w", err)
 	}
 	engine.Use(
 		otelgin.Middleware(params.Config.App.Name,

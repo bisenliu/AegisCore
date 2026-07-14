@@ -15,17 +15,10 @@ func parseLevel(level string) zapcore.Level {
 	return parsed
 }
 
-func exactLevelAtOrAbove(level zapcore.Level, minimum zapcore.Level) zap.LevelEnablerFunc {
-	return func(got zapcore.Level) bool { return got == level && got >= minimum }
+func lowLevelAtOrAbove(minimum zapcore.Level) zap.LevelEnablerFunc {
+	return func(got zapcore.Level) bool { return got >= minimum && got < zapcore.WarnLevel }
 }
 
 func levelAtOrAbove(level zapcore.Level, minimum zapcore.Level) zap.LevelEnablerFunc {
 	return func(got zapcore.Level) bool { return got >= level && got >= minimum }
-}
-
-func positiveOrDefault(value int, fallback int) int {
-	if value > 0 {
-		return value
-	}
-	return fallback
 }

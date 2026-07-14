@@ -24,8 +24,8 @@ import (
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
-	commonconfig "github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
+	commonresources "github.com/aegiscore/common/runtime/resources"
 	"github.com/aegiscore/common/testing/containers"
 	"github.com/aegiscore/user-service/internal/bootstrap"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
@@ -97,24 +97,26 @@ func envEnabled(name string) bool {
 	}
 }
 
-func writeTestConfig(t *testing.T, postgres commonconfig.PostgresConfig, redis commonconfig.RedisConfig) string {
+func writeTestConfig(t *testing.T, postgres commonresources.PostgresConfig, redis commonresources.RedisConfig) string {
 	t.Helper()
 	port := freeTCPPort(t)
-	logDir := filepath.Join(t.TempDir(), "logs")
 	content := fmt.Sprintf(`app:
   name: aegiscore-user-services-test
   environment: test
-system:
-  timezone: Asia/Shanghai
-http:
-  host: 127.0.0.1
-  port: %d
-  read_timeout: 5s
-  write_timeout: 5s
-  idle_timeout: 10s
-  shutdown_timeout: 5s
-  trusted_proxies:
-    - 127.0.0.1
+server:
+  http:
+    enabled: true
+    host: 127.0.0.1
+    port: %d
+    read_timeout: 5s
+    write_timeout: 5s
+    idle_timeout: 10s
+    shutdown_timeout: 5s
+  grpc:
+    enabled: false
+    host: 127.0.0.1
+    port: 19090
+    shutdown_timeout: 5s
 auth:
   jwt:
     secret: integration-test-jwt-secret-value
@@ -125,71 +127,59 @@ auth:
   password_kdf:
     argon2_concurrency: 2
     argon2_queue_size: 16
+  token_version_cache:
+    enabled: true
+    size: 1000
+    ttl: 1s
+    load_timeout: 300ms
   token_version_cache_ttl: 5s
   refresh_token_rotation: true
   max_active_sessions_per_user: 5
-local_cache:
-  auth_token_version:
-    capacity: 1000
-    ttl: 1s
-    load_timeout: 300ms
-    num_counters: 0
-    buffer_items: 0
-  rbac_user_roles:
-    capacity: 1000
+rbac:
+  user_role_cache:
+    enabled: true
+    size: 1000
     ttl: 5s
     load_timeout: 500ms
-    num_counters: 0
-    buffer_items: 0
 log:
   level: error
   format: json
-  directory: %q
-  filename: "aegiscore-user-services-test"
-  console: false
-  max_age_days: 0
-  max_size_mb: 0
-  max_backups: 0
 observability:
   metrics:
     enabled: true
     path: /metrics
     include_runtime: false
   tracing:
-    enabled: true
+    enabled: false
     sample_ratio: 0
-    exporter: none
     otlp_endpoint: ""
     insecure: false
-redis:
-  cache_redis:
-    addr: %q
-    username: %q
-    password: %q
-    db: %d
-    dial_timeout: %s
-    read_timeout: %s
-    write_timeout: %s
-    ping_timeout: %s
-postgres:
-  user_db:
-    host: %q
-    port: %d
-    username: %q
-    password: %q
-    db_name: %q
-    driver: %q
-    sslmode: %q
-    max_open_conns: %d
-    max_idle_conns: %d
-    conn_max_lifetime: %s
-    conn_max_idle_time: %s
-    ping_timeout: %s
+resources:
+  redis:
+    cache_redis:
+      addr: %q
+      username: %q
+      password: %q
+      db: %d
+      timeout: %s
+  postgres:
+    user_db:
+      host: %q
+      port: %d
+      username: %q
+      password: %q
+      db_name: %q
+      sslmode: %q
+      pool:
+        max_open_conns: %d
+        max_idle_conns: %d
+        conn_max_lifetime: %s
+        conn_max_idle_time: %s
 `,
 		port,
-		logDir,
-		redis.Addr, redis.Username, redis.Password, redis.DB, redis.DialTimeout, redis.ReadTimeout, redis.WriteTimeout, redis.PingTimeout,
-		postgres.Host, postgres.Port, postgres.Username, postgres.Password, postgres.DBName, postgres.Driver, postgres.SSLMode, postgres.MaxOpenConns, postgres.MaxIdleConns, postgres.ConnMaxLifetime, postgres.ConnMaxIdleTime, postgres.PingTimeout,
+		redis.Addr, redis.Username, redis.Password, redis.DB, redis.Timeout,
+		postgres.Host, postgres.Port, postgres.Username, postgres.Password, postgres.DBName, postgres.SSLMode,
+		postgres.Pool.MaxOpenConns, postgres.Pool.MaxIdleConns, postgres.Pool.ConnMaxLifetime, postgres.Pool.ConnMaxIdleTime,
 	)
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600), "write test config")

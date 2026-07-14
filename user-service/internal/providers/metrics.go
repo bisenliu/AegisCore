@@ -8,9 +8,9 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
 	permissionredis "github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis"
 	"github.com/aegiscore/user-service/internal/resources"
@@ -26,7 +26,7 @@ const (
 type RuntimeDependencyMetricsParams struct {
 	fx.In
 
-	Config           *config.Config
+	Config           *serviceconfig.Config
 	Metrics          *commonmetrics.Provider
 	UserDB           *sql.DB                 `name:"user_db"`
 	CacheRedis       *redis.Client           `name:"cache_redis"`
@@ -53,11 +53,11 @@ func RegisterRuntimeDependencyMetrics(params RuntimeDependencyMetricsParams) err
 		return err
 	}
 
-	redisCfg, _ := params.Config.RedisConfig(resources.NameCacheRedis)
+	redisCfg := params.Config.Resources.Redis[resources.NameCacheRedis]
 	redisCollector, err := commonmetrics.NewRedisPingCollector(commonmetrics.RedisPingCollectorOptions{
 		Resource:    resources.NameCacheRedis,
 		Pinger:      commonmetrics.NewRedisClientPinger(params.CacheRedis),
-		Timeout:     redisCfg.PingTimeout,
+		Timeout:     redisCfg.Timeout,
 		MinInterval: redisMetricsMinProbeInterval,
 	})
 	if err != nil {

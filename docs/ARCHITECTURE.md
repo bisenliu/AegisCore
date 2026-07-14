@@ -26,9 +26,10 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 | `common/http/middleware/` | auth、casbin、cors、logging、metrics、recovery 和 span error |
 | `common/http/openapi/` | OpenAPI 转换和渲染 helper |
 | `common/http/response/` | HTTP 响应写入和错误响应 |
-| `common/runtime/config/` | 跨服务 runtime 配置、通用 YAML loader 和 validation primitive |
+| `common/runtime/config/` | 仅包含 app/server/log/observability 的跨服务核心配置、严格 YAML loader 和 validation primitive |
+| `common/runtime/resources/` | 无业务语义的 Redis/PostgreSQL 资源类型、默认值和校验；具名资源由服务声明 |
 | `common/runtime/datastore/` | Postgres、Redis 和 Fx provider |
-| `common/runtime/logger/` | zap logger 和 writer |
+| `common/runtime/logger/` | 写 stdout/stderr 的 zap logger |
 | `common/runtime/observability/` | metrics 与 tracing provider |
 | `common/runtime/scheduler/` | scheduler、lock、metrics 和 logger |
 | `common/runtime/workerpool/` | 固定 worker pool、stats 和 errors |
@@ -47,7 +48,7 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 - `fxgraph`：生成 Fx 依赖图。
 - `healthcheck --url <url> --timeout <duration>`：在容器内无 shell、wget、curl 或 grep 依赖地检查 `/readyz`。
 
-`user-service/internal/bootstrap/` 构造应用和 HTTP server。`user-service/internal/config/` 拥有服务根配置、认证配置、Ent 配置和服务级校验，并复用 `common/runtime/config` 的通用 loader。`user-service/internal/providers/` 提供 Gin、Ent、Postgres、Redis、auth verifier、metrics、health 和 routes provider。
+`user-service/internal/bootstrap/` 构造应用、HTTP server 和默认关闭的独立 pprof 诊断监听。`user-service/internal/config/` 拥有服务根配置、认证/RBAC feature cache、Ent 配置、具名 resources 和服务级校验，并复用 `common/runtime/config` 的严格 loader。`user-service/internal/providers/` 提供 Gin、Ent、Postgres、Redis、auth verifier、metrics、health 和 routes provider。
 
 ## 4. HTTP 路由结构
 
@@ -55,9 +56,10 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 
 1. 注册健康检查。
 2. 注册 OpenAPI。
-3. 按配置注册 pprof。
-4. 按配置注册 metrics。
-5. 挂载 `/api/v1` 业务路由。
+3. 按配置注册 metrics。
+4. 挂载 `/api/v1` 业务路由。
+
+pprof 不挂载到业务 router。临时诊断时通过 `PPROF_ENABLED=true` 和 `PPROF_ADDR=127.0.0.1:6060` 启动独立监听，并只通过 loopback、`kubectl port-forward` 或等价受控通道访问。Gin 默认不信任代理；真实客户端地址和 forwarded headers 由 Ingress、gateway 或 service mesh 的入口安全策略负责。
 
 业务路由分层：
 
@@ -129,6 +131,8 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 5. 发布时通过 DBA 工单或受控发布平台人工或受控执行 SQL migration；`CREATE EXTENSION IF NOT EXISTS pg_trgm;` 等扩展语句可能需要 DBA 权限或前置动作。
 
 ## 7. 部署和观测
+
+共享核心配置只含 `app/server/log/observability`。Redis/PostgreSQL 类型由 `common/runtime/resources` 提供，user-service 在 `resources.redis.cache_redis` 与 `resources.postgres.user_db` 声明实际资源；feature cache 由 `auth.token_version_cache` 和 `rbac.user_role_cache` 各自拥有。日志输出到 stdout/stderr，tracing 启用后固定使用 OTLP，进程时区由平台 `TZ` 控制。
 
 - Dockerfile：`deployments/docker/user-service.Dockerfile` 使用 BuildKit manifest-first 依赖层、只读 Go module 解析、静态编译和固定 digest 的 `gcr.io/distroless/static-debian12:nonroot` 运行时；运行镜像身份为 UID/GID `65532`，不包含 shell、包管理器、下载工具或 Atlas。
 - Compose：`deployments/compose/docker-compose.yml` 继承 Distroless `nonroot` 身份，user-service healthcheck 使用 exec-form 调用原生 `healthcheck` CLI。

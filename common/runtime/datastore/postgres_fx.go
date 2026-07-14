@@ -9,24 +9,24 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/common/runtime/resources"
 )
 
 // ProvideNamedPostgres 通过 Fx 名称到配置 key 的映射提供一个具名 PostgreSQL 连接池。
 func ProvideNamedPostgres(fxName string, configKey string) fx.Option {
 	// Fx 分类：资源 - 通用具名 PostgreSQL provider 工厂。
 	return fx.Provide(fx.Annotate(
-		func(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger) (*sql.DB, error) {
-			return NewPostgres(lc, cfg, log, configKey)
+		func(lc fx.Lifecycle, configs resources.PostgresConfigs, log *zap.Logger) (*sql.DB, error) {
+			return NewPostgres(lc, configs, log, configKey)
 		},
 		fx.ResultTags(fmt.Sprintf(`name:"%s"`, fxName)),
 	))
 }
 
 // NewPostgres 创建一个具名 PostgreSQL 连接池并注册生命周期 hook。
-func NewPostgres(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name string) (*sql.DB, error) {
-	dbs, err := NewPostgresPools(lc, cfg, log, name)
+func NewPostgres(lc fx.Lifecycle, configs resources.PostgresConfigs, log *zap.Logger, name string) (*sql.DB, error) {
+	dbs, err := NewPostgresPools(lc, configs, log, name)
 	if err != nil {
 		return nil, err
 	}
@@ -34,11 +34,16 @@ func NewPostgres(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name stri
 }
 
 // NewPostgresPools 创建多个具名 PostgreSQL 连接池并注册一个共享生命周期 hook。
-func NewPostgresPools(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, names ...string) (map[string]*sql.DB, error) {
+func NewPostgresPools(lc fx.Lifecycle, configs resources.PostgresConfigs, log *zap.Logger, names ...string) (map[string]*sql.DB, error) {
+	return newPostgresPools(lc, configs, log, OpenPostgres, names...)
+}
+
+type postgresOpener func(name string, cfg resources.PostgresConfig) (*sql.DB, error)
+
+func newPostgresPools(lc fx.Lifecycle, configs resources.PostgresConfigs, log *zap.Logger, opener postgresOpener, names ...string) (map[string]*sql.DB, error) {
 	dbs := make(map[string]*sql.DB, len(names))
-	dbCfgs := make(map[string]config.PostgresDBConfig, len(names))
 	for _, name := range names {
-		dbCfg, ok := cfg.PostgresDatabaseConfig(name)
+		dbCfg, ok := configs[name]
 		if !ok {
 			// 关闭缺失配置前已打开的连接池，避免部分启动失败时泄漏资源。
 			return nil, errors.Join(
@@ -46,15 +51,15 @@ func NewPostgresPools(lc fx.Lifecycle, cfg *config.Config, log *zap.Logger, name
 				closePostgresPools(dbs),
 			)
 		}
-		db, err := OpenPostgres(name, dbCfg)
+		dbCfg.ApplyDefaults()
+		db, err := opener(name, dbCfg)
 		if err != nil {
 			// 保留初始化错误，同时报告已创建连接池的清理失败。
 			return nil, errors.Join(err, closePostgresPools(dbs))
 		}
 		dbs[name] = db
-		dbCfgs[name] = dbCfg
 	}
-	registerDBLifecycle(lc, log, dbs, dbCfgs, names)
+	registerDBLifecycle(lc, log, dbs, names)
 	return dbs, nil
 }
 
@@ -68,13 +73,13 @@ func closePostgresPools(dbs map[string]*sql.DB) error {
 	return errors.Join(errs...)
 }
 
-func registerDBLifecycle(lc fx.Lifecycle, log *zap.Logger, dbs map[string]*sql.DB, dbCfgs map[string]config.PostgresDBConfig, names []string) {
+func registerDBLifecycle(lc fx.Lifecycle, log *zap.Logger, dbs map[string]*sql.DB, names []string) {
+	postgresLog := logger.NamedComponent(log, "postgres", "postgres")
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			for _, name := range names {
 				db := dbs[name]
-				cfg := dbCfgs[name]
-				pingCtx, cancel := context.WithTimeout(ctx, cfg.PingTimeout)
+				pingCtx, cancel := context.WithTimeout(ctx, resources.DefaultPostgresPingTimeout())
 				if err := db.PingContext(pingCtx); err != nil {
 					cancel()
 					return errors.Join(
@@ -83,7 +88,7 @@ func registerDBLifecycle(lc fx.Lifecycle, log *zap.Logger, dbs map[string]*sql.D
 					)
 				}
 				cancel()
-				logger.WithContext(ctx, log).Info("postgres connected", zap.String("name", name))
+				logger.WithContext(ctx, postgresLog).Info("postgres connected", zap.String(logger.ResourceField, name))
 			}
 			return nil
 		},
@@ -95,7 +100,7 @@ func registerDBLifecycle(lc fx.Lifecycle, log *zap.Logger, dbs map[string]*sql.D
 					errs = append(errs, fmt.Errorf("close postgres %s: %w", name, err))
 					continue
 				}
-				logger.WithContext(ctx, log).Info("postgres closed", zap.String("name", name))
+				logger.WithContext(ctx, postgresLog).Info("postgres closed", zap.String(logger.ResourceField, name))
 			}
 			return errors.Join(errs...)
 		},

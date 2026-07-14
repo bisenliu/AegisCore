@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -17,7 +16,8 @@ import (
 	// 注册测试容器使用的 pgx database/sql driver。
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/datastore"
+	"github.com/aegiscore/common/runtime/resources"
 )
 
 const (
@@ -79,26 +79,26 @@ func StartPostgres(ctx context.Context, t testing.TB, opts PostgresOptions) *Pos
 		Username:    opts.Username,
 		Password:    opts.Password,
 	}
-	pg.DSN = postgresDSN(pg.Host, pg.Port, pg.Username, pg.Password, pg.Database)
+	pg.DSN = datastore.PostgresDSN(pg.Config())
 
 	waitForPostgres(startCtx, t, pg)
 	return pg
 }
 
-func (p PostgresContainer) Config() config.PostgresConfig {
-	return config.PostgresConfig{
-		Host:            p.Host,
-		Port:            p.Port,
-		Username:        p.Username,
-		Password:        p.Password,
-		DBName:          p.Database,
-		Driver:          "pgx",
-		SSLMode:         "disable",
-		MaxOpenConns:    2,
-		MaxIdleConns:    1,
-		ConnMaxLifetime: time.Minute,
-		ConnMaxIdleTime: time.Minute,
-		PingTimeout:     5 * time.Second,
+func (p PostgresContainer) Config() resources.PostgresConfig {
+	return resources.PostgresConfig{
+		Host:     p.Host,
+		Port:     p.Port,
+		Username: p.Username,
+		Password: p.Password,
+		DBName:   p.Database,
+		SSLMode:  resources.DefaultPostgresSSLMode,
+		Pool: resources.PostgresPoolConfig{
+			MaxOpenConns:    2,
+			MaxIdleConns:    1,
+			ConnMaxLifetime: time.Minute,
+			ConnMaxIdleTime: time.Minute,
+		},
 	}
 }
 
@@ -245,17 +245,4 @@ func dockerOutput(ctx context.Context, args ...string) (string, string, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	return string(out), stderr.String(), err
-}
-
-func postgresDSN(host string, port int, username, password, database string) string {
-	u := url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword(username, password),
-		Host:   net.JoinHostPort(host, strconv.Itoa(port)),
-		Path:   database,
-	}
-	q := u.Query()
-	q.Set("sslmode", "disable")
-	u.RawQuery = q.Encode()
-	return u.String()
 }

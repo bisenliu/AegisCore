@@ -24,6 +24,7 @@ func RequestLogger(log *zap.Logger) gin.HandlerFunc {
 
 // RequestLoggerWithOptions 使用自定义过滤规则记录完成的 HTTP 请求。
 func RequestLoggerWithOptions(log *zap.Logger, options RequestLoggerOptions) gin.HandlerFunc {
+	httpLog := logger.NamedComponent(log, "http", "http-server")
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
@@ -33,7 +34,7 @@ func RequestLoggerWithOptions(log *zap.Logger, options RequestLoggerOptions) gin
 			return
 		}
 
-		reqLog := logger.WithContext(c.Request.Context(), log)
+		reqLog := logger.WithContext(c.Request.Context(), httpLog)
 		fieldsRef := requestLogFields(c, time.Since(start))
 		fields := *fieldsRef
 

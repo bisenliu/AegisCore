@@ -7,9 +7,9 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/datastore"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	"github.com/aegiscore/user-service/internal/resources"
 )
 
@@ -18,7 +18,7 @@ type NamedRedisParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Config    *config.Config
+	Config    *serviceconfig.Config
 	Log       *zap.Logger
 	Trace     *commontracing.Provider
 }
@@ -37,7 +37,7 @@ func ProvideRedisClients(params NamedRedisParams) (NamedRedisClients, error) {
 	}
 	cacheRedis, err := datastore.NewRedisClient(
 		params.Lifecycle,
-		params.Config,
+		params.Config.Resources.Redis,
 		params.Log,
 		resources.NameCacheRedis,
 		datastore.WithRedisTracerProvider(params.Trace.TracerProvider()),

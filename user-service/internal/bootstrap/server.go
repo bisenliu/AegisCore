@@ -17,7 +17,7 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 )
 
-// defaultHTTPShutdownTimeout 是配置缺省 http.shutdown_timeout 时使用的关闭超时。
+// defaultHTTPShutdownTimeout 是配置缺省 server.http.shutdown_timeout 时使用的关闭超时。
 const defaultHTTPShutdownTimeout = 10 * time.Second
 
 // HTTPServerParams 包含注册 HTTP server 生命周期所需的 Fx 输入。
@@ -40,27 +40,33 @@ type httpDrainTracker struct {
 	active  int
 }
 
-// NewHTTPServer 创建 HTTP server，并注册 Fx start/stop 生命周期 hook。
+// NewHTTPServer 创建 HTTP server；仅在 server.http.enabled=true 时注册 Fx start/stop 生命周期 hook。
 // OnStart 先完成 net.Listen 再异步 Serve，确保端口绑定失败能同步阻断启动；Serve 异常会通过 Shutdowner 触发全局停止。
 func NewHTTPServer(params HTTPServerParams) *http.Server {
-	addr := fmt.Sprintf("%s:%d", params.Config.HTTP.Host, params.Config.HTTP.Port)
+	httpCfg := params.Config.Server.HTTP
+	addr := fmt.Sprintf("%s:%d", httpCfg.Host, httpCfg.Port)
+	httpLog := logger.NamedComponent(params.Log, "http", "http-server")
 	drainTracker := newHTTPDrainTracker(params.Engine)
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      drainTracker,
-		ReadTimeout:  params.Config.HTTP.ReadTimeout,
-		WriteTimeout: params.Config.HTTP.WriteTimeout,
-		IdleTimeout:  params.Config.HTTP.IdleTimeout,
+		ReadTimeout:  httpCfg.ReadTimeout,
+		WriteTimeout: httpCfg.WriteTimeout,
+		IdleTimeout:  httpCfg.IdleTimeout,
 	}
+	if !httpCfg.Enabled {
+		return server
+	}
+
 	var cancelServe context.CancelFunc
 
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			logger.WithContext(ctx, params.Log).Info("starting http server",
+			logger.WithContext(ctx, httpLog).Info("starting http server",
 				zap.String("addr", addr),
 				zap.String("service", params.Config.App.Name),
 				zap.String("environment", params.Config.App.Environment),
-				zap.String("timezone", params.Config.System.Timezone),
+				zap.String("timezone", time.Local.String()),
 			)
 			listener, err := net.Listen("tcp", addr)
 			if err != nil {
@@ -68,23 +74,23 @@ func NewHTTPServer(params HTTPServerParams) *http.Server {
 			}
 			serveCtx, cancel := context.WithCancel(context.Background())
 			cancelServe = cancel
-			go serveHTTPWithLifecycle(serveCtx, params.Log, params.Shutdowner, server, listener)
+			go serveHTTPWithLifecycle(serveCtx, httpLog, params.Shutdowner, server, listener)
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			if cancelServe != nil {
 				defer cancelServe()
 			}
-			shutdownTimeout := params.Config.HTTP.ShutdownTimeout
+			shutdownTimeout := httpCfg.ShutdownTimeout
 			if shutdownTimeout == 0 {
 				// 0 表示配置未填写超时，应使用服务默认值而不是取消关闭边界。
 				shutdownTimeout = defaultHTTPShutdownTimeout
 			}
 			shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 			defer cancel()
-			logger.WithContext(ctx, params.Log).Info("stopping http server")
+			logger.WithContext(ctx, httpLog).Info("stopping http server")
 			if err := server.Shutdown(shutdownCtx); err != nil {
-				return closeHTTPServerAfterShutdownError(ctx, params.Log, server, drainTracker, err)
+				return closeHTTPServerAfterShutdownError(ctx, httpLog, server, drainTracker, err)
 			}
 			return nil
 		},

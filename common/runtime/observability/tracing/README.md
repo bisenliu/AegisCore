@@ -2,9 +2,9 @@
 
 `common/runtime/observability/tracing` 是跨服务链路追踪 runtime primitive 的边界。当前支持基于 OpenTelemetry SDK 的 tracer provider、parent-based sampler、resource attributes、W3C TraceContext/Baggage propagator、OTLP trace exporter 和 Fx 生命周期关闭。
 
-`exporter: none` 是本地默认模式：它会创建 SDK provider，并生成标准 OTel trace ID 与 span ID，但不会创建 OTLP exporter、不会连接 Collector，也不会把 span 导出到 Jaeger、Tempo 或其他 trace UI。该模式只提供日志关联和标准上下文传播基础，不提供 trace 可视化。
+`observability.tracing.enabled: false` 是本地默认模式：它使用 `NeverSample`，不创建 OTLP exporter、不连接 Collector，也不向 Jaeger、Tempo 或其他 trace UI 导出 span。
 
-`exporter: otlp` 会基于配置的 OTLP gRPC endpoint 创建 trace exporter，并通过 SDK batch processor 导出 span。生产类环境中 `insecure: true` 会在配置校验阶段被拒绝；endpoint 不应包含 token、账号密码、Cookie 或其他敏感凭据。
+启用 tracing 后会基于 `observability.tracing.otlp_endpoint` 创建 OTLP gRPC exporter，并通过 SDK batch processor 导出 span。生产类环境中 `insecure: true` 会在配置校验阶段被拒绝；endpoint 不应包含 token、账号密码、Cookie 或其他敏感凭据。配置层不提供 exporter 选择字段。
 
 ## 可以放置
 
@@ -26,4 +26,4 @@
 
 当前 package 提供 `NewProvider` 和 `NewFxProvider`。构造函数不会隐式安装 OpenTelemetry global tracer provider 或 global propagator，调用方需要显式使用返回的 provider 和 propagator；未来如果服务侧需要全局安装，应通过单独 wiring 明确接入。
 
-当前实现 `exporter: none` 和 `exporter: otlp`。禁用 tracing 时会使用 `NeverSample` 且不创建 OTLP exporter，避免关闭状态仍连接 Collector。后续接入 exporter 认证、logger trace/span 字段或外部调用 instrumentation 时，应继续保持本包无业务语义，并单独说明认证和脱敏规则。
+当前实现只有 enabled/disabled 与 OTLP 传输语义。禁用 tracing 时会使用 `NeverSample` 且不创建 OTLP exporter，避免关闭状态仍连接 Collector。后续接入 exporter 认证、logger trace/span 字段或外部调用 instrumentation 时，应继续保持本包无业务语义，并单独说明认证和脱敏规则。

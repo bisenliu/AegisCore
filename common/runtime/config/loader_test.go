@@ -1,9 +1,9 @@
 package config
 
 import (
-	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -11,34 +11,74 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestConfigContainsOnlyCoreGroups(t *testing.T) {
+	typeOfConfig := reflect.TypeOf(Config{})
+	require.Equal(t, 4, typeOfConfig.NumField())
+
+	for index, expected := range []struct {
+		name string
+		tag  string
+	}{
+		{name: "App", tag: "app"},
+		{name: "Server", tag: "server"},
+		{name: "Log", tag: "log"},
+		{name: "Observability", tag: "observability"},
+	} {
+		field := typeOfConfig.Field(index)
+		require.Equal(t, expected.name, field.Name)
+		require.Equal(t, expected.tag, field.Tag.Get("mapstructure"))
+	}
+}
+
+func TestDefaultConfigSupportsLocalHTTPServer(t *testing.T) {
+	cfg := DefaultConfig()
+
+	require.NoError(t, cfg.Validate())
+	require.Equal(t, DefaultAppName, cfg.App.Name)
+	require.Equal(t, DefaultAppEnvironment, cfg.App.Environment)
+	require.True(t, cfg.Server.HTTP.Enabled)
+	require.Equal(t, DefaultHTTPHost, cfg.Server.HTTP.Host)
+	require.Equal(t, DefaultHTTPPort, cfg.Server.HTTP.Port)
+	require.Positive(t, cfg.Server.HTTP.ReadTimeout)
+	require.Positive(t, cfg.Server.HTTP.WriteTimeout)
+	require.Positive(t, cfg.Server.HTTP.IdleTimeout)
+	require.Positive(t, cfg.Server.HTTP.ShutdownTimeout)
+	require.False(t, cfg.Server.GRPC.Enabled)
+	require.Equal(t, "info", cfg.Log.Level)
+	require.Equal(t, "json", cfg.Log.Format)
+	require.Equal(t, DefaultMetricsPath, cfg.Observability.Metrics.Path)
+	require.False(t, cfg.Observability.Tracing.Enabled)
+}
+
+func TestLoadAppliesCoreDefaults(t *testing.T) {
+	cfg := loadConfigFromYAML(t, "{}\n")
+
+	require.Equal(t, DefaultConfig(), *cfg)
+}
+
 func TestLoadExplicitConfig(t *testing.T) {
 	cfg := loadConfigFromYAML(t, explicitConfigYAML())
 
 	require.Equal(t, "aegiscore-test", cfg.App.Name)
-	require.Equal(t, "Asia/Shanghai", cfg.System.Timezone)
-	require.Equal(t, 18080, cfg.HTTP.Port)
-	require.True(t, cfg.HTTP.Pprof.Enabled)
-	require.Equal(t, "/internal/debug/pprof", cfg.HTTP.Pprof.BasePath)
-	authTokenVersion := requireLocalCacheInstance(t, cfg, "auth_token_version")
-	require.Equal(t, int64(1000), authTokenVersion.Capacity)
-	require.Equal(t, time.Second, authTokenVersion.TTL)
-	require.Equal(t, 300*time.Millisecond, authTokenVersion.LoadTimeout)
-	require.Equal(t, int64(2000), authTokenVersion.NumCounters)
-	require.Equal(t, int64(128), authTokenVersion.BufferItems)
-	require.Equal(t, "./logs", cfg.Log.Directory)
-	require.Equal(t, "aegiscore-test", cfg.Log.Filename)
+	require.Equal(t, "local", cfg.App.Environment)
+	require.True(t, cfg.Server.HTTP.Enabled)
+	require.Equal(t, "127.0.0.1", cfg.Server.HTTP.Host)
+	require.Equal(t, 18080, cfg.Server.HTTP.Port)
+	require.Equal(t, 10*time.Second, cfg.Server.HTTP.ReadTimeout)
+	require.Equal(t, 20*time.Second, cfg.Server.HTTP.WriteTimeout)
+	require.Equal(t, 30*time.Second, cfg.Server.HTTP.IdleTimeout)
+	require.Equal(t, 5*time.Second, cfg.Server.HTTP.ShutdownTimeout)
+	require.True(t, cfg.Server.GRPC.Enabled)
+	require.Equal(t, "127.0.0.1", cfg.Server.GRPC.Host)
+	require.Equal(t, 19090, cfg.Server.GRPC.Port)
+	require.Equal(t, 8*time.Second, cfg.Server.GRPC.ShutdownTimeout)
+	require.Equal(t, "info", cfg.Log.Level)
+	require.Equal(t, "json", cfg.Log.Format)
 	require.True(t, cfg.Observability.Metrics.Enabled)
 	require.Equal(t, "/metrics", cfg.Observability.Metrics.Path)
-	require.Equal(t, "otlp", cfg.Observability.Tracing.Exporter)
+	require.True(t, cfg.Observability.Tracing.Enabled)
+	require.Equal(t, 0.25, cfg.Observability.Tracing.SampleRatio)
 	require.Equal(t, "collector:4317", cfg.Observability.Tracing.OTLPEndpoint)
-	cacheRedis, ok := cfg.RedisConfig("cache_redis")
-	require.True(t, ok)
-	require.Equal(t, 2, cacheRedis.DB)
-	pg := cfg.Postgres["user_db"]
-	require.Equal(t, "127.0.0.1", pg.Host)
-	require.Equal(t, 15432, pg.Port)
-	require.Equal(t, "pgx", pg.Driver)
-	require.Equal(t, "aegiscore_user", pg.DBName)
 }
 
 func TestLoadIntoServiceExtension(t *testing.T) {
@@ -50,57 +90,131 @@ func TestLoadIntoServiceExtension(t *testing.T) {
 			} `mapstructure:"jwt"`
 		} `mapstructure:"auth"`
 	}
-	cfg := loadIntoFromYAML[extended](t, explicitConfigYAML(), func(cfg extended) error { return cfg.Validate() })
+
+	cfg := loadIntoFromYAML[extended](t, explicitConfigYAML()+`auth:
+  jwt:
+    secret: test-secret
+`, func(cfg extended) error {
+		return cfg.Validate()
+	})
 	require.Equal(t, "test-secret", cfg.Auth.JWT.Secret)
 	require.Equal(t, "aegiscore-test", cfg.App.Name)
 }
 
-func TestLoadValidatesMissingPrimaryConfigFields(t *testing.T) {
+func TestLoadIntoStrictServiceExtension(t *testing.T) {
+	type redisResource struct {
+		Addr string `mapstructure:"addr"`
+	}
+	type extended struct {
+		Config    `mapstructure:",squash"`
+		Resources struct {
+			Redis map[string]redisResource `mapstructure:"redis"`
+		} `mapstructure:"resources"`
+		Feature struct {
+			Mode string `mapstructure:"mode"`
+		} `mapstructure:"feature"`
+	}
+
+	cfg := loadIntoFromYAML[extended](t, `resources:
+  redis:
+    cache:
+      addr: 127.0.0.1:6379
+feature:
+  mode: strict
+`, func(cfg extended) error {
+		return cfg.Validate()
+	})
+
+	require.Equal(t, "127.0.0.1:6379", cfg.Resources.Redis["cache"].Addr)
+	require.Equal(t, "strict", cfg.Feature.Mode)
+	require.Equal(t, DefaultHTTPPort, cfg.Server.HTTP.Port)
+}
+
+func TestLoadValidatesMissingCoreFields(t *testing.T) {
 	err := loadConfigErrorFromYAML(t, `app:
-  environment: test
-
-http:
-  port: 0
-
+  name: " "
+  environment: " "
+server:
+  http:
+    enabled: false
+  grpc:
+    enabled: false
 log: {}
-
-redis:
-  cache_redis:
-    db: 0
-
-postgres:
-  user_db:
-    port: 0
+observability:
+  metrics: {}
+  tracing: {}
 `)
 
 	assertConfigLoadErrorContains(t, err,
-		"system.timezone is required",
 		"app.name is required",
-		"http.host is required",
-		"http.port must be between 1 and 65535",
-		"redis.cache_redis.addr is required",
-		"postgres.user_db.host is required",
+		"app.environment is required",
+		"server must enable at least one of server.http or server.grpc",
 	)
 }
 
-func TestLoadValidatesInvalidBasicValues(t *testing.T) {
-	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`http:
-  host: 127.0.0.1
-  port: 70000
-  read_timeout: 0s
-  write_timeout: 0s
-  idle_timeout: 0s
-  shutdown_timeout: 0s`))
+func TestLoadValidatesEnabledServers(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`server:
+  http:
+    enabled: true
+    host: " "
+    port: 70000
+    read_timeout: 0s
+    write_timeout: 0s
+    idle_timeout: 0s
+    shutdown_timeout: 0s
+  grpc:
+    enabled: true
+    host: " "
+    port: 0
+    shutdown_timeout: 0s`))
+
 	assertConfigLoadErrorContains(t, err,
-		"http.port must be between 1 and 65535",
-		"http.read_timeout must be > 0",
-		"http.write_timeout must be > 0",
-		"http.idle_timeout must be > 0",
-		"http.shutdown_timeout must be > 0",
+		"server.http.host is required",
+		"server.http.port must be between 1 and 65535",
+		"server.http.read_timeout must be > 0",
+		"server.http.write_timeout must be > 0",
+		"server.http.idle_timeout must be > 0",
+		"server.http.shutdown_timeout must be > 0",
+		"server.grpc.host is required",
+		"server.grpc.port must be between 1 and 65535",
+		"server.grpc.shutdown_timeout must be > 0",
 	)
 }
 
-func TestLoadRejectsProductionLikeInsecureConfig(t *testing.T) {
+func TestLoadAllowsDisabledHTTPWithoutPlaceholdersWhenGRPCEnabled(t *testing.T) {
+	cfg := loadConfigFromYAML(t, configYAMLWithSection(`server:
+  http:
+    enabled: false
+  grpc:
+    enabled: true
+    host: 127.0.0.1
+    port: 19090
+    shutdown_timeout: 5s`))
+
+	require.False(t, cfg.Server.HTTP.Enabled)
+	require.True(t, cfg.Server.GRPC.Enabled)
+}
+
+func TestLoadValidatesLogAndMetrics(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSections(`log:
+  level: trace
+  format: text`, `observability:
+  metrics:
+    enabled: false
+    path: metrics
+  tracing:
+    enabled: false
+    sample_ratio: -0.1`))
+
+	assertConfigLoadErrorContains(t, err,
+		"log.level must be one of debug, info, warn, error",
+		"log.format must be one of json, console",
+		"observability.metrics.path must start with /",
+		"observability.tracing.sample_ratio must be between 0 and 1",
+	)
+}
+
+func TestLoadValidatesTracing(t *testing.T) {
 	err := loadConfigErrorFromYAML(t, configYAMLWithSections(`app:
   name: aegiscore-test
   environment: prod`, `observability:
@@ -110,69 +224,103 @@ func TestLoadRejectsProductionLikeInsecureConfig(t *testing.T) {
     include_runtime: true
   tracing:
     enabled: true
-    sample_ratio: 1.0
-    exporter: otlp
-    otlp_endpoint: collector.internal:4317
+    sample_ratio: 1.1
     insecure: true`))
 
 	assertConfigLoadErrorContains(t, err,
-		"postgres.user_db.sslmode must not be disable in production-like environments",
-		"observability.tracing.insecure must not be true with otlp exporter in production-like environments",
+		"observability.tracing.sample_ratio must be between 0 and 1",
+		"observability.tracing.otlp_endpoint is required when tracing is enabled",
+		"observability.tracing.insecure must not be true when tracing is enabled in production-like environments",
 	)
 }
 
 func TestLoadEnvironmentOverride(t *testing.T) {
-	t.Setenv("AEGISCORE_SYSTEM_TIMEZONE", "UTC")
-	t.Setenv("AEGISCORE_HTTP_PORT", "19090")
-	t.Setenv("AEGISCORE_LOCAL_CACHE_AUTH_TOKEN_VERSION_CAPACITY", "3000")
+	t.Setenv("AEGISCORE_SERVER_HTTP_PORT", "28080")
+	t.Setenv("AEGISCORE_SERVER_GRPC_SHUTDOWN_TIMEOUT", "12s")
 	t.Setenv("AEGISCORE_OBSERVABILITY_METRICS_ENABLED", "false")
-	t.Setenv("AEGISCORE_REDIS_CACHE_REDIS_DB", "9")
-	t.Setenv("AEGISCORE_POSTGRES_USER_DB_PASSWORD", "env-secret")
+	t.Setenv("AEGISCORE_OBSERVABILITY_TRACING_SAMPLE_RATIO", "0.5")
 
 	cfg := loadConfigFromYAML(t, explicitConfigYAML())
-	require.Equal(t, "UTC", cfg.System.Timezone)
-	require.Equal(t, 19090, cfg.HTTP.Port)
-	require.Equal(t, int64(3000), requireLocalCacheInstance(t, cfg, "auth_token_version").Capacity)
+	require.Equal(t, 28080, cfg.Server.HTTP.Port)
+	require.Equal(t, 12*time.Second, cfg.Server.GRPC.ShutdownTimeout)
 	require.False(t, cfg.Observability.Metrics.Enabled)
-	require.Equal(t, 9, cfg.Redis["cache_redis"].DB)
-	require.Equal(t, "env-secret", cfg.Postgres["user_db"].Password)
+	require.Equal(t, 0.5, cfg.Observability.Tracing.SampleRatio)
 }
 
-func TestLoadValidatesLocalCacheConfig(t *testing.T) {
-	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`local_cache:
-  auth_token_version:
-    capacity: 0
-    ttl: 0s
-    load_timeout: 0s
-    num_counters: -1
-    buffer_items: -1`))
+func TestLoadRejectsUnknownLegacyKeysWithFullPaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		section  string
+		expected string
+	}{
+		{name: "system", section: "system:\n  timezone: UTC", expected: "system.timezone"},
+		{name: "top level http", section: "http:\n  host: 127.0.0.1", expected: "http.host"},
+		{name: "postgres", section: "postgres:\n  user_db:\n    host: 127.0.0.1", expected: "postgres.user_db.host"},
+		{name: "redis", section: "redis:\n  cache:\n    addr: 127.0.0.1:6379", expected: "redis.cache.addr"},
+		{name: "local cache", section: "local_cache:\n  auth:\n    ttl: 1s", expected: "local_cache.auth.ttl"},
+		{name: "log directory", section: "log:\n  level: info\n  format: json\n  directory: ./logs", expected: "log.directory"},
+		{name: "log filename", section: "log:\n  level: info\n  format: json\n  filename: app.log", expected: "log.filename"},
+		{name: "log console", section: "log:\n  level: info\n  format: json\n  console: true", expected: "log.console"},
+		{name: "http pprof", section: `http:
+  pprof:
+    enabled: true`, expected: "http.pprof.enabled"},
+		{name: "http trusted proxies", section: `http:
+  trusted_proxies:
+    - 127.0.0.1`, expected: "http.trusted_proxies"},
+		{name: "tracing exporter", section: `observability:
+  metrics:
+    enabled: true
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: true
+    sample_ratio: 0.25
+    exporter: otlp
+    otlp_endpoint: collector:4317
+    insecure: false`, expected: "observability.tracing.exporter"},
+	}
 
-	assertConfigLoadErrorContains(t, err,
-		"local_cache.auth_token_version.capacity must be > 0",
-		"local_cache.auth_token_version.ttl must be > 0",
-		"local_cache.auth_token_version.load_timeout must be > 0",
-		"local_cache.auth_token_version.num_counters must be >= 0",
-		"local_cache.auth_token_version.buffer_items must be >= 0",
-	)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := loadConfigErrorFromYAML(t, configYAMLWithSection(tt.section))
+			assertConfigLoadErrorContains(t, err, "unknown configuration keys", tt.expected)
+		})
+	}
 }
 
-func TestPostgresDatabaseConfigBuildsDSN(t *testing.T) {
-	cfg := loadConfigFromYAML(t, explicitConfigYAML())
-	dbCfg, ok := cfg.PostgresDatabaseConfig("user_db")
-	require.True(t, ok)
-	parsed, err := url.Parse(dbCfg.DSN)
+func TestLoadRejectsUnknownServiceExtensionKey(t *testing.T) {
+	type extended struct {
+		Config `mapstructure:",squash"`
+		Auth   struct {
+			Secret string `mapstructure:"secret"`
+		} `mapstructure:"auth"`
+	}
+
+	path := writeTempConfig(t, "auth:\n  secret: test\n  legacy: rejected\n")
+	_, err := LoadInto(path, func(cfg extended) error { return cfg.Validate() })
+	require.Error(t, err)
+	assertConfigLoadErrorContains(t, err, "unknown configuration keys", "auth.legacy")
+}
+
+func TestLoadIntoAppliesServiceDefaultsBeforeValidation(t *testing.T) {
+	path := writeTempConfig(t, explicitConfigYAML())
+	cfg, err := LoadInto(path, func(cfg defaultedExtensionConfig) error {
+		require.Equal(t, "service-default", cfg.ServiceValue)
+		return cfg.Validate()
+	})
 	require.NoError(t, err)
-	require.Equal(t, "postgres", parsed.Scheme)
-	require.Equal(t, "127.0.0.1:15432", parsed.Host)
-	require.Equal(t, "/aegiscore_user", parsed.Path)
-	require.Equal(t, "disable", parsed.Query().Get("sslmode"))
+	require.Equal(t, "service-default", cfg.ServiceValue)
 }
 
-func requireLocalCacheInstance(t *testing.T, cfg *Config, name string) LocalCacheInstanceConfig {
-	t.Helper()
-	cacheCfg, ok := cfg.LocalCache.Instance(name)
-	require.True(t, ok)
-	return cacheCfg
+type defaultedExtensionConfig struct {
+	Config       `mapstructure:",squash"`
+	ServiceValue string `mapstructure:"service_value"`
+}
+
+func (c *defaultedExtensionConfig) ApplyDefaults() {
+	if c.ServiceValue == "" {
+		c.ServiceValue = "service-default"
+	}
 }
 
 func loadConfigFromYAML(t *testing.T, content string) *Config {
@@ -257,51 +405,23 @@ func explicitConfigYAML() string {
 	return `app:
   name: aegiscore-test
   environment: local
-system:
-  timezone: Asia/Shanghai
-http:
-  host: 127.0.0.1
-  port: 18080
-  read_timeout: 10s
-  write_timeout: 20s
-  idle_timeout: 30s
-  shutdown_timeout: 5s
-  trusted_proxies: 127.0.0.1,10.0.0.1
-  pprof:
+server:
+  http:
     enabled: true
-    base_path: /internal/debug/pprof
-auth:
-  jwt:
-    secret: test-secret
-    issuer: aegiscore-test
-    audience: aegiscore-users
-    access_token_ttl: 15m
-    refresh_token_ttl: 168h
-    password_change_token_ttl: 5m
-  password_kdf:
-    argon2_concurrency: 2
-    argon2_queue_size: 16
-  token_version_cache_ttl: 30s
-  refresh_token_rotation: true
-  max_active_sessions_per_user: 5
-ent:
-  sql_debug: true
-local_cache:
-  auth_token_version:
-    capacity: 1000
-    ttl: 1s
-    load_timeout: 300ms
-    num_counters: 2000
-    buffer_items: 128
+    host: 127.0.0.1
+    port: 18080
+    read_timeout: 10s
+    write_timeout: 20s
+    idle_timeout: 30s
+    shutdown_timeout: 5s
+  grpc:
+    enabled: true
+    host: 127.0.0.1
+    port: 19090
+    shutdown_timeout: 8s
 log:
   level: info
   format: json
-  directory: ./logs
-  filename: aegiscore-test
-  console: true
-  max_age_days: 7
-  max_size_mb: 100
-  max_backups: 30
 observability:
   metrics:
     enabled: true
@@ -310,30 +430,7 @@ observability:
   tracing:
     enabled: true
     sample_ratio: 0.25
-    exporter: otlp
     otlp_endpoint: collector:4317
     insecure: false
-redis:
-  cache_redis:
-    addr: 127.0.0.1:6379
-    db: 2
-    dial_timeout: 5s
-    read_timeout: 3s
-    write_timeout: 3s
-    ping_timeout: 7s
-postgres:
-  user_db:
-    host: 127.0.0.1
-    port: 15432
-    username: aegiscore
-    password: secret
-    db_name: aegiscore_user
-    driver: pgx
-    sslmode: disable
-    max_open_conns: 20
-    max_idle_conns: 4
-    conn_max_lifetime: 45m
-    conn_max_idle_time: 12m
-    ping_timeout: 7s
 `
 }

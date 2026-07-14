@@ -1,27 +1,13 @@
 package config
 
-import (
-	"net"
-	"net/url"
-	"strconv"
-	"time"
-)
+import "time"
 
-// Config 是跨服务共享 runtime 配置对象。
+// Config 是跨服务共享的最小 runtime 配置对象。
 type Config struct {
-	System        SystemConfig              `mapstructure:"system"`
-	App           AppConfig                 `mapstructure:"app"`
-	HTTP          HTTPConfig                `mapstructure:"http"`
-	Log           LogConfig                 `mapstructure:"log"`
-	Observability ObservabilityConfig       `mapstructure:"observability"`
-	LocalCache    LocalCacheConfig          `mapstructure:"local_cache"`
-	Redis         map[string]RedisConfig    `mapstructure:"redis"`
-	Postgres      map[string]PostgresConfig `mapstructure:"postgres"`
-}
-
-// SystemConfig 包含进程级运行时设置。
-type SystemConfig struct {
-	Timezone string `mapstructure:"timezone"`
+	App           AppConfig           `mapstructure:"app"`
+	Server        ServerConfig        `mapstructure:"server"`
+	Log           LogConfig           `mapstructure:"log"`
+	Observability ObservabilityConfig `mapstructure:"observability"`
 }
 
 // AppConfig 标识运行中的服务和部署环境。
@@ -30,34 +16,35 @@ type AppConfig struct {
 	Environment string `mapstructure:"environment"`
 }
 
-// HTTPConfig 包含服务地址、超时、关闭、代理和诊断端点设置。
-type HTTPConfig struct {
+// ServerConfig 包含共享协议 server 的生命周期配置。
+type ServerConfig struct {
+	HTTP HTTPServerConfig `mapstructure:"http"`
+	GRPC GRPCServerConfig `mapstructure:"grpc"`
+}
+
+// HTTPServerConfig 包含 HTTP server 的监听、超时和关闭设置。
+type HTTPServerConfig struct {
+	Enabled         bool          `mapstructure:"enabled"`
 	Host            string        `mapstructure:"host"`
 	Port            int           `mapstructure:"port"`
 	ReadTimeout     time.Duration `mapstructure:"read_timeout"`
 	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
 	IdleTimeout     time.Duration `mapstructure:"idle_timeout"`
 	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
-	TrustedProxies  []string      `mapstructure:"trusted_proxies"`
-	Pprof           PprofConfig   `mapstructure:"pprof"`
 }
 
-// PprofConfig 控制服务是否挂载 Go runtime pprof 诊断端点。
-type PprofConfig struct {
-	Enabled  bool   `mapstructure:"enabled"`
-	BasePath string `mapstructure:"base_path"`
+// GRPCServerConfig 包含 gRPC server 的最小监听和关闭设置。
+type GRPCServerConfig struct {
+	Enabled         bool          `mapstructure:"enabled"`
+	Host            string        `mapstructure:"host"`
+	Port            int           `mapstructure:"port"`
+	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
 }
 
-// LogConfig 控制 zap logger 格式、输出目标和文件轮转。
+// LogConfig 控制 logger 级别和编码格式。
 type LogConfig struct {
-	Level      string `mapstructure:"level"`
-	Format     string `mapstructure:"format"`
-	Directory  string `mapstructure:"directory"`
-	Filename   string `mapstructure:"filename"`
-	Console    bool   `mapstructure:"console"`
-	MaxAgeDays int    `mapstructure:"max_age_days"`
-	MaxSizeMB  int    `mapstructure:"max_size_mb"`
-	MaxBackups int    `mapstructure:"max_backups"`
+	Level  string `mapstructure:"level"`
+	Format string `mapstructure:"format"`
 }
 
 // ObservabilityConfig 包含可观测性运行时配置入口。
@@ -73,107 +60,10 @@ type MetricsConfig struct {
 	IncludeRuntime bool   `mapstructure:"include_runtime"`
 }
 
-// TracingConfig 包含 tracing 采样和 exporter 的配置契约。
+// TracingConfig 包含 OTLP tracing 采样和传输配置。
 type TracingConfig struct {
 	Enabled      bool    `mapstructure:"enabled"`
 	SampleRatio  float64 `mapstructure:"sample_ratio"`
-	Exporter     string  `mapstructure:"exporter"`
 	OTLPEndpoint string  `mapstructure:"otlp_endpoint"`
 	Insecure     bool    `mapstructure:"insecure"`
-}
-
-// LocalCacheConfig 包含服务内进程缓存实例配置。
-type LocalCacheConfig map[string]LocalCacheInstanceConfig
-
-// Instance 返回指定名称的本地缓存实例配置及其是否存在。
-func (c LocalCacheConfig) Instance(name string) (LocalCacheInstanceConfig, bool) {
-	cfg, ok := c[name]
-	return cfg, ok
-}
-
-// LocalCacheInstanceConfig 描述单个本地缓存实例的容量和生命周期。
-type LocalCacheInstanceConfig struct {
-	Capacity    int64         `mapstructure:"capacity"`
-	TTL         time.Duration `mapstructure:"ttl"`
-	LoadTimeout time.Duration `mapstructure:"load_timeout"`
-	NumCounters int64         `mapstructure:"num_counters"`
-	BufferItems int64         `mapstructure:"buffer_items"`
-}
-
-// RedisConfig 包含一个具名 Redis 客户端配置。
-type RedisConfig struct {
-	Addr         string        `mapstructure:"addr"`
-	Username     string        `mapstructure:"username"`
-	Password     string        `mapstructure:"password"`
-	DB           int           `mapstructure:"db"`
-	DialTimeout  time.Duration `mapstructure:"dial_timeout"`
-	ReadTimeout  time.Duration `mapstructure:"read_timeout"`
-	WriteTimeout time.Duration `mapstructure:"write_timeout"`
-	PingTimeout  time.Duration `mapstructure:"ping_timeout"`
-}
-
-// PostgresConfig 包含一个具名 PostgreSQL 数据源在生成 DSN 前的配置。
-type PostgresConfig struct {
-	Host            string        `mapstructure:"host"`
-	Port            int           `mapstructure:"port"`
-	Username        string        `mapstructure:"username"`
-	Password        string        `mapstructure:"password"`
-	DBName          string        `mapstructure:"db_name"`
-	Driver          string        `mapstructure:"driver"`
-	SSLMode         string        `mapstructure:"sslmode"`
-	MaxOpenConns    int           `mapstructure:"max_open_conns"`
-	MaxIdleConns    int           `mapstructure:"max_idle_conns"`
-	ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime"`
-	ConnMaxIdleTime time.Duration `mapstructure:"conn_max_idle_time"`
-	PingTimeout     time.Duration `mapstructure:"ping_timeout"`
-}
-
-// PostgresDBConfig 包含从 PostgresConfig 派生出的 SQL driver 设置。
-type PostgresDBConfig struct {
-	Driver          string
-	DSN             string
-	MaxOpenConns    int
-	MaxIdleConns    int
-	ConnMaxLifetime time.Duration
-	ConnMaxIdleTime time.Duration
-	PingTimeout     time.Duration
-}
-
-// RedisConfig 返回具名 Redis 配置及其是否存在。
-func (c Config) RedisConfig(name string) (RedisConfig, bool) {
-	redisCfg, ok := c.Redis[name]
-	return redisCfg, ok
-}
-
-// PostgresDatabaseConfig 返回带有已生成 DSN 的具名 PostgreSQL 数据库配置。
-func (c Config) PostgresDatabaseConfig(name string) (PostgresDBConfig, bool) {
-	pg, ok := c.Postgres[name]
-	if !ok {
-		return PostgresDBConfig{}, false
-	}
-	return PostgresDBConfig{
-		Driver:          pg.Driver,
-		DSN:             pg.dsn(),
-		MaxOpenConns:    pg.MaxOpenConns,
-		MaxIdleConns:    pg.MaxIdleConns,
-		ConnMaxLifetime: pg.ConnMaxLifetime,
-		ConnMaxIdleTime: pg.ConnMaxIdleTime,
-		PingTimeout:     pg.PingTimeout,
-	}, true
-}
-
-func (p PostgresConfig) dsn() string {
-	u := url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword(p.Username, p.Password),
-		Host:   net.JoinHostPort(p.Host, strconv.Itoa(p.Port)),
-		Path:   p.DBName,
-	}
-	if p.SSLMode != "" {
-		// 未配置 sslmode 时保持为空，让 pgx driver 使用自身默认行为。
-		q := u.Query()
-		q.Set("sslmode", p.SSLMode)
-		u.RawQuery = q.Encode()
-	}
-	return u.String()
 }

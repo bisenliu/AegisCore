@@ -7,7 +7,6 @@ import (
 	"go.uber.org/zap"
 
 	commonmw "github.com/aegiscore/common/http/middleware"
-	commonpprof "github.com/aegiscore/common/http/pprof"
 	"github.com/aegiscore/common/runtime/config"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commonauth "github.com/aegiscore/common/security/auth"
@@ -24,7 +23,6 @@ type RouteParams struct {
 	Environment           string
 	Log                   *zap.Logger
 	JWT                   commonauth.AccessTokenVerifier
-	HTTPConfig            config.HTTPConfig
 	MetricsConfig         config.MetricsConfig
 	HealthChecks          HealthChecks
 	Metrics               *commonmetrics.Provider
@@ -43,19 +41,11 @@ func RegisterUserServiceHTTPRoutes(engine *gin.Engine, params RouteParams) error
 	}
 	registerHealthRoutes(engine, params.ServiceName, params.HealthChecks)
 	RegisterOpenAPI(engine, params.Environment)
-	registerPprofRoutes(engine, params.HTTPConfig.Pprof)
-	if err := registerMetricsRoute(engine, MetricsRouteParams{Config: params.MetricsConfig, Pprof: params.HTTPConfig.Pprof, Provider: params.Metrics}); err != nil {
+	if err := registerMetricsRoute(engine, MetricsRouteParams{Config: params.MetricsConfig, Provider: params.Metrics}); err != nil {
 		return err
 	}
 	registerV1Routes(engine, params)
 	return nil
-}
-
-func registerPprofRoutes(engine *gin.Engine, cfg config.PprofConfig) {
-	if !cfg.Enabled {
-		return
-	}
-	commonpprof.Register(engine, commonpprof.Options{BasePath: cfg.BasePath})
 }
 
 func registerV1Routes(engine *gin.Engine, params RouteParams) {

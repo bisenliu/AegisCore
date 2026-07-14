@@ -7,9 +7,9 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/fx"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/user-service/ent"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 const rbacUserRolesCacheName = "rbac_user_roles"
@@ -19,7 +19,7 @@ type UserRoleResolverParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Config    *config.Config
+	Config    *serviceconfig.Config
 	Client    *ent.Client `name:"user_db"`
 }
 
@@ -33,19 +33,17 @@ type UserRoleResolverResult struct {
 
 // NewUserRoleResolver 构造按用户 bounded TTL 缓存的角色解析器。
 func NewUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult, error) {
-	cfg, ok := params.Config.LocalCache.Instance(rbacUserRolesCacheName)
-	if !ok {
-		return UserRoleResolverResult{}, fmt.Errorf("local_cache.%s is required", rbacUserRolesCacheName)
-	}
+	cfg := params.Config.RBAC.UserRoleCache
 	resolver := &entUserRoleResolver{client: params.Client}
+	if !cfg.IsEnabled() {
+		return UserRoleResolverResult{Resolver: resolver, Stats: resolver}, nil
+	}
 	cache, err := localcache.New[uuid.UUID, []uuid.UUID](localcache.Config[uuid.UUID]{
 		Name:        rbacUserRolesCacheName,
-		Capacity:    cfg.Capacity,
-		TTL:         cfg.TTL,
-		LoadTimeout: cfg.LoadTimeout,
+		Capacity:    cfg.SizeValue(),
+		TTL:         cfg.TTLValue(),
+		LoadTimeout: cfg.LoadTimeoutValue(),
 		KeyString:   func(userID uuid.UUID) string { return userID.String() },
-		NumCounters: cfg.NumCounters,
-		BufferItems: cfg.BufferItems,
 	}, func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 		return resolver.loadRolesForUser(ctx, userID)
 	}, cloneRoleIDs)

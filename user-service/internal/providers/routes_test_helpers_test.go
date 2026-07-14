@@ -25,9 +25,11 @@ import (
 	"github.com/aegiscore/common/runtime/localcache"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	commonresources "github.com/aegiscore/common/runtime/resources"
 	"github.com/aegiscore/common/runtime/workerpool"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/validation"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
@@ -40,16 +42,7 @@ import (
 
 func newRouteTestTracingProvider(t *testing.T, cfg *config.Config) *commontracing.Provider {
 	t.Helper()
-	provider, err := commontracing.NewProvider(context.Background(), commontracing.Options{
-		Config:      cfg.Observability.Tracing,
-		ServiceName: cfg.App.Name,
-		Environment: cfg.App.Environment,
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, provider.Shutdown(context.Background()))
-	})
-	return provider
+	return newGinTestTracingProvider(t, cfg)
 }
 
 func newRouteTestMetricsProvider(t *testing.T, cfg *config.Config) *commonmetrics.Provider {
@@ -73,13 +66,15 @@ func registerRouteTestRuntimeMetrics(t *testing.T, cfg *config.Config, provider 
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 
-	if cfg.Redis == nil {
-		cfg.Redis = make(map[string]config.RedisConfig)
+	serviceCfg := &serviceconfig.Config{
+		Config: *cfg,
+		Resources: serviceconfig.ResourcesConfig{Redis: commonresources.RedisConfigs{
+			resources.NameCacheRedis: {Timeout: time.Second},
+		}},
 	}
-	cfg.Redis[resources.NameCacheRedis] = config.RedisConfig{PingTimeout: time.Second}
 
 	err = RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{
-		Config:           cfg,
+		Config:           serviceCfg,
 		Metrics:          provider,
 		UserDB:           db,
 		CacheRedis:       client,

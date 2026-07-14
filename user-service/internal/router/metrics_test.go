@@ -106,8 +106,6 @@ func TestRegisterMetricsRouteRejectsInvalidPaths(t *testing.T) {
 		{name: "openapi", path: "/openapi/metrics"},
 		{name: "docs", path: "/docs"},
 		{name: "api docs", path: "/api-docs"},
-		{name: "pprof default", path: "/debug/pprof"},
-		{name: "pprof custom", path: "/internal/debug/pprof/metrics"},
 		{name: "unclean", path: "/internal/../metrics"},
 	}
 	for _, tt := range tests {
@@ -115,10 +113,24 @@ func TestRegisterMetricsRouteRejectsInvalidPaths(t *testing.T) {
 			engine := gin.New()
 			err := registerMetricsRoute(engine, MetricsRouteParams{
 				Config:   metricsRouteConfig(true, tt.path),
-				Pprof:    config.PprofConfig{Enabled: true, BasePath: "/internal/debug/pprof"},
 				Provider: provider,
 			})
 			require.ErrorIs(t, err, ErrInvalidMetricsPath)
+		})
+	}
+}
+
+func TestRegisterMetricsRouteAllowsFormerPprofPaths(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, metricsPath := range []string{"/debug/pprof", "/internal/debug/pprof/metrics"} {
+		t.Run(metricsPath, func(t *testing.T) {
+			engine := gin.New()
+			provider := newRouterTestMetricsProvider(t, true, metricsPath)
+			require.NoError(t, registerMetricsRoute(engine, MetricsRouteParams{
+				Config:   metricsRouteConfig(true, metricsPath),
+				Provider: provider,
+			}))
+			require.Equal(t, http.StatusOK, executeMetricsRequest(engine, metricsPath).Code)
 		})
 	}
 }

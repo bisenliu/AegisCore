@@ -60,6 +60,8 @@
 
 `kustomization.yaml` 聚合完整资源集合，适合验证和审查。生产首次发布应使用上面的分阶段命令，避免 Deployment 在数据库 SQL migration 和 RBAC seed 完成前创建。
 
+运行时 Secret 使用 `AEGISCORE_AUTH_JWT_SECRET`、`AEGISCORE_RESOURCES_POSTGRES_USER_DB_USERNAME`、`AEGISCORE_RESOURCES_POSTGRES_USER_DB_PASSWORD`、`AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME` 和 `AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD`。`secret.example.yaml` 的空密码只是键名示例，生产值必须由外部 Secret 管理器注入。
+
 ## 探针和运行边界
 
 - liveness probe：`GET /livez`
@@ -67,6 +69,10 @@
 - startup probe：`GET /startupz`
 
 Deployment 默认只启动 HTTP 服务，不设置 `RUN_MIGRATIONS=true`，运行时镜像不包含 Atlas。多副本生产发布必须先确认数据库 SQL migration 已由 DBA 工单或受控发布平台执行完成。
+
+非敏感配置使用 `AEGISCORE_SERVER_HTTP_*` 和 `AEGISCORE_RESOURCES_*`，敏感资源凭据使用同路径 Secret key。Redis 只有统一 `TIMEOUT`，PostgreSQL pool 使用 `POOL_*`。时区由平台 `TZ` 控制；日志只写 stdout/stderr；tracing 启用后固定使用 OTLP。应用不接收 trusted proxy 配置，代理信任和 forwarded headers 由 Ingress、gateway 或 service mesh 入口策略负责。
+
+pprof 默认关闭且不由 Service 暴露。临时诊断时只在受控副本设置 `PPROF_ENABLED=true`、`PPROF_ADDR=127.0.0.1:6060`，再通过 `kubectl port-forward` 访问。
 
 运行时镜像基于固定 digest 的 Distroless static nonroot，Deployment 和 RBAC seed Job 的 `runAsUser`、`runAsGroup`、`fsGroup` 均为 `65532`，并保持只读根文件系统、禁止提权、capabilities drop、RuntimeDefault seccomp 和 `/tmp` emptyDir。Kubernetes 探针使用 kubelet HTTP probe，不依赖容器内 shell 或原生 `healthcheck` 命令。
 

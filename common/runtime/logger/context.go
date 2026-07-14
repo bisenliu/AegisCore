@@ -9,14 +9,23 @@ import (
 )
 
 const (
+	// ApplicationLoggerName 是服务默认应用日志的 logger 名称。
+	ApplicationLoggerName = "application"
+	// SQLLoggerName 是 SQL 诊断日志使用的 logger 名称。
+	SQLLoggerName = "sql"
+	// ServiceField 是服务名称字段。
+	ServiceField = "service"
+	// EnvironmentField 是部署环境字段。
+	EnvironmentField = "env"
+	// ComponentField 是运行时组件字段。
+	ComponentField = "component"
+	// ResourceField 是具名外部资源字段。
+	ResourceField = "resource"
 	// TraceIDField 是 OTel trace ID 使用的 zap 字段名。
 	TraceIDField = "trace_id"
 	// SpanIDField 是 OTel span ID 使用的 zap 字段名。
 	SpanIDField = "span_id"
 )
-
-// SQLLoggerName 是 SQL 诊断日志使用的命名 logger。
-const SQLLoggerName = "sql"
 
 type loggerContextKey struct{}
 
@@ -66,12 +75,21 @@ func WithContext(ctx context.Context, base *zap.Logger) *zap.Logger {
 	return base
 }
 
-// SQL 返回写入 SQL 专用日志流的命名 logger。
-func SQL(base *zap.Logger) *zap.Logger {
+// NamedComponent 从 base 的 core 派生稳定命名 logger，并附加组件字段。
+func NamedComponent(base *zap.Logger, name string, component string) *zap.Logger {
 	if base == nil {
 		base = getDefault()
 	}
-	return base.Named(SQLLoggerName)
+	derived := zap.New(base.Core(), zap.AddCaller()).Named(name)
+	if component != "" {
+		derived = derived.With(zap.String(ComponentField, component))
+	}
+	return derived
+}
+
+// SQL 返回 PostgreSQL SQL 诊断使用的命名 logger。
+func SQL(base *zap.Logger) *zap.Logger {
+	return NamedComponent(base, SQLLoggerName, "postgres")
 }
 
 // ToContext 返回携带 log 的 context，供 FromContext 作为基础 logger 使用。

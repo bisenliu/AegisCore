@@ -73,7 +73,9 @@ func TestRequestLoggerIncludesTraceAndSpanIDAndRequestFields(t *testing.T) {
 
 	entries := logs.FilterMessage("http request completed").All()
 	require.Len(t, entries, 1)
+	require.Equal(t, "http", entries[0].LoggerName)
 	fields := entries[0].ContextMap()
+	require.Equal(t, "http-server", fields[logger.ComponentField])
 	require.Equal(t, "00112233445566778899aabbccddeeff", fields[logger.TraceIDField])
 	require.Equal(t, "0102030405060708", fields[logger.SpanIDField])
 	require.Equal(t, "client-request-123", fields[RequestIDField])

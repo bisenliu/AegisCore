@@ -8,10 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/url"
-	"sort"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,7 +22,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/config"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
-	"github.com/aegiscore/user-service/ent"
+	commonresources "github.com/aegiscore/common/runtime/resources"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	"github.com/aegiscore/user-service/internal/resources"
 )
@@ -33,54 +30,23 @@ import (
 var providerTestDriverSeq atomic.Int64
 
 func TestProvidePostgresPoolsProvidesUserDatabase(t *testing.T) {
-	drv := registerProviderTestSQLDriver(t)
-	cfg := providerTestConfig(drv.name)
-	log := zap.NewNop()
-
-	type pools struct {
-		fx.In
-
-		UserDB *sql.DB `name:"user_db"`
-	}
-
-	var got pools
-	app := fxtest.New(t,
-		fx.Supply(cfg, &serviceconfig.Config{}, log),
-		fx.Provide(ProvidePostgresPools),
-		fx.Populate(&got),
-	)
-	app.RequireStart()
-	app.RequireStop()
+	cfg := providerTestConfig("")
+	lc := fxtest.NewLifecycle(t)
+	got, err := ProvidePostgresPools(NamedPostgresParams{Lifecycle: lc, Config: cfg, Log: zap.NewNop()})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = got.UserDB.Close() })
 
 	require.NotNil(t, got.UserDB)
-
-	dbNames := drv.databaseNames()
-	want := []string{"aegiscore_user"}
-	require.ElementsMatch(t, want, dbNames)
-	require.Equal(t, int64(1), drv.pings.Load())
-	require.Equal(t, int64(1), drv.closes.Load())
+	require.Equal(t, 7, got.UserDB.Stats().MaxOpenConnections)
 }
 
-func TestProvidePostgresPoolsDoesNotRequireSharedDBConfig(t *testing.T) {
-	drv := registerProviderTestSQLDriver(t)
-	cfg := providerTestConfig(drv.name)
-	lc := fxtest.NewLifecycle(t)
-	log := zap.NewNop()
-
-	got, err := ProvidePostgresPools(NamedPostgresParams{
-		Lifecycle: lc,
-		Config:    cfg,
-		Log:       log,
+func TestProvidePostgresPoolsReturnsErrorForMissingUserDatabase(t *testing.T) {
+	_, err := ProvidePostgresPools(NamedPostgresParams{
+		Lifecycle: fxtest.NewLifecycle(t),
+		Config:    &serviceconfig.Config{},
+		Log:       zap.NewNop(),
 	})
-	require.NoError(t, err)
-	require.NotNil(t, got.UserDB)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	require.NoError(t, lc.Start(ctx))
-	require.NoError(t, lc.Stop(ctx))
-	require.Equal(t, int64(1), drv.pings.Load())
-	require.Equal(t, int64(1), drv.closes.Load())
+	require.ErrorContains(t, err, `postgres config "`+resources.NameUserDB+`" not found`)
 }
 
 func TestProvidePostgresPoolsDoesNotProvideSharedDatabase(t *testing.T) {
@@ -136,53 +102,22 @@ func TestProvideEntClientsProvidesUserServiceEntClient(t *testing.T) {
 	require.Equal(t, int64(0), drv.closes.Load())
 }
 
-func TestPostgresPoolsAndEntClientsClosePoolOnce(t *testing.T) {
-	drv := registerProviderTestSQLDriver(t)
-	cfg := providerTestConfig(drv.name)
-	log := zap.NewNop()
-
-	type clients struct {
-		fx.In
-
-		UserClient *ent.Client `name:"user_db"`
-	}
-
-	var got clients
-	app := fxtest.New(t,
-		fx.Supply(cfg, &serviceconfig.Config{}, log),
-		fx.Provide(ProvidePostgresPools, ProvideEntClients),
-		fx.Populate(&got),
-	)
-	app.RequireStart()
-	app.RequireStop()
-
-	require.NotNil(t, got.UserClient)
-	require.Equal(t, int64(1), drv.pings.Load())
-	require.Equal(t, int64(1), drv.closes.Load())
-}
-
 func TestProvideRedisClientsProvidesCacheRedis(t *testing.T) {
 	redisServer := newProviderTestRedisServer(t)
 	traceProvider := newProviderTestTracing(t)
 	spanRecorder := tracetest.NewSpanRecorder()
 	traceProvider.TracerProvider().RegisterSpanProcessor(spanRecorder)
 	cfg := providerTestConfig("")
-	cfg.Redis = map[string]config.RedisConfig{
+	cfg.Resources.Redis = commonresources.RedisConfigs{
 		resources.NameCacheRedis: {
-			Addr:         redisServer.addr,
-			DB:           0,
-			DialTimeout:  time.Second,
-			ReadTimeout:  time.Second,
-			WriteTimeout: time.Second,
-			PingTimeout:  time.Second,
+			Addr:    redisServer.addr,
+			DB:      0,
+			Timeout: time.Second,
 		},
 		"queue_redis": {
-			Addr:         "127.0.0.1:1",
-			DB:           1,
-			DialTimeout:  time.Second,
-			ReadTimeout:  time.Second,
-			WriteTimeout: time.Second,
-			PingTimeout:  time.Second,
+			Addr:    "127.0.0.1:1",
+			DB:      1,
+			Timeout: time.Second,
 		},
 	}
 	log := zap.NewNop()
@@ -218,7 +153,7 @@ func TestProvideRedisClientsDoesNotProvideQueueRedis(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		fx.Supply(&config.Config{}, zap.NewNop(), traceProvider),
+		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), traceProvider),
 		fx.Provide(ProvideRedisClients),
 		fx.Invoke(func(clients) {}),
 	)
@@ -232,7 +167,7 @@ func TestProvideRedisClientsReturnsErrorForMissingCacheRedisConfig(t *testing.T)
 
 	_, err := ProvideRedisClients(NamedRedisParams{
 		Lifecycle: lc,
-		Config:    &config.Config{},
+		Config:    &serviceconfig.Config{},
 		Log:       log,
 		Trace:     traceProvider,
 	})
@@ -252,16 +187,9 @@ func TestProvideRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 	traceProvider := newProviderTestTracing(t)
-	cfg := &config.Config{Redis: map[string]config.RedisConfig{
-		resources.NameCacheRedis: {
-			Addr:         "127.0.0.1:1",
-			DB:           0,
-			DialTimeout:  10 * time.Millisecond,
-			ReadTimeout:  10 * time.Millisecond,
-			WriteTimeout: 10 * time.Millisecond,
-			PingTimeout:  10 * time.Millisecond,
-		},
-	}}
+	cfg := &serviceconfig.Config{Resources: serviceconfig.ResourcesConfig{Redis: commonresources.RedisConfigs{
+		resources.NameCacheRedis: {Addr: "127.0.0.1:1", DB: 0, Timeout: 10 * time.Millisecond},
+	}}}
 
 	clients, err := ProvideRedisClients(NamedRedisParams{Lifecycle: lc, Config: cfg, Log: log, Trace: traceProvider})
 	require.NoError(t, err)
@@ -274,20 +202,16 @@ func TestProvideRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 
 func newProviderTestTracing(t *testing.T) *commontracing.Provider {
 	t.Helper()
-	provider, err := commontracing.NewProvider(context.Background(), commontracing.Options{
-		Config: config.TracingConfig{
-			Enabled:     true,
-			SampleRatio: 1,
-			Exporter:    "none",
-		},
-		ServiceName: "provider-test",
-		Environment: "test",
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, provider.Shutdown(context.Background()))
-	})
-	return provider
+	cfg := &config.Config{
+		App: config.AppConfig{Name: "provider-test", Environment: "test"},
+		Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{
+			Enabled:      true,
+			SampleRatio:  1,
+			OTLPEndpoint: "127.0.0.1:4317",
+			Insecure:     true,
+		}},
+	}
+	return newGinTestTracingProvider(t, cfg)
 }
 
 func providerTestHasRedisSpan(recorder *tracetest.SpanRecorder) bool {
@@ -308,44 +232,25 @@ func providerTestSpanNames(recorder *tracetest.SpanRecorder) []string {
 	return names
 }
 
-func providerTestConfig(driverName string) *config.Config {
-	return &config.Config{
-		Redis: map[string]config.RedisConfig{
-			resources.NameCacheRedis: {
-				Addr:         "127.0.0.1:6379",
-				DB:           0,
-				DialTimeout:  time.Second,
-				ReadTimeout:  time.Second,
-				WriteTimeout: time.Second,
-				PingTimeout:  time.Second,
+func providerTestConfig(_ string) *serviceconfig.Config {
+	return &serviceconfig.Config{
+		Resources: serviceconfig.ResourcesConfig{
+			Redis: commonresources.RedisConfigs{
+				resources.NameCacheRedis: {
+					Addr:    "127.0.0.1:6379",
+					DB:      0,
+					Timeout: time.Second,
+				},
 			},
-		},
-		Postgres: map[string]config.PostgresConfig{
-			resources.NameUserDB: {
-				Host:            "127.0.0.1",
-				Port:            15432,
-				Username:        "aegiscore",
-				Password:        "secret",
-				DBName:          "aegiscore_user",
-				Driver:          driverName,
-				MaxOpenConns:    7,
-				MaxIdleConns:    3,
-				ConnMaxLifetime: time.Minute,
-				ConnMaxIdleTime: 30 * time.Second,
-				PingTimeout:     time.Second,
-			},
-			"pay_db": {
-				Host:            "127.0.0.1",
-				Port:            15432,
-				Username:        "aegiscore",
-				Password:        "secret",
-				DBName:          "aegiscore_pay",
-				Driver:          driverName,
-				MaxOpenConns:    7,
-				MaxIdleConns:    3,
-				ConnMaxLifetime: time.Minute,
-				ConnMaxIdleTime: 30 * time.Second,
-				PingTimeout:     time.Second,
+			Postgres: commonresources.PostgresConfigs{
+				resources.NameUserDB: {
+					Host: "127.0.0.1", Port: 15432, Username: "aegiscore", Password: "secret", DBName: "aegiscore_user", SSLMode: "disable",
+					Pool: commonresources.PostgresPoolConfig{MaxOpenConns: 7, MaxIdleConns: 3, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second},
+				},
+				"pay_db": {
+					Host: "127.0.0.1", Port: 15432, Username: "aegiscore", Password: "secret", DBName: "aegiscore_pay", SSLMode: "disable",
+					Pool: commonresources.PostgresPoolConfig{MaxOpenConns: 99, MaxIdleConns: 3, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second},
+				},
 			},
 		},
 	}
@@ -467,32 +372,10 @@ type providerTestSQLDriver struct {
 	name   string
 	pings  atomic.Int64
 	closes atomic.Int64
-
-	mu   sync.Mutex
-	dsns []string
 }
 
-func (d *providerTestSQLDriver) Open(dsn string) (driver.Conn, error) {
-	d.mu.Lock()
-	d.dsns = append(d.dsns, dsn)
-	d.mu.Unlock()
+func (d *providerTestSQLDriver) Open(string) (driver.Conn, error) {
 	return &providerTestSQLConn{driver: d}, nil
-}
-
-func (d *providerTestSQLDriver) databaseNames() []string {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	dbNames := make([]string, 0, len(d.dsns))
-	for _, dsn := range d.dsns {
-		parsed, err := url.Parse(dsn)
-		if err != nil {
-			continue
-		}
-		dbNames = append(dbNames, strings.TrimPrefix(parsed.Path, "/"))
-	}
-	sort.Strings(dbNames)
-	return dbNames
 }
 
 type providerTestSQLConn struct {

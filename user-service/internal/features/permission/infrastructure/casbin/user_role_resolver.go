@@ -2,6 +2,7 @@ package casbin
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 
@@ -17,12 +18,22 @@ type UserRoleResolver interface {
 }
 
 type entUserRoleResolver struct {
-	client *ent.Client
-	cache  *localcache.Cache[uuid.UUID, []uuid.UUID]
+	client          *ent.Client
+	cache           *localcache.Cache[uuid.UUID, []uuid.UUID]
+	directLoads     atomic.Uint64
+	directLoadError atomic.Uint64
 }
 
 // RolesForUser 返回用户当前绑定的启用角色 ID。
 func (r *entUserRoleResolver) RolesForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	if r.cache == nil {
+		r.directLoads.Add(1)
+		roleIDs, err := r.loadRolesForUser(ctx, userID)
+		if err != nil {
+			r.directLoadError.Add(1)
+		}
+		return roleIDs, err
+	}
 	roleIDs, err := r.cache.GetOrLoad(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -32,12 +43,29 @@ func (r *entUserRoleResolver) RolesForUser(ctx context.Context, userID uuid.UUID
 
 // InvalidateUserRole 删除单个用户的本地角色缓存。
 func (r *entUserRoleResolver) InvalidateUserRole(userID uuid.UUID) {
+	if r.cache == nil {
+		return
+	}
 	_ = r.cache.Delete(userID)
 }
 
 // InvalidateAllUserRoles 清空本实例全部用户角色缓存。
 func (r *entUserRoleResolver) InvalidateAllUserRoles() {
+	if r.cache == nil {
+		return
+	}
 	_ = r.cache.Clear()
+}
+
+// Name 返回供 metrics 使用的稳定缓存实例名。
+func (r *entUserRoleResolver) Name() string {
+	return rbacUserRolesCacheName
+}
+
+// Stats 返回关闭本地缓存时的逐次回源统计。
+func (r *entUserRoleResolver) Stats() localcache.Stats {
+	loads := r.directLoads.Load()
+	return localcache.Stats{Miss: loads, Load: loads, LoadError: r.directLoadError.Load()}
 }
 
 func cloneRoleIDs(roleIDs []uuid.UUID) []uuid.UUID {

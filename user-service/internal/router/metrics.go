@@ -21,7 +21,6 @@ var (
 // MetricsRouteParams 包含挂载 Prometheus metrics endpoint 所需的服务级依赖。
 type MetricsRouteParams struct {
 	Config   config.MetricsConfig
-	Pprof    config.PprofConfig
 	Provider *commonmetrics.Provider
 }
 
@@ -33,7 +32,7 @@ func registerMetricsRoute(engine *gin.Engine, params MetricsRouteParams) error {
 	if err != nil {
 		return err
 	}
-	if err := validateMetricsPath(metricsPath, params.Pprof); err != nil {
+	if err := validateMetricsPath(metricsPath); err != nil {
 		return err
 	}
 	handler := params.Provider.HTTPHandler(promhttp.HandlerOpts{})
@@ -80,8 +79,8 @@ func normalizeMetricsPath(rawPath string) (string, error) {
 	return metricsPath, nil
 }
 
-func validateMetricsPath(metricsPath string, pprofCfg config.PprofConfig) error {
-	// 启动期阻断与健康检查、OpenAPI、业务 API 和 pprof 的冲突，避免后注册路由覆盖已知端点。
+func validateMetricsPath(metricsPath string) error {
+	// 启动期阻断与健康检查、OpenAPI 和业务 API 的冲突，避免后注册路由覆盖已知端点。
 	if metricsPath == "/" {
 		return fmt.Errorf("%w: metrics path must not be root", ErrInvalidMetricsPath)
 	}
@@ -91,7 +90,12 @@ func validateMetricsPath(metricsPath string, pprofCfg config.PprofConfig) error 
 	if IsHealthProbePath(metricsPath) {
 		return fmt.Errorf("%w: metrics path conflicts with health probe path", ErrInvalidMetricsPath)
 	}
-	for _, reserved := range reservedMetricsPathPrefixes(pprofCfg) {
+	for _, reserved := range reservedMetricsExactPaths() {
+		if metricsPath == reserved {
+			return fmt.Errorf("%w: metrics path conflicts with reserved route %s", ErrInvalidMetricsPath, reserved)
+		}
+	}
+	for _, reserved := range reservedMetricsPathPrefixes() {
 		if pathHasPrefix(metricsPath, reserved) {
 			return fmt.Errorf("%w: metrics path conflicts with reserved route prefix %s", ErrInvalidMetricsPath, reserved)
 		}
@@ -99,27 +103,19 @@ func validateMetricsPath(metricsPath string, pprofCfg config.PprofConfig) error 
 	return nil
 }
 
-func reservedMetricsPathPrefixes(pprofCfg config.PprofConfig) []string {
-	prefixes := []string{
-		"/api/v1",
+func reservedMetricsExactPaths() []string {
+	return []string{
 		openAPIJSONPath,
-		"/openapi",
 		"/docs",
 		"/api-docs",
-		"/debug/pprof",
 	}
-	if pprofCfg.Enabled {
-		prefixes = append(prefixes, normalizePprofBasePath(pprofCfg.BasePath))
-	}
-	return prefixes
 }
 
-func normalizePprofBasePath(basePath string) string {
-	trimmed := strings.TrimSpace(basePath)
-	if trimmed == "" || trimmed == "/" {
-		return "/debug/pprof"
+func reservedMetricsPathPrefixes() []string {
+	return []string{
+		"/api/v1",
+		"/openapi",
 	}
-	return "/" + strings.Trim(trimmed, "/")
 }
 
 func pathHasPrefix(candidate string, prefix string) bool {

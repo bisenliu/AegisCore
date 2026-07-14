@@ -6,45 +6,62 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/aegiscore/common/runtime/config"
+	"go.uber.org/fx/fxtest"
 )
 
-func TestInitConfigUsesDefaultTimezone(t *testing.T) {
+func TestInitUsesDefaultTimezone(t *testing.T) {
 	withIsolatedTimezone(t, func() {
-		require.NoError(t, InitConfig(&config.Config{}))
+		require.NoError(t, os.Unsetenv("TZ"))
+		require.NoError(t, Init())
 		assertTimezone(t, DefaultTimezone)
 	})
 }
 
-func TestInitConfigUsesConfiguredTimezone(t *testing.T) {
+func TestInitUsesPlatformTimezone(t *testing.T) {
 	withIsolatedTimezone(t, func() {
-		require.NoError(t, InitConfig(&config.Config{System: config.SystemConfig{Timezone: "UTC"}}))
+		require.NoError(t, os.Setenv("TZ", "UTC"))
+		require.NoError(t, Init())
 		assertTimezone(t, "UTC")
 	})
 }
 
-func TestInitConfigReturnsErrorForInvalidTimezone(t *testing.T) {
+func TestInitReturnsErrorForInvalidTimezone(t *testing.T) {
 	withIsolatedTimezone(t, func() {
-		err := InitConfig(&config.Config{System: config.SystemConfig{Timezone: "Invalid/Timezone"}})
+		require.NoError(t, os.Setenv("TZ", "Invalid/Timezone"))
+		err := Init()
 		require.Error(t, err)
 		require.Contains(t, err.Error(), `load timezone "Invalid/Timezone"`)
 		require.NotEqual(t, "Invalid/Timezone", time.Local.String())
 	})
 }
 
-func TestInitConfigOnlyInitializesOnceAfterSuccess(t *testing.T) {
+func TestInitOnlyInitializesOnceAfterSuccess(t *testing.T) {
 	withIsolatedTimezone(t, func() {
-		require.NoError(t, InitConfig(&config.Config{System: config.SystemConfig{Timezone: "UTC"}}))
-		require.NoError(t, InitConfig(&config.Config{System: config.SystemConfig{Timezone: DefaultTimezone}}))
+		require.NoError(t, os.Setenv("TZ", "UTC"))
+		require.NoError(t, Init())
+		require.NoError(t, os.Setenv("TZ", DefaultTimezone))
+		require.NoError(t, Init())
+		require.Equal(t, "UTC", time.Local.String())
+		require.Equal(t, DefaultTimezone, os.Getenv("TZ"))
+	})
+}
+
+func TestInitCanRetryAfterFailure(t *testing.T) {
+	withIsolatedTimezone(t, func() {
+		require.NoError(t, os.Setenv("TZ", "Invalid/Timezone"))
+		require.Error(t, Init())
+		require.NoError(t, os.Setenv("TZ", "UTC"))
+		require.NoError(t, Init())
 		assertTimezone(t, "UTC")
 	})
 }
 
-func TestInitConfigCanRetryAfterFailure(t *testing.T) {
+func TestModuleDoesNotRequireRuntimeConfig(t *testing.T) {
 	withIsolatedTimezone(t, func() {
-		require.Error(t, InitConfig(&config.Config{System: config.SystemConfig{Timezone: "Invalid/Timezone"}}))
-		require.NoError(t, InitConfig(&config.Config{System: config.SystemConfig{Timezone: "UTC"}}))
+		require.NoError(t, os.Setenv("TZ", "UTC"))
+		app := fxtest.New(t, Module)
+		app.RequireStart()
+		app.RequireStop()
 		assertTimezone(t, "UTC")
 	})
 }

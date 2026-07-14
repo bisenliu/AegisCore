@@ -74,6 +74,10 @@ cd user-service
 go run ./cmd serve --config ./configs/config.yaml
 ```
 
+配置文件使用严格 unknown-key 校验。共享核心只有 `app`、`server`、`log`、`observability`；user-service 在 `resources` 下声明 `cache_redis` 和 `user_db`，并在 `auth.token_version_cache`、`rbac.user_role_cache` 下声明 feature cache。环境变量对应完整路径，例如 `AEGISCORE_SERVER_HTTP_PORT`、`AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_TIMEOUT` 和 `AEGISCORE_RESOURCES_POSTGRES_USER_DB_POOL_MAX_OPEN_CONNS`。
+
+本地时区用标准 `TZ=Asia/Shanghai`。日志只写 stdout/stderr。需要 trace 时设置 `AEGISCORE_OBSERVABILITY_TRACING_ENABLED=true` 和 OTLP endpoint；需要 pprof 时临时设置 `PPROF_ENABLED=true PPROF_ADDR=127.0.0.1:6060`，不要把独立诊断端口直接暴露到公网。
+
 ## 4. 测试和 lint
 
 运行全部测试：

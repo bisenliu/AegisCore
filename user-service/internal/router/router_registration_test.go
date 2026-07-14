@@ -33,7 +33,6 @@ func TestRegisterUserServiceHTTPRoutesRegistersCurrentRouteGraph(t *testing.T) {
 	authorizer := &routerRegistrationAuthorizer{allowed: false}
 	params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{
 		metrics:    metricsRouteConfig(true, "/internal/metrics"),
-		pprof:      config.PprofConfig{Enabled: true, BasePath: "/internal/debug/pprof"},
 		authorizer: authorizer,
 	})
 
@@ -45,6 +44,8 @@ func TestRegisterUserServiceHTTPRoutesRegistersCurrentRouteGraph(t *testing.T) {
 		{method: http.MethodGet, path: "/metrics"},
 		{method: http.MethodGet, path: "/debug/pprof"},
 		{method: http.MethodGet, path: "/debug/pprof/*profile"},
+		{method: http.MethodGet, path: "/internal/debug/pprof"},
+		{method: http.MethodGet, path: "/internal/debug/pprof/*profile"},
 		{method: http.MethodPost, path: "/api/auth/login"},
 		{method: http.MethodPost, path: "/v1/auth/login"},
 		{method: http.MethodGet, path: "/api/users"},
@@ -103,52 +104,10 @@ func TestRegisterUserServiceHTTPRoutesReturnsMetricsConfigError(t *testing.T) {
 	engine := gin.New()
 	params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{
 		metrics: metricsRouteConfig(true, "/api/v1/metrics"),
-		pprof:   config.PprofConfig{Enabled: true, BasePath: "/internal/debug/pprof"},
 	})
 
 	err := RegisterUserServiceHTTPRoutes(engine, params)
 	require.ErrorIs(t, err, ErrInvalidMetricsPath)
-}
-
-func TestRegisterUserServiceHTTPRoutesHonorsPprofSwitch(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	t.Setenv(openAPIEnabledEnv, "true")
-
-	t.Run("disabled does not register default path", func(t *testing.T) {
-		engine := gin.New()
-		params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{
-			metrics: metricsRouteConfig(false, "/metrics"),
-			pprof:   config.PprofConfig{Enabled: false, BasePath: "/debug/pprof"},
-		})
-
-		require.NoError(t, RegisterUserServiceHTTPRoutes(engine, params))
-
-		routes := collectRouterRegistrationRoutes(engine)
-		requireRouterRoutesAbsent(t, routes, []routerRegisteredRoute{
-			{method: http.MethodGet, path: "/debug/pprof"},
-			{method: http.MethodGet, path: "/debug/pprof/*profile"},
-		})
-	})
-
-	t.Run("enabled registers only configured base path", func(t *testing.T) {
-		engine := gin.New()
-		params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{
-			metrics: metricsRouteConfig(false, "/metrics"),
-			pprof:   config.PprofConfig{Enabled: true, BasePath: "/internal/debug/pprof"},
-		})
-
-		require.NoError(t, RegisterUserServiceHTTPRoutes(engine, params))
-
-		routes := collectRouterRegistrationRoutes(engine)
-		requireRouterRoutesContain(t, routes, []routerRegisteredRoute{
-			{method: http.MethodGet, path: "/internal/debug/pprof"},
-			{method: http.MethodGet, path: "/internal/debug/pprof/*profile"},
-		})
-		requireRouterRoutesAbsent(t, routes, []routerRegisteredRoute{
-			{method: http.MethodGet, path: "/debug/pprof"},
-			{method: http.MethodGet, path: "/debug/pprof/*profile"},
-		})
-	})
 }
 
 type routerRegisteredRoute struct {
@@ -158,7 +117,6 @@ type routerRegisteredRoute struct {
 
 type routerRegistrationRouteOptions struct {
 	metrics    config.MetricsConfig
-	pprof      config.PprofConfig
 	authorizer permissionauthorization.Authorizer
 }
 
@@ -194,7 +152,6 @@ func newRouterRegistrationRouteParams(t *testing.T, opts routerRegistrationRoute
 		Environment:           "test",
 		Log:                   zap.NewNop(),
 		JWT:                   routerRegistrationAccessVerifier{},
-		HTTPConfig:            config.HTTPConfig{Pprof: opts.pprof},
 		MetricsConfig:         metricsCfg,
 		Metrics:               newRouterTestMetricsProvider(t, metricsCfg.Enabled, metricsCfg.Path),
 		TokenVersionValidator: routerRegistrationTokenVersionValidator{},
@@ -301,8 +258,6 @@ func routerRegistrationRuntimeRoutes() []routerRegisteredRoute {
 		{method: http.MethodGet, path: "/docs"},
 		{method: http.MethodGet, path: "/api-docs"},
 		{method: http.MethodGet, path: "/internal/metrics"},
-		{method: http.MethodGet, path: "/internal/debug/pprof"},
-		{method: http.MethodGet, path: "/internal/debug/pprof/*profile"},
 	}
 }
 

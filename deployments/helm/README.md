@@ -24,6 +24,8 @@ Deployment 默认不设置 `RUN_MIGRATIONS=true`，普通服务副本不执行 A
 
 chart 默认与 Distroless static nonroot 镜像对齐，`podSecurityContext.runAsUser`、`runAsGroup` 和 `fsGroup` 均为 `65532`。Deployment 保持 kubelet HTTP probes；Compose 场景才使用镜像内原生 `healthcheck` CLI。
 
+运行配置使用 `AEGISCORE_SERVER_*` 和服务声明的 `AEGISCORE_RESOURCES_*` 路径，时区使用平台 `TZ`。应用日志只写 stdout/stderr，tracing 启用后固定通过 OTLP 导出；trusted proxy 属于入口控制面。pprof 默认不进入 chart，通过 loopback 和 `kubectl port-forward` 临时诊断。
+
 ## 验证
 
 ```bash

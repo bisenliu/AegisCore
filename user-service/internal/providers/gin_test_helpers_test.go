@@ -2,12 +2,15 @@ package providers
 
 import (
 	"context"
+	"net"
 	"testing"
 
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	"google.golang.org/grpc"
 
 	"github.com/aegiscore/common/runtime/config"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
@@ -18,13 +21,20 @@ func ginTestConfig() *config.Config {
 	return &config.Config{
 		App: config.AppConfig{Name: "configured-user-service", Environment: "test"},
 		Observability: config.ObservabilityConfig{
-			Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1, Exporter: "none"},
+			Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1, OTLPEndpoint: "127.0.0.1:4317", Insecure: true},
 		},
 	}
 }
 
 func newGinTestTracingProvider(t *testing.T, cfg *config.Config) *commontracing.Provider {
 	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	collector := grpc.NewServer()
+	collectortrace.RegisterTraceServiceServer(collector, testOTLPTraceService{})
+	go func() { _ = collector.Serve(listener) }()
+	cfg.Observability.Tracing.OTLPEndpoint = listener.Addr().String()
+	cfg.Observability.Tracing.Insecure = true
 	provider, err := commontracing.NewProvider(context.Background(), commontracing.Options{
 		Config:      cfg.Observability.Tracing,
 		ServiceName: cfg.App.Name,
@@ -33,8 +43,18 @@ func newGinTestTracingProvider(t *testing.T, cfg *config.Config) *commontracing.
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, provider.Shutdown(context.Background()))
+		collector.GracefulStop()
+		_ = listener.Close()
 	})
 	return provider
+}
+
+type testOTLPTraceService struct {
+	collectortrace.UnimplementedTraceServiceServer
+}
+
+func (testOTLPTraceService) Export(context.Context, *collectortrace.ExportTraceServiceRequest) (*collectortrace.ExportTraceServiceResponse, error) {
+	return &collectortrace.ExportTraceServiceResponse{}, nil
 }
 
 func newGinTestTracingProviderWithRecorder(t *testing.T, cfg *config.Config) (*commontracing.Provider, *tracetest.SpanRecorder) {

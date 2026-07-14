@@ -45,51 +45,49 @@ service: # runtime Service 配置。
   port: 8080 # Service 和容器 HTTP 端口。
 
 config: # 渲染到 ConfigMap 的非敏感 `AEGISCORE_*` 环境变量。
-  TZ: Asia/Shanghai # 容器进程时区。
-  AEGISCORE_SYSTEM_TIMEZONE: Asia/Shanghai # AegisCore system.timezone。
+  TZ: Asia/Shanghai # 平台级进程时区，不属于 AegisCore 配置树。
   AEGISCORE_APP_ENVIRONMENT: production # 运行环境标识；生产类环境启用更严格校验。
-  AEGISCORE_HTTP_HOST: 0.0.0.0 # HTTP 监听地址。
-  AEGISCORE_HTTP_PORT: "8080" # HTTP 监听端口；需与 service.port 一致。
-  AEGISCORE_HTTP_TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16 # Gin trusted proxies 网段。
+  AEGISCORE_SERVER_HTTP_ENABLED: "true" # 启用 HTTP server。
+  AEGISCORE_SERVER_HTTP_HOST: 0.0.0.0 # HTTP 监听地址。
+  AEGISCORE_SERVER_HTTP_PORT: "8080" # HTTP 监听端口；需与 service.port 一致。
+  AEGISCORE_SERVER_HTTP_READ_TIMEOUT: 30s # HTTP 读取超时。
+  AEGISCORE_SERVER_HTTP_WRITE_TIMEOUT: 60s # HTTP 写入超时。
+  AEGISCORE_SERVER_HTTP_IDLE_TIMEOUT: 120s # keep-alive 空闲超时。
+  AEGISCORE_SERVER_HTTP_SHUTDOWN_TIMEOUT: 25s # HTTP 优雅关闭超时。
+  AEGISCORE_SERVER_GRPC_ENABLED: "false" # 当前没有入站 gRPC API。
+  AEGISCORE_SERVER_GRPC_HOST: 127.0.0.1 # gRPC 默认 loopback 监听地址。
+  AEGISCORE_SERVER_GRPC_PORT: "9090" # gRPC 预留端口。
+  AEGISCORE_SERVER_GRPC_SHUTDOWN_TIMEOUT: 10s # gRPC 优雅关闭超时。
   AEGISCORE_LOG_LEVEL: info # 日志级别；可选 debug、info、warn、error。
-  AEGISCORE_LOG_FORMAT: json # 日志格式；生产建议 json。
-  AEGISCORE_LOG_DIRECTORY: /tmp/aegiscore-user-services/logs # 文件日志目录；只读根文件系统下使用 /tmp。
-  AEGISCORE_LOG_FILENAME: aegiscore-user-services # 日志文件名前缀。
-  AEGISCORE_LOG_CONSOLE: "true" # 是否输出到控制台。
+  AEGISCORE_LOG_FORMAT: json # 日志写 stdout/stderr，由平台采集和轮转。
   AEGISCORE_OBSERVABILITY_METRICS_ENABLED: "true" # 是否启用 Prometheus metrics endpoint。
   AEGISCORE_OBSERVABILITY_METRICS_PATH: /metrics # metrics 暴露路径。
   AEGISCORE_OBSERVABILITY_METRICS_INCLUDE_RUNTIME: "true" # 是否包含 Go runtime/process 指标。
-  AEGISCORE_OBSERVABILITY_TRACING_ENABLED: "true" # 是否启用 tracing provider。
-  AEGISCORE_OBSERVABILITY_TRACING_EXPORTER: none # tracing exporter；可选 none 或 otlp。
-  AEGISCORE_OBSERVABILITY_TRACING_OTLP_ENDPOINT: "" # OTLP endpoint；exporter=otlp 时必填。
+  AEGISCORE_OBSERVABILITY_TRACING_ENABLED: "false" # 启用后固定使用 OTLP。
+  AEGISCORE_OBSERVABILITY_TRACING_OTLP_ENDPOINT: "" # 启用 tracing 时填写 Collector endpoint。
   AEGISCORE_OBSERVABILITY_TRACING_INSECURE: "false" # 是否允许 insecure OTLP；生产建议 false。
   AEGISCORE_AUTH_JWT_ISSUER: aegiscore-user-services # JWT issuer。
   AEGISCORE_AUTH_JWT_AUDIENCE: aegiscore-users # JWT audience。
-  AEGISCORE_POSTGRES_USER_DB_HOST: postgres # user_db PostgreSQL 主机或 Service DNS。
-  AEGISCORE_POSTGRES_USER_DB_PORT: "5432" # user_db PostgreSQL 端口。
-  AEGISCORE_POSTGRES_USER_DB_DB_NAME: aegiscore_user # user_db 数据库名。
-  AEGISCORE_POSTGRES_USER_DB_DRIVER: pgx # SQL driver；当前支持 pgx。
-  AEGISCORE_POSTGRES_USER_DB_SSLMODE: require # PostgreSQL SSL 模式。
-  AEGISCORE_POSTGRES_USER_DB_MAX_OPEN_CONNS: "50" # user_db 最大打开连接数。
-  AEGISCORE_POSTGRES_USER_DB_MAX_IDLE_CONNS: "10" # user_db 最大空闲连接数。
-  AEGISCORE_POSTGRES_USER_DB_CONN_MAX_LIFETIME: 30m # 单连接最大生命周期。
-  AEGISCORE_POSTGRES_USER_DB_CONN_MAX_IDLE_TIME: 10m # 空闲连接最大保留时间。
-  AEGISCORE_POSTGRES_USER_DB_PING_TIMEOUT: 5s # 启动时数据库 ping 超时。
-  AEGISCORE_REDIS_CACHE_REDIS_ADDR: redis:6379 # cache_redis 地址。
-  AEGISCORE_REDIS_CACHE_REDIS_DB: "0" # Redis logical database 编号。
-  AEGISCORE_REDIS_CACHE_REDIS_DIAL_TIMEOUT: 5s # Redis 建连超时。
-  AEGISCORE_REDIS_CACHE_REDIS_READ_TIMEOUT: 3s # Redis 读超时。
-  AEGISCORE_REDIS_CACHE_REDIS_WRITE_TIMEOUT: 3s # Redis 写超时。
-  AEGISCORE_REDIS_CACHE_REDIS_PING_TIMEOUT: 5s # 启动时 Redis ping 超时。
+  AEGISCORE_RESOURCES_POSTGRES_USER_DB_HOST: postgres # user_db PostgreSQL 主机或 Service DNS。
+  AEGISCORE_RESOURCES_POSTGRES_USER_DB_PORT: "5432" # user_db PostgreSQL 端口。
+  AEGISCORE_RESOURCES_POSTGRES_USER_DB_DB_NAME: aegiscore_user # user_db 数据库名。
+  AEGISCORE_RESOURCES_POSTGRES_USER_DB_SSLMODE: require # PostgreSQL SSL 模式。
+  AEGISCORE_RESOURCES_POSTGRES_USER_DB_POOL_MAX_OPEN_CONNS: "50" # user_db 最大打开连接数。
+  AEGISCORE_RESOURCES_POSTGRES_USER_DB_POOL_MAX_IDLE_CONNS: "10" # user_db 最大空闲连接数。
+  AEGISCORE_RESOURCES_POSTGRES_USER_DB_POOL_CONN_MAX_LIFETIME: 30m # 单连接最大生命周期。
+  AEGISCORE_RESOURCES_POSTGRES_USER_DB_POOL_CONN_MAX_IDLE_TIME: 10m # 空闲连接最大保留时间。
+  AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_ADDR: redis:6379 # cache_redis 地址。
+  AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_DB: "0" # Redis logical database 编号。
+  AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_TIMEOUT: 5s # Redis 建连、读写和启动探测统一超时。
 
 secret: # 外部 Secret 引用配置；chart 不渲染真实 Secret。
   existingSecret: aegiscore-user-services-runtime # 已存在 Secret 名称。
   keys: # Secret 中各敏感字段的键名映射。
     jwtSecret: AEGISCORE_AUTH_JWT_SECRET # JWT HMAC secret。
-    postgresUsername: AEGISCORE_POSTGRES_USER_DB_USERNAME # user_db 用户名。
-    postgresPassword: AEGISCORE_POSTGRES_USER_DB_PASSWORD # user_db 密码。
-    redisUsername: AEGISCORE_REDIS_CACHE_REDIS_USERNAME # cache_redis ACL 用户名。
-    redisPassword: AEGISCORE_REDIS_CACHE_REDIS_PASSWORD # cache_redis 密码。
+    postgresUsername: AEGISCORE_RESOURCES_POSTGRES_USER_DB_USERNAME # user_db 用户名。
+    postgresPassword: AEGISCORE_RESOURCES_POSTGRES_USER_DB_PASSWORD # user_db 密码。
+    redisUsername: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME # cache_redis ACL 用户名。
+    redisPassword: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD # cache_redis 密码。
 
 deployment: # runtime Deployment 行为配置。
   revisionHistoryLimit: 5 # 保留的历史 ReplicaSet 数量。

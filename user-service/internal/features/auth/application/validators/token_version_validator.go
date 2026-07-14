@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -15,9 +16,23 @@ import (
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
-// TokenVersionValidator 使用 bounded localcache 校验 token version。
+// TokenVersionValidator 使用 feature 注入的本地读取策略校验 token version。
 type TokenVersionValidator struct {
-	cache *localcache.Cache[string, int64]
+	cache LocalTokenVersionCache
+}
+
+// LocalTokenVersionCache 定义 token version 本地读取与失效所需的最小接口。
+type LocalTokenVersionCache interface {
+	GetOrLoad(ctx context.Context, userID string) (int64, error)
+	Delete(userID string) error
+}
+
+// DirectTokenVersionCache 在关闭本地缓存时逐次回源，并保留稳定的指标来源。
+type DirectTokenVersionCache struct {
+	users     authapplication.UserTokenVersionStore
+	cache     authapplication.TokenVersionCache
+	load      atomic.Uint64
+	loadError atomic.Uint64
 }
 
 // TokenVersionLocalInvalidator 失效本实例内 token version 本地缓存。
@@ -26,8 +41,39 @@ type TokenVersionLocalInvalidator interface {
 }
 
 // NewCachingValidator 构造使用外部注入 localcache 的 token version 校验器。
-func NewCachingValidator(cache *localcache.Cache[string, int64]) *TokenVersionValidator {
+func NewCachingValidator(cache LocalTokenVersionCache) *TokenVersionValidator {
 	return &TokenVersionValidator{cache: cache}
+}
+
+// NewDirectTokenVersionCache 构造不保留进程内状态的 token version 回源器。
+func NewDirectTokenVersionCache(users authapplication.UserTokenVersionStore, cache authapplication.TokenVersionCache) *DirectTokenVersionCache {
+	return &DirectTokenVersionCache{users: users, cache: cache}
+}
+
+// GetOrLoad 每次通过 Redis 投影或用户存储读取当前 token version。
+func (c *DirectTokenVersionCache) GetOrLoad(ctx context.Context, userID string) (int64, error) {
+	c.load.Add(1)
+	version, err := Current(ctx, c.users, c.cache, userID)
+	if err != nil {
+		c.loadError.Add(1)
+	}
+	return version, err
+}
+
+// Delete 在无本地缓存模式下是安全 no-op。
+func (c *DirectTokenVersionCache) Delete(string) error {
+	return nil
+}
+
+// Name 返回供 metrics 使用的稳定缓存实例名。
+func (c *DirectTokenVersionCache) Name() string {
+	return "auth_token_version"
+}
+
+// Stats 返回无本地缓存模式下的回源统计。
+func (c *DirectTokenVersionCache) Stats() localcache.Stats {
+	loads := c.load.Load()
+	return localcache.Stats{Miss: loads, Load: loads, LoadError: c.loadError.Load()}
 }
 
 // ValidateTokenVersion 拒绝 version 不再匹配当前用户版本的 token。

@@ -6,7 +6,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/resources"
 )
 
 // RedisClientOption 配置 Redis 客户端的共享运行时能力。
@@ -26,7 +26,8 @@ func WithRedisTracerProvider(provider trace.TracerProvider) RedisClientOption {
 }
 
 // OpenRedisClient 根据配置构造 Redis 客户端，但不检查连接可用性。
-func OpenRedisClient(redisCfg config.RedisConfig, options ...RedisClientOption) *redis.Client {
+func OpenRedisClient(redisCfg resources.RedisConfig, options ...RedisClientOption) *redis.Client {
+	redisCfg.ApplyDefaults()
 	opts := redisClientOptions{tracerProvider: otel.GetTracerProvider()}
 	for _, option := range options {
 		if option != nil {
@@ -38,9 +39,9 @@ func OpenRedisClient(redisCfg config.RedisConfig, options ...RedisClientOption) 
 		Username:     redisCfg.Username,
 		Password:     redisCfg.Password,
 		DB:           redisCfg.DB,
-		DialTimeout:  redisCfg.DialTimeout,
-		ReadTimeout:  redisCfg.ReadTimeout,
-		WriteTimeout: redisCfg.WriteTimeout,
+		DialTimeout:  redisCfg.Timeout,
+		ReadTimeout:  redisCfg.Timeout,
+		WriteTimeout: redisCfg.Timeout,
 	})
 	if err := redisotel.InstrumentTracing(client, redisotel.WithTracerProvider(opts.tracerProvider)); err != nil {
 		panic(err)
