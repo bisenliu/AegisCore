@@ -299,7 +299,7 @@ func newTestPool(t *testing.T, opts Options) *Pool {
 
 func newTestPoolWithLogger(t *testing.T, log *zap.Logger, opts Options) *Pool {
 	t.Helper()
-	pool, err := NewUnmanaged(log, opts)
+	pool, err := newUnmanaged(log, opts)
 	require.NoError(t, err)
 	return pool
 }

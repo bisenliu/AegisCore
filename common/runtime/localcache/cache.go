@@ -150,7 +150,7 @@ func (c *Cache[K, V]) GetOrLoad(ctx context.Context, key K) (V, error) {
 		if ok := c.client.SetWithTTL(cacheKey, cached, 1, c.ttl); !ok {
 			c.setDropped.Add(1)
 		} else {
-			// Ristretto 写入通过缓冲异步生效；Wait 提高后续读取和测试断言的可见性。
+			// Ristretto 写入通过缓冲异步生效；Wait 保证后续读取可见当前写入。
 			c.client.Wait()
 		}
 		return loaded, nil

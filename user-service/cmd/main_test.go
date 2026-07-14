@@ -29,6 +29,36 @@ func (a testLifecycleApp) Stop(ctx context.Context) error {
 	return a.stop(ctx)
 }
 
+func testRootCommandDependencies(t testing.TB) rootCommandDependencies {
+	t.Helper()
+	unexpected := func(name string) {
+		t.Helper()
+		t.Fatalf("unexpected root command dependency call: %s", name)
+	}
+	return rootCommandDependencies{
+		appFactory: func(string) lifecycleApp {
+			unexpected("appFactory")
+			return testLifecycleApp{}
+		},
+		seedRunner: func(context.Context, string, rbacSeedOptions) error {
+			unexpected("seedRunner")
+			return nil
+		},
+		assignSuperAdminRunner: func(context.Context, string, uuid.UUID) error {
+			unexpected("assignSuperAdminRunner")
+			return nil
+		},
+		createSuperAdminRunner: func(context.Context, string, rbacCreateSuperAdminOptions) error {
+			unexpected("createSuperAdminRunner")
+			return nil
+		},
+		fxGraphWriter: func(string, ...fx.Option) (string, error) {
+			unexpected("fxGraphWriter")
+			return "", nil
+		},
+	}
+}
+
 func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testing.T) {
 	key := testContextKey("trace-id")
 	parent := context.WithValue(context.Background(), key, "test-trace")
@@ -59,7 +89,7 @@ func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testin
 }
 
 func TestRootCommandSurface(t *testing.T) {
-	root := newRootCommand(rootCommandDependencies{})
+	root := newRootCommand(testRootCommandDependencies(t))
 	require.Equal(t, "aegiscore-user-services", root.Use)
 
 	var serve *cobra.Command
@@ -108,12 +138,13 @@ func TestRootCommandSurface(t *testing.T) {
 
 func TestFxGraphCommandWritesGraph(t *testing.T) {
 	called := false
-	deps := rootCommandDependencies{fxGraphWriter: func(path string, opts ...fx.Option) (string, error) {
+	deps := testRootCommandDependencies(t)
+	deps.fxGraphWriter = func(path string, opts ...fx.Option) (string, error) {
 		called = true
 		require.Equal(t, "docs/test.dot", path)
 		require.Len(t, opts, 3)
 		return "digraph {}\n", nil
-	}}
+	}
 
 	root := newRootCommand(deps)
 	root.SetArgs([]string{"fxgraph", "--config", "test-config.yaml", "--output", "docs/test.dot"})
@@ -123,13 +154,14 @@ func TestFxGraphCommandWritesGraph(t *testing.T) {
 
 func TestRBACSeedCommandFlags(t *testing.T) {
 	called := false
-	deps := rootCommandDependencies{seedRunner: func(_ context.Context, configPath string, opts rbacSeedOptions) error {
+	deps := testRootCommandDependencies(t)
+	deps.seedRunner = func(_ context.Context, configPath string, opts rbacSeedOptions) error {
 		called = true
 		require.Equal(t, "test-config.yaml", configPath)
 		assert.True(t, opts.reactivateSystem)
 		assert.True(t, opts.syncSystemBindings)
 		return nil
-	}}
+	}
 
 	root := newRootCommand(deps)
 	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "seed", "--reactivate-system", "--sync-system-bindings"})
@@ -139,10 +171,11 @@ func TestRBACSeedCommandFlags(t *testing.T) {
 
 func TestAssignSuperAdminCommandValidatesUserID(t *testing.T) {
 	called := false
-	deps := rootCommandDependencies{assignSuperAdminRunner: func(_ context.Context, _ string, _ uuid.UUID) error {
+	deps := testRootCommandDependencies(t)
+	deps.assignSuperAdminRunner = func(_ context.Context, _ string, _ uuid.UUID) error {
 		called = true
 		return nil
-	}}
+	}
 
 	root := newRootCommand(deps)
 	root.SetArgs([]string{"rbac", "assign-super-admin", "--user-id", "not-a-uuid"})
@@ -153,12 +186,13 @@ func TestAssignSuperAdminCommandValidatesUserID(t *testing.T) {
 func TestAssignSuperAdminCommandRuns(t *testing.T) {
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000001")
 	called := false
-	deps := rootCommandDependencies{assignSuperAdminRunner: func(_ context.Context, configPath string, got uuid.UUID) error {
+	deps := testRootCommandDependencies(t)
+	deps.assignSuperAdminRunner = func(_ context.Context, configPath string, got uuid.UUID) error {
 		called = true
 		require.Equal(t, "test-config.yaml", configPath)
 		require.Equal(t, userID, got)
 		return nil
-	}}
+	}
 
 	root := newRootCommand(deps)
 	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "assign-super-admin", "--user-id", userID.String()})
@@ -168,7 +202,8 @@ func TestAssignSuperAdminCommandRuns(t *testing.T) {
 
 func TestCreateSuperAdminCommandRunsWithDefaults(t *testing.T) {
 	called := false
-	deps := rootCommandDependencies{createSuperAdminRunner: func(_ context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
+	deps := testRootCommandDependencies(t)
+	deps.createSuperAdminRunner = func(_ context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
 		called = true
 		require.Equal(t, "test-config.yaml", configPath)
 		assert.Equal(t, defaultCreateSuperAdminUsername, opts.username)
@@ -176,7 +211,7 @@ func TestCreateSuperAdminCommandRunsWithDefaults(t *testing.T) {
 		assert.Equal(t, defaultCreateSuperAdminPasswordEnv, opts.passwordEnv)
 		assert.False(t, opts.resetPassword)
 		return nil
-	}}
+	}
 
 	root := newRootCommand(deps)
 	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "create-super-admin"})
@@ -186,7 +221,8 @@ func TestCreateSuperAdminCommandRunsWithDefaults(t *testing.T) {
 
 func TestCreateSuperAdminCommandRunsWithFlags(t *testing.T) {
 	called := false
-	deps := rootCommandDependencies{createSuperAdminRunner: func(_ context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
+	deps := testRootCommandDependencies(t)
+	deps.createSuperAdminRunner = func(_ context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
 		called = true
 		require.Equal(t, "test-config.yaml", configPath)
 		assert.Equal(t, "root", opts.username)
@@ -194,7 +230,7 @@ func TestCreateSuperAdminCommandRunsWithFlags(t *testing.T) {
 		assert.Equal(t, "ADMIN_SECRET", opts.passwordEnv)
 		assert.True(t, opts.resetPassword)
 		return nil
-	}}
+	}
 
 	root := newRootCommand(deps)
 	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "create-super-admin", "--username", "root", "--nickname", "Root", "--password-env", "ADMIN_SECRET", "--reset-password"})

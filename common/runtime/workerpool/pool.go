@@ -52,7 +52,7 @@ type Pool struct {
 
 // New 创建后台任务池，并向 Fx 注册停止钩子。
 func New(lc fx.Lifecycle, log *zap.Logger, opts Options) (*Pool, error) {
-	pool, err := NewUnmanaged(log, opts)
+	pool, err := newUnmanaged(log, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -62,8 +62,7 @@ func New(lc fx.Lifecycle, log *zap.Logger, opts Options) (*Pool, error) {
 	return pool, nil
 }
 
-// NewUnmanaged 创建不注册 Fx 生命周期钩子的后台任务池，供测试或手动管理场景使用。
-func NewUnmanaged(log *zap.Logger, opts Options) (*Pool, error) {
+func newUnmanaged(log *zap.Logger, opts Options) (*Pool, error) {
 	name := strings.TrimSpace(opts.Name)
 	if name == "" {
 		return nil, fmt.Errorf("%w: name is required", ErrInvalidTask)

@@ -1,3 +1,5 @@
+//go:build generate
+
 package rolehttp
 
 //go:generate go tool mockgen -destination=mock_test.go -package=rolehttp github.com/aegiscore/user-service/internal/features/role/application/command RoleCommandService

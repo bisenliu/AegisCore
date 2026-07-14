@@ -49,20 +49,15 @@ func TestVerifierRejectsDisabledUser(t *testing.T) {
 }
 
 func TestVerifierUnknownUserExecutesDummyPasswordVerification(t *testing.T) {
-	store := NewMockUserCredentialStore(gomock.NewController(t))
+	ctrl := gomock.NewController(t)
+	store := NewMockUserCredentialStore(ctrl)
 	store.EXPECT().GetByUsername(gomock.Any(), "missing").Return(nil, identity.ErrUserNotFound)
-	passwords := &stubPasswordService{
-		verify: func(_ context.Context, plain string, encodedHash string) (bool, error) {
-			require.Equal(t, "secret", plain)
-			require.Equal(t, dummyPasswordHash, encodedHash)
-			return false, nil
-		},
-	}
+	passwords := NewMockPasswordService(ctrl)
+	passwords.EXPECT().VerifyContext(gomock.Any(), "secret", dummyPasswordHash).Return(false, nil)
 	verifier := NewVerifier(store, passwords)
 
 	_, err := verifier.VerifyPassword(context.Background(), "missing", "secret")
 	require.ErrorIs(t, err, authdomain.ErrInvalidCredentials)
-	require.Equal(t, 1, passwords.verifyCalls)
 }
 
 func TestVerifierDummyPasswordHashUsesSupportedKDFParameters(t *testing.T) {
@@ -83,19 +78,20 @@ func TestVerifierPasswordKDFBusyDoesNotRevealUserExistence(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store := NewMockUserCredentialStore(gomock.NewController(t))
+			ctrl := gomock.NewController(t)
+			store := NewMockUserCredentialStore(ctrl)
 			store.EXPECT().GetByUsername(gomock.Any(), "alice").Return(tt.credential, tt.storeErr)
-			passwords := &stubPasswordService{
-				verify: func(context.Context, string, string) (bool, error) {
-					return false, password.ErrPasswordKDFBusy
-				},
+			passwordHash := dummyPasswordHash
+			if tt.credential != nil {
+				passwordHash = tt.credential.PasswordHash
 			}
+			passwords := NewMockPasswordService(ctrl)
+			passwords.EXPECT().VerifyContext(gomock.Any(), "secret", passwordHash).Return(false, password.ErrPasswordKDFBusy)
 			verifier := NewVerifier(store, passwords)
 
 			_, err := verifier.VerifyPassword(context.Background(), "alice", "secret")
 			require.ErrorIs(t, err, password.ErrPasswordKDFBusy)
 			require.False(t, errors.Is(err, authdomain.ErrInvalidCredentials))
-			require.Equal(t, 1, passwords.verifyCalls)
 		})
 	}
 }
@@ -138,18 +134,4 @@ func testPasswordService(t testing.TB) *password.Service {
 func hashTestPassword(t testing.TB, plain string) (string, error) {
 	t.Helper()
 	return testPasswordService(t).HashContext(context.Background(), plain)
-}
-
-type stubPasswordService struct {
-	verify      func(context.Context, string, string) (bool, error)
-	verifyCalls int
-}
-
-func (s *stubPasswordService) HashContext(context.Context, string) (string, error) {
-	return "", errors.New("unexpected password hash")
-}
-
-func (s *stubPasswordService) VerifyContext(ctx context.Context, plain string, encodedHash string) (bool, error) {
-	s.verifyCalls++
-	return s.verify(ctx, plain, encodedHash)
 }

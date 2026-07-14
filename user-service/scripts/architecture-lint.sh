@@ -148,8 +148,49 @@ check_atlas_postgres_version() {
   fi
 }
 
+check_mock_generate_build_tags() {
+  local file
+  while IFS= read -r file; do
+    if [[ "$(head -n 1 "${file}")" != "//go:build generate" ]]; then
+      report "mock_generate.go must use //go:build generate: ${file#"${repo_root}/"}"
+    fi
+  done < <(find "${repo_root}/common" "${service_dir}" -type f -name 'mock_generate.go' -print)
+}
+
+check_test_only_production_symbols() {
+  local pattern='(^|[^[:alnum:]_])([[:alpha:]_][[:alnum:]_]*ForTest|testHook[[:alnum:]_]*)([^[:alnum:]_]|$)'
+  local file output status
+  while IFS= read -r file; do
+    set +e
+    output="$(rg -n "${pattern}" "${file}" 2>&1)"
+    status=$?
+    set -e
+    case "${status}" in
+      0)
+        report "test-only symbol must not enter production Go files: ${file#"${repo_root}/"}"$'\n'"${output}"
+        ;;
+      1)
+        ;;
+      *)
+        report "test-only symbol scan failed for ${file#"${repo_root}/"}"$'\n'"${output}"
+        ;;
+    esac
+  done < <(
+    find "${repo_root}/common" "${service_dir}" \
+      -type f -name '*.go' \
+      ! -name '*_test.go' \
+      ! -name 'mock_generate.go' \
+      ! -path "${repo_root}/common/testing/*" \
+      ! -path "${service_dir}/ent/*" \
+      ! -path "${service_dir}/docs/*" \
+      -print
+  )
+}
+
 check_go_toolchain_version
 check_atlas_postgres_version
+check_mock_generate_build_tags
+check_test_only_production_symbols
 
 if [[ -d "${service_dir}/internal/features/permission/application/rbacbaseline" ]]; then
   report "old permission/application/rbacbaseline package still exists"

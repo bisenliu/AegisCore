@@ -35,7 +35,7 @@ const (
 	fxAppStopTimeout = 30 * time.Second
 )
 
-// lifecycleApp 是 runServe 和测试所需的最小 Fx 生命周期接口。
+// lifecycleApp 是 runServe 启停服务所需的最小生命周期接口。
 type lifecycleApp interface {
 	Start(context.Context) error
 	Stop(context.Context) error
@@ -49,7 +49,7 @@ type rbacAssignSuperAdminRunner func(context.Context, string, uuid.UUID) error
 
 type rbacCreateSuperAdminRunner func(context.Context, string, rbacCreateSuperAdminOptions) error
 
-// rootCommandDependencies 是 CLI 命令树的依赖替换入口，用于测试和离线命令注入 runner，不承载服务运行时 provider 组装。
+// rootCommandDependencies 包含 CLI 命令树执行各子命令所需的运行时依赖。
 type rootCommandDependencies struct {
 	appFactory             lifecycleAppFactory
 	seedRunner             rbacSeedRunner
@@ -66,26 +66,6 @@ func defaultRootCommandDependencies() rootCommandDependencies {
 		createSuperAdminRunner: newRBACCreateSuperAdminRunner(defaultRBACSeedDependencies),
 		fxGraphWriter:          runtimefxgraph.WriteDOT,
 	}
-}
-
-func (deps rootCommandDependencies) withDefaults() rootCommandDependencies {
-	defaults := defaultRootCommandDependencies()
-	if deps.appFactory == nil {
-		deps.appFactory = defaults.appFactory
-	}
-	if deps.seedRunner == nil {
-		deps.seedRunner = defaults.seedRunner
-	}
-	if deps.assignSuperAdminRunner == nil {
-		deps.assignSuperAdminRunner = defaults.assignSuperAdminRunner
-	}
-	if deps.createSuperAdminRunner == nil {
-		deps.createSuperAdminRunner = defaults.createSuperAdminRunner
-	}
-	if deps.fxGraphWriter == nil {
-		deps.fxGraphWriter = defaults.fxGraphWriter
-	}
-	return deps
 }
 
 func newBootstrapLifecycleApp(configPath string) lifecycleApp {
@@ -118,8 +98,6 @@ func main() {
 }
 
 func newRootCommand(deps rootCommandDependencies) *cobra.Command {
-	deps = deps.withDefaults()
-
 	var configPath string
 	var rbacConfigPath string
 	var reactivateSystem bool
@@ -222,9 +200,6 @@ func runServe(ctx context.Context, configPath string, appFactory lifecycleAppFac
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if appFactory == nil {
-		appFactory = newBootstrapLifecycleApp
-	}
 	app := appFactory(configPath)
 	startCtx, cancelStart := context.WithTimeout(ctx, fxAppStartTimeout)
 	defer cancelStart()

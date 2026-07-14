@@ -48,7 +48,7 @@ func Register(router gin.IRoutes, opts Options) {
 	router.GET(basePath+"/*profile", handler)
 }
 
-// Handler 返回已注册 pprof 路由的 http.Handler，便于测试或独立 debug server 复用。
+// Handler 返回已注册 pprof 路由的 http.Handler，供独立 debug server 复用。
 //
 // 接入示例：
 //

@@ -1,3 +1,5 @@
+//go:build generate
+
 package permissionhttp
 
 //go:generate go tool mockgen -destination=mock_test.go -package=permissionhttp github.com/aegiscore/user-service/internal/features/permission/application/command PermissionCommandService

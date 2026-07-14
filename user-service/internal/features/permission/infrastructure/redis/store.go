@@ -51,11 +51,6 @@ func NewStore(params StoreParams) (*Store, error) {
 	return newStore(params.Client, keys, defaultInstanceID(), params.Log), nil
 }
 
-// NewStoreWithInstance 使用指定实例标识构造 RBAC policy Redis store。
-func NewStoreWithInstance(client *rediscmd.Client, appName string, instanceID string, log *zap.Logger) *Store {
-	return newStore(client, MustKeyCatalog(appName), instanceID, log)
-}
-
 func newStore(client *rediscmd.Client, keys KeyCatalog, instanceID string, log *zap.Logger) *Store {
 	if instanceID == "" {
 		instanceID = defaultInstanceID()

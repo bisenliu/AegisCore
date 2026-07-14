@@ -31,6 +31,14 @@ make common-test
 make user-service-test
 ```
 
+### 测试替身与生成
+
+- 生成 mock 的入口放在消费测试所在 package 的 `mock_generate.go`，文件必须使用 `//go:build generate`，使 `go generate ./...` 可以发现指令而普通构建不会编译测试生成入口。
+- 测试 command tree、provider 或其他依赖集合时，使用位于 `_test.go` 的完整 dependency fixture。fixture 对未声明的依赖调用应立即失败，单个测试只覆盖自身目标依赖，避免生产代码通过 nil/default 分支补齐测试输入。
+- 外部协作者 port 的失败注入、调用次数和顺序优先使用消费包本地生成的 gomock；真实算法行为继续使用真实轻量 service。
+- 协议 server、数据库 driver、并发记录器、通道同步 executor、OTel exporter、只读 stats source 等具有协议、并发或状态语义的测试替身可以保留，不应机械替换为 gomock。
+- 不要新增跨 feature testing facade、共享断言 wrapper、全局可变 hook、`ForTest` 正式 API 或仅为测试服务的兼容 adapter。
+
 ## 3. 集成测试和 e2e
 
 集成和 e2e 测试使用真实依赖时优先复用 `common/testing/containers/`：
@@ -107,6 +115,8 @@ require.True(t, strings.Contains(err.Error(), "timeout"))
 - 检查 `go.work`、各 `go.mod` 的 `go` 版本和 GitHub Actions 的 Go toolchain 版本一致；`go.mod` 中存在 `toolchain` 行时也必须一致。
 - 检查 OpenAPI 和 Ent 生成物 drift。
 - 检查 `openspec/specs/`、`openspec/changes/` 和 `docs/opsx/` 下 Markdown 是否保留默认英文模板内容。
+- 检查 `common/` 与 `user-service/` 的 `mock_generate.go` 是否使用 `generate` build tag。
+- 检查人工维护的正式 Go 文件是否新增 `*ForTest` 或 `testHook*` 等明确测试语义 symbol；`_test.go`、`common/testing`、Ent 和 OpenAPI 生成物不在该扫描范围内。
 
 运行：
 
