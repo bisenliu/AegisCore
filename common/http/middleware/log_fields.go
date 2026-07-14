@@ -29,9 +29,6 @@ func requestLogFields(c *gin.Context, latency time.Duration) *[]zap.Field {
 		zap.String("client_ip", c.ClientIP()),
 		zap.String(auth.UserIDKey, requestUserID(c)),
 	)
-	if requestID, ok := RequestIDFromContext(c.Request.Context()); ok {
-		fields = append(fields, zap.String(RequestIDField, requestID))
-	}
 	*fieldsRef = fields
 	return fieldsRef
 }

@@ -205,6 +205,7 @@ func TestBindOrAbort(t *testing.T) {
 		Name string `json:"name" validate:"required"`
 	}
 	ctx, recorder := newJSONContextWithRecorder(`{}`)
+	ctx.Request = ctx.Request.WithContext(logger.WithRequestID(ctx.Request.Context(), "request-123"))
 	logs := captureValidationLogs(t, ctx)
 	var req request
 	require.False(t, BindOrAbort(validator, ctx, &req, JSONBinder))
@@ -224,6 +225,7 @@ func TestBindOrAbort(t *testing.T) {
 	require.Equal(t, "invalid request", entry.Message)
 	fields := entry.ContextMap()
 	require.Equal(t, "/", fields["path"])
+	require.Equal(t, "request-123", fields[logger.RequestIDField])
 	require.NotNil(t, fields["error"])
 	errorsField, ok := fields["errors"].([]validation.FieldError)
 	require.True(t, ok)

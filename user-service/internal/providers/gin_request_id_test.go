@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	commonmiddleware "github.com/aegiscore/common/http/middleware"
+	"github.com/aegiscore/common/runtime/logger"
 )
 
 func TestNewGinEnginePassesThroughRequestID(t *testing.T) {
@@ -22,7 +23,7 @@ func TestNewGinEnginePassesThroughRequestID(t *testing.T) {
 	var requestID string
 	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
 		var ok bool
-		requestID, ok = commonmiddleware.RequestIDFromContext(c.Request.Context())
+		requestID, ok = logger.RequestIDFromContext(c.Request.Context())
 		require.True(t, ok)
 		c.Status(http.StatusNoContent)
 	})
@@ -46,7 +47,7 @@ func TestNewGinEngineGeneratesRequestID(t *testing.T) {
 	var requestID string
 	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
 		var ok bool
-		requestID, ok = commonmiddleware.RequestIDFromContext(c.Request.Context())
+		requestID, ok = logger.RequestIDFromContext(c.Request.Context())
 		require.True(t, ok)
 		c.Status(http.StatusNoContent)
 	})
@@ -71,7 +72,7 @@ func TestNewGinEngineKeepsTraceparentAndRequestID(t *testing.T) {
 	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
 		spanContext = trace.SpanContextFromContext(c.Request.Context())
 		var ok bool
-		requestID, ok = commonmiddleware.RequestIDFromContext(c.Request.Context())
+		requestID, ok = logger.RequestIDFromContext(c.Request.Context())
 		require.True(t, ok)
 		c.Status(http.StatusNoContent)
 	})

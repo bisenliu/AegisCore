@@ -119,6 +119,49 @@ func TestWithContextAddsOTelTraceAndSpanFields(t *testing.T) {
 	require.Equal(t, "0102030405060708", fields[SpanIDField])
 }
 
+func TestWithRequestIDStoresOnlyNonEmptyValue(t *testing.T) {
+	ctx := WithRequestID(context.Background(), "request-123")
+	requestID, ok := RequestIDFromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, "request-123", requestID)
+
+	emptyCtx := WithRequestID(context.Background(), "")
+	_, ok = RequestIDFromContext(emptyCtx)
+	require.False(t, ok)
+}
+
+func TestWithContextAddsRequestIDWithoutValidSpan(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core)
+	ctx := WithRequestID(context.Background(), "request-123")
+
+	WithContext(ctx, log).Info("request id field")
+
+	entries := logs.FilterMessage("request id field").All()
+	require.Len(t, entries, 1)
+	fields := entries[0].ContextMap()
+	require.Equal(t, "request-123", fields[RequestIDField])
+	require.NotContains(t, fields, TraceIDField)
+	require.NotContains(t, fields, SpanIDField)
+}
+
+func TestFromContextAddsTraceSpanAndRequestID(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core)
+	ctx := contextWithSpanContext(context.Background(), t, "00112233445566778899aabbccddeeff", "0102030405060708")
+	ctx = WithRequestID(ctx, "request-123")
+	ctx = ToContext(ctx, log)
+
+	Info(ctx, "all correlation fields")
+
+	entries := logs.FilterMessage("all correlation fields").All()
+	require.Len(t, entries, 1)
+	fields := entries[0].ContextMap()
+	require.Equal(t, "00112233445566778899aabbccddeeff", fields[TraceIDField])
+	require.Equal(t, "0102030405060708", fields[SpanIDField])
+	require.Equal(t, "request-123", fields[RequestIDField])
+}
+
 func TestWithContextOmitsTraceAndSpanFieldsWithoutValidSpan(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core)
@@ -130,6 +173,7 @@ func TestWithContextOmitsTraceAndSpanFieldsWithoutValidSpan(t *testing.T) {
 	fields := entries[0].ContextMap()
 	require.NotContains(t, fields, TraceIDField)
 	require.NotContains(t, fields, SpanIDField)
+	require.NotContains(t, fields, RequestIDField)
 }
 
 func TestContextLoggerReportsCallerFromCallSite(t *testing.T) {

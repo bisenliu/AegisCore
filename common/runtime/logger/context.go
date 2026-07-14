@@ -25,9 +25,12 @@ const (
 	TraceIDField = "trace_id"
 	// SpanIDField 是 OTel span ID 使用的 zap 字段名。
 	SpanIDField = "span_id"
+	// RequestIDField 是请求关联 ID 使用的 zap 字段名。
+	RequestIDField = "request_id"
 )
 
 type loggerContextKey struct{}
+type requestIDContextKey struct{}
 
 var defaultLogger = struct {
 	mu  sync.RWMutex
@@ -54,17 +57,21 @@ func fieldsFromContext(ctx context.Context) []zap.Field {
 	if ctx == nil {
 		return nil
 	}
+	fields := make([]zap.Field, 0, 3)
 	spanContext := trace.SpanContextFromContext(ctx)
-	if !spanContext.IsValid() {
-		return nil
+	if spanContext.IsValid() {
+		fields = append(fields,
+			zap.String(TraceIDField, spanContext.TraceID().String()),
+			zap.String(SpanIDField, spanContext.SpanID().String()),
+		)
 	}
-	return []zap.Field{
-		zap.String(TraceIDField, spanContext.TraceID().String()),
-		zap.String(SpanIDField, spanContext.SpanID().String()),
+	if requestID, ok := RequestIDFromContext(ctx); ok {
+		fields = append(fields, zap.String(RequestIDField, requestID))
 	}
+	return fields
 }
 
-// WithContext 基于 base 派生 logger，并附加 ctx 中的 OTel trace/span 字段。
+// WithContext 基于 base 派生 logger，并附加 ctx 中的 trace、span 和 request ID 字段。
 func WithContext(ctx context.Context, base *zap.Logger) *zap.Logger {
 	if base == nil {
 		base = getDefault()
@@ -73,6 +80,26 @@ func WithContext(ctx context.Context, base *zap.Logger) *zap.Logger {
 		return base.With(fields...)
 	}
 	return base
+}
+
+// WithRequestID 返回携带 request ID 的日志关联上下文。
+func WithRequestID(ctx context.Context, requestID string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if requestID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, requestIDContextKey{}, requestID)
+}
+
+// RequestIDFromContext 返回日志关联上下文中的 request ID。
+func RequestIDFromContext(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	requestID, ok := ctx.Value(requestIDContextKey{}).(string)
+	return requestID, ok && requestID != ""
 }
 
 // NamedComponent 从 base 的 core 派生稳定命名 logger，并附加组件字段。
@@ -97,7 +124,7 @@ func ToContext(ctx context.Context, log *zap.Logger) context.Context {
 	return context.WithValue(ctx, loggerContextKey{}, log)
 }
 
-// FromContext 返回 context logger 或默认 logger，并在可用时附加 OTel trace/span 字段。
+// FromContext 返回 context logger 或默认 logger，并附加可用的关联字段。
 func FromContext(ctx context.Context) *zap.Logger {
 	if ctx != nil {
 		if log, ok := ctx.Value(loggerContextKey{}).(*zap.Logger); ok && log != nil {

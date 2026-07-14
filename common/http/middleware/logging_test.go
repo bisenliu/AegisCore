@@ -78,7 +78,8 @@ func TestRequestLoggerIncludesTraceAndSpanIDAndRequestFields(t *testing.T) {
 	require.Equal(t, "http-server", fields[logger.ComponentField])
 	require.Equal(t, "00112233445566778899aabbccddeeff", fields[logger.TraceIDField])
 	require.Equal(t, "0102030405060708", fields[logger.SpanIDField])
-	require.Equal(t, "client-request-123", fields[RequestIDField])
+	require.Equal(t, "client-request-123", fields[logger.RequestIDField])
+	require.Equal(t, 1, countLogFields(entries[0], logger.RequestIDField))
 	require.Equal(t, http.MethodGet, fields["method"])
 	require.Equal(t, "/ok", fields["path"])
 	require.Equal(t, int64(http.StatusAccepted), fields["status"])
@@ -92,7 +93,7 @@ func TestRequestIDPassesThroughHeaderAndContext(t *testing.T) {
 	engine := gin.New()
 	engine.Use(RequestID())
 	engine.GET("/request-id", func(c *gin.Context) {
-		requestID, ok := RequestIDFromContext(c.Request.Context())
+		requestID, ok := logger.RequestIDFromContext(c.Request.Context())
 		require.True(t, ok)
 		c.String(http.StatusOK, requestID)
 	})
@@ -111,7 +112,7 @@ func TestRequestIDGeneratesMissingHeader(t *testing.T) {
 	engine := gin.New()
 	engine.Use(RequestID())
 	engine.GET("/request-id", func(c *gin.Context) {
-		requestID, ok := RequestIDFromContext(c.Request.Context())
+		requestID, ok := logger.RequestIDFromContext(c.Request.Context())
 		require.True(t, ok)
 		c.String(http.StatusOK, requestID)
 	})
@@ -141,7 +142,7 @@ func TestRequestIDRejectsInvalidHeader(t *testing.T) {
 			engine := gin.New()
 			engine.Use(RequestID())
 			engine.GET("/request-id", func(c *gin.Context) {
-				requestID, ok := RequestIDFromContext(c.Request.Context())
+				requestID, ok := logger.RequestIDFromContext(c.Request.Context())
 				require.True(t, ok)
 				c.String(http.StatusOK, requestID)
 			})
@@ -424,4 +425,14 @@ func assertSpanEventStringAttribute(t *testing.T, event sdktrace.Event, key stri
 	}
 	require.NotNil(t, got, "span event attribute %s missing in %#v", key, event.Attributes)
 	require.Equal(t, want, *got)
+}
+
+func countLogFields(entry observer.LoggedEntry, key string) int {
+	count := 0
+	for _, field := range entry.Context {
+		if field.Key == key {
+			count++
+		}
+	}
+	return count
 }
