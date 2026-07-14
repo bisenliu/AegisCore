@@ -35,14 +35,14 @@ type tokenVersionCacheParams struct {
 type tokenVersionCacheResult struct {
 	fx.Out
 
-	Cache *localcache.Cache[string, int64] `name:"auth_token_version_cache"`
-	Stats localcache.StatsSource           `name:"auth_token_version_cache"`
+	Cache authvalidators.LocalTokenVersionCache `name:"auth_token_version_cache"`
+	Stats localcache.StatsSource                `name:"auth_token_version_cache"`
 }
 
 type tokenVersionValidatorParams struct {
 	fx.In
 
-	Cache   *localcache.Cache[string, int64] `name:"auth_token_version_cache"`
+	Cache   authvalidators.LocalTokenVersionCache `name:"auth_token_version_cache"`
 	Metrics authapplication.Metrics
 }
 
@@ -186,18 +186,17 @@ func newLogoutAllSessionsUseCase(params logoutAllSessionsUseCaseParams) authcomm
 }
 
 func newTokenVersionLocalCache(params tokenVersionCacheParams) (tokenVersionCacheResult, error) {
-	cfg, ok := params.Config.LocalCache.Instance(authTokenVersionCacheName)
-	if !ok {
-		return tokenVersionCacheResult{}, fmt.Errorf("local_cache.%s is required", authTokenVersionCacheName)
+	cfg := params.Config.Auth.TokenVersionCache
+	if !cfg.IsEnabled() {
+		cache := authvalidators.NewDirectTokenVersionCache(params.Users, params.Cache)
+		return tokenVersionCacheResult{Cache: cache, Stats: cache}, nil
 	}
 	cache, err := localcache.New[string, int64](localcache.Config[string]{
 		Name:        authTokenVersionCacheName,
-		Capacity:    cfg.Capacity,
-		TTL:         cfg.TTL,
-		LoadTimeout: cfg.LoadTimeout,
+		Capacity:    cfg.SizeValue(),
+		TTL:         cfg.TTLValue(),
+		LoadTimeout: cfg.LoadTimeoutValue(),
 		KeyString:   func(key string) string { return key },
-		NumCounters: cfg.NumCounters,
-		BufferItems: cfg.BufferItems,
 	}, func(ctx context.Context, userID string) (int64, error) {
 		return authvalidators.Current(ctx, params.Users, params.Cache, userID)
 	}, nil)

@@ -3,7 +3,6 @@ package tracing
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -20,20 +19,12 @@ import (
 )
 
 const (
-	exporterNone = "none"
-	exporterOTLP = "otlp"
-
 	defaultOTLPTimeout = 5 * time.Second
 
 	attributeServiceName           = "service.name"
 	attributeDeploymentEnvironment = "deployment.environment"
 	attributeServiceVersion        = "service.version"
 	attributeServiceInstanceID     = "service.instance.id"
-)
-
-var (
-	// ErrUnsupportedExporter 表示 tracing exporter 不在当前支持集合中。
-	ErrUnsupportedExporter = errors.New("unsupported tracing exporter")
 )
 
 // Options 描述构造 OpenTelemetry tracer provider 所需的跨服务运行时输入。
@@ -54,6 +45,12 @@ type Provider struct {
 
 // NewProvider 基于配置创建本进程 OpenTelemetry tracer provider。
 func NewProvider(ctx context.Context, opts Options) (*Provider, error) {
+	return newProvider(ctx, opts, newOTLPExporter)
+}
+
+type exporterFactory func(context.Context, config.TracingConfig) (sdktrace.SpanExporter, error)
+
+func newProvider(ctx context.Context, opts Options, createExporter exporterFactory) (*Provider, error) {
 	if ctx == nil {
 		return nil, errors.New("tracing provider context is required")
 	}
@@ -69,21 +66,12 @@ func NewProvider(ctx context.Context, opts Options) (*Provider, error) {
 	if sampleRatio < 0 || sampleRatio > 1 {
 		return nil, errors.New("tracing sample ratio must be between 0 and 1")
 	}
-	exporter := strings.ToLower(strings.TrimSpace(opts.Config.Exporter))
-	if exporter == "" {
-		return nil, errors.New("tracing exporter is required")
-	}
-	if exporter != exporterNone && exporter != exporterOTLP {
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedExporter, exporter)
-	}
-
 	res := newResource(serviceName, environment, strings.TrimSpace(opts.Version), strings.TrimSpace(opts.InstanceID))
 	sampler := sdktrace.ParentBased(sdktrace.TraceIDRatioBased(sampleRatio))
 	if !opts.Config.Enabled {
 		sampler = sdktrace.NeverSample()
-		exporter = exporterNone
 	}
-	tp, err := newTracerProvider(ctx, opts.Config, exporter, res, sampler)
+	tp, err := newTracerProvider(ctx, opts.Config, res, sampler, createExporter)
 	if err != nil {
 		return nil, err
 	}
@@ -100,30 +88,29 @@ func NewProvider(ctx context.Context, opts Options) (*Provider, error) {
 func newTracerProvider(
 	ctx context.Context,
 	cfg config.TracingConfig,
-	exporter string,
 	res *resource.Resource,
 	sampler sdktrace.Sampler,
+	createExporter exporterFactory,
 ) (*sdktrace.TracerProvider, error) {
 	options := []sdktrace.TracerProviderOption{
 		sdktrace.WithResource(res),
 		sdktrace.WithSampler(sampler),
 	}
-	switch exporter {
-	case exporterNone:
+	if !cfg.Enabled {
 		return sdktrace.NewTracerProvider(options...), nil
-	case exporterOTLP:
-		traceExporter, err := newOTLPExporter(ctx, cfg)
-		if err != nil {
-			return nil, err
-		}
-		options = append(options, sdktrace.WithBatcher(traceExporter))
-		return sdktrace.NewTracerProvider(options...), nil
-	default:
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedExporter, exporter)
 	}
+	if createExporter == nil {
+		return nil, errors.New("tracing exporter factory is required")
+	}
+	traceExporter, err := createExporter(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	options = append(options, sdktrace.WithBatcher(traceExporter))
+	return sdktrace.NewTracerProvider(options...), nil
 }
 
-func newOTLPExporter(ctx context.Context, cfg config.TracingConfig) (*otlptrace.Exporter, error) {
+func newOTLPExporter(ctx context.Context, cfg config.TracingConfig) (sdktrace.SpanExporter, error) {
 	endpoint := strings.TrimSpace(cfg.OTLPEndpoint)
 	if endpoint == "" {
 		return nil, errors.New("otlp tracing endpoint is required")

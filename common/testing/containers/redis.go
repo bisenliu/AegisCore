@@ -8,7 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/resources"
 )
 
 const (
@@ -56,23 +56,21 @@ func StartRedis(ctx context.Context, t testing.TB, opts RedisOptions) *RedisCont
 }
 
 func (r RedisContainer) Options() *redis.Options {
+	cfg := r.Config()
 	return &redis.Options{
-		Addr:         r.Addr,
-		DB:           r.DB,
-		DialTimeout:  5 * time.Second,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 5 * time.Second,
+		Addr:         cfg.Addr,
+		DB:           cfg.DB,
+		DialTimeout:  cfg.Timeout,
+		ReadTimeout:  cfg.Timeout,
+		WriteTimeout: cfg.Timeout,
 	}
 }
 
-func (r RedisContainer) Config() config.RedisConfig {
-	return config.RedisConfig{
-		Addr:         r.Addr,
-		DB:           r.DB,
-		DialTimeout:  5 * time.Second,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 5 * time.Second,
-		PingTimeout:  5 * time.Second,
+func (r RedisContainer) Config() resources.RedisConfig {
+	return resources.RedisConfig{
+		Addr:    r.Addr,
+		DB:      r.DB,
+		Timeout: resources.DefaultRedisTimeout,
 	}
 }
 

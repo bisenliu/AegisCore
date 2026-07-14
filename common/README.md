@@ -14,17 +14,17 @@
 | `http/middleware` | 无业务语义 Gin middleware 骨架 |
 | `http/openapi` | Swagger/OpenAPI 转换、规范化、序列化和 Go embed 渲染 helper |
 | `http/pprof` | Go runtime pprof 路由注册 helper |
-| `runtime/config` | YAML 与 `AEGISCORE_` 环境覆盖配置加载 |
-| `runtime/logger` | Zap logger、context trace/span 字段 helper 和 Fx provider |
+| `runtime/config` | 仅含 app/server/log/observability 的核心配置、严格 YAML 与 `AEGISCORE_` 环境覆盖加载 |
+| `runtime/logger` | stdout/stderr Zap logger、context trace/span 字段 helper 和 Fx provider |
 | `runtime/datastore` | Named Redis/PostgreSQL provider |
 | `runtime/id` | 跨服务默认 UUID 生成策略 |
 | `runtime/localcache` | 有容量上限的进程内 TTL loading cache primitive |
 | `runtime/rediskey` | 通用 Redis key 构造规则 |
-| `runtime/resources` | 稳定 runtime 资源命名 |
+| `runtime/resources` | 无业务语义的具名 Redis/PostgreSQL 配置、默认值、校验和稳定资源名 |
 | `runtime/workerpool` | 受控后台任务池 primitive |
 | `runtime/scheduler` | 定时任务、锁、续租和 metrics adapter primitive |
 | `runtime/observability` | Prometheus metrics 和 OpenTelemetry tracing provider |
-| `runtime/timezone` | 时区加载和时间位置 helper |
+| `runtime/timezone` | 基于平台 `TZ` 的时区加载和时间位置 helper |
 | `security/auth` | JWT、Bearer、认证上下文和 token version helper |
 | `security/casbin` | 通用请求三元组和 Casbin authorizer wrapper |
 | `security/password` | 密码哈希和校验 helper |

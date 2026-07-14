@@ -11,12 +11,31 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	commonresources "github.com/aegiscore/common/runtime/resources"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	roleseed "github.com/aegiscore/user-service/internal/features/role/application/seed"
 	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
+
+func TestRBACPostgresConfigUsesServiceResource(t *testing.T) {
+	want := commonresources.PostgresConfig{Host: "db.internal", Port: 5432, Username: "aegiscore", DBName: "users"}
+	cfg := &serviceconfig.Config{Resources: serviceconfig.ResourcesConfig{Postgres: commonresources.PostgresConfigs{
+		"user_db":  want,
+		"audit_db": {Host: "audit.internal", Port: 5432, Username: "audit", DBName: "audit"},
+	}}}
+
+	got, err := rbacPostgresConfig(cfg)
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}
+
+func TestRBACPostgresConfigRejectsMissingUserDatabase(t *testing.T) {
+	_, err := rbacPostgresConfig(&serviceconfig.Config{})
+	require.ErrorContains(t, err, "resources.postgres.user_db config not found")
+}
 
 func TestRunRBACSeedCommand(t *testing.T) {
 	t.Run("success passes options and cleans up", func(t *testing.T) {

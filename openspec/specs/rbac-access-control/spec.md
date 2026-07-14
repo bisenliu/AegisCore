@@ -190,7 +190,7 @@
 
 ### Requirement: 授权热路径用户角色本地缓存
 
-系统 MUST 在 RBAC 授权热路径中使用有容量上限的本地 loading cache 缓存用户当前启用角色 ID 集合，并通过主动失效和全量清空保证在线 RBAC 变更后不依赖 TTL 长期收敛。user-service permission/RBAC provider 边界 MUST 拥有 `rbac_user_roles` 缓存实例名，并 MUST 在缺少该配置实例时拒绝服务装配。
+系统 MUST 在 RBAC 授权热路径中使用有容量上限的本地 loading cache 缓存用户当前启用角色 ID 集合，并通过主动失效和全量清空保证在线 RBAC 变更后不依赖 TTL 长期收敛。user-service MUST 从服务自有 `resources.redis` 和 `resources.postgres` 读取 RBAC 依赖，并使用 `rbac.user_role_cache` 配置本地缓存，MUST NOT 使用共享核心 LocalCache、Redis 或 PostgreSQL 配置字段。
 
 #### Scenario: 用户角色缓存命中
 
@@ -208,14 +208,27 @@
 #### Scenario: 用户角色缓存容量边界
 
 - **WHEN** 单实例处理大量不同用户的 RBAC 授权请求
-- **THEN** `rbac_user_roles` 本地缓存 MUST 使用配置容量限制进程内条目预算
+- **THEN** `rbac.user_role_cache.size` MUST 限制进程内条目预算
 - **AND** 容量淘汰、准入拒绝或 TTL 过期后 MUST 能通过 PostgreSQL 回源恢复授权判断
 
-#### Scenario: 用户角色必需缓存配置
+#### Scenario: RBAC 资源和缓存缺省值
 
 - **WHEN** user-service 装配 RBAC 用户角色 resolver
-- **THEN** permission/RBAC provider MUST 使用本服务常量读取 `local_cache.rbac_user_roles`
-- **AND** 缺少该配置实例时 MUST 返回明确错误并拒绝继续装配用户角色本地缓存
+- **THEN** Redis 和 PostgreSQL MUST 从 `resources.redis` 和 `resources.postgres` 的必需具名资源读取
+- **AND** 未显式配置 `rbac.user_role_cache` 时 MUST 使用 `enabled=true`、`size=100000`、`ttl=5s` 和 `load_timeout=500ms`
+- **AND** `rbac.user_role_cache` MUST NOT 暴露 `num_counters` 或 `buffer_items`
+
+#### Scenario: 校验启用的 user role cache
+
+- **WHEN** `rbac.user_role_cache.enabled` 为 true
+- **THEN** `size`、`ttl` 和 `load_timeout` MUST 为正值
+
+#### Scenario: 关闭 RBAC cache
+
+- **WHEN** `rbac.user_role_cache.enabled` 为 false
+- **THEN** 授权结果和策略一致性 MUST 保持正确
+- **AND** 关闭缓存 MAY 只造成性能下降
+- **AND** `size`、`ttl` 和 `load_timeout` MAY 为零值
 
 #### Scenario: 在线用户角色变更失效缓存
 

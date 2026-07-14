@@ -30,10 +30,14 @@ user-service 运行时镜像基于 Distroless static nonroot，Kubernetes Deploy
 `secret.example.yaml` 只说明必需键名，不应直接用于生产。生产环境应由部署系统、GitOps Secret、密钥管理系统或 CI/CD 注入以下键：
 
 - `AEGISCORE_AUTH_JWT_SECRET`
-- `AEGISCORE_POSTGRES_USER_DB_USERNAME`
-- `AEGISCORE_POSTGRES_USER_DB_PASSWORD`
-- `AEGISCORE_REDIS_CACHE_REDIS_USERNAME`
-- `AEGISCORE_REDIS_CACHE_REDIS_PASSWORD`
+- `AEGISCORE_RESOURCES_POSTGRES_USER_DB_USERNAME`
+- `AEGISCORE_RESOURCES_POSTGRES_USER_DB_PASSWORD`
+- `AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME`
+- `AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD`
+
+ConfigMap 使用 `AEGISCORE_SERVER_HTTP_*`、`AEGISCORE_RESOURCES_*` 最终路径，进程时区使用标准 `TZ`。日志由 stdout/stderr 采集，tracing 启用后固定通过 OTLP 导出。trusted proxy 策略属于 Ingress、gateway 或 service mesh 入口边界，不通过应用配置注入。
+
+pprof 默认不渲染、不暴露。临时诊断应在受控副本中设置 `PPROF_ENABLED=true`、`PPROF_ADDR=127.0.0.1:6060`，再使用 `kubectl port-forward`。
 
 ## 验证
 

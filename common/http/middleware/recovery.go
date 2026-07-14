@@ -13,11 +13,12 @@ import (
 
 // Recovery 将 panic 转换为内部错误响应信封，并记录 panic 与堆栈明细。
 func Recovery(log *zap.Logger) gin.HandlerFunc {
+	recoveryLog := logger.NamedComponent(log, "http", "recovery")
 	return func(c *gin.Context) {
 		defer func() {
 			if r := recover(); r != nil {
 				recordPanicOnSpan(c.Request.Context())
-				logger.WithContext(c.Request.Context(), log).Error("panic recovered",
+				logger.WithContext(c.Request.Context(), recoveryLog).Error("panic recovered",
 					zap.Any("panic", r),
 					zap.String("stack", string(debug.Stack())),
 				)

@@ -198,28 +198,42 @@
 
 ### Requirement: Runtime primitive 基础
 
-系统 MUST 在 `common/runtime/` 中维护配置加载、数据存储、logger、metrics、tracing、scheduler、workerpool、localcache、Redis key 和 timezone 等 runtime primitive。`common/runtime/config` MUST 将 `local_cache` 表达为通用具名缓存实例集合，并 MUST NOT 固定 user-service 的 `auth_token_version`、`rbac_user_roles` 或其他业务缓存名。`common/runtime/config` MUST 使用 `github.com/go-viper/mapstructure/v2` 作为配置反序列化依赖，并 MUST NOT 保留旧版 `github.com/mitchellh/mapstructure` 导入、兼容层或旧行为 fallback。
+系统 MUST 在 `common/runtime/` 中维护跨服务稳定的配置加载、资源类型、datastore、logger、observability、scheduler、workerpool、localcache、Redis key 和 timezone primitive。`common/runtime/config.Config` MUST 只包含 `app`、`server`、`log` 和 `observability`，MUST NOT 包含服务资源、业务缓存、pprof、trusted proxies 或文件日志配置。`common/runtime/config` MUST 使用 `github.com/go-viper/mapstructure/v2` 作为配置反序列化依赖，并 MUST NOT 保留旧版 `github.com/mitchellh/mapstructure` 导入、兼容层或旧行为 fallback。
 
-#### Scenario: 服务启动加载配置
+#### Scenario: 加载核心和服务扩展配置
 
-- **WHEN** 服务通过配置文件启动
-- **THEN** 系统 MUST 使用共享配置 loader 与 validation 解析 runtime、HTTP、auth、Postgres、Redis、metrics、tracing、logger 和通用 `local_cache` 配置
+- **WHEN** 服务通过 `LoadInto` 加载配置
+- **THEN** 核心字段 MUST 从 `app`、`server`、`log` 和 `observability` 解析
+- **AND** 服务 MUST 能通过自有根 Config 声明 resources 和业务配置
 
-#### Scenario: production-like JWT secret 长度校验
+#### Scenario: 拒绝未知配置字段
 
-- **WHEN** runtime environment 为 production-like 环境且配置包含 `auth.jwt.secret`
-- **THEN** `common/runtime/config` validation MUST 要求该 secret 至少为 32 bytes
-- **AND** development 环境 MAY 不执行该长度约束
-- **AND** 校验错误 MUST 明确定位到 `auth.jwt.secret`
+- **WHEN** YAML 包含目标 Config 未声明的字段
+- **THEN** 加载 MUST 在服务启动前失败
+- **AND** 错误 MUST 包含未知字段的完整配置路径
+- **AND** 系统 MUST NOT 提供旧字段别名、自动迁移、白名单绕过或 fallback
+
+#### Scenario: 协议 server 最小配置
+
+- **WHEN** 服务声明 `server.http` 或 `server.grpc`
+- **THEN** HTTP MUST 支持 enabled、host、port、read、write、idle 和 shutdown timeout
+- **AND** gRPC MUST 支持 enabled、host、port 和 shutdown timeout
+- **AND** 至少一个 server MUST 启用
+
+#### Scenario: 初始化进程时区
+
+- **WHEN** runtime 初始化进程时区
+- **THEN** timezone primitive MUST 优先使用平台 `TZ` 环境变量，并在缺省时使用稳定默认值
+- **AND** timezone primitive MUST NOT 依赖核心 Config 或重新引入 `system.timezone`
 
 #### Scenario: runtime 依赖初始化
 
-- **WHEN** 服务需要连接 Postgres、Redis、logger、metrics 或 tracing provider
+- **WHEN** 服务需要连接 PostgreSQL、Redis、logger、metrics 或 tracing provider
 - **THEN** 服务 MUST 优先复用 `common/runtime/` 中的 provider 和 Fx module
 
-#### Scenario: Postgres 启动探测失败关闭连接池
+#### Scenario: PostgreSQL 启动探测失败关闭连接池
 
-- **WHEN** 共享 Postgres Fx provider 已创建连接池但启动 PING 失败
+- **WHEN** 共享 PostgreSQL Fx provider 已创建连接池但启动 PING 失败
 - **THEN** provider MUST 关闭已创建的连接池
 - **AND** 返回错误 MUST 保留 PING 失败和关闭失败信息
 - **AND** 启动失败后连接池 MUST 不再泄露为可继续使用的资源
@@ -251,24 +265,6 @@
 - **AND** `Stop(ctx)` 超时时 MUST 返回包装 `context.DeadlineExceeded` 的错误
 - **AND** 重复 `Stop` MUST 共享同一 drain 状态，不得重复释放底层池或丢失已接收任务
 
-#### Scenario: 本地缓存配置解析
-
-- **WHEN** 配置文件包含 `local_cache.<name>` entry
-- **THEN** `common/runtime/config` MUST 将其解析为以 `<name>` 为 key 的 `LocalCacheInstanceConfig`
-- **AND** 配置 key MUST 保持原样供服务按名称读取
-
-#### Scenario: 本地缓存配置通用校验
-
-- **WHEN** `local_cache` 中存在一个或多个 entry
-- **THEN** validation MUST 遍历所有 entry 并校验 `capacity > 0`、`ttl > 0`、`load_timeout > 0`、`num_counters >= 0` 和 `buffer_items >= 0`
-- **AND** 校验错误 MUST 包含对应 `local_cache.<name>.<field>` 路径
-
-#### Scenario: 拒绝 common 固化业务缓存名
-
-- **WHEN** user-service 或其他服务需要声明必需本地缓存实例
-- **THEN** 必需缓存名、缺失实例检查和业务含义 MUST 位于对应服务的 feature/provider 边界
-- **AND** `common/runtime/config` MUST NOT 增加该业务缓存的固定字段或专用校验
-
 #### Scenario: auth Redis key schema
 
 - **WHEN** 认证功能需要 refresh session、token version 或撤销相关 Redis key
@@ -286,9 +282,9 @@
 
 #### Scenario: mapstructure v2 配置反序列化
 
-- **WHEN** `common/runtime/config` 将 Viper 读取到的配置反序列化为 `Config`
+- **WHEN** `common/runtime/config` 将 Viper 读取到的配置反序列化为服务 Config
 - **THEN** 系统 MUST 使用 `github.com/go-viper/mapstructure/v2` 提供的 decode hook 和 decode 配置能力
-- **AND** duration、slice、具名 Postgres、具名 Redis 和具名 `local_cache` 配置 MUST 按 v2 标准行为解析
+- **AND** duration、slice、核心配置和服务自有具名 resources MUST 按 v2 标准行为解析
 - **AND** 系统 MUST NOT 导入 `github.com/mitchellh/mapstructure` 或保留面向旧版行为的兼容代码
 
 ### Requirement: scheduler 包内结构保持稳定契约
@@ -1023,27 +1019,71 @@ cmd 与 Ent schema 测试 MUST 可以直接使用标准 `testify/require` 与 `t
 - **AND** 测试 MUST 使用局部 logger、context logger 或显式参数表达日志依赖
 
 ### Requirement: 共享只读集合不得暴露共享可写状态
-`common` 中用于配置校验、HTTP middleware 默认策略和 validation tag 解析的只读集合或默认 struct MUST 使用不暴露共享可写底层状态的表达方式。实现 MUST 保持配置允许值、弱密钥 denylist、validation 字段名解析顺序、CORS 默认策略、公开错误消息和 HTTP 响应行为不变。
+
+`common` 中用于配置校验、HTTP middleware 默认策略和 validation tag 解析的只读集合或默认 struct MUST 使用不暴露共享可写底层状态的表达方式。实现 MUST 保持配置允许值、validation 字段名解析顺序、CORS 默认策略、公开错误消息和 HTTP 响应行为不变。
 
 #### Scenario: 配置校验集合不可被包内误写
-- **WHEN** `common/runtime/config` 校验 log level、log format、Postgres driver、Postgres SSL mode、tracing exporter、production-like environment 或 insecure JWT secret
+
+- **WHEN** `common/runtime/config` 或 `common/runtime/resources` 校验 log level、log format、server enabled、PostgreSQL SSL mode、tracing sample ratio 或 production-like insecure transport
 - **THEN** 校验逻辑 MUST 使用 `switch`、私有查询函数、局部构造或等价方式表达固定集合
 - **AND** 系统 MUST NOT 暴露可被同包未来代码直接写入的 package-level map 作为这些固定集合的权威来源
 - **AND** 合法值、非法值和错误消息 MUST 保持当前语义不变
 
 #### Scenario: 默认 CORS 配置隔离共享 slice
+
 - **WHEN** 调用方使用 `common/http/middleware.CORS()` 或 `CORSWithOptions` 创建 CORS middleware
 - **THEN** middleware MUST 在构造时持有与 package-level 默认值和调用方传入 slice 隔离的配置副本
 - **AND** 调用方后续修改其传入的 origins、methods、headers 或 exposed headers slice MUST NOT 改变已创建 middleware 的行为
 - **AND** `CORS()` 的默认响应 MUST 继续使用 `Access-Control-Allow-Origin=*`、`Access-Control-Allow-Methods=GET,POST,PUT,PATCH,DELETE,OPTIONS` 和 `Access-Control-Allow-Headers=Authorization,Content-Type`
 
 #### Scenario: validation request tag 顺序稳定且不可共享写入
+
 - **WHEN** `common/validation` 从 struct field tag 推导请求字段名
 - **THEN** tag 优先级和支持集合 MUST 保持当前顺序与语义
 - **AND** 实现 MUST NOT 依赖可被同包未来代码修改的 package-level slice 作为共享底层状态
 
 #### Scenario: 保留非只读集合变量需有理由
+
 - **WHEN** 实现阶段发现 package-level var 不迁移
 - **THEN** 该变量 MUST 不属于本次只读 map、slice 或默认 struct 风险范围，或具备明确保留理由
 - **AND** 合理保留理由 MAY 包括 sentinel error、regexp 编译结果、Fx Module、`sync.Pool`、atomic counter 或需要运行时状态的对象
+
+### Requirement: 共享资源配置边界
+
+系统 MUST 在 `common/runtime/resources` 提供 Redis/PostgreSQL 具名资源类型、默认值和通用校验，但 MUST NOT 将这些资源挂入核心 `config.Config`。
+
+#### Scenario: 声明多具名资源
+
+- **WHEN** 服务依赖多个 Redis 或 PostgreSQL 实例
+- **THEN** 服务 MUST 能使用 `RedisConfigs` 和 `PostgresConfigs` 按名称声明资源
+- **AND** 必需资源名称和业务用途 MUST 由消费服务校验
+
+#### Scenario: 应用资源默认值
+
+- **WHEN** Redis timeout 或 PostgreSQL sslmode、pool 参数未显式配置
+- **THEN** resources helper MUST 应用稳定默认值
+- **AND** PostgreSQL ping timeout MUST 作为内部 helper 默认值存在而不进入 YAML 契约
+
+#### Scenario: 校验资源参数
+
+- **WHEN** 资源名称、地址、端口、timeout、sslmode、PostgreSQL username 或 pool 参数非法
+- **THEN** 通用校验 MUST 返回包含资源名和字段路径的错误
+- **AND** PostgreSQL max idle connections MUST NOT 大于 max open connections
+- **AND** PostgreSQL password 与 Redis username/password MUST 允许为空
+
+### Requirement: Datastore 使用共享资源类型
+
+系统 MUST 使用 `common/runtime/resources` 的 Redis/PostgreSQL 配置初始化共享 datastore，并 MUST NOT 依赖已删除的核心 Config 资源字段或 helper。
+
+#### Scenario: 初始化 Redis client
+
+- **WHEN** datastore 创建 Redis client
+- **THEN** 统一 timeout MUST 映射到 dial、read、write 和启动 ping timeout
+- **AND** username MUST 可用于 Redis ACL
+
+#### Scenario: 初始化 PostgreSQL pool
+
+- **WHEN** datastore 创建 PostgreSQL pool
+- **THEN** DSN MUST 在 datastore 或 resources 边界构建
+- **AND** pool 与 ping timeout MUST 使用 resources 默认值和可选覆盖
 

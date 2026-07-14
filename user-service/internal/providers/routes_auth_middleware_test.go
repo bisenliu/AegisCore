@@ -40,7 +40,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		App: config.AppConfig{Name: "configured-user-service", Environment: "local"},
 		Observability: config.ObservabilityConfig{
 			Metrics: config.MetricsConfig{Enabled: true, Path: "/metrics", IncludeRuntime: true},
-			Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1, Exporter: "none"},
+			Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1, OTLPEndpoint: "127.0.0.1:4317", Insecure: true},
 		},
 	}
 	core, logs := observer.New(zap.DebugLevel)

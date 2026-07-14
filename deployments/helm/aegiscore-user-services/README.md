@@ -45,12 +45,16 @@ networkPolicy:
 默认 Secret 名称为 `aegiscore-user-services-runtime`，默认键名如下：
 
 - `AEGISCORE_AUTH_JWT_SECRET`
-- `AEGISCORE_POSTGRES_USER_DB_USERNAME`
-- `AEGISCORE_POSTGRES_USER_DB_PASSWORD`
-- `AEGISCORE_REDIS_CACHE_REDIS_USERNAME`
-- `AEGISCORE_REDIS_CACHE_REDIS_PASSWORD`
+- `AEGISCORE_RESOURCES_POSTGRES_USER_DB_USERNAME`
+- `AEGISCORE_RESOURCES_POSTGRES_USER_DB_PASSWORD`
+- `AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME`
+- `AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD`
 
 如果集群使用外部 Secret 管理器，应保持这些键名，或通过 `secret.keys` 显式覆盖。
+
+`config` 使用最终 `AEGISCORE_SERVER_*` 与 `AEGISCORE_RESOURCES_*` 路径，Redis 使用统一 `TIMEOUT`，PostgreSQL pool 使用 `POOL_*`；平台时区只使用 `TZ`。日志写 stdout/stderr，tracing 启用后固定通过 OTLP 导出。trusted proxy 由集群入口边界负责，不是 chart 的应用配置。
+
+chart 默认不配置或暴露 pprof。临时排障应通过额外受控环境变量设置 `PPROF_ENABLED=true`、`PPROF_ADDR=127.0.0.1:6060`，并使用 `kubectl port-forward`，不要把诊断端口加入常驻 Service。
 
 ## 渲染和验证
 

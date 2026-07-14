@@ -6,8 +6,8 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/datastore"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	"github.com/aegiscore/user-service/internal/resources"
 )
 
@@ -16,7 +16,7 @@ type NamedPostgresParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Config    *config.Config
+	Config    *serviceconfig.Config
 	Log       *zap.Logger
 }
 
@@ -31,7 +31,7 @@ type NamedPostgresPools struct {
 func ProvidePostgresPools(params NamedPostgresParams) (NamedPostgresPools, error) {
 	dbs, err := datastore.NewPostgresPools(
 		params.Lifecycle,
-		params.Config,
+		params.Config.Resources.Postgres,
 		params.Log,
 		resources.NameUserDB,
 	)

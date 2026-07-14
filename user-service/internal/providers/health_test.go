@@ -18,7 +18,9 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	commonresources "github.com/aegiscore/common/runtime/resources"
 	"github.com/aegiscore/common/runtime/workerpool"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
 	"github.com/aegiscore/user-service/internal/router"
 )
@@ -28,7 +30,7 @@ func TestPostgresHealthChecker(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
-	checker := postgresHealthChecker{name: "postgres.user_db", db: db}
+	checker := postgresHealthChecker{name: "postgres.user_db", db: db, timeout: commonresources.DefaultPostgresPingTimeout()}
 	require.Equal(t, "postgres.user_db", checker.Name())
 	result := checker.Check(context.Background())
 	require.Equal(t, router.HealthCheckStatusOK, result.Status)
@@ -44,7 +46,7 @@ func TestRedisHealthChecker(t *testing.T) {
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 
-	checker := redisHealthChecker{name: "redis.cache_redis", client: client}
+	checker := redisHealthChecker{name: "redis.cache_redis", client: client, timeout: commonresources.DefaultRedisTimeout}
 	require.Equal(t, "redis.cache_redis", checker.Name())
 	result := checker.Check(context.Background())
 	require.Equal(t, router.HealthCheckStatusOK, result.Status)
@@ -89,6 +91,31 @@ func TestWatcherHealthChecker(t *testing.T) {
 	}
 }
 
+func TestProvideHealthChecksUsesResourcePingTimeouts(t *testing.T) {
+	cfg := &serviceconfig.Config{Resources: serviceconfig.ResourcesConfig{Redis: commonresources.RedisConfigs{
+		"cache_redis": {Addr: "127.0.0.1:6379", Timeout: 2 * time.Second},
+	}}}
+	checks := ProvideHealthChecks(HealthCheckParams{Config: cfg})
+
+	require.Len(t, checks.Readiness, 4)
+	postgres, ok := checks.Readiness[0].(postgresHealthChecker)
+	require.True(t, ok)
+	require.Equal(t, commonresources.DefaultPostgresPingTimeout(), postgres.timeout)
+	redis, ok := checks.Readiness[1].(redisHealthChecker)
+	require.True(t, ok)
+	require.Equal(t, 2*time.Second, redis.timeout)
+}
+
+func TestProvideHealthChecksAppliesDefaultRedisPingTimeout(t *testing.T) {
+	cfg := &serviceconfig.Config{Resources: serviceconfig.ResourcesConfig{Redis: commonresources.RedisConfigs{
+		"cache_redis": {Addr: "127.0.0.1:6379"},
+	}}}
+	checks := ProvideHealthChecks(HealthCheckParams{Config: cfg})
+
+	redis := checks.Readiness[1].(redisHealthChecker)
+	require.Equal(t, commonresources.DefaultRedisTimeout, redis.timeout)
+}
+
 func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 	db, err := sql.Open("sqlite3", "file:runtime_metrics?mode=memory&cache=shared")
 	require.NoError(t, err)
@@ -98,19 +125,22 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 
-	cfg := &config.Config{
+	runtimeCfg := config.Config{
 		App: config.AppConfig{Name: "aegiscore-user-service-test", Environment: "test"},
-		Redis: map[string]config.RedisConfig{
-			"cache_redis": {PingTimeout: time.Second},
-		},
 		Observability: config.ObservabilityConfig{
 			Metrics: config.MetricsConfig{Enabled: true, Path: "/metrics"},
 		},
 	}
+	cfg := &serviceconfig.Config{
+		Config: runtimeCfg,
+		Resources: serviceconfig.ResourcesConfig{Redis: commonresources.RedisConfigs{
+			"cache_redis": {Timeout: time.Second},
+		}},
+	}
 	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
-		Config:      cfg.Observability.Metrics,
-		ServiceName: cfg.App.Name,
-		Environment: cfg.App.Environment,
+		Config:      runtimeCfg.Observability.Metrics,
+		ServiceName: runtimeCfg.App.Name,
+		Environment: runtimeCfg.App.Environment,
 	})
 	require.NoError(t, err)
 

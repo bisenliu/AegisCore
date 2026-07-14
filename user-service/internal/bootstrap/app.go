@@ -36,10 +36,14 @@ var AppModule = fx.Module("aegiscore-user-services",
 	fx.Provide(
 		// Fx 分类：传输 - 对外 HTTP server 及其生命周期 hook。
 		NewHTTPServer,
+		// Fx 分类：开发工具 - 通过进程环境控制的独立 pprof 诊断 server。
+		NewPprofServer,
 	),
 	fx.Invoke(
 		// Fx 分类：生命周期 - 强制实例化 HTTP server 并注册启停 hook。
 		func(*http.Server) {},
+		// Fx 分类：生命周期 - 强制解析并按需启动独立 pprof server。
+		func(*PprofServer) {},
 	),
 )
 

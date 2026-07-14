@@ -12,12 +12,13 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/fx/fxtest"
 
-	"github.com/aegiscore/common/runtime/config"
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/user-service/ent"
 	"github.com/aegiscore/user-service/ent/enttest"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
@@ -163,14 +164,54 @@ func TestUserRoleResolverCoalescesConcurrentMisses(t *testing.T) {
 	require.Equal(t, int64(1), roleQueries.Load())
 }
 
-func TestNewUserRoleResolverRequiresConfigInstance(t *testing.T) {
-	_, err := NewUserRoleResolver(UserRoleResolverParams{
-		Config: &config.Config{LocalCache: config.LocalCacheConfig{}},
+func TestNewUserRoleResolverUsesRBACFeatureConfig(t *testing.T) {
+	enabled := true
+	size := int64(321)
+	ttl := time.Minute
+	loadTimeout := time.Second
+	lifecycle := fxtest.NewLifecycle(t)
+	result, err := NewUserRoleResolver(UserRoleResolverParams{
+		Lifecycle: lifecycle,
+		Config: &serviceconfig.Config{RBAC: serviceconfig.RBACConfig{UserRoleCache: serviceconfig.FeatureCacheConfig{
+			Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout,
+		}}},
 		Client: newPolicyTestClient(t),
 	})
+	require.NoError(t, err)
+	require.EqualValues(t, 321, result.Stats.Stats().Capacity)
+	lifecycle.RequireStop()
+}
 
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "local_cache.rbac_user_roles is required")
+func TestDisabledUserRoleResolverReadsThroughAndInvalidationIsSafe(t *testing.T) {
+	disabled := false
+	client := newPolicyTestClient(t)
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000601")
+	firstRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000602")
+	secondRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000603")
+	user := createPolicyTestUser(t, client, userID, "resolver-disabled@example.com")
+	firstRole := createPolicyTestRole(t, client, firstRoleID, true)
+	secondRole := createPolicyTestRole(t, client, secondRoleID, true)
+	createPolicyTestUserRole(t, client, user.ID, firstRole.ID)
+
+	result, err := NewUserRoleResolver(UserRoleResolverParams{
+		Config: &serviceconfig.Config{RBAC: serviceconfig.RBACConfig{UserRoleCache: serviceconfig.FeatureCacheConfig{Enabled: &disabled}}},
+		Client: client,
+	})
+	require.NoError(t, err)
+
+	first, err := result.Resolver.RolesForUser(context.Background(), userID)
+	require.NoError(t, err)
+	assertRoleIDs(t, first, []uuid.UUID{firstRoleID})
+	createPolicyTestUserRole(t, client, user.ID, secondRole.ID)
+	second, err := result.Resolver.RolesForUser(context.Background(), userID)
+	require.NoError(t, err)
+	assertRoleIDs(t, second, []uuid.UUID{firstRoleID, secondRoleID})
+
+	result.Resolver.InvalidateUserRole(userID)
+	result.Resolver.InvalidateAllUserRoles()
+	require.Equal(t, rbacUserRolesCacheName, result.Stats.Name())
+	require.EqualValues(t, 2, result.Stats.Stats().Load)
+	require.Zero(t, result.Stats.Stats().Capacity)
 }
 
 func newPolicyTestClient(t *testing.T) *ent.Client {

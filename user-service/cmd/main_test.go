@@ -224,9 +224,8 @@ func TestNormalizeCreateSuperAdminOptionsReadsPasswordEnv(t *testing.T) {
 func TestFxAppLifecycleTimeouts(t *testing.T) {
 	require.Equal(t, 15*time.Second, fxAppStartTimeout)
 
-	cfg, err := config.Load("../configs/config.yaml")
-	require.NoError(t, err)
-	require.GreaterOrEqual(t, fxAppStopTimeout, cfg.HTTP.ShutdownTimeout)
+	cfg := config.DefaultConfig()
+	require.GreaterOrEqual(t, fxAppStopTimeout, cfg.Server.HTTP.ShutdownTimeout)
 }
 
 func findSubcommand(parent *cobra.Command, use string) *cobra.Command {

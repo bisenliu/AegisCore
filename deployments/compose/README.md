@@ -24,8 +24,15 @@ make compose-dashboard-check
 从仓库根目录启动：
 
 ```bash
+POSTGRES_PASSWORD='<local-password>' \
+AEGISCORE_AUTH_JWT_SECRET='<local-jwt-secret>' \
+GRAFANA_ADMIN_PASSWORD='<local-grafana-password>' \
 docker compose -f deployments/compose/docker-compose.yml up --build
 ```
+
+Compose 仅用平台 `TZ` 设置进程时区，并通过 `AEGISCORE_SERVER_HTTP_*`、`AEGISCORE_SERVER_GRPC_*`、`AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_*` 和 `AEGISCORE_RESOURCES_POSTGRES_USER_DB_*` 覆盖最终配置路径。Redis 使用统一 `TIMEOUT`，PostgreSQL 连接池使用 `POOL_*`。user-service 不声明额外队列 Redis 或支付数据库。PostgreSQL 密码必须通过调用命令或本地 `.env` 中的 `POSTGRES_PASSWORD` 注入；日志只写 stdout/stderr；本地 tracing 默认关闭，启用时固定连接 OTLP Collector。
+
+pprof 不进入 Compose 默认配置。临时诊断应在受控环境设置 `PPROF_ENABLED=true`、`PPROF_ADDR=127.0.0.1:6060`，并通过容器 namespace 内 loopback 或受控端口转发访问。
 
 user-service 使用固定 digest 的 Distroless static nonroot 运行时镜像，容器内数值身份为 UID/GID `65532`，不包含 shell、`apk`、`wget`、`curl`、`grep` 或 Atlas。Compose healthcheck 使用 exec-form 调用镜像内原生 CLI：`/app/user-service/bin/user-services healthcheck --url http://127.0.0.1:8080/readyz`，不依赖 `CMD-SHELL` 或管道。
 
@@ -35,7 +42,7 @@ user-service 使用固定 digest 的 Distroless static nonroot 运行时镜像�
 - PostgreSQL：localhost:15432 -> 容器内 5432
 - Redis：localhost:16379 -> 容器内 6379
 - Prometheus：http://localhost:9090
-- Grafana：http://localhost:3000，默认账号密码为 `admin` / `admin`
+- Grafana：http://localhost:3000，账号为 `admin`，密码由 `GRAFANA_ADMIN_PASSWORD` 注入
 
 从仓库根目录单独构建用户服务运行时镜像：
 

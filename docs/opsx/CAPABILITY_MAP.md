@@ -7,11 +7,11 @@
 | Capability | 业务说明 | 主要代码位置 | 主规格 | 状态 |
 |---|---|---|---|---|
 | `opsx-foundation` | 仓库级 OPSX/OpenSpec 目录、配置、文档入口、能力地图和变更工作流 | `AGENTS.md`、`docs/opsx/`、`openspec/config.yaml` | `openspec/specs/opsx-foundation/spec.md` | ready |
-| `shared-platform-primitives` | 跨服务契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力 | `common/contract/`、`common/http/`、`common/runtime/`、`common/security/`、`common/testing/`、`common/validation/` | `openspec/specs/shared-platform-primitives/spec.md` | ready |
+| `shared-platform-primitives` | 跨服务契约、HTTP helper、安全原语、仅含 app/server/log/observability 的核心配置、无业务语义 resources、runtime primitive、测试基础设施和校验能力 | `common/contract/`、`common/http/`、`common/runtime/`、`common/security/`、`common/testing/`、`common/validation/` | `openspec/specs/shared-platform-primitives/spec.md` | ready |
 | `user-identity-management` | 用户资料创建、查询、列表、状态约束和用户 HTTP 边界 | `user-service/internal/features/user/`、`user-service/internal/shared/identity/` | `openspec/specs/user-identity-management/spec.md` | ready |
 | `auth-session-management` | 登录、服务私有认证配置、令牌签发、刷新、退出、改密、会话和 token version 校验 | `user-service/internal/config/`、`user-service/internal/features/auth/`、`common/security/password/` | `openspec/specs/auth-session-management/spec.md` | ready |
 | `rbac-access-control` | 权限目录、角色、角色权限、用户角色、Casbin 授权、RBAC seed 和超级管理员引导 | `user-service/internal/features/permission/`、`user-service/internal/features/role/`、`common/security/casbin/`、`user-service/cmd/rbac.go` | `openspec/specs/rbac-access-control/spec.md` | ready |
-| `runtime-observability` | 健康检查、OpenAPI、metrics、tracing、logging、pprof、Prometheus/Grafana 资产 | `user-service/internal/router/`、`common/runtime/observability/`、`common/http/middleware/`、`deployments/observability/`、`deployments/compose/grafana/` | `openspec/specs/runtime-observability/spec.md` | ready |
+| `runtime-observability` | 健康检查、OpenAPI、metrics、OTLP tracing、stdout/stderr logging、独立 pprof 诊断监听、Prometheus/Grafana 资产 | `user-service/internal/bootstrap/`、`user-service/internal/router/`、`common/runtime/observability/`、`common/runtime/logger/`、`common/http/middleware/`、`deployments/observability/`、`deployments/compose/grafana/` | `openspec/specs/runtime-observability/spec.md` | ready |
 | `delivery-operations` | 构建、测试、lint、OpenAPI 生成、Ent/Atlas migration、运行时镜像、Docker-backed 测试门禁、CI 镜像安全扫描、Compose、Kubernetes、Helm 和发布顺序 | `Makefile`、`.github/workflows/ci.yml`、`user-service/Makefile`、`user-service/scripts/`、`tools/openapi-convert/`、`deployments/` | `openspec/specs/delivery-operations/spec.md` | ready |
 
 ## 2. 关键入口点
@@ -24,7 +24,7 @@
 - 角色路由：`user-service/internal/features/role/transport/http/routes.go`。
 - 用户路由：`user-service/internal/features/user/transport/http/routes.go`。
 - 共享契约：`common/contract/` 和 `common/http/response/`。
-- 配置与依赖：`common/runtime/config/`、`common/runtime/datastore/`、`user-service/internal/config/`、`user-service/internal/providers/`。
+- 配置与依赖：`common/runtime/config/` 拥有最小核心配置，`common/runtime/resources/` 和 `common/runtime/datastore/` 提供无业务语义资源能力，`user-service/internal/config/` 声明具名资源和 feature cache，`user-service/internal/providers/` 完成服务接线。
 - 观测资产：`deployments/observability/` 和 `deployments/compose/grafana/`。
 
 ## 3. 交叉依赖

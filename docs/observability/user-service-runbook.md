@@ -39,7 +39,7 @@
 
 `aegiscore_localcache_writes_total{event="set_dropped"}` 表示写入队列丢弃，`event="rejected"` 表示 Ristretto admission 拒绝。先查看 dashboard 中对应 cache 的 `capacity`、hit ratio、load rate 和 key 访问模式；持续增长通常意味着容量过小、TTL 不合适、key 基数变高或写入突增。
 
-短时间内少量 `rejected` 可能是 admission policy 的正常行为；持续 `set_dropped` 或 rejected 与 loader rate 同时升高时，应评估 `local_cache.<name>.capacity`、`num_counters`、`buffer_items` 和业务流量变化。
+短时间内少量 `rejected` 可能是 admission policy 的正常行为；持续 `set_dropped` 或 rejected 与 loader rate 同时升高时，应评估 `auth.token_version_cache` 或 `rbac.user_role_cache` 的 `size`、`ttl`、`load_timeout` 和业务流量变化。底层 `num_counters`、`buffer_items` 不属于服务配置契约。
 
 ### localcache-eviction-pressure
 

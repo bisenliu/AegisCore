@@ -3,10 +3,13 @@ package providers
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 
+	commonresources "github.com/aegiscore/common/runtime/resources"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissioncasbin "github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin"
 	permissionredis "github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis"
 	"github.com/aegiscore/user-service/internal/resources"
@@ -17,6 +20,7 @@ import (
 type HealthCheckParams struct {
 	fx.In
 
+	Config        *serviceconfig.Config
 	UserDB        *sql.DB       `name:"user_db"`
 	CacheRedis    *redis.Client `name:"cache_redis"`
 	CasbinPolicy  *permissioncasbin.Engine
@@ -24,13 +28,15 @@ type HealthCheckParams struct {
 }
 
 type postgresHealthChecker struct {
-	name string
-	db   *sql.DB
+	name    string
+	db      *sql.DB
+	timeout time.Duration
 }
 
 type redisHealthChecker struct {
-	name   string
-	client *redis.Client
+	name    string
+	client  *redis.Client
+	timeout time.Duration
 }
 
 type casbinPolicyHealthChecker struct {
@@ -46,9 +52,11 @@ type watcherHealthChecker struct {
 // ProvideHealthChecks 构造用户服务启动和流量接入探针检查项。
 // readiness 与 startup 当前使用同一组关键依赖；Casbin policy 和 watcher 不可用时拒绝接入流量，避免授权未就绪时服务放行或误拒。
 func ProvideHealthChecks(params HealthCheckParams) router.HealthChecks {
+	redisCfg := params.Config.Resources.Redis[resources.NameCacheRedis]
+	redisCfg.ApplyDefaults()
 	checks := []router.HealthChecker{
-		postgresHealthChecker{name: "postgres." + resources.NameUserDB, db: params.UserDB},
-		redisHealthChecker{name: "redis." + resources.NameCacheRedis, client: params.CacheRedis},
+		postgresHealthChecker{name: "postgres." + resources.NameUserDB, db: params.UserDB, timeout: commonresources.DefaultPostgresPingTimeout()},
+		redisHealthChecker{name: "redis." + resources.NameCacheRedis, client: params.CacheRedis, timeout: redisCfg.Timeout},
 		casbinPolicyHealthChecker{engine: params.CasbinPolicy},
 		watcherHealthChecker{watcher: params.PolicyWatcher},
 	}
@@ -63,7 +71,9 @@ func (c postgresHealthChecker) Check(ctx context.Context) router.HealthCheckResu
 	if c.db == nil {
 		return unavailableHealthResult(c.name, "postgres unavailable")
 	}
-	if err := c.db.PingContext(ctx); err != nil {
+	pingCtx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+	if err := c.db.PingContext(pingCtx); err != nil {
 		return unavailableHealthResult(c.name, "postgres unavailable")
 	}
 	return okHealthResult(c.name)
@@ -77,7 +87,9 @@ func (c redisHealthChecker) Check(ctx context.Context) router.HealthCheckResult 
 	if c.client == nil {
 		return unavailableHealthResult(c.name, "redis unavailable")
 	}
-	if err := c.client.Ping(ctx).Err(); err != nil {
+	pingCtx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+	if err := c.client.Ping(pingCtx).Err(); err != nil {
 		return unavailableHealthResult(c.name, "redis unavailable")
 	}
 	return okHealthResult(c.name)

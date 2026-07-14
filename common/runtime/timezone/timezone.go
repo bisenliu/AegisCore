@@ -6,11 +6,9 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/aegiscore/common/runtime/config"
 )
 
-// DefaultTimezone 是配置缺省 system.timezone 时使用的进程时区兜底值。
+// DefaultTimezone 是平台未注入 TZ 时使用的进程时区兜底值。
 const DefaultTimezone = "Asia/Shanghai"
 
 var state timezoneState
@@ -20,16 +18,12 @@ type timezoneState struct {
 	initialized bool
 }
 
-// InitConfig 根据 config 初始化进程时区，并在缺省时回退到 DefaultTimezone。
-func InitConfig(cfg *config.Config) error {
-	timezone := DefaultTimezone
-	if cfg != nil {
-		configured := strings.TrimSpace(cfg.System.Timezone)
-		if configured != "" {
-			timezone = configured
-		}
+// Init 根据平台 TZ 初始化进程时区，并在缺省时回退到 DefaultTimezone。
+func Init() error {
+	timezone := strings.TrimSpace(os.Getenv("TZ"))
+	if timezone == "" {
+		timezone = DefaultTimezone
 	}
-
 	return state.init(timezone)
 }
 

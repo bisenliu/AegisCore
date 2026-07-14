@@ -15,6 +15,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/datastore"
 	"github.com/aegiscore/common/runtime/logger"
+	commonresources "github.com/aegiscore/common/runtime/resources"
 	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/user-service/ent"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
@@ -219,9 +220,9 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 		return nil
 	})
 
-	dbCfg, ok := cfg.PostgresDatabaseConfig(resources.NameUserDB)
-	if !ok {
-		return fail(fmt.Errorf("postgres.%s config not found", resources.NameUserDB))
+	dbCfg, err := rbacPostgresConfig(cfg)
+	if err != nil {
+		return fail(err)
 	}
 	db, err := datastore.OpenPostgres(resources.NameUserDB, dbCfg)
 	if err != nil {
@@ -250,6 +251,17 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 	userCreator := usercommand.NewCreateUserService(userStore, passwordService)
 
 	return rbacSeedDependencies{service: service, users: userCreator, credentials: credentialStore, passwordService: passwordService}, cleanup, nil
+}
+
+func rbacPostgresConfig(cfg *serviceconfig.Config) (commonresources.PostgresConfig, error) {
+	if cfg == nil {
+		return commonresources.PostgresConfig{}, errors.New("user-service config is required")
+	}
+	dbCfg, ok := cfg.Resources.Postgres[resources.NameUserDB]
+	if !ok {
+		return commonresources.PostgresConfig{}, fmt.Errorf("resources.postgres.%s config not found", resources.NameUserDB)
+	}
+	return dbCfg, nil
 }
 
 func newRBACEntClient(db *sql.DB) *ent.Client {

@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 
 	"github.com/aegiscore/common/runtime/config"
 )
 
-func TestNewProviderWithNoneExporterCreatesSpanContext(t *testing.T) {
+func TestEnabledProviderCreatesSampledSpanContext(t *testing.T) {
 	provider := newTestProvider(t, 1.0)
 	defer shutdownProvider(t, provider)
 
@@ -49,17 +50,17 @@ func TestParentBasedSamplerHonorsSampledParent(t *testing.T) {
 }
 
 func TestProviderResourceAttributes(t *testing.T) {
-	provider, err := NewProvider(context.Background(), Options{
+	provider, err := newProvider(context.Background(), Options{
 		Config: config.TracingConfig{
-			Enabled:     true,
-			SampleRatio: 1.0,
-			Exporter:    exporterNone,
+			Enabled:      true,
+			SampleRatio:  1.0,
+			OTLPEndpoint: "collector.internal:4317",
 		},
 		ServiceName: "aegiscore-test",
 		Environment: "local",
 		Version:     "1.2.3",
 		InstanceID:  "instance-1",
-	})
+	}, testExporterFactory)
 	require.NoError(t, err, "NewProvider")
 	defer shutdownProvider(t, provider)
 
@@ -99,12 +100,11 @@ func TestProviderTracerFallsBackToNoopWhenTracerProviderIsNil(t *testing.T) {
 	require.False(t, span.SpanContext().IsValid(), "span context is valid, want noop span")
 }
 
-func TestNewProviderWithOTLPExporterCreatesProvider(t *testing.T) {
+func TestNewProviderWithOTLPConfigCreatesProvider(t *testing.T) {
 	provider, err := NewProvider(context.Background(), Options{
 		Config: config.TracingConfig{
 			Enabled:      true,
 			SampleRatio:  0.0,
-			Exporter:     exporterOTLP,
 			OTLPEndpoint: "collector.internal:4317",
 			Insecure:     true,
 		},
@@ -121,12 +121,11 @@ func TestNewProviderWithOTLPExporterCreatesProvider(t *testing.T) {
 	require.False(t, span.SpanContext().IsSampled(), "span is sampled")
 }
 
-func TestNewProviderWithOTLPExporterRejectsMissingEndpoint(t *testing.T) {
+func TestNewProviderRejectsMissingOTLPEndpoint(t *testing.T) {
 	_, err := NewProvider(context.Background(), Options{
 		Config: config.TracingConfig{
 			Enabled:      true,
 			SampleRatio:  1.0,
-			Exporter:     exporterOTLP,
 			OTLPEndpoint: "   ",
 		},
 		ServiceName: "aegiscore-test",
@@ -137,30 +136,22 @@ func TestNewProviderWithOTLPExporterRejectsMissingEndpoint(t *testing.T) {
 	require.NotContains(t, err.Error(), "secret")
 }
 
-func TestNewProviderRejectsUnknownExporter(t *testing.T) {
-	_, err := NewProvider(context.Background(), Options{
-		Config: config.TracingConfig{
-			Enabled:     true,
-			SampleRatio: 1.0,
-			Exporter:    "zipkin",
-		},
-		ServiceName: "aegiscore-test",
-		Environment: "local",
-	})
-	require.ErrorIs(t, err, ErrUnsupportedExporter)
-}
-
-func TestNewProviderRejectsUnknownExporterWhenDisabled(t *testing.T) {
-	_, err := NewProvider(context.Background(), Options{
+func TestDisabledProviderDoesNotCreateOTLPExporter(t *testing.T) {
+	called := false
+	provider, err := newProvider(context.Background(), Options{
 		Config: config.TracingConfig{
 			Enabled:     false,
 			SampleRatio: 1.0,
-			Exporter:    "zipkin",
 		},
 		ServiceName: "aegiscore-test",
 		Environment: "local",
+	}, func(context.Context, config.TracingConfig) (sdktrace.SpanExporter, error) {
+		called = true
+		return &testSpanExporter{}, nil
 	})
-	require.ErrorIs(t, err, ErrUnsupportedExporter)
+	require.NoError(t, err)
+	defer shutdownProvider(t, provider)
+	require.False(t, called)
 }
 
 func TestNewProviderRejectsMissingServiceIdentity(t *testing.T) {
@@ -199,7 +190,6 @@ func TestNewProviderRejectsInvalidSampleRatio(t *testing.T) {
 		Config: config.TracingConfig{
 			Enabled:     true,
 			SampleRatio: 1.1,
-			Exporter:    exporterNone,
 		},
 		ServiceName: "aegiscore-test",
 		Environment: "local",
@@ -227,7 +217,7 @@ func TestNewFxProviderRegistersShutdown(t *testing.T) {
 				Environment: "local",
 			},
 			Observability: config.ObservabilityConfig{
-				Tracing: testTracingConfig(1.0),
+				Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1.0},
 			},
 		},
 	})
@@ -240,21 +230,35 @@ func TestNewFxProviderRegistersShutdown(t *testing.T) {
 
 func newTestProvider(t *testing.T, sampleRatio float64) *Provider {
 	t.Helper()
-	provider, err := NewProvider(context.Background(), Options{
+	provider, err := newProvider(context.Background(), Options{
 		Config:      testTracingConfig(sampleRatio),
 		ServiceName: "aegiscore-test",
 		Environment: "local",
-	})
+	}, testExporterFactory)
 	require.NoError(t, err, "NewProvider")
 	return provider
 }
 
 func testTracingConfig(sampleRatio float64) config.TracingConfig {
 	return config.TracingConfig{
-		Enabled:     true,
-		SampleRatio: sampleRatio,
-		Exporter:    exporterNone,
+		Enabled:      true,
+		SampleRatio:  sampleRatio,
+		OTLPEndpoint: "collector.internal:4317",
 	}
+}
+
+type testSpanExporter struct{}
+
+func (*testSpanExporter) ExportSpans(context.Context, []sdktrace.ReadOnlySpan) error {
+	return nil
+}
+
+func (*testSpanExporter) Shutdown(context.Context) error {
+	return nil
+}
+
+func testExporterFactory(context.Context, config.TracingConfig) (sdktrace.SpanExporter, error) {
+	return &testSpanExporter{}, nil
 }
 
 func shutdownProvider(t *testing.T, provider *Provider) {

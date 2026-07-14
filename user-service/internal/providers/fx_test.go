@@ -22,7 +22,7 @@ func TestModuleResolvesServiceLevelProviders(t *testing.T) {
 		fx.Supply(&config.Config{
 			App: config.AppConfig{Name: "configured-user-service", Environment: "test"},
 			Observability: config.ObservabilityConfig{
-				Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1, Exporter: "none"},
+				Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1},
 			},
 		}, &serviceconfig.Config{Auth: serviceconfig.AuthConfig{PasswordKDF: serviceconfig.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1}}}, zap.NewNop()),
 		validation.Module,

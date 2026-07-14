@@ -19,11 +19,15 @@ func NewLogger(lc fx.Lifecycle, cfg *config.Config) (*zap.Logger, error) {
 	}
 	lc.Append(fx.Hook{OnStop: func(context.Context) error {
 		err := log.Sync()
-		if errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTTY) {
-			// 某些平台的 stdout/stderr 不支持 fsync，关闭流程不应因此失败。
+		if isIgnorableSyncError(err) {
+			// 某些平台或测试宿主的 stdout/stderr 不支持 fsync，关闭流程不应因此失败。
 			return nil
 		}
 		return err
 	}})
 	return log, nil
+}
+
+func isIgnorableSyncError(err error) bool {
+	return errors.Is(err, syscall.EBADF) || errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTTY)
 }

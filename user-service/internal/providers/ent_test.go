@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"entgo.io/ent/dialect"
 	_ "github.com/mattn/go-sqlite3"
@@ -27,27 +28,65 @@ func TestEntSQLDebugEnabledRequiresConfigFlag(t *testing.T) {
 	require.True(t, entSQLDebugEnabled(&serviceconfig.Config{Ent: serviceconfig.EntConfig{SQLDebug: true}}))
 }
 
-func TestEntSQLDebugLogFuncWritesSQLDiagnosticLog(t *testing.T) {
-	core, logs := observer.New(zap.InfoLevel)
-	log := zap.New(core).Named(logger.SQLLoggerName)
+func TestEntObservabilityDriverLogsDebugSQLWithStableFields(t *testing.T) {
+	core, logs := observer.New(zap.DebugLevel)
+	log := logger.SQL(zap.New(core))
 	ctx := contextWithSpanContext(context.Background(), t, "00112233445566778899aabbccddeeff", "0102030405060708")
+	driver := newEntObservabilityDriver(observabilityTestDriver{}, log, userDatabaseResource, true)
+	driver.now = advancingClock(time.Unix(0, 0), 12*time.Millisecond)
 
-	entSQLDebugLogFunc(log)(ctx, "driver.Query: query=SELECT * FROM users WHERE id = $1 args=[1]")
+	require.NoError(t, driver.Exec(ctx, "SELECT * FROM users WHERE id = $1", []any{1}, nil))
 
-	entries := logs.FilterMessage("ent sql debug").All()
+	entries := logs.FilterMessage("ent sql completed").All()
 	require.Len(t, entries, 1)
 	fields := entries[0].ContextMap()
 	require.Equal(t, "00112233445566778899aabbccddeeff", fields[logger.TraceIDField])
 	require.Equal(t, "0102030405060708", fields[logger.SpanIDField])
-	require.Equal(t, "driver.Query: query=SELECT * FROM users WHERE id = $1 args=[1]", fields["statement"])
+	require.Equal(t, userDatabaseResource, fields["db"])
+	require.Equal(t, "select", fields["operation"])
+	require.Equal(t, int64(12), fields["duration_ms"])
+	require.Equal(t, "postgres", fields[logger.ComponentField])
 	require.Equal(t, logger.SQLLoggerName, entries[0].LoggerName)
+	require.Equal(t, zap.DebugLevel, entries[0].Level)
 }
 
-func TestNewEntDriverUsesDebugDriverOnlyWhenConfigured(t *testing.T) {
-	_, ok := newEntDriver(nil, &serviceconfig.Config{}, zap.NewNop()).(*dialect.DebugDriver)
-	require.False(t, ok)
-	_, ok = newEntDriver(nil, &serviceconfig.Config{Ent: serviceconfig.EntConfig{SQLDebug: true}}, zap.NewNop()).(*dialect.DebugDriver)
+func TestEntObservabilityDriverLogsSlowSQLAtWarnWhenDebugDisabled(t *testing.T) {
+	core, logs := observer.New(zap.DebugLevel)
+	driver := newEntObservabilityDriver(observabilityTestDriver{}, logger.SQL(zap.New(core)), userDatabaseResource, false)
+	driver.now = advancingClock(time.Unix(0, 0), defaultEntSlowQueryThreshold)
+
+	require.NoError(t, driver.Query(context.Background(), "SELECT 1", nil, nil))
+
+	entries := logs.FilterMessage("ent sql slow").All()
+	require.Len(t, entries, 1)
+	require.Equal(t, zap.WarnLevel, entries[0].Level)
+	require.Equal(t, int64(defaultEntSlowQueryThreshold/time.Millisecond), entries[0].ContextMap()["duration_ms"])
+}
+
+func TestEntObservabilityDriverLogsSQLErrorWhenDebugDisabled(t *testing.T) {
+	wantErr := errors.New("query failed")
+	core, logs := observer.New(zap.DebugLevel)
+	driver := newEntObservabilityDriver(observabilityTestDriver{queryErr: wantErr}, logger.SQL(zap.New(core)), userDatabaseResource, false)
+	driver.now = advancingClock(time.Unix(0, 0), time.Millisecond)
+
+	err := driver.Query(context.Background(), "UPDATE users SET name = $1", nil, nil)
+	require.ErrorIs(t, err, wantErr)
+
+	entries := logs.FilterMessage("ent sql failed").All()
+	require.Len(t, entries, 1)
+	require.Equal(t, zap.ErrorLevel, entries[0].Level)
+	fields := entries[0].ContextMap()
+	require.Equal(t, "update", fields["operation"])
+	require.Equal(t, wantErr.Error(), fields["error"])
+}
+
+func TestNewEntDriverAlwaysObservesErrorsAndUsesConfiguredDebugLevel(t *testing.T) {
+	driver, ok := newEntDriver(nil, &serviceconfig.Config{}, zap.NewNop()).(*entObservabilityDriver)
 	require.True(t, ok)
+	require.False(t, driver.debugEnabled)
+	driver, ok = newEntDriver(nil, &serviceconfig.Config{Ent: serviceconfig.EntConfig{SQLDebug: true}}, zap.NewNop()).(*entObservabilityDriver)
+	require.True(t, ok)
+	require.True(t, driver.debugEnabled)
 }
 
 func TestCloseEntClientPreservesNamedError(t *testing.T) {
@@ -156,4 +195,44 @@ func contextWithSpanContext(ctx context.Context, t *testing.T, traceIDHex string
 		Remote:  true,
 	})
 	return trace.ContextWithSpanContext(ctx, spanContext)
+}
+
+type observabilityTestDriver struct {
+	execErr  error
+	queryErr error
+	txErr    error
+}
+
+func (d observabilityTestDriver) Exec(context.Context, string, any, any) error {
+	return d.execErr
+}
+
+func (d observabilityTestDriver) Query(context.Context, string, any, any) error {
+	return d.queryErr
+}
+
+func (d observabilityTestDriver) Tx(context.Context) (dialect.Tx, error) {
+	if d.txErr != nil {
+		return nil, d.txErr
+	}
+	return dialect.NopTx(d), nil
+}
+
+func (observabilityTestDriver) Close() error {
+	return nil
+}
+
+func (observabilityTestDriver) Dialect() string {
+	return dialect.Postgres
+}
+
+func advancingClock(start time.Time, elapsed time.Duration) func() time.Time {
+	calls := 0
+	return func() time.Time {
+		calls++
+		if calls%2 == 1 {
+			return start
+		}
+		return start.Add(elapsed)
+	}
 }

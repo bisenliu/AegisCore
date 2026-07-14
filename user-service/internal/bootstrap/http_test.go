@@ -20,7 +20,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/aegiscore/common/runtime/config"
-	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	commonlogger "github.com/aegiscore/common/runtime/logger"
 )
 
 type lifecycleRecorder struct {
@@ -42,41 +42,25 @@ func (r *shutdownRecorder) Shutdown(...fx.ShutdownOption) error {
 }
 
 func TestDefaultConfigHTTPTimeouts(t *testing.T) {
-	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath("../../configs/config.yaml"))
-	require.NoError(t, err)
+	cfg := config.DefaultConfig()
 
-	require.Equal(t, 30*time.Second, cfg.HTTP.ReadTimeout)
-	require.Equal(t, 60*time.Second, cfg.HTTP.WriteTimeout)
-	require.Equal(t, 120*time.Second, cfg.HTTP.IdleTimeout)
-	require.Equal(t, 25*time.Second, cfg.HTTP.ShutdownTimeout)
-	require.NotEmpty(t, cfg.Auth.JWT.Secret)
-	require.Equal(t, "aegiscore-user-services", cfg.Auth.JWT.Issuer)
-	require.Equal(t, "aegiscore-users", cfg.Auth.JWT.Audience)
-	require.Equal(t, 15*time.Minute, cfg.Auth.JWT.AccessTokenTTL)
-	require.Equal(t, 168*time.Hour, cfg.Auth.JWT.RefreshTokenTTL)
-	require.Equal(t, 30*time.Second, cfg.Auth.TokenVersionCacheTTL)
-	require.False(t, cfg.Observability.Metrics.Enabled)
-	require.Equal(t, "/metrics", cfg.Observability.Metrics.Path)
-	require.True(t, cfg.Observability.Metrics.IncludeRuntime)
-	require.True(t, cfg.Observability.Tracing.Enabled)
-	require.Equal(t, 1.0, cfg.Observability.Tracing.SampleRatio)
-	require.Equal(t, "none", cfg.Observability.Tracing.Exporter)
-	require.Empty(t, cfg.Observability.Tracing.OTLPEndpoint)
-	require.False(t, cfg.Observability.Tracing.Insecure)
+	require.True(t, cfg.Server.HTTP.Enabled)
+	require.Equal(t, 30*time.Second, cfg.Server.HTTP.ReadTimeout)
+	require.Equal(t, 60*time.Second, cfg.Server.HTTP.WriteTimeout)
+	require.Equal(t, 120*time.Second, cfg.Server.HTTP.IdleTimeout)
+	require.Equal(t, 10*time.Second, cfg.Server.HTTP.ShutdownTimeout)
 }
 
 func TestHTTPServerUsesConfiguredTimeouts(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
-	cfg := &config.Config{
-		HTTP: config.HTTPConfig{
-			Host:            "127.0.0.1",
-			Port:            18080,
-			ReadTimeout:     30 * time.Second,
-			WriteTimeout:    60 * time.Second,
-			IdleTimeout:     120 * time.Second,
-			ShutdownTimeout: 25 * time.Second,
-		},
-	}
+	cfg := httpServerTestRuntimeConfig(config.HTTPServerConfig{
+		Host:            "127.0.0.1",
+		Port:            18080,
+		ReadTimeout:     30 * time.Second,
+		WriteTimeout:    60 * time.Second,
+		IdleTimeout:     120 * time.Second,
+		ShutdownTimeout: 25 * time.Second,
+	})
 	server := NewHTTPServer(HTTPServerParams{
 		Lifecycle: lifecycle,
 		Config:    cfg,
@@ -84,9 +68,9 @@ func TestHTTPServerUsesConfiguredTimeouts(t *testing.T) {
 		Engine:    gin.New(),
 	})
 
-	require.Equal(t, cfg.HTTP.ReadTimeout, server.ReadTimeout)
-	require.Equal(t, cfg.HTTP.WriteTimeout, server.WriteTimeout)
-	require.Equal(t, cfg.HTTP.IdleTimeout, server.IdleTimeout)
+	require.Equal(t, cfg.Server.HTTP.ReadTimeout, server.ReadTimeout)
+	require.Equal(t, cfg.Server.HTTP.WriteTimeout, server.WriteTimeout)
+	require.Equal(t, cfg.Server.HTTP.IdleTimeout, server.IdleTimeout)
 	require.Len(t, lifecycle.hooks, 1)
 	require.NotNil(t, lifecycle.hooks[0].OnStop)
 }
@@ -100,10 +84,10 @@ func TestHTTPServerStartReturnsListenError(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
 	NewHTTPServer(HTTPServerParams{
 		Lifecycle: lifecycle,
-		Config: &config.Config{HTTP: config.HTTPConfig{
+		Config: httpServerTestRuntimeConfig(config.HTTPServerConfig{
 			Host: "127.0.0.1",
 			Port: addr.Port,
-		}},
+		}),
 		Log:    zap.NewNop(),
 		Engine: gin.New(),
 	})
@@ -112,6 +96,42 @@ func TestHTTPServerStartReturnsListenError(t *testing.T) {
 	require.NotNil(t, lifecycle.hooks[0].OnStart)
 	err = lifecycle.hooks[0].OnStart(context.Background())
 	require.ErrorContains(t, err, "listen http server")
+}
+
+func TestHTTPServerDisabledDoesNotRegisterLifecycleOrListen(t *testing.T) {
+	port := reserveHTTPTestPort(t)
+	lifecycle := &lifecycleRecorder{}
+	server := NewHTTPServer(HTTPServerParams{
+		Lifecycle: lifecycle,
+		Config: &config.Config{Server: config.ServerConfig{
+			HTTP: config.HTTPServerConfig{Enabled: false, Host: "127.0.0.1", Port: port},
+			GRPC: config.GRPCServerConfig{Enabled: true},
+		}},
+		Log:    zap.NewNop(),
+		Engine: gin.New(),
+	})
+
+	require.Equal(t, fmt.Sprintf("127.0.0.1:%d", port), server.Addr)
+	require.Empty(t, lifecycle.hooks)
+	listener, err := net.Listen("tcp", server.Addr)
+	require.NoError(t, err)
+	require.NoError(t, listener.Close())
+}
+
+func TestHTTPServerDisabledAllowsFxAppStartAndStop(t *testing.T) {
+	cfg := &config.Config{Server: config.ServerConfig{
+		HTTP: config.HTTPServerConfig{Enabled: false},
+		GRPC: config.GRPCServerConfig{Enabled: true},
+	}}
+	app := fx.New(
+		fx.Supply(cfg, zap.NewNop(), gin.New()),
+		fx.Provide(NewHTTPServer),
+		fx.Invoke(func(*http.Server) {}),
+	)
+
+	require.NoError(t, app.Err())
+	require.NoError(t, app.Start(context.Background()))
+	require.NoError(t, app.Stop(context.Background()))
 }
 
 func TestHTTPServerUnexpectedServeErrorTriggersShutdown(t *testing.T) {
@@ -182,11 +202,11 @@ func TestHTTPServerStartAndStop(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
 	NewHTTPServer(HTTPServerParams{
 		Lifecycle: lifecycle,
-		Config: &config.Config{HTTP: config.HTTPConfig{
+		Config: httpServerTestRuntimeConfig(config.HTTPServerConfig{
 			Host:            "127.0.0.1",
 			Port:            0,
 			ShutdownTimeout: time.Second,
-		}},
+		}),
 		Log:    zap.NewNop(),
 		Engine: gin.New(),
 	})
@@ -221,11 +241,11 @@ func TestHTTPServerStopWaitsForActiveRequest(t *testing.T) {
 	})
 	NewHTTPServer(HTTPServerParams{
 		Lifecycle: lifecycle,
-		Config: &config.Config{HTTP: config.HTTPConfig{
+		Config: httpServerTestRuntimeConfig(config.HTTPServerConfig{
 			Host:            "127.0.0.1",
 			Port:            port,
 			ShutdownTimeout: time.Second,
-		}},
+		}),
 		Log:    zap.NewNop(),
 		Engine: engine,
 	})
@@ -297,11 +317,11 @@ func TestHTTPServerStopClosesAndDrainsActiveRequestAfterShutdownTimeout(t *testi
 	})
 	NewHTTPServer(HTTPServerParams{
 		Lifecycle: lifecycle,
-		Config: &config.Config{HTTP: config.HTTPConfig{
+		Config: httpServerTestRuntimeConfig(config.HTTPServerConfig{
 			Host:            "127.0.0.1",
 			Port:            port,
 			ShutdownTimeout: 20 * time.Millisecond,
-		}},
+		}),
 		Log:    zap.NewNop(),
 		Engine: engine,
 	})
@@ -344,11 +364,13 @@ func TestHTTPServerStartLogIncludesRuntimeIdentity(t *testing.T) {
 	NewHTTPServer(HTTPServerParams{
 		Lifecycle: lifecycle,
 		Config: &config.Config{
-			App:    config.AppConfig{Name: "aegiscore-user-services", Environment: "local"},
-			System: config.SystemConfig{Timezone: "Asia/Shanghai"},
-			HTTP: config.HTTPConfig{
-				Host: "127.0.0.1",
-				Port: 0,
+			App: config.AppConfig{Name: "aegiscore-user-services", Environment: "local"},
+			Server: config.ServerConfig{
+				HTTP: config.HTTPServerConfig{
+					Enabled: true,
+					Host:    "127.0.0.1",
+					Port:    0,
+				},
 			},
 		},
 		Log:    log,
@@ -365,11 +387,13 @@ func TestHTTPServerStartLogIncludesRuntimeIdentity(t *testing.T) {
 
 	entries := logs.FilterMessage("starting http server").All()
 	require.Len(t, entries, 1)
+	require.Equal(t, "http", entries[0].LoggerName)
 	fields := entries[0].ContextMap()
+	require.Equal(t, "http-server", fields[commonlogger.ComponentField])
 	require.Equal(t, "127.0.0.1:0", fields["addr"])
 	require.Equal(t, "aegiscore-user-services", fields["service"])
 	require.Equal(t, "local", fields["environment"])
-	require.Equal(t, "Asia/Shanghai", fields["timezone"])
+	require.Equal(t, time.Local.String(), fields["timezone"])
 }
 
 func TestDefaultHTTPShutdownTimeout(t *testing.T) {
@@ -421,6 +445,11 @@ func reserveHTTPTestPort(t *testing.T) int {
 	port := listener.Addr().(*net.TCPAddr).Port
 	require.NoError(t, listener.Close())
 	return port
+}
+
+func httpServerTestRuntimeConfig(httpCfg config.HTTPServerConfig) *config.Config {
+	httpCfg.Enabled = true
+	return &config.Config{Server: config.ServerConfig{HTTP: httpCfg}}
 }
 
 func requireEventuallyClosed(t *testing.T, ch <-chan struct{}, waitFor time.Duration) {
