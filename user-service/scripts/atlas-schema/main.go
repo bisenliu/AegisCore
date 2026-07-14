@@ -20,6 +20,8 @@ func main() {
 	}
 	ddl, err := entsqlschema.DDL(ctx, entsqlschema.DDLArgs{
 		Dialect: dialect.Postgres,
+		// Ent DDL dump 不连接 Atlas dev database，Version 仅作为 PostgreSQL DDL 渲染的版本上下文；
+		// 实际 migration diff 使用的 dev database 镜像由 migrations/atlas.hcl 的 dev_url 控制。
 		Version: "15.0.0",
 		Tables:  tables,
 	})
