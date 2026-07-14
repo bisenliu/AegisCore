@@ -13,13 +13,14 @@ import (
 
 func TestConfigContainsOnlyCoreGroups(t *testing.T) {
 	typeOfConfig := reflect.TypeOf(Config{})
-	require.Equal(t, 4, typeOfConfig.NumField())
+	require.Equal(t, 5, typeOfConfig.NumField())
 
 	for index, expected := range []struct {
 		name string
 		tag  string
 	}{
 		{name: "App", tag: "app"},
+		{name: "Runtime", tag: "runtime"},
 		{name: "Server", tag: "server"},
 		{name: "Log", tag: "log"},
 		{name: "Observability", tag: "observability"},
@@ -36,6 +37,8 @@ func TestDefaultConfigSupportsLocalHTTPServer(t *testing.T) {
 	require.NoError(t, cfg.Validate())
 	require.Equal(t, DefaultAppName, cfg.App.Name)
 	require.Equal(t, DefaultAppEnvironment, cfg.App.Environment)
+	require.Positive(t, cfg.Runtime.Lifecycle.StartTimeout)
+	require.Positive(t, cfg.Runtime.Lifecycle.StopTimeout)
 	require.True(t, cfg.Server.HTTP.Enabled)
 	require.Equal(t, DefaultHTTPHost, cfg.Server.HTTP.Host)
 	require.Equal(t, DefaultHTTPPort, cfg.Server.HTTP.Port)
@@ -43,6 +46,8 @@ func TestDefaultConfigSupportsLocalHTTPServer(t *testing.T) {
 	require.Positive(t, cfg.Server.HTTP.WriteTimeout)
 	require.Positive(t, cfg.Server.HTTP.IdleTimeout)
 	require.Positive(t, cfg.Server.HTTP.ShutdownTimeout)
+	require.GreaterOrEqual(t, cfg.Runtime.Lifecycle.StopTimeout, cfg.Server.HTTP.ShutdownTimeout)
+	require.GreaterOrEqual(t, cfg.Runtime.Lifecycle.StopTimeout, cfg.Server.GRPC.ShutdownTimeout)
 	require.False(t, cfg.Server.GRPC.Enabled)
 	require.Equal(t, "info", cfg.Log.Level)
 	require.Equal(t, "json", cfg.Log.Format)
@@ -61,6 +66,8 @@ func TestLoadExplicitConfig(t *testing.T) {
 
 	require.Equal(t, "aegiscore-test", cfg.App.Name)
 	require.Equal(t, "local", cfg.App.Environment)
+	require.Equal(t, 11*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
+	require.Equal(t, 12*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 	require.True(t, cfg.Server.HTTP.Enabled)
 	require.Equal(t, "127.0.0.1", cfg.Server.HTTP.Host)
 	require.Equal(t, 18080, cfg.Server.HTTP.Port)
@@ -79,6 +86,43 @@ func TestLoadExplicitConfig(t *testing.T) {
 	require.True(t, cfg.Observability.Tracing.Enabled)
 	require.Equal(t, 0.25, cfg.Observability.Tracing.SampleRatio)
 	require.Equal(t, "collector:4317", cfg.Observability.Tracing.OTLPEndpoint)
+}
+
+func TestLoadValidatesLifecycle(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`runtime:
+  lifecycle:
+    start_timeout: 0s
+    stop_timeout: 0s`))
+
+	assertConfigLoadErrorContains(t, err,
+		"runtime.lifecycle.start_timeout must be > 0",
+		"runtime.lifecycle.stop_timeout must be > 0",
+	)
+}
+
+func TestLoadValidatesLifecycleStopTimeoutCoversServerShutdown(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSections(`runtime:
+  lifecycle:
+    start_timeout: 1s
+    stop_timeout: 6s`, `server:
+  http:
+    enabled: true
+    host: 127.0.0.1
+    port: 18080
+    read_timeout: 10s
+    write_timeout: 20s
+    idle_timeout: 30s
+    shutdown_timeout: 7s
+  grpc:
+    enabled: true
+    host: 127.0.0.1
+    port: 19090
+    shutdown_timeout: 8s`))
+
+	assertConfigLoadErrorContains(t, err,
+		"runtime.lifecycle.stop_timeout must be >= server.http.shutdown_timeout",
+		"runtime.lifecycle.stop_timeout must be >= server.grpc.shutdown_timeout",
+	)
 }
 
 func TestLoadIntoServiceExtension(t *testing.T) {
@@ -235,12 +279,16 @@ func TestLoadValidatesTracing(t *testing.T) {
 }
 
 func TestLoadEnvironmentOverride(t *testing.T) {
+	t.Setenv("AEGISCORE_RUNTIME_LIFECYCLE_START_TIMEOUT", "13s")
+	t.Setenv("AEGISCORE_RUNTIME_LIFECYCLE_STOP_TIMEOUT", "14s")
 	t.Setenv("AEGISCORE_SERVER_HTTP_PORT", "28080")
 	t.Setenv("AEGISCORE_SERVER_GRPC_SHUTDOWN_TIMEOUT", "12s")
 	t.Setenv("AEGISCORE_OBSERVABILITY_METRICS_ENABLED", "false")
 	t.Setenv("AEGISCORE_OBSERVABILITY_TRACING_SAMPLE_RATIO", "0.5")
 
 	cfg := loadConfigFromYAML(t, explicitConfigYAML())
+	require.Equal(t, 13*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
+	require.Equal(t, 14*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 	require.Equal(t, 28080, cfg.Server.HTTP.Port)
 	require.Equal(t, 12*time.Second, cfg.Server.GRPC.ShutdownTimeout)
 	require.False(t, cfg.Observability.Metrics.Enabled)
@@ -405,6 +453,10 @@ func explicitConfigYAML() string {
 	return `app:
   name: aegiscore-test
   environment: local
+runtime:
+  lifecycle:
+    start_timeout: 11s
+    stop_timeout: 12s
 server:
   http:
     enabled: true

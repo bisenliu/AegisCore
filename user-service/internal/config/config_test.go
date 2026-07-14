@@ -40,6 +40,8 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, 20, cfg.Resources.Postgres[serviceresources.NameUserDB].Pool.MaxOpenConns)
 	runtime := cfg.RuntimeConfig()
 	require.Equal(t, "aegiscore-test", runtime.App.Name)
+	require.Equal(t, 21*time.Second, runtime.Runtime.Lifecycle.StartTimeout)
+	require.Equal(t, 22*time.Second, runtime.Runtime.Lifecycle.StopTimeout)
 }
 
 func TestApplyDefaultsSetsFeatureCacheDefaults(t *testing.T) {
@@ -175,6 +177,8 @@ func TestLoadAppliesNestedResourceEnvironmentOverride(t *testing.T) {
 func TestLoadRepositoryConfig(t *testing.T) {
 	cfg, err := NewConfig(ConfigPath(filepath.Join("..", "..", "configs", "config.yaml")))
 	require.NoError(t, err)
+	require.Equal(t, 60*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
+	require.Equal(t, 120*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 	require.True(t, cfg.Server.HTTP.Enabled)
 	require.False(t, cfg.Server.GRPC.Enabled)
 	require.Contains(t, cfg.Resources.Redis, serviceresources.NameCacheRedis)
@@ -250,6 +254,10 @@ server:
     shutdown_timeout: 5s
   grpc:
     enabled: false
+runtime:
+  lifecycle:
+    start_timeout: 21s
+    stop_timeout: 22s
 auth:
   jwt:
     secret: secret-123456789012345678901234567890

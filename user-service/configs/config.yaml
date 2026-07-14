@@ -3,6 +3,14 @@ app:
   name: aegiscore-user-services
   environment: local
 
+runtime:
+  lifecycle:
+    # Fx app 启动总预算，覆盖配置加载后的 provider 初始化和 OnStart hooks。
+    start_timeout: 60s
+    # Fx app 关闭总预算，覆盖所有 OnStop hooks；必须大于等于 server.http/grpc.shutdown_timeout。
+    # 该值不是数据可靠性保证，关键数据仍应通过持久化队列、WAL 或数据库状态恢复。
+    stop_timeout: 120s
+
 server:
   http:
     # HTTP 是 user-service 当前唯一启用的入站协议。
@@ -12,6 +20,7 @@ server:
     read_timeout: 30s
     write_timeout: 60s
     idle_timeout: 120s
+    # HTTP server 组件级优雅关闭预算；必须小于等于 runtime.lifecycle.stop_timeout。
     shutdown_timeout: 25s
   grpc:
     # 当前没有入站 gRPC API；保留共享生命周期契约但默认关闭。

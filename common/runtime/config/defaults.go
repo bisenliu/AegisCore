@@ -22,12 +22,16 @@ const (
 )
 
 const (
-	defaultHTTPReadTimeout     = 30 * time.Second
-	defaultHTTPWriteTimeout    = 60 * time.Second
-	defaultHTTPIdleTimeout     = 120 * time.Second
-	defaultHTTPShutdownTimeout = 10 * time.Second
-	defaultGRPCShutdownTimeout = 10 * time.Second
-	defaultTracingSampleRatio  = 1.0
+	// defaultLifecycleStartTimeout 是 Fx app 启动总预算，覆盖配置加载后 app.Start 阶段的 provider 和 lifecycle hook 初始化。
+	defaultLifecycleStartTimeout = 60 * time.Second
+	// defaultLifecycleStopTimeout 是 Fx app 关闭总预算，必须不小于 HTTP/gRPC 等组件级 shutdown timeout。
+	defaultLifecycleStopTimeout = 120 * time.Second
+	defaultHTTPReadTimeout      = 30 * time.Second
+	defaultHTTPWriteTimeout     = 60 * time.Second
+	defaultHTTPIdleTimeout      = 120 * time.Second
+	defaultHTTPShutdownTimeout  = 10 * time.Second
+	defaultGRPCShutdownTimeout  = 10 * time.Second
+	defaultTracingSampleRatio   = 1.0
 )
 
 // DefaultConfig 返回可直接启动本地 HTTP 服务的核心配置。
@@ -36,6 +40,12 @@ func DefaultConfig() Config {
 		App: AppConfig{
 			Name:        DefaultAppName,
 			Environment: DefaultAppEnvironment,
+		},
+		Runtime: RuntimeConfig{
+			Lifecycle: LifecycleConfig{
+				StartTimeout: defaultLifecycleStartTimeout,
+				StopTimeout:  defaultLifecycleStopTimeout,
+			},
 		},
 		Server: ServerConfig{
 			HTTP: HTTPServerConfig{

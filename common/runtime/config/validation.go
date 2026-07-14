@@ -53,6 +53,7 @@ func (c Config) Validate() error {
 	var errs []error
 
 	errs = append(errs, c.validateApp()...)
+	errs = append(errs, c.validateRuntime()...)
 	errs = append(errs, c.validateServer()...)
 	errs = append(errs, c.validateLog()...)
 	errs = append(errs, c.validateObservability()...)
@@ -70,6 +71,22 @@ func (c Config) validateApp() []error {
 	}
 	if strings.TrimSpace(c.App.Environment) == "" {
 		errs = append(errs, configFieldError("app.environment", "is required"))
+	}
+	return errs
+}
+
+func (c Config) validateRuntime() []error {
+	var errs []error
+	errs = append(errs, validatePositiveDuration("runtime.lifecycle.start_timeout", c.Runtime.Lifecycle.StartTimeout)...)
+	errs = append(errs, validatePositiveDuration("runtime.lifecycle.stop_timeout", c.Runtime.Lifecycle.StopTimeout)...)
+	if c.Runtime.Lifecycle.StopTimeout > 0 {
+		// lifecycle stop 是 Fx app 总预算，不能短于任一协议 server 的组件级关闭预算。
+		if c.Server.HTTP.ShutdownTimeout > 0 && c.Runtime.Lifecycle.StopTimeout < c.Server.HTTP.ShutdownTimeout {
+			errs = append(errs, configFieldError("runtime.lifecycle.stop_timeout", "must be >= server.http.shutdown_timeout"))
+		}
+		if c.Server.GRPC.ShutdownTimeout > 0 && c.Runtime.Lifecycle.StopTimeout < c.Server.GRPC.ShutdownTimeout {
+			errs = append(errs, configFieldError("runtime.lifecycle.stop_timeout", "must be >= server.grpc.shutdown_timeout"))
+		}
 	}
 	return errs
 }

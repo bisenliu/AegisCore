@@ -5,6 +5,7 @@ import "time"
 // Config 是跨服务共享的最小 runtime 配置对象。
 type Config struct {
 	App           AppConfig           `mapstructure:"app"`
+	Runtime       RuntimeConfig       `mapstructure:"runtime"`
 	Server        ServerConfig        `mapstructure:"server"`
 	Log           LogConfig           `mapstructure:"log"`
 	Observability ObservabilityConfig `mapstructure:"observability"`
@@ -14,6 +15,19 @@ type Config struct {
 type AppConfig struct {
 	Name        string `mapstructure:"name"`
 	Environment string `mapstructure:"environment"`
+}
+
+// RuntimeConfig 包含进程级 runtime 生命周期配置。
+// 该配置约束整个 Fx app 的启停总预算，不替代 HTTP、gRPC 等组件级关闭超时。
+type RuntimeConfig struct {
+	Lifecycle LifecycleConfig `mapstructure:"lifecycle"`
+}
+
+// LifecycleConfig 包含 Fx app 启动和关闭的总预算。
+// StopTimeout 必须覆盖已启用或已配置协议 server 的 shutdown timeout，使组件级优雅关闭有机会完整执行。
+type LifecycleConfig struct {
+	StartTimeout time.Duration `mapstructure:"start_timeout"`
+	StopTimeout  time.Duration `mapstructure:"stop_timeout"`
 }
 
 // ServerConfig 包含共享协议 server 的生命周期配置。

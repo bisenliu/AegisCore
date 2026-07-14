@@ -75,6 +75,8 @@ func LoadInto[T any](path string, validate func(T) error) (*T, error) {
 func setCoreDefaults(v *viper.Viper, defaults Config) {
 	v.SetDefault("app.name", defaults.App.Name)
 	v.SetDefault("app.environment", defaults.App.Environment)
+	v.SetDefault("runtime.lifecycle.start_timeout", defaults.Runtime.Lifecycle.StartTimeout)
+	v.SetDefault("runtime.lifecycle.stop_timeout", defaults.Runtime.Lifecycle.StopTimeout)
 	v.SetDefault("server.http.enabled", defaults.Server.HTTP.Enabled)
 	v.SetDefault("server.http.host", defaults.Server.HTTP.Host)
 	v.SetDefault("server.http.port", defaults.Server.HTTP.Port)
