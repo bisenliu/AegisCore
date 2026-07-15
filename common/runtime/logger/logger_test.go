@@ -17,7 +17,6 @@ import (
 )
 
 func TestNewLoggerSplitsLowAndWarningLevels(t *testing.T) {
-	restoreDefaultLoggerAfterTest(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	log, err := newLogger(
@@ -50,7 +49,6 @@ func TestNewLoggerSplitsLowAndWarningLevels(t *testing.T) {
 }
 
 func TestNewLoggerHonorsConfiguredLevelAndConsoleFormat(t *testing.T) {
-	restoreDefaultLoggerAfterTest(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	log, err := newLogger(
@@ -68,6 +66,30 @@ func TestNewLoggerHonorsConfiguredLevelAndConsoleFormat(t *testing.T) {
 	require.Empty(t, stdout.String())
 	require.NotContains(t, stderr.String(), "ignored")
 	require.Contains(t, stderr.String(), "visible")
+}
+
+func TestNewDoesNotReplaceDefaultLogger(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	setDefaultLoggerForTest(t, zap.New(core))
+
+	created, err := New(&config.Config{App: config.AppConfig{Name: "user-service", Environment: "test"}})
+	require.NoError(t, err)
+	require.NotNil(t, created)
+
+	Info(context.Background(), "default logger unchanged")
+	require.Len(t, logs.FilterMessage("default logger unchanged").All(), 1)
+}
+
+func TestNewWithConfigDoesNotReplaceDefaultLogger(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	setDefaultLoggerForTest(t, zap.New(core))
+
+	created, err := NewWithConfig(config.LogConfig{Level: "debug", Format: "json"})
+	require.NoError(t, err)
+	require.NotNil(t, created)
+
+	Info(context.Background(), "default logger unchanged")
+	require.Len(t, logs.FilterMessage("default logger unchanged").All(), 1)
 }
 
 func TestNamedComponentResetsLoggerNameAndAddsComponent(t *testing.T) {

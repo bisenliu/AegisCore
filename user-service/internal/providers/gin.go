@@ -12,6 +12,7 @@ import (
 
 	commonmw "github.com/aegiscore/common/http/middleware"
 	"github.com/aegiscore/common/runtime/config"
+	commonlogger "github.com/aegiscore/common/runtime/logger"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 	"github.com/aegiscore/user-service/internal/router"
@@ -49,6 +50,7 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 		),
 		renameHTTPServerSpan(),
 		commonmw.RequestID(),
+		requestLoggerContext(params.Log),
 		commonmw.HTTPServerMetrics(commonmw.HTTPMetricsOptions{
 			Provider:   params.Metrics,
 			Skip:       skipMetricsScrapeRequest(params.Config.Observability.Metrics),
@@ -59,6 +61,13 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 		commonmw.CORS(),
 	)
 	return engine, nil
+}
+
+func requestLoggerContext(log *zap.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Request = c.Request.WithContext(commonlogger.ToContext(c.Request.Context(), log))
+		c.Next()
+	}
 }
 
 func skipSuccessfulRuntimeEndpointLog(metricsCfg config.MetricsConfig) func(*gin.Context) bool {

@@ -10,7 +10,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 )
 
-// New 根据根配置创建 zap logger，并在配置为 nil 时使用默认配置。
+// New 根据根配置创建调用方拥有的 zap logger，并在配置为 nil 时使用默认配置。
 func New(cfg *config.Config) (*zap.Logger, error) {
 	logCfg := config.LogConfig{}
 	serviceName := ""
@@ -23,7 +23,7 @@ func New(cfg *config.Config) (*zap.Logger, error) {
 	return newLogger(logCfg, serviceName, environment, zapcore.AddSync(os.Stdout), zapcore.AddSync(os.Stderr))
 }
 
-// NewWithConfig 创建配置化 zap logger，并将其安装为进程默认 logger。
+// NewWithConfig 创建调用方拥有的配置化 zap logger。
 func NewWithConfig(cfg config.LogConfig) (*zap.Logger, error) {
 	return newLogger(cfg, "", "", zapcore.AddSync(os.Stdout), zapcore.AddSync(os.Stderr))
 }
@@ -43,7 +43,6 @@ func newLogger(cfg config.LogConfig, serviceName string, environment string, std
 		identityFields = append(identityFields, zap.String(EnvironmentField, environment))
 	}
 	log = log.With(identityFields...)
-	SetDefault(log)
 	return log, nil
 }
 

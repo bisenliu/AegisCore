@@ -102,6 +102,9 @@ func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, chan
 	if c == nil {
 		return errors.New("rbac policy refresh coordinator is required")
 	}
+	if c.log != nil {
+		ctx = logger.ToContext(ctx, c.log)
+	}
 	reason := change.ReasonText()
 	localApplied := true
 	var syncErr error

@@ -90,7 +90,7 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 	service := roleseed.NewService(roleStore, permissionStore, rolePermissionStore, userRoleStore)
 	userCreator := usercommand.NewCreateUserService(userStore, passwordService)
 
-	return rbacSeedDependencies{service: service, users: userCreator, credentials: credentialStore, passwordService: passwordService}, cleanup, nil
+	return rbacSeedDependencies{service: service, users: userCreator, credentials: credentialStore, passwordService: passwordService, log: log}, cleanup, nil
 }
 
 func rbacPostgresConfig(cfg *serviceconfig.Config) (commonresources.PostgresConfig, error) {

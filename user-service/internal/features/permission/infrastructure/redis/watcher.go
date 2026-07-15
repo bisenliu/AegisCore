@@ -83,6 +83,9 @@ func (w *Watcher) Start() {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	if w.log != nil {
+		ctx = logger.ToContext(ctx, w.log)
+	}
 	w.cancel = cancel
 	w.done = make(chan struct{})
 	w.running = true

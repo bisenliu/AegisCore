@@ -19,6 +19,7 @@ mkdir -p \
   "${fixture_root}/user-service/ent/schema" \
   "${fixture_root}/user-service/docs" \
   "${fixture_root}/user-service/internal/features/auth/application" \
+  "${fixture_root}/user-service/internal/features/auth/infrastructure" \
   "${fixture_root}/user-service/internal/features/role" \
   "${fixture_root}/user-service/internal/shared" \
   "${fixture_root}/user-service/migrations" \
@@ -102,6 +103,20 @@ package application
 func setClockForTest() {}
 EOF
 
+cat > "${fixture_root}/user-service/internal/features/auth/infrastructure/default_logger.go" <<'EOF'
+package infrastructure
+
+import (
+	"context"
+
+	"github.com/aegiscore/common/runtime/logger"
+)
+
+func useDefaultLogger() {
+	logger.Info(context.Background(), "default logger dependency")
+}
+EOF
+
 cat > "${fixture_root}/user-service/internal/features/auth/application/allowed_test.go" <<'EOF'
 package application
 
@@ -150,6 +165,11 @@ fi
 
 if [[ "${output}" != *"test-only symbol must not enter production Go files"* ]]; then
   printf 'architecture-lint-test: expected test-only production symbol violation report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
+if [[ "${output}" != *"feature production code must not use package-level default logger as main-path dependency"* ]]; then
+  printf 'architecture-lint-test: expected default logger dependency violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
