@@ -5,14 +5,18 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
+	rediscmd "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
+	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
+	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 	permissioncasbin "github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin"
@@ -72,6 +76,93 @@ func TestPermissionModuleBuildsWithMetricsConfigurations(t *testing.T) {
 			require.Nil(t, provider.Gatherer())
 		})
 	}
+}
+
+func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	redisClient := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = redisClient.Close() })
+	provider := newPermissionModuleMetricsProvider(t, false)
+	cfg := &config.Config{App: config.AppConfig{Name: "aegiscore-user-service-module-test"}}
+	loader := permissionModulePolicyLoader{}
+	roles := permissionModuleUserRoleResolver{}
+
+	var engine *permissioncasbin.Engine
+	var authorizationEngine permissionauthorization.Engine
+	var reloadEngine permissionapplication.PolicyReloadEngine
+	var store *permissionredis.Store
+	var publisher permissionapplication.PolicyVersionPublisher
+	var tracker *permissionredis.VersionTracker
+	var trackerPort permissionapplication.PolicyVersionTracker
+	var watcher *permissionredis.Watcher
+	var watcherStatus permissionredis.WatcherStatus
+	var authorizer permissionauthorization.Authorizer
+	var reloadMetrics commonmetrics.ReloadMetrics
+	app := fxtest.New(t,
+		fx.NopLogger,
+		fx.Supply(
+			provider,
+			cfg,
+			zap.NewNop(),
+			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
+		),
+		fx.Replace(
+			fx.Annotate(loader, fx.As(new(permissioncasbin.Loader))),
+			fx.Annotate(roles, fx.As(new(permissioncasbin.UserRoleResolver))),
+			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
+			fx.Annotate(permissionModuleScanner{}, fx.As(new(permissionapplication.RouteCatalogScanner))),
+		),
+		Module,
+		fx.Populate(
+			&engine,
+			&authorizationEngine,
+			&reloadEngine,
+			&store,
+			&publisher,
+			&tracker,
+			&trackerPort,
+			&watcher,
+			&watcherStatus,
+			&authorizer,
+			&reloadMetrics,
+		),
+	)
+	app.RequireStart()
+	require.True(t, watcher.Running())
+	app.RequireStop()
+	require.False(t, watcher.Running())
+
+	require.Same(t, engine, authorizationEngine.(*permissioncasbin.Engine))
+	require.Same(t, engine, reloadEngine.(*permissioncasbin.Engine))
+	require.Same(t, store, publisher.(*permissionredis.Store))
+	require.Same(t, tracker, trackerPort.(*permissionredis.VersionTracker))
+	require.Same(t, watcher, watcherStatus.(*permissionredis.Watcher))
+	require.NotNil(t, authorizer)
+	require.NotNil(t, reloadMetrics)
+}
+
+func TestPermissionModuleRequiresMetricsProvider(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	redisClient := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = redisClient.Close() })
+	app := fx.New(
+		fx.NopLogger,
+		fx.Supply(
+			&config.Config{App: config.AppConfig{Name: "aegiscore-user-service-module-test"}},
+			zap.NewNop(),
+			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
+		),
+		fx.Replace(
+			fx.Annotate(permissionModulePolicyLoader{}, fx.As(new(permissioncasbin.Loader))),
+			fx.Annotate(permissionModuleUserRoleResolver{}, fx.As(new(permissioncasbin.UserRoleResolver))),
+			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
+			fx.Annotate(permissionModuleScanner{}, fx.As(new(permissionapplication.RouteCatalogScanner))),
+		),
+		Module,
+	)
+
+	require.Error(t, app.Err())
+	require.Contains(t, app.Err().Error(), "metrics.Provider")
 }
 
 func newPermissionModuleTestApp(
@@ -142,3 +233,19 @@ func (s *routeDiffMetricsSpy) RouteDiffObserved(_ context.Context, missing int, 
 	s.missing = missing
 	s.stale = stale
 }
+
+type permissionModulePolicyLoader struct{}
+
+func (permissionModulePolicyLoader) LoadPolicies(context.Context) (permissioncasbin.PolicySet, error) {
+	return permissioncasbin.PolicySet{}, nil
+}
+
+type permissionModuleUserRoleResolver struct{}
+
+func (permissionModuleUserRoleResolver) RolesForUser(context.Context, uuid.UUID) ([]uuid.UUID, error) {
+	return nil, nil
+}
+
+func (permissionModuleUserRoleResolver) InvalidateUserRole(uuid.UUID) {}
+
+func (permissionModuleUserRoleResolver) InvalidateAllUserRoles() {}

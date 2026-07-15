@@ -97,7 +97,7 @@ func TestPermissionLookupDefaultGetActiveByPermissionID(t *testing.T) {
 	client := newRoleStoreTestClient(t)
 	ctx := context.Background()
 	permissionStore := permissionpostgres.NewPermissionStore(permissionpostgres.PermissionStoreParams{Client: client})
-	lookup := NewPermissionLookup(PermissionLookupParams{Store: permissionStore})
+	lookup := NewPermissionLookup(permissionStore)
 	activePermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000011001")
 	inactivePermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000011002")
 	missingPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000011003")

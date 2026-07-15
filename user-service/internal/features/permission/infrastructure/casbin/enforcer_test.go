@@ -7,9 +7,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 
+	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
@@ -24,7 +26,7 @@ func TestEngineEnforceAllowDenyAndDoesNotReload(t *testing.T) {
 	}, nil).Times(1)
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return([]uuid.UUID{roleID}, nil).Times(2)
-	engine := NewEngine(Params{Loader: loader, UserRoles: roles})
+	engine := NewEngine(Params{Loader: loader, Metrics: commonmetrics.NopReloadMetrics(), UserRoles: roles})
 	require.NoError(t, engine.Reload(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
 	require.NoError(t, err)
@@ -44,7 +46,7 @@ func TestEngineSuperAdminWildcard(t *testing.T) {
 	}, nil)
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return([]uuid.UUID{superAdminRoleID}, nil)
-	engine := NewEngine(Params{Loader: loader, UserRoles: roles})
+	engine := NewEngine(Params{Loader: loader, Metrics: commonmetrics.NopReloadMetrics(), UserRoles: roles})
 	require.NoError(t, engine.Reload(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/anything/:id", "DELETE")
 	require.NoError(t, err)
@@ -151,7 +153,7 @@ func TestEngineEnforceReturnsRoleResolverError(t *testing.T) {
 	}, nil)
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return(nil, resolveErr)
-	engine := NewEngine(Params{Loader: loader, UserRoles: roles})
+	engine := NewEngine(Params{Loader: loader, Metrics: commonmetrics.NopReloadMetrics(), UserRoles: roles})
 	require.NoError(t, engine.Reload(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
 	require.ErrorIs(t, err, resolveErr)
@@ -195,8 +197,26 @@ func TestEngineInvalidatesUserRoleResolver(t *testing.T) {
 		roles.EXPECT().InvalidateUserRole(userID),
 		roles.EXPECT().InvalidateAllUserRoles(),
 	)
-	engine := NewEngine(Params{Loader: loader, UserRoles: roles})
+	engine := NewEngine(Params{Loader: loader, Metrics: commonmetrics.NopReloadMetrics(), UserRoles: roles})
 
 	engine.InvalidateUserRole(userID)
 	engine.InvalidateAllUserRoles()
+}
+
+func TestEngineFxRequiresReloadMetrics(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	var engine *Engine
+	app := fx.New(
+		fx.NopLogger,
+		fx.Provide(NewEngine),
+		fx.Supply(
+			fx.Annotate(NewMockLoader(ctrl), fx.As(new(Loader))),
+			fx.Annotate(NewMockUserRoleResolver(ctrl), fx.As(new(UserRoleResolver))),
+		),
+		fx.Populate(&engine),
+	)
+
+	require.Error(t, app.Err())
+	require.Contains(t, app.Err().Error(), "metrics.ReloadMetrics")
+	require.Nil(t, engine)
 }

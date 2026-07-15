@@ -11,6 +11,7 @@ import (
 
 	commonvalidation "github.com/aegiscore/common/validation"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
+	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	rolecommand "github.com/aegiscore/user-service/internal/features/role/application/command"
 	rolequery "github.com/aegiscore/user-service/internal/features/role/application/query"
@@ -23,29 +24,34 @@ func TestRoleModuleBuildsWithCompositionAdapters(t *testing.T) {
 	require.NoError(t, err)
 	store := roleModuleStore{}
 	permissionStore := roleModulePermissionStore{}
+	permissionCatalogStore := roleModulePermissionCatalogStore{}
 	notifier := roleModulePolicyNotifier{}
 
 	var commands rolecommand.RoleCommandService
 	var queries rolequery.RoleQueryService
 	var controller *rolehttp.RoleController
+	var lookup roleapplication.PermissionLookup
 	app := fxtest.New(t,
 		fx.NopLogger,
 		Module,
-		fx.Supply(validator),
+		fx.Supply(
+			validator,
+			fx.Annotate(permissionCatalogStore, fx.As(new(permissionapplication.PermissionStore))),
+		),
 		fx.Provide(func() permissionapplication.PolicyChangeNotifier { return notifier }),
 		fx.Replace(
 			fx.Annotate(store, fx.As(new(roleapplication.RoleStore))),
 			fx.Annotate(store, fx.As(new(roleapplication.UserRoleStore))),
 			fx.Annotate(permissionStore, fx.As(new(roleapplication.RolePermissionStore))),
-			fx.Annotate(store, fx.As(new(roleapplication.PermissionLookup))),
 		),
-		fx.Populate(&commands, &queries, &controller),
+		fx.Populate(&commands, &queries, &controller, &lookup),
 	)
 	app.RequireStart().RequireStop()
 
 	require.NotNil(t, commands)
 	require.NotNil(t, queries)
 	require.NotNil(t, controller)
+	require.NotNil(t, lookup)
 }
 
 type roleModulePolicyNotifier struct{}
@@ -137,3 +143,35 @@ func (roleModulePermissionStore) Remove(context.Context, uuid.UUID, uuid.UUID) e
 }
 
 var _ roleapplication.RolePermissionStore = roleModulePermissionStore{}
+
+type roleModulePermissionCatalogStore struct{}
+
+func (roleModulePermissionCatalogStore) Create(context.Context, permissionapplication.CreatePermissionInput) (*permissiondomain.Permission, error) {
+	return nil, nil
+}
+
+func (roleModulePermissionCatalogStore) GetByPermissionID(context.Context, uuid.UUID) (*permissiondomain.Permission, error) {
+	return nil, nil
+}
+
+func (roleModulePermissionCatalogStore) List(context.Context, permissionapplication.ListPermissionsInput) ([]permissiondomain.Permission, bool, error) {
+	return nil, false, nil
+}
+
+func (roleModulePermissionCatalogStore) ListAll(context.Context) ([]permissiondomain.Permission, error) {
+	return nil, nil
+}
+
+func (roleModulePermissionCatalogStore) ListEffectiveByUserID(context.Context, uuid.UUID) ([]permissiondomain.Permission, error) {
+	return nil, nil
+}
+
+func (roleModulePermissionCatalogStore) Update(context.Context, permissionapplication.UpdatePermissionInput) error {
+	return nil
+}
+
+func (roleModulePermissionCatalogStore) SetActive(context.Context, uuid.UUID, bool) error {
+	return nil
+}
+
+var _ permissionapplication.PermissionStore = roleModulePermissionCatalogStore{}

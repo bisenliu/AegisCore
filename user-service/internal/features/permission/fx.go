@@ -23,22 +23,30 @@ var Module = fx.Module("feature-permission",
 		permissioncasbin.NewPolicyLoader,
 		permissioncasbin.NewUserRoleResolver,
 		// Fx 分类：横切能力 - Casbin reload 指标。
-		newCasbinReloadMetrics,
+		commonmetrics.NewCasbinPolicyReloadMetrics,
 		// Fx 分类：Feature 基础设施 - Casbin 引擎及其 port 投影。
-		permissioncasbin.NewEngine,
-		newAuthorizationEngine,
-		newPolicyReloadEngine,
+		fx.Annotate(
+			permissioncasbin.NewEngine,
+			fx.As(fx.Self()),
+			fx.As(new(permissionauthorization.Engine)),
+			fx.As(new(permissionapplication.PolicyReloadEngine)),
+		),
 		// Fx 分类：横切能力 - 请求授权器。
-		fx.Annotate(permissionauthorization.NewAuthorizer, fx.As(new(permissionauthorization.Authorizer))),
+		permissionauthorization.NewAuthorizer,
 		// Fx 分类：Feature 基础设施 - 权限持久化与路由目录 adapter。
 		fx.Annotate(permissionpostgres.NewPermissionStore, fx.As(new(permissionapplication.PermissionStore))),
 		fx.Annotate(permissionhttp.NewRouteCatalogScanner, fx.As(new(permissionapplication.RouteCatalogScanner))),
 		// Fx 分类：Feature 基础设施 - 分布式 policy version 同步 adapter。
-		permissionredis.NewStore,
-		permissionredis.NewVersionTracker,
-		newPolicyVersionPublisher,
-		newPolicyVersionTracker,
-		newPolicyWatcherStatus,
+		fx.Annotate(
+			permissionredis.NewStore,
+			fx.As(fx.Self()),
+			fx.As(new(permissionapplication.PolicyVersionPublisher)),
+		),
+		fx.Annotate(
+			permissionredis.NewVersionTracker,
+			fx.As(fx.Self()),
+			fx.As(new(permissionapplication.PolicyVersionTracker)),
+		),
 		// Fx 分类：Feature 应用 - policy 刷新编排与权限读写服务。
 		fx.Annotate(permissionapplication.NewPolicyRefreshCoordinator, fx.As(new(permissionapplication.PolicyChangeNotifier))),
 		permissioncommand.NewPermissionCommandService,
@@ -46,7 +54,11 @@ var Module = fx.Module("feature-permission",
 		// Fx 分类：传输 - permission HTTP controller。
 		permissionhttp.NewPermissionController,
 		// Fx 分类：资源 - policy 变更后台 watcher。
-		permissionredis.NewWatcher,
+		fx.Annotate(
+			permissionredis.NewWatcher,
+			fx.As(fx.Self()),
+			fx.As(new(permissionredis.WatcherStatus)),
+		),
 	),
 	fx.Invoke(
 		// Fx 分类：生命周期 - 启动期完成 Casbin policy 初始加载。
@@ -55,27 +67,3 @@ var Module = fx.Module("feature-permission",
 		func(*permissionredis.Watcher) {},
 	),
 )
-
-func newCasbinReloadMetrics(provider *commonmetrics.Provider) commonmetrics.ReloadMetrics {
-	return commonmetrics.NewCasbinPolicyReloadMetrics(provider)
-}
-
-func newAuthorizationEngine(engine *permissioncasbin.Engine) permissionauthorization.Engine {
-	return engine
-}
-
-func newPolicyReloadEngine(engine *permissioncasbin.Engine) permissionapplication.PolicyReloadEngine {
-	return engine
-}
-
-func newPolicyVersionPublisher(store *permissionredis.Store) permissionapplication.PolicyVersionPublisher {
-	return store
-}
-
-func newPolicyVersionTracker(tracker *permissionredis.VersionTracker) permissionapplication.PolicyVersionTracker {
-	return tracker
-}
-
-func newPolicyWatcherStatus(watcher *permissionredis.Watcher) permissionredis.WatcherStatus {
-	return watcher
-}

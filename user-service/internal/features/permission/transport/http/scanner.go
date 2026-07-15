@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/fx"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
@@ -16,16 +15,9 @@ type RouteCatalogScanner struct {
 
 var _ permissionapplication.RouteCatalogScanner = (*RouteCatalogScanner)(nil)
 
-// RouteCatalogScannerParams 包含 Gin route scanner 所需的 Fx 输入。
-type RouteCatalogScannerParams struct {
-	fx.In
-
-	Engine *gin.Engine
-}
-
 // NewRouteCatalogScanner 构造基于 Gin engine 的只读路由扫描器。
-func NewRouteCatalogScanner(params RouteCatalogScannerParams) *RouteCatalogScanner {
-	return &RouteCatalogScanner{engine: params.Engine}
+func NewRouteCatalogScanner(engine *gin.Engine) *RouteCatalogScanner {
+	return &RouteCatalogScanner{engine: engine}
 }
 
 // DiscoverRoutes 返回当前 Gin engine 上可授权的 HTTP 路由。
