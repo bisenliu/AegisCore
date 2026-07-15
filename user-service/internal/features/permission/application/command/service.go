@@ -3,8 +3,6 @@ package command
 import (
 	"context"
 
-	"go.uber.org/fx"
-
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 
@@ -13,20 +11,12 @@ type permissionCommandService struct {
 	store         permissionapplication.PermissionStore
 }
 
-// PermissionCommandParams 包含权限写侧服务依赖。
-type PermissionCommandParams struct {
-	fx.In
-
-	Store         permissionapplication.PermissionStore
-	PolicyChanges permissionapplication.PolicyChangeNotifier
-}
-
 // NewPermissionCommandService 根据权限仓储依赖构造权限写侧服务。
-func NewPermissionCommandService(params PermissionCommandParams) PermissionCommandService {
-	if params.PolicyChanges == nil {
+func NewPermissionCommandService(store permissionapplication.PermissionStore, policyChanges permissionapplication.PolicyChangeNotifier) PermissionCommandService {
+	if policyChanges == nil {
 		panic("permission policy change notifier is required")
 	}
-	return &permissionCommandService{store: params.Store, policyChanges: params.PolicyChanges}
+	return &permissionCommandService{store: store, policyChanges: policyChanges}
 }
 
 func (s *permissionCommandService) notifyPolicyChanged(ctx context.Context, reason string) error {

@@ -215,11 +215,40 @@ check_feature_default_logger_dependencies() {
   )
 }
 
+check_feature_application_domain_fx_metadata() {
+  local pattern='go\.uber\.org/fx|fx\.In|`[^`]*(name|optional):"'
+  local file output status
+  while IFS= read -r file; do
+    set +e
+    output="$(rg -n "${pattern}" "${file}" 2>&1)"
+    status=$?
+    set -e
+    case "${status}" in
+      0)
+        report "feature application/domain production code must not carry Fx DI metadata: ${file#"${repo_root}/"}"$'\n'"${output}"
+        ;;
+      1)
+        ;;
+      *)
+        report "feature application/domain Fx metadata scan failed for ${file#"${repo_root}/"}"$'\n'"${output}"
+        ;;
+    esac
+  done < <(
+    find "${service_dir}/internal/features" \
+      -type f -name '*.go' \
+      ! -name '*_test.go' \
+      ! -name 'mock_generate.go' \
+      \( -path '*/application/*' -o -path '*/domain/*' \) \
+      -print
+  )
+}
+
 check_go_toolchain_version
 check_atlas_postgres_version
 check_mock_generate_build_tags
 check_test_only_production_symbols
 check_feature_default_logger_dependencies
+check_feature_application_domain_fx_metadata
 
 if [[ -d "${service_dir}/internal/features/permission/application/rbacbaseline" ]]; then
   report "old permission/application/rbacbaseline package still exists"

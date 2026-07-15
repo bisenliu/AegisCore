@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"go.uber.org/fx"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
@@ -18,23 +17,24 @@ type roleCommandService struct {
 	userRoles       roleapplication.UserRoleStore
 }
 
-// RoleCommandParams 包含角色写侧服务依赖。
-type RoleCommandParams struct {
-	fx.In
-
-	Permissions     roleapplication.PermissionLookup
-	PolicyChanges   permissionapplication.PolicyChangeNotifier
-	RolePermissions roleapplication.RolePermissionStore
-	Roles           roleapplication.RoleStore
-	UserRoles       roleapplication.UserRoleStore
-}
-
 // NewRoleCommandService 根据角色相关端口构造角色写侧服务。
-func NewRoleCommandService(params RoleCommandParams) RoleCommandService {
-	if params.PolicyChanges == nil {
+func NewRoleCommandService(
+	roles roleapplication.RoleStore,
+	userRoles roleapplication.UserRoleStore,
+	rolePermissions roleapplication.RolePermissionStore,
+	permissions roleapplication.PermissionLookup,
+	policyChanges permissionapplication.PolicyChangeNotifier,
+) RoleCommandService {
+	if policyChanges == nil {
 		panic("role policy change notifier is required")
 	}
-	return &roleCommandService{roles: params.Roles, userRoles: params.UserRoles, rolePermissions: params.RolePermissions, permissions: params.Permissions, policyChanges: params.PolicyChanges}
+	return &roleCommandService{
+		roles:           roles,
+		userRoles:       userRoles,
+		rolePermissions: rolePermissions,
+		permissions:     permissions,
+		policyChanges:   policyChanges,
+	}
 }
 
 func (s *roleCommandService) notifyPolicyChanged(ctx context.Context, reason string) error {

@@ -21,6 +21,7 @@ mkdir -p \
   "${fixture_root}/user-service/internal/features/auth/application" \
   "${fixture_root}/user-service/internal/features/auth/infrastructure" \
   "${fixture_root}/user-service/internal/features/role" \
+  "${fixture_root}/user-service/internal/features/role/infrastructure" \
   "${fixture_root}/user-service/internal/shared" \
   "${fixture_root}/user-service/migrations" \
   "${fixture_root}/user-service/scripts"
@@ -103,6 +104,39 @@ package application
 func setClockForTest() {}
 EOF
 
+cat > "${fixture_root}/user-service/internal/features/auth/application/fx_metadata.go" <<'EOF'
+package application
+
+import "go.uber.org/fx"
+
+type Deps struct {
+	fx.In
+	Store any `name:"user_db"`
+}
+EOF
+
+cat > "${fixture_root}/user-service/internal/features/role/fx.go" <<'EOF'
+package role
+
+import "go.uber.org/fx"
+
+type Params struct {
+	fx.In
+	Store any `name:"user_db"`
+}
+EOF
+
+cat > "${fixture_root}/user-service/internal/features/role/infrastructure/store.go" <<'EOF'
+package infrastructure
+
+import "go.uber.org/fx"
+
+type Params struct {
+	fx.In
+	Store any `name:"user_db"`
+}
+EOF
+
 cat > "${fixture_root}/user-service/internal/features/auth/infrastructure/default_logger.go" <<'EOF'
 package infrastructure
 
@@ -173,7 +207,12 @@ if [[ "${output}" != *"feature production code must not use package-level defaul
   exit 1
 fi
 
-if [[ "${output}" == *"allowed_test.go"* || "${output}" == *"common/testing/example/helper.go"* || "${output}" == *"user-service/ent/schema/generated.go"* || "${output}" == *"user-service/docs/openapi.go"* ]]; then
+if [[ "${output}" != *"feature application/domain production code must not carry Fx DI metadata"* ]]; then
+  printf 'architecture-lint-test: expected application/domain Fx metadata violation report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
+if [[ "${output}" == *"allowed_test.go"* || "${output}" == *"common/testing/example/helper.go"* || "${output}" == *"user-service/ent/schema/generated.go"* || "${output}" == *"user-service/docs/openapi.go"* || "${output}" == *"user-service/internal/features/role/fx.go"* || "${output}" == *"user-service/internal/features/role/infrastructure/store.go"* ]]; then
   printf 'architecture-lint-test: excluded test or generated file produced a false positive\n%s\n' "${output}" >&2
   exit 1
 fi
