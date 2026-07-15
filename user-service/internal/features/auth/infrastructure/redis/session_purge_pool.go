@@ -13,8 +13,9 @@ type SessionPurgePoolParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Redis     *rediscache.Client `name:"cache_redis"`
-	Log       *zap.Logger
+	// Redis 仅用于建立 Fx lifecycle 注册顺序，确保停止时先关闭 purge pool、再关闭 Redis client。
+	Redis *rediscache.Client `name:"cache_redis"`
+	Log   *zap.Logger
 }
 
 // NewSessionPurgePool 构造认证会话批量清理专用后台任务池。

@@ -17,6 +17,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/workerpool"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
@@ -215,6 +216,7 @@ func TestSessionStorePurgePoolStopHookPrecedesRedisStopHook(t *testing.T) {
 		Redis:     client,
 		Cfg:       &serviceconfig.Config{},
 		PurgePool: pool,
+		Metrics:   authapplication.NopMetrics(),
 	})
 	require.NoError(t, err,
 		"NewSessionStore: %v", err)
@@ -254,6 +256,9 @@ func TestSessionStoreConsumesNamedPurgePool(t *testing.T) {
 	var store *SessionStore
 	app := fxtest.New(t,
 		fx.Provide(
+			func() authapplication.Metrics {
+				return authapplication.NopMetrics()
+			},
 			func() *serviceconfig.Config {
 				return &serviceconfig.Config{Auth: serviceconfig.AuthConfig{TokenVersionCacheTTL: time.Minute}}
 			},

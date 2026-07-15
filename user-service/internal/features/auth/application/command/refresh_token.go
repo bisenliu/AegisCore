@@ -30,12 +30,12 @@ type refreshTokenUseCase struct {
 }
 
 // NewRefreshTokenUseCase 构造 refresh token use case。
-func NewRefreshTokenUseCase(deps RefreshTokenDeps) RefreshTokenUseCase {
+func NewRefreshTokenUseCase(tokens authtokens.Issuer, sessions authsessions.Lifecycle, metrics authapplication.Metrics, settings RefreshTokenSettings) RefreshTokenUseCase {
 	return &refreshTokenUseCase{
-		tokens:               deps.Tokens,
-		sessions:             deps.Sessions,
-		metrics:              metricsOrNop(deps.Metrics),
-		refreshTokenRotation: deps.Settings.RefreshTokenRotation,
+		tokens:               tokens,
+		sessions:             sessions,
+		metrics:              metricsOrNop(metrics),
+		refreshTokenRotation: settings.RefreshTokenRotation,
 	}
 }
 

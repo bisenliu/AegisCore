@@ -63,6 +63,7 @@ func newTestSessionStoreWithAppName(t testing.TB, redisServer *miniredis.Minired
 			Auth:   serviceconfig.AuthConfig{TokenVersionCacheTTL: time.Minute},
 		},
 		PurgePool: directPurgeTaskPool{},
+		Metrics:   authapplication.NopMetrics(),
 	})
 	require.NoError(t, err,
 		"NewSessionStore: %v", err)

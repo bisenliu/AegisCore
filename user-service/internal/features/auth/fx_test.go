@@ -2,18 +2,34 @@ package auth
 
 import (
 	"context"
+	"regexp"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
+	rediscache "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 
+	commonconfig "github.com/aegiscore/common/runtime/config"
+	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	commonauth "github.com/aegiscore/common/security/auth"
+	"github.com/aegiscore/common/security/password"
+	commonvalidation "github.com/aegiscore/common/validation"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
+	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
+	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
+	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 )
+
+var _ authcredentials.PasswordService = (*password.Service)(nil)
 
 func TestNewTokenVersionLocalCacheUsesFeatureConfig(t *testing.T) {
 	enabled := true
@@ -63,4 +79,192 @@ func TestDisabledTokenVersionLocalCacheReadsThroughAndPreservesValidation(t *tes
 	require.Equal(t, authTokenVersionCacheName, result.Stats.Name())
 	require.EqualValues(t, 2, result.Stats.Stats().Load)
 	require.Zero(t, result.Stats.Stats().Capacity)
+}
+
+func TestAuthModuleBuildsCommandGraphWithMetricsConfigurations(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		t.Run(map[bool]string{true: "enabled", false: "disabled"}[enabled], func(t *testing.T) {
+			outputs := newAuthModuleTestApp(t, enabled, true)
+
+			require.NotNil(t, outputs.login)
+			require.NotNil(t, outputs.refresh)
+			require.NotNil(t, outputs.changePassword)
+			require.NotNil(t, outputs.logoutCurrent)
+			require.NotNil(t, outputs.logoutAll)
+			require.NotNil(t, outputs.verifier)
+			require.NotNil(t, outputs.refreshSessions)
+			require.NotNil(t, outputs.passwordChangeSessions)
+			require.NotNil(t, outputs.validator)
+			require.NotNil(t, outputs.invalidator)
+			require.NotNil(t, outputs.controller)
+			require.True(t, outputs.settings.RefreshTokenRotation)
+
+			if enabled {
+				require.IsType(t, &prometheusMetrics{}, outputs.metrics)
+				return
+			}
+
+			require.IsType(t, authapplication.NopMetrics(), outputs.metrics)
+			require.Nil(t, outputs.provider.Gatherer())
+		})
+	}
+}
+
+func TestAuthModuleRefreshTokenSettingsFollowsConfig(t *testing.T) {
+	for _, rotation := range []bool{true, false} {
+		t.Run(map[bool]string{true: "rotation_enabled", false: "rotation_disabled"}[rotation], func(t *testing.T) {
+			outputs := newAuthModuleTestApp(t, false, rotation)
+			require.Equal(t, rotation, outputs.settings.RefreshTokenRotation)
+		})
+	}
+}
+
+func TestAuthModuleMetricsEdgesAreRequired(t *testing.T) {
+	var login authcommand.LoginUseCase
+	options := append(newAuthModuleBaseOptions(t, true, nil), fx.Populate(&login))
+	app := fx.New(options...)
+
+	require.Error(t, app.Err())
+	require.Contains(t, app.Err().Error(), "metrics.Provider")
+}
+
+func TestAuthModuleCommandConstructorsHaveMetricsEdges(t *testing.T) {
+	outputs := newAuthModuleTestApp(t, true, true)
+	graphText := string(outputs.graph)
+	for _, constructor := range []string{"NewLoginUseCase", "NewRefreshTokenUseCase", "NewChangePasswordUseCase", "NewLogoutCurrentSessionUseCase", "NewLogoutAllSessionsUseCase"} {
+		match := regexp.MustCompile(`(constructor_\d+) \[shape=plaintext label="` + constructor + `"\];`).FindStringSubmatch(graphText)
+		require.Len(t, match, 2, graphText)
+		require.Contains(t, graphText, match[1]+` -> "application.Metrics" [ltail=`)
+	}
+}
+
+type authModuleOutputs struct {
+	provider               *commonmetrics.Provider
+	login                  authcommand.LoginUseCase
+	refresh                authcommand.RefreshTokenUseCase
+	changePassword         authcommand.ChangePasswordUseCase
+	logoutCurrent          authcommand.LogoutCurrentSessionUseCase
+	logoutAll              authcommand.LogoutAllSessionsUseCase
+	verifier               authcredentials.Verifier
+	settings               authcommand.RefreshTokenSettings
+	metrics                authapplication.Metrics
+	refreshSessions        authapplication.RefreshSessionStore
+	passwordChangeSessions authapplication.PasswordChangeSessionStore
+	validator              commonauth.TokenVersionValidator
+	invalidator            authvalidators.TokenVersionLocalInvalidator
+	controller             *authhttp.AuthController
+	graph                  fx.DotGraph
+}
+
+func newAuthModuleTestApp(t *testing.T, metricsEnabled bool, refreshRotation bool) authModuleOutputs {
+	t.Helper()
+	provider := newAuthModuleMetricsProvider(t, metricsEnabled)
+	outputs := authModuleOutputs{provider: provider}
+	options := append(newAuthModuleBaseOptions(t, refreshRotation, provider),
+		fx.Populate(
+			&outputs.login,
+			&outputs.refresh,
+			&outputs.changePassword,
+			&outputs.logoutCurrent,
+			&outputs.logoutAll,
+			&outputs.verifier,
+			&outputs.settings,
+			&outputs.metrics,
+			&outputs.refreshSessions,
+			&outputs.passwordChangeSessions,
+			&outputs.validator,
+			&outputs.invalidator,
+			&outputs.controller,
+			&outputs.graph,
+		),
+	)
+	app := fxtest.New(t, options...)
+	app.RequireStart().RequireStop()
+	return outputs
+}
+
+func newAuthModuleBaseOptions(t *testing.T, refreshRotation bool, provider *commonmetrics.Provider) []fx.Option {
+	t.Helper()
+	redisServer := miniredis.RunT(t)
+	redisClient := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = redisClient.Close() })
+	disabled := false
+	cfg := &serviceconfig.Config{
+		Config: commonconfig.Config{App: commonconfig.AppConfig{Name: "aegiscore-user-service-module-test"}},
+		Auth: serviceconfig.AuthConfig{
+			JWT: serviceconfig.JWTConfig{
+				Secret:                 "auth-module-test-secret-32-bytes",
+				Issuer:                 "issuer",
+				Audience:               "audience",
+				AccessTokenTTL:         15 * time.Minute,
+				RefreshTokenTTL:        time.Hour,
+				PasswordChangeTokenTTL: 5 * time.Minute,
+			},
+			PasswordKDF:              serviceconfig.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1},
+			TokenVersionCache:        serviceconfig.FeatureCacheConfig{Enabled: &disabled},
+			TokenVersionCacheTTL:     time.Minute,
+			RefreshTokenRotation:     refreshRotation,
+			MaxActiveSessionsPerUser: 5,
+		},
+	}
+	jwtService := commonauth.NewJWTService(commonauth.JWTConfig{Secret: cfg.Auth.JWT.Secret, Issuer: cfg.Auth.JWT.Issuer, Audience: cfg.Auth.JWT.Audience})
+	passwordService, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
+	require.NoError(t, err)
+	validator, err := commonvalidation.NewDefault()
+	require.NoError(t, err)
+	credentialStore := authModuleCredentialStore{}
+
+	options := []fx.Option{
+		fx.NopLogger,
+		fx.Supply(
+			cfg,
+			jwtService,
+			passwordService,
+			validator,
+			zap.NewNop(),
+			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
+		),
+		Module,
+		fx.Replace(
+			fx.Annotate(credentialStore, fx.As(new(authapplication.UserCredentialStore))),
+			fx.Annotate(credentialStore, fx.As(new(authapplication.UserTokenVersionStore))),
+		),
+	}
+	if provider != nil {
+		options = append([]fx.Option{fx.Supply(provider)}, options...)
+	}
+	return options
+}
+
+func newAuthModuleMetricsProvider(t *testing.T, enabled bool) *commonmetrics.Provider {
+	t.Helper()
+	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+		Config:      commonconfig.MetricsConfig{Enabled: enabled},
+		ServiceName: "aegiscore-user-service-module-test",
+		Environment: "test",
+	})
+	require.NoError(t, err)
+	return provider
+}
+
+type authModuleCredentialStore struct{}
+
+func (authModuleCredentialStore) GetByUsername(context.Context, string) (*authdomain.UserCredential, error) {
+	return nil, authdomain.ErrInvalidCredentials
+}
+
+func (authModuleCredentialStore) GetCredentialByUserID(context.Context, uuid.UUID) (*authdomain.UserCredential, error) {
+	return nil, authdomain.ErrInvalidCredentials
+}
+
+func (authModuleCredentialStore) UpdateCredentials(context.Context, authdomain.UpdateCredentialsInput) (int64, error) {
+	return 0, authdomain.ErrInvalidCredentials
+}
+
+func (authModuleCredentialStore) GetTokenVersion(context.Context, uuid.UUID) (int64, error) {
+	return 1, nil
+}
+
+func (authModuleCredentialStore) IncrementTokenVersion(context.Context, uuid.UUID) (int64, error) {
+	return 2, nil
 }

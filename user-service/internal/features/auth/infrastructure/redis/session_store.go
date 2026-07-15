@@ -42,8 +42,8 @@ type SessionStoreParams struct {
 
 	Redis     *rediscache.Client `name:"cache_redis"`
 	Cfg       *serviceconfig.Config
-	PurgePool PurgeTaskPool           `name:"auth_session_purge_pool"`
-	Metrics   authapplication.Metrics `optional:"true"`
+	PurgePool PurgeTaskPool `name:"auth_session_purge_pool"`
+	Metrics   authapplication.Metrics
 }
 
 type SessionStore struct {

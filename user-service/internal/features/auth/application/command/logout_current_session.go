@@ -27,10 +27,10 @@ type logoutCurrentSessionUseCase struct {
 }
 
 // NewLogoutCurrentSessionUseCase 构造当前会话登出 use case。
-func NewLogoutCurrentSessionUseCase(deps LogoutCurrentSessionDeps) LogoutCurrentSessionUseCase {
+func NewLogoutCurrentSessionUseCase(sessions authsessions.Lifecycle, metrics authapplication.Metrics) LogoutCurrentSessionUseCase {
 	return &logoutCurrentSessionUseCase{
-		sessions: deps.Sessions,
-		metrics:  metricsOrNop(deps.Metrics),
+		sessions: sessions,
+		metrics:  metricsOrNop(metrics),
 	}
 }
 

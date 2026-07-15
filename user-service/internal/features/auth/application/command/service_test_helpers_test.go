@@ -48,31 +48,11 @@ func newAuthCommandFixtureWithController(ctrl *gomock.Controller, authCfg servic
 	sessions := NewMockLifecycle(ctrl)
 	return &authCommandFixture{
 		testAuthUseCases: testAuthUseCases{
-			LoginUseCase: NewLoginUseCase(LoginDeps{
-				Credentials: credentials,
-				Tokens:      tokens,
-				Sessions:    sessions,
-				Metrics:     metrics,
-			}),
-			RefreshTokenUseCase: NewRefreshTokenUseCase(RefreshTokenDeps{
-				Tokens:   tokens,
-				Sessions: sessions,
-				Metrics:  metrics,
-				Settings: RefreshTokenSettings{RefreshTokenRotation: authCfg.RefreshTokenRotation},
-			}),
-			ChangePasswordUseCase: NewChangePasswordUseCase(ChangePasswordDeps{
-				Credentials: credentials,
-				Tokens:      tokens,
-				Sessions:    sessions,
-			}),
-			LogoutCurrentSessionUseCase: NewLogoutCurrentSessionUseCase(LogoutCurrentSessionDeps{
-				Sessions: sessions,
-				Metrics:  metrics,
-			}),
-			LogoutAllSessionsUseCase: NewLogoutAllSessionsUseCase(LogoutAllSessionsDeps{
-				Sessions: sessions,
-				Metrics:  metrics,
-			}),
+			LoginUseCase:                NewLoginUseCase(credentials, tokens, sessions, metrics),
+			RefreshTokenUseCase:         NewRefreshTokenUseCase(tokens, sessions, metrics, RefreshTokenSettings{RefreshTokenRotation: authCfg.RefreshTokenRotation}),
+			ChangePasswordUseCase:       NewChangePasswordUseCase(credentials, tokens, sessions, metrics),
+			LogoutCurrentSessionUseCase: NewLogoutCurrentSessionUseCase(sessions, metrics),
+			LogoutAllSessionsUseCase:    NewLogoutAllSessionsUseCase(sessions, metrics),
 		},
 		credentials: credentials,
 		tokens:      tokens,

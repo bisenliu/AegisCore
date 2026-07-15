@@ -50,11 +50,7 @@ func TestAuthUseCaseRefreshRotationPassesMaxActiveSessionsPerUser(t *testing.T) 
 	sessions := NewMockRefreshSessionStore(ctrl)
 	passwordChanges := NewMockPasswordChangeSessionStore(ctrl)
 	cfg := serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, TokenVersionCacheTTL: time.Minute, RefreshTokenRotation: true, MaxActiveSessionsPerUser: 4}
-	svc := NewRefreshTokenUseCase(RefreshTokenDeps{
-		Tokens:   tokens,
-		Sessions: authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, cfg.MaxActiveSessionsPerUser, noopTokenVersionInvalidator{}),
-		Settings: RefreshTokenSettings{RefreshTokenRotation: cfg.RefreshTokenRotation},
-	})
+	svc := NewRefreshTokenUseCase(tokens, authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, cfg.MaxActiveSessionsPerUser, noopTokenVersionInvalidator{}), nil, RefreshTokenSettings{RefreshTokenRotation: cfg.RefreshTokenRotation})
 	claims := refreshClaims("s-old", 2)
 	oldSession := authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
 
