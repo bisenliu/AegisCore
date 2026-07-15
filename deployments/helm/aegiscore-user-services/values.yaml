@@ -92,7 +92,7 @@ secret: # 外部 Secret 引用配置；chart 不渲染真实 Secret。
 deployment: # runtime Deployment 行为配置。
   revisionHistoryLimit: 5 # 保留的历史 ReplicaSet 数量。
   minReadySeconds: 10 # Pod ready 后至少稳定多少秒才算可用。
-  terminationGracePeriodSeconds: 35 # Pod 终止宽限期，应大于 HTTP shutdown_timeout。
+  terminationGracePeriodSeconds: 150 # Pod 终止宽限期；覆盖 120 秒 Fx Stop 总预算和 30 秒平台余量。
   strategy: # rollout 策略。
     type: RollingUpdate # 使用滚动更新。
     rollingUpdate: # RollingUpdate 参数。

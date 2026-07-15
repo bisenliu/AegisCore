@@ -10,6 +10,7 @@
 | `config` | 非敏感 `AEGISCORE_*` 运行时配置 |
 | `secret.existingSecret` | 外部 Secret 名称；chart 只引用不渲染真实 Secret |
 | `secret.keys.*` | Secret 键名映射 |
+| `deployment.terminationGracePeriodSeconds` | Fx Stop 总预算与平台余量对应的 Pod 终止宽限期 |
 | `resources` | HTTP 副本 requests/limits |
 | `probes` | `/livez`、`/readyz`、`/startupz` 探针配置 |
 | `autoscaling` | HPA 配置 |
@@ -20,6 +21,8 @@
 默认 `values.yaml` 不包含真实敏感值，也不设置 `RUN_MIGRATIONS=true`。普通 user-service 镜像不包含 Atlas，chart 不渲染自动执行 Atlas apply 的 migration Job。生产环境必须提前创建 `secret.existingSecret` 指向的 Secret，并确保数据库 SQL migration 已通过 DBA 工单或受控发布平台执行完成。
 
 默认 `podSecurityContext.runAsUser`、`runAsGroup` 和 `fsGroup` 均为 `65532`，与 Distroless static nonroot 运行时镜像身份一致。Deployment 和 RBAC seed Job 使用同一数值身份，保持只读根文件系统、禁止提权、capabilities drop 和 RuntimeDefault seccomp；Kubernetes 探针继续由 kubelet 通过 HTTP 访问 `/livez`、`/readyz`、`/startupz`。
+
+默认 `deployment.terminationGracePeriodSeconds` 为 150 秒，其中 120 秒覆盖 Fx `app.Stop()` 对全部 `OnStop` hook 的逆注册顺序串行总预算，30 秒保留给 kubelet 调度、信号传递、受控 `preStop` 和网络抖动。HTTP、workerpool 或 exporter 的局部 timeout 不能替代 Fx 总预算；正常关闭完成后 Pod 会立即退出，不会等待完整 150 秒。环境 values 覆盖该值或新增、延长 `preStop` 时，发布方必须保持 grace 至少覆盖 Fx Stop 总预算和 30 秒平台余量，并同步验证原生 Kubernetes 与 Helm 的默认契约未漂移。
 
 ## NetworkPolicy 安全边界
 
@@ -64,7 +67,7 @@ helm template aegiscore-user-services deployments/helm/aegiscore-user-services \
   --values deployments/helm/aegiscore-user-services/values.yaml
 ```
 
-渲染结果应包含 UID/GID/fsGroup `65532`，且不包含容器内 shell healthcheck、Atlas apply 命令或 migration Job。
+渲染结果应包含 UID/GID/fsGroup `65532` 和 `terminationGracePeriodSeconds: 150`，且不包含容器内 shell healthcheck、Atlas apply 命令或 migration Job。
 
 本地覆盖示例：
 

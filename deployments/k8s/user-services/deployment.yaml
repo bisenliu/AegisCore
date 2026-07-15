@@ -31,7 +31,7 @@ spec: # Deployment 期望状态。
     spec: # Pod 规格。
       serviceAccountName: aegiscore-user-services # Pod 使用的 ServiceAccount。
       automountServiceAccountToken: false # 不自动挂载 API token，降低凭据暴露面。
-      terminationGracePeriodSeconds: 35 # 终止宽限期；应大于 HTTP shutdown_timeout。
+      terminationGracePeriodSeconds: 150 # 终止宽限期；覆盖 120 秒 Fx Stop 总预算和 30 秒平台余量。
       securityContext: # Pod 级安全上下文。
         runAsNonRoot: true # 要求容器以非 root 用户运行。
         runAsUser: 65532 # 容器进程 UID；与 Distroless nonroot 镜像身份一致。
