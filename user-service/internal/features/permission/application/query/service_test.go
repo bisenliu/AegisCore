@@ -22,7 +22,7 @@ func TestPermissionQueryServiceListPermissionsNormalizesFiltersAndCursor(t *test
 		listInput = input
 		return []permissiondomain.Permission{{PermissionID: firstID, Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}, {PermissionID: lastID, Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true}}, true, nil
 	})
-	service := NewPermissionQueryService(store, NewMockRouteCatalogScanner(gomock.NewController(t)))
+	service := NewPermissionQueryService(store, NewMockRouteCatalogScanner(gomock.NewController(t)), permissionapplication.NopMetrics())
 
 	result, err := service.ListPermissions(context.Background(), ListPermissionsQuery{PageSize: 20, Limit: 10, Module: "  user  ", HTTPMethod: "post"})
 	require.NoError(t, err)
@@ -40,7 +40,7 @@ func TestPermissionQueryServiceGetAndEffectivePermissionsPassThrough(t *testing.
 	store := NewMockPermissionStore(gomock.NewController(t))
 	store.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permissiondomain.Permission{PermissionID: permissionID, Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}, nil)
 	store.EXPECT().ListEffectiveByUserID(gomock.Any(), userID).Return([]permissiondomain.Permission{{PermissionID: permissionID, Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}}, nil)
-	service := NewPermissionQueryService(store, NewMockRouteCatalogScanner(gomock.NewController(t)))
+	service := NewPermissionQueryService(store, NewMockRouteCatalogScanner(gomock.NewController(t)), permissionapplication.NopMetrics())
 
 	permissionResult, err := service.GetPermission(context.Background(), GetPermissionQuery{PermissionID: permissionID})
 	require.NoError(t, err)

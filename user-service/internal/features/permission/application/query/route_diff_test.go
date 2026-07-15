@@ -26,7 +26,7 @@ func TestRouteDiff(t *testing.T) {
 		{Method: "GET", Path: "/api/v1/users"},
 		{Method: "POST", Path: "/api/v1/users"},
 	}, nil)
-	service := NewPermissionQueryService(store, scanner)
+	service := NewPermissionQueryService(store, scanner, permissionapplication.NopMetrics())
 
 	result, err := service.GetRouteDiff(context.Background())
 	require.NoError(t, err)
@@ -70,7 +70,7 @@ func TestRouteDiffNormalizesSortsAndStaysReadOnly(t *testing.T) {
 		{Method: "get", Path: "/api/v1/users"},
 		{Method: "delete", Path: "/api/v1/users/:user_id"},
 	}, nil)
-	service := NewPermissionQueryService(store, scanner)
+	service := NewPermissionQueryService(store, scanner, permissionapplication.NopMetrics())
 
 	result, err := service.GetRouteDiff(context.Background())
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestRouteDiffRejectsInvalidDiscoveredRoute(t *testing.T) {
 	scanner.EXPECT().DiscoverRoutes(gomock.Any()).Return([]permissionapplication.DiscoveredRoute{{Method: "", Path: "/api/v1/users"}}, nil)
 	store := NewMockPermissionStore(gomock.NewController(t))
 	store.EXPECT().ListAll(gomock.Any()).Return(nil, nil)
-	service := NewPermissionQueryService(store, scanner)
+	service := NewPermissionQueryService(store, scanner, permissionapplication.NopMetrics())
 	_, err := service.GetRouteDiff(context.Background())
 	require.Error(t, err)
 }
