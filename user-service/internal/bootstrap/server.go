@@ -221,7 +221,7 @@ func shutdownOnHTTPServeError(log *zap.Logger, shutdowner fx.Shutdowner, err err
 	if shutdowner == nil {
 		return
 	}
-	if shutdownErr := shutdowner.Shutdown(); shutdownErr != nil {
+	if shutdownErr := shutdowner.Shutdown(fx.ExitCode(1)); shutdownErr != nil {
 		log.Error("shutdown after http server failure failed", logger.StackTrace(zap.Error(shutdownErr))...)
 	}
 }

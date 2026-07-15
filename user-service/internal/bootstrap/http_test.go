@@ -32,13 +32,42 @@ func (r *lifecycleRecorder) Append(hook fx.Hook) {
 }
 
 type shutdownRecorder struct {
-	calls int
-	err   error
+	calls    int
+	err      error
+	delegate fx.Shutdowner
 }
 
-func (r *shutdownRecorder) Shutdown(...fx.ShutdownOption) error {
+func (r *shutdownRecorder) Shutdown(options ...fx.ShutdownOption) error {
 	r.calls++
-	return r.err
+	if r.err != nil {
+		return r.err
+	}
+	if r.delegate != nil {
+		return r.delegate.Shutdown(options...)
+	}
+	return nil
+}
+
+func newShutdownSignalRecorder(t testing.TB) (*shutdownRecorder, <-chan fx.ShutdownSignal) {
+	t.Helper()
+	var shutdowner fx.Shutdowner
+	app := fx.New(fx.NopLogger, fx.Populate(&shutdowner))
+	require.NoError(t, app.Start(context.Background()))
+	t.Cleanup(func() {
+		require.NoError(t, app.Stop(context.Background()))
+	})
+	return &shutdownRecorder{delegate: shutdowner}, app.Wait()
+}
+
+func requireShutdownSignal(t testing.TB, signals <-chan fx.ShutdownSignal) fx.ShutdownSignal {
+	t.Helper()
+	select {
+	case signal := <-signals:
+		return signal
+	case <-time.After(time.Second):
+		t.Fatal("shutdown signal was not received")
+		return fx.ShutdownSignal{}
+	}
 }
 
 func TestDefaultConfigHTTPTimeouts(t *testing.T) {
@@ -136,12 +165,13 @@ func TestHTTPServerDisabledAllowsFxAppStartAndStop(t *testing.T) {
 
 func TestHTTPServerUnexpectedServeErrorTriggersShutdown(t *testing.T) {
 	core, logs := observer.New(zapcore.ErrorLevel)
-	shutdowner := &shutdownRecorder{}
+	shutdowner, signals := newShutdownSignalRecorder(t)
 	serveErr := errors.New("serve failed")
 
 	shutdownOnHTTPServeError(zap.New(core), shutdowner, serveErr)
 
 	require.Equal(t, 1, shutdowner.calls)
+	require.Equal(t, 1, requireShutdownSignal(t, signals).ExitCode)
 	entries := logs.FilterMessage("http server failed").All()
 	require.Len(t, entries, 1)
 	if loggedErr, ok := entries[0].ContextMap()["error"].(string); !ok || loggedErr != serveErr.Error() {

@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"go.uber.org/fx"
 
 	"github.com/aegiscore/user-service/internal/bootstrap"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
@@ -15,6 +18,7 @@ import (
 // lifecycleApp 是 runServe 启停服务所需的最小生命周期接口。
 type lifecycleApp interface {
 	Start(context.Context) error
+	Wait() <-chan fx.ShutdownSignal
 	Stop(context.Context) error
 }
 
@@ -55,10 +59,23 @@ func runServe(ctx context.Context, configPath string, appFactory lifecycleAppFac
 		return err
 	}
 
-	<-ctx.Done()
+	var shutdownSignal fx.ShutdownSignal
+	select {
+	case <-ctx.Done():
+	case shutdownSignal = <-app.Wait():
+	}
 
 	// 使用未被取消的父 context，使信号触发后优雅关闭仍能获得完整预算。
 	stopCtx, cancelStop := context.WithTimeout(context.WithoutCancel(upstreamCtx), lifecycleCfg.StopTimeout)
 	defer cancelStop()
-	return app.Stop(stopCtx)
+	stopErr := app.Stop(stopCtx)
+
+	var exitCodeErr error
+	if shutdownSignal.ExitCode != 0 {
+		exitCodeErr = fmt.Errorf("application shutdown requested with exit code %d", shutdownSignal.ExitCode)
+	}
+	if stopErr != nil {
+		stopErr = fmt.Errorf("stop application: %w", stopErr)
+	}
+	return errors.Join(exitCodeErr, stopErr)
 }

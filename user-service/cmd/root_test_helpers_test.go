@@ -11,11 +11,16 @@ import (
 
 type testLifecycleApp struct {
 	start func(context.Context) error
+	wait  <-chan fx.ShutdownSignal
 	stop  func(context.Context) error
 }
 
 func (a testLifecycleApp) Start(ctx context.Context) error {
 	return a.start(ctx)
+}
+
+func (a testLifecycleApp) Wait() <-chan fx.ShutdownSignal {
+	return a.wait
 }
 
 func (a testLifecycleApp) Stop(ctx context.Context) error {

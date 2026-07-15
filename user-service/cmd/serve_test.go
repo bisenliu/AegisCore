@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/fx"
 )
 
 type testContextKey string
@@ -57,6 +61,103 @@ func TestRunServeRejectsInvalidConfigBeforeCreatingApp(t *testing.T) {
 	err := runServe(context.Background(), writeServeTestConfig(t, 0, time.Second), appFactory)
 	require.ErrorContains(t, err, "runtime.lifecycle.start_timeout must be > 0")
 	require.False(t, called)
+}
+
+func TestRunServeHandlesInternalShutdownSignal(t *testing.T) {
+	stopErr := errors.New("stop failed")
+	tests := []struct {
+		name          string
+		exitCode      int
+		stopErr       error
+		wantExitError bool
+		wantStopError bool
+	}{
+		{name: "zero exit code"},
+		{name: "non-zero exit code", exitCode: 23, wantExitError: true},
+		{name: "stop error", stopErr: stopErr, wantStopError: true},
+		{name: "exit code and stop error", exitCode: 42, stopErr: stopErr, wantExitError: true, wantStopError: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shutdownSignals := make(chan fx.ShutdownSignal, 1)
+			shutdownSignals <- fx.ShutdownSignal{ExitCode: tt.exitCode}
+			var stopCalls int
+			appFactory := func(string) lifecycleApp {
+				return testLifecycleApp{
+					start: func(context.Context) error { return nil },
+					wait:  shutdownSignals,
+					stop: func(context.Context) error {
+						stopCalls++
+						return tt.stopErr
+					},
+				}
+			}
+
+			err := runServe(context.Background(), writeServeTestConfig(t, time.Second, time.Second), appFactory)
+			require.Equal(t, 1, stopCalls)
+			if tt.wantExitError {
+				require.ErrorContains(t, err, "exit code "+fmt.Sprint(tt.exitCode))
+			} else if !tt.wantStopError {
+				require.NoError(t, err)
+			}
+			if tt.wantStopError {
+				require.ErrorIs(t, err, stopErr)
+			}
+		})
+	}
+}
+
+func TestRunServeReturnsExternalShutdownStopError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	stopErr := errors.New("external stop failed")
+	appFactory := func(string) lifecycleApp {
+		return testLifecycleApp{
+			start: func(context.Context) error {
+				cancel()
+				return nil
+			},
+			stop: func(context.Context) error { return stopErr },
+		}
+	}
+
+	err := runServe(ctx, writeServeTestConfig(t, time.Second, time.Second), appFactory)
+	require.ErrorIs(t, err, stopErr)
+}
+
+func TestRunServeConcurrentExitSourcesStopOnce(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	shutdownSignals := make(chan fx.ShutdownSignal, 2)
+	configPath := writeServeTestConfig(t, time.Second, time.Second)
+	var stopCalls atomic.Int32
+	appFactory := func(string) lifecycleApp {
+		return testLifecycleApp{
+			start: func(context.Context) error {
+				cancel()
+				shutdownSignals <- fx.ShutdownSignal{}
+				shutdownSignals <- fx.ShutdownSignal{}
+				return nil
+			},
+			wait: shutdownSignals,
+			stop: func(context.Context) error {
+				stopCalls.Add(1)
+				return nil
+			},
+		}
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runServe(ctx, configPath, appFactory)
+	}()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("runServe did not return after concurrent exit sources")
+	}
+	require.Equal(t, int32(1), stopCalls.Load())
 }
 
 func writeServeTestConfig(t testing.TB, startTimeout time.Duration, stopTimeout time.Duration) string {
