@@ -716,3 +716,132 @@ user-service 的 HTTP 与 pprof listener/server 在 Fx App 成功启动后发生
 - **WHEN** listener/server 故障发生后 `Shutdown(fx.ExitCode(1))` 返回错误
 - **THEN** bootstrap MUST 记录 shutdown 请求失败及其错误原因
 - **AND** bootstrap goroutine MUST NOT 直接调用 `App.Stop()` 或 `os.Exit`
+
+### Requirement: user-service 优雅关闭总预算边界
+
+user-service MUST 将 `runtime.lifecycle.stop_timeout` 视为 `app.Stop()` 和全部 Fx `OnStop` hook 的进程级总预算。Fx MUST 保持逆注册顺序串行停止组件；每个 hook MUST 使用同一 Stop context 或其派生的更短 context，单个 HTTP、workerpool、exporter 或 datastore 关闭 timeout MUST NOT 被解释为全部 hook 的总预算，也不得通过并行执行 hook 绕开资源关闭顺序。
+
+默认关闭链路 MUST 在 120 秒 Fx 总预算内依次为 HTTP 请求排空、auth session purge workerpool、RBAC policy watcher、pprof、tracing、Ent/PostgreSQL/Redis 和 logger 同步提供关闭机会；具有 25 秒 HTTP 子预算和 30 秒 workerpool 子预算的 hook MUST 继续受 Fx 剩余 deadline 约束，没有独立子预算的 hook MUST 继续受同一 Fx Stop context 约束。
+
+#### Scenario: 外部终止信号进入总预算关闭链路
+
+- **WHEN** user-service 收到 `SIGINT` 或 `SIGTERM`
+- **THEN** 进程 MUST 使用默认 120 秒 Stop context 调用一次 `app.Stop()`
+- **AND** Fx MUST 在该 context 内按逆注册顺序串行执行已注册的 `OnStop` hook
+
+#### Scenario: 内部故障进入同一关闭链路
+
+- **WHEN** HTTP 或 pprof server 的非预期退出产生 Fx shutdown signal
+- **THEN** 进程 MUST 使用与外部终止相同的 Fx Stop 总预算和组件关闭语义
+- **AND** 部署 grace MUST 为 tracing flush、datastore 关闭和 logger sync 等后序工作保留到总预算结束后的平台余量
+
+#### Scenario: 局部组件 timeout 不替代总预算
+
+- **WHEN** HTTP shutdown timeout 为 25 秒、auth session purge workerpool StopTimeout 为 30 秒或 OTLP exporter I/O timeout 为 5 秒
+- **THEN** 这些值 MUST 仅限制各自组件或 I/O 操作
+- **AND** 运维和自动校验 MUST NOT 使用任一局部 timeout 作为 Kubernetes 或 Helm termination grace 的应用预算来源
+
+#### Scenario: 前序 hook 消耗关闭时间
+
+- **WHEN** 一个前序 `OnStop` hook 在 Fx 逆序串行关闭中消耗部分 Stop 时间
+- **THEN** 后序 hook MUST 观察同一全局 deadline 的剩余时间
+- **AND** 系统 MUST NOT 为每个 hook 重新创建完整 120 秒父预算
+
+#### Scenario: 正常快速关闭
+
+- **WHEN** HTTP 已无活跃请求、workerpool 已无任务、watcher 已退出且外部资源可立即关闭
+- **THEN** 各 `OnStop` hook MUST 在完成自身关闭后立即返回
+- **AND** 进程 MUST NOT 为耗尽 Fx Stop budget 或 Kubernetes termination grace 而主动等待
+
+### Requirement: Permission Metrics 正式依赖图必须完整
+
+user-service 的正式 permission 模块 MUST 向 `PermissionQueryService` 提供唯一且明确的单值 `permissionapplication.Metrics` 依赖。该依赖 MUST 在 Fx/Dig 图中作为必选输入边存在，MUST NOT 使用 variadic、optional 或 slice/group annotation 表达可缺失的 Metrics。
+
+#### Scenario: metrics 启用时注入真实实现
+
+- **WHEN** user-service 以 metrics 启用配置构造正式 App
+- **THEN** permission 模块 MUST 向 `PermissionQueryService` 注入当前 Prometheus Metrics 实现
+- **AND** route diff 查询 MUST 能更新既有 `aegiscore_user_service_permission_route_diff` 指标
+
+#### Scenario: metrics 禁用时注入 Nop 实现
+
+- **WHEN** user-service 以 metrics 禁用配置构造正式 App
+- **THEN** permission 模块 MUST 向 `PermissionQueryService` 注入现有 `permissionapplication.NopMetrics()` 实现
+- **AND** 正式 App MUST 完成构图且 MUST NOT 注册或更新 permission Prometheus 指标
+
+#### Scenario: DOT 图展示明确 Metrics 输入边
+
+- **WHEN** 测试生成包含正式 `permission.Module` 的 Fx/DOT 依赖图
+- **THEN** `PermissionQueryService` 构造节点 MUST 存在明确的 `permissionapplication.Metrics` 输入边
+- **AND** 依赖图 MUST NOT 依赖 variadic、错误的 optional 或 slice/group annotation 补偿该输入
+
+#### Scenario: 指标契约保持不变
+
+- **WHEN** permission Metrics 的正式依赖接线被修复
+- **THEN** 既有 metric family、指标名称、label key、label value 和低基数约束 MUST 保持不变
+- **AND** 系统 MUST NOT 新增 metrics backend、dashboard 或 alert
+
+### Requirement: user-service Fx lifecycle timeout 同源与作用边界
+
+user-service composition root MUST 使用同一份已解析 service config 的 `runtime.lifecycle.start_timeout` 和 `runtime.lifecycle.stop_timeout` 设置 App 顶层 `fx.StartTimeout` 与 `fx.StopTimeout`。`serve` 命令手动调用 `App.Start` 和 `App.Stop` 时 MUST 使用同一配置值创建显式 context；这些 context MUST 作为当前 CLI lifecycle hook 的实际 deadline，Fx App 顶层 timeout 与显式 context MUST NOT 被解释为可累加的两段预算。
+
+`fx.StartTimeout` MUST NOT 被描述或实现为配置加载或 `fx.New` 同步构造阶段的 deadline。配置加载 MUST 在 `fx.New` 之前完成；对构造期 provider、invoke 或资源 I/O 的 timeout 与 lifecycle 迁移 MUST 由其自身 context 或后续独立 change 定义。
+
+#### Scenario: App 与 CLI 使用相同 lifecycle 配置
+
+- **WHEN** CLI 使用已解析 service config 创建正式 Fx App
+- **THEN** App 的 Start/Stop timeout MUST 分别等于该配置的 `runtime.lifecycle.start_timeout` 和 `runtime.lifecycle.stop_timeout`
+- **AND** CLI 传给 `App.Start` 与 `App.Stop` 的 context MUST 分别使用相同的两个配置值
+
+#### Scenario: 显式 Start context 是实际启动边界
+
+- **WHEN** `serve` 命令手动调用 `App.Start(startCtx)`
+- **THEN** lifecycle `OnStart` hook MUST 接收受 `startCtx` 限制的启动预算
+- **AND** App 顶层 `fx.StartTimeout` MUST NOT 在该 context 之外增加或串联第二段启动预算
+
+#### Scenario: 显式 Stop context 是实际停止边界
+
+- **WHEN** 外部 context 或内部 Fx shutdown signal 触发 `serve` 停止
+- **THEN** CLI MUST 使用未被取消的上游 context value 和配置化 `stop_timeout` 调用一次 `App.Stop(stopCtx)`
+- **AND** App 顶层 `fx.StopTimeout` MUST NOT 在该 context 之外增加或串联第二段停止预算
+
+#### Scenario: fx.New 不受 StartTimeout 限制
+
+- **WHEN** user-service 在 `fx.New` 中同步构建依赖图、执行 invoke 或解析其 constructor 依赖
+- **THEN** 系统 MUST NOT 声称 `fx.StartTimeout` 会中断或限制该阶段
+- **AND** 文档与配置注释 MUST 将 `start_timeout` 描述为配置加载后 `App.Start` lifecycle 阶段的预算
+
+#### Scenario: 不隐式迁移构造期资源
+
+- **WHEN** 本 change 设置 App 顶层 lifecycle timeout 并统一配置来源
+- **THEN** 系统 MUST NOT 因此声称全部 provider constructor 或 invoke 已具备可取消的构造期 deadline
+- **AND** 任何把构造期资源工作迁移到 `OnStart` 的行为 MUST 另行评估依赖顺序、回滚和测试
+
+### Requirement: 正式 App logger 生命周期与显式来源
+
+user-service 正式 App MUST 使用 Fx 装配出的服务级 `*zap.Logger` 作为运行时日志依赖来源，并由 logger provider 在 App Stop 阶段同步该正式 logger。正式 App MUST NOT 通过安装、恢复或持有进程级默认 logger 来表达 logger lifecycle；request lifecycle 中的日志关联 MUST 继续通过明确写入 request context 的 logger 和 request ID context 传播。
+
+#### Scenario: App Stop 同步正式 logger
+- **WHEN** user-service Fx App 停止并执行 logger provider 的 `OnStop` hook
+- **THEN** 系统 MUST 对服务级正式 logger 执行既有 `Sync` 责任
+- **AND** stdout/stderr 不支持 fsync 的平台错误 MUST 继续按既有规则忽略
+
+#### Scenario: 正式 App 不安装默认 logger
+- **WHEN** user-service 正式 App 构造或启动 logger provider
+- **THEN** provider MUST NOT 调用 `logger.SetDefault` 或等价逻辑安装进程级默认 logger
+- **AND** App Stop MUST NOT 恢复旧默认 logger 或持有默认 logger restore 状态
+
+#### Scenario: 并行 App logger 隔离
+- **WHEN** 同一进程并行或连续构造多个 user-service 测试 App
+- **THEN** 每个 App 的 feature、middleware 和 provider 日志 MUST 来源于自身注入的服务级 logger 或 request context logger
+- **AND** 一个 App 构造的 logger MUST NOT 覆盖另一个 App 通过默认 logger fallback 观察到的实例
+
+#### Scenario: request context 日志关联保持不变
+- **WHEN** HTTP 请求经过 request ID 和 tracing 相关 middleware 并进入业务处理
+- **THEN** 请求生命周期内通过明确 context logger 记录的日志 MUST 继续包含有效的 `request_id`、`trace_id` 和 `span_id`
+- **AND** 本变更 MUST NOT 修改 `X-Request-ID`、W3C `traceparent` 或 `tracestate` 的外部传播契约
+
+#### Scenario: 观测输出契约保持不变
+- **WHEN** logger 依赖来源从进程默认迁移为显式注入或 request context
+- **THEN** 日志 message、level、logger name、`component`、`service`、`env`、`request_id`、`trace_id`、`span_id` 和敏感信息过滤语义 MUST 保持不变
+- **AND** 系统 MUST NOT 修改 metrics、tracing、OpenAPI、pprof、Prometheus alert 或 Grafana dashboard 契约

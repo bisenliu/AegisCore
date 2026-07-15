@@ -1239,3 +1239,80 @@ permission domain 中用于权限目录和授权对象的 HTTP method allowlist 
 - **THEN** 授权判断 MUST 继续使用当前 HTTP method 作为 Casbin action
 - **AND** 本次 allowlist 加固 MUST NOT 改变权限目录、route diff、policy loader、policy sync、超级管理员通配授权或授权失败响应语义
 
+### Requirement: Permission route diff 指标反映正式模块执行结果
+
+系统通过正式 `permission.Module` 执行 route diff 查询时 MUST 使用该模块注入的 `permissionapplication.Metrics` 实现，并在差异计算成功后记录准确的 missing 与 stale 数量。指标记录 MUST NOT 改变 route diff 的业务判定、只读语义、HTTP response、权限目录或 Casbin policy。
+
+#### Scenario: 正式模块记录 route diff 结果
+
+- **WHEN** 正式 `permission.Module` 构造的 `PermissionQueryService` 成功完成一次 route diff 查询
+- **THEN** 系统 MUST 调用所注入 Metrics 实现的 `RouteDiffObserved`
+- **AND** 调用参数 MUST 等于本次结果中的 missing 与 stale 数量
+
+#### Scenario: 模块级 spy 验证指标协作者
+
+- **WHEN** 测试从正式 `permission.Module` 构图注入 spy `permissionapplication.Metrics` 并执行 route diff 查询
+- **THEN** spy MUST 观察到 `RouteDiffObserved` 调用
+- **AND** 测试 MUST NOT 通过直接手工构造 query service 绕过正式模块接线
+
+#### Scenario: route diff 业务语义保持不变
+
+- **WHEN** 系统接入必选 Metrics 依赖并记录 route diff 数量
+- **THEN** missing、stale、mismatch 判定、排序、错误传播和只读行为 MUST 保持不变
+- **AND** 系统 MUST NOT 因记录指标而创建权限、修改权限状态、绑定角色或刷新 Casbin policy
+
+### Requirement: RBAC feature 日志依赖显式化
+
+permission 和 role feature 的 application、policy sync、Casbin authorization、RBAC seed、Redis watcher、PostgreSQL adapter 和其他关键 infrastructure 在正式业务主路径记录日志时 MUST 使用 constructor 注入的 `*zap.Logger`、由注入 logger 派生的组件 logger，或 request context 中明确携带的 logger。RBAC 授权、policy reload、用户角色缓存失效和跨副本同步路径 MUST NOT 依赖可变进程级默认 logger 作为正式日志依赖。
+
+#### Scenario: permission application 构造声明日志依赖
+- **WHEN** 权限目录 command/query、授权服务、route diff、policy reload coordinator 或 policy sync 组件需要记录日志
+- **THEN** 对应 constructor MUST 显式接收 `*zap.Logger` 或包含该 logger 的最小依赖结构
+- **AND** logger 迁移 MUST NOT 改变权限目录、授权判断、policy reload、用户角色缓存失效或 Redis policy version 发布语义
+
+#### Scenario: role application 构造声明日志依赖
+- **WHEN** 角色 command/query、用户角色绑定、角色权限绑定、RBAC seed 或超级管理员绑定流程需要记录日志
+- **THEN** 对应 constructor MUST 显式接收 `*zap.Logger` 或包含该 logger 的最小依赖结构
+- **AND** logger 迁移 MUST NOT 改变角色、权限、绑定、seed 或超级管理员业务结果
+
+#### Scenario: RBAC infrastructure 不依赖全局默认 logger
+- **WHEN** Casbin engine、policy loader、Redis watcher、PostgreSQL adapter、本地用户角色缓存或 policy change notifier 记录错误、reload 结果或后台同步状态
+- **THEN** logger MUST 从 constructor 显式注入或由调用方 context 提供
+- **AND** 生产文件 MUST NOT 通过 package-level `logger.Info`、`logger.Warn`、`logger.Error`、`logger.Debug` 或 `logger.NamedComponent(nil, ...)` 作为正式主路径日志来源
+
+#### Scenario: RBAC policy sync 日志契约保持不变
+- **WHEN** 在线 RBAC 写操作触发本实例 policy reload、用户角色缓存失效或 Redis policy version 发布
+- **THEN** 日志依赖来源迁移 MUST NOT 改变 fail-closed 授权、同步失败向调用方传播、周期性版本补偿或 Pub/Sub payload 语义
+- **AND** 日志字段 MUST 继续保持低基数并不得包含用户 ID 以外的高敏感明文、Redis key、SQL、token 或原始策略数据
+
+#### Scenario: 架构检查覆盖 role 与 permission feature
+- **WHEN** 执行 `make user-service-architecture-lint`
+- **THEN** 检查 MUST 能发现 role 或 permission feature application、policy sync 或关键 infrastructure 重新依赖 package-level 默认 logger 的生产代码
+- **AND** 生成 mock、测试 fixture 或显式局部 logger 使用不得被要求引入生产冗余接口
+
+### Requirement: RBAC application/domain 框架无关分层
+
+role 和 permission feature 的 application/domain 生产包 MUST 保持框架无关，不得承载仅服务于 Fx DI 的 import、`fx.In` 或 Fx struct tag。无 DI metadata 需求的普通 application 构造器 MUST 由 feature composition 直接注册；确有 Fx Params、named/optional metadata 或配置转换需求时，对应 adapter MUST 位于 feature composition 边界，例如各 feature 的 `fx.go` 或等价 composition 文件。该约束 MUST 不改变 RBAC command/query 业务行为、application port 所有权、transport DTO、policy reload、用户角色缓存失效或跨副本 policy sync 语义。
+
+#### Scenario: application command 直接构造无需 Fx
+
+- **WHEN** role 或 permission command service 在单元测试或非 Fx 调用方中被直接构造
+- **THEN** 调用方 MUST 能使用强类型普通参数提供 `RoleStore`、`UserRoleStore`、`RolePermissionStore`、`PermissionLookup`、`PermissionStore` 和 `PolicyChangeNotifier` 等协作者
+- **AND** 调用方 MUST NOT 需要 import `go.uber.org/fx`、嵌入 `fx.In` 或提供 Fx DI tag
+- **AND** 缺少必需 `PolicyChangeNotifier` 时的 fail-fast 或拒绝装配语义 MUST 保持不变
+
+#### Scenario: feature composition 注册普通构造器
+- **WHEN** user-service 通过正式 feature module 组装 role 或 permission command service
+- **THEN** 无 `name`/`optional` tag 或配置转换需求的 application command 构造器 MUST 由 feature composition 直接注册
+- **AND** 只有存在真实 DI metadata 或配置转换需求时，composition adapter 才 MUST 把 Fx graph 输入转换为 application command 构造器需要的普通依赖
+- **AND** 正式 module MUST 继续成功构图和启动
+
+#### Scenario: lint 阻止 application/domain Fx 回归
+- **WHEN** user/auth/role/permission 的 application/domain 生产包新增 `go.uber.org/fx` import、`fx.In` 或仅用于 Fx DI 的 struct tag
+- **THEN** `make user-service-architecture-lint` MUST 失败并指出对应违规
+- **AND** lint fixture MUST 覆盖至少一个 application/domain Fx 违规样例，证明规则可命中
+
+#### Scenario: RBAC 业务语义保持不变
+- **WHEN** role/permission command service 完成 DI metadata 下沉到 composition 边界
+- **THEN** 权限目录、角色、角色权限绑定、用户角色绑定、policy reload、用户角色缓存失效、Redis policy version 发布和 Casbin 授权结果 MUST 与变更前保持一致
+- **AND** 本变更 MUST NOT 修改 HTTP API、OpenAPI、数据库 schema、Atlas migration 或部署资产
