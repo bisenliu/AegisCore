@@ -22,7 +22,7 @@ const (
 )
 
 const (
-	// defaultLifecycleStartTimeout 是 Fx app 启动总预算，覆盖配置加载后 app.Start 阶段的 provider 和 lifecycle hook 初始化。
+	// defaultLifecycleStartTimeout 是配置加载后 Fx App.Start 和 OnStart hook 的启动总预算，不覆盖 fx.New 同步构造。
 	defaultLifecycleStartTimeout = 60 * time.Second
 	// defaultLifecycleStopTimeout 是 Fx app 关闭总预算，必须不小于 HTTP/gRPC 等组件级 shutdown timeout。
 	defaultLifecycleStopTimeout = 120 * time.Second

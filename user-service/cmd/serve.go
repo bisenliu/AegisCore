@@ -22,10 +22,10 @@ type lifecycleApp interface {
 	Stop(context.Context) error
 }
 
-type lifecycleAppFactory func(configPath string) lifecycleApp
+type lifecycleAppFactory func(cfg *serviceconfig.Config) lifecycleApp
 
-func newBootstrapLifecycleApp(configPath string) lifecycleApp {
-	return bootstrap.NewApp(configPath)
+func newBootstrapLifecycleApp(cfg *serviceconfig.Config) lifecycleApp {
+	return bootstrap.NewApp(cfg)
 }
 
 func newServeCommand(appFactory lifecycleAppFactory) *cobra.Command {
@@ -52,7 +52,8 @@ func runServe(ctx context.Context, configPath string, appFactory lifecycleAppFac
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	app := appFactory(configPath)
+	app := appFactory(cfg)
+	// 手动调用 Start 时由此 context 提供实际 deadline，不会与 App 顶层 fx.StartTimeout 累加。
 	startCtx, cancelStart := context.WithTimeout(ctx, lifecycleCfg.StartTimeout)
 	defer cancelStart()
 	if err := app.Start(startCtx); err != nil {
@@ -65,7 +66,7 @@ func runServe(ctx context.Context, configPath string, appFactory lifecycleAppFac
 	case shutdownSignal = <-app.Wait():
 	}
 
-	// 使用未被取消的父 context，使信号触发后优雅关闭仍能获得完整预算。
+	// 使用未被取消的父 context，使信号触发后优雅关闭仍能获得完整预算；该 deadline 不会与 fx.StopTimeout 累加。
 	stopCtx, cancelStop := context.WithTimeout(context.WithoutCancel(upstreamCtx), lifecycleCfg.StopTimeout)
 	defer cancelStop()
 	stopErr := app.Stop(stopCtx)

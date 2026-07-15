@@ -12,6 +12,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
+
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 type testContextKey string
@@ -22,8 +24,10 @@ func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testin
 	ctx, cancel := context.WithCancel(parent)
 	configPath := writeServeTestConfig(t, 2*time.Second, 4*time.Second)
 
-	appFactory := func(configPath string) lifecycleApp {
-		require.NotEmpty(t, configPath)
+	appFactory := func(cfg *serviceconfig.Config) lifecycleApp {
+		require.NotNil(t, cfg)
+		require.Equal(t, 2*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
+		require.Equal(t, 4*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 
 		return testLifecycleApp{
 			start: func(ctx context.Context) error {
@@ -53,7 +57,7 @@ func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testin
 
 func TestRunServeRejectsInvalidConfigBeforeCreatingApp(t *testing.T) {
 	called := false
-	appFactory := func(string) lifecycleApp {
+	appFactory := func(*serviceconfig.Config) lifecycleApp {
 		called = true
 		return testLifecycleApp{}
 	}
@@ -83,7 +87,7 @@ func TestRunServeHandlesInternalShutdownSignal(t *testing.T) {
 			shutdownSignals := make(chan fx.ShutdownSignal, 1)
 			shutdownSignals <- fx.ShutdownSignal{ExitCode: tt.exitCode}
 			var stopCalls int
-			appFactory := func(string) lifecycleApp {
+			appFactory := func(*serviceconfig.Config) lifecycleApp {
 				return testLifecycleApp{
 					start: func(context.Context) error { return nil },
 					wait:  shutdownSignals,
@@ -111,7 +115,7 @@ func TestRunServeHandlesInternalShutdownSignal(t *testing.T) {
 func TestRunServeReturnsExternalShutdownStopError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	stopErr := errors.New("external stop failed")
-	appFactory := func(string) lifecycleApp {
+	appFactory := func(*serviceconfig.Config) lifecycleApp {
 		return testLifecycleApp{
 			start: func(context.Context) error {
 				cancel()
@@ -130,7 +134,7 @@ func TestRunServeConcurrentExitSourcesStopOnce(t *testing.T) {
 	shutdownSignals := make(chan fx.ShutdownSignal, 2)
 	configPath := writeServeTestConfig(t, time.Second, time.Second)
 	var stopCalls atomic.Int32
-	appFactory := func(string) lifecycleApp {
+	appFactory := func(*serviceconfig.Config) lifecycleApp {
 		return testLifecycleApp{
 			start: func(context.Context) error {
 				cancel()

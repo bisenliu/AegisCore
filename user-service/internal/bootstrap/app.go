@@ -47,18 +47,28 @@ var AppModule = fx.Module("aegiscore-user-services",
 	),
 )
 
-// NewApp 构建包含共享配置、日志和服务模块的 user-service Fx 应用。
-func NewApp(configPath string) *fx.App {
-	return fx.New(
-		// Fx 分类：基础运行时 - 应用启动输入。
-		fx.Supply(serviceconfig.ConfigPath(configPath)),
+// AppOptions 从已解析的 service config 构建无配置 I/O 的基础 Fx options。
+func AppOptions(cfg *serviceconfig.Config, additional ...fx.Option) []fx.Option {
+	lifecycleCfg := cfg.Runtime.Lifecycle
+	options := []fx.Option{
+		// Fx 分类：基础运行时 - 同源的服务配置与共享运行时配置。
+		fx.Supply(cfg, serviceconfig.NewRuntimeConfig(cfg)),
 		fx.Provide(
-			// Fx 分类：基础运行时 - 配置加载、共享运行时配置和日志。
-			serviceconfig.NewConfig,
-			serviceconfig.NewRuntimeConfig,
+			// Fx 分类：基础运行时 - 结构化日志。
 			logger.NewLogger,
 		),
+		// 为 App.Run、fxtest 和 timeout 查询提供默认预算；显式 App.Start/Stop 仍以调用方 context 为实际边界。
+		fx.StartTimeout(lifecycleCfg.StartTimeout),
+		fx.StopTimeout(lifecycleCfg.StopTimeout),
+	}
+	return append(options, additional...)
+}
+
+// NewApp 使用调用方已解析的配置构建 user-service Fx 应用。
+func NewApp(cfg *serviceconfig.Config) *fx.App {
+	return fx.New(AppOptions(
+		cfg,
 		// Fx 分类：基础运行时 - user-service composition root。
 		AppModule,
-	)
+	)...)
 }

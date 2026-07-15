@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
+
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 type testLifecycleApp struct {
@@ -34,7 +36,7 @@ func testRootCommandDependencies(t testing.TB) rootCommandDependencies {
 		t.Fatalf("unexpected root command dependency call: %s", name)
 	}
 	return rootCommandDependencies{
-		appFactory: func(string) lifecycleApp {
+		appFactory: func(*serviceconfig.Config) lifecycleApp {
 			unexpected("appFactory")
 			return testLifecycleApp{}
 		},

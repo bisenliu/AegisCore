@@ -24,7 +24,6 @@ import (
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
-	"github.com/aegiscore/common/runtime/logger"
 	commonresources "github.com/aegiscore/common/runtime/resources"
 	"github.com/aegiscore/common/testing/containers"
 	"github.com/aegiscore/user-service/internal/bootstrap"
@@ -59,17 +58,14 @@ func newHTTPFlowHarness(t *testing.T) *httpFlowHarness {
 	seedRBACBaseline(t, postgres.DSN)
 
 	configPath := writeTestConfig(t, postgres.Config(), redis.Config())
+	serviceCfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(configPath))
+	require.NoError(t, err)
 	var engine *gin.Engine
-	app := fxtest.New(t,
-		fx.Supply(serviceconfig.ConfigPath(configPath)),
-		fx.Provide(
-			serviceconfig.NewConfig,
-			serviceconfig.NewRuntimeConfig,
-			logger.NewLogger,
-		),
+	app := fxtest.New(t, bootstrap.AppOptions(
+		serviceCfg,
 		bootstrap.AppModule,
 		fx.Populate(&engine),
-	)
+	)...)
 	app.RequireStart()
 	t.Cleanup(func() { app.RequireStop() })
 

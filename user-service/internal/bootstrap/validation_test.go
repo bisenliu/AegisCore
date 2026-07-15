@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
-	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/validation"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
@@ -18,36 +17,54 @@ import (
 
 func TestAppModuleResolvesSharedValidationDependency(t *testing.T) {
 	serviceCfg := appModuleValidationTestConfig()
-	err := fx.ValidateApp(
-		fx.Supply(serviceconfig.NewRuntimeConfig(serviceCfg), serviceCfg, zap.NewNop()),
+	err := fx.ValidateApp(AppOptions(
+		serviceCfg,
 		AppModule,
 		fx.Invoke(func(*validation.Validator, *userhttp.UserController) {}),
-	)
+	)...)
 	require.NoError(t, err)
 }
 
 func TestAppModuleIncludesSharedTimezoneDependency(t *testing.T) {
 	serviceCfg := appModuleValidationTestConfig()
-	err := fx.ValidateApp(
-		fx.Supply(serviceconfig.NewRuntimeConfig(serviceCfg), serviceCfg, zap.NewNop()),
+	err := fx.ValidateApp(AppOptions(
+		serviceCfg,
 		AppModule,
 		fx.Invoke(func(*validation.Validator, *userhttp.UserController) {}),
-	)
+	)...)
 	require.NoError(t, err)
 }
 
 func TestAppWiresCommonDependenciesExplicitly(t *testing.T) {
-	err := fx.ValidateApp(
-		fx.Supply(serviceconfig.ConfigPath("../../configs/config.yaml")),
-		fx.Provide(
-			serviceconfig.NewConfig,
-			serviceconfig.NewRuntimeConfig,
-			logger.NewLogger,
-		),
+	serviceCfg := appModuleValidationTestConfig()
+	err := fx.ValidateApp(AppOptions(
+		serviceCfg,
 		AppModule,
 		fx.Invoke(func(*config.Config, *serviceconfig.Config, *zap.Logger, *userhttp.UserController) {}),
-	)
+	)...)
 	require.NoError(t, err)
+}
+
+func TestAppOptionsSupplySameConfigurationAndLifecycleTimeouts(t *testing.T) {
+	serviceCfg := appModuleValidationTestConfig()
+	serviceCfg.Runtime.Lifecycle = config.LifecycleConfig{
+		StartTimeout: 17 * time.Second,
+		StopTimeout:  29 * time.Second,
+	}
+	var resolvedServiceCfg *serviceconfig.Config
+	var resolvedRuntimeCfg *config.Config
+
+	app := fx.New(AppOptions(
+		serviceCfg,
+		fx.Populate(&resolvedServiceCfg, &resolvedRuntimeCfg),
+		fx.NopLogger,
+	)...)
+
+	require.NoError(t, app.Err())
+	require.Same(t, serviceCfg, resolvedServiceCfg)
+	require.Equal(t, serviceconfig.NewRuntimeConfig(serviceCfg), resolvedRuntimeCfg)
+	require.Equal(t, serviceCfg.Runtime.Lifecycle.StartTimeout, app.StartTimeout())
+	require.Equal(t, serviceCfg.Runtime.Lifecycle.StopTimeout, app.StopTimeout())
 }
 
 func TestRuntimeModuleNamingReflectsCompositionRootScope(t *testing.T) {

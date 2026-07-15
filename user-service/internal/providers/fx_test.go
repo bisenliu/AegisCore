@@ -18,13 +18,17 @@ import (
 )
 
 func TestModuleResolvesServiceLevelProviders(t *testing.T) {
-	err := fx.ValidateApp(
-		fx.Supply(&config.Config{
+	serviceCfg := &serviceconfig.Config{
+		Config: config.Config{
 			App: config.AppConfig{Name: "configured-user-service", Environment: "test"},
 			Observability: config.ObservabilityConfig{
 				Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1},
 			},
-		}, &serviceconfig.Config{Auth: serviceconfig.AuthConfig{PasswordKDF: serviceconfig.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1}}}, zap.NewNop()),
+		},
+		Auth: serviceconfig.AuthConfig{PasswordKDF: serviceconfig.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1}},
+	}
+	err := fx.ValidateApp(
+		fx.Supply(serviceconfig.NewRuntimeConfig(serviceCfg), serviceCfg, zap.NewNop()),
 		validation.Module,
 		authfeature.Module,
 		permissionfeature.Module,
