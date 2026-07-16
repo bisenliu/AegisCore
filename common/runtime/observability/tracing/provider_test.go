@@ -209,16 +209,13 @@ func TestTextMapPropagatorUsesTraceContextAndBaggage(t *testing.T) {
 
 func TestNewFxProviderRegistersShutdown(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
-	provider, err := NewFxProvider(FxParams{
-		Lifecycle: lifecycle,
-		Config: &config.Config{
-			App: config.AppConfig{
-				Name:        "aegiscore-test",
-				Environment: "local",
-			},
-			Observability: config.ObservabilityConfig{
-				Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1.0},
-			},
+	provider, err := NewFxProvider(lifecycle, &config.Config{
+		App: config.AppConfig{
+			Name:        "aegiscore-test",
+			Environment: "local",
+		},
+		Observability: config.ObservabilityConfig{
+			Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1.0},
 		},
 	})
 	require.NoError(t, err, "NewFxProvider")
@@ -226,6 +223,39 @@ func TestNewFxProviderRegistersShutdown(t *testing.T) {
 	require.Len(t, lifecycle.hooks, 1, "registered hooks")
 	require.NotNil(t, lifecycle.hooks[0].OnStop, "registered OnStop hook")
 	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()), "OnStop")
+}
+
+func TestNewFxProviderDisabledUsesNeverSample(t *testing.T) {
+	provider, err := NewFxProvider(&lifecycleRecorder{}, &config.Config{
+		App: config.AppConfig{
+			Name:        "aegiscore-test",
+			Environment: "local",
+		},
+		Observability: config.ObservabilityConfig{
+			Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1.0},
+		},
+	})
+	require.NoError(t, err, "NewFxProvider")
+	defer shutdownProvider(t, provider)
+
+	_, span := provider.Tracer("test").Start(context.Background(), "operation")
+	defer span.End()
+	require.False(t, span.SpanContext().IsSampled(), "span is sampled")
+}
+
+func TestNewFxProviderPropagatesConstructionError(t *testing.T) {
+	lifecycle := &lifecycleRecorder{}
+	_, err := NewFxProvider(lifecycle, &config.Config{
+		App: config.AppConfig{
+			Name:        "aegiscore-test",
+			Environment: "local",
+		},
+		Observability: config.ObservabilityConfig{
+			Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1.1},
+		},
+	})
+	require.ErrorContains(t, err, "sample ratio")
+	require.Empty(t, lifecycle.hooks, "registered hooks")
 }
 
 func newTestProvider(t *testing.T, sampleRatio float64) *Provider {

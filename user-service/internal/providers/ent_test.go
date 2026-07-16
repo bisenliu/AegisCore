@@ -159,6 +159,16 @@ func TestEntQueryObservabilityRecordsErrorMetric(t *testing.T) {
 func TestEntQueryObservabilityDisabledKeepsQueryResult(t *testing.T) {
 	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:ent_observability_disabled_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	require.NoError(t, installEntObservability(client, newProviderTestMetrics(t, false), newProviderTestDisabledTracing(t)))
+
+	count, err := client.User.Query().Count(context.Background())
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+func TestEntQueryObservabilityNilFallbackKeepsQueryResultForDirectConstruction(t *testing.T) {
+	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:ent_observability_nil_fallback_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
 	require.NoError(t, installEntObservability(client, nil, nil))
 
 	count, err := client.User.Query().Count(context.Background())

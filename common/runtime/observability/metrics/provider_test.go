@@ -130,15 +130,13 @@ func TestNewProviderRejectsMissingServiceIdentity(t *testing.T) {
 }
 
 func TestNewFxProviderUsesSharedConfig(t *testing.T) {
-	provider, err := NewFxProvider(FxParams{
-		Config: &config.Config{
-			App: config.AppConfig{
-				Name:        "aegiscore-test",
-				Environment: "local",
-			},
-			Observability: config.ObservabilityConfig{
-				Metrics: testMetricsConfig(true, false),
-			},
+	provider, err := NewFxProvider(&config.Config{
+		App: config.AppConfig{
+			Name:        "aegiscore-test",
+			Environment: "local",
+		},
+		Observability: config.ObservabilityConfig{
+			Metrics: testMetricsConfig(true, false),
 		},
 	})
 	require.NoError(t, err, "NewFxProvider")
@@ -146,8 +144,23 @@ func TestNewFxProviderUsesSharedConfig(t *testing.T) {
 	require.True(t, provider.Enabled(), "provider = %#v, want enabled provider", provider)
 }
 
+func TestNewFxProviderReturnsDisabledProvider(t *testing.T) {
+	provider, err := NewFxProvider(&config.Config{
+		App: config.AppConfig{
+			Name:        "aegiscore-test",
+			Environment: "local",
+		},
+		Observability: config.ObservabilityConfig{
+			Metrics: testMetricsConfig(false, false),
+		},
+	})
+	require.NoError(t, err, "NewFxProvider")
+	require.NotNil(t, provider)
+	require.False(t, provider.Enabled(), "provider = %#v, want disabled provider", provider)
+}
+
 func TestNewFxProviderRejectsMissingConfig(t *testing.T) {
-	_, err := NewFxProvider(FxParams{})
+	_, err := NewFxProvider(nil)
 	require.ErrorContains(t, err, "metrics config")
 }
 

@@ -26,9 +26,9 @@ type NamedEntClientParams struct {
 	Lifecycle fx.Lifecycle
 	Config    *serviceconfig.Config
 	Log       *zap.Logger
-	Metrics   *commonmetrics.Provider `optional:"true"`
-	Tracing   *commontracing.Provider `optional:"true"`
-	UserDB    *sql.DB                 `name:"user_db"`
+	Metrics   *commonmetrics.Provider
+	Tracing   *commontracing.Provider
+	UserDB    *sql.DB `name:"user_db"`
 }
 
 // NamedEntClients 包含绑定用户服务数据库的 Ent client Fx 输出。

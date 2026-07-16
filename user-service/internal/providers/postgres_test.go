@@ -21,8 +21,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
+	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 	commonresources "github.com/aegiscore/common/runtime/resources"
+	"github.com/aegiscore/user-service/ent"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	"github.com/aegiscore/user-service/internal/resources"
 )
@@ -87,9 +89,13 @@ func TestProvideEntClientsProvidesUserServiceEntClient(t *testing.T) {
 	require.NoError(t, userDB.PingContext(ctx))
 
 	lc := fxtest.NewLifecycle(t)
+	metricsProvider := newProviderTestMetrics(t, true)
+	tracingProvider := newProviderTestTracing(t)
 	got, err := ProvideEntClients(NamedEntClientParams{
 		Lifecycle: lc,
 		Log:       zap.NewNop(),
+		Metrics:   metricsProvider,
+		Tracing:   tracingProvider,
 		UserDB:    userDB,
 	})
 	require.NoError(t, err)
@@ -100,6 +106,78 @@ func TestProvideEntClientsProvidesUserServiceEntClient(t *testing.T) {
 	require.NoError(t, lc.Start(ctx))
 	require.NoError(t, lc.Stop(ctx))
 	require.Equal(t, int64(0), drv.closes.Load())
+}
+
+func TestProvideEntClientsAcceptsDisabledObservabilityProviders(t *testing.T) {
+	drv := registerProviderTestSQLDriver(t)
+	userDB, err := sql.Open(drv.name, "postgres://aegiscore:secret@127.0.0.1/aegiscore_user")
+	require.NoError(t, err)
+	defer userDB.Close()
+	lc := fxtest.NewLifecycle(t)
+
+	got, err := ProvideEntClients(NamedEntClientParams{
+		Lifecycle: lc,
+		Log:       zap.NewNop(),
+		Metrics:   newProviderTestMetrics(t, false),
+		Tracing:   newProviderTestDisabledTracing(t),
+		UserDB:    userDB,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, got.UserClient)
+}
+
+func TestProvideEntClientsRequiresMetricsProviderInGraph(t *testing.T) {
+	type clients struct {
+		fx.In
+
+		UserClient *ent.Client `name:"user_db"`
+	}
+
+	err := fx.ValidateApp(
+		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), newProviderTestDisabledTracing(t)),
+		fx.Provide(
+			provideNilUserDBForEntGraphTest,
+			ProvideEntClients,
+		),
+		fx.Invoke(func(clients) {}),
+	)
+	require.ErrorContains(t, err, "*metrics.Provider")
+}
+
+func TestProvideEntClientsRequiresTracingProviderInGraph(t *testing.T) {
+	type clients struct {
+		fx.In
+
+		UserClient *ent.Client `name:"user_db"`
+	}
+
+	err := fx.ValidateApp(
+		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), newProviderTestMetrics(t, false)),
+		fx.Provide(
+			provideNilUserDBForEntGraphTest,
+			ProvideEntClients,
+		),
+		fx.Invoke(func(clients) {}),
+	)
+	require.ErrorContains(t, err, "*tracing.Provider")
+}
+
+func TestProvideEntClientsResolvesWithObservabilityProvidersInGraph(t *testing.T) {
+	type clients struct {
+		fx.In
+
+		UserClient *ent.Client `name:"user_db"`
+	}
+
+	err := fx.ValidateApp(
+		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), newProviderTestMetrics(t, false), newProviderTestDisabledTracing(t)),
+		fx.Provide(
+			provideNilUserDBForEntGraphTest,
+			ProvideEntClients,
+		),
+		fx.Invoke(func(clients) {}),
+	)
+	require.NoError(t, err)
 }
 
 func TestProvideRedisClientsProvidesCacheRedis(t *testing.T) {
@@ -212,6 +290,33 @@ func newProviderTestTracing(t *testing.T) *commontracing.Provider {
 		}},
 	}
 	return newGinTestTracingProvider(t, cfg)
+}
+
+func newProviderTestDisabledTracing(t *testing.T) *commontracing.Provider {
+	t.Helper()
+	provider, err := commontracing.NewProvider(context.Background(), commontracing.Options{
+		Config:      config.TracingConfig{Enabled: false, SampleRatio: 1},
+		ServiceName: "provider-test",
+		Environment: "test",
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	return provider
+}
+
+func newProviderTestMetrics(t *testing.T, enabled bool) *commonmetrics.Provider {
+	t.Helper()
+	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+		Config:      config.MetricsConfig{Enabled: enabled},
+		ServiceName: "provider-test",
+		Environment: "test",
+	})
+	require.NoError(t, err)
+	return provider
+}
+
+func provideNilUserDBForEntGraphTest() NamedPostgresPools {
+	return NamedPostgresPools{UserDB: nil}
 }
 
 func providerTestHasRedisSpan(recorder *tracetest.SpanRecorder) bool {
