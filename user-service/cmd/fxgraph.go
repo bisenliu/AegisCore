@@ -5,10 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
-	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/user-service/internal/bootstrap"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 const defaultFxGraphOutputPath = "./docs/fx-dependency-graph.dot"
@@ -37,17 +36,22 @@ func runFxGraphCommand(configPath string, outputPath string, writer fxGraphWrite
 	if writer == nil {
 		return fmt.Errorf("fx graph writer is required")
 	}
-	_, err := writer(outputPath,
-		// Fx 分类：开发工具 - 依赖图构建所需的启动输入与日志替身。
-		fx.Supply(config.ConfigPath(configPath), zap.NewNop()),
-		// Fx 分类：开发工具 - 依赖图构建所需的基础配置 provider。
-		fx.Provide(config.NewConfig),
-		// Fx 分类：开发工具 - 复用正式 composition root 校验完整依赖图。
-		bootstrap.AppModule,
-	)
+	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(configPath))
+	if err != nil {
+		return err
+	}
+	_, err = writer(outputPath, fxGraphOptions(cfg)...)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("Fx dependency graph generated: %s\n", outputPath)
 	return nil
+}
+
+func fxGraphOptions(cfg *serviceconfig.Config) []fx.Option {
+	return bootstrap.AppOptions(
+		cfg,
+		// Fx 分类：开发工具 - 复用正式 composition root 校验完整依赖图。
+		bootstrap.AppModule,
+	)
 }
