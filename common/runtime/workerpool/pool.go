@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/panjf2000/ants/v2"
-	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
 
@@ -30,6 +29,7 @@ type Options struct {
 }
 
 // Pool 使用 ants 原生池执行后台任务，并通过固定容量限制并发。
+// 创建方拥有 Pool 生命周期，必须在资源关闭边界显式调用 Stop。
 type Pool struct {
 	name        string
 	workers     int
@@ -50,19 +50,8 @@ type Pool struct {
 	counters counters
 }
 
-// New 创建后台任务池，并向 Fx 注册停止钩子。
-func New(lc fx.Lifecycle, log *zap.Logger, opts Options) (*Pool, error) {
-	pool, err := newUnmanaged(log, opts)
-	if err != nil {
-		return nil, err
-	}
-	if lc != nil {
-		lc.Append(fx.Hook{OnStop: pool.Stop})
-	}
-	return pool, nil
-}
-
-func newUnmanaged(log *zap.Logger, opts Options) (*Pool, error) {
+// New 创建后台任务池。调用方必须持有返回的 Pool，并在资源所有者生命周期边界显式调用 Stop。
+func New(log *zap.Logger, opts Options) (*Pool, error) {
 	name := strings.TrimSpace(opts.Name)
 	if name == "" {
 		return nil, fmt.Errorf("%w: name is required", ErrInvalidTask)
@@ -167,6 +156,7 @@ func (p *Pool) Stats() Stats {
 
 // Stop 停止接收新任务，并等待已登记或已接收任务完成。
 // StopTimeout <= 0 时只使用调用方 ctx；超时会取消 pool context，通知仍在运行的任务尽快退出。
+// Stop 可重复调用，所有调用共享同一次 drain 状态。
 func (p *Pool) Stop(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()

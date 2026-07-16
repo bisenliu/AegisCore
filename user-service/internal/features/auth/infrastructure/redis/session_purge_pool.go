@@ -20,9 +20,14 @@ type SessionPurgePoolParams struct {
 
 // NewSessionPurgePool 构造认证会话批量清理专用后台任务池。
 func NewSessionPurgePool(params SessionPurgePoolParams) (*workerpool.Pool, error) {
-	return workerpool.New(params.Lifecycle, params.Log, workerpool.Options{
+	pool, err := workerpool.New(params.Log, workerpool.Options{
 		Name:        "auth.redis.session_purge",
 		Workers:     deleteAllUserSessionsPurgeWorkers,
 		StopTimeout: deleteAllUserSessionsPurgeStopTimeout,
 	})
+	if err != nil {
+		return nil, err
+	}
+	params.Lifecycle.Append(fx.Hook{OnStop: pool.Stop})
+	return pool, nil
 }

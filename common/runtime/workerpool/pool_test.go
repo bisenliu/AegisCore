@@ -8,11 +8,22 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestNewRejectsInvalidOptions(t *testing.T) {
+	t.Parallel()
+
+	_, err := New(zap.NewNop(), Options{Name: "", Workers: 1})
+	require.ErrorIs(t, err, ErrInvalidTask)
+	require.Contains(t, err.Error(), "name is required")
+
+	_, err = New(zap.NewNop(), Options{Name: "invalid-workers", Workers: 0})
+	require.ErrorIs(t, err, ErrInvalidTask)
+	require.Contains(t, err.Error(), "workers must be positive")
+}
 
 func TestPoolLimitsConcurrency(t *testing.T) {
 	pool := newTestPool(t, Options{Name: "test-concurrency", Workers: 2})
@@ -144,16 +155,14 @@ func TestPoolSubmitAfterStopReturnsClosed(t *testing.T) {
 	require.ErrorIs(t, err, ErrClosed)
 }
 
-func TestPoolRegistersLifecycleStopHook(t *testing.T) {
-	lifecycle := fxtest.NewLifecycle(t)
-	pool, err := New(lifecycle, zap.NewNop(), Options{Name: "test-lifecycle", Workers: 1})
+func TestNewCreatesPoolRequiringExplicitStop(t *testing.T) {
+	pool, err := New(zap.NewNop(), Options{Name: "test-explicit-stop", Workers: 1})
 	require.NoError(t, err)
 	require.NoError(t, pool.Submit(context.Background(), Task{Name: "noop", Run: func(context.Context) error { return nil }}))
 
-	lifecycle.RequireStart()
-	lifecycle.RequireStop()
+	require.NoError(t, pool.Stop(context.Background()))
 
-	err = pool.Submit(context.Background(), Task{Name: "after-lifecycle-stop", Run: func(context.Context) error { return nil }})
+	err = pool.Submit(context.Background(), Task{Name: "after-explicit-stop", Run: func(context.Context) error { return nil }})
 	require.ErrorIs(t, err, ErrClosed)
 }
 
@@ -299,7 +308,7 @@ func newTestPool(t *testing.T, opts Options) *Pool {
 
 func newTestPoolWithLogger(t *testing.T, log *zap.Logger, opts Options) *Pool {
 	t.Helper()
-	pool, err := newUnmanaged(log, opts)
+	pool, err := New(log, opts)
 	require.NoError(t, err)
 	return pool
 }
