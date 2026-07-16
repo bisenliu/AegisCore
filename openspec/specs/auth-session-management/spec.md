@@ -210,7 +210,7 @@
 
 ### Requirement: 认证 command use case 最小依赖边界
 
-认证 command use case MUST 通过自身 constructor 声明最小依赖，并且结构体 MUST 只保存该 use case 实际需要的 collaborator。系统 MUST NOT 通过跨多个 command use case 的共享依赖容器向单个 use case 暴露无关的 credential、token、session、metrics 或配置依赖。认证 command application 包 MUST NOT 在 use case constructor deps 中嵌入 `fx.In`，也 MUST NOT 为读取单个 refresh token rotation 开关而依赖完整 `*config.Config`。Fx 参数结构 MUST 位于 feature composition root，并由 composition root 转换为纯 application deps/settings。
+认证 command use case MUST 通过自身 constructor 声明最小依赖，并且结构体 MUST 只保存该 use case 实际需要的 collaborator。系统 MUST NOT 通过跨多个 command use case 的共享依赖容器向单个 use case 暴露无关的 credential、token、session、metrics 或配置依赖。认证 command application 包 MUST NOT 在 use case constructor 参数中嵌入 `fx.In`，也 MUST NOT 为读取单个 refresh token rotation 开关而依赖完整 `*config.Config`。command constructor MAY 使用强类型普通参数直接声明自身真实 collaborator 和窄 settings，不要求保留 `*Deps` 参数结构；当使用 `*Deps` 结构时，该结构仍 MUST 只属于单个 use case 的最小依赖集合。Fx 参数结构 MUST 位于 feature composition root，并由 composition root 转换为纯 application collaborator 或 settings。
 
 #### Scenario: 退出当前会话不能访问无关凭证依赖
 
@@ -227,16 +227,17 @@
 #### Scenario: Fx 装配表达 use case 真实依赖
 
 - **WHEN** user-service 装配 auth command use case
-- **THEN** Fx provider MUST 直接提供各 use case constructor 所需的最小参数结构
-- **AND** 系统 MUST NOT 继续 provide 或消费 `UseCaseDeps` 作为 auth command use case 的公共装配入口
-- **AND** `fx.In` MUST 只出现在 feature composition root 的参数结构中，MUST NOT 出现在 `user-service/internal/features/auth/application/command` 的 use case deps struct 中
+- **THEN** Fx provider MUST 直接提供各 use case constructor 所需的最小 collaborator 和窄 settings
+- **AND** 系统 MUST NOT 继续 provide 或消费跨多个 auth command use case 的公共 `UseCaseDeps` 作为装配入口
+- **AND** 系统 MUST NOT 为单个 command use case 维护与 application constructor 参数重复、且只额外表达 optional metrics 或字段转发的 composition wrapper
+- **AND** `fx.In` MUST 只出现在 feature composition root 的参数结构中，MUST NOT 出现在 `user-service/internal/features/auth/application/command` 的 use case constructor 参数结构中
 
 #### Scenario: application constructor 不暴露 Fx 语义
 
 - **WHEN** command 包构造登录、刷新、改密、退出当前会话或退出全部会话 use case
-- **THEN** constructor deps MUST 是普通 application 参数结构
+- **THEN** constructor 参数 MUST 是普通 application collaborator、窄 settings 或 use case 私有的最小参数结构
 - **AND** `user-service/internal/features/auth/application/command` 源码 MUST NOT 导入 `go.uber.org/fx`
-- **AND** constructor deps MUST NOT 包含 `optional` 等仅服务于 Fx 参数解析的 struct tag
+- **AND** constructor 参数 MUST NOT 包含 `optional` 等仅服务于 Fx 参数解析的 struct tag
 
 #### Scenario: refresh use case 使用窄 settings
 
@@ -251,6 +252,27 @@
 - **THEN** 测试 MUST 按被测 use case 的最小 constructor 参数直接提供 mock collaborator
 - **AND** 测试 MUST NOT 通过公共 `UseCaseDeps` fixture 隐藏单个 use case 的真实依赖面
 - **AND** 测试 MUST NOT 为满足 `fx.In` 或完整 runtime config 依赖而构造无关装配对象
+
+#### Scenario: credential verifier 使用 Fx 原生输入映射
+
+- **WHEN** auth feature composition 注册 `authcredentials.NewVerifier`
+- **THEN** composition MUST 使用 Fx 原生输入映射或等价机制让第二个消费侧 `authcredentials.PasswordService` 参数从 graph 中的 `*password.Service` concrete 解析
+- **AND** positional 输入映射 MUST 显式覆盖第一个 `authapplication.UserCredentialStore` 参数和第二个 `*password.Service` 参数，避免第一个参数被错误重映射
+- **AND** composition MUST NOT 保留只做输入类型适配且无业务逻辑的 credential verifier wrapper
+
+#### Scenario: 保留有真实职责的 auth composition adapter
+
+- **WHEN** 清理 auth command use case composition wrapper
+- **THEN** 系统 MUST 保留执行完整配置裁剪、feature cache 配置解释、enabled/disabled 实现选择、loader 构造、named 多接口输出、lifecycle hook、Prometheus collector 注册、错误传播或基础设施 named metadata 的 adapter
+- **AND** 系统 MUST NOT 为删除重复 command wrapper 而把完整服务配置下沉到 application/domain
+- **AND** 系统 MUST NOT 删除 token version validator 的 metrics-decorated validator 与原始 local invalidator 双输出
+
+#### Scenario: purge pool 保留 Redis ordering-only 依赖
+
+- **WHEN** auth session purge pool constructor 参数包含 Redis client 但业务构造逻辑不直接读取该字段
+- **THEN** 该依赖 MUST 作为 lifecycle ordering-only dependency 保留，用于确保 Fx 逆序停止时先关闭 purge pool、再关闭 Redis
+- **AND** 代码 MUST 通过字段注释说明该 ordering-only 职责
+- **AND** 测试 MUST 覆盖 `purge_pool,redis` stop order，防止该依赖被误删
 
 ### Requirement: 会话退出
 

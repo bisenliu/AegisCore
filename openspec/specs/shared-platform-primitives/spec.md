@@ -374,7 +374,7 @@
 
 ### Requirement: Fx 依赖图 runtime primitive
 
-系统 MUST 在 `common/` 中提供业务中立的 Fx 依赖图构建与渲染能力，使服务可以从自身 Fx module 或 app option 生成稳定、可审查的依赖图文本。
+系统 MUST 在 `common/` 中提供业务中立的 Fx 依赖图构建与渲染能力，使服务可以从自身 Fx module 或 app option 生成稳定、可审查的依赖图文本。`common/runtime/fxgraph` MUST 只承担通用 DOT rendering、排序和 Fx 图解析职责，不得构造或要求 user-service 私有配置、feature provider、Ent、Redis、PostgreSQL、OTLP 或 HTTP server 输入。
 
 #### Scenario: 生成业务中立依赖图
 
@@ -392,6 +392,34 @@
 - **WHEN** Fx 依赖图能力与具体业务 feature 无关
 - **THEN** 系统 MUST 将公共方法放在 `common/` 的 runtime primitive 边界
 - **AND** 系统 MUST NOT 将该能力放入 `user-service/internal/shared` 或任一 feature 包
+
+#### Scenario: 服务私有输入留在服务命令层
+
+- **WHEN** user-service 需要为 Fx 依赖图生成提供 `*serviceconfig.Config`、派生 runtime config、logger、资源替身或 feature provider options
+- **THEN** 这些服务私有输入 MUST 由 user-service 命令层或 user-service 装配边界提供
+- **AND** `common/runtime/fxgraph` MUST NOT 导入或构造 user-service 配置、feature module、Ent client、Redis client、PostgreSQL client、OTLP exporter 或 HTTP server
+
+### Requirement: 共享 runtime Fx provider 输入治理
+
+共享 runtime primitive 的 Fx provider MUST 使用能表达真实依赖语义的输入形式。依赖类型唯一且没有 `name`、`optional`、`group` 或其他 DI metadata 时，provider MUST 使用普通强类型参数完成装配；只有输入对象承载真实 DI metadata、较复杂输出映射或能显著提升多依赖构造可读性时，系统 MAY 保留 Params 容器。共享 runtime provider MUST 继续只消费 `common/runtime/config.Config` 等跨服务配置和 primitive，MUST NOT 读取 user-service 私有配置类型。
+
+#### Scenario: 无 metadata 的共享 provider 输入
+
+- **WHEN** 共享 runtime Fx provider 只需要唯一类型依赖且不需要 named、optional、group 或其他 DI metadata
+- **THEN** provider MUST 通过普通强类型参数接收依赖
+- **AND** 系统 MUST NOT 为该依赖保留只包裹字段且无额外语义的 Params 容器
+
+#### Scenario: 保留有真实语义的 Params 容器
+
+- **WHEN** provider 输入需要 named、optional、group、multi-result 映射、lifecycle orchestration 或显著提升复杂构造的可读性
+- **THEN** 系统 MAY 使用 Params 容器表达这些真实 DI 或构造语义
+- **AND** 本规则 MUST NOT 触发对其他有真实 metadata、配置裁剪、multi-result 输出或测试 seam 的 Params/adapter 的机械删除
+
+#### Scenario: 共享配置边界保持跨服务
+
+- **WHEN** `common/runtime/observability` 的 Fx provider 从配置构造 metrics 或 tracing provider
+- **THEN** provider MUST 只消费 `common/runtime/config.Config` 中的共享 runtime 配置
+- **AND** provider MUST NOT 导入、读取或依赖 user-service 私有配置类型
 
 ### Requirement: 有界本地缓存 primitive
 

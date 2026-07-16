@@ -109,6 +109,62 @@
 - **AND** 日志 helper MUST 只从有效 span context 派生 `trace_id` 和 `span_id`，无有效 span context 时 MUST 省略这两个字段
 - **AND** 日志 helper MUST 独立从 logger request ID context 派生 `request_id`，不得因 span context 无效而省略有效 request ID
 
+### Requirement: 共享 observability Fx provider 组合语义
+
+共享 metrics 与 tracing Fx provider MUST 能通过普通强类型依赖完成装配，并保持现有配置来源、service/environment 标识、disabled/no-op、错误传播和 shutdown 行为不变。metrics Fx provider MUST 从共享 runtime config 构造 metrics `Options` 并拒绝 nil config；tracing Fx provider MUST 从共享 runtime config 构造 provider，传播构造错误，并通过 `fx.Lifecycle` 注册 `OnStop: provider.Shutdown`。`NewFxProvider` MUST 保留从共享 runtime config 投影 service name、environment、metrics/tracing config 和 lifecycle 的 composition 职责，MUST NOT 退化为 `NewProvider` 的无语义别名。
+
+#### Scenario: metrics Fx provider 通过共享配置装配
+
+- **WHEN** Fx graph 调用共享 metrics `NewFxProvider` 且提供有效的 `*config.Config`
+- **THEN** provider MUST 从共享 runtime config 投影 service name、environment 和 metrics 配置
+- **AND** provider MUST 返回符合配置的 metrics `*Provider`
+- **AND** metrics 配置禁用时 MUST 返回非 nil disabled provider
+
+#### Scenario: metrics Fx provider 拒绝 nil config
+
+- **WHEN** 共享 metrics `NewFxProvider` 收到 nil `*config.Config`
+- **THEN** provider MUST 返回明确错误
+- **AND** 系统 MUST NOT 用默认配置静默构造 metrics provider
+
+#### Scenario: tracing Fx provider 保留 lifecycle shutdown
+
+- **WHEN** Fx graph 调用共享 tracing `NewFxProvider` 且提供有效 `fx.Lifecycle` 与 `*config.Config`
+- **THEN** provider MUST 从共享 runtime config 投影 service name、environment 和 tracing 配置
+- **AND** provider 构造错误 MUST 传播给 Fx graph
+- **AND** provider MUST 注册 `OnStop: provider.Shutdown` hook
+- **AND** tracing 配置禁用时 MUST 返回非 nil provider 并使用 no-op 或 `NeverSample` 语义
+
+#### Scenario: tracing provider 仍允许依赖 Fx lifecycle
+
+- **WHEN** 共享 tracing Fx provider 需要在 Fx app 停止时关闭 exporter 或 provider 资源
+- **THEN** provider MAY 直接依赖 `fx.Lifecycle`
+- **AND** 系统 MUST NOT 将 shutdown lifecycle 移到 user-service 调用方
+- **AND** 系统 MUST NOT 依赖全局 tracer shutdown 或新增 package-level mutable state
+
+### Requirement: user-service Ent observability 依赖必需性
+
+user-service 正式 Ent provider MUST 消费非 optional 的共享 metrics 与 tracing provider。`providers.Module` MUST 始终注册共享 metrics/tracing Fx provider；缺失任一 provider 时，正式 Fx graph MUST 构图失败。metrics 或 tracing 被配置禁用时，系统 MUST 通过非 nil disabled/no-op provider 表达禁用语义，MUST NOT 依赖 nil metrics/tracing 或 optional tag 作为正式降级路径。
+
+#### Scenario: 正式 Ent provider 消费非 optional observability provider
+
+- **WHEN** user-service `providers.Module` 构建正式 Ent client graph
+- **THEN** `NamedEntClientParams` MUST 要求非 optional 的 `*commonmetrics.Provider`
+- **AND** `NamedEntClientParams` MUST 要求非 optional 的 `*commontracing.Provider`
+- **AND** 缺失任一 provider 时 Fx graph 校验 MUST 失败
+
+#### Scenario: disabled observability 通过非 nil provider 表达
+
+- **WHEN** metrics 或 tracing 配置为 disabled
+- **THEN** 共享 Fx provider MUST 仍向 Ent provider 注入非 nil provider
+- **AND** Ent provider MUST 通过该 provider 的 disabled/no-op 语义工作
+- **AND** 正式 `providers.Module` MUST NOT 通过 nil provider 或 optional tag 表达禁用状态
+
+#### Scenario: Ent nil fallback 限定为直接构造防御
+
+- **WHEN** Ent provider 的纯函数或直接构造测试绕过正式 `providers.Module`
+- **THEN** 实现 MAY 保留 nil metrics/tracing fallback 作为防御或测试 seam
+- **AND** 该 fallback MUST NOT 成为正式 Fx graph 的降级机制
+
 ### Requirement: Request ID 日志上下文 API 归属
 
 系统 MUST 由 `common/runtime/logger` 统一拥有 `RequestIDField`、`WithRequestID` 和 `RequestIDFromContext`，并由 HTTP Request ID middleware 使用这些 API 将最终 request ID 写入请求 context。`common/http/middleware` MUST NOT 保留同名常量、context key、公开转发函数、别名或 deprecated wrapper。
@@ -780,6 +836,50 @@ user-service 的正式 permission 模块 MUST 向 `PermissionQueryService` 提�
 - **WHEN** permission Metrics 的正式依赖接线被修复
 - **THEN** 既有 metric family、指标名称、label key、label value 和低基数约束 MUST 保持不变
 - **AND** 系统 MUST NOT 新增 metrics backend、dashboard 或 alert
+
+### Requirement: Auth Metrics 正式依赖图必须完整
+
+user-service 的正式 auth 模块 MUST 向五个 command use case 和 Redis SessionStore 提供唯一且明确的单值 `authapplication.Metrics` 依赖。该依赖 MUST 在 Fx/Dig graph 中作为必选输入边存在，MUST NOT 使用 `optional`、variadic、slice/group 或 nil 表达正式降级。metrics enabled 时 MUST 注入 Prometheus recorder；metrics disabled 时 MUST 由 auth metrics provider 注入 `authapplication.NopMetrics()`。缺失 `*commonmetrics.Provider` 或缺失 `authapplication.Metrics` 的正式 graph MUST 构图失败，MUST NOT 被解释为自动 no-op。
+
+#### Scenario: metrics 启用时注入 Prometheus recorder
+
+- **WHEN** user-service 以 metrics 启用配置构造正式 auth module
+- **THEN** auth module MUST 向登录、刷新、改密、退出当前会话、退出全部会话 use case 和 Redis SessionStore 注入当前 Prometheus Metrics 实现
+- **AND** auth 指标记录 MUST 使用既有 metric family、label key、label value 和低基数约束
+
+#### Scenario: metrics 禁用时注入 NopMetrics
+
+- **WHEN** user-service 以 metrics 禁用配置构造正式 auth module
+- **THEN** auth module MUST 通过 `newAuthMetrics` 或等价 auth metrics provider 注入 `authapplication.NopMetrics()`
+- **AND** 五个 command use case 和 Redis SessionStore MUST 在不接收 nil Metrics 的情况下完成构图
+- **AND** 系统 MUST NOT 注册或更新 auth Prometheus 指标
+
+#### Scenario: command use case Metrics edge 为必选单值
+
+- **WHEN** 正式 auth module 构造登录、刷新、改密、退出当前会话或退出全部会话 use case
+- **THEN** 每个 constructor MUST 声明一个明确的 `authapplication.Metrics` 输入边
+- **AND** 该输入边 MUST NOT 使用 `optional`、variadic、slice/group annotation 或 nil 表达可缺失依赖
+- **AND** 缺失该输入时 Fx graph MUST 构造失败
+
+#### Scenario: Redis SessionStore Metrics edge 为必选单值
+
+- **WHEN** 正式 auth module 构造 Redis refresh session store
+- **THEN** `authredis.SessionStoreParams.Metrics` MUST 是必选输入
+- **AND** 该输入 MUST NOT 使用 `optional` tag 或 nil 表达正式降级
+- **AND** 不观察指标的直接 SessionStore 测试 MUST 显式传入 `authapplication.NopMetrics()`
+
+#### Scenario: no-op 与 graph 缺边语义区分
+
+- **WHEN** metrics 配置显式禁用
+- **THEN** auth metrics provider MUST 返回 no-op 实现并允许正式 graph 成功构造
+- **AND** 当 `*commonmetrics.Provider` 或 auth metrics provider 未注册时，正式 graph MUST fail-fast
+- **AND** use case 或 SessionStore 内部的 nil 防御 MUST NOT 被用作正式 graph 的降级契约
+
+#### Scenario: 指标契约保持不变
+
+- **WHEN** auth Metrics 的正式依赖接线被收紧
+- **THEN** 既有 metric family、指标名称、label key、label value 和低基数约束 MUST 保持不变
+- **AND** 系统 MUST NOT 新增 metrics backend、dashboard、alert、配置字段或部署资产
 
 ### Requirement: user-service Fx lifecycle timeout 同源与作用边界
 
