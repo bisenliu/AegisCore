@@ -204,7 +204,7 @@ const openAPIDocument = `{
             "type": "string"
           },
           "name": {
-            "example": "postgres.user_db",
+            "example": "postgres.primary_db",
             "type": "string"
           },
           "status": {

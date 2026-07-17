@@ -76,7 +76,7 @@ func registerRouteTestRuntimeMetrics(t *testing.T, cfg *config.Config, provider 
 	err = RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{
 		Config:           serviceCfg,
 		Metrics:          provider,
-		UserDB:           db,
+		PrimaryDB:        db,
 		CacheRedis:       client,
 		SessionPurgePool: routePurgeTaskPool{stats: workerpool.Stats{Name: "auth.redis.session_purge", Workers: 4, Submitted: 1}},
 		PolicyWatcher:    stubWatcherStatus{running: true},

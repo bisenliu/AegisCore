@@ -69,7 +69,7 @@ digraph {
 		"application.UserTokenVersionStore" [label=<application.UserTokenVersionStore>];
 		"application.UserCredentialStore" [label=<application.UserCredentialStore>];
 	}
-	constructor_10 -> "*ent.Client[name=user_db]" [ltail=cluster_10];
+	constructor_10 -> "*ent.Client[name=primary_db]" [ltail=cluster_10];
 	subgraph cluster_11 {
 		label = "reflect";
 		constructor_11 [shape=plaintext label="makeFuncStub"];
@@ -208,7 +208,7 @@ digraph {
 		constructor_27 [shape=plaintext label="NewPolicyLoader"];
 		"casbin.Loader" [label=<casbin.Loader>];
 	}
-	constructor_27 -> "*ent.Client[name=user_db]" [ltail=cluster_27];
+	constructor_27 -> "*ent.Client[name=primary_db]" [ltail=cluster_27];
 	subgraph cluster_28 {
 		label = "github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin";
 		constructor_28 [shape=plaintext label="NewUserRoleResolver"];
@@ -217,7 +217,7 @@ digraph {
 	}
 	constructor_28 -> "fx.Lifecycle" [ltail=cluster_28];
 	constructor_28 -> "*config.Config" [ltail=cluster_28];
-	constructor_28 -> "*ent.Client[name=user_db]" [ltail=cluster_28];
+	constructor_28 -> "*ent.Client[name=primary_db]" [ltail=cluster_28];
 	subgraph cluster_29 {
 		label = "github.com/aegiscore/common/runtime/observability/metrics";
 		constructor_29 [shape=plaintext label="NewCasbinPolicyReloadMetrics"];
@@ -246,7 +246,7 @@ digraph {
 		constructor_32 [shape=plaintext label="makeFuncStub"];
 		"application.PermissionStore" [label=<application.PermissionStore>];
 	}
-	constructor_32 -> "*ent.Client[name=user_db]" [ltail=cluster_32];
+	constructor_32 -> "*ent.Client[name=primary_db]" [ltail=cluster_32];
 	subgraph cluster_33 {
 		label = "reflect";
 		constructor_33 [shape=plaintext label="makeFuncStub"];
@@ -318,19 +318,19 @@ digraph {
 		constructor_41 [shape=plaintext label="makeFuncStub"];
 		"application.RoleStore" [label=<application.RoleStore>];
 	}
-	constructor_41 -> "*ent.Client[name=user_db]" [ltail=cluster_41];
+	constructor_41 -> "*ent.Client[name=primary_db]" [ltail=cluster_41];
 	subgraph cluster_42 {
 		label = "reflect";
 		constructor_42 [shape=plaintext label="makeFuncStub"];
 		"application.UserRoleStore" [label=<application.UserRoleStore>];
 	}
-	constructor_42 -> "*ent.Client[name=user_db]" [ltail=cluster_42];
+	constructor_42 -> "*ent.Client[name=primary_db]" [ltail=cluster_42];
 	subgraph cluster_43 {
 		label = "reflect";
 		constructor_43 [shape=plaintext label="makeFuncStub"];
 		"application.RolePermissionStore" [label=<application.RolePermissionStore>];
 	}
-	constructor_43 -> "*ent.Client[name=user_db]" [ltail=cluster_43];
+	constructor_43 -> "*ent.Client[name=primary_db]" [ltail=cluster_43];
 	subgraph cluster_44 {
 		label = "reflect";
 		constructor_44 [shape=plaintext label="makeFuncStub"];
@@ -368,7 +368,7 @@ digraph {
 		constructor_48 [shape=plaintext label="makeFuncStub"];
 		"application.UserProfileStore" [label=<application.UserProfileStore>];
 	}
-	constructor_48 -> "*ent.Client[name=user_db]" [ltail=cluster_48];
+	constructor_48 -> "*ent.Client[name=primary_db]" [ltail=cluster_48];
 	subgraph cluster_49 {
 		label = "github.com/aegiscore/user-service/internal/features/user/application/command";
 		constructor_49 [shape=plaintext label="NewCreateUserService"];
@@ -412,7 +412,7 @@ digraph {
 	subgraph cluster_55 {
 		label = "github.com/aegiscore/user-service/internal/providers";
 		constructor_55 [shape=plaintext label="ProvidePostgresPools"];
-		"*sql.DB[name=user_db]" [label=<*sql.DB<BR /><FONT POINT-SIZE="10">Name: user_db</FONT>>];
+		"*sql.DB[name=primary_db]" [label=<*sql.DB<BR /><FONT POINT-SIZE="10">Name: primary_db</FONT>>];
 	}
 	constructor_55 -> "fx.Lifecycle" [ltail=cluster_55];
 	constructor_55 -> "*config.Config" [ltail=cluster_55];
@@ -435,21 +435,21 @@ digraph {
 	subgraph cluster_58 {
 		label = "github.com/aegiscore/user-service/internal/providers";
 		constructor_58 [shape=plaintext label="ProvideEntClients"];
-		"*ent.Client[name=user_db]" [label=<*ent.Client<BR /><FONT POINT-SIZE="10">Name: user_db</FONT>>];
+		"*ent.Client[name=primary_db]" [label=<*ent.Client<BR /><FONT POINT-SIZE="10">Name: primary_db</FONT>>];
 	}
 	constructor_58 -> "fx.Lifecycle" [ltail=cluster_58];
 	constructor_58 -> "*config.Config" [ltail=cluster_58];
 	constructor_58 -> "*zap.Logger" [ltail=cluster_58];
 	constructor_58 -> "*metrics.Provider" [ltail=cluster_58];
 	constructor_58 -> "*tracing.Provider" [ltail=cluster_58];
-	constructor_58 -> "*sql.DB[name=user_db]" [ltail=cluster_58];
+	constructor_58 -> "*sql.DB[name=primary_db]" [ltail=cluster_58];
 	subgraph cluster_59 {
 		label = "github.com/aegiscore/user-service/internal/providers";
 		constructor_59 [shape=plaintext label="ProvideHealthChecks"];
 		"router.HealthChecks" [label=<router.HealthChecks>];
 	}
 	constructor_59 -> "*config.Config" [ltail=cluster_59];
-	constructor_59 -> "*sql.DB[name=user_db]" [ltail=cluster_59];
+	constructor_59 -> "*sql.DB[name=primary_db]" [ltail=cluster_59];
 	constructor_59 -> "*redis.Client[name=cache_redis]" [ltail=cluster_59];
 	constructor_59 -> "*casbin.Engine" [ltail=cluster_59];
 	constructor_59 -> "redis.WatcherStatus" [ltail=cluster_59];

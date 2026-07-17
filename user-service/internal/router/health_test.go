@@ -17,7 +17,7 @@ func TestRegisterHealthRoutes(t *testing.T) {
 	engine := gin.New()
 	registerHealthRoutes(engine, "aegiscore-user-services", HealthChecks{
 		Readiness: []HealthChecker{
-			staticHealthChecker{name: "postgres.user_db", status: HealthCheckStatusOK},
+			staticHealthChecker{name: "postgres.primary_db", status: HealthCheckStatusOK},
 			staticHealthChecker{name: "redis.cache_redis", status: HealthCheckStatusOK},
 		},
 		Startup: []HealthChecker{
@@ -57,7 +57,7 @@ func TestProbezReturnsUnavailableWhenAnyCheckFails(t *testing.T) {
 	engine := gin.New()
 	registerHealthRoutes(engine, "aegiscore-user-services", HealthChecks{
 		Readiness: []HealthChecker{
-			staticHealthChecker{name: "postgres.user_db", status: HealthCheckStatusOK},
+			staticHealthChecker{name: "postgres.primary_db", status: HealthCheckStatusOK},
 			staticHealthChecker{name: "redis.cache_redis", status: HealthCheckStatusUnavailable, message: "redis unavailable"},
 		},
 		Startup: []HealthChecker{
@@ -81,7 +81,7 @@ func TestProbezRunsChecksConcurrently(t *testing.T) {
 	engine := gin.New()
 	registerHealthRoutes(engine, "aegiscore-user-services", HealthChecks{
 		Readiness: []HealthChecker{
-			delayedHealthChecker{name: "postgres.user_db", delay: 300 * time.Millisecond, status: HealthCheckStatusOK},
+			delayedHealthChecker{name: "postgres.primary_db", delay: 300 * time.Millisecond, status: HealthCheckStatusOK},
 			delayedHealthChecker{name: "redis.cache_redis", delay: 300 * time.Millisecond, status: HealthCheckStatusOK},
 		},
 	})
@@ -94,7 +94,7 @@ func TestProbezRunsChecksConcurrently(t *testing.T) {
 
 	health := decodeHealthResponse(t, recorder)
 	require.Len(t, health.Checks, 2)
-	require.Equal(t, "postgres.user_db", health.Checks[0].Name)
+	require.Equal(t, "postgres.primary_db", health.Checks[0].Name)
 	require.Equal(t, "redis.cache_redis", health.Checks[1].Name)
 }
 
@@ -105,7 +105,7 @@ func TestProbezReturnsUnavailableForTimedOutCheck(t *testing.T) {
 	defer close(release)
 	registerHealthRoutes(engine, "aegiscore-user-services", HealthChecks{
 		Readiness: []HealthChecker{
-			staticHealthChecker{name: "postgres.user_db", status: HealthCheckStatusOK},
+			staticHealthChecker{name: "postgres.primary_db", status: HealthCheckStatusOK},
 			blockingHealthChecker{name: "redis.cache_redis", release: release},
 		},
 	})

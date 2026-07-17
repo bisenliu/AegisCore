@@ -28,7 +28,7 @@ var _ permissionapplication.SeedPermissionStore = (*PermissionStore)(nil)
 type PermissionStoreParams struct {
 	fx.In
 
-	Client *ent.Client `name:"user_db"`
+	Client *ent.Client `name:"primary_db"`
 }
 
 // NewPermissionStore 构造基于 Ent 的权限 store。

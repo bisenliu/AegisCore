@@ -36,10 +36,10 @@ func TestProvidePostgresPoolsProvidesUserDatabase(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	got, err := ProvidePostgresPools(NamedPostgresParams{Lifecycle: lc, Config: cfg, Log: zap.NewNop()})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = got.UserDB.Close() })
+	t.Cleanup(func() { _ = got.PrimaryDB.Close() })
 
-	require.NotNil(t, got.UserDB)
-	require.Equal(t, 7, got.UserDB.Stats().MaxOpenConnections)
+	require.NotNil(t, got.PrimaryDB)
+	require.Equal(t, 7, got.PrimaryDB.Stats().MaxOpenConnections)
 }
 
 func TestProvidePostgresPoolsReturnsErrorForMissingUserDatabase(t *testing.T) {
@@ -48,7 +48,7 @@ func TestProvidePostgresPoolsReturnsErrorForMissingUserDatabase(t *testing.T) {
 		Config:    &serviceconfig.Config{},
 		Log:       zap.NewNop(),
 	})
-	require.ErrorContains(t, err, `postgres config "`+resources.NameUserDB+`" not found`)
+	require.ErrorContains(t, err, `postgres config "`+resources.NamePrimaryDB+`" not found`)
 }
 
 func TestProvidePostgresPoolsDoesNotProvideSharedDatabase(t *testing.T) {
@@ -96,11 +96,11 @@ func TestProvideEntClientsProvidesUserServiceEntClient(t *testing.T) {
 		Log:       zap.NewNop(),
 		Metrics:   metricsProvider,
 		Tracing:   tracingProvider,
-		UserDB:    userDB,
+		PrimaryDB: userDB,
 	})
 	require.NoError(t, err)
 
-	require.NotNil(t, got.UserClient)
+	require.NotNil(t, got.PrimaryClient)
 	require.Equal(t, int64(0), drv.closes.Load())
 
 	require.NoError(t, lc.Start(ctx))
@@ -120,23 +120,23 @@ func TestProvideEntClientsAcceptsDisabledObservabilityProviders(t *testing.T) {
 		Log:       zap.NewNop(),
 		Metrics:   newProviderTestMetrics(t, false),
 		Tracing:   newProviderTestDisabledTracing(t),
-		UserDB:    userDB,
+		PrimaryDB: userDB,
 	})
 	require.NoError(t, err)
-	require.NotNil(t, got.UserClient)
+	require.NotNil(t, got.PrimaryClient)
 }
 
 func TestProvideEntClientsRequiresMetricsProviderInGraph(t *testing.T) {
 	type clients struct {
 		fx.In
 
-		UserClient *ent.Client `name:"user_db"`
+		PrimaryClient *ent.Client `name:"primary_db"`
 	}
 
 	err := fx.ValidateApp(
 		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), newProviderTestDisabledTracing(t)),
 		fx.Provide(
-			provideNilUserDBForEntGraphTest,
+			provideNilPrimaryDBForEntGraphTest,
 			ProvideEntClients,
 		),
 		fx.Invoke(func(clients) {}),
@@ -148,13 +148,13 @@ func TestProvideEntClientsRequiresTracingProviderInGraph(t *testing.T) {
 	type clients struct {
 		fx.In
 
-		UserClient *ent.Client `name:"user_db"`
+		PrimaryClient *ent.Client `name:"primary_db"`
 	}
 
 	err := fx.ValidateApp(
 		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), newProviderTestMetrics(t, false)),
 		fx.Provide(
-			provideNilUserDBForEntGraphTest,
+			provideNilPrimaryDBForEntGraphTest,
 			ProvideEntClients,
 		),
 		fx.Invoke(func(clients) {}),
@@ -166,13 +166,13 @@ func TestProvideEntClientsResolvesWithObservabilityProvidersInGraph(t *testing.T
 	type clients struct {
 		fx.In
 
-		UserClient *ent.Client `name:"user_db"`
+		PrimaryClient *ent.Client `name:"primary_db"`
 	}
 
 	err := fx.ValidateApp(
 		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), newProviderTestMetrics(t, false), newProviderTestDisabledTracing(t)),
 		fx.Provide(
-			provideNilUserDBForEntGraphTest,
+			provideNilPrimaryDBForEntGraphTest,
 			ProvideEntClients,
 		),
 		fx.Invoke(func(clients) {}),
@@ -315,8 +315,8 @@ func newProviderTestMetrics(t *testing.T, enabled bool) *commonmetrics.Provider 
 	return provider
 }
 
-func provideNilUserDBForEntGraphTest() NamedPostgresPools {
-	return NamedPostgresPools{UserDB: nil}
+func provideNilPrimaryDBForEntGraphTest() NamedPostgresPools {
+	return NamedPostgresPools{PrimaryDB: nil}
 }
 
 func providerTestHasRedisSpan(recorder *tracetest.SpanRecorder) bool {
@@ -348,7 +348,7 @@ func providerTestConfig(_ string) *serviceconfig.Config {
 				},
 			},
 			Postgres: commonresources.PostgresConfigs{
-				resources.NameUserDB: {
+				resources.NamePrimaryDB: {
 					Host: "127.0.0.1", Port: 15432, Username: "aegiscore", Password: "secret", DBName: "aegiscore_user", SSLMode: "disable",
 					Pool: commonresources.PostgresPoolConfig{MaxOpenConns: 7, MaxIdleConns: 3, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second},
 				},

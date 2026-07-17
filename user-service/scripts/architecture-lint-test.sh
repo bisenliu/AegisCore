@@ -111,7 +111,7 @@ import "go.uber.org/fx"
 
 type Deps struct {
 	fx.In
-	Store any `name:"user_db"`
+	Store any `name:"primary_db"`
 }
 EOF
 
@@ -122,7 +122,7 @@ import "go.uber.org/fx"
 
 type Params struct {
 	fx.In
-	Store any `name:"user_db"`
+	Store any `name:"primary_db"`
 }
 EOF
 
@@ -133,7 +133,7 @@ import "go.uber.org/fx"
 
 type Params struct {
 	fx.In
-	Store any `name:"user_db"`
+	Store any `name:"primary_db"`
 }
 EOF
 

@@ -27,7 +27,7 @@ var _ roleapplication.SeedUserRoleStore = (*UserRoleStore)(nil)
 type UserRoleStoreParams struct {
 	fx.In
 
-	Client *ent.Client `name:"user_db"`
+	Client *ent.Client `name:"primary_db"`
 }
 
 // NewUserRoleStore 构造基于 Ent 的用户角色绑定 store。

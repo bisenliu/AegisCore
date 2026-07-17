@@ -54,7 +54,7 @@ docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-ser
 
 ## 运行时配置边界
 
-共享 `common/runtime/config.Config` 只包含 `app`、`server`、`log` 和 `observability`。Redis/PostgreSQL 连接类型由 `common/runtime/resources` 复用，但具名资源及其 `resources.*` 路径由具体服务声明；user-service 当前只声明 `resources.redis.cache_redis` 和 `resources.postgres.user_db`。认证 token version cache 与 RBAC user role cache 分别位于 `auth.token_version_cache` 和 `rbac.user_role_cache`，不属于共享核心配置。
+共享 `common/runtime/config.Config` 只包含 `app`、`server`、`log` 和 `observability`。Redis/PostgreSQL 连接类型由 `common/runtime/resources` 复用，但具名资源及其 `resources.*` 路径由具体服务声明；user-service 当前只声明 `resources.redis.cache_redis` 和 `resources.postgres.primary_db`。认证 token version cache 与 RBAC user role cache 分别位于 `auth.token_version_cache` 和 `rbac.user_role_cache`，不属于共享核心配置。
 
 日志只写 stdout/stderr，采集、保留和轮转由运行平台负责。Tracing 启用后固定通过 OTLP 导出；pprof 使用独立的 `PPROF_ENABLED`、`PPROF_ADDR` 诊断监听，默认关闭。反向代理信任由 Ingress、gateway 或 service mesh 入口边界管理，应用不接受 trusted proxy 配置。进程时区使用平台标准 `TZ`。
 
@@ -73,7 +73,7 @@ OpenSpec 主规格、change artifacts 和 OPSX 相关文档必须使用简体中
 
 生产发布应在 HTTP rollout 前完成数据库 SQL migration 和 RBAC seed：
 
-1. 按 Ent schema -> Atlas diff 生成 SQL -> Atlas validate/hash 校验 SQL 目录 -> SQL 进 Git -> DBA 工单或受控发布平台执行的流程，确认 user-service `user_db` 已完成本 release 对应 SQL migration；`CREATE EXTENSION IF NOT EXISTS pg_trgm;` 可能需要 DBA 权限或前置动作。
+1. 按 Ent schema -> Atlas diff 生成 SQL -> Atlas validate/hash 校验 SQL 目录 -> SQL 进 Git -> DBA 工单或受控发布平台执行的流程，确认 user-service `primary_db` 已完成本 release 对应 SQL migration；`CREATE EXTENSION IF NOT EXISTS pg_trgm;` 可能需要 DBA 权限或前置动作。
 2. 执行 `make user-service-seed-rbac` 初始化 RBAC 系统数据，按需通过 `ADMIN_PASSWORD='<password>' make user-service-create-super-admin` 创建或复用超级管理员账号。
 3. 启动或滚动更新 user-service HTTP 副本。
 

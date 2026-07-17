@@ -159,7 +159,7 @@ resources:
       db: %d
       timeout: %s
   postgres:
-    user_db:
+    primary_db:
       host: %q
       port: %d
       username: %q

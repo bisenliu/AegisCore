@@ -20,7 +20,7 @@ type UserRoleResolverParams struct {
 
 	Lifecycle fx.Lifecycle
 	Config    *serviceconfig.Config
-	Client    *ent.Client `name:"user_db"`
+	Client    *ent.Client `name:"primary_db"`
 }
 
 // UserRoleResolverResult 暴露 resolver 和对应的缓存统计源。

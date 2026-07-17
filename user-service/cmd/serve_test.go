@@ -217,7 +217,7 @@ resources:
     cache_redis:
       addr: 127.0.0.1:6379
   postgres:
-    user_db:
+    primary_db:
       host: 127.0.0.1
       port: 15432
       username: aegiscore

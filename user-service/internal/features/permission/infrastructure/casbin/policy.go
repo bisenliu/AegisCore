@@ -37,7 +37,7 @@ type Loader interface {
 type LoaderParams struct {
 	fx.In
 
-	Client *ent.Client `name:"user_db"`
+	Client *ent.Client `name:"primary_db"`
 }
 
 type entLoader struct {

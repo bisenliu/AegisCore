@@ -28,7 +28,7 @@ var _ roleapplication.SeedRolePermissionStore = (*RolePermissionStore)(nil)
 type RolePermissionStoreParams struct {
 	fx.In
 
-	Client *ent.Client `name:"user_db"`
+	Client *ent.Client `name:"primary_db"`
 }
 
 // NewRolePermissionStore 构造基于 Ent 的角色权限绑定 store。

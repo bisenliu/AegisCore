@@ -51,16 +51,16 @@ spec: # Job 执行规格。
                 secretKeyRef: # Secret 键引用。
                   name: aegiscore-user-services-runtime # 运行时 Secret 名称。
                   key: AEGISCORE_AUTH_JWT_SECRET # Secret 中的 JWT secret 键。
-            - name: AEGISCORE_RESOURCES_POSTGRES_USER_DB_USERNAME # user_db PostgreSQL 用户名。
+            - name: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME # primary_db PostgreSQL 用户名。
               valueFrom: # 从 Secret 读取值。
                 secretKeyRef: # Secret 键引用。
                   name: aegiscore-user-services-runtime # 运行时 Secret 名称。
-                  key: AEGISCORE_RESOURCES_POSTGRES_USER_DB_USERNAME # Secret 中的数据库用户名键。
-            - name: AEGISCORE_RESOURCES_POSTGRES_USER_DB_PASSWORD # user_db PostgreSQL 密码。
+                  key: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME # Secret 中的数据库用户名键。
+            - name: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD # primary_db PostgreSQL 密码。
               valueFrom: # 从 Secret 读取值。
                 secretKeyRef: # Secret 键引用。
                   name: aegiscore-user-services-runtime # 运行时 Secret 名称。
-                  key: AEGISCORE_RESOURCES_POSTGRES_USER_DB_PASSWORD # Secret 中的数据库密码键。
+                  key: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD # Secret 中的数据库密码键。
             - name: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME # cache_redis ACL 用户名。
               valueFrom: # 从 Secret 读取值。
                 secretKeyRef: # Secret 键引用。

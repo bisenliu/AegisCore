@@ -90,12 +90,12 @@ Secret-backed runtime env.
     secretKeyRef:
       name: {{ include "aegiscore-user-services.secretName" . }}
       key: {{ .Values.secret.keys.jwtSecret }}
-- name: AEGISCORE_RESOURCES_POSTGRES_USER_DB_USERNAME
+- name: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME
   valueFrom:
     secretKeyRef:
       name: {{ include "aegiscore-user-services.secretName" . }}
       key: {{ .Values.secret.keys.postgresUsername }}
-- name: AEGISCORE_RESOURCES_POSTGRES_USER_DB_PASSWORD
+- name: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD
   valueFrom:
     secretKeyRef:
       name: {{ include "aegiscore-user-services.secretName" . }}

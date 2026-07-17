@@ -28,14 +28,14 @@ type NamedEntClientParams struct {
 	Log       *zap.Logger
 	Metrics   *commonmetrics.Provider
 	Tracing   *commontracing.Provider
-	UserDB    *sql.DB `name:"user_db"`
+	PrimaryDB *sql.DB `name:"primary_db"`
 }
 
-// NamedEntClients 包含绑定用户服务数据库的 Ent client Fx 输出。
+// NamedEntClients 包含绑定 user-service 主数据库的 Ent client Fx 输出。
 type NamedEntClients struct {
 	fx.Out
 
-	UserClient *ent.Client `name:"user_db"`
+	PrimaryClient *ent.Client `name:"primary_db"`
 }
 
 type nonClosingEntDriver struct {
@@ -43,7 +43,7 @@ type nonClosingEntDriver struct {
 }
 
 const (
-	userDatabaseResource         = "user_db"
+	primaryDatabaseResource      = "primary_db"
 	defaultEntSlowQueryThreshold = 500 * time.Millisecond
 )
 
@@ -64,7 +64,7 @@ type entObservabilityTx struct {
 
 // ProvideEntClients 将具名 SQL 连接池包装为 Ent client，并注册 Ent client 关闭 hook。
 func ProvideEntClients(params NamedEntClientParams) (NamedEntClients, error) {
-	userClient, err := newEntClient(params.UserDB, params.Config, logger.SQL(params.Log), params.Metrics, params.Tracing)
+	primaryClient, err := newEntClient(params.PrimaryDB, params.Config, logger.SQL(params.Log), params.Metrics, params.Tracing)
 	if err != nil {
 		return NamedEntClients{}, err
 	}
@@ -72,11 +72,11 @@ func ProvideEntClients(params NamedEntClientParams) (NamedEntClients, error) {
 	params.Lifecycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			logger.WithContext(ctx, params.Log).Info("closing ent clients")
-			return closeEntClient("user_db", userClient.Close)
+			return closeEntClient(primaryDatabaseResource, primaryClient.Close)
 		},
 	})
 
-	return NamedEntClients{UserClient: userClient}, nil
+	return NamedEntClients{PrimaryClient: primaryClient}, nil
 }
 
 func newEntClient(db *sql.DB, cfg *serviceconfig.Config, sqlLog *zap.Logger, metricsProvider *commonmetrics.Provider, tracingProvider *commontracing.Provider) (*ent.Client, error) {
@@ -91,7 +91,7 @@ func newEntClient(db *sql.DB, cfg *serviceconfig.Config, sqlLog *zap.Logger, met
 func newEntDriver(db *sql.DB, cfg *serviceconfig.Config, sqlLog *zap.Logger) dialect.Driver {
 	// SQL 连接池由 datastore 生命周期 hook 持有，Ent client 不应独立关闭它们。
 	driver := nonClosingEntDriver{Driver: entsql.OpenDB(dialect.Postgres, db)}
-	return newEntObservabilityDriver(driver, sqlLog, userDatabaseResource, entSQLDebugEnabled(cfg))
+	return newEntObservabilityDriver(driver, sqlLog, primaryDatabaseResource, entSQLDebugEnabled(cfg))
 }
 
 func entSQLDebugEnabled(cfg *serviceconfig.Config) bool {

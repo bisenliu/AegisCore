@@ -133,7 +133,7 @@ pprof 不挂载到业务 router。临时诊断时通过 `PPROF_ENABLED=true` 和
 
 ## 7. 部署和观测
 
-共享核心配置只含 `app/server/log/observability`。Redis/PostgreSQL 类型由 `common/runtime/resources` 提供，user-service 在 `resources.redis.cache_redis` 与 `resources.postgres.user_db` 声明实际资源；feature cache 由 `auth.token_version_cache` 和 `rbac.user_role_cache` 各自拥有。日志输出到 stdout/stderr，tracing 启用后固定使用 OTLP，进程时区由平台 `TZ` 控制。
+共享核心配置只含 `app/server/log/observability`。Redis/PostgreSQL 类型由 `common/runtime/resources` 提供，user-service 在 `resources.redis.cache_redis` 与 `resources.postgres.primary_db` 声明实际资源；feature cache 由 `auth.token_version_cache` 和 `rbac.user_role_cache` 各自拥有。日志输出到 stdout/stderr，tracing 启用后固定使用 OTLP，进程时区由平台 `TZ` 控制。
 
 - Dockerfile：`deployments/docker/user-service.Dockerfile` 使用 BuildKit manifest-first 依赖层、只读 Go module 解析、静态编译和固定 digest 的 `gcr.io/distroless/static-debian12:nonroot` 运行时；运行镜像身份为 UID/GID `65532`，不包含 shell、包管理器、下载工具或 Atlas。
 - Compose：`deployments/compose/docker-compose.yml` 继承 Distroless `nonroot` 身份，user-service healthcheck 使用 exec-form 调用原生 `healthcheck` CLI。

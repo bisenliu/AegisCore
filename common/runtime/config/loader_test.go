@@ -303,7 +303,7 @@ func TestLoadRejectsUnknownLegacyKeysWithFullPaths(t *testing.T) {
 	}{
 		{name: "system", section: "system:\n  timezone: UTC", expected: "system.timezone"},
 		{name: "top level http", section: "http:\n  host: 127.0.0.1", expected: "http.host"},
-		{name: "postgres", section: "postgres:\n  user_db:\n    host: 127.0.0.1", expected: "postgres.user_db.host"},
+		{name: "postgres", section: "postgres:\n  primary_db:\n    host: 127.0.0.1", expected: "postgres.primary_db.host"},
 		{name: "redis", section: "redis:\n  cache:\n    addr: 127.0.0.1:6379", expected: "redis.cache.addr"},
 		{name: "local cache", section: "local_cache:\n  auth:\n    ttl: 1s", expected: "local_cache.auth.ttl"},
 		{name: "log directory", section: "log:\n  level: info\n  format: json\n  directory: ./logs", expected: "log.directory"},

@@ -60,7 +60,7 @@ func TestRedisConfigsValidateRejectsInvalidResources(t *testing.T) {
 
 func TestPostgresConfigsApplyDefaultsAndValidateMultipleResources(t *testing.T) {
 	configs := PostgresConfigs{
-		"user_db": {
+		"primary_db": {
 			Host:     "127.0.0.1",
 			Port:     5432,
 			Username: "user",
@@ -85,7 +85,7 @@ func TestPostgresConfigsApplyDefaultsAndValidateMultipleResources(t *testing.T) 
 
 	configs.ApplyDefaults()
 
-	userDB := configs["user_db"]
+	userDB := configs["primary_db"]
 	require.Equal(t, DefaultPostgresSSLMode, userDB.SSLMode)
 	require.Equal(t, DefaultPostgresMaxOpenConns, userDB.Pool.MaxOpenConns)
 	require.Equal(t, DefaultPostgresMaxIdleConns, userDB.Pool.MaxIdleConns)
@@ -107,7 +107,7 @@ func TestPostgresConfigsValidateRejectsInvalidResources(t *testing.T) {
 				ConnMaxIdleTime: -time.Second,
 			},
 		},
-		"user_db": {
+		"primary_db": {
 			Host:     "127.0.0.1",
 			Port:     70000,
 			Username: " ",
@@ -133,9 +133,9 @@ func TestPostgresConfigsValidateRejectsInvalidResources(t *testing.T) {
 	require.ErrorContains(t, err, "resources.postgres.pool.max_idle_conns must be >= 0")
 	require.ErrorContains(t, err, "resources.postgres.pool.conn_max_lifetime must be > 0")
 	require.ErrorContains(t, err, "resources.postgres.pool.conn_max_idle_time must be > 0")
-	require.ErrorContains(t, err, "resources.postgres.user_db.port must be between 1 and 65535")
-	require.ErrorContains(t, err, "resources.postgres.user_db.username is required")
-	require.ErrorContains(t, err, "resources.postgres.user_db.pool.max_idle_conns must be <= max_open_conns")
+	require.ErrorContains(t, err, "resources.postgres.primary_db.port must be between 1 and 65535")
+	require.ErrorContains(t, err, "resources.postgres.primary_db.username is required")
+	require.ErrorContains(t, err, "resources.postgres.primary_db.pool.max_idle_conns must be <= max_open_conns")
 }
 
 func TestPostgresPingTimeoutIsInternalHelperOnly(t *testing.T) {

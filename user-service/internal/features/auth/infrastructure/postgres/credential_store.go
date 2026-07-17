@@ -26,7 +26,7 @@ var _ authapplication.UserTokenVersionStore = (*CredentialStore)(nil)
 type CredentialStoreParams struct {
 	fx.In
 
-	Client *ent.Client `name:"user_db"`
+	Client *ent.Client `name:"primary_db"`
 }
 
 // NewCredentialStore 构造基于 Ent 的认证凭据和 token version store。

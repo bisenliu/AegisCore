@@ -33,7 +33,7 @@ import (
 var testDriverSeq atomic.Int64
 
 const testAuditDB = "audit_db"
-const testUserDB = "user_db"
+const testUserDB = "primary_db"
 const testCacheRedis = "cache_redis"
 
 func TestNewPostgresReturnsErrorForMissingConfig(t *testing.T) {
@@ -161,8 +161,8 @@ func TestNewPostgresClosesPoolWhenStartPingFails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	err = lc.Start(ctx)
-	require.ErrorContains(t, err, "ping postgres user_db: postgres unavailable")
-	require.ErrorContains(t, err, "close postgres user_db: driver close failed")
+	require.ErrorContains(t, err, "ping postgres primary_db: postgres unavailable")
+	require.ErrorContains(t, err, "close postgres primary_db: driver close failed")
 	require.Equal(t, int64(1), drv.pings.Load())
 	require.Equal(t, int64(1), drv.closes.Load())
 	require.ErrorContains(t, db.PingContext(ctx), "database is closed")
@@ -201,7 +201,7 @@ func TestNewPostgresPoolsStopPreservesNamedCloseErrors(t *testing.T) {
 	defer cancel()
 	err = lc.Stop(ctx)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "close postgres user_db")
+	require.Contains(t, err.Error(), "close postgres primary_db")
 	require.Contains(t, err.Error(), "close postgres audit_db")
 	require.Equal(t, int64(2), drv.closes.Load())
 }
@@ -210,7 +210,7 @@ func TestExplicitCommonProvidersDoNotProvideNamedPostgresPools(t *testing.T) {
 	type params struct {
 		fx.In
 
-		UserDB *sql.DB `name:"user_db"`
+		UserDB *sql.DB `name:"primary_db"`
 	}
 
 	err := fx.ValidateApp(
@@ -219,7 +219,7 @@ func TestExplicitCommonProvidersDoNotProvideNamedPostgresPools(t *testing.T) {
 		fx.Invoke(func(params) {}),
 	)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), `name="user_db"`)
+	require.Contains(t, err.Error(), `name="primary_db"`)
 }
 
 func TestNewRedisClientReturnsErrorForMissingConfig(t *testing.T) {
@@ -417,7 +417,7 @@ func TestProvideNamedPostgresProvidesOnlyDeclaredPool(t *testing.T) {
 	type params struct {
 		fx.In
 
-		UserDB *sql.DB `name:"user_db"`
+		UserDB *sql.DB `name:"primary_db"`
 	}
 	err := fx.ValidateApp(
 		fx.Supply(cfg, log),

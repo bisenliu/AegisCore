@@ -30,8 +30,8 @@ func TestPostgresHealthChecker(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
-	checker := postgresHealthChecker{name: "postgres.user_db", db: db, timeout: commonresources.DefaultPostgresPingTimeout()}
-	require.Equal(t, "postgres.user_db", checker.Name())
+	checker := postgresHealthChecker{name: "postgres.primary_db", db: db, timeout: commonresources.DefaultPostgresPingTimeout()}
+	require.Equal(t, "postgres.primary_db", checker.Name())
 	result := checker.Check(context.Background())
 	require.Equal(t, router.HealthCheckStatusOK, result.Status)
 
@@ -147,7 +147,7 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 	err = RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{
 		Config:           cfg,
 		Metrics:          provider,
-		UserDB:           db,
+		PrimaryDB:        db,
 		CacheRedis:       client,
 		SessionPurgePool: fakePurgeTaskPool{stats: workerpool.Stats{Name: "auth.redis.session_purge", Workers: 4, Submitted: 3}},
 		PolicyWatcher:    stubWatcherStatus{running: true},
@@ -158,7 +158,7 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 
 	body := gatherProviderText(t, provider)
 	for _, want := range []string{
-		`aegiscore_postgres_pool_open_connections{environment="test",resource="user_db",service="aegiscore-user-service-test"}`,
+		`aegiscore_postgres_pool_open_connections{environment="test",resource="primary_db",service="aegiscore-user-service-test"}`,
 		`aegiscore_redis_up{environment="test",resource="cache_redis",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_workerpool_tasks_total{environment="test",event="submitted",pool="auth_session_purge_pool",service="aegiscore-user-service-test"} 3`,
 		`aegiscore_localcache_requests_total{cache="auth_token_version",environment="test",result="hit",service="aegiscore-user-service-test"} 3`,

@@ -13,8 +13,8 @@ import (
 func TestRBACPostgresConfigUsesServiceResource(t *testing.T) {
 	want := commonresources.PostgresConfig{Host: "db.internal", Port: 5432, Username: "aegiscore", DBName: "users"}
 	cfg := &serviceconfig.Config{Resources: serviceconfig.ResourcesConfig{Postgres: commonresources.PostgresConfigs{
-		"user_db":  want,
-		"audit_db": {Host: "audit.internal", Port: 5432, Username: "audit", DBName: "audit"},
+		"primary_db": want,
+		"audit_db":   {Host: "audit.internal", Port: 5432, Username: "audit", DBName: "audit"},
 	}}}
 
 	got, err := rbacPostgresConfig(cfg)
@@ -24,7 +24,7 @@ func TestRBACPostgresConfigUsesServiceResource(t *testing.T) {
 
 func TestRBACPostgresConfigRejectsMissingUserDatabase(t *testing.T) {
 	_, err := rbacPostgresConfig(&serviceconfig.Config{})
-	require.ErrorContains(t, err, "resources.postgres.user_db config not found")
+	require.ErrorContains(t, err, "resources.postgres.primary_db config not found")
 }
 
 func TestChainCleanupRunsSecondBeforeFirstAndJoinsErrors(t *testing.T) {

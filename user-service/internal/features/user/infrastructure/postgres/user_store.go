@@ -24,7 +24,7 @@ var _ userapplication.UserProfileStore = (*UserStore)(nil)
 type UserStoreParams struct {
 	fx.In
 
-	Client *ent.Client `name:"user_db"`
+	Client *ent.Client `name:"primary_db"`
 }
 
 // NewUserStore 构造基于 Ent 的用户 store。

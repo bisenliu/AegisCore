@@ -64,7 +64,7 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 	if err != nil {
 		return fail(err)
 	}
-	db, err := datastore.OpenPostgres(resources.NameUserDB, dbCfg)
+	db, err := datastore.OpenPostgres(resources.NamePrimaryDB, dbCfg)
 	if err != nil {
 		return fail(err)
 	}
@@ -73,7 +73,7 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 		return nil
 	})
 	if err := db.PingContext(ctx); err != nil {
-		return fail(fmt.Errorf("ping postgres %s: %w", resources.NameUserDB, err))
+		return fail(fmt.Errorf("ping postgres %s: %w", resources.NamePrimaryDB, err))
 	}
 
 	client := newRBACEntClient(db)
@@ -97,9 +97,9 @@ func rbacPostgresConfig(cfg *serviceconfig.Config) (commonresources.PostgresConf
 	if cfg == nil {
 		return commonresources.PostgresConfig{}, errors.New("user-service config is required")
 	}
-	dbCfg, ok := cfg.Resources.Postgres[resources.NameUserDB]
+	dbCfg, ok := cfg.Resources.Postgres[resources.NamePrimaryDB]
 	if !ok {
-		return commonresources.PostgresConfig{}, fmt.Errorf("resources.postgres.%s config not found", resources.NameUserDB)
+		return commonresources.PostgresConfig{}, fmt.Errorf("resources.postgres.%s config not found", resources.NamePrimaryDB)
 	}
 	return dbCfg, nil
 }

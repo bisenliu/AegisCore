@@ -89,7 +89,7 @@ resources:
       # 建连、读写和启动探测统一使用该超时。
       timeout: 5s
   postgres:
-    user_db:
+    primary_db:
       host: 127.0.0.1
       port: 5432
       username: aegiscore

@@ -32,7 +32,7 @@ func TestEntObservabilityDriverLogsDebugSQLWithStableFields(t *testing.T) {
 	core, logs := observer.New(zap.DebugLevel)
 	log := logger.SQL(zap.New(core))
 	ctx := contextWithSpanContext(context.Background(), t, "00112233445566778899aabbccddeeff", "0102030405060708")
-	driver := newEntObservabilityDriver(observabilityTestDriver{}, log, userDatabaseResource, true)
+	driver := newEntObservabilityDriver(observabilityTestDriver{}, log, primaryDatabaseResource, true)
 	driver.now = advancingClock(time.Unix(0, 0), 12*time.Millisecond)
 
 	require.NoError(t, driver.Exec(ctx, "SELECT * FROM users WHERE id = $1", []any{1}, nil))
@@ -42,7 +42,7 @@ func TestEntObservabilityDriverLogsDebugSQLWithStableFields(t *testing.T) {
 	fields := entries[0].ContextMap()
 	require.Equal(t, "00112233445566778899aabbccddeeff", fields[logger.TraceIDField])
 	require.Equal(t, "0102030405060708", fields[logger.SpanIDField])
-	require.Equal(t, userDatabaseResource, fields["db"])
+	require.Equal(t, primaryDatabaseResource, fields["db"])
 	require.Equal(t, "select", fields["operation"])
 	require.Equal(t, int64(12), fields["duration_ms"])
 	require.Equal(t, "postgres", fields[logger.ComponentField])
@@ -52,7 +52,7 @@ func TestEntObservabilityDriverLogsDebugSQLWithStableFields(t *testing.T) {
 
 func TestEntObservabilityDriverLogsSlowSQLAtWarnWhenDebugDisabled(t *testing.T) {
 	core, logs := observer.New(zap.DebugLevel)
-	driver := newEntObservabilityDriver(observabilityTestDriver{}, logger.SQL(zap.New(core)), userDatabaseResource, false)
+	driver := newEntObservabilityDriver(observabilityTestDriver{}, logger.SQL(zap.New(core)), primaryDatabaseResource, false)
 	driver.now = advancingClock(time.Unix(0, 0), defaultEntSlowQueryThreshold)
 
 	require.NoError(t, driver.Query(context.Background(), "SELECT 1", nil, nil))
@@ -66,7 +66,7 @@ func TestEntObservabilityDriverLogsSlowSQLAtWarnWhenDebugDisabled(t *testing.T) 
 func TestEntObservabilityDriverLogsSQLErrorWhenDebugDisabled(t *testing.T) {
 	wantErr := errors.New("query failed")
 	core, logs := observer.New(zap.DebugLevel)
-	driver := newEntObservabilityDriver(observabilityTestDriver{queryErr: wantErr}, logger.SQL(zap.New(core)), userDatabaseResource, false)
+	driver := newEntObservabilityDriver(observabilityTestDriver{queryErr: wantErr}, logger.SQL(zap.New(core)), primaryDatabaseResource, false)
 	driver.now = advancingClock(time.Unix(0, 0), time.Millisecond)
 
 	err := driver.Query(context.Background(), "UPDATE users SET name = $1", nil, nil)
@@ -92,16 +92,16 @@ func TestNewEntDriverAlwaysObservesErrorsAndUsesConfiguredDebugLevel(t *testing.
 func TestCloseEntClientPreservesNamedError(t *testing.T) {
 	userErr := errors.New("user close failed")
 
-	err := closeEntClient("user_db", func() error { return userErr })
+	err := closeEntClient("primary_db", func() error { return userErr })
 	require.Error(t, err)
 	require.ErrorIs(t, err, userErr)
-	require.ErrorContains(t, err, "close user_db ent client")
+	require.ErrorContains(t, err, "close primary_db ent client")
 }
 
 func TestCloseEntClientCallsCloser(t *testing.T) {
 	closed := false
 
-	err := closeEntClient("user_db", func() error {
+	err := closeEntClient("primary_db", func() error {
 		closed = true
 		return nil
 	})
