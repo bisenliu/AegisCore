@@ -1,1255 +1,388 @@
 ## Purpose
 
-定义 `common/` 提供的跨服务共享契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力，保证服务间基础行为一致。
-## Requirements
-### Requirement: 跨服务契约基础
+定义 `common/` 提供的跨服务共享契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力，保证服务间基础行为一致且业务边界清晰。
 
-系统 MUST 在 `common/` 中维护跨服务共享的错误、响应 envelope、分页和 HTTP response helper，以保证服务之间的外部契约保持一致，并保持业务中立。共享错误契约 MUST 使用语义驱动的应用错误模型表达错误类别、业务原因、稳定响应码、公开消息和内部原因，并 MUST NOT 在 `common/contract/errors` 中保存、暴露或推导 HTTP status。HTTP status MUST 只由 `common/http/response` 根据应用错误 `Kind` 推导。
+## Requirements
+
+### Requirement: 跨服务错误与响应契约
+
+系统 MUST 在 `common/contract` 中维护业务中立的应用错误、响应 envelope 和分页契约，并 MUST 由 `common/http/response` 统一完成 HTTP 渲染。应用错误 MUST 使用低基数 `Kind`、稳定 `Reason`、响应 `Code`、公开 `Message` 和可选内部 `Cause` 表达语义，MUST NOT 保存或接收 HTTP status；HTTP status MUST 只根据 `Kind` 推导。
 
 #### Scenario: 返回统一响应
 
-- **WHEN** 服务处理成功响应或错误响应
-- **THEN** 系统 MUST 使用共享响应和错误契约表达 code、message、data、pagination 或错误详情
+- **WHEN** 服务返回成功、分页或错误响应
+- **THEN** 系统 MUST 使用共享 envelope 表达 `success`、`code`、`message`、`data`、`pagination` 或结构化错误详情
+- **AND** 新服务 MUST 优先复用 `common/contract` 和 `common/http/response`，不得定义不兼容的 envelope
 
-#### Scenario: 新服务复用契约
+#### Scenario: 应用错误转换与标准错误链
 
-- **WHEN** 新服务模块需要对外暴露 HTTP API
-- **THEN** 该服务 MUST 优先复用 `common/contract/` 和 `common/http/response/` 中的稳定契约，而不是定义不兼容的 envelope
-
-#### Scenario: 契约变更需要规格化
-
-- **WHEN** 共享错误码、响应 envelope 或分页结构需要改变
-- **THEN** change MUST 更新相关主规格或 delta spec，并评估所有使用 `common/contract/` 的服务影响
-
-#### Scenario: 新增错误分类
-
-- **WHEN** 需要在 `common/contract/errors` 新增跨服务错误分类或原因
-- **THEN** `Kind` 和 `Reason` MUST 保持业务中立或由明确业务边界声明
-- **AND** `Kind` MUST 表达低基数错误类别
-- **AND** `Reason` MUST 表达稳定、可公开的错误原因
-- **AND** HTTP status MUST 由 `common/http/response` 根据 `Kind` 渲染
-
-#### Scenario: 应用错误不暴露 HTTP status
-
-- **WHEN** 调用方创建、包装或检查 `common/contract/errors` 应用错误
-- **THEN** 应用错误 MUST 暴露 `Kind`、`Reason`、`Code`、`Message` 和可选 `Cause`
-- **AND** 应用错误 MUST NOT 暴露 `HTTPStatus` 字段
-- **AND** 应用错误构造 API MUST NOT 接收 HTTP status 参数
+- **WHEN** 系统创建、包装或通过 `FromError` 归一化错误
+- **THEN** wrapped application error MUST 保留原始 `Kind`、`Reason`、`Code` 和公开 `Message`
+- **AND** nil 或未知错误 MUST 归一化为使用非敏感公开消息的内部错误，原始错误只能作为内部 `Cause` 保留
+- **AND** `errors.As` MUST 能解析应用错误，`errors.Is` MUST 按稳定 `Kind`、`Reason` 或内部 `Cause` 语义匹配
 
 #### Scenario: HTTP 层推导错误状态码
 
 - **WHEN** `common/http/response` 写入应用错误响应
-- **THEN** 系统 MUST 根据应用错误 `Kind` 推导 HTTP status
-- **AND** 请求格式错误或字段校验失败 MUST 渲染为 `400 Bad Request`
+- **THEN** 请求格式或字段校验错误 MUST 渲染为 `400 Bad Request`
 - **AND** 未认证或 token 无效、过期、撤销 MUST 渲染为 `401 Unauthorized`
-- **AND** 权限不足 MUST 渲染为 `403 Forbidden`
-- **AND** 冲突 MUST 渲染为 `409 Conflict`
-- **AND** 未找到 MUST 渲染为 `404 Not Found`
-- **AND** 服务不可用 MUST 渲染为 `503 Service Unavailable`
+- **AND** 权限不足、未找到、冲突和服务不可用 MUST 分别渲染为 `403 Forbidden`、`404 Not Found`、`409 Conflict` 和 `503 Service Unavailable`
 - **AND** nil、未知或内部错误 MUST 渲染为 `500 Internal Server Error`
 
-#### Scenario: 应用错误转换和包装
-
-- **WHEN** 系统通过 `FromError` 归一化错误
-- **THEN** wrapped application error MUST 保留原始 `Kind`、`Reason`、`Code` 和公开 `Message`
-- **AND** nil error MUST 按内部错误处理
-- **AND** 未知 error MUST 按内部错误处理并使用非敏感公开 message
-- **AND** 原始错误 MUST 只作为内部 `Cause` 保留
-
-#### Scenario: 标准错误链支持
-
-- **WHEN** 调用方使用 `errors.As` 检查 wrapped application error
-- **THEN** 系统 MUST 能从错误链中解析出应用错误
-- **WHEN** 调用方使用 `errors.Is` 按应用错误类别或原因匹配
-- **THEN** 系统 MUST 按 `Kind` 和 `Reason` 的稳定语义进行匹配
-- **AND** 内部 `Cause` MUST 继续支持标准 `errors.Is` 和 `errors.As`
-
-#### Scenario: 校验错误响应
+#### Scenario: 校验错误保持结构化
 
 - **WHEN** 请求绑定或字段校验失败
-- **THEN** `common/validation` 和 `common/http/binding` MUST 生成或传播语义应用错误分类
-- **AND** `common/http/response` MUST 将字段校验失败渲染为 `400 Bad Request`
-- **AND** 响应 envelope MUST 保持 `success=false`、`code=CodeValidationFailed`、公开 message 和结构化字段错误明细
+- **THEN** `common/validation` 和 `common/http/binding` MUST 生成或传播语义应用错误
+- **AND** response helper MUST 返回 `success=false`、`CodeValidationFailed`、公开 message 和结构化字段错误明细
 
-#### Scenario: 强制改密错误码稳定
+#### Scenario: 稳定跨服务错误码
 
-- **WHEN** 服务需要表达用户凭据有效但账号要求强制修改密码
-- **THEN** 系统 MUST 使用 `CodePasswordChangeRequired`
-- **AND** 该 code 的数值 MUST 为 `20006`
+- **WHEN** 服务表达凭据有效但账号要求强制修改密码
+- **THEN** 系统 MUST 使用数值为 `20006` 的 `CodePasswordChangeRequired`
+- **AND** `common` MUST 只拥有该业务中立错误码，不得承载 user-service 的状态判断、token 签发或登录编排
 
-#### Scenario: 错误码保持业务中立
+#### Scenario: 业务错误归属功能边界
 
-- **WHEN** `common/contract/errors` 新增 `CodePasswordChangeRequired`
-- **THEN** `common` MUST 只定义共享错误码和通用错误构造能力
-- **AND** `common` MUST NOT 承载 user-service 的受限 token 签发、强制改密状态判断或登录响应编排逻辑
+- **WHEN** auth、permission、role 或 `internal/shared/identity` 定义稳定业务错误
+- **THEN** owning domain MUST 为错误提供共享契约要求的 `Kind`、`Reason`、`Code` 和公开 `Message`，并保持 `errors.Is` 匹配语义
+- **AND** `common/http/response.Fail` MUST 能直接渲染该错误
+- **AND** 系统 MUST NOT 在 `common`、跨 feature 全局包或 HTTP transport 中维护重复的业务错误映射表
 
-#### Scenario: 服务不可用错误
+#### Scenario: 共享契约发生变化
 
-- **WHEN** 服务需要表达临时资源池繁忙、依赖暂时不可用或实例无法处理当前请求
-- **THEN** 共享错误契约 MUST 提供业务中立的服务不可用 `Kind`
-- **AND** `common/http/response` MUST 将该 `Kind` 渲染为 `503 Service Unavailable`
-- **AND** 具体业务边界 MUST 提供不泄露内部实现细节的公开消息
+- **WHEN** 共享错误分类、错误码、响应 envelope 或分页结构需要改变
+- **THEN** change MUST 更新相关主规格或 delta spec，并评估所有共享契约消费者的影响
 
-#### Scenario: 不保留旧兼容路径
+### Requirement: HTTP helper 与校验基础
 
-- **WHEN** 系统完成语义应用错误模型迁移
-- **THEN** `common/contract/errors` MUST NOT 保留旧 `HTTPStatus` 字段
-- **AND** 系统 MUST NOT 保留接收 HTTP status 的旧 factory API
-- **AND** 系统 MUST NOT 保留从旧状态码直连模型到新模型的兼容适配层
-
-### Requirement: HTTP 与安全中间件基础
-
-系统 MUST 在 `common/http/` 和 `common/security/` 中提供可复用的绑定、校验、认证、授权、CORS、metrics、logging、recovery、OpenAPI 和 pprof 基础能力。
+系统 MUST 在 `common/http` 和 `common/validation` 中提供业务中立的绑定、字段校验、响应、认证授权 middleware、CORS、metrics、logging、recovery、OpenAPI 和 pprof 能力，并 MUST 保持其外部行为一致。
 
 #### Scenario: HTTP 请求进入服务
 
 - **WHEN** HTTP 请求被 Gin 路由处理
-- **THEN** 服务 MUST 能复用共享 middleware 完成认证上下文、授权检查、日志字段、metrics 采集、panic recovery 和 span error 记录
+- **THEN** 服务 MUST 能复用共享 middleware 完成认证上下文、授权检查、日志字段、metrics、panic recovery 和 span error 记录
 
-#### Scenario: 输入校验失败
+#### Scenario: 绑定和字段校验
 
-- **WHEN** 请求绑定或字段校验失败
-- **THEN** 系统 MUST 通过共享 binding、validation 和 response helper 返回一致的校验错误结构
+- **WHEN** HTTP handler 绑定请求或校验字段
+- **THEN** 系统 MUST 通过共享 binding、validation 和 response helper 返回一致的字段名、公开消息和错误结构
+- **AND** validation tag 的字段名解析顺序 MUST 保持稳定
 
-#### Scenario: OpenAPI 输出
+#### Scenario: 成功响应 helper
 
-- **WHEN** 服务生成或转换 OpenAPI 文档
-- **THEN** 系统 MUST 复用 `common/http/openapi/` 的转换与渲染约束，避免服务间文档格式漂移
+- **WHEN** 调用方使用 `Created` 或 `NoContent` 写入响应
+- **THEN** `Created` MUST 返回包含统一成功 envelope 和调用方 `data` 的 `201 Created`
+- **AND** `NoContent` MUST 返回 body 为空的 `204 No Content`
+
+#### Scenario: 默认 CORS 请求
+
+- **WHEN** 请求经过 `CORS()` middleware
+- **THEN** 响应 MUST 默认包含 `Access-Control-Allow-Origin=*`、`Access-Control-Allow-Methods=GET,POST,PUT,PATCH,DELETE,OPTIONS` 和 `Access-Control-Allow-Headers=Authorization,Content-Type`
+- **AND** 默认配置 MUST NOT 启用 credentials、max age、exposed headers 或 `Vary: Origin`
+- **AND** middleware MUST 复制默认或调用方传入的 slice，调用方后续修改 MUST NOT 改变已创建 middleware 的行为
+
+#### Scenario: CORS 预检与普通请求
+
+- **WHEN** `OPTIONS` 预检请求经过共享 CORS middleware
+- **THEN** middleware MUST 返回带默认 CORS header 的 `204 No Content` 并停止调用后续 handler
+- **WHEN** 非 `OPTIONS` 请求经过该 middleware
+- **THEN** middleware MUST 调用后续 handler，并保持其 status 和 body 可见
+
+#### Scenario: OpenAPI 生成与渲染
+
+- **WHEN** 服务生成、转换或嵌入 OpenAPI 文档
+- **THEN** 系统 MUST 复用 `common/http/openapi` 的规范化、序列化和 Go embed 渲染能力
+- **AND** API server、认证方案、扫描范围、健康路径和输出目录等服务元数据 MUST 留在服务脚本或薄 wrapper
 
 #### Scenario: 服务特定授权行为
 
-- **WHEN** 授权行为依赖 user-service 的 `user:<uuid>` subject、角色、权限目录、route diff 或超级管理员基线
-- **THEN** 行为 MUST 留在 user-service permission/shared 边界，不得放入 `common/security/casbin` 或通用 HTTP middleware
+- **WHEN** 授权依赖 user-service 的 subject schema、角色、权限目录、route diff 或超级管理员基线
+- **THEN** 行为 MUST 留在 user-service permission 或 shared 边界，不得进入通用 HTTP middleware 或 `common/security/casbin`
 
-#### Scenario: 服务特定 OpenAPI 元数据
+### Requirement: 共享安全原语
 
-- **WHEN** OpenAPI 元数据描述 user-service API server、认证方案、源码扫描范围、健康路径或输出目录
-- **THEN** 元数据 MUST 位于 user-service 脚本或薄 wrapper，不得放入 `common/http/openapi`
+系统 MUST 在 `common/security` 中提供业务中立的 JWT 验证、Bearer token 处理、Casbin 请求三元组授权和 Argon2id 密码 KDF 原语，MUST NOT 固定 user-service 的 claims schema、token subject、会话撤销或业务授权模型。
 
-### Requirement: 共享认证授权 helper API 治理
+#### Scenario: JWT middleware 使用最小 verifier
 
-系统 MUST 在 `common/http` 和 `common/security` 中保持认证、授权 helper 的导出 API 语义清晰且避免重复简写入口；当共享 helper 只包装另一个推荐入口、暴露未参与行为的参数或没有额外稳定语义时，系统 MUST 通过显式推荐入口或移除策略治理该 helper。`common/security/auth` MUST 只提供通用 JWT verifier、Bearer token 处理和无业务语义安全 primitive，MUST NOT 暴露 access、refresh、password-change token 签发 API，MUST NOT 固定 user-service claims schema、token subject 或会话撤销语义。
+- **WHEN** 服务创建共享 JWT 认证 middleware
+- **THEN** middleware constructor MUST 只接收 logger、访问令牌 verifier 和可选 token version validator
+- **AND** middleware MUST NOT 依赖 token issuer、服务私有配置或具备签发能力的 concrete service
+- **AND** access token claims、subject 和业务字段校验 MUST 由服务私有 verifier adapter 拥有
 
-#### Scenario: Casbin 授权 helper 收紧
-
-- **WHEN** 调用方需要获得 Casbin 三元组授权的原始允许结果
-- **THEN** 系统 MUST 提供 `common/security/casbin.Enforce` 作为返回 `bool` 和 `error` 的推荐入口
-- **AND** 拒绝访问转换为 `ErrDenied` 的 error-only 语义 MUST 由 `Authorizer.Authorize` 或调用方显式处理
-
-#### Scenario: JWT middleware 依赖最小 verifier
-
-- **WHEN** 服务需要创建共享 JWT 认证 middleware
-- **THEN** middleware MUST 只依赖能验证访问令牌的最小接口
-- **AND** middleware MUST NOT 依赖具备 token 签发能力的 concrete JWT service
-- **AND** access token 的 claims schema、subject 检查和服务业务字段校验 MUST 由服务私有 verifier adapter 拥有
-
-#### Scenario: JWT middleware 不接收无效配置参数
-
-- **WHEN** 服务需要创建共享 JWT 认证 middleware
-- **THEN** middleware constructor MUST 只接收 logger、访问令牌 verifier 和可选 token version validator 作为调用参数
-- **AND** middleware constructor MUST NOT 接收 `config.AuthConfig` 或其他不参与运行时认证行为的配置参数
-- **AND** JWT 配置 MUST 由服务私有配置和服务私有 verifier/issuer 组合消费后再注入 middleware
-
-#### Scenario: token version validator 函数适配器移除
-
-- **WHEN** 服务需要为共享 JWT 认证 middleware 提供 token version 撤销校验
-- **THEN** 调用方 MUST 直接提供实现 `common/security/auth.TokenVersionValidator` 的具体类型
-- **AND** `common/http/middleware` MUST NOT 暴露只将函数包装为 `TokenVersionValidator` 的 `TokenVersionValidatorFunc` 适配器
-
-#### Scenario: common 不暴露用户服务签发能力
+#### Scenario: common 不提供业务 token 签发
 
 - **WHEN** 任一服务导入 `common/security/auth`
-- **THEN** 该包 MUST NOT 提供 `SignAccessToken`、`SignRefreshToken`、`SignPasswordChangeToken` 或等价签发入口
-- **AND** 该包 MUST NOT 定义 `SubjectRefresh`、`SubjectPasswordChange` 或其他 user-service 认证流程 subject
-- **AND** 该包 MUST NOT 定义包含 `user_id`、`token_version`、`session_id` 的 user-service 专属 claims 结构
+- **THEN** 该包 MUST NOT 提供 access、refresh 或 password-change token 签发入口
+- **AND** 该包 MUST NOT 定义 user-service 专属 subject 或包含 `user_id`、`token_version`、`session_id` 的专属 claims
 
-#### Scenario: 行为保持不变
+#### Scenario: Casbin 授权入口
 
-- **WHEN** 共享认证授权 helper 的重复入口、无效参数或签发能力被移除
-- **THEN** 系统 MUST 保持 JWT 验签、token version 校验、Casbin 三元组校验、`ErrNotConfigured`、`ErrDenied` 和 HTTP 响应语义不变
-- **AND** user-service 的认证路由挂载和 RBAC 保护路由 MUST 不因该 API 治理发生行为变化
+- **WHEN** 调用方需要获得 Casbin 三元组授权的原始结果
+- **THEN** `common/security/casbin.Enforce` MUST 返回 `bool` 和 `error`
+- **AND** 拒绝访问到 `ErrDenied` 的转换 MUST 由 `Authorizer.Authorize` 或调用方显式处理
 
-### Requirement: 密码 KDF 显式实例化
-
-系统 MUST 在 `common/security/password` 中提供可显式实例化的 Argon2id 密码哈希与校验 primitive。调用方 MUST 通过实例方法执行密码哈希和校验，并 MUST 在构造实例时声明本实例的 Argon2id 并发上限和队列上限。`common/security/password` MUST NOT 暴露包级密码哈希、包级密码校验或包级可变 Argon2id 门控入口。
-
-#### Scenario: 创建密码 KDF 服务实例
+#### Scenario: 创建密码 KDF 实例
 
 - **WHEN** 服务、CLI 或测试需要执行密码哈希或校验
-- **THEN** 调用方 MUST 显式创建 `common/security/password` 的密码 KDF 服务实例
-- **AND** 构造参数 MUST 包含正数 Argon2id 并发上限和正数队列上限
-- **AND** 队列上限 MUST 大于或等于并发上限
+- **THEN** 调用方 MUST 显式创建 Argon2id KDF 实例并提供正数并发上限和正数队列上限
+- **AND** 队列上限 MUST 大于或等于并发上限，无效预算 MUST 被拒绝
+- **AND** `common/security/password` MUST NOT 暴露包级哈希、校验或可变门控入口
 
-#### Scenario: 拒绝无效 KDF 资源预算
+#### Scenario: 密码哈希与校验
 
-- **WHEN** 调用方使用非正数并发上限、非正数队列上限或小于并发上限的队列上限创建密码 KDF 服务
-- **THEN** 系统 MUST 返回明确错误并拒绝创建实例
+- **WHEN** 调用方使用 KDF 实例哈希或校验合法密码
+- **THEN** 系统 MUST 生成或解析包含算法、版本、内存、迭代、并行度、盐和派生密钥的受支持 Argon2id 编码
+- **AND** 系统 MUST 只接受当前策略允许的参数并使用常量时间比较
+- **AND** 每个实例 MUST 独立执行自身的并发和队列预算
 
-#### Scenario: 通过实例执行密码哈希
+#### Scenario: KDF 资源繁忙
 
-- **WHEN** 调用方使用密码 KDF 服务实例对合法明文密码执行哈希
-- **THEN** 系统 MUST 使用 Argon2id 当前安全参数生成包含算法、版本、内存、迭代、并行度、盐和派生密钥的编码哈希
-- **AND** 系统 MUST 使用该实例的队列和并发预算限制本实例内执行中和等待中的 KDF 请求
+- **WHEN** KDF 实例达到执行中和等待中的资源预算
+- **THEN** 系统 MUST 返回可由 `errors.Is(err, password.ErrPasswordKDFBusy)` 匹配的应用错误
+- **AND** 该错误 MUST 携带 `KindServiceUnavailable`、`Reason=password_kdf_busy`、`CodeServiceUnavailable` 和不泄露预算的公开消息
+- **AND** response helper MUST 将其直接渲染为 `503 Service Unavailable`
 
-#### Scenario: 通过实例执行密码校验
+### Requirement: Runtime 配置、资源与 datastore
 
-- **WHEN** 调用方使用密码 KDF 服务实例校验合法明文密码和受支持的编码哈希
-- **THEN** 系统 MUST 解析编码哈希中的算法、版本和参数
-- **AND** 系统 MUST 只接受当前策略允许的 Argon2id 参数
-- **AND** 系统 MUST 使用常量时间比较返回密码是否匹配
+系统 MUST 在 `common/runtime/config` 和 `common/runtime/resources` 中分别维护跨服务 runtime 配置以及具名 Redis/PostgreSQL 资源类型、默认值和通用校验，并 MUST 由 `common/runtime/datastore` 使用共享资源类型初始化客户端。服务私有业务配置、必需资源名和业务用途 MUST 由消费服务拥有。
 
-#### Scenario: KDF 门控只属于实例
-
-- **WHEN** 多个服务组件、CLI 或测试在同一进程内需要不同密码 KDF 资源预算
-- **THEN** 系统 MUST 允许它们持有不同密码 KDF 服务实例
-- **AND** 一个实例的队列和并发占用 MUST NOT 消耗另一个实例的队列和并发预算
-
-### Requirement: Runtime primitive 基础
-
-系统 MUST 在 `common/runtime/` 中维护配置加载、数据存储、logger、metrics、tracing、scheduler、workerpool、localcache、Redis key 和 timezone 等 runtime primitive。`common/runtime/config` MUST 将 `local_cache` 表达为通用具名缓存实例集合，并 MUST NOT 固定 user-service 的 `auth_token_version`、`rbac_user_roles` 或其他业务缓存名。`common/runtime/config` MUST 只声明和校验跨服务通用 runtime 配置，MUST NOT 声明或校验 user-service 的 `auth`、`ent`、JWT TTL、password KDF、refresh session 或 token version 策略。`common/runtime/config` MUST 使用 `github.com/go-viper/mapstructure/v2` 作为配置反序列化依赖，并 MUST NOT 保留旧版 `github.com/mitchellh/mapstructure` 导入、兼容层或旧行为 fallback。`common/runtime/workerpool` MUST 作为普通 Go runtime primitive 提供构造和显式关闭能力，MUST NOT 依赖 `go.uber.org/fx`、`fx.Lifecycle`、`fx.Hook` 或 `fxtest`。
-
-#### Scenario: 服务启动加载配置
+#### Scenario: 严格加载通用配置
 
 - **WHEN** 服务通过配置文件启动
-- **THEN** 系统 MUST 使用共享配置 loader 解析 runtime、HTTP、Postgres、Redis、metrics、tracing、logger 和通用 `local_cache` 配置
-- **AND** 服务私有配置 loader MUST 负责解析和校验该服务的 `auth`、`ent` 或其他业务配置块
+- **THEN** 共享 loader MUST 解析 runtime、HTTP、gRPC、metrics、tracing、logger 和通用 `local_cache` 配置
+- **AND** 系统 MUST 使用 `github.com/go-viper/mapstructure/v2` 的 decode 能力解析 duration、slice 和具名配置
+- **AND** 未声明字段 MUST 在启动前失败并报告完整路径，不得使用旧字段别名或 fallback
 
-#### Scenario: production-like JWT secret 长度校验
+#### Scenario: 服务私有配置留在服务边界
 
-- **WHEN** user-service runtime environment 为 production-like 环境且配置包含 `auth.jwt.secret`
-- **THEN** user-service 私有配置 validation MUST 要求该 secret 至少为 32 bytes
-- **AND** development 环境 MAY 不执行该长度约束
-- **AND** 校验错误 MUST 明确定位到 `auth.jwt.secret`
-- **AND** `common/runtime/config` validation MUST NOT 校验 `auth.jwt.secret`
+- **WHEN** 服务需要 `auth`、`ent`、JWT TTL、password KDF、refresh session、token version 或 production-like secret 校验
+- **THEN** 服务私有 loader MUST 负责解析和校验这些配置
+- **AND** `common/runtime/config` MUST NOT 声明或校验这些业务配置
 
-#### Scenario: 拒绝未知配置字段
-
-- **WHEN** YAML 包含目标 Config 未声明的字段
-- **THEN** 加载 MUST 在服务启动前失败
-- **AND** 错误 MUST 包含未知字段的完整配置路径
-- **AND** 系统 MUST NOT 提供旧字段别名、自动迁移、白名单绕过或 fallback
-
-#### Scenario: 协议 server 最小配置
+#### Scenario: 协议 server 配置
 
 - **WHEN** 服务声明 `server.http` 或 `server.grpc`
-- **THEN** HTTP MUST 支持 enabled、host、port、read、write、idle 和 shutdown timeout
-- **AND** gRPC MUST 支持 enabled、host、port 和 shutdown timeout
+- **THEN** HTTP 配置 MUST 支持 enabled、host、port、read、write、idle 和 shutdown timeout
+- **AND** gRPC 配置 MUST 支持 enabled、host、port 和 shutdown timeout
 - **AND** 至少一个 server MUST 启用
+
+#### Scenario: 通用具名本地缓存配置
+
+- **WHEN** 配置包含 `local_cache.<name>`
+- **THEN** loader MUST 保留 `<name>` 并解析为通用缓存实例配置
+- **AND** validation MUST 校验 `capacity > 0`、`ttl > 0`、`load_timeout > 0`、`num_counters >= 0` 和 `buffer_items >= 0`，错误 MUST 包含完整字段路径
+- **AND** 必需缓存名及其业务含义 MUST 留在消费服务
+
+#### Scenario: 声明和校验具名资源
+
+- **WHEN** 服务声明一个或多个 Redis 或 PostgreSQL 实例
+- **THEN** 服务 MUST 能使用 `RedisConfigs` 和 `PostgresConfigs` 按名称配置资源
+- **AND** resources helper MUST 应用稳定 timeout、SSL 和连接池默认值，并对非法名称、地址、端口、timeout、SSL mode、username 或 pool 参数返回包含资源名和字段路径的错误
+- **AND** PostgreSQL max idle connections MUST NOT 大于 max open connections，PostgreSQL password 与 Redis username/password MUST 允许为空
+- **AND** 核心 runtime `Config` MUST NOT 固定这些资源或服务私有资源名
+
+#### Scenario: 初始化 Redis client
+
+- **WHEN** datastore 使用共享资源配置创建 Redis client
+- **THEN** 统一 timeout MUST 映射到 dial、read、write 和启动 ping timeout，username MUST 可用于 Redis ACL
+- **AND** 调用方 MUST 能显式指定 tracing provider，未指定时 MAY 使用全局 provider
+- **AND** 启动 PING 失败时 provider MUST 关闭 client，并保留探测失败和关闭失败信息
+
+#### Scenario: 初始化 PostgreSQL pool
+
+- **WHEN** datastore 使用共享资源配置创建 PostgreSQL pool
+- **THEN** DSN MUST 在 datastore 或 resources 边界构建，pool 和 ping timeout MUST 使用共享默认值或显式覆盖
+- **AND** 启动 PING 失败时 provider MUST 关闭连接池，并保留探测失败和关闭失败信息
+
+#### Scenario: 单一配置来源组装服务
+
+- **WHEN** user-service 正式 `serve` 启动或装配测试构建 Fx App
+- **THEN** CLI MUST 在创建 App 前只解析并校验一次 service config
+- **AND** composition root MUST supply 同一个 service config 及由其派生的 runtime config，不得再次读取配置文件
+- **AND** bootstrap MUST 提供无配置文件 I/O 的基础 Fx options 入口供正式 App 和测试复用
+- **AND** 配置失败 MUST 在创建 App、资源或 lifecycle hook 前返回
+
+### Requirement: Runtime 执行原语
+
+系统 MUST 在 `common/runtime` 中提供业务中立的 ID、scheduler、workerpool、localcache、Redis key 和 timezone 原语，并 MUST 为后台执行提供明确的容量、并发、失败处理、观测和关闭语义。
+
+#### Scenario: workerpool 生命周期
+
+- **WHEN** 调用方通过 `workerpool.New` 创建任务池并通过 `Stop(ctx)` 关闭
+- **THEN** task pool MUST 作为不依赖 Fx 的普通 Go 资源创建，由拥有者显式关闭
+- **AND** Stop MUST 停止接收新任务、等待已登记或已接受任务 drain，并允许重复调用共享同一 drain 状态
+- **AND** Stop 超时 MUST 返回包装 `context.DeadlineExceeded` 的错误
+
+#### Scenario: workerpool 保持业务中立
+
+- **WHEN** feature 向共享 workerpool 提交后台任务
+- **THEN** workerpool MUST 只提供并发控制、显式关闭、日志和统计能力
+- **AND** workerpool MUST NOT 承载 refresh session、token version、可靠消息、eventbus、outbox 或业务一致性语义
+
+#### Scenario: scheduler 执行任务
+
+- **WHEN** scheduler 触发已注册任务
+- **THEN** 系统 MUST 按本地 overlap gate、全局并发 gate、可选分布式锁、任务 context、可选锁续租、任务执行和 cleanup 的顺序处理
+- **AND** 系统 MUST 记录跳过、开始、完成、失败、拒绝和 panic，并在 shutdown 时优雅停止
+
+#### Scenario: scheduler 多实例锁与续租
+
+- **WHEN** 定时任务具有多实例副作用
+- **THEN** 任务 MUST 声明正数 TTL 的分布式锁策略，长任务 SHOULD 使用续租
+- **AND** 即使任务未配置 timeout，scheduler MUST 创建可取消 context，并在自动续租失败时取消任务和记录失败
+
+#### Scenario: 创建有界本地缓存
+
+- **WHEN** 服务创建 loading cache
+- **THEN** 配置 MUST 包含名称、正数容量、正数 TTL、key string 编码和 loader，无效配置 MUST 被拒绝
+- **AND** 容量 MUST 作为最大条目预算，调用方 MAY 提供 `CloneFunc` 隔离可变对象
+
+#### Scenario: 本地缓存读取与回源
+
+- **WHEN** `GetOrLoad` miss
+- **THEN** cache MUST 使用 `singleflight` 合并同 key 并发回源，成功后尝试写入，且 MUST NOT 缓存 loader 错误
+- **AND** singleflight 内部 double-check 命中 MUST NOT 污染业务 hit 统计
+
+#### Scenario: 关闭本地缓存
+
+- **WHEN** cache 已关闭
+- **THEN** `GetOrLoad` 和 `Set` MUST 返回 `ErrClosed`，`Get` MUST 返回未命中，`Delete` 和 `Clear` MUST 不再访问底层缓存
+
+#### Scenario: Redis key 归属
+
+- **WHEN** feature 需要 refresh session、token version、RBAC 或其他业务 Redis key
+- **THEN** feature infrastructure MUST 拥有业务 key schema，并只能复用 `common/runtime/rediskey` 的通用构造规则
 
 #### Scenario: 初始化进程时区
 
 - **WHEN** runtime 初始化进程时区
-- **THEN** timezone primitive MUST 优先使用平台 `TZ` 环境变量，并在缺省时使用稳定默认值
-- **AND** timezone primitive MUST NOT 依赖核心 Config 或重新引入 `system.timezone`
+- **THEN** timezone primitive MUST 优先使用平台 `TZ` 环境变量并在缺省时使用稳定默认值
+- **AND** timezone primitive MUST NOT 依赖核心 Config 或服务业务配置
 
-#### Scenario: runtime 依赖初始化
+### Requirement: Logger、观测与 Fx 装配
 
-- **WHEN** 服务需要连接 PostgreSQL、Redis、logger、metrics 或 tracing provider
-- **THEN** 服务 MUST 优先复用 `common/runtime/` 中的 provider 和 Fx module
+系统 MUST 在 `common/runtime` 中提供业务中立的 logger、metrics、tracing、Fx provider 和依赖图原语。构造函数和 provider MUST 只消费真实运行时依赖，MUST NOT 为测试便利暴露生产 API 或读取服务私有配置。
 
-#### Scenario: PostgreSQL 启动探测失败关闭连接池
+#### Scenario: logger 构造无全局副作用
 
-- **WHEN** 共享 PostgreSQL Fx provider 已创建连接池但启动 PING 失败
-- **THEN** provider MUST 关闭已创建的连接池
-- **AND** 返回错误 MUST 保留 PING 失败和关闭失败信息
-- **AND** 启动失败后连接池 MUST 不再泄露为可继续使用的资源
+- **WHEN** 调用方通过 `logger.New`、`NewWithConfig` 或 Fx provider `NewLogger` 创建 logger
+- **THEN** 系统 MUST 返回由调用方拥有的 logger，Fx provider MUST 注册既有 Sync 关闭 hook
+- **AND** 构造过程 MUST NOT 隐式安装、覆盖或恢复进程级默认 logger
+- **AND** 默认 logger 只能通过显式 `SetDefault` 修改，并 MAY 作为未注入 logger 时的兜底
 
-#### Scenario: Redis 启动探测失败关闭 client
+#### Scenario: Fx provider 使用真实输入语义
 
-- **WHEN** 共享 Redis Fx provider 已创建 client 但启动 PING 失败
-- **THEN** provider MUST 关闭已创建的 Redis client
-- **AND** 返回错误 MUST 保留 PING 失败和关闭失败信息
-- **AND** 启动失败后 Redis client MUST 不再泄露为可继续使用的资源
+- **WHEN** 共享 provider 的依赖类型唯一且没有 named、optional、group 或其他 DI metadata
+- **THEN** provider MUST 使用普通强类型参数
+- **AND** 只有存在真实 DI metadata、复杂输出映射或明显的多依赖可读性收益时 MAY 使用 Params 容器
+- **AND** provider MUST 只消费跨服务配置和 primitive，不得导入服务私有配置
 
-#### Scenario: Redis client 显式 tracing provider
+#### Scenario: 生成稳定依赖图
 
-- **WHEN** 服务通过 `OpenRedisClient` 或 `NewRedisClient` 创建共享 Redis client
-- **THEN** 调用方 MUST 能通过 `WithRedisTracerProvider` 显式指定 tracing provider
-- **AND** 未显式指定时 MAY 使用全局 tracing provider
-- **AND** no-op tracing provider MUST NOT 改变 Redis 命令结果、连接生命周期或启动 PING 语义
+- **WHEN** 服务将 Fx option 或 module 传入 `common/runtime/fxgraph`
+- **THEN** helper MUST 输出稳定排序的 provider、invoke 和依赖关系图文本
+- **AND** helper MUST NOT 构造或要求服务私有配置、feature provider、Ent、Redis、PostgreSQL、OTLP 或 HTTP server 输入
 
-#### Scenario: 后台任务执行
+#### Scenario: 公开 API 具有运行时职责
 
-- **WHEN** 服务需要执行定时任务、分布式锁或固定 worker pool 任务
-- **THEN** 系统 MUST 使用共享 scheduler、lock、workerpool 和 metrics 约束，并记录失败、拒绝、panic 和完成事件
+- **WHEN** `common/runtime` 新增公开 constructor、method、option 或 hook
+- **THEN** 入口 MUST 具有真实运行时职责或已定义的稳定共享契约
+- **AND** 仅测试消费、暴露内部状态或绕过正常 lifecycle 的能力 MUST 留在包内、`_test.go` fixture 或 `common/testing`
 
-#### Scenario: workerpool 显式生命周期所有权
+### Requirement: common、shared 与外部集成边界
 
-- **WHEN** 调用方通过 `common/runtime/workerpool.New` 创建后台任务池
-- **THEN** `New` MUST 作为普通 Go 构造器创建未绑定 DI 框架的任务池
-- **AND** `New` MUST NOT 接收 `fx.Lifecycle`、注册 `fx.Hook` 或导入 `go.uber.org/fx`
-- **AND** 调用方 MUST 在拥有该资源的生命周期边界显式调用公开 `Stop(ctx)` 关闭任务池
-- **AND** 系统 MUST NOT 保留旧签名、deprecated wrapper、可选 lifecycle 参数或 Fx 兼容 adapter
+系统 MUST 将 `common` 限制为跨服务稳定且业务中立的能力，将 `user-service/internal/shared` 限制为至少两个 feature 真实消费的服务内纯业务内核，并将真实外部协议适配放入 `user-service/internal/integration/http|grpc|events`。
 
-#### Scenario: workerpool Stop drain 语义
+#### Scenario: 能力归入 common
 
-- **WHEN** 调用方对 `common/runtime/workerpool` 执行 `Stop(ctx)`
-- **THEN** workerpool MUST 停止接收新任务并拒绝后续提交
-- **AND** workerpool MUST 等待已经登记或已经接受的任务完成 drain
-- **AND** `Stop(ctx)` 超时时 MUST 返回包装 `context.DeadlineExceeded` 的错误
-- **AND** 重复 `Stop` MUST 共享同一 drain 状态，不得重复释放底层池或丢失已接收任务
+- **WHEN** 新能力准备放入 `common`
+- **THEN** 能力 MUST 跨服务可复用、无 user-service 业务语义且具有稳定契约
+- **AND** `common` MUST NOT 依赖 feature 包或承载业务 DTO、业务 key schema、policy loader、route diff、服务 OpenAPI 元数据、eventbus 或 outbox 设计
 
-#### Scenario: 本地缓存配置解析
+#### Scenario: 服务内 shared kernel
 
-- **WHEN** 配置文件包含 `local_cache.<name>` entry
-- **THEN** `common/runtime/config` MUST 将其解析为以 `<name>` 为 key 的 `LocalCacheInstanceConfig`
-- **AND** 配置 key MUST 保持原样供服务按名称读取
+- **WHEN** user/auth 共享身份语义或 role/permission 共享系统 RBAC 基线
+- **THEN** 系统 MUST 分别使用 `internal/shared/identity` 和 `internal/shared/rbacbaseline`
+- **AND** shared 包 MUST 保持纯业务语义，不得依赖 feature、Gin、Ent、Redis、SQL、Fx、runtime provider、HTTP response、DTO、store port、外部调用或部署资产
 
-#### Scenario: 本地缓存配置通用校验
+#### Scenario: 新增 shared 能力
 
-- **WHEN** `local_cache` 中存在一个或多个 entry
-- **THEN** validation MUST 遍历所有 entry 并校验 `capacity > 0`、`ttl > 0`、`load_timeout > 0`、`num_counters >= 0` 和 `buffer_items >= 0`
-- **AND** 校验错误 MUST 包含对应 `local_cache.<name>.<field>` 路径
-
-#### Scenario: 拒绝 common 固化业务缓存名
-
-- **WHEN** user-service 或其他服务需要声明必需本地缓存实例
-- **THEN** 必需缓存名、缺失实例检查和业务含义 MUST 位于对应服务的 feature/provider 边界
-- **AND** `common/runtime/config` MUST NOT 增加该业务缓存的固定字段或专用校验
-
-#### Scenario: 服务资源名私有化
-
-- **WHEN** 服务需要声明数据库、Redis 或 Ent resource 的业务资源名
-- **THEN** 资源名常量 MUST 位于对应服务私有边界
-- **AND** `common/runtime/resources` MUST NOT 声明 `NameUserDB` 或其他服务私有业务资源名
-- **AND** 通用 datastore provider MUST 只消费调用方传入的资源名字符串
-
-#### Scenario: auth Redis key schema
-
-- **WHEN** 认证功能需要 refresh session、token version 或撤销相关 Redis key
-- **THEN** 认证 infrastructure MUST 拥有功能 key schema，只能复用 `common/runtime/rediskey` 的通用构造规则
-
-#### Scenario: workerpool 业务边界
-
-- **WHEN** feature 代码使用 `common/runtime/workerpool` 提交后台任务
-- **THEN** workerpool MUST 只提供并发控制、显式关闭、日志和统计能力，MUST NOT 承载 refresh session 上限裁剪、token version 撤销、可靠消息、eventbus、outbox 或业务一致性协议
-
-#### Scenario: scheduler 分布式锁
-
-- **WHEN** 定时任务具有多实例副作用
-- **THEN** 任务 MUST 声明锁策略，锁 TTL MUST 为正值，长任务 SHOULD 具备续租策略
-
-#### Scenario: mapstructure v2 配置反序列化
-
-- **WHEN** `common/runtime/config` 将 Viper 读取到的配置反序列化为目标配置结构
-- **THEN** 系统 MUST 使用 `github.com/go-viper/mapstructure/v2` 提供的 decode hook 和 decode 配置能力
-- **AND** duration、slice、具名 Postgres、具名 Redis 和具名 `local_cache` 配置 MUST 按 v2 标准行为解析
-- **AND** 系统 MUST NOT 导入 `github.com/mitchellh/mapstructure` 或保留面向旧版行为的兼容代码
-
-### Requirement: 共享 runtime 公开 API 不承载测试适配
-
-`common/` 的公开 runtime constructor、method、option 和 hook MUST 具有可说明的真实运行时职责或已定义的稳定共享契约。仅被同包测试直接调用、仅用于绕过正常 lifecycle、仅用于固定测试输入或仅用于暴露内部状态的入口 MUST 留在包内实现、`_test.go` fixture 或 `common/testing`，不得作为正式导出 API 保留。
-
-#### Scenario: 仅测试消费的构造器降为包内实现
-
-- **WHEN** 一个 `common/runtime` 导出构造器在仓库生产调用图中没有直接消费者，主规格也未定义其独立运行时语义
-- **THEN** 系统 MUST 将该构造器降为包内实现或由正式构造器内联消费
-- **AND** 同包测试 MUST 通过包内 helper、Fx lifecycle fixture 或其他测试边界覆盖原行为
-
-#### Scenario: 真实手动生命周期需求需要独立契约
-
-- **WHEN** 新的生产调用方需要绕过 Fx lifecycle 手动创建和关闭 runtime primitive
-- **THEN** 变更 MUST 明确该调用方的 owner、关闭责任、错误语义和稳定 API
-- **AND** 系统 MUST NOT 仅以单元测试构造便利性为理由公开 unmanaged、for-test 或 test-hook 入口
-
-#### Scenario: 保留真实运行时边界处理
-
-- **WHEN** 候选代码处理协议兼容、安全失败关闭、运行时容错、观测 fallback 或已进入主规格的 helper 行为
-- **THEN** 系统 MUST 以主规格和真实调用路径验证后保留该行为
-- **AND** 系统 MUST NOT 因其同时方便测试或当前调用数量较少而删除真实业务边界
-
-#### Scenario: 测试可替换性留在局部边界
-
-- **WHEN** 测试需要注入端口失败、固定依赖返回、控制调用顺序或观察后台任务
-- **THEN** 测试 MUST 优先使用消费侧最小接口、生成 mock、局部 fixture、通道或可观察状态
-- **AND** 正式代码 MUST NOT 为此新增全局可变函数、nil 测试兜底、测试专用 flag 或无运行时职责的兼容 adapter
-
-### Requirement: scheduler 包内结构保持稳定契约
-
-系统 MUST 允许 `common/runtime/scheduler` 按公开配置类型、调度器生命周期、任务执行流程、分布式锁、锁续租和校验逻辑拆分包内文件，同时保持 `package scheduler`、导出 API、错误变量、metrics 事件、日志语义、cron parser、并发控制、锁策略、续租策略和 shutdown 行为不变。
-
-#### Scenario: 拆分 scheduler 源码文件
-
-- **WHEN** `common/runtime/scheduler` 将 `scheduler.go` 中的类型、生命周期、执行、锁续租或校验逻辑移动到不同源码文件
-- **THEN** 系统 MUST 保持原有导出符号、函数签名、常量值、错误语义和调用方导入路径不变
-- **AND** scheduler 的任务注册、触发、跳过、失败、panic recovery、完成、分布式锁获取、自动续租和优雅关闭行为 MUST 不变
-
-#### Scenario: 保持业务中立边界
-
-- **WHEN** scheduler 包内结构被拆分或命名调整
-- **THEN** `common/runtime/scheduler` MUST 继续只承载无业务语义 runtime primitive
-- **AND** 系统 MUST NOT 将 user-service feature 语义、业务 Redis key schema、HTTP controller、Fx provider、Ent、部署资产或观测 dashboard 逻辑放入 scheduler 包
-
-### Requirement: Fx 依赖图 runtime primitive
-
-系统 MUST 在 `common/` 中提供业务中立的 Fx 依赖图构建与渲染能力，使服务可以从自身 Fx module 或 app option 生成稳定、可审查的依赖图文本。`common/runtime/fxgraph` MUST 只承担通用 DOT rendering、排序和 Fx 图解析职责，不得构造或要求 user-service 私有配置、feature provider、Ent、Redis、PostgreSQL、OTLP 或 HTTP server 输入。
-
-#### Scenario: 生成业务中立依赖图
-
-- **WHEN** 服务将 Fx option 或 module 传入共享依赖图 helper
-- **THEN** 系统 MUST 返回描述 provider、invoke、输入输出依赖或等价 Fx 依赖关系的图文本
-- **AND** 该 helper MUST NOT 引入 user-service feature、HTTP route、RBAC policy、Ent schema 或服务专用配置语义
-
-#### Scenario: 输出稳定图文本
-
-- **WHEN** 相同 Fx module 在代码未变化的情况下重复生成依赖图
-- **THEN** 系统 MUST 输出稳定排序的图文本，避免产生无意义 diff
-
-#### Scenario: 拒绝放入服务内 shared kernel
-
-- **WHEN** Fx 依赖图能力与具体业务 feature 无关
-- **THEN** 系统 MUST 将公共方法放在 `common/` 的 runtime primitive 边界
-- **AND** 系统 MUST NOT 将该能力放入 `user-service/internal/shared` 或任一 feature 包
-
-#### Scenario: 服务私有输入留在服务命令层
-
-- **WHEN** user-service 需要为 Fx 依赖图生成提供 `*serviceconfig.Config`、派生 runtime config、logger、资源替身或 feature provider options
-- **THEN** 这些服务私有输入 MUST 由 user-service 命令层或 user-service 装配边界提供
-- **AND** `common/runtime/fxgraph` MUST NOT 导入或构造 user-service 配置、feature module、Ent client、Redis client、PostgreSQL client、OTLP exporter 或 HTTP server
-
-### Requirement: 共享 runtime Fx provider 输入治理
-
-共享 runtime primitive 的 Fx provider MUST 使用能表达真实依赖语义的输入形式。依赖类型唯一且没有 `name`、`optional`、`group` 或其他 DI metadata 时，provider MUST 使用普通强类型参数完成装配；只有输入对象承载真实 DI metadata、较复杂输出映射或能显著提升多依赖构造可读性时，系统 MAY 保留 Params 容器。共享 runtime provider MUST 继续只消费 `common/runtime/config.Config` 等跨服务配置和 primitive，MUST NOT 读取 user-service 私有配置类型。
-
-#### Scenario: 无 metadata 的共享 provider 输入
-
-- **WHEN** 共享 runtime Fx provider 只需要唯一类型依赖且不需要 named、optional、group 或其他 DI metadata
-- **THEN** provider MUST 通过普通强类型参数接收依赖
-- **AND** 系统 MUST NOT 为该依赖保留只包裹字段且无额外语义的 Params 容器
-
-#### Scenario: 保留有真实语义的 Params 容器
-
-- **WHEN** provider 输入需要 named、optional、group、multi-result 映射、lifecycle orchestration 或显著提升复杂构造的可读性
-- **THEN** 系统 MAY 使用 Params 容器表达这些真实 DI 或构造语义
-- **AND** 本规则 MUST NOT 触发对其他有真实 metadata、配置裁剪、multi-result 输出或测试 seam 的 Params/adapter 的机械删除
-
-#### Scenario: 共享配置边界保持跨服务
-
-- **WHEN** `common/runtime/observability` 的 Fx provider 从配置构造 metrics 或 tracing provider
-- **THEN** provider MUST 只消费 `common/runtime/config.Config` 中的共享 runtime 配置
-- **AND** provider MUST NOT 导入、读取或依赖 user-service 私有配置类型
-
-### Requirement: 有界本地缓存 primitive
-
-系统 MUST 在 `common/runtime/localcache` 中提供有明确容量上限、TTL、回源合并、主动失效、统计快照和关闭语义的本地缓存 primitive。缓存实例 MUST 通过显式配置创建，配置 MUST 包含名称、容量、TTL 和 key string 编码；旧的仅传入 TTL 的构造方式 MUST 被移除。
-
-#### Scenario: 创建有界本地缓存
-
-- **WHEN** 服务创建 `localcache` 实例
-- **THEN** 系统 MUST 要求配置 `Name`、正数 `Capacity`、正数 `TTL` 和 `KeyString`
-- **AND** 系统 MUST 将 `Capacity` 作为本地缓存容量预算，第一版以 `cost=1` 表示最大条目预算
-
-#### Scenario: 拒绝无效缓存配置
-
-- **WHEN** 服务使用空名称、非正数容量、非正数 TTL、空 key string 编码或空 loader 创建 loading cache
-- **THEN** 系统 MUST 返回明确错误并拒绝创建缓存
-
-#### Scenario: 缓存读取与回源
-
-- **WHEN** 调用方通过 `GetOrLoad` 读取 key 且本地缓存 miss
-- **THEN** 系统 MUST 使用 `singleflight` 合并同 key 并发回源
-- **AND** 系统 MUST 在回源成功后尝试写入本地缓存
-- **AND** 系统 MUST NOT 缓存 loader 返回的错误
-
-#### Scenario: 缓存对象隔离
-
-- **WHEN** 缓存 value 类型可被调用方修改
-- **THEN** 系统 MUST 允许调用方提供 `CloneFunc`
-- **AND** 系统 MUST 使用 clone 隔离 loader 返回对象、缓存内部对象和调用方返回对象
-
-#### Scenario: 关闭后的访问
-
-- **WHEN** 缓存实例已经调用 `Close`
-- **THEN** `GetOrLoad` 和 `Set` MUST 返回 `ErrClosed`
-- **AND** `Get` MUST 返回未命中
-- **AND** `Delete` 和 `Clear` MUST 不再触碰底层缓存
-
-#### Scenario: 统计不污染命中率
-
-- **WHEN** `GetOrLoad` 进入 singleflight 后执行 double-check 并命中缓存
-- **THEN** 系统 MUST 记录 double-check 命中
-- **AND** 系统 MUST NOT 将该内部命中计入业务 hit 统计
-
-### Requirement: localcache 包内结构保持稳定契约
-
-系统 MUST 允许 `common/runtime/localcache` 按错误变量、公开类型和核心实现拆分包内文件，同时保持 `package localcache`、导出 API、错误变量和运行时行为不变。
-
-#### Scenario: 拆分包内文件
-
-- **WHEN** `common/runtime/localcache` 将错误变量、公开类型和 `Cache` 实现拆分到不同源码文件
-- **THEN** 系统 MUST 保持原有导出符号、错误语义、Ristretto 配置、TTL、singleflight、stats 和 `Close` 行为不变
-
-### Requirement: 服务内 shared kernel
-
-系统 MUST 将 `user-service/internal/shared` 限制为服务内稳定业务内核，只承载已被至少两个 feature 真实消费、边界稳定且不能归入 `common` 的纯业务规格。
-
-#### Scenario: 当前允许共享包
-
-- **WHEN** user/auth 需要用户状态或身份错误，role/permission 需要系统 RBAC 基线
-- **THEN** 系统 MUST 分别使用 `internal/shared/identity` 和 `internal/shared/rbacbaseline`，并 MUST NOT 在 feature 内复制常量或保留兼容 alias
-
-#### Scenario: 新增共享 helper
-
-- **WHEN** helper 只被一个 feature 使用或只是技术工具函数
+- **WHEN** helper 只被一个 feature 使用、只是技术工具或需要基础设施依赖
 - **THEN** 系统 MUST NOT 将其放入 `internal/shared`
+- **AND** shared 子包 MUST 使用具体业务名称，不得创建根级 `errors`、`enums`、`types`、`utils` 或 `helpers` 兜底包
 
-#### Scenario: shared 子包命名
+#### Scenario: 接入真实外部系统
 
-- **WHEN** 确需新增或调整 shared 子包
-- **THEN** 包名 MUST 使用稳定业务内核语义，MUST NOT 新增根级 `errors`、`enums`、`types`、`utils` 或 `helpers` 兜底包；公共错误和枚举 MUST 放入 owning 子包的具体文件
-
-#### Scenario: shared 禁止依赖
-
-- **WHEN** 拟新增 shared 包需要 Ent、SQL、Redis、Gin、Fx、HTTP response、runtime provider、feature use case、store port、DTO、外部调用或部署资产
-- **THEN** 设计 MUST 被拒绝或移动到所属 feature 的 application/infrastructure 边界
-
-### Requirement: 外部集成边界
-
-系统 MUST 将 `user-service/internal/integration/http|grpc|events` 作为真实外部系统协议适配和防腐层边界，避免推测性集成污染服务内架构。
-
-#### Scenario: 新增外部 HTTP client
-
-- **WHEN** feature 需要调用真实外部 HTTP 系统
-- **THEN** feature application MUST 拥有最小消费侧端口，`integration/http` MAY 实现协议适配器
+- **WHEN** feature 调用真实外部 HTTP、gRPC 或事件系统
+- **THEN** feature application MUST 拥有最小消费侧端口，`integration/http|grpc|events` MUST 只实现协议适配与防腐
+- **AND** 入站 gRPC handler MUST 位于所属 feature 的 `transport/grpc`，feature-specific consumer 映射和 handler MUST 位于所属 feature
 
 #### Scenario: 禁止推测性集成
 
-- **WHEN** 没有单独批准的设计
-- **THEN** 系统 MUST NOT 新增 Kafka、RabbitMQ、NATS、Redis Stream、eventbus、outbox、producer、subscriber、consumer handler、dispatcher、Ent hook 或 transaction wrapper
+- **WHEN** 没有真实 broker、外部 API 或单独批准的设计
+- **THEN** 系统 MUST NOT 新增 eventbus、outbox、producer、subscriber、consumer handler、dispatcher、Ent hook 或 transaction wrapper
 
-#### Scenario: gRPC 与事件边界分离
+### Requirement: 测试基础设施与测试边界
 
-- **WHEN** user-service 暴露真实入站 gRPC API 或消费真实外部 broker 事件
-- **THEN** 入站 gRPC handler MUST 位于所属 feature 的 `transport/grpc`；broker subscription、ack 和协议机制 MAY 位于 `integration/events`，feature-specific 映射和 handler adapter MUST 位于所属 feature 的 `infrastructure/consumers`
+系统 MUST 在 `common/testing` 中提供可复用的容器和 fixture，并 MUST 使用可重复、可观察且不污染生产 API 或进程全局状态的测试方式验证共享能力。
 
-### Requirement: 测试 mock 生成规范
+#### Scenario: 集成测试依赖服务
 
-系统 MUST 为高重复 interface 测试 double 提供生成化 mock 规范，并保持 mock 生成物归属于接口消费侧 feature-local 测试包。系统 MUST NOT 创建全局 `mocks/`、`testmocks/`、`common/mocks/` 或等价中央 mock 仓库来承载跨 feature mock。
+- **WHEN** Go 测试需要真实 PostgreSQL 或 Redis
+- **THEN** 测试 MUST 优先使用 `common/testing/containers` 管理依赖生命周期
+- **AND** 测试数据 MUST 使用稳定 fixture 或 feature-local builder，避免不可重复的随机输入
 
-#### Scenario: 生成 feature-local mock
+#### Scenario: 使用生成 mock
 
-- **WHEN** application、transport 或 infrastructure 测试需要替代高重复 store、notifier、policy engine、session store 或 metrics recorder interface
-- **THEN** 测试 MUST 优先使用 `go.uber.org/mock/mockgen` 生成的 feature-local mock
-- **AND** mock 生成物 MUST 放在接口消费侧 package 或其测试专用子包内
-- **AND** mock 生成物 MUST NOT 放入中央 mock 仓库
+- **WHEN** 测试以 expectation 表达高重复 interface 的调用参数、次数或返回值
+- **THEN** 测试 MUST 优先使用 `go.uber.org/mock/mockgen` 生成消费侧 package-local mock
+- **AND** 系统 MUST NOT 创建全局或跨 feature 中央 mock 仓库
+- **AND** 复杂内存状态或并发协调 MAY 使用 package-local 状态型 harness
 
-#### Scenario: 保留状态型测试 harness
+#### Scenario: 测试不扩张生产接口
 
-- **WHEN** 测试需要复杂内存状态、E2E 流程状态或比 expectation mock 更清晰的领域测试夹具
-- **THEN** 测试 MAY 保留 package-local 测试 harness
-- **AND** 该对象 MUST 使用 `testHarness`、`testStore`、`recordingMetrics` 或等价描述性名称
-- **AND** 该对象 MUST NOT 作为跨 feature 共享 mock 导出
+- **WHEN** 测试需要注入失败、固定返回、控制顺序或观察后台状态
+- **THEN** 测试 MUST 使用消费侧最小接口、局部 fixture、通道或可观察状态
+- **AND** 正式代码 MUST NOT 为测试新增全局可变函数、测试 flag、`NewXForTest` 或无运行时职责的 adapter
 
-#### Scenario: 禁止测试驱动生产冗余接口
+#### Scenario: 语义化测试断言
 
-- **WHEN** 为了生成 mock 或迁移测试 double 调整代码
-- **THEN** 系统 MUST NOT 仅为单元测试新增与业务无关的生产接口、分支、适配层或 `NewXForTest` 入口
-- **AND** 测试 MUST 基于现有 feature/application 边界和合理的可测试性设计
+- **WHEN** 测试检查错误、相等性、nil、布尔、集合、字符串、JSON、时间或 panic 等常见结果
+- **THEN** 测试 MUST 优先使用 `testify/require` 的语义化断言；多个互不依赖的检查 MAY 使用 `testify/assert`
+- **AND** 测试 MUST NOT 用 `Fail*` 机械包装可语义化的断言
+- **AND** 直接 `testing.T` 失败调用 MUST 限于自定义控制流、特殊诊断或不适合依赖 testify 的 helper
 
-### Requirement: 测试基础设施
+#### Scenario: 异步测试使用可观察条件
 
-系统 MUST 在 `common/testing/` 中提供可复用的容器和 fixture 能力，用于支撑 Postgres、Redis 和测试数据场景。
+- **WHEN** 测试验证缓存过期、workerpool drain、scheduler 续租或后台任务取消
+- **THEN** 测试 MUST 使用通道、eventually-style 条件或其他可观察同步机制
+- **AND** 测试 MUST NOT 只依赖固定 `time.Sleep` 判断状态已经变化
 
-#### Scenario: 集成测试需要依赖服务
+#### Scenario: 隔离进程级状态
 
-- **WHEN** Go 测试需要真实 Postgres 或 Redis
-- **THEN** 测试 MUST 优先使用 `common/testing/containers/` 启动依赖，避免每个模块重复实现容器生命周期
+- **WHEN** 测试必须修改默认 logger、`TZ`、`time.Local` 或包级初始化状态
+- **THEN** 测试 MUST 在 package-local helper 中保存状态并通过 cleanup 恢复
+- **AND** 环境变量 MUST 使用 `t.Setenv`，相关测试 MUST NOT 并行执行
+- **AND** 非测试目标所需的日志捕获 MUST 使用 context logger 或局部 logger 注入
 
-#### Scenario: 测试数据需要稳定生成
+### Requirement: 共享默认值与只读状态安全
 
-- **WHEN** 测试需要生成用户、角色、权限或其他输入数据
-- **THEN** 测试 MUST 优先使用共享 fixture 或本 feature 内明确的 builder，避免随机数据破坏可重复性
+系统 MUST 保证配置允许值、middleware 默认策略和 validation tag 等共享只读数据不暴露可被调用方或同包无意修改的底层状态，同时保持公开默认值、错误消息和运行时行为稳定。
 
-### Requirement: 测试断言与失败处理风格
+#### Scenario: 固定集合不可变
 
-测试代码中的断言与失败处理 MUST 优先使用 `testify/require`，以提升测试可读性、减少手写失败判断样板代码、统一阻塞式失败处理方式，并提供一致、清晰的失败诊断信息。`common/contract`、`common/validation` 和 `common/testing` 的历史测试迁移或新增测试 MUST 将常见错误、相等性、集合、fixture 和容器测试断言表达为语义化 `require` 方法，除非该失败调用属于测试控制流、特殊诊断输出或测试框架边界。
+- **WHEN** runtime config 或 resources 校验 log、server、SSL、tracing 等固定允许值
+- **THEN** 实现 MUST 使用不可被共享写入的查询方式表达固定集合
+- **AND** 合法值、非法值和公开错误消息 MUST 保持稳定
 
-#### Scenario: 常见阻塞式断言
+#### Scenario: 默认配置与调用方输入隔离
 
-- **WHEN** 测试需要检查错误返回值、前置条件、对象相等性、布尔条件、集合长度、错误类型或状态
-- **THEN** 测试 MUST 使用语义化的 `require` 断言方法，例如 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.True`、`require.False`、`require.Len`、`require.NotNil`
-- **AND** 测试 SHOULD NOT 直接使用 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf` 表达这些常见断言
+- **WHEN** helper 接收 slice、map 或默认 struct 并据此创建长期存活对象
+- **THEN** helper MUST 持有与 package default 和调用方输入隔离的副本
+- **AND** 调用方后续修改原始数据 MUST NOT 改变已创建对象的行为
 
-#### Scenario: 共享基础包历史测试迁移
+#### Scenario: 运行时可变状态保持显式
 
-- **WHEN** `common/contract`、`common/validation` 或 `common/testing` 的 `_test.go` 文件迁移历史断言或新增常见阻塞式断言
-- **THEN** 测试 MUST 优先使用 `require.NoError`、`require.ErrorIs`、`require.Equal`、`require.Len`、`require.Contains`、`require.NotNil` 或等价语义化 `require` 方法
-- **AND** 目标模块 MUST 直接声明实际使用的 `github.com/stretchr/testify` 测试依赖
-- **AND** 迁移 MUST NOT 改变对应生产包的公开 API、错误语义或运行时行为
-
-#### Scenario: 避免机械 Fail 替换
-
-- **WHEN** 测试迁移手写失败判断或新增失败处理
-- **THEN** 测试 SHOULD NOT 将 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf` 机械替换为 `require.FailNow`、`require.FailNowf`、`require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf`
-- **AND** 当存在明确的语义化 `require` 或 `assert` 断言方法时，测试 MUST 优先使用对应断言方法
-
-#### Scenario: 非阻塞式独立断言
-
-- **WHEN** 单个测试用例需要在一次执行中继续收集多个相互独立的断言失败
-- **THEN** 测试 MAY 使用 `testify/assert` 进行非阻塞式断言
-- **AND** 初始化失败、前置条件失败或后续检查依赖当前结果的场景 MUST 使用 `testify/require` 立即终止当前测试
-
-#### Scenario: 保留特殊失败控制流
-
-- **WHEN** 测试存在无法通过现有 `require` 或 `assert` 语义化断言清晰表达的自定义测试控制流、特殊诊断输出，或测试辅助工具不适合依赖 `testify`
-- **THEN** 测试 MAY 直接使用 `t.Fatal`、`t.Fatalf`、`t.Error`、`t.Errorf`、`require.FailNowf` 或 `assert.Failf`
-- **AND** 此类用法 SHOULD 让保留原因在代码上下文中保持清晰
-- **AND** 在 `common/contract`、`common/validation` 或 `common/testing` 迁移完成时，剩余命中 MUST 在实施任务记录中列明并确认符合例外规则
-
-### Requirement: common 边界 mock 生成规范
-
-系统 MUST 为 `common` 中适合 expectation 表达的边界 interface 测试 double 提供 package-local mockgen 生成入口。生成 mock MUST 仅用于对应 package 的测试，系统 MUST NOT 创建 `common/mocks`、全局 `mocks/`、`testmocks/` 或等价中央 mock 仓库。
-
-#### Scenario: common 授权 enforcer 测试使用生成 mock
-
-- **WHEN** `common/security/casbin` 测试需要模拟 `Enforcer` 的允许、拒绝、错误或调用参数
-- **THEN** 测试 MUST 使用该 package 内的 `go.uber.org/mock/mockgen` 生成 mock 表达 expectation
-- **AND** 测试 MUST NOT 保留被迁移的手写 recording double 兼容路径
-
-#### Scenario: common HTTP middleware 测试使用生成 mock
-
-- **WHEN** `common/http/middleware` 测试需要模拟 `CasbinAuthorizer` 或 `auth.TokenVersionValidator`
-- **THEN** 测试 MUST 使用 `common/http/middleware` package-local 生成 mock 表达调用次数、入参和错误返回
-- **AND** 生成 mock MUST NOT 作为跨 package 共享测试 API 暴露
-
-#### Scenario: 保持 common 生产语义不变
-
-- **WHEN** 测试 double 迁移为 generated mock
-- **THEN** 系统 MUST 保持 Casbin 三元组授权、`ErrNotConfigured`、`ErrDenied`、JWT 解析、token version mismatch、HTTP 响应和日志语义不变
-- **AND** 系统 MUST NOT 仅为测试新增业务无关生产接口、adapter、分支或 `NewXForTest` 入口
-
-#### Scenario: 状态型测试 harness 不强制迁移
-
-- **WHEN** `common` 测试对象需要复杂内存状态、并发协调、scheduler 生命周期或比 expectation mock 更清晰的测试夹具
-- **THEN** 测试 MAY 保留 package-local 状态型 harness
-- **AND** 该 harness MUST NOT 被迁移到中央 mock 仓库或导出为跨 package 测试依赖
-
-### Requirement: common HTTP 测试断言规范
-
-系统 MUST 在 `common/http/**/*_test.go` 中使用语义化 `testify` 断言验证共享 HTTP helper、binding、middleware、response、OpenAPI 和 pprof 相关行为。初始化失败、前置条件失败以及后续检查依赖当前结果的场景 MUST 使用 `testify/require`；只有需要在单次测试执行中收集多个相互独立响应字段失败时，系统 MAY 使用 `testify/assert`。
-
-#### Scenario: 验证 HTTP status 和 header
-
-- **WHEN** `common/http` 测试验证 HTTP 响应状态码、响应 header 或中间件写入结果
-- **THEN** 测试 MUST 优先使用 `require.Equal`、`require.Contains`、`require.NotEmpty` 或等价语义化断言
-- **AND** 测试 MUST NOT 将可语义化表达的检查迁移为 `require.Fail*`、`assert.Fail*`、`t.Fatal*` 或 `t.Error*`
-
-#### Scenario: 验证 JSON envelope
-
-- **WHEN** `common/http` 测试验证 JSON response envelope、错误详情或分页结构
-- **THEN** 测试 MUST 优先使用 `require.JSONEq` 或在 `require.NoError` 解析后使用语义化字段断言
-- **AND** 测试 MUST 验证当前稳定 envelope 结构，不得新增旧 envelope 兼容断言或双写断言
-
-#### Scenario: 验证 binding 错误
-
-- **WHEN** `common/http/binding` 测试验证请求绑定、校验失败或错误响应
-- **THEN** 测试 MUST 使用 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.Contains` 或等价语义化断言表达预期
-- **AND** 只有无法通过现有语义化断言清晰表达的自定义测试控制流或特殊诊断输出 MAY 保留直接 `t.Fatal*`、`t.Error*` 或 `Fail*`
-
-#### Scenario: 验证迁移完成度
-
-- **WHEN** 断言迁移完成
-- **THEN** `rg "t\\.Fatalf|t\\.Fatal\\(|t\\.Errorf|t\\.Error\\(|Failf?\\(" common/http --glob '*_test.go'` 的剩余命中 MUST 均符合 `docs/TESTING.md` 特殊例外规则
-- **AND** `rg "github.com/stretchr/testify/(require|assert)" common/http --glob '*_test.go'` MUST 能定位到迁移后的实际使用点
-
-### Requirement: common 测试断言统一迁移
-
-`common/runtime` 和 `common/security` 的测试代码 MUST 优先使用 `testify/require` 表达可语义化的常见断言，包括错误返回、错误类型、对象和值相等性、nil、布尔条件、集合长度、字符串包含关系和状态检查。测试代码 MUST NOT 将历史手写失败判断机械替换为 `require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf`；当存在明确语义化断言方法时，MUST 使用对应的 `require` 或 `assert` 方法。
-
-#### Scenario: 迁移常见断言
-
-- **WHEN** `common/runtime` 或 `common/security` 的 `_test.go` 需要检查错误、对象状态、布尔条件、集合或字符串结果
-- **THEN** 测试 MUST 使用 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.True`、`require.False`、`require.Len`、`require.NotNil` 或等价语义化断言
-- **AND** 测试 SHOULD NOT 使用 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf` 表达这些常见断言
-
-#### Scenario: 独立字段聚合诊断
-
-- **WHEN** 单个测试需要在一次执行中收集多个相互独立字段、指标或统计值的失败信息
-- **THEN** 测试 MAY 使用 `testify/assert` 进行非阻塞式断言
-- **AND** 初始化失败、前置条件失败或后续检查依赖当前结果的场景 MUST 使用 `testify/require`
-
-#### Scenario: 避免 Fail helper 机械替换
-
-- **WHEN** 迁移历史手写失败判断
-- **THEN** 测试 MUST NOT 使用 `require.Fail`、`require.Failf`、`require.FailNow`、`require.FailNowf`、`assert.Fail` 或 `assert.Failf` 替代可语义化表达的普通断言
-
-#### Scenario: 特殊失败控制流例外
-
-- **WHEN** 测试存在并发协调、panic/recovery、benchmark、goroutine 内控制流、测试框架边界或无法通过现有语义化断言清晰表达的特殊诊断
-- **THEN** 测试 MAY 保留 `t.Fatal`、`t.Fatalf`、`t.Error`、`t.Errorf` 或 `Fail*` 用法
-- **AND** 保留项 MUST 能通过代码上下文或实施任务清单说明其符合 `docs/TESTING.md` 的例外规则
-
-#### Scenario: 不引入兼容 helper
-
-- **WHEN** 统一 common 测试断言风格
-- **THEN** 系统 MUST NOT 新增旧断言风格兼容 helper、双写断言 wrapper 或仅服务于断言迁移的生产代码
-
-### Requirement: HTTP response helper wrapper 覆盖
-
-系统 MUST 在 `common/http/response` 中为共享 HTTP response helper wrapper 保持直接单元测试覆盖，测试 MUST 锁定当前统一 response envelope、应用错误码、公开 message、HTTP status、`data` 或 `errors` 字段行为，并 MUST NOT 接受旧 envelope、旧错误消息格式、旧 helper alias 或旧 HTTP status 的兼容路径。
-
-#### Scenario: 创建成功响应
-
-- **WHEN** 调用方使用 `Created` 写入创建成功响应
-- **THEN** 系统 MUST 返回 `201 Created`
-- **AND** 响应 envelope MUST 为 `success=true`、`code=CodeOK`、`message=MessageCreated`
-- **AND** 响应 envelope MUST 携带调用方传入的 `data`
-
-#### Scenario: 无内容成功响应
-
-- **WHEN** 调用方使用 `NoContent` 写入无内容成功响应
-- **THEN** 系统 MUST 返回 `204 No Content`
-- **AND** 响应 body MUST 为空
-
-#### Scenario: 校验失败响应
-
-- **WHEN** 调用方使用 `ValidationFailed` 写入字段语义校验失败响应
-- **THEN** 系统 MUST 返回 `400 Bad Request`
-- **AND** 响应 envelope MUST 为 `success=false`、`code=CodeValidationFailed`
-- **AND** 响应 envelope MUST 使用调用方提供的公开 message
-
-#### Scenario: 未认证响应
-
-- **WHEN** 调用方使用 `Unauthenticated` 写入未认证响应
-- **THEN** 系统 MUST 返回 `401 Unauthorized`
-- **AND** 响应 envelope MUST 为 `success=false`、`code=CodeUnauthenticated`
-- **AND** 响应 envelope MUST 使用调用方提供的公开 message
-
-#### Scenario: 权限不足响应
-
-- **WHEN** 调用方使用 `Forbidden` 写入权限不足响应
-- **THEN** 系统 MUST 返回 `403 Forbidden`
-- **AND** 响应 envelope MUST 为 `success=false`、`code=CodeForbidden`
-- **AND** 响应 envelope MUST 使用调用方提供的公开 message
-
-#### Scenario: 冲突响应
-
-- **WHEN** 调用方使用 `Conflict` 写入领域冲突或资源状态冲突响应
-- **THEN** 系统 MUST 返回 `409 Conflict`
-- **AND** 响应 envelope MUST 为 `success=false`、`code=CodeConflict`
-- **AND** 响应 envelope MUST 使用调用方提供的公开 message
-
-#### Scenario: 未找到响应
-
-- **WHEN** 调用方使用 `NotFound` 写入资源不存在响应
-- **THEN** 系统 MUST 返回 `404 Not Found`
-- **AND** 响应 envelope MUST 为 `success=false`、`code=CodeNotFound`
-- **AND** 响应 envelope MUST 使用调用方提供的公开 message
-
-### Requirement: 共享 CORS 默认入口覆盖
-
-系统 MUST 在 `common/http/middleware` 中为共享 CORS 默认入口 `CORS()` 保持直接单元测试覆盖。测试 MUST 锁定当前默认策略：允许来源为 `*`，允许方法为 `GET,POST,PUT,PATCH,DELETE,OPTIONS`，允许请求头为 `Authorization,Content-Type`；测试 MUST 验证 `CORS()` 与 `CORSWithOptions(defaultCORSOptions)` 的外部响应行为一致，并 MUST NOT 接受旧 origin 反射默认值、旧 header、旧 wildcard+credentials 兼容行为或旧安全兼容开关。
-
-#### Scenario: 默认响应头
-
-- **WHEN** 普通 HTTP 请求经过 `CORS()` middleware
-- **THEN** 响应 MUST 包含 `Access-Control-Allow-Origin=*`
-- **AND** 响应 MUST 包含 `Access-Control-Allow-Methods=GET,POST,PUT,PATCH,DELETE,OPTIONS`
-- **AND** 响应 MUST 包含 `Access-Control-Allow-Headers=Authorization,Content-Type`
-- **AND** 默认响应 MUST NOT 包含 `Access-Control-Allow-Credentials`、`Access-Control-Max-Age`、`Access-Control-Expose-Headers` 或 `Vary: Origin`
-
-#### Scenario: 默认预检短路
-
-- **WHEN** `OPTIONS` 预检请求经过 `CORS()` middleware
-- **THEN** 系统 MUST 返回 `204 No Content`
-- **AND** 业务 handler MUST NOT 被继续调用
-- **AND** 响应 MUST 继续包含当前默认 CORS 响应头
-
-#### Scenario: 默认普通请求传递
-
-- **WHEN** 非 `OPTIONS` 普通请求经过 `CORS()` middleware
-- **THEN** 系统 MUST 继续调用后续业务 handler
-- **AND** 业务 handler 写入的 HTTP status 和 body MUST 保持可见
-- **AND** `CORS()` 的相关响应结果 MUST 与 `CORSWithOptions(defaultCORSOptions)` 一致
-
-#### Scenario: CORS 测试断言风格
-
-- **WHEN** 新增或修改 `common/http/middleware` 的 CORS 测试
-- **THEN** 常见错误、状态、相等性、布尔条件、集合或字符串断言 MUST 使用语义化 `require` 或允许边界内的 `assert`
-- **AND** 测试 MUST NOT 通过机械 `require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf` 替换常见断言
-
-### Requirement: Go 测试断言依赖与例外规范
-
-服务测试 MUST 可以直接使用标准 `testify/require` 与 `testify/assert` 断言库表达常见错误、对象、布尔、集合、字符串和诊断预期。系统 MUST NOT 为迁移历史测试断言新增跨服务兼容 helper、机械失败包装器或隐藏标准断言语义的共享抽象。
-
-#### Scenario: 服务模块声明直接测试依赖
-
-- **WHEN** 服务模块的测试代码直接导入 `github.com/stretchr/testify/require` 或 `github.com/stretchr/testify/assert`
-- **THEN** 该 Go module MUST 在自身 `go.mod` 中直接声明 `github.com/stretchr/testify`
-- **AND** `go mod tidy` 后依赖文件 MUST NOT 出现与本次测试断言迁移无关的漂移
-
-#### Scenario: 优先使用语义化断言
-
-- **WHEN** 测试需要验证错误、对象和值、布尔状态、集合长度、字符串内容或 nil 状态
-- **THEN** 测试 MUST 优先使用 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.NotEqual`、`require.Nil`、`require.NotNil`、`require.True`、`require.False`、`require.Len`、`require.Empty`、`require.NotEmpty` 或 `require.Contains` 等语义化断言
-- **AND** 测试 MUST NOT 将普通手写失败判断机械替换为 `require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf`
-
-#### Scenario: 保留直接 testing.T 失败调用的例外
-
-- **WHEN** 测试保留 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf`
-- **THEN** 该调用 MUST 用于无法通过现有语义化断言清晰表达的自定义测试控制流、特殊诊断输出或不适合依赖 `testify` 的测试辅助工具
-- **AND** 普通前置条件失败、错误返回值、相等性、包含关系、长度、空值或布尔状态断言 MUST 使用 `require` 或必要时 `assert`
-
-### Requirement: 服务测试断言依赖与例外规范
-
-服务测试 MUST 可以直接使用标准 `testify/require` 与 `testify/assert` 断言库表达常见错误、对象、布尔、集合、字符串和诊断预期。系统 MUST NOT 为迁移 user 与 shared identity 历史测试断言新增跨服务兼容 helper、机械失败包装器或隐藏标准断言语义的共享抽象。
-
-#### Scenario: 服务模块声明直接测试依赖
-
-- **WHEN** 服务模块的测试代码直接导入 `github.com/stretchr/testify/require` 或 `github.com/stretchr/testify/assert`
-- **THEN** 该 Go module MUST 在自身 `go.mod` 中直接声明 `github.com/stretchr/testify`
-- **AND** `go mod tidy` 后依赖文件 MUST NOT 出现与本次测试断言迁移无关的漂移
-
-#### Scenario: 优先使用语义化断言
-
-- **WHEN** 测试需要验证错误、对象和值、布尔状态、集合长度、字符串内容、类型、nil 状态、HTTP response 字段或 pagination 字段
-- **THEN** 测试 MUST 优先使用 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.NotEqual`、`require.Nil`、`require.NotNil`、`require.True`、`require.False`、`require.Len`、`require.Empty`、`require.NotEmpty`、`require.Contains` 或等价语义化断言
-- **AND** 测试 MUST NOT 将普通手写失败判断机械替换为 `require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf`
-
-#### Scenario: 多字段响应诊断可以使用 assert
-
-- **WHEN** 单个 HTTP response、pagination 或 DTO 测试需要同时收集多个互不依赖字段的失败信息
-- **THEN** 测试 MAY 使用 `testify/assert` 验证这些独立字段
-- **AND** 任何会影响后续解码、类型断言或字段访问安全性的前置条件 MUST 使用 `require`
-
-#### Scenario: 保留直接 testing.T 失败调用的例外
-
-- **WHEN** 测试保留 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf`
-- **THEN** 该调用 MUST 用于无法通过现有语义化断言清晰表达的自定义测试控制流、特殊诊断输出或不适合依赖 `testify` 的测试辅助工具
-- **AND** 普通前置条件失败、错误返回值、相等性、包含关系、长度、空值或布尔状态断言 MUST 使用 `require` 或必要时 `assert`
-
-### Requirement: 服务装配边界测试断言依赖与例外治理
-
-服务装配边界测试 MUST 可以直接使用标准 `testify/require` 与 `testify/assert` 表达常见错误、对象、数值范围、集合、字符串、JSON、正则、时间和 panic 断言。系统 MUST NOT 为迁移 router、provider 或 bootstrap 历史测试断言新增跨服务兼容 helper、机械失败包装器、共享断言 facade 或仅服务于测试的生产 API。
-
-#### Scenario: 直接使用标准 testify 断言
-
-- **WHEN** `user-service/internal/router`、`providers` 或 `bootstrap` 测试需要验证错误、对象和值、数值范围、集合长度、元素集合、字符串包含、JSON 等价、正则匹配、时间边界或 panic 行为
-- **THEN** 测试 MUST 优先使用 `require.NoError`、`require.Error`、`require.ErrorContains`、`require.Equal`、`require.NotNil`、`require.Len`、`require.Greater`、`require.Less`、`require.ElementsMatch`、`require.JSONEq`、`require.Regexp`、`require.WithinDuration`、`require.Panics` 或等价语义化断言
-- **AND** 测试 MUST NOT 使用 `require.True`、`require.False`、手写 `if` 或多个基础断言拼凑上述已有语义化断言可以清晰覆盖的检查
-
-#### Scenario: 多个独立检查可使用 assert
-
-- **WHEN** 单个测试需要在一次执行中收集多个互相独立的 route、provider 输出、metric family、label、日志字段或 health check 结果失败
-- **THEN** 测试 MAY 使用 `testify/assert` 进行非阻塞式断言
-- **AND** 初始化失败、前置条件失败或后续检查依赖当前结果时 MUST 使用 `testify/require`
-
-#### Scenario: 禁止新增断言兼容层
-
-- **WHEN** 迁移历史 `t.Fatal`、`t.Error` 或泛化布尔断言
-- **THEN** 系统 MUST NOT 新增旧断言风格兼容 helper、共享 wrapper、机械 `Fail*` 替换、测试专用生产分支或仅为单元测试暴露的运行时 API
-- **AND** 迁移 MUST 基于现有实现和合理的测试可读性完成
-
-#### Scenario: testing.T 直接失败例外
-
-- **WHEN** 目标测试保留直接 `testing.T` 失败方法或 `Fail*` 调用
-- **THEN** 保留项 MUST 符合 `docs/TESTING.md` 中自定义测试控制流、特殊诊断输出或测试辅助工具不适合依赖 `testify` 的例外规则
-- **AND** 普通错误、相等性、包含关系、长度、空值、数值范围、字符串、JSON、正则、时间或 panic 断言 MUST 使用语义化 `require` 或必要时 `assert`
-
-### Requirement: cmd 与 Ent schema 测试断言依赖与例外治理
-
-cmd 与 Ent schema 测试 MUST 可以直接使用标准 `testify/require` 与 `testify/assert` 表达常见错误、对象、数值范围、集合、字符串、JSON、正则、时间和 panic 断言。系统 MUST NOT 为迁移 CLI 或 Ent schema 历史测试断言新增跨服务兼容 helper、机械失败包装器、共享断言 facade 或仅服务于测试的生产 API。
-
-#### Scenario: 直接使用标准 testify 断言
-
-- **WHEN** `user-service/cmd` 或 `user-service/ent/schema` 测试需要验证错误、对象和值、数值范围、集合长度、元素集合、字符串包含、JSON 等价、正则匹配、时间边界或 panic 行为
-- **THEN** 测试 MUST 优先使用 `require.NoError`、`require.Error`、`require.ErrorContains`、`require.Equal`、`require.NotNil`、`require.Len`、`require.Greater`、`require.Less`、`require.ElementsMatch`、`require.JSONEq`、`require.Regexp`、`require.WithinDuration`、`require.Panics` 或等价语义化断言
-- **AND** 测试 MUST NOT 使用 `require.True`、`require.False`、手写 `if` 或多个基础断言拼凑上述已有语义化断言可以清晰覆盖的检查
-
-#### Scenario: 多个独立检查可使用 assert
-
-- **WHEN** 单个测试需要在一次执行中收集多个互相独立的 command property、flag metadata、schema field、schema edge、schema index、annotation 或 validator 结果失败
-- **THEN** 测试 MAY 使用 `testify/assert` 进行非阻塞式断言
-- **AND** 初始化失败、前置条件失败或后续检查依赖当前结果时 MUST 使用 `testify/require`
-
-#### Scenario: 禁止新增断言兼容层
-
-- **WHEN** 迁移历史 `t.Fatal`、`t.Error` 或泛化布尔断言
-- **THEN** 系统 MUST NOT 新增旧断言风格兼容 helper、共享 wrapper、机械 `Fail*` 替换、测试专用生产分支或仅为单元测试暴露的运行时 API
-- **AND** 迁移 MUST 基于现有实现和合理的测试可读性完成
-
-#### Scenario: testing.T 直接失败例外
-
-- **WHEN** 目标测试保留直接 `testing.T` 失败方法或 `Fail*` 调用
-- **THEN** 保留项 MUST 符合 `docs/TESTING.md` 中自定义测试控制流、特殊诊断输出或测试辅助工具不适合依赖 `testify` 的例外规则
-- **AND** 普通错误、相等性、包含关系、长度、空值、数值范围、字符串、JSON、正则、时间或 panic 断言 MUST 使用语义化 `require` 或必要时 `assert`
-
-### Requirement: runtime primitive 内部默认值可追踪
-
-系统 MUST 在 `common/runtime` 和 `common/testing` 中使用命名常量表达包内默认超时、轮询间隔和探测间隔，避免在核心执行路径或测试基础设施中保留难以追踪的内联时间魔法值。命名常量 MUST 保持私有，除非该值已经是明确的跨模块公开契约。
-
-#### Scenario: scheduler 锁默认超时命名化
-
-- **WHEN** scheduler 需要为锁释放或锁续租设置内部默认超时
-- **THEN** 系统 MUST 通过 `common/runtime/scheduler` 包内私有命名常量表达该默认值
-- **AND** `executor.go`、`renew.go` 和 `validation.go` MUST NOT 分别内联重复的 `5 * time.Second` 默认值
-
-#### Scenario: 测试容器探测间隔命名化
-
-- **WHEN** `common/testing/containers` 需要轮询 Docker mapped port 或依赖 readiness
-- **THEN** 系统 MUST 通过测试 helper 包内私有命名常量表达探测或轮询间隔
-- **AND** PostgreSQL 测试容器 helper MUST NOT 在端口探测循环中直接内联 `100 * time.Millisecond`
-
-### Requirement: scheduler 任务执行流程可维护
-
-系统 MUST 保持 `common/runtime/scheduler` 的任务执行流程职责清晰。`runJob()` MUST 作为一次任务触发的编排入口，核心子流程 MUST 通过私有函数承载执行权获取、分布式锁获取、任务上下文和续租准备、执行后 cleanup、执行结果记录，且 MUST 保持导出 API 和运行时行为不变。
-
-#### Scenario: 拆分任务执行子流程
-
-- **WHEN** scheduler 执行一次已注册任务
-- **THEN** `runJob()` MUST 继续按本地 overlap gate、全局并发 gate、分布式锁、任务上下文、自动续租、任务执行和收尾记录的顺序编排
-- **AND** 各子流程 MUST 由 `common/runtime/scheduler` 包内私有函数或私有类型承载
-
-#### Scenario: 保持任务执行语义
-
-- **WHEN** `runJob()` 被拆分为私有函数
-- **THEN** 系统 MUST 保持任务触发、跳过原因、开始、完成、失败、panic recovery、锁释放、续租失败处理、gate 归还和 shutdown 语义不变
-- **AND** 系统 MUST NOT 新增公开 executor 类型、公开接口或仅服务测试的生产适配层
-
-#### Scenario: 无 timeout 任务仍可被续租失败取消
-
-- **WHEN** scheduler 执行未配置 `Timeout` 的任务且该任务启用分布式锁自动续租
-- **THEN** scheduler MUST 仍为该任务创建可取消 job context
-- **AND** 自动续租失败时 MUST 能取消任务 context 并记录续租失败
-- **AND** 系统 MUST NOT 因任务未配置 timeout 而失去续租失败取消能力
-
-### Requirement: common 模块依赖保持 tidy
-
-系统 MUST 保持 `common` 模块依赖图与当前源码和工具入口一致。`common/go.mod` 和 `common/go.sum` MUST 通过 `GOWORK=off go mod tidy` 校验，不得手工保留当前模块不再需要的间接依赖残留。
-
-#### Scenario: common 依赖清理
-
-- **WHEN** `common` 模块完成 runtime primitive 或测试基础设施维护性变更
-- **THEN** 系统 MUST 在 `common` 目录使用 `GOWORK=off go mod tidy` 整理依赖
-- **AND** `common/go.mod` 和 `common/go.sum` MUST 只保留 Go 工具链按当前源码、测试和 tool 指令判定需要的模块项
-
-#### Scenario: 不误删真实导入链依赖
-
-- **WHEN** 某个间接依赖由 Gin、Swagger UI、Prometheus 或其他当前源码真实导入链带入
-- **THEN** 系统 MUST 以 `go mod why -m` 和 `go mod tidy -diff` 结果为准判断是否清理
-- **AND** 系统 MUST NOT 为降低依赖数量而手工删除 tidy 仍要求保留的模块项
-
-### Requirement: 共享 runtime primitive 测试稳定性
-
-`common/runtime` 中 localcache、workerpool、scheduler 和 timezone 等共享 runtime primitive 的测试 MUST 避免使用固定 `time.Sleep` 或手动 `os.Setenv` 恢复来表达异步进度、过期状态或全局环境隔离。测试 MUST 使用可观察条件、通道同步、testing 环境隔离或确定性输入表达预期。涉及 `TZ`、`time.Local` 或 timezone 包级初始化状态的测试 MUST 将这些进程级全局状态作为同一个隔离单元管理，并 MUST 通过包内受控 reset helper 重置初始化状态。
-
-#### Scenario: localcache 过期测试使用条件等待
-- **WHEN** localcache 测试验证 TTL 过期后缓存未命中
-- **THEN** 测试 MUST 使用 `require.Eventually` 或等价条件等待断言未命中状态
-- **AND** 测试 MUST NOT 在固定 `time.Sleep` 后立即断言过期结果
-
-#### Scenario: localcache 并发回源测试使用通道同步
-- **WHEN** localcache 测试验证同 key 并发 miss 被 `singleflight` 合并
-- **THEN** 测试 MUST 通过通道、atomic 计数或 wait group 明确确认 goroutine 已进入目标等待点
-- **AND** 测试 MUST NOT 依赖固定 `time.Sleep` 猜测 goroutine 调度状态
-
-#### Scenario: workerpool 状态等待使用条件断言
-- **WHEN** workerpool 测试等待任务进入 running、waiting、completed、failed 或 stopped 状态
-- **THEN** 测试 MUST 使用条件等待 helper、`require.Eventually` 或通道信号
-- **AND** 测试 MUST NOT 使用固定 `time.Sleep` 表达后台状态已经变化
-
-#### Scenario: scheduler 自动续租测试使用可观察条件
-- **WHEN** scheduler 测试验证自动续租或任务取消行为
-- **THEN** 测试 MUST 通过锁记录、任务通道或 eventually-style 条件断言观察续租结果
-- **AND** 测试 MUST NOT 仅通过任务内部固定 sleep 制造续租窗口
-
-#### Scenario: timezone 测试隔离全局环境
-- **WHEN** timezone 测试修改 `TZ`、`time.Local` 或包级初始化状态
-- **THEN** 测试 MUST 使用集中 helper 保存并恢复 `TZ`、`time.Local` 和包级初始化状态
-- **AND** 测试 MUST 使用 `t.Setenv` 管理环境变量恢复
-- **AND** 包级初始化状态 reset MUST 通过持有 `timezoneState` 内部锁的包内受控 helper 完成
-- **AND** 测试 MUST 通过 `t.Cleanup` 恢复 `time.Local` 和包级状态
-- **AND** 这些测试 MUST NOT 使用 `t.Parallel`
-
-### Requirement: Password KDF busy 应用错误契约
-
-`common/security/password` MUST 将密码 KDF 资源繁忙表达为业务中立的应用错误，使调用方可通过共享 `response.Fail` 直接渲染为服务不可用响应，同时保持 Argon2id 参数、哈希编码、并发上限、队列上限和 `errors.Is(err, password.ErrPasswordKDFBusy)` 语义不变。
-
-#### Scenario: KDF busy 直接渲染为服务不可用
-
-- **WHEN** `common/security/password` 的 KDF 服务实例因为执行中和等待中的请求数达到实例资源预算而返回 `password.ErrPasswordKDFBusy`
-- **THEN** 该错误 MUST 携带 `KindServiceUnavailable`、稳定 `Reason` 值 `password_kdf_busy`、`CodeServiceUnavailable` 和不泄露资源预算的中文公开 message
-- **AND** `common/http/response.Fail` MUST 能通过 `contracterrors.FromError` 直接渲染该错误为 `503 Service Unavailable`
-- **AND** 该错误 MUST NOT 要求 user-service auth HTTP mapper 才能获得服务不可用语义
-
-#### Scenario: KDF busy 保持 errors.Is 语义
-
-- **WHEN** 调用方通过 `errors.Is(err, password.ErrPasswordKDFBusy)` 判断 KDF 资源繁忙
-- **THEN** 直接返回的错误和被包装后的错误 MUST 继续支持正确匹配
-- **AND** 该匹配语义 MUST NOT 依赖 HTTP transport 层的错误转换函数
-
-#### Scenario: password primitive 保持业务中立
-
-- **WHEN** `common/security/password` 定义 `password.ErrPasswordKDFBusy`
-- **THEN** `common` MUST 只表达密码 KDF 资源预算繁忙这一业务中立语义
-- **AND** `common` MUST NOT 承载 user-service 登录、用户名、认证会话、token、强制改密、撤销或认证公开消息以外的业务编排逻辑
-
-#### Scenario: KDF 安全语义不变
-
-- **WHEN** password KDF busy 错误迁移为应用错误
-- **THEN** 系统 MUST NOT 改变 Argon2id 参数、哈希编码、队列上限、并发上限、常量时间校验或资源预算触发条件
-- **AND** 测试 MUST 继续覆盖队列繁忙路径、哈希成功路径和密码校验失败路径
-
-### Requirement: Feature-local auth domain 应用错误契约
-
-系统 MUST 允许 user-service auth domain 为稳定认证业务错误定义应用错误，使这些错误同时携带 `Kind`、`Reason`、`Code`、`Message` 并可被共享 response helper 直接渲染。该契约 MUST 保持业务归属清晰，且不得把 user-service 的认证错误映射表上移到 `common`、`internal/shared` 或跨 feature 全局包。
-
-#### Scenario: auth domain 定义可渲染应用错误
-
-- **WHEN** `user-service/internal/features/auth/domain` 定义无效凭据、缺失会话、token 无效、refresh session 无效、强制改密 session 无效或撤销不完整错误
-- **THEN** 错误 MUST 携带共享错误契约所需的 `Kind`、稳定 `Reason`、`Code` 和中文公开 `Message`
-- **AND** `common/http/response.Fail` MUST 能通过 `contracterrors.FromError` 直接渲染该错误
-
-#### Scenario: auth domain 保持业务判断语义
-
-- **WHEN** 调用方通过 `errors.Is` 判断 auth domain 导出的稳定业务错误
-- **THEN** 直接返回的错误和被包装后的错误 MUST 继续支持正确匹配
-- **AND** 该匹配语义 MUST NOT 依赖 HTTP transport 层的错误转换函数
-
-#### Scenario: common 保持认证业务中立
-
-- **WHEN** auth domain 错误迁移为应用错误
-- **THEN** `common/` MUST 只提供业务中立的错误契约、应用错误构造、password primitive 和 response 渲染 helper
-- **AND** 系统 MUST NOT 在 `common` 新增 user-service 认证专用错误映射表、登录编排、session 语义、token version 语义或 Redis key schema
-
-#### Scenario: 不新增跨模块认证错误注册表
-
-- **WHEN** feature-local auth domain 应用错误需要被 HTTP controller 渲染
-- **THEN** controller MUST 通过共享 `response.Fail` 和错误自身携带的契约信息完成渲染
-- **AND** 系统 MUST NOT 新增跨模块认证错误映射注册表、compat mapper 或仅包装 `contracterrors.FromError` 的认证错误兼容函数
-
-### Requirement: Feature-local domain 应用错误契约
-
-系统 MUST 允许 user-service feature-local domain 为稳定业务错误定义应用错误，使这些错误同时携带 `Kind`、`Reason`、`Code`、`Message` 并可被共享 response helper 直接渲染。该契约 MUST 保持业务归属清晰，且不得把 user-service 的权限错误映射表上移到 `common`、`internal/shared` 或跨 feature 全局包。
-
-#### Scenario: permission domain 定义可渲染应用错误
-
-- **WHEN** `user-service/internal/features/permission/domain` 定义权限已存在、权限不存在、权限输入无效或系统权限保护错误
-- **THEN** 错误 MUST 携带共享错误契约所需的 `Kind`、稳定 `Reason`、`Code` 和中文公开 `Message`
-- **AND** `common/http/response.Fail` MUST 能通过 `contracterrors.FromError` 直接渲染该错误
-
-#### Scenario: feature-local domain 保持业务判断语义
-
-- **WHEN** 调用方通过 `errors.Is` 判断 permission domain 导出的稳定业务错误
-- **THEN** 直接返回的错误和被包装后的错误 MUST 继续支持正确匹配
-- **AND** 该匹配语义 MUST NOT 依赖 HTTP transport 层的错误转换函数
-
-#### Scenario: common 保持业务中立
-
-- **WHEN** 权限目录错误迁移为应用错误
-- **THEN** `common/` MUST 只提供业务中立的错误契约、应用错误构造和 response 渲染 helper
-- **AND** 系统 MUST NOT 在 `common` 新增权限目录专用 `Reason` 常量、公开消息、错误变量或权限错误到 HTTP 响应的全局映射表
-
-#### Scenario: 不新增跨模块权限错误注册表
-
-- **WHEN** feature-local domain 应用错误需要被 HTTP controller 渲染
-- **THEN** controller MUST 通过共享 `response.Fail` 和错误自身携带的契约信息完成渲染
-- **AND** 系统 MUST NOT 新增跨模块权限错误映射注册表、compat mapper 或仅包装 `contracterrors.FromError` 的权限错误兼容函数
-
-### Requirement: Feature-local role 应用错误契约
-
-系统 MUST 允许 user-service feature-local role domain 为稳定角色和 RBAC 绑定错误定义应用错误，使这些错误同时携带 `Kind`、`Reason`、`Code`、`Message` 并可被共享 response helper 直接渲染。该契约 MUST 保持业务归属清晰，且不得把 role、permission 或 identity 的错误映射表上移到 `common`、`internal/shared` 或跨 feature 全局包。
-
-#### Scenario: role domain 定义可渲染应用错误
-
-- **WHEN** `user-service/internal/features/role/domain` 定义角色目录、用户角色绑定或角色权限绑定错误
-- **THEN** 错误 MUST 携带共享错误契约所需的 `Kind`、稳定 `Reason`、`Code` 和中文公开 `Message`
-- **AND** `common/http/response.Fail` MUST 能通过 `contracterrors.FromError` 直接渲染该错误
-
-#### Scenario: role domain 保持业务判断语义
-
-- **WHEN** 调用方通过 `errors.Is` 判断 role domain 导出的稳定业务错误
-- **THEN** 直接返回的错误和被包装后的错误 MUST 继续支持正确匹配
-- **AND** 该匹配语义 MUST NOT 依赖 HTTP transport 层的错误转换函数
-
-#### Scenario: 消费方 feature 透传应用错误
-
-- **WHEN** role feature 接收到 `identity` 或 `permission` 边界拥有的应用错误
-- **THEN** role feature MAY 返回或包装该错误并交给共享 response helper 渲染
-- **AND** role HTTP transport MUST NOT 为这些跨 feature 错误维护重复 sentinel-to-HTTP 映射
-
-#### Scenario: common 保持业务中立
-
-- **WHEN** 角色与 RBAC 绑定错误迁移为应用错误
-- **THEN** `common/` MUST 只提供业务中立的错误契约、应用错误构造和 response 渲染 helper
-- **AND** 系统 MUST NOT 在 `common` 新增角色、用户角色绑定、角色权限绑定、permission 或 identity 专用 `Reason` 常量、公开消息、错误变量或错误到 HTTP 响应的全局映射表
-
-#### Scenario: 不新增跨模块角色错误注册表
-
-- **WHEN** feature-local role 应用错误或跨 feature 应用错误需要被 role HTTP controller 渲染
-- **THEN** controller MUST 通过共享 `response.Fail` 和错误自身携带的契约信息完成渲染
-- **AND** 系统 MUST NOT 新增跨模块角色错误映射注册表、compat mapper 或仅包装 `contracterrors.FromError` 的角色错误兼容函数
-
-### Requirement: 服务内 shared identity 应用错误契约
-
-系统 MUST 允许服务内 shared kernel 为稳定身份错误定义应用错误，使这些错误同时携带 `Kind`、`Reason`、`Code`、`Message` 并可被共享 response helper 直接渲染。该契约 MUST 保持服务内业务归属清晰，且不得把 user-service 的用户错误映射表上移到 `common` 或跨 feature 全局包。
-
-#### Scenario: shared identity 定义可渲染应用错误
-
-- **WHEN** `user-service/internal/shared/identity` 定义用户不存在或用户已存在错误
-- **THEN** 错误 MUST 携带共享错误契约所需的 `Kind`、`Reason`、`Code` 和公开 `Message`
-- **AND** `common/http/response.Fail` MUST 能通过 `contracterrors.FromError` 直接渲染该错误
-
-#### Scenario: shared identity 保持业务判断语义
-
-- **WHEN** 调用方通过 `errors.Is` 判断 `identity.ErrUserNotFound` 或 `identity.ErrUserAlreadyExists`
-- **THEN** 直接返回的错误和被包装后的错误 MUST 继续支持正确匹配
-
-#### Scenario: common 不承载用户错误映射
-
-- **WHEN** 用户身份错误迁移为应用错误
-- **THEN** `common/` MUST 只提供业务中立的错误契约、应用错误构造和 response 渲染 helper
-- **AND** 系统 MUST NOT 在 `common` 或用户 feature 外新增用户错误到 HTTP 响应的全局映射表
-
-### Requirement: 共享 runtime primitive 测试避免非必要进程级状态
-
-`common/` 共享 runtime primitive 的测试 MUST 避免为了日志捕获或断言便利而非必要地修改进程级可变状态。对 logger 相关测试，系统 MUST 优先使用 context logger 或局部 logger 注入；只有测试目标本身是进程级默认 logger 行为时，才 MAY 调用 `logger.SetDefault`，并 MUST 保存和恢复原状态。
-
-#### Scenario: 共享 HTTP binding 日志测试注入 request context logger
-
-- **WHEN** `common/http/binding` 测试需要捕获绑定、校验或响应相关日志
-- **THEN** 测试 MUST 通过 request context 注入局部 logger
-- **AND** 测试 MUST NOT 通过 `logger.SetDefault` 修改进程级默认 logger
-
-#### Scenario: 必要进程级状态测试具备恢复边界
-
-- **WHEN** `common/` 测试必须替换 logger 默认值或其他进程级 runtime primitive 状态
-- **THEN** 测试 MUST 在测试 helper 内保存原状态并通过 cleanup 恢复
-- **AND** 该 helper MUST 限定在相关 package 测试内，不得新增业务无关生产 API
-
-#### Scenario: 并行测试不依赖被替换的默认 logger
-
-- **WHEN** 测试使用 `t.Parallel()` 或可能与其他 package 测试同进程执行
-- **THEN** 测试 MUST NOT 依赖被 `logger.SetDefault` 替换的进程级 logger
-- **AND** 测试 MUST 使用局部 logger、context logger 或显式参数表达日志依赖
-
-### Requirement: 共享只读集合不得暴露共享可写状态
-
-`common` 中用于配置校验、HTTP middleware 默认策略和 validation tag 解析的只读集合或默认 struct MUST 使用不暴露共享可写底层状态的表达方式。实现 MUST 保持配置允许值、validation 字段名解析顺序、CORS 默认策略、公开错误消息和 HTTP 响应行为不变。
-
-#### Scenario: 配置校验集合不可被包内误写
-
-- **WHEN** `common/runtime/config` 或 `common/runtime/resources` 校验 log level、log format、server enabled、PostgreSQL SSL mode、tracing sample ratio 或 production-like insecure transport
-- **THEN** 校验逻辑 MUST 使用 `switch`、私有查询函数、局部构造或等价方式表达固定集合
-- **AND** 系统 MUST NOT 暴露可被同包未来代码直接写入的 package-level map 作为这些固定集合的权威来源
-- **AND** 合法值、非法值和错误消息 MUST 保持当前语义不变
-
-#### Scenario: 默认 CORS 配置隔离共享 slice
-
-- **WHEN** 调用方使用 `common/http/middleware.CORS()` 或 `CORSWithOptions` 创建 CORS middleware
-- **THEN** middleware MUST 在构造时持有与 package-level 默认值和调用方传入 slice 隔离的配置副本
-- **AND** 调用方后续修改其传入的 origins、methods、headers 或 exposed headers slice MUST NOT 改变已创建 middleware 的行为
-- **AND** `CORS()` 的默认响应 MUST 继续使用 `Access-Control-Allow-Origin=*`、`Access-Control-Allow-Methods=GET,POST,PUT,PATCH,DELETE,OPTIONS` 和 `Access-Control-Allow-Headers=Authorization,Content-Type`
-
-#### Scenario: validation request tag 顺序稳定且不可共享写入
-
-- **WHEN** `common/validation` 从 struct field tag 推导请求字段名
-- **THEN** tag 优先级和支持集合 MUST 保持当前顺序与语义
-- **AND** 实现 MUST NOT 依赖可被同包未来代码修改的 package-level slice 作为共享底层状态
-
-#### Scenario: 保留非只读集合变量需有理由
-
-- **WHEN** 实现阶段发现 package-level var 不迁移
-- **THEN** 该变量 MUST 不属于本次只读 map、slice 或默认 struct 风险范围，或具备明确保留理由
-- **AND** 合理保留理由 MAY 包括 sentinel error、regexp 编译结果、Fx Module、`sync.Pool`、atomic counter 或需要运行时状态的对象
-
-### Requirement: 共享资源配置边界
-
-系统 MUST 在 `common/runtime/resources` 提供 Redis/PostgreSQL 具名资源类型、默认值和通用校验，但 MUST NOT 将这些资源挂入核心 `config.Config`。
-
-#### Scenario: 声明多具名资源
-
-- **WHEN** 服务依赖多个 Redis 或 PostgreSQL 实例
-- **THEN** 服务 MUST 能使用 `RedisConfigs` 和 `PostgresConfigs` 按名称声明资源
-- **AND** 必需资源名称和业务用途 MUST 由消费服务校验
-
-#### Scenario: 应用资源默认值
-
-- **WHEN** Redis timeout 或 PostgreSQL sslmode、pool 参数未显式配置
-- **THEN** resources helper MUST 应用稳定默认值
-- **AND** PostgreSQL ping timeout MUST 作为内部 helper 默认值存在而不进入 YAML 契约
-
-#### Scenario: 校验资源参数
-
-- **WHEN** 资源名称、地址、端口、timeout、sslmode、PostgreSQL username 或 pool 参数非法
-- **THEN** 通用校验 MUST 返回包含资源名和字段路径的错误
-- **AND** PostgreSQL max idle connections MUST NOT 大于 max open connections
-- **AND** PostgreSQL password 与 Redis username/password MUST 允许为空
-
-### Requirement: Datastore 使用共享资源类型
-
-系统 MUST 使用 `common/runtime/resources` 的 Redis/PostgreSQL 配置初始化共享 datastore，并 MUST NOT 依赖已删除的核心 Config 资源字段或 helper。
-
-#### Scenario: 初始化 Redis client
-
-- **WHEN** datastore 创建 Redis client
-- **THEN** 统一 timeout MUST 映射到 dial、read、write 和启动 ping timeout
-- **AND** username MUST 可用于 Redis ACL
-
-#### Scenario: 初始化 PostgreSQL pool
-
-- **WHEN** datastore 创建 PostgreSQL pool
-- **THEN** DSN MUST 在 datastore 或 resources 边界构建
-- **AND** pool 与 ping timeout MUST 使用 resources 默认值和可选覆盖
-
-### Requirement: user-service App 配置单一来源与可复用装配
-
-user-service 正式 `serve` 启动路径 MUST 在创建 Fx App 前只解析一次 service config，并将同一个已解析 `*serviceconfig.Config` 及由它派生的共享 runtime config 交给 composition root。user-service bootstrap MUST 提供无配置文件 I/O 的基础 Fx options 构建入口，供正式 App 和装配测试复用；该入口 MUST NOT 保留 `ConfigPath -> serviceconfig.NewConfig` 的第二套 provider 链。
-
-#### Scenario: serve 启动只解析一次配置
-
-- **WHEN** `aegiscore-user-services serve` 使用配置文件启动
-- **THEN** CLI MUST 在创建 Fx App 前解析并校验一次 service config
-- **AND** App factory MUST 接收该已解析配置对象而不是再次接收配置路径
-- **AND** composition root MUST NOT 再次读取该配置文件
-
-#### Scenario: service config 与 runtime config 同源
-
-- **WHEN** composition root 构建 user-service Fx options
-- **THEN** 系统 MUST supply CLI 已解析的同一个 `*serviceconfig.Config`
-- **AND** 共享 runtime config MUST 由该 service config 在 composition root 中派生并 supply
-- **AND** logger、observability、server 和资源 provider MUST 消费这一组同源配置对象
-
-#### Scenario: 正式 App 与测试复用基础 options
-
-- **WHEN** 正式 `NewApp` 或 bootstrap/providers 装配测试构建 user-service 依赖图
-- **THEN** 它们 MUST 能复用同一个无 I/O 基础 Fx options 构建入口
-- **AND** 测试 MAY 在该入口上追加 `fx.NopLogger`、`fx.Populate` 或测试所需替代项
-- **AND** 正式代码 MUST NOT 为测试引入可变全局 loader、test-only flag 或第二套 service config provider
-
-#### Scenario: 配置失败不创建 App
-
-- **WHEN** service config 文件不存在、包含未知字段或未通过校验
-- **THEN** CLI MUST 在调用 App factory 或 `fx.New` 前返回配置错误
-- **AND** 系统 MUST NOT 创建部分 App、资源或 lifecycle hook
-
-#### Scenario: 保持配置与业务契约
-
-- **WHEN** user-service 将 App 配置来源统一为已解析对象
-- **THEN** 系统 MUST 保持配置字段、默认值、环境变量覆盖和校验语义不变
-- **AND** 系统 MUST NOT 改变 HTTP/OpenAPI、数据库 schema、migration、认证、RBAC 或资源运行时行为
-
-### Requirement: Logger 构造函数无进程默认副作用
-
-`common/runtime/logger` 的 logger 构造函数 MUST 只构造并返回调用方拥有的 `*zap.Logger`，不得隐式安装、覆盖或恢复进程级默认 logger。进程级默认 logger 只作为共享 helper 的无注入兜底能力存在，调用方需要修改该兜底值时 MUST 显式调用 `SetDefault`。
-
-#### Scenario: New 不覆盖默认 logger
-- **WHEN** 调用方执行 `logger.New` 创建配置化 logger
-- **THEN** 系统 MUST 返回该 logger
-- **AND** 进程级默认 logger MUST 保持调用前的值
-
-#### Scenario: NewWithConfig 不覆盖默认 logger
-- **WHEN** 调用方执行 `logger.NewWithConfig` 创建配置化 logger
-- **THEN** 系统 MUST 返回该 logger
-- **AND** 进程级默认 logger MUST 保持调用前的值
-
-#### Scenario: NewLogger 不覆盖默认 logger
-- **WHEN** Fx provider `logger.NewLogger` 创建正式 logger
-- **THEN** 系统 MUST 返回该 logger 并注册既有 Sync 关闭 hook
-- **AND** 系统 MUST NOT 调用 `SetDefault` 或等价逻辑覆盖进程级默认 logger
-
-#### Scenario: 显式默认 logger API 保留兜底语义
-- **WHEN** 共享 helper 在没有注入 logger 或 context logger 的情况下调用 `FromContext`、`WithContext`、`NamedComponent` 或包级日志函数
-- **THEN** 系统 MAY 使用当前进程级默认 logger 作为兜底
-- **AND** 该默认值只能通过显式 `SetDefault` 修改
-- **AND** logger 构造函数 MUST NOT 成为修改默认值的隐式入口
+- **WHEN** package-level 变量承载 sentinel error、regexp、Fx Module、`sync.Pool`、atomic counter 或其他必要运行时状态
+- **THEN** 系统 MUST 明确其可变性和并发边界，不得将其伪装为可写的只读配置集合
