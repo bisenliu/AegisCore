@@ -263,7 +263,7 @@ func newTestCredentialStore(t *testing.T) *CredentialStore {
 	t.Helper()
 	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:credential_store_test_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
 	t.Cleanup(func() { _ = client.Close() })
-	return NewCredentialStore(CredentialStoreParams{Client: client})
+	return NewCredentialStore(client)
 }
 
 func createCredentialTestUser(t *testing.T, repo *CredentialStore, input credentialTestUserInput) *ent.User {

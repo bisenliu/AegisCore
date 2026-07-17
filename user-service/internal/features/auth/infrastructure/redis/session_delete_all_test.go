@@ -11,12 +11,10 @@ import (
 	rediscache "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/workerpool"
-	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
@@ -212,14 +210,13 @@ func TestSessionStorePurgePoolStopHookPrecedesRedisStopHook(t *testing.T) {
 	require.NoError(t, err,
 		"NewSessionPurgePool: %v", err)
 
-	store, err := NewSessionStore(SessionStoreParams{
-		Redis:     client,
-		Cfg:       &serviceconfig.Config{},
-		PurgePool: pool,
-		Metrics:   authapplication.NopMetrics(),
+	store := NewSessionStore(SessionStoreOptions{
+		Redis:                client,
+		Keys:                 MustKeyCatalog(""),
+		TokenVersionCacheTTL: time.Minute,
+		PurgePool:            pool,
+		Metrics:              authapplication.NopMetrics(),
 	})
-	require.NoError(t, err,
-		"NewSessionStore: %v", err)
 	require.NotNil(t, store.purgePool,
 		"purgePool = nil")
 	require.EqualValues(t, 2, len(lifecycle.hooks),
@@ -250,39 +247,34 @@ func TestSessionStorePurgePoolStopHookPrecedesRedisStopHook(t *testing.T) {
 
 }
 
-func TestSessionStoreConsumesNamedPurgePool(t *testing.T) {
+func TestSessionStoreConsumesPurgePool(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
-	var store *SessionStore
-	app := fxtest.New(t,
-		fx.Provide(
-			func() authapplication.Metrics {
-				return authapplication.NopMetrics()
-			},
-			func() *serviceconfig.Config {
-				return &serviceconfig.Config{Auth: serviceconfig.AuthConfig{TokenVersionCacheTTL: time.Minute}}
-			},
-			func() *zap.Logger {
-				return zap.NewNop()
-			},
-			fx.Annotate(
-				func() *rediscache.Client {
-					return client
-				},
-				fx.ResultTags(`name:"cache_redis"`),
-			),
-			fx.Annotate(
-				NewSessionPurgePool,
-				fx.As(new(PurgeTaskPool)),
-				fx.ResultTags(`name:"auth_session_purge_pool"`),
-			),
-			NewSessionStore,
-		),
-		fx.Populate(&store),
-	)
-	app.RequireStart()
-	app.RequireStop()
-	_ = client.Close()
+	t.Cleanup(func() { _ = client.Close() })
+	lifecycle := &lifecycleRecorder{}
+	pool, err := NewSessionPurgePool(SessionPurgePoolParams{
+		Lifecycle: lifecycle,
+		Redis:     client,
+		Log:       zap.NewNop(),
+	})
+	require.NoError(t, err,
+		"NewSessionPurgePool: %v", err)
+	store := NewSessionStore(SessionStoreOptions{
+		Redis:                client,
+		Keys:                 MustKeyCatalog(""),
+		TokenVersionCacheTTL: time.Minute,
+		PurgePool:            pool,
+		Metrics:              authapplication.NopMetrics(),
+	})
+	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	t.Cleanup(func() {
+		defer cancel()
+		for i := len(lifecycle.hooks) - 1; i >= 0; i-- {
+			if lifecycle.hooks[i].OnStop != nil {
+				_ = lifecycle.hooks[i].OnStop(stopCtx)
+			}
+		}
+	})
 	require.NotNil(t, store,
 		"store = nil")
 	require.NotNil(t, store.purgePool,

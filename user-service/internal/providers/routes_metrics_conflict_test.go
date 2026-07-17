@@ -35,7 +35,7 @@ func TestRegisterRoutesRejectsMetricsPathConflict(t *testing.T) {
 		TokenVersions: &routeTokenVersionValidator{version: 1},
 		Authorizer:    &routeAuthorizer{allowed: true},
 		Metrics:       newRouteTestMetricsProvider(t, cfg),
-		AuthController: authhttp.NewAuthController(authhttp.AuthControllerParams{
+		AuthController: authhttp.NewAuthController(authhttp.AuthControllerOptions{
 			Login:          &routeAuthAuthUseCases{},
 			Refresh:        &routeAuthAuthUseCases{},
 			ChangePassword: &routeAuthAuthUseCases{},

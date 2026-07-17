@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 
 	"github.com/aegiscore/common/runtime/localcache"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
+	commonvalidation "github.com/aegiscore/common/validation"
+	"github.com/aegiscore/user-service/ent"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
@@ -22,6 +25,21 @@ import (
 )
 
 const authTokenVersionCacheName = "auth_token_version" // #nosec G101 -- 本地缓存名称，不包含真实凭据。
+
+type credentialStoreParams struct {
+	fx.In
+
+	Client *ent.Client `name:"primary_db"`
+}
+
+type sessionStoreParams struct {
+	fx.In
+
+	Redis     *rediscache.Client `name:"cache_redis"`
+	Config    *serviceconfig.Config
+	PurgePool authredis.PurgeTaskPool `name:"auth_session_purge_pool"`
+	Metrics   authapplication.Metrics
+}
 
 type tokenVersionCacheParams struct {
 	fx.In
@@ -53,6 +71,17 @@ type tokenVersionValidatorResult struct {
 	Invalidator authvalidators.TokenVersionLocalInvalidator
 }
 
+type authControllerParams struct {
+	fx.In
+
+	Login          authcommand.LoginUseCase
+	Refresh        authcommand.RefreshTokenUseCase
+	ChangePassword authcommand.ChangePasswordUseCase
+	LogoutCurrent  authcommand.LogoutCurrentSessionUseCase
+	LogoutAll      authcommand.LogoutAllSessionsUseCase
+	Validator      *commonvalidation.Validator
+}
+
 // Module 组装认证功能的应用服务、HTTP 传输层和基础设施适配器。
 var Module = fx.Module("feature-auth",
 	fx.Provide(
@@ -60,12 +89,12 @@ var Module = fx.Module("feature-auth",
 		newAuthMetrics,
 		// Fx 分类：Feature 基础设施 - PostgreSQL 与 Redis port adapter。
 		fx.Annotate(
-			authpostgres.NewCredentialStore,
+			newCredentialStore,
 			fx.As(new(authapplication.UserTokenVersionStore)),
 			fx.As(new(authapplication.UserCredentialStore)),
 		),
 		fx.Annotate(
-			authredis.NewSessionStore,
+			newSessionStore,
 			fx.As(new(authapplication.TokenVersionCache)),
 			fx.As(new(authapplication.RefreshSessionStore)),
 			fx.As(new(authapplication.PasswordChangeSessionStore)),
@@ -95,9 +124,38 @@ var Module = fx.Module("feature-auth",
 		authcommand.NewLogoutCurrentSessionUseCase,
 		authcommand.NewLogoutAllSessionsUseCase,
 		// Fx 分类：传输 - auth HTTP controller。
-		authhttp.NewAuthController,
+		newAuthController,
 	),
 )
+
+func newCredentialStore(params credentialStoreParams) *authpostgres.CredentialStore {
+	return authpostgres.NewCredentialStore(params.Client)
+}
+
+func newSessionStore(params sessionStoreParams) (*authredis.SessionStore, error) {
+	keys, err := authredis.NewKeyCatalog(params.Config.App.Name)
+	if err != nil {
+		return nil, fmt.Errorf("new auth redis keys: %w", err)
+	}
+	return authredis.NewSessionStore(authredis.SessionStoreOptions{
+		Redis:                params.Redis,
+		Keys:                 keys,
+		TokenVersionCacheTTL: params.Config.Auth.TokenVersionCacheTTL,
+		PurgePool:            params.PurgePool,
+		Metrics:              params.Metrics,
+	}), nil
+}
+
+func newAuthController(params authControllerParams) *authhttp.AuthController {
+	return authhttp.NewAuthController(authhttp.AuthControllerOptions{
+		Login:          params.Login,
+		Refresh:        params.Refresh,
+		ChangePassword: params.ChangePassword,
+		LogoutCurrent:  params.LogoutCurrent,
+		LogoutAll:      params.LogoutAll,
+		Validator:      params.Validator,
+	})
+}
 
 func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, tokenVersionCache authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, tokenVersions authvalidators.TokenVersionLocalInvalidator, cfg *serviceconfig.Config) authsessions.Lifecycle {
 	return authsessions.NewLifecycle(users, tokenVersionCache, sessions, passwordChangeSessions, cfg.Auth.MaxActiveSessionsPerUser, tokenVersions)

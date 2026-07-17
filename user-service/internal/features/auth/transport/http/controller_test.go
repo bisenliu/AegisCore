@@ -352,7 +352,7 @@ func newTestAuthController(t *testing.T) (*AuthController, authControllerMocks) 
 		logoutCurrent:  NewMockLogoutCurrentSessionUseCase(ctrl),
 		logoutAll:      NewMockLogoutAllSessionsUseCase(ctrl),
 	}
-	return NewAuthController(AuthControllerParams{
+	return NewAuthController(AuthControllerOptions{
 		Login:          mocks.login,
 		Refresh:        mocks.refresh,
 		ChangePassword: mocks.changePassword,

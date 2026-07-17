@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/fx"
 
 	"github.com/aegiscore/common/http/binding"
 	"github.com/aegiscore/common/http/response"
@@ -23,10 +22,8 @@ type AuthController struct {
 	validator      *commonvalidation.Validator
 }
 
-// AuthControllerParams 包含构造认证控制器所需的依赖。
-type AuthControllerParams struct {
-	fx.In
-
+// AuthControllerOptions 包含构造认证控制器所需的普通依赖。
+type AuthControllerOptions struct {
 	Login          authcommand.LoginUseCase
 	Refresh        authcommand.RefreshTokenUseCase
 	ChangePassword authcommand.ChangePasswordUseCase
@@ -36,14 +33,14 @@ type AuthControllerParams struct {
 }
 
 // NewAuthController 使用 command use case 和 validator 依赖构造认证控制器。
-func NewAuthController(params AuthControllerParams) *AuthController {
+func NewAuthController(options AuthControllerOptions) *AuthController {
 	return &AuthController{
-		login:          params.Login,
-		refresh:        params.Refresh,
-		changePassword: params.ChangePassword,
-		logoutCurrent:  params.LogoutCurrent,
-		logoutAll:      params.LogoutAll,
-		validator:      params.Validator,
+		login:          options.Login,
+		refresh:        options.Refresh,
+		changePassword: options.ChangePassword,
+		logoutCurrent:  options.LogoutCurrent,
+		logoutAll:      options.LogoutAll,
+		validator:      options.Validator,
 	}
 }
 

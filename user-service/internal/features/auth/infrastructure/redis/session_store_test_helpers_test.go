@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
-	commonconfig "github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/common/runtime/workerpool"
 	commonauth "github.com/aegiscore/common/security/auth"
@@ -56,17 +55,16 @@ func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenV
 func newTestSessionStoreWithAppName(t testing.TB, redisServer *miniredis.Miniredis, appName string) *SessionStore {
 	t.Helper()
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
-	store, err := NewSessionStore(SessionStoreParams{
-		Redis: client,
-		Cfg: &serviceconfig.Config{
-			Config: commonconfig.Config{App: commonconfig.AppConfig{Name: appName}},
-			Auth:   serviceconfig.AuthConfig{TokenVersionCacheTTL: time.Minute},
-		},
-		PurgePool: directPurgeTaskPool{},
-		Metrics:   authapplication.NopMetrics(),
-	})
+	keys, err := NewKeyCatalog(appName)
 	require.NoError(t, err,
-		"NewSessionStore: %v", err)
+		"NewKeyCatalog: %v", err)
+	store := NewSessionStore(SessionStoreOptions{
+		Redis:                client,
+		Keys:                 keys,
+		TokenVersionCacheTTL: time.Minute,
+		PurgePool:            directPurgeTaskPool{},
+		Metrics:              authapplication.NopMetrics(),
+	})
 
 	t.Cleanup(func() {
 		_ = client.Close()

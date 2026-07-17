@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"go.uber.org/fx"
 
 	"github.com/aegiscore/user-service/ent"
 	"github.com/aegiscore/user-service/ent/predicate"
@@ -22,16 +21,9 @@ type CredentialStore struct {
 var _ authapplication.UserCredentialStore = (*CredentialStore)(nil)
 var _ authapplication.UserTokenVersionStore = (*CredentialStore)(nil)
 
-// CredentialStoreParams 包含 PostgreSQL-backed 认证凭据 store 所需的 Fx 输入。
-type CredentialStoreParams struct {
-	fx.In
-
-	Client *ent.Client `name:"primary_db"`
-}
-
 // NewCredentialStore 构造基于 Ent 的认证凭据和 token version store。
-func NewCredentialStore(params CredentialStoreParams) *CredentialStore {
-	return &CredentialStore{client: params.Client}
+func NewCredentialStore(client *ent.Client) *CredentialStore {
+	return &CredentialStore{client: client}
 }
 
 // GetByUsername 按规范化 username 返回未软删除用户的认证凭据。
