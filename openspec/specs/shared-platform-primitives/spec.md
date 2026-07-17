@@ -206,7 +206,7 @@
 
 ### Requirement: Runtime primitive 基础
 
-系统 MUST 在 `common/runtime/` 中维护配置加载、数据存储、logger、metrics、tracing、scheduler、workerpool、localcache、Redis key 和 timezone 等 runtime primitive。`common/runtime/config` MUST 将 `local_cache` 表达为通用具名缓存实例集合，并 MUST NOT 固定 user-service 的 `auth_token_version`、`rbac_user_roles` 或其他业务缓存名。`common/runtime/config` MUST 只声明和校验跨服务通用 runtime 配置，MUST NOT 声明或校验 user-service 的 `auth`、`ent`、JWT TTL、password KDF、refresh session 或 token version 策略。`common/runtime/config` MUST 使用 `github.com/go-viper/mapstructure/v2` 作为配置反序列化依赖，并 MUST NOT 保留旧版 `github.com/mitchellh/mapstructure` 导入、兼容层或旧行为 fallback。
+系统 MUST 在 `common/runtime/` 中维护配置加载、数据存储、logger、metrics、tracing、scheduler、workerpool、localcache、Redis key 和 timezone 等 runtime primitive。`common/runtime/config` MUST 将 `local_cache` 表达为通用具名缓存实例集合，并 MUST NOT 固定 user-service 的 `auth_token_version`、`rbac_user_roles` 或其他业务缓存名。`common/runtime/config` MUST 只声明和校验跨服务通用 runtime 配置，MUST NOT 声明或校验 user-service 的 `auth`、`ent`、JWT TTL、password KDF、refresh session 或 token version 策略。`common/runtime/config` MUST 使用 `github.com/go-viper/mapstructure/v2` 作为配置反序列化依赖，并 MUST NOT 保留旧版 `github.com/mitchellh/mapstructure` 导入、兼容层或旧行为 fallback。`common/runtime/workerpool` MUST 作为普通 Go runtime primitive 提供构造和显式关闭能力，MUST NOT 依赖 `go.uber.org/fx`、`fx.Lifecycle`、`fx.Hook` 或 `fxtest`。
 
 #### Scenario: 服务启动加载配置
 
@@ -273,6 +273,14 @@
 - **WHEN** 服务需要执行定时任务、分布式锁或固定 worker pool 任务
 - **THEN** 系统 MUST 使用共享 scheduler、lock、workerpool 和 metrics 约束，并记录失败、拒绝、panic 和完成事件
 
+#### Scenario: workerpool 显式生命周期所有权
+
+- **WHEN** 调用方通过 `common/runtime/workerpool.New` 创建后台任务池
+- **THEN** `New` MUST 作为普通 Go 构造器创建未绑定 DI 框架的任务池
+- **AND** `New` MUST NOT 接收 `fx.Lifecycle`、注册 `fx.Hook` 或导入 `go.uber.org/fx`
+- **AND** 调用方 MUST 在拥有该资源的生命周期边界显式调用公开 `Stop(ctx)` 关闭任务池
+- **AND** 系统 MUST NOT 保留旧签名、deprecated wrapper、可选 lifecycle 参数或 Fx 兼容 adapter
+
 #### Scenario: workerpool Stop drain 语义
 
 - **WHEN** 调用方对 `common/runtime/workerpool` 执行 `Stop(ctx)`
@@ -314,7 +322,7 @@
 #### Scenario: workerpool 业务边界
 
 - **WHEN** feature 代码使用 `common/runtime/workerpool` 提交后台任务
-- **THEN** workerpool MUST 只提供并发控制、生命周期、日志和统计能力，MUST NOT 承载 refresh session 上限裁剪、token version 撤销、可靠消息、eventbus、outbox 或业务一致性协议
+- **THEN** workerpool MUST 只提供并发控制、显式关闭、日志和统计能力，MUST NOT 承载 refresh session 上限裁剪、token version 撤销、可靠消息、eventbus、outbox 或业务一致性协议
 
 #### Scenario: scheduler 分布式锁
 
