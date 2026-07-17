@@ -272,6 +272,35 @@ check_user_feature_framework_metadata() {
   )
 }
 
+check_role_feature_framework_metadata() {
+  local pattern='go\.uber\.org/(fx|dig)|(^|[^[:alnum:]_])(fx|dig)\.(In|Out)([^[:alnum:]_]|$)|`[^`]*(name|optional):"'
+  local file output status
+  while IFS= read -r file; do
+    set +e
+    output="$(rg -n "${pattern}" "${file}" 2>&1)"
+    status=$?
+    set -e
+    case "${status}" in
+      0)
+        report "role feature production code must not carry Fx/Dig DI metadata outside composition: ${file#"${repo_root}/"}"$'\n'"${output}"
+        ;;
+      1)
+        ;;
+      *)
+        report "role feature Fx/Dig metadata scan failed for ${file#"${repo_root}/"}"$'\n'"${output}"
+        ;;
+    esac
+  done < <(
+    find "${service_dir}/internal/features/role" \
+      -type f -name '*.go' \
+      ! -name '*_test.go' \
+      ! -name 'fx.go' \
+      ! -name 'mock_generate.go' \
+      \( -path '*/application/*' -o -path '*/domain/*' -o -path '*/infrastructure/*' -o -path '*/transport/*' \) \
+      -print
+  )
+}
+
 check_go_toolchain_version
 check_atlas_postgres_version
 check_mock_generate_build_tags
@@ -279,6 +308,7 @@ check_test_only_production_symbols
 check_feature_default_logger_dependencies
 check_feature_application_domain_fx_metadata
 check_user_feature_framework_metadata
+check_role_feature_framework_metadata
 
 if [[ -d "${service_dir}/internal/features/permission/application/rbacbaseline" ]]; then
   report "old permission/application/rbacbaseline package still exists"

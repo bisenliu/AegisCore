@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"go.uber.org/fx"
 
 	"github.com/aegiscore/user-service/ent"
 	entrole "github.com/aegiscore/user-service/ent/role"
@@ -23,16 +22,9 @@ type UserRoleStore struct {
 var _ roleapplication.UserRoleStore = (*UserRoleStore)(nil)
 var _ roleapplication.SeedUserRoleStore = (*UserRoleStore)(nil)
 
-// UserRoleStoreParams 包含 PostgreSQL-backed 用户角色绑定 store 所需的 Fx 输入。
-type UserRoleStoreParams struct {
-	fx.In
-
-	Client *ent.Client `name:"primary_db"`
-}
-
 // NewUserRoleStore 构造基于 Ent 的用户角色绑定 store。
-func NewUserRoleStore(params UserRoleStoreParams) *UserRoleStore {
-	return &UserRoleStore{client: params.Client}
+func NewUserRoleStore(client *ent.Client) *UserRoleStore {
+	return &UserRoleStore{client: client}
 }
 
 // ListByUserID 按用户外部 ID 返回已绑定角色列表。

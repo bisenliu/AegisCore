@@ -266,7 +266,12 @@ if [[ "${output}" != *"user feature production code must not carry Fx/Dig DI met
   exit 1
 fi
 
-if [[ "${output}" == *"allowed_test.go"* || "${output}" == *"common/testing/example/helper.go"* || "${output}" == *"user-service/ent/schema/generated.go"* || "${output}" == *"user-service/docs/openapi.go"* || "${output}" == *"user-service/internal/features/role/fx.go"* || "${output}" == *"user-service/internal/features/role/infrastructure/store.go"* || "${output}" == *"user-service/internal/features/user/fx.go"* || "${output}" == *"user-service/internal/features/user/infrastructure/postgres/store_test.go"* || "${output}" == *"user-service/internal/features/user/transport/http/mock_generate.go"* ]]; then
+if [[ "${output}" != *"role feature production code must not carry Fx/Dig DI metadata outside composition"* ]]; then
+  printf 'architecture-lint-test: expected role feature Fx/Dig metadata violation report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
+if [[ "${output}" == *"allowed_test.go"* || "${output}" == *"common/testing/example/helper.go"* || "${output}" == *"user-service/ent/schema/generated.go"* || "${output}" == *"user-service/docs/openapi.go"* || "${output}" == *"user-service/internal/features/role/fx.go"* || "${output}" == *"user-service/internal/features/user/fx.go"* || "${output}" == *"user-service/internal/features/user/infrastructure/postgres/store_test.go"* || "${output}" == *"user-service/internal/features/user/transport/http/mock_generate.go"* ]]; then
   printf 'architecture-lint-test: excluded test or generated file produced a false positive\n%s\n' "${output}" >&2
   exit 1
 fi

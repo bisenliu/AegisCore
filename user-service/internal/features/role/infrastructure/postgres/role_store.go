@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"go.uber.org/fx"
 
 	"github.com/aegiscore/user-service/ent"
 	entrole "github.com/aegiscore/user-service/ent/role"
@@ -20,16 +19,9 @@ type RoleStore struct {
 var _ roleapplication.RoleStore = (*RoleStore)(nil)
 var _ roleapplication.SeedRoleStore = (*RoleStore)(nil)
 
-// RoleStoreParams 包含 PostgreSQL-backed 角色 store 所需的 Fx 输入。
-type RoleStoreParams struct {
-	fx.In
-
-	Client *ent.Client `name:"primary_db"`
-}
-
 // NewRoleStore 构造基于 Ent 的角色 store。
-func NewRoleStore(params RoleStoreParams) *RoleStore {
-	return &RoleStore{client: params.Client}
+func NewRoleStore(client *ent.Client) *RoleStore {
+	return &RoleStore{client: client}
 }
 
 // Create 插入角色记录，并将唯一约束冲突映射为 ErrRoleAlreadyExists。
