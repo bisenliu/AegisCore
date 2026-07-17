@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	rediscmd "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -135,7 +135,9 @@ func TestWatcherRunningStatus(t *testing.T) {
 
 	require.False(t, watcher.Running())
 	watcher.Start()
+	watcher.Start()
 	require.True(t, watcher.Running())
+	require.NoError(t, watcher.Stop(context.Background()))
 	require.NoError(t, watcher.Stop(context.Background()))
 	require.False(t, watcher.Running())
 	require.NoError(t, watcher.LastError())
@@ -152,29 +154,75 @@ func TestWatcherRecordsUnexpectedChannelClose(t *testing.T) {
 	require.Error(t, watcher.LastError())
 }
 
-func TestWatcherLifecycleStartContextDoesNotControlBackgroundLoop(t *testing.T) {
-	redisServer := miniredis.RunT(t)
-	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
-	t.Cleanup(func() { _ = client.Close() })
-	store := newStore(client, MustKeyCatalog("aegiscore-user-services"), "instance-a", nil)
+func TestNewWatcherDoesNotStartBackgroundLoop(t *testing.T) {
 	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
-	lifecycle := fxtest.NewLifecycle(t)
 	watcher := NewWatcher(WatcherParams{
-		Lifecycle: lifecycle,
-		Store:     store,
-		Tracker:   NewVersionTracker(),
-		Engine:    engine,
+		Tracker: NewVersionTracker(),
+		Engine:  engine,
 	})
-	t.Cleanup(func() { _ = watcher.Stop(context.Background()) })
 
-	startCtx, cancelStart := context.WithCancel(context.Background())
-	require.NoError(t, lifecycle.Start(startCtx))
-	cancelStart()
-
-	requireWatcherRunningFor(t, watcher, 100*time.Millisecond)
-
-	require.NoError(t, lifecycle.Stop(context.Background()))
 	require.False(t, watcher.Running())
+}
+
+func TestWatcherStopHonorsDeadlineAndCanBeRepeated(t *testing.T) {
+	release := make(chan struct{})
+	closed := &atomic.Int64{}
+	subscriber := blockingPolicySubscriber{release: release, closed: closed}
+	store := &countingSubscriptionStore{subscriber: subscriber}
+	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
+	watcher := newWatcherWithMetrics(store, NewVersionTracker(), engine, nil, time.Hour, nil)
+
+	watcher.Start()
+	require.True(t, watcher.Running())
+	require.Eventually(t, func() bool { return store.subscriptions.Load() == 1 }, time.Second, 10*time.Millisecond)
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+	defer cancel()
+	require.ErrorIs(t, watcher.Stop(stopCtx), context.DeadlineExceeded)
+	require.True(t, watcher.Running())
+	require.Equal(t, int64(0), closed.Load())
+
+	close(release)
+
+	require.NoError(t, watcher.Stop(context.Background()))
+	require.NoError(t, watcher.Stop(context.Background()))
+	require.False(t, watcher.Running())
+	require.Equal(t, int64(1), closed.Load())
+}
+
+type countingSubscriptionStore struct {
+	subscriber    policySubscriber
+	subscriptions atomic.Int64
+}
+
+func (s *countingSubscriptionStore) CurrentVersion(context.Context) (int64, error) {
+	return 0, nil
+}
+
+func (s *countingSubscriptionStore) Subscribe(context.Context) policySubscriber {
+	s.subscriptions.Add(1)
+	return s.subscriber
+}
+
+type blockingPolicySubscriber struct {
+	release <-chan struct{}
+	closed  *atomic.Int64
+}
+
+func (s blockingPolicySubscriber) Receive(context.Context) (any, error) {
+	<-s.release
+	return nil, context.Canceled
+}
+
+func (s blockingPolicySubscriber) Channel(...rediscmd.ChannelOption) <-chan *rediscmd.Message {
+	ch := make(chan *rediscmd.Message)
+	close(ch)
+	return ch
+}
+
+func (s blockingPolicySubscriber) Close() error {
+	s.closed.Add(1)
+	return nil
 }
 
 type closedChannelStore struct{}
@@ -208,11 +256,4 @@ func waitForWatcherStopped(t *testing.T, watcher *Watcher) {
 	require.Eventually(t, func() bool {
 		return !watcher.Running()
 	}, time.Second, 10*time.Millisecond)
-}
-
-func requireWatcherRunningFor(t *testing.T, watcher *Watcher, duration time.Duration) {
-	t.Helper()
-	require.Never(t, func() bool {
-		return !watcher.Running()
-	}, duration, 10*time.Millisecond)
 }

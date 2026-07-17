@@ -1,6 +1,8 @@
 package permission
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 	rediscmd "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
@@ -36,9 +38,8 @@ type cacheRedisIn struct {
 type userRoleResolverIn struct {
 	fx.In
 
-	Lifecycle fx.Lifecycle
-	Config    *serviceconfig.Config
-	Client    *ent.Client `name:"primary_db"`
+	Config *serviceconfig.Config
+	Client *ent.Client `name:"primary_db"`
 }
 
 type userRoleResolverOut struct {
@@ -46,6 +47,7 @@ type userRoleResolverOut struct {
 
 	Resolver permissioncasbin.UserRoleResolver
 	Stats    localcache.StatsSource `name:"rbac_user_roles_cache"`
+	Closer   permissioncasbin.UserRoleCacheCloser
 }
 
 type engineOut struct {
@@ -75,6 +77,25 @@ type watcherOut struct {
 
 	Watcher *permissionredis.Watcher
 	Status  permissionredis.WatcherStatus
+}
+
+type watcherIn struct {
+	fx.In
+
+	Store   *permissionredis.Store
+	Tracker *permissionredis.VersionTracker
+	Engine  permissionapplication.PolicyReloadEngine
+	Log     *zap.Logger
+	Metrics permissionapplication.Metrics
+}
+
+type rbacLifecycleIn struct {
+	fx.In
+
+	Lifecycle fx.Lifecycle
+	Engine    *permissioncasbin.Engine
+	Watcher   *permissionredis.Watcher
+	Closer    permissioncasbin.UserRoleCacheCloser
 }
 
 // Module 组装权限目录 feature 的应用服务、控制器和基础设施 adapter。
@@ -107,10 +128,8 @@ var Module = fx.Module("feature-permission",
 		provideWatcher,
 	),
 	fx.Invoke(
-		// Fx 分类：生命周期 - 启动期完成 Casbin policy 初始加载。
-		permissioncasbin.RegisterInitialLoad,
-		// Fx 分类：生命周期 - 强制实例化 watcher 并注册启停 hook。
-		func(*permissionredis.Watcher) {},
+		// Fx 分类：生命周期 - 组合层显式编排 RBAC 资源启停。
+		registerRBACLifecycle,
 	),
 )
 
@@ -123,11 +142,11 @@ func providePolicyLoader(in primaryDBIn) permissioncasbin.Loader {
 }
 
 func provideUserRoleResolver(in userRoleResolverIn) (userRoleResolverOut, error) {
-	result, err := permissioncasbin.NewUserRoleResolver(permissioncasbin.UserRoleResolverParams{Lifecycle: in.Lifecycle, Config: in.Config, Client: in.Client})
+	result, err := permissioncasbin.NewUserRoleResolver(permissioncasbin.UserRoleResolverParams{Config: in.Config, Client: in.Client})
 	if err != nil {
 		return userRoleResolverOut{}, err
 	}
-	return userRoleResolverOut{Resolver: result.Resolver, Stats: result.Stats}, nil
+	return userRoleResolverOut{Resolver: result.Resolver, Stats: result.Stats, Closer: result.Closer}, nil
 }
 
 func provideEngine(loader permissioncasbin.Loader, metrics commonmetrics.ReloadMetrics, userRoles permissioncasbin.UserRoleResolver) engineOut {
@@ -156,7 +175,25 @@ func providePolicyChangeNotifier(engine permissionapplication.PolicyReloadEngine
 	return permissionapplication.NewPolicyRefreshCoordinator(engine, publisher, tracker, log, metrics)
 }
 
-func provideWatcher(params permissionredis.WatcherParams) watcherOut {
-	watcher := permissionredis.NewWatcher(params)
+func provideWatcher(in watcherIn) watcherOut {
+	watcher := permissionredis.NewWatcher(permissionredis.WatcherParams{Store: in.Store, Tracker: in.Tracker, Engine: in.Engine, Log: in.Log, Metrics: in.Metrics})
 	return watcherOut{Watcher: watcher, Status: watcher}
+}
+
+func registerRBACLifecycle(in rbacLifecycleIn) {
+	in.Lifecycle.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			_ = in.Engine.Initialize(ctx)
+			in.Watcher.Start()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			stopErr := in.Watcher.Stop(ctx)
+			closeErr := in.Closer.Close()
+			if stopErr != nil {
+				return stopErr
+			}
+			return closeErr
+		},
+	})
 }

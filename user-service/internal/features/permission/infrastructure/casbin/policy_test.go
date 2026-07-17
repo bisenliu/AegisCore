@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx/fxtest"
 
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/localcache"
@@ -169,9 +168,7 @@ func TestNewUserRoleResolverUsesRBACFeatureConfig(t *testing.T) {
 	size := int64(321)
 	ttl := time.Minute
 	loadTimeout := time.Second
-	lifecycle := fxtest.NewLifecycle(t)
 	result, err := NewUserRoleResolver(UserRoleResolverParams{
-		Lifecycle: lifecycle,
 		Config: &serviceconfig.Config{RBAC: serviceconfig.RBACConfig{UserRoleCache: serviceconfig.FeatureCacheConfig{
 			Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout,
 		}}},
@@ -179,7 +176,10 @@ func TestNewUserRoleResolverUsesRBACFeatureConfig(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 321, result.Stats.Stats().Capacity)
-	lifecycle.RequireStop()
+	require.NoError(t, result.Closer.Close())
+	require.NoError(t, result.Closer.Close())
+	_, err = result.Resolver.RolesForUser(context.Background(), uuid.New())
+	require.ErrorIs(t, err, localcache.ErrClosed)
 }
 
 func TestDisabledUserRoleResolverReadsThroughAndInvalidationIsSafe(t *testing.T) {
@@ -209,6 +209,8 @@ func TestDisabledUserRoleResolverReadsThroughAndInvalidationIsSafe(t *testing.T)
 
 	result.Resolver.InvalidateUserRole(userID)
 	result.Resolver.InvalidateAllUserRoles()
+	require.NoError(t, result.Closer.Close())
+	require.NoError(t, result.Closer.Close())
 	require.Equal(t, rbacUserRolesCacheName, result.Stats.Name())
 	require.EqualValues(t, 2, result.Stats.Stats().Load)
 	require.Zero(t, result.Stats.Stats().Capacity)

@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
@@ -64,9 +63,7 @@ func TestEngineFailClosedWhenInitialLoadFails(t *testing.T) {
 	)
 	roles := NewMockUserRoleResolver(ctrl)
 	engine := NewEngine(loader, metrics, roles)
-	lc := fxtest.NewLifecycle(t)
-	RegisterInitialLoad(lc, engine)
-	require.NoError(t, lc.Start(context.Background()))
+	require.NoError(t, engine.Initialize(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), uuid.New(), "/api/v1/users", "GET")
 	require.NoError(t, err)
 	require.False(t, allowed)
@@ -126,9 +123,7 @@ func TestEngineReloadSuccessReplacesPolicyAndClearsError(t *testing.T) {
 		metrics.EXPECT().SetLastStatus(true),
 	)
 	engine := NewEngine(loader, metrics, roles)
-	lc := fxtest.NewLifecycle(t)
-	RegisterInitialLoad(lc, engine)
-	require.NoError(t, lc.Start(context.Background()))
+	require.NoError(t, engine.Initialize(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
 	require.NoError(t, err)
 	require.False(t, allowed)
@@ -159,7 +154,7 @@ func TestEngineEnforceReturnsRoleResolverError(t *testing.T) {
 	require.False(t, allowed)
 }
 
-func TestEngineInitialLoadUsesLifecycleContext(t *testing.T) {
+func TestEngineInitialLoadUsesInitializeContext(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	loader := NewMockLoader(ctrl)
@@ -177,10 +172,8 @@ func TestEngineInitialLoadUsesLifecycleContext(t *testing.T) {
 	)
 	roles := NewMockUserRoleResolver(ctrl)
 	engine := NewEngine(loader, metrics, roles)
-	lc := fxtest.NewLifecycle(t)
-	RegisterInitialLoad(lc, engine)
 
-	require.NoError(t, lc.Start(ctx))
+	require.NoError(t, engine.Initialize(ctx))
 	require.ErrorIs(t, engine.LastError(), context.Canceled)
 	allowed, err := engine.Enforce(context.Background(), uuid.New(), "/api/v1/users", "GET")
 	require.NoError(t, err)

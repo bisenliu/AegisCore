@@ -23,7 +23,7 @@ type Engine struct {
 	lastErr  error
 }
 
-// NewEngine 构造 Casbin Engine；初始 policy 加载由 Fx lifecycle 执行。
+// NewEngine 构造 Casbin Engine；调用方负责在启动边界显式执行 Initialize。
 func NewEngine(loader Loader, metrics commonmetrics.ReloadMetrics, userRoles UserRoleResolver) *Engine {
 	return &Engine{loader: loader, metrics: metrics, userRoles: userRoles}
 }

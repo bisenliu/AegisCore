@@ -109,6 +109,7 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 		fx.Replace(
 			fx.Annotate(loader, fx.As(new(permissioncasbin.Loader))),
 			fx.Annotate(roles, fx.As(new(permissioncasbin.UserRoleResolver))),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser))),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
 			fx.Annotate(permissionModuleScanner{}, fx.As(new(permissionapplication.RouteCatalogScanner))),
 		),
@@ -155,6 +156,7 @@ func TestPermissionModuleRequiresMetricsProvider(t *testing.T) {
 		fx.Replace(
 			fx.Annotate(permissionModulePolicyLoader{}, fx.As(new(permissioncasbin.Loader))),
 			fx.Annotate(permissionModuleUserRoleResolver{}, fx.As(new(permissioncasbin.UserRoleResolver))),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser))),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
 			fx.Annotate(permissionModuleScanner{}, fx.As(new(permissionapplication.RouteCatalogScanner))),
 		),
@@ -183,6 +185,7 @@ func newPermissionModuleTestApp(
 		fx.Replace(
 			fx.Annotate(store, fx.As(new(permissionapplication.PermissionStore))),
 			fx.Annotate(scanner, fx.As(new(permissionapplication.RouteCatalogScanner))),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser))),
 			&permissioncasbin.Engine{},
 			&permissionredis.Watcher{},
 		),
@@ -249,3 +252,7 @@ func (permissionModuleUserRoleResolver) RolesForUser(context.Context, uuid.UUID)
 func (permissionModuleUserRoleResolver) InvalidateUserRole(uuid.UUID) {}
 
 func (permissionModuleUserRoleResolver) InvalidateAllUserRoles() {}
+
+type permissionModuleUserRoleCacheCloser struct{}
+
+func (permissionModuleUserRoleCacheCloser) Close() error { return nil }
