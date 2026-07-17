@@ -68,14 +68,14 @@ config: # 渲染到 ConfigMap 的非敏感 `AEGISCORE_*` 环境变量。
   AEGISCORE_OBSERVABILITY_TRACING_INSECURE: "false" # 是否允许 insecure OTLP；生产建议 false。
   AEGISCORE_AUTH_JWT_ISSUER: aegiscore-user-services # JWT issuer。
   AEGISCORE_AUTH_JWT_AUDIENCE: aegiscore-users # JWT audience。
-  AEGISCORE_RESOURCES_POSTGRES_USER_DB_HOST: postgres # user_db PostgreSQL 主机或 Service DNS。
-  AEGISCORE_RESOURCES_POSTGRES_USER_DB_PORT: "5432" # user_db PostgreSQL 端口。
-  AEGISCORE_RESOURCES_POSTGRES_USER_DB_DB_NAME: aegiscore_user # user_db 数据库名。
-  AEGISCORE_RESOURCES_POSTGRES_USER_DB_SSLMODE: require # PostgreSQL SSL 模式。
-  AEGISCORE_RESOURCES_POSTGRES_USER_DB_POOL_MAX_OPEN_CONNS: "50" # user_db 最大打开连接数。
-  AEGISCORE_RESOURCES_POSTGRES_USER_DB_POOL_MAX_IDLE_CONNS: "10" # user_db 最大空闲连接数。
-  AEGISCORE_RESOURCES_POSTGRES_USER_DB_POOL_CONN_MAX_LIFETIME: 30m # 单连接最大生命周期。
-  AEGISCORE_RESOURCES_POSTGRES_USER_DB_POOL_CONN_MAX_IDLE_TIME: 10m # 空闲连接最大保留时间。
+  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_HOST: postgres # primary_db PostgreSQL 主机或 Service DNS。
+  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PORT: "5432" # primary_db PostgreSQL 端口。
+  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_DB_NAME: aegiscore_user # primary_db 数据库名。
+  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_SSLMODE: require # PostgreSQL SSL 模式。
+  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_MAX_OPEN_CONNS: "50" # primary_db 最大打开连接数。
+  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_MAX_IDLE_CONNS: "10" # primary_db 最大空闲连接数。
+  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_CONN_MAX_LIFETIME: 30m # 单连接最大生命周期。
+  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_CONN_MAX_IDLE_TIME: 10m # 空闲连接最大保留时间。
   AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_ADDR: redis:6379 # cache_redis 地址。
   AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_DB: "0" # Redis logical database 编号。
   AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_TIMEOUT: 5s # Redis 建连、读写和启动探测统一超时。
@@ -84,15 +84,15 @@ secret: # 外部 Secret 引用配置；chart 不渲染真实 Secret。
   existingSecret: aegiscore-user-services-runtime # 已存在 Secret 名称。
   keys: # Secret 中各敏感字段的键名映射。
     jwtSecret: AEGISCORE_AUTH_JWT_SECRET # JWT HMAC secret。
-    postgresUsername: AEGISCORE_RESOURCES_POSTGRES_USER_DB_USERNAME # user_db 用户名。
-    postgresPassword: AEGISCORE_RESOURCES_POSTGRES_USER_DB_PASSWORD # user_db 密码。
+    postgresUsername: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME # primary_db 用户名。
+    postgresPassword: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD # primary_db 密码。
     redisUsername: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME # cache_redis ACL 用户名。
     redisPassword: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD # cache_redis 密码。
 
 deployment: # runtime Deployment 行为配置。
   revisionHistoryLimit: 5 # 保留的历史 ReplicaSet 数量。
   minReadySeconds: 10 # Pod ready 后至少稳定多少秒才算可用。
-  terminationGracePeriodSeconds: 35 # Pod 终止宽限期，应大于 HTTP shutdown_timeout。
+  terminationGracePeriodSeconds: 150 # Pod 终止宽限期；覆盖 120 秒 Fx Stop 总预算和 30 秒平台余量。
   strategy: # rollout 策略。
     type: RollingUpdate # 使用滚动更新。
     rollingUpdate: # RollingUpdate 参数。

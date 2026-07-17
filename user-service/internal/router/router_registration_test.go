@@ -156,7 +156,7 @@ func newRouterRegistrationRouteParams(t *testing.T, opts routerRegistrationRoute
 		Metrics:               newRouterTestMetricsProvider(t, metricsCfg.Enabled, metricsCfg.Path),
 		TokenVersionValidator: routerRegistrationTokenVersionValidator{},
 		Authorizer:            authorizer,
-		AuthController: authhttp.NewAuthController(authhttp.AuthControllerParams{
+		AuthController: authhttp.NewAuthController(authhttp.AuthControllerOptions{
 			Validator: validator,
 		}),
 		PermissionController: permissionhttp.NewPermissionController(nil, nil, validator),

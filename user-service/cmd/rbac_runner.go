@@ -36,6 +36,7 @@ func runRBACSeedCommand(ctx context.Context, configPath string, opts rbacSeedOpt
 	defer func() {
 		err = errors.Join(err, cleanup())
 	}()
+	ctx = contextWithRBACLogger(ctx, deps)
 
 	result, err := deps.service.Seed(ctx, roleseed.SeedOptions{ReactivateSystem: opts.reactivateSystem, SyncSystemBindings: opts.syncSystemBindings})
 	if err != nil {
@@ -53,6 +54,7 @@ func runAssignSuperAdminCommand(ctx context.Context, configPath string, userID u
 	defer func() {
 		err = errors.Join(err, cleanup())
 	}()
+	ctx = contextWithRBACLogger(ctx, deps)
 
 	result, err := deps.service.AssignSuperAdmin(ctx, userID)
 	if err != nil {

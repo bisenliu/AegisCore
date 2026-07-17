@@ -1,7 +1,9 @@
 package datastore
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -15,21 +17,45 @@ import (
 
 const postgresDriver = "pgx"
 
-// OpenPostgres 打开 PostgreSQL 连接池并应用连接池设置，但不执行 ping。
+// OpenPostgres 打开单个具名 PostgreSQL 连接池并应用连接池设置，但不执行启动探测。
 func OpenPostgres(name string, cfg resources.PostgresConfig) (*sql.DB, error) {
 	cfg.ApplyDefaults()
-	db, err := sql.Open(postgresDriver, PostgresDSN(cfg))
+	db, err := sql.Open(postgresDriver, postgresDSN(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("open postgres %s: %w", name, err)
 	}
 	applyPostgresPoolConfig(db, cfg.Pool)
-	// Fx 生命周期 provider 统一执行 PingContext，使启动阶段一致报告依赖可用性。
 	return db, nil
+}
+
+// PingPostgres 使用稳定的单资源 timeout 执行启动探测，失败时关闭连接池。
+func PingPostgres(ctx context.Context, name string, db *sql.DB) error {
+	pingCtx, cancel := context.WithTimeout(ctx, resources.DefaultPostgresPingTimeout())
+	defer cancel()
+	if err := db.PingContext(pingCtx); err != nil {
+		return errors.Join(
+			fmt.Errorf("ping postgres %s: %w", name, err),
+			ClosePostgres(name, db),
+		)
+	}
+	return nil
+}
+
+// ClosePostgres 关闭连接池并保留资源名称。
+func ClosePostgres(name string, db *sql.DB) error {
+	if err := db.Close(); err != nil {
+		return fmt.Errorf("close postgres %s: %w", name, err)
+	}
+	return nil
 }
 
 // PostgresDSN 根据共享资源配置构造 pgx 使用的连接字符串。
 func PostgresDSN(cfg resources.PostgresConfig) string {
 	cfg.ApplyDefaults()
+	return postgresDSN(cfg)
+}
+
+func postgresDSN(cfg resources.PostgresConfig) string {
 	databasePath := "/" + cfg.DBName
 	u := url.URL{
 		Scheme:  "postgres",

@@ -131,8 +131,8 @@ func (c Config) Validate() error {
 	if _, ok := c.Resources.Redis[serviceresources.NameCacheRedis]; !ok {
 		errs = append(errs, commonconfig.FieldError("resources.redis."+serviceresources.NameCacheRedis, "is required"))
 	}
-	if _, ok := c.Resources.Postgres[serviceresources.NameUserDB]; !ok {
-		errs = append(errs, commonconfig.FieldError("resources.postgres."+serviceresources.NameUserDB, "is required"))
+	if _, ok := c.Resources.Postgres[serviceresources.NamePrimaryDB]; !ok {
+		errs = append(errs, commonconfig.FieldError("resources.postgres."+serviceresources.NamePrimaryDB, "is required"))
 	}
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, validateFeatureCache("rbac.user_role_cache", c.RBAC.UserRoleCache)...)

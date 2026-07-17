@@ -48,7 +48,7 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 - `fxgraph`：生成 Fx 依赖图。
 - `healthcheck --url <url> --timeout <duration>`：在容器内无 shell、wget、curl 或 grep 依赖地检查 `/readyz`。
 
-`user-service/internal/bootstrap/` 构造应用、HTTP server 和默认关闭的独立 pprof 诊断监听。`user-service/internal/config/` 拥有服务根配置、认证/RBAC feature cache、Ent 配置、具名 resources 和服务级校验，并复用 `common/runtime/config` 的严格 loader。`user-service/internal/providers/` 提供 Gin、Ent、Postgres、Redis、auth verifier、metrics、health 和 routes provider。
+`user-service/internal/bootstrap/` 构造应用、HTTP server 和默认关闭的独立 pprof 诊断监听，并通过 `AppOptions` 接收 CLI 已解析的 service config、派生共享 runtime config 和组装 Fx options。`user-service/internal/config/` 拥有服务根配置、认证/RBAC feature cache、Ent 配置、具名 resources 和服务级校验，并复用 `common/runtime/config` 的严格 loader。`user-service/internal/providers/` 提供 Gin、Ent、Postgres、Redis、auth verifier、metrics、health 和 routes provider，不读取配置文件。
 
 ## 4. HTTP 路由结构
 
@@ -88,16 +88,17 @@ pprof 不挂载到业务 router。临时诊断时通过 `PPROF_ENABLED=true` 和
 - `infrastructure/`：Postgres、Redis、Casbin 等适配器。
 - `transport/http/`：controller、request、response、mapper、routes 和输入校验。
 
-分层约束由 `user-service/scripts/architecture-lint.sh` 检查。
+`domain/` 和 `application/` 生产代码保持框架无关，不承载仅服务于 Fx DI 的 import、`fx.In` 或 `name`/`optional` tag；无 DI metadata 需求的普通 application 构造器由 feature 根 `fx.go` 直接注册，确有 named/optional 等 metadata 或配置转换需求时才由 composition adapter 转换。分层约束由 `user-service/scripts/architecture-lint.sh` 检查。
 
 ## 6. 核心流程
 
 ### 6.1 服务启动
 
-1. `aegiscore-user-services serve --config ./configs/config.yaml` 进入 `runServe`。
-2. `bootstrap.NewApp(configPath)` 构造 Fx app。
-3. provider 初始化配置、logger、datastore、auth、metrics、health、routes 和 HTTP server。
-4. 收到 SIGINT 或 SIGTERM 后使用独立 stop timeout 优雅关闭。
+1. `aegiscore-user-services serve --config ./configs/config.yaml` 进入 `runServe`，CLI 单次解析并校验 service config。
+2. `bootstrap.NewApp(cfg)` 通过 `AppOptions` supply 同一个 service config 及其派生的共享 runtime config，并组装 logger、datastore、auth、metrics、health、routes 和 HTTP server。
+3. `fx.New` 同步构建依赖图、执行 invoke 及其 constructor 依赖；该阶段不受 `runtime.lifecycle.start_timeout` 限制。
+4. CLI 使用同一配置值建立显式 Start context 并调用 `App.Start`，该 context 约束全部 `OnStart` hooks。
+5. 收到外部终止信号或内部 Fx shutdown signal 后，CLI 使用同一配置值建立显式 Stop context 并调用一次 `App.Stop`。
 
 ### 6.2 登录和会话
 
@@ -132,7 +133,7 @@ pprof 不挂载到业务 router。临时诊断时通过 `PPROF_ENABLED=true` 和
 
 ## 7. 部署和观测
 
-共享核心配置只含 `app/server/log/observability`。Redis/PostgreSQL 类型由 `common/runtime/resources` 提供，user-service 在 `resources.redis.cache_redis` 与 `resources.postgres.user_db` 声明实际资源；feature cache 由 `auth.token_version_cache` 和 `rbac.user_role_cache` 各自拥有。日志输出到 stdout/stderr，tracing 启用后固定使用 OTLP，进程时区由平台 `TZ` 控制。
+共享核心配置只含 `app/server/log/observability`。Redis/PostgreSQL 类型由 `common/runtime/resources` 提供，user-service 在 `resources.redis.cache_redis` 与 `resources.postgres.primary_db` 声明实际资源；feature cache 由 `auth.token_version_cache` 和 `rbac.user_role_cache` 各自拥有。日志输出到 stdout/stderr，tracing 启用后固定使用 OTLP，进程时区由平台 `TZ` 控制。
 
 - Dockerfile：`deployments/docker/user-service.Dockerfile` 使用 BuildKit manifest-first 依赖层、只读 Go module 解析、静态编译和固定 digest 的 `gcr.io/distroless/static-debian12:nonroot` 运行时；运行镜像身份为 UID/GID `65532`，不包含 shell、包管理器、下载工具或 Atlas。
 - Compose：`deployments/compose/docker-compose.yml` 继承 Distroless `nonroot` 身份，user-service healthcheck 使用 exec-form 调用原生 `healthcheck` CLI。

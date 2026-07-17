@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"go.uber.org/fx"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
@@ -24,14 +23,11 @@ type WatcherStatus interface {
 
 // WatcherParams 包含 RBAC policy watcher 所需依赖。
 type WatcherParams struct {
-	fx.In
-
-	Lifecycle fx.Lifecycle
-	Store     *Store
-	Tracker   *VersionTracker
-	Engine    permissionapplication.PolicyReloadEngine
-	Log       *zap.Logger
-	Metrics   permissionapplication.Metrics
+	Store   *Store
+	Tracker *VersionTracker
+	Engine  permissionapplication.PolicyReloadEngine
+	Log     *zap.Logger
+	Metrics permissionapplication.Metrics
 }
 
 // Watcher 监听 RBAC policy 分布式版本并执行补偿 reload。
@@ -50,19 +46,9 @@ type Watcher struct {
 	lastErr error
 }
 
-// NewWatcher 构造并注册 RBAC policy watcher 生命周期。
+// NewWatcher 只构造 RBAC policy watcher；调用方负责显式调用 Start 和 Stop。
 func NewWatcher(params WatcherParams) *Watcher {
-	watcher := newWatcherWithMetrics(params.Store, params.Tracker, params.Engine, params.Log, defaultCheckInterval, params.Metrics)
-	params.Lifecycle.Append(fx.Hook{
-		OnStart: func(context.Context) error {
-			watcher.Start()
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			return watcher.Stop(ctx)
-		},
-	})
-	return watcher
+	return newWatcherWithMetrics(params.Store, params.Tracker, params.Engine, params.Log, defaultCheckInterval, params.Metrics)
 }
 
 func newWatcherWithMetrics(store policySubscriptionStore, tracker *VersionTracker, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, checkInterval time.Duration, metrics permissionapplication.Metrics) *Watcher {
@@ -79,10 +65,13 @@ func newWatcherWithMetrics(store policySubscriptionStore, tracker *VersionTracke
 func (w *Watcher) Start() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.cancel != nil {
+	if w.done != nil {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	if w.log != nil {
+		ctx = logger.ToContext(ctx, w.log)
+	}
 	w.cancel = cancel
 	w.done = make(chan struct{})
 	w.running = true
@@ -93,19 +82,24 @@ func (w *Watcher) Start() {
 
 // Stop 停止 Pub/Sub 监听和定时版本补偿检查。
 func (w *Watcher) Stop(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	w.mu.Lock()
 	cancel := w.cancel
 	done := w.done
-	w.cancel = nil
-	w.done = nil
 	w.mu.Unlock()
-	if cancel == nil {
+	if cancel == nil || done == nil {
 		return nil
 	}
 	cancel()
 	select {
 	case <-done:
 		w.mu.Lock()
+		if w.done == done {
+			w.cancel = nil
+			w.done = nil
+		}
 		w.running = false
 		w.mu.Unlock()
 		return nil
@@ -161,6 +155,10 @@ func (w *Watcher) HandlePayload(ctx context.Context, payload string) {
 func (w *Watcher) run(ctx context.Context, done chan struct{}) {
 	defer func() {
 		w.mu.Lock()
+		if w.done == done {
+			w.cancel = nil
+			w.done = nil
+		}
 		w.running = false
 		w.mu.Unlock()
 		close(done)

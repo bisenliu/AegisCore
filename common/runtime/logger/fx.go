@@ -1,7 +1,6 @@
 package logger
 
 import (
-	"context"
 	"errors"
 	"syscall"
 
@@ -17,14 +16,14 @@ func NewLogger(lc fx.Lifecycle, cfg *config.Config) (*zap.Logger, error) {
 	if err != nil {
 		return nil, err
 	}
-	lc.Append(fx.Hook{OnStop: func(context.Context) error {
+	lc.Append(fx.StopHook(func() error {
 		err := log.Sync()
 		if isIgnorableSyncError(err) {
 			// 某些平台的 stdout/stderr 不支持 fsync，关闭流程不应因此失败。
 			return nil
 		}
 		return err
-	}})
+	}))
 	return log, nil
 }
 

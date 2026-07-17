@@ -24,12 +24,12 @@ func TestSQLDBCollectorExportsPoolStats(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	db.SetMaxOpenConns(7)
 
-	collector, err := NewSQLDBCollector(SQLDBCollectorOptions{Resource: "user_db", DB: db})
+	collector, err := NewSQLDBCollector(SQLDBCollectorOptions{Resource: "primary_db", DB: db})
 	require.NoError(t, err, "NewSQLDBCollector")
 	require.NoError(t, provider.Register(collector), "Register")
 
 	metric := firstMetric(t, gatherFamily(t, provider, sqlMaxOpenConnectionsMetricName))
-	assertMetricLabel(t, metric, LabelResource, "user_db")
+	assertMetricLabel(t, metric, LabelResource, "primary_db")
 	require.Equal(t, float64(7), metric.GetGauge().GetValue(), "max open gauge")
 	assertHasFamily(t, provider, sqlOpenConnectionsMetricName)
 	assertHasFamily(t, provider, sqlWaitCountMetricName)
@@ -39,7 +39,7 @@ func TestSQLDBCollectorExportsPoolStats(t *testing.T) {
 func TestSQLDBCollectorRejectsInvalidOptions(t *testing.T) {
 	_, err := NewSQLDBCollector(SQLDBCollectorOptions{})
 	require.ErrorContains(t, err, "resource")
-	_, err = NewSQLDBCollector(SQLDBCollectorOptions{Resource: "user_db"})
+	_, err = NewSQLDBCollector(SQLDBCollectorOptions{Resource: "primary_db"})
 	require.ErrorContains(t, err, "db")
 }
 

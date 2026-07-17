@@ -28,6 +28,10 @@ func WithRedisTracerProvider(provider trace.TracerProvider) RedisClientOption {
 // OpenRedisClient 根据配置构造 Redis 客户端，但不检查连接可用性。
 func OpenRedisClient(redisCfg resources.RedisConfig, options ...RedisClientOption) *redis.Client {
 	redisCfg.ApplyDefaults()
+	return openRedisClient(redisCfg, options...)
+}
+
+func openRedisClient(redisCfg resources.RedisConfig, options ...RedisClientOption) *redis.Client {
 	opts := redisClientOptions{tracerProvider: otel.GetTracerProvider()}
 	for _, option := range options {
 		if option != nil {

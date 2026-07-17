@@ -20,7 +20,7 @@ const (
 	LabelCode = "code"
 	// LabelResult 标识固定结果枚举，例如 hit、miss、success 或 error。
 	LabelResult = "result"
-	// LabelResource 标识固定运行时资源名，例如 user_db 或 cache_redis。
+	// LabelResource 标识固定运行时资源名，例如 primary_db 或 cache_redis。
 	LabelResource = "resource"
 	// LabelCache 标识固定本地缓存实例名。
 	LabelCache = "cache"

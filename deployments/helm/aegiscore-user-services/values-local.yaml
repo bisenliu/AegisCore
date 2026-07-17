@@ -4,8 +4,8 @@
 config: # 覆盖非敏感运行时配置。
   AEGISCORE_APP_ENVIRONMENT: local # 将运行环境标记为 local，避免生产类安全校验。
   AEGISCORE_OBSERVABILITY_TRACING_ENABLED: "false" # 本地默认不连接 OTLP Collector。
-  AEGISCORE_RESOURCES_POSTGRES_USER_DB_HOST: postgres # 本地 PostgreSQL Service 名称。
-  AEGISCORE_RESOURCES_POSTGRES_USER_DB_SSLMODE: disable # 本地数据库通常不启用 TLS。
+  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_HOST: postgres # 本地 PostgreSQL Service 名称。
+  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_SSLMODE: disable # 本地数据库通常不启用 TLS。
   AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_ADDR: redis:6379 # 本地 Redis Service 地址。
 
 autoscaling: # 本地环境 HPA 覆盖。

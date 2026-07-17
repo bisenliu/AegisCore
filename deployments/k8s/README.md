@@ -25,13 +25,19 @@
 
 user-service 运行时镜像基于 Distroless static nonroot，Kubernetes Deployment 和 RBAC seed Job 的 `runAsUser`、`runAsGroup`、`fsGroup` 均为 `65532`。探针继续使用 kubelet `httpGet` 请求 `/livez`、`/readyz` 和 `/startupz`，不依赖容器内 shell 或 healthcheck 命令。
 
+## 终止预算
+
+user-service Deployment 默认 `terminationGracePeriodSeconds` 为 150 秒，用于覆盖应用默认 120 秒 Fx `runtime.lifecycle.stop_timeout` 和 30 秒平台余量。Fx Stop 是全部 `OnStop` hook 按逆注册顺序串行执行的进程级总预算；HTTP 25 秒、auth session purge workerpool 30 秒或 exporter I/O timeout 等局部预算不能替代该总预算。
+
+应用完成请求排空、后台任务停止、tracing flush、datastore 关闭和 logger sync 后会立即退出，不会主动等待完整 150 秒。当前清单没有 `preStop`；后续新增或延长 `preStop` 时必须把执行上界计入 30 秒平台余量，余量不足时同步提高原生清单、Helm 默认值、配置一致性测试和说明。
+
 ## Secret 边界
 
 `secret.example.yaml` 只说明必需键名，不应直接用于生产。生产环境应由部署系统、GitOps Secret、密钥管理系统或 CI/CD 注入以下键：
 
 - `AEGISCORE_AUTH_JWT_SECRET`
-- `AEGISCORE_RESOURCES_POSTGRES_USER_DB_USERNAME`
-- `AEGISCORE_RESOURCES_POSTGRES_USER_DB_PASSWORD`
+- `AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME`
+- `AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD`
 - `AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME`
 - `AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD`
 
@@ -50,6 +56,7 @@ grep -q 'atlas migrate apply\|migrate apply' /tmp/aegiscore-user-services-k8s.ya
 grep -q 'runAsUser: 65532' /tmp/aegiscore-user-services-k8s.yaml
 grep -q 'runAsGroup: 65532' /tmp/aegiscore-user-services-k8s.yaml
 grep -q 'fsGroup: 65532' /tmp/aegiscore-user-services-k8s.yaml
+grep -q 'terminationGracePeriodSeconds: 150' /tmp/aegiscore-user-services-k8s.yaml
 ```
 
 有可用集群或可用 OpenAPI cache 时，执行 client dry-run：

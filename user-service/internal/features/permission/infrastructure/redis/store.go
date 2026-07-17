@@ -6,22 +6,12 @@ import (
 	"os"
 
 	rediscmd "github.com/redis/go-redis/v9"
-	"go.uber.org/fx"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
-
-// StoreParams 包含 RBAC policy Redis store 所需依赖。
-type StoreParams struct {
-	fx.In
-
-	Client *rediscmd.Client `name:"cache_redis"`
-	Cfg    *config.Config
-	Log    *zap.Logger
-}
 
 // Store 负责 RBAC policy Redis 版本和 Pub/Sub 通知。
 type Store struct {
@@ -43,12 +33,12 @@ type policySubscriptionStore interface {
 }
 
 // NewStore 构造 RBAC policy Redis store。
-func NewStore(params StoreParams) (*Store, error) {
-	keys, err := NewKeyCatalog(params.Cfg.App.Name)
+func NewStore(client *rediscmd.Client, cfg *config.Config, log *zap.Logger) (*Store, error) {
+	keys, err := NewKeyCatalog(cfg.App.Name)
 	if err != nil {
 		return nil, fmt.Errorf("new rbac policy redis keys: %w", err)
 	}
-	return newStore(params.Client, keys, defaultInstanceID(), params.Log), nil
+	return newStore(client, keys, defaultInstanceID(), log), nil
 }
 
 func newStore(client *rediscmd.Client, keys KeyCatalog, instanceID string, log *zap.Logger) *Store {

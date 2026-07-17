@@ -37,7 +37,7 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, "127.0.0.1:6379", cfg.Resources.Redis[serviceresources.NameCacheRedis].Addr)
 	require.Equal(t, 7*time.Second, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
 	require.Len(t, cfg.Resources.Postgres, 1)
-	require.Equal(t, 20, cfg.Resources.Postgres[serviceresources.NameUserDB].Pool.MaxOpenConns)
+	require.Equal(t, 20, cfg.Resources.Postgres[serviceresources.NamePrimaryDB].Pool.MaxOpenConns)
 	runtime := cfg.RuntimeConfig()
 	require.Equal(t, "aegiscore-test", runtime.App.Name)
 	require.Equal(t, 21*time.Second, runtime.Runtime.Lifecycle.StartTimeout)
@@ -160,7 +160,7 @@ func TestLoadAppliesResourceDefaultsBeforeValidation(t *testing.T) {
 	cfg := loadServiceConfig(t, serviceConfigYAMLWithResourceDefaults())
 
 	require.Equal(t, commonresources.DefaultRedisTimeout, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
-	postgres := cfg.Resources.Postgres[serviceresources.NameUserDB]
+	postgres := cfg.Resources.Postgres[serviceresources.NamePrimaryDB]
 	require.Equal(t, commonresources.DefaultPostgresSSLMode, postgres.SSLMode)
 	require.Equal(t, commonresources.DefaultPostgresMaxOpenConns, postgres.Pool.MaxOpenConns)
 	require.Equal(t, commonresources.DefaultPostgresMaxIdleConns, postgres.Pool.MaxIdleConns)
@@ -182,7 +182,7 @@ func TestLoadRepositoryConfig(t *testing.T) {
 	require.True(t, cfg.Server.HTTP.Enabled)
 	require.False(t, cfg.Server.GRPC.Enabled)
 	require.Contains(t, cfg.Resources.Redis, serviceresources.NameCacheRedis)
-	require.Contains(t, cfg.Resources.Postgres, serviceresources.NameUserDB)
+	require.Contains(t, cfg.Resources.Postgres, serviceresources.NamePrimaryDB)
 }
 
 func TestValidateRejectsInvalidAuthConfig(t *testing.T) {
@@ -199,10 +199,10 @@ func TestValidateRejectsShortProductionJWTSecret(t *testing.T) {
 
 func TestValidateRejectsMissingRequiredResources(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "  cache_redis:\n", "  other_redis:\n", 1)
-	yaml = strings.Replace(yaml, "  user_db:\n", "  other_db:\n", 1)
+	yaml = strings.Replace(yaml, "  primary_db:\n", "  other_db:\n", 1)
 	err := loadServiceConfigError(t, yaml)
 	require.Contains(t, err.Error(), "resources.redis.cache_redis is required")
-	require.Contains(t, err.Error(), "resources.postgres.user_db is required")
+	require.Contains(t, err.Error(), "resources.postgres.primary_db is required")
 }
 
 func TestValidateReportsFullResourceFieldPath(t *testing.T) {
@@ -305,7 +305,7 @@ resources:
       db: 2
       timeout: 7s
   postgres:
-    user_db:
+    primary_db:
       host: 127.0.0.1
       port: 15432
       username: aegiscore

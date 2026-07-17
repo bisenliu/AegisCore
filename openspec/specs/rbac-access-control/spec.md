@@ -1,1241 +1,522 @@
 ## Purpose
 
-定义 user-service 的 RBAC 访问控制能力，覆盖权限目录、角色、角色权限、用户角色、Casbin 授权、系统 seed 和超级管理员引导。
+定义 user-service 的 RBAC 访问控制能力，覆盖权限目录、角色、角色权限、用户角色、Casbin 授权、策略同步、系统数据引导和超级管理员管理。
+
 ## Requirements
-### Requirement: 权限目录管理
 
-系统 MUST 提供权限目录创建、更新、启停、查询、列表和路由差异分析能力，用于描述可授权的 HTTP 资源和动作。权限创建 MUST 返回新建权限实体；权限更新、启用和停用成功后 MUST 返回无实体成功响应，调用方如需最新实体 MUST 使用查询接口读取。公开权限创建 API MUST NOT 接收或使用调用方提供的系统权限标记，普通创建路径 MUST 创建非系统权限。
+### Requirement: 权限目录与路由诊断
 
-#### Scenario: 创建权限
+系统 MUST 提供权限创建、更新、启停、详情、列表和路由差异诊断能力。权限 MUST 使用稳定业务标识描述可授权的 HTTP method、route template 和业务模块；公开写接口 MUST NOT 允许调用方创建或篡改系统权限。
 
-- **WHEN** 授权调用方提供合法权限标识、方法、路径和描述
-- **THEN** 系统 MUST 创建权限记录，并使其可参与后续角色绑定和授权判断
-- **AND** 系统 MUST 返回新建权限实体
-- **AND** 新建权限 MUST 为非系统权限
-- **AND** 普通权限创建路径 MUST NOT 允许调用方制造系统权限
+#### Scenario: 创建普通权限
 
-#### Scenario: 创建权限忽略或拒绝公开系统标记
+- **WHEN** 授权调用方提交合法且唯一的权限标识、HTTP method、route template、模块和描述
+- **THEN** 系统 MUST 创建可供角色绑定和策略加载使用的非系统权限
+- **AND** 成功响应 MUST 返回新建权限实体
 
-- **WHEN** 授权调用方通过公开权限创建 API 提交 `system` 字段
-- **THEN** 系统 MUST NOT 创建系统权限
-- **AND** 若 HTTP JSON 绑定启用未知字段拒绝，系统 MUST 返回请求错误
-- **AND** 若 HTTP JSON 绑定忽略未知字段，系统 MUST 创建非系统权限
+#### Scenario: 公开接口不能创建系统权限
 
-#### Scenario: 更新权限不返回实体
+- **WHEN** 调用方通过公开权限创建接口提交系统权限标记
+- **THEN** 系统 MUST 拒绝未知字段或忽略该字段并创建非系统权限
+- **AND** 系统 MUST NOT 因调用方输入创建系统权限
 
-- **WHEN** 授权调用方更新存在的权限目录记录且输入合法
-- **THEN** 系统 MUST 持久化权限元数据变更
-- **AND** 成功响应 MUST NOT 包含权限实体响应体
-- **AND** 持久化层 MUST NOT 为构造成功响应而在更新后重新查询该权限实体
+#### Scenario: 更新和启停权限
 
-#### Scenario: 启停权限不返回实体
+- **WHEN** 授权调用方使用合法输入更新、启用或停用存在的普通权限
+- **THEN** 系统 MUST 持久化对应变更
+- **AND** 成功响应 MUST NOT 包含更新后的权限实体，调用方 MUST 通过查询接口读取最新状态
 
-- **WHEN** 授权调用方启用或停用存在的权限目录记录
-- **THEN** 系统 MUST 持久化权限启用状态变更
-- **AND** 成功响应 MUST NOT 包含权限实体响应体
-- **AND** 持久化层 MUST NOT 为构造成功响应而在更新后重新查询该权限实体
+#### Scenario: 权限输入或目标无效
 
-#### Scenario: 权限输入非法
+- **WHEN** 权限标识、HTTP method、route template、模块或描述不满足 domain validation，或者目标权限不存在或受系统保护
+- **THEN** 系统 MUST 拒绝变更并返回可区分的业务错误
 
-- **WHEN** 权限方法、路径、标识或描述不满足 domain validation
-- **THEN** 系统 MUST 拒绝创建或更新，并返回一致的校验错误
+#### Scenario: 查询权限目录
 
-#### Scenario: 路由差异分析
+- **WHEN** 授权调用方查询权限详情或按模块、HTTP method、状态、系统标记分页查询权限
+- **THEN** 系统 MUST 按稳定权限 ID 排序返回当前权限数据和共享 pagination 信息
 
-- **WHEN** 系统扫描已注册 HTTP 路由并与权限目录比较
-- **THEN** 系统 MUST 能识别 missing、stale 或不一致的权限定义，且 MUST NOT 创建权限、修改权限状态或绑定角色
+#### Scenario: 诊断路由差异
 
-#### Scenario: 可授权路由发现
+- **WHEN** 系统比较已注册的可授权 HTTP 路由与权限目录
+- **THEN** 系统 MUST 返回 missing、stale 和不一致的权限定义
+- **AND** 诊断 MUST NOT 创建权限、修改权限状态或改变角色绑定
 
-- **WHEN** 系统构造 route diff 诊断输入
-- **THEN** 系统 MUST 排除 `OPTIONS`、`/api/v1/` 外路径和认证公开或会话控制路由，且 application 层 MUST NOT 直接依赖 Gin engine
+#### Scenario: 发现可授权路由
 
-### Requirement: 角色与权限绑定
+- **WHEN** 系统构造路由差异诊断输入
+- **THEN** 系统 MUST 排除 `OPTIONS`、`/api/v1/` 之外的路由以及认证公开或会话控制路由
+- **AND** application 层 MUST NOT 直接依赖 Gin engine
 
-系统 MUST 提供角色创建、更新、查询、列表和角色权限绑定能力，并保证绑定引用的权限存在且状态可用。角色创建 MUST 返回新建角色实体；角色更新、启用和停用成功后 MUST 返回无实体成功响应。角色权限绑定的替换、系统绑定补齐和系统绑定同步 MUST 使用批量写入方式新增多条绑定，并保持事务性和错误语义。公开角色创建 API MUST NOT 接收或使用调用方提供的系统角色标记，普通创建路径 MUST 创建非系统角色。
+### Requirement: 角色目录与角色权限绑定
 
-#### Scenario: 创建角色并绑定权限
+系统 MUST 提供角色创建、更新、启停、详情、列表和角色权限绑定能力。公开写接口 MUST NOT 允许调用方创建或篡改系统角色；角色权限关系 MUST 只引用存在且启用的权限，并在完整替换时保持事务性。
 
-- **WHEN** 授权调用方创建角色并指定合法权限集合
-- **THEN** 系统 MUST 持久化角色、写入角色权限绑定，并使授权策略可同步使用
-- **AND** 新建角色 MUST 为非系统角色
-- **AND** 普通角色创建路径 MUST NOT 允许调用方制造系统角色
+#### Scenario: 创建普通角色
 
-#### Scenario: 创建角色忽略或拒绝公开系统标记
+- **WHEN** 授权调用方提交合法角色信息和可用权限集合
+- **THEN** 系统 MUST 创建非系统角色并写入角色权限绑定
+- **AND** 成功响应 MUST 返回新建角色实体
 
-- **WHEN** 授权调用方通过公开角色创建 API 提交 `system` 字段
-- **THEN** 系统 MUST NOT 创建系统角色
-- **AND** 若 HTTP JSON 绑定启用未知字段拒绝，系统 MUST 返回请求错误
-- **AND** 若 HTTP JSON 绑定忽略未知字段，系统 MUST 创建非系统角色
+#### Scenario: 公开接口不能创建系统角色
 
-#### Scenario: 更新角色不返回实体
+- **WHEN** 调用方通过公开角色创建接口提交系统角色标记
+- **THEN** 系统 MUST 拒绝未知字段或忽略该字段并创建非系统角色
+- **AND** 系统 MUST NOT 因调用方输入创建系统角色
 
-- **WHEN** 授权调用方更新存在的角色记录且输入合法
-- **THEN** 系统 MUST 持久化角色元数据变更
-- **AND** 成功响应 MUST NOT 包含角色实体响应体
-- **AND** 持久化层 MUST NOT 为构造成功响应而在更新后重新查询该角色实体
+#### Scenario: 更新和启停角色
 
-#### Scenario: 启停角色不返回实体
+- **WHEN** 授权调用方使用合法输入更新、启用或停用存在的普通角色
+- **THEN** 系统 MUST 持久化对应变更
+- **AND** 成功响应 MUST NOT 包含更新后的角色实体，调用方 MUST 通过查询接口读取最新状态
 
-- **WHEN** 授权调用方启用或停用存在的角色记录
-- **THEN** 系统 MUST 持久化角色启用状态变更
-- **AND** 成功响应 MUST NOT 包含角色实体响应体
-- **AND** 持久化层 MUST NOT 为构造成功响应而在更新后重新查询该角色实体
+#### Scenario: 系统角色受保护
 
-#### Scenario: 绑定不存在权限
+- **WHEN** 普通角色接口尝试修改或停用系统角色
+- **THEN** 系统 MUST 拒绝操作并保持系统角色及其基线语义不变
 
-- **WHEN** 角色绑定请求引用不存在或不可用的权限
-- **THEN** 系统 MUST 拒绝绑定并保持已有角色权限关系不被破坏
+#### Scenario: 查询角色
 
-#### Scenario: 角色通过权限端口校验
+- **WHEN** 授权调用方查询角色详情或分页查询角色
+- **THEN** 系统 MUST 返回角色数据、权限摘要和共享 pagination 信息
 
-- **WHEN** 角色 application 需要校验权限 ID
-- **THEN** 角色 feature MUST 通过权限 application 查询端口校验，不得导入 permission infrastructure
+#### Scenario: 绑定权限前校验
 
-#### Scenario: 停用角色
+- **WHEN** 角色权限写请求引用不存在或已停用的权限
+- **THEN** 系统 MUST 拒绝写入并保持已有角色权限关系不变
+- **AND** role application MUST 通过 permission application 拥有的最小查询端口校验权限，MUST NOT 导入 permission infrastructure
 
-- **WHEN** 角色已停用
-- **THEN** 通过该角色形成的绑定 MUST NOT 在有效权限查询或 Casbin policy 加载中授予访问权限
-
-#### Scenario: 查询角色列表
-
-- **WHEN** 授权调用方分页查询角色
-- **THEN** 系统 MUST 返回角色列表、权限摘要和共享 pagination 信息
-
-#### Scenario: 批量替换角色权限绑定
+#### Scenario: 完整替换角色权限
 
 - **WHEN** 授权调用方使用合法权限集合替换角色的完整权限绑定
 - **THEN** 系统 MUST 在同一事务中删除旧绑定并批量写入新绑定
-- **AND** 任一新增绑定发生非幂等错误时，系统 MUST 回滚本次删除和新增
+- **AND** 任一写入发生非幂等错误时系统 MUST 回滚全部变更
 
-#### Scenario: 批量维护系统角色权限绑定
+#### Scenario: 停用角色不再授权
 
-- **WHEN** RBAC seed 补齐或同步系统角色权限绑定
-- **THEN** 系统 MUST 批量新增缺失绑定
-- **AND** 已存在绑定的唯一冲突 MUST 保持幂等成功语义
-- **AND** 非唯一冲突错误 MUST 使本次操作失败并保持既有事务回滚语义
+- **WHEN** 角色被停用
+- **THEN** 该角色 MUST NOT 出现在用户有效角色、有效权限或 Casbin policy 中
 
-### Requirement: RBAC 查询索引支撑
+#### Scenario: 维护系统角色权限基线
 
-系统 MUST 为 RBAC 角色、权限、用户角色绑定、角色权限绑定和授权策略加载维护与稳定访问路径匹配的数据库索引，并通过 Ent schema 和 Atlas migration 交付可审查的结构变更。
+- **WHEN** seed 补齐或同步系统角色权限绑定
+- **THEN** 系统 MUST 批量维护绑定并把已有绑定视为幂等成功
+- **AND** 非唯一冲突错误 MUST 使本次事务失败
 
-#### Scenario: 角色列表和授权回源索引
+### Requirement: 用户角色绑定与有效权限
 
-- **WHEN** 系统分页查询角色、按启用状态过滤角色或在授权热路径回源查询用户启用角色
-- **THEN** 角色表 MUST 提供支持过滤字段和 `role_id` 稳定排序的索引
+系统 MUST 支持查询、添加、移除和完整替换用户角色绑定，并基于用户当前启用角色及其启用权限提供有效权限。写路径 MUST 校验用户和角色状态，失败时 MUST 保持原绑定和同步状态不变。
 
-#### Scenario: 权限列表索引
+#### Scenario: 绑定启用角色
 
-- **WHEN** 系统分页查询权限并按模块、HTTP 方法、启用状态或系统权限标记过滤
-- **THEN** 权限表 MUST 提供支持常用过滤字段和 `permission_id` keyset 排序的索引
+- **WHEN** 授权调用方将存在且启用的角色绑定给存在且未软删除的用户
+- **THEN** 系统 MUST 写入用户角色关系并使后续授权能够使用该角色
 
-#### Scenario: 用户角色绑定反向索引
+#### Scenario: 绑定目标无效
 
-- **WHEN** 系统从角色侧 join 或反查用户角色绑定
-- **THEN** 用户角色绑定表 MUST 提供以 `role_id` 起始并包含 `user_id` 的索引
+- **WHEN** 用户角色写请求引用不存在或已软删除的用户、不存在的角色或已停用角色
+- **THEN** 系统 MUST 拒绝写入并返回明确错误
+- **AND** 系统 MUST NOT 改变已有关系、失效缓存或发送 policy change 通知
 
-#### Scenario: 角色权限绑定反向索引
+#### Scenario: 完整替换用户角色
 
-- **WHEN** 系统从权限侧 join 或反查角色权限绑定
-- **THEN** 角色权限绑定表 MUST 提供以 `permission_id` 起始并包含 `role_id` 的索引
-
-#### Scenario: RBAC 索引不改变授权语义
-
-- **WHEN** RBAC 查询索引发生调整
-- **THEN** 权限目录、角色绑定、用户角色绑定、有效权限聚合、Casbin policy loader、policy sync 和超级管理员通配授权的业务结果 MUST 保持不变
-
-### Requirement: 用户角色绑定
-
-系统 MUST 支持将启用角色绑定到用户，并为授权判断提供用户有效权限查询能力。用户角色替换 MUST 使用批量写入方式新增多条绑定，并保持事务性和错误语义。用户角色绑定写路径 MUST 拒绝不存在或已停用的角色，且任一角色不可绑定时 MUST 不写入新的用户角色关系。
-
-#### Scenario: 绑定角色给用户
-
-- **WHEN** 授权调用方把存在且启用的角色绑定给存在用户
-- **THEN** 系统 MUST 写入用户角色关系，并使该用户后续访问权限生效
-
-#### Scenario: 用户或角色不存在
-
-- **WHEN** 用户角色绑定请求引用不存在的用户或角色
-- **THEN** 系统 MUST 拒绝绑定并返回明确错误
-
-#### Scenario: 绑定停用角色
-
-- **WHEN** 用户角色绑定请求引用已停用角色
-- **THEN** 系统 MUST 拒绝绑定并返回明确错误
-- **AND** 系统 MUST NOT 写入新的用户角色关系
-- **AND** 系统 MUST NOT 触发用户角色缓存失效或 policy change 通知
+- **WHEN** 授权调用方使用全部合法且启用的角色集合替换用户的完整角色绑定
+- **THEN** 系统 MUST 在同一事务中删除旧绑定并批量写入新绑定
+- **AND** 任一角色不可用或任一写入失败时系统 MUST 回滚全部变更
 
 #### Scenario: 查询用户有效权限
 
-- **WHEN** 系统或调用方查询某用户有效权限
-- **THEN** 系统 MUST 聚合用户角色和角色权限，返回该用户当前可访问的权限集合
+- **WHEN** 系统或授权调用方查询用户有效权限
+- **THEN** 系统 MUST 聚合该用户当前启用角色和这些角色的启用权限并返回去重后的权限集合
 
-#### Scenario: 用户无角色
+#### Scenario: 用户没有有效角色
 
-- **WHEN** 已认证用户没有有效角色绑定并访问 RBAC 保护路由
+- **WHEN** 已认证用户没有有效角色绑定并访问受 RBAC 保护的路由
 - **THEN** 系统 MUST 拒绝访问
 
-#### Scenario: 批量替换用户角色绑定
+### Requirement: RBAC 持久化完整性
 
-- **WHEN** 授权调用方使用合法角色集合替换用户的完整角色绑定
-- **THEN** 系统 MUST 在同一事务中删除旧绑定并批量写入新绑定
-- **AND** 任一新增绑定失败时，系统 MUST 回滚本次删除和新增
+系统 MUST 使用外部 UUID 作为角色、权限、用户角色和角色权限的稳定业务标识，并通过数据库约束、事务和与查询路径匹配的索引维护关系完整性和可预测性能。join 表内部主键或外键 MUST NOT 成为 feature 对外业务标识。
 
-#### Scenario: 批量替换包含停用角色
+#### Scenario: 使用外部 UUID 查询和关联
 
-- **WHEN** 授权调用方替换用户角色集合且任一目标角色已停用
-- **THEN** 系统 MUST 拒绝本次替换并返回明确错误
-- **AND** 系统 MUST 保持该用户已有角色关系不变
-- **AND** 系统 MUST NOT 触发用户角色缓存失效或 policy change 通知
+- **WHEN** 系统创建、查询、排序或关联角色、权限及其绑定
+- **THEN** 系统 MUST 使用当前外部 UUID 字段作为业务标识
+- **AND** 系统 MUST NOT 向 application 或 transport 暴露 join 表内部标识
 
-### Requirement: 授权热路径用户角色本地缓存
+#### Scenario: 约束错误映射
 
-系统 MUST 在 RBAC 授权热路径中使用有容量上限的本地 loading cache 缓存用户当前启用角色 ID 集合，并通过主动失效和全量清空保证在线 RBAC 变更后不依赖 TTL 长期收敛。user-service MUST 从服务自有 `resources.redis` 和 `resources.postgres` 读取 RBAC 依赖，并使用 `rbac.user_role_cache` 配置本地缓存，MUST NOT 使用共享核心 LocalCache、Redis 或 PostgreSQL 配置字段。
+- **WHEN** 持久化操作发生唯一冲突、引用目标不存在或目标状态不可用
+- **THEN** adapter MUST 将数据库结果映射为对应领域错误
+- **AND** application 层 MUST NOT 依赖 Ent predicate 或数据库错误细节
 
-#### Scenario: 用户角色缓存命中
+#### Scenario: 绑定替换失败
 
-- **WHEN** 业务请求进入 RBAC 授权中间件且用户角色本地缓存命中
-- **THEN** 授权判断 MUST 使用缓存中的角色 ID 副本
-- **AND** 调用方对返回 slice 的修改 MUST NOT 污染缓存内部值
+- **WHEN** 用户角色或角色权限完整替换在校验、删除或新增阶段失败
+- **THEN** 系统 MUST 回滚事务并保留替换前的完整绑定
 
-#### Scenario: 用户角色缓存 miss
+#### Scenario: 查询路径具备索引
 
-- **WHEN** 业务请求进入 RBAC 授权中间件且用户角色本地缓存 miss
-- **THEN** 系统 MUST 通过 `singleflight` 合并同用户并发回源
-- **AND** 回源 MUST 查询 PostgreSQL 中该用户当前绑定的启用角色
-- **AND** loader 错误 MUST NOT 写入本地缓存
+- **WHEN** 系统执行权限或角色分页过滤、用户启用角色回源、角色权限加载或关系反向查询
+- **THEN** Ent schema 和 Atlas migration MUST 提供与过滤字段、关系字段和稳定 ID 排序匹配的索引
+- **AND** 索引调整 MUST NOT 改变授权结果
 
-#### Scenario: 用户角色缓存容量边界
+### Requirement: Casbin 授权与 HTTP 边界
 
-- **WHEN** 单实例处理大量不同用户的 RBAC 授权请求
-- **THEN** `rbac.user_role_cache.size` MUST 限制进程内条目预算
-- **AND** 容量淘汰、准入拒绝或 TTL 过期后 MUST 能通过 PostgreSQL 回源恢复授权判断
+系统 MUST 在认证通过后使用 RBAC 授权中间件保护权限、角色和用户业务接口。授权 MUST 使用用户与角色的稳定 subject、Gin route template object 和 HTTP method action，并在任何身份、策略或执行异常下 fail-closed。
 
-#### Scenario: RBAC 资源和缓存缺省值
+#### Scenario: 构造授权请求
 
-- **WHEN** user-service 装配 RBAC 用户角色 resolver
-- **THEN** Redis 和 PostgreSQL MUST 从 `resources.redis` 和 `resources.postgres` 的必需具名资源读取
-- **AND** 未显式配置 `rbac.user_role_cache` 时 MUST 使用 `enabled=true`、`size=100000`、`ttl=5s` 和 `load_timeout=500ms`
-- **AND** `rbac.user_role_cache` MUST NOT 暴露 `num_counters` 或 `buffer_items`
+- **WHEN** 已认证请求进入受 RBAC 保护的 `/api/v1` 路由
+- **THEN** 中间件 MUST 使用请求上下文中的用户 ID、Gin `FullPath()` 和 HTTP method 构造授权请求
+- **AND** 用户 subject MUST 使用 `user:<user_uuid>`，角色 subject MUST 使用 `role:<role_uuid>`
 
-#### Scenario: 校验启用的 user role cache
+#### Scenario: 允许和拒绝访问
 
-- **WHEN** `rbac.user_role_cache.enabled` 为 true
-- **THEN** `size`、`ttl` 和 `load_timeout` MUST 为正值
-
-#### Scenario: 关闭 RBAC cache
-
-- **WHEN** `rbac.user_role_cache.enabled` 为 false
-- **THEN** 授权结果和策略一致性 MUST 保持正确
-- **AND** 关闭缓存 MAY 只造成性能下降
-- **AND** `size`、`ttl` 和 `load_timeout` MAY 为零值
-
-#### Scenario: 在线用户角色变更失效缓存
-
-- **WHEN** 用户角色绑定通过在线 HTTP API 添加、替换或移除成功
-- **THEN** 本实例 MUST 删除对应用户角色本地缓存或清空相关缓存
-- **AND** 其他副本 MUST 通过既有 policy sync 机制感知变更并失效本地缓存
-
-#### Scenario: policy reload 全量失效缓存
-
-- **WHEN** RBAC policy reload 或全量策略刷新完成
-- **THEN** 系统 MUST 清空本实例用户角色本地缓存
-- **AND** 后续授权请求 MUST 通过回源重新建立本地投影
-
-### Requirement: Casbin 授权保护
-
-系统 MUST 使用 RBAC 授权中间件保护权限、角色和用户业务接口，并在认证通过后执行资源级授权判断。Casbin subject/object/action MUST 分别使用 `user:<user_uuid>`、`role:<role_uuid>`、Gin route template 和 HTTP method。授权服务 MUST 区分认证 subject 非法与策略拒绝，且在 subject 非法时 MUST 拒绝请求并返回明确错误，不得将解析失败静默折叠为普通权限拒绝。系统 MUST 将 user-service 直接依赖的 Casbin 主版本维护在最新稳定 v3，并保持 RBAC 授权、policy loader、超级管理员通配授权、用户角色缓存和 policy sync 的既有业务语义不变。升级后系统 MUST NOT 保留对 `github.com/casbin/casbin/v2` 或其子包的直接引用。
-
-#### Scenario: 授权通过
-
-- **WHEN** 已认证用户拥有当前 HTTP 方法和路径对应权限
+- **WHEN** 用户当前启用角色拥有匹配 HTTP method 和 route template 的启用权限
 - **THEN** 系统 MUST 允许请求进入目标 controller
+- **AND** 没有匹配权限时系统 MUST 返回禁止访问错误
 
-#### Scenario: 授权失败
+#### Scenario: 认证 subject 无效
 
-- **WHEN** 已认证用户缺少当前 HTTP 方法和路径对应权限
-- **THEN** 系统 MUST 拒绝请求并返回授权失败错误
+- **WHEN** 请求缺少用户 ID、用户 ID 类型非法或 subject 不能解析为用户 UUID
+- **THEN** 系统 MUST 返回未认证错误并拒绝请求
+- **AND** 系统 MUST NOT 调用底层 Casbin engine
 
-#### Scenario: 非法认证 subject
+#### Scenario: 授权执行异常
 
-- **WHEN** 授权服务收到无法解析为用户 UUID 的认证 subject
-- **THEN** 系统 MUST 拒绝请求并返回明确错误
-- **AND** 系统 MUST NOT 调用底层授权 engine
-- **AND** 调用方 MUST 能通过错误区分该场景与普通策略拒绝
+- **WHEN** policy 未加载、用户角色回源失败、context 取消或 Casbin 执行返回错误
+- **THEN** 系统 MUST 拒绝请求并返回内部错误
+- **AND** 系统 MUST NOT 将执行异常折叠为允许结果
 
-#### Scenario: 权限策略更新
+#### Scenario: 公开和预检请求旁路
 
-- **WHEN** 权限、角色或绑定发生变化
-- **THEN** 系统 MUST 同步或刷新授权策略，避免旧策略长期影响授权判断
+- **WHEN** 请求命中显式授权白名单或使用 `OPTIONS` 方法
+- **THEN** 中间件 MUST 允许请求继续处理并 MUST NOT 调用授权服务
 
-#### Scenario: Casbin policy 权威来源
+#### Scenario: policy 权威来源
 
-- **WHEN** policy loader 从持久化层构造授权策略
-- **THEN** 策略 MUST 由启用角色、启用权限、角色权限绑定和用户角色绑定派生，不得以独立 `casbin_rules` 表作为业务权威来源
-
-#### Scenario: Casbin subject 稳定格式
-
-- **WHEN** 角色参与 policy 构造或授权判断
-- **THEN** 角色 subject MUST 使用 `role:<role_uuid>`，不得依赖 `roles.code`；用户身份解析 MUST 排除已软删除用户
+- **WHEN** policy loader 构造授权策略
+- **THEN** policy MUST 从启用角色、启用权限、角色权限绑定和用户角色绑定派生
+- **AND** 独立 `casbin_rules` 表 MUST NOT 成为业务权威来源，用户身份解析 MUST 排除已软删除用户
 
 #### Scenario: 超级管理员通配授权
 
-- **WHEN** 用户拥有 `internal/shared/rbacbaseline` 中稳定的内置超级管理员角色
-- **THEN** policy loader MUST 补充 wildcard policy，使其可访问受保护业务接口，且升级后的 Casbin v3 enforcer MUST 继续识别 wildcard policy
-- **AND** 超级管理员角色常量 MUST 仍只由 `internal/shared/rbacbaseline` 提供，且 MUST NOT 在 role 或 permission feature 内重复定义超级管理员常量
+- **WHEN** 用户拥有 `internal/shared/rbacbaseline` 定义的内置超级管理员角色
+- **THEN** policy loader MUST 为该角色提供受保护业务接口的 wildcard policy
+- **AND** 超级管理员角色常量 MUST 只由 `rbacbaseline` 提供
 
-#### Scenario: 使用稳定 v3 模块路径
+#### Scenario: 路由注册安全依赖完整
 
-- **WHEN** 实现升级 Casbin 依赖
-- **THEN** `user-service/go.mod` MUST 直接依赖 `github.com/casbin/casbin/v3` 的最新稳定版本
-- **AND** user-service 代码和测试 MUST NOT import `github.com/casbin/casbin/v2` 或 `github.com/casbin/casbin/v2/model`
+- **WHEN** user-service 注册 `/api/v1` 权限、角色和用户业务路由
+- **THEN** 这些路由 MUST 经过当前认证和 RBAC 授权中间件链
+- **AND** token version validator、RBAC authorizer 或必需 controller 缺失时系统 MUST 拒绝注册部分业务路由
 
-#### Scenario: 授权判断语义保持不变
+### Requirement: 授权热路径用户角色缓存
 
-- **WHEN** 已认证用户访问 RBAC 保护路由
-- **THEN** 授权判断 MUST 继续使用用户当前启用角色、`role:<role_uuid>` subject、Gin route template 和 HTTP method 执行 Casbin `Enforce`
-- **AND** policy 未加载、用户无启用角色、角色无匹配权限或底层 Casbin 返回错误时 MUST NOT 默认放行
+系统 MUST 使用有容量上限的本地 loading cache 缓存用户当前启用角色 ID 集合，并通过主动失效和全量清空使在线 RBAC 变更及时收敛。关闭缓存 MUST 只影响性能，不得改变授权结果；启用和 disabled 模式 MUST 提供相同的显式幂等关闭契约。
 
-### Requirement: Casbin v3 API 变更检查与适配记录
+#### Scenario: 缓存命中
 
-实现 MUST 全面检查当前代码中所有 Casbin 旧用法，并对模块路径、model 子包、enforcer 构造、policy 写入、授权执行和测试 helper 给出明确适配。检查结果 MUST 记录在实现任务或提交说明中，并通过编译、测试和全仓搜索验证没有遗漏旧主版本引用。
+- **WHEN** 用户角色缓存命中
+- **THEN** 授权 MUST 使用缓存中的角色 ID 副本
+- **AND** 调用方对返回 slice 的修改 MUST NOT 污染缓存内部值
 
-#### Scenario: 旧用法替换完整
+#### Scenario: 缓存未命中
 
-- **WHEN** 实现完成 Casbin v3 升级
-- **THEN** `rg "github.com/casbin/casbin/v2|casbin/v2" common user-service tools --glob '*.go' --glob 'go.mod' --glob 'go.sum'` MUST 无命中
-- **AND** 所有直接 Casbin API 调用 MUST 使用 v3 模块下的类型或函数
+- **WHEN** 用户角色缓存未命中
+- **THEN** 系统 MUST 合并同一用户的并发回源并查询 PostgreSQL 中的当前启用角色
+- **AND** loader 错误 MUST NOT 写入缓存
 
-#### Scenario: 关键 API 行为验证
+#### Scenario: 缓存配置和容量
 
-- **WHEN** 实现适配 `NewEnforcer`、`AddPolicy`、`Enforce` 和 `model` import
-- **THEN** 测试 MUST 覆盖允许、拒绝、底层错误、未配置、通配策略、context 取消和 policy reload 失败路径
-- **AND** 失败路径 MUST 保留当前错误区分和错误包装语义
+- **WHEN** user-service 装配启用的用户角色缓存
+- **THEN** 系统 MUST 从 `rbac.user_role_cache` 读取正值 `size`、`ttl` 和 `load_timeout`
+- **AND** 未显式配置时 MUST 使用 `enabled=true`、`size=100000`、`ttl=5s` 和 `load_timeout=500ms`
+- **AND** 容量淘汰、准入拒绝或 TTL 过期后 MUST 能通过 PostgreSQL 回源
 
-#### Scenario: v3 新能力不改变线上授权路径
+#### Scenario: 关闭缓存
 
-- **WHEN** 实现评估 Casbin v3 新增的 `Explain()`、detector 或其他诊断能力
-- **THEN** 这些能力 MUST NOT 成为 request-time 授权 allow/deny 的必要依赖
-- **AND** 如需采用这些能力优化诊断，MUST 仅作为离线 route diff、管理端排障或后续独立 change 的候选方案记录
+- **WHEN** `rbac.user_role_cache.enabled` 为 false
+- **THEN** `size`、`ttl` 和 `load_timeout` MAY 为零值
+- **AND** 系统 MUST 直接回源并保持正确的 fail-closed 授权语义
+- **AND** disabled 模式 MUST 提供与启用模式相同的幂等 `Close` 契约
 
-### Requirement: Casbin 初始 policy 加载上下文传播
+#### Scenario: 显式关闭缓存
 
-系统 MUST 在 user-service 启动 lifecycle 中执行 Casbin Engine 初始 policy 加载，并将 Fx `OnStart` 提供的启动 context 传播到 policy loader 及其持久化查询。Casbin Engine 构造器 MUST NOT 在 provider 构造阶段执行不可取消的初始 policy reload。
+- **WHEN** 调用方对启用或 disabled user-role resolver/cache 调用 `Close`
+- **THEN** `Close` MUST 是幂等的，并且 MUST NOT 关闭调用方注入的 Redis、Ent 或 PostgreSQL 共享资源
+- **AND** 关闭后授权语义 MUST 继续 fail-closed，不得因为关闭本地缓存而产生允许结果
 
-#### Scenario: 启动 context 传播到初始加载
+#### Scenario: 在线绑定变更失效
 
-- **WHEN** user-service 通过 Fx 启动 permission/RBAC 模块并初始化 Casbin Engine
-- **THEN** 初始 policy reload MUST 使用 Fx `OnStart` 传入的 context 调用 `Loader.LoadPolicies(ctx)`
-- **AND** 启动 context 取消或超时时，底层 policy loader MUST 能观察到对应取消信号
+- **WHEN** 在线用户角色添加、替换或移除成功
+- **THEN** 本实例 MUST 失效对应用户缓存
+- **AND** 其他副本 MUST 通过 policy sync 感知变更并失效缓存
 
-#### Scenario: 初始加载失败保持 fail-closed
+#### Scenario: policy reload 清空缓存
 
-- **WHEN** Casbin 初始 policy 加载失败或因启动 context 取消而未构造可用 enforcer
-- **THEN** Engine MUST 记录最近错误并更新 policy reload 失败指标
-- **AND** 后续授权判断 MUST fail-closed，不得放行缺少可用 policy 的请求
-- **AND** 服务装配行为 MUST 保持既有语义，不因本场景自动改为启动失败
+- **WHEN** RBAC policy reload 或全量策略刷新完成
+- **THEN** 系统 MUST 清空本实例用户角色缓存
+- **AND** 后续请求 MUST 通过回源重新建立本地投影
 
-#### Scenario: 手动 reload 继续使用调用方 context
+### Requirement: Policy 加载与多副本同步
 
-- **WHEN** 在线 RBAC 写操作或 watcher 触发 Casbin policy reload
-- **THEN** `Reload(ctx)` MUST 继续使用调用方传入的 context 执行 policy loader
-- **AND** 本次变更不得改变 policy 权威来源、用户角色缓存失效或 Redis policy sync 语义
+系统 MUST 在启动时通过显式初始化入口加载初始 policy，并在在线 RBAC 写操作成功后刷新本实例状态，再通过 Redis policy version、Pub/Sub 和周期性版本补偿同步其他副本。授权热路径 MUST 使用本地 enforcer 和本地用户角色解析结果，MUST NOT 每请求读取 Redis version。
 
-### Requirement: RBAC policy watcher 生命周期契约
+#### Scenario: 启动加载 policy
 
-RBAC Redis policy watcher MUST 使用无参数 `Start()` 表达启动动作，并 MUST 通过内部可取消 context 驱动长期后台循环；Fx `OnStart` context MUST NOT 作为 watcher 后台循环的生命周期控制信号。watcher 停止 MUST 由 `Stop(ctx)` 触发内部 cancel 并等待后台循环退出，`Stop(ctx)` 的 context 仅用于限制停止等待时间。
+- **WHEN** user-service 启动 permission/RBAC 模块
+- **THEN** composition 层 MUST 显式调用 initial load 初始化入口，并将可取消或带超时的启动 context 传给 policy loader
+- **AND** permission infrastructure MUST NOT 通过 `RegisterInitialLoad(fx.Lifecycle, ...)` 或等价 Fx lifecycle adapter 注册初始加载
+- **AND** loader MUST 能观察启动超时或取消
 
-#### Scenario: 启动 watcher 不消费 Fx 启动 context
+#### Scenario: 初始加载失败
 
-- **WHEN** user-service 通过 Fx `OnStart` 启动 RBAC Redis policy watcher
-- **THEN** lifecycle hook MUST 调用无参数 `Watcher.Start()`
-- **AND** watcher 后台循环 MUST NOT 依赖 Fx `OnStart` context 的取消信号来退出
+- **WHEN** 初始 policy 加载失败或被取消
+- **THEN** engine MUST 记录最近错误和 reload 失败指标
+- **AND** 后续授权 MUST fail-closed，服务 MUST 保持既有启动语义
+- **AND** reload 状态和 readiness 可观测性 MUST 保留失败信息
 
-#### Scenario: Stop 关闭 watcher 后台循环
+#### Scenario: 在线权限或角色变更
 
-- **WHEN** user-service 通过 Fx `OnStop` 停止 RBAC Redis policy watcher
-- **THEN** `Watcher.Stop(ctx)` MUST 取消 watcher 内部 context 并等待后台循环退出
-- **AND** `Stop(ctx)` MUST 在传入 context 取消或超时时返回对应错误
+- **WHEN** 权限、角色状态或角色权限绑定通过在线 API 持久化成功
+- **THEN** 本实例 MUST reload policy 并发布新的 Redis policy version 和 Pub/Sub 通知
 
-#### Scenario: 策略同步语义保持不变
+#### Scenario: 在线用户角色变更
 
-- **WHEN** watcher 通过 Redis Pub/Sub 或周期性版本补偿感知 RBAC policy version 变化
-- **THEN** 系统 MUST 继续按既有 policy sync 语义执行 policy reload 或用户角色缓存失效
-- **AND** 本生命周期契约变更 MUST NOT 改变 Redis policy version、Pub/Sub payload、补偿检查间隔、Casbin reload 或授权判断语义
+- **WHEN** 用户角色绑定通过在线 API 持久化成功
+- **THEN** 本实例 MUST 失效相关用户缓存并通知其他副本刷新授权投影
 
-### Requirement: Permission HTTP 授权中间件请求构造与旁路行为
+#### Scenario: 同步失败向调用方传播
 
-permission HTTP 授权中间件 MUST 在真实 Gin 路由上下文中解析授权请求，并将认证用户 ID、Gin route template 和 HTTP method 传递给 permission authorization service；白名单和 `OPTIONS` 请求 MUST 绕过授权服务调用。
+- **WHEN** 持久化成功后的 reload、缓存失效、version 发布或通知失败
+- **THEN** command service MUST 向调用方返回同步错误，成功响应 MUST NOT 掩盖该错误
+- **AND** `PolicyChangeNotifier` MUST 是正式 command service 的必需依赖
 
-#### Scenario: 授权请求使用 Gin route template
+#### Scenario: reload 和发布局部失败
 
-- **WHEN** 已认证用户访问受 RBAC 保护的 permission HTTP 路由
-- **THEN** 授权中间件 MUST 使用认证用户 ID 作为授权 subject
-- **AND** 授权中间件 MUST 使用 Gin `FullPath()` route template 作为授权 object
-- **AND** 授权中间件 MUST 使用 HTTP method 作为授权 action
+- **WHEN** policy refresh coordinator 执行本地 reload 和 version 发布
+- **THEN** 本地 reload 失败后系统 MUST 仍尝试发布 version
+- **AND** 两者同时失败时返回错误 MUST 保留两项失败
+- **AND** 只有两者均成功时系统才 MUST 标记本实例已应用该 version
 
-#### Scenario: 认证用户来自请求上下文
+#### Scenario: watcher 生命周期
 
-- **WHEN** 已认证用户 ID 存在于 request context 且 Gin context 未设置用户 ID
-- **THEN** 授权中间件 MUST 使用 request context 中的用户 ID 构造授权请求
+- **WHEN** user-service 启停 Redis policy watcher
+- **THEN** `NewWatcher` MUST 只构造 watcher 对象，MUST NOT 启动 goroutine、订阅 Redis 或执行版本补偿循环
+- **AND** `Start()` MUST 是幂等的，并使用内部可取消 context 驱动长期循环
+- **AND** `Stop(ctx)` MUST 是幂等的，取消内部 context，并在调用方 context 限制内等待循环退出
 
-#### Scenario: 缺失或非法用户不调用授权服务
+#### Scenario: watcher 停止超时
 
-- **WHEN** 请求缺少认证用户 ID 或 Gin context 中的用户 ID 类型非法
-- **THEN** 授权中间件 MUST 拒绝请求并返回未认证错误
-- **AND** 授权中间件 MUST NOT 调用 permission authorization service
+- **WHEN** 调用方传入的 `Stop(ctx)` context 在 watcher 循环退出前到期
+- **THEN** `Stop(ctx)` MUST 返回 context 相关错误
+- **AND** watcher MUST 保持后续重复 `Stop(ctx)` 可安全调用，且 MUST NOT 关闭调用方注入的 Redis、Ent 或 PostgreSQL 共享资源
 
-#### Scenario: 白名单请求绕过授权服务
+#### Scenario: 其他副本收敛
 
-- **WHEN** 请求方法和 Gin route template 命中显式授权白名单
-- **THEN** 授权中间件 MUST 允许请求继续处理
-- **AND** 授权中间件 MUST NOT 调用 permission authorization service
+- **WHEN** watcher 通过 Pub/Sub 或周期性版本检查发现远端 policy version 更新
+- **THEN** 系统 MUST reload policy 或失效用户角色缓存
+- **AND** Pub/Sub 丢失时周期性版本补偿 MUST 使副本最终收敛
 
-#### Scenario: OPTIONS 请求绕过授权服务
+### Requirement: RBAC 系统数据与运维 CLI
 
-- **WHEN** 请求使用 `OPTIONS` 方法访问已注册路由
-- **THEN** 授权中间件 MUST 允许请求继续处理
-- **AND** 授权中间件 MUST NOT 调用 permission authorization service
+系统 MUST 提供带服务上下文的 `rbac seed`、`rbac assign-super-admin` 和 `rbac create-super-admin` 命令，用于维护系统角色、系统权限、默认绑定和超级管理员。系统数据 MUST 只由 seed port 根据 `internal/shared/rbacbaseline` 写入。
 
-#### Scenario: 授权服务拒绝或错误映射响应
-
-- **WHEN** permission authorization service 返回拒绝、执行错误或 invalid subject 错误
-- **THEN** 授权中间件 MUST 分别返回禁止访问、内部错误或未认证错误响应
-
-### Requirement: 策略同步
-
-系统 MUST 在在线 RBAC 写操作成功后触发本实例策略刷新，并通过 Redis policy version、Pub/Sub 和定时版本补偿同步其他副本。写操作成功响应是否包含实体 MUST NOT 影响 policy reload、用户角色缓存失效或跨副本同步语义。在线 RBAC 写操作持久化成功后，policy reload、用户角色缓存失效或 Redis policy version 发布失败 MUST 向调用方返回错误，MUST NOT 被成功响应掩盖。
-
-#### Scenario: 在线角色绑定变更
-
-- **WHEN** 用户角色绑定通过 HTTP API 变更成功
-- **THEN** 本实例 MUST 执行策略刷新或用户角色缓存失效，并通知其他副本
-
-#### Scenario: 在线权限策略变更
-
-- **WHEN** 在线 RBAC 管理接口修改权限、角色启停或角色权限绑定并提交成功
-- **THEN** 本实例 MUST 执行 policy reload，并通过 Redis policy version 和 Pub/Sub 通知其他副本；其他副本 MUST 通过 Pub/Sub 和周期性版本补偿感知变更
-
-#### Scenario: 授权热路径
-
-- **WHEN** 业务请求进入 RBAC 授权中间件
-- **THEN** 授权 MUST 使用本实例内存 Casbin enforcer 和本地可用的用户角色解析结果，MUST NOT 每请求读取 Redis policy version 做强一致门控
-
-#### Scenario: 写响应契约不影响同步
-
-- **WHEN** 权限、角色、用户角色绑定或角色权限绑定写操作成功且响应不包含更新后实体
-- **THEN** 系统 MUST 继续按既有规则触发本实例 policy reload、用户角色缓存失效和跨副本 policy version 通知
-
-#### Scenario: policy change 通知失败向调用方传播
-
-- **WHEN** 权限、角色、用户角色绑定或角色权限绑定写操作已经持久化成功，但 policy change 通知、policy reload、用户角色缓存失效或 Redis policy version 发布返回错误
-- **THEN** command service MUST 向调用方返回该错误
-- **AND** 成功响应 MUST NOT 掩盖同步失败
-- **AND** 错误链 SHOULD 保留底层同步错误，便于日志、metrics 和测试定位失败来源
-
-#### Scenario: policy change notifier 必需依赖
-
-- **WHEN** permission command service 或 role command service 被构造
-- **THEN** `PolicyChangeNotifier` MUST 作为必需依赖提供
-- **AND** 缺失 notifier 时系统 MUST fail-fast 或拒绝装配，MUST NOT 退化为 no-op 通知
-
-#### Scenario: policy refresh coordinator 局部失败处理
-
-- **WHEN** policy refresh coordinator 收到需要本实例 reload 并发布 policy version 的变更
-- **THEN** coordinator 为 nil 时 MUST 返回明确错误
-- **AND** 本地 reload 失败后仍 MUST 尝试发布 policy version，使其他副本有机会感知变更
-- **AND** reload 和 publish 同时失败时 MUST 通过 joined error 保留两者
-- **AND** 只有本地 reload 成功且 publish 成功时才可标记本实例已应用该 policy version
-
-### Requirement: RBAC 系统数据引导
-
-系统 MUST 提供 CLI 能力初始化系统角色、系统权限、系统绑定，并支持为用户分配或创建超级管理员。系统角色和系统权限 MUST 仅由 RBAC seed port 根据代码基线写入或更新，普通公开 API、普通 command 和普通 store create 路径 MUST NOT 写入系统角色或系统权限。
-
-#### Scenario: 初始化 RBAC 系统数据
+#### Scenario: 初始化系统基线
 
 - **WHEN** 运维执行 `aegiscore-user-services rbac seed`
-- **THEN** 系统 MUST 创建或更新默认系统角色、权限和绑定，并输出插入、更新、绑定增删统计；seed MUST NOT 自动创建真实业务用户或为任意业务用户分配超级管理员角色
-- **AND** RBAC seed port 写入的默认角色和默认权限 MUST 标记为系统数据
-- **AND** 默认系统角色和默认系统权限 MUST 来自代码基线
+- **THEN** 系统 MUST 幂等创建或更新基线角色、权限和绑定并输出变更统计
+- **AND** 系统角色和权限 MUST 标记为系统数据
+- **AND** seed MUST NOT 创建业务用户或自动分配超级管理员
 
-#### Scenario: 只有 seed port 可写系统角色和系统权限
+#### Scenario: 普通路径不能写系统数据
 
-- **WHEN** 非 seed 的角色或权限创建路径写入数据
-- **THEN** 系统 MUST 固定写入非系统数据
-- **AND** 系统 MUST NOT 从普通 command、普通 store create input 或公开 HTTP 请求读取系统标记
+- **WHEN** 非 seed 的角色或权限 command、store create 或公开 HTTP 路径写入数据
+- **THEN** 系统 MUST 固定写入非系统数据并 MUST NOT 接收系统标记
 
 #### Scenario: 分配超级管理员
 
 - **WHEN** 运维执行 `rbac assign-super-admin --user-id <uuid>`
-- **THEN** 系统 MUST 为指定已存在用户绑定内置超级管理员角色
+- **THEN** 系统 MUST 为指定存在用户幂等绑定内置超级管理员角色
 
 #### Scenario: 创建超级管理员
 
-- **WHEN** 运维执行 `create-super-admin` 并提供管理员密码环境变量
-- **THEN** 系统 MUST 创建或复用管理员用户并绑定内置超级管理员角色；已有管理员默认 MUST NOT 重置密码，只有显式传入 `--reset-password` 或 `ADMIN_RESET_PASSWORD=true` 时才允许重置密码
+- **WHEN** 运维执行 `rbac create-super-admin` 并提供合法 username 和密码
+- **THEN** 系统 MUST 创建或复用用户并绑定内置超级管理员角色
+- **AND** username MUST trim 后转为小写，空 nickname MUST 回退为归一化 username
 
-#### Scenario: 缺少管理员密码
+#### Scenario: 超级管理员密码处理
 
-- **WHEN** 创建超级管理员时缺少配置的密码环境变量或密码为空
-- **THEN** 系统 MUST 拒绝执行并返回明确错误
+- **WHEN** create-super-admin 未显式指定 password env
+- **THEN** 系统 MUST 从 `ADMIN_PASSWORD` 读取非空密码
+- **AND** 已有用户的密码 MUST NOT 默认重置，只有显式 `--reset-password` 或 `ADMIN_RESET_PASSWORD=true` 时系统才 MUST 更新密码
+- **AND** 必需输入缺失时命令 MUST 返回明确错误
 
-#### Scenario: 运行中执行离线 RBAC 命令
+#### Scenario: 离线命令不等同在线刷新
 
-- **WHEN** HTTP 副本已经运行时执行 `rbac seed`、`rbac assign-super-admin` 或 `rbac create-super-admin`
-- **THEN** 命令只修改持久化数据，不得被视为运行期 policy refresh；运维 MUST 滚动重启副本或触发在线 RBAC 刷新
+- **WHEN** HTTP 副本运行期间执行 seed、assign-super-admin 或 create-super-admin
+- **THEN** 命令 MUST 只修改持久化数据并 MUST NOT 宣称已触发运行期 policy refresh
+- **AND** 运维 MUST 滚动重启副本或触发在线 RBAC 刷新使运行实例收敛
 
-### Requirement: role command service 测试协作者契约
+### Requirement: RBAC 应用错误与统一 HTTP 渲染
 
-role command service 测试 MUST 使用 `user-service/internal/features/role/application/command` 包已有 `mockgen` 生成物表达 `RoleStore`、`UserRoleStore`、`RolePermissionStore`、`PermissionLookup` 和 `PolicyChangeNotifier` 等外部协作者契约。测试 MUST NOT 保留实现这些 port 的手写 store/notifier double 来兼容或隐藏依赖调用、失败路径、调用顺序、去重逻辑或 policy change 通知行为。
+permission、role 和 binding domain MUST 返回携带稳定 HTTP status、共享业务 code、公开 message 和 `Reason` 的应用错误。HTTP transport MUST 通过共享 `response.Fail` 直接渲染业务错误，MUST NOT 维护 feature 专用 sentinel-to-HTTP mapper；直接或包装返回的应用错误 MUST 保留 `errors.Is` 语义。
 
-#### Scenario: 角色生命周期测试使用生成 mock
+#### Scenario: 权限目录错误
 
-- **WHEN** command 包测试覆盖角色创建、更新、启用、停用、重复角色或系统角色保护路径
-- **THEN** 测试 MUST 通过生成 mock 的 expectation 表达 `RoleStore` 调用、输入归一化、错误映射和禁止写入路径
-- **AND** 系统角色保护相关测试 MUST 明确断言受保护变更不会调用后续写入或 policy change 通知
+- **WHEN** permission feature 返回权限已存在、权限不存在、输入无效或系统权限保护错误
+- **THEN** 系统 MUST 分别使用 `409 Conflict`、`404 Not Found`、`400 Bad Request`、`409 Conflict`
+- **AND** `Reason` MUST 分别为 `permission_already_exists`、`permission_not_found`、`permission_invalid`、`system_permission_protected`
 
-#### Scenario: 用户角色绑定测试使用生成 mock
+#### Scenario: 角色目录错误
 
-- **WHEN** command 包测试覆盖用户角色添加、移除、替换、角色不存在或重复角色 ID 去重路径
-- **THEN** 测试 MUST 通过生成 mock 的 expectation、matcher 或 `DoAndReturn` 表达 `RoleStore` 查询、`UserRoleStore` 写入和返回角色集合
-- **AND** 用户角色绑定成功后的用户角色缓存失效通知 MUST 通过 `PolicyChangeNotifier` expectation 明确断言
+- **WHEN** role feature 返回角色已存在、角色不存在、输入无效、系统角色保护或角色停用错误
+- **THEN** 系统 MUST 分别使用 `409 Conflict`、`404 Not Found`、`400 Bad Request`、`409 Conflict`、`409 Conflict`
+- **AND** `Reason` MUST 分别为 `role_already_exists`、`role_not_found`、`role_invalid`、`system_role_protected`、`role_inactive`
 
-#### Scenario: 角色权限绑定测试使用生成 mock
+#### Scenario: 用户角色绑定错误
 
-- **WHEN** command 包测试覆盖角色权限添加、移除、替换、权限不存在、权限不可用或重复权限 ID 去重路径
-- **THEN** 测试 MUST 通过生成 mock 的 expectation 表达 `PermissionLookup` 校验和 `RolePermissionStore` 写入
-- **AND** 权限查找失败或权限不可用时，测试 MUST 明确断言不会执行角色权限写入或 policy change 通知
+- **WHEN** 用户角色增量绑定或解绑返回绑定已存在或绑定不存在错误
+- **THEN** 系统 MUST 分别返回 `409 Conflict` 或 `404 Not Found`
+- **AND** `Reason` MUST 分别为 `user_role_already_exists` 或 `user_role_not_found`
 
-#### Scenario: policy change 通知失败被明确覆盖
+#### Scenario: 角色权限绑定错误
 
-- **WHEN** 角色写操作、用户角色绑定或角色权限绑定已经成功，但 `PolicyChangeNotifier.NotifyPolicyChanged` 返回错误
-- **THEN** 测试 MUST 通过生成 mock expectation 注入通知错误
-- **AND** 测试 MUST 断言 command service 返回通知错误，MUST NOT 吞掉通知失败并返回写操作成功结果
+- **WHEN** 角色权限增量绑定或解绑返回绑定已存在或绑定不存在错误
+- **THEN** 系统 MUST 分别返回 `409 Conflict` 或 `404 Not Found`
+- **AND** `Reason` MUST 分别为 `role_permission_already_exists` 或 `role_permission_not_found`
 
-#### Scenario: 保留纯测试 helper
+#### Scenario: 跨 feature 错误透传
 
-- **WHEN** command 包测试需要复用角色、权限引用、输入命令、gomock matcher 或 service fixture 构造逻辑
-- **THEN** 保留的 helper MUST NOT 实现 `RoleStore`、`UserRoleStore`、`RolePermissionStore`、`PermissionLookup` 或 `PolicyChangeNotifier` port
-- **AND** 这些 helper MUST NOT 替代生成 mock 记录 collaborator 调用或隐藏失败注入
+- **WHEN** role 流程收到 `identity.ErrUserNotFound` 或 permission 的不存在错误
+- **THEN** role HTTP transport MUST 通过共享 response helper 保留错误自身的 status、code 和 message
+- **AND** role transport MUST NOT 复制 identity 或 permission 错误映射
 
-### Requirement: RBAC seed service 测试协作者契约
+#### Scenario: controller 统一错误出口
 
-RBAC seed service 测试 MUST 使用 `user-service/internal/features/role/application/seed` 包已有 `mockgen` 生成物表达 `SeedRoleStore`、`SeedPermissionStore`、`SeedRolePermissionStore` 和 `SeedUserRoleStore` 等外部持久化协作者契约。测试 MUST NOT 保留实现这些 seed port 的手写 store double 来兼容或隐藏依赖调用、失败路径、调用顺序、重复 seed、reactivate 参数、binding 同步或超级管理员绑定行为。
-
-#### Scenario: 默认 seed 测试使用生成 mock
-
-- **WHEN** seed 包测试覆盖默认系统角色、系统权限和系统角色权限绑定初始化路径
-- **THEN** 测试 MUST 通过生成 mock 的 ordered expectation 表达 `SeedRoleStore.UpsertSystemRole`、`SeedPermissionStore.UpsertSystemPermission` 和 `SeedRolePermissionStore.EnsureSystemBindings` 调用
-- **AND** 测试 MUST 基于 `rbacbaseline.DefaultRoles()`、`DefaultPermissions()` 和 `DefaultRolePermissions()` 校验调用数量、参数映射和返回统计
-
-#### Scenario: 重复 seed 测试使用生成 mock
-
-- **WHEN** seed 包测试覆盖默认系统数据已经存在的重复 seed 路径
-- **THEN** 测试 MUST 通过生成 mock 返回已存在写入结果，并断言 `SeedResult` 的 inserted、updated 和 binding added 统计保持既有语义
-- **AND** 测试 MUST NOT 依赖手写 store double 的内部状态模拟重复数据
-
-#### Scenario: reactivate 和 sync bindings 测试使用生成 mock
-
-- **WHEN** seed 包测试覆盖 `ReactivateSystem` 或 `SyncSystemBindings` 选项
-- **THEN** 测试 MUST 通过 matcher 明确断言角色和权限 upsert 输入携带正确的 reactivate 参数
-- **AND** `SyncSystemBindings` 场景 MUST 通过 `SeedRolePermissionStore.SyncSystemBindings` expectation 表达新增和删除绑定统计
-
-#### Scenario: assign super admin 测试使用生成 mock
-
-- **WHEN** seed 包测试覆盖为用户分配内置超级管理员角色
-- **THEN** 测试 MUST 通过 `SeedUserRoleStore.AssignRole` expectation 断言用户 ID 和 `rbacbaseline.SuperAdminRoleID` 对应角色 ID
-- **AND** 测试 MUST 覆盖新增绑定和已有绑定两类返回结果
-
-#### Scenario: 保留纯测试 helper
-
-- **WHEN** seed 包测试需要复用 service fixture、输入 matcher、UUID 解析或 baseline 期望构造逻辑
-- **THEN** 保留的 helper MUST NOT 实现 `SeedRoleStore`、`SeedPermissionStore`、`SeedRolePermissionStore` 或 `SeedUserRoleStore` port
-- **AND** 这些 helper MUST NOT 替代生成 mock 记录 collaborator 调用或隐藏失败注入
-
-### Requirement: common Casbin wrapper 测试断言迁移
-
-`common/security/casbin` 的测试 MUST 使用统一断言规范验证共享 Casbin authorizer wrapper、请求三元组、允许、拒绝、未配置和底层错误路径。断言迁移 MUST 保持 Casbin 三元组授权、`ErrNotConfigured`、`ErrDenied`、返回 bool/error 的 `Enforce` 语义和 error-only `Authorizer.Authorize` 语义不变。
-
-#### Scenario: Casbin 允许和拒绝断言
-
-- **WHEN** `common/security/casbin` 测试验证允许访问、策略拒绝或底层 enforcer 返回错误
-- **THEN** 测试 MUST 使用 `require` 表达 bool 结果、错误存在性、错误类型和错误包装断言
-- **AND** 迁移 MUST NOT 改变 `Enforce` 或 `Authorizer.Authorize` 的授权结果语义
-
-#### Scenario: 未配置 authorizer 断言
-
-- **WHEN** 测试验证 nil enforcer、未配置 authorizer 或非法请求三元组路径
-- **THEN** 测试 MUST 使用语义化断言表达 `ErrNotConfigured`、`ErrDenied` 或参数校验结果
-- **AND** 迁移 MUST NOT 将未配置、拒绝访问或底层错误折叠为无法区分的测试结果
-
-#### Scenario: 不影响 user-service RBAC
-
-- **WHEN** common Casbin wrapper 测试迁移断言风格
-- **THEN** user-service 的权限目录、角色绑定、用户角色绑定、policy loader、policy sync、超级管理员通配授权和 RBAC HTTP 授权行为 MUST 保持不变
-- **AND** 迁移 MUST NOT 修改 user-service feature 测试或 RBAC 生产代码
-
-### Requirement: Permission 测试断言规范
-
-permission feature 的 Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、状态、集合、字符串和授权结果等语义化断言。只有当单个测试需要收集多个互相独立的字段失败，且后续检查不依赖前置检查成功时，测试 MAY 使用 `testify/assert`。permission 测试 MUST NOT 通过机械 `Fail` / `Failf` 替换、自定义兼容 helper、旧字段断言或旧接口断言来保留历史断言形态。
-
-#### Scenario: 迁移 permission 历史断言
-- **WHEN** permission catalog、authorization、policy sync、route diff、HTTP boundary、Casbin adapter、PostgreSQL store、Redis watcher 或 metrics 测试检查错误返回、对象字段、布尔状态、集合长度、字符串内容或授权结果
-- **THEN** 测试 MUST 使用 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.NotNil`、`require.True`、`require.False`、`require.Len`、`require.Contains` 等语义化断言表达预期
-- **AND** 测试 MUST NOT 使用 `t.Fatalf`、`t.Fatal`、`t.Errorf`、`t.Error` 或 `Fail` 类调用表达已有语义化断言可以清晰覆盖的失败
-
-#### Scenario: 收集互相独立字段失败
-- **WHEN** route diff 或多字段 HTTP 响应测试需要在一次执行中展示多个互相独立字段的差异
-- **THEN** 测试 MAY 使用 `assert` 收集这些字段失败
-- **AND** 初始化失败、错误返回、nil 检查、响应解析或后续检查依赖的前置条件仍然 MUST 使用 `require` 立即终止当前测试
-
-#### Scenario: 保持 collaborator 契约表达
-- **WHEN** permission application、transport/http、Casbin adapter、PostgreSQL store 或 Redis watcher 测试依赖已有 gomock 生成物表达外部协作者调用、失败注入或调用顺序
-- **THEN** 测试 MUST 保持既有生成 mock 使用方式
-- **AND** 本次断言迁移 MUST NOT 回退为手写 collaborator double 或通过 helper 隐藏 collaborator expectation
-
-#### Scenario: 不保留旧兼容断言
-- **WHEN** permission 测试迁移断言表达
-- **THEN** 测试 MUST NOT 新增旧 permission 字段、旧 route scanner 输出、旧 watcher 签名或旧授权白名单兼容断言
-- **AND** 测试 MUST NOT 新增机械 `require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf` 替换来模拟历史手写失败判断
-
-#### Scenario: 残留手写失败调用符合例外
-- **WHEN** `rg "t\\.Fatalf|t\\.Fatal\\(|t\\.Errorf|t\\.Error\\(|Failf?\\(" user-service/internal/features/permission --glob '*_test.go'` 在迁移后仍有命中
-- **THEN** 每个剩余命中 MUST 属于 `docs/TESTING.md` 允许的自定义测试控制流、特殊诊断输出或测试辅助工具不适合依赖 `testify` 的场景
-- **AND** 实现任务记录 MUST 列明这些剩余命中及其保留原因
-
-### Requirement: Role 与 RBAC baseline 测试断言规范
-
-role feature 和 shared RBAC baseline 的 Go 测试 MUST 优先使用 `testify/require` 表达错误、对象、状态、集合、字符串、HTTP response、store 结果和 baseline catalog 等语义化断言。只有当单个测试需要收集多个互相独立的字段失败，且后续检查不依赖前置检查成功时，测试 MAY 使用 `testify/assert`。role 与 baseline 测试 MUST NOT 通过机械 `Fail` / `Failf` 替换、自定义兼容 helper、旧字段断言、旧 binding 断言或旧 baseline catalog 断言来保留历史断言形态。
-
-#### Scenario: 迁移 role 历史断言
-
-- **WHEN** role command、query、seed、domain、HTTP boundary、PostgreSQL store、RoleStore、UserRoleStore 或 RolePermissionStore 测试检查错误返回、对象字段、布尔状态、集合长度、字符串内容、HTTP status 或绑定结果
-- **THEN** 测试 MUST 使用 `require.NoError`、`require.Error`、`require.ErrorIs`、`require.Equal`、`require.NotNil`、`require.True`、`require.False`、`require.Len`、`require.Contains` 等语义化断言表达预期
-- **AND** 测试 MUST NOT 使用 `t.Fatalf`、`t.Fatal`、`t.Errorf`、`t.Error` 或 `Fail` 类调用表达已有语义化断言可以清晰覆盖的失败
-
-#### Scenario: 迁移 baseline catalog 历史断言
-
-- **WHEN** shared RBAC baseline 测试检查系统角色、系统权限、默认绑定、超级管理员常量或 catalog 唯一性
-- **THEN** 测试 MUST 使用 `require` 或必要时 `assert` 表达错误、相等性、包含关系、空值、非空值、长度、唯一性和布尔预期
-- **AND** 测试 MUST NOT 新增旧 baseline 常量、旧 catalog 条目或旧绑定关系兼容断言
-
-#### Scenario: 收集互相独立字段失败
-
-- **WHEN** 多字段 HTTP response、角色列表摘要、权限摘要或 baseline catalog 测试需要在一次执行中展示多个互相独立字段的差异
-- **THEN** 测试 MAY 使用 `assert` 收集这些字段失败
-- **AND** 初始化失败、错误返回、nil 检查、响应解析、store 连接或后续检查依赖的前置条件仍然 MUST 使用 `require` 立即终止当前测试
-
-#### Scenario: 保持 collaborator 契约表达
-
-- **WHEN** role application、transport/http、seed 或 store 相关测试依赖已有 gomock 生成物表达外部协作者调用、失败注入或调用顺序
-- **THEN** 测试 MUST 保持既有生成 mock 使用方式
-- **AND** 本次断言迁移 MUST NOT 回退为手写 store double、notifier double、fake 或通过 helper 隐藏 collaborator expectation
-
-#### Scenario: 不保留旧兼容断言
-
-- **WHEN** role 与 baseline 测试迁移断言表达
-- **THEN** 测试 MUST NOT 新增旧 role 字段、旧 binding 行为、旧 baseline catalog、旧 fake 或旧 helper 兼容断言
-- **AND** 测试 MUST NOT 新增机械 `require.Fail`、`require.Failf`、`assert.Fail` 或 `assert.Failf` 替换来模拟历史手写失败判断
-
-#### Scenario: 残留手写失败调用符合例外
-
-- **WHEN** `rg "t\\.Fatalf|t\\.Fatal\\(|t\\.Errorf|t\\.Error\\(|Failf?\\(" user-service/internal/features/role user-service/internal/shared/rbacbaseline --glob '*_test.go'` 在迁移后仍有命中
-- **THEN** 每个剩余命中 MUST 属于 `docs/TESTING.md` 允许的自定义测试控制流、特殊诊断输出或测试辅助工具不适合依赖 `testify` 的场景
-- **AND** 实现任务记录 MUST 列明这些剩余命中及其保留原因
-
-### Requirement: Role HTTP boundary 测试覆盖
-
-role feature 的 HTTP boundary 测试 MUST 直接覆盖角色生命周期、角色权限绑定和用户角色绑定 controller。测试 MUST 固定请求绑定、input preparer、application command/query port 调用、错误映射和 response envelope 的当前契约，并 MUST NOT 通过旧 role 字段、旧请求字段别名、旧 binding 行为、旧 envelope 形态、旧错误码或兼容 helper 表达预期。
-
-#### Scenario: 角色生命周期 handler 成功路径
-
-- **WHEN** role HTTP 测试覆盖角色列表、创建、详情、更新和启停 handler 的合法请求
-- **THEN** 测试 MUST 验证 controller 调用对应 role application command/query port，并传入由当前 URI、query 和 JSON body 归一化得到的 command/query
-- **AND** 测试 MUST 验证成功响应使用当前 response envelope、HTTP status 和 role response 字段映射
-
-#### Scenario: 角色权限绑定 handler 成功路径
-
-- **WHEN** role HTTP 测试覆盖查询、替换、新增和移除角色权限绑定 handler 的合法请求
-- **THEN** 测试 MUST 验证 controller 调用对应 role application command/query port，并传入当前 role ID、permission ID 或 permission ID 集合
-- **AND** 测试 MUST 验证成功响应使用当前 response envelope、HTTP status 和 permission response 字段映射
-
-#### Scenario: 用户角色绑定 handler 成功路径
-
-- **WHEN** role HTTP 测试覆盖查询、替换、新增和移除用户角色绑定 handler 的合法请求
-- **THEN** 测试 MUST 验证 controller 调用对应 role application command/query port，并传入当前 user ID、role ID 或 role ID 集合
-- **AND** 测试 MUST 验证成功响应使用当前 response envelope、HTTP status 和 role response 字段映射
-
-#### Scenario: 请求绑定和输入解析失败
-
-- **WHEN** role HTTP controller 收到非法 URI UUID、非法 cursor、非法 query 参数、非法 JSON body 或缺失必填字段
-- **THEN** 测试 MUST 验证请求在 HTTP boundary 被拒绝并返回当前 bad request 或 validation failed envelope
-- **AND** 测试 MUST 验证对应 application command/query port 未被调用
-
-#### Scenario: application 错误映射
-
-- **WHEN** role application command/query port 返回 domain、validation、not found、conflict 或内部错误
-- **THEN** role HTTP boundary 测试 MUST 验证 controller 通过当前 `toRoleHTTPError` 映射为对应 HTTP status 和 envelope code
-- **AND** 测试 MUST NOT 新增旧错误码、旧 message 或旧 envelope 兼容断言
-
-#### Scenario: 保持 role HTTP 测试边界
-
-- **WHEN** role HTTP boundary 测试需要构造 collaborator、请求上下文或响应断言
-- **THEN** 测试 MUST 使用现有 gomock 生成物或既有生成入口维护的 mock 表达 application port 调用
-- **AND** 测试 MUST NOT 引入 infrastructure store、Ent client、PostgreSQL、Casbin engine、RBAC seed 或跨 feature adapter 作为 controller 单元测试依赖
-
-#### Scenario: 不保留旧兼容路径
-
-- **WHEN** role HTTP boundary 测试新增或调整断言
-- **THEN** 测试 MUST NOT 新增旧 role 字段、旧 request body 字段别名、旧 binding 行为、旧 response envelope、旧错误码或旧 helper 兼容断言
-- **AND** 测试 MUST 使用 `testify/require` 或必要的 `assert` 表达语义化断言，MUST NOT 使用机械 `Fail` / `Failf` 替换来模拟历史手写失败判断
-
-### Requirement: Role PostgreSQL store 持久化契约
-
-系统 MUST 使用当前 Ent schema 和外部 UUID 字段实现 Role PostgreSQL store 的角色、用户角色绑定和角色权限绑定持久化；join 表内部外键只用于数据库关联，不得暴露为 role feature 的业务查询入口。store MUST 将当前领域错误稳定映射给 application 层，并在替换绑定失败时保持已有绑定不被部分破坏。
-
-#### Scenario: 角色按外部 UUID 持久化和查询
-
-- **WHEN** role infrastructure store 创建、查询、批量查询、列表、更新或启停角色
-- **THEN** 系统 MUST 以 `roles.role_id` 作为稳定业务标识执行查询和排序
-- **AND** 唯一约束冲突 MUST 映射为 `ErrRoleAlreadyExists`
-- **AND** 未找到目标角色 MUST 映射为 `ErrRoleNotFound`
-
-#### Scenario: 用户角色绑定使用当前用户和角色身份
-
-- **WHEN** role infrastructure store 查询、添加、替换或移除用户角色绑定
-- **THEN** 系统 MUST 通过用户外部 UUID 和角色外部 UUID 解析当前未软删除用户与角色
-- **AND** 空绑定集合 MUST 返回空结果且不得创建兼容占位数据
-- **AND** 重复或不存在的绑定引用 MUST 返回当前领域错误并保持已有绑定关系不被破坏
-
-#### Scenario: 角色权限绑定复核当前启用权限
-
-- **WHEN** role infrastructure store 添加或替换角色权限绑定
-- **THEN** 系统 MUST 在写入前按权限外部 UUID 复核权限存在且处于启用状态
-- **AND** 不存在或已停用权限 MUST 映射为当前权限或角色绑定领域错误
-- **AND** 替换失败 MUST 回滚事务并保留替换前的角色权限绑定
-
-#### Scenario: 不引入旧兼容查询和绑定语义
-
-- **WHEN** Role PostgreSQL store 测试或实现覆盖角色与绑定持久化
-- **THEN** 系统 MUST NOT 新增旧 internal ID 查询入口、旧 role code 字段、旧 binding 行为或兼容查询 helper
-- **AND** 测试 MUST 以当前 Ent schema、当前外部 UUID 字段和当前领域错误为准
-
-### Requirement: Permission HTTP boundary 测试覆盖
-
-permission feature 的 HTTP boundary 测试 MUST 直接覆盖权限目录生命周期、用户有效权限查询和 route diff controller。测试 MUST 固定请求绑定、input preparer、application command/query port 调用、错误直通渲染、分页 envelope、有效权限 response 和 route diff response 的当前契约，并 MUST NOT 通过旧权限资源路径、旧 action/resource 字段语义、旧错误 envelope、旧授权绕过、旧 route scanner 输出或兼容 helper 表达预期。
-
-#### Scenario: 权限目录 handler 成功路径
-
-- **WHEN** permission HTTP 测试覆盖权限列表、创建、详情、更新、启用和停用 handler 的合法请求
-- **THEN** 测试 MUST 验证 controller 调用对应 permission application command/query port，并传入由当前 URI、query 和 JSON body 归一化得到的 command/query
-- **AND** 测试 MUST 验证成功响应使用当前 response envelope、HTTP status、分页信息和 permission response 字段映射
-
-#### Scenario: 用户有效权限 handler 成功路径
-
-- **WHEN** permission HTTP 测试覆盖查询用户有效权限 handler 的合法请求
-- **THEN** 测试 MUST 验证 controller 调用当前 permission query port，并传入当前 user ID
-- **AND** 测试 MUST 验证成功响应使用当前 response envelope 和有效权限 response 字段映射
-
-#### Scenario: route diff handler 成功路径
-
-- **WHEN** permission HTTP 测试覆盖 route diff handler 的合法请求
-- **THEN** 测试 MUST 验证 controller 调用当前 permission query port 获取 route diff 结果
-- **AND** 测试 MUST 验证成功响应使用当前 response envelope 和 missing、stale、mismatch 诊断字段映射
-
-#### Scenario: 请求绑定和输入解析失败
-
-- **WHEN** permission HTTP controller 收到非法 URI UUID、非法 cursor、非法 query 参数、非法 JSON body 或缺失必填字段
-- **THEN** 测试 MUST 验证请求在 HTTP boundary 被拒绝并返回当前 bad request 或 validation failed envelope
-- **AND** 测试 MUST 验证对应 application command/query port 未被调用
-
-#### Scenario: application 错误直通渲染
-
-- **WHEN** permission application command/query port 返回 domain、validation、not found、conflict 或内部错误
-- **THEN** permission HTTP boundary 测试 MUST 验证 controller 通过 `response.Fail(c, err)` 渲染对应 HTTP status 和 envelope code
-- **AND** 测试 MUST 覆盖权限已存在、权限不存在、权限输入无效、系统权限保护和未知内部错误响应
-- **AND** 测试 MUST NOT 新增旧错误码、旧 message、旧 envelope 或权限专用错误 mapper 兼容断言
-
-#### Scenario: 保持 permission HTTP 测试边界
-
-- **WHEN** permission HTTP boundary 测试需要构造 collaborator、请求上下文或响应断言
-- **THEN** 测试 MUST 使用现有 gomock 生成物或既有生成入口维护的 mock 表达 application port 调用
-- **AND** 测试 MUST NOT 引入 infrastructure store、Ent client、PostgreSQL、Redis、Casbin engine、RBAC seed 或跨 feature adapter 作为 controller 单元测试依赖
-
-#### Scenario: 语义化断言和不保留旧兼容路径
-
-- **WHEN** permission HTTP boundary 测试新增或调整断言
-- **THEN** 测试 MUST 优先使用 `testify/require` 和 `Len`、`Greater`、`ErrorContains`、`ElementsMatch`、`JSONEq`、`Regexp` 等更具体语义化断言
-- **AND** 测试 MUST NOT 新增机械 `Fail` / `Failf` / `FailNow` / `FailNowf` 替换、旧权限资源路径、旧 action/resource 字段、旧 binding、旧 response envelope、旧授权绕过或旧 helper 兼容断言
-
-### Requirement: RBAC CLI 测试断言规范
-
-RBAC CLI 测试 MUST 优先使用 `testify/require` 表达 seed、assign-super-admin、create-super-admin、password/env normalization、command construction、error handling 和 cleanup behavior 等语义化断言。只有当单个测试需要收集多个互相独立的命令属性失败，且后续检查不依赖前置检查成功时，测试 MAY 使用 `testify/assert`。
-
-#### Scenario: 迁移 RBAC command 历史断言
-
-- **WHEN** `user-service/cmd` 测试检查 `rbac seed`、`rbac assign-super-admin`、`rbac create-super-admin` 或相关 helper 的错误返回、输出文本、flag/env 归一化、password 输入、cleanup error 或 command metadata
-- **THEN** 测试 MUST 使用 `require.NoError`、`require.Error`、`require.ErrorContains`、`require.Equal`、`require.NotNil`、`require.Len`、`require.Contains`、`require.Regexp` 或等价语义化断言表达预期
-- **AND** 测试 MUST NOT 使用 `t.Fatalf`、`t.Fatal`、`t.Errorf`、`t.Error` 或 `Fail` 类调用表达已有语义化断言可以清晰覆盖的失败
-
-#### Scenario: 不保留旧 RBAC CLI 兼容断言
-
-- **WHEN** RBAC CLI 测试迁移断言表达
-- **THEN** 测试 MUST NOT 新增旧 root command alias、旧 RBAC command path、旧 flag/env 名、旧 password handling 或旧 cleanup behavior 兼容断言
-- **AND** 迁移 MUST NOT 改变 RBAC seed、超级管理员角色绑定、密码哈希、用户状态或权限目录生产语义
-
-#### Scenario: RBAC CLI 残留手写失败调用符合例外
-
-- **WHEN** `rg "t\\.Fatalf|t\\.Fatal\\(|t\\.Errorf|t\\.Error\\(|Fail(Now)?f?\\(" user-service/cmd --glob '*_test.go'` 在迁移后仍有命中
-- **THEN** 每个剩余命中 MUST 属于 `docs/TESTING.md` 允许的自定义测试控制流、特殊诊断输出或测试辅助工具不适合依赖 `testify` 的场景
-- **AND** 实现任务记录 MUST 列明这些剩余命中及其保留原因
-
-### Requirement: RBAC 路由注册测试覆盖
-系统 MUST 使用 router 包测试覆盖权限、角色和用户角色路由在 user-service 聚合路由中的注册结果，确保 RBAC 保护接口只注册在当前 `/api/v1` 路由图并经过当前认证和授权中间件链。
-
-#### Scenario: 权限和角色路由注册
-- **WHEN** PermissionController 和 RoleController 均已提供给 `registerV1Routes`
-- **THEN** 测试 MUST 验证权限目录、route diff、用户有效权限、角色生命周期、角色权限绑定和用户角色绑定路由注册在 `/api/v1` 下
-- **AND** 测试 MUST 验证这些路由进入当前认证和 RBAC 授权中间件链
-
-#### Scenario: RBAC 安全依赖缺失拒绝注册
-- **WHEN** `RegisterUserServiceHTTPRoutes` 或 `registerV1Routes` 缺少 token version validator、RBAC authorizer、PermissionController 或 RoleController 任一安全依赖
-- **THEN** user-service 聚合路由注册 MUST 返回明确错误
-- **AND** 系统 MUST NOT 注册部分 `/api/v1` 业务路由
-- **AND** 测试 MUST NOT 通过可选 controller 条件跳过、旧路径兼容别名或部分路由注册补偿缺失依赖
-
-### Requirement: RBAC CLI 命令测试覆盖
-
-`rbac-access-control` 的 user-service RBAC CLI 测试 MUST 直接覆盖当前 `user-service rbac` seed、assign-super-admin 和 create-super-admin 命令契约。测试 MUST 固定当前配置来源、参数归一化、依赖装配、错误传播和 cleanup 语义，并 MUST NOT 为旧命令名、旧 flag、旧环境变量、旧 root Makefile 无服务前缀入口或旧 bootstrap 行为新增兼容断言。
-
-#### Scenario: seed 命令 runner 传递当前选项
-
-- **WHEN** `runRBACSeedCommand` 使用当前配置路径和 seed options 执行
-- **THEN** 测试 MUST 验证 runner 通过当前 RBAC seed service 接收 `reactivateSystem` 和 `syncSystemBindings`
-- **AND** 测试 MUST 验证成功路径执行 cleanup
-
-#### Scenario: assign-super-admin 命令 runner 绑定指定用户
-
-- **WHEN** `runAssignSuperAdminCommand` 收到合法用户 UUID
-- **THEN** 测试 MUST 验证 runner 将该 UUID 传递给当前超级管理员绑定流程
-- **AND** 测试 MUST 覆盖绑定已存在和新增绑定两类当前输出语义
-
-#### Scenario: create-super-admin 命令 runner 使用当前创建流程
-
-- **WHEN** `runCreateSuperAdminCommand` 收到当前 create-super-admin options
-- **THEN** 测试 MUST 验证 runner 使用当前配置路径初始化依赖并调用 `createSuperAdmin`
-- **AND** 测试 MUST 验证输出中的 username 使用当前 username 归一化规则
-
-#### Scenario: createSuperAdmin 覆盖用户存在性分支
-
-- **WHEN** `createSuperAdmin` 处理不存在用户、已存在用户不重置密码或已存在用户重置密码
-- **THEN** 测试 MUST 验证新建用户、角色绑定、密码 hash 和凭据更新按当前契约发生
-- **AND** 测试 MUST 验证用户读取、创建、hash、凭据更新和角色绑定错误会 fail-fast 返回
-
-#### Scenario: RBAC CLI 初始化和 cleanup 错误可见
-
-- **WHEN** RBAC CLI 依赖初始化失败或命令执行后 cleanup 返回错误
-- **THEN** 测试 MUST 验证命令返回明确错误
-- **AND** 如果命令错误和 cleanup 错误同时存在，测试 MUST 验证两者都保留在返回错误中
-
-### Requirement: RBAC CLI 参数归一化测试
-
-`rbac-access-control` 的 create-super-admin 参数归一化测试 MUST 固定当前 username、nickname、password env、password value 和 reset password 语义。测试 MUST 只验证当前 `ADMIN_PASSWORD` 默认来源和当前 flag/env 契约，不得新增旧环境变量或旧默认值兼容路径。
-
-#### Scenario: create-super-admin 使用默认 password env
-
-- **WHEN** `passwordEnv` 为空且 `ADMIN_PASSWORD` 存在
-- **THEN** `normalizeCreateSuperAdminOptions` MUST 使用 `ADMIN_PASSWORD`
-- **AND** username MUST trim 后转小写，空 nickname MUST 回退为归一化 username
-
-#### Scenario: create-super-admin 拒绝缺失必要输入
-
-- **WHEN** password env 不存在、username 为空或 password value 为空
-- **THEN** `normalizeCreateSuperAdminOptions` MUST 返回明确错误
-- **AND** 测试 MUST 使用 `require.ErrorContains` 或等价语义化断言表达错误内容
-
-#### Scenario: reset password 标志保持当前值
-
-- **WHEN** create-super-admin options 启用 reset password
-- **THEN** 归一化结果 MUST 保留 `resetPassword=true`
-- **AND** 测试 MUST NOT 通过旧 flag 或旧环境变量表达重置密码预期
-
-### Requirement: 受保护 HTTP flow 授权边界断言规范
-系统 MUST 使用语义化断言覆盖 user-service E2E HTTP flow 中受保护用户接口的认证和授权边界。断言迁移 MUST 保持当前认证中间件、RBAC 授权中间件、错误 envelope 和受保护路由语义不变。
-
-#### Scenario: 授权上下文访问用户接口
-- **WHEN** E2E flow 使用当前测试前置条件中的有效 bearer token 访问用户创建或用户详情接口
-- **THEN** 测试 MUST 使用语义化断言验证请求进入当前受保护 HTTP flow 并返回预期 response envelope
-- **AND** 迁移 MUST NOT 绕过认证或 RBAC 中间件，也 MUST NOT 新增旧授权兼容断言
-
-#### Scenario: 缺失认证访问受保护接口
-- **WHEN** E2E flow 未提供 bearer token 访问受保护用户接口
-- **THEN** 测试 MUST 使用语义化断言验证 HTTP `401 Unauthorized`、`success=false` 和 `CodeUnauthenticated`
-- **AND** 测试 MUST NOT 接受旧认证绕过路径、旧错误码或旧 envelope 格式
-
-#### Scenario: 跨 feature 响应断言保持边界
-- **WHEN** E2E flow 同时经过认证、RBAC 和用户资料 feature 的响应边界
-- **THEN** 测试 MUST 只迁移断言表达
-- **AND** 测试 MUST NOT 修改 Casbin policy、RBAC seed、角色权限绑定、用户角色绑定、受保护路由路径或授权结果语义
-
-### Requirement: 角色权限绑定基础设施关键路径测试
-
-role infrastructure MUST 提供默认可执行的测试覆盖角色权限绑定中不依赖 PostgreSQL 行锁的持久化路径，包括列表、删除、系统绑定同步、缺失权限、重复输入去重、失败保持和映射 helper。依赖 `FOR UPDATE` 的新增和替换路径 MUST 保持生产 PostgreSQL 锁语义不变，并 MAY 由显式 Docker-backed PostgreSQL 集成测试覆盖。
-
-#### Scenario: 默认测试覆盖非锁定绑定路径
-- **WHEN** 协作者执行 `go test -cover ./user-service/internal/features/role/infrastructure/postgres`
-- **THEN** 测试 MUST 默认执行 `RolePermissionStore.ListByRoleID`、`Remove`、`EnsureSystemBindings`、`SyncSystemBindings` 和映射 helper 的成功与错误路径
-- **AND** 默认覆盖率 MUST 达到 70% 以上
-
-#### Scenario: 同步失败保持原绑定
-- **WHEN** `RolePermissionStore.SyncSystemBindings` 请求引用缺失权限
-- **THEN** 测试 MUST 断言方法返回明确错误
-- **AND** 测试 MUST 断言失败前已有角色权限绑定保持不变
-
-#### Scenario: 默认测试覆盖系统绑定同步
-- **WHEN** 默认测试执行 `RolePermissionStore.SyncSystemBindings`
-- **THEN** 测试 MUST 覆盖新增缺失绑定、删除多余绑定和保留既有绑定
-- **AND** 测试 MUST 断言返回的新增与删除统计符合持久化结果
-
-#### Scenario: 同步失败保持可诊断结果
-- **WHEN** `SyncSystemBindings` 因缺失权限、查询失败或事务写入失败无法完成
-- **THEN** 测试 MUST 覆盖错误映射或 rollback 路径
-- **AND** 测试 MUST 断言不会把部分成功伪装为完整同步成功
-
-#### Scenario: PostgreSQL 集成测试不承担默认覆盖唯一来源
-- **WHEN** `AEGISCORE_TEST_CONTAINERS` 未设置
-- **THEN** 默认测试 MAY 跳过 Docker-backed PostgreSQL 集成测试
-- **AND** 默认测试仍 MUST 覆盖角色权限绑定非锁定核心路径
-- **AND** 生产代码 MUST NOT 为 SQLite 测试新增跳过 `FOR UPDATE` 的兼容分支
-
-### Requirement: RBAC Enforce 低基数指标
-
-系统 MUST 为每次 permission authorization service 的 RBAC Enforce 判定导出低基数 Prometheus metrics，用于观察授权通过、授权拒绝、授权异常和授权耗时。指标 MUST 不改变 Casbin policy、用户角色缓存、policy sync、超级管理员通配授权或 HTTP 授权结果语义。
-
-#### Scenario: 授权通过指标
-
-- **WHEN** 已认证用户拥有当前 HTTP method 和 route template 对应权限，RBAC Enforce 返回允许
-- **THEN** 系统 MUST 将 RBAC Enforce counter 记录为 `result="allow"`
-- **AND** 系统 MUST 将本次 Enforce 耗时写入 RBAC Enforce latency histogram
-- **AND** 指标标签 MUST 只包含 `result`、`method` 和 `route_template`
-
-#### Scenario: 授权拒绝指标
-
-- **WHEN** 已认证用户缺少当前 HTTP method 和 route template 对应权限，RBAC Enforce 返回拒绝
-- **THEN** 系统 MUST 将 RBAC Enforce counter 记录为 `result="deny"`
-- **AND** 系统 MUST 将本次 Enforce 耗时写入 RBAC Enforce latency histogram
-- **AND** 系统 MUST 保持授权拒绝响应语义不变
-
-#### Scenario: 授权异常指标
-
-- **WHEN** RBAC Enforce 因非法 subject、context 取消、用户角色回源失败或 Casbin 执行失败返回错误
-- **THEN** 系统 MUST 将 RBAC Enforce counter 记录为 `result="error"`
-- **AND** 系统 MUST 将本次 Enforce 耗时写入 RBAC Enforce latency histogram
-- **AND** 系统 MUST 保持 fail-closed 行为，不得因指标记录失败放行请求
-
-#### Scenario: Enforce 指标禁止高基数字段
-
-- **WHEN** 系统记录 RBAC Enforce metrics
-- **THEN** 指标 MUST NOT 包含用户 ID、角色 ID、权限 ID、token ID、trace/span ID、raw path、IP、邮箱、用户名、Redis key、SQL、SQL 参数或原始错误
-- **AND** route 标签 MUST 使用 Gin route template 或等价稳定模板，不得使用真实请求 path
-
-### Requirement: 权限目录错误应用错误渲染
-
-系统 MUST 将权限目录能力中的权限已存在、权限不存在、权限输入无效和系统权限保护错误表达为可由共享 response helper 直接渲染的应用错误，并保持权限 HTTP 边界无专用 sentinel-to-HTTP 兼容映射。
-
-#### Scenario: 权限已存在渲染为冲突响应
-
-- **WHEN** 权限创建或更新流程返回 `permissiondomain.ErrPermissionAlreadyExists`
-- **THEN** 权限 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
-- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
-- **AND** 响应 message MUST 使用当前权限已存在中文公开文案
-- **AND** 该错误 MUST 使用稳定 `Reason` 值 `permission_already_exists`
-
-#### Scenario: 权限不存在渲染为未找到响应
-
-- **WHEN** 权限详情查询、更新或启停流程返回 `permissiondomain.ErrPermissionNotFound`
-- **THEN** 权限 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
-- **AND** 响应 MUST 为 `404 Not Found` 和共享未找到业务 code
-- **AND** 响应 message MUST 使用当前权限不存在中文公开文案
-- **AND** 该错误 MUST 使用稳定 `Reason` 值 `permission_not_found`
-
-#### Scenario: 权限输入无效渲染为 validation 响应
-
-- **WHEN** 权限 domain validation 返回 `permissiondomain.ErrPermissionInvalid`
-- **THEN** 权限 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
-- **AND** 响应 MUST 为 `400 Bad Request` 和共享 validation 业务 code
-- **AND** 响应 message MUST 使用当前权限输入无效中文公开文案
-- **AND** 该错误 MUST 使用稳定 `Reason` 值 `permission_invalid`
-
-#### Scenario: 系统权限保护渲染为冲突响应
-
-- **WHEN** 权限更新流程返回 `permissiondomain.ErrSystemPermissionProtected`
-- **THEN** 权限 HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
-- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
-- **AND** 响应 message MUST 使用当前系统权限保护中文公开文案
-- **AND** 该错误 MUST 使用稳定 `Reason` 值 `system_permission_protected`
-
-#### Scenario: 权限业务错误保留 errors.Is 语义
-
-- **WHEN** permission feature 或测试需要判断权限已存在、权限不存在、权限输入无效或系统权限保护错误
-- **THEN** `errors.Is` 对直接返回的权限应用错误和被包装后的权限应用错误 MUST 继续支持正确匹配
-- **AND** 系统 MUST NOT 为 permission HTTP transport 保留 `toPermissionHTTPError` 或等价兼容函数
-
-### Requirement: 权限 HTTP transport 统一错误出口
-
-permission HTTP transport MUST 对业务 command/query 返回错误使用共享 `response.Fail` 入口，避免在 transport 层重复维护权限目录错误到 HTTP 响应的映射。授权中间件错误处理 MUST 继续使用共享 response helper，且不得复用或新增权限目录错误 mapper。
-
-#### Scenario: 权限创建业务错误
-
-- **WHEN** `CreatePermission` controller 调用权限创建 use case 返回错误
+- **WHEN** permission 或 role controller 的 command/query 返回业务错误
 - **THEN** controller MUST 直接调用 `response.Fail(c, err)`
-- **AND** controller MUST NOT 先调用权限专用错误 mapper
+- **AND** transport MUST NOT 调用或保留 `toPermissionHTTPError`、`toRoleHTTPError` 或等价 mapper
 
-#### Scenario: 权限详情查询业务错误
+### Requirement: RBAC 可观测性
 
-- **WHEN** `GetPermission` controller 调用权限查询 use case 返回错误
-- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
-- **AND** controller MUST NOT 先调用权限专用错误 mapper
+系统 MUST 为 RBAC 授权判定和正式模块执行的 route diff 提供低基数 metrics，并使用显式注入的 logger 记录加载和同步异常。观测失败 MUST NOT 改变授权或策略同步结果。
 
-#### Scenario: 权限列表查询业务错误
+#### Scenario: 记录授权结果和耗时
 
-- **WHEN** `ListPermissions` controller 调用权限列表 use case 返回错误
-- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
-- **AND** controller MUST NOT 先调用权限专用错误 mapper
+- **WHEN** permission authorization service 完成一次 RBAC Enforce 判定
+- **THEN** counter MUST 记录 `result="allow"`、`result="deny"` 或 `result="error"`
+- **AND** histogram MUST 记录本次判定耗时
+- **AND** 标签 MUST 只使用 `result`、HTTP method 和 route template
 
-#### Scenario: 权限更新业务错误
+#### Scenario: 指标禁止高基数数据
 
-- **WHEN** `UpdatePermission` controller 调用权限更新 use case 返回错误
-- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
-- **AND** controller MUST NOT 先调用权限专用错误 mapper
+- **WHEN** 系统记录 RBAC metrics
+- **THEN** 指标 MUST NOT 包含用户、角色、权限、token、trace、IP、账号、Redis key、SQL、原始错误或 raw path
+- **AND** route 标签 MUST 使用稳定 route template
 
-#### Scenario: 权限启停业务错误
+#### Scenario: 记录 route diff
 
-- **WHEN** `EnablePermission` 或 `DisablePermission` controller 调用权限启停 use case 返回错误
-- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
-- **AND** controller MUST NOT 先调用权限专用错误 mapper
+- **WHEN** 正式 permission 模块执行 route diff
+- **THEN** 系统 MUST 记录本次 missing、stale 和不一致结果
+- **AND** 指标记录 MUST NOT 修改权限目录或路由诊断结果
 
-#### Scenario: 权限有效权限与 route diff 业务错误
+#### Scenario: 显式日志依赖
 
-- **WHEN** `ListEffectivePermissions` 或 `DiffRoutes` controller 调用权限 query use case 返回错误
-- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
-- **AND** controller MUST NOT 先调用权限专用错误 mapper
+- **WHEN** role 或 permission application、policy loader、watcher、cache 或 adapter 需要记录日志
+- **THEN** logger MUST 由 constructor 显式注入或由调用方 context 提供
+- **AND** 生产主路径 MUST NOT 依赖 package-level 默认 logger
+- **AND** 日志 MUST 使用稳定低基数字段并 MUST NOT 记录 token、SQL、Redis key 或原始 policy 数据
 
-#### Scenario: 授权 HTTP transport 不使用权限目录 mapper
+### Requirement: RBAC 分层与组合边界
 
-- **WHEN** permission HTTP 授权中间件处理缺失认证、策略拒绝或授权执行错误
-- **THEN** 授权中间件 MUST 使用共享 response helper 渲染当前未认证、禁止访问或内部错误响应
-- **AND** 授权中间件 MUST NOT 调用 `toPermissionHTTPError` 或任何权限目录错误 mapper
+role 和 permission feature MUST 保持 domain、application、transport 和 infrastructure 分层。domain/application MUST 框架无关并拥有消费侧最小 port；Fx、Gin、Ent、Redis、SQL 和 HTTP response 细节 MUST 留在对应 composition、transport 或 infrastructure 边界。role infrastructure store constructor MUST 使用显式普通 Go 参数接收 Ent client 和必要的消费侧窄 port，MUST NOT 通过 `fx.In`、`dig.In`、`fx.Out`、`dig.Out`、`name` tag 或其他 DI metadata 表达依赖。permission infrastructure 可以拥有 Ent、Redis、Casbin 和 cache 的具体适配细节，但 MUST NOT 依赖 Fx 或 Dig。
 
-### Requirement: 角色与绑定错误应用错误渲染
+#### Scenario: application 直接构造
 
-系统 MUST 将角色目录、用户角色绑定和角色权限绑定能力中的稳定业务错误表达为可由共享 response helper 直接渲染的应用错误，并保持 role HTTP 边界无专用 sentinel-to-HTTP 兼容映射。
+- **WHEN** role 或 permission application service 在单元测试或非 Fx 调用方中构造
+- **THEN** 调用方 MUST 能以普通强类型参数提供 store、lookup、notifier 和 logger
+- **AND** application/domain MUST NOT import Fx、嵌入 `fx.In` 或声明仅服务于 DI 的 tag
 
-#### Scenario: 角色已存在渲染为冲突响应
+#### Scenario: feature composition 组装依赖
 
-- **WHEN** 角色创建或更新流程返回 `roledomain.ErrRoleAlreadyExists`
-- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
-- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
-- **AND** 响应 message MUST 使用当前角色已存在中文公开文案
-- **AND** 该错误 MUST 使用稳定 `Reason` 值 `role_already_exists`
+- **WHEN** 正式 feature module 注册 application service、policy engine、watcher、cache 和 adapter
+- **THEN** 无 DI metadata 的构造器 MUST 直接注册
+- **AND** named、optional 或配置转换 adapter MUST 留在 feature composition 边界
+- **AND** 必需安全依赖缺失时 graph MUST 构造失败，MUST NOT 静默降级
 
-#### Scenario: 角色不存在渲染为未找到响应
+#### Scenario: role store adapter 显式构造
 
-- **WHEN** 角色详情查询、更新、启停、用户角色绑定或角色权限绑定流程返回 `roledomain.ErrRoleNotFound`
-- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
-- **AND** 响应 MUST 为 `404 Not Found` 和共享未找到业务 code
-- **AND** 响应 message MUST 使用当前角色不存在中文公开文案
-- **AND** 该错误 MUST 使用稳定 `Reason` 值 `role_not_found`
+- **WHEN** 调用方构造 `RoleStore`、`RolePermissionStore` 或 `UserRoleStore`
+- **THEN** 调用方 MUST 以普通 Go 参数显式传入 `*ent.Client`
+- **AND** constructor MUST NOT 暴露或接收 `fx.In`、`dig.In`、`fx.Out`、`dig.Out` 或 `name:"primary_db"` 等 DI metadata
+- **AND** `PermissionLookup` 等跨 feature 依赖 MUST 继续通过 role application 消费侧窄 port 显式注入，MUST NOT 扩大为 permission infrastructure 宽接口
 
-#### Scenario: 角色输入无效渲染为 validation 响应
+#### Scenario: role feature 禁止 Fx/Dig 回归
 
-- **WHEN** 角色 domain validation 返回 `roledomain.ErrRoleInvalid`
-- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
-- **AND** 响应 MUST 为 `400 Bad Request` 和共享 validation 业务 code
-- **AND** 响应 message MUST 使用当前角色输入无效中文公开文案
-- **AND** 该错误 MUST 使用稳定 `Reason` 值 `role_invalid`
+- **WHEN** 执行 `user-service-architecture-lint`
+- **THEN** lint MUST 检查 `user-service/internal/features/role` 的 domain、application、infrastructure 和 transport 生产 Go 文件
+- **AND** 这些文件 MUST NOT import `go.uber.org/fx` 或 `go.uber.org/dig`
+- **AND** 这些文件 MUST NOT 使用 `fx.In`、`fx.Out`、`dig.In`、`dig.Out` 或仅服务于 DI 的 tag
+- **AND** role feature 的 `fx.go` 与 `fx_test.go` MAY 继续作为 composition 和 graph 验证边界使用 Fx
 
-#### Scenario: 系统角色保护渲染为冲突响应
+#### Scenario: 显式生命周期由 composition 编排
 
-- **WHEN** 角色更新或启停流程返回 `roledomain.ErrSystemRoleProtected`
-- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
-- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
-- **AND** 响应 message MUST 使用当前系统角色保护中文公开文案
-- **AND** 该错误 MUST 使用稳定 `Reason` 值 `system_role_protected`
+- **WHEN** 正式 feature module 需要启动 initial load、RBAC watcher 或关闭 user-role cache
+- **THEN** Fx lifecycle hook MUST 只登记在 composition 层，并且 MUST 调用 infrastructure 对象暴露的显式 `Initialize`、`Start`、`Stop` 或 `Close` 方法
+- **AND** `user-service/internal/features/permission/infrastructure` 的生产代码 MUST NOT import `go.uber.org/fx` 或 `go.uber.org/dig`，也 MUST NOT 使用 `fx.Lifecycle`、`fx.Hook`、`fx.In` 或 `fx.Out`
 
-#### Scenario: 停用角色渲染为冲突响应
+#### Scenario: 共享边界保持最小
 
-- **WHEN** 用户角色绑定流程返回 `roledomain.ErrRoleInactive`
-- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
-- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
-- **AND** 响应 message MUST 使用当前角色已停用中文公开文案
-- **AND** 该错误 MUST 使用稳定 `Reason` 值 `role_inactive`
+- **WHEN** role 需要查询权限或 permission 需要解析用户身份
+- **THEN** 消费侧 application MUST 定义最小 port 并由相邻 feature 或 integration adapter 实现
+- **AND** feature MUST NOT 导入其他 feature 的 infrastructure 或 HTTP transport
 
-#### Scenario: 用户角色绑定已存在渲染为冲突响应
+#### Scenario: 服务资源归属
 
-- **WHEN** 用户角色增量绑定流程返回 `roledomain.ErrUserRoleAlreadyExists`
-- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
-- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
-- **AND** 响应 message MUST 使用当前用户角色绑定已存在中文公开文案
-- **AND** 该错误 MUST 使用稳定 `Reason` 值 `user_role_already_exists`
+- **WHEN** user-service 装配 RBAC 的 PostgreSQL、Redis 和用户角色缓存
+- **THEN** 具名资源 MUST 来自服务自有 `resources.postgres` 和 `resources.redis`，feature cache MUST 来自 `rbac.user_role_cache`
+- **AND** RBAC MUST NOT 把服务业务配置或 key schema 下沉到 `common`
+- **AND** watcher 和 cache 的 `Stop` 或 `Close` MUST NOT 关闭共享 Redis、Ent 或 PostgreSQL 资源
 
-#### Scenario: 用户角色绑定不存在渲染为未找到响应
+#### Scenario: 架构调整不改变行为
 
-- **WHEN** 用户角色解绑流程返回 `roledomain.ErrUserRoleNotFound`
-- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
-- **AND** 响应 MUST 为 `404 Not Found` 和共享未找到业务 code
-- **AND** 响应 message MUST 使用当前用户角色绑定不存在中文公开文案
-- **AND** 该错误 MUST 使用稳定 `Reason` 值 `user_role_not_found`
+- **WHEN** provider 注册、依赖投影、logger 注入、application 构造方式或显式生命周期编排调整
+- **THEN** 权限、角色、绑定、授权、policy reload、缓存失效、跨副本同步和 CLI 行为 MUST 保持不变
+- **AND** 架构检查 MUST 阻止 application/domain 引入框架依赖或生产代码重新依赖全局 logger
 
-#### Scenario: 角色权限绑定已存在渲染为冲突响应
+### Requirement: Permission adapter 显式装配边界
 
-- **WHEN** 角色权限增量绑定流程返回 `roledomain.ErrRolePermissionAlreadyExists`
-- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
-- **AND** 响应 MUST 为 `409 Conflict` 和共享冲突业务 code
-- **AND** 响应 message MUST 使用当前角色权限绑定已存在中文公开文案
-- **AND** 该错误 MUST 使用稳定 `Reason` 值 `role_permission_already_exists`
+permission 的 PostgreSQL、Redis 和 Casbin infrastructure adapter 构造 API MUST 使用普通 Go 参数表达必需依赖，并 MUST NOT 在 adapter constructor 中暴露或要求 Fx/Dig metadata。生产 Fx composition MAY 在 feature composition 边界选择具名资源和生命周期挂钩，但 MUST 通过显式 Go 赋值暴露 concrete 与 application/authorization port 视图。
 
-#### Scenario: 角色权限绑定不存在渲染为未找到响应
+#### Scenario: adapter constructor 不携带 DI metadata
 
-- **WHEN** 角色权限解绑或绑定查询流程返回 `roledomain.ErrRolePermissionNotFound`
-- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 渲染失败响应
-- **AND** 响应 MUST 为 `404 Not Found` 和共享未找到业务 code
-- **AND** 响应 message MUST 使用当前角色权限绑定不存在中文公开文案
-- **AND** 该错误 MUST 使用稳定 `Reason` 值 `role_permission_not_found`
+- **WHEN** 构造 permission `PermissionStore`、policy `Loader`、Casbin `Engine` 或 Redis policy `Store`
+- **THEN** constructor MUST 接收普通强类型参数或无 DI metadata 的 options
+- **AND** constructor MUST NOT 嵌入 `fx.In`、`fx.Out`、Dig tag、`fx.As`、`fx.Self`、named result 或 group result
 
-#### Scenario: 跨 feature 不存在错误透传
+#### Scenario: composition 显式选择服务资源
 
-- **WHEN** 用户角色绑定流程返回 `identity.ErrUserNotFound` 或角色权限绑定流程返回 `permissiondomain.ErrPermissionNotFound`
-- **THEN** role HTTP 边界 MUST 通过 `response.Fail(c, err)` 直接透传渲染失败响应
-- **AND** 用户不存在 MUST 返回 `404 Not Found` 和用户身份错误自身携带的共享未找到业务 code 与公开 message
-- **AND** 权限不存在 MUST 返回 `404 Not Found` 和权限目录错误自身携带的共享未找到业务 code 与公开 message
-- **AND** role HTTP transport MUST NOT 复制 identity 或 permission 错误映射
+- **WHEN** 正式 permission Fx module 装配 PostgreSQL、Redis、policy loader、policy store、version tracker 或 authorization engine
+- **THEN** 具名 `primary_db`、`cache_redis` 或生命周期依赖的选择 MUST 留在 `features/permission/fx.go` composition 边界
+- **AND** PostgreSQL、Redis 和 Casbin adapter package 的生产构造 API MUST NOT import Fx 或 Dig 只为读取这些 tags
 
-#### Scenario: 角色业务错误保留 errors.Is 语义
+#### Scenario: 同一 Engine 暴露多个端口
 
-- **WHEN** role feature、seed 或测试需要判断角色目录、用户角色绑定或角色权限绑定错误
-- **THEN** `errors.Is` 对直接返回的角色应用错误和被包装后的角色应用错误 MUST 继续支持正确匹配
-- **AND** 系统 MUST NOT 为 role HTTP transport 保留 `toRoleHTTPError` 或等价兼容函数
+- **WHEN** composition 需要同时提供 Casbin concrete `Engine`、`permissionauthorization.Engine` 和 `permissionapplication.PolicyReloadEngine`
+- **THEN** composition MUST 构造一个 `Engine` 实例并通过普通 Go 赋值暴露这些端口
+- **AND** 系统 MUST NOT 为 concrete、authorization port 或 reload port 重复构造有状态 `Engine`
 
-### Requirement: 角色 HTTP transport 统一错误出口
+#### Scenario: 同一 Redis Store 暴露发布端口
 
-role HTTP transport MUST 对业务 command/query 返回错误使用共享 `response.Fail` 入口，避免在 transport 层重复维护角色、用户角色绑定、角色权限绑定、identity 或 permission 错误到 HTTP 响应的映射。
+- **WHEN** composition 需要同时提供 Redis policy `Store` concrete 视图和 `permissionapplication.PolicyVersionPublisher` 等接口视图
+- **THEN** composition MUST 构造一个 `Store` 实例并通过普通 Go 赋值暴露这些端口
+- **AND** 系统 MUST NOT 为 concrete 和 interface 视图重复构造有状态 Redis policy store 或 version tracker
 
-#### Scenario: 角色目录 controller 业务错误
+#### Scenario: 行为保持不变
 
-- **WHEN** `ListRoles`、`CreateRole`、`GetRole`、`UpdateRole` 或 `SetRoleStatus` controller 调用角色 command/query use case 返回错误
-- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
-- **AND** controller MUST NOT 先调用角色专用错误 mapper
-
-#### Scenario: 用户角色 controller 业务错误
-
-- **WHEN** `ListUserRoles`、`ReplaceUserRoles`、`AddUserRole` 或 `RemoveUserRole` controller 调用用户角色 command/query use case 返回错误
-- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
-- **AND** controller MUST NOT 先调用角色专用错误 mapper
-
-#### Scenario: 角色权限 controller 业务错误
-
-- **WHEN** `ListRolePermissions`、`ReplaceRolePermissions`、`AddRolePermission` 或 `RemoveRolePermission` controller 调用角色权限 command/query use case 返回错误
-- **THEN** controller MUST 直接调用 `response.Fail(c, err)`
-- **AND** controller MUST NOT 先调用角色专用错误 mapper
-
-#### Scenario: role transport 不保留跨 feature 错误 mapper
-
-- **WHEN** role HTTP transport 接收来自 identity、permission 或 role domain 的应用错误
-- **THEN** controller MUST 通过共享 response helper 渲染错误自身携带的 HTTP status、code 和 message
-- **AND** role HTTP transport MUST NOT 新增或保留将 role、identity 或 permission sentinel error 转换为 HTTP 应用错误的 mapper
-
-### Requirement: 角色 HTTP boundary 测试覆盖应用错误直通
-
-role feature 的 HTTP boundary 测试 MUST 覆盖角色目录、用户角色绑定和角色权限绑定 controller 的应用错误直通渲染。测试 MUST 固定请求绑定、input preparer、application command/query port 调用、错误直通渲染、角色 response 和权限 response 的当前契约，并 MUST NOT 通过旧错误 mapper 表达预期。
-
-#### Scenario: 角色目录错误直通渲染
-
-- **WHEN** role HTTP 测试覆盖角色创建、详情、更新或启停 handler 的业务错误
-- **THEN** 测试 MUST 验证 controller 通过 `response.Fail(c, err)` 渲染角色已存在、角色不存在、角色输入无效、系统角色保护和未知内部错误响应
-- **AND** 测试 MUST NOT 依赖 `toRoleHTTPError` 或等价兼容函数
-
-#### Scenario: 用户角色错误直通渲染
-
-- **WHEN** role HTTP 测试覆盖用户角色替换、增量绑定或解绑 handler 的业务错误
-- **THEN** 测试 MUST 验证 controller 通过 `response.Fail(c, err)` 渲染角色不存在、角色停用、用户角色绑定已存在、用户角色绑定不存在、用户不存在和未知内部错误响应
-- **AND** 测试 MUST NOT 在 role transport 层复制 identity 错误映射
-
-#### Scenario: 角色权限错误直通渲染
-
-- **WHEN** role HTTP 测试覆盖角色权限替换、增量绑定或解绑 handler 的业务错误
-- **THEN** 测试 MUST 验证 controller 通过 `response.Fail(c, err)` 渲染角色不存在、权限不存在、角色权限绑定已存在、角色权限绑定不存在和未知内部错误响应
-- **AND** 测试 MUST NOT 在 role transport 层复制 permission 错误映射
-
-#### Scenario: 保持 role HTTP 测试边界
-
-- **WHEN** role HTTP boundary 测试需要构造 collaborator、请求上下文或响应断言
-- **THEN** 测试 MUST 使用现有 gomock 生成物或既有生成入口维护的 mock 表达 application port 调用
-- **AND** 测试 MUST NOT 引入 infrastructure store、Ent client、PostgreSQL、Redis、Casbin engine、RBAC seed 或跨 feature adapter 作为 controller 单元测试依赖
-
-### Requirement: RBAC CLI runner 测试局部依赖注入
-
-`rbac-access-control` 的 user-service RBAC CLI command 测试 MUST 通过 root command 的本地依赖注入覆盖 `rbac seed`、`rbac assign-super-admin` 和 `rbac create-super-admin` runner。正式代码 MUST NOT 为这些 RBAC runner 暴露 package-level 可变函数变量，且本次装配重构 MUST 保持 RBAC seed、超级管理员分配、超级管理员创建、cleanup 和错误传播的生产语义不变。
-
-#### Scenario: seed command 通过本地 runner 捕获选项
-
-- **WHEN** `user-service/cmd` 测试执行 `rbac seed` 并传入 `--reactivate-system` 或 `--sync-system-bindings`
-- **THEN** 测试 MUST 通过当前 root command 实例的本地 runner 替身断言配置路径和 seed options
-- **AND** 测试 MUST NOT 通过赋值 package-level `runRBACSeed` 或等价可变全局函数变量注入 runner
-
-#### Scenario: assign-super-admin command 通过本地 runner 校验 UUID
-
-- **WHEN** `user-service/cmd` 测试执行 `rbac assign-super-admin --user-id <uuid>`
-- **THEN** 测试 MUST 通过当前 root command 实例的本地 runner 替身断言配置路径和用户 UUID
-- **AND** 非法 UUID 输入 MUST 在调用 runner 前被拒绝，且不得调用本地 runner 替身
-
-#### Scenario: create-super-admin command 通过本地 runner 捕获参数
-
-- **WHEN** `user-service/cmd` 测试执行 `rbac create-super-admin` 并传入默认值或显式 flag
-- **THEN** 测试 MUST 通过当前 root command 实例的本地 runner 替身断言 username、nickname、password env 和 reset password 选项
-- **AND** 测试 MUST NOT 通过保存和恢复 package-level `runCreateSuperAdmin` 或等价可变全局函数变量表达替身
-
-#### Scenario: RBAC CLI 生产语义保持不变
-
-- **WHEN** 运维执行 `rbac seed`、`rbac assign-super-admin` 或 `rbac create-super-admin`
-- **THEN** 系统 MUST 继续调用现有真实 RBAC runner，并保持 RBAC 系统数据初始化、超级管理员绑定、密码处理、输出文本、cleanup 和错误传播语义不变
-
-### Requirement: RBAC CLI 显式依赖装配
-
-系统 MUST 在 RBAC CLI 引导命令中使用单次命令调用范围内的显式依赖工厂装配 seed、超级管理员绑定和超级管理员创建所需资源。RBAC CLI MUST NOT 依赖可变 package-level 工厂来注入运行时依赖或测试替身。
-
-#### Scenario: 生产命令使用显式依赖工厂
-
-- **WHEN** user-service 构造 `rbac seed`、`rbac assign-super-admin` 或 `rbac create-super-admin` 命令
-- **THEN** 命令 runner MUST 通过显式参数获得依赖工厂
-- **AND** 真实依赖工厂 MUST 保持既有配置加载、数据库连接、Ent client 创建和 cleanup 顺序
-
-#### Scenario: 测试命令使用局部替身
-
-- **WHEN** RBAC command 测试需要注入依赖替身
-- **THEN** 测试 MUST 通过局部 runner、局部命令对象或局部依赖参数传入替身
-- **AND** 测试 MUST NOT 写入 package-level 可变依赖工厂
-
-#### Scenario: RBAC 业务行为保持不变
-
-- **WHEN** RBAC seed、超级管理员绑定或超级管理员创建命令在依赖创建成功后执行
-- **THEN** 系统 MUST 保持既有 RBAC seed、超级管理员绑定和超级管理员创建业务语义
-- **AND** 系统 MUST 保持既有命令超时、输出文本和 cleanup 调用语义
-
-### Requirement: Permission HTTP method allowlist 不得暴露共享可写状态
-permission domain 中用于权限目录和授权对象的 HTTP method allowlist MUST 使用不暴露共享可写底层状态的表达方式。实现 MUST 保持允许方法、大小写归一化、非法方法错误语义、route diff 和 RBAC 授权 action 语义不变。
-
-#### Scenario: HTTP method allowlist 不可被包内误写
-- **WHEN** permission domain 校验权限方法或构造 route identity
-- **THEN** 允许的 HTTP method 集合 MUST 使用 `switch`、私有查询函数或等价不可共享写入的表达方式
-- **AND** 系统 MUST NOT 暴露可被同包未来代码直接写入的 package-level map 作为 allowlist 权威来源
-
-#### Scenario: method 校验语义保持不变
-- **WHEN** 调用方传入当前允许的 HTTP method
-- **THEN** 系统 MUST 继续接受并按当前规则归一化 method
-- **AND** 调用方传入不允许的 method 时，系统 MUST 继续返回当前非法 method 错误语义
-
-#### Scenario: RBAC 授权 action 不变
-- **WHEN** 已认证用户访问 RBAC 保护路由
-- **THEN** 授权判断 MUST 继续使用当前 HTTP method 作为 Casbin action
-- **AND** 本次 allowlist 加固 MUST NOT 改变权限目录、route diff、policy loader、policy sync、超级管理员通配授权或授权失败响应语义
-
+- **WHEN** permission adapter 构造 API 从 Fx/Dig metadata 改为普通 Go 参数
+- **THEN** 权限目录、route diff、Casbin policy、授权 fail-closed、Redis policy version、Pub/Sub、用户角色缓存失效和多副本同步语义 MUST 保持不变
+- **AND** 本变更 MUST NOT 迁移 Casbin initial load、watcher `Start/Stop` 或用户角色缓存 `Close` 生命周期

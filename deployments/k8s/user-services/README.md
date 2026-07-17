@@ -60,7 +60,7 @@
 
 `kustomization.yaml` 聚合完整资源集合，适合验证和审查。生产首次发布应使用上面的分阶段命令，避免 Deployment 在数据库 SQL migration 和 RBAC seed 完成前创建。
 
-运行时 Secret 使用 `AEGISCORE_AUTH_JWT_SECRET`、`AEGISCORE_RESOURCES_POSTGRES_USER_DB_USERNAME`、`AEGISCORE_RESOURCES_POSTGRES_USER_DB_PASSWORD`、`AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME` 和 `AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD`。`secret.example.yaml` 的空密码只是键名示例，生产值必须由外部 Secret 管理器注入。
+运行时 Secret 使用 `AEGISCORE_AUTH_JWT_SECRET`、`AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME`、`AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD`、`AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME` 和 `AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD`。`secret.example.yaml` 的空密码只是键名示例，生产值必须由外部 Secret 管理器注入。
 
 ## 探针和运行边界
 
@@ -69,6 +69,8 @@
 - startup probe：`GET /startupz`
 
 Deployment 默认只启动 HTTP 服务，不设置 `RUN_MIGRATIONS=true`，运行时镜像不包含 Atlas。多副本生产发布必须先确认数据库 SQL migration 已由 DBA 工单或受控发布平台执行完成。
+
+Deployment 默认提供 150 秒终止宽限期：120 秒用于 Fx `app.Stop()` 逆注册顺序串行执行全部 `OnStop` hook，额外 30 秒用于 kubelet 调度、信号传递、受控 `preStop` 和网络抖动。HTTP 25 秒、auth session purge workerpool 30 秒等组件级 timeout 只约束各自 hook，不能作为 Pod grace 的应用总预算。正常关闭完成后进程会立即退出，不会等待完整宽限期；后续新增或延长 `preStop` 时必须证明 30 秒余量仍足够，否则同步提高原生 Kubernetes 与 Helm 默认值及自动校验基线。
 
 非敏感配置使用 `AEGISCORE_SERVER_HTTP_*` 和 `AEGISCORE_RESOURCES_*`，敏感资源凭据使用同路径 Secret key。Redis 只有统一 `TIMEOUT`，PostgreSQL pool 使用 `POOL_*`。时区由平台 `TZ` 控制；日志只写 stdout/stderr；tracing 启用后固定使用 OTLP。应用不接收 trusted proxy 配置，代理信任和 forwarded headers 由 Ingress、gateway 或 service mesh 入口策略负责。
 
@@ -97,6 +99,7 @@ grep -q 'atlas migrate apply\|migrate apply' /tmp/aegiscore-user-services-k8s.ya
 grep -q 'runAsUser: 65532' /tmp/aegiscore-user-services-k8s.yaml
 grep -q 'runAsGroup: 65532' /tmp/aegiscore-user-services-k8s.yaml
 grep -q 'fsGroup: 65532' /tmp/aegiscore-user-services-k8s.yaml
+grep -q 'terminationGracePeriodSeconds: 150' /tmp/aegiscore-user-services-k8s.yaml
 ```
 
 有可用集群或可用 OpenAPI cache 时，执行 client dry-run：

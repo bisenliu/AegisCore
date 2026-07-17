@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
+	commonlogger "github.com/aegiscore/common/runtime/logger"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	roleseed "github.com/aegiscore/user-service/internal/features/role/application/seed"
 	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
@@ -41,11 +43,13 @@ type rbacSeedDependencies struct {
 	users           usercommand.CreateUserService
 	credentials     rbacCredentialStore
 	passwordService rbacPasswordHasher
+	log             *zap.Logger
 }
 
 type rbacSeedDependencyFactory func(context.Context, string) (rbacSeedDependencies, func() error, error)
 
 func createSuperAdmin(ctx context.Context, deps rbacSeedDependencies, opts rbacCreateSuperAdminOptions) (rbacCreateSuperAdminResult, error) {
+	ctx = contextWithRBACLogger(ctx, deps)
 	// 命令保持幂等：不存在则创建用户，存在则默认只补超级管理员角色；显式 reset 时才更新密码和状态。
 	normalized, err := normalizeCreateSuperAdminOptions(opts)
 	if err != nil {
@@ -92,6 +96,13 @@ func createSuperAdmin(ctx context.Context, deps rbacSeedDependencies, opts rbacC
 	}
 	result.roleAdded = assigned.Added
 	return result, nil
+}
+
+func contextWithRBACLogger(ctx context.Context, deps rbacSeedDependencies) context.Context {
+	if deps.log == nil {
+		return ctx
+	}
+	return commonlogger.ToContext(ctx, deps.log)
 }
 
 func normalizeCreateSuperAdminOptions(opts rbacCreateSuperAdminOptions) (rbacCreateSuperAdminOptions, error) {

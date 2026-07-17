@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx/fxtest"
 
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/localcache"
@@ -31,7 +30,7 @@ func TestPolicyLoaderLoadsActiveBindings(t *testing.T) {
 	permission := createPolicyTestPermission(t, client, permissionID, "GET", "/api/v1/users", true)
 	createPolicyTestRolePermission(t, client, role.ID, permission.ID)
 
-	loader := NewPolicyLoader(LoaderParams{Client: client})
+	loader := NewPolicyLoader(client)
 	policies, err := loader.LoadPolicies(ctx)
 	require.NoError(t, err)
 	assertHasRule(t, policies.PermissionRules, roleID, "/api/v1/users", "GET")
@@ -52,7 +51,7 @@ func TestPolicyLoaderSkipsInactiveRolesAndPermissions(t *testing.T) {
 	createPolicyTestRolePermission(t, client, activeRole.ID, inactivePermission.ID)
 	createPolicyTestRolePermission(t, client, inactiveRole.ID, activePermission.ID)
 
-	loader := NewPolicyLoader(LoaderParams{Client: client})
+	loader := NewPolicyLoader(client)
 	policies, err := loader.LoadPolicies(ctx)
 	require.NoError(t, err)
 	assertHasRule(t, policies.PermissionRules, activeRoleID, "/api/v1/active", "GET")
@@ -62,7 +61,7 @@ func TestPolicyLoaderSkipsInactiveRolesAndPermissions(t *testing.T) {
 
 func TestPolicyLoaderAddsSuperAdminWildcard(t *testing.T) {
 	client := newPolicyTestClient(t)
-	loader := NewPolicyLoader(LoaderParams{Client: client})
+	loader := NewPolicyLoader(client)
 	policies, err := loader.LoadPolicies(context.Background())
 	require.NoError(t, err)
 	assertHasRule(t, policies.PermissionRules, uuid.MustParse(rbacbaseline.SuperAdminRoleID), policyWildcard, policyWildcard)
@@ -77,7 +76,7 @@ func TestPolicyLoaderUsesRoleIDSubjectWithoutRoleCode(t *testing.T) {
 	permission := createPolicyTestPermission(t, client, permissionID, "PATCH", "/api/v1/roles/:role_id", true)
 	createPolicyTestRolePermission(t, client, role.ID, permission.ID)
 
-	loader := NewPolicyLoader(LoaderParams{Client: client})
+	loader := NewPolicyLoader(client)
 	policies, err := loader.LoadPolicies(ctx)
 	require.NoError(t, err)
 	assertHasRule(t, policies.PermissionRules, roleID, "/api/v1/roles/:role_id", "PATCH")
@@ -169,9 +168,7 @@ func TestNewUserRoleResolverUsesRBACFeatureConfig(t *testing.T) {
 	size := int64(321)
 	ttl := time.Minute
 	loadTimeout := time.Second
-	lifecycle := fxtest.NewLifecycle(t)
 	result, err := NewUserRoleResolver(UserRoleResolverParams{
-		Lifecycle: lifecycle,
 		Config: &serviceconfig.Config{RBAC: serviceconfig.RBACConfig{UserRoleCache: serviceconfig.FeatureCacheConfig{
 			Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout,
 		}}},
@@ -179,7 +176,10 @@ func TestNewUserRoleResolverUsesRBACFeatureConfig(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 321, result.Stats.Stats().Capacity)
-	lifecycle.RequireStop()
+	require.NoError(t, result.Closer.Close())
+	require.NoError(t, result.Closer.Close())
+	_, err = result.Resolver.RolesForUser(context.Background(), uuid.New())
+	require.ErrorIs(t, err, localcache.ErrClosed)
 }
 
 func TestDisabledUserRoleResolverReadsThroughAndInvalidationIsSafe(t *testing.T) {
@@ -209,6 +209,8 @@ func TestDisabledUserRoleResolverReadsThroughAndInvalidationIsSafe(t *testing.T)
 
 	result.Resolver.InvalidateUserRole(userID)
 	result.Resolver.InvalidateAllUserRoles()
+	require.NoError(t, result.Closer.Close())
+	require.NoError(t, result.Closer.Close())
 	require.Equal(t, rbacUserRolesCacheName, result.Stats.Name())
 	require.EqualValues(t, 2, result.Stats.Stats().Load)
 	require.Zero(t, result.Stats.Stats().Capacity)

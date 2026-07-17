@@ -48,26 +48,26 @@ groups:
 
       - alert: AegisCoreUserServicePostgresPoolUnavailable
         expr: |
-          absent(aegiscore_postgres_pool_open_connections{service="aegiscore-user-services",resource="user_db"})
+          absent(aegiscore_postgres_pool_open_connections{service="aegiscore-user-services",resource="primary_db"})
         for: 5m
         labels:
           service: aegiscore-user-services
           severity: critical
         annotations:
           summary: "用户服务 PostgreSQL pool 可能不可用"
-          description: "user_db PostgreSQL pool 指标缺失。请检查 readyz、数据库连通性和 user_db pool 配置。"
+          description: "primary_db PostgreSQL pool 指标缺失。请检查 readyz、数据库连通性和 primary_db pool 配置。"
           runbook_url: "docs/observability/user-service-runbook.md#postgresql-unavailable-or-pool-pressure"
 
       - alert: AegisCoreUserServicePostgresPoolWaitPressure
         expr: |
-          rate(aegiscore_postgres_pool_wait_count_total{service="aegiscore-user-services",resource="user_db"}[5m]) > 0
+          rate(aegiscore_postgres_pool_wait_count_total{service="aegiscore-user-services",resource="primary_db"}[5m]) > 0
         for: 10m
         labels:
           service: aegiscore-user-services
           severity: warning
         annotations:
           summary: "用户服务 PostgreSQL pool 持续等待连接"
-          description: "user_db pool 已连续 10 分钟出现连接等待。请检查 in-use/open connections、慢请求和数据库容量。"
+          description: "primary_db pool 已连续 10 分钟出现连接等待。请检查 in-use/open connections、慢请求和数据库容量。"
           runbook_url: "docs/observability/user-service-runbook.md#postgresql-unavailable-or-pool-pressure"
 
       - alert: AegisCoreUserServiceRedisUnavailable

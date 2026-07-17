@@ -126,5 +126,5 @@ func newTestPermissionStore(t *testing.T) *PermissionStore {
 	t.Helper()
 	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:permission_store_test_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
 	t.Cleanup(func() { _ = client.Close() })
-	return NewPermissionStore(PermissionStoreParams{Client: client})
+	return NewPermissionStore(client)
 }

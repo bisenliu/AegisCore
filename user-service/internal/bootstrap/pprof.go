@@ -145,13 +145,16 @@ func isProductionLike(environment string) bool {
 }
 
 func servePprofServer(log *zap.Logger, shutdowner fx.Shutdowner, server *http.Server, listener net.Listener) {
-	err := server.Serve(listener)
-	if err == nil || errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {
+	handlePprofServeExit(log, shutdowner, server.Serve(listener))
+}
+
+func handlePprofServeExit(log *zap.Logger, shutdowner fx.Shutdowner, err error) {
+	if err == nil || errors.Is(err, http.ErrServerClosed) {
 		return
 	}
 	log.Error("pprof server failed", logger.StackTrace(zap.Error(err))...)
 	if shutdowner != nil {
-		if shutdownErr := shutdowner.Shutdown(); shutdownErr != nil {
+		if shutdownErr := shutdowner.Shutdown(fx.ExitCode(1)); shutdownErr != nil {
 			log.Error("shutdown after pprof server failure failed", logger.StackTrace(zap.Error(shutdownErr))...)
 		}
 	}

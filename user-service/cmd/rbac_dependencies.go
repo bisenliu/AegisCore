@@ -64,16 +64,16 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 	if err != nil {
 		return fail(err)
 	}
-	db, err := datastore.OpenPostgres(resources.NameUserDB, dbCfg)
+	db, err := datastore.OpenPostgres(resources.NamePrimaryDB, dbCfg)
 	if err != nil {
 		return fail(err)
 	}
 	cleanup = chainCleanup(cleanup, func() error {
-		_ = db.Close()
+		_ = datastore.ClosePostgres(resources.NamePrimaryDB, db)
 		return nil
 	})
-	if err := db.PingContext(ctx); err != nil {
-		return fail(fmt.Errorf("ping postgres %s: %w", resources.NameUserDB, err))
+	if err := datastore.PingPostgres(ctx, resources.NamePrimaryDB, db); err != nil {
+		return fail(err)
 	}
 
 	client := newRBACEntClient(db)
@@ -81,25 +81,25 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 		_ = client.Close()
 		return nil
 	})
-	permissionStore := permissionpostgres.NewPermissionStore(permissionpostgres.PermissionStoreParams{Client: client})
-	roleStore := rolepostgres.NewRoleStore(rolepostgres.RoleStoreParams{Client: client})
-	rolePermissionStore := rolepostgres.NewRolePermissionStore(rolepostgres.RolePermissionStoreParams{Client: client})
-	userRoleStore := rolepostgres.NewUserRoleStore(rolepostgres.UserRoleStoreParams{Client: client})
-	userStore := userpostgres.NewUserStore(userpostgres.UserStoreParams{Client: client})
-	credentialStore := authpostgres.NewCredentialStore(authpostgres.CredentialStoreParams{Client: client})
+	permissionStore := permissionpostgres.NewPermissionStore(client)
+	roleStore := rolepostgres.NewRoleStore(client)
+	rolePermissionStore := rolepostgres.NewRolePermissionStore(client)
+	userRoleStore := rolepostgres.NewUserRoleStore(client)
+	userStore := userpostgres.NewUserStore(client)
+	credentialStore := authpostgres.NewCredentialStore(client)
 	service := roleseed.NewService(roleStore, permissionStore, rolePermissionStore, userRoleStore)
 	userCreator := usercommand.NewCreateUserService(userStore, passwordService)
 
-	return rbacSeedDependencies{service: service, users: userCreator, credentials: credentialStore, passwordService: passwordService}, cleanup, nil
+	return rbacSeedDependencies{service: service, users: userCreator, credentials: credentialStore, passwordService: passwordService, log: log}, cleanup, nil
 }
 
 func rbacPostgresConfig(cfg *serviceconfig.Config) (commonresources.PostgresConfig, error) {
 	if cfg == nil {
 		return commonresources.PostgresConfig{}, errors.New("user-service config is required")
 	}
-	dbCfg, ok := cfg.Resources.Postgres[resources.NameUserDB]
+	dbCfg, ok := cfg.Resources.Postgres[resources.NamePrimaryDB]
 	if !ok {
-		return commonresources.PostgresConfig{}, fmt.Errorf("resources.postgres.%s config not found", resources.NameUserDB)
+		return commonresources.PostgresConfig{}, fmt.Errorf("resources.postgres.%s config not found", resources.NamePrimaryDB)
 	}
 	return dbCfg, nil
 }

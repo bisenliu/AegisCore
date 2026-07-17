@@ -63,7 +63,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		TokenVersions: tokenVersions,
 		Authorizer:    authorizer,
 		Metrics:       metricsProvider,
-		AuthController: authhttp.NewAuthController(authhttp.AuthControllerParams{
+		AuthController: authhttp.NewAuthController(authhttp.AuthControllerOptions{
 			Login:          &routeAuthAuthUseCases{},
 			Refresh:        &routeAuthAuthUseCases{},
 			ChangePassword: &routeAuthAuthUseCases{},

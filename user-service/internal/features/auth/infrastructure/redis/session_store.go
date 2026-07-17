@@ -6,11 +6,9 @@ import (
 	"time"
 
 	rediscache "github.com/redis/go-redis/v9"
-	"go.uber.org/fx"
 
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/workerpool"
-	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 )
 
@@ -36,14 +34,13 @@ const (
 	expiredSessionMinScore = "-inf"
 )
 
-// SessionStoreParams 包含 Redis 认证会话 store 所需的 Fx 输入。
-type SessionStoreParams struct {
-	fx.In
-
-	Redis     *rediscache.Client `name:"cache_redis"`
-	Cfg       *serviceconfig.Config
-	PurgePool PurgeTaskPool           `name:"auth_session_purge_pool"`
-	Metrics   authapplication.Metrics `optional:"true"`
+// SessionStoreOptions 包含 Redis 认证会话 store 的普通构造依赖。
+type SessionStoreOptions struct {
+	Redis                *rediscache.Client
+	Keys                 KeyCatalog
+	TokenVersionCacheTTL time.Duration
+	PurgePool            PurgeTaskPool
+	Metrics              authapplication.Metrics
 }
 
 type SessionStore struct {
@@ -67,22 +64,18 @@ type PurgeTaskPool interface {
 }
 
 // NewSessionStore 构造认证会话持久化的 Redis 实现。
-func NewSessionStore(params SessionStoreParams) (*SessionStore, error) {
-	keys, err := NewKeyCatalog(params.Cfg.App.Name)
-	if err != nil {
-		return nil, fmt.Errorf("new auth redis keys: %w", err)
-	}
-	metrics := params.Metrics
+func NewSessionStore(options SessionStoreOptions) *SessionStore {
+	metrics := options.Metrics
 	if metrics == nil {
 		metrics = authapplication.NopMetrics()
 	}
 	return &SessionStore{
-		redis:                params.Redis,
-		keys:                 keys,
-		tokenVersionCacheTTL: params.Cfg.Auth.TokenVersionCacheTTL,
-		purgePool:            params.PurgePool,
+		redis:                options.Redis,
+		keys:                 options.Keys,
+		tokenVersionCacheTTL: options.TokenVersionCacheTTL,
+		purgePool:            options.PurgePool,
 		metrics:              metrics,
-	}, nil
+	}
 }
 
 func (r *SessionStore) metricsRecorder() authapplication.Metrics {

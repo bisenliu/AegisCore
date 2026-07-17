@@ -15,8 +15,8 @@ import (
 func TestUserRoleStoreAddListAndRemove(t *testing.T) {
 	client := newRoleStoreTestClient(t)
 	ctx := context.Background()
-	roleStore := NewRoleStore(RoleStoreParams{Client: client})
-	userRoleStore := NewUserRoleStore(UserRoleStoreParams{Client: client})
+	roleStore := NewRoleStore(client)
+	userRoleStore := NewUserRoleStore(client)
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000002001")
 	softDeletedUserID := uuid.MustParse("018f0000-0000-7000-8000-000000002002")
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000002101")
@@ -60,8 +60,8 @@ func TestUserRoleStoreAddListAndRemove(t *testing.T) {
 func TestUserRoleStoreReplace(t *testing.T) {
 	client := newRoleStoreTestClient(t)
 	ctx := context.Background()
-	roleStore := NewRoleStore(RoleStoreParams{Client: client})
-	userRoleStore := NewUserRoleStore(UserRoleStoreParams{Client: client})
+	roleStore := NewRoleStore(client)
+	userRoleStore := NewUserRoleStore(client)
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000002201")
 	roleAID := uuid.MustParse("018f0000-0000-7000-8000-000000002301")
 	roleBID := uuid.MustParse("018f0000-0000-7000-8000-000000002302")

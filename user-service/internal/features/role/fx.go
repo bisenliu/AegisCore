@@ -14,9 +14,21 @@ import (
 var Module = fx.Module("feature-role",
 	fx.Provide(
 		// Fx 分类：Feature 基础设施 - PostgreSQL port adapter。
-		fx.Annotate(rolepostgres.NewRoleStore, fx.As(new(roleapplication.RoleStore))),
-		fx.Annotate(rolepostgres.NewUserRoleStore, fx.As(new(roleapplication.UserRoleStore))),
-		fx.Annotate(rolepostgres.NewRolePermissionStore, fx.As(new(roleapplication.RolePermissionStore))),
+		fx.Annotate(
+			rolepostgres.NewRoleStore,
+			fx.ParamTags(`name:"primary_db"`),
+			fx.As(new(roleapplication.RoleStore)),
+		),
+		fx.Annotate(
+			rolepostgres.NewUserRoleStore,
+			fx.ParamTags(`name:"primary_db"`),
+			fx.As(new(roleapplication.UserRoleStore)),
+		),
+		fx.Annotate(
+			rolepostgres.NewRolePermissionStore,
+			fx.ParamTags(`name:"primary_db"`),
+			fx.As(new(roleapplication.RolePermissionStore)),
+		),
 		fx.Annotate(rolepostgres.NewPermissionLookup, fx.As(new(roleapplication.PermissionLookup))),
 		// Fx 分类：Feature 应用 - 角色命令与查询服务。
 		rolecommand.NewRoleCommandService,

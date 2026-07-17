@@ -6,7 +6,6 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
-	"go.uber.org/fx"
 
 	"github.com/aegiscore/user-service/ent"
 	entpermission "github.com/aegiscore/user-service/ent/permission"
@@ -24,16 +23,9 @@ type RolePermissionStore struct {
 var _ roleapplication.RolePermissionStore = (*RolePermissionStore)(nil)
 var _ roleapplication.SeedRolePermissionStore = (*RolePermissionStore)(nil)
 
-// RolePermissionStoreParams 包含 PostgreSQL-backed 角色权限绑定 store 所需的 Fx 输入。
-type RolePermissionStoreParams struct {
-	fx.In
-
-	Client *ent.Client `name:"user_db"`
-}
-
 // NewRolePermissionStore 构造基于 Ent 的角色权限绑定 store。
-func NewRolePermissionStore(params RolePermissionStoreParams) *RolePermissionStore {
-	return &RolePermissionStore{client: params.Client}
+func NewRolePermissionStore(client *ent.Client) *RolePermissionStore {
+	return &RolePermissionStore{client: client}
 }
 
 // ListByRoleID 按角色外部 ID 返回已绑定权限列表。

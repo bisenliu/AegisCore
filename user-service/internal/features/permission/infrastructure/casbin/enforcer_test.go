@@ -7,9 +7,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 
+	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
@@ -24,7 +24,7 @@ func TestEngineEnforceAllowDenyAndDoesNotReload(t *testing.T) {
 	}, nil).Times(1)
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return([]uuid.UUID{roleID}, nil).Times(2)
-	engine := NewEngine(Params{Loader: loader, UserRoles: roles})
+	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), roles)
 	require.NoError(t, engine.Reload(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
 	require.NoError(t, err)
@@ -44,7 +44,7 @@ func TestEngineSuperAdminWildcard(t *testing.T) {
 	}, nil)
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return([]uuid.UUID{superAdminRoleID}, nil)
-	engine := NewEngine(Params{Loader: loader, UserRoles: roles})
+	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), roles)
 	require.NoError(t, engine.Reload(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/anything/:id", "DELETE")
 	require.NoError(t, err)
@@ -62,10 +62,8 @@ func TestEngineFailClosedWhenInitialLoadFails(t *testing.T) {
 		metrics.EXPECT().SetLastStatus(false),
 	)
 	roles := NewMockUserRoleResolver(ctrl)
-	engine := NewEngine(Params{Loader: loader, Metrics: metrics, UserRoles: roles})
-	lc := fxtest.NewLifecycle(t)
-	RegisterInitialLoad(lc, engine)
-	require.NoError(t, lc.Start(context.Background()))
+	engine := NewEngine(loader, metrics, roles)
+	require.NoError(t, engine.Initialize(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), uuid.New(), "/api/v1/users", "GET")
 	require.NoError(t, err)
 	require.False(t, allowed)
@@ -94,7 +92,7 @@ func TestEngineReloadFailurePreservesPreviousPolicy(t *testing.T) {
 		metrics.EXPECT().ReloadFailed(),
 		metrics.EXPECT().SetLastStatus(false),
 	)
-	engine := NewEngine(Params{Loader: loader, Metrics: metrics, UserRoles: roles})
+	engine := NewEngine(loader, metrics, roles)
 	require.NoError(t, engine.Reload(context.Background()))
 	require.ErrorIs(t, engine.Reload(context.Background()), loadErr)
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
@@ -124,10 +122,8 @@ func TestEngineReloadSuccessReplacesPolicyAndClearsError(t *testing.T) {
 		metrics.EXPECT().ReloadSucceeded(),
 		metrics.EXPECT().SetLastStatus(true),
 	)
-	engine := NewEngine(Params{Loader: loader, Metrics: metrics, UserRoles: roles})
-	lc := fxtest.NewLifecycle(t)
-	RegisterInitialLoad(lc, engine)
-	require.NoError(t, lc.Start(context.Background()))
+	engine := NewEngine(loader, metrics, roles)
+	require.NoError(t, engine.Initialize(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
 	require.NoError(t, err)
 	require.False(t, allowed)
@@ -151,14 +147,14 @@ func TestEngineEnforceReturnsRoleResolverError(t *testing.T) {
 	}, nil)
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return(nil, resolveErr)
-	engine := NewEngine(Params{Loader: loader, UserRoles: roles})
+	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), roles)
 	require.NoError(t, engine.Reload(context.Background()))
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
 	require.ErrorIs(t, err, resolveErr)
 	require.False(t, allowed)
 }
 
-func TestEngineInitialLoadUsesLifecycleContext(t *testing.T) {
+func TestEngineInitialLoadUsesInitializeContext(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	loader := NewMockLoader(ctrl)
@@ -175,11 +171,9 @@ func TestEngineInitialLoadUsesLifecycleContext(t *testing.T) {
 		metrics.EXPECT().SetLastStatus(false),
 	)
 	roles := NewMockUserRoleResolver(ctrl)
-	engine := NewEngine(Params{Loader: loader, Metrics: metrics, UserRoles: roles})
-	lc := fxtest.NewLifecycle(t)
-	RegisterInitialLoad(lc, engine)
+	engine := NewEngine(loader, metrics, roles)
 
-	require.NoError(t, lc.Start(ctx))
+	require.NoError(t, engine.Initialize(ctx))
 	require.ErrorIs(t, engine.LastError(), context.Canceled)
 	allowed, err := engine.Enforce(context.Background(), uuid.New(), "/api/v1/users", "GET")
 	require.NoError(t, err)
@@ -195,7 +189,7 @@ func TestEngineInvalidatesUserRoleResolver(t *testing.T) {
 		roles.EXPECT().InvalidateUserRole(userID),
 		roles.EXPECT().InvalidateAllUserRoles(),
 	)
-	engine := NewEngine(Params{Loader: loader, UserRoles: roles})
+	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), roles)
 
 	engine.InvalidateUserRole(userID)
 	engine.InvalidateAllUserRoles()

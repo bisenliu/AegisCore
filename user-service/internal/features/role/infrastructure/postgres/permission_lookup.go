@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"go.uber.org/fx"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
@@ -18,16 +17,9 @@ type PermissionLookup struct {
 
 var _ roleapplication.PermissionLookup = (*PermissionLookup)(nil)
 
-// PermissionLookupParams 包含权限目录查询适配器所需的 Fx 输入。
-type PermissionLookupParams struct {
-	fx.In
-
-	Store permissionapplication.PermissionStore
-}
-
 // NewPermissionLookup 构造通过 permission feature 端口校验权限的 adapter。
-func NewPermissionLookup(params PermissionLookupParams) *PermissionLookup {
-	return &PermissionLookup{store: params.Store}
+func NewPermissionLookup(store permissionapplication.PermissionStore) *PermissionLookup {
+	return &PermissionLookup{store: store}
 }
 
 // GetActiveByPermissionID 校验权限存在且已启用，并返回角色绑定所需的最小权限视图。

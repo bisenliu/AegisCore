@@ -1367,7 +1367,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "展示 user_db 的 open、in-use、idle 和 max-open 连接数。",
+      "description": "展示 primary_db 的 open、in-use、idle 和 max-open 连接数。",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1440,7 +1440,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aegiscore_postgres_pool_open_connections{service=\"$service\",environment=\"$environment\",resource=\"user_db\"}",
+          "expr": "aegiscore_postgres_pool_open_connections{service=\"$service\",environment=\"$environment\",resource=\"primary_db\"}",
           "legendFormat": "open",
           "range": true,
           "refId": "A"
@@ -1451,7 +1451,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aegiscore_postgres_pool_in_use_connections{service=\"$service\",environment=\"$environment\",resource=\"user_db\"}",
+          "expr": "aegiscore_postgres_pool_in_use_connections{service=\"$service\",environment=\"$environment\",resource=\"primary_db\"}",
           "legendFormat": "in use",
           "range": true,
           "refId": "B"
@@ -1462,7 +1462,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aegiscore_postgres_pool_idle_connections{service=\"$service\",environment=\"$environment\",resource=\"user_db\"}",
+          "expr": "aegiscore_postgres_pool_idle_connections{service=\"$service\",environment=\"$environment\",resource=\"primary_db\"}",
           "legendFormat": "idle",
           "range": true,
           "refId": "C"
@@ -1473,7 +1473,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aegiscore_postgres_pool_max_open_connections{service=\"$service\",environment=\"$environment\",resource=\"user_db\"}",
+          "expr": "aegiscore_postgres_pool_max_open_connections{service=\"$service\",environment=\"$environment\",resource=\"primary_db\"}",
           "legendFormat": "max open",
           "range": true,
           "refId": "D"
@@ -1546,7 +1546,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aegiscore_postgres_pool_in_use_connections{service=\"$service\",environment=\"$environment\",resource=\"user_db\"} / clamp_min(aegiscore_postgres_pool_max_open_connections{service=\"$service\",environment=\"$environment\",resource=\"user_db\"}, 1)",
+          "expr": "aegiscore_postgres_pool_in_use_connections{service=\"$service\",environment=\"$environment\",resource=\"primary_db\"} / clamp_min(aegiscore_postgres_pool_max_open_connections{service=\"$service\",environment=\"$environment\",resource=\"primary_db\"}, 1)",
           "legendFormat": "usage",
           "range": true,
           "refId": "A"
@@ -1717,7 +1717,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(aegiscore_postgres_pool_wait_count_total{service=\"$service\",environment=\"$environment\",resource=\"user_db\"}[5m])",
+          "expr": "rate(aegiscore_postgres_pool_wait_count_total{service=\"$service\",environment=\"$environment\",resource=\"primary_db\"}[5m])",
           "legendFormat": "wait count",
           "range": true,
           "refId": "A"
@@ -1913,7 +1913,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(aegiscore_postgres_pool_wait_duration_seconds_total{service=\"$service\",environment=\"$environment\",resource=\"user_db\"}[5m])",
+          "expr": "rate(aegiscore_postgres_pool_wait_duration_seconds_total{service=\"$service\",environment=\"$environment\",resource=\"primary_db\"}[5m])",
           "legendFormat": "wait duration",
           "range": true,
           "refId": "A"
@@ -2115,7 +2115,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (resource) (aegiscore_redis_up{service=\"$service\",environment=\"$environment\",resource=\"cache_redis\"}) or sum by (resource) (aegiscore_postgres_pool_open_connections{service=\"$service\",environment=\"$environment\",resource=\"user_db\"})",
+          "expr": "sum by (resource) (aegiscore_redis_up{service=\"$service\",environment=\"$environment\",resource=\"cache_redis\"}) or sum by (resource) (aegiscore_postgres_pool_open_connections{service=\"$service\",environment=\"$environment\",resource=\"primary_db\"})",
           "legendFormat": "{{resource}}",
           "range": false,
           "refId": "A",
@@ -3379,7 +3379,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "### 读图提示\n\n- HTTP 面板使用 Gin route template，不使用 raw path。\n- Auth/RBAC 面板只展示固定枚举 label，不包含用户、角色、权限或 session 标识。\n- Runtime dependency 面板固定使用 `user_db`、`cache_redis` 和 `auth_session_purge_pool`。\n- Go runtime/process 指标依赖 `observability.metrics.include_runtime: true`；关闭时显示 `No data` 是预期行为。\n- Compose dashboard 由通用 dashboard 生成，只改写 Prometheus datasource uid。",
+        "content": "### 读图提示\n\n- HTTP 面板使用 Gin route template，不使用 raw path。\n- Auth/RBAC 面板只展示固定枚举 label，不包含用户、角色、权限或 session 标识。\n- Runtime dependency 面板固定使用 `primary_db`、`cache_redis` 和 `auth_session_purge_pool`。\n- Go runtime/process 指标依赖 `observability.metrics.include_runtime: true`；关闭时显示 `No data` 是预期行为。\n- Compose dashboard 由通用 dashboard 生成，只改写 Prometheus datasource uid。",
         "mode": "markdown"
       },
       "title": "读图说明",

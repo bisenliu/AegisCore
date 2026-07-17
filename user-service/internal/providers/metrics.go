@@ -28,7 +28,7 @@ type RuntimeDependencyMetricsParams struct {
 
 	Config           *serviceconfig.Config
 	Metrics          *commonmetrics.Provider
-	UserDB           *sql.DB                 `name:"user_db"`
+	PrimaryDB        *sql.DB                 `name:"primary_db"`
 	CacheRedis       *redis.Client           `name:"cache_redis"`
 	SessionPurgePool authredis.PurgeTaskPool `name:"auth_session_purge_pool"`
 	PolicyWatcher    permissionredis.WatcherStatus
@@ -42,14 +42,14 @@ func RegisterRuntimeDependencyMetrics(params RuntimeDependencyMetricsParams) err
 		return nil
 	}
 
-	userDBCollector, err := commonmetrics.NewSQLDBCollector(commonmetrics.SQLDBCollectorOptions{
-		Resource: resources.NameUserDB,
-		DB:       params.UserDB,
+	primaryDBCollector, err := commonmetrics.NewSQLDBCollector(commonmetrics.SQLDBCollectorOptions{
+		Resource: resources.NamePrimaryDB,
+		DB:       params.PrimaryDB,
 	})
 	if err != nil {
 		return fmt.Errorf("create postgres metrics collector: %w", err)
 	}
-	if err := params.Metrics.Register(userDBCollector); err != nil {
+	if err := params.Metrics.Register(primaryDBCollector); err != nil {
 		return err
 	}
 

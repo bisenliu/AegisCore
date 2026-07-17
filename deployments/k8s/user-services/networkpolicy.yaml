@@ -38,7 +38,7 @@ spec: # 网络策略规格。
               app.kubernetes.io/name: postgres # PostgreSQL 工作负载标签。
       ports: # PostgreSQL 允许端口。
         - protocol: TCP # PostgreSQL 使用 TCP。
-          port: 5432 # PostgreSQL user_db 端口。
+          port: 5432 # PostgreSQL primary_db 端口。
     - to: # Redis 目的地限制。
         - namespaceSelector: # 选择缓存所在 namespace。
             matchLabels: # namespace 必须匹配以下标签。

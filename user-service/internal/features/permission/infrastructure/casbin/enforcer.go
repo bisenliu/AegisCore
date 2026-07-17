@@ -7,7 +7,6 @@ import (
 
 	casbinlib "github.com/casbin/casbin/v3"
 	"github.com/google/uuid"
-	"go.uber.org/fx"
 
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commoncasbin "github.com/aegiscore/common/security/casbin"
@@ -24,33 +23,9 @@ type Engine struct {
 	lastErr  error
 }
 
-// Params 包含 Casbin Engine 所需的 Fx 输入。
-type Params struct {
-	fx.In
-
-	Loader    Loader
-	Metrics   commonmetrics.ReloadMetrics `optional:"true"`
-	UserRoles UserRoleResolver
-}
-
-// NewEngine 构造 Casbin Engine；初始 policy 加载由 Fx lifecycle 执行。
-func NewEngine(params Params) *Engine {
-	metrics := params.Metrics
-	if metrics == nil {
-		metrics = commonmetrics.NopReloadMetrics()
-	}
-	return &Engine{loader: params.Loader, metrics: metrics, userRoles: params.UserRoles}
-}
-
-// RegisterInitialLoad 在 Fx 启动阶段执行初始 policy 加载，失败时保持 fail-closed。
-// 初始 reload 失败不会阻断服务启动；Enforce 在 enforcer 或 userRoles 缺失时返回 deny，避免因授权组件未就绪而放行请求。
-func RegisterInitialLoad(lc fx.Lifecycle, engine *Engine) {
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			_ = engine.Reload(ctx)
-			return nil
-		},
-	})
+// NewEngine 构造 Casbin Engine；调用方负责在启动边界显式执行 Initialize。
+func NewEngine(loader Loader, metrics commonmetrics.ReloadMetrics, userRoles UserRoleResolver) *Engine {
+	return &Engine{loader: loader, metrics: metrics, userRoles: userRoles}
 }
 
 // Enforce 基于已加载的内存 policy 判断用户是否允许访问指定路由模板和 HTTP 方法。

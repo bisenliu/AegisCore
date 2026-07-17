@@ -13,7 +13,7 @@ import (
 
 func TestRoleStoreCRUDAndDomainErrors(t *testing.T) {
 	client := newRoleStoreTestClient(t)
-	store := NewRoleStore(RoleStoreParams{Client: client})
+	store := NewRoleStore(client)
 	ctx := context.Background()
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000001001")
 	missingRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000001099")
@@ -78,7 +78,7 @@ func TestRoleStoreCRUDAndDomainErrors(t *testing.T) {
 
 func TestRoleStoreListFiltersAndPagination(t *testing.T) {
 	client := newRoleStoreTestClient(t)
-	store := NewRoleStore(RoleStoreParams{Client: client})
+	store := NewRoleStore(client)
 	ctx := context.Background()
 	roleAID := uuid.MustParse("018f0000-0000-7000-8000-000000001101")
 	roleBID := uuid.MustParse("018f0000-0000-7000-8000-000000001102")

@@ -7,15 +7,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
+
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 type testLifecycleApp struct {
 	start func(context.Context) error
+	wait  <-chan fx.ShutdownSignal
 	stop  func(context.Context) error
 }
 
 func (a testLifecycleApp) Start(ctx context.Context) error {
 	return a.start(ctx)
+}
+
+func (a testLifecycleApp) Wait() <-chan fx.ShutdownSignal {
+	return a.wait
 }
 
 func (a testLifecycleApp) Stop(ctx context.Context) error {
@@ -29,7 +36,7 @@ func testRootCommandDependencies(t testing.TB) rootCommandDependencies {
 		t.Fatalf("unexpected root command dependency call: %s", name)
 	}
 	return rootCommandDependencies{
-		appFactory: func(string) lifecycleApp {
+		appFactory: func(*serviceconfig.Config) lifecycleApp {
 			unexpected("appFactory")
 			return testLifecycleApp{}
 		},

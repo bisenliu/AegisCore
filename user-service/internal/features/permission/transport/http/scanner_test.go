@@ -24,7 +24,7 @@ func TestRouteCatalogScanner(t *testing.T) {
 	engine.GET("/api/v1/users", func(*gin.Context) {})
 	engine.POST("/api/v1/users", func(*gin.Context) {})
 
-	scanner := NewRouteCatalogScanner(RouteCatalogScannerParams{Engine: engine})
+	scanner := NewRouteCatalogScanner(engine)
 	routes, err := scanner.DiscoverRoutes(context.Background())
 	require.NoError(t, err)
 	require.Len(t, routes, 2)
@@ -45,7 +45,7 @@ func TestRouteCatalogScannerFiltersAuthorizableRoutes(t *testing.T) {
 	engine.GET("/api/v1/roles", func(*gin.Context) {})
 	engine.GET("/api/v1/permissions/route-diff", func(*gin.Context) {})
 
-	scanner := NewRouteCatalogScanner(RouteCatalogScannerParams{Engine: engine})
+	scanner := NewRouteCatalogScanner(engine)
 	routes, err := scanner.DiscoverRoutes(context.Background())
 	require.NoError(t, err)
 	require.Len(t, routes, 2)
@@ -62,7 +62,7 @@ func TestRouteCatalogScannerMatchesRBACBaseline(t *testing.T) {
 	rolehttp.RegisterUserRoleRoutes(v1.Group("/users"), &rolehttp.RoleController{})
 	userhttp.RegisterRoutes(v1.Group("/users"), &userhttp.UserController{})
 
-	scanner := NewRouteCatalogScanner(RouteCatalogScannerParams{Engine: engine})
+	scanner := NewRouteCatalogScanner(engine)
 	routes, err := scanner.DiscoverRoutes(context.Background())
 	require.NoError(t, err)
 	discovered := discoveredRouteSet(routes)

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"go.uber.org/fx"
 
 	"github.com/aegiscore/user-service/ent"
 	entpermission "github.com/aegiscore/user-service/ent/permission"
@@ -24,16 +23,9 @@ type PermissionStore struct {
 var _ permissionapplication.PermissionStore = (*PermissionStore)(nil)
 var _ permissionapplication.SeedPermissionStore = (*PermissionStore)(nil)
 
-// PermissionStoreParams 包含 PostgreSQL-backed 权限 store 所需的 Fx 输入。
-type PermissionStoreParams struct {
-	fx.In
-
-	Client *ent.Client `name:"user_db"`
-}
-
 // NewPermissionStore 构造基于 Ent 的权限 store。
-func NewPermissionStore(params PermissionStoreParams) *PermissionStore {
-	return &PermissionStore{client: params.Client}
+func NewPermissionStore(client *ent.Client) *PermissionStore {
+	return &PermissionStore{client: client}
 }
 
 // Create 插入权限记录，并将唯一约束冲突映射为 ErrPermissionAlreadyExists。

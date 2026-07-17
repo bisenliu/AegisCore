@@ -18,12 +18,12 @@ type AppConfig struct {
 }
 
 // RuntimeConfig 包含进程级 runtime 生命周期配置。
-// 该配置约束整个 Fx app 的启停总预算，不替代 HTTP、gRPC 等组件级关闭超时。
+// 该配置约束 Fx App.Start/App.Stop 生命周期阶段，不覆盖配置加载或 fx.New 同步构造，也不替代 HTTP、gRPC 等组件级关闭超时。
 type RuntimeConfig struct {
 	Lifecycle LifecycleConfig `mapstructure:"lifecycle"`
 }
 
-// LifecycleConfig 包含 Fx app 启动和关闭的总预算。
+// LifecycleConfig 包含 Fx App.Start 和 App.Stop 的总预算。
 // StopTimeout 必须覆盖已启用或已配置协议 server 的 shutdown timeout，使组件级优雅关闭有机会完整执行。
 type LifecycleConfig struct {
 	StartTimeout time.Duration `mapstructure:"start_timeout"`

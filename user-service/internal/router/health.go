@@ -34,7 +34,7 @@ type HealthChecks struct {
 
 // HealthCheckResult 表示单个健康检查项的输出。
 type HealthCheckResult struct {
-	Name    string            `json:"name" example:"postgres.user_db"`
+	Name    string            `json:"name" example:"postgres.primary_db"`
 	Status  HealthCheckStatus `json:"status" example:"ok"`
 	Message string            `json:"message,omitempty" example:"dependency unavailable"`
 }

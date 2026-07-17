@@ -5,7 +5,7 @@ app:
 
 runtime:
   lifecycle:
-    # Fx app 启动总预算，覆盖配置加载后的 provider 初始化和 OnStart hooks。
+    # Fx App.Start 和 OnStart hooks 的启动总预算；不覆盖配置加载或 fx.New 同步构造。
     start_timeout: 60s
     # Fx app 关闭总预算，覆盖所有 OnStop hooks；必须大于等于 server.http/grpc.shutdown_timeout。
     # 该值不是数据可靠性保证，关键数据仍应通过持久化队列、WAL 或数据库状态恢复。
@@ -89,7 +89,7 @@ resources:
       # 建连、读写和启动探测统一使用该超时。
       timeout: 5s
   postgres:
-    user_db:
+    primary_db:
       host: 127.0.0.1
       port: 5432
       username: aegiscore

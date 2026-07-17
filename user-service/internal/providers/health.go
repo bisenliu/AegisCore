@@ -21,7 +21,7 @@ type HealthCheckParams struct {
 	fx.In
 
 	Config        *serviceconfig.Config
-	UserDB        *sql.DB       `name:"user_db"`
+	PrimaryDB     *sql.DB       `name:"primary_db"`
 	CacheRedis    *redis.Client `name:"cache_redis"`
 	CasbinPolicy  *permissioncasbin.Engine
 	PolicyWatcher permissionredis.WatcherStatus
@@ -55,7 +55,7 @@ func ProvideHealthChecks(params HealthCheckParams) router.HealthChecks {
 	redisCfg := params.Config.Resources.Redis[resources.NameCacheRedis]
 	redisCfg.ApplyDefaults()
 	checks := []router.HealthChecker{
-		postgresHealthChecker{name: "postgres." + resources.NameUserDB, db: params.UserDB, timeout: commonresources.DefaultPostgresPingTimeout()},
+		postgresHealthChecker{name: "postgres." + resources.NamePrimaryDB, db: params.PrimaryDB, timeout: commonresources.DefaultPostgresPingTimeout()},
 		redisHealthChecker{name: "redis." + resources.NameCacheRedis, client: params.CacheRedis, timeout: redisCfg.Timeout},
 		casbinPolicyHealthChecker{engine: params.CasbinPolicy},
 		watcherHealthChecker{watcher: params.PolicyWatcher},

@@ -24,10 +24,10 @@ type logoutAllSessionsUseCase struct {
 }
 
 // NewLogoutAllSessionsUseCase 构造全部会话登出 use case。
-func NewLogoutAllSessionsUseCase(deps LogoutAllSessionsDeps) LogoutAllSessionsUseCase {
+func NewLogoutAllSessionsUseCase(sessions authsessions.Lifecycle, metrics authapplication.Metrics) LogoutAllSessionsUseCase {
 	return &logoutAllSessionsUseCase{
-		sessions: deps.Sessions,
-		metrics:  metricsOrNop(deps.Metrics),
+		sessions: sessions,
+		metrics:  metricsOrNop(metrics),
 	}
 }
 

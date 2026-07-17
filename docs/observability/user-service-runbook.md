@@ -7,7 +7,7 @@
 ## Key Signals
 
 - HTTP RED：请求数、延迟 histogram、in-flight gauge，route label 使用 Gin route template。
-- PostgreSQL：`user_db` pool stats 和可用性。
+- PostgreSQL：`primary_db` pool stats 和可用性。
 - Redis：`cache_redis` ping/up 状态。
 - Localcache：`auth_token_version` 与 `rbac_user_roles` 的 hit/miss、loader success/error、singleflight、write drop/reject、eviction 和 capacity。
 - Runtime components：workerpool、scheduler、runtime component status。

@@ -40,12 +40,12 @@ type changePasswordUseCase struct {
 }
 
 // NewChangePasswordUseCase 构造强制改密 use case。
-func NewChangePasswordUseCase(deps ChangePasswordDeps) ChangePasswordUseCase {
+func NewChangePasswordUseCase(credentials authcredentials.Verifier, tokens authtokens.Issuer, sessions authsessions.Lifecycle, metrics authapplication.Metrics) ChangePasswordUseCase {
 	return &changePasswordUseCase{
-		credentials: deps.Credentials,
-		tokens:      deps.Tokens,
-		sessions:    deps.Sessions,
-		metrics:     metricsOrNop(deps.Metrics),
+		credentials: credentials,
+		tokens:      tokens,
+		sessions:    sessions,
+		metrics:     metricsOrNop(metrics),
 	}
 }
 

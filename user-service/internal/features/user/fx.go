@@ -16,6 +16,7 @@ var Module = fx.Module("feature-user",
 		// Fx 分类：Feature 基础设施 - PostgreSQL user profile port adapter。
 		fx.Annotate(
 			userpostgres.NewUserStore,
+			fx.ParamTags(`name:"primary_db"`),
 			fx.As(new(userapplication.UserProfileStore)),
 		),
 		// Fx 分类：Feature 应用 - 用户资料命令与查询服务。

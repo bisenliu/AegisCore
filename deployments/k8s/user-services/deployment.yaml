@@ -31,7 +31,7 @@ spec: # Deployment 期望状态。
     spec: # Pod 规格。
       serviceAccountName: aegiscore-user-services # Pod 使用的 ServiceAccount。
       automountServiceAccountToken: false # 不自动挂载 API token，降低凭据暴露面。
-      terminationGracePeriodSeconds: 35 # 终止宽限期；应大于 HTTP shutdown_timeout。
+      terminationGracePeriodSeconds: 150 # 终止宽限期；覆盖 120 秒 Fx Stop 总预算和 30 秒平台余量。
       securityContext: # Pod 级安全上下文。
         runAsNonRoot: true # 要求容器以非 root 用户运行。
         runAsUser: 65532 # 容器进程 UID；与 Distroless nonroot 镜像身份一致。
@@ -56,16 +56,16 @@ spec: # Deployment 期望状态。
                 secretKeyRef: # Secret 键引用。
                   name: aegiscore-user-services-runtime # 运行时 Secret 名称。
                   key: AEGISCORE_AUTH_JWT_SECRET # Secret 中的 JWT secret 键。
-            - name: AEGISCORE_RESOURCES_POSTGRES_USER_DB_USERNAME # user_db PostgreSQL 用户名环境变量。
+            - name: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME # primary_db PostgreSQL 用户名环境变量。
               valueFrom: # 从 Secret 读取值。
                 secretKeyRef: # Secret 键引用。
                   name: aegiscore-user-services-runtime # 运行时 Secret 名称。
-                  key: AEGISCORE_RESOURCES_POSTGRES_USER_DB_USERNAME # Secret 中的数据库用户名键。
-            - name: AEGISCORE_RESOURCES_POSTGRES_USER_DB_PASSWORD # user_db PostgreSQL 密码环境变量。
+                  key: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME # Secret 中的数据库用户名键。
+            - name: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD # primary_db PostgreSQL 密码环境变量。
               valueFrom: # 从 Secret 读取值。
                 secretKeyRef: # Secret 键引用。
                   name: aegiscore-user-services-runtime # 运行时 Secret 名称。
-                  key: AEGISCORE_RESOURCES_POSTGRES_USER_DB_PASSWORD # Secret 中的数据库密码键。
+                  key: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD # Secret 中的数据库密码键。
             - name: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME # cache_redis ACL 用户名环境变量。
               valueFrom: # 从 Secret 读取值。
                 secretKeyRef: # Secret 键引用。

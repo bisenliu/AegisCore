@@ -42,12 +42,12 @@ type loginUseCase struct {
 }
 
 // NewLoginUseCase 构造登录 use case。
-func NewLoginUseCase(deps LoginDeps) LoginUseCase {
+func NewLoginUseCase(credentials authcredentials.Verifier, tokens authtokens.Issuer, sessions authsessions.Lifecycle, metrics authapplication.Metrics) LoginUseCase {
 	return &loginUseCase{
-		credentials: deps.Credentials,
-		tokens:      deps.Tokens,
-		sessions:    deps.Sessions,
-		metrics:     metricsOrNop(deps.Metrics),
+		credentials: credentials,
+		tokens:      tokens,
+		sessions:    sessions,
+		metrics:     metricsOrNop(metrics),
 	}
 }
 

@@ -20,7 +20,7 @@ import (
 
 func TestRoleStoreUpsertSystemRole(t *testing.T) {
 	client := newRoleStoreTestClient(t)
-	store := NewRoleStore(RoleStoreParams{Client: client})
+	store := NewRoleStore(client)
 	ctx := context.Background()
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000101")
 	input := roleapplication.SeedRoleInput{RoleID: roleID, Name: "Super Admin", Description: "all", Active: true}
@@ -51,9 +51,9 @@ func TestRoleStoreUpsertSystemRole(t *testing.T) {
 func TestRolePermissionStoreSeedEnsureAndSync(t *testing.T) {
 	client := newRoleStoreTestClient(t)
 	ctx := context.Background()
-	roleStore := NewRoleStore(RoleStoreParams{Client: client})
-	permissionStore := permissionpostgres.NewPermissionStore(permissionpostgres.PermissionStoreParams{Client: client})
-	bindingStore := NewRolePermissionStore(RolePermissionStoreParams{Client: client})
+	roleStore := NewRoleStore(client)
+	permissionStore := permissionpostgres.NewPermissionStore(client)
+	bindingStore := NewRolePermissionStore(client)
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000201")
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000202")
 	extraPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000203")
@@ -86,8 +86,8 @@ func TestRolePermissionStoreSeedEnsureAndSync(t *testing.T) {
 func TestUserRoleStoreAssignRoleIdempotent(t *testing.T) {
 	client := newRoleStoreTestClient(t)
 	ctx := context.Background()
-	roleStore := NewRoleStore(RoleStoreParams{Client: client})
-	userRoleStore := NewUserRoleStore(UserRoleStoreParams{Client: client})
+	roleStore := NewRoleStore(client)
+	userRoleStore := NewUserRoleStore(client)
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000301")
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000302")
 	_, err := client.User.Create().SetUserID(userID).SetNickname("Admin").SetUsername("admin@example.com").SetPasswordHash("hash").Save(ctx)

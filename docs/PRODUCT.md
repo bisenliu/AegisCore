@@ -38,6 +38,6 @@ AegisCore 是面向后端服务的 Go workspace 项目底座，当前聚焦用�
 
 - 认证、授权和密码处理必须优先保证安全，不泄露凭证匹配细节。
 - API 响应、错误、分页和校验错误优先复用 `common/contract/` 与 `common/http/`。
-- 生产发布先执行 user-service `user_db` migration，再执行 RBAC seed，最后启动或滚动 HTTP 副本。
+- 生产发布先执行 user-service `primary_db` migration，再执行 RBAC seed，最后启动或滚动 HTTP 副本。
 - OpenSpec 主规格和 OPSX 文档必须保持简体中文，技术标识符可保留原文。
 - 生成物必须可验证，OpenAPI、Ent 和 dashboard 相关变更需要 drift 检查。

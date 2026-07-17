@@ -9,9 +9,7 @@ import (
 	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx"
 
-	commonconfig "github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/common/runtime/workerpool"
 	commonauth "github.com/aegiscore/common/security/auth"
@@ -56,16 +54,16 @@ func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenV
 func newTestSessionStoreWithAppName(t testing.TB, redisServer *miniredis.Miniredis, appName string) *SessionStore {
 	t.Helper()
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
-	store, err := NewSessionStore(SessionStoreParams{
-		Redis: client,
-		Cfg: &serviceconfig.Config{
-			Config: commonconfig.Config{App: commonconfig.AppConfig{Name: appName}},
-			Auth:   serviceconfig.AuthConfig{TokenVersionCacheTTL: time.Minute},
-		},
-		PurgePool: directPurgeTaskPool{},
-	})
+	keys, err := NewKeyCatalog(appName)
 	require.NoError(t, err,
-		"NewSessionStore: %v", err)
+		"NewKeyCatalog: %v", err)
+	store := NewSessionStore(SessionStoreOptions{
+		Redis:                client,
+		Keys:                 keys,
+		TokenVersionCacheTTL: time.Minute,
+		PurgePool:            directPurgeTaskPool{},
+		Metrics:              authapplication.NopMetrics(),
+	})
 
 	t.Cleanup(func() {
 		_ = client.Close()
@@ -132,12 +130,4 @@ func (p *recordingPurgeTaskPool) Submit(ctx context.Context, task workerpool.Tas
 
 func (p *recordingPurgeTaskPool) Stats() workerpool.Stats {
 	return workerpool.Stats{Failed: p.failed}
-}
-
-type lifecycleRecorder struct {
-	hooks []fx.Hook
-}
-
-func (r *lifecycleRecorder) Append(hook fx.Hook) {
-	r.hooks = append(r.hooks, hook)
 }

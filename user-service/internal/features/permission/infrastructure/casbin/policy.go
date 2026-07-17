@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"go.uber.org/fx"
 
 	"github.com/aegiscore/user-service/ent"
 	entpermission "github.com/aegiscore/user-service/ent/permission"
@@ -33,21 +32,14 @@ type Loader interface {
 	LoadPolicies(ctx context.Context) (PolicySet, error)
 }
 
-// LoaderParams 包含 Ent-backed policy loader 的 Fx 输入。
-type LoaderParams struct {
-	fx.In
-
-	Client *ent.Client `name:"user_db"`
-}
-
 type entLoader struct {
 	client           *ent.Client
 	superAdminRoleID uuid.UUID
 }
 
 // NewPolicyLoader 构造基于 Ent 的 Casbin policy loader。
-func NewPolicyLoader(params LoaderParams) Loader {
-	return &entLoader{client: params.Client, superAdminRoleID: uuid.MustParse(rbacbaseline.SuperAdminRoleID)}
+func NewPolicyLoader(client *ent.Client) Loader {
+	return &entLoader{client: client, superAdminRoleID: uuid.MustParse(rbacbaseline.SuperAdminRoleID)}
 }
 
 func (l *entLoader) LoadPolicies(ctx context.Context) (PolicySet, error) {

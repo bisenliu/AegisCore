@@ -2,6 +2,7 @@ package casbin
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 
 	"github.com/google/uuid"
@@ -20,6 +21,7 @@ type UserRoleResolver interface {
 type entUserRoleResolver struct {
 	client          *ent.Client
 	cache           *localcache.Cache[uuid.UUID, []uuid.UUID]
+	closeOnce       sync.Once
 	directLoads     atomic.Uint64
 	directLoadError atomic.Uint64
 }
@@ -55,6 +57,19 @@ func (r *entUserRoleResolver) InvalidateAllUserRoles() {
 		return
 	}
 	_ = r.cache.Clear()
+}
+
+// Close 释放 resolver 持有的本地缓存资源；共享 Ent client 由调用方拥有。
+func (r *entUserRoleResolver) Close() error {
+	if r == nil {
+		return nil
+	}
+	r.closeOnce.Do(func() {
+		if r.cache != nil {
+			r.cache.Close()
+		}
+	})
+	return nil
 }
 
 // Name 返回供 metrics 使用的稳定缓存实例名。

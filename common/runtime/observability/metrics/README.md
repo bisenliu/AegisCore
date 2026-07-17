@@ -42,7 +42,7 @@ Provider 基于 `common/runtime/config.MetricsConfig`、服务名和部署环境
 | `route` | HTTP route template 或固定 runtime key | 必须是模板或枚举值，例如 `/api/v1/users/:id` |
 | `status_class` | HTTP status class | 使用 `2xx`、`3xx`、`4xx`、`5xx` |
 | `code` | 稳定错误码或结果码 | 必须来自有限集合，不得填入原始错误字符串 |
-| `resource` | datastore 或 runtime 组件名 | 固定枚举值，例如 `user_db`、`cache_redis`、`rbac_policy_watcher` |
+| `resource` | datastore 或 runtime 组件名 | 固定枚举值，例如 `primary_db`、`cache_redis`、`rbac_policy_watcher` |
 | `pool` | workerpool 名称 | 固定按用途命名的 pool |
 | `scheduler_job` | scheduler job key | 固定任务名，不得来自用户输入 |
 | `event` | runtime 生命周期事件 | 固定枚举值，例如 `submitted`、`failed` |
@@ -108,6 +108,6 @@ Provider 基于 `common/runtime/config.MetricsConfig`、服务名和部署环境
 
 ## 当前状态
 
-当前 package 提供 `NewProvider`、`NewFxProvider`、`Provider.Register`、`Provider.Registerer`、`Provider.Gatherer`、`StatusClass`、label key 常量、SQL DB stats collector、带最小探测间隔的 Redis ping collector、workerpool stats collector、scheduler Prometheus adapter、runtime component status collector 和 Casbin policy reload recorder。HTTP server RED 采集由 `common/http/middleware` 接入本 provider；用户服务通过服务级 provider 显式注册 `user_db`、`cache_redis`、`auth_session_purge_pool`、RBAC policy watcher 和 Casbin policy reload 指标。后续实现应继续保持本包无业务语义，并由服务侧显式挂载 `/metrics` 路由。
+当前 package 提供 `NewProvider`、`NewFxProvider`、`Provider.Register`、`Provider.Registerer`、`Provider.Gatherer`、`StatusClass`、label key 常量、SQL DB stats collector、带最小探测间隔的 Redis ping collector、workerpool stats collector、scheduler Prometheus adapter、runtime component status collector 和 Casbin policy reload recorder。HTTP server RED 采集由 `common/http/middleware` 接入本 provider；用户服务通过服务级 provider 显式注册 `primary_db`、`cache_redis`、`auth_session_purge_pool`、RBAC policy watcher 和 Casbin policy reload 指标。后续实现应继续保持本包无业务语义，并由服务侧显式挂载 `/metrics` 路由。
 
 用户服务业务指标由 owning feature 自己定义和注入 recorder，例如 auth feature 的登录、refresh、logout、token version mismatch、session purge submit failure，以及 permission feature 的 RBAC policy sync 和 route diff 指标。这些指标可以复用本 package 的 `Provider` 和低基数 label 约定，但 metric name、业务 operation、业务 reason、feature recorder 和测试必须留在 user-service feature 边界内，不进入 common runtime package。

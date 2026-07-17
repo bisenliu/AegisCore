@@ -183,7 +183,7 @@ func newTestUserStore(t *testing.T) *UserStore {
 	// 足以覆盖 integration boundary，不需要依赖只能通过 Docker 运行的 PostgreSQL 测试。
 	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:user_store_test_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
 	t.Cleanup(func() { _ = client.Close() })
-	return NewUserStore(UserStoreParams{Client: client})
+	return NewUserStore(client)
 }
 
 func createTestUser(t *testing.T, repo *UserStore, input userapplication.CreateUserInput) *userdomain.User {
