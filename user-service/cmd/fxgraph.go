@@ -51,7 +51,7 @@ func runFxGraphCommand(configPath string, outputPath string, writer fxGraphWrite
 func fxGraphOptions(cfg *serviceconfig.Config) []fx.Option {
 	return bootstrap.AppOptions(
 		cfg,
-		// Fx 分类：开发工具 - 复用正式 composition root 校验完整依赖图。
-		bootstrap.AppModule,
+		// Fx 分类：开发工具 - 仅使用无运行时激活副作用的 wiring graph。
+		bootstrap.WiringModule,
 	)
 }

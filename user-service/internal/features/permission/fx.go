@@ -23,16 +23,28 @@ import (
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
 )
 
-// Module 组装权限目录、请求授权和分布式 policy 同步能力。
-var Module = fx.Module(
-	"feature-permission",
+// WiringModule 组装权限目录、请求授权和分布式 policy 同步的 provider，不主动注册 lifecycle。
+var WiringModule = fx.Module(
+	"feature-permission-wiring",
 	permissionMetricsOptions,
 	permissionStorageOptions,
 	permissionAuthorizationOptions,
 	permissionPolicySyncOptions,
 	permissionApplicationOptions,
 	permissionTransportOptions,
+)
+
+// LifecycleModule 注册权限 feature 的运行时 lifecycle hook。
+var LifecycleModule = fx.Module(
+	"feature-permission-lifecycle",
 	permissionLifecycleOptions,
+)
+
+// Module 组装权限目录、请求授权和分布式 policy 同步能力。
+var Module = fx.Module(
+	"feature-permission",
+	WiringModule,
+	LifecycleModule,
 )
 
 var permissionMetricsOptions = fx.Options(

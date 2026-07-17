@@ -1,17 +1,29 @@
 package main
 
 import (
+	"database/sql"
+	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
 	runtimefxgraph "github.com/aegiscore/common/runtime/fxgraph"
+	"github.com/aegiscore/common/runtime/localcache"
 	commonlogger "github.com/aegiscore/common/runtime/logger"
+	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 
 	"github.com/aegiscore/user-service/internal/bootstrap"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
+	permissionredis "github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis"
+	"github.com/aegiscore/user-service/internal/router"
 )
 
 func TestFxGraphCommandWritesGraph(t *testing.T) {
@@ -39,6 +51,53 @@ func TestFxGraphOptionsRenderDOT(t *testing.T) {
 	dot, err := runtimefxgraph.RenderDOT(fxGraphOptions(cfg)...)
 	require.NoError(t, err)
 	assertFxGraphContainsAppNodes(t, dot)
+}
+
+func TestFxGraphOptionsUseWiringModuleOnly(t *testing.T) {
+	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(filepath.Join("..", "configs", "config.yaml")))
+	require.NoError(t, err)
+
+	dot, err := runtimefxgraph.RenderDOT(fxGraphOptions(cfg)...)
+	require.NoError(t, err)
+	for _, runtimeOnly := range []string{
+		"timezone.Init",
+		"RegisterRuntimeDependencyMetrics",
+		"RegisterRoutes",
+		"registerRBACLifecycle",
+		"func(*http.Server)",
+		"func(*bootstrap.PprofServer)",
+	} {
+		require.NotContains(t, dot, runtimeOnly)
+	}
+}
+
+func TestFxGraphOptionsDoNotConstructRuntimeResources(t *testing.T) {
+	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(filepath.Join("..", "configs", "config.yaml")))
+	require.NoError(t, err)
+
+	_, err = runtimefxgraph.RenderDOT(append(fxGraphOptions(cfg), fxGraphSideEffectGuards(t)...)...)
+	require.NoError(t, err)
+}
+
+func TestFxGraphOptionsDoNotMutateProcessState(t *testing.T) {
+	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(filepath.Join("..", "configs", "config.yaml")))
+	require.NoError(t, err)
+
+	previousLocal := time.Local
+	previousGinMode := gin.Mode()
+	t.Cleanup(func() {
+		time.Local = previousLocal
+		gin.SetMode(previousGinMode)
+	})
+	t.Setenv("TZ", "UTC")
+	time.Local = time.UTC
+	gin.SetMode(gin.DebugMode)
+
+	_, err = runtimefxgraph.RenderDOT(fxGraphOptions(cfg)...)
+	require.NoError(t, err)
+	require.Equal(t, "UTC", os.Getenv("TZ"))
+	require.Same(t, time.UTC, time.Local)
+	require.Equal(t, gin.DebugMode, gin.Mode())
 }
 
 func TestFxGraphRenderDOTFailsWithoutServiceConfig(t *testing.T) {
@@ -76,4 +135,62 @@ func assertFxGraphContainsAppNodes(t *testing.T, dot string) {
 	require.Contains(t, dot, "constructor_")
 	require.Contains(t, dot, " -> ")
 	require.NotContains(t, dot, "config.ConfigPath")
+}
+
+func fxGraphSideEffectGuards(t *testing.T) []fx.Option {
+	t.Helper()
+	fail := func(name string) {
+		t.Helper()
+		t.Fatalf("fxgraph constructed runtime resource: %s", name)
+	}
+	return []fx.Option{
+		fx.Decorate(func(provider *commonmetrics.Provider) *commonmetrics.Provider {
+			fail("metrics provider")
+			return provider
+		}),
+		fx.Decorate(func(provider *commontracing.Provider) *commontracing.Provider {
+			fail("tracing provider")
+			return provider
+		}),
+		fx.Decorate(fx.Annotate(func(db *sql.DB) *sql.DB {
+			fail("primary postgres")
+			return db
+		}, fx.ParamTags(`name:"primary_db"`), fx.ResultTags(`name:"primary_db"`))),
+		fx.Decorate(fx.Annotate(func(client *redis.Client) *redis.Client {
+			fail("cache redis")
+			return client
+		}, fx.ParamTags(`name:"cache_redis"`), fx.ResultTags(`name:"cache_redis"`))),
+		fx.Decorate(func(engine *gin.Engine) *gin.Engine {
+			fail("gin engine")
+			return engine
+		}),
+		fx.Decorate(func(server *http.Server) *http.Server {
+			fail("http server")
+			return server
+		}),
+		fx.Decorate(func(server *bootstrap.PprofServer) *bootstrap.PprofServer {
+			fail("pprof server")
+			return server
+		}),
+		fx.Decorate(func(checks router.HealthChecks) router.HealthChecks {
+			fail("health checks")
+			return checks
+		}),
+		fx.Decorate(fx.Annotate(func(pool authredis.PurgeTaskPool) authredis.PurgeTaskPool {
+			fail("auth session purge pool")
+			return pool
+		}, fx.ParamTags(`name:"auth_session_purge_pool"`), fx.ResultTags(`name:"auth_session_purge_pool"`))),
+		fx.Decorate(fx.Annotate(func(source localcache.StatsSource) localcache.StatsSource {
+			fail("auth token version cache")
+			return source
+		}, fx.ParamTags(`name:"auth_token_version_cache"`), fx.ResultTags(`name:"auth_token_version_cache"`))),
+		fx.Decorate(fx.Annotate(func(source localcache.StatsSource) localcache.StatsSource {
+			fail("rbac user roles cache")
+			return source
+		}, fx.ParamTags(`name:"rbac_user_roles_cache"`), fx.ResultTags(`name:"rbac_user_roles_cache"`))),
+		fx.Decorate(func(status permissionredis.WatcherStatus) permissionredis.WatcherStatus {
+			fail("rbac policy watcher")
+			return status
+		}),
+	}
 }

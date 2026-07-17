@@ -32,6 +32,21 @@ func TestRenderDOTReturnsStableGraph(t *testing.T) {
 	require.True(t, strings.HasSuffix(first, "\n"), "RenderDOT output does not end with newline: %q", first)
 }
 
+func TestRenderDOTDoesNotConstructUnreferencedProviders(t *testing.T) {
+	type expensiveResource struct{}
+	constructed := false
+
+	dot, err := RenderDOT(
+		fx.Provide(func() expensiveResource {
+			constructed = true
+			return expensiveResource{}
+		}),
+	)
+	require.NoError(t, err)
+	require.False(t, constructed, "RenderDOT constructed an unreferenced provider")
+	require.Contains(t, dot, "fxgraph.expensiveResource")
+}
+
 func TestWriteDOTCreatesFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "graphs", "fx.dot")
 	dot, err := WriteDOT(path, fx.Provide(func() string { return "ready" }))
