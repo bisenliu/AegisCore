@@ -40,7 +40,7 @@ func TestNewTokenVersionLocalCacheUsesFeatureConfig(t *testing.T) {
 	loadTimeout := time.Second
 	lifecycle := fxtest.NewLifecycle(t)
 	ctrl := gomock.NewController(t)
-	result, err := newTokenVersionLocalCache(tokenVersionCacheParams{
+	result, err := newTokenVersionLocalCache(TokenVersionLocalCacheParams{
 		Lifecycle: lifecycle,
 		Config: &serviceconfig.Config{Auth: serviceconfig.AuthConfig{TokenVersionCache: serviceconfig.FeatureCacheConfig{
 			Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout,
@@ -67,7 +67,7 @@ func TestDisabledTokenVersionLocalCacheReadsThroughAndPreservesValidation(t *tes
 		users.EXPECT().GetTokenVersion(gomock.Any(), userID).Return(int64(7), nil),
 		cache.EXPECT().CacheTokenVersion(gomock.Any(), userID.String(), int64(7)).Return(nil),
 	)
-	result, err := newTokenVersionLocalCache(tokenVersionCacheParams{
+	result, err := newTokenVersionLocalCache(TokenVersionLocalCacheParams{
 		Config: &serviceconfig.Config{Auth: serviceconfig.AuthConfig{TokenVersionCache: serviceconfig.FeatureCacheConfig{Enabled: &disabled}}},
 		Users:  users,
 		Cache:  cache,
@@ -186,13 +186,13 @@ func TestAuthModuleStopsAuthResourcesBeforeRedis(t *testing.T) {
 	stopOrder := make([]string, 0, 3)
 	options := append(newAuthModuleBaseOptionsWithoutRedis(t, true, newAuthModuleMetricsProvider(t, false)),
 		fx.Provide(fx.Annotate(func(lifecycle fx.Lifecycle) *rediscache.Client {
-			lifecycle.Append(fx.Hook{OnStop: func(context.Context) error {
+			lifecycle.Append(fx.StopHook(func() error {
 				require.NotNil(t, purgePool)
 				require.True(t, purgePool.Stats().Closed,
 					"purge pool must be stopped before redis client closes")
 				stopOrder = append(stopOrder, "redis")
 				return redisClient.Close()
-			}})
+			}))
 			return redisClient
 		}, fx.ResultTags(`name:"cache_redis"`))),
 		fx.Invoke(func(params struct {

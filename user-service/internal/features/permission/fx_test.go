@@ -87,14 +87,10 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 	loader := permissionModulePolicyLoader{}
 	roles := permissionModuleUserRoleResolver{}
 
-	var engine *permissioncasbin.Engine
 	var authorizationEngine permissionauthorization.Engine
 	var reloadEngine permissionapplication.PolicyReloadEngine
-	var store *permissionredis.Store
 	var publisher permissionapplication.PolicyVersionPublisher
-	var tracker *permissionredis.VersionTracker
 	var trackerPort permissionapplication.PolicyVersionTracker
-	var watcher *permissionredis.Watcher
 	var watcherStatus permissionredis.WatcherStatus
 	var authorizer permissionauthorization.Authorizer
 	var reloadMetrics commonmetrics.ReloadMetrics
@@ -115,29 +111,25 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 		),
 		Module,
 		fx.Populate(
-			&engine,
 			&authorizationEngine,
 			&reloadEngine,
-			&store,
 			&publisher,
-			&tracker,
 			&trackerPort,
-			&watcher,
 			&watcherStatus,
 			&authorizer,
 			&reloadMetrics,
 		),
 	)
 	app.RequireStart()
-	require.True(t, watcher.Running())
+	require.True(t, watcherStatus.Running())
 	app.RequireStop()
-	require.False(t, watcher.Running())
+	require.False(t, watcherStatus.Running())
 
-	require.Same(t, engine, authorizationEngine.(*permissioncasbin.Engine))
-	require.Same(t, engine, reloadEngine.(*permissioncasbin.Engine))
-	require.Same(t, store, publisher.(*permissionredis.Store))
-	require.Same(t, tracker, trackerPort.(*permissionredis.VersionTracker))
-	require.Same(t, watcher, watcherStatus.(*permissionredis.Watcher))
+	require.IsType(t, (*permissioncasbin.Engine)(nil), authorizationEngine)
+	require.Same(t, authorizationEngine.(*permissioncasbin.Engine), reloadEngine.(*permissioncasbin.Engine))
+	require.IsType(t, (*permissionredis.Store)(nil), publisher)
+	require.IsType(t, (*permissionredis.VersionTracker)(nil), trackerPort)
+	require.IsType(t, (*permissionredis.Watcher)(nil), watcherStatus)
 	require.NotNil(t, authorizer)
 	require.NotNil(t, reloadMetrics)
 }

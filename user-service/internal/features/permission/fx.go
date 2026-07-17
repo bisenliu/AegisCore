@@ -23,26 +23,106 @@ import (
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
 )
 
-type primaryDBIn struct {
+// Module 组装权限目录、请求授权和分布式 policy 同步能力。
+var Module = fx.Module(
+	"feature-permission",
+	permissionMetricsOptions,
+	permissionStorageOptions,
+	permissionAuthorizationOptions,
+	permissionPolicySyncOptions,
+	permissionApplicationOptions,
+	permissionTransportOptions,
+	permissionLifecycleOptions,
+)
+
+var permissionMetricsOptions = fx.Options(
+	fx.Provide(
+		newPermissionMetrics,
+		commonmetrics.NewCasbinPolicyReloadMetrics,
+	),
+)
+
+var permissionStorageOptions = fx.Options(
+	fx.Provide(
+		providePermissionStore,
+		provideRouteCatalogScanner,
+	),
+)
+
+var permissionAuthorizationOptions = fx.Options(
+	fx.Provide(
+		providePolicyLoader,
+		provideUserRoleResolver,
+		fx.Annotate(
+			provideEngine,
+			fx.As(fx.Self()),
+			fx.As(new(permissionauthorization.Engine)),
+			fx.As(new(permissionapplication.PolicyReloadEngine)),
+		),
+		permissionauthorization.NewAuthorizer,
+	),
+)
+
+var permissionPolicySyncOptions = fx.Options(
+	fx.Provide(
+		fx.Annotate(
+			provideRedisStore,
+			fx.As(fx.Self()),
+			fx.As(new(permissionapplication.PolicyVersionPublisher)),
+		),
+		fx.Annotate(
+			permissionredis.NewVersionTracker,
+			fx.As(fx.Self()),
+			fx.As(new(permissionapplication.PolicyVersionTracker)),
+		),
+		providePolicyChangeNotifier,
+		fx.Annotate(
+			provideWatcher,
+			fx.As(fx.Self()),
+			fx.As(new(permissionredis.WatcherStatus)),
+		),
+	),
+)
+
+var permissionApplicationOptions = fx.Options(
+	fx.Provide(
+		permissioncommand.NewPermissionCommandService,
+		permissionquery.NewPermissionQueryService,
+	),
+)
+
+var permissionTransportOptions = fx.Options(
+	fx.Provide(
+		permissionhttp.NewPermissionController,
+	),
+)
+
+var permissionLifecycleOptions = fx.Options(
+	fx.Invoke(
+		registerRBACLifecycle,
+	),
+)
+
+type PrimaryDBParams struct {
 	fx.In
 
 	Client *ent.Client `name:"primary_db"`
 }
 
-type cacheRedisIn struct {
+type CacheRedisParams struct {
 	fx.In
 
 	Client *rediscmd.Client `name:"cache_redis"`
 }
 
-type userRoleResolverIn struct {
+type UserRoleResolverParams struct {
 	fx.In
 
 	Config *serviceconfig.Config
 	Client *ent.Client `name:"primary_db"`
 }
 
-type userRoleResolverOut struct {
+type UserRoleResolverResult struct {
 	fx.Out
 
 	Resolver permissioncasbin.UserRoleResolver
@@ -50,36 +130,7 @@ type userRoleResolverOut struct {
 	Closer   permissioncasbin.UserRoleCacheCloser
 }
 
-type engineOut struct {
-	fx.Out
-
-	Engine              *permissioncasbin.Engine
-	AuthorizationEngine permissionauthorization.Engine
-	ReloadEngine        permissionapplication.PolicyReloadEngine
-}
-
-type redisStoreOut struct {
-	fx.Out
-
-	Store     *permissionredis.Store
-	Publisher permissionapplication.PolicyVersionPublisher
-}
-
-type versionTrackerOut struct {
-	fx.Out
-
-	Tracker     *permissionredis.VersionTracker
-	TrackerPort permissionapplication.PolicyVersionTracker
-}
-
-type watcherOut struct {
-	fx.Out
-
-	Watcher *permissionredis.Watcher
-	Status  permissionredis.WatcherStatus
-}
-
-type watcherIn struct {
+type WatcherParams struct {
 	fx.In
 
 	Store   *permissionredis.Store
@@ -89,7 +140,7 @@ type watcherIn struct {
 	Metrics permissionapplication.Metrics
 }
 
-type rbacLifecycleIn struct {
+type RegisterRBACLifecycleParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
@@ -98,98 +149,54 @@ type rbacLifecycleIn struct {
 	Closer    permissioncasbin.UserRoleCacheCloser
 }
 
-// Module 组装权限目录 feature 的应用服务、控制器和基础设施 adapter。
-var Module = fx.Module("feature-permission",
-	fx.Provide(
-		// Fx 分类：横切能力 - permission feature 指标。
-		newPermissionMetrics,
-		// Fx 分类：Feature 基础设施 - Casbin policy 加载与用户角色解析。
-		providePolicyLoader,
-		provideUserRoleResolver,
-		// Fx 分类：横切能力 - Casbin reload 指标。
-		commonmetrics.NewCasbinPolicyReloadMetrics,
-		// Fx 分类：Feature 基础设施 - Casbin 引擎及其 port 投影。
-		provideEngine,
-		// Fx 分类：横切能力 - 请求授权器。
-		permissionauthorization.NewAuthorizer,
-		// Fx 分类：Feature 基础设施 - 权限持久化与路由目录 adapter。
-		providePermissionStore,
-		provideRouteCatalogScanner,
-		// Fx 分类：Feature 基础设施 - 分布式 policy version 同步 adapter。
-		provideRedisStore,
-		provideVersionTracker,
-		// Fx 分类：Feature 应用 - policy 刷新编排与权限读写服务。
-		providePolicyChangeNotifier,
-		permissioncommand.NewPermissionCommandService,
-		permissionquery.NewPermissionQueryService,
-		// Fx 分类：传输 - permission HTTP controller。
-		permissionhttp.NewPermissionController,
-		// Fx 分类：资源 - policy 变更后台 watcher。
-		provideWatcher,
-	),
-	fx.Invoke(
-		// Fx 分类：生命周期 - 组合层显式编排 RBAC 资源启停。
-		registerRBACLifecycle,
-	),
-)
-
-func providePermissionStore(in primaryDBIn) permissionapplication.PermissionStore {
-	return permissionpostgres.NewPermissionStore(in.Client)
+func providePermissionStore(params PrimaryDBParams) permissionapplication.PermissionStore {
+	return permissionpostgres.NewPermissionStore(params.Client)
 }
 
-func providePolicyLoader(in primaryDBIn) permissioncasbin.Loader {
-	return permissioncasbin.NewPolicyLoader(in.Client)
+func providePolicyLoader(params PrimaryDBParams) permissioncasbin.Loader {
+	return permissioncasbin.NewPolicyLoader(params.Client)
 }
 
-func provideUserRoleResolver(in userRoleResolverIn) (userRoleResolverOut, error) {
-	result, err := permissioncasbin.NewUserRoleResolver(permissioncasbin.UserRoleResolverParams{Config: in.Config, Client: in.Client})
+func provideUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult, error) {
+	result, err := permissioncasbin.NewUserRoleResolver(permissioncasbin.UserRoleResolverParams{Config: params.Config, Client: params.Client})
 	if err != nil {
-		return userRoleResolverOut{}, err
+		return UserRoleResolverResult{}, err
 	}
-	return userRoleResolverOut{Resolver: result.Resolver, Stats: result.Stats, Closer: result.Closer}, nil
+	return UserRoleResolverResult{Resolver: result.Resolver, Stats: result.Stats, Closer: result.Closer}, nil
 }
 
-func provideEngine(loader permissioncasbin.Loader, metrics commonmetrics.ReloadMetrics, userRoles permissioncasbin.UserRoleResolver) engineOut {
-	engine := permissioncasbin.NewEngine(loader, metrics, userRoles)
-	return engineOut{Engine: engine, AuthorizationEngine: engine, ReloadEngine: engine}
+func provideEngine(loader permissioncasbin.Loader, metrics commonmetrics.ReloadMetrics, userRoles permissioncasbin.UserRoleResolver) *permissioncasbin.Engine {
+	return permissioncasbin.NewEngine(loader, metrics, userRoles)
 }
 
 func provideRouteCatalogScanner(engine *gin.Engine) permissionapplication.RouteCatalogScanner {
 	return permissionhttp.NewRouteCatalogScanner(engine)
 }
 
-func provideRedisStore(in cacheRedisIn, cfg *commonconfig.Config, log *zap.Logger) (redisStoreOut, error) {
-	store, err := permissionredis.NewStore(in.Client, cfg, log)
-	if err != nil {
-		return redisStoreOut{}, err
-	}
-	return redisStoreOut{Store: store, Publisher: store}, nil
-}
-
-func provideVersionTracker() versionTrackerOut {
-	tracker := permissionredis.NewVersionTracker()
-	return versionTrackerOut{Tracker: tracker, TrackerPort: tracker}
+func provideRedisStore(params CacheRedisParams, cfg *commonconfig.Config, log *zap.Logger) (*permissionredis.Store, error) {
+	return permissionredis.NewStore(params.Client, cfg, log)
 }
 
 func providePolicyChangeNotifier(engine permissionapplication.PolicyReloadEngine, publisher permissionapplication.PolicyVersionPublisher, tracker permissionapplication.PolicyVersionTracker, log *zap.Logger, metrics permissionapplication.Metrics) permissionapplication.PolicyChangeNotifier {
 	return permissionapplication.NewPolicyRefreshCoordinator(engine, publisher, tracker, log, metrics)
 }
 
-func provideWatcher(in watcherIn) watcherOut {
-	watcher := permissionredis.NewWatcher(permissionredis.WatcherParams{Store: in.Store, Tracker: in.Tracker, Engine: in.Engine, Log: in.Log, Metrics: in.Metrics})
-	return watcherOut{Watcher: watcher, Status: watcher}
+func provideWatcher(params WatcherParams) *permissionredis.Watcher {
+	return permissionredis.NewWatcher(permissionredis.WatcherParams{Store: params.Store, Tracker: params.Tracker, Engine: params.Engine, Log: params.Log, Metrics: params.Metrics})
 }
 
-func registerRBACLifecycle(in rbacLifecycleIn) {
-	in.Lifecycle.Append(fx.Hook{
+func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
+	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			_ = in.Engine.Initialize(ctx)
-			in.Watcher.Start()
+			if err := params.Engine.Initialize(ctx); err != nil {
+				return err
+			}
+			params.Watcher.Start()
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			stopErr := in.Watcher.Stop(ctx)
-			closeErr := in.Closer.Close()
+			stopErr := params.Watcher.Stop(ctx)
+			closeErr := params.Closer.Close()
 			if stopErr != nil {
 				return stopErr
 			}

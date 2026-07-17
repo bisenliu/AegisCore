@@ -18,8 +18,6 @@ func NewFxProvider(lifecycle fx.Lifecycle, cfg *config.Config) (*Provider, error
 	if err != nil {
 		return nil, err
 	}
-	lifecycle.Append(fx.Hook{
-		OnStop: provider.Shutdown,
-	})
+	lifecycle.Append(fx.StopHook(provider.Shutdown))
 	return provider, nil
 }

@@ -28,13 +28,77 @@ import (
 
 const authTokenVersionCacheName = "auth_token_version" // #nosec G101 -- 本地缓存名称，不包含真实凭据。
 
-type credentialStoreParams struct {
+// Module 组装认证功能的应用服务、HTTP 传输层和基础设施适配器。
+var Module = fx.Module(
+	"feature-auth",
+	authMetricsOptions,
+	authInfrastructureOptions,
+	authResourceOptions,
+	authApplicationOptions,
+	authTransportOptions,
+)
+
+var authMetricsOptions = fx.Options(
+	fx.Provide(
+		newAuthMetrics,
+	),
+)
+
+var authInfrastructureOptions = fx.Options(
+	fx.Provide(
+		fx.Annotate(
+			newCredentialStore,
+			fx.As(new(authapplication.UserTokenVersionStore)),
+			fx.As(new(authapplication.UserCredentialStore)),
+		),
+		fx.Annotate(
+			newSessionStore,
+			fx.As(new(authapplication.TokenVersionCache)),
+			fx.As(new(authapplication.RefreshSessionStore)),
+			fx.As(new(authapplication.PasswordChangeSessionStore)),
+		),
+	),
+)
+
+var authResourceOptions = fx.Options(
+	fx.Provide(
+		newSessionPurgePool,
+		newTokenVersionLocalCache,
+	),
+)
+
+var authApplicationOptions = fx.Options(
+	fx.Provide(
+		newTokenVersionValidator,
+		fx.Annotate(
+			authcredentials.NewVerifier,
+			fx.From(new(authapplication.UserCredentialStore), new(*password.Service)),
+		),
+		authtokens.NewIssuer,
+		authtokens.NewAccessTokenVerifier,
+		newAuthSessionLifecycle,
+		newRefreshTokenSettings,
+		authcommand.NewLoginUseCase,
+		authcommand.NewRefreshTokenUseCase,
+		authcommand.NewChangePasswordUseCase,
+		authcommand.NewLogoutCurrentSessionUseCase,
+		authcommand.NewLogoutAllSessionsUseCase,
+	),
+)
+
+var authTransportOptions = fx.Options(
+	fx.Provide(
+		newAuthController,
+	),
+)
+
+type CredentialStoreParams struct {
 	fx.In
 
 	Client *ent.Client `name:"primary_db"`
 }
 
-type sessionStoreParams struct {
+type SessionStoreParams struct {
 	fx.In
 
 	Redis     *rediscache.Client `name:"cache_redis"`
@@ -43,7 +107,7 @@ type sessionStoreParams struct {
 	Metrics   authapplication.Metrics
 }
 
-type sessionPurgePoolParams struct {
+type SessionPurgePoolParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
@@ -52,13 +116,13 @@ type sessionPurgePoolParams struct {
 	Log   *zap.Logger
 }
 
-type sessionPurgePoolResult struct {
+type SessionPurgePoolResult struct {
 	fx.Out
 
 	Pool authredis.PurgeTaskPool `name:"auth_session_purge_pool"`
 }
 
-type tokenVersionCacheParams struct {
+type TokenVersionLocalCacheParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
@@ -67,7 +131,7 @@ type tokenVersionCacheParams struct {
 	Cache     authapplication.TokenVersionCache
 }
 
-type tokenVersionCacheResult struct {
+type TokenVersionLocalCacheResult struct {
 	fx.Out
 
 	Cache authvalidators.LocalTokenVersionCache `name:"auth_token_version_cache"`
@@ -82,21 +146,21 @@ type tokenVersionLocalCacheResource struct {
 	close     func()
 }
 
-type tokenVersionValidatorParams struct {
+type TokenVersionValidatorParams struct {
 	fx.In
 
 	Cache   authvalidators.LocalTokenVersionCache `name:"auth_token_version_cache"`
 	Metrics authapplication.Metrics
 }
 
-type tokenVersionValidatorResult struct {
+type TokenVersionValidatorResult struct {
 	fx.Out
 
 	Validator   commonauth.TokenVersionValidator
 	Invalidator authvalidators.TokenVersionLocalInvalidator
 }
 
-type authControllerParams struct {
+type AuthControllerParams struct {
 	fx.In
 
 	Login          authcommand.LoginUseCase
@@ -107,53 +171,11 @@ type authControllerParams struct {
 	Validator      *commonvalidation.Validator
 }
 
-// Module 组装认证功能的应用服务、HTTP 传输层和基础设施适配器。
-var Module = fx.Module("feature-auth",
-	fx.Provide(
-		// Fx 分类：横切能力 - auth feature 指标。
-		newAuthMetrics,
-		// Fx 分类：Feature 基础设施 - PostgreSQL 与 Redis port adapter。
-		fx.Annotate(
-			newCredentialStore,
-			fx.As(new(authapplication.UserTokenVersionStore)),
-			fx.As(new(authapplication.UserCredentialStore)),
-		),
-		fx.Annotate(
-			newSessionStore,
-			fx.As(new(authapplication.TokenVersionCache)),
-			fx.As(new(authapplication.RefreshSessionStore)),
-			fx.As(new(authapplication.PasswordChangeSessionStore)),
-		),
-		// Fx 分类：资源 - auth feature 私有清理 worker pool。
-		newSessionPurgePool,
-		// Fx 分类：资源 - token version 本地缓存及其生命周期。
-		newTokenVersionLocalCache,
-		// Fx 分类：Feature 应用 - token、凭据和会话安全能力。
-		newTokenVersionValidator,
-		fx.Annotate(
-			authcredentials.NewVerifier,
-			fx.From(new(authapplication.UserCredentialStore), new(*password.Service)),
-		),
-		authtokens.NewIssuer,
-		authtokens.NewAccessTokenVerifier,
-		newAuthSessionLifecycle,
-		newRefreshTokenSettings,
-		// Fx 分类：Feature 应用 - 认证命令用例。
-		authcommand.NewLoginUseCase,
-		authcommand.NewRefreshTokenUseCase,
-		authcommand.NewChangePasswordUseCase,
-		authcommand.NewLogoutCurrentSessionUseCase,
-		authcommand.NewLogoutAllSessionsUseCase,
-		// Fx 分类：传输 - auth HTTP controller。
-		newAuthController,
-	),
-)
-
-func newCredentialStore(params credentialStoreParams) *authpostgres.CredentialStore {
+func newCredentialStore(params CredentialStoreParams) *authpostgres.CredentialStore {
 	return authpostgres.NewCredentialStore(params.Client)
 }
 
-func newSessionStore(params sessionStoreParams) (*authredis.SessionStore, error) {
+func newSessionStore(params SessionStoreParams) (*authredis.SessionStore, error) {
 	keys, err := authredis.NewKeyCatalog(params.Config.App.Name)
 	if err != nil {
 		return nil, fmt.Errorf("new auth redis keys: %w", err)
@@ -167,16 +189,16 @@ func newSessionStore(params sessionStoreParams) (*authredis.SessionStore, error)
 	}), nil
 }
 
-func newSessionPurgePool(params sessionPurgePoolParams) (sessionPurgePoolResult, error) {
+func newSessionPurgePool(params SessionPurgePoolParams) (SessionPurgePoolResult, error) {
 	pool, err := authredis.NewSessionPurgePool(params.Log)
 	if err != nil {
-		return sessionPurgePoolResult{}, err
+		return SessionPurgePoolResult{}, err
 	}
-	params.Lifecycle.Append(fx.Hook{OnStop: pool.Stop})
-	return sessionPurgePoolResult{Pool: pool}, nil
+	params.Lifecycle.Append(fx.StopHook(pool.Stop))
+	return SessionPurgePoolResult{Pool: pool}, nil
 }
 
-func newAuthController(params authControllerParams) *authhttp.AuthController {
+func newAuthController(params AuthControllerParams) *authhttp.AuthController {
 	return authhttp.NewAuthController(authhttp.AuthControllerOptions{
 		Login:          params.Login,
 		Refresh:        params.Refresh,
@@ -195,17 +217,15 @@ func newRefreshTokenSettings(cfg *serviceconfig.Config) authcommand.RefreshToken
 	return authcommand.RefreshTokenSettings{RefreshTokenRotation: cfg.Auth.RefreshTokenRotation}
 }
 
-func newTokenVersionLocalCache(params tokenVersionCacheParams) (tokenVersionCacheResult, error) {
+func newTokenVersionLocalCache(params TokenVersionLocalCacheParams) (TokenVersionLocalCacheResult, error) {
 	resource, err := newTokenVersionLocalCacheResource(params.Config.Auth.TokenVersionCache, params.Users, params.Cache)
 	if err != nil {
-		return tokenVersionCacheResult{}, err
+		return TokenVersionLocalCacheResult{}, err
 	}
 	if params.Lifecycle != nil {
-		params.Lifecycle.Append(fx.Hook{OnStop: func(context.Context) error {
-			return resource.Close()
-		}})
+		params.Lifecycle.Append(fx.StopHook(resource.Close))
 	}
-	return tokenVersionCacheResult{Cache: resource.cache, Stats: resource.stats}, nil
+	return TokenVersionLocalCacheResult{Cache: resource.cache, Stats: resource.stats}, nil
 }
 
 func newTokenVersionLocalCacheResource(cfg serviceconfig.FeatureCacheConfig, users authapplication.UserTokenVersionStore, cache authapplication.TokenVersionCache) (*tokenVersionLocalCacheResource, error) {
@@ -240,7 +260,7 @@ func (r *tokenVersionLocalCacheResource) Close() error {
 	return nil
 }
 
-func newTokenVersionValidator(params tokenVersionValidatorParams) tokenVersionValidatorResult {
+func newTokenVersionValidator(params TokenVersionValidatorParams) TokenVersionValidatorResult {
 	validator := authvalidators.NewCachingValidator(params.Cache)
-	return tokenVersionValidatorResult{Validator: authvalidators.NewMetricsTokenVersionValidator(validator, params.Metrics), Invalidator: validator}
+	return TokenVersionValidatorResult{Validator: authvalidators.NewMetricsTokenVersionValidator(validator, params.Metrics), Invalidator: validator}
 }
