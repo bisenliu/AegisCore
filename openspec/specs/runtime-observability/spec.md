@@ -34,6 +34,16 @@
 - **WHEN** pprof 显式启用
 - **THEN** 系统 MUST 使用独立诊断 listener，并默认限制在 loopback 或受控网络边界
 
+### Requirement: runtime dependency 观测使用稳定资源名
+
+系统 MUST 使用稳定低基数资源名标识 runtime dependency 指标、健康检查和告警。user-service 主 PostgreSQL runtime dependency 的资源名 MUST 为 `primary_db`，Redis 缓存资源名保持 `cache_redis`。
+
+#### Scenario: PostgreSQL runtime dependency 暴露观测标签
+
+- **WHEN** user-service 注册 PostgreSQL 连接池指标、健康检查或告警查询
+- **THEN** PostgreSQL 资源名 MUST 使用 `primary_db`
+- **AND** 指标 label、健康检查名称、dashboard 查询和 alert 表达式 MUST 保持一致
+
 ### Requirement: OpenAPI 文档契约
 
 系统 MUST 暴露并生成与当前 user-service HTTP API 一致的 OpenAPI 3 文档，覆盖认证、用户、角色、权限、RBAC 保护接口和健康检查；运行时 Swagger UI MUST 使用 `github.com/swaggo/files/v2` 的 embedded `fs.FS`。

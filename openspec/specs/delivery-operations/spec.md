@@ -316,7 +316,10 @@ GitHub Actions 的阻塞式 test job MUST 通过唯一开关 `AEGISCORE_TEST_CON
 
 - **WHEN** 交付 user-service 配置
 - **THEN** server MUST 使用 `server.http` 与默认禁用的 `server.grpc`，资源 MUST 使用 `resources.redis` 和 `resources.postgres`
+- **AND** user-service 主 PostgreSQL 连接配置路径 MUST 使用 `resources.postgres.primary_db`
+- **AND** 主 PostgreSQL 环境变量 MUST 使用 `AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_*`
 - **AND** 环境变量 MUST 使用当前嵌套路径，进程时区 MUST 使用 `TZ`，secret MUST 通过环境变量或 Secret 注入
+- **AND** 不得继续把 `resources.postgres.user_db` 描述为有效正向配置路径
 - **AND** 旧顶层 HTTP、Redis、PostgreSQL、`local_cache`、文件日志或旧 tracing exporter 字段 MUST NOT 被描述为有效配置
 
 #### Scenario: 观测与入口配置

@@ -214,7 +214,7 @@
 
 ### Requirement: 授权热路径用户角色缓存
 
-系统 MUST 使用有容量上限的本地 loading cache 缓存用户当前启用角色 ID 集合，并通过主动失效和全量清空使在线 RBAC 变更及时收敛。关闭缓存 MUST 只影响性能，不得改变授权结果。
+系统 MUST 使用有容量上限的本地 loading cache 缓存用户当前启用角色 ID 集合，并通过主动失效和全量清空使在线 RBAC 变更及时收敛。关闭缓存 MUST 只影响性能，不得改变授权结果；启用和 disabled 模式 MUST 提供相同的显式幂等关闭契约。
 
 #### Scenario: 缓存命中
 
@@ -240,6 +240,13 @@
 - **WHEN** `rbac.user_role_cache.enabled` 为 false
 - **THEN** `size`、`ttl` 和 `load_timeout` MAY 为零值
 - **AND** 系统 MUST 直接回源并保持正确的 fail-closed 授权语义
+- **AND** disabled 模式 MUST 提供与启用模式相同的幂等 `Close` 契约
+
+#### Scenario: 显式关闭缓存
+
+- **WHEN** 调用方对启用或 disabled user-role resolver/cache 调用 `Close`
+- **THEN** `Close` MUST 是幂等的，并且 MUST NOT 关闭调用方注入的 Redis、Ent 或 PostgreSQL 共享资源
+- **AND** 关闭后授权语义 MUST 继续 fail-closed，不得因为关闭本地缓存而产生允许结果
 
 #### Scenario: 在线绑定变更失效
 
@@ -255,12 +262,13 @@
 
 ### Requirement: Policy 加载与多副本同步
 
-系统 MUST 在启动时加载初始 policy，并在在线 RBAC 写操作成功后刷新本实例状态，再通过 Redis policy version、Pub/Sub 和周期性版本补偿同步其他副本。授权热路径 MUST 使用本地 enforcer 和本地用户角色解析结果，MUST NOT 每请求读取 Redis version。
+系统 MUST 在启动时通过显式初始化入口加载初始 policy，并在在线 RBAC 写操作成功后刷新本实例状态，再通过 Redis policy version、Pub/Sub 和周期性版本补偿同步其他副本。授权热路径 MUST 使用本地 enforcer 和本地用户角色解析结果，MUST NOT 每请求读取 Redis version。
 
 #### Scenario: 启动加载 policy
 
-- **WHEN** Fx 启动 permission/RBAC 模块
-- **THEN** 初始 reload MUST 使用 `OnStart` context 调用 policy loader
+- **WHEN** user-service 启动 permission/RBAC 模块
+- **THEN** composition 层 MUST 显式调用 initial load 初始化入口，并将可取消或带超时的启动 context 传给 policy loader
+- **AND** permission infrastructure MUST NOT 通过 `RegisterInitialLoad(fx.Lifecycle, ...)` 或等价 Fx lifecycle adapter 注册初始加载
 - **AND** loader MUST 能观察启动超时或取消
 
 #### Scenario: 初始加载失败
@@ -268,6 +276,7 @@
 - **WHEN** 初始 policy 加载失败或被取消
 - **THEN** engine MUST 记录最近错误和 reload 失败指标
 - **AND** 后续授权 MUST fail-closed，服务 MUST 保持既有启动语义
+- **AND** reload 状态和 readiness 可观测性 MUST 保留失败信息
 
 #### Scenario: 在线权限或角色变更
 
@@ -294,9 +303,16 @@
 
 #### Scenario: watcher 生命周期
 
-- **WHEN** Fx 启停 Redis policy watcher
-- **THEN** `Start()` MUST 使用内部可取消 context 驱动长期循环，MUST NOT 依赖 `OnStart` context 存活
-- **AND** `Stop(ctx)` MUST 取消内部 context 并在调用方 context 限制内等待循环退出
+- **WHEN** user-service 启停 Redis policy watcher
+- **THEN** `NewWatcher` MUST 只构造 watcher 对象，MUST NOT 启动 goroutine、订阅 Redis 或执行版本补偿循环
+- **AND** `Start()` MUST 是幂等的，并使用内部可取消 context 驱动长期循环
+- **AND** `Stop(ctx)` MUST 是幂等的，取消内部 context，并在调用方 context 限制内等待循环退出
+
+#### Scenario: watcher 停止超时
+
+- **WHEN** 调用方传入的 `Stop(ctx)` context 在 watcher 循环退出前到期
+- **THEN** `Stop(ctx)` MUST 返回 context 相关错误
+- **AND** watcher MUST 保持后续重复 `Stop(ctx)` 可安全调用，且 MUST NOT 关闭调用方注入的 Redis、Ent 或 PostgreSQL 共享资源
 
 #### Scenario: 其他副本收敛
 
@@ -416,7 +432,7 @@ permission、role 和 binding domain MUST 返回携带稳定 HTTP status、共�
 
 ### Requirement: RBAC 分层与组合边界
 
-role 和 permission feature MUST 保持 domain、application、transport 和 infrastructure 分层。domain/application MUST 框架无关并拥有消费侧最小 port；Fx、Gin、Ent、Redis、SQL 和 HTTP response 细节 MUST 留在对应 composition、transport 或 infrastructure 边界。
+role 和 permission feature MUST 保持 domain、application、transport 和 infrastructure 分层。domain/application MUST 框架无关并拥有消费侧最小 port；Fx、Gin、Ent、Redis、SQL 和 HTTP response 细节 MUST 留在对应 composition、transport 或 infrastructure 边界。role infrastructure store constructor MUST 使用显式普通 Go 参数接收 Ent client 和必要的消费侧窄 port，MUST NOT 通过 `fx.In`、`dig.In`、`fx.Out`、`dig.Out`、`name` tag 或其他 DI metadata 表达依赖。permission infrastructure 可以拥有 Ent、Redis、Casbin 和 cache 的具体适配细节，但 MUST NOT 依赖 Fx 或 Dig。
 
 #### Scenario: application 直接构造
 
@@ -431,6 +447,27 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 - **AND** named、optional 或配置转换 adapter MUST 留在 feature composition 边界
 - **AND** 必需安全依赖缺失时 graph MUST 构造失败，MUST NOT 静默降级
 
+#### Scenario: role store adapter 显式构造
+
+- **WHEN** 调用方构造 `RoleStore`、`RolePermissionStore` 或 `UserRoleStore`
+- **THEN** 调用方 MUST 以普通 Go 参数显式传入 `*ent.Client`
+- **AND** constructor MUST NOT 暴露或接收 `fx.In`、`dig.In`、`fx.Out`、`dig.Out` 或 `name:"primary_db"` 等 DI metadata
+- **AND** `PermissionLookup` 等跨 feature 依赖 MUST 继续通过 role application 消费侧窄 port 显式注入，MUST NOT 扩大为 permission infrastructure 宽接口
+
+#### Scenario: role feature 禁止 Fx/Dig 回归
+
+- **WHEN** 执行 `user-service-architecture-lint`
+- **THEN** lint MUST 检查 `user-service/internal/features/role` 的 domain、application、infrastructure 和 transport 生产 Go 文件
+- **AND** 这些文件 MUST NOT import `go.uber.org/fx` 或 `go.uber.org/dig`
+- **AND** 这些文件 MUST NOT 使用 `fx.In`、`fx.Out`、`dig.In`、`dig.Out` 或仅服务于 DI 的 tag
+- **AND** role feature 的 `fx.go` 与 `fx_test.go` MAY 继续作为 composition 和 graph 验证边界使用 Fx
+
+#### Scenario: 显式生命周期由 composition 编排
+
+- **WHEN** 正式 feature module 需要启动 initial load、RBAC watcher 或关闭 user-role cache
+- **THEN** Fx lifecycle hook MUST 只登记在 composition 层，并且 MUST 调用 infrastructure 对象暴露的显式 `Initialize`、`Start`、`Stop` 或 `Close` 方法
+- **AND** `user-service/internal/features/permission/infrastructure` 的生产代码 MUST NOT import `go.uber.org/fx` 或 `go.uber.org/dig`，也 MUST NOT 使用 `fx.Lifecycle`、`fx.Hook`、`fx.In` 或 `fx.Out`
+
 #### Scenario: 共享边界保持最小
 
 - **WHEN** role 需要查询权限或 permission 需要解析用户身份
@@ -442,9 +479,44 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 - **WHEN** user-service 装配 RBAC 的 PostgreSQL、Redis 和用户角色缓存
 - **THEN** 具名资源 MUST 来自服务自有 `resources.postgres` 和 `resources.redis`，feature cache MUST 来自 `rbac.user_role_cache`
 - **AND** RBAC MUST NOT 把服务业务配置或 key schema 下沉到 `common`
+- **AND** watcher 和 cache 的 `Stop` 或 `Close` MUST NOT 关闭共享 Redis、Ent 或 PostgreSQL 资源
 
 #### Scenario: 架构调整不改变行为
 
-- **WHEN** provider 注册、依赖投影、logger 注入或 application 构造方式调整
+- **WHEN** provider 注册、依赖投影、logger 注入、application 构造方式或显式生命周期编排调整
 - **THEN** 权限、角色、绑定、授权、policy reload、缓存失效、跨副本同步和 CLI 行为 MUST 保持不变
 - **AND** 架构检查 MUST 阻止 application/domain 引入框架依赖或生产代码重新依赖全局 logger
+
+### Requirement: Permission adapter 显式装配边界
+
+permission 的 PostgreSQL、Redis 和 Casbin infrastructure adapter 构造 API MUST 使用普通 Go 参数表达必需依赖，并 MUST NOT 在 adapter constructor 中暴露或要求 Fx/Dig metadata。生产 Fx composition MAY 在 feature composition 边界选择具名资源和生命周期挂钩，但 MUST 通过显式 Go 赋值暴露 concrete 与 application/authorization port 视图。
+
+#### Scenario: adapter constructor 不携带 DI metadata
+
+- **WHEN** 构造 permission `PermissionStore`、policy `Loader`、Casbin `Engine` 或 Redis policy `Store`
+- **THEN** constructor MUST 接收普通强类型参数或无 DI metadata 的 options
+- **AND** constructor MUST NOT 嵌入 `fx.In`、`fx.Out`、Dig tag、`fx.As`、`fx.Self`、named result 或 group result
+
+#### Scenario: composition 显式选择服务资源
+
+- **WHEN** 正式 permission Fx module 装配 PostgreSQL、Redis、policy loader、policy store、version tracker 或 authorization engine
+- **THEN** 具名 `primary_db`、`cache_redis` 或生命周期依赖的选择 MUST 留在 `features/permission/fx.go` composition 边界
+- **AND** PostgreSQL、Redis 和 Casbin adapter package 的生产构造 API MUST NOT import Fx 或 Dig 只为读取这些 tags
+
+#### Scenario: 同一 Engine 暴露多个端口
+
+- **WHEN** composition 需要同时提供 Casbin concrete `Engine`、`permissionauthorization.Engine` 和 `permissionapplication.PolicyReloadEngine`
+- **THEN** composition MUST 构造一个 `Engine` 实例并通过普通 Go 赋值暴露这些端口
+- **AND** 系统 MUST NOT 为 concrete、authorization port 或 reload port 重复构造有状态 `Engine`
+
+#### Scenario: 同一 Redis Store 暴露发布端口
+
+- **WHEN** composition 需要同时提供 Redis policy `Store` concrete 视图和 `permissionapplication.PolicyVersionPublisher` 等接口视图
+- **THEN** composition MUST 构造一个 `Store` 实例并通过普通 Go 赋值暴露这些端口
+- **AND** 系统 MUST NOT 为 concrete 和 interface 视图重复构造有状态 Redis policy store 或 version tracker
+
+#### Scenario: 行为保持不变
+
+- **WHEN** permission adapter 构造 API 从 Fx/Dig metadata 改为普通 Go 参数
+- **THEN** 权限目录、route diff、Casbin policy、授权 fail-closed、Redis policy version、Pub/Sub、用户角色缓存失效和多副本同步语义 MUST 保持不变
+- **AND** 本变更 MUST NOT 迁移 Casbin initial load、watcher `Start/Stop` 或用户角色缓存 `Close` 生命周期
