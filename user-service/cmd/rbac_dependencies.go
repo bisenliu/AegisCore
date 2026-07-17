@@ -85,7 +85,7 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 	roleStore := rolepostgres.NewRoleStore(rolepostgres.RoleStoreParams{Client: client})
 	rolePermissionStore := rolepostgres.NewRolePermissionStore(rolepostgres.RolePermissionStoreParams{Client: client})
 	userRoleStore := rolepostgres.NewUserRoleStore(rolepostgres.UserRoleStoreParams{Client: client})
-	userStore := userpostgres.NewUserStore(userpostgres.UserStoreParams{Client: client})
+	userStore := userpostgres.NewUserStore(client)
 	credentialStore := authpostgres.NewCredentialStore(authpostgres.CredentialStoreParams{Client: client})
 	service := roleseed.NewService(roleStore, permissionStore, rolePermissionStore, userRoleStore)
 	userCreator := usercommand.NewCreateUserService(userStore, passwordService)

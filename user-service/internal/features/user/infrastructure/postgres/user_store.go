@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"go.uber.org/fx"
 
 	"github.com/aegiscore/user-service/ent"
 	entuser "github.com/aegiscore/user-service/ent/user"
@@ -20,16 +19,9 @@ type UserStore struct {
 
 var _ userapplication.UserProfileStore = (*UserStore)(nil)
 
-// UserStoreParams 包含 PostgreSQL-backed 用户 store 所需的 Fx 输入。
-type UserStoreParams struct {
-	fx.In
-
-	Client *ent.Client `name:"primary_db"`
-}
-
 // NewUserStore 构造基于 Ent 的用户 store。
-func NewUserStore(params UserStoreParams) *UserStore {
-	return &UserStore{client: params.Client}
+func NewUserStore(client *ent.Client) *UserStore {
+	return &UserStore{client: client}
 }
 
 // Create 插入用户记录，并将唯一约束冲突映射为 ErrUserAlreadyExists。

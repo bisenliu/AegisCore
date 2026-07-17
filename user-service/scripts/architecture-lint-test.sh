@@ -22,6 +22,9 @@ mkdir -p \
   "${fixture_root}/user-service/internal/features/auth/infrastructure" \
   "${fixture_root}/user-service/internal/features/role" \
   "${fixture_root}/user-service/internal/features/role/infrastructure" \
+  "${fixture_root}/user-service/internal/features/user" \
+  "${fixture_root}/user-service/internal/features/user/infrastructure/postgres" \
+  "${fixture_root}/user-service/internal/features/user/transport/http" \
   "${fixture_root}/user-service/internal/shared" \
   "${fixture_root}/user-service/migrations" \
   "${fixture_root}/user-service/scripts"
@@ -137,6 +140,52 @@ type Params struct {
 }
 EOF
 
+cat > "${fixture_root}/user-service/internal/features/user/infrastructure/postgres/fx_metadata.go" <<'EOF'
+package postgres
+
+import "go.uber.org/fx"
+
+type Params struct {
+	fx.In
+	Store any `name:"primary_db"`
+}
+EOF
+
+cat > "${fixture_root}/user-service/internal/features/user/fx.go" <<'EOF'
+package user
+
+import "go.uber.org/fx"
+
+type Params struct {
+	fx.In
+	Store any `name:"primary_db"`
+}
+EOF
+
+cat > "${fixture_root}/user-service/internal/features/user/infrastructure/postgres/store_test.go" <<'EOF'
+package postgres
+
+import "go.uber.org/fx"
+
+type TestParams struct {
+	fx.In
+	Store any `name:"primary_db"`
+}
+EOF
+
+cat > "${fixture_root}/user-service/internal/features/user/transport/http/mock_generate.go" <<'EOF'
+//go:build generate
+
+package http
+
+import "go.uber.org/fx"
+
+type Params struct {
+	fx.In
+	Store any `name:"primary_db"`
+}
+EOF
+
 cat > "${fixture_root}/user-service/internal/features/auth/infrastructure/default_logger.go" <<'EOF'
 package infrastructure
 
@@ -212,7 +261,12 @@ if [[ "${output}" != *"feature application/domain production code must not carry
   exit 1
 fi
 
-if [[ "${output}" == *"allowed_test.go"* || "${output}" == *"common/testing/example/helper.go"* || "${output}" == *"user-service/ent/schema/generated.go"* || "${output}" == *"user-service/docs/openapi.go"* || "${output}" == *"user-service/internal/features/role/fx.go"* || "${output}" == *"user-service/internal/features/role/infrastructure/store.go"* ]]; then
+if [[ "${output}" != *"user feature production code must not carry Fx/Dig DI metadata outside composition"* ]]; then
+  printf 'architecture-lint-test: expected user feature Fx/Dig metadata violation report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
+if [[ "${output}" == *"allowed_test.go"* || "${output}" == *"common/testing/example/helper.go"* || "${output}" == *"user-service/ent/schema/generated.go"* || "${output}" == *"user-service/docs/openapi.go"* || "${output}" == *"user-service/internal/features/role/fx.go"* || "${output}" == *"user-service/internal/features/role/infrastructure/store.go"* || "${output}" == *"user-service/internal/features/user/fx.go"* || "${output}" == *"user-service/internal/features/user/infrastructure/postgres/store_test.go"* || "${output}" == *"user-service/internal/features/user/transport/http/mock_generate.go"* ]]; then
   printf 'architecture-lint-test: excluded test or generated file produced a false positive\n%s\n' "${output}" >&2
   exit 1
 fi
