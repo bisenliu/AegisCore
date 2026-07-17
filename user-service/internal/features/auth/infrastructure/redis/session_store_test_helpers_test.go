@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx"
 
 	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/common/runtime/workerpool"
@@ -131,12 +130,4 @@ func (p *recordingPurgeTaskPool) Submit(ctx context.Context, task workerpool.Tas
 
 func (p *recordingPurgeTaskPool) Stats() workerpool.Stats {
 	return workerpool.Stats{Failed: p.failed}
-}
-
-type lifecycleRecorder struct {
-	hooks []fx.Hook
-}
-
-func (r *lifecycleRecorder) Append(hook fx.Hook) {
-	r.hooks = append(r.hooks, hook)
 }

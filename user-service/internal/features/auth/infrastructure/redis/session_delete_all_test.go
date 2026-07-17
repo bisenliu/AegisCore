@@ -2,15 +2,16 @@ package redis
 
 import (
 	"context"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	rediscache "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
@@ -192,21 +193,12 @@ func TestSessionStoreDeleteAllUserSessionsPurgeFailureIsObservable(t *testing.T)
 
 }
 
-func TestSessionStorePurgePoolStopHookPrecedesRedisStopHook(t *testing.T) {
+func TestSessionStorePurgePoolStopsBeforeRedisClose(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
-	lifecycle := &lifecycleRecorder{}
 	stopOrder := make([]string, 0, 2)
-	lifecycle.Append(fx.Hook{OnStop: func(context.Context) error {
-		stopOrder = append(stopOrder, "redis")
-		return client.Close()
-	}})
 
-	pool, err := NewSessionPurgePool(SessionPurgePoolParams{
-		Lifecycle: lifecycle,
-		Redis:     client,
-		Log:       zap.NewNop(),
-	})
+	pool, err := NewSessionPurgePool(zap.NewNop())
 	require.NoError(t, err,
 		"NewSessionPurgePool: %v", err)
 
@@ -219,29 +211,13 @@ func TestSessionStorePurgePoolStopHookPrecedesRedisStopHook(t *testing.T) {
 	})
 	require.NotNil(t, store.purgePool,
 		"purgePool = nil")
-	require.EqualValues(t, 2, len(lifecycle.hooks),
-		"lifecycle hooks = %d, want redis and purge pool hooks", len(lifecycle.hooks))
-
-	purgeStop := lifecycle.hooks[1].OnStop
-	lifecycle.hooks[1].OnStop = func(ctx context.Context) error {
-		stopOrder = append(stopOrder, "purge_pool")
-		return purgeStop(ctx)
-	}
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	for i := len(lifecycle.hooks) - 1; i >= 0; i-- {
-		hook := lifecycle.hooks[i]
-		if hook.OnStop == nil {
-			continue
-		}
-		{
-			err := hook.OnStop(stopCtx)
-			require.NoError(t, err,
-				"OnStop hook %d: %v", i, err)
-		}
-
-	}
+	stopOrder = append(stopOrder, "purge_pool")
+	require.NoError(t, pool.Stop(stopCtx))
+	stopOrder = append(stopOrder, "redis")
+	require.NoError(t, client.Close())
 	require.Equal(t, "purge_pool,redis", strings.Join(stopOrder, ","),
 		"stop order = %v, want purge_pool before redis", stopOrder)
 
@@ -251,12 +227,7 @@ func TestSessionStoreConsumesPurgePool(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
-	lifecycle := &lifecycleRecorder{}
-	pool, err := NewSessionPurgePool(SessionPurgePoolParams{
-		Lifecycle: lifecycle,
-		Redis:     client,
-		Log:       zap.NewNop(),
-	})
+	pool, err := NewSessionPurgePool(zap.NewNop())
 	require.NoError(t, err,
 		"NewSessionPurgePool: %v", err)
 	store := NewSessionStore(SessionStoreOptions{
@@ -269,15 +240,85 @@ func TestSessionStoreConsumesPurgePool(t *testing.T) {
 	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 	t.Cleanup(func() {
 		defer cancel()
-		for i := len(lifecycle.hooks) - 1; i >= 0; i-- {
-			if lifecycle.hooks[i].OnStop != nil {
-				_ = lifecycle.hooks[i].OnStop(stopCtx)
-			}
-		}
+		_ = pool.Stop(stopCtx)
 	})
 	require.NotNil(t, store,
 		"store = nil")
 	require.NotNil(t, store.purgePool,
 		"purgePool = nil")
 
+}
+
+func TestSessionPurgePoolStopDrainsAndIsIdempotent(t *testing.T) {
+	baselineGoroutines := runtime.NumGoroutine()
+	pool, err := NewSessionPurgePool(zap.NewNop())
+	require.NoError(t, err,
+		"NewSessionPurgePool: %v", err)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var completed atomic.Bool
+	err = pool.Submit(context.Background(), workerpool.Task{Name: "drain", Run: func(context.Context) error {
+		close(started)
+		<-release
+		completed.Store(true)
+		return nil
+	}})
+	require.NoError(t, err,
+		"Submit: %v", err)
+	<-started
+
+	stopDone := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		stopDone <- pool.Stop(ctx)
+	}()
+	require.Never(t, func() bool {
+		select {
+		case <-stopDone:
+			return true
+		default:
+			return false
+		}
+	}, 50*time.Millisecond, 10*time.Millisecond)
+
+	close(release)
+	require.NoError(t, <-stopDone)
+	require.True(t, completed.Load(),
+		"task was not drained before Stop returned")
+	require.NoError(t, pool.Stop(context.Background()))
+	require.True(t, pool.Stats().Closed,
+		"pool was not marked closed")
+	require.Zero(t, pool.Stats().Running,
+		"pool still has running tasks")
+	require.Eventually(t, func() bool {
+		return runtime.NumGoroutine() <= baselineGoroutines+2
+	}, time.Second, 10*time.Millisecond, "purge pool goroutines did not settle")
+}
+
+func TestSessionPurgePoolStopRespectsCallerTimeout(t *testing.T) {
+	pool, err := NewSessionPurgePool(zap.NewNop())
+	require.NoError(t, err,
+		"NewSessionPurgePool: %v", err)
+
+	started := make(chan struct{})
+	err = pool.Submit(context.Background(), workerpool.Task{Name: "timeout", Run: func(ctx context.Context) error {
+		close(started)
+		<-ctx.Done()
+		return nil
+	}})
+	require.NoError(t, err,
+		"Submit: %v", err)
+	<-started
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	err = pool.Stop(stopCtx)
+	require.ErrorIs(t, err, context.DeadlineExceeded,
+		"Stop err = %v, want DeadlineExceeded", err)
+	require.Eventually(t, func() bool {
+		return pool.Stats().Closed && pool.Stats().Running == 0
+	}, time.Second, 10*time.Millisecond, "pool did not settle after timeout")
+	require.NoError(t, pool.Stop(context.Background()))
 }

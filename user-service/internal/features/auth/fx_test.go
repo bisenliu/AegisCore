@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	commonconfig "github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/localcache"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
@@ -26,6 +27,7 @@ import (
 	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
+	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 )
 
@@ -79,6 +81,45 @@ func TestDisabledTokenVersionLocalCacheReadsThroughAndPreservesValidation(t *tes
 	require.Equal(t, authTokenVersionCacheName, result.Stats.Name())
 	require.EqualValues(t, 2, result.Stats.Stats().Load)
 	require.Zero(t, result.Stats.Stats().Capacity)
+}
+
+func TestTokenVersionLocalCacheResourceCloseIsIdempotent(t *testing.T) {
+	enabled := true
+	size := int64(10)
+	ttl := time.Minute
+	loadTimeout := time.Second
+	resource, err := newTokenVersionLocalCacheResource(serviceconfig.FeatureCacheConfig{
+		Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout,
+	}, NewMockUserTokenVersionStore(gomock.NewController(t)), NewMockTokenVersionCache(gomock.NewController(t)))
+	require.NoError(t, err)
+	require.NotNil(t, resource.cache)
+	require.EqualValues(t, 10, resource.stats.Stats().Capacity)
+
+	require.NoError(t, resource.Close())
+	require.NoError(t, resource.Close())
+	require.ErrorIs(t, resource.cache.Delete("018f0000-0000-7000-8000-000000000502"), localcache.ErrClosed)
+}
+
+func TestDisabledTokenVersionLocalCacheResourceCloseIsNoop(t *testing.T) {
+	disabled := false
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000503")
+	ctrl := gomock.NewController(t)
+	users := NewMockUserTokenVersionStore(ctrl)
+	cache := NewMockTokenVersionCache(ctrl)
+	resource, err := newTokenVersionLocalCacheResource(serviceconfig.FeatureCacheConfig{Enabled: &disabled}, users, cache)
+	require.NoError(t, err)
+
+	require.NoError(t, resource.Close())
+	require.NoError(t, resource.Close())
+	gomock.InOrder(
+		cache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID.String()).Return(int64(0), authdomain.ErrTokenVersionCacheMiss),
+		users.EXPECT().GetTokenVersion(gomock.Any(), userID).Return(int64(9), nil),
+		cache.EXPECT().CacheTokenVersion(gomock.Any(), userID.String(), int64(9)).Return(nil),
+	)
+	version, err := resource.cache.GetOrLoad(context.Background(), userID.String())
+	require.NoError(t, err)
+	require.EqualValues(t, 9, version)
+	require.Equal(t, authTokenVersionCacheName, resource.stats.Name())
 }
 
 func TestAuthModuleBuildsCommandGraphWithMetricsConfigurations(t *testing.T) {
@@ -138,6 +179,41 @@ func TestAuthModuleCommandConstructorsHaveMetricsEdges(t *testing.T) {
 	}
 }
 
+func TestAuthModuleStopsAuthResourcesBeforeRedis(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	redisClient := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
+	var purgePool authredis.PurgeTaskPool
+	stopOrder := make([]string, 0, 3)
+	options := append(newAuthModuleBaseOptionsWithoutRedis(t, true, newAuthModuleMetricsProvider(t, false)),
+		fx.Provide(fx.Annotate(func(lifecycle fx.Lifecycle) *rediscache.Client {
+			lifecycle.Append(fx.Hook{OnStop: func(context.Context) error {
+				require.NotNil(t, purgePool)
+				require.True(t, purgePool.Stats().Closed,
+					"purge pool must be stopped before redis client closes")
+				stopOrder = append(stopOrder, "redis")
+				return redisClient.Close()
+			}})
+			return redisClient
+		}, fx.ResultTags(`name:"cache_redis"`))),
+		fx.Invoke(func(params struct {
+			fx.In
+
+			Pool  authredis.PurgeTaskPool               `name:"auth_session_purge_pool"`
+			Cache authvalidators.LocalTokenVersionCache `name:"auth_token_version_cache"`
+		}) {
+			require.NotNil(t, params.Pool)
+			require.NotNil(t, params.Cache)
+			purgePool = params.Pool
+		}),
+	)
+	app := fxtest.New(t, options...)
+	app.RequireStart().RequireStop()
+	require.Equal(t, []string{"redis"}, stopOrder,
+		"redis close hook did not run")
+	require.Error(t, redisClient.Ping(context.Background()).Err(),
+		"redis client should be closed by provider hook")
+}
+
 type authModuleOutputs struct {
 	provider               *commonmetrics.Provider
 	login                  authcommand.LoginUseCase
@@ -188,6 +264,12 @@ func newAuthModuleBaseOptions(t *testing.T, refreshRotation bool, provider *comm
 	redisServer := miniredis.RunT(t)
 	redisClient := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = redisClient.Close() })
+	options := newAuthModuleBaseOptionsWithoutRedis(t, refreshRotation, provider)
+	return append(options, fx.Supply(fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`))))
+}
+
+func newAuthModuleBaseOptionsWithoutRedis(t *testing.T, refreshRotation bool, provider *commonmetrics.Provider) []fx.Option {
+	t.Helper()
 	disabled := false
 	cfg := &serviceconfig.Config{
 		Config: commonconfig.Config{App: commonconfig.AppConfig{Name: "aegiscore-user-service-module-test"}},
@@ -222,7 +304,6 @@ func newAuthModuleBaseOptions(t *testing.T, refreshRotation bool, provider *comm
 			passwordService,
 			validator,
 			zap.NewNop(),
-			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
 		),
 		Module,
 		fx.Replace(

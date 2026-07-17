@@ -3,9 +3,11 @@ package auth
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/localcache"
 	commonauth "github.com/aegiscore/common/security/auth"
@@ -41,6 +43,21 @@ type sessionStoreParams struct {
 	Metrics   authapplication.Metrics
 }
 
+type sessionPurgePoolParams struct {
+	fx.In
+
+	Lifecycle fx.Lifecycle
+	// Redis 只在 Fx module 边界表达关闭顺序：auth 自有 pool 必须先于共享 Redis client 停止。
+	Redis *rediscache.Client `name:"cache_redis"`
+	Log   *zap.Logger
+}
+
+type sessionPurgePoolResult struct {
+	fx.Out
+
+	Pool authredis.PurgeTaskPool `name:"auth_session_purge_pool"`
+}
+
 type tokenVersionCacheParams struct {
 	fx.In
 
@@ -55,6 +72,14 @@ type tokenVersionCacheResult struct {
 
 	Cache authvalidators.LocalTokenVersionCache `name:"auth_token_version_cache"`
 	Stats localcache.StatsSource                `name:"auth_token_version_cache"`
+}
+
+type tokenVersionLocalCacheResource struct {
+	cache authvalidators.LocalTokenVersionCache
+	stats localcache.StatsSource
+
+	closeOnce sync.Once
+	close     func()
 }
 
 type tokenVersionValidatorParams struct {
@@ -100,11 +125,7 @@ var Module = fx.Module("feature-auth",
 			fx.As(new(authapplication.PasswordChangeSessionStore)),
 		),
 		// Fx 分类：资源 - auth feature 私有清理 worker pool。
-		fx.Annotate(
-			authredis.NewSessionPurgePool,
-			fx.As(new(authredis.PurgeTaskPool)),
-			fx.ResultTags(`name:"auth_session_purge_pool"`),
-		),
+		newSessionPurgePool,
 		// Fx 分类：资源 - token version 本地缓存及其生命周期。
 		newTokenVersionLocalCache,
 		// Fx 分类：Feature 应用 - token、凭据和会话安全能力。
@@ -146,6 +167,15 @@ func newSessionStore(params sessionStoreParams) (*authredis.SessionStore, error)
 	}), nil
 }
 
+func newSessionPurgePool(params sessionPurgePoolParams) (sessionPurgePoolResult, error) {
+	pool, err := authredis.NewSessionPurgePool(params.Log)
+	if err != nil {
+		return sessionPurgePoolResult{}, err
+	}
+	params.Lifecycle.Append(fx.Hook{OnStop: pool.Stop})
+	return sessionPurgePoolResult{Pool: pool}, nil
+}
+
 func newAuthController(params authControllerParams) *authhttp.AuthController {
 	return authhttp.NewAuthController(authhttp.AuthControllerOptions{
 		Login:          params.Login,
@@ -166,29 +196,48 @@ func newRefreshTokenSettings(cfg *serviceconfig.Config) authcommand.RefreshToken
 }
 
 func newTokenVersionLocalCache(params tokenVersionCacheParams) (tokenVersionCacheResult, error) {
-	cfg := params.Config.Auth.TokenVersionCache
-	if !cfg.IsEnabled() {
-		cache := authvalidators.NewDirectTokenVersionCache(params.Users, params.Cache)
-		return tokenVersionCacheResult{Cache: cache, Stats: cache}, nil
+	resource, err := newTokenVersionLocalCacheResource(params.Config.Auth.TokenVersionCache, params.Users, params.Cache)
+	if err != nil {
+		return tokenVersionCacheResult{}, err
 	}
-	cache, err := localcache.New[string, int64](localcache.Config[string]{
+	if params.Lifecycle != nil {
+		params.Lifecycle.Append(fx.Hook{OnStop: func(context.Context) error {
+			return resource.Close()
+		}})
+	}
+	return tokenVersionCacheResult{Cache: resource.cache, Stats: resource.stats}, nil
+}
+
+func newTokenVersionLocalCacheResource(cfg serviceconfig.FeatureCacheConfig, users authapplication.UserTokenVersionStore, cache authapplication.TokenVersionCache) (*tokenVersionLocalCacheResource, error) {
+	if !cfg.IsEnabled() {
+		direct := authvalidators.NewDirectTokenVersionCache(users, cache)
+		return &tokenVersionLocalCacheResource{cache: direct, stats: direct}, nil
+	}
+	local, err := localcache.New[string, int64](localcache.Config[string]{
 		Name:        authTokenVersionCacheName,
 		Capacity:    cfg.SizeValue(),
 		TTL:         cfg.TTLValue(),
 		LoadTimeout: cfg.LoadTimeoutValue(),
 		KeyString:   func(key string) string { return key },
 	}, func(ctx context.Context, userID string) (int64, error) {
-		return authvalidators.Current(ctx, params.Users, params.Cache, userID)
+		return authvalidators.Current(ctx, users, cache, userID)
 	}, nil)
 	if err != nil {
-		return tokenVersionCacheResult{}, fmt.Errorf("create auth token version localcache: %w", err)
+		return nil, fmt.Errorf("create auth token version localcache: %w", err)
 	}
+	return &tokenVersionLocalCacheResource{cache: local, stats: local, close: local.Close}, nil
+}
 
-	params.Lifecycle.Append(fx.Hook{OnStop: func(context.Context) error {
-		cache.Close()
+func (r *tokenVersionLocalCacheResource) Close() error {
+	if r == nil {
 		return nil
-	}})
-	return tokenVersionCacheResult{Cache: cache, Stats: cache}, nil
+	}
+	r.closeOnce.Do(func() {
+		if r.close != nil {
+			r.close()
+		}
+	})
+	return nil
 }
 
 func newTokenVersionValidator(params tokenVersionValidatorParams) tokenVersionValidatorResult {
