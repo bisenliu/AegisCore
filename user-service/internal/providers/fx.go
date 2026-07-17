@@ -16,8 +16,8 @@ var Module = fx.Module("user-service-providers",
 		// Fx 分类：横切能力 - 服务级认证与密码安全能力。
 		NewPasswordService,
 		// Fx 分类：资源 - 服务拥有的 PostgreSQL 与 Redis 客户端。
-		ProvidePostgresPools,
-		ProvideRedisClients,
+		fx.Annotate(NewPrimaryDB, fx.ResultTags(`name:"primary_db"`)),
+		fx.Annotate(NewCacheRedis, fx.ResultTags(`name:"cache_redis"`)),
 		// Fx 分类：横切能力 - 服务级 JWT 签发与校验能力。
 		NewJWTService,
 		// Fx 分类：资源 - 服务拥有的 Ent 客户端。

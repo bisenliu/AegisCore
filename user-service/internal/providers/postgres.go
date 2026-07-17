@@ -2,6 +2,7 @@ package providers
 
 import (
 	"database/sql"
+	"fmt"
 
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -11,8 +12,8 @@ import (
 	"github.com/aegiscore/user-service/internal/resources"
 )
 
-// NamedPostgresParams 包含供应用户服务 PostgreSQL 连接池所需的 Fx 输入。
-type NamedPostgresParams struct {
+// PrimaryDBParams 包含供应 user-service 主 PostgreSQL 连接池所需的 Fx 输入。
+type PrimaryDBParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
@@ -20,26 +21,11 @@ type NamedPostgresParams struct {
 	Log       *zap.Logger
 }
 
-// NamedPostgresPools 包含 user-service PostgreSQL 连接池的 Fx 输出。
-type NamedPostgresPools struct {
-	fx.Out
-
-	PrimaryDB *sql.DB `name:"primary_db"`
-}
-
-// ProvidePostgresPools 供应 user-service 所需的具名 PostgreSQL 连接池。
-func ProvidePostgresPools(params NamedPostgresParams) (NamedPostgresPools, error) {
-	dbs, err := datastore.NewPostgresPools(
-		params.Lifecycle,
-		params.Config.Resources.Postgres,
-		params.Log,
-		resources.NamePrimaryDB,
-	)
-	if err != nil {
-		return NamedPostgresPools{}, err
+// NewPrimaryDB 显式选择并供应 user-service 主 PostgreSQL 连接池。
+func NewPrimaryDB(params PrimaryDBParams) (*sql.DB, error) {
+	cfg, ok := params.Config.Resources.Postgres[resources.NamePrimaryDB]
+	if !ok {
+		return nil, fmt.Errorf("postgres config %q not found", resources.NamePrimaryDB)
 	}
-
-	return NamedPostgresPools{
-		PrimaryDB: dbs[resources.NamePrimaryDB],
-	}, nil
+	return datastore.NewPostgres(params.Lifecycle, params.Log, resources.NamePrimaryDB, cfg)
 }

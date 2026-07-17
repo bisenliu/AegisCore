@@ -1,9 +1,7 @@
 ## Purpose
 
 定义 `common/` 提供的跨服务共享契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力，保证服务间基础行为一致且业务边界清晰。
-
 ## Requirements
-
 ### Requirement: 跨服务错误与响应契约
 
 系统 MUST 在 `common/contract` 中维护业务中立的应用错误、响应 envelope 和分页契约，并 MUST 由 `common/http/response` 统一完成 HTTP 渲染。应用错误 MUST 使用低基数 `Kind`、稳定 `Reason`、响应 `Code`、公开 `Message` 和可选内部 `Cause` 表达语义，MUST NOT 保存或接收 HTTP status；HTTP status MUST 只根据 `Kind` 推导。
@@ -145,7 +143,7 @@
 
 ### Requirement: Runtime 配置、资源与 datastore
 
-系统 MUST 在 `common/runtime/config` 和 `common/runtime/resources` 中分别维护跨服务 runtime 配置以及具名 Redis/PostgreSQL 资源类型、默认值和通用校验，并 MUST 由 `common/runtime/datastore` 使用共享资源类型初始化客户端。服务私有业务配置、必需资源名和业务用途 MUST 由消费服务拥有。
+系统 MUST 在 `common/runtime/config` 和 `common/runtime/resources` 中分别维护跨服务 runtime 配置以及具名 Redis/PostgreSQL 资源类型、默认值和通用校验，并 MUST 由 `common/runtime/datastore` 使用共享资源类型初始化框架无关的单资源连接池。服务私有业务配置、必需资源名、业务用途和配置 map 到真实资源的选择 MUST 由消费服务拥有。
 
 #### Scenario: 严格加载通用配置
 
@@ -184,16 +182,42 @@
 
 #### Scenario: 初始化 Redis client
 
-- **WHEN** datastore 使用共享资源配置创建 Redis client
+- **WHEN** 调用方使用一份 `RedisConfig` 创建 Redis client
 - **THEN** 统一 timeout MUST 映射到 dial、read、write 和启动 ping timeout，username MUST 可用于 Redis ACL
 - **AND** 调用方 MUST 能显式指定 tracing provider，未指定时 MAY 使用全局 provider
+- **AND** 普通 Go constructor 和 Fx constructor MUST 一次只创建一个 client，且 MUST NOT 接收或遍历 `RedisConfigs`
+- **AND** 具名配置 map 到单份配置的选择 MUST 由消费服务负责
 - **AND** 启动 PING 失败时 provider MUST 关闭 client，并保留探测失败和关闭失败信息
 
-#### Scenario: 初始化 PostgreSQL pool
+#### Scenario: 构造单个 PostgreSQL 连接池
 
-- **WHEN** datastore 使用共享资源配置创建 PostgreSQL pool
-- **THEN** DSN MUST 在 datastore 或 resources 边界构建，pool 和 ping timeout MUST 使用共享默认值或显式覆盖
-- **AND** 启动 PING 失败时 provider MUST 关闭连接池，并保留探测失败和关闭失败信息
+- **WHEN** 调用方使用一个资源名称和一份 `PostgresConfig` 构造 PostgreSQL 资源
+- **THEN** `common/runtime/datastore` MUST 一次只创建一个连接池，并应用稳定的 DSN、SSL 和 pool 默认值
+- **AND** constructor MUST NOT 接收 `PostgresConfigs`、`fx.Lifecycle` 或其他 DI framework 类型
+- **AND** constructor MUST NOT 遍历具名配置 map、返回 map result 或隐式创建其他资源
+- **AND** datastore MUST 提供接收资源名称和 `*sql.DB` 的启动 `Ping` 与 `Close` 契约
+
+#### Scenario: PostgreSQL 启动探测失败回滚
+
+- **WHEN** 调用方对单个具名 PostgreSQL 连接池执行启动 `Ping`
+- **THEN** 探测 MUST 使用稳定的单资源 ping timeout
+- **AND** 探测失败 MUST 关闭同一连接池
+- **AND** 返回错误 MUST 同时保留具名探测错误和关闭错误
+
+#### Scenario: 关闭单个 PostgreSQL 连接池
+
+- **WHEN** 调用方关闭具名 PostgreSQL 连接池
+- **THEN** datastore MUST 关闭该单个连接池
+- **AND** 关闭错误 MUST 包含资源名称
+- **AND** 关闭操作 MUST NOT 关闭其他资源
+
+#### Scenario: 使用 Fx adapter 组合 PostgreSQL
+
+- **WHEN** Fx 服务声明一个具名 PostgreSQL 资源
+- **THEN** `common/runtime/datastore` 中共置的 Fx adapter MUST 调用框架无关的单资源 constructor
+- **AND** adapter MUST 只注册该资源的启动 `Ping` 和 `Close` hook
+- **AND** adapter MUST NOT 遍历 `PostgresConfigs` 或自动创建配置中出现的其他资源
+- **AND** 成功连接和关闭日志 MUST 保留 PostgreSQL component 与资源名称
 
 #### Scenario: 单一配置来源组装服务
 

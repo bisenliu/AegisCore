@@ -69,11 +69,11 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 		return fail(err)
 	}
 	cleanup = chainCleanup(cleanup, func() error {
-		_ = db.Close()
+		_ = datastore.ClosePostgres(resources.NamePrimaryDB, db)
 		return nil
 	})
-	if err := db.PingContext(ctx); err != nil {
-		return fail(fmt.Errorf("ping postgres %s: %w", resources.NamePrimaryDB, err))
+	if err := datastore.PingPostgres(ctx, resources.NamePrimaryDB, db); err != nil {
+		return fail(err)
 	}
 
 	client := newRBACEntClient(db)

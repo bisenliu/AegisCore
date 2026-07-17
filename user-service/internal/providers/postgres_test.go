@@ -31,19 +31,19 @@ import (
 
 var providerTestDriverSeq atomic.Int64
 
-func TestProvidePostgresPoolsProvidesUserDatabase(t *testing.T) {
+func TestNewPrimaryDBProvidesUserDatabase(t *testing.T) {
 	cfg := providerTestConfig("")
 	lc := fxtest.NewLifecycle(t)
-	got, err := ProvidePostgresPools(NamedPostgresParams{Lifecycle: lc, Config: cfg, Log: zap.NewNop()})
+	got, err := NewPrimaryDB(PrimaryDBParams{Lifecycle: lc, Config: cfg, Log: zap.NewNop()})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = got.PrimaryDB.Close() })
+	t.Cleanup(func() { _ = got.Close() })
 
-	require.NotNil(t, got.PrimaryDB)
-	require.Equal(t, 7, got.PrimaryDB.Stats().MaxOpenConnections)
+	require.NotNil(t, got)
+	require.Equal(t, 7, got.Stats().MaxOpenConnections)
 }
 
-func TestProvidePostgresPoolsReturnsErrorForMissingUserDatabase(t *testing.T) {
-	_, err := ProvidePostgresPools(NamedPostgresParams{
+func TestNewPrimaryDBReturnsErrorForMissingUserDatabase(t *testing.T) {
+	_, err := NewPrimaryDB(PrimaryDBParams{
 		Lifecycle: fxtest.NewLifecycle(t),
 		Config:    &serviceconfig.Config{},
 		Log:       zap.NewNop(),
@@ -51,7 +51,7 @@ func TestProvidePostgresPoolsReturnsErrorForMissingUserDatabase(t *testing.T) {
 	require.ErrorContains(t, err, `postgres config "`+resources.NamePrimaryDB+`" not found`)
 }
 
-func TestProvidePostgresPoolsDoesNotProvideSharedDatabase(t *testing.T) {
+func TestNewPrimaryDBDoesNotProvideSharedDatabase(t *testing.T) {
 	type pools struct {
 		fx.In
 
@@ -59,13 +59,13 @@ func TestProvidePostgresPoolsDoesNotProvideSharedDatabase(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		fx.Provide(ProvidePostgresPools),
+		fx.Provide(fx.Annotate(NewPrimaryDB, fx.ResultTags(`name:"primary_db"`))),
 		fx.Invoke(func(pools) {}),
 	)
 	require.ErrorContains(t, err, `name="shared_db"`)
 }
 
-func TestProvidePostgresPoolsDoesNotProvidePayDatabase(t *testing.T) {
+func TestNewPrimaryDBDoesNotProvidePayDatabase(t *testing.T) {
 	type pools struct {
 		fx.In
 
@@ -73,7 +73,7 @@ func TestProvidePostgresPoolsDoesNotProvidePayDatabase(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		fx.Provide(ProvidePostgresPools),
+		fx.Provide(fx.Annotate(NewPrimaryDB, fx.ResultTags(`name:"primary_db"`))),
 		fx.Invoke(func(pools) {}),
 	)
 	require.ErrorContains(t, err, `name="pay_db"`)
@@ -136,7 +136,7 @@ func TestProvideEntClientsRequiresMetricsProviderInGraph(t *testing.T) {
 	err := fx.ValidateApp(
 		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), newProviderTestDisabledTracing(t)),
 		fx.Provide(
-			provideNilPrimaryDBForEntGraphTest,
+			fx.Annotate(provideNilPrimaryDBForEntGraphTest, fx.ResultTags(`name:"primary_db"`)),
 			ProvideEntClients,
 		),
 		fx.Invoke(func(clients) {}),
@@ -154,7 +154,7 @@ func TestProvideEntClientsRequiresTracingProviderInGraph(t *testing.T) {
 	err := fx.ValidateApp(
 		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), newProviderTestMetrics(t, false)),
 		fx.Provide(
-			provideNilPrimaryDBForEntGraphTest,
+			fx.Annotate(provideNilPrimaryDBForEntGraphTest, fx.ResultTags(`name:"primary_db"`)),
 			ProvideEntClients,
 		),
 		fx.Invoke(func(clients) {}),
@@ -172,7 +172,7 @@ func TestProvideEntClientsResolvesWithObservabilityProvidersInGraph(t *testing.T
 	err := fx.ValidateApp(
 		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), newProviderTestMetrics(t, false), newProviderTestDisabledTracing(t)),
 		fx.Provide(
-			provideNilPrimaryDBForEntGraphTest,
+			fx.Annotate(provideNilPrimaryDBForEntGraphTest, fx.ResultTags(`name:"primary_db"`)),
 			ProvideEntClients,
 		),
 		fx.Invoke(func(clients) {}),
@@ -180,7 +180,7 @@ func TestProvideEntClientsResolvesWithObservabilityProvidersInGraph(t *testing.T
 	require.NoError(t, err)
 }
 
-func TestProvideRedisClientsProvidesCacheRedis(t *testing.T) {
+func TestNewCacheRedisProvidesCacheRedis(t *testing.T) {
 	redisServer := newProviderTestRedisServer(t)
 	traceProvider := newProviderTestTracing(t)
 	spanRecorder := tracetest.NewSpanRecorder()
@@ -209,7 +209,7 @@ func TestProvideRedisClientsProvidesCacheRedis(t *testing.T) {
 	var got clients
 	app := fxtest.New(t,
 		fx.Supply(cfg, log, traceProvider),
-		fx.Provide(ProvideRedisClients),
+		fx.Provide(fx.Annotate(NewCacheRedis, fx.ResultTags(`name:"cache_redis"`))),
 		fx.Populate(&got),
 	)
 	app.RequireStart()
@@ -222,7 +222,7 @@ func TestProvideRedisClientsProvidesCacheRedis(t *testing.T) {
 	redisServer.requireClosed(t)
 }
 
-func TestProvideRedisClientsDoesNotProvideQueueRedis(t *testing.T) {
+func TestNewCacheRedisDoesNotProvideQueueRedis(t *testing.T) {
 	traceProvider := newProviderTestTracing(t)
 	type clients struct {
 		fx.In
@@ -232,18 +232,18 @@ func TestProvideRedisClientsDoesNotProvideQueueRedis(t *testing.T) {
 
 	err := fx.ValidateApp(
 		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), traceProvider),
-		fx.Provide(ProvideRedisClients),
+		fx.Provide(fx.Annotate(NewCacheRedis, fx.ResultTags(`name:"cache_redis"`))),
 		fx.Invoke(func(clients) {}),
 	)
 	require.ErrorContains(t, err, `name="queue_redis"`)
 }
 
-func TestProvideRedisClientsReturnsErrorForMissingCacheRedisConfig(t *testing.T) {
+func TestNewCacheRedisReturnsErrorForMissingCacheRedisConfig(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 	traceProvider := newProviderTestTracing(t)
 
-	_, err := ProvideRedisClients(NamedRedisParams{
+	_, err := NewCacheRedis(CacheRedisParams{
 		Lifecycle: lc,
 		Config:    &serviceconfig.Config{},
 		Log:       log,
@@ -252,8 +252,8 @@ func TestProvideRedisClientsReturnsErrorForMissingCacheRedisConfig(t *testing.T)
 	require.ErrorContains(t, err, `redis config "`+resources.NameCacheRedis+`" not found`)
 }
 
-func TestProvideRedisClientsRequiresTracingProvider(t *testing.T) {
-	_, err := ProvideRedisClients(NamedRedisParams{
+func TestNewCacheRedisRequiresTracingProvider(t *testing.T) {
+	_, err := NewCacheRedis(CacheRedisParams{
 		Lifecycle: fxtest.NewLifecycle(t),
 		Config:    providerTestConfig(""),
 		Log:       zap.NewNop(),
@@ -261,7 +261,7 @@ func TestProvideRedisClientsRequiresTracingProvider(t *testing.T) {
 	require.ErrorContains(t, err, "redis tracing provider is required")
 }
 
-func TestProvideRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
+func TestNewCacheRedisFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 	traceProvider := newProviderTestTracing(t)
@@ -269,13 +269,13 @@ func TestProvideRedisClientsFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 		resources.NameCacheRedis: {Addr: "127.0.0.1:1", DB: 0, Timeout: 10 * time.Millisecond},
 	}}}
 
-	clients, err := ProvideRedisClients(NamedRedisParams{Lifecycle: lc, Config: cfg, Log: log, Trace: traceProvider})
+	client, err := NewCacheRedis(CacheRedisParams{Lifecycle: lc, Config: cfg, Log: log, Trace: traceProvider})
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	err = lc.Start(ctx)
 	require.ErrorContains(t, err, "ping redis cache_redis")
-	require.ErrorIs(t, clients.CacheRedis.Ping(ctx).Err(), redis.ErrClosed)
+	require.ErrorIs(t, client.Ping(ctx).Err(), redis.ErrClosed)
 }
 
 func newProviderTestTracing(t *testing.T) *commontracing.Provider {
@@ -315,8 +315,8 @@ func newProviderTestMetrics(t *testing.T, enabled bool) *commonmetrics.Provider 
 	return provider
 }
 
-func provideNilPrimaryDBForEntGraphTest() NamedPostgresPools {
-	return NamedPostgresPools{PrimaryDB: nil}
+func provideNilPrimaryDBForEntGraphTest() *sql.DB {
+	return nil
 }
 
 func providerTestHasRedisSpan(recorder *tracetest.SpanRecorder) bool {
