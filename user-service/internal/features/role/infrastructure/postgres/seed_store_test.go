@@ -52,7 +52,7 @@ func TestRolePermissionStoreSeedEnsureAndSync(t *testing.T) {
 	client := newRoleStoreTestClient(t)
 	ctx := context.Background()
 	roleStore := NewRoleStore(client)
-	permissionStore := permissionpostgres.NewPermissionStore(permissionpostgres.PermissionStoreParams{Client: client})
+	permissionStore := permissionpostgres.NewPermissionStore(client)
 	bindingStore := NewRolePermissionStore(client)
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000201")
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000202")

@@ -31,7 +31,7 @@ func TestPolicyLoaderLoadsActiveBindings(t *testing.T) {
 	permission := createPolicyTestPermission(t, client, permissionID, "GET", "/api/v1/users", true)
 	createPolicyTestRolePermission(t, client, role.ID, permission.ID)
 
-	loader := NewPolicyLoader(LoaderParams{Client: client})
+	loader := NewPolicyLoader(client)
 	policies, err := loader.LoadPolicies(ctx)
 	require.NoError(t, err)
 	assertHasRule(t, policies.PermissionRules, roleID, "/api/v1/users", "GET")
@@ -52,7 +52,7 @@ func TestPolicyLoaderSkipsInactiveRolesAndPermissions(t *testing.T) {
 	createPolicyTestRolePermission(t, client, activeRole.ID, inactivePermission.ID)
 	createPolicyTestRolePermission(t, client, inactiveRole.ID, activePermission.ID)
 
-	loader := NewPolicyLoader(LoaderParams{Client: client})
+	loader := NewPolicyLoader(client)
 	policies, err := loader.LoadPolicies(ctx)
 	require.NoError(t, err)
 	assertHasRule(t, policies.PermissionRules, activeRoleID, "/api/v1/active", "GET")
@@ -62,7 +62,7 @@ func TestPolicyLoaderSkipsInactiveRolesAndPermissions(t *testing.T) {
 
 func TestPolicyLoaderAddsSuperAdminWildcard(t *testing.T) {
 	client := newPolicyTestClient(t)
-	loader := NewPolicyLoader(LoaderParams{Client: client})
+	loader := NewPolicyLoader(client)
 	policies, err := loader.LoadPolicies(context.Background())
 	require.NoError(t, err)
 	assertHasRule(t, policies.PermissionRules, uuid.MustParse(rbacbaseline.SuperAdminRoleID), policyWildcard, policyWildcard)
@@ -77,7 +77,7 @@ func TestPolicyLoaderUsesRoleIDSubjectWithoutRoleCode(t *testing.T) {
 	permission := createPolicyTestPermission(t, client, permissionID, "PATCH", "/api/v1/roles/:role_id", true)
 	createPolicyTestRolePermission(t, client, role.ID, permission.ID)
 
-	loader := NewPolicyLoader(LoaderParams{Client: client})
+	loader := NewPolicyLoader(client)
 	policies, err := loader.LoadPolicies(ctx)
 	require.NoError(t, err)
 	assertHasRule(t, policies.PermissionRules, roleID, "/api/v1/roles/:role_id", "PATCH")

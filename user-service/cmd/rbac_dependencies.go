@@ -81,7 +81,7 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 		_ = client.Close()
 		return nil
 	})
-	permissionStore := permissionpostgres.NewPermissionStore(permissionpostgres.PermissionStoreParams{Client: client})
+	permissionStore := permissionpostgres.NewPermissionStore(client)
 	roleStore := rolepostgres.NewRoleStore(client)
 	rolePermissionStore := rolepostgres.NewRolePermissionStore(client)
 	userRoleStore := rolepostgres.NewUserRoleStore(client)
