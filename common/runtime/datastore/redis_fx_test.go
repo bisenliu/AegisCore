@@ -2,6 +2,7 @@ package datastore
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
 
@@ -20,7 +22,8 @@ const testCacheRedis = "cache_redis"
 func TestNewRedisClientRegistersLifecycle(t *testing.T) {
 	server := miniredis.RunT(t)
 	lc := fxtest.NewLifecycle(t)
-	client := NewRedisClient(lc, zap.NewNop(), testCacheRedis, resources.RedisConfig{Addr: server.Addr()})
+	client, err := NewRedisClient(lc, zap.NewNop(), testCacheRedis, resources.RedisConfig{Addr: server.Addr()})
+	require.NoError(t, err)
 	lc.RequireStart()
 	lc.RequireStop()
 	require.Equal(t, resources.DefaultRedisTimeout, client.Options().DialTimeout)
@@ -33,10 +36,27 @@ func TestNewRedisClientClosesClientWhenStartPingFails(t *testing.T) {
 	addr := listener.Addr().String()
 	require.NoError(t, listener.Close())
 	lc := fxtest.NewLifecycle(t)
-	client := NewRedisClient(lc, zap.NewNop(), testCacheRedis, resources.RedisConfig{Addr: addr, Timeout: 20 * time.Millisecond})
+	client, err := NewRedisClient(lc, zap.NewNop(), testCacheRedis, resources.RedisConfig{Addr: addr, Timeout: 20 * time.Millisecond})
+	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	err = lc.Start(ctx)
 	require.ErrorContains(t, err, "ping redis cache_redis")
 	require.ErrorIs(t, client.Ping(ctx).Err(), redis.ErrClosed)
+}
+
+func TestNewRedisClientReturnsConstructorError(t *testing.T) {
+	instrumentErr := errors.New("instrumentation failed")
+	restoreRedisInstrumentation(t, func(_ *redis.Client, _ trace.TracerProvider) error {
+		return instrumentErr
+	})
+	lc := fxtest.NewLifecycle(t)
+
+	client, err := NewRedisClient(lc, zap.NewNop(), testCacheRedis, resources.RedisConfig{Addr: "127.0.0.1:6379"})
+	require.Nil(t, client)
+	require.ErrorContains(t, err, "open redis cache_redis")
+	require.ErrorContains(t, err, "instrument redis tracing")
+	require.ErrorIs(t, err, instrumentErr)
+	lc.RequireStart()
+	lc.RequireStop()
 }

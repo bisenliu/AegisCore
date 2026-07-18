@@ -2,23 +2,27 @@ package datastore
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/aegiscore/common/runtime/resources"
 )
 
 func TestOpenRedisClientMapsDefaultTimeoutAndCredentials(t *testing.T) {
-	client := OpenRedisClient(resources.RedisConfig{
+	client, err := OpenRedisClient(resources.RedisConfig{
 		Addr: "127.0.0.1:6379", Username: "service-account", Password: "secret",
 	})
+	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 	opts := client.Options()
 	require.Equal(t, "service-account", opts.Username)
@@ -40,11 +44,54 @@ func TestOpenRedisClientUsesExplicitTracerProvider(t *testing.T) {
 		otel.SetTracerProvider(previousProvider)
 		require.NoError(t, provider.Shutdown(context.Background()))
 	})
-	client := OpenRedisClient(resources.RedisConfig{Addr: listener.Addr().String(), Timeout: 10 * time.Millisecond}, WithRedisTracerProvider(provider))
+	client, err := OpenRedisClient(resources.RedisConfig{Addr: listener.Addr().String(), Timeout: 10 * time.Millisecond}, WithRedisTracerProvider(provider))
+	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 
 	ctx, span := provider.Tracer("datastore-test").Start(context.Background(), "parent")
 	_ = client.Ping(ctx).Err()
 	span.End()
 	require.NotEmpty(t, recorder.Ended())
+}
+
+func TestOpenRedisClientReturnsErrorWhenInstrumentationFails(t *testing.T) {
+	instrumentErr := errors.New("instrumentation failed")
+	var captured *redis.Client
+	restoreRedisInstrumentation(t, func(client *redis.Client, _ trace.TracerProvider) error {
+		captured = client
+		return instrumentErr
+	})
+
+	var client *redis.Client
+	require.NotPanics(t, func() {
+		var err error
+		client, err = OpenRedisClient(resources.RedisConfig{Addr: "127.0.0.1:6379"})
+		require.Error(t, err)
+		require.ErrorContains(t, err, "instrument redis tracing")
+		require.ErrorIs(t, err, instrumentErr)
+	})
+	require.Nil(t, client)
+	require.NotNil(t, captured)
+	require.ErrorIs(t, captured.Ping(context.Background()).Err(), redis.ErrClosed)
+}
+
+func TestOpenRedisClientPreservesCloseFailureAfterInstrumentationFails(t *testing.T) {
+	instrumentErr := errors.New("instrumentation failed")
+	restoreRedisInstrumentation(t, func(client *redis.Client, _ trace.TracerProvider) error {
+		require.NoError(t, client.Close())
+		return instrumentErr
+	})
+
+	client, err := OpenRedisClient(resources.RedisConfig{Addr: "127.0.0.1:6379"})
+	require.Nil(t, client)
+	require.Error(t, err)
+	require.ErrorIs(t, err, instrumentErr)
+	require.ErrorIs(t, err, redis.ErrClosed)
+}
+
+func restoreRedisInstrumentation(t *testing.T, instrument func(*redis.Client, trace.TracerProvider) error) {
+	t.Helper()
+	original := instrumentRedisTracing
+	instrumentRedisTracing = instrument
+	t.Cleanup(func() { instrumentRedisTracing = original })
 }

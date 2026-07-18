@@ -21,6 +21,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/datastore"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 	commonresources "github.com/aegiscore/common/runtime/resources"
@@ -259,6 +260,23 @@ func TestNewCacheRedisRequiresTracingProvider(t *testing.T) {
 		Log:       zap.NewNop(),
 	})
 	require.ErrorContains(t, err, "redis tracing provider is required")
+}
+
+func TestNewCacheRedisWrapsConstructorError(t *testing.T) {
+	constructorErr := errors.New("instrumentation failed")
+	traceProvider := newProviderTestTracing(t)
+
+	client, err := newCacheRedis(CacheRedisParams{
+		Lifecycle: fxtest.NewLifecycle(t),
+		Config:    providerTestConfig(""),
+		Log:       zap.NewNop(),
+		Trace:     traceProvider,
+	}, func(fx.Lifecycle, *zap.Logger, string, commonresources.RedisConfig, ...datastore.RedisClientOption) (*redis.Client, error) {
+		return nil, constructorErr
+	})
+	require.Nil(t, client)
+	require.ErrorContains(t, err, "provide redis cache_redis")
+	require.ErrorIs(t, err, constructorErr)
 }
 
 func TestNewCacheRedisFailsStartWhenCacheRedisUnavailable(t *testing.T) {

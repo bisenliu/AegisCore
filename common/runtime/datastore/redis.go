@@ -1,6 +1,9 @@
 package datastore
 
 import (
+	"errors"
+	"fmt"
+
 	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
@@ -16,6 +19,10 @@ type redisClientOptions struct {
 	tracerProvider trace.TracerProvider
 }
 
+var instrumentRedisTracing = func(client *redis.Client, provider trace.TracerProvider) error {
+	return redisotel.InstrumentTracing(client, redisotel.WithTracerProvider(provider))
+}
+
 // WithRedisTracerProvider 显式指定 Redis instrumentation 使用的 tracer provider。
 func WithRedisTracerProvider(provider trace.TracerProvider) RedisClientOption {
 	return func(opts *redisClientOptions) {
@@ -26,12 +33,12 @@ func WithRedisTracerProvider(provider trace.TracerProvider) RedisClientOption {
 }
 
 // OpenRedisClient 根据配置构造 Redis 客户端，但不检查连接可用性。
-func OpenRedisClient(redisCfg resources.RedisConfig, options ...RedisClientOption) *redis.Client {
+func OpenRedisClient(redisCfg resources.RedisConfig, options ...RedisClientOption) (*redis.Client, error) {
 	redisCfg.ApplyDefaults()
 	return openRedisClient(redisCfg, options...)
 }
 
-func openRedisClient(redisCfg resources.RedisConfig, options ...RedisClientOption) *redis.Client {
+func openRedisClient(redisCfg resources.RedisConfig, options ...RedisClientOption) (*redis.Client, error) {
 	opts := redisClientOptions{tracerProvider: otel.GetTracerProvider()}
 	for _, option := range options {
 		if option != nil {
@@ -47,8 +54,11 @@ func openRedisClient(redisCfg resources.RedisConfig, options ...RedisClientOptio
 		ReadTimeout:  redisCfg.Timeout,
 		WriteTimeout: redisCfg.Timeout,
 	})
-	if err := redisotel.InstrumentTracing(client, redisotel.WithTracerProvider(opts.tracerProvider)); err != nil {
-		panic(err)
+	if err := instrumentRedisTracing(client, opts.tracerProvider); err != nil {
+		return nil, errors.Join(
+			fmt.Errorf("instrument redis tracing: %w", err),
+			client.Close(),
+		)
 	}
-	return client
+	return client, nil
 }

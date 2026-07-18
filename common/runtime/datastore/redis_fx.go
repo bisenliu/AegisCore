@@ -14,9 +14,12 @@ import (
 )
 
 // NewRedisClient 创建一个 Redis 客户端，并注册单资源 Fx lifecycle hook。
-func NewRedisClient(lc fx.Lifecycle, log *zap.Logger, name string, redisCfg resources.RedisConfig, options ...RedisClientOption) *redis.Client {
+func NewRedisClient(lc fx.Lifecycle, log *zap.Logger, name string, redisCfg resources.RedisConfig, options ...RedisClientOption) (*redis.Client, error) {
 	redisCfg.ApplyDefaults()
-	client := openRedisClient(redisCfg, options...)
+	client, err := openRedisClient(redisCfg, options...)
+	if err != nil {
+		return nil, fmt.Errorf("open redis %s: %w", name, err)
+	}
 	redisLog := logger.NamedComponent(log, "redis", "redis")
 
 	lc.Append(fx.Hook{
@@ -41,7 +44,7 @@ func NewRedisClient(lc fx.Lifecycle, log *zap.Logger, name string, redisCfg reso
 		},
 	})
 
-	return client
+	return client, nil
 }
 
 func closeRedisClient(name string, client *redis.Client) error {
