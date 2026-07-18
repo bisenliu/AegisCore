@@ -18,3 +18,12 @@
 - [x] 3.4 将本次预期代码、测试和 OpenSpec artifacts 加入暂存区。
 - [x] 3.5 运行 `make lint`，通过后再勾选本任务。
 - [x] 3.6 运行 `make verify`，通过后再勾选本任务。
+
+## 4. tracing provider 初始化时序补充
+
+- [x] 4.1 更新 `common/runtime/observability/tracing.NewFxProvider`，在 provider 构造阶段创建可用的底层 `TracerProvider()`。
+- [x] 4.2 保留 Fx lifecycle rollback 语义，注册 no-op `OnStart` 和 `OnStop: provider.Shutdown`，确保后续启动失败时释放 tracing provider。
+- [x] 4.3 更新 tracing provider 单元测试，覆盖构造后立即可用、exporter 构造时机、rollback shutdown 和 disabled tracing never-sample 行为。
+- [x] 4.4 运行相关测试：`go test ./common/runtime/observability/tracing ./user-service/internal/providers ./user-service/internal/bootstrap`。
+- [x] 4.5 运行 `make user-service-run` 验证不再因 `redis tracing provider is required` 在 Fx 构图阶段失败。
+- [x] 4.6 运行 `make lint` 和 `make verify`，通过后再勾选本任务。

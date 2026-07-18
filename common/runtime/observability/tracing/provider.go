@@ -193,26 +193,6 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 	return tp.Shutdown(ctx)
 }
 
-func (p *Provider) start(ctx context.Context, opts Options, createExporter exporterFactory) error {
-	started, err := newProvider(ctx, opts, createExporter)
-	if err != nil {
-		return err
-	}
-	p.mu.Lock()
-	p.tracerProvider = started.tracerProvider
-	p.resource = started.resource
-	p.propagator = started.propagator
-	p.mu.Unlock()
-	return nil
-}
-
-func newUnstartedProvider() *Provider {
-	return &Provider{propagator: propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	)}
-}
-
 func newResource(serviceName string, environment string, version string, instanceID string) *resource.Resource {
 	attrs := []attribute.KeyValue{
 		attribute.String(attributeServiceName, serviceName),

@@ -2,7 +2,7 @@
 
 `common/runtime/logger/fx.go` 当前只负责创建配置化 `*zap.Logger` 并在 Fx `OnStop` 阶段执行 `Sync`。`user-service/internal/bootstrap/app.go` 的 `AppOptions` 已经把该 logger 注入正式依赖图，但未调用 `fx.WithLogger`，因此 Fx 自身事件没有进入统一结构化日志链路。
 
-本变更横跨 `common` 和 `user-service`：`common/runtime/logger` 提供无业务语义的 Fx event logger adapter，`user-service` composition root 负责选择在顶层 App 中启用该 adapter。该能力属于 `runtime-observability`，不进入 feature 包、`internal/shared` 或部署资产。
+本变更横跨 `common` 和 `user-service`：`common/runtime/logger` 提供无业务语义的 Fx event logger adapter，`common/runtime/observability/tracing` 保证 Fx 依赖图构造期即可提供可用 tracing provider，`user-service` composition root 负责选择在顶层 App 中启用该 adapter。该能力属于 `runtime-observability`，不进入 feature 包、`internal/shared` 或部署资产。
 
 ## Goals / Non-Goals
 
@@ -12,6 +12,7 @@
 - 保留共享 logger 的生命周期语义，由现有 `NewLogger` 在 Stop 阶段同步 logger。
 - 使用 Fx 内置 `fxevent.ZapLogger`，消费当前 Fx 版本提供的 constructor、decorator、stub、Invoke、rollback、lifecycle 和 module trace 事件。
 - 保持 event logger 快速、同步本地日志写入且非阻塞，不在 `LogEvent` 路径引入网络 I/O 或额外外部依赖。
+- 让 `common/runtime/observability/tracing.NewFxProvider` 返回时已经持有非 nil `TracerProvider()`，满足 Redis、Gin、Ent 等 constructor 阶段的 tracing 依赖。
 
 **Non-Goals:**
 
@@ -38,6 +39,10 @@
   理由：`fx.WithLogger` 支持依赖注入式构造 event logger，可以复用当前 App 的 `*zap.Logger`，且顶层 composition root 是启用 App 级 Fx logger 的正确位置。
   备选方案是在每个模块内配置 logger，但 Fx logger 是 App 级行为，分散配置会产生重复和覆盖风险。
 
+- `common/runtime/observability/tracing.NewFxProvider` 在 provider 构造阶段创建底层 tracing provider，并注册 no-op `OnStart` 与 `OnStop: provider.Shutdown`。
+  理由：Redis、Gin、Ent 等 provider 在 constructor 阶段需要 `TracerProvider()`，延迟到 `OnStart` 初始化会导致构图失败；保留 no-op `OnStart` 可以确保后续 hook 启动失败时 Fx rollback 会执行 tracing shutdown。
+  备选方案是让所有下游 provider 接受 nil tracing provider 并降级为 noop，但这会破坏正式依赖图的显式非 nil 契约，并把初始化时序问题扩散到多个 provider。
+
 ## Risks / Trade-offs
 
 - [Risk] debug 级别 Fx event 可能在本地或 debug 环境产生更多日志。
@@ -52,9 +57,12 @@
 - [Risk] event logger 不能执行网络 I/O，否则会拖慢 Fx 初始化或关闭路径。
   Mitigation: 只使用 zap logger 的本地 `fxevent.ZapLogger` adapter，不在 `LogEvent` 中增加 hook、exporter 或远程调用。
 
+- [Risk] tracing provider 在构造阶段初始化会让启用 OTLP 且配置无效时更早失败。
+  Mitigation: 这是正式依赖图的期望行为；配置错误应阻止 App 构造或启动，并由 Fx 结构化日志暴露。
+
 ## Migration Plan
 
-- 实施时先在 `common/runtime/logger` 增加 provider 和单元测试，再在 `user-service/internal/bootstrap/AppOptions` 接入 `fx.WithLogger`。
+- 实施时先在 `common/runtime/logger` 增加 provider 和单元测试，再在 `user-service/internal/bootstrap/AppOptions` 接入 `fx.WithLogger`，随后调整 `common/runtime/observability/tracing` 的 Fx provider 初始化时序。
 - 该变更无需数据迁移、API 发布协调或部署清单更新，可随普通 user-service 镜像发布。
 - 回滚方式是移除 `fx.WithLogger(logger.NewFxEventLogger)` 和新增 provider；回滚后 Fx 事件恢复默认 logger，不影响业务请求处理。
 

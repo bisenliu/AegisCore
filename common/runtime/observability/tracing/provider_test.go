@@ -225,11 +225,12 @@ func TestNewFxProviderRegistersShutdown(t *testing.T) {
 	require.Len(t, lifecycle.hooks, 1, "registered hooks")
 	require.NotNil(t, lifecycle.hooks[0].OnStart, "registered OnStart hook")
 	require.NotNil(t, lifecycle.hooks[0].OnStop, "registered OnStop hook")
+	require.NotNil(t, provider.TracerProvider(), "provider should be ready for constructors")
 	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()), "OnStart")
 	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()), "OnStop")
 }
 
-func TestNewFxProviderDefersExporterUntilStart(t *testing.T) {
+func TestNewFxProviderCreatesExporterDuringConstruction(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
 	called := false
 	provider, err := newFxProvider(lifecycle, &config.Config{
@@ -241,10 +242,9 @@ func TestNewFxProviderDefersExporterUntilStart(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, provider)
-	require.False(t, called, "exporter should not be created before OnStart")
-	require.Nil(t, provider.TracerProvider(), "tracer provider should not be created before OnStart")
+	require.True(t, called, "exporter should be created before dependent constructors")
+	require.NotNil(t, provider.TracerProvider(), "tracer provider should be available before OnStart")
 	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
-	require.True(t, called, "exporter should be created during OnStart")
 	require.NotNil(t, provider.TracerProvider())
 	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
 }
