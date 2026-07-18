@@ -1,9 +1,7 @@
 ## Purpose
 
 定义 user-service 的 RBAC 访问控制能力，覆盖权限目录、角色、角色权限、用户角色、Casbin 授权、策略同步、系统数据引导和超级管理员管理。
-
 ## Requirements
-
 ### Requirement: 权限目录与路由诊断
 
 系统 MUST 提供权限创建、更新、启停、详情、列表和路由差异诊断能力。权限 MUST 使用稳定业务标识描述可授权的 HTTP method、route template 和业务模块；公开写接口 MUST NOT 允许调用方创建或篡改系统权限。
@@ -163,7 +161,7 @@
 
 ### Requirement: Casbin 授权与 HTTP 边界
 
-系统 MUST 在认证通过后使用 RBAC 授权中间件保护权限、角色和用户业务接口。授权 MUST 使用用户与角色的稳定 subject、Gin route template object 和 HTTP method action，并在任何身份、策略或执行异常下 fail-closed。
+系统 MUST 在认证通过后使用 RBAC 授权中间件保护权限、角色和用户业务接口。授权 MUST 使用用户与角色的稳定 subject、Gin route template object 和 HTTP method action，并在任何身份、策略或执行异常下 fail-closed。RBAC 授权 HTTP 边界 MUST 通过稳定 authorizer 和 route registrar contract 暴露给 service composition，MUST NOT 要求父 module 注入 permission feature 的内部 concrete implementation。
 
 #### Scenario: 构造授权请求
 
@@ -185,9 +183,16 @@
 
 #### Scenario: 授权执行异常
 
-- **WHEN** policy 未加载、用户角色回源失败、context 取消或 Casbin 执行返回错误
+- **WHEN** 用户角色回源失败、context 取消或 Casbin 执行返回错误
 - **THEN** 系统 MUST 拒绝请求并返回内部错误
 - **AND** 系统 MUST NOT 将执行异常折叠为允许结果
+
+#### Scenario: policy 未加载时安全拒绝
+
+- **WHEN** 初始 policy 未加载或最近一次 reload 失败导致本地 enforcer 不可用
+- **THEN** 系统 MUST fail-closed 并拒绝受 RBAC 保护的请求
+- **AND** 系统 MUST NOT 因 policy 缺失产生允许结果
+- **AND** readiness/startup MUST 暴露 policy 不可用状态以阻止接入业务流量
 
 #### Scenario: 公开和预检请求旁路
 
@@ -210,7 +215,13 @@
 
 - **WHEN** user-service 注册 `/api/v1` 权限、角色和用户业务路由
 - **THEN** 这些路由 MUST 经过当前认证和 RBAC 授权中间件链
-- **AND** token version validator、RBAC authorizer 或必需 controller 缺失时系统 MUST 拒绝注册部分业务路由
+- **AND** token version validator、RBAC authorizer 或必需 route registrar 缺失时系统 MUST 拒绝注册部分业务路由
+
+#### Scenario: 授权边界不暴露 concrete
+
+- **WHEN** service composition 注入 RBAC authorizer 或 authorized route registrar
+- **THEN** 注入类型 MUST 是 permission feature 暴露的 public contract
+- **AND** service composition MUST NOT 依赖 permission Casbin engine、policy loader、Redis store、version tracker 或 watcher 的 concrete implementation
 
 ### Requirement: 授权热路径用户角色缓存
 
@@ -262,21 +273,29 @@
 
 ### Requirement: Policy 加载与多副本同步
 
-系统 MUST 在启动时通过显式初始化入口加载初始 policy，并在在线 RBAC 写操作成功后刷新本实例状态，再通过 Redis policy version、Pub/Sub 和周期性版本补偿同步其他副本。授权热路径 MUST 使用本地 enforcer 和本地用户角色解析结果，MUST NOT 每请求读取 Redis version。
+系统 MUST 在启动时通过显式 fail-closed 初始化入口加载初始 policy，并在在线 RBAC 写操作成功后刷新本实例状态，再通过 Redis policy version、Pub/Sub 和周期性版本补偿同步其他副本。授权热路径 MUST 使用本地 enforcer 和本地用户角色解析结果，MUST NOT 每请求读取 Redis version。
 
 #### Scenario: 启动加载 policy
 
 - **WHEN** user-service 启动 permission/RBAC 模块
-- **THEN** composition 层 MUST 显式调用 initial load 初始化入口，并将可取消或带超时的启动 context 传给 policy loader
+- **THEN** composition 层 MUST 显式调用表达 fail-closed 降级启动语义的 initial load 初始化入口，并将可取消或带超时的启动 context 传给 policy loader
 - **AND** permission infrastructure MUST NOT 通过 `RegisterInitialLoad(fx.Lifecycle, ...)` 或等价 Fx lifecycle adapter 注册初始加载
 - **AND** loader MUST 能观察启动超时或取消
+- **AND** composition 层 MUST NOT 保留看似严格启动但不会因初始 reload 失败触发的 error branch
 
 #### Scenario: 初始加载失败
 
 - **WHEN** 初始 policy 加载失败或被取消
 - **THEN** engine MUST 记录最近错误和 reload 失败指标
-- **AND** 后续授权 MUST fail-closed，服务 MUST 保持既有启动语义
-- **AND** reload 状态和 readiness 可观测性 MUST 保留失败信息
+- **AND** 后续授权 MUST fail-closed，`app.Start` MUST 保持成功
+- **AND** reload 状态和 readiness/startup 可观测性 MUST 保留失败信息并拒绝接入业务流量
+
+#### Scenario: 后续 reload 恢复 readiness
+
+- **WHEN** 初始 policy 加载失败后，后续 Pub/Sub、版本补偿或显式 reload 成功加载当前 policy
+- **THEN** engine MUST 替换为最新可用 policy 并清除最近 reload 错误
+- **AND** readiness/startup MUST 恢复成功
+- **AND** 后续授权 MUST 按最新 policy 判定允许或拒绝
 
 #### Scenario: 在线权限或角色变更
 
@@ -313,6 +332,13 @@
 - **WHEN** 调用方传入的 `Stop(ctx)` context 在 watcher 循环退出前到期
 - **THEN** `Stop(ctx)` MUST 返回 context 相关错误
 - **AND** watcher MUST 保持后续重复 `Stop(ctx)` 可安全调用，且 MUST NOT 关闭调用方注入的 Redis、Ent 或 PostgreSQL 共享资源
+
+#### Scenario: RBAC lifecycle 停止合并清理错误
+
+- **WHEN** RBAC lifecycle 停止时 watcher stop 和 user-role cache close 同时失败
+- **THEN** 单个 lifecycle hook 返回的错误 MUST 同时保留 watcher stop error 和 cache close error
+- **AND** 调用方 MUST 能通过标准错误链匹配两个 cause
+- **AND** cache close MUST 在 watcher stop 返回错误时仍被执行
 
 #### Scenario: 其他副本收敛
 
@@ -432,7 +458,7 @@ permission、role 和 binding domain MUST 返回携带稳定 HTTP status、共�
 
 ### Requirement: RBAC 分层与组合边界
 
-role 和 permission feature MUST 保持 domain、application、transport 和 infrastructure 分层。domain/application MUST 框架无关并拥有消费侧最小 port；Fx、Gin、Ent、Redis、SQL 和 HTTP response 细节 MUST 留在对应 composition、transport 或 infrastructure 边界。role infrastructure store constructor MUST 使用显式普通 Go 参数接收 Ent client 和必要的消费侧窄 port，MUST NOT 通过 `fx.In`、`dig.In`、`fx.Out`、`dig.Out`、`name` tag 或其他 DI metadata 表达依赖。permission infrastructure 可以拥有 Ent、Redis、Casbin 和 cache 的具体适配细节，但 MUST NOT 依赖 Fx 或 Dig。
+role 和 permission feature MUST 保持 domain、application、transport 和 infrastructure 分层。domain/application MUST 框架无关并拥有消费侧最小 port；Fx、Gin、Ent、Redis、SQL 和 HTTP response 细节 MUST 留在对应 composition、transport 或 infrastructure 边界。role infrastructure store constructor MUST 使用显式普通 Go 参数接收 Ent client 和必要的消费侧窄 port，MUST NOT 通过 `fx.In`、`dig.In`、`fx.Out`、`dig.Out`、`name` tag 或其他 DI metadata 表达依赖。permission infrastructure 可以拥有 Ent、Redis、Casbin 和 cache 的具体适配细节，但 MUST NOT 依赖 Fx 或 Dig。feature Fx module MUST 使用 internal/public provider 边界收缩内部 implementation 可见性，父 module MUST NOT 消费 feature 内部 concrete implementation。
 
 #### Scenario: application 直接构造
 
@@ -483,13 +509,20 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 
 #### Scenario: 架构调整不改变行为
 
-- **WHEN** provider 注册、依赖投影、logger 注入、application 构造方式或显式生命周期编排调整
+- **WHEN** provider 注册、依赖投影、logger 注入、application 构造方式、route registrar 或显式生命周期编排调整
 - **THEN** 权限、角色、绑定、授权、policy reload、缓存失效、跨副本同步和 CLI 行为 MUST 保持不变
-- **AND** 架构检查 MUST 阻止 application/domain 引入框架依赖或生产代码重新依赖全局 logger
+- **AND** 架构检查 MUST 阻止 application/domain 引入框架依赖、生产代码重新依赖全局 logger 或父 module 消费 feature infrastructure concrete
+
+#### Scenario: internal provider 不跨 module 可见
+
+- **WHEN** feature module 装配 store、engine、watcher、tracker、cache holder 或 metrics implementation 等内部 implementation
+- **THEN** 这些 implementation MUST 通过 `fx.Private` 或等价 provider 边界限制在所属 feature module 内部
+- **AND** public provider MUST 只暴露 controller、authorizer、route registrar、health/status 和 application port 等稳定 contract
+- **AND** 不再需要跨 module concrete 注入时 MUST 删除 `fx.As(fx.Self())` 暴露
 
 ### Requirement: Permission adapter 显式装配边界
 
-permission 的 PostgreSQL、Redis 和 Casbin infrastructure adapter 构造 API MUST 使用普通 Go 参数表达必需依赖，并 MUST NOT 在 adapter constructor 中暴露或要求 Fx/Dig metadata。生产 Fx composition MAY 在 feature composition 边界选择具名资源和生命周期挂钩，但 MUST 通过显式 Go 赋值暴露 concrete 与 application/authorization port 视图。
+permission 的 PostgreSQL、Redis 和 Casbin infrastructure adapter 构造 API MUST 使用普通 Go 参数表达必需依赖，并 MUST NOT 在 adapter constructor 中暴露或要求 Fx/Dig metadata。生产 Fx composition MAY 在 feature composition 边界选择具名资源和生命周期挂钩，但 MUST 通过显式 Go 赋值暴露 concrete 与 application/authorization port 视图。跨 module 公开视图 MUST 限定为稳定 public contract，MUST NOT 继续公开 permission infrastructure concrete 给父 module。
 
 #### Scenario: adapter constructor 不携带 DI metadata
 
@@ -505,18 +538,93 @@ permission 的 PostgreSQL、Redis 和 Casbin infrastructure adapter 构造 API M
 
 #### Scenario: 同一 Engine 暴露多个端口
 
-- **WHEN** composition 需要同时提供 Casbin concrete `Engine`、`permissionauthorization.Engine` 和 `permissionapplication.PolicyReloadEngine`
+- **WHEN** composition 需要同时提供 authorization、policy reload 和 policy health 视图
 - **THEN** composition MUST 构造一个 `Engine` 实例并通过普通 Go 赋值暴露这些端口
-- **AND** 系统 MUST NOT 为 concrete、authorization port 或 reload port 重复构造有状态 `Engine`
+- **AND** 系统 MUST NOT 为 authorization port、reload port 或 health port 重复构造有状态 `Engine`
+- **AND** 父 module MUST NOT 直接注入 concrete `Engine`
 
 #### Scenario: 同一 Redis Store 暴露发布端口
 
-- **WHEN** composition 需要同时提供 Redis policy `Store` concrete 视图和 `permissionapplication.PolicyVersionPublisher` 等接口视图
+- **WHEN** composition 需要同时提供 Redis policy store 内部视图和 `permissionapplication.PolicyVersionPublisher` 等接口视图
 - **THEN** composition MUST 构造一个 `Store` 实例并通过普通 Go 赋值暴露这些端口
-- **AND** 系统 MUST NOT 为 concrete 和 interface 视图重复构造有状态 Redis policy store 或 version tracker
+- **AND** 系统 MUST NOT 为内部 concrete 和 interface 视图重复构造有状态 Redis policy store 或 version tracker
+- **AND** 父 module MUST NOT 直接注入 Redis policy store、version tracker 或 watcher concrete
 
 #### Scenario: 行为保持不变
 
-- **WHEN** permission adapter 构造 API 从 Fx/Dig metadata 改为普通 Go 参数
+- **WHEN** permission adapter 构造 API 从 Fx/Dig metadata 改为普通 Go 参数，或 Fx provider 边界从 concrete self 暴露改为 private/internal 暴露
 - **THEN** 权限目录、route diff、Casbin policy、授权 fail-closed、Redis policy version、Pub/Sub、用户角色缓存失效和多副本同步语义 MUST 保持不变
 - **AND** 本变更 MUST NOT 迁移 Casbin initial load、watcher `Start/Stop` 或用户角色缓存 `Close` 生命周期
+
+### Requirement: RBAC watcher 和缓存生命周期启动安全
+
+系统 MUST 在 permission/RBAC Fx composition 中显式编排 policy initial load、Redis policy watcher 和 user-role cache 的生命周期。watcher constructor MUST 只创建对象，不得启动 goroutine、订阅 Redis 或执行版本补偿循环；`Start` 创建的后台循环 MUST 在启动失败或停止时通过 `Stop(ctx)` 关闭。
+
+#### Scenario: Watcher 后续启动失败回滚
+- **WHEN** Redis policy watcher 的 `Start` 已成功启动后台循环
+- **AND** 后续 Fx hook 失败导致 App 启动失败
+- **THEN** watcher MUST 收到停止信号并在调用方 context 限制内退出
+- **AND** watcher MUST NOT 关闭共享 Redis、Ent 或 PostgreSQL 资源
+
+#### Scenario: User-role cache 启动失败关闭
+- **WHEN** user-role cache 或 resolver 在启动阶段创建了 localcache 资源
+- **AND** App 启动失败或服务停止
+- **THEN** cache MUST 执行幂等 `Close`
+- **AND** 关闭后授权语义 MUST 继续 fail-closed，不得产生允许结果
+
+### Requirement: RBAC 生命周期调整不改变授权与同步语义
+
+系统 MUST 在调整 permission/RBAC 资源生命周期时保持权限目录、角色、绑定、Casbin policy、授权 fail-closed、policy reload、Redis policy version、Pub/Sub 和周期性补偿语义不变。
+
+#### Scenario: 显式 lifecycle 编排保持行为
+- **WHEN** permission Fx composition 将资源创建从 constructor 移到 `OnStart` 或补齐部分失败清理
+- **THEN** 在线 RBAC 写操作成功后的本实例 reload、版本发布、通知和其他副本收敛语义 MUST 保持不变
+- **AND** 初始加载失败、watcher 停止超时和同步失败仍 MUST 按既有错误契约传播或 fail-closed
+
+### Requirement: RBAC application constructor 缺失依赖错误
+permission 和 role application constructor MUST 将可预期的缺失 policy change notifier 或其他必需 collaborator 表达为明确 error，MUST NOT 使用 panic 作为正式装配失败路径。RBAC 写侧服务 MUST 在缺失通知能力时拒绝装配，避免在线策略同步失效后继续接受写操作。
+
+#### Scenario: permission command 缺少 policy change notifier
+- **WHEN** 构造 permission command service 时缺少 policy change notifier
+- **THEN** constructor MUST 返回明确错误
+- **AND** Fx graph MUST 通过标准 error path 拒绝装配
+- **AND** constructor MUST NOT panic
+
+#### Scenario: role command 缺少 policy change notifier
+- **WHEN** 构造 role command service 时缺少 policy change notifier
+- **THEN** constructor MUST 返回明确错误
+- **AND** Fx graph MUST 通过标准 error path 拒绝装配
+- **AND** constructor MUST NOT panic
+
+#### Scenario: RBAC 写后同步能力不可降级
+- **WHEN** 权限、角色、角色权限或用户角色写侧服务装配完成
+- **THEN** 服务 MUST 具备可用的 policy change notifier
+- **AND** 系统 MUST NOT 以 no-op、nil fallback 或兼容 wrapper 静默跳过 policy reload、Redis policy version 或 watcher 同步语义
+
+### Requirement: RBAC watcher stop 测试具备硬超时
+
+RBAC policy watcher、policy sync 和启动失败回滚相关测试 MUST 验证 watcher stop 尊重调用方 context，并 MUST 通过测试级硬超时保护避免 watcher、订阅器或关闭回调阻塞测试进程。
+
+#### Scenario: watcher Stop deadline 不阻塞测试
+
+- **WHEN** 测试 `Watcher.Stop(ctx)` 在订阅循环尚未退出时的 deadline 行为
+- **THEN** 测试 MUST 以 goroutine/select 或等价机制等待 Stop 返回
+- **AND** 如果 Stop 未在测试级 guard 内返回，测试 MUST 失败并指出 watcher stop 阻塞
+
+#### Scenario: watcher 重复停止仍可验证
+
+- **WHEN** 第一次 `Watcher.Stop(ctx)` 因 context deadline 返回错误后释放阻塞订阅器
+- **THEN** 后续重复 `Stop(context.Background())` MUST 被测试验证为幂等成功
+- **AND** 测试 MUST 验证 watcher 不关闭调用方注入的 Redis、Ent 或 PostgreSQL 共享资源
+
+#### Scenario: 启动失败回滚停止 watcher
+
+- **WHEN** permission/RBAC Fx module 的后续 `OnStart` hook 失败
+- **THEN** 测试 MUST 验证已启动 watcher 被停止并保持 Redis client 可用
+- **AND** 启动失败路径 MUST 使用测试 logger 和带 deadline 的 Start context 保留 rollback 诊断信息
+
+#### Scenario: RBAC lifecycle stop 聚合错误不阻塞
+
+- **WHEN** 测试 `stopRBACLifecycle` 聚合 watcher stop 和 user-role cache close 错误
+- **THEN** 测试 MUST 保留两个错误的 `errors.Is` 断言
+- **AND** watcher stop 永不返回时测试 MUST 在测试级 guard 内失败

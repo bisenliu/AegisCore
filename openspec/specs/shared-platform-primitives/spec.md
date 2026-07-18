@@ -148,9 +148,31 @@
 #### Scenario: 严格加载通用配置
 
 - **WHEN** 服务通过配置文件启动
-- **THEN** 共享 loader MUST 解析 runtime、HTTP、gRPC、metrics、tracing、logger 和通用 `local_cache` 配置
+- **THEN** 共享 loader MUST 解析 runtime、HTTP、gRPC、metrics、tracing、pprof、logger 和通用 `local_cache` 配置
 - **AND** 系统 MUST 使用 `github.com/go-viper/mapstructure/v2` 的 decode 能力解析 duration、slice 和具名配置
 - **AND** 未声明字段 MUST 在启动前失败并报告完整路径，不得使用旧字段别名或 fallback
+
+#### Scenario: 进程级 Gin mode 配置
+
+- **WHEN** 服务加载 runtime 配置
+- **THEN** 共享 runtime config MUST 声明 `runtime.gin.mode`
+- **AND** 默认值 MUST 为 `release`
+- **AND** 环境变量覆盖 MUST 使用 `AEGISCORE_RUNTIME_GIN_MODE`
+- **AND** 校验 MUST 只接受 `debug`、`release` 或 `test`
+
+#### Scenario: pprof 诊断配置
+
+- **WHEN** 服务加载 observability 配置
+- **THEN** 共享 runtime config MUST 声明 `observability.pprof.enabled` 和 `observability.pprof.addr`
+- **AND** 默认值 MUST 分别为 `false` 和 `127.0.0.1:6060`
+- **AND** 环境变量覆盖 MUST 使用 `AEGISCORE_OBSERVABILITY_PPROF_ENABLED` 和 `AEGISCORE_OBSERVABILITY_PPROF_ADDR`
+- **AND** `observability.pprof.addr` MUST 在配置加载阶段校验为合法 `host:port`
+
+#### Scenario: pprof 生产类环境安全校验
+
+- **WHEN** `app.environment` 为 `prod`、`production` 或 `staging` 且 `observability.pprof.enabled=true`
+- **THEN** `observability.pprof.addr` MUST 使用 loopback host
+- **AND** 非 loopback host MUST 在配置加载校验阶段失败
 
 #### Scenario: 服务私有配置留在服务边界
 
@@ -286,7 +308,7 @@
 
 ### Requirement: Logger、观测与 Fx 装配
 
-系统 MUST 在 `common/runtime` 中提供业务中立的 logger、metrics、tracing、Fx provider 和依赖图原语。构造函数和 provider MUST 只消费真实运行时依赖，MUST NOT 为测试便利暴露生产 API 或读取服务私有配置。
+系统 MUST 在 `common/runtime` 中提供业务中立的 logger、metrics、tracing、Fx provider 和依赖图原语。构造函数、provider 和 Fx graph helper MUST 只消费真实运行时依赖或调用方显式提供的无副作用 Fx option，MUST NOT 为测试便利暴露生产 API 或读取服务私有配置。
 
 #### Scenario: logger 构造无全局副作用
 
@@ -306,7 +328,9 @@
 
 - **WHEN** 服务将 Fx option 或 module 传入 `common/runtime/fxgraph`
 - **THEN** helper MUST 输出稳定排序的 provider、invoke 和依赖关系图文本
-- **AND** helper MUST NOT 构造或要求服务私有配置、feature provider、Ent、Redis、PostgreSQL、OTLP 或 HTTP server 输入
+- **AND** helper MUST 只处理调用方显式传入的 graph-safe Fx option，MUST NOT 构造或要求服务私有配置、feature provider、Ent、Redis、PostgreSQL、OTLP 或 HTTP server 输入
+- **AND** helper MUST NOT 通过服务完整 runtime module 间接执行生产 runtime `fx.Invoke`，也 MUST NOT 提供服务私有 fake resource、provider 替换或 graph mode 分支
+- **AND** 需要规避运行时副作用时，服务侧 MUST 提供 wiring graph 或专用无副作用 graph root，而不是把服务语义下沉到 `common`
 
 #### Scenario: 公开 API 具有运行时职责
 
@@ -410,3 +434,83 @@
 
 - **WHEN** package-level 变量承载 sentinel error、regexp、Fx Module、`sync.Pool`、atomic counter 或其他必要运行时状态
 - **THEN** 系统 MUST 明确其可变性和并发边界，不得将其伪装为可写的只读配置集合
+
+### Requirement: Fx adapter 不把 stop hook 当作 constructor rollback
+
+系统 MUST 在 `common/runtime` 的 Fx adapter 中区分构造、启动和停止职责。带网络连接、后台 goroutine、定时清理或批处理行为的共享 runtime 资源 MUST 优先在 `OnStart` 创建并在 `OnStop` 关闭；constructor 阶段若已创建需要关闭的部分资源，后续失败时 MUST 立即清理。
+
+#### Scenario: OnStart 创建的资源随启动失败关闭
+- **WHEN** 某个共享 runtime Fx adapter 的 `OnStart` 已创建 Redis client、workerpool、localcache 或 tracing 相关运行资源
+- **AND** 后续 `OnStart` hook 返回错误导致 App 启动失败
+- **THEN** 已启动资源 MUST 通过 Fx 停止流程关闭
+- **AND** 资源关闭 MUST 不依赖 constructor 中登记但从未进入启动状态的 rollback 假设
+
+#### Scenario: constructor 部分失败即时清理
+- **WHEN** 共享 runtime constructor 必须在构造阶段创建一个或多个需要关闭的资源
+- **AND** 后续配置投影、探测或包装步骤失败
+- **THEN** constructor MUST 在返回错误前关闭已经创建的资源
+- **AND** 错误链 MUST 保留构造失败和关闭失败
+
+### Requirement: Redis Fx 生命周期启动安全
+
+系统 MUST 在 Redis Fx adapter 中保持单资源创建语义，并保证启动探测失败、后续启动失败和正常停止路径均关闭同一个 Redis client。普通 Go constructor MUST 继续保持框架无关。
+
+#### Scenario: Redis 启动探测失败关闭 client
+- **WHEN** Redis Fx adapter 创建 client 后执行启动 PING 失败
+- **THEN** adapter MUST 关闭该 client
+- **AND** 返回错误 MUST 同时保留 PING 失败和关闭失败信息
+
+#### Scenario: Redis client 不被 feature 自有资源关闭
+- **WHEN** auth、permission 或其他 feature 关闭自身 workerpool、watcher、cache 或 store
+- **THEN** feature 自有资源 MUST NOT 关闭共享 Redis client
+- **AND** 共享 Redis client MUST 只由服务资源层生命周期关闭
+
+### Requirement: 主动后台 primitive 显式关闭
+
+系统 MUST 为 workerpool、scheduler、localcache 等主动后台 primitive 提供拥有者显式关闭契约，并要求 Fx composition 只关闭本组件拥有的资源。
+
+#### Scenario: workerpool 和 localcache 关闭幂等
+- **WHEN** 调用方重复关闭 workerpool 或 localcache
+- **THEN** 关闭操作 MUST 幂等且不得 panic
+- **AND** 关闭操作 MUST NOT 关闭调用方注入的 Redis、PostgreSQL、Ent 或其他共享资源
+
+### Requirement: Runtime lifecycle 停止预算校验
+
+系统 MUST 在 `common/runtime/config` 中校验 `runtime.lifecycle.stop_timeout` 覆盖共享 runtime 已知的串行停止路径最低预算，并 MUST 在预算不足时于配置加载阶段返回包含最低所需时长的错误。该校验 MUST 保持业务中立，不得在 `common` 中引入 auth、RBAC、user-service 资源名或 feature 语义。
+
+#### Scenario: 停止总预算不足
+
+- **WHEN** 配置中的 `runtime.lifecycle.stop_timeout` 小于 HTTP shutdown timeout、worker drain allowance、tracing flush allowance 和 shutdown safety margin 的组合最低预算
+- **THEN** 配置校验 MUST 失败
+- **AND** 错误信息 MUST 指出 `runtime.lifecycle.stop_timeout` 以及最低所需预算
+
+#### Scenario: 停止总预算满足组合下限
+
+- **WHEN** 配置中的 `runtime.lifecycle.stop_timeout` 大于或等于组合最低预算
+- **THEN** 共享 runtime 配置校验 MUST 继续通过该 lifecycle 校验
+- **AND** 既有 HTTP、gRPC、metrics、tracing、logger、resource 和 local cache 校验语义 MUST 保持不变
+
+#### Scenario: workerpool 停止预算保持业务中立
+
+- **WHEN** 调用方需要把 feature worker drain 纳入 App stop 总预算
+- **THEN** `common/runtime/workerpool` MUST 只提供显式 `Stop(ctx)` drain 语义和错误传播
+- **AND** auth purge、refresh session、Redis key 或其他业务停止策略 MUST 由 owning feature 或服务组合层表达
+
+### Requirement: 共享 tracing 与 datastore constructor 错误语义
+`common/runtime/observability/tracing` 和 `common/runtime/datastore` MUST 为服务装配提供可预测的 constructor 错误语义。共享 runtime primitive MUST 将可预期的配置、资源和 instrumentation 失败返回为 error，MUST NOT 通过 panic 表达这些失败。
+
+#### Scenario: Fx tracing provider 可直接消费
+- **WHEN** 服务通过共享 Fx provider 构造 tracing provider
+- **THEN** 返回的 provider MUST 立即具备可供 instrumentation 使用的非 nil tracer provider
+- **AND** provider shutdown MUST 由 Fx lifecycle stop hook 管理
+
+#### Scenario: Redis client instrumentation 错误
+- **WHEN** `common/runtime/datastore` 创建 Redis client 时 tracing instrumentation 失败
+- **THEN** constructor MUST 返回可匹配和可诊断的 error
+- **AND** constructor MUST 关闭该 Redis client 并保留 instrumentation 失败与关闭失败信息
+
+#### Scenario: 不为测试扩张生产 API
+- **WHEN** 测试需要验证 tracing 或 datastore 失败路径
+- **THEN** 测试 MUST 使用 package-local fixture、已有最小注入点或 Fx graph 断言
+- **AND** 正式代码 MUST NOT 为测试新增无运行时职责的公开 wrapper、全局开关或兼容路径
+

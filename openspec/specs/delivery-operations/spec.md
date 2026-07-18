@@ -1,9 +1,7 @@
 ## Purpose
 
 定义 AegisCore 的交付运维能力，覆盖构建、运行、测试、lint、生成、数据库迁移、容器、部署资产和发布顺序。
-
 ## Requirements
-
 ### Requirement: 构建、本地运行与 CLI 生命周期
 
 系统 MUST 通过统一 Makefile 和 user-service CLI 提供可重复的构建、运行及进程生命周期控制，并从已加载配置获取启动和停止预算。
@@ -99,7 +97,7 @@ Go 测试 MUST 使用语义化断言和消费侧 mock，mock 与 metrics no-op M
 
 ### Requirement: 架构边界与 Fx 依赖图验证
 
-系统 MUST 通过 `user-service-architecture-lint` 保护 feature-first、分层、共享边界、生成配置和部署契约，并提供无外部副作用的正式 Fx 依赖图诊断入口。
+系统 MUST 通过 `user-service-architecture-lint` 保护 feature-first、分层、共享边界、生成配置和部署契约，并提供无外部副作用、无运行时激活副作用的正式 Fx 依赖图诊断入口。
 
 #### Scenario: feature 与共享边界
 
@@ -117,9 +115,17 @@ Go 测试 MUST 使用语义化断言和消费侧 mock，mock 与 metrics no-op M
 #### Scenario: 生成 Fx 图
 
 - **WHEN** 执行 `cd user-service && go run ./cmd fxgraph --config ./configs/config.yaml --output /tmp/aegis-fx.dot`
-- **THEN** 系统 MUST 基于正式 App module 和正式配置投影生成非空 DOT
+- **THEN** 系统 MUST 基于正式配置投影和无运行时激活的 wiring graph 或专用 graph root 生成非空 DOT
 - **AND** 图 MUST 展示 auth、user、role、permission、providers、router 及关键 metrics 依赖边
-- **AND** 生成过程 MUST 使用无副作用资源替身，MUST NOT 连接真实 PostgreSQL、Redis、OTLP 或启动 listener
+- **AND** 生成过程 MUST NOT 执行生产 runtime `fx.Invoke`，MUST NOT 连接真实 PostgreSQL、Redis、OTLP 或启动 listener
+- **AND** 生成过程 MUST NOT 创建 workerpool、本地缓存、tracing exporter 后台资源，MUST NOT 注册真实 route 或 runtime metrics，MUST NOT 修改 `TZ`、`time.Local` 或 Gin mode
+
+#### Scenario: 正式 App 保持完整运行时激活
+
+- **WHEN** user-service 通过 `serve` 命令构建正式 Fx App
+- **THEN** 系统 MUST 使用同时包含 wiring module 和 runtime module 的正式 App module
+- **AND** HTTP server、pprof server、route 注册、runtime dependency metrics、timezone 初始化、RBAC lifecycle 和 lifecycle hooks MUST 保持正式运行时语义
+- **AND** graph 命令的无副作用 root MUST NOT 取代正式 `serve` 的 runtime 激活链路
 
 ### Requirement: Ent 生成与 Atlas migration
 
@@ -345,3 +351,32 @@ GitHub Actions 的阻塞式 test job MUST 通过唯一开关 `AEGISCORE_TEST_CON
 - **WHEN** 滚动发布、缩容、驱逐或故障退出终止 Pod
 - **THEN** kubelet MUST 为完整 Fx Stop 链路与平台阶段保留默认宽限期
 - **AND** 只有宽限期耗尽且进程仍未退出时才能强制终止
+
+### Requirement: Fx 测试诊断与硬超时门禁
+
+Go 测试 MUST 保留 Fx event 的测试诊断信息，并且对可能阻塞的启动、停止、rollback、worker 或 shutdown 测试路径提供测试级硬超时保护。除非测试明确断言构图或启动错误且 Fx event 日志确实无价值，测试 MUST NOT 使用 `fx.NopLogger` 静默 Fx event。
+
+#### Scenario: Fx 正向组合测试输出 event
+
+- **WHEN** 测试使用 `fxtest.New(t, ...)` 构造并启动正向 Fx app 或 feature module
+- **THEN** 测试 MUST 使用 `fxtest.New` 默认测试 logger 或显式 `fxtest.WithTestLogger(t)`
+- **AND** 测试 MUST NOT 额外传入 `fx.NopLogger` 覆盖测试 logger
+
+#### Scenario: Fx 负向构图测试保留可诊断日志
+
+- **WHEN** 测试需要使用 `fx.New` 并断言 `app.Err()`
+- **THEN** 测试 MUST 显式配置 `fxtest.WithTestLogger(t)` 或等价测试 logger
+- **AND** 测试 MUST NOT 改用会在 `app.Err()` 非空时提前 `FailNow` 的 `fxtest.New`
+
+#### Scenario: 生命周期 spy 启用硬超时
+
+- **WHEN** 测试使用 `fxtest.NewLifecycle` 验证可能阻塞或依赖 context deadline 的 `OnStart` 或 `OnStop` hook
+- **THEN** 测试 MUST 启用 `fxtest.EnforceTimeout(true)`
+- **AND** hook 忽略 context 时测试 MUST 在自身 deadline 到期后返回 context 相关错误，而不是等待全局 `go test -timeout`
+
+#### Scenario: 直接 Stop 调用具备测试 guard
+
+- **WHEN** 测试直接调用 `Stop(ctx)`、`Shutdown(ctx)`、关闭 hook 或其它可能阻塞的函数
+- **THEN** 测试 MUST 使用带 timeout 的 context 并通过 goroutine/select、`require.Eventually` 或等价机制限制测试等待时间
+- **AND** 被测实现不尊重 context 时测试 MUST 在测试级 guard 内失败
+

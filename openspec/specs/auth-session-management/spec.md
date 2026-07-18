@@ -1,9 +1,7 @@
 ## Purpose
 
 定义 user-service 的认证会话能力，覆盖登录、令牌签发与刷新、退出、改密、会话状态和 token version 校验。
-
 ## Requirements
-
 ### Requirement: 用户登录与令牌签发
 
 系统 MUST 在凭证、用户状态和会话策略校验通过后签发用途隔离的 access、refresh 或 password-change token。所有 token MUST 包含标准 `jti`，并 MUST 通过 `access`、`refresh` 和 `password_change` subject 限定使用流程；任一用途、subject 或必要 claims 不匹配时 MUST 拒绝 token。
@@ -317,3 +315,70 @@ user-service auth feature MUST 私有拥有 token issuer、claims schema、subje
 - **AND** auth session purge pool MUST 在共享 Redis client 关闭前完成停止
 - **AND** token-version 本地缓存 MUST 在服务退出时显式关闭
 - **AND** auth Redis infrastructure 正式代码中 MUST NOT 出现 `go.uber.org/fx`、`go.uber.org/dig`、`fx.Lifecycle` 或 `name:"cache_redis"` ordering-only dependency
+
+### Requirement: Auth 主动资源延迟启动与显式关闭
+
+系统 MUST 在 auth Fx composition 中把 session purge pool、token-version 本地缓存等主动后台资源作为 auth feature 自有资源管理。会启动 goroutine、worker 或内部清理循环的资源 MUST 优先在 `OnStart` 创建，在 `OnStop` 关闭，并 MUST 先于共享 Redis client 关闭。
+
+#### Scenario: Auth worker pool 启动失败回滚
+- **WHEN** auth session purge pool 已在 `OnStart` 创建
+- **AND** 后续 auth 或服务级启动 hook 失败导致 App 启动失败
+- **THEN** purge pool MUST 被停止并 drain 已接收任务
+- **AND** 停止过程 MUST 不关闭共享 Redis client
+
+#### Scenario: Auth local cache 生命周期
+- **WHEN** token-version 本地缓存启用并在启动阶段创建
+- **THEN** 服务停止或启动失败时 MUST 显式关闭该缓存
+- **AND** disabled 或 direct 模式 MUST 继续提供幂等 no-op close 语义
+
+#### Scenario: Auth constructor 部分失败清理
+- **WHEN** auth composition 中必须在 constructor 阶段创建多个部分资源
+- **AND** 后续资源创建、配置选择或 wiring 失败
+- **THEN** 已创建且归 auth 拥有的资源 MUST 立即关闭
+- **AND** 关闭失败 MUST 与原始失败一起返回或记录
+
+### Requirement: Auth 生命周期调整不改变认证语义
+
+系统 MUST 在调整 auth 资源生命周期时保持登录、refresh、强制改密、退出、token version 校验和安全撤销语义不变。
+
+#### Scenario: 资源 holder 不产生安全降级
+- **WHEN** auth 资源尚未启动、启动失败或已关闭
+- **THEN** 受保护访问和会话撤销流程 MUST 返回明确错误或保持 fail-closed
+- **AND** 系统 MUST NOT 因 holder 中资源为空而允许旧 token、无效 refresh session 或撤销不完整结果通过
+
+### Requirement: auth application constructor 缺失依赖错误
+auth application constructor MUST 将可预期的缺失 collaborator 或无效窄 settings 表达为明确 error，MUST NOT 使用 panic 作为正式装配失败路径。constructor MUST 继续保持 application 层边界，不得引入 Fx、HTTP transport DTO 或完整运行时配置依赖。
+
+#### Scenario: token version 本地失效器缺失
+- **WHEN** 构造认证 session lifecycle 时缺少 token version local invalidator
+- **THEN** constructor MUST 返回明确错误
+- **AND** Fx graph MUST 通过标准 error path 拒绝装配
+- **AND** constructor MUST NOT panic
+
+#### Scenario: application 边界保持纯净
+- **WHEN** auth application constructor 增加错误返回
+- **THEN** application 包 MUST NOT 因此导入 `go.uber.org/fx`、Gin、HTTP response helper 或服务完整配置
+- **AND** 调用方 MUST 通过普通 Go 错误处理或 Fx constructor error 接收失败
+
+### Requirement: Auth 资源停止测试具备硬超时
+
+auth session purge pool、token-version 本地缓存和 auth module 关闭顺序测试 MUST 保留 Fx event 诊断信息，并对 worker pool stop、启动失败回滚和共享 Redis 关闭顺序验证提供测试级硬超时保护。
+
+#### Scenario: session purge pool stop timeout 不阻塞测试
+
+- **WHEN** 测试 session purge pool 的 drain、caller timeout 或重复停止行为
+- **THEN** 测试 MUST 使用带 timeout 的 context 和测试级 guard 等待 Stop 返回
+- **AND** worker task 忽略 context 或 stop 实现阻塞时测试 MUST 在测试级 guard 内失败
+
+#### Scenario: auth module 关闭顺序可诊断
+
+- **WHEN** 测试 auth module 停止 auth 自有资源早于共享 Redis client
+- **THEN** 测试 MUST 使用 `fxtest.New(t, ...)` 默认测试 logger 或 `fxtest.WithTestLogger(t)`
+- **AND** 测试 MUST NOT 使用 `fx.NopLogger` 静默 Fx lifecycle event
+
+#### Scenario: auth 启动失败回滚停止自有资源
+
+- **WHEN** auth module 后续 `OnStart` hook 失败
+- **THEN** 测试 MUST 验证 session purge pool 和 token-version 本地缓存按已启动资源回滚关闭
+- **AND** Start 调用 MUST 使用带 deadline 的 context 或测试级 guard，避免回滚阻塞导致测试无限等待
+
