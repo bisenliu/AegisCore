@@ -50,7 +50,9 @@ func TestAuthUseCaseRefreshRotationPassesMaxActiveSessionsPerUser(t *testing.T) 
 	sessions := NewMockRefreshSessionStore(ctrl)
 	passwordChanges := NewMockPasswordChangeSessionStore(ctrl)
 	cfg := serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, TokenVersionCacheTTL: time.Minute, RefreshTokenRotation: true, MaxActiveSessionsPerUser: 4}
-	svc := NewRefreshTokenUseCase(tokens, authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, cfg.MaxActiveSessionsPerUser, noopTokenVersionInvalidator{}), nil, RefreshTokenSettings{RefreshTokenRotation: cfg.RefreshTokenRotation})
+	lifecycle, err := authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, cfg.MaxActiveSessionsPerUser, noopTokenVersionInvalidator{})
+	require.NoError(t, err)
+	svc := NewRefreshTokenUseCase(tokens, lifecycle, nil, RefreshTokenSettings{RefreshTokenRotation: cfg.RefreshTokenRotation})
 	claims := refreshClaims("s-old", 2)
 	oldSession := authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
 
@@ -60,7 +62,7 @@ func TestAuthUseCaseRefreshRotationPassesMaxActiveSessionsPerUser(t *testing.T) 
 	tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil)
 	sessions.EXPECT().RotateSession(gomock.Any(), oldSession, gomock.Any(), time.Hour, 4).Return(nil)
 
-	_, err := svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
+	_, err = svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
 	require.NoError(t, err,
 		"Refresh: %v", err)
 

@@ -86,8 +86,10 @@ func TestLifecycleCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
 
 func TestNewLifecycleRequiresLocalTokenVersionInvalidator(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	require.PanicsWithValue(t, "token version local invalidator is required", func() {
-		NewLifecycle(
+	var lifecycle Lifecycle
+	require.NotPanics(t, func() {
+		var err error
+		lifecycle, err = NewLifecycle(
 			NewMockUserTokenVersionStore(ctrl),
 			NewMockTokenVersionCache(ctrl),
 			NewMockRefreshSessionStore(ctrl),
@@ -95,7 +97,9 @@ func TestNewLifecycleRequiresLocalTokenVersionInvalidator(t *testing.T) {
 			5,
 			nil,
 		)
+		require.ErrorContains(t, err, "token version local invalidator is required")
 	})
+	require.Nil(t, lifecycle)
 }
 
 func TestLifecycleRevokeAllUserSessions(t *testing.T) {
@@ -156,6 +160,8 @@ func newLifecycleTestFixture(t *testing.T) *lifecycleTestFixture {
 		passwordChanges: NewMockPasswordChangeSessionStore(ctrl),
 		invalidator:     NewMockTokenVersionLocalInvalidator(ctrl),
 	}
-	fixture.lifecycle = NewLifecycle(fixture.users, fixture.tokenVersions, fixture.sessions, fixture.passwordChanges, 5, fixture.invalidator)
+	var err error
+	fixture.lifecycle, err = NewLifecycle(fixture.users, fixture.tokenVersions, fixture.sessions, fixture.passwordChanges, 5, fixture.invalidator)
+	require.NoError(t, err)
 	return fixture
 }

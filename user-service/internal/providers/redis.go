@@ -33,8 +33,12 @@ func NewCacheRedis(params CacheRedisParams) (*redis.Client, error) {
 }
 
 func newCacheRedis(params CacheRedisParams, createRedisClient redisClientFactory) (*redis.Client, error) {
-	if params.Trace == nil || params.Trace.TracerProvider() == nil {
+	if params.Trace == nil {
 		return nil, errors.New("redis tracing provider is required")
+	}
+	tracerProvider := params.Trace.TracerProvider()
+	if tracerProvider == nil {
+		return nil, errors.New("redis tracing provider is not ready")
 	}
 	if createRedisClient == nil {
 		return nil, errors.New("redis client factory is required")
@@ -48,7 +52,7 @@ func newCacheRedis(params CacheRedisParams, createRedisClient redisClientFactory
 		params.Log,
 		resources.NameCacheRedis,
 		redisCfg,
-		datastore.WithRedisTracerProvider(params.Trace.TracerProvider()),
+		datastore.WithRedisTracerProvider(tracerProvider),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("provide redis %s: %w", resources.NameCacheRedis, err)

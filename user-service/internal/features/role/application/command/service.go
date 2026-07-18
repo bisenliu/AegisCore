@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 
@@ -24,9 +25,9 @@ func NewRoleCommandService(
 	rolePermissions roleapplication.RolePermissionStore,
 	permissions roleapplication.PermissionLookup,
 	policyChanges permissionapplication.PolicyChangeNotifier,
-) RoleCommandService {
+) (RoleCommandService, error) {
 	if policyChanges == nil {
-		panic("role policy change notifier is required")
+		return nil, errors.New("role policy change notifier is required")
 	}
 	return &roleCommandService{
 		roles:           roles,
@@ -34,7 +35,7 @@ func NewRoleCommandService(
 		rolePermissions: rolePermissions,
 		permissions:     permissions,
 		policyChanges:   policyChanges,
-	}
+	}, nil
 }
 
 func (s *roleCommandService) notifyPolicyChanged(ctx context.Context, reason string) error {

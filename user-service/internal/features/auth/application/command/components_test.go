@@ -200,13 +200,14 @@ func TestAuthSessionLifecycleRejectsRefreshVersionMismatch(t *testing.T) {
 	tokenVersions := NewMockTokenVersionCache(ctrl)
 	sessions := NewMockRefreshSessionStore(ctrl)
 	passwordChanges := NewMockPasswordChangeSessionStore(ctrl)
-	lifecycle := authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, 5, noopTokenVersionInvalidator{})
+	lifecycle, err := authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, 5, noopTokenVersionInvalidator{})
+	require.NoError(t, err)
 	claims := &authtokens.Claims{UserID: authTestUserID.String(), TokenVersion: 2, SessionID: "s-123"}
 
 	sessions.EXPECT().GetSession(gomock.Any(), authTestUserID.String(), "s-123").Return(authRefreshTestSession("s-123", 2), nil)
 	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(3), nil)
 
-	_, _, err := lifecycle.ValidateRefreshSession(context.Background(), claims)
+	_, _, err = lifecycle.ValidateRefreshSession(context.Background(), claims)
 	require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
 		"err = %v, want authdomain.ErrTokenInvalid", err)
 
@@ -216,7 +217,7 @@ func TestAuthSessionLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T)
 	for _, err := range []error{authdomain.ErrAuthSessionNotFound, authdomain.ErrAuthSessionMismatch} {
 		t.Run(err.Error(), func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			lifecycle, _, _, sessions := newGeneratedAuthSessionLifecycle(ctrl)
+			lifecycle, _, _, sessions := newGeneratedAuthSessionLifecycle(t, ctrl)
 			oldSession := authRefreshTestSession("s-old", 2)
 			newSession := authRefreshTestSession("s-new", 2)
 			sessions.EXPECT().RotateSession(gomock.Any(), oldSession, newSession, time.Hour, 5).Return(err)
@@ -232,7 +233,7 @@ func TestAuthSessionLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T)
 func TestAuthSessionLifecycleRotateTokenSessionMapsUnexpectedError(t *testing.T) {
 	rotateErr := errors.New("redis failed")
 	ctrl := gomock.NewController(t)
-	lifecycle, _, _, sessions := newGeneratedAuthSessionLifecycle(ctrl)
+	lifecycle, _, _, sessions := newGeneratedAuthSessionLifecycle(t, ctrl)
 	oldSession := authRefreshTestSession("s-old", 2)
 	newSession := authRefreshTestSession("s-new", 2)
 	sessions.EXPECT().RotateSession(gomock.Any(), oldSession, newSession, time.Hour, 5).Return(rotateErr)
@@ -245,7 +246,7 @@ func TestAuthSessionLifecycleRotateTokenSessionMapsUnexpectedError(t *testing.T)
 
 func TestAuthSessionLifecycleCurrentTokenVersionUsesCacheHit(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	lifecycle, _, tokenVersions, _ := newGeneratedAuthSessionLifecycle(ctrl)
+	lifecycle, _, tokenVersions, _ := newGeneratedAuthSessionLifecycle(t, ctrl)
 	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(2), nil)
 
 	version, err := lifecycle.CurrentTokenVersion(context.Background(), authTestUserID.String())
@@ -258,7 +259,7 @@ func TestAuthSessionLifecycleCurrentTokenVersionUsesCacheHit(t *testing.T) {
 
 func TestAuthSessionLifecycleCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	lifecycle, users, tokenVersions, _ := newGeneratedAuthSessionLifecycle(ctrl)
+	lifecycle, users, tokenVersions, _ := newGeneratedAuthSessionLifecycle(t, ctrl)
 
 	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(0), authdomain.ErrTokenVersionCacheMiss)
 	users.EXPECT().GetTokenVersion(gomock.Any(), authTestUserID).Return(int64(7), nil)
@@ -274,7 +275,7 @@ func TestAuthSessionLifecycleCurrentTokenVersionCacheMissReadsRepository(t *test
 
 func TestAuthSessionLifecycleCurrentTokenVersionCacheErrorReturnsInfrastructureError(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	lifecycle, _, tokenVersions, _ := newGeneratedAuthSessionLifecycle(ctrl)
+	lifecycle, _, tokenVersions, _ := newGeneratedAuthSessionLifecycle(t, ctrl)
 	cacheErr := errors.New("redis failed")
 	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(0), cacheErr)
 
@@ -286,7 +287,7 @@ func TestAuthSessionLifecycleCurrentTokenVersionCacheErrorReturnsInfrastructureE
 
 func TestAuthSessionLifecycleCurrentTokenVersionDatabaseFallbackErrorReturnsInfrastructureError(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	lifecycle, users, tokenVersions, _ := newGeneratedAuthSessionLifecycle(ctrl)
+	lifecycle, users, tokenVersions, _ := newGeneratedAuthSessionLifecycle(t, ctrl)
 	dbErr := errors.New("database failed")
 
 	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(0), authdomain.ErrTokenVersionCacheMiss)
@@ -300,7 +301,7 @@ func TestAuthSessionLifecycleCurrentTokenVersionDatabaseFallbackErrorReturnsInfr
 
 func TestAuthSessionLifecycleCurrentTokenVersionBackfillErrorReturnsInfrastructureError(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	lifecycle, users, tokenVersions, _ := newGeneratedAuthSessionLifecycle(ctrl)
+	lifecycle, users, tokenVersions, _ := newGeneratedAuthSessionLifecycle(t, ctrl)
 	cacheErr := errors.New("redis set failed")
 
 	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(0), authdomain.ErrTokenVersionCacheMiss)
@@ -315,7 +316,7 @@ func TestAuthSessionLifecycleCurrentTokenVersionBackfillErrorReturnsInfrastructu
 
 func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	lifecycle, users, tokenVersions, sessions := newGeneratedAuthSessionLifecycle(ctrl)
+	lifecycle, users, tokenVersions, sessions := newGeneratedAuthSessionLifecycle(t, ctrl)
 
 	users.EXPECT().IncrementTokenVersion(gomock.Any(), authTestUserID).Return(int64(4), nil)
 	tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), authTestUserID.String(), int64(4)).Return(nil)
@@ -333,7 +334,7 @@ func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	lifecycle, users, _, _ := newGeneratedAuthSessionLifecycle(ctrl)
+	lifecycle, users, _, _ := newGeneratedAuthSessionLifecycle(t, ctrl)
 	users.EXPECT().IncrementTokenVersion(gomock.Any(), authTestUserID).Return(int64(0), identity.ErrUserNotFound)
 
 	_, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
@@ -344,7 +345,7 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T)
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	lifecycle, users, tokenVersions, sessions := newGeneratedAuthSessionLifecycle(ctrl)
+	lifecycle, users, tokenVersions, sessions := newGeneratedAuthSessionLifecycle(t, ctrl)
 	cacheErr := errors.New("cache refresh failed")
 
 	users.EXPECT().IncrementTokenVersion(gomock.Any(), authTestUserID).Return(int64(4), nil)
@@ -364,7 +365,7 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t
 
 func TestAuthSessionLifecycleRevokeAllUserSessionsSucceedsAfterDeleteAllProjectionError(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	lifecycle, users, tokenVersions, sessions := newGeneratedAuthSessionLifecycle(ctrl)
+	lifecycle, users, tokenVersions, sessions := newGeneratedAuthSessionLifecycle(t, ctrl)
 	deleteErr := errors.New("delete all failed")
 
 	users.EXPECT().IncrementTokenVersion(gomock.Any(), authTestUserID).Return(int64(4), nil)
@@ -383,7 +384,7 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsSucceedsAfterDeleteAllProjecti
 
 func TestAuthSessionLifecycleRevokeUserSessionsAtVersionReturnsProjectionError(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	lifecycle, _, tokenVersions, sessions := newGeneratedAuthSessionLifecycle(ctrl)
+	lifecycle, _, tokenVersions, sessions := newGeneratedAuthSessionLifecycle(t, ctrl)
 	cacheErr := errors.New("cache refresh failed")
 	deleteErr := errors.New("delete all failed")
 	deleteCacheErr := errors.New("delete cache failed")
@@ -439,10 +440,13 @@ func authRefreshTestSession(sessionID string, tokenVersion int64) authdomain.Aut
 	return authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: sessionID, TokenVersion: tokenVersion}
 }
 
-func newGeneratedAuthSessionLifecycle(ctrl *gomock.Controller) (authsessions.Lifecycle, *MockUserTokenVersionStore, *MockTokenVersionCache, *MockRefreshSessionStore) {
+func newGeneratedAuthSessionLifecycle(t testing.TB, ctrl *gomock.Controller) (authsessions.Lifecycle, *MockUserTokenVersionStore, *MockTokenVersionCache, *MockRefreshSessionStore) {
+	t.Helper()
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenVersions := NewMockTokenVersionCache(ctrl)
 	sessions := NewMockRefreshSessionStore(ctrl)
 	passwordChanges := NewMockPasswordChangeSessionStore(ctrl)
-	return authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, 5, noopTokenVersionInvalidator{}), users, tokenVersions, sessions
+	lifecycle, err := authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, 5, noopTokenVersionInvalidator{})
+	require.NoError(t, err)
+	return lifecycle, users, tokenVersions, sessions
 }

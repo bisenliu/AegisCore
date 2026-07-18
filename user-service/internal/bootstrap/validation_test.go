@@ -67,6 +67,48 @@ func TestAppOptionsSupplySameConfigurationAndLifecycleTimeouts(t *testing.T) {
 	require.Equal(t, serviceCfg.Runtime.Lifecycle.StopTimeout, app.StopTimeout())
 }
 
+func TestAppOptionsRecoverFromFxInitializationPanics(t *testing.T) {
+	serviceCfg := appModuleValidationTestConfig()
+	tests := []struct {
+		name    string
+		option  fx.Option
+		message string
+	}{
+		{
+			name: "constructor",
+			option: fx.Options(
+				fx.Provide(func() *struct{} { panic("constructor boom") }),
+				fx.Invoke(func(*struct{}) {}),
+			),
+			message: "constructor boom",
+		},
+		{
+			name: "decorator",
+			option: fx.Options(
+				fx.Supply("input"),
+				fx.Decorate(func(string) string { panic("decorator boom") }),
+				fx.Invoke(func(string) {}),
+			),
+			message: "decorator boom",
+		},
+		{
+			name:    "invoke",
+			option:  fx.Invoke(func() { panic("invoke boom") }),
+			message: "invoke boom",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var app *fx.App
+			require.NotPanics(t, func() {
+				app = fx.New(AppOptions(serviceCfg, tt.option, fx.NopLogger)...)
+			})
+			require.ErrorContains(t, app.Err(), tt.message)
+		})
+	}
+}
+
 func TestRuntimeModuleNamingReflectsCompositionRootScope(t *testing.T) {
 	content, err := os.ReadFile("app.go")
 	require.NoError(t, err)

@@ -231,9 +231,13 @@ func TestRoleCommandServiceRolePermissionLookupFailureSkipsWriteAndNotify(t *tes
 }
 
 func TestRoleCommandServiceRequiresPolicyChangeNotifier(t *testing.T) {
-	require.PanicsWithValue(t, "role policy change notifier is required", func() {
-		NewRoleCommandService(nil, nil, nil, nil, nil)
+	var service RoleCommandService
+	require.NotPanics(t, func() {
+		var err error
+		service, err = NewRoleCommandService(nil, nil, nil, nil, nil)
+		require.ErrorContains(t, err, "role policy change notifier is required")
 	})
+	require.Nil(t, service)
 }
 
 func TestRoleCommandServicePropagatesRefreshFailureAfterSuccessfulWrite(t *testing.T) {
@@ -396,7 +400,9 @@ func newRoleCommandFixture(t testing.TB) *roleCommandFixture {
 		roles:           NewMockRoleStore(ctrl),
 		userRoles:       NewMockUserRoleStore(ctrl),
 	}
-	fixture.service = NewRoleCommandService(fixture.roles, fixture.userRoles, fixture.rolePermissions, fixture.permissions, fixture.policyChanges)
+	var err error
+	fixture.service, err = NewRoleCommandService(fixture.roles, fixture.userRoles, fixture.rolePermissions, fixture.permissions, fixture.policyChanges)
+	require.NoError(t, err)
 	return fixture
 }
 

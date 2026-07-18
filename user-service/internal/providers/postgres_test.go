@@ -262,6 +262,44 @@ func TestNewCacheRedisRequiresTracingProvider(t *testing.T) {
 	require.ErrorContains(t, err, "redis tracing provider is required")
 }
 
+func TestNewCacheRedisRejectsUnreadyTracingProvider(t *testing.T) {
+	_, err := NewCacheRedis(CacheRedisParams{
+		Lifecycle: fxtest.NewLifecycle(t),
+		Config:    providerTestConfig(""),
+		Log:       zap.NewNop(),
+		Trace:     &commontracing.Provider{},
+	})
+	require.ErrorContains(t, err, "redis tracing provider is not ready")
+}
+
+func TestNewCacheRedisUsesFxTracingProviderDuringConstruction(t *testing.T) {
+	redisServer := newProviderTestRedisServer(t)
+	cfg := providerTestConfig("")
+	cfg.Config = config.Config{
+		App:           config.AppConfig{Name: "provider-test", Environment: "test"},
+		Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1}},
+	}
+	cfg.Resources.Redis[resources.NameCacheRedis] = commonresources.RedisConfig{Addr: redisServer.addr, Timeout: time.Second}
+
+	type clients struct {
+		fx.In
+
+		CacheRedis *redis.Client `name:"cache_redis"`
+	}
+	var got clients
+	app := fxtest.New(t,
+		fx.Supply(cfg, serviceconfig.NewRuntimeConfig(cfg), zap.NewNop()),
+		fx.Provide(commontracing.NewFxProvider),
+		fx.Provide(fx.Annotate(NewCacheRedis, fx.ResultTags(`name:"cache_redis"`))),
+		fx.Populate(&got),
+	)
+	app.RequireStart()
+	app.RequireStop()
+
+	require.NotNil(t, got.CacheRedis)
+	require.Equal(t, redisServer.addr, got.CacheRedis.Options().Addr)
+}
+
 func TestNewCacheRedisWrapsConstructorError(t *testing.T) {
 	constructorErr := errors.New("instrumentation failed")
 	traceProvider := newProviderTestTracing(t)

@@ -65,6 +65,8 @@ var AppModule = fx.Module("aegiscore-user-services",
 func AppOptions(cfg *serviceconfig.Config, additional ...fx.Option) []fx.Option {
 	lifecycleCfg := cfg.Runtime.Lifecycle
 	options := []fx.Option{
+		// Fx 分类：基础运行时 - 将 DI 初始化期 panic 转换为 Fx 错误。
+		fx.RecoverFromPanics(),
 		// Fx 分类：基础运行时 - 同源的服务配置与共享运行时配置。
 		fx.Supply(cfg, serviceconfig.NewRuntimeConfig(cfg)),
 		fx.Provide(

@@ -164,7 +164,9 @@ func TestAuthUseCaseLoginPassesMaxActiveSessionsPerUser(t *testing.T) {
 	sessions := NewMockRefreshSessionStore(ctrl)
 	passwordChanges := NewMockPasswordChangeSessionStore(ctrl)
 	cfg := serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}, RefreshTokenRotation: true, TokenVersionCacheTTL: time.Minute, MaxActiveSessionsPerUser: 3}
-	svc := NewLoginUseCase(credentials, tokens, authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, cfg.MaxActiveSessionsPerUser, noopTokenVersionInvalidator{}), nil)
+	lifecycle, err := authsessions.NewLifecycle(users, tokenVersions, sessions, passwordChanges, cfg.MaxActiveSessionsPerUser, noopTokenVersionInvalidator{})
+	require.NoError(t, err)
+	svc := NewLoginUseCase(credentials, tokens, lifecycle, nil)
 
 	credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(normalCredential(), nil)
 	tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", 900, time.Hour), nil)
@@ -175,7 +177,7 @@ func TestAuthUseCaseLoginPassesMaxActiveSessionsPerUser(t *testing.T) {
 		return nil
 	})
 
-	_, err := svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
+	_, err = svc.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 	require.NoError(t, err,
 		"Login: %v", err)
 

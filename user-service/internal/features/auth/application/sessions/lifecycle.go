@@ -39,11 +39,11 @@ type lifecycle struct {
 }
 
 // NewLifecycle 构造认证会话生命周期组件。
-func NewLifecycle(users authapplication.UserTokenVersionStore, tokenVersions authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, maxActiveSessionsPerUser int, localTokenVersions authvalidators.TokenVersionLocalInvalidator) Lifecycle {
+func NewLifecycle(users authapplication.UserTokenVersionStore, tokenVersions authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, maxActiveSessionsPerUser int, localTokenVersions authvalidators.TokenVersionLocalInvalidator) (Lifecycle, error) {
 	if localTokenVersions == nil {
-		panic("token version local invalidator is required")
+		return nil, errors.New("token version local invalidator is required")
 	}
-	return &lifecycle{users: users, tokenVersions: tokenVersions, sessions: sessions, passwordChangeSessions: passwordChangeSessions, maxActiveSessionsPerUser: maxActiveSessionsPerUser, localTokenVersions: localTokenVersions}
+	return &lifecycle{users: users, tokenVersions: tokenVersions, sessions: sessions, passwordChangeSessions: passwordChangeSessions, maxActiveSessionsPerUser: maxActiveSessionsPerUser, localTokenVersions: localTokenVersions}, nil
 }
 
 // CreateTokenSession 为新签发的 token pair 持久化 refresh 会话元数据。
