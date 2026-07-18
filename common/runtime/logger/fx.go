@@ -5,6 +5,7 @@ import (
 	"syscall"
 
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
@@ -25,6 +26,14 @@ func NewLogger(lc fx.Lifecycle, cfg *config.Config) (*zap.Logger, error) {
 		return err
 	}))
 	return log, nil
+}
+
+// NewFxEventLogger 将 Fx 自身事件接入当前 App 的结构化 zap logger。
+func NewFxEventLogger(log *zap.Logger) fxevent.Logger {
+	fxLog := &fxevent.ZapLogger{Logger: log.Named("fx")}
+	fxLog.UseLogLevel(zap.DebugLevel)
+	fxLog.UseErrorLevel(zap.ErrorLevel)
+	return fxLog
 }
 
 func isIgnorableSyncError(err error) bool {

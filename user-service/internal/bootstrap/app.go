@@ -71,6 +71,8 @@ func AppOptions(cfg *serviceconfig.Config, additional ...fx.Option) []fx.Option 
 			// Fx 分类：基础运行时 - 结构化日志。
 			logger.NewLogger,
 		),
+		// Fx 分类：基础运行时 - 将 Fx 自身事件接入结构化日志。
+		fx.WithLogger(logger.NewFxEventLogger),
 		// 为 App.Run、fxtest 和 timeout 查询提供默认预算；显式 App.Start/Stop 仍以调用方 context 为实际边界。
 		fx.StartTimeout(lifecycleCfg.StartTimeout),
 		fx.StopTimeout(lifecycleCfg.StopTimeout),
