@@ -16,9 +16,13 @@ const (
 	DefaultGRPCHost = "127.0.0.1"
 	// DefaultGRPCPort 是 gRPC server 的默认监听端口。
 	DefaultGRPCPort = 9090
+	// DefaultGinMode 是 Gin 的默认进程运行模式。
+	DefaultGinMode = "release"
 
 	// DefaultMetricsPath 是 Prometheus metrics 的默认暴露路径。
 	DefaultMetricsPath = "/metrics"
+	// DefaultPprofAddr 是 pprof 诊断 listener 的本地安全默认地址。
+	DefaultPprofAddr = "127.0.0.1:6060"
 )
 
 const (
@@ -53,6 +57,9 @@ func DefaultConfig() Config {
 				StartTimeout: defaultLifecycleStartTimeout,
 				StopTimeout:  defaultLifecycleStopTimeout,
 			},
+			Gin: GinConfig{
+				Mode: DefaultGinMode,
+			},
 		},
 		Server: ServerConfig{
 			HTTP: HTTPServerConfig{
@@ -85,6 +92,10 @@ func DefaultConfig() Config {
 				Enabled:     false,
 				SampleRatio: defaultTracingSampleRatio,
 				Insecure:    false,
+			},
+			Pprof: PprofConfig{
+				Enabled: false,
+				Addr:    DefaultPprofAddr,
 			},
 		},
 	}

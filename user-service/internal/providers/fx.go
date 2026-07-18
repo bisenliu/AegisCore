@@ -10,6 +10,8 @@ import (
 // WiringModule 将用户服务级基础设施 provider 接入 Fx，不主动执行运行时注册。
 var WiringModule = fx.Module("user-service-providers-wiring",
 	fx.Provide(
+		// Fx 分类：基础运行时 - 显式设置 Gin 进程运行模式。
+		ConfigureGinMode,
 		// Fx 分类：横切能力 - 服务级可观测性 provider。
 		commonmetrics.NewFxProvider,
 		commontracing.NewFxProvider,

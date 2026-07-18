@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -79,6 +81,9 @@ func (c Config) validateRuntime() []error {
 	var errs []error
 	errs = append(errs, validatePositiveDuration("runtime.lifecycle.start_timeout", c.Runtime.Lifecycle.StartTimeout)...)
 	errs = append(errs, validatePositiveDuration("runtime.lifecycle.stop_timeout", c.Runtime.Lifecycle.StopTimeout)...)
+	if !isValidGinMode(c.Runtime.Gin.Mode) {
+		errs = append(errs, configFieldError("runtime.gin.mode", "must be one of debug, release, test"))
+	}
 	if c.Runtime.Lifecycle.StopTimeout > 0 {
 		// lifecycle stop 是 Fx app 总预算，不能短于任一协议 server 的组件级关闭预算。
 		if c.Server.HTTP.ShutdownTimeout > 0 && c.Runtime.Lifecycle.StopTimeout < c.Server.HTTP.ShutdownTimeout {
@@ -171,6 +176,25 @@ func (c Config) validateObservability() []error {
 			errs = append(errs, configFieldError("observability.tracing.insecure", "must not be true when tracing is enabled in production-like environments"))
 		}
 	}
+	errs = append(errs, c.validatePprof()...)
+	return errs
+}
+
+func (c Config) validatePprof() []error {
+	var errs []error
+	host, portText, err := net.SplitHostPort(c.Observability.Pprof.Addr)
+	if err != nil {
+		return []error{configFieldError("observability.pprof.addr", "must be a host:port address")}
+	}
+	if strings.TrimSpace(host) == "" {
+		errs = append(errs, configFieldError("observability.pprof.addr", "host is required"))
+	}
+	if portErrs := validatePortText("observability.pprof.addr", portText); len(portErrs) > 0 {
+		errs = append(errs, portErrs...)
+	}
+	if c.Observability.Pprof.Enabled && c.isProductionLike() && !isLoopbackHost(host) {
+		errs = append(errs, configFieldError("observability.pprof.addr", "must use a loopback address in production-like environments"))
+	}
 	return errs
 }
 
@@ -201,9 +225,35 @@ func isValidLogFormat(value string) bool {
 	}
 }
 
+func isValidGinMode(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "debug", "release", "test":
+		return true
+	default:
+		return false
+	}
+}
+
+func isLoopbackHost(host string) bool {
+	host = strings.TrimSpace(host)
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func validatePort(path string, value int) []error {
 	if value < minPort || value > maxPort {
 		return []error{configFieldError(path, fmt.Sprintf("must be between %d and %d", minPort, maxPort))}
+	}
+	return nil
+}
+
+func validatePortText(path string, value string) []error {
+	port, err := strconv.Atoi(value)
+	if err != nil || port < minPort || port > maxPort {
+		return []error{configFieldError(path, fmt.Sprintf("port must be between %d and %d", minPort, maxPort))}
 	}
 	return nil
 }

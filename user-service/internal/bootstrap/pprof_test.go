@@ -18,44 +18,11 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 )
 
-func TestLoadPprofSettingsDefaultsToDisabledLoopback(t *testing.T) {
-	settings, err := loadPprofSettings(func(string) (string, bool) { return "", false })
-	require.NoError(t, err)
-	require.False(t, settings.enabled)
-	require.Equal(t, defaultPprofAddr, settings.addr)
-}
-
-func TestLoadPprofSettingsUsesExplicitEnvironment(t *testing.T) {
-	values := map[string]string{
-		pprofEnabledEnv: "true",
-		pprofAddrEnv:    "localhost:16060",
-	}
-	settings, err := loadPprofSettings(func(key string) (string, bool) {
-		value, ok := values[key]
-		return value, ok
-	})
-	require.NoError(t, err)
-	require.True(t, settings.enabled)
-	require.Equal(t, "localhost:16060", settings.addr)
-}
-
-func TestLoadPprofSettingsRejectsInvalidBool(t *testing.T) {
-	_, err := loadPprofSettings(func(key string) (string, bool) {
-		if key == pprofEnabledEnv {
-			return "sometimes", true
-		}
-		return "", false
-	})
-	require.ErrorContains(t, err, pprofEnabledEnv)
-}
-
 func TestPprofServerDisabledDoesNotRegisterLifecycle(t *testing.T) {
-	t.Setenv(pprofEnabledEnv, "false")
-	t.Setenv(pprofAddrEnv, defaultPprofAddr)
 	lifecycle := &lifecycleRecorder{}
 	server, err := NewPprofServer(PprofServerParams{
 		Lifecycle: lifecycle,
-		Config:    &config.Config{App: config.AppConfig{Environment: "production"}},
+		Config:    newPprofRuntimeConfig(false, config.DefaultPprofAddr),
 		Log:       zap.NewNop(),
 	})
 	require.NoError(t, err)
@@ -63,49 +30,25 @@ func TestPprofServerDisabledDoesNotRegisterLifecycle(t *testing.T) {
 	require.Empty(t, lifecycle.hooks)
 }
 
-func TestPprofServerRejectsNonLoopbackProductionAddresses(t *testing.T) {
-	tests := []string{
-		"0.0.0.0:6060",
-		"[::]:6060",
-		"192.0.2.10:6060",
-		"diagnostics.internal:6060",
-	}
-	for _, addr := range tests {
-		t.Run(addr, func(t *testing.T) {
-			t.Setenv(pprofEnabledEnv, "true")
-			t.Setenv(pprofAddrEnv, addr)
-			_, err := NewPprofServer(PprofServerParams{
-				Lifecycle: &lifecycleRecorder{},
-				Config:    &config.Config{App: config.AppConfig{Environment: "staging"}},
-				Log:       zap.NewNop(),
-			})
-			require.ErrorContains(t, err, "loopback")
-		})
-	}
-}
-
-func TestPprofServerAllowsLoopbackProductionAddresses(t *testing.T) {
-	for _, addr := range []string{"127.0.0.1:6060", "[::1]:6060", "localhost:6060"} {
-		t.Run(addr, func(t *testing.T) {
-			t.Setenv(pprofEnabledEnv, "true")
-			t.Setenv(pprofAddrEnv, addr)
-			server, err := NewPprofServer(PprofServerParams{
-				Lifecycle: &lifecycleRecorder{},
-				Config:    &config.Config{App: config.AppConfig{Environment: "production"}},
-				Log:       zap.NewNop(),
-			})
-			require.NoError(t, err)
-			require.True(t, server.Enabled)
-		})
-	}
+func TestPprofServerUsesParsedConfigInsteadOfProcessEnvironment(t *testing.T) {
+	t.Setenv("PPROF_ENABLED", "true")
+	t.Setenv("PPROF_ADDR", "127.0.0.1:16060")
+	lifecycle := &lifecycleRecorder{}
+	server, err := NewPprofServer(PprofServerParams{
+		Lifecycle: lifecycle,
+		Config:    newPprofRuntimeConfig(false, config.DefaultPprofAddr),
+		Log:       zap.NewNop(),
+	})
+	require.NoError(t, err)
+	require.False(t, server.Enabled)
+	require.Equal(t, config.DefaultPprofAddr, server.Server.Addr)
+	require.Empty(t, lifecycle.hooks)
 }
 
 func TestPprofServerUsesIndependentHandler(t *testing.T) {
-	t.Setenv(pprofEnabledEnv, "false")
-	t.Setenv(pprofAddrEnv, defaultPprofAddr)
 	server, err := NewPprofServer(PprofServerParams{
 		Lifecycle: &lifecycleRecorder{},
-		Config:    &config.Config{App: config.AppConfig{Environment: "test"}},
+		Config:    newPprofRuntimeConfig(false, config.DefaultPprofAddr),
 		Log:       zap.NewNop(),
 	})
 	require.NoError(t, err)
@@ -121,14 +64,13 @@ func TestPprofServerUsesIndependentHandler(t *testing.T) {
 
 func TestPprofServerLifecycleStartsAndStopsIndependentListener(t *testing.T) {
 	port := reserveHTTPTestPort(t)
-	t.Setenv(pprofEnabledEnv, "true")
-	t.Setenv(pprofAddrEnv, fmt.Sprintf("127.0.0.1:%d", port))
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	lifecycle := &lifecycleRecorder{}
 	shutdowner := &shutdownRecorder{}
 	server, err := NewPprofServer(PprofServerParams{
 		Lifecycle:  lifecycle,
 		Shutdowner: shutdowner,
-		Config:     &config.Config{App: config.AppConfig{Environment: "test"}},
+		Config:     newPprofRuntimeConfig(true, addr),
 		Log:        zap.NewNop(),
 	})
 	require.NoError(t, err)
@@ -147,14 +89,13 @@ func TestPprofServerLifecycleStartsAndStopsIndependentListener(t *testing.T) {
 
 func TestPprofServerStopClosesServerAfterCanceledShutdown(t *testing.T) {
 	port := reserveHTTPTestPort(t)
-	t.Setenv(pprofEnabledEnv, "true")
-	t.Setenv(pprofAddrEnv, fmt.Sprintf("127.0.0.1:%d", port))
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	lifecycle := &lifecycleRecorder{}
 	shutdowner := &shutdownRecorder{}
 	server, err := NewPprofServer(PprofServerParams{
 		Lifecycle:  lifecycle,
 		Shutdowner: shutdowner,
-		Config:     &config.Config{App: config.AppConfig{Environment: "test"}},
+		Config:     newPprofRuntimeConfig(true, addr),
 		Log:        zap.NewNop(),
 	})
 	require.NoError(t, err)
@@ -185,13 +126,12 @@ func TestPprofServerStopClosesServerAfterCanceledShutdown(t *testing.T) {
 
 func TestPprofServerRepeatedStopAfterForcedCloseDoesNotBlock(t *testing.T) {
 	port := reserveHTTPTestPort(t)
-	t.Setenv(pprofEnabledEnv, "true")
-	t.Setenv(pprofAddrEnv, fmt.Sprintf("127.0.0.1:%d", port))
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	lifecycle := &lifecycleRecorder{}
 	server, err := NewPprofServer(PprofServerParams{
 		Lifecycle:  lifecycle,
 		Shutdowner: &shutdownRecorder{},
-		Config:     &config.Config{App: config.AppConfig{Environment: "test"}},
+		Config:     newPprofRuntimeConfig(true, addr),
 		Log:        zap.NewNop(),
 	})
 	require.NoError(t, err)
@@ -225,6 +165,13 @@ func TestPprofServerRepeatedStopAfterForcedCloseDoesNotBlock(t *testing.T) {
 		require.NoError(t, conn.Close())
 		t.Fatal("pprof server still accepts connections after repeated stop")
 	}
+}
+
+func newPprofRuntimeConfig(enabled bool, addr string) *config.Config {
+	cfg := config.DefaultConfig()
+	cfg.App.Environment = "test"
+	cfg.Observability.Pprof = config.PprofConfig{Enabled: enabled, Addr: addr}
+	return &cfg
 }
 
 func startBlockedPprofRequest(t testing.TB, addr string, entered <-chan struct{}) <-chan error {

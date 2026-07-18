@@ -20,14 +20,27 @@ import (
 
 const httpServerUnmatchedRouteSpanTarget = "route not found"
 
+// GinModeConfigured 表示 Gin 包级进程运行模式已按配置显式设置。
+type GinModeConfigured struct{}
+
+// ConfigureGinMode 根据已解析 runtime config 设置 Gin 包级进程运行模式。
+func ConfigureGinMode(cfg *config.Config) (GinModeConfigured, error) {
+	if cfg == nil {
+		return GinModeConfigured{}, fmt.Errorf("config is required")
+	}
+	gin.SetMode(cfg.Runtime.Gin.Mode)
+	return GinModeConfigured{}, nil
+}
+
 // GinParams 包含创建 Gin engine 所需的 Fx 输入。
 type GinParams struct {
 	fx.In
 
-	Config  *config.Config
-	Log     *zap.Logger
-	Metrics *commonmetrics.Provider
-	Trace   *commontracing.Provider
+	ModeConfigured GinModeConfigured
+	Config         *config.Config
+	Log            *zap.Logger
+	Metrics        *commonmetrics.Provider
+	Trace          *commontracing.Provider
 }
 
 // NewGinEngine 创建 Gin engine，禁用可信代理并安装共享中间件。
@@ -36,7 +49,6 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 	if params.Trace == nil {
 		return nil, fmt.Errorf("tracing provider is required")
 	}
-	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	// 服务没有可信代理配置契约时不信任转发头，避免客户端伪造来源 IP。
 	if err := engine.SetTrustedProxies(nil); err != nil {

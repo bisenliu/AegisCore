@@ -39,6 +39,7 @@ func TestDefaultConfigSupportsLocalHTTPServer(t *testing.T) {
 	require.Equal(t, DefaultAppEnvironment, cfg.App.Environment)
 	require.Positive(t, cfg.Runtime.Lifecycle.StartTimeout)
 	require.Positive(t, cfg.Runtime.Lifecycle.StopTimeout)
+	require.Equal(t, DefaultGinMode, cfg.Runtime.Gin.Mode)
 	require.True(t, cfg.Server.HTTP.Enabled)
 	require.Equal(t, DefaultHTTPHost, cfg.Server.HTTP.Host)
 	require.Equal(t, DefaultHTTPPort, cfg.Server.HTTP.Port)
@@ -54,6 +55,8 @@ func TestDefaultConfigSupportsLocalHTTPServer(t *testing.T) {
 	require.Equal(t, "json", cfg.Log.Format)
 	require.Equal(t, DefaultMetricsPath, cfg.Observability.Metrics.Path)
 	require.False(t, cfg.Observability.Tracing.Enabled)
+	require.False(t, cfg.Observability.Pprof.Enabled)
+	require.Equal(t, DefaultPprofAddr, cfg.Observability.Pprof.Addr)
 }
 
 func TestLoadAppliesCoreDefaults(t *testing.T) {
@@ -69,6 +72,7 @@ func TestLoadExplicitConfig(t *testing.T) {
 	require.Equal(t, "local", cfg.App.Environment)
 	require.Equal(t, 11*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
 	require.Equal(t, 50*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
+	require.Equal(t, "test", cfg.Runtime.Gin.Mode)
 	require.True(t, cfg.Server.HTTP.Enabled)
 	require.Equal(t, "127.0.0.1", cfg.Server.HTTP.Host)
 	require.Equal(t, 18080, cfg.Server.HTTP.Port)
@@ -87,18 +91,102 @@ func TestLoadExplicitConfig(t *testing.T) {
 	require.True(t, cfg.Observability.Tracing.Enabled)
 	require.Equal(t, 0.25, cfg.Observability.Tracing.SampleRatio)
 	require.Equal(t, "collector:4317", cfg.Observability.Tracing.OTLPEndpoint)
+	require.True(t, cfg.Observability.Pprof.Enabled)
+	require.Equal(t, "127.0.0.1:16060", cfg.Observability.Pprof.Addr)
 }
 
 func TestLoadValidatesLifecycle(t *testing.T) {
 	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`runtime:
   lifecycle:
     start_timeout: 0s
-    stop_timeout: 0s`))
+    stop_timeout: 0s
+  gin:
+    mode: sometimes`))
 
 	assertConfigLoadErrorContains(t, err,
 		"runtime.lifecycle.start_timeout must be > 0",
 		"runtime.lifecycle.stop_timeout must be > 0",
+		"runtime.gin.mode must be one of debug, release, test",
 	)
+}
+
+func TestLoadValidatesPprof(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`observability:
+  metrics:
+    enabled: false
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: false
+    sample_ratio: 0.25
+    insecure: false
+  pprof:
+    enabled: false
+    addr: invalid`))
+
+	assertConfigLoadErrorContains(t, err,
+		"observability.pprof.addr must be a host:port address",
+	)
+}
+
+func TestLoadValidatesPprofPort(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`observability:
+  metrics:
+    enabled: false
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: false
+    sample_ratio: 0.25
+    insecure: false
+  pprof:
+    enabled: false
+    addr: 127.0.0.1:70000`))
+
+	assertConfigLoadErrorContains(t, err,
+		"observability.pprof.addr port must be between 1 and 65535",
+	)
+}
+
+func TestLoadRejectsPprofNonLoopbackInProduction(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSections(`app:
+  name: aegiscore-test
+  environment: staging`, `observability:
+  metrics:
+    enabled: false
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: false
+    sample_ratio: 0.25
+    insecure: false
+  pprof:
+    enabled: true
+    addr: 0.0.0.0:6060`))
+
+	assertConfigLoadErrorContains(t, err,
+		"observability.pprof.addr must use a loopback address in production-like environments",
+	)
+}
+
+func TestLoadAllowsPprofLoopbackInProduction(t *testing.T) {
+	cfg := loadConfigFromYAML(t, configYAMLWithSections(`app:
+  name: aegiscore-test
+  environment: production`, `observability:
+  metrics:
+    enabled: false
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: false
+    sample_ratio: 0.25
+    insecure: false
+  pprof:
+    enabled: true
+    addr: localhost:6060`))
+
+	require.True(t, cfg.Observability.Pprof.Enabled)
+	require.Equal(t, "localhost:6060", cfg.Observability.Pprof.Addr)
 }
 
 func TestLoadValidatesLifecycleStopTimeoutCoversServerShutdown(t *testing.T) {
@@ -328,18 +416,24 @@ func TestLoadValidatesTracing(t *testing.T) {
 func TestLoadEnvironmentOverride(t *testing.T) {
 	t.Setenv("AEGISCORE_RUNTIME_LIFECYCLE_START_TIMEOUT", "13s")
 	t.Setenv("AEGISCORE_RUNTIME_LIFECYCLE_STOP_TIMEOUT", "52s")
+	t.Setenv("AEGISCORE_RUNTIME_GIN_MODE", "debug")
 	t.Setenv("AEGISCORE_SERVER_HTTP_PORT", "28080")
 	t.Setenv("AEGISCORE_SERVER_GRPC_SHUTDOWN_TIMEOUT", "12s")
 	t.Setenv("AEGISCORE_OBSERVABILITY_METRICS_ENABLED", "false")
 	t.Setenv("AEGISCORE_OBSERVABILITY_TRACING_SAMPLE_RATIO", "0.5")
+	t.Setenv("AEGISCORE_OBSERVABILITY_PPROF_ENABLED", "false")
+	t.Setenv("AEGISCORE_OBSERVABILITY_PPROF_ADDR", "127.0.0.1:26060")
 
 	cfg := loadConfigFromYAML(t, explicitConfigYAML())
 	require.Equal(t, 13*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
 	require.Equal(t, 52*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
+	require.Equal(t, "debug", cfg.Runtime.Gin.Mode)
 	require.Equal(t, 28080, cfg.Server.HTTP.Port)
 	require.Equal(t, 12*time.Second, cfg.Server.GRPC.ShutdownTimeout)
 	require.False(t, cfg.Observability.Metrics.Enabled)
 	require.Equal(t, 0.5, cfg.Observability.Tracing.SampleRatio)
+	require.False(t, cfg.Observability.Pprof.Enabled)
+	require.Equal(t, "127.0.0.1:26060", cfg.Observability.Pprof.Addr)
 }
 
 func TestLoadRejectsUnknownLegacyKeysWithFullPaths(t *testing.T) {
@@ -504,6 +598,8 @@ runtime:
   lifecycle:
     start_timeout: 11s
     stop_timeout: 50s
+  gin:
+    mode: test
 server:
   http:
     enabled: true
@@ -531,5 +627,8 @@ observability:
     sample_ratio: 0.25
     otlp_endpoint: collector:4317
     insecure: false
+  pprof:
+    enabled: true
+    addr: 127.0.0.1:16060
 `
 }

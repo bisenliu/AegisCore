@@ -21,6 +21,12 @@ type AppConfig struct {
 // 该配置约束 Fx App.Start/App.Stop 生命周期阶段，不覆盖配置加载或 fx.New 同步构造，也不替代 HTTP、gRPC 等组件级关闭超时。
 type RuntimeConfig struct {
 	Lifecycle LifecycleConfig `mapstructure:"lifecycle"`
+	Gin       GinConfig       `mapstructure:"gin"`
+}
+
+// GinConfig 控制 Gin 包级进程运行模式。
+type GinConfig struct {
+	Mode string `mapstructure:"mode"`
 }
 
 // LifecycleConfig 包含 Fx App.Start 和 App.Stop 的总预算。
@@ -65,6 +71,13 @@ type LogConfig struct {
 type ObservabilityConfig struct {
 	Metrics MetricsConfig `mapstructure:"metrics"`
 	Tracing TracingConfig `mapstructure:"tracing"`
+	Pprof   PprofConfig   `mapstructure:"pprof"`
+}
+
+// PprofConfig 控制独立 pprof 诊断监听。
+type PprofConfig struct {
+	Enabled bool   `mapstructure:"enabled"`
+	Addr    string `mapstructure:"addr"`
 }
 
 // MetricsConfig 包含 metrics 采集和暴露的配置契约。

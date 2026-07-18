@@ -77,6 +77,7 @@ func setCoreDefaults(v *viper.Viper, defaults Config) {
 	v.SetDefault("app.environment", defaults.App.Environment)
 	v.SetDefault("runtime.lifecycle.start_timeout", defaults.Runtime.Lifecycle.StartTimeout)
 	v.SetDefault("runtime.lifecycle.stop_timeout", defaults.Runtime.Lifecycle.StopTimeout)
+	v.SetDefault("runtime.gin.mode", defaults.Runtime.Gin.Mode)
 	v.SetDefault("server.http.enabled", defaults.Server.HTTP.Enabled)
 	v.SetDefault("server.http.host", defaults.Server.HTTP.Host)
 	v.SetDefault("server.http.port", defaults.Server.HTTP.Port)
@@ -97,4 +98,6 @@ func setCoreDefaults(v *viper.Viper, defaults Config) {
 	v.SetDefault("observability.tracing.sample_ratio", defaults.Observability.Tracing.SampleRatio)
 	v.SetDefault("observability.tracing.otlp_endpoint", defaults.Observability.Tracing.OTLPEndpoint)
 	v.SetDefault("observability.tracing.insecure", defaults.Observability.Tracing.Insecure)
+	v.SetDefault("observability.pprof.enabled", defaults.Observability.Pprof.Enabled)
+	v.SetDefault("observability.pprof.addr", defaults.Observability.Pprof.Addr)
 }

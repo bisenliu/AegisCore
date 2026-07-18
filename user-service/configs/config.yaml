@@ -10,6 +10,9 @@ runtime:
     # Fx app 关闭总预算，覆盖所有 OnStop hooks；必须大于等于 server.http/grpc.shutdown_timeout。
     # 该值不是数据可靠性保证，关键数据仍应通过持久化队列、WAL 或数据库状态恢复。
     stop_timeout: 120s
+  gin:
+    # Gin mode 是进程级设置；可通过 AEGISCORE_RUNTIME_GIN_MODE 覆盖。
+    mode: release
 
 server:
   http:
@@ -77,6 +80,10 @@ observability:
     sample_ratio: 1.0
     otlp_endpoint: ""
     insecure: false
+  pprof:
+    # pprof 使用独立诊断 listener；生产类环境启用时必须绑定 loopback。
+    enabled: false
+    addr: 127.0.0.1:6060
 
 resources:
   redis:
