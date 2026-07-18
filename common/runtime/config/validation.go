@@ -87,8 +87,25 @@ func (c Config) validateRuntime() []error {
 		if c.Server.GRPC.ShutdownTimeout > 0 && c.Runtime.Lifecycle.StopTimeout < c.Server.GRPC.ShutdownTimeout {
 			errs = append(errs, configFieldError("runtime.lifecycle.stop_timeout", "must be >= server.grpc.shutdown_timeout"))
 		}
+		if minimumStopBudget := c.minimumLifecycleStopBudget(); minimumStopBudget > 0 && c.Runtime.Lifecycle.StopTimeout < minimumStopBudget {
+			errs = append(errs, configFieldError("runtime.lifecycle.stop_timeout", fmt.Sprintf("must be at least %s to cover shutdown budget", minimumStopBudget)))
+		}
 	}
 	return errs
+}
+
+func (c Config) minimumLifecycleStopBudget() time.Duration {
+	protocolShutdown := c.Server.HTTP.ShutdownTimeout
+	if c.Server.GRPC.ShutdownTimeout > protocolShutdown {
+		protocolShutdown = c.Server.GRPC.ShutdownTimeout
+	}
+	if protocolShutdown <= 0 {
+		return 0
+	}
+	return protocolShutdown +
+		DefaultLifecycleWorkerDrainAllowance +
+		DefaultLifecycleTracingFlushAllowance +
+		DefaultLifecycleShutdownSafetyMargin
 }
 
 func (c Config) validateServer() []error {

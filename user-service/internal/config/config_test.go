@@ -41,7 +41,7 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	runtime := cfg.RuntimeConfig()
 	require.Equal(t, "aegiscore-test", runtime.App.Name)
 	require.Equal(t, 21*time.Second, runtime.Runtime.Lifecycle.StartTimeout)
-	require.Equal(t, 22*time.Second, runtime.Runtime.Lifecycle.StopTimeout)
+	require.Equal(t, 50*time.Second, runtime.Runtime.Lifecycle.StopTimeout)
 }
 
 func TestApplyDefaultsSetsFeatureCacheDefaults(t *testing.T) {
@@ -257,7 +257,7 @@ server:
 runtime:
   lifecycle:
     start_timeout: 21s
-    stop_timeout: 22s
+    stop_timeout: 50s
 auth:
   jwt:
     secret: secret-123456789012345678901234567890

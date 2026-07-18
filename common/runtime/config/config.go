@@ -24,7 +24,7 @@ type RuntimeConfig struct {
 }
 
 // LifecycleConfig 包含 Fx App.Start 和 App.Stop 的总预算。
-// StopTimeout 必须覆盖已启用或已配置协议 server 的 shutdown timeout，使组件级优雅关闭有机会完整执行。
+// StopTimeout 必须覆盖已启用或已配置协议 server 的 shutdown timeout 和共享 runtime 已知串行停止预算。
 type LifecycleConfig struct {
 	StartTimeout time.Duration `mapstructure:"start_timeout"`
 	StopTimeout  time.Duration `mapstructure:"stop_timeout"`

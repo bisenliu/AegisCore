@@ -7,6 +7,7 @@ import (
 
 	rediscache "github.com/redis/go-redis/v9"
 
+	runtimeconfig "github.com/aegiscore/common/runtime/config"
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/workerpool"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
@@ -27,8 +28,8 @@ const (
 	deleteAllUserSessionsBatchSize int64 = 500
 	// deleteAllUserSessionsPurgeWorkers 限制退出全部设备后台清理并发。
 	deleteAllUserSessionsPurgeWorkers = 4
-	// deleteAllUserSessionsPurgeStopTimeout 限制服务关闭时等待后台清理的时间。
-	deleteAllUserSessionsPurgeStopTimeout = 30 * time.Second
+	// deleteAllUserSessionsPurgeStopTimeout 限制服务关闭时等待后台清理的时间，必须与 runtime lifecycle worker drain 预算一致。
+	deleteAllUserSessionsPurgeStopTimeout = runtimeconfig.DefaultLifecycleWorkerDrainAllowance
 
 	// expiredSessionMinScore 让 ZRemRangeByScore 清理所有 score 小于等于当前时间的会话。
 	expiredSessionMinScore = "-inf"

@@ -24,7 +24,7 @@ const (
 const (
 	// defaultLifecycleStartTimeout 是配置加载后 Fx App.Start 和 OnStart hook 的启动总预算，不覆盖 fx.New 同步构造。
 	defaultLifecycleStartTimeout = 60 * time.Second
-	// defaultLifecycleStopTimeout 是 Fx app 关闭总预算，必须不小于 HTTP/gRPC 等组件级 shutdown timeout。
+	// defaultLifecycleStopTimeout 是 Fx app 关闭总预算，必须覆盖协议 drain、worker drain、tracing flush 和安全余量。
 	defaultLifecycleStopTimeout = 120 * time.Second
 	defaultHTTPReadTimeout      = 30 * time.Second
 	defaultHTTPWriteTimeout     = 60 * time.Second
@@ -32,6 +32,13 @@ const (
 	defaultHTTPShutdownTimeout  = 10 * time.Second
 	defaultGRPCShutdownTimeout  = 10 * time.Second
 	defaultTracingSampleRatio   = 1.0
+
+	// DefaultLifecycleWorkerDrainAllowance 是服务内 feature worker 在 App.Stop 总预算中的通用 drain 预留。
+	DefaultLifecycleWorkerDrainAllowance = 30 * time.Second
+	// DefaultLifecycleTracingFlushAllowance 是 tracing provider flush/shutdown 的通用预留。
+	DefaultLifecycleTracingFlushAllowance = 5 * time.Second
+	// DefaultLifecycleShutdownSafetyMargin 为 logger sync 和其他轻量 hook 保留余量。
+	DefaultLifecycleShutdownSafetyMargin = 5 * time.Second
 )
 
 // DefaultConfig 返回可直接启动本地 HTTP 服务的核心配置。

@@ -22,12 +22,12 @@ func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testin
 	key := testContextKey("trace-id")
 	parent := context.WithValue(context.Background(), key, "test-trace")
 	ctx, cancel := context.WithCancel(parent)
-	configPath := writeServeTestConfig(t, 2*time.Second, 4*time.Second)
+	configPath := writeServeTestConfig(t, 2*time.Second, 45*time.Second)
 
 	appFactory := func(cfg *serviceconfig.Config) lifecycleApp {
 		require.NotNil(t, cfg)
 		require.Equal(t, 2*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
-		require.Equal(t, 4*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
+		require.Equal(t, 45*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 
 		return testLifecycleApp{
 			start: func(ctx context.Context) error {
@@ -46,7 +46,7 @@ func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testin
 				require.True(t, ok)
 				remaining := time.Until(deadline)
 				require.Positive(t, remaining)
-				require.LessOrEqual(t, remaining, 4*time.Second)
+				require.LessOrEqual(t, remaining, 45*time.Second)
 				return nil
 			},
 		}
@@ -62,7 +62,7 @@ func TestRunServeRejectsInvalidConfigBeforeCreatingApp(t *testing.T) {
 		return testLifecycleApp{}
 	}
 
-	err := runServe(context.Background(), writeServeTestConfig(t, 0, time.Second), appFactory)
+	err := runServe(context.Background(), writeServeTestConfig(t, 0, 45*time.Second), appFactory)
 	require.ErrorContains(t, err, "runtime.lifecycle.start_timeout must be > 0")
 	require.False(t, called)
 }
@@ -98,7 +98,7 @@ func TestRunServeHandlesInternalShutdownSignal(t *testing.T) {
 				}
 			}
 
-			err := runServe(context.Background(), writeServeTestConfig(t, time.Second, time.Second), appFactory)
+			err := runServe(context.Background(), writeServeTestConfig(t, time.Second, 45*time.Second), appFactory)
 			require.Equal(t, 1, stopCalls)
 			if tt.wantExitError {
 				require.ErrorContains(t, err, "exit code "+fmt.Sprint(tt.exitCode))
@@ -125,14 +125,14 @@ func TestRunServeReturnsExternalShutdownStopError(t *testing.T) {
 		}
 	}
 
-	err := runServe(ctx, writeServeTestConfig(t, time.Second, time.Second), appFactory)
+	err := runServe(ctx, writeServeTestConfig(t, time.Second, 45*time.Second), appFactory)
 	require.ErrorIs(t, err, stopErr)
 }
 
 func TestRunServeConcurrentExitSourcesStopOnce(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	shutdownSignals := make(chan fx.ShutdownSignal, 2)
-	configPath := writeServeTestConfig(t, time.Second, time.Second)
+	configPath := writeServeTestConfig(t, time.Second, 45*time.Second)
 	var stopCalls atomic.Int32
 	appFactory := func(*serviceconfig.Config) lifecycleApp {
 		return testLifecycleApp{

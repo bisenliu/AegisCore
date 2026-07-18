@@ -15,6 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	runtimeconfig "github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/workerpool"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
@@ -321,4 +322,8 @@ func TestSessionPurgePoolStopRespectsCallerTimeout(t *testing.T) {
 		return pool.Stats().Closed && pool.Stats().Running == 0
 	}, time.Second, 10*time.Millisecond, "pool did not settle after timeout")
 	require.NoError(t, pool.Stop(context.Background()))
+}
+
+func TestSessionPurgePoolStopTimeoutMatchesRuntimeWorkerDrainAllowance(t *testing.T) {
+	require.Equal(t, runtimeconfig.DefaultLifecycleWorkerDrainAllowance, deleteAllUserSessionsPurgeStopTimeout)
 }
