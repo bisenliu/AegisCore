@@ -81,10 +81,14 @@ func NewPprofServer(params PprofServerParams) (*PprofServer, error) {
 		},
 		OnStop: func(ctx context.Context) error {
 			logger.WithContext(ctx, pprofLog).Info("stopping pprof server")
-			if err := server.Shutdown(ctx); err != nil {
-				return fmt.Errorf("shutdown pprof server: %w", err)
+			shutdownErr := server.Shutdown(ctx)
+			if shutdownErr == nil {
+				return nil
 			}
-			return nil
+			return errors.Join(
+				fmt.Errorf("shutdown pprof server: %w", shutdownErr),
+				server.Close(),
+			)
 		},
 	})
 	return result, nil

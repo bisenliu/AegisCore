@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -141,6 +142,127 @@ func TestPprofServerLifecycleStartsAndStopsIndependentListener(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.StatusCode)
 
 	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
+	require.Equal(t, 0, shutdowner.calls)
+}
+
+func TestPprofServerStopClosesServerAfterCanceledShutdown(t *testing.T) {
+	port := reserveHTTPTestPort(t)
+	t.Setenv(pprofEnabledEnv, "true")
+	t.Setenv(pprofAddrEnv, fmt.Sprintf("127.0.0.1:%d", port))
+	lifecycle := &lifecycleRecorder{}
+	shutdowner := &shutdownRecorder{}
+	server, err := NewPprofServer(PprofServerParams{
+		Lifecycle:  lifecycle,
+		Shutdowner: shutdowner,
+		Config:     &config.Config{App: config.AppConfig{Environment: "test"}},
+		Log:        zap.NewNop(),
+	})
+	require.NoError(t, err)
+	require.Len(t, lifecycle.hooks, 1)
+	entered := make(chan struct{})
+	server.Server.Handler = http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		close(entered)
+		<-r.Context().Done()
+	})
+	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
+	requestDone := startBlockedPprofRequest(t, server.Server.Addr, entered)
+
+	stopCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err = lifecycle.hooks[0].OnStop(stopCtx)
+	require.ErrorIs(t, err, context.Canceled)
+	requireEventuallyReceives(t, requestDone, time.Second)
+	require.Eventually(t, func() bool {
+		conn, dialErr := net.DialTimeout("tcp", server.Server.Addr, 10*time.Millisecond)
+		if dialErr != nil {
+			return true
+		}
+		require.NoError(t, conn.Close())
+		return false
+	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, 0, shutdowner.calls)
+}
+
+func TestPprofServerRepeatedStopAfterForcedCloseDoesNotBlock(t *testing.T) {
+	port := reserveHTTPTestPort(t)
+	t.Setenv(pprofEnabledEnv, "true")
+	t.Setenv(pprofAddrEnv, fmt.Sprintf("127.0.0.1:%d", port))
+	lifecycle := &lifecycleRecorder{}
+	server, err := NewPprofServer(PprofServerParams{
+		Lifecycle:  lifecycle,
+		Shutdowner: &shutdownRecorder{},
+		Config:     &config.Config{App: config.AppConfig{Environment: "test"}},
+		Log:        zap.NewNop(),
+	})
+	require.NoError(t, err)
+	require.Len(t, lifecycle.hooks, 1)
+	entered := make(chan struct{})
+	server.Server.Handler = http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		close(entered)
+		<-r.Context().Done()
+	})
+	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
+	requestDone := startBlockedPprofRequest(t, server.Server.Addr, entered)
+
+	stopCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.ErrorIs(t, lifecycle.hooks[0].OnStop(stopCtx), context.Canceled)
+	requireEventuallyReceives(t, requestDone, time.Second)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- lifecycle.hooks[0].OnStop(context.Background())
+	}()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("repeated pprof stop blocked")
+	}
+
+	conn, err := net.DialTimeout("tcp", server.Server.Addr, 10*time.Millisecond)
+	if err == nil {
+		require.NoError(t, conn.Close())
+		t.Fatal("pprof server still accepts connections after repeated stop")
+	}
+}
+
+func startBlockedPprofRequest(t testing.TB, addr string, entered <-chan struct{}) <-chan error {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() {
+		response, err := http.Get("http://" + addr + "/debug/pprof/")
+		if err != nil {
+			done <- err
+			return
+		}
+		done <- response.Body.Close()
+	}()
+	require.Eventually(t, func() bool {
+		select {
+		case <-entered:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 10*time.Millisecond)
+	return done
+}
+
+func TestPprofServeReturnsAfterServerCloseWithoutShutdownSignal(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	server := &http.Server{Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})}
+	shutdowner := &shutdownRecorder{}
+	done := make(chan struct{})
+
+	go func() {
+		servePprofServer(zap.NewNop(), shutdowner, server, listener)
+		close(done)
+	}()
+
+	require.NoError(t, server.Close())
+	requireEventuallyClosed(t, done, time.Second)
 	require.Equal(t, 0, shutdowner.calls)
 }
 
