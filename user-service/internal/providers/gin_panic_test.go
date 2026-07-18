@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/codes"
+	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/runtime/config"
@@ -61,7 +61,7 @@ func TestNewGinEngineRecordsPanicSpanError(t *testing.T) {
 	require.NoError(t, json.NewDecoder(recorderHTTP.Body).Decode(&body))
 	require.False(t, body.Success)
 	require.Equal(t, contracterrors.CodeInternalError, body.Code)
-	span := endedGinSpan(t, recorder)
-	require.Equal(t, codes.Error, span.Status().Code)
-	require.True(t, spanHasEvent(span, "exception"), "events=%#v", span.Events())
+	span := endedGinSpan(t, provider, recorder)
+	require.Equal(t, tracepb.Status_STATUS_CODE_ERROR, span.GetStatus().GetCode())
+	require.True(t, spanHasEvent(span, "exception"), "events=%#v", span.GetEvents())
 }

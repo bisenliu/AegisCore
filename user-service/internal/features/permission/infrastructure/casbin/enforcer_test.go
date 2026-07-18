@@ -63,7 +63,7 @@ func TestEngineFailClosedWhenInitialLoadFails(t *testing.T) {
 	)
 	roles := NewMockUserRoleResolver(ctrl)
 	engine := NewEngine(loader, metrics, roles)
-	require.NoError(t, engine.Initialize(context.Background()))
+	engine.InitializeFailClosed(context.Background())
 	allowed, err := engine.Enforce(context.Background(), uuid.New(), "/api/v1/users", "GET")
 	require.NoError(t, err)
 	require.False(t, allowed)
@@ -123,7 +123,7 @@ func TestEngineReloadSuccessReplacesPolicyAndClearsError(t *testing.T) {
 		metrics.EXPECT().SetLastStatus(true),
 	)
 	engine := NewEngine(loader, metrics, roles)
-	require.NoError(t, engine.Initialize(context.Background()))
+	engine.InitializeFailClosed(context.Background())
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/users", "GET")
 	require.NoError(t, err)
 	require.False(t, allowed)
@@ -173,7 +173,7 @@ func TestEngineInitialLoadUsesInitializeContext(t *testing.T) {
 	roles := NewMockUserRoleResolver(ctrl)
 	engine := NewEngine(loader, metrics, roles)
 
-	require.NoError(t, engine.Initialize(ctx))
+	engine.InitializeFailClosed(ctx)
 	require.ErrorIs(t, engine.LastError(), context.Canceled)
 	allowed, err := engine.Enforce(context.Background(), uuid.New(), "/api/v1/users", "GET")
 	require.NoError(t, err)

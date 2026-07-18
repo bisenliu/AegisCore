@@ -15,7 +15,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
@@ -183,9 +183,8 @@ func TestProvideEntClientsResolvesWithObservabilityProvidersInGraph(t *testing.T
 
 func TestNewCacheRedisProvidesCacheRedis(t *testing.T) {
 	redisServer := newProviderTestRedisServer(t)
-	traceProvider := newProviderTestTracing(t)
-	spanRecorder := tracetest.NewSpanRecorder()
-	traceProvider.TracerProvider().RegisterSpanProcessor(spanRecorder)
+	traceCfg := &config.Config{App: config.AppConfig{Name: "provider-test", Environment: "test"}, Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1}}}
+	traceProvider, traceCollector := newGinTestTracingProviderWithCollector(t, traceCfg)
 	cfg := providerTestConfig("")
 	cfg.Resources.Redis = commonresources.RedisConfigs{
 		resources.NameCacheRedis: {
@@ -219,7 +218,8 @@ func TestNewCacheRedisProvidesCacheRedis(t *testing.T) {
 	require.NotNil(t, got.CacheRedis)
 	require.Equal(t, redisServer.addr, got.CacheRedis.Options().Addr)
 	require.Equal(t, int64(1), redisServer.pings.Load())
-	require.True(t, providerTestHasRedisSpan(spanRecorder), "spans=%v", providerTestSpanNames(spanRecorder))
+	spans := exportedSpans(t, traceProvider, traceCollector)
+	require.True(t, providerTestHasRedisSpan(spans), "spans=%v", providerTestSpanNames(spans))
 	redisServer.requireClosed(t)
 }
 
@@ -262,14 +262,16 @@ func TestNewCacheRedisRequiresTracingProvider(t *testing.T) {
 	require.ErrorContains(t, err, "redis tracing provider is required")
 }
 
-func TestNewCacheRedisRejectsUnreadyTracingProvider(t *testing.T) {
-	_, err := NewCacheRedis(CacheRedisParams{
+func TestNewCacheRedisAcceptsUnstartedTracingProvider(t *testing.T) {
+	client, err := NewCacheRedis(CacheRedisParams{
 		Lifecycle: fxtest.NewLifecycle(t),
 		Config:    providerTestConfig(""),
 		Log:       zap.NewNop(),
 		Trace:     &commontracing.Provider{},
 	})
-	require.ErrorContains(t, err, "redis tracing provider is not ready")
+	require.NoError(t, err)
+	require.NotNil(t, client)
+	require.NoError(t, client.Close())
 }
 
 func TestNewCacheRedisUsesFxTracingProviderDuringConstruction(t *testing.T) {
@@ -375,20 +377,19 @@ func provideNilPrimaryDBForEntGraphTest() *sql.DB {
 	return nil
 }
 
-func providerTestHasRedisSpan(recorder *tracetest.SpanRecorder) bool {
-	for _, span := range recorder.Ended() {
-		if span.Name() == "ping" || span.Name() == "redis.dial" {
+func providerTestHasRedisSpan(spans []*tracepb.Span) bool {
+	for _, span := range spans {
+		if span.GetName() == "ping" || span.GetName() == "redis.dial" {
 			return true
 		}
 	}
 	return false
 }
 
-func providerTestSpanNames(recorder *tracetest.SpanRecorder) []string {
-	spans := recorder.Ended()
+func providerTestSpanNames(spans []*tracepb.Span) []string {
 	names := make([]string, 0, len(spans))
 	for _, span := range spans {
-		names = append(names, span.Name())
+		names = append(names, span.GetName())
 	}
 	return names
 }

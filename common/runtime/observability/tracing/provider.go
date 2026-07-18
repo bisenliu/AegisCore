@@ -3,6 +3,7 @@ package tracing
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -53,38 +54,41 @@ func NewProvider(ctx context.Context, opts Options) (*Provider, error) {
 type exporterFactory func(context.Context, config.TracingConfig) (sdktrace.SpanExporter, error)
 
 func newProvider(ctx context.Context, opts Options, createExporter exporterFactory) (*Provider, error) {
-	if ctx == nil {
-		return nil, errors.New("tracing provider context is required")
+	provider, sampler, err := newUnstartedProvider(opts)
+	if err != nil {
+		return nil, err
 	}
+	if err := provider.Start(ctx, opts.Config, sampler, createExporter); err != nil {
+		return nil, err
+	}
+	return provider, nil
+}
+
+func newUnstartedProvider(opts Options) (*Provider, sdktrace.Sampler, error) {
 	serviceName := strings.TrimSpace(opts.ServiceName)
 	if serviceName == "" {
-		return nil, errors.New("tracing service name is required")
+		return nil, nil, errors.New("tracing service name is required")
 	}
 	environment := strings.TrimSpace(opts.Environment)
 	if environment == "" {
-		return nil, errors.New("tracing deployment environment is required")
+		return nil, nil, errors.New("tracing deployment environment is required")
 	}
 	sampleRatio := opts.Config.SampleRatio
 	if sampleRatio < 0 || sampleRatio > 1 {
-		return nil, errors.New("tracing sample ratio must be between 0 and 1")
+		return nil, nil, errors.New("tracing sample ratio must be between 0 and 1")
 	}
 	res := newResource(serviceName, environment, strings.TrimSpace(opts.Version), strings.TrimSpace(opts.InstanceID))
 	sampler := sdktrace.ParentBased(sdktrace.TraceIDRatioBased(sampleRatio))
 	if !opts.Config.Enabled {
 		sampler = sdktrace.NeverSample()
 	}
-	tp, err := newTracerProvider(ctx, opts.Config, res, sampler, createExporter)
-	if err != nil {
-		return nil, err
-	}
 	return &Provider{
-		tracerProvider: tp,
-		resource:       res,
+		resource: res,
 		propagator: propagation.NewCompositeTextMapPropagator(
 			propagation.TraceContext{},
 			propagation.Baggage{},
 		),
-	}, nil
+	}, sampler, nil
 }
 
 func newTracerProvider(
@@ -126,29 +130,57 @@ func newOTLPExporter(ctx context.Context, cfg config.TracingConfig) (sdktrace.Sp
 	}
 	traceExporter, err := otlptrace.New(ctx, otlptracegrpc.NewClient(clientOptions...))
 	if err != nil {
-		return nil, errors.New("create otlp tracing exporter")
+		return nil, wrapOTLPExporterError(err)
 	}
 	return traceExporter, nil
 }
 
-// TracerProvider 返回底层 OpenTelemetry SDK provider。
-func (p *Provider) TracerProvider() *sdktrace.TracerProvider {
-	if p == nil {
+func wrapOTLPExporterError(err error) error {
+	if err == nil {
 		return nil
 	}
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.tracerProvider
+	return fmt.Errorf("create OTLP tracing exporter: %w", err)
 }
 
-// Resource 返回构造 provider 时绑定的 OpenTelemetry resource。
-func (p *Provider) Resource() *resource.Resource {
+type dynamicTracerProvider struct {
+	trace.TracerProvider
+	provider *Provider
+}
+
+// OTelTracerProvider 返回可在 constructor 阶段安全注入的 OpenTelemetry provider 视图。
+func (p *Provider) OTelTracerProvider() trace.TracerProvider {
 	if p == nil {
-		return nil
+		return noop.NewTracerProvider()
+	}
+	return dynamicTracerProvider{TracerProvider: noop.NewTracerProvider(), provider: p}
+}
+
+func (p dynamicTracerProvider) Tracer(name string, opts ...trace.TracerOption) trace.Tracer {
+	return p.provider.Tracer(name, opts...)
+}
+
+// Start 使用 lifecycle context 初始化底层 SDK provider。
+func (p *Provider) Start(ctx context.Context, cfg config.TracingConfig, sampler sdktrace.Sampler, createExporter exporterFactory) error {
+	if p == nil {
+		return errors.New("tracing provider is required")
+	}
+	if ctx == nil {
+		return errors.New("tracing provider context is required")
 	}
 	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.resource
+	res := p.resource
+	p.mu.RUnlock()
+	if res == nil {
+		return errors.New("tracing resource is required")
+	}
+	tp, err := newTracerProvider(ctx, cfg, res, sampler, createExporter)
+	if err != nil {
+		return err
+	}
+	p.mu.Lock()
+	p.tracerProvider = tp
+	p.mu.Unlock()
+	return nil
 }
 
 // TextMapPropagator 返回 W3C trace context 与 baggage 组合传播器。

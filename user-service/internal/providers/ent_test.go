@@ -11,8 +11,8 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
@@ -127,7 +127,7 @@ func TestEntQueryObservabilityRecordsSpanAndMetrics(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 	cfg := ginTestConfig()
 	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true}
-	tracingProvider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
+	tracingProvider, collector := newGinTestTracingProviderWithRecorder(t, cfg)
 	metricsProvider := newGinTestMetricsProvider(t, cfg)
 	metrics, err := newEntQueryMetrics(metricsProvider)
 	require.NoError(t, err)
@@ -139,7 +139,8 @@ func TestEntQueryObservabilityRecordsSpanAndMetrics(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Zero(t, count)
-	require.True(t, hasEntQuerySpan(recorder.Ended()), "spans=%v", entSpanNames(recorder.Ended()))
+	spans := exportedSpans(t, tracingProvider, collector)
+	require.True(t, hasEntQuerySpan(spans), "spans=%v", entSpanNames(spans))
 	latency := gatherGinMetricFamily(t, metricsProvider, entQueryLatencyMetricName)
 	latencyMetric := findGinMetricByLabels(t, latency, map[string]string{
 		"entity": "user",
@@ -189,19 +190,19 @@ func TestEntQueryObservabilityNilFallbackKeepsQueryResultForDirectConstruction(t
 	require.Zero(t, count)
 }
 
-func hasEntQuerySpan(spans []sdktrace.ReadOnlySpan) bool {
+func hasEntQuerySpan(spans []*tracepb.Span) bool {
 	for _, span := range spans {
-		if span.Name() == "ent.query" {
+		if span.GetName() == "ent.query" {
 			return true
 		}
 	}
 	return false
 }
 
-func entSpanNames(spans []sdktrace.ReadOnlySpan) []string {
+func entSpanNames(spans []*tracepb.Span) []string {
 	names := make([]string, 0, len(spans))
 	for _, span := range spans {
-		names = append(names, span.Name())
+		names = append(names, span.GetName())
 	}
 	return names
 }

@@ -219,21 +219,21 @@ func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
 			} else if params.Closer == nil {
 				return errors.New("rbac user role cache lifecycle dependency is required")
 			}
-			if err := params.Engine.Initialize(ctx); err != nil {
-				return err
-			}
+			params.Engine.InitializeFailClosed(ctx)
 			params.Watcher.Start()
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			stopErr := params.Watcher.Stop(ctx)
-			closeErr := params.Closer.Close()
-			if stopErr != nil {
-				return stopErr
-			}
-			return closeErr
+			return stopRBACLifecycle(ctx, params.Watcher.Stop, params.Closer)
 		},
 	})
+}
+
+func stopRBACLifecycle(ctx context.Context, stopWatcher func(context.Context) error, closer permissioncasbin.UserRoleCacheCloser) error {
+	return errors.Join(
+		stopWatcher(ctx),
+		closer.Close(),
+	)
 }
 
 func (h *userRoleResolverHolder) Start(context.Context) error {

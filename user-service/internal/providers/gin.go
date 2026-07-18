@@ -33,7 +33,7 @@ type GinParams struct {
 // NewGinEngine 创建 Gin engine，禁用可信代理并安装共享中间件。
 // 中间件顺序保持 tracing -> span rename -> request id -> metrics -> recovery -> request log -> CORS，避免 panic 丢失指标和日志上下文。
 func NewGinEngine(params GinParams) (*gin.Engine, error) {
-	if params.Trace == nil || params.Trace.TracerProvider() == nil {
+	if params.Trace == nil {
 		return nil, fmt.Errorf("tracing provider is required")
 	}
 	gin.SetMode(gin.ReleaseMode)
@@ -44,7 +44,7 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 	}
 	engine.Use(
 		otelgin.Middleware(params.Config.App.Name,
-			otelgin.WithTracerProvider(params.Trace.TracerProvider()),
+			otelgin.WithTracerProvider(params.Trace.OTelTracerProvider()),
 			otelgin.WithPropagators(params.Trace.TextMapPropagator()),
 			otelgin.WithFilter(traceBusinessRequest(params.Config.Observability.Metrics)),
 		),

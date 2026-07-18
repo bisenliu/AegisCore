@@ -69,6 +69,18 @@ func TestCasbinPolicyHealthChecker(t *testing.T) {
 	require.NotEmpty(t, result.Message)
 }
 
+func TestCasbinPolicyHealthCheckerRecoversAfterReloadSuccess(t *testing.T) {
+	engine := &stubLastError{err: errors.New("initial load failed")}
+	checker := casbinPolicyHealthChecker{engine: engine}
+
+	result := checker.Check(context.Background())
+	require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
+
+	engine.err = nil
+	result = checker.Check(context.Background())
+	require.Equal(t, router.HealthCheckStatusOK, result.Status)
+}
+
 func TestWatcherHealthChecker(t *testing.T) {
 	checker := watcherHealthChecker{watcher: stubWatcherStatus{running: true}}
 	require.Equal(t, "rbac.policy_watcher", checker.Name())

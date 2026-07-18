@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -225,12 +226,14 @@ func TestNewFxProviderRegistersShutdown(t *testing.T) {
 	require.Len(t, lifecycle.hooks, 1, "registered hooks")
 	require.NotNil(t, lifecycle.hooks[0].OnStart, "registered OnStart hook")
 	require.NotNil(t, lifecycle.hooks[0].OnStop, "registered OnStop hook")
-	require.NotNil(t, provider.TracerProvider(), "provider should be ready for constructors")
 	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()), "OnStart")
+	_, span := provider.Tracer("test").Start(context.Background(), "operation")
+	span.End()
+	require.False(t, span.SpanContext().IsSampled(), "span is sampled")
 	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()), "OnStop")
 }
 
-func TestNewFxProviderCreatesExporterDuringConstruction(t *testing.T) {
+func TestNewFxProviderCreatesExporterDuringOnStart(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
 	called := false
 	provider, err := newFxProvider(lifecycle, &config.Config{
@@ -242,11 +245,42 @@ func TestNewFxProviderCreatesExporterDuringConstruction(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, provider)
-	require.True(t, called, "exporter should be created before dependent constructors")
-	require.NotNil(t, provider.TracerProvider(), "tracer provider should be available before OnStart")
+	require.False(t, called, "exporter should not be created before OnStart")
 	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
-	require.NotNil(t, provider.TracerProvider())
+	require.True(t, called, "exporter should be created during OnStart")
+	_, span := provider.Tracer("test").Start(context.Background(), "operation")
+	span.End()
+	require.True(t, span.SpanContext().IsValid())
 	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
+}
+
+func TestNewFxProviderExporterCreationUsesStartContext(t *testing.T) {
+	started := make(chan struct{})
+	var provider *Provider
+	app := fxtest.New(t,
+		fx.NopLogger,
+		fx.Supply(&config.Config{
+			App:           config.AppConfig{Name: "aegiscore-test", Environment: "local"},
+			Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1.0, OTLPEndpoint: "collector.internal:4317"}},
+		}),
+		fx.Provide(func(lifecycle fx.Lifecycle, cfg *config.Config) (*Provider, error) {
+			return newFxProvider(lifecycle, cfg, func(ctx context.Context, _ config.TracingConfig) (sdktrace.SpanExporter, error) {
+				close(started)
+				<-ctx.Done()
+				return nil, ctx.Err()
+			})
+		}),
+		fx.Populate(&provider),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	err := app.Start(ctx)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	<-started
+	_, span := provider.Tracer("test").Start(context.Background(), "operation")
+	span.End()
+	require.False(t, span.SpanContext().IsValid())
 }
 
 func TestNewFxProviderShutdownRunsWhenLaterStartHookFails(t *testing.T) {
@@ -273,11 +307,14 @@ func TestNewFxProviderShutdownRunsWhenLaterStartHookFails(t *testing.T) {
 	err := app.Start(context.Background())
 	require.ErrorIs(t, err, startErr)
 	require.Equal(t, 1, shutdowns)
-	require.Nil(t, provider.TracerProvider())
+	_, span := provider.Tracer("test").Start(context.Background(), "operation")
+	span.End()
+	require.False(t, span.SpanContext().IsValid())
 }
 
 func TestNewFxProviderDisabledUsesNeverSample(t *testing.T) {
-	provider, err := NewFxProvider(&lifecycleRecorder{}, &config.Config{
+	lifecycle := &lifecycleRecorder{}
+	provider, err := NewFxProvider(lifecycle, &config.Config{
 		App: config.AppConfig{
 			Name:        "aegiscore-test",
 			Environment: "local",
@@ -288,10 +325,19 @@ func TestNewFxProviderDisabledUsesNeverSample(t *testing.T) {
 	})
 	require.NoError(t, err, "NewFxProvider")
 	defer shutdownProvider(t, provider)
+	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()), "OnStart")
 
 	_, span := provider.Tracer("test").Start(context.Background(), "operation")
 	defer span.End()
 	require.False(t, span.SpanContext().IsSampled(), "span is sampled")
+}
+
+func TestNewOTLPExporterWrapsCause(t *testing.T) {
+	cause := errors.New("dial failed")
+
+	err := wrapOTLPExporterError(cause)
+	require.ErrorContains(t, err, "create OTLP tracing exporter")
+	require.ErrorIs(t, err, cause)
 }
 
 func TestNewFxProviderPropagatesConstructionError(t *testing.T) {
@@ -371,7 +417,10 @@ func sampledRemoteParent(t *testing.T) context.Context {
 
 func resourceAttributes(provider *Provider) map[string]string {
 	attrs := make(map[string]string)
-	for _, attr := range provider.Resource().Attributes() {
+	provider.mu.RLock()
+	res := provider.resource
+	provider.mu.RUnlock()
+	for _, attr := range res.Attributes() {
 		attrs[string(attr.Key)] = attr.Value.AsString()
 	}
 	return attrs

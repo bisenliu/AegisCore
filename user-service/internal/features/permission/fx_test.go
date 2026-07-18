@@ -174,6 +174,59 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 	require.NoError(t, redisClient.Close())
 }
 
+func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	redisClient := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = redisClient.Close() })
+	provider := newPermissionModuleMetricsProvider(t, false)
+	cfg := &config.Config{App: config.AppConfig{Name: "aegiscore-user-service-module-test"}}
+	loadErr := errors.New("initial policy load failed")
+	loader := &permissionModuleFailOncePolicyLoader{err: loadErr}
+	roles := permissionModuleUserRoleResolver{}
+	var engine *permissioncasbin.Engine
+	var watcherStatus permissionredis.WatcherStatus
+	app := fxtest.New(t,
+		fx.NopLogger,
+		fx.Supply(
+			provider,
+			cfg,
+			zap.NewNop(),
+			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
+		),
+		fx.Replace(
+			fx.Annotate(loader, fx.As(new(permissioncasbin.Loader))),
+			fx.Annotate(roles, fx.As(new(permissioncasbin.UserRoleResolver))),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser))),
+			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
+			fx.Annotate(permissionModuleScanner{}, fx.As(new(permissionapplication.RouteCatalogScanner))),
+		),
+		Module,
+		fx.Populate(&engine, &watcherStatus),
+	)
+
+	app.RequireStart()
+	require.True(t, watcherStatus.Running())
+	require.ErrorIs(t, engine.LastError(), loadErr)
+	allowed, err := engine.Enforce(context.Background(), uuid.New(), "/api/v1/users", "GET")
+	require.NoError(t, err)
+	require.False(t, allowed)
+	require.NoError(t, engine.Reload(context.Background()))
+	require.NoError(t, engine.LastError())
+	app.RequireStop()
+	require.False(t, watcherStatus.Running())
+}
+
+func TestStopRBACLifecycleJoinsWatcherAndCloserErrors(t *testing.T) {
+	watcherErr := errors.New("watcher stop failed")
+	closeErr := errors.New("cache close failed")
+	closer := &permissionModuleErrCloser{err: closeErr}
+
+	err := stopRBACLifecycle(context.Background(), func(context.Context) error { return watcherErr }, closer)
+	require.ErrorIs(t, err, watcherErr)
+	require.ErrorIs(t, err, closeErr)
+	require.True(t, closer.closed)
+}
+
 func TestUserRoleResolverHolderFailsClosedAndClosesIdempotently(t *testing.T) {
 	enabled := true
 	size := int64(10)
@@ -294,6 +347,19 @@ func (permissionModulePolicyLoader) LoadPolicies(context.Context) (permissioncas
 	return permissioncasbin.PolicySet{}, nil
 }
 
+type permissionModuleFailOncePolicyLoader struct {
+	err  error
+	done bool
+}
+
+func (l *permissionModuleFailOncePolicyLoader) LoadPolicies(context.Context) (permissioncasbin.PolicySet, error) {
+	if !l.done {
+		l.done = true
+		return permissioncasbin.PolicySet{}, l.err
+	}
+	return permissioncasbin.PolicySet{}, nil
+}
+
 type permissionModuleUserRoleResolver struct{}
 
 func (permissionModuleUserRoleResolver) RolesForUser(context.Context, uuid.UUID) ([]uuid.UUID, error) {
@@ -307,3 +373,13 @@ func (permissionModuleUserRoleResolver) InvalidateAllUserRoles() {}
 type permissionModuleUserRoleCacheCloser struct{}
 
 func (permissionModuleUserRoleCacheCloser) Close() error { return nil }
+
+type permissionModuleErrCloser struct {
+	err    error
+	closed bool
+}
+
+func (c *permissionModuleErrCloser) Close() error {
+	c.closed = true
+	return c.err
+}

@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 
 	commonresponse "github.com/aegiscore/common/http/response"
 	"github.com/aegiscore/common/runtime/config"
@@ -112,8 +112,8 @@ func TestNewGinEngineMarksServerErrorSpanStatus(t *testing.T) {
 	engine.ServeHTTP(recorderHTTP, request)
 
 	require.Equal(t, http.StatusInternalServerError, recorderHTTP.Code)
-	span := endedGinSpan(t, recorder)
-	require.Equal(t, codes.Error, span.Status().Code)
+	span := endedGinSpan(t, provider, recorder)
+	require.Equal(t, tracepb.Status_STATUS_CODE_ERROR, span.GetStatus().GetCode())
 }
 
 func TestNewGinEngineDoesNotMarkClientErrorSpanStatus(t *testing.T) {
@@ -131,8 +131,8 @@ func TestNewGinEngineDoesNotMarkClientErrorSpanStatus(t *testing.T) {
 	engine.ServeHTTP(recorderHTTP, request)
 
 	require.Equal(t, http.StatusBadRequest, recorderHTTP.Code)
-	span := endedGinSpan(t, recorder)
-	require.Equal(t, codes.Unset, span.Status().Code)
+	span := endedGinSpan(t, provider, recorder)
+	require.Equal(t, tracepb.Status_STATUS_CODE_UNSET, span.GetStatus().GetCode())
 }
 
 func TestNewGinEngineSkipsSuccessfulHealthProbeErrorStatus(t *testing.T) {
@@ -147,7 +147,7 @@ func TestNewGinEngineSkipsSuccessfulHealthProbeErrorStatus(t *testing.T) {
 
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/livez", nil))
 
-	require.Empty(t, recorder.Ended())
+	require.Empty(t, exportedSpans(t, provider, recorder))
 }
 
 func TestHTTPServerSpanName(t *testing.T) {

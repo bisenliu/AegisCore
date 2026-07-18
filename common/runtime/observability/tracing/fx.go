@@ -27,12 +27,12 @@ func newFxProvider(lifecycle fx.Lifecycle, cfg *config.Config, createExporter ex
 	if err := validateFxOptions(opts); err != nil {
 		return nil, err
 	}
-	provider, err := newProvider(context.Background(), opts, createExporter)
+	provider, sampler, err := newUnstartedProvider(opts)
 	if err != nil {
 		return nil, err
 	}
 	lifecycle.Append(fx.Hook{
-		OnStart: func(context.Context) error { return nil },
+		OnStart: func(ctx context.Context) error { return provider.Start(ctx, opts.Config, sampler, createExporter) },
 		OnStop:  provider.Shutdown,
 	})
 	return provider, nil
