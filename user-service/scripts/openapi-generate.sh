@@ -4,14 +4,29 @@ set -eu
 # 基于源码注解生成用户服务 OpenAPI 3 文档。
 #
 # 用法：
-#   make openapi-generate
+#   make user-service-openapi-generate
 #   cd user-service && ./scripts/openapi-generate.sh
-#   ./scripts/openapi-generate.sh
 #
 # 生成产物：
 #   user-service/docs/openapi.go
 #   user-service/docs/openapi.json
 #   user-service/docs/openapi.yaml
+#
+# 执行前提：
+#   - 在 Go workspace 可用的仓库中运行，脚本会先切换到 user-service 目录。
+#   - swag 通过 go run 拉取固定版本 github.com/swaggo/swag/cmd/swag@v1.16.6。
+#   - tools/openapi-convert 必须可通过 ../tools/openapi-convert 运行。
+#
+# 行为：
+#   - 只扫描 cmd、internal/router 和各 feature HTTP transport 中的 Swagger 注解。
+#   - 先在临时目录生成 Swagger 2.0 JSON，再调用仓库工具转换为 OpenAPI 3 JSON/YAML/Go embed 文件。
+#   - 为 /api/v1 配置业务 API server，同时保留 /livez、/readyz、/startupz 等根路径健康探针。
+#   - 配置 BearerAuth 认证方案，供 OpenAPI UI 录入 Bearer token。
+#
+# 注意事项：
+#   - 脚本会覆盖 docs/openapi.go、docs/openapi.json 和 docs/openapi.yaml；提交前应检查 diff。
+#   - 修改路由、Swagger 注解、认证方案或健康探针路径后需要重新运行本脚本。
+#   - macOS 下 go run swag 使用 external link mode，以规避本地链接器兼容性问题。
 
 cd "$(dirname "$0")/.."
 
@@ -19,6 +34,7 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 if [ "$(go env GOOS)" = "darwin" ]; then
+  # Darwin 环境下显式使用外部链接，降低 swag 依赖在本地链接阶段失败的概率。
   swag_go_run() {
     go run -ldflags='-linkmode=external' github.com/swaggo/swag/cmd/swag@v1.16.6 "$@"
   }
@@ -28,6 +44,7 @@ else
   }
 fi
 
+# swag 仅负责从源码注解生成 Swagger 2.0 中间文件；最终 OpenAPI 3 由 openapi-convert 统一规范化。
 swag_go_run init \
   -d ./cmd,./internal/router,./internal/features/auth/transport/http,./internal/features/user/transport/http,./internal/features/role/transport/http,./internal/features/permission/transport/http \
   -g main.go \

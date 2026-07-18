@@ -1,10 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 验证 architecture-lint.sh 能发现关键架构违规，并且不会误报允许的测试或生成文件。
+#
+# 用法：
+#   ./user-service/scripts/architecture-lint-test.sh
+#
+# 执行前提：
+#   - 本机需要安装 architecture-lint.sh 依赖的 ripgrep（rg）。
+#   - 脚本会在系统临时目录创建一个最小 Git fixture 仓库，结束时自动删除。
+#
+# 行为：
+#   - 构造 common、user-service、tools/openapi-convert、CI workflow、deployments 和 openspec 的最小目录。
+#   - 写入一组故意违规的 Go 文件和配置，用来覆盖架构分层、mock build tag、测试钩子、默认 logger、Fx/Dig 元数据等检查。
+#   - 通过 ARCHITECTURE_LINT_REPO_ROOT 让 architecture-lint.sh 针对 fixture 运行，而不是扫描真实仓库。
+#   - 断言预期违规都会出现在输出中，并断言测试文件、生成目录、组合入口等白名单不会产生误报。
+#
+# 注意事项：
+#   - 该脚本只验证 lint 规则的代表性路径，不替代真实仓库的 architecture-lint 扫描。
+#   - 更新 architecture-lint.sh 的规则、报错文本或排除列表时，应同步更新这里的 fixture 和断言。
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fixture_root="$(mktemp -d)"
 trap 'rm -rf "${fixture_root}"' EXIT
 
+# 构造最小仓库布局；目录只包含触发或排除规则所需的文件。
 mkdir -p \
   "${fixture_root}/.github/workflows" \
   "${fixture_root}/common" \
@@ -226,6 +245,7 @@ EOF
 
 git -C "${fixture_root}" init -q
 
+# 将 lint 根目录指向 fixture，避免测试依赖真实工作区的当前状态。
 set +e
 output="$(ARCHITECTURE_LINT_REPO_ROOT="${fixture_root}" "${script_dir}/architecture-lint.sh" 2>&1)"
 status=$?
@@ -236,6 +256,7 @@ if [[ "${status}" -eq 0 ]]; then
   exit 1
 fi
 
+# 下列断言确保每类核心规则至少有一个 fixture 能触发对应失败输出。
 if [[ "${output}" != *"application/domain/infrastructure must not import feature HTTP transport DTO/controller packages"* ]]; then
   printf 'architecture-lint-test: expected layering violation report\n%s\n' "${output}" >&2
   exit 1
@@ -271,11 +292,13 @@ if [[ "${output}" != *"role feature production code must not carry Fx/Dig DI met
   exit 1
 fi
 
+# 白名单文件不应进入违规结果；这里覆盖测试文件、测试 helper、Ent/OpenAPI 生成目录和 feature 组合入口。
 if [[ "${output}" == *"allowed_test.go"* || "${output}" == *"common/testing/example/helper.go"* || "${output}" == *"user-service/ent/schema/generated.go"* || "${output}" == *"user-service/docs/openapi.go"* || "${output}" == *"user-service/internal/features/role/fx.go"* || "${output}" == *"user-service/internal/features/user/fx.go"* || "${output}" == *"user-service/internal/features/user/infrastructure/postgres/store_test.go"* || "${output}" == *"user-service/internal/features/user/transport/http/mock_generate.go"* ]]; then
   printf 'architecture-lint-test: excluded test or generated file produced a false positive\n%s\n' "${output}" >&2
   exit 1
 fi
 
+# fixture 内的路径都应存在；如果出现 rg 执行错误，通常意味着规则路径或测试目录布局需要同步调整。
 if [[ "${output}" == *"rg execution failed"* ]]; then
   printf 'architecture-lint-test: unexpected rg execution failure\n%s\n' "${output}" >&2
   exit 1

@@ -1,6 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 校验仓库级架构边界和生成物状态。
+#
+# 用法：
+#   ./user-service/scripts/architecture-lint.sh
+#   make user-service-architecture-lint
+#
+# 可选环境变量：
+#   ARCHITECTURE_LINT_REPO_ROOT  覆盖仓库根目录。默认根据脚本位置向上推导；
+#                                测试脚本会用该变量指向临时 fixture 仓库。
+#
+# 执行前提：
+#   - 在 Git 工作区内运行，且仓库包含 common、user-service、tools/openapi-convert 等模块。
+#   - 本机需要安装 ripgrep（rg）；脚本依赖 rg 执行正则扫描。
+#   - 部分检查会调用 git diff --name-only，用于发现 Ent/OpenAPI 生成物漂移。
+#
+# 行为：
+#   - 检查 Go toolchain 版本在 go.work、go.mod 和 CI workflow 中保持一致。
+#   - 检查 Atlas dev PostgreSQL 镜像配置在 Dockerfile、Compose、atlas.hcl 和迁移脚本中一致。
+#   - 扫描 common 与 user-service 的架构边界，避免共享包、feature 分层和 DI 元数据越界。
+#   - 检查 mock 生成文件 build tag、测试专用符号、OpenSpec 中文模板和生成物未提交漂移。
+#   - 收集所有违规项后统一退出；任一违规会以非 0 状态结束。
+#
+# 注意事项：
+#   - 本脚本只做静态扫描和 Git diff 检查，不会修改源码或生成物。
+#   - 新增目录或架构边界时，应同步扩展本脚本和 architecture-lint-test.sh 的 fixture 覆盖。
 repo_root="${ARCHITECTURE_LINT_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 service_dir="${repo_root}/user-service"
 shopt -s nullglob
@@ -92,6 +117,7 @@ workflow_gotoolchain_version() {
 }
 
 check_go_toolchain_version() {
+  # common/go.mod 是当前仓库 Go 版本的单一参照；go.work、服务模块和 CI 配置必须跟随它。
   local expected
   expected="$(go_mod_version "${repo_root}/common/go.mod")"
   if [[ -z "${expected}" ]]; then
@@ -149,6 +175,7 @@ check_atlas_postgres_version() {
 }
 
 check_mock_generate_build_tags() {
+  # mock_generate.go 只允许在 generate build tag 下参与 mockgen，避免进入常规编译路径。
   local file
   while IFS= read -r file; do
     if [[ "$(head -n 1 "${file}")" != "//go:build generate" ]]; then
@@ -158,6 +185,7 @@ check_mock_generate_build_tags() {
 }
 
 check_test_only_production_symbols() {
+  # ForTest/testHook 命名只允许出现在测试、测试基础设施或生成物中，防止测试钩子进入生产路径。
   local pattern='(^|[^[:alnum:]_])([[:alpha:]_][[:alnum:]_]*ForTest|testHook[[:alnum:]_]*)([^[:alnum:]_]|$)'
   local file output status
   while IFS= read -r file; do
@@ -188,6 +216,7 @@ check_test_only_production_symbols() {
 }
 
 check_feature_default_logger_dependencies() {
+  # feature 主路径应通过依赖注入获得 logger，避免依赖包级默认 logger 或 context.Background()。
   local pattern='logger\.SetDefault\(|logger\.(FromContext|Info|Warn|Error|Debug)\(context\.Background\(\)|logger\.NamedComponent\(nil,'
   local file output status
   while IFS= read -r file; do
@@ -216,6 +245,7 @@ check_feature_default_logger_dependencies() {
 }
 
 check_feature_application_domain_fx_metadata() {
+  # application/domain 层保持框架无关，不携带 Fx import、fx.In 或 name/optional 注入标签。
   local pattern='go\.uber\.org/fx|fx\.In|`[^`]*(name|optional):"'
   local file output status
   while IFS= read -r file; do
@@ -244,6 +274,7 @@ check_feature_application_domain_fx_metadata() {
 }
 
 check_user_feature_framework_metadata() {
+  # user feature 除组合入口 fx.go 外，不在业务分层结构中暴露 Fx/Dig 元数据。
   local pattern='go\.uber\.org/(fx|dig)|(^|[^[:alnum:]_])(fx|dig)\.(In|Out)([^[:alnum:]_]|$)|`[^`]*(name|optional):"'
   local file output status
   while IFS= read -r file; do
@@ -273,6 +304,7 @@ check_user_feature_framework_metadata() {
 }
 
 check_role_feature_framework_metadata() {
+  # role feature 除组合入口 fx.go 外，不在业务分层结构中暴露 Fx/Dig 元数据。
   local pattern='go\.uber\.org/(fx|dig)|(^|[^[:alnum:]_])(fx|dig)\.(In|Out)([^[:alnum:]_]|$)|`[^`]*(name|optional):"'
   local file output status
   while IFS= read -r file; do
