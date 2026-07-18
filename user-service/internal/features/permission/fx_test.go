@@ -92,7 +92,6 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 	var watcherStatus permissionapplication.PolicyWatcherStatus
 	var authorizer permissionauthorization.Authorizer
 	app := fxtest.New(t,
-		fx.NopLogger,
 		fx.Supply(
 			provider,
 			cfg,
@@ -133,7 +132,6 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 	startErr := errors.New("later start failed")
 	var watcherStatus permissionapplication.PolicyWatcherStatus
 	app := fxtest.New(t,
-		fx.NopLogger,
 		fx.Supply(
 			provider,
 			cfg,
@@ -154,7 +152,9 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 			lifecycle.Append(fx.Hook{OnStart: func(context.Context) error { return startErr }})
 		}),
 	)
-	err := app.Start(context.Background())
+	startCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err := app.Start(startCtx)
 	require.ErrorIs(t, err, startErr)
 	require.False(t, watcherStatus.Running())
 	require.NoError(t, redisClient.Ping(context.Background()).Err())
@@ -174,7 +174,6 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 	var policyHealth permissionauthorization.PolicyHealth
 	var watcherStatus permissionapplication.PolicyWatcherStatus
 	app := fxtest.New(t,
-		fx.NopLogger,
 		fx.Supply(
 			provider,
 			cfg,
@@ -208,7 +207,16 @@ func TestStopRBACLifecycleJoinsWatcherAndCloserErrors(t *testing.T) {
 	closeErr := errors.New("cache close failed")
 	closer := &permissionModuleErrCloser{err: closeErr}
 
-	err := stopRBACLifecycle(context.Background(), func(context.Context) error { return watcherErr }, closer)
+	stopDone := make(chan error, 1)
+	go func() {
+		stopDone <- stopRBACLifecycle(context.Background(), func(context.Context) error { return watcherErr }, closer)
+	}()
+	var err error
+	select {
+	case err = <-stopDone:
+	case <-time.After(time.Second):
+		t.Fatal("RBAC lifecycle stop blocked")
+	}
 	require.ErrorIs(t, err, watcherErr)
 	require.ErrorIs(t, err, closeErr)
 	require.True(t, closer.closed)
@@ -238,7 +246,7 @@ func TestPermissionModuleRequiresMetricsProvider(t *testing.T) {
 	redisClient := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = redisClient.Close() })
 	app := fx.New(
-		fx.NopLogger,
+		fxtest.WithTestLogger(t),
 		fx.Supply(
 			&config.Config{App: config.AppConfig{Name: "aegiscore-user-service-module-test"}},
 			zap.NewNop(),
@@ -270,7 +278,6 @@ func newPermissionModuleTestApp(
 	var queries permissionquery.PermissionQueryService
 	var graph fx.DotGraph
 	appOptions := []fx.Option{
-		fx.NopLogger,
 		fx.Supply(provider),
 		Module,
 		fx.Replace(

@@ -285,7 +285,12 @@ func TestSessionPurgePoolStopDrainsAndIsIdempotent(t *testing.T) {
 	}, 50*time.Millisecond, 10*time.Millisecond)
 
 	close(release)
-	require.NoError(t, <-stopDone)
+	select {
+	case err := <-stopDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("session purge pool stop blocked after task release")
+	}
 	require.True(t, completed.Load(),
 		"task was not drained before Stop returned")
 	require.NoError(t, pool.Stop(context.Background()))
@@ -315,7 +320,13 @@ func TestSessionPurgePoolStopRespectsCallerTimeout(t *testing.T) {
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	err = pool.Stop(stopCtx)
+	stopDone := make(chan error, 1)
+	go func() { stopDone <- pool.Stop(stopCtx) }()
+	select {
+	case err = <-stopDone:
+	case <-time.After(time.Second):
+		t.Fatal("session purge pool stop did not honor caller timeout")
+	}
 	require.ErrorIs(t, err, context.DeadlineExceeded,
 		"Stop err = %v, want DeadlineExceeded", err)
 	require.Eventually(t, func() bool {

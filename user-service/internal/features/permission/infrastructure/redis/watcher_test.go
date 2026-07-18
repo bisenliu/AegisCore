@@ -178,7 +178,14 @@ func TestWatcherStopHonorsDeadlineAndCanBeRepeated(t *testing.T) {
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
 	defer cancel()
-	require.ErrorIs(t, watcher.Stop(stopCtx), context.DeadlineExceeded)
+	stopDone := make(chan error, 1)
+	go func() { stopDone <- watcher.Stop(stopCtx) }()
+	select {
+	case err := <-stopDone:
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-time.After(time.Second):
+		t.Fatal("watcher stop did not honor deadline")
+	}
 	require.True(t, watcher.Running())
 	require.Equal(t, int64(0), closed.Load())
 

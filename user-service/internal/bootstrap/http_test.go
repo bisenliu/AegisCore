@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -51,7 +52,7 @@ func (r *shutdownRecorder) Shutdown(options ...fx.ShutdownOption) error {
 func newShutdownSignalRecorder(t testing.TB) (*shutdownRecorder, <-chan fx.ShutdownSignal) {
 	t.Helper()
 	var shutdowner fx.Shutdowner
-	app := fx.New(fx.NopLogger, fx.Populate(&shutdowner))
+	app := fx.New(fxtest.WithTestLogger(t), fx.Populate(&shutdowner))
 	require.NoError(t, app.Start(context.Background()))
 	t.Cleanup(func() {
 		require.NoError(t, app.Stop(context.Background()))
@@ -327,7 +328,12 @@ func TestHTTPServerStopWaitsForActiveRequest(t *testing.T) {
 	}, 100*time.Millisecond, 10*time.Millisecond)
 
 	releaseRequest()
-	require.NoError(t, <-stopDone)
+	select {
+	case err := <-stopDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("HTTP server stop blocked after active request release")
+	}
 	result := <-responseDone
 	require.NoError(t, result.err)
 	require.Equal(t, http.StatusOK, result.status)
@@ -380,7 +386,14 @@ func TestHTTPServerStopClosesAndDrainsActiveRequestAfterShutdownTimeout(t *testi
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	err := lifecycle.hooks[0].OnStop(stopCtx)
+	stopDone := make(chan error, 1)
+	go func() { stopDone <- lifecycle.hooks[0].OnStop(stopCtx) }()
+	var err error
+	select {
+	case err = <-stopDone:
+	case <-time.After(time.Second):
+		t.Fatal("HTTP server stop did not honor shutdown timeout")
+	}
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 
 	requireEventuallyClosed(t, exited, time.Second)

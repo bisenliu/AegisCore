@@ -110,7 +110,13 @@ func TestPprofServerStopClosesServerAfterCanceledShutdown(t *testing.T) {
 
 	stopCtx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err = lifecycle.hooks[0].OnStop(stopCtx)
+	stopDone := make(chan error, 1)
+	go func() { stopDone <- lifecycle.hooks[0].OnStop(stopCtx) }()
+	select {
+	case err = <-stopDone:
+	case <-time.After(time.Second):
+		t.Fatal("pprof stop blocked after canceled shutdown")
+	}
 	require.ErrorIs(t, err, context.Canceled)
 	requireEventuallyReceives(t, requestDone, time.Second)
 	require.Eventually(t, func() bool {
@@ -146,7 +152,14 @@ func TestPprofServerRepeatedStopAfterForcedCloseDoesNotBlock(t *testing.T) {
 
 	stopCtx, cancel := context.WithCancel(context.Background())
 	cancel()
-	require.ErrorIs(t, lifecycle.hooks[0].OnStop(stopCtx), context.Canceled)
+	stopDone := make(chan error, 1)
+	go func() { stopDone <- lifecycle.hooks[0].OnStop(stopCtx) }()
+	select {
+	case err := <-stopDone:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("pprof stop blocked after canceled shutdown")
+	}
 	requireEventuallyReceives(t, requestDone, time.Second)
 
 	done := make(chan error, 1)

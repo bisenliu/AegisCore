@@ -8,12 +8,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 )
 
 func TestFxLifecycleStopsCriticalResourcesInReverseOrder(t *testing.T) {
 	var order []string
 	app := fx.New(
-		fx.NopLogger,
+		fxtest.WithTestLogger(t),
 		testLifecycleHook("logger", &order, nil),
 		testLifecycleHook("tracing", &order, nil),
 		testLifecycleHook("postgres", &order, nil),
@@ -44,7 +45,7 @@ func TestFxLifecycleContinuesStopHooksAfterOrdinaryError(t *testing.T) {
 	stopErr := errors.New("stop failed")
 	var order []string
 	app := fx.New(
-		fx.NopLogger,
+		fxtest.WithTestLogger(t),
 		testLifecycleHook("logger", &order, nil),
 		testLifecycleHook("tracing", &order, nil),
 		testLifecycleHook("http", &order, stopErr),
@@ -59,7 +60,7 @@ func TestFxLifecycleContinuesStopHooksAfterOrdinaryError(t *testing.T) {
 func TestFxLifecycleStopHooksShareDeadline(t *testing.T) {
 	remainingSeen := make(chan time.Duration, 1)
 	app := fx.New(
-		fx.NopLogger,
+		fxtest.WithTestLogger(t),
 		fx.Invoke(func(lifecycle fx.Lifecycle) {
 			lifecycle.Append(fx.Hook{
 				OnStart: func(context.Context) error { return nil },

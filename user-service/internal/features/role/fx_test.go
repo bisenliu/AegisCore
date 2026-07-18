@@ -32,7 +32,6 @@ func TestRoleModuleBuildsWithCompositionAdapters(t *testing.T) {
 	var controller *rolehttp.RoleController
 	var lookup roleapplication.PermissionLookup
 	app := fxtest.New(t,
-		fx.NopLogger,
 		Module,
 		fx.Supply(
 			validator,

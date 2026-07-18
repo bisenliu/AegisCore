@@ -258,7 +258,6 @@ func TestNewFxProviderExporterCreationUsesStartContext(t *testing.T) {
 	started := make(chan struct{})
 	var provider *Provider
 	app := fxtest.New(t,
-		fx.NopLogger,
 		fx.Supply(&config.Config{
 			App:           config.AppConfig{Name: "aegiscore-test", Environment: "local"},
 			Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1.0, OTLPEndpoint: "collector.internal:4317"}},
@@ -277,7 +276,11 @@ func TestNewFxProviderExporterCreationUsesStartContext(t *testing.T) {
 	defer cancel()
 	err := app.Start(ctx)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	<-started
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("tracing exporter factory was not started")
+	}
 	_, span := provider.Tracer("test").Start(context.Background(), "operation")
 	span.End()
 	require.False(t, span.SpanContext().IsValid())
@@ -288,7 +291,6 @@ func TestNewFxProviderShutdownRunsWhenLaterStartHookFails(t *testing.T) {
 	startErr := errors.New("later start failed")
 	var provider *Provider
 	app := fxtest.New(t,
-		fx.NopLogger,
 		fx.Supply(&config.Config{
 			App:           config.AppConfig{Name: "aegiscore-test", Environment: "local"},
 			Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1.0, OTLPEndpoint: "collector.internal:4317"}},
@@ -304,7 +306,9 @@ func TestNewFxProviderShutdownRunsWhenLaterStartHookFails(t *testing.T) {
 		}),
 	)
 
-	err := app.Start(context.Background())
+	startCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err := app.Start(startCtx)
 	require.ErrorIs(t, err, startErr)
 	require.Equal(t, 1, shutdowns)
 	_, span := provider.Tracer("test").Start(context.Background(), "operation")

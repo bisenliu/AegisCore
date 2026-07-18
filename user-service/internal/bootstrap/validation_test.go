@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
@@ -57,7 +58,7 @@ func TestAppOptionsSupplySameConfigurationAndLifecycleTimeouts(t *testing.T) {
 	app := fx.New(AppOptions(
 		serviceCfg,
 		fx.Populate(&resolvedServiceCfg, &resolvedRuntimeCfg),
-		fx.NopLogger,
+		fxtest.WithTestLogger(t),
 	)...)
 
 	require.NoError(t, app.Err())
@@ -102,7 +103,7 @@ func TestAppOptionsRecoverFromFxInitializationPanics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var app *fx.App
 			require.NotPanics(t, func() {
-				app = fx.New(AppOptions(serviceCfg, tt.option, fx.NopLogger)...)
+				app = fx.New(AppOptions(serviceCfg, tt.option, fxtest.WithTestLogger(t))...)
 			})
 			require.ErrorContains(t, app.Err(), tt.message)
 		})

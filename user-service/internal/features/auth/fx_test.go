@@ -239,7 +239,9 @@ func TestAuthModuleStopsAuthResourcesWhenLaterStartHookFails(t *testing.T) {
 		}),
 	)
 	app := fxtest.New(t, options...)
-	err := app.Start(context.Background())
+	startCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err := app.Start(startCtx)
 	require.ErrorIs(t, err, startErr)
 	require.NotNil(t, purgePool)
 	require.True(t, purgePool.Stats().Closed)
@@ -357,7 +359,7 @@ func newAuthModuleBaseOptionsWithoutRedis(t *testing.T, refreshRotation bool, pr
 	credentialStore := authModuleCredentialStore{}
 
 	options := []fx.Option{
-		fx.NopLogger,
+		fxtest.WithTestLogger(t),
 		fx.Supply(
 			cfg,
 			jwtService,
