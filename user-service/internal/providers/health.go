@@ -10,8 +10,8 @@ import (
 
 	commonresources "github.com/aegiscore/common/runtime/resources"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
-	permissioncasbin "github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin"
-	permissionredis "github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis"
+	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
+	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	"github.com/aegiscore/user-service/internal/resources"
 	"github.com/aegiscore/user-service/internal/router"
 )
@@ -23,8 +23,8 @@ type HealthCheckParams struct {
 	Config        *serviceconfig.Config
 	PrimaryDB     *sql.DB       `name:"primary_db"`
 	CacheRedis    *redis.Client `name:"cache_redis"`
-	CasbinPolicy  *permissioncasbin.Engine
-	PolicyWatcher permissionredis.WatcherStatus
+	CasbinPolicy  permissionauthorization.PolicyHealth
+	PolicyWatcher permissionapplication.PolicyWatcherStatus
 }
 
 type postgresHealthChecker struct {
@@ -46,7 +46,7 @@ type casbinPolicyHealthChecker struct {
 }
 
 type watcherHealthChecker struct {
-	watcher permissionredis.WatcherStatus
+	watcher permissionapplication.PolicyWatcherStatus
 }
 
 // ProvideHealthChecks 构造用户服务启动和流量接入探针检查项。

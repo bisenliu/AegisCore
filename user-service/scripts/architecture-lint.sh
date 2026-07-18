@@ -350,6 +350,18 @@ run_rg "shared packages must not import feature packages" \
   'github\.com/aegiscore/user-service/internal/features/' \
   "${service_dir}/internal/shared"
 
+for service_composition_dir in \
+  "${service_dir}/internal/providers" \
+  "${service_dir}/internal/bootstrap" \
+  "${service_dir}/internal/router" \
+  "${service_dir}/cmd"; do
+  if [[ -d "${service_composition_dir}" ]]; then
+    run_rg "service composition must not import permission infrastructure concrete; use permission public contracts" \
+      'github\.com/aegiscore/user-service/internal/features/permission/infrastructure/(casbin|redis)' \
+      "${service_composition_dir}"
+  fi
+done
+
 for forbidden_shared_dir in errors enums types utils helpers; do
   if [[ -d "${service_dir}/internal/shared/${forbidden_shared_dir}" ]]; then
     report "internal/shared/${forbidden_shared_dir} is a forbidden root-level catch-all package; put shared errors/enums/types in the owning shared kernel package"

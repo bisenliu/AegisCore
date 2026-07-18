@@ -16,6 +16,7 @@ import (
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
 	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
+	"github.com/aegiscore/user-service/internal/router"
 )
 
 func TestRegisterRoutesRejectsMetricsPathConflict(t *testing.T) {
@@ -27,25 +28,29 @@ func TestRegisterRoutesRejectsMetricsPathConflict(t *testing.T) {
 		},
 	}
 	validator := mustRouteTestValidator(t)
+	authRoutes := &routeAuthRoutes{controller: authhttp.NewAuthController(authhttp.AuthControllerOptions{
+		Login:          &routeAuthAuthUseCases{},
+		Refresh:        &routeAuthAuthUseCases{},
+		ChangePassword: &routeAuthAuthUseCases{},
+		LogoutCurrent:  &routeAuthAuthUseCases{},
+		LogoutAll:      &routeAuthAuthUseCases{},
+		Validator:      validator,
+	})}
 	err := RegisterRoutes(RegisterRouteParams{
-		Config:        cfg,
-		Log:           zap.NewNop(),
-		Engine:        gin.New(),
-		JWT:           authtokens.NewAccessTokenVerifier(commonauth.NewJWTService(commonauth.JWTConfig{Secret: "secret"}), &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret"}}}),
-		TokenVersions: &routeTokenVersionValidator{version: 1},
-		Authorizer:    &routeAuthorizer{allowed: true},
-		Metrics:       newRouteTestMetricsProvider(t, cfg),
-		AuthController: authhttp.NewAuthController(authhttp.AuthControllerOptions{
-			Login:          &routeAuthAuthUseCases{},
-			Refresh:        &routeAuthAuthUseCases{},
-			ChangePassword: &routeAuthAuthUseCases{},
-			LogoutCurrent:  &routeAuthAuthUseCases{},
-			LogoutAll:      &routeAuthAuthUseCases{},
-			Validator:      validator,
-		}),
-		PermissionController: permissionhttp.NewPermissionController(nil, nil, validator),
-		RoleController:       rolehttp.NewRoleController(nil, nil, validator),
-		UserController:       userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
+		Config:              cfg,
+		Log:                 zap.NewNop(),
+		Engine:              gin.New(),
+		JWT:                 authtokens.NewAccessTokenVerifier(commonauth.NewJWTService(commonauth.JWTConfig{Secret: "secret"}), &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret"}}}),
+		TokenVersions:       &routeTokenVersionValidator{version: 1},
+		Authorizer:          &routeAuthorizer{allowed: true},
+		Metrics:             newRouteTestMetricsProvider(t, cfg),
+		PublicRoutes:        []router.PublicRouteRegistrar{authRoutes},
+		AuthenticatedRoutes: []router.AuthenticatedRouteRegistrar{authRoutes},
+		AuthorizedRoutes: []router.AuthorizedRouteRegistrar{
+			&routePermissionRoutes{controller: permissionhttp.NewPermissionController(nil, nil, validator)},
+			&routeRoleRoutes{controller: rolehttp.NewRoleController(nil, nil, validator)},
+			&routeUserRoutes{controller: userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator)},
+		},
 	})
 	require.ErrorContains(t, err, "invalid metrics path")
 }

@@ -19,6 +19,11 @@ type Authorizer interface {
 	Enforce(ctx context.Context, userID string, pathTemplate string, method string) (bool, error)
 }
 
+// PolicyHealth 暴露 RBAC policy engine 的只读健康状态。
+type PolicyHealth interface {
+	LastError() error
+}
+
 // Engine 定义授权服务依赖的内存策略执行能力。
 type Engine interface {
 	Enforce(ctx context.Context, userID uuid.UUID, pathTemplate string, method string) (bool, error)

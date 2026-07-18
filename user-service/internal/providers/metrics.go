@@ -12,7 +12,7 @@ import (
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
-	permissionredis "github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis"
+	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	"github.com/aegiscore/user-service/internal/resources"
 )
 
@@ -31,7 +31,7 @@ type RuntimeDependencyMetricsParams struct {
 	PrimaryDB        *sql.DB                 `name:"primary_db"`
 	CacheRedis       *redis.Client           `name:"cache_redis"`
 	SessionPurgePool authredis.PurgeTaskPool `name:"auth_session_purge_pool"`
-	PolicyWatcher    permissionredis.WatcherStatus
+	PolicyWatcher    permissionapplication.PolicyWatcherStatus
 	AuthTokenCache   localcache.StatsSource `name:"auth_token_version_cache"`
 	RBACRolesCache   localcache.StatsSource `name:"rbac_user_roles_cache"`
 }

@@ -25,6 +25,7 @@ import (
 	authpostgres "github.com/aegiscore/user-service/internal/features/auth/infrastructure/postgres"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
+	"github.com/aegiscore/user-service/internal/router"
 )
 
 const authTokenVersionCacheName = "auth_token_version" // #nosec G101 -- 本地缓存名称，不包含真实凭据。
@@ -90,6 +91,16 @@ var authApplicationOptions = fx.Options(
 var authTransportOptions = fx.Options(
 	fx.Provide(
 		newAuthController,
+		fx.Annotate(
+			newPublicAuthRouteRegistrar,
+			fx.As(new(router.PublicRouteRegistrar)),
+			fx.ResultTags(`group:"public_routes"`),
+		),
+		fx.Annotate(
+			newAuthenticatedAuthRouteRegistrar,
+			fx.As(new(router.AuthenticatedRouteRegistrar)),
+			fx.ResultTags(`group:"authenticated_routes"`),
+		),
 	),
 )
 

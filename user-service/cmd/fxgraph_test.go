@@ -22,7 +22,7 @@ import (
 	"github.com/aegiscore/user-service/internal/bootstrap"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
-	permissionredis "github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis"
+	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	"github.com/aegiscore/user-service/internal/router"
 )
 
@@ -188,7 +188,7 @@ func fxGraphSideEffectGuards(t *testing.T) []fx.Option {
 			fail("rbac user roles cache")
 			return source
 		}, fx.ParamTags(`name:"rbac_user_roles_cache"`), fx.ResultTags(`name:"rbac_user_roles_cache"`))),
-		fx.Decorate(func(status permissionredis.WatcherStatus) permissionredis.WatcherStatus {
+		fx.Decorate(func(status permissionapplication.PolicyWatcherStatus) permissionapplication.PolicyWatcherStatus {
 			fail("rbac policy watcher")
 			return status
 		}),

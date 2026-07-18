@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/localcache"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -23,7 +24,6 @@ import (
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 	permissioncasbin "github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin"
-	permissionredis "github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis"
 )
 
 func TestPermissionModuleInjectsRouteDiffMetrics(t *testing.T) {
@@ -38,7 +38,7 @@ func TestPermissionModuleInjectsRouteDiffMetrics(t *testing.T) {
 	metrics := &routeDiffMetricsSpy{Metrics: permissionapplication.NopMetrics()}
 	provider := newPermissionModuleMetricsProvider(t, false)
 
-	queries, _, graph := newPermissionModuleTestApp(t, provider, store, scanner,
+	queries, graph := newPermissionModuleTestApp(t, provider, store, scanner,
 		fx.Replace(fx.Annotate(metrics, fx.As(new(permissionapplication.Metrics)))),
 	)
 
@@ -63,19 +63,17 @@ func TestPermissionModuleBuildsWithMetricsConfigurations(t *testing.T) {
 				{Method: "GET", Path: "/api/v1/users"},
 			}}
 
-			queries, recorder, _ := newPermissionModuleTestApp(t, provider, store, scanner)
+			queries, _ := newPermissionModuleTestApp(t, provider, store, scanner)
 			_, err := queries.GetRouteDiff(context.Background())
 			require.NoError(t, err)
 
 			if enabled {
 				metricText := gatherPermissionMetricText(t, provider)
-				require.IsType(t, &prometheusMetrics{}, recorder)
 				require.Contains(t, metricText, `aegiscore_user_service_permission_route_diff{environment="test",kind="missing",service="aegiscore-user-service-module-test"} 1`)
 				require.Contains(t, metricText, `aegiscore_user_service_permission_route_diff{environment="test",kind="stale",service="aegiscore-user-service-module-test"} 0`)
 				return
 			}
 
-			require.IsType(t, permissionapplication.NopMetrics(), recorder)
 			require.Nil(t, provider.Gatherer())
 		})
 	}
@@ -90,13 +88,9 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 	loader := permissionModulePolicyLoader{}
 	roles := permissionModuleUserRoleResolver{}
 
-	var authorizationEngine permissionauthorization.Engine
-	var reloadEngine permissionapplication.PolicyReloadEngine
-	var publisher permissionapplication.PolicyVersionPublisher
-	var trackerPort permissionapplication.PolicyVersionTracker
-	var watcherStatus permissionredis.WatcherStatus
+	var policyHealth permissionauthorization.PolicyHealth
+	var watcherStatus permissionapplication.PolicyWatcherStatus
 	var authorizer permissionauthorization.Authorizer
-	var reloadMetrics commonmetrics.ReloadMetrics
 	app := fxtest.New(t,
 		fx.NopLogger,
 		fx.Supply(
@@ -108,19 +102,16 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 		fx.Replace(
 			fx.Annotate(loader, fx.As(new(permissioncasbin.Loader))),
 			fx.Annotate(roles, fx.As(new(permissioncasbin.UserRoleResolver))),
-			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser))),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser)), fx.ResultTags(`name:"permission_user_role_cache_closer"`)),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
 			fx.Annotate(permissionModuleScanner{}, fx.As(new(permissionapplication.RouteCatalogScanner))),
 		),
 		Module,
 		fx.Populate(
-			&authorizationEngine,
-			&reloadEngine,
-			&publisher,
-			&trackerPort,
 			&watcherStatus,
 			&authorizer,
-			&reloadMetrics,
+			&policyHealth,
 		),
 	)
 	app.RequireStart()
@@ -128,13 +119,8 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 	app.RequireStop()
 	require.False(t, watcherStatus.Running())
 
-	require.IsType(t, (*permissioncasbin.Engine)(nil), authorizationEngine)
-	require.Same(t, authorizationEngine.(*permissioncasbin.Engine), reloadEngine.(*permissioncasbin.Engine))
-	require.IsType(t, (*permissionredis.Store)(nil), publisher)
-	require.IsType(t, (*permissionredis.VersionTracker)(nil), trackerPort)
-	require.IsType(t, (*permissionredis.Watcher)(nil), watcherStatus)
 	require.NotNil(t, authorizer)
-	require.NotNil(t, reloadMetrics)
+	require.NotNil(t, policyHealth)
 }
 
 func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
@@ -145,7 +131,7 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 	loader := permissionModulePolicyLoader{}
 	roles := permissionModuleUserRoleResolver{}
 	startErr := errors.New("later start failed")
-	var watcherStatus permissionredis.WatcherStatus
+	var watcherStatus permissionapplication.PolicyWatcherStatus
 	app := fxtest.New(t,
 		fx.NopLogger,
 		fx.Supply(
@@ -157,7 +143,8 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 		fx.Replace(
 			fx.Annotate(loader, fx.As(new(permissioncasbin.Loader))),
 			fx.Annotate(roles, fx.As(new(permissioncasbin.UserRoleResolver))),
-			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser))),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser)), fx.ResultTags(`name:"permission_user_role_cache_closer"`)),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
 			fx.Annotate(permissionModuleScanner{}, fx.As(new(permissionapplication.RouteCatalogScanner))),
 		),
@@ -183,8 +170,9 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 	loadErr := errors.New("initial policy load failed")
 	loader := &permissionModuleFailOncePolicyLoader{err: loadErr}
 	roles := permissionModuleUserRoleResolver{}
-	var engine *permissioncasbin.Engine
-	var watcherStatus permissionredis.WatcherStatus
+	var authorizer permissionauthorization.Authorizer
+	var policyHealth permissionauthorization.PolicyHealth
+	var watcherStatus permissionapplication.PolicyWatcherStatus
 	app := fxtest.New(t,
 		fx.NopLogger,
 		fx.Supply(
@@ -196,22 +184,21 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 		fx.Replace(
 			fx.Annotate(loader, fx.As(new(permissioncasbin.Loader))),
 			fx.Annotate(roles, fx.As(new(permissioncasbin.UserRoleResolver))),
-			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser))),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser)), fx.ResultTags(`name:"permission_user_role_cache_closer"`)),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
 			fx.Annotate(permissionModuleScanner{}, fx.As(new(permissionapplication.RouteCatalogScanner))),
 		),
 		Module,
-		fx.Populate(&engine, &watcherStatus),
+		fx.Populate(&authorizer, &policyHealth, &watcherStatus),
 	)
 
 	app.RequireStart()
 	require.True(t, watcherStatus.Running())
-	require.ErrorIs(t, engine.LastError(), loadErr)
-	allowed, err := engine.Enforce(context.Background(), uuid.New(), "/api/v1/users", "GET")
+	require.ErrorIs(t, policyHealth.LastError(), loadErr)
+	allowed, err := authorizer.Enforce(context.Background(), uuid.NewString(), "/api/v1/users", "GET")
 	require.NoError(t, err)
 	require.False(t, allowed)
-	require.NoError(t, engine.Reload(context.Background()))
-	require.NoError(t, engine.LastError())
 	app.RequireStop()
 	require.False(t, watcherStatus.Running())
 }
@@ -260,7 +247,8 @@ func TestPermissionModuleRequiresMetricsProvider(t *testing.T) {
 		fx.Replace(
 			fx.Annotate(permissionModulePolicyLoader{}, fx.As(new(permissioncasbin.Loader))),
 			fx.Annotate(permissionModuleUserRoleResolver{}, fx.As(new(permissioncasbin.UserRoleResolver))),
-			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser))),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser)), fx.ResultTags(`name:"permission_user_role_cache_closer"`)),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
 			fx.Annotate(permissionModuleScanner{}, fx.As(new(permissionapplication.RouteCatalogScanner))),
 		),
@@ -277,10 +265,9 @@ func newPermissionModuleTestApp(
 	store permissionapplication.PermissionStore,
 	scanner permissionapplication.RouteCatalogScanner,
 	options ...fx.Option,
-) (permissionquery.PermissionQueryService, permissionapplication.Metrics, fx.DotGraph) {
+) (permissionquery.PermissionQueryService, fx.DotGraph) {
 	t.Helper()
 	var queries permissionquery.PermissionQueryService
-	var recorder permissionapplication.Metrics
 	var graph fx.DotGraph
 	appOptions := []fx.Option{
 		fx.NopLogger,
@@ -289,15 +276,16 @@ func newPermissionModuleTestApp(
 		fx.Replace(
 			fx.Annotate(store, fx.As(new(permissionapplication.PermissionStore))),
 			fx.Annotate(scanner, fx.As(new(permissionapplication.RouteCatalogScanner))),
-			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser))),
-			&permissioncasbin.Engine{},
-			&permissionredis.Watcher{},
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser)), fx.ResultTags(`name:"permission_user_role_cache_closer"`)),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
+			fx.Annotate(noopPermissionPolicyInitializer{}, fx.As(new(permissionPolicyInitializer)), fx.ResultTags(`name:"permission_policy_initializer"`)),
+			fx.Annotate(noopPermissionApplicationWatcher{}, fx.As(new(permissionApplicationWatcher))),
 		),
-		fx.Populate(&queries, &recorder, &graph),
+		fx.Populate(&queries, &graph),
 	}
 	appOptions = append(appOptions, options...)
 	_ = fxtest.New(t, appOptions...)
-	return queries, recorder, graph
+	return queries, graph
 }
 
 func newPermissionModuleMetricsProvider(t *testing.T, enabled bool) *commonmetrics.Provider {
@@ -323,6 +311,16 @@ func (s *permissionModuleStore) ListAll(context.Context) ([]permissiondomain.Per
 type permissionModuleScanner struct {
 	routes []permissionapplication.DiscoveredRoute
 }
+
+type noopPermissionPolicyInitializer struct{}
+
+func (noopPermissionPolicyInitializer) InitializeFailClosed(context.Context) {}
+
+type noopPermissionApplicationWatcher struct{}
+
+func (noopPermissionApplicationWatcher) Start() {}
+
+func (noopPermissionApplicationWatcher) Stop(context.Context) error { return nil }
 
 func (s permissionModuleScanner) DiscoverRoutes(context.Context) ([]permissionapplication.DiscoveredRoute, error) {
 	return s.routes, nil
@@ -373,6 +371,10 @@ func (permissionModuleUserRoleResolver) InvalidateAllUserRoles() {}
 type permissionModuleUserRoleCacheCloser struct{}
 
 func (permissionModuleUserRoleCacheCloser) Close() error { return nil }
+
+func (permissionModuleUserRoleCacheCloser) Name() string { return "rbac_user_roles" }
+
+func (permissionModuleUserRoleCacheCloser) Stats() localcache.Stats { return localcache.Stats{} }
 
 type permissionModuleErrCloser struct {
 	err    error

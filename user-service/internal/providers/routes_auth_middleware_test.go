@@ -25,6 +25,7 @@ import (
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
 	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
+	"github.com/aegiscore/user-service/internal/router"
 )
 
 const routeAuthUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
@@ -55,25 +56,29 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	require.NoError(t, err)
 	validator, err := validation.NewDefault()
 	require.NoError(t, err)
+	authRoutes := &routeAuthRoutes{controller: authhttp.NewAuthController(authhttp.AuthControllerOptions{
+		Login:          &routeAuthAuthUseCases{},
+		Refresh:        &routeAuthAuthUseCases{},
+		ChangePassword: &routeAuthAuthUseCases{},
+		LogoutCurrent:  &routeAuthAuthUseCases{},
+		LogoutAll:      &routeAuthAuthUseCases{},
+		Validator:      validator,
+	})}
 	err = RegisterRoutes(RegisterRouteParams{
-		Config:        cfg,
-		Log:           log,
-		Engine:        engine,
-		JWT:           jwtService,
-		TokenVersions: tokenVersions,
-		Authorizer:    authorizer,
-		Metrics:       metricsProvider,
-		AuthController: authhttp.NewAuthController(authhttp.AuthControllerOptions{
-			Login:          &routeAuthAuthUseCases{},
-			Refresh:        &routeAuthAuthUseCases{},
-			ChangePassword: &routeAuthAuthUseCases{},
-			LogoutCurrent:  &routeAuthAuthUseCases{},
-			LogoutAll:      &routeAuthAuthUseCases{},
-			Validator:      validator,
-		}),
-		PermissionController: permissionhttp.NewPermissionController(nil, nil, validator),
-		RoleController:       rolehttp.NewRoleController(nil, nil, validator),
-		UserController:       userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
+		Config:              cfg,
+		Log:                 log,
+		Engine:              engine,
+		JWT:                 jwtService,
+		TokenVersions:       tokenVersions,
+		Authorizer:          authorizer,
+		Metrics:             metricsProvider,
+		PublicRoutes:        []router.PublicRouteRegistrar{authRoutes},
+		AuthenticatedRoutes: []router.AuthenticatedRouteRegistrar{authRoutes},
+		AuthorizedRoutes: []router.AuthorizedRouteRegistrar{
+			&routePermissionRoutes{controller: permissionhttp.NewPermissionController(nil, nil, validator)},
+			&routeRoleRoutes{controller: rolehttp.NewRoleController(nil, nil, validator)},
+			&routeUserRoutes{controller: userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator)},
+		},
 	})
 	require.NoError(t, err)
 	registerRouteTestRuntimeMetrics(t, cfg, metricsProvider)
@@ -295,4 +300,57 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		engine.ServeHTTP(recorder, request)
 		require.Equal(t, http.StatusBadRequest, recorder.Code)
 	})
+}
+
+type routeAuthRoutes struct {
+	controller *authhttp.AuthController
+}
+
+func (r *routeAuthRoutes) RouteKey() string {
+	return "auth"
+}
+
+func (r *routeAuthRoutes) RegisterPublicRoutes(group *gin.RouterGroup) {
+	authhttp.RegisterPublicRoutes(group.Group("/auth"), r.controller)
+}
+
+func (r *routeAuthRoutes) RegisterAuthenticatedRoutes(group *gin.RouterGroup) {
+	authhttp.RegisterProtectedRoutes(group.Group("/auth"), r.controller)
+}
+
+type routePermissionRoutes struct {
+	controller *permissionhttp.PermissionController
+}
+
+func (r *routePermissionRoutes) RouteKey() string {
+	return "permission"
+}
+
+func (r *routePermissionRoutes) RegisterAuthorizedRoutes(group *gin.RouterGroup) {
+	permissionhttp.RegisterRoutes(group.Group("/permissions"), r.controller)
+}
+
+type routeRoleRoutes struct {
+	controller *rolehttp.RoleController
+}
+
+func (r *routeRoleRoutes) RouteKey() string {
+	return "role"
+}
+
+func (r *routeRoleRoutes) RegisterAuthorizedRoutes(group *gin.RouterGroup) {
+	rolehttp.RegisterRoleRoutes(group.Group("/roles"), r.controller)
+	rolehttp.RegisterUserRoleRoutes(group.Group("/users"), r.controller)
+}
+
+type routeUserRoutes struct {
+	controller *userhttp.UserController
+}
+
+func (r *routeUserRoutes) RouteKey() string {
+	return "user"
+}
+
+func (r *routeUserRoutes) RegisterAuthorizedRoutes(group *gin.RouterGroup) {
+	userhttp.RegisterRoutes(group.Group("/users"), r.controller)
 }
