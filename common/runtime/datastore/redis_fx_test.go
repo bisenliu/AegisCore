@@ -11,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/zap"
 
@@ -42,6 +43,29 @@ func TestNewRedisClientClosesClientWhenStartPingFails(t *testing.T) {
 	defer cancel()
 	err = lc.Start(ctx)
 	require.ErrorContains(t, err, "ping redis cache_redis")
+	require.ErrorIs(t, client.Ping(ctx).Err(), redis.ErrClosed)
+}
+
+func TestNewRedisClientClosesClientWhenLaterStartHookFails(t *testing.T) {
+	server := miniredis.RunT(t)
+	var client *redis.Client
+	startErr := errors.New("later start failed")
+	app := fxtest.New(t,
+		fx.NopLogger,
+		fx.Supply(zap.NewNop()),
+		fx.Provide(func(lifecycle fx.Lifecycle, log *zap.Logger) (*redis.Client, error) {
+			return NewRedisClient(lifecycle, log, testCacheRedis, resources.RedisConfig{Addr: server.Addr()})
+		}),
+		fx.Populate(&client),
+		fx.Invoke(func(lifecycle fx.Lifecycle) {
+			lifecycle.Append(fx.Hook{OnStart: func(context.Context) error { return startErr }})
+		}),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err := app.Start(ctx)
+	require.ErrorIs(t, err, startErr)
 	require.ErrorIs(t, client.Ping(ctx).Err(), redis.ErrClosed)
 }
 

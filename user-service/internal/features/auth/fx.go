@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/localcache"
+	"github.com/aegiscore/common/runtime/workerpool"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
 	commonvalidation "github.com/aegiscore/common/validation"
@@ -101,6 +102,7 @@ type CredentialStoreParams struct {
 type SessionStoreParams struct {
 	fx.In
 
+	Lifecycle fx.Lifecycle
 	Redis     *rediscache.Client `name:"cache_redis"`
 	Config    *serviceconfig.Config
 	PurgePool authredis.PurgeTaskPool `name:"auth_session_purge_pool"`
@@ -110,10 +112,7 @@ type SessionStoreParams struct {
 type SessionPurgePoolParams struct {
 	fx.In
 
-	Lifecycle fx.Lifecycle
-	// Redis 只在 Fx module 边界表达关闭顺序：auth 自有 pool 必须先于共享 Redis client 停止。
-	Redis *rediscache.Client `name:"cache_redis"`
-	Log   *zap.Logger
+	Log *zap.Logger
 }
 
 type SessionPurgePoolResult struct {
@@ -144,6 +143,20 @@ type tokenVersionLocalCacheResource struct {
 
 	closeOnce sync.Once
 	close     func()
+}
+
+type sessionPurgePoolHolder struct {
+	mu   sync.RWMutex
+	log  *zap.Logger
+	pool *workerpool.Pool
+}
+
+type tokenVersionLocalCacheHolder struct {
+	mu       sync.RWMutex
+	cfg      serviceconfig.FeatureCacheConfig
+	users    authapplication.UserTokenVersionStore
+	cache    authapplication.TokenVersionCache
+	resource *tokenVersionLocalCacheResource
 }
 
 type TokenVersionValidatorParams struct {
@@ -180,22 +193,24 @@ func newSessionStore(params SessionStoreParams) (*authredis.SessionStore, error)
 	if err != nil {
 		return nil, fmt.Errorf("new auth redis keys: %w", err)
 	}
-	return authredis.NewSessionStore(authredis.SessionStoreOptions{
+	store := authredis.NewSessionStore(authredis.SessionStoreOptions{
 		Redis:                params.Redis,
 		Keys:                 keys,
 		TokenVersionCacheTTL: params.Config.Auth.TokenVersionCacheTTL,
 		PurgePool:            params.PurgePool,
 		Metrics:              params.Metrics,
-	}), nil
+	})
+	if starter, ok := params.PurgePool.(*sessionPurgePoolHolder); ok && params.Lifecycle != nil {
+		params.Lifecycle.Append(fx.Hook{
+			OnStart: starter.Start,
+			OnStop:  starter.Stop,
+		})
+	}
+	return store, nil
 }
 
 func newSessionPurgePool(params SessionPurgePoolParams) (SessionPurgePoolResult, error) {
-	pool, err := authredis.NewSessionPurgePool(params.Log)
-	if err != nil {
-		return SessionPurgePoolResult{}, err
-	}
-	params.Lifecycle.Append(fx.StopHook(pool.Stop))
-	return SessionPurgePoolResult{Pool: pool}, nil
+	return SessionPurgePoolResult{Pool: &sessionPurgePoolHolder{log: params.Log}}, nil
 }
 
 func newAuthController(params AuthControllerParams) *authhttp.AuthController {
@@ -218,14 +233,13 @@ func newRefreshTokenSettings(cfg *serviceconfig.Config) authcommand.RefreshToken
 }
 
 func newTokenVersionLocalCache(params TokenVersionLocalCacheParams) (TokenVersionLocalCacheResult, error) {
-	resource, err := newTokenVersionLocalCacheResource(params.Config.Auth.TokenVersionCache, params.Users, params.Cache)
-	if err != nil {
+	resource := &tokenVersionLocalCacheHolder{cfg: params.Config.Auth.TokenVersionCache, users: params.Users, cache: params.Cache}
+	if params.Lifecycle != nil {
+		params.Lifecycle.Append(fx.Hook{OnStart: resource.Start, OnStop: resource.Close})
+	} else if err := resource.Start(context.Background()); err != nil {
 		return TokenVersionLocalCacheResult{}, err
 	}
-	if params.Lifecycle != nil {
-		params.Lifecycle.Append(fx.StopHook(resource.Close))
-	}
-	return TokenVersionLocalCacheResult{Cache: resource.cache, Stats: resource.stats}, nil
+	return TokenVersionLocalCacheResult{Cache: resource, Stats: resource}, nil
 }
 
 func newTokenVersionLocalCacheResource(cfg serviceconfig.FeatureCacheConfig, users authapplication.UserTokenVersionStore, cache authapplication.TokenVersionCache) (*tokenVersionLocalCacheResource, error) {
@@ -258,6 +272,114 @@ func (r *tokenVersionLocalCacheResource) Close() error {
 		}
 	})
 	return nil
+}
+
+func (h *sessionPurgePoolHolder) Start(context.Context) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.pool != nil {
+		return nil
+	}
+	pool, err := authredis.NewSessionPurgePool(h.log)
+	if err != nil {
+		return err
+	}
+	h.pool = pool
+	return nil
+}
+
+func (h *sessionPurgePoolHolder) Stop(ctx context.Context) error {
+	h.mu.Lock()
+	pool := h.pool
+	h.pool = nil
+	h.mu.Unlock()
+	if pool == nil {
+		return nil
+	}
+	return pool.Stop(ctx)
+}
+
+func (h *sessionPurgePoolHolder) Submit(ctx context.Context, task workerpool.Task) error {
+	h.mu.RLock()
+	pool := h.pool
+	h.mu.RUnlock()
+	if pool == nil {
+		return workerpool.ErrClosed
+	}
+	return pool.Submit(ctx, task)
+}
+
+func (h *sessionPurgePoolHolder) Stats() workerpool.Stats {
+	h.mu.RLock()
+	pool := h.pool
+	h.mu.RUnlock()
+	if pool == nil {
+		return workerpool.Stats{Name: "auth.redis.session_purge", Closed: true}
+	}
+	return pool.Stats()
+}
+
+func (h *tokenVersionLocalCacheHolder) Start(context.Context) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.resource != nil {
+		return nil
+	}
+	resource, err := newTokenVersionLocalCacheResource(h.cfg, h.users, h.cache)
+	if err != nil {
+		return err
+	}
+	h.resource = resource
+	return nil
+}
+
+func (h *tokenVersionLocalCacheHolder) GetOrLoad(ctx context.Context, userID string) (int64, error) {
+	resource := h.currentResource()
+	if resource == nil || resource.cache == nil {
+		return 0, localcache.ErrClosed
+	}
+	return resource.cache.GetOrLoad(ctx, userID)
+}
+
+func (h *tokenVersionLocalCacheHolder) Delete(userID string) error {
+	resource := h.currentResource()
+	if resource == nil || resource.cache == nil {
+		return localcache.ErrClosed
+	}
+	return resource.cache.Delete(userID)
+}
+
+func (h *tokenVersionLocalCacheHolder) Name() string {
+	resource := h.currentResource()
+	if resource == nil || resource.stats == nil {
+		return authTokenVersionCacheName
+	}
+	return resource.stats.Name()
+}
+
+func (h *tokenVersionLocalCacheHolder) Stats() localcache.Stats {
+	resource := h.currentResource()
+	if resource == nil || resource.stats == nil {
+		return localcache.Stats{}
+	}
+	return resource.stats.Stats()
+}
+
+func (h *tokenVersionLocalCacheHolder) Close(context.Context) error {
+	h.mu.Lock()
+	resource := h.resource
+	h.resource = nil
+	h.mu.Unlock()
+	if resource == nil {
+		return nil
+	}
+	return resource.Close()
+}
+
+func (h *tokenVersionLocalCacheHolder) currentResource() *tokenVersionLocalCacheResource {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.resource
 }
 
 func newTokenVersionValidator(params TokenVersionValidatorParams) TokenVersionValidatorResult {

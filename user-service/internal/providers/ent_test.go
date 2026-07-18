@@ -9,6 +9,7 @@ import (
 
 	"entgo.io/ent/dialect"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -107,6 +108,18 @@ func TestCloseEntClientCallsCloser(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, closed)
+}
+
+func TestNewEntClientReturnsObservabilityInstallError(t *testing.T) {
+	metricsProvider := newProviderTestMetrics(t, true)
+	require.NoError(t, metricsProvider.Register(prometheus.NewCounter(prometheus.CounterOpts{
+		Name: entQueryLatencyMetricName,
+		Help: "conflicting collector for constructor rollback test.",
+	})))
+
+	client, err := newEntClient(nil, &serviceconfig.Config{}, zap.NewNop(), metricsProvider, nil)
+	require.Nil(t, client)
+	require.ErrorContains(t, err, "register ent query latency metrics")
 }
 
 func TestEntQueryObservabilityRecordsSpanAndMetrics(t *testing.T) {

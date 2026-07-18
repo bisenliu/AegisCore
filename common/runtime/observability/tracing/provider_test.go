@@ -2,12 +2,14 @@ package tracing
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 
 	"github.com/aegiscore/common/runtime/config"
 )
@@ -221,8 +223,57 @@ func TestNewFxProviderRegistersShutdown(t *testing.T) {
 	require.NoError(t, err, "NewFxProvider")
 	require.NotNil(t, provider, "provider is nil")
 	require.Len(t, lifecycle.hooks, 1, "registered hooks")
+	require.NotNil(t, lifecycle.hooks[0].OnStart, "registered OnStart hook")
 	require.NotNil(t, lifecycle.hooks[0].OnStop, "registered OnStop hook")
+	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()), "OnStart")
 	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()), "OnStop")
+}
+
+func TestNewFxProviderDefersExporterUntilStart(t *testing.T) {
+	lifecycle := &lifecycleRecorder{}
+	called := false
+	provider, err := newFxProvider(lifecycle, &config.Config{
+		App:           config.AppConfig{Name: "aegiscore-test", Environment: "local"},
+		Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1.0, OTLPEndpoint: "collector.internal:4317"}},
+	}, func(context.Context, config.TracingConfig) (sdktrace.SpanExporter, error) {
+		called = true
+		return &testSpanExporter{}, nil
+	})
+	require.NoError(t, err)
+	require.NotNil(t, provider)
+	require.False(t, called, "exporter should not be created before OnStart")
+	require.Nil(t, provider.TracerProvider(), "tracer provider should not be created before OnStart")
+	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
+	require.True(t, called, "exporter should be created during OnStart")
+	require.NotNil(t, provider.TracerProvider())
+	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
+}
+
+func TestNewFxProviderShutdownRunsWhenLaterStartHookFails(t *testing.T) {
+	shutdowns := 0
+	startErr := errors.New("later start failed")
+	var provider *Provider
+	app := fxtest.New(t,
+		fx.NopLogger,
+		fx.Supply(&config.Config{
+			App:           config.AppConfig{Name: "aegiscore-test", Environment: "local"},
+			Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1.0, OTLPEndpoint: "collector.internal:4317"}},
+		}),
+		fx.Provide(func(lifecycle fx.Lifecycle, cfg *config.Config) (*Provider, error) {
+			return newFxProvider(lifecycle, cfg, func(context.Context, config.TracingConfig) (sdktrace.SpanExporter, error) {
+				return &testSpanExporter{shutdown: func() { shutdowns++ }}, nil
+			})
+		}),
+		fx.Populate(&provider),
+		fx.Invoke(func(lifecycle fx.Lifecycle) {
+			lifecycle.Append(fx.Hook{OnStart: func(context.Context) error { return startErr }})
+		}),
+	)
+
+	err := app.Start(context.Background())
+	require.ErrorIs(t, err, startErr)
+	require.Equal(t, 1, shutdowns)
+	require.Nil(t, provider.TracerProvider())
 }
 
 func TestNewFxProviderDisabledUsesNeverSample(t *testing.T) {
@@ -277,15 +328,22 @@ func testTracingConfig(sampleRatio float64) config.TracingConfig {
 	}
 }
 
-type testSpanExporter struct{}
+type testSpanExporter struct {
+	shutdown func()
+}
 
 func (*testSpanExporter) ExportSpans(context.Context, []sdktrace.ReadOnlySpan) error {
 	return nil
 }
 
-func (*testSpanExporter) Shutdown(context.Context) error {
+func (e *testSpanExporter) Shutdown(context.Context) error {
+	if e.shutdown != nil {
+		e.shutdown()
+	}
 	return nil
 }
+
+func (*testSpanExporter) ForceFlush(context.Context) error { return nil }
 
 func testExporterFactory(context.Context, config.TracingConfig) (sdktrace.SpanExporter, error) {
 	return &testSpanExporter{}, nil

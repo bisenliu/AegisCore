@@ -2,8 +2,11 @@ package permission
 
 import (
 	"context"
+	"errors"
+	"sync"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	rediscmd "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -140,6 +143,17 @@ type UserRoleResolverResult struct {
 	Resolver permissioncasbin.UserRoleResolver
 	Stats    localcache.StatsSource `name:"rbac_user_roles_cache"`
 	Closer   permissioncasbin.UserRoleCacheCloser
+	Starter  userRoleResolverStarter
+}
+
+type userRoleResolverStarter interface {
+	Start(context.Context) error
+}
+
+type userRoleResolverHolder struct {
+	mu     sync.RWMutex
+	params permissioncasbin.UserRoleResolverParams
+	result permissioncasbin.UserRoleResolverResult
 }
 
 type WatcherParams struct {
@@ -159,6 +173,7 @@ type RegisterRBACLifecycleParams struct {
 	Engine    *permissioncasbin.Engine
 	Watcher   *permissionredis.Watcher
 	Closer    permissioncasbin.UserRoleCacheCloser
+	Starter   userRoleResolverStarter `optional:"true"`
 }
 
 func providePermissionStore(params PrimaryDBParams) permissionapplication.PermissionStore {
@@ -170,11 +185,8 @@ func providePolicyLoader(params PrimaryDBParams) permissioncasbin.Loader {
 }
 
 func provideUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult, error) {
-	result, err := permissioncasbin.NewUserRoleResolver(permissioncasbin.UserRoleResolverParams{Config: params.Config, Client: params.Client})
-	if err != nil {
-		return UserRoleResolverResult{}, err
-	}
-	return UserRoleResolverResult{Resolver: result.Resolver, Stats: result.Stats, Closer: result.Closer}, nil
+	holder := &userRoleResolverHolder{params: permissioncasbin.UserRoleResolverParams{Config: params.Config, Client: params.Client}}
+	return UserRoleResolverResult{Resolver: holder, Stats: holder, Closer: holder, Starter: holder}, nil
 }
 
 func provideEngine(loader permissioncasbin.Loader, metrics commonmetrics.ReloadMetrics, userRoles permissioncasbin.UserRoleResolver) *permissioncasbin.Engine {
@@ -200,6 +212,13 @@ func provideWatcher(params WatcherParams) *permissionredis.Watcher {
 func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
+			if params.Starter != nil {
+				if err := params.Starter.Start(ctx); err != nil {
+					return err
+				}
+			} else if params.Closer == nil {
+				return errors.New("rbac user role cache lifecycle dependency is required")
+			}
 			if err := params.Engine.Initialize(ctx); err != nil {
 				return err
 			}
@@ -215,4 +234,77 @@ func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
 			return closeErr
 		},
 	})
+}
+
+func (h *userRoleResolverHolder) Start(context.Context) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.result.Resolver != nil {
+		return nil
+	}
+	result, err := permissioncasbin.NewUserRoleResolver(h.params)
+	if err != nil {
+		return err
+	}
+	h.result = result
+	return nil
+}
+
+func (h *userRoleResolverHolder) RolesForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	resolver := h.currentResolver()
+	if resolver == nil {
+		return nil, errors.New("rbac user role resolver is not started")
+	}
+	return resolver.RolesForUser(ctx, userID)
+}
+
+func (h *userRoleResolverHolder) InvalidateUserRole(userID uuid.UUID) {
+	resolver := h.currentResolver()
+	if resolver != nil {
+		resolver.InvalidateUserRole(userID)
+	}
+}
+
+func (h *userRoleResolverHolder) InvalidateAllUserRoles() {
+	resolver := h.currentResolver()
+	if resolver != nil {
+		resolver.InvalidateAllUserRoles()
+	}
+}
+
+func (h *userRoleResolverHolder) Close() error {
+	h.mu.Lock()
+	closer := h.result.Closer
+	h.result = permissioncasbin.UserRoleResolverResult{}
+	h.mu.Unlock()
+	if closer == nil {
+		return nil
+	}
+	return closer.Close()
+}
+
+func (h *userRoleResolverHolder) Name() string {
+	h.mu.RLock()
+	stats := h.result.Stats
+	h.mu.RUnlock()
+	if stats == nil {
+		return "rbac_user_roles"
+	}
+	return stats.Name()
+}
+
+func (h *userRoleResolverHolder) Stats() localcache.Stats {
+	h.mu.RLock()
+	stats := h.result.Stats
+	h.mu.RUnlock()
+	if stats == nil {
+		return localcache.Stats{}
+	}
+	return stats.Stats()
+}
+
+func (h *userRoleResolverHolder) currentResolver() permissioncasbin.UserRoleResolver {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.result.Resolver
 }

@@ -2,8 +2,10 @@ package permission
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/aegiscore/common/runtime/config"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
@@ -132,6 +135,62 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 	require.IsType(t, (*permissionredis.Watcher)(nil), watcherStatus)
 	require.NotNil(t, authorizer)
 	require.NotNil(t, reloadMetrics)
+}
+
+func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	redisClient := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	provider := newPermissionModuleMetricsProvider(t, false)
+	cfg := &config.Config{App: config.AppConfig{Name: "aegiscore-user-service-module-test"}}
+	loader := permissionModulePolicyLoader{}
+	roles := permissionModuleUserRoleResolver{}
+	startErr := errors.New("later start failed")
+	var watcherStatus permissionredis.WatcherStatus
+	app := fxtest.New(t,
+		fx.NopLogger,
+		fx.Supply(
+			provider,
+			cfg,
+			zap.NewNop(),
+			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
+		),
+		fx.Replace(
+			fx.Annotate(loader, fx.As(new(permissioncasbin.Loader))),
+			fx.Annotate(roles, fx.As(new(permissioncasbin.UserRoleResolver))),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser))),
+			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
+			fx.Annotate(permissionModuleScanner{}, fx.As(new(permissionapplication.RouteCatalogScanner))),
+		),
+		Module,
+		fx.Populate(&watcherStatus),
+		fx.Invoke(func(lifecycle fx.Lifecycle) {
+			lifecycle.Append(fx.Hook{OnStart: func(context.Context) error { return startErr }})
+		}),
+	)
+	err := app.Start(context.Background())
+	require.ErrorIs(t, err, startErr)
+	require.False(t, watcherStatus.Running())
+	require.NoError(t, redisClient.Ping(context.Background()).Err())
+	require.NoError(t, redisClient.Close())
+}
+
+func TestUserRoleResolverHolderFailsClosedAndClosesIdempotently(t *testing.T) {
+	enabled := true
+	size := int64(10)
+	ttl := time.Minute
+	loadTimeout := time.Second
+	holder := &userRoleResolverHolder{params: permissioncasbin.UserRoleResolverParams{Config: &serviceconfig.Config{RBAC: serviceconfig.RBACConfig{UserRoleCache: serviceconfig.FeatureCacheConfig{Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout}}}}}
+	_, err := holder.RolesForUser(context.Background(), uuid.MustParse("018f0000-0000-7000-8000-000000000701"))
+	require.ErrorContains(t, err, "not started")
+	require.Equal(t, "rbac_user_roles", holder.Name())
+	require.Zero(t, holder.Stats().Capacity)
+	require.NoError(t, holder.Start(context.Background()))
+	require.EqualValues(t, 10, holder.Stats().Capacity)
+	require.NoError(t, holder.Close())
+	require.NoError(t, holder.Close())
+	_, err = holder.RolesForUser(context.Background(), uuid.MustParse("018f0000-0000-7000-8000-000000000701"))
+	require.ErrorContains(t, err, "not started")
+	require.Zero(t, holder.Stats().Capacity)
 }
 
 func TestPermissionModuleRequiresMetricsProvider(t *testing.T) {

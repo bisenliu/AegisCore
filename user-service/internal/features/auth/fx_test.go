@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	commonconfig "github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
+	"github.com/aegiscore/common/runtime/workerpool"
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
 	commonvalidation "github.com/aegiscore/common/validation"
@@ -49,6 +51,7 @@ func TestNewTokenVersionLocalCacheUsesFeatureConfig(t *testing.T) {
 		Cache: NewMockTokenVersionCache(ctrl),
 	})
 	require.NoError(t, err)
+	lifecycle.RequireStart()
 	require.EqualValues(t, 123, result.Stats.Stats().Capacity)
 	lifecycle.RequireStop()
 }
@@ -212,6 +215,63 @@ func TestAuthModuleStopsAuthResourcesBeforeRedis(t *testing.T) {
 		"redis close hook did not run")
 	require.Error(t, redisClient.Ping(context.Background()).Err(),
 		"redis client should be closed by provider hook")
+}
+
+func TestAuthModuleStopsAuthResourcesWhenLaterStartHookFails(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	redisClient := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
+	startErr := errors.New("later start failed")
+	var purgePool authredis.PurgeTaskPool
+	options := append(newAuthModuleBaseOptionsWithoutRedis(t, true, newAuthModuleMetricsProvider(t, false)),
+		fx.Supply(fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`))),
+		fx.Invoke(func(params struct {
+			fx.In
+
+			Pool  authredis.PurgeTaskPool               `name:"auth_session_purge_pool"`
+			Cache authvalidators.LocalTokenVersionCache `name:"auth_token_version_cache"`
+		}) {
+			require.NotNil(t, params.Pool)
+			require.NotNil(t, params.Cache)
+			purgePool = params.Pool
+		}),
+		fx.Invoke(func(lifecycle fx.Lifecycle) {
+			lifecycle.Append(fx.Hook{OnStart: func(context.Context) error { return startErr }})
+		}),
+	)
+	app := fxtest.New(t, options...)
+	err := app.Start(context.Background())
+	require.ErrorIs(t, err, startErr)
+	require.NotNil(t, purgePool)
+	require.True(t, purgePool.Stats().Closed)
+	require.NoError(t, redisClient.Ping(context.Background()).Err())
+	require.NoError(t, redisClient.Close())
+}
+
+func TestSessionPurgePoolHolderRejectsBeforeStartAndStopsIdempotently(t *testing.T) {
+	holder := &sessionPurgePoolHolder{log: zap.NewNop()}
+	require.ErrorIs(t, holder.Submit(context.Background(), workerpool.Task{Name: "test", Run: func(context.Context) error { return nil }}), workerpool.ErrClosed)
+	require.True(t, holder.Stats().Closed)
+	require.NoError(t, holder.Start(context.Background()))
+	require.False(t, holder.Stats().Closed)
+	require.NoError(t, holder.Stop(context.Background()))
+	require.NoError(t, holder.Stop(context.Background()))
+	require.True(t, holder.Stats().Closed)
+}
+
+func TestTokenVersionLocalCacheHolderFailsClosedBeforeStartAndClosesIdempotently(t *testing.T) {
+	enabled := true
+	size := int64(10)
+	ttl := time.Minute
+	loadTimeout := time.Second
+	holder := &tokenVersionLocalCacheHolder{cfg: serviceconfig.FeatureCacheConfig{Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout}, users: NewMockUserTokenVersionStore(gomock.NewController(t)), cache: NewMockTokenVersionCache(gomock.NewController(t))}
+	require.ErrorIs(t, holder.Delete("018f0000-0000-7000-8000-000000000504"), localcache.ErrClosed)
+	_, err := holder.GetOrLoad(context.Background(), "018f0000-0000-7000-8000-000000000504")
+	require.ErrorIs(t, err, localcache.ErrClosed)
+	require.NoError(t, holder.Start(context.Background()))
+	require.EqualValues(t, 10, holder.Stats().Capacity)
+	require.NoError(t, holder.Close(context.Background()))
+	require.NoError(t, holder.Close(context.Background()))
+	require.ErrorIs(t, holder.Delete("018f0000-0000-7000-8000-000000000504"), localcache.ErrClosed)
 }
 
 type authModuleOutputs struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -38,6 +39,7 @@ type Options struct {
 
 // Provider 持有 tracing runtime 的 SDK provider、resource 和传播器。
 type Provider struct {
+	mu             sync.RWMutex
 	tracerProvider *sdktrace.TracerProvider
 	resource       *resource.Resource
 	propagator     propagation.TextMapPropagator
@@ -134,6 +136,8 @@ func (p *Provider) TracerProvider() *sdktrace.TracerProvider {
 	if p == nil {
 		return nil
 	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.tracerProvider
 }
 
@@ -142,6 +146,8 @@ func (p *Provider) Resource() *resource.Resource {
 	if p == nil {
 		return nil
 	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.resource
 }
 
@@ -150,23 +156,61 @@ func (p *Provider) TextMapPropagator() propagation.TextMapPropagator {
 	if p == nil {
 		return propagation.NewCompositeTextMapPropagator()
 	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.propagator == nil {
+		return propagation.NewCompositeTextMapPropagator()
+	}
 	return p.propagator
 }
 
 // Tracer 返回底层 provider 创建的 tracer。
 func (p *Provider) Tracer(name string, opts ...trace.TracerOption) trace.Tracer {
-	if p == nil || p.tracerProvider == nil {
+	if p == nil {
 		return noop.NewTracerProvider().Tracer(name, opts...)
 	}
-	return p.tracerProvider.Tracer(name, opts...)
+	p.mu.RLock()
+	tp := p.tracerProvider
+	p.mu.RUnlock()
+	if tp == nil {
+		return noop.NewTracerProvider().Tracer(name, opts...)
+	}
+	return tp.Tracer(name, opts...)
 }
 
 // Shutdown 关闭底层 SDK provider。
 func (p *Provider) Shutdown(ctx context.Context) error {
-	if p == nil || p.tracerProvider == nil {
+	if p == nil {
 		return nil
 	}
-	return p.tracerProvider.Shutdown(ctx)
+	p.mu.Lock()
+	tp := p.tracerProvider
+	p.tracerProvider = nil
+	p.mu.Unlock()
+	if tp == nil {
+		return nil
+	}
+	return tp.Shutdown(ctx)
+}
+
+func (p *Provider) start(ctx context.Context, opts Options, createExporter exporterFactory) error {
+	started, err := newProvider(ctx, opts, createExporter)
+	if err != nil {
+		return err
+	}
+	p.mu.Lock()
+	p.tracerProvider = started.tracerProvider
+	p.resource = started.resource
+	p.propagator = started.propagator
+	p.mu.Unlock()
+	return nil
+}
+
+func newUnstartedProvider() *Provider {
+	return &Provider{propagator: propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	)}
 }
 
 func newResource(serviceName string, environment string, version string, instanceID string) *resource.Resource {
