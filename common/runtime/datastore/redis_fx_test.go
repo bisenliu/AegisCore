@@ -71,12 +71,17 @@ func TestNewRedisClientClosesClientWhenLaterStartHookFails(t *testing.T) {
 
 func TestNewRedisClientReturnsConstructorError(t *testing.T) {
 	instrumentErr := errors.New("instrumentation failed")
-	restoreRedisInstrumentation(t, func(_ *redis.Client, _ trace.TracerProvider) error {
-		return instrumentErr
-	})
 	lc := fxtest.NewLifecycle(t)
 
-	client, err := NewRedisClient(lc, zap.NewNop(), testCacheRedis, resources.RedisConfig{Addr: "127.0.0.1:6379"})
+	client, err := NewRedisClient(
+		lc,
+		zap.NewNop(),
+		testCacheRedis,
+		resources.RedisConfig{Addr: "127.0.0.1:6379"},
+		withRedisInstrumenterForTest(func(*redis.Client, trace.TracerProvider) error {
+			return instrumentErr
+		}),
+	)
 	require.Nil(t, client)
 	require.ErrorContains(t, err, "open redis cache_redis")
 	require.ErrorContains(t, err, "instrument redis tracing")

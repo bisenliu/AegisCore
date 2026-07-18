@@ -57,15 +57,17 @@ func TestOpenRedisClientUsesExplicitTracerProvider(t *testing.T) {
 func TestOpenRedisClientReturnsErrorWhenInstrumentationFails(t *testing.T) {
 	instrumentErr := errors.New("instrumentation failed")
 	var captured *redis.Client
-	restoreRedisInstrumentation(t, func(client *redis.Client, _ trace.TracerProvider) error {
-		captured = client
-		return instrumentErr
-	})
 
 	var client *redis.Client
 	require.NotPanics(t, func() {
 		var err error
-		client, err = OpenRedisClient(resources.RedisConfig{Addr: "127.0.0.1:6379"})
+		client, err = OpenRedisClient(
+			resources.RedisConfig{Addr: "127.0.0.1:6379"},
+			withRedisInstrumenterForTest(func(redisClient *redis.Client, _ trace.TracerProvider) error {
+				captured = redisClient
+				return instrumentErr
+			}),
+		)
 		require.Error(t, err)
 		require.ErrorContains(t, err, "instrument redis tracing")
 		require.ErrorIs(t, err, instrumentErr)
@@ -77,21 +79,24 @@ func TestOpenRedisClientReturnsErrorWhenInstrumentationFails(t *testing.T) {
 
 func TestOpenRedisClientPreservesCloseFailureAfterInstrumentationFails(t *testing.T) {
 	instrumentErr := errors.New("instrumentation failed")
-	restoreRedisInstrumentation(t, func(client *redis.Client, _ trace.TracerProvider) error {
-		require.NoError(t, client.Close())
-		return instrumentErr
-	})
 
-	client, err := OpenRedisClient(resources.RedisConfig{Addr: "127.0.0.1:6379"})
+	client, err := OpenRedisClient(
+		resources.RedisConfig{Addr: "127.0.0.1:6379"},
+		withRedisInstrumenterForTest(func(redisClient *redis.Client, _ trace.TracerProvider) error {
+			require.NoError(t, redisClient.Close())
+			return instrumentErr
+		}),
+	)
 	require.Nil(t, client)
 	require.Error(t, err)
 	require.ErrorIs(t, err, instrumentErr)
 	require.ErrorIs(t, err, redis.ErrClosed)
 }
 
-func restoreRedisInstrumentation(t *testing.T, instrument func(*redis.Client, trace.TracerProvider) error) {
-	t.Helper()
-	original := instrumentRedisTracing
-	instrumentRedisTracing = instrument
-	t.Cleanup(func() { instrumentRedisTracing = original })
+func withRedisInstrumenterForTest(instrument redisInstrumenter) RedisClientOption {
+	return func(opts *redisClientOptions) {
+		if instrument != nil {
+			opts.instrument = instrument
+		}
+	}
 }
