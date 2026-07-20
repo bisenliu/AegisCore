@@ -238,7 +238,7 @@ const openAPIDocument = `{
             "type": "array"
           },
           "service": {
-            "example": "aegiscore-user-services",
+            "example": "aegiscore-user-service",
             "type": "string"
           },
           "status": {

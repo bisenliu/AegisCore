@@ -10,7 +10,7 @@ import (
 
 func TestRootCommandSurface(t *testing.T) {
 	root := newRootCommand(testRootCommandDependencies(t))
-	require.Equal(t, "aegiscore-user-services", root.Use)
+	require.Equal(t, "aegiscore-user-service", root.Use)
 
 	var serve *cobra.Command
 	var rbac *cobra.Command

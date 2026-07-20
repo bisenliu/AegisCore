@@ -18,5 +18,5 @@ scrape_configs:
       - targets:
           - user-service:8080
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           environment: local

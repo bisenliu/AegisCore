@@ -407,7 +407,7 @@ func TestHTTPServerStartLogIncludesRuntimeIdentity(t *testing.T) {
 	NewHTTPServer(HTTPServerParams{
 		Lifecycle: lifecycle,
 		Config: &config.Config{
-			App: config.AppConfig{Name: "aegiscore-user-services", Environment: "local"},
+			App: config.AppConfig{Name: "aegiscore-user-service", Environment: "local"},
 			Server: config.ServerConfig{
 				HTTP: config.HTTPServerConfig{
 					Enabled: true,
@@ -434,7 +434,7 @@ func TestHTTPServerStartLogIncludesRuntimeIdentity(t *testing.T) {
 	fields := entries[0].ContextMap()
 	require.Equal(t, "http-server", fields[commonlogger.ComponentField])
 	require.Equal(t, "127.0.0.1:0", fields["addr"])
-	require.Equal(t, "aegiscore-user-services", fields["service"])
+	require.Equal(t, "aegiscore-user-service", fields["service"])
 	require.Equal(t, "local", fields["environment"])
 	require.Equal(t, time.Local.String(), fields["timezone"])
 }

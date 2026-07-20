@@ -97,7 +97,7 @@ func writeTestConfig(t *testing.T, postgres commonresources.PostgresConfig, redi
 	t.Helper()
 	port := freeTCPPort(t)
 	content := fmt.Sprintf(`app:
-  name: aegiscore-user-services-test
+  name: aegiscore-user-service-test
   environment: test
 server:
   http:
@@ -116,7 +116,7 @@ server:
 auth:
   jwt:
     secret: integration-test-jwt-secret-value
-    issuer: aegiscore-user-services-test
+    issuer: aegiscore-user-service-test
     audience: aegiscore-users
     access_token_ttl: 5m
     refresh_token_ttl: 30m

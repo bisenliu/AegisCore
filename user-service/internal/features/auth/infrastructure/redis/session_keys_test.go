@@ -29,12 +29,12 @@ func TestSessionStorePurgeUserSessionsKeyKeepsHashTag(t *testing.T) {
 
 func TestSessionStorePurgeUserSessionsKeyUsesAppNamePrefix(t *testing.T) {
 	redisServer := miniredis.RunT(t)
-	store := newTestSessionStoreWithAppName(t, redisServer, " aegiscore-user-services ")
+	store := newTestSessionStoreWithAppName(t, redisServer, " aegiscore-user-service ")
 
 	purgeKey, err := store.purgeUserSessionsKey(sessionTestUserID.String())
 	require.NoError(t, err,
 		"purgeUserSessionsKey: %v", err)
-	require.True(t, strings.HasPrefix(purgeKey, "aegiscore-user-services:auth:user:sessions:{"+sessionTestUserID.String()+"}:purge:"),
+	require.True(t, strings.HasPrefix(purgeKey, "aegiscore-user-service:auth:user:sessions:{"+sessionTestUserID.String()+"}:purge:"),
 		"purge key = %q, want app-name-prefixed purge key", purgeKey)
 	require.True(t, strings.Contains(purgeKey, "{"+sessionTestUserID.String()+"}"),
 		"purge key = %q, want user hash tag", purgeKey)
@@ -79,7 +79,7 @@ func TestSessionStoreUserSessionsIndexTTLIsNotShortened(t *testing.T) {
 
 func TestSessionStoreKeysUseAppNamePrefixWithNewFormat(t *testing.T) {
 	redisServer := miniredis.RunT(t)
-	store := newTestSessionStoreWithAppName(t, redisServer, " aegiscore-user-services ")
+	store := newTestSessionStoreWithAppName(t, redisServer, " aegiscore-user-service ")
 	ctx := context.Background()
 	session := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-prefixed", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
 	{
@@ -95,11 +95,11 @@ func TestSessionStoreKeysUseAppNamePrefixWithNewFormat(t *testing.T) {
 			"CacheTokenVersion: %v", err)
 	}
 
-	require.True(t, redisServer.Exists("aegiscore-user-services:auth:session:{"+sessionTestUserID.String()+"}:s-prefixed"),
+	require.True(t, redisServer.Exists("aegiscore-user-service:auth:session:{"+sessionTestUserID.String()+"}:s-prefixed"),
 		"prefixed new session key does not exist")
-	require.True(t, redisServer.Exists("aegiscore-user-services:auth:user:sessions:{"+sessionTestUserID.String()+"}"),
+	require.True(t, redisServer.Exists("aegiscore-user-service:auth:user:sessions:{"+sessionTestUserID.String()+"}"),
 		"prefixed new user sessions key does not exist")
-	require.True(t, redisServer.Exists("aegiscore-user-services:auth:user:token_version:{"+sessionTestUserID.String()+"}"),
+	require.True(t, redisServer.Exists("aegiscore-user-service:auth:user:token_version:{"+sessionTestUserID.String()+"}"),
 		"prefixed new token version key does not exist")
 	require.False(t, redisServer.Exists("auth:session:{"+sessionTestUserID.String()+"}:s-prefixed") || redisServer.Exists("auth:user:sessions:{"+sessionTestUserID.String()+"}") || redisServer.Exists("auth:user:token_version:{"+sessionTestUserID.String()+"}"),
 		"unprefixed Redis keys should not exist when app.name is set")
@@ -130,7 +130,7 @@ func TestSessionStoreKeysRemainUnprefixedWhenAppNameEmpty(t *testing.T) {
 		"unprefixed new user sessions key does not exist")
 	require.True(t, redisServer.Exists("auth:user:token_version:{"+sessionTestUserID.String()+"}"),
 		"unprefixed new token version key does not exist")
-	require.False(t, redisServer.Exists("aegiscore-user-services:auth:session:{"+sessionTestUserID.String()+"}:s-empty-prefix") || redisServer.Exists("aegiscore-user-services:auth:user:sessions:{"+sessionTestUserID.String()+"}") || redisServer.Exists("aegiscore-user-services:auth:user:token_version:{"+sessionTestUserID.String()+"}"),
+	require.False(t, redisServer.Exists("aegiscore-user-service:auth:session:{"+sessionTestUserID.String()+"}:s-empty-prefix") || redisServer.Exists("aegiscore-user-service:auth:user:sessions:{"+sessionTestUserID.String()+"}") || redisServer.Exists("aegiscore-user-service:auth:user:token_version:{"+sessionTestUserID.String()+"}"),
 		"default service-name Redis keys should not exist when app.name is empty")
 
 }

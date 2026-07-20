@@ -1,0 +1,48 @@
+# 本文件约束 user-service 网络准入标签的使用范围，避免未授权租户通过标签旁路 NetworkPolicy。
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: aegiscore-user-service-network-labels
+  labels:
+    app.kubernetes.io/name: aegiscore-user-service
+    app.kubernetes.io/component: network-security
+    app.kubernetes.io/part-of: aegiscore
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments", "statefulsets", "daemonsets"]
+  validations:
+    - expression: >-
+        !has(object.metadata.labels) ||
+        !("aegiscore.io/allow-user-service" in object.metadata.labels) ||
+        object.metadata.labels["aegiscore.io/allow-user-service"] != "true" ||
+        request.namespace in ["ingress-system", "aegiscore"]
+      message: "aegiscore.io/allow-user-service can only be set in trusted namespaces"
+    - expression: >-
+        !has(object.spec.template) ||
+        !has(object.spec.template.metadata.labels) ||
+        !("aegiscore.io/allow-user-service" in object.spec.template.metadata.labels) ||
+        object.spec.template.metadata.labels["aegiscore.io/allow-user-service"] != "true" ||
+        request.namespace in ["ingress-system", "aegiscore"]
+      message: "aegiscore.io/allow-user-service can only be set on workloads in trusted namespaces"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: aegiscore-user-service-network-labels
+  labels:
+    app.kubernetes.io/name: aegiscore-user-service
+    app.kubernetes.io/component: network-security
+    app.kubernetes.io/part-of: aegiscore
+spec:
+  policyName: aegiscore-user-service-network-labels
+  validationActions:
+    - Deny

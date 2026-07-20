@@ -1,6 +1,6 @@
 app:
   # 服务标识和部署环境会写入日志与 tracing resource attributes。
-  name: aegiscore-user-services
+  name: aegiscore-user-service
   environment: local
 
 runtime:
@@ -36,7 +36,7 @@ auth:
   jwt:
     # 仅供本地开发；生产环境必须通过 AEGISCORE_AUTH_JWT_SECRET 或 Secret 注入强随机值。
     secret: local-development-secret
-    issuer: aegiscore-user-services
+    issuer: aegiscore-user-service
     audience: aegiscore-users
     access_token_ttl: 15m
     refresh_token_ttl: 168h

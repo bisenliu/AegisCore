@@ -15,7 +15,7 @@ import (
 func TestRegisterHealthRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	registerHealthRoutes(engine, "aegiscore-user-services", HealthChecks{
+	registerHealthRoutes(engine, "aegiscore-user-service", HealthChecks{
 		Readiness: []HealthChecker{
 			staticHealthChecker{name: "postgres.primary_db", status: HealthCheckStatusOK},
 			staticHealthChecker{name: "redis.cache_redis", status: HealthCheckStatusOK},
@@ -30,7 +30,7 @@ func TestRegisterHealthRoutes(t *testing.T) {
 		require.Equal(t, http.StatusOK, recorder.Code)
 		health := decodeHealthResponse(t, recorder)
 		require.Equal(t, HealthCheckStatusOK, health.Status)
-		require.Equal(t, "aegiscore-user-services", health.Service)
+		require.Equal(t, "aegiscore-user-service", health.Service)
 		require.Empty(t, health.Checks)
 	})
 
@@ -55,7 +55,7 @@ func TestRegisterHealthRoutes(t *testing.T) {
 func TestProbezReturnsUnavailableWhenAnyCheckFails(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	registerHealthRoutes(engine, "aegiscore-user-services", HealthChecks{
+	registerHealthRoutes(engine, "aegiscore-user-service", HealthChecks{
 		Readiness: []HealthChecker{
 			staticHealthChecker{name: "postgres.primary_db", status: HealthCheckStatusOK},
 			staticHealthChecker{name: "redis.cache_redis", status: HealthCheckStatusUnavailable, message: "redis unavailable"},
@@ -79,7 +79,7 @@ func TestProbezReturnsUnavailableWhenAnyCheckFails(t *testing.T) {
 func TestProbezRunsChecksConcurrently(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
-	registerHealthRoutes(engine, "aegiscore-user-services", HealthChecks{
+	registerHealthRoutes(engine, "aegiscore-user-service", HealthChecks{
 		Readiness: []HealthChecker{
 			delayedHealthChecker{name: "postgres.primary_db", delay: 300 * time.Millisecond, status: HealthCheckStatusOK},
 			delayedHealthChecker{name: "redis.cache_redis", delay: 300 * time.Millisecond, status: HealthCheckStatusOK},
@@ -103,7 +103,7 @@ func TestProbezReturnsUnavailableForTimedOutCheck(t *testing.T) {
 	engine := gin.New()
 	release := make(chan struct{})
 	defer close(release)
-	registerHealthRoutes(engine, "aegiscore-user-services", HealthChecks{
+	registerHealthRoutes(engine, "aegiscore-user-service", HealthChecks{
 		Readiness: []HealthChecker{
 			staticHealthChecker{name: "postgres.primary_db", status: HealthCheckStatusOK},
 			blockingHealthChecker{name: "redis.cache_redis", release: release},

@@ -1,15 +1,15 @@
 # Helm 部署
 
-本目录承载 AegisCore 服务的 Helm charts。当前可用 chart 位于 `aegiscore-user-services/`，用于模板化 user-service 的 Kubernetes 运行时资源和 RBAC seed 发布前置 Job。
+本目录承载 AegisCore 服务的 Helm charts。当前可用 chart 位于 `aegiscore-user-service/`，用于模板化 user-service 的 Kubernetes 运行时资源和 RBAC seed 发布前置 Job。
 
 ## Chart
 
 | 路径 | 作用 |
 |---|---|
-| `aegiscore-user-services/Chart.yaml` | chart 元数据 |
-| `aegiscore-user-services/values.yaml` | 生产基线默认值 |
-| `aegiscore-user-services/values-local.yaml` | 本地或临时环境覆盖示例 |
-| `aegiscore-user-services/templates/` | Deployment、Service、ConfigMap、Job、PDB、HPA、NetworkPolicy 等模板 |
+| `aegiscore-user-service/Chart.yaml` | chart 元数据 |
+| `aegiscore-user-service/values.yaml` | 生产基线默认值 |
+| `aegiscore-user-service/values-local.yaml` | 本地或临时环境覆盖示例 |
+| `aegiscore-user-service/templates/` | Deployment、Service、ConfigMap、Job、PDB、HPA、NetworkPolicy 等模板 |
 
 ## 发布顺序
 
@@ -29,9 +29,9 @@ chart 默认与 Distroless static nonroot 镜像对齐，`podSecurityContext.run
 ## 验证
 
 ```bash
-helm lint deployments/helm/aegiscore-user-services
-helm template aegiscore-user-services deployments/helm/aegiscore-user-services \
-  --values deployments/helm/aegiscore-user-services/values.yaml
+helm lint deployments/helm/aegiscore-user-service
+helm template aegiscore-user-service deployments/helm/aegiscore-user-service \
+  --values deployments/helm/aegiscore-user-service/values.yaml
 ```
 
 渲染输出中应能看到：

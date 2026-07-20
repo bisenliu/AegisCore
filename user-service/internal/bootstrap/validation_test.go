@@ -124,7 +124,7 @@ func TestRuntimeModuleNamingReflectsCompositionRootScope(t *testing.T) {
 
 func appModuleValidationTestConfig() *serviceconfig.Config {
 	return &serviceconfig.Config{Config: config.Config{
-		App:           config.AppConfig{Name: "aegiscore-user-services", Environment: "test"},
+		App:           config.AppConfig{Name: "aegiscore-user-service", Environment: "test"},
 		Observability: appModuleTestObservabilityConfig(),
 	}, Auth: serviceconfig.AuthConfig{
 		PasswordKDF:       serviceconfig.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1},

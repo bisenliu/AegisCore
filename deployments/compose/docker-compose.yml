@@ -84,7 +84,7 @@ services:
 
   rbac-seed:
     build: *user-service-build
-    image: aegiscore-user-services:latest
+    image: aegiscore-user-service:latest
     command:
       - rbac
       - --config
@@ -105,7 +105,7 @@ services:
 
   user-service:
     build: *user-service-build
-    image: aegiscore-user-services:latest
+    image: aegiscore-user-service:latest
     environment:
       <<: *user-service-environment
     ports:
@@ -121,7 +121,7 @@ services:
       - aegiscore-runtime
       - aegiscore-observability
     healthcheck:
-      test: ["CMD", "/app/user-service/bin/user-services", "healthcheck", "--url", "http://127.0.0.1:8080/readyz", "--timeout", "3s"]
+      test: ["CMD", "/app/user-service/bin/user-service", "healthcheck", "--url", "http://127.0.0.1:8080/readyz", "--timeout", "3s"]
       interval: 10s
       timeout: 5s
       retries: 18

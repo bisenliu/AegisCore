@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-image="${1:-aegiscore-user-services:latest}"
+image="${1:-aegiscore-user-service:latest}"
 tmpdir="$(mktemp -d)"
 container=""
 
@@ -26,7 +26,7 @@ docker export "${container}" -o "${tmpdir}/rootfs.tar"
 tar -tf "${tmpdir}/rootfs.tar" > "${tmpdir}/rootfs.txt"
 
 required_paths=(
-  "app/user-service/bin/user-services"
+  "app/user-service/bin/user-service"
   "etc/ssl/certs/ca-certificates.crt"
   "usr/share/zoneinfo/Asia/Shanghai"
   "tmp/"
@@ -49,8 +49,8 @@ for path in \
   fi
 done
 
-docker cp "${container}:/app/user-service/bin/user-services" "${tmpdir}/user-services"
-file_output="$(file "${tmpdir}/user-services")"
+docker cp "${container}:/app/user-service/bin/user-service" "${tmpdir}/user-service"
+file_output="$(file "${tmpdir}/user-service")"
 if [[ "${file_output}" != *"statically linked"* && "${file_output}" != *"static"* ]]; then
   fail "service binary is not statically linked: ${file_output}"
 fi

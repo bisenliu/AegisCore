@@ -67,7 +67,7 @@ user-service-create-super-admin: ## 为 user-service 创建管理员用户并绑
 	$(MAKE) -C $(USER_SERVICE_DIR) create-super-admin USER_SERVICE_CONFIG='$(USER_SERVICE_CONFIG)' ADMIN_USERNAME='$(ADMIN_USERNAME)' ADMIN_NICKNAME='$(ADMIN_NICKNAME)' ADMIN_RESET_PASSWORD='$(ADMIN_RESET_PASSWORD)'
 
 user-service-image-verify: ## 校验 user-service Distroless 镜像内容；可通过 IMAGE 覆盖镜像名。
-	./deployments/docker/verify-user-service-image.sh "$${IMAGE:-aegiscore-user-services:latest}"
+	./deployments/docker/verify-user-service-image.sh "$${IMAGE:-aegiscore-user-service:latest}"
 
 user-service-generate: ## 生成 user-service Go 生成物。
 	$(MAKE) -C $(USER_SERVICE_DIR) generate

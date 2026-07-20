@@ -49,7 +49,7 @@ make user-service-openapi-generate
 Docker 镜像：
 
 ```bash
-docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
+docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-service .
 ```
 
 ## 运行时配置边界

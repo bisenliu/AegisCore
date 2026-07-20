@@ -1,15 +1,15 @@
 # Kubernetes 部署
 
-本目录承载 AegisCore 服务的 Kubernetes YAML。当前提交的生产基线位于 `user-services/`，用于部署运行时名称为 `aegiscore-user-services` 的用户服务。
+本目录承载 AegisCore 服务的 Kubernetes YAML。当前提交的生产基线位于 `user-service/`，用于部署运行时名称为 `aegiscore-user-service` 的用户服务。
 
 ## 目录
 
 | 路径 | 作用 |
 |---|---|
-| `user-services/kustomization.yaml` | user-service 原生 YAML 入口 |
-| `user-services/deployment.yaml` | HTTP 副本、探针、资源、安全上下文和滚动更新策略 |
-| `user-services/rbac-seed-job.yaml` | RBAC 系统数据 seed 发布前置 Job |
-| `user-services/secret.example.yaml` | Secret 键名示例；不参与默认 kustomization |
+| `user-service/kustomization.yaml` | user-service 原生 YAML 入口 |
+| `user-service/deployment.yaml` | HTTP 副本、探针、资源、安全上下文和滚动更新策略 |
+| `user-service/rbac-seed-job.yaml` | RBAC 系统数据 seed 发布前置 Job |
+| `user-service/secret.example.yaml` | Secret 键名示例；不参与默认 kustomization |
 
 ## 发布顺序
 
@@ -50,25 +50,25 @@ pprof 默认不渲染、不暴露。临时诊断应在受控副本中设置 `PPR
 无可用集群时，先执行离线渲染和 YAML 解析：
 
 ```bash
-kubectl kustomize deployments/k8s/user-services > /tmp/aegiscore-user-services-k8s.yaml
-ruby -e 'require "yaml"; docs = YAML.load_stream(File.read("/tmp/aegiscore-user-services-k8s.yaml")); abort("no docs") if docs.empty?'
-grep -q 'atlas migrate apply\|migrate apply' /tmp/aegiscore-user-services-k8s.yaml && exit 1 || true
-grep -q 'runAsUser: 65532' /tmp/aegiscore-user-services-k8s.yaml
-grep -q 'runAsGroup: 65532' /tmp/aegiscore-user-services-k8s.yaml
-grep -q 'fsGroup: 65532' /tmp/aegiscore-user-services-k8s.yaml
-grep -q 'terminationGracePeriodSeconds: 150' /tmp/aegiscore-user-services-k8s.yaml
+kubectl kustomize deployments/k8s/user-service > /tmp/aegiscore-user-service-k8s.yaml
+ruby -e 'require "yaml"; docs = YAML.load_stream(File.read("/tmp/aegiscore-user-service-k8s.yaml")); abort("no docs") if docs.empty?'
+grep -q 'atlas migrate apply\|migrate apply' /tmp/aegiscore-user-service-k8s.yaml && exit 1 || true
+grep -q 'runAsUser: 65532' /tmp/aegiscore-user-service-k8s.yaml
+grep -q 'runAsGroup: 65532' /tmp/aegiscore-user-service-k8s.yaml
+grep -q 'fsGroup: 65532' /tmp/aegiscore-user-service-k8s.yaml
+grep -q 'terminationGracePeriodSeconds: 150' /tmp/aegiscore-user-service-k8s.yaml
 ```
 
 有可用集群或可用 OpenAPI cache 时，执行 client dry-run：
 
 ```bash
-kubectl apply --dry-run=client -k deployments/k8s/user-services
+kubectl apply --dry-run=client -k deployments/k8s/user-service
 ```
 
 连接到目标集群时，也可以执行 server-side dry-run：
 
 ```bash
-kubectl apply --dry-run=server -k deployments/k8s/user-services
+kubectl apply --dry-run=server -k deployments/k8s/user-service
 ```
 
 ## 观测资产

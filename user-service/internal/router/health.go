@@ -42,7 +42,7 @@ type HealthCheckResult struct {
 // HealthResponse 是健康检查端点返回的响应体。
 type HealthResponse struct {
 	Status  HealthCheckStatus   `json:"status" example:"ok"`
-	Service string              `json:"service" example:"aegiscore-user-services"`
+	Service string              `json:"service" example:"aegiscore-user-service"`
 	Checks  []HealthCheckResult `json:"checks,omitempty"`
 }
 

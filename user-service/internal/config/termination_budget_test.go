@@ -25,8 +25,8 @@ func TestRepositoryTerminationBudgets(t *testing.T) {
 	repoRoot := filepath.Join("..", "..", "..")
 	budgets, err := loadTerminationBudgets(
 		filepath.Join(repoRoot, "user-service", "configs", "config.yaml"),
-		filepath.Join(repoRoot, "deployments", "k8s", "user-services", "deployment.yaml"),
-		filepath.Join(repoRoot, "deployments", "helm", "aegiscore-user-services", "values.yaml"),
+		filepath.Join(repoRoot, "deployments", "k8s", "user-service", "deployment.yaml"),
+		filepath.Join(repoRoot, "deployments", "helm", "aegiscore-user-service", "values.yaml"),
 	)
 	require.NoError(t, err)
 	require.Equal(t, 120*time.Second, budgets.stopTimeout)

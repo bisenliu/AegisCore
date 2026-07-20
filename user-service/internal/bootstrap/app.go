@@ -21,7 +21,7 @@ import (
 // Feature 基础设施负责实现 application port，Feature 应用负责用例与业务编排，传输负责协议入口，生命周期负责主动初始化或启停注册，开发工具仅服务构图与诊断。
 
 // WiringModule 组装 user-service 无运行时激活副作用的 provider graph。
-var WiringModule = fx.Module("aegiscore-user-services-wiring",
+var WiringModule = fx.Module("aegiscore-user-service-wiring",
 	// Fx 分类：横切能力 - 跨 feature 的输入校验能力。
 	validation.Module,
 	// Fx 分类：Feature 应用 - 各业务 feature 的完整内部装配。
@@ -40,7 +40,7 @@ var WiringModule = fx.Module("aegiscore-user-services-wiring",
 )
 
 // RuntimeModule 注册 user-service 正式运行时需要主动执行的初始化、路由和 lifecycle。
-var RuntimeModule = fx.Module("aegiscore-user-services-runtime",
+var RuntimeModule = fx.Module("aegiscore-user-service-runtime",
 	// Fx 分类：基础运行时 - 跨 feature 的进程时区初始化。
 	commontz.Module,
 	// Fx 分类：生命周期 - 启动期服务级 runtime 注册。
@@ -56,7 +56,7 @@ var RuntimeModule = fx.Module("aegiscore-user-services-runtime",
 )
 
 // AppModule 组装 user-service 顶层模块、服务级 provider 和 HTTP server 生命周期。
-var AppModule = fx.Module("aegiscore-user-services",
+var AppModule = fx.Module("aegiscore-user-service",
 	WiringModule,
 	RuntimeModule,
 )

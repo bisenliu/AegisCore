@@ -22,7 +22,7 @@
 
 1. 打开 Grafana，导入 `grafana/user-service-overview.json`。
 2. 按提示选择 Prometheus datasource。
-3. 选择 `service` 和 `environment` 变量；默认 service 是 `aegiscore-user-services`。
+3. 选择 `service` 和 `environment` 变量；默认 service 是 `aegiscore-user-service`。
 4. 确认 HTTP RED、依赖、workerpool、scheduler、RBAC 和 runtime 面板能够加载。
 
 如果某个面板为空，先确认 Prometheus 中是否存在对应指标。`observability.metrics.include_runtime: false` 时，Go runtime/process 面板可以为空。

@@ -7,9 +7,9 @@ import (
 )
 
 func TestKeyCatalogBuildsRBACPolicyKeys(t *testing.T) {
-	catalog, err := NewKeyCatalog(" aegiscore-user-services ")
+	catalog, err := NewKeyCatalog(" aegiscore-user-service ")
 	require.NoError(t, err)
 
-	require.Equal(t, "aegiscore-user-services:rbac:policy:version", catalog.PolicyVersionKey())
-	require.Equal(t, "aegiscore-user-services:rbac:policy:refresh", catalog.PolicyChannel())
+	require.Equal(t, "aegiscore-user-service:rbac:policy:version", catalog.PolicyVersionKey())
+	require.Equal(t, "aegiscore-user-service:rbac:policy:refresh", catalog.PolicyChannel())
 }

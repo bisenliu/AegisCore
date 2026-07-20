@@ -13,7 +13,7 @@
 - **WHEN** 协作者执行 `make build`
 - **THEN** 系统 MUST 将 user-service 二进制构建到 `USER_SERVICE_BIN`
 - **WHEN** 执行 `make user-service-run`
-- **THEN** 系统 MUST 使用 `USER_SERVICE_CONFIG` 启动 `aegiscore-user-services serve`
+- **THEN** 系统 MUST 使用 `USER_SERVICE_CONFIG` 启动 `aegiscore-user-service serve`
 
 #### Scenario: 命令帮助和稳定 surface
 

@@ -39,7 +39,7 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 
 ## 3. `user-service` 运行入口
 
-`user-service/cmd/main.go` 定义 `aegiscore-user-services` CLI：
+`user-service/cmd/main.go` 定义 `aegiscore-user-service` CLI：
 
 - `serve --config <path>`：启动 Fx app 和 Gin HTTP server。
 - `rbac seed`：初始化默认系统角色、权限和绑定。
@@ -94,7 +94,7 @@ pprof 不挂载到业务 router。临时诊断时通过 `PPROF_ENABLED=true` 和
 
 ### 6.1 服务启动
 
-1. `aegiscore-user-services serve --config ./configs/config.yaml` 进入 `runServe`，CLI 单次解析并校验 service config。
+1. `aegiscore-user-service serve --config ./configs/config.yaml` 进入 `runServe`，CLI 单次解析并校验 service config。
 2. `bootstrap.NewApp(cfg)` 通过 `AppOptions` supply 同一个 service config 及其派生的共享 runtime config，并组装 logger、datastore、auth、metrics、health、routes 和 HTTP server。
 3. `fx.New` 同步构建依赖图、执行 invoke 及其 constructor 依赖；该阶段不受 `runtime.lifecycle.start_timeout` 限制。
 4. CLI 使用同一配置值建立显式 Start context 并调用 `App.Start`，该 context 约束全部 `OnStart` hooks。
@@ -137,8 +137,8 @@ pprof 不挂载到业务 router。临时诊断时通过 `PPROF_ENABLED=true` 和
 
 - Dockerfile：`deployments/docker/user-service.Dockerfile` 使用 BuildKit manifest-first 依赖层、只读 Go module 解析、静态编译和固定 digest 的 `gcr.io/distroless/static-debian12:nonroot` 运行时；运行镜像身份为 UID/GID `65532`，不包含 shell、包管理器、下载工具或 Atlas。
 - Compose：`deployments/compose/docker-compose.yml` 继承 Distroless `nonroot` 身份，user-service healthcheck 使用 exec-form 调用原生 `healthcheck` CLI。
-- Kubernetes：`deployments/k8s/user-services/` 使用 UID/GID/fsGroup `65532`、只读根文件系统、`/tmp` emptyDir 和 kubelet HTTP probes。
-- Helm：`deployments/helm/aegiscore-user-services/` 渲染与原生 YAML 一致的 UID/GID `65532`、HTTP probes 和 RBAC seed Job。
+- Kubernetes：`deployments/k8s/user-service/` 使用 UID/GID/fsGroup `65532`、只读根文件系统、`/tmp` emptyDir 和 kubelet HTTP probes。
+- Helm：`deployments/helm/aegiscore-user-service/` 渲染与原生 YAML 一致的 UID/GID `65532`、HTTP probes 和 RBAC seed Job。
 - CI：阻塞式 `test` job 设置 `AEGISCORE_TEST_CONTAINERS=1` 运行真实 PostgreSQL/Redis 测试；镜像安全 job 复用同一 BuildKit image ID 执行内容断言、Trivy HIGH/CRITICAL 门禁和 SBOM 生成。
 - Prometheus alerts：`deployments/observability/prometheus/user-service-alerts.yaml`。
 - Grafana dashboard：`deployments/observability/grafana/user-service-overview.json`。

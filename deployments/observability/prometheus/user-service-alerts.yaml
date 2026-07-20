@@ -4,13 +4,13 @@ groups:
       - alert: AegisCoreUserServiceHigh5xxRatio
         expr: |
           (
-            sum(rate(http_server_requests_total{service="aegiscore-user-services",status_class="5xx"}[5m]))
+            sum(rate(http_server_requests_total{service="aegiscore-user-service",status_class="5xx"}[5m]))
             /
-            clamp_min(sum(rate(http_server_requests_total{service="aegiscore-user-services"}[5m])), 1)
+            clamp_min(sum(rate(http_server_requests_total{service="aegiscore-user-service"}[5m])), 1)
           ) > 0.05
         for: 10m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: critical
         annotations:
           summary: "用户服务 5xx 比例超过 5%"
@@ -22,12 +22,12 @@ groups:
           histogram_quantile(
             0.95,
             sum by (le) (
-              rate(http_server_request_duration_seconds_bucket{service="aegiscore-user-services"}[5m])
+              rate(http_server_request_duration_seconds_bucket{service="aegiscore-user-service"}[5m])
             )
           ) > 1
         for: 10m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: warning
         annotations:
           summary: "用户服务 P95 延迟超过 1 秒"
@@ -39,7 +39,7 @@ groups:
           probe_success{job=~".*readyz.*"} == 0
         for: 5m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: critical
         annotations:
           summary: "用户服务 readyz 探测失败"
@@ -48,10 +48,10 @@ groups:
 
       - alert: AegisCoreUserServicePostgresPoolUnavailable
         expr: |
-          absent(aegiscore_postgres_pool_open_connections{service="aegiscore-user-services",resource="primary_db"})
+          absent(aegiscore_postgres_pool_open_connections{service="aegiscore-user-service",resource="primary_db"})
         for: 5m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: critical
         annotations:
           summary: "用户服务 PostgreSQL pool 可能不可用"
@@ -60,10 +60,10 @@ groups:
 
       - alert: AegisCoreUserServicePostgresPoolWaitPressure
         expr: |
-          rate(aegiscore_postgres_pool_wait_count_total{service="aegiscore-user-services",resource="primary_db"}[5m]) > 0
+          rate(aegiscore_postgres_pool_wait_count_total{service="aegiscore-user-service",resource="primary_db"}[5m]) > 0
         for: 10m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: warning
         annotations:
           summary: "用户服务 PostgreSQL pool 持续等待连接"
@@ -72,10 +72,10 @@ groups:
 
       - alert: AegisCoreUserServiceRedisUnavailable
         expr: |
-          aegiscore_redis_up{service="aegiscore-user-services",resource="cache_redis"} == 0
+          aegiscore_redis_up{service="aegiscore-user-service",resource="cache_redis"} == 0
         for: 5m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: critical
         annotations:
           summary: "用户服务 Redis cache_redis 不可用"
@@ -85,11 +85,11 @@ groups:
       - alert: AegisCoreUserServiceLocalcacheLoadErrors
         expr: |
           sum by (cache) (
-            increase(aegiscore_localcache_loads_total{service="aegiscore-user-services",result="error"}[10m])
+            increase(aegiscore_localcache_loads_total{service="aegiscore-user-service",result="error"}[10m])
           ) > 0
         for: 0m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: warning
         annotations:
           summary: "用户服务 localcache 回源失败"
@@ -99,11 +99,11 @@ groups:
       - alert: AegisCoreUserServiceLocalcacheWriteDropsOrRejects
         expr: |
           sum by (cache, event) (
-            increase(aegiscore_localcache_writes_total{service="aegiscore-user-services",event=~"set_dropped|rejected"}[10m])
+            increase(aegiscore_localcache_writes_total{service="aegiscore-user-service",event=~"set_dropped|rejected"}[10m])
           ) > 0
         for: 5m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: warning
         annotations:
           summary: "用户服务 localcache 写入被丢弃或准入拒绝"
@@ -113,16 +113,16 @@ groups:
       - alert: AegisCoreUserServiceLocalcacheEvictionPressure
         expr: |
           sum by (cache) (
-            increase(aegiscore_localcache_evictions_total{service="aegiscore-user-services"}[15m])
+            increase(aegiscore_localcache_evictions_total{service="aegiscore-user-service"}[15m])
           )
           /
           clamp_min(
-            max by (cache) (aegiscore_localcache_capacity{service="aegiscore-user-services"}),
+            max by (cache) (aegiscore_localcache_capacity{service="aegiscore-user-service"}),
             1
           ) > 0.2
         for: 15m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: warning
         annotations:
           summary: "用户服务 localcache 淘汰压力升高"
@@ -131,10 +131,10 @@ groups:
 
       - alert: AegisCoreUserServiceRBACWatcherStopped
         expr: |
-          aegiscore_runtime_component_running{service="aegiscore-user-services",resource="rbac_policy_watcher"} == 0
+          aegiscore_runtime_component_running{service="aegiscore-user-service",resource="rbac_policy_watcher"} == 0
         for: 5m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: critical
         annotations:
           summary: "RBAC policy watcher 已停止"
@@ -143,10 +143,10 @@ groups:
 
       - alert: AegisCoreUserServicePolicyReloadFailed
         expr: |
-          increase(aegiscore_casbin_policy_reloads_total{service="aegiscore-user-services",status="failure"}[10m]) > 0
+          increase(aegiscore_casbin_policy_reloads_total{service="aegiscore-user-service",status="failure"}[10m]) > 0
         for: 0m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: critical
         annotations:
           summary: "Casbin policy reload 失败"
@@ -155,10 +155,10 @@ groups:
 
       - alert: AegisCoreUserServiceWorkerpoolFailedOrPanicked
         expr: |
-          increase(aegiscore_workerpool_tasks_total{service="aegiscore-user-services",pool="auth_session_purge_pool",event=~"failed|panicked"}[10m]) > 0
+          increase(aegiscore_workerpool_tasks_total{service="aegiscore-user-service",pool="auth_session_purge_pool",event=~"failed|panicked"}[10m]) > 0
         for: 0m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: warning
         annotations:
           summary: "Auth session purge workerpool task 失败或 panic"
@@ -167,12 +167,12 @@ groups:
 
       - alert: AegisCoreUserServicePasswordChangeRevocationFailed
         expr: |
-          increase(aegiscore_user_service_auth_password_change_revocation_projection_failures_total{service="aegiscore-user-services"}[10m]) > 0
+          increase(aegiscore_user_service_auth_password_change_revocation_projection_failures_total{service="aegiscore-user-service"}[10m]) > 0
           or
-          increase(aegiscore_user_service_auth_password_change_revocation_compensation_failures_total{service="aegiscore-user-services"}[10m]) > 0
+          increase(aegiscore_user_service_auth_password_change_revocation_compensation_failures_total{service="aegiscore-user-service"}[10m]) > 0
         for: 0m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: critical
         annotations:
           summary: "强制改密安全撤销失败"
@@ -181,10 +181,10 @@ groups:
 
       - alert: AegisCoreUserServiceSchedulerJobFailed
         expr: |
-          increase(aegiscore_scheduler_jobs_total{service="aegiscore-user-services",event="failed"}[10m]) > 0
+          increase(aegiscore_scheduler_jobs_total{service="aegiscore-user-service",event="failed"}[10m]) > 0
         for: 0m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: warning
         annotations:
           summary: "用户服务 scheduler job 失败"
@@ -193,10 +193,10 @@ groups:
 
       - alert: AegisCoreUserServiceSchedulerLockRenewFailed
         expr: |
-          increase(aegiscore_scheduler_jobs_total{service="aegiscore-user-services",event="lock_renew_failed"}[10m]) > 0
+          increase(aegiscore_scheduler_jobs_total{service="aegiscore-user-service",event="lock_renew_failed"}[10m]) > 0
         for: 0m
         labels:
-          service: aegiscore-user-services
+          service: aegiscore-user-service
           severity: warning
         annotations:
           summary: "用户服务 scheduler lock 续租失败"

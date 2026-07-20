@@ -1,0 +1,121 @@
+# 本文件定义 user-service HTTP 运行时 Deployment。
+# 适用于 migration 和 RBAC seed 成功后的服务 rollout；普通副本只启动 HTTP 服务。
+# 关键配置包括三类健康探针、滚动更新策略、Secret 引用、资源边界和 Pod 安全上下文。
+apiVersion: apps/v1 # Deployment 使用 apps/v1 API。
+kind: Deployment # 声明控制 ReplicaSet 和 Pod rollout 的工作负载。
+metadata: # Deployment 的元数据。
+  name: aegiscore-user-service # Deployment 名称，也是 rollout/status 操作的目标名。
+  labels: # 资源标签，便于归类和查询。
+    app.kubernetes.io/name: aegiscore-user-service # 应用名称标签。
+    app.kubernetes.io/component: runtime # 组件类型；runtime 表示 HTTP 服务副本。
+    app.kubernetes.io/part-of: aegiscore # 系统归属标签。
+spec: # Deployment 期望状态。
+  replicas: 2 # 默认副本数；启用 HPA 后由 HPA 在 min/max 范围内调整。
+  revisionHistoryLimit: 5 # 保留的历史 ReplicaSet 数量，便于回滚。
+  minReadySeconds: 10 # Pod ready 后至少稳定 10 秒才视为可用。
+  selector: # Deployment 管理 Pod 的选择器；创建后不应随意修改。
+    matchLabels: # 必须同时匹配以下标签。
+      app.kubernetes.io/name: aegiscore-user-service # 匹配 user-service Pod。
+      app.kubernetes.io/component: runtime # 只管理 HTTP runtime Pod。
+  strategy: # rollout 策略。
+    type: RollingUpdate # 使用滚动更新，避免一次性替换全部副本。
+    rollingUpdate: # RollingUpdate 参数。
+      maxUnavailable: 0 # 更新期间不主动减少可用副本。
+      maxSurge: 1 # 更新期间最多额外创建 1 个 Pod。
+  template: # Pod 模板；该内容变化会触发新 ReplicaSet。
+    metadata: # Pod 元数据。
+      labels: # Pod 标签；必须满足 Deployment selector 和 Service selector。
+        app.kubernetes.io/name: aegiscore-user-service # 应用名称标签。
+        app.kubernetes.io/component: runtime # 组件类型；用于区分 Job Pod。
+        app.kubernetes.io/part-of: aegiscore # 系统归属标签。
+    spec: # Pod 规格。
+      serviceAccountName: aegiscore-user-service # Pod 使用的 ServiceAccount。
+      automountServiceAccountToken: false # 不自动挂载 API token，降低凭据暴露面。
+      terminationGracePeriodSeconds: 150 # 终止宽限期；覆盖 120 秒 Fx Stop 总预算和 30 秒平台余量。
+      securityContext: # Pod 级安全上下文。
+        runAsNonRoot: true # 要求容器以非 root 用户运行。
+        runAsUser: 65532 # 容器进程 UID；与 Distroless nonroot 镜像身份一致。
+        runAsGroup: 65532 # 容器进程 GID。
+        fsGroup: 65532 # 挂载卷文件所属组，便于非 root 写入。
+        seccompProfile: # seccomp 限制配置。
+          type: RuntimeDefault # 使用容器运行时默认 seccomp profile。
+      containers: # Pod 内容器列表。
+        - name: user-service # 容器名称，日志和事件中使用。
+          image: aegiscore-user-service:latest # 示例镜像；生产应替换为不可变 tag 或 digest。
+          imagePullPolicy: IfNotPresent # 本地已有镜像时不重复拉取；固定 tag 可按需改为 Always。
+          ports: # 容器暴露端口。
+            - name: http # 端口名称，Service 和探针通过该名称引用。
+              containerPort: 8080 # 容器内 HTTP 监听端口。
+              protocol: TCP # HTTP 使用 TCP 协议。
+          envFrom: # 批量注入环境变量来源。
+            - configMapRef: # 从非敏感 ConfigMap 注入运行时配置。
+                name: aegiscore-user-service-config # ConfigMap 名称。
+          env: # 单独注入的敏感或可选环境变量。
+            - name: AEGISCORE_AUTH_JWT_SECRET # JWT HMAC secret 环境变量名。
+              valueFrom: # 从 Secret 读取值。
+                secretKeyRef: # Secret 键引用。
+                  name: aegiscore-user-service-runtime # 运行时 Secret 名称。
+                  key: AEGISCORE_AUTH_JWT_SECRET # Secret 中的 JWT secret 键。
+            - name: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME # primary_db PostgreSQL 用户名环境变量。
+              valueFrom: # 从 Secret 读取值。
+                secretKeyRef: # Secret 键引用。
+                  name: aegiscore-user-service-runtime # 运行时 Secret 名称。
+                  key: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME # Secret 中的数据库用户名键。
+            - name: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD # primary_db PostgreSQL 密码环境变量。
+              valueFrom: # 从 Secret 读取值。
+                secretKeyRef: # Secret 键引用。
+                  name: aegiscore-user-service-runtime # 运行时 Secret 名称。
+                  key: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD # Secret 中的数据库密码键。
+            - name: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME # cache_redis ACL 用户名环境变量。
+              valueFrom: # 从 Secret 读取值。
+                secretKeyRef: # Secret 键引用。
+                  name: aegiscore-user-service-runtime # 运行时 Secret 名称。
+                  key: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME # Secret 中的 Redis 用户名键。
+                  optional: true # 未启用 Redis ACL 时允许缺失。
+            - name: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD # cache_redis 密码环境变量。
+              valueFrom: # 从 Secret 读取值。
+                secretKeyRef: # Secret 键引用。
+                  name: aegiscore-user-service-runtime # 运行时 Secret 名称。
+                  key: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD # Secret 中的 Redis 密码键。
+                  optional: true # 未启用 Redis 密码时允许缺失。
+          livenessProbe: # 存活探针；失败会触发 kubelet 重启容器。
+            httpGet: # 使用 HTTP GET 探测。
+              path: /livez # liveness 路径，表示进程是否存活。
+              port: http # 使用名为 http 的容器端口。
+            periodSeconds: 10 # 每 10 秒探测一次。
+            timeoutSeconds: 3 # 单次探测超时 3 秒。
+            failureThreshold: 3 # 连续 3 次失败后判定不健康。
+          readinessProbe: # 就绪探针；失败会从 Service endpoints 移除。
+            httpGet: # 使用 HTTP GET 探测。
+              path: /readyz # readiness 路径，表示依赖是否可服务。
+              port: http # 使用名为 http 的容器端口。
+            periodSeconds: 10 # 每 10 秒探测一次。
+            timeoutSeconds: 3 # 单次探测超时 3 秒。
+            failureThreshold: 3 # 连续 3 次失败后判定未就绪。
+          startupProbe: # 启动探针；启动完成前保护慢启动容器不被 liveness 杀死。
+            httpGet: # 使用 HTTP GET 探测。
+              path: /startupz # startup 路径，表示启动阶段是否完成。
+              port: http # 使用名为 http 的容器端口。
+            periodSeconds: 5 # 启动期间每 5 秒探测一次。
+            timeoutSeconds: 3 # 单次探测超时 3 秒。
+            failureThreshold: 24 # 最多允许约 120 秒启动窗口。
+          resources: # 容器资源边界。
+            requests: # 调度和 HPA 计算使用的资源请求。
+              cpu: 100m # 请求 0.1 CPU。
+              memory: 128Mi # 请求 128Mi 内存。
+            limits: # 容器可使用资源上限。
+              cpu: 500m # 限制最多 0.5 CPU。
+              memory: 512Mi # 限制最多 512Mi 内存。
+          securityContext: # 容器级安全上下文。
+            allowPrivilegeEscalation: false # 禁止通过 setuid 等方式提权。
+            readOnlyRootFilesystem: true # 根文件系统只读，临时写入使用 /tmp emptyDir。
+            capabilities: # Linux capabilities 配置。
+              drop: # 删除不需要的 capabilities。
+                - ALL # 删除全部默认 capabilities，按需再显式添加。
+          volumeMounts: # 容器挂载卷。
+            - name: tmp # 引用下方 tmp emptyDir。
+              mountPath: /tmp # 提供日志和临时文件可写路径。
+      volumes: # Pod 级卷定义。
+        - name: tmp # 临时卷名称。
+          emptyDir: # Pod 生命周期内的临时目录。
+            sizeLimit: 256Mi # 限制临时目录最大占用，避免无限写满节点。

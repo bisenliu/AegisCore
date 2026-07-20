@@ -66,8 +66,8 @@ BOOTSTRAP_PASSWORD="${BOOTSTRAP_PASSWORD:-AegisCoreLoad123!}"
 BOOTSTRAP_NICKNAME="${BOOTSTRAP_NICKNAME:-Metrics Admin}"
 BOOTSTRAP_USER_ID="${BOOTSTRAP_USER_ID:-00000000-0000-0000-0000-00000000a001}"
 SUPER_ADMIN_ROLE_ID="${SUPER_ADMIN_ROLE_ID:-00000000-0000-0000-0000-000000000001}"
-RBAC_POLICY_VERSION_KEY="${RBAC_POLICY_VERSION_KEY:-aegiscore-user-services:rbac:policy:version}"
-RBAC_POLICY_CHANNEL="${RBAC_POLICY_CHANNEL:-aegiscore-user-services:rbac:policy:refresh}"
+RBAC_POLICY_VERSION_KEY="${RBAC_POLICY_VERSION_KEY:-aegiscore-user-service:rbac:policy:version}"
+RBAC_POLICY_CHANNEL="${RBAC_POLICY_CHANNEL:-aegiscore-user-service:rbac:policy:refresh}"
 
 STATIC_PASSWORD_HASH="${STATIC_PASSWORD_HASH:-\$argon2id\$v=19\$m=65536,t=3,p=4\$PysvHcWpamCZAwybuk5j8w\$0whWdpZhQyNuFUNQZ1HEKp9nsByqXIHxsHc1Xh03o20}"
 
@@ -262,7 +262,7 @@ SQL
 # assign_super_admin 使用服务容器内的 RBAC CLI，为 bootstrap 用户补齐授权。
 assign_super_admin() {
   log "assigning super admin role to bootstrap user"
-  compose exec -T "$SERVICE_NAME" /app/user-service/bin/user-services \
+  compose exec -T "$SERVICE_NAME" /app/user-service/bin/user-service \
     rbac --config /app/user-service/configs/config.yaml \
     assign-super-admin --user-id "$BOOTSTRAP_USER_ID" >/dev/null
 }
@@ -357,7 +357,7 @@ SQL
 cache_user_token_version() {
   local user_id="$1"
   local token_version="$2"
-  compose exec -T "$REDIS_SERVICE" redis-cli SET "aegiscore-user-services:auth:user:token_version:{$user_id}" "$token_version" EX 60 >/dev/null
+  compose exec -T "$REDIS_SERVICE" redis-cli SET "aegiscore-user-service:auth:user:token_version:{$user_id}" "$token_version" EX 60 >/dev/null
 }
 
 # prepare_business_data 准备后续压测需要的正常用户、禁用用户、强制改密用户、角色和权限。

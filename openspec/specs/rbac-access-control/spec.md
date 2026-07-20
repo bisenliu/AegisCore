@@ -176,7 +176,7 @@
 
 #### Scenario: 初始化系统基线
 
-- **WHEN** 运维执行 `aegiscore-user-services rbac seed`
+- **WHEN** 运维执行 `aegiscore-user-service rbac seed`
 - **THEN** 系统 MUST 幂等创建或更新基线角色、权限和绑定并输出变更统计
 - **AND** 系统角色和权限 MUST 标记为系统数据
 - **AND** seed MUST NOT 创建业务用户或自动分配超级管理员

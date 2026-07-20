@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.25
 # 从仓库根目录构建：
-#   docker buildx build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services .
+#   docker buildx build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-service .
 #
 # 基础镜像同时保留可读 tag 与多架构 manifest digest，便于 Renovate 审查 tag/digest 更新。
 
@@ -27,14 +27,14 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     -trimpath \
     -buildvcs=false \
     -ldflags="-s -w" \
-    -o /out/user-services ./cmd
+    -o /out/user-service ./cmd
 
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:b7bb25d9f7c31d2bdd1982feb4dafcaf137703c7075dbe2febb41c24212b946f
 WORKDIR /app
 
-COPY --from=builder --chmod=0755 /out/user-services /app/user-service/bin/user-services
+COPY --from=builder --chmod=0755 /out/user-service /app/user-service/bin/user-service
 COPY user-service/configs /app/user-service/configs
 
 USER 65532:65532
-ENTRYPOINT ["/app/user-service/bin/user-services"]
+ENTRYPOINT ["/app/user-service/bin/user-service"]
 CMD ["serve", "--config", "/app/user-service/configs/config.yaml"]

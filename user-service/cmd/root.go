@@ -27,7 +27,7 @@ func defaultRootCommandDependencies() rootCommandDependencies {
 
 func newRootCommand(deps rootCommandDependencies) *cobra.Command {
 	root := &cobra.Command{
-		Use:   "aegiscore-user-services",
+		Use:   "aegiscore-user-service",
 		Short: "AegisCore user services runtime",
 	}
 

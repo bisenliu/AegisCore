@@ -1,0 +1,31 @@
+# 本文件定义 user-service 的水平自动伸缩策略。
+# 适用于已安装 metrics-server 的集群，按 CPU 和内存利用率调整 HTTP 副本数量。
+# 关键资源是 HorizontalPodAutoscaler，目标为 user-service Deployment。
+apiVersion: autoscaling/v2 # HPA 使用 autoscaling/v2，支持多指标伸缩。
+kind: HorizontalPodAutoscaler # 声明水平 Pod 自动伸缩资源。
+metadata: # HPA 的元数据。
+  name: aegiscore-user-service # HPA 名称，与目标 Deployment 保持一致。
+  labels: # 资源标签，便于归类和查询。
+    app.kubernetes.io/name: aegiscore-user-service # 应用名称标签。
+    app.kubernetes.io/component: runtime # 组件类型；runtime 表示作用于 HTTP 副本。
+    app.kubernetes.io/part-of: aegiscore # 系统归属标签。
+spec: # HPA 伸缩规格。
+  scaleTargetRef: # 被伸缩的目标资源。
+    apiVersion: apps/v1 # 目标 Deployment 的 API 版本。
+    kind: Deployment # 目标资源类型。
+    name: aegiscore-user-service # 目标 Deployment 名称。
+  minReplicas: 2 # 最小副本数；生产默认保留至少两个 HTTP 副本。
+  maxReplicas: 6 # 最大副本数；按数据库和缓存容量调整上限。
+  metrics: # 触发伸缩的指标列表。
+    - type: Resource # 使用 Pod 资源指标。
+      resource: # CPU 指标配置。
+        name: cpu # 指标名称；cpu 表示 CPU 利用率。
+        target: # CPU 目标值。
+          type: Utilization # 按 requests 的百分比计算利用率。
+          averageUtilization: 70 # 平均 CPU 利用率超过 70% 时倾向扩容。
+    - type: Resource # 使用 Pod 资源指标。
+      resource: # 内存指标配置。
+        name: memory # 指标名称；memory 表示内存利用率。
+        target: # 内存目标值。
+          type: Utilization # 按 requests 的百分比计算利用率。
+          averageUtilization: 80 # 平均内存利用率超过 80% 时倾向扩容。

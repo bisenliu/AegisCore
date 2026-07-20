@@ -1,0 +1,72 @@
+# 本文件声明 user-service runtime Pod 的最小网络访问意图。
+# 适用于启用 NetworkPolicy 的 CNI；未启用策略执行的集群会忽略这些限制。
+# 默认仅允许受信任 namespace 中带有准入标签的调用方访问 HTTP，并仅允许访问明确的数据库、Redis、OTLP 和 DNS 目的地。
+apiVersion: networking.k8s.io/v1 # NetworkPolicy 使用 networking.k8s.io/v1 API。
+kind: NetworkPolicy # 声明 Pod 网络隔离策略。
+metadata: # NetworkPolicy 的元数据。
+  name: aegiscore-user-service # NetworkPolicy 名称，与工作负载保持一致。
+  labels: # 资源标签，便于归类和查询。
+    app.kubernetes.io/name: aegiscore-user-service # 应用名称标签。
+    app.kubernetes.io/component: runtime # 组件类型；runtime 表示作用于 HTTP Pod。
+    app.kubernetes.io/part-of: aegiscore # 系统归属标签。
+spec: # 网络策略规格。
+  podSelector: # 选择受此策略约束的 Pod。
+    matchLabels: # 必须同时匹配以下标签。
+      app.kubernetes.io/name: aegiscore-user-service # 匹配 user-service runtime Pod。
+      app.kubernetes.io/component: runtime # 排除 migration 和 seed Job Pod。
+  policyTypes: # 策略方向；声明后未放行的流量会被拒绝。
+    - Ingress # 约束进入 Pod 的流量。
+    - Egress # 约束 Pod 发出的流量。
+  ingress: # 入站允许规则。
+    - from: # 允许的来源 Pod 集合。
+        - namespaceSelector: # 仅允许受信任入口 namespace。
+            matchLabels: # namespace 必须匹配以下标签。
+              kubernetes.io/metadata.name: ingress-system # 网关或受控上游所在 namespace。
+          podSelector: # 来源 Pod 选择器。
+            matchLabels: # 调用方必须显式带此标签。
+              aegiscore.io/allow-user-service: "true" # 调用方准入标签；网关或上游服务应配置。
+      ports: # 入站允许的端口。
+        - protocol: TCP # HTTP 使用 TCP 协议。
+          port: 8080 # 允许访问 user-service HTTP 端口。
+  egress: # 出站允许规则。
+    - to: # PostgreSQL 目的地限制。
+        - namespaceSelector: # 选择数据库所在 namespace。
+            matchLabels: # namespace 必须匹配以下标签。
+              kubernetes.io/metadata.name: data-services # 数据服务 namespace。
+          podSelector: # 选择 PostgreSQL Pod。
+            matchLabels: # Pod 必须匹配以下标签。
+              app.kubernetes.io/name: postgres # PostgreSQL 工作负载标签。
+      ports: # PostgreSQL 允许端口。
+        - protocol: TCP # PostgreSQL 使用 TCP。
+          port: 5432 # PostgreSQL primary_db 端口。
+    - to: # Redis 目的地限制。
+        - namespaceSelector: # 选择缓存所在 namespace。
+            matchLabels: # namespace 必须匹配以下标签。
+              kubernetes.io/metadata.name: data-services # 数据服务 namespace。
+          podSelector: # 选择 Redis Pod。
+            matchLabels: # Pod 必须匹配以下标签。
+              app.kubernetes.io/name: redis # Redis 工作负载标签。
+      ports: # Redis 允许端口。
+        - protocol: TCP # Redis 使用 TCP。
+          port: 6379 # Redis cache_redis 端口。
+    - to: # OTLP Collector 目的地限制。
+        - namespaceSelector: # 选择观测组件所在 namespace。
+            matchLabels: # namespace 必须匹配以下标签。
+              kubernetes.io/metadata.name: observability # 观测 namespace。
+          podSelector: # 选择 OpenTelemetry Collector Pod。
+            matchLabels: # Pod 必须匹配以下标签。
+              app.kubernetes.io/name: opentelemetry-collector # Collector 工作负载标签。
+      ports: # OTLP 允许端口。
+        - protocol: TCP # OTLP gRPC 使用 TCP。
+          port: 4317 # OpenTelemetry Collector gRPC 端口。
+        - protocol: TCP # OTLP HTTP 使用 TCP。
+          port: 4318 # OpenTelemetry Collector HTTP 端口。
+    - to: # DNS 解析目的地限制。
+        - namespaceSelector: # 选择 DNS 所在 namespace。
+            matchLabels: # namespace 必须匹配以下标签。
+              kubernetes.io/metadata.name: kube-system # kube-system 通常承载 CoreDNS。
+      ports: # DNS 允许端口。
+        - protocol: UDP # DNS 常用 UDP。
+          port: 53 # DNS UDP 端口。
+        - protocol: TCP # 大响应或重试时 DNS 可使用 TCP。
+          port: 53 # DNS TCP 端口。

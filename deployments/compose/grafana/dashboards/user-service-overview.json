@@ -4127,8 +4127,8 @@
       {
         "current": {
           "selected": false,
-          "text": "aegiscore-user-services",
-          "value": "aegiscore-user-services"
+          "text": "aegiscore-user-service",
+          "value": "aegiscore-user-service"
         },
         "datasource": {
           "type": "prometheus",

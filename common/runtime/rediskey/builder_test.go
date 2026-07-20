@@ -7,12 +7,12 @@ import (
 )
 
 func TestBuilderKeyUsesNamespaceScopeAndHashTag(t *testing.T) {
-	builder, err := NewBuilder(Options{Namespace: " aegiscore-user-services "})
+	builder, err := NewBuilder(Options{Namespace: " aegiscore-user-service "})
 	require.NoError(t, err)
 	scoped := builder.MustScoped("auth")
 
 	got := scoped.MustKey("session", HashTag("u-123"), "s-123")
-	require.Equal(t, "aegiscore-user-services:auth:session:{u-123}:s-123", got)
+	require.Equal(t, "aegiscore-user-service:auth:session:{u-123}:s-123", got)
 }
 
 func TestBuilderOmitsEmptyNamespace(t *testing.T) {
@@ -24,10 +24,10 @@ func TestBuilderOmitsEmptyNamespace(t *testing.T) {
 }
 
 func TestBuilderPrefixAddsTrailingSeparator(t *testing.T) {
-	builder := MustBuilder(Options{Namespace: "aegiscore-user-services"}).MustScoped("auth")
+	builder := MustBuilder(Options{Namespace: "aegiscore-user-service"}).MustScoped("auth")
 
 	got := builder.MustPrefix("session", HashTag("u-123"))
-	require.Equal(t, "aegiscore-user-services:auth:session:{u-123}:", got)
+	require.Equal(t, "aegiscore-user-service:auth:session:{u-123}:", got)
 }
 
 func TestBuilderAllowsSeparatorInsideHashTag(t *testing.T) {

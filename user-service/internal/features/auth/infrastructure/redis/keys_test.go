@@ -7,41 +7,41 @@ import (
 )
 
 func TestKeyCatalogUsesAppNamePrefixWithNewKeyFormat(t *testing.T) {
-	keys := MustKeyCatalog(" aegiscore-user-services ")
+	keys := MustKeyCatalog(" aegiscore-user-service ")
 	{
 
 		got := keys.AuthSession("u-123", "s-123")
-		require.Equal(t, "aegiscore-user-services:auth:session:{u-123}:s-123", got,
+		require.Equal(t, "aegiscore-user-service:auth:session:{u-123}:s-123", got,
 			"AuthSession = %q", got)
 	}
 	{
 
 		got := keys.PasswordChangeSession("u-123", "pc-123")
-		require.Equal(t, "aegiscore-user-services:auth:password_change_session:{u-123}:pc-123", got,
+		require.Equal(t, "aegiscore-user-service:auth:password_change_session:{u-123}:pc-123", got,
 			"PasswordChangeSession = %q", got)
 	}
 	{
 
 		got := keys.AuthSessionPrefix("u-123")
-		require.Equal(t, "aegiscore-user-services:auth:session:{u-123}:", got,
+		require.Equal(t, "aegiscore-user-service:auth:session:{u-123}:", got,
 			"AuthSessionPrefix = %q", got)
 	}
 	{
 
 		got := keys.AuthUserTokenVersion("u-123")
-		require.Equal(t, "aegiscore-user-services:auth:user:token_version:{u-123}", got,
+		require.Equal(t, "aegiscore-user-service:auth:user:token_version:{u-123}", got,
 			"AuthUserTokenVersion = %q", got)
 	}
 	{
 
 		got := keys.AuthUserSessions("u-123")
-		require.Equal(t, "aegiscore-user-services:auth:user:sessions:{u-123}", got,
+		require.Equal(t, "aegiscore-user-service:auth:user:sessions:{u-123}", got,
 			"AuthUserSessions = %q", got)
 	}
 	{
 
 		got := keys.AuthUserSessionsPurge("u-123", "p-123")
-		require.Equal(t, "aegiscore-user-services:auth:user:sessions:{u-123}:purge:p-123", got,
+		require.Equal(t, "aegiscore-user-service:auth:user:sessions:{u-123}:purge:p-123", got,
 			"AuthUserSessionsPurge = %q", got)
 	}
 

@@ -153,8 +153,8 @@ make user-service-migrate-validate
 Distroless 运行时镜像变更还应执行：
 
 ```bash
-docker buildx build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-services:latest --load .
-IMAGE=aegiscore-user-services:latest make user-service-image-verify
+docker buildx build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-service:latest --load .
+IMAGE=aegiscore-user-service:latest make user-service-image-verify
 ```
 
 该验证检查静态链接、UID/GID `65532`、CA certificates、`Asia/Shanghai` timezone、`/tmp`、CLI help，以及 shell、`apk`、`wget`、`curl`、`grep` 和 Atlas 均不存在。

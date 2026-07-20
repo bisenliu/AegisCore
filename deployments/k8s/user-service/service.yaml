@@ -1,0 +1,21 @@
+# 本文件定义 user-service 的集群内访问入口。
+# 适用于集群内部调用、Ingress/Gateway 后端绑定和探针访问聚合。
+# 关键资源是 ClusterIP Service，通过标准 selector 指向 HTTP 运行副本。
+apiVersion: v1 # Service 属于 Kubernetes core/v1 API。
+kind: Service # 声明创建服务发现和负载均衡资源。
+metadata: # Service 的元数据。
+  name: aegiscore-user-service # Service 名称；集群内 DNS 会使用该名称。
+  labels: # 资源标签，供查询、归类和工具链使用。
+    app.kubernetes.io/name: aegiscore-user-service # 应用名称标签，保持与 Deployment selector 一致。
+    app.kubernetes.io/component: runtime # 组件类型；runtime 表示 HTTP 服务运行时。
+    app.kubernetes.io/part-of: aegiscore # 系统归属标签。
+spec: # Service 行为规格。
+  type: ClusterIP # 仅暴露集群内虚拟 IP；外部访问由网关或 Ingress 另行接入。
+  selector: # 选择后端 Pod 的标签条件。
+    app.kubernetes.io/name: aegiscore-user-service # 匹配 user-service Pod 的应用名称。
+    app.kubernetes.io/component: runtime # 只选择 HTTP 运行时 Pod，避免选中 Job Pod。
+  ports: # Service 对外暴露的端口列表。
+    - name: http # 端口名称；Deployment probe 和网关可引用该语义名称。
+      port: 8080 # Service 端口；集群内客户端访问该端口。
+      targetPort: http # 转发到容器中名为 http 的端口。
+      protocol: TCP # HTTP 服务使用 TCP 协议。
