@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
-	"github.com/aegiscore/common/security/password"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcredentials "github.com/aegiscore/user-service/internal/features/auth/application/credentials"
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
@@ -112,8 +111,6 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*LoginResul
 
 func loginFailureReason(err error) string {
 	switch {
-	case errors.Is(err, password.ErrPasswordKDFBusy):
-		return authapplication.MetricsReasonPasswordKDFBusy
 	case errors.Is(err, authdomain.ErrUserStatusRejected):
 		return authapplication.MetricsReasonUserStatusRejected
 	case errors.Is(err, authdomain.ErrInvalidCredentials):

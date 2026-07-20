@@ -16,7 +16,6 @@ import (
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/response"
 	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/common/validation"
 	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
@@ -112,19 +111,6 @@ func TestAuthControllerLoginMapsInvalidCredentials(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, status,
 		"status = %d, want %d", status, http.StatusUnauthorized)
 	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeUnauthenticated || envelope.Message != messages.InvalidCredentials,
-		"envelope = %#v", envelope)
-
-}
-
-func TestAuthControllerLoginMapsPasswordKDFBusy(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	ctl, mocks := newTestAuthController(t)
-	mocks.login.EXPECT().Login(gomock.Any(), authcommand.LoginCommand{Username: "alice", Password: "secret"}).Return(nil, password.ErrPasswordKDFBusy)
-
-	status, envelope := executeAuthLogin(t, ctl, `{"username":"alice","password":"secret"}`)
-	require.Equal(t, http.StatusServiceUnavailable, status,
-		"status = %d, want %d", status, http.StatusServiceUnavailable)
-	require.False(t, envelope.Success || envelope.Code != contracterrors.CodeServiceUnavailable || envelope.Message != messages.AuthServiceBusy,
 		"envelope = %#v", envelope)
 
 }

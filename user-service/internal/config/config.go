@@ -29,7 +29,6 @@ type ResourcesConfig struct {
 // AuthConfig 包含 user-service 认证 token 与会话校验设置。
 type AuthConfig struct {
 	JWT                      JWTConfig          `mapstructure:"jwt"`
-	PasswordKDF              PasswordKDFConfig  `mapstructure:"password_kdf"`
 	TokenVersionCache        FeatureCacheConfig `mapstructure:"token_version_cache"`
 	TokenVersionCacheTTL     time.Duration      `mapstructure:"token_version_cache_ttl"`
 	RefreshTokenRotation     bool               `mapstructure:"refresh_token_rotation"`
@@ -76,12 +75,6 @@ func (c FeatureCacheConfig) LoadTimeoutValue() time.Duration {
 		return 0
 	}
 	return *c.LoadTimeout
-}
-
-// PasswordKDFConfig 包含密码 Argon2id KDF 的实例级资源预算。
-type PasswordKDFConfig struct {
-	Argon2Concurrency int `mapstructure:"argon2_concurrency"`
-	Argon2QueueSize   int `mapstructure:"argon2_queue_size"`
 }
 
 // EntConfig 控制 user-service Ent 运行时行为。
@@ -143,7 +136,7 @@ func (c Config) Validate() error {
 }
 
 func (c Config) validateAuth() []error {
-	// production-like 环境对 JWT secret 额外加固；Argon2 queue 必须覆盖 concurrency，0 个活跃会话上限表示不裁剪。
+	// production-like 环境对 JWT secret 额外加固；0 个活跃会话上限表示不裁剪。
 	var errs []error
 	secret := strings.TrimSpace(c.Auth.JWT.Secret)
 	if secret == "" {
@@ -157,11 +150,6 @@ func (c Config) validateAuth() []error {
 	}
 	errs = append(errs, commonconfig.ValidatePositiveDuration("auth.jwt.access_token_ttl", c.Auth.JWT.AccessTokenTTL)...)
 	errs = append(errs, commonconfig.ValidatePositiveDuration("auth.jwt.refresh_token_ttl", c.Auth.JWT.RefreshTokenTTL)...)
-	errs = append(errs, commonconfig.ValidatePositiveInt("auth.password_kdf.argon2_concurrency", c.Auth.PasswordKDF.Argon2Concurrency)...)
-	errs = append(errs, commonconfig.ValidatePositiveInt("auth.password_kdf.argon2_queue_size", c.Auth.PasswordKDF.Argon2QueueSize)...)
-	if c.Auth.PasswordKDF.Argon2Concurrency > 0 && c.Auth.PasswordKDF.Argon2QueueSize > 0 && c.Auth.PasswordKDF.Argon2QueueSize < c.Auth.PasswordKDF.Argon2Concurrency {
-		errs = append(errs, commonconfig.FieldError("auth.password_kdf.argon2_queue_size", "must be >= auth.password_kdf.argon2_concurrency"))
-	}
 	errs = append(errs, commonconfig.ValidateNonNegativeInt("auth.max_active_sessions_per_user", c.Auth.MaxActiveSessionsPerUser)...)
 	errs = append(errs, validateFeatureCache("auth.token_version_cache", c.Auth.TokenVersionCache)...)
 	return errs

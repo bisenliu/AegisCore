@@ -43,10 +43,7 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 	if err != nil {
 		return fail(err)
 	}
-	passwordService, err := password.NewService(password.Options{
-		Concurrency: cfg.Auth.PasswordKDF.Argon2Concurrency,
-		QueueSize:   cfg.Auth.PasswordKDF.Argon2QueueSize,
-	})
+	passwordService, err := password.NewService()
 	if err != nil {
 		return fail(err)
 	}

@@ -97,7 +97,7 @@ func seedUser(t *testing.T, harness *httpFlowHarness, input seededUserInput) see
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	passwordService, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
+	passwordService, err := password.NewService()
 	require.NoError(t, err, "create password service")
 	passwordHash, err := passwordService.HashContext(ctx, input.Password)
 	require.NoError(t, err, "hash bootstrap password")

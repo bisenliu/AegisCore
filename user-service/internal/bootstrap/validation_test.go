@@ -127,7 +127,6 @@ func appModuleValidationTestConfig() *serviceconfig.Config {
 		App:           config.AppConfig{Name: "aegiscore-user-service", Environment: "test"},
 		Observability: appModuleTestObservabilityConfig(),
 	}, Auth: serviceconfig.AuthConfig{
-		PasswordKDF:       serviceconfig.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1},
 		TokenVersionCache: appModuleTestFeatureCacheConfig(time.Second),
 	}, RBAC: serviceconfig.RBACConfig{UserRoleCache: appModuleTestFeatureCacheConfig(5 * time.Second)}}
 }

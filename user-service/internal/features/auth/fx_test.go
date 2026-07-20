@@ -344,7 +344,6 @@ func newAuthModuleBaseOptionsWithoutRedis(t *testing.T, refreshRotation bool, pr
 				RefreshTokenTTL:        time.Hour,
 				PasswordChangeTokenTTL: 5 * time.Minute,
 			},
-			PasswordKDF:              serviceconfig.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1},
 			TokenVersionCache:        serviceconfig.FeatureCacheConfig{Enabled: &disabled},
 			TokenVersionCacheTTL:     time.Minute,
 			RefreshTokenRotation:     refreshRotation,
@@ -352,7 +351,7 @@ func newAuthModuleBaseOptionsWithoutRedis(t *testing.T, refreshRotation bool, pr
 		},
 	}
 	jwtService := commonauth.NewJWTService(commonauth.JWTConfig{Secret: cfg.Auth.JWT.Secret, Issuer: cfg.Auth.JWT.Issuer, Audience: cfg.Auth.JWT.Audience})
-	passwordService, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
+	passwordService, err := password.NewService()
 	require.NoError(t, err)
 	validator, err := commonvalidation.NewDefault()
 	require.NoError(t, err)

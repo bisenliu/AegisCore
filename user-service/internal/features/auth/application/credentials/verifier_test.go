@@ -3,6 +3,7 @@ package credentials
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -60,13 +61,13 @@ func TestVerifierUnknownUserExecutesDummyPasswordVerification(t *testing.T) {
 	require.ErrorIs(t, err, authdomain.ErrInvalidCredentials)
 }
 
-func TestVerifierDummyPasswordHashUsesSupportedKDFParameters(t *testing.T) {
+func TestVerifierDummyPasswordHashUsesSupportedBcryptHash(t *testing.T) {
 	matched, err := testPasswordService(t).VerifyContext(context.Background(), "secret", dummyPasswordHash)
 	require.NoError(t, err)
 	require.False(t, matched)
 }
 
-func TestVerifierPasswordKDFBusyDoesNotRevealUserExistence(t *testing.T) {
+func TestVerifierInvalidHashDoesNotRevealUserExistence(t *testing.T) {
 	tests := []struct {
 		name       string
 		credential *authdomain.UserCredential
@@ -86,12 +87,12 @@ func TestVerifierPasswordKDFBusyDoesNotRevealUserExistence(t *testing.T) {
 				passwordHash = tt.credential.PasswordHash
 			}
 			passwords := NewMockPasswordService(ctrl)
-			passwords.EXPECT().VerifyContext(gomock.Any(), "secret", passwordHash).Return(false, password.ErrPasswordKDFBusy)
+			passwords.EXPECT().VerifyContext(gomock.Any(), "secret", passwordHash).Return(false, password.ErrInvalidHash)
 			verifier := NewVerifier(store, passwords)
 
 			_, err := verifier.VerifyPassword(context.Background(), "alice", "secret")
-			require.ErrorIs(t, err, password.ErrPasswordKDFBusy)
-			require.False(t, errors.Is(err, authdomain.ErrInvalidCredentials))
+			require.ErrorIs(t, err, authdomain.ErrInvalidCredentials)
+			require.False(t, errors.Is(err, password.ErrInvalidHash))
 		})
 	}
 }
@@ -117,6 +118,7 @@ func TestVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 		"result = %#v", result)
 	require.False(t, updatedInput.UserID != verifierTestUserID || updatedInput.Status != identity.UserStatusNormal,
 		"updated input = %#v", updatedInput)
+	require.True(t, strings.HasPrefix(updatedInput.PasswordHash, "$2"))
 	require.False(t, updatedInput.ExpectedStatus == nil || *updatedInput.ExpectedStatus != identity.UserStatusMustChangePassword || updatedInput.ExpectedTokenVersion == nil || *updatedInput.ExpectedTokenVersion != 2,
 		"updated input expected guards = %#v", updatedInput)
 
@@ -124,7 +126,7 @@ func TestVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 
 func testPasswordService(t testing.TB) *password.Service {
 	t.Helper()
-	service, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
+	service, err := password.NewService()
 	require.NoError(t, err,
 		"NewService: %v", err)
 

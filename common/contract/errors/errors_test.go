@@ -107,7 +107,7 @@ func TestWrapInternalAndFromError(t *testing.T) {
 }
 
 func TestWrapServiceUnavailable(t *testing.T) {
-	cause := stderrors.New("argon2 queue full")
+	cause := stderrors.New("dependency busy")
 	err := WrapServiceUnavailable(cause, "认证服务繁忙，请稍后重试")
 	require.Equal(t, KindServiceUnavailable, err.Kind)
 	require.Equal(t, ReasonServiceUnavailable, err.Reason)

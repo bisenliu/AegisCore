@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -39,6 +40,7 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 		matched, err := verifyTestPassword(t, "secret", createdInput.PasswordHash)
 		require.NoError(t, err)
 		require.True(t, matched)
+		require.True(t, strings.HasPrefix(createdInput.PasswordHash, "$2"))
 		require.Equal(t, testUserID, user.User.UserID)
 		require.Equal(t, "alice", user.User.Username)
 		require.Equal(t, createdAt, user.User.CreatedAt)
@@ -83,7 +85,7 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 
 func testPasswordService(t testing.TB) *password.Service {
 	t.Helper()
-	service, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
+	service, err := password.NewService()
 	require.NoError(t, err)
 	return service
 }

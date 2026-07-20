@@ -85,7 +85,7 @@ func passwordChangeClaims(sessionID string, tokenVersion int64) *authtokens.Clai
 
 func testPasswordService(t testing.TB) *password.Service {
 	t.Helper()
-	service, err := password.NewService(password.Options{Concurrency: 1, QueueSize: 1})
+	service, err := password.NewService()
 	require.NoError(t, err,
 		"NewService: %v", err)
 

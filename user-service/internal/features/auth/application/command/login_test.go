@@ -11,7 +11,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	commonauth "github.com/aegiscore/common/security/auth"
-	"github.com/aegiscore/common/security/password"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
@@ -94,16 +93,17 @@ func TestAuthUseCaseLoginRecordsFailureReasons(t *testing.T) {
 
 	})
 
-	t.Run("kdf busy", func(t *testing.T) {
+	t.Run("system error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		metrics := NewMockMetrics(ctrl)
 		fixture := newAuthCommandFixtureWithController(ctrl, defaultAuthConfig(true), metrics)
-		fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(nil, password.ErrPasswordKDFBusy)
-		metrics.EXPECT().LoginFailed(gomock.Any(), authapplication.MetricsReasonPasswordKDFBusy)
+		verifyErr := errors.New("verify password failed")
+		fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(nil, verifyErr)
+		metrics.EXPECT().LoginFailed(gomock.Any(), authapplication.MetricsReasonSystemError)
 
 		result, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
-		require.ErrorIs(t, err, password.ErrPasswordKDFBusy,
-			"err = %v, want ErrPasswordKDFBusy", err)
+		require.ErrorIs(t, err, verifyErr,
+			"err = %v, want system error", err)
 		require.Nil(t, result,
 			"result = %#v, want nil", result)
 

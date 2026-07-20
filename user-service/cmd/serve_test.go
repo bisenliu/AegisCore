@@ -193,9 +193,6 @@ auth:
     access_token_ttl: 15m
     refresh_token_ttl: 168h
     password_change_token_ttl: 5m
-  password_kdf:
-    argon2_concurrency: 2
-    argon2_queue_size: 16
   token_version_cache_ttl: 30s
   refresh_token_rotation: true
   max_active_sessions_per_user: 5

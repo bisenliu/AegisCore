@@ -9,16 +9,15 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
-	"github.com/aegiscore/common/security/password"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	"github.com/aegiscore/user-service/internal/features/auth/application/authctx"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
-const dummyPasswordHash = "$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" // #nosec G101 -- 固定 dummy hash 仅用于隐藏用户存在性，不对应真实凭据。
+const dummyPasswordHash = "$2a$12$C6UzMDM.H6dfI/f/IKcEeOeIOoC.K1Yp1vCLMRaoLQheS9MZ5.w7u" // #nosec G101 -- 固定 dummy hash 仅用于隐藏用户存在性，不对应真实凭据。
 
-// PasswordService 定义凭据校验对密码 KDF 的最小依赖面。
+// PasswordService 定义凭据校验对密码哈希服务的最小依赖面。
 type PasswordService interface {
 	HashContext(ctx context.Context, plain string) (string, error)
 	VerifyContext(ctx context.Context, plain string, encodedHash string) (bool, error)
@@ -46,11 +45,6 @@ func (v *verifier) VerifyPassword(ctx context.Context, username string, plainPas
 	if err != nil {
 		if errors.Is(err, identity.ErrUserNotFound) {
 			if _, verifyErr := v.passwordService.VerifyContext(ctx, plainPassword, dummyPasswordHash); verifyErr != nil {
-				if errors.Is(verifyErr, password.ErrPasswordKDFBusy) {
-					fields := append([]zap.Field{zap.String("username", username), zap.Error(verifyErr)}, authctx.ClientContextFields(ctx)...)
-					logger.Warn(ctx, "password kdf busy", fields...)
-					return nil, verifyErr
-				}
 				logger.Error(ctx, "verify dummy login password failed", logger.StackTrace(zap.String("username", username), zap.Error(verifyErr))...)
 			}
 			fields := append([]zap.Field{zap.String("username", username)}, authctx.ClientContextFields(ctx)...)
@@ -62,11 +56,6 @@ func (v *verifier) VerifyPassword(ctx context.Context, username string, plainPas
 	}
 	matched, err := v.passwordService.VerifyContext(ctx, plainPassword, credential.PasswordHash)
 	if err != nil {
-		if errors.Is(err, password.ErrPasswordKDFBusy) {
-			fields := append([]zap.Field{zap.String("username", username), zap.String("user_id", credential.UserID.String()), zap.Error(err)}, authctx.ClientContextFields(ctx)...)
-			logger.Warn(ctx, "password kdf busy", fields...)
-			return nil, err
-		}
 		logger.Error(ctx, "verify login password failed", logger.StackTrace(zap.String("username", username), zap.String("user_id", credential.UserID.String()), zap.Error(err))...)
 		return nil, authdomain.ErrInvalidCredentials
 	}

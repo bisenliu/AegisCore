@@ -33,24 +33,3 @@ func TestNewJWTServiceAcceptsValidTokenTTLPolicy(t *testing.T) {
 	require.NotNil(t, service)
 
 }
-
-func TestNewPasswordServiceUsesConfiguredKDFBudget(t *testing.T) {
-	cfg := &serviceconfig.Config{Auth: serviceconfig.AuthConfig{
-		PasswordKDF: serviceconfig.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1},
-	}}
-
-	service, err := NewPasswordService(cfg)
-	require.NoError(t, err)
-	require.NotNil(t, service)
-
-}
-
-func TestNewPasswordServiceRejectsInvalidKDFBudget(t *testing.T) {
-	cfg := &serviceconfig.Config{Auth: serviceconfig.AuthConfig{
-		PasswordKDF: serviceconfig.PasswordKDFConfig{Argon2Concurrency: 2, Argon2QueueSize: 1},
-	}}
-
-	_, err := NewPasswordService(cfg)
-	require.ErrorContains(t, err, "password argon2 queue size must be >= concurrency")
-
-}

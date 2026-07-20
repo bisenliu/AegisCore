@@ -5,6 +5,7 @@ import (
 
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	"github.com/aegiscore/common/security/password"
 )
 
 // WiringModule 将用户服务级基础设施 provider 接入 Fx，不主动执行运行时注册。
@@ -16,7 +17,7 @@ var WiringModule = fx.Module("user-service-providers-wiring",
 		commonmetrics.NewFxProvider,
 		commontracing.NewFxProvider,
 		// Fx 分类：横切能力 - 服务级认证与密码安全能力。
-		NewPasswordService,
+		password.NewService,
 		// Fx 分类：资源 - 服务拥有的 PostgreSQL 与 Redis 客户端。
 		fx.Annotate(NewPrimaryDB, fx.ResultTags(`name:"primary_db"`)),
 		fx.Annotate(NewCacheRedis, fx.ResultTags(`name:"cache_redis"`)),

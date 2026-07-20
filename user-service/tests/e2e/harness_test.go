@@ -120,9 +120,6 @@ auth:
     audience: aegiscore-users
     access_token_ttl: 5m
     refresh_token_ttl: 30m
-  password_kdf:
-    argon2_concurrency: 2
-    argon2_queue_size: 16
   token_version_cache:
     enabled: true
     size: 1000

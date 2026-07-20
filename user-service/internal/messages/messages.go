@@ -10,7 +10,6 @@ const (
 
 	// 认证与登录类。
 	InvalidCredentials       = "用户名或密码不正确，请检查后重试" // #nosec G101 -- 用户提示文案，不包含真实凭据。
-	AuthServiceBusy          = "认证服务繁忙，请稍后重试"
 	AuthRevocationIncomplete = "退出登录尚未完全生效，请稍后重试"
 	PasswordChangeRequired   = "为保障账号安全，请先修改密码" // #nosec G101 -- 用户提示文案，不包含真实凭据。
 	MissingSession           = "登录状态已失效，请重新登录"

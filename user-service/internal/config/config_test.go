@@ -30,8 +30,6 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, 600*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeoutValue())
 	require.True(t, cfg.Auth.RefreshTokenRotation)
 	require.Equal(t, 5, cfg.Auth.MaxActiveSessionsPerUser)
-	require.Equal(t, 2, cfg.Auth.PasswordKDF.Argon2Concurrency)
-	require.Equal(t, 16, cfg.Auth.PasswordKDF.Argon2QueueSize)
 	require.True(t, cfg.Ent.SQLDebug)
 	require.Len(t, cfg.Resources.Redis, 1)
 	require.Equal(t, "127.0.0.1:6379", cfg.Resources.Redis[serviceresources.NameCacheRedis].Addr)
@@ -185,9 +183,10 @@ func TestLoadRepositoryConfig(t *testing.T) {
 	require.Contains(t, cfg.Resources.Postgres, serviceresources.NamePrimaryDB)
 }
 
-func TestValidateRejectsInvalidAuthConfig(t *testing.T) {
-	err := loadServiceConfigError(t, strings.ReplaceAll(serviceConfigYAML(), "argon2_queue_size: 16", "argon2_queue_size: 1"))
-	require.Contains(t, err.Error(), "auth.password_kdf.argon2_queue_size must be >= auth.password_kdf.argon2_concurrency")
+func TestLoadRejectsLegacyPasswordKDFConfig(t *testing.T) {
+	yaml := strings.Replace(serviceConfigYAML(), "  token_version_cache:\n", "  password_kdf:\n    argon2_concurrency: 2\n    argon2_queue_size: 16\n  token_version_cache:\n", 1)
+	err := loadServiceConfigError(t, yaml)
+	require.Contains(t, err.Error(), "unknown configuration keys: auth.password_kdf.argon2_concurrency, auth.password_kdf.argon2_queue_size")
 }
 
 func TestValidateRejectsShortProductionJWTSecret(t *testing.T) {
@@ -266,9 +265,6 @@ auth:
     access_token_ttl: 15m
     refresh_token_ttl: 168h
     password_change_token_ttl: 5m
-  password_kdf:
-    argon2_concurrency: 2
-    argon2_queue_size: 16
   token_version_cache:
     enabled: true
     size: 2048

@@ -30,7 +30,6 @@ func TestModuleResolvesServiceLevelProviders(t *testing.T) {
 				Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1},
 			},
 		},
-		Auth: serviceconfig.AuthConfig{PasswordKDF: serviceconfig.PasswordKDFConfig{Argon2Concurrency: 1, Argon2QueueSize: 1}},
 	}
 	err := fx.ValidateApp(
 		fx.Supply(serviceconfig.NewRuntimeConfig(serviceCfg), serviceCfg, zap.NewNop()),

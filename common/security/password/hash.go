@@ -2,64 +2,46 @@ package password
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
-	"encoding/base64"
 	"fmt"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
-// HashContext 使用实例安全参数创建编码后的 Argon2id 密码哈希，并支持等待 KDF 槽位时被 ctx 取消。
+// HashContext 使用固定 bcrypt 策略创建编码后的密码哈希。
 func (s *Service) HashContext(ctx context.Context, plain string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if err := validatePlainPassword(plain); err != nil {
 		return "", err
 	}
 
-	salt := make([]byte, s.params.saltLength)
-	if _, err := rand.Read(salt); err != nil {
-		return "", fmt.Errorf("generate password salt: %w", err)
-	}
-
-	key, err := s.deriveKeyContext(ctx, []byte(plain), salt, s.params)
+	hash, err := bcrypt.GenerateFromPassword([]byte(plain), s.cost)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("hash password with bcrypt: %w", err)
 	}
-
-	b64Salt := base64.RawStdEncoding.EncodeToString(salt)
-	b64Key := base64.RawStdEncoding.EncodeToString(key)
-
-	return fmt.Sprintf(
-		"$%s$v=%d$m=%d,t=%d,p=%d$%s$%s",
-		passwordAlgorithm,
-		passwordVersion,
-		s.params.memory,
-		s.params.iterations,
-		s.params.parallelism,
-		b64Salt,
-		b64Key,
-	), nil
+	return string(hash), nil
 }
 
-// VerifyContext 使用常量时间比较校验明文密码和编码后的 Argon2id 哈希，并支持等待 KDF 槽位时被 ctx 取消。
+// VerifyContext 校验明文密码和编码后的 bcrypt 哈希。
 func (s *Service) VerifyContext(ctx context.Context, plain, encodedHash string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	if err := validatePlainPassword(plain); err != nil {
 		return false, err
 	}
-
-	parsed, salt, expected, err := parsePasswordHash(encodedHash)
-	if err != nil {
-		// 格式错误、超长哈希或不符合当前策略的参数会在运行 Argon2 前被拒绝。
-		return false, err
+	if len(encodedHash) == 0 || len(encodedHash) > maxEncodedHashLength {
+		return false, ErrInvalidHash
 	}
 
-	actual, err := s.deriveKeyContext(ctx, []byte(plain), salt, parsed)
-	if err != nil {
-		return false, err
-	}
-
-	if subtle.ConstantTimeCompare(actual, expected) == 1 {
+	if err := bcrypt.CompareHashAndPassword([]byte(encodedHash), []byte(plain)); err == nil {
 		return true, nil
+	} else if err == bcrypt.ErrMismatchedHashAndPassword {
+		return false, nil
+	} else {
+		return false, ErrInvalidHash
 	}
-	return false, nil
 }
 
 func validatePlainPassword(plain string) error {
