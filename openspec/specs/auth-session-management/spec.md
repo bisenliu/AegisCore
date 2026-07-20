@@ -21,13 +21,8 @@
 - **WHEN** 用户名不存在、密码不匹配，或用户状态不允许登录且不属于强制改密状态
 - **THEN** 系统 MUST 拒绝签发任何 token 和创建会话
 - **AND** 公开错误 MUST NOT 泄露用户是否存在、密码匹配结果或具体用户状态
-- **AND** 用户名不存在时系统 MUST 使用当前密码 KDF 参数执行 dummy password verification
-
-#### Scenario: 密码 KDF 资源繁忙
-
-- **WHEN** Argon2 执行和等待队列达到资源上限，或 dummy verification 返回 `password.ErrPasswordKDFBusy`
-- **THEN** 系统 MUST 将该结果分类为临时服务不可用并返回 `503 Service Unavailable`
-- **AND** 系统 MUST NOT 将其折叠为无效凭据，也 MUST NOT 泄露队列长度、KDF 配置或凭证匹配状态
+- **AND** 用户名不存在时系统 MUST 使用当前 bcrypt dummy hash 执行 dummy password verification
+- **AND** 旧 Argon2id、未知算法或格式非法的存储哈希 MUST 被视为无效凭据，MUST NOT 触发旧哈希验证、迁移、fallback 或 rehash
 
 #### Scenario: 强制改密登录
 
@@ -185,7 +180,7 @@
 
 - **WHEN** 凭据无效、用户状态拒绝、缺失认证会话、token 无效、refresh session 无效或 password-change session 无效
 - **THEN** 系统 MUST 返回稳定的 `401 Unauthorized` 认证错误，并保持统一公开文案或 token invalid 文案
-- **WHEN** 认证流程返回 `password.ErrPasswordKDFBusy` 或 `authdomain.ErrSessionRevocationIncomplete`
+- **WHEN** 认证流程返回 `authdomain.ErrSessionRevocationIncomplete`
 - **THEN** 系统 MUST 返回 `503 Service Unavailable` 和 `CodeServiceUnavailable`
 - **AND** 响应 MUST 使用对应稳定公开消息，MUST NOT 泄露 Redis key、session ID、jti、SQL、stacktrace 或内部错误文本
 
@@ -203,7 +198,8 @@ user-service auth feature MUST 私有拥有 token issuer、claims schema、subje
 #### Scenario: 服务私有签发、配置和分层边界
 
 - **WHEN** user-service 签发 token、装配认证流程或新增凭据、token、session、token version 行为
-- **THEN** 系统 MUST 从服务私有配置读取 JWT TTL、password KDF 预算、refresh rotation、token version cache TTL 和每用户活跃 session 上限
+- **THEN** 系统 MUST 从服务私有配置读取 JWT TTL、refresh rotation、token version cache TTL 和每用户活跃 session 上限
+- **AND** 系统 MUST NOT 从服务私有配置读取 password KDF、Argon2 或 bcrypt cost 预算
 - **AND** production-like 环境中的 `auth.jwt.secret` MUST 至少为 32 bytes，校验错误 MUST 明确定位该配置项
 - **AND** 默认 `auth.jwt.issuer` MUST 为 `aegiscore-user-service`
 - **AND** `common/runtime/config` MUST NOT 声明或校验这些业务策略

@@ -79,7 +79,7 @@
 
 ### Requirement: 共享安全原语
 
-系统 MUST 在 `common/security` 中提供业务中立的 JWT 验证、Bearer token 处理、Casbin 请求三元组授权和 Argon2id 密码 KDF 原语，MUST NOT 固定 user-service 的 claims schema、token subject、会话撤销或业务授权模型。
+系统 MUST 在 `common/security` 中提供业务中立的 JWT 验证、Bearer token 处理、Casbin 请求三元组授权和 bcrypt 密码哈希原语，MUST NOT 固定 user-service 的 claims schema、token subject、会话撤销或业务授权模型。
 
 #### Scenario: JWT middleware 使用最小 verifier
 
@@ -95,20 +95,21 @@
 - **THEN** `common/security/casbin.Enforce` MUST 返回 `bool` 和 `error`
 - **AND** 拒绝访问到 `ErrDenied` 的转换 MUST 由 `Authorizer.Authorize` 或调用方显式处理
 
-#### Scenario: 密码 KDF 实例和编码
+#### Scenario: bcrypt 密码哈希和校验
 
 - **WHEN** 服务、CLI 或测试需要执行密码哈希或校验
-- **THEN** 调用方 MUST 显式创建 Argon2id KDF 实例并提供正数并发上限和正数队列上限
-- **AND** 队列上限 MUST 大于或等于并发上限，无效预算 MUST 被拒绝
-- **AND** `common/security/password` MUST NOT 暴露包级哈希、校验或可变门控入口
-- **AND** 系统 MUST 生成或解析包含算法、版本、内存、迭代、并行度、盐和派生密钥的受支持 Argon2id 编码，并使用常量时间比较
+- **THEN** 调用方 MUST 显式创建 bcrypt 密码服务实例
+- **AND** `common/security/password` MUST 使用固定 bcrypt cost 生成新密码哈希，初始 cost MUST 为 `12`
+- **AND** `common/security/password` MUST 使用 bcrypt 校验已编码的密码哈希，非 bcrypt、格式非法或无法解析的哈希 MUST 被拒绝
+- **AND** `common/security/password` MUST NOT 验证、迁移、fallback 或 rehash Argon2id 密码哈希
+- **AND** `common/security/password` MUST NOT 暴露包级哈希、校验或可变算法配置入口
 
-#### Scenario: KDF 资源繁忙
+#### Scenario: 明文密码长度边界
 
-- **WHEN** KDF 实例达到执行中和等待中的资源预算
-- **THEN** 系统 MUST 返回可由 `errors.Is(err, password.ErrPasswordKDFBusy)` 匹配的应用错误
-- **AND** 该错误 MUST 携带 `KindServiceUnavailable`、`Reason=password_kdf_busy`、`CodeServiceUnavailable` 和不泄露预算的公开消息
-- **AND** response helper MUST 将其直接渲染为 `503 Service Unavailable`
+- **WHEN** 调用方提交空明文密码或超过 bcrypt 安全输入上限的明文密码
+- **THEN** `common/security/password` MUST 在执行 bcrypt 前拒绝该输入
+- **AND** 空密码 MUST 返回可匹配的 `password.ErrEmptyPassword`
+- **AND** 超长密码 MUST 返回可匹配的 `password.ErrPasswordTooLong`
 
 ### Requirement: Runtime 配置加载与服务配置边界
 
@@ -132,9 +133,10 @@
 
 #### Scenario: 服务私有配置留在服务边界
 
-- **WHEN** 服务需要 `auth`、`ent`、JWT TTL、password KDF、refresh session、token version、RBAC 或 production-like secret 校验
+- **WHEN** 服务需要 `auth`、`ent`、JWT TTL、refresh session、token version、RBAC 或 production-like secret 校验
 - **THEN** 服务私有 loader MUST 负责解析和校验这些配置
 - **AND** `common/runtime/config` MUST NOT 声明或校验这些业务配置
+- **AND** 服务私有配置 MUST NOT 声明、读取或兼容旧 `auth.password_kdf` 配置
 
 #### Scenario: 通用具名本地缓存配置
 
