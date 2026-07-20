@@ -258,15 +258,14 @@ func newTokenVersionLocalCacheResource(cfg serviceconfig.FeatureCacheConfig, use
 		direct := authvalidators.NewDirectTokenVersionCache(users, cache)
 		return &tokenVersionLocalCacheResource{cache: direct, stats: direct}, nil
 	}
-	local, err := localcache.New[string, int64](localcache.Config[string]{
+	local, err := localcache.NewLoadingCache[string, int64](localcache.Config{
 		Name:        authTokenVersionCacheName,
-		Capacity:    cfg.SizeValue(),
+		Capacity:    uint64(cfg.SizeValue()),
 		TTL:         cfg.TTLValue(),
 		LoadTimeout: cfg.LoadTimeoutValue(),
-		KeyString:   func(key string) string { return key },
 	}, func(ctx context.Context, userID string) (int64, error) {
 		return authvalidators.Current(ctx, users, cache, userID)
-	}, nil)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create auth token version localcache: %w", err)
 	}

@@ -38,15 +38,18 @@ func NewUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult,
 	if !cfg.IsEnabled() {
 		return UserRoleResolverResult{Resolver: resolver, Stats: resolver, Closer: resolver}, nil
 	}
-	cache, err := localcache.New[uuid.UUID, []uuid.UUID](localcache.Config[uuid.UUID]{
+	cache, err := localcache.NewLoadingCache[uuid.UUID, []uuid.UUID](localcache.Config{
 		Name:        rbacUserRolesCacheName,
-		Capacity:    cfg.SizeValue(),
+		Capacity:    uint64(cfg.SizeValue()),
 		TTL:         cfg.TTLValue(),
 		LoadTimeout: cfg.LoadTimeoutValue(),
-		KeyString:   func(userID uuid.UUID) string { return userID.String() },
 	}, func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-		return resolver.loadRolesForUser(ctx, userID)
-	}, cloneRoleIDs)
+		roleIDs, err := resolver.loadRolesForUser(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		return cloneRoleIDs(roleIDs), nil
+	})
 	if err != nil {
 		return UserRoleResolverResult{}, fmt.Errorf("create rbac user roles localcache: %w", err)
 	}

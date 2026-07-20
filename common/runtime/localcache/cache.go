@@ -2,243 +2,242 @@ package localcache
 
 import (
 	"context"
-	"fmt"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/dgraph-io/ristretto/v2"
+	"github.com/jellydator/ttlcache/v3"
 	"golang.org/x/sync/singleflight"
 )
 
-const defaultBufferItems int64 = 64
-
-// Cache 是基于 Ristretto 的 bounded TTL loading cache。
-type Cache[K comparable, V any] struct {
-	name        string
-	capacity    int64
-	client      *ristretto.Cache[string, V]
-	group       singleflight.Group
-	ttl         time.Duration
-	loadTimeout time.Duration
-	keyString   func(K) string
-	loader      Loader[K, V]
-	clone       CloneFunc[V]
-	closed      atomic.Bool
-
-	hit            atomic.Uint64
-	miss           atomic.Uint64
-	load           atomic.Uint64
-	loadError      atomic.Uint64
-	shared         atomic.Uint64
-	doubleCheckHit atomic.Uint64
-	setDropped     atomic.Uint64
-	rejected       atomic.Uint64
-	evicted        atomic.Uint64
+type flightEntry struct {
+	group singleflight.Group
+	refs  int
 }
 
-// New 创建本地 loading cache。
-func New[K comparable, V any](cfg Config[K], loader Loader[K, V], clone CloneFunc[V]) (*Cache[K, V], error) {
-	if cfg.Name == "" {
+// LoadingCache 是 bounded、固定 TTL 的本地 loading cache。
+// 可变 value 的复制语义由调用方负责。
+type LoadingCache[K comparable, V any] struct {
+	name        string
+	capacity    uint64
+	loadTimeout time.Duration
+	loader      Loader[K, V]
+	client      *ttlcache.Cache[K, V]
+
+	lifecycleMu sync.RWMutex
+	closed      bool
+	unsubscribe func()
+	cleanerStop chan struct{}
+	cleanerDone chan struct{}
+
+	flightsMu sync.Mutex
+	flights   map[K]*flightEntry
+
+	hit         atomic.Uint64
+	miss        atomic.Uint64
+	loadSuccess atomic.Uint64
+	loadError   atomic.Uint64
+	evicted     atomic.Uint64
+}
+
+// NewLoadingCache 创建并启动本地 loading cache。
+func NewLoadingCache[K comparable, V any](cfg Config, loader Loader[K, V]) (*LoadingCache[K, V], error) {
+	name := strings.TrimSpace(cfg.Name)
+	if name == "" {
 		return nil, ErrNameRequired
 	}
-	if cfg.Capacity <= 0 {
+	if cfg.Capacity == 0 {
 		return nil, ErrCapacityRequired
 	}
 	if cfg.TTL <= 0 {
 		return nil, ErrTTLRequired
 	}
-	if cfg.KeyString == nil {
-		return nil, ErrKeyStringRequired
+	if cfg.LoadTimeout <= 0 {
+		return nil, ErrLoadTimeoutRequired
 	}
 	if loader == nil {
 		return nil, ErrLoaderRequired
 	}
-	if clone == nil {
-		clone = func(v V) V { return v }
-	}
 
-	numCounters := cfg.NumCounters
-	if numCounters <= 0 {
-		numCounters = cfg.Capacity * 10
-	}
-	bufferItems := cfg.BufferItems
-	if bufferItems <= 0 {
-		bufferItems = defaultBufferItems
-	}
-
-	cache := &Cache[K, V]{
-		name:        cfg.Name,
+	cache := &LoadingCache[K, V]{
+		name:        name,
 		capacity:    cfg.Capacity,
-		ttl:         cfg.TTL,
 		loadTimeout: cfg.LoadTimeout,
-		keyString:   cfg.KeyString,
 		loader:      loader,
-		clone:       clone,
+		flights:     make(map[K]*flightEntry),
+		cleanerStop: make(chan struct{}),
+		cleanerDone: make(chan struct{}),
 	}
-
-	client, err := ristretto.NewCache(&ristretto.Config[string, V]{
-		NumCounters:        numCounters,
-		MaxCost:            cfg.Capacity,
-		BufferItems:        bufferItems,
-		IgnoreInternalCost: true,
-		Metrics:            false,
-		OnReject:           func(*ristretto.Item[V]) { cache.rejected.Add(1) },
-		OnEvict:            func(*ristretto.Item[V]) { cache.evicted.Add(1) },
+	cache.client = ttlcache.New[K, V](
+		ttlcache.WithTTL[K, V](cfg.TTL),
+		ttlcache.WithCapacity[K, V](cfg.Capacity),
+		ttlcache.WithDisableTouchOnHit[K, V](),
+	)
+	cache.unsubscribe = cache.client.OnEviction(func(_ context.Context, reason ttlcache.EvictionReason, _ *ttlcache.Item[K, V]) {
+		if reason == ttlcache.EvictionReasonExpired || reason == ttlcache.EvictionReasonCapacityReached {
+			cache.evicted.Add(1)
+		}
 	})
-	if err != nil {
-		return nil, fmt.Errorf("init localcache %q: %w", cfg.Name, err)
-	}
-	cache.client = client
+	go cache.cleanExpired(cfg.TTL)
 	return cache, nil
 }
 
-// Name 返回缓存实例名称。
-func (c *Cache[K, V]) Name() string {
+// Name 返回缓存实例的稳定名称。
+func (c *LoadingCache[K, V]) Name() string {
 	return c.name
 }
 
-// Get 读取缓存，并记录业务 hit/miss。
-func (c *Cache[K, V]) Get(key K) (V, bool, error) {
+// GetOrLoad 返回未过期值；miss 时合并同 key 并发回源。
+func (c *LoadingCache[K, V]) GetOrLoad(ctx context.Context, key K) (V, error) {
 	var zero V
-	if c.closed.Load() {
-		return zero, false, ErrClosed
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	value, ok := c.lookup(c.keyString(key))
-	if ok {
+	if value, ok, err := c.lookup(key); err != nil {
+		return zero, err
+	} else if ok {
 		c.hit.Add(1)
-		return c.clone(value), true, nil
-	}
-	c.miss.Add(1)
-	return zero, false, nil
-}
-
-// GetOrLoad 读取缓存；miss 时通过 singleflight 合并同 key 回源。
-// leader 会二次检查并负责回源；follower 的 ctx 取消只影响自身返回，不取消 leader 的加载任务。
-func (c *Cache[K, V]) GetOrLoad(ctx context.Context, key K) (V, error) {
-	var zero V
-	if c.closed.Load() {
-		return zero, ErrClosed
-	}
-
-	cacheKey := c.keyString(key)
-	if value, ok := c.lookup(cacheKey); ok {
-		c.hit.Add(1)
-		return c.clone(value), nil
+		return value, nil
 	}
 	c.miss.Add(1)
 
-	ch := c.group.DoChan(cacheKey, func() (any, error) {
-		if c.closed.Load() {
-			return zero, ErrClosed
-		}
-		if value, ok := c.lookup(cacheKey); ok {
-			c.doubleCheckHit.Add(1)
-			return c.clone(value), nil
+	entry := c.acquireFlight(key)
+	result := entry.group.DoChan("", func() (any, error) {
+		if value, ok, err := c.lookup(key); err != nil {
+			return zero, err
+		} else if ok {
+			return value, nil
 		}
 
-		c.load.Add(1)
-		loadCtx, cancel := c.loadContext(ctx)
+		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.loadTimeout)
 		defer cancel()
-
 		loaded, err := c.loader(loadCtx, key)
 		if err != nil {
 			c.loadError.Add(1)
 			return zero, err
 		}
+		c.loadSuccess.Add(1)
 
-		cached := c.clone(loaded)
-		if ok := c.client.SetWithTTL(cacheKey, cached, 1, c.ttl); !ok {
-			c.setDropped.Add(1)
-		} else {
-			// Ristretto 写入通过缓冲异步生效；Wait 保证后续读取可见当前写入。
-			c.client.Wait()
+		c.lifecycleMu.RLock()
+		if !c.closed {
+			c.client.Set(key, loaded, ttlcache.DefaultTTL)
 		}
+		c.lifecycleMu.RUnlock()
 		return loaded, nil
 	})
 
 	select {
 	case <-ctx.Done():
+		go func() {
+			<-result
+			c.releaseFlight(key, entry)
+		}()
 		return zero, ctx.Err()
-	case result := <-ch:
-		if result.Shared {
-			c.shared.Add(1)
+	case loaded := <-result:
+		c.releaseFlight(key, entry)
+		if loaded.Err != nil {
+			return zero, loaded.Err
 		}
-		if result.Err != nil {
-			return zero, result.Err
-		}
-		return result.Val.(V), nil
+		return loaded.Val.(V), nil
 	}
 }
 
-// Set 写入缓存，适合预热或业务主动刷新。
-// 返回 false 表示 Ristretto 拒绝或丢弃了本次写入，调用方不应假设后续读取一定命中。
-func (c *Cache[K, V]) Set(key K, value V) (bool, error) {
-	if c.closed.Load() {
-		return false, ErrClosed
-	}
-	cached := c.clone(value)
-	ok := c.client.SetWithTTL(c.keyString(key), cached, 1, c.ttl)
-	if !ok {
-		c.setDropped.Add(1)
-	} else {
-		c.client.Wait()
-	}
-	return ok, nil
-}
-
-// Delete 删除单个缓存项。
-func (c *Cache[K, V]) Delete(key K) error {
-	if c.closed.Load() {
+// Delete 同步删除指定 key。
+func (c *LoadingCache[K, V]) Delete(key K) error {
+	c.lifecycleMu.RLock()
+	defer c.lifecycleMu.RUnlock()
+	if c.closed {
 		return ErrClosed
 	}
-	c.client.Del(c.keyString(key))
-	c.client.Wait()
+	c.client.Delete(key)
 	return nil
 }
 
-// Clear 清空缓存。
-func (c *Cache[K, V]) Clear() error {
-	if c.closed.Load() {
+// Clear 同步删除全部 item。
+func (c *LoadingCache[K, V]) Clear() error {
+	c.lifecycleMu.RLock()
+	defer c.lifecycleMu.RUnlock()
+	if c.closed {
 		return ErrClosed
 	}
-	c.client.Clear()
-	c.client.Wait()
+	c.client.DeleteAll()
 	return nil
 }
 
-// Stats 返回当前统计快照。
-func (c *Cache[K, V]) Stats() Stats {
+// Stats 返回当前累计统计快照。自动驱逐 callback 可能最终可见。
+func (c *LoadingCache[K, V]) Stats() Stats {
 	return Stats{
-		Hit:            c.hit.Load(),
-		Miss:           c.miss.Load(),
-		Load:           c.load.Load(),
-		LoadError:      c.loadError.Load(),
-		Shared:         c.shared.Load(),
-		DoubleCheckHit: c.doubleCheckHit.Load(),
-		SetDropped:     c.setDropped.Load(),
-		Rejected:       c.rejected.Load(),
-		Evicted:        c.evicted.Load(),
-		Capacity:       c.capacity,
+		Hit:         c.hit.Load(),
+		Miss:        c.miss.Load(),
+		LoadSuccess: c.loadSuccess.Load(),
+		LoadError:   c.loadError.Load(),
+		Evicted:     c.evicted.Load(),
+		Capacity:    c.capacity,
 	}
 }
 
-// Close 关闭缓存后台资源。
-func (c *Cache[K, V]) Close() {
-	if c.closed.CompareAndSwap(false, true) {
-		c.client.Close()
+// Close 幂等停止后台清理，并阻止新的 cache 操作。
+func (c *LoadingCache[K, V]) Close() {
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+	if c.closed {
+		return
+	}
+	c.closed = true
+	close(c.cleanerStop)
+	<-c.cleanerDone
+	if c.unsubscribe != nil {
+		c.unsubscribe()
+		c.unsubscribe = nil
 	}
 }
 
-func (c *Cache[K, V]) lookup(cacheKey string) (V, bool) {
-	return c.client.Get(cacheKey)
+func (c *LoadingCache[K, V]) cleanExpired(interval time.Duration) {
+	defer close(c.cleanerDone)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			c.client.DeleteExpired()
+		case <-c.cleanerStop:
+			return
+		}
+	}
 }
 
-// loadContext 会刻意解除请求 ctx 的取消信号，避免 singleflight leader
-// 因客户端断开导致所有 follower 一起收到 context.Canceled；LoadTimeout
-// 用于给回源路径重新建立独立上限。LoadTimeout <= 0 时不会解除请求取消。
-func (c *Cache[K, V]) loadContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	if c.loadTimeout <= 0 {
-		return ctx, func() {}
+func (c *LoadingCache[K, V]) lookup(key K) (V, bool, error) {
+	var zero V
+	c.lifecycleMu.RLock()
+	defer c.lifecycleMu.RUnlock()
+	if c.closed {
+		return zero, false, ErrClosed
 	}
-	return context.WithTimeout(context.WithoutCancel(ctx), c.loadTimeout)
+	item := c.client.Get(key)
+	if item == nil {
+		return zero, false, nil
+	}
+	return item.Value(), true, nil
+}
+
+func (c *LoadingCache[K, V]) acquireFlight(key K) *flightEntry {
+	c.flightsMu.Lock()
+	defer c.flightsMu.Unlock()
+	entry := c.flights[key]
+	if entry == nil {
+		entry = &flightEntry{}
+		c.flights[key] = entry
+	}
+	entry.refs++
+	return entry
+}
+
+func (c *LoadingCache[K, V]) releaseFlight(key K, entry *flightEntry) {
+	c.flightsMu.Lock()
+	defer c.flightsMu.Unlock()
+	entry.refs--
+	if entry.refs == 0 && c.flights[key] == entry {
+		delete(c.flights, key)
+	}
 }

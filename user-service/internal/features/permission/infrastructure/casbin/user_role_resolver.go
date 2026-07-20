@@ -20,7 +20,7 @@ type UserRoleResolver interface {
 
 type entUserRoleResolver struct {
 	client          *ent.Client
-	cache           *localcache.Cache[uuid.UUID, []uuid.UUID]
+	cache           *localcache.LoadingCache[uuid.UUID, []uuid.UUID]
 	closeOnce       sync.Once
 	directLoads     atomic.Uint64
 	directLoadError atomic.Uint64
@@ -34,13 +34,13 @@ func (r *entUserRoleResolver) RolesForUser(ctx context.Context, userID uuid.UUID
 		if err != nil {
 			r.directLoadError.Add(1)
 		}
-		return roleIDs, err
+		return cloneRoleIDs(roleIDs), err
 	}
 	roleIDs, err := r.cache.GetOrLoad(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	return roleIDs, nil
+	return cloneRoleIDs(roleIDs), nil
 }
 
 // InvalidateUserRole 删除单个用户的本地角色缓存。
@@ -80,7 +80,8 @@ func (r *entUserRoleResolver) Name() string {
 // Stats 返回关闭本地缓存时的逐次回源统计。
 func (r *entUserRoleResolver) Stats() localcache.Stats {
 	loads := r.directLoads.Load()
-	return localcache.Stats{Miss: loads, Load: loads, LoadError: r.directLoadError.Load()}
+	errors := r.directLoadError.Load()
+	return localcache.Stats{Miss: loads, LoadSuccess: loads - errors, LoadError: errors}
 }
 
 func cloneRoleIDs(roleIDs []uuid.UUID) []uuid.UUID {

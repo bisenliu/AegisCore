@@ -82,7 +82,7 @@ func TestDisabledTokenVersionLocalCacheReadsThroughAndPreservesValidation(t *tes
 	require.Error(t, validator.ValidateTokenVersion(context.Background(), userID.String(), 8))
 	require.NoError(t, validator.InvalidateTokenVersion(userID.String()))
 	require.Equal(t, authTokenVersionCacheName, result.Stats.Name())
-	require.EqualValues(t, 2, result.Stats.Stats().Load)
+	require.EqualValues(t, 2, result.Stats.Stats().LoadSuccess)
 	require.Zero(t, result.Stats.Stats().Capacity)
 }
 

@@ -69,7 +69,7 @@ SUPER_ADMIN_ROLE_ID="${SUPER_ADMIN_ROLE_ID:-00000000-0000-0000-0000-000000000001
 RBAC_POLICY_VERSION_KEY="${RBAC_POLICY_VERSION_KEY:-aegiscore-user-service:rbac:policy:version}"
 RBAC_POLICY_CHANNEL="${RBAC_POLICY_CHANNEL:-aegiscore-user-service:rbac:policy:refresh}"
 
-STATIC_PASSWORD_HASH="${STATIC_PASSWORD_HASH:-\$argon2id\$v=19\$m=65536,t=3,p=4\$PysvHcWpamCZAwybuk5j8w\$0whWdpZhQyNuFUNQZ1HEKp9nsByqXIHxsHc1Xh03o20}"
+STATIC_PASSWORD_HASH="${STATIC_PASSWORD_HASH:-\$2y\$12\$0W17hTDYsMOjsS30IsyJ.u1gtJEJ6kZhpI86BpWR9dhj65Tsgy/42}"
 
 RUN_ID="${RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 ARTIFACT_DIR="${ARTIFACT_DIR:-/tmp/aegiscore-metrics-load}"
@@ -273,7 +273,7 @@ publish_rbac_reload() {
   local version payload
   version="$(compose exec -T "$REDIS_SERVICE" redis-cli INCR "$RBAC_POLICY_VERSION_KEY" | tr -d '\r')"
   payload="$(jq -nc --argjson version "$version" --arg reason "metrics_bootstrap" \
-    '{version:$version,instance_id:"metrics-load-script",reason:$reason,published_at:now|floor}')"
+    '{version:$version,instance_id:"metrics-load-script",kind:"policy",reason:$reason,user_id:"00000000-0000-0000-0000-000000000000",role_id:"00000000-0000-0000-0000-000000000000",permission_id:"00000000-0000-0000-0000-000000000000",published_at:now|floor}')"
   compose exec -T "$REDIS_SERVICE" redis-cli PUBLISH "$RBAC_POLICY_CHANNEL" "$payload" >/dev/null
   sleep "$WARMUP_SECONDS"
 }
@@ -570,8 +570,6 @@ report_service_metric_presence() {
     aegiscore_user_service_ent_query_errors_total
     aegiscore_localcache_requests_total
     aegiscore_localcache_loads_total
-    aegiscore_localcache_singleflight_total
-    aegiscore_localcache_writes_total
     aegiscore_localcache_evictions_total
     aegiscore_localcache_capacity
     aegiscore_scheduler_jobs_total
@@ -633,8 +631,6 @@ summarize_results() {
     'aegiscore_postgres_pool_open_connections'
     'sum by (cache, result) (aegiscore_localcache_requests_total)'
     'sum by (cache, result) (aegiscore_localcache_loads_total)'
-    'sum by (cache, event) (aegiscore_localcache_singleflight_total)'
-    'sum by (cache, event) (aegiscore_localcache_writes_total)'
     'sum by (cache) (aegiscore_localcache_evictions_total)'
     'aegiscore_localcache_capacity'
     'sum by (event) (aegiscore_workerpool_tasks_total)'

@@ -130,8 +130,6 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			"aegiscore_workerpool_tasks_total",
 			"aegiscore_localcache_requests_total",
 			"aegiscore_localcache_loads_total",
-			"aegiscore_localcache_singleflight_total",
-			"aegiscore_localcache_writes_total",
 			"aegiscore_localcache_evictions_total",
 			"aegiscore_localcache_capacity",
 			"aegiscore_runtime_component_running",

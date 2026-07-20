@@ -35,15 +35,14 @@ func defaultMaxActiveSessionsPerUser() int {
 
 func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenVersionStore, tokenCache authapplication.TokenVersionCache) commonauth.TokenVersionValidator {
 	t.Helper()
-	cache, err := localcache.New[string, int64](localcache.Config[string]{
+	cache, err := localcache.NewLoadingCache[string, int64](localcache.Config{
 		Name:        "auth_token_version_test",
 		Capacity:    100,
 		TTL:         time.Minute,
 		LoadTimeout: time.Second,
-		KeyString:   func(key string) string { return key },
 	}, func(ctx context.Context, userID string) (int64, error) {
 		return authvalidators.Current(ctx, users, tokenCache, userID)
-	}, nil)
+	})
 	require.NoError(t, err,
 		"New localcache: %v", err)
 

@@ -4,7 +4,6 @@ go 1.26.5
 
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
-	github.com/dgraph-io/ristretto/v2 v2.4.2
 	github.com/getkin/kin-openapi v0.141.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-playground/locales v0.14.1
@@ -14,6 +13,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/jellydator/ttlcache/v3 v3.4.1
 	github.com/panjf2000/ants/v2 v2.12.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
@@ -44,7 +44,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.7 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/gin-contrib/sse v1.1.1 // indirect

@@ -100,6 +100,7 @@ func TestUserRoleResolverCachesAndInvalidatesActiveRoles(t *testing.T) {
 	first, err := resolver.RolesForUser(ctx, userID)
 	require.NoError(t, err)
 	assertRoleIDs(t, first, []uuid.UUID{activeRoleID})
+	first[0] = laterRoleID
 
 	createPolicyTestUserRole(t, client, user.ID, laterRole.ID)
 	cached, err := resolver.RolesForUser(ctx, userID)
@@ -212,7 +213,7 @@ func TestDisabledUserRoleResolverReadsThroughAndInvalidationIsSafe(t *testing.T)
 	require.NoError(t, result.Closer.Close())
 	require.NoError(t, result.Closer.Close())
 	require.Equal(t, rbacUserRolesCacheName, result.Stats.Name())
-	require.EqualValues(t, 2, result.Stats.Stats().Load)
+	require.EqualValues(t, 2, result.Stats.Stats().LoadSuccess)
 	require.Zero(t, result.Stats.Stats().Capacity)
 }
 
@@ -226,15 +227,18 @@ func newPolicyTestClient(t *testing.T) *ent.Client {
 func newTestUserRoleResolver(t *testing.T, client *ent.Client, ttl time.Duration) *entUserRoleResolver {
 	t.Helper()
 	resolver := &entUserRoleResolver{client: client}
-	cache, err := localcache.New[uuid.UUID, []uuid.UUID](localcache.Config[uuid.UUID]{
+	cache, err := localcache.NewLoadingCache[uuid.UUID, []uuid.UUID](localcache.Config{
 		Name:        "rbac_user_roles_test",
 		Capacity:    100,
 		TTL:         ttl,
 		LoadTimeout: time.Second,
-		KeyString:   func(userID uuid.UUID) string { return userID.String() },
 	}, func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-		return resolver.loadRolesForUser(ctx, userID)
-	}, cloneRoleIDs)
+		roleIDs, err := resolver.loadRolesForUser(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		return cloneRoleIDs(roleIDs), nil
+	})
 	require.NoError(t, err)
 	resolver.cache = cache
 	t.Cleanup(cache.Close)

@@ -96,20 +96,6 @@ groups:
           description: "localcache {{ $labels.cache }} 最近 10 分钟出现 loader error。请检查回源依赖、缓存注册状态和对应 feature 日志。"
           runbook_url: "docs/observability/user-service-runbook.md#localcache-load-errors"
 
-      - alert: AegisCoreUserServiceLocalcacheWriteDropsOrRejects
-        expr: |
-          sum by (cache, event) (
-            increase(aegiscore_localcache_writes_total{service="aegiscore-user-service",event=~"set_dropped|rejected"}[10m])
-          ) > 0
-        for: 5m
-        labels:
-          service: aegiscore-user-service
-          severity: warning
-        annotations:
-          summary: "用户服务 localcache 写入被丢弃或准入拒绝"
-          description: "localcache {{ $labels.cache }} 最近 10 分钟持续报告 {{ $labels.event }}。请检查容量、TTL、key 基数和写入突增。"
-          runbook_url: "docs/observability/user-service-runbook.md#localcache-write-drops-or-rejects"
-
       - alert: AegisCoreUserServiceLocalcacheEvictionPressure
         expr: |
           sum by (cache) (

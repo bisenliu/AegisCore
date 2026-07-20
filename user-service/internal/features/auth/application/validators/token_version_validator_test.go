@@ -257,15 +257,14 @@ func TestTokenVersionValidatorInvalidateReloads(t *testing.T) {
 }
 
 func TestTokenVersionValidatorInvalidateAfterCacheCloseIsNoop(t *testing.T) {
-	cache, err := localcache.New[string, int64](localcache.Config[string]{
+	cache, err := localcache.NewLoadingCache[string, int64](localcache.Config{
 		Name:        "auth_token_version_invalidate_error_test",
 		Capacity:    100,
 		TTL:         time.Minute,
 		LoadTimeout: time.Second,
-		KeyString:   func(key string) string { return key },
 	}, func(context.Context, string) (int64, error) {
 		return 0, nil
-	}, nil)
+	})
 	require.NoError(t, err,
 		"New localcache: %v", err)
 	cache.Close()
@@ -277,15 +276,14 @@ func TestTokenVersionValidatorInvalidateAfterCacheCloseIsNoop(t *testing.T) {
 
 func newTestTokenVersionValidator(t *testing.T, users *MockUserTokenVersionStore, tokenCache *MockTokenVersionCache, ttl time.Duration) *TokenVersionValidator {
 	t.Helper()
-	cache, err := localcache.New[string, int64](localcache.Config[string]{
+	cache, err := localcache.NewLoadingCache[string, int64](localcache.Config{
 		Name:        "auth_token_version_test",
 		Capacity:    100,
 		TTL:         ttl,
 		LoadTimeout: time.Second,
-		KeyString:   func(key string) string { return key },
 	}, func(ctx context.Context, userID string) (int64, error) {
 		return Current(ctx, users, tokenCache, userID)
-	}, nil)
+	})
 	require.NoError(t, err,
 		"New localcache: %v", err)
 

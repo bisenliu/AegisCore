@@ -3650,7 +3650,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "shared 表示同 key 并发 miss 被合并，double_check_hit 表示 leader 回源前二次检查命中。",
+      "description": "按 cache 和 result 展示业务 hit/miss 请求速率。",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3723,13 +3723,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (cache, event) (rate(aegiscore_localcache_singleflight_total{service=\"$service\",environment=\"$environment\"}[5m]))",
-          "legendFormat": "{{cache}} / {{event}}",
+          "expr": "sum by (cache, result) (rate(aegiscore_localcache_requests_total{service=\"$service\",environment=\"$environment\"}[5m]))",
+          "legendFormat": "{{cache}} / {{result}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Singleflight 速率",
+      "title": "缓存请求速率",
       "type": "timeseries"
     },
     {
@@ -3737,7 +3737,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "set_dropped 表示写入队列丢弃，rejected 表示 Ristretto admission 拒绝。",
+      "description": "按 cache 和 result 展示 loader success/error 速率。",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3810,13 +3810,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (cache, event) (rate(aegiscore_localcache_writes_total{service=\"$service\",environment=\"$environment\"}[5m]))",
-          "legendFormat": "{{cache}} / {{event}}",
+          "expr": "sum by (cache, result) (rate(aegiscore_localcache_loads_total{service=\"$service\",environment=\"$environment\"}[5m]))",
+          "legendFormat": "{{cache}} / {{result}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "缓存写入事件速率",
+      "title": "缓存回源速率",
       "type": "timeseries"
     },
     {
@@ -3824,7 +3824,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "按 cache 展示 Ristretto eviction counter 的 5 分钟速率。",
+      "description": "按 cache 展示 TTL 过期或容量达到上限产生的自动 eviction 5 分钟速率。",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -3976,7 +3976,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "最近 15 分钟 set_dropped 与 rejected 增量。非 0 时检查容量、TTL、key 基数和写入突增。",
+      "description": "最近 15 分钟自动 eviction 增量。非 0 时检查容量、TTL、key 基数和流量变化。",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4035,13 +4035,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (cache) (increase(aegiscore_localcache_writes_total{service=\"$service\",environment=\"$environment\",event=~\"set_dropped|rejected\"}[15m])) or label_replace(vector(0), \"cache\", \"auth_token_version\", \"__name__\", \".*\") or label_replace(vector(0), \"cache\", \"rbac_user_roles\", \"__name__\", \".*\")",
+          "expr": "sum by (cache) (increase(aegiscore_localcache_evictions_total{service=\"$service\",environment=\"$environment\"}[15m])) or label_replace(vector(0), \"cache\", \"auth_token_version\", \"__name__\", \".*\") or label_replace(vector(0), \"cache\", \"rbac_user_roles\", \"__name__\", \".*\")",
           "legendFormat": "{{cache}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "写入异常（15m）",
+      "title": "自动驱逐（15m）",
       "type": "stat"
     },
     {

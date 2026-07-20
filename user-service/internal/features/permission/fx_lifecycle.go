@@ -24,19 +24,18 @@ type RegisterRBACLifecycleParams struct {
 	Engine    permissionPolicyInitializer
 	Watcher   permissionApplicationWatcher
 	Closer    permissioncasbin.UserRoleCacheCloser
-	Starter   userRoleResolverStarter `optional:"true"`
 }
 
 // registerRBACLifecycle 先启动用户角色缓存，再 fail-closed 初始化策略，最后启动跨副本 watcher。
 func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			if params.Starter != nil {
-				if err := params.Starter.Start(ctx); err != nil {
-					return err
-				}
-			} else if params.Closer == nil {
-				return errors.New("rbac user role cache lifecycle dependency is required")
+			starter, ok := params.Closer.(userRoleResolverStarter)
+			if !ok {
+				return errors.New("rbac user role resolver starter is required")
+			}
+			if err := starter.Start(ctx); err != nil {
+				return err
 			}
 			params.Engine.InitializeFailClosed(ctx)
 			params.Watcher.Start()

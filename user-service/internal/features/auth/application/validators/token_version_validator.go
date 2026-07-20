@@ -73,7 +73,8 @@ func (c *DirectTokenVersionCache) Name() string {
 // Stats 返回无本地缓存模式下的回源统计。
 func (c *DirectTokenVersionCache) Stats() localcache.Stats {
 	loads := c.load.Load()
-	return localcache.Stats{Miss: loads, Load: loads, LoadError: c.loadError.Load()}
+	errors := c.loadError.Load()
+	return localcache.Stats{Miss: loads, LoadSuccess: loads - errors, LoadError: errors}
 }
 
 // ValidateTokenVersion 拒绝 version 不再匹配当前用户版本的 token。

@@ -9,7 +9,7 @@
 - HTTP RED：请求数、延迟 histogram、in-flight gauge，route label 使用 Gin route template。
 - PostgreSQL：`primary_db` pool stats 和可用性。
 - Redis：`cache_redis` ping/up 状态。
-- Localcache：`auth_token_version` 与 `rbac_user_roles` 的 hit/miss、loader success/error、singleflight、write drop/reject、eviction 和 capacity。
+- Localcache：`auth_token_version` 与 `rbac_user_roles` 的 hit/miss、loader success/error、自动 eviction 和最大 item capacity。
 - Runtime components：workerpool、scheduler、runtime component status。
 - RBAC：policy watcher 状态、Casbin policy reload 成功/失败、policy sync 版本 mismatch。
 - Business metrics：auth login/refresh/logout、token version mismatch、route diff missing/stale 等固定低基数指标。
@@ -33,17 +33,11 @@
 
 `aegiscore_user_service_auth_password_change_revocation_projection_failures_total` 或 `aegiscore_user_service_auth_password_change_revocation_compensation_failures_total` 增加表示强制改密已更新凭据但安全撤销未完整完成。优先检查 Redis `cache_redis` 可用性、auth token version 投影刷新、本地 token version cache 失效、refresh session 删除链路和 auth feature 错误日志；不要在排查记录中复制 token、jti、session ID 或 Redis key 明文。
 
-如果同时出现 Redis 或 PostgreSQL 告警，优先处理依赖不可用；如果依赖正常，检查最近部署是否改变了 loader、key 编码、TTL 或权限/认证数据路径。该指标不包含 raw key、用户 ID 或原始错误，定位具体请求需要结合日志中的稳定错误信息和 trace/span 上下文。
-
-### localcache-write-drops-or-rejects
-
-`aegiscore_localcache_writes_total{event="set_dropped"}` 表示写入队列丢弃，`event="rejected"` 表示 Ristretto admission 拒绝。先查看 dashboard 中对应 cache 的 `capacity`、hit ratio、load rate 和 key 访问模式；持续增长通常意味着容量过小、TTL 不合适、key 基数变高或写入突增。
-
-短时间内少量 `rejected` 可能是 admission policy 的正常行为；持续 `set_dropped` 或 rejected 与 loader rate 同时升高时，应评估 `auth.token_version_cache` 或 `rbac.user_role_cache` 的 `size`、`ttl`、`load_timeout` 和业务流量变化。底层 `num_counters`、`buffer_items` 不属于服务配置契约。
+如果同时出现 Redis 或 PostgreSQL 告警，优先处理依赖不可用；如果依赖正常，检查最近部署是否改变了 loader、TTL、容量或权限/认证数据路径。该指标不包含 raw key、用户 ID 或原始错误，定位具体请求需要结合日志中的稳定错误信息和 trace/span 上下文。
 
 ### localcache-eviction-pressure
 
-`aegiscore_localcache_evictions_total` 相对 `aegiscore_localcache_capacity` 快速增长表示缓存淘汰压力升高。先确认是否是冷启动或批量流量导致的短暂预热，再检查对应 cache 的 hit ratio、loader error、write drop/reject 和依赖延迟。
+`aegiscore_localcache_evictions_total` 相对 `aegiscore_localcache_capacity` 快速增长表示缓存淘汰压力升高。先确认是否是冷启动或批量流量导致的短暂加载，再检查对应 cache 的 hit ratio、loader error 和依赖延迟。
 
 如果淘汰压力持续存在且 hit ratio 下降，优先评估容量、TTL 和 key 基数；如果淘汰压力升高但 hit ratio 稳定，可能只是访问集大于容量预算，需要结合资源成本决定是否扩容。
 

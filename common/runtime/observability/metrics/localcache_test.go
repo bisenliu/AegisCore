@@ -14,16 +14,12 @@ func TestLocalcacheCollectorExportsStats(t *testing.T) {
 	source := staticLocalcacheStatsSource{
 		name: "auth_token_version",
 		stats: localcache.Stats{
-			Hit:            10,
-			Miss:           3,
-			Load:           2,
-			LoadError:      1,
-			Shared:         4,
-			DoubleCheckHit: 1,
-			SetDropped:     5,
-			Rejected:       6,
-			Evicted:        7,
-			Capacity:       1000,
+			Hit:         10,
+			Miss:        3,
+			LoadSuccess: 2,
+			LoadError:   1,
+			Evicted:     7,
+			Capacity:    1000,
 		},
 	}
 	collector, err := NewLocalcacheCollector(LocalcacheCollectorOptions{Source: source})
@@ -34,14 +30,21 @@ func TestLocalcacheCollectorExportsStats(t *testing.T) {
 	families := gatherRegistryFamilies(t, registry)
 	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheRequestsMetricName), map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultHit}, 10)
 	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheRequestsMetricName), map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultMiss}, 3)
-	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheLoadsMetricName), map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultSuccess}, 1)
+	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheLoadsMetricName), map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultSuccess}, 2)
 	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheLoadsMetricName), map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultError}, 1)
-	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheSingleflightMetricName), map[string]string{LabelCache: "auth_token_version", LabelEvent: localcacheEventShared}, 4)
-	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheSingleflightMetricName), map[string]string{LabelCache: "auth_token_version", LabelEvent: localcacheEventDoubleCheck}, 1)
-	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheWritesMetricName), map[string]string{LabelCache: "auth_token_version", LabelEvent: localcacheEventSetDropped}, 5)
-	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheWritesMetricName), map[string]string{LabelCache: "auth_token_version", LabelEvent: localcacheEventRejected}, 6)
 	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheEvictionsMetricName), map[string]string{LabelCache: "auth_token_version"}, 7)
 	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheCapacityMetricName), map[string]string{LabelCache: "auth_token_version"}, 1000)
+	require.Nil(t, findMetricFamily(families, "aegiscore_localcache_singleflight_total"))
+	require.Nil(t, findMetricFamily(families, "aegiscore_localcache_writes_total"))
+}
+
+func findMetricFamily(families []*io_prometheus_client.MetricFamily, name string) *io_prometheus_client.MetricFamily {
+	for _, family := range families {
+		if family.GetName() == name {
+			return family
+		}
+	}
+	return nil
 }
 
 func TestLocalcacheCollectorAllowsMultipleCaches(t *testing.T) {

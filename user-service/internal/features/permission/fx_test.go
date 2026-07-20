@@ -377,6 +377,8 @@ func (permissionModuleUserRoleResolver) InvalidateAllUserRoles() {}
 
 type permissionModuleUserRoleCacheCloser struct{}
 
+func (permissionModuleUserRoleCacheCloser) Start(context.Context) error { return nil }
+
 func (permissionModuleUserRoleCacheCloser) Close() error { return nil }
 
 func (permissionModuleUserRoleCacheCloser) Name() string { return "rbac_user_roles" }
