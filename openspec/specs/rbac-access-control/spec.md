@@ -172,7 +172,7 @@
 
 ### Requirement: RBAC 系统数据与运维 CLI
 
-系统 MUST 提供带服务上下文的 `rbac seed`、`rbac assign-super-admin` 和 `rbac create-super-admin` 命令，用于维护系统角色、系统权限、默认绑定和超级管理员。系统数据 MUST 只由 seed port 根据 `internal/shared/rbacbaseline` 写入。
+系统 MUST 提供带服务上下文的 `rbac seed`、`rbac assign-super-admin` 和 `rbac create-super-admin` 命令，用于维护系统角色、系统权限、默认绑定和超级管理员。系统数据 MUST 只由 seed port 根据 `internal/shared/rbacbaseline` 写入。RBAC 运维 CLI MUST 通过 `aegiscore-user-service` 根命令调用，旧 `aegiscore-user-services` 根命令 MUST NOT 作为 RBAC 兼容入口保留。
 
 #### Scenario: 初始化系统基线
 
@@ -223,7 +223,7 @@ permission、role 和 binding domain MUST 返回携带稳定 HTTP status、共�
 
 ### Requirement: RBAC 可观测性
 
-系统 MUST 为 RBAC 授权判定和正式模块执行的 route diff 提供低基数 metrics，并使用显式注入的 logger 记录加载和同步异常。观测失败 MUST NOT 改变授权或策略同步结果。
+系统 MUST 为 RBAC 授权判定和正式模块执行的 route diff 提供低基数 metrics，并使用显式注入的 logger 记录加载和同步异常。观测失败 MUST NOT 改变授权或策略同步结果。RBAC policy sync Redis key prefix、Pub/Sub channel、metrics `service` label 和 route diff 观测输出 MUST 使用 `aegiscore-user-service`，旧 `aegiscore-user-services` prefix 或兼容 channel MUST NOT 被读取、发布或订阅。
 
 #### Scenario: 授权 metrics 的低基数与敏感数据约束
 
@@ -232,15 +232,24 @@ permission、role 和 binding domain MUST 返回携带稳定 HTTP status、共�
 - **AND** histogram MUST 记录本次判定耗时
 - **AND** 标签 MUST 只使用 `result`、HTTP method 和 route template
 - **AND** 指标 MUST NOT 包含用户、角色、权限、token、trace、IP、账号、Redis key、SQL、原始错误或 raw path
+- **AND** user-service 默认 `service` label MUST 为 `aegiscore-user-service`
 
 #### Scenario: route diff 和日志观测
 
 - **WHEN** 正式 permission 模块执行 route diff
 - **THEN** 系统 MUST 记录本次 missing、stale 和不一致结果
 - **AND** 指标记录 MUST NOT 修改权限目录或路由诊断结果
+- **AND** route diff metrics MUST 使用当前单数服务名
 - **WHEN** role 或 permission application、policy loader、watcher、cache 或 adapter 需要记录日志
 - **THEN** logger MUST 由 constructor 显式注入或由调用方 context 提供
 - **AND** 日志 MUST 使用稳定低基数字段并 MUST NOT 记录 token、SQL、Redis key 或原始 policy 数据
+
+#### Scenario: RBAC policy sync key 和 channel
+
+- **WHEN** permission Redis adapter 生成 policy version key 或 policy refresh channel
+- **THEN** key 和 channel prefix MUST 来自当前 `app.name` 并归一化为 `aegiscore-user-service`
+- **AND** adapter MUST NOT 读取、发布、订阅或迁移旧 `aegiscore-user-services` prefix 下的 policy version key 或 Pub/Sub channel
+- **AND** 发布后副本收敛 MUST 依赖新 prefix 下的 version key、Pub/Sub channel 和周期性补偿
 
 ### Requirement: RBAC 架构、装配与资源生命周期
 

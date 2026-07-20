@@ -86,7 +86,7 @@
 
 ### Requirement: Metrics 平台、依赖资源名与低基数
 
-系统 MUST 提供 Prometheus metrics 基础能力，并以非 nil provider 显式表达启用或禁用状态。HTTP、runtime、scheduler、workerpool、SQL、Redis 和 feature metrics MUST 保持稳定、低基数且不泄露敏感数据。user-service 主 PostgreSQL runtime dependency 的资源名 MUST 为 `primary_db`，Redis 缓存资源名保持 `cache_redis`。
+系统 MUST 提供 Prometheus metrics 基础能力，并以非 nil provider 显式表达启用或禁用状态。HTTP、runtime、scheduler、workerpool、SQL、Redis 和 feature metrics MUST 保持稳定、低基数且不泄露敏感数据。user-service 主 PostgreSQL runtime dependency 的资源名 MUST 为 `primary_db`，Redis 缓存资源名保持 `cache_redis`。user-service 默认 metrics `service` label、tracing `service.name`、日志 `service` 字段、健康响应 service 字段、dashboard 变量和 alert 表达式 MUST 统一使用 `aegiscore-user-service`；旧 `aegiscore-user-services` label 和兼容 PromQL MUST NOT 保留。
 
 #### Scenario: metrics 启停和依赖图完整
 
@@ -103,6 +103,7 @@
 - **AND** PostgreSQL 资源名 MUST 使用 `primary_db`，Redis 缓存资源名 MUST 使用 `cache_redis`
 - **AND** 指标 label、健康检查名称、dashboard 查询和 alert 表达式 MUST 保持一致
 - **AND** 低基数 label allowlist、HTTP label names 和 duration buckets 的顺序与数值 MUST 保持稳定且不可被调用方修改
+- **AND** user-service 默认 `service` label MUST 为 `aegiscore-user-service`
 
 #### Scenario: HTTP in-flight gauge 正确归零
 
@@ -115,6 +116,13 @@
 - **WHEN** feature-local `Metrics` interface 需要空实现
 - **THEN** 系统 MUST 通过统一生成入口维护匹配接口的 no-op 实现
 - **AND** 业务指标方法 MUST 留在所属 feature，`common/runtime/observability/metrics` MUST NOT 承载 user-service 业务语义
+
+#### Scenario: 观测资产命名一致
+
+- **WHEN** Prometheus rules、Grafana dashboard、Compose scrape config 或观测文档引用 user-service
+- **THEN** 查询、默认变量、静态 label 和告警 label MUST 使用 `aegiscore-user-service`
+- **AND** dashboard UID、rule group、job name 和文档示例 MUST 与单数服务名一致
+- **AND** 旧 `aegiscore-user-services` 查询、变量默认值或兼容 dashboard MUST NOT 保留
 
 ### Requirement: 本地缓存指标契约
 
@@ -142,7 +150,7 @@
 
 ### Requirement: 结构化日志、请求关联与 Fx 事件
 
-系统 MUST 为每个 HTTP 请求建立 request ID，并通过共享 logger context 将其与 access log、应用日志、有效 tracing context 和 Fx 初始化事件关联。日志 MUST 结构化输出到 stdout/stderr，保持分级且不得记录敏感信息。
+系统 MUST 为每个 HTTP 请求建立 request ID，并通过共享 logger context 将其与 access log、应用日志、有效 tracing context 和 Fx 初始化事件关联。日志 MUST 结构化输出到 stdout/stderr，保持分级且不得记录敏感信息。user-service 默认日志身份字段 `service` MUST 使用 `aegiscore-user-service`，并与 metrics、tracing 和健康响应中的服务名一致。
 
 #### Scenario: request ID 和 trace 字段
 

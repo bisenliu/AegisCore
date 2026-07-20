@@ -198,13 +198,14 @@
 
 ### Requirement: 认证架构、配置与资源生命周期
 
-user-service auth feature MUST 私有拥有 token issuer、claims schema、subject 常量、TTL fallback 和认证策略配置；`common/security/auth` MUST 只提供通用验证原语。认证 application、adapter、controller 和 composition MUST 通过 framework-neutral constructor、消费侧最小 port 和窄 settings 表达依赖，并显式管理 auth 自有后台资源。
+user-service auth feature MUST 私有拥有 token issuer、claims schema、subject 常量、TTL fallback 和认证策略配置；`common/security/auth` MUST 只提供通用验证原语。认证 application、adapter、controller 和 composition MUST 通过 framework-neutral constructor、消费侧最小 port 和窄 settings 表达依赖，并显式管理 auth 自有后台资源。默认 JWT issuer、auth Redis key prefix 和认证相关配置示例 MUST 使用 `aegiscore-user-service`，旧 `aegiscore-user-services` issuer 或 Redis key prefix MUST NOT 被兼容接受、读取或双写。
 
 #### Scenario: 服务私有签发、配置和分层边界
 
 - **WHEN** user-service 签发 token、装配认证流程或新增凭据、token、session、token version 行为
 - **THEN** 系统 MUST 从服务私有配置读取 JWT TTL、password KDF 预算、refresh rotation、token version cache TTL 和每用户活跃 session 上限
 - **AND** production-like 环境中的 `auth.jwt.secret` MUST 至少为 32 bytes，校验错误 MUST 明确定位该配置项
+- **AND** 默认 `auth.jwt.issuer` MUST 为 `aegiscore-user-service`
 - **AND** `common/runtime/config` MUST NOT 声明或校验这些业务策略
 - **AND** 业务编排 MUST 位于 auth application 或 domain，Redis 和 PostgreSQL adapter MUST 只实现消费侧最小存储 port
 
@@ -237,3 +238,10 @@ user-service auth feature MUST 私有拥有 token issuer、claims schema、subje
 - **THEN** logger MUST 由 constructor 显式注入或从 request context 获取，MUST NOT 依赖可变 package-level 默认 logger
 - **AND** 撤销失败日志 MUST 保留可用的 `user_id`、错误分类、`request_id`、`trace_id` 和 `span_id`
 - **AND** 日志 MUST NOT 暴露 token、jti、session ID、Redis key、SQL、密码或敏感原始错误
+
+#### Scenario: auth Redis key prefix
+
+- **WHEN** auth Redis adapter 生成 refresh session、password-change session、token version projection 或 session purge key
+- **THEN** key prefix MUST 来自当前 `app.name` 并归一化为 `aegiscore-user-service`
+- **AND** adapter MUST NOT 查询、删除、迁移或双写旧 `aegiscore-user-services` prefix 下的 key
+- **AND** 发布后旧 prefix 下的 token version projection 或 session 数据 MUST 不再影响认证结果
