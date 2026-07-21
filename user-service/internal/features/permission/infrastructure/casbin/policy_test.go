@@ -36,7 +36,7 @@ func TestPolicyLoaderLoadsActiveBindings(t *testing.T) {
 	assertHasRule(t, policies.PermissionRules, roleID, "/api/v1/users", "GET")
 }
 
-func TestPolicyLoaderSkipsInactiveRolesAndPermissions(t *testing.T) {
+func TestPolicyLoaderSkipsInactiveRoles(t *testing.T) {
 	client := newPolicyTestClient(t)
 	ctx := context.Background()
 	activeRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000203")
@@ -55,7 +55,7 @@ func TestPolicyLoaderSkipsInactiveRolesAndPermissions(t *testing.T) {
 	policies, err := loader.LoadPolicies(ctx)
 	require.NoError(t, err)
 	assertHasRule(t, policies.PermissionRules, activeRoleID, "/api/v1/active", "GET")
-	assertMissingRule(t, policies.PermissionRules, activeRoleID, "/api/v1/inactive", "POST")
+	assertHasRule(t, policies.PermissionRules, activeRoleID, "/api/v1/inactive", "POST")
 	assertMissingRule(t, policies.PermissionRules, inactiveRoleID, "/api/v1/active", "GET")
 }
 
@@ -274,9 +274,9 @@ func createPolicyTestRole(t *testing.T, client *ent.Client, roleID uuid.UUID, ac
 	return role
 }
 
-func createPolicyTestPermission(t *testing.T, client *ent.Client, permissionID uuid.UUID, method string, path string, active bool) *ent.Permission {
+func createPolicyTestPermission(t *testing.T, client *ent.Client, permissionID uuid.UUID, method string, path string, _ bool) *ent.Permission {
 	t.Helper()
-	permission, err := client.Permission.Create().SetPermissionID(permissionID).SetName(permissionID.String()).SetModule("test").SetHTTPMethod(method).SetPathTemplate(path).SetActive(active).Save(context.Background())
+	permission, err := client.Permission.Create().SetPermissionID(permissionID).SetName(permissionID.String()).SetModule("test").SetHTTPMethod(method).SetPathTemplate(path).Save(context.Background())
 	require.NoError(t, err)
 	return permission
 }

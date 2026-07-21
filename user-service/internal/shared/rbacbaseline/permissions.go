@@ -6,13 +6,7 @@ const (
 	permissionUserGet    = "00000000-0000-0000-0000-000000010003"
 
 	permissionPermissionList          = "00000000-0000-0000-0000-000000020001"
-	permissionPermissionCreate        = "00000000-0000-0000-0000-000000020002"
-	permissionPermissionRouteDiff     = "00000000-0000-0000-0000-000000020003"
-	permissionPermissionUserEffective = "00000000-0000-0000-0000-000000020004"
-	permissionPermissionGet           = "00000000-0000-0000-0000-000000020005"
-	permissionPermissionUpdate        = "00000000-0000-0000-0000-000000020006"
-	permissionPermissionEnable        = "00000000-0000-0000-0000-000000020007"
-	permissionPermissionDisable       = "00000000-0000-0000-0000-000000020008"
+	permissionPermissionUserEffective = "00000000-0000-0000-0000-000000020002"
 
 	permissionRoleList   = "00000000-0000-0000-0000-000000030001"
 	permissionRoleCreate = "00000000-0000-0000-0000-000000030002"
@@ -41,7 +35,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "user",
 			Method:       "GET",
 			PathTemplate: "/api/v1/users",
-			System:       true,
 		},
 		{
 			PermissionID: permissionUserCreate,
@@ -50,7 +43,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "user",
 			Method:       "POST",
 			PathTemplate: "/api/v1/users",
-			System:       true,
 		},
 		{
 			PermissionID: permissionUserGet,
@@ -59,7 +51,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "user",
 			Method:       "GET",
 			PathTemplate: "/api/v1/users/:user_id",
-			System:       true,
 		},
 		{
 			PermissionID: permissionPermissionList,
@@ -68,25 +59,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "permission",
 			Method:       "GET",
 			PathTemplate: "/api/v1/permissions",
-			System:       true,
-		},
-		{
-			PermissionID: permissionPermissionCreate,
-			Name:         "创建权限",
-			Description:  "允许创建正式权限目录记录",
-			Module:       "permission",
-			Method:       "POST",
-			PathTemplate: "/api/v1/permissions",
-			System:       true,
-		},
-		{
-			PermissionID: permissionPermissionRouteDiff,
-			Name:         "查询权限路由差异",
-			Description:  "允许只读查询已注册路由与权限目录差异",
-			Module:       "permission",
-			Method:       "GET",
-			PathTemplate: "/api/v1/permissions/route-diff",
-			System:       true,
 		},
 		{
 			PermissionID: permissionPermissionUserEffective,
@@ -95,43 +67,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "permission",
 			Method:       "GET",
 			PathTemplate: "/api/v1/permissions/users/:user_id/effective",
-			System:       true,
-		},
-		{
-			PermissionID: permissionPermissionGet,
-			Name:         "查询权限详情",
-			Description:  "允许按权限 ID 查询权限目录记录",
-			Module:       "permission",
-			Method:       "GET",
-			PathTemplate: "/api/v1/permissions/:permission_id",
-			System:       true,
-		},
-		{
-			PermissionID: permissionPermissionUpdate,
-			Name:         "更新权限",
-			Description:  "允许更新权限目录记录",
-			Module:       "permission",
-			Method:       "PUT",
-			PathTemplate: "/api/v1/permissions/:permission_id",
-			System:       true,
-		},
-		{
-			PermissionID: permissionPermissionEnable,
-			Name:         "启用权限",
-			Description:  "允许启用权限目录记录",
-			Module:       "permission",
-			Method:       "POST",
-			PathTemplate: "/api/v1/permissions/:permission_id/enable",
-			System:       true,
-		},
-		{
-			PermissionID: permissionPermissionDisable,
-			Name:         "停用权限",
-			Description:  "允许停用权限目录记录",
-			Module:       "permission",
-			Method:       "POST",
-			PathTemplate: "/api/v1/permissions/:permission_id/disable",
-			System:       true,
 		},
 		{
 			PermissionID: permissionRoleList,
@@ -140,7 +75,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "role",
 			Method:       "GET",
 			PathTemplate: "/api/v1/roles",
-			System:       true,
 		},
 		{
 			PermissionID: permissionRoleCreate,
@@ -149,7 +83,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "role",
 			Method:       "POST",
 			PathTemplate: "/api/v1/roles",
-			System:       true,
 		},
 		{
 			PermissionID: permissionRoleGet,
@@ -158,7 +91,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "role",
 			Method:       "GET",
 			PathTemplate: "/api/v1/roles/:role_id",
-			System:       true,
 		},
 		{
 			PermissionID: permissionRoleUpdate,
@@ -167,7 +99,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "role",
 			Method:       "PATCH",
 			PathTemplate: "/api/v1/roles/:role_id",
-			System:       true,
 		},
 		{
 			PermissionID: permissionRoleStatus,
@@ -176,7 +107,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "role",
 			Method:       "PATCH",
 			PathTemplate: "/api/v1/roles/:role_id/status",
-			System:       true,
 		},
 		{
 			PermissionID: permissionUserRoleList,
@@ -185,7 +115,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "role",
 			Method:       "GET",
 			PathTemplate: "/api/v1/users/:user_id/roles",
-			System:       true,
 		},
 		{
 			PermissionID: permissionUserRoleReplace,
@@ -194,7 +123,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "role",
 			Method:       "PUT",
 			PathTemplate: "/api/v1/users/:user_id/roles",
-			System:       true,
 		},
 		{
 			PermissionID: permissionUserRoleAdd,
@@ -203,7 +131,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "role",
 			Method:       "POST",
 			PathTemplate: "/api/v1/users/:user_id/roles",
-			System:       true,
 		},
 		{
 			PermissionID: permissionUserRoleRemove,
@@ -212,7 +139,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "role",
 			Method:       "DELETE",
 			PathTemplate: "/api/v1/users/:user_id/roles/:role_id",
-			System:       true,
 		},
 		{
 			PermissionID: permissionRolePermissionList,
@@ -221,7 +147,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "role",
 			Method:       "GET",
 			PathTemplate: "/api/v1/roles/:role_id/permissions",
-			System:       true,
 		},
 		{
 			PermissionID: permissionRolePermissionReplace,
@@ -230,7 +155,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "role",
 			Method:       "PUT",
 			PathTemplate: "/api/v1/roles/:role_id/permissions",
-			System:       true,
 		},
 		{
 			PermissionID: permissionRolePermissionAdd,
@@ -239,7 +163,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "role",
 			Method:       "POST",
 			PathTemplate: "/api/v1/roles/:role_id/permissions",
-			System:       true,
 		},
 		{
 			PermissionID: permissionRolePermissionRemove,
@@ -248,7 +171,6 @@ func DefaultPermissions() []PermissionSpec {
 			Module:       "role",
 			Method:       "DELETE",
 			PathTemplate: "/api/v1/roles/:role_id/permissions/:permission_id",
-			System:       true,
 		},
 	}
 }

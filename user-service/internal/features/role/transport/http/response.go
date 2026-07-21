@@ -27,8 +27,6 @@ type PermissionResponse struct {
 	Module       string `json:"module" example:"user"`
 	HTTPMethod   string `json:"http_method" example:"GET"`
 	PathTemplate string `json:"path_template" example:"/api/v1/users"`
-	Active       bool   `json:"active" example:"true"`
-	System       bool   `json:"system" example:"true"`
 	CreatedAt    int64  `json:"created_at" example:"1780288800000"`
 	UpdatedAt    int64  `json:"updated_at" example:"1780288800000"`
 }

@@ -326,7 +326,7 @@ func roleHTTPTestRole(roleID uuid.UUID, name string) roledomain.Role {
 }
 
 func roleHTTPTestPermission(permissionID uuid.UUID, name string) roleapplication.PermissionReference {
-	return roleapplication.PermissionReference{ID: 1, PermissionID: permissionID, Name: name, Description: name + "说明", Module: "user", HTTPMethod: http.MethodGet, PathTemplate: "/api/v1/users", Active: true, IsSystem: true, CreatedAt: 1780048800000, UpdatedAt: 1780052400000}
+	return roleapplication.PermissionReference{ID: 1, PermissionID: permissionID, Name: name, Description: name + "说明", Module: "user", HTTPMethod: http.MethodGet, PathTemplate: "/api/v1/users", CreatedAt: 1780048800000, UpdatedAt: 1780052400000}
 }
 
 func assertRoleHTTPResponse(t *testing.T, want roledomain.Role, got RoleResponse) {
@@ -334,8 +334,6 @@ func assertRoleHTTPResponse(t *testing.T, want roledomain.Role, got RoleResponse
 	require.Equal(t, want.RoleID.String(), got.RoleID)
 	require.Equal(t, want.Name, got.Name)
 	require.Equal(t, want.Description, got.Description)
-	require.Equal(t, want.Active, got.Active)
-	require.Equal(t, want.IsSystem, got.System)
 	require.Equal(t, want.CreatedAt, got.CreatedAt)
 	require.Equal(t, want.UpdatedAt, got.UpdatedAt)
 }
@@ -348,8 +346,6 @@ func assertPermissionHTTPResponse(t *testing.T, want roleapplication.PermissionR
 	require.Equal(t, want.Module, got.Module)
 	require.Equal(t, want.HTTPMethod, got.HTTPMethod)
 	require.Equal(t, want.PathTemplate, got.PathTemplate)
-	require.Equal(t, want.Active, got.Active)
-	require.Equal(t, want.IsSystem, got.System)
 	require.Equal(t, want.CreatedAt, got.CreatedAt)
 	require.Equal(t, want.UpdatedAt, got.UpdatedAt)
 }

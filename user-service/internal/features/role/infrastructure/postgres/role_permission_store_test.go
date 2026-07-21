@@ -93,25 +93,21 @@ func TestRolePermissionStoreDefaultListRemoveAndSyncSystemBindings(t *testing.T)
 	require.ErrorIs(t, err, roledomain.ErrRolePermissionNotFound)
 }
 
-func TestPermissionLookupDefaultGetActiveByPermissionID(t *testing.T) {
+func TestPermissionLookupGetByPermissionID(t *testing.T) {
 	client := newRoleStoreTestClient(t)
 	ctx := context.Background()
 	permissionStore := permissionpostgres.NewPermissionStore(client)
 	lookup := NewPermissionLookup(permissionStore)
 	activePermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000011001")
-	inactivePermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000011002")
 	missingPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000011003")
 	activePermission := createPermissionForTest(ctx, t, permissionStore, activePermissionID, "Lookup Active", "GET", "/api/v1/lookup/active", true)
-	createPermissionForTest(ctx, t, permissionStore, inactivePermissionID, "Lookup Inactive", "GET", "/api/v1/lookup/inactive", false)
 
-	permission, err := lookup.GetActiveByPermissionID(ctx, activePermissionID)
+	permission, err := lookup.GetByPermissionID(ctx, activePermissionID)
 	require.NoError(t, err)
 	require.Equal(t, activePermission.PermissionID, permission.PermissionID)
 	require.Equal(t, activePermission.PathTemplate, permission.PathTemplate)
 
-	_, err = lookup.GetActiveByPermissionID(ctx, inactivePermissionID)
-	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
-	_, err = lookup.GetActiveByPermissionID(ctx, missingPermissionID)
+	_, err = lookup.GetByPermissionID(ctx, missingPermissionID)
 	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
 }
 
@@ -177,7 +173,6 @@ func TestRolePermissionStorePostgresReplace(t *testing.T) {
 	permissionAID := uuid.MustParse("018f0000-0000-7000-8000-000000000702")
 	permissionBID := uuid.MustParse("018f0000-0000-7000-8000-000000000703")
 	permissionCID := uuid.MustParse("018f0000-0000-7000-8000-000000000704")
-	inactivePermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000705")
 	missingPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000798")
 	roleStore := NewRoleStore(client)
 	permissionStore := permissionpostgres.NewPermissionStore(client)
@@ -186,7 +181,6 @@ func TestRolePermissionStorePostgresReplace(t *testing.T) {
 	permissionA := createPermissionForTest(ctx, t, permissionStore, permissionAID, "Read Reports", "GET", "/api/v1/reports", true)
 	permissionB := createPermissionForTest(ctx, t, permissionStore, permissionBID, "Create Reports", "POST", "/api/v1/reports", true)
 	permissionC := createPermissionForTest(ctx, t, permissionStore, permissionCID, "Delete Reports", "DELETE", "/api/v1/reports/:id", true)
-	inactivePermission := createPermissionForTest(ctx, t, permissionStore, inactivePermissionID, "Archive Reports", "PATCH", "/api/v1/reports/:id/archive", false)
 
 	replaced, err := bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{permissionA, permissionB})
 	require.NoError(t, err)
@@ -204,12 +198,6 @@ func TestRolePermissionStorePostgresReplace(t *testing.T) {
 
 	_, err = bindingStore.Replace(ctx, missingRoleID, []roleapplication.PermissionReference{permissionA})
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
-	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{permissionA, inactivePermission})
-	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
-	items, err = bindingStore.ListByRoleID(ctx, roleID)
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{permissionCID}, permissionIDsForTest(items))
-
 	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{{PermissionID: missingPermissionID}})
 	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
 	items, err = bindingStore.ListByRoleID(ctx, roleID)
@@ -222,61 +210,6 @@ func TestRolePermissionStorePostgresReplace(t *testing.T) {
 	items, err = bindingStore.ListByRoleID(ctx, roleID)
 	require.NoError(t, err)
 	require.Empty(t, items)
-}
-
-func TestRolePermissionStorePostgresAddRechecksPermissionActiveState(t *testing.T) {
-	client := newRolePermissionPostgresTestClient(t)
-	ctx := context.Background()
-	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000401")
-	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000402")
-	roleStore := NewRoleStore(client)
-	permissionStore := permissionpostgres.NewPermissionStore(client)
-	bindingStore := NewRolePermissionStore(client)
-
-	_, err := roleStore.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: "Operator", Active: true})
-	require.NoError(t, err)
-	createdPermission, err := permissionStore.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: permissionID, Name: "Create User", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true})
-	require.NoError(t, err)
-	err = permissionStore.SetActive(ctx, permissionID, false)
-	require.NoError(t, err)
-
-	err = bindingStore.Add(ctx, roleID, roleapplication.PermissionReference{ID: createdPermission.ID, PermissionID: createdPermission.PermissionID})
-	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
-	items, err := bindingStore.ListByRoleID(ctx, roleID)
-	require.NoError(t, err)
-	require.Empty(t, items)
-}
-
-func TestRolePermissionStorePostgresReplaceRechecksPermissionActiveState(t *testing.T) {
-	client := newRolePermissionPostgresTestClient(t)
-	ctx := context.Background()
-	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000501")
-	activePermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000502")
-	inactivePermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000503")
-	roleStore := NewRoleStore(client)
-	permissionStore := permissionpostgres.NewPermissionStore(client)
-	bindingStore := NewRolePermissionStore(client)
-
-	_, err := roleStore.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: "Auditor", Active: true})
-	require.NoError(t, err)
-	activePermission, err := permissionStore.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: activePermissionID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true})
-	require.NoError(t, err)
-	inactivePermission, err := permissionStore.Create(ctx, permissionapplication.CreatePermissionInput{PermissionID: inactivePermissionID, Name: "Delete User", Module: "user", HTTPMethod: "DELETE", PathTemplate: "/api/v1/users/:id", Active: true})
-	require.NoError(t, err)
-	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{{PermissionID: activePermissionID}})
-	require.NoError(t, err)
-	err = permissionStore.SetActive(ctx, inactivePermissionID, false)
-	require.NoError(t, err)
-
-	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{
-		{ID: activePermission.ID, PermissionID: activePermission.PermissionID},
-		{ID: inactivePermission.ID, PermissionID: inactivePermission.PermissionID},
-	})
-	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
-	items, err := bindingStore.ListByRoleID(ctx, roleID)
-	require.NoError(t, err)
-	require.Len(t, items, 1)
-	require.Equal(t, activePermissionID, items[0].PermissionID)
 }
 
 func newRolePermissionPostgresTestClient(t *testing.T) *ent.Client {
@@ -297,15 +230,14 @@ func newRolePermissionPostgresTestClient(t *testing.T) *ent.Client {
 	return client
 }
 
-func createPermissionForTest(ctx context.Context, t *testing.T, store *permissionpostgres.PermissionStore, permissionID uuid.UUID, name string, method string, path string, active bool) roleapplication.PermissionReference {
+func createPermissionForTest(ctx context.Context, t *testing.T, store *permissionpostgres.PermissionStore, permissionID uuid.UUID, name string, method string, path string, _ bool) roleapplication.PermissionReference {
 	t.Helper()
-	permission, err := store.Create(ctx, permissionapplication.CreatePermissionInput{
+	permission, _, err := store.UpsertPermission(ctx, permissionapplication.SeedPermissionInput{
 		PermissionID: permissionID,
 		Name:         name,
 		Module:       "role",
 		HTTPMethod:   method,
 		PathTemplate: path,
-		Active:       active,
 	})
 	require.NoError(t, err)
 	return roleapplication.PermissionReference{
@@ -316,8 +248,6 @@ func createPermissionForTest(ctx context.Context, t *testing.T, store *permissio
 		Module:       permission.Module,
 		HTTPMethod:   permission.HTTPMethod,
 		PathTemplate: permission.PathTemplate,
-		Active:       permission.Active,
-		IsSystem:     permission.IsSystem,
 		CreatedAt:    permission.CreatedAt,
 		UpdatedAt:    permission.UpdatedAt,
 	}

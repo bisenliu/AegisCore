@@ -35,11 +35,6 @@ const (
 	// MetricsSourceWatcherVersionCheck 表示 watcher 定时版本补偿触发。
 	MetricsSourceWatcherVersionCheck = "watcher_version_check"
 
-	// MetricsRouteDiffMissing 表示已注册路由缺少正式权限。
-	MetricsRouteDiffMissing = "missing"
-	// MetricsRouteDiffStale 表示正式权限没有对应已注册路由。
-	MetricsRouteDiffStale = "stale"
-
 	// MetricsEnforceResultAllow 表示授权判定通过。
 	MetricsEnforceResultAllow = "allow"
 	// MetricsEnforceResultDeny 表示授权判定拒绝。
@@ -58,6 +53,5 @@ type Metrics interface {
 	WatcherReloadSucceeded(ctx context.Context, source string)
 	WatcherReloadFailed(ctx context.Context, source string, reason string)
 	WatcherVersionMismatch(ctx context.Context, source string)
-	RouteDiffObserved(ctx context.Context, missing int, stale int)
 	EnforceObserved(ctx context.Context, result string, method string, routeTemplate string, duration time.Duration)
 }

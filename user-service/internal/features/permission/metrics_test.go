@@ -26,7 +26,6 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 	recorder.PolicyReloadSucceeded(context.Background(), permissionapplication.MetricsSourceLocalChange)
 	recorder.PolicyPublishFailed(context.Background(), permissionapplication.MetricsReasonPublishFailed)
 	recorder.WatcherVersionMismatch(context.Background(), permissionapplication.MetricsSourceWatcherVersionCheck)
-	recorder.RouteDiffObserved(context.Background(), 2, 1)
 	recorder.EnforceObserved(context.Background(), permissionapplication.MetricsEnforceResultAllow, "GET", "/api/v1/users/:user_id", 10*time.Millisecond)
 	recorder.EnforceObserved(context.Background(), permissionapplication.MetricsEnforceResultDeny, "DELETE", "/api/v1/users/:user_id", 20*time.Millisecond)
 	recorder.EnforceObserved(context.Background(), "unexpected", "PATCH", "/api/v1/users/:user_id", 30*time.Millisecond)
@@ -36,8 +35,6 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 		`aegiscore_user_service_rbac_policy_sync_operations_total{environment="test",operation="policy_reload",reason="none",result="success",service="aegiscore-user-service-test",source="local_change"} 1`,
 		`aegiscore_user_service_rbac_policy_sync_operations_total{environment="test",operation="policy_publish",reason="publish_failed",result="failure",service="aegiscore-user-service-test",source="local_change"} 1`,
 		`aegiscore_user_service_rbac_policy_version_mismatches_total{environment="test",service="aegiscore-user-service-test",source="watcher_version_check"} 1`,
-		`aegiscore_user_service_permission_route_diff{environment="test",kind="missing",service="aegiscore-user-service-test"} 2`,
-		`aegiscore_user_service_permission_route_diff{environment="test",kind="stale",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_user_service_rbac_enforce_total{environment="test",method="GET",result="allow",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_user_service_rbac_enforce_total{environment="test",method="DELETE",result="deny",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_user_service_rbac_enforce_total{environment="test",method="PATCH",result="error",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,

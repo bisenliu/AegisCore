@@ -40,7 +40,7 @@ func TestRoleQueryServiceGetAndBindingQueriesPassThrough(t *testing.T) {
 	userRoles := NewMockUserRoleStore(gomock.NewController(t))
 	userRoles.EXPECT().ListByUserID(gomock.Any(), userID).Return([]roledomain.Role{{RoleID: roleID, Name: "operator", Active: true}}, nil)
 	rolePermissions := NewMockRolePermissionStore(gomock.NewController(t))
-	rolePermissions.EXPECT().ListByRoleID(gomock.Any(), roleID).Return([]roleapplication.PermissionReference{{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}}, nil)
+	rolePermissions.EXPECT().ListByRoleID(gomock.Any(), roleID).Return([]roleapplication.PermissionReference{{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users"}}, nil)
 	service := NewRoleQueryService(roles, userRoles, rolePermissions)
 
 	roleResult, err := service.GetRole(context.Background(), GetRoleQuery{RoleID: roleID})

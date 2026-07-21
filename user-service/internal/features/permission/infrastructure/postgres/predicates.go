@@ -7,18 +7,12 @@ import (
 )
 
 func buildListPredicates(input permissionapplication.ListPermissionsInput) []predicate.Permission {
-	predicates := make([]predicate.Permission, 0, 4)
+	predicates := make([]predicate.Permission, 0, 2)
 	if input.Module != "" {
 		predicates = append(predicates, entpermission.ModuleEQ(input.Module))
 	}
 	if input.HTTPMethod != "" {
 		predicates = append(predicates, entpermission.HTTPMethodEQ(input.HTTPMethod))
-	}
-	if input.Active != nil {
-		predicates = append(predicates, entpermission.ActiveEQ(*input.Active))
-	}
-	if input.IsSystem != nil {
-		predicates = append(predicates, entpermission.IsSystemEQ(*input.IsSystem))
 	}
 	return predicates
 }

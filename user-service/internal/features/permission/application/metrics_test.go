@@ -18,5 +18,4 @@ func TestNopMetricsImplementsMetrics(t *testing.T) {
 	metrics.WatcherReloadSucceeded(ctx, MetricsSourceWatcherVersionCheck)
 	metrics.WatcherReloadFailed(ctx, MetricsSourceWatcherPubSub, MetricsReasonSystemError)
 	metrics.WatcherVersionMismatch(ctx, MetricsSourceWatcherPubSub)
-	metrics.RouteDiffObserved(ctx, 1, 2)
 }

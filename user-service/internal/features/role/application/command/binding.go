@@ -98,7 +98,7 @@ func (s *roleCommandService) AddRolePermission(ctx context.Context, cmd RolePerm
 	if _, err := s.roles.GetByRoleID(ctx, cmd.RoleID); err != nil {
 		return nil, err
 	}
-	permission, err := s.permissions.GetActiveByPermissionID(ctx, cmd.PermissionID)
+	permission, err := s.permissions.GetByPermissionID(ctx, cmd.PermissionID)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func (s *roleCommandService) ReplaceRolePermissions(ctx context.Context, cmd Rep
 	permissionIDs := uniqueUUIDs(cmd.PermissionIDs)
 	permissions := make([]roleapplication.PermissionReference, 0, len(permissionIDs))
 	for _, permissionID := range permissionIDs {
-		permission, err := s.permissions.GetActiveByPermissionID(ctx, permissionID)
+		permission, err := s.permissions.GetByPermissionID(ctx, permissionID)
 		if err != nil {
 			return nil, err
 		}

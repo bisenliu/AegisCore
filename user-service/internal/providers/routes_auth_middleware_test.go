@@ -75,7 +75,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		PublicRoutes:        []router.PublicRouteRegistrar{authRoutes},
 		AuthenticatedRoutes: []router.AuthenticatedRouteRegistrar{authRoutes},
 		AuthorizedRoutes: []router.AuthorizedRouteRegistrar{
-			&routePermissionRoutes{controller: permissionhttp.NewPermissionController(nil, nil, validator)},
+			&routePermissionRoutes{controller: permissionhttp.NewPermissionController(nil, validator)},
 			&routeRoleRoutes{controller: rolehttp.NewRoleController(nil, nil, validator)},
 			&routeUserRoutes{controller: userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator)},
 		},

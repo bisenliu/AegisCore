@@ -67,7 +67,7 @@ pprof 不挂载到业务 router。临时诊断时通过 `AEGISCORE_OBSERVABILITY
 - 其余受保护路由先通过 `AuthWithTokenVersionValidator`。
 - 权限、角色和用户接口再通过 `permissionhttp.Authorize` 执行 RBAC 授权。
 - 用户 API 位于 `/api/v1/users`。
-- 权限 API 位于 `/api/v1/permissions`。
+- 权限 API 只提供 `/api/v1/permissions` 列表和 `/api/v1/permissions/users/:user_id/effective` 有效权限查询。
 - 角色 API 位于 `/api/v1/roles` 和 `/api/v1/users/:user_id/roles`。
 
 ## 5. Feature 分层
@@ -77,7 +77,7 @@ pprof 不挂载到业务 router。临时诊断时通过 `AEGISCORE_OBSERVABILITY
 | Feature | 主要职责 |
 |---|---|
 | `auth` | 登录、刷新、退出、改密、会话、token、凭证和 token version |
-| `permission` | 权限目录、路由差异、有效权限、Casbin policy 和授权中间件 |
+| `permission` | 代码权限目录的只读投影、有效权限、Casbin policy 和授权中间件 |
 | `role` | 角色、角色权限、用户角色、系统 seed 和超级管理员绑定 |
 | `user` | 用户资料创建、查询、列表、状态和存储 |
 
@@ -119,9 +119,10 @@ pprof 不挂载到业务 router。临时诊断时通过 `AEGISCORE_OBSERVABILITY
 ### 6.4 RBAC seed 和超级管理员
 
 1. `rbac seed` 加载 user-service 私有配置，按服务私有资源名打开 user DB，创建 Ent client。
-2. role seed service 创建或更新系统角色、权限和绑定。
-3. `create-super-admin` 读取 `ADMIN_PASSWORD`，创建或复用用户，按需更新密码。
-4. seed service 绑定内置超级管理员角色。
+2. role seed service 按 `rbacbaseline.DefaultPermissions()` 的稳定 `permission_id` 创建或更新权限投影，并维护系统角色和默认绑定。
+3. 权限定义变更随代码发布；路由测试构建真实 Gin route graph，与代码基线双向比较，missing 或 stale 均阻断 CI。
+4. `create-super-admin` 读取 `ADMIN_PASSWORD`，创建或复用用户，按需更新密码。
+5. seed service 绑定内置超级管理员角色。
 
 ### 6.5 数据迁移
 
@@ -130,6 +131,7 @@ pprof 不挂载到业务 router。临时诊断时通过 `AEGISCORE_OBSERVABILITY
 3. 使用 `make user-service-migrate-validate` 校验 migration。
 4. 使用 `atlas migrate hash` 或等价流程刷新 `atlas.sum`，将 SQL migration 与权限要求提交 Git。
 5. 发布时通过 DBA 工单或受控发布平台人工或受控执行 SQL migration；`CREATE EXTENSION IF NOT EXISTS pg_trgm;` 等扩展语句可能需要 DBA 权限或前置动作。
+6. 删除权限时 migration 先删除 `role_permissions` 再删除 `permissions`；随后执行同版本 RBAC seed，并通过显式 reload 或滚动重启收敛 Casbin policy。
 
 ## 7. 部署和观测
 

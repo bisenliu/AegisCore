@@ -10,8 +10,6 @@ type PermissionResponse struct {
 	Module       string `json:"module" example:"user"`
 	HTTPMethod   string `json:"http_method" example:"GET"`
 	PathTemplate string `json:"path_template" example:"/api/v1/users"`
-	Active       bool   `json:"active" example:"true"`
-	System       bool   `json:"system" example:"true"`
 	CreatedAt    int64  `json:"created_at" example:"1780288800000"`
 	UpdatedAt    int64  `json:"updated_at" example:"1780288800000"`
 }
@@ -20,16 +18,4 @@ type PermissionResponse struct {
 type PermissionListResponseDoc struct {
 	Items      []PermissionResponse  `json:"items"`
 	Pagination pagination.Pagination `json:"pagination"`
-}
-
-// DiscoveredRouteResponse 是 route diff 中缺失路由响应。
-type DiscoveredRouteResponse struct {
-	HTTPMethod string `json:"http_method" example:"GET"`
-	Path       string `json:"path" example:"/api/v1/users"`
-}
-
-// RouteDiffResponse 是权限目录与路由发现的差异响应。
-type RouteDiffResponse struct {
-	MissingInPermissions []DiscoveredRouteResponse `json:"missing_in_permissions"`
-	StalePermissions     []PermissionResponse      `json:"stale_permissions"`
 }

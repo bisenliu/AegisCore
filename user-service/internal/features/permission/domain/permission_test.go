@@ -30,28 +30,12 @@ func TestPermissionErrorsAreApplicationErrors(t *testing.T) {
 			message: messages.PermissionNotFound,
 		},
 		{
-			name:    "permission already exists",
-			err:     ErrPermissionAlreadyExists,
-			kind:    contracterrors.KindConflict,
-			reason:  reasonPermissionAlreadyExists,
-			code:    contracterrors.CodeConflict,
-			message: messages.PermissionAlreadyExists,
-		},
-		{
 			name:    "permission invalid",
 			err:     ErrPermissionInvalid,
 			kind:    contracterrors.KindValidation,
 			reason:  reasonPermissionInvalid,
 			code:    contracterrors.CodeValidationFailed,
 			message: messages.InvalidPermission,
-		},
-		{
-			name:    "system permission protected",
-			err:     ErrSystemPermissionProtected,
-			kind:    contracterrors.KindConflict,
-			reason:  reasonSystemPermissionProtected,
-			code:    contracterrors.CodeConflict,
-			message: messages.SystemPermissionProtected,
 		},
 	}
 
@@ -73,9 +57,7 @@ func TestPermissionErrorsSupportErrorsIs(t *testing.T) {
 		err  error
 	}{
 		{name: "permission not found", err: ErrPermissionNotFound},
-		{name: "permission already exists", err: ErrPermissionAlreadyExists},
 		{name: "permission invalid", err: ErrPermissionInvalid},
-		{name: "system permission protected", err: ErrSystemPermissionProtected},
 	}
 
 	for _, tt := range tests {
@@ -130,16 +112,4 @@ func TestNormalizeHTTPMethodAllowlist(t *testing.T) {
 			require.ErrorContains(t, err, "unsupported http method")
 		})
 	}
-}
-
-func TestSystemPermissionProtection(t *testing.T) {
-	permission := Permission{HTTPMethod: "GET", PathTemplate: "/api/v1/users", IsSystem: true}
-
-	require.NoError(t, permission.ProtectSystemIdentity(RouteIdentity{Method: "GET", PathTemplate: "/api/v1/users"}))
-
-	err := permission.ProtectSystemIdentity(RouteIdentity{Method: "POST", PathTemplate: "/api/v1/users"})
-	require.ErrorIs(t, err, ErrSystemPermissionProtected)
-
-	nonSystem := Permission{HTTPMethod: "GET", PathTemplate: "/api/v1/users"}
-	require.NoError(t, nonSystem.ProtectSystemIdentity(RouteIdentity{Method: "POST", PathTemplate: "/api/v1/users"}))
 }

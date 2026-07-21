@@ -30,7 +30,7 @@ func toCommandRoleResponses(result *rolecommand.RolesResult) []RoleResponse {
 }
 
 func toPermissionResponse(permission roleapplication.PermissionReference) PermissionResponse {
-	return PermissionResponse{PermissionID: permission.PermissionID.String(), Name: permission.Name, Description: permission.Description, Module: permission.Module, HTTPMethod: permission.HTTPMethod, PathTemplate: permission.PathTemplate, Active: permission.Active, System: permission.IsSystem, CreatedAt: permission.CreatedAt, UpdatedAt: permission.UpdatedAt}
+	return PermissionResponse{PermissionID: permission.PermissionID.String(), Name: permission.Name, Description: permission.Description, Module: permission.Module, HTTPMethod: permission.HTTPMethod, PathTemplate: permission.PathTemplate, CreatedAt: permission.CreatedAt, UpdatedAt: permission.UpdatedAt}
 }
 
 func toPermissionResponses(items []roleapplication.PermissionReference) []PermissionResponse {

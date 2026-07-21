@@ -7,20 +7,14 @@ CREATE TABLE "permissions" (
   "module" character varying NOT NULL,
   "http_method" character varying NOT NULL,
   "path_template" character varying NOT NULL,
-  "active" boolean NOT NULL DEFAULT true,
-  "is_system" boolean NOT NULL DEFAULT false,
   "created_at" bigint NOT NULL,
   "updated_at" bigint NOT NULL,
   PRIMARY KEY ("id")
 );
--- Create index "permission_active_permission_id" to table: "permissions"
-CREATE INDEX "permission_active_permission_id" ON "permissions" ("active", "permission_id");
 -- Create index "permission_http_method_path_template" to table: "permissions"
 CREATE UNIQUE INDEX "permission_http_method_path_template" ON "permissions" ("http_method", "path_template");
 -- Create index "permission_http_method_permission_id" to table: "permissions"
 CREATE INDEX "permission_http_method_permission_id" ON "permissions" ("http_method", "permission_id");
--- Create index "permission_is_system_permission_id" to table: "permissions"
-CREATE INDEX "permission_is_system_permission_id" ON "permissions" ("is_system", "permission_id");
 -- Create index "permission_module_permission_id" to table: "permissions"
 CREATE INDEX "permission_module_permission_id" ON "permissions" ("module", "permission_id");
 -- Create index "permissions_permission_id_key" to table: "permissions"
@@ -39,10 +33,6 @@ COMMENT ON COLUMN "permissions"."module" IS '权限所属模块';
 COMMENT ON COLUMN "permissions"."http_method" IS 'HTTP 方法';
 -- Set comment to column: "path_template" on table: "permissions"
 COMMENT ON COLUMN "permissions"."path_template" IS '路径模板';
--- Set comment to column: "active" on table: "permissions"
-COMMENT ON COLUMN "permissions"."active" IS '权限是否启用';
--- Set comment to column: "is_system" on table: "permissions"
-COMMENT ON COLUMN "permissions"."is_system" IS '是否系统权限';
 -- Set comment to column: "created_at" on table: "permissions"
 COMMENT ON COLUMN "permissions"."created_at" IS '创建时间戳毫秒';
 -- Set comment to column: "updated_at" on table: "permissions"

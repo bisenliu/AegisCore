@@ -28,27 +28,6 @@ func NewPermissionStore(client *ent.Client) *PermissionStore {
 	return &PermissionStore{client: client}
 }
 
-// Create 插入权限记录，并将唯一约束冲突映射为 ErrPermissionAlreadyExists。
-func (s *PermissionStore) Create(ctx context.Context, input permissionapplication.CreatePermissionInput) (*permissiondomain.Permission, error) {
-	created, err := s.client.Permission.Create().
-		SetPermissionID(input.PermissionID).
-		SetName(input.Name).
-		SetDescription(input.Description).
-		SetModule(input.Module).
-		SetHTTPMethod(input.HTTPMethod).
-		SetPathTemplate(input.PathTemplate).
-		SetActive(input.Active).
-		SetIsSystem(false).
-		Save(ctx)
-	if err == nil {
-		return toModel(created), nil
-	}
-	if ent.IsConstraintError(err) {
-		return nil, permissiondomain.ErrPermissionAlreadyExists
-	}
-	return nil, fmt.Errorf("create permission %s %s: %w", input.HTTPMethod, input.PathTemplate, err)
-}
-
 // GetByPermissionID 按外部 UUID 返回权限记录。
 func (s *PermissionStore) GetByPermissionID(ctx context.Context, permissionID uuid.UUID) (*permissiondomain.Permission, error) {
 	found, err := s.client.Permission.Query().Where(entpermission.PermissionIDEQ(permissionID)).Only(ctx)
@@ -82,20 +61,10 @@ func (s *PermissionStore) List(ctx context.Context, input permissionapplication.
 	return toModels(permissions), hasNext, nil
 }
 
-// ListAll 返回全部权限目录记录，用于只读 route diff。
-func (s *PermissionStore) ListAll(ctx context.Context) ([]permissiondomain.Permission, error) {
-	permissions, err := s.client.Permission.Query().Order(entpermission.ByHTTPMethod(), entpermission.ByPathTemplate()).All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list all permissions: %w", err)
-	}
-	return toModels(permissions), nil
-}
-
-// ListEffectiveByUserID 返回用户经由现有角色绑定获得的启用权限。
+// ListEffectiveByUserID 返回用户经由启用角色绑定获得的权限。
 func (s *PermissionStore) ListEffectiveByUserID(ctx context.Context, userID uuid.UUID) ([]permissiondomain.Permission, error) {
 	permissions, err := s.client.Permission.Query().
 		Where(
-			entpermission.ActiveEQ(true),
 			entpermission.HasRolePermissionsWith(
 				entrolepermission.HasRoleWith(
 					entrole.ActiveEQ(true),
@@ -113,52 +82,11 @@ func (s *PermissionStore) ListEffectiveByUserID(ctx context.Context, userID uuid
 	return toModels(permissions), nil
 }
 
-// Update 更新权限记录，并将唯一约束冲突映射为 ErrPermissionAlreadyExists。
-func (s *PermissionStore) Update(ctx context.Context, input permissionapplication.UpdatePermissionInput) error {
-	updated, err := s.client.Permission.Update().
-		Where(entpermission.PermissionIDEQ(input.PermissionID)).
-		SetName(input.Name).
-		SetDescription(input.Description).
-		SetModule(input.Module).
-		SetHTTPMethod(input.HTTPMethod).
-		SetPathTemplate(input.PathTemplate).
-		SetActive(input.Active).
-		Save(ctx)
-	if err == nil && updated == 0 {
-		return permissiondomain.ErrPermissionNotFound
-	}
-	if err != nil {
-		if ent.IsConstraintError(err) {
-			return permissiondomain.ErrPermissionAlreadyExists
-		}
-		return fmt.Errorf("update permission %s: %w", input.PermissionID.String(), err)
-	}
-	return nil
-}
-
-// SetActive 启用或停用权限记录。
-func (s *PermissionStore) SetActive(ctx context.Context, permissionID uuid.UUID, active bool) error {
-	updated, err := s.client.Permission.Update().Where(entpermission.PermissionIDEQ(permissionID)).SetActive(active).Save(ctx)
-	if err == nil && updated == 0 {
-		return permissiondomain.ErrPermissionNotFound
-	}
-	if err != nil {
-		return fmt.Errorf("set permission active %s: %w", permissionID.String(), err)
-	}
-	return nil
-}
-
-// UpsertSystemPermission 按 permission_id 或路由身份幂等写入系统权限 seed 数据。
-func (s *PermissionStore) UpsertSystemPermission(ctx context.Context, input permissionapplication.SeedPermissionInput) (*permissiondomain.Permission, bool, error) {
+// UpsertPermission 按 permission_id 幂等写入权限 seed 数据。
+func (s *PermissionStore) UpsertPermission(ctx context.Context, input permissionapplication.SeedPermissionInput) (*permissiondomain.Permission, bool, error) {
 	existing, err := s.client.Permission.Query().Where(entpermission.PermissionIDEQ(input.PermissionID)).Only(ctx)
 	if err != nil && !ent.IsNotFound(err) {
 		return nil, false, fmt.Errorf("query seed permission %s: %w", input.PermissionID.String(), err)
-	}
-	if ent.IsNotFound(err) {
-		existing, err = s.client.Permission.Query().Where(entpermission.HTTPMethodEQ(input.HTTPMethod), entpermission.PathTemplateEQ(input.PathTemplate)).Only(ctx)
-		if err != nil && !ent.IsNotFound(err) {
-			return nil, false, fmt.Errorf("query seed permission %s %s: %w", input.HTTPMethod, input.PathTemplate, err)
-		}
 	}
 	if ent.IsNotFound(err) {
 		created, err := s.client.Permission.Create().
@@ -168,30 +96,40 @@ func (s *PermissionStore) UpsertSystemPermission(ctx context.Context, input perm
 			SetModule(input.Module).
 			SetHTTPMethod(input.HTTPMethod).
 			SetPathTemplate(input.PathTemplate).
-			SetActive(input.Active).
-			SetIsSystem(true).
 			Save(ctx)
-		if err != nil {
-			if ent.IsConstraintError(err) {
-				return s.UpsertSystemPermission(ctx, input)
+		if err == nil {
+			return toModel(created), true, nil
+		}
+		if !ent.IsConstraintError(err) {
+			return nil, false, fmt.Errorf("create seed permission %s %s: %w", input.HTTPMethod, input.PathTemplate, err)
+		}
+
+		// 并发 seed 可能已经创建同一 permission_id；只对该情况继续幂等更新。
+		existing, err = s.client.Permission.Query().Where(entpermission.PermissionIDEQ(input.PermissionID)).Only(ctx)
+		if err == nil {
+			// 继续执行下方更新。
+		} else if !ent.IsNotFound(err) {
+			return nil, false, fmt.Errorf("query seed permission %s after create conflict: %w", input.PermissionID.String(), err)
+		} else {
+			conflicting, conflictErr := s.client.Permission.Query().
+				Where(entpermission.HTTPMethodEQ(input.HTTPMethod), entpermission.PathTemplateEQ(input.PathTemplate)).
+				Only(ctx)
+			if conflictErr == nil {
+				return nil, false, fmt.Errorf("seed permission %s route %s %s conflicts with permission_id %s", input.PermissionID.String(), input.HTTPMethod, input.PathTemplate, conflicting.PermissionID.String())
+			}
+			if !ent.IsNotFound(conflictErr) {
+				return nil, false, fmt.Errorf("query conflicting seed permission %s %s: %w", input.HTTPMethod, input.PathTemplate, conflictErr)
 			}
 			return nil, false, fmt.Errorf("create seed permission %s %s: %w", input.HTTPMethod, input.PathTemplate, err)
 		}
-		return toModel(created), true, nil
 	}
 
-	active := existing.Active
-	if input.ReactivateSystem {
-		active = input.Active
-	}
 	updated, err := s.client.Permission.UpdateOneID(existing.ID).
 		SetName(input.Name).
 		SetDescription(input.Description).
 		SetModule(input.Module).
 		SetHTTPMethod(input.HTTPMethod).
 		SetPathTemplate(input.PathTemplate).
-		SetActive(active).
-		SetIsSystem(true).
 		Save(ctx)
 	if err != nil {
 		return nil, false, fmt.Errorf("update seed permission %s %s: %w", input.HTTPMethod, input.PathTemplate, err)
@@ -203,7 +141,7 @@ func toModel(entPermission *ent.Permission) *permissiondomain.Permission {
 	if entPermission == nil {
 		return nil
 	}
-	return &permissiondomain.Permission{ID: entPermission.ID, PermissionID: entPermission.PermissionID, Name: entPermission.Name, Description: entPermission.Description, Module: entPermission.Module, HTTPMethod: entPermission.HTTPMethod, PathTemplate: entPermission.PathTemplate, Active: entPermission.Active, IsSystem: entPermission.IsSystem, CreatedAt: entPermission.CreatedAt, UpdatedAt: entPermission.UpdatedAt}
+	return &permissiondomain.Permission{ID: entPermission.ID, PermissionID: entPermission.PermissionID, Name: entPermission.Name, Description: entPermission.Description, Module: entPermission.Module, HTTPMethod: entPermission.HTTPMethod, PathTemplate: entPermission.PathTemplate, CreatedAt: entPermission.CreatedAt, UpdatedAt: entPermission.UpdatedAt}
 }
 
 func toModels(permissions []*ent.Permission) []permissiondomain.Permission {

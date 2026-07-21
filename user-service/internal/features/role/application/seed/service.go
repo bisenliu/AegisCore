@@ -47,13 +47,13 @@ func NewService(roles roleapplication.SeedRoleStore, permissions permissionappli
 	return &Service{roles: roles, permissions: permissions, rolePermissions: rolePermissions, userRoles: userRoles}
 }
 
-// Seed 写入系统角色、系统权限和系统角色权限绑定。
+// Seed 写入系统角色、代码定义权限投影和系统角色权限绑定。
 func (s *Service) Seed(ctx context.Context, opts SeedOptions) (SeedResult, error) {
 	roleInputs, err := buildRoleInputs(opts.ReactivateSystem)
 	if err != nil {
 		return SeedResult{}, err
 	}
-	permissionInputs, err := buildPermissionInputs(opts.ReactivateSystem)
+	permissionInputs, err := buildPermissionInputs()
 	if err != nil {
 		return SeedResult{}, err
 	}
@@ -77,7 +77,7 @@ func (s *Service) Seed(ctx context.Context, opts SeedOptions) (SeedResult, error
 
 	actualPermissions := make(map[uuid.UUID]uuid.UUID, len(permissionInputs))
 	for _, input := range permissionInputs {
-		permission, inserted, err := s.permissions.UpsertSystemPermission(ctx, input)
+		permission, inserted, err := s.permissions.UpsertPermission(ctx, input)
 		if err != nil {
 			return result, err
 		}
@@ -152,7 +152,7 @@ func buildRoleInputs(reactivate bool) ([]roleapplication.SeedRoleInput, error) {
 	return inputs, nil
 }
 
-func buildPermissionInputs(reactivate bool) ([]permissionapplication.SeedPermissionInput, error) {
+func buildPermissionInputs() ([]permissionapplication.SeedPermissionInput, error) {
 	seenIDs := make(map[uuid.UUID]struct{})
 	seenRoutes := make(map[string]struct{})
 	permissions := rbacbaseline.DefaultPermissions()
@@ -174,7 +174,7 @@ func buildPermissionInputs(reactivate bool) ([]permissionapplication.SeedPermiss
 			return nil, fmt.Errorf("duplicate route identity %s in permission catalog", identity.Key())
 		}
 		seenRoutes[identity.Key()] = struct{}{}
-		inputs = append(inputs, permissionapplication.SeedPermissionInput{PermissionID: permissionID, Name: name, Description: description, Module: module, HTTPMethod: identity.Method, PathTemplate: identity.PathTemplate, Active: true, ReactivateSystem: reactivate})
+		inputs = append(inputs, permissionapplication.SeedPermissionInput{PermissionID: permissionID, Name: name, Description: description, Module: module, HTTPMethod: identity.Method, PathTemplate: identity.PathTemplate})
 	}
 	return inputs, nil
 }

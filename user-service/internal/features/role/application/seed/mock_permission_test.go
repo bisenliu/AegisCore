@@ -42,18 +42,18 @@ func (m *MockSeedPermissionStore) EXPECT() *MockSeedPermissionStoreMockRecorder 
 	return m.recorder
 }
 
-// UpsertSystemPermission mocks base method.
-func (m *MockSeedPermissionStore) UpsertSystemPermission(ctx context.Context, input application.SeedPermissionInput) (*domain.Permission, bool, error) {
+// UpsertPermission mocks base method.
+func (m *MockSeedPermissionStore) UpsertPermission(ctx context.Context, input application.SeedPermissionInput) (*domain.Permission, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpsertSystemPermission", ctx, input)
+	ret := m.ctrl.Call(m, "UpsertPermission", ctx, input)
 	ret0, _ := ret[0].(*domain.Permission)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
 
-// UpsertSystemPermission indicates an expected call of UpsertSystemPermission.
-func (mr *MockSeedPermissionStoreMockRecorder) UpsertSystemPermission(ctx, input any) *gomock.Call {
+// UpsertPermission indicates an expected call of UpsertPermission.
+func (mr *MockSeedPermissionStoreMockRecorder) UpsertPermission(ctx, input any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertSystemPermission", reflect.TypeOf((*MockSeedPermissionStore)(nil).UpsertSystemPermission), ctx, input)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertPermission", reflect.TypeOf((*MockSeedPermissionStore)(nil).UpsertPermission), ctx, input)
 }

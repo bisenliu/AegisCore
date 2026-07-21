@@ -54,11 +54,11 @@ func (s *RolePermissionStore) Add(ctx context.Context, roleID uuid.UUID, permiss
 	if err != nil {
 		return rollback(tx, err)
 	}
-	activePermission, err := s.getLockedActivePermissionByExternalID(ctx, tx, permission.PermissionID)
+	lockedPermission, err := s.getLockedPermissionByExternalID(ctx, tx, permission.PermissionID)
 	if err != nil {
 		return rollback(tx, err)
 	}
-	if _, err := tx.RolePermission.Create().SetRoleID(role.ID).SetPermissionID(activePermission.ID).Save(ctx); err != nil {
+	if _, err := tx.RolePermission.Create().SetRoleID(role.ID).SetPermissionID(lockedPermission.ID).Save(ctx); err != nil {
 		if ent.IsConstraintError(err) {
 			return rollback(tx, roledomain.ErrRolePermissionAlreadyExists)
 		}
@@ -81,15 +81,15 @@ func (s *RolePermissionStore) Replace(ctx context.Context, roleID uuid.UUID, per
 	if err != nil {
 		return nil, rollback(tx, err)
 	}
-	activePermissions, err := s.lockedActivePermissionsByExternalIDs(ctx, tx, permissionReferenceIDs(permissions))
+	lockedPermissions, err := s.lockedPermissionsByExternalIDs(ctx, tx, permissionReferenceIDs(permissions))
 	if err != nil {
 		return nil, rollback(tx, err)
 	}
 	if _, err := tx.RolePermission.Delete().Where(entrolepermission.RoleIDEQ(role.ID)).Exec(ctx); err != nil {
 		return nil, rollback(tx, fmt.Errorf("delete role permissions for role %s: %w", roleID.String(), err))
 	}
-	builders := make([]*ent.RolePermissionCreate, 0, len(activePermissions))
-	for _, permission := range activePermissions {
+	builders := make([]*ent.RolePermissionCreate, 0, len(lockedPermissions))
+	for _, permission := range lockedPermissions {
 		builders = append(builders, tx.RolePermission.Create().SetRoleID(role.ID).SetPermissionID(permission.ID))
 	}
 	if len(builders) > 0 {
@@ -100,7 +100,7 @@ func (s *RolePermissionStore) Replace(ctx context.Context, roleID uuid.UUID, per
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit replace role permissions: %w", err)
 	}
-	return activePermissions, nil
+	return lockedPermissions, nil
 }
 
 // Remove 删除角色权限绑定。
@@ -247,24 +247,24 @@ func (s *RolePermissionStore) getPermissionByExternalID(ctx context.Context, per
 	return nil, fmt.Errorf("query permission by permission_id %s: %w", permissionID.String(), err)
 }
 
-func (s *RolePermissionStore) getLockedActivePermissionByExternalID(ctx context.Context, tx *ent.Tx, permissionID uuid.UUID) (*ent.Permission, error) {
-	permission, err := tx.Permission.Query().Where(entpermission.PermissionIDEQ(permissionID), entpermission.ActiveEQ(true)).ForUpdate().Only(ctx)
+func (s *RolePermissionStore) getLockedPermissionByExternalID(ctx context.Context, tx *ent.Tx, permissionID uuid.UUID) (*ent.Permission, error) {
+	permission, err := tx.Permission.Query().Where(entpermission.PermissionIDEQ(permissionID)).ForUpdate().Only(ctx)
 	if err == nil {
 		return permission, nil
 	}
 	if ent.IsNotFound(err) {
 		return nil, fmt.Errorf("%w: permission_id %s", permissiondomain.ErrPermissionNotFound, permissionID.String())
 	}
-	return nil, fmt.Errorf("query active permission by permission_id %s: %w", permissionID.String(), err)
+	return nil, fmt.Errorf("query permission by permission_id %s: %w", permissionID.String(), err)
 }
 
-func (s *RolePermissionStore) lockedActivePermissionsByExternalIDs(ctx context.Context, tx *ent.Tx, permissionIDs []uuid.UUID) ([]roleapplication.PermissionReference, error) {
+func (s *RolePermissionStore) lockedPermissionsByExternalIDs(ctx context.Context, tx *ent.Tx, permissionIDs []uuid.UUID) ([]roleapplication.PermissionReference, error) {
 	if len(permissionIDs) == 0 {
 		return []roleapplication.PermissionReference{}, nil
 	}
-	found, err := tx.Permission.Query().Where(entpermission.PermissionIDIn(permissionIDs...), entpermission.ActiveEQ(true)).ForUpdate().All(ctx)
+	found, err := tx.Permission.Query().Where(entpermission.PermissionIDIn(permissionIDs...)).ForUpdate().All(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("query active permissions by permission_ids: %w", err)
+		return nil, fmt.Errorf("query permissions by permission_ids: %w", err)
 	}
 	byExternalID := make(map[uuid.UUID]*ent.Permission, len(found))
 	for _, permission := range found {
@@ -342,7 +342,7 @@ func toPermissionReference(permission *ent.Permission) *roleapplication.Permissi
 	if permission == nil {
 		return nil
 	}
-	return &roleapplication.PermissionReference{ID: permission.ID, PermissionID: permission.PermissionID, Name: permission.Name, Description: permission.Description, Module: permission.Module, HTTPMethod: permission.HTTPMethod, PathTemplate: permission.PathTemplate, Active: permission.Active, IsSystem: permission.IsSystem, CreatedAt: permission.CreatedAt, UpdatedAt: permission.UpdatedAt}
+	return &roleapplication.PermissionReference{ID: permission.ID, PermissionID: permission.PermissionID, Name: permission.Name, Description: permission.Description, Module: permission.Module, HTTPMethod: permission.HTTPMethod, PathTemplate: permission.PathTemplate, CreatedAt: permission.CreatedAt, UpdatedAt: permission.UpdatedAt}
 }
 
 func toPermissionReferences(permissions []*ent.Permission) []roleapplication.PermissionReference {

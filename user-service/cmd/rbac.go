@@ -58,7 +58,7 @@ func newRBACCommand(seedRunner rbacSeedRunner, assignRunner rbacAssignSuperAdmin
 			return seedRunner(cmd.Context(), configPath, seedOpts)
 		},
 	}
-	seed.Flags().BoolVar(&seedOpts.reactivateSystem, "reactivate-system", false, "reactivate catalog-managed system roles and permissions")
+	seed.Flags().BoolVar(&seedOpts.reactivateSystem, "reactivate-system", false, "reactivate catalog-managed system roles")
 	seed.Flags().BoolVar(&seedOpts.syncSystemBindings, "sync-system-bindings", false, "synchronize catalog-managed system role permission bindings exactly")
 	cmd.AddCommand(seed)
 

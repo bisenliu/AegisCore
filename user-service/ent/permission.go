@@ -30,10 +30,6 @@ type Permission struct {
 	HTTPMethod string `json:"http_method,omitempty"`
 	// 路径模板
 	PathTemplate string `json:"path_template,omitempty"`
-	// 权限是否启用
-	Active bool `json:"active,omitempty"`
-	// 是否系统权限
-	IsSystem bool `json:"is_system,omitempty"`
 	// 创建时间戳毫秒
 	CreatedAt int64 `json:"created_at,omitempty"`
 	// 更新时间戳毫秒
@@ -67,8 +63,6 @@ func (*Permission) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case permission.FieldActive, permission.FieldIsSystem:
-			values[i] = new(sql.NullBool)
 		case permission.FieldID, permission.FieldCreatedAt, permission.FieldUpdatedAt:
 			values[i] = new(sql.NullInt64)
 		case permission.FieldName, permission.FieldDescription, permission.FieldModule, permission.FieldHTTPMethod, permission.FieldPathTemplate:
@@ -131,18 +125,6 @@ func (_m *Permission) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field path_template", values[i])
 			} else if value.Valid {
 				_m.PathTemplate = value.String
-			}
-		case permission.FieldActive:
-			if value, ok := values[i].(*sql.NullBool); !ok {
-				return fmt.Errorf("unexpected type %T for field active", values[i])
-			} else if value.Valid {
-				_m.Active = value.Bool
-			}
-		case permission.FieldIsSystem:
-			if value, ok := values[i].(*sql.NullBool); !ok {
-				return fmt.Errorf("unexpected type %T for field is_system", values[i])
-			} else if value.Valid {
-				_m.IsSystem = value.Bool
 			}
 		case permission.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -214,12 +196,6 @@ func (_m *Permission) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("path_template=")
 	builder.WriteString(_m.PathTemplate)
-	builder.WriteString(", ")
-	builder.WriteString("active=")
-	builder.WriteString(fmt.Sprintf("%v", _m.Active))
-	builder.WriteString(", ")
-	builder.WriteString("is_system=")
-	builder.WriteString(fmt.Sprintf("%v", _m.IsSystem))
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(fmt.Sprintf("%v", _m.CreatedAt))

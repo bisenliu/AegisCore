@@ -67,34 +67,6 @@ func (_c *PermissionCreate) SetPathTemplate(v string) *PermissionCreate {
 	return _c
 }
 
-// SetActive sets the "active" field.
-func (_c *PermissionCreate) SetActive(v bool) *PermissionCreate {
-	_c.mutation.SetActive(v)
-	return _c
-}
-
-// SetNillableActive sets the "active" field if the given value is not nil.
-func (_c *PermissionCreate) SetNillableActive(v *bool) *PermissionCreate {
-	if v != nil {
-		_c.SetActive(*v)
-	}
-	return _c
-}
-
-// SetIsSystem sets the "is_system" field.
-func (_c *PermissionCreate) SetIsSystem(v bool) *PermissionCreate {
-	_c.mutation.SetIsSystem(v)
-	return _c
-}
-
-// SetNillableIsSystem sets the "is_system" field if the given value is not nil.
-func (_c *PermissionCreate) SetNillableIsSystem(v *bool) *PermissionCreate {
-	if v != nil {
-		_c.SetIsSystem(*v)
-	}
-	return _c
-}
-
 // SetCreatedAt sets the "created_at" field.
 func (_c *PermissionCreate) SetCreatedAt(v int64) *PermissionCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -183,14 +155,6 @@ func (_c *PermissionCreate) defaults() {
 		v := permission.DefaultDescription
 		_c.mutation.SetDescription(v)
 	}
-	if _, ok := _c.mutation.Active(); !ok {
-		v := permission.DefaultActive
-		_c.mutation.SetActive(v)
-	}
-	if _, ok := _c.mutation.IsSystem(); !ok {
-		v := permission.DefaultIsSystem
-		_c.mutation.SetIsSystem(v)
-	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := permission.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -245,12 +209,6 @@ func (_c *PermissionCreate) check() error {
 		if err := permission.PathTemplateValidator(v); err != nil {
 			return &ValidationError{Name: "path_template", err: fmt.Errorf(`ent: validator failed for field "Permission.path_template": %w`, err)}
 		}
-	}
-	if _, ok := _c.mutation.Active(); !ok {
-		return &ValidationError{Name: "active", err: errors.New(`ent: missing required field "Permission.active"`)}
-	}
-	if _, ok := _c.mutation.IsSystem(); !ok {
-		return &ValidationError{Name: "is_system", err: errors.New(`ent: missing required field "Permission.is_system"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Permission.created_at"`)}
@@ -314,14 +272,6 @@ func (_c *PermissionCreate) createSpec() (*Permission, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.PathTemplate(); ok {
 		_spec.SetField(permission.FieldPathTemplate, field.TypeString, value)
 		_node.PathTemplate = value
-	}
-	if value, ok := _c.mutation.Active(); ok {
-		_spec.SetField(permission.FieldActive, field.TypeBool, value)
-		_node.Active = value
-	}
-	if value, ok := _c.mutation.IsSystem(); ok {
-		_spec.SetField(permission.FieldIsSystem, field.TypeBool, value)
-		_node.IsSystem = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(permission.FieldCreatedAt, field.TypeInt64, value)
@@ -456,30 +406,6 @@ func (u *PermissionUpsert) SetPathTemplate(v string) *PermissionUpsert {
 // UpdatePathTemplate sets the "path_template" field to the value that was provided on create.
 func (u *PermissionUpsert) UpdatePathTemplate() *PermissionUpsert {
 	u.SetExcluded(permission.FieldPathTemplate)
-	return u
-}
-
-// SetActive sets the "active" field.
-func (u *PermissionUpsert) SetActive(v bool) *PermissionUpsert {
-	u.Set(permission.FieldActive, v)
-	return u
-}
-
-// UpdateActive sets the "active" field to the value that was provided on create.
-func (u *PermissionUpsert) UpdateActive() *PermissionUpsert {
-	u.SetExcluded(permission.FieldActive)
-	return u
-}
-
-// SetIsSystem sets the "is_system" field.
-func (u *PermissionUpsert) SetIsSystem(v bool) *PermissionUpsert {
-	u.Set(permission.FieldIsSystem, v)
-	return u
-}
-
-// UpdateIsSystem sets the "is_system" field to the value that was provided on create.
-func (u *PermissionUpsert) UpdateIsSystem() *PermissionUpsert {
-	u.SetExcluded(permission.FieldIsSystem)
 	return u
 }
 
@@ -622,34 +548,6 @@ func (u *PermissionUpsertOne) SetPathTemplate(v string) *PermissionUpsertOne {
 func (u *PermissionUpsertOne) UpdatePathTemplate() *PermissionUpsertOne {
 	return u.Update(func(s *PermissionUpsert) {
 		s.UpdatePathTemplate()
-	})
-}
-
-// SetActive sets the "active" field.
-func (u *PermissionUpsertOne) SetActive(v bool) *PermissionUpsertOne {
-	return u.Update(func(s *PermissionUpsert) {
-		s.SetActive(v)
-	})
-}
-
-// UpdateActive sets the "active" field to the value that was provided on create.
-func (u *PermissionUpsertOne) UpdateActive() *PermissionUpsertOne {
-	return u.Update(func(s *PermissionUpsert) {
-		s.UpdateActive()
-	})
-}
-
-// SetIsSystem sets the "is_system" field.
-func (u *PermissionUpsertOne) SetIsSystem(v bool) *PermissionUpsertOne {
-	return u.Update(func(s *PermissionUpsert) {
-		s.SetIsSystem(v)
-	})
-}
-
-// UpdateIsSystem sets the "is_system" field to the value that was provided on create.
-func (u *PermissionUpsertOne) UpdateIsSystem() *PermissionUpsertOne {
-	return u.Update(func(s *PermissionUpsert) {
-		s.UpdateIsSystem()
 	})
 }
 
@@ -961,34 +859,6 @@ func (u *PermissionUpsertBulk) SetPathTemplate(v string) *PermissionUpsertBulk {
 func (u *PermissionUpsertBulk) UpdatePathTemplate() *PermissionUpsertBulk {
 	return u.Update(func(s *PermissionUpsert) {
 		s.UpdatePathTemplate()
-	})
-}
-
-// SetActive sets the "active" field.
-func (u *PermissionUpsertBulk) SetActive(v bool) *PermissionUpsertBulk {
-	return u.Update(func(s *PermissionUpsert) {
-		s.SetActive(v)
-	})
-}
-
-// UpdateActive sets the "active" field to the value that was provided on create.
-func (u *PermissionUpsertBulk) UpdateActive() *PermissionUpsertBulk {
-	return u.Update(func(s *PermissionUpsert) {
-		s.UpdateActive()
-	})
-}
-
-// SetIsSystem sets the "is_system" field.
-func (u *PermissionUpsertBulk) SetIsSystem(v bool) *PermissionUpsertBulk {
-	return u.Update(func(s *PermissionUpsert) {
-		s.SetIsSystem(v)
-	})
-}
-
-// UpdateIsSystem sets the "is_system" field to the value that was provided on create.
-func (u *PermissionUpsertBulk) UpdateIsSystem() *PermissionUpsertBulk {
-	return u.Update(func(s *PermissionUpsert) {
-		s.UpdateIsSystem()
 	})
 }
 

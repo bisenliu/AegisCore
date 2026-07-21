@@ -160,13 +160,13 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000007")
 	otherPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000008")
 	role := roledomain.Role{RoleID: roleID, Name: "operator", Active: true}
-	permission := roleapplication.PermissionReference{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}
-	otherPermission := roleapplication.PermissionReference{PermissionID: otherPermissionID, HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true}
+	permission := roleapplication.PermissionReference{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users"}
+	otherPermission := roleapplication.PermissionReference{PermissionID: otherPermissionID, HTTPMethod: "POST", PathTemplate: "/api/v1/users"}
 	fixture := newRoleCommandFixture(t)
 
 	gomock.InOrder(
 		fixture.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil),
-		fixture.permissions.EXPECT().GetActiveByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
+		fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
 		fixture.rolePermissions.EXPECT().Add(gomock.Any(), roleID, permission).Return(nil),
 		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permission_added", uuid.Nil, uuid.Nil)).Return(nil),
 		fixture.rolePermissions.EXPECT().ListByRoleID(gomock.Any(), roleID).Return([]roleapplication.PermissionReference{permission}, nil),
@@ -179,8 +179,8 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 
 	gomock.InOrder(
 		fixture.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil),
-		fixture.permissions.EXPECT().GetActiveByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
-		fixture.permissions.EXPECT().GetActiveByPermissionID(gomock.Any(), otherPermissionID).Return(&otherPermission, nil),
+		fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
+		fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), otherPermissionID).Return(&otherPermission, nil),
 		fixture.rolePermissions.EXPECT().Replace(gomock.Any(), roleID, permissionSliceMatches(permission, otherPermission)).Return([]roleapplication.PermissionReference{permission, otherPermission}, nil),
 		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permissions_replaced", uuid.Nil, uuid.Nil)).Return(nil),
 	)
@@ -197,14 +197,14 @@ func TestRoleCommandServiceRolePermissionLookupFailureSkipsWriteAndNotify(t *tes
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000026")
 	otherPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000027")
 	role := roledomain.Role{RoleID: roleID, Name: "operator", Active: true}
-	permission := roleapplication.PermissionReference{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}
-	inactiveErr := errors.Join(permissiondomain.ErrPermissionNotFound, errors.New("permission inactive"))
+	permission := roleapplication.PermissionReference{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users"}
+	lookupErr := errors.Join(permissiondomain.ErrPermissionNotFound, errors.New("permission lookup failed"))
 
 	t.Run("add skips binding write when permission is unavailable", func(t *testing.T) {
 		fixture := newRoleCommandFixture(t)
 		gomock.InOrder(
 			fixture.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil),
-			fixture.permissions.EXPECT().GetActiveByPermissionID(gomock.Any(), permissionID).Return(nil, inactiveErr),
+			fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(nil, lookupErr),
 		)
 		fixture.rolePermissions.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).Times(0)
@@ -218,8 +218,8 @@ func TestRoleCommandServiceRolePermissionLookupFailureSkipsWriteAndNotify(t *tes
 		fixture := newRoleCommandFixture(t)
 		gomock.InOrder(
 			fixture.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil),
-			fixture.permissions.EXPECT().GetActiveByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
-			fixture.permissions.EXPECT().GetActiveByPermissionID(gomock.Any(), otherPermissionID).Return(nil, permissiondomain.ErrPermissionNotFound),
+			fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
+			fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), otherPermissionID).Return(nil, permissiondomain.ErrPermissionNotFound),
 		)
 		fixture.rolePermissions.EXPECT().Replace(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any()).Times(0)
@@ -245,7 +245,7 @@ func TestRoleCommandServicePropagatesRefreshFailureAfterSuccessfulWrite(t *testi
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000010")
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000011")
 	role := roledomain.Role{RoleID: roleID, Name: "operator", Active: true}
-	permission := roleapplication.PermissionReference{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}
+	permission := roleapplication.PermissionReference{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users"}
 	refreshErr := errors.New("refresh failed")
 
 	tests := []struct {
@@ -328,7 +328,7 @@ func TestRoleCommandServicePropagatesRefreshFailureAfterSuccessfulWrite(t *testi
 			setup: func(f *roleCommandFixture) {
 				gomock.InOrder(
 					f.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil),
-					f.permissions.EXPECT().GetActiveByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
+					f.permissions.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
 					f.rolePermissions.EXPECT().Add(gomock.Any(), roleID, permission).Return(nil),
 					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permission_added", uuid.Nil, uuid.Nil)).Return(refreshErr),
 				)
@@ -344,7 +344,7 @@ func TestRoleCommandServicePropagatesRefreshFailureAfterSuccessfulWrite(t *testi
 			setup: func(f *roleCommandFixture) {
 				gomock.InOrder(
 					f.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil),
-					f.permissions.EXPECT().GetActiveByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
+					f.permissions.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
 					f.rolePermissions.EXPECT().Replace(gomock.Any(), roleID, permissionSliceMatches(permission)).Return([]roleapplication.PermissionReference{permission}, nil),
 					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permissions_replaced", uuid.Nil, uuid.Nil)).Return(refreshErr),
 				)

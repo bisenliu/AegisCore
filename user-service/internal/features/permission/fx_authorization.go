@@ -15,7 +15,6 @@ import (
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
-	permissioncommand "github.com/aegiscore/user-service/internal/features/permission/application/command"
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 	permissioncasbin "github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin"
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
@@ -216,8 +215,8 @@ func providePermissionUserRoleCacheCloser(params PermissionUserRoleCacheCloserPa
 	return params.Closer
 }
 
-func providePermissionController(command permissioncommand.PermissionCommandService, query permissionquery.PermissionQueryService, validator *commonvalidation.Validator) *permissionhttp.PermissionController {
-	return permissionhttp.NewPermissionController(command, query, validator)
+func providePermissionController(query permissionquery.PermissionQueryService, validator *commonvalidation.Validator) *permissionhttp.PermissionController {
+	return permissionhttp.NewPermissionController(query, validator)
 }
 
 // Start 在应用启动阶段创建真实 resolver，避免 graph 生成或 dry-run 时触发运行时资源访问。

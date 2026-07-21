@@ -20,9 +20,9 @@ func TestPermissionQueryServiceListPermissionsNormalizesFiltersAndCursor(t *test
 	var listInput permissionapplication.ListPermissionsInput
 	store.EXPECT().List(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, input permissionapplication.ListPermissionsInput) ([]permissiondomain.Permission, bool, error) {
 		listInput = input
-		return []permissiondomain.Permission{{PermissionID: firstID, Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}, {PermissionID: lastID, Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true}}, true, nil
+		return []permissiondomain.Permission{{PermissionID: firstID, Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users"}, {PermissionID: lastID, Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users"}}, true, nil
 	})
-	service := NewPermissionQueryService(store, NewMockRouteCatalogScanner(gomock.NewController(t)), permissionapplication.NopMetrics())
+	service := NewPermissionQueryService(store)
 
 	result, err := service.ListPermissions(context.Background(), ListPermissionsQuery{PageSize: 20, Limit: 10, Module: "  user  ", HTTPMethod: "post"})
 	require.NoError(t, err)
@@ -34,17 +34,12 @@ func TestPermissionQueryServiceListPermissionsNormalizesFiltersAndCursor(t *test
 	require.Equal(t, 20, result.PageSize)
 }
 
-func TestPermissionQueryServiceGetAndEffectivePermissionsPassThrough(t *testing.T) {
+func TestPermissionQueryServiceEffectivePermissionsPassThrough(t *testing.T) {
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000203")
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000204")
 	store := NewMockPermissionStore(gomock.NewController(t))
-	store.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permissiondomain.Permission{PermissionID: permissionID, Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}, nil)
-	store.EXPECT().ListEffectiveByUserID(gomock.Any(), userID).Return([]permissiondomain.Permission{{PermissionID: permissionID, Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true}}, nil)
-	service := NewPermissionQueryService(store, NewMockRouteCatalogScanner(gomock.NewController(t)), permissionapplication.NopMetrics())
-
-	permissionResult, err := service.GetPermission(context.Background(), GetPermissionQuery{PermissionID: permissionID})
-	require.NoError(t, err)
-	require.Equal(t, permissionID, permissionResult.Permission.PermissionID)
+	store.EXPECT().ListEffectiveByUserID(gomock.Any(), userID).Return([]permissiondomain.Permission{{PermissionID: permissionID, Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users"}}, nil)
+	service := NewPermissionQueryService(store)
 
 	effectiveResult, err := service.ListUserEffectivePermissions(context.Background(), UserEffectivePermissionsQuery{UserID: userID})
 	require.NoError(t, err)

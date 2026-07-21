@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/aegiscore/user-service/ent"
-	entpermission "github.com/aegiscore/user-service/ent/permission"
 	entrole "github.com/aegiscore/user-service/ent/role"
 	entrolepermission "github.com/aegiscore/user-service/ent/rolepermission"
 	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
@@ -54,10 +53,7 @@ func (l *entLoader) LoadPolicies(ctx context.Context) (PolicySet, error) {
 
 func (l *entLoader) loadPermissionRules(ctx context.Context) ([]PermissionRule, error) {
 	bindings, err := l.client.RolePermission.Query().
-		Where(
-			entrolepermission.HasRoleWith(entrole.ActiveEQ(true)),
-			entrolepermission.HasPermissionWith(entpermission.ActiveEQ(true)),
-		).
+		Where(entrolepermission.HasRoleWith(entrole.ActiveEQ(true))).
 		WithRole().
 		WithPermission().
 		Order(entrolepermission.ByRoleID(), entrolepermission.ByPermissionID()).

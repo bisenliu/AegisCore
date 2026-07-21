@@ -19,9 +19,7 @@ const (
 	UserNotFound      = "未找到该用户，请检查后重试"
 
 	// 权限类。
-	PermissionAlreadyExists   = "权限已存在，请检查后重试"
-	PermissionNotFound        = "未找到该权限，请检查后重试"
-	SystemPermissionProtected = "系统内置权限受保护，不能修改关键内容"
+	PermissionNotFound = "未找到该权限，请检查后重试"
 
 	// 角色类。
 	RoleAlreadyExists   = "角色已存在，请检查后重试"

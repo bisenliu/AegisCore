@@ -1,35 +1,39 @@
-## Purpose
-
-定义 user-service 的 RBAC 访问控制能力，覆盖权限目录、角色、角色权限、用户角色、Casbin 授权、策略同步、系统数据引导、超级管理员管理、错误契约、观测和资源生命周期。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: 权限目录与路由诊断
 
-系统 MUST 将 `internal/shared/rbacbaseline.DefaultPermissions()` 作为权限定义的唯一业务权威来源，并将 permissions 数据库表作为列表、角色绑定和授权加载使用的只读投影。权限 MUST 使用稳定 `permission_id` 描述 HTTP method、route template 和业务模块；HTTP 运行时 MUST 只提供权限列表和用户有效权限查询。
+系统 MUST 将 `internal/shared/rbacbaseline.DefaultPermissions()` 作为权限定义的唯一业务权威来源，并将 permissions 数据库表作为供列表、角色绑定和授权加载使用的只读投影。权限 MUST 使用稳定 `permission_id` 描述可授权的 HTTP method、route template 和业务模块；运行时 MUST NOT 提供权限创建、详情、更新、启停或 route diff 公开接口。
 
-#### Scenario: 权限查询与 seed 投影
-
-- **WHEN** 授权调用方分页查询权限
-- **THEN** 系统 MUST 按稳定权限 ID 排序返回当前权限数据和共享 pagination 信息
-- **AND** 请求和响应 MUST NOT 包含权限 `active`、`is_system` 或 `system`
-- **WHEN** 运维执行 RBAC seed
-- **THEN** 系统 MUST 按代码基线中的稳定 `permission_id` 幂等 upsert 权限定义，method 或 route template 变化 MUST 保留原 ID
-
-#### Scenario: 权限 HTTP 边界与受控删除
+#### Scenario: 权限查询边界
 
 - **WHEN** user-service 注册权限 HTTP 路由
 - **THEN** 系统 MUST 只注册 `GET /api/v1/permissions` 和 `GET /api/v1/permissions/users/:user_id/effective`
-- **WHEN** 权限从代码基线删除
-- **THEN** 受控 migration MUST 先删除对应 `role_permissions` 再删除 `permissions`，seed 和运行时 MUST NOT 自动删除
+- **AND** 系统 MUST NOT 注册权限创建、详情、更新、启用、停用或 route diff HTTP 路由
+- **WHEN** 授权调用方分页查询权限
+- **THEN** 系统 MUST 按稳定权限 ID 排序返回当前权限投影和共享 pagination 信息
+- **AND** 列表输入和响应 MUST NOT 包含 `active`、`is_system` 或 `system`
 
-#### Scenario: 路由基线 CI 门禁
+#### Scenario: 权限定义和 seed 投影
 
-- **WHEN** CI 构建真实 Gin route graph 并比较可授权路由与 `DefaultPermissions()`
-- **THEN** missing 或 stale MUST 使测试失败
-- **AND** 校验 MUST NOT 创建权限或改变角色绑定
-- **AND** 路由发现 MUST 排除 `OPTIONS`、`/api/v1/` 之外的路由以及认证公开或会话控制路由
-- **AND** application 层 MUST NOT 直接依赖 Gin engine
+- **WHEN** 运维执行 RBAC seed
+- **THEN** 系统 MUST 按 `rbacbaseline.DefaultPermissions()` 中的稳定 `permission_id` 幂等 upsert 权限名称、描述、模块、HTTP method 和 route template
+- **AND** method 或 route template 修改 MUST 沿用原 `permission_id`，使已有角色权限绑定保持不变
+- **AND** 权限实体、seed 输入和数据库投影 MUST NOT 包含权限启停或系统权限标记
+
+#### Scenario: 受控删除权限
+
+- **WHEN** 权限从 `rbacbaseline.DefaultPermissions()` 删除
+- **THEN** 受控 migration MUST 先删除对应 `role_permissions` 再删除 `permissions` 记录
+- **AND** seed 和 HTTP 运行时 MUST NOT 自动删除基线之外的权限或绑定
+- **AND** 数据清理后系统 MUST 通过显式 policy reload 或滚动重启使 Casbin policy 收敛
+
+#### Scenario: 路由与权限基线一致性门禁
+
+- **WHEN** CI 或测试构建真实 Gin route graph 并扫描 `/api/v1` 下需要 RBAC 授权的路由
+- **THEN** 系统 MUST 将 HTTP method 和 route template 与 `rbacbaseline.DefaultPermissions()` 双向比较
+- **AND** 任一实际路由缺少基线权限或任一基线权限没有对应实际路由时测试 MUST 失败
+- **AND** 扫描 MUST 排除 `OPTIONS`、认证公开接口和会话控制接口
+- **AND** 一致性校验 MUST NOT 创建或修改权限、角色绑定或运行时 policy
 
 ### Requirement: 角色目录与角色权限绑定
 
@@ -37,7 +41,7 @@
 
 #### Scenario: 角色目录写入和查询
 
-- **WHEN** 授权调用方提交合法角色信息和可用权限集合
+- **WHEN** 授权调用方提交合法角色信息和存在的权限集合
 - **THEN** 系统 MUST 创建非系统角色并写入角色权限绑定，成功响应 MUST 返回新建角色实体
 - **WHEN** 授权调用方使用合法输入更新、启用或停用存在的普通角色
 - **THEN** 系统 MUST 持久化对应变更，成功响应 MUST NOT 包含更新后的角色实体
@@ -48,9 +52,15 @@
 
 - **WHEN** 普通角色接口尝试创建、修改或停用系统角色
 - **THEN** 系统 MUST 拒绝操作并保持系统角色及其基线语义不变
-- **WHEN** 角色权限写请求引用不存在的权限
+- **WHEN** 角色权限写请求引用不存在或不属于当前代码基线投影的权限
 - **THEN** 系统 MUST 拒绝写入并保持已有角色权限关系不变
 - **AND** role application MUST 通过 permission application 拥有的最小查询端口校验权限，MUST NOT 导入 permission infrastructure
+
+#### Scenario: 普通角色绑定基线权限
+
+- **WHEN** 授权调用方把 `rbacbaseline.DefaultPermissions()` 中任意存在的权限绑定给普通角色
+- **THEN** 系统 MUST 允许绑定且 MUST NOT 执行权限 active 或 system 状态检查
+- **AND** Permission 的状态语义移除 MUST NOT 删除或改变 `Role.Active` 与 `Role.IsSystem`
 
 #### Scenario: 完整替换角色权限
 
@@ -86,7 +96,8 @@
 #### Scenario: 有效权限聚合
 
 - **WHEN** 系统或授权调用方查询用户有效权限
-- **THEN** 系统 MUST 聚合该用户当前启用角色和这些角色绑定的存在权限并返回去重后的权限集合
+- **THEN** 系统 MUST 聚合该用户当前启用角色及其绑定的存在权限并返回去重后的权限集合
+- **AND** 有效权限响应 MUST NOT 包含权限 `active`、`is_system` 或 `system`
 - **AND** 角色、权限、用户角色和角色权限 MUST 使用外部 UUID 作为稳定业务标识，join 表内部标识 MUST NOT 暴露给 application 或 transport
 - **WHEN** 已认证用户没有有效角色绑定并访问受 RBAC 保护的路由
 - **THEN** 系统 MUST 拒绝访问
@@ -123,15 +134,15 @@
 #### Scenario: policy 权威来源和超级管理员
 
 - **WHEN** policy loader 构造授权策略
-- **THEN** policy MUST 从启用角色、permissions 投影、角色权限绑定和用户角色绑定派生，MUST NOT 使用权限 active predicate
-- **AND** 独立 `casbin_rules` 表 MUST NOT 成为业务权威来源，用户身份解析 MUST 排除已软删除用户
+- **THEN** policy MUST 从启用角色、角色权限绑定、permissions 投影和用户角色绑定派生
+- **AND** policy loader MUST NOT 使用权限 active predicate，独立 `casbin_rules` 表 MUST NOT 成为业务权威来源，用户身份解析 MUST 排除已软删除用户
 - **WHEN** 用户拥有 `internal/shared/rbacbaseline` 定义的内置超级管理员角色
 - **THEN** policy loader MUST 为该角色提供受保护业务接口的 wildcard policy
 - **AND** 超级管理员角色常量 MUST 只由 `rbacbaseline` 提供
 
 ### Requirement: RBAC 策略加载、缓存与多副本同步
 
-系统 MUST 以 PostgreSQL 关系数据作为业务权威来源，以本地 Casbin policy 和用户角色 loading cache 作为授权投影。系统 MUST 在启动时显式加载 policy，在线 RBAC 写操作成功后刷新本实例状态，并通过 Redis policy version、Pub/Sub 和周期性版本补偿同步其他副本。授权热路径 MUST 使用本地 enforcer 和本地用户角色解析结果，MUST NOT 每请求读取 Redis version。
+系统 MUST 以 PostgreSQL 关系数据作为业务权威投影，以本地 Casbin policy 和用户角色 loading cache 作为授权投影。系统 MUST 在启动时显式加载 policy，在线角色状态、角色权限绑定和用户角色绑定写操作成功后刷新本实例状态，并通过 Redis policy version、Pub/Sub 和周期性版本补偿同步其他副本。授权热路径 MUST 使用本地 enforcer 和本地用户角色解析结果，MUST NOT 每请求读取 Redis version。
 
 #### Scenario: 初始加载和恢复
 
@@ -171,7 +182,9 @@
 - **WHEN** 角色状态、角色权限绑定或用户角色绑定通过在线 API 持久化成功
 - **THEN** 本实例 MUST reload policy 或失效相关用户缓存，并发布新的 Redis policy version 和 Pub/Sub 通知
 - **AND** 持久化成功后的 reload、缓存失效、version 发布或通知失败 MUST 向调用方返回同步错误，成功响应 MUST NOT 掩盖该错误
-- **AND** `PolicyChangeNotifier` MUST 是正式 command service 的必需依赖
+- **AND** `PolicyChangeNotifier` MUST 是对应正式 command service 的必需依赖
+- **WHEN** 权限投影由离线 migration 或 RBAC seed 改变
+- **THEN** 离线命令 MUST NOT 宣称已完成在线 policy refresh，运维 MUST 显式 reload 或滚动重启副本
 
 #### Scenario: reload、发布和副本收敛
 
@@ -184,14 +197,14 @@
 
 ### Requirement: RBAC 系统数据与运维 CLI
 
-系统 MUST 提供带服务上下文的 `rbac seed`、`rbac assign-super-admin` 和 `rbac create-super-admin` 命令，用于维护系统角色、代码权限投影、默认绑定和超级管理员。全部权限定义 MUST 只来自 `internal/shared/rbacbaseline.DefaultPermissions()`。RBAC 运维 CLI MUST 通过 `aegiscore-user-service` 根命令调用。
+系统 MUST 提供带服务上下文的 `rbac seed`、`rbac assign-super-admin` 和 `rbac create-super-admin` 命令，用于维护系统角色、代码定义权限投影、默认绑定和超级管理员。系统角色与默认绑定 MUST 由 seed port 根据 `internal/shared/rbacbaseline` 写入，全部权限定义 MUST 只来自 `rbacbaseline.DefaultPermissions()`。RBAC 运维 CLI MUST 通过 `aegiscore-user-service` 根命令调用，旧 `aegiscore-user-services` 根命令 MUST NOT 作为 RBAC 兼容入口保留。
 
 #### Scenario: 初始化系统基线
 
 - **WHEN** 运维执行 `aegiscore-user-service rbac seed`
-- **THEN** 系统 MUST 幂等创建或更新基线角色、权限和绑定并输出变更统计
-- **AND** 系统角色 MUST 保持系统数据标记，Permission MUST NOT 包含 `Active` 或 `IsSystem`
-- **AND** seed MUST NOT 创建业务用户、自动分配超级管理员或自动删除基线之外的权限
+- **THEN** 系统 MUST 幂等创建或更新基线角色、权限投影和绑定并输出变更统计
+- **AND** 系统角色 MUST 保持系统数据标记，Permission MUST NOT 包含 `Active` 或 `IsSystem` 标记
+- **AND** seed MUST NOT 创建业务用户、自动分配超级管理员或自动删除基线之外的权限记录
 - **AND** 非 seed 的公开 HTTP 路径 MUST NOT 创建、修改或启停权限
 
 #### Scenario: 超级管理员维护
@@ -213,12 +226,13 @@
 
 ### Requirement: RBAC 错误与统一 HTTP 契约
 
-permission、role 和 binding domain MUST 返回携带稳定 HTTP status、共享业务 code、公开 message 和 `Reason` 的应用错误。HTTP transport MUST 通过共享 `response.Fail` 直接渲染业务错误，MUST NOT 维护 feature 专用 sentinel-to-HTTP mapper；直接或包装返回的应用错误 MUST 保留 `errors.Is` 语义。
+permission、role 和 binding domain MUST 返回携带稳定 HTTP status、共享业务 code、公开 message 和 `Reason` 的应用错误。HTTP transport MUST 通过共享 `response.Fail` 直接渲染业务错误，MUST NOT 维护 feature 专用 sentinel-to-HTTP mapper；直接或包装返回的应用错误 MUST 保留 `errors.Is` 语义。permission 查询端只保留输入无效和权限不存在等仍可达错误，不得保留只服务于权限创建、更新、启停或系统权限保护的公开错误契约。
 
 #### Scenario: 目录与绑定错误稳定映射
 
-- **WHEN** permission 查询或 role permission lookup 返回权限不存在或输入无效错误
+- **WHEN** permission 查询或 role 权限 lookup 返回权限不存在或输入无效错误
 - **THEN** 系统 MUST 分别使用 `404 Not Found` 或 `400 Bad Request`，且 `Reason` MUST 分别为 `permission_not_found` 或 `permission_invalid`
+- **AND** permission feature MUST NOT 暴露权限已存在或系统权限保护作为公开 HTTP 写错误
 - **WHEN** role feature 返回角色已存在、角色不存在、输入无效、系统角色保护或角色停用错误
 - **THEN** 系统 MUST 分别使用 `409 Conflict`、`404 Not Found`、`400 Bad Request`、`409 Conflict`、`409 Conflict`，且 `Reason` MUST 分别为 `role_already_exists`、`role_not_found`、`role_invalid`、`system_role_protected`、`role_inactive`
 - **WHEN** 用户角色或角色权限增量绑定返回绑定已存在或绑定不存在错误
@@ -229,13 +243,13 @@ permission、role 和 binding domain MUST 返回携带稳定 HTTP status、共�
 - **WHEN** role 流程收到 `identity.ErrUserNotFound` 或 permission 的不存在错误
 - **THEN** role HTTP transport MUST 通过共享 response helper 保留错误自身的 status、code 和 message
 - **AND** role transport MUST NOT 复制 identity 或 permission 错误映射
-- **WHEN** permission 或 role controller 的 command/query 返回业务错误
+- **WHEN** permission query 或 role command/query 返回业务错误
 - **THEN** controller MUST 直接调用 `response.Fail(c, err)`
 - **AND** transport MUST NOT 调用或保留 `toPermissionHTTPError`、`toRoleHTTPError` 或等价 mapper
 
 ### Requirement: RBAC 可观测性
 
-系统 MUST 为 RBAC 授权判定提供低基数 metrics，并使用显式注入的 logger 记录加载和同步异常。观测失败 MUST NOT 改变授权或策略同步结果。生产运行时 MUST NOT 装配公开 route diff query、scanner 或 metrics。
+系统 MUST 为 RBAC 授权判定提供低基数 metrics，并使用显式注入的 logger 记录加载和同步异常。观测失败 MUST NOT 改变授权或策略同步结果。RBAC policy sync Redis key prefix、Pub/Sub channel 和 metrics `service` label MUST 使用 `aegiscore-user-service`，旧 `aegiscore-user-services` prefix 或兼容 channel MUST NOT 被读取、发布或订阅。生产运行时 MUST NOT 装配只服务于公开 route diff 的 query、scanner 或 metrics。
 
 #### Scenario: 授权 metrics 的低基数与敏感数据约束
 
@@ -248,12 +262,12 @@ permission、role 和 binding domain MUST 返回携带稳定 HTTP status、共�
 
 #### Scenario: 日志观测和 route diff 移除
 
-- **WHEN** user-service 组装生产 permission 模块
-- **THEN** 系统 MUST NOT 注册公开 route diff handler 或装配专用于 route diff 的 metrics
-- **AND** 路由基线一致性 MUST 由 CI/测试失败表达，不得自动修改权限投影
 - **WHEN** role 或 permission application、policy loader、watcher、cache 或 adapter 需要记录日志
 - **THEN** logger MUST 由 constructor 显式注入或由调用方 context 提供
 - **AND** 日志 MUST 使用稳定低基数字段并 MUST NOT 记录 token、SQL、Redis key 或原始 policy 数据
+- **WHEN** user-service 组装生产 permission 模块
+- **THEN** 系统 MUST NOT 注册公开 route diff handler 或装配专用于 route diff 的 metrics
+- **AND** 路由基线一致性 MUST 由 CI/测试失败表达，不得自动修改权限投影
 
 #### Scenario: RBAC policy sync key 和 channel
 
@@ -264,7 +278,7 @@ permission、role 和 binding domain MUST 返回携带稳定 HTTP status、共�
 
 ### Requirement: RBAC 架构、装配与资源生命周期
 
-role 和 permission feature MUST 保持 domain、application、transport 和 infrastructure 分层。domain/application MUST 框架无关并拥有消费侧最小 port；Fx、Gin、Ent、Redis、SQL、HTTP response 和 named resource metadata MUST 留在对应 composition、transport 或 infrastructure 边界。RBAC 自有 watcher、cache 和 policy 投影资源 MUST 显式启动、停止和回滚。
+role 和 permission feature MUST 保持 domain、application、transport 和 infrastructure 分层。permission application MUST 只保留权限查询、授权、policy loading/sync 和 seed/角色绑定所需最小端口，不得保留公开权限 command 或仅服务于公开 route diff 的生产装配。domain/application MUST 框架无关并拥有消费侧最小 port；Fx、Gin、Ent、Redis、SQL、HTTP response 和 named resource metadata MUST 留在对应 composition、transport 或 infrastructure 边界。RBAC 自有 watcher、cache 和 policy 投影资源 MUST 显式启动、停止和回滚。
 
 #### Scenario: 分层和最小依赖
 
@@ -272,6 +286,7 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 - **THEN** 调用方 MUST 能以普通强类型参数提供 store、lookup、notifier 和 logger
 - **AND** application/domain MUST NOT import Fx、嵌入 `fx.In` 或声明仅服务于 DI 的 tag
 - **AND** 消费侧 application MUST 定义最小 port 并由相邻 feature 或 integration adapter 实现，feature MUST NOT 导入其他 feature 的 infrastructure 或 HTTP transport
+- **AND** role 仍使用的 permission lookup MUST NOT 因删除 permission command 而被移除
 
 #### Scenario: framework-neutral adapter 和 composition 边界
 
@@ -289,7 +304,7 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 
 #### Scenario: 必需同步依赖不可降级
 
-- **WHEN** 权限、角色、角色权限或用户角色写侧服务装配完成
+- **WHEN** 角色、角色权限或用户角色写侧服务装配完成
 - **THEN** 服务 MUST 具备可用的 policy change notifier
 - **AND** 缺少 notifier 或其他必需安全 collaborator 时 constructor MUST 返回明确 error 并拒绝装配，MUST NOT panic
 - **AND** 系统 MUST NOT 以 no-op、nil fallback 或兼容 wrapper 静默跳过 policy reload、Redis policy version 或 watcher 同步语义
@@ -308,4 +323,4 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 - **WHEN** RBAC 关闭 watcher、cache、store 或 resolver
 - **THEN** `Stop` 或 `Close` MUST NOT 关闭共享 Redis、Ent 或 PostgreSQL 资源
 - **AND** 关闭后授权语义 MUST 继续 fail-closed，不得因为本地资源不可用而产生允许结果
-- **AND** RBAC MUST NOT 把服务业务配置或 key schema 下沉到 `common`
+- **AND** RBAC MUST NOT 把服务业务配置、权限基线或 key schema 下沉到 `common`

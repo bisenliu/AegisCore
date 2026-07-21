@@ -23,6 +23,7 @@ import (
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
 	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
+	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
 func TestRegisterUserServiceHTTPRoutesRegistersCurrentRouteGraph(t *testing.T) {
@@ -68,6 +69,26 @@ func TestRegisterUserServiceHTTPRoutesRegistersCurrentRouteGraph(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, recorder.Code, "route=%s body=%s", routerRegistrationRouteKey(route), recorder.Body.String())
 	}
 	require.Equal(t, 3, authorizer.calls)
+}
+
+func TestAuthorizedRouteGraphMatchesPermissionBaseline(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{})
+	require.NoError(t, RegisterUserServiceHTTPRoutes(engine, params))
+
+	actual := make(map[string]struct{})
+	for _, route := range engine.Routes() {
+		if route.Method == http.MethodOptions || !strings.HasPrefix(route.Path, "/api/v1/") || strings.HasPrefix(route.Path, "/api/v1/auth/") {
+			continue
+		}
+		actual[route.Method+" "+route.Path] = struct{}{}
+	}
+	expected := make(map[string]struct{})
+	for _, permission := range rbacbaseline.DefaultPermissions() {
+		expected[permission.Method+" "+permission.PathTemplate] = struct{}{}
+	}
+	require.Equal(t, expected, actual)
 }
 
 func TestRegisterUserServiceHTTPRoutesRejectsMissingSecurityDependencies(t *testing.T) {
@@ -212,7 +233,7 @@ type routerRegistrationPermissionRoutes struct {
 
 func newRouterRegistrationPermissionRoutes(t *testing.T, validator *commonvalidation.Validator) *routerRegistrationPermissionRoutes {
 	t.Helper()
-	return &routerRegistrationPermissionRoutes{controller: permissionhttp.NewPermissionController(nil, nil, validator)}
+	return &routerRegistrationPermissionRoutes{controller: permissionhttp.NewPermissionController(nil, validator)}
 }
 
 func (r *routerRegistrationPermissionRoutes) RouteKey() string {
@@ -373,13 +394,7 @@ func routerRegistrationV1Routes() []routerRegisteredRoute {
 func routerRegistrationPermissionRouteList() []routerRegisteredRoute {
 	return []routerRegisteredRoute{
 		{method: http.MethodGet, path: "/api/v1/permissions"},
-		{method: http.MethodPost, path: "/api/v1/permissions"},
-		{method: http.MethodGet, path: "/api/v1/permissions/route-diff"},
 		{method: http.MethodGet, path: "/api/v1/permissions/users/:user_id/effective"},
-		{method: http.MethodGet, path: "/api/v1/permissions/:permission_id"},
-		{method: http.MethodPut, path: "/api/v1/permissions/:permission_id"},
-		{method: http.MethodPost, path: "/api/v1/permissions/:permission_id/enable"},
-		{method: http.MethodPost, path: "/api/v1/permissions/:permission_id/disable"},
 	}
 }
 

@@ -164,18 +164,6 @@ func (mr *MockMetricsMockRecorder) PolicyReloadSucceeded(ctx, source any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PolicyReloadSucceeded", reflect.TypeOf((*MockMetrics)(nil).PolicyReloadSucceeded), ctx, source)
 }
 
-// RouteDiffObserved mocks base method.
-func (m *MockMetrics) RouteDiffObserved(ctx context.Context, missing, stale int) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RouteDiffObserved", ctx, missing, stale)
-}
-
-// RouteDiffObserved indicates an expected call of RouteDiffObserved.
-func (mr *MockMetricsMockRecorder) RouteDiffObserved(ctx, missing, stale any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RouteDiffObserved", reflect.TypeOf((*MockMetrics)(nil).RouteDiffObserved), ctx, missing, stale)
-}
-
 // WatcherCheckFailed mocks base method.
 func (m *MockMetrics) WatcherCheckFailed(ctx context.Context, reason string) {
 	m.ctrl.T.Helper()

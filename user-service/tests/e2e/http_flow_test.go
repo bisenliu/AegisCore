@@ -132,10 +132,10 @@ ON CONFLICT (role_id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED
 	}
 	for _, permission := range rbacbaseline.DefaultPermissions() {
 		_, err := db.ExecContext(ctx, `
-INSERT INTO permissions (permission_id, name, description, module, http_method, path_template, active, is_system, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $8)
-ON CONFLICT (permission_id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, module = EXCLUDED.module, http_method = EXCLUDED.http_method, path_template = EXCLUDED.path_template, active = true, is_system = EXCLUDED.is_system, updated_at = EXCLUDED.updated_at
-`, permission.PermissionID, permission.Name, permission.Description, permission.Module, permission.Method, permission.PathTemplate, permission.System, now)
+INSERT INTO permissions (permission_id, name, description, module, http_method, path_template, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+ON CONFLICT (permission_id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, module = EXCLUDED.module, http_method = EXCLUDED.http_method, path_template = EXCLUDED.path_template, updated_at = EXCLUDED.updated_at
+`, permission.PermissionID, permission.Name, permission.Description, permission.Module, permission.Method, permission.PathTemplate, now)
 		require.NoError(t, err, "seed RBAC permission %s", permission.PermissionID)
 	}
 	for _, binding := range rbacbaseline.DefaultRolePermissions() {

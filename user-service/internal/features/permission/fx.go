@@ -4,7 +4,6 @@ import (
 	"go.uber.org/fx"
 
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	permissioncommand "github.com/aegiscore/user-service/internal/features/permission/application/command"
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 )
 
@@ -46,10 +45,9 @@ var permissionMetricsOptions = fx.Options(
 	),
 )
 
-// permissionApplicationOptions 注册权限目录读写 use case，具体端口实现由同包其他 Fx 文件提供。
+// permissionApplicationOptions 注册权限目录只读 use case，具体端口实现由同包其他 Fx 文件提供。
 var permissionApplicationOptions = fx.Options(
 	fx.Provide(
-		permissioncommand.NewPermissionCommandService,
 		permissionquery.NewPermissionQueryService,
 	),
 )

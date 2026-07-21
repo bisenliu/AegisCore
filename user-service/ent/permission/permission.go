@@ -24,10 +24,6 @@ const (
 	FieldHTTPMethod = "http_method"
 	// FieldPathTemplate holds the string denoting the path_template field in the database.
 	FieldPathTemplate = "path_template"
-	// FieldActive holds the string denoting the active field in the database.
-	FieldActive = "active"
-	// FieldIsSystem holds the string denoting the is_system field in the database.
-	FieldIsSystem = "is_system"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -54,8 +50,6 @@ var Columns = []string{
 	FieldModule,
 	FieldHTTPMethod,
 	FieldPathTemplate,
-	FieldActive,
-	FieldIsSystem,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -83,10 +77,6 @@ var (
 	HTTPMethodValidator func(string) error
 	// PathTemplateValidator is a validator for the "path_template" field. It is called by the builders before save.
 	PathTemplateValidator func(string) error
-	// DefaultActive holds the default value on creation for the "active" field.
-	DefaultActive bool
-	// DefaultIsSystem holds the default value on creation for the "is_system" field.
-	DefaultIsSystem bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() int64
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -131,16 +121,6 @@ func ByHTTPMethod(opts ...sql.OrderTermOption) OrderOption {
 // ByPathTemplate orders the results by the path_template field.
 func ByPathTemplate(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPathTemplate, opts...).ToFunc()
-}
-
-// ByActive orders the results by the active field.
-func ByActive(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldActive, opts...).ToFunc()
-}
-
-// ByIsSystem orders the results by the is_system field.
-func ByIsSystem(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldIsSystem, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

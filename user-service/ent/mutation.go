@@ -47,8 +47,6 @@ type PermissionMutation struct {
 	module                  *string
 	http_method             *string
 	path_template           *string
-	active                  *bool
-	is_system               *bool
 	created_at              *int64
 	addcreated_at           *int64
 	updated_at              *int64
@@ -382,78 +380,6 @@ func (m *PermissionMutation) ResetPathTemplate() {
 	m.path_template = nil
 }
 
-// SetActive sets the "active" field.
-func (m *PermissionMutation) SetActive(b bool) {
-	m.active = &b
-}
-
-// Active returns the value of the "active" field in the mutation.
-func (m *PermissionMutation) Active() (r bool, exists bool) {
-	v := m.active
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldActive returns the old "active" field's value of the Permission entity.
-// If the Permission object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PermissionMutation) OldActive(ctx context.Context) (v bool, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldActive is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldActive requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldActive: %w", err)
-	}
-	return oldValue.Active, nil
-}
-
-// ResetActive resets all changes to the "active" field.
-func (m *PermissionMutation) ResetActive() {
-	m.active = nil
-}
-
-// SetIsSystem sets the "is_system" field.
-func (m *PermissionMutation) SetIsSystem(b bool) {
-	m.is_system = &b
-}
-
-// IsSystem returns the value of the "is_system" field in the mutation.
-func (m *PermissionMutation) IsSystem() (r bool, exists bool) {
-	v := m.is_system
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldIsSystem returns the old "is_system" field's value of the Permission entity.
-// If the Permission object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PermissionMutation) OldIsSystem(ctx context.Context) (v bool, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldIsSystem is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldIsSystem requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldIsSystem: %w", err)
-	}
-	return oldValue.IsSystem, nil
-}
-
-// ResetIsSystem resets all changes to the "is_system" field.
-func (m *PermissionMutation) ResetIsSystem() {
-	m.is_system = nil
-}
-
 // SetCreatedAt sets the "created_at" field.
 func (m *PermissionMutation) SetCreatedAt(i int64) {
 	m.created_at = &i
@@ -654,7 +580,7 @@ func (m *PermissionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PermissionMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 8)
 	if m.permission_id != nil {
 		fields = append(fields, permission.FieldPermissionID)
 	}
@@ -672,12 +598,6 @@ func (m *PermissionMutation) Fields() []string {
 	}
 	if m.path_template != nil {
 		fields = append(fields, permission.FieldPathTemplate)
-	}
-	if m.active != nil {
-		fields = append(fields, permission.FieldActive)
-	}
-	if m.is_system != nil {
-		fields = append(fields, permission.FieldIsSystem)
 	}
 	if m.created_at != nil {
 		fields = append(fields, permission.FieldCreatedAt)
@@ -705,10 +625,6 @@ func (m *PermissionMutation) Field(name string) (ent.Value, bool) {
 		return m.HTTPMethod()
 	case permission.FieldPathTemplate:
 		return m.PathTemplate()
-	case permission.FieldActive:
-		return m.Active()
-	case permission.FieldIsSystem:
-		return m.IsSystem()
 	case permission.FieldCreatedAt:
 		return m.CreatedAt()
 	case permission.FieldUpdatedAt:
@@ -734,10 +650,6 @@ func (m *PermissionMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldHTTPMethod(ctx)
 	case permission.FieldPathTemplate:
 		return m.OldPathTemplate(ctx)
-	case permission.FieldActive:
-		return m.OldActive(ctx)
-	case permission.FieldIsSystem:
-		return m.OldIsSystem(ctx)
 	case permission.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case permission.FieldUpdatedAt:
@@ -792,20 +704,6 @@ func (m *PermissionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPathTemplate(v)
-		return nil
-	case permission.FieldActive:
-		v, ok := value.(bool)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetActive(v)
-		return nil
-	case permission.FieldIsSystem:
-		v, ok := value.(bool)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetIsSystem(v)
 		return nil
 	case permission.FieldCreatedAt:
 		v, ok := value.(int64)
@@ -914,12 +812,6 @@ func (m *PermissionMutation) ResetField(name string) error {
 		return nil
 	case permission.FieldPathTemplate:
 		m.ResetPathTemplate()
-		return nil
-	case permission.FieldActive:
-		m.ResetActive()
-		return nil
-	case permission.FieldIsSystem:
-		m.ResetIsSystem()
 		return nil
 	case permission.FieldCreatedAt:
 		m.ResetCreatedAt()

@@ -21,7 +21,6 @@ type PermissionSpec struct {
 	Module       string
 	Method       string
 	PathTemplate string
-	System       bool
 }
 
 // RolePermissionSpec 描述系统 RBAC 角色权限绑定基线。

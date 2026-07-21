@@ -117,7 +117,7 @@ func (roleModuleStore) RemoveRolePermission(context.Context, uuid.UUID, uuid.UUI
 	return nil
 }
 
-func (roleModuleStore) GetActiveByPermissionID(context.Context, uuid.UUID) (*roleapplication.PermissionReference, error) {
+func (roleModuleStore) GetByPermissionID(context.Context, uuid.UUID) (*roleapplication.PermissionReference, error) {
 	return nil, nil
 }
 
@@ -145,10 +145,6 @@ var _ roleapplication.RolePermissionStore = roleModulePermissionStore{}
 
 type roleModulePermissionCatalogStore struct{}
 
-func (roleModulePermissionCatalogStore) Create(context.Context, permissionapplication.CreatePermissionInput) (*permissiondomain.Permission, error) {
-	return nil, nil
-}
-
 func (roleModulePermissionCatalogStore) GetByPermissionID(context.Context, uuid.UUID) (*permissiondomain.Permission, error) {
 	return nil, nil
 }
@@ -157,20 +153,8 @@ func (roleModulePermissionCatalogStore) List(context.Context, permissionapplicat
 	return nil, false, nil
 }
 
-func (roleModulePermissionCatalogStore) ListAll(context.Context) ([]permissiondomain.Permission, error) {
-	return nil, nil
-}
-
 func (roleModulePermissionCatalogStore) ListEffectiveByUserID(context.Context, uuid.UUID) ([]permissiondomain.Permission, error) {
 	return nil, nil
-}
-
-func (roleModulePermissionCatalogStore) Update(context.Context, permissionapplication.UpdatePermissionInput) error {
-	return nil
-}
-
-func (roleModulePermissionCatalogStore) SetActive(context.Context, uuid.UUID, bool) error {
-	return nil
 }
 
 var _ permissionapplication.PermissionStore = roleModulePermissionCatalogStore{}

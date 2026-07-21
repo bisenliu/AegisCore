@@ -19,8 +19,6 @@ type ListPermissionsQuery struct {
 	Limit      int
 	Module     string
 	HTTPMethod string
-	Active     *bool
-	IsSystem   *bool
 }
 
 // ListPermissionsResult 是权限列表查询用例的 transport-neutral 分页输出。
@@ -37,7 +35,7 @@ func (s *permissionQueryService) ListPermissions(ctx context.Context, query List
 	if err != nil {
 		return nil, err
 	}
-	items, hasNext, err := s.store.List(ctx, permissionapplication.ListPermissionsInput{AfterPermissionID: query.Cursor, Limit: query.Limit, Module: validators.NormalizeOptionalModule(query.Module), HTTPMethod: method, Active: query.Active, IsSystem: query.IsSystem})
+	items, hasNext, err := s.store.List(ctx, permissionapplication.ListPermissionsInput{AfterPermissionID: query.Cursor, Limit: query.Limit, Module: validators.NormalizeOptionalModule(query.Module), HTTPMethod: method})
 	if err != nil {
 		logger.Error(ctx, "list permissions failed", logger.StackTrace(zap.Error(err))...)
 		return nil, err

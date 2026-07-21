@@ -18,8 +18,6 @@ var (
 		{Name: "module", Type: field.TypeString, Size: 64, Comment: "权限所属模块"},
 		{Name: "http_method", Type: field.TypeString, Size: 16, Comment: "HTTP 方法"},
 		{Name: "path_template", Type: field.TypeString, Size: 512, Comment: "路径模板"},
-		{Name: "active", Type: field.TypeBool, Comment: "权限是否启用", Default: true},
-		{Name: "is_system", Type: field.TypeBool, Comment: "是否系统权限", Default: false},
 		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
 		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
 	}
@@ -35,11 +33,6 @@ var (
 				Columns: []*schema.Column{PermissionsColumns[5], PermissionsColumns[6]},
 			},
 			{
-				Name:    "permission_active_permission_id",
-				Unique:  false,
-				Columns: []*schema.Column{PermissionsColumns[7], PermissionsColumns[1]},
-			},
-			{
 				Name:    "permission_module_permission_id",
 				Unique:  false,
 				Columns: []*schema.Column{PermissionsColumns[4], PermissionsColumns[1]},
@@ -48,11 +41,6 @@ var (
 				Name:    "permission_http_method_permission_id",
 				Unique:  false,
 				Columns: []*schema.Column{PermissionsColumns[5], PermissionsColumns[1]},
-			},
-			{
-				Name:    "permission_is_system_permission_id",
-				Unique:  false,
-				Columns: []*schema.Column{PermissionsColumns[8], PermissionsColumns[1]},
 			},
 		},
 	}

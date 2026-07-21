@@ -98,34 +98,6 @@ func (_u *PermissionUpdate) SetNillablePathTemplate(v *string) *PermissionUpdate
 	return _u
 }
 
-// SetActive sets the "active" field.
-func (_u *PermissionUpdate) SetActive(v bool) *PermissionUpdate {
-	_u.mutation.SetActive(v)
-	return _u
-}
-
-// SetNillableActive sets the "active" field if the given value is not nil.
-func (_u *PermissionUpdate) SetNillableActive(v *bool) *PermissionUpdate {
-	if v != nil {
-		_u.SetActive(*v)
-	}
-	return _u
-}
-
-// SetIsSystem sets the "is_system" field.
-func (_u *PermissionUpdate) SetIsSystem(v bool) *PermissionUpdate {
-	_u.mutation.SetIsSystem(v)
-	return _u
-}
-
-// SetNillableIsSystem sets the "is_system" field if the given value is not nil.
-func (_u *PermissionUpdate) SetNillableIsSystem(v *bool) *PermissionUpdate {
-	if v != nil {
-		_u.SetIsSystem(*v)
-	}
-	return _u
-}
-
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *PermissionUpdate) SetUpdatedAt(v int64) *PermissionUpdate {
 	_u.mutation.ResetUpdatedAt()
@@ -273,12 +245,6 @@ func (_u *PermissionUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.PathTemplate(); ok {
 		_spec.SetField(permission.FieldPathTemplate, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.Active(); ok {
-		_spec.SetField(permission.FieldActive, field.TypeBool, value)
-	}
-	if value, ok := _u.mutation.IsSystem(); ok {
-		_spec.SetField(permission.FieldIsSystem, field.TypeBool, value)
-	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(permission.FieldUpdatedAt, field.TypeInt64, value)
 	}
@@ -416,34 +382,6 @@ func (_u *PermissionUpdateOne) SetPathTemplate(v string) *PermissionUpdateOne {
 func (_u *PermissionUpdateOne) SetNillablePathTemplate(v *string) *PermissionUpdateOne {
 	if v != nil {
 		_u.SetPathTemplate(*v)
-	}
-	return _u
-}
-
-// SetActive sets the "active" field.
-func (_u *PermissionUpdateOne) SetActive(v bool) *PermissionUpdateOne {
-	_u.mutation.SetActive(v)
-	return _u
-}
-
-// SetNillableActive sets the "active" field if the given value is not nil.
-func (_u *PermissionUpdateOne) SetNillableActive(v *bool) *PermissionUpdateOne {
-	if v != nil {
-		_u.SetActive(*v)
-	}
-	return _u
-}
-
-// SetIsSystem sets the "is_system" field.
-func (_u *PermissionUpdateOne) SetIsSystem(v bool) *PermissionUpdateOne {
-	_u.mutation.SetIsSystem(v)
-	return _u
-}
-
-// SetNillableIsSystem sets the "is_system" field if the given value is not nil.
-func (_u *PermissionUpdateOne) SetNillableIsSystem(v *bool) *PermissionUpdateOne {
-	if v != nil {
-		_u.SetIsSystem(*v)
 	}
 	return _u
 }
@@ -624,12 +562,6 @@ func (_u *PermissionUpdateOne) sqlSave(ctx context.Context) (_node *Permission, 
 	}
 	if value, ok := _u.mutation.PathTemplate(); ok {
 		_spec.SetField(permission.FieldPathTemplate, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.Active(); ok {
-		_spec.SetField(permission.FieldActive, field.TypeBool, value)
-	}
-	if value, ok := _u.mutation.IsSystem(); ok {
-		_spec.SetField(permission.FieldIsSystem, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(permission.FieldUpdatedAt, field.TypeInt64, value)

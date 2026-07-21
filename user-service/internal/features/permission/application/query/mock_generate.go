@@ -2,4 +2,4 @@
 
 package query
 
-//go:generate go tool mockgen -destination=mock_test.go -package=query github.com/aegiscore/user-service/internal/features/permission/application PermissionStore,RouteCatalogScanner,Metrics
+//go:generate go tool mockgen -destination=mock_test.go -package=query github.com/aegiscore/user-service/internal/features/permission/application PermissionStore

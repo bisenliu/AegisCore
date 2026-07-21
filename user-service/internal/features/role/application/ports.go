@@ -52,7 +52,7 @@ type SeedRolePermissionStore interface {
 
 // PermissionLookup 定义角色绑定权限前对权限目录的只读校验端口。
 type PermissionLookup interface {
-	GetActiveByPermissionID(ctx context.Context, permissionID uuid.UUID) (*PermissionReference, error)
+	GetByPermissionID(ctx context.Context, permissionID uuid.UUID) (*PermissionReference, error)
 }
 
 // CreateRoleInput 包含规范化后的角色创建数据。
@@ -97,8 +97,6 @@ type PermissionReference struct {
 	Module       string
 	HTTPMethod   string
 	PathTemplate string
-	Active       bool
-	IsSystem     bool
 	CreatedAt    int64
 	UpdatedAt    int64
 }

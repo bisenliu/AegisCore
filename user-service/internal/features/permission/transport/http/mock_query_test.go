@@ -41,36 +41,6 @@ func (m *MockPermissionQueryService) EXPECT() *MockPermissionQueryServiceMockRec
 	return m.recorder
 }
 
-// GetPermission mocks base method.
-func (m *MockPermissionQueryService) GetPermission(ctx context.Context, arg1 query.GetPermissionQuery) (*query.PermissionResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPermission", ctx, arg1)
-	ret0, _ := ret[0].(*query.PermissionResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetPermission indicates an expected call of GetPermission.
-func (mr *MockPermissionQueryServiceMockRecorder) GetPermission(ctx, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPermission", reflect.TypeOf((*MockPermissionQueryService)(nil).GetPermission), ctx, arg1)
-}
-
-// GetRouteDiff mocks base method.
-func (m *MockPermissionQueryService) GetRouteDiff(ctx context.Context) (*query.RouteDiffResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRouteDiff", ctx)
-	ret0, _ := ret[0].(*query.RouteDiffResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetRouteDiff indicates an expected call of GetRouteDiff.
-func (mr *MockPermissionQueryServiceMockRecorder) GetRouteDiff(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRouteDiff", reflect.TypeOf((*MockPermissionQueryService)(nil).GetRouteDiff), ctx)
-}
-
 // ListPermissions mocks base method.
 func (m *MockPermissionQueryService) ListPermissions(ctx context.Context, arg1 query.ListPermissionsQuery) (*query.ListPermissionsResult, error) {
 	m.ctrl.T.Helper()

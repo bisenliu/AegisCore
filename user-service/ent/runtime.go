@@ -95,20 +95,12 @@ func init() {
 			return nil
 		}
 	}()
-	// permissionDescActive is the schema descriptor for active field.
-	permissionDescActive := permissionFields[7].Descriptor()
-	// permission.DefaultActive holds the default value on creation for the active field.
-	permission.DefaultActive = permissionDescActive.Default.(bool)
-	// permissionDescIsSystem is the schema descriptor for is_system field.
-	permissionDescIsSystem := permissionFields[8].Descriptor()
-	// permission.DefaultIsSystem holds the default value on creation for the is_system field.
-	permission.DefaultIsSystem = permissionDescIsSystem.Default.(bool)
 	// permissionDescCreatedAt is the schema descriptor for created_at field.
-	permissionDescCreatedAt := permissionFields[9].Descriptor()
+	permissionDescCreatedAt := permissionFields[7].Descriptor()
 	// permission.DefaultCreatedAt holds the default value on creation for the created_at field.
 	permission.DefaultCreatedAt = permissionDescCreatedAt.Default.(func() int64)
 	// permissionDescUpdatedAt is the schema descriptor for updated_at field.
-	permissionDescUpdatedAt := permissionFields[10].Descriptor()
+	permissionDescUpdatedAt := permissionFields[8].Descriptor()
 	// permission.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	permission.DefaultUpdatedAt = permissionDescUpdatedAt.Default.(func() int64)
 	// permission.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

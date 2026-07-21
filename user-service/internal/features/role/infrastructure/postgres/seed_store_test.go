@@ -60,9 +60,9 @@ func TestRolePermissionStoreSeedEnsureAndSync(t *testing.T) {
 
 	_, _, err := roleStore.UpsertSystemRole(ctx, roleapplication.SeedRoleInput{RoleID: roleID, Name: "System", Active: true})
 	require.NoError(t, err)
-	_, _, err = permissionStore.UpsertSystemPermission(ctx, permissionapplication.SeedPermissionInput{PermissionID: permissionID, Name: "List", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users", Active: true})
+	_, _, err = permissionStore.UpsertPermission(ctx, permissionapplication.SeedPermissionInput{PermissionID: permissionID, Name: "List", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users"})
 	require.NoError(t, err)
-	_, _, err = permissionStore.UpsertSystemPermission(ctx, permissionapplication.SeedPermissionInput{PermissionID: extraPermissionID, Name: "Create", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users", Active: true})
+	_, _, err = permissionStore.UpsertPermission(ctx, permissionapplication.SeedPermissionInput{PermissionID: extraPermissionID, Name: "Create", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users"})
 	require.NoError(t, err)
 
 	added, err := bindingStore.EnsureSystemBindings(ctx, roleID, []uuid.UUID{permissionID, extraPermissionID})

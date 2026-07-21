@@ -122,7 +122,7 @@ func expectPermissionUpserts(store *MockSeedPermissionStore, reactivate bool, in
 	for _, spec := range permissions {
 		input := expectedSeedPermissionInput(spec, reactivate)
 		permission := permissionFromSeedInput(input)
-		calls = append(calls, store.EXPECT().UpsertSystemPermission(gomock.Any(), input).Return(permission, inserted, nil))
+		calls = append(calls, store.EXPECT().UpsertPermission(gomock.Any(), input).Return(permission, inserted, nil))
 	}
 	return calls
 }
@@ -155,16 +155,14 @@ func expectedSeedRoleInput(spec rbacbaseline.RoleSpec, reactivate bool) roleappl
 	}
 }
 
-func expectedSeedPermissionInput(spec rbacbaseline.PermissionSpec, reactivate bool) permissionapplication.SeedPermissionInput {
+func expectedSeedPermissionInput(spec rbacbaseline.PermissionSpec, _ bool) permissionapplication.SeedPermissionInput {
 	return permissionapplication.SeedPermissionInput{
-		PermissionID:     uuid.MustParse(spec.PermissionID),
-		Name:             spec.Name,
-		Description:      spec.Description,
-		Module:           spec.Module,
-		HTTPMethod:       spec.Method,
-		PathTemplate:     spec.PathTemplate,
-		Active:           true,
-		ReactivateSystem: reactivate,
+		PermissionID: uuid.MustParse(spec.PermissionID),
+		Name:         spec.Name,
+		Description:  spec.Description,
+		Module:       spec.Module,
+		HTTPMethod:   spec.Method,
+		PathTemplate: spec.PathTemplate,
 	}
 }
 
@@ -183,5 +181,5 @@ func roleFromSeedInput(input roleapplication.SeedRoleInput) *roledomain.Role {
 }
 
 func permissionFromSeedInput(input permissionapplication.SeedPermissionInput) *permissiondomain.Permission {
-	return &permissiondomain.Permission{PermissionID: input.PermissionID, Name: input.Name, Description: input.Description, Module: input.Module, HTTPMethod: input.HTTPMethod, PathTemplate: input.PathTemplate, Active: input.Active, IsSystem: true}
+	return &permissiondomain.Permission{PermissionID: input.PermissionID, Name: input.Name, Description: input.Description, Module: input.Module, HTTPMethod: input.HTTPMethod, PathTemplate: input.PathTemplate}
 }

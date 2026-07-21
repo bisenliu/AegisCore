@@ -84,16 +84,6 @@ func PathTemplate(v string) predicate.Permission {
 	return predicate.Permission(sql.FieldEQ(FieldPathTemplate, v))
 }
 
-// Active applies equality check predicate on the "active" field. It's identical to ActiveEQ.
-func Active(v bool) predicate.Permission {
-	return predicate.Permission(sql.FieldEQ(FieldActive, v))
-}
-
-// IsSystem applies equality check predicate on the "is_system" field. It's identical to IsSystemEQ.
-func IsSystem(v bool) predicate.Permission {
-	return predicate.Permission(sql.FieldEQ(FieldIsSystem, v))
-}
-
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v int64) predicate.Permission {
 	return predicate.Permission(sql.FieldEQ(FieldCreatedAt, v))
@@ -467,26 +457,6 @@ func PathTemplateEqualFold(v string) predicate.Permission {
 // PathTemplateContainsFold applies the ContainsFold predicate on the "path_template" field.
 func PathTemplateContainsFold(v string) predicate.Permission {
 	return predicate.Permission(sql.FieldContainsFold(FieldPathTemplate, v))
-}
-
-// ActiveEQ applies the EQ predicate on the "active" field.
-func ActiveEQ(v bool) predicate.Permission {
-	return predicate.Permission(sql.FieldEQ(FieldActive, v))
-}
-
-// ActiveNEQ applies the NEQ predicate on the "active" field.
-func ActiveNEQ(v bool) predicate.Permission {
-	return predicate.Permission(sql.FieldNEQ(FieldActive, v))
-}
-
-// IsSystemEQ applies the EQ predicate on the "is_system" field.
-func IsSystemEQ(v bool) predicate.Permission {
-	return predicate.Permission(sql.FieldEQ(FieldIsSystem, v))
-}
-
-// IsSystemNEQ applies the NEQ predicate on the "is_system" field.
-func IsSystemNEQ(v bool) predicate.Permission {
-	return predicate.Permission(sql.FieldNEQ(FieldIsSystem, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

@@ -11,8 +11,6 @@ type Permission struct {
 	Module       string
 	HTTPMethod   string
 	PathTemplate string
-	Active       bool
-	IsSystem     bool
 	CreatedAt    int64
 	UpdatedAt    int64
 }
@@ -20,15 +18,4 @@ type Permission struct {
 // Identity 返回权限的 HTTP 路由身份。
 func (p Permission) Identity() RouteIdentity {
 	return RouteIdentity{Method: p.HTTPMethod, PathTemplate: p.PathTemplate}
-}
-
-// ProtectSystemIdentity 校验系统权限是否发生受保护身份字段变更。
-func (p Permission) ProtectSystemIdentity(next RouteIdentity) error {
-	if !p.IsSystem {
-		return nil
-	}
-	if p.HTTPMethod != next.Method || p.PathTemplate != next.PathTemplate {
-		return ErrSystemPermissionProtected
-	}
-	return nil
 }
