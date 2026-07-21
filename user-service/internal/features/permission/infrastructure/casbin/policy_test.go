@@ -183,6 +183,21 @@ func TestNewUserRoleResolverUsesRBACFeatureConfig(t *testing.T) {
 	require.ErrorIs(t, err, localcache.ErrClosed)
 }
 
+func TestNewUserRoleResolverRejectsNegativeCapacity(t *testing.T) {
+	enabled := true
+	size := int64(-1)
+	ttl := time.Minute
+	loadTimeout := time.Second
+
+	_, err := NewUserRoleResolver(UserRoleResolverParams{
+		Config: &serviceconfig.Config{RBAC: serviceconfig.RBACConfig{UserRoleCache: serviceconfig.FeatureCacheConfig{
+			Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout,
+		}}},
+		Client: newPolicyTestClient(t),
+	})
+	require.ErrorIs(t, err, localcache.ErrCapacityRequired)
+}
+
 func TestDisabledUserRoleResolverReadsThroughAndInvalidationIsSafe(t *testing.T) {
 	disabled := false
 	client := newPolicyTestClient(t)

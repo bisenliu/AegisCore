@@ -260,7 +260,7 @@ func newTokenVersionLocalCacheResource(cfg serviceconfig.FeatureCacheConfig, use
 	}
 	local, err := localcache.NewLoadingCache[string, int64](localcache.Config{
 		Name:        authTokenVersionCacheName,
-		Capacity:    uint64(cfg.SizeValue()),
+		Capacity:    cfg.CapacityValue(),
 		TTL:         cfg.TTLValue(),
 		LoadTimeout: cfg.LoadTimeoutValue(),
 	}, func(ctx context.Context, userID string) (int64, error) {

@@ -103,6 +103,18 @@ func TestTokenVersionLocalCacheResourceCloseIsIdempotent(t *testing.T) {
 	require.ErrorIs(t, resource.cache.Delete("018f0000-0000-7000-8000-000000000502"), localcache.ErrClosed)
 }
 
+func TestTokenVersionLocalCacheRejectsNegativeCapacity(t *testing.T) {
+	enabled := true
+	size := int64(-1)
+	ttl := time.Minute
+	loadTimeout := time.Second
+
+	_, err := newTokenVersionLocalCacheResource(serviceconfig.FeatureCacheConfig{
+		Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout,
+	}, NewMockUserTokenVersionStore(gomock.NewController(t)), NewMockTokenVersionCache(gomock.NewController(t)))
+	require.ErrorIs(t, err, localcache.ErrCapacityRequired)
+}
+
 func TestDisabledTokenVersionLocalCacheResourceCloseIsNoop(t *testing.T) {
 	disabled := false
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000503")

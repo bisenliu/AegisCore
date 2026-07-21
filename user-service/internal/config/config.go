@@ -61,6 +61,15 @@ func (c FeatureCacheConfig) SizeValue() int64 {
 	return *c.Size
 }
 
+// CapacityValue 返回可安全传递给 localcache 的容量；非正数返回零并由构造器拒绝。
+func (c FeatureCacheConfig) CapacityValue() uint64 {
+	size := c.SizeValue()
+	if size <= 0 {
+		return 0
+	}
+	return uint64(size)
+}
+
 // TTLValue 返回缓存条目的生命周期；字段缺失时返回零。
 func (c FeatureCacheConfig) TTLValue() time.Duration {
 	if c.TTL == nil {

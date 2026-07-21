@@ -56,6 +56,30 @@ func TestApplyDefaultsSetsFeatureCacheDefaults(t *testing.T) {
 	require.Equal(t, 500*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeoutValue())
 }
 
+func TestFeatureCacheCapacityValue(t *testing.T) {
+	positive := int64(123)
+	zero := int64(0)
+	negative := int64(-1)
+
+	tests := []struct {
+		name string
+		size *int64
+		want uint64
+	}{
+		{name: "missing", want: 0},
+		{name: "positive", size: &positive, want: 123},
+		{name: "zero", size: &zero, want: 0},
+		{name: "negative", size: &negative, want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := FeatureCacheConfig{Size: tt.size}
+			require.Equal(t, tt.want, cfg.CapacityValue())
+		})
+	}
+}
+
 func TestLoadAppliesFeatureCacheDefaults(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), `  token_version_cache:
     enabled: true

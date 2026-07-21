@@ -40,7 +40,7 @@ func NewUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult,
 	}
 	cache, err := localcache.NewLoadingCache[uuid.UUID, []uuid.UUID](localcache.Config{
 		Name:        rbacUserRolesCacheName,
-		Capacity:    uint64(cfg.SizeValue()),
+		Capacity:    cfg.CapacityValue(),
 		TTL:         cfg.TTLValue(),
 		LoadTimeout: cfg.LoadTimeoutValue(),
 	}, func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
