@@ -38,7 +38,7 @@ func TestPermissionControllerListPermissions(t *testing.T) {
 	queries.EXPECT().ListPermissions(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query permissionquery.ListPermissionsQuery) (*permissionquery.ListPermissionsResult, error) {
 		require.Equal(t, "user", query.Module)
 		require.Equal(t, http.MethodGet, query.HTTPMethod)
-		return &permissionquery.ListPermissionsResult{Items: []permissiondomain.Permission{permission}, PageSize: 20}, nil
+		return &permissionquery.ListPermissionsResult{Items: []permissiondomain.Permission{permission}}, nil
 	})
 
 	recorder := performPermissionHTTPRequest(engine, http.MethodGet, "/api/v1/permissions?module=user&http_method=GET")
@@ -47,6 +47,42 @@ func TestPermissionControllerListPermissions(t *testing.T) {
 	require.NoError(t, json.Unmarshal(envelope.Data, &payload))
 	require.Len(t, payload.Items, 1)
 	assertPermissionHTTPResponse(t, permission, payload.Items[0])
+	require.NotContains(t, string(envelope.Data), "pagination")
+}
+
+func TestPermissionControllerListPermissionsFiltersByModule(t *testing.T) {
+	engine, queries := newPermissionHTTPTestHarness(t)
+	queries.EXPECT().ListPermissions(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query permissionquery.ListPermissionsQuery) (*permissionquery.ListPermissionsResult, error) {
+		require.Equal(t, "user", query.Module)
+		require.Empty(t, query.HTTPMethod)
+		return &permissionquery.ListPermissionsResult{}, nil
+	})
+
+	recorder := performPermissionHTTPRequest(engine, http.MethodGet, "/api/v1/permissions?module=user")
+	expectPermissionEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK)
+}
+
+func TestPermissionControllerListPermissionsFiltersByHTTPMethod(t *testing.T) {
+	engine, queries := newPermissionHTTPTestHarness(t)
+	queries.EXPECT().ListPermissions(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query permissionquery.ListPermissionsQuery) (*permissionquery.ListPermissionsResult, error) {
+		require.Empty(t, query.Module)
+		require.Equal(t, http.MethodGet, query.HTTPMethod)
+		return &permissionquery.ListPermissionsResult{}, nil
+	})
+
+	recorder := performPermissionHTTPRequest(engine, http.MethodGet, "/api/v1/permissions?http_method=GET")
+	expectPermissionEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK)
+}
+
+func TestPermissionControllerListPermissionsInvalidHTTPMethod(t *testing.T) {
+	engine, queries := newPermissionHTTPTestHarness(t)
+	queries.EXPECT().ListPermissions(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, query permissionquery.ListPermissionsQuery) (*permissionquery.ListPermissionsResult, error) {
+		require.Equal(t, "not-a-method", query.HTTPMethod)
+		return nil, permissiondomain.ErrPermissionInvalid
+	})
+
+	recorder := performPermissionHTTPRequest(engine, http.MethodGet, "/api/v1/permissions?http_method=not-a-method")
+	expectPermissionEnvelope(t, recorder, http.StatusBadRequest, false, contracterrors.CodeValidationFailed)
 }
 
 func TestPermissionControllerListUserEffectivePermissions(t *testing.T) {

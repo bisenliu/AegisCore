@@ -6,27 +6,13 @@ import (
 	"github.com/google/uuid"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
-	"github.com/aegiscore/common/contract/pagination"
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 	"github.com/aegiscore/user-service/internal/messages"
 )
 
 // prepareListPermissionsQuery 将权限列表 HTTP 请求转换为应用层查询。
 func prepareListPermissionsQuery(req ListPermissionsRequest) (permissionquery.ListPermissionsQuery, error) {
-	cursorText := strings.TrimSpace(req.Cursor)
-	var cursor *uuid.UUID
-	if cursorText != "" {
-		parsed, err := uuid.Parse(cursorText)
-		if err != nil {
-			return permissionquery.ListPermissionsQuery{}, contracterrors.BadRequestError(messages.InvalidPermission)
-		}
-		cursor = &parsed
-	}
-	pageSize := pagination.NormalizePageSize(req.PageSize)
 	return permissionquery.ListPermissionsQuery{
-		Cursor:     cursor,
-		PageSize:   pageSize,
-		Limit:      pageSize,
 		Module:     strings.TrimSpace(req.Module),
 		HTTPMethod: strings.TrimSpace(req.HTTPMethod),
 	}, nil

@@ -149,8 +149,8 @@ func (roleModulePermissionCatalogStore) GetByPermissionID(context.Context, uuid.
 	return nil, nil
 }
 
-func (roleModulePermissionCatalogStore) List(context.Context, permissionapplication.ListPermissionsInput) ([]permissiondomain.Permission, bool, error) {
-	return nil, false, nil
+func (roleModulePermissionCatalogStore) List(context.Context, permissionapplication.ListPermissionsInput) ([]permissiondomain.Permission, error) {
+	return nil, nil
 }
 
 func (roleModulePermissionCatalogStore) ListEffectiveByUserID(context.Context, uuid.UUID) ([]permissiondomain.Permission, error) {

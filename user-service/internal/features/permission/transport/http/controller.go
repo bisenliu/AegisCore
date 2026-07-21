@@ -20,14 +20,12 @@ func NewPermissionController(queries permissionquery.PermissionQueryService, val
 	return &PermissionController{queries: queries, validator: validator}
 }
 
-// ListPermissions 处理分页权限列表请求。
-// @Summary 分页查询权限
-// @Description 查询权限目录。业务接口由 JWT 和 RBAC 保护。
+// ListPermissions 处理权限目录列表请求。
+// @Summary 查询完整权限目录
+// @Description 返回由代码基线定义并同步到数据库的完整权限目录，不使用分页；支持按业务模块和 HTTP 方法过滤。该接口由 JWT 和 RBAC 保护。
 // @Tags 权限
 // @Produce json
-// @Param cursor query string false "分页游标"
-// @Param page_size query int false "每页数量"
-// @Param module query string false "模块"
+// @Param module query string false "业务模块"
 // @Param http_method query string false "HTTP 方法"
 // @Success 200 {object} response.Envelope{data=permissionhttp.PermissionListResponseDoc} "查询成功"
 // @Failure 400 {object} response.Envelope "查询参数错误"

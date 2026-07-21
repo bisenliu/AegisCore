@@ -321,7 +321,7 @@ create_user() {
 
 select_permission() {
   local output status body permission_id
-  output="$(request GET "/api/v1/permissions?module=user&http_method=GET&page_size=1" '' "$ADMIN_ACCESS_TOKEN" "select-baseline-permission")"
+  output="$(request GET "/api/v1/permissions?module=user&http_method=GET" '' "$ADMIN_ACCESS_TOKEN" "select-baseline-permission")"
   status="$(status_from_request_output <<<"$output")"
   body="$(body_from_request_output <<<"$output")"
   expect_2xx "$status" "select baseline permission"
@@ -452,7 +452,7 @@ traffic_worker() {
     request GET "/api/v1/roles?page_size=20&active=true" '' "$ADMIN_ACCESS_TOKEN" "w${worker_id}-list-roles" >/dev/null
     request GET "/api/v1/roles/$ROLE_ID" '' "$ADMIN_ACCESS_TOKEN" "w${worker_id}-get-role" >/dev/null
     request GET "/api/v1/roles/$ROLE_ID/permissions" '' "$ADMIN_ACCESS_TOKEN" "w${worker_id}-role-permissions" >/dev/null
-    request GET "/api/v1/permissions?page_size=20&module=user&http_method=GET" '' "$ADMIN_ACCESS_TOKEN" "w${worker_id}-list-permissions" >/dev/null
+    request GET "/api/v1/permissions?module=user&http_method=GET" '' "$ADMIN_ACCESS_TOKEN" "w${worker_id}-list-permissions" >/dev/null
     request GET "/api/v1/permissions/users/$NORMAL_USER_ID/effective" '' "$ADMIN_ACCESS_TOKEN" "w${worker_id}-effective-permissions" >/dev/null
 
     if (( i % STATUS_RATE == 0 )); then
@@ -475,7 +475,7 @@ traffic_worker() {
       request GET "/api/v1/users/$NORMAL_USER_ID" '' '' "w${worker_id}-missing-auth" >/dev/null
       request GET "/api/v1/users/not-a-uuid" '' "$ADMIN_ACCESS_TOKEN" "w${worker_id}-bad-uri" >/dev/null
       request GET "/api/v1/not-found-$RUN_ID-$worker_id-$i" '' "$ADMIN_ACCESS_TOKEN" "w${worker_id}-not-found" >/dev/null
-      request GET /api/v1/permissions?page_size=not-a-number '' "$ADMIN_ACCESS_TOKEN" "w${worker_id}-bad-query" >/dev/null
+      request GET /api/v1/permissions?http_method=not-a-method '' "$ADMIN_ACCESS_TOKEN" "w${worker_id}-bad-query" >/dev/null
       request GET /api/v1/permissions '' "$NORMAL_ACCESS_TOKEN" "w${worker_id}-rbac-denied" >/dev/null
     fi
   done

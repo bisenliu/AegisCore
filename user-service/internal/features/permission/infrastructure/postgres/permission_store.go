@@ -40,25 +40,17 @@ func (s *PermissionStore) GetByPermissionID(ctx context.Context, permissionID uu
 	return nil, fmt.Errorf("query permission by permission_id %s: %w", permissionID.String(), err)
 }
 
-// List 返回一页权限记录，以及是否存在下一页。
-func (s *PermissionStore) List(ctx context.Context, input permissionapplication.ListPermissionsInput) ([]permissiondomain.Permission, bool, error) {
+// List 返回全部匹配权限记录。
+func (s *PermissionStore) List(ctx context.Context, input permissionapplication.ListPermissionsInput) ([]permissiondomain.Permission, error) {
 	predicates := buildListPredicates(input)
-	if input.AfterPermissionID != nil {
-		predicates = append(predicates, entpermission.PermissionIDGT(*input.AfterPermissionID))
-	}
 	permissions, err := s.client.Permission.Query().
 		Where(predicates...).
 		Order(entpermission.ByPermissionID()).
-		Limit(input.Limit + 1).
 		All(ctx)
 	if err != nil {
-		return nil, false, fmt.Errorf("list permissions: %w", err)
+		return nil, fmt.Errorf("list permissions: %w", err)
 	}
-	hasNext := len(permissions) > input.Limit
-	if hasNext {
-		permissions = permissions[:input.Limit]
-	}
-	return toModels(permissions), hasNext, nil
+	return toModels(permissions), nil
 }
 
 // ListEffectiveByUserID 返回用户经由启用角色绑定获得的权限。

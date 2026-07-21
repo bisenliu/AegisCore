@@ -278,9 +278,6 @@ const openAPIDocument = `{
               "$ref": "#/components/schemas/PermissionResponse"
             },
             "type": "array"
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/Pagination"
           }
         },
         "type": "object"
@@ -936,26 +933,10 @@ const openAPIDocument = `{
     },
     "/permissions": {
       "get": {
-        "description": "查询权限目录。业务接口由 JWT 和 RBAC 保护。",
+        "description": "返回由代码基线定义并同步到数据库的完整权限目录，不使用分页；支持按业务模块和 HTTP 方法过滤。该接口由 JWT 和 RBAC 保护。",
         "parameters": [
           {
-            "description": "分页游标",
-            "in": "query",
-            "name": "cursor",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "每页数量",
-            "in": "query",
-            "name": "page_size",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "description": "模块",
+            "description": "业务模块",
             "in": "query",
             "name": "module",
             "schema": {
@@ -1040,7 +1021,7 @@ const openAPIDocument = `{
             "BearerAuth": []
           }
         ],
-        "summary": "分页查询权限",
+        "summary": "查询完整权限目录",
         "tags": [
           "权限"
         ]

@@ -1,7 +1,5 @@
 package permissionhttp
 
-import "github.com/aegiscore/common/contract/pagination"
-
 // PermissionResponse 是权限目录公开响应。
 type PermissionResponse struct {
 	PermissionID string `json:"permission_id" example:"018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"`
@@ -14,8 +12,7 @@ type PermissionResponse struct {
 	UpdatedAt    int64  `json:"updated_at" example:"1780288800000"`
 }
 
-// PermissionListResponseDoc 描述分页权限列表 OpenAPI 响应载荷。
+// PermissionListResponseDoc 描述权限列表 OpenAPI 响应载荷。
 type PermissionListResponseDoc struct {
-	Items      []PermissionResponse  `json:"items"`
-	Pagination pagination.Pagination `json:"pagination"`
+	Items []PermissionResponse `json:"items"`
 }

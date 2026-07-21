@@ -32,11 +32,33 @@ func TestPermissionStoreUpsertAndQueryProjection(t *testing.T) {
 	require.False(t, inserted)
 	require.Equal(t, "List Users Updated", updated.Name)
 
-	items, hasNext, err := store.List(ctx, permissionapplication.ListPermissionsInput{Limit: 10, Module: "user"})
+	items, err := store.List(ctx, permissionapplication.ListPermissionsInput{Module: "user"})
 	require.NoError(t, err)
-	require.False(t, hasNext)
 	require.Len(t, items, 1)
 	require.Equal(t, permissionID, items[0].PermissionID)
+}
+
+func TestPermissionStoreListReturnsAllMatchingPermissionsInStableOrder(t *testing.T) {
+	store := newTestPermissionStore(t)
+	ctx := context.Background()
+	firstID := uuid.MustParse("018f0000-0000-7000-8000-000000000041")
+	secondID := uuid.MustParse("018f0000-0000-7000-8000-000000000042")
+
+	_, inserted, err := store.UpsertPermission(ctx, permissionapplication.SeedPermissionInput{PermissionID: secondID, Name: "Create User", Module: "user", HTTPMethod: "POST", PathTemplate: "/api/v1/users"})
+	require.NoError(t, err)
+	require.True(t, inserted)
+	_, inserted, err = store.UpsertPermission(ctx, permissionapplication.SeedPermissionInput{PermissionID: firstID, Name: "List Users", Module: "user", HTTPMethod: "GET", PathTemplate: "/api/v1/users"})
+	require.NoError(t, err)
+	require.True(t, inserted)
+	_, inserted, err = store.UpsertPermission(ctx, permissionapplication.SeedPermissionInput{PermissionID: uuid.MustParse("018f0000-0000-7000-8000-000000000043"), Name: "List Roles", Module: "role", HTTPMethod: "GET", PathTemplate: "/api/v1/roles"})
+	require.NoError(t, err)
+	require.True(t, inserted)
+
+	items, err := store.List(ctx, permissionapplication.ListPermissionsInput{Module: "user"})
+	require.NoError(t, err)
+	require.Len(t, items, 2)
+	require.Equal(t, firstID, items[0].PermissionID)
+	require.Equal(t, secondID, items[1].PermissionID)
 }
 
 func TestPermissionStoreUpsertRejectsRouteOwnedByDifferentPermissionID(t *testing.T) {

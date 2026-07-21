@@ -59,13 +59,12 @@ func (mr *MockPermissionStoreMockRecorder) GetByPermissionID(ctx, permissionID a
 }
 
 // List mocks base method.
-func (m *MockPermissionStore) List(ctx context.Context, input application.ListPermissionsInput) ([]domain.Permission, bool, error) {
+func (m *MockPermissionStore) List(ctx context.Context, input application.ListPermissionsInput) ([]domain.Permission, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "List", ctx, input)
 	ret0, _ := ret[0].([]domain.Permission)
-	ret1, _ := ret[1].(bool)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // List indicates an expected call of List.
