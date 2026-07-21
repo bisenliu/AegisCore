@@ -1,9 +1,7 @@
 ## Purpose
 
 定义 `common/` 提供的跨服务共享契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力，保证服务间基础行为一致且业务边界清晰。
-
 ## Requirements
-
 ### Requirement: 跨服务错误、响应与分页契约
 
 系统 MUST 在 `common/contract` 中维护业务中立的应用错误、响应 envelope 和分页契约，并 MUST 由 `common/http/response` 统一完成 HTTP 渲染。应用错误 MUST 使用低基数 `Kind`、稳定 `Reason`、响应 `Code`、公开 `Message` 和可选内部 `Cause` 表达语义，MUST NOT 保存或接收 HTTP status；HTTP status MUST 只根据 `Kind` 推导。
@@ -142,7 +140,8 @@
 
 - **WHEN** 配置包含 `local_cache.<name>`
 - **THEN** loader MUST 保留 `<name>` 并解析为通用缓存实例配置
-- **AND** validation MUST 校验 `capacity > 0`、`ttl > 0`、`load_timeout > 0`、`num_counters >= 0` 和 `buffer_items >= 0`，错误 MUST 包含完整字段路径
+- **AND** validation MUST 校验 `capacity > 0`、`ttl > 0` 和 `load_timeout > 0`，错误 MUST 包含完整字段路径
+- **AND** 配置契约 MUST NOT 暴露 Ristretto 的 `num_counters`、`buffer_items`、admission 或 write buffer 选项
 - **AND** 必需缓存名及其业务含义 MUST 留在消费服务
 
 #### Scenario: Runtime lifecycle 停止预算校验
@@ -196,6 +195,7 @@
 - **WHEN** user-service 正式 `serve` 启动或装配测试构建 Fx App
 - **THEN** CLI MUST 在创建 App 前只解析并校验一次 service config
 - **AND** composition root MUST supply 同一个 service config 及由其派生的 runtime config，不得再次读取配置文件
+- **AND** `common/runtime/config` MUST NOT 通过 Fx provider 接受配置路径或重复调用共享 loader
 - **AND** 配置失败 MUST 在创建 App、资源或 lifecycle hook 前返回
 
 ### Requirement: Runtime 执行原语
@@ -218,16 +218,43 @@
 - **AND** 多实例副作用任务 MUST 声明正数 TTL 的分布式锁策略，长任务 SHOULD 使用续租
 - **AND** 即使任务未配置 timeout，scheduler MUST 创建可取消 context，并在自动续租失败时取消任务和记录失败
 
-#### Scenario: 本地缓存读取、回源和关闭
+#### Scenario: 创建本地 loading cache
 
-- **WHEN** 服务创建 loading cache
-- **THEN** 配置 MUST 包含名称、正数容量、正数 TTL、key string 编码和 loader，无效配置 MUST 被拒绝
-- **AND** 容量 MUST 作为最大条目预算，调用方 MAY 提供 `CloneFunc` 隔离可变对象
-- **WHEN** `GetOrLoad` miss
-- **THEN** cache MUST 使用 `singleflight` 合并同 key 并发回源，成功后尝试写入，且 MUST NOT 缓存 loader 错误
-- **AND** singleflight 内部 double-check 命中 MUST NOT 污染业务 hit 统计
-- **WHEN** cache 已关闭
-- **THEN** `GetOrLoad` 和 `Set` MUST 返回 `ErrClosed`，`Get` MUST 返回未命中，`Delete` 和 `Clear` MUST 不再访问底层缓存
+- **WHEN** 服务通过 `NewLoadingCache` 创建 loading cache
+- **THEN** 配置 MUST 只包含非空名称、正数 `uint64` 容量、正数固定 TTL 和正数 load timeout，并 MUST 提供 loader
+- **AND** 容量 MUST 表示最大 item 数，不得表示字节、自定义 cost 或 Ristretto admission 参数
+- **AND** cache key MUST 保留调用方选择的 comparable 类型，common MUST NOT 要求业务 key 字符串编码
+- **AND** 公开 API MUST NOT 暴露底层 `ttlcache` 配置、独立 `Get`、主动 `Set`、`CloneFunc` 或写入拒绝语义
+
+#### Scenario: 本地缓存读取与回源
+
+- **WHEN** `GetOrLoad` 命中未过期 item
+- **THEN** cache MUST 返回该值并记录一次 hit，且读取 MUST NOT 延长该 item 的固定 TTL
+- **WHEN** `GetOrLoad` 未命中
+- **THEN** cache MUST 为每个调用记录一次 miss，并使用 `singleflight` 合并同一业务 key 的并发回源
+- **AND** loader 成功 MUST 记录 `LoadSuccess` 并同步写入 bounded TTL cache，loader 失败 MUST 记录 `LoadError` 且不得缓存错误结果
+- **AND** 内部 double-check MAY 避免重复回源，但 MUST NOT 计为业务 hit 或成为公开统计字段
+
+#### Scenario: loader context 与 caller 取消
+
+- **WHEN** 同 key 回源正在执行且任一 caller context 被取消
+- **THEN** 该 caller MUST 返回其 context error，MUST NOT 因自身取消而终止其他等待者共享的 loader
+- **AND** loader context MUST 保留发起请求的 context values、解除 caller cancellation，并受配置的 `LoadTimeout` 限制
+
+#### Scenario: value ownership 与失效
+
+- **WHEN** cache 存储或返回 slice、map、pointer 或包含引用字段的 value
+- **THEN** common MUST NOT 执行业务 deep clone，消费 feature MUST 在 loader 写入和返回调用方的适当边界复制可变 value
+- **WHEN** 调用方执行 `Delete` 或 `Clear`
+- **THEN** 对应 item 或全部 item MUST 在方法成功返回时失效，显式失效 MUST NOT 计入自动 eviction
+
+#### Scenario: 本地缓存关闭
+
+- **WHEN** 调用方一次或多次执行 `Close`
+- **THEN** cache MUST 幂等停止 wrapper 拥有的 TTL 清理 goroutine 并阻止新的底层访问
+- **AND** 关闭后的 `GetOrLoad`、`Delete` 和 `Clear` MUST 返回 `ErrClosed`
+- **AND** 已开始的 loader MAY 在 load timeout 内完成，但关闭后 MUST NOT 再写入底层 cache
+- **AND** `Name` 和 `Stats` MUST 在关闭后继续返回稳定名称与最后累计快照
 
 #### Scenario: Redis key 和 timezone 归属
 

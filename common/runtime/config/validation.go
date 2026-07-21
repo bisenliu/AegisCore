@@ -270,18 +270,6 @@ func ValidatePositiveDuration(path string, value time.Duration) []error {
 	return validatePositiveDuration(path, value)
 }
 
-func validatePositiveInt(path string, value int) []error {
-	if value <= 0 {
-		return []error{configFieldError(path, "must be > 0")}
-	}
-	return nil
-}
-
-// ValidatePositiveInt 校验 int 必须为正数。
-func ValidatePositiveInt(path string, value int) []error {
-	return validatePositiveInt(path, value)
-}
-
 func validateNonNegativeInt(path string, value int) []error {
 	if value < 0 {
 		return []error{configFieldError(path, "must be >= 0")}

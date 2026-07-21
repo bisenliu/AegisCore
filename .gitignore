@@ -19,45 +19,28 @@
 .env
 .env.*
 
-# Editor and IDE specific files
+# Editor, IDE and OS files
 .idea
 .vscode/
 *.sublime-project
 *.sublime-workspace
 .DS_Store
-Thumbs.db # Windows specific
+Thumbs.db
 .codebuddy
 .kiro
 
 # Log files
 *.log
-logs
+logs/
 
 # Coverage files
 *.out
 
 # pb files
 *pb.go
-services/main
-
-# Configuration files
-services/configs/app.yaml
-services/configs/app.yaml.docker
-
-# Logs
-logs/
-*.log
 
 # Binaries
 bin/
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
 
 # Ai Agent
 .agent
@@ -68,4 +51,3 @@ Thumbs.db
 
 # Code Graph
 .codegraph
-

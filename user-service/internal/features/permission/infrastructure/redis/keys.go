@@ -20,15 +20,6 @@ func NewKeyCatalog(appName string) (KeyCatalog, error) {
 	return KeyCatalog{builder: scoped}, nil
 }
 
-// MustKeyCatalog 根据 app name 构造权限 RBAC Redis key catalog，配置无效时 panic。
-func MustKeyCatalog(appName string) KeyCatalog {
-	catalog, err := NewKeyCatalog(appName)
-	if err != nil {
-		panic(err)
-	}
-	return catalog
-}
-
 // PolicyVersionKey 返回 RBAC policy 版本 Redis key。
 func (c KeyCatalog) PolicyVersionKey() string {
 	return c.builder.MustKey("policy", "version")

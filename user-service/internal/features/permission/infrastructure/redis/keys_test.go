@@ -13,3 +13,11 @@ func TestKeyCatalogBuildsRBACPolicyKeys(t *testing.T) {
 	require.Equal(t, "aegiscore-user-service:rbac:policy:version", catalog.PolicyVersionKey())
 	require.Equal(t, "aegiscore-user-service:rbac:policy:refresh", catalog.PolicyChannel())
 }
+
+func mustKeyCatalog(appName string) KeyCatalog {
+	catalog, err := NewKeyCatalog(appName)
+	if err != nil {
+		panic(err)
+	}
+	return catalog
+}

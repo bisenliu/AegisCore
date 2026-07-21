@@ -7,7 +7,8 @@
 !common/
 !common/**
 !tools/
-!tools/**
+!tools/openapi-convert/
+!tools/openapi-convert/go.mod
 !user-service/
 !user-service/**
 

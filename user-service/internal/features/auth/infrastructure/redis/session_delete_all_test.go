@@ -205,7 +205,7 @@ func TestSessionStorePurgePoolStopsBeforeRedisClose(t *testing.T) {
 
 	store := NewSessionStore(SessionStoreOptions{
 		Redis:                client,
-		Keys:                 MustKeyCatalog(""),
+		Keys:                 mustKeyCatalog(""),
 		TokenVersionCacheTTL: time.Minute,
 		PurgePool:            pool,
 		Metrics:              authapplication.NopMetrics(),
@@ -233,7 +233,7 @@ func TestSessionStoreConsumesPurgePool(t *testing.T) {
 		"NewSessionPurgePool: %v", err)
 	store := NewSessionStore(SessionStoreOptions{
 		Redis:                client,
-		Keys:                 MustKeyCatalog(""),
+		Keys:                 mustKeyCatalog(""),
 		TokenVersionCacheTTL: time.Minute,
 		PurgePool:            pool,
 		Metrics:              authapplication.NopMetrics(),

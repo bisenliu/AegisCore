@@ -56,7 +56,7 @@ docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-ser
 
 共享 `common/runtime/config.Config` 只包含 `app`、`server`、`log` 和 `observability`。Redis/PostgreSQL 连接类型由 `common/runtime/resources` 复用，但具名资源及其 `resources.*` 路径由具体服务声明；user-service 当前只声明 `resources.redis.cache_redis` 和 `resources.postgres.primary_db`。认证 token version cache 与 RBAC user role cache 分别位于 `auth.token_version_cache` 和 `rbac.user_role_cache`，不属于共享核心配置。
 
-日志只写 stdout/stderr，采集、保留和轮转由运行平台负责。Tracing 启用后固定通过 OTLP 导出；pprof 使用独立的 `PPROF_ENABLED`、`PPROF_ADDR` 诊断监听，默认关闭。反向代理信任由 Ingress、gateway 或 service mesh 入口边界管理，应用不接受 trusted proxy 配置。进程时区使用平台标准 `TZ`。
+日志只写 stdout/stderr，采集、保留和轮转由运行平台负责。Tracing 启用后固定通过 OTLP 导出；pprof 使用独立的 `AEGISCORE_OBSERVABILITY_PPROF_ENABLED`、`AEGISCORE_OBSERVABILITY_PPROF_ADDR` 诊断监听，默认关闭。反向代理信任由 Ingress、gateway 或 service mesh 入口边界管理，应用不接受 trusted proxy 配置。进程时区使用平台标准 `TZ`。
 
 ## OPSX 工作流
 

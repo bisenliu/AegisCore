@@ -24,7 +24,7 @@
 
 ```bash
 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
-go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
+go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
 make lint
 make common-lint
 make user-service-lint
@@ -39,7 +39,7 @@ cd user-service && golangci-lint run ./...
 
 ## Architecture Lint
 
-`depguard` 规则应镜像 `docs/ARCHITECTURE.md` 和 `openspec/specs/feature-layering/spec.md` 的分层依赖表：
+`depguard` 规则应镜像 `docs/ARCHITECTURE.md` 和 `openspec/specs/delivery-operations/spec.md` 的分层依赖表：
 
 - `domain` 不得导入 Gin、Ent、Redis、runtime config/logger、response envelope、application ports 或 infrastructure adapter。
 - `application` 不得导入 Gin、Ent、Redis 或 `common/http/binding`。

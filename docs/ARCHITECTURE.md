@@ -59,7 +59,7 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 3. 按配置注册 metrics。
 4. 挂载 `/api/v1` 业务路由。
 
-pprof 不挂载到业务 router。临时诊断时通过 `PPROF_ENABLED=true` 和 `PPROF_ADDR=127.0.0.1:6060` 启动独立监听，并只通过 loopback、`kubectl port-forward` 或等价受控通道访问。Gin 默认不信任代理；真实客户端地址和 forwarded headers 由 Ingress、gateway 或 service mesh 的入口安全策略负责。
+pprof 不挂载到业务 router。临时诊断时通过 `AEGISCORE_OBSERVABILITY_PPROF_ENABLED=true` 和 `AEGISCORE_OBSERVABILITY_PPROF_ADDR=127.0.0.1:6060` 启动独立监听，并只通过 loopback、`kubectl port-forward` 或等价受控通道访问。Gin 默认不信任代理；真实客户端地址和 forwarded headers 由 Ingress、gateway 或 service mesh 的入口安全策略负责。
 
 业务路由分层：
 

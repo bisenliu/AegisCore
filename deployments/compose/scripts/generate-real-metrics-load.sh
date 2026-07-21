@@ -82,7 +82,6 @@ SERVICE_METRICS_FILE="${SERVICE_METRICS_FILE:-$ARTIFACT_DIR/service-metrics-$RUN
 ADMIN_ACCESS_TOKEN=""
 ADMIN_REFRESH_TOKEN=""
 NORMAL_ACCESS_TOKEN=""
-NORMAL_REFRESH_TOKEN=""
 NORMAL_USER_ID=""
 MUST_CHANGE_USERNAME=""
 MUST_CHANGE_PASSWORD=""
@@ -369,7 +368,6 @@ prepare_business_data() {
   log "creating normal user, permission, and role through real APIs"
   NORMAL_USER_ID="$(create_user "$normal_username" "Metrics User $RUN_ID" "$normal_password" 100)"
   NORMAL_ACCESS_TOKEN="$(login_user "$normal_username" "$normal_password" | jq -r '.data.access_token // empty')"
-  NORMAL_REFRESH_TOKEN="$(login_user "$normal_username" "$normal_password" | jq -r '.data.refresh_token // empty')"
 
   PERMISSION_ID="$(create_permission "$suffix")"
   ROLE_ID="$(create_role "$suffix")"

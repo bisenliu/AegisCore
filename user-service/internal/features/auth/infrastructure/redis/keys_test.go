@@ -7,7 +7,7 @@ import (
 )
 
 func TestKeyCatalogUsesAppNamePrefixWithNewKeyFormat(t *testing.T) {
-	keys := MustKeyCatalog(" aegiscore-user-service ")
+	keys := mustKeyCatalog(" aegiscore-user-service ")
 	{
 
 		got := keys.AuthSession("u-123", "s-123")
@@ -48,7 +48,7 @@ func TestKeyCatalogUsesAppNamePrefixWithNewKeyFormat(t *testing.T) {
 }
 
 func TestKeyCatalogKeepsUnprefixedKeysWhenAppNameEmpty(t *testing.T) {
-	keys := MustKeyCatalog("   ")
+	keys := mustKeyCatalog("   ")
 	{
 
 		got := keys.AuthSession("u-123", "s-123")
@@ -80,4 +80,12 @@ func TestKeyCatalogKeepsUnprefixedKeysWhenAppNameEmpty(t *testing.T) {
 			"AuthUserSessionsPurge = %q", got)
 	}
 
+}
+
+func mustKeyCatalog(appName string) KeyCatalog {
+	catalog, err := NewKeyCatalog(appName)
+	if err != nil {
+		panic(err)
+	}
+	return catalog
 }

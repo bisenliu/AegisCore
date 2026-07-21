@@ -62,13 +62,6 @@ func StrictJSONBinder(c *gin.Context, dst any) error {
 	return jsonBinder(c, dst, true)
 }
 
-// JSONBinderWithOptions 返回按未知字段策略配置的 JSON binder。
-func JSONBinderWithOptions(disallowUnknownFields bool) Binder {
-	return func(c *gin.Context, dst any) error {
-		return jsonBinder(c, dst, disallowUnknownFields)
-	}
-}
-
 func jsonBinder(c *gin.Context, dst any, disallowUnknownFields bool) error {
 	if c.Request.Body == nil || c.Request.ContentLength == 0 {
 		return &validation.Error{Message: validation.ErrEmptyRequestBody, Kind: contracterrors.KindBadRequest, Reason: contracterrors.ReasonEmptyRequestBody, Code: contracterrors.CodeBadRequest}

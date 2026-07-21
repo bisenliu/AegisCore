@@ -22,15 +22,6 @@ func NewKeyCatalog(appName string) (KeyCatalog, error) {
 	return KeyCatalog{builder: scoped}, nil
 }
 
-// MustKeyCatalog 根据 app name 构造认证 Redis key catalog，配置无效时 panic。
-func MustKeyCatalog(appName string) KeyCatalog {
-	catalog, err := NewKeyCatalog(appName)
-	if err != nil {
-		panic(err)
-	}
-	return catalog
-}
-
 // AuthSession 返回一个 refresh token 会话载荷的 key。
 func (c KeyCatalog) AuthSession(userID string, sessionID string) string {
 	return c.builder.MustKey("session", rediskey.HashTag(userID), sessionID)

@@ -145,14 +145,28 @@
 - **WHEN** 后续 Pub/Sub、版本补偿或显式 reload 成功加载当前 policy
 - **THEN** engine MUST 替换为最新可用 policy、清除最近 reload 错误并恢复 readiness/startup
 
-#### Scenario: 用户角色缓存语义
+#### Scenario: 用户角色缓存 key 与容量
+
+- **WHEN** RBAC user-role cache 被启用
+- **THEN** permission feature MUST 使用 `uuid.UUID` 作为真实业务 key，并将配置的正数 size 映射为最大 item 数
+- **AND** common MUST NOT 字符串化 UUID、接收 key encoder 或暴露底层 cache option
+
+#### Scenario: 用户角色缓存命中与 value 隔离
 
 - **WHEN** 用户角色缓存命中
-- **THEN** 授权 MUST 使用缓存中的角色 ID 副本，调用方对返回 slice 的修改 MUST NOT 污染缓存内部值
+- **THEN** 授权 MUST 使用缓存中角色 ID 的防御性副本，调用方对返回 slice 的修改 MUST NOT 污染缓存内部值或后续读取
+- **AND** permission feature MUST 在 loader 写入缓存前及 `RolesForUser` 返回调用方前复制 `[]uuid.UUID`
+- **AND** `common/runtime/localcache` MUST NOT 承担角色 ID clone 语义
+
+#### Scenario: 用户角色缓存未命中与关闭
+
 - **WHEN** 用户角色缓存未命中
-- **THEN** 系统 MUST 合并同一用户的并发回源并查询 PostgreSQL 中的当前启用角色，loader 错误 MUST NOT 写入缓存
+- **THEN** 系统 MUST 合并同一 `uuid.UUID` 用户的并发回源并查询 PostgreSQL 中的当前启用角色，loader 错误 MUST NOT 写入缓存
+- **WHEN** user-role cache 已关闭或回源失败
+- **THEN** 授权 MUST fail-closed，MUST NOT 因 cache 不可用产生允许结果
 - **WHEN** `rbac.user_role_cache.enabled` 为 false
-- **THEN** 系统 MUST 直接回源并保持正确的 fail-closed 授权语义
+- **THEN** 系统 MUST 直接回源、返回独立角色 ID slice 并保持正确的 fail-closed 授权语义
+- **AND** direct stats source MUST 使用 `LoadSuccess` 与 `LoadError` 表达逐次回源结果
 
 #### Scenario: 在线写后同步
 

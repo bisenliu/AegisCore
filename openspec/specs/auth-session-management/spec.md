@@ -63,7 +63,7 @@
 
 ### Requirement: Token version 权威来源与缓存投影
 
-系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地缓存和 Redis 投影加速受保护访问校验。校验链路 MUST 在本地缓存或 Redis 未命中时回源 PostgreSQL，MUST NOT 缓存错误结果，且缓存关闭或淘汰 MUST 只影响性能、不得改变认证和撤销语义。
+系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地 loading cache 和 Redis 投影加速受保护访问校验。校验链路 MUST 在本地缓存或 Redis 未命中时回源 PostgreSQL，MUST NOT 缓存错误结果，且缓存关闭、TTL 过期或容量驱逐 MUST 只影响性能、不得改变认证和撤销语义。
 
 #### Scenario: 受保护访问校验
 
@@ -75,10 +75,14 @@
 #### Scenario: 本地缓存启用或关闭
 
 - **WHEN** `auth.token_version_cache.enabled` 为 true
-- **THEN** 对应 feature cache 实例的 `size`、`ttl` 和 `load_timeout` MUST 为正值，且容量淘汰、准入拒绝或 TTL 过期后 MUST 可回源恢复校验
+- **THEN** 对应 feature cache 实例的 `size`、`ttl` 和 `load_timeout` MUST 为正值，`size` MUST 映射为最大 item 数
+- **AND** token version string key MUST 由 auth feature 直接提供，MUST NOT 配置 common key string encoder
+- **AND** `int64` token version MUST 作为不可变值直接缓存，不得为其配置 common clone callback
+- **AND** 容量驱逐或 TTL 过期后 MUST 可通过同 key 回源合并恢复校验，不得依赖 admission rejected、set dropped 或异步写入可见性
 - **AND** user-service 装配时缺少具名 `auth_token_version` cache 配置 MUST 明确报错并拒绝装配
 - **WHEN** `auth.token_version_cache.enabled` 为 false
 - **THEN** 系统 MUST 保持 token version 校验和撤销语义正确，且 MAY 产生额外 datastore 查询
+- **AND** direct stats source MUST 使用 `LoadSuccess` 与 `LoadError` 表达逐次回源结果
 
 #### Scenario: Redis 投影和刷新
 

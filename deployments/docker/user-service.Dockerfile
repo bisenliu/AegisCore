@@ -16,7 +16,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
   go list -m -mod=readonly all >/dev/null
 
 COPY common ./common
-COPY tools ./tools
 COPY user-service ./user-service
 
 WORKDIR /src/user-service

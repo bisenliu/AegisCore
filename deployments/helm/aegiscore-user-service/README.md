@@ -57,7 +57,7 @@ networkPolicy:
 
 `config` 使用最终 `AEGISCORE_SERVER_*` 与 `AEGISCORE_RESOURCES_*` 路径，Redis 使用统一 `TIMEOUT`，PostgreSQL pool 使用 `POOL_*`；平台时区只使用 `TZ`。日志写 stdout/stderr，tracing 启用后固定通过 OTLP 导出。trusted proxy 由集群入口边界负责，不是 chart 的应用配置。
 
-chart 默认不配置或暴露 pprof。临时排障应通过额外受控环境变量设置 `PPROF_ENABLED=true`、`PPROF_ADDR=127.0.0.1:6060`，并使用 `kubectl port-forward`，不要把诊断端口加入常驻 Service。
+chart 默认不配置或暴露 pprof。临时排障应通过额外受控环境变量设置 `AEGISCORE_OBSERVABILITY_PPROF_ENABLED=true`、`AEGISCORE_OBSERVABILITY_PPROF_ADDR=127.0.0.1:6060`，并使用 `kubectl port-forward`，不要把诊断端口加入常驻 Service。
 
 ## 渲染和验证
 

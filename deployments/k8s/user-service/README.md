@@ -74,7 +74,7 @@ Deployment 默认提供 150 秒终止宽限期：120 秒用于 Fx `app.Stop()` �
 
 非敏感配置使用 `AEGISCORE_SERVER_HTTP_*` 和 `AEGISCORE_RESOURCES_*`，敏感资源凭据使用同路径 Secret key。Redis 只有统一 `TIMEOUT`，PostgreSQL pool 使用 `POOL_*`。时区由平台 `TZ` 控制；日志只写 stdout/stderr；tracing 启用后固定使用 OTLP。应用不接收 trusted proxy 配置，代理信任和 forwarded headers 由 Ingress、gateway 或 service mesh 入口策略负责。
 
-pprof 默认关闭且不由 Service 暴露。临时诊断时只在受控副本设置 `PPROF_ENABLED=true`、`PPROF_ADDR=127.0.0.1:6060`，再通过 `kubectl port-forward` 访问。
+pprof 默认关闭且不由 Service 暴露。临时诊断时只在受控副本设置 `AEGISCORE_OBSERVABILITY_PPROF_ENABLED=true`、`AEGISCORE_OBSERVABILITY_PPROF_ADDR=127.0.0.1:6060`，再通过 `kubectl port-forward` 访问。
 
 运行时镜像基于固定 digest 的 Distroless static nonroot，Deployment 和 RBAC seed Job 的 `runAsUser`、`runAsGroup`、`fsGroup` 均为 `65532`，并保持只读根文件系统、禁止提权、capabilities drop、RuntimeDefault seccomp 和 `/tmp` emptyDir。Kubernetes 探针使用 kubelet HTTP probe，不依赖容器内 shell 或原生 `healthcheck` 命令。
 
