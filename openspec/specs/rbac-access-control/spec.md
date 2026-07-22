@@ -1,9 +1,7 @@
 ## Purpose
 
 定义 user-service 的 RBAC 访问控制能力，覆盖权限目录、角色、角色权限、用户角色、Casbin 授权、策略同步、系统数据引导、超级管理员管理、错误契约、观测和资源生命周期。
-
 ## Requirements
-
 ### Requirement: 权限目录与路由诊断
 
 系统 MUST 将 `internal/shared/rbacbaseline.DefaultPermissions()` 作为权限定义的唯一业务权威来源，并将 permissions 数据库表作为供列表、角色绑定和授权加载使用的只读投影。权限 MUST 使用稳定 `permission_id` 描述可授权的 HTTP method、route template 和业务模块；运行时 MUST NOT 提供权限创建、详情、更新、启停或 route diff 公开接口。
@@ -205,7 +203,7 @@
 
 ### Requirement: RBAC 系统数据与运维 CLI
 
-系统 MUST 提供带服务上下文的 `rbac seed` 和一次性 `rbac bootstrap-super-admin` 命令，用于维护系统角色、代码定义权限投影、默认绑定和全新数据库的首次超级管理员引导。系统角色与默认绑定 MUST 由 seed port 根据 `internal/shared/rbacbaseline` 写入，全部权限定义 MUST 只来自 `rbacbaseline.DefaultPermissions()`。RBAC 运维 CLI MUST 通过 `aegiscore-user-service` 根命令调用，旧 `aegiscore-user-services` 根命令 MUST NOT 作为 RBAC 兼容入口保留。
+系统 MUST 提供带服务上下文的 `rbac seed` 和一次性 `rbac bootstrap-super-admin` 命令，用于维护系统角色、代码定义权限投影、默认绑定和全新数据库的首次超级管理员引导。系统角色、系统权限、默认绑定和 bootstrap 用户 ID MUST 由 `internal/shared/rbacbaseline` 以 UUID v5 生成后固化常量定义，全部权限定义 MUST 只来自 `rbacbaseline.DefaultPermissions()`。RBAC 运维 CLI MUST 通过 `aegiscore-user-service` 根命令调用，旧 `aegiscore-user-services` 根命令 MUST NOT 作为 RBAC 兼容入口保留。
 
 #### Scenario: 初始化系统基线
 
@@ -214,6 +212,24 @@
 - **AND** 系统角色 MUST 保持系统数据标记，Permission MUST NOT 包含 `Active` 或 `IsSystem`
 - **AND** seed MUST NOT 创建业务用户、自动分配超级管理员或自动删除基线之外的权限记录
 - **AND** 非 seed 的公开 HTTP 路径 MUST NOT 创建、修改或启停权限
+- **AND** seed 写入的系统角色和权限 ID MUST 引用 `rbacbaseline` 中的固化常量，MUST NOT 在 seed 运行时调用 `id.NewUUID()` 或动态 UUID v5 生成逻辑
+
+#### Scenario: 系统 ID 固化常量
+
+- **WHEN** 代码定义 `SuperAdminRoleID`、`BootstrapSuperAdminUserID` 或任一 baseline permission ID
+- **THEN** 常量 MUST 位于 `user-service/internal/shared/rbacbaseline` 边界
+- **AND** 每个常量 MUST 是由 `UUIDv5(SystemIDNamespace, semantic name)` 生成后固化的 UUID 字符串
+- **AND** 常量注释 MUST 记录对应 semantic name
+- **AND** semantic name MUST 使用稳定业务语义，例如 `role:super-admin`、`user:bootstrap-super-admin` 或 `permission:<resource>:<action>`
+- **AND** semantic name MUST NOT 使用项目名、服务名、HTTP path、中文展示文案或 Go symbol
+
+#### Scenario: 权限基线引用系统 ID 常量
+
+- **WHEN** `rbacbaseline.DefaultPermissions()` 返回权限基线
+- **THEN** 每个 `PermissionSpec.PermissionID` MUST 引用 `rbacbaseline` 中的 permission ID 常量
+- **AND** `DefaultPermissions()` MUST NOT 内联 UUID 字符串
+- **AND** `DefaultRoles()` 和 `DefaultRolePermissions()` MUST 引用 `rbacbaseline` 中的角色或权限 ID 常量
+- **AND** 系统 MUST 通过测试校验所有默认权限 ID 和默认绑定引用均存在且没有重复
 
 #### Scenario: 一次性超级管理员引导输入
 
@@ -228,9 +244,10 @@
 #### Scenario: 固定 bootstrap 标识
 
 - **WHEN** 系统执行超级管理员首次引导
-- **THEN** 系统 MUST 使用 `user-service/internal/features/role/application/bootstrap.BootstrapSuperAdminUserID` 作为固定用户 ID，值为 `00000000-0000-0000-0000-000000000002`
+- **THEN** 系统 MUST 使用 `user-service/internal/shared/rbacbaseline.BootstrapSuperAdminUserID` 作为固定用户 ID
 - **AND** 固定用户 ID MUST 由代码定义，MUST NOT 通过 CLI 参数、环境变量或配置覆盖
 - **AND** 系统 MUST 使用 `rbacbaseline.SuperAdminRoleID` 作为超级管理员角色 ID
+- **AND** bootstrap application MUST NOT 在自身 package 中私有定义 bootstrap 系统用户 ID
 
 #### Scenario: 事务性首次引导
 
@@ -272,6 +289,14 @@
 - **WHEN** HTTP 副本运行期间执行 seed 或 bootstrap-super-admin
 - **THEN** 命令 MUST 只修改持久化数据并 MUST NOT 宣称已触发运行期 policy refresh
 - **AND** 运维 MUST 滚动重启副本或触发在线 RBAC 刷新使运行实例收敛
+
+#### Scenario: 系统 ID 一致性门禁
+
+- **WHEN** 执行 user-service 测试
+- **THEN** 测试 MUST 校验 `SystemIDNamespace` 和所有系统 ID 常量均可解析
+- **AND** 每个系统 ID 常量的 UUID 版本 MUST 为 5
+- **AND** 每个系统 ID 常量 MUST 等于 `uuid.NewSHA1(SystemIDNamespace, []byte(semantic name))` 的结果
+- **AND** 全部系统 ID MUST 无重复
 
 ### Requirement: RBAC 错误与统一 HTTP 契约
 
@@ -381,3 +406,50 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 - **THEN** `Stop` 或 `Close` MUST NOT 关闭共享 Redis、Ent 或 PostgreSQL 资源
 - **AND** 关闭后授权语义 MUST 继续 fail-closed，不得因为本地资源不可用而产生允许结果
 - **AND** RBAC MUST NOT 把服务业务配置、权限基线或 key schema 下沉到 `common`
+
+### Requirement: RBAC 运行时 ID 与系统 ID 分离
+
+系统 MUST 区分普通运行时业务 ID 和系统内置稳定 ID。普通运行时业务实体 MUST 继续使用 `common/runtime/id.NewUUID()` 生成 UUID v7；RBAC 系统基线和 bootstrap ID MUST 使用 `rbacbaseline` 中的 UUID v5 固化常量。
+
+#### Scenario: 普通业务实体创建
+- **WHEN** 系统创建普通用户、普通角色或其他运行时业务数据
+- **THEN** 创建路径 MUST 使用当前运行时 ID 生成策略生成新 ID
+- **AND** 普通运行时创建路径 MUST NOT 复用 RBAC 系统 ID 常量
+
+#### Scenario: 系统基线禁止随机 ID
+- **WHEN** 系统创建或更新超级管理员角色、bootstrap 用户、baseline permission 或默认角色权限绑定
+- **THEN** 系统 MUST 使用 `rbacbaseline` 中的固化系统 ID 常量
+- **AND** 系统 MUST NOT 使用 `common/runtime/id.NewUUID()` 为这些系统基线生成 ID
+- **AND** 系统 MUST NOT 在正式运行路径动态调用 UUID v5 生成逻辑来替代固化常量
+
+### Requirement: 默认系统角色权限基线维护
+
+系统 MUST 在 `internal/shared/rbacbaseline` 中集中维护默认系统角色及其默认权限绑定。`DefaultRoles()`、`DefaultPermissions()` 和 `DefaultRolePermissions()` 的公开函数签名 MUST 保持稳定；默认角色权限绑定 MUST 只引用 `DefaultPermissions()` 中的稳定 `PermissionID`。
+
+#### Scenario: 当前默认基线行为保持不变
+
+- **WHEN** 代码调用 `rbacbaseline.DefaultRoles()`
+- **THEN** 系统 MUST 仍然只返回内置超级管理员角色作为当前默认角色
+- **WHEN** 代码调用 `rbacbaseline.DefaultRolePermissions()`
+- **THEN** 系统 MUST 仍然返回超级管理员角色到全部默认权限的绑定
+- **AND** 绑定集合 MUST 不包含重复的 `RoleID` 与 `PermissionID` 组合
+
+#### Scenario: 默认角色绑定引用已知基线
+
+- **WHEN** 系统展开默认角色权限绑定
+- **THEN** 每条绑定的 `RoleID` MUST 引用 `DefaultRoles()` 返回的已知默认角色
+- **AND** 每条绑定的 `PermissionID` MUST 引用 `DefaultPermissions()` 返回的已知默认权限
+
+#### Scenario: 未来默认角色显式维护权限
+
+- **WHEN** 后续新增非超级管理员默认系统角色
+- **THEN** 该角色的默认权限 MUST 在角色 catalog block 中显式列出 `PermissionID`
+- **AND** 系统 MUST NOT 按 `Module`、model、read/write、路由前缀或其他粗粒度集合自动推导该角色的默认权限
+- **AND** 系统 MUST NOT 为了表达默认角色权限引入 `PermissionSet` 别名层
+
+#### Scenario: 超级管理员全量绑定例外
+
+- **WHEN** 系统展开超级管理员默认权限绑定
+- **THEN** 系统 MUST 允许超级管理员使用内部 helper 自动绑定 `DefaultPermissions()` 中的全部权限
+- **AND** 该自动全量绑定例外 MUST NOT 扩展到其他默认系统角色
+
