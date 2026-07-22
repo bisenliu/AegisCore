@@ -1,24 +1,40 @@
 package rbacbaseline
 
 import (
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSystemIDsMatchV5Names(t *testing.T) {
-	namespace := uuid.MustParse(SystemIDNamespace)
-	seen := make(map[string]string, len(systemIDCases()))
+var reservedSystemIDPattern = regexp.MustCompile(`^00000000-0000-0000-0000-[0-9]{12}$`)
 
+func TestSystemIDsUseReservedFormat(t *testing.T) {
 	for _, tc := range systemIDCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			parsed, err := uuid.Parse(tc.id)
+			_, err := uuid.Parse(tc.id)
 			require.NoError(t, err)
-			require.Equal(t, uuid.Version(5), parsed.Version())
-			require.Equal(t, uuid.NewSHA1(namespace, []byte(tc.name)).String(), tc.id)
+			require.Regexp(t, reservedSystemIDPattern, tc.id)
 		})
+	}
+}
 
+func TestSystemIDsMatchTypeModule(t *testing.T) {
+	for _, tc := range systemIDCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			suffix := systemIDSuffix(tc.id)
+			require.Equal(t, tc.typeCode, suffix[:2])
+			require.Equal(t, tc.module, suffix[2:4])
+			require.NotEqual(t, "00000000", suffix[4:])
+		})
+	}
+}
+
+func TestSystemIDsGloballyUnique(t *testing.T) {
+	seen := make(map[string]string, len(systemIDCases()))
+	for _, tc := range systemIDCases() {
 		if existing, ok := seen[tc.id]; ok {
 			require.Failf(t, "duplicate system id", "%s and %s share %s", existing, tc.name, tc.id)
 		}
@@ -49,33 +65,45 @@ func TestDefaultRolePermissionsUseRegisteredSystemIDs(t *testing.T) {
 }
 
 type systemIDCase struct {
-	name string
-	id   string
+	name     string
+	id       string
+	typeCode string
+	module   string
 }
 
 func systemIDCases() []systemIDCase {
 	return []systemIDCase{
-		{name: "role:super-admin", id: SuperAdminRoleID},
-		{name: "user:bootstrap-super-admin", id: BootstrapSuperAdminUserID},
-		{name: "permission:user:list", id: PermissionUserListID},
-		{name: "permission:user:create", id: PermissionUserCreateID},
-		{name: "permission:user:get", id: PermissionUserGetID},
-		{name: "permission:permission:list", id: PermissionPermissionListID},
-		{name: "permission:permission:effective-by-user", id: PermissionPermissionUserEffectiveID},
-		{name: "permission:role:list", id: PermissionRoleListID},
-		{name: "permission:role:create", id: PermissionRoleCreateID},
-		{name: "permission:role:get", id: PermissionRoleGetID},
-		{name: "permission:role:update", id: PermissionRoleUpdateID},
-		{name: "permission:role:set-status", id: PermissionRoleStatusID},
-		{name: "permission:user-role:list", id: PermissionUserRoleListID},
-		{name: "permission:user-role:replace", id: PermissionUserRoleReplaceID},
-		{name: "permission:user-role:add", id: PermissionUserRoleAddID},
-		{name: "permission:user-role:remove", id: PermissionUserRoleRemoveID},
-		{name: "permission:role-permission:list", id: PermissionRolePermissionListID},
-		{name: "permission:role-permission:replace", id: PermissionRolePermissionReplaceID},
-		{name: "permission:role-permission:add", id: PermissionRolePermissionAddID},
-		{name: "permission:role-permission:remove", id: PermissionRolePermissionRemoveID},
+		{name: "user:bootstrap-super-admin", id: BootstrapSuperAdminUserID, typeCode: "01", module: "00"},
+		{name: "role:super-admin", id: SuperAdminRoleID, typeCode: "02", module: "00"},
+
+		{name: "permission:user:list", id: PermissionUserListID, typeCode: "03", module: "01"},
+		{name: "permission:user:create", id: PermissionUserCreateID, typeCode: "03", module: "01"},
+		{name: "permission:user:get", id: PermissionUserGetID, typeCode: "03", module: "01"},
+
+		{name: "permission:permission:list", id: PermissionPermissionListID, typeCode: "03", module: "02"},
+		{name: "permission:permission:effective-by-user", id: PermissionPermissionUserEffectiveID, typeCode: "03", module: "02"},
+
+		{name: "permission:role:list", id: PermissionRoleListID, typeCode: "03", module: "03"},
+		{name: "permission:role:create", id: PermissionRoleCreateID, typeCode: "03", module: "03"},
+		{name: "permission:role:get", id: PermissionRoleGetID, typeCode: "03", module: "03"},
+		{name: "permission:role:update", id: PermissionRoleUpdateID, typeCode: "03", module: "03"},
+		{name: "permission:role:set-status", id: PermissionRoleStatusID, typeCode: "03", module: "03"},
+
+		{name: "permission:user-role:list", id: PermissionUserRoleListID, typeCode: "03", module: "04"},
+		{name: "permission:user-role:replace", id: PermissionUserRoleReplaceID, typeCode: "03", module: "04"},
+		{name: "permission:user-role:add", id: PermissionUserRoleAddID, typeCode: "03", module: "04"},
+		{name: "permission:user-role:remove", id: PermissionUserRoleRemoveID, typeCode: "03", module: "04"},
+
+		{name: "permission:role-permission:list", id: PermissionRolePermissionListID, typeCode: "03", module: "05"},
+		{name: "permission:role-permission:replace", id: PermissionRolePermissionReplaceID, typeCode: "03", module: "05"},
+		{name: "permission:role-permission:add", id: PermissionRolePermissionAddID, typeCode: "03", module: "05"},
+		{name: "permission:role-permission:remove", id: PermissionRolePermissionRemoveID, typeCode: "03", module: "05"},
 	}
+}
+
+func systemIDSuffix(id string) string {
+	parts := strings.Split(id, "-")
+	return parts[len(parts)-1]
 }
 
 func registeredPermissionIDs() map[string]struct{} {

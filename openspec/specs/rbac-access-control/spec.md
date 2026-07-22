@@ -203,7 +203,7 @@
 
 ### Requirement: RBAC 系统数据与运维 CLI
 
-系统 MUST 提供带服务上下文的 `rbac seed` 和一次性 `rbac bootstrap-super-admin` 命令，用于维护系统角色、代码定义权限投影、默认绑定和全新数据库的首次超级管理员引导。系统角色、系统权限、默认绑定和 bootstrap 用户 ID MUST 由 `internal/shared/rbacbaseline` 以 UUID v5 生成后固化常量定义，全部权限定义 MUST 只来自 `rbacbaseline.DefaultPermissions()`。RBAC 运维 CLI MUST 通过 `aegiscore-user-service` 根命令调用，旧 `aegiscore-user-services` 根命令 MUST NOT 作为 RBAC 兼容入口保留。
+系统 MUST 提供带服务上下文的 `rbac seed` 和一次性 `rbac bootstrap-super-admin` 命令，用于维护系统角色、代码定义权限投影、默认绑定和全新数据库的首次超级管理员引导。系统角色、系统权限、默认绑定和 bootstrap 用户 ID MUST 由 `internal/shared/rbacbaseline` 以手写保留 UUID 常量定义，全部权限定义 MUST 只来自 `rbacbaseline.DefaultPermissions()`。RBAC 运维 CLI MUST 通过 `aegiscore-user-service` 根命令调用，旧 `aegiscore-user-services` 根命令 MUST NOT 作为 RBAC 兼容入口保留。
 
 #### Scenario: 初始化系统基线
 
@@ -212,16 +212,28 @@
 - **AND** 系统角色 MUST 保持系统数据标记，Permission MUST NOT 包含 `Active` 或 `IsSystem`
 - **AND** seed MUST NOT 创建业务用户、自动分配超级管理员或自动删除基线之外的权限记录
 - **AND** 非 seed 的公开 HTTP 路径 MUST NOT 创建、修改或启停权限
-- **AND** seed 写入的系统角色和权限 ID MUST 引用 `rbacbaseline` 中的固化常量，MUST NOT 在 seed 运行时调用 `id.NewUUID()` 或动态 UUID v5 生成逻辑
+- **AND** seed 写入的系统角色和权限 ID MUST 引用 `rbacbaseline` 中的固化常量，MUST NOT 在 seed 运行时调用 `id.NewUUID()`、UUIDv5 生成逻辑或其他动态系统 ID 生成逻辑
 
 #### Scenario: 系统 ID 固化常量
 
 - **WHEN** 代码定义 `SuperAdminRoleID`、`BootstrapSuperAdminUserID` 或任一 baseline permission ID
-- **THEN** 常量 MUST 位于 `user-service/internal/shared/rbacbaseline` 边界
-- **AND** 每个常量 MUST 是由 `UUIDv5(SystemIDNamespace, semantic name)` 生成后固化的 UUID 字符串
-- **AND** 常量注释 MUST 记录对应 semantic name
-- **AND** semantic name MUST 使用稳定业务语义，例如 `role:super-admin`、`user:bootstrap-super-admin` 或 `permission:<resource>:<action>`
-- **AND** semantic name MUST NOT 使用项目名、服务名、HTTP path、中文展示文案或 Go symbol
+- **THEN** 常量 MUST 位于 `user-service/internal/shared/rbacbaseline/ids.go`
+- **AND** 每个常量 MUST 是手写固化的 UUID 字符串，MUST NOT 由 UUIDv5、`go:generate` 或运行时代码生成
+- **AND** 每个常量 MUST 匹配 `00000000-0000-0000-0000-TTMMSSSSSSSS` 保留格式
+- **AND** `TT` MUST 表示实体类型，其中 `01` 为系统用户、`02` 为系统角色、`03` 为系统权限、`09` 为测试、fixture 或诊断预留
+- **AND** 系统用户和系统角色的 `MM` MUST 为 `00`
+- **AND** 系统权限的 `MM` MUST 使用当前真实进入 `DefaultPermissions()` 的权限模块连续编号，当前编号 MUST 为 `01=user`、`02=permission`、`03=role`、`04=user-role`、`05=role-permission`
+- **AND** `SSSSSSSS` MUST 是同一 `TT+MM` 下从 `00000001` 开始递增的序号，MUST NOT 使用 `00000000`
+- **AND** `ids.go` MUST 集中记录 type、module 和 sequence 编码规则
+- **AND** 每个常量注释 MUST 记录稳定 semantic
+
+#### Scenario: 权限模块编号追加
+
+- **WHEN** 后续新增权限模块首次进入 `rbacbaseline.DefaultPermissions()`
+- **THEN** 系统 MUST 按该模块首次进入 baseline 的顺序分配下一个可用正式 `MM`
+- **AND** 已发布模块编号 MUST NOT 因后续新增、删除或重排权限而修改
+- **AND** 系统 MUST NOT 提前为 `auth`、`audit`、`tenant` 或其他尚未进入 `DefaultPermissions()` 的未来权限模块预分配编号
+- **AND** `90` 至 `99` 的权限模块编号 MUST 只用于测试、fixture 或诊断预留，MUST NOT 用于生产 baseline
 
 #### Scenario: 权限基线引用系统 ID 常量
 
@@ -293,10 +305,19 @@
 #### Scenario: 系统 ID 一致性门禁
 
 - **WHEN** 执行 user-service 测试
-- **THEN** 测试 MUST 校验 `SystemIDNamespace` 和所有系统 ID 常量均可解析
-- **AND** 每个系统 ID 常量的 UUID 版本 MUST 为 5
-- **AND** 每个系统 ID 常量 MUST 等于 `uuid.NewSHA1(SystemIDNamespace, []byte(semantic name))` 的结果
-- **AND** 全部系统 ID MUST 无重复
+- **THEN** 测试 MUST 校验所有系统 ID 常量均可通过 UUID parser 解析
+- **AND** 每个系统 ID 常量 MUST 匹配 `^00000000-0000-0000-0000-[0-9]{12}$`
+- **AND** 每个系统 ID 常量最后 12 位中的 `TT` MUST 匹配测试登记的类型编号
+- **AND** 每个系统 ID 常量最后 12 位中的 `MM` MUST 匹配测试登记的模块编号
+- **AND** 每个系统 ID 常量最后 8 位 sequence MUST NOT 为 `00000000`
+- **AND** 全部系统 ID MUST 全局唯一
+- **AND** 全部 baseline permission ID MUST 登记在 `registeredPermissionIDs()` 并被默认权限和默认绑定校验覆盖
+
+#### Scenario: 已发布系统 ID 不可复用
+
+- **WHEN** 系统 ID 已随代码发布或对应 baseline 项被删除
+- **THEN** 后续变更 MUST NOT 修改该 ID 的字符串值
+- **AND** 后续变更 MUST NOT 将已删除 baseline 项的 ID 复用于其他系统用户、系统角色或系统权限
 
 ### Requirement: RBAC 错误与统一 HTTP 契约
 
@@ -409,18 +430,19 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 
 ### Requirement: RBAC 运行时 ID 与系统 ID 分离
 
-系统 MUST 区分普通运行时业务 ID 和系统内置稳定 ID。普通运行时业务实体 MUST 继续使用 `common/runtime/id.NewUUID()` 生成 UUID v7；RBAC 系统基线和 bootstrap ID MUST 使用 `rbacbaseline` 中的 UUID v5 固化常量。
+系统 MUST 区分普通运行时业务 ID 和系统内置稳定 ID。普通运行时业务实体 MUST 继续使用 `common/runtime/id.NewUUID()` 生成 UUID v7；RBAC 系统基线和 bootstrap ID MUST 使用 `rbacbaseline` 中的手写保留 UUID 固化常量。
 
 #### Scenario: 普通业务实体创建
 - **WHEN** 系统创建普通用户、普通角色或其他运行时业务数据
 - **THEN** 创建路径 MUST 使用当前运行时 ID 生成策略生成新 ID
 - **AND** 普通运行时创建路径 MUST NOT 复用 RBAC 系统 ID 常量
+- **AND** 普通业务用户、普通角色和运行时创建数据 MUST NOT 使用 `00000000-0000-0000-0000-TTMMSSSSSSSS` 系统保留 ID 格式
 
 #### Scenario: 系统基线禁止随机 ID
 - **WHEN** 系统创建或更新超级管理员角色、bootstrap 用户、baseline permission 或默认角色权限绑定
 - **THEN** 系统 MUST 使用 `rbacbaseline` 中的固化系统 ID 常量
 - **AND** 系统 MUST NOT 使用 `common/runtime/id.NewUUID()` 为这些系统基线生成 ID
-- **AND** 系统 MUST NOT 在正式运行路径动态调用 UUID v5 生成逻辑来替代固化常量
+- **AND** 系统 MUST NOT 在正式运行路径动态调用 UUIDv5、随机 UUID 或其他生成逻辑来替代固化常量
 
 ### Requirement: 默认系统角色权限基线维护
 
@@ -452,4 +474,3 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 - **WHEN** 系统展开超级管理员默认权限绑定
 - **THEN** 系统 MUST 允许超级管理员使用内部 helper 自动绑定 `DefaultPermissions()` 中的全部权限
 - **AND** 该自动全量绑定例外 MUST NOT 扩展到其他默认系统角色
-
