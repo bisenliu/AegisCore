@@ -43,7 +43,7 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 
 - `serve --config <path>`：启动 Fx app 和 Gin HTTP server。
 - `rbac seed`：初始化默认系统角色、权限和绑定。
-- `rbac bootstrap-super-admin`：为全新数据库一次性创建固定 ID 的初始超级管理员用户并绑定超级管理员角色。
+- `rbac bootstrap-super-admin`：为全新数据库一次性创建系统内置固定 ID 的初始超级管理员用户并绑定超级管理员角色。
 - `fxgraph`：生成 Fx 依赖图。
 - `healthcheck --url <url> --timeout <duration>`：在容器内无 shell、wget、curl 或 grep 依赖地检查 `/readyz`。
 
@@ -120,8 +120,10 @@ pprof 不挂载到业务 router。临时诊断时通过 `AEGISCORE_OBSERVABILITY
 1. `rbac seed` 加载 user-service 私有配置，按服务私有资源名打开 user DB，创建 Ent client。
 2. role seed service 按 `rbacbaseline.DefaultPermissions()` 的稳定 `permission_id` 创建或更新权限投影，并维护系统角色和默认绑定。
 3. 权限定义变更随代码发布；路由测试构建真实 Gin route graph，与代码基线双向比较，missing 或 stale 均阻断 CI。
-4. `bootstrap-super-admin` 读取 `ADMIN_BOOTSTRAP_PASSWORD`，使用固定 bootstrap 用户 ID 创建 `MustChangePassword` 用户并绑定内置超级管理员角色。
+4. `bootstrap-super-admin` 读取 `ADMIN_BOOTSTRAP_PASSWORD`，使用 `rbacbaseline.BootstrapSuperAdminUserID` 创建 `MustChangePassword` 用户并绑定内置超级管理员角色。
 5. 后续超级管理员授权通过在线用户角色绑定 API 完成，由在线流程负责 policy version 发布和缓存收敛。
+
+系统内置 RBAC 角色、权限和 bootstrap 用户 ID 由 `user-service/internal/shared/rbacbaseline/ids.go` 统一定义。`SystemIDNamespace` 和各系统 ID 均为 UUID v5 生成后固化的常量，semantic name 绑定稳定业务授权语义，不绑定项目展示名、HTTP path、中文文案或 Go symbol。普通运行时业务实体仍使用 `common/runtime/id.NewUUID()` 生成 UUID v7；已有项目重命名不得默认重算系统内置 ID。
 
 ### 6.5 数据迁移
 

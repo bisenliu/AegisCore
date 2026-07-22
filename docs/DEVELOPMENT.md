@@ -175,6 +175,12 @@ make user-service-bootstrap-super-admin
 - `ADMIN_NICKNAME` 可选；trim 后为空时回退为归一化 username。
 - `ADMIN_BOOTSTRAP_PASSWORD` 必填，Makefile 不在命令行展开或输出密码值。
 
+ID 约束：
+
+- 普通运行时业务实体继续使用 `common/runtime/id.NewUUID()` 生成 UUID v7。
+- 系统内置 RBAC 角色、权限和 bootstrap 用户 ID 由 `user-service/internal/shared/rbacbaseline/ids.go` 中的 UUID v5 固化常量定义。
+- 从基础框架初始化全新项目时可以生成新的 `SystemIDNamespace` 和系统 ID 常量；已有项目重命名时不得默认重算这些 ID，也不得修改既有数据库中的 RBAC 数据。
+
 ## 8. 本地部署和观测
 
 Compose 文档位于 `deployments/compose/README.md`。通用观测文档位于 `deployments/observability/README.md`。

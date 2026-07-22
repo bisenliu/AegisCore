@@ -49,7 +49,7 @@ func (s *Service) BootstrapSuperAdmin(ctx context.Context, cmd Command) (Bootstr
 	if err != nil {
 		return BootstrapSuperAdminResult{}, fmt.Errorf("hash bootstrap super admin password: %w", err)
 	}
-	userID, err := uuid.Parse(BootstrapSuperAdminUserID)
+	userID, err := uuid.Parse(rbacbaseline.BootstrapSuperAdminUserID)
 	if err != nil {
 		return BootstrapSuperAdminResult{}, fmt.Errorf("parse bootstrap super admin user id: %w", err)
 	}

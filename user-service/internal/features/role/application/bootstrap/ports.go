@@ -8,9 +8,6 @@ import (
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
-// BootstrapSuperAdminUserID 是首次超级管理员引导用户的固定外部 ID。
-const BootstrapSuperAdminUserID = "00000000-0000-0000-0000-000000000002"
-
 // PasswordHasher 封装 bootstrap 创建临时密码哈希所需的最小能力。
 type PasswordHasher interface {
 	HashContext(ctx context.Context, plain string) (string, error)

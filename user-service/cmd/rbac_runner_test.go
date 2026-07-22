@@ -9,6 +9,7 @@ import (
 
 	rolebootstrap "github.com/aegiscore/user-service/internal/features/role/application/bootstrap"
 	roleseed "github.com/aegiscore/user-service/internal/features/role/application/seed"
+	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
 func TestRunRBACSeedCommand(t *testing.T) {
@@ -100,7 +101,7 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, cleanupCalled)
 		require.Equal(t, "admin", store.input.Username)
-		require.Contains(t, out, "Super admin bootstrap complete: username=admin user_id=00000000-0000-0000-0000-000000000002")
+		require.Contains(t, out, "Super admin bootstrap complete: username=admin user_id="+rbacbaseline.BootstrapSuperAdminUserID)
 	})
 
 	t.Run("dependency error", func(t *testing.T) {

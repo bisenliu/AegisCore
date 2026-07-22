@@ -50,7 +50,7 @@ func TestBootstrapStoreRejectsSoftDeletedBootstrapUser(t *testing.T) {
 	ctx, db, client := newBootstrapPostgresTestDB(t)
 	store := NewBootstrapStore(db)
 	createBootstrapRole(ctx, t, client, uuid.MustParse(rbacbaseline.SuperAdminRoleID), true, true)
-	createUserForTest(ctx, t, client, uuid.MustParse(rolebootstrap.BootstrapSuperAdminUserID), "deleted-bootstrap", true)
+	createUserForTest(ctx, t, client, uuid.MustParse(rbacbaseline.BootstrapSuperAdminUserID), "deleted-bootstrap", true)
 
 	_, err := store.BootstrapSuperAdmin(ctx, validBootstrapInput("initial-admin"))
 
@@ -151,7 +151,7 @@ func newBootstrapPostgresTestDB(t *testing.T) (context.Context, *sql.DB, *ent.Cl
 
 func validBootstrapInput(username string) rolebootstrap.BootstrapSuperAdminInput {
 	return rolebootstrap.BootstrapSuperAdminInput{
-		UserID:       uuid.MustParse(rolebootstrap.BootstrapSuperAdminUserID),
+		UserID:       uuid.MustParse(rbacbaseline.BootstrapSuperAdminUserID),
 		RoleID:       uuid.MustParse(rbacbaseline.SuperAdminRoleID),
 		Username:     username,
 		Nickname:     username,

@@ -1,10 +1,5 @@
 package rbacbaseline
 
-const (
-	// SuperAdminRoleID 是内置超级管理员角色的稳定外部 ID。
-	SuperAdminRoleID = "00000000-0000-0000-0000-000000000001"
-)
-
 // RoleSpec 描述系统 RBAC 角色基线。
 type RoleSpec struct {
 	RoleID      string
