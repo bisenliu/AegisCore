@@ -95,16 +95,27 @@ func TestDefaultRolePermissionsReferenceBaseline(t *testing.T) {
 		permissions[permission.PermissionID] = struct{}{}
 	}
 	seen := make(map[string]struct{})
+	superAdminPermissions := make(map[string]struct{})
 	for _, binding := range DefaultRolePermissions() {
 		require.Contains(t, roles, binding.RoleID, "binding references unknown role_id")
 		require.Contains(t, permissions, binding.PermissionID, "binding references unknown permission_id")
 		key := binding.RoleID + ":" + binding.PermissionID
 		require.NotContains(t, seen, key, "duplicate role permission binding")
 		seen[key] = struct{}{}
+
+		if binding.RoleID == SuperAdminRoleID {
+			superAdminPermissions[binding.PermissionID] = struct{}{}
+		}
 	}
-	require.Len(t, seen, len(permissions), "want one super admin binding per permission")
-	for permissionID := range permissions {
-		key := SuperAdminRoleID + ":" + permissionID
-		require.Contains(t, seen, key, "super admin binding missing permission_id")
-	}
+	require.Equal(t, permissions, superAdminPermissions, "super admin must bind every default permission")
+}
+
+func TestPermissionIDsReturnsDefensiveCopy(t *testing.T) {
+	getIDs := permissionIDs(PermissionUserListID, PermissionUserGetID)
+
+	first := getIDs()
+	require.Equal(t, []string{PermissionUserListID, PermissionUserGetID}, first)
+
+	first[0] = PermissionUserCreateID
+	require.Equal(t, []string{PermissionUserListID, PermissionUserGetID}, getIDs())
 }
