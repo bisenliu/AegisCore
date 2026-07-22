@@ -42,7 +42,7 @@
 ## 3. 关键入口
 
 - 服务 CLI：`user-service/cmd/main.go`，包含 `serve` 和 `rbac` 子命令。
-- RBAC CLI：`user-service/cmd/rbac.go`，包含 `seed`、`assign-super-admin` 和 `create-super-admin`。
+- RBAC CLI：`user-service/cmd/rbac.go`，包含 `seed` 和 `bootstrap-super-admin`。
 - 服务组装：`user-service/internal/bootstrap/app.go`、`user-service/internal/bootstrap/server.go`、`user-service/internal/providers/fx.go`。
 - HTTP 路由：`user-service/internal/router/router.go`，挂载健康检查、OpenAPI、metrics、pprof、认证、权限、角色和用户 API。
 - 健康、metrics、OpenAPI：`user-service/internal/router/health.go`、`metrics.go`、`openapi.go`。
@@ -91,9 +91,7 @@ RBAC 引导：
 
 ```bash
 make user-service-seed-rbac
-make user-service-create-super-admin
-ADMIN_PASSWORD='<password>' make user-service-create-super-admin
-ADMIN_PASSWORD='<password>' ADMIN_RESET_PASSWORD=true make user-service-create-super-admin
+ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' ADMIN_USERNAME='initial-admin' make user-service-bootstrap-super-admin
 ```
 
 根 `Makefile` 中服务私有目标必须带服务名前缀，例如 `user-service-seed-rbac`，不要新增 `seed-rbac` 这类无服务上下文的根目标。

@@ -5,12 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
+	rolebootstrap "github.com/aegiscore/user-service/internal/features/role/application/bootstrap"
 	roleseed "github.com/aegiscore/user-service/internal/features/role/application/seed"
-	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
 func TestRunRBACSeedCommand(t *testing.T) {
@@ -32,7 +30,7 @@ func TestRunRBACSeedCommand(t *testing.T) {
 							RolePermissionBindingsAdd: 5,
 							RolePermissionBindingsDel: 6,
 						}, nil
-					}, nil),
+					}),
 				}, func() error {
 					cleanupCalled = true
 					return nil
@@ -67,7 +65,7 @@ func TestRunRBACSeedCommand(t *testing.T) {
 			return rbacSeedDependencies{
 					service: newRBACSeedServiceMock(t, func(context.Context, roleseed.SeedOptions) (roleseed.SeedResult, error) {
 						return roleseed.SeedResult{}, seedErr
-					}, nil),
+					}),
 				}, func() error {
 					return cleanupErr
 				}, nil
@@ -80,93 +78,15 @@ func TestRunRBACSeedCommand(t *testing.T) {
 	})
 }
 
-func TestRunAssignSuperAdminCommand(t *testing.T) {
-	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000101")
-
-	for _, tc := range []struct {
-		name       string
-		added      bool
-		wantOutput string
-	}{
-		{name: "new binding", added: true, wantOutput: "Super admin role assigned to user " + userID.String()},
-		{name: "existing binding", added: false, wantOutput: "Super admin role already assigned to user " + userID.String()},
-	} {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			assignCalled := false
-			cleanupCalled := false
-			runners := rbacCommandRunnersWithFactory(func(_ context.Context, configPath string) (rbacSeedDependencies, func() error, error) {
-				require.Equal(t, "test-config.yaml", configPath)
-				return rbacSeedDependencies{
-						service: newRBACSeedServiceMock(t, nil, func(_ context.Context, got uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
-							assignCalled = true
-							require.Equal(t, userID, got)
-							return roleseed.AssignSuperAdminResult{Added: tc.added}, nil
-						}),
-					}, func() error {
-						cleanupCalled = true
-						return nil
-					}, nil
-			})
-
-			out, err := captureStdout(t, func() error {
-				return runners.assignSuperAdminRunner(context.Background(), "test-config.yaml", userID)
-			})
-
-			require.NoError(t, err)
-			require.True(t, assignCalled)
-			require.True(t, cleanupCalled)
-			require.Contains(t, out, tc.wantOutput)
-		})
-	}
-
-	t.Run("dependency error", func(t *testing.T) {
-		initErr := errors.New("postgres config missing")
-		runners := rbacCommandRunnersWithFactory(func(context.Context, string) (rbacSeedDependencies, func() error, error) {
-			return rbacSeedDependencies{}, nil, initErr
-		})
-		err := runners.assignSuperAdminRunner(context.Background(), "bad.yaml", userID)
-		require.ErrorIs(t, err, initErr)
-	})
-
-	t.Run("service error still cleans up", func(t *testing.T) {
-		assignErr := errors.New("assign failed")
+func TestRunBootstrapSuperAdminCommand(t *testing.T) {
+	t.Run("success prints normalized identifiers", func(t *testing.T) {
+		t.Setenv("ADMIN_SECRET", " long secret ")
 		cleanupCalled := false
-		runners := rbacCommandRunnersWithFactory(func(context.Context, string) (rbacSeedDependencies, func() error, error) {
-			return rbacSeedDependencies{
-					service: newRBACSeedServiceMock(t, nil, func(context.Context, uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
-						return roleseed.AssignSuperAdminResult{}, assignErr
-					}),
-				}, func() error {
-					cleanupCalled = true
-					return nil
-				}, nil
-		})
-
-		err := runners.assignSuperAdminRunner(context.Background(), "test-config.yaml", userID)
-
-		require.ErrorIs(t, err, assignErr)
-		require.True(t, cleanupCalled)
-	})
-}
-
-func TestRunCreateSuperAdminCommand(t *testing.T) {
-	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000201")
-
-	t.Run("success prints normalized username", func(t *testing.T) {
-		t.Setenv("ADMIN_SECRET", " secret ")
-		cleanupCalled := false
+		store := &testBootstrapStore{}
 		runners := rbacCommandRunnersWithFactory(func(_ context.Context, configPath string) (rbacSeedDependencies, func() error, error) {
 			require.Equal(t, "test-config.yaml", configPath)
 			return rbacSeedDependencies{
-					service: newRBACSeedServiceMock(t, nil, func(_ context.Context, got uuid.UUID) (roleseed.AssignSuperAdminResult, error) {
-						require.Equal(t, userID, got)
-						return roleseed.AssignSuperAdminResult{Added: true}, nil
-					}),
-					credentials: newRBACCredentialStoreMock(t, func(_ context.Context, username string) (*authdomain.UserCredential, error) {
-						require.Equal(t, "admin", username)
-						return &authdomain.UserCredential{UserID: userID, Username: username, Status: identity.UserStatusNormal}, nil
-					}, nil),
+					bootstrap: rolebootstrap.NewService(store, &testBootstrapHasher{}),
 				}, func() error {
 					cleanupCalled = true
 					return nil
@@ -174,12 +94,13 @@ func TestRunCreateSuperAdminCommand(t *testing.T) {
 		})
 
 		out, err := captureStdout(t, func() error {
-			return runners.createSuperAdminRunner(context.Background(), "test-config.yaml", rbacCreateSuperAdminOptions{username: " ADMIN ", passwordEnv: "ADMIN_SECRET"})
+			return runners.bootstrapSuperAdminRunner(context.Background(), "test-config.yaml", rbacBootstrapSuperAdminOptions{username: " ADMIN ", passwordEnv: "ADMIN_SECRET"})
 		})
 
 		require.NoError(t, err)
 		require.True(t, cleanupCalled)
-		require.Contains(t, out, "Super admin create complete: username=admin user_id="+userID.String()+" created=false password_updated=false super_admin_role_added=true")
+		require.Equal(t, "admin", store.input.Username)
+		require.Contains(t, out, "Super admin bootstrap complete: username=admin user_id=00000000-0000-0000-0000-000000000002")
 	})
 
 	t.Run("dependency error", func(t *testing.T) {
@@ -187,27 +108,25 @@ func TestRunCreateSuperAdminCommand(t *testing.T) {
 		runners := rbacCommandRunnersWithFactory(func(context.Context, string) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{}, nil, initErr
 		})
-		err := runners.createSuperAdminRunner(context.Background(), "bad.yaml", rbacCreateSuperAdminOptions{})
+		err := runners.bootstrapSuperAdminRunner(context.Background(), "bad.yaml", rbacBootstrapSuperAdminOptions{})
 		require.ErrorIs(t, err, initErr)
 	})
 
-	t.Run("create and cleanup errors are joined", func(t *testing.T) {
-		t.Setenv("ADMIN_SECRET", "secret")
-		getErr := errors.New("credential read failed")
+	t.Run("bootstrap and cleanup errors are joined", func(t *testing.T) {
+		t.Setenv("ADMIN_SECRET", "long-password")
+		bootstrapErr := errors.New("bootstrap failed")
 		cleanupErr := errors.New("cleanup failed")
 		runners := rbacCommandRunnersWithFactory(func(context.Context, string) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
-					credentials: newRBACCredentialStoreMock(t, func(context.Context, string) (*authdomain.UserCredential, error) {
-						return nil, getErr
-					}, nil),
+					bootstrap: rolebootstrap.NewService(&testBootstrapStore{err: bootstrapErr}, &testBootstrapHasher{}),
 				}, func() error {
 					return cleanupErr
 				}, nil
 		})
 
-		err := runners.createSuperAdminRunner(context.Background(), "test-config.yaml", rbacCreateSuperAdminOptions{username: "admin", passwordEnv: "ADMIN_SECRET"})
+		err := runners.bootstrapSuperAdminRunner(context.Background(), "test-config.yaml", rbacBootstrapSuperAdminOptions{username: "admin", passwordEnv: "ADMIN_SECRET"})
 
-		require.ErrorIs(t, err, getErr)
+		require.ErrorIs(t, err, bootstrapErr)
 		require.ErrorIs(t, err, cleanupErr)
 	})
 }

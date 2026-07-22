@@ -18,7 +18,6 @@ type Service struct {
 	permissions     permissionapplication.SeedPermissionStore
 	roles           roleapplication.SeedRoleStore
 	rolePermissions roleapplication.SeedRolePermissionStore
-	userRoles       roleapplication.SeedUserRoleStore
 }
 
 // SeedOptions 控制系统 RBAC seed 的可选行为。
@@ -37,14 +36,9 @@ type SeedResult struct {
 	RolePermissionBindingsDel int
 }
 
-// AssignSuperAdminResult 汇总超级管理员绑定结果。
-type AssignSuperAdminResult struct {
-	Added bool
-}
-
 // NewService 构造 RBAC seed 服务。
-func NewService(roles roleapplication.SeedRoleStore, permissions permissionapplication.SeedPermissionStore, rolePermissions roleapplication.SeedRolePermissionStore, userRoles roleapplication.SeedUserRoleStore) *Service {
-	return &Service{roles: roles, permissions: permissions, rolePermissions: rolePermissions, userRoles: userRoles}
+func NewService(roles roleapplication.SeedRoleStore, permissions permissionapplication.SeedPermissionStore, rolePermissions roleapplication.SeedRolePermissionStore) *Service {
+	return &Service{roles: roles, permissions: permissions, rolePermissions: rolePermissions}
 }
 
 // Seed 写入系统角色、代码定义权限投影和系统角色权限绑定。
@@ -115,19 +109,6 @@ func (s *Service) Seed(ctx context.Context, opts SeedOptions) (SeedResult, error
 	}
 
 	return result, nil
-}
-
-// AssignSuperAdmin 将指定用户绑定到内置超级管理员角色。
-func (s *Service) AssignSuperAdmin(ctx context.Context, userID uuid.UUID) (AssignSuperAdminResult, error) {
-	roleID, err := uuid.Parse(rbacbaseline.SuperAdminRoleID)
-	if err != nil {
-		return AssignSuperAdminResult{}, fmt.Errorf("parse super admin role id: %w", err)
-	}
-	added, err := s.userRoles.AssignRole(ctx, userID, roleID)
-	if err != nil {
-		return AssignSuperAdminResult{}, err
-	}
-	return AssignSuperAdminResult{Added: added}, nil
 }
 
 func buildRoleInputs(reactivate bool) ([]roleapplication.SeedRoleInput, error) {

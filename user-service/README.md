@@ -7,7 +7,7 @@
 | Path | Purpose |
 |---|---|
 | `cmd/main.go` | CLI 入口，注册 `serve` 和 `rbac` 子命令 |
-| `cmd/rbac.go` | 离线 RBAC seed 和 super-admin assignment |
+| `cmd/rbac.go` | 离线 RBAC seed 和一次性 super-admin bootstrap |
 | `internal/bootstrap/` | Fx app、HTTP server lifecycle 和独立 pprof 诊断监听 |
 | `internal/providers/` | 服务级 Gin、routes、JWT、PostgreSQL、Redis、Ent、metrics/tracing provider |
 | `internal/router/` | `/api/v1` route graph、health、metrics、OpenAPI routes |
@@ -61,7 +61,7 @@ make user-service-generate
 make user-service-migrate-diff name=<name>
 make user-service-migrate-validate
 make user-service-openapi-generate
-ADMIN_PASSWORD='<password>' make user-service-create-super-admin
+ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' ADMIN_USERNAME='initial-admin' make user-service-bootstrap-super-admin
 ```
 
 在 `user-service/` 目录内执行：
@@ -71,7 +71,7 @@ make test
 make generate
 make migrate-validate
 make openapi-generate
-ADMIN_PASSWORD='<password>' make create-super-admin
+ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' ADMIN_USERNAME='initial-admin' make bootstrap-super-admin
 ```
 
 ## Migration 与 RBAC Seed
@@ -80,9 +80,10 @@ ADMIN_PASSWORD='<password>' make create-super-admin
 
 1. 按 Ent schema -> Atlas diff 生成 SQL -> Atlas validate/hash 校验 SQL 目录 -> SQL 进 Git -> DBA 工单或受控发布平台执行的流程，确认服务拥有的 `primary_db` 已完成本 release 对应 SQL migration。
 2. 执行 `rbac seed`、`make user-service-seed-rbac` 或在服务目录执行 `make seed-rbac` 初始化系统 RBAC 数据。
-3. 按需通过 `ADMIN_PASSWORD='<password>' make user-service-create-super-admin`，或在服务目录执行 `ADMIN_PASSWORD='<password>' make create-super-admin`，创建或复用超级管理员账号；重置已有账号密码需显式追加 `ADMIN_RESET_PASSWORD=true`。
+3. 在全新数据库上通过 `ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' ADMIN_USERNAME='initial-admin' ADMIN_NICKNAME='Initial Administrator' make user-service-bootstrap-super-admin`，或在服务目录执行对应 `make bootstrap-super-admin`，一次性创建初始超级管理员账号。
 4. 启动或滚动更新 HTTP server 副本。
+5. 初始管理员使用临时密码登录并完成强制改密。
 
-如果 seed、超级管理员分配或 `create-super-admin` 在副本运行中执行，必须滚动重启副本或触发在线 policy refresh。这些命令是离线运维工具，不是运行期 policy sync。
+如果 seed 或 `bootstrap-super-admin` 在副本运行中执行，必须滚动重启副本或触发在线 policy refresh。这些命令是离线运维工具，不是运行期 policy sync。
 
 普通 user-service 运行时镜像不包含 Atlas，也不会因 `RUN_MIGRATIONS=true` 执行 migration。容器化发布必须先确认 SQL migration 已通过 DBA 工单或受控发布平台执行完成，再启动或滚动 HTTP 副本。若 SQL 包含 `CREATE EXTENSION IF NOT EXISTS pg_trgm;`，生产库可能需要 DBA 权限或前置动作。

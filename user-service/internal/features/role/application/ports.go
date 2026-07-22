@@ -31,11 +31,6 @@ type UserRoleStore interface {
 	Remove(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) error
 }
 
-// SeedUserRoleStore 定义 RBAC seed 消费的用户角色绑定端口。
-type SeedUserRoleStore interface {
-	AssignRole(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) (bool, error)
-}
-
 // RolePermissionStore 定义角色权限绑定 use case 实际消费的持久化端口。
 type RolePermissionStore interface {
 	ListByRoleID(ctx context.Context, roleID uuid.UUID) ([]PermissionReference, error)

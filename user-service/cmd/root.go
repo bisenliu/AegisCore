@@ -8,20 +8,18 @@ import (
 
 // rootCommandDependencies 包含 CLI 命令树执行各子命令所需的运行时依赖。
 type rootCommandDependencies struct {
-	appFactory             lifecycleAppFactory
-	seedRunner             rbacSeedRunner
-	assignSuperAdminRunner rbacAssignSuperAdminRunner
-	createSuperAdminRunner rbacCreateSuperAdminRunner
-	fxGraphWriter          fxGraphWriter
+	appFactory                lifecycleAppFactory
+	seedRunner                rbacSeedRunner
+	bootstrapSuperAdminRunner rbacBootstrapSuperAdminRunner
+	fxGraphWriter             fxGraphWriter
 }
 
 func defaultRootCommandDependencies() rootCommandDependencies {
 	return rootCommandDependencies{
-		appFactory:             newBootstrapLifecycleApp,
-		seedRunner:             newRBACSeedRunner(defaultRBACSeedDependencies),
-		assignSuperAdminRunner: newRBACAssignSuperAdminRunner(defaultRBACSeedDependencies),
-		createSuperAdminRunner: newRBACCreateSuperAdminRunner(defaultRBACSeedDependencies),
-		fxGraphWriter:          runtimefxgraph.WriteDOT,
+		appFactory:                newBootstrapLifecycleApp,
+		seedRunner:                newRBACSeedRunner(defaultRBACSeedDependencies),
+		bootstrapSuperAdminRunner: newRBACBootstrapSuperAdminRunner(defaultRBACSeedDependencies),
+		fxGraphWriter:             runtimefxgraph.WriteDOT,
 	}
 }
 
@@ -33,7 +31,7 @@ func newRootCommand(deps rootCommandDependencies) *cobra.Command {
 
 	root.AddCommand(
 		newServeCommand(deps.appFactory),
-		newRBACCommand(deps.seedRunner, deps.assignSuperAdminRunner, deps.createSuperAdminRunner),
+		newRBACCommand(deps.seedRunner, deps.bootstrapSuperAdminRunner),
 		newFxGraphCommand(deps.fxGraphWriter),
 		newHealthcheckCommand(),
 	)

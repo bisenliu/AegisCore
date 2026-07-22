@@ -4,56 +4,47 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
 
-const (
-	defaultCreateSuperAdminUsername    = "admin"
-	defaultCreateSuperAdminNickname    = "Admin"
-	defaultCreateSuperAdminPasswordEnv = "ADMIN_PASSWORD"
-)
+const defaultBootstrapSuperAdminPasswordEnv = "ADMIN_BOOTSTRAP_PASSWORD"
 
 type rbacSeedOptions struct {
 	reactivateSystem   bool
 	syncSystemBindings bool
 }
 
-type rbacCreateSuperAdminOptions struct {
-	// password 由 normalizeCreateSuperAdminOptions 从 passwordEnv 读取，避免命令行参数泄露明文。
+type rbacBootstrapSuperAdminOptions struct {
 	username    string
 	nickname    string
-	password    string
 	passwordEnv string
-	// resetPassword 只在用户已存在时更新密码并恢复 normal 状态；默认不会覆盖既有管理员凭据。
-	resetPassword bool
 }
 
 type rbacSeedRunner func(context.Context, string, rbacSeedOptions) error
 
-type rbacAssignSuperAdminRunner func(context.Context, string, uuid.UUID) error
+type rbacBootstrapSuperAdminRunner func(context.Context, string, rbacBootstrapSuperAdminOptions) error
 
-type rbacCreateSuperAdminRunner func(context.Context, string, rbacCreateSuperAdminOptions) error
-
-func newRBACCommand(seedRunner rbacSeedRunner, assignRunner rbacAssignSuperAdminRunner, createRunner rbacCreateSuperAdminRunner) *cobra.Command {
+func newRBACCommand(seedRunner rbacSeedRunner, bootstrapRunner rbacBootstrapSuperAdminRunner) *cobra.Command {
 	var configPath string
 	var seedOpts rbacSeedOptions
-	var superAdminUserID string
-	createOpts := rbacCreateSuperAdminOptions{
-		username:    defaultCreateSuperAdminUsername,
-		nickname:    defaultCreateSuperAdminNickname,
-		passwordEnv: defaultCreateSuperAdminPasswordEnv,
+	bootstrapOpts := rbacBootstrapSuperAdminOptions{
+		passwordEnv: defaultBootstrapSuperAdminPasswordEnv,
 	}
 
 	cmd := &cobra.Command{
 		Use:   "rbac",
-		Short: "Manage RBAC seed data and bootstrap bindings",
+		Short: "Manage RBAC seed data and bootstrap super admin",
+		Args:  cobra.NoArgs,
+		RunE: func(*cobra.Command, []string) error {
+			return fmt.Errorf("rbac subcommand is required")
+		},
 	}
 	cmd.PersistentFlags().StringVar(&configPath, "config", "./configs/config.yaml", "path to YAML configuration file")
 
 	seed := &cobra.Command{
 		Use:   "seed",
 		Short: "Seed default RBAC system roles, permissions, and bindings",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return seedRunner(cmd.Context(), configPath, seedOpts)
 		},
@@ -62,33 +53,19 @@ func newRBACCommand(seedRunner rbacSeedRunner, assignRunner rbacAssignSuperAdmin
 	seed.Flags().BoolVar(&seedOpts.syncSystemBindings, "sync-system-bindings", false, "synchronize catalog-managed system role permission bindings exactly")
 	cmd.AddCommand(seed)
 
-	assignSuperAdmin := &cobra.Command{
-		Use:   "assign-super-admin --user-id <uuid>",
-		Short: "Assign the built-in super admin role to a user",
+	bootstrapSuperAdmin := &cobra.Command{
+		Use:   "bootstrap-super-admin",
+		Short: "Bootstrap the initial super admin user once",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			userID, err := uuid.Parse(superAdminUserID)
-			if err != nil {
-				return fmt.Errorf("invalid --user-id: %w", err)
-			}
-			return assignRunner(cmd.Context(), configPath, userID)
+			return bootstrapRunner(cmd.Context(), configPath, bootstrapOpts)
 		},
 	}
-	assignSuperAdmin.Flags().StringVar(&superAdminUserID, "user-id", "", "user UUID to receive the built-in super admin role")
-	_ = assignSuperAdmin.MarkFlagRequired("user-id")
-	cmd.AddCommand(assignSuperAdmin)
-
-	createSuperAdmin := &cobra.Command{
-		Use:   "create-super-admin",
-		Short: "Create the default admin user and assign the built-in super admin role",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return createRunner(cmd.Context(), configPath, createOpts)
-		},
-	}
-	createSuperAdmin.Flags().StringVar(&createOpts.username, "username", defaultCreateSuperAdminUsername, "admin username to create or bind")
-	createSuperAdmin.Flags().StringVar(&createOpts.nickname, "nickname", defaultCreateSuperAdminNickname, "admin display nickname")
-	createSuperAdmin.Flags().StringVar(&createOpts.passwordEnv, "password-env", defaultCreateSuperAdminPasswordEnv, "environment variable containing the admin password")
-	createSuperAdmin.Flags().BoolVar(&createOpts.resetPassword, "reset-password", false, "reset password when the admin user already exists")
-	cmd.AddCommand(createSuperAdmin)
+	bootstrapSuperAdmin.Flags().StringVar(&bootstrapOpts.username, "username", "", "initial admin username")
+	bootstrapSuperAdmin.Flags().StringVar(&bootstrapOpts.nickname, "nickname", "", "initial admin display nickname")
+	bootstrapSuperAdmin.Flags().StringVar(&bootstrapOpts.passwordEnv, "password-env", defaultBootstrapSuperAdminPasswordEnv, "environment variable containing the bootstrap password")
+	_ = bootstrapSuperAdmin.MarkFlagRequired("username")
+	cmd.AddCommand(bootstrapSuperAdmin)
 
 	return cmd
 }

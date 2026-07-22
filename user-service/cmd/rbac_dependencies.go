@@ -16,12 +16,10 @@ import (
 	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/user-service/ent"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
-	authpostgres "github.com/aegiscore/user-service/internal/features/auth/infrastructure/postgres"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
+	rolebootstrap "github.com/aegiscore/user-service/internal/features/role/application/bootstrap"
 	roleseed "github.com/aegiscore/user-service/internal/features/role/application/seed"
 	rolepostgres "github.com/aegiscore/user-service/internal/features/role/infrastructure/postgres"
-	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
-	userpostgres "github.com/aegiscore/user-service/internal/features/user/infrastructure/postgres"
 	"github.com/aegiscore/user-service/internal/resources"
 )
 
@@ -81,13 +79,11 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 	permissionStore := permissionpostgres.NewPermissionStore(client)
 	roleStore := rolepostgres.NewRoleStore(client)
 	rolePermissionStore := rolepostgres.NewRolePermissionStore(client)
-	userRoleStore := rolepostgres.NewUserRoleStore(client)
-	userStore := userpostgres.NewUserStore(client)
-	credentialStore := authpostgres.NewCredentialStore(client)
-	service := roleseed.NewService(roleStore, permissionStore, rolePermissionStore, userRoleStore)
-	userCreator := usercommand.NewCreateUserService(userStore, passwordService)
+	service := roleseed.NewService(roleStore, permissionStore, rolePermissionStore)
+	bootstrapStore := rolepostgres.NewBootstrapStore(db)
+	bootstrapService := rolebootstrap.NewService(bootstrapStore, passwordService)
 
-	return rbacSeedDependencies{service: service, users: userCreator, credentials: credentialStore, passwordService: passwordService, log: log}, cleanup, nil
+	return rbacSeedDependencies{service: service, bootstrap: bootstrapService, log: log}, cleanup, nil
 }
 
 func rbacPostgresConfig(cfg *serviceconfig.Config) (commonresources.PostgresConfig, error) {

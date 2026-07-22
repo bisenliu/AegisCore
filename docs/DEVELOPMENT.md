@@ -160,21 +160,20 @@ API 注解、路由、request 或 response 变化后必须重新生成并检查 
 make user-service-seed-rbac
 ```
 
-创建或复用超级管理员：
+一次性创建初始超级管理员：
 
 ```bash
-ADMIN_PASSWORD='<password>' make user-service-create-super-admin
+ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' \
+ADMIN_USERNAME='initial-admin' \
+ADMIN_NICKNAME='Initial Administrator' \
+make user-service-bootstrap-super-admin
 ```
 
-可选参数：
+参数约束：
 
-```bash
-ADMIN_USERNAME=admin \
-ADMIN_NICKNAME=Admin \
-ADMIN_RESET_PASSWORD=true \
-ADMIN_PASSWORD='<password>' \
-make user-service-create-super-admin
-```
+- `ADMIN_USERNAME` 必填，无默认值；命令会 trim 后转为小写。
+- `ADMIN_NICKNAME` 可选；trim 后为空时回退为归一化 username。
+- `ADMIN_BOOTSTRAP_PASSWORD` 必填，Makefile 不在命令行展开或输出密码值。
 
 ## 8. 本地部署和观测
 

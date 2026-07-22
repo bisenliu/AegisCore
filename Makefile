@@ -3,15 +3,14 @@ TOOLS_OPENAPI_CONVERT_DIR := tools/openapi-convert
 USER_SERVICE_DIR := user-service
 USER_SERVICE_CONFIG ?= $(CURDIR)/user-service/configs/config.yaml
 USER_SERVICE_BIN ?= $(CURDIR)/bin/user-service
-ADMIN_USERNAME ?= admin
-ADMIN_NICKNAME ?= Admin
-ADMIN_RESET_PASSWORD ?= false
+ADMIN_USERNAME ?=
+ADMIN_NICKNAME ?=
 
 .PHONY: help build test lint verify
 .PHONY: common-test common-lint common-generate common-verify
 .PHONY: tools-openapi-convert-test
 .PHONY: user-service-build user-service-run user-service-test user-service-lint user-service-verify user-service-architecture-lint
-.PHONY: user-service-seed-rbac user-service-create-super-admin user-service-image-verify
+.PHONY: user-service-seed-rbac user-service-bootstrap-super-admin user-service-image-verify
 .PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-openapi-generate user-service-fxgraph-generate user-service-fxgraph-check
 .PHONY: compose-dashboard-generate compose-dashboard-check
 
@@ -63,8 +62,8 @@ user-service-architecture-lint: ## 运行 user-service 架构边界检查。
 user-service-seed-rbac: ## 使用 USER_SERVICE_CONFIG 初始化 user-service RBAC 系统数据。
 	$(MAKE) -C $(USER_SERVICE_DIR) seed-rbac USER_SERVICE_CONFIG='$(USER_SERVICE_CONFIG)'
 
-user-service-create-super-admin: ## 为 user-service 创建管理员用户并绑定超级管理员角色；需要 ADMIN_PASSWORD 环境变量。
-	$(MAKE) -C $(USER_SERVICE_DIR) create-super-admin USER_SERVICE_CONFIG='$(USER_SERVICE_CONFIG)' ADMIN_USERNAME='$(ADMIN_USERNAME)' ADMIN_NICKNAME='$(ADMIN_NICKNAME)' ADMIN_RESET_PASSWORD='$(ADMIN_RESET_PASSWORD)'
+user-service-bootstrap-super-admin: ## 为全新数据库一次性创建初始超级管理员；需要 ADMIN_BOOTSTRAP_PASSWORD 和 ADMIN_USERNAME。
+	$(MAKE) -C $(USER_SERVICE_DIR) bootstrap-super-admin USER_SERVICE_CONFIG='$(USER_SERVICE_CONFIG)' ADMIN_USERNAME='$(ADMIN_USERNAME)' ADMIN_NICKNAME='$(ADMIN_NICKNAME)'
 
 user-service-image-verify: ## 校验 user-service Distroless 镜像内容；可通过 IMAGE 覆盖镜像名。
 	./deployments/docker/verify-user-service-image.sh "$${IMAGE:-aegiscore-user-service:latest}"

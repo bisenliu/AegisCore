@@ -56,6 +56,7 @@ func newHTTPFlowHarness(t *testing.T) *httpFlowHarness {
 	redis := containers.StartRedis(ctx, t, containers.RedisOptions{})
 	applyMigrations(ctx, t, postgres.DSN)
 	seedRBACBaseline(t, postgres.DSN)
+	bootstrapSuperAdmin(t, postgres.DSN, "bootstrap-secret")
 
 	configPath := writeTestConfig(t, postgres.Config(), redis.Config())
 	serviceCfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(configPath))

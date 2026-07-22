@@ -20,7 +20,6 @@ type UserRoleStore struct {
 }
 
 var _ roleapplication.UserRoleStore = (*UserRoleStore)(nil)
-var _ roleapplication.SeedUserRoleStore = (*UserRoleStore)(nil)
 
 // NewUserRoleStore 构造基于 Ent 的用户角色绑定 store。
 func NewUserRoleStore(client *ent.Client) *UserRoleStore {

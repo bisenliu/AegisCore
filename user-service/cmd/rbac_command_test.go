@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,71 +25,46 @@ func TestRBACSeedCommandFlags(t *testing.T) {
 	require.True(t, called)
 }
 
-func TestAssignSuperAdminCommandValidatesUserID(t *testing.T) {
+func TestRBACDeletedSuperAdminCommandsAreUnavailable(t *testing.T) {
+	for _, args := range [][]string{
+		{"rbac", "assign-super-admin", "--user-id", "not-a-uuid"},
+		{"rbac", "create-super-admin"},
+		{"rbac", "bootstrap-super-admin", "--username", "root", "--reset-password"},
+	} {
+		root := newRootCommand(testRootCommandDependencies(t))
+		root.SetArgs(args)
+		require.Error(t, root.Execute())
+	}
+}
+
+func TestBootstrapSuperAdminCommandRequiresUsername(t *testing.T) {
 	called := false
 	deps := testRootCommandDependencies(t)
-	deps.assignSuperAdminRunner = func(_ context.Context, _ string, _ uuid.UUID) error {
+	deps.bootstrapSuperAdminRunner = func(_ context.Context, _ string, _ rbacBootstrapSuperAdminOptions) error {
 		called = true
 		return nil
 	}
 
 	root := newRootCommand(deps)
-	root.SetArgs([]string{"rbac", "assign-super-admin", "--user-id", "not-a-uuid"})
-	require.ErrorContains(t, root.Execute(), "invalid")
+	root.SetArgs([]string{"rbac", "bootstrap-super-admin"})
+	require.ErrorContains(t, root.Execute(), "required flag")
 	require.False(t, called)
 }
 
-func TestAssignSuperAdminCommandRuns(t *testing.T) {
-	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000001")
+func TestBootstrapSuperAdminCommandRuns(t *testing.T) {
 	called := false
 	deps := testRootCommandDependencies(t)
-	deps.assignSuperAdminRunner = func(_ context.Context, configPath string, got uuid.UUID) error {
-		called = true
-		require.Equal(t, "test-config.yaml", configPath)
-		require.Equal(t, userID, got)
-		return nil
-	}
-
-	root := newRootCommand(deps)
-	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "assign-super-admin", "--user-id", userID.String()})
-	require.NoError(t, root.Execute())
-	require.True(t, called)
-}
-
-func TestCreateSuperAdminCommandRunsWithDefaults(t *testing.T) {
-	called := false
-	deps := testRootCommandDependencies(t)
-	deps.createSuperAdminRunner = func(_ context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
-		called = true
-		require.Equal(t, "test-config.yaml", configPath)
-		assert.Equal(t, defaultCreateSuperAdminUsername, opts.username)
-		assert.Equal(t, defaultCreateSuperAdminNickname, opts.nickname)
-		assert.Equal(t, defaultCreateSuperAdminPasswordEnv, opts.passwordEnv)
-		assert.False(t, opts.resetPassword)
-		return nil
-	}
-
-	root := newRootCommand(deps)
-	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "create-super-admin"})
-	require.NoError(t, root.Execute())
-	require.True(t, called)
-}
-
-func TestCreateSuperAdminCommandRunsWithFlags(t *testing.T) {
-	called := false
-	deps := testRootCommandDependencies(t)
-	deps.createSuperAdminRunner = func(_ context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
+	deps.bootstrapSuperAdminRunner = func(_ context.Context, configPath string, opts rbacBootstrapSuperAdminOptions) error {
 		called = true
 		require.Equal(t, "test-config.yaml", configPath)
 		assert.Equal(t, "root", opts.username)
 		assert.Equal(t, "Root", opts.nickname)
 		assert.Equal(t, "ADMIN_SECRET", opts.passwordEnv)
-		assert.True(t, opts.resetPassword)
 		return nil
 	}
 
 	root := newRootCommand(deps)
-	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "create-super-admin", "--username", "root", "--nickname", "Root", "--password-env", "ADMIN_SECRET", "--reset-password"})
+	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "bootstrap-super-admin", "--username", "root", "--nickname", "Root", "--password-env", "ADMIN_SECRET"})
 	require.NoError(t, root.Execute())
 	require.True(t, called)
 }

@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
-
 	roleseed "github.com/aegiscore/user-service/internal/features/role/application/seed"
 )
 
@@ -16,15 +14,9 @@ func newRBACSeedRunner(newDependencies rbacSeedDependencyFactory) rbacSeedRunner
 	}
 }
 
-func newRBACAssignSuperAdminRunner(newDependencies rbacSeedDependencyFactory) rbacAssignSuperAdminRunner {
-	return func(ctx context.Context, configPath string, userID uuid.UUID) error {
-		return runAssignSuperAdminCommand(ctx, configPath, userID, newDependencies)
-	}
-}
-
-func newRBACCreateSuperAdminRunner(newDependencies rbacSeedDependencyFactory) rbacCreateSuperAdminRunner {
-	return func(ctx context.Context, configPath string, opts rbacCreateSuperAdminOptions) error {
-		return runCreateSuperAdminCommand(ctx, configPath, opts, newDependencies)
+func newRBACBootstrapSuperAdminRunner(newDependencies rbacSeedDependencyFactory) rbacBootstrapSuperAdminRunner {
+	return func(ctx context.Context, configPath string, opts rbacBootstrapSuperAdminOptions) error {
+		return runBootstrapSuperAdminCommand(ctx, configPath, opts, newDependencies)
 	}
 }
 
@@ -46,29 +38,7 @@ func runRBACSeedCommand(ctx context.Context, configPath string, opts rbacSeedOpt
 	return nil
 }
 
-func runAssignSuperAdminCommand(ctx context.Context, configPath string, userID uuid.UUID, newDependencies rbacSeedDependencyFactory) (err error) {
-	deps, cleanup, err := newDependencies(ctx, configPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		err = errors.Join(err, cleanup())
-	}()
-	ctx = contextWithRBACLogger(ctx, deps)
-
-	result, err := deps.service.AssignSuperAdmin(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if result.Added {
-		fmt.Printf("Super admin role assigned to user %s\n", userID.String())
-	} else {
-		fmt.Printf("Super admin role already assigned to user %s\n", userID.String())
-	}
-	return nil
-}
-
-func runCreateSuperAdminCommand(ctx context.Context, configPath string, opts rbacCreateSuperAdminOptions, newDependencies rbacSeedDependencyFactory) (err error) {
+func runBootstrapSuperAdminCommand(ctx context.Context, configPath string, opts rbacBootstrapSuperAdminOptions, newDependencies rbacSeedDependencyFactory) (err error) {
 	deps, cleanup, err := newDependencies(ctx, configPath)
 	if err != nil {
 		return err
@@ -77,10 +47,10 @@ func runCreateSuperAdminCommand(ctx context.Context, configPath string, opts rba
 		err = errors.Join(err, cleanup())
 	}()
 
-	result, err := createSuperAdmin(ctx, deps, opts)
+	result, err := bootstrapSuperAdmin(ctx, deps, opts)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Super admin create complete: username=%s user_id=%s created=%t password_updated=%t super_admin_role_added=%t\n", normalizeUsername(opts.username), result.userID.String(), result.created, result.passwordUpdated, result.roleAdded)
+	fmt.Printf("Super admin bootstrap complete: username=%s user_id=%s super_admin_role_id=%s\n", result.Username, result.UserID.String(), result.RoleID.String())
 	return nil
 }

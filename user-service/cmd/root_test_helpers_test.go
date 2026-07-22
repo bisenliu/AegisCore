@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 
@@ -44,12 +43,8 @@ func testRootCommandDependencies(t testing.TB) rootCommandDependencies {
 			unexpected("seedRunner")
 			return nil
 		},
-		assignSuperAdminRunner: func(context.Context, string, uuid.UUID) error {
-			unexpected("assignSuperAdminRunner")
-			return nil
-		},
-		createSuperAdminRunner: func(context.Context, string, rbacCreateSuperAdminOptions) error {
-			unexpected("createSuperAdminRunner")
+		bootstrapSuperAdminRunner: func(context.Context, string, rbacBootstrapSuperAdminOptions) error {
+			unexpected("bootstrapSuperAdminRunner")
 			return nil
 		},
 		fxGraphWriter: func(string, ...fx.Option) (string, error) {

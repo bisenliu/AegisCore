@@ -34,7 +34,7 @@ make lint
 make verify
 make user-service-run
 make user-service-seed-rbac
-ADMIN_PASSWORD='<password>' make user-service-create-super-admin
+ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' ADMIN_USERNAME='initial-admin' make user-service-bootstrap-super-admin
 ```
 
 数据库和生成物：
@@ -71,10 +71,12 @@ OpenSpec 主规格、change artifacts 和 OPSX 相关文档必须使用简体中
 
 ## 发布顺序
 
-生产发布应在 HTTP rollout 前完成数据库 SQL migration 和 RBAC seed：
+生产发布应在 HTTP rollout 前完成数据库 SQL migration、RBAC seed 和一次性超级管理员 bootstrap：
 
 1. 按 Ent schema -> Atlas diff 生成 SQL -> Atlas validate/hash 校验 SQL 目录 -> SQL 进 Git -> DBA 工单或受控发布平台执行的流程，确认 user-service `primary_db` 已完成本 release 对应 SQL migration；`CREATE EXTENSION IF NOT EXISTS pg_trgm;` 可能需要 DBA 权限或前置动作。
-2. 执行 `make user-service-seed-rbac` 初始化 RBAC 系统数据，按需通过 `ADMIN_PASSWORD='<password>' make user-service-create-super-admin` 创建或复用超级管理员账号。
-3. 启动或滚动更新 user-service HTTP 副本。
+2. 执行 `make user-service-seed-rbac` 初始化 RBAC 系统数据。
+3. 在全新数据库上执行 `ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' ADMIN_USERNAME='initial-admin' ADMIN_NICKNAME='Initial Administrator' make user-service-bootstrap-super-admin` 一次性创建初始超级管理员。
+4. 启动或滚动更新 user-service HTTP 副本。
+5. 初始管理员使用临时密码登录并完成强制改密。
 
 普通服务容器不包含 Atlas，也不执行 migration；`RUN_MIGRATIONS=true` 在运行时镜像中已废弃。简单部署也应先确认 SQL migration 已受控执行，再启动服务镜像。

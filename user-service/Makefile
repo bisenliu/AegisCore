@@ -1,10 +1,9 @@
 USER_SERVICE_CONFIG ?= ./configs/config.yaml
 USER_SERVICE_BIN ?= ../bin/user-service
-ADMIN_USERNAME ?= admin
-ADMIN_NICKNAME ?= Admin
-ADMIN_RESET_PASSWORD ?= false
+ADMIN_USERNAME ?=
+ADMIN_NICKNAME ?=
 
-.PHONY: help build run test lint architecture-lint architecture-lint-test verify seed-rbac create-super-admin generate migrate-diff migrate-validate openapi-generate fxgraph-generate fxgraph-check
+.PHONY: help build run test lint architecture-lint architecture-lint-test verify seed-rbac bootstrap-super-admin generate migrate-diff migrate-validate openapi-generate fxgraph-generate fxgraph-check
 
 help: ## 查看 user-service 可用命令。
 	@awk 'BEGIN {FS = ":.*##"; printf "user-service 可用命令：\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -34,9 +33,10 @@ verify: lint architecture-lint generate test openapi-generate ## 运行 user-ser
 seed-rbac: ## 使用 USER_SERVICE_CONFIG 初始化 RBAC 系统数据。
 	go run ./cmd rbac --config $(USER_SERVICE_CONFIG) seed
 
-create-super-admin: ## 创建管理员用户并绑定超级管理员角色；需要 ADMIN_PASSWORD 环境变量。
-	@test -n "$${ADMIN_PASSWORD}" || (echo "必须设置 ADMIN_PASSWORD" >&2; exit 2)
-	ADMIN_PASSWORD="$${ADMIN_PASSWORD}" go run ./cmd rbac --config $(USER_SERVICE_CONFIG) create-super-admin --username '$(ADMIN_USERNAME)' --nickname '$(ADMIN_NICKNAME)' --reset-password=$(ADMIN_RESET_PASSWORD)
+bootstrap-super-admin: ## 一次性创建初始超级管理员；需要 ADMIN_BOOTSTRAP_PASSWORD 和 ADMIN_USERNAME。
+	@test -n "$${ADMIN_BOOTSTRAP_PASSWORD+x}" || (echo "必须设置 ADMIN_BOOTSTRAP_PASSWORD" >&2; exit 2)
+	@test -n "$(ADMIN_USERNAME)" || (echo "必须设置 ADMIN_USERNAME" >&2; exit 2)
+	go run ./cmd rbac --config $(USER_SERVICE_CONFIG) bootstrap-super-admin --username '$(ADMIN_USERNAME)' --nickname '$(ADMIN_NICKNAME)' --password-env ADMIN_BOOTSTRAP_PASSWORD
 
 generate: ## 生成 user-service Go 生成物。
 	go generate ./...

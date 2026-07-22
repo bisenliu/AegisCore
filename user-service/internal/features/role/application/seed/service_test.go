@@ -18,7 +18,7 @@ import (
 func TestSeedServiceDefaultEnsureAndRepeat(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	stores := newSeedMockStores(ctrl)
-	service := NewService(stores.roles, stores.permissions, stores.rolePermissions, stores.userRoles)
+	service := NewService(stores.roles, stores.permissions, stores.rolePermissions)
 	permissionCount := len(rbacbaseline.DefaultPermissions())
 
 	firstCalls := append(expectRoleUpserts(stores.roles, false, true), expectPermissionUpserts(stores.permissions, false, true)...)
@@ -45,7 +45,7 @@ func TestSeedServiceDefaultEnsureAndRepeat(t *testing.T) {
 func TestSeedServiceReactivateAndSyncOptions(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	stores := newSeedMockStores(ctrl)
-	service := NewService(stores.roles, stores.permissions, stores.rolePermissions, stores.userRoles)
+	service := NewService(stores.roles, stores.permissions, stores.rolePermissions)
 	permissionCount := len(rbacbaseline.DefaultPermissions())
 
 	calls := append(expectRoleUpserts(stores.roles, true, true), expectPermissionUpserts(stores.permissions, true, true)...)
@@ -60,32 +60,10 @@ func TestSeedServiceReactivateAndSyncOptions(t *testing.T) {
 	require.Zero(t, result.RolePermissionBindingsDel)
 }
 
-func TestSeedServiceAssignSuperAdmin(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	stores := newSeedMockStores(ctrl)
-	service := NewService(stores.roles, stores.permissions, stores.rolePermissions, stores.userRoles)
-	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000001")
-	superAdminRoleID := uuid.MustParse(rbacbaseline.SuperAdminRoleID)
-
-	gomock.InOrder(
-		stores.userRoles.EXPECT().AssignRole(gomock.Any(), userID, superAdminRoleID).Return(true, nil),
-		stores.userRoles.EXPECT().AssignRole(gomock.Any(), userID, superAdminRoleID).Return(false, nil),
-	)
-
-	result, err := service.AssignSuperAdmin(context.Background(), userID)
-	require.NoError(t, err)
-	require.True(t, result.Added)
-
-	result, err = service.AssignSuperAdmin(context.Background(), userID)
-	require.NoError(t, err)
-	require.False(t, result.Added)
-}
-
 type seedMockStores struct {
 	permissions     *MockSeedPermissionStore
 	roles           *MockSeedRoleStore
 	rolePermissions *MockSeedRolePermissionStore
-	userRoles       *MockSeedUserRoleStore
 }
 
 func newSeedMockStores(ctrl *gomock.Controller) seedMockStores {
@@ -93,7 +71,6 @@ func newSeedMockStores(ctrl *gomock.Controller) seedMockStores {
 		permissions:     NewMockSeedPermissionStore(ctrl),
 		roles:           NewMockSeedRoleStore(ctrl),
 		rolePermissions: NewMockSeedRolePermissionStore(ctrl),
-		userRoles:       NewMockSeedUserRoleStore(ctrl),
 	}
 }
 

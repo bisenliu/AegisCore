@@ -6,20 +6,17 @@ import (
 	"os"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
+	rolebootstrap "github.com/aegiscore/user-service/internal/features/role/application/bootstrap"
 	roleseed "github.com/aegiscore/user-service/internal/features/role/application/seed"
-	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
 )
 
 func rbacCommandRunnersWithFactory(factory rbacSeedDependencyFactory) rootCommandDependencies {
 	return rootCommandDependencies{
-		seedRunner:             newRBACSeedRunner(factory),
-		assignSuperAdminRunner: newRBACAssignSuperAdminRunner(factory),
-		createSuperAdminRunner: newRBACCreateSuperAdminRunner(factory),
+		seedRunner:                newRBACSeedRunner(factory),
+		bootstrapSuperAdminRunner: newRBACBootstrapSuperAdminRunner(factory),
 	}
 }
 
@@ -42,40 +39,37 @@ func captureStdout(t *testing.T, fn func() error) (string, error) {
 	return string(output), runErr
 }
 
-func newRBACSeedServiceMock(t testing.TB, seed func(context.Context, roleseed.SeedOptions) (roleseed.SeedResult, error), assign func(context.Context, uuid.UUID) (roleseed.AssignSuperAdminResult, error)) *MockrbacSeedService {
+func newRBACSeedServiceMock(t testing.TB, seed func(context.Context, roleseed.SeedOptions) (roleseed.SeedResult, error)) *MockrbacSeedService {
 	t.Helper()
 	service := NewMockrbacSeedService(gomock.NewController(t))
 	if seed != nil {
 		service.EXPECT().Seed(gomock.Any(), gomock.Any()).DoAndReturn(seed)
 	}
-	if assign != nil {
-		service.EXPECT().AssignSuperAdmin(gomock.Any(), gomock.Any()).DoAndReturn(assign)
-	}
 	return service
 }
 
-func newCreateUserServiceMock(t testing.TB, create func(context.Context, usercommand.CreateUserCommand) (*usercommand.CreateUserResult, error)) *MockCreateUserService {
-	t.Helper()
-	service := NewMockCreateUserService(gomock.NewController(t))
-	service.EXPECT().CreateUser(gomock.Any(), gomock.Any()).DoAndReturn(create)
-	return service
+type testBootstrapStore struct {
+	input rolebootstrap.BootstrapSuperAdminInput
+	err   error
 }
 
-func newRBACCredentialStoreMock(t testing.TB, getByUsername func(context.Context, string) (*authdomain.UserCredential, error), updateCredentials func(context.Context, authdomain.UpdateCredentialsInput) (int64, error)) *MockrbacCredentialStore {
-	t.Helper()
-	store := NewMockrbacCredentialStore(gomock.NewController(t))
-	if getByUsername != nil {
-		store.EXPECT().GetByUsername(gomock.Any(), gomock.Any()).DoAndReturn(getByUsername)
+func (s *testBootstrapStore) BootstrapSuperAdmin(_ context.Context, input rolebootstrap.BootstrapSuperAdminInput) (*rolebootstrap.BootstrapSuperAdminResult, error) {
+	s.input = input
+	if s.err != nil {
+		return nil, s.err
 	}
-	if updateCredentials != nil {
-		store.EXPECT().UpdateCredentials(gomock.Any(), gomock.Any()).DoAndReturn(updateCredentials)
-	}
-	return store
+	return &rolebootstrap.BootstrapSuperAdminResult{UserID: input.UserID, RoleID: input.RoleID, Username: input.Username, Nickname: input.Nickname}, nil
 }
 
-func newRBACPasswordHasherMock(t testing.TB, hash func(context.Context, string) (string, error)) *MockrbacPasswordHasher {
-	t.Helper()
-	hasher := NewMockrbacPasswordHasher(gomock.NewController(t))
-	hasher.EXPECT().HashContext(gomock.Any(), gomock.Any()).DoAndReturn(hash)
-	return hasher
+type testBootstrapHasher struct {
+	plain string
+	err   error
+}
+
+func (h *testBootstrapHasher) HashContext(_ context.Context, plain string) (string, error) {
+	h.plain = plain
+	if h.err != nil {
+		return "", h.err
+	}
+	return "hashed-password", nil
 }

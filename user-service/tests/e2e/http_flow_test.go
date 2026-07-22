@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -15,6 +14,8 @@ import (
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
 	"github.com/aegiscore/common/testing/fixtures"
+	rolebootstrap "github.com/aegiscore/user-service/internal/features/role/application/bootstrap"
+	rolepostgres "github.com/aegiscore/user-service/internal/features/role/infrastructure/postgres"
 	"github.com/aegiscore/user-service/internal/shared/identity"
 	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
@@ -43,25 +44,26 @@ type logoutResponse struct {
 	LoggedOut bool `json:"logged_out"`
 }
 
-type seededUser struct {
-	Username string
-	Password string
-}
-
 func TestHTTPAuthUserFlow(t *testing.T) {
 	harness := newHTTPFlowHarness(t)
 	faker := fixtures.NewFaker(t)
 
-	bootstrapUser := seedUser(t, harness, seededUserInput{
-		Nickname: faker.Name("Flow Admin"),
-		Username: faker.Username("flow-admin"),
-		Password: "bootstrap-secret",
-		Status:   identity.UserStatusNormal,
+	bootstrapPasswordChangeTokens := loginPasswordChangeRequired(t, harness, "initial-admin", "bootstrap-secret")
+	bootstrapPassword := "changed-bootstrap-secret"
+	changePassword(t, harness, bootstrapPasswordChangeTokens.AccessToken, bootstrapPassword)
+	bootstrapTokens := login(t, harness, "initial-admin", bootstrapPassword)
+	delegatedAdminPassword := "delegated-admin-secret"
+	delegatedAdmin := createUser(t, harness, bootstrapTokens.AccessToken, map[string]any{
+		"nickname": faker.Name("Delegated Admin"),
+		"username": faker.Username("delegated-admin"),
+		"password": delegatedAdminPassword,
+		"status":   int64(identity.UserStatusNormal),
 	})
-	bootstrapTokens := login(t, harness, bootstrapUser.Username, bootstrapUser.Password)
+	addUserRole(t, harness, bootstrapTokens.AccessToken, delegatedAdmin.UserID, rbacbaseline.SuperAdminRoleID)
+	delegatedTokens := login(t, harness, delegatedAdmin.Username, delegatedAdminPassword)
 
 	mustChangePassword := "initial-secret"
-	targetUser := createUser(t, harness, bootstrapTokens.AccessToken, map[string]any{
+	targetUser := createUser(t, harness, delegatedTokens.AccessToken, map[string]any{
 		"nickname": faker.Name("Password Change"),
 		"username": faker.Username("password-change"),
 		"password": mustChangePassword,
@@ -85,36 +87,21 @@ func TestHTTPAuthUserFlow(t *testing.T) {
 	expectRefreshFailure(t, harness, targetTokens.RefreshToken)
 }
 
-type seededUserInput struct {
-	Nickname string
-	Username string
-	Password string
-	Status   identity.UserStatus
-}
-
-func seedUser(t *testing.T, harness *httpFlowHarness, input seededUserInput) seededUser {
+func bootstrapSuperAdmin(t *testing.T, dsn string, plainPassword string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
 	passwordService, err := password.NewService()
 	require.NoError(t, err, "create password service")
-	passwordHash, err := passwordService.HashContext(ctx, input.Password)
-	require.NoError(t, err, "hash bootstrap password")
-	userID := uuid.New()
-	now := time.Now().UnixMilli()
-	db := openPostgres(t, harness.postgresDSN)
-	var userInternalID int64
-	err = db.QueryRowContext(ctx, `
-INSERT INTO users (user_id, nickname, username, password_hash, token_version, status, created_at, updated_at)
-VALUES ($1, $2, $3, $4, 1, $5, $6, $7)
-RETURNING id
-`, userID, input.Nickname, input.Username, passwordHash, int64(input.Status), now, now).Scan(&userInternalID)
-	require.NoError(t, err, "seed bootstrap user")
-	bindSuperAdminRole(t, db, userInternalID, now)
-	return seededUser{Username: input.Username, Password: input.Password}
+	db := openPostgres(t, dsn)
+	store := rolepostgres.NewBootstrapStore(db)
+	service := rolebootstrap.NewService(store, passwordService)
+	_, err = service.BootstrapSuperAdmin(ctx, rolebootstrap.Command{Username: "initial-admin", Nickname: "Initial Administrator", PasswordEnv: "E2E_BOOTSTRAP_PASSWORD"})
+	require.Error(t, err, "bootstrap without password env should fail")
+	t.Setenv("E2E_BOOTSTRAP_PASSWORD", plainPassword)
+	_, err = service.BootstrapSuperAdmin(ctx, rolebootstrap.Command{Username: "initial-admin", Nickname: "Initial Administrator", PasswordEnv: "E2E_BOOTSTRAP_PASSWORD"})
+	require.NoError(t, err, "bootstrap super admin")
 }
-
 func seedRBACBaseline(t *testing.T, dsn string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -233,6 +220,14 @@ func changePassword(t *testing.T, harness *httpFlowHarness, passwordChangeToken 
 	envelope := expectEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK)
 	result := decodeData[changePasswordResponse](t, envelope)
 	require.Equal(t, true, result.Changed, "change password response changed")
+}
+
+func addUserRole(t *testing.T, harness *httpFlowHarness, token string, userID string, roleID string) {
+	t.Helper()
+	recorder := harness.request(t, http.MethodPost, "/api/v1/users/"+userID+"/roles", map[string]any{
+		"role_id": roleID,
+	}, token)
+	expectEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK)
 }
 
 func logoutCurrent(t *testing.T, harness *httpFlowHarness, token string) {

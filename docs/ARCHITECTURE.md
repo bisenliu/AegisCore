@@ -43,8 +43,7 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 
 - `serve --config <path>`：启动 Fx app 和 Gin HTTP server。
 - `rbac seed`：初始化默认系统角色、权限和绑定。
-- `rbac assign-super-admin --user-id <uuid>`：为已有用户绑定超级管理员角色。
-- `rbac create-super-admin`：创建或复用管理员用户并绑定超级管理员角色。
+- `rbac bootstrap-super-admin`：为全新数据库一次性创建固定 ID 的初始超级管理员用户并绑定超级管理员角色。
 - `fxgraph`：生成 Fx 依赖图。
 - `healthcheck --url <url> --timeout <duration>`：在容器内无 shell、wget、curl 或 grep 依赖地检查 `/readyz`。
 
@@ -78,7 +77,7 @@ pprof 不挂载到业务 router。临时诊断时通过 `AEGISCORE_OBSERVABILITY
 |---|---|
 | `auth` | 登录、刷新、退出、改密、会话、token、凭证和 token version |
 | `permission` | 代码权限目录的只读投影、有效权限、Casbin policy 和授权中间件 |
-| `role` | 角色、角色权限、用户角色、系统 seed 和超级管理员绑定 |
+| `role` | 角色、角色权限、用户角色、系统 seed 和初始超级管理员 bootstrap |
 | `user` | 用户资料创建、查询、列表、状态和存储 |
 
 典型 feature 内部结构：
@@ -116,13 +115,13 @@ pprof 不挂载到业务 router。临时诊断时通过 `AEGISCORE_OBSERVABILITY
 4. permission authorizer 使用 Casbin 或同步后的 policy 判断访问权限。
 5. 通过后进入目标 controller。
 
-### 6.4 RBAC seed 和超级管理员
+### 6.4 RBAC seed 和超级管理员 bootstrap
 
 1. `rbac seed` 加载 user-service 私有配置，按服务私有资源名打开 user DB，创建 Ent client。
 2. role seed service 按 `rbacbaseline.DefaultPermissions()` 的稳定 `permission_id` 创建或更新权限投影，并维护系统角色和默认绑定。
 3. 权限定义变更随代码发布；路由测试构建真实 Gin route graph，与代码基线双向比较，missing 或 stale 均阻断 CI。
-4. `create-super-admin` 读取 `ADMIN_PASSWORD`，创建或复用用户，按需更新密码。
-5. seed service 绑定内置超级管理员角色。
+4. `bootstrap-super-admin` 读取 `ADMIN_BOOTSTRAP_PASSWORD`，使用固定 bootstrap 用户 ID 创建 `MustChangePassword` 用户并绑定内置超级管理员角色。
+5. 后续超级管理员授权通过在线用户角色绑定 API 完成，由在线流程负责 policy version 发布和缓存收敛。
 
 ### 6.5 数据迁移
 
