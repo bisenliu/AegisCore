@@ -131,7 +131,7 @@
 
 ### Requirement: 强制改密一次性流程
 
-系统 MUST 为强制改密 token 创建服务端一次性 password-change session，并在更新密码前原子消费该 session。token 与 session MUST 使用独立短 TTL，并绑定 `jti`、`session_id`、`user_id` 和 `token_version`；MUST NOT 复用 refresh session 的 TTL、存储语义或上限裁剪策略。
+系统 MUST 为强制改密 token 创建服务端一次性 password-change session，并在更新密码前原子消费该 session。token 与 session MUST 使用独立短 TTL，并绑定 `jti`、`session_id`、`user_id` 和 `token_version`；MUST NOT 复用 refresh session 的 TTL、存储语义或上限裁剪策略。RBAC bootstrap 创建的初始超级管理员用户 MUST 通过同一强制改密流程完成首次密码变更，bootstrap CLI MUST NOT 直接实现认证撤销逻辑。
 
 #### Scenario: 创建一次性会话
 
@@ -140,6 +140,14 @@
 - **AND** token 和 session MUST 使用 `auth.jwt.password_change_token_ttl`
 - **AND** 该配置未设置或非正数时 MUST 使用 5 分钟默认 TTL，MUST NOT 创建无过期时间的 token 或 session
 - **AND** session 创建失败时登录 MUST 失败，已签发 token MUST NOT 返回客户端
+
+#### Scenario: bootstrap 用户首次登录
+
+- **WHEN** RBAC bootstrap 创建的固定超级管理员用户使用临时密码首次登录
+- **THEN** 用户状态 MUST 为 `identity.UserStatusMustChangePassword` 并只获得 subject 为 `password_change` 的受限 token
+- **AND** 系统 MUST NOT 创建普通 refresh session 或签发 refresh token
+- **AND** 完成强制改密后用户状态 MUST 变为 normal，随后才能正常登录并使用超级管理员权限
+- **AND** bootstrap CLI MUST NOT 直接执行条件凭据更新、token version 更新、Redis 投影刷新、本地缓存失效或 refresh session 撤销
 
 #### Scenario: 原子消费和并发保护
 
