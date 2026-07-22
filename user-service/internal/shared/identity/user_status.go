@@ -1,9 +1,6 @@
 package identity
 
-import (
-	"encoding/json"
-	"strconv"
-)
+import "strconv"
 
 // UserStatus 是用户持久化生命周期和认证状态。
 type UserStatus int64
@@ -44,24 +41,4 @@ func (s UserStatus) CanLogin() bool {
 // RequiresPasswordChange 返回 s 是否要求先完成强制改密流程。
 func (s UserStatus) RequiresPasswordChange() bool {
 	return s == UserStatusMustChangePassword
-}
-
-// UnmarshalText 将 query 或 form 文本解析为用户状态值。
-func (s *UserStatus) UnmarshalText(text []byte) error {
-	value, err := strconv.ParseInt(string(text), 10, 64)
-	if err != nil {
-		return err
-	}
-	*s = UserStatus(value)
-	return nil
-}
-
-// UnmarshalJSON 解析 JSON 数字用户状态值。
-func (s *UserStatus) UnmarshalJSON(data []byte) error {
-	var value int64
-	if err := json.Unmarshal(data, &value); err != nil {
-		return err
-	}
-	*s = UserStatus(value)
-	return nil
 }

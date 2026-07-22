@@ -1,7 +1,6 @@
 package identity
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -48,21 +47,4 @@ func TestUserStatusLifecycleRules(t *testing.T) {
 			require.Equal(t, tt.wantRequiresChangePass, tt.status.RequiresPasswordChange())
 		})
 	}
-}
-
-func TestUserStatusUnmarshalText(t *testing.T) {
-	var status UserStatus
-	require.NoError(t, status.UnmarshalText([]byte("300")))
-	require.Equal(t, UserStatusMustChangePassword, status)
-}
-
-func TestUserStatusUnmarshalJSON(t *testing.T) {
-	var status UserStatus
-	require.NoError(t, json.Unmarshal([]byte("200"), &status))
-	require.Equal(t, UserStatusDisabled, status)
-}
-
-func TestUserStatusRejectsInvalidText(t *testing.T) {
-	var status UserStatus
-	require.Error(t, status.UnmarshalText([]byte("invalid")))
 }
