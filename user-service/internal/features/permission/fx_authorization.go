@@ -35,15 +35,12 @@ var permissionAuthorizationOptions = fx.Options(
 // permissionPublicOptions 将 permission 内部命名组件投影为跨 feature 或 router 可消费的公开依赖。
 var permissionPublicOptions = fx.Options(
 	fx.Provide(
+		newPermissionRuntime,
 		providePermissionAuthorizer,
 		providePermissionPolicyHealth,
 		providePermissionPolicyWatcherStatus,
 		providePermissionUserRoleCacheStats,
 		providePermissionPolicyChangeNotifier,
-		providePermissionPolicyInitializer,
-		providePermissionApplicationWatcher,
-		providePermissionUserRoleResolverLifecycle,
-		providePermissionUserRoleCacheCloser,
 		providePermissionController,
 	),
 	fx.Provide(
@@ -98,52 +95,39 @@ type AuthorizerResult struct {
 	Authorizer permissionauthorization.Authorizer `name:"permission_authorizer"`
 }
 
-type PermissionAuthorizerParams struct {
-	fx.In
-
-	Authorizer permissionauthorization.Authorizer `name:"permission_authorizer"`
-}
-
-type PermissionPolicyHealthParams struct {
-	fx.In
-
-	Health permissionauthorization.PolicyHealth `name:"permission_policy_health"`
-}
-
-type PermissionPolicyWatcherStatusParams struct {
-	fx.In
-
-	Watcher permissionapplication.PolicyWatcherStatus `name:"permission_policy_watcher_status"`
-}
-
 type PermissionUserRoleCacheStatsParams struct {
 	fx.In
 
 	Stats localcache.StatsSource `name:"permission_rbac_user_roles_cache"`
 }
 
-type PermissionPolicyChangeNotifierParams struct {
-	fx.In
-
-	Notifier permissionapplication.PolicyChangeNotifier `name:"permission_policy_change_notifier"`
-}
-
-type PermissionUserRoleCacheCloserParams struct {
-	fx.In
-
-	Closer permissioncasbin.UserRoleCacheCloser `name:"permission_user_role_cache_closer"`
-}
-
-type PermissionUserRoleResolverLifecycleParams struct {
-	fx.In
-
-	Lifecycle userRoleResolverLifecycle `name:"permission_user_role_resolver_lifecycle"`
-}
-
 type PermissionUserRoleCacheStatsResult struct {
 	fx.Out
 
 	Stats localcache.StatsSource `name:"rbac_user_roles_cache"`
+}
+
+// PermissionRuntime 聚合 permission feature 对外稳定 RBAC runtime 组件，避免 public 投影散落在多个 named 转发函数中。
+type PermissionRuntime struct {
+	Authorizer    permissionauthorization.Authorizer
+	PolicyHealth  permissionauthorization.PolicyHealth
+	WatcherStatus permissionapplication.PolicyWatcherStatus
+	Notifier      permissionapplication.PolicyChangeNotifier
+	Initializer   permissionPolicyInitializer
+	Watcher       permissionApplicationWatcher
+	UserRoles     userRoleResolverLifecycle
+}
+
+type PermissionRuntimeParams struct {
+	fx.In
+
+	Authorizer  permissionauthorization.Authorizer         `name:"permission_authorizer"`
+	Health      permissionauthorization.PolicyHealth       `name:"permission_policy_health"`
+	Watcher     permissionApplicationWatcher               `name:"permission_policy_watcher_runner"`
+	Status      permissionapplication.PolicyWatcherStatus  `name:"permission_policy_watcher_status"`
+	Notifier    permissionapplication.PolicyChangeNotifier `name:"permission_policy_change_notifier"`
+	Initializer permissionPolicyInitializer                `name:"permission_policy_initializer"`
+	UserRoles   userRoleResolverLifecycle                  `name:"permission_user_role_resolver_lifecycle"`
 }
 
 type PolicyEngineResult struct {
@@ -179,52 +163,36 @@ func provideAuthorizer(params AuthorizerParams) AuthorizerResult {
 	return AuthorizerResult{Authorizer: permissionauthorization.NewAuthorizer(params.Engine, params.Metrics)}
 }
 
-func providePermissionAuthorizer(params PermissionAuthorizerParams) permissionauthorization.Authorizer {
-	return params.Authorizer
+func newPermissionRuntime(params PermissionRuntimeParams) *PermissionRuntime {
+	return &PermissionRuntime{
+		Authorizer:    params.Authorizer,
+		PolicyHealth:  params.Health,
+		WatcherStatus: params.Status,
+		Notifier:      params.Notifier,
+		Initializer:   params.Initializer,
+		Watcher:       params.Watcher,
+		UserRoles:     params.UserRoles,
+	}
 }
 
-func providePermissionPolicyHealth(params PermissionPolicyHealthParams) permissionauthorization.PolicyHealth {
-	return params.Health
+func providePermissionAuthorizer(runtime *PermissionRuntime) permissionauthorization.Authorizer {
+	return runtime.Authorizer
 }
 
-func providePermissionPolicyWatcherStatus(params PermissionPolicyWatcherStatusParams) permissionapplication.PolicyWatcherStatus {
-	return params.Watcher
+func providePermissionPolicyHealth(runtime *PermissionRuntime) permissionauthorization.PolicyHealth {
+	return runtime.PolicyHealth
+}
+
+func providePermissionPolicyWatcherStatus(runtime *PermissionRuntime) permissionapplication.PolicyWatcherStatus {
+	return runtime.WatcherStatus
 }
 
 func providePermissionUserRoleCacheStats(params PermissionUserRoleCacheStatsParams) PermissionUserRoleCacheStatsResult {
 	return PermissionUserRoleCacheStatsResult{Stats: params.Stats}
 }
 
-func providePermissionPolicyChangeNotifier(params PermissionPolicyChangeNotifierParams) permissionapplication.PolicyChangeNotifier {
-	return params.Notifier
-}
-
-type PermissionPolicyInitializerParams struct {
-	fx.In
-
-	Initializer permissionPolicyInitializer `name:"permission_policy_initializer"`
-}
-
-func providePermissionPolicyInitializer(params PermissionPolicyInitializerParams) permissionPolicyInitializer {
-	return params.Initializer
-}
-
-type PermissionApplicationWatcherParams struct {
-	fx.In
-
-	Watcher permissionApplicationWatcher `name:"permission_policy_watcher_runner"`
-}
-
-func providePermissionApplicationWatcher(params PermissionApplicationWatcherParams) permissionApplicationWatcher {
-	return params.Watcher
-}
-
-func providePermissionUserRoleResolverLifecycle(params PermissionUserRoleResolverLifecycleParams) userRoleResolverLifecycle {
-	return params.Lifecycle
-}
-
-func providePermissionUserRoleCacheCloser(params PermissionUserRoleCacheCloserParams) permissioncasbin.UserRoleCacheCloser {
-	return params.Closer
+func providePermissionPolicyChangeNotifier(runtime *PermissionRuntime) permissionapplication.PolicyChangeNotifier {
+	return runtime.Notifier
 }
 
 func providePermissionController(query permissionquery.PermissionQueryService, validator *commonvalidation.Validator) *permissionhttp.PermissionController {

@@ -35,6 +35,8 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 	var policyHealth permissionauthorization.PolicyHealth
 	var watcherStatus permissionapplication.PolicyWatcherStatus
 	var authorizer permissionauthorization.Authorizer
+	var notifier permissionapplication.PolicyChangeNotifier
+	var runtime *PermissionRuntime
 	app := fxtest.New(t,
 		fx.Supply(
 			provider,
@@ -55,15 +57,28 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 			&watcherStatus,
 			&authorizer,
 			&policyHealth,
+			&notifier,
+			&runtime,
 		),
 	)
+	require.NotNil(t, runtime)
 	app.RequireStart()
 	require.True(t, watcherStatus.Running())
+	require.True(t, runtime.WatcherStatus.Running())
 	app.RequireStop()
 	require.False(t, watcherStatus.Running())
+	require.False(t, runtime.WatcherStatus.Running())
 
 	require.NotNil(t, authorizer)
 	require.NotNil(t, policyHealth)
+	require.NotNil(t, notifier)
+	require.NotNil(t, runtime.Authorizer)
+	require.NotNil(t, runtime.PolicyHealth)
+	require.NotNil(t, runtime.WatcherStatus)
+	require.NotNil(t, runtime.Watcher)
+	require.NotNil(t, runtime.Notifier)
+	require.NotNil(t, runtime.Initializer)
+	require.NotNil(t, runtime.UserRoles)
 }
 
 func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
@@ -175,9 +190,7 @@ func TestRegisterRBACLifecycleStopsWhenUserRolesStartFails(t *testing.T) {
 
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
 		Lifecycle: lifecycle,
-		Engine:    engine,
-		Watcher:   watcher,
-		UserRoles: userRoles,
+		Runtime:   &PermissionRuntime{Initializer: engine, Watcher: watcher, UserRoles: userRoles},
 	})
 	require.Len(t, lifecycle.hooks, 1)
 
@@ -196,9 +209,7 @@ func TestRegisterRBACLifecycleStopClosesUserRolesAfterWatcherError(t *testing.T)
 
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
 		Lifecycle: lifecycle,
-		Engine:    &permissionModulePolicyInitializer{},
-		Watcher:   watcher,
-		UserRoles: userRoles,
+		Runtime:   &PermissionRuntime{Initializer: &permissionModulePolicyInitializer{}, Watcher: watcher, UserRoles: userRoles},
 	})
 	require.Len(t, lifecycle.hooks, 1)
 

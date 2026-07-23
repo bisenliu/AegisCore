@@ -19,24 +19,22 @@ type RegisterRBACLifecycleParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Engine    permissionPolicyInitializer
-	Watcher   permissionApplicationWatcher
-	UserRoles userRoleResolverLifecycle
+	Runtime   *PermissionRuntime
 }
 
 // registerRBACLifecycle 先启动用户角色缓存，再 fail-closed 初始化策略，最后启动跨副本 watcher。
 func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			if err := params.UserRoles.Start(ctx); err != nil {
+			if err := params.Runtime.UserRoles.Start(ctx); err != nil {
 				return err
 			}
-			params.Engine.InitializeFailClosed(ctx)
-			params.Watcher.Start()
+			params.Runtime.Initializer.InitializeFailClosed(ctx)
+			params.Runtime.Watcher.Start()
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			return stopRBACLifecycle(ctx, params.Watcher.Stop, params.UserRoles)
+			return stopRBACLifecycle(ctx, params.Runtime.Watcher.Stop, params.Runtime.UserRoles)
 		},
 	})
 }
