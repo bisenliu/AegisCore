@@ -8,13 +8,8 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/trace/noop"
 
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 	"github.com/aegiscore/user-service/ent"
 )
 
@@ -29,24 +24,24 @@ const (
 	entResultError    = "error"
 )
 
+// entMetricsPlugin 在 Ent client 上安装 Prometheus query metrics interceptor。
+type entMetricsPlugin struct {
+	metrics *entQueryMetrics
+}
+
+// InstallEntClientPlugin 安装 Ent query metrics；metrics 为空时保持 no-op。
+func (p entMetricsPlugin) InstallEntClientPlugin(client *ent.Client) error {
+	installEntQueryMetrics(client, p.metrics)
+	return nil
+}
+
+// entQueryMetrics 持有 Ent query latency histogram 和 error counter。
 type entQueryMetrics struct {
 	latency *prometheus.HistogramVec
 	errors  *prometheus.CounterVec
 }
 
-func installEntObservability(client *ent.Client, metricsProvider *commonmetrics.Provider, tracingProvider *commontracing.Provider) error {
-	metrics, err := newEntQueryMetrics(metricsProvider)
-	if err != nil {
-		return err
-	}
-	tracer := noop.NewTracerProvider().Tracer("github.com/aegiscore/user-service/ent")
-	if tracingProvider != nil {
-		tracer = tracingProvider.Tracer("github.com/aegiscore/user-service/ent")
-	}
-	installEntQueryObservability(client, tracer, metrics)
-	return nil
-}
-
+// newEntQueryMetrics 仅在 metrics provider 启用时注册 Ent query collector。
 func newEntQueryMetrics(provider *commonmetrics.Provider) (*entQueryMetrics, error) {
 	if provider == nil || !provider.Enabled() {
 		return nil, nil
@@ -74,55 +69,45 @@ func newEntQueryMetrics(provider *commonmetrics.Provider) (*entQueryMetrics, err
 	return metrics, nil
 }
 
-func installEntQueryObservability(client *ent.Client, tracer trace.Tracer, metrics *entQueryMetrics) {
-	// Ent interceptor 只覆盖 query/select 路径，不覆盖 mutation；固定 entity/query/result label 用于控制指标基数。
-	if client == nil {
+// installEntQueryMetrics 记录 Ent query latency 和 error，不改变 query 结果或错误传播。
+func installEntQueryMetrics(client *ent.Client, metrics *entQueryMetrics) {
+	if client == nil || metrics == nil {
 		return
-	}
-	if tracer == nil {
-		tracer = noop.NewTracerProvider().Tracer("github.com/aegiscore/user-service/ent")
 	}
 	client.Intercept(ent.InterceptFunc(func(next ent.Querier) ent.Querier {
 		return ent.QuerierFunc(func(ctx context.Context, query ent.Query) (ent.Value, error) {
 			entity := entQueryEntity(query)
-			ctx, span := tracer.Start(ctx, "ent.query",
-				trace.WithAttributes(
-					attribute.String("db.system", "postgresql"),
-					attribute.String("ent.entity", entity),
-					attribute.String("ent.query", entQueryOperation),
-				),
-			)
 			startedAt := time.Now()
 			value, err := next.Query(ctx, query)
 			result := entResultSuccess
 			if err != nil {
 				result = entResultError
-				span.RecordError(err)
-				span.SetStatus(codes.Error, "ent query failed")
 			}
-			if metrics != nil {
-				metrics.latency.WithLabelValues(entity, entQueryOperation, result).Observe(time.Since(startedAt).Seconds())
-				if err != nil {
-					metrics.errors.WithLabelValues(entity, entQueryOperation).Inc()
-				}
+			metrics.latency.WithLabelValues(entity, entQueryOperation, result).Observe(time.Since(startedAt).Seconds())
+			if err != nil {
+				metrics.errors.WithLabelValues(entity, entQueryOperation).Inc()
 			}
-			span.End()
 			return value, err
 		})
 	}))
 }
 
+// entQueryEntity 将 Ent query 类型映射为固定低基数实体标签。
 func entQueryEntity(query ent.Query) string {
-	// 通过 query 类型名映射低基数实体标签；新增 Ent schema 后需同步这里和 entQueryMetricEntities，否则会落到 unknown。
 	if query == nil {
 		return "unknown"
 	}
 	typeName := reflect.TypeOf(query).String()
+	return entEntityFromTypeName(typeName, "Query")
+}
+
+// entEntityFromTypeName 将 Ent 生成类型名转换为稳定 snake_case 实体名。
+func entEntityFromTypeName(typeName string, suffix string) string {
 	if idx := strings.LastIndex(typeName, "."); idx >= 0 {
 		typeName = typeName[idx+1:]
 	}
 	typeName = strings.TrimPrefix(typeName, "*")
-	typeName = strings.TrimSuffix(typeName, "Query")
+	typeName = strings.TrimSuffix(typeName, suffix)
 	switch typeName {
 	case "Permission":
 		return "permission"
@@ -139,6 +124,7 @@ func entQueryEntity(query ent.Query) string {
 	}
 }
 
+// entQueryMetricEntities 返回预初始化 error counter 使用的固定实体集合。
 func entQueryMetricEntities() []string {
 	return []string{"permission", "role", "role_permission", "user", "user_role", "unknown"}
 }

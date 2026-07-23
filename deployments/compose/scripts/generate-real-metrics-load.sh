@@ -580,6 +580,9 @@ report_service_metric_presence() {
   if ! grep -Eq '^aegiscore_scheduler_jobs_total(\{| |$)' "$SERVICE_METRICS_FILE"; then
     printf '  note scheduler metrics are absent from the running service; no scheduler jobs appear to be registered.\n'
   fi
+  if ! service_metric_present aegiscore_user_service_ent_query_duration_seconds; then
+    printf '  note Ent query metrics require ent.plugins.metrics.enabled=true and an enabled metrics provider.\n'
+  fi
 }
 
 # histogram 在 /metrics 中会以 _bucket/_sum/_count 输出，所以单独兼容 duration 类指标。

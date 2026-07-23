@@ -1571,7 +1571,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "连接池等待空闲连接的次数速率，以及 Ent query 成功和错误速率。",
+      "description": "连接池等待空闲连接的次数速率，以及 Ent query 成功和错误速率；Ent query metrics 仅在 ent.plugins.metrics.enabled=true 且 metrics provider 启用时有数据。",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1767,7 +1767,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "连接池累计等待时长的 5 分钟变化速率，以及 Ent SQL 查询平均耗时和 p95 耗时。",
+      "description": "连接池累计等待时长的 5 分钟变化速率，以及 Ent SQL 查询平均耗时和 p95 耗时；Ent query metrics 仅在 ent.plugins.metrics.enabled=true 且 metrics provider 启用时有数据。",
       "fieldConfig": {
         "defaults": {
           "color": {

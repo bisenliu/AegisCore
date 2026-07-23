@@ -30,7 +30,11 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, 600*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeoutValue())
 	require.True(t, cfg.Auth.RefreshTokenRotation)
 	require.Equal(t, 5, cfg.Auth.MaxActiveSessionsPerUser)
-	require.True(t, cfg.Ent.SQLDebug)
+	require.True(t, cfg.Ent.Plugins.SQLLog.Enabled)
+	require.True(t, cfg.Ent.Plugins.SQLLog.Debug)
+	require.Equal(t, 250*time.Millisecond, cfg.Ent.Plugins.SQLLog.SlowThreshold)
+	require.False(t, cfg.Ent.Plugins.Tracing.Enabled)
+	require.True(t, cfg.Ent.Plugins.Metrics.Enabled)
 	require.Len(t, cfg.Resources.Redis, 1)
 	require.Equal(t, "127.0.0.1:6379", cfg.Resources.Redis[serviceresources.NameCacheRedis].Addr)
 	require.Equal(t, 7*time.Second, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
@@ -104,6 +108,32 @@ func TestLoadAppliesFeatureCacheDefaults(t *testing.T) {
 	require.EqualValues(t, 100000, cfg.RBAC.UserRoleCache.SizeValue())
 	require.Equal(t, 5*time.Second, cfg.RBAC.UserRoleCache.TTLValue())
 	require.Equal(t, 500*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeoutValue())
+}
+
+func TestLoadAppliesEntPluginDefaults(t *testing.T) {
+	yaml := strings.Replace(serviceConfigYAML(), `ent:
+  plugins:
+    sql_log:
+      enabled: true
+      debug: true
+      slow_threshold: 250ms
+    tracing:
+      enabled: false
+    metrics:
+      enabled: true
+`, "ent: {}\n", 1)
+
+	cfg := loadServiceConfig(t, yaml)
+	require.False(t, cfg.Ent.Plugins.SQLLog.Enabled)
+	require.False(t, cfg.Ent.Plugins.SQLLog.Debug)
+	require.Equal(t, 500*time.Millisecond, cfg.Ent.Plugins.SQLLog.SlowThreshold)
+	require.True(t, cfg.Ent.Plugins.Tracing.Enabled)
+	require.False(t, cfg.Ent.Plugins.Metrics.Enabled)
+}
+
+func TestLoadParsesEntSlowThresholdDuration(t *testing.T) {
+	cfg := loadServiceConfig(t, serviceConfigYAML())
+	require.Equal(t, 250*time.Millisecond, cfg.Ent.Plugins.SQLLog.SlowThreshold)
 }
 
 func TestApplyDefaultsPreservesDisabledFeatureCacheZeroValues(t *testing.T) {
@@ -304,7 +334,15 @@ rbac:
     ttl: 7s
     load_timeout: 600ms
 ent:
-  sql_debug: true
+  plugins:
+    sql_log:
+      enabled: true
+      debug: true
+      slow_threshold: 250ms
+    tracing:
+      enabled: false
+    metrics:
+      enabled: true
 log:
   level: info
   format: json

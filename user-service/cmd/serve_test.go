@@ -198,7 +198,15 @@ auth:
   max_active_sessions_per_user: 5
 rbac: {}
 ent:
-  sql_debug: false
+  plugins:
+    sql_log:
+      enabled: false
+      debug: false
+      slow_threshold: 500ms
+    tracing:
+      enabled: true
+    metrics:
+      enabled: false
 log:
   level: info
   format: json

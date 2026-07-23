@@ -15,6 +15,10 @@ type defaultsApplier interface {
 	ApplyDefaults()
 }
 
+type viperDefaultsApplier interface {
+	ApplyViperDefaults(*viper.Viper)
+}
+
 // Load 从指定路径或默认 configs 目录读取 YAML 配置，并应用 AEGISCORE_ 环境变量覆盖。
 func Load(path string) (*Config, error) {
 	return LoadInto(path, Config.Validate)
@@ -24,6 +28,10 @@ func Load(path string) (*Config, error) {
 func LoadInto[T any](path string, validate func(T) error) (*T, error) {
 	v := viper.New()
 	setCoreDefaults(v, DefaultConfig())
+	var serviceDefaults T
+	if defaults, ok := any(&serviceDefaults).(viperDefaultsApplier); ok {
+		defaults.ApplyViperDefaults(v)
+	}
 
 	v.SetConfigType("yaml")
 	if path != "" {

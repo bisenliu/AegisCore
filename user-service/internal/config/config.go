@@ -4,12 +4,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/viper"
+
 	commonconfig "github.com/aegiscore/common/runtime/config"
 	commonresources "github.com/aegiscore/common/runtime/resources"
 	serviceresources "github.com/aegiscore/user-service/internal/resources"
 )
 
-const minProductionJWTBytes = 32
+const (
+	minProductionJWTBytes = 32
+	// DefaultEntSlowQueryThreshold 是 Ent SQL log 插件的默认慢查询阈值。
+	DefaultEntSlowQueryThreshold = 500 * time.Millisecond
+)
 
 // Config 是 user-service 的根配置对象。
 type Config struct {
@@ -88,7 +94,31 @@ func (c FeatureCacheConfig) LoadTimeoutValue() time.Duration {
 
 // EntConfig 控制 user-service Ent 运行时行为。
 type EntConfig struct {
-	SQLDebug bool `mapstructure:"sql_debug"`
+	Plugins EntPluginsConfig `mapstructure:"plugins"`
+}
+
+// EntPluginsConfig 控制 Ent 运行时观测插件启停。
+type EntPluginsConfig struct {
+	SQLLog  EntSQLLogPluginConfig  `mapstructure:"sql_log"`
+	Tracing EntTracingPluginConfig `mapstructure:"tracing"`
+	Metrics EntMetricsPluginConfig `mapstructure:"metrics"`
+}
+
+// EntSQLLogPluginConfig 控制 Ent SQL driver 日志插件行为。
+type EntSQLLogPluginConfig struct {
+	Enabled       bool          `mapstructure:"enabled"`
+	Debug         bool          `mapstructure:"debug"`
+	SlowThreshold time.Duration `mapstructure:"slow_threshold"`
+}
+
+// EntTracingPluginConfig 控制 Ent tracing 插件行为。
+type EntTracingPluginConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
+// EntMetricsPluginConfig 控制 Ent Prometheus metrics 插件行为。
+type EntMetricsPluginConfig struct {
+	Enabled bool `mapstructure:"enabled"`
 }
 
 // JWTConfig 包含 user-service JWT 签发和校验设置。
@@ -113,8 +143,27 @@ func (c *Config) ApplyDefaults() {
 	}
 	c.Resources.Redis.ApplyDefaults()
 	c.Resources.Postgres.ApplyDefaults()
+	c.Ent.applyDefaults()
 	c.Auth.TokenVersionCache.applyDefaults(100000, time.Second, 300*time.Millisecond)
 	c.RBAC.UserRoleCache.applyDefaults(100000, 5*time.Second, 500*time.Millisecond)
+}
+
+// ApplyViperDefaults 注册 user-service 私有配置默认值，使显式 false 不被后置默认值覆盖。
+func (c *Config) ApplyViperDefaults(v *viper.Viper) {
+	if v == nil {
+		return
+	}
+	v.SetDefault("ent.plugins.sql_log.enabled", false)
+	v.SetDefault("ent.plugins.sql_log.debug", false)
+	v.SetDefault("ent.plugins.sql_log.slow_threshold", DefaultEntSlowQueryThreshold)
+	v.SetDefault("ent.plugins.tracing.enabled", true)
+	v.SetDefault("ent.plugins.metrics.enabled", false)
+}
+
+func (c *EntConfig) applyDefaults() {
+	if c.Plugins.SQLLog.SlowThreshold <= 0 {
+		c.Plugins.SQLLog.SlowThreshold = DefaultEntSlowQueryThreshold
+	}
 }
 
 // Validate 在 user-service 启动前拒绝结构非法的服务配置。

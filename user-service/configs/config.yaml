@@ -59,7 +59,20 @@ rbac:
     load_timeout: 500ms
 
 ent:
-  sql_debug: false
+  plugins:
+    sql_log:
+      # enabled 仅控制是否安装 Ent SQL log driver 插件；默认不输出 SQL 日志。
+      enabled: true
+      # debug=true 时成功 SQL 以 debug 级别输出；需要 log.level=debug 才能在终端看到。
+      debug: true
+      # 慢 SQL 达到该阈值时以 warn 级别输出；SQL error 始终以 error 级别输出。
+      slow_threshold: 500ms
+    tracing:
+      # tracing=true 时安装 Ent query/mutation span 插件；需要 observability.tracing 配置可用才会导出真实链路。
+      enabled: false
+    metrics:
+      # metrics=true 且 observability.metrics.enabled=true 时注册 Ent query latency/error 指标，Grafana Ent 面板才会有数据。
+      enabled: true
 
 log:
   # 日志只写 stdout/stderr；容器平台负责采集、保留和轮转。
