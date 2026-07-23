@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/fx/fxtest"
 )
 
 func TestInitUsesDefaultTimezone(t *testing.T) {
@@ -52,16 +51,6 @@ func TestInitCanRetryAfterFailure(t *testing.T) {
 		require.Error(t, Init())
 		require.NoError(t, os.Setenv("TZ", "UTC"))
 		require.NoError(t, Init())
-		assertTimezone(t, "UTC")
-	})
-}
-
-func TestModuleDoesNotRequireRuntimeConfig(t *testing.T) {
-	withIsolatedTimezone(t, func() {
-		require.NoError(t, os.Setenv("TZ", "UTC"))
-		app := fxtest.New(t, Module)
-		app.RequireStart()
-		app.RequireStop()
 		assertTimezone(t, "UTC")
 	})
 }

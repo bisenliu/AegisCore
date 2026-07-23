@@ -53,7 +53,7 @@ func TestProviderGraphConfiguresGinModeBeforeEngine(t *testing.T) {
 	var engine *gin.Engine
 	app := fxtest.New(t,
 		fx.Supply(&cfg, zap.NewNop()),
-		fx.Provide(ConfigureGinMode, commonmetrics.NewFxProvider, commontracing.NewFxProvider, NewGinEngine),
+		fx.Provide(ConfigureGinMode, commonmetrics.NewMetricsProvider, commontracing.NewTracingProvider, NewGinEngine),
 		fx.Populate(&engine),
 	)
 	app.RequireStart()

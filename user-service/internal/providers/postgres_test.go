@@ -291,7 +291,7 @@ func TestNewCacheRedisUsesFxTracingProviderDuringConstruction(t *testing.T) {
 	var got clients
 	app := fxtest.New(t,
 		fx.Supply(cfg, serviceconfig.NewRuntimeConfig(cfg), zap.NewNop()),
-		fx.Provide(commontracing.NewFxProvider),
+		fx.Provide(commontracing.NewTracingProvider),
 		fx.Provide(fx.Annotate(NewCacheRedis, fx.ResultTags(`name:"cache_redis"`))),
 		fx.Populate(&got),
 	)

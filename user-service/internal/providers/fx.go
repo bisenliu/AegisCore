@@ -14,8 +14,8 @@ var WiringModule = fx.Module("user-service-providers-wiring",
 		// Fx 分类：基础运行时 - 显式设置 Gin 进程运行模式。
 		ConfigureGinMode,
 		// Fx 分类：横切能力 - 服务级可观测性 provider。
-		commonmetrics.NewFxProvider,
-		commontracing.NewFxProvider,
+		commonmetrics.NewMetricsProvider,
+		commontracing.NewTracingProvider,
 		// Fx 分类：横切能力 - 服务级认证与密码安全能力。
 		password.NewService,
 		// Fx 分类：资源 - 服务拥有的 PostgreSQL 与 Redis 客户端。

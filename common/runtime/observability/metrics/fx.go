@@ -6,8 +6,8 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 )
 
-// NewFxProvider 从共享配置构造 metrics provider，不挂载 HTTP 路由。
-func NewFxProvider(cfg *config.Config) (*Provider, error) {
+// NewMetricsProvider 从共享配置构造 metrics provider，不挂载 HTTP 路由。
+func NewMetricsProvider(cfg *config.Config) (*Provider, error) {
 	if cfg == nil {
 		return nil, errors.New("metrics config is required")
 	}

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,7 +27,7 @@ func TestAppModuleResolvesSharedValidationDependency(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestAppModuleIncludesSharedTimezoneDependency(t *testing.T) {
+func TestAppModuleIncludesProcessRuntimeInitialization(t *testing.T) {
 	serviceCfg := appModuleValidationTestConfig()
 	err := fx.ValidateApp(AppOptions(
 		serviceCfg,
@@ -127,10 +128,32 @@ func TestRuntimeModuleRegistersRuntimeServersThroughNamedInvoke(t *testing.T) {
 	require.NoError(t, err)
 
 	source := string(content)
+	require.Contains(t, source, "fx.Invoke(InitProcessRuntime)")
 	require.Contains(t, source, "fx.Invoke(registerRuntimeServers)")
 	require.Contains(t, source, "func registerRuntimeServers(_ *http.Server, _ *PprofServer) {}")
+	require.Contains(t, source, "func InitProcessRuntime() error")
+	require.NotContains(t, source, "commontz.Module")
 	require.NotContains(t, source, "func(*http.Server) {}")
 	require.NotContains(t, source, "func(*PprofServer) {}")
+}
+
+func TestRuntimeModuleOrdersProcessRuntimeBeforeRuntimeServers(t *testing.T) {
+	content, err := os.ReadFile("app.go")
+	require.NoError(t, err)
+	source := string(content)
+
+	initIndex := strings.Index(source, "fx.Invoke(InitProcessRuntime)")
+	providerRuntimeIndex := strings.Index(source, "providers.RuntimeModule")
+	permissionLifecycleIndex := strings.Index(source, "permissionfeature.LifecycleModule")
+	serverIndex := strings.Index(source, "fx.Invoke(registerRuntimeServers)")
+
+	require.NotEqual(t, -1, initIndex)
+	require.NotEqual(t, -1, providerRuntimeIndex)
+	require.NotEqual(t, -1, permissionLifecycleIndex)
+	require.NotEqual(t, -1, serverIndex)
+	require.Less(t, initIndex, providerRuntimeIndex)
+	require.Less(t, providerRuntimeIndex, permissionLifecycleIndex)
+	require.Less(t, permissionLifecycleIndex, serverIndex)
 }
 
 func appModuleValidationTestConfig() *serviceconfig.Config {

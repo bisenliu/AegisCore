@@ -42,7 +42,7 @@ var WiringModule = fx.Module("aegiscore-user-service-wiring",
 // RuntimeModule 注册 user-service 正式运行时需要主动执行的初始化、路由和 lifecycle。
 var RuntimeModule = fx.Module("aegiscore-user-service-runtime",
 	// Fx 分类：基础运行时 - 跨 feature 的进程时区初始化。
-	commontz.Module,
+	fx.Invoke(InitProcessRuntime),
 	// Fx 分类：生命周期 - 启动期服务级 runtime 注册。
 	providers.RuntimeModule,
 	// Fx 分类：生命周期 - 权限 feature 的 RBAC 初始化和 watcher lifecycle。
@@ -53,6 +53,11 @@ var RuntimeModule = fx.Module("aegiscore-user-service-runtime",
 
 // registerRuntimeServers 强制解析运行时 server，使其构造函数注册 lifecycle hook。
 func registerRuntimeServers(_ *http.Server, _ *PprofServer) {}
+
+// InitProcessRuntime 初始化 user-service 拥有的进程级 runtime 状态。
+func InitProcessRuntime() error {
+	return commontz.Init()
+}
 
 // AppModule 组装 user-service 顶层模块、服务级 provider 和 HTTP server 生命周期。
 var AppModule = fx.Module("aegiscore-user-service",

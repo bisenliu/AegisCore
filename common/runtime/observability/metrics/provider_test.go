@@ -129,8 +129,8 @@ func TestNewProviderRejectsMissingServiceIdentity(t *testing.T) {
 	}
 }
 
-func TestNewFxProviderUsesSharedConfig(t *testing.T) {
-	provider, err := NewFxProvider(&config.Config{
+func TestNewMetricsProviderUsesSharedConfig(t *testing.T) {
+	provider, err := NewMetricsProvider(&config.Config{
 		App: config.AppConfig{
 			Name:        "aegiscore-test",
 			Environment: "local",
@@ -139,13 +139,13 @@ func TestNewFxProviderUsesSharedConfig(t *testing.T) {
 			Metrics: testMetricsConfig(true, false),
 		},
 	})
-	require.NoError(t, err, "NewFxProvider")
+	require.NoError(t, err, "NewMetricsProvider")
 	require.NotNil(t, provider)
 	require.True(t, provider.Enabled(), "provider = %#v, want enabled provider", provider)
 }
 
-func TestNewFxProviderReturnsDisabledProvider(t *testing.T) {
-	provider, err := NewFxProvider(&config.Config{
+func TestNewMetricsProviderReturnsDisabledProvider(t *testing.T) {
+	provider, err := NewMetricsProvider(&config.Config{
 		App: config.AppConfig{
 			Name:        "aegiscore-test",
 			Environment: "local",
@@ -154,13 +154,13 @@ func TestNewFxProviderReturnsDisabledProvider(t *testing.T) {
 			Metrics: testMetricsConfig(false, false),
 		},
 	})
-	require.NoError(t, err, "NewFxProvider")
+	require.NoError(t, err, "NewMetricsProvider")
 	require.NotNil(t, provider)
 	require.False(t, provider.Enabled(), "provider = %#v, want disabled provider", provider)
 }
 
-func TestNewFxProviderRejectsMissingConfig(t *testing.T) {
-	_, err := NewFxProvider(nil)
+func TestNewMetricsProviderRejectsMissingConfig(t *testing.T) {
+	_, err := NewMetricsProvider(nil)
 	require.ErrorContains(t, err, "metrics config")
 }
 

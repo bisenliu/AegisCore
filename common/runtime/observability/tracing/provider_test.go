@@ -210,9 +210,9 @@ func TestTextMapPropagatorUsesTraceContextAndBaggage(t *testing.T) {
 	assertContains(t, fields, "baggage")
 }
 
-func TestNewFxProviderRegistersShutdown(t *testing.T) {
+func TestNewTracingProviderRegistersShutdown(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
-	provider, err := NewFxProvider(lifecycle, &config.Config{
+	provider, err := NewTracingProvider(lifecycle, &config.Config{
 		App: config.AppConfig{
 			Name:        "aegiscore-test",
 			Environment: "local",
@@ -221,7 +221,7 @@ func TestNewFxProviderRegistersShutdown(t *testing.T) {
 			Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1.0},
 		},
 	})
-	require.NoError(t, err, "NewFxProvider")
+	require.NoError(t, err, "NewTracingProvider")
 	require.NotNil(t, provider, "provider is nil")
 	require.Len(t, lifecycle.hooks, 1, "registered hooks")
 	require.NotNil(t, lifecycle.hooks[0].OnStart, "registered OnStart hook")
@@ -233,10 +233,10 @@ func TestNewFxProviderRegistersShutdown(t *testing.T) {
 	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()), "OnStop")
 }
 
-func TestNewFxProviderCreatesExporterDuringOnStart(t *testing.T) {
+func TestNewTracingProviderCreatesExporterDuringOnStart(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
 	called := false
-	provider, err := newFxProvider(lifecycle, &config.Config{
+	provider, err := newTracingProvider(lifecycle, &config.Config{
 		App:           config.AppConfig{Name: "aegiscore-test", Environment: "local"},
 		Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1.0, OTLPEndpoint: "collector.internal:4317"}},
 	}, func(context.Context, config.TracingConfig) (sdktrace.SpanExporter, error) {
@@ -254,7 +254,7 @@ func TestNewFxProviderCreatesExporterDuringOnStart(t *testing.T) {
 	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
 }
 
-func TestNewFxProviderExporterCreationUsesStartContext(t *testing.T) {
+func TestNewTracingProviderExporterCreationUsesStartContext(t *testing.T) {
 	started := make(chan struct{})
 	var provider *Provider
 	app := fxtest.New(t,
@@ -263,7 +263,7 @@ func TestNewFxProviderExporterCreationUsesStartContext(t *testing.T) {
 			Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1.0, OTLPEndpoint: "collector.internal:4317"}},
 		}),
 		fx.Provide(func(lifecycle fx.Lifecycle, cfg *config.Config) (*Provider, error) {
-			return newFxProvider(lifecycle, cfg, func(ctx context.Context, _ config.TracingConfig) (sdktrace.SpanExporter, error) {
+			return newTracingProvider(lifecycle, cfg, func(ctx context.Context, _ config.TracingConfig) (sdktrace.SpanExporter, error) {
 				close(started)
 				<-ctx.Done()
 				return nil, ctx.Err()
@@ -286,7 +286,7 @@ func TestNewFxProviderExporterCreationUsesStartContext(t *testing.T) {
 	require.False(t, span.SpanContext().IsValid())
 }
 
-func TestNewFxProviderShutdownRunsWhenLaterStartHookFails(t *testing.T) {
+func TestNewTracingProviderShutdownRunsWhenLaterStartHookFails(t *testing.T) {
 	shutdowns := 0
 	startErr := errors.New("later start failed")
 	var provider *Provider
@@ -296,7 +296,7 @@ func TestNewFxProviderShutdownRunsWhenLaterStartHookFails(t *testing.T) {
 			Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1.0, OTLPEndpoint: "collector.internal:4317"}},
 		}),
 		fx.Provide(func(lifecycle fx.Lifecycle, cfg *config.Config) (*Provider, error) {
-			return newFxProvider(lifecycle, cfg, func(context.Context, config.TracingConfig) (sdktrace.SpanExporter, error) {
+			return newTracingProvider(lifecycle, cfg, func(context.Context, config.TracingConfig) (sdktrace.SpanExporter, error) {
 				return &testSpanExporter{shutdown: func() { shutdowns++ }}, nil
 			})
 		}),
@@ -316,9 +316,9 @@ func TestNewFxProviderShutdownRunsWhenLaterStartHookFails(t *testing.T) {
 	require.False(t, span.SpanContext().IsValid())
 }
 
-func TestNewFxProviderDisabledUsesNeverSample(t *testing.T) {
+func TestNewTracingProviderDisabledUsesNeverSample(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
-	provider, err := NewFxProvider(lifecycle, &config.Config{
+	provider, err := NewTracingProvider(lifecycle, &config.Config{
 		App: config.AppConfig{
 			Name:        "aegiscore-test",
 			Environment: "local",
@@ -327,7 +327,7 @@ func TestNewFxProviderDisabledUsesNeverSample(t *testing.T) {
 			Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1.0},
 		},
 	})
-	require.NoError(t, err, "NewFxProvider")
+	require.NoError(t, err, "NewTracingProvider")
 	defer shutdownProvider(t, provider)
 	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()), "OnStart")
 
@@ -344,9 +344,9 @@ func TestNewOTLPExporterWrapsCause(t *testing.T) {
 	require.ErrorIs(t, err, cause)
 }
 
-func TestNewFxProviderPropagatesConstructionError(t *testing.T) {
+func TestNewTracingProviderPropagatesConstructionError(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
-	_, err := NewFxProvider(lifecycle, &config.Config{
+	_, err := NewTracingProvider(lifecycle, &config.Config{
 		App: config.AppConfig{
 			Name:        "aegiscore-test",
 			Environment: "local",

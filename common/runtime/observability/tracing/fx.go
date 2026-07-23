@@ -10,12 +10,12 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 )
 
-// NewFxProvider 从共享配置构造 tracing provider，并注册关闭生命周期。
-func NewFxProvider(lifecycle fx.Lifecycle, cfg *config.Config) (*Provider, error) {
-	return newFxProvider(lifecycle, cfg, newOTLPExporter)
+// NewTracingProvider 从共享配置构造 tracing provider，并注册关闭生命周期。
+func NewTracingProvider(lifecycle fx.Lifecycle, cfg *config.Config) (*Provider, error) {
+	return newTracingProvider(lifecycle, cfg, newOTLPExporter)
 }
 
-func newFxProvider(lifecycle fx.Lifecycle, cfg *config.Config, createExporter exporterFactory) (*Provider, error) {
+func newTracingProvider(lifecycle fx.Lifecycle, cfg *config.Config, createExporter exporterFactory) (*Provider, error) {
 	if cfg == nil {
 		return nil, errors.New("tracing config is required")
 	}

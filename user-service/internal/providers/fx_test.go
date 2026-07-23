@@ -63,7 +63,7 @@ func TestSharedObservabilityProvidersStartFromServiceRuntimeConfig(t *testing.T)
 	var got observabilityProviders
 	app := fxtest.New(t,
 		fx.Supply(serviceconfig.NewRuntimeConfig(serviceCfg)),
-		fx.Provide(commonmetrics.NewFxProvider, commontracing.NewFxProvider),
+		fx.Provide(commonmetrics.NewMetricsProvider, commontracing.NewTracingProvider),
 		fx.Populate(&got),
 	)
 	app.RequireStart()
