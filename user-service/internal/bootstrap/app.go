@@ -47,13 +47,12 @@ var RuntimeModule = fx.Module("aegiscore-user-service-runtime",
 	providers.RuntimeModule,
 	// Fx 分类：生命周期 - 权限 feature 的 RBAC 初始化和 watcher lifecycle。
 	permissionfeature.LifecycleModule,
-	fx.Invoke(
-		// Fx 分类：生命周期 - 强制实例化 HTTP server 并注册启停 hook。
-		func(*http.Server) {},
-		// Fx 分类：生命周期 - 强制解析并按需启动独立 pprof server。
-		func(*PprofServer) {},
-	),
+	// Fx 分类：生命周期 - 强制解析运行时 server 并注册启停 hook。
+	fx.Invoke(registerRuntimeServers),
 )
+
+// registerRuntimeServers 强制解析运行时 server，使其构造函数注册 lifecycle hook。
+func registerRuntimeServers(_ *http.Server, _ *PprofServer) {}
 
 // AppModule 组装 user-service 顶层模块、服务级 provider 和 HTTP server 生命周期。
 var AppModule = fx.Module("aegiscore-user-service",

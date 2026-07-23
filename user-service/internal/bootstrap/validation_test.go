@@ -122,6 +122,17 @@ func TestRuntimeModuleNamingReflectsCompositionRootScope(t *testing.T) {
 	require.Contains(t, source, "AppModule")
 }
 
+func TestRuntimeModuleRegistersRuntimeServersThroughNamedInvoke(t *testing.T) {
+	content, err := os.ReadFile("app.go")
+	require.NoError(t, err)
+
+	source := string(content)
+	require.Contains(t, source, "fx.Invoke(registerRuntimeServers)")
+	require.Contains(t, source, "func registerRuntimeServers(_ *http.Server, _ *PprofServer) {}")
+	require.NotContains(t, source, "func(*http.Server) {}")
+	require.NotContains(t, source, "func(*PprofServer) {}")
+}
+
 func appModuleValidationTestConfig() *serviceconfig.Config {
 	return &serviceconfig.Config{Config: config.Config{
 		App:           config.AppConfig{Name: "aegiscore-user-service", Environment: "test"},
