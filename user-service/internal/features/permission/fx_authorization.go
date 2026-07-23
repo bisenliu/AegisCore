@@ -42,6 +42,7 @@ var permissionPublicOptions = fx.Options(
 		providePermissionPolicyChangeNotifier,
 		providePermissionPolicyInitializer,
 		providePermissionApplicationWatcher,
+		providePermissionUserRoleResolverLifecycle,
 		providePermissionUserRoleCacheCloser,
 		providePermissionController,
 	),
@@ -61,19 +62,20 @@ type UserRoleResolverParams struct {
 	Client *ent.Client `name:"primary_db"`
 }
 
-// UserRoleResolverResult 同时暴露 resolver、cache stats、closer 和启动器，确保 lazy 初始化仍由 lifecycle 控制。
+// UserRoleResolverResult 同时暴露 resolver、cache stats、closer 和生命周期视图，确保 lazy 初始化仍由 lifecycle 控制。
 type UserRoleResolverResult struct {
 	fx.Out
 
-	Resolver permissioncasbin.UserRoleResolver
-	Stats    localcache.StatsSource               `name:"permission_rbac_user_roles_cache"`
-	Closer   permissioncasbin.UserRoleCacheCloser `name:"permission_user_role_cache_closer"`
-	Starter  userRoleResolverStarter
+	Resolver  permissioncasbin.UserRoleResolver
+	Stats     localcache.StatsSource               `name:"permission_rbac_user_roles_cache"`
+	Closer    permissioncasbin.UserRoleCacheCloser `name:"permission_user_role_cache_closer"`
+	Lifecycle userRoleResolverLifecycle            `name:"permission_user_role_resolver_lifecycle"`
 }
 
-// userRoleResolverStarter 是 lifecycle 启动 holder 的最小接口，避免把 Fx lifecycle 传入 Casbin adapter。
-type userRoleResolverStarter interface {
+// userRoleResolverLifecycle 是 permission composition 内部显式启停契约，避免把启动能力隐藏在关闭接口中。
+type userRoleResolverLifecycle interface {
 	Start(context.Context) error
+	Close() error
 }
 
 // userRoleResolverHolder 延迟创建真实 resolver，使 Fx graph 构建阶段不会提前访问数据库或缓存资源。
@@ -132,6 +134,12 @@ type PermissionUserRoleCacheCloserParams struct {
 	Closer permissioncasbin.UserRoleCacheCloser `name:"permission_user_role_cache_closer"`
 }
 
+type PermissionUserRoleResolverLifecycleParams struct {
+	fx.In
+
+	Lifecycle userRoleResolverLifecycle `name:"permission_user_role_resolver_lifecycle"`
+}
+
 type PermissionUserRoleCacheStatsResult struct {
 	fx.Out
 
@@ -158,7 +166,7 @@ func providePolicyLoader(params PrimaryDBParams) permissioncasbin.Loader {
 
 func provideUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult, error) {
 	holder := &userRoleResolverHolder{params: permissioncasbin.UserRoleResolverParams{Config: params.Config, Client: params.Client}}
-	return UserRoleResolverResult{Resolver: holder, Stats: holder, Closer: holder, Starter: holder}, nil
+	return UserRoleResolverResult{Resolver: holder, Stats: holder, Closer: holder, Lifecycle: holder}, nil
 }
 
 // provideEngine 将同一个 Casbin engine 按不同端口投影，保持授权、reload、健康检查和初始化使用同一份内存策略。
@@ -209,6 +217,10 @@ type PermissionApplicationWatcherParams struct {
 
 func providePermissionApplicationWatcher(params PermissionApplicationWatcherParams) permissionApplicationWatcher {
 	return params.Watcher
+}
+
+func providePermissionUserRoleResolverLifecycle(params PermissionUserRoleResolverLifecycleParams) userRoleResolverLifecycle {
+	return params.Lifecycle
 }
 
 func providePermissionUserRoleCacheCloser(params PermissionUserRoleCacheCloserParams) permissioncasbin.UserRoleCacheCloser {

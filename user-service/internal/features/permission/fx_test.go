@@ -45,6 +45,7 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 		fx.Replace(
 			fx.Annotate(loader, fx.As(new(permissioncasbin.Loader))),
 			fx.Annotate(roles, fx.As(new(permissioncasbin.UserRoleResolver))),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(userRoleResolverLifecycle)), fx.ResultTags(`name:"permission_user_role_resolver_lifecycle"`)),
 			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser)), fx.ResultTags(`name:"permission_user_role_cache_closer"`)),
 			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
@@ -84,6 +85,7 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 		fx.Replace(
 			fx.Annotate(loader, fx.As(new(permissioncasbin.Loader))),
 			fx.Annotate(roles, fx.As(new(permissioncasbin.UserRoleResolver))),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(userRoleResolverLifecycle)), fx.ResultTags(`name:"permission_user_role_resolver_lifecycle"`)),
 			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser)), fx.ResultTags(`name:"permission_user_role_cache_closer"`)),
 			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
@@ -125,6 +127,7 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 		fx.Replace(
 			fx.Annotate(loader, fx.As(new(permissioncasbin.Loader))),
 			fx.Annotate(roles, fx.As(new(permissioncasbin.UserRoleResolver))),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(userRoleResolverLifecycle)), fx.ResultTags(`name:"permission_user_role_resolver_lifecycle"`)),
 			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser)), fx.ResultTags(`name:"permission_user_role_cache_closer"`)),
 			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
@@ -163,6 +166,49 @@ func TestStopRBACLifecycleJoinsWatcherAndCloserErrors(t *testing.T) {
 	require.True(t, closer.closed)
 }
 
+func TestRegisterRBACLifecycleStopsWhenUserRolesStartFails(t *testing.T) {
+	startErr := errors.New("user roles start failed")
+	lifecycle := &permissionModuleLifecycle{}
+	engine := &permissionModulePolicyInitializer{}
+	watcher := &permissionModuleApplicationWatcher{}
+	userRoles := &permissionModuleUserRoleLifecycle{startErr: startErr}
+
+	registerRBACLifecycle(RegisterRBACLifecycleParams{
+		Lifecycle: lifecycle,
+		Engine:    engine,
+		Watcher:   watcher,
+		UserRoles: userRoles,
+	})
+	require.Len(t, lifecycle.hooks, 1)
+
+	err := lifecycle.hooks[0].OnStart(context.Background())
+	require.ErrorIs(t, err, startErr)
+	require.Equal(t, 1, userRoles.startCalls)
+	require.False(t, engine.initialized)
+	require.False(t, watcher.started)
+}
+
+func TestRegisterRBACLifecycleStopClosesUserRolesAfterWatcherError(t *testing.T) {
+	watcherErr := errors.New("watcher stop failed")
+	lifecycle := &permissionModuleLifecycle{}
+	userRoles := &permissionModuleUserRoleLifecycle{closeErr: errors.New("user roles close failed")}
+	watcher := &permissionModuleApplicationWatcher{stopErr: watcherErr}
+
+	registerRBACLifecycle(RegisterRBACLifecycleParams{
+		Lifecycle: lifecycle,
+		Engine:    &permissionModulePolicyInitializer{},
+		Watcher:   watcher,
+		UserRoles: userRoles,
+	})
+	require.Len(t, lifecycle.hooks, 1)
+
+	err := lifecycle.hooks[0].OnStop(context.Background())
+	require.ErrorIs(t, err, watcherErr)
+	require.ErrorIs(t, err, userRoles.closeErr)
+	require.Equal(t, 1, watcher.stopCalls)
+	require.Equal(t, 1, userRoles.closeCalls)
+}
+
 func TestUserRoleResolverHolderFailsClosedAndClosesIdempotently(t *testing.T) {
 	enabled := true
 	size := int64(10)
@@ -196,6 +242,7 @@ func TestPermissionModuleRequiresMetricsProvider(t *testing.T) {
 		fx.Replace(
 			fx.Annotate(permissionModulePolicyLoader{}, fx.As(new(permissioncasbin.Loader))),
 			fx.Annotate(permissionModuleUserRoleResolver{}, fx.As(new(permissioncasbin.UserRoleResolver))),
+			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(userRoleResolverLifecycle)), fx.ResultTags(`name:"permission_user_role_resolver_lifecycle"`)),
 			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(permissioncasbin.UserRoleCacheCloser)), fx.ResultTags(`name:"permission_user_role_cache_closer"`)),
 			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
@@ -266,7 +313,58 @@ type permissionModuleErrCloser struct {
 	closed bool
 }
 
+func (c *permissionModuleErrCloser) Start(context.Context) error { return nil }
+
 func (c *permissionModuleErrCloser) Close() error {
 	c.closed = true
 	return c.err
+}
+
+type permissionModuleLifecycle struct {
+	hooks []fx.Hook
+}
+
+func (l *permissionModuleLifecycle) Append(hook fx.Hook) {
+	l.hooks = append(l.hooks, hook)
+}
+
+type permissionModulePolicyInitializer struct {
+	initialized bool
+}
+
+func (i *permissionModulePolicyInitializer) InitializeFailClosed(context.Context) {
+	i.initialized = true
+}
+
+type permissionModuleApplicationWatcher struct {
+	started   bool
+	stopCalls int
+	stopErr   error
+}
+
+func (w *permissionModuleApplicationWatcher) Start() {
+	w.started = true
+}
+
+func (w *permissionModuleApplicationWatcher) Stop(context.Context) error {
+	w.stopCalls++
+	w.started = false
+	return w.stopErr
+}
+
+type permissionModuleUserRoleLifecycle struct {
+	startCalls int
+	closeCalls int
+	startErr   error
+	closeErr   error
+}
+
+func (l *permissionModuleUserRoleLifecycle) Start(context.Context) error {
+	l.startCalls++
+	return l.startErr
+}
+
+func (l *permissionModuleUserRoleLifecycle) Close() error {
+	l.closeCalls++
+	return l.closeErr
 }
