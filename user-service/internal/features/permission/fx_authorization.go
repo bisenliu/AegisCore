@@ -18,7 +18,6 @@ import (
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 	permissioncasbin "github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin"
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
-	"github.com/aegiscore/user-service/internal/router"
 )
 
 // Fx 选项
@@ -44,13 +43,6 @@ var permissionPublicOptions = fx.Options(
 		providePermissionUserRoleCacheStats,
 		providePermissionPolicyChangeNotifier,
 		providePermissionController,
-	),
-	fx.Provide(
-		fx.Annotate(
-			newPermissionRouteRegistrar,
-			fx.As(new(router.AuthorizedRouteRegistrar)),
-			fx.ResultTags(`group:"authorized_routes"`),
-		),
 	),
 )
 

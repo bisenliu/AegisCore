@@ -8,7 +8,11 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commonauth "github.com/aegiscore/common/security/auth"
+	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
+	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
+	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
+	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 	"github.com/aegiscore/user-service/internal/router"
 )
 
@@ -16,17 +20,18 @@ import (
 type RegisterRouteParams struct {
 	fx.In
 
-	Config              *config.Config
-	Log                 *zap.Logger
-	Engine              *gin.Engine
-	JWT                 commonauth.AccessTokenVerifier
-	Health              router.HealthChecks
-	Metrics             *commonmetrics.Provider
-	TokenVersions       commonauth.TokenVersionValidator
-	Authorizer          permissionauthorization.Authorizer
-	PublicRoutes        []router.PublicRouteRegistrar        `group:"public_routes"`
-	AuthenticatedRoutes []router.AuthenticatedRouteRegistrar `group:"authenticated_routes"`
-	AuthorizedRoutes    []router.AuthorizedRouteRegistrar    `group:"authorized_routes"`
+	Config        *config.Config
+	Log           *zap.Logger
+	Engine        *gin.Engine
+	JWT           commonauth.AccessTokenVerifier
+	Health        router.HealthChecks
+	Metrics       *commonmetrics.Provider
+	TokenVersions commonauth.TokenVersionValidator
+	Authorizer    permissionauthorization.Authorizer
+	Auth          *authhttp.AuthController
+	Permission    *permissionhttp.PermissionController
+	Role          *rolehttp.RoleController
+	User          *userhttp.UserController
 }
 
 // RegisterRoutes 将服务级 provider 依赖适配为 router 层路由注册参数。
@@ -41,8 +46,9 @@ func RegisterRoutes(params RegisterRouteParams) error {
 		Metrics:               params.Metrics,
 		TokenVersionValidator: params.TokenVersions,
 		Authorizer:            params.Authorizer,
-		PublicRoutes:          params.PublicRoutes,
-		AuthenticatedRoutes:   params.AuthenticatedRoutes,
-		AuthorizedRoutes:      params.AuthorizedRoutes,
+		Auth:                  params.Auth,
+		Permission:            params.Permission,
+		Role:                  params.Role,
+		User:                  params.User,
 	})
 }

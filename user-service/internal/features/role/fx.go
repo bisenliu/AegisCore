@@ -8,7 +8,6 @@ import (
 	rolequery "github.com/aegiscore/user-service/internal/features/role/application/query"
 	rolepostgres "github.com/aegiscore/user-service/internal/features/role/infrastructure/postgres"
 	rolehttp "github.com/aegiscore/user-service/internal/features/role/transport/http"
-	"github.com/aegiscore/user-service/internal/router"
 )
 
 // Module 组装角色管理 feature 的应用服务、控制器和基础设施 adapter。
@@ -36,10 +35,5 @@ var Module = fx.Module("feature-role",
 		rolequery.NewRoleQueryService,
 		// Fx 分类：传输 - role HTTP controller。
 		rolehttp.NewRoleController,
-		fx.Annotate(
-			newRoleRouteRegistrar,
-			fx.As(new(router.AuthorizedRouteRegistrar)),
-			fx.ResultTags(`group:"authorized_routes"`),
-		),
 	),
 )

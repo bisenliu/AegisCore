@@ -101,17 +101,10 @@ func TestRegisterUserServiceHTTPRoutesRejectsMissingSecurityDependencies(t *test
 	}{
 		{name: "token version validator", remove: func(params *RouteParams) { params.TokenVersionValidator = nil }, wantErr: "token version validator is required"},
 		{name: "authorizer", remove: func(params *RouteParams) { params.Authorizer = nil }, wantErr: "rbac authorizer is required"},
-		{name: "public auth registrar", remove: func(params *RouteParams) { params.PublicRoutes = nil }, wantErr: "public route registrar auth is required"},
-		{name: "authenticated auth registrar", remove: func(params *RouteParams) { params.AuthenticatedRoutes = nil }, wantErr: "authenticated route registrar auth is required"},
-		{name: "permission registrar", remove: func(params *RouteParams) {
-			params.AuthorizedRoutes = routerRegistrationWithoutAuthorizedRoute(params.AuthorizedRoutes, "permission")
-		}, wantErr: "authorized route registrar permission is required"},
-		{name: "role registrar", remove: func(params *RouteParams) {
-			params.AuthorizedRoutes = routerRegistrationWithoutAuthorizedRoute(params.AuthorizedRoutes, "role")
-		}, wantErr: "authorized route registrar role is required"},
-		{name: "user registrar", remove: func(params *RouteParams) {
-			params.AuthorizedRoutes = routerRegistrationWithoutAuthorizedRoute(params.AuthorizedRoutes, "user")
-		}, wantErr: "authorized route registrar user is required"},
+		{name: "auth controller", remove: func(params *RouteParams) { params.Auth = nil }, wantErr: "auth controller is required"},
+		{name: "permission controller", remove: func(params *RouteParams) { params.Permission = nil }, wantErr: "permission controller is required"},
+		{name: "role controller", remove: func(params *RouteParams) { params.Role = nil }, wantErr: "role controller is required"},
+		{name: "user controller", remove: func(params *RouteParams) { params.User = nil }, wantErr: "user controller is required"},
 	}
 
 	for _, tt := range tests {
@@ -177,7 +170,6 @@ func newRouterRegistrationRouteParams(t *testing.T, opts routerRegistrationRoute
 	if authorizer == nil {
 		authorizer = &routerRegistrationAuthorizer{allowed: true}
 	}
-	authRoutes := newRouterRegistrationAuthRoutes(validator)
 	return RouteParams{
 		ServiceName:           "aegiscore-user-service-test",
 		Environment:           "test",
@@ -187,96 +179,15 @@ func newRouterRegistrationRouteParams(t *testing.T, opts routerRegistrationRoute
 		Metrics:               newRouterTestMetricsProvider(t, metricsCfg.Enabled, metricsCfg.Path),
 		TokenVersionValidator: routerRegistrationTokenVersionValidator{},
 		Authorizer:            authorizer,
-		PublicRoutes:          []PublicRouteRegistrar{authRoutes},
-		AuthenticatedRoutes:   []AuthenticatedRouteRegistrar{authRoutes},
-		AuthorizedRoutes: []AuthorizedRouteRegistrar{
-			newRouterRegistrationPermissionRoutes(t, validator),
-			newRouterRegistrationRoleRoutes(t, validator),
-			newRouterRegistrationUserRoutes(t, validator),
-		},
+		Auth:                  newRouterRegistrationAuthController(validator),
+		Permission:            permissionhttp.NewPermissionController(nil, validator),
+		Role:                  rolehttp.NewRoleController(nil, nil, validator),
+		User:                  userhttp.NewUserController(nil, nil, validator),
 	}
 }
 
-func routerRegistrationWithoutAuthorizedRoute(registrars []AuthorizedRouteRegistrar, key string) []AuthorizedRouteRegistrar {
-	filtered := make([]AuthorizedRouteRegistrar, 0, len(registrars))
-	for _, registrar := range registrars {
-		if registrar.RouteKey() != key {
-			filtered = append(filtered, registrar)
-		}
-	}
-	return filtered
-}
-
-type routerRegistrationAuthRoutes struct {
-	controller *authhttp.AuthController
-}
-
-func newRouterRegistrationAuthRoutes(validator *commonvalidation.Validator) *routerRegistrationAuthRoutes {
-	return &routerRegistrationAuthRoutes{controller: authhttp.NewAuthController(authhttp.AuthControllerOptions{Validator: validator})}
-}
-
-func (r *routerRegistrationAuthRoutes) RouteKey() string {
-	return "auth"
-}
-
-func (r *routerRegistrationAuthRoutes) RegisterPublicRoutes(group *gin.RouterGroup) {
-	authhttp.RegisterPublicRoutes(group.Group("/auth"), r.controller)
-}
-
-func (r *routerRegistrationAuthRoutes) RegisterAuthenticatedRoutes(group *gin.RouterGroup) {
-	authhttp.RegisterProtectedRoutes(group.Group("/auth"), r.controller)
-}
-
-type routerRegistrationPermissionRoutes struct {
-	controller *permissionhttp.PermissionController
-}
-
-func newRouterRegistrationPermissionRoutes(t *testing.T, validator *commonvalidation.Validator) *routerRegistrationPermissionRoutes {
-	t.Helper()
-	return &routerRegistrationPermissionRoutes{controller: permissionhttp.NewPermissionController(nil, validator)}
-}
-
-func (r *routerRegistrationPermissionRoutes) RouteKey() string {
-	return "permission"
-}
-
-func (r *routerRegistrationPermissionRoutes) RegisterAuthorizedRoutes(group *gin.RouterGroup) {
-	permissionhttp.RegisterRoutes(group.Group("/permissions"), r.controller)
-}
-
-type routerRegistrationRoleRoutes struct {
-	controller *rolehttp.RoleController
-}
-
-func newRouterRegistrationRoleRoutes(t *testing.T, validator *commonvalidation.Validator) *routerRegistrationRoleRoutes {
-	t.Helper()
-	return &routerRegistrationRoleRoutes{controller: rolehttp.NewRoleController(nil, nil, validator)}
-}
-
-func (r *routerRegistrationRoleRoutes) RouteKey() string {
-	return "role"
-}
-
-func (r *routerRegistrationRoleRoutes) RegisterAuthorizedRoutes(group *gin.RouterGroup) {
-	rolehttp.RegisterRoleRoutes(group.Group("/roles"), r.controller)
-	rolehttp.RegisterUserRoleRoutes(group.Group("/users"), r.controller)
-}
-
-type routerRegistrationUserRoutes struct {
-	controller *userhttp.UserController
-}
-
-func newRouterRegistrationUserRoutes(t *testing.T, validator *commonvalidation.Validator) *routerRegistrationUserRoutes {
-	t.Helper()
-	return &routerRegistrationUserRoutes{controller: userhttp.NewUserController(nil, nil, validator)}
-}
-
-func (r *routerRegistrationUserRoutes) RouteKey() string {
-	return "user"
-}
-
-func (r *routerRegistrationUserRoutes) RegisterAuthorizedRoutes(group *gin.RouterGroup) {
-	userhttp.RegisterRoutes(group.Group("/users"), r.controller)
+func newRouterRegistrationAuthController(validator *commonvalidation.Validator) *authhttp.AuthController {
+	return authhttp.NewAuthController(authhttp.AuthControllerOptions{Validator: validator})
 }
 
 func newRouterRegistrationValidator(t *testing.T) *commonvalidation.Validator {

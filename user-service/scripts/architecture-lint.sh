@@ -342,6 +342,10 @@ check_feature_application_domain_fx_metadata
 check_user_feature_framework_metadata
 check_role_feature_framework_metadata
 
+if [[ -n "$(find "${service_dir}/internal/features" -type f -name 'route_registrar.go' -print -quit)" ]]; then
+  report "fixed feature route_registrar.go files are forbidden; register auth, permission, role and user routes centrally in user-service/internal/router"
+fi
+
 if [[ -d "${service_dir}/internal/features/permission/application/rbacbaseline" ]]; then
   report "old permission/application/rbacbaseline package still exists"
 fi

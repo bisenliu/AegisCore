@@ -181,6 +181,10 @@ type Params struct {
 }
 EOF
 
+cat > "${fixture_root}/user-service/internal/features/user/route_registrar.go" <<'EOF'
+package user
+EOF
+
 cat > "${fixture_root}/user-service/internal/features/user/infrastructure/postgres/store_test.go" <<'EOF'
 package postgres
 
@@ -289,6 +293,11 @@ fi
 
 if [[ "${output}" != *"role feature production code must not carry Fx/Dig DI metadata outside composition"* ]]; then
   printf 'architecture-lint-test: expected role feature Fx/Dig metadata violation report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
+if [[ "${output}" != *"fixed feature route_registrar.go files are forbidden"* ]]; then
+  printf 'architecture-lint-test: expected fixed feature route registrar violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
