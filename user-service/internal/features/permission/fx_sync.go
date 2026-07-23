@@ -11,6 +11,8 @@ import (
 	permissionredis "github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis"
 )
 
+// Fx 选项
+
 // permissionPolicySyncOptions 组装跨副本 policy version 发布、追踪和 watcher 同步能力。
 var permissionPolicySyncOptions = fx.Options(
 	fx.Provide(
@@ -21,6 +23,8 @@ var permissionPolicySyncOptions = fx.Options(
 		fx.Private,
 	),
 )
+
+// Fx 参数与结果：Policy 同步
 
 // WatcherParams 汇集 watcher 运行时依赖，watcher 只通过 reload 端口触发内存策略刷新。
 type WatcherParams struct {
@@ -77,6 +81,8 @@ type permissionApplicationWatcher interface {
 	Start()
 	Stop(context.Context) error
 }
+
+// Provider：Policy 同步
 
 func provideRedisStore(params CacheRedisParams, cfg *commonconfig.Config, log *zap.Logger) (PolicyRedisStoreResult, error) {
 	store, err := permissionredis.NewStore(params.Client, cfg, log)

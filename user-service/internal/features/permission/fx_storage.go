@@ -9,12 +9,16 @@ import (
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
 )
 
+// Fx 选项
+
 // permissionStorageOptions 组装 permission feature 直接依赖的持久化端口。
 var permissionStorageOptions = fx.Options(
 	fx.Provide(
 		providePermissionStore,
 	),
 )
+
+// Fx 参数：命名资源
 
 // PrimaryDBParams 只消费服务级命名主库连接，避免 feature provider 直接依赖 providers 包。
 type PrimaryDBParams struct {
@@ -29,6 +33,8 @@ type CacheRedisParams struct {
 
 	Client *rediscmd.Client `name:"cache_redis"`
 }
+
+// Provider：存储适配器
 
 func providePermissionStore(params PrimaryDBParams) permissionapplication.PermissionStore {
 	return permissionpostgres.NewPermissionStore(params.Client)

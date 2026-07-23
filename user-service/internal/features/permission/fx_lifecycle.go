@@ -7,12 +7,16 @@ import (
 	"go.uber.org/fx"
 )
 
+// Fx 选项
+
 // permissionLifecycleOptions 只注册运行时 hook，便于测试和 graph 生成单独使用 WiringModule。
 var permissionLifecycleOptions = fx.Options(
 	fx.Invoke(
 		registerRBACLifecycle,
 	),
 )
+
+// Fx 参数：生命周期
 
 // RegisterRBACLifecycleParams 汇集 RBAC 启停依赖，启动顺序由 registerRBACLifecycle 统一控制。
 type RegisterRBACLifecycleParams struct {
@@ -21,6 +25,8 @@ type RegisterRBACLifecycleParams struct {
 	Lifecycle fx.Lifecycle
 	Runtime   *PermissionRuntime
 }
+
+// Provider：生命周期注册
 
 // registerRBACLifecycle 先启动用户角色缓存，再 fail-closed 初始化策略，最后启动跨副本 watcher。
 func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
@@ -38,6 +44,8 @@ func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
 		},
 	})
 }
+
+// 生命周期辅助函数
 
 // stopRBACLifecycle 聚合 watcher 停止和本地用户角色缓存关闭错误，避免静默丢失清理失败。
 func stopRBACLifecycle(ctx context.Context, stopWatcher func(context.Context) error, closer userRoleResolverLifecycle) error {

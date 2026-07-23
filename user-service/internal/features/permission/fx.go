@@ -7,6 +7,8 @@ import (
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 )
 
+// Fx 模块与选项
+
 // WiringModule 组装权限目录、请求授权和分布式 policy 同步的 provider，不主动注册 lifecycle。
 var WiringModule = fx.Module(
 	"feature-permission-wiring",

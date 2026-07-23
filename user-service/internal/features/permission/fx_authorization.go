@@ -21,6 +21,8 @@ import (
 	"github.com/aegiscore/user-service/internal/router"
 )
 
+// Fx 选项
+
 // permissionAuthorizationOptions 组装内存授权引擎及其本地用户角色解析依赖。
 var permissionAuthorizationOptions = fx.Options(
 	fx.Provide(
@@ -51,6 +53,8 @@ var permissionPublicOptions = fx.Options(
 		),
 	),
 )
+
+// Fx 参数与结果：授权核心
 
 type UserRoleResolverParams struct {
 	fx.In
@@ -95,6 +99,8 @@ type AuthorizerResult struct {
 	Authorizer permissionauthorization.Authorizer `name:"permission_authorizer"`
 }
 
+// Fx 参数与结果：公开投影
+
 type PermissionUserRoleCacheStatsParams struct {
 	fx.In
 
@@ -106,6 +112,8 @@ type PermissionUserRoleCacheStatsResult struct {
 
 	Stats localcache.StatsSource `name:"rbac_user_roles_cache"`
 }
+
+// Fx 参数与结果：运行时聚合
 
 // PermissionRuntime 聚合 permission feature 对外稳定 RBAC runtime 组件，避免 public 投影散落在多个 named 转发函数中。
 type PermissionRuntime struct {
@@ -144,6 +152,8 @@ type permissionPolicyInitializer interface {
 	InitializeFailClosed(context.Context)
 }
 
+// Provider：授权核心
+
 func providePolicyLoader(params PrimaryDBParams) permissioncasbin.Loader {
 	return permissioncasbin.NewPolicyLoader(params.Client)
 }
@@ -162,6 +172,8 @@ func provideEngine(loader permissioncasbin.Loader, metrics commonmetrics.ReloadM
 func provideAuthorizer(params AuthorizerParams) AuthorizerResult {
 	return AuthorizerResult{Authorizer: permissionauthorization.NewAuthorizer(params.Engine, params.Metrics)}
 }
+
+// Provider：公开投影
 
 func newPermissionRuntime(params PermissionRuntimeParams) *PermissionRuntime {
 	return &PermissionRuntime{
@@ -198,6 +210,8 @@ func providePermissionPolicyChangeNotifier(runtime *PermissionRuntime) permissio
 func providePermissionController(query permissionquery.PermissionQueryService, validator *commonvalidation.Validator) *permissionhttp.PermissionController {
 	return permissionhttp.NewPermissionController(query, validator)
 }
+
+// 运行时资源方法：用户角色 resolver holder
 
 // Start 在应用启动阶段创建真实 resolver，避免 graph 生成或 dry-run 时触发运行时资源访问。
 func (h *userRoleResolverHolder) Start(context.Context) error {

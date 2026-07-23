@@ -30,6 +30,8 @@ import (
 
 const authTokenVersionCacheName = "auth_token_version" // #nosec G101 -- 本地缓存名称，不包含真实凭据。
 
+// Fx 模块与选项
+
 // Module 组装认证功能的应用服务、HTTP 传输层和基础设施适配器。
 var Module = fx.Module(
 	"feature-auth",
@@ -104,6 +106,8 @@ var authTransportOptions = fx.Options(
 	),
 )
 
+// Fx 参数与结果：基础设施
+
 type CredentialStoreParams struct {
 	fx.In
 
@@ -119,6 +123,8 @@ type SessionStoreParams struct {
 	PurgePool authredis.PurgeTaskPool `name:"auth_session_purge_pool"`
 	Metrics   authapplication.Metrics
 }
+
+// Fx 参数与结果：运行时资源
 
 type SessionPurgePoolParams struct {
 	fx.In
@@ -148,6 +154,8 @@ type TokenVersionLocalCacheResult struct {
 	Stats localcache.StatsSource                `name:"auth_token_version_cache"`
 }
 
+// 运行时资源 holder
+
 type tokenVersionLocalCacheResource struct {
 	cache authvalidators.LocalTokenVersionCache
 	stats localcache.StatsSource
@@ -170,6 +178,8 @@ type tokenVersionLocalCacheHolder struct {
 	resource *tokenVersionLocalCacheResource
 }
 
+// Fx 参数与结果：应用服务
+
 type TokenVersionValidatorParams struct {
 	fx.In
 
@@ -184,6 +194,8 @@ type TokenVersionValidatorResult struct {
 	Invalidator authvalidators.TokenVersionLocalInvalidator
 }
 
+// Fx 参数与结果：传输层
+
 type AuthControllerParams struct {
 	fx.In
 
@@ -194,6 +206,8 @@ type AuthControllerParams struct {
 	LogoutAll      authcommand.LogoutAllSessionsUseCase
 	Validator      *commonvalidation.Validator
 }
+
+// Provider：基础设施
 
 func newCredentialStore(params CredentialStoreParams) *authpostgres.CredentialStore {
 	return authpostgres.NewCredentialStore(params.Client)
@@ -220,27 +234,10 @@ func newSessionStore(params SessionStoreParams) (*authredis.SessionStore, error)
 	return store, nil
 }
 
+// Provider：运行时资源
+
 func newSessionPurgePool(params SessionPurgePoolParams) (SessionPurgePoolResult, error) {
 	return SessionPurgePoolResult{Pool: &sessionPurgePoolHolder{log: params.Log}}, nil
-}
-
-func newAuthController(params AuthControllerParams) *authhttp.AuthController {
-	return authhttp.NewAuthController(authhttp.AuthControllerOptions{
-		Login:          params.Login,
-		Refresh:        params.Refresh,
-		ChangePassword: params.ChangePassword,
-		LogoutCurrent:  params.LogoutCurrent,
-		LogoutAll:      params.LogoutAll,
-		Validator:      params.Validator,
-	})
-}
-
-func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, tokenVersionCache authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, tokenVersions authvalidators.TokenVersionLocalInvalidator, cfg *serviceconfig.Config) (authsessions.Lifecycle, error) {
-	return authsessions.NewLifecycle(users, tokenVersionCache, sessions, passwordChangeSessions, cfg.Auth.MaxActiveSessionsPerUser, tokenVersions)
-}
-
-func newRefreshTokenSettings(cfg *serviceconfig.Config) authcommand.RefreshTokenSettings {
-	return authcommand.RefreshTokenSettings{RefreshTokenRotation: cfg.Auth.RefreshTokenRotation}
 }
 
 func newTokenVersionLocalCache(params TokenVersionLocalCacheParams) (TokenVersionLocalCacheResult, error) {
@@ -272,6 +269,36 @@ func newTokenVersionLocalCacheResource(cfg serviceconfig.FeatureCacheConfig, use
 	return &tokenVersionLocalCacheResource{cache: local, stats: local, close: local.Close}, nil
 }
 
+// Provider：应用服务
+
+func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, tokenVersionCache authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, tokenVersions authvalidators.TokenVersionLocalInvalidator, cfg *serviceconfig.Config) (authsessions.Lifecycle, error) {
+	return authsessions.NewLifecycle(users, tokenVersionCache, sessions, passwordChangeSessions, cfg.Auth.MaxActiveSessionsPerUser, tokenVersions)
+}
+
+func newRefreshTokenSettings(cfg *serviceconfig.Config) authcommand.RefreshTokenSettings {
+	return authcommand.RefreshTokenSettings{RefreshTokenRotation: cfg.Auth.RefreshTokenRotation}
+}
+
+func newTokenVersionValidator(params TokenVersionValidatorParams) TokenVersionValidatorResult {
+	validator := authvalidators.NewCachingValidator(params.Cache)
+	return TokenVersionValidatorResult{Validator: authvalidators.NewMetricsTokenVersionValidator(validator, params.Metrics), Invalidator: validator}
+}
+
+// Provider：传输层
+
+func newAuthController(params AuthControllerParams) *authhttp.AuthController {
+	return authhttp.NewAuthController(authhttp.AuthControllerOptions{
+		Login:          params.Login,
+		Refresh:        params.Refresh,
+		ChangePassword: params.ChangePassword,
+		LogoutCurrent:  params.LogoutCurrent,
+		LogoutAll:      params.LogoutAll,
+		Validator:      params.Validator,
+	})
+}
+
+// 运行时资源方法：token version 本地缓存
+
 func (r *tokenVersionLocalCacheResource) Close() error {
 	if r == nil {
 		return nil
@@ -283,6 +310,8 @@ func (r *tokenVersionLocalCacheResource) Close() error {
 	})
 	return nil
 }
+
+// 运行时资源方法：session purge workerpool
 
 func (h *sessionPurgePoolHolder) Start(context.Context) error {
 	h.mu.Lock()
@@ -328,6 +357,8 @@ func (h *sessionPurgePoolHolder) Stats() workerpool.Stats {
 	}
 	return pool.Stats()
 }
+
+// 运行时资源方法：token version 本地缓存 holder
 
 func (h *tokenVersionLocalCacheHolder) Start(context.Context) error {
 	h.mu.Lock()
@@ -390,9 +421,4 @@ func (h *tokenVersionLocalCacheHolder) currentResource() *tokenVersionLocalCache
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.resource
-}
-
-func newTokenVersionValidator(params TokenVersionValidatorParams) TokenVersionValidatorResult {
-	validator := authvalidators.NewCachingValidator(params.Cache)
-	return TokenVersionValidatorResult{Validator: authvalidators.NewMetricsTokenVersionValidator(validator, params.Metrics), Invalidator: validator}
 }
