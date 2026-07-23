@@ -12,8 +12,8 @@ import (
 )
 
 // NewPostgres 创建一个 PostgreSQL 连接池并注册单资源 Fx lifecycle hook。
-func NewPostgres(lc fx.Lifecycle, log *zap.Logger, name string, cfg resources.PostgresConfig) (*sql.DB, error) {
-	db, err := OpenPostgres(name, cfg)
+func NewPostgres(lc fx.Lifecycle, log *zap.Logger, name string, cfg resources.PostgresConfig, options ...PostgresOption) (*sql.DB, error) {
+	db, err := OpenPostgres(name, cfg, options...)
 	if err != nil {
 		return nil, err
 	}

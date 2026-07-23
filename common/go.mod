@@ -3,6 +3,7 @@ module github.com/aegiscore/common
 go 1.26.5
 
 require (
+	github.com/XSAM/otelsql v0.43.0
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/getkin/kin-openapi v0.141.0
 	github.com/gin-gonic/gin v1.12.0

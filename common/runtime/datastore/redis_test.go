@@ -93,6 +93,26 @@ func TestOpenRedisClientPreservesCloseFailureAfterInstrumentationFails(t *testin
 	require.ErrorIs(t, err, redis.ErrClosed)
 }
 
+func TestOmitRedisCommandTrace(t *testing.T) {
+	tests := []struct {
+		name string
+		cmd  redis.Cmder
+		want bool
+	}{
+		{name: "auth is filtered", cmd: redis.NewCmd(context.Background(), "auth", "secret"), want: true},
+		{name: "hello auth is filtered", cmd: redis.NewCmd(context.Background(), "hello", "3", "auth", "user", "secret"), want: true},
+		{name: "ping is filtered", cmd: redis.NewCmd(context.Background(), "ping"), want: true},
+		{name: "get is traced", cmd: redis.NewCmd(context.Background(), "get", "key"), want: false},
+		{name: "nil is filtered", cmd: nil, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, omitRedisCommandTrace(tt.cmd))
+		})
+	}
+}
+
 func withRedisInstrumenterForTest(instrument redisInstrumenter) RedisClientOption {
 	return func(opts *redisClientOptions) {
 		if instrument != nil {

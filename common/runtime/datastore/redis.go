@@ -3,6 +3,7 @@ package datastore
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
@@ -23,7 +24,18 @@ type redisClientOptions struct {
 }
 
 func defaultRedisInstrumenter(client *redis.Client, provider trace.TracerProvider) error {
-	return redisotel.InstrumentTracing(client, redisotel.WithTracerProvider(provider))
+	return redisotel.InstrumentTracing(client,
+		redisotel.WithTracerProvider(provider),
+		redisotel.WithCommandFilter(omitRedisCommandTrace),
+	)
+
+}
+
+func omitRedisCommandTrace(cmd redis.Cmder) bool {
+	if cmd == nil {
+		return true
+	}
+	return redisotel.DefaultCommandFilter(cmd) || strings.EqualFold(cmd.Name(), "ping")
 }
 
 func newRedisClientOptions() redisClientOptions {

@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/datastore"
+	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	"github.com/aegiscore/user-service/internal/resources"
 )
@@ -19,6 +20,7 @@ type PrimaryDBParams struct {
 	Lifecycle fx.Lifecycle
 	Config    *serviceconfig.Config
 	Log       *zap.Logger
+	Trace     *commontracing.Provider
 }
 
 // NewPrimaryDB 显式选择并供应 user-service 主 PostgreSQL 连接池。
@@ -27,5 +29,5 @@ func NewPrimaryDB(params PrimaryDBParams) (*sql.DB, error) {
 	if !ok {
 		return nil, fmt.Errorf("postgres config %q not found", resources.NamePrimaryDB)
 	}
-	return datastore.NewPostgres(params.Lifecycle, params.Log, resources.NamePrimaryDB, cfg)
+	return datastore.NewPostgres(params.Lifecycle, params.Log, resources.NamePrimaryDB, cfg, datastore.WithPostgresTracerProvider(params.Trace.OTelTracerProvider()))
 }

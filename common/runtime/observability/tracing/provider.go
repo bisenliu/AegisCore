@@ -147,6 +147,13 @@ type dynamicTracerProvider struct {
 	provider *Provider
 }
 
+type dynamicTracer struct {
+	noop.Tracer
+	provider *Provider
+	name     string
+	options  []trace.TracerOption
+}
+
 // OTelTracerProvider 返回可在 constructor 阶段安全注入的 OpenTelemetry provider 视图。
 func (p *Provider) OTelTracerProvider() trace.TracerProvider {
 	if p == nil {
@@ -156,7 +163,14 @@ func (p *Provider) OTelTracerProvider() trace.TracerProvider {
 }
 
 func (p dynamicTracerProvider) Tracer(name string, opts ...trace.TracerOption) trace.Tracer {
-	return p.provider.Tracer(name, opts...)
+	return dynamicTracer{provider: p.provider, name: name, options: append([]trace.TracerOption(nil), opts...)}
+}
+
+func (t dynamicTracer) Start(ctx context.Context, spanName string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	if t.provider == nil {
+		return t.Tracer.Start(ctx, spanName, opts...)
+	}
+	return t.provider.realTracer(t.name, t.options...).Start(ctx, spanName, opts...)
 }
 
 // Start 使用 lifecycle context 初始化底层 SDK provider。
@@ -198,6 +212,10 @@ func (p *Provider) TextMapPropagator() propagation.TextMapPropagator {
 
 // Tracer 返回底层 provider 创建的 tracer。
 func (p *Provider) Tracer(name string, opts ...trace.TracerOption) trace.Tracer {
+	return dynamicTracer{provider: p, name: name, options: append([]trace.TracerOption(nil), opts...)}
+}
+
+func (p *Provider) realTracer(name string, opts ...trace.TracerOption) trace.Tracer {
 	if p == nil {
 		return noop.NewTracerProvider().Tracer(name, opts...)
 	}

@@ -7,6 +7,7 @@ x-user-service-build: &user-service-build
 x-user-service-environment: &user-service-environment
   TZ: Asia/Shanghai
   AEGISCORE_APP_ENVIRONMENT: local
+  OPENAPI_ENABLED: "true"
   AEGISCORE_SERVER_HTTP_ENABLED: "true"
   AEGISCORE_SERVER_HTTP_HOST: 0.0.0.0
   AEGISCORE_SERVER_HTTP_PORT: "8080"
@@ -15,24 +16,31 @@ x-user-service-environment: &user-service-environment
   AEGISCORE_SERVER_HTTP_IDLE_TIMEOUT: 120s
   AEGISCORE_SERVER_HTTP_SHUTDOWN_TIMEOUT: 25s
   AEGISCORE_SERVER_GRPC_ENABLED: "false"
-  AEGISCORE_SERVER_GRPC_HOST: 127.0.0.1
+  AEGISCORE_SERVER_GRPC_HOST: 0.0.0.0
   AEGISCORE_SERVER_GRPC_PORT: "9090"
   AEGISCORE_SERVER_GRPC_SHUTDOWN_TIMEOUT: 10s
-  AEGISCORE_AUTH_JWT_SECRET: ${AEGISCORE_AUTH_JWT_SECRET}
-  AEGISCORE_LOG_LEVEL: info
+  AEGISCORE_AUTH_JWT_SECRET: ${AEGISCORE_AUTH_JWT_SECRET:?AEGISCORE_AUTH_JWT_SECRET is required}
+  AEGISCORE_LOG_LEVEL: debug
   AEGISCORE_LOG_FORMAT: json
+  AEGISCORE_AUTH_TOKEN_VERSION_CACHE_ENABLED: "true"
+  AEGISCORE_AUTH_REFRESH_TOKEN_ROTATION: "true"
+  AEGISCORE_RBAC_USER_ROLE_CACHE_ENABLED: "true"
+  AEGISCORE_ENT_PLUGINS_SQL_LOG_ENABLED: "true"
+  AEGISCORE_ENT_PLUGINS_SQL_LOG_DEBUG: "true"
+  AEGISCORE_ENT_PLUGINS_TRACING_ENABLED: "true"
+  AEGISCORE_ENT_PLUGINS_METRICS_ENABLED: "true"
   AEGISCORE_OBSERVABILITY_METRICS_ENABLED: "true"
   AEGISCORE_OBSERVABILITY_METRICS_PATH: /metrics
   AEGISCORE_OBSERVABILITY_METRICS_INCLUDE_RUNTIME: "true"
-  AEGISCORE_OBSERVABILITY_TRACING_ENABLED: "false"
-  AEGISCORE_OBSERVABILITY_TRACING_OTLP_ENDPOINT: ""
-  AEGISCORE_OBSERVABILITY_TRACING_INSECURE: "false"
+  AEGISCORE_OBSERVABILITY_TRACING_ENABLED: "true"
+  AEGISCORE_OBSERVABILITY_TRACING_OTLP_ENDPOINT: jaeger:4317
+  AEGISCORE_OBSERVABILITY_TRACING_INSECURE: "true"
   AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_ADDR: redis:6379
   AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_TIMEOUT: 5s
   AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_HOST: postgres
   AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PORT: "5432"
   AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME: aegiscore
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD: ${POSTGRES_PASSWORD}
+  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
   AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_DB_NAME: aegiscore_user
   AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_SSLMODE: disable
   AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_MAX_OPEN_CONNS: "50"
@@ -46,7 +54,7 @@ services:
     image: postgres:latest
     environment:
       POSTGRES_USER: aegiscore
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: aegiscore_user
       TZ: Asia/Shanghai
     ports:
@@ -82,7 +90,22 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      TZ: Asia/Shanghai
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - aegiscore-observability
+    restart: unless-stopped
+
   rbac-seed:
+    profiles:
+      - seed
     build: *user-service-build
     image: aegiscore-user-service:latest
     command:
@@ -99,8 +122,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      jaeger:
+        condition: service_started
     networks:
       - aegiscore-runtime
+      - aegiscore-observability
     restart: "no"
 
   user-service:
@@ -115,8 +141,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      rbac-seed:
-        condition: service_completed_successfully
+      jaeger:
+        condition: service_started
     networks:
       - aegiscore-runtime
       - aegiscore-observability
@@ -164,7 +190,7 @@ services:
     image: grafana/grafana:latest
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/aegiscore/user-service-overview.json
       TZ: Asia/Shanghai
