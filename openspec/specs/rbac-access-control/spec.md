@@ -373,7 +373,7 @@ permission、role 和 binding domain MUST 返回携带稳定 HTTP status、共�
 
 ### Requirement: RBAC 架构、装配与资源生命周期
 
-role 和 permission feature MUST 保持 domain、application、transport 和 infrastructure 分层。permission application MUST 只保留权限查询、授权、policy loading/sync 和 seed/角色绑定所需最小端口，不得保留公开权限 command 或仅服务于公开 route diff 的生产装配。domain/application MUST 框架无关并拥有消费侧最小 port；Fx、Gin、Ent、Redis、SQL、HTTP response 和 named resource metadata MUST 留在对应 composition、transport 或 infrastructure 边界。RBAC 自有 watcher、cache 和 policy 投影资源 MUST 显式启动、停止和回滚。
+role 和 permission feature MUST 保持 domain、application、transport 和 infrastructure 分层。permission application MUST 只保留权限查询、授权、policy loading/sync 和 seed/角色绑定所需最小端口，不得保留公开权限 command 或仅服务于公开 route diff 的生产装配。domain/application MUST 框架无关并拥有消费侧最小 port；Fx、Gin、Ent、Redis、SQL、HTTP response 和 named resource metadata MUST 留在对应 composition、transport 或 infrastructure 边界。RBAC 自有 watcher、cache、user-role resolver 和 policy 投影资源 MUST 显式启动、停止和回滚。permission composition MUST 用单一运行时聚合对象表达对外稳定 RBAC runtime 组件集合，并避免为 named/private 到 public 投影保留重复样板。
 
 #### Scenario: 分层和最小依赖
 
@@ -397,13 +397,22 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 - **THEN** constructor MUST 接收普通强类型参数或无 DI metadata 的 options
 - **AND** constructor MUST NOT 嵌入 `fx.In`、`fx.Out`、Dig tag、named result 或 group result
 - **AND** 具名 `primary_db`、`cache_redis`、optional、group 或生命周期依赖选择 MUST 留在 feature composition 边界
-- **AND** public provider MUST 只暴露 controller、authorizer、route registrar、health/status 和 application port 等稳定 contract，父 module MUST NOT 消费 feature infrastructure concrete implementation
+- **AND** public provider MUST 只暴露 controller、authorizer、health/status、运行时聚合对象和 application port 等稳定 contract，父 module MUST NOT 消费 feature infrastructure concrete implementation
+
+#### Scenario: RBAC runtime 聚合投影
+
+- **WHEN** permission composition 对外提供授权、policy health、policy watcher status、policy change notifier、policy initializer、policy watcher runner 或 user-role resolver lifecycle
+- **THEN** composition MUST 通过单一 permission runtime 聚合对象表达这些组件属于同一组 RBAC runtime
+- **AND** 聚合对象字段 MUST 来自已经构造完成的稳定接口或 composition 私有 lifecycle contract
+- **AND** 聚合对象 MUST NOT 在内部重新构造 Casbin engine、policy store、watcher、version tracker、cache、resolver、Redis client 或 Ent client
+- **AND** application/domain MUST NOT 依赖该聚合对象
 
 #### Scenario: 有状态资源单实例多视图
 
 - **WHEN** composition 需要同时提供 authorization、policy reload、policy health、policy store 或 publisher 等接口视图
 - **THEN** composition MUST 为同一有状态 adapter 构造一个实例并通过普通 Go 赋值暴露所需端口
 - **AND** 系统 MUST NOT 为不同接口视图重复构造有状态 engine、store、version tracker、watcher 或 cache
+- **AND** watcher 的状态视图和运行器视图 MUST 指向同一 watcher 实例
 
 #### Scenario: 必需同步依赖不可降级
 
@@ -414,8 +423,11 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 
 #### Scenario: watcher、cache 和 lifecycle
 
-- **WHEN** user-service 启停 Redis policy watcher 和 user-role cache
+- **WHEN** user-service 启停 Redis policy watcher 和 user-role resolver/cache
 - **THEN** `NewWatcher` MUST 只构造 watcher 对象，MUST NOT 启动 goroutine、订阅 Redis 或执行版本补偿循环
+- **AND** user-role resolver/cache 的 Fx result MUST 显式提供同时具备 `Start(context.Context) error` 与 `Close() error` 的 lifecycle 视图，lifecycle hook MUST NOT 通过关闭接口的 type assertion 探测启动能力
+- **AND** lifecycle hook MUST 在启动阶段先调用 user-role resolver/cache 的 `Start(ctx)`，再执行初始 policy 加载并启动 watcher
+- **AND** user-role resolver/cache 启动失败时 MUST 返回启动错误，且 MUST NOT 执行初始 policy 加载或启动 watcher
 - **AND** `Start()` 和 `Stop(ctx)` MUST 幂等，`Stop(ctx)` MUST 取消内部 context，并在调用方 context 限制内等待循环退出
 - **AND** `Stop(ctx)` 超时时 MUST 返回 context 相关错误，并保持后续重复停止安全
 - **AND** 启动失败或服务停止时已启动 watcher MUST 被停止，已创建 cache MUST 幂等关闭

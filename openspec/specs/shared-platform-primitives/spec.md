@@ -263,10 +263,11 @@
 - **WHEN** runtime 初始化进程时区
 - **THEN** timezone primitive MUST 优先使用平台 `TZ` 环境变量并在缺省时使用稳定默认值
 - **AND** timezone primitive MUST NOT 依赖核心 Config 或服务业务配置
+- **AND** 如果 timezone 初始化通过 Fx 执行，拥有进程启动语义的服务 composition root MUST 显式绑定初始化调用或服务级 runtime 初始化函数，common MUST NOT 仅为了包装 `Init` 暴露无额外运行时职责的 Fx provider
 
 ### Requirement: Logger 与共享 Fx 装配边界
 
-系统 MUST 在 `common/runtime` 中提供业务中立的 logger、Fx provider 和依赖图原语。构造函数、provider 和 Fx graph helper MUST 只消费真实运行时依赖或调用方显式提供的无副作用 Fx option，MUST NOT 为测试便利暴露生产 API 或读取服务私有配置。
+系统 MUST 在 `common/runtime` 中提供业务中立的 logger、Fx provider 和依赖图原语。构造函数、provider 和 Fx graph helper MUST 只消费真实运行时依赖或调用方显式提供的无副作用 Fx option，MUST NOT 为测试便利暴露生产 API 或读取服务私有配置。公开 provider 名称 MUST 表达其提供的 runtime 能力或资源职责，MUST NOT 仅用模糊的 DI framework 术语隐藏能力语义。
 
 #### Scenario: logger 构造无全局副作用
 
@@ -279,6 +280,7 @@
 
 - **WHEN** 共享 provider 暴露依赖
 - **THEN** provider MUST 只消费跨服务配置和 primitive，不得导入服务私有配置
+- **AND** provider 的公开命名 MUST 能从调用点区分 logger、metrics、tracing、datastore 或其他具体 runtime 能力，不得在多个 common 包中重复使用缺少能力语义的通用名称作为主要入口
 - **WHEN** 服务将 Fx option 或 module 传入 `common/runtime/fxgraph`
 - **THEN** helper MUST 输出稳定排序的 provider、invoke 和依赖关系图文本
 - **AND** helper MUST 只处理调用方显式传入的 graph-safe Fx option，MUST NOT 构造或要求服务私有配置、feature provider、Ent、Redis、PostgreSQL、OTLP 或 HTTP server 输入
@@ -289,6 +291,7 @@
 - **WHEN** `common/runtime` 新增公开 constructor、method、option 或 hook
 - **THEN** 入口 MUST 具有真实运行时职责或已定义的稳定共享契约
 - **AND** 仅测试消费、暴露内部状态或绕过正常 lifecycle 的能力 MUST 留在包内、`_test.go` fixture 或 `common/testing`
+- **AND** 仅包装另一个无参初始化函数且不提供额外资源、配置、错误处理、顺序控制或 lifecycle 语义的 Fx provider MUST NOT 作为 common 公开 API 新增或保留
 
 ### Requirement: common、shared 与外部集成边界
 

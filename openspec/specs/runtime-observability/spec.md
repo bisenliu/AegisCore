@@ -39,7 +39,7 @@
 
 ### Requirement: 业务与运行时路由访问边界
 
-系统 MUST 由 user-service composition root 统一维护 HTTP route 的访问层级，并通过明确的 route registrar contract 接入 feature 路由。route registrar MUST 按 public、authenticated 和 authorized 层级注册，MUST NOT 依赖 Fx value group 的 slice 顺序表达安全或冲突语义。
+系统 MUST 由 user-service composition root 统一维护 HTTP route 的访问层级，并显式集中挂载当前固定的 auth、permission、role 和 user feature 路由。composition root MUST 按 public、authenticated 和 authorized 层级注册路由，MUST NOT 依赖 Fx value group 的 slice 顺序表达安全、冲突或必需路由语义。
 
 #### Scenario: 分层注册业务路由
 
@@ -48,19 +48,19 @@
 - **AND** authenticated auth route MUST 经过 token version validator 认证 middleware
 - **AND** permission、role 和 user 业务 route MUST 先经过认证 middleware，再经过 RBAC authorizer middleware
 
-#### Scenario: route registrar 和冲突语义
+#### Scenario: 固定 feature 路由集中注册
 
-- **WHEN** 新 feature 需要挂载 `/api/v1` 业务路由
-- **THEN** feature MUST 通过对应访问层级的 route registrar contract 接入 composition root
-- **WHEN** route registrar 通过 Fx value group 注入
-- **THEN** 注册逻辑 MUST NOT 假设 group slice 顺序稳定
-- **AND** 如果存在 path 冲突、顺序或 middleware 层级要求，composition root MUST 使用显式编排或稳定排序规则表达该要求
+- **WHEN** user-service 注册当前固定 feature 的 `/api/v1` 业务路由
+- **THEN** composition root MUST 显式挂载 auth、permission、role 和 user 的 transport route 函数
+- **AND** 生产路由装配 MUST NOT 要求这些固定 feature 通过 feature-local route registrar 或 Fx route value group 接入
+- **AND** 如果存在 path 冲突、顺序或 middleware 层级要求，composition root MUST 使用显式编排表达该要求
 
 #### Scenario: route graph 可验证
 
 - **WHEN** 运行 route graph 测试或 route diff 诊断
 - **THEN** 健康检查、OpenAPI、metrics、auth、permission、role 和 user route 的 path、method、访问层级和 route template MUST 可被稳定验证
 - **AND** 必需认证或授权依赖缺失时系统 MUST 拒绝部分注册，而不是降级开放
+- **AND** 必需 feature controller 缺失导致固定业务路由无法挂载时系统 MUST 在构图或注册阶段失败，而不是启动缺失路由的服务
 
 ### Requirement: OpenAPI 运行时文档契约
 
@@ -86,7 +86,7 @@
 
 ### Requirement: Metrics 平台、依赖资源名与低基数
 
-系统 MUST 提供 Prometheus metrics 基础能力，并以非 nil provider 显式表达启用或禁用状态。HTTP、runtime、scheduler、workerpool、SQL、Redis 和 feature metrics MUST 保持稳定、低基数且不泄露敏感数据。user-service 主 PostgreSQL runtime dependency 的资源名 MUST 为 `primary_db`，Redis 缓存资源名保持 `cache_redis`。user-service 默认 metrics `service` label、tracing `service.name`、日志 `service` 字段、健康响应 service 字段、dashboard 变量和 alert 表达式 MUST 统一使用 `aegiscore-user-service`；旧 `aegiscore-user-services` label 和兼容 PromQL MUST NOT 保留。
+系统 MUST 提供 Prometheus metrics 基础能力，并以非 nil provider 显式表达启用或禁用状态。HTTP、runtime、scheduler、workerpool、SQL、Redis 和 feature metrics MUST 保持稳定、低基数且不泄露敏感数据。user-service 主 PostgreSQL runtime dependency 的资源名 MUST 为 `primary_db`，Redis 缓存资源名保持 `cache_redis`。user-service 默认 metrics `service` label、tracing `service.name`、日志 `service` 字段、健康响应 service 字段、dashboard 变量和 alert 表达式 MUST 统一使用 `aegiscore-user-service`；旧 `aegiscore-user-services` label 和兼容 PromQL MUST NOT 保留。metrics 的 Fx provider 公开入口 MUST 表达 metrics 能力语义，并由服务 composition root 显式装配。
 
 #### Scenario: metrics 启停和依赖图完整
 
@@ -95,6 +95,7 @@
 - **WHEN** metrics 被禁用
 - **THEN** 系统 MUST 不暴露 endpoint 或 collector，但 MUST 向正式依赖图提供非 nil no-op provider
 - **AND** metrics/tracing 以及 feature-local `Metrics` 输入 MUST 是非 optional 的明确依赖，缺失依赖 MUST 导致构图失败
+- **AND** metrics Fx provider 的公开名称 MUST 能从 user-service composition root 的调用点识别其提供 metrics provider，不得以缺少能力语义的通用 `NewFxProvider` 作为主要入口
 
 #### Scenario: 低基数标签和资源名
 
@@ -194,13 +195,14 @@
 
 ### Requirement: Tracing 与依赖观测生命周期
 
-系统 MUST 通过最小 OTLP 配置提供 OpenTelemetry tracing，并为 Redis 命令、Ent 查询和 HTTP 请求传播上下文。constructor MUST 返回稳定、非 nil、可被 instrumentation 安全引用的 tracing facade；禁用或尚未启动时其底层 MUST 为 no-op。启用 tracing 后，`OnStart` MUST 创建 exporter 与 SDK provider 并安装到底层 facade；`OnStop` 或启动 rollback MUST 关闭真实资源并恢复 no-op。
+系统 MUST 通过最小 OTLP 配置提供 OpenTelemetry tracing，并为 Redis 命令、Ent 查询和 HTTP 请求传播上下文。constructor MUST 返回稳定、非 nil、可被 instrumentation 安全引用的 tracing facade；禁用或尚未启动时其底层 MUST 为 no-op。启用 tracing 后，`OnStart` MUST 创建 exporter 与 SDK provider 并安装到底层 facade；`OnStop` 或启动 rollback MUST 关闭真实资源并恢复 no-op。tracing 的 Fx provider 公开入口 MUST 表达 tracing 能力语义，并由服务 composition root 显式装配。
 
 #### Scenario: tracing 启停和 constructor 阶段语义
 
 - **WHEN** tracing 关闭或 Fx graph 在 `fx.New` constructor 阶段构造 tracing provider
 - **THEN** provider MUST 可注入给 Redis、Gin、Ent 等依赖方，并提供非 nil no-op tracer provider
 - **AND** constructor 阶段 MUST NOT 连接 OTLP exporter、启动 batch processor 或执行可能阻塞的 exporter 初始化
+- **AND** tracing Fx provider 的公开名称 MUST 能从 user-service composition root 的调用点识别其提供 tracing provider，不得以缺少能力语义的通用 `NewFxProvider` 作为主要入口
 - **WHEN** tracing 开启且 Fx app 执行 `OnStart(ctx)`
 - **THEN** provider MUST 使用服务名、环境和 OTLP endpoint 初始化 exporter 与 SDK provider
 - **AND** exporter 初始化 MUST 使用 lifecycle 启动 context，受 Fx 启动预算、取消和超时控制
@@ -260,7 +262,7 @@
 
 ### Requirement: 运行时故障、初始化保护与优雅关闭
 
-系统 MUST 将 HTTP 或 pprof listener 的非预期退出转换为 Fx shutdown signal，并在统一的 `runtime.lifecycle.stop_timeout` 总预算内按逆序 lifecycle hook 完成优雅关闭。可预期的资源、配置和依赖错误 MUST 优先通过 constructor 返回 `error` 暴露，MUST NOT 依赖 panic recovery 表达正常失败路径。
+系统 MUST 将 HTTP 或 pprof listener 的非预期退出转换为 Fx shutdown signal，并在统一的 `runtime.lifecycle.stop_timeout` 总预算内按逆序 lifecycle hook 完成优雅关闭。可预期的资源、配置和依赖错误 MUST 优先通过 constructor 返回 `error` 暴露，MUST NOT 依赖 panic recovery 表达正常失败路径。user-service composition root MUST 显式表达 process runtime 初始化、observability provider、feature lifecycle module 和 runtime server 注册之间的绑定关系，并以清晰、可验证的方式解析 HTTP server 与 pprof server，使对应 constructor 注册 lifecycle hook。
 
 #### Scenario: listener 非预期退出
 
@@ -294,3 +296,17 @@
 - **WHEN** HTTP handler、worker task、后台 goroutine 或 lifecycle hook 运行期发生 panic
 - **THEN** `fx.RecoverFromPanics()` MUST NOT 被视为这些运行期边界的恢复策略
 - **AND** 对应边界 MUST 使用其自身已有或显式设计的 panic 处理机制
+
+#### Scenario: 服务 composition root 显式绑定 runtime lifecycle
+
+- **WHEN** user-service 构建正式 Fx App 或装配测试 App
+- **THEN** composition root MUST 显式绑定 process runtime 初始化、metrics provider、tracing provider、服务资源 provider、feature lifecycle module 和 runtime server 注册
+- **AND** process runtime 初始化 MUST 在 HTTP、pprof 或其他 runtime server 启动前执行
+- **AND** common/runtime/observability provider MUST 保持业务中立，不得导入 user-service feature、router、bootstrap 或服务私有配置包
+
+#### Scenario: runtime server lifecycle 注册可验证
+
+- **WHEN** user-service 通过正式 `AppModule` 构建 runtime graph
+- **THEN** composition root MUST 显式解析 `*http.Server` 与 `*PprofServer`
+- **AND** 解析意图 MUST 通过具名注册函数或等价可识别结构表达，MUST NOT 依赖空匿名 Invoke 隐式表达
+- **AND** bootstrap 测试 MUST 能验证正式 runtime graph 仍解析这些 server 并保留 lifecycle hook 注册链路
