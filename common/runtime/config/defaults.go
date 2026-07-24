@@ -18,6 +18,8 @@ const (
 	DefaultGRPCPort = 9090
 	// DefaultGinMode 是 Gin 的默认进程运行模式。
 	DefaultGinMode = "release"
+	// DefaultTimezone 是未声明进程时区时使用的稳定默认值。
+	DefaultTimezone = "Asia/Shanghai"
 
 	// DefaultMetricsPath 是 Prometheus metrics 的默认暴露路径。
 	DefaultMetricsPath = "/metrics"
@@ -60,6 +62,7 @@ func DefaultConfig() Config {
 			Gin: GinConfig{
 				Mode: DefaultGinMode,
 			},
+			Timezone: DefaultTimezone,
 		},
 		Server: ServerConfig{
 			HTTP: HTTPServerConfig{

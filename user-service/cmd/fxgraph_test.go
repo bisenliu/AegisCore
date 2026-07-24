@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"net/http"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -89,13 +88,11 @@ func TestFxGraphOptionsDoNotMutateProcessState(t *testing.T) {
 		time.Local = previousLocal
 		gin.SetMode(previousGinMode)
 	})
-	t.Setenv("TZ", "UTC")
 	time.Local = time.UTC
 	gin.SetMode(gin.DebugMode)
 
 	_, err = runtimefxgraph.RenderDOT(fxGraphOptions(cfg)...)
 	require.NoError(t, err)
-	require.Equal(t, "UTC", os.Getenv("TZ"))
 	require.Same(t, time.UTC, time.Local)
 	require.Equal(t, gin.DebugMode, gin.Mode())
 }

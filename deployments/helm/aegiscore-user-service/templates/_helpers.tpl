@@ -61,14 +61,7 @@ ServiceAccount name.
 {{- end -}}
 
 {{/*
-Runtime ConfigMap name.
-*/}}
-{{- define "aegiscore-user-service.configMapName" -}}
-{{- printf "%s-config" (include "aegiscore-user-service.fullname" .) | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-
-{{/*
-Runtime Secret name. The chart references this Secret but does not render it.
+Runtime config Secret name. The chart references this Secret but does not render it.
 */}}
 {{- define "aegiscore-user-service.secretName" -}}
 {{- .Values.secret.existingSecret | default (printf "%s-runtime" (include "aegiscore-user-service.fullname" .)) | trunc 63 | trimSuffix "-" -}}
@@ -79,37 +72,4 @@ Image reference.
 */}}
 {{- define "aegiscore-user-service.image" -}}
 {{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) -}}
-{{- end -}}
-
-{{/*
-Secret-backed runtime env.
-*/}}
-{{- define "aegiscore-user-service.secretEnv" -}}
-- name: AEGISCORE_AUTH_JWT_SECRET
-  valueFrom:
-    secretKeyRef:
-      name: {{ include "aegiscore-user-service.secretName" . }}
-      key: {{ .Values.secret.keys.jwtSecret }}
-- name: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME
-  valueFrom:
-    secretKeyRef:
-      name: {{ include "aegiscore-user-service.secretName" . }}
-      key: {{ .Values.secret.keys.postgresUsername }}
-- name: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD
-  valueFrom:
-    secretKeyRef:
-      name: {{ include "aegiscore-user-service.secretName" . }}
-      key: {{ .Values.secret.keys.postgresPassword }}
-- name: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME
-  valueFrom:
-    secretKeyRef:
-      name: {{ include "aegiscore-user-service.secretName" . }}
-      key: {{ .Values.secret.keys.redisUsername }}
-      optional: true
-- name: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD
-  valueFrom:
-    secretKeyRef:
-      name: {{ include "aegiscore-user-service.secretName" . }}
-      key: {{ .Values.secret.keys.redisPassword }}
-      optional: true
 {{- end -}}

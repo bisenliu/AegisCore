@@ -34,7 +34,6 @@ const routeAuthInternalErrorUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3500"
 
 func TestGinEngineAuthMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv("OPENAPI_ENABLED", "true")
 
 	cfg := &config.Config{
 		App: config.AppConfig{Name: "configured-user-service", Environment: "local"},

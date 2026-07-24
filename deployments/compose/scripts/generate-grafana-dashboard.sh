@@ -2,16 +2,16 @@
 #
 # 从通用可观测性 dashboard 生成 Docker Compose 使用的 Grafana dashboard。
 #
-# 通用 dashboard 使用 ${DS_PROMETHEUS} 作为 Prometheus datasource uid，
+# 通用 dashboard 使用 DS_PROMETHEUS 作为 Prometheus datasource uid，
 # 方便普通 Grafana 导入时选择数据源。Compose provisioning 创建的数据源
 # uid 固定为 "prometheus"，所以生成产物只改写 Prometheus datasource 引用，
 # 不改查询表达式和面板结构。
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-SOURCE="${SOURCE:-$ROOT_DIR/deployments/observability/grafana/user-service-overview.json}"
-TARGET="${TARGET:-$ROOT_DIR/deployments/compose/grafana/dashboards/user-service-overview.json}"
-DATASOURCE_UID="${DATASOURCE_UID:-prometheus}"
+SOURCE="$ROOT_DIR/deployments/observability/grafana/user-service-overview.json"
+TARGET="$ROOT_DIR/deployments/compose/grafana/dashboards/user-service-overview.json"
+DATASOURCE_UID="prometheus"
 MODE="write"
 
 usage() {
@@ -20,11 +20,6 @@ usage() {
 
 Usage:
   $(basename "$0") [--check]
-
-Environment:
-  SOURCE          通用 dashboard 路径。默认: $SOURCE
-  TARGET          生成的 Compose dashboard 路径。默认: $TARGET
-  DATASOURCE_UID  Compose Prometheus datasource uid。默认: $DATASOURCE_UID
 
 Options:
   --check         TARGET 未同步时失败。
@@ -60,7 +55,7 @@ if [[ ! -f "$SOURCE" ]]; then
   exit 1
 fi
 
-tmp="$(mktemp "${TMPDIR:-/tmp}/aegiscore-compose-dashboard.XXXXXX.json")"
+tmp="$(mktemp "/tmp/aegiscore-compose-dashboard.XXXXXX.json")"
 trap 'rm -f "$tmp"' EXIT
 
 jq --arg uid "$DATASOURCE_UID" '

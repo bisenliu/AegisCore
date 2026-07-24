@@ -83,7 +83,7 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 	bootstrapStore := rolepostgres.NewBootstrapStore(db)
 	bootstrapService := rolebootstrap.NewService(bootstrapStore, passwordService)
 
-	return rbacSeedDependencies{service: service, bootstrap: bootstrapService, log: log}, cleanup, nil
+	return rbacSeedDependencies{service: service, bootstrap: bootstrapService, cfg: cfg, log: log}, cleanup, nil
 }
 
 func rbacPostgresConfig(cfg *serviceconfig.Config) (commonresources.PostgresConfig, error) {

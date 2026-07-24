@@ -1,17 +1,14 @@
 # 本文件提供本地或临时环境的 Helm values 覆盖示例。
 # 适用于 `helm template -f values.yaml -f values-local.yaml` 进行本地渲染验证。
-# 生产环境应使用独立环境 values，并通过外部 Secret 注入敏感信息。
-config: # 覆盖非敏感运行时配置。
-  AEGISCORE_APP_ENVIRONMENT: local # 将运行环境标记为 local，避免生产类安全校验。
-  AEGISCORE_OBSERVABILITY_TRACING_ENABLED: "false" # 本地默认不连接 OTLP Collector。
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_HOST: postgres # 本地 PostgreSQL Service 名称。
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_SSLMODE: disable # 本地数据库通常不启用 TLS。
-  AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_ADDR: redis:6379 # 本地 Redis Service 地址。
+# 生产环境应使用独立环境 values，并提前创建包含完整 config.yaml 的外部 Secret。
+secret:
+  existingSecret: aegiscore-user-service-runtime
+  configKey: config.yaml
 
-autoscaling: # 本地环境 HPA 覆盖。
-  enabled: false # 本地通常无 metrics-server，关闭 HPA 渲染。
+autoscaling:
+  enabled: false
 
-replicaCount: 1 # 本地只运行 1 个副本，降低资源占用。
+replicaCount: 1
 
-image: # 本地 user-service 镜像 tag 示例。
-  tag: latest # 与本地构建的 user-service 镜像一致。
+image:
+  tag: latest

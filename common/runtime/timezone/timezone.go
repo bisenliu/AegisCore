@@ -2,14 +2,9 @@ package timezone
 
 import (
 	"fmt"
-	"os"
-	"strings"
 	"sync"
 	"time"
 )
-
-// DefaultTimezone 是平台未注入 TZ 时使用的进程时区兜底值。
-const DefaultTimezone = "Asia/Shanghai"
 
 var state timezoneState
 
@@ -18,12 +13,8 @@ type timezoneState struct {
 	initialized bool
 }
 
-// Init 根据平台 TZ 初始化进程时区，并在缺省时回退到 DefaultTimezone。
-func Init() error {
-	timezone := strings.TrimSpace(os.Getenv("TZ"))
-	if timezone == "" {
-		timezone = DefaultTimezone
-	}
+// Init 根据已校验的配置时区初始化进程时区。
+func Init(timezone string) error {
 	return state.init(timezone)
 }
 
@@ -40,10 +31,7 @@ func (s *timezoneState) init(timezone string) error {
 	if err != nil {
 		return fmt.Errorf("load timezone %q: %w", timezone, err)
 	}
-	if err := os.Setenv("TZ", timezone); err != nil {
-		return fmt.Errorf("set TZ %q: %w", timezone, err)
-	}
-	// 同时更新 TZ 和 time.Local，确保标准库格式化和 location 查询语义一致。
+	// 更新 time.Local，确保标准库格式化和 location 查询语义一致。
 	time.Local = location
 	s.initialized = true
 	return nil

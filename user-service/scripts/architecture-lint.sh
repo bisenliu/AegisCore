@@ -5,11 +5,8 @@ set -euo pipefail
 #
 # 用法：
 #   ./user-service/scripts/architecture-lint.sh
+#   ./user-service/scripts/architecture-lint.sh --repo-root /path/to/repo
 #   make user-service-architecture-lint
-#
-# 可选环境变量：
-#   ARCHITECTURE_LINT_REPO_ROOT  覆盖仓库根目录。默认根据脚本位置向上推导；
-#                                测试脚本会用该变量指向临时 fixture 仓库。
 #
 # 执行前提：
 #   - 在 Git 工作区内运行，且仓库包含 common、user-service、tools/openapi-convert 等模块。
@@ -26,7 +23,29 @@ set -euo pipefail
 # 注意事项：
 #   - 本脚本只做静态扫描和 Git diff 检查，不会修改源码或生成物。
 #   - 新增目录或架构边界时，应同步扩展本脚本和 architecture-lint-test.sh 的 fixture 覆盖。
-repo_root="${ARCHITECTURE_LINT_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo-root)
+      if [[ $# -lt 2 || -z "$2" ]]; then
+        printf 'architecture-lint: --repo-root requires a path\n' >&2
+        exit 2
+      fi
+      repo_root="$(cd "$2" && pwd)"
+      shift 2
+      ;;
+    -h|--help)
+      printf 'Usage: %s [--repo-root <path>]\n' "$0"
+      exit 0
+      ;;
+    *)
+      printf 'architecture-lint: unknown argument: %s\n' "$1" >&2
+      exit 2
+      ;;
+  esac
+done
+
 service_dir="${repo_root}/user-service"
 shopt -s nullglob
 
@@ -108,12 +127,7 @@ toolchain_version() {
 
 workflow_go_version() {
   local file="$1"
-  sed -nE "s/^[[:space:]]*GO_VERSION:[[:space:]]*['\"]?([0-9]+\\.[0-9]+\\.[0-9]+)['\"]?.*/\\1/p" "${file}" | head -n 1
-}
-
-workflow_gotoolchain_version() {
-  local file="$1"
-  sed -nE "s/^[[:space:]]*GOTOOLCHAIN:[[:space:]]*go([0-9]+\\.[0-9]+\\.[0-9]+).*/\\1/p" "${file}" | head -n 1
+  sed -nE "s/^[[:space:]]*go-version:[[:space:]]*['\"]?([0-9]+\\.[0-9]+\\.[0-9]+)['\"]?.*/\\1/p" "${file}" | head -n 1
 }
 
 check_go_toolchain_version() {
@@ -139,8 +153,7 @@ check_go_toolchain_version() {
       printf '%s go\t%s\n' "${mod}" "$(go_mod_version "${repo_root}/${mod}")"
     done
     for workflow in .github/workflows/ci.yml .github/workflows/lint.yml; do
-      printf '%s GO_VERSION\t%s\n' "${workflow}" "$(workflow_go_version "${repo_root}/${workflow}")"
-      printf '%s GOTOOLCHAIN\t%s\n' "${workflow}" "$(workflow_gotoolchain_version "${repo_root}/${workflow}")"
+      printf '%s go-version\t%s\n' "${workflow}" "$(workflow_go_version "${repo_root}/${workflow}")"
     done
   )
 
@@ -333,8 +346,55 @@ check_role_feature_framework_metadata() {
   )
 }
 
+check_environment_variable_config_removed() {
+  # 运行时配置只能来自显式指定的一份完整配置文件，不允许生产代码或交付模板读取进程环境。
+  run_rg_any "production Go code must not read process environment or bind Viper env config" \
+    'os\.(Getenv|LookupEnv|Environ)\(|\.(AutomaticEnv|BindEnv|SetEnvPrefix)\(' \
+    --glob '*.go' \
+    --glob '!*_test.go' \
+    --glob '!common/testing/**' \
+    --glob '!user-service/ent/**' \
+    --glob '!user-service/docs/**' \
+    --glob '!cmd/rbac_bootstrap_super_admin.go' \
+    "${repo_root}/common" \
+    "${service_dir}"
+
+  run_rg_any "Docker Compose runtime config must not use environment, env_file or shell interpolation" \
+    '^[[:space:]]*(environment|env_file):|\$\{[A-Z_][A-Z0-9_]*' \
+    "${repo_root}/deployments/compose/docker-compose.yml"
+
+  local k8s_manifest_files=()
+  local k8s_file
+  for k8s_file in \
+    "${repo_root}/deployments/k8s/user-service/deployment.yaml" \
+    "${repo_root}/deployments/k8s/user-service/rbac-seed-job.yaml"; do
+    if [[ -e "${k8s_file}" ]]; then
+      k8s_manifest_files+=("${k8s_file}")
+    fi
+  done
+  if [[ "${#k8s_manifest_files[@]}" -gt 0 ]]; then
+    run_rg_any "Kubernetes user-service manifests must not use env or envFrom" \
+      '^[[:space:]]*(env|envFrom):' \
+      "${k8s_manifest_files[@]}"
+  fi
+
+  local helm_and_workflow_paths=()
+  if [[ -d "${repo_root}/deployments/helm/aegiscore-user-service/templates" ]]; then
+    helm_and_workflow_paths+=("${repo_root}/deployments/helm/aegiscore-user-service/templates")
+  fi
+  if [[ -d "${repo_root}/.github/workflows" ]]; then
+    helm_and_workflow_paths+=("${repo_root}/.github/workflows")
+  fi
+  if [[ "${#helm_and_workflow_paths[@]}" -gt 0 ]]; then
+    run_rg_any "Helm user-service templates must not use env, envFrom or workflow-style env indirection" \
+      '^[[:space:]]*(env|envFrom):|\$\{\{[[:space:]]*env\.' \
+      "${helm_and_workflow_paths[@]}"
+  fi
+}
+
 check_go_toolchain_version
 check_atlas_postgres_version
+check_environment_variable_config_removed
 check_mock_generate_build_tags
 check_test_only_production_symbols
 check_feature_default_logger_dependencies

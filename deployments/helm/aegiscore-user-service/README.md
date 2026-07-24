@@ -1,15 +1,14 @@
 # aegiscore-user-service Helm Chart
 
-本 chart 为 user-service 渲染云厂商无关的 Kubernetes 资源，包括 HTTP Deployment、Service、ConfigMap、ServiceAccount、RBAC、RBAC seed Job、PDB、HPA 和 NetworkPolicy。
+本 chart 为 user-service 渲染云厂商无关的 Kubernetes 资源，包括 HTTP Deployment、Service、ServiceAccount、RBAC、RBAC seed Job、PDB、HPA 和 NetworkPolicy。完整应用配置由外部 Secret 提供。
 
 ## Values
 
 | 值 | 作用 |
 |---|---|
 | `image.repository`、`image.tag` | user-service 发布镜像 |
-| `config` | 非敏感 `AEGISCORE_*` 运行时配置 |
-| `secret.existingSecret` | 外部 Secret 名称；chart 只引用不渲染真实 Secret |
-| `secret.keys.*` | Secret 键名映射 |
+| `secret.existingSecret` | 外部完整配置 Secret 名称；chart 只引用不渲染真实 Secret |
+| `secret.configKey` | 外部 Secret 中保存完整 YAML 配置的键名，默认 `config.yaml` |
 | `deployment.terminationGracePeriodSeconds` | Fx Stop 总预算与平台余量对应的 Pod 终止宽限期 |
 | `resources` | HTTP 副本 requests/limits |
 | `probes` | `/livez`、`/readyz`、`/startupz` 探针配置 |
@@ -43,21 +42,22 @@ networkPolicy:
           port: 5432
 ```
 
-## Secret 键名
+## 配置 Secret
 
-默认 Secret 名称为 `aegiscore-user-service-runtime`，默认键名如下：
+默认 Secret 名称为 `aegiscore-user-service-runtime`，默认键名为 `config.yaml`。该文件是唯一完整配置来源，至少包含：
 
-- `AEGISCORE_AUTH_JWT_SECRET`
-- `AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME`
-- `AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD`
-- `AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME`
-- `AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD`
+- `auth.jwt.secret`
+- `resources.postgres.primary_db.username`
+- `resources.postgres.primary_db.password`
+- 可选 `resources.redis.cache_redis.username/password`
 
-如果集群使用外部 Secret 管理器，应保持这些键名，或通过 `secret.keys` 显式覆盖。
+超级管理员 bootstrap 临时密码只通过 `ADMIN_BOOTSTRAP_PASSWORD` 环境变量提供，不写入 `secret.configKey` 指向的 YAML 文件。
 
-`config` 使用最终 `AEGISCORE_SERVER_*` 与 `AEGISCORE_RESOURCES_*` 路径，Redis 使用统一 `TIMEOUT`，PostgreSQL pool 使用 `POOL_*`；平台时区只使用 `TZ`。日志写 stdout/stderr，tracing 启用后固定通过 OTLP 导出。trusted proxy 由集群入口边界负责，不是 chart 的应用配置。
+如果集群使用外部 Secret 管理器，应创建同名 Secret 并提供 `secret.configKey` 指向的一份完整 YAML 文件。
 
-chart 默认不配置或暴露 pprof。临时排障应通过额外受控环境变量设置 `AEGISCORE_OBSERVABILITY_PPROF_ENABLED=true`、`AEGISCORE_OBSERVABILITY_PPROF_ADDR=127.0.0.1:6060`，并使用 `kubectl port-forward`，不要把诊断端口加入常驻 Service。
+进程时区使用 `runtime.timezone`。日志写 stdout/stderr，tracing 启用后固定通过 OTLP 导出。trusted proxy 由集群入口边界负责，不是 chart 的应用配置。
+
+chart 默认不配置或暴露 pprof。临时排障应修改完整配置文件设置 `observability.pprof`，并使用 `kubectl port-forward`，不要把诊断端口加入常驻 Service。
 
 ## 渲染和验证
 

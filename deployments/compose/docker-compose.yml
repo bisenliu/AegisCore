@@ -4,67 +4,34 @@ x-user-service-build: &user-service-build
   context: ../..
   dockerfile: deployments/docker/user-service.Dockerfile
 
-x-user-service-environment: &user-service-environment
-  TZ: Asia/Shanghai
-  AEGISCORE_APP_ENVIRONMENT: local
-  OPENAPI_ENABLED: "true"
-  AEGISCORE_SERVER_HTTP_ENABLED: "true"
-  AEGISCORE_SERVER_HTTP_HOST: 0.0.0.0
-  AEGISCORE_SERVER_HTTP_PORT: "8080"
-  AEGISCORE_SERVER_HTTP_READ_TIMEOUT: 30s
-  AEGISCORE_SERVER_HTTP_WRITE_TIMEOUT: 60s
-  AEGISCORE_SERVER_HTTP_IDLE_TIMEOUT: 120s
-  AEGISCORE_SERVER_HTTP_SHUTDOWN_TIMEOUT: 25s
-  AEGISCORE_SERVER_GRPC_ENABLED: "false"
-  AEGISCORE_SERVER_GRPC_HOST: 0.0.0.0
-  AEGISCORE_SERVER_GRPC_PORT: "9090"
-  AEGISCORE_SERVER_GRPC_SHUTDOWN_TIMEOUT: 10s
-  AEGISCORE_AUTH_JWT_SECRET: ${AEGISCORE_AUTH_JWT_SECRET:?AEGISCORE_AUTH_JWT_SECRET is required}
-  AEGISCORE_LOG_LEVEL: debug
-  AEGISCORE_LOG_FORMAT: json
-  AEGISCORE_AUTH_TOKEN_VERSION_CACHE_ENABLED: "true"
-  AEGISCORE_AUTH_REFRESH_TOKEN_ROTATION: "true"
-  AEGISCORE_RBAC_USER_ROLE_CACHE_ENABLED: "true"
-  AEGISCORE_ENT_PLUGINS_SQL_LOG_ENABLED: "true"
-  AEGISCORE_ENT_PLUGINS_SQL_LOG_DEBUG: "true"
-  AEGISCORE_ENT_PLUGINS_TRACING_ENABLED: "true"
-  AEGISCORE_ENT_PLUGINS_METRICS_ENABLED: "true"
-  AEGISCORE_OBSERVABILITY_METRICS_ENABLED: "true"
-  AEGISCORE_OBSERVABILITY_METRICS_PATH: /metrics
-  AEGISCORE_OBSERVABILITY_METRICS_INCLUDE_RUNTIME: "true"
-  AEGISCORE_OBSERVABILITY_TRACING_ENABLED: "true"
-  AEGISCORE_OBSERVABILITY_TRACING_OTLP_ENDPOINT: jaeger:4317
-  AEGISCORE_OBSERVABILITY_TRACING_INSECURE: "true"
-  AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_ADDR: redis:6379
-  AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_TIMEOUT: 5s
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_HOST: postgres
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PORT: "5432"
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME: aegiscore
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_DB_NAME: aegiscore_user
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_SSLMODE: disable
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_MAX_OPEN_CONNS: "50"
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_MAX_IDLE_CONNS: "10"
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_CONN_MAX_LIFETIME: 30m
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_CONN_MAX_IDLE_TIME: 10m
+x-user-service-configs: &user-service-configs
+  - ./config/user-service.local.yaml:/app/user-service/configs/config.yaml:ro
 
 services:
   postgres:
-    # 本地开发跟随最新 PostgreSQL 镜像；正式环境建议固定具体版本或镜像 digest，避免上游变更影响发布可重复性。
+    # 本地开发跟随最新 PostgreSQL 镜像；正式环境建议固定具体版本或镜像 digest。
     image: postgres:latest
-    environment:
-      POSTGRES_USER: aegiscore
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      POSTGRES_DB: aegiscore_user
-      TZ: Asia/Shanghai
+    user: postgres
+    entrypoint: ["bash", "-euc"]
+    command:
+      - |
+        data_dir=/var/lib/postgresql/data/pgdata
+        if [ ! -s "$${data_dir}/PG_VERSION" ]; then
+          mkdir -p "$${data_dir}"
+          initdb -D "$${data_dir}" --username=postgres --auth-local=trust --auth-host=trust
+        fi
+        if ! grep -q '^host all all all trust$$' "$${data_dir}/pg_hba.conf"; then
+          printf '\nhost all all all trust\n' >> "$${data_dir}/pg_hba.conf"
+        fi
+        exec postgres -D "$${data_dir}" -c listen_addresses=*
     ports:
       - "15432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql
+      - postgres-data:/var/lib/postgresql/data
     networks:
       - aegiscore-runtime
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aegiscore -d aegiscore_user"]
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "postgres"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -74,8 +41,6 @@ services:
   redis:
     image: redis:latest
     command: ["redis-server", "--appendonly", "yes"]
-    environment:
-      TZ: Asia/Shanghai
     ports:
       - "16379:6379"
     volumes:
@@ -92,9 +57,8 @@ services:
 
   jaeger:
     image: jaegertracing/all-in-one:latest
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-      TZ: Asia/Shanghai
+    command:
+      - --collector.otlp.enabled=true
     ports:
       - "16686:16686"
       - "4317:4317"
@@ -115,8 +79,7 @@ services:
       - seed
       - --reactivate-system
       - --sync-system-bindings
-    environment:
-      <<: *user-service-environment
+    volumes: *user-service-configs
     depends_on:
       postgres:
         condition: service_healthy
@@ -132,8 +95,11 @@ services:
   user-service:
     build: *user-service-build
     image: aegiscore-user-service:latest
-    environment:
-      <<: *user-service-environment
+    command:
+      - serve
+      - --config
+      - /app/user-service/configs/config.yaml
+    volumes: *user-service-configs
     ports:
       - "8080:8080"
     depends_on:
@@ -188,16 +154,13 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/aegiscore/user-service-overview.json
-      TZ: Asia/Shanghai
+    command:
+      - --config=/etc/grafana/grafana.ini
     ports:
       - "3000:3000"
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards/aegiscore:ro

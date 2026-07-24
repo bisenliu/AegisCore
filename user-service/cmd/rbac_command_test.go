@@ -59,12 +59,12 @@ func TestBootstrapSuperAdminCommandRuns(t *testing.T) {
 		require.Equal(t, "test-config.yaml", configPath)
 		assert.Equal(t, "root", opts.username)
 		assert.Equal(t, "Root", opts.nickname)
-		assert.Equal(t, "ADMIN_SECRET", opts.passwordEnv)
+		assert.Equal(t, "CUSTOM_ADMIN_PASSWORD", opts.passwordEnv)
 		return nil
 	}
 
 	root := newRootCommand(deps)
-	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "bootstrap-super-admin", "--username", "root", "--nickname", "Root", "--password-env", "ADMIN_SECRET"})
+	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "bootstrap-super-admin", "--username", "root", "--nickname", "Root", "--password-env", "CUSTOM_ADMIN_PASSWORD"})
 	require.NoError(t, root.Execute())
 	require.True(t, called)
 }

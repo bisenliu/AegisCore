@@ -1,13 +1,12 @@
 # 本文件是 user-service 原生 Kubernetes 清单的 Kustomize 入口。
 # 适用于本地渲染、审查和环境发布前的完整资源集合校验。
-# 关键资源包括 namespace、运行时 Deployment/Service、RBAC seed Job、PDB、HPA 和 NetworkPolicy。
+# 关键资源包括 namespace、运行时 Deployment/Service、RBAC seed Job、PDB、HPA 和 NetworkPolicy；完整配置 Secret 由环境发布系统创建。
 apiVersion: kustomize.config.k8s.io/v1beta1 # Kustomize 配置 API 版本，v1beta1 是当前通用入口。
 kind: Kustomization # 声明这是一个 Kustomize 聚合配置。
 namespace: aegiscore # 为未显式指定 namespace 的 namespaced 资源统一设置命名空间。
 resources: # 参与渲染和应用的资源文件列表；生产首次发布需按 README 分阶段执行。
   - namespace.yaml # 创建 AegisCore 运行命名空间。
   - serviceaccount.yaml # 创建 Pod 使用的 ServiceAccount 和最小 RBAC 占位。
-  - configmap.yaml # 提供非敏感运行时环境变量。
   - service.yaml # 暴露集群内 HTTP Service。
   - deployment.yaml # 启动 user-service HTTP 副本。
   - rbac-seed-job.yaml # 数据库 SQL migration 受控执行完成后执行 RBAC seed。

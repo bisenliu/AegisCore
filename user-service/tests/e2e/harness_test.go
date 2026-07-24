@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -29,8 +28,6 @@ import (
 	"github.com/aegiscore/user-service/internal/bootstrap"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
-
-const envTestE2E = "AEGISCORE_TEST_E2E"
 
 type httpFlowHarness struct {
 	engine      *gin.Engine
@@ -75,23 +72,10 @@ func newHTTPFlowHarness(t *testing.T) *httpFlowHarness {
 
 func requireE2EEnabled(t *testing.T) {
 	t.Helper()
-	if envEnabled(envTestE2E) {
-		t.Setenv(containers.EnvTestContainers, "1")
-		return
-	}
 	if containers.ContainersEnabled() {
 		return
 	}
-	t.Skipf("set %s=1 to run user-service HTTP flow integration tests", envTestE2E)
-}
-
-func envEnabled(name string) bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
-	case "1", "true", "yes":
-		return true
-	default:
-		return false
-	}
+	t.Skip("pass -args -aegiscore.testcontainers to run user-service HTTP flow integration tests")
 }
 
 func writeTestConfig(t *testing.T, postgres commonresources.PostgresConfig, redis commonresources.RedisConfig) string {

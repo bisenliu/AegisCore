@@ -220,9 +220,10 @@ func TestLoadAppliesResourceDefaultsBeforeValidation(t *testing.T) {
 	require.Equal(t, commonresources.DefaultPostgresConnMaxIdleTime, postgres.Pool.ConnMaxIdleTime)
 }
 
-func TestLoadAppliesNestedResourceEnvironmentOverride(t *testing.T) {
-	t.Setenv("AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_TIMEOUT", "11s")
-	cfg := loadServiceConfig(t, serviceConfigYAML())
+func TestLoadParsesNestedResourceConfig(t *testing.T) {
+	yaml := strings.Replace(serviceConfigYAML(), "      timeout: 7s", "      timeout: 11s", 1)
+	cfg, err := NewConfig(ConfigPath(writeTempConfig(t, yaml)))
+	require.NoError(t, err)
 	require.Equal(t, 11*time.Second, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
 }
 
@@ -241,6 +242,12 @@ func TestLoadRejectsLegacyPasswordKDFConfig(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "  token_version_cache:\n", "  password_kdf:\n    argon2_concurrency: 2\n    argon2_queue_size: 16\n  token_version_cache:\n", 1)
 	err := loadServiceConfigError(t, yaml)
 	require.Contains(t, err.Error(), "unknown configuration keys: auth.password_kdf.argon2_concurrency, auth.password_kdf.argon2_queue_size")
+}
+
+func TestLoadRejectsBootstrapSuperAdminConfig(t *testing.T) {
+	yaml := strings.Replace(serviceConfigYAML(), "rbac:\n", "rbac:\n  bootstrap_super_admin:\n    password: bootstrap-secret-value\n", 1)
+	err := loadServiceConfigError(t, yaml)
+	require.Contains(t, err.Error(), "unknown configuration keys: rbac.bootstrap_super_admin.password")
 }
 
 func TestValidateRejectsShortProductionJWTSecret(t *testing.T) {
@@ -311,6 +318,7 @@ runtime:
   lifecycle:
     start_timeout: 21s
     stop_timeout: 50s
+  timezone: UTC
 auth:
   jwt:
     secret: secret-123456789012345678901234567890

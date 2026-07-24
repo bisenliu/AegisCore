@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"flag"
 	"fmt"
 	"net"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -21,9 +21,6 @@ import (
 )
 
 const (
-	// EnvTestContainers 控制是否启用真实 Docker-backed integration containers。
-	EnvTestContainers = "AEGISCORE_TEST_CONTAINERS"
-
 	DefaultPostgresImage           = "postgres:15-alpine"
 	DefaultPostgresDatabase        = "aegiscore_test"
 	DefaultPostgresUsername        = "aegiscore"
@@ -32,6 +29,8 @@ const (
 	defaultPostgresPort            = "5432/tcp"
 	defaultDockerPortProbeInterval = time.Millisecond * 100
 )
+
+var testContainersEnabled = flag.Bool("aegiscore.testcontainers", false, "enable Docker-backed integration containers")
 
 type PostgresOptions struct {
 	Image          string
@@ -103,8 +102,7 @@ func (p PostgresContainer) Config() resources.PostgresConfig {
 }
 
 func ContainersEnabled() bool {
-	value := strings.TrimSpace(strings.ToLower(os.Getenv(EnvTestContainers)))
-	return value == "1" || value == "true" || value == "yes"
+	return testContainersEnabled != nil && *testContainersEnabled
 }
 
 func normalizePostgresOptions(opts PostgresOptions) PostgresOptions {
@@ -129,7 +127,7 @@ func normalizePostgresOptions(opts PostgresOptions) PostgresOptions {
 func requireContainersEnabled(t testing.TB) {
 	t.Helper()
 	if !ContainersEnabled() {
-		t.Skipf("set %s=1 to enable Docker-backed integration containers", EnvTestContainers)
+		t.Skip("pass -args -aegiscore.testcontainers to enable Docker-backed integration containers")
 	}
 }
 

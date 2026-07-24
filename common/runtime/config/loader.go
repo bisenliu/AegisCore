@@ -2,14 +2,11 @@ package config
 
 import (
 	"fmt"
-	"strings"
+	"reflect"
 
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 )
-
-// envPrefix 定义环境变量配置覆盖使用的全局前缀。
-const envPrefix = "AEGISCORE"
 
 type defaultsApplier interface {
 	ApplyDefaults()
@@ -19,13 +16,11 @@ type viperDefaultsApplier interface {
 	ApplyViperDefaults(*viper.Viper)
 }
 
-// Load 从指定路径或默认 configs 目录读取 YAML 配置，并应用 AEGISCORE_ 环境变量覆盖。
-func Load(path string) (*Config, error) {
-	return LoadInto(path, Config.Validate)
-}
-
-// LoadInto 从配置文件加载调用方指定的配置结构，并应用 AEGISCORE_ 环境变量覆盖。
+// LoadInto 从单个 YAML 文件读取调用方指定的完整配置结构。
 func LoadInto[T any](path string, validate func(T) error) (*T, error) {
+	if path == "" {
+		return nil, fmt.Errorf("read config: config file path is required")
+	}
 	v := viper.New()
 	setCoreDefaults(v, DefaultConfig())
 	var serviceDefaults T
@@ -34,27 +29,9 @@ func LoadInto[T any](path string, validate func(T) error) (*T, error) {
 	}
 
 	v.SetConfigType("yaml")
-	if path != "" {
-		v.SetConfigFile(path)
-	} else {
-		// 两个搜索路径分别支持从模块目录和服务子目录运行命令。
-		v.SetConfigName("config")
-		v.AddConfigPath("./configs")
-		v.AddConfigPath("../configs")
-	}
-
-	v.SetEnvPrefix(envPrefix)
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
-	v.AutomaticEnv()
-
+	v.SetConfigFile(path)
 	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
-	}
-	for _, key := range v.AllKeys() {
-		// 绑定已发现和已注册默认值的 key，使环境变量可以覆盖缺省配置。
-		if err := v.BindEnv(key); err != nil {
-			return nil, fmt.Errorf("bind env %s: %w", key, err)
-		}
+		return nil, fmt.Errorf("read config %s: %w", path, err)
 	}
 
 	var cfg T
@@ -81,31 +58,48 @@ func LoadInto[T any](path string, validate func(T) error) (*T, error) {
 }
 
 func setCoreDefaults(v *viper.Viper, defaults Config) {
-	v.SetDefault("app.name", defaults.App.Name)
-	v.SetDefault("app.environment", defaults.App.Environment)
-	v.SetDefault("runtime.lifecycle.start_timeout", defaults.Runtime.Lifecycle.StartTimeout)
-	v.SetDefault("runtime.lifecycle.stop_timeout", defaults.Runtime.Lifecycle.StopTimeout)
-	v.SetDefault("runtime.gin.mode", defaults.Runtime.Gin.Mode)
-	v.SetDefault("server.http.enabled", defaults.Server.HTTP.Enabled)
-	v.SetDefault("server.http.host", defaults.Server.HTTP.Host)
-	v.SetDefault("server.http.port", defaults.Server.HTTP.Port)
-	v.SetDefault("server.http.read_timeout", defaults.Server.HTTP.ReadTimeout)
-	v.SetDefault("server.http.write_timeout", defaults.Server.HTTP.WriteTimeout)
-	v.SetDefault("server.http.idle_timeout", defaults.Server.HTTP.IdleTimeout)
-	v.SetDefault("server.http.shutdown_timeout", defaults.Server.HTTP.ShutdownTimeout)
-	v.SetDefault("server.grpc.enabled", defaults.Server.GRPC.Enabled)
-	v.SetDefault("server.grpc.host", defaults.Server.GRPC.Host)
-	v.SetDefault("server.grpc.port", defaults.Server.GRPC.Port)
-	v.SetDefault("server.grpc.shutdown_timeout", defaults.Server.GRPC.ShutdownTimeout)
-	v.SetDefault("log.level", defaults.Log.Level)
-	v.SetDefault("log.format", defaults.Log.Format)
-	v.SetDefault("observability.metrics.enabled", defaults.Observability.Metrics.Enabled)
-	v.SetDefault("observability.metrics.path", defaults.Observability.Metrics.Path)
-	v.SetDefault("observability.metrics.include_runtime", defaults.Observability.Metrics.IncludeRuntime)
-	v.SetDefault("observability.tracing.enabled", defaults.Observability.Tracing.Enabled)
-	v.SetDefault("observability.tracing.sample_ratio", defaults.Observability.Tracing.SampleRatio)
-	v.SetDefault("observability.tracing.otlp_endpoint", defaults.Observability.Tracing.OTLPEndpoint)
-	v.SetDefault("observability.tracing.insecure", defaults.Observability.Tracing.Insecure)
-	v.SetDefault("observability.pprof.enabled", defaults.Observability.Pprof.Enabled)
-	v.SetDefault("observability.pprof.addr", defaults.Observability.Pprof.Addr)
+	setViperDefaultsFromStruct(v, "", reflect.ValueOf(defaults))
+}
+
+// setViperDefaultsFromStruct 按 mapstructure tag 递归展开默认配置，避免在 loader 中维护另一份字段路径映射。
+func setViperDefaultsFromStruct(v *viper.Viper, prefix string, value reflect.Value) {
+	value = dereferenceValue(value)
+	if !value.IsValid() {
+		return
+	}
+	if value.Kind() != reflect.Struct {
+		if prefix != "" {
+			v.SetDefault(prefix, value.Interface())
+		}
+		return
+	}
+
+	valueType := value.Type()
+	for index := 0; index < value.NumField(); index++ {
+		field := valueType.Field(index)
+		if field.PkgPath != "" {
+			continue
+		}
+		name, squash, skip := configFieldName(field)
+		if skip {
+			continue
+		}
+		fieldValue := value.Field(index)
+		if squash {
+			setViperDefaultsFromStruct(v, prefix, fieldValue)
+			continue
+		}
+		setViperDefaultsFromStruct(v, joinConfigPath(prefix, name), fieldValue)
+	}
+}
+
+// dereferenceValue 解开指针默认值；nil 指针没有可注册的默认配置叶子。
+func dereferenceValue(value reflect.Value) reflect.Value {
+	for value.IsValid() && value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return reflect.Value{}
+		}
+		value = value.Elem()
+	}
+	return value
 }

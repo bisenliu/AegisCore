@@ -40,6 +40,7 @@ func TestDefaultConfigSupportsLocalHTTPServer(t *testing.T) {
 	require.Positive(t, cfg.Runtime.Lifecycle.StartTimeout)
 	require.Positive(t, cfg.Runtime.Lifecycle.StopTimeout)
 	require.Equal(t, DefaultGinMode, cfg.Runtime.Gin.Mode)
+	require.Equal(t, DefaultTimezone, cfg.Runtime.Timezone)
 	require.True(t, cfg.Server.HTTP.Enabled)
 	require.Equal(t, DefaultHTTPHost, cfg.Server.HTTP.Host)
 	require.Equal(t, DefaultHTTPPort, cfg.Server.HTTP.Port)
@@ -73,6 +74,7 @@ func TestLoadExplicitConfig(t *testing.T) {
 	require.Equal(t, 11*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
 	require.Equal(t, 50*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 	require.Equal(t, "test", cfg.Runtime.Gin.Mode)
+	require.Equal(t, "UTC", cfg.Runtime.Timezone)
 	require.True(t, cfg.Server.HTTP.Enabled)
 	require.Equal(t, "127.0.0.1", cfg.Server.HTTP.Host)
 	require.Equal(t, 18080, cfg.Server.HTTP.Port)
@@ -101,12 +103,14 @@ func TestLoadValidatesLifecycle(t *testing.T) {
     start_timeout: 0s
     stop_timeout: 0s
   gin:
-    mode: sometimes`))
+    mode: sometimes
+  timezone: Invalid/Timezone`))
 
 	assertConfigLoadErrorContains(t, err,
 		"runtime.lifecycle.start_timeout must be > 0",
 		"runtime.lifecycle.stop_timeout must be > 0",
 		"runtime.gin.mode must be one of debug, release, test",
+		"runtime.timezone must be a valid IANA timezone",
 	)
 }
 
@@ -413,27 +417,57 @@ func TestLoadValidatesTracing(t *testing.T) {
 	)
 }
 
-func TestLoadEnvironmentOverride(t *testing.T) {
-	t.Setenv("AEGISCORE_RUNTIME_LIFECYCLE_START_TIMEOUT", "13s")
-	t.Setenv("AEGISCORE_RUNTIME_LIFECYCLE_STOP_TIMEOUT", "52s")
-	t.Setenv("AEGISCORE_RUNTIME_GIN_MODE", "debug")
-	t.Setenv("AEGISCORE_SERVER_HTTP_PORT", "28080")
-	t.Setenv("AEGISCORE_SERVER_GRPC_SHUTDOWN_TIMEOUT", "12s")
-	t.Setenv("AEGISCORE_OBSERVABILITY_METRICS_ENABLED", "false")
-	t.Setenv("AEGISCORE_OBSERVABILITY_TRACING_SAMPLE_RATIO", "0.5")
-	t.Setenv("AEGISCORE_OBSERVABILITY_PPROF_ENABLED", "false")
-	t.Setenv("AEGISCORE_OBSERVABILITY_PPROF_ADDR", "127.0.0.1:26060")
+func TestLoadIntoLoadsCompleteConfig(t *testing.T) {
+	path := writeTempConfigNamed(t, "config.yaml", configYAMLWithSections(`runtime:
+  lifecycle:
+    start_timeout: 13s
+    stop_timeout: 52s
+  gin:
+    mode: debug
+  timezone: Asia/Shanghai`, `server:
+  http:
+    enabled: true
+    host: 127.0.0.1
+    port: 28080
+    read_timeout: 10s
+    write_timeout: 20s
+    idle_timeout: 30s
+    shutdown_timeout: 5s
+  grpc:
+    enabled: true
+    host: 127.0.0.1
+    port: 19090
+    shutdown_timeout: 12s`, `observability:
+  metrics:
+    enabled: false
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: true
+    sample_ratio: 0.5
+    otlp_endpoint: collector:4317
+    insecure: false
+  pprof:
+    enabled: false
+    addr: 127.0.0.1:26060`))
 
-	cfg := loadConfigFromYAML(t, explicitConfigYAML())
+	cfg, err := LoadInto(path, Config.Validate)
+	require.NoError(t, err)
 	require.Equal(t, 13*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
 	require.Equal(t, 52*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 	require.Equal(t, "debug", cfg.Runtime.Gin.Mode)
+	require.Equal(t, "Asia/Shanghai", cfg.Runtime.Timezone)
 	require.Equal(t, 28080, cfg.Server.HTTP.Port)
 	require.Equal(t, 12*time.Second, cfg.Server.GRPC.ShutdownTimeout)
 	require.False(t, cfg.Observability.Metrics.Enabled)
 	require.Equal(t, 0.5, cfg.Observability.Tracing.SampleRatio)
 	require.False(t, cfg.Observability.Pprof.Enabled)
 	require.Equal(t, "127.0.0.1:26060", cfg.Observability.Pprof.Addr)
+}
+
+func TestLoadIntoRejectsMissingPath(t *testing.T) {
+	_, err := LoadInto[Config]("", Config.Validate)
+	require.ErrorContains(t, err, "config file path is required")
 }
 
 func TestLoadRejectsUnknownLegacyKeysWithFullPaths(t *testing.T) {
@@ -520,7 +554,7 @@ func loadConfigFromYAML(t *testing.T, content string) *Config {
 func loadConfigErrorFromYAML(t *testing.T, content string) error {
 	t.Helper()
 	path := writeTempConfig(t, content)
-	_, err := Load(path)
+	_, err := LoadInto(path, Config.Validate)
 	require.Error(t, err)
 	return err
 }
@@ -537,6 +571,13 @@ func writeTempConfig(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	return path
+}
+
+func writeTempConfigNamed(t *testing.T, name string, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 	return path
 }
@@ -600,6 +641,7 @@ runtime:
     stop_timeout: 50s
   gin:
     mode: test
+  timezone: UTC
 server:
   http:
     enabled: true

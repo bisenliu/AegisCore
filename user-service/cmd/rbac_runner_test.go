@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -81,9 +83,10 @@ func TestRunRBACSeedCommand(t *testing.T) {
 
 func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 	t.Run("success prints normalized identifiers", func(t *testing.T) {
-		t.Setenv("ADMIN_SECRET", " long secret ")
 		cleanupCalled := false
 		store := &testBootstrapStore{}
+		passwordEnv := uniquePasswordEnv(t)
+		t.Setenv(passwordEnv, " long secret ")
 		runners := rbacCommandRunnersWithFactory(func(_ context.Context, configPath string) (rbacSeedDependencies, func() error, error) {
 			require.Equal(t, "test-config.yaml", configPath)
 			return rbacSeedDependencies{
@@ -95,7 +98,7 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 		})
 
 		out, err := captureStdout(t, func() error {
-			return runners.bootstrapSuperAdminRunner(context.Background(), "test-config.yaml", rbacBootstrapSuperAdminOptions{username: " ADMIN ", passwordEnv: "ADMIN_SECRET"})
+			return runners.bootstrapSuperAdminRunner(context.Background(), "test-config.yaml", rbacBootstrapSuperAdminOptions{username: " ADMIN ", passwordEnv: passwordEnv})
 		})
 
 		require.NoError(t, err)
@@ -114,9 +117,10 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 	})
 
 	t.Run("bootstrap and cleanup errors are joined", func(t *testing.T) {
-		t.Setenv("ADMIN_SECRET", "long-password")
 		bootstrapErr := errors.New("bootstrap failed")
 		cleanupErr := errors.New("cleanup failed")
+		passwordEnv := uniquePasswordEnv(t)
+		t.Setenv(passwordEnv, "long-password")
 		runners := rbacCommandRunnersWithFactory(func(context.Context, string) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
 					bootstrap: rolebootstrap.NewService(&testBootstrapStore{err: bootstrapErr}, &testBootstrapHasher{}),
@@ -125,9 +129,29 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 				}, nil
 		})
 
-		err := runners.bootstrapSuperAdminRunner(context.Background(), "test-config.yaml", rbacBootstrapSuperAdminOptions{username: "admin", passwordEnv: "ADMIN_SECRET"})
+		err := runners.bootstrapSuperAdminRunner(context.Background(), "test-config.yaml", rbacBootstrapSuperAdminOptions{username: "admin", passwordEnv: passwordEnv})
 
 		require.ErrorIs(t, err, bootstrapErr)
 		require.ErrorIs(t, err, cleanupErr)
 	})
+
+	t.Run("missing password environment variable", func(t *testing.T) {
+		passwordEnv := uniquePasswordEnv(t)
+		runners := rbacCommandRunnersWithFactory(func(context.Context, string) (rbacSeedDependencies, func() error, error) {
+			return rbacSeedDependencies{
+					bootstrap: rolebootstrap.NewService(&testBootstrapStore{}, &testBootstrapHasher{}),
+				}, func() error {
+					return nil
+				}, nil
+		})
+
+		err := runners.bootstrapSuperAdminRunner(context.Background(), "test-config.yaml", rbacBootstrapSuperAdminOptions{username: "admin", passwordEnv: passwordEnv})
+
+		require.ErrorContains(t, err, "bootstrap password environment variable "+passwordEnv+" is required")
+	})
+}
+
+func uniquePasswordEnv(t *testing.T) string {
+	t.Helper()
+	return fmt.Sprintf("ADMIN_BOOTSTRAP_PASSWORD_%s", strings.NewReplacer("/", "_", "-", "_", " ", "_").Replace(t.Name()))
 }

@@ -84,6 +84,11 @@ func (c Config) validateRuntime() []error {
 	if !isValidGinMode(c.Runtime.Gin.Mode) {
 		errs = append(errs, configFieldError("runtime.gin.mode", "must be one of debug, release, test"))
 	}
+	if strings.TrimSpace(c.Runtime.Timezone) == "" {
+		errs = append(errs, configFieldError("runtime.timezone", "is required"))
+	} else if _, err := time.LoadLocation(c.Runtime.Timezone); err != nil {
+		errs = append(errs, configFieldError("runtime.timezone", "must be a valid IANA timezone"))
+	}
 	if c.Runtime.Lifecycle.StopTimeout > 0 {
 		// lifecycle stop 是 Fx app 总预算，不能短于任一协议 server 的组件级关闭预算。
 		if c.Server.HTTP.ShutdownTimeout > 0 && c.Runtime.Lifecycle.StopTimeout < c.Server.HTTP.ShutdownTimeout {

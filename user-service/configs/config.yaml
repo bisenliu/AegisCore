@@ -11,8 +11,9 @@ runtime:
     # 该值不是数据可靠性保证，关键数据仍应通过持久化队列、WAL 或数据库状态恢复。
     stop_timeout: 120s
   gin:
-    # Gin mode 是进程级设置；可通过 AEGISCORE_RUNTIME_GIN_MODE 覆盖。
+    # Gin mode 是进程级设置，只从当前配置文件读取。
     mode: release
+  timezone: Asia/Shanghai
 
 server:
   http:
@@ -34,7 +35,7 @@ server:
 
 auth:
   jwt:
-    # 仅供本地开发；生产环境必须通过 AEGISCORE_AUTH_JWT_SECRET 或 Secret 注入强随机值。
+    # 仅供本地开发；生产环境必须在唯一完整配置文件中提供强随机值，并由部署平台保护文件权限。
     secret: local-development-secret
     issuer: aegiscore-user-service
     audience: aegiscore-users
@@ -100,7 +101,7 @@ resources:
     cache_redis:
       addr: 127.0.0.1:6379
       username: ""
-      # 本地无密码；生产通过 AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD 或 Secret 注入。
+      # 本地无密码；生产必须在唯一完整配置文件中提供真实凭据。
       password: ""
       db: 0
       # 建连、读写和启动探测统一使用该超时。
@@ -110,7 +111,7 @@ resources:
       host: 127.0.0.1
       port: 5432
       username: aegiscore
-      # 示例不承诺生产密码；本地按需用环境变量覆盖，生产必须由 Secret 注入。
+      # 示例不承诺生产密码；生产必须由受控完整配置文件提供。
       password: ""
       db_name: aegiscore_user
       sslmode: disable

@@ -35,9 +35,9 @@ Business APIs are mounted under `/api/v1` and include auth, users, roles, permis
 
 ## Runtime Config
 
-共享核心配置只包含 `app/server/log/observability`。user-service 在 `resources.redis.cache_redis` 和 `resources.postgres.primary_db` 声明外部资源，在 `auth.token_version_cache` 和 `rbac.user_role_cache` 声明 feature cache。环境变量使用完整路径，例如 `AEGISCORE_SERVER_HTTP_PORT`、`AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_TIMEOUT` 和 `AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_MAX_OPEN_CONNS`；未知 YAML 字段会在启动前失败。
+共享核心配置只包含 `app/runtime/server/log/observability`。user-service 在 `resources.redis.cache_redis` 和 `resources.postgres.primary_db` 声明外部资源，在 `auth.token_version_cache` 和 `rbac.user_role_cache` 声明服务私有配置。配置只从显式 `--config` 指定的一份完整 YAML 文件读取；未知 YAML 字段会在启动前失败。
 
-日志只写 stdout/stderr，tracing 启用后固定使用 OTLP，进程时区使用平台 `TZ`。Gin 不信任代理，代理信任由 Ingress、gateway 或 service mesh 入口策略负责。pprof 默认关闭；临时诊断使用 `AEGISCORE_OBSERVABILITY_PPROF_ENABLED=true`、`AEGISCORE_OBSERVABILITY_PPROF_ADDR=127.0.0.1:6060` 和受控端口转发。
+日志只写 stdout/stderr，tracing 启用后固定使用 OTLP，进程时区使用 `runtime.timezone`。Gin 不信任代理，代理信任由 Ingress、gateway 或 service mesh 入口策略负责。pprof 默认关闭；临时诊断需修改当前环境的完整配置文件并使用受控端口转发。
 
 ## Feature Rules
 
@@ -61,7 +61,7 @@ make user-service-generate
 make user-service-migrate-diff name=<name>
 make user-service-migrate-validate
 make user-service-openapi-generate
-ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' ADMIN_USERNAME='initial-admin' make user-service-bootstrap-super-admin
+ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' make user-service-bootstrap-super-admin ADMIN_USERNAME='initial-admin'
 ```
 
 在 `user-service/` 目录内执行：
@@ -71,7 +71,7 @@ make test
 make generate
 make migrate-validate
 make openapi-generate
-ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' ADMIN_USERNAME='initial-admin' make bootstrap-super-admin
+ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' make bootstrap-super-admin ADMIN_USERNAME='initial-admin'
 ```
 
 ## Migration 与 RBAC Seed
@@ -80,7 +80,7 @@ ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' ADMIN_USERNAME='initial-admin' m
 
 1. 按 Ent schema -> Atlas diff 生成 SQL -> Atlas validate/hash 校验 SQL 目录 -> SQL 进 Git -> DBA 工单或受控发布平台执行的流程，确认服务拥有的 `primary_db` 已完成本 release 对应 SQL migration。
 2. 执行 `rbac seed`、`make user-service-seed-rbac` 或在服务目录执行 `make seed-rbac` 初始化系统 RBAC 数据。
-3. 在全新数据库上通过 `ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' ADMIN_USERNAME='initial-admin' ADMIN_NICKNAME='Initial Administrator' make user-service-bootstrap-super-admin`，或在服务目录执行对应 `make bootstrap-super-admin`，一次性创建初始超级管理员账号。
+3. 在全新数据库上通过 `ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' make user-service-bootstrap-super-admin ADMIN_USERNAME='initial-admin' ADMIN_NICKNAME='Initial Administrator'`，或在服务目录执行对应 `make bootstrap-super-admin`，一次性创建初始超级管理员账号。密码只从 `ADMIN_BOOTSTRAP_PASSWORD` 环境变量读取。
 4. 启动或滚动更新 HTTP server 副本。
 5. 初始管理员使用临时密码登录并完成强制改密。
 

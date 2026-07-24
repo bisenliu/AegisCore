@@ -62,8 +62,10 @@ spec:
 1. 启用 metrics：
 
 ```bash
-AEGISCORE_OBSERVABILITY_METRICS_ENABLED=true make user-service-run
+make user-service-run
 ```
+
+本地默认配置文件已启用 metrics；如需临时调整，编辑当前环境传给 `--config` 的完整 YAML 配置文件。
 
 2. 确认 metrics endpoint：
 
@@ -79,4 +81,4 @@ curl -fsS http://localhost:8080/metrics | head
 
 本地 tracing 默认关闭。启用 `observability.tracing.enabled` 后，服务固定通过 OTLP 向 `observability.tracing.otlp_endpoint` 导出，不提供 exporter 分支；Trace 可视化仍需要 OpenTelemetry Collector 和 trace backend。日志只写 stdout/stderr，并由容器或集群日志管道采集。
 
-pprof 是默认关闭的独立诊断监听，不与业务 HTTP router 或 metrics endpoint 共用端口。临时排障时设置 `AEGISCORE_OBSERVABILITY_PPROF_ENABLED=true`、`AEGISCORE_OBSERVABILITY_PPROF_ADDR=127.0.0.1:6060`，并通过 loopback、`kubectl port-forward` 或等价受控通道访问；不要在 Service、Ingress 或公网负载均衡器中默认暴露该端口。
+pprof 是默认关闭的独立诊断监听，不与业务 HTTP router 或 metrics endpoint 共用端口。临时排障时在当前环境完整配置文件中设置 `observability.pprof.enabled: true` 和 `observability.pprof.addr: 127.0.0.1:6060`，并通过 loopback、`kubectl port-forward` 或等价受控通道访问；不要在 Service、Ingress 或公网负载均衡器中默认暴露该端口。

@@ -29,7 +29,7 @@ func newBootstrapLifecycleApp(cfg *serviceconfig.Config) lifecycleApp {
 }
 
 func newServeCommand(appFactory lifecycleAppFactory) *cobra.Command {
-	var configPath string
+	configPath := "./configs/config.yaml"
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Start the AegisCore user services HTTP server",
@@ -37,7 +37,7 @@ func newServeCommand(appFactory lifecycleAppFactory) *cobra.Command {
 			return runServe(cmd.Context(), configPath, appFactory)
 		},
 	}
-	cmd.Flags().StringVar(&configPath, "config", "./configs/config.yaml", "path to YAML configuration file")
+	cmd.Flags().StringVar(&configPath, "config", configPath, "path to the complete YAML configuration file")
 	return cmd
 }
 

@@ -7,8 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const defaultBootstrapSuperAdminPasswordEnv = "ADMIN_BOOTSTRAP_PASSWORD"
-
 type rbacSeedOptions struct {
 	reactivateSystem   bool
 	syncSystemBindings bool
@@ -25,11 +23,9 @@ type rbacSeedRunner func(context.Context, string, rbacSeedOptions) error
 type rbacBootstrapSuperAdminRunner func(context.Context, string, rbacBootstrapSuperAdminOptions) error
 
 func newRBACCommand(seedRunner rbacSeedRunner, bootstrapRunner rbacBootstrapSuperAdminRunner) *cobra.Command {
-	var configPath string
+	configPath := "./configs/config.yaml"
 	var seedOpts rbacSeedOptions
-	bootstrapOpts := rbacBootstrapSuperAdminOptions{
-		passwordEnv: defaultBootstrapSuperAdminPasswordEnv,
-	}
+	bootstrapOpts := rbacBootstrapSuperAdminOptions{passwordEnv: defaultAdminBootstrapPasswordEnv}
 
 	cmd := &cobra.Command{
 		Use:   "rbac",
@@ -39,7 +35,7 @@ func newRBACCommand(seedRunner rbacSeedRunner, bootstrapRunner rbacBootstrapSupe
 			return fmt.Errorf("rbac subcommand is required")
 		},
 	}
-	cmd.PersistentFlags().StringVar(&configPath, "config", "./configs/config.yaml", "path to YAML configuration file")
+	cmd.PersistentFlags().StringVar(&configPath, "config", configPath, "path to the complete YAML configuration file")
 
 	seed := &cobra.Command{
 		Use:   "seed",
@@ -63,7 +59,7 @@ func newRBACCommand(seedRunner rbacSeedRunner, bootstrapRunner rbacBootstrapSupe
 	}
 	bootstrapSuperAdmin.Flags().StringVar(&bootstrapOpts.username, "username", "", "initial admin username")
 	bootstrapSuperAdmin.Flags().StringVar(&bootstrapOpts.nickname, "nickname", "", "initial admin display nickname")
-	bootstrapSuperAdmin.Flags().StringVar(&bootstrapOpts.passwordEnv, "password-env", defaultBootstrapSuperAdminPasswordEnv, "environment variable containing the bootstrap password")
+	bootstrapSuperAdmin.Flags().StringVar(&bootstrapOpts.passwordEnv, "password-env", defaultAdminBootstrapPasswordEnv, "environment variable that contains the initial admin password")
 	_ = bootstrapSuperAdmin.MarkFlagRequired("username")
 	cmd.AddCommand(bootstrapSuperAdmin)
 

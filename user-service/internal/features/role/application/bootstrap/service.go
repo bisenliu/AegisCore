@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,16 +12,15 @@ import (
 )
 
 const (
-	defaultPasswordEnv = "ADMIN_BOOTSTRAP_PASSWORD"
-	minPasswordBytes   = 12
-	maxPasswordBytes   = 72
+	minPasswordBytes = 12
+	maxPasswordBytes = 72
 )
 
 // Command 是 bootstrap-super-admin CLI 传入应用服务的原始输入。
 type Command struct {
-	Username    string
-	Nickname    string
-	PasswordEnv string
+	Username string
+	Nickname string
+	Password string
 }
 
 // Service 编排一次性超级管理员 bootstrap。
@@ -75,19 +73,14 @@ func (s *Service) BootstrapSuperAdmin(ctx context.Context, cmd Command) (Bootstr
 }
 
 type normalizedCommand struct {
-	Username    string
-	Nickname    string
-	PasswordEnv string
+	Username string
+	Nickname string
 }
 
 func normalizeCommand(cmd Command) (normalizedCommand, string, error) {
-	passwordEnv := strings.TrimSpace(cmd.PasswordEnv)
-	if passwordEnv == "" {
-		passwordEnv = defaultPasswordEnv
-	}
-	password, ok := os.LookupEnv(passwordEnv)
-	if !ok {
-		return normalizedCommand{}, "", fmt.Errorf("%w: %s environment variable is required", ErrBootstrapInvalidInput, passwordEnv)
+	password := cmd.Password
+	if password == "" {
+		return normalizedCommand{}, "", fmt.Errorf("%w: bootstrap password is required", ErrBootstrapInvalidInput)
 	}
 	if len(password) < minPasswordBytes {
 		return normalizedCommand{}, "", fmt.Errorf("%w: bootstrap password must be at least %d bytes", ErrBootstrapInvalidInput, minPasswordBytes)
@@ -103,5 +96,5 @@ func normalizeCommand(cmd Command) (normalizedCommand, string, error) {
 	if nickname == "" {
 		nickname = username
 	}
-	return normalizedCommand{Username: username, Nickname: nickname, PasswordEnv: passwordEnv}, password, nil
+	return normalizedCommand{Username: username, Nickname: nickname}, password, nil
 }

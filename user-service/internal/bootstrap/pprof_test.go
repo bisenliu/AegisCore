@@ -31,8 +31,6 @@ func TestPprofServerDisabledDoesNotRegisterLifecycle(t *testing.T) {
 }
 
 func TestPprofServerUsesParsedConfigInsteadOfProcessEnvironment(t *testing.T) {
-	t.Setenv("PPROF_ENABLED", "true")
-	t.Setenv("PPROF_ADDR", "127.0.0.1:16060")
 	lifecycle := &lifecycleRecorder{}
 	server, err := NewPprofServer(PprofServerParams{
 		Lifecycle: lifecycle,

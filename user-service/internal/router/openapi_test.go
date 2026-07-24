@@ -13,31 +13,19 @@ import (
 )
 
 func TestOpenAPIEnabled(t *testing.T) {
-	t.Setenv(openAPIEnabledEnv, "")
-
 	t.Run("production disabled by default", func(t *testing.T) {
-		t.Setenv(openAPIEnabledEnv, "")
 		require.False(t, openAPIEnabled("production"))
 	})
 
 	t.Run("local enabled by default", func(t *testing.T) {
-		t.Setenv(openAPIEnabledEnv, "")
 		require.True(t, openAPIEnabled("local"))
-	})
-
-	t.Run("env override", func(t *testing.T) {
-		t.Setenv(openAPIEnabledEnv, "true")
-		require.True(t, openAPIEnabled("production"))
-		t.Setenv(openAPIEnabledEnv, "false")
-		require.False(t, openAPIEnabled("local"))
 	})
 }
 
 func TestRegisterOpenAPIRedirects(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv(openAPIEnabledEnv, "true")
 	engine := gin.New()
-	RegisterOpenAPI(engine, "production")
+	RegisterOpenAPI(engine, "local")
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, openAPIUIPath, nil)
@@ -88,9 +76,8 @@ func TestRegisterOpenAPIRedirects(t *testing.T) {
 
 func TestRegisterOpenAPIDisabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv(openAPIEnabledEnv, "false")
 	engine := gin.New()
-	RegisterOpenAPI(engine, "local")
+	RegisterOpenAPI(engine, "production")
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/docs", nil)

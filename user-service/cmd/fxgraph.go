@@ -15,7 +15,7 @@ const defaultFxGraphOutputPath = "./docs/fx-dependency-graph.dot"
 type fxGraphWriter func(path string, opts ...fx.Option) (string, error)
 
 func newFxGraphCommand(writer fxGraphWriter) *cobra.Command {
-	var configPath string
+	configPath := "./configs/config.yaml"
 	var outputPath string
 	cmd := &cobra.Command{
 		Use:   "fxgraph",
@@ -24,7 +24,7 @@ func newFxGraphCommand(writer fxGraphWriter) *cobra.Command {
 			return runFxGraphCommand(configPath, outputPath, writer)
 		},
 	}
-	cmd.Flags().StringVar(&configPath, "config", "./configs/config.yaml", "path to YAML configuration file")
+	cmd.Flags().StringVar(&configPath, "config", configPath, "path to the complete YAML configuration file")
 	cmd.Flags().StringVar(&outputPath, "output", defaultFxGraphOutputPath, "path to write DOT dependency graph")
 	return cmd
 }

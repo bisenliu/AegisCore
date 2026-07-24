@@ -22,6 +22,7 @@ type AppConfig struct {
 type RuntimeConfig struct {
 	Lifecycle LifecycleConfig `mapstructure:"lifecycle"`
 	Gin       GinConfig       `mapstructure:"gin"`
+	Timezone  string          `mapstructure:"timezone"`
 }
 
 // GinConfig 控制 Gin 包级进程运行模式。

@@ -4,9 +4,7 @@ import (
 	"io/fs"
 	"mime"
 	"net/http"
-	"os"
 	"path"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -14,9 +12,6 @@ import (
 
 	"github.com/aegiscore/user-service/docs"
 )
-
-// openAPIEnabledEnv 显式开启或关闭 OpenAPI 文档路由，并覆盖环境默认行为。
-const openAPIEnabledEnv = "OPENAPI_ENABLED"
 
 const (
 	openAPIJSONPath = "/openapi.json"
@@ -102,16 +97,9 @@ func redirectToOpenAPI(c *gin.Context) {
 }
 
 func openAPIEnabled(environment string) bool {
-	if raw, ok := os.LookupEnv(openAPIEnabledEnv); ok {
-		// 显式环境变量覆盖优先于部署环境默认行为。
-		if enabled, err := strconv.ParseBool(raw); err == nil {
-			return enabled
-		}
-	}
-
 	switch strings.ToLower(strings.TrimSpace(environment)) {
 	case "prod", "production":
-		// 生产环境默认关闭 OpenAPI 文档路由，除非通过 OPENAPI_ENABLED 显式开启。
+		// 生产环境默认关闭 OpenAPI 文档路由。
 		return false
 	default:
 		return true

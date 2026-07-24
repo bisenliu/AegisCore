@@ -55,8 +55,8 @@ var RuntimeModule = fx.Module("aegiscore-user-service-runtime",
 func registerRuntimeServers(_ *http.Server, _ *PprofServer) {}
 
 // InitProcessRuntime 初始化 user-service 拥有的进程级 runtime 状态。
-func InitProcessRuntime() error {
-	return commontz.Init()
+func InitProcessRuntime(cfg *serviceconfig.Config) error {
+	return commontz.Init(cfg.Runtime.Timezone)
 }
 
 // AppModule 组装 user-service 顶层模块、服务级 provider 和 HTTP server 生命周期。

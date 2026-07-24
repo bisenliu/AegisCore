@@ -13,7 +13,7 @@ set -euo pipefail
 # 行为：
 #   - 构造 common、user-service、tools/openapi-convert、CI workflow、deployments 和 openspec 的最小目录。
 #   - 写入一组故意违规的 Go 文件和配置，用来覆盖架构分层、mock build tag、测试钩子、默认 logger、Fx/Dig 元数据等检查。
-#   - 通过 ARCHITECTURE_LINT_REPO_ROOT 让 architecture-lint.sh 针对 fixture 运行，而不是扫描真实仓库。
+#   - 通过 --repo-root 让 architecture-lint.sh 针对 fixture 运行，而不是扫描真实仓库。
 #   - 断言预期违规都会出现在输出中，并断言测试文件、生成目录、组合入口等白名单不会产生误报。
 #
 # 注意事项：
@@ -79,15 +79,25 @@ go 1.26.5
 EOF
 
 cat > "${fixture_root}/.github/workflows/ci.yml" <<'EOF'
-env:
-  GO_VERSION: '1.26.5'
-  GOTOOLCHAIN: go1.26.5
+name: ci
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.5'
 EOF
 
 cat > "${fixture_root}/.github/workflows/lint.yml" <<'EOF'
-env:
-  GO_VERSION: '1.26.5'
-  GOTOOLCHAIN: go1.26.5
+name: lint
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.5'
 EOF
 
 cat > "${fixture_root}/deployments/docker/atlas-postgres-pgtrgm.Dockerfile" <<'EOF'
@@ -106,6 +116,10 @@ cat > "${fixture_root}/deployments/compose/docker-compose.yml" <<'EOF'
 services:
   postgres:
     image: postgres:latest
+  user-service:
+    image: aegiscore/user-service:local
+    environment:
+      AEGISCORE_RUNTIME_ENVIRONMENT: local
 EOF
 
 cat > "${fixture_root}/user-service/internal/features/auth/application/violating_import.go" <<'EOF'
@@ -223,6 +237,16 @@ func useDefaultLogger() {
 }
 EOF
 
+cat > "${fixture_root}/user-service/internal/features/auth/infrastructure/env_config.go" <<'EOF'
+package infrastructure
+
+import "os"
+
+func loadEnvConfig() string {
+	return os.Getenv("AEGISCORE_RUNTIME_ENVIRONMENT")
+}
+EOF
+
 cat > "${fixture_root}/user-service/internal/features/auth/application/allowed_test.go" <<'EOF'
 package application
 
@@ -251,7 +275,7 @@ git -C "${fixture_root}" init -q
 
 # 将 lint 根目录指向 fixture，避免测试依赖真实工作区的当前状态。
 set +e
-output="$(ARCHITECTURE_LINT_REPO_ROOT="${fixture_root}" "${script_dir}/architecture-lint.sh" 2>&1)"
+output="$("${script_dir}/architecture-lint.sh" --repo-root "${fixture_root}" 2>&1)"
 status=$?
 set -e
 
@@ -278,6 +302,16 @@ fi
 
 if [[ "${output}" != *"feature production code must not use package-level default logger as main-path dependency"* ]]; then
   printf 'architecture-lint-test: expected default logger dependency violation report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
+if [[ "${output}" != *"production Go code must not read process environment or bind Viper env config"* ]]; then
+  printf 'architecture-lint-test: expected Go env config violation report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
+if [[ "${output}" != *"Docker Compose runtime config must not use environment, env_file or shell interpolation"* ]]; then
+  printf 'architecture-lint-test: expected Compose env config violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 

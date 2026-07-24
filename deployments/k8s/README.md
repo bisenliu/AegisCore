@@ -15,7 +15,7 @@
 
 生产 Kubernetes 发布必须按以下顺序执行：
 
-1. 创建 namespace、ServiceAccount、配置和外部 Secret。
+1. 创建 namespace、ServiceAccount 和包含完整配置文件的外部 Secret。
 2. 确认本 release 对应的已提交 SQL migration 已通过 DBA 工单或受控发布平台执行完成。
 3. 执行 RBAC seed Job，并等待完成。
 4. 创建或滚动更新 user-service Deployment、Service、PDB、HPA 和 NetworkPolicy。
@@ -31,19 +31,20 @@ user-service Deployment 默认 `terminationGracePeriodSeconds` 为 150 秒，用
 
 应用完成请求排空、后台任务停止、tracing flush、datastore 关闭和 logger sync 后会立即退出，不会主动等待完整 150 秒。当前清单没有 `preStop`；后续新增或延长 `preStop` 时必须把执行上界计入 30 秒平台余量，余量不足时同步提高原生清单、Helm 默认值、配置一致性测试和说明。
 
-## Secret 边界
+## 配置边界
 
-`secret.example.yaml` 只说明必需键名，不应直接用于生产。生产环境应由部署系统、GitOps Secret、密钥管理系统或 CI/CD 注入以下键：
+user-service 每个进程只接受一份完整 YAML 配置文件。Kubernetes 清单不再拆分 ConfigMap 与 Secret overlay；生产环境应由部署系统、GitOps Secret、密钥管理系统或 CI/CD 创建包含 `config.yaml` 的 Secret。该文件必须同时包含运行时配置、资源地址和凭据，例如：
 
-- `AEGISCORE_AUTH_JWT_SECRET`
-- `AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME`
-- `AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD`
-- `AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME`
-- `AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD`
+- `auth.jwt.secret`
+- `resources.postgres.primary_db.username`
+- `resources.postgres.primary_db.password`
+- 可选 `resources.redis.cache_redis.username/password`
 
-ConfigMap 使用 `AEGISCORE_SERVER_HTTP_*`、`AEGISCORE_RESOURCES_*` 最终路径，进程时区使用标准 `TZ`。日志由 stdout/stderr 采集，tracing 启用后固定通过 OTLP 导出。trusted proxy 策略属于 Ingress、gateway 或 service mesh 入口边界，不通过应用配置注入。
+超级管理员 bootstrap 临时密码只通过 `ADMIN_BOOTSTRAP_PASSWORD` 环境变量提供，不写入 `config.yaml`。
 
-pprof 默认不渲染、不暴露。临时诊断应在受控副本中设置 `AEGISCORE_OBSERVABILITY_PPROF_ENABLED=true`、`AEGISCORE_OBSERVABILITY_PPROF_ADDR=127.0.0.1:6060`，再使用 `kubectl port-forward`。
+Secret 中的 `config.yaml` 是唯一配置来源，进程时区使用 `runtime.timezone`。日志由 stdout/stderr 采集，tracing 启用后固定通过 OTLP 导出。trusted proxy 策略属于 Ingress、gateway 或 service mesh 入口边界，不通过应用配置注入。
+
+pprof 默认不渲染、不暴露。临时诊断应修改受控环境的完整配置文件设置 `observability.pprof`，再使用 `kubectl port-forward`。
 
 ## 验证
 

@@ -1,6 +1,6 @@
 # 本文件是 aegiscore-user-service Helm chart 的默认 values。
 # 适用于生产基线渲染，提供云厂商无关的 Deployment、RBAC seed Job、PDB、HPA 和 NetworkPolicy 配置。
-# 敏感值只通过 `secret.existingSecret` 引用外部 Secret，默认不在 chart 中渲染真实 Secret。
+# 完整配置文件只通过 `secret.existingSecret` 引用外部 Secret，默认不在 chart 中渲染真实 Secret。
 replicaCount: 2 # 默认 HTTP 副本数；autoscaling.enabled=true 时由 HPA 控制。
 
 image: # user-service 镜像配置，用于 HTTP Deployment 和 RBAC seed Job。
@@ -44,50 +44,9 @@ service: # runtime Service 配置。
   type: ClusterIP # Service 类型；默认只暴露集群内访问。
   port: 8080 # Service 和容器 HTTP 端口。
 
-config: # 渲染到 ConfigMap 的非敏感 `AEGISCORE_*` 环境变量。
-  TZ: Asia/Shanghai # 平台级进程时区，不属于 AegisCore 配置树。
-  AEGISCORE_APP_ENVIRONMENT: production # 运行环境标识；生产类环境启用更严格校验。
-  AEGISCORE_SERVER_HTTP_ENABLED: "true" # 启用 HTTP server。
-  AEGISCORE_SERVER_HTTP_HOST: 0.0.0.0 # HTTP 监听地址。
-  AEGISCORE_SERVER_HTTP_PORT: "8080" # HTTP 监听端口；需与 service.port 一致。
-  AEGISCORE_SERVER_HTTP_READ_TIMEOUT: 30s # HTTP 读取超时。
-  AEGISCORE_SERVER_HTTP_WRITE_TIMEOUT: 60s # HTTP 写入超时。
-  AEGISCORE_SERVER_HTTP_IDLE_TIMEOUT: 120s # keep-alive 空闲超时。
-  AEGISCORE_SERVER_HTTP_SHUTDOWN_TIMEOUT: 25s # HTTP 优雅关闭超时。
-  AEGISCORE_SERVER_GRPC_ENABLED: "false" # 当前没有入站 gRPC API。
-  AEGISCORE_SERVER_GRPC_HOST: 127.0.0.1 # gRPC 默认 loopback 监听地址。
-  AEGISCORE_SERVER_GRPC_PORT: "9090" # gRPC 预留端口。
-  AEGISCORE_SERVER_GRPC_SHUTDOWN_TIMEOUT: 10s # gRPC 优雅关闭超时。
-  AEGISCORE_LOG_LEVEL: info # 日志级别；可选 debug、info、warn、error。
-  AEGISCORE_LOG_FORMAT: json # 日志写 stdout/stderr，由平台采集和轮转。
-  AEGISCORE_OBSERVABILITY_METRICS_ENABLED: "true" # 是否启用 Prometheus metrics endpoint。
-  AEGISCORE_OBSERVABILITY_METRICS_PATH: /metrics # metrics 暴露路径。
-  AEGISCORE_OBSERVABILITY_METRICS_INCLUDE_RUNTIME: "true" # 是否包含 Go runtime/process 指标。
-  AEGISCORE_OBSERVABILITY_TRACING_ENABLED: "false" # 启用后固定使用 OTLP。
-  AEGISCORE_OBSERVABILITY_TRACING_OTLP_ENDPOINT: "" # 启用 tracing 时填写 Collector endpoint。
-  AEGISCORE_OBSERVABILITY_TRACING_INSECURE: "false" # 是否允许 insecure OTLP；生产建议 false。
-  AEGISCORE_AUTH_JWT_ISSUER: aegiscore-user-service # JWT issuer。
-  AEGISCORE_AUTH_JWT_AUDIENCE: aegiscore-users # JWT audience。
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_HOST: postgres # primary_db PostgreSQL 主机或 Service DNS。
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PORT: "5432" # primary_db PostgreSQL 端口。
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_DB_NAME: aegiscore_user # primary_db 数据库名。
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_SSLMODE: require # PostgreSQL SSL 模式。
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_MAX_OPEN_CONNS: "50" # primary_db 最大打开连接数。
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_MAX_IDLE_CONNS: "10" # primary_db 最大空闲连接数。
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_CONN_MAX_LIFETIME: 30m # 单连接最大生命周期。
-  AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_POOL_CONN_MAX_IDLE_TIME: 10m # 空闲连接最大保留时间。
-  AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_ADDR: redis:6379 # cache_redis 地址。
-  AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_DB: "0" # Redis logical database 编号。
-  AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_TIMEOUT: 5s # Redis 建连、读写和启动探测统一超时。
-
-secret: # 外部 Secret 引用配置；chart 不渲染真实 Secret。
+secret: # 外部完整配置 Secret 引用；chart 不渲染真实 Secret。
   existingSecret: aegiscore-user-service-runtime # 已存在 Secret 名称。
-  keys: # Secret 中各敏感字段的键名映射。
-    jwtSecret: AEGISCORE_AUTH_JWT_SECRET # JWT HMAC secret。
-    postgresUsername: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME # primary_db 用户名。
-    postgresPassword: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD # primary_db 密码。
-    redisUsername: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME # cache_redis ACL 用户名。
-    redisPassword: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD # cache_redis 密码。
+  configKey: config.yaml # Secret 中保存唯一完整 YAML 配置的键名。
 
 deployment: # runtime Deployment 行为配置。
   revisionHistoryLimit: 5 # 保留的历史 ReplicaSet 数量。
@@ -209,7 +168,7 @@ rbacSeedJob: # RBAC 系统数据 seed 发布前置 Job 配置。
     - /app/user-service/bin/user-service # user-service 二进制路径。
     - rbac # 进入 RBAC CLI。
     - --config # 指定配置文件参数名。
-    - /app/user-service/configs/config.yaml # 镜像内配置文件路径。
+    - /app/user-service/config/config.yaml # 完整配置文件路径。
     - seed # 执行 RBAC seed。
     - --reactivate-system # 重新启用 catalog 管理的系统角色和权限。
     - --sync-system-bindings # 同步系统角色权限绑定。

@@ -46,11 +46,11 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
-          envFrom:
-            - configMapRef:
-                name: {{ include "aegiscore-user-service.configMapName" . }}
-          env:
-            {{- include "aegiscore-user-service.secretEnv" . | nindent 12 }}
+          command:
+            - /app/user-service/bin/user-service
+            - serve
+            - --config
+            - /app/user-service/config/config.yaml
           livenessProbe:
             httpGet:
               path: {{ .Values.probes.liveness.path }}
@@ -78,8 +78,17 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:
             {{- toYaml .Values.volumeMounts | nindent 12 }}
+            - name: runtime-config
+              mountPath: /app/user-service/config
+              readOnly: true
       volumes:
         {{- toYaml .Values.volumes | nindent 8 }}
+        - name: runtime-config
+          secret:
+            secretName: {{ include "aegiscore-user-service.secretName" . }}
+            items:
+              - key: {{ .Values.secret.configKey }}
+                path: config.yaml
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -96,10 +96,7 @@ func bootstrapSuperAdmin(t *testing.T, dsn string, plainPassword string) {
 	db := openPostgres(t, dsn)
 	store := rolepostgres.NewBootstrapStore(db)
 	service := rolebootstrap.NewService(store, passwordService)
-	_, err = service.BootstrapSuperAdmin(ctx, rolebootstrap.Command{Username: "initial-admin", Nickname: "Initial Administrator", PasswordEnv: "E2E_BOOTSTRAP_PASSWORD"})
-	require.Error(t, err, "bootstrap without password env should fail")
-	t.Setenv("E2E_BOOTSTRAP_PASSWORD", plainPassword)
-	_, err = service.BootstrapSuperAdmin(ctx, rolebootstrap.Command{Username: "initial-admin", Nickname: "Initial Administrator", PasswordEnv: "E2E_BOOTSTRAP_PASSWORD"})
+	_, err = service.BootstrapSuperAdmin(ctx, rolebootstrap.Command{Username: "initial-admin", Nickname: "Initial Administrator", Password: plainPassword})
 	require.NoError(t, err, "bootstrap super admin")
 }
 func seedRBACBaseline(t *testing.T, dsn string) {

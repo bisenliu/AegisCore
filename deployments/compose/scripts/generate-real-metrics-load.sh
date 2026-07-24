@@ -10,24 +10,6 @@
 # 典型用法：
 #   ./deployments/compose/scripts/generate-real-metrics-load.sh
 #
-# 调整压测强度：
-#   DURATION=120 CONCURRENCY=16 ./deployments/compose/scripts/generate-real-metrics-load.sh
-#
-# 只快速生成边界指标并跳过 Prometheus 等待：
-#   DURATION=0 PROM_SETTLE_SECONDS=0 ./deployments/compose/scripts/generate-real-metrics-load.sh
-#
-# 常用环境变量：
-#   BASE_URL                         user-service HTTP 地址，默认 http://localhost:8080
-#   PROM_URL                         Prometheus 地址，默认 http://localhost:9090
-#   COMPOSE_FILE                     docker compose 文件路径
-#   DURATION                         并发流量持续秒数
-#   CONCURRENCY                      并发 worker 数
-#   CREATE_RATE/STATUS_RATE          每 N 轮执行用户创建和角色启停写操作
-#   AUTH_RATE/BAD_RATE               每 N 轮执行认证和异常请求
-#   PROM_SETTLE_SECONDS              请求结束后等待 Prometheus scrape 的秒数
-#   RBAC_WATCHER_CHECK_WAIT_SECONDS  触发 RBAC watcher 补偿检查后的等待秒数；设为 0 可跳过
-#   ARTIFACT_DIR                     输出目录，默认 /tmp/aegiscore-metrics-load
-#
 # 输出文件：
 #   results-<RUN_ID>.tsv             每次 HTTP 请求的时间戳、状态码、耗时、方法和路径
 #   prometheus-samples-<RUN_ID>.txt  关键 Prometheus 查询快照
@@ -39,43 +21,43 @@
 #   - RBAC policy failure 指标通常需要真实 reload/publish 失败才会出现，脚本默认只触发安全的成功与版本补偿路径。
 set -Eeuo pipefail
 
-# ---------- 可通过环境变量覆盖的运行参数 ----------
+# ---------- 运行参数 ----------
 
-BASE_URL="${BASE_URL:-http://localhost:8080}"
-PROM_URL="${PROM_URL:-http://localhost:9090}"
-COMPOSE_FILE="${COMPOSE_FILE:-deployments/compose/docker-compose.yml}"
-SERVICE_NAME="${SERVICE_NAME:-user-service}"
-POSTGRES_SERVICE="${POSTGRES_SERVICE:-postgres}"
-REDIS_SERVICE="${REDIS_SERVICE:-redis}"
-POSTGRES_USER="${POSTGRES_USER:-aegiscore}"
-POSTGRES_DB="${POSTGRES_DB:-aegiscore_user}"
+BASE_URL="http://localhost:8080"
+PROM_URL="http://localhost:9090"
+COMPOSE_FILE="deployments/compose/docker-compose.yml"
+SERVICE_NAME="user-service"
+POSTGRES_SERVICE="postgres"
+REDIS_SERVICE="redis"
+POSTGRES_USER="postgres"
+POSTGRES_DB="postgres"
 
-DURATION="${DURATION:-60}"
-CONCURRENCY="${CONCURRENCY:-8}"
-CREATE_RATE="${CREATE_RATE:-3}"
-STATUS_RATE="${STATUS_RATE:-5}"
-AUTH_RATE="${AUTH_RATE:-4}"
-BAD_RATE="${BAD_RATE:-3}"
-PROM_SCRAPE_INTERVAL="${PROM_SCRAPE_INTERVAL:-10}"
-PROM_SETTLE_SECONDS="${PROM_SETTLE_SECONDS:-20}"
-WARMUP_SECONDS="${WARMUP_SECONDS:-2}"
-RBAC_WATCHER_CHECK_WAIT_SECONDS="${RBAC_WATCHER_CHECK_WAIT_SECONDS:-17}"
+DURATION="60"
+CONCURRENCY="8"
+CREATE_RATE="3"
+STATUS_RATE="5"
+AUTH_RATE="4"
+BAD_RATE="3"
+PROM_SCRAPE_INTERVAL="10"
+PROM_SETTLE_SECONDS="20"
+WARMUP_SECONDS="2"
+RBAC_WATCHER_CHECK_WAIT_SECONDS="17"
 
-BOOTSTRAP_USERNAME="${BOOTSTRAP_USERNAME:-metrics-admin}"
-BOOTSTRAP_PASSWORD="${BOOTSTRAP_PASSWORD:-AegisCoreLoad123!}"
-BOOTSTRAP_NICKNAME="${BOOTSTRAP_NICKNAME:-Metrics Admin}"
-BOOTSTRAP_USER_ID="${BOOTSTRAP_USER_ID:-00000000-0000-0000-0000-00000000a001}"
-SUPER_ADMIN_ROLE_ID="${SUPER_ADMIN_ROLE_ID:-00000000-0000-0000-0000-000000000001}"
-RBAC_POLICY_VERSION_KEY="${RBAC_POLICY_VERSION_KEY:-aegiscore-user-service:rbac:policy:version}"
-RBAC_POLICY_CHANNEL="${RBAC_POLICY_CHANNEL:-aegiscore-user-service:rbac:policy:refresh}"
+BOOTSTRAP_USERNAME="metrics-admin"
+BOOTSTRAP_PASSWORD="AegisCoreLoad123!"
+BOOTSTRAP_NICKNAME="Metrics Admin"
+BOOTSTRAP_USER_ID="00000000-0000-0000-0000-00000000a001"
+SUPER_ADMIN_ROLE_ID="00000000-0000-0000-0000-000000000001"
+RBAC_POLICY_VERSION_KEY="aegiscore-user-service:rbac:policy:version"
+RBAC_POLICY_CHANNEL="aegiscore-user-service:rbac:policy:refresh"
 
-STATIC_PASSWORD_HASH="${STATIC_PASSWORD_HASH:-\$2y\$12\$0W17hTDYsMOjsS30IsyJ.u1gtJEJ6kZhpI86BpWR9dhj65Tsgy/42}"
+STATIC_PASSWORD_HASH="\$2y\$12\$0W17hTDYsMOjsS30IsyJ.u1gtJEJ6kZhpI86BpWR9dhj65Tsgy/42"
 
-RUN_ID="${RUN_ID:-$(date +%Y%m%d%H%M%S)}"
-ARTIFACT_DIR="${ARTIFACT_DIR:-/tmp/aegiscore-metrics-load}"
-RESULTS_FILE="${RESULTS_FILE:-$ARTIFACT_DIR/results-$RUN_ID.tsv}"
-PROM_SAMPLES_FILE="${PROM_SAMPLES_FILE:-$ARTIFACT_DIR/prometheus-samples-$RUN_ID.txt}"
-SERVICE_METRICS_FILE="${SERVICE_METRICS_FILE:-$ARTIFACT_DIR/service-metrics-$RUN_ID.prom}"
+RUN_ID="$(date +%Y%m%d%H%M%S)"
+ARTIFACT_DIR="/tmp/aegiscore-metrics-load"
+RESULTS_FILE="$ARTIFACT_DIR/results-$RUN_ID.tsv"
+PROM_SAMPLES_FILE="$ARTIFACT_DIR/prometheus-samples-$RUN_ID.txt"
+SERVICE_METRICS_FILE="$ARTIFACT_DIR/service-metrics-$RUN_ID.prom"
 
 # ---------- 运行中写入的状态 ----------
 

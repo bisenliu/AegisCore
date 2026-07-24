@@ -13,12 +13,11 @@ import (
 )
 
 func TestServiceBootstrapSuperAdmin(t *testing.T) {
-	t.Setenv("ADMIN_SECRET", "  long secret  ")
 	store := &recordingStore{}
 	hasher := &recordingHasher{hash: "bcrypt-hash"}
 	service := NewService(store, hasher)
 
-	result, err := service.BootstrapSuperAdmin(context.Background(), Command{Username: " Initial-Admin ", Nickname: " ", PasswordEnv: "ADMIN_SECRET"})
+	result, err := service.BootstrapSuperAdmin(context.Background(), Command{Username: " Initial-Admin ", Nickname: " ", Password: "  long secret  "})
 
 	require.NoError(t, err)
 	require.Equal(t, uuid.MustParse(rbacbaseline.BootstrapSuperAdminUserID), result.UserID)
@@ -33,11 +32,10 @@ func TestServiceBootstrapSuperAdmin(t *testing.T) {
 }
 
 func TestServiceBootstrapSuperAdminNickname(t *testing.T) {
-	t.Setenv("ADMIN_SECRET", "long-password")
 	store := &recordingStore{}
 	service := NewService(store, &recordingHasher{hash: "hash"})
 
-	_, err := service.BootstrapSuperAdmin(context.Background(), Command{Username: "Admin", Nickname: " Initial Administrator ", PasswordEnv: "ADMIN_SECRET"})
+	_, err := service.BootstrapSuperAdmin(context.Background(), Command{Username: "Admin", Nickname: " Initial Administrator ", Password: "long-password"})
 
 	require.NoError(t, err)
 	require.Equal(t, "Initial Administrator", store.input.Nickname)
@@ -51,9 +49,9 @@ func TestServiceBootstrapSuperAdminValidation(t *testing.T) {
 		wantErr    string
 		wantNoHash bool
 	}{
-		{name: "requires username", setup: func(t *testing.T) { t.Setenv("ADMIN_SECRET", "long-password") }, cmd: Command{Username: " ", PasswordEnv: "ADMIN_SECRET"}, wantErr: "bootstrap username is required", wantNoHash: true},
-		{name: "requires password env", setup: func(*testing.T) {}, cmd: Command{Username: "admin", PasswordEnv: "MISSING_SECRET"}, wantErr: "MISSING_SECRET environment variable is required", wantNoHash: true},
-		{name: "rejects short password", setup: func(t *testing.T) { t.Setenv("ADMIN_SECRET", "short") }, cmd: Command{Username: "admin", PasswordEnv: "ADMIN_SECRET"}, wantErr: "at least 12 bytes", wantNoHash: true},
+		{name: "requires username", setup: func(*testing.T) {}, cmd: Command{Username: " ", Password: "long-password"}, wantErr: "bootstrap username is required", wantNoHash: true},
+		{name: "requires password", setup: func(*testing.T) {}, cmd: Command{Username: "admin"}, wantErr: "bootstrap password is required", wantNoHash: true},
+		{name: "rejects short password", setup: func(*testing.T) {}, cmd: Command{Username: "admin", Password: "short"}, wantErr: "at least 12 bytes", wantNoHash: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.setup(t)
@@ -70,16 +68,14 @@ func TestServiceBootstrapSuperAdminValidation(t *testing.T) {
 
 func TestServiceBootstrapSuperAdminPropagatesHashAndStoreErrors(t *testing.T) {
 	t.Run("hash error", func(t *testing.T) {
-		t.Setenv("ADMIN_SECRET", "long-password")
 		hashErr := errors.New("hash failed")
-		_, err := NewService(&recordingStore{}, &recordingHasher{err: hashErr}).BootstrapSuperAdmin(context.Background(), Command{Username: "admin", PasswordEnv: "ADMIN_SECRET"})
+		_, err := NewService(&recordingStore{}, &recordingHasher{err: hashErr}).BootstrapSuperAdmin(context.Background(), Command{Username: "admin", Password: "long-password"})
 		require.ErrorIs(t, err, hashErr)
 	})
 
 	t.Run("store error", func(t *testing.T) {
-		t.Setenv("ADMIN_SECRET", "long-password")
 		storeErr := errors.New("store failed")
-		_, err := NewService(&recordingStore{err: storeErr}, &recordingHasher{hash: "hash"}).BootstrapSuperAdmin(context.Background(), Command{Username: "admin", PasswordEnv: "ADMIN_SECRET"})
+		_, err := NewService(&recordingStore{err: storeErr}, &recordingHasher{hash: "hash"}).BootstrapSuperAdmin(context.Background(), Command{Username: "admin", Password: "long-password"})
 		require.ErrorIs(t, err, storeErr)
 	})
 }

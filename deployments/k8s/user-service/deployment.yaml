@@ -1,6 +1,6 @@
 # 本文件定义 user-service HTTP 运行时 Deployment。
 # 适用于 migration 和 RBAC seed 成功后的服务 rollout；普通副本只启动 HTTP 服务。
-# 关键配置包括三类健康探针、滚动更新策略、Secret 引用、资源边界和 Pod 安全上下文。
+# 关键配置包括三类健康探针、滚动更新策略、完整配置 Secret 引用、资源边界和 Pod 安全上下文。
 apiVersion: apps/v1 # Deployment 使用 apps/v1 API。
 kind: Deployment # 声明控制 ReplicaSet 和 Pod rollout 的工作负载。
 metadata: # Deployment 的元数据。
@@ -47,37 +47,11 @@ spec: # Deployment 期望状态。
             - name: http # 端口名称，Service 和探针通过该名称引用。
               containerPort: 8080 # 容器内 HTTP 监听端口。
               protocol: TCP # HTTP 使用 TCP 协议。
-          envFrom: # 批量注入环境变量来源。
-            - configMapRef: # 从非敏感 ConfigMap 注入运行时配置。
-                name: aegiscore-user-service-config # ConfigMap 名称。
-          env: # 单独注入的敏感或可选环境变量。
-            - name: AEGISCORE_AUTH_JWT_SECRET # JWT HMAC secret 环境变量名。
-              valueFrom: # 从 Secret 读取值。
-                secretKeyRef: # Secret 键引用。
-                  name: aegiscore-user-service-runtime # 运行时 Secret 名称。
-                  key: AEGISCORE_AUTH_JWT_SECRET # Secret 中的 JWT secret 键。
-            - name: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME # primary_db PostgreSQL 用户名环境变量。
-              valueFrom: # 从 Secret 读取值。
-                secretKeyRef: # Secret 键引用。
-                  name: aegiscore-user-service-runtime # 运行时 Secret 名称。
-                  key: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_USERNAME # Secret 中的数据库用户名键。
-            - name: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD # primary_db PostgreSQL 密码环境变量。
-              valueFrom: # 从 Secret 读取值。
-                secretKeyRef: # Secret 键引用。
-                  name: aegiscore-user-service-runtime # 运行时 Secret 名称。
-                  key: AEGISCORE_RESOURCES_POSTGRES_PRIMARY_DB_PASSWORD # Secret 中的数据库密码键。
-            - name: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME # cache_redis ACL 用户名环境变量。
-              valueFrom: # 从 Secret 读取值。
-                secretKeyRef: # Secret 键引用。
-                  name: aegiscore-user-service-runtime # 运行时 Secret 名称。
-                  key: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_USERNAME # Secret 中的 Redis 用户名键。
-                  optional: true # 未启用 Redis ACL 时允许缺失。
-            - name: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD # cache_redis 密码环境变量。
-              valueFrom: # 从 Secret 读取值。
-                secretKeyRef: # Secret 键引用。
-                  name: aegiscore-user-service-runtime # 运行时 Secret 名称。
-                  key: AEGISCORE_RESOURCES_REDIS_CACHE_REDIS_PASSWORD # Secret 中的 Redis 密码键。
-                  optional: true # 未启用 Redis 密码时允许缺失。
+          command: # 显式指定配置文件来源，避免通过环境变量传递配置。
+            - /app/user-service/bin/user-service
+            - serve
+            - --config
+            - /app/user-service/config/config.yaml
           livenessProbe: # 存活探针；失败会触发 kubelet 重启容器。
             httpGet: # 使用 HTTP GET 探测。
               path: /livez # liveness 路径，表示进程是否存活。
@@ -115,7 +89,13 @@ spec: # Deployment 期望状态。
           volumeMounts: # 容器挂载卷。
             - name: tmp # 引用下方 tmp emptyDir。
               mountPath: /tmp # 提供日志和临时文件可写路径。
+            - name: runtime-config # 完整配置文件。
+              mountPath: /app/user-service/config # 配置目录。
+              readOnly: true # 配置只读挂载。
       volumes: # Pod 级卷定义。
         - name: tmp # 临时卷名称。
           emptyDir: # Pod 生命周期内的临时目录。
             sizeLimit: 256Mi # 限制临时目录最大占用，避免无限写满节点。
+        - name: runtime-config # 完整配置卷。
+          secret: # 从 Secret 投影唯一完整配置文件。
+            secretName: aegiscore-user-service-runtime # Secret 名称。

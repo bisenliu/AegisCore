@@ -28,7 +28,6 @@ import (
 
 func TestRegisterUserServiceHTTPRoutesRegistersCurrentRouteGraph(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv(openAPIEnabledEnv, "true")
 
 	engine := gin.New()
 	authorizer := &routerRegistrationAuthorizer{allowed: false}
@@ -122,7 +121,6 @@ func TestRegisterUserServiceHTTPRoutesRejectsMissingSecurityDependencies(t *test
 
 func TestRegisterUserServiceHTTPRoutesReturnsMetricsConfigError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	t.Setenv(openAPIEnabledEnv, "true")
 
 	engine := gin.New()
 	params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{
