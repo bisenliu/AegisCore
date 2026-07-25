@@ -1,9 +1,10 @@
 # 本文件提供本地或临时环境的 Helm values 覆盖示例。
 # 适用于 `helm template -f values.yaml -f values-local.yaml` 进行本地渲染验证。
-# 生产环境应使用独立环境 values，并提前创建包含完整 config.yaml 的外部 Secret。
-secret:
-  existingSecret: aegiscore-user-service-runtime
-  configKey: config.yaml
+# 生产环境应使用独立环境 values，并提前在 Nacos 写入对应 namespace/group/dataId。
+nacos:
+  server:
+    namespace: local
+  configNamespace: local
 
 autoscaling:
   enabled: false

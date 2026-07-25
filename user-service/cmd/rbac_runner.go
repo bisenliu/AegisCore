@@ -9,19 +9,19 @@ import (
 )
 
 func newRBACSeedRunner(newDependencies rbacSeedDependencyFactory) rbacSeedRunner {
-	return func(ctx context.Context, configPath string, opts rbacSeedOptions) error {
-		return runRBACSeedCommand(ctx, configPath, opts, newDependencies)
+	return func(ctx context.Context, opts rbacSeedOptions) error {
+		return runRBACSeedCommand(ctx, opts, newDependencies)
 	}
 }
 
 func newRBACBootstrapSuperAdminRunner(newDependencies rbacSeedDependencyFactory) rbacBootstrapSuperAdminRunner {
-	return func(ctx context.Context, configPath string, opts rbacBootstrapSuperAdminOptions) error {
-		return runBootstrapSuperAdminCommand(ctx, configPath, opts, newDependencies)
+	return func(ctx context.Context, opts rbacBootstrapSuperAdminOptions) error {
+		return runBootstrapSuperAdminCommand(ctx, opts, newDependencies)
 	}
 }
 
-func runRBACSeedCommand(ctx context.Context, configPath string, opts rbacSeedOptions, newDependencies rbacSeedDependencyFactory) (err error) {
-	deps, cleanup, err := newDependencies(ctx, configPath)
+func runRBACSeedCommand(ctx context.Context, opts rbacSeedOptions, newDependencies rbacSeedDependencyFactory) (err error) {
+	deps, cleanup, err := newDependencies(ctx)
 	if err != nil {
 		return err
 	}
@@ -38,8 +38,8 @@ func runRBACSeedCommand(ctx context.Context, configPath string, opts rbacSeedOpt
 	return nil
 }
 
-func runBootstrapSuperAdminCommand(ctx context.Context, configPath string, opts rbacBootstrapSuperAdminOptions, newDependencies rbacSeedDependencyFactory) (err error) {
-	deps, cleanup, err := newDependencies(ctx, configPath)
+func runBootstrapSuperAdminCommand(ctx context.Context, opts rbacBootstrapSuperAdminOptions, newDependencies rbacSeedDependencyFactory) (err error) {
+	deps, cleanup, err := newDependencies(ctx)
 	if err != nil {
 		return err
 	}

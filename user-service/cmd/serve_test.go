@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
+	commonconfig "github.com/aegiscore/common/runtime/config"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
@@ -22,7 +21,7 @@ func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testin
 	key := testContextKey("trace-id")
 	parent := context.WithValue(context.Background(), key, "test-trace")
 	ctx, cancel := context.WithCancel(parent)
-	configPath := writeServeTestConfig(t, 2*time.Second, 45*time.Second)
+	loadConfig := serveTestConfigLoader(t, 2*time.Second, 45*time.Second)
 
 	appFactory := func(cfg *serviceconfig.Config) lifecycleApp {
 		require.NotNil(t, cfg)
@@ -52,7 +51,7 @@ func TestRunServeStopContextPreservesUpstreamValuesWithoutCancellation(t *testin
 		}
 	}
 
-	require.NoError(t, runServe(ctx, configPath, appFactory))
+	require.NoError(t, runServe(ctx, appFactory, loadConfig))
 }
 
 func TestRunServeRejectsInvalidConfigBeforeCreatingApp(t *testing.T) {
@@ -62,7 +61,7 @@ func TestRunServeRejectsInvalidConfigBeforeCreatingApp(t *testing.T) {
 		return testLifecycleApp{}
 	}
 
-	err := runServe(context.Background(), writeServeTestConfig(t, 0, 45*time.Second), appFactory)
+	err := runServe(context.Background(), appFactory, serveTestConfigLoader(t, 0, 45*time.Second))
 	require.ErrorContains(t, err, "runtime.lifecycle.start_timeout must be > 0")
 	require.False(t, called)
 }
@@ -98,7 +97,7 @@ func TestRunServeHandlesInternalShutdownSignal(t *testing.T) {
 				}
 			}
 
-			err := runServe(context.Background(), writeServeTestConfig(t, time.Second, 45*time.Second), appFactory)
+			err := runServe(context.Background(), appFactory, serveTestConfigLoader(t, time.Second, 45*time.Second))
 			require.Equal(t, 1, stopCalls)
 			if tt.wantExitError {
 				require.ErrorContains(t, err, "exit code "+fmt.Sprint(tt.exitCode))
@@ -125,14 +124,14 @@ func TestRunServeReturnsExternalShutdownStopError(t *testing.T) {
 		}
 	}
 
-	err := runServe(ctx, writeServeTestConfig(t, time.Second, 45*time.Second), appFactory)
+	err := runServe(ctx, appFactory, serveTestConfigLoader(t, time.Second, 45*time.Second))
 	require.ErrorIs(t, err, stopErr)
 }
 
 func TestRunServeConcurrentExitSourcesStopOnce(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	shutdownSignals := make(chan fx.ShutdownSignal, 2)
-	configPath := writeServeTestConfig(t, time.Second, 45*time.Second)
+	loadConfig := serveTestConfigLoader(t, time.Second, 45*time.Second)
 	var stopCalls atomic.Int32
 	appFactory := func(*serviceconfig.Config) lifecycleApp {
 		return testLifecycleApp{
@@ -152,7 +151,7 @@ func TestRunServeConcurrentExitSourcesStopOnce(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- runServe(ctx, configPath, appFactory)
+		done <- runServe(ctx, appFactory, loadConfig)
 	}()
 
 	select {
@@ -164,7 +163,7 @@ func TestRunServeConcurrentExitSourcesStopOnce(t *testing.T) {
 	require.Equal(t, int32(1), stopCalls.Load())
 }
 
-func writeServeTestConfig(t testing.TB, startTimeout time.Duration, stopTimeout time.Duration) string {
+func serveTestConfigLoader(t testing.TB, startTimeout time.Duration, stopTimeout time.Duration) configLoader {
 	t.Helper()
 	content := `app:
   name: aegiscore-test
@@ -229,8 +228,7 @@ resources:
       password: ""
       db_name: aegiscore_user
 `
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-	return path
+	return func(context.Context) (*serviceconfig.LoadResult, error) {
+		return serviceconfig.LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "user-service.yaml", Content: []byte(content)}})
+	}
 }

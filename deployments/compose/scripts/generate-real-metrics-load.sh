@@ -30,7 +30,7 @@ SERVICE_NAME="user-service"
 POSTGRES_SERVICE="postgres"
 REDIS_SERVICE="redis"
 POSTGRES_USER="postgres"
-POSTGRES_DB="postgres"
+POSTGRES_DB="aegiscore"
 
 DURATION="60"
 CONCURRENCY="8"
@@ -240,12 +240,18 @@ SET nickname = EXCLUDED.nickname,
 SQL
 }
 
-# assign_super_admin 使用服务容器内的 RBAC CLI，为 bootstrap 用户补齐授权。
+# assign_super_admin 直接写入固定管理员角色绑定，避免压测脚本依赖已删除的旧 RBAC CLI。
 assign_super_admin() {
   log "assigning super admin role to bootstrap user"
-  compose exec -T "$SERVICE_NAME" /app/user-service/bin/user-service \
-    rbac --config /app/user-service/configs/config.yaml \
-    assign-super-admin --user-id "$BOOTSTRAP_USER_ID" >/dev/null
+  compose exec -T "$POSTGRES_SERVICE" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 \
+    -v user_id="$BOOTSTRAP_USER_ID" \
+    -v role_id="$SUPER_ADMIN_ROLE_ID" <<'SQL' >/dev/null
+INSERT INTO user_roles (user_id, role_id, created_at, updated_at)
+SELECT u.id, r.id, floor(extract(epoch from now()) * 1000)::bigint, floor(extract(epoch from now()) * 1000)::bigint
+FROM users u, roles r
+WHERE u.user_id = :'user_id'::uuid AND r.role_id = :'role_id'::uuid
+ON CONFLICT (user_id, role_id) DO NOTHING;
+SQL
 }
 
 # publish_rbac_reload 触发运行中实例刷新 Casbin policy，确保刚分配的角色立即生效。

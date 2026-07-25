@@ -35,9 +35,9 @@ Business APIs are mounted under `/api/v1` and include auth, users, roles, permis
 
 ## Runtime Config
 
-共享核心配置只包含 `app/runtime/server/log/observability`。user-service 在 `resources.redis.cache_redis` 和 `resources.postgres.primary_db` 声明外部资源，在 `auth.token_version_cache` 和 `rbac.user_role_cache` 声明服务私有配置。配置只从显式 `--config` 指定的一份完整 YAML 文件读取；未知 YAML 字段会在启动前失败。
+共享核心配置只包含 `app/runtime/server/log/observability`。user-service 在 `resources.redis.cache_redis` 和 `resources.postgres.primary_db` 声明外部资源，在 `auth.token_version_cache` 和 `rbac.user_role_cache` 声明服务私有配置。运行时通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` 定位 Nacos，默认加载 `base.yaml`、`resources.yaml`、`user-service.yaml`，合成后 strict decode；未知 YAML 字段会在启动前失败。
 
-日志只写 stdout/stderr，tracing 启用后固定使用 OTLP，进程时区使用 `runtime.timezone`。Gin 不信任代理，代理信任由 Ingress、gateway 或 service mesh 入口策略负责。pprof 默认关闭；临时诊断需修改当前环境的完整配置文件并使用受控端口转发。
+日志只写 stdout/stderr，tracing 启用后固定使用 OTLP，进程时区使用 `runtime.timezone`。Gin 不信任代理，代理信任由 Ingress、gateway 或 service mesh 入口策略负责。pprof 默认关闭；临时诊断需修改 Nacos 配置并使用受控端口转发。
 
 ## Feature Rules
 

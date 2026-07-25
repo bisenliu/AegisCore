@@ -1,0 +1,28 @@
+app:
+  environment: local
+
+runtime:
+  lifecycle:
+    start_timeout: 60s
+    stop_timeout: 120s
+  gin:
+    mode: release
+  timezone: Asia/Shanghai
+
+log:
+  level: info
+  format: json
+
+observability:
+  metrics:
+    enabled: false
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: false
+    sample_ratio: 1.0
+    otlp_endpoint: ""
+    insecure: false
+  pprof:
+    enabled: false
+    addr: 127.0.0.1:6060

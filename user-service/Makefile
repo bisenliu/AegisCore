@@ -1,4 +1,3 @@
-USER_SERVICE_CONFIG ?= ./configs/config.yaml
 USER_SERVICE_BIN ?= ../bin/user-service
 ADMIN_USERNAME ?=
 ADMIN_NICKNAME ?=
@@ -13,8 +12,8 @@ build: ## 构建 user-service 二进制。
 	@mkdir -p $(dir $(USER_SERVICE_BIN))
 	go build -o $(USER_SERVICE_BIN) ./cmd
 
-run: ## 使用 USER_SERVICE_CONFIG 运行 user-service。
-	go run ./cmd serve --config $(USER_SERVICE_CONFIG)
+run: ## 使用 AEGISCORE_NACOS_* 环境变量运行 user-service。
+	go run ./cmd serve
 
 test: ## 运行 user-service 测试。
 	go test ./...
@@ -34,13 +33,13 @@ architecture-lint-test: ## 使用故意违规 fixture 验证架构检查可命�
 verify: lint architecture-lint generate test openapi-generate ## 运行 user-service 验证。
 	git diff --exit-code
 
-seed-rbac: ## 使用 USER_SERVICE_CONFIG 初始化 RBAC 系统数据。
-	go run ./cmd rbac --config $(USER_SERVICE_CONFIG) seed
+seed-rbac: ## 使用 AEGISCORE_NACOS_* 环境变量初始化 RBAC 系统数据。
+	go run ./cmd rbac seed
 
 bootstrap-super-admin: ## 一次性创建初始超级管理员；密码来自 ADMIN_BOOTSTRAP_PASSWORD 环境变量。
 	@test -n "$(ADMIN_USERNAME)" || (echo "必须设置 ADMIN_USERNAME" >&2; exit 2)
 	@test -n "$${ADMIN_BOOTSTRAP_PASSWORD}" || (echo "必须设置 ADMIN_BOOTSTRAP_PASSWORD" >&2; exit 2)
-	go run ./cmd rbac --config $(USER_SERVICE_CONFIG) bootstrap-super-admin --username '$(ADMIN_USERNAME)' --nickname '$(ADMIN_NICKNAME)' --password-env ADMIN_BOOTSTRAP_PASSWORD
+	go run ./cmd rbac bootstrap-super-admin --username '$(ADMIN_USERNAME)' --nickname '$(ADMIN_NICKNAME)' --password-env ADMIN_BOOTSTRAP_PASSWORD
 
 generate: ## 生成 user-service Go 生成物。
 	go generate ./...
@@ -56,7 +55,7 @@ openapi-generate: ## 生成 OpenAPI 3 文档。
 	./scripts/openapi-generate.sh
 
 fxgraph-generate: ## 生成 user-service Fx 依赖图。
-	go run ./cmd fxgraph --config $(USER_SERVICE_CONFIG) --output ./docs/fx-dependency-graph.dot
+	go run ./cmd fxgraph --output ./docs/fx-dependency-graph.dot
 
 fxgraph-check: fxgraph-generate ## 检查 user-service Fx 依赖图是否存在 drift。
 	git diff --exit-code -- docs/fx-dependency-graph.dot

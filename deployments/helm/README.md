@@ -15,7 +15,7 @@
 
 chart 会渲染 RBAC seed Job 和 HTTP Deployment，但 Helm 本身不保证这些资源按业务顺序等待完成。生产流水线必须显式编排：
 
-1. 准备或更新 `secret.existingSecret` 指向的外部 Secret。
+1. 准备或更新 Nacos namespace/group/dataId 配置来源。
 2. 确认本 release 对应的已提交 SQL migration 已通过 DBA 工单或受控发布平台执行完成。
 3. 渲染并执行 RBAC seed Job，等待成功。
 4. 执行 `helm upgrade --install` 滚动 HTTP Deployment，并在最终 rollout 阶段关闭 Job 渲染。
@@ -24,7 +24,7 @@ Deployment 默认不设置 `RUN_MIGRATIONS=true`，普通服务副本不执行 A
 
 chart 默认与 Distroless static nonroot 镜像对齐，`podSecurityContext.runAsUser`、`runAsGroup` 和 `fsGroup` 均为 `65532`。Deployment 保持 kubelet HTTP probes；Compose 场景才使用镜像内原生 `healthcheck` CLI。
 
-运行配置只使用外部 Secret 中的完整 `config.yaml`，时区使用 `runtime.timezone`。应用日志只写 stdout/stderr，tracing 启用后固定通过 OTLP 导出；trusted proxy 属于入口控制面。pprof 默认不进入 chart，通过修改完整配置文件、loopback 和 `kubectl port-forward` 临时诊断。
+运行配置只通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` 定位 Nacos，再加载 `base.yaml`、`resources.yaml`、`user-service.yaml` 等 dataId。时区使用 `runtime.timezone`。应用日志只写 stdout/stderr，tracing 启用后固定通过 OTLP 导出；trusted proxy 属于入口控制面。pprof 默认不进入 chart，通过修改 Nacos 中的 `observability.pprof`、loopback 和 `kubectl port-forward` 临时诊断。
 
 ## 验证
 

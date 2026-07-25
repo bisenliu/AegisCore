@@ -1,6 +1,6 @@
 # 本文件是 aegiscore-user-service Helm chart 的默认 values。
 # 适用于生产基线渲染，提供云厂商无关的 Deployment、RBAC seed Job、PDB、HPA 和 NetworkPolicy 配置。
-# 完整配置文件只通过 `secret.existingSecret` 引用外部 Secret，默认不在 chart 中渲染真实 Secret。
+# 运行配置通过 AEGISCORE_* 环境变量定位 Nacos，业务字段存放在 Nacos dataId 中。
 replicaCount: 2 # 默认 HTTP 副本数；autoscaling.enabled=true 时由 HPA 控制。
 
 image: # user-service 镜像配置，用于 HTTP Deployment 和 RBAC seed Job。
@@ -44,9 +44,18 @@ service: # runtime Service 配置。
   type: ClusterIP # Service 类型；默认只暴露集群内访问。
   port: 8080 # Service 和容器 HTTP 端口。
 
-secret: # 外部完整配置 Secret 引用；chart 不渲染真实 Secret。
-  existingSecret: aegiscore-user-service-runtime # 已存在 Secret 名称。
-  configKey: config.yaml # Secret 中保存唯一完整 YAML 配置的键名。
+nacos: # Nacos 配置来源；同一组 server 字段同时生成地址和 NetworkPolicy egress。
+  service: user-service # AEGISCORE_SERVICE，用于组成服务级 dataId。
+  server: # 集群内 Nacos Service 定位信息。
+    serviceName: nacos # Nacos Kubernetes Service 名称。
+    namespace: prod # Nacos Service 所在 Kubernetes namespace。
+    clusterDomain: cluster.local # Kubernetes 集群 DNS domain。
+    port: 8848 # Nacos v3 Client HTTP API 端口。
+    podSelector: # NetworkPolicy 用于选择 Nacos 后端 Pod 的标签。
+      app.kubernetes.io/name: nacos
+  configNamespace: prod # AEGISCORE_NACOS_NAMESPACE，表示 Nacos 配置 namespace ID。
+  group: AEGISCORE # AEGISCORE_NACOS_GROUP。
+  extraEnv: [] # 可追加 username、password、timeout 等环境变量或 Secret 引用。
 
 deployment: # runtime Deployment 行为配置。
   revisionHistoryLimit: 5 # 保留的历史 ReplicaSet 数量。
@@ -115,7 +124,7 @@ networkPolicy: # NetworkPolicy 配置。
       ports: # 入站允许端口。
         - protocol: TCP # HTTP 使用 TCP。
           port: 8080 # user-service HTTP 端口。
-  egress: # 出站允许规则。
+  additionalEgress: # Nacos egress 由 nacos.server 自动生成；这里只维护其他出站规则。
     - to: # PostgreSQL 目的地限制。
         - namespaceSelector: # 选择数据库所在 namespace。
             matchLabels: # namespace 标签条件。
@@ -167,8 +176,6 @@ rbacSeedJob: # RBAC 系统数据 seed 发布前置 Job 配置。
   command: # RBAC seed 容器命令。
     - /app/user-service/bin/user-service # user-service 二进制路径。
     - rbac # 进入 RBAC CLI。
-    - --config # 指定配置文件参数名。
-    - /app/user-service/config/config.yaml # 完整配置文件路径。
     - seed # 执行 RBAC seed。
     - --reactivate-system # 重新启用 catalog 管理的系统角色和权限。
     - --sync-system-bindings # 同步系统角色权限绑定。

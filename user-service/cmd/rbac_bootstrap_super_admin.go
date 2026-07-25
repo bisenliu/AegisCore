@@ -27,7 +27,7 @@ type rbacSeedDependencies struct {
 	log       *zap.Logger
 }
 
-type rbacSeedDependencyFactory func(context.Context, string) (rbacSeedDependencies, func() error, error)
+type rbacSeedDependencyFactory func(context.Context) (rbacSeedDependencies, func() error, error)
 
 func bootstrapSuperAdmin(ctx context.Context, deps rbacSeedDependencies, opts rbacBootstrapSuperAdminOptions) (rolebootstrap.BootstrapSuperAdminResult, error) {
 	ctx = contextWithRBACLogger(ctx, deps)

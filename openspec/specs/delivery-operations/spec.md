@@ -1,9 +1,7 @@
 ## Purpose
 
 定义 AegisCore 的交付运维能力，覆盖构建、运行、测试、lint、生成、数据库迁移、容器、部署资产和发布顺序。
-
 ## Requirements
-
 ### Requirement: 构建、运行与稳定 CLI 入口
 
 系统 MUST 通过统一 Makefile 和 user-service CLI 提供可重复的构建、运行及进程生命周期控制。公开命令、flag、退出码和错误传播属于运维契约，变更时 MUST 通过对应 capability 明确迁移。唯一公开 CLI 根命令 MUST 为 `aegiscore-user-service`，MUST NOT 保留旧 `aegiscore-user-services` 别名、隐藏命令或兼容入口。
@@ -154,3 +152,25 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 - **AND** 重算系统 ID MUST 作为单独高风险数据迁移 change，MUST NOT 混入普通重命名
 - **WHEN** 仓库提供初始化或重命名脚本
 - **THEN** 文档 MUST 明确初始化仅用于新项目且重命名默认不重算系统 ID，脚本或 README MUST NOT 宣称已有项目改名会自动迁移 RBAC 系统 ID
+
+### Requirement: 本地 Compose 时区一致性
+
+本地 Compose 的常驻服务与一次性任务 MUST 显式使用 `TZ=Asia/Shanghai`，不得依赖宿主机时区或镜像浮动默认值。缺少 IANA zoneinfo 的基础镜像 MUST 通过可审查的最小镜像层补齐所需时区数据，不得保留设置了 `TZ` 但进程仍以 UTC 运行的无效配置。
+
+#### Scenario: 全部 Compose 服务声明时区
+
+- **WHEN** 渲染 `deployments/compose/docker-compose.yml`
+- **THEN** PostgreSQL、Redis、Nacos、Nacos 初始化任务、Jaeger、RBAC seed、user-service、Prometheus 和 Grafana MUST 都获得 `TZ=Asia/Shanghai`
+- **AND** 配置 MUST NOT 挂载宿主机 `/etc/localtime` 或把宿主机时区作为正确性前提
+
+#### Scenario: Jaeger 基础镜像缺少 zoneinfo
+
+- **WHEN** 当前 Jaeger 基础镜像不包含 `/usr/share/zoneinfo/Asia/Shanghai`
+- **THEN** 本地 Jaeger 镜像 MUST 从固定且可审查的构建阶段复制该 IANA zoneinfo，并在进程启动后解析为 UTC+8
+- **AND** 薄镜像 MUST 保留基础 Jaeger 的 entrypoint、端口与功能，MUST NOT 为时区修复引入 Jaeger 版本迁移
+
+#### Scenario: PostgreSQL 已有数据卷
+
+- **WHEN** Compose 使用已经初始化且配置为 UTC 的 PostgreSQL data volume 重建容器
+- **THEN** PostgreSQL session `timezone` 与 `log_timezone` MUST 在不删除 volume、不运行 migration 的情况下变为 `Asia/Shanghai`
+- **AND** 官方 `docker-entrypoint.sh` 与健康检查 MUST 继续正常工作

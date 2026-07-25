@@ -11,16 +11,15 @@ import (
 func TestRBACSeedCommandFlags(t *testing.T) {
 	called := false
 	deps := testRootCommandDependencies(t)
-	deps.seedRunner = func(_ context.Context, configPath string, opts rbacSeedOptions) error {
+	deps.seedRunner = func(_ context.Context, opts rbacSeedOptions) error {
 		called = true
-		require.Equal(t, "test-config.yaml", configPath)
 		assert.True(t, opts.reactivateSystem)
 		assert.True(t, opts.syncSystemBindings)
 		return nil
 	}
 
 	root := newRootCommand(deps)
-	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "seed", "--reactivate-system", "--sync-system-bindings"})
+	root.SetArgs([]string{"rbac", "seed", "--reactivate-system", "--sync-system-bindings"})
 	require.NoError(t, root.Execute())
 	require.True(t, called)
 }
@@ -40,7 +39,7 @@ func TestRBACDeletedSuperAdminCommandsAreUnavailable(t *testing.T) {
 func TestBootstrapSuperAdminCommandRequiresUsername(t *testing.T) {
 	called := false
 	deps := testRootCommandDependencies(t)
-	deps.bootstrapSuperAdminRunner = func(_ context.Context, _ string, _ rbacBootstrapSuperAdminOptions) error {
+	deps.bootstrapSuperAdminRunner = func(_ context.Context, _ rbacBootstrapSuperAdminOptions) error {
 		called = true
 		return nil
 	}
@@ -54,9 +53,8 @@ func TestBootstrapSuperAdminCommandRequiresUsername(t *testing.T) {
 func TestBootstrapSuperAdminCommandRuns(t *testing.T) {
 	called := false
 	deps := testRootCommandDependencies(t)
-	deps.bootstrapSuperAdminRunner = func(_ context.Context, configPath string, opts rbacBootstrapSuperAdminOptions) error {
+	deps.bootstrapSuperAdminRunner = func(_ context.Context, opts rbacBootstrapSuperAdminOptions) error {
 		called = true
-		require.Equal(t, "test-config.yaml", configPath)
 		assert.Equal(t, "root", opts.username)
 		assert.Equal(t, "Root", opts.nickname)
 		assert.Equal(t, "CUSTOM_ADMIN_PASSWORD", opts.passwordEnv)
@@ -64,7 +62,7 @@ func TestBootstrapSuperAdminCommandRuns(t *testing.T) {
 	}
 
 	root := newRootCommand(deps)
-	root.SetArgs([]string{"rbac", "--config", "test-config.yaml", "bootstrap-super-admin", "--username", "root", "--nickname", "Root", "--password-env", "CUSTOM_ADMIN_PASSWORD"})
+	root.SetArgs([]string{"rbac", "bootstrap-super-admin", "--username", "root", "--nickname", "Root", "--password-env", "CUSTOM_ADMIN_PASSWORD"})
 	require.NoError(t, root.Execute())
 	require.True(t, called)
 }

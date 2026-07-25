@@ -1,8 +1,6 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -264,7 +262,7 @@ func TestLoadAllowsLifecycleStopTimeoutAtCombinedShutdownBudget(t *testing.T) {
 	require.Equal(t, 45*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 }
 
-func TestLoadIntoServiceExtension(t *testing.T) {
+func TestDecodeStrictServiceExtension(t *testing.T) {
 	type extended struct {
 		Config `mapstructure:",squash"`
 		Auth   struct {
@@ -284,7 +282,7 @@ func TestLoadIntoServiceExtension(t *testing.T) {
 	require.Equal(t, "aegiscore-test", cfg.App.Name)
 }
 
-func TestLoadIntoStrictServiceExtension(t *testing.T) {
+func TestDecodeStrictNestedServiceExtension(t *testing.T) {
 	type redisResource struct {
 		Addr string `mapstructure:"addr"`
 	}
@@ -417,8 +415,8 @@ func TestLoadValidatesTracing(t *testing.T) {
 	)
 }
 
-func TestLoadIntoLoadsCompleteConfig(t *testing.T) {
-	path := writeTempConfigNamed(t, "config.yaml", configYAMLWithSections(`runtime:
+func TestDecodeStrictLoadsCompleteConfig(t *testing.T) {
+	cfg := loadConfigFromYAML(t, configYAMLWithSections(`runtime:
   lifecycle:
     start_timeout: 13s
     stop_timeout: 52s
@@ -450,9 +448,6 @@ func TestLoadIntoLoadsCompleteConfig(t *testing.T) {
   pprof:
     enabled: false
     addr: 127.0.0.1:26060`))
-
-	cfg, err := LoadInto(path, Config.Validate)
-	require.NoError(t, err)
 	require.Equal(t, 13*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
 	require.Equal(t, 52*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 	require.Equal(t, "debug", cfg.Runtime.Gin.Mode)
@@ -463,11 +458,6 @@ func TestLoadIntoLoadsCompleteConfig(t *testing.T) {
 	require.Equal(t, 0.5, cfg.Observability.Tracing.SampleRatio)
 	require.False(t, cfg.Observability.Pprof.Enabled)
 	require.Equal(t, "127.0.0.1:26060", cfg.Observability.Pprof.Addr)
-}
-
-func TestLoadIntoRejectsMissingPath(t *testing.T) {
-	_, err := LoadInto[Config]("", Config.Validate)
-	require.ErrorContains(t, err, "config file path is required")
 }
 
 func TestLoadRejectsUnknownLegacyKeysWithFullPaths(t *testing.T) {
@@ -519,19 +509,18 @@ func TestLoadRejectsUnknownServiceExtensionKey(t *testing.T) {
 		} `mapstructure:"auth"`
 	}
 
-	path := writeTempConfig(t, "auth:\n  secret: test\n  legacy: rejected\n")
-	_, err := LoadInto(path, func(cfg extended) error { return cfg.Validate() })
+	settings, mergeErr := DeepMergeYAML([]ConfigDocument{{DataID: "test.yaml", Content: []byte("auth:\n  secret: test\n  legacy: rejected\n")}})
+	require.NoError(t, mergeErr)
+	_, err := DecodeStrict(settings, func(cfg extended) error { return cfg.Validate() })
 	require.Error(t, err)
 	assertConfigLoadErrorContains(t, err, "unknown configuration keys", "auth.legacy")
 }
 
-func TestLoadIntoAppliesServiceDefaultsBeforeValidation(t *testing.T) {
-	path := writeTempConfig(t, explicitConfigYAML())
-	cfg, err := LoadInto(path, func(cfg defaultedExtensionConfig) error {
+func TestDecodeStrictAppliesServiceDefaultsBeforeValidation(t *testing.T) {
+	cfg := loadIntoFromYAML(t, explicitConfigYAML(), func(cfg defaultedExtensionConfig) error {
 		require.Equal(t, "service-default", cfg.ServiceValue)
 		return cfg.Validate()
 	})
-	require.NoError(t, err)
 	require.Equal(t, "service-default", cfg.ServiceValue)
 }
 
@@ -553,33 +542,20 @@ func loadConfigFromYAML(t *testing.T, content string) *Config {
 
 func loadConfigErrorFromYAML(t *testing.T, content string) error {
 	t.Helper()
-	path := writeTempConfig(t, content)
-	_, err := LoadInto(path, Config.Validate)
+	settings, mergeErr := DeepMergeYAML([]ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
+	require.NoError(t, mergeErr)
+	_, err := DecodeStrict(settings, Config.Validate)
 	require.Error(t, err)
 	return err
 }
 
 func loadIntoFromYAML[T any](t *testing.T, content string, validate func(T) error) *T {
 	t.Helper()
-	path := writeTempConfig(t, content)
-	cfg, err := LoadInto(path, validate)
+	settings, err := DeepMergeYAML([]ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
+	require.NoError(t, err)
+	cfg, err := DecodeStrict(settings, validate)
 	require.NoError(t, err)
 	return cfg
-}
-
-func writeTempConfig(t *testing.T, content string) string {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-	return path
-}
-
-func writeTempConfigNamed(t *testing.T, name string, content string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), name)
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-	return path
 }
 
 func assertConfigLoadErrorContains(t *testing.T, err error, parts ...string) {

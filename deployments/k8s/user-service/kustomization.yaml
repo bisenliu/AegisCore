@@ -1,6 +1,6 @@
 # 本文件是 user-service 原生 Kubernetes 清单的 Kustomize 入口。
 # 适用于本地渲染、审查和环境发布前的完整资源集合校验。
-# 关键资源包括 namespace、运行时 Deployment/Service、RBAC seed Job、PDB、HPA 和 NetworkPolicy；完整配置 Secret 由环境发布系统创建。
+# 关键资源包括 namespace、运行时 Deployment/Service、RBAC seed Job、PDB、HPA 和 NetworkPolicy；运行配置由 AEGISCORE_* 环境变量定位 Nacos。
 apiVersion: kustomize.config.k8s.io/v1beta1 # Kustomize 配置 API 版本，v1beta1 是当前通用入口。
 kind: Kustomization # 声明这是一个 Kustomize 聚合配置。
 namespace: aegiscore # 为未显式指定 namespace 的 namespaced 资源统一设置命名空间。

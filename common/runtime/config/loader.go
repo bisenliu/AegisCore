@@ -12,49 +12,46 @@ type defaultsApplier interface {
 	ApplyDefaults()
 }
 
-type viperDefaultsApplier interface {
-	ApplyViperDefaults(*viper.Viper)
+type defaultsProvider interface {
+	ConfigDefaults() map[string]any
 }
 
-// LoadInto 从单个 YAML 文件读取调用方指定的完整配置结构。
-func LoadInto[T any](path string, validate func(T) error) (*T, error) {
-	if path == "" {
-		return nil, fmt.Errorf("read config: config file path is required")
-	}
+// DecodeStrict 将已合成的配置 map 严格解码到调用方目标结构。
+func DecodeStrict[T any](settings map[string]any, validate func(T) error) (*T, error) {
+	var target T
 	v := viper.New()
 	setCoreDefaults(v, DefaultConfig())
 	var serviceDefaults T
-	if defaults, ok := any(&serviceDefaults).(viperDefaultsApplier); ok {
-		defaults.ApplyViperDefaults(v)
+	if provider, ok := any(&serviceDefaults).(defaultsProvider); ok {
+		for path, value := range provider.ConfigDefaults() {
+			v.SetDefault(path, value)
+		}
 	}
-
-	v.SetConfigType("yaml")
-	v.SetConfigFile(path)
-	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("read config %s: %w", path, err)
+	if err := v.MergeConfigMap(settings); err != nil {
+		return nil, fmt.Errorf("decode runtime config: %w", err)
 	}
-
-	var cfg T
-	if err := validateKnownConfigKeys(cfg, v.AllSettings()); err != nil {
-		return nil, fmt.Errorf("decode config: %w", err)
-	}
-	if err := v.Unmarshal(&cfg, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+	metadata := new(mapstructure.Metadata)
+	if err := v.Unmarshal(&target, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(","),
-	))); err != nil {
-		return nil, fmt.Errorf("decode config: %w", err)
+	)), func(config *mapstructure.DecoderConfig) {
+		config.Metadata = metadata
+	}); err != nil {
+		return nil, fmt.Errorf("decode runtime config: %w", err)
 	}
-	if defaults, ok := any(&cfg).(defaultsApplier); ok {
+	if paths := unknownConfigPaths(settings, metadata.Unused); paths != "" {
+		return nil, fmt.Errorf("decode runtime config: unknown configuration keys: %s", paths)
+	}
+	if defaults, ok := any(&target).(defaultsApplier); ok {
 		// 服务扩展配置可在校验前补齐自身默认值，并将结果保留在返回对象中。
 		defaults.ApplyDefaults()
 	}
 	if validate != nil {
-		if err := validate(cfg); err != nil {
-			return nil, fmt.Errorf("validate config: %w", err)
+		if err := validate(target); err != nil {
+			return nil, fmt.Errorf("validate runtime config: %w", err)
 		}
 	}
-
-	return &cfg, nil
+	return &target, nil
 }
 
 func setCoreDefaults(v *viper.Viper, defaults Config) {

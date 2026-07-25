@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	commonconfig "github.com/aegiscore/common/runtime/config"
 	commonresources "github.com/aegiscore/common/runtime/resources"
 	serviceresources "github.com/aegiscore/user-service/internal/resources"
 )
@@ -222,20 +223,81 @@ func TestLoadAppliesResourceDefaultsBeforeValidation(t *testing.T) {
 
 func TestLoadParsesNestedResourceConfig(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "      timeout: 7s", "      timeout: 11s", 1)
-	cfg, err := NewConfig(ConfigPath(writeTempConfig(t, yaml)))
-	require.NoError(t, err)
+	cfg := loadServiceConfig(t, yaml)
 	require.Equal(t, 11*time.Second, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
 }
 
 func TestLoadRepositoryConfig(t *testing.T) {
-	cfg, err := NewConfig(ConfigPath(filepath.Join("..", "..", "configs", "config.yaml")))
+	result, err := LoadFromDocuments(loadExampleConfigDocuments(t))
 	require.NoError(t, err)
+	cfg := result.Config
 	require.Equal(t, 60*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
 	require.Equal(t, 120*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 	require.True(t, cfg.Server.HTTP.Enabled)
 	require.False(t, cfg.Server.GRPC.Enabled)
 	require.Contains(t, cfg.Resources.Redis, serviceresources.NameCacheRedis)
 	require.Contains(t, cfg.Resources.Postgres, serviceresources.NamePrimaryDB)
+}
+
+func loadExampleConfigDocuments(t *testing.T) []commonconfig.ConfigDocument {
+	t.Helper()
+	var docs []commonconfig.ConfigDocument
+	for _, dataID := range []string{"base.yaml", "resources.yaml", "user-service.yaml"} {
+		content, err := os.ReadFile(filepath.Join("..", "..", "configs", "examples", dataID))
+		require.NoError(t, err)
+		docs = append(docs, commonconfig.ConfigDocument{DataID: dataID, Content: content})
+	}
+	return docs
+}
+
+func TestLoadFromDocumentsMergesLayeredServiceConfig(t *testing.T) {
+	docs := []commonconfig.ConfigDocument{
+		{DataID: "base.yaml", Content: []byte(serviceConfigYAML())},
+		{DataID: "user-service.yaml", Content: []byte("log:\n  level: debug\n")},
+	}
+	result, err := LoadFromDocuments(docs)
+	require.NoError(t, err)
+	require.Equal(t, "debug", result.Config.Log.Level)
+	require.Equal(t, "json", result.Config.Log.Format)
+	require.NotEmpty(t, result.Source.Digest)
+	settings, err := result.EffectiveSettings()
+	require.NoError(t, err)
+	rendered, err := commonconfig.RenderYAML(commonconfig.RedactSettings(settings, nil))
+	require.NoError(t, err)
+	require.NotContains(t, string(rendered), "secret-123456789012345678901234567890")
+	require.Contains(t, string(rendered), "***")
+}
+
+func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing.T) {
+	yaml := strings.Replace(serviceConfigYAML(), `  token_version_cache:
+    enabled: true
+    size: 2048
+    ttl: 2s
+    load_timeout: 400ms
+`, "", 1)
+	docs := []commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(yaml)}}
+	rawSettings, err := commonconfig.DeepMergeYAML(docs)
+	require.NoError(t, err)
+	wantDigest, err := commonconfig.DigestSettings(rawSettings)
+	require.NoError(t, err)
+
+	result, err := DecodeSettings(rawSettings, commonconfig.SourceMetadata{Provider: "test"})
+	require.NoError(t, err)
+	settings, err := result.EffectiveSettings()
+	require.NoError(t, err)
+
+	require.Equal(t, wantDigest, result.Source.Digest)
+	auth := settings["auth"].(map[string]any)
+	cache := auth["token_version_cache"].(map[string]any)
+	require.Equal(t, true, cache["enabled"])
+	require.EqualValues(t, 100000, cache["size"])
+	require.Equal(t, "1s", cache["ttl"])
+	require.Equal(t, "300ms", cache["load_timeout"])
+
+	result.Config.Log.Level = "warn"
+	settings, err = result.EffectiveSettings()
+	require.NoError(t, err)
+	require.Equal(t, "warn", settings["log"].(map[string]any)["level"])
 }
 
 func TestLoadRejectsLegacyPasswordKDFConfig(t *testing.T) {
@@ -279,24 +341,16 @@ func TestLoadRejectsLegacyTopLevelResourcePath(t *testing.T) {
 
 func loadServiceConfig(t *testing.T, content string) *Config {
 	t.Helper()
-	cfg, err := NewConfig(ConfigPath(writeTempConfig(t, content)))
+	result, err := LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
 	require.NoError(t, err)
-	return cfg
+	return result.Config
 }
 
 func loadServiceConfigError(t *testing.T, content string) error {
 	t.Helper()
-	_, err := NewConfig(ConfigPath(writeTempConfig(t, content)))
+	_, err := LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
 	require.Error(t, err)
 	return err
-}
-
-func writeTempConfig(t *testing.T, content string) string {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-	return path
 }
 
 func serviceConfigYAML() string {

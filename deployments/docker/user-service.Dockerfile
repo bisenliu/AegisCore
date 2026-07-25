@@ -9,6 +9,7 @@ WORKDIR /src
 
 COPY go.work go.work.sum ./
 COPY common/go.mod common/go.sum ./common/
+COPY tools/nacos-config-seed/go.mod ./tools/nacos-config-seed/
 COPY tools/openapi-convert/go.mod ./tools/openapi-convert/
 COPY user-service/go.mod user-service/go.sum ./user-service/
 
@@ -32,8 +33,7 @@ FROM gcr.io/distroless/static-debian12:nonroot@sha256:f5b485ea962d9bd1186b2f6b3a
 WORKDIR /app
 
 COPY --from=builder --chmod=0755 /out/user-service /app/user-service/bin/user-service
-COPY user-service/configs /app/user-service/configs
 
 USER 65532:65532
 ENTRYPOINT ["/app/user-service/bin/user-service"]
-CMD ["serve", "--config", "/app/user-service/configs/config.yaml"]
+CMD ["serve"]

@@ -39,11 +39,14 @@ func testRootCommandDependencies(t testing.TB) rootCommandDependencies {
 			unexpected("appFactory")
 			return testLifecycleApp{}
 		},
-		seedRunner: func(context.Context, string, rbacSeedOptions) error {
+		configLoader: func(context.Context) (*serviceconfig.LoadResult, error) {
+			return serviceconfig.LoadFromDocuments(readRepositoryConfigDocList(t))
+		},
+		seedRunner: func(context.Context, rbacSeedOptions) error {
 			unexpected("seedRunner")
 			return nil
 		},
-		bootstrapSuperAdminRunner: func(context.Context, string, rbacBootstrapSuperAdminOptions) error {
+		bootstrapSuperAdminRunner: func(context.Context, rbacBootstrapSuperAdminOptions) error {
 			unexpected("bootstrapSuperAdminRunner")
 			return nil
 		},

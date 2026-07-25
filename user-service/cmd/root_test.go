@@ -14,6 +14,7 @@ func TestRootCommandSurface(t *testing.T) {
 
 	var serve *cobra.Command
 	var rbac *cobra.Command
+	var configCmd *cobra.Command
 	var fxGraph *cobra.Command
 	var healthcheck *cobra.Command
 	for _, cmd := range root.Commands() {
@@ -22,6 +23,8 @@ func TestRootCommandSurface(t *testing.T) {
 			serve = cmd
 		case "rbac":
 			rbac = cmd
+		case "config":
+			configCmd = cmd
 		case "fxgraph":
 			fxGraph = cmd
 		case "healthcheck":
@@ -31,20 +34,21 @@ func TestRootCommandSurface(t *testing.T) {
 	require.NotNil(t, serve)
 
 	flag := serve.Flags().Lookup("config")
-	require.NotNil(t, flag)
-	assert.Equal(t, "./configs/config.yaml", flag.DefValue)
+	require.Nil(t, flag)
 	require.NotNil(t, rbac)
 	flag = rbac.PersistentFlags().Lookup("config")
-	require.NotNil(t, flag)
-	assert.Equal(t, "./configs/config.yaml", flag.DefValue)
+	require.Nil(t, flag)
 	assert.NotNil(t, findSubcommand(rbac, "seed"))
 	assert.NotNil(t, findSubcommand(rbac, "bootstrap-super-admin"))
 	assert.Nil(t, findSubcommand(rbac, "assign-super-admin"))
 	assert.Nil(t, findSubcommand(rbac, "create-super-admin"))
+	require.NotNil(t, configCmd)
+	assert.NotNil(t, findSubcommand(configCmd, "validate"))
+	assert.NotNil(t, findSubcommand(configCmd, "render"))
+	assert.NotNil(t, findSubcommand(configCmd, "sources"))
 	require.NotNil(t, fxGraph)
 	flag = fxGraph.Flags().Lookup("config")
-	require.NotNil(t, flag)
-	assert.Equal(t, "./configs/config.yaml", flag.DefValue)
+	require.Nil(t, flag)
 	flag = fxGraph.Flags().Lookup("output")
 	require.NotNil(t, flag)
 	assert.Equal(t, defaultFxGraphOutputPath, flag.DefValue)

@@ -41,13 +41,14 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 
 `user-service/cmd/main.go` 定义 `aegiscore-user-service` CLI：
 
-- `serve --config <path>`：启动 Fx app 和 Gin HTTP server。
+- `serve`：通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` 定位 Nacos 分层配置，启动 Fx app 和 Gin HTTP server。
 - `rbac seed`：初始化默认系统角色、权限和绑定。
 - `rbac bootstrap-super-admin`：为全新数据库一次性创建系统内置固定 ID 的初始超级管理员用户并绑定超级管理员角色。
 - `fxgraph`：生成 Fx 依赖图。
+- `config validate|render|sources`：验证 Nacos 配置、脱敏渲染最终配置和展示实际来源。
 - `healthcheck --url <url> --timeout <duration>`：在容器内无 shell、wget、curl 或 grep 依赖地检查 `/readyz`。
 
-`user-service/internal/bootstrap/` 构造应用、HTTP server 和默认关闭的独立 pprof 诊断监听，并通过 `AppOptions` 接收 CLI 已解析的 service config、派生共享 runtime config 和组装 Fx options。`user-service/internal/config/` 拥有服务根配置、认证/RBAC feature cache、Ent 配置、具名 resources 和服务级校验，并复用 `common/runtime/config` 的严格 loader。`user-service/internal/providers/` 提供 Gin、Ent、Postgres、Redis、auth verifier、metrics、health 和 routes provider，不读取配置文件。
+`user-service/internal/bootstrap/` 构造应用、HTTP server 和默认关闭的独立 pprof 诊断监听，并通过 `AppOptions` 接收 CLI 已解析的 service config、派生共享 runtime config 和组装 Fx options。`user-service/internal/config/` 拥有服务根配置、认证/RBAC feature cache、Ent 配置、具名 resources 和服务级校验，并复用 `common/runtime/config` 的 Nacos 来源解析、YAML deep merge、strict decode、digest 和脱敏能力。`user-service/internal/providers/` 提供 Gin、Ent、Postgres、Redis、auth verifier、metrics、health 和 routes provider，不读取配置来源。
 
 ## 4. HTTP 路由结构
 
@@ -58,7 +59,7 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 3. 按配置注册 metrics。
 4. 挂载 `/api/v1` 业务路由。
 
-pprof 不挂载到业务 router。临时诊断时通过 `AEGISCORE_OBSERVABILITY_PPROF_ENABLED=true` 和 `AEGISCORE_OBSERVABILITY_PPROF_ADDR=127.0.0.1:6060` 启动独立监听，并只通过 loopback、`kubectl port-forward` 或等价受控通道访问。Gin 默认不信任代理；真实客户端地址和 forwarded headers 由 Ingress、gateway 或 service mesh 的入口安全策略负责。
+pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observability.pprof` 配置，并只通过 loopback、`kubectl port-forward` 或等价受控通道访问。Gin 默认不信任代理；真实客户端地址和 forwarded headers 由 Ingress、gateway 或 service mesh 的入口安全策略负责。
 
 业务路由分层：
 
@@ -93,7 +94,7 @@ pprof 不挂载到业务 router。临时诊断时通过 `AEGISCORE_OBSERVABILITY
 
 ### 6.1 服务启动
 
-1. `aegiscore-user-service serve --config ./configs/config.yaml` 进入 `runServe`，CLI 单次解析并校验 service config。
+1. `aegiscore-user-service serve` 进入 `runServe`，CLI 从环境变量读取 Nacos 来源，按 dataId 加载 YAML、deep merge、strict decode、ApplyDefaults 并校验 service config。
 2. `bootstrap.NewApp(cfg)` 通过 `AppOptions` supply 同一个 service config 及其派生的共享 runtime config，并组装 logger、datastore、auth、metrics、health、routes 和 HTTP server。
 3. `fx.New` 同步构建依赖图、执行 invoke 及其 constructor 依赖；该阶段不受 `runtime.lifecycle.start_timeout` 限制。
 4. CLI 使用同一配置值建立显式 Start context 并调用 `App.Start`，该 context 约束全部 `OnStart` hooks。

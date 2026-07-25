@@ -61,10 +61,20 @@ ServiceAccount name.
 {{- end -}}
 
 {{/*
-Runtime config Secret name. The chart references this Secret but does not render it.
+Nacos source environment shared by the runtime Deployment and RBAC seed Job.
 */}}
-{{- define "aegiscore-user-service.secretName" -}}
-{{- .Values.secret.existingSecret | default (printf "%s-runtime" (include "aegiscore-user-service.fullname" .)) | trunc 63 | trimSuffix "-" -}}
+{{- define "aegiscore-user-service.nacosEnv" -}}
+- name: AEGISCORE_SERVICE
+  value: {{ .Values.nacos.service | quote }}
+- name: AEGISCORE_NACOS_ADDR
+  value: {{ printf "%s.%s.svc.%s:%v" .Values.nacos.server.serviceName .Values.nacos.server.namespace .Values.nacos.server.clusterDomain .Values.nacos.server.port | quote }}
+- name: AEGISCORE_NACOS_NAMESPACE
+  value: {{ .Values.nacos.configNamespace | quote }}
+- name: AEGISCORE_NACOS_GROUP
+  value: {{ .Values.nacos.group | quote }}
+{{- with .Values.nacos.extraEnv }}
+{{ toYaml . }}
+{{- end }}
 {{- end -}}
 
 {{/*

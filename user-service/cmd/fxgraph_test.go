@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"net/http"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 )
 
 func TestFxGraphCommandWritesGraph(t *testing.T) {
+	setTestNacosEnv(t)
 	called := 0
 	deps := testRootCommandDependencies(t)
 	deps.fxGraphWriter = func(path string, opts ...fx.Option) (string, error) {
@@ -38,14 +38,13 @@ func TestFxGraphCommandWritesGraph(t *testing.T) {
 	}
 
 	root := newRootCommand(deps)
-	root.SetArgs([]string{"fxgraph", "--config", filepath.Join("..", "configs", "config.yaml"), "--output", "docs/test.dot"})
+	root.SetArgs([]string{"fxgraph", "--output", "docs/test.dot"})
 	require.NoError(t, root.Execute())
 	require.Equal(t, 1, called)
 }
 
 func TestFxGraphOptionsRenderDOT(t *testing.T) {
-	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(filepath.Join("..", "configs", "config.yaml")))
-	require.NoError(t, err)
+	cfg := loadRepositoryConfigForTest(t)
 
 	dot, err := runtimefxgraph.RenderDOT(fxGraphOptions(cfg)...)
 	require.NoError(t, err)
@@ -53,8 +52,7 @@ func TestFxGraphOptionsRenderDOT(t *testing.T) {
 }
 
 func TestFxGraphOptionsUseWiringModuleOnly(t *testing.T) {
-	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(filepath.Join("..", "configs", "config.yaml")))
-	require.NoError(t, err)
+	cfg := loadRepositoryConfigForTest(t)
 
 	dot, err := runtimefxgraph.RenderDOT(fxGraphOptions(cfg)...)
 	require.NoError(t, err)
@@ -71,16 +69,14 @@ func TestFxGraphOptionsUseWiringModuleOnly(t *testing.T) {
 }
 
 func TestFxGraphOptionsDoNotConstructRuntimeResources(t *testing.T) {
-	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(filepath.Join("..", "configs", "config.yaml")))
-	require.NoError(t, err)
+	cfg := loadRepositoryConfigForTest(t)
 
-	_, err = runtimefxgraph.RenderDOT(append(fxGraphOptions(cfg), fxGraphSideEffectGuards(t)...)...)
+	_, err := runtimefxgraph.RenderDOT(append(fxGraphOptions(cfg), fxGraphSideEffectGuards(t)...)...)
 	require.NoError(t, err)
 }
 
 func TestFxGraphOptionsDoNotMutateProcessState(t *testing.T) {
-	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(filepath.Join("..", "configs", "config.yaml")))
-	require.NoError(t, err)
+	cfg := loadRepositoryConfigForTest(t)
 
 	previousLocal := time.Local
 	previousGinMode := gin.Mode()
@@ -91,17 +87,16 @@ func TestFxGraphOptionsDoNotMutateProcessState(t *testing.T) {
 	time.Local = time.UTC
 	gin.SetMode(gin.DebugMode)
 
-	_, err = runtimefxgraph.RenderDOT(fxGraphOptions(cfg)...)
+	_, err := runtimefxgraph.RenderDOT(fxGraphOptions(cfg)...)
 	require.NoError(t, err)
 	require.Same(t, time.UTC, time.Local)
 	require.Equal(t, gin.DebugMode, gin.Mode())
 }
 
 func TestFxGraphRenderDOTFailsWithoutServiceConfig(t *testing.T) {
-	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(filepath.Join("..", "configs", "config.yaml")))
-	require.NoError(t, err)
+	cfg := loadRepositoryConfigForTest(t)
 
-	_, err = runtimefxgraph.RenderDOT(
+	_, err := runtimefxgraph.RenderDOT(
 		// Fx 分类：开发工具 - 只提供共享 runtime config，模拟缺失 user-service 私有配置的错误图。
 		fx.Supply(serviceconfig.NewRuntimeConfig(cfg)),
 		fx.Provide(

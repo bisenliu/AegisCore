@@ -1,0 +1,22 @@
+resources:
+  redis:
+    cache_redis:
+      addr: 127.0.0.1:6379
+      username: ""
+      password: ""
+      db: 0
+      timeout: 5s
+
+  postgres:
+    primary_db:
+      host: 127.0.0.1
+      port: 5432
+      username: postgres
+      password: ""
+      db_name: aegiscore
+      sslmode: disable
+      pool:
+        max_open_conns: 50
+        max_idle_conns: 10
+        conn_max_lifetime: 30m
+        conn_max_idle_time: 10m

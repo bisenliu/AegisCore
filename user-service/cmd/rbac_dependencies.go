@@ -25,7 +25,7 @@ import (
 
 const rbacCommandTimeout = 30 * time.Second
 
-func defaultRBACSeedDependencies(parent context.Context, configPath string) (rbacSeedDependencies, func() error, error) {
+func defaultRBACSeedDependencies(parent context.Context) (rbacSeedDependencies, func() error, error) {
 	// RBAC CLI 绕过 Fx composition root，只打开 PostgreSQL 并组装 seed 所需最小依赖；不能在这里启动 HTTP、Redis watcher 或服务生命周期。
 	ctx, cancel := context.WithTimeout(parent, rbacCommandTimeout)
 	cleanup := func() error {
@@ -37,10 +37,11 @@ func defaultRBACSeedDependencies(parent context.Context, configPath string) (rba
 		return rbacSeedDependencies{}, func() error { return nil }, errors.Join(err, cleanupErr)
 	}
 
-	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(configPath))
+	loaded, err := serviceconfig.Load(ctx)
 	if err != nil {
 		return fail(err)
 	}
+	cfg := loaded.Config
 	passwordService, err := password.NewService()
 	if err != nil {
 		return fail(err)

@@ -1,6 +1,6 @@
 # 本文件定义 user-service RBAC 系统数据 seed 发布前置 Job。
 # 适用于 migration Job 成功之后、HTTP Deployment rollout 之前执行。
-# Job 复用服务完整配置文件，执行 `rbac seed --reactivate-system --sync-system-bindings` 保持系统角色权限基线。
+# Job 复用服务 Nacos 配置来源，执行 `rbac seed --reactivate-system --sync-system-bindings` 保持系统角色权限基线。
 apiVersion: batch/v1 # Job 使用 batch/v1 API。
 kind: Job # 声明一次性任务资源。
 metadata: # Job 的元数据。
@@ -37,11 +37,18 @@ spec: # Job 执行规格。
           command: # 覆盖镜像默认 CMD，执行 RBAC CLI。
             - /app/user-service/bin/user-service # user-service 二进制路径。
             - rbac # 进入 RBAC CLI 子命令。
-            - --config # 指定配置文件参数名。
-            - /app/user-service/config/config.yaml # 完整配置文件路径。
             - seed # 执行系统 RBAC seed。
             - --reactivate-system # 重新启用 catalog 管理的系统角色和权限。
             - --sync-system-bindings # 同步系统角色权限绑定，使其与基线一致。
+          env: # Nacos 配置来源选择环境变量；不覆盖业务字段。
+            - name: AEGISCORE_SERVICE
+              value: user-service
+            - name: AEGISCORE_NACOS_ADDR
+              value: nacos.prod.svc.cluster.local:8848
+            - name: AEGISCORE_NACOS_NAMESPACE
+              value: prod
+            - name: AEGISCORE_NACOS_GROUP
+              value: AEGISCORE
           resources: # seed 容器资源边界。
             requests: # 调度使用的资源请求。
               cpu: 100m # 请求 0.1 CPU。
@@ -58,13 +65,7 @@ spec: # Job 执行规格。
           volumeMounts: # 容器挂载卷。
             - name: tmp # 引用下方 tmp emptyDir。
               mountPath: /tmp # 提供日志和临时文件可写路径。
-            - name: runtime-config # 完整配置文件。
-              mountPath: /app/user-service/config # 配置目录。
-              readOnly: true # 配置只读挂载。
       volumes: # Pod 级卷定义。
         - name: tmp # 临时卷名称。
           emptyDir: # Pod 生命周期内临时目录。
             sizeLimit: 128Mi # 限制临时目录容量。
-        - name: runtime-config # 完整配置卷。
-          secret: # 从 Secret 投影唯一完整配置文件。
-            secretName: aegiscore-user-service-runtime # Secret 名称。
