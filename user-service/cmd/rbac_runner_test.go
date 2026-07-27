@@ -18,8 +18,7 @@ func TestRunRBACSeedCommand(t *testing.T) {
 	t.Run("success passes options and cleans up", func(t *testing.T) {
 		seedCalled := false
 		cleanupCalled := false
-		runners := rbacCommandRunnersWithFactory(func(_ context.Context, configPath string) (rbacSeedDependencies, func() error, error) {
-			require.Equal(t, "test-config.yaml", configPath)
+		runners := rbacCommandRunnersWithFactory(func(_ context.Context) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
 					service: newRBACSeedServiceMock(t, func(_ context.Context, opts roleseed.SeedOptions) (roleseed.SeedResult, error) {
 						seedCalled = true
@@ -41,7 +40,7 @@ func TestRunRBACSeedCommand(t *testing.T) {
 		})
 
 		out, err := captureStdout(t, func() error {
-			return runners.seedRunner(context.Background(), "test-config.yaml", rbacSeedOptions{reactivateSystem: true, syncSystemBindings: true})
+			return runners.seedRunner(context.Background(), rbacSeedOptions{reactivateSystem: true, syncSystemBindings: true})
 		})
 
 		require.NoError(t, err)
@@ -52,11 +51,11 @@ func TestRunRBACSeedCommand(t *testing.T) {
 
 	t.Run("dependency error returns before cleanup", func(t *testing.T) {
 		initErr := errors.New("load config failed")
-		runners := rbacCommandRunnersWithFactory(func(context.Context, string) (rbacSeedDependencies, func() error, error) {
+		runners := rbacCommandRunnersWithFactory(func(context.Context) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{}, nil, initErr
 		})
 
-		err := runners.seedRunner(context.Background(), "bad.yaml", rbacSeedOptions{})
+		err := runners.seedRunner(context.Background(), rbacSeedOptions{})
 
 		require.ErrorIs(t, err, initErr)
 	})
@@ -64,7 +63,7 @@ func TestRunRBACSeedCommand(t *testing.T) {
 	t.Run("seed and cleanup errors are joined", func(t *testing.T) {
 		seedErr := errors.New("seed failed")
 		cleanupErr := errors.New("cleanup failed")
-		runners := rbacCommandRunnersWithFactory(func(context.Context, string) (rbacSeedDependencies, func() error, error) {
+		runners := rbacCommandRunnersWithFactory(func(context.Context) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
 					service: newRBACSeedServiceMock(t, func(context.Context, roleseed.SeedOptions) (roleseed.SeedResult, error) {
 						return roleseed.SeedResult{}, seedErr
@@ -74,7 +73,7 @@ func TestRunRBACSeedCommand(t *testing.T) {
 				}, nil
 		})
 
-		err := runners.seedRunner(context.Background(), "test-config.yaml", rbacSeedOptions{})
+		err := runners.seedRunner(context.Background(), rbacSeedOptions{})
 
 		require.ErrorIs(t, err, seedErr)
 		require.ErrorIs(t, err, cleanupErr)
@@ -87,8 +86,7 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 		store := &testBootstrapStore{}
 		passwordEnv := uniquePasswordEnv(t)
 		t.Setenv(passwordEnv, " long secret ")
-		runners := rbacCommandRunnersWithFactory(func(_ context.Context, configPath string) (rbacSeedDependencies, func() error, error) {
-			require.Equal(t, "test-config.yaml", configPath)
+		runners := rbacCommandRunnersWithFactory(func(_ context.Context) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
 					bootstrap: rolebootstrap.NewService(store, &testBootstrapHasher{}),
 				}, func() error {
@@ -98,7 +96,7 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 		})
 
 		out, err := captureStdout(t, func() error {
-			return runners.bootstrapSuperAdminRunner(context.Background(), "test-config.yaml", rbacBootstrapSuperAdminOptions{username: " ADMIN ", passwordEnv: passwordEnv})
+			return runners.bootstrapSuperAdminRunner(context.Background(), rbacBootstrapSuperAdminOptions{username: " ADMIN ", passwordEnv: passwordEnv})
 		})
 
 		require.NoError(t, err)
@@ -109,10 +107,10 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 
 	t.Run("dependency error", func(t *testing.T) {
 		initErr := errors.New("init failed")
-		runners := rbacCommandRunnersWithFactory(func(context.Context, string) (rbacSeedDependencies, func() error, error) {
+		runners := rbacCommandRunnersWithFactory(func(context.Context) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{}, nil, initErr
 		})
-		err := runners.bootstrapSuperAdminRunner(context.Background(), "bad.yaml", rbacBootstrapSuperAdminOptions{})
+		err := runners.bootstrapSuperAdminRunner(context.Background(), rbacBootstrapSuperAdminOptions{})
 		require.ErrorIs(t, err, initErr)
 	})
 
@@ -121,7 +119,7 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 		cleanupErr := errors.New("cleanup failed")
 		passwordEnv := uniquePasswordEnv(t)
 		t.Setenv(passwordEnv, "long-password")
-		runners := rbacCommandRunnersWithFactory(func(context.Context, string) (rbacSeedDependencies, func() error, error) {
+		runners := rbacCommandRunnersWithFactory(func(context.Context) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
 					bootstrap: rolebootstrap.NewService(&testBootstrapStore{err: bootstrapErr}, &testBootstrapHasher{}),
 				}, func() error {
@@ -129,7 +127,7 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 				}, nil
 		})
 
-		err := runners.bootstrapSuperAdminRunner(context.Background(), "test-config.yaml", rbacBootstrapSuperAdminOptions{username: "admin", passwordEnv: passwordEnv})
+		err := runners.bootstrapSuperAdminRunner(context.Background(), rbacBootstrapSuperAdminOptions{username: "admin", passwordEnv: passwordEnv})
 
 		require.ErrorIs(t, err, bootstrapErr)
 		require.ErrorIs(t, err, cleanupErr)
@@ -137,7 +135,7 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 
 	t.Run("missing password environment variable", func(t *testing.T) {
 		passwordEnv := uniquePasswordEnv(t)
-		runners := rbacCommandRunnersWithFactory(func(context.Context, string) (rbacSeedDependencies, func() error, error) {
+		runners := rbacCommandRunnersWithFactory(func(context.Context) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
 					bootstrap: rolebootstrap.NewService(&testBootstrapStore{}, &testBootstrapHasher{}),
 				}, func() error {
@@ -145,7 +143,7 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 				}, nil
 		})
 
-		err := runners.bootstrapSuperAdminRunner(context.Background(), "test-config.yaml", rbacBootstrapSuperAdminOptions{username: "admin", passwordEnv: passwordEnv})
+		err := runners.bootstrapSuperAdminRunner(context.Background(), rbacBootstrapSuperAdminOptions{username: "admin", passwordEnv: passwordEnv})
 
 		require.ErrorContains(t, err, "bootstrap password environment variable "+passwordEnv+" is required")
 	})

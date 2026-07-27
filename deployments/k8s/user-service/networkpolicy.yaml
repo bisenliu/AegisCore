@@ -1,6 +1,6 @@
 # 本文件声明 user-service runtime Pod 的最小网络访问意图。
 # 适用于启用 NetworkPolicy 的 CNI；未启用策略执行的集群会忽略这些限制。
-# 默认仅允许受信任 namespace 中带有准入标签的调用方访问 HTTP，并仅允许访问明确的数据库、Redis、OTLP 和 DNS 目的地。
+# 默认仅允许受信任 namespace 中带有准入标签的调用方访问 HTTP，并仅允许访问明确的 Nacos、数据库、Redis、OTLP 和 DNS 目的地。
 apiVersion: networking.k8s.io/v1 # NetworkPolicy 使用 networking.k8s.io/v1 API。
 kind: NetworkPolicy # 声明 Pod 网络隔离策略。
 metadata: # NetworkPolicy 的元数据。
@@ -29,6 +29,16 @@ spec: # 网络策略规格。
         - protocol: TCP # HTTP 使用 TCP 协议。
           port: 8080 # 允许访问 user-service HTTP 端口。
   egress: # 出站允许规则。
+    - to: # Nacos 配置中心目的地限制。
+        - namespaceSelector: # 选择 Nacos 所在 namespace。
+            matchLabels: # namespace 必须匹配以下标签。
+              kubernetes.io/metadata.name: prod # 必须与 Nacos Service DNS 中的 namespace 一致。
+          podSelector: # 选择 Nacos Pod。
+            matchLabels: # Pod 必须匹配以下标签。
+              app.kubernetes.io/name: nacos # Nacos 工作负载标签。
+      ports: # Nacos 允许端口。
+        - protocol: TCP # Nacos v3 Client HTTP API 使用 TCP。
+          port: 8848 # Nacos HTTP 端口。
     - to: # PostgreSQL 目的地限制。
         - namespaceSelector: # 选择数据库所在 namespace。
             matchLabels: # namespace 必须匹配以下标签。

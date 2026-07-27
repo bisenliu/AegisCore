@@ -6,7 +6,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
-	commonconfig "github.com/aegiscore/common/runtime/config"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionredis "github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis"
 )
@@ -84,8 +84,8 @@ type permissionApplicationWatcher interface {
 
 // Provider：Policy 同步
 
-func provideRedisStore(params CacheRedisParams, cfg *commonconfig.Config, log *zap.Logger) (PolicyRedisStoreResult, error) {
-	store, err := permissionredis.NewStore(params.Client, cfg, log)
+func provideRedisStore(params CacheRedisParams, settings serviceconfig.RBACSettings, log *zap.Logger) (PolicyRedisStoreResult, error) {
+	store, err := permissionredis.NewStore(params.Client, settings.AppName, log)
 	if err != nil {
 		return PolicyRedisStoreResult{}, err
 	}

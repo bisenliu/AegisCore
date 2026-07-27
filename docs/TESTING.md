@@ -23,7 +23,7 @@ Go 单元测试位于对应包内，以 `_test.go` 结尾。常见覆盖范围�
 - `user-service/internal/features/*/domain`：领域对象和错误。
 - `user-service/internal/features/*/application`：command、query、validator、service 和 seed。
 - `user-service/internal/features/*/transport/http`：controller、input、mapper 和 routes。
-- `user-service/internal/bootstrap` 与 `internal/providers`：通过 `bootstrap.AppOptions` 或显式 supply 同源 service/runtime config 验证 composition root、provider 依赖和 Fx lifecycle timeout，不在测试中复制 `ConfigPath -> NewConfig` provider 链。
+- `user-service/internal/bootstrap` 与 `internal/providers`：通过 `bootstrap.AppOptions` 或显式 supply 同源 service/runtime config 验证 composition root、provider 依赖和 Fx lifecycle timeout，不在测试中复制 Nacos loader 或二次读取配置来源。
 
 运行单模块测试：
 
@@ -49,7 +49,9 @@ make user-service-test
 
 user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration 和测试 harness。HTTP harness 在启动 Fx App 前加载一次 service config，并复用 `bootstrap.AppOptions`，使测试与正式 App 使用相同的 service/runtime config 和 composition root 接线。真实 PostgreSQL/Redis 测试的唯一规范开关是 `AEGISCORE_TEST_CONTAINERS=1`；CI 的阻塞式 `test` job 设置该开关并运行 `make test`，从而执行 common 容器 smoke、role PostgreSQL 集成测试和 user-service HTTP E2E。不要新增或使用 `TEST_CONTAINERS` 兼容别名；单独设置 `AEGISCORE_TEST_E2E` 只适合本地兼容触发 user-service E2E，不代表完整容器测试门禁。
 
-配置 fixture 必须使用最终严格契约：核心路径为 `app/server/log/observability`，服务资源位于 `resources.redis.cache_redis` 和 `resources.postgres.primary_db`，feature cache 位于 `auth.token_version_cache` 与 `rbac.user_role_cache`。旧路径只允许出现在 strict decoder 负向测试中，用于证明未知字段会被拒绝；正向 fixture 必须能够通过 `LoadInto`。
+配置 fixture 必须使用最终严格契约：核心路径为 `app/server/log/observability`，服务资源位于 `resources.redis.cache_redis` 和 `resources.postgres.primary_db`，feature cache 位于 `auth.token_version_cache` 与 `rbac.user_role_cache`。旧路径只允许出现在 strict decoder 负向测试中，用于证明未知字段会被拒绝；正向 fixture 必须能够通过 Nacos 分层配置合成后的 strict decode。
+
+版本化本地 Nacos 配置位于 `deployments/nacos/local-host/` 与 `deployments/nacos/local-docker/`。测试必须分别严格解码两个目录中的完整三文档，断言公共字段一致，并确认 Namespace、dataId 顺序、Compose DNS 和宿主映射端口与 Compose 一致。`tools/nacos-config-seed` 测试还必须覆盖目录文档在网络写入前完成读取与基本校验。
 
 运行：
 

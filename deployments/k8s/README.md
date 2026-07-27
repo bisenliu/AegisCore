@@ -9,13 +9,12 @@
 | `user-service/kustomization.yaml` | user-service 原生 YAML 入口 |
 | `user-service/deployment.yaml` | HTTP 副本、探针、资源、安全上下文和滚动更新策略 |
 | `user-service/rbac-seed-job.yaml` | RBAC 系统数据 seed 发布前置 Job |
-| `user-service/secret.example.yaml` | Secret 键名示例；不参与默认 kustomization |
 
 ## 发布顺序
 
 生产 Kubernetes 发布必须按以下顺序执行：
 
-1. 创建 namespace、ServiceAccount 和包含完整配置文件的外部 Secret。
+1. 创建 namespace、ServiceAccount，并准备 Nacos namespace/group/dataId。
 2. 确认本 release 对应的已提交 SQL migration 已通过 DBA 工单或受控发布平台执行完成。
 3. 执行 RBAC seed Job，并等待完成。
 4. 创建或滚动更新 user-service Deployment、Service、PDB、HPA 和 NetworkPolicy。
@@ -33,18 +32,18 @@ user-service Deployment 默认 `terminationGracePeriodSeconds` 为 150 秒，用
 
 ## 配置边界
 
-user-service 每个进程只接受一份完整 YAML 配置文件。Kubernetes 清单不再拆分 ConfigMap 与 Secret overlay；生产环境应由部署系统、GitOps Secret、密钥管理系统或 CI/CD 创建包含 `config.yaml` 的 Secret。该文件必须同时包含运行时配置、资源地址和凭据，例如：
+user-service 每个进程只通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` 定位 Nacos 配置来源。生产环境应在 Nacos 中维护 `base.yaml`、`resources.yaml`、`user-service.yaml` 等 dataId，这些 YAML 合成后必须同时包含运行时配置、资源地址和凭据，例如：
 
 - `auth.jwt.secret`
 - `resources.postgres.primary_db.username`
 - `resources.postgres.primary_db.password`
 - 可选 `resources.redis.cache_redis.username/password`
 
-超级管理员 bootstrap 临时密码只通过 `ADMIN_BOOTSTRAP_PASSWORD` 环境变量提供，不写入 `config.yaml`。
+超级管理员 bootstrap 临时密码只通过 `ADMIN_BOOTSTRAP_PASSWORD` 环境变量提供，不写入 Nacos 配置。
 
-Secret 中的 `config.yaml` 是唯一配置来源，进程时区使用 `runtime.timezone`。日志由 stdout/stderr 采集，tracing 启用后固定通过 OTLP 导出。trusted proxy 策略属于 Ingress、gateway 或 service mesh 入口边界，不通过应用配置注入。
+Nacos 合成配置是唯一运行配置来源，进程时区使用 `runtime.timezone`。日志由 stdout/stderr 采集，tracing 启用后固定通过 OTLP 导出。trusted proxy 策略属于 Ingress、gateway 或 service mesh 入口边界，不通过应用配置注入。
 
-pprof 默认不渲染、不暴露。临时诊断应修改受控环境的完整配置文件设置 `observability.pprof`，再使用 `kubectl port-forward`。
+pprof 默认不渲染、不暴露。临时诊断应修改 Nacos 配置中的 `observability.pprof`，再使用 `kubectl port-forward`。
 
 ## 验证
 

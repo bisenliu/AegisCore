@@ -5,6 +5,7 @@ import (
 
 	"go.uber.org/fx"
 
+	commonconfig "github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	commontz "github.com/aegiscore/common/runtime/timezone"
 	"github.com/aegiscore/common/validation"
@@ -55,7 +56,7 @@ var RuntimeModule = fx.Module("aegiscore-user-service-runtime",
 func registerRuntimeServers(_ *http.Server, _ *PprofServer) {}
 
 // InitProcessRuntime 初始化 user-service 拥有的进程级 runtime 状态。
-func InitProcessRuntime(cfg *serviceconfig.Config) error {
+func InitProcessRuntime(cfg *commonconfig.Config) error {
 	return commontz.Init(cfg.Runtime.Timezone)
 }
 
@@ -71,9 +72,14 @@ func AppOptions(cfg *serviceconfig.Config, additional ...fx.Option) []fx.Option 
 	options := []fx.Option{
 		// Fx 分类：基础运行时 - 将 DI 初始化期 panic 转换为 Fx 错误。
 		fx.RecoverFromPanics(),
-		// Fx 分类：基础运行时 - 同源的服务配置与共享运行时配置。
-		fx.Supply(cfg, serviceconfig.NewRuntimeConfig(cfg)),
+		// Fx 分类：基础运行时 - 根配置仅供 composition provider 派生共享 runtime 与窄 settings。
+		fx.Supply(cfg),
 		fx.Provide(
+			serviceconfig.NewRuntimeConfig,
+			serviceconfig.NewAuthSettings,
+			serviceconfig.NewRBACSettings,
+			serviceconfig.NewEntSettings,
+			serviceconfig.NewResourceSettings,
 			// Fx 分类：基础运行时 - 结构化日志。
 			logger.NewLogger,
 		),

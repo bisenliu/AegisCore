@@ -44,8 +44,8 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	}
 	core, logs := observer.New(zap.DebugLevel)
 	log := zap.New(core)
-	serviceCfg := &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret"}}}
-	jwtService := authtokens.NewAccessTokenVerifier(commonauth.NewJWTService(commonauth.JWTConfig{Secret: serviceCfg.Auth.JWT.Secret}), serviceCfg)
+	authSettings := serviceconfig.AuthSettings{JWT: serviceconfig.JWTConfig{Secret: "secret"}}
+	jwtService := authtokens.NewAccessTokenVerifier(commonauth.NewJWTService(commonauth.JWTConfig{Secret: authSettings.JWT.Secret}), authSettings)
 	tokenVersions := &routeTokenVersionValidator{version: 1}
 	authorizer := &routeAuthorizer{allowed: true}
 	metricsProvider := newRouteTestMetricsProvider(t, cfg)
@@ -76,7 +76,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		User:          userhttp.NewUserController(&routeAuthUserCommands{}, &routeAuthUserQueries{}, validator),
 	})
 	require.NoError(t, err)
-	registerRouteTestRuntimeMetrics(t, cfg, metricsProvider)
+	registerRouteTestRuntimeMetrics(t, metricsProvider)
 
 	publicRequests := []struct {
 		method string

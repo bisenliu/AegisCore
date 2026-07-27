@@ -51,8 +51,8 @@ var permissionPublicOptions = fx.Options(
 type UserRoleResolverParams struct {
 	fx.In
 
-	Config *serviceconfig.Config
-	Client *ent.Client `name:"primary_db"`
+	Settings serviceconfig.RBACSettings
+	Client   *ent.Client `name:"primary_db"`
 }
 
 // UserRoleResolverResult 同时暴露 resolver、cache stats、closer 和生命周期视图，确保 lazy 初始化仍由 lifecycle 控制。
@@ -151,7 +151,7 @@ func providePolicyLoader(params PrimaryDBParams) permissioncasbin.Loader {
 }
 
 func provideUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult, error) {
-	holder := &userRoleResolverHolder{params: permissioncasbin.UserRoleResolverParams{Config: params.Config, Client: params.Client}}
+	holder := &userRoleResolverHolder{params: permissioncasbin.UserRoleResolverParams{Settings: params.Settings, Client: params.Client}}
 	return UserRoleResolverResult{Resolver: holder, Stats: holder, Closer: holder, Lifecycle: holder}, nil
 }
 

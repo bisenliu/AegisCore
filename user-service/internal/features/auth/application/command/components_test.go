@@ -179,9 +179,9 @@ func TestCredentialVerifierChangePasswordMapsUpdateError(t *testing.T) {
 }
 
 func TestAuthTokenIssuerParsesBearerRefreshToken(t *testing.T) {
-	cfg := &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}}}
-	jwt := commonauth.NewJWTService(commonauth.JWTConfig{Secret: cfg.Auth.JWT.Secret, Issuer: cfg.Auth.JWT.Issuer, Audience: cfg.Auth.JWT.Audience})
-	issuer := authtokens.NewIssuer(jwt, cfg)
+	settings := serviceconfig.AuthSettings{JWT: serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}}
+	jwt := commonauth.NewJWTService(commonauth.JWTConfig{Secret: settings.JWT.Secret, Issuer: settings.JWT.Issuer, Audience: settings.JWT.Audience})
+	issuer := authtokens.NewIssuer(jwt, settings)
 	pair, err := issuer.IssueTokenPair(context.Background(), authTestUserID.String(), 2, "s-123")
 	require.NoError(t, err,
 		"IssueTokenPair: %v", err)

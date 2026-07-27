@@ -1,8 +1,7 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -264,7 +263,7 @@ func TestLoadAllowsLifecycleStopTimeoutAtCombinedShutdownBudget(t *testing.T) {
 	require.Equal(t, 45*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 }
 
-func TestLoadIntoServiceExtension(t *testing.T) {
+func TestDecodeStrictServiceExtension(t *testing.T) {
 	type extended struct {
 		Config `mapstructure:",squash"`
 		Auth   struct {
@@ -277,14 +276,19 @@ func TestLoadIntoServiceExtension(t *testing.T) {
 	cfg := loadIntoFromYAML[extended](t, explicitConfigYAML()+`auth:
   jwt:
     secret: test-secret
-`, func(cfg extended) error {
-		return cfg.Validate()
+`, DecodeOptions[extended]{
+		Defaults: func() extended {
+			return extended{Config: DefaultConfig()}
+		},
+		Validate: func(cfg extended) error {
+			return cfg.Validate()
+		},
 	})
 	require.Equal(t, "test-secret", cfg.Auth.JWT.Secret)
 	require.Equal(t, "aegiscore-test", cfg.App.Name)
 }
 
-func TestLoadIntoStrictServiceExtension(t *testing.T) {
+func TestDecodeStrictNestedServiceExtension(t *testing.T) {
 	type redisResource struct {
 		Addr string `mapstructure:"addr"`
 	}
@@ -304,8 +308,13 @@ func TestLoadIntoStrictServiceExtension(t *testing.T) {
       addr: 127.0.0.1:6379
 feature:
   mode: strict
-`, func(cfg extended) error {
-		return cfg.Validate()
+`, DecodeOptions[extended]{
+		Defaults: func() extended {
+			return extended{Config: DefaultConfig()}
+		},
+		Validate: func(cfg extended) error {
+			return cfg.Validate()
+		},
 	})
 
 	require.Equal(t, "127.0.0.1:6379", cfg.Resources.Redis["cache"].Addr)
@@ -417,8 +426,8 @@ func TestLoadValidatesTracing(t *testing.T) {
 	)
 }
 
-func TestLoadIntoLoadsCompleteConfig(t *testing.T) {
-	path := writeTempConfigNamed(t, "config.yaml", configYAMLWithSections(`runtime:
+func TestDecodeStrictLoadsCompleteConfig(t *testing.T) {
+	cfg := loadConfigFromYAML(t, configYAMLWithSections(`runtime:
   lifecycle:
     start_timeout: 13s
     stop_timeout: 52s
@@ -450,9 +459,6 @@ func TestLoadIntoLoadsCompleteConfig(t *testing.T) {
   pprof:
     enabled: false
     addr: 127.0.0.1:26060`))
-
-	cfg, err := LoadInto(path, Config.Validate)
-	require.NoError(t, err)
 	require.Equal(t, 13*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
 	require.Equal(t, 52*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 	require.Equal(t, "debug", cfg.Runtime.Gin.Mode)
@@ -463,11 +469,6 @@ func TestLoadIntoLoadsCompleteConfig(t *testing.T) {
 	require.Equal(t, 0.5, cfg.Observability.Tracing.SampleRatio)
 	require.False(t, cfg.Observability.Pprof.Enabled)
 	require.Equal(t, "127.0.0.1:26060", cfg.Observability.Pprof.Addr)
-}
-
-func TestLoadIntoRejectsMissingPath(t *testing.T) {
-	_, err := LoadInto[Config]("", Config.Validate)
-	require.ErrorContains(t, err, "config file path is required")
 }
 
 func TestLoadRejectsUnknownLegacyKeysWithFullPaths(t *testing.T) {
@@ -519,67 +520,102 @@ func TestLoadRejectsUnknownServiceExtensionKey(t *testing.T) {
 		} `mapstructure:"auth"`
 	}
 
-	path := writeTempConfig(t, "auth:\n  secret: test\n  legacy: rejected\n")
-	_, err := LoadInto(path, func(cfg extended) error { return cfg.Validate() })
+	settings, mergeErr := DeepMergeYAML([]ConfigDocument{{DataID: "test.yaml", Content: []byte("auth:\n  secret: test\n  legacy: rejected\n")}})
+	require.NoError(t, mergeErr)
+	normalized := false
+	validated := false
+	_, err := DecodeStrict(settings, DecodeOptions[extended]{
+		Defaults: func() extended {
+			return extended{Config: DefaultConfig()}
+		},
+		Normalize: func(*extended) {
+			normalized = true
+		},
+		Validate: func(cfg extended) error {
+			validated = true
+			return cfg.Validate()
+		},
+	})
 	require.Error(t, err)
 	assertConfigLoadErrorContains(t, err, "unknown configuration keys", "auth.legacy")
+	require.False(t, normalized)
+	require.False(t, validated)
 }
 
-func TestLoadIntoAppliesServiceDefaultsBeforeValidation(t *testing.T) {
-	path := writeTempConfig(t, explicitConfigYAML())
-	cfg, err := LoadInto(path, func(cfg defaultedExtensionConfig) error {
-		require.Equal(t, "service-default", cfg.ServiceValue)
-		return cfg.Validate()
+func TestDecodeStrictRunsExplicitOptionsInOrder(t *testing.T) {
+	type pipelineConfig struct {
+		Enabled      bool   `mapstructure:"enabled"`
+		Value        string `mapstructure:"value"`
+		DefaultOnly  string `mapstructure:"default_only"`
+		NormalizedAt string `mapstructure:"normalized_at"`
+	}
+
+	var calls []string
+	cfg, err := DecodeStrict(map[string]any{
+		"enabled": false,
+		"value":   "raw",
+	}, DecodeOptions[pipelineConfig]{
+		Defaults: func() pipelineConfig {
+			calls = append(calls, "defaults")
+			return pipelineConfig{Enabled: true, Value: "default", DefaultOnly: "preserved"}
+		},
+		Normalize: func(cfg *pipelineConfig) {
+			calls = append(calls, "normalize")
+			cfg.Value += "-normalized"
+			cfg.NormalizedAt = "normalize"
+		},
+		Validate: func(cfg pipelineConfig) error {
+			calls = append(calls, "validate")
+			require.False(t, cfg.Enabled)
+			require.Equal(t, "raw-normalized", cfg.Value)
+			require.Equal(t, "preserved", cfg.DefaultOnly)
+			require.Equal(t, "normalize", cfg.NormalizedAt)
+			return nil
+		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "service-default", cfg.ServiceValue)
+	require.Equal(t, []string{"defaults", "normalize", "validate"}, calls)
+	require.False(t, cfg.Enabled)
+	require.Equal(t, "raw-normalized", cfg.Value)
+	require.Equal(t, "preserved", cfg.DefaultOnly)
 }
 
-type defaultedExtensionConfig struct {
-	Config       `mapstructure:",squash"`
-	ServiceValue string `mapstructure:"service_value"`
+func TestDecodeStrictWrapsValidationError(t *testing.T) {
+	_, err := DecodeStrict(map[string]any{}, DecodeOptions[Config]{
+		Defaults: DefaultConfig,
+		Validate: func(Config) error {
+			return errors.New("rejected")
+		},
+	})
+	require.EqualError(t, err, "validate runtime config: rejected")
 }
 
-func (c *defaultedExtensionConfig) ApplyDefaults() {
-	if c.ServiceValue == "" {
-		c.ServiceValue = "service-default"
-	}
+func TestDecodeStrictRequiresDefaults(t *testing.T) {
+	_, err := DecodeStrict[Config](map[string]any{}, DecodeOptions[Config]{})
+	require.EqualError(t, err, "decode runtime config: defaults function is required")
 }
 
 func loadConfigFromYAML(t *testing.T, content string) *Config {
 	t.Helper()
-	return loadIntoFromYAML(t, content, Config.Validate)
+	return loadIntoFromYAML(t, content, DecodeOptions[Config]{Defaults: DefaultConfig, Validate: Config.Validate})
 }
 
 func loadConfigErrorFromYAML(t *testing.T, content string) error {
 	t.Helper()
-	path := writeTempConfig(t, content)
-	_, err := LoadInto(path, Config.Validate)
+	settings, mergeErr := DeepMergeYAML([]ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
+	require.NoError(t, mergeErr)
+	_, err := DecodeStrict(settings, DecodeOptions[Config]{Defaults: DefaultConfig, Validate: Config.Validate})
 	require.Error(t, err)
 	return err
 }
 
-func loadIntoFromYAML[T any](t *testing.T, content string, validate func(T) error) *T {
+func loadIntoFromYAML[T any](t *testing.T, content string, options DecodeOptions[T]) *T {
 	t.Helper()
-	path := writeTempConfig(t, content)
-	cfg, err := LoadInto(path, validate)
+	settings, err := DeepMergeYAML([]ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
+	require.NoError(t, err)
+	cfg, err := DecodeStrict(settings, options)
 	require.NoError(t, err)
 	return cfg
-}
-
-func writeTempConfig(t *testing.T, content string) string {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-	return path
-}
-
-func writeTempConfigNamed(t *testing.T, name string, content string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), name)
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-	return path
 }
 
 func assertConfigLoadErrorContains(t *testing.T, err error, parts ...string) {

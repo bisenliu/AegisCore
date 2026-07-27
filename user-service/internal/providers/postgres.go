@@ -18,14 +18,14 @@ type PrimaryDBParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Config    *serviceconfig.Config
+	Settings  serviceconfig.ResourceSettings
 	Log       *zap.Logger
 	Trace     *commontracing.Provider
 }
 
 // NewPrimaryDB 显式选择并供应 user-service 主 PostgreSQL 连接池。
 func NewPrimaryDB(params PrimaryDBParams) (*sql.DB, error) {
-	cfg, ok := params.Config.Resources.Postgres[resources.NamePrimaryDB]
+	cfg, ok := params.Settings.Postgres[resources.NamePrimaryDB]
 	if !ok {
 		return nil, fmt.Errorf("postgres config %q not found", resources.NamePrimaryDB)
 	}

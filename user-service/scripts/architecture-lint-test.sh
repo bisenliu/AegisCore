@@ -118,8 +118,9 @@ services:
     image: postgres:latest
   user-service:
     image: aegiscore/user-service:local
-    environment:
-      AEGISCORE_RUNTIME_ENVIRONMENT: local
+    command:
+      - serve
+      - --config
 EOF
 
 cat > "${fixture_root}/user-service/internal/features/auth/application/violating_import.go" <<'EOF'
@@ -243,7 +244,7 @@ package infrastructure
 import "os"
 
 func loadEnvConfig() string {
-	return os.Getenv("AEGISCORE_RUNTIME_ENVIRONMENT")
+	return os.Getenv("USER_SERVICE_CONFIG")
 }
 EOF
 
@@ -305,13 +306,13 @@ if [[ "${output}" != *"feature production code must not use package-level defaul
   exit 1
 fi
 
-if [[ "${output}" != *"production Go code must not read process environment or bind Viper env config"* ]]; then
-  printf 'architecture-lint-test: expected Go env config violation report\n%s\n' "${output}" >&2
+if [[ "${output}" != *"production Go code must not retain local config path entrypoints"* ]]; then
+  printf 'architecture-lint-test: expected Go local config path violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-if [[ "${output}" != *"Docker Compose runtime config must not use environment, env_file or shell interpolation"* ]]; then
-  printf 'architecture-lint-test: expected Compose env config violation report\n%s\n' "${output}" >&2
+if [[ "${output}" != *"Docker Compose runtime config must not mount local full config or pass --config"* ]]; then
+  printf 'architecture-lint-test: expected Compose local config path violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 

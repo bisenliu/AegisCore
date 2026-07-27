@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -9,69 +8,22 @@ import (
 
 const mapstructureTag = "mapstructure"
 
-// validateKnownConfigKeys 根据目标配置结构拒绝所有未声明的 YAML 路径。
-func validateKnownConfigKeys(target any, settings map[string]any) error {
-	paths := unknownConfigPaths(reflect.TypeOf(target), settings, "")
-	if len(paths) == 0 {
-		return nil
+// unknownConfigPaths 将 mapstructure 报告的未消费键展开为完整叶子路径。
+func unknownConfigPaths(settings map[string]any, unused []string) string {
+	paths := make([]string, 0, len(unused))
+	for _, unusedPath := range unused {
+		value := any(settings)
+		for _, name := range strings.Split(unusedPath, ".") {
+			children, ok := value.(map[string]any)
+			if !ok {
+				break
+			}
+			value = children[name]
+		}
+		paths = append(paths, unknownLeafPaths(value, unusedPath)...)
 	}
 	sort.Strings(paths)
-	return fmt.Errorf("unknown configuration keys: %s", strings.Join(paths, ", "))
-}
-
-func unknownConfigPaths(targetType reflect.Type, value any, prefix string) []string {
-	targetType = indirectType(targetType)
-	settings, ok := value.(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	switch targetType.Kind() {
-	case reflect.Struct:
-		fields := configFields(targetType)
-		var paths []string
-		for key, child := range settings {
-			path := joinConfigPath(prefix, key)
-			fieldType, exists := fields[key]
-			if !exists {
-				paths = append(paths, unknownLeafPaths(child, path)...)
-				continue
-			}
-			paths = append(paths, unknownConfigPaths(fieldType, child, path)...)
-		}
-		return paths
-	case reflect.Map:
-		elementType := indirectType(targetType.Elem())
-		if elementType.Kind() != reflect.Struct && elementType.Kind() != reflect.Map {
-			return nil
-		}
-		var paths []string
-		for key, child := range settings {
-			paths = append(paths, unknownConfigPaths(elementType, child, joinConfigPath(prefix, key))...)
-		}
-		return paths
-	default:
-		return nil
-	}
-}
-
-func configFields(targetType reflect.Type) map[string]reflect.Type {
-	fields := make(map[string]reflect.Type)
-	for index := 0; index < targetType.NumField(); index++ {
-		field := targetType.Field(index)
-		name, squash, skip := configFieldName(field)
-		if skip {
-			continue
-		}
-		if squash {
-			for nestedName, nestedType := range configFields(indirectType(field.Type)) {
-				fields[nestedName] = nestedType
-			}
-			continue
-		}
-		fields[name] = field.Type
-	}
-	return fields
+	return strings.Join(paths, ", ")
 }
 
 func configFieldName(field reflect.StructField) (name string, squash bool, skip bool) {
@@ -104,13 +56,6 @@ func unknownLeafPaths(value any, prefix string) []string {
 		paths = append(paths, unknownLeafPaths(child, joinConfigPath(prefix, key))...)
 	}
 	return paths
-}
-
-func indirectType(targetType reflect.Type) reflect.Type {
-	for targetType.Kind() == reflect.Pointer {
-		targetType = targetType.Elem()
-	}
-	return targetType
 }
 
 func joinConfigPath(prefix string, name string) string {

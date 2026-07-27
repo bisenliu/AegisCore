@@ -18,12 +18,11 @@ type rbacBootstrapSuperAdminOptions struct {
 	passwordEnv string
 }
 
-type rbacSeedRunner func(context.Context, string, rbacSeedOptions) error
+type rbacSeedRunner func(context.Context, rbacSeedOptions) error
 
-type rbacBootstrapSuperAdminRunner func(context.Context, string, rbacBootstrapSuperAdminOptions) error
+type rbacBootstrapSuperAdminRunner func(context.Context, rbacBootstrapSuperAdminOptions) error
 
 func newRBACCommand(seedRunner rbacSeedRunner, bootstrapRunner rbacBootstrapSuperAdminRunner) *cobra.Command {
-	configPath := "./configs/config.yaml"
 	var seedOpts rbacSeedOptions
 	bootstrapOpts := rbacBootstrapSuperAdminOptions{passwordEnv: defaultAdminBootstrapPasswordEnv}
 
@@ -35,14 +34,13 @@ func newRBACCommand(seedRunner rbacSeedRunner, bootstrapRunner rbacBootstrapSupe
 			return fmt.Errorf("rbac subcommand is required")
 		},
 	}
-	cmd.PersistentFlags().StringVar(&configPath, "config", configPath, "path to the complete YAML configuration file")
 
 	seed := &cobra.Command{
 		Use:   "seed",
 		Short: "Seed default RBAC system roles, permissions, and bindings",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return seedRunner(cmd.Context(), configPath, seedOpts)
+			return seedRunner(cmd.Context(), seedOpts)
 		},
 	}
 	seed.Flags().BoolVar(&seedOpts.reactivateSystem, "reactivate-system", false, "reactivate catalog-managed system roles")
@@ -54,7 +52,7 @@ func newRBACCommand(seedRunner rbacSeedRunner, bootstrapRunner rbacBootstrapSupe
 		Short: "Bootstrap the initial super admin user once",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return bootstrapRunner(cmd.Context(), configPath, bootstrapOpts)
+			return bootstrapRunner(cmd.Context(), bootstrapOpts)
 		},
 	}
 	bootstrapSuperAdmin.Flags().StringVar(&bootstrapOpts.username, "username", "", "initial admin username")

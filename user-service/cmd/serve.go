@@ -10,7 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 
+	commonlogger "github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/user-service/internal/bootstrap"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
@@ -28,25 +30,25 @@ func newBootstrapLifecycleApp(cfg *serviceconfig.Config) lifecycleApp {
 	return bootstrap.NewApp(cfg)
 }
 
-func newServeCommand(appFactory lifecycleAppFactory) *cobra.Command {
-	configPath := "./configs/config.yaml"
+func newServeCommand(appFactory lifecycleAppFactory, loadConfig configLoader) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Start the AegisCore user services HTTP server",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runServe(cmd.Context(), configPath, appFactory)
+			return runServe(cmd.Context(), appFactory, loadConfig)
 		},
 	}
-	cmd.Flags().StringVar(&configPath, "config", configPath, "path to the complete YAML configuration file")
 	return cmd
 }
 
-func runServe(ctx context.Context, configPath string, appFactory lifecycleAppFactory) error {
-	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(configPath))
+func runServe(ctx context.Context, appFactory lifecycleAppFactory, loadConfig configLoader) error {
+	loaded, err := loadConfig(ctx)
 	if err != nil {
 		return err
 	}
+	cfg := loaded.Config
 	lifecycleCfg := cfg.Runtime.Lifecycle
+	logConfigSource(loaded)
 
 	upstreamCtx := ctx
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
@@ -79,4 +81,25 @@ func runServe(ctx context.Context, configPath string, appFactory lifecycleAppFac
 		stopErr = fmt.Errorf("stop application: %w", stopErr)
 	}
 	return errors.Join(exitCodeErr, stopErr)
+}
+
+func logConfigSource(loaded *serviceconfig.LoadResult) {
+	if loaded == nil || loaded.Config == nil {
+		return
+	}
+	runtimeCfg := loaded.Config.RuntimeConfig()
+	log, err := commonlogger.New(&runtimeCfg)
+	if err != nil {
+		return
+	}
+	defer func() { _ = log.Sync() }()
+	source := loaded.Source
+	log.Info("runtime config loaded",
+		zap.String("config_provider", source.Provider),
+		zap.String("config_namespace", source.Namespace),
+		zap.String("config_group", source.Group),
+		zap.String("config_data_ids", source.DataIDsCSV()),
+		zap.String("config_service", source.Service),
+		zap.String("config_digest", source.Digest),
+	)
 }

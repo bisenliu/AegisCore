@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -10,12 +11,20 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
+	commonconfig "github.com/aegiscore/common/runtime/config"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 func TestAppModuleValidatesFullRuntimeGraph(t *testing.T) {
-	cfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(filepath.Join("..", "..", "configs", "config.yaml")))
+	var docs []commonconfig.ConfigDocument
+	for _, dataID := range []string{"base.yaml", "resources.yaml", "user-service.yaml"} {
+		content, err := os.ReadFile(filepath.Join("..", "..", "..", "deployments", "nacos", "local-docker", dataID))
+		require.NoError(t, err)
+		docs = append(docs, commonconfig.ConfigDocument{DataID: dataID, Content: content})
+	}
+	result, err := serviceconfig.LoadFromDocuments(docs)
 	require.NoError(t, err)
+	cfg := result.Config
 
 	require.NoError(t, fx.ValidateApp(AppOptions(cfg, AppModule)...))
 }

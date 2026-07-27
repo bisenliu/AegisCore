@@ -27,6 +27,8 @@
 
 如果某个面板为空，先确认 Prometheus 中是否存在对应指标。`observability.metrics.include_runtime: false` 时，Go runtime/process 面板可以为空。
 
+通用 dashboard 与 Compose provisioning 副本默认使用 `Asia/Shanghai` 展示时间。Prometheus sample 仍以 Unix time 存储，Prometheus Web UI 按官方设计固定显示 UTC；容器 `TZ` 只影响 Prometheus 进程本地时间和日志，不改变 sample 或 Web UI 的时间语义。
+
 本地 Docker Compose 自动导入的 dashboard 是生成产物，路径为 `deployments/compose/grafana/dashboards/user-service-overview.json`。更新通用 dashboard 后，从仓库根目录执行：
 
 ```bash
@@ -65,7 +67,7 @@ spec:
 make user-service-run
 ```
 
-本地默认配置文件已启用 metrics；如需临时调整，编辑当前环境传给 `--config` 的完整 YAML 配置文件。
+Compose Nacos 初始化配置已启用 metrics；如需调整，修改 `deployments/nacos/local-host/` 与 `local-docker/` 中对应的完整配置，并重新运行相应初始化任务，不要把 Nacos 控制台手工修改作为配置来源。
 
 2. 确认 metrics endpoint：
 
@@ -79,6 +81,8 @@ curl -fsS http://localhost:8080/metrics | head
 
 ## Tracing 说明
 
-本地 tracing 默认关闭。启用 `observability.tracing.enabled` 后，服务固定通过 OTLP 向 `observability.tracing.otlp_endpoint` 导出，不提供 exporter 分支；Trace 可视化仍需要 OpenTelemetry Collector 和 trace backend。日志只写 stdout/stderr，并由容器或集群日志管道采集。
+应用默认 tracing 关闭；仓库的 `local-host/` 与 `local-docker/` 配置为完整链路诊断显式启用 tracing。启用 `observability.tracing.enabled` 后，服务固定通过 OTLP 向 `observability.tracing.otlp_endpoint` 导出，不提供 exporter 分支；Trace 可视化仍需要 OpenTelemetry Collector 和 trace backend。日志只写 stdout/stderr，并由容器或集群日志管道采集。
 
-pprof 是默认关闭的独立诊断监听，不与业务 HTTP router 或 metrics endpoint 共用端口。临时排障时在当前环境完整配置文件中设置 `observability.pprof.enabled: true` 和 `observability.pprof.addr: 127.0.0.1:6060`，并通过 loopback、`kubectl port-forward` 或等价受控通道访问；不要在 Service、Ingress 或公网负载均衡器中默认暴露该端口。
+OpenTelemetry span 时间戳表示 Unix epoch 绝对时间。Compose Jaeger 进程通过本地薄镜像加载 `Asia/Shanghai` zoneinfo，但 Jaeger UI 的日期由访问浏览器的本地时区渲染，服务端没有可由 Compose 强制覆盖的 UI timezone 配置。
+
+pprof 是默认关闭的独立诊断监听，不与业务 HTTP router 或 metrics endpoint 共用端口。临时排障时在 Nacos 配置中设置 `observability.pprof.enabled: true` 和 `observability.pprof.addr: 127.0.0.1:6060`，并通过 loopback、`kubectl port-forward` 或等价受控通道访问；不要在 Service、Ingress 或公网负载均衡器中默认暴露该端口。

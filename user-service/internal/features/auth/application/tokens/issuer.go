@@ -78,13 +78,13 @@ type signInput struct {
 }
 
 // NewIssuer 构造 token 签发解析组件。
-func NewIssuer(verifier *commonauth.JWTService, cfg *serviceconfig.Config) Issuer {
-	return &authTokenIssuer{verifier: verifier, config: cfg.Auth.JWT}
+func NewIssuer(verifier *commonauth.JWTService, settings serviceconfig.AuthSettings) Issuer {
+	return &authTokenIssuer{verifier: verifier, config: settings.JWT}
 }
 
 // NewAccessTokenVerifier 构造受保护 HTTP 路由使用的 access token verifier。
-func NewAccessTokenVerifier(verifier *commonauth.JWTService, cfg *serviceconfig.Config) commonauth.AccessTokenVerifier {
-	return &authTokenIssuer{verifier: verifier, config: cfg.Auth.JWT}
+func NewAccessTokenVerifier(verifier *commonauth.JWTService, settings serviceconfig.AuthSettings) commonauth.AccessTokenVerifier {
+	return &authTokenIssuer{verifier: verifier, config: settings.JWT}
 }
 
 // IssueTokenPair 为一个认证会话签发 access 和 refresh token。

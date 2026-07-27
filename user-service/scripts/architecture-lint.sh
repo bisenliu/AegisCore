@@ -347,9 +347,9 @@ check_role_feature_framework_metadata() {
 }
 
 check_environment_variable_config_removed() {
-  # 运行时配置只能来自显式指定的一份完整配置文件，不允许生产代码或交付模板读取进程环境。
-  run_rg_any "production Go code must not read process environment or bind Viper env config" \
-    'os\.(Getenv|LookupEnv|Environ)\(|\.(AutomaticEnv|BindEnv|SetEnvPrefix)\(' \
+  # 环境变量只允许选择 Nacos 配置来源；旧本地完整配置文件入口不得回流。
+  run_rg_any "production Go code must not retain local config path entrypoints" \
+    '\bConfigPath\b|USER_SERVICE_CONFIG|configs/config\.yaml' \
     --glob '*.go' \
     --glob '!*_test.go' \
     --glob '!common/testing/**' \
@@ -359,8 +359,8 @@ check_environment_variable_config_removed() {
     "${repo_root}/common" \
     "${service_dir}"
 
-  run_rg_any "Docker Compose runtime config must not use environment, env_file or shell interpolation" \
-    '^[[:space:]]*(environment|env_file):|\$\{[A-Z_][A-Z0-9_]*' \
+  run_rg_any "Docker Compose runtime config must not mount local full config or pass --config" \
+    'user-service\.local\.yaml|configs/config\.yaml|^[[:space:]]*-[[:space:]]*--config[[:space:]]*$' \
     "${repo_root}/deployments/compose/docker-compose.yml"
 
   local k8s_manifest_files=()
@@ -373,8 +373,8 @@ check_environment_variable_config_removed() {
     fi
   done
   if [[ "${#k8s_manifest_files[@]}" -gt 0 ]]; then
-    run_rg_any "Kubernetes user-service manifests must not use env or envFrom" \
-      '^[[:space:]]*(env|envFrom):' \
+    run_rg_any "Kubernetes user-service manifests must not mount local full config or pass --config" \
+      'runtime-config|config/config\.yaml|^[[:space:]]*-[[:space:]]*--config[[:space:]]*$' \
       "${k8s_manifest_files[@]}"
   fi
 
@@ -386,8 +386,8 @@ check_environment_variable_config_removed() {
     helm_and_workflow_paths+=("${repo_root}/.github/workflows")
   fi
   if [[ "${#helm_and_workflow_paths[@]}" -gt 0 ]]; then
-    run_rg_any "Helm user-service templates must not use env, envFrom or workflow-style env indirection" \
-      '^[[:space:]]*(env|envFrom):|\$\{\{[[:space:]]*env\.' \
+    run_rg_any "Helm user-service templates must not mount local full config or pass --config" \
+      'runtime-config|config/config\.yaml|^[[:space:]]*-[[:space:]]*--config[[:space:]]*$|\$\{\{[[:space:]]*env\.' \
       "${helm_and_workflow_paths[@]}"
   fi
 }

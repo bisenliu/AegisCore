@@ -7,6 +7,8 @@
 !common/
 !common/**
 !tools/
+!tools/nacos-config-seed/
+!tools/nacos-config-seed/**
 !tools/openapi-convert/
 !tools/openapi-convert/go.mod
 !user-service/

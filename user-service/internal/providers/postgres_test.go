@@ -35,7 +35,7 @@ var providerTestDriverSeq atomic.Int64
 func TestNewPrimaryDBProvidesUserDatabase(t *testing.T) {
 	cfg := providerTestConfig("")
 	lc := fxtest.NewLifecycle(t)
-	got, err := NewPrimaryDB(PrimaryDBParams{Lifecycle: lc, Config: cfg, Log: zap.NewNop()})
+	got, err := NewPrimaryDB(PrimaryDBParams{Lifecycle: lc, Settings: cfg, Log: zap.NewNop()})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = got.Close() })
 
@@ -46,7 +46,7 @@ func TestNewPrimaryDBProvidesUserDatabase(t *testing.T) {
 func TestNewPrimaryDBReturnsErrorForMissingUserDatabase(t *testing.T) {
 	_, err := NewPrimaryDB(PrimaryDBParams{
 		Lifecycle: fxtest.NewLifecycle(t),
-		Config:    &serviceconfig.Config{},
+		Settings:  serviceconfig.ResourceSettings{},
 		Log:       zap.NewNop(),
 	})
 	require.ErrorContains(t, err, `postgres config "`+resources.NamePrimaryDB+`" not found`)
@@ -135,7 +135,7 @@ func TestProvideEntClientsRequiresMetricsProviderInGraph(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), newProviderTestDisabledTracing(t)),
+		fx.Supply(serviceconfig.EntSettings{}, zap.NewNop(), newProviderTestDisabledTracing(t)),
 		fx.Provide(
 			fx.Annotate(provideNilPrimaryDBForEntGraphTest, fx.ResultTags(`name:"primary_db"`)),
 			ProvideEntClients,
@@ -153,7 +153,7 @@ func TestProvideEntClientsRequiresTracingProviderInGraph(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), newProviderTestMetrics(t, false)),
+		fx.Supply(serviceconfig.EntSettings{}, zap.NewNop(), newProviderTestMetrics(t, false)),
 		fx.Provide(
 			fx.Annotate(provideNilPrimaryDBForEntGraphTest, fx.ResultTags(`name:"primary_db"`)),
 			ProvideEntClients,
@@ -171,7 +171,7 @@ func TestProvideEntClientsResolvesWithObservabilityProvidersInGraph(t *testing.T
 	}
 
 	err := fx.ValidateApp(
-		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), newProviderTestMetrics(t, false), newProviderTestDisabledTracing(t)),
+		fx.Supply(serviceconfig.EntSettings{}, zap.NewNop(), newProviderTestMetrics(t, false), newProviderTestDisabledTracing(t)),
 		fx.Provide(
 			fx.Annotate(provideNilPrimaryDBForEntGraphTest, fx.ResultTags(`name:"primary_db"`)),
 			ProvideEntClients,
@@ -186,7 +186,7 @@ func TestNewCacheRedisProvidesCacheRedis(t *testing.T) {
 	traceCfg := &config.Config{App: config.AppConfig{Name: "provider-test", Environment: "test"}, Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1}}}
 	traceProvider, traceCollector := newGinTestTracingProviderWithCollector(t, traceCfg)
 	cfg := providerTestConfig("")
-	cfg.Resources.Redis = commonresources.RedisConfigs{
+	cfg.Redis = commonresources.RedisConfigs{
 		resources.NameCacheRedis: {
 			Addr:    redisServer.addr,
 			DB:      0,
@@ -232,7 +232,7 @@ func TestNewCacheRedisDoesNotProvideQueueRedis(t *testing.T) {
 	}
 
 	err := fx.ValidateApp(
-		fx.Supply(&serviceconfig.Config{}, zap.NewNop(), traceProvider),
+		fx.Supply(serviceconfig.ResourceSettings{}, zap.NewNop(), traceProvider),
 		fx.Provide(fx.Annotate(NewCacheRedis, fx.ResultTags(`name:"cache_redis"`))),
 		fx.Invoke(func(clients) {}),
 	)
@@ -246,7 +246,7 @@ func TestNewCacheRedisReturnsErrorForMissingCacheRedisConfig(t *testing.T) {
 
 	_, err := NewCacheRedis(CacheRedisParams{
 		Lifecycle: lc,
-		Config:    &serviceconfig.Config{},
+		Settings:  serviceconfig.ResourceSettings{},
 		Log:       log,
 		Trace:     traceProvider,
 	})
@@ -256,7 +256,7 @@ func TestNewCacheRedisReturnsErrorForMissingCacheRedisConfig(t *testing.T) {
 func TestNewCacheRedisRequiresTracingProvider(t *testing.T) {
 	_, err := NewCacheRedis(CacheRedisParams{
 		Lifecycle: fxtest.NewLifecycle(t),
-		Config:    providerTestConfig(""),
+		Settings:  providerTestConfig(""),
 		Log:       zap.NewNop(),
 	})
 	require.ErrorContains(t, err, "redis tracing provider is required")
@@ -265,7 +265,7 @@ func TestNewCacheRedisRequiresTracingProvider(t *testing.T) {
 func TestNewCacheRedisAcceptsUnstartedTracingProvider(t *testing.T) {
 	client, err := NewCacheRedis(CacheRedisParams{
 		Lifecycle: fxtest.NewLifecycle(t),
-		Config:    providerTestConfig(""),
+		Settings:  providerTestConfig(""),
 		Log:       zap.NewNop(),
 		Trace:     &commontracing.Provider{},
 	})
@@ -277,11 +277,11 @@ func TestNewCacheRedisAcceptsUnstartedTracingProvider(t *testing.T) {
 func TestNewCacheRedisUsesFxTracingProviderDuringConstruction(t *testing.T) {
 	redisServer := newProviderTestRedisServer(t)
 	cfg := providerTestConfig("")
-	cfg.Config = config.Config{
+	runtimeCfg := &config.Config{
 		App:           config.AppConfig{Name: "provider-test", Environment: "test"},
 		Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1}},
 	}
-	cfg.Resources.Redis[resources.NameCacheRedis] = commonresources.RedisConfig{Addr: redisServer.addr, Timeout: time.Second}
+	cfg.Redis[resources.NameCacheRedis] = commonresources.RedisConfig{Addr: redisServer.addr, Timeout: time.Second}
 
 	type clients struct {
 		fx.In
@@ -290,7 +290,7 @@ func TestNewCacheRedisUsesFxTracingProviderDuringConstruction(t *testing.T) {
 	}
 	var got clients
 	app := fxtest.New(t,
-		fx.Supply(cfg, serviceconfig.NewRuntimeConfig(cfg), zap.NewNop()),
+		fx.Supply(cfg, runtimeCfg, zap.NewNop()),
 		fx.Provide(commontracing.NewTracingProvider),
 		fx.Provide(fx.Annotate(NewCacheRedis, fx.ResultTags(`name:"cache_redis"`))),
 		fx.Populate(&got),
@@ -308,7 +308,7 @@ func TestNewCacheRedisWrapsConstructorError(t *testing.T) {
 
 	client, err := newCacheRedis(CacheRedisParams{
 		Lifecycle: fxtest.NewLifecycle(t),
-		Config:    providerTestConfig(""),
+		Settings:  providerTestConfig(""),
 		Log:       zap.NewNop(),
 		Trace:     traceProvider,
 	}, func(fx.Lifecycle, *zap.Logger, string, commonresources.RedisConfig, ...datastore.RedisClientOption) (*redis.Client, error) {
@@ -323,11 +323,11 @@ func TestNewCacheRedisFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 	lc := fxtest.NewLifecycle(t)
 	log := zap.NewNop()
 	traceProvider := newProviderTestTracing(t)
-	cfg := &serviceconfig.Config{Resources: serviceconfig.ResourcesConfig{Redis: commonresources.RedisConfigs{
+	cfg := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
 		resources.NameCacheRedis: {Addr: "127.0.0.1:1", DB: 0, Timeout: 10 * time.Millisecond},
-	}}}
+	}}
 
-	client, err := NewCacheRedis(CacheRedisParams{Lifecycle: lc, Config: cfg, Log: log, Trace: traceProvider})
+	client, err := NewCacheRedis(CacheRedisParams{Lifecycle: lc, Settings: cfg, Log: log, Trace: traceProvider})
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -394,25 +394,23 @@ func providerTestSpanNames(spans []*tracepb.Span) []string {
 	return names
 }
 
-func providerTestConfig(_ string) *serviceconfig.Config {
-	return &serviceconfig.Config{
-		Resources: serviceconfig.ResourcesConfig{
-			Redis: commonresources.RedisConfigs{
-				resources.NameCacheRedis: {
-					Addr:    "127.0.0.1:6379",
-					DB:      0,
-					Timeout: time.Second,
-				},
+func providerTestConfig(_ string) serviceconfig.ResourceSettings {
+	return serviceconfig.ResourceSettings{
+		Redis: commonresources.RedisConfigs{
+			resources.NameCacheRedis: {
+				Addr:    "127.0.0.1:6379",
+				DB:      0,
+				Timeout: time.Second,
 			},
-			Postgres: commonresources.PostgresConfigs{
-				resources.NamePrimaryDB: {
-					Host: "127.0.0.1", Port: 15432, Username: "aegiscore", Password: "secret", DBName: "aegiscore_user", SSLMode: "disable",
-					Pool: commonresources.PostgresPoolConfig{MaxOpenConns: 7, MaxIdleConns: 3, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second},
-				},
-				"pay_db": {
-					Host: "127.0.0.1", Port: 15432, Username: "aegiscore", Password: "secret", DBName: "aegiscore_pay", SSLMode: "disable",
-					Pool: commonresources.PostgresPoolConfig{MaxOpenConns: 99, MaxIdleConns: 3, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second},
-				},
+		},
+		Postgres: commonresources.PostgresConfigs{
+			resources.NamePrimaryDB: {
+				Host: "127.0.0.1", Port: 15432, Username: "aegiscore", Password: "secret", DBName: "aegiscore_user", SSLMode: "disable",
+				Pool: commonresources.PostgresPoolConfig{MaxOpenConns: 7, MaxIdleConns: 3, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second},
+			},
+			"pay_db": {
+				Host: "127.0.0.1", Port: 15432, Username: "aegiscore", Password: "secret", DBName: "aegiscore_pay", SSLMode: "disable",
+				Pool: commonresources.PostgresPoolConfig{MaxOpenConns: 99, MaxIdleConns: 3, ConnMaxLifetime: time.Minute, ConnMaxIdleTime: 30 * time.Second},
 			},
 		},
 	}

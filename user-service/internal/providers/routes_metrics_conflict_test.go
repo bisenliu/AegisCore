@@ -39,7 +39,7 @@ func TestRegisterRoutesRejectsMetricsPathConflict(t *testing.T) {
 		Config:        cfg,
 		Log:           zap.NewNop(),
 		Engine:        gin.New(),
-		JWT:           authtokens.NewAccessTokenVerifier(commonauth.NewJWTService(commonauth.JWTConfig{Secret: "secret"}), &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{Secret: "secret"}}}),
+		JWT:           authtokens.NewAccessTokenVerifier(commonauth.NewJWTService(commonauth.JWTConfig{Secret: "secret"}), serviceconfig.AuthSettings{JWT: serviceconfig.JWTConfig{Secret: "secret"}}),
 		TokenVersions: &routeTokenVersionValidator{version: 1},
 		Authorizer:    &routeAuthorizer{allowed: true},
 		Metrics:       newRouteTestMetricsProvider(t, cfg),

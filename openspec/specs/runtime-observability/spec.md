@@ -1,9 +1,7 @@
 ## Purpose
 
 定义 user-service 和共享 runtime 的可观测性能力，覆盖运行时路由、健康检查、OpenAPI、metrics、tracing、日志、故障处理和部署观测资产。
-
 ## Requirements
-
 ### Requirement: HTTP 路由、健康检查与 OpenAPI
 
 系统 MUST 在业务 API 之外提供 `/livez`、`/readyz`、`/startupz`、配置化 metrics endpoint、OpenAPI 文档端点和可选 pprof 诊断监听。user-service composition root MUST 显式集中挂载 auth、permission、role 和 user 路由，并按 public、authenticated 和 authorized 层级维护访问边界，MUST NOT 依赖 Fx value group 的 slice 顺序表达安全、冲突或必需路由语义。健康检查 MUST 只通过稳定 public contract 读取跨 feature 状态，MUST NOT 依赖 feature infrastructure concrete implementation。OpenAPI 3 文档 MUST 与当前 HTTP API 一致，运行时 Swagger UI MUST 使用 `github.com/swaggo/files/v2` 的 embedded `fs.FS`。
@@ -204,3 +202,25 @@
 - **WHEN** 正式 `AppModule` 构建 runtime graph
 - **THEN** composition root MUST 通过具名注册函数或等价可识别结构显式解析 `*http.Server` 与 `*PprofServer`，MUST NOT 依赖空匿名 Invoke
 - **AND** bootstrap 测试 MUST 验证这些 server 及 lifecycle hook 注册链路仍存在
+
+### Requirement: 本地观测时间展示边界
+
+本地观测组件 MUST 区分容器进程日志时区、浏览器展示时区与基于 Unix epoch 的 telemetry 绝对时间。Jaeger、Prometheus 和 Grafana 的进程日志 MUST 可定位到 `Asia/Shanghai` 或 `+08:00`，但 OpenTelemetry span 与 Prometheus sample 的存储语义 MUST 保持不变。
+
+#### Scenario: Grafana 默认展示时区
+
+- **WHEN** Compose provisioning 加载 user-service Grafana dashboard
+- **THEN** dashboard MUST 默认使用 `Asia/Shanghai` 展示时间
+- **AND** 通用 dashboard 源文件与 Compose provisioning 副本 MUST 通过现有生成脚本保持一致
+
+#### Scenario: Prometheus Web UI 时区边界
+
+- **WHEN** 用户访问 Prometheus Web UI 或读取 Prometheus sample
+- **THEN** 系统 MUST 保留 Prometheus 官方的 Unix time 内部语义与 UTC UI 展示行为
+- **AND** Compose `TZ` MUST 只用于 Prometheus 进程本地时间与日志，不得宣称可以覆盖官方 UI 时区
+
+#### Scenario: Jaeger UI 时区边界
+
+- **WHEN** 用户访问 Jaeger UI 查看 trace
+- **THEN** Jaeger 服务进程 MUST 能加载 `Asia/Shanghai`，trace 时间戳 MUST 继续表示 Unix epoch 绝对时间
+- **AND** UI 日期 MUST 继续由访问浏览器的本地时区渲染，Compose MUST NOT 伪造不存在的服务端 UI timezone 配置

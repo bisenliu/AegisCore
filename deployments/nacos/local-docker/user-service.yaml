@@ -1,0 +1,53 @@
+# 仅限本地开发；固定占位 secret 不得用于 production-like 环境。
+app:
+  name: aegiscore-user-service
+
+server:
+  http:
+    enabled: true
+    host: 0.0.0.0
+    port: 8080
+    read_timeout: 30s
+    write_timeout: 60s
+    idle_timeout: 120s
+    shutdown_timeout: 25s
+  grpc:
+    enabled: false
+    host: 127.0.0.1
+    port: 9090
+    shutdown_timeout: 10s
+
+auth:
+  jwt:
+    secret: local-development-secret
+    issuer: aegiscore-user-service
+    audience: aegiscore-users
+    access_token_ttl: 15m
+    refresh_token_ttl: 168h
+    password_change_token_ttl: 5m
+  token_version_cache:
+    enabled: true
+    size: 100000
+    ttl: 1s
+    load_timeout: 300ms
+  token_version_cache_ttl: 30s
+  refresh_token_rotation: true
+  max_active_sessions_per_user: 5
+
+rbac:
+  user_role_cache:
+    enabled: true
+    size: 100000
+    ttl: 5s
+    load_timeout: 500ms
+
+ent:
+  plugins:
+    sql_log:
+      enabled: true
+      debug: true
+      slow_threshold: 500ms
+    tracing:
+      enabled: false
+    metrics:
+      enabled: true

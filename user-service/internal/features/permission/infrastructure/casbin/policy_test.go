@@ -165,14 +165,10 @@ func TestUserRoleResolverCoalescesConcurrentMisses(t *testing.T) {
 }
 
 func TestNewUserRoleResolverUsesRBACFeatureConfig(t *testing.T) {
-	enabled := true
-	size := int64(321)
-	ttl := time.Minute
-	loadTimeout := time.Second
 	result, err := NewUserRoleResolver(UserRoleResolverParams{
-		Config: &serviceconfig.Config{RBAC: serviceconfig.RBACConfig{UserRoleCache: serviceconfig.FeatureCacheConfig{
-			Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout,
-		}}},
+		Settings: serviceconfig.RBACSettings{UserRoleCache: serviceconfig.FeatureCacheConfig{
+			Enabled: true, Size: 321, TTL: time.Minute, LoadTimeout: time.Second,
+		}},
 		Client: newPolicyTestClient(t),
 	})
 	require.NoError(t, err)
@@ -184,22 +180,16 @@ func TestNewUserRoleResolverUsesRBACFeatureConfig(t *testing.T) {
 }
 
 func TestNewUserRoleResolverRejectsNegativeCapacity(t *testing.T) {
-	enabled := true
-	size := int64(-1)
-	ttl := time.Minute
-	loadTimeout := time.Second
-
 	_, err := NewUserRoleResolver(UserRoleResolverParams{
-		Config: &serviceconfig.Config{RBAC: serviceconfig.RBACConfig{UserRoleCache: serviceconfig.FeatureCacheConfig{
-			Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout,
-		}}},
+		Settings: serviceconfig.RBACSettings{UserRoleCache: serviceconfig.FeatureCacheConfig{
+			Enabled: true, Size: -1, TTL: time.Minute, LoadTimeout: time.Second,
+		}},
 		Client: newPolicyTestClient(t),
 	})
 	require.ErrorIs(t, err, localcache.ErrCapacityRequired)
 }
 
 func TestDisabledUserRoleResolverReadsThroughAndInvalidationIsSafe(t *testing.T) {
-	disabled := false
 	client := newPolicyTestClient(t)
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000601")
 	firstRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000602")
@@ -210,7 +200,9 @@ func TestDisabledUserRoleResolverReadsThroughAndInvalidationIsSafe(t *testing.T)
 	createPolicyTestUserRole(t, client, user.ID, firstRole.ID)
 
 	result, err := NewUserRoleResolver(UserRoleResolverParams{
-		Config: &serviceconfig.Config{RBAC: serviceconfig.RBACConfig{UserRoleCache: serviceconfig.FeatureCacheConfig{Enabled: &disabled}}},
+		Settings: serviceconfig.RBACSettings{UserRoleCache: serviceconfig.FeatureCacheConfig{
+			Enabled: false, Size: -1, TTL: -time.Second, LoadTimeout: -time.Second,
+		}},
 		Client: client,
 	})
 	require.NoError(t, err)

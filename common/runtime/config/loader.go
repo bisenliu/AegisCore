@@ -8,60 +8,49 @@ import (
 	"github.com/spf13/viper"
 )
 
-type defaultsApplier interface {
-	ApplyDefaults()
+// DecodeOptions 显式定义严格解码的默认值、归一化和校验步骤；Defaults 必填，其他步骤可选。
+type DecodeOptions[T any] struct {
+	Defaults  func() T
+	Normalize func(*T)
+	Validate  func(T) error
 }
 
-type viperDefaultsApplier interface {
-	ApplyViperDefaults(*viper.Viper)
-}
-
-// LoadInto 从单个 YAML 文件读取调用方指定的完整配置结构。
-func LoadInto[T any](path string, validate func(T) error) (*T, error) {
-	if path == "" {
-		return nil, fmt.Errorf("read config: config file path is required")
+// DecodeStrict 按 defaults、raw settings 覆盖、未知键检查、normalize、validate 的顺序解码配置。
+func DecodeStrict[T any](settings map[string]any, options DecodeOptions[T]) (*T, error) {
+	if options.Defaults == nil {
+		return nil, fmt.Errorf("decode runtime config: defaults function is required")
 	}
+	target := options.Defaults()
+
 	v := viper.New()
-	setCoreDefaults(v, DefaultConfig())
-	var serviceDefaults T
-	if defaults, ok := any(&serviceDefaults).(viperDefaultsApplier); ok {
-		defaults.ApplyViperDefaults(v)
+	setViperDefaultsFromStruct(v, "", reflect.ValueOf(target))
+	if err := v.MergeConfigMap(settings); err != nil {
+		return nil, fmt.Errorf("decode runtime config: %w", err)
 	}
-
-	v.SetConfigType("yaml")
-	v.SetConfigFile(path)
-	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("read config %s: %w", path, err)
-	}
-
-	var cfg T
-	if err := validateKnownConfigKeys(cfg, v.AllSettings()); err != nil {
-		return nil, fmt.Errorf("decode config: %w", err)
-	}
-	if err := v.Unmarshal(&cfg, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+	metadata := new(mapstructure.Metadata)
+	if err := v.Unmarshal(&target, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(","),
-	))); err != nil {
-		return nil, fmt.Errorf("decode config: %w", err)
+	)), func(config *mapstructure.DecoderConfig) {
+		config.Metadata = metadata
+	}); err != nil {
+		return nil, fmt.Errorf("decode runtime config: %w", err)
 	}
-	if defaults, ok := any(&cfg).(defaultsApplier); ok {
-		// 服务扩展配置可在校验前补齐自身默认值，并将结果保留在返回对象中。
-		defaults.ApplyDefaults()
+	if paths := unknownConfigPaths(settings, metadata.Unused); paths != "" {
+		return nil, fmt.Errorf("decode runtime config: unknown configuration keys: %s", paths)
 	}
-	if validate != nil {
-		if err := validate(cfg); err != nil {
-			return nil, fmt.Errorf("validate config: %w", err)
+	if options.Normalize != nil {
+		options.Normalize(&target)
+	}
+	if options.Validate != nil {
+		if err := options.Validate(target); err != nil {
+			return nil, fmt.Errorf("validate runtime config: %w", err)
 		}
 	}
-
-	return &cfg, nil
+	return &target, nil
 }
 
-func setCoreDefaults(v *viper.Viper, defaults Config) {
-	setViperDefaultsFromStruct(v, "", reflect.ValueOf(defaults))
-}
-
-// setViperDefaultsFromStruct 按 mapstructure tag 递归展开默认配置，避免在 loader 中维护另一份字段路径映射。
+// setViperDefaultsFromStruct 将显式 defaults 按 mapstructure tag 注册给 Viper，使嵌套 map 也支持 raw 局部覆盖。
 func setViperDefaultsFromStruct(v *viper.Viper, prefix string, value reflect.Value) {
 	value = dereferenceValue(value)
 	if !value.IsValid() {

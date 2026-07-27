@@ -8,7 +8,6 @@ import (
 	rediscmd "github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
-	"github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
@@ -33,8 +32,8 @@ type policySubscriptionStore interface {
 }
 
 // NewStore 构造 RBAC policy Redis store。
-func NewStore(client *rediscmd.Client, cfg *config.Config, log *zap.Logger) (*Store, error) {
-	keys, err := NewKeyCatalog(cfg.App.Name)
+func NewStore(client *rediscmd.Client, appName string, log *zap.Logger) (*Store, error) {
+	keys, err := NewKeyCatalog(appName)
 	if err != nil {
 		return nil, fmt.Errorf("new rbac policy redis keys: %w", err)
 	}

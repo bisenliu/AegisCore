@@ -1,0 +1,25 @@
+app:
+  environment: local
+
+runtime:
+  lifecycle:
+    start_timeout: 60s
+    stop_timeout: 120s
+  gin:
+    mode: release
+  timezone: Asia/Shanghai
+
+log:
+  level: info
+  format: json
+
+observability:
+  metrics:
+    enabled: true
+    path: /metrics
+    include_runtime: true
+  tracing:
+    enabled: true
+    otlp_endpoint: jaeger:4317
+    insecure: true
+    sample_ratio: 1.0

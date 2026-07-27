@@ -4,6 +4,7 @@ toolchain go1.26.5
 
 use (
 	./common
+	./tools/nacos-config-seed
 	./tools/openapi-convert
 	./user-service
 )

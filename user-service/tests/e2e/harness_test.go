@@ -23,6 +23,7 @@ import (
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
+	commonconfig "github.com/aegiscore/common/runtime/config"
 	commonresources "github.com/aegiscore/common/runtime/resources"
 	"github.com/aegiscore/common/testing/containers"
 	"github.com/aegiscore/user-service/internal/bootstrap"
@@ -56,8 +57,11 @@ func newHTTPFlowHarness(t *testing.T) *httpFlowHarness {
 	bootstrapSuperAdmin(t, postgres.DSN, "bootstrap-secret")
 
 	configPath := writeTestConfig(t, postgres.Config(), redis.Config())
-	serviceCfg, err := serviceconfig.NewConfig(serviceconfig.ConfigPath(configPath))
+	content, err := os.ReadFile(configPath)
 	require.NoError(t, err)
+	loaded, err := serviceconfig.LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "config.yaml", Content: content}})
+	require.NoError(t, err)
+	serviceCfg := loaded.Config
 	var engine *gin.Engine
 	app := fxtest.New(t, bootstrap.AppOptions(
 		serviceCfg,

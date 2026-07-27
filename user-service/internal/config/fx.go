@@ -1,13 +1,86 @@
 package config
 
-import commonconfig "github.com/aegiscore/common/runtime/config"
+import (
+	"context"
+	"fmt"
 
-// ConfigPath 是 Fx 应用传递给 Load 的文件系统路径。
-type ConfigPath string
+	commonconfig "github.com/aegiscore/common/runtime/config"
+	commonnacos "github.com/aegiscore/common/runtime/config/nacos"
+)
 
-// NewConfig 为 Fx 依赖注入加载 user-service 配置。
-func NewConfig(path ConfigPath) (*Config, error) {
-	return commonconfig.LoadInto(string(path), Config.Validate)
+// LoadResult 包含已应用默认值的服务配置和原始配置来源信息。
+type LoadResult struct {
+	Config *Config
+	Source commonconfig.SourceMetadata
+}
+
+// EffectiveSettings 从已应用默认值的 Config 生成最终生效配置，避免维护会漂移的重复状态。
+func (r *LoadResult) EffectiveSettings() (map[string]any, error) {
+	if r == nil || r.Config == nil {
+		return nil, fmt.Errorf("encode runtime config: config is required")
+	}
+	return commonconfig.EncodeSettings(r.Config)
+}
+
+// Load 从 Nacos 分层配置加载 user-service 配置。
+func Load(ctx context.Context) (*LoadResult, error) {
+	env, err := commonnacos.LoadEnv()
+	if err != nil {
+		return nil, err
+	}
+	source, err := commonnacos.NewSource(env)
+	if err != nil {
+		return nil, err
+	}
+	settings, metadata, err := commonconfig.LoadSource(ctx, source)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeSettings(settings, metadata)
+}
+
+// DecodeSettings 将合并后的配置 map 解码为 user-service Config。
+func DecodeSettings(settings map[string]any, source commonconfig.SourceMetadata) (*LoadResult, error) {
+	cfg, err := commonconfig.DecodeStrict(settings, commonconfig.DecodeOptions[Config]{
+		Defaults: DefaultConfig,
+		Normalize: func(cfg *Config) {
+			normalizeConfig(cfg, settings)
+		},
+		Validate: Config.Validate,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if source.Digest == "" {
+		digest, digestErr := commonconfig.DigestSettings(settings)
+		if digestErr != nil {
+			return nil, digestErr
+		}
+		source.Digest = digest
+	}
+	return &LoadResult{Config: cfg, Source: source}, nil
+}
+
+// LoadFromDocuments 使用测试或初始化来源提供的多段 YAML 生成配置。
+func LoadFromDocuments(docs []commonconfig.ConfigDocument) (*LoadResult, error) {
+	settings, source, err := commonconfig.LoadSource(context.Background(), documentSource{docs: docs})
+	if err != nil {
+		return nil, err
+	}
+	return DecodeSettings(settings, source)
+}
+
+type documentSource struct {
+	docs []commonconfig.ConfigDocument
+}
+
+func (s documentSource) LoadDocuments(context.Context) ([]commonconfig.ConfigDocument, commonconfig.SourceMetadata, error) {
+	docs := append([]commonconfig.ConfigDocument(nil), s.docs...)
+	dataIDs := make([]string, 0, len(docs))
+	for _, doc := range docs {
+		dataIDs = append(dataIDs, doc.DataID)
+	}
+	return docs, commonconfig.SourceMetadata{Provider: "test", DataIDs: dataIDs}, nil
 }
 
 // NewRuntimeConfig 提供共享 runtime 配置，供 common provider 消费。

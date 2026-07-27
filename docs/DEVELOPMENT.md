@@ -61,24 +61,38 @@ make build
 make user-service-run
 ```
 
-指定配置：
+运行前需要准备 Nacos，并设置来源环境变量。以下示例复用 Compose 暴露到主机的 PostgreSQL、Redis、Nacos 和 Jaeger，并选择主机配置对应的 Namespace：
 
 ```bash
-USER_SERVICE_CONFIG=/absolute/path/to/config.yaml make user-service-run
+export AEGISCORE_SERVICE=user-service
+export AEGISCORE_NACOS_ADDR=127.0.0.1:8848
+export AEGISCORE_NACOS_NAMESPACE=loca-host
+export AEGISCORE_NACOS_GROUP=AEGISCORE
+make user-service-run
 ```
 
 直接在模块内运行：
 
 ```bash
 cd user-service
-go run ./cmd serve --config ./configs/config.yaml
+go run ./cmd serve
 ```
 
-配置文件使用严格 unknown-key 校验。共享核心只有 `app`、`runtime`、`server`、`log`、`observability`；user-service 在 `resources` 下声明 `cache_redis` 和 `primary_db`，并在 `auth.token_version_cache`、`rbac.user_role_cache` 下声明 feature cache。每次启动只接受 `--config` 指定的一份完整 YAML 文件，不读取运行时环境变量，也不合并 overlay 文件。
+配置从 Nacos 按默认顺序加载 `base.yaml`、`resources.yaml`、`${AEGISCORE_SERVICE}.yaml`。仓库在 `deployments/nacos/local-host/` 和 `local-docker/` 中分别保存三份完整配置：`loca-host` 使用宿主机映射端口，`loca-docker` 使用 Compose DNS 和容器端口。环境变量只选择 Nacos 来源，不覆盖业务字段。完整加载顺序固定为：`source -> documents -> deep merge -> raw digest -> strict decode（defaults 初值、raw 覆盖、unknown key 拒绝）-> normalize -> validate -> effective encode -> redact/render`。raw digest 只描述合并后的原始来源，不受默认值或 effective encode 变化影响；`config render` 编码最终生效配置后再脱敏敏感字段。
+
+`common/runtime/config` 只拥有业务中立的 document/source contract、YAML deep merge、raw digest、strict decode、effective encode、redact 和 render 原语；`common/runtime/config/nacos` 是独立 adapter，拥有 Nacos 环境变量、HTTP client、认证、timeout、failover 和文档读取。user-service 的 `internal/config.DefaultConfig()` 集中组装完整默认初值，并由显式 normalize 和 validate 完成服务级处理；composition root 再派生 `AuthSettings`、`RBACSettings`、`EntSettings` 和 `ResourceSettings`，auth、permission/RBAC、Ent 与具名资源 provider 不读取完整根配置。共享核心配置只有 `app`、`runtime`、`server`、`log`、`observability`；user-service 在 `resources` 下声明 `cache_redis` 和 `primary_db`，并在 `auth.token_version_cache`、`rbac.user_role_cache` 下声明 feature cache。
+
+配置读取直接使用 Nacos 3.x 的 v3 Client HTTP API，只需要访问 `8848`。`AEGISCORE_NACOS_ADDR` 支持逗号分隔的多个地址并按顺序 failover；地址可以包含自定义 context path。启用 Nacos client auth 时必须同时设置 `AEGISCORE_NACOS_USERNAME` 和 `AEGISCORE_NACOS_PASSWORD`，客户端登录一次后复用 access token。
+
+`AEGISCORE_NACOS_NAMESPACE` 必须填写 namespace ID，不是控制台显示名。通过控制台创建 namespace 时，如果选择自动生成 ID，应从 namespace 列表复制实际 ID；本地 Compose 初始化工具会把 ID 和显示名分别固定为 `loca-host`、`loca-docker`。版本化配置统一维护在 `deployments/nacos/`，Nacos 控制台中的内容是发布结果，不是第二配置来源。
+
+本地 Nacos Dockerfile 参考官方最新部署说明，使用 `nacos/nacos-server:latest`，在镜像内固定 standalone、`FUNCTION_MODE=microservice` 和 `docker-startup.sh` 入口，只加载 Config 与 Naming；Compose 不提供或覆盖 Nacos 启动命令，仅通过 v3 Admin API 初始化 namespace 和配置。该功能模式要求 Nacos 3.2.2 或更高版本。浮动 tag 适合本地验证最新版兼容性；生产部署仍应在验证后固定具体版本或镜像 digest。
+
+本地 `docker run` 示例和 Compose 同时关闭 Client、Admin API、Console API 三类鉴权。Nacos 3.x 的三个鉴权开关相互独立，只设置 `NACOS_AUTH_ENABLE=false` 不会关闭控制台鉴权；生产环境不得沿用本地关闭鉴权的配置。
 
 `serve` 由 CLI 在创建 App 前单次加载 service config，再通过 `bootstrap.AppOptions` 将该对象及其派生 runtime config 交给 composition root。`runtime.lifecycle.start_timeout` 和 `stop_timeout` 同时用于 App 顶层 Fx options 与 CLI 显式 Start/Stop context；当前手动生命周期的实际 deadline 由传给 `App.Start`/`App.Stop` 的 context 决定。`fx.StartTimeout` 不限制配置加载或 `fx.New` 中的同步 constructor/invoke，构造期 I/O 必须由自身边界治理。
 
-本地时区由 `runtime.timezone` 控制。日志只写 stdout/stderr。需要 trace 或 pprof 时修改当前环境的完整 YAML 配置文件；不要把独立诊断端口直接暴露到公网。
+本地时区由 `runtime.timezone` 控制。日志只写 stdout/stderr。需要 trace 或 pprof 时修改 Nacos 中对应 dataId；不要把独立诊断端口直接暴露到公网。可用 `go run ./cmd config sources`、`config validate` 和 `config render` 诊断配置来源和合成结果，`render` 默认脱敏敏感字段。
 
 ## 4. 测试和 lint
 

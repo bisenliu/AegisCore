@@ -26,7 +26,7 @@ const (
 type RuntimeDependencyMetricsParams struct {
 	fx.In
 
-	Config           *serviceconfig.Config
+	Resources        serviceconfig.ResourceSettings
 	Metrics          *commonmetrics.Provider
 	PrimaryDB        *sql.DB                 `name:"primary_db"`
 	CacheRedis       *redis.Client           `name:"cache_redis"`
@@ -53,7 +53,7 @@ func RegisterRuntimeDependencyMetrics(params RuntimeDependencyMetricsParams) err
 		return err
 	}
 
-	redisCfg := params.Config.Resources.Redis[resources.NameCacheRedis]
+	redisCfg := params.Resources.Redis[resources.NameCacheRedis]
 	redisCollector, err := commonmetrics.NewRedisPingCollector(commonmetrics.RedisPingCollectorOptions{
 		Resource:    resources.NameCacheRedis,
 		Pinger:      commonmetrics.NewRedisClientPinger(params.CacheRedis),

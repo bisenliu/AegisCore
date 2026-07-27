@@ -31,31 +31,26 @@ type entPluginSet struct {
 
 // newEntPlugins 将服务配置和可观测性 provider 转换为显式启用的 Ent 插件集合。
 func newEntPlugins(
-	cfg *serviceconfig.Config,
+	settings serviceconfig.EntSettings,
 	log *zap.Logger,
 	metricsProvider *commonmetrics.Provider,
 	tracingProvider *commontracing.Provider,
 ) (entPluginSet, error) {
-	pluginsCfg := serviceconfig.EntConfig{}
-	if cfg != nil {
-		pluginsCfg = cfg.Ent
-	}
-
 	plugins := entPluginSet{}
-	if pluginsCfg.Plugins.SQLLog.Enabled {
+	if settings.Plugins.SQLLog.Enabled {
 		plugins.driverPlugins = append(plugins.driverPlugins, &entSQLLogPlugin{
 			log:           logger.SQL(log),
 			db:            primaryDatabaseResource,
-			debugEnabled:  pluginsCfg.Plugins.SQLLog.Debug,
-			slowThreshold: pluginsCfg.Plugins.SQLLog.SlowThreshold,
+			debugEnabled:  settings.Plugins.SQLLog.Debug,
+			slowThreshold: settings.Plugins.SQLLog.SlowThreshold,
 		})
 	}
-	if pluginsCfg.Plugins.Tracing.Enabled && tracingProvider != nil {
+	if settings.Plugins.Tracing.Enabled && tracingProvider != nil {
 		plugins.clientPlugins = append(plugins.clientPlugins, entTracingPlugin{
 			tracer: tracingProvider.Tracer("github.com/aegiscore/user-service/ent"),
 		})
 	}
-	if pluginsCfg.Plugins.Metrics.Enabled && metricsProvider != nil && metricsProvider.Enabled() {
+	if settings.Plugins.Metrics.Enabled && metricsProvider != nil && metricsProvider.Enabled() {
 		metrics, err := newEntQueryMetrics(metricsProvider)
 		if err != nil {
 			return entPluginSet{}, fmt.Errorf("create ent metrics plugin: %w", err)

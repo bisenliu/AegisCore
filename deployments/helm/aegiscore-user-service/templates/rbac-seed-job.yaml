@@ -27,21 +27,14 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
             {{- toYaml .Values.rbacSeedJob.command | nindent 12 }}
+          env:
+            {{- include "aegiscore-user-service.nacosEnv" . | nindent 12 }}
           resources:
             {{- toYaml .Values.rbacSeedJob.resources | nindent 12 }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:
             {{- toYaml .Values.rbacSeedJob.volumeMounts | nindent 12 }}
-            - name: runtime-config
-              mountPath: /app/user-service/config
-              readOnly: true
       volumes:
         {{- toYaml .Values.rbacSeedJob.volumes | nindent 8 }}
-        - name: runtime-config
-          secret:
-            secretName: {{ include "aegiscore-user-service.secretName" . }}
-            items:
-              - key: {{ .Values.secret.configKey }}
-                path: config.yaml
 {{- end }}

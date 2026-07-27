@@ -1,29 +1,69 @@
+# 常用命令（在仓库根目录执行）：
+# 校验配置：
+#   docker compose -f deployments/compose/docker-compose.yml config --quiet
+# 构建本地镜像；--pull 会检查并拉取更新的基础镜像：
+#   docker compose -f deployments/compose/docker-compose.yml build --pull
+# 启动全部服务；配置或源码变化时添加 --build：
+#   docker compose -f deployments/compose/docker-compose.yml up -d
+#   docker compose -f deployments/compose/docker-compose.yml up -d --build
+# 查看服务状态和日志：
+#   docker compose -f deployments/compose/docker-compose.yml ps -a
+#   docker compose -f deployments/compose/docker-compose.yml logs -f --tail=200
+#   docker compose -f deployments/compose/docker-compose.yml logs -f nacos nacos-init-host nacos-init-docker user-service
+# 停止、恢复或重启现有容器（保留容器和数据卷）：
+#   docker compose -f deployments/compose/docker-compose.yml stop
+#   docker compose -f deployments/compose/docker-compose.yml start
+#   docker compose -f deployments/compose/docker-compose.yml restart
+# 手动执行一次 RBAC seed：
+#   docker compose -f deployments/compose/docker-compose.yml --profile seed run --rm rbac-seed
+# migration 和 RBAC seed 完成后，一次性创建初始超级管理员：
+#   read -s "ADMIN_BOOTSTRAP_PASSWORD?请输入临时密码: " && echo
+#   export ADMIN_BOOTSTRAP_PASSWORD
+#   docker compose -f deployments/compose/docker-compose.yml run --rm \
+#     -e ADMIN_BOOTSTRAP_PASSWORD \
+#     user-service rbac bootstrap-super-admin \
+#     --username initial-admin --nickname "Initial Administrator"
+#   unset ADMIN_BOOTSTRAP_PASSWORD
+#   docker compose -f deployments/compose/docker-compose.yml restart user-service
+# 删除容器和网络但保留数据卷：
+#   docker compose -f deployments/compose/docker-compose.yml down --remove-orphans
+# 删除本仓库构建的镜像（应先执行 down）：
+#   docker image rm aegiscore-user-service:latest aegiscore-nacos:latest aegiscore-nacos-config-seed:latest aegiscore-jaeger:latest
+# 危险：删除容器、网络及 PostgreSQL、Redis、Nacos、Prometheus、Grafana 的全部本地数据卷：
+#   docker compose -f deployments/compose/docker-compose.yml down -v --remove-orphans
+
 name: aegiscore-local
+
+x-timezone-env: &timezone-env
+  TZ: Asia/Shanghai
 
 x-user-service-build: &user-service-build
   context: ../..
   dockerfile: deployments/docker/user-service.Dockerfile
 
-x-user-service-configs: &user-service-configs
-  - ./config/user-service.local.yaml:/app/user-service/configs/config.yaml:ro
+x-nacos-build: &nacos-build
+  context: ../..
+  dockerfile: deployments/docker/nacos.Dockerfile
+
+x-nacos-config-seed-build: &nacos-config-seed-build
+  context: ../..
+  dockerfile: deployments/docker/nacos-config-seed.Dockerfile
+
+x-jaeger-build: &jaeger-build
+  context: ../..
+  dockerfile: deployments/docker/jaeger.Dockerfile
 
 services:
   postgres:
     # 本地开发跟随最新 PostgreSQL 镜像；正式环境建议固定具体版本或镜像 digest。
     image: postgres:latest
-    user: postgres
-    entrypoint: ["bash", "-euc"]
-    command:
-      - |
-        data_dir=/var/lib/postgresql/data/pgdata
-        if [ ! -s "$${data_dir}/PG_VERSION" ]; then
-          mkdir -p "$${data_dir}"
-          initdb -D "$${data_dir}" --username=postgres --auth-local=trust --auth-host=trust
-        fi
-        if ! grep -q '^host all all all trust$$' "$${data_dir}/pg_hba.conf"; then
-          printf '\nhost all all all trust\n' >> "$${data_dir}/pg_hba.conf"
-        fi
-        exec postgres -D "$${data_dir}" -c listen_addresses=*
+    environment:
+      <<: *timezone-env
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_USER: postgres
+      POSTGRES_DB: aegiscore
+      POSTGRES_HOST_AUTH_METHOD: trust
+    command: ["postgres", "-c", "timezone=Asia/Shanghai", "-c", "log_timezone=Asia/Shanghai"]
     ports:
       - "15432:5432"
     volumes:
@@ -31,7 +71,7 @@ services:
     networks:
       - aegiscore-runtime
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "postgres"]
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "aegiscore"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -40,6 +80,7 @@ services:
 
   redis:
     image: redis:latest
+    environment: *timezone-env
     command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "16379:6379"
@@ -55,8 +96,79 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  nacos:
+    build: *nacos-build
+    image: aegiscore-nacos:latest
+    environment:
+      <<: *timezone-env
+      NACOS_AUTH_ENABLE: "false"
+      NACOS_AUTH_ADMIN_ENABLE: "false"
+      NACOS_AUTH_CONSOLE_ENABLE: "false"
+      NACOS_AUTH_TOKEN: QWVnaXNDb3JlTmFjb3NMb2NhbERldmVsb3BtZW50VG9rZW4wMTIzNDU2Nzg5
+      NACOS_AUTH_IDENTITY_KEY: aegiscore-local
+      NACOS_AUTH_IDENTITY_VALUE: aegiscore-local
+    ports:
+      - "8849:8080"
+      - "8848:8848"
+      - "9848:9848"
+    volumes:
+      - nacos-data:/home/nacos/data
+    networks:
+      - aegiscore-runtime
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8848/nacos/v3/admin/core/state/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 20s
+    restart: unless-stopped
+
+  nacos-init-host:
+    build: *nacos-config-seed-build
+    image: aegiscore-nacos-config-seed:latest
+    command:
+      - --config-dir
+      - /nacos/config
+    volumes:
+      - ../nacos/local-host:/nacos/config:ro
+    environment:
+      <<: *timezone-env
+      AEGISCORE_NACOS_ADDR: nacos:8848
+      AEGISCORE_NACOS_NAMESPACE: loca-host
+      AEGISCORE_NACOS_GROUP: AEGISCORE
+      AEGISCORE_NACOS_TIMEOUT: 30s
+    depends_on:
+      nacos:
+        condition: service_healthy
+    networks:
+      - aegiscore-runtime
+    restart: "no"
+
+  nacos-init-docker:
+    build: *nacos-config-seed-build
+    image: aegiscore-nacos-config-seed:latest
+    command:
+      - --config-dir
+      - /nacos/config
+    volumes:
+      - ../nacos/local-docker:/nacos/config:ro
+    environment:
+      <<: *timezone-env
+      AEGISCORE_NACOS_ADDR: nacos:8848
+      AEGISCORE_NACOS_NAMESPACE: loca-docker
+      AEGISCORE_NACOS_GROUP: AEGISCORE
+      AEGISCORE_NACOS_TIMEOUT: 30s
+    depends_on:
+      nacos:
+        condition: service_healthy
+    networks:
+      - aegiscore-runtime
+    restart: "no"
+
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    build: *jaeger-build
+    image: aegiscore-jaeger:latest
+    environment: *timezone-env
     command:
       - --collector.otlp.enabled=true
     ports:
@@ -74,13 +186,18 @@ services:
     image: aegiscore-user-service:latest
     command:
       - rbac
-      - --config
-      - /app/user-service/configs/config.yaml
       - seed
       - --reactivate-system
       - --sync-system-bindings
-    volumes: *user-service-configs
+    environment: &user-service-nacos-env
+      <<: *timezone-env
+      AEGISCORE_SERVICE: user-service
+      AEGISCORE_NACOS_ADDR: nacos:8848
+      AEGISCORE_NACOS_NAMESPACE: loca-docker
+      AEGISCORE_NACOS_GROUP: AEGISCORE
     depends_on:
+      nacos-init-docker:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -97,12 +214,12 @@ services:
     image: aegiscore-user-service:latest
     command:
       - serve
-      - --config
-      - /app/user-service/configs/config.yaml
-    volumes: *user-service-configs
+    environment: *user-service-nacos-env
     ports:
       - "8080:8080"
     depends_on:
+      nacos-init-docker:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -127,6 +244,7 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
+    environment: *timezone-env
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -154,6 +272,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
+    environment: *timezone-env
     command:
       - --config=/etc/grafana/grafana.ini
     ports:
@@ -179,6 +298,7 @@ services:
 
 volumes:
   postgres-data:
+  nacos-data:
   redis-data:
   prometheus-data:
   grafana-data:

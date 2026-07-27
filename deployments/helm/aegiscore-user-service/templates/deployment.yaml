@@ -49,8 +49,8 @@ spec:
           command:
             - /app/user-service/bin/user-service
             - serve
-            - --config
-            - /app/user-service/config/config.yaml
+          env:
+            {{- include "aegiscore-user-service.nacosEnv" . | nindent 12 }}
           livenessProbe:
             httpGet:
               path: {{ .Values.probes.liveness.path }}
@@ -78,17 +78,8 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:
             {{- toYaml .Values.volumeMounts | nindent 12 }}
-            - name: runtime-config
-              mountPath: /app/user-service/config
-              readOnly: true
       volumes:
         {{- toYaml .Values.volumes | nindent 8 }}
-        - name: runtime-config
-          secret:
-            secretName: {{ include "aegiscore-user-service.secretName" . }}
-            items:
-              - key: {{ .Values.secret.configKey }}
-                path: config.yaml
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
