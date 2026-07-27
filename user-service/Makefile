@@ -1,6 +1,7 @@
 USER_SERVICE_BIN ?= ../bin/user-service
 ADMIN_USERNAME ?=
 ADMIN_NICKNAME ?=
+CONTAINER_TEST_PACKAGES := ./internal/features/role/infrastructure/postgres ./tests/e2e
 export ADMIN_BOOTSTRAP_PASSWORD
 
 .PHONY: help build run test test-containers lint architecture-lint architecture-lint-test verify seed-rbac bootstrap-super-admin generate migrate-diff migrate-validate openapi-generate fxgraph-generate fxgraph-check
@@ -19,7 +20,7 @@ test: ## 运行 user-service 测试。
 	go test ./...
 
 test-containers: ## 运行包含 Docker-backed 容器的 user-service 测试。
-	go test ./... -args -aegiscore.testcontainers
+	go test $(CONTAINER_TEST_PACKAGES) -args -aegiscore.testcontainers
 
 lint: ## 运行 user-service lint。
 	golangci-lint run ./...

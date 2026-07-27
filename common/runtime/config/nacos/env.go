@@ -15,7 +15,7 @@ const (
 	EnvDataIDs   = "AEGISCORE_NACOS_DATA_IDS"
 	EnvTimeout   = "AEGISCORE_NACOS_TIMEOUT"
 	EnvUsername  = "AEGISCORE_NACOS_USERNAME"
-	EnvPassword  = "AEGISCORE_NACOS_PASSWORD"
+	EnvPassword  = "AEGISCORE_NACOS_PASSWORD" // #nosec G101 -- 常量仅表示环境变量名称，不包含凭据。
 
 	defaultTimeout = 5 * time.Second
 )
