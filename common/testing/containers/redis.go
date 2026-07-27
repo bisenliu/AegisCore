@@ -2,7 +2,9 @@ package containers
 
 import (
 	"context"
+	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,14 +20,12 @@ const (
 
 type RedisOptions struct {
 	Image          string
-	DB             int
 	StartupTimeout time.Duration
 }
 
 type RedisContainer struct {
 	ContainerID string
 	Addr        string
-	DB          int
 }
 
 func StartRedis(ctx context.Context, t testing.TB, opts RedisOptions) *RedisContainer {
@@ -41,6 +41,11 @@ func StartRedis(ctx context.Context, t testing.TB, opts RedisOptions) *RedisCont
 		"--rm",
 		"-p", "127.0.0.1::6379",
 		opts.Image,
+		"redis-server",
+		"--cluster-enabled", "yes",
+		"--cluster-config-file", "nodes.conf",
+		"--appendonly", "no",
+		"--protected-mode", "no",
 	)
 	t.Cleanup(func() { dockerStop(context.Background(), t, containerID) })
 
@@ -48,29 +53,28 @@ func StartRedis(ctx context.Context, t testing.TB, opts RedisOptions) *RedisCont
 	redisContainer := &RedisContainer{
 		ContainerID: containerID,
 		Addr:        host + ":" + strconv.Itoa(port),
-		DB:          opts.DB,
 	}
 
+	assignRedisClusterSlots(startCtx, t, redisContainer)
 	waitForRedis(startCtx, t, redisContainer)
 	return redisContainer
 }
 
 func (r RedisContainer) Options() *redis.Options {
-	cfg := r.Config()
 	return &redis.Options{
-		Addr:         cfg.Addr,
-		DB:           cfg.DB,
-		DialTimeout:  cfg.Timeout,
-		ReadTimeout:  cfg.Timeout,
-		WriteTimeout: cfg.Timeout,
+		Addr:         r.Addr,
+		DialTimeout:  resources.DefaultRedisTimeout,
+		ReadTimeout:  resources.DefaultRedisTimeout,
+		WriteTimeout: resources.DefaultRedisTimeout,
 	}
 }
 
 func (r RedisContainer) Config() resources.RedisConfig {
 	return resources.RedisConfig{
-		Addr:    r.Addr,
-		DB:      r.DB,
+		Mode:    resources.RedisModeCluster,
+		Addrs:   []string{r.Addr},
 		Timeout: resources.DefaultRedisTimeout,
+		Cluster: resources.RedisClusterConfig{MaxRedirects: resources.DefaultRedisClusterMaxRedirects},
 	}
 }
 
@@ -91,5 +95,19 @@ func waitForRedis(ctx context.Context, t testing.TB, redisContainer *RedisContai
 
 	waitFor(ctx, t, "Redis ping", func(ctx context.Context) error {
 		return client.Ping(ctx).Err()
+	})
+}
+
+func assignRedisClusterSlots(ctx context.Context, t testing.TB, redisContainer *RedisContainer) {
+	t.Helper()
+	waitFor(ctx, t, "Redis cluster slots", func(context.Context) error {
+		out, stderr, err := dockerOutput(ctx, "exec", redisContainer.ContainerID, "sh", "-c", "redis-cli cluster addslots $(seq 0 16383)")
+		if err != nil && strings.Contains(out+stderr, "Slot") && strings.Contains(out+stderr, "is already busy") {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("assign Redis cluster slots: %w: %s", err, strings.TrimSpace(stderr+out))
+		}
+		return nil
 	})
 }

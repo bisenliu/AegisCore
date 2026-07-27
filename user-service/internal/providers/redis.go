@@ -15,7 +15,7 @@ import (
 	"github.com/aegiscore/user-service/internal/resources"
 )
 
-type redisClientFactory func(fx.Lifecycle, *zap.Logger, string, commonresources.RedisConfig, ...datastore.RedisClientOption) (*redis.Client, error)
+type redisClientFactory func(fx.Lifecycle, *zap.Logger, string, commonresources.RedisConfig, ...datastore.RedisClientOption) (redis.UniversalClient, error)
 
 // CacheRedisParams 包含供应 user-service cache Redis 客户端所需的 Fx 输入。
 type CacheRedisParams struct {
@@ -28,11 +28,11 @@ type CacheRedisParams struct {
 }
 
 // NewCacheRedis 显式选择并供应 user-service cache Redis 客户端。
-func NewCacheRedis(params CacheRedisParams) (*redis.Client, error) {
+func NewCacheRedis(params CacheRedisParams) (redis.UniversalClient, error) {
 	return newCacheRedis(params, datastore.NewRedisClient)
 }
 
-func newCacheRedis(params CacheRedisParams, createRedisClient redisClientFactory) (*redis.Client, error) {
+func newCacheRedis(params CacheRedisParams, createRedisClient redisClientFactory) (redis.UniversalClient, error) {
 	if params.Trace == nil {
 		return nil, errors.New("redis tracing provider is required")
 	}

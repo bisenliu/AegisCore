@@ -37,8 +37,10 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.False(t, cfg.Ent.Plugins.Tracing.Enabled)
 	require.True(t, cfg.Ent.Plugins.Metrics.Enabled)
 	require.Len(t, cfg.Resources.Redis, 1)
-	require.Equal(t, "127.0.0.1:6379", cfg.Resources.Redis[serviceresources.NameCacheRedis].Addr)
+	require.Equal(t, commonresources.RedisModeCluster, cfg.Resources.Redis[serviceresources.NameCacheRedis].Mode)
+	require.Equal(t, []string{"127.0.0.1:6379"}, cfg.Resources.Redis[serviceresources.NameCacheRedis].Addrs)
 	require.Equal(t, 7*time.Second, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
+	require.Equal(t, 8, cfg.Resources.Redis[serviceresources.NameCacheRedis].Cluster.MaxRedirects)
 	require.Len(t, cfg.Resources.Postgres, 1)
 	require.Equal(t, 20, cfg.Resources.Postgres[serviceresources.NamePrimaryDB].Pool.MaxOpenConns)
 	runtime := cfg.RuntimeConfig()
@@ -60,7 +62,9 @@ func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
 	cfg := DefaultConfig()
 
 	require.Equal(t, commonconfig.DefaultConfig(), cfg.Config)
+	require.Equal(t, commonresources.RedisModeCluster, cfg.Resources.Redis[serviceresources.NameCacheRedis].Mode)
 	require.Equal(t, commonresources.DefaultRedisTimeout, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
+	require.Equal(t, commonresources.DefaultRedisClusterMaxRedirects, cfg.Resources.Redis[serviceresources.NameCacheRedis].Cluster.MaxRedirects)
 	postgres := cfg.Resources.Postgres[serviceresources.NamePrimaryDB]
 	require.Equal(t, commonresources.DefaultPostgresSSLMode, postgres.SSLMode)
 	require.Equal(t, commonresources.DefaultPostgresMaxOpenConns, postgres.Pool.MaxOpenConns)
@@ -215,7 +219,7 @@ func TestLoadParsesNestedResourceConfig(t *testing.T) {
 }
 
 func TestLoadPreservesAdditionalNamedResourceAndAppliesDefaults(t *testing.T) {
-	yaml := strings.Replace(serviceConfigYAML(), "  postgres:\n", "    queue_redis:\n      addr: 127.0.0.1:6380\n      db: 3\n  postgres:\n", 1)
+	yaml := strings.Replace(serviceConfigYAML(), "  postgres:\n", "    queue_redis:\n      mode: cluster\n      addrs:\n        - 127.0.0.1:6380\n  postgres:\n", 1)
 
 	cfg := loadServiceConfig(t, yaml)
 	require.Len(t, cfg.Resources.Redis, 2)
@@ -245,7 +249,9 @@ func TestLoadRepositoryConfigTargets(t *testing.T) {
 			require.Equal(t, 120*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
 			require.True(t, cfg.Server.HTTP.Enabled)
 			require.False(t, cfg.Server.GRPC.Enabled)
+			require.Equal(t, commonresources.RedisModeStandalone, cfg.Resources.Redis[serviceresources.NameCacheRedis].Mode)
 			require.Equal(t, tt.redisAddr, cfg.Resources.Redis[serviceresources.NameCacheRedis].Addr)
+			require.Empty(t, cfg.Resources.Redis[serviceresources.NameCacheRedis].Addrs)
 			postgres := cfg.Resources.Postgres[serviceresources.NamePrimaryDB]
 			require.Equal(t, tt.postgresHost, postgres.Host)
 			require.Equal(t, tt.postgresPort, postgres.Port)
@@ -257,7 +263,9 @@ func TestLoadRepositoryConfigTargets(t *testing.T) {
 
 	host := *configs["host"]
 	hostRedis := host.Resources.Redis[serviceresources.NameCacheRedis]
-	hostRedis.Addr = configs["docker"].Resources.Redis[serviceresources.NameCacheRedis].Addr
+	dockerRedis := configs["docker"].Resources.Redis[serviceresources.NameCacheRedis]
+	hostRedis.Addr = dockerRedis.Addr
+	hostRedis.Addrs = dockerRedis.Addrs
 	host.Resources.Redis[serviceresources.NameCacheRedis] = hostRedis
 	hostPostgres := host.Resources.Postgres[serviceresources.NamePrimaryDB]
 	dockerPostgres := configs["docker"].Resources.Postgres[serviceresources.NamePrimaryDB]
@@ -372,9 +380,9 @@ func TestValidateRejectsMissingRequiredResources(t *testing.T) {
 }
 
 func TestValidateReportsFullResourceFieldPath(t *testing.T) {
-	yaml := strings.Replace(serviceConfigYAML(), "    addr: 127.0.0.1:6379", "    addr: invalid", 1)
+	yaml := strings.Replace(serviceConfigYAML(), "        - 127.0.0.1:6379", "        - invalid", 1)
 	err := loadServiceConfigError(t, yaml)
-	require.Contains(t, err.Error(), "resources.redis.cache_redis.addr must be in host:port format")
+	require.Contains(t, err.Error(), "resources.redis.cache_redis.addrs[0] must be in host:port format")
 }
 
 func TestLoadRejectsLegacyTopLevelResourcePath(t *testing.T) {
@@ -465,9 +473,12 @@ observability:
 resources:
   redis:
     cache_redis:
-      addr: 127.0.0.1:6379
-      db: 2
+      mode: cluster
+      addrs:
+        - 127.0.0.1:6379
       timeout: 7s
+      cluster:
+        max_redirects: 8
   postgres:
     primary_db:
       host: 127.0.0.1

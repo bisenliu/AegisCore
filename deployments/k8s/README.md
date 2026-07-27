@@ -37,7 +37,11 @@ user-service 每个进程只通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` �
 - `auth.jwt.secret`
 - `resources.postgres.primary_db.username`
 - `resources.postgres.primary_db.password`
+- `resources.redis.cache_redis.mode`，枚举为 `cluster` 或 `standalone`
+- `resources.redis.cache_redis.addrs`，`cluster` 模式使用，可只包含一个阿里云 Redis 集群 seed endpoint
+- `resources.redis.cache_redis.addr`，`standalone` 模式使用；Redis DB 固定为 0 号库且不暴露配置项
 - 可选 `resources.redis.cache_redis.username/password`
+- 可选 `resources.redis.cache_redis.cluster.max_redirects`
 
 超级管理员 bootstrap 临时密码只通过 `ADMIN_BOOTSTRAP_PASSWORD` 环境变量提供，不写入 Nacos 配置。
 

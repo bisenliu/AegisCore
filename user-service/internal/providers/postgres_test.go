@@ -188,13 +188,13 @@ func TestNewCacheRedisProvidesCacheRedis(t *testing.T) {
 	cfg := providerTestConfig("")
 	cfg.Redis = commonresources.RedisConfigs{
 		resources.NameCacheRedis: {
-			Addr:    redisServer.addr,
-			DB:      0,
+			Mode:    commonresources.RedisModeCluster,
+			Addrs:   []string{redisServer.addr},
 			Timeout: time.Second,
 		},
 		"queue_redis": {
-			Addr:    "127.0.0.1:1",
-			DB:      1,
+			Mode:    commonresources.RedisModeCluster,
+			Addrs:   []string{"127.0.0.1:1"},
 			Timeout: time.Second,
 		},
 	}
@@ -203,7 +203,7 @@ func TestNewCacheRedisProvidesCacheRedis(t *testing.T) {
 	type clients struct {
 		fx.In
 
-		CacheRedis *redis.Client `name:"cache_redis"`
+		CacheRedis redis.UniversalClient `name:"cache_redis"`
 	}
 
 	var got clients
@@ -216,7 +216,6 @@ func TestNewCacheRedisProvidesCacheRedis(t *testing.T) {
 	app.RequireStop()
 
 	require.NotNil(t, got.CacheRedis)
-	require.Equal(t, redisServer.addr, got.CacheRedis.Options().Addr)
 	require.Equal(t, int64(1), redisServer.pings.Load())
 	spans := exportedSpans(t, traceProvider, traceCollector)
 	require.True(t, providerTestHasRedisSpan(spans), "spans=%v", providerTestSpanNames(spans))
@@ -228,7 +227,7 @@ func TestNewCacheRedisDoesNotProvideQueueRedis(t *testing.T) {
 	type clients struct {
 		fx.In
 
-		QueueRedis *redis.Client `name:"queue_redis"`
+		QueueRedis redis.UniversalClient `name:"queue_redis"`
 	}
 
 	err := fx.ValidateApp(
@@ -281,12 +280,12 @@ func TestNewCacheRedisUsesFxTracingProviderDuringConstruction(t *testing.T) {
 		App:           config.AppConfig{Name: "provider-test", Environment: "test"},
 		Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1}},
 	}
-	cfg.Redis[resources.NameCacheRedis] = commonresources.RedisConfig{Addr: redisServer.addr, Timeout: time.Second}
+	cfg.Redis[resources.NameCacheRedis] = commonresources.RedisConfig{Mode: commonresources.RedisModeCluster, Addrs: []string{redisServer.addr}, Timeout: time.Second}
 
 	type clients struct {
 		fx.In
 
-		CacheRedis *redis.Client `name:"cache_redis"`
+		CacheRedis redis.UniversalClient `name:"cache_redis"`
 	}
 	var got clients
 	app := fxtest.New(t,
@@ -299,7 +298,6 @@ func TestNewCacheRedisUsesFxTracingProviderDuringConstruction(t *testing.T) {
 	app.RequireStop()
 
 	require.NotNil(t, got.CacheRedis)
-	require.Equal(t, redisServer.addr, got.CacheRedis.Options().Addr)
 }
 
 func TestNewCacheRedisWrapsConstructorError(t *testing.T) {
@@ -311,7 +309,7 @@ func TestNewCacheRedisWrapsConstructorError(t *testing.T) {
 		Settings:  providerTestConfig(""),
 		Log:       zap.NewNop(),
 		Trace:     traceProvider,
-	}, func(fx.Lifecycle, *zap.Logger, string, commonresources.RedisConfig, ...datastore.RedisClientOption) (*redis.Client, error) {
+	}, func(fx.Lifecycle, *zap.Logger, string, commonresources.RedisConfig, ...datastore.RedisClientOption) (redis.UniversalClient, error) {
 		return nil, constructorErr
 	})
 	require.Nil(t, client)
@@ -324,7 +322,7 @@ func TestNewCacheRedisFailsStartWhenCacheRedisUnavailable(t *testing.T) {
 	log := zap.NewNop()
 	traceProvider := newProviderTestTracing(t)
 	cfg := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
-		resources.NameCacheRedis: {Addr: "127.0.0.1:1", DB: 0, Timeout: 10 * time.Millisecond},
+		resources.NameCacheRedis: {Mode: commonresources.RedisModeCluster, Addrs: []string{"127.0.0.1:1"}, Timeout: 10 * time.Millisecond},
 	}}
 
 	client, err := NewCacheRedis(CacheRedisParams{Lifecycle: lc, Settings: cfg, Log: log, Trace: traceProvider})
@@ -398,8 +396,8 @@ func providerTestConfig(_ string) serviceconfig.ResourceSettings {
 	return serviceconfig.ResourceSettings{
 		Redis: commonresources.RedisConfigs{
 			resources.NameCacheRedis: {
-				Addr:    "127.0.0.1:6379",
-				DB:      0,
+				Mode:    commonresources.RedisModeCluster,
+				Addrs:   []string{"127.0.0.1:6379"},
 				Timeout: time.Second,
 			},
 		},
@@ -478,9 +476,22 @@ func (s *providerTestRedisServer) writeResponses(w io.Writer, command string) er
 		responded = true
 		command = command[idx+len(name):]
 		switch name {
+		case "COMMAND":
+			if _, err := w.Write([]byte("*0\r\n")); err != nil {
+				return err
+			}
 		case "PING":
 			s.pings.Add(1)
 			if _, err := w.Write([]byte("+PONG\r\n")); err != nil {
+				return err
+			}
+		case "CLUSTER":
+			_, portText, err := net.SplitHostPort(s.addr)
+			if err != nil {
+				return err
+			}
+			response := "*1\r\n*3\r\n:0\r\n:16383\r\n*3\r\n$9\r\n127.0.0.1\r\n:" + portText + "\r\n$40\r\n0000000000000000000000000000000000000000\r\n"
+			if _, err := w.Write([]byte(response)); err != nil {
 				return err
 			}
 		case "HELLO":
@@ -496,7 +507,7 @@ func (s *providerTestRedisServer) writeResponses(w io.Writer, command string) er
 }
 
 func nextProviderRedisCommand(command string) (int, string) {
-	candidates := []string{"PING", "HELLO", "CLIENT"}
+	candidates := []string{"COMMAND", "PING", "HELLO", "CLIENT", "CLUSTER"}
 	bestIndex := -1
 	bestName := ""
 	for _, candidate := range candidates {

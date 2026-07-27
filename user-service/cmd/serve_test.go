@@ -219,7 +219,9 @@ observability:
 resources:
   redis:
     cache_redis:
-      addr: 127.0.0.1:6379
+      mode: cluster
+      addrs:
+        - 127.0.0.1:6379
   postgres:
     primary_db:
       host: 127.0.0.1

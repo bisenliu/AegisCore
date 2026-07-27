@@ -42,7 +42,7 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 			provider,
 			settings,
 			zap.NewNop(),
-			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
+			fx.Annotate(redisClient, fx.As(new(rediscmd.UniversalClient)), fx.ResultTags(`name:"cache_redis"`)),
 		),
 		fx.Replace(
 			fx.Annotate(loader, fx.As(new(permissioncasbin.Loader))),
@@ -95,7 +95,7 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 			provider,
 			settings,
 			zap.NewNop(),
-			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
+			fx.Annotate(redisClient, fx.As(new(rediscmd.UniversalClient)), fx.ResultTags(`name:"cache_redis"`)),
 		),
 		fx.Replace(
 			fx.Annotate(loader, fx.As(new(permissioncasbin.Loader))),
@@ -137,7 +137,7 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 			provider,
 			settings,
 			zap.NewNop(),
-			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
+			fx.Annotate(redisClient, fx.As(new(rediscmd.UniversalClient)), fx.ResultTags(`name:"cache_redis"`)),
 		),
 		fx.Replace(
 			fx.Annotate(loader, fx.As(new(permissioncasbin.Loader))),
@@ -244,7 +244,7 @@ func TestPermissionModuleRequiresMetricsProvider(t *testing.T) {
 		fx.Supply(
 			serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test"},
 			zap.NewNop(),
-			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
+			fx.Annotate(redisClient, fx.As(new(rediscmd.UniversalClient)), fx.ResultTags(`name:"cache_redis"`)),
 		),
 		fx.Replace(
 			fx.Annotate(permissionModulePolicyLoader{}, fx.As(new(permissioncasbin.Loader))),

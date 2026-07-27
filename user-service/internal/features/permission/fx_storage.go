@@ -31,7 +31,7 @@ type PrimaryDBParams struct {
 type CacheRedisParams struct {
 	fx.In
 
-	Client *rediscmd.Client `name:"cache_redis"`
+	Client rediscmd.UniversalClient `name:"cache_redis"`
 }
 
 // Provider：存储适配器

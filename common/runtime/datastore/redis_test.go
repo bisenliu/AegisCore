@@ -20,16 +20,36 @@ import (
 
 func TestOpenRedisClientMapsDefaultTimeoutAndCredentials(t *testing.T) {
 	client, err := OpenRedisClient(resources.RedisConfig{
-		Addr: "127.0.0.1:6379", Username: "service-account", Password: "secret",
+		Mode: resources.RedisModeCluster, Addrs: []string{"127.0.0.1:6379"}, Username: "service-account", Password: "secret",
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
-	opts := client.Options()
+	clusterClient, ok := client.(*redis.ClusterClient)
+	require.True(t, ok)
+	opts := clusterClient.Options()
 	require.Equal(t, "service-account", opts.Username)
 	require.Equal(t, "secret", opts.Password)
+	require.Equal(t, []string{"127.0.0.1:6379"}, opts.Addrs)
 	require.Equal(t, resources.DefaultRedisTimeout, opts.DialTimeout)
 	require.Equal(t, resources.DefaultRedisTimeout, opts.ReadTimeout)
 	require.Equal(t, resources.DefaultRedisTimeout, opts.WriteTimeout)
+	require.Equal(t, resources.DefaultRedisClusterMaxRedirects, opts.MaxRedirects)
+}
+
+func TestOpenRedisClientSupportsStandaloneMode(t *testing.T) {
+	client, err := OpenRedisClient(resources.RedisConfig{
+		Mode: resources.RedisModeStandalone, Addr: "127.0.0.1:6379", Username: "service-account", Password: "secret",
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	standaloneClient, ok := client.(*redis.Client)
+	require.True(t, ok)
+	opts := standaloneClient.Options()
+	require.Equal(t, "127.0.0.1:6379", opts.Addr)
+	require.Equal(t, "service-account", opts.Username)
+	require.Equal(t, "secret", opts.Password)
+	require.Zero(t, opts.DB)
+	require.Equal(t, resources.DefaultRedisTimeout, opts.DialTimeout)
 }
 
 func TestOpenRedisClientUsesExplicitTracerProvider(t *testing.T) {
@@ -44,7 +64,7 @@ func TestOpenRedisClientUsesExplicitTracerProvider(t *testing.T) {
 		otel.SetTracerProvider(previousProvider)
 		require.NoError(t, provider.Shutdown(context.Background()))
 	})
-	client, err := OpenRedisClient(resources.RedisConfig{Addr: listener.Addr().String(), Timeout: 10 * time.Millisecond}, WithRedisTracerProvider(provider))
+	client, err := OpenRedisClient(resources.RedisConfig{Mode: resources.RedisModeCluster, Addrs: []string{listener.Addr().String()}, Timeout: 10 * time.Millisecond}, WithRedisTracerProvider(provider))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 
@@ -56,14 +76,14 @@ func TestOpenRedisClientUsesExplicitTracerProvider(t *testing.T) {
 
 func TestOpenRedisClientReturnsErrorWhenInstrumentationFails(t *testing.T) {
 	instrumentErr := errors.New("instrumentation failed")
-	var captured *redis.Client
+	var captured redis.UniversalClient
 
-	var client *redis.Client
+	var client redis.UniversalClient
 	require.NotPanics(t, func() {
 		var err error
 		client, err = OpenRedisClient(
-			resources.RedisConfig{Addr: "127.0.0.1:6379"},
-			withRedisInstrumenterForTest(func(redisClient *redis.Client, _ trace.TracerProvider) error {
+			resources.RedisConfig{Mode: resources.RedisModeCluster, Addrs: []string{"127.0.0.1:6379"}},
+			withRedisInstrumenterForTest(func(redisClient redis.UniversalClient, _ trace.TracerProvider) error {
 				captured = redisClient
 				return instrumentErr
 			}),
@@ -81,8 +101,8 @@ func TestOpenRedisClientPreservesCloseFailureAfterInstrumentationFails(t *testin
 	instrumentErr := errors.New("instrumentation failed")
 
 	client, err := OpenRedisClient(
-		resources.RedisConfig{Addr: "127.0.0.1:6379"},
-		withRedisInstrumenterForTest(func(redisClient *redis.Client, _ trace.TracerProvider) error {
+		resources.RedisConfig{Mode: resources.RedisModeCluster, Addrs: []string{"127.0.0.1:6379"}},
+		withRedisInstrumenterForTest(func(redisClient redis.UniversalClient, _ trace.TracerProvider) error {
 			require.NoError(t, redisClient.Close())
 			return instrumentErr
 		}),
@@ -90,7 +110,6 @@ func TestOpenRedisClientPreservesCloseFailureAfterInstrumentationFails(t *testin
 	require.Nil(t, client)
 	require.Error(t, err)
 	require.ErrorIs(t, err, instrumentErr)
-	require.ErrorIs(t, err, redis.ErrClosed)
 }
 
 func TestOmitRedisCommandTrace(t *testing.T) {

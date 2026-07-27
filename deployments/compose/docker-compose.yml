@@ -22,7 +22,7 @@
 #   docker compose -f deployments/compose/docker-compose.yml run --rm \
 #     -e ADMIN_BOOTSTRAP_PASSWORD \
 #     user-service rbac bootstrap-super-admin \
-#     --username initial-admin --nickname "Initial Administrator"
+#     --username admin --nickname "Administrator"
 #   unset ADMIN_BOOTSTRAP_PASSWORD
 #   docker compose -f deployments/compose/docker-compose.yml restart user-service
 # 删除容器和网络但保留数据卷：
@@ -65,7 +65,7 @@ services:
       POSTGRES_HOST_AUTH_METHOD: trust
     command: ["postgres", "-c", "timezone=Asia/Shanghai", "-c", "log_timezone=Asia/Shanghai"]
     ports:
-      - "15432:5432"
+      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -81,9 +81,12 @@ services:
   redis:
     image: redis:latest
     environment: *timezone-env
-    command: ["redis-server", "--appendonly", "yes"]
+    # 默认使用非集群 Redis。需要本地 Cluster 模式时，注释下一行并启用下面的 redis cluster services。
+    command: ["redis-server", "--appendonly", "yes", "--protected-mode", "no"]
+    # Cluster 节点 1 启动方式：
+    # command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--appendonly", "yes", "--protected-mode", "no"]
     ports:
-      - "16379:6379"
+      - "6379:6379"
     volumes:
       - redis-data:/data
     networks:
@@ -95,6 +98,60 @@ services:
       retries: 12
       start_period: 5s
     restart: unless-stopped
+
+  # 本地 Cluster 模式节点 2：启用 Cluster 模式时取消注释本服务。
+  # redis-cluster-2:
+  #   image: redis:latest
+  #   environment: *timezone-env
+  #   command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--appendonly", "yes", "--protected-mode", "no"]
+  #   ports:
+  #     - "6380:6379"
+  #   volumes:
+  #     - redis-cluster-2-data:/data
+  #   networks:
+  #     - aegiscore-runtime
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 12
+  #     start_period: 5s
+  #   restart: unless-stopped
+
+  # 本地 Cluster 模式节点 3：启用 Cluster 模式时取消注释本服务。
+  # redis-cluster-3:
+  #   image: redis:latest
+  #   environment: *timezone-env
+  #   command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--appendonly", "yes", "--protected-mode", "no"]
+  #   ports:
+  #     - "6381:6379"
+  #   volumes:
+  #     - redis-cluster-3-data:/data
+  #   networks:
+  #     - aegiscore-runtime
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 12
+  #     start_period: 5s
+  #   restart: unless-stopped
+
+  # 本地 Cluster 模式初始化：启用三个 cluster 节点后，取消注释本服务，并恢复 user-service/rbac-seed 的 depends_on。
+  # redis-cluster-init:
+  #   image: redis:latest
+  #   environment: *timezone-env
+  #   command: ["sh", "-c", "redis-cli --cluster create redis:6379 redis-cluster-2:6379 redis-cluster-3:6379 --cluster-replicas 0 --cluster-yes || redis-cli -h redis cluster info | grep -q cluster_state:ok"]
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #     redis-cluster-2:
+  #       condition: service_healthy
+  #     redis-cluster-3:
+  #       condition: service_healthy
+  #   networks:
+  #     - aegiscore-runtime
+  #   restart: "no"
 
   nacos:
     build: *nacos-build
@@ -202,6 +259,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # Cluster 模式下恢复以下依赖，确保 slot 初始化后再启动。
+      # redis-cluster-init:
+      #   condition: service_completed_successfully
       jaeger:
         condition: service_started
     networks:
@@ -224,6 +284,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # Cluster 模式下恢复以下依赖，确保 slot 初始化后再启动。
+      # redis-cluster-init:
+      #   condition: service_completed_successfully
       jaeger:
         condition: service_started
     networks:
@@ -300,6 +363,9 @@ volumes:
   postgres-data:
   nacos-data:
   redis-data:
+  # Cluster 模式时取消注释以下数据卷。
+  # redis-cluster-2-data:
+  # redis-cluster-3-data:
   prometheus-data:
   grafana-data:
 

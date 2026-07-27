@@ -3,8 +3,15 @@ package resources
 import "time"
 
 const (
+	// RedisModeStandalone 表示 Redis 单机或托管代理拓扑。
+	RedisModeStandalone = "standalone"
+	// RedisModeCluster 表示 Redis Cluster 拓扑。
+	RedisModeCluster = "cluster"
+
 	// DefaultRedisTimeout 是 Redis 建连、读写和启动探测共用的默认超时。
 	DefaultRedisTimeout = 5 * time.Second
+	// DefaultRedisClusterMaxRedirects 是 Redis Cluster MOVED/ASK 跳转默认上限。
+	DefaultRedisClusterMaxRedirects = 8
 
 	// DefaultPostgresSSLMode 是未显式配置时使用的 PostgreSQL TLS 模式。
 	DefaultPostgresSSLMode = "disable"
@@ -42,6 +49,9 @@ func (c *RedisConfig) ApplyDefaults() {
 	}
 	if c.Timeout == 0 {
 		c.Timeout = DefaultRedisTimeout
+	}
+	if c.Mode == RedisModeCluster && c.Cluster.MaxRedirects == 0 {
+		c.Cluster.MaxRedirects = DefaultRedisClusterMaxRedirects
 	}
 }
 

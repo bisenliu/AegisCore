@@ -22,10 +22,10 @@ func NewKeyCatalog(appName string) (KeyCatalog, error) {
 
 // PolicyVersionKey 返回 RBAC policy 版本 Redis key。
 func (c KeyCatalog) PolicyVersionKey() string {
-	return c.builder.MustKey("policy", "version")
+	return c.builder.MustKey("policy", rediskey.HashTag("sync"), "version")
 }
 
 // PolicyChannel 返回 RBAC policy 刷新 Pub/Sub channel。
 func (c KeyCatalog) PolicyChannel() string {
-	return c.builder.MustKey("policy", "refresh")
+	return c.builder.MustKey("policy", rediskey.HashTag("sync"), "refresh")
 }

@@ -23,13 +23,40 @@ func (c RedisConfigs) Validate(basePath string) error {
 		if strings.TrimSpace(name) == "" {
 			errs = append(errs, fieldError(basePath, "must not contain an empty named resource"))
 		}
-		if strings.TrimSpace(cfg.Addr) == "" {
-			errs = append(errs, fieldError(resourcePath+".addr", "is required"))
-		} else {
-			errs = append(errs, validateHostPort(resourcePath+".addr", cfg.Addr)...)
-		}
-		if cfg.DB < 0 {
-			errs = append(errs, fieldError(resourcePath+".db", "must be >= 0"))
+		mode := strings.TrimSpace(cfg.Mode)
+		switch mode {
+		case RedisModeStandalone:
+			if strings.TrimSpace(cfg.Addr) == "" {
+				errs = append(errs, fieldError(resourcePath+".addr", "is required when mode is standalone"))
+			} else {
+				errs = append(errs, validateHostPort(resourcePath+".addr", cfg.Addr)...)
+			}
+			if len(cfg.Addrs) > 0 {
+				errs = append(errs, fieldError(resourcePath+".addrs", "must be empty when mode is standalone"))
+			}
+			if cfg.Cluster.MaxRedirects != 0 {
+				errs = append(errs, fieldError(resourcePath+".cluster.max_redirects", "must be 0 when mode is standalone"))
+			}
+		case RedisModeCluster:
+			if strings.TrimSpace(cfg.Addr) != "" {
+				errs = append(errs, fieldError(resourcePath+".addr", "must be empty when mode is cluster"))
+			}
+			if len(cfg.Addrs) == 0 {
+				errs = append(errs, fieldError(resourcePath+".addrs", "must contain at least one address"))
+			}
+			for idx, addr := range cfg.Addrs {
+				addrPath := fmt.Sprintf("%s.addrs[%d]", resourcePath, idx)
+				if strings.TrimSpace(addr) == "" {
+					errs = append(errs, fieldError(addrPath, "is required"))
+					continue
+				}
+				errs = append(errs, validateHostPort(addrPath, addr)...)
+			}
+			if cfg.Cluster.MaxRedirects < 0 {
+				errs = append(errs, fieldError(resourcePath+".cluster.max_redirects", "must be >= 0"))
+			}
+		default:
+			errs = append(errs, fieldError(resourcePath+".mode", "must be standalone or cluster"))
 		}
 		errs = append(errs, validatePositiveDuration(resourcePath+".timeout", cfg.Timeout)...)
 	}

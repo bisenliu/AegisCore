@@ -35,7 +35,7 @@ Business APIs are mounted under `/api/v1` and include auth, users, roles, permis
 
 ## Runtime Config
 
-共享核心配置只包含 `app/runtime/server/log/observability`。user-service 在 `resources.redis.cache_redis` 和 `resources.postgres.primary_db` 声明外部资源，在 `auth.token_version_cache` 和 `rbac.user_role_cache` 声明服务私有配置。运行时通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` 定位 Nacos，默认加载 `base.yaml`、`resources.yaml`、`user-service.yaml`；仓库的 `local-host/` 与 `local-docker/` 分别保存对应 Namespace 的完整三文档。文档合成后 strict decode，未知 YAML 字段会在启动前失败。
+共享核心配置只包含 `app/runtime/server/log/observability`。user-service 在 `resources.redis.cache_redis` 和 `resources.postgres.primary_db` 声明外部资源，在 `auth.token_version_cache` 和 `rbac.user_role_cache` 声明服务私有配置。Redis 使用 `mode` 选择 `cluster` 或 `standalone`：集群使用 `addrs` 和可选 `cluster.max_redirects`，`addrs` 是 seed endpoints，允许单个阿里云 Redis 集群访问地址；非集群使用 `addr`，两种 mode 均固定使用 Redis 0 号库且不暴露 `db` 配置。运行时通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` 定位 Nacos，默认加载 `base.yaml`、`resources.yaml`、`user-service.yaml`；仓库的 `local-host/` 与 `local-docker/` 分别保存对应 Namespace 的完整三文档。文档合成后 strict decode，未知 YAML 字段会在启动前失败。
 
 日志只写 stdout/stderr，tracing 启用后固定使用 OTLP，进程时区使用 `runtime.timezone`。Gin 不信任代理，代理信任由 Ingress、gateway 或 service mesh 入口策略负责。pprof 默认关闭；临时诊断需修改 Nacos 配置并使用受控端口转发。
 

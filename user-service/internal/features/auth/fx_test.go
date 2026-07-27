@@ -189,7 +189,7 @@ func TestAuthModuleStopsAuthResourcesBeforeRedis(t *testing.T) {
 	var purgePool authredis.PurgeTaskPool
 	stopOrder := make([]string, 0, 3)
 	options := append(newAuthModuleBaseOptionsWithoutRedis(t, true, newAuthModuleMetricsProvider(t, false)),
-		fx.Provide(fx.Annotate(func(lifecycle fx.Lifecycle) *rediscache.Client {
+		fx.Provide(fx.Annotate(func(lifecycle fx.Lifecycle) rediscache.UniversalClient {
 			lifecycle.Append(fx.StopHook(func() error {
 				require.NotNil(t, purgePool)
 				require.True(t, purgePool.Stats().Closed,
@@ -224,7 +224,7 @@ func TestAuthModuleStopsAuthResourcesWhenLaterStartHookFails(t *testing.T) {
 	startErr := errors.New("later start failed")
 	var purgePool authredis.PurgeTaskPool
 	options := append(newAuthModuleBaseOptionsWithoutRedis(t, true, newAuthModuleMetricsProvider(t, false)),
-		fx.Supply(fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`))),
+		fx.Supply(fx.Annotate(redisClient, fx.As(new(rediscache.UniversalClient)), fx.ResultTags(`name:"cache_redis"`))),
 		fx.Invoke(func(params struct {
 			fx.In
 
@@ -324,7 +324,7 @@ func newAuthModuleBaseOptions(t *testing.T, refreshRotation bool, provider *comm
 	redisClient := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = redisClient.Close() })
 	options := newAuthModuleBaseOptionsWithoutRedis(t, refreshRotation, provider)
-	return append(options, fx.Supply(fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`))))
+	return append(options, fx.Supply(fx.Annotate(redisClient, fx.As(new(rediscache.UniversalClient)), fx.ResultTags(`name:"cache_redis"`))))
 }
 
 func newAuthModuleBaseOptionsWithoutRedis(t *testing.T, refreshRotation bool, provider *commonmetrics.Provider) []fx.Option {

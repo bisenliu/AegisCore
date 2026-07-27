@@ -13,8 +13,8 @@ import (
 	"github.com/aegiscore/common/runtime/resources"
 )
 
-// NewRedisClient 创建一个 Redis 客户端，并注册单资源 Fx lifecycle hook。
-func NewRedisClient(lc fx.Lifecycle, log *zap.Logger, name string, redisCfg resources.RedisConfig, options ...RedisClientOption) (*redis.Client, error) {
+// NewRedisClient 创建一个 Redis Cluster 客户端，并注册单资源 Fx lifecycle hook。
+func NewRedisClient(lc fx.Lifecycle, log *zap.Logger, name string, redisCfg resources.RedisConfig, options ...RedisClientOption) (redis.UniversalClient, error) {
 	redisCfg.ApplyDefaults()
 	client, err := openRedisClient(redisCfg, options...)
 	if err != nil {
@@ -32,7 +32,7 @@ func NewRedisClient(lc fx.Lifecycle, log *zap.Logger, name string, redisCfg reso
 					closeRedisClient(name, client),
 				)
 			}
-			logger.WithContext(ctx, redisLog).Info("redis connected", zap.String(logger.ResourceField, name), zap.String("addr", redisCfg.Addr))
+			logger.WithContext(ctx, redisLog).Info("redis connected", zap.String(logger.ResourceField, name), zap.String("mode", redisCfg.Mode), zap.Int("seed_count", len(redisCfg.Addrs)))
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
@@ -47,7 +47,7 @@ func NewRedisClient(lc fx.Lifecycle, log *zap.Logger, name string, redisCfg reso
 	return client, nil
 }
 
-func closeRedisClient(name string, client *redis.Client) error {
+func closeRedisClient(name string, client redis.UniversalClient) error {
 	if err := client.Close(); err != nil {
 		return fmt.Errorf("close redis %s: %w", name, err)
 	}

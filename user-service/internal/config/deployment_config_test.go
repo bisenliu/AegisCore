@@ -43,7 +43,9 @@ type deploymentComposeDocument struct {
 type deploymentResourcesDocument struct {
 	Resources struct {
 		Redis map[string]struct {
-			Addr string `yaml:"addr"`
+			Mode  string   `yaml:"mode"`
+			Addr  string   `yaml:"addr"`
+			Addrs []string `yaml:"addrs"`
 		} `yaml:"redis"`
 		Postgres map[string]struct {
 			Host     string `yaml:"host"`
@@ -164,11 +166,15 @@ func TestRepositoryDeploymentConfigConsistency(t *testing.T) {
 	dockerResources := readDeploymentYAML[deploymentResourcesDocument](t, resourcesPath)
 	hostBase := readDeploymentYAML[deploymentBaseDocument](t, filepath.Join(nacosDir, "local-host", "base.yaml"))
 	dockerBase := readDeploymentYAML[deploymentBaseDocument](t, filepath.Join(nacosDir, "local-docker", "base.yaml"))
+	require.Equal(t, "standalone", hostResources.Resources.Redis["cache_redis"].Mode)
 	require.Equal(t, "127.0.0.1:"+deploymentPublishedPort(t, redis.Ports, "6379"), hostResources.Resources.Redis["cache_redis"].Addr)
+	require.Empty(t, hostResources.Resources.Redis["cache_redis"].Addrs)
 	require.Equal(t, "127.0.0.1", hostResources.Resources.Postgres["primary_db"].Host)
 	require.Equal(t, deploymentPublishedPortInt(t, postgres.Ports, "5432"), hostResources.Resources.Postgres["primary_db"].Port)
 	require.Equal(t, "127.0.0.1:4317", hostBase.Observability.Tracing.OTLPEndpoint)
+	require.Equal(t, "standalone", dockerResources.Resources.Redis["cache_redis"].Mode)
 	require.Equal(t, "redis:6379", dockerResources.Resources.Redis["cache_redis"].Addr)
+	require.Empty(t, dockerResources.Resources.Redis["cache_redis"].Addrs)
 	require.Equal(t, "postgres", dockerResources.Resources.Postgres["primary_db"].Host)
 	require.Equal(t, 5432, dockerResources.Resources.Postgres["primary_db"].Port)
 	require.Equal(t, "jaeger:4317", dockerBase.Observability.Tracing.OTLPEndpoint)

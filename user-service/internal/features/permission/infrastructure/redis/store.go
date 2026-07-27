@@ -14,7 +14,7 @@ import (
 
 // Store 负责 RBAC policy Redis 版本和 Pub/Sub 通知。
 type Store struct {
-	client     *rediscmd.Client
+	client     rediscmd.UniversalClient
 	instanceID string
 	keys       KeyCatalog
 	log        *zap.Logger
@@ -32,7 +32,7 @@ type policySubscriptionStore interface {
 }
 
 // NewStore 构造 RBAC policy Redis store。
-func NewStore(client *rediscmd.Client, appName string, log *zap.Logger) (*Store, error) {
+func NewStore(client rediscmd.UniversalClient, appName string, log *zap.Logger) (*Store, error) {
 	keys, err := NewKeyCatalog(appName)
 	if err != nil {
 		return nil, fmt.Errorf("new rbac policy redis keys: %w", err)
@@ -40,7 +40,7 @@ func NewStore(client *rediscmd.Client, appName string, log *zap.Logger) (*Store,
 	return newStore(client, keys, defaultInstanceID(), log), nil
 }
 
-func newStore(client *rediscmd.Client, keys KeyCatalog, instanceID string, log *zap.Logger) *Store {
+func newStore(client rediscmd.UniversalClient, keys KeyCatalog, instanceID string, log *zap.Logger) *Store {
 	if instanceID == "" {
 		instanceID = defaultInstanceID()
 	}

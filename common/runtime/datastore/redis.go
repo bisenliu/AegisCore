@@ -16,14 +16,14 @@ import (
 // RedisClientOption 配置 Redis 客户端的共享运行时能力。
 type RedisClientOption func(*redisClientOptions)
 
-type redisInstrumenter func(*redis.Client, trace.TracerProvider) error
+type redisInstrumenter func(redis.UniversalClient, trace.TracerProvider) error
 
 type redisClientOptions struct {
 	tracerProvider trace.TracerProvider
 	instrument     redisInstrumenter
 }
 
-func defaultRedisInstrumenter(client *redis.Client, provider trace.TracerProvider) error {
+func defaultRedisInstrumenter(client redis.UniversalClient, provider trace.TracerProvider) error {
 	return redisotel.InstrumentTracing(client,
 		redisotel.WithTracerProvider(provider),
 		redisotel.WithCommandFilter(omitRedisCommandTrace),
@@ -52,27 +52,19 @@ func WithRedisTracerProvider(provider trace.TracerProvider) RedisClientOption {
 }
 
 // OpenRedisClient 根据配置构造 Redis 客户端，但不检查连接可用性。
-func OpenRedisClient(redisCfg resources.RedisConfig, options ...RedisClientOption) (*redis.Client, error) {
+func OpenRedisClient(redisCfg resources.RedisConfig, options ...RedisClientOption) (redis.UniversalClient, error) {
 	redisCfg.ApplyDefaults()
 	return openRedisClient(redisCfg, options...)
 }
 
-func openRedisClient(redisCfg resources.RedisConfig, options ...RedisClientOption) (*redis.Client, error) {
+func openRedisClient(redisCfg resources.RedisConfig, options ...RedisClientOption) (redis.UniversalClient, error) {
 	opts := newRedisClientOptions()
 	for _, option := range options {
 		if option != nil {
 			option(&opts)
 		}
 	}
-	client := redis.NewClient(&redis.Options{
-		Addr:         redisCfg.Addr,
-		Username:     redisCfg.Username,
-		Password:     redisCfg.Password,
-		DB:           redisCfg.DB,
-		DialTimeout:  redisCfg.Timeout,
-		ReadTimeout:  redisCfg.Timeout,
-		WriteTimeout: redisCfg.Timeout,
-	})
+	client := newRedisClient(redisCfg)
 	if err := opts.instrument(client, opts.tracerProvider); err != nil {
 		return nil, errors.Join(
 			fmt.Errorf("instrument redis tracing: %w", err),
@@ -80,4 +72,28 @@ func openRedisClient(redisCfg resources.RedisConfig, options ...RedisClientOptio
 		)
 	}
 	return client, nil
+}
+
+func newRedisClient(redisCfg resources.RedisConfig) redis.UniversalClient {
+	if redisCfg.Mode == resources.RedisModeCluster {
+		return redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs:        append([]string(nil), redisCfg.Addrs...),
+			Username:     redisCfg.Username,
+			Password:     redisCfg.Password,
+			DialTimeout:  redisCfg.Timeout,
+			ReadTimeout:  redisCfg.Timeout,
+			WriteTimeout: redisCfg.Timeout,
+			MaxRedirects: redisCfg.Cluster.MaxRedirects,
+		})
+	}
+	return redis.NewClient(&redis.Options{
+		Addr:         redisCfg.Addr,
+		Username:     redisCfg.Username,
+		Password:     redisCfg.Password,
+		// Redis Cluster 只支持 0 号库；standalone 也固定使用 0 号库，避免两种 mode 出现数据隔离语义分叉。
+		DB:           0,
+		DialTimeout:  redisCfg.Timeout,
+		ReadTimeout:  redisCfg.Timeout,
+		WriteTimeout: redisCfg.Timeout,
+	})
 }

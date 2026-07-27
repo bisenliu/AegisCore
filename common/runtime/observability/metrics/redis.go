@@ -28,6 +28,10 @@ type RedisPinger interface {
 	Ping(ctx context.Context) error
 }
 
+type redisStatusPinger interface {
+	Ping(ctx context.Context) *redis.StatusCmd
+}
+
 // RedisPingCollectorOptions 配置 Redis ping 指标 collector。
 type RedisPingCollectorOptions struct {
 	Resource    string
@@ -58,11 +62,11 @@ type redisPingSnapshot struct {
 }
 
 type redisClientPinger struct {
-	client *redis.Client
+	client redisStatusPinger
 }
 
 // NewRedisClientPinger 将 go-redis client 适配为 RedisPinger。
-func NewRedisClientPinger(client *redis.Client) RedisPinger {
+func NewRedisClientPinger(client redisStatusPinger) RedisPinger {
 	if client == nil {
 		return nil
 	}

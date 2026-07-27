@@ -10,52 +10,49 @@ import (
 
 func TestRedisConfigsApplyDefaultsAndValidateMultipleResources(t *testing.T) {
 	configs := RedisConfigs{
-		"cache_redis": {
-			Addr: "127.0.0.1:6379",
-			DB:   0,
-		},
+		"cache_redis": {Mode: RedisModeStandalone, Addr: "127.0.0.1:6379"},
 		"queue_redis": {
-			Addr:     "redis.internal:6380",
+			Mode:     RedisModeCluster,
+			Addrs:    []string{"redis.internal:6380"},
 			Username: "",
 			Password: "",
-			DB:       1,
 			Timeout:  9 * time.Second,
+			Cluster:  RedisClusterConfig{MaxRedirects: 12},
 		},
 	}
 
 	configs.ApplyDefaults()
 
 	require.Equal(t, DefaultRedisTimeout, configs["cache_redis"].Timeout)
+	require.Equal(t, RedisModeStandalone, configs["cache_redis"].Mode)
+	require.Zero(t, configs["cache_redis"].Cluster.MaxRedirects)
 	require.Equal(t, 9*time.Second, configs["queue_redis"].Timeout)
+	require.Equal(t, 12, configs["queue_redis"].Cluster.MaxRedirects)
 	require.NoError(t, configs.Validate("resources.redis"))
 }
 
 func TestRedisConfigsValidateRejectsInvalidResources(t *testing.T) {
 	configs := RedisConfigs{
-		"": {
-			Addr:    "missing-port",
-			DB:      -1,
-			Timeout: -time.Second,
-		},
-		"cache_redis": {
-			Addr:    ":6379",
-			Timeout: time.Second,
-		},
-		"queue_redis": {
-			Addr:    "redis.internal:70000",
-			Timeout: 0,
-		},
+		"":            {Mode: "unknown", Addrs: []string{"missing-port"}, Timeout: -time.Second, Cluster: RedisClusterConfig{MaxRedirects: -1}},
+		"cache_redis": {Mode: RedisModeCluster, Addrs: []string{":6379"}, Timeout: time.Second},
+		"queue_redis": {Mode: RedisModeCluster, Addrs: []string{"redis.internal:70000"}, Timeout: 0},
+		"empty_redis": {Mode: RedisModeCluster, Timeout: time.Second},
+		"bad_standalone": {Mode: RedisModeStandalone, Addr: ":6379", Addrs: []string{"127.0.0.1:6379"}, Timeout: time.Second,
+			Cluster: RedisClusterConfig{MaxRedirects: 1}},
 	}
 
 	err := configs.Validate("resources.redis")
 	require.Error(t, err)
 	require.ErrorContains(t, err, "resources.redis must not contain an empty named resource")
-	require.ErrorContains(t, err, "resources.redis.addr must be in host:port format")
-	require.ErrorContains(t, err, "resources.redis.db must be >= 0")
+	require.ErrorContains(t, err, "resources.redis.mode must be standalone or cluster")
 	require.ErrorContains(t, err, "resources.redis.timeout must be > 0")
-	require.ErrorContains(t, err, "resources.redis.cache_redis.addr must be in host:port format")
-	require.ErrorContains(t, err, "resources.redis.queue_redis.addr port must be valid")
+	require.ErrorContains(t, err, "resources.redis.bad_standalone.addr must be in host:port format")
+	require.ErrorContains(t, err, "resources.redis.bad_standalone.addrs must be empty when mode is standalone")
+	require.ErrorContains(t, err, "resources.redis.bad_standalone.cluster.max_redirects must be 0 when mode is standalone")
+	require.ErrorContains(t, err, "resources.redis.cache_redis.addrs[0] must be in host:port format")
+	require.ErrorContains(t, err, "resources.redis.queue_redis.addrs[0] port must be valid")
 	require.ErrorContains(t, err, "resources.redis.queue_redis.timeout must be > 0")
+	require.ErrorContains(t, err, "resources.redis.empty_redis.addrs must contain at least one address")
 }
 
 func TestPostgresConfigsApplyDefaultsAndValidateMultipleResources(t *testing.T) {

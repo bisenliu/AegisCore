@@ -7,11 +7,18 @@ type RedisConfigs map[string]RedisConfig
 
 // RedisConfig 描述单个 Redis 资源的连接参数。
 type RedisConfig struct {
-	Addr     string        `mapstructure:"addr"`
-	Username string        `mapstructure:"username"`
-	Password string        `mapstructure:"password"`
-	DB       int           `mapstructure:"db"`
-	Timeout  time.Duration `mapstructure:"timeout"`
+	Mode     string             `mapstructure:"mode"`
+	Addr     string             `mapstructure:"addr"`
+	Addrs    []string           `mapstructure:"addrs"`
+	Username string             `mapstructure:"username"`
+	Password string             `mapstructure:"password"`
+	Timeout  time.Duration      `mapstructure:"timeout"`
+	Cluster  RedisClusterConfig `mapstructure:"cluster"`
+}
+
+// RedisClusterConfig 描述 Redis Cluster 专属连接参数。
+type RedisClusterConfig struct {
+	MaxRedirects int `mapstructure:"max_redirects"`
 }
 
 // PostgresConfigs 是按资源名索引的 PostgreSQL 配置集合。

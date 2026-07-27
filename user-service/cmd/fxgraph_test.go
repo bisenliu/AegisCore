@@ -156,7 +156,7 @@ func fxGraphSideEffectGuards(t *testing.T) []fx.Option {
 			fail("primary postgres")
 			return db
 		}, fx.ParamTags(`name:"primary_db"`), fx.ResultTags(`name:"primary_db"`))),
-		fx.Decorate(fx.Annotate(func(client *redis.Client) *redis.Client {
+		fx.Decorate(fx.Annotate(func(client redis.UniversalClient) redis.UniversalClient {
 			fail("cache redis")
 			return client
 		}, fx.ParamTags(`name:"cache_redis"`), fx.ResultTags(`name:"cache_redis"`))),

@@ -24,7 +24,7 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 		RBAC: RBACConfig{UserRoleCache: FeatureCacheConfig{Enabled: true, Size: 13}},
 		Ent:  EntConfig{Plugins: EntPluginsConfig{Metrics: EntMetricsPluginConfig{Enabled: true}}},
 		Resources: ResourcesConfig{
-			Redis:    commonresources.RedisConfigs{"cache_redis": {Addr: "redis:6379"}},
+			Redis:    commonresources.RedisConfigs{"cache_redis": {Mode: commonresources.RedisModeCluster, Addrs: []string{"redis:6379"}}},
 			Postgres: commonresources.PostgresConfigs{"primary_db": {Host: "postgres"}},
 		},
 	}

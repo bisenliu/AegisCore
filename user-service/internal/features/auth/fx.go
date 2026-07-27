@@ -107,7 +107,7 @@ type SessionStoreParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Redis     *rediscache.Client `name:"cache_redis"`
+	Redis     rediscache.UniversalClient `name:"cache_redis"`
 	Settings  serviceconfig.AuthSettings
 	PurgePool authredis.PurgeTaskPool `name:"auth_session_purge_pool"`
 	Metrics   authapplication.Metrics

@@ -29,7 +29,7 @@ type RuntimeDependencyMetricsParams struct {
 	Resources        serviceconfig.ResourceSettings
 	Metrics          *commonmetrics.Provider
 	PrimaryDB        *sql.DB                 `name:"primary_db"`
-	CacheRedis       *redis.Client           `name:"cache_redis"`
+	CacheRedis       redis.UniversalClient   `name:"cache_redis"`
 	SessionPurgePool authredis.PurgeTaskPool `name:"auth_session_purge_pool"`
 	PolicyWatcher    permissionapplication.PolicyWatcherStatus
 	AuthTokenCache   localcache.StatsSource `name:"auth_token_version_cache"`

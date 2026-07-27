@@ -27,11 +27,12 @@ func TestPostgresContainerConfigUsesResourceContract(t *testing.T) {
 }
 
 func TestRedisContainerConfigUsesResourceContract(t *testing.T) {
-	cfg := (RedisContainer{Addr: "127.0.0.1:16379", DB: 2}).Config()
+	cfg := (RedisContainer{Addr: "127.0.0.1:16379"}).Config()
 
-	require.Equal(t, "127.0.0.1:16379", cfg.Addr)
-	require.Equal(t, 2, cfg.DB)
+	require.Equal(t, resources.RedisModeCluster, cfg.Mode)
+	require.Equal(t, []string{"127.0.0.1:16379"}, cfg.Addrs)
 	require.Equal(t, resources.DefaultRedisTimeout, cfg.Timeout)
+	require.Equal(t, resources.DefaultRedisClusterMaxRedirects, cfg.Cluster.MaxRedirects)
 }
 
 func TestStartPostgresIntegration(t *testing.T) {
@@ -62,7 +63,15 @@ func TestStartRedisIntegration(t *testing.T) {
 	require.NoError(t, client.Ping(ctx).Err())
 
 	cfg := redisContainer.Config()
-	require.NotEmpty(t, cfg.Addr)
-	require.Zero(t, cfg.DB)
+	require.NotEmpty(t, cfg.Addrs)
 	require.Positive(t, cfg.Timeout)
+	clusterClient := redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs:        cfg.Addrs,
+		DialTimeout:  cfg.Timeout,
+		ReadTimeout:  cfg.Timeout,
+		WriteTimeout: cfg.Timeout,
+		MaxRedirects: cfg.Cluster.MaxRedirects,
+	})
+	defer clusterClient.Close()
+	require.NoError(t, clusterClient.Ping(ctx).Err())
 }

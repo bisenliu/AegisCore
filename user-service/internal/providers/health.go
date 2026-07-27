@@ -21,8 +21,8 @@ type HealthCheckParams struct {
 	fx.In
 
 	Resources     serviceconfig.ResourceSettings
-	PrimaryDB     *sql.DB       `name:"primary_db"`
-	CacheRedis    *redis.Client `name:"cache_redis"`
+	PrimaryDB     *sql.DB               `name:"primary_db"`
+	CacheRedis    redis.UniversalClient `name:"cache_redis"`
 	CasbinPolicy  permissionauthorization.PolicyHealth
 	PolicyWatcher permissionapplication.PolicyWatcherStatus
 }
@@ -35,7 +35,7 @@ type postgresHealthChecker struct {
 
 type redisHealthChecker struct {
 	name    string
-	client  *redis.Client
+	client  redis.UniversalClient
 	timeout time.Duration
 }
 

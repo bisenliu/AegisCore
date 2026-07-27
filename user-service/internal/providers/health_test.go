@@ -105,7 +105,7 @@ func TestWatcherHealthChecker(t *testing.T) {
 
 func TestProvideHealthChecksUsesResourcePingTimeouts(t *testing.T) {
 	settings := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
-		"cache_redis": {Addr: "127.0.0.1:6379", Timeout: 2 * time.Second},
+		"cache_redis": {Mode: commonresources.RedisModeCluster, Addrs: []string{"127.0.0.1:6379"}, Timeout: 2 * time.Second},
 	}}
 	checks := ProvideHealthChecks(HealthCheckParams{Resources: settings})
 
@@ -120,7 +120,7 @@ func TestProvideHealthChecksUsesResourcePingTimeouts(t *testing.T) {
 
 func TestProvideHealthChecksAppliesDefaultRedisPingTimeout(t *testing.T) {
 	settings := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
-		"cache_redis": {Addr: "127.0.0.1:6379"},
+		"cache_redis": {Mode: commonresources.RedisModeCluster, Addrs: []string{"127.0.0.1:6379"}},
 	}}
 	checks := ProvideHealthChecks(HealthCheckParams{Resources: settings})
 

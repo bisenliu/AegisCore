@@ -37,7 +37,7 @@ const (
 
 // SessionStoreOptions 包含 Redis 认证会话 store 的普通构造依赖。
 type SessionStoreOptions struct {
-	Redis                *rediscache.Client
+	Redis                rediscache.UniversalClient
 	Keys                 KeyCatalog
 	TokenVersionCacheTTL time.Duration
 	PurgePool            PurgeTaskPool
@@ -45,7 +45,7 @@ type SessionStoreOptions struct {
 }
 
 type SessionStore struct {
-	redis                *rediscache.Client
+	redis                rediscache.UniversalClient
 	keys                 KeyCatalog
 	tokenVersionCacheTTL time.Duration
 	purgePool            PurgeTaskPool

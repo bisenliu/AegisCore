@@ -139,11 +139,14 @@ observability:
 resources:
   redis:
     cache_redis:
-      addr: %q
+      mode: cluster
+      addrs:
+        - %q
       username: %q
       password: %q
-      db: %d
       timeout: %s
+      cluster:
+        max_redirects: %d
   postgres:
     primary_db:
       host: %q
@@ -159,7 +162,7 @@ resources:
         conn_max_idle_time: %s
 `,
 		port,
-		redis.Addr, redis.Username, redis.Password, redis.DB, redis.Timeout,
+		redis.Addrs[0], redis.Username, redis.Password, redis.Timeout, redis.Cluster.MaxRedirects,
 		postgres.Host, postgres.Port, postgres.Username, postgres.Password, postgres.DBName, postgres.SSLMode,
 		postgres.Pool.MaxOpenConns, postgres.Pool.MaxIdleConns, postgres.Pool.ConnMaxLifetime, postgres.Pool.ConnMaxIdleTime,
 	)

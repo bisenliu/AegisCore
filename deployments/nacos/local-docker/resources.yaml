@@ -1,11 +1,21 @@
 resources:
   redis:
     cache_redis:
+      # mode 枚举：cluster=集群，standalone=非集群。
+      # 默认 Compose 使用非集群 Redis；切换 Compose cluster command 时，同步改为下方 cluster 配置。
+      mode: standalone
       addr: redis:6379
       username: ""
       password: ""
-      db: 0
       timeout: 5s
+      # Cluster 配置示例：
+      # mode: cluster
+      # addrs:
+      #   - redis:6379
+      #   - redis-cluster-2:6379
+      #   - redis-cluster-3:6379
+      # cluster:
+      #   max_redirects: 8
 
   postgres:
     primary_db:

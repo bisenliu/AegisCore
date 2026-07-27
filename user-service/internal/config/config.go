@@ -142,7 +142,11 @@ func DefaultConfig() Config {
 		Resources: ResourcesConfig{
 			Redis: commonresources.RedisConfigs{
 				serviceresources.NameCacheRedis: {
+					Mode:    commonresources.RedisModeCluster,
 					Timeout: commonresources.DefaultRedisTimeout,
+					Cluster: commonresources.RedisClusterConfig{
+						MaxRedirects: commonresources.DefaultRedisClusterMaxRedirects,
+					},
 				},
 			},
 			Postgres: commonresources.PostgresConfigs{
