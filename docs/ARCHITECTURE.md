@@ -23,6 +23,7 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 | `common/contract/response/` | 统一响应 envelope 和消息 |
 | `common/contract/pagination/` | 分页数据结构和 helper |
 | `common/http/binding/` | Gin 请求绑定与校验衔接 |
+| `common/http/client/` | 基于可复用 Resty client 的业务中立出站请求、timeout、代理与状态错误 helper |
 | `common/http/middleware/` | auth、casbin、cors、logging、metrics、recovery 和 span error |
 | `common/http/openapi/` | OpenAPI 转换和渲染 helper |
 | `common/http/response/` | HTTP 响应写入和错误响应 |
@@ -89,6 +90,8 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 - `transport/http/`：controller、request、response、mapper、routes 和输入校验。
 
 `domain/` 和 `application/` 生产代码保持框架无关，不承载仅服务于 Fx DI 的 import、`fx.In` 或 `name`/`optional` tag；无 DI metadata 需求的普通 application 构造器由 feature 根 `fx.go` 直接注册，确有 named/optional 等 metadata 或配置转换需求时才由 composition adapter 转换。分层约束由 `user-service/scripts/architecture-lint.sh` 检查。
+
+真实外部 HTTP 系统的消费侧端口、DTO、认证、retry policy、业务错误映射和防腐逻辑仍位于 `user-service/internal/integration/http` 或所属 feature；`common/http/client` 只提供 Resty client 复用、单次请求构造与发送原语，消费侧可注入预配置的 Resty client。
 
 ## 6. 核心流程
 
