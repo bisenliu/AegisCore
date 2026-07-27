@@ -51,6 +51,8 @@ user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration
 
 配置 fixture 必须使用最终严格契约：核心路径为 `app/server/log/observability`，服务资源位于 `resources.redis.cache_redis` 和 `resources.postgres.primary_db`，feature cache 位于 `auth.token_version_cache` 与 `rbac.user_role_cache`。旧路径只允许出现在 strict decoder 负向测试中，用于证明未知字段会被拒绝；正向 fixture 必须能够通过 Nacos 分层配置合成后的 strict decode。
 
+版本化本地 Nacos 配置位于 `deployments/nacos/local-host/` 与 `deployments/nacos/local-docker/`。测试必须分别严格解码两个目录中的完整三文档，断言公共字段一致，并确认 Namespace、dataId 顺序、Compose DNS 和宿主映射端口与 Compose 一致。`tools/nacos-config-seed` 测试还必须覆盖目录文档在网络写入前完成读取与基本校验。
+
 运行：
 
 ```bash

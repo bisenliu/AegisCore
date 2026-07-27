@@ -18,7 +18,7 @@ import (
 func TestAppModuleValidatesFullRuntimeGraph(t *testing.T) {
 	var docs []commonconfig.ConfigDocument
 	for _, dataID := range []string{"base.yaml", "resources.yaml", "user-service.yaml"} {
-		content, err := os.ReadFile(filepath.Join("..", "..", "configs", "examples", dataID))
+		content, err := os.ReadFile(filepath.Join("..", "..", "..", "deployments", "nacos", "local-docker", dataID))
 		require.NoError(t, err)
 		docs = append(docs, commonconfig.ConfigDocument{DataID: dataID, Content: content})
 	}

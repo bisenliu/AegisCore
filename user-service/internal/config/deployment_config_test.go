@@ -28,6 +28,12 @@ type deploymentNacosEndpoint struct {
 type deploymentComposeDocument struct {
 	Services map[string]struct {
 		Environment map[string]string `yaml:"environment"`
+		Ports       []string          `yaml:"ports"`
+		Volumes     []string          `yaml:"volumes"`
+		Restart     string            `yaml:"restart"`
+		DependsOn   map[string]struct {
+			Condition string `yaml:"condition"`
+		} `yaml:"depends_on"`
 		Healthcheck struct {
 			Test []string `yaml:"test"`
 		} `yaml:"healthcheck"`
@@ -36,11 +42,24 @@ type deploymentComposeDocument struct {
 
 type deploymentResourcesDocument struct {
 	Resources struct {
+		Redis map[string]struct {
+			Addr string `yaml:"addr"`
+		} `yaml:"redis"`
 		Postgres map[string]struct {
+			Host     string `yaml:"host"`
+			Port     int    `yaml:"port"`
 			Username string `yaml:"username"`
 			DBName   string `yaml:"db_name"`
 		} `yaml:"postgres"`
 	} `yaml:"resources"`
+}
+
+type deploymentBaseDocument struct {
+	Observability struct {
+		Tracing struct {
+			OTLPEndpoint string `yaml:"otlp_endpoint"`
+		} `yaml:"tracing"`
+	} `yaml:"observability"`
 }
 
 type deploymentWorkloadDocument struct {
@@ -95,7 +114,8 @@ func TestRepositoryDeploymentConfigConsistency(t *testing.T) {
 	repoRoot := filepath.Join("..", "..", "..")
 
 	composePath := filepath.Join(repoRoot, "deployments", "compose", "docker-compose.yml")
-	resourcesPath := filepath.Join(repoRoot, "deployments", "compose", "nacos", "init", "resources.yaml")
+	resourcesPath := filepath.Join(repoRoot, "deployments", "nacos", "local-docker", "resources.yaml")
+	nacosDir := filepath.Join(repoRoot, "deployments", "nacos")
 	metricsPath := filepath.Join(repoRoot, "deployments", "compose", "scripts", "generate-real-metrics-load.sh")
 	kubernetesDir := filepath.Join(repoRoot, "deployments", "k8s", "user-service")
 	chartDir := filepath.Join(repoRoot, "deployments", "helm", "aegiscore-user-service")
@@ -112,8 +132,48 @@ func TestRepositoryDeploymentConfigConsistency(t *testing.T) {
 	require.Equal(t, composeTarget.username, deploymentFlagValue(t, postgres.Healthcheck.Test, "-U"))
 	require.Equal(t, composeTarget.database, deploymentFlagValue(t, postgres.Healthcheck.Test, "-d"))
 
-	resources := readDeploymentYAML[deploymentResourcesDocument](t, resourcesPath)
-	primaryDB, ok := resources.Resources.Postgres["primary_db"]
+	redis, ok := compose.Services["redis"]
+	require.True(t, ok, "compose redis service is required")
+	hostInit, ok := compose.Services["nacos-init-host"]
+	require.True(t, ok, "compose nacos-init-host service is required")
+	require.Contains(t, hostInit.Volumes, "../nacos/local-host:/nacos/config:ro")
+	require.Equal(t, "loca-host", hostInit.Environment["AEGISCORE_NACOS_NAMESPACE"])
+	require.Equal(t, "AEGISCORE", hostInit.Environment["AEGISCORE_NACOS_GROUP"])
+	require.Empty(t, hostInit.Environment["AEGISCORE_NACOS_DATA_IDS"], "Compose 应使用运行时默认三文档顺序")
+	require.Equal(t, "no", hostInit.Restart)
+
+	dockerInit, ok := compose.Services["nacos-init-docker"]
+	require.True(t, ok, "compose nacos-init-docker service is required")
+	require.Contains(t, dockerInit.Volumes, "../nacos/local-docker:/nacos/config:ro")
+	require.Equal(t, "loca-docker", dockerInit.Environment["AEGISCORE_NACOS_NAMESPACE"])
+	require.Equal(t, "AEGISCORE", dockerInit.Environment["AEGISCORE_NACOS_GROUP"])
+	require.Empty(t, dockerInit.Environment["AEGISCORE_NACOS_DATA_IDS"], "Compose 应使用运行时默认三文档顺序")
+	require.Equal(t, "no", dockerInit.Restart)
+	requireDeploymentConfigDocuments(t, filepath.Join(nacosDir, "local-docker"))
+	requireDeploymentConfigDocuments(t, filepath.Join(nacosDir, "local-host"))
+
+	for _, serviceName := range []string{"user-service", "rbac-seed"} {
+		service, exists := compose.Services[serviceName]
+		require.True(t, exists, "compose %s service is required", serviceName)
+		require.Equal(t, "loca-docker", service.Environment["AEGISCORE_NACOS_NAMESPACE"])
+		require.Empty(t, service.Environment["AEGISCORE_NACOS_DATA_IDS"], "Compose 应使用运行时默认三文档顺序")
+		require.Equal(t, "service_completed_successfully", service.DependsOn["nacos-init-docker"].Condition)
+	}
+
+	hostResources := readDeploymentYAML[deploymentResourcesDocument](t, filepath.Join(nacosDir, "local-host", "resources.yaml"))
+	dockerResources := readDeploymentYAML[deploymentResourcesDocument](t, resourcesPath)
+	hostBase := readDeploymentYAML[deploymentBaseDocument](t, filepath.Join(nacosDir, "local-host", "base.yaml"))
+	dockerBase := readDeploymentYAML[deploymentBaseDocument](t, filepath.Join(nacosDir, "local-docker", "base.yaml"))
+	require.Equal(t, "127.0.0.1:"+deploymentPublishedPort(t, redis.Ports, "6379"), hostResources.Resources.Redis["cache_redis"].Addr)
+	require.Equal(t, "127.0.0.1", hostResources.Resources.Postgres["primary_db"].Host)
+	require.Equal(t, deploymentPublishedPortInt(t, postgres.Ports, "5432"), hostResources.Resources.Postgres["primary_db"].Port)
+	require.Equal(t, "127.0.0.1:4317", hostBase.Observability.Tracing.OTLPEndpoint)
+	require.Equal(t, "redis:6379", dockerResources.Resources.Redis["cache_redis"].Addr)
+	require.Equal(t, "postgres", dockerResources.Resources.Postgres["primary_db"].Host)
+	require.Equal(t, 5432, dockerResources.Resources.Postgres["primary_db"].Port)
+	require.Equal(t, "jaeger:4317", dockerBase.Observability.Tracing.OTLPEndpoint)
+
+	primaryDB, ok := dockerResources.Resources.Postgres["primary_db"]
 	require.True(t, ok, "resources.postgres.primary_db is required")
 	require.Equal(t, composeTarget, deploymentDatabaseTarget{
 		username: strings.TrimSpace(primaryDB.Username),
@@ -157,6 +217,38 @@ func TestRepositoryDeploymentConfigConsistency(t *testing.T) {
 		template := readDeploymentFile(t, filepath.Join(chartDir, "templates", templateName))
 		require.Contains(t, template, `include "aegiscore-user-service.nacosEnv" .`)
 	}
+}
+
+func requireDeploymentConfigDocuments(t *testing.T, directory string) {
+	t.Helper()
+	entries, err := os.ReadDir(directory)
+	require.NoError(t, err)
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			names = append(names, entry.Name())
+		}
+	}
+	require.ElementsMatch(t, []string{"base.yaml", "resources.yaml", "user-service.yaml"}, names)
+}
+
+func deploymentPublishedPort(t *testing.T, ports []string, containerPort string) string {
+	t.Helper()
+	for _, mapping := range ports {
+		hostPort, targetPort, ok := strings.Cut(mapping, ":")
+		if ok && targetPort == containerPort {
+			return hostPort
+		}
+	}
+	require.FailNow(t, "compose published port is missing", "container_port=%s", containerPort)
+	return ""
+}
+
+func deploymentPublishedPortInt(t *testing.T, ports []string, containerPort string) int {
+	t.Helper()
+	value, err := strconv.Atoi(deploymentPublishedPort(t, ports, containerPort))
+	require.NoError(t, err)
+	return value
 }
 
 func readDeploymentYAML[T any](t *testing.T, path string) T {

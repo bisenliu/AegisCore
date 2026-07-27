@@ -9,7 +9,7 @@
 # 查看服务状态和日志：
 #   docker compose -f deployments/compose/docker-compose.yml ps -a
 #   docker compose -f deployments/compose/docker-compose.yml logs -f --tail=200
-#   docker compose -f deployments/compose/docker-compose.yml logs -f nacos nacos-init user-service
+#   docker compose -f deployments/compose/docker-compose.yml logs -f nacos nacos-init-host nacos-init-docker user-service
 # 停止、恢复或重启现有容器（保留容器和数据卷）：
 #   docker compose -f deployments/compose/docker-compose.yml stop
 #   docker compose -f deployments/compose/docker-compose.yml start
@@ -123,16 +123,39 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  nacos-init:
+  nacos-init-host:
     build: *nacos-config-seed-build
     image: aegiscore-nacos-config-seed:latest
+    command:
+      - --config-dir
+      - /nacos/config
     volumes:
-      - ./nacos/init:/nacos/init:ro
+      - ../nacos/local-host:/nacos/config:ro
     environment:
       <<: *timezone-env
-      AEGISCORE_SERVICE: user-service
       AEGISCORE_NACOS_ADDR: nacos:8848
-      AEGISCORE_NACOS_NAMESPACE: loca
+      AEGISCORE_NACOS_NAMESPACE: loca-host
+      AEGISCORE_NACOS_GROUP: AEGISCORE
+      AEGISCORE_NACOS_TIMEOUT: 30s
+    depends_on:
+      nacos:
+        condition: service_healthy
+    networks:
+      - aegiscore-runtime
+    restart: "no"
+
+  nacos-init-docker:
+    build: *nacos-config-seed-build
+    image: aegiscore-nacos-config-seed:latest
+    command:
+      - --config-dir
+      - /nacos/config
+    volumes:
+      - ../nacos/local-docker:/nacos/config:ro
+    environment:
+      <<: *timezone-env
+      AEGISCORE_NACOS_ADDR: nacos:8848
+      AEGISCORE_NACOS_NAMESPACE: loca-docker
       AEGISCORE_NACOS_GROUP: AEGISCORE
       AEGISCORE_NACOS_TIMEOUT: 30s
     depends_on:
@@ -170,10 +193,10 @@ services:
       <<: *timezone-env
       AEGISCORE_SERVICE: user-service
       AEGISCORE_NACOS_ADDR: nacos:8848
-      AEGISCORE_NACOS_NAMESPACE: loca
+      AEGISCORE_NACOS_NAMESPACE: loca-docker
       AEGISCORE_NACOS_GROUP: AEGISCORE
     depends_on:
-      nacos-init:
+      nacos-init-docker:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
@@ -195,7 +218,7 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      nacos-init:
+      nacos-init-docker:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy

@@ -12,7 +12,7 @@
 | `auth-session-management` | 登录、服务私有认证配置、令牌签发、刷新、退出、改密、会话和 token version 校验 | `user-service/internal/config/`、`user-service/internal/features/auth/`、`common/security/password/` | `openspec/specs/auth-session-management/spec.md` | ready |
 | `rbac-access-control` | 权限目录、角色、角色权限、用户角色、Casbin 授权、RBAC seed 和超级管理员引导 | `user-service/internal/features/permission/`、`user-service/internal/features/role/`、`common/security/casbin/`、`user-service/cmd/rbac.go` | `openspec/specs/rbac-access-control/spec.md` | ready |
 | `runtime-observability` | 健康检查、OpenAPI、metrics、OTLP tracing、stdout/stderr logging、独立 pprof 诊断监听、Prometheus/Grafana 资产 | `user-service/internal/bootstrap/`、`user-service/internal/router/`、`common/runtime/observability/`、`common/runtime/logger/`、`common/http/middleware/`、`deployments/observability/`、`deployments/compose/grafana/` | `openspec/specs/runtime-observability/spec.md` | ready |
-| `delivery-operations` | 构建、测试、lint、OpenAPI 生成、Ent/Atlas migration、运行时镜像、Docker-backed 测试门禁、CI 镜像安全扫描、Nacos 分层配置部署、Compose、Kubernetes、Helm 和发布顺序 | `Makefile`、`.github/workflows/ci.yml`、`user-service/Makefile`、`user-service/scripts/`、`tools/openapi-convert/`、`deployments/` | `openspec/specs/delivery-operations/spec.md` | ready |
+| `delivery-operations` | 构建、测试、lint、OpenAPI 生成、Ent/Atlas migration、运行时镜像、Docker-backed 测试门禁、CI 镜像安全扫描、Nacos 环境目录发布、Compose、Kubernetes、Helm 和发布顺序 | `Makefile`、`.github/workflows/ci.yml`、`user-service/Makefile`、`user-service/scripts/`、`tools/openapi-convert/`、`tools/nacos-config-seed/`、`deployments/` | `openspec/specs/delivery-operations/spec.md` | ready |
 
 ## 2. 关键入口点
 

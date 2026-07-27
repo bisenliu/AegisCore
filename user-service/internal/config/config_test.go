@@ -223,23 +223,56 @@ func TestLoadPreservesAdditionalNamedResourceAndAppliesDefaults(t *testing.T) {
 	require.Equal(t, commonresources.DefaultRedisTimeout, cfg.Resources.Redis["queue_redis"].Timeout)
 }
 
-func TestLoadRepositoryConfig(t *testing.T) {
-	result, err := LoadFromDocuments(loadExampleConfigDocuments(t))
-	require.NoError(t, err)
-	cfg := result.Config
-	require.Equal(t, 60*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
-	require.Equal(t, 120*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
-	require.True(t, cfg.Server.HTTP.Enabled)
-	require.False(t, cfg.Server.GRPC.Enabled)
-	require.Contains(t, cfg.Resources.Redis, serviceresources.NameCacheRedis)
-	require.Contains(t, cfg.Resources.Postgres, serviceresources.NamePrimaryDB)
+func TestLoadRepositoryConfigTargets(t *testing.T) {
+	tests := []struct {
+		name         string
+		environment  string
+		redisAddr    string
+		postgresHost string
+		postgresPort int
+		otlpEndpoint string
+	}{
+		{name: "host", environment: "local-host", redisAddr: "127.0.0.1:16379", postgresHost: "127.0.0.1", postgresPort: 15432, otlpEndpoint: "127.0.0.1:4317"},
+		{name: "docker", environment: "local-docker", redisAddr: "redis:6379", postgresHost: "postgres", postgresPort: 5432, otlpEndpoint: "jaeger:4317"},
+	}
+	configs := make(map[string]*Config, len(tests))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := LoadFromDocuments(loadRepositoryConfigDocuments(t, tt.environment))
+			require.NoError(t, err)
+			cfg := result.Config
+			require.Equal(t, 60*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
+			require.Equal(t, 120*time.Second, cfg.Runtime.Lifecycle.StopTimeout)
+			require.True(t, cfg.Server.HTTP.Enabled)
+			require.False(t, cfg.Server.GRPC.Enabled)
+			require.Equal(t, tt.redisAddr, cfg.Resources.Redis[serviceresources.NameCacheRedis].Addr)
+			postgres := cfg.Resources.Postgres[serviceresources.NamePrimaryDB]
+			require.Equal(t, tt.postgresHost, postgres.Host)
+			require.Equal(t, tt.postgresPort, postgres.Port)
+			require.Equal(t, tt.otlpEndpoint, cfg.Observability.Tracing.OTLPEndpoint)
+			require.Equal(t, "json", cfg.Log.Format)
+			configs[tt.name] = cfg
+		})
+	}
+
+	host := *configs["host"]
+	hostRedis := host.Resources.Redis[serviceresources.NameCacheRedis]
+	hostRedis.Addr = configs["docker"].Resources.Redis[serviceresources.NameCacheRedis].Addr
+	host.Resources.Redis[serviceresources.NameCacheRedis] = hostRedis
+	hostPostgres := host.Resources.Postgres[serviceresources.NamePrimaryDB]
+	dockerPostgres := configs["docker"].Resources.Postgres[serviceresources.NamePrimaryDB]
+	hostPostgres.Host = dockerPostgres.Host
+	hostPostgres.Port = dockerPostgres.Port
+	host.Resources.Postgres[serviceresources.NamePrimaryDB] = hostPostgres
+	host.Observability.Tracing.OTLPEndpoint = configs["docker"].Observability.Tracing.OTLPEndpoint
+	require.Equal(t, *configs["docker"], host, "host 与 Docker 配置除运行位置端点外必须一致")
 }
 
-func loadExampleConfigDocuments(t *testing.T) []commonconfig.ConfigDocument {
+func loadRepositoryConfigDocuments(t *testing.T, environment string) []commonconfig.ConfigDocument {
 	t.Helper()
 	var docs []commonconfig.ConfigDocument
 	for _, dataID := range []string{"base.yaml", "resources.yaml", "user-service.yaml"} {
-		content, err := os.ReadFile(filepath.Join("..", "..", "configs", "examples", dataID))
+		content, err := os.ReadFile(filepath.Join("..", "..", "..", "deployments", "nacos", environment, dataID))
 		require.NoError(t, err)
 		docs = append(docs, commonconfig.ConfigDocument{DataID: dataID, Content: content})
 	}

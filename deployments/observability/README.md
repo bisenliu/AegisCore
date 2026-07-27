@@ -67,7 +67,7 @@ spec:
 make user-service-run
 ```
 
-Compose Nacos 初始化配置已启用 metrics；如需临时调整，编辑或覆盖 Nacos 中的 `base.yaml`、`resources.yaml` 或 `user-service.yaml`。
+Compose Nacos 初始化配置已启用 metrics；如需调整，修改 `deployments/nacos/local-host/` 与 `local-docker/` 中对应的完整配置，并重新运行相应初始化任务，不要把 Nacos 控制台手工修改作为配置来源。
 
 2. 确认 metrics endpoint：
 
@@ -81,7 +81,7 @@ curl -fsS http://localhost:8080/metrics | head
 
 ## Tracing 说明
 
-本地 tracing 默认关闭。启用 `observability.tracing.enabled` 后，服务固定通过 OTLP 向 `observability.tracing.otlp_endpoint` 导出，不提供 exporter 分支；Trace 可视化仍需要 OpenTelemetry Collector 和 trace backend。日志只写 stdout/stderr，并由容器或集群日志管道采集。
+应用默认 tracing 关闭；仓库的 `local-host/` 与 `local-docker/` 配置为完整链路诊断显式启用 tracing。启用 `observability.tracing.enabled` 后，服务固定通过 OTLP 向 `observability.tracing.otlp_endpoint` 导出，不提供 exporter 分支；Trace 可视化仍需要 OpenTelemetry Collector 和 trace backend。日志只写 stdout/stderr，并由容器或集群日志管道采集。
 
 OpenTelemetry span 时间戳表示 Unix epoch 绝对时间。Compose Jaeger 进程通过本地薄镜像加载 `Asia/Shanghai` zoneinfo，但 Jaeger UI 的日期由访问浏览器的本地时区渲染，服务端没有可由 Compose 强制覆盖的 UI timezone 配置。
 

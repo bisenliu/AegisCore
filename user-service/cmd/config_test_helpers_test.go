@@ -31,7 +31,7 @@ func readRepositoryConfigDocuments(t testing.TB) map[string][]byte {
 	t.Helper()
 	docs := make(map[string][]byte)
 	for _, dataID := range []string{"base.yaml", "resources.yaml", "user-service.yaml"} {
-		content, err := os.ReadFile(filepath.Join("..", "configs", "examples", dataID))
+		content, err := os.ReadFile(filepath.Join("..", "..", "deployments", "nacos", "local-docker", dataID))
 		require.NoError(t, err)
 		docs[dataID] = content
 	}

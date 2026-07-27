@@ -1,3 +1,4 @@
+# 仅限本地开发；固定占位 secret 不得用于 production-like 环境。
 app:
   name: aegiscore-user-service
 

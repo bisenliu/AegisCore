@@ -1,7 +1,7 @@
 resources:
   redis:
     cache_redis:
-      addr: 127.0.0.1:6379
+      addr: 127.0.0.1:16379
       username: ""
       password: ""
       db: 0
@@ -10,7 +10,7 @@ resources:
   postgres:
     primary_db:
       host: 127.0.0.1
-      port: 5432
+      port: 15432
       username: postgres
       password: ""
       db_name: aegiscore

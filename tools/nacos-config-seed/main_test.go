@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -116,6 +118,63 @@ func TestRunRejectsFailedEnvelope(t *testing.T) {
 	}
 	if got := stderr.String(); !bytes.Contains([]byte(got), []byte("api code 403: access denied")) {
 		t.Fatalf("stderr = %q", got)
+	}
+}
+
+func TestRunPreloadsAllDocumentsBeforeNetwork(t *testing.T) {
+	tests := []struct {
+		name      string
+		prepare   func(*testing.T, string)
+		errorText string
+	}{
+		{
+			name: "missing last document",
+			prepare: func(t *testing.T, dir string) {
+				if err := os.Remove(filepath.Join(dir, "user-service.yaml")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			errorText: "read config document user-service.yaml",
+		},
+		{
+			name: "empty middle document",
+			prepare: func(t *testing.T, dir string) {
+				if err := os.WriteFile(filepath.Join(dir, "resources.yaml"), []byte("  \n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			errorText: "read config document resources.yaml: content is empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := writeConfigDocuments(t)
+			tt.prepare(t, dir)
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests.Add(1)
+				writeResponse(t, w, `{"code":0,"message":"success","data":1}`)
+			}))
+			defer server.Close()
+
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			code := run(context.Background(), []string{
+				"-addr", server.URL,
+				"-config-dir", dir,
+				"-data-ids", "base.yaml,resources.yaml,user-service.yaml",
+			}, &stdout, &stderr)
+			if code != exitError {
+				t.Fatalf("code = %d", code)
+			}
+			if got := stderr.String(); !strings.Contains(got, tt.errorText) {
+				t.Fatalf("stderr = %q, want substring %q", got, tt.errorText)
+			}
+			if got := requests.Load(); got != 0 {
+				t.Fatalf("network requests = %d, want 0", got)
+			}
+		})
 	}
 }
 

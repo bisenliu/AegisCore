@@ -48,7 +48,7 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 - `config validate|render|sources`：验证 Nacos 配置、脱敏渲染最终配置和展示实际来源。
 - `healthcheck --url <url> --timeout <duration>`：在容器内无 shell、wget、curl 或 grep 依赖地检查 `/readyz`。
 
-`user-service/internal/bootstrap/` 构造应用、HTTP server 和默认关闭的独立 pprof 诊断监听，并通过 `AppOptions` 接收 CLI 已解析的 service config、派生共享 runtime config 和组装 Fx options。`user-service/internal/config/` 拥有服务根配置、认证/RBAC feature cache、Ent 配置、具名 resources 和服务级校验，并复用 `common/runtime/config` 的 Nacos 来源解析、YAML deep merge、strict decode、digest 和脱敏能力。`user-service/internal/providers/` 提供 Gin、Ent、Postgres、Redis、auth verifier、metrics、health 和 routes provider，不读取配置来源。
+`user-service/internal/bootstrap/` 构造应用、HTTP server 和默认关闭的独立 pprof 诊断监听，并通过 `AppOptions` 接收 CLI 已解析的 service config、派生共享 runtime config 和组装 Fx options。`user-service/internal/config/` 拥有服务根配置、认证/RBAC feature cache、Ent 配置、具名 resources 和服务级校验，并复用 `common/runtime/config` 的 Nacos 来源解析、YAML deep merge、strict decode、digest 和脱敏能力。`user-service/internal/providers/` 提供 Gin、Ent、Postgres、Redis、auth verifier、metrics、health 和 routes provider，不读取配置来源。版本化本地 Nacos 配置位于 `deployments/nacos/local-host/` 与 `deployments/nacos/local-docker/`，每个目录都是对应 Namespace 的完整三文档发布源；`tools/nacos-config-seed` 只负责将指定目录发布到指定 Namespace。
 
 ## 4. HTTP 路由结构
 
@@ -141,6 +141,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 
 - Dockerfile：`deployments/docker/user-service.Dockerfile` 使用 BuildKit manifest-first 依赖层、只读 Go module 解析、静态编译和固定 digest 的 `gcr.io/distroless/static-debian12:nonroot` 运行时；运行镜像身份为 UID/GID `65532`，不包含 shell、包管理器、下载工具或 Atlas。
 - Compose：`deployments/compose/docker-compose.yml` 继承 Distroless `nonroot` 身份，user-service healthcheck 使用 exec-form 调用原生 `healthcheck` CLI。
+- 本地 Nacos：`deployments/nacos/` 是 Git 权威来源；两个 Compose 初始化任务分别将 `local-host/` 与 `local-docker/` 的完整三文档发布到 `loca-host` 与 `loca-docker`。
 - Kubernetes：`deployments/k8s/user-service/` 使用 UID/GID/fsGroup `65532`、只读根文件系统、`/tmp` emptyDir 和 kubelet HTTP probes。
 - Helm：`deployments/helm/aegiscore-user-service/` 渲染与原生 YAML 一致的 UID/GID `65532`、HTTP probes 和 RBAC seed Job。
 - CI：阻塞式 `test` job 设置 `AEGISCORE_TEST_CONTAINERS=1` 运行真实 PostgreSQL/Redis 测试；镜像安全 job 复用同一 BuildKit image ID 执行内容断言、Trivy HIGH/CRITICAL 门禁和 SBOM 生成。
