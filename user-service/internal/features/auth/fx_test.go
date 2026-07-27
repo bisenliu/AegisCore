@@ -36,17 +36,13 @@ import (
 var _ authcredentials.PasswordService = (*password.Service)(nil)
 
 func TestNewTokenVersionLocalCacheUsesFeatureConfig(t *testing.T) {
-	enabled := true
-	size := int64(123)
-	ttl := time.Minute
-	loadTimeout := time.Second
 	lifecycle := fxtest.NewLifecycle(t)
 	ctrl := gomock.NewController(t)
 	result, err := newTokenVersionLocalCache(TokenVersionLocalCacheParams{
 		Lifecycle: lifecycle,
-		Config: &serviceconfig.Config{Auth: serviceconfig.AuthConfig{TokenVersionCache: serviceconfig.FeatureCacheConfig{
-			Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout,
-		}}},
+		Settings: serviceconfig.AuthSettings{TokenVersionCache: serviceconfig.FeatureCacheConfig{
+			Enabled: true, Size: 123, TTL: time.Minute, LoadTimeout: time.Second,
+		}},
 		Users: NewMockUserTokenVersionStore(ctrl),
 		Cache: NewMockTokenVersionCache(ctrl),
 	})
@@ -57,7 +53,6 @@ func TestNewTokenVersionLocalCacheUsesFeatureConfig(t *testing.T) {
 }
 
 func TestDisabledTokenVersionLocalCacheReadsThroughAndPreservesValidation(t *testing.T) {
-	disabled := false
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000501")
 	ctrl := gomock.NewController(t)
 	users := NewMockUserTokenVersionStore(ctrl)
@@ -71,9 +66,11 @@ func TestDisabledTokenVersionLocalCacheReadsThroughAndPreservesValidation(t *tes
 		cache.EXPECT().CacheTokenVersion(gomock.Any(), userID.String(), int64(7)).Return(nil),
 	)
 	result, err := newTokenVersionLocalCache(TokenVersionLocalCacheParams{
-		Config: &serviceconfig.Config{Auth: serviceconfig.AuthConfig{TokenVersionCache: serviceconfig.FeatureCacheConfig{Enabled: &disabled}}},
-		Users:  users,
-		Cache:  cache,
+		Settings: serviceconfig.AuthSettings{TokenVersionCache: serviceconfig.FeatureCacheConfig{
+			Enabled: false, Size: -1, TTL: -time.Second, LoadTimeout: -time.Second,
+		}},
+		Users: users,
+		Cache: cache,
 	})
 	require.NoError(t, err)
 
@@ -87,12 +84,8 @@ func TestDisabledTokenVersionLocalCacheReadsThroughAndPreservesValidation(t *tes
 }
 
 func TestTokenVersionLocalCacheResourceCloseIsIdempotent(t *testing.T) {
-	enabled := true
-	size := int64(10)
-	ttl := time.Minute
-	loadTimeout := time.Second
 	resource, err := newTokenVersionLocalCacheResource(serviceconfig.FeatureCacheConfig{
-		Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout,
+		Enabled: true, Size: 10, TTL: time.Minute, LoadTimeout: time.Second,
 	}, NewMockUserTokenVersionStore(gomock.NewController(t)), NewMockTokenVersionCache(gomock.NewController(t)))
 	require.NoError(t, err)
 	require.NotNil(t, resource.cache)
@@ -104,24 +97,20 @@ func TestTokenVersionLocalCacheResourceCloseIsIdempotent(t *testing.T) {
 }
 
 func TestTokenVersionLocalCacheRejectsNegativeCapacity(t *testing.T) {
-	enabled := true
-	size := int64(-1)
-	ttl := time.Minute
-	loadTimeout := time.Second
-
 	_, err := newTokenVersionLocalCacheResource(serviceconfig.FeatureCacheConfig{
-		Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout,
+		Enabled: true, Size: -1, TTL: time.Minute, LoadTimeout: time.Second,
 	}, NewMockUserTokenVersionStore(gomock.NewController(t)), NewMockTokenVersionCache(gomock.NewController(t)))
 	require.ErrorIs(t, err, localcache.ErrCapacityRequired)
 }
 
 func TestDisabledTokenVersionLocalCacheResourceCloseIsNoop(t *testing.T) {
-	disabled := false
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000503")
 	ctrl := gomock.NewController(t)
 	users := NewMockUserTokenVersionStore(ctrl)
 	cache := NewMockTokenVersionCache(ctrl)
-	resource, err := newTokenVersionLocalCacheResource(serviceconfig.FeatureCacheConfig{Enabled: &disabled}, users, cache)
+	resource, err := newTokenVersionLocalCacheResource(serviceconfig.FeatureCacheConfig{
+		Enabled: false, Size: -1, TTL: -time.Second, LoadTimeout: -time.Second,
+	}, users, cache)
 	require.NoError(t, err)
 
 	require.NoError(t, resource.Close())
@@ -273,11 +262,7 @@ func TestSessionPurgePoolHolderRejectsBeforeStartAndStopsIdempotently(t *testing
 }
 
 func TestTokenVersionLocalCacheHolderFailsClosedBeforeStartAndClosesIdempotently(t *testing.T) {
-	enabled := true
-	size := int64(10)
-	ttl := time.Minute
-	loadTimeout := time.Second
-	holder := &tokenVersionLocalCacheHolder{cfg: serviceconfig.FeatureCacheConfig{Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout}, users: NewMockUserTokenVersionStore(gomock.NewController(t)), cache: NewMockTokenVersionCache(gomock.NewController(t))}
+	holder := &tokenVersionLocalCacheHolder{cfg: serviceconfig.FeatureCacheConfig{Enabled: true, Size: 10, TTL: time.Minute, LoadTimeout: time.Second}, users: NewMockUserTokenVersionStore(gomock.NewController(t)), cache: NewMockTokenVersionCache(gomock.NewController(t))}
 	require.ErrorIs(t, holder.Delete("018f0000-0000-7000-8000-000000000504"), localcache.ErrClosed)
 	_, err := holder.GetOrLoad(context.Background(), "018f0000-0000-7000-8000-000000000504")
 	require.ErrorIs(t, err, localcache.ErrClosed)
@@ -344,25 +329,22 @@ func newAuthModuleBaseOptions(t *testing.T, refreshRotation bool, provider *comm
 
 func newAuthModuleBaseOptionsWithoutRedis(t *testing.T, refreshRotation bool, provider *commonmetrics.Provider) []fx.Option {
 	t.Helper()
-	disabled := false
-	cfg := &serviceconfig.Config{
-		Config: commonconfig.Config{App: commonconfig.AppConfig{Name: "aegiscore-user-service-module-test"}},
-		Auth: serviceconfig.AuthConfig{
-			JWT: serviceconfig.JWTConfig{
-				Secret:                 "auth-module-test-secret-32-bytes",
-				Issuer:                 "issuer",
-				Audience:               "audience",
-				AccessTokenTTL:         15 * time.Minute,
-				RefreshTokenTTL:        time.Hour,
-				PasswordChangeTokenTTL: 5 * time.Minute,
-			},
-			TokenVersionCache:        serviceconfig.FeatureCacheConfig{Enabled: &disabled},
-			TokenVersionCacheTTL:     time.Minute,
-			RefreshTokenRotation:     refreshRotation,
-			MaxActiveSessionsPerUser: 5,
+	settings := serviceconfig.AuthSettings{
+		AppName: "aegiscore-user-service-module-test",
+		JWT: serviceconfig.JWTConfig{
+			Secret:                 "auth-module-test-secret-32-bytes",
+			Issuer:                 "issuer",
+			Audience:               "audience",
+			AccessTokenTTL:         15 * time.Minute,
+			RefreshTokenTTL:        time.Hour,
+			PasswordChangeTokenTTL: 5 * time.Minute,
 		},
+		TokenVersionCache:        serviceconfig.FeatureCacheConfig{Enabled: false},
+		TokenVersionCacheTTL:     time.Minute,
+		RefreshTokenRotation:     refreshRotation,
+		MaxActiveSessionsPerUser: 5,
 	}
-	jwtService := commonauth.NewJWTService(commonauth.JWTConfig{Secret: cfg.Auth.JWT.Secret, Issuer: cfg.Auth.JWT.Issuer, Audience: cfg.Auth.JWT.Audience})
+	jwtService := commonauth.NewJWTService(commonauth.JWTConfig{Secret: settings.JWT.Secret, Issuer: settings.JWT.Issuer, Audience: settings.JWT.Audience})
 	passwordService, err := password.NewService()
 	require.NoError(t, err)
 	validator, err := commonvalidation.NewDefault()
@@ -372,7 +354,7 @@ func newAuthModuleBaseOptionsWithoutRedis(t *testing.T, refreshRotation bool, pr
 	options := []fx.Option{
 		fxtest.WithTestLogger(t),
 		fx.Supply(
-			cfg,
+			settings,
 			jwtService,
 			passwordService,
 			validator,

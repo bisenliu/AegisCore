@@ -22,7 +22,7 @@ type NamedEntClientParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Config    *serviceconfig.Config
+	Settings  serviceconfig.EntSettings
 	Log       *zap.Logger
 	Metrics   *commonmetrics.Provider
 	Tracing   *commontracing.Provider
@@ -46,7 +46,7 @@ const (
 
 // ProvideEntClients 将具名 SQL 连接池包装为 Ent client，并注册 Ent client 关闭 hook。
 func ProvideEntClients(params NamedEntClientParams) (NamedEntClients, error) {
-	plugins, err := newEntPlugins(params.Config, params.Log, params.Metrics, params.Tracing)
+	plugins, err := newEntPlugins(params.Settings, params.Log, params.Metrics, params.Tracing)
 	if err != nil {
 		return NamedEntClients{}, err
 	}

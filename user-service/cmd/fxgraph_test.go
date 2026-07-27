@@ -100,6 +100,10 @@ func TestFxGraphRenderDOTFailsWithoutServiceConfig(t *testing.T) {
 		// Fx 分类：开发工具 - 只提供共享 runtime config，模拟缺失 user-service 私有配置的错误图。
 		fx.Supply(serviceconfig.NewRuntimeConfig(cfg)),
 		fx.Provide(
+			serviceconfig.NewAuthSettings,
+			serviceconfig.NewRBACSettings,
+			serviceconfig.NewEntSettings,
+			serviceconfig.NewResourceSettings,
 			// Fx 分类：基础运行时 - 与正式 AppOptions 相同的日志 provider。
 			commonlogger.NewLogger,
 		),
@@ -120,6 +124,10 @@ func assertFxGraphContainsAppNodes(t *testing.T, dot string) {
 		"github.com/aegiscore/user-service/internal/features/role",
 		"github.com/aegiscore/user-service/internal/features/user",
 		"*config.Config",
+		"config.AuthSettings",
+		"config.RBACSettings",
+		"config.EntSettings",
+		"config.ResourceSettings",
 		"*gin.Engine",
 	} {
 		require.Contains(t, dot, expected)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	commonconfig "github.com/aegiscore/common/runtime/config"
+	commonnacos "github.com/aegiscore/common/runtime/config/nacos"
 )
 
 // LoadResult 包含已应用默认值的服务配置和原始配置来源信息。
@@ -23,16 +24,30 @@ func (r *LoadResult) EffectiveSettings() (map[string]any, error) {
 
 // Load 从 Nacos 分层配置加载 user-service 配置。
 func Load(ctx context.Context) (*LoadResult, error) {
-	settings, source, err := commonconfig.LoadNacosMergedSettings(ctx)
+	env, err := commonnacos.LoadEnv()
 	if err != nil {
 		return nil, err
 	}
-	return DecodeSettings(settings, source)
+	source, err := commonnacos.NewSource(env)
+	if err != nil {
+		return nil, err
+	}
+	settings, metadata, err := commonconfig.LoadSource(ctx, source)
+	if err != nil {
+		return nil, err
+	}
+	return DecodeSettings(settings, metadata)
 }
 
 // DecodeSettings 将合并后的配置 map 解码为 user-service Config。
 func DecodeSettings(settings map[string]any, source commonconfig.SourceMetadata) (*LoadResult, error) {
-	cfg, err := commonconfig.DecodeStrict[Config](settings, Config.Validate)
+	cfg, err := commonconfig.DecodeStrict(settings, commonconfig.DecodeOptions[Config]{
+		Defaults: DefaultConfig,
+		Normalize: func(cfg *Config) {
+			normalizeConfig(cfg, settings)
+		},
+		Validate: Config.Validate,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -48,15 +63,24 @@ func DecodeSettings(settings map[string]any, source commonconfig.SourceMetadata)
 
 // LoadFromDocuments 使用测试或初始化来源提供的多段 YAML 生成配置。
 func LoadFromDocuments(docs []commonconfig.ConfigDocument) (*LoadResult, error) {
-	settings, err := commonconfig.DeepMergeYAML(docs)
+	settings, source, err := commonconfig.LoadSource(context.Background(), documentSource{docs: docs})
 	if err != nil {
 		return nil, err
 	}
-	digest, err := commonconfig.DigestSettings(settings)
-	if err != nil {
-		return nil, fmt.Errorf("digest runtime config: %w", err)
+	return DecodeSettings(settings, source)
+}
+
+type documentSource struct {
+	docs []commonconfig.ConfigDocument
+}
+
+func (s documentSource) LoadDocuments(context.Context) ([]commonconfig.ConfigDocument, commonconfig.SourceMetadata, error) {
+	docs := append([]commonconfig.ConfigDocument(nil), s.docs...)
+	dataIDs := make([]string, 0, len(docs))
+	for _, doc := range docs {
+		dataIDs = append(dataIDs, doc.DataID)
 	}
-	return DecodeSettings(settings, commonconfig.SourceMetadata{Provider: "test", Digest: digest})
+	return docs, commonconfig.SourceMetadata{Provider: "test", DataIDs: dataIDs}, nil
 }
 
 // NewRuntimeConfig 提供共享 runtime 配置，供 common provider 消费。

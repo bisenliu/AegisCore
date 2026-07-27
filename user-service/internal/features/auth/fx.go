@@ -108,7 +108,7 @@ type SessionStoreParams struct {
 
 	Lifecycle fx.Lifecycle
 	Redis     *rediscache.Client `name:"cache_redis"`
-	Config    *serviceconfig.Config
+	Settings  serviceconfig.AuthSettings
 	PurgePool authredis.PurgeTaskPool `name:"auth_session_purge_pool"`
 	Metrics   authapplication.Metrics
 }
@@ -131,7 +131,7 @@ type TokenVersionLocalCacheParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Config    *serviceconfig.Config
+	Settings  serviceconfig.AuthSettings
 	Users     authapplication.UserTokenVersionStore
 	Cache     authapplication.TokenVersionCache
 }
@@ -203,14 +203,14 @@ func newCredentialStore(params CredentialStoreParams) *authpostgres.CredentialSt
 }
 
 func newSessionStore(params SessionStoreParams) (*authredis.SessionStore, error) {
-	keys, err := authredis.NewKeyCatalog(params.Config.App.Name)
+	keys, err := authredis.NewKeyCatalog(params.Settings.AppName)
 	if err != nil {
 		return nil, fmt.Errorf("new auth redis keys: %w", err)
 	}
 	store := authredis.NewSessionStore(authredis.SessionStoreOptions{
 		Redis:                params.Redis,
 		Keys:                 keys,
-		TokenVersionCacheTTL: params.Config.Auth.TokenVersionCacheTTL,
+		TokenVersionCacheTTL: params.Settings.TokenVersionCacheTTL,
 		PurgePool:            params.PurgePool,
 		Metrics:              params.Metrics,
 	})
@@ -230,7 +230,7 @@ func newSessionPurgePool(params SessionPurgePoolParams) (SessionPurgePoolResult,
 }
 
 func newTokenVersionLocalCache(params TokenVersionLocalCacheParams) (TokenVersionLocalCacheResult, error) {
-	resource := &tokenVersionLocalCacheHolder{cfg: params.Config.Auth.TokenVersionCache, users: params.Users, cache: params.Cache}
+	resource := &tokenVersionLocalCacheHolder{cfg: params.Settings.TokenVersionCache, users: params.Users, cache: params.Cache}
 	if params.Lifecycle != nil {
 		params.Lifecycle.Append(fx.Hook{OnStart: resource.Start, OnStop: resource.Close})
 	} else if err := resource.Start(context.Background()); err != nil {
@@ -240,16 +240,11 @@ func newTokenVersionLocalCache(params TokenVersionLocalCacheParams) (TokenVersio
 }
 
 func newTokenVersionLocalCacheResource(cfg serviceconfig.FeatureCacheConfig, users authapplication.UserTokenVersionStore, cache authapplication.TokenVersionCache) (*tokenVersionLocalCacheResource, error) {
-	if !cfg.IsEnabled() {
+	if !cfg.Enabled {
 		direct := authvalidators.NewDirectTokenVersionCache(users, cache)
 		return &tokenVersionLocalCacheResource{cache: direct, stats: direct}, nil
 	}
-	local, err := localcache.NewLoadingCache[string, int64](localcache.Config{
-		Name:        authTokenVersionCacheName,
-		Capacity:    cfg.CapacityValue(),
-		TTL:         cfg.TTLValue(),
-		LoadTimeout: cfg.LoadTimeoutValue(),
-	}, func(ctx context.Context, userID string) (int64, error) {
+	local, err := localcache.NewLoadingCache[string, int64](cfg.Localcache(authTokenVersionCacheName), func(ctx context.Context, userID string) (int64, error) {
 		return authvalidators.Current(ctx, users, cache, userID)
 	})
 	if err != nil {
@@ -260,12 +255,12 @@ func newTokenVersionLocalCacheResource(cfg serviceconfig.FeatureCacheConfig, use
 
 // Provider：应用服务
 
-func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, tokenVersionCache authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, tokenVersions authvalidators.TokenVersionLocalInvalidator, cfg *serviceconfig.Config) (authsessions.Lifecycle, error) {
-	return authsessions.NewLifecycle(users, tokenVersionCache, sessions, passwordChangeSessions, cfg.Auth.MaxActiveSessionsPerUser, tokenVersions)
+func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, tokenVersionCache authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, tokenVersions authvalidators.TokenVersionLocalInvalidator, settings serviceconfig.AuthSettings) (authsessions.Lifecycle, error) {
+	return authsessions.NewLifecycle(users, tokenVersionCache, sessions, passwordChangeSessions, settings.MaxActiveSessionsPerUser, tokenVersions)
 }
 
-func newRefreshTokenSettings(cfg *serviceconfig.Config) authcommand.RefreshTokenSettings {
-	return authcommand.RefreshTokenSettings{RefreshTokenRotation: cfg.Auth.RefreshTokenRotation}
+func newRefreshTokenSettings(settings serviceconfig.AuthSettings) authcommand.RefreshTokenSettings {
+	return authcommand.RefreshTokenSettings{RefreshTokenRotation: settings.RefreshTokenRotation}
 }
 
 func newTokenVersionValidator(params TokenVersionValidatorParams) TokenVersionValidatorResult {

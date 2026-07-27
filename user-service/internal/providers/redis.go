@@ -22,7 +22,7 @@ type CacheRedisParams struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Config    *serviceconfig.Config
+	Settings  serviceconfig.ResourceSettings
 	Log       *zap.Logger
 	Trace     *commontracing.Provider
 }
@@ -39,7 +39,7 @@ func newCacheRedis(params CacheRedisParams, createRedisClient redisClientFactory
 	if createRedisClient == nil {
 		return nil, errors.New("redis client factory is required")
 	}
-	redisCfg, ok := params.Config.Resources.Redis[resources.NameCacheRedis]
+	redisCfg, ok := params.Settings.Redis[resources.NameCacheRedis]
 	if !ok {
 		return nil, fmt.Errorf("redis config %q not found", resources.NameCacheRedis)
 	}

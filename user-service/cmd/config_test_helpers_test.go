@@ -8,15 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	commonconfig "github.com/aegiscore/common/runtime/config"
+	commonnacos "github.com/aegiscore/common/runtime/config/nacos"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 func setTestNacosEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv(commonconfig.EnvService, "user-service")
-	t.Setenv(commonconfig.EnvNacosAddr, "127.0.0.1:8848")
-	t.Setenv(commonconfig.EnvNacosNamespace, "test")
-	t.Setenv(commonconfig.EnvNacosGroup, "AEGISCORE")
+	t.Setenv(commonnacos.EnvService, "user-service")
+	t.Setenv(commonnacos.EnvAddr, "127.0.0.1:8848")
+	t.Setenv(commonnacos.EnvNamespace, "test")
+	t.Setenv(commonnacos.EnvGroup, "AEGISCORE")
 }
 
 func loadRepositoryConfigForTest(t *testing.T) *serviceconfig.Config {

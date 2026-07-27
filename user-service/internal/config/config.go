@@ -5,6 +5,7 @@ import (
 	"time"
 
 	commonconfig "github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/localcache"
 	commonresources "github.com/aegiscore/common/runtime/resources"
 	serviceresources "github.com/aegiscore/user-service/internal/resources"
 )
@@ -46,48 +47,48 @@ type RBACConfig struct {
 
 // FeatureCacheConfig 描述单个 feature 自有 bounded cache 的稳定配置面。
 type FeatureCacheConfig struct {
-	Enabled     *bool          `mapstructure:"enabled"`
-	Size        *int64         `mapstructure:"size"`
-	TTL         *time.Duration `mapstructure:"ttl"`
-	LoadTimeout *time.Duration `mapstructure:"load_timeout"`
+	Enabled     bool          `mapstructure:"enabled"`
+	Size        int64         `mapstructure:"size"`
+	TTL         time.Duration `mapstructure:"ttl"`
+	LoadTimeout time.Duration `mapstructure:"load_timeout"`
 }
 
-// IsEnabled 返回缓存是否启用；未显式配置时按默认启用处理。
-func (c FeatureCacheConfig) IsEnabled() bool {
-	return c.Enabled == nil || *c.Enabled
-}
-
-// SizeValue 返回配置的最大条目数；字段缺失时返回零。
-func (c FeatureCacheConfig) SizeValue() int64 {
-	if c.Size == nil {
-		return 0
+// DefaultFeatureCacheConfig 构造启用状态下的完整 feature cache 默认配置。
+func DefaultFeatureCacheConfig(size int64, ttl time.Duration, loadTimeout time.Duration) FeatureCacheConfig {
+	return FeatureCacheConfig{
+		Enabled:     true,
+		Size:        size,
+		TTL:         ttl,
+		LoadTimeout: loadTimeout,
 	}
-	return *c.Size
 }
 
-// CapacityValue 返回可安全传递给 localcache 的容量；非正数返回零并由构造器拒绝。
-func (c FeatureCacheConfig) CapacityValue() uint64 {
-	size := c.SizeValue()
-	if size <= 0 {
-		return 0
+// Validate 校验启用的 feature cache；禁用时其余字段不参与运行时构造和校验。
+func (c FeatureCacheConfig) Validate(path string) []error {
+	if !c.Enabled {
+		return nil
 	}
-	return uint64(size)
+	var errs []error
+	if c.Size <= 0 {
+		errs = append(errs, commonconfig.FieldError(path+".size", "must be > 0 when enabled"))
+	}
+	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".ttl", c.TTL)...)
+	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".load_timeout", c.LoadTimeout)...)
+	return errs
 }
 
-// TTLValue 返回缓存条目的生命周期；字段缺失时返回零。
-func (c FeatureCacheConfig) TTLValue() time.Duration {
-	if c.TTL == nil {
-		return 0
+// Localcache 将服务私有 feature cache 配置集中映射为通用 localcache 配置。
+func (c FeatureCacheConfig) Localcache(name string) localcache.Config {
+	var capacity uint64
+	if c.Size > 0 {
+		capacity = uint64(c.Size)
 	}
-	return *c.TTL
-}
-
-// LoadTimeoutValue 返回单次回源上限；字段缺失时返回零。
-func (c FeatureCacheConfig) LoadTimeoutValue() time.Duration {
-	if c.LoadTimeout == nil {
-		return 0
+	return localcache.Config{
+		Name:        name,
+		Capacity:    capacity,
+		TTL:         c.TTL,
+		LoadTimeout: c.LoadTimeout,
 	}
-	return *c.LoadTimeout
 }
 
 // EntConfig 控制 user-service Ent 运行时行为。
@@ -134,33 +135,71 @@ func (c Config) RuntimeConfig() commonconfig.Config {
 	return c.Config
 }
 
-// ApplyDefaults 在服务配置校验前补齐所有具名资源默认值。
-func (c *Config) ApplyDefaults() {
+// DefaultConfig 返回 user-service 的完整默认配置初值。
+func DefaultConfig() Config {
+	return Config{
+		Config: commonconfig.DefaultConfig(),
+		Resources: ResourcesConfig{
+			Redis: commonresources.RedisConfigs{
+				serviceresources.NameCacheRedis: {
+					Timeout: commonresources.DefaultRedisTimeout,
+				},
+			},
+			Postgres: commonresources.PostgresConfigs{
+				serviceresources.NamePrimaryDB: {
+					SSLMode: commonresources.DefaultPostgresSSLMode,
+					Pool: commonresources.PostgresPoolConfig{
+						MaxOpenConns:    commonresources.DefaultPostgresMaxOpenConns,
+						MaxIdleConns:    commonresources.DefaultPostgresMaxIdleConns,
+						ConnMaxLifetime: commonresources.DefaultPostgresConnMaxLifetime,
+						ConnMaxIdleTime: commonresources.DefaultPostgresConnMaxIdleTime,
+					},
+				},
+			},
+		},
+		Auth: AuthConfig{
+			TokenVersionCache: DefaultFeatureCacheConfig(100000, time.Second, 300*time.Millisecond),
+		},
+		RBAC: RBACConfig{
+			UserRoleCache: DefaultFeatureCacheConfig(100000, 5*time.Second, 500*time.Millisecond),
+		},
+		Ent: EntConfig{
+			Plugins: EntPluginsConfig{
+				SQLLog: EntSQLLogPluginConfig{
+					SlowThreshold: DefaultEntSlowQueryThreshold,
+				},
+				Tracing: EntTracingPluginConfig{Enabled: true},
+			},
+		},
+	}
+}
+
+// normalizeConfig 按 raw settings 保留实际声明的固定资源，并补齐新增动态具名资源的通用默认值。
+func normalizeConfig(c *Config, settings map[string]any) {
 	if c == nil {
 		return
 	}
+	if !hasRawNamedResource(settings, "redis", serviceresources.NameCacheRedis) {
+		delete(c.Resources.Redis, serviceresources.NameCacheRedis)
+	}
+	if !hasRawNamedResource(settings, "postgres", serviceresources.NamePrimaryDB) {
+		delete(c.Resources.Postgres, serviceresources.NamePrimaryDB)
+	}
 	c.Resources.Redis.ApplyDefaults()
 	c.Resources.Postgres.ApplyDefaults()
-	c.Ent.applyDefaults()
-	c.Auth.TokenVersionCache.applyDefaults(100000, time.Second, 300*time.Millisecond)
-	c.RBAC.UserRoleCache.applyDefaults(100000, 5*time.Second, 500*time.Millisecond)
 }
 
-// ConfigDefaults 返回需要在解码前注册的服务默认值，使显式 false 不被后置默认值覆盖。
-func (*Config) ConfigDefaults() map[string]any {
-	return map[string]any{
-		"ent.plugins.sql_log.enabled":        false,
-		"ent.plugins.sql_log.debug":          false,
-		"ent.plugins.sql_log.slow_threshold": DefaultEntSlowQueryThreshold,
-		"ent.plugins.tracing.enabled":        true,
-		"ent.plugins.metrics.enabled":        false,
+func hasRawNamedResource(settings map[string]any, resourceType string, name string) bool {
+	resources, ok := settings["resources"].(map[string]any)
+	if !ok {
+		return false
 	}
-}
-
-func (c *EntConfig) applyDefaults() {
-	if c.Plugins.SQLLog.SlowThreshold <= 0 {
-		c.Plugins.SQLLog.SlowThreshold = DefaultEntSlowQueryThreshold
+	namedResources, ok := resources[resourceType].(map[string]any)
+	if !ok {
+		return false
 	}
+	value, exists := namedResources[name]
+	return exists && value != nil
 }
 
 // Validate 在 user-service 启动前拒绝结构非法的服务配置。
@@ -183,7 +222,7 @@ func (c Config) Validate() error {
 		errs = append(errs, commonconfig.FieldError("resources.postgres."+serviceresources.NamePrimaryDB, "is required"))
 	}
 	errs = append(errs, c.validateAuth()...)
-	errs = append(errs, validateFeatureCache("rbac.user_role_cache", c.RBAC.UserRoleCache)...)
+	errs = append(errs, c.RBAC.UserRoleCache.Validate("rbac.user_role_cache")...)
 	if len(errs) == 0 {
 		return nil
 	}
@@ -206,39 +245,7 @@ func (c Config) validateAuth() []error {
 	errs = append(errs, commonconfig.ValidatePositiveDuration("auth.jwt.access_token_ttl", c.Auth.JWT.AccessTokenTTL)...)
 	errs = append(errs, commonconfig.ValidatePositiveDuration("auth.jwt.refresh_token_ttl", c.Auth.JWT.RefreshTokenTTL)...)
 	errs = append(errs, commonconfig.ValidateNonNegativeInt("auth.max_active_sessions_per_user", c.Auth.MaxActiveSessionsPerUser)...)
-	errs = append(errs, validateFeatureCache("auth.token_version_cache", c.Auth.TokenVersionCache)...)
-	return errs
-}
-
-func (c *FeatureCacheConfig) applyDefaults(size int64, ttl time.Duration, loadTimeout time.Duration) {
-	if c.Enabled == nil {
-		enabled := true
-		c.Enabled = &enabled
-	}
-	if !c.IsEnabled() {
-		return
-	}
-	if c.Size == nil {
-		c.Size = &size
-	}
-	if c.TTL == nil {
-		c.TTL = &ttl
-	}
-	if c.LoadTimeout == nil {
-		c.LoadTimeout = &loadTimeout
-	}
-}
-
-func validateFeatureCache(path string, cfg FeatureCacheConfig) []error {
-	if !cfg.IsEnabled() {
-		return nil
-	}
-	var errs []error
-	if cfg.SizeValue() <= 0 {
-		errs = append(errs, commonconfig.FieldError(path+".size", "must be > 0 when enabled"))
-	}
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".ttl", cfg.TTLValue())...)
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".load_timeout", cfg.LoadTimeoutValue())...)
+	errs = append(errs, c.Auth.TokenVersionCache.Validate("auth.token_version_cache")...)
 	return errs
 }
 

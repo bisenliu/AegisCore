@@ -10,25 +10,25 @@ import (
 )
 
 func TestNewJWTServiceRejectsInvalidTokenTTLPolicy(t *testing.T) {
-	cfg := &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{
+	settings := serviceconfig.AuthSettings{JWT: serviceconfig.JWTConfig{
 		Secret:          "secret",
 		AccessTokenTTL:  time.Hour,
 		RefreshTokenTTL: time.Hour,
-	}}}
+	}}
 
-	_, err := NewJWTService(cfg)
+	_, err := NewJWTService(settings)
 	require.ErrorContains(t, err, "auth jwt refresh_token_ttl must be greater than access_token_ttl")
 
 }
 
 func TestNewJWTServiceAcceptsValidTokenTTLPolicy(t *testing.T) {
-	cfg := &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: serviceconfig.JWTConfig{
+	settings := serviceconfig.AuthSettings{JWT: serviceconfig.JWTConfig{
 		Secret:          "secret",
 		AccessTokenTTL:  15 * time.Minute,
 		RefreshTokenTTL: time.Hour,
-	}}}
+	}}
 
-	service, err := NewJWTService(cfg)
+	service, err := NewJWTService(settings)
 	require.NoError(t, err)
 	require.NotNil(t, service)
 

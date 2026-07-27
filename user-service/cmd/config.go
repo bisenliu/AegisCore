@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	commonconfig "github.com/aegiscore/common/runtime/config"
+	commonnacos "github.com/aegiscore/common/runtime/config/nacos"
 )
 
 func newConfigCommand(loadConfig configLoader) *cobra.Command {
@@ -64,7 +65,7 @@ func newConfigSourcesCommand() *cobra.Command {
 		Short: "Show Nacos runtime configuration source order",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			env, err := commonconfig.LoadNacosEnv()
+			env, err := commonnacos.LoadEnv()
 			if err != nil {
 				return err
 			}

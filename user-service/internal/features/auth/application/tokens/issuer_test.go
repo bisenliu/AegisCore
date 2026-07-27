@@ -85,13 +85,13 @@ func TestIssuerRejectsWrongSubjectForAccessVerifier(t *testing.T) {
 func TestIssuerRejectsRefreshTokenMissingJTI(t *testing.T) {
 	cfg := testIssuerConfig(serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour})
 	issuer := NewIssuer(testJWTVerifier(cfg), cfg)
-	token := signIssuerTestClaims(t, cfg.Auth.JWT.Secret, Claims{
+	token := signIssuerTestClaims(t, cfg.JWT.Secret, Claims{
 		UserID:       issuerTestUserID,
 		TokenVersion: 2,
 		SessionID:    "s-123",
 		RegisteredClaims: jwtv5.RegisteredClaims{
-			Issuer:    cfg.Auth.JWT.Issuer,
-			Audience:  jwtv5.ClaimStrings{cfg.Auth.JWT.Audience},
+			Issuer:    cfg.JWT.Issuer,
+			Audience:  jwtv5.ClaimStrings{cfg.JWT.Audience},
 			Subject:   SubjectRefresh,
 			ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Hour)),
 		},
@@ -101,12 +101,12 @@ func TestIssuerRejectsRefreshTokenMissingJTI(t *testing.T) {
 	require.Error(t, err)
 }
 
-func testIssuerConfig(jwt serviceconfig.JWTConfig) *serviceconfig.Config {
-	return &serviceconfig.Config{Auth: serviceconfig.AuthConfig{JWT: jwt}}
+func testIssuerConfig(jwt serviceconfig.JWTConfig) serviceconfig.AuthSettings {
+	return serviceconfig.AuthSettings{JWT: jwt}
 }
 
-func testJWTVerifier(cfg *serviceconfig.Config) *commonauth.JWTService {
-	return commonauth.NewJWTService(commonauth.JWTConfig{Secret: cfg.Auth.JWT.Secret, Issuer: cfg.Auth.JWT.Issuer, Audience: cfg.Auth.JWT.Audience})
+func testJWTVerifier(settings serviceconfig.AuthSettings) *commonauth.JWTService {
+	return commonauth.NewJWTService(commonauth.JWTConfig{Secret: settings.JWT.Secret, Issuer: settings.JWT.Issuer, Audience: settings.JWT.Audience})
 }
 
 func signIssuerTestClaims(t *testing.T, secret string, claims Claims) string {

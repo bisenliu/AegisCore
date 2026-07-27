@@ -9,7 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ConfigDocument 是从一个 dataId 读取到的 YAML 文档。
+// ConfigDocument 是配置来源按顺序返回的一份 YAML 文档。
 type ConfigDocument struct {
 	DataID  string
 	Content []byte
@@ -23,7 +23,7 @@ func DeepMergeYAML(docs []ConfigDocument) (map[string]any, error) {
 		if len(doc.Content) == 0 {
 			current = map[string]any{}
 		} else if err := yaml.Unmarshal(doc.Content, &current); err != nil {
-			return nil, fmt.Errorf("decode nacos config %s: %w", doc.DataID, err)
+			return nil, fmt.Errorf("decode config document %s: %w", doc.DataID, err)
 		}
 		merged = mergeConfigValues(merged, current).(map[string]any)
 	}

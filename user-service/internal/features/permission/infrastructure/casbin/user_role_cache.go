@@ -15,8 +15,8 @@ const rbacUserRolesCacheName = "rbac_user_roles"
 
 // UserRoleResolverParams 包含用户角色 resolver 的 Fx 输入。
 type UserRoleResolverParams struct {
-	Config *serviceconfig.Config
-	Client *ent.Client
+	Settings serviceconfig.RBACSettings
+	Client   *ent.Client
 }
 
 // UserRoleResolverResult 暴露 resolver 和对应的缓存统计源。
@@ -33,17 +33,12 @@ type UserRoleCacheCloser interface {
 
 // NewUserRoleResolver 构造按用户 bounded TTL 缓存的角色解析器。
 func NewUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult, error) {
-	cfg := params.Config.RBAC.UserRoleCache
+	cfg := params.Settings.UserRoleCache
 	resolver := &entUserRoleResolver{client: params.Client}
-	if !cfg.IsEnabled() {
+	if !cfg.Enabled {
 		return UserRoleResolverResult{Resolver: resolver, Stats: resolver, Closer: resolver}, nil
 	}
-	cache, err := localcache.NewLoadingCache[uuid.UUID, []uuid.UUID](localcache.Config{
-		Name:        rbacUserRolesCacheName,
-		Capacity:    cfg.CapacityValue(),
-		TTL:         cfg.TTLValue(),
-		LoadTimeout: cfg.LoadTimeoutValue(),
-	}, func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	cache, err := localcache.NewLoadingCache[uuid.UUID, []uuid.UUID](cfg.Localcache(rbacUserRolesCacheName), func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 		roleIDs, err := resolver.loadRolesForUser(ctx, userID)
 		if err != nil {
 			return nil, err

@@ -21,14 +21,14 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, 168*time.Hour, cfg.Auth.JWT.RefreshTokenTTL)
 	require.Equal(t, 5*time.Minute, cfg.Auth.JWT.PasswordChangeTokenTTL)
 	require.Equal(t, 30*time.Second, cfg.Auth.TokenVersionCacheTTL)
-	require.True(t, cfg.Auth.TokenVersionCache.IsEnabled())
-	require.EqualValues(t, 2048, cfg.Auth.TokenVersionCache.SizeValue())
-	require.Equal(t, 2*time.Second, cfg.Auth.TokenVersionCache.TTLValue())
-	require.Equal(t, 400*time.Millisecond, cfg.Auth.TokenVersionCache.LoadTimeoutValue())
-	require.True(t, cfg.RBAC.UserRoleCache.IsEnabled())
-	require.EqualValues(t, 4096, cfg.RBAC.UserRoleCache.SizeValue())
-	require.Equal(t, 7*time.Second, cfg.RBAC.UserRoleCache.TTLValue())
-	require.Equal(t, 600*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeoutValue())
+	require.True(t, cfg.Auth.TokenVersionCache.Enabled)
+	require.EqualValues(t, 2048, cfg.Auth.TokenVersionCache.Size)
+	require.Equal(t, 2*time.Second, cfg.Auth.TokenVersionCache.TTL)
+	require.Equal(t, 400*time.Millisecond, cfg.Auth.TokenVersionCache.LoadTimeout)
+	require.True(t, cfg.RBAC.UserRoleCache.Enabled)
+	require.EqualValues(t, 4096, cfg.RBAC.UserRoleCache.Size)
+	require.Equal(t, 7*time.Second, cfg.RBAC.UserRoleCache.TTL)
+	require.Equal(t, 600*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeout)
 	require.True(t, cfg.Auth.RefreshTokenRotation)
 	require.Equal(t, 5, cfg.Auth.MaxActiveSessionsPerUser)
 	require.True(t, cfg.Ent.Plugins.SQLLog.Enabled)
@@ -47,51 +47,60 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, 50*time.Second, runtime.Runtime.Lifecycle.StopTimeout)
 }
 
-func TestApplyDefaultsSetsFeatureCacheDefaults(t *testing.T) {
-	cfg := &Config{}
-	cfg.ApplyDefaults()
+func TestDefaultFeatureCacheConfigReturnsCompleteValue(t *testing.T) {
+	cfg := DefaultFeatureCacheConfig(100000, time.Second, 300*time.Millisecond)
 
-	require.True(t, cfg.Auth.TokenVersionCache.IsEnabled())
-	require.EqualValues(t, 100000, cfg.Auth.TokenVersionCache.SizeValue())
-	require.Equal(t, time.Second, cfg.Auth.TokenVersionCache.TTLValue())
-	require.Equal(t, 300*time.Millisecond, cfg.Auth.TokenVersionCache.LoadTimeoutValue())
-	require.True(t, cfg.RBAC.UserRoleCache.IsEnabled())
-	require.EqualValues(t, 100000, cfg.RBAC.UserRoleCache.SizeValue())
-	require.Equal(t, 5*time.Second, cfg.RBAC.UserRoleCache.TTLValue())
-	require.Equal(t, 500*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeoutValue())
+	require.True(t, cfg.Enabled)
+	require.EqualValues(t, 100000, cfg.Size)
+	require.Equal(t, time.Second, cfg.TTL)
+	require.Equal(t, 300*time.Millisecond, cfg.LoadTimeout)
 }
 
-func TestFeatureCacheCapacityValue(t *testing.T) {
-	positive := int64(123)
-	zero := int64(0)
-	negative := int64(-1)
+func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
+	cfg := DefaultConfig()
 
+	require.Equal(t, commonconfig.DefaultConfig(), cfg.Config)
+	require.Equal(t, commonresources.DefaultRedisTimeout, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
+	postgres := cfg.Resources.Postgres[serviceresources.NamePrimaryDB]
+	require.Equal(t, commonresources.DefaultPostgresSSLMode, postgres.SSLMode)
+	require.Equal(t, commonresources.DefaultPostgresMaxOpenConns, postgres.Pool.MaxOpenConns)
+	require.Equal(t, commonresources.DefaultPostgresMaxIdleConns, postgres.Pool.MaxIdleConns)
+	require.Equal(t, commonresources.DefaultPostgresConnMaxLifetime, postgres.Pool.ConnMaxLifetime)
+	require.Equal(t, commonresources.DefaultPostgresConnMaxIdleTime, postgres.Pool.ConnMaxIdleTime)
+	require.Equal(t, DefaultFeatureCacheConfig(100000, time.Second, 300*time.Millisecond), cfg.Auth.TokenVersionCache)
+	require.Equal(t, DefaultFeatureCacheConfig(100000, 5*time.Second, 500*time.Millisecond), cfg.RBAC.UserRoleCache)
+	require.False(t, cfg.Ent.Plugins.SQLLog.Enabled)
+	require.False(t, cfg.Ent.Plugins.SQLLog.Debug)
+	require.Equal(t, DefaultEntSlowQueryThreshold, cfg.Ent.Plugins.SQLLog.SlowThreshold)
+	require.True(t, cfg.Ent.Plugins.Tracing.Enabled)
+	require.False(t, cfg.Ent.Plugins.Metrics.Enabled)
+}
+
+func TestFeatureCacheLocalcache(t *testing.T) {
 	tests := []struct {
 		name string
-		size *int64
+		size int64
 		want uint64
 	}{
-		{name: "missing", want: 0},
-		{name: "positive", size: &positive, want: 123},
-		{name: "zero", size: &zero, want: 0},
-		{name: "negative", size: &negative, want: 0},
+		{name: "positive", size: 123, want: 123},
+		{name: "zero", want: 0},
+		{name: "negative", size: -1, want: 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := FeatureCacheConfig{Size: tt.size}
-			require.Equal(t, tt.want, cfg.CapacityValue())
+			cfg := FeatureCacheConfig{Size: tt.size, TTL: time.Minute, LoadTimeout: time.Second}
+			mapped := cfg.Localcache("feature_test")
+			require.Equal(t, "feature_test", mapped.Name)
+			require.Equal(t, tt.want, mapped.Capacity)
+			require.Equal(t, time.Minute, mapped.TTL)
+			require.Equal(t, time.Second, mapped.LoadTimeout)
 		})
 	}
 }
 
 func TestLoadAppliesFeatureCacheDefaults(t *testing.T) {
-	yaml := strings.Replace(serviceConfigYAML(), `  token_version_cache:
-    enabled: true
-    size: 2048
-    ttl: 2s
-    load_timeout: 400ms
-`, "", 1)
+	yaml := strings.Replace(serviceConfigYAML(), "  token_version_cache:\n    enabled: true\n    size: 2048\n    ttl: 2s\n    load_timeout: 400ms\n", "", 1)
 	yaml = strings.Replace(yaml, `rbac:
   user_role_cache:
     enabled: true
@@ -101,14 +110,14 @@ func TestLoadAppliesFeatureCacheDefaults(t *testing.T) {
 `, "", 1)
 
 	cfg := loadServiceConfig(t, yaml)
-	require.True(t, cfg.Auth.TokenVersionCache.IsEnabled())
-	require.EqualValues(t, 100000, cfg.Auth.TokenVersionCache.SizeValue())
-	require.Equal(t, time.Second, cfg.Auth.TokenVersionCache.TTLValue())
-	require.Equal(t, 300*time.Millisecond, cfg.Auth.TokenVersionCache.LoadTimeoutValue())
-	require.True(t, cfg.RBAC.UserRoleCache.IsEnabled())
-	require.EqualValues(t, 100000, cfg.RBAC.UserRoleCache.SizeValue())
-	require.Equal(t, 5*time.Second, cfg.RBAC.UserRoleCache.TTLValue())
-	require.Equal(t, 500*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeoutValue())
+	require.True(t, cfg.Auth.TokenVersionCache.Enabled)
+	require.EqualValues(t, 100000, cfg.Auth.TokenVersionCache.Size)
+	require.Equal(t, time.Second, cfg.Auth.TokenVersionCache.TTL)
+	require.Equal(t, 300*time.Millisecond, cfg.Auth.TokenVersionCache.LoadTimeout)
+	require.True(t, cfg.RBAC.UserRoleCache.Enabled)
+	require.EqualValues(t, 100000, cfg.RBAC.UserRoleCache.Size)
+	require.Equal(t, 5*time.Second, cfg.RBAC.UserRoleCache.TTL)
+	require.Equal(t, 500*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeout)
 }
 
 func TestLoadAppliesEntPluginDefaults(t *testing.T) {
@@ -137,25 +146,6 @@ func TestLoadParsesEntSlowThresholdDuration(t *testing.T) {
 	require.Equal(t, 250*time.Millisecond, cfg.Ent.Plugins.SQLLog.SlowThreshold)
 }
 
-func TestApplyDefaultsPreservesDisabledFeatureCacheZeroValues(t *testing.T) {
-	disabled := false
-	cfg := &Config{
-		Auth: AuthConfig{TokenVersionCache: FeatureCacheConfig{Enabled: &disabled}},
-		RBAC: RBACConfig{UserRoleCache: FeatureCacheConfig{Enabled: &disabled}},
-	}
-
-	cfg.ApplyDefaults()
-
-	require.False(t, cfg.Auth.TokenVersionCache.IsEnabled())
-	require.Zero(t, cfg.Auth.TokenVersionCache.SizeValue())
-	require.Zero(t, cfg.Auth.TokenVersionCache.TTLValue())
-	require.Zero(t, cfg.Auth.TokenVersionCache.LoadTimeoutValue())
-	require.False(t, cfg.RBAC.UserRoleCache.IsEnabled())
-	require.Zero(t, cfg.RBAC.UserRoleCache.SizeValue())
-	require.Zero(t, cfg.RBAC.UserRoleCache.TTLValue())
-	require.Zero(t, cfg.RBAC.UserRoleCache.LoadTimeoutValue())
-}
-
 func TestLoadPreservesExplicitDisabledFeatureCaches(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), `  token_version_cache:
     enabled: true
@@ -177,14 +167,14 @@ func TestLoadPreservesExplicitDisabledFeatureCaches(t *testing.T) {
 `, 1)
 
 	cfg := loadServiceConfig(t, yaml)
-	require.False(t, cfg.Auth.TokenVersionCache.IsEnabled())
-	require.Zero(t, cfg.Auth.TokenVersionCache.SizeValue())
-	require.Zero(t, cfg.Auth.TokenVersionCache.TTLValue())
-	require.Zero(t, cfg.Auth.TokenVersionCache.LoadTimeoutValue())
-	require.False(t, cfg.RBAC.UserRoleCache.IsEnabled())
-	require.Zero(t, cfg.RBAC.UserRoleCache.SizeValue())
-	require.Zero(t, cfg.RBAC.UserRoleCache.TTLValue())
-	require.Zero(t, cfg.RBAC.UserRoleCache.LoadTimeoutValue())
+	require.False(t, cfg.Auth.TokenVersionCache.Enabled)
+	require.EqualValues(t, 100000, cfg.Auth.TokenVersionCache.Size)
+	require.Equal(t, time.Second, cfg.Auth.TokenVersionCache.TTL)
+	require.Equal(t, 300*time.Millisecond, cfg.Auth.TokenVersionCache.LoadTimeout)
+	require.False(t, cfg.RBAC.UserRoleCache.Enabled)
+	require.EqualValues(t, 100000, cfg.RBAC.UserRoleCache.Size)
+	require.Equal(t, 5*time.Second, cfg.RBAC.UserRoleCache.TTL)
+	require.Equal(t, 500*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeout)
 }
 
 func TestLoadRejectsExplicitInvalidFeatureCacheValue(t *testing.T) {
@@ -194,17 +184,14 @@ func TestLoadRejectsExplicitInvalidFeatureCacheValue(t *testing.T) {
 }
 
 func TestValidateFeatureCaches(t *testing.T) {
-	enabled := true
-	disabled := false
-
 	t.Run("enabled requires positive values", func(t *testing.T) {
-		errs := validateFeatureCache("auth.token_version_cache", FeatureCacheConfig{Enabled: &enabled})
+		errs := (FeatureCacheConfig{Enabled: true}).Validate("auth.token_version_cache")
 		require.Len(t, errs, 3)
 		require.Contains(t, errs[0].Error(), "auth.token_version_cache.size")
 	})
 
 	t.Run("disabled allows zero values", func(t *testing.T) {
-		errs := validateFeatureCache("rbac.user_role_cache", FeatureCacheConfig{Enabled: &disabled})
+		errs := (FeatureCacheConfig{Enabled: false}).Validate("rbac.user_role_cache")
 		require.Empty(t, errs)
 	})
 }
@@ -225,6 +212,15 @@ func TestLoadParsesNestedResourceConfig(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "      timeout: 7s", "      timeout: 11s", 1)
 	cfg := loadServiceConfig(t, yaml)
 	require.Equal(t, 11*time.Second, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
+}
+
+func TestLoadPreservesAdditionalNamedResourceAndAppliesDefaults(t *testing.T) {
+	yaml := strings.Replace(serviceConfigYAML(), "  postgres:\n", "    queue_redis:\n      addr: 127.0.0.1:6380\n      db: 3\n  postgres:\n", 1)
+
+	cfg := loadServiceConfig(t, yaml)
+	require.Len(t, cfg.Resources.Redis, 2)
+	require.Equal(t, 7*time.Second, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
+	require.Equal(t, commonresources.DefaultRedisTimeout, cfg.Resources.Redis["queue_redis"].Timeout)
 }
 
 func TestLoadRepositoryConfig(t *testing.T) {
@@ -269,12 +265,11 @@ func TestLoadFromDocumentsMergesLayeredServiceConfig(t *testing.T) {
 }
 
 func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing.T) {
-	yaml := strings.Replace(serviceConfigYAML(), `  token_version_cache:
-    enabled: true
-    size: 2048
-    ttl: 2s
-    load_timeout: 400ms
-`, "", 1)
+	yaml := strings.Replace(serviceConfigYAML(), "  token_version_cache:\n    enabled: true\n    size: 2048\n    ttl: 2s\n    load_timeout: 400ms\n", "", 1)
+	yaml = strings.Replace(yaml, "rbac:\n  user_role_cache:\n    enabled: true\n    size: 4096\n    ttl: 7s\n    load_timeout: 600ms\n", "", 1)
+	yaml = strings.Replace(yaml, "ent:\n  plugins:\n    sql_log:\n      enabled: true\n      debug: true\n      slow_threshold: 250ms\n    tracing:\n      enabled: false\n    metrics:\n      enabled: true\n", "ent: {}\n", 1)
+	yaml = strings.Replace(yaml, "      timeout: 7s\n", "", 1)
+	yaml = strings.Replace(yaml, "      sslmode: disable\n      pool:\n        max_open_conns: 20\n        max_idle_conns: 4\n        conn_max_lifetime: 45m\n        conn_max_idle_time: 12m\n", "", 1)
 	docs := []commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(yaml)}}
 	rawSettings, err := commonconfig.DeepMergeYAML(docs)
 	require.NoError(t, err)
@@ -293,6 +288,22 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
 	require.EqualValues(t, 100000, cache["size"])
 	require.Equal(t, "1s", cache["ttl"])
 	require.Equal(t, "300ms", cache["load_timeout"])
+	rbac := settings["rbac"].(map[string]any)
+	userRoleCache := rbac["user_role_cache"].(map[string]any)
+	require.Equal(t, true, userRoleCache["enabled"])
+	require.EqualValues(t, 100000, userRoleCache["size"])
+	require.Equal(t, "5s", userRoleCache["ttl"])
+	require.Equal(t, "500ms", userRoleCache["load_timeout"])
+	ent := settings["ent"].(map[string]any)
+	plugins := ent["plugins"].(map[string]any)
+	require.Equal(t, "500ms", plugins["sql_log"].(map[string]any)["slow_threshold"])
+	require.Equal(t, true, plugins["tracing"].(map[string]any)["enabled"])
+	resources := settings["resources"].(map[string]any)
+	redis := resources["redis"].(map[string]any)
+	require.Equal(t, "5s", redis[serviceresources.NameCacheRedis].(map[string]any)["timeout"])
+	postgres := resources["postgres"].(map[string]any)[serviceresources.NamePrimaryDB].(map[string]any)
+	require.Equal(t, commonresources.DefaultPostgresSSLMode, postgres["sslmode"])
+	require.EqualValues(t, commonresources.DefaultPostgresMaxOpenConns, postgres["pool"].(map[string]any)["max_open_conns"])
 
 	result.Config.Log.Level = "warn"
 	settings, err = result.EffectiveSettings()

@@ -28,7 +28,7 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 	redisClient := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = redisClient.Close() })
 	provider := newPermissionModuleMetricsProvider(t, false)
-	cfg := &config.Config{App: config.AppConfig{Name: "aegiscore-user-service-module-test"}}
+	settings := serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test"}
 	loader := permissionModulePolicyLoader{}
 	roles := permissionModuleUserRoleResolver{}
 
@@ -40,7 +40,7 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 	app := fxtest.New(t,
 		fx.Supply(
 			provider,
-			cfg,
+			settings,
 			zap.NewNop(),
 			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
 		),
@@ -85,7 +85,7 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	redisClient := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	provider := newPermissionModuleMetricsProvider(t, false)
-	cfg := &config.Config{App: config.AppConfig{Name: "aegiscore-user-service-module-test"}}
+	settings := serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test"}
 	loader := permissionModulePolicyLoader{}
 	roles := permissionModuleUserRoleResolver{}
 	startErr := errors.New("later start failed")
@@ -93,7 +93,7 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 	app := fxtest.New(t,
 		fx.Supply(
 			provider,
-			cfg,
+			settings,
 			zap.NewNop(),
 			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
 		),
@@ -125,7 +125,7 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 	redisClient := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = redisClient.Close() })
 	provider := newPermissionModuleMetricsProvider(t, false)
-	cfg := &config.Config{App: config.AppConfig{Name: "aegiscore-user-service-module-test"}}
+	settings := serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test"}
 	loadErr := errors.New("initial policy load failed")
 	loader := &permissionModuleFailOncePolicyLoader{err: loadErr}
 	roles := permissionModuleUserRoleResolver{}
@@ -135,7 +135,7 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 	app := fxtest.New(t,
 		fx.Supply(
 			provider,
-			cfg,
+			settings,
 			zap.NewNop(),
 			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
 		),
@@ -221,11 +221,7 @@ func TestRegisterRBACLifecycleStopClosesUserRolesAfterWatcherError(t *testing.T)
 }
 
 func TestUserRoleResolverHolderFailsClosedAndClosesIdempotently(t *testing.T) {
-	enabled := true
-	size := int64(10)
-	ttl := time.Minute
-	loadTimeout := time.Second
-	holder := &userRoleResolverHolder{params: permissioncasbin.UserRoleResolverParams{Config: &serviceconfig.Config{RBAC: serviceconfig.RBACConfig{UserRoleCache: serviceconfig.FeatureCacheConfig{Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout}}}}}
+	holder := &userRoleResolverHolder{params: permissioncasbin.UserRoleResolverParams{Settings: serviceconfig.RBACSettings{UserRoleCache: serviceconfig.FeatureCacheConfig{Enabled: true, Size: 10, TTL: time.Minute, LoadTimeout: time.Second}}}}
 	_, err := holder.RolesForUser(context.Background(), uuid.MustParse("018f0000-0000-7000-8000-000000000701"))
 	require.ErrorContains(t, err, "not started")
 	require.Equal(t, "rbac_user_roles", holder.Name())
@@ -246,7 +242,7 @@ func TestPermissionModuleRequiresMetricsProvider(t *testing.T) {
 	app := fx.New(
 		fxtest.WithTestLogger(t),
 		fx.Supply(
-			&config.Config{App: config.AppConfig{Name: "aegiscore-user-service-module-test"}},
+			serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test"},
 			zap.NewNop(),
 			fx.Annotate(redisClient, fx.ResultTags(`name:"cache_redis"`)),
 		),

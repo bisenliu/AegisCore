@@ -56,7 +56,7 @@ func newRouteTestMetricsProvider(t *testing.T, cfg *config.Config) *commonmetric
 	return provider
 }
 
-func registerRouteTestRuntimeMetrics(t *testing.T, cfg *config.Config, provider *commonmetrics.Provider) {
+func registerRouteTestRuntimeMetrics(t *testing.T, provider *commonmetrics.Provider) {
 	t.Helper()
 	db, err := sql.Open("sqlite3", "file:route_runtime_metrics?mode=memory&cache=shared")
 	require.NoError(t, err)
@@ -66,15 +66,14 @@ func registerRouteTestRuntimeMetrics(t *testing.T, cfg *config.Config, provider 
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 
-	serviceCfg := &serviceconfig.Config{
-		Config: *cfg,
-		Resources: serviceconfig.ResourcesConfig{Redis: commonresources.RedisConfigs{
+	resourceSettings := serviceconfig.ResourceSettings{
+		Redis: commonresources.RedisConfigs{
 			resources.NameCacheRedis: {Timeout: time.Second},
-		}},
+		},
 	}
 
 	err = RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{
-		Config:           serviceCfg,
+		Resources:        resourceSettings,
 		Metrics:          provider,
 		PrimaryDB:        db,
 		CacheRedis:       client,

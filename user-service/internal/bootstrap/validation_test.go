@@ -37,12 +37,13 @@ func TestAppModuleIncludesProcessRuntimeInitialization(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestAppWiresCommonDependenciesExplicitly(t *testing.T) {
+func TestAppWiresRuntimeAndNarrowSettingsExplicitly(t *testing.T) {
 	serviceCfg := appModuleValidationTestConfig()
 	err := fx.ValidateApp(AppOptions(
 		serviceCfg,
 		AppModule,
-		fx.Invoke(func(*config.Config, *serviceconfig.Config, *zap.Logger, *userhttp.UserController) {}),
+		fx.Invoke(func(*config.Config, serviceconfig.AuthSettings, serviceconfig.RBACSettings, serviceconfig.EntSettings, serviceconfig.ResourceSettings, *zap.Logger, *userhttp.UserController) {
+		}),
 	)...)
 	require.NoError(t, err)
 }
@@ -131,7 +132,7 @@ func TestRuntimeModuleRegistersRuntimeServersThroughNamedInvoke(t *testing.T) {
 	require.Contains(t, source, "fx.Invoke(InitProcessRuntime)")
 	require.Contains(t, source, "fx.Invoke(registerRuntimeServers)")
 	require.Contains(t, source, "func registerRuntimeServers(_ *http.Server, _ *PprofServer) {}")
-	require.Contains(t, source, "func InitProcessRuntime(cfg *serviceconfig.Config) error")
+	require.Contains(t, source, "func InitProcessRuntime(cfg *commonconfig.Config) error")
 	require.NotContains(t, source, "commontz.Module")
 	require.NotContains(t, source, "func(*http.Server) {}")
 	require.NotContains(t, source, "func(*PprofServer) {}")
@@ -166,10 +167,7 @@ func appModuleValidationTestConfig() *serviceconfig.Config {
 }
 
 func appModuleTestFeatureCacheConfig(ttl time.Duration) serviceconfig.FeatureCacheConfig {
-	enabled := true
-	size := int64(1000)
-	loadTimeout := time.Second
-	return serviceconfig.FeatureCacheConfig{Enabled: &enabled, Size: &size, TTL: &ttl, LoadTimeout: &loadTimeout}
+	return serviceconfig.FeatureCacheConfig{Enabled: true, Size: 1000, TTL: ttl, LoadTimeout: time.Second}
 }
 
 func appModuleTestObservabilityConfig() config.ObservabilityConfig {

@@ -78,7 +78,9 @@ cd user-service
 go run ./cmd serve
 ```
 
-配置从 Nacos 按 dataId 加载，默认顺序为 `base.yaml`、`resources.yaml`、`${AEGISCORE_SERVICE}.yaml`。环境变量只选择 Nacos 来源，不覆盖业务字段。多段 YAML 会 deep merge，再 strict decode 到服务 `Config`，执行 `ApplyDefaults` 和 `Validate`；未知字段会在启动前失败。共享核心只有 `app`、`runtime`、`server`、`log`、`observability`；user-service 在 `resources` 下声明 `cache_redis` 和 `primary_db`，并在 `auth.token_version_cache`、`rbac.user_role_cache` 下声明 feature cache。
+配置从 Nacos 按 dataId 加载，默认顺序为 `base.yaml`、`resources.yaml`、`${AEGISCORE_SERVICE}.yaml`。环境变量只选择 Nacos 来源，不覆盖业务字段。完整加载顺序固定为：`source -> documents -> deep merge -> raw digest -> strict decode（defaults 初值、raw 覆盖、unknown key 拒绝）-> normalize -> validate -> effective encode -> redact/render`。raw digest 只描述合并后的原始来源，不受默认值或 effective encode 变化影响；`config render` 编码最终生效配置后再脱敏敏感字段。
+
+`common/runtime/config` 只拥有业务中立的 document/source contract、YAML deep merge、raw digest、strict decode、effective encode、redact 和 render 原语；`common/runtime/config/nacos` 是独立 adapter，拥有 Nacos 环境变量、HTTP client、认证、timeout、failover 和文档读取。user-service 的 `internal/config.DefaultConfig()` 集中组装完整默认初值，并由显式 normalize 和 validate 完成服务级处理；composition root 再派生 `AuthSettings`、`RBACSettings`、`EntSettings` 和 `ResourceSettings`，auth、permission/RBAC、Ent 与具名资源 provider 不读取完整根配置。共享核心配置只有 `app`、`runtime`、`server`、`log`、`observability`；user-service 在 `resources` 下声明 `cache_redis` 和 `primary_db`，并在 `auth.token_version_cache`、`rbac.user_role_cache` 下声明 feature cache。
 
 配置读取直接使用 Nacos 3.x 的 v3 Client HTTP API，只需要访问 `8848`。`AEGISCORE_NACOS_ADDR` 支持逗号分隔的多个地址并按顺序 failover；地址可以包含自定义 context path。启用 Nacos client auth 时必须同时设置 `AEGISCORE_NACOS_USERNAME` 和 `AEGISCORE_NACOS_PASSWORD`，客户端登录一次后复用 access token。
 

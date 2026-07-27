@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -275,8 +276,13 @@ func TestDecodeStrictServiceExtension(t *testing.T) {
 	cfg := loadIntoFromYAML[extended](t, explicitConfigYAML()+`auth:
   jwt:
     secret: test-secret
-`, func(cfg extended) error {
-		return cfg.Validate()
+`, DecodeOptions[extended]{
+		Defaults: func() extended {
+			return extended{Config: DefaultConfig()}
+		},
+		Validate: func(cfg extended) error {
+			return cfg.Validate()
+		},
 	})
 	require.Equal(t, "test-secret", cfg.Auth.JWT.Secret)
 	require.Equal(t, "aegiscore-test", cfg.App.Name)
@@ -302,8 +308,13 @@ func TestDecodeStrictNestedServiceExtension(t *testing.T) {
       addr: 127.0.0.1:6379
 feature:
   mode: strict
-`, func(cfg extended) error {
-		return cfg.Validate()
+`, DecodeOptions[extended]{
+		Defaults: func() extended {
+			return extended{Config: DefaultConfig()}
+		},
+		Validate: func(cfg extended) error {
+			return cfg.Validate()
+		},
 	})
 
 	require.Equal(t, "127.0.0.1:6379", cfg.Resources.Redis["cache"].Addr)
@@ -511,49 +522,98 @@ func TestLoadRejectsUnknownServiceExtensionKey(t *testing.T) {
 
 	settings, mergeErr := DeepMergeYAML([]ConfigDocument{{DataID: "test.yaml", Content: []byte("auth:\n  secret: test\n  legacy: rejected\n")}})
 	require.NoError(t, mergeErr)
-	_, err := DecodeStrict(settings, func(cfg extended) error { return cfg.Validate() })
+	normalized := false
+	validated := false
+	_, err := DecodeStrict(settings, DecodeOptions[extended]{
+		Defaults: func() extended {
+			return extended{Config: DefaultConfig()}
+		},
+		Normalize: func(*extended) {
+			normalized = true
+		},
+		Validate: func(cfg extended) error {
+			validated = true
+			return cfg.Validate()
+		},
+	})
 	require.Error(t, err)
 	assertConfigLoadErrorContains(t, err, "unknown configuration keys", "auth.legacy")
+	require.False(t, normalized)
+	require.False(t, validated)
 }
 
-func TestDecodeStrictAppliesServiceDefaultsBeforeValidation(t *testing.T) {
-	cfg := loadIntoFromYAML(t, explicitConfigYAML(), func(cfg defaultedExtensionConfig) error {
-		require.Equal(t, "service-default", cfg.ServiceValue)
-		return cfg.Validate()
-	})
-	require.Equal(t, "service-default", cfg.ServiceValue)
-}
-
-type defaultedExtensionConfig struct {
-	Config       `mapstructure:",squash"`
-	ServiceValue string `mapstructure:"service_value"`
-}
-
-func (c *defaultedExtensionConfig) ApplyDefaults() {
-	if c.ServiceValue == "" {
-		c.ServiceValue = "service-default"
+func TestDecodeStrictRunsExplicitOptionsInOrder(t *testing.T) {
+	type pipelineConfig struct {
+		Enabled      bool   `mapstructure:"enabled"`
+		Value        string `mapstructure:"value"`
+		DefaultOnly  string `mapstructure:"default_only"`
+		NormalizedAt string `mapstructure:"normalized_at"`
 	}
+
+	var calls []string
+	cfg, err := DecodeStrict(map[string]any{
+		"enabled": false,
+		"value":   "raw",
+	}, DecodeOptions[pipelineConfig]{
+		Defaults: func() pipelineConfig {
+			calls = append(calls, "defaults")
+			return pipelineConfig{Enabled: true, Value: "default", DefaultOnly: "preserved"}
+		},
+		Normalize: func(cfg *pipelineConfig) {
+			calls = append(calls, "normalize")
+			cfg.Value += "-normalized"
+			cfg.NormalizedAt = "normalize"
+		},
+		Validate: func(cfg pipelineConfig) error {
+			calls = append(calls, "validate")
+			require.False(t, cfg.Enabled)
+			require.Equal(t, "raw-normalized", cfg.Value)
+			require.Equal(t, "preserved", cfg.DefaultOnly)
+			require.Equal(t, "normalize", cfg.NormalizedAt)
+			return nil
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"defaults", "normalize", "validate"}, calls)
+	require.False(t, cfg.Enabled)
+	require.Equal(t, "raw-normalized", cfg.Value)
+	require.Equal(t, "preserved", cfg.DefaultOnly)
+}
+
+func TestDecodeStrictWrapsValidationError(t *testing.T) {
+	_, err := DecodeStrict(map[string]any{}, DecodeOptions[Config]{
+		Defaults: DefaultConfig,
+		Validate: func(Config) error {
+			return errors.New("rejected")
+		},
+	})
+	require.EqualError(t, err, "validate runtime config: rejected")
+}
+
+func TestDecodeStrictRequiresDefaults(t *testing.T) {
+	_, err := DecodeStrict[Config](map[string]any{}, DecodeOptions[Config]{})
+	require.EqualError(t, err, "decode runtime config: defaults function is required")
 }
 
 func loadConfigFromYAML(t *testing.T, content string) *Config {
 	t.Helper()
-	return loadIntoFromYAML(t, content, Config.Validate)
+	return loadIntoFromYAML(t, content, DecodeOptions[Config]{Defaults: DefaultConfig, Validate: Config.Validate})
 }
 
 func loadConfigErrorFromYAML(t *testing.T, content string) error {
 	t.Helper()
 	settings, mergeErr := DeepMergeYAML([]ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
 	require.NoError(t, mergeErr)
-	_, err := DecodeStrict(settings, Config.Validate)
+	_, err := DecodeStrict(settings, DecodeOptions[Config]{Defaults: DefaultConfig, Validate: Config.Validate})
 	require.Error(t, err)
 	return err
 }
 
-func loadIntoFromYAML[T any](t *testing.T, content string, validate func(T) error) *T {
+func loadIntoFromYAML[T any](t *testing.T, content string, options DecodeOptions[T]) *T {
 	t.Helper()
 	settings, err := DeepMergeYAML([]ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
 	require.NoError(t, err)
-	cfg, err := DecodeStrict(settings, validate)
+	cfg, err := DecodeStrict(settings, options)
 	require.NoError(t, err)
 	return cfg
 }

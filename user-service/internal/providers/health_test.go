@@ -104,10 +104,10 @@ func TestWatcherHealthChecker(t *testing.T) {
 }
 
 func TestProvideHealthChecksUsesResourcePingTimeouts(t *testing.T) {
-	cfg := &serviceconfig.Config{Resources: serviceconfig.ResourcesConfig{Redis: commonresources.RedisConfigs{
+	settings := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
 		"cache_redis": {Addr: "127.0.0.1:6379", Timeout: 2 * time.Second},
-	}}}
-	checks := ProvideHealthChecks(HealthCheckParams{Config: cfg})
+	}}
+	checks := ProvideHealthChecks(HealthCheckParams{Resources: settings})
 
 	require.Len(t, checks.Readiness, 4)
 	postgres, ok := checks.Readiness[0].(postgresHealthChecker)
@@ -119,10 +119,10 @@ func TestProvideHealthChecksUsesResourcePingTimeouts(t *testing.T) {
 }
 
 func TestProvideHealthChecksAppliesDefaultRedisPingTimeout(t *testing.T) {
-	cfg := &serviceconfig.Config{Resources: serviceconfig.ResourcesConfig{Redis: commonresources.RedisConfigs{
+	settings := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
 		"cache_redis": {Addr: "127.0.0.1:6379"},
-	}}}
-	checks := ProvideHealthChecks(HealthCheckParams{Config: cfg})
+	}}
+	checks := ProvideHealthChecks(HealthCheckParams{Resources: settings})
 
 	redis := checks.Readiness[1].(redisHealthChecker)
 	require.Equal(t, commonresources.DefaultRedisTimeout, redis.timeout)
@@ -143,11 +143,10 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 			Metrics: config.MetricsConfig{Enabled: true, Path: "/metrics"},
 		},
 	}
-	cfg := &serviceconfig.Config{
-		Config: runtimeCfg,
-		Resources: serviceconfig.ResourcesConfig{Redis: commonresources.RedisConfigs{
+	settings := serviceconfig.ResourceSettings{
+		Redis: commonresources.RedisConfigs{
 			"cache_redis": {Timeout: time.Second},
-		}},
+		},
 	}
 	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
 		Config:      runtimeCfg.Observability.Metrics,
@@ -157,7 +156,7 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 	require.NoError(t, err)
 
 	err = RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{
-		Config:           cfg,
+		Resources:        settings,
 		Metrics:          provider,
 		PrimaryDB:        db,
 		CacheRedis:       client,

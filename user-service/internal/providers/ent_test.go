@@ -112,11 +112,11 @@ func TestNewEntDriverDoesNotWrapSQLLogByDefault(t *testing.T) {
 }
 
 func TestNewEntPluginsDefaultEnablesTracingOnly(t *testing.T) {
-	cfg := &serviceconfig.Config{Ent: serviceconfig.EntConfig{Plugins: serviceconfig.EntPluginsConfig{
+	settings := serviceconfig.EntSettings{Plugins: serviceconfig.EntPluginsConfig{
 		Tracing: serviceconfig.EntTracingPluginConfig{Enabled: true},
-	}}}
+	}}
 
-	plugins, err := newEntPlugins(cfg, zap.NewNop(), newProviderTestMetrics(t, true), newProviderTestTracing(t))
+	plugins, err := newEntPlugins(settings, zap.NewNop(), newProviderTestMetrics(t, true), newProviderTestTracing(t))
 
 	require.NoError(t, err)
 	require.Empty(t, plugins.driverPlugins)
@@ -126,11 +126,11 @@ func TestNewEntPluginsDefaultEnablesTracingOnly(t *testing.T) {
 }
 
 func TestNewEntPluginsEnablesSQLLogWhenConfigured(t *testing.T) {
-	cfg := &serviceconfig.Config{Ent: serviceconfig.EntConfig{Plugins: serviceconfig.EntPluginsConfig{
+	settings := serviceconfig.EntSettings{Plugins: serviceconfig.EntPluginsConfig{
 		SQLLog: serviceconfig.EntSQLLogPluginConfig{Enabled: true, Debug: true, SlowThreshold: time.Second},
-	}}}
+	}}
 
-	plugins, err := newEntPlugins(cfg, zap.NewNop(), nil, nil)
+	plugins, err := newEntPlugins(settings, zap.NewNop(), nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, plugins.driverPlugins, 1)
@@ -141,12 +141,12 @@ func TestNewEntPluginsEnablesSQLLogWhenConfigured(t *testing.T) {
 }
 
 func TestNewEntPluginsEnablesMetricsWhenConfigured(t *testing.T) {
-	cfg := &serviceconfig.Config{Ent: serviceconfig.EntConfig{Plugins: serviceconfig.EntPluginsConfig{
+	settings := serviceconfig.EntSettings{Plugins: serviceconfig.EntPluginsConfig{
 		Metrics: serviceconfig.EntMetricsPluginConfig{Enabled: true},
-	}}}
+	}}
 	metricsProvider := newProviderTestMetrics(t, true)
 
-	plugins, err := newEntPlugins(cfg, zap.NewNop(), metricsProvider, nil)
+	plugins, err := newEntPlugins(settings, zap.NewNop(), metricsProvider, nil)
 
 	require.NoError(t, err)
 	require.Len(t, plugins.clientPlugins, 1)
@@ -160,11 +160,11 @@ func TestNewEntPluginsReturnsMetricsRegistrationError(t *testing.T) {
 		Name: entQueryLatencyMetricName,
 		Help: "conflicting collector for constructor rollback test.",
 	})))
-	cfg := &serviceconfig.Config{Ent: serviceconfig.EntConfig{Plugins: serviceconfig.EntPluginsConfig{
+	settings := serviceconfig.EntSettings{Plugins: serviceconfig.EntPluginsConfig{
 		Metrics: serviceconfig.EntMetricsPluginConfig{Enabled: true},
-	}}}
+	}}
 
-	plugins, err := newEntPlugins(cfg, zap.NewNop(), metricsProvider, nil)
+	plugins, err := newEntPlugins(settings, zap.NewNop(), metricsProvider, nil)
 
 	require.Empty(t, plugins.clientPlugins)
 	require.ErrorContains(t, err, "register ent query latency metrics")
@@ -314,7 +314,7 @@ func TestEntMetricsDisabledDoesNotRegisterCollectors(t *testing.T) {
 	cfg := ginTestConfig()
 	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true}
 	metricsProvider := newGinTestMetricsProvider(t, cfg)
-	plugins, err := newEntPlugins(&serviceconfig.Config{}, zap.NewNop(), metricsProvider, nil)
+	plugins, err := newEntPlugins(serviceconfig.EntSettings{}, zap.NewNop(), metricsProvider, nil)
 
 	require.NoError(t, err)
 	require.Empty(t, plugins.clientPlugins)

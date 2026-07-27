@@ -8,15 +8,15 @@ import (
 )
 
 // NewJWTService 根据用户服务认证配置构建共享 JWT verifier。
-func NewJWTService(cfg *serviceconfig.Config) (*auth.JWTService, error) {
-	if err := validateAuthTokenPolicy(cfg.Auth); err != nil {
+func NewJWTService(settings serviceconfig.AuthSettings) (*auth.JWTService, error) {
+	if err := validateAuthTokenPolicy(settings); err != nil {
 		return nil, err
 	}
-	return auth.NewJWTService(auth.JWTConfig{Secret: cfg.Auth.JWT.Secret, Issuer: cfg.Auth.JWT.Issuer, Audience: cfg.Auth.JWT.Audience}), nil
+	return auth.NewJWTService(auth.JWTConfig{Secret: settings.JWT.Secret, Issuer: settings.JWT.Issuer, Audience: settings.JWT.Audience}), nil
 }
 
-func validateAuthTokenPolicy(cfg serviceconfig.AuthConfig) error {
-	if cfg.JWT.RefreshTokenTTL <= cfg.JWT.AccessTokenTTL {
+func validateAuthTokenPolicy(settings serviceconfig.AuthSettings) error {
+	if settings.JWT.RefreshTokenTTL <= settings.JWT.AccessTokenTTL {
 		return fmt.Errorf("auth jwt refresh_token_ttl must be greater than access_token_ttl")
 	}
 	return nil

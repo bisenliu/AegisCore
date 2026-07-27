@@ -8,25 +8,22 @@ import (
 	"github.com/spf13/viper"
 )
 
-type defaultsApplier interface {
-	ApplyDefaults()
+// DecodeOptions 显式定义严格解码的默认值、归一化和校验步骤；Defaults 必填，其他步骤可选。
+type DecodeOptions[T any] struct {
+	Defaults  func() T
+	Normalize func(*T)
+	Validate  func(T) error
 }
 
-type defaultsProvider interface {
-	ConfigDefaults() map[string]any
-}
-
-// DecodeStrict 将已合成的配置 map 严格解码到调用方目标结构。
-func DecodeStrict[T any](settings map[string]any, validate func(T) error) (*T, error) {
-	var target T
-	v := viper.New()
-	setCoreDefaults(v, DefaultConfig())
-	var serviceDefaults T
-	if provider, ok := any(&serviceDefaults).(defaultsProvider); ok {
-		for path, value := range provider.ConfigDefaults() {
-			v.SetDefault(path, value)
-		}
+// DecodeStrict 按 defaults、raw settings 覆盖、未知键检查、normalize、validate 的顺序解码配置。
+func DecodeStrict[T any](settings map[string]any, options DecodeOptions[T]) (*T, error) {
+	if options.Defaults == nil {
+		return nil, fmt.Errorf("decode runtime config: defaults function is required")
 	}
+	target := options.Defaults()
+
+	v := viper.New()
+	setViperDefaultsFromStruct(v, "", reflect.ValueOf(target))
 	if err := v.MergeConfigMap(settings); err != nil {
 		return nil, fmt.Errorf("decode runtime config: %w", err)
 	}
@@ -42,23 +39,18 @@ func DecodeStrict[T any](settings map[string]any, validate func(T) error) (*T, e
 	if paths := unknownConfigPaths(settings, metadata.Unused); paths != "" {
 		return nil, fmt.Errorf("decode runtime config: unknown configuration keys: %s", paths)
 	}
-	if defaults, ok := any(&target).(defaultsApplier); ok {
-		// 服务扩展配置可在校验前补齐自身默认值，并将结果保留在返回对象中。
-		defaults.ApplyDefaults()
+	if options.Normalize != nil {
+		options.Normalize(&target)
 	}
-	if validate != nil {
-		if err := validate(target); err != nil {
+	if options.Validate != nil {
+		if err := options.Validate(target); err != nil {
 			return nil, fmt.Errorf("validate runtime config: %w", err)
 		}
 	}
 	return &target, nil
 }
 
-func setCoreDefaults(v *viper.Viper, defaults Config) {
-	setViperDefaultsFromStruct(v, "", reflect.ValueOf(defaults))
-}
-
-// setViperDefaultsFromStruct 按 mapstructure tag 递归展开默认配置，避免在 loader 中维护另一份字段路径映射。
+// setViperDefaultsFromStruct 将显式 defaults 按 mapstructure tag 注册给 Viper，使嵌套 map 也支持 raw 局部覆盖。
 func setViperDefaultsFromStruct(v *viper.Viper, prefix string, value reflect.Value) {
 	value = dereferenceValue(value)
 	if !value.IsValid() {

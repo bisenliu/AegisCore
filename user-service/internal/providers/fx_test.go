@@ -32,7 +32,14 @@ func TestModuleResolvesServiceLevelProviders(t *testing.T) {
 		},
 	}
 	err := fx.ValidateApp(
-		fx.Supply(serviceconfig.NewRuntimeConfig(serviceCfg), serviceCfg, zap.NewNop()),
+		fx.Supply(serviceCfg, zap.NewNop()),
+		fx.Provide(
+			serviceconfig.NewRuntimeConfig,
+			serviceconfig.NewAuthSettings,
+			serviceconfig.NewRBACSettings,
+			serviceconfig.NewEntSettings,
+			serviceconfig.NewResourceSettings,
+		),
 		validation.Module,
 		authfeature.Module,
 		permissionfeature.Module,

@@ -1,9 +1,7 @@
 ## Purpose
 
 定义 user-service 的认证会话能力，覆盖登录、用途隔离 token、refresh 轮换、token version 主事实、会话撤销、改密、HTTP 契约和认证资源生命周期。
-
 ## Requirements
-
 ### Requirement: 登录、用途隔离令牌与 HTTP 契约
 
 系统 MUST 在凭证、用户状态和会话策略校验通过后签发用途隔离的 access、refresh 或 password-change token。所有 token MUST 包含标准 `jti`，并通过 `access`、`refresh` 和 `password_change` subject 限定使用流程；任一用途、subject 或必要 claims 不匹配时 MUST 被拒绝。系统 MUST 仅通过 `/api/v1/auth` 暴露认证入口，并使用共享 response helper 渲染业务错误。
@@ -66,18 +64,21 @@
 
 ### Requirement: Token version 校验与会话撤销
 
-系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地 loading cache 和 Redis 投影加速校验。缓存未命中、关闭、过期或驱逐只能影响性能，MUST NOT 改变认证与撤销语义。退出全部会话和密码变更 MUST 递增主事实，使旧 access token 失效并撤销相应 refresh sessions。
+系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地 loading cache 和 Redis 投影加速校验。缓存未命中、关闭、过期、驱逐或显式禁用只能影响性能，MUST NOT 改变认证与撤销语义。退出全部会话和密码变更 MUST 递增主事实，使旧 access token 失效并撤销相应 refresh sessions。token-version feature cache MUST 由 user-service 私有配置提供完整默认值、启用时校验和到通用 localcache 配置的集中映射，auth 构造路径 MUST 只消费窄 auth settings。
 
 #### Scenario: 受保护访问与本地缓存
 
 - **WHEN** access token 已通过签名、subject 和过期校验
 - **THEN** 系统 MUST 按有界本地缓存、Redis 投影和 PostgreSQL 当前值的顺序解析 token version，版本不一致时 MUST 拒绝访问，Redis miss 后 MAY 回源并回填
 - **AND** 系统 MUST NOT 缓存错误结果；容量驱逐或 TTL 过期后 MUST 可通过同 key 合并回源恢复校验，不得依赖异步写入可见性
+- **WHEN** `auth.token_version_cache` 未配置
+- **THEN** user-service MUST 使用 `enabled=true`、`size=100000`、`ttl=1s` 和 `load_timeout=300ms` 的完整默认值
 - **WHEN** `auth.token_version_cache.enabled` 为 true
-- **THEN** 具名 `auth_token_version` cache 的 `size`、`ttl` 和 `load_timeout` MUST 为正值，`size` MUST 表示最大 item 数；缺少配置 MUST 拒绝装配
+- **THEN** 具名 `auth_token_version` cache 的 `size`、`ttl` 和 `load_timeout` MUST 为正值，`size` MUST 表示最大 item 数
 - **AND** auth feature MUST 直接提供 string key，MUST NOT 配置 common key encoder；`int64` token version MUST 直接缓存，MUST NOT 配置 clone callback
 - **WHEN** cache 被禁用
-- **THEN** 系统 MUST 保持校验和撤销正确，且 direct stats source MUST 使用 `LoadSuccess` 与 `LoadError` 表达逐次回源结果
+- **THEN** 系统 MUST 忽略 cache 的 `size`、`ttl` 和 `load_timeout`，不创建通用 loading cache，并保持校验和撤销正确
+- **AND** direct stats source MUST 使用 `LoadSuccess` 与 `LoadError` 表达逐次回源结果
 
 #### Scenario: Redis 投影更新
 
@@ -107,6 +108,12 @@
 - **WHEN** PostgreSQL 主事实已更新，但本地缓存失效、Redis 投影刷新或 refresh session 删除失败
 - **THEN** use case MUST 返回 `authdomain.ErrSessionRevocationIncomplete`，MUST NOT 返回普通成功结果
 - **AND** 错误链 MUST 保留底层原因，metrics MUST 将结果记录为撤销不完整失败
+
+#### Scenario: Auth settings 依赖边界
+
+- **WHEN** composition 构造 token issuer、session 策略、token-version localcache 或 validator
+- **THEN** auth provider MUST 接收只包含 JWT、session 和 token-version cache 所需字段的 auth settings
+- **AND** auth feature MUST NOT 依赖完整 user-service 根配置或读取 RBAC、Ent、resources 等无关配置段
 
 ### Requirement: 强制改密一次性流程
 
