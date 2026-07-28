@@ -81,5 +81,9 @@ Nacos source environment shared by the runtime Deployment and RBAC seed Job.
 Image reference.
 */}}
 {{- define "aegiscore-user-service.image" -}}
-{{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) -}}
+{{- $ref := required "image.ref is required and must use an immutable digest or sha-<commit> tag" .Values.image.ref | trim -}}
+{{- if or (eq $ref "") (hasSuffix ":latest" $ref) (contains ":latest@" $ref) -}}
+{{- fail "image.ref must be immutable and must not use latest tag" -}}
+{{- end -}}
+{{- $ref -}}
 {{- end -}}

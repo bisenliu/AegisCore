@@ -187,6 +187,49 @@ check_atlas_postgres_version() {
   fi
 }
 
+check_helm_user_service_immutable_image() {
+  # 生产 Helm chart 必须由发布流程显式传入不可变 image.ref，禁止 latest fallback。
+  local chart_dir="${repo_root}/deployments/helm/aegiscore-user-service"
+  local values_file="${chart_dir}/values.yaml"
+  local local_values_file="${chart_dir}/values-local.yaml"
+  local chart_file="${chart_dir}/Chart.yaml"
+  local helpers_file="${chart_dir}/templates/_helpers.tpl"
+  local deployment_file="${chart_dir}/templates/deployment.yaml"
+  local seed_job_file="${chart_dir}/templates/rbac-seed-job.yaml"
+
+  if [[ ! -d "${chart_dir}" ]]; then
+    return
+  fi
+
+  if ! rg -q '^[[:space:]]+ref:[[:space:]]+""[[:space:]]*#' "${values_file}"; then
+    report "Helm production values must require explicit image.ref"
+  fi
+  if rg -q '^[[:space:]]+(repository|tag):' "${values_file}"; then
+    report "Helm production values must not retain image.repository or image.tag"
+  fi
+  if rg -q 'appVersion:[[:space:]]+"latest"|appVersion:[[:space:]]+latest' "${chart_file}"; then
+    report "Helm Chart.appVersion must not use latest fallback"
+  fi
+  if ! rg -q 'required "image\.ref is required' "${helpers_file}"; then
+    report "Helm image helper must require image.ref"
+  fi
+  if ! rg -q 'fail "image\.ref must be immutable and must not use latest tag"' "${helpers_file}"; then
+    report "Helm image helper must fail on latest image ref"
+  fi
+  if rg -q 'image\.repository|image\.tag' "${helpers_file}"; then
+    report "Helm image helper must not retain repository/tag fallback"
+  fi
+  if rg -q '^[[:space:]]+ref:[[:space:]]+.*:latest([[:space:]]|$)' "${local_values_file}"; then
+    report "Helm local values must not use latest image ref"
+  fi
+  if ! rg -q 'image:[[:space:]]+\{\{ include "aegiscore-user-service\.image" \. \| quote \}\}' "${deployment_file}"; then
+    report "Helm Deployment must use centralized immutable image helper"
+  fi
+  if ! rg -q 'image:[[:space:]]+\{\{ include "aegiscore-user-service\.image" \. \| quote \}\}' "${seed_job_file}"; then
+    report "Helm RBAC seed Job must use centralized immutable image helper"
+  fi
+}
+
 check_mock_generate_build_tags() {
   # mock_generate.go 只允许在 generate build tag 下参与 mockgen，避免进入常规编译路径。
   local file
@@ -394,6 +437,7 @@ check_environment_variable_config_removed() {
 
 check_go_toolchain_version
 check_atlas_postgres_version
+check_helm_user_service_immutable_image
 check_environment_variable_config_removed
 check_mock_generate_build_tags
 check_test_only_production_symbols

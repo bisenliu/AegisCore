@@ -31,6 +31,7 @@ mkdir -p \
   "${fixture_root}/common/testing/example" \
   "${fixture_root}/deployments/docker" \
   "${fixture_root}/deployments/compose" \
+  "${fixture_root}/deployments/helm/aegiscore-user-service/templates" \
   "${fixture_root}/docs/opsx" \
   "${fixture_root}/openspec/changes" \
   "${fixture_root}/openspec/specs" \
@@ -121,6 +122,40 @@ services:
     command:
       - serve
       - --config
+EOF
+
+cat > "${fixture_root}/deployments/helm/aegiscore-user-service/values.yaml" <<'EOF'
+image:
+  repository: aegiscore-user-service
+  tag: latest
+  pullPolicy: IfNotPresent
+EOF
+
+cat > "${fixture_root}/deployments/helm/aegiscore-user-service/values-local.yaml" <<'EOF'
+image:
+  ref: aegiscore-user-service:latest
+EOF
+
+cat > "${fixture_root}/deployments/helm/aegiscore-user-service/Chart.yaml" <<'EOF'
+apiVersion: v2
+name: aegiscore-user-service
+type: application
+version: 0.1.0
+appVersion: "latest"
+EOF
+
+cat > "${fixture_root}/deployments/helm/aegiscore-user-service/templates/_helpers.tpl" <<'EOF'
+{{- define "aegiscore-user-service.image" -}}
+{{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) -}}
+{{- end -}}
+EOF
+
+cat > "${fixture_root}/deployments/helm/aegiscore-user-service/templates/deployment.yaml" <<'EOF'
+image: {{ .Values.image.ref | quote }}
+EOF
+
+cat > "${fixture_root}/deployments/helm/aegiscore-user-service/templates/rbac-seed-job.yaml" <<'EOF'
+image: {{ .Values.image.ref | quote }}
 EOF
 
 cat > "${fixture_root}/user-service/internal/features/auth/application/violating_import.go" <<'EOF'
@@ -313,6 +348,16 @@ fi
 
 if [[ "${output}" != *"Docker Compose runtime config must not mount local full config or pass --config"* ]]; then
   printf 'architecture-lint-test: expected Compose local config path violation report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
+if [[ "${output}" != *"Helm production values must require explicit image.ref"* ]]; then
+  printf 'architecture-lint-test: expected Helm image.ref required violation report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
+if [[ "${output}" != *"Helm image helper must fail on latest image ref"* ]]; then
+  printf 'architecture-lint-test: expected Helm latest guard violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 

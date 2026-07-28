@@ -32,7 +32,7 @@ spec: # Job 执行规格。
           type: RuntimeDefault # 使用运行时默认 seccomp profile。
       containers: # Job Pod 中的容器列表。
         - name: rbac-seed # 容器名称。
-          image: aegiscore-user-service:latest # 示例镜像；生产应使用当前发布的不可变镜像。
+          image: aegiscore-user-service:sha-local # 示例镜像；生产必须使用当前发布的不可变镜像。
           imagePullPolicy: IfNotPresent # 本地已有镜像时不重复拉取；固定 tag 可改 Always。
           command: # 覆盖镜像默认 CMD，执行 RBAC CLI。
             - /app/user-service/bin/user-service # user-service 二进制路径。

@@ -41,7 +41,7 @@ spec: # Deployment 期望状态。
           type: RuntimeDefault # 使用容器运行时默认 seccomp profile。
       containers: # Pod 内容器列表。
         - name: user-service # 容器名称，日志和事件中使用。
-          image: aegiscore-user-service:latest # 示例镜像；生产应替换为不可变 tag 或 digest。
+          image: aegiscore-user-service:sha-local # 示例镜像；生产必须替换为当前发布的不可变 tag 或 digest。
           imagePullPolicy: IfNotPresent # 本地已有镜像时不重复拉取；固定 tag 可按需改为 Always。
           ports: # 容器暴露端口。
             - name: http # 端口名称，Service 和探针通过该名称引用。

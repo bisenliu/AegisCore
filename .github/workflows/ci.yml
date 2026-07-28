@@ -310,22 +310,22 @@ jobs:
         with:
           context: .
           file: deployments/docker/user-service.Dockerfile
-          tags: aegiscore/user-service:ci
+          tags: aegiscore/user-service:sha-${{ github.sha }}
           load: true
           cache-from: type=gha,scope=user-service-image
           cache-to: type=gha,scope=user-service-image,mode=max
 
       - name: Inspect image identity
         run: |
-          docker image inspect aegiscore/user-service:ci --format 'image_id={{.Id}} repo_digests={{join .RepoDigests ","}}' | tee security/user-service-image-identity.txt
+          docker image inspect "aegiscore/user-service:sha-${GITHUB_SHA}" --format 'image_ref=aegiscore/user-service:sha-'"${GITHUB_SHA}"' image_id={{.Id}} repo_digests={{join .RepoDigests ","}}' | tee security/user-service-image-identity.txt
 
       - name: Verify Distroless runtime contents
-        run: ./deployments/docker/verify-user-service-image.sh aegiscore/user-service:ci
+        run: ./deployments/docker/verify-user-service-image.sh "aegiscore/user-service:sha-${GITHUB_SHA}"
 
       - name: Generate image scan report
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: aegiscore/user-service:ci
+          image-ref: aegiscore/user-service:sha-${{ github.sha }}
           scanners: vuln
           format: sarif
           output: security/trivy-image.sarif
@@ -345,7 +345,7 @@ jobs:
       - name: Generate image SBOM
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: aegiscore/user-service:ci
+          image-ref: aegiscore/user-service:sha-${{ github.sha }}
           format: cyclonedx
           output: security/sbom-image.cdx.json
           skip-setup-trivy: true
@@ -353,7 +353,7 @@ jobs:
       - name: Fail on high or critical image findings
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: aegiscore/user-service:ci
+          image-ref: aegiscore/user-service:sha-${{ github.sha }}
           scanners: vuln
           format: table
           severity: HIGH,CRITICAL

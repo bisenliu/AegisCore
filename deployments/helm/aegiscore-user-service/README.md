@@ -6,7 +6,7 @@
 
 | 值 | 作用 |
 |---|---|
-| `image.repository`、`image.tag` | user-service 发布镜像 |
+| `image.ref` | user-service 不可变发布镜像，生产必须使用 digest 或 `sha-<commit>` tag |
 | `nacos` | Nacos Service、Kubernetes namespace、配置 namespace/group 与扩展环境变量 |
 | `deployment.terminationGracePeriodSeconds` | Fx Stop 总预算与平台余量对应的 Pod 终止宽限期 |
 | `resources` | HTTP 副本 requests/limits |
@@ -16,7 +16,9 @@
 | `networkPolicy` | ingress 与 Nacos 之外的 additional egress 网络意图 |
 | `rbacSeedJob` | RBAC seed Job 配置 |
 
-默认 `values.yaml` 不包含真实敏感值，也不设置 `RUN_MIGRATIONS=true`。普通 user-service 镜像不包含 Atlas，chart 不渲染自动执行 Atlas apply 的 migration Job。生产环境必须提前在 Nacos 写入 `base.yaml`、`resources.yaml` 和 `user-service.yaml` 等 dataId，并确保数据库 SQL migration 已通过 DBA 工单或受控发布平台执行完成。
+默认 `values.yaml` 不包含真实敏感值，也不设置 `RUN_MIGRATIONS=true`。普通 user-service 镜像不包含 Atlas，chart 不渲染自动执行 Atlas apply 的 migration Job。生产环境必须提前在 Nacos 写入 `base.yaml`、`resources.yaml` 和 `user-service.yaml` 等 dataId，并确保数据库 SQL migration 已通过 DBA 工单或受控发布平台执行完成。生产发布必须显式传入 `image.ref`，且该值必须是当前 release 的不可变镜像引用，不得使用 `latest`。
+
+`image.ref` 同时用于 Deployment 和 RBAC seed Job。CI/CD 必须先构建并扫描同一 user-service 镜像工件，再将 digest 或 `sha-<commit>` tag 传给 Helm；不得扫描一个镜像、发布另一个镜像。
 
 默认 `podSecurityContext.runAsUser`、`runAsGroup` 和 `fsGroup` 均为 `65532`，与 Distroless static nonroot 运行时镜像身份一致。Deployment 和 RBAC seed Job 使用同一数值身份，保持只读根文件系统、禁止提权、capabilities drop 和 RuntimeDefault seccomp；Kubernetes 探针继续由 kubelet 通过 HTTP 访问 `/livez`、`/readyz`、`/startupz`。
 
@@ -65,9 +67,11 @@ chart 默认不配置或暴露 pprof。临时排障应修改 Nacos 中的 `obser
 ## 渲染和验证
 
 ```bash
-helm lint deployments/helm/aegiscore-user-service
+helm lint deployments/helm/aegiscore-user-service \
+  --set-string image.ref=aegiscore-user-service:sha-local
 helm template aegiscore-user-service deployments/helm/aegiscore-user-service \
-  --values deployments/helm/aegiscore-user-service/values.yaml
+  --values deployments/helm/aegiscore-user-service/values.yaml \
+  --set-string image.ref=aegiscore-user-service:sha-local
 ```
 
 渲染结果应包含 UID/GID/fsGroup `65532`、`terminationGracePeriodSeconds: 150` 和 `AEGISCORE_NACOS_*` 环境变量，且不包含容器内 shell healthcheck、Atlas apply 命令、`--config` 参数或 migration Job。
@@ -85,15 +89,16 @@ helm template aegiscore-user-service deployments/helm/aegiscore-user-service \
 生产流水线应按顺序执行：
 
 1. 创建或更新目标 Nacos namespace/group/dataId。
-2. 确认本 release 对应的已提交 SQL migration 已通过 DBA 工单或受控发布平台执行完成；如包含 `CREATE EXTENSION IF NOT EXISTS pg_trgm;`，确认 DBA 权限或前置动作已处理。
-3. 执行 RBAC seed Job，等待 Job 成功。
-4. 执行 `helm upgrade --install aegiscore-user-service deployments/helm/aegiscore-user-service --values <env-values> --set rbacSeedJob.enabled=false`。
-5. 等待 Deployment rollout 完成。
+2. 构建、推送、扫描并记录当前 release 的 user-service 不可变镜像引用，例如 `registry.example.com/aegiscore/user-service@sha256:<digest>` 或 `registry.example.com/aegiscore/user-service:sha-<commit>`。
+3. 确认本 release 对应的已提交 SQL migration 已通过 DBA 工单或受控发布平台执行完成；如包含 `CREATE EXTENSION IF NOT EXISTS pg_trgm;`，确认 DBA 权限或前置动作已处理。
+4. 使用同一个 `image.ref` 执行 RBAC seed Job，等待 Job 成功。
+5. 执行 `helm upgrade --install aegiscore-user-service deployments/helm/aegiscore-user-service --values <env-values> --set-string image.ref=<immutable-ref> --set rbacSeedJob.enabled=false`。
+6. 等待 Deployment rollout 完成。
 
 Helm 渲染的 RBAC seed Job 可由 GitOps 或 CI/CD 流水线分阶段应用。不要依赖普通服务副本启动时执行 migration，也不要混用新版 user-service 镜像和旧版自动执行 Atlas apply 的 Job 模板。
 
 ## 回滚边界
 
-Deployment rollout 失败时，可回滚 Helm release 或回退镜像 tag。已经成功执行的 SQL migration 不应由 Helm rollback 隐式撤销；数据库回滚必须走 DBA 工单或受控发布平台流程。
+Deployment rollout 失败时，可回滚 Helm release 或回退到上一版已记录的不可变 `image.ref`。回滚不得改回 `latest`，也不得依赖 registry 中当前 tag 指向。已经成功执行的 SQL migration 不应由 Helm rollback 隐式撤销；数据库回滚必须走 DBA 工单或受控发布平台流程。
 
 如果在已有副本运行时重新执行 RBAC seed，需要滚动重启副本或触发在线 policy refresh，确保授权缓存及时收敛。

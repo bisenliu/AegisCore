@@ -1,6 +1,6 @@
 # user-service Kubernetes 清单
 
-本目录提供 user-service 的云厂商无关 Kubernetes 生产基线。运行时清单使用 `aegiscore-user-service:latest` 作为示例镜像；生产发布应替换为不可变 tag 或 digest。
+本目录提供 user-service 的云厂商无关 Kubernetes 生产基线。运行时清单使用 `aegiscore-user-service:sha-local` 作为本地渲染示例镜像；生产发布必须替换为当前 release 的不可变 tag 或 digest，不得使用 `latest`。
 
 ## 资源
 

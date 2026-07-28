@@ -1,9 +1,9 @@
 # 本文件定义 aegiscore-user-service Helm chart 的元数据。
 # 适用于 Helm lint、template、package 和 release 管理。
-# 关键字段包括 chart 名称、chart 版本和默认应用镜像版本。
+# 关键字段包括 chart 名称和 chart 版本；应用镜像必须由 image.ref 显式传入。
 apiVersion: v2 # Helm chart API 版本；v2 适用于 Helm 3。
 name: aegiscore-user-service # chart 名称，也是默认模板命名的一部分。
 description: AegisCore user-service runtime and release jobs # chart 描述，说明包含运行时和发布前置 Job。
 type: application # chart 类型；application 表示可安装应用。
 version: 0.1.0 # chart 包版本；chart 模板或 values 变化时递增。
-appVersion: "latest" # 默认应用版本；未设置 image.tag 时作为镜像 tag fallback。
+appVersion: "0.1.0" # 应用展示版本；不得作为生产镜像 tag fallback。

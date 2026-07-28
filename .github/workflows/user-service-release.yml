@@ -1,0 +1,125 @@
+name: user-service release
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_repository:
+        description: Immutable image repository without tag
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+jobs:
+  build-scan-render:
+    name: build, scan, and render Helm release
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare immutable image reference
+        id: image
+        run: |
+          repository="${{ inputs.image_repository }}"
+          if [[ -z "${repository}" ]]; then
+            repository="ghcr.io/${GITHUB_REPOSITORY_OWNER}/aegiscore/user-service"
+          fi
+          repository="${repository,,}"
+          tag="sha-${GITHUB_SHA}"
+          printf 'repository=%s\n' "${repository}" >> "${GITHUB_OUTPUT}"
+          printf 'tag=%s\n' "${tag}" >> "${GITHUB_OUTPUT}"
+          printf 'tagged_ref=%s:%s\n' "${repository}" "${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push user-service image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deployments/docker/user-service.Dockerfile
+          push: true
+          tags: ${{ steps.image.outputs.tagged_ref }}
+          cache-from: type=gha,scope=user-service-image-release
+          cache-to: type=gha,scope=user-service-image-release,mode=max
+
+      - name: Resolve pushed image digest
+        id: digest
+        run: |
+          digest="$(docker buildx imagetools inspect "${{ steps.image.outputs.tagged_ref }}" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          image_ref="${{ steps.image.outputs.repository }}@${digest}"
+          mkdir -p release
+          printf 'IMAGE_REF=%s\n' "${image_ref}" | tee release/user-service-image-ref.env
+          printf 'image_ref=%s\n' "${image_ref}" >> "${GITHUB_OUTPUT}"
+
+      - name: Inspect immutable image identity
+        run: |
+          docker buildx imagetools inspect "${{ steps.digest.outputs.image_ref }}" | tee release/user-service-image-identity.txt
+
+      - name: Pull immutable image for runtime verification
+        run: docker pull "${{ steps.digest.outputs.image_ref }}"
+
+      - name: Verify Distroless runtime contents
+        run: ./deployments/docker/verify-user-service-image.sh "${{ steps.digest.outputs.image_ref }}"
+
+      - name: Generate image scan report
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.digest.outputs.image_ref }}
+          scanners: vuln
+          format: sarif
+          output: release/trivy-image.sarif
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+
+      - name: Generate image SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.digest.outputs.image_ref }}
+          format: cyclonedx
+          output: release/sbom-image.cdx.json
+          skip-setup-trivy: true
+
+      - name: Fail on high or critical image findings
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.digest.outputs.image_ref }}
+          scanners: vuln
+          format: table
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          skip-setup-trivy: true
+
+      - name: Render Helm release manifests
+        run: |
+          helm lint deployments/helm/aegiscore-user-service --set-string "image.ref=${{ steps.digest.outputs.image_ref }}"
+          helm template aegiscore-user-service deployments/helm/aegiscore-user-service \
+            --values deployments/helm/aegiscore-user-service/values.yaml \
+            --set-string "image.ref=${{ steps.digest.outputs.image_ref }}" \
+            > release/aegiscore-user-service.yaml
+
+      - name: Upload release artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: user-service-release
+          path: |
+            release/user-service-image-ref.env
+            release/user-service-image-identity.txt
+            release/trivy-image.sarif
+            release/sbom-image.cdx.json
+            release/aegiscore-user-service.yaml
+          if-no-files-found: warn
+          retention-days: 30

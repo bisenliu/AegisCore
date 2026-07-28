@@ -146,7 +146,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 - Compose：`deployments/compose/docker-compose.yml` 继承 Distroless `nonroot` 身份，user-service healthcheck 使用 exec-form 调用原生 `healthcheck` CLI。
 - 本地 Nacos：`deployments/nacos/` 是 Git 权威来源；两个 Compose 初始化任务分别将 `local-host/` 与 `local-docker/` 的完整三文档发布到 `loca-host` 与 `loca-docker`。
 - Kubernetes：`deployments/k8s/user-service/` 使用 UID/GID/fsGroup `65532`、只读根文件系统、`/tmp` emptyDir 和 kubelet HTTP probes。
-- Helm：`deployments/helm/aegiscore-user-service/` 渲染与原生 YAML 一致的 UID/GID `65532`、HTTP probes 和 RBAC seed Job。
+- Helm：`deployments/helm/aegiscore-user-service/` 渲染与原生 YAML 一致的 UID/GID `65532`、HTTP probes 和 RBAC seed Job，并要求生产发布显式传入不可变 `image.ref`。
 - CI：阻塞式 `test` job 设置 `AEGISCORE_TEST_CONTAINERS=1` 运行真实 PostgreSQL/Redis 测试；镜像安全 job 复用同一 BuildKit image ID 执行内容断言、Trivy HIGH/CRITICAL 门禁和 SBOM 生成。
 - Prometheus alerts：`deployments/observability/prometheus/user-service-alerts.yaml`。
 - Grafana dashboard：`deployments/observability/grafana/user-service-overview.json`。
