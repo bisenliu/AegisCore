@@ -52,7 +52,6 @@ func (m *lifecycle) CreateTokenSession(ctx context.Context, userID string, sessi
 		logger.Error(ctx, "create auth session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return err
 	}
-	logger.Info(ctx, "auth session created", zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion))
 	return nil
 }
 
@@ -63,7 +62,6 @@ func (m *lifecycle) CreatePasswordChangeSession(ctx context.Context, userID stri
 		logger.Error(ctx, "create password change session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return err
 	}
-	logger.Info(ctx, "password change session created", zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion))
 	return nil
 }
 
@@ -123,7 +121,6 @@ func (m *lifecycle) RotateTokenSession(ctx context.Context, oldSession authdomai
 		logger.Error(ctx, "rotate auth session failed", logger.StackTrace(zap.String("user_id", oldSession.UserID), zap.String("old_session_id", oldSession.SessionID), zap.String("new_session_id", newSession.SessionID), zap.Error(err))...)
 		return err
 	}
-	logger.Info(ctx, "auth session rotated", zap.String("user_id", oldSession.UserID), zap.String("old_session_id", oldSession.SessionID), zap.String("new_session_id", newSession.SessionID), zap.Int64("token_version", newSession.TokenVersion))
 	return nil
 }
 
@@ -133,7 +130,6 @@ func (m *lifecycle) DeleteSession(ctx context.Context, userID string, sessionID 
 		logger.Error(ctx, "delete auth session failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Error(err))...)
 		return err
 	}
-	logger.Info(ctx, "auth session deleted", zap.String("user_id", userID), zap.String("session_id", sessionID))
 	return nil
 }
 

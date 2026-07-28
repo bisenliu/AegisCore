@@ -48,7 +48,6 @@ func NewCreateUserService(store userapplication.UserProfileStore, passwordServic
 func (s *createUserService) CreateUser(ctx context.Context, cmd CreateUserCommand) (*CreateUserResult, error) {
 	status := validators.CreateUserStatus(cmd.Status)
 
-	logger.Info(ctx, "create user", zap.String("username", cmd.Username), zap.Int64("status", int64(status)))
 	passwordHash, err := s.passwordService.HashContext(ctx, cmd.Password)
 	if err != nil {
 		logger.Error(ctx, "hash user password failed", logger.StackTrace(zap.String("username", cmd.Username), zap.Int64("status", int64(status)), zap.Error(err))...)

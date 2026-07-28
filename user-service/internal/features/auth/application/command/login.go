@@ -57,7 +57,6 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*LoginResul
 		return nil, err
 	}
 
-	logger.Info(ctx, "login user", zap.String("username", cmd.Username))
 	user, err := u.credentials.VerifyPassword(ctx, cmd.Username, cmd.Password)
 	if err != nil {
 		u.metrics.LoginFailed(ctx, loginFailureReason(err))
@@ -72,7 +71,6 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*LoginResul
 }
 
 func (u *loginUseCase) loginWithSession(ctx context.Context, username string, user *authdomain.UserCredential) (*LoginResult, error) {
-	logger.Info(ctx, "login user authenticated", zap.String("username", username), zap.String("user_id", user.UserID.String()), zap.Int64("token_version", user.TokenVersion))
 	sessionID, err := newAuthSessionID()
 	if err != nil {
 		logger.Error(ctx, "generate auth session id failed", logger.StackTrace(zap.String("username", username), zap.String("user_id", user.UserID.String()), zap.Int64("token_version", user.TokenVersion), zap.Error(err))...)

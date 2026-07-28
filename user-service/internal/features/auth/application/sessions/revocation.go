@@ -28,7 +28,6 @@ func (m *lifecycle) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID)
 	if projectionErr != nil {
 		logger.Error(ctx, "revoke all user sessions projection failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion), zap.Error(projectionErr))...)
 	}
-	logger.Info(ctx, "all user sessions revoked", zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion))
 	return &authdomain.SessionRevocationResult{UserID: userID, TokenVersion: tokenVersion}, projectionErr, nil
 }
 

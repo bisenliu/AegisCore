@@ -24,7 +24,6 @@ type GetUserResult struct {
 
 // GetUserByID 按外部 UUID 返回公开用户资料。
 func (s *userQueryService) GetUserByID(ctx context.Context, query GetUserByIDQuery) (*GetUserResult, error) {
-	logger.Info(ctx, "query user profile", zap.String("user_id", query.UserID.String()))
 	user, err := s.store.GetByUserID(ctx, query.UserID)
 	if err != nil {
 		if errors.Is(err, identity.ErrUserNotFound) {

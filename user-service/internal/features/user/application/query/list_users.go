@@ -36,7 +36,6 @@ func (s *userQueryService) ListUsers(ctx context.Context, query ListUsersQuery) 
 	if query.Cursor != nil {
 		fields = append(fields, zap.String("cursor", query.Cursor.String()))
 	}
-	logger.Info(ctx, "list users", fields...)
 	users, hasNext, err := s.store.ListUsers(ctx, userapplication.ListUsersInput{
 		AfterUserID: query.Cursor,
 		Limit:       query.Limit,
