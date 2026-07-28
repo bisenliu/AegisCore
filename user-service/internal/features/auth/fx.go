@@ -175,8 +175,10 @@ type AuthControllerParams struct {
 // 运行时资源 holder
 
 type tokenVersionCacheResource struct {
-	cache authvalidators.LocalTokenVersionCache
-	stats localcache.StatsSource
+	mu     sync.RWMutex
+	cache  authvalidators.LocalTokenVersionCache
+	stats  localcache.StatsSource
+	closed bool
 
 	closeOnce sync.Once
 	close     func()
@@ -288,11 +290,39 @@ func (r *tokenVersionCacheResource) Close() error {
 		return nil
 	}
 	r.closeOnce.Do(func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+
+		r.closed = true
 		if r.close != nil {
 			r.close()
 		}
 	})
 	return nil
+}
+
+func (r *tokenVersionCacheResource) GetOrLoad(ctx context.Context, userID string) (int64, error) {
+	if r == nil {
+		return 0, localcache.ErrClosed
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.closed || r.cache == nil {
+		return 0, localcache.ErrClosed
+	}
+	return r.cache.GetOrLoad(ctx, userID)
+}
+
+func (r *tokenVersionCacheResource) Delete(userID string) error {
+	if r == nil {
+		return localcache.ErrClosed
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.closed || r.cache == nil {
+		return localcache.ErrClosed
+	}
+	return r.cache.Delete(userID)
 }
 
 // 运行时资源方法：session purge workerpool
@@ -360,18 +390,18 @@ func (h *tokenVersionCacheHolder) Start(context.Context) error {
 
 func (h *tokenVersionCacheHolder) GetOrLoad(ctx context.Context, userID string) (int64, error) {
 	resource := h.currentResource()
-	if resource == nil || resource.cache == nil {
+	if resource == nil {
 		return 0, localcache.ErrClosed
 	}
-	return resource.cache.GetOrLoad(ctx, userID)
+	return resource.GetOrLoad(ctx, userID)
 }
 
 func (h *tokenVersionCacheHolder) Delete(userID string) error {
 	resource := h.currentResource()
-	if resource == nil || resource.cache == nil {
+	if resource == nil {
 		return localcache.ErrClosed
 	}
-	return resource.cache.Delete(userID)
+	return resource.Delete(userID)
 }
 
 func (h *tokenVersionCacheHolder) Name() string {

@@ -93,7 +93,7 @@ func TestTokenVersionLocalCacheResourceCloseIsIdempotent(t *testing.T) {
 
 	require.NoError(t, resource.Close())
 	require.NoError(t, resource.Close())
-	require.ErrorIs(t, resource.cache.Delete("018f0000-0000-7000-8000-000000000502"), localcache.ErrClosed)
+	require.ErrorIs(t, resource.Delete("018f0000-0000-7000-8000-000000000502"), localcache.ErrClosed)
 }
 
 func TestTokenVersionLocalCacheRejectsNegativeCapacity(t *testing.T) {
@@ -103,8 +103,7 @@ func TestTokenVersionLocalCacheRejectsNegativeCapacity(t *testing.T) {
 	require.ErrorIs(t, err, localcache.ErrCapacityRequired)
 }
 
-func TestDisabledTokenVersionLocalCacheResourceCloseIsNoop(t *testing.T) {
-	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000503")
+func TestDisabledTokenVersionLocalCacheResourceRejectsAfterClose(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	users := NewMockUserTokenVersionStore(ctrl)
 	cache := NewMockTokenVersionCache(ctrl)
@@ -115,15 +114,31 @@ func TestDisabledTokenVersionLocalCacheResourceCloseIsNoop(t *testing.T) {
 
 	require.NoError(t, resource.Close())
 	require.NoError(t, resource.Close())
-	gomock.InOrder(
-		cache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID.String()).Return(int64(0), authdomain.ErrTokenVersionCacheMiss),
-		users.EXPECT().GetTokenVersion(gomock.Any(), userID).Return(int64(9), nil),
-		cache.EXPECT().CacheTokenVersion(gomock.Any(), userID.String(), int64(9)).Return(nil),
-	)
-	version, err := resource.cache.GetOrLoad(context.Background(), userID.String())
-	require.NoError(t, err)
-	require.EqualValues(t, 9, version)
+	version, err := resource.GetOrLoad(context.Background(), "018f0000-0000-7000-8000-000000000503")
+	require.Zero(t, version)
+	require.ErrorIs(t, err, localcache.ErrClosed)
+	require.ErrorIs(t, resource.Delete("018f0000-0000-7000-8000-000000000503"), localcache.ErrClosed)
 	require.Equal(t, authTokenVersionCacheName, resource.stats.Name())
+}
+
+func TestTokenVersionCacheHolderOldResourceRejectsAfterClose(t *testing.T) {
+	holder := &tokenVersionCacheHolder{
+		cfg: serviceconfig.FeatureCacheConfig{
+			Enabled: false, Size: -1, TTL: -time.Second, LoadTimeout: -time.Second,
+		},
+		users: NewMockUserTokenVersionStore(gomock.NewController(t)),
+		cache: NewMockTokenVersionCache(gomock.NewController(t)),
+	}
+	require.NoError(t, holder.Start(context.Background()))
+	resource := holder.currentResource()
+	require.NotNil(t, resource)
+
+	require.NoError(t, holder.Close(context.Background()))
+	version, err := resource.GetOrLoad(context.Background(), "018f0000-0000-7000-8000-000000000504")
+	require.Zero(t, version)
+	require.ErrorIs(t, err, localcache.ErrClosed)
+	require.ErrorIs(t, resource.Delete("018f0000-0000-7000-8000-000000000504"), localcache.ErrClosed)
+	require.ErrorIs(t, holder.Delete("018f0000-0000-7000-8000-000000000504"), localcache.ErrClosed)
 }
 
 func TestAuthModuleBuildsCommandGraphWithMetricsConfigurations(t *testing.T) {
