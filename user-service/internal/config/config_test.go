@@ -236,7 +236,7 @@ func TestLoadRepositoryConfigTargets(t *testing.T) {
 		postgresPort int
 		otlpEndpoint string
 	}{
-		{name: "host", environment: "local-host", redisAddr: "127.0.0.1:16379", postgresHost: "127.0.0.1", postgresPort: 15432, otlpEndpoint: "127.0.0.1:4317"},
+		{name: "host", environment: "local-host", redisAddr: "127.0.0.1:6379", postgresHost: "127.0.0.1", postgresPort: 5432, otlpEndpoint: "127.0.0.1:4317"},
 		{name: "docker", environment: "local-docker", redisAddr: "redis:6379", postgresHost: "postgres", postgresPort: 5432, otlpEndpoint: "jaeger:4317"},
 	}
 	configs := make(map[string]*Config, len(tests))

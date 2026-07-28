@@ -87,9 +87,9 @@ func newRedisClient(redisCfg resources.RedisConfig) redis.UniversalClient {
 		})
 	}
 	return redis.NewClient(&redis.Options{
-		Addr:         redisCfg.Addr,
-		Username:     redisCfg.Username,
-		Password:     redisCfg.Password,
+		Addr:     redisCfg.Addr,
+		Username: redisCfg.Username,
+		Password: redisCfg.Password,
 		// Redis Cluster 只支持 0 号库；standalone 也固定使用 0 号库，避免两种 mode 出现数据隔离语义分叉。
 		DB:           0,
 		DialTimeout:  redisCfg.Timeout,
