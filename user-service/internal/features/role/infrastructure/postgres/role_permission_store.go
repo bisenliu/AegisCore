@@ -7,6 +7,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 
+	"github.com/aegiscore/common/runtime/datastore"
 	"github.com/aegiscore/user-service/ent"
 	entpermission "github.com/aegiscore/user-service/ent/permission"
 	entrole "github.com/aegiscore/user-service/ent/role"
@@ -46,25 +47,26 @@ func (s *RolePermissionStore) ListByRoleID(ctx context.Context, roleID uuid.UUID
 
 // Add 新增角色权限绑定。
 func (s *RolePermissionStore) Add(ctx context.Context, roleID uuid.UUID, permission roleapplication.PermissionReference) error {
-	tx, err := s.client.Tx(ctx)
+	tx, finish, err := datastore.BeginTransaction(ctx, entTxStarter{client: s.client})
 	if err != nil {
 		return fmt.Errorf("begin add role permission: %w", err)
 	}
+	defer func() { _ = finish.RollbackUnlessCommitted() }()
 	role, err := s.getLockedRoleByExternalID(ctx, tx, roleID)
 	if err != nil {
-		return rollback(tx, err)
+		return finish.Fail(err)
 	}
 	lockedPermission, err := s.getLockedPermissionByExternalID(ctx, tx, permission.PermissionID)
 	if err != nil {
-		return rollback(tx, err)
+		return finish.Fail(err)
 	}
 	if _, err := tx.RolePermission.Create().SetRoleID(role.ID).SetPermissionID(lockedPermission.ID).Save(ctx); err != nil {
 		if ent.IsConstraintError(err) {
-			return rollback(tx, roledomain.ErrRolePermissionAlreadyExists)
+			return finish.Fail(roledomain.ErrRolePermissionAlreadyExists)
 		}
-		return rollback(tx, fmt.Errorf("add role permission role %s permission %s: %w", roleID.String(), permission.PermissionID.String(), err))
+		return finish.Fail(fmt.Errorf("add role permission role %s permission %s: %w", roleID.String(), permission.PermissionID.String(), err))
 	}
-	if err := tx.Commit(); err != nil {
+	if err := finish.Commit(ctx); err != nil {
 		return fmt.Errorf("commit add role permission: %w", err)
 	}
 	return nil
@@ -73,20 +75,21 @@ func (s *RolePermissionStore) Add(ctx context.Context, roleID uuid.UUID, permiss
 // Replace 幂等替换角色的完整权限绑定集合。
 // 事务内先锁定角色和目标权限，再删除旧绑定并批量创建新绑定；ForUpdate 防止并发启停或删除导致替换结果基于过期状态。
 func (s *RolePermissionStore) Replace(ctx context.Context, roleID uuid.UUID, permissions []roleapplication.PermissionReference) ([]roleapplication.PermissionReference, error) {
-	tx, err := s.client.Tx(ctx)
+	tx, finish, err := datastore.BeginTransaction(ctx, entTxStarter{client: s.client})
 	if err != nil {
 		return nil, fmt.Errorf("begin replace role permissions: %w", err)
 	}
+	defer func() { _ = finish.RollbackUnlessCommitted() }()
 	role, err := s.getLockedRoleByExternalID(ctx, tx, roleID)
 	if err != nil {
-		return nil, rollback(tx, err)
+		return nil, finish.Fail(err)
 	}
 	lockedPermissions, err := s.lockedPermissionsByExternalIDs(ctx, tx, permissionReferenceIDs(permissions))
 	if err != nil {
-		return nil, rollback(tx, err)
+		return nil, finish.Fail(err)
 	}
 	if _, err := tx.RolePermission.Delete().Where(entrolepermission.RoleIDEQ(role.ID)).Exec(ctx); err != nil {
-		return nil, rollback(tx, fmt.Errorf("delete role permissions for role %s: %w", roleID.String(), err))
+		return nil, finish.Fail(fmt.Errorf("delete role permissions for role %s: %w", roleID.String(), err))
 	}
 	builders := make([]*ent.RolePermissionCreate, 0, len(lockedPermissions))
 	for _, permission := range lockedPermissions {
@@ -94,10 +97,10 @@ func (s *RolePermissionStore) Replace(ctx context.Context, roleID uuid.UUID, per
 	}
 	if len(builders) > 0 {
 		if _, err := tx.RolePermission.CreateBulk(builders...).Save(ctx); err != nil {
-			return nil, rollback(tx, fmt.Errorf("create replacement role permissions for role %s: %w", roleID.String(), err))
+			return nil, finish.Fail(fmt.Errorf("create replacement role permissions for role %s: %w", roleID.String(), err))
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := finish.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit replace role permissions: %w", err)
 	}
 	return lockedPermissions, nil
@@ -177,10 +180,11 @@ func (s *RolePermissionStore) SyncSystemBindings(ctx context.Context, roleID uui
 		return 0, 0, err
 	}
 
-	tx, err := s.client.Tx(ctx)
+	tx, finish, err := datastore.BeginTransaction(ctx, entTxStarter{client: s.client})
 	if err != nil {
 		return 0, 0, fmt.Errorf("begin sync seed role permissions: %w", err)
 	}
+	defer func() { _ = finish.RollbackUnlessCommitted() }()
 	removed := 0
 	for permissionID := range existing {
 		if _, ok := desired[permissionID]; ok {
@@ -188,7 +192,7 @@ func (s *RolePermissionStore) SyncSystemBindings(ctx context.Context, roleID uui
 		}
 		deleted, err := tx.RolePermission.Delete().Where(entrolepermission.RoleIDEQ(role.ID), entrolepermission.PermissionIDEQ(permissionID)).Exec(ctx)
 		if err != nil {
-			return 0, 0, rollback(tx, fmt.Errorf("delete seed role permission role %s permission %d: %w", roleID.String(), permissionID, err))
+			return 0, 0, finish.Fail(fmt.Errorf("delete seed role permission role %s permission %d: %w", roleID.String(), permissionID, err))
 		}
 		removed += deleted
 	}
@@ -205,10 +209,10 @@ func (s *RolePermissionStore) SyncSystemBindings(ctx context.Context, roleID uui
 			OnConflict(sql.ConflictColumns(entrolepermission.FieldRoleID, entrolepermission.FieldPermissionID)).
 			DoNothing().
 			Exec(ctx); err != nil {
-			return 0, 0, rollback(tx, fmt.Errorf("create seed role permissions for role %s: %w", roleID.String(), err))
+			return 0, 0, finish.Fail(fmt.Errorf("create seed role permissions for role %s: %w", roleID.String(), err))
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := finish.Commit(ctx); err != nil {
 		return 0, 0, fmt.Errorf("commit sync seed role permissions: %w", err)
 	}
 	return added, removed, nil

@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/aegiscore/common/runtime/datastore"
 	"github.com/aegiscore/user-service/ent"
 	entrole "github.com/aegiscore/user-service/ent/role"
 	entuser "github.com/aegiscore/user-service/ent/user"
@@ -68,12 +69,13 @@ func (s *UserRoleStore) Replace(ctx context.Context, userID uuid.UUID, roleIDs [
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.client.Tx(ctx)
+	tx, finish, err := datastore.BeginTransaction(ctx, entTxStarter{client: s.client})
 	if err != nil {
 		return nil, fmt.Errorf("begin replace user roles: %w", err)
 	}
+	defer func() { _ = finish.RollbackUnlessCommitted() }()
 	if _, err := tx.UserRole.Delete().Where(entuserrole.UserIDEQ(user.ID)).Exec(ctx); err != nil {
-		return nil, rollback(tx, fmt.Errorf("delete user roles for user %s: %w", userID.String(), err))
+		return nil, finish.Fail(fmt.Errorf("delete user roles for user %s: %w", userID.String(), err))
 	}
 	builders := make([]*ent.UserRoleCreate, 0, len(roles))
 	for _, role := range roles {
@@ -81,10 +83,10 @@ func (s *UserRoleStore) Replace(ctx context.Context, userID uuid.UUID, roleIDs [
 	}
 	if len(builders) > 0 {
 		if _, err := tx.UserRole.CreateBulk(builders...).Save(ctx); err != nil {
-			return nil, rollback(tx, fmt.Errorf("create replacement user roles for user %s: %w", userID.String(), err))
+			return nil, finish.Fail(fmt.Errorf("create replacement user roles for user %s: %w", userID.String(), err))
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := finish.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit replace user roles: %w", err)
 	}
 	return toRoleModels(roles), nil

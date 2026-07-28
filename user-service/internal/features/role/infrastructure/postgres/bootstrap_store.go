@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/aegiscore/common/runtime/datastore"
 	rolebootstrap "github.com/aegiscore/user-service/internal/features/role/application/bootstrap"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 )
@@ -32,48 +33,42 @@ func (s *BootstrapStore) BootstrapSuperAdmin(ctx context.Context, input roleboot
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("bootstrap postgres store requires database")
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, finish, err := datastore.BeginTransaction(ctx, sqlTxStarter{db: s.db})
 	if err != nil {
 		return nil, fmt.Errorf("begin bootstrap super admin: %w", err)
 	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Rollback()
-		}
-	}()
+	defer func() { _ = finish.RollbackUnlessCommitted() }()
 
 	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, bootstrapAdvisoryLockKey); err != nil {
-		return nil, fmt.Errorf("lock bootstrap super admin: %w", err)
+		return nil, finish.Fail(fmt.Errorf("lock bootstrap super admin: %w", err))
 	}
 
 	roleInternalID, err := queryBootstrapRole(ctx, tx, input)
 	if err != nil {
-		return nil, err
+		return nil, finish.Fail(err)
 	}
 	if exists, err := userIDExists(ctx, tx, input.UserID.String()); err != nil {
-		return nil, err
+		return nil, finish.Fail(err)
 	} else if exists {
-		return nil, rolebootstrap.ErrSuperAdminAlreadyBootstrapped
+		return nil, finish.Fail(rolebootstrap.ErrSuperAdminAlreadyBootstrapped)
 	}
 	if exists, err := usernameExists(ctx, tx, input.Username); err != nil {
-		return nil, err
+		return nil, finish.Fail(err)
 	} else if exists {
-		return nil, rolebootstrap.ErrBootstrapUsernameAlreadyExists
+		return nil, finish.Fail(rolebootstrap.ErrBootstrapUsernameAlreadyExists)
 	}
 
 	now := time.Now().UnixMilli()
 	userInternalID, err := insertBootstrapUser(ctx, tx, input, now)
 	if err != nil {
-		return nil, err
+		return nil, finish.Fail(err)
 	}
 	if err := insertBootstrapUserRole(ctx, tx, userInternalID, roleInternalID, now); err != nil {
-		return nil, err
+		return nil, finish.Fail(err)
 	}
-	if err := tx.Commit(); err != nil {
+	if err := finish.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit bootstrap super admin: %w", err)
 	}
-	committed = true
 	return &rolebootstrap.BootstrapSuperAdminResult{UserID: input.UserID, RoleID: input.RoleID, Username: input.Username, Nickname: input.Nickname}, nil
 }
 
