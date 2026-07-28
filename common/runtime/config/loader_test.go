@@ -47,6 +47,7 @@ func TestDefaultConfigSupportsLocalHTTPServer(t *testing.T) {
 	require.Positive(t, cfg.Server.HTTP.WriteTimeout)
 	require.Positive(t, cfg.Server.HTTP.IdleTimeout)
 	require.Positive(t, cfg.Server.HTTP.ShutdownTimeout)
+	require.Empty(t, cfg.Server.HTTP.TrustedProxies)
 	require.GreaterOrEqual(t, cfg.Runtime.Lifecycle.StopTimeout, cfg.Server.HTTP.ShutdownTimeout)
 	require.GreaterOrEqual(t, cfg.Runtime.Lifecycle.StopTimeout, cfg.Server.GRPC.ShutdownTimeout)
 	require.GreaterOrEqual(t, cfg.Runtime.Lifecycle.StopTimeout, cfg.minimumLifecycleStopBudget())
@@ -81,6 +82,7 @@ func TestLoadExplicitConfig(t *testing.T) {
 	require.Equal(t, 20*time.Second, cfg.Server.HTTP.WriteTimeout)
 	require.Equal(t, 30*time.Second, cfg.Server.HTTP.IdleTimeout)
 	require.Equal(t, 5*time.Second, cfg.Server.HTTP.ShutdownTimeout)
+	require.Equal(t, []string{"10.0.0.0/8", "192.0.2.10"}, cfg.Server.HTTP.TrustedProxies)
 	require.True(t, cfg.Server.GRPC.Enabled)
 	require.Equal(t, "127.0.0.1", cfg.Server.GRPC.Host)
 	require.Equal(t, 19090, cfg.Server.GRPC.Port)
@@ -230,6 +232,9 @@ func TestLoadValidatesLifecycleStopTimeoutCoversCombinedShutdownBudget(t *testin
     write_timeout: 20s
     idle_timeout: 30s
     shutdown_timeout: 5s
+    trusted_proxies:
+      - 10.0.0.0/8
+      - 192.0.2.10
   grpc:
     enabled: true
     host: 127.0.0.1
@@ -254,6 +259,9 @@ func TestLoadAllowsLifecycleStopTimeoutAtCombinedShutdownBudget(t *testing.T) {
     write_timeout: 20s
     idle_timeout: 30s
     shutdown_timeout: 5s
+    trusted_proxies:
+      - 10.0.0.0/8
+      - 192.0.2.10
   grpc:
     enabled: true
     host: 127.0.0.1
@@ -373,6 +381,28 @@ func TestLoadValidatesEnabledServers(t *testing.T) {
 	)
 }
 
+func TestLoadValidatesHTTPTrustedProxies(t *testing.T) {
+	err := loadConfigErrorFromYAML(t, configYAMLWithSection(`server:
+  http:
+    enabled: true
+    host: 127.0.0.1
+    port: 18080
+    read_timeout: 10s
+    write_timeout: 20s
+    idle_timeout: 30s
+    shutdown_timeout: 5s
+    trusted_proxies:
+      - 10.0.0.0/33
+      - " "
+  grpc:
+    enabled: false`))
+
+	assertConfigLoadErrorContains(t, err,
+		"server.http.trusted_proxies[0] must be an IP address or CIDR",
+		"server.http.trusted_proxies[1] must be an IP address or CIDR",
+	)
+}
+
 func TestLoadAllowsDisabledHTTPWithoutPlaceholdersWhenGRPCEnabled(t *testing.T) {
 	cfg := loadConfigFromYAML(t, configYAMLWithSection(`server:
   http:
@@ -442,6 +472,9 @@ func TestDecodeStrictLoadsCompleteConfig(t *testing.T) {
     write_timeout: 20s
     idle_timeout: 30s
     shutdown_timeout: 5s
+    trusted_proxies:
+      - 10.0.0.0/8
+      - 192.0.2.10
   grpc:
     enabled: true
     host: 127.0.0.1
@@ -464,6 +497,7 @@ func TestDecodeStrictLoadsCompleteConfig(t *testing.T) {
 	require.Equal(t, "debug", cfg.Runtime.Gin.Mode)
 	require.Equal(t, "Asia/Shanghai", cfg.Runtime.Timezone)
 	require.Equal(t, 28080, cfg.Server.HTTP.Port)
+	require.Equal(t, []string{"10.0.0.0/8", "192.0.2.10"}, cfg.Server.HTTP.TrustedProxies)
 	require.Equal(t, 12*time.Second, cfg.Server.GRPC.ShutdownTimeout)
 	require.False(t, cfg.Observability.Metrics.Enabled)
 	require.Equal(t, 0.5, cfg.Observability.Tracing.SampleRatio)
@@ -687,6 +721,9 @@ server:
     write_timeout: 20s
     idle_timeout: 30s
     shutdown_timeout: 5s
+    trusted_proxies:
+      - 10.0.0.0/8
+      - 192.0.2.10
   grpc:
     enabled: true
     host: 127.0.0.1

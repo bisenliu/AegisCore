@@ -42,10 +42,11 @@ user-service 每个进程只通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` �
 - `resources.redis.cache_redis.addr`，`standalone` 模式使用；Redis DB 固定为 0 号库且不暴露配置项
 - 可选 `resources.redis.cache_redis.username/password`
 - 可选 `resources.redis.cache_redis.cluster.max_redirects`
+- `server.http.trusted_proxies`，部署在入口代理后方时填写真实 Ingress、gateway、load balancer 或 service mesh 上游 IP/CIDR
 
 超级管理员 bootstrap 临时密码只通过 `ADMIN_BOOTSTRAP_PASSWORD` 环境变量提供，不写入 Nacos 配置。
 
-Nacos 合成配置是唯一运行配置来源，进程时区使用 `runtime.timezone`。日志由 stdout/stderr 采集，tracing 启用后固定通过 OTLP 导出。trusted proxy 策略属于 Ingress、gateway 或 service mesh 入口边界，不通过应用配置注入。
+Nacos 合成配置是唯一运行配置来源，进程时区使用 `runtime.timezone`。日志由 stdout/stderr 采集，tracing 启用后固定通过 OTLP 导出。trusted proxy 策略通过 `server.http.trusted_proxies` 显式注入应用；Ingress、gateway 或 service mesh 必须在入口边界覆盖或重建 forwarded headers。
 
 pprof 默认不渲染、不暴露。临时诊断应修改 Nacos 配置中的 `observability.pprof`，再使用 `kubectl port-forward`。
 

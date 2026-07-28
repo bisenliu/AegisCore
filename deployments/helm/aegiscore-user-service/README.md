@@ -58,7 +58,7 @@ user-service 使用 Nacos v3 Client HTTP API 读取配置；默认网络策略�
 
 超级管理员 bootstrap 临时密码只通过 `ADMIN_BOOTSTRAP_PASSWORD` 环境变量提供，不写入 Nacos 配置。
 
-进程时区使用 `runtime.timezone`。日志写 stdout/stderr，tracing 启用后固定通过 OTLP 导出。trusted proxy 由集群入口边界负责，不是 chart 的应用配置。
+进程时区使用 `runtime.timezone`。日志写 stdout/stderr，tracing 启用后固定通过 OTLP 导出。trusted proxy 通过 Nacos `server.http.trusted_proxies` 显式配置真实入口代理 IP/CIDR；chart 的 NetworkPolicy 只限制网络来源，入口 Ingress、gateway 或 service mesh 仍必须覆盖或重建 forwarded headers。
 
 chart 默认不配置或暴露 pprof。临时排障应修改 Nacos 中的 `observability.pprof`，并使用 `kubectl port-forward`，不要把诊断端口加入常驻 Service。
 

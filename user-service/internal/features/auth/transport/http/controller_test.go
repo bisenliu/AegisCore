@@ -56,6 +56,35 @@ func TestAuthControllerLoginNormalizesToCommand(t *testing.T) {
 
 }
 
+func TestAuthControllerLoginUsesTrustedProxyClientIP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctl, mocks := newTestAuthController(t)
+	mocks.login.EXPECT().Login(gomock.Any(), authcommand.LoginCommand{Username: "alice", Password: "secret"}).DoAndReturn(func(ctx context.Context, _ authcommand.LoginCommand) (*authcommand.LoginResult, error) {
+		clientContext, ok := authctx.ClientContextFromContext(ctx)
+		require.False(t, !ok || clientContext.ClientIP != "203.0.113.50" || clientContext.UserAgent != "auth-controller-test",
+			"clientContext = %#v, %v", clientContext, ok)
+		return &authcommand.LoginResult{Tokens: &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 900}}, nil
+	})
+
+	engine := gin.New()
+	require.NoError(t, engine.SetTrustedProxies([]string{"192.0.2.10"}))
+	engine.POST("/api/v1/auth/login", ctl.LoginUser)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":"alice","password":"secret"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("User-Agent", "auth-controller-test")
+	request.Header.Set("X-Forwarded-For", "203.0.113.50")
+	request.RemoteAddr = "192.0.2.10:1234"
+	recorder := httptest.NewRecorder()
+
+	engine.ServeHTTP(recorder, request)
+
+	status, envelope := decodeAuthEnvelope(t, recorder)
+	require.Equal(t, http.StatusOK, status,
+		"status = %d, want %d", status, http.StatusOK)
+	require.False(t, !envelope.Success || envelope.Code != contracterrors.CodeOK,
+		"envelope = %#v", envelope)
+}
+
 func TestAuthControllerLoginMapsPasswordChangeRequiredCode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctl, mocks := newTestAuthController(t)

@@ -160,15 +160,17 @@ func TestRequestIDRejectsInvalidHeader(t *testing.T) {
 	}
 }
 
-func TestRequestLoggerUsesSharedClientIPExtraction(t *testing.T) {
+func TestRequestLoggerUsesTrustedProxyClientIP(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	core, logs := observer.New(zap.InfoLevel)
 	log := zap.New(core)
 	engine := gin.New()
+	require.NoError(t, engine.SetTrustedProxies([]string{"10.0.0.1"}))
 	engine.Use(RequestLogger(log))
 	engine.GET("/ok", func(c *gin.Context) { c.Status(http.StatusAccepted) })
 
 	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
+	req.RemoteAddr = "10.0.0.1:12345"
 	req.Header.Set("X-Forwarded-For", "203.0.113.10, 10.0.0.1")
 	engine.ServeHTTP(httptest.NewRecorder(), req)
 
@@ -176,6 +178,26 @@ func TestRequestLoggerUsesSharedClientIPExtraction(t *testing.T) {
 	require.Len(t, entries, 1)
 	fields := entries[0].ContextMap()
 	require.Equal(t, "203.0.113.10", fields["client_ip"])
+}
+
+func TestRequestLoggerIgnoresForwardedClientIPFromUntrustedPeer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core)
+	engine := gin.New()
+	require.NoError(t, engine.SetTrustedProxies([]string{"198.51.100.10"}))
+	engine.Use(RequestLogger(log))
+	engine.GET("/ok", func(c *gin.Context) { c.Status(http.StatusAccepted) })
+
+	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
+	req.RemoteAddr = "10.0.0.1:12345"
+	req.Header.Set("X-Forwarded-For", "203.0.113.10, 10.0.0.1")
+	engine.ServeHTTP(httptest.NewRecorder(), req)
+
+	entries := logs.FilterMessage("http request completed").All()
+	require.Len(t, entries, 1)
+	fields := entries[0].ContextMap()
+	require.Equal(t, "10.0.0.1", fields["client_ip"])
 }
 
 func TestRequestLoggerSelectsLevelByStatus(t *testing.T) {

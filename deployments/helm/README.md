@@ -24,7 +24,7 @@ Deployment 默认不设置 `RUN_MIGRATIONS=true`，普通服务副本不执行 A
 
 chart 默认与 Distroless static nonroot 镜像对齐，`podSecurityContext.runAsUser`、`runAsGroup` 和 `fsGroup` 均为 `65532`。Deployment 保持 kubelet HTTP probes；Compose 场景才使用镜像内原生 `healthcheck` CLI。
 
-运行配置只通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` 定位 Nacos，再加载 `base.yaml`、`resources.yaml`、`user-service.yaml` 等 dataId。时区使用 `runtime.timezone`。应用日志只写 stdout/stderr，tracing 启用后固定通过 OTLP 导出；trusted proxy 属于入口控制面。pprof 默认不进入 chart，通过修改 Nacos 中的 `observability.pprof`、loopback 和 `kubectl port-forward` 临时诊断。
+运行配置只通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` 定位 Nacos，再加载 `base.yaml`、`resources.yaml`、`user-service.yaml` 等 dataId。时区使用 `runtime.timezone`。应用日志只写 stdout/stderr，tracing 启用后固定通过 OTLP 导出；trusted proxy 使用 Nacos `server.http.trusted_proxies` 配置真实入口代理 IP/CIDR，入口控制面必须覆盖或重建 forwarded headers。pprof 默认不进入 chart，通过修改 Nacos 中的 `observability.pprof`、loopback 和 `kubectl port-forward` 临时诊断。
 
 ## 验证
 

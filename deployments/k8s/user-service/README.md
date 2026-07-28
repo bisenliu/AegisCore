@@ -65,7 +65,7 @@ Deployment 默认只启动 HTTP 服务，不设置 `RUN_MIGRATIONS=true`，运�
 
 Deployment 默认提供 150 秒终止宽限期：120 秒用于 Fx `app.Stop()` 逆注册顺序串行执行全部 `OnStop` hook，额外 30 秒用于 kubelet 调度、信号传递、受控 `preStop` 和网络抖动。HTTP 25 秒、auth session purge workerpool 30 秒等组件级 timeout 只约束各自 hook，不能作为 Pod grace 的应用总预算。正常关闭完成后进程会立即退出，不会等待完整宽限期；后续新增或延长 `preStop` 时必须证明 30 秒余量仍足够，否则同步提高原生 Kubernetes 与 Helm 默认值及自动校验基线。
 
-配置通过 Nacos dataId 合成，时区由 `runtime.timezone` 控制；日志只写 stdout/stderr；tracing 启用后固定使用 OTLP。应用不接收 trusted proxy 配置，代理信任和 forwarded headers 由 Ingress、gateway 或 service mesh 入口策略负责。
+配置通过 Nacos dataId 合成，时区由 `runtime.timezone` 控制；日志只写 stdout/stderr；tracing 启用后固定使用 OTLP。部署在 Ingress、gateway、ALB、Envoy、Nginx 或 service mesh 后方时，Nacos `user-service.yaml` 必须在 `server.http.trusted_proxies` 中声明真实入口代理 IP/CIDR；入口层必须覆盖或重建 `X-Forwarded-For` 和 `X-Real-IP`，不得透传客户端提供的未清洗 forwarded headers。
 
 pprof 默认关闭且不由 Service 暴露。临时诊断时修改 Nacos 中的 `observability.pprof`，再通过 `kubectl port-forward` 访问。
 

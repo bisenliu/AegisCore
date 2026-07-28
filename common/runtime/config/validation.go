@@ -125,6 +125,7 @@ func (c Config) validateServer() []error {
 		errs = append(errs, ValidatePositiveDuration("server.http.write_timeout", c.Server.HTTP.WriteTimeout)...)
 		errs = append(errs, ValidatePositiveDuration("server.http.idle_timeout", c.Server.HTTP.IdleTimeout)...)
 		errs = append(errs, ValidatePositiveDuration("server.http.shutdown_timeout", c.Server.HTTP.ShutdownTimeout)...)
+		errs = append(errs, validateTrustedProxies(c.Server.HTTP.TrustedProxies)...)
 	}
 	if c.Server.GRPC.Enabled {
 		errs = append(errs, validateServerAddress("server.grpc", c.Server.GRPC.Host, c.Server.GRPC.Port)...)
@@ -139,6 +140,26 @@ func validateServerAddress(base string, host string, port int) []error {
 		errs = append(errs, FieldError(base+".host", "is required"))
 	}
 	return append(errs, validatePort(base+".port", port)...)
+}
+
+func validateTrustedProxies(values []string) []error {
+	var errs []error
+	for index, value := range values {
+		path := fmt.Sprintf("server.http.trusted_proxies[%d]", index)
+		proxy := strings.TrimSpace(value)
+		if proxy == "" {
+			errs = append(errs, FieldError(path, "must be an IP address or CIDR"))
+			continue
+		}
+		if net.ParseIP(proxy) != nil {
+			continue
+		}
+		if _, _, err := net.ParseCIDR(proxy); err == nil {
+			continue
+		}
+		errs = append(errs, FieldError(path, "must be an IP address or CIDR"))
+	}
+	return errs
 }
 
 func (c Config) validateLog() []error {

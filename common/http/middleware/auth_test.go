@@ -88,6 +88,7 @@ func TestAuthMiddleware(t *testing.T) {
 			}
 			core, logs := observer.New(zapcore.DebugLevel)
 			engine := gin.New()
+			require.NoError(t, engine.SetTrustedProxies([]string{"10.0.0.1"}))
 			engine.Use(AuthWithTokenVersionValidator(zap.New(core), testVerifier, validator))
 			handled := false
 			engine.GET("/*path", func(c *gin.Context) {
@@ -115,6 +116,8 @@ func TestAuthMiddleware(t *testing.T) {
 
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			request.RemoteAddr = "10.0.0.1:12345"
+			request.Header.Set("X-Forwarded-For", "203.0.113.10, 10.0.0.1")
 			request.Header.Set("User-Agent", "auth-test-agent")
 			if tt.authorization != "" {
 				request.Header.Set(auth.AuthorizationHeader, tt.authorization)
@@ -196,7 +199,7 @@ func assertAuthFailureFields(t *testing.T, fields map[string]any, _ string) {
 	require.Equal(t, http.MethodGet, fields["method"])
 	require.Equal(t, "/*path", fields["path"])
 	require.Equal(t, "auth-test-agent", fields["user_agent"])
-	require.Contains(t, fields, "client_ip")
+	require.Equal(t, "203.0.113.10", fields["client_ip"])
 }
 
 func signAuthTestToken(t *testing.T, secret, userID string, tokenVersion int64, sessionID string, expiresAt time.Time) string {

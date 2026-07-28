@@ -11,6 +11,7 @@ server:
     write_timeout: 60s
     idle_timeout: 120s
     shutdown_timeout: 25s
+    trusted_proxies: []
   grpc:
     enabled: false
     host: 127.0.0.1

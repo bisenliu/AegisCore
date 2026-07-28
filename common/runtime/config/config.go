@@ -43,7 +43,7 @@ type ServerConfig struct {
 	GRPC GRPCServerConfig `mapstructure:"grpc"`
 }
 
-// HTTPServerConfig 包含 HTTP server 的监听、超时和关闭设置。
+// HTTPServerConfig 包含 HTTP server 的监听、超时、关闭和可信代理设置。
 type HTTPServerConfig struct {
 	Enabled         bool          `mapstructure:"enabled"`
 	Host            string        `mapstructure:"host"`
@@ -52,6 +52,7 @@ type HTTPServerConfig struct {
 	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
 	IdleTimeout     time.Duration `mapstructure:"idle_timeout"`
 	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+	TrustedProxies  []string      `mapstructure:"trusted_proxies"`
 }
 
 // GRPCServerConfig 包含 gRPC server 的最小监听和关闭设置。
