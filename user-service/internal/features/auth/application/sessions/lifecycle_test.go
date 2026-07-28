@@ -113,13 +113,13 @@ func TestLifecycleRevokeAllUserSessions(t *testing.T) {
 		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
 	)
 
-	result, err := fixture.lifecycle.RevokeAllUserSessions(context.Background(), sessionTestUserID)
+	result, projectionErr, err := fixture.lifecycle.RevokeAllUserSessions(context.Background(), sessionTestUserID)
 	require.NoError(t, err,
 		"RevokeAllUserSessions: %v", err)
+	require.NoError(t, projectionErr,
+		"projection error = %v, want nil", projectionErr)
 	require.False(t, result.UserID != sessionTestUserID || result.TokenVersion != 4,
 		"result = %#v", result)
-	require.NoError(t, result.ProjectionError,
-		"projection error = %v, want nil", result.ProjectionError)
 
 }
 

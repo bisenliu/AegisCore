@@ -54,7 +54,7 @@ func TestAuthUseCaseLogoutAllIncrementsVersionAndDeletesSessions(t *testing.T) {
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 	revocation := &authdomain.SessionRevocationResult{UserID: authTestUserID, TokenVersion: 3}
 
-	fixture.sessions.EXPECT().RevokeAllUserSessions(gomock.Any(), authTestUserID).Return(revocation, nil)
+	fixture.sessions.EXPECT().RevokeAllUserSessions(gomock.Any(), authTestUserID).Return(revocation, nil, nil)
 	metrics.EXPECT().LogoutSucceeded(gomock.Any(), authapplication.MetricsOperationLogoutAll)
 
 	result, err := fixture.LogoutAllSessions(ctx)
@@ -71,9 +71,9 @@ func TestAuthUseCaseLogoutAllReturnsIncompleteWhenRevocationProjectionFails(t *t
 	fixture := newAuthCommandFixtureWithController(ctrl, defaultAuthConfig(true), metrics)
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 	projectionErr := errors.New("projection failed")
-	revocation := &authdomain.SessionRevocationResult{UserID: authTestUserID, TokenVersion: 3, ProjectionError: projectionErr}
+	revocation := &authdomain.SessionRevocationResult{UserID: authTestUserID, TokenVersion: 3}
 
-	fixture.sessions.EXPECT().RevokeAllUserSessions(gomock.Any(), authTestUserID).Return(revocation, nil)
+	fixture.sessions.EXPECT().RevokeAllUserSessions(gomock.Any(), authTestUserID).Return(revocation, projectionErr, nil)
 	metrics.EXPECT().LogoutFailed(gomock.Any(), authapplication.MetricsOperationLogoutAll, authapplication.MetricsReasonSessionRevokeFailed)
 
 	result, err := fixture.LogoutAllSessions(ctx)
@@ -89,7 +89,7 @@ func TestAuthUseCaseLogoutAllMapsIncrementUserNotFound(t *testing.T) {
 	fixture := newAuthCommandFixtureWithController(ctrl, defaultAuthConfig(true), metrics)
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 
-	fixture.sessions.EXPECT().RevokeAllUserSessions(gomock.Any(), authTestUserID).Return(nil, identity.ErrUserNotFound)
+	fixture.sessions.EXPECT().RevokeAllUserSessions(gomock.Any(), authTestUserID).Return(nil, nil, identity.ErrUserNotFound)
 	metrics.EXPECT().LogoutFailed(gomock.Any(), authapplication.MetricsOperationLogoutAll, authapplication.MetricsReasonSessionRevokeFailed)
 
 	_, err := fixture.LogoutAllSessions(ctx)

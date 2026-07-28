@@ -14,22 +14,22 @@ import (
 )
 
 // RevokeAllUserSessions 递增 token version，并尽力刷新 Redis 投影与删除全部 refresh 会话。
-func (m *lifecycle) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*authdomain.SessionRevocationResult, error) {
+func (m *lifecycle) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*authdomain.SessionRevocationResult, error, error) {
 	tokenVersion, err := m.users.IncrementTokenVersion(ctx, userID)
 	if err != nil {
 		if errors.Is(err, identity.ErrUserNotFound) {
 			logger.Warn(ctx, "revoke all user sessions user not found", zap.String("user_id", userID.String()))
-			return nil, identity.ErrUserNotFound
+			return nil, nil, identity.ErrUserNotFound
 		}
 		logger.Error(ctx, "increment token version failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
-		return nil, err
+		return nil, nil, err
 	}
 	projectionErr := m.RevokeUserSessionsAtVersion(ctx, userID, tokenVersion)
 	if projectionErr != nil {
 		logger.Error(ctx, "revoke all user sessions projection failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion), zap.Error(projectionErr))...)
 	}
 	logger.Info(ctx, "all user sessions revoked", zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion))
-	return &authdomain.SessionRevocationResult{UserID: userID, TokenVersion: tokenVersion, ProjectionError: projectionErr}, nil
+	return &authdomain.SessionRevocationResult{UserID: userID, TokenVersion: tokenVersion}, projectionErr, nil
 }
 
 // RevokeUserSessionsAtVersion 刷新 token version 投影并删除全部 refresh 会话，不修改 PostgreSQL 版本。

@@ -322,13 +322,13 @@ func TestAuthSessionLifecycleRevokeAllUserSessions(t *testing.T) {
 	tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), authTestUserID.String(), int64(4)).Return(nil)
 	sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), authTestUserID.String()).Return(nil)
 
-	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
+	result, projectionErr, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 	require.NoError(t, err,
 		"RevokeAllUserSessions: %v", err)
+	require.NoError(t, projectionErr,
+		"projection error = %v, want nil", projectionErr)
 	require.False(t, result.UserID != authTestUserID || result.TokenVersion != 4,
 		"result = %#v", result)
-	require.NoError(t, result.ProjectionError,
-		"projection error = %v, want nil", result.ProjectionError)
 
 }
 
@@ -337,7 +337,7 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsMapsUserNotFound(t *testing.T)
 	lifecycle, users, _, _ := newGeneratedAuthSessionLifecycle(t, ctrl)
 	users.EXPECT().IncrementTokenVersion(gomock.Any(), authTestUserID).Return(int64(0), identity.ErrUserNotFound)
 
-	_, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
+	_, _, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 	require.ErrorIs(t, err, identity.ErrUserNotFound,
 		"err = %v, want ErrUserNotFound", err)
 
@@ -353,13 +353,13 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsCompensatesCacheRefreshError(t
 	tokenVersions.EXPECT().DeleteCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(nil)
 	sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), authTestUserID.String()).Return(nil)
 
-	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
+	result, projectionErr, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 	require.NoError(t, err,
 		"RevokeAllUserSessions: %v", err)
 	require.False(t, result.UserID != authTestUserID || result.TokenVersion != 4,
 		"result = %#v", result)
-	require.ErrorIs(t, result.ProjectionError, cacheErr,
-		"projection error = %v, want cache error", result.ProjectionError)
+	require.ErrorIs(t, projectionErr, cacheErr,
+		"projection error = %v, want cache error", projectionErr)
 
 }
 
@@ -372,13 +372,13 @@ func TestAuthSessionLifecycleRevokeAllUserSessionsSucceedsAfterDeleteAllProjecti
 	tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), authTestUserID.String(), int64(4)).Return(nil)
 	sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), authTestUserID.String()).Return(deleteErr)
 
-	result, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
+	result, projectionErr, err := lifecycle.RevokeAllUserSessions(context.Background(), authTestUserID)
 	require.NoError(t, err,
 		"RevokeAllUserSessions: %v", err)
 	require.False(t, result.UserID != authTestUserID || result.TokenVersion != 4,
 		"result = %#v", result)
-	require.ErrorIs(t, result.ProjectionError, deleteErr,
-		"projection error = %v, want delete error", result.ProjectionError)
+	require.ErrorIs(t, projectionErr, deleteErr,
+		"projection error = %v, want delete error", projectionErr)
 
 }
 

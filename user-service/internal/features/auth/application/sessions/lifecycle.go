@@ -26,7 +26,7 @@ type Lifecycle interface {
 	DeleteSession(ctx context.Context, userID string, sessionID string) error
 	CurrentTokenVersion(ctx context.Context, userID string) (int64, error)
 	RevokeUserSessionsAtVersion(ctx context.Context, userID uuid.UUID, tokenVersion int64) error
-	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*authdomain.SessionRevocationResult, error)
+	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*authdomain.SessionRevocationResult, error, error)
 }
 
 type lifecycle struct {

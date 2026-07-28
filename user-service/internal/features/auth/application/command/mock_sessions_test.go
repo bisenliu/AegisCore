@@ -116,12 +116,13 @@ func (mr *MockLifecycleMockRecorder) DeleteSession(ctx, userID, sessionID any) *
 }
 
 // RevokeAllUserSessions mocks base method.
-func (m *MockLifecycle) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*domain.SessionRevocationResult, error) {
+func (m *MockLifecycle) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) (*domain.SessionRevocationResult, error, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RevokeAllUserSessions", ctx, userID)
 	ret0, _ := ret[0].(*domain.SessionRevocationResult)
 	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // RevokeAllUserSessions indicates an expected call of RevokeAllUserSessions.

@@ -39,15 +39,19 @@ func (u *logoutAllSessionsUseCase) LogoutAllSessions(ctx context.Context) (*Logo
 		u.metrics.LogoutFailed(ctx, authapplication.MetricsOperationLogoutAll, authapplication.MetricsReasonAuthContextMissing)
 		return nil, err
 	}
-	revocation, err := u.sessions.RevokeAllUserSessions(ctx, userID)
+	revocation, projectionErr, err := u.sessions.RevokeAllUserSessions(ctx, userID)
 	if err != nil {
 		u.metrics.LogoutFailed(ctx, authapplication.MetricsOperationLogoutAll, authapplication.MetricsReasonSessionRevokeFailed)
 		return nil, err
 	}
-	if revocation != nil && revocation.ProjectionError != nil {
-		logger.Error(ctx, "logout all session revocation projection incomplete", logger.StackTrace(zap.String("user_id", userID.String()), zap.Int64("token_version", revocation.TokenVersion), zap.Error(revocation.ProjectionError))...)
+	if projectionErr != nil {
+		tokenVersion := int64(0)
+		if revocation != nil {
+			tokenVersion = revocation.TokenVersion
+		}
+		logger.Error(ctx, "logout all session revocation projection incomplete", logger.StackTrace(zap.String("user_id", userID.String()), zap.Int64("token_version", tokenVersion), zap.Error(projectionErr))...)
 		u.metrics.LogoutFailed(ctx, authapplication.MetricsOperationLogoutAll, authapplication.MetricsReasonSessionRevokeFailed)
-		return nil, errors.Join(authdomain.ErrSessionRevocationIncomplete, revocation.ProjectionError)
+		return nil, errors.Join(authdomain.ErrSessionRevocationIncomplete, projectionErr)
 	}
 	u.metrics.LogoutSucceeded(ctx, authapplication.MetricsOperationLogoutAll)
 	return &LogoutResult{LoggedOut: true}, nil
