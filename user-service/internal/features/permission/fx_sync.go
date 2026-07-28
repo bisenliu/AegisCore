@@ -72,12 +72,12 @@ type PolicyWatcherResult struct {
 	fx.Out
 
 	Watcher *permissionredis.Watcher
-	Runner  permissionApplicationWatcher              `name:"permission_policy_watcher_runner"`
+	Runner  policyWatcherRunner                       `name:"permission_policy_watcher_runner"`
 	Status  permissionapplication.PolicyWatcherStatus `name:"permission_policy_watcher_status"`
 }
 
-// permissionApplicationWatcher 是 lifecycle 对 policy watcher 的最小控制面。
-type permissionApplicationWatcher interface {
+// policyWatcherRunner 是 lifecycle 对 policy watcher 的最小控制面。
+type policyWatcherRunner interface {
 	Start()
 	Stop(context.Context) error
 }

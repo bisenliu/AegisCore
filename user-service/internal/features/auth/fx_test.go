@@ -261,8 +261,8 @@ func TestSessionPurgePoolHolderRejectsBeforeStartAndStopsIdempotently(t *testing
 	require.True(t, holder.Stats().Closed)
 }
 
-func TestTokenVersionLocalCacheHolderFailsClosedBeforeStartAndClosesIdempotently(t *testing.T) {
-	holder := &tokenVersionLocalCacheHolder{cfg: serviceconfig.FeatureCacheConfig{Enabled: true, Size: 10, TTL: time.Minute, LoadTimeout: time.Second}, users: NewMockUserTokenVersionStore(gomock.NewController(t)), cache: NewMockTokenVersionCache(gomock.NewController(t))}
+func TestTokenVersionCacheHolderFailsClosedBeforeStartAndClosesIdempotently(t *testing.T) {
+	holder := &tokenVersionCacheHolder{cfg: serviceconfig.FeatureCacheConfig{Enabled: true, Size: 10, TTL: time.Minute, LoadTimeout: time.Second}, users: NewMockUserTokenVersionStore(gomock.NewController(t)), cache: NewMockTokenVersionCache(gomock.NewController(t))}
 	require.ErrorIs(t, holder.Delete("018f0000-0000-7000-8000-000000000504"), localcache.ErrClosed)
 	_, err := holder.GetOrLoad(context.Background(), "018f0000-0000-7000-8000-000000000504")
 	require.ErrorIs(t, err, localcache.ErrClosed)

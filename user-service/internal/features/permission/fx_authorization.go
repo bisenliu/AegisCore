@@ -114,7 +114,7 @@ type PermissionRuntime struct {
 	WatcherStatus permissionapplication.PolicyWatcherStatus
 	Notifier      permissionapplication.PolicyChangeNotifier
 	Initializer   permissionPolicyInitializer
-	Watcher       permissionApplicationWatcher
+	Watcher       policyWatcherRunner
 	UserRoles     userRoleResolverLifecycle
 }
 
@@ -123,7 +123,7 @@ type PermissionRuntimeParams struct {
 
 	Authorizer  permissionauthorization.Authorizer         `name:"permission_authorizer"`
 	Health      permissionauthorization.PolicyHealth       `name:"permission_policy_health"`
-	Watcher     permissionApplicationWatcher               `name:"permission_policy_watcher_runner"`
+	Watcher     policyWatcherRunner                        `name:"permission_policy_watcher_runner"`
 	Status      permissionapplication.PolicyWatcherStatus  `name:"permission_policy_watcher_status"`
 	Notifier    permissionapplication.PolicyChangeNotifier `name:"permission_policy_change_notifier"`
 	Initializer permissionPolicyInitializer                `name:"permission_policy_initializer"`
