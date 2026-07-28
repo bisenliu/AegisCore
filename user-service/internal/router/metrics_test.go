@@ -135,12 +135,12 @@ func TestRegisterMetricsRouteAllowsFormerPprofPaths(t *testing.T) {
 	}
 }
 
-func TestIsLowNoiseRuntimePath(t *testing.T) {
+func TestIsLowNoiseRuntimeRoute(t *testing.T) {
 	cfg := metricsRouteConfig(true, "/metrics")
-	require.True(t, IsLowNoiseRuntimePath("/livez", cfg))
-	require.True(t, IsLowNoiseRuntimePath("/metrics", cfg))
-	require.False(t, IsLowNoiseRuntimePath("/api/v1/users", cfg))
-	require.False(t, IsLowNoiseRuntimePath("/metrics", metricsRouteConfig(false, "/metrics")))
+	require.True(t, IsLowNoiseRuntimeRoute("/livez", cfg))
+	require.True(t, IsLowNoiseRuntimeRoute("/metrics", cfg))
+	require.False(t, IsLowNoiseRuntimeRoute("/api/v1/users", cfg))
+	require.False(t, IsLowNoiseRuntimeRoute("/metrics", metricsRouteConfig(false, "/metrics")))
 }
 
 func newRouterTestMetricsProvider(t *testing.T, enabled bool, metricsPath string) *commonmetrics.Provider {

@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	commonroute "github.com/aegiscore/common/http/route"
 	"github.com/aegiscore/common/security/auth"
 )
 
@@ -23,7 +24,7 @@ func requestLogFields(c *gin.Context, latency time.Duration) *[]zap.Field {
 	fields := (*fieldsRef)[:0]
 	fields = append(fields,
 		zap.String("method", c.Request.Method),
-		zap.String("path", requestPath(c)),
+		zap.String("path", commonroute.TemplateOrUnmatched(c)),
 		zap.Int("status", c.Writer.Status()),
 		zap.Int64("latency_ms", latency.Milliseconds()),
 		zap.String("client_ip", c.ClientIP()),
@@ -47,15 +48,8 @@ func releaseRequestLogFields(fieldsRef *[]zap.Field) {
 func authFailureLogFields(c *gin.Context) []zap.Field {
 	return []zap.Field{
 		zap.String("method", c.Request.Method),
-		zap.String("path", requestPath(c)),
+		zap.String("path", commonroute.TemplateOrUnmatched(c)),
 		zap.String("client_ip", c.ClientIP()),
 		zap.String("user_agent", c.GetHeader("User-Agent")),
 	}
-}
-
-func requestPath(c *gin.Context) string {
-	if path := c.FullPath(); path != "" {
-		return path
-	}
-	return c.Request.URL.Path
 }

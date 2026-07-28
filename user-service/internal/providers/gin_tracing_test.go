@@ -57,7 +57,7 @@ func TestNewGinEngineExtractsTraceparent(t *testing.T) {
 	require.Equal(t, "00112233445566778899aabbccddeeff", spanContext.TraceID().String())
 }
 
-func TestNewGinEngineSkipsHealthProbeTracing(t *testing.T) {
+func TestNewGinEngineTracesHealthProbeWithoutRawPathFilter(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
@@ -72,11 +72,11 @@ func TestNewGinEngineSkipsHealthProbeTracing(t *testing.T) {
 
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/livez", nil))
 
-	require.False(t, spanContext.TraceID().IsValid())
-	require.False(t, spanContext.SpanID().IsValid())
+	require.True(t, spanContext.TraceID().IsValid())
+	require.True(t, spanContext.SpanID().IsValid())
 }
 
-func TestNewGinEngineSkipsMetricsTracingWhenEnabled(t *testing.T) {
+func TestNewGinEngineTracesMetricsWithoutRawPathFilter(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true, Path: "/metrics"}
@@ -92,8 +92,8 @@ func TestNewGinEngineSkipsMetricsTracingWhenEnabled(t *testing.T) {
 
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/metrics", nil))
 
-	require.False(t, spanContext.TraceID().IsValid())
-	require.False(t, spanContext.SpanID().IsValid())
+	require.True(t, spanContext.TraceID().IsValid())
+	require.True(t, spanContext.SpanID().IsValid())
 }
 
 func TestNewGinEngineMarksServerErrorSpanStatus(t *testing.T) {
@@ -135,7 +135,7 @@ func TestNewGinEngineDoesNotMarkClientErrorSpanStatus(t *testing.T) {
 	require.Equal(t, tracepb.Status_STATUS_CODE_UNSET, span.GetStatus().GetCode())
 }
 
-func TestNewGinEngineSkipsSuccessfulHealthProbeErrorStatus(t *testing.T) {
+func TestNewGinEngineKeepsSuccessfulHealthProbeSpanStatusUnset(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
@@ -147,7 +147,8 @@ func TestNewGinEngineSkipsSuccessfulHealthProbeErrorStatus(t *testing.T) {
 
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/livez", nil))
 
-	require.Empty(t, exportedSpans(t, provider, recorder))
+	span := endedGinSpan(t, provider, recorder)
+	require.Equal(t, tracepb.Status_STATUS_CODE_UNSET, span.GetStatus().GetCode())
 }
 
 func TestHTTPServerSpanName(t *testing.T) {
@@ -165,8 +166,41 @@ func TestHTTPServerSpanName(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Request = httptest.NewRequest(http.MethodPatch, path, nil)
 		got := httpServerSpanName(c)
-		require.Equal(t, "PATCH route not found", got)
+		require.Equal(t, "PATCH __unmatched__", got)
 		unmatchedNames[got] = struct{}{}
 	}
 	require.Len(t, unmatchedNames, 1)
+}
+
+func TestNewGinEngineRenamesSpansWithLowCardinalityRoute(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	require.NoError(t, err)
+	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
+	rawPath := "/api/v1/users/018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, rawPath, nil))
+
+	span := endedGinSpan(t, provider, recorder)
+	require.Equal(t, "GET /api/v1/users/:user_id", span.GetName())
+	require.NotEqual(t, "GET "+rawPath, span.GetName())
+}
+
+func TestNewGinEngineRenamesUnmatchedSpanWithStableFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := ginTestConfig()
+	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	require.NoError(t, err)
+
+	rawPath := "/unknown/018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, rawPath, nil))
+
+	span := endedGinSpan(t, provider, recorder)
+	require.Equal(t, "GET __unmatched__", span.GetName())
+	require.NotEqual(t, "GET "+rawPath, span.GetName())
 }

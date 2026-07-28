@@ -43,8 +43,8 @@ func registerMetricsRoute(engine *gin.Engine, params MetricsRouteParams) error {
 	return nil
 }
 
-// IsMetricsPath 判断 path 是否为当前配置启用的 Prometheus metrics endpoint。
-func IsMetricsPath(requestPath string, cfg config.MetricsConfig) bool {
+// IsMetricsRoute 判断 route template 是否为当前配置启用的 Prometheus metrics endpoint。
+func IsMetricsRoute(route string, cfg config.MetricsConfig) bool {
 	if !cfg.Enabled {
 		return false
 	}
@@ -52,12 +52,12 @@ func IsMetricsPath(requestPath string, cfg config.MetricsConfig) bool {
 	if err != nil {
 		return false
 	}
-	return requestPath == metricsPath
+	return route == metricsPath
 }
 
-// IsLowNoiseRuntimePath 判断 path 是否属于可跳过成功日志和 tracing 的运行时端点。
-func IsLowNoiseRuntimePath(requestPath string, metricsCfg config.MetricsConfig) bool {
-	return IsHealthProbePath(requestPath) || IsMetricsPath(requestPath, metricsCfg)
+// IsLowNoiseRuntimeRoute 判断 route template 是否属于可跳过成功日志和指标的运行时端点。
+func IsLowNoiseRuntimeRoute(route string, metricsCfg config.MetricsConfig) bool {
+	return IsHealthProbePath(route) || IsMetricsRoute(route, metricsCfg)
 }
 
 func normalizeMetricsPath(rawPath string) (string, error) {

@@ -11,14 +11,13 @@ import (
 	"go.uber.org/zap"
 
 	commonmw "github.com/aegiscore/common/http/middleware"
+	commonroute "github.com/aegiscore/common/http/route"
 	"github.com/aegiscore/common/runtime/config"
 	commonlogger "github.com/aegiscore/common/runtime/logger"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
 	"github.com/aegiscore/user-service/internal/router"
 )
-
-const httpServerUnmatchedRouteSpanTarget = "route not found"
 
 // GinModeConfigured 表示 Gin 包级进程运行模式已按配置显式设置。
 type GinModeConfigured struct{}
@@ -57,7 +56,6 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 		otelgin.Middleware(params.Config.App.Name,
 			otelgin.WithTracerProvider(params.Trace.OTelTracerProvider()),
 			otelgin.WithPropagators(params.Trace.TextMapPropagator()),
-			otelgin.WithFilter(traceBusinessRequest(params.Config.Observability.Metrics)),
 		),
 		renameHTTPServerSpan(),
 		commonmw.RequestID(),
@@ -83,25 +81,19 @@ func requestLoggerContext(log *zap.Logger) gin.HandlerFunc {
 
 func skipSuccessfulRuntimeEndpointLog(metricsCfg config.MetricsConfig) func(*gin.Context) bool {
 	return func(c *gin.Context) bool {
-		return c.Writer.Status() < 400 && router.IsLowNoiseRuntimePath(c.Request.URL.Path, metricsCfg)
+		return c.Writer.Status() < 400 && router.IsLowNoiseRuntimeRoute(commonroute.TemplateOrUnmatched(c), metricsCfg)
 	}
 }
 
 func skipMetricsScrapeRequest(metricsCfg config.MetricsConfig) func(*gin.Context) bool {
 	return func(c *gin.Context) bool {
-		return router.IsMetricsPath(c.Request.URL.Path, metricsCfg)
+		return router.IsMetricsRoute(commonroute.TemplateOrUnmatched(c), metricsCfg)
 	}
 }
 
 func skipSuccessfulRuntimeEndpointMetrics(metricsCfg config.MetricsConfig) func(*gin.Context) bool {
 	return func(c *gin.Context) bool {
-		return c.Writer.Status() < http.StatusBadRequest && router.IsLowNoiseRuntimePath(c.Request.URL.Path, metricsCfg)
-	}
-}
-
-func traceBusinessRequest(metricsCfg config.MetricsConfig) func(*http.Request) bool {
-	return func(request *http.Request) bool {
-		return !router.IsLowNoiseRuntimePath(request.URL.Path, metricsCfg)
+		return c.Writer.Status() < http.StatusBadRequest && router.IsLowNoiseRuntimeRoute(commonroute.TemplateOrUnmatched(c), metricsCfg)
 	}
 }
 
@@ -116,8 +108,5 @@ func renameHTTPServerSpan() gin.HandlerFunc {
 }
 
 func httpServerSpanName(c *gin.Context) string {
-	if path := c.FullPath(); path != "" {
-		return c.Request.Method + " " + path
-	}
-	return c.Request.Method + " " + httpServerUnmatchedRouteSpanTarget
+	return c.Request.Method + " " + commonroute.TemplateOrUnmatched(c)
 }

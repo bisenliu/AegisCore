@@ -8,12 +8,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 
+	commonroute "github.com/aegiscore/common/http/route"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 )
 
 const (
-	defaultHTTPMetricsRouteFallback = "__unmatched__"
-	unknownHTTPMetricsMethod        = "UNKNOWN"
+	unknownHTTPMetricsMethod = "UNKNOWN"
 
 	httpServerRequestsMetricName   = "http_server_requests_total"
 	httpServerDurationMetricName   = "http_server_request_duration_seconds"
@@ -28,7 +28,6 @@ type HTTPMetricsOptions struct {
 	Provider        *commonmetrics.Provider
 	Skip            func(*gin.Context) bool
 	SkipResult      func(*gin.Context) bool
-	RouteFallback   string
 	DurationBuckets []float64
 }
 
@@ -47,7 +46,6 @@ func HTTPServerMetrics(options HTTPMetricsOptions) gin.HandlerFunc {
 		}
 	}
 
-	routeFallback := normalizeRouteFallback(options.RouteFallback)
 	return func(c *gin.Context) {
 		if options.Skip != nil && options.Skip(c) {
 			c.Next()
@@ -55,7 +53,7 @@ func HTTPServerMetrics(options HTTPMetricsOptions) gin.HandlerFunc {
 		}
 
 		method := normalizeHTTPMetricsMethod(c.Request.Method)
-		inFlightRoute := routeTemplateOrFallback(c, routeFallback)
+		inFlightRoute := commonroute.TemplateOrUnmatched(c)
 		start := time.Now()
 
 		recorder.inFlight.WithLabelValues(method, inFlightRoute).Inc()
@@ -67,7 +65,7 @@ func HTTPServerMetrics(options HTTPMetricsOptions) gin.HandlerFunc {
 				return
 			}
 
-			route := routeTemplateOrFallback(c, routeFallback)
+			route := commonroute.TemplateOrUnmatched(c)
 			statusClass := commonmetrics.StatusClass(status)
 			recorder.requests.WithLabelValues(method, route, statusClass).Inc()
 			recorder.duration.WithLabelValues(method, route, statusClass).Observe(time.Since(start).Seconds())
@@ -109,21 +107,6 @@ func newHTTPServerMetricsRecorder(options HTTPMetricsOptions) *httpServerMetrics
 		}
 	}
 	return recorder
-}
-
-func normalizeRouteFallback(routeFallback string) string {
-	routeFallback = strings.TrimSpace(routeFallback)
-	if routeFallback == "" {
-		return defaultHTTPMetricsRouteFallback
-	}
-	return routeFallback
-}
-
-func routeTemplateOrFallback(c *gin.Context, fallback string) string {
-	if route := c.FullPath(); route != "" {
-		return route
-	}
-	return fallback
 }
 
 func normalizeHTTPMetricsMethod(method string) string {

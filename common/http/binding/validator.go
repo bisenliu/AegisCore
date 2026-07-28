@@ -5,6 +5,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/http/response"
+	commonroute "github.com/aegiscore/common/http/route"
 	"github.com/aegiscore/common/runtime/logger"
 	"github.com/aegiscore/common/validation"
 )
@@ -21,7 +22,7 @@ func Bind(validator *validation.Validator, c *gin.Context, dst any, binder Binde
 func BindOrAbort(validator *validation.Validator, c *gin.Context, dst any, binder Binder) bool {
 	if err := Bind(validator, c, dst, binder); err != nil {
 		failure := validation.ClassifyError(err)
-		fields := []zap.Field{zap.Error(err), zap.String("path", c.Request.URL.Path)}
+		fields := []zap.Field{zap.Error(err), zap.String("path", commonroute.TemplateOrUnmatched(c))}
 		if len(failure.Fields) > 0 {
 			fields = append(fields, zap.Any("errors", failure.Fields))
 		}

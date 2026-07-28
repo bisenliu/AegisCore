@@ -224,7 +224,7 @@ func TestBindOrAbort(t *testing.T) {
 	require.Equal(t, zapcore.WarnLevel, entry.Level)
 	require.Equal(t, "invalid request", entry.Message)
 	fields := entry.ContextMap()
-	require.Equal(t, "/", fields["path"])
+	require.Equal(t, "__unmatched__", fields["path"])
 	require.Equal(t, "request-123", fields[logger.RequestIDField])
 	require.NotNil(t, fields["error"])
 	errorsField, ok := fields["errors"].([]validation.FieldError)
@@ -257,9 +257,36 @@ func TestBindOrAbortTypeMismatchUsesBadRequest(t *testing.T) {
 	require.Equal(t, zapcore.WarnLevel, entry.Level)
 	require.Equal(t, "invalid request", entry.Message)
 	fields := entry.ContextMap()
-	require.Equal(t, "/users/bad", fields["path"])
+	require.Equal(t, "__unmatched__", fields["path"])
 	require.NotNil(t, fields["error"])
 	require.NotContains(t, fields, "errors")
+}
+
+func TestBindOrAbortLogsRouteTemplateForDynamicPath(t *testing.T) {
+	validator := newTestValidator(t)
+	type request struct {
+		ID int64 `uri:"id" label:"用户ID"`
+	}
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zapcore.DebugLevel)
+	engine := gin.New()
+	engine.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(logger.ToContext(c.Request.Context(), zap.New(core)))
+		c.Next()
+	})
+	engine.GET("/users/:id", func(c *gin.Context) {
+		var req request
+		require.False(t, BindOrAbort(validator, c, &req, URIBinder))
+	})
+
+	rawPath := "/users/bad"
+	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, rawPath, nil))
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+	fields := entries[0].ContextMap()
+	require.Equal(t, "/users/:id", fields["path"])
+	require.NotEqual(t, rawPath, fields["path"])
 }
 
 type testTextValue string

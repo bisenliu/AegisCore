@@ -10,6 +10,7 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 
+	commonroute "github.com/aegiscore/common/http/route"
 	"github.com/aegiscore/common/runtime/config"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 )
@@ -85,7 +86,7 @@ func TestHTTPServerMetricsUsesFallbackForUnmatchedRoute(t *testing.T) {
 
 	metric := findMetricByLabels(t, gatherHTTPMiddlewareFamily(t, provider, httpServerRequestsMetricName), map[string]string{
 		commonmetrics.LabelMethod:      http.MethodGet,
-		commonmetrics.LabelRoute:       defaultHTTPMetricsRouteFallback,
+		commonmetrics.LabelRoute:       commonroute.Unmatched,
 		commonmetrics.LabelStatusClass: "4xx",
 	})
 	require.Equal(t, float64(1), metric.GetCounter().GetValue())
@@ -217,7 +218,7 @@ func TestHTTPServerMetricsSkipFiltersBeforeInFlight(t *testing.T) {
 	engine.Use(HTTPServerMetrics(HTTPMetricsOptions{
 		Provider: provider,
 		Skip: func(c *gin.Context) bool {
-			return c.Request.URL.Path == "/metrics"
+			return c.FullPath() == "/metrics"
 		},
 	}))
 	engine.GET("/metrics", func(c *gin.Context) {

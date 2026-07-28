@@ -10,6 +10,7 @@ import (
 	contractresponse "github.com/aegiscore/common/contract/response"
 	commonmiddleware "github.com/aegiscore/common/http/middleware"
 	commonresponse "github.com/aegiscore/common/http/response"
+	commonroute "github.com/aegiscore/common/http/route"
 	commonauth "github.com/aegiscore/common/security/auth"
 	commoncasbin "github.com/aegiscore/common/security/casbin"
 	"github.com/aegiscore/user-service/internal/features/permission/application/authorization"
@@ -67,8 +68,8 @@ func (a authorizationAdapter) Authorize(ctx context.Context, req commoncasbin.Re
 }
 
 func resolveAuthorizationRequest(c *gin.Context) (commoncasbin.Request, error) {
-	pathTemplate := c.FullPath()
-	if pathTemplate == "" {
+	pathTemplate := commonroute.TemplateOrUnmatched(c)
+	if pathTemplate == commonroute.Unmatched {
 		return commoncasbin.Request{}, commoncasbin.ErrDenied
 	}
 	userID, ok := authenticatedUserID(c)

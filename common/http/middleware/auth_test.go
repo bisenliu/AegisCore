@@ -194,10 +194,11 @@ func assertAuthLog(t *testing.T, logs *observer.ObservedLogs, wantLevel zapcore.
 	return found
 }
 
-func assertAuthFailureFields(t *testing.T, fields map[string]any, _ string) {
+func assertAuthFailureFields(t *testing.T, fields map[string]any, rawPath string) {
 	t.Helper()
 	require.Equal(t, http.MethodGet, fields["method"])
 	require.Equal(t, "/*path", fields["path"])
+	require.NotEqual(t, rawPath, fields["path"])
 	require.Equal(t, "auth-test-agent", fields["user_agent"])
 	require.Equal(t, "203.0.113.10", fields["client_ip"])
 }

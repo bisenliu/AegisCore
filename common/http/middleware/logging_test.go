@@ -88,6 +88,41 @@ func TestRequestLoggerIncludesTraceAndSpanIDAndRequestFields(t *testing.T) {
 	require.Contains(t, fields, "client_ip")
 }
 
+func TestRequestLoggerUsesRouteTemplateForDynamicPath(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core)
+	engine := gin.New()
+	engine.Use(RequestLogger(log))
+	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) { c.Status(http.StatusAccepted) })
+
+	rawPath := "/api/v1/users/018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, rawPath, nil))
+
+	entries := logs.FilterMessage("http request completed").All()
+	require.Len(t, entries, 1)
+	fields := entries[0].ContextMap()
+	require.Equal(t, "/api/v1/users/:user_id", fields["path"])
+	require.NotContains(t, fields, rawPath)
+}
+
+func TestRequestLoggerUsesUnmatchedFallbackForMissingRoute(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zap.InfoLevel)
+	log := zap.New(core)
+	engine := gin.New()
+	engine.Use(RequestLogger(log))
+
+	rawPath := "/api/v1/users/018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, rawPath, nil))
+
+	entries := logs.FilterMessage("http request completed").All()
+	require.Len(t, entries, 1)
+	fields := entries[0].ContextMap()
+	require.Equal(t, "__unmatched__", fields["path"])
+	require.NotContains(t, fields, rawPath)
+}
+
 func TestRequestIDPassesThroughHeaderAndContext(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
