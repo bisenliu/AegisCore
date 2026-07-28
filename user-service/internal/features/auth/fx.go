@@ -143,30 +143,6 @@ type TokenVersionLocalCacheResult struct {
 	Stats localcache.StatsSource                `name:"auth_token_version_cache"`
 }
 
-// 运行时资源 holder
-
-type tokenVersionCacheResource struct {
-	cache authvalidators.LocalTokenVersionCache
-	stats localcache.StatsSource
-
-	closeOnce sync.Once
-	close     func()
-}
-
-type sessionPurgePoolHolder struct {
-	mu   sync.RWMutex
-	log  *zap.Logger
-	pool *workerpool.Pool
-}
-
-type tokenVersionCacheHolder struct {
-	mu       sync.RWMutex
-	cfg      serviceconfig.FeatureCacheConfig
-	users    authapplication.UserTokenVersionStore
-	cache    authapplication.TokenVersionCache
-	resource *tokenVersionCacheResource
-}
-
 // Fx 参数与结果：应用服务
 
 type TokenVersionValidatorParams struct {
@@ -194,6 +170,30 @@ type AuthControllerParams struct {
 	LogoutCurrent  authcommand.LogoutCurrentSessionUseCase
 	LogoutAll      authcommand.LogoutAllSessionsUseCase
 	Validator      *commonvalidation.Validator
+}
+
+// 运行时资源 holder
+
+type tokenVersionCacheResource struct {
+	cache authvalidators.LocalTokenVersionCache
+	stats localcache.StatsSource
+
+	closeOnce sync.Once
+	close     func()
+}
+
+type sessionPurgePoolHolder struct {
+	mu   sync.RWMutex
+	log  *zap.Logger
+	pool *workerpool.Pool
+}
+
+type tokenVersionCacheHolder struct {
+	mu       sync.RWMutex
+	cfg      serviceconfig.FeatureCacheConfig
+	users    authapplication.UserTokenVersionStore
+	cache    authapplication.TokenVersionCache
+	resource *tokenVersionCacheResource
 }
 
 // Provider：基础设施

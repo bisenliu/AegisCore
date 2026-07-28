@@ -65,19 +65,6 @@ type UserRoleResolverResult struct {
 	Lifecycle userRoleResolverLifecycle            `name:"permission_user_role_resolver_lifecycle"`
 }
 
-// userRoleResolverLifecycle 是 permission composition 内部显式启停契约，避免把启动能力隐藏在关闭接口中。
-type userRoleResolverLifecycle interface {
-	Start(context.Context) error
-	Close() error
-}
-
-// userRoleResolverHolder 延迟创建真实 resolver，使 Fx graph 构建阶段不会提前访问数据库或缓存资源。
-type userRoleResolverHolder struct {
-	mu     sync.RWMutex
-	params permissioncasbin.UserRoleResolverParams
-	result permissioncasbin.UserRoleResolverResult
-}
-
 type AuthorizerParams struct {
 	fx.In
 
@@ -107,17 +94,6 @@ type PermissionUserRoleCacheStatsResult struct {
 
 // Fx 参数与结果：运行时聚合
 
-// PermissionRuntime 聚合 permission feature 对外稳定 RBAC runtime 组件，避免 public 投影散落在多个 named 转发函数中。
-type PermissionRuntime struct {
-	Authorizer    permissionauthorization.Authorizer
-	PolicyHealth  permissionauthorization.PolicyHealth
-	WatcherStatus permissionapplication.PolicyWatcherStatus
-	Notifier      permissionapplication.PolicyChangeNotifier
-	Initializer   permissionPolicyInitializer
-	Watcher       policyWatcherRunner
-	UserRoles     userRoleResolverLifecycle
-}
-
 type PermissionRuntimeParams struct {
 	fx.In
 
@@ -137,6 +113,32 @@ type PolicyEngineResult struct {
 	ReloadEngine        permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
 	Health              permissionauthorization.PolicyHealth     `name:"permission_policy_health"`
 	Initializer         permissionPolicyInitializer              `name:"permission_policy_initializer"`
+}
+
+// 内部运行时类型
+
+// userRoleResolverLifecycle 是 permission composition 内部显式启停契约，避免把启动能力隐藏在关闭接口中。
+type userRoleResolverLifecycle interface {
+	Start(context.Context) error
+	Close() error
+}
+
+// userRoleResolverHolder 延迟创建真实 resolver，使 Fx graph 构建阶段不会提前访问数据库或缓存资源。
+type userRoleResolverHolder struct {
+	mu     sync.RWMutex
+	params permissioncasbin.UserRoleResolverParams
+	result permissioncasbin.UserRoleResolverResult
+}
+
+// PermissionRuntime 聚合 permission feature 对外稳定 RBAC runtime 组件，避免 public 投影散落在多个 named 转发函数中。
+type PermissionRuntime struct {
+	Authorizer    permissionauthorization.Authorizer
+	PolicyHealth  permissionauthorization.PolicyHealth
+	WatcherStatus permissionapplication.PolicyWatcherStatus
+	Notifier      permissionapplication.PolicyChangeNotifier
+	Initializer   permissionPolicyInitializer
+	Watcher       policyWatcherRunner
+	UserRoles     userRoleResolverLifecycle
 }
 
 // permissionPolicyInitializer 只暴露 fail-closed 初始化能力给 lifecycle hook。
