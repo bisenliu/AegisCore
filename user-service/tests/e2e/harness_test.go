@@ -117,6 +117,11 @@ auth:
   token_version_cache_ttl: 5s
   refresh_token_rotation: true
   max_active_sessions_per_user: 5
+api_rate_limit:
+  anonymous:
+    enabled: false
+  authenticated:
+    enabled: false
 rbac:
   user_role_cache:
     enabled: true
