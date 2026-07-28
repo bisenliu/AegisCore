@@ -140,15 +140,15 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 
 ### Requirement: 项目身份初始化与重命名 ID 边界
 
-系统 MUST 区分从基础框架初始化新项目和已有项目重命名。新项目初始化 MAY 生成新的 RBAC 系统 ID namespace 和固化常量；已有项目重命名 MUST NOT 默认重算系统内置 RBAC、permission 或 bootstrap 用户 ID。
+系统 MUST 区分从基础框架初始化新项目和已有项目重命名。新项目初始化 MAY 写入新的 RBAC 系统 ID 固化常量；已有项目重命名 MUST NOT 默认修改、重算或复用系统内置 RBAC、permission 或 bootstrap 用户 ID。
 
 #### Scenario: 初始化、重命名与文档边界
 
 - **WHEN** AegisCore 作为基础框架复制为全新项目
-- **THEN** 初始化流程 MAY 生成新 `SystemIDNamespace`，并 MAY 根据固定 semantic name 生成 UUID v5 后写入 `user-service/internal/shared/rbacbaseline/ids.go`
+- **THEN** 初始化流程 MAY 将新的手写固化 UUID 字符串常量写入 `user-service/internal/shared/rbacbaseline/ids.go`
 - **AND** 初始化 MUST 只修改代码或文档，MUST NOT 连接或修改数据库，也 MUST NOT 执行 RBAC seed
 - **WHEN** 已有项目修改展示名、服务名、module path、CLI、镜像、部署资源或观测 label
-- **THEN** 重命名 MUST NOT 默认修改 `SystemIDNamespace`、`SuperAdminRoleID`、`BootstrapSuperAdminUserID`、baseline permission ID 或数据库中的角色、权限、用户和绑定 ID
+- **THEN** 重命名 MUST NOT 默认修改 `SuperAdminRoleID`、`BootstrapSuperAdminUserID`、baseline permission ID 或数据库中的角色、权限、用户和绑定 ID
 - **AND** 重算系统 ID MUST 作为单独高风险数据迁移 change，MUST NOT 混入普通重命名
 - **WHEN** 仓库提供初始化或重命名脚本
 - **THEN** 文档 MUST 明确初始化仅用于新项目且重命名默认不重算系统 ID，脚本或 README MUST NOT 宣称已有项目改名会自动迁移 RBAC 系统 ID

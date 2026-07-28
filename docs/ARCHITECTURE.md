@@ -127,7 +127,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 4. `bootstrap-super-admin` 读取 `ADMIN_BOOTSTRAP_PASSWORD`，使用 `rbacbaseline.BootstrapSuperAdminUserID` 创建 `MustChangePassword` 用户并绑定内置超级管理员角色。
 5. 后续超级管理员授权通过在线用户角色绑定 API 完成，由在线流程负责 policy version 发布和缓存收敛。
 
-系统内置 RBAC 角色、权限和 bootstrap 用户 ID 由 `user-service/internal/shared/rbacbaseline/ids.go` 统一定义。`SystemIDNamespace` 和各系统 ID 均为 UUID v5 生成后固化的常量，semantic name 绑定稳定业务授权语义，不绑定项目展示名、HTTP path、中文文案或 Go symbol。普通运行时业务实体仍使用 `common/runtime/id.NewUUID()` 生成 UUID v7；已有项目重命名不得默认重算系统内置 ID。
+系统内置 RBAC 角色、权限和 bootstrap 用户 ID 由 `user-service/internal/shared/rbacbaseline/ids.go` 统一定义为手写固化 UUID 字符串，semantic name 绑定稳定业务授权语义，不绑定项目展示名、HTTP path、中文文案或 Go symbol。普通运行时业务实体仍使用 `common/runtime/id.NewUUID()` 生成 UUID v7；已有项目重命名不得默认修改、重算或复用系统内置 ID。
 
 ### 6.5 数据迁移
 

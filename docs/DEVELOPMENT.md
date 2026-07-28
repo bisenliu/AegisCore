@@ -192,8 +192,8 @@ make user-service-bootstrap-super-admin
 ID 约束：
 
 - 普通运行时业务实体继续使用 `common/runtime/id.NewUUID()` 生成 UUID v7。
-- 系统内置 RBAC 角色、权限和 bootstrap 用户 ID 由 `user-service/internal/shared/rbacbaseline/ids.go` 中的 UUID v5 固化常量定义。
-- 从基础框架初始化全新项目时可以生成新的 `SystemIDNamespace` 和系统 ID 常量；已有项目重命名时不得默认重算这些 ID，也不得修改既有数据库中的 RBAC 数据。
+- 系统内置 RBAC 角色、权限和 bootstrap 用户 ID 由 `user-service/internal/shared/rbacbaseline/ids.go` 中的手写固化 UUID 字符串常量定义。
+- 从基础框架初始化全新项目时可以写入新的系统 ID 常量；已有项目重命名时不得默认修改、重算或复用这些 ID，也不得修改既有数据库中的 RBAC 数据。
 
 ## 8. 本地部署和观测
 
