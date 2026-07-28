@@ -5,6 +5,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
+	commonmw "github.com/aegiscore/common/http/middleware"
 	"github.com/aegiscore/common/runtime/config"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commonauth "github.com/aegiscore/common/security/auth"
@@ -26,6 +27,7 @@ type RegisterRouteParams struct {
 	JWT           commonauth.AccessTokenVerifier
 	Health        router.HealthChecks
 	Metrics       *commonmetrics.Provider
+	RateLimiters  *APIRateLimiters
 	TokenVersions commonauth.TokenVersionValidator
 	Authorizer    permissionauthorization.Authorizer
 	Auth          *authhttp.AuthController
@@ -36,6 +38,12 @@ type RegisterRouteParams struct {
 
 // RegisterRoutes 将服务级 provider 依赖适配为 router 层路由注册参数。
 func RegisterRoutes(params RegisterRouteParams) error {
+	var anonymousLimiter commonmw.RateLimiter
+	var userLimiter commonmw.RateLimiter
+	if params.RateLimiters != nil {
+		anonymousLimiter = params.RateLimiters.Anonymous
+		userLimiter = params.RateLimiters.Authenticated
+	}
 	return router.RegisterUserServiceHTTPRoutes(params.Engine, router.RouteParams{
 		ServiceName:           params.Config.App.Name,
 		Environment:           params.Config.App.Environment,
@@ -44,6 +52,8 @@ func RegisterRoutes(params RegisterRouteParams) error {
 		MetricsConfig:         params.Config.Observability.Metrics,
 		HealthChecks:          params.Health,
 		Metrics:               params.Metrics,
+		AnonymousRateLimiter:  anonymousLimiter,
+		UserRateLimiter:       userLimiter,
 		TokenVersionValidator: params.TokenVersions,
 		Authorizer:            params.Authorizer,
 		Auth:                  params.Auth,

@@ -16,6 +16,8 @@ const (
 	KindConflict Kind = "conflict"
 	// KindNotFound 表示资源不存在或不可见。
 	KindNotFound Kind = "not_found"
+	// KindRateLimited 表示调用方超过限流或配额约束。
+	KindRateLimited Kind = "rate_limited"
 	// KindInternal 表示服务内部错误。
 	KindInternal Kind = "internal"
 	// KindServiceUnavailable 表示服务实例或依赖暂时不可用。

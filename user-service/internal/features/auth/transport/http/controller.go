@@ -54,6 +54,7 @@ func NewAuthController(options AuthControllerOptions) *AuthController {
 // @Success 200 {object} response.Envelope{data=authhttp.TokenResponse} "登录成功或需要强制改密"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
 // @Failure 401 {object} response.Envelope "用户名或密码错误"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 503 {object} response.Envelope "认证服务繁忙"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Router /auth/login [post]
@@ -94,6 +95,7 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 // @Success 200 {object} response.Envelope{data=authhttp.TokenResponse} "刷新成功"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
 // @Failure 401 {object} response.Envelope "Refresh Token 无效或会话已失效"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Router /auth/refresh [post]
 func (ctl *AuthController) RefreshToken(c *gin.Context) {
@@ -126,6 +128,7 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 // @Success 200 {object} response.Envelope{data=authhttp.ChangePasswordResponse} "修改成功"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
 // @Failure 401 {object} response.Envelope "改密凭据无效或已失效"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 503 {object} response.Envelope "认证安全撤销未完成，请稍后重试"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Router /auth/change-password [post]
@@ -155,6 +158,7 @@ func (ctl *AuthController) ChangePassword(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} response.Envelope{data=authhttp.LogoutResponse} "退出成功"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /auth/logout [post]
@@ -174,6 +178,7 @@ func (ctl *AuthController) LogoutCurrentSession(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} response.Envelope{data=authhttp.LogoutResponse} "退出成功"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /auth/logout-all [post]

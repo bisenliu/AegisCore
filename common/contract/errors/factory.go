@@ -59,6 +59,11 @@ func NotFoundError(format string, args ...any) *Error {
 	return New(KindNotFound, ReasonNotFound, CodeNotFound, formatMessage(format, args))
 }
 
+// RateLimitedError 创建表示请求超过限流或配额约束的应用错误。
+func RateLimitedError(format string, args ...any) *Error {
+	return New(KindRateLimited, ReasonRateLimited, CodeRateLimited, formatMessage(format, args))
+}
+
 // ServiceUnavailableError 创建表示服务实例或依赖暂时不可用的应用错误。
 func ServiceUnavailableError(format string, args ...any) *Error {
 	return New(KindServiceUnavailable, ReasonServiceUnavailable, CodeServiceUnavailable, formatMessage(format, args))

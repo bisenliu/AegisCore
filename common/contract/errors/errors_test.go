@@ -27,6 +27,7 @@ func TestCodeValues(t *testing.T) {
 		{name: "forbidden", code: CodeForbidden, want: 30000},
 		{name: "conflict", code: CodeConflict, want: 40000},
 		{name: "not found", code: CodeNotFound, want: 50000},
+		{name: "rate limited", code: CodeRateLimited, want: 60000},
 		{name: "internal error", code: CodeInternalError, want: 90000},
 		{name: "service unavailable", code: CodeServiceUnavailable, want: 90001},
 	}
@@ -73,6 +74,7 @@ func TestErrorConstructors(t *testing.T) {
 		{name: "forbidden", err: ForbiddenError("无权访问"), wantKind: KindForbidden, wantReason: ReasonForbidden, wantCode: CodeForbidden, wantMsg: "无权访问"},
 		{name: "conflict", err: ConflictError("当前状态不允许操作"), wantKind: KindConflict, wantReason: ReasonConflict, wantCode: CodeConflict, wantMsg: "当前状态不允许操作"},
 		{name: "not found", err: NotFoundError("用户不存在"), wantKind: KindNotFound, wantReason: ReasonNotFound, wantCode: CodeNotFound, wantMsg: "用户不存在"},
+		{name: "rate limited", err: RateLimitedError("请求过于频繁"), wantKind: KindRateLimited, wantReason: ReasonRateLimited, wantCode: CodeRateLimited, wantMsg: "请求过于频繁"},
 		{name: "service unavailable", err: ServiceUnavailableError("服务繁忙，请稍后重试"), wantKind: KindServiceUnavailable, wantReason: ReasonServiceUnavailable, wantCode: CodeServiceUnavailable, wantMsg: "服务繁忙，请稍后重试"},
 	}
 

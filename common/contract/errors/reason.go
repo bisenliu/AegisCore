@@ -32,6 +32,8 @@ const (
 	ReasonConflict Reason = "conflict"
 	// ReasonNotFound 表示资源不存在或不可见。
 	ReasonNotFound Reason = "not_found"
+	// ReasonRateLimited 表示调用方请求频率超过限制。
+	ReasonRateLimited Reason = "rate_limited"
 	// ReasonInternalError 表示服务内部错误。
 	ReasonInternalError Reason = "internal_error"
 	// ReasonServiceUnavailable 表示服务实例或依赖暂时不可用。

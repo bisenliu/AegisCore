@@ -1,12 +1,16 @@
 resources:
   redis:
+    # cache_redis 是 user-service 认证 session、token version 和 RBAC 热路径缓存依赖的必需 Redis 资源名。
     cache_redis:
       # mode 枚举：cluster=集群，standalone=非集群。
       # 默认 Compose 使用非集群 Redis；切换 Compose cluster command 时，同步改为下方 cluster 配置。
       mode: standalone
+      # standalone 模式只允许配置 addr；cluster 模式改用 addrs，且不要同时保留 addr。
       addr: redis:6379
+      # 本地 Redis 默认无 ACL 用户名和密码；启用认证时两个环境目录需要同步调整。
       username: ""
       password: ""
+      # timeout 是 Redis 命令级超时，过低会放大本地容器冷启动或调试暂停导致的失败。
       timeout: 5s
       # Cluster 配置示例：
       # mode: cluster
@@ -18,15 +22,21 @@ resources:
       #   max_redirects: 8
 
   postgres:
+    # primary_db 是 user-service Ent client 的必需 PostgreSQL 资源名。
     primary_db:
+      # Docker 场景使用 Compose service DNS；local-host 对应文件使用宿主机映射地址。
       host: postgres
       port: 5432
+      # 本地 Compose 默认使用 postgres 超级用户；生产类环境应改为最小权限账号并使用外部 secret 注入。
       username: postgres
       password: ""
       db_name: aegiscore
+      # 本地 PostgreSQL 未启用 TLS；非本地环境应按数据库安全要求调整 sslmode。
       sslmode: disable
       pool:
+        # database/sql 连接池上限；过高会消耗数据库连接，过低会限制并发请求吞吐。
         max_open_conns: 50
         max_idle_conns: 10
+        # 连接生命周期必须短于数据库、代理或 LB 的空闲回收策略，避免复用已断开的连接。
         conn_max_lifetime: 30m
         conn_max_idle_time: 10m

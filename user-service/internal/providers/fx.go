@@ -23,6 +23,8 @@ var WiringModule = fx.Module("user-service-providers-wiring",
 		fx.Annotate(NewCacheRedis, fx.ResultTags(`name:"cache_redis"`)),
 		// Fx 分类：横切能力 - 服务级 JWT 签发与校验能力。
 		NewJWTService,
+		// Fx 分类：横切能力 - 服务级 API 限流能力。
+		NewAPIRateLimiters,
 		// Fx 分类：资源 - 服务拥有的 Ent 客户端。
 		ProvideEntClients,
 		// Fx 分类：横切能力 - 运行时健康检查聚合。

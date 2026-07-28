@@ -27,6 +27,11 @@ type EntSettings struct {
 	Plugins EntPluginsConfig
 }
 
+// RateLimitSettings 是 user-service 构造 API 限流资源所需的最小配置视图。
+type RateLimitSettings struct {
+	APIRateLimit APIRateLimitConfig
+}
+
 // ResourceSettings 是 user-service 具名资源 provider 所需的配置视图。
 type ResourceSettings struct {
 	Redis    commonresources.RedisConfigs
@@ -53,6 +58,11 @@ func NewRBACSettings(cfg *Config) RBACSettings {
 // NewEntSettings 从根配置派生 Ent settings。
 func NewEntSettings(cfg *Config) EntSettings {
 	return EntSettings{Plugins: cfg.Ent.Plugins}
+}
+
+// NewRateLimitSettings 从根配置派生 API 限流 settings。
+func NewRateLimitSettings(cfg *Config) RateLimitSettings {
+	return RateLimitSettings{APIRateLimit: cfg.APIRateLimit}
 }
 
 // NewResourceSettings 从根配置派生具名资源 settings。

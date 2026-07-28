@@ -19,10 +19,11 @@ const (
 // Config 是 user-service 的根配置对象。
 type Config struct {
 	commonconfig.Config `mapstructure:",squash"`
-	Resources           ResourcesConfig `mapstructure:"resources"`
-	Auth                AuthConfig      `mapstructure:"auth"`
-	RBAC                RBACConfig      `mapstructure:"rbac"`
-	Ent                 EntConfig       `mapstructure:"ent"`
+	Resources           ResourcesConfig    `mapstructure:"resources"`
+	Auth                AuthConfig         `mapstructure:"auth"`
+	RBAC                RBACConfig         `mapstructure:"rbac"`
+	APIRateLimit        APIRateLimitConfig `mapstructure:"api_rate_limit"`
+	Ent                 EntConfig          `mapstructure:"ent"`
 }
 
 // ResourcesConfig 包含 user-service 按名称声明的外部运行时资源。
@@ -43,6 +44,47 @@ type AuthConfig struct {
 // RBACConfig 包含 user-service RBAC 热路径的服务私有设置。
 type RBACConfig struct {
 	UserRoleCache FeatureCacheConfig `mapstructure:"user_role_cache"`
+}
+
+// APIRateLimitConfig 包含 user-service API 限流的服务私有配置。
+type APIRateLimitConfig struct {
+	Anonymous     RateLimitPolicyConfig `mapstructure:"anonymous"`
+	Authenticated RateLimitPolicyConfig `mapstructure:"authenticated"`
+}
+
+// RateLimitPolicyConfig 描述一个限流策略的本地 token bucket 与清理设置。
+type RateLimitPolicyConfig struct {
+	Enabled         bool          `mapstructure:"enabled"`
+	RatePerSecond   float64       `mapstructure:"rate_per_second"`
+	Burst           int           `mapstructure:"burst"`
+	KeyTTL          time.Duration `mapstructure:"key_ttl"`
+	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`
+	Shards          int           `mapstructure:"shards"`
+}
+
+// DefaultRateLimitPolicyConfig 构造启用状态下的完整限流策略默认配置。
+func DefaultRateLimitPolicyConfig(ratePerSecond float64, burst int, keyTTL time.Duration, cleanupInterval time.Duration, shards int) RateLimitPolicyConfig {
+	return RateLimitPolicyConfig{Enabled: true, RatePerSecond: ratePerSecond, Burst: burst, KeyTTL: keyTTL, CleanupInterval: cleanupInterval, Shards: shards}
+}
+
+// Validate 校验启用的限流策略；禁用时其余字段不参与运行时构造和校验。
+func (c RateLimitPolicyConfig) Validate(path string) []error {
+	if !c.Enabled {
+		return nil
+	}
+	var errs []error
+	if c.RatePerSecond <= 0 {
+		errs = append(errs, commonconfig.FieldError(path+".rate_per_second", "must be > 0 when enabled"))
+	}
+	if c.Burst <= 0 {
+		errs = append(errs, commonconfig.FieldError(path+".burst", "must be > 0 when enabled"))
+	}
+	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".key_ttl", c.KeyTTL)...)
+	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".cleanup_interval", c.CleanupInterval)...)
+	if c.Shards <= 0 {
+		errs = append(errs, commonconfig.FieldError(path+".shards", "must be > 0 when enabled"))
+	}
+	return errs
 }
 
 // FeatureCacheConfig 描述单个 feature 自有 bounded cache 的稳定配置面。
@@ -167,6 +209,10 @@ func DefaultConfig() Config {
 		RBAC: RBACConfig{
 			UserRoleCache: DefaultFeatureCacheConfig(100000, 5*time.Second, 500*time.Millisecond),
 		},
+		APIRateLimit: APIRateLimitConfig{
+			Anonymous:     DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64),
+			Authenticated: DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, 30*time.Second, 128),
+		},
 		Ent: EntConfig{
 			Plugins: EntPluginsConfig{
 				SQLLog: EntSQLLogPluginConfig{
@@ -227,6 +273,8 @@ func (c Config) Validate() error {
 	}
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.RBAC.UserRoleCache.Validate("rbac.user_role_cache")...)
+	errs = append(errs, c.APIRateLimit.Anonymous.Validate("api_rate_limit.anonymous")...)
+	errs = append(errs, c.APIRateLimit.Authenticated.Validate("api_rate_limit.authenticated")...)
 	if len(errs) == 0 {
 		return nil
 	}

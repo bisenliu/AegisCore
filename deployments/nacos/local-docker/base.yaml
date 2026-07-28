@@ -1,25 +1,39 @@
 app:
+  # environment 参与 production-like 校验；prod/production/staging 会拒绝本地默认 JWT secret。
   environment: local
 
 runtime:
+  # lifecycle 是 Fx App.Start/App.Stop 的总预算，不替代 HTTP/gRPC 组件自己的 shutdown_timeout。
   lifecycle:
     start_timeout: 60s
+    # stop_timeout 需要覆盖所有已启用 server 的 shutdown_timeout 以及串行资源释放时间。
     stop_timeout: 120s
   gin:
+    # mode 直接设置 Gin 包级模式；本地 Nacos 默认使用 release，减少框架调试输出。
     mode: release
+  # timezone 用于进程级本地时区初始化，影响本地时间格式化和调度语义。
   timezone: Asia/Shanghai
 
 log:
+  # level 支持 logger 实现认可的级别；本地排障可临时改为 debug。
   level: info
+  # format=json 便于 Compose、Prometheus/Grafana 和日志采集按字段解析。
   format: json
 
 observability:
   metrics:
+    # enabled=false 时不会注册 metrics provider，也不会暴露 metrics endpoint。
     enabled: true
+    # path 是 user-service router 挂载的 Prometheus 抓取路径。
     path: /metrics
+    # include_runtime 控制是否采集 Go runtime/process 类指标。
     include_runtime: true
   tracing:
+    # enabled=false 时不会创建 OTLP exporter；Ent tracing 插件即使启用也不会实际导出。
     enabled: true
+    # Docker 场景使用 Compose service DNS 访问 Jaeger OTLP gRPC collector。
     otlp_endpoint: jaeger:4317
+    # 本地 collector 未启用 TLS；生产类环境应按 collector 安全配置调整。
     insecure: true
+    # sample_ratio 范围为 0.0-1.0；本地默认全采样，便于排查链路。
     sample_ratio: 1.0

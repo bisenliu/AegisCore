@@ -48,6 +48,7 @@ const openAPIDocument = `{
           30000,
           40000,
           50000,
+          60000,
           90000,
           90001
         ],
@@ -66,6 +67,7 @@ const openAPIDocument = `{
           "CodeForbidden",
           "CodeConflict",
           "CodeNotFound",
+          "CodeRateLimited",
           "CodeInternalError",
           "CodeServiceUnavailable"
         ]
@@ -602,6 +604,16 @@ const openAPIDocument = `{
             },
             "description": "改密凭据无效或已失效"
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -687,6 +699,16 @@ const openAPIDocument = `{
             },
             "description": "用户名或密码错误"
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -750,6 +772,16 @@ const openAPIDocument = `{
             },
             "description": "未认证或 token 无效"
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -807,6 +839,16 @@ const openAPIDocument = `{
               }
             },
             "description": "未认证或 token 无效"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
           },
           "500": {
             "content": {
@@ -887,6 +929,16 @@ const openAPIDocument = `{
               }
             },
             "description": "Refresh Token 无效或会话已失效"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
           },
           "500": {
             "content": {
@@ -1005,6 +1057,16 @@ const openAPIDocument = `{
             },
             "description": "无访问权限"
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -1096,6 +1158,16 @@ const openAPIDocument = `{
               }
             },
             "description": "无访问权限"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
           },
           "500": {
             "content": {
@@ -1245,6 +1317,16 @@ const openAPIDocument = `{
             },
             "description": "无访问权限"
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -1342,6 +1424,16 @@ const openAPIDocument = `{
               }
             },
             "description": "角色已存在"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
           },
           "500": {
             "content": {
@@ -1441,6 +1533,16 @@ const openAPIDocument = `{
               }
             },
             "description": "角色不存在"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
           },
           "500": {
             "content": {
@@ -1542,6 +1644,16 @@ const openAPIDocument = `{
             },
             "description": "角色已存在"
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -1633,6 +1745,16 @@ const openAPIDocument = `{
               }
             },
             "description": "无访问权限"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
           },
           "500": {
             "content": {
@@ -1756,6 +1878,16 @@ const openAPIDocument = `{
             },
             "description": "绑定已存在"
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -1868,6 +2000,16 @@ const openAPIDocument = `{
             },
             "description": "角色或权限不存在"
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -1979,6 +2121,16 @@ const openAPIDocument = `{
             },
             "description": "绑定不存在"
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -2070,6 +2222,16 @@ const openAPIDocument = `{
               }
             },
             "description": "角色不存在"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
           },
           "500": {
             "content": {
@@ -2224,6 +2386,16 @@ const openAPIDocument = `{
             },
             "description": "未认证或 token 无效"
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -2311,6 +2483,16 @@ const openAPIDocument = `{
               }
             },
             "description": "用户已存在"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
           },
           "500": {
             "content": {
@@ -2400,6 +2582,16 @@ const openAPIDocument = `{
               }
             },
             "description": "用户不存在"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
           },
           "500": {
             "content": {
@@ -2492,6 +2684,16 @@ const openAPIDocument = `{
               }
             },
             "description": "无访问权限"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
           },
           "500": {
             "content": {
@@ -2615,6 +2817,16 @@ const openAPIDocument = `{
             },
             "description": "绑定已存在"
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -2727,6 +2939,16 @@ const openAPIDocument = `{
             },
             "description": "角色不存在"
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
+          },
           "500": {
             "content": {
               "application/json": {
@@ -2837,6 +3059,16 @@ const openAPIDocument = `{
               }
             },
             "description": "绑定不存在"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "请求过于频繁"
           },
           "500": {
             "content": {

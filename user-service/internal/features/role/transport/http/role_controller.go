@@ -35,6 +35,7 @@ func NewRoleController(commands rolecommand.RoleCommandService, queries rolequer
 // @Failure 400 {object} response.Envelope "查询参数错误"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /roles [get]
@@ -69,6 +70,7 @@ func (ctl *RoleController) ListRoles(c *gin.Context) {
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
 // @Failure 409 {object} response.Envelope "角色已存在"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /roles [post]
@@ -102,6 +104,7 @@ func (ctl *RoleController) CreateRole(c *gin.Context) {
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
 // @Failure 404 {object} response.Envelope "角色不存在"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /roles/{role_id} [get]
@@ -138,6 +141,7 @@ func (ctl *RoleController) GetRole(c *gin.Context) {
 // @Failure 403 {object} response.Envelope "无访问权限"
 // @Failure 404 {object} response.Envelope "角色不存在"
 // @Failure 409 {object} response.Envelope "角色已存在"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /roles/{role_id} [patch]
@@ -173,6 +177,7 @@ func (ctl *RoleController) UpdateRole(c *gin.Context) {
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
 // @Failure 404 {object} response.Envelope "角色不存在"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /roles/{role_id}/status [patch]

@@ -31,6 +31,7 @@ func NewPermissionController(queries permissionquery.PermissionQueryService, val
 // @Failure 400 {object} response.Envelope "查询参数错误"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /permissions [get]
@@ -62,6 +63,7 @@ func (ctl *PermissionController) ListPermissions(c *gin.Context) {
 // @Failure 400 {object} response.Envelope "用户 ID 参数错误"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /permissions/users/{user_id}/effective [get]

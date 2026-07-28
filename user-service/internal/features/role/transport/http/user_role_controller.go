@@ -17,6 +17,7 @@ import (
 // @Failure 400 {object} response.Envelope "用户 ID 参数错误"
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /users/{user_id}/roles [get]
@@ -52,6 +53,7 @@ func (ctl *RoleController) ListUserRoles(c *gin.Context) {
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
 // @Failure 404 {object} response.Envelope "角色不存在"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /users/{user_id}/roles [put]
@@ -88,6 +90,7 @@ func (ctl *RoleController) ReplaceUserRoles(c *gin.Context) {
 // @Failure 403 {object} response.Envelope "无访问权限"
 // @Failure 404 {object} response.Envelope "角色不存在"
 // @Failure 409 {object} response.Envelope "绑定已存在"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /users/{user_id}/roles [post]
@@ -122,6 +125,7 @@ func (ctl *RoleController) AddUserRole(c *gin.Context) {
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
 // @Failure 404 {object} response.Envelope "绑定不存在"
+// @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
 // @Router /users/{user_id}/roles/{role_id} [delete]

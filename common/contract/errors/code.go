@@ -80,6 +80,12 @@ const (
 	CodeNotFound Code = 50000
 )
 
+// 60xxx：限流、配额或用量约束。
+const (
+	// CodeRateLimited 表示调用方超过限流或配额约束。
+	CodeRateLimited Code = 60000
+)
+
 // 90xxx：内部错误、依赖不可用和服务端临时故障。
 const (
 	// CodeInternalError 表示服务内部错误。

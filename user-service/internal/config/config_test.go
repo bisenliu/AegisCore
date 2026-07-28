@@ -31,6 +31,18 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, 600*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeout)
 	require.True(t, cfg.Auth.RefreshTokenRotation)
 	require.Equal(t, 5, cfg.Auth.MaxActiveSessionsPerUser)
+	require.True(t, cfg.APIRateLimit.Anonymous.Enabled)
+	require.Equal(t, 2.5, cfg.APIRateLimit.Anonymous.RatePerSecond)
+	require.Equal(t, 7, cfg.APIRateLimit.Anonymous.Burst)
+	require.Equal(t, 11*time.Minute, cfg.APIRateLimit.Anonymous.KeyTTL)
+	require.Equal(t, 15*time.Second, cfg.APIRateLimit.Anonymous.CleanupInterval)
+	require.Equal(t, 32, cfg.APIRateLimit.Anonymous.Shards)
+	require.True(t, cfg.APIRateLimit.Authenticated.Enabled)
+	require.Equal(t, 8.0, cfg.APIRateLimit.Authenticated.RatePerSecond)
+	require.Equal(t, 30, cfg.APIRateLimit.Authenticated.Burst)
+	require.Equal(t, 12*time.Minute, cfg.APIRateLimit.Authenticated.KeyTTL)
+	require.Equal(t, 20*time.Second, cfg.APIRateLimit.Authenticated.CleanupInterval)
+	require.Equal(t, 64, cfg.APIRateLimit.Authenticated.Shards)
 	require.True(t, cfg.Ent.Plugins.SQLLog.Enabled)
 	require.True(t, cfg.Ent.Plugins.SQLLog.Debug)
 	require.Equal(t, 250*time.Millisecond, cfg.Ent.Plugins.SQLLog.SlowThreshold)
@@ -73,6 +85,8 @@ func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
 	require.Equal(t, commonresources.DefaultPostgresConnMaxIdleTime, postgres.Pool.ConnMaxIdleTime)
 	require.Equal(t, DefaultFeatureCacheConfig(100000, time.Second, 300*time.Millisecond), cfg.Auth.TokenVersionCache)
 	require.Equal(t, DefaultFeatureCacheConfig(100000, 5*time.Second, 500*time.Millisecond), cfg.RBAC.UserRoleCache)
+	require.Equal(t, DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64), cfg.APIRateLimit.Anonymous)
+	require.Equal(t, DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, 30*time.Second, 128), cfg.APIRateLimit.Authenticated)
 	require.False(t, cfg.Ent.Plugins.SQLLog.Enabled)
 	require.False(t, cfg.Ent.Plugins.SQLLog.Debug)
 	require.Equal(t, DefaultEntSlowQueryThreshold, cfg.Ent.Plugins.SQLLog.SlowThreshold)
@@ -122,6 +136,76 @@ func TestLoadAppliesFeatureCacheDefaults(t *testing.T) {
 	require.EqualValues(t, 100000, cfg.RBAC.UserRoleCache.Size)
 	require.Equal(t, 5*time.Second, cfg.RBAC.UserRoleCache.TTL)
 	require.Equal(t, 500*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeout)
+}
+
+func TestLoadAppliesAPIRateLimitDefaults(t *testing.T) {
+	yaml := strings.Replace(serviceConfigYAML(), `api_rate_limit:
+  anonymous:
+    enabled: true
+    rate_per_second: 2.5
+    burst: 7
+    key_ttl: 11m
+    cleanup_interval: 15s
+    shards: 32
+  authenticated:
+    enabled: true
+    rate_per_second: 8
+    burst: 30
+    key_ttl: 12m
+    cleanup_interval: 20s
+    shards: 64
+`, "", 1)
+
+	cfg := loadServiceConfig(t, yaml)
+	require.Equal(t, DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64), cfg.APIRateLimit.Anonymous)
+	require.Equal(t, DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, 30*time.Second, 128), cfg.APIRateLimit.Authenticated)
+}
+
+func TestLoadPreservesDisabledAPIRateLimit(t *testing.T) {
+	yaml := strings.Replace(serviceConfigYAML(), `api_rate_limit:
+  anonymous:
+    enabled: true
+    rate_per_second: 2.5
+    burst: 7
+    key_ttl: 11m
+    cleanup_interval: 15s
+    shards: 32
+  authenticated:
+    enabled: true
+    rate_per_second: 8
+    burst: 30
+    key_ttl: 12m
+    cleanup_interval: 20s
+    shards: 64
+`, `api_rate_limit:
+  anonymous:
+    enabled: false
+  authenticated:
+    enabled: false
+`, 1)
+
+	cfg := loadServiceConfig(t, yaml)
+	require.False(t, cfg.APIRateLimit.Anonymous.Enabled)
+	require.Equal(t, 1.0, cfg.APIRateLimit.Anonymous.RatePerSecond)
+	require.False(t, cfg.APIRateLimit.Authenticated.Enabled)
+	require.Equal(t, 5.0, cfg.APIRateLimit.Authenticated.RatePerSecond)
+}
+
+func TestValidateAPIRateLimit(t *testing.T) {
+	t.Run("enabled requires positive values", func(t *testing.T) {
+		errs := (RateLimitPolicyConfig{Enabled: true}).Validate("api_rate_limit.anonymous")
+		require.Len(t, errs, 5)
+		require.Contains(t, errs[0].Error(), "api_rate_limit.anonymous.rate_per_second")
+		require.Contains(t, errs[1].Error(), "api_rate_limit.anonymous.burst")
+		require.Contains(t, errs[2].Error(), "api_rate_limit.anonymous.key_ttl")
+		require.Contains(t, errs[3].Error(), "api_rate_limit.anonymous.cleanup_interval")
+		require.Contains(t, errs[4].Error(), "api_rate_limit.anonymous.shards")
+	})
+
+	t.Run("disabled allows zero values", func(t *testing.T) {
+		errs := (RateLimitPolicyConfig{Enabled: false}).Validate("api_rate_limit.authenticated")
+		require.Empty(t, errs)
+	})
 }
 
 func TestLoadAppliesEntPluginDefaults(t *testing.T) {
@@ -308,6 +392,22 @@ func TestLoadFromDocumentsMergesLayeredServiceConfig(t *testing.T) {
 func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "  token_version_cache:\n    enabled: true\n    size: 2048\n    ttl: 2s\n    load_timeout: 400ms\n", "", 1)
 	yaml = strings.Replace(yaml, "rbac:\n  user_role_cache:\n    enabled: true\n    size: 4096\n    ttl: 7s\n    load_timeout: 600ms\n", "", 1)
+	yaml = strings.Replace(yaml, `api_rate_limit:
+  anonymous:
+    enabled: true
+    rate_per_second: 2.5
+    burst: 7
+    key_ttl: 11m
+    cleanup_interval: 15s
+    shards: 32
+  authenticated:
+    enabled: true
+    rate_per_second: 8
+    burst: 30
+    key_ttl: 12m
+    cleanup_interval: 20s
+    shards: 64
+`, "", 1)
 	yaml = strings.Replace(yaml, "ent:\n  plugins:\n    sql_log:\n      enabled: true\n      debug: true\n      slow_threshold: 250ms\n    tracing:\n      enabled: false\n    metrics:\n      enabled: true\n", "ent: {}\n", 1)
 	yaml = strings.Replace(yaml, "      timeout: 7s\n", "", 1)
 	yaml = strings.Replace(yaml, "      sslmode: disable\n      pool:\n        max_open_conns: 20\n        max_idle_conns: 4\n        conn_max_lifetime: 45m\n        conn_max_idle_time: 12m\n", "", 1)
@@ -345,6 +445,12 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
 	postgres := resources["postgres"].(map[string]any)[serviceresources.NamePrimaryDB].(map[string]any)
 	require.Equal(t, commonresources.DefaultPostgresSSLMode, postgres["sslmode"])
 	require.EqualValues(t, commonresources.DefaultPostgresMaxOpenConns, postgres["pool"].(map[string]any)["max_open_conns"])
+	apiRateLimit := settings["api_rate_limit"].(map[string]any)
+	anonymous := apiRateLimit["anonymous"].(map[string]any)
+	require.Equal(t, true, anonymous["enabled"])
+	require.Equal(t, 1.0, anonymous["rate_per_second"])
+	require.EqualValues(t, 5, anonymous["burst"])
+	require.Equal(t, "10m0s", anonymous["key_ttl"])
 
 	result.Config.Log.Level = "warn"
 	settings, err = result.EffectiveSettings()
@@ -441,6 +547,21 @@ auth:
   token_version_cache_ttl: 30s
   refresh_token_rotation: true
   max_active_sessions_per_user: 5
+api_rate_limit:
+  anonymous:
+    enabled: true
+    rate_per_second: 2.5
+    burst: 7
+    key_ttl: 11m
+    cleanup_interval: 15s
+    shards: 32
+  authenticated:
+    enabled: true
+    rate_per_second: 8
+    burst: 30
+    key_ttl: 12m
+    cleanup_interval: 20s
+    shards: 64
 rbac:
   user_role_cache:
     enabled: true

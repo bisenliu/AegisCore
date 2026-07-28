@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -12,9 +13,13 @@ import (
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
+	contracterrors "github.com/aegiscore/common/contract/errors"
+	commonmw "github.com/aegiscore/common/http/middleware"
 	"github.com/aegiscore/common/runtime/config"
 	commonauth "github.com/aegiscore/common/security/auth"
 	commonvalidation "github.com/aegiscore/common/validation"
@@ -68,6 +73,99 @@ func TestRegisterUserServiceHTTPRoutesRegistersCurrentRouteGraph(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, recorder.Code, "route=%s body=%s", routerRegistrationRouteKey(route), recorder.Body.String())
 	}
 	require.Equal(t, 3, authorizer.calls)
+}
+
+func TestRegisterUserServiceHTTPRoutesAppliesRateLimits(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("public auth rate limit rejects before controller", func(t *testing.T) {
+		engine := gin.New()
+		params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{anonymousLimiter: &routerRegistrationLimiter{allowed: false}})
+		require.NoError(t, RegisterUserServiceHTTPRoutes(engine, params))
+
+		recorder := executeRouterRegistrationRequest(engine, http.MethodPost, "/api/v1/auth/login", "", "{}")
+
+		require.Equal(t, http.StatusTooManyRequests, recorder.Code, "body=%s", recorder.Body.String())
+		requireRouterRegistrationFailureCode(t, recorder, contracterrors.CodeRateLimited)
+	})
+
+	t.Run("authentication failure does not consume user limiter", func(t *testing.T) {
+		userLimiter := &routerRegistrationLimiter{allowed: false}
+		engine := gin.New()
+		params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{userLimiter: userLimiter})
+		require.NoError(t, RegisterUserServiceHTTPRoutes(engine, params))
+
+		recorder := executeRouterRegistrationRequest(engine, http.MethodGet, "/api/v1/users", "", "")
+
+		require.Equal(t, http.StatusUnauthorized, recorder.Code, "body=%s", recorder.Body.String())
+		require.Equal(t, 0, userLimiter.calls)
+	})
+
+	t.Run("authenticated route rate limit rejects before rbac", func(t *testing.T) {
+		authorizer := &routerRegistrationAuthorizer{allowed: true}
+		engine := gin.New()
+		params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{authorizer: authorizer, userLimiter: &routerRegistrationLimiter{allowed: false}})
+		require.NoError(t, RegisterUserServiceHTTPRoutes(engine, params))
+
+		recorder := executeRouterRegistrationRequest(engine, http.MethodGet, "/api/v1/users", signRouterRegistrationAccessToken(t), "")
+
+		require.Equal(t, http.StatusTooManyRequests, recorder.Code, "body=%s", recorder.Body.String())
+		requireRouterRegistrationFailureCode(t, recorder, contracterrors.CodeRateLimited)
+		require.Equal(t, 0, authorizer.calls)
+	})
+
+	t.Run("authenticated route continues to rbac when allowed", func(t *testing.T) {
+		authorizer := &routerRegistrationAuthorizer{allowed: false}
+		engine := gin.New()
+		params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{authorizer: authorizer, userLimiter: &routerRegistrationLimiter{allowed: true}})
+		require.NoError(t, RegisterUserServiceHTTPRoutes(engine, params))
+
+		recorder := executeRouterRegistrationRequest(engine, http.MethodGet, "/api/v1/users", signRouterRegistrationAccessToken(t), "")
+
+		require.Equal(t, http.StatusForbidden, recorder.Code, "body=%s", recorder.Body.String())
+		require.Equal(t, 1, authorizer.calls)
+	})
+
+	t.Run("runtime routes bypass business rate limiters", func(t *testing.T) {
+		anonymousLimiter := &routerRegistrationLimiter{allowed: false}
+		userLimiter := &routerRegistrationLimiter{allowed: false}
+		engine := gin.New()
+		params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{anonymousLimiter: anonymousLimiter, userLimiter: userLimiter})
+		require.NoError(t, RegisterUserServiceHTTPRoutes(engine, params))
+
+		recorder := executeRouterRegistrationRequest(engine, http.MethodGet, "/livez", "", "")
+
+		require.NotEqual(t, http.StatusTooManyRequests, recorder.Code, "body=%s", recorder.Body.String())
+		require.Equal(t, 0, anonymousLimiter.calls)
+		require.Equal(t, 0, userLimiter.calls)
+	})
+}
+
+func TestRegisterUserServiceHTTPRoutesRecordsRateLimitObservability(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zap.DebugLevel)
+	metricsCfg := metricsRouteConfig(true, "/internal/metrics")
+	params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{
+		metrics:          metricsCfg,
+		anonymousLimiter: &routerRegistrationLimiter{err: commonmw.ErrRateLimitKeyRequired},
+		userLimiter:      &routerRegistrationLimiter{allowed: false},
+	})
+	params.Log = zap.New(core)
+	engine := gin.New()
+	require.NoError(t, RegisterUserServiceHTTPRoutes(engine, params))
+
+	publicAuth := executeRouterRegistrationRequest(engine, http.MethodPost, "/api/v1/auth/login", "", "{}")
+	require.NotEqual(t, http.StatusTooManyRequests, publicAuth.Code, "body=%s", publicAuth.Body.String())
+
+	protected := executeRouterRegistrationRequest(engine, http.MethodGet, "/api/v1/users", signRouterRegistrationAccessToken(t), "")
+	require.Equal(t, http.StatusTooManyRequests, protected.Code, "body=%s", protected.Body.String())
+
+	families, err := params.Metrics.GatherContext(context.Background())
+	require.NoError(t, err)
+	requireMetricCounterValue(t, families, apiRateLimitEventsMetricName, map[string]string{"scope": "anonymous_auth", "event": "error", "reason": "key_required"}, 1)
+	requireMetricCounterValue(t, families, apiRateLimitEventsMetricName, map[string]string{"scope": "authenticated_api", "event": "limited", "reason": "limit_exceeded"}, 1)
+	require.Len(t, logs.FilterMessage("api rate limiter failed").All(), 1)
+	require.Len(t, logs.FilterMessage("api request rate limited").All(), 1)
 }
 
 func TestAuthorizedRouteGraphMatchesPermissionBaseline(t *testing.T) {
@@ -137,8 +235,10 @@ type routerRegisteredRoute struct {
 }
 
 type routerRegistrationRouteOptions struct {
-	metrics    config.MetricsConfig
-	authorizer permissionauthorization.Authorizer
+	metrics          config.MetricsConfig
+	authorizer       permissionauthorization.Authorizer
+	anonymousLimiter commonmw.RateLimiter
+	userLimiter      commonmw.RateLimiter
 }
 
 type routerRegistrationAuthorizer struct {
@@ -148,6 +248,13 @@ type routerRegistrationAuthorizer struct {
 
 type routerRegistrationTokenVersionValidator struct{}
 
+type routerRegistrationLimiter struct {
+	allowed bool
+	err     error
+	calls   int
+	keys    []string
+}
+
 func (routerRegistrationTokenVersionValidator) ValidateTokenVersion(context.Context, string, int64) error {
 	return nil
 }
@@ -155,6 +262,15 @@ func (routerRegistrationTokenVersionValidator) ValidateTokenVersion(context.Cont
 func (a *routerRegistrationAuthorizer) Enforce(context.Context, string, string, string) (bool, error) {
 	a.calls++
 	return a.allowed, nil
+}
+
+func (l *routerRegistrationLimiter) Allow(key string) (bool, error) {
+	l.calls++
+	l.keys = append(l.keys, key)
+	if l.err != nil {
+		return false, l.err
+	}
+	return l.allowed, nil
 }
 
 func newRouterRegistrationRouteParams(t *testing.T, opts routerRegistrationRouteOptions) RouteParams {
@@ -175,6 +291,8 @@ func newRouterRegistrationRouteParams(t *testing.T, opts routerRegistrationRoute
 		JWT:                   routerRegistrationAccessVerifier{},
 		MetricsConfig:         metricsCfg,
 		Metrics:               newRouterTestMetricsProvider(t, metricsCfg.Enabled, metricsCfg.Path),
+		AnonymousRateLimiter:  opts.anonymousLimiter,
+		UserRateLimiter:       opts.userLimiter,
 		TokenVersionValidator: routerRegistrationTokenVersionValidator{},
 		Authorizer:            authorizer,
 		Auth:                  newRouterRegistrationAuthController(validator),
@@ -182,6 +300,47 @@ func newRouterRegistrationRouteParams(t *testing.T, opts routerRegistrationRoute
 		Role:                  rolehttp.NewRoleController(nil, nil, validator),
 		User:                  userhttp.NewUserController(nil, nil, validator),
 	}
+}
+
+func requireRouterRegistrationFailureCode(t *testing.T, recorder *httptest.ResponseRecorder, wantCode contracterrors.Code) {
+	t.Helper()
+	var envelope struct {
+		Success bool                `json:"success"`
+		Code    contracterrors.Code `json:"code"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+	require.False(t, envelope.Success)
+	require.Equal(t, wantCode, envelope.Code)
+}
+
+func requireMetricCounterValue(t *testing.T, families []*io_prometheus_client.MetricFamily, name string, labels map[string]string, want float64) {
+	t.Helper()
+	for _, family := range families {
+		if family.GetName() != name {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			if metricLabelsMatch(metric, labels) {
+				require.NotNil(t, metric.GetCounter(), "metric %s is not a counter", name)
+				require.Equal(t, want, metric.GetCounter().GetValue())
+				return
+			}
+		}
+	}
+	require.Failf(t, "missing metric", "name=%s labels=%v", name, labels)
+}
+
+func metricLabelsMatch(metric *io_prometheus_client.Metric, want map[string]string) bool {
+	got := make(map[string]string, len(metric.GetLabel()))
+	for _, label := range metric.GetLabel() {
+		got[label.GetName()] = label.GetValue()
+	}
+	for key, value := range want {
+		if got[key] != value {
+			return false
+		}
+	}
+	return true
 }
 
 func newRouterRegistrationAuthController(validator *commonvalidation.Validator) *authhttp.AuthController {

@@ -78,3 +78,8 @@ func Conflict(c *gin.Context, format string, args ...any) {
 func NotFound(c *gin.Context, format string, args ...any) {
 	WriteError(c, contracterrors.NotFoundError(format, args...))
 }
+
+// RateLimited 写入表示请求超过限流或配额约束的 429 失败信封。
+func RateLimited(c *gin.Context, format string, args ...any) {
+	WriteError(c, contracterrors.RateLimitedError(format, args...))
+}

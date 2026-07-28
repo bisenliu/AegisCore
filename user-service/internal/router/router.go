@@ -26,6 +26,8 @@ type RouteParams struct {
 	MetricsConfig         config.MetricsConfig
 	HealthChecks          HealthChecks
 	Metrics               *commonmetrics.Provider
+	AnonymousRateLimiter  commonmw.RateLimiter
+	UserRateLimiter       commonmw.RateLimiter
 	TokenVersionValidator commonauth.TokenVersionValidator
 	Authorizer            permissionauthorization.Authorizer
 	Auth                  *authhttp.AuthController
@@ -44,18 +46,25 @@ func RegisterUserServiceHTTPRoutes(engine *gin.Engine, params RouteParams) error
 	if err := registerMetricsRoute(engine, MetricsRouteParams{Config: params.MetricsConfig, Provider: params.Metrics}); err != nil {
 		return err
 	}
-	registerV1Routes(engine, params)
+	rateLimitObserver, err := newRateLimitObserver(params.Log, params.Metrics)
+	if err != nil {
+		return fmt.Errorf("rate limit metrics: %w", err)
+	}
+	registerV1Routes(engine, params, rateLimitObserver)
 	return nil
 }
 
-func registerV1Routes(engine *gin.Engine, params RouteParams) {
+func registerV1Routes(engine *gin.Engine, params RouteParams, rateLimitObserver *rateLimitObserver) {
 	v1 := engine.Group("/api/v1")
 
-	authhttp.RegisterPublicRoutes(v1.Group("/auth"), params.Auth)
+	publicAuth := v1.Group("/auth")
+	publicAuth.Use(commonmw.RateLimit(rateLimitObserver.options("anonymous_auth", params.AnonymousRateLimiter, commonmw.IPRateLimitKey("anonymous-auth"))))
+	authhttp.RegisterPublicRoutes(publicAuth, params.Auth)
 
 	// 路由分层必须先认证再授权：auth 保护接口只需要登录态，permission/role/user 等业务接口还需 RBAC 授权。
 	authenticated := v1.Group("")
 	authenticated.Use(commonmw.AuthWithTokenVersionValidator(params.Log, params.JWT, params.TokenVersionValidator))
+	authenticated.Use(commonmw.RateLimit(rateLimitObserver.options("authenticated_api", params.UserRateLimiter, commonmw.UserIDRateLimitKey("authenticated-api"))))
 
 	authhttp.RegisterProtectedRoutes(authenticated.Group("/auth"), params.Auth)
 

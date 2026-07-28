@@ -79,6 +79,7 @@ func AppOptions(cfg *serviceconfig.Config, additional ...fx.Option) []fx.Option 
 			serviceconfig.NewAuthSettings,
 			serviceconfig.NewRBACSettings,
 			serviceconfig.NewEntSettings,
+			serviceconfig.NewRateLimitSettings,
 			serviceconfig.NewResourceSettings,
 			// Fx 分类：基础运行时 - 结构化日志。
 			logger.NewLogger,

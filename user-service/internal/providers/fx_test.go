@@ -38,6 +38,7 @@ func TestModuleResolvesServiceLevelProviders(t *testing.T) {
 			serviceconfig.NewAuthSettings,
 			serviceconfig.NewRBACSettings,
 			serviceconfig.NewEntSettings,
+			serviceconfig.NewRateLimitSettings,
 			serviceconfig.NewResourceSettings,
 		),
 		validation.Module,

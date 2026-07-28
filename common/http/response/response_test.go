@@ -100,6 +100,19 @@ func TestFailureResponseErrors(t *testing.T) {
 		require.Equal(t, "服务繁忙，请稍后重试", envelope.Message)
 	})
 
+	t.Run("rate limited failure", func(t *testing.T) {
+		ctx, recorder := newTestContext()
+
+		RateLimited(ctx, "请求过于频繁")
+
+		var envelope contractresponse.Envelope
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+		require.Equal(t, http.StatusTooManyRequests, recorder.Code)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeRateLimited, envelope.Code)
+		require.Equal(t, "请求过于频繁", envelope.Message)
+	})
+
 	t.Run("unknown application kind is sanitized as internal", func(t *testing.T) {
 		ctx, recorder := newTestContext()
 

@@ -1,18 +1,25 @@
 # 仅限本地开发；固定占位 secret 不得用于 production-like 环境。
 app:
+  # name 用作服务标识，参与日志、metrics、tracing 和 Redis key 前缀等运行时语义。
   name: aegiscore-user-service
 
 server:
   http:
+    # enabled=false 会跳过 HTTP server 构造；当前 user-service 对外 API 依赖 HTTP，通常不要关闭。
     enabled: true
+    # Host 场景也保持 0.0.0.0，便于从容器或局域网调试访问本机服务。
     host: 0.0.0.0
     port: 8080
+    # read/write/idle_timeout 直接传给 net/http Server，用于约束慢请求和空闲连接。
     read_timeout: 30s
     write_timeout: 60s
     idle_timeout: 120s
+    # shutdown_timeout 是 HTTP server 优雅关闭预算，必须小于 runtime.lifecycle.stop_timeout。
     shutdown_timeout: 25s
+    # trusted_proxies 为空时 Gin 不信任代理转发头；接入反向代理后再显式填写代理网段。
     trusted_proxies: []
   grpc:
+    # 当前没有入站 gRPC API；保持关闭，避免暴露无业务语义的监听端口。
     enabled: false
     host: 127.0.0.1
     port: 9090
@@ -20,35 +27,84 @@ server:
 
 auth:
   jwt:
+    # secret 用于签发和校验 JWT；production-like 环境必须使用 >=32 字节且非默认值的 secret。
     secret: local-development-secret
+    # issuer/audience 必须与客户端和 token 校验逻辑保持一致，改动会使旧 token 失效。
     issuer: aegiscore-user-service
     audience: aegiscore-users
+    # access_token_ttl 控制访问 token 有效期；缩短会降低泄露窗口但增加 refresh 压力。
     access_token_ttl: 15m
+    # refresh_token_ttl 同时影响 Redis refresh session 生命周期。
     refresh_token_ttl: 168h
+    # password_change_token_ttl 用于强制改密流程的一次性短期 token。
     password_change_token_ttl: 5m
   token_version_cache:
+    # token_version_cache 缓存用户 token version，降低每次认证校验访问存储的压力。
     enabled: true
+    # enabled=false 时 size/ttl/load_timeout 不参与校验，也不会构造本地缓存。
     size: 100000
     ttl: 1s
+    # load_timeout 是缓存 miss 后加载 token version 的单次等待预算。
     load_timeout: 300ms
+  # token_version_cache_ttl 是 token version 在 Redis 侧的缓存时间；<=0 时会回退到代码默认值。
   token_version_cache_ttl: 30s
+  # true 表示 refresh 成功后轮换 refresh session；关闭会允许旧 refresh token 在有效期内复用。
   refresh_token_rotation: true
+  # 单用户最大活跃 refresh session 数；0 表示不裁剪旧 session。
   max_active_sessions_per_user: 5
 
 rbac:
   user_role_cache:
+    # user_role_cache 缓存用户角色查询结果，降低 RBAC 授权热路径读库压力。
     enabled: true
     size: 100000
     ttl: 5s
     load_timeout: 500ms
 
+api_rate_limit:
+  # 限流使用进程内 token bucket，不是认证或授权边界；限流器错误默认降级放行。
+  # 字段含义：
+  # enabled: 是否构造该策略。
+  # rate_per_second: 每个限流 key 的稳定补充速率，单位 token/s。
+  # burst: 每个限流 key 允许的瞬时突发 token 数。
+  # key_ttl: 闲置限流 key 保留时间，避免本地内存无限增长。
+  # cleanup_interval: 过期限流 key 的清理频率。
+  # shards: 本地限流状态分片数，用于降低并发锁竞争。
+  #
+  # 配置参考：
+  # 小型项目，峰值 <500 QPS：anonymous 1/5/64，authenticated 5/20/128。
+  # 中型项目，峰值 500-5k QPS：anonymous 2/10/256，authenticated 20/100/1024。
+  # 高并发项目，峰值 5k-20k QPS：anonymous 5/20/1024，authenticated 100/500/4096。
+  # 格式为 rate_per_second/burst/shards；公网匿名入口可再降低 anonymous。
+  # 未携带有效用户身份的请求使用匿名限流策略。
+  anonymous:
+    enabled: true
+    rate_per_second: 1
+    burst: 5
+    key_ttl: 10m
+    cleanup_interval: 30s
+    shards: 64
+  # 已通过 JWT 认证的请求按用户身份使用独立限流策略。
+  authenticated:
+    enabled: true
+    rate_per_second: 5
+    burst: 20
+    key_ttl: 10m
+    cleanup_interval: 30s
+    shards: 128
+
 ent:
   plugins:
     sql_log:
+      # sql_log 输出 Ent SQL 执行日志；本地开启便于调试，非本地环境需评估日志量和敏感字段风险。
       enabled: true
+      # debug=true 输出更详细 SQL 调试信息，可能增加日志噪音。
       debug: true
+      # slow_threshold 控制慢 SQL 日志阈值；仅影响日志判定，不会中断查询。
       slow_threshold: 500ms
     tracing:
+      # tracing 插件需要 observability.tracing.enabled=true 才会实际导出 span。
       enabled: false
     metrics:
+      # metrics 插件需要 observability.metrics.enabled=true 才会注册并暴露 Ent 指标。
       enabled: true
