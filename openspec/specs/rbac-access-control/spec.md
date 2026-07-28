@@ -355,3 +355,19 @@ user-service MUST 私有拥有 user-role feature cache 的默认值、启用时�
 - **THEN** permission/RBAC provider MUST 接收只包含职责所需字段的 RBAC settings
 - **AND** permission/RBAC feature MUST NOT 依赖完整 user-service 根配置或读取 auth、Ent、resources 等无关配置段
 - **AND** feature cache 配置、必需缓存名和角色值复制语义 MUST 留在 user-service，不得进入 `common/runtime/localcache`
+
+### Requirement: RBAC policy sync 兼容 Redis Cluster
+
+RBAC policy sync MUST 兼容 Redis Cluster。policy version key、policy refresh channel、周期性版本补偿和 Pub/Sub watcher MUST 使用稳定 hash tag 或 Cluster-compatible key schema，并只消费 Cluster-capable Redis client 或最小接口，MUST NOT 要求 `*redis.Client` 单机 concrete type。
+
+#### Scenario: policy version 发布与补偿
+
+- **WHEN** 在线 RBAC 写操作发布新的 policy version
+- **THEN** Redis version key MUST 位于稳定 hash tag 下，并允许 Redis Cluster client 正常读写
+- **AND** 本地 reload、version 发布和周期性 version check 的错误语义 MUST 保持 fail-closed 与可诊断
+
+#### Scenario: Pub/Sub 通知与 watcher 生命周期
+
+- **WHEN** watcher 订阅 policy refresh channel 或接收远端更新
+- **THEN** channel 名称 MUST 使用稳定 hash tag 或 Cluster-compatible 命名
+- **AND** watcher 停止、cache 关闭或 RBAC runtime 关闭 MUST NOT 关闭共享 Redis Cluster client

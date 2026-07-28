@@ -55,6 +55,7 @@ func StartRedis(ctx context.Context, t testing.TB, opts RedisOptions) *RedisCont
 		Addr:        host + ":" + strconv.Itoa(port),
 	}
 
+	configureRedisClusterAnnouncement(startCtx, t, redisContainer, host, port)
 	assignRedisClusterSlots(startCtx, t, redisContainer)
 	waitForRedis(startCtx, t, redisContainer)
 	return redisContainer
@@ -95,6 +96,36 @@ func waitForRedis(ctx context.Context, t testing.TB, redisContainer *RedisContai
 
 	waitFor(ctx, t, "Redis ping", func(ctx context.Context) error {
 		return client.Ping(ctx).Err()
+	})
+}
+
+func configureRedisClusterAnnouncement(
+	ctx context.Context,
+	t testing.TB,
+	redisContainer *RedisContainer,
+	host string,
+	port int,
+) {
+	t.Helper()
+	settings := [][2]string{
+		{"cluster-announce-ip", host},
+		{"cluster-announce-port", strconv.Itoa(port)},
+	}
+	waitFor(ctx, t, "Redis cluster announcement", func(ctx context.Context) error {
+		for _, setting := range settings {
+			out, stderr, err := dockerOutput(
+				ctx,
+				"exec", redisContainer.ContainerID,
+				"redis-cli", "CONFIG", "SET", setting[0], setting[1],
+			)
+			if err != nil {
+				return fmt.Errorf("configure %s: %w: %s", setting[0], err, strings.TrimSpace(stderr+out))
+			}
+			if strings.TrimSpace(out) != "OK" {
+				return fmt.Errorf("configure %s: unexpected response %q", setting[0], strings.TrimSpace(out))
+			}
+		}
+		return nil
 	})
 }
 

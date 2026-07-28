@@ -203,6 +203,74 @@
 - **THEN** composition root MUST 通过具名注册函数或等价可识别结构显式解析 `*http.Server` 与 `*PprofServer`，MUST NOT 依赖空匿名 Invoke
 - **AND** bootstrap 测试 MUST 验证这些 server 及 lifecycle hook 注册链路仍存在
 
+### Requirement: pprof 诊断监听
+
+系统 MUST 提供独立 pprof 诊断监听能力，默认 MUST 关闭。pprof MUST NOT 挂载到业务 HTTP router。临时诊断时，系统 MUST 支持通过显式配置启用 pprof，并 SHOULD 使用 loopback、`kubectl port-forward` 或等价受控通道访问。Compose 本地默认 MUST NOT 启用 pprof，也 MUST NOT 发布宿主 pprof 端口。
+
+#### Scenario: Compose 默认不暴露 pprof
+
+- **WHEN** 调用方渲染默认 Compose 配置
+- **THEN** user-service 环境变量 MUST NOT 设置 `AEGISCORE_OBSERVABILITY_PPROF_ENABLED=true`
+- **AND** user-service 环境变量 MUST NOT 设置 `AEGISCORE_OBSERVABILITY_PPROF_ADDR=0.0.0.0:6060`
+- **AND** user-service ports MUST NOT 包含 `6060:6060`
+
+### Requirement: Redis tracing 命令过滤
+
+系统 MUST 为 Redis tracing 过滤认证类敏感命令和本地健康检查命令，避免敏感认证参数进入 span，并降低无业务价值的 ping 噪声。
+
+#### Scenario: Redis command filter 语义
+
+- **WHEN** Redis command 为 `AUTH`
+- **THEN** command filter MUST 返回 true 表示过滤该命令且不生成 span
+- **WHEN** Redis command 为 `HELLO ... AUTH ...`
+- **THEN** command filter MUST 返回 true 表示过滤该命令且不生成 span
+- **WHEN** Redis command 为 `PING`
+- **THEN** command filter MUST 返回 true 表示过滤该命令且不生成 span
+- **WHEN** Redis command 为普通业务命令
+- **THEN** command filter MUST 返回 false 表示允许生成 span
+
+### Requirement: 本地 DB tracing 分层
+
+系统 SHOULD 在本地 Compose 诊断配置中保留 Ent 实体级 tracing 和 PostgreSQL SQL/driver 级 tracing。文档 MUST 说明 Ent span 用于观察实体与操作，otelsql span 用于观察真实 SQL/driver 视角，并说明该组合会增加 trace 细节和噪声。
+
+#### Scenario: Compose tracing 文档说明
+
+- **WHEN** 本地 Compose 默认启用 tracing 和 Ent tracing 插件
+- **THEN** README MUST 说明会同时产生 Ent 实体级 span 和 PostgreSQL SQL/driver 级 span
+- **AND** README MUST 说明该配置用于本地完整链路诊断
+
+### Requirement: Redis Cluster 健康检查与指标
+
+Redis readiness/startup 检查和 Redis ping metrics MUST 支持 Redis Cluster client。健康响应和 metrics MUST 保持稳定低基数资源标签，MUST NOT 泄露 Redis seed endpoint、node address、slot、key、命令参数、secret 或原始错误文本。
+
+#### Scenario: Cluster PING 健康检查
+
+- **WHEN** `/readyz` 或 `/startupz` 检查 `redis.cache_redis`
+- **THEN** health checker MUST 通过 Cluster-capable pinger 执行 PING
+- **AND** Redis Cluster 不可用时响应 MUST 只返回稳定不可用消息，不得包含 endpoint、密码、key、slot 或底层错误文本
+
+#### Scenario: Redis ping metrics 保持低基数
+
+- **WHEN** metrics scrape 触发 Redis ping collector
+- **THEN** collector MUST 支持 Cluster client 并继续导出既有 `aegiscore_redis_*` 指标契约
+- **AND** 指标 label MUST 只使用稳定 resource 等低基数字段，MUST NOT 增加 node、addr、slot、mode 或错误文本 label
+
+### Requirement: Redis Cluster tracing instrumentation
+
+Redis tracing instrumentation MUST 支持 Redis Cluster client，并继续过滤或避免记录敏感 Redis 命令内容。Instrumentation 失败 MUST 阻止 Redis client 构造成功并关闭已创建 client。
+
+#### Scenario: Cluster Redis 命令 tracing
+
+- **WHEN** user-service 通过 Redis Cluster client 执行 Redis 命令
+- **THEN** tracing MUST 使用服务注入的 tracer provider 创建低风险 span
+- **AND** span MUST NOT 记录完整 key、参数、token、密码、seed endpoint 或连接 secret
+
+#### Scenario: instrumentation 失败清理
+
+- **WHEN** Redis Cluster tracing instrumentation 返回错误
+- **THEN** constructor MUST 返回包含 `instrument redis tracing` 的错误并关闭已创建 client
+- **AND** 系统 MUST NOT panic 或留下未关闭 Redis client
+
 ### Requirement: 本地观测时间展示边界
 
 本地观测组件 MUST 区分容器进程日志时区、浏览器展示时区与基于 Unix epoch 的 telemetry 绝对时间。Jaeger、Prometheus 和 Grafana 的进程日志 MUST 可定位到 `Asia/Shanghai` 或 `+08:00`，但 OpenTelemetry span 与 Prometheus sample 的存储语义 MUST 保持不变。

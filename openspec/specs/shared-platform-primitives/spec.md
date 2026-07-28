@@ -4,7 +4,7 @@
 ## Requirements
 ### Requirement: 跨服务 HTTP 契约与 helper
 
-系统 MUST 在 `common/contract` 中维护业务中立的应用错误、响应 envelope 和分页契约，由 `common/http/response` 统一完成 HTTP 渲染，并 MUST 在 `common/http` 和 `common/validation` 中提供行为一致、业务中立的绑定、字段校验、认证授权 middleware、CORS、metrics、logging、recovery 和 OpenAPI 能力。应用错误 MUST 使用低基数 `Kind`、稳定 `Reason`、响应 `Code`、公开 `Message` 和可选内部 `Cause` 表达语义，MUST NOT 保存或接收 HTTP status；HTTP status MUST 只根据 `Kind` 推导。
+系统 MUST 在 `common/contract` 中维护业务中立的应用错误、响应 envelope 和分页契约，由 `common/http/response` 统一完成 HTTP 渲染，并 MUST 在 `common/http` 和 `common/validation` 中提供行为一致、业务中立的入站绑定、字段校验、认证授权 middleware、CORS、metrics、logging、recovery、OpenAPI 和轻量出站请求能力。应用错误 MUST 使用低基数 `Kind`、稳定 `Reason`、响应 `Code`、公开 `Message` 和可选内部 `Cause` 表达语义，MUST NOT 保存或接收 HTTP status；HTTP status MUST 只根据 `Kind` 推导。
 
 #### Scenario: 响应、错误归一化与 HTTP 映射
 
@@ -29,6 +29,22 @@
 - **AND** validation tag 的字段名解析顺序 MUST 保持稳定
 - **WHEN** 调用方使用 `Created` 或 `NoContent` 写入响应
 - **THEN** `Created` MUST 返回包含统一成功 envelope 和调用方 `data` 的 `201 Created`，`NoContent` MUST 返回 body 为空的 `204 No Content`
+
+#### Scenario: 业务中立的出站 HTTP 请求
+
+- **WHEN** 调用方使用共享 HTTP client helper 发送出站请求
+- **THEN** helper MUST 基于 Resty 支持 query、header、JSON 或 form body、context、逐请求 timeout 和显式 HTTP(S) proxy URL，并 MUST 允许注入调用方拥有的 `*resty.Client`
+- **AND** form 与 JSON 同时存在时 MUST 使用 form，并由 Resty 设置 `application/x-www-form-urlencoded`
+- **AND** 零值 timeout MUST 使用 60 秒默认值，负值、空 URL、空 method 或非法 proxy MUST 在网络请求前失败
+- **AND** helper MUST 使用调用方 context 表达逐请求 timeout，MUST NOT 为设置 timeout 修改共享或注入 client
+- **AND** 默认 Resty client MUST 长期复用、MUST NOT 保存 cookie、启用 retry、记录请求或响应 body、注入业务认证信息；调用方注入 client 时 MUST 保留其已有 middleware、retry、transport、TLS 和 response body limit 行为
+- **AND** `ProxyURL` 与注入 client 同时存在时 MUST 在网络请求前失败；固定或高频代理 MUST 由调用方预先配置在注入 client 上
+- **WHEN** 调用方未注入自定义 TLS transport
+- **THEN** helper MUST 保持 Go 默认 TLS 证书校验，MUST NOT 默认或通过隐式选项跳过证书校验
+- **WHEN** 上游返回 HTTP 响应
+- **THEN** 全部 2xx 状态 MUST 返回成功和完整 response body，其他状态 MUST 返回可检查的状态错误和 response body，错误文本 MUST NOT 包含 response body
+- **AND** Resty 构造、middleware、body limit、context、TLS 或 transport 错误 MUST 返回失败、nil body 和可包装的原始错误
+- **AND** 具体外部系统的 DTO、认证、重试、业务错误映射和防腐逻辑 MUST 留在消费服务的 `internal/integration/http` 或所属 feature 边界
 
 #### Scenario: CORS 默认策略与预检
 
@@ -122,6 +138,39 @@
 - **THEN** `common/runtime/datastore` 中共置的 Fx adapter MUST 调用 framework-neutral 的单资源 constructor，只注册该资源的启动探测和关闭 hook，MUST NOT 遍历具名资源 map 或自动创建其他资源
 - **AND** `OnStart` 创建的资源 MUST 由 `OnStop` 或 Fx rollback 关闭，constructor 阶段已创建的部分资源 MUST 在后续失败时立即清理
 - **AND** feature 关闭自身 workerpool、watcher、cache 或 store 时 MUST NOT 关闭共享 Redis、Ent 或 PostgreSQL 资源
+
+### Requirement: Redis mode-driven 资源契约
+
+系统 MUST 将共享 Redis 资源契约定义为 mode-driven 配置，`mode: cluster` MUST 使用 `addrs`、`timeout` 和可选 `cluster.max_redirects`，`mode: standalone` MUST 使用 `addr` 和 `timeout`。`addrs` MUST 表示 Redis Cluster seed endpoints，并 MUST 允许只配置一个阿里云 Redis 集群访问地址。Redis DB MUST NOT 作为配置项暴露；Cluster 与 standalone 均 MUST 固定使用 Redis 0 号库。系统 MUST NOT 支持 Sentinel 或根据字段隐式推断 mode。
+
+#### Scenario: 加载最小 Cluster 配置
+
+- **WHEN** 配置包含 `resources.redis.cache_redis.mode=cluster`、至少一个 `addrs` 地址和正数 `timeout`
+- **THEN** 配置加载、默认值应用和通用 validation MUST 成功
+- **AND** 每个 `addrs` 元素 MUST 按 `host:port` 校验，错误路径 MUST 包含资源名和字段路径
+
+#### Scenario: 按 mode 校验 Redis 配置
+
+- **WHEN** `mode=cluster` 的配置包含 `addr` 或 `db`，或 `mode=standalone` 的配置包含 `addrs`、`cluster.max_redirects` 或 `db`
+- **THEN** Redis resource validation MUST 在启动前失败并报告完整字段路径
+- **AND** 未声明 mode、未知 mode、Sentinel 字段或未知 Redis 字段 MUST 在启动前失败
+
+### Requirement: Redis Cluster client 构造与生命周期
+
+系统 MUST 通过共享 datastore 构造可承载 Redis Cluster 的单资源 client，并在 Fx lifecycle 中执行启动 PING、tracing instrumentation 和关闭清理。Redis client 公开边界 MUST 支持 Cluster client，MUST NOT 要求 `*redis.Client` 单机 concrete type。
+
+#### Scenario: 构造并探测 Cluster client
+
+- **WHEN** 调用方使用有效 Redis Cluster 资源配置创建 `cache_redis`
+- **THEN** datastore MUST 使用 Cluster client 初始化，并将 `timeout` 映射到 dial、read、write 和启动 PING timeout
+- **AND** `cluster.max_redirects` 配置存在时 MUST 映射到 Cluster redirect 上限
+- **AND** 启动 PING 或 tracing instrumentation 失败时 MUST 关闭已创建 client，并保留主错误和关闭错误
+
+#### Scenario: client 所有权与 feature 边界
+
+- **WHEN** feature 消费共享 Redis 资源
+- **THEN** feature MUST 只消费 Cluster-capable client 或消费侧最小接口
+- **AND** feature 自有 workerpool、watcher、cache 或 store 关闭时 MUST NOT 关闭共享 Redis client
 
 ### Requirement: Runtime 执行与装配原语
 
@@ -226,15 +275,42 @@
 - **AND** 环境变量 MUST 使用 `t.Setenv`，相关测试 MUST NOT 并行执行
 - **AND** 非测试目标所需的日志捕获 MUST 使用 context logger 或局部 logger 注入
 
+### Requirement: Redis Cluster 测试基础设施
+
+系统 MUST 提供可由集成测试复用的 Redis Cluster 测试能力，用于验证 hash slot、多 key Lua、Pub/Sub、PING 和 MOVED/ASK redirect 相关行为。普通单元测试 MAY 继续使用 mock 或轻量 Redis fixture，但 Cluster 兼容性 MUST 通过真实 Redis Cluster 覆盖。
+
+#### Scenario: 真实 Cluster 集成测试
+
+- **WHEN** `AEGISCORE_TEST_CONTAINERS=1` 启用真实依赖测试
+- **THEN** Redis Cluster 相关集成测试 MUST 实际连接 Cluster fixture 并执行 Cluster-sensitive Redis 命令
+- **AND** Docker daemon、Cluster fixture 启动、slot 初始化或连接失败 MUST 使相关集成测试失败而不是静默跳过
+
 ### Requirement: 显式配置来源与加载管线
 
-系统 MUST 将配置文档来源、文档合成、严格解码和服务配置策略表达为显式边界。`common/runtime/config` MUST 只拥有业务中立的配置 schema、document contract、deep merge、raw digest、strict decode、encode、render、redact 和通用校验原语；具体 Nacos 环境、认证、client、failover 和文档读取 MUST 位于 Nacos source adapter。服务 MUST 显式组合 defaults、normalize 和 validate，shared loader MUST NOT 通过服务类型的隐式接口自动发现这些行为。
+系统 MUST 将配置文档来源、文档合成、严格解码和服务配置策略表达为显式边界。`common/runtime/config` MUST 只拥有业务中立的配置 schema、document contract、deep merge、raw digest、strict decode、encode、render、redact 和通用校验原语；具体 Nacos 环境、认证、client、failover 和文档读取 MUST 位于 Nacos source adapter。服务 MUST 显式组合 defaults、normalize 和 validate，shared loader MUST NOT 通过服务类型的隐式接口自动发现这些行为。本地配置目录与 Namespace 的发布选择 MUST 留在 Compose 初始化服务和仓库级发布工具边界，runtime Nacos source MUST NOT 读取或解释仓库目录。
 
 #### Scenario: Nacos 缺省文档来源
 
 - **WHEN** 服务已设置必需 Nacos 环境变量但未设置 `AEGISCORE_NACOS_DATA_IDS`
 - **THEN** Nacos source MUST 按 `base.yaml`、`resources.yaml`、`<service>.yaml` 的稳定顺序读取文档
 - **AND** 显式 `AEGISCORE_NACOS_DATA_IDS` MUST 继续按声明顺序读取，认证、timeout 和 server failover 行为 MUST 保持不变
+
+#### Scenario: 本地主机和 Compose 选择独立 Namespace
+
+- **WHEN** 本地主机或 Compose workload 使用各自完整 Nacos 配置
+- **THEN** 进程 MUST 通过 `AEGISCORE_NACOS_NAMESPACE` 显式选择 `loca-host` 或 `loca-docker`
+- **AND** 两个 Namespace MUST 都使用 `base.yaml`、`resources.yaml`、`user-service.yaml` 三 dataId，不得要求环境专用第四文档
+- **AND** Nacos source MUST 只根据已解析环境加载文档，MUST NOT 读取 Git 配置目录、感知 Compose 初始化服务、推断主机或容器环境、创建 Namespace 或改写资源地址
+
+### Requirement: Go 模块依赖声明
+
+`common` 模块 MUST 将生产代码直接 import 的第三方模块声明为 direct require，MUST NOT 将直接 import 的运行时依赖标记为 `// indirect`。
+
+#### Scenario: PostgreSQL tracing direct dependency
+
+- **WHEN** `common/runtime/datastore/postgres.go` 直接 import `github.com/XSAM/otelsql`
+- **THEN** `common/go.mod` MUST 在 direct require 组声明 `github.com/XSAM/otelsql`
+- **AND** 该 require MUST NOT 标记为 `// indirect`
 
 #### Scenario: 文档合成与严格解码
 

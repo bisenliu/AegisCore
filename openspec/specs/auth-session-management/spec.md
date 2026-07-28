@@ -173,3 +173,25 @@ user-service auth feature MUST 私有拥有 token issuer、claims schema、subje
 - **AND** 撤销失败日志 MUST 保留 `user_id`、错误分类、`request_id`、`trace_id` 和 `span_id`，MUST NOT 暴露 token、jti、session ID、Redis key、SQL、密码或敏感原始错误
 - **WHEN** auth Redis adapter 生成 session、token version projection 或 purge key
 - **THEN** prefix MUST 来自当前 `app.name` 并归一化为 `aegiscore-user-service`，MUST NOT 查询、删除、迁移或双写旧 prefix；旧 prefix 数据 MUST NOT 再影响认证结果
+
+### Requirement: 认证 Redis 存储兼容 Redis Cluster
+
+auth Redis adapter MUST 兼容 Redis Cluster。多 key Lua、pipeline、refresh session、password-change session、token version projection 和用户级批量撤销 MUST 使用稳定 hash tag 使同一原子操作内 key 位于同一 slot。auth MUST 只消费 Cluster-capable Redis client 或最小接口，MUST NOT 要求 `*redis.Client` 单机 concrete type。
+
+#### Scenario: refresh session 多 key 原子操作
+
+- **WHEN** auth 创建、轮换、撤销或裁剪同一用户的 refresh sessions
+- **THEN** 同一 Lua 或事务性操作涉及的 Redis key MUST 使用同一用户 hash tag
+- **AND** Redis Cluster MUST NOT 因 CROSSSLOT 拒绝同一用户的 refresh session 原子操作
+
+#### Scenario: 强制改密和 token version key schema
+
+- **WHEN** auth 创建或消费 password-change session，或读写 token version projection
+- **THEN** 相关 Redis key MUST 使用与用户一致的 hash tag 规则
+- **AND** token version projection 刷新失败时的删除补偿 MUST 继续保持 Cluster 兼容
+
+#### Scenario: Cluster client 生命周期边界
+
+- **WHEN** auth store、purge pool、本地 cache 或 invalidator 停止
+- **THEN** auth MUST NOT 关闭共享 Redis Cluster client
+- **AND** Redis Cluster MOVED/ASK、slot 初始化或 CROSSSLOT 错误 MUST 作为可诊断错误暴露，不得被吞掉或降级为认证成功

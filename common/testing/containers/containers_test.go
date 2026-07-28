@@ -3,6 +3,8 @@ package containers
 import (
 	"context"
 	"database/sql"
+	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -61,6 +63,12 @@ func TestStartRedisIntegration(t *testing.T) {
 	client := redis.NewClient(redisContainer.Options())
 	defer client.Close()
 	require.NoError(t, client.Ping(ctx).Err())
+	shards, err := client.ClusterShards(ctx).Result()
+	require.NoError(t, err)
+	require.NotEmpty(t, shards)
+	require.NotEmpty(t, shards[0].Nodes)
+	advertisedNode := shards[0].Nodes[0]
+	require.Equal(t, redisContainer.Addr, net.JoinHostPort(advertisedNode.IP, strconv.FormatInt(advertisedNode.Port, 10)))
 
 	cfg := redisContainer.Config()
 	require.NotEmpty(t, cfg.Addrs)
