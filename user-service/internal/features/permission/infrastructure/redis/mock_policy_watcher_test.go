@@ -152,6 +152,18 @@ func (mr *MockMetricsMockRecorder) PolicyReloadFailed(ctx, source, reason any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PolicyReloadFailed", reflect.TypeOf((*MockMetrics)(nil).PolicyReloadFailed), ctx, source, reason)
 }
 
+// PolicyReloadLagObserved mocks base method.
+func (m *MockMetrics) PolicyReloadLagObserved(ctx context.Context, lag int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "PolicyReloadLagObserved", ctx, lag)
+}
+
+// PolicyReloadLagObserved indicates an expected call of PolicyReloadLagObserved.
+func (mr *MockMetricsMockRecorder) PolicyReloadLagObserved(ctx, lag any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PolicyReloadLagObserved", reflect.TypeOf((*MockMetrics)(nil).PolicyReloadLagObserved), ctx, lag)
+}
+
 // PolicyReloadSucceeded mocks base method.
 func (m *MockMetrics) PolicyReloadSucceeded(ctx context.Context, source string) {
 	m.ctrl.T.Helper()

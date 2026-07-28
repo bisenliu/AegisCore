@@ -103,6 +103,7 @@ func (m *spyMetrics) WatcherCheckFailed(context.Context, string)          {}
 func (m *spyMetrics) WatcherReloadSucceeded(context.Context, string)      {}
 func (m *spyMetrics) WatcherReloadFailed(context.Context, string, string) {}
 func (m *spyMetrics) WatcherVersionMismatch(context.Context, string)      {}
+func (m *spyMetrics) PolicyReloadLagObserved(context.Context, int64)      {}
 func (m *spyMetrics) EnforceObserved(_ context.Context, result string, method string, routeTemplate string, duration time.Duration) {
 	m.enforce = append(m.enforce, enforceObservation{result: result, method: method, routeTemplate: routeTemplate, duration: duration})
 }

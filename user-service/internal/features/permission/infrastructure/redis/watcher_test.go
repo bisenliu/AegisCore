@@ -50,9 +50,14 @@ func TestWatcherHandlePayloadReloadsPolicyOnlyForNewerVersions(t *testing.T) {
 	require.NoError(t, err)
 
 	gomock.InOrder(
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(3)),
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(3)),
 		engine.EXPECT().Reload(gomock.Any()).Return(nil),
 		engine.EXPECT().InvalidateAllUserRoles(),
 		metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub),
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
 	)
 
 	watcher.HandlePayload(context.Background(), payload)
@@ -72,7 +77,12 @@ func TestWatcherHandlePayloadInvalidatesUserRoleWithoutReload(t *testing.T) {
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(4, "instance-b", permissionapplication.NewUserRoleChange("user_role_added", userID, roleID)))
 	require.NoError(t, err)
 
-	engine.EXPECT().InvalidateUserRole(userID)
+	gomock.InOrder(
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(4)),
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(4)),
+		engine.EXPECT().InvalidateUserRole(userID),
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
+	)
 
 	watcher.HandlePayload(context.Background(), payload)
 
@@ -93,10 +103,13 @@ func TestWatcherCheckVersionCompensatesMissedMessage(t *testing.T) {
 	watcher := newWatcherWithMetrics(store, tracker, engine, nil, time.Second, metrics)
 
 	gomock.InOrder(
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(4)),
 		metrics.EXPECT().WatcherVersionMismatch(gomock.Any(), permissionapplication.MetricsSourceWatcherVersionCheck),
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(4)),
 		engine.EXPECT().Reload(gomock.Any()).Return(nil),
 		engine.EXPECT().InvalidateAllUserRoles(),
 		metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherVersionCheck),
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
 	)
 
 	watcher.CheckVersion(context.Background())
@@ -116,6 +129,8 @@ func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
 	require.NoError(t, err)
 
 	gomock.InOrder(
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(3)),
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(3)),
 		engine.EXPECT().Reload(gomock.Any()).Return(reloadErr),
 		metrics.EXPECT().WatcherReloadFailed(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub, permissionapplication.MetricsReasonReloadFailed),
 	)
@@ -123,6 +138,18 @@ func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
 	watcher.HandlePayload(context.Background(), payload)
 
 	require.Equal(t, int64(2), tracker.Applied())
+}
+
+func TestWatcherCheckVersionFailureDoesNotClearLag(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	engine := NewMockPolicyReloadEngine(ctrl)
+	tracker := NewVersionTracker()
+	metrics := NewMockMetrics(ctrl)
+	watcher := newWatcherWithMetrics(&failingVersionStore{}, tracker, engine, nil, time.Second, metrics)
+
+	metrics.EXPECT().WatcherCheckFailed(gomock.Any(), permissionapplication.MetricsReasonStoreUnavailable)
+
+	watcher.CheckVersion(context.Background())
 }
 
 func TestWatcherRunningStatus(t *testing.T) {
@@ -256,6 +283,16 @@ func (s closedPolicySubscriber) Channel(...rediscmd.ChannelOption) <-chan *redis
 
 func (s closedPolicySubscriber) Close() error {
 	return nil
+}
+
+type failingVersionStore struct{}
+
+func (s *failingVersionStore) CurrentVersion(context.Context) (int64, error) {
+	return 0, errors.New("redis unavailable")
+}
+
+func (s *failingVersionStore) Subscribe(context.Context) policySubscriber {
+	return closedPolicySubscriber{}
 }
 
 func waitForWatcherStopped(t *testing.T, watcher *Watcher) {

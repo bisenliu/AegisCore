@@ -139,6 +139,20 @@ groups:
           description: "最近 10 分钟至少发生一次 Casbin policy reload 失败。请检查 policy reload 日志和 RBAC datastore 健康状态。"
           runbook_url: "docs/observability/user-service-runbook.md#casbin-policy-reload-failed"
 
+      - alert: AegisCoreUserServiceRBACPolicyReloadLag
+        expr: |
+          max by (service, environment, instance) (
+            aegiscore_user_service_rbac_policy_reload_lag{service="aegiscore-user-service"}
+          ) > 0
+        for: 30s
+        labels:
+          service: aegiscore-user-service
+          severity: warning
+        annotations:
+          summary: "RBAC policy reload lag 持续存在"
+          description: "实例 {{ $labels.instance }} 的本地 RBAC policy version 落后 Redis 最新 version 已持续超过 30 秒，权限变更可能尚未最终生效。"
+          runbook_url: "docs/observability/user-service-runbook.md#rbac-policy-reload-lag"
+
       - alert: AegisCoreUserServiceWorkerpoolFailedOrPanicked
         expr: |
           increase(aegiscore_workerpool_tasks_total{service="aegiscore-user-service",pool="auth_session_purge_pool",event=~"failed|panicked"}[10m]) > 0

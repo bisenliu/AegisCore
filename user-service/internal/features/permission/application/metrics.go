@@ -53,5 +53,6 @@ type Metrics interface {
 	WatcherReloadSucceeded(ctx context.Context, source string)
 	WatcherReloadFailed(ctx context.Context, source string, reason string)
 	WatcherVersionMismatch(ctx context.Context, source string)
+	PolicyReloadLagObserved(ctx context.Context, lag int64)
 	EnforceObserved(ctx context.Context, result string, method string, routeTemplate string, duration time.Duration)
 }

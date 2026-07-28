@@ -12,19 +12,22 @@ import (
 )
 
 const (
-	rbacPolicySyncMetricName     = "aegiscore_user_service_rbac_policy_sync_operations_total"
-	rbacPolicyMismatchMetricName = "aegiscore_user_service_rbac_policy_version_mismatches_total"
-	rbacEnforceMetricName        = "aegiscore_user_service_rbac_enforce_total"
-	rbacEnforceLatencyMetricName = "aegiscore_user_service_rbac_enforce_duration_seconds"
-	rbacPolicySyncMetricHelp     = "Total number of RBAC policy sync operation results by fixed operation, result, reason, and source."
-	rbacPolicyMismatchMetricHelp = "Total number of RBAC policy version mismatches by fixed watcher source."
-	rbacEnforceMetricHelp        = "Total number of RBAC enforce decisions by fixed result, method, and route template."
-	rbacEnforceLatencyMetricHelp = "RBAC enforce latency in seconds by fixed result, method, and route template."
+	rbacPolicySyncMetricName      = "aegiscore_user_service_rbac_policy_sync_operations_total"
+	rbacPolicyMismatchMetricName  = "aegiscore_user_service_rbac_policy_version_mismatches_total"
+	rbacPolicyReloadLagMetricName = "aegiscore_user_service_rbac_policy_reload_lag"
+	rbacEnforceMetricName         = "aegiscore_user_service_rbac_enforce_total"
+	rbacEnforceLatencyMetricName  = "aegiscore_user_service_rbac_enforce_duration_seconds"
+	rbacPolicySyncMetricHelp      = "Total number of RBAC policy sync operation results by fixed operation, result, reason, and source."
+	rbacPolicyMismatchMetricHelp  = "Total number of RBAC policy version mismatches by fixed watcher source."
+	rbacPolicyReloadLagMetricHelp = "Current RBAC policy reload lag measured as the non-negative difference between latest Redis policy version and local applied policy version."
+	rbacEnforceMetricHelp         = "Total number of RBAC enforce decisions by fixed result, method, and route template."
+	rbacEnforceLatencyMetricHelp  = "RBAC enforce latency in seconds by fixed result, method, and route template."
 )
 
 type prometheusMetrics struct {
 	policySync      *prometheus.CounterVec
 	versionMismatch *prometheus.CounterVec
+	policyReloadLag prometheus.Gauge
 	enforce         *prometheus.CounterVec
 	enforceLatency  *prometheus.HistogramVec
 }
@@ -42,6 +45,10 @@ func newPermissionMetrics(provider *commonmetrics.Provider) (permissionapplicati
 			Name: rbacPolicyMismatchMetricName,
 			Help: rbacPolicyMismatchMetricHelp,
 		}, []string{"source"}),
+		policyReloadLag: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: rbacPolicyReloadLagMetricName,
+			Help: rbacPolicyReloadLagMetricHelp,
+		}),
 		enforce: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: rbacEnforceMetricName,
 			Help: rbacEnforceMetricHelp,
@@ -57,6 +64,9 @@ func newPermissionMetrics(provider *commonmetrics.Provider) (permissionapplicati
 	}
 	if err := provider.Register(recorder.versionMismatch); err != nil {
 		return nil, fmt.Errorf("register rbac policy version mismatch metrics: %w", err)
+	}
+	if err := provider.Register(recorder.policyReloadLag); err != nil {
+		return nil, fmt.Errorf("register rbac policy reload lag metrics: %w", err)
 	}
 	if err := provider.Register(recorder.enforce); err != nil {
 		return nil, fmt.Errorf("register rbac enforce metrics: %w", err)
@@ -97,6 +107,13 @@ func (m *prometheusMetrics) WatcherReloadFailed(_ context.Context, source string
 
 func (m *prometheusMetrics) WatcherVersionMismatch(_ context.Context, source string) {
 	m.versionMismatch.WithLabelValues(rbacSource(source)).Inc()
+}
+
+func (m *prometheusMetrics) PolicyReloadLagObserved(_ context.Context, lag int64) {
+	if lag < 0 {
+		lag = 0
+	}
+	m.policyReloadLag.Set(float64(lag))
 }
 
 func (m *prometheusMetrics) EnforceObserved(_ context.Context, result string, method string, routeTemplate string, duration time.Duration) {

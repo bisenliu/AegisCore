@@ -22,5 +22,6 @@ func (nopMetrics) WatcherCheckFailed(ctx context.Context, reason string)        
 func (nopMetrics) WatcherReloadSucceeded(ctx context.Context, source string)             {}
 func (nopMetrics) WatcherReloadFailed(ctx context.Context, source string, reason string) {}
 func (nopMetrics) WatcherVersionMismatch(ctx context.Context, source string)             {}
+func (nopMetrics) PolicyReloadLagObserved(ctx context.Context, lag int64)                {}
 func (nopMetrics) EnforceObserved(ctx context.Context, result string, method string, routeTemplate string, duration time.Duration) {
 }

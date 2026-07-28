@@ -132,6 +132,7 @@ func (w *Watcher) CheckVersion(ctx context.Context) {
 		return
 	}
 	localVersion := w.tracker.Applied()
+	w.observeLag(ctx, remoteVersion, localVersion)
 	if remoteVersion <= localVersion {
 		return
 	}
@@ -148,7 +149,9 @@ func (w *Watcher) HandlePayload(ctx context.Context, payload string) {
 		logger.Error(ctx, "rbac policy refresh message invalid", logger.StackTrace(zap.Error(err))...)
 		return
 	}
-	logger.Info(ctx, "rbac policy refresh received", zap.Int64("remote_policy_version", message.Version), zap.Int64("local_policy_version", w.tracker.Applied()), zap.String("instance_id", message.InstanceID), zap.String("reason", message.Reason))
+	localVersion := w.tracker.Applied()
+	w.observeLag(ctx, message.Version, localVersion)
+	logger.Info(ctx, "rbac policy refresh received", zap.Int64("remote_policy_version", message.Version), zap.Int64("local_policy_version", localVersion), zap.String("instance_id", message.InstanceID), zap.String("reason", message.Reason))
 	w.applyIfNewer(ctx, message.Version, message.policyChange(), message.InstanceID, permissionapplication.MetricsSourceWatcherPubSub)
 }
 
@@ -192,6 +195,7 @@ func (w *Watcher) run(ctx context.Context, done chan struct{}) {
 
 func (w *Watcher) applyIfNewer(ctx context.Context, version int64, change permissionapplication.PolicyChange, instanceID string, source string) {
 	localVersion := w.tracker.Applied()
+	w.observeLag(ctx, version, localVersion)
 	// 版本号是跨实例幂等门禁；已经应用过的版本必须跳过，避免旧 Pub/Sub 消息覆盖后续 reload 状态。
 	if version <= localVersion {
 		return
@@ -211,7 +215,16 @@ func (w *Watcher) applyIfNewer(ctx context.Context, version int64, change permis
 		w.engine.InvalidateAllUserRoles()
 	}
 	w.tracker.MarkApplied(version)
+	w.observeLag(ctx, version, w.tracker.Applied())
 	logger.Info(ctx, "rbac policy remote refresh succeeded", zap.Int64("policy_version", version), zap.Int64("local_policy_version", w.tracker.Applied()), zap.String("instance_id", instanceID), zap.String("reason", reason))
+}
+
+func (w *Watcher) observeLag(ctx context.Context, remoteVersion int64, localVersion int64) {
+	lag := remoteVersion - localVersion
+	if lag < 0 {
+		lag = 0
+	}
+	w.metrics.PolicyReloadLagObserved(ctx, lag)
 }
 
 func (w *Watcher) recordError(err error) {
