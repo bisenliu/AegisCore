@@ -46,6 +46,20 @@ groups:
           description: "外部 readyz 探测已连续 5 分钟失败。该规则需要 blackbox exporter、Kubernetes probe metrics 或等价外部探测。"
           runbook_url: "docs/observability/user-service-runbook.md#readiness-failure"
 
+      - alert: AegisCoreUserServiceHighGoroutineCount
+        expr: |
+          max by (service, environment, instance) (
+            go_goroutines{service="aegiscore-user-service"}
+          ) > 10000
+        for: 5m
+        labels:
+          service: aegiscore-user-service
+          severity: warning
+        annotations:
+          summary: "用户服务 goroutine 数量过高"
+          description: "实例 {{ $labels.instance }} 的 goroutine 数量已连续 5 分钟超过 10000，可能存在 goroutine 泄漏或突发并发堆积。请检查 Go runtime dashboard、pprof goroutine profile 和近期发布变更。"
+          runbook_url: "docs/observability/user-service-runbook.md#goroutine-count"
+
       - alert: AegisCoreUserServicePostgresPoolUnavailable
         expr: |
           absent(aegiscore_postgres_pool_open_connections{service="aegiscore-user-service",resource="primary_db"})

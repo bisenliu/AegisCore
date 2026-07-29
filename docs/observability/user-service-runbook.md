@@ -19,10 +19,21 @@
 - HTTP 5xx 升高：先按 route template 聚合定位，再结合 `trace_id` / `span_id` 查日志；不得依赖 raw path 高基数标签。
 - 延迟升高：检查 HTTP p95、PostgreSQL wait/pool stats、Redis ping 和 downstream runtime 指标。
 - `/readyz` 或 `/startupz` 失败：检查 PostgreSQL、Redis、Casbin policy state 和 RBAC watcher state。
+- Goroutine 数量过高：检查 Go runtime dashboard、`/debug/pprof/goroutine`、近期发布变更和后台任务状态，区分真实泄漏与短时并发堆积。
 - RBAC watcher stopped：检查 Redis Pub/Sub、policy version compensation、实例日志和 watcher metrics；授权热路径不会每请求读 Redis 强一致校验。
 - Casbin reload failed：检查权限目录、角色状态、绑定关系和 policy loader 错误；不要通过 route diff 写入权限。
 - RBAC policy reload lag：在线 RBAC 写成功后，Redis 和 watcher 正常运行时其他副本应在 30 秒内完成 policy 最终生效；持续 lag 表示至少一个副本本地已应用 policy version 落后 Redis 最新 version。
 - Workerpool failed/panicked：定位 owning feature 的后台清理任务，workerpool 只是 runtime executor，不承担业务补偿语义。
+
+## Runtime Alerts
+
+### goroutine-count
+
+`go_goroutines` 表示当前进程 goroutine 数量。值超过 `10000` 并持续 5 分钟时，可能存在 goroutine 泄漏、外部依赖阻塞导致的请求堆积、后台任务卡住或突发流量超过实例处理能力。
+
+先确认 `observability.metrics.include_runtime: true` 且 Prometheus 正常 scrape 当前实例，再查看 Go runtime dashboard 的 goroutine、heap、GC 和 process memory 趋势。随后通过受控 pprof 入口采集 goroutine profile，按栈聚合定位增长最快的调用路径，并结合近期 deployment、HTTP in-flight、PostgreSQL pool wait、Redis up/ping 和 workerpool/scheduler 告警判断是否为依赖阻塞或代码泄漏。
+
+不要通过重启实例作为唯一处置；如果重启后 goroutine 数量随流量持续线性增长，应保留 profile、日志和变更窗口，优先回滚最近涉及 goroutine 生命周期、请求上下文取消、Redis Pub/Sub、scheduler 或 workerpool 的发布。
 
 ## RBAC Alerts
 
