@@ -140,7 +140,7 @@ func TestSessionStoreIgnoresLegacyKeys(t *testing.T) {
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
 	legacySession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-legacy", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
-	data, err := json.Marshal(legacySession)
+	data, err := json.Marshal(newAuthSessionPayload(legacySession))
 	require.NoError(t, err,
 		"Marshal legacy session: %v", err)
 	{

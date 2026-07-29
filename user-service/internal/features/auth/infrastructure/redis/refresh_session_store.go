@@ -36,7 +36,7 @@ func (r *SessionStore) CreateSession(ctx context.Context, session authdomain.Aut
 	now := time.Now()
 	expiresAt := now.Add(ttl)
 	session.ExpiresAt = expiresAt
-	data, err := json.Marshal(session)
+	data, err := json.Marshal(newAuthSessionPayload(session))
 	if err != nil {
 		return fmt.Errorf("marshal auth session: %w", err)
 	}
@@ -74,7 +74,7 @@ func (r *SessionStore) RotateSession(ctx context.Context, oldSession authdomain.
 	now := time.Now()
 	expiresAt := now.Add(ttl)
 	newSession.ExpiresAt = expiresAt
-	data, err := json.Marshal(newSession)
+	data, err := json.Marshal(newAuthSessionPayload(newSession))
 	if err != nil {
 		return fmt.Errorf("marshal rotated auth session: %w", err)
 	}
@@ -121,9 +121,13 @@ func (r *SessionStore) GetSession(ctx context.Context, userID uuid.UUID, session
 	if err != nil {
 		return authdomain.AuthSession{}, fmt.Errorf("get auth session: %w", err)
 	}
-	var session authdomain.AuthSession
-	if err := json.Unmarshal(data, &session); err != nil {
+	var payload authSessionPayload
+	if err := json.Unmarshal(data, &payload); err != nil {
 		return authdomain.AuthSession{}, fmt.Errorf("unmarshal auth session: %w", err)
+	}
+	session, err := payload.domainSession()
+	if err != nil {
+		return authdomain.AuthSession{}, fmt.Errorf("decode auth session: %w", err)
 	}
 	return session, nil
 }

@@ -6,21 +6,21 @@ import (
 	"github.com/google/uuid"
 )
 
-// AuthSession 包含 Redis 存储的 refresh token 会话元数据。
+// AuthSession 包含 refresh token 会话元数据。
 type AuthSession struct {
-	UserID       uuid.UUID `json:"user_id"`
-	SessionID    string    `json:"session_id"`
-	TokenVersion int64     `json:"token_version"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	UserID       uuid.UUID
+	SessionID    string
+	TokenVersion int64
+	ExpiresAt    time.Time
 }
 
-// PasswordChangeSession 包含 Redis 存储的一次性强制改密会话元数据。
+// PasswordChangeSession 包含一次性强制改密会话元数据。
 type PasswordChangeSession struct {
-	UserID       uuid.UUID `json:"user_id"`
-	SessionID    string    `json:"session_id"`
-	TokenID      string    `json:"token_id"`
-	TokenVersion int64     `json:"token_version"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	UserID       uuid.UUID
+	SessionID    string
+	TokenID      string
+	TokenVersion int64
+	ExpiresAt    time.Time
 }
 
 // SessionRevocationResult 返回撤销用户全部会话后的新 token version。

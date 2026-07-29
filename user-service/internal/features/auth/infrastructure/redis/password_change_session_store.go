@@ -25,7 +25,7 @@ func (r *SessionStore) CreatePasswordChangeSession(ctx context.Context, session 
 		ttl = defaultPasswordChangeSessionTTL
 	}
 	session.ExpiresAt = time.Now().Add(ttl)
-	data, err := json.Marshal(session)
+	data, err := json.Marshal(newPasswordChangeSessionPayload(session))
 	if err != nil {
 		return fmt.Errorf("marshal password change session: %w", err)
 	}

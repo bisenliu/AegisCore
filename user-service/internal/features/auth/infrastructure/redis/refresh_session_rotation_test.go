@@ -92,7 +92,7 @@ func TestSessionStoreRotateSessionPrunesOldestWhenLimitExceeded(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		sessionID := "s-" + strconv.Itoa(i)
 		session := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: sessionID, TokenVersion: 1}
-		data, err := json.Marshal(session)
+		data, err := json.Marshal(newAuthSessionPayload(session))
 		require.NoError(t, err,
 			"Marshal session %s: %v", sessionID, err)
 		{
