@@ -35,7 +35,6 @@ const (
 
 var (
 	errMissingUserID       = errors.New("jwt user_id is required")
-	errInvalidUserID       = errors.New("jwt user_id is invalid")
 	errMissingTokenID      = errors.New("jwt jti is required")
 	errInvalidTokenID      = errors.New("jwt jti is invalid")
 	errMissingTokenVersion = errors.New("jwt token_version is required")
