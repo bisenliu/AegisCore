@@ -42,6 +42,17 @@ func TestBeginTransactionInheritsOriginalDeadline(t *testing.T) {
 	require.Equal(t, wantDeadline, deadline)
 }
 
+func TestBeginTransactionFailureCancelsLifecycleContext(t *testing.T) {
+	beginErr := errors.New("begin failed")
+	starter := &testTransactionStarter{err: beginErr}
+
+	_, finish, err := BeginTransaction(context.Background(), starter)
+
+	require.ErrorIs(t, err, beginErr)
+	require.Nil(t, finish)
+	require.ErrorIs(t, starter.ctx.Err(), context.Canceled)
+}
+
 func TestRollbackUnlessCommittedRunsAfterRequestCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	tx := &testTransaction{}
@@ -81,6 +92,21 @@ func TestFailJoinsOriginalAndRollbackErrors(t *testing.T) {
 	require.ErrorIs(t, err, businessErr)
 	require.ErrorIs(t, err, rollbackErr)
 	require.Equal(t, 1, tx.rollbackCount)
+	require.NoError(t, finish.RollbackUnlessCommitted())
+	require.Equal(t, 1, tx.rollbackCount)
+}
+
+func TestCommitFailureAllowsDeferredRollback(t *testing.T) {
+	commitErr := errors.New("commit failed")
+	tx := &testTransaction{commitErr: commitErr}
+	_, finish, err := BeginTransaction(context.Background(), &testTransactionStarter{tx: tx})
+	require.NoError(t, err)
+
+	err = finish.Commit(context.Background())
+
+	require.ErrorIs(t, err, commitErr)
+	require.Equal(t, 1, tx.commitCount)
+	require.Zero(t, tx.rollbackCount)
 	require.NoError(t, finish.RollbackUnlessCommitted())
 	require.Equal(t, 1, tx.rollbackCount)
 }

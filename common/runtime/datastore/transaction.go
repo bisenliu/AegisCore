@@ -10,17 +10,19 @@ import (
 const DefaultTransactionCleanupTimeout = 5 * time.Second
 
 // Transaction 表达业务中立的最小事务终结接口。
+//
+// 该接口不替代 Ent 或 database/sql 的事务实现，只抽象提交和回滚终结动作。
 type Transaction interface {
 	Commit() error
 	Rollback() error
 }
 
-// TransactionStarter 使用调用方提供的 lifecycle context 开始事务。
+// TransactionStarter 使用调用方提供的 lifecycle context 开始具体事务。
 type TransactionStarter[T Transaction] interface {
 	BeginTransaction(context.Context) (T, error)
 }
 
-// Finish 负责统一提交、失败回滚和 defer 兜底回滚语义。
+// Finish 封装跨事务实现复用的终结策略：提交、失败回滚和 defer 兜底回滚。
 type Finish[T Transaction] struct {
 	tx        T
 	cancel    context.CancelFunc
@@ -29,6 +31,10 @@ type Finish[T Transaction] struct {
 }
 
 // BeginTransaction 使用 detached lifecycle context 创建事务。
+//
+// detached context 继承原始 context 的 value 和 deadline，但不继承取消信号，
+// 从而允许 request context 取消后仍能完成 rollback cleanup。提交时仍由 Commit
+// 检查原始 request context，避免请求已取消后继续提交业务结果。
 func BeginTransaction[T Transaction](ctx context.Context, starter TransactionStarter[T]) (T, *Finish[T], error) {
 	txCtx, cancel := transactionLifecycleContext(ctx)
 
