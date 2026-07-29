@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -20,14 +21,14 @@ import (
 func TestAuthUseCaseRefreshRotatesSession(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
 	claims := refreshClaims("s-old", 2)
-	oldSession := authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
+	oldSession := authdomain.AuthSession{UserID: authTestUserID, SessionID: "s-old", TokenVersion: 2}
 
 	gomock.InOrder(
-		fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "Bearer refresh").Return(claims, nil),
+		fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "Bearer refresh").Return(claims, authTestUserID, nil),
 		fixture.sessions.EXPECT().ValidateRefreshSession(gomock.Any(), claims).Return(oldSession, int64(2), nil),
-		fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil),
+		fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil),
 		fixture.sessions.EXPECT().RotateTokenSession(gomock.Any(), oldSession, gomock.Any(), time.Hour).DoAndReturn(func(_ context.Context, _ authdomain.AuthSession, newSession authdomain.AuthSession, _ time.Duration) error {
-			require.False(t, newSession.UserID != authTestUserID.String() || newSession.SessionID == "" || newSession.SessionID == "s-old" || newSession.TokenVersion != 2,
+			require.False(t, newSession.UserID != authTestUserID || newSession.SessionID == "" || newSession.SessionID == "s-old" || newSession.TokenVersion != 2,
 				"new session = %#v", newSession)
 
 			return nil
@@ -54,12 +55,12 @@ func TestAuthUseCaseRefreshRotationPassesMaxActiveSessionsPerUser(t *testing.T) 
 	require.NoError(t, err)
 	svc := NewRefreshTokenUseCase(tokens, lifecycle, nil, RefreshTokenSettings{RefreshTokenRotation: cfg.RefreshTokenRotation})
 	claims := refreshClaims("s-old", 2)
-	oldSession := authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
+	oldSession := authdomain.AuthSession{UserID: authTestUserID, SessionID: "s-old", TokenVersion: 2}
 
-	tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, nil)
-	sessions.EXPECT().GetSession(gomock.Any(), authTestUserID.String(), "s-old").Return(oldSession, nil)
-	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID.String()).Return(int64(2), nil)
-	tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil)
+	tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, authTestUserID, nil)
+	sessions.EXPECT().GetSession(gomock.Any(), authTestUserID, "s-old").Return(oldSession, nil)
+	tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), authTestUserID).Return(int64(2), nil)
+	tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil)
 	sessions.EXPECT().RotateSession(gomock.Any(), oldSession, gomock.Any(), time.Hour, 4).Return(nil)
 
 	_, err = svc.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
@@ -82,12 +83,12 @@ func TestAuthUseCaseRefreshRejectsInvalidNormalizedToken(t *testing.T) {
 func TestAuthUseCaseRefreshRotationKeepsOldSessionWhenTokenSigningFails(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
 	claims := refreshClaims("s-old", 2)
-	oldSession := authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
+	oldSession := authdomain.AuthSession{UserID: authTestUserID, SessionID: "s-old", TokenVersion: 2}
 	signErr := errors.New("sign failed")
 
-	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, nil)
+	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, authTestUserID, nil)
 	fixture.sessions.EXPECT().ValidateRefreshSession(gomock.Any(), claims).Return(oldSession, int64(2), nil)
-	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(nil, signErr)
+	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(nil, signErr)
 
 	_, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
 	require.ErrorIs(t, err, signErr,
@@ -98,12 +99,12 @@ func TestAuthUseCaseRefreshRotationKeepsOldSessionWhenTokenSigningFails(t *testi
 func TestAuthUseCaseRefreshRotationKeepsOldSessionWhenNewSessionCreateFails(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
 	claims := refreshClaims("s-old", 2)
-	oldSession := authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
+	oldSession := authdomain.AuthSession{UserID: authTestUserID, SessionID: "s-old", TokenVersion: 2}
 	createErr := errors.New("create failed")
 
-	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, nil)
+	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, authTestUserID, nil)
 	fixture.sessions.EXPECT().ValidateRefreshSession(gomock.Any(), claims).Return(oldSession, int64(2), nil)
-	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil)
+	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil)
 	fixture.sessions.EXPECT().RotateTokenSession(gomock.Any(), oldSession, gomock.Any(), time.Hour).Return(createErr)
 
 	tokens, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
@@ -117,12 +118,12 @@ func TestAuthUseCaseRefreshRotationKeepsOldSessionWhenNewSessionCreateFails(t *t
 func TestAuthUseCaseRefreshRotationFailureDoesNotReturnToken(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
 	claims := refreshClaims("s-old", 2)
-	oldSession := authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
+	oldSession := authdomain.AuthSession{UserID: authTestUserID, SessionID: "s-old", TokenVersion: 2}
 	rotateErr := errors.New("rotate failed")
 
-	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, nil)
+	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, authTestUserID, nil)
 	fixture.sessions.EXPECT().ValidateRefreshSession(gomock.Any(), claims).Return(oldSession, int64(2), nil)
-	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil)
+	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil)
 	fixture.sessions.EXPECT().RotateTokenSession(gomock.Any(), oldSession, gomock.Any(), time.Hour).Return(rotateErr)
 
 	tokens, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
@@ -136,11 +137,11 @@ func TestAuthUseCaseRefreshRotationFailureDoesNotReturnToken(t *testing.T) {
 func TestAuthUseCaseRefreshRotationReturnsTokenAfterNewSessionAndOldRevocation(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
 	claims := refreshClaims("s-old", 2)
-	oldSession := authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
+	oldSession := authdomain.AuthSession{UserID: authTestUserID, SessionID: "s-old", TokenVersion: 2}
 
-	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, nil)
+	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, authTestUserID, nil)
 	fixture.sessions.EXPECT().ValidateRefreshSession(gomock.Any(), claims).Return(oldSession, int64(2), nil)
-	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil)
+	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil)
 	fixture.sessions.EXPECT().RotateTokenSession(gomock.Any(), oldSession, gomock.Any(), time.Hour).Return(nil)
 
 	tokens, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
@@ -154,12 +155,12 @@ func TestAuthUseCaseRefreshRotationReturnsTokenAfterNewSessionAndOldRevocation(t
 func TestAuthUseCaseRefreshUsesNormalizedToken(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(false), nil)
 	claims := refreshClaims("s-old", 2)
-	oldSession := authdomain.AuthSession{UserID: authTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
+	oldSession := authdomain.AuthSession{UserID: authTestUserID, SessionID: "s-old", TokenVersion: 2}
 
-	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, nil)
+	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, authTestUserID, nil)
 	fixture.sessions.EXPECT().ValidateRefreshSession(gomock.Any(), claims).Return(oldSession, int64(2), nil)
-	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), "s-old").Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil)
-	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), "s-old", int64(2), time.Hour).Return(nil)
+	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), "s-old").Return(issuedTokenPair("access", "refresh-new", 900, time.Hour), nil)
+	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID, "s-old", int64(2), time.Hour).Return(nil)
 
 	tokens, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})
 	require.NoError(t, err,
@@ -171,7 +172,7 @@ func TestAuthUseCaseRefreshUsesNormalizedToken(t *testing.T) {
 
 func TestAuthUseCaseRefreshRejectsAccessTokenSubject(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(false), nil)
-	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "access").Return(nil, authdomain.ErrTokenInvalid)
+	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "access").Return(nil, uuid.Nil, authdomain.ErrTokenInvalid)
 
 	_, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "access"})
 	require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
@@ -185,7 +186,7 @@ func TestAuthUseCaseRefreshRejectsVersionChange(t *testing.T) {
 	fixture := newAuthCommandFixtureWithController(ctrl, defaultAuthConfig(true), metrics)
 	claims := refreshClaims("s-old", 2)
 
-	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, nil)
+	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, authTestUserID, nil)
 	fixture.sessions.EXPECT().ValidateRefreshSession(gomock.Any(), claims).Return(authdomain.AuthSession{}, int64(0), errors.Join(authdomain.ErrTokenInvalid, commonauth.ErrTokenVersionMismatch))
 	metrics.EXPECT().RefreshFailed(gomock.Any(), authapplication.MetricsReasonTokenVersionMismatch)
 	metrics.EXPECT().TokenVersionMismatch(gomock.Any(), authapplication.MetricsSourceRefreshToken)
@@ -200,7 +201,7 @@ func TestAuthUseCaseRefreshMapsTokenVersionUserNotFound(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
 	claims := refreshClaims("s-old", 2)
 
-	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, nil)
+	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "refresh").Return(claims, authTestUserID, nil)
 	fixture.sessions.EXPECT().ValidateRefreshSession(gomock.Any(), claims).Return(authdomain.AuthSession{}, int64(0), identity.ErrUserNotFound)
 
 	_, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "refresh"})

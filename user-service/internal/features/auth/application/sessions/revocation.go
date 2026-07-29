@@ -40,10 +40,10 @@ func (m *lifecycle) RevokeUserSessionsAtVersion(ctx context.Context, userID uuid
 	if err := m.invalidateLocalTokenVersion(ctx, userIDString); err != nil {
 		projectionErr = errors.Join(projectionErr, fmt.Errorf("invalidate local token version cache before projection: %w", err))
 	}
-	if err := m.tokenVersions.CacheTokenVersion(ctx, userIDString, tokenVersion); err != nil {
+	if err := m.tokenVersions.CacheTokenVersion(ctx, userID, tokenVersion); err != nil {
 		logger.Error(ctx, "refresh token version cache failed", logger.StackTrace(zap.String("user_id", userIDString), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		projectionErr = errors.Join(projectionErr, fmt.Errorf("refresh token version cache: %w", err))
-		if evictErr := m.tokenVersions.DeleteCachedTokenVersion(ctx, userIDString); evictErr != nil {
+		if evictErr := m.tokenVersions.DeleteCachedTokenVersion(ctx, userID); evictErr != nil {
 			logger.Error(ctx, "delete token version cache failed", logger.StackTrace(zap.String("user_id", userIDString), zap.Int64("token_version", tokenVersion), zap.Error(evictErr))...)
 			projectionErr = errors.Join(projectionErr, fmt.Errorf("delete token version cache: %w", evictErr))
 		}
@@ -52,7 +52,7 @@ func (m *lifecycle) RevokeUserSessionsAtVersion(ctx context.Context, userID uuid
 	if err := m.invalidateLocalTokenVersion(ctx, userIDString); err != nil {
 		projectionErr = errors.Join(projectionErr, fmt.Errorf("invalidate local token version cache after projection: %w", err))
 	}
-	if err := m.sessions.DeleteAllUserSessions(ctx, userIDString); err != nil {
+	if err := m.sessions.DeleteAllUserSessions(ctx, userID); err != nil {
 		logger.Error(ctx, "delete all user sessions failed", logger.StackTrace(zap.String("user_id", userIDString), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		projectionErr = errors.Join(projectionErr, fmt.Errorf("delete all user sessions: %w", err))
 	}

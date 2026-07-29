@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	commonauth "github.com/aegiscore/common/security/auth"
@@ -16,7 +17,7 @@ func TestAuthenticatedSessionReturnsUserAndSession(t *testing.T) {
 	userID, sessionID, err := AuthenticatedSession(ctx)
 	require.NoError(t, err,
 		"AuthenticatedSession: %v", err)
-	require.False(t, userID != "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e" || sessionID != "s-123",
+	require.False(t, userID != uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e") || sessionID != "s-123",
 		"userID=%q sessionID=%q", userID, sessionID)
 
 }

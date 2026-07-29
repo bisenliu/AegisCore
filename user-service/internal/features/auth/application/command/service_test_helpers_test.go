@@ -76,11 +76,11 @@ func issuedTokenPair(accessToken string, refreshToken string, expiresIn int64, r
 }
 
 func refreshClaims(sessionID string, tokenVersion int64) *authtokens.Claims {
-	return &authtokens.Claims{UserID: authTestUserID.String(), SessionID: sessionID, TokenVersion: tokenVersion}
+	return &authtokens.Claims{UserID: authTestUserID, SessionID: sessionID, TokenVersion: tokenVersion}
 }
 
 func passwordChangeClaims(sessionID string, tokenVersion int64) *authtokens.Claims {
-	return &authtokens.Claims{UserID: authTestUserID.String(), SessionID: sessionID, TokenVersion: tokenVersion, RegisteredClaims: jwtv5.RegisteredClaims{ID: "jti-123"}}
+	return &authtokens.Claims{UserID: authTestUserID, SessionID: sessionID, TokenVersion: tokenVersion, RegisteredClaims: jwtv5.RegisteredClaims{ID: "jti-123"}}
 }
 
 func testPasswordService(t testing.TB) *password.Service {

@@ -26,13 +26,13 @@ func TestTokenVersionValidatorBackfillsMiniredisCacheOnMiss(t *testing.T) {
 	require.NoError(t, err,
 		"ValidateTokenVersion: %v", err)
 
-	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
+	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID)
 	require.NoError(t, err,
 		"GetCachedTokenVersion after backfill: %v", err)
 	require.EqualValues(t, 7, version,
 		"cached version = %d, want 7", version)
 
-	ttl, err := store.redis.TTL(ctx, store.tokenVersionKey(sessionTestUserID.String())).Result()
+	ttl, err := store.redis.TTL(ctx, store.tokenVersionKey(sessionTestUserID)).Result()
 	require.NoError(t, err,
 		"TTL: %v", err)
 	require.False(t, ttl <= 0 || ttl > time.Minute,
@@ -47,7 +47,7 @@ func TestTokenVersionValidatorUsesMiniredisCacheHitWithoutRepositoryLookup(t *te
 	users := NewMockUserTokenVersionStore(ctrl)
 	ctx := context.Background()
 	{
-		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 8)
+		err := store.CacheTokenVersion(ctx, sessionTestUserID, 8)
 		require.NoError(t, err,
 			"CacheTokenVersion: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestTokenVersionValidatorRejectsStaleTokenUsingMiniredisCache(t *testing.T)
 	users := NewMockUserTokenVersionStore(ctrl)
 	ctx := context.Background()
 	{
-		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 9)
+		err := store.CacheTokenVersion(ctx, sessionTestUserID, 9)
 		require.NoError(t, err,
 			"CacheTokenVersion: %v", err)
 	}
@@ -85,25 +85,25 @@ func TestTokenVersionCacheRefreshMakesStaleTokenObservable(t *testing.T) {
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
 	{
-		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 5)
+		err := store.CacheTokenVersion(ctx, sessionTestUserID, 5)
 		require.NoError(t, err,
 			"CacheTokenVersion old: %v", err)
 	}
 	{
 
-		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-stale", TokenVersion: 5}, time.Hour, defaultMaxActiveSessionsPerUser())
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-stale", TokenVersion: 5}, time.Hour, defaultMaxActiveSessionsPerUser())
 		require.NoError(t, err,
 			"CreateSession: %v", err)
 	}
 	{
 
-		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 6)
+		err := store.CacheTokenVersion(ctx, sessionTestUserID, 6)
 		require.NoError(t, err,
 			"CacheTokenVersion refreshed: %v", err)
 	}
 	{
 
-		err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String())
+		err := store.DeleteAllUserSessions(ctx, sessionTestUserID)
 		require.NoError(t, err,
 			"DeleteAllUserSessions: %v", err)
 	}
@@ -116,14 +116,14 @@ func TestTokenVersionCacheRefreshMakesStaleTokenObservable(t *testing.T) {
 	require.ErrorIs(t, err, commonauth.ErrTokenVersionMismatch,
 		"err = %v, want token version mismatch", err)
 
-	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
+	version, err := store.GetCachedTokenVersion(ctx, sessionTestUserID)
 	require.NoError(t, err,
 		"GetCachedTokenVersion: %v", err)
 	require.EqualValues(t, 6, version,
 		"cached version = %d, want 6", version)
 
 	waitForRedisCondition(t, func() bool {
-		return !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-stale")) &&
-			!redisServer.Exists(store.userSessionsKey(sessionTestUserID.String()))
+		return !redisServer.Exists(store.sessionKey(sessionTestUserID, "s-stale")) &&
+			!redisServer.Exists(store.userSessionsKey(sessionTestUserID))
 	}, "user sessions were not deleted during cache refresh flow")
 }

@@ -45,17 +45,17 @@ var (
 
 // Claims 包含 user-service 认证和会话校验所需的 JWT claims。
 type Claims struct {
-	UserID       string `json:"user_id"`
-	TokenVersion int64  `json:"token_version"`
-	SessionID    string `json:"session_id"`
+	UserID       uuid.UUID `json:"user_id"`
+	TokenVersion int64     `json:"token_version"`
+	SessionID    string    `json:"session_id"`
 	jwtv5.RegisteredClaims
 }
 
 // Issuer 签发和解析认证流程使用的 JWT。
 type Issuer interface {
-	IssueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*IssuedTokenPair, error)
-	IssuePasswordChangeToken(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*TokenResult, error)
-	ParseRefreshToken(ctx context.Context, token string) (*Claims, error)
+	IssueTokenPair(ctx context.Context, userID uuid.UUID, tokenVersion int64, sessionID string) (*IssuedTokenPair, error)
+	IssuePasswordChangeToken(ctx context.Context, userID uuid.UUID, tokenVersion int64, sessionID string) (*TokenResult, error)
+	ParseRefreshToken(ctx context.Context, token string) (*Claims, uuid.UUID, error)
 	ParsePasswordChangeToken(ctx context.Context, token string) (*Claims, uuid.UUID, error)
 }
 
@@ -71,7 +71,7 @@ type authTokenIssuer struct {
 }
 
 type signInput struct {
-	UserID       string
+	UserID       uuid.UUID
 	TokenVersion int64
 	SessionID    string
 	TTL          time.Duration
@@ -88,17 +88,17 @@ func NewAccessTokenVerifier(verifier *commonauth.JWTService, settings servicecon
 }
 
 // IssueTokenPair 为一个认证会话签发 access 和 refresh token。
-func (i *authTokenIssuer) IssueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*IssuedTokenPair, error) {
+func (i *authTokenIssuer) IssueTokenPair(ctx context.Context, userID uuid.UUID, tokenVersion int64, sessionID string) (*IssuedTokenPair, error) {
 	accessTTL := i.accessTokenTTL()
 	refreshTTL := i.refreshTokenTTL()
 	access, err := i.sign(signInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: accessTTL}, SubjectAccess)
 	if err != nil {
-		logger.Error(ctx, "sign access token failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
+		logger.Error(ctx, "sign access token failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return nil, fmt.Errorf("sign access token: %w", err)
 	}
 	refresh, err := i.sign(signInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: refreshTTL}, SubjectRefresh)
 	if err != nil {
-		logger.Error(ctx, "sign refresh token failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
+		logger.Error(ctx, "sign refresh token failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return nil, fmt.Errorf("sign refresh token: %w", err)
 	}
 	return &IssuedTokenPair{
@@ -108,11 +108,11 @@ func (i *authTokenIssuer) IssueTokenPair(ctx context.Context, userID string, tok
 }
 
 // IssuePasswordChangeToken 签发受限 token，并有意不返回 refresh token。
-func (i *authTokenIssuer) IssuePasswordChangeToken(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*TokenResult, error) {
+func (i *authTokenIssuer) IssuePasswordChangeToken(ctx context.Context, userID uuid.UUID, tokenVersion int64, sessionID string) (*TokenResult, error) {
 	ttl := i.passwordChangeTokenTTL()
 	token, err := i.sign(signInput{UserID: userID, TokenVersion: tokenVersion, SessionID: sessionID, TTL: ttl}, SubjectPasswordChange)
 	if err != nil {
-		logger.Error(ctx, "sign password change token failed", logger.StackTrace(zap.String("user_id", userID), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
+		logger.Error(ctx, "sign password change token failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.String("session_id", sessionID), zap.Int64("token_version", tokenVersion), zap.Error(err))...)
 		return nil, fmt.Errorf("sign password change token: %w", err)
 	}
 	return &TokenResult{AccessToken: token, TokenType: commonauth.TokenTypeBearer, ExpiresIn: int64(ttl.Seconds())}, nil
@@ -128,17 +128,13 @@ func (i *authTokenIssuer) passwordChangeTokenTTL() time.Duration {
 }
 
 // ParseRefreshToken 规范化可选 Bearer 输入并校验 refresh token claims。
-func (i *authTokenIssuer) ParseRefreshToken(ctx context.Context, token string) (*Claims, error) {
+func (i *authTokenIssuer) ParseRefreshToken(ctx context.Context, token string) (*Claims, uuid.UUID, error) {
 	claims, err := i.parse(commonauth.StripBearerPrefix(token), SubjectRefresh, false)
 	if err != nil {
 		logger.Warn(ctx, "refresh token invalid", zap.Bool("token_present", token != ""))
-		return nil, authdomain.ErrTokenInvalid
+		return nil, uuid.Nil, authdomain.ErrTokenInvalid
 	}
-	if _, err := uuid.Parse(claims.UserID); err != nil {
-		logger.Warn(ctx, "refresh token user id invalid", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-		return nil, authdomain.ErrTokenInvalid
-	}
-	return claims, nil
+	return claims, claims.UserID, nil
 }
 
 // ParsePasswordChangeToken 规范化可选 Bearer 输入，并返回已校验的改密 claims。
@@ -148,12 +144,7 @@ func (i *authTokenIssuer) ParsePasswordChangeToken(ctx context.Context, token st
 		logger.Warn(ctx, "password change token invalid", zap.Bool("token_present", token != ""))
 		return nil, uuid.Nil, authdomain.ErrTokenInvalid
 	}
-	parsedUserID, err := uuid.Parse(claims.UserID)
-	if err != nil {
-		logger.Warn(ctx, "password change token user id invalid", zap.String("user_id", claims.UserID), zap.String("session_id", claims.SessionID))
-		return nil, uuid.Nil, authdomain.ErrTokenInvalid
-	}
-	return claims, parsedUserID, nil
+	return claims, claims.UserID, nil
 }
 
 func (i *authTokenIssuer) VerifyAccessToken(tokenString string) (commonauth.AccessToken, error) {
@@ -161,7 +152,7 @@ func (i *authTokenIssuer) VerifyAccessToken(tokenString string) (commonauth.Acce
 	if err != nil {
 		return commonauth.AccessToken{}, err
 	}
-	return commonauth.AccessToken{UserID: claims.UserID, SessionID: claims.SessionID, TokenVersion: claims.TokenVersion}, nil
+	return commonauth.AccessToken{UserID: claims.UserID.String(), SessionID: claims.SessionID, TokenVersion: claims.TokenVersion}, nil
 }
 
 func (i *authTokenIssuer) parse(tokenString string, subject string, requireSession bool) (*Claims, error) {
@@ -175,11 +166,8 @@ func (i *authTokenIssuer) parse(tokenString string, subject string, requireSessi
 	if _, err := uuid.Parse(claims.ID); err != nil {
 		return nil, errInvalidTokenID
 	}
-	if claims.UserID == "" {
+	if claims.UserID == uuid.Nil {
 		return nil, errMissingUserID
-	}
-	if _, err := uuid.Parse(claims.UserID); err != nil {
-		return nil, errInvalidUserID
 	}
 	if claims.TokenVersion <= 0 {
 		return nil, errMissingTokenVersion
@@ -197,11 +185,8 @@ func (i *authTokenIssuer) sign(input signInput, subject string) (string, error) 
 	if i.config.Secret == "" {
 		return "", commonauth.ErrMissingSecret
 	}
-	if input.UserID == "" {
+	if input.UserID == uuid.Nil {
 		return "", errMissingUserID
-	}
-	if _, err := uuid.Parse(input.UserID); err != nil {
-		return "", errInvalidUserID
 	}
 	if input.TokenVersion <= 0 {
 		return "", errMissingTokenVersion

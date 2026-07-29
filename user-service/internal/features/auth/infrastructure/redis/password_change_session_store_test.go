@@ -96,5 +96,5 @@ func TestPasswordChangeSessionConcurrentConsumeSucceedsOnce(t *testing.T) {
 }
 
 func passwordChangeSession(sessionID string, tokenID string, tokenVersion int64) authdomain.PasswordChangeSession {
-	return authdomain.PasswordChangeSession{UserID: sessionTestUserID.String(), SessionID: sessionID, TokenID: tokenID, TokenVersion: tokenVersion}
+	return authdomain.PasswordChangeSession{UserID: sessionTestUserID, SessionID: sessionID, TokenID: tokenID, TokenVersion: tokenVersion}
 }

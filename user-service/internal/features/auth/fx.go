@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -198,6 +199,10 @@ type tokenVersionCacheHolder struct {
 	resource *tokenVersionCacheResource
 }
 
+type localTokenVersionCacheAdapter struct {
+	cache *localcache.LoadingCache[string, int64]
+}
+
 // Provider：基础设施
 
 func newCredentialStore(params CredentialStoreParams) *authpostgres.CredentialStore {
@@ -247,12 +252,24 @@ func newTokenVersionLocalCacheResource(cfg serviceconfig.FeatureCacheConfig, use
 		return &tokenVersionCacheResource{cache: direct, stats: direct}, nil
 	}
 	local, err := localcache.NewLoadingCache[string, int64](cfg.Localcache(authTokenVersionCacheName), func(ctx context.Context, userID string) (int64, error) {
-		return authvalidators.Current(ctx, users, cache, userID)
+		parsedUserID, err := uuid.Parse(userID)
+		if err != nil {
+			return 0, fmt.Errorf("parse auth token version cache user id: %w", err)
+		}
+		return authvalidators.Current(ctx, users, cache, parsedUserID)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create auth token version localcache: %w", err)
 	}
-	return &tokenVersionCacheResource{cache: local, stats: local, close: local.Close}, nil
+	return &tokenVersionCacheResource{cache: localTokenVersionCacheAdapter{cache: local}, stats: local, close: local.Close}, nil
+}
+
+func (a localTokenVersionCacheAdapter) GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error) {
+	return a.cache.GetOrLoad(ctx, userID.String())
+}
+
+func (a localTokenVersionCacheAdapter) Delete(userID string) error {
+	return a.cache.Delete(userID)
 }
 
 // Provider：应用服务
@@ -301,7 +318,7 @@ func (r *tokenVersionCacheResource) Close() error {
 	return nil
 }
 
-func (r *tokenVersionCacheResource) GetOrLoad(ctx context.Context, userID string) (int64, error) {
+func (r *tokenVersionCacheResource) GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error) {
 	if r == nil {
 		return 0, localcache.ErrClosed
 	}
@@ -388,7 +405,7 @@ func (h *tokenVersionCacheHolder) Start(context.Context) error {
 	return nil
 }
 
-func (h *tokenVersionCacheHolder) GetOrLoad(ctx context.Context, userID string) (int64, error) {
+func (h *tokenVersionCacheHolder) GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error) {
 	resource := h.currentResource()
 	if resource == nil {
 		return 0, localcache.ErrClosed

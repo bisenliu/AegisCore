@@ -27,15 +27,15 @@ func TestAuthUseCaseLogin(t *testing.T) {
 	issued := issuedTokenPair("access", "refresh", 900, time.Hour)
 
 	fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(credential, nil)
-	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).
-		DoAndReturn(func(_ context.Context, _ string, _ int64, sessionID string) (*authtokens.IssuedTokenPair, error) {
+	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ uuid.UUID, _ int64, sessionID string) (*authtokens.IssuedTokenPair, error) {
 			require.NotEqual(t, "", sessionID,
 				"sessionID is empty")
 
 			return issued, nil
 		})
-	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), gomock.Any(), int64(2), time.Hour).
-		DoAndReturn(func(_ context.Context, _ string, sessionID string, _ int64, _ time.Duration) error {
+	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID, gomock.Any(), int64(2), time.Hour).
+		DoAndReturn(func(_ context.Context, _ uuid.UUID, sessionID string, _ int64, _ time.Duration) error {
 			require.NotEqual(t, "", sessionID,
 				"sessionID is empty")
 
@@ -57,8 +57,8 @@ func TestAuthUseCaseLoginRecordsMetrics(t *testing.T) {
 	fixture := newAuthCommandFixtureWithController(ctrl, defaultAuthConfig(true), metrics)
 
 	fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(normalCredential(), nil)
-	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", 900, time.Hour), nil)
-	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), gomock.Any(), int64(2), time.Hour).Return(nil)
+	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", 900, time.Hour), nil)
+	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID, gomock.Any(), int64(2), time.Hour).Return(nil)
 	metrics.EXPECT().LoginSucceeded(gomock.Any())
 
 	_, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
@@ -125,8 +125,8 @@ func TestAuthUseCaseLoginUsesDefaultTTLs(t *testing.T) {
 	defaultRefreshTokenTTL := 7 * 24 * time.Hour
 
 	fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(normalCredential(), nil)
-	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", int64(defaultAccessTokenTTL.Seconds()), defaultRefreshTokenTTL), nil)
-	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), gomock.Any(), int64(2), defaultRefreshTokenTTL).Return(nil)
+	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", int64(defaultAccessTokenTTL.Seconds()), defaultRefreshTokenTTL), nil)
+	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID, gomock.Any(), int64(2), defaultRefreshTokenTTL).Return(nil)
 
 	result, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 	require.NoError(t, err,
@@ -143,8 +143,8 @@ func TestAuthUseCaseLoginUsesExplicitTTLs(t *testing.T) {
 	refreshTTL := 2 * time.Hour
 
 	fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(normalCredential(), nil)
-	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", int64(accessTTL.Seconds()), refreshTTL), nil)
-	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), gomock.Any(), int64(2), refreshTTL).Return(nil)
+	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", int64(accessTTL.Seconds()), refreshTTL), nil)
+	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID, gomock.Any(), int64(2), refreshTTL).Return(nil)
 
 	result, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 	require.NoError(t, err,
@@ -169,9 +169,9 @@ func TestAuthUseCaseLoginPassesMaxActiveSessionsPerUser(t *testing.T) {
 	svc := NewLoginUseCase(credentials, tokens, lifecycle, nil)
 
 	credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(normalCredential(), nil)
-	tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", 900, time.Hour), nil)
+	tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", 900, time.Hour), nil)
 	sessions.EXPECT().CreateSession(gomock.Any(), gomock.Any(), time.Hour, 3).DoAndReturn(func(_ context.Context, session authdomain.AuthSession, _ time.Duration, _ int) error {
-		require.False(t, session.UserID != authTestUserID.String() || session.SessionID == "" || session.TokenVersion != 2,
+		require.False(t, session.UserID != authTestUserID || session.SessionID == "" || session.TokenVersion != 2,
 			"session = %#v", session)
 
 		return nil
@@ -188,8 +188,8 @@ func TestAuthUseCaseLoginDoesNotReturnTokenWhenSessionCreateFails(t *testing.T) 
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
 
 	fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(normalCredential(), nil)
-	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", 900, time.Hour), nil)
-	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID.String(), gomock.Any(), int64(2), time.Hour).Return(createErr)
+	fixture.tokens.EXPECT().IssueTokenPair(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(issuedTokenPair("access", "refresh", 900, time.Hour), nil)
+	fixture.sessions.EXPECT().CreateTokenSession(gomock.Any(), authTestUserID, gomock.Any(), int64(2), time.Hour).Return(createErr)
 
 	result, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 	require.ErrorIs(t, err, createErr,
@@ -228,9 +228,9 @@ func TestAuthUseCaseLoginIssuesPasswordChangeToken(t *testing.T) {
 	claims := passwordChangeClaims("pc-123", 2)
 
 	fixture.credentials.EXPECT().VerifyPassword(gomock.Any(), "alice", "secret").Return(credential, nil)
-	fixture.tokens.EXPECT().IssuePasswordChangeToken(gomock.Any(), authTestUserID.String(), int64(2), gomock.Any()).Return(passwordChange, nil)
+	fixture.tokens.EXPECT().IssuePasswordChangeToken(gomock.Any(), authTestUserID, int64(2), gomock.Any()).Return(passwordChange, nil)
 	fixture.tokens.EXPECT().ParsePasswordChangeToken(gomock.Any(), "password-change").Return(claims, authTestUserID, nil)
-	fixture.sessions.EXPECT().CreatePasswordChangeSession(gomock.Any(), authTestUserID.String(), gomock.Any(), "jti-123", int64(2), 15*time.Minute).Return(nil)
+	fixture.sessions.EXPECT().CreatePasswordChangeSession(gomock.Any(), authTestUserID, gomock.Any(), "jti-123", int64(2), 15*time.Minute).Return(nil)
 
 	result, err := fixture.Login(context.Background(), LoginCommand{Username: "alice", Password: "secret"})
 	require.NoError(t, err,

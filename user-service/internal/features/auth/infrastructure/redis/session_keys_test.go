@@ -17,7 +17,7 @@ func TestSessionStorePurgeUserSessionsKeyKeepsHashTag(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 
-	purgeKey, err := store.purgeUserSessionsKey(sessionTestUserID.String())
+	purgeKey, err := store.purgeUserSessionsKey(sessionTestUserID)
 	require.NoError(t, err,
 		"purgeUserSessionsKey: %v", err)
 	require.True(t, strings.HasPrefix(purgeKey, "auth:user:sessions:{"+sessionTestUserID.String()+"}:purge:"),
@@ -31,7 +31,7 @@ func TestSessionStorePurgeUserSessionsKeyUsesAppNamePrefix(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStoreWithAppName(t, redisServer, " aegiscore-user-service ")
 
-	purgeKey, err := store.purgeUserSessionsKey(sessionTestUserID.String())
+	purgeKey, err := store.purgeUserSessionsKey(sessionTestUserID)
 	require.NoError(t, err,
 		"purgeUserSessionsKey: %v", err)
 	require.True(t, strings.HasPrefix(purgeKey, "aegiscore-user-service:auth:user:sessions:{"+sessionTestUserID.String()+"}:purge:"),
@@ -45,12 +45,12 @@ func TestSessionStoreUserSessionsIndexTTLIsNotShortened(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
-	indexKey := store.userSessionsKey(sessionTestUserID.String())
+	indexKey := store.userSessionsKey(sessionTestUserID)
 	longTTL := 2 * time.Hour
 	shortTTL := time.Hour
 	{
 
-		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "long", TokenVersion: 1}, longTTL, defaultMaxActiveSessionsPerUser())
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "long", TokenVersion: 1}, longTTL, defaultMaxActiveSessionsPerUser())
 		require.NoError(t, err,
 			"CreateSession(long): %v", err)
 	}
@@ -62,7 +62,7 @@ func TestSessionStoreUserSessionsIndexTTLIsNotShortened(t *testing.T) {
 		"long index TTL = %s, want between session ttl and %s", longIndexTTL, longTTL+authSessionIndexTTLBuffer)
 	{
 
-		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "short", TokenVersion: 1}, shortTTL, defaultMaxActiveSessionsPerUser())
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "short", TokenVersion: 1}, shortTTL, defaultMaxActiveSessionsPerUser())
 		require.NoError(t, err,
 			"CreateSession(short): %v", err)
 	}
@@ -81,7 +81,7 @@ func TestSessionStoreKeysUseAppNamePrefixWithNewFormat(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStoreWithAppName(t, redisServer, " aegiscore-user-service ")
 	ctx := context.Background()
-	session := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-prefixed", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
+	session := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-prefixed", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
 	{
 
 		err := store.CreateSession(ctx, session, time.Hour, defaultMaxActiveSessionsPerUser())
@@ -90,7 +90,7 @@ func TestSessionStoreKeysUseAppNamePrefixWithNewFormat(t *testing.T) {
 	}
 	{
 
-		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7)
+		err := store.CacheTokenVersion(ctx, sessionTestUserID, 7)
 		require.NoError(t, err,
 			"CacheTokenVersion: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestSessionStoreKeysRemainUnprefixedWhenAppNameEmpty(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStoreWithAppName(t, redisServer, "   ")
 	ctx := context.Background()
-	session := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-empty-prefix", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
+	session := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-empty-prefix", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
 	{
 
 		err := store.CreateSession(ctx, session, time.Hour, defaultMaxActiveSessionsPerUser())
@@ -119,7 +119,7 @@ func TestSessionStoreKeysRemainUnprefixedWhenAppNameEmpty(t *testing.T) {
 	}
 	{
 
-		err := store.CacheTokenVersion(ctx, sessionTestUserID.String(), 7)
+		err := store.CacheTokenVersion(ctx, sessionTestUserID, 7)
 		require.NoError(t, err,
 			"CacheTokenVersion: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestSessionStoreIgnoresLegacyKeys(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
-	legacySession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-legacy", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
+	legacySession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-legacy", TokenVersion: 7, ExpiresAt: time.Now().Add(time.Hour)}
 	data, err := json.Marshal(legacySession)
 	require.NoError(t, err,
 		"Marshal legacy session: %v", err)
@@ -156,11 +156,11 @@ func TestSessionStoreIgnoresLegacyKeys(t *testing.T) {
 			"Set legacy token version: %v", err)
 	}
 
-	_, err = store.GetSession(ctx, sessionTestUserID.String(), "s-legacy")
+	_, err = store.GetSession(ctx, sessionTestUserID, "s-legacy")
 	require.ErrorIs(t, err, authdomain.ErrAuthSessionNotFound,
 		"GetSession err = %v, want session not found", err)
 
-	_, err = store.GetCachedTokenVersion(ctx, sessionTestUserID.String())
+	_, err = store.GetCachedTokenVersion(ctx, sessionTestUserID)
 	require.ErrorIs(t, err, authdomain.ErrTokenVersionCacheMiss,
 		"GetCachedTokenVersion err = %v, want cache miss", err)
 

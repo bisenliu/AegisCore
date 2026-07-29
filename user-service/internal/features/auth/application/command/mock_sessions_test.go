@@ -59,7 +59,7 @@ func (mr *MockLifecycleMockRecorder) ConsumePasswordChangeClaims(ctx, claims any
 }
 
 // CreatePasswordChangeSession mocks base method.
-func (m *MockLifecycle) CreatePasswordChangeSession(ctx context.Context, userID, sessionID, tokenID string, tokenVersion int64, ttl time.Duration) error {
+func (m *MockLifecycle) CreatePasswordChangeSession(ctx context.Context, userID uuid.UUID, sessionID, tokenID string, tokenVersion int64, ttl time.Duration) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreatePasswordChangeSession", ctx, userID, sessionID, tokenID, tokenVersion, ttl)
 	ret0, _ := ret[0].(error)
@@ -73,7 +73,7 @@ func (mr *MockLifecycleMockRecorder) CreatePasswordChangeSession(ctx, userID, se
 }
 
 // CreateTokenSession mocks base method.
-func (m *MockLifecycle) CreateTokenSession(ctx context.Context, userID, sessionID string, tokenVersion int64, refreshTTL time.Duration) error {
+func (m *MockLifecycle) CreateTokenSession(ctx context.Context, userID uuid.UUID, sessionID string, tokenVersion int64, refreshTTL time.Duration) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateTokenSession", ctx, userID, sessionID, tokenVersion, refreshTTL)
 	ret0, _ := ret[0].(error)
@@ -87,7 +87,7 @@ func (mr *MockLifecycleMockRecorder) CreateTokenSession(ctx, userID, sessionID, 
 }
 
 // CurrentTokenVersion mocks base method.
-func (m *MockLifecycle) CurrentTokenVersion(ctx context.Context, userID string) (int64, error) {
+func (m *MockLifecycle) CurrentTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CurrentTokenVersion", ctx, userID)
 	ret0, _ := ret[0].(int64)
@@ -102,7 +102,7 @@ func (mr *MockLifecycleMockRecorder) CurrentTokenVersion(ctx, userID any) *gomoc
 }
 
 // DeleteSession mocks base method.
-func (m *MockLifecycle) DeleteSession(ctx context.Context, userID, sessionID string) error {
+func (m *MockLifecycle) DeleteSession(ctx context.Context, userID uuid.UUID, sessionID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteSession", ctx, userID, sessionID)
 	ret0, _ := ret[0].(error)

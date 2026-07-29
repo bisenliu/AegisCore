@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
@@ -49,7 +50,7 @@ func (r *SessionStore) CreateSession(ctx context.Context, session authdomain.Aut
 		redisScore(expiresAt),
 		redisScore(now),
 		milliseconds(indexTTL),
-		r.keys.AuthSessionPrefix(session.UserID),
+		r.keys.AuthSessionPrefix(session.UserID.String()),
 		strconv.Itoa(maxActiveSessionsPerUser),
 	).Int64()
 	if err != nil {
@@ -83,7 +84,7 @@ func (r *SessionStore) RotateSession(ctx context.Context, oldSession authdomain.
 	indexTTL := ttl + authSessionIndexTTLBuffer
 
 	result, err := rotateSessionScript.Run(ctx, r.redis, []string{oldKey, newKey, userSessions},
-		oldSession.UserID,
+		oldSession.UserID.String(),
 		oldSession.SessionID,
 		formatTokenVersion(oldSession.TokenVersion),
 		newSession.SessionID,
@@ -93,7 +94,7 @@ func (r *SessionStore) RotateSession(ctx context.Context, oldSession authdomain.
 		redisScore(expiresAt),
 		redisScore(now),
 		milliseconds(indexTTL),
-		r.keys.AuthSessionPrefix(newSession.UserID),
+		r.keys.AuthSessionPrefix(newSession.UserID.String()),
 		strconv.Itoa(maxActiveSessionsPerUser),
 	).Int64()
 	if err != nil {
@@ -112,7 +113,7 @@ func (r *SessionStore) RotateSession(ctx context.Context, oldSession authdomain.
 }
 
 // GetSession 按 session ID 返回 refresh token 会话。
-func (r *SessionStore) GetSession(ctx context.Context, userID string, sessionID string) (authdomain.AuthSession, error) {
+func (r *SessionStore) GetSession(ctx context.Context, userID uuid.UUID, sessionID string) (authdomain.AuthSession, error) {
 	data, err := r.redis.Get(ctx, r.sessionKey(userID, sessionID)).Bytes()
 	if errors.Is(err, rediscache.Nil) {
 		return authdomain.AuthSession{}, authdomain.ErrAuthSessionNotFound
@@ -128,7 +129,7 @@ func (r *SessionStore) GetSession(ctx context.Context, userID string, sessionID 
 }
 
 // DeleteSession 删除一个 refresh token 会话，并从用户索引中清理过期项。
-func (r *SessionStore) DeleteSession(ctx context.Context, userID string, sessionID string) error {
+func (r *SessionStore) DeleteSession(ctx context.Context, userID uuid.UUID, sessionID string) error {
 	userSessions := r.userSessionsKey(userID)
 	pipe := r.redis.TxPipeline()
 	pipe.Del(ctx, r.sessionKey(userID, sessionID))
@@ -143,7 +144,7 @@ func (r *SessionStore) DeleteSession(ctx context.Context, userID string, session
 
 // DeleteAllUserSessions 从在线路径摘除用户 session 索引，并后台清理已摘除 session key。
 // 两阶段删除避免一次性阻塞请求线程；purge 只处理 cutTime 前索引里的会话，避免误删撤销开始后新建的并发会话。
-func (r *SessionStore) DeleteAllUserSessions(ctx context.Context, userID string) error {
+func (r *SessionStore) DeleteAllUserSessions(ctx context.Context, userID uuid.UUID) error {
 	userSessions := r.userSessionsKey(userID)
 	purgeKey, err := r.purgeUserSessionsKey(userID)
 	if err != nil {
@@ -158,11 +159,11 @@ func (r *SessionStore) DeleteAllUserSessions(ctx context.Context, userID string)
 	case detachUserSessionsResultEmpty:
 		return nil
 	case detachUserSessionsResultDetached:
-		sessionPrefix := r.keys.AuthSessionPrefix(userID)
+		sessionPrefix := r.keys.AuthSessionPrefix(userID.String())
 		task := workerpool.Task{
 			Name: "auth.redis.purge_detached_user_sessions",
 			Fields: []zap.Field{
-				zap.String("user_id", userID),
+				zap.String("user_id", userID.String()),
 				zap.String("purge_key", purgeKey),
 				zap.String("session_prefix", sessionPrefix),
 				zap.Time("cut_time", cutTime),

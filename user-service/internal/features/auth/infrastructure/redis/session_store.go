@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 
 	runtimeconfig "github.com/aegiscore/common/runtime/config"
@@ -86,26 +87,26 @@ func (r *SessionStore) metricsRecorder() authapplication.Metrics {
 	return r.metrics
 }
 
-func (r *SessionStore) tokenVersionKey(userID string) string {
-	return r.keys.AuthUserTokenVersion(userID)
+func (r *SessionStore) tokenVersionKey(userID uuid.UUID) string {
+	return r.keys.AuthUserTokenVersion(userID.String())
 }
 
-func (r *SessionStore) sessionKey(userID string, sessionID string) string {
-	return r.keys.AuthSession(userID, sessionID)
+func (r *SessionStore) sessionKey(userID uuid.UUID, sessionID string) string {
+	return r.keys.AuthSession(userID.String(), sessionID)
 }
 
-func (r *SessionStore) passwordChangeSessionKey(userID string, sessionID string) string {
-	return r.keys.PasswordChangeSession(userID, sessionID)
+func (r *SessionStore) passwordChangeSessionKey(userID uuid.UUID, sessionID string) string {
+	return r.keys.PasswordChangeSession(userID.String(), sessionID)
 }
 
-func (r *SessionStore) userSessionsKey(userID string) string {
-	return r.keys.AuthUserSessions(userID)
+func (r *SessionStore) userSessionsKey(userID uuid.UUID) string {
+	return r.keys.AuthUserSessions(userID.String())
 }
 
-func (r *SessionStore) purgeUserSessionsKey(userID string) (string, error) {
+func (r *SessionStore) purgeUserSessionsKey(userID uuid.UUID) (string, error) {
 	purgeID, err := runtimeid.NewUUIDString()
 	if err != nil {
 		return "", fmt.Errorf("generate auth sessions purge id: %w", err)
 	}
-	return r.keys.AuthUserSessionsPurge(userID, purgeID), nil
+	return r.keys.AuthUserSessionsPurge(userID.String(), purgeID), nil
 }

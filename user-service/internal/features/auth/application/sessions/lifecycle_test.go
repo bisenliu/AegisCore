@@ -21,8 +21,8 @@ func TestLifecycleRotateTokenSessionMapsRejectedSession(t *testing.T) {
 	for _, rejectedErr := range []error{authdomain.ErrAuthSessionNotFound, authdomain.ErrAuthSessionMismatch} {
 		t.Run(rejectedErr.Error(), func(t *testing.T) {
 			fixture := newLifecycleTestFixture(t)
-			oldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
-			newSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 2}
+			oldSession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-old", TokenVersion: 2}
+			newSession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-new", TokenVersion: 2}
 			fixture.sessions.EXPECT().
 				RotateSession(gomock.Any(), oldSession, newSession, time.Hour, 5).
 				Return(rejectedErr)
@@ -42,7 +42,7 @@ func TestLifecycleConsumePasswordChangeClaimsMapsRejectedSession(t *testing.T) {
 		t.Run(rejectedErr.Error(), func(t *testing.T) {
 			fixture := newLifecycleTestFixture(t)
 			claims := &authtokens.Claims{
-				UserID:       sessionTestUserID.String(),
+				UserID:       sessionTestUserID,
 				SessionID:    "password-session",
 				TokenVersion: 2,
 				RegisteredClaims: jwtv5.RegisteredClaims{
@@ -71,12 +71,12 @@ func TestLifecycleConsumePasswordChangeClaimsMapsRejectedSession(t *testing.T) {
 func TestLifecycleCurrentTokenVersionCacheMissReadsRepository(t *testing.T) {
 	fixture := newLifecycleTestFixture(t)
 	gomock.InOrder(
-		fixture.tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), sessionTestUserID.String()).Return(int64(0), authdomain.ErrTokenVersionCacheMiss),
+		fixture.tokenVersions.EXPECT().GetCachedTokenVersion(gomock.Any(), sessionTestUserID).Return(int64(0), authdomain.ErrTokenVersionCacheMiss),
 		fixture.users.EXPECT().GetTokenVersion(gomock.Any(), sessionTestUserID).Return(int64(7), nil),
-		fixture.tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), sessionTestUserID.String(), int64(7)).Return(nil),
+		fixture.tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), sessionTestUserID, int64(7)).Return(nil),
 	)
 
-	version, err := fixture.lifecycle.CurrentTokenVersion(context.Background(), sessionTestUserID.String())
+	version, err := fixture.lifecycle.CurrentTokenVersion(context.Background(), sessionTestUserID)
 	require.NoError(t, err,
 		"CurrentTokenVersion: %v", err)
 	require.EqualValues(t, 7, version,
@@ -107,9 +107,9 @@ func TestLifecycleRevokeAllUserSessions(t *testing.T) {
 	gomock.InOrder(
 		fixture.users.EXPECT().IncrementTokenVersion(gomock.Any(), sessionTestUserID).Return(int64(4), nil),
 		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
-		fixture.tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), sessionTestUserID.String(), int64(4)).Return(nil),
+		fixture.tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), sessionTestUserID, int64(4)).Return(nil),
 		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
-		fixture.sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), sessionTestUserID.String()).Return(nil),
+		fixture.sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), sessionTestUserID).Return(nil),
 		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
 	)
 
@@ -125,14 +125,15 @@ func TestLifecycleRevokeAllUserSessions(t *testing.T) {
 
 func TestLifecycleRevokeUserSessionsAtVersionReturnsLocalInvalidationErrors(t *testing.T) {
 	fixture := newLifecycleTestFixture(t)
-	userID := sessionTestUserID.String()
+	userID := sessionTestUserID
+	userIDString := sessionTestUserID.String()
 	invalidateErr := errors.New("local cache closed")
 	gomock.InOrder(
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(userID).Return(invalidateErr),
+		fixture.invalidator.EXPECT().InvalidateTokenVersion(userIDString).Return(invalidateErr),
 		fixture.tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), userID, int64(4)).Return(nil),
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(userID).Return(nil),
+		fixture.invalidator.EXPECT().InvalidateTokenVersion(userIDString).Return(nil),
 		fixture.sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), userID).Return(nil),
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(userID).Return(nil),
+		fixture.invalidator.EXPECT().InvalidateTokenVersion(userIDString).Return(nil),
 	)
 
 	err := fixture.lifecycle.RevokeUserSessionsAtVersion(context.Background(), sessionTestUserID, 4)

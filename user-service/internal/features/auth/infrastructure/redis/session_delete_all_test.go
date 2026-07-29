@@ -25,17 +25,17 @@ func TestSessionStoreDeleteAllUserSessions(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
-	indexKey := store.userSessionsKey(sessionTestUserID.String())
+	indexKey := store.userSessionsKey(sessionTestUserID)
 	for _, sessionID := range []string{"s-1", "s-2"} {
 		{
-			err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: sessionID, TokenVersion: 1, ExpiresAt: time.Now().Add(time.Hour)}, time.Hour, defaultMaxActiveSessionsPerUser())
+			err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID, SessionID: sessionID, TokenVersion: 1, ExpiresAt: time.Now().Add(time.Hour)}, time.Hour, defaultMaxActiveSessionsPerUser())
 			require.NoError(t, err,
 				"CreateSession: %v", err)
 		}
 
 	}
 	{
-		err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID.String(), "expired-session"), "stale", 0).Err()
+		err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID, "expired-session"), "stale", 0).Err()
 		require.NoError(t, err,
 			"Set expired session: %v", err)
 	}
@@ -53,17 +53,17 @@ func TestSessionStoreDeleteAllUserSessions(t *testing.T) {
 	}
 	{
 
-		err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String())
+		err := store.DeleteAllUserSessions(ctx, sessionTestUserID)
 		require.NoError(t, err,
 			"DeleteAllUserSessions: %v", err)
 	}
 
 	waitForRedisCondition(t, func() bool {
-		return !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-1")) &&
-			!redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-2")) &&
+		return !redisServer.Exists(store.sessionKey(sessionTestUserID, "s-1")) &&
+			!redisServer.Exists(store.sessionKey(sessionTestUserID, "s-2")) &&
 			!redisServer.Exists(indexKey)
 	}, "user sessions were not fully deleted")
-	require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "expired-session")),
+	require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID, "expired-session")),
 		"expired session key was deleted despite expired index member cleanup")
 
 }
@@ -72,12 +72,12 @@ func TestSessionStoreDeleteAllUserSessionsPurgesInBatches(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
-	indexKey := store.userSessionsKey(sessionTestUserID.String())
+	indexKey := store.userSessionsKey(sessionTestUserID)
 	sessionCount := int(deleteAllUserSessionsBatchSize)*2 + 1
 	for i := 0; i < sessionCount; i++ {
 		sessionID := "bulk-" + strconv.Itoa(i)
 		{
-			err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID.String(), sessionID), "{}", time.Hour).Err()
+			err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID, sessionID), "{}", time.Hour).Err()
 			require.NoError(t, err,
 				"Set session %d: %v", i, err)
 		}
@@ -91,14 +91,14 @@ func TestSessionStoreDeleteAllUserSessionsPurgesInBatches(t *testing.T) {
 	}
 	{
 
-		err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String())
+		err := store.DeleteAllUserSessions(ctx, sessionTestUserID)
 		require.NoError(t, err,
 			"DeleteAllUserSessions: %v", err)
 	}
 
 	waitForRedisCondition(t, func() bool {
 		for i := 0; i < sessionCount; i++ {
-			if redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "bulk-"+strconv.Itoa(i))) {
+			if redisServer.Exists(store.sessionKey(sessionTestUserID, "bulk-"+strconv.Itoa(i))) {
 				return false
 			}
 		}
@@ -113,30 +113,30 @@ func TestSessionStoreDeleteAllUserSessionsDoesNotDeleteNewSessionsAfterDetach(t 
 	oldSessionID := "old-before-detach"
 	newSessionID := "new-after-detach"
 	{
-		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: oldSessionID, TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser())
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID, SessionID: oldSessionID, TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser())
 		require.NoError(t, err,
 			"CreateSession old: %v", err)
 	}
 	{
 
-		err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String())
+		err := store.DeleteAllUserSessions(ctx, sessionTestUserID)
 		require.NoError(t, err,
 			"DeleteAllUserSessions: %v", err)
 	}
 	{
 
-		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: newSessionID, TokenVersion: 2}, time.Hour, defaultMaxActiveSessionsPerUser())
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID, SessionID: newSessionID, TokenVersion: 2}, time.Hour, defaultMaxActiveSessionsPerUser())
 		require.NoError(t, err,
 			"CreateSession new: %v", err)
 	}
 
 	waitForRedisCondition(t, func() bool {
-		return !redisServer.Exists(store.sessionKey(sessionTestUserID.String(), oldSessionID))
+		return !redisServer.Exists(store.sessionKey(sessionTestUserID, oldSessionID))
 	}, "detached old session was not purged")
-	require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), newSessionID)),
+	require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID, newSessionID)),
 		"new session created after detach was deleted")
 
-	members, err := store.redis.ZRange(ctx, store.userSessionsKey(sessionTestUserID.String()), 0, -1).Result()
+	members, err := store.redis.ZRange(ctx, store.userSessionsKey(sessionTestUserID), 0, -1).Result()
 	require.NoError(t, err,
 		"ZRange new index: %v", err)
 	require.False(t, len(members) != 1 || members[0] != newSessionID,
@@ -154,12 +154,12 @@ func TestSessionStoreDeleteAllUserSessionsReturnsSubmitError(t *testing.T) {
 	ctx := context.Background()
 	metrics.EXPECT().SessionPurgeSubmitFailed(gomock.Any())
 	{
-		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-rejected", TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser())
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-rejected", TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser())
 		require.NoError(t, err,
 			"CreateSession: %v", err)
 	}
 
-	err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String())
+	err := store.DeleteAllUserSessions(ctx, sessionTestUserID)
 	require.ErrorIs(t, err, workerpool.ErrQueueFull,
 		"DeleteAllUserSessions err = %v, want ErrQueueFull", err)
 	require.False(t, err == nil || !strings.Contains(err.Error(), "submit delete user auth sessions purge"),
@@ -174,13 +174,13 @@ func TestSessionStoreDeleteAllUserSessionsPurgeFailureIsObservable(t *testing.T)
 	store.purgePool = pool
 	ctx := context.Background()
 	{
-		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-fails", TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser())
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-fails", TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser())
 		require.NoError(t, err,
 			"CreateSession: %v", err)
 	}
 	{
 
-		err := store.DeleteAllUserSessions(ctx, sessionTestUserID.String())
+		err := store.DeleteAllUserSessions(ctx, sessionTestUserID)
 		require.NoError(t, err,
 			"DeleteAllUserSessions: %v", err)
 	}

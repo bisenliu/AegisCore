@@ -58,12 +58,12 @@ func TestDisabledTokenVersionLocalCacheReadsThroughAndPreservesValidation(t *tes
 	users := NewMockUserTokenVersionStore(ctrl)
 	cache := NewMockTokenVersionCache(ctrl)
 	gomock.InOrder(
-		cache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID.String()).Return(int64(0), authdomain.ErrTokenVersionCacheMiss),
+		cache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID).Return(int64(0), authdomain.ErrTokenVersionCacheMiss),
 		users.EXPECT().GetTokenVersion(gomock.Any(), userID).Return(int64(7), nil),
-		cache.EXPECT().CacheTokenVersion(gomock.Any(), userID.String(), int64(7)).Return(nil),
-		cache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID.String()).Return(int64(0), authdomain.ErrTokenVersionCacheMiss),
+		cache.EXPECT().CacheTokenVersion(gomock.Any(), userID, int64(7)).Return(nil),
+		cache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID).Return(int64(0), authdomain.ErrTokenVersionCacheMiss),
 		users.EXPECT().GetTokenVersion(gomock.Any(), userID).Return(int64(7), nil),
-		cache.EXPECT().CacheTokenVersion(gomock.Any(), userID.String(), int64(7)).Return(nil),
+		cache.EXPECT().CacheTokenVersion(gomock.Any(), userID, int64(7)).Return(nil),
 	)
 	result, err := newTokenVersionLocalCache(TokenVersionLocalCacheParams{
 		Settings: serviceconfig.AuthSettings{TokenVersionCache: serviceconfig.FeatureCacheConfig{
@@ -75,8 +75,8 @@ func TestDisabledTokenVersionLocalCacheReadsThroughAndPreservesValidation(t *tes
 	require.NoError(t, err)
 
 	validator := authvalidators.NewCachingValidator(result.Cache)
-	require.NoError(t, validator.ValidateTokenVersion(context.Background(), userID.String(), 7))
-	require.Error(t, validator.ValidateTokenVersion(context.Background(), userID.String(), 8))
+	require.NoError(t, validator.ValidateTokenVersion(context.Background(), userID, 7))
+	require.Error(t, validator.ValidateTokenVersion(context.Background(), userID, 8))
 	require.NoError(t, validator.InvalidateTokenVersion(userID.String()))
 	require.Equal(t, authTokenVersionCacheName, result.Stats.Name())
 	require.EqualValues(t, 2, result.Stats.Stats().LoadSuccess)
@@ -114,7 +114,7 @@ func TestDisabledTokenVersionLocalCacheResourceRejectsAfterClose(t *testing.T) {
 
 	require.NoError(t, resource.Close())
 	require.NoError(t, resource.Close())
-	version, err := resource.GetOrLoad(context.Background(), "018f0000-0000-7000-8000-000000000503")
+	version, err := resource.GetOrLoad(context.Background(), uuid.MustParse("018f0000-0000-7000-8000-000000000503"))
 	require.Zero(t, version)
 	require.ErrorIs(t, err, localcache.ErrClosed)
 	require.ErrorIs(t, resource.Delete("018f0000-0000-7000-8000-000000000503"), localcache.ErrClosed)
@@ -134,7 +134,7 @@ func TestTokenVersionCacheHolderOldResourceRejectsAfterClose(t *testing.T) {
 	require.NotNil(t, resource)
 
 	require.NoError(t, holder.Close(context.Background()))
-	version, err := resource.GetOrLoad(context.Background(), "018f0000-0000-7000-8000-000000000504")
+	version, err := resource.GetOrLoad(context.Background(), uuid.MustParse("018f0000-0000-7000-8000-000000000504"))
 	require.Zero(t, version)
 	require.ErrorIs(t, err, localcache.ErrClosed)
 	require.ErrorIs(t, resource.Delete("018f0000-0000-7000-8000-000000000504"), localcache.ErrClosed)
@@ -279,7 +279,7 @@ func TestSessionPurgePoolHolderRejectsBeforeStartAndStopsIdempotently(t *testing
 func TestTokenVersionCacheHolderFailsClosedBeforeStartAndClosesIdempotently(t *testing.T) {
 	holder := &tokenVersionCacheHolder{cfg: serviceconfig.FeatureCacheConfig{Enabled: true, Size: 10, TTL: time.Minute, LoadTimeout: time.Second}, users: NewMockUserTokenVersionStore(gomock.NewController(t)), cache: NewMockTokenVersionCache(gomock.NewController(t))}
 	require.ErrorIs(t, holder.Delete("018f0000-0000-7000-8000-000000000504"), localcache.ErrClosed)
-	_, err := holder.GetOrLoad(context.Background(), "018f0000-0000-7000-8000-000000000504")
+	_, err := holder.GetOrLoad(context.Background(), uuid.MustParse("018f0000-0000-7000-8000-000000000504"))
 	require.ErrorIs(t, err, localcache.ErrClosed)
 	require.NoError(t, holder.Start(context.Background()))
 	require.EqualValues(t, 10, holder.Stats().Capacity)

@@ -41,13 +41,30 @@ func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenV
 		TTL:         time.Minute,
 		LoadTimeout: time.Second,
 	}, func(ctx context.Context, userID string) (int64, error) {
-		return authvalidators.Current(ctx, users, tokenCache, userID)
+		parsedUserID, err := uuid.Parse(userID)
+		if err != nil {
+			return 0, err
+		}
+		return authvalidators.Current(ctx, users, tokenCache, parsedUserID)
 	})
 	require.NoError(t, err,
 		"New localcache: %v", err)
 
 	t.Cleanup(cache.Close)
-	return authvalidators.NewCachingValidator(cache)
+	validator := authvalidators.NewCachingValidator(redisLocalTokenVersionCacheAdapter{cache: cache})
+	return authvalidators.NewMetricsTokenVersionValidator(validator, nil)
+}
+
+type redisLocalTokenVersionCacheAdapter struct {
+	cache *localcache.LoadingCache[string, int64]
+}
+
+func (a redisLocalTokenVersionCacheAdapter) GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error) {
+	return a.cache.GetOrLoad(ctx, userID.String())
+}
+
+func (a redisLocalTokenVersionCacheAdapter) Delete(userID string) error {
+	return a.cache.Delete(userID)
 }
 
 func newTestSessionStoreWithAppName(t testing.TB, redisServer *miniredis.Miniredis, appName string) *SessionStore {

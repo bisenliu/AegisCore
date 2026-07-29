@@ -20,10 +20,10 @@ func TestSessionStoreRotateSession(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
-	indexKey := store.userSessionsKey(sessionTestUserID.String())
+	indexKey := store.userSessionsKey(sessionTestUserID)
 	ttl := time.Hour
-	oldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 1}
-	newSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 1, ExpiresAt: time.Now().Add(24 * time.Hour)}
+	oldSession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-old", TokenVersion: 1}
+	newSession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-new", TokenVersion: 1, ExpiresAt: time.Now().Add(24 * time.Hour)}
 	{
 		err := store.CreateSession(ctx, oldSession, ttl, defaultMaxActiveSessionsPerUser())
 		require.NoError(t, err,
@@ -44,13 +44,13 @@ func TestSessionStoreRotateSession(t *testing.T) {
 	}
 
 	afterRotate := time.Now()
-	require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-old")),
+	require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID, "s-old")),
 		"old session key still exists")
 
-	stored, err := store.GetSession(ctx, sessionTestUserID.String(), "s-new")
+	stored, err := store.GetSession(ctx, sessionTestUserID, "s-new")
 	require.NoError(t, err,
 		"GetSession(new): %v", err)
-	require.False(t, stored.UserID != sessionTestUserID.String() || stored.SessionID != "s-new" || stored.TokenVersion != 1,
+	require.False(t, stored.UserID != sessionTestUserID || stored.SessionID != "s-new" || stored.TokenVersion != 1,
 		"stored = %#v", stored)
 	require.False(t, stored.ExpiresAt.Before(beforeRotate.Add(ttl)) || stored.ExpiresAt.After(afterRotate.Add(ttl)),
 		"stored ExpiresAt = %s, want derived from ttl %s", stored.ExpiresAt, ttl)
@@ -87,17 +87,17 @@ func TestSessionStoreRotateSessionPrunesOldestWhenLimitExceeded(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
-	indexKey := store.userSessionsKey(sessionTestUserID.String())
+	indexKey := store.userSessionsKey(sessionTestUserID)
 	limit := 3
 	for i := 0; i < 5; i++ {
 		sessionID := "s-" + strconv.Itoa(i)
-		session := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: sessionID, TokenVersion: 1}
+		session := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: sessionID, TokenVersion: 1}
 		data, err := json.Marshal(session)
 		require.NoError(t, err,
 			"Marshal session %s: %v", sessionID, err)
 		{
 
-			err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID.String(), sessionID), data, time.Hour).Err()
+			err := store.redis.Set(ctx, store.sessionKey(sessionTestUserID, sessionID), data, time.Hour).Err()
 			require.NoError(t, err,
 				"Set session %s: %v", sessionID, err)
 		}
@@ -109,8 +109,8 @@ func TestSessionStoreRotateSessionPrunesOldestWhenLimitExceeded(t *testing.T) {
 		}
 
 	}
-	oldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-4", TokenVersion: 1}
-	newSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 1}
+	oldSession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-4", TokenVersion: 1}
+	newSession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-new", TokenVersion: 1}
 	{
 
 		err := store.RotateSession(ctx, oldSession, newSession, time.Hour, limit)
@@ -127,11 +127,11 @@ func TestSessionStoreRotateSessionPrunesOldestWhenLimitExceeded(t *testing.T) {
 		"members = %v, want %v", members, wantMembers)
 
 	for _, sessionID := range []string{"s-1", "s-4"} {
-		require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), sessionID)),
+		require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID, sessionID)),
 			"pruned or rotated session key %s still exists", sessionID)
 
 	}
-	require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-new")),
+	require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID, "s-new")),
 		"new rotated session key does not exist")
 
 }
@@ -140,13 +140,13 @@ func TestSessionStoreRotateSessionRejectsMissingOldSession(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
-	oldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-missing", TokenVersion: 1}
-	newSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 1}
+	oldSession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-missing", TokenVersion: 1}
+	newSession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-new", TokenVersion: 1}
 
 	err := store.RotateSession(ctx, oldSession, newSession, time.Hour, defaultMaxActiveSessionsPerUser())
 	require.ErrorIs(t, err, authdomain.ErrAuthSessionNotFound,
 		"err = %v, want session not found", err)
-	require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-new")),
+	require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID, "s-new")),
 		"new session was created after missing old session")
 
 }
@@ -155,22 +155,22 @@ func TestSessionStoreRotateSessionRejectsOldSessionMismatch(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
-	storedOldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 1}
+	storedOldSession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-old", TokenVersion: 1}
 	{
 		err := store.CreateSession(ctx, storedOldSession, time.Hour, defaultMaxActiveSessionsPerUser())
 		require.NoError(t, err,
 			"CreateSession: %v", err)
 	}
 
-	oldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 2}
-	newSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new", TokenVersion: 2}
+	oldSession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-old", TokenVersion: 2}
+	newSession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-new", TokenVersion: 2}
 
 	err := store.RotateSession(ctx, oldSession, newSession, time.Hour, defaultMaxActiveSessionsPerUser())
 	require.ErrorIs(t, err, authdomain.ErrAuthSessionMismatch,
 		"err = %v, want session mismatch", err)
-	require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-old")),
+	require.True(t, redisServer.Exists(store.sessionKey(sessionTestUserID, "s-old")),
 		"old session was deleted after mismatch")
-	require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID.String(), "s-new")),
+	require.False(t, redisServer.Exists(store.sessionKey(sessionTestUserID, "s-new")),
 		"new session was created after mismatch")
 
 }
@@ -179,7 +179,7 @@ func TestSessionStoreRotateSessionConcurrentAttemptsSucceedOnce(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	store := newTestSessionStore(redisServer)
 	ctx := context.Background()
-	oldSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-old", TokenVersion: 1}
+	oldSession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-old", TokenVersion: 1}
 	{
 		err := store.CreateSession(ctx, oldSession, time.Hour, defaultMaxActiveSessionsPerUser())
 		require.NoError(t, err,
@@ -196,7 +196,7 @@ func TestSessionStoreRotateSessionConcurrentAttemptsSucceedOnce(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			newSession := authdomain.AuthSession{UserID: sessionTestUserID.String(), SessionID: "s-new-" + strconv.Itoa(i), TokenVersion: 1}
+			newSession := authdomain.AuthSession{UserID: sessionTestUserID, SessionID: "s-new-" + strconv.Itoa(i), TokenVersion: 1}
 			results <- store.RotateSession(ctx, oldSession, newSession, time.Hour, defaultMaxActiveSessionsPerUser())
 		}()
 	}
@@ -217,7 +217,7 @@ func TestSessionStoreRotateSessionConcurrentAttemptsSucceedOnce(t *testing.T) {
 	require.EqualValues(t, 1, successes,
 		"successes = %d, want 1", successes)
 
-	members, err := store.redis.ZRange(ctx, store.userSessionsKey(sessionTestUserID.String()), 0, -1).Result()
+	members, err := store.redis.ZRange(ctx, store.userSessionsKey(sessionTestUserID), 0, -1).Result()
 	require.NoError(t, err,
 		"ZRange: %v", err)
 	require.EqualValues(t, 1, len(members),

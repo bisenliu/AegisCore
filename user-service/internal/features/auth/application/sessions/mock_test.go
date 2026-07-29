@@ -98,7 +98,7 @@ func (m *MockTokenVersionCache) EXPECT() *MockTokenVersionCacheMockRecorder {
 }
 
 // CacheTokenVersion mocks base method.
-func (m *MockTokenVersionCache) CacheTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
+func (m *MockTokenVersionCache) CacheTokenVersion(ctx context.Context, userID uuid.UUID, tokenVersion int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CacheTokenVersion", ctx, userID, tokenVersion)
 	ret0, _ := ret[0].(error)
@@ -112,7 +112,7 @@ func (mr *MockTokenVersionCacheMockRecorder) CacheTokenVersion(ctx, userID, toke
 }
 
 // DeleteCachedTokenVersion mocks base method.
-func (m *MockTokenVersionCache) DeleteCachedTokenVersion(ctx context.Context, userID string) error {
+func (m *MockTokenVersionCache) DeleteCachedTokenVersion(ctx context.Context, userID uuid.UUID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteCachedTokenVersion", ctx, userID)
 	ret0, _ := ret[0].(error)
@@ -126,7 +126,7 @@ func (mr *MockTokenVersionCacheMockRecorder) DeleteCachedTokenVersion(ctx, userI
 }
 
 // GetCachedTokenVersion mocks base method.
-func (m *MockTokenVersionCache) GetCachedTokenVersion(ctx context.Context, userID string) (int64, error) {
+func (m *MockTokenVersionCache) GetCachedTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCachedTokenVersion", ctx, userID)
 	ret0, _ := ret[0].(int64)
@@ -179,7 +179,7 @@ func (mr *MockRefreshSessionStoreMockRecorder) CreateSession(ctx, session, ttl, 
 }
 
 // DeleteAllUserSessions mocks base method.
-func (m *MockRefreshSessionStore) DeleteAllUserSessions(ctx context.Context, userID string) error {
+func (m *MockRefreshSessionStore) DeleteAllUserSessions(ctx context.Context, userID uuid.UUID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteAllUserSessions", ctx, userID)
 	ret0, _ := ret[0].(error)
@@ -193,7 +193,7 @@ func (mr *MockRefreshSessionStoreMockRecorder) DeleteAllUserSessions(ctx, userID
 }
 
 // DeleteSession mocks base method.
-func (m *MockRefreshSessionStore) DeleteSession(ctx context.Context, userID, sessionID string) error {
+func (m *MockRefreshSessionStore) DeleteSession(ctx context.Context, userID uuid.UUID, sessionID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteSession", ctx, userID, sessionID)
 	ret0, _ := ret[0].(error)
@@ -207,7 +207,7 @@ func (mr *MockRefreshSessionStoreMockRecorder) DeleteSession(ctx, userID, sessio
 }
 
 // GetSession mocks base method.
-func (m *MockRefreshSessionStore) GetSession(ctx context.Context, userID, sessionID string) (domain.AuthSession, error) {
+func (m *MockRefreshSessionStore) GetSession(ctx context.Context, userID uuid.UUID, sessionID string) (domain.AuthSession, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSession", ctx, userID, sessionID)
 	ret0, _ := ret[0].(domain.AuthSession)
@@ -288,7 +288,7 @@ func (mr *MockPasswordChangeSessionStoreMockRecorder) CreatePasswordChangeSessio
 }
 
 // RevokePasswordChangeSession mocks base method.
-func (m *MockPasswordChangeSessionStore) RevokePasswordChangeSession(ctx context.Context, userID, sessionID string) error {
+func (m *MockPasswordChangeSessionStore) RevokePasswordChangeSession(ctx context.Context, userID uuid.UUID, sessionID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RevokePasswordChangeSession", ctx, userID, sessionID)
 	ret0, _ := ret[0].(error)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
@@ -22,7 +24,7 @@ func metricsOrNop(metrics authapplication.Metrics) authapplication.Metrics {
 	return metrics
 }
 
-func issueTokenPair(ctx context.Context, issuer authtokens.Issuer, sessions authsessions.Lifecycle, userID string, tokenVersion int64, sessionID string) (*authtokens.TokenResult, string, error) {
+func issueTokenPair(ctx context.Context, issuer authtokens.Issuer, sessions authsessions.Lifecycle, userID uuid.UUID, tokenVersion int64, sessionID string) (*authtokens.TokenResult, string, error) {
 	tokens, err := issuer.IssueTokenPair(ctx, userID, tokenVersion, sessionID)
 	if err != nil {
 		return nil, authapplication.MetricsReasonTokenIssueFailed, err

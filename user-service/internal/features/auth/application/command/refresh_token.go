@@ -63,7 +63,7 @@ func (u *refreshTokenUseCase) Refresh(ctx context.Context, cmd RefreshTokenComma
 }
 
 func (u *refreshTokenUseCase) parseAndValidateRefreshSession(ctx context.Context, refreshToken string) (*authtokens.Claims, authdomain.AuthSession, int64, error) {
-	claims, err := u.tokens.ParseRefreshToken(ctx, refreshToken)
+	claims, _, err := u.tokens.ParseRefreshToken(ctx, refreshToken)
 	if err != nil {
 		return nil, authdomain.AuthSession{}, 0, err
 	}

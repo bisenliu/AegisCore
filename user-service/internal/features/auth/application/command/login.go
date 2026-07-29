@@ -78,7 +78,7 @@ func (u *loginUseCase) loginWithSession(ctx context.Context, username string, us
 		return nil, err
 	}
 	// refresh session 是 JWT token pair 的服务端投影；refresh、logout 和 token version 撤销都依赖该投影阻断仅凭 JWT 过期时间继续访问。
-	tokens, reason, err := issueTokenPair(ctx, u.tokens, u.sessions, user.UserID.String(), user.TokenVersion, sessionID)
+	tokens, reason, err := issueTokenPair(ctx, u.tokens, u.sessions, user.UserID, user.TokenVersion, sessionID)
 	if err != nil {
 		u.metrics.LoginFailed(ctx, reason)
 		return nil, err
@@ -97,7 +97,7 @@ func (u *loginUseCase) loginWithPasswordChangeSession(ctx context.Context, usern
 		u.metrics.LoginFailed(ctx, authapplication.MetricsReasonPasswordChangeRequiredIssueFailed)
 		return nil, err
 	}
-	tokens, err := u.tokens.IssuePasswordChangeToken(ctx, user.UserID.String(), user.TokenVersion, sessionID)
+	tokens, err := u.tokens.IssuePasswordChangeToken(ctx, user.UserID, user.TokenVersion, sessionID)
 	if err != nil {
 		u.metrics.LoginFailed(ctx, authapplication.MetricsReasonPasswordChangeRequiredIssueFailed)
 		return nil, err
@@ -107,7 +107,7 @@ func (u *loginUseCase) loginWithPasswordChangeSession(ctx context.Context, usern
 		u.metrics.LoginFailed(ctx, authapplication.MetricsReasonPasswordChangeRequiredIssueFailed)
 		return nil, err
 	}
-	if err := u.sessions.CreatePasswordChangeSession(ctx, user.UserID.String(), sessionID, claims.ID, user.TokenVersion, time.Duration(tokens.ExpiresIn)*time.Second); err != nil {
+	if err := u.sessions.CreatePasswordChangeSession(ctx, user.UserID, sessionID, claims.ID, user.TokenVersion, time.Duration(tokens.ExpiresIn)*time.Second); err != nil {
 		u.metrics.LoginFailed(ctx, authapplication.MetricsReasonPasswordChangeRequiredIssueFailed)
 		return nil, err
 	}

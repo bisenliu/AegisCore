@@ -6,13 +6,14 @@ import (
 	"time"
 
 	jwtv5 "github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	commonauth "github.com/aegiscore/common/security/auth"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
-const issuerTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+var issuerTestUserID = uuid.MustParse("018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e")
 
 func TestIssuerUsesDefaultTTLs(t *testing.T) {
 	cfg := testIssuerConfig(serviceconfig.JWTConfig{Secret: "secret", Issuer: "issuer", Audience: "audience"})
@@ -41,7 +42,7 @@ func TestIssuerIssuesPasswordChangeToken(t *testing.T) {
 	claims, parsedUserID, err := issuer.ParsePasswordChangeToken(context.Background(), tokens.AccessToken)
 	require.NoError(t, err,
 		"ParsePasswordChangeToken: %v", err)
-	require.False(t, parsedUserID.String() != issuerTestUserID || claims.Subject != SubjectPasswordChange || claims.SessionID != "pc-123" || claims.TokenVersion != 2 || claims.ID == "",
+	require.False(t, parsedUserID != issuerTestUserID || claims.Subject != SubjectPasswordChange || claims.SessionID != "pc-123" || claims.TokenVersion != 2 || claims.ID == "",
 		"claims = %#v parsedUserID = %s", claims, parsedUserID.String())
 
 }
@@ -64,10 +65,10 @@ func TestIssuerParsesBearerRefreshToken(t *testing.T) {
 	require.NoError(t, err,
 		"SignRefreshToken: %v", err)
 
-	claims, err := issuer.ParseRefreshToken(context.Background(), "Bearer "+pair.Response.RefreshToken)
+	claims, parsedUserID, err := issuer.ParseRefreshToken(context.Background(), "Bearer "+pair.Response.RefreshToken)
 	require.NoError(t, err,
 		"ParseRefreshToken: %v", err)
-	require.False(t, claims.UserID != issuerTestUserID || claims.SessionID != "s-123" || claims.Subject != SubjectRefresh,
+	require.False(t, parsedUserID != issuerTestUserID || claims.UserID != issuerTestUserID || claims.SessionID != "s-123" || claims.Subject != SubjectRefresh,
 		"claims = %#v", claims)
 
 }
@@ -97,7 +98,7 @@ func TestIssuerRejectsRefreshTokenMissingJTI(t *testing.T) {
 		},
 	})
 
-	_, err := issuer.ParseRefreshToken(context.Background(), token)
+	_, _, err := issuer.ParseRefreshToken(context.Background(), token)
 	require.Error(t, err)
 }
 

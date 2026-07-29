@@ -24,7 +24,7 @@ func TestTokenVersionValidatorUsesLocalCache(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenCache := NewMockTokenVersionCache(ctrl)
-	userID := tokenVersionTestUserID.String()
+	userID := tokenVersionTestUserID
 	tokenCache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID).Return(int64(0), authdomain.ErrTokenVersionCacheMiss).Times(1)
 	users.EXPECT().GetTokenVersion(gomock.Any(), tokenVersionTestUserID).Return(int64(7), nil).Times(1)
 	tokenCache.EXPECT().CacheTokenVersion(gomock.Any(), userID, int64(7)).Return(nil).Times(1)
@@ -48,7 +48,7 @@ func TestTokenVersionValidatorUsesRedisCache(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenCache := NewMockTokenVersionCache(ctrl)
-	userID := tokenVersionTestUserID.String()
+	userID := tokenVersionTestUserID
 	tokenCache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID).Return(int64(7), nil).Times(1)
 	validator := newTestTokenVersionValidator(t, users, tokenCache, time.Minute)
 	{
@@ -70,7 +70,7 @@ func TestTokenVersionValidatorReloadsAfterLocalCacheExpires(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenCache := NewMockTokenVersionCache(ctrl)
-	userID := tokenVersionTestUserID.String()
+	userID := tokenVersionTestUserID
 	var userLoads atomic.Int64
 	tokenCache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID).Return(int64(0), authdomain.ErrTokenVersionCacheMiss).Times(2)
 	users.EXPECT().GetTokenVersion(gomock.Any(), tokenVersionTestUserID).DoAndReturn(func(context.Context, uuid.UUID) (int64, error) {
@@ -100,7 +100,7 @@ func TestTokenVersionValidatorRejectsMismatchFromLocalCache(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenCache := NewMockTokenVersionCache(ctrl)
-	userID := tokenVersionTestUserID.String()
+	userID := tokenVersionTestUserID
 	tokenCache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID).Return(int64(0), authdomain.ErrTokenVersionCacheMiss).Times(1)
 	users.EXPECT().GetTokenVersion(gomock.Any(), tokenVersionTestUserID).Return(int64(8), nil).Times(1)
 	tokenCache.EXPECT().CacheTokenVersion(gomock.Any(), userID, int64(8)).Return(nil).Times(1)
@@ -126,7 +126,7 @@ func TestTokenVersionValidatorDoesNotCacheLoaderError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenCache := NewMockTokenVersionCache(ctrl)
-	userID := tokenVersionTestUserID.String()
+	userID := tokenVersionTestUserID
 	tokenCache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID).Return(int64(0), cacheErr).Times(2)
 	validator := newTestTokenVersionValidator(t, users, tokenCache, time.Minute)
 
@@ -143,7 +143,7 @@ func TestTokenVersionValidatorDoesNotCacheBackfillError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenCache := NewMockTokenVersionCache(ctrl)
-	userID := tokenVersionTestUserID.String()
+	userID := tokenVersionTestUserID
 	tokenCache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID).Return(int64(0), authdomain.ErrTokenVersionCacheMiss).Times(2)
 	users.EXPECT().GetTokenVersion(gomock.Any(), tokenVersionTestUserID).Return(int64(7), nil).Times(2)
 	tokenCache.EXPECT().CacheTokenVersion(gomock.Any(), userID, int64(7)).Return(cacheErr).Times(2)
@@ -161,7 +161,7 @@ func TestTokenVersionValidatorSingleflightCoalescesSameUser(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenCache := NewMockTokenVersionCache(ctrl)
-	userID := tokenVersionTestUserID.String()
+	userID := tokenVersionTestUserID
 	started := make(chan struct{})
 	release := make(chan struct{})
 	var startedOnce sync.Once
@@ -200,8 +200,8 @@ func TestTokenVersionValidatorSingleflightKeepsUsersSeparate(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenCache := NewMockTokenVersionCache(ctrl)
-	userID := tokenVersionTestUserID.String()
-	otherUserID := tokenVersionOtherUserID.String()
+	userID := tokenVersionTestUserID
+	otherUserID := tokenVersionOtherUserID
 	tokenCache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID).Return(int64(0), authdomain.ErrTokenVersionCacheMiss).Times(1)
 	users.EXPECT().GetTokenVersion(gomock.Any(), tokenVersionTestUserID).Return(int64(7), nil).Times(1)
 	tokenCache.EXPECT().CacheTokenVersion(gomock.Any(), userID, int64(7)).Return(nil).Times(1)
@@ -234,7 +234,7 @@ func TestTokenVersionValidatorInvalidateReloads(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	users := NewMockUserTokenVersionStore(ctrl)
 	tokenCache := NewMockTokenVersionCache(ctrl)
-	userID := tokenVersionTestUserID.String()
+	userID := tokenVersionTestUserID
 	tokenCache.EXPECT().GetCachedTokenVersion(gomock.Any(), userID).Return(int64(0), authdomain.ErrTokenVersionCacheMiss).Times(2)
 	users.EXPECT().GetTokenVersion(gomock.Any(), tokenVersionTestUserID).Return(int64(7), nil).Times(2)
 	tokenCache.EXPECT().CacheTokenVersion(gomock.Any(), userID, int64(7)).Return(nil).Times(2)
@@ -246,7 +246,7 @@ func TestTokenVersionValidatorInvalidateReloads(t *testing.T) {
 			"ValidateTokenVersion first: %v", err)
 	}
 
-	require.NoError(t, validator.InvalidateTokenVersion(userID),
+	require.NoError(t, validator.InvalidateTokenVersion(userID.String()),
 		"InvalidateTokenVersion")
 	{
 		err := validator.ValidateTokenVersion(context.Background(), userID, 7)
@@ -269,7 +269,7 @@ func TestTokenVersionValidatorInvalidateAfterCacheCloseIsNoop(t *testing.T) {
 		"New localcache: %v", err)
 	cache.Close()
 
-	validator := NewCachingValidator(cache)
+	validator := NewCachingValidator(localTokenVersionCacheAdapter{cache: cache})
 	err = validator.InvalidateTokenVersion(tokenVersionTestUserID.String())
 	require.NoError(t, err)
 }
@@ -282,11 +282,27 @@ func newTestTokenVersionValidator(t *testing.T, users *MockUserTokenVersionStore
 		TTL:         ttl,
 		LoadTimeout: time.Second,
 	}, func(ctx context.Context, userID string) (int64, error) {
-		return Current(ctx, users, tokenCache, userID)
+		parsedUserID, err := uuid.Parse(userID)
+		if err != nil {
+			return 0, err
+		}
+		return Current(ctx, users, tokenCache, parsedUserID)
 	})
 	require.NoError(t, err,
 		"New localcache: %v", err)
 
 	t.Cleanup(cache.Close)
-	return NewCachingValidator(cache)
+	return NewCachingValidator(localTokenVersionCacheAdapter{cache: cache})
+}
+
+type localTokenVersionCacheAdapter struct {
+	cache *localcache.LoadingCache[string, int64]
+}
+
+func (a localTokenVersionCacheAdapter) GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error) {
+	return a.cache.GetOrLoad(ctx, userID.String())
+}
+
+func (a localTokenVersionCacheAdapter) Delete(userID string) error {
+	return a.cache.Delete(userID)
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
@@ -40,7 +42,7 @@ func (r *SessionStore) CreatePasswordChangeSession(ctx context.Context, session 
 // ConsumePasswordChangeSession 原子消费强制改密一次性会话。
 func (r *SessionStore) ConsumePasswordChangeSession(ctx context.Context, expected authdomain.PasswordChangeSession) error {
 	result, err := consumePasswordChangeSessionScript.Run(ctx, r.redis, []string{r.passwordChangeSessionKey(expected.UserID, expected.SessionID)},
-		expected.UserID,
+		expected.UserID.String(),
 		expected.SessionID,
 		expected.TokenID,
 		formatTokenVersion(expected.TokenVersion),
@@ -65,7 +67,7 @@ func (r *SessionStore) ConsumePasswordChangeSession(ctx context.Context, expecte
 }
 
 // RevokePasswordChangeSession 删除未消费的强制改密一次性会话。
-func (r *SessionStore) RevokePasswordChangeSession(ctx context.Context, userID string, sessionID string) error {
+func (r *SessionStore) RevokePasswordChangeSession(ctx context.Context, userID uuid.UUID, sessionID string) error {
 	if err := r.redis.Del(ctx, r.passwordChangeSessionKey(userID, sessionID)).Err(); err != nil {
 		return fmt.Errorf("revoke password change session: %w", err)
 	}

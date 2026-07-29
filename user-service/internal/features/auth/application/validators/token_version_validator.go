@@ -23,7 +23,7 @@ type TokenVersionValidator struct {
 
 // LocalTokenVersionCache 定义 token version 本地读取与失效所需的最小接口。
 type LocalTokenVersionCache interface {
-	GetOrLoad(ctx context.Context, userID string) (int64, error)
+	GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error)
 	Delete(userID string) error
 }
 
@@ -51,7 +51,7 @@ func NewDirectTokenVersionCache(users authapplication.UserTokenVersionStore, cac
 }
 
 // GetOrLoad 每次通过 Redis 投影或用户存储读取当前 token version。
-func (c *DirectTokenVersionCache) GetOrLoad(ctx context.Context, userID string) (int64, error) {
+func (c *DirectTokenVersionCache) GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error) {
 	c.load.Add(1)
 	version, err := Current(ctx, c.users, c.cache, userID)
 	if err != nil {
@@ -78,7 +78,7 @@ func (c *DirectTokenVersionCache) Stats() localcache.Stats {
 }
 
 // ValidateTokenVersion 拒绝 version 不再匹配当前用户版本的 token。
-func (v *TokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
+func (v *TokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID uuid.UUID, tokenVersion int64) error {
 	currentVersion, err := v.Current(ctx, userID)
 	if err != nil {
 		return err
@@ -87,7 +87,7 @@ func (v *TokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID
 }
 
 // Current 返回本实例缓存或后端存储中的当前 token version。
-func (v *TokenVersionValidator) Current(ctx context.Context, userID string) (int64, error) {
+func (v *TokenVersionValidator) Current(ctx context.Context, userID uuid.UUID) (int64, error) {
 	return v.cache.GetOrLoad(ctx, userID)
 }
 
@@ -103,27 +103,22 @@ func (v *TokenVersionValidator) InvalidateTokenVersion(userID string) error {
 }
 
 // Current 使用 Redis token version cache，并在 miss 时回源用户凭据存储。
-func Current(ctx context.Context, users authapplication.UserTokenVersionStore, cache authapplication.TokenVersionCache, userID string) (int64, error) {
+func Current(ctx context.Context, users authapplication.UserTokenVersionStore, cache authapplication.TokenVersionCache, userID uuid.UUID) (int64, error) {
 	// access token 中间件对延迟敏感，因此先查 Redis，再回退到仓储。
 	currentVersion, err := cache.GetCachedTokenVersion(ctx, userID)
 	if err == nil {
 		return currentVersion, nil
 	}
 	if !errors.Is(err, authdomain.ErrTokenVersionCacheMiss) {
-		logger.Error(ctx, "token version cache unavailable", logger.StackTrace(zap.String("user_id", userID), zap.Error(err))...)
+		logger.Error(ctx, "token version cache unavailable", logger.StackTrace(zap.String("user_id", userID.String()), zap.Error(err))...)
 		return 0, fmt.Errorf("get token version cache: %w", err)
 	}
-	parsedUserID, err := uuid.Parse(userID)
-	if err != nil {
-		// token 用户 ID 是外部 UUID，解析可保护仓储调用不接收畸形 claims。
-		return 0, fmt.Errorf("parse user id: %w", err)
-	}
-	currentVersion, err = users.GetTokenVersion(ctx, parsedUserID)
+	currentVersion, err = users.GetTokenVersion(ctx, userID)
 	if err != nil {
 		return 0, fmt.Errorf("get token version from database: %w", err)
 	}
 	if err := cache.CacheTokenVersion(ctx, userID, currentVersion); err != nil {
-		logger.Error(ctx, "backfill token version cache failed", logger.StackTrace(zap.String("user_id", userID), zap.Int64("token_version", currentVersion), zap.Error(err))...)
+		logger.Error(ctx, "backfill token version cache failed", logger.StackTrace(zap.String("user_id", userID.String()), zap.Int64("token_version", currentVersion), zap.Error(err))...)
 		return 0, fmt.Errorf("backfill token version cache: %w", err)
 	}
 	return currentVersion, nil

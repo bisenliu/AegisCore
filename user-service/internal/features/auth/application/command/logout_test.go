@@ -20,7 +20,7 @@ func TestAuthUseCaseLogoutCurrentDeletesSession(t *testing.T) {
 	fixture := newAuthCommandFixtureWithController(ctrl, defaultAuthConfig(true), metrics)
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 
-	fixture.sessions.EXPECT().DeleteSession(gomock.Any(), authTestUserID.String(), "s-123").Return(nil)
+	fixture.sessions.EXPECT().DeleteSession(gomock.Any(), authTestUserID, "s-123").Return(nil)
 	metrics.EXPECT().LogoutSucceeded(gomock.Any(), authapplication.MetricsOperationLogoutCurrent)
 
 	result, err := fixture.LogoutCurrentSession(ctx)
@@ -38,7 +38,7 @@ func TestAuthUseCaseLogoutCurrentRecordsDeleteFailure(t *testing.T) {
 	ctx := commonauth.WithSessionID(commonauth.WithUserID(context.Background(), authTestUserID.String()), "s-123")
 	deleteErr := errors.New("delete failed")
 
-	fixture.sessions.EXPECT().DeleteSession(gomock.Any(), authTestUserID.String(), "s-123").Return(deleteErr)
+	fixture.sessions.EXPECT().DeleteSession(gomock.Any(), authTestUserID, "s-123").Return(deleteErr)
 	metrics.EXPECT().LogoutFailed(gomock.Any(), authapplication.MetricsOperationLogoutCurrent, authapplication.MetricsReasonSessionDeleteFailed)
 
 	_, err := fixture.LogoutCurrentSession(ctx)

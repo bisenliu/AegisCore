@@ -96,7 +96,7 @@ func (m *MockTokenVersionCache) EXPECT() *MockTokenVersionCacheMockRecorder {
 }
 
 // CacheTokenVersion mocks base method.
-func (m *MockTokenVersionCache) CacheTokenVersion(ctx context.Context, userID string, tokenVersion int64) error {
+func (m *MockTokenVersionCache) CacheTokenVersion(ctx context.Context, userID uuid.UUID, tokenVersion int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CacheTokenVersion", ctx, userID, tokenVersion)
 	ret0, _ := ret[0].(error)
@@ -110,7 +110,7 @@ func (mr *MockTokenVersionCacheMockRecorder) CacheTokenVersion(ctx, userID, toke
 }
 
 // DeleteCachedTokenVersion mocks base method.
-func (m *MockTokenVersionCache) DeleteCachedTokenVersion(ctx context.Context, userID string) error {
+func (m *MockTokenVersionCache) DeleteCachedTokenVersion(ctx context.Context, userID uuid.UUID) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteCachedTokenVersion", ctx, userID)
 	ret0, _ := ret[0].(error)
@@ -124,7 +124,7 @@ func (mr *MockTokenVersionCacheMockRecorder) DeleteCachedTokenVersion(ctx, userI
 }
 
 // GetCachedTokenVersion mocks base method.
-func (m *MockTokenVersionCache) GetCachedTokenVersion(ctx context.Context, userID string) (int64, error) {
+func (m *MockTokenVersionCache) GetCachedTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCachedTokenVersion", ctx, userID)
 	ret0, _ := ret[0].(int64)

@@ -43,7 +43,7 @@ func (m *MockIssuer) EXPECT() *MockIssuerMockRecorder {
 }
 
 // IssuePasswordChangeToken mocks base method.
-func (m *MockIssuer) IssuePasswordChangeToken(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*tokens.TokenResult, error) {
+func (m *MockIssuer) IssuePasswordChangeToken(ctx context.Context, userID uuid.UUID, tokenVersion int64, sessionID string) (*tokens.TokenResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IssuePasswordChangeToken", ctx, userID, tokenVersion, sessionID)
 	ret0, _ := ret[0].(*tokens.TokenResult)
@@ -58,7 +58,7 @@ func (mr *MockIssuerMockRecorder) IssuePasswordChangeToken(ctx, userID, tokenVer
 }
 
 // IssueTokenPair mocks base method.
-func (m *MockIssuer) IssueTokenPair(ctx context.Context, userID string, tokenVersion int64, sessionID string) (*tokens.IssuedTokenPair, error) {
+func (m *MockIssuer) IssueTokenPair(ctx context.Context, userID uuid.UUID, tokenVersion int64, sessionID string) (*tokens.IssuedTokenPair, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IssueTokenPair", ctx, userID, tokenVersion, sessionID)
 	ret0, _ := ret[0].(*tokens.IssuedTokenPair)
@@ -89,12 +89,13 @@ func (mr *MockIssuerMockRecorder) ParsePasswordChangeToken(ctx, token any) *gomo
 }
 
 // ParseRefreshToken mocks base method.
-func (m *MockIssuer) ParseRefreshToken(ctx context.Context, token string) (*tokens.Claims, error) {
+func (m *MockIssuer) ParseRefreshToken(ctx context.Context, token string) (*tokens.Claims, uuid.UUID, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ParseRefreshToken", ctx, token)
 	ret0, _ := ret[0].(*tokens.Claims)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(uuid.UUID)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // ParseRefreshToken indicates an expected call of ParseRefreshToken.
