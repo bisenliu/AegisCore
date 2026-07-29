@@ -5,7 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/aegiscore/common/runtime/datastore"
-	"github.com/aegiscore/user-service/ent"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
 type entTxStarter struct {

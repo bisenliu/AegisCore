@@ -10,7 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
-	"github.com/aegiscore/user-service/ent"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
 const (

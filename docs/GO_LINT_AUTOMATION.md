@@ -58,6 +58,6 @@ Architecture-lint 还必须检查 `openspec/specs/`、`openspec/changes/` 和 `d
 - 本地提交前运行 `make lint`，或至少运行受影响模块的 lint。
 - 新增严格规则导致大量历史 findings 时，应先单独设计治理范围，不要混入业务 PR。
 - CI 安全门禁和 lint 工具必须固定版本，不得使用 `@latest`；`gosec` 等工具通过 `renovate.json` 定期升级并由 CI 验证。
-- 生成代码排除规则只能覆盖 Ent codegen 输出，不得排除 `user-service/ent/schema/`。
+- 生成代码排除规则只能覆盖 Ent codegen 输出，不得排除 `user-service/internal/persistence/ent/schema/`。
 - 新增或调整分层规则时，同步更新 `AGENTS.md`、`docs/ARCHITECTURE.md`、相关 OpenSpec 主规格和 `.golangci.yml`。
 - 新增或更新 OpenSpec/OPSX 文档时，必须同步保持简体中文语言约束，并运行 `make user-service-architecture-lint` 防止英文模板内容进入主线。

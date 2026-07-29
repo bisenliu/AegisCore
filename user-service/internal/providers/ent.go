@@ -13,8 +13,8 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
-	"github.com/aegiscore/user-service/ent"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
 // NamedEntClientParams 包含由具名 SQL 连接池支撑 Ent client 所需的 Fx 输入。

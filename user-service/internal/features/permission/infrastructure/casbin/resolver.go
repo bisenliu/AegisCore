@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
-	entrole "github.com/aegiscore/user-service/ent/role"
-	entuser "github.com/aegiscore/user-service/ent/user"
-	entuserrole "github.com/aegiscore/user-service/ent/userrole"
+	entrole "github.com/aegiscore/user-service/internal/persistence/ent/role"
+	entuser "github.com/aegiscore/user-service/internal/persistence/ent/user"
+	entuserrole "github.com/aegiscore/user-service/internal/persistence/ent/userrole"
 )
 
 func (r *entUserRoleResolver) loadRolesForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {

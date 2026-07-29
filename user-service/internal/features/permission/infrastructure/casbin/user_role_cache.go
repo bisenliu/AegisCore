@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/aegiscore/common/runtime/localcache"
-	"github.com/aegiscore/user-service/ent"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
 const rbacUserRolesCacheName = "rbac_user_roles"

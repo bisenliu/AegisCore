@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	runtimeid "github.com/aegiscore/common/runtime/id"
-	"github.com/aegiscore/user-service/ent"
-	"github.com/aegiscore/user-service/ent/enttest"
-	entuser "github.com/aegiscore/user-service/ent/user"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
+	"github.com/aegiscore/user-service/internal/persistence/ent/enttest"
+	entuser "github.com/aegiscore/user-service/internal/persistence/ent/user"
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 

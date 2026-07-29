@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/aegiscore/user-service/ent"
-	entrole "github.com/aegiscore/user-service/ent/role"
-	entrolepermission "github.com/aegiscore/user-service/ent/rolepermission"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
+	entrole "github.com/aegiscore/user-service/internal/persistence/ent/role"
+	entrolepermission "github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
 	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 

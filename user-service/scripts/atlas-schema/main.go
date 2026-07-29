@@ -8,7 +8,7 @@ import (
 	"entgo.io/ent/dialect"
 	entsqlschema "entgo.io/ent/dialect/sql/schema"
 
-	"github.com/aegiscore/user-service/ent/migrate"
+	"github.com/aegiscore/user-service/internal/persistence/ent/migrate"
 )
 
 func main() {

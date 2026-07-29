@@ -36,8 +36,9 @@ mkdir -p \
   "${fixture_root}/openspec/changes" \
   "${fixture_root}/openspec/specs" \
   "${fixture_root}/tools/openapi-convert" \
-  "${fixture_root}/user-service/ent/schema" \
+  "${fixture_root}/user-service/ent" \
   "${fixture_root}/user-service/docs" \
+  "${fixture_root}/user-service/internal/persistence/ent/schema" \
   "${fixture_root}/user-service/internal/features/auth/application" \
   "${fixture_root}/user-service/internal/features/auth/infrastructure" \
   "${fixture_root}/user-service/internal/features/role" \
@@ -170,6 +171,12 @@ package example
 //go:generate go tool mockgen -destination=mock_test.go -package=example example.org/project Port
 EOF
 
+cat > "${fixture_root}/common/runtime/example/root_ent_import.go" <<'EOF'
+package example
+
+import _ "github.com/aegiscore/user-service/ent"
+EOF
+
 cat > "${fixture_root}/user-service/internal/features/auth/application/test_hook.go" <<'EOF'
 package application
 
@@ -295,7 +302,7 @@ package example
 func NewStoreForTest() {}
 EOF
 
-cat > "${fixture_root}/user-service/ent/schema/generated.go" <<'EOF'
+cat > "${fixture_root}/user-service/internal/persistence/ent/schema/generated.go" <<'EOF'
 package schema
 
 func testHookGenerated() {}
@@ -346,6 +353,16 @@ if [[ "${output}" != *"production Go code must not retain local config path entr
   exit 1
 fi
 
+if [[ "${output}" != *"root-level user-service/ent package is forbidden"* ]]; then
+  printf 'architecture-lint-test: expected root-level Ent directory violation report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
+if [[ "${output}" != *"root-level user-service Ent import is forbidden"* ]]; then
+  printf 'architecture-lint-test: expected root-level Ent import violation report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
 if [[ "${output}" != *"Docker Compose runtime config must not mount local full config or pass --config"* ]]; then
   printf 'architecture-lint-test: expected Compose local config path violation report\n%s\n' "${output}" >&2
   exit 1
@@ -382,7 +399,7 @@ if [[ "${output}" != *"fixed feature route_registrar.go files are forbidden"* ]]
 fi
 
 # 白名单文件不应进入违规结果；这里覆盖测试文件、测试 helper、Ent/OpenAPI 生成目录和 feature 组合入口。
-if [[ "${output}" == *"allowed_test.go"* || "${output}" == *"common/testing/example/helper.go"* || "${output}" == *"user-service/ent/schema/generated.go"* || "${output}" == *"user-service/docs/openapi.go"* || "${output}" == *"user-service/internal/features/role/fx.go"* || "${output}" == *"user-service/internal/features/user/fx.go"* || "${output}" == *"user-service/internal/features/user/infrastructure/postgres/store_test.go"* || "${output}" == *"user-service/internal/features/user/transport/http/mock_generate.go"* ]]; then
+if [[ "${output}" == *"allowed_test.go"* || "${output}" == *"common/testing/example/helper.go"* || "${output}" == *"user-service/internal/persistence/ent/schema/generated.go"* || "${output}" == *"user-service/docs/openapi.go"* || "${output}" == *"user-service/internal/features/role/fx.go"* || "${output}" == *"user-service/internal/features/user/fx.go"* || "${output}" == *"user-service/internal/features/user/infrastructure/postgres/store_test.go"* || "${output}" == *"user-service/internal/features/user/transport/http/mock_generate.go"* ]]; then
   printf 'architecture-lint-test: excluded test or generated file produced a false positive\n%s\n' "${output}" >&2
   exit 1
 fi

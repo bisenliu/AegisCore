@@ -1,9 +1,9 @@
 package postgres
 
 import (
-	"github.com/aegiscore/user-service/ent/predicate"
-	entrole "github.com/aegiscore/user-service/ent/role"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
+	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
+	entrole "github.com/aegiscore/user-service/internal/persistence/ent/role"
 )
 
 func buildListPredicates(input roleapplication.ListRolesInput) []predicate.Role {

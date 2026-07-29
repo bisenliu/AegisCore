@@ -20,9 +20,9 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/logger"
-	"github.com/aegiscore/user-service/ent"
-	"github.com/aegiscore/user-service/ent/enttest"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
+	"github.com/aegiscore/user-service/internal/persistence/ent/enttest"
 )
 
 func TestEntSQLLogPluginWrapsDriverWhenEnabled(t *testing.T) {

@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	runtimeid "github.com/aegiscore/common/runtime/id"
-	"github.com/aegiscore/user-service/ent"
-	"github.com/aegiscore/user-service/ent/enttest"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
+	"github.com/aegiscore/user-service/internal/persistence/ent/enttest"
 )
 
 func TestRoleStoreUpsertSystemRole(t *testing.T) {

@@ -16,7 +16,7 @@ set -euo pipefail
 # 行为：
 #   - 检查 Go toolchain 版本在 go.work、go.mod 和 CI workflow 中保持一致。
 #   - 检查 Atlas dev PostgreSQL 镜像配置在 Dockerfile、Compose、atlas.hcl 和迁移脚本中一致。
-#   - 扫描 common 与 user-service 的架构边界，避免共享包、feature 分层和 DI 元数据越界。
+#   - 扫描 common 与 user-service 的架构边界，避免共享包、feature 分层、Ent 根级暴露和 DI 元数据越界。
 #   - 检查 mock 生成文件 build tag、测试专用符号、OpenSpec 中文模板和生成物未提交漂移。
 #   - 收集所有违规项后统一退出；任一违规会以非 0 状态结束。
 #
@@ -187,6 +187,19 @@ check_atlas_postgres_version() {
   fi
 }
 
+check_ent_internal_persistence_boundary() {
+  # Ent 是 user-service 私有持久化实现，必须位于 internal 下，禁止重新暴露为模块根级包。
+  if [[ -d "${service_dir}/ent" ]]; then
+    report "root-level user-service/ent package is forbidden; use user-service/internal/persistence/ent"
+  fi
+
+  run_rg "root-level user-service Ent import is forbidden" \
+    'github\.com/aegiscore/user-service/ent(/|")' \
+    "${repo_root}/common" \
+    "${repo_root}/tools" \
+    "${service_dir}"
+}
+
 check_helm_user_service_immutable_image() {
   # 生产 Helm chart 必须由发布流程显式传入不可变 image.ref，禁止 latest fallback。
   local chart_dir="${repo_root}/deployments/helm/aegiscore-user-service"
@@ -265,7 +278,7 @@ check_test_only_production_symbols() {
       ! -name '*_test.go' \
       ! -name 'mock_generate.go' \
       ! -path "${repo_root}/common/testing/*" \
-      ! -path "${service_dir}/ent/*" \
+      ! -path "${service_dir}/internal/persistence/ent/*" \
       ! -path "${service_dir}/docs/*" \
       -print
   )
@@ -396,7 +409,7 @@ check_environment_variable_config_removed() {
     --glob '*.go' \
     --glob '!*_test.go' \
     --glob '!common/testing/**' \
-    --glob '!user-service/ent/**' \
+    --glob '!user-service/internal/persistence/ent/**' \
     --glob '!user-service/docs/**' \
     --glob '!cmd/rbac_bootstrap_super_admin.go' \
     "${repo_root}/common" \
@@ -437,6 +450,7 @@ check_environment_variable_config_removed() {
 
 check_go_toolchain_version
 check_atlas_postgres_version
+check_ent_internal_persistence_boundary
 check_helm_user_service_immutable_image
 check_environment_variable_config_removed
 check_mock_generate_build_tags
@@ -472,7 +486,7 @@ run_rg "old RBAC baseline import remains" \
 
 run_rg "old user-domain status reference remains" \
   'userdomain\.UserStatus|github\.com/aegiscore/user-service/internal/features/user/domain.*UserStatus' \
-  "${service_dir}/internal/features" "${service_dir}/ent/schema"
+  "${service_dir}/internal/features" "${service_dir}/internal/persistence/ent/schema"
 
 if [[ -e "${service_dir}/internal/features/user/domain/user_status.go" ]]; then
   report "old user/domain/user_status.go still exists; use internal/shared/identity"
@@ -513,7 +527,7 @@ if [[ -e "${service_dir}/internal/shared/identity/status.go" ]]; then
 fi
 
 run_rg "shared packages must not import forbidden runtime or transport dependencies" \
-  'github\.com/gin-gonic/gin|github\.com/aegiscore/user-service/ent(/|")|github\.com/redis/go-redis|database/sql|github\.com/jackc/pgx|go\.uber\.org/fx|github\.com/aegiscore/common/http/response|github\.com/aegiscore/common/contract/response|github\.com/aegiscore/common/runtime/(config|logger|datastore)' \
+  'github\.com/gin-gonic/gin|github\.com/aegiscore/user-service/internal/persistence/ent(/|")|github\.com/redis/go-redis|database/sql|github\.com/jackc/pgx|go\.uber\.org/fx|github\.com/aegiscore/common/http/response|github\.com/aegiscore/common/contract/response|github\.com/aegiscore/common/runtime/(config|logger|datastore)' \
   "${service_dir}/internal/shared"
 
 run_rg "application/domain/infrastructure must not import feature HTTP transport DTO/controller packages" \
@@ -537,8 +551,8 @@ run_rg_any "OpenSpec/OPSX markdown must use Simplified Chinese instead of defaul
   "${repo_root}/docs/opsx"
 
 run_rg_any "Ent generated files have uncommitted drift; run make generate and commit generated output" \
-  '^user-service/ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update|permission|permission_create|permission_delete|permission_query|permission_update|role|role_create|role_delete|role_query|role_update|rolepermission|rolepermission_create|rolepermission_delete|rolepermission_query|rolepermission_update|userrole|userrole_create|userrole_delete|userrole_query|userrole_update)\.go$|^user-service/ent/(enttest|hook|migrate|predicate|runtime|user|permission|role|rolepermission|userrole)/' \
-  <(cd "${repo_root}" && git diff --name-only -- user-service/ent)
+  '^user-service/internal/persistence/ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update|permission|permission_create|permission_delete|permission_query|permission_update|role|role_create|role_delete|role_query|role_update|rolepermission|rolepermission_create|rolepermission_delete|rolepermission_query|rolepermission_update|userrole|userrole_create|userrole_delete|userrole_query|userrole_update)\.go$|^user-service/internal/persistence/ent/(enttest|hook|migrate|predicate|runtime|user|permission|role|rolepermission|userrole)/' \
+  <(cd "${repo_root}" && git diff --name-only -- user-service/internal/persistence/ent)
 
 if [[ "${failures}" -gt 0 ]]; then
   printf 'architecture-lint: failed with %d issue(s)\n' "${failures}" >&2

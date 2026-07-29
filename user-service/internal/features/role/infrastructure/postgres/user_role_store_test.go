@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/aegiscore/user-service/ent"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 

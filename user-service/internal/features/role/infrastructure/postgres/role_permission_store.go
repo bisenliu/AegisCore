@@ -8,13 +8,13 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/aegiscore/common/runtime/datastore"
-	"github.com/aegiscore/user-service/ent"
-	entpermission "github.com/aegiscore/user-service/ent/permission"
-	entrole "github.com/aegiscore/user-service/ent/role"
-	entrolepermission "github.com/aegiscore/user-service/ent/rolepermission"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
+	entpermission "github.com/aegiscore/user-service/internal/persistence/ent/permission"
+	entrole "github.com/aegiscore/user-service/internal/persistence/ent/role"
+	entrolepermission "github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
 )
 
 type RolePermissionStore struct {

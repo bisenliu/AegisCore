@@ -15,10 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/aegiscore/common/testing/containers"
-	"github.com/aegiscore/user-service/ent"
-	entuser "github.com/aegiscore/user-service/ent/user"
 	rolebootstrap "github.com/aegiscore/user-service/internal/features/role/application/bootstrap"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
+	entuser "github.com/aegiscore/user-service/internal/persistence/ent/user"
 	"github.com/aegiscore/user-service/internal/shared/identity"
 	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )

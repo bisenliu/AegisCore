@@ -6,14 +6,14 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/aegiscore/user-service/ent"
-	entpermission "github.com/aegiscore/user-service/ent/permission"
-	entrole "github.com/aegiscore/user-service/ent/role"
-	entrolepermission "github.com/aegiscore/user-service/ent/rolepermission"
-	entuser "github.com/aegiscore/user-service/ent/user"
-	entuserrole "github.com/aegiscore/user-service/ent/userrole"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
+	entpermission "github.com/aegiscore/user-service/internal/persistence/ent/permission"
+	entrole "github.com/aegiscore/user-service/internal/persistence/ent/role"
+	entrolepermission "github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
+	entuser "github.com/aegiscore/user-service/internal/persistence/ent/user"
+	entuserrole "github.com/aegiscore/user-service/internal/persistence/ent/userrole"
 )
 
 type PermissionStore struct {

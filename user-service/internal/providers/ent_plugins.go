@@ -9,8 +9,8 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
-	"github.com/aegiscore/user-service/ent"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
 type entDriverPlugin interface {
@@ -47,7 +47,7 @@ func newEntPlugins(
 	}
 	if settings.Plugins.Tracing.Enabled && tracingProvider != nil {
 		plugins.clientPlugins = append(plugins.clientPlugins, entTracingPlugin{
-			tracer: tracingProvider.Tracer("github.com/aegiscore/user-service/ent"),
+			tracer: tracingProvider.Tracer("github.com/aegiscore/user-service/internal/persistence/ent"),
 		})
 	}
 	if settings.Plugins.Metrics.Enabled && metricsProvider != nil && metricsProvider.Enabled() {

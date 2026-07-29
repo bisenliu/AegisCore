@@ -11,13 +11,13 @@ import (
 	"github.com/aegiscore/common/runtime/localcache"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commonvalidation "github.com/aegiscore/common/validation"
-	"github.com/aegiscore/user-service/ent"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 	permissioncasbin "github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin"
 	permissionhttp "github.com/aegiscore/user-service/internal/features/permission/transport/http"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
 // Fx 选项

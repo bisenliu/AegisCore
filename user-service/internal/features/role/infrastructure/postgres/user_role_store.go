@@ -7,12 +7,12 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/aegiscore/common/runtime/datastore"
-	"github.com/aegiscore/user-service/ent"
-	entrole "github.com/aegiscore/user-service/ent/role"
-	entuser "github.com/aegiscore/user-service/ent/user"
-	entuserrole "github.com/aegiscore/user-service/ent/userrole"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
+	entrole "github.com/aegiscore/user-service/internal/persistence/ent/role"
+	entuser "github.com/aegiscore/user-service/internal/persistence/ent/user"
+	entuserrole "github.com/aegiscore/user-service/internal/persistence/ent/userrole"
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 

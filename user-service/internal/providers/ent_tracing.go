@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/aegiscore/user-service/ent"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
 // entTracingPlugin 在 Ent client 上安装 query 和 mutation tracing。

@@ -6,11 +6,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/aegiscore/user-service/ent"
-	"github.com/aegiscore/user-service/ent/predicate"
-	entuser "github.com/aegiscore/user-service/ent/user"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
+	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
+	entuser "github.com/aegiscore/user-service/internal/persistence/ent/user"
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 

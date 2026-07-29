@@ -1,9 +1,9 @@
 package postgres
 
 import (
-	"github.com/aegiscore/user-service/ent/predicate"
-	entuser "github.com/aegiscore/user-service/ent/user"
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
+	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
+	entuser "github.com/aegiscore/user-service/internal/persistence/ent/user"
 )
 
 func buildListPredicates(input userapplication.ListUsersInput) []predicate.User {

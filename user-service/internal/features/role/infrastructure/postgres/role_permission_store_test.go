@@ -13,13 +13,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/aegiscore/common/testing/containers"
-	"github.com/aegiscore/user-service/ent"
-	entrole "github.com/aegiscore/user-service/ent/role"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
+	entrole "github.com/aegiscore/user-service/internal/persistence/ent/role"
 )
 
 func TestRolePermissionStoreDefaultListRemoveAndSyncSystemBindings(t *testing.T) {

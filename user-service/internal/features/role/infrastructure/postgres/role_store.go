@@ -6,10 +6,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/aegiscore/user-service/ent"
-	entrole "github.com/aegiscore/user-service/ent/role"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
+	entrole "github.com/aegiscore/user-service/internal/persistence/ent/role"
 )
 
 type RoleStore struct {

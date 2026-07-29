@@ -14,7 +14,6 @@ import (
 	commonauth "github.com/aegiscore/common/security/auth"
 	"github.com/aegiscore/common/security/password"
 	commonvalidation "github.com/aegiscore/common/validation"
-	"github.com/aegiscore/user-service/ent"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
@@ -25,6 +24,7 @@ import (
 	authpostgres "github.com/aegiscore/user-service/internal/features/auth/infrastructure/postgres"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
 	authhttp "github.com/aegiscore/user-service/internal/features/auth/transport/http"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
 const authTokenVersionCacheName = "auth_token_version" // #nosec G101 -- 本地缓存名称，不包含真实凭据。

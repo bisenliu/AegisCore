@@ -4,9 +4,9 @@ import (
 	rediscmd "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 
-	"github.com/aegiscore/user-service/ent"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
 // Fx 选项

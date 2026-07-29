@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/aegiscore/common/runtime/localcache"
-	"github.com/aegiscore/user-service/ent"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
 // UserRoleResolver 定义授权热路径按需解析用户启用角色的端口。

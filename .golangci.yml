@@ -30,9 +30,9 @@ linters:
           deny:
             - pkg: github.com/gin-gonic/gin
               desc: domain must not depend on Gin transport
-            - pkg: github.com/aegiscore/user-service/ent$
+            - pkg: github.com/aegiscore/user-service/internal/persistence/ent$
               desc: domain must not depend on Ent persistence
-            - pkg: github.com/aegiscore/user-service/ent/
+            - pkg: github.com/aegiscore/user-service/internal/persistence/ent/
               desc: domain must not depend on Ent persistence
             - pkg: github.com/redis/go-redis/v9
               desc: domain must not depend on Redis clients
@@ -83,9 +83,9 @@ linters:
           deny:
             - pkg: github.com/gin-gonic/gin
               desc: application must not depend on Gin transport
-            - pkg: github.com/aegiscore/user-service/ent$
+            - pkg: github.com/aegiscore/user-service/internal/persistence/ent$
               desc: application must not depend on Ent persistence
-            - pkg: github.com/aegiscore/user-service/ent/
+            - pkg: github.com/aegiscore/user-service/internal/persistence/ent/
               desc: application must not depend on Ent persistence
             - pkg: github.com/redis/go-redis/v9
               desc: application must not depend on Redis clients
@@ -96,9 +96,9 @@ linters:
             - "**/internal/features/**/transport/http/*.go"
             - "**/internal/features/**/transport/http/**/*.go"
           deny:
-            - pkg: github.com/aegiscore/user-service/ent$
+            - pkg: github.com/aegiscore/user-service/internal/persistence/ent$
               desc: HTTP transport must not depend on Ent persistence
-            - pkg: github.com/aegiscore/user-service/ent/
+            - pkg: github.com/aegiscore/user-service/internal/persistence/ent/
               desc: HTTP transport must not depend on Ent persistence
             - pkg: github.com/redis/go-redis/v9
               desc: HTTP transport must not depend on Redis clients
@@ -111,9 +111,9 @@ linters:
             - "**/internal/features/**/transport/grpc/*.go"
             - "**/internal/features/**/transport/grpc/**/*.go"
           deny:
-            - pkg: github.com/aegiscore/user-service/ent$
+            - pkg: github.com/aegiscore/user-service/internal/persistence/ent$
               desc: gRPC transport must not depend on Ent persistence
-            - pkg: github.com/aegiscore/user-service/ent/
+            - pkg: github.com/aegiscore/user-service/internal/persistence/ent/
               desc: gRPC transport must not depend on Ent persistence
             - pkg: github.com/redis/go-redis/v9
               desc: gRPC transport must not depend on Redis clients
@@ -161,9 +161,9 @@ linters:
               desc: integration adapters must not depend on HTTP response helpers
             - pkg: github.com/aegiscore/common/contract/response
               desc: integration adapters must not depend on HTTP response envelopes
-            - pkg: github.com/aegiscore/user-service/ent$
+            - pkg: github.com/aegiscore/user-service/internal/persistence/ent$
               desc: integration adapters must not depend on Ent persistence
-            - pkg: github.com/aegiscore/user-service/ent/
+            - pkg: github.com/aegiscore/user-service/internal/persistence/ent/
               desc: integration adapters must not depend on Ent persistence
             - pkg: github.com/aegiscore/user-service/internal/features/auth/infrastructure$
               desc: integration adapters must not depend on feature persistence adapters
@@ -213,7 +213,7 @@ linters:
         path: (_test\.go)$
         text: Error return value.*(Close|Rollback)
     paths:
-      # 排除 Ent 生成代码，但不排除 user-service/ent/schema/ 下的 schema source。
+      # 排除 Ent 生成代码，但不排除 user-service/internal/persistence/ent/schema/ 下的 schema source。
       - (^|/)ent/(enttest|hook|migrate|predicate|runtime|user)(/|$)
       - (^|/)ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update)\.go$
       - third_party$

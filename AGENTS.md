@@ -51,7 +51,7 @@
 - 角色路由：`user-service/internal/features/role/transport/http/routes.go`。
 - 用户路由：`user-service/internal/features/user/transport/http/routes.go`。
 - RBAC seed：`user-service/internal/features/role/application/seed/`，系统基线来自 `user-service/internal/shared/rbacbaseline/`。
-- Ent schema 和 migration：`user-service/ent/schema/`、`user-service/migrations/atlas.hcl`、`user-service/migrations/*.sql`。
+- Ent schema 和 migration：`user-service/internal/persistence/ent/schema/`、`user-service/migrations/atlas.hcl`、`user-service/migrations/*.sql`。
 - OpenAPI 生成：`user-service/scripts/openapi-generate.sh` 调用 `tools/openapi-convert`，生成 `user-service/docs/openapi.go`、`openapi.json`、`openapi.yaml`。
 
 ## 4. 当前能力
@@ -132,15 +132,15 @@ openspec init --tools none --force
 - Ports 由消费侧 feature application 拥有，infrastructure adapter 只实现这些最小接口；不要为了 adapter 方便在 infrastructure 包或共享根包定义大接口。
 - `transport/grpc`、`domain/events`、`domain/services` 和 `infrastructure/consumers` 只有存在真实 API、领域事件模型、纯领域服务或消费者需求时才承载业务代码；当前没有真实 gRPC API、MQ/broker、eventbus、outbox、producer、subscriber、consumer handler 或后台投递 worker。
 - 外部系统防腐层统一使用 `user-service/internal/integration/http|grpc|events`；`integration/grpc` 是出站 external client adapter，不是本服务入站 gRPC transport。
-- 不要手写 `user-service/ent/` 生成代码或 OpenAPI 生成物；通过 `make user-service-generate` 和 `make user-service-openapi-generate` 更新。
+- 不要手写 `user-service/internal/persistence/ent/` 下的 Ent 生成代码或 OpenAPI 生成物；通过 `make user-service-generate` 和 `make user-service-openapi-generate` 更新。
 - 运行时服务代码不得使用 `client.Schema.Create(ctx)` 表达 schema 变更；Ent schema 变化必须生成 Ent 代码和 Atlas SQL migration。
-- Ent predicate 构造封装在 infrastructure adapter 内，application 层不得直接导入 `github.com/aegiscore/user-service/ent/<entity>` predicate 包。
+- Ent predicate 构造封装在 infrastructure adapter 内，application 层不得直接导入 `github.com/aegiscore/user-service/internal/persistence/ent/<entity>` predicate 包。
 
 ## 9. 高风险区域
 
 - 认证、refresh session、强制改密和 token version：`user-service/internal/features/auth/`、`common/security/auth/`。
 - RBAC、policy sync 和 Casbin：`user-service/internal/features/permission/`、`user-service/internal/features/role/`、`user-service/internal/shared/rbacbaseline/`、`common/security/casbin/`。
-- 数据库 schema 和 migration：`user-service/ent/schema/`、`user-service/migrations/`。
+- 数据库 schema 和 migration：`user-service/internal/persistence/ent/schema/`、`user-service/migrations/`。
 - OpenAPI 生成物：`user-service/docs/openapi.go`、`user-service/docs/openapi.json`、`user-service/docs/openapi.yaml`。
 - 可观测性：`common/runtime/observability/`、`common/runtime/logger/`、`common/http/middleware/`、`deployments/observability/`、`deployments/compose/grafana/`。
 - 部署发布：SQL migration 通过 DBA 工单或受控发布平台人工或受控执行；普通 user-service 运行时镜像不包含 Atlas，不执行 migration，`RUN_MIGRATIONS=true` 已废弃。

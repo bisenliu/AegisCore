@@ -15,9 +15,9 @@ import (
 
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	"github.com/aegiscore/common/runtime/localcache"
-	"github.com/aegiscore/user-service/ent"
-	"github.com/aegiscore/user-service/ent/enttest"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
+	"github.com/aegiscore/user-service/internal/persistence/ent/enttest"
 	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 

@@ -1,9 +1,9 @@
 package postgres
 
 import (
-	entpermission "github.com/aegiscore/user-service/ent/permission"
-	"github.com/aegiscore/user-service/ent/predicate"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
+	entpermission "github.com/aegiscore/user-service/internal/persistence/ent/permission"
+	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
 )
 
 func buildListPredicates(input permissionapplication.ListPermissionsInput) []predicate.Permission {

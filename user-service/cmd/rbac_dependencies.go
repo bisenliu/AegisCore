@@ -14,12 +14,12 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 	commonresources "github.com/aegiscore/common/runtime/resources"
 	"github.com/aegiscore/common/security/password"
-	"github.com/aegiscore/user-service/ent"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
 	rolebootstrap "github.com/aegiscore/user-service/internal/features/role/application/bootstrap"
 	roleseed "github.com/aegiscore/user-service/internal/features/role/application/seed"
 	rolepostgres "github.com/aegiscore/user-service/internal/features/role/infrastructure/postgres"
+	"github.com/aegiscore/user-service/internal/persistence/ent"
 	"github.com/aegiscore/user-service/internal/resources"
 )
 
