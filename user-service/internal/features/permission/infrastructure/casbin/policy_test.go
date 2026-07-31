@@ -23,6 +23,7 @@ import (
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/enttest"
+	entuserrole "github.com/aegiscore/user-service/internal/persistence/ent/userrole"
 	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
@@ -298,6 +299,147 @@ func TestUserRoleResolverCoalescesConcurrentMisses(t *testing.T) {
 	require.Equal(t, int64(1), roleQueries.Load())
 }
 
+func TestUserRoleResolverSuppressesStaleSingleUserLoadAfterInvalidation(t *testing.T) {
+	client := newPolicyTestClient(t)
+	ctx := context.Background()
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000501")
+	firstRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000502")
+	secondRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000503")
+	user := createPolicyTestUser(t, client, userID, "resolver-stale-user@example.com")
+	firstRole := createPolicyTestRole(t, client, firstRoleID, true)
+	secondRole := createPolicyTestRole(t, client, secondRoleID, true)
+	createPolicyTestUserRole(t, client, user.ID, firstRole.ID)
+
+	queryStarted := make(chan struct{})
+	releaseQuery := make(chan struct{})
+	var roleQueries atomic.Int64
+	client.Role.Intercept(ent.InterceptFunc(func(next ent.Querier) ent.Querier {
+		return ent.QuerierFunc(func(ctx context.Context, q ent.Query) (ent.Value, error) {
+			if roleQueries.Add(1) == 1 {
+				close(queryStarted)
+				<-releaseQuery
+			}
+			return next.Query(ctx, q)
+		})
+	}))
+
+	resolver := newTestUserRoleResolver(t, client, time.Minute)
+	staleErr := make(chan error, 1)
+	go func() {
+		_, err := resolver.RolesForUser(ctx, userID)
+		staleErr <- err
+	}()
+	<-queryStarted
+	createPolicyTestUserRole(t, client, user.ID, secondRole.ID)
+	resolver.InvalidateUserRole(userID)
+	close(releaseQuery)
+	require.ErrorIs(t, <-staleErr, errUserRoleCacheGenerationStale)
+
+	reloaded, err := resolver.RolesForUser(ctx, userID)
+	require.NoError(t, err)
+	assertRoleIDs(t, reloaded, []uuid.UUID{firstRoleID, secondRoleID})
+	require.Equal(t, int64(2), roleQueries.Load())
+}
+
+func TestUserRoleResolverSuppressesStaleLoadsAfterInvalidateAll(t *testing.T) {
+	client := newPolicyTestClient(t)
+	ctx := context.Background()
+	firstUserID := uuid.MustParse("018f0000-0000-7000-8000-000000000511")
+	secondUserID := uuid.MustParse("018f0000-0000-7000-8000-000000000512")
+	firstRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000513")
+	secondRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000514")
+	firstUser := createPolicyTestUser(t, client, firstUserID, "resolver-stale-all-1@example.com")
+	secondUser := createPolicyTestUser(t, client, secondUserID, "resolver-stale-all-2@example.com")
+	firstRole := createPolicyTestRole(t, client, firstRoleID, true)
+	secondRole := createPolicyTestRole(t, client, secondRoleID, true)
+	createPolicyTestUserRole(t, client, firstUser.ID, firstRole.ID)
+	createPolicyTestUserRole(t, client, secondUser.ID, secondRole.ID)
+
+	queriesStarted := make(chan struct{})
+	releaseQueries := make(chan struct{})
+	var roleQueries atomic.Int64
+	client.Role.Intercept(ent.InterceptFunc(func(next ent.Querier) ent.Querier {
+		return ent.QuerierFunc(func(ctx context.Context, q ent.Query) (ent.Value, error) {
+			queryNumber := roleQueries.Add(1)
+			if queryNumber <= 2 {
+				if queryNumber == 2 {
+					close(queriesStarted)
+				}
+				<-releaseQueries
+			}
+			return next.Query(ctx, q)
+		})
+	}))
+
+	resolver := newTestUserRoleResolver(t, client, time.Minute)
+	errCh := make(chan error, 2)
+	go func() {
+		_, err := resolver.RolesForUser(ctx, firstUserID)
+		errCh <- err
+	}()
+	go func() {
+		_, err := resolver.RolesForUser(ctx, secondUserID)
+		errCh <- err
+	}()
+	<-queriesStarted
+	resolver.InvalidateAllUserRoles()
+	close(releaseQueries)
+	require.ErrorIs(t, <-errCh, errUserRoleCacheGenerationStale)
+	require.ErrorIs(t, <-errCh, errUserRoleCacheGenerationStale)
+
+	firstReloaded, err := resolver.RolesForUser(ctx, firstUserID)
+	require.NoError(t, err)
+	assertRoleIDs(t, firstReloaded, []uuid.UUID{firstRoleID})
+	secondReloaded, err := resolver.RolesForUser(ctx, secondUserID)
+	require.NoError(t, err)
+	assertRoleIDs(t, secondReloaded, []uuid.UUID{secondRoleID})
+	require.Equal(t, int64(4), roleQueries.Load())
+}
+
+func TestUserRoleResolverStaleLoadFailsClosedAndReloadsFinalState(t *testing.T) {
+	client := newPolicyTestClient(t)
+	ctx := context.Background()
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000521")
+	oldRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000522")
+	finalRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000523")
+	user := createPolicyTestUser(t, client, userID, "resolver-stale-fail-closed@example.com")
+	oldRole := createPolicyTestRole(t, client, oldRoleID, true)
+	finalRole := createPolicyTestRole(t, client, finalRoleID, true)
+	createPolicyTestUserRole(t, client, user.ID, oldRole.ID)
+
+	queryStarted := make(chan struct{})
+	releaseQuery := make(chan struct{})
+	var roleQueries atomic.Int64
+	client.Role.Intercept(ent.InterceptFunc(func(next ent.Querier) ent.Querier {
+		return ent.QuerierFunc(func(ctx context.Context, q ent.Query) (ent.Value, error) {
+			if roleQueries.Add(1) == 1 {
+				close(queryStarted)
+				<-releaseQuery
+			}
+			return next.Query(ctx, q)
+		})
+	}))
+
+	resolver := newTestUserRoleResolver(t, client, time.Minute)
+	staleErr := make(chan error, 1)
+	go func() {
+		_, err := resolver.RolesForUser(ctx, userID)
+		staleErr <- err
+	}()
+	<-queryStarted
+	resolver.InvalidateUserRole(userID)
+	close(releaseQuery)
+	require.ErrorIs(t, <-staleErr, errUserRoleCacheGenerationStale)
+
+	_, err := client.UserRole.Delete().Where(entuserrole.UserIDEQ(user.ID)).Exec(ctx)
+	require.NoError(t, err)
+	createPolicyTestUserRole(t, client, user.ID, finalRole.ID)
+	reloaded, err := resolver.RolesForUser(ctx, userID)
+	require.NoError(t, err)
+	assertRoleIDs(t, reloaded, []uuid.UUID{finalRoleID})
+	require.Equal(t, int64(2), roleQueries.Load())
+}
+
 func TestNewUserRoleResolverUsesRBACFeatureConfig(t *testing.T) {
 	result, err := NewUserRoleResolver(UserRoleResolverParams{
 		Settings: serviceconfig.RBACSettings{UserRoleCache: serviceconfig.FeatureCacheConfig{
@@ -344,6 +486,7 @@ func TestDisabledUserRoleResolverReadsThroughAndInvalidationIsSafe(t *testing.T)
 	first, err := result.Resolver.RolesForUser(context.Background(), userID)
 	require.NoError(t, err)
 	assertRoleIDs(t, first, []uuid.UUID{firstRoleID})
+	first[0] = secondRoleID
 	createPolicyTestUserRole(t, client, user.ID, secondRole.ID)
 	second, err := result.Resolver.RolesForUser(context.Background(), userID)
 	require.NoError(t, err)
@@ -434,11 +577,7 @@ func newTestUserRoleResolver(t *testing.T, client *ent.Client, ttl time.Duration
 		TTL:         ttl,
 		LoadTimeout: time.Second,
 	}, func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-		roleIDs, err := resolver.loadRolesForUser(ctx, userID)
-		if err != nil {
-			return nil, err
-		}
-		return cloneRoleIDs(roleIDs), nil
+		return resolver.loadCacheableRolesForUser(ctx, userID)
 	})
 	require.NoError(t, err)
 	resolver.cache = cache
