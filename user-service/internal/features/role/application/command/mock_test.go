@@ -44,18 +44,18 @@ func (m *MockRoleStore) EXPECT() *MockRoleStoreMockRecorder {
 }
 
 // Create mocks base method.
-func (m *MockRoleStore) Create(ctx context.Context, input application.CreateRoleInput) (*domain.Role, error) {
+func (m *MockRoleStore) Create(ctx context.Context, input application.CreateRoleInput, change application.PolicyChange) (*application.RoleWriteResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", ctx, input)
-	ret0, _ := ret[0].(*domain.Role)
+	ret := m.ctrl.Call(m, "Create", ctx, input, change)
+	ret0, _ := ret[0].(*application.RoleWriteResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Create indicates an expected call of Create.
-func (mr *MockRoleStoreMockRecorder) Create(ctx, input any) *gomock.Call {
+func (mr *MockRoleStoreMockRecorder) Create(ctx, input, change any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockRoleStore)(nil).Create), ctx, input)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockRoleStore)(nil).Create), ctx, input, change)
 }
 
 // GetByRoleID mocks base method.
@@ -105,31 +105,33 @@ func (mr *MockRoleStoreMockRecorder) List(ctx, input any) *gomock.Call {
 }
 
 // SetActive mocks base method.
-func (m *MockRoleStore) SetActive(ctx context.Context, roleID uuid.UUID, active bool) error {
+func (m *MockRoleStore) SetActive(ctx context.Context, roleID uuid.UUID, active bool, change application.PolicyChange) (application.PolicyWriteResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetActive", ctx, roleID, active)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "SetActive", ctx, roleID, active, change)
+	ret0, _ := ret[0].(application.PolicyWriteResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // SetActive indicates an expected call of SetActive.
-func (mr *MockRoleStoreMockRecorder) SetActive(ctx, roleID, active any) *gomock.Call {
+func (mr *MockRoleStoreMockRecorder) SetActive(ctx, roleID, active, change any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetActive", reflect.TypeOf((*MockRoleStore)(nil).SetActive), ctx, roleID, active)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetActive", reflect.TypeOf((*MockRoleStore)(nil).SetActive), ctx, roleID, active, change)
 }
 
 // Update mocks base method.
-func (m *MockRoleStore) Update(ctx context.Context, input application.UpdateRoleInput) error {
+func (m *MockRoleStore) Update(ctx context.Context, input application.UpdateRoleInput, change application.PolicyChange) (application.PolicyWriteResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", ctx, input)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "Update", ctx, input, change)
+	ret0, _ := ret[0].(application.PolicyWriteResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Update indicates an expected call of Update.
-func (mr *MockRoleStoreMockRecorder) Update(ctx, input any) *gomock.Call {
+func (mr *MockRoleStoreMockRecorder) Update(ctx, input, change any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockRoleStore)(nil).Update), ctx, input)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockRoleStore)(nil).Update), ctx, input, change)
 }
 
 // MockUserRoleStore is a mock of UserRoleStore interface.
@@ -157,17 +159,18 @@ func (m *MockUserRoleStore) EXPECT() *MockUserRoleStoreMockRecorder {
 }
 
 // Add mocks base method.
-func (m *MockUserRoleStore) Add(ctx context.Context, userID, roleID uuid.UUID) error {
+func (m *MockUserRoleStore) Add(ctx context.Context, userID, roleID uuid.UUID, change application.PolicyChange) (application.PolicyWriteResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Add", ctx, userID, roleID)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "Add", ctx, userID, roleID, change)
+	ret0, _ := ret[0].(application.PolicyWriteResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Add indicates an expected call of Add.
-func (mr *MockUserRoleStoreMockRecorder) Add(ctx, userID, roleID any) *gomock.Call {
+func (mr *MockUserRoleStoreMockRecorder) Add(ctx, userID, roleID, change any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockUserRoleStore)(nil).Add), ctx, userID, roleID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockUserRoleStore)(nil).Add), ctx, userID, roleID, change)
 }
 
 // ListByUserID mocks base method.
@@ -186,32 +189,33 @@ func (mr *MockUserRoleStoreMockRecorder) ListByUserID(ctx, userID any) *gomock.C
 }
 
 // Remove mocks base method.
-func (m *MockUserRoleStore) Remove(ctx context.Context, userID, roleID uuid.UUID) error {
+func (m *MockUserRoleStore) Remove(ctx context.Context, userID, roleID uuid.UUID, change application.PolicyChange) (application.PolicyWriteResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Remove", ctx, userID, roleID)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "Remove", ctx, userID, roleID, change)
+	ret0, _ := ret[0].(application.PolicyWriteResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Remove indicates an expected call of Remove.
-func (mr *MockUserRoleStoreMockRecorder) Remove(ctx, userID, roleID any) *gomock.Call {
+func (mr *MockUserRoleStoreMockRecorder) Remove(ctx, userID, roleID, change any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockUserRoleStore)(nil).Remove), ctx, userID, roleID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockUserRoleStore)(nil).Remove), ctx, userID, roleID, change)
 }
 
 // Replace mocks base method.
-func (m *MockUserRoleStore) Replace(ctx context.Context, userID uuid.UUID, roleIDs []uuid.UUID) ([]domain.Role, error) {
+func (m *MockUserRoleStore) Replace(ctx context.Context, userID uuid.UUID, roleIDs []uuid.UUID, change application.PolicyChange) (application.RolesWriteResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Replace", ctx, userID, roleIDs)
-	ret0, _ := ret[0].([]domain.Role)
+	ret := m.ctrl.Call(m, "Replace", ctx, userID, roleIDs, change)
+	ret0, _ := ret[0].(application.RolesWriteResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Replace indicates an expected call of Replace.
-func (mr *MockUserRoleStoreMockRecorder) Replace(ctx, userID, roleIDs any) *gomock.Call {
+func (mr *MockUserRoleStoreMockRecorder) Replace(ctx, userID, roleIDs, change any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replace", reflect.TypeOf((*MockUserRoleStore)(nil).Replace), ctx, userID, roleIDs)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replace", reflect.TypeOf((*MockUserRoleStore)(nil).Replace), ctx, userID, roleIDs, change)
 }
 
 // MockRolePermissionStore is a mock of RolePermissionStore interface.
@@ -239,17 +243,18 @@ func (m *MockRolePermissionStore) EXPECT() *MockRolePermissionStoreMockRecorder 
 }
 
 // Add mocks base method.
-func (m *MockRolePermissionStore) Add(ctx context.Context, roleID uuid.UUID, permission application.PermissionReference) error {
+func (m *MockRolePermissionStore) Add(ctx context.Context, roleID uuid.UUID, permission application.PermissionReference, change application.PolicyChange) (application.PolicyWriteResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Add", ctx, roleID, permission)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "Add", ctx, roleID, permission, change)
+	ret0, _ := ret[0].(application.PolicyWriteResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Add indicates an expected call of Add.
-func (mr *MockRolePermissionStoreMockRecorder) Add(ctx, roleID, permission any) *gomock.Call {
+func (mr *MockRolePermissionStoreMockRecorder) Add(ctx, roleID, permission, change any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockRolePermissionStore)(nil).Add), ctx, roleID, permission)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockRolePermissionStore)(nil).Add), ctx, roleID, permission, change)
 }
 
 // ListByRoleID mocks base method.
@@ -268,32 +273,33 @@ func (mr *MockRolePermissionStoreMockRecorder) ListByRoleID(ctx, roleID any) *go
 }
 
 // Remove mocks base method.
-func (m *MockRolePermissionStore) Remove(ctx context.Context, roleID, permissionID uuid.UUID) error {
+func (m *MockRolePermissionStore) Remove(ctx context.Context, roleID, permissionID uuid.UUID, change application.PolicyChange) (application.PolicyWriteResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Remove", ctx, roleID, permissionID)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "Remove", ctx, roleID, permissionID, change)
+	ret0, _ := ret[0].(application.PolicyWriteResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Remove indicates an expected call of Remove.
-func (mr *MockRolePermissionStoreMockRecorder) Remove(ctx, roleID, permissionID any) *gomock.Call {
+func (mr *MockRolePermissionStoreMockRecorder) Remove(ctx, roleID, permissionID, change any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockRolePermissionStore)(nil).Remove), ctx, roleID, permissionID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockRolePermissionStore)(nil).Remove), ctx, roleID, permissionID, change)
 }
 
 // Replace mocks base method.
-func (m *MockRolePermissionStore) Replace(ctx context.Context, roleID uuid.UUID, permissions []application.PermissionReference) ([]application.PermissionReference, error) {
+func (m *MockRolePermissionStore) Replace(ctx context.Context, roleID uuid.UUID, permissions []application.PermissionReference, change application.PolicyChange) (application.PermissionsWriteResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Replace", ctx, roleID, permissions)
-	ret0, _ := ret[0].([]application.PermissionReference)
+	ret := m.ctrl.Call(m, "Replace", ctx, roleID, permissions, change)
+	ret0, _ := ret[0].(application.PermissionsWriteResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Replace indicates an expected call of Replace.
-func (mr *MockRolePermissionStoreMockRecorder) Replace(ctx, roleID, permissions any) *gomock.Call {
+func (mr *MockRolePermissionStoreMockRecorder) Replace(ctx, roleID, permissions, change any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replace", reflect.TypeOf((*MockRolePermissionStore)(nil).Replace), ctx, roleID, permissions)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Replace", reflect.TypeOf((*MockRolePermissionStore)(nil).Replace), ctx, roleID, permissions, change)
 }
 
 // MockPermissionLookup is a mock of PermissionLookup interface.

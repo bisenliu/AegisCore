@@ -16,7 +16,7 @@ import (
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 
-func TestStorePublishPolicyChangedIncrementsVersionAndPublishes(t *testing.T) {
+func TestStorePublishPolicyChangedCachesSuppliedRevisionAndPublishes(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
@@ -27,17 +27,98 @@ func TestStorePublishPolicyChangedIncrementsVersionAndPublishes(t *testing.T) {
 	require.NoError(t, err)
 	change := permissionapplication.NewPolicyReloadChange("role_permission_added")
 
-	version, err := store.PublishPolicyChanged(context.Background(), change)
+	const revision int64 = 42
+	require.NoError(t, store.PublishPolicyChanged(context.Background(), revision, change))
+	storedRevision, err := store.CurrentVersion(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, int64(1), version)
+	require.Equal(t, revision, storedRevision)
 	message, err := pubsub.ReceiveMessage(context.Background())
 	require.NoError(t, err)
 	decoded, err := decodePolicyRefreshMessage(message.Payload)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), decoded.Version)
+	require.Equal(t, revision, decoded.Version)
 	require.Equal(t, "instance-a", decoded.InstanceID)
 	require.Equal(t, permissionapplication.PolicyChangeKindPolicy, decoded.Kind)
 	require.Equal(t, "role_permission_added", decoded.Reason)
+}
+
+func TestStorePublishPolicyChangedDoesNotLowerCachedRevision(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	store := newStore(client, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
+	require.NoError(t, client.Set(context.Background(), store.keys.PolicyVersionKey(), 50, 0).Err())
+	pubsub := client.Subscribe(context.Background(), store.keys.PolicyChannel())
+	t.Cleanup(func() { _ = pubsub.Close() })
+	_, err := pubsub.Receive(context.Background())
+	require.NoError(t, err)
+
+	require.NoError(t, store.PublishPolicyChanged(context.Background(), 41, permissionapplication.NewPolicyReloadChange("role_updated")))
+	storedRevision, err := store.CurrentVersion(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int64(50), storedRevision)
+	message, err := pubsub.ReceiveMessage(context.Background())
+	require.NoError(t, err)
+	decoded, err := decodePolicyRefreshMessage(message.Payload)
+	require.NoError(t, err)
+	require.Equal(t, int64(41), decoded.Version)
+}
+
+func TestStorePublishPolicyChangedCachesLargerBigIntRevisionExactly(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	store := newStore(client, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
+	const previousRevision int64 = 9223372036854775806
+	const revision int64 = 9223372036854775807
+	require.NoError(t, client.Set(context.Background(), store.keys.PolicyVersionKey(), previousRevision, 0).Err())
+
+	require.NoError(t, store.PublishPolicyChanged(context.Background(), revision, permissionapplication.NewPolicyReloadChange("role_updated")))
+	storedRevision, err := store.CurrentVersion(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, revision, storedRevision)
+}
+
+func TestStorePublishPolicyChangedReturnsCacheFailureWithoutPublishing(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	cacheErr := errors.New("redis cache failed")
+	failingClient := &failingPolicyRedisClient{policyRedisClient: client, evalErr: cacheErr}
+	store := newStore(failingClient, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
+
+	err := store.PublishPolicyChanged(context.Background(), 43, permissionapplication.NewPolicyReloadChange("role_updated"))
+
+	require.ErrorIs(t, err, cacheErr)
+	require.Equal(t, int64(0), failingClient.publishCalls.Load())
+	storedRevision, err := store.CurrentVersion(context.Background())
+	require.NoError(t, err)
+	require.Zero(t, storedRevision)
+}
+
+func TestStorePublishPolicyChangedReturnsPublishFailureAndPreservesCachedRevision(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	publishErr := errors.New("redis publish failed")
+	failingClient := &failingPolicyRedisClient{policyRedisClient: client, publishErr: publishErr}
+	store := newStore(failingClient, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
+
+	err := store.PublishPolicyChanged(context.Background(), 44, permissionapplication.NewPolicyReloadChange("role_updated"))
+
+	require.ErrorIs(t, err, publishErr)
+	require.Equal(t, int64(1), failingClient.publishCalls.Load())
+	storedRevision, err := store.CurrentVersion(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int64(44), storedRevision)
+}
+
+func TestVersionTrackerDoesNotMoveBackward(t *testing.T) {
+	tracker := NewVersionTracker()
+	tracker.MarkApplied(9)
+	tracker.MarkApplied(4)
+
+	require.Equal(t, int64(9), tracker.Applied())
 }
 
 func TestWatcherHandlePayloadReloadsPolicyOnlyForNewerVersions(t *testing.T) {
@@ -293,6 +374,28 @@ func (s *failingVersionStore) CurrentVersion(context.Context) (int64, error) {
 
 func (s *failingVersionStore) Subscribe(context.Context) policySubscriber {
 	return closedPolicySubscriber{}
+}
+
+type failingPolicyRedisClient struct {
+	policyRedisClient
+	evalErr      error
+	publishErr   error
+	publishCalls atomic.Int64
+}
+
+func (c *failingPolicyRedisClient) Eval(ctx context.Context, script string, keys []string, args ...any) *rediscmd.Cmd {
+	if c.evalErr != nil {
+		return rediscmd.NewCmdResult(nil, c.evalErr)
+	}
+	return c.policyRedisClient.Eval(ctx, script, keys, args...)
+}
+
+func (c *failingPolicyRedisClient) Publish(ctx context.Context, channel string, message any) *rediscmd.IntCmd {
+	c.publishCalls.Add(1)
+	if c.publishErr != nil {
+		return rediscmd.NewIntResult(0, c.publishErr)
+	}
+	return c.policyRedisClient.Publish(ctx, channel, message)
 }
 
 func waitForWatcherStopped(t *testing.T, watcher *Watcher) {

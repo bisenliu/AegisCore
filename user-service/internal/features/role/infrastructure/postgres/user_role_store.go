@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/aegiscore/common/runtime/datastore"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
@@ -44,80 +43,125 @@ func (s *UserRoleStore) ListByUserID(ctx context.Context, userID uuid.UUID) ([]r
 }
 
 // Add 新增用户角色绑定。
-func (s *UserRoleStore) Add(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) error {
-	user, role, err := s.getUserAndRole(ctx, userID, roleID)
-	if err != nil {
-		return err
-	}
-	_, err = s.client.UserRole.Create().SetUserID(user.ID).SetRoleID(role.ID).Save(ctx)
-	if err == nil {
-		return nil
-	}
-	if ent.IsConstraintError(err) {
-		return roledomain.ErrUserRoleAlreadyExists
-	}
-	return fmt.Errorf("add user role user %s role %s: %w", userID.String(), roleID.String(), err)
+func (s *UserRoleStore) Add(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
+	_, write, err := transactPolicyChange(ctx, s.client, "add user role", change, func(tx *ent.Tx) (struct{}, error) {
+		user, role, err := s.getLockedUserAndRole(ctx, tx, userID, roleID)
+		if err != nil {
+			return struct{}{}, err
+		}
+		_, err = tx.UserRole.Create().SetUserID(user.ID).SetRoleID(role.ID).Save(ctx)
+		if ent.IsConstraintError(err) {
+			return struct{}{}, roledomain.ErrUserRoleAlreadyExists
+		}
+		if err != nil {
+			return struct{}{}, fmt.Errorf("add user role user %s role %s: %w", userID.String(), roleID.String(), err)
+		}
+		return struct{}{}, nil
+	})
+	return write, err
 }
 
 // Replace 幂等替换用户的完整角色绑定集合。
-func (s *UserRoleStore) Replace(ctx context.Context, userID uuid.UUID, roleIDs []uuid.UUID) ([]roledomain.Role, error) {
-	user, err := s.getUserByExternalID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	roles, err := s.rolesByExternalIDs(ctx, roleIDs)
-	if err != nil {
-		return nil, err
-	}
-	tx, finish, err := datastore.BeginTransaction(ctx, entTxStarter{client: s.client})
-	if err != nil {
-		return nil, fmt.Errorf("begin replace user roles: %w", err)
-	}
-	defer func() { _ = finish.RollbackUnlessCommitted() }()
-	if _, err := tx.UserRole.Delete().Where(entuserrole.UserIDEQ(user.ID)).Exec(ctx); err != nil {
-		return nil, finish.Fail(fmt.Errorf("delete user roles for user %s: %w", userID.String(), err))
-	}
-	builders := make([]*ent.UserRoleCreate, 0, len(roles))
-	for _, role := range roles {
-		builders = append(builders, tx.UserRole.Create().SetUserID(user.ID).SetRoleID(role.ID))
-	}
-	if len(builders) > 0 {
-		if _, err := tx.UserRole.CreateBulk(builders...).Save(ctx); err != nil {
-			return nil, finish.Fail(fmt.Errorf("create replacement user roles for user %s: %w", userID.String(), err))
+func (s *UserRoleStore) Replace(ctx context.Context, userID uuid.UUID, roleIDs []uuid.UUID, change roleapplication.PolicyChange) (roleapplication.RolesWriteResult, error) {
+	roles, write, err := transactPolicyChange(ctx, s.client, "replace user roles", change, func(tx *ent.Tx) ([]*ent.Role, error) {
+		user, err := s.getLockedUserByExternalID(ctx, tx, userID)
+		if err != nil {
+			return nil, err
 		}
-	}
-	if err := finish.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit replace user roles: %w", err)
-	}
-	return toRoleModels(roles), nil
+		roles, err := s.lockedRolesByExternalIDs(ctx, tx, roleIDs)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.UserRole.Delete().Where(entuserrole.UserIDEQ(user.ID)).Exec(ctx); err != nil {
+			return nil, fmt.Errorf("delete user roles for user %s: %w", userID.String(), err)
+		}
+		builders := make([]*ent.UserRoleCreate, 0, len(roles))
+		for _, role := range roles {
+			builders = append(builders, tx.UserRole.Create().SetUserID(user.ID).SetRoleID(role.ID))
+		}
+		if len(builders) > 0 {
+			if _, err := tx.UserRole.CreateBulk(builders...).Save(ctx); err != nil {
+				return nil, fmt.Errorf("create replacement user roles for user %s: %w", userID.String(), err)
+			}
+		}
+		return roles, nil
+	})
+	return roleapplication.RolesWriteResult{Items: toRoleModels(roles), Revision: write.Revision}, err
 }
 
 // Remove 删除用户角色绑定。
-func (s *UserRoleStore) Remove(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) error {
-	user, role, err := s.getUserAndRole(ctx, userID, roleID)
-	if err != nil {
-		return err
-	}
-	deleted, err := s.client.UserRole.Delete().Where(entuserrole.UserIDEQ(user.ID), entuserrole.RoleIDEQ(role.ID)).Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("remove user role user %s role %s: %w", userID.String(), roleID.String(), err)
-	}
-	if deleted == 0 {
-		return roledomain.ErrUserRoleNotFound
-	}
-	return nil
+func (s *UserRoleStore) Remove(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
+	_, write, err := transactPolicyChange(ctx, s.client, "remove user role", change, func(tx *ent.Tx) (struct{}, error) {
+		user, role, err := s.getLockedUserAndRole(ctx, tx, userID, roleID)
+		if err != nil {
+			return struct{}{}, err
+		}
+		deleted, err := tx.UserRole.Delete().Where(entuserrole.UserIDEQ(user.ID), entuserrole.RoleIDEQ(role.ID)).Exec(ctx)
+		if err != nil {
+			return struct{}{}, fmt.Errorf("remove user role user %s role %s: %w", userID.String(), roleID.String(), err)
+		}
+		if deleted == 0 {
+			return struct{}{}, roledomain.ErrUserRoleNotFound
+		}
+		return struct{}{}, nil
+	})
+	return write, err
 }
 
 // AssignRole 幂等新增用户角色绑定，已存在时返回 added=false。
 func (s *UserRoleStore) AssignRole(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) (bool, error) {
-	err := s.Add(ctx, userID, roleID)
+	user, role, err := s.getUserAndRole(ctx, userID, roleID)
+	if err != nil {
+		return false, err
+	}
+	_, err = s.client.UserRole.Create().SetUserID(user.ID).SetRoleID(role.ID).Save(ctx)
 	if err == nil {
 		return true, nil
 	}
-	if err == roledomain.ErrUserRoleAlreadyExists {
+	if ent.IsConstraintError(err) {
 		return false, nil
 	}
-	return false, err
+	return false, fmt.Errorf("assign user role user %s role %s: %w", userID.String(), roleID.String(), err)
+}
+
+func (s *UserRoleStore) getLockedUserAndRole(ctx context.Context, tx *ent.Tx, userID uuid.UUID, roleID uuid.UUID) (*ent.User, *ent.Role, error) {
+	user, err := s.getLockedUserByExternalID(ctx, tx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	role, err := tx.Role.Query().Where(entrole.RoleIDEQ(roleID)).Only(ctx)
+	if ent.IsNotFound(err) {
+		return nil, nil, roledomain.ErrRoleNotFound
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("query role by role_id %s: %w", roleID.String(), err)
+	}
+	return user, role, nil
+}
+
+func (s *UserRoleStore) getLockedUserByExternalID(ctx context.Context, tx *ent.Tx, userID uuid.UUID) (*ent.User, error) {
+	user, err := tx.User.Query().Where(entuser.UserIDEQ(userID), entuser.DeletedAtIsNil()).Only(ctx)
+	if ent.IsNotFound(err) {
+		return nil, identity.ErrUserNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query user by user_id %s: %w", userID.String(), err)
+	}
+	return user, nil
+}
+
+func (s *UserRoleStore) lockedRolesByExternalIDs(ctx context.Context, tx *ent.Tx, roleIDs []uuid.UUID) ([]*ent.Role, error) {
+	if len(roleIDs) == 0 {
+		return []*ent.Role{}, nil
+	}
+	roles, err := tx.Role.Query().Where(entrole.RoleIDIn(roleIDs...)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("query roles by role_ids: %w", err)
+	}
+	if len(roles) != len(roleIDs) {
+		return nil, roledomain.ErrRoleNotFound
+	}
+	return roles, nil
 }
 
 func (s *UserRoleStore) getUserAndRole(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) (*ent.User, *ent.Role, error) {
@@ -152,18 +196,4 @@ func (s *UserRoleStore) getRoleByExternalID(ctx context.Context, roleID uuid.UUI
 		return nil, roledomain.ErrRoleNotFound
 	}
 	return nil, fmt.Errorf("query role by role_id %s: %w", roleID.String(), err)
-}
-
-func (s *UserRoleStore) rolesByExternalIDs(ctx context.Context, roleIDs []uuid.UUID) ([]*ent.Role, error) {
-	if len(roleIDs) == 0 {
-		return []*ent.Role{}, nil
-	}
-	roles, err := s.client.Role.Query().Where(entrole.RoleIDIn(roleIDs...)).All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("query roles by role_ids: %w", err)
-	}
-	if len(roles) != len(roleIDs) {
-		return nil, roledomain.ErrRoleNotFound
-	}
-	return roles, nil
 }

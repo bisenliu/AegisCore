@@ -47,14 +47,16 @@ func (s *roleCommandService) AddUserRole(ctx context.Context, cmd UserRoleComman
 	if !role.Active {
 		return nil, roledomain.ErrRoleInactive
 	}
-	if err := s.userRoles.Add(ctx, cmd.UserID, cmd.RoleID); err != nil {
+	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindUserRoleChanged, Reason: "user_role_added", UserID: cmd.UserID, RoleID: cmd.RoleID}
+	write, err := s.userRoles.Add(ctx, cmd.UserID, cmd.RoleID, change)
+	if err != nil {
 		return nil, err
 	}
-	if err := s.notifyUserRoleChanged(ctx, "user_role_added", cmd.UserID, cmd.RoleID); err != nil {
+	if err := s.notifyUserRoleChanged(ctx, write.Revision, change.Reason, cmd.UserID, cmd.RoleID); err != nil {
 		logger.Error(ctx, "refresh rbac policy after user role add failed", logger.StackTrace(zap.String("user_id", cmd.UserID.String()), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
 		return nil, err
 	}
-	return s.listUserRoles(ctx, cmd.UserID)
+	return s.listUserRoles(ctx, cmd.UserID, write.Revision)
 }
 
 // ReplaceUserRoles 幂等替换用户的完整角色绑定集合。
@@ -70,27 +72,30 @@ func (s *roleCommandService) ReplaceUserRoles(ctx context.Context, cmd ReplaceUs
 			return nil, roledomain.ErrRoleInactive
 		}
 	}
-	items, err := s.userRoles.Replace(ctx, cmd.UserID, roleIDs)
+	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindUserRoleChanged, Reason: "user_roles_replaced", UserID: cmd.UserID}
+	write, err := s.userRoles.Replace(ctx, cmd.UserID, roleIDs, change)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.notifyUserRoleChanged(ctx, "user_roles_replaced", cmd.UserID, uuid.Nil); err != nil {
+	if err := s.notifyUserRoleChanged(ctx, write.Revision, change.Reason, cmd.UserID, uuid.Nil); err != nil {
 		logger.Error(ctx, "refresh rbac policy after user roles replace failed", logger.StackTrace(zap.String("user_id", cmd.UserID.String()), zap.Error(err))...)
 		return nil, err
 	}
-	return &RolesResult{Items: items}, nil
+	return &RolesResult{Items: write.Items, Revision: write.Revision}, nil
 }
 
 // RemoveUserRole 删除用户角色绑定；不存在由 store 映射为明确 not found 语义。
 func (s *roleCommandService) RemoveUserRole(ctx context.Context, cmd UserRoleCommand) (*RolesResult, error) {
-	if err := s.userRoles.Remove(ctx, cmd.UserID, cmd.RoleID); err != nil {
+	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindUserRoleChanged, Reason: "user_role_removed", UserID: cmd.UserID, RoleID: cmd.RoleID}
+	write, err := s.userRoles.Remove(ctx, cmd.UserID, cmd.RoleID, change)
+	if err != nil {
 		return nil, err
 	}
-	if err := s.notifyUserRoleChanged(ctx, "user_role_removed", cmd.UserID, cmd.RoleID); err != nil {
+	if err := s.notifyUserRoleChanged(ctx, write.Revision, change.Reason, cmd.UserID, cmd.RoleID); err != nil {
 		logger.Error(ctx, "refresh rbac policy after user role remove failed", logger.StackTrace(zap.String("user_id", cmd.UserID.String()), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
 		return nil, err
 	}
-	return s.listUserRoles(ctx, cmd.UserID)
+	return s.listUserRoles(ctx, cmd.UserID, write.Revision)
 }
 
 // AddRolePermission 为角色新增权限绑定；重复绑定由 store 映射为明确冲突语义。
@@ -102,14 +107,16 @@ func (s *roleCommandService) AddRolePermission(ctx context.Context, cmd RolePerm
 	if err != nil {
 		return nil, err
 	}
-	if err := s.rolePermissions.Add(ctx, cmd.RoleID, *permission); err != nil {
+	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindPolicyChanged, Reason: "role_permission_added", RoleID: cmd.RoleID, PermissionID: cmd.PermissionID}
+	write, err := s.rolePermissions.Add(ctx, cmd.RoleID, *permission, change)
+	if err != nil {
 		return nil, err
 	}
-	if err := s.notifyPolicyChanged(ctx, "role_permission_added"); err != nil {
+	if err := s.notifyPolicyChanged(ctx, write.Revision, change.Reason); err != nil {
 		logger.Error(ctx, "refresh rbac policy after role permission add failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
 		return nil, err
 	}
-	return s.listRolePermissions(ctx, cmd.RoleID)
+	return s.listRolePermissions(ctx, cmd.RoleID, write.Revision)
 }
 
 // ReplaceRolePermissions 幂等替换角色的完整权限绑定集合。
@@ -127,43 +134,46 @@ func (s *roleCommandService) ReplaceRolePermissions(ctx context.Context, cmd Rep
 		}
 		permissions = append(permissions, *permission)
 	}
-	items, err := s.rolePermissions.Replace(ctx, cmd.RoleID, permissions)
+	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindPolicyChanged, Reason: "role_permissions_replaced", RoleID: cmd.RoleID}
+	write, err := s.rolePermissions.Replace(ctx, cmd.RoleID, permissions, change)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.notifyPolicyChanged(ctx, "role_permissions_replaced"); err != nil {
+	if err := s.notifyPolicyChanged(ctx, write.Revision, change.Reason); err != nil {
 		logger.Error(ctx, "refresh rbac policy after role permissions replace failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
 		return nil, err
 	}
-	return &PermissionsResult{Items: items}, nil
+	return &PermissionsResult{Items: write.Items, Revision: write.Revision}, nil
 }
 
 // RemoveRolePermission 删除角色权限绑定；不存在由 store 映射为明确 not found 语义。
 func (s *roleCommandService) RemoveRolePermission(ctx context.Context, cmd RolePermissionCommand) (*PermissionsResult, error) {
-	if err := s.rolePermissions.Remove(ctx, cmd.RoleID, cmd.PermissionID); err != nil {
+	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindPolicyChanged, Reason: "role_permission_removed", RoleID: cmd.RoleID, PermissionID: cmd.PermissionID}
+	write, err := s.rolePermissions.Remove(ctx, cmd.RoleID, cmd.PermissionID, change)
+	if err != nil {
 		return nil, err
 	}
-	if err := s.notifyPolicyChanged(ctx, "role_permission_removed"); err != nil {
+	if err := s.notifyPolicyChanged(ctx, write.Revision, change.Reason); err != nil {
 		logger.Error(ctx, "refresh rbac policy after role permission remove failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
 		return nil, err
 	}
-	return s.listRolePermissions(ctx, cmd.RoleID)
+	return s.listRolePermissions(ctx, cmd.RoleID, write.Revision)
 }
 
-func (s *roleCommandService) listUserRoles(ctx context.Context, userID uuid.UUID) (*RolesResult, error) {
+func (s *roleCommandService) listUserRoles(ctx context.Context, userID uuid.UUID, revision int64) (*RolesResult, error) {
 	items, err := s.userRoles.ListByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	return &RolesResult{Items: items}, nil
+	return &RolesResult{Items: items, Revision: revision}, nil
 }
 
-func (s *roleCommandService) listRolePermissions(ctx context.Context, roleID uuid.UUID) (*PermissionsResult, error) {
+func (s *roleCommandService) listRolePermissions(ctx context.Context, roleID uuid.UUID, revision int64) (*PermissionsResult, error) {
 	items, err := s.rolePermissions.ListByRoleID(ctx, roleID)
 	if err != nil {
 		return nil, err
 	}
-	return &PermissionsResult{Items: items}, nil
+	return &PermissionsResult{Items: items, Revision: revision}, nil
 }
 
 func uniqueUUIDs(values []uuid.UUID) []uuid.UUID {

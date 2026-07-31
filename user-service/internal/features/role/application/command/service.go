@@ -11,11 +11,16 @@ import (
 )
 
 type roleCommandService struct {
-	policyChanges   permissionapplication.PolicyChangeNotifier
+	policyChanges   PolicyChangeNotifier
 	permissions     roleapplication.PermissionLookup
 	rolePermissions roleapplication.RolePermissionStore
 	roles           roleapplication.RoleStore
 	userRoles       roleapplication.UserRoleStore
+}
+
+// PolicyChangeNotifier 消费数据库已提交 revision 执行即时 policy 同步。
+type PolicyChangeNotifier interface {
+	NotifyPolicyChanged(ctx context.Context, revision int64, change permissionapplication.PolicyChange) error
 }
 
 // NewRoleCommandService 根据角色相关端口构造角色写侧服务。
@@ -24,7 +29,7 @@ func NewRoleCommandService(
 	userRoles roleapplication.UserRoleStore,
 	rolePermissions roleapplication.RolePermissionStore,
 	permissions roleapplication.PermissionLookup,
-	policyChanges permissionapplication.PolicyChangeNotifier,
+	policyChanges PolicyChangeNotifier,
 ) (RoleCommandService, error) {
 	if policyChanges == nil {
 		return nil, errors.New("role policy change notifier is required")
@@ -38,10 +43,10 @@ func NewRoleCommandService(
 	}, nil
 }
 
-func (s *roleCommandService) notifyPolicyChanged(ctx context.Context, reason string) error {
-	return s.policyChanges.NotifyPolicyChanged(ctx, permissionapplication.NewPolicyReloadChange(reason))
+func (s *roleCommandService) notifyPolicyChanged(ctx context.Context, revision int64, reason string) error {
+	return s.policyChanges.NotifyPolicyChanged(ctx, revision, permissionapplication.NewPolicyReloadChange(reason))
 }
 
-func (s *roleCommandService) notifyUserRoleChanged(ctx context.Context, reason string, userID uuid.UUID, roleID uuid.UUID) error {
-	return s.policyChanges.NotifyPolicyChanged(ctx, permissionapplication.NewUserRoleChange(reason, userID, roleID))
+func (s *roleCommandService) notifyUserRoleChanged(ctx context.Context, revision int64, reason string, userID uuid.UUID, roleID uuid.UUID) error {
+	return s.policyChanges.NotifyPolicyChanged(ctx, revision, permissionapplication.NewUserRoleChange(reason, userID, roleID))
 }

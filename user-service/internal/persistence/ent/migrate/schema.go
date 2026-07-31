@@ -44,6 +44,61 @@ var (
 			},
 		},
 	}
+	// RbacPolicyOutboxEventsColumns holds the columns for the "rbac_policy_outbox_events" table.
+	RbacPolicyOutboxEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "RBAC policy outbox 内部ID"},
+		{Name: "event_id", Type: field.TypeUUID, Unique: true, Comment: "稳定 outbox event ID"},
+		{Name: "kind", Type: field.TypeString, Size: 32, Comment: "事件类型"},
+		{Name: "reason", Type: field.TypeString, Size: 64, Comment: "触发 policy 变更的稳定原因"},
+		{Name: "role_id", Type: field.TypeUUID, Nullable: true, Comment: "相关外部角色ID"},
+		{Name: "user_id", Type: field.TypeUUID, Nullable: true, Comment: "相关外部用户ID"},
+		{Name: "permission_id", Type: field.TypeUUID, Nullable: true, Comment: "相关外部权限ID"},
+		{Name: "status", Type: field.TypeString, Size: 16, Comment: "投递状态", Default: "pending"},
+		{Name: "attempt_count", Type: field.TypeInt, Comment: "投递尝试次数", Default: 0},
+		{Name: "next_attempt_at", Type: field.TypeInt64, Comment: "下次允许尝试的时间戳毫秒"},
+		{Name: "last_error", Type: field.TypeString, Nullable: true, Size: 2048, Comment: "最近一次投递错误"},
+		{Name: "idempotency_key", Type: field.TypeString, Unique: true, Size: 128, Comment: "稳定投递幂等键"},
+		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
+		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
+		{Name: "delivered_at", Type: field.TypeInt64, Nullable: true, Comment: "投递完成时间戳毫秒"},
+		{Name: "revision", Type: field.TypeInt64, Unique: true, Comment: "关联的 RBAC policy revision"},
+	}
+	// RbacPolicyOutboxEventsTable holds the schema information for the "rbac_policy_outbox_events" table.
+	RbacPolicyOutboxEventsTable = &schema.Table{
+		Name:       "rbac_policy_outbox_events",
+		Columns:    RbacPolicyOutboxEventsColumns,
+		PrimaryKey: []*schema.Column{RbacPolicyOutboxEventsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "rbac_policy_outbox_events_rbac_policy_revisions_outbox_event",
+				Columns:    []*schema.Column{RbacPolicyOutboxEventsColumns[15]},
+				RefColumns: []*schema.Column{RbacPolicyRevisionsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "rbacpolicyoutboxevent_status_next_attempt_at_revision",
+				Unique:  false,
+				Columns: []*schema.Column{RbacPolicyOutboxEventsColumns[7], RbacPolicyOutboxEventsColumns[9], RbacPolicyOutboxEventsColumns[15]},
+			},
+		},
+	}
+	// RbacPolicyRevisionsColumns holds the columns for the "rbac_policy_revisions" table.
+	RbacPolicyRevisionsColumns = []*schema.Column{
+		{Name: "revision", Type: field.TypeInt64, Increment: true, Comment: "单调递增的 RBAC policy revision"},
+		{Name: "reason", Type: field.TypeString, Size: 64, Comment: "触发 policy 变更的稳定原因"},
+		{Name: "role_id", Type: field.TypeUUID, Nullable: true, Comment: "相关外部角色ID"},
+		{Name: "user_id", Type: field.TypeUUID, Nullable: true, Comment: "相关外部用户ID"},
+		{Name: "permission_id", Type: field.TypeUUID, Nullable: true, Comment: "相关外部权限ID"},
+		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
+	}
+	// RbacPolicyRevisionsTable holds the schema information for the "rbac_policy_revisions" table.
+	RbacPolicyRevisionsTable = &schema.Table{
+		Name:       "rbac_policy_revisions",
+		Columns:    RbacPolicyRevisionsColumns,
+		PrimaryKey: []*schema.Column{RbacPolicyRevisionsColumns[0]},
+	}
 	// RolesColumns holds the columns for the "roles" table.
 	RolesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "角色ID"},
@@ -206,6 +261,8 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		PermissionsTable,
+		RbacPolicyOutboxEventsTable,
+		RbacPolicyRevisionsTable,
 		RolesTable,
 		RolePermissionsTable,
 		UsersTable,
@@ -214,6 +271,7 @@ var (
 )
 
 func init() {
+	RbacPolicyOutboxEventsTable.ForeignKeys[0].RefTable = RbacPolicyRevisionsTable
 	RolePermissionsTable.ForeignKeys[0].RefTable = PermissionsTable
 	RolePermissionsTable.ForeignKeys[1].RefTable = RolesTable
 	UserRolesTable.ForeignKeys[0].RefTable = RolesTable

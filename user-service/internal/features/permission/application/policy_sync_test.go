@@ -10,20 +10,21 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestPolicyRefreshCoordinatorReloadsPublishesAndTracksVersion(t *testing.T) {
+func TestPolicyRefreshCoordinatorReloadsPublishesAndTracksRevision(t *testing.T) {
+	const revision int64 = 12
 	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
 	engine.EXPECT().Reload(gomock.Any()).Return(nil)
 	engine.EXPECT().InvalidateAllUserRoles()
 
 	publisher := NewMockPolicyVersionPublisher(gomock.NewController(t))
 	var published PolicyChange
-	publisher.EXPECT().PublishPolicyChanged(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, change PolicyChange) (int64, error) {
+	publisher.EXPECT().PublishPolicyChanged(gomock.Any(), revision, gomock.Any()).DoAndReturn(func(_ context.Context, _ int64, change PolicyChange) error {
 		published = change
-		return int64(12), nil
+		return nil
 	})
 
 	tracker := NewMockPolicyVersionTracker(gomock.NewController(t))
-	tracker.EXPECT().MarkApplied(int64(12))
+	tracker.EXPECT().MarkApplied(revision)
 
 	metrics := NewMockMetrics(gomock.NewController(t))
 	metrics.EXPECT().PolicyReloadSucceeded(gomock.Any(), MetricsSourceLocalChange)
@@ -31,17 +32,18 @@ func TestPolicyRefreshCoordinatorReloadsPublishesAndTracksVersion(t *testing.T) 
 
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	require.NoError(t, coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("role_permission_added")))
+	require.NoError(t, coordinator.NotifyPolicyChanged(context.Background(), revision, NewPolicyReloadChange("role_permission_added")))
 	require.Equal(t, "role_permission_added", published.Reason)
 }
 
 func TestPolicyRefreshCoordinatorPublishesButDoesNotTrackWhenReloadFails(t *testing.T) {
+	const revision int64 = 13
 	reloadErr := errors.New("reload failed")
 	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
 	engine.EXPECT().Reload(gomock.Any()).Return(reloadErr)
 
 	publisher := NewMockPolicyVersionPublisher(gomock.NewController(t))
-	publisher.EXPECT().PublishPolicyChanged(gomock.Any(), gomock.Any()).Return(int64(13), nil)
+	publisher.EXPECT().PublishPolicyChanged(gomock.Any(), revision, gomock.Any()).Return(nil)
 	tracker := NewMockPolicyVersionTracker(gomock.NewController(t))
 	metrics := NewMockMetrics(gomock.NewController(t))
 	metrics.EXPECT().PolicyReloadFailed(gomock.Any(), MetricsSourceLocalChange, MetricsReasonReloadFailed)
@@ -49,18 +51,19 @@ func TestPolicyRefreshCoordinatorPublishesButDoesNotTrackWhenReloadFails(t *test
 
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	err := coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("permission_updated"))
+	err := coordinator.NotifyPolicyChanged(context.Background(), revision, NewPolicyReloadChange("permission_updated"))
 	require.ErrorIs(t, err, reloadErr)
 }
 
 func TestPolicyRefreshCoordinatorJoinsReloadAndPublishFailures(t *testing.T) {
+	const revision int64 = 14
 	reloadErr := errors.New("reload failed")
 	publishErr := errors.New("publish failed")
 	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
 	engine.EXPECT().Reload(gomock.Any()).Return(reloadErr)
 
 	publisher := NewMockPolicyVersionPublisher(gomock.NewController(t))
-	publisher.EXPECT().PublishPolicyChanged(gomock.Any(), gomock.Any()).Return(int64(0), publishErr)
+	publisher.EXPECT().PublishPolicyChanged(gomock.Any(), revision, gomock.Any()).Return(publishErr)
 
 	tracker := NewMockPolicyVersionTracker(gomock.NewController(t))
 	metrics := NewMockMetrics(gomock.NewController(t))
@@ -69,19 +72,20 @@ func TestPolicyRefreshCoordinatorJoinsReloadAndPublishFailures(t *testing.T) {
 
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	err := coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("permission_updated"))
+	err := coordinator.NotifyPolicyChanged(context.Background(), revision, NewPolicyReloadChange("permission_updated"))
 	require.ErrorIs(t, err, reloadErr)
 	require.ErrorIs(t, err, publishErr)
 }
 
 func TestPolicyRefreshCoordinatorDoesNotTrackWhenPublishFails(t *testing.T) {
+	const revision int64 = 15
 	publishErr := errors.New("publish failed")
 	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
 	engine.EXPECT().Reload(gomock.Any()).Return(nil)
 	engine.EXPECT().InvalidateAllUserRoles()
 
 	publisher := NewMockPolicyVersionPublisher(gomock.NewController(t))
-	publisher.EXPECT().PublishPolicyChanged(gomock.Any(), gomock.Any()).Return(int64(0), publishErr)
+	publisher.EXPECT().PublishPolicyChanged(gomock.Any(), revision, gomock.Any()).Return(publishErr)
 
 	tracker := NewMockPolicyVersionTracker(gomock.NewController(t))
 	metrics := NewMockMetrics(gomock.NewController(t))
@@ -90,11 +94,12 @@ func TestPolicyRefreshCoordinatorDoesNotTrackWhenPublishFails(t *testing.T) {
 
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	err := coordinator.NotifyPolicyChanged(context.Background(), NewPolicyReloadChange("permission_active_changed"))
+	err := coordinator.NotifyPolicyChanged(context.Background(), revision, NewPolicyReloadChange("permission_active_changed"))
 	require.ErrorIs(t, err, publishErr)
 }
 
 func TestPolicyRefreshCoordinatorUserRoleChangeInvalidatesWithoutReload(t *testing.T) {
+	const revision int64 = 7
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000901")
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000902")
 	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
@@ -102,20 +107,20 @@ func TestPolicyRefreshCoordinatorUserRoleChangeInvalidatesWithoutReload(t *testi
 
 	publisher := NewMockPolicyVersionPublisher(gomock.NewController(t))
 	var published PolicyChange
-	publisher.EXPECT().PublishPolicyChanged(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, change PolicyChange) (int64, error) {
+	publisher.EXPECT().PublishPolicyChanged(gomock.Any(), revision, gomock.Any()).DoAndReturn(func(_ context.Context, _ int64, change PolicyChange) error {
 		published = change
-		return int64(7), nil
+		return nil
 	})
 
 	tracker := NewMockPolicyVersionTracker(gomock.NewController(t))
-	tracker.EXPECT().MarkApplied(int64(7))
+	tracker.EXPECT().MarkApplied(revision)
 
 	metrics := NewMockMetrics(gomock.NewController(t))
 	metrics.EXPECT().PolicyPublishSucceeded(gomock.Any())
 
 	coordinator := NewPolicyRefreshCoordinator(engine, publisher, tracker, nil, metrics)
 
-	require.NoError(t, coordinator.NotifyPolicyChanged(context.Background(), NewUserRoleChange("user_role_added", userID, roleID)))
+	require.NoError(t, coordinator.NotifyPolicyChanged(context.Background(), revision, NewUserRoleChange("user_role_added", userID, roleID)))
 	require.Equal(t, PolicyChangeKindUserRole, published.Kind)
 	require.Equal(t, userID, published.UserID)
 	require.Equal(t, roleID, published.RoleID)

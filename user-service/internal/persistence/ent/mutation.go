@@ -12,6 +12,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/aegiscore/user-service/internal/persistence/ent/permission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
 	"github.com/aegiscore/user-service/internal/persistence/ent/role"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/user"
@@ -28,11 +30,13 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
-	TypePermission     = "Permission"
-	TypeRole           = "Role"
-	TypeRolePermission = "RolePermission"
-	TypeUser           = "User"
-	TypeUserRole       = "UserRole"
+	TypePermission            = "Permission"
+	TypeRbacPolicyOutboxEvent = "RbacPolicyOutboxEvent"
+	TypeRbacPolicyRevision    = "RbacPolicyRevision"
+	TypeRole                  = "Role"
+	TypeRolePermission        = "RolePermission"
+	TypeUser                  = "User"
+	TypeUserRole              = "UserRole"
 )
 
 // PermissionMutation represents an operation that mutates the Permission nodes in the graph.
@@ -905,6 +909,2139 @@ func (m *PermissionMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Permission edge %s", name)
+}
+
+// RbacPolicyOutboxEventMutation represents an operation that mutates the RbacPolicyOutboxEvent nodes in the graph.
+type RbacPolicyOutboxEventMutation struct {
+	config
+	op                     Op
+	typ                    string
+	id                     *int64
+	event_id               *uuid.UUID
+	kind                   *string
+	reason                 *string
+	role_id                *uuid.UUID
+	user_id                *uuid.UUID
+	permission_id          *uuid.UUID
+	status                 *string
+	attempt_count          *int
+	addattempt_count       *int
+	next_attempt_at        *int64
+	addnext_attempt_at     *int64
+	last_error             *string
+	idempotency_key        *string
+	created_at             *int64
+	addcreated_at          *int64
+	updated_at             *int64
+	addupdated_at          *int64
+	delivered_at           *int64
+	adddelivered_at        *int64
+	clearedFields          map[string]struct{}
+	policy_revision        *int64
+	clearedpolicy_revision bool
+	done                   bool
+	oldValue               func(context.Context) (*RbacPolicyOutboxEvent, error)
+	predicates             []predicate.RbacPolicyOutboxEvent
+}
+
+var _ ent.Mutation = (*RbacPolicyOutboxEventMutation)(nil)
+
+// rbacpolicyoutboxeventOption allows management of the mutation configuration using functional options.
+type rbacpolicyoutboxeventOption func(*RbacPolicyOutboxEventMutation)
+
+// newRbacPolicyOutboxEventMutation creates new mutation for the RbacPolicyOutboxEvent entity.
+func newRbacPolicyOutboxEventMutation(c config, op Op, opts ...rbacpolicyoutboxeventOption) *RbacPolicyOutboxEventMutation {
+	m := &RbacPolicyOutboxEventMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeRbacPolicyOutboxEvent,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withRbacPolicyOutboxEventID sets the ID field of the mutation.
+func withRbacPolicyOutboxEventID(id int64) rbacpolicyoutboxeventOption {
+	return func(m *RbacPolicyOutboxEventMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *RbacPolicyOutboxEvent
+		)
+		m.oldValue = func(ctx context.Context) (*RbacPolicyOutboxEvent, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().RbacPolicyOutboxEvent.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withRbacPolicyOutboxEvent sets the old RbacPolicyOutboxEvent of the mutation.
+func withRbacPolicyOutboxEvent(node *RbacPolicyOutboxEvent) rbacpolicyoutboxeventOption {
+	return func(m *RbacPolicyOutboxEventMutation) {
+		m.oldValue = func(context.Context) (*RbacPolicyOutboxEvent, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m RbacPolicyOutboxEventMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m RbacPolicyOutboxEventMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of RbacPolicyOutboxEvent entities.
+func (m *RbacPolicyOutboxEventMutation) SetID(id int64) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *RbacPolicyOutboxEventMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *RbacPolicyOutboxEventMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().RbacPolicyOutboxEvent.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetEventID sets the "event_id" field.
+func (m *RbacPolicyOutboxEventMutation) SetEventID(u uuid.UUID) {
+	m.event_id = &u
+}
+
+// EventID returns the value of the "event_id" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) EventID() (r uuid.UUID, exists bool) {
+	v := m.event_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEventID returns the old "event_id" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldEventID(ctx context.Context) (v uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEventID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEventID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEventID: %w", err)
+	}
+	return oldValue.EventID, nil
+}
+
+// ResetEventID resets all changes to the "event_id" field.
+func (m *RbacPolicyOutboxEventMutation) ResetEventID() {
+	m.event_id = nil
+}
+
+// SetRevision sets the "revision" field.
+func (m *RbacPolicyOutboxEventMutation) SetRevision(i int64) {
+	m.policy_revision = &i
+}
+
+// Revision returns the value of the "revision" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) Revision() (r int64, exists bool) {
+	v := m.policy_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRevision returns the old "revision" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldRevision(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRevision is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRevision requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRevision: %w", err)
+	}
+	return oldValue.Revision, nil
+}
+
+// ResetRevision resets all changes to the "revision" field.
+func (m *RbacPolicyOutboxEventMutation) ResetRevision() {
+	m.policy_revision = nil
+}
+
+// SetKind sets the "kind" field.
+func (m *RbacPolicyOutboxEventMutation) SetKind(s string) {
+	m.kind = &s
+}
+
+// Kind returns the value of the "kind" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) Kind() (r string, exists bool) {
+	v := m.kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKind returns the old "kind" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldKind(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKind: %w", err)
+	}
+	return oldValue.Kind, nil
+}
+
+// ResetKind resets all changes to the "kind" field.
+func (m *RbacPolicyOutboxEventMutation) ResetKind() {
+	m.kind = nil
+}
+
+// SetReason sets the "reason" field.
+func (m *RbacPolicyOutboxEventMutation) SetReason(s string) {
+	m.reason = &s
+}
+
+// Reason returns the value of the "reason" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) Reason() (r string, exists bool) {
+	v := m.reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReason returns the old "reason" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldReason(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReason: %w", err)
+	}
+	return oldValue.Reason, nil
+}
+
+// ResetReason resets all changes to the "reason" field.
+func (m *RbacPolicyOutboxEventMutation) ResetReason() {
+	m.reason = nil
+}
+
+// SetRoleID sets the "role_id" field.
+func (m *RbacPolicyOutboxEventMutation) SetRoleID(u uuid.UUID) {
+	m.role_id = &u
+}
+
+// RoleID returns the value of the "role_id" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) RoleID() (r uuid.UUID, exists bool) {
+	v := m.role_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRoleID returns the old "role_id" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldRoleID(ctx context.Context) (v *uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRoleID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRoleID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRoleID: %w", err)
+	}
+	return oldValue.RoleID, nil
+}
+
+// ClearRoleID clears the value of the "role_id" field.
+func (m *RbacPolicyOutboxEventMutation) ClearRoleID() {
+	m.role_id = nil
+	m.clearedFields[rbacpolicyoutboxevent.FieldRoleID] = struct{}{}
+}
+
+// RoleIDCleared returns if the "role_id" field was cleared in this mutation.
+func (m *RbacPolicyOutboxEventMutation) RoleIDCleared() bool {
+	_, ok := m.clearedFields[rbacpolicyoutboxevent.FieldRoleID]
+	return ok
+}
+
+// ResetRoleID resets all changes to the "role_id" field.
+func (m *RbacPolicyOutboxEventMutation) ResetRoleID() {
+	m.role_id = nil
+	delete(m.clearedFields, rbacpolicyoutboxevent.FieldRoleID)
+}
+
+// SetUserID sets the "user_id" field.
+func (m *RbacPolicyOutboxEventMutation) SetUserID(u uuid.UUID) {
+	m.user_id = &u
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) UserID() (r uuid.UUID, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldUserID(ctx context.Context) (v *uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ClearUserID clears the value of the "user_id" field.
+func (m *RbacPolicyOutboxEventMutation) ClearUserID() {
+	m.user_id = nil
+	m.clearedFields[rbacpolicyoutboxevent.FieldUserID] = struct{}{}
+}
+
+// UserIDCleared returns if the "user_id" field was cleared in this mutation.
+func (m *RbacPolicyOutboxEventMutation) UserIDCleared() bool {
+	_, ok := m.clearedFields[rbacpolicyoutboxevent.FieldUserID]
+	return ok
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *RbacPolicyOutboxEventMutation) ResetUserID() {
+	m.user_id = nil
+	delete(m.clearedFields, rbacpolicyoutboxevent.FieldUserID)
+}
+
+// SetPermissionID sets the "permission_id" field.
+func (m *RbacPolicyOutboxEventMutation) SetPermissionID(u uuid.UUID) {
+	m.permission_id = &u
+}
+
+// PermissionID returns the value of the "permission_id" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) PermissionID() (r uuid.UUID, exists bool) {
+	v := m.permission_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPermissionID returns the old "permission_id" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldPermissionID(ctx context.Context) (v *uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPermissionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPermissionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPermissionID: %w", err)
+	}
+	return oldValue.PermissionID, nil
+}
+
+// ClearPermissionID clears the value of the "permission_id" field.
+func (m *RbacPolicyOutboxEventMutation) ClearPermissionID() {
+	m.permission_id = nil
+	m.clearedFields[rbacpolicyoutboxevent.FieldPermissionID] = struct{}{}
+}
+
+// PermissionIDCleared returns if the "permission_id" field was cleared in this mutation.
+func (m *RbacPolicyOutboxEventMutation) PermissionIDCleared() bool {
+	_, ok := m.clearedFields[rbacpolicyoutboxevent.FieldPermissionID]
+	return ok
+}
+
+// ResetPermissionID resets all changes to the "permission_id" field.
+func (m *RbacPolicyOutboxEventMutation) ResetPermissionID() {
+	m.permission_id = nil
+	delete(m.clearedFields, rbacpolicyoutboxevent.FieldPermissionID)
+}
+
+// SetStatus sets the "status" field.
+func (m *RbacPolicyOutboxEventMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *RbacPolicyOutboxEventMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetAttemptCount sets the "attempt_count" field.
+func (m *RbacPolicyOutboxEventMutation) SetAttemptCount(i int) {
+	m.attempt_count = &i
+	m.addattempt_count = nil
+}
+
+// AttemptCount returns the value of the "attempt_count" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) AttemptCount() (r int, exists bool) {
+	v := m.attempt_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAttemptCount returns the old "attempt_count" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldAttemptCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAttemptCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAttemptCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAttemptCount: %w", err)
+	}
+	return oldValue.AttemptCount, nil
+}
+
+// AddAttemptCount adds i to the "attempt_count" field.
+func (m *RbacPolicyOutboxEventMutation) AddAttemptCount(i int) {
+	if m.addattempt_count != nil {
+		*m.addattempt_count += i
+	} else {
+		m.addattempt_count = &i
+	}
+}
+
+// AddedAttemptCount returns the value that was added to the "attempt_count" field in this mutation.
+func (m *RbacPolicyOutboxEventMutation) AddedAttemptCount() (r int, exists bool) {
+	v := m.addattempt_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAttemptCount resets all changes to the "attempt_count" field.
+func (m *RbacPolicyOutboxEventMutation) ResetAttemptCount() {
+	m.attempt_count = nil
+	m.addattempt_count = nil
+}
+
+// SetNextAttemptAt sets the "next_attempt_at" field.
+func (m *RbacPolicyOutboxEventMutation) SetNextAttemptAt(i int64) {
+	m.next_attempt_at = &i
+	m.addnext_attempt_at = nil
+}
+
+// NextAttemptAt returns the value of the "next_attempt_at" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) NextAttemptAt() (r int64, exists bool) {
+	v := m.next_attempt_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNextAttemptAt returns the old "next_attempt_at" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldNextAttemptAt(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNextAttemptAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNextAttemptAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNextAttemptAt: %w", err)
+	}
+	return oldValue.NextAttemptAt, nil
+}
+
+// AddNextAttemptAt adds i to the "next_attempt_at" field.
+func (m *RbacPolicyOutboxEventMutation) AddNextAttemptAt(i int64) {
+	if m.addnext_attempt_at != nil {
+		*m.addnext_attempt_at += i
+	} else {
+		m.addnext_attempt_at = &i
+	}
+}
+
+// AddedNextAttemptAt returns the value that was added to the "next_attempt_at" field in this mutation.
+func (m *RbacPolicyOutboxEventMutation) AddedNextAttemptAt() (r int64, exists bool) {
+	v := m.addnext_attempt_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetNextAttemptAt resets all changes to the "next_attempt_at" field.
+func (m *RbacPolicyOutboxEventMutation) ResetNextAttemptAt() {
+	m.next_attempt_at = nil
+	m.addnext_attempt_at = nil
+}
+
+// SetLastError sets the "last_error" field.
+func (m *RbacPolicyOutboxEventMutation) SetLastError(s string) {
+	m.last_error = &s
+}
+
+// LastError returns the value of the "last_error" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) LastError() (r string, exists bool) {
+	v := m.last_error
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastError returns the old "last_error" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldLastError(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastError is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastError requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastError: %w", err)
+	}
+	return oldValue.LastError, nil
+}
+
+// ClearLastError clears the value of the "last_error" field.
+func (m *RbacPolicyOutboxEventMutation) ClearLastError() {
+	m.last_error = nil
+	m.clearedFields[rbacpolicyoutboxevent.FieldLastError] = struct{}{}
+}
+
+// LastErrorCleared returns if the "last_error" field was cleared in this mutation.
+func (m *RbacPolicyOutboxEventMutation) LastErrorCleared() bool {
+	_, ok := m.clearedFields[rbacpolicyoutboxevent.FieldLastError]
+	return ok
+}
+
+// ResetLastError resets all changes to the "last_error" field.
+func (m *RbacPolicyOutboxEventMutation) ResetLastError() {
+	m.last_error = nil
+	delete(m.clearedFields, rbacpolicyoutboxevent.FieldLastError)
+}
+
+// SetIdempotencyKey sets the "idempotency_key" field.
+func (m *RbacPolicyOutboxEventMutation) SetIdempotencyKey(s string) {
+	m.idempotency_key = &s
+}
+
+// IdempotencyKey returns the value of the "idempotency_key" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) IdempotencyKey() (r string, exists bool) {
+	v := m.idempotency_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIdempotencyKey returns the old "idempotency_key" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldIdempotencyKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIdempotencyKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIdempotencyKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIdempotencyKey: %w", err)
+	}
+	return oldValue.IdempotencyKey, nil
+}
+
+// ResetIdempotencyKey resets all changes to the "idempotency_key" field.
+func (m *RbacPolicyOutboxEventMutation) ResetIdempotencyKey() {
+	m.idempotency_key = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *RbacPolicyOutboxEventMutation) SetCreatedAt(i int64) {
+	m.created_at = &i
+	m.addcreated_at = nil
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) CreatedAt() (r int64, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldCreatedAt(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// AddCreatedAt adds i to the "created_at" field.
+func (m *RbacPolicyOutboxEventMutation) AddCreatedAt(i int64) {
+	if m.addcreated_at != nil {
+		*m.addcreated_at += i
+	} else {
+		m.addcreated_at = &i
+	}
+}
+
+// AddedCreatedAt returns the value that was added to the "created_at" field in this mutation.
+func (m *RbacPolicyOutboxEventMutation) AddedCreatedAt() (r int64, exists bool) {
+	v := m.addcreated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *RbacPolicyOutboxEventMutation) ResetCreatedAt() {
+	m.created_at = nil
+	m.addcreated_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *RbacPolicyOutboxEventMutation) SetUpdatedAt(i int64) {
+	m.updated_at = &i
+	m.addupdated_at = nil
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) UpdatedAt() (r int64, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldUpdatedAt(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// AddUpdatedAt adds i to the "updated_at" field.
+func (m *RbacPolicyOutboxEventMutation) AddUpdatedAt(i int64) {
+	if m.addupdated_at != nil {
+		*m.addupdated_at += i
+	} else {
+		m.addupdated_at = &i
+	}
+}
+
+// AddedUpdatedAt returns the value that was added to the "updated_at" field in this mutation.
+func (m *RbacPolicyOutboxEventMutation) AddedUpdatedAt() (r int64, exists bool) {
+	v := m.addupdated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *RbacPolicyOutboxEventMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+	m.addupdated_at = nil
+}
+
+// SetDeliveredAt sets the "delivered_at" field.
+func (m *RbacPolicyOutboxEventMutation) SetDeliveredAt(i int64) {
+	m.delivered_at = &i
+	m.adddelivered_at = nil
+}
+
+// DeliveredAt returns the value of the "delivered_at" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) DeliveredAt() (r int64, exists bool) {
+	v := m.delivered_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDeliveredAt returns the old "delivered_at" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldDeliveredAt(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDeliveredAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDeliveredAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDeliveredAt: %w", err)
+	}
+	return oldValue.DeliveredAt, nil
+}
+
+// AddDeliveredAt adds i to the "delivered_at" field.
+func (m *RbacPolicyOutboxEventMutation) AddDeliveredAt(i int64) {
+	if m.adddelivered_at != nil {
+		*m.adddelivered_at += i
+	} else {
+		m.adddelivered_at = &i
+	}
+}
+
+// AddedDeliveredAt returns the value that was added to the "delivered_at" field in this mutation.
+func (m *RbacPolicyOutboxEventMutation) AddedDeliveredAt() (r int64, exists bool) {
+	v := m.adddelivered_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDeliveredAt clears the value of the "delivered_at" field.
+func (m *RbacPolicyOutboxEventMutation) ClearDeliveredAt() {
+	m.delivered_at = nil
+	m.adddelivered_at = nil
+	m.clearedFields[rbacpolicyoutboxevent.FieldDeliveredAt] = struct{}{}
+}
+
+// DeliveredAtCleared returns if the "delivered_at" field was cleared in this mutation.
+func (m *RbacPolicyOutboxEventMutation) DeliveredAtCleared() bool {
+	_, ok := m.clearedFields[rbacpolicyoutboxevent.FieldDeliveredAt]
+	return ok
+}
+
+// ResetDeliveredAt resets all changes to the "delivered_at" field.
+func (m *RbacPolicyOutboxEventMutation) ResetDeliveredAt() {
+	m.delivered_at = nil
+	m.adddelivered_at = nil
+	delete(m.clearedFields, rbacpolicyoutboxevent.FieldDeliveredAt)
+}
+
+// SetPolicyRevisionID sets the "policy_revision" edge to the RbacPolicyRevision entity by id.
+func (m *RbacPolicyOutboxEventMutation) SetPolicyRevisionID(id int64) {
+	m.policy_revision = &id
+}
+
+// ClearPolicyRevision clears the "policy_revision" edge to the RbacPolicyRevision entity.
+func (m *RbacPolicyOutboxEventMutation) ClearPolicyRevision() {
+	m.clearedpolicy_revision = true
+	m.clearedFields[rbacpolicyoutboxevent.FieldRevision] = struct{}{}
+}
+
+// PolicyRevisionCleared reports if the "policy_revision" edge to the RbacPolicyRevision entity was cleared.
+func (m *RbacPolicyOutboxEventMutation) PolicyRevisionCleared() bool {
+	return m.clearedpolicy_revision
+}
+
+// PolicyRevisionID returns the "policy_revision" edge ID in the mutation.
+func (m *RbacPolicyOutboxEventMutation) PolicyRevisionID() (id int64, exists bool) {
+	if m.policy_revision != nil {
+		return *m.policy_revision, true
+	}
+	return
+}
+
+// PolicyRevisionIDs returns the "policy_revision" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// PolicyRevisionID instead. It exists only for internal usage by the builders.
+func (m *RbacPolicyOutboxEventMutation) PolicyRevisionIDs() (ids []int64) {
+	if id := m.policy_revision; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetPolicyRevision resets all changes to the "policy_revision" edge.
+func (m *RbacPolicyOutboxEventMutation) ResetPolicyRevision() {
+	m.policy_revision = nil
+	m.clearedpolicy_revision = false
+}
+
+// Where appends a list predicates to the RbacPolicyOutboxEventMutation builder.
+func (m *RbacPolicyOutboxEventMutation) Where(ps ...predicate.RbacPolicyOutboxEvent) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the RbacPolicyOutboxEventMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RbacPolicyOutboxEventMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RbacPolicyOutboxEvent, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *RbacPolicyOutboxEventMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RbacPolicyOutboxEventMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (RbacPolicyOutboxEvent).
+func (m *RbacPolicyOutboxEventMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *RbacPolicyOutboxEventMutation) Fields() []string {
+	fields := make([]string, 0, 15)
+	if m.event_id != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldEventID)
+	}
+	if m.policy_revision != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldRevision)
+	}
+	if m.kind != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldKind)
+	}
+	if m.reason != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldReason)
+	}
+	if m.role_id != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldRoleID)
+	}
+	if m.user_id != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldUserID)
+	}
+	if m.permission_id != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldPermissionID)
+	}
+	if m.status != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldStatus)
+	}
+	if m.attempt_count != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldAttemptCount)
+	}
+	if m.next_attempt_at != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldNextAttemptAt)
+	}
+	if m.last_error != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldLastError)
+	}
+	if m.idempotency_key != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldIdempotencyKey)
+	}
+	if m.created_at != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldUpdatedAt)
+	}
+	if m.delivered_at != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldDeliveredAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *RbacPolicyOutboxEventMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case rbacpolicyoutboxevent.FieldEventID:
+		return m.EventID()
+	case rbacpolicyoutboxevent.FieldRevision:
+		return m.Revision()
+	case rbacpolicyoutboxevent.FieldKind:
+		return m.Kind()
+	case rbacpolicyoutboxevent.FieldReason:
+		return m.Reason()
+	case rbacpolicyoutboxevent.FieldRoleID:
+		return m.RoleID()
+	case rbacpolicyoutboxevent.FieldUserID:
+		return m.UserID()
+	case rbacpolicyoutboxevent.FieldPermissionID:
+		return m.PermissionID()
+	case rbacpolicyoutboxevent.FieldStatus:
+		return m.Status()
+	case rbacpolicyoutboxevent.FieldAttemptCount:
+		return m.AttemptCount()
+	case rbacpolicyoutboxevent.FieldNextAttemptAt:
+		return m.NextAttemptAt()
+	case rbacpolicyoutboxevent.FieldLastError:
+		return m.LastError()
+	case rbacpolicyoutboxevent.FieldIdempotencyKey:
+		return m.IdempotencyKey()
+	case rbacpolicyoutboxevent.FieldCreatedAt:
+		return m.CreatedAt()
+	case rbacpolicyoutboxevent.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case rbacpolicyoutboxevent.FieldDeliveredAt:
+		return m.DeliveredAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *RbacPolicyOutboxEventMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case rbacpolicyoutboxevent.FieldEventID:
+		return m.OldEventID(ctx)
+	case rbacpolicyoutboxevent.FieldRevision:
+		return m.OldRevision(ctx)
+	case rbacpolicyoutboxevent.FieldKind:
+		return m.OldKind(ctx)
+	case rbacpolicyoutboxevent.FieldReason:
+		return m.OldReason(ctx)
+	case rbacpolicyoutboxevent.FieldRoleID:
+		return m.OldRoleID(ctx)
+	case rbacpolicyoutboxevent.FieldUserID:
+		return m.OldUserID(ctx)
+	case rbacpolicyoutboxevent.FieldPermissionID:
+		return m.OldPermissionID(ctx)
+	case rbacpolicyoutboxevent.FieldStatus:
+		return m.OldStatus(ctx)
+	case rbacpolicyoutboxevent.FieldAttemptCount:
+		return m.OldAttemptCount(ctx)
+	case rbacpolicyoutboxevent.FieldNextAttemptAt:
+		return m.OldNextAttemptAt(ctx)
+	case rbacpolicyoutboxevent.FieldLastError:
+		return m.OldLastError(ctx)
+	case rbacpolicyoutboxevent.FieldIdempotencyKey:
+		return m.OldIdempotencyKey(ctx)
+	case rbacpolicyoutboxevent.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case rbacpolicyoutboxevent.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case rbacpolicyoutboxevent.FieldDeliveredAt:
+		return m.OldDeliveredAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown RbacPolicyOutboxEvent field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RbacPolicyOutboxEventMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case rbacpolicyoutboxevent.FieldEventID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEventID(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRevision(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKind(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReason(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldRoleID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRoleID(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldUserID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldPermissionID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPermissionID(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldAttemptCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAttemptCount(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldNextAttemptAt:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNextAttemptAt(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldLastError:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastError(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldIdempotencyKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIdempotencyKey(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldCreatedAt:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldUpdatedAt:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldDeliveredAt:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDeliveredAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyOutboxEvent field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *RbacPolicyOutboxEventMutation) AddedFields() []string {
+	var fields []string
+	if m.addattempt_count != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldAttemptCount)
+	}
+	if m.addnext_attempt_at != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldNextAttemptAt)
+	}
+	if m.addcreated_at != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldCreatedAt)
+	}
+	if m.addupdated_at != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldUpdatedAt)
+	}
+	if m.adddelivered_at != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldDeliveredAt)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *RbacPolicyOutboxEventMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case rbacpolicyoutboxevent.FieldAttemptCount:
+		return m.AddedAttemptCount()
+	case rbacpolicyoutboxevent.FieldNextAttemptAt:
+		return m.AddedNextAttemptAt()
+	case rbacpolicyoutboxevent.FieldCreatedAt:
+		return m.AddedCreatedAt()
+	case rbacpolicyoutboxevent.FieldUpdatedAt:
+		return m.AddedUpdatedAt()
+	case rbacpolicyoutboxevent.FieldDeliveredAt:
+		return m.AddedDeliveredAt()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RbacPolicyOutboxEventMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case rbacpolicyoutboxevent.FieldAttemptCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAttemptCount(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldNextAttemptAt:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddNextAttemptAt(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldCreatedAt:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCreatedAt(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldUpdatedAt:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUpdatedAt(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldDeliveredAt:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDeliveredAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyOutboxEvent numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *RbacPolicyOutboxEventMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(rbacpolicyoutboxevent.FieldRoleID) {
+		fields = append(fields, rbacpolicyoutboxevent.FieldRoleID)
+	}
+	if m.FieldCleared(rbacpolicyoutboxevent.FieldUserID) {
+		fields = append(fields, rbacpolicyoutboxevent.FieldUserID)
+	}
+	if m.FieldCleared(rbacpolicyoutboxevent.FieldPermissionID) {
+		fields = append(fields, rbacpolicyoutboxevent.FieldPermissionID)
+	}
+	if m.FieldCleared(rbacpolicyoutboxevent.FieldLastError) {
+		fields = append(fields, rbacpolicyoutboxevent.FieldLastError)
+	}
+	if m.FieldCleared(rbacpolicyoutboxevent.FieldDeliveredAt) {
+		fields = append(fields, rbacpolicyoutboxevent.FieldDeliveredAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *RbacPolicyOutboxEventMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *RbacPolicyOutboxEventMutation) ClearField(name string) error {
+	switch name {
+	case rbacpolicyoutboxevent.FieldRoleID:
+		m.ClearRoleID()
+		return nil
+	case rbacpolicyoutboxevent.FieldUserID:
+		m.ClearUserID()
+		return nil
+	case rbacpolicyoutboxevent.FieldPermissionID:
+		m.ClearPermissionID()
+		return nil
+	case rbacpolicyoutboxevent.FieldLastError:
+		m.ClearLastError()
+		return nil
+	case rbacpolicyoutboxevent.FieldDeliveredAt:
+		m.ClearDeliveredAt()
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyOutboxEvent nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *RbacPolicyOutboxEventMutation) ResetField(name string) error {
+	switch name {
+	case rbacpolicyoutboxevent.FieldEventID:
+		m.ResetEventID()
+		return nil
+	case rbacpolicyoutboxevent.FieldRevision:
+		m.ResetRevision()
+		return nil
+	case rbacpolicyoutboxevent.FieldKind:
+		m.ResetKind()
+		return nil
+	case rbacpolicyoutboxevent.FieldReason:
+		m.ResetReason()
+		return nil
+	case rbacpolicyoutboxevent.FieldRoleID:
+		m.ResetRoleID()
+		return nil
+	case rbacpolicyoutboxevent.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case rbacpolicyoutboxevent.FieldPermissionID:
+		m.ResetPermissionID()
+		return nil
+	case rbacpolicyoutboxevent.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case rbacpolicyoutboxevent.FieldAttemptCount:
+		m.ResetAttemptCount()
+		return nil
+	case rbacpolicyoutboxevent.FieldNextAttemptAt:
+		m.ResetNextAttemptAt()
+		return nil
+	case rbacpolicyoutboxevent.FieldLastError:
+		m.ResetLastError()
+		return nil
+	case rbacpolicyoutboxevent.FieldIdempotencyKey:
+		m.ResetIdempotencyKey()
+		return nil
+	case rbacpolicyoutboxevent.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case rbacpolicyoutboxevent.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case rbacpolicyoutboxevent.FieldDeliveredAt:
+		m.ResetDeliveredAt()
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyOutboxEvent field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *RbacPolicyOutboxEventMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.policy_revision != nil {
+		edges = append(edges, rbacpolicyoutboxevent.EdgePolicyRevision)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *RbacPolicyOutboxEventMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case rbacpolicyoutboxevent.EdgePolicyRevision:
+		if id := m.policy_revision; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *RbacPolicyOutboxEventMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *RbacPolicyOutboxEventMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *RbacPolicyOutboxEventMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedpolicy_revision {
+		edges = append(edges, rbacpolicyoutboxevent.EdgePolicyRevision)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *RbacPolicyOutboxEventMutation) EdgeCleared(name string) bool {
+	switch name {
+	case rbacpolicyoutboxevent.EdgePolicyRevision:
+		return m.clearedpolicy_revision
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *RbacPolicyOutboxEventMutation) ClearEdge(name string) error {
+	switch name {
+	case rbacpolicyoutboxevent.EdgePolicyRevision:
+		m.ClearPolicyRevision()
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyOutboxEvent unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *RbacPolicyOutboxEventMutation) ResetEdge(name string) error {
+	switch name {
+	case rbacpolicyoutboxevent.EdgePolicyRevision:
+		m.ResetPolicyRevision()
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyOutboxEvent edge %s", name)
+}
+
+// RbacPolicyRevisionMutation represents an operation that mutates the RbacPolicyRevision nodes in the graph.
+type RbacPolicyRevisionMutation struct {
+	config
+	op                  Op
+	typ                 string
+	id                  *int64
+	reason              *string
+	role_id             *uuid.UUID
+	user_id             *uuid.UUID
+	permission_id       *uuid.UUID
+	created_at          *int64
+	addcreated_at       *int64
+	clearedFields       map[string]struct{}
+	outbox_event        *int64
+	clearedoutbox_event bool
+	done                bool
+	oldValue            func(context.Context) (*RbacPolicyRevision, error)
+	predicates          []predicate.RbacPolicyRevision
+}
+
+var _ ent.Mutation = (*RbacPolicyRevisionMutation)(nil)
+
+// rbacpolicyrevisionOption allows management of the mutation configuration using functional options.
+type rbacpolicyrevisionOption func(*RbacPolicyRevisionMutation)
+
+// newRbacPolicyRevisionMutation creates new mutation for the RbacPolicyRevision entity.
+func newRbacPolicyRevisionMutation(c config, op Op, opts ...rbacpolicyrevisionOption) *RbacPolicyRevisionMutation {
+	m := &RbacPolicyRevisionMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeRbacPolicyRevision,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withRbacPolicyRevisionID sets the ID field of the mutation.
+func withRbacPolicyRevisionID(id int64) rbacpolicyrevisionOption {
+	return func(m *RbacPolicyRevisionMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *RbacPolicyRevision
+		)
+		m.oldValue = func(ctx context.Context) (*RbacPolicyRevision, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().RbacPolicyRevision.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withRbacPolicyRevision sets the old RbacPolicyRevision of the mutation.
+func withRbacPolicyRevision(node *RbacPolicyRevision) rbacpolicyrevisionOption {
+	return func(m *RbacPolicyRevisionMutation) {
+		m.oldValue = func(context.Context) (*RbacPolicyRevision, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m RbacPolicyRevisionMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m RbacPolicyRevisionMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of RbacPolicyRevision entities.
+func (m *RbacPolicyRevisionMutation) SetID(id int64) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *RbacPolicyRevisionMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *RbacPolicyRevisionMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().RbacPolicyRevision.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetReason sets the "reason" field.
+func (m *RbacPolicyRevisionMutation) SetReason(s string) {
+	m.reason = &s
+}
+
+// Reason returns the value of the "reason" field in the mutation.
+func (m *RbacPolicyRevisionMutation) Reason() (r string, exists bool) {
+	v := m.reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReason returns the old "reason" field's value of the RbacPolicyRevision entity.
+// If the RbacPolicyRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyRevisionMutation) OldReason(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReason: %w", err)
+	}
+	return oldValue.Reason, nil
+}
+
+// ResetReason resets all changes to the "reason" field.
+func (m *RbacPolicyRevisionMutation) ResetReason() {
+	m.reason = nil
+}
+
+// SetRoleID sets the "role_id" field.
+func (m *RbacPolicyRevisionMutation) SetRoleID(u uuid.UUID) {
+	m.role_id = &u
+}
+
+// RoleID returns the value of the "role_id" field in the mutation.
+func (m *RbacPolicyRevisionMutation) RoleID() (r uuid.UUID, exists bool) {
+	v := m.role_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRoleID returns the old "role_id" field's value of the RbacPolicyRevision entity.
+// If the RbacPolicyRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyRevisionMutation) OldRoleID(ctx context.Context) (v *uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRoleID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRoleID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRoleID: %w", err)
+	}
+	return oldValue.RoleID, nil
+}
+
+// ClearRoleID clears the value of the "role_id" field.
+func (m *RbacPolicyRevisionMutation) ClearRoleID() {
+	m.role_id = nil
+	m.clearedFields[rbacpolicyrevision.FieldRoleID] = struct{}{}
+}
+
+// RoleIDCleared returns if the "role_id" field was cleared in this mutation.
+func (m *RbacPolicyRevisionMutation) RoleIDCleared() bool {
+	_, ok := m.clearedFields[rbacpolicyrevision.FieldRoleID]
+	return ok
+}
+
+// ResetRoleID resets all changes to the "role_id" field.
+func (m *RbacPolicyRevisionMutation) ResetRoleID() {
+	m.role_id = nil
+	delete(m.clearedFields, rbacpolicyrevision.FieldRoleID)
+}
+
+// SetUserID sets the "user_id" field.
+func (m *RbacPolicyRevisionMutation) SetUserID(u uuid.UUID) {
+	m.user_id = &u
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *RbacPolicyRevisionMutation) UserID() (r uuid.UUID, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the RbacPolicyRevision entity.
+// If the RbacPolicyRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyRevisionMutation) OldUserID(ctx context.Context) (v *uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// ClearUserID clears the value of the "user_id" field.
+func (m *RbacPolicyRevisionMutation) ClearUserID() {
+	m.user_id = nil
+	m.clearedFields[rbacpolicyrevision.FieldUserID] = struct{}{}
+}
+
+// UserIDCleared returns if the "user_id" field was cleared in this mutation.
+func (m *RbacPolicyRevisionMutation) UserIDCleared() bool {
+	_, ok := m.clearedFields[rbacpolicyrevision.FieldUserID]
+	return ok
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *RbacPolicyRevisionMutation) ResetUserID() {
+	m.user_id = nil
+	delete(m.clearedFields, rbacpolicyrevision.FieldUserID)
+}
+
+// SetPermissionID sets the "permission_id" field.
+func (m *RbacPolicyRevisionMutation) SetPermissionID(u uuid.UUID) {
+	m.permission_id = &u
+}
+
+// PermissionID returns the value of the "permission_id" field in the mutation.
+func (m *RbacPolicyRevisionMutation) PermissionID() (r uuid.UUID, exists bool) {
+	v := m.permission_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPermissionID returns the old "permission_id" field's value of the RbacPolicyRevision entity.
+// If the RbacPolicyRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyRevisionMutation) OldPermissionID(ctx context.Context) (v *uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPermissionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPermissionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPermissionID: %w", err)
+	}
+	return oldValue.PermissionID, nil
+}
+
+// ClearPermissionID clears the value of the "permission_id" field.
+func (m *RbacPolicyRevisionMutation) ClearPermissionID() {
+	m.permission_id = nil
+	m.clearedFields[rbacpolicyrevision.FieldPermissionID] = struct{}{}
+}
+
+// PermissionIDCleared returns if the "permission_id" field was cleared in this mutation.
+func (m *RbacPolicyRevisionMutation) PermissionIDCleared() bool {
+	_, ok := m.clearedFields[rbacpolicyrevision.FieldPermissionID]
+	return ok
+}
+
+// ResetPermissionID resets all changes to the "permission_id" field.
+func (m *RbacPolicyRevisionMutation) ResetPermissionID() {
+	m.permission_id = nil
+	delete(m.clearedFields, rbacpolicyrevision.FieldPermissionID)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *RbacPolicyRevisionMutation) SetCreatedAt(i int64) {
+	m.created_at = &i
+	m.addcreated_at = nil
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *RbacPolicyRevisionMutation) CreatedAt() (r int64, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the RbacPolicyRevision entity.
+// If the RbacPolicyRevision object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyRevisionMutation) OldCreatedAt(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// AddCreatedAt adds i to the "created_at" field.
+func (m *RbacPolicyRevisionMutation) AddCreatedAt(i int64) {
+	if m.addcreated_at != nil {
+		*m.addcreated_at += i
+	} else {
+		m.addcreated_at = &i
+	}
+}
+
+// AddedCreatedAt returns the value that was added to the "created_at" field in this mutation.
+func (m *RbacPolicyRevisionMutation) AddedCreatedAt() (r int64, exists bool) {
+	v := m.addcreated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *RbacPolicyRevisionMutation) ResetCreatedAt() {
+	m.created_at = nil
+	m.addcreated_at = nil
+}
+
+// SetOutboxEventID sets the "outbox_event" edge to the RbacPolicyOutboxEvent entity by id.
+func (m *RbacPolicyRevisionMutation) SetOutboxEventID(id int64) {
+	m.outbox_event = &id
+}
+
+// ClearOutboxEvent clears the "outbox_event" edge to the RbacPolicyOutboxEvent entity.
+func (m *RbacPolicyRevisionMutation) ClearOutboxEvent() {
+	m.clearedoutbox_event = true
+}
+
+// OutboxEventCleared reports if the "outbox_event" edge to the RbacPolicyOutboxEvent entity was cleared.
+func (m *RbacPolicyRevisionMutation) OutboxEventCleared() bool {
+	return m.clearedoutbox_event
+}
+
+// OutboxEventID returns the "outbox_event" edge ID in the mutation.
+func (m *RbacPolicyRevisionMutation) OutboxEventID() (id int64, exists bool) {
+	if m.outbox_event != nil {
+		return *m.outbox_event, true
+	}
+	return
+}
+
+// OutboxEventIDs returns the "outbox_event" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OutboxEventID instead. It exists only for internal usage by the builders.
+func (m *RbacPolicyRevisionMutation) OutboxEventIDs() (ids []int64) {
+	if id := m.outbox_event; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOutboxEvent resets all changes to the "outbox_event" edge.
+func (m *RbacPolicyRevisionMutation) ResetOutboxEvent() {
+	m.outbox_event = nil
+	m.clearedoutbox_event = false
+}
+
+// Where appends a list predicates to the RbacPolicyRevisionMutation builder.
+func (m *RbacPolicyRevisionMutation) Where(ps ...predicate.RbacPolicyRevision) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the RbacPolicyRevisionMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RbacPolicyRevisionMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RbacPolicyRevision, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *RbacPolicyRevisionMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RbacPolicyRevisionMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (RbacPolicyRevision).
+func (m *RbacPolicyRevisionMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *RbacPolicyRevisionMutation) Fields() []string {
+	fields := make([]string, 0, 5)
+	if m.reason != nil {
+		fields = append(fields, rbacpolicyrevision.FieldReason)
+	}
+	if m.role_id != nil {
+		fields = append(fields, rbacpolicyrevision.FieldRoleID)
+	}
+	if m.user_id != nil {
+		fields = append(fields, rbacpolicyrevision.FieldUserID)
+	}
+	if m.permission_id != nil {
+		fields = append(fields, rbacpolicyrevision.FieldPermissionID)
+	}
+	if m.created_at != nil {
+		fields = append(fields, rbacpolicyrevision.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *RbacPolicyRevisionMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case rbacpolicyrevision.FieldReason:
+		return m.Reason()
+	case rbacpolicyrevision.FieldRoleID:
+		return m.RoleID()
+	case rbacpolicyrevision.FieldUserID:
+		return m.UserID()
+	case rbacpolicyrevision.FieldPermissionID:
+		return m.PermissionID()
+	case rbacpolicyrevision.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *RbacPolicyRevisionMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case rbacpolicyrevision.FieldReason:
+		return m.OldReason(ctx)
+	case rbacpolicyrevision.FieldRoleID:
+		return m.OldRoleID(ctx)
+	case rbacpolicyrevision.FieldUserID:
+		return m.OldUserID(ctx)
+	case rbacpolicyrevision.FieldPermissionID:
+		return m.OldPermissionID(ctx)
+	case rbacpolicyrevision.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown RbacPolicyRevision field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RbacPolicyRevisionMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case rbacpolicyrevision.FieldReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReason(v)
+		return nil
+	case rbacpolicyrevision.FieldRoleID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRoleID(v)
+		return nil
+	case rbacpolicyrevision.FieldUserID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case rbacpolicyrevision.FieldPermissionID:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPermissionID(v)
+		return nil
+	case rbacpolicyrevision.FieldCreatedAt:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyRevision field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *RbacPolicyRevisionMutation) AddedFields() []string {
+	var fields []string
+	if m.addcreated_at != nil {
+		fields = append(fields, rbacpolicyrevision.FieldCreatedAt)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *RbacPolicyRevisionMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case rbacpolicyrevision.FieldCreatedAt:
+		return m.AddedCreatedAt()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RbacPolicyRevisionMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case rbacpolicyrevision.FieldCreatedAt:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyRevision numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *RbacPolicyRevisionMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(rbacpolicyrevision.FieldRoleID) {
+		fields = append(fields, rbacpolicyrevision.FieldRoleID)
+	}
+	if m.FieldCleared(rbacpolicyrevision.FieldUserID) {
+		fields = append(fields, rbacpolicyrevision.FieldUserID)
+	}
+	if m.FieldCleared(rbacpolicyrevision.FieldPermissionID) {
+		fields = append(fields, rbacpolicyrevision.FieldPermissionID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *RbacPolicyRevisionMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *RbacPolicyRevisionMutation) ClearField(name string) error {
+	switch name {
+	case rbacpolicyrevision.FieldRoleID:
+		m.ClearRoleID()
+		return nil
+	case rbacpolicyrevision.FieldUserID:
+		m.ClearUserID()
+		return nil
+	case rbacpolicyrevision.FieldPermissionID:
+		m.ClearPermissionID()
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyRevision nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *RbacPolicyRevisionMutation) ResetField(name string) error {
+	switch name {
+	case rbacpolicyrevision.FieldReason:
+		m.ResetReason()
+		return nil
+	case rbacpolicyrevision.FieldRoleID:
+		m.ResetRoleID()
+		return nil
+	case rbacpolicyrevision.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case rbacpolicyrevision.FieldPermissionID:
+		m.ResetPermissionID()
+		return nil
+	case rbacpolicyrevision.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyRevision field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *RbacPolicyRevisionMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.outbox_event != nil {
+		edges = append(edges, rbacpolicyrevision.EdgeOutboxEvent)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *RbacPolicyRevisionMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case rbacpolicyrevision.EdgeOutboxEvent:
+		if id := m.outbox_event; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *RbacPolicyRevisionMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *RbacPolicyRevisionMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *RbacPolicyRevisionMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedoutbox_event {
+		edges = append(edges, rbacpolicyrevision.EdgeOutboxEvent)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *RbacPolicyRevisionMutation) EdgeCleared(name string) bool {
+	switch name {
+	case rbacpolicyrevision.EdgeOutboxEvent:
+		return m.clearedoutbox_event
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *RbacPolicyRevisionMutation) ClearEdge(name string) error {
+	switch name {
+	case rbacpolicyrevision.EdgeOutboxEvent:
+		m.ClearOutboxEvent()
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyRevision unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *RbacPolicyRevisionMutation) ResetEdge(name string) error {
+	switch name {
+	case rbacpolicyrevision.EdgeOutboxEvent:
+		m.ResetOutboxEvent()
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyRevision edge %s", name)
 }
 
 // RoleMutation represents an operation that mutates the Role nodes in the graph.

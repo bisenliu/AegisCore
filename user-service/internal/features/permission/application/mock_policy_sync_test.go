@@ -105,18 +105,17 @@ func (m *MockPolicyVersionPublisher) EXPECT() *MockPolicyVersionPublisherMockRec
 }
 
 // PublishPolicyChanged mocks base method.
-func (m *MockPolicyVersionPublisher) PublishPolicyChanged(ctx context.Context, change PolicyChange) (int64, error) {
+func (m *MockPolicyVersionPublisher) PublishPolicyChanged(ctx context.Context, revision int64, change PolicyChange) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishPolicyChanged", ctx, change)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "PublishPolicyChanged", ctx, revision, change)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // PublishPolicyChanged indicates an expected call of PublishPolicyChanged.
-func (mr *MockPolicyVersionPublisherMockRecorder) PublishPolicyChanged(ctx, change any) *gomock.Call {
+func (mr *MockPolicyVersionPublisherMockRecorder) PublishPolicyChanged(ctx, revision, change any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishPolicyChanged", reflect.TypeOf((*MockPolicyVersionPublisher)(nil).PublishPolicyChanged), ctx, change)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishPolicyChanged", reflect.TypeOf((*MockPolicyVersionPublisher)(nil).PublishPolicyChanged), ctx, revision, change)
 }
 
 // MockPolicyVersionTracker is a mock of PolicyVersionTracker interface.
@@ -158,15 +157,15 @@ func (mr *MockPolicyVersionTrackerMockRecorder) Applied() *gomock.Call {
 }
 
 // MarkApplied mocks base method.
-func (m *MockPolicyVersionTracker) MarkApplied(version int64) {
+func (m *MockPolicyVersionTracker) MarkApplied(revision int64) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "MarkApplied", version)
+	m.ctrl.Call(m, "MarkApplied", revision)
 }
 
 // MarkApplied indicates an expected call of MarkApplied.
-func (mr *MockPolicyVersionTrackerMockRecorder) MarkApplied(version any) *gomock.Call {
+func (mr *MockPolicyVersionTrackerMockRecorder) MarkApplied(revision any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkApplied", reflect.TypeOf((*MockPolicyVersionTracker)(nil).MarkApplied), version)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkApplied", reflect.TypeOf((*MockPolicyVersionTracker)(nil).MarkApplied), revision)
 }
 
 // MockMetrics is a mock of Metrics interface.

@@ -13,7 +13,7 @@ import (
 
 // Fx 选项
 
-// permissionPolicySyncOptions 组装跨副本 policy version 发布、追踪和 watcher 同步能力。
+// permissionPolicySyncOptions 组装跨副本 policy revision 发布、追踪和 watcher 同步能力。
 var permissionPolicySyncOptions = fx.Options(
 	fx.Provide(
 		provideRedisStore,
@@ -97,7 +97,7 @@ func provideVersionTracker() PolicyVersionTrackerResult {
 	return PolicyVersionTrackerResult{Tracker: tracker, Port: tracker}
 }
 
-// providePolicyChangeNotifier 复用同一 coordinator 串联本地 reload、Redis publish 和版本追踪。
+// providePolicyChangeNotifier 复用同一 coordinator 串联本地 reload、Redis publish 和 revision 追踪。
 func providePolicyChangeNotifier(params PolicyChangeNotifierParams) PolicyChangeNotifierResult {
 	return PolicyChangeNotifierResult{Notifier: permissionapplication.NewPolicyRefreshCoordinator(params.Engine, params.Publisher, params.Tracker, params.Log, params.Metrics)}
 }

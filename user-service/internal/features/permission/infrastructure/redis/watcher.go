@@ -30,7 +30,7 @@ type WatcherParams struct {
 	Metrics permissionapplication.Metrics
 }
 
-// Watcher 监听 RBAC policy 分布式版本并执行补偿 reload。
+// Watcher 监听 RBAC policy 分布式 revision 并执行补偿 reload。
 type Watcher struct {
 	store         policySubscriptionStore
 	tracker       *VersionTracker
@@ -122,8 +122,8 @@ func (w *Watcher) LastError() error {
 	return w.lastErr
 }
 
-// CheckVersion 执行一次 Redis 版本补偿检查。
-// Pub/Sub 只是快速路径，定时检查负责发现漏消息或重启期间错过的版本；版本号依赖 Redis 单调递增，落后时按 full reload 补偿。
+// CheckVersion 执行一次 Redis revision 补偿检查。
+// Pub/Sub 只是快速路径，Redis 缓存已知最大数据库 revision；定时检查负责发现漏消息或重启期间错过的 revision。
 func (w *Watcher) CheckVersion(ctx context.Context) {
 	remoteVersion, err := w.store.CurrentVersion(ctx)
 	if err != nil {
@@ -136,7 +136,7 @@ func (w *Watcher) CheckVersion(ctx context.Context) {
 	if remoteVersion <= localVersion {
 		return
 	}
-	logger.Warn(ctx, "rbac policy version mismatch detected", zap.Int64("local_policy_version", localVersion), zap.Int64("remote_policy_version", remoteVersion))
+	logger.Warn(ctx, "rbac policy revision mismatch detected", zap.Int64("local_policy_revision", localVersion), zap.Int64("remote_policy_revision", remoteVersion), zap.String("reason", "version_check"))
 	w.metrics.WatcherVersionMismatch(ctx, permissionapplication.MetricsSourceWatcherVersionCheck)
 	w.applyIfNewer(ctx, remoteVersion, permissionapplication.NewPolicyReloadChange("version_check"), "", permissionapplication.MetricsSourceWatcherVersionCheck)
 }
@@ -151,7 +151,7 @@ func (w *Watcher) HandlePayload(ctx context.Context, payload string) {
 	}
 	localVersion := w.tracker.Applied()
 	w.observeLag(ctx, message.Version, localVersion)
-	logger.Info(ctx, "rbac policy refresh received", zap.Int64("remote_policy_version", message.Version), zap.Int64("local_policy_version", localVersion), zap.String("instance_id", message.InstanceID), zap.String("reason", message.Reason))
+	logger.Info(ctx, "rbac policy refresh received", zap.Int64("remote_policy_revision", message.Version), zap.Int64("local_policy_revision", localVersion), zap.String("instance_id", message.InstanceID), zap.String("reason", message.Reason))
 	w.applyIfNewer(ctx, message.Version, message.policyChange(), message.InstanceID, permissionapplication.MetricsSourceWatcherPubSub)
 }
 
@@ -196,7 +196,7 @@ func (w *Watcher) run(ctx context.Context, done chan struct{}) {
 func (w *Watcher) applyIfNewer(ctx context.Context, version int64, change permissionapplication.PolicyChange, instanceID string, source string) {
 	localVersion := w.tracker.Applied()
 	w.observeLag(ctx, version, localVersion)
-	// 版本号是跨实例幂等门禁；已经应用过的版本必须跳过，避免旧 Pub/Sub 消息覆盖后续 reload 状态。
+	// revision 是跨实例幂等门禁；已经应用过的 revision 必须跳过，避免旧 Pub/Sub 消息覆盖后续 reload 状态。
 	if version <= localVersion {
 		return
 	}
@@ -204,7 +204,7 @@ func (w *Watcher) applyIfNewer(ctx context.Context, version int64, change permis
 	if change.RequiresReload() {
 		if err := w.engine.Reload(ctx); err != nil {
 			w.metrics.WatcherReloadFailed(ctx, source, permissionapplication.MetricsReasonReloadFailed)
-			logger.Error(ctx, "rbac policy remote refresh failed", logger.StackTrace(zap.Int64("policy_version", version), zap.Int64("local_policy_version", localVersion), zap.String("instance_id", instanceID), zap.String("reason", reason), zap.Error(err))...)
+			logger.Error(ctx, "rbac policy remote refresh failed", logger.StackTrace(zap.Int64("policy_revision", version), zap.Int64("local_policy_revision", localVersion), zap.String("instance_id", instanceID), zap.String("reason", reason), zap.Error(err))...)
 			return
 		}
 		w.engine.InvalidateAllUserRoles()
@@ -216,7 +216,7 @@ func (w *Watcher) applyIfNewer(ctx context.Context, version int64, change permis
 	}
 	w.tracker.MarkApplied(version)
 	w.observeLag(ctx, version, w.tracker.Applied())
-	logger.Info(ctx, "rbac policy remote refresh succeeded", zap.Int64("policy_version", version), zap.Int64("local_policy_version", w.tracker.Applied()), zap.String("instance_id", instanceID), zap.String("reason", reason))
+	logger.Info(ctx, "rbac policy remote refresh succeeded", zap.Int64("policy_revision", version), zap.Int64("local_policy_revision", w.tracker.Applied()), zap.String("instance_id", instanceID), zap.String("reason", reason))
 }
 
 func (w *Watcher) observeLag(ctx context.Context, remoteVersion int64, localVersion int64) {

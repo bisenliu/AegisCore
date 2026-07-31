@@ -18,20 +18,20 @@ type PolicyReloadEngine interface {
 	InvalidateAllUserRoles()
 }
 
-// PolicyVersionPublisher 定义 RBAC policy 分布式版本通知端口。
+// PolicyVersionPublisher 定义已提交 RBAC policy revision 的分布式通知端口。
 type PolicyVersionPublisher interface {
-	PublishPolicyChanged(ctx context.Context, change PolicyChange) (int64, error)
+	PublishPolicyChanged(ctx context.Context, revision int64, change PolicyChange) error
 }
 
-// PolicyVersionTracker 定义本实例已应用 RBAC policy 版本跟踪端口。
+// PolicyVersionTracker 定义本实例已应用 RBAC policy revision 跟踪端口。
 type PolicyVersionTracker interface {
-	MarkApplied(version int64)
+	MarkApplied(revision int64)
 	Applied() int64
 }
 
-// PolicyChangeNotifier 定义 RBAC policy 变更后的刷新通知端口。
+// PolicyChangeNotifier 定义已提交 RBAC policy 变更后的刷新通知端口。
 type PolicyChangeNotifier interface {
-	NotifyPolicyChanged(ctx context.Context, change PolicyChange) error
+	NotifyPolicyChanged(ctx context.Context, revision int64, change PolicyChange) error
 }
 
 // PolicyChangeKind 表示 RBAC policy 同步变更类别。
@@ -53,7 +53,7 @@ type PolicyChange struct {
 	PermissionID uuid.UUID
 }
 
-// PolicyRefreshCoordinator 负责本实例 policy reload 和分布式版本通知编排。
+// PolicyRefreshCoordinator 负责本实例 policy reload 和分布式 revision 通知编排。
 type PolicyRefreshCoordinator struct {
 	engine    PolicyReloadEngine
 	publisher PolicyVersionPublisher
@@ -96,9 +96,9 @@ func NewPolicyRefreshCoordinator(engine PolicyReloadEngine, publisher PolicyVers
 	return &PolicyRefreshCoordinator{engine: engine, publisher: publisher, tracker: tracker, log: log, metrics: metrics}
 }
 
-// NotifyPolicyChanged 在 RBAC 数据变更成功后刷新本实例并通知其他实例。
-// 本实例先应用本地 reload 或缓存失效，再发布分布式版本；如果本地应用失败，即使发布成功也不能标记本版本已应用。
-func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, change PolicyChange) error {
+// NotifyPolicyChanged 使用已提交数据库 revision 刷新本实例并通知其他实例。
+// 本实例先应用本地 reload 或缓存失效，再发布 revision；只有本地应用和发布均成功才标记该 revision 已应用。
+func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, revision int64, change PolicyChange) error {
 	if c == nil {
 		return errors.New("rbac policy refresh coordinator is required")
 	}
@@ -112,7 +112,7 @@ func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, chan
 		if err := c.engine.Reload(ctx); err != nil {
 			localApplied = false
 			c.metrics.PolicyReloadFailed(ctx, MetricsSourceLocalChange, MetricsReasonReloadFailed)
-			logger.Error(ctx, "rbac policy local refresh failed", logger.StackTrace(zap.String("reason", reason), zap.Error(err))...)
+			logger.Error(ctx, "rbac policy local refresh failed", logger.StackTrace(zap.Int64("policy_revision", revision), zap.String("reason", reason), zap.Error(err))...)
 			syncErr = errors.Join(syncErr, fmt.Errorf("reload rbac policy after %s: %w", reason, err))
 		} else {
 			c.engine.InvalidateAllUserRoles()
@@ -123,20 +123,20 @@ func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, chan
 	} else {
 		c.engine.InvalidateAllUserRoles()
 	}
-	version, err := c.publisher.PublishPolicyChanged(ctx, change)
+	err := c.publisher.PublishPolicyChanged(ctx, revision, change)
 	if err != nil {
 		c.metrics.PolicyPublishFailed(ctx, MetricsReasonPublishFailed)
-		logger.Error(ctx, "rbac policy version publish failed", logger.StackTrace(zap.String("reason", reason), zap.Error(err))...)
+		logger.Error(ctx, "rbac policy revision publish failed", logger.StackTrace(zap.Int64("policy_revision", revision), zap.String("reason", reason), zap.Error(err))...)
 		syncErr = errors.Join(syncErr, fmt.Errorf("publish rbac policy change after %s: %w", reason, err))
 	} else {
 		c.metrics.PolicyPublishSucceeded(ctx)
 		if localApplied {
-			c.tracker.MarkApplied(version)
+			c.tracker.MarkApplied(revision)
 		}
 	}
 	if syncErr != nil {
 		return syncErr
 	}
-	logger.Info(ctx, "rbac policy local refresh succeeded", zap.Int64("policy_version", version), zap.String("reason", reason))
+	logger.Info(ctx, "rbac policy local refresh succeeded", zap.Int64("policy_revision", revision), zap.String("reason", reason))
 	return nil
 }

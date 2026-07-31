@@ -81,15 +81,16 @@ func TestRolePermissionStoreDefaultListRemoveAndSyncSystemBindings(t *testing.T)
 	require.NoError(t, err)
 	require.Zero(t, added)
 
-	require.NoError(t, bindingStore.Remove(ctx, roleID, addPermissionID))
+	_, err = bindingStore.Remove(ctx, roleID, addPermissionID, permissionPolicyChange("role_permission_removed", roleID, addPermissionID))
+	require.NoError(t, err)
 	items, err = bindingStore.ListByRoleID(ctx, roleID)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{keepPermissionID}, permissionIDsForTest(items))
-	err = bindingStore.Remove(ctx, roleID, addPermissionID)
+	_, err = bindingStore.Remove(ctx, roleID, addPermissionID, permissionPolicyChange("role_permission_removed", roleID, addPermissionID))
 	require.ErrorIs(t, err, roledomain.ErrRolePermissionNotFound)
-	err = bindingStore.Remove(ctx, missingRoleID, keepPermissionID)
+	_, err = bindingStore.Remove(ctx, missingRoleID, keepPermissionID, permissionPolicyChange("role_permission_removed", missingRoleID, keepPermissionID))
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
-	err = bindingStore.Remove(ctx, roleID, missingPermissionID)
+	_, err = bindingStore.Remove(ctx, roleID, missingPermissionID, permissionPolicyChange("role_permission_removed", roleID, missingPermissionID))
 	require.ErrorIs(t, err, roledomain.ErrRolePermissionNotFound)
 }
 
@@ -136,9 +137,9 @@ func TestRolePermissionStorePostgresAddListAndRemove(t *testing.T) {
 	createRoleForTest(ctx, t, roleStore, roleID, "Permission Operator", true, false)
 	permission := createPermissionForTest(ctx, t, permissionStore, permissionID, "List Operators", "GET", "/api/v1/operators", true)
 
-	err := bindingStore.Add(ctx, roleID, permission)
+	_, err := bindingStore.Add(ctx, roleID, permission, permissionPolicyChange("role_permission_added", roleID, permissionID))
 	require.NoError(t, err)
-	err = bindingStore.Add(ctx, roleID, permission)
+	_, err = bindingStore.Add(ctx, roleID, permission, permissionPolicyChange("role_permission_added", roleID, permissionID))
 	require.ErrorIs(t, err, roledomain.ErrRolePermissionAlreadyExists)
 
 	items, err := bindingStore.ListByRoleID(ctx, roleID)
@@ -147,21 +148,21 @@ func TestRolePermissionStorePostgresAddListAndRemove(t *testing.T) {
 	_, err = bindingStore.ListByRoleID(ctx, missingRoleID)
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
 
-	err = bindingStore.Add(ctx, missingRoleID, permission)
+	_, err = bindingStore.Add(ctx, missingRoleID, permission, permissionPolicyChange("role_permission_added", missingRoleID, permissionID))
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
-	err = bindingStore.Add(ctx, roleID, roleapplication.PermissionReference{PermissionID: missingPermissionID})
+	_, err = bindingStore.Add(ctx, roleID, roleapplication.PermissionReference{PermissionID: missingPermissionID}, permissionPolicyChange("role_permission_added", roleID, missingPermissionID))
 	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
 
-	err = bindingStore.Remove(ctx, roleID, permissionID)
+	_, err = bindingStore.Remove(ctx, roleID, permissionID, permissionPolicyChange("role_permission_removed", roleID, permissionID))
 	require.NoError(t, err)
 	items, err = bindingStore.ListByRoleID(ctx, roleID)
 	require.NoError(t, err)
 	require.Empty(t, items)
-	err = bindingStore.Remove(ctx, roleID, permissionID)
+	_, err = bindingStore.Remove(ctx, roleID, permissionID, permissionPolicyChange("role_permission_removed", roleID, permissionID))
 	require.ErrorIs(t, err, roledomain.ErrRolePermissionNotFound)
-	err = bindingStore.Remove(ctx, missingRoleID, permissionID)
+	_, err = bindingStore.Remove(ctx, missingRoleID, permissionID, permissionPolicyChange("role_permission_removed", missingRoleID, permissionID))
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
-	err = bindingStore.Remove(ctx, roleID, missingPermissionID)
+	_, err = bindingStore.Remove(ctx, roleID, missingPermissionID, permissionPolicyChange("role_permission_removed", roleID, missingPermissionID))
 	require.ErrorIs(t, err, roledomain.ErrRolePermissionNotFound)
 }
 
@@ -182,31 +183,31 @@ func TestRolePermissionStorePostgresReplace(t *testing.T) {
 	permissionB := createPermissionForTest(ctx, t, permissionStore, permissionBID, "Create Reports", "POST", "/api/v1/reports", true)
 	permissionC := createPermissionForTest(ctx, t, permissionStore, permissionCID, "Delete Reports", "DELETE", "/api/v1/reports/:id", true)
 
-	replaced, err := bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{permissionA, permissionB})
+	replaced, err := bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{permissionA, permissionB}, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil))
 	require.NoError(t, err)
-	require.ElementsMatch(t, []uuid.UUID{permissionAID, permissionBID}, permissionIDsForTest(replaced))
+	require.ElementsMatch(t, []uuid.UUID{permissionAID, permissionBID}, permissionIDsForTest(replaced.Items))
 	items, err := bindingStore.ListByRoleID(ctx, roleID)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []uuid.UUID{permissionAID, permissionBID}, permissionIDsForTest(items))
 
-	replaced, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{permissionC, permissionC})
+	replaced, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{permissionC, permissionC}, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil))
 	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{permissionCID}, permissionIDsForTest(replaced))
+	require.Equal(t, []uuid.UUID{permissionCID}, permissionIDsForTest(replaced.Items))
 	items, err = bindingStore.ListByRoleID(ctx, roleID)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{permissionCID}, permissionIDsForTest(items))
 
-	_, err = bindingStore.Replace(ctx, missingRoleID, []roleapplication.PermissionReference{permissionA})
+	_, err = bindingStore.Replace(ctx, missingRoleID, []roleapplication.PermissionReference{permissionA}, permissionPolicyChange("role_permissions_replaced", missingRoleID, uuid.Nil))
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
-	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{{PermissionID: missingPermissionID}})
+	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{{PermissionID: missingPermissionID}}, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil))
 	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
 	items, err = bindingStore.ListByRoleID(ctx, roleID)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{permissionCID}, permissionIDsForTest(items))
 
-	replaced, err = bindingStore.Replace(ctx, roleID, nil)
+	replaced, err = bindingStore.Replace(ctx, roleID, nil, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil))
 	require.NoError(t, err)
-	require.Empty(t, replaced)
+	require.Empty(t, replaced.Items)
 	items, err = bindingStore.ListByRoleID(ctx, roleID)
 	require.NoError(t, err)
 	require.Empty(t, items)
@@ -259,4 +260,8 @@ func permissionIDsForTest(permissions []roleapplication.PermissionReference) []u
 		result = append(result, permission.PermissionID)
 	}
 	return result
+}
+
+func permissionPolicyChange(reason string, roleID uuid.UUID, permissionID uuid.UUID) roleapplication.PolicyChange {
+	return roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindPolicyChanged, Reason: reason, RoleID: roleID, PermissionID: permissionID}
 }
