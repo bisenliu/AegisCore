@@ -95,6 +95,16 @@ func (d nonClosingEntDriver) Close() error {
 	return nil
 }
 
+func (d nonClosingEntDriver) BeginTx(ctx context.Context, opts *sql.TxOptions) (dialect.Tx, error) {
+	driver, ok := d.Driver.(interface {
+		BeginTx(context.Context, *sql.TxOptions) (dialect.Tx, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("ent driver does not support transaction options")
+	}
+	return driver.BeginTx(ctx, opts)
+}
+
 func closeEntClient(name string, closeClient func() error) error {
 	if err := closeClient(); err != nil {
 		return fmt.Errorf("close %s ent client: %w", name, err)

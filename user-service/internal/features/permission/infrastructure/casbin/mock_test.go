@@ -41,19 +41,19 @@ func (m *MockLoader) EXPECT() *MockLoaderMockRecorder {
 	return m.recorder
 }
 
-// LoadPolicies mocks base method.
-func (m *MockLoader) LoadPolicies(ctx context.Context) (PolicySet, error) {
+// LoadPoliciesAtLeast mocks base method.
+func (m *MockLoader) LoadPoliciesAtLeast(ctx context.Context, targetRevision int64) (PolicySet, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LoadPolicies", ctx)
+	ret := m.ctrl.Call(m, "LoadPoliciesAtLeast", ctx, targetRevision)
 	ret0, _ := ret[0].(PolicySet)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// LoadPolicies indicates an expected call of LoadPolicies.
-func (mr *MockLoaderMockRecorder) LoadPolicies(ctx any) *gomock.Call {
+// LoadPoliciesAtLeast indicates an expected call of LoadPoliciesAtLeast.
+func (mr *MockLoaderMockRecorder) LoadPoliciesAtLeast(ctx, targetRevision any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadPolicies", reflect.TypeOf((*MockLoader)(nil).LoadPolicies), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadPoliciesAtLeast", reflect.TypeOf((*MockLoader)(nil).LoadPoliciesAtLeast), ctx, targetRevision)
 }
 
 // MockUserRoleResolver is a mock of UserRoleResolver interface.

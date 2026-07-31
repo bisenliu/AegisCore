@@ -21,7 +21,7 @@ type Authorizer interface {
 
 // PolicyHealth 暴露 RBAC policy engine 的只读健康状态。
 type PolicyHealth interface {
-	LastError() error
+	ProjectionStatus() permissionapplication.PolicyProjectionStatus
 }
 
 // Engine 定义授权服务依赖的内存策略执行能力。

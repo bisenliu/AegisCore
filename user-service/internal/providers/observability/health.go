@@ -41,9 +41,7 @@ type redisHealthChecker struct {
 }
 
 type casbinPolicyHealthChecker struct {
-	engine interface {
-		LastError() error
-	}
+	engine permissionauthorization.PolicyHealth
 }
 
 type watcherHealthChecker struct {
@@ -129,7 +127,7 @@ func (c casbinPolicyHealthChecker) Check(context.Context) router.HealthCheckResu
 	if c.engine == nil {
 		return unavailableHealthResult(name, "casbin policy unavailable")
 	}
-	if err := c.engine.LastError(); err != nil {
+	if !c.engine.ProjectionStatus().Ready() {
 		return unavailableHealthResult(name, "casbin policy unavailable")
 	}
 	return okHealthResult(name)

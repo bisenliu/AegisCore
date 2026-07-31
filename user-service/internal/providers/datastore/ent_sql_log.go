@@ -2,6 +2,8 @@ package datastore
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 
@@ -98,6 +100,24 @@ func (d *entSQLLogDriver) Query(ctx context.Context, query string, args, v any) 
 func (d *entSQLLogDriver) Tx(ctx context.Context) (dialect.Tx, error) {
 	start := d.now()
 	tx, err := d.Driver.Tx(ctx)
+	d.logOperation(ctx, "tx.begin", "", d.now().Sub(start), err)
+	if err != nil {
+		return nil, err
+	}
+	return &entSQLLogTx{Tx: tx, driver: d, ctx: ctx}, nil
+}
+
+func (d *entSQLLogDriver) BeginTx(ctx context.Context, opts *sql.TxOptions) (dialect.Tx, error) {
+	start := d.now()
+	driver, ok := d.Driver.(interface {
+		BeginTx(context.Context, *sql.TxOptions) (dialect.Tx, error)
+	})
+	if !ok {
+		err := fmt.Errorf("ent driver does not support transaction options")
+		d.logOperation(ctx, "tx.begin", "", d.now().Sub(start), err)
+		return nil, err
+	}
+	tx, err := driver.BeginTx(ctx, opts)
 	d.logOperation(ctx, "tx.begin", "", d.now().Sub(start), err)
 	if err != nil {
 		return nil, err

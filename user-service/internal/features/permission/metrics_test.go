@@ -2,6 +2,7 @@ package permission
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,11 +22,19 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 		Environment: "test",
 	})
 	require.NoError(t, err)
-	recorder, err := newPermissionMetrics(provider)
+	health := &metricPolicyHealth{status: permissionapplication.PolicyProjectionStatus{
+		Initialized:     true,
+		ReloadSucceeded: false,
+		AppliedRevision: 11,
+		TargetRevision:  12,
+		LastError:       errors.New("reload failed"),
+	}}
+	recorder, err := newPermissionMetrics(permissionMetricsParams{Provider: provider, PolicyHealth: health})
 	require.NoError(t, err)
 	recorder.PolicyReloadSucceeded(context.Background(), permissionapplication.MetricsSourceLocalChange)
 	recorder.PolicyPublishFailed(context.Background(), permissionapplication.MetricsReasonPublishFailed)
 	recorder.WatcherVersionMismatch(context.Background(), permissionapplication.MetricsSourceWatcherVersionCheck)
+	recorder.PolicyReloadFailed(context.Background(), permissionapplication.MetricsSourceLocalChange, permissionapplication.MetricsReasonReloadFailed)
 	recorder.PolicyReloadLagObserved(context.Background(), 4)
 	recorder.PolicyReloadLagObserved(context.Background(), -1)
 	recorder.PolicyReloadLagObserved(context.Background(), 2)
@@ -42,7 +51,8 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 		`aegiscore_user_service_rbac_policy_sync_operations_total{environment="test",operation="policy_reload",reason="none",result="success",service="aegiscore-user-service-test",source="local_change"} 1`,
 		`aegiscore_user_service_rbac_policy_sync_operations_total{environment="test",operation="policy_publish",reason="publish_failed",result="failure",service="aegiscore-user-service-test",source="local_change"} 1`,
 		`aegiscore_user_service_rbac_policy_version_mismatches_total{environment="test",service="aegiscore-user-service-test",source="watcher_version_check"} 1`,
-		`aegiscore_user_service_rbac_policy_reload_lag{environment="test",service="aegiscore-user-service-test"} 2`,
+		`aegiscore_user_service_rbac_policy_applied_revision{environment="test",service="aegiscore-user-service-test"} 11`,
+		`aegiscore_user_service_rbac_policy_reload_lag{environment="test",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_user_service_rbac_enforce_total{environment="test",method="GET",result="allow",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_user_service_rbac_enforce_total{environment="test",method="DELETE",result="deny",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_user_service_rbac_enforce_total{environment="test",method="PATCH",result="error",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
@@ -58,10 +68,12 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 	require.NotContains(t, text, "user_id=\"")
 	require.NotContains(t, text, "role_id=\"")
 	require.NotContains(t, text, "permission_id=\"")
+	require.NotContains(t, text, "revision=\"")
 	require.NotContains(t, text, "raw_path=")
 	require.NotContains(t, text, "source=\"watcher_pubsub\"")
 	require.NotContains(t, text, "reason=\"reload_lag\"")
 	require.NotContains(t, text, "error=")
+	require.Equal(t, "Current RBAC policy projection lag measured as max(known latest database revision - local engine applied revision, 0).", rbacPolicyReloadLagMetricHelp)
 }
 
 func TestPermissionMetricsDisabledUsesNoop(t *testing.T) {
@@ -71,8 +83,16 @@ func TestPermissionMetricsDisabledUsesNoop(t *testing.T) {
 		Environment: "test",
 	})
 	require.NoError(t, err)
-	_, err = newPermissionMetrics(provider)
+	_, err = newPermissionMetrics(permissionMetricsParams{Provider: provider})
 	require.NoError(t, err)
+}
+
+type metricPolicyHealth struct {
+	status permissionapplication.PolicyProjectionStatus
+}
+
+func (h *metricPolicyHealth) ProjectionStatus() permissionapplication.PolicyProjectionStatus {
+	return h.status
 }
 
 func gatherPermissionMetricText(t *testing.T, provider *commonmetrics.Provider) string {

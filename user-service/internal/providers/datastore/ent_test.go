@@ -333,6 +333,30 @@ func TestNonClosingEntDriverCloseDoesNotCloseUnderlyingDB(t *testing.T) {
 	require.Equal(t, int64(0), drv.closes.Load())
 }
 
+func TestNonClosingEntDriverPassesThroughBeginTxOptions(t *testing.T) {
+	underlying := &observabilityTestDriver{}
+	driver := nonClosingEntDriver{Driver: underlying}
+	opts := &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true}
+
+	tx, err := driver.BeginTx(context.Background(), opts)
+
+	require.NoError(t, err)
+	require.NotNil(t, tx)
+	require.Same(t, opts, underlying.txOptions)
+}
+
+func TestEntSQLLogDriverPassesThroughBeginTxOptions(t *testing.T) {
+	underlying := &observabilityTestDriver{}
+	driver := newEntSQLLogDriver(underlying, zap.NewNop(), primaryDatabaseResource, false, time.Second, time.Now)
+	opts := &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true}
+
+	tx, err := driver.BeginTx(context.Background(), opts)
+
+	require.NoError(t, err)
+	require.NotNil(t, tx)
+	require.Same(t, opts, underlying.txOptions)
+}
+
 func TestCloseEntClientPreservesNamedError(t *testing.T) {
 	userErr := errors.New("user close failed")
 
@@ -405,9 +429,10 @@ func contextWithSpanContext(ctx context.Context, t *testing.T, traceIDHex string
 }
 
 type observabilityTestDriver struct {
-	execErr  error
-	queryErr error
-	txErr    error
+	execErr   error
+	queryErr  error
+	txErr     error
+	txOptions *sql.TxOptions
 }
 
 func (d observabilityTestDriver) Exec(context.Context, string, any, any) error {
@@ -419,6 +444,14 @@ func (d observabilityTestDriver) Query(context.Context, string, any, any) error 
 }
 
 func (d observabilityTestDriver) Tx(context.Context) (dialect.Tx, error) {
+	if d.txErr != nil {
+		return nil, d.txErr
+	}
+	return dialect.NopTx(d), nil
+}
+
+func (d *observabilityTestDriver) BeginTx(_ context.Context, opts *sql.TxOptions) (dialect.Tx, error) {
+	d.txOptions = opts
 	if d.txErr != nil {
 		return nil, d.txErr
 	}

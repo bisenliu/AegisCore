@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	application "github.com/aegiscore/user-service/internal/features/permission/application"
 	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -42,6 +43,20 @@ func (m *MockPolicyReloadEngine) EXPECT() *MockPolicyReloadEngineMockRecorder {
 	return m.recorder
 }
 
+// AppliedRevision mocks base method.
+func (m *MockPolicyReloadEngine) AppliedRevision() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppliedRevision")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// AppliedRevision indicates an expected call of AppliedRevision.
+func (mr *MockPolicyReloadEngineMockRecorder) AppliedRevision() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppliedRevision", reflect.TypeOf((*MockPolicyReloadEngine)(nil).AppliedRevision))
+}
+
 // InvalidateAllUserRoles mocks base method.
 func (m *MockPolicyReloadEngine) InvalidateAllUserRoles() {
 	m.ctrl.T.Helper()
@@ -66,18 +81,45 @@ func (mr *MockPolicyReloadEngineMockRecorder) InvalidateUserRole(userID any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvalidateUserRole", reflect.TypeOf((*MockPolicyReloadEngine)(nil).InvalidateUserRole), userID)
 }
 
-// Reload mocks base method.
-func (m *MockPolicyReloadEngine) Reload(ctx context.Context) error {
+// ObserveTargetRevision mocks base method.
+func (m *MockPolicyReloadEngine) ObserveTargetRevision(targetRevision int64) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Reload", ctx)
-	ret0, _ := ret[0].(error)
+	m.ctrl.Call(m, "ObserveTargetRevision", targetRevision)
+}
+
+// ObserveTargetRevision indicates an expected call of ObserveTargetRevision.
+func (mr *MockPolicyReloadEngineMockRecorder) ObserveTargetRevision(targetRevision any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ObserveTargetRevision", reflect.TypeOf((*MockPolicyReloadEngine)(nil).ObserveTargetRevision), targetRevision)
+}
+
+// ProjectionStatus mocks base method.
+func (m *MockPolicyReloadEngine) ProjectionStatus() application.PolicyProjectionStatus {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProjectionStatus")
+	ret0, _ := ret[0].(application.PolicyProjectionStatus)
 	return ret0
 }
 
-// Reload indicates an expected call of Reload.
-func (mr *MockPolicyReloadEngineMockRecorder) Reload(ctx any) *gomock.Call {
+// ProjectionStatus indicates an expected call of ProjectionStatus.
+func (mr *MockPolicyReloadEngineMockRecorder) ProjectionStatus() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reload", reflect.TypeOf((*MockPolicyReloadEngine)(nil).Reload), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProjectionStatus", reflect.TypeOf((*MockPolicyReloadEngine)(nil).ProjectionStatus))
+}
+
+// ReloadToRevision mocks base method.
+func (m *MockPolicyReloadEngine) ReloadToRevision(ctx context.Context, targetRevision int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReloadToRevision", ctx, targetRevision)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReloadToRevision indicates an expected call of ReloadToRevision.
+func (mr *MockPolicyReloadEngineMockRecorder) ReloadToRevision(ctx, targetRevision any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReloadToRevision", reflect.TypeOf((*MockPolicyReloadEngine)(nil).ReloadToRevision), ctx, targetRevision)
 }
 
 // MockMetrics is a mock of Metrics interface.

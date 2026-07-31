@@ -168,7 +168,7 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 
 	app.RequireStart()
 	require.True(t, watcherStatus.Running())
-	require.ErrorIs(t, policyHealth.LastError(), loadErr)
+	require.ErrorIs(t, policyHealth.ProjectionStatus().LastError, loadErr)
 	allowed, err := authorizer.Enforce(context.Background(), uuid.NewString(), "/api/v1/users", "GET")
 	require.NoError(t, err)
 	require.False(t, allowed)
@@ -362,7 +362,7 @@ func (*permissionModuleOutboxStore) Backlog(context.Context, time.Time) (permiss
 
 type permissionModulePolicyLoader struct{}
 
-func (permissionModulePolicyLoader) LoadPolicies(context.Context) (permissioncasbin.PolicySet, error) {
+func (permissionModulePolicyLoader) LoadPoliciesAtLeast(context.Context, int64) (permissioncasbin.PolicySet, error) {
 	return permissioncasbin.PolicySet{}, nil
 }
 
@@ -371,7 +371,7 @@ type permissionModuleFailOncePolicyLoader struct {
 	done bool
 }
 
-func (l *permissionModuleFailOncePolicyLoader) LoadPolicies(context.Context) (permissioncasbin.PolicySet, error) {
+func (l *permissionModuleFailOncePolicyLoader) LoadPoliciesAtLeast(context.Context, int64) (permissioncasbin.PolicySet, error) {
 	if !l.done {
 		l.done = true
 		return permissioncasbin.PolicySet{}, l.err

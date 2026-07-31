@@ -6,14 +6,17 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/fx"
 
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
+	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 )
 
 const (
 	rbacPolicySyncMetricName      = "aegiscore_user_service_rbac_policy_sync_operations_total"
 	rbacPolicyMismatchMetricName  = "aegiscore_user_service_rbac_policy_version_mismatches_total"
+	rbacPolicyAppliedMetricName   = "aegiscore_user_service_rbac_policy_applied_revision"
 	rbacPolicyReloadLagMetricName = "aegiscore_user_service_rbac_policy_reload_lag"
 	rbacEnforceMetricName         = "aegiscore_user_service_rbac_enforce_total"
 	rbacEnforceLatencyMetricName  = "aegiscore_user_service_rbac_enforce_duration_seconds"
@@ -23,7 +26,8 @@ const (
 	rbacDispatcherRunningName     = "aegiscore_user_service_rbac_outbox_dispatcher_running"
 	rbacPolicySyncMetricHelp      = "Total number of RBAC policy sync operation results by fixed operation, result, reason, and source."
 	rbacPolicyMismatchMetricHelp  = "Total number of RBAC policy version mismatches by fixed watcher source."
-	rbacPolicyReloadLagMetricHelp = "Current RBAC policy reload lag measured as the non-negative difference between latest Redis policy version and local applied policy version."
+	rbacPolicyAppliedMetricHelp   = "Current database policy revision atomically applied by the local Casbin engine."
+	rbacPolicyReloadLagMetricHelp = "Current RBAC policy projection lag measured as max(known latest database revision - local engine applied revision, 0)."
 	rbacEnforceMetricHelp         = "Total number of RBAC enforce decisions by fixed result, method, and route template."
 	rbacEnforceLatencyMetricHelp  = "RBAC enforce latency in seconds by fixed result, method, and route template."
 	rbacDispatcherMetricHelp      = "Total number of RBAC outbox dispatcher operations by fixed operation, result, and reason."
@@ -35,7 +39,8 @@ const (
 type prometheusMetrics struct {
 	policySync      *prometheus.CounterVec
 	versionMismatch *prometheus.CounterVec
-	policyReloadLag prometheus.Gauge
+	policyApplied   prometheus.GaugeFunc
+	policyReloadLag prometheus.GaugeFunc
 	enforce         *prometheus.CounterVec
 	enforceLatency  *prometheus.HistogramVec
 	dispatcher      *prometheus.CounterVec
@@ -44,7 +49,16 @@ type prometheusMetrics struct {
 	dispatcherRun   prometheus.Gauge
 }
 
-func newPermissionMetrics(provider *commonmetrics.Provider) (permissionapplication.Metrics, error) {
+type permissionMetricsParams struct {
+	fx.In
+
+	Provider     *commonmetrics.Provider
+	PolicyHealth permissionauthorization.PolicyHealth `name:"permission_policy_health"`
+}
+
+func newPermissionMetrics(params permissionMetricsParams) (permissionapplication.Metrics, error) {
+	provider := params.Provider
+	policyHealth := params.PolicyHealth
 	if provider == nil || !provider.Enabled() {
 		return permissionapplication.NopMetrics(), nil
 	}
@@ -57,9 +71,32 @@ func newPermissionMetrics(provider *commonmetrics.Provider) (permissionapplicati
 			Name: rbacPolicyMismatchMetricName,
 			Help: rbacPolicyMismatchMetricHelp,
 		}, []string{"source"}),
-		policyReloadLag: prometheus.NewGauge(prometheus.GaugeOpts{
+		policyApplied: prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: rbacPolicyAppliedMetricName,
+			Help: rbacPolicyAppliedMetricHelp,
+		}, func() float64 {
+			if policyHealth == nil {
+				return 0
+			}
+			revision := policyHealth.ProjectionStatus().AppliedRevision
+			if revision < 0 {
+				return 0
+			}
+			return float64(revision)
+		}),
+		policyReloadLag: prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 			Name: rbacPolicyReloadLagMetricName,
 			Help: rbacPolicyReloadLagMetricHelp,
+		}, func() float64 {
+			if policyHealth == nil {
+				return 0
+			}
+			status := policyHealth.ProjectionStatus()
+			lag := status.TargetRevision - status.AppliedRevision
+			if lag < 0 {
+				return 0
+			}
+			return float64(lag)
 		}),
 		enforce: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: rbacEnforceMetricName,
@@ -92,6 +129,9 @@ func newPermissionMetrics(provider *commonmetrics.Provider) (permissionapplicati
 	}
 	if err := provider.Register(recorder.versionMismatch); err != nil {
 		return nil, fmt.Errorf("register rbac policy version mismatch metrics: %w", err)
+	}
+	if err := provider.Register(recorder.policyApplied); err != nil {
+		return nil, fmt.Errorf("register rbac policy applied revision metric: %w", err)
 	}
 	if err := provider.Register(recorder.policyReloadLag); err != nil {
 		return nil, fmt.Errorf("register rbac policy reload lag metrics: %w", err)
@@ -149,11 +189,8 @@ func (m *prometheusMetrics) WatcherVersionMismatch(_ context.Context, source str
 	m.versionMismatch.WithLabelValues(rbacSource(source)).Inc()
 }
 
-func (m *prometheusMetrics) PolicyReloadLagObserved(_ context.Context, lag int64) {
-	if lag < 0 {
-		lag = 0
-	}
-	m.policyReloadLag.Set(float64(lag))
+func (m *prometheusMetrics) PolicyReloadLagObserved(_ context.Context, _ int64) {
+	// GaugeFunc 直接读取 engine 的原子投影状态；事件调用只保留 Metrics port 兼容性。
 }
 
 func (m *prometheusMetrics) EnforceObserved(_ context.Context, result string, method string, routeTemplate string, duration time.Duration) {

@@ -59,25 +59,37 @@ func TestRedisHealthChecker(t *testing.T) {
 }
 
 func TestCasbinPolicyHealthChecker(t *testing.T) {
-	checker := casbinPolicyHealthChecker{engine: stubLastError{}}
+	checker := casbinPolicyHealthChecker{engine: stubPolicyHealth{status: readyPolicyProjectionStatus(2, 2)}}
 	require.Equal(t, "rbac.casbin_policy", checker.Name())
 	result := checker.Check(context.Background())
 	require.Equal(t, router.HealthCheckStatusOK, result.Status)
 
-	checker = casbinPolicyHealthChecker{engine: stubLastError{err: errors.New("load failed")}}
-	result = checker.Check(context.Background())
-	require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
-	require.NotEmpty(t, result.Message)
+	tests := []struct {
+		name   string
+		status permissionapplication.PolicyProjectionStatus
+	}{
+		{name: "uninitialized"},
+		{name: "last reload failed", status: permissionapplication.PolicyProjectionStatus{Initialized: true, AppliedRevision: 2, TargetRevision: 2, LastError: errors.New("load failed")}},
+		{name: "reload status failed", status: permissionapplication.PolicyProjectionStatus{Initialized: true, AppliedRevision: 2, TargetRevision: 2}},
+		{name: "target not reached", status: readyPolicyProjectionStatus(2, 3)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := (casbinPolicyHealthChecker{engine: stubPolicyHealth{status: tt.status}}).Check(context.Background())
+			require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
+			require.NotEmpty(t, result.Message)
+		})
+	}
 }
 
 func TestCasbinPolicyHealthCheckerRecoversAfterReloadSuccess(t *testing.T) {
-	engine := &stubLastError{err: errors.New("initial load failed")}
+	engine := &stubPolicyHealth{status: permissionapplication.PolicyProjectionStatus{LastError: errors.New("initial load failed")}}
 	checker := casbinPolicyHealthChecker{engine: engine}
 
 	result := checker.Check(context.Background())
 	require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
 
-	engine.err = nil
+	engine.status = readyPolicyProjectionStatus(4, 4)
 	result = checker.Check(context.Background())
 	require.Equal(t, router.HealthCheckStatusOK, result.Status)
 }
@@ -208,12 +220,21 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 	}
 }
 
-type stubLastError struct {
-	err error
+type stubPolicyHealth struct {
+	status permissionapplication.PolicyProjectionStatus
 }
 
-func (s stubLastError) LastError() error {
-	return s.err
+func (s stubPolicyHealth) ProjectionStatus() permissionapplication.PolicyProjectionStatus {
+	return s.status
+}
+
+func readyPolicyProjectionStatus(appliedRevision int64, targetRevision int64) permissionapplication.PolicyProjectionStatus {
+	return permissionapplication.PolicyProjectionStatus{
+		Initialized:     true,
+		ReloadSucceeded: true,
+		AppliedRevision: appliedRevision,
+		TargetRevision:  targetRevision,
+	}
 }
 
 type stubWatcherStatus struct {

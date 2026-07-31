@@ -13,11 +13,10 @@ import (
 
 // Fx 选项
 
-// permissionPolicySyncOptions 组装跨副本 policy revision 发布、追踪和 watcher 同步能力。
+// permissionPolicySyncOptions 组装跨副本 policy revision 发布和 watcher 同步能力。
 var permissionPolicySyncOptions = fx.Options(
 	fx.Provide(
 		provideRedisStore,
-		provideVersionTracker,
 		providePolicyChangeNotifier,
 		provideWatcher,
 		provideOutboxDispatcher,
@@ -32,7 +31,6 @@ type WatcherParams struct {
 	fx.In
 
 	Store   *permissionredis.Store
-	Tracker *permissionredis.VersionTracker
 	Engine  permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
 	Log     *zap.Logger
 	Metrics permissionapplication.Metrics
@@ -43,7 +41,6 @@ type PolicyChangeNotifierParams struct {
 	fx.In
 
 	Engine  permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
-	Tracker permissionapplication.PolicyVersionTracker
 	Log     *zap.Logger
 	Metrics permissionapplication.Metrics
 }
@@ -59,13 +56,6 @@ type PolicyRedisStoreResult struct {
 
 	Store     *permissionredis.Store
 	Publisher permissionapplication.PolicyRevisionPublisher
-}
-
-type PolicyVersionTrackerResult struct {
-	fx.Out
-
-	Tracker *permissionredis.VersionTracker
-	Port    permissionapplication.PolicyVersionTracker
 }
 
 type PolicyWatcherResult struct {
@@ -109,19 +99,14 @@ func provideRedisStore(params CacheRedisParams, settings serviceconfig.RBACSetti
 	return PolicyRedisStoreResult{Store: store, Publisher: store}, nil
 }
 
-func provideVersionTracker() PolicyVersionTrackerResult {
-	tracker := permissionredis.NewVersionTracker()
-	return PolicyVersionTrackerResult{Tracker: tracker, Port: tracker}
-}
-
-// providePolicyChangeNotifier 只编排本实例 reload、缓存失效和 revision 追踪。
+// providePolicyChangeNotifier 只编排本实例 revision-aware reload 和缓存失效。
 func providePolicyChangeNotifier(params PolicyChangeNotifierParams) PolicyChangeNotifierResult {
-	return PolicyChangeNotifierResult{Notifier: permissionapplication.NewPolicyRefreshCoordinator(params.Engine, params.Tracker, params.Log, params.Metrics)}
+	return PolicyChangeNotifierResult{Notifier: permissionapplication.NewPolicyRefreshCoordinator(params.Engine, params.Log, params.Metrics)}
 }
 
 // provideWatcher 将 Redis watcher 同时投影为 lifecycle runner 和健康状态来源。
 func provideWatcher(params WatcherParams) PolicyWatcherResult {
-	watcher := permissionredis.NewWatcher(permissionredis.WatcherParams{Store: params.Store, Tracker: params.Tracker, Engine: params.Engine, Log: params.Log, Metrics: params.Metrics})
+	watcher := permissionredis.NewWatcher(permissionredis.WatcherParams{Store: params.Store, Engine: params.Engine, Log: params.Log, Metrics: params.Metrics})
 	return PolicyWatcherResult{Watcher: watcher, Runner: watcher, Status: watcher}
 }
 
