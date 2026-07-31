@@ -14,8 +14,8 @@ const (
 	MetricsOperationPolicyPublish = "policy_publish"
 	// MetricsOperationWatcherReload 表示 watcher 触发的远端 reload 操作。
 	MetricsOperationWatcherReload = "watcher_reload"
-	// MetricsOperationWatcherVersionCheck 表示 watcher 版本补偿检查。
-	MetricsOperationWatcherVersionCheck = "watcher_version_check"
+	// MetricsOperationWatcherRevisionCheck 表示 watcher 数据库 revision 补偿检查。
+	MetricsOperationWatcherRevisionCheck = "watcher_revision_check"
 	// MetricsOperationDispatcherClaim 表示 outbox batch claim 操作。
 	MetricsOperationDispatcherClaim = "dispatcher_claim"
 	// MetricsOperationDispatcherPublish 表示 outbox event publish 操作。
@@ -45,8 +45,10 @@ const (
 	MetricsReasonReloadFailed = "reload_failed"
 	// MetricsReasonPublishFailed 表示 policy version 发布失败。
 	MetricsReasonPublishFailed = "publish_failed"
-	// MetricsReasonStoreUnavailable 表示 policy version store 不可用。
-	MetricsReasonStoreUnavailable = "store_unavailable"
+	// MetricsReasonRevisionStoreUnavailable 表示数据库 policy revision source 不可用。
+	MetricsReasonRevisionStoreUnavailable = "revision_store_unavailable"
+	// MetricsReasonRevisionMismatch 表示数据库 latest revision 超前于本地授权投影。
+	MetricsReasonRevisionMismatch = "revision_mismatch"
 	// MetricsReasonSystemError 表示未能稳定归类的系统异常。
 	MetricsReasonSystemError = "system_error"
 	// MetricsReasonClaimFailed 表示 outbox claim 失败。
@@ -61,8 +63,8 @@ const (
 	MetricsSourceLocalChange = "local_change"
 	// MetricsSourceWatcherPubSub 表示 watcher Pub/Sub 消息触发。
 	MetricsSourceWatcherPubSub = "watcher_pubsub"
-	// MetricsSourceWatcherVersionCheck 表示 watcher 定时版本补偿触发。
-	MetricsSourceWatcherVersionCheck = "watcher_version_check"
+	// MetricsSourceWatcherRevisionCheck 表示 watcher 定时数据库 revision 补偿触发。
+	MetricsSourceWatcherRevisionCheck = "watcher_revision_check"
 
 	// MetricsEnforceResultAllow 表示授权判定通过。
 	MetricsEnforceResultAllow = "allow"
@@ -78,10 +80,10 @@ type Metrics interface {
 	PolicyReloadFailed(ctx context.Context, source string, reason string)
 	PolicyPublishSucceeded(ctx context.Context)
 	PolicyPublishFailed(ctx context.Context, reason string)
-	WatcherCheckFailed(ctx context.Context, reason string)
+	WatcherCheckFailed(ctx context.Context, source string, reason string)
 	WatcherReloadSucceeded(ctx context.Context, source string)
 	WatcherReloadFailed(ctx context.Context, source string, reason string)
-	WatcherVersionMismatch(ctx context.Context, source string)
+	WatcherVersionMismatch(ctx context.Context, source string, reason string)
 	PolicyReloadLagObserved(ctx context.Context, lag int64)
 	EnforceObserved(ctx context.Context, result string, method string, routeTemplate string, duration time.Duration)
 	DispatcherOperationObserved(ctx context.Context, operation string, result string, reason string, kind string)

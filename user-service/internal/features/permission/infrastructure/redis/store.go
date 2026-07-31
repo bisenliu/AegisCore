@@ -46,7 +46,6 @@ type policySubscriber interface {
 }
 
 type policySubscriptionStore interface {
-	CurrentVersion(ctx context.Context) (int64, error)
 	Subscribe(ctx context.Context) policySubscriber
 }
 

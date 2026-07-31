@@ -40,7 +40,7 @@ type prometheusMetrics struct {
 	policySync      *prometheus.CounterVec
 	versionMismatch *prometheus.CounterVec
 	policyApplied   prometheus.GaugeFunc
-	policyReloadLag prometheus.GaugeFunc
+	policyReloadLag prometheus.Gauge
 	enforce         *prometheus.CounterVec
 	enforceLatency  *prometheus.HistogramVec
 	dispatcher      *prometheus.CounterVec
@@ -70,7 +70,7 @@ func newPermissionMetrics(params permissionMetricsParams) (permissionapplication
 		versionMismatch: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: rbacPolicyMismatchMetricName,
 			Help: rbacPolicyMismatchMetricHelp,
-		}, []string{"source"}),
+		}, []string{"source", "reason"}),
 		policyApplied: prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 			Name: rbacPolicyAppliedMetricName,
 			Help: rbacPolicyAppliedMetricHelp,
@@ -84,19 +84,9 @@ func newPermissionMetrics(params permissionMetricsParams) (permissionapplication
 			}
 			return float64(revision)
 		}),
-		policyReloadLag: prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		policyReloadLag: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: rbacPolicyReloadLagMetricName,
 			Help: rbacPolicyReloadLagMetricHelp,
-		}, func() float64 {
-			if policyHealth == nil {
-				return 0
-			}
-			status := policyHealth.ProjectionStatus()
-			lag := status.TargetRevision - status.AppliedRevision
-			if lag < 0 {
-				return 0
-			}
-			return float64(lag)
 		}),
 		enforce: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: rbacEnforceMetricName,
@@ -173,8 +163,8 @@ func (m *prometheusMetrics) PolicyPublishFailed(_ context.Context, reason string
 	m.policySync.WithLabelValues(permissionapplication.MetricsOperationPolicyPublish, commonmetrics.StatusFailure, rbacReason(reason), permissionapplication.MetricsSourceLocalChange).Inc()
 }
 
-func (m *prometheusMetrics) WatcherCheckFailed(_ context.Context, reason string) {
-	m.policySync.WithLabelValues(permissionapplication.MetricsOperationWatcherVersionCheck, commonmetrics.StatusFailure, rbacReason(reason), permissionapplication.MetricsSourceWatcherVersionCheck).Inc()
+func (m *prometheusMetrics) WatcherCheckFailed(_ context.Context, source string, reason string) {
+	m.policySync.WithLabelValues(permissionapplication.MetricsOperationWatcherRevisionCheck, commonmetrics.StatusFailure, rbacReason(reason), rbacSource(source)).Inc()
 }
 
 func (m *prometheusMetrics) WatcherReloadSucceeded(_ context.Context, source string) {
@@ -185,12 +175,15 @@ func (m *prometheusMetrics) WatcherReloadFailed(_ context.Context, source string
 	m.policySync.WithLabelValues(permissionapplication.MetricsOperationWatcherReload, commonmetrics.StatusFailure, rbacReason(reason), rbacSource(source)).Inc()
 }
 
-func (m *prometheusMetrics) WatcherVersionMismatch(_ context.Context, source string) {
-	m.versionMismatch.WithLabelValues(rbacSource(source)).Inc()
+func (m *prometheusMetrics) WatcherVersionMismatch(_ context.Context, source string, reason string) {
+	m.versionMismatch.WithLabelValues(rbacSource(source), rbacReason(reason)).Inc()
 }
 
-func (m *prometheusMetrics) PolicyReloadLagObserved(_ context.Context, _ int64) {
-	// GaugeFunc 直接读取 engine 的原子投影状态；事件调用只保留 Metrics port 兼容性。
+func (m *prometheusMetrics) PolicyReloadLagObserved(_ context.Context, lag int64) {
+	if lag < 0 {
+		lag = 0
+	}
+	m.policyReloadLag.Set(float64(lag))
 }
 
 func (m *prometheusMetrics) EnforceObserved(_ context.Context, result string, method string, routeTemplate string, duration time.Duration) {
@@ -273,7 +266,7 @@ func rbacSource(source string) string {
 	switch source {
 	case permissionapplication.MetricsSourceLocalChange,
 		permissionapplication.MetricsSourceWatcherPubSub,
-		permissionapplication.MetricsSourceWatcherVersionCheck:
+		permissionapplication.MetricsSourceWatcherRevisionCheck:
 		return source
 	default:
 		return permissionapplication.MetricsSourceLocalChange
@@ -285,7 +278,8 @@ func rbacReason(reason string) string {
 	case permissionapplication.MetricsReasonNone,
 		permissionapplication.MetricsReasonReloadFailed,
 		permissionapplication.MetricsReasonPublishFailed,
-		permissionapplication.MetricsReasonStoreUnavailable,
+		permissionapplication.MetricsReasonRevisionStoreUnavailable,
+		permissionapplication.MetricsReasonRevisionMismatch,
 		permissionapplication.MetricsReasonSystemError:
 		return reason
 	default:

@@ -255,15 +255,15 @@ func (mr *MockMetricsMockRecorder) PolicyReloadSucceeded(ctx, source any) *gomoc
 }
 
 // WatcherCheckFailed mocks base method.
-func (m *MockMetrics) WatcherCheckFailed(ctx context.Context, reason string) {
+func (m *MockMetrics) WatcherCheckFailed(ctx context.Context, source, reason string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "WatcherCheckFailed", ctx, reason)
+	m.ctrl.Call(m, "WatcherCheckFailed", ctx, source, reason)
 }
 
 // WatcherCheckFailed indicates an expected call of WatcherCheckFailed.
-func (mr *MockMetricsMockRecorder) WatcherCheckFailed(ctx, reason any) *gomock.Call {
+func (mr *MockMetricsMockRecorder) WatcherCheckFailed(ctx, source, reason any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WatcherCheckFailed", reflect.TypeOf((*MockMetrics)(nil).WatcherCheckFailed), ctx, reason)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WatcherCheckFailed", reflect.TypeOf((*MockMetrics)(nil).WatcherCheckFailed), ctx, source, reason)
 }
 
 // WatcherReloadFailed mocks base method.
@@ -291,13 +291,13 @@ func (mr *MockMetricsMockRecorder) WatcherReloadSucceeded(ctx, source any) *gomo
 }
 
 // WatcherVersionMismatch mocks base method.
-func (m *MockMetrics) WatcherVersionMismatch(ctx context.Context, source string) {
+func (m *MockMetrics) WatcherVersionMismatch(ctx context.Context, source, reason string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "WatcherVersionMismatch", ctx, source)
+	m.ctrl.Call(m, "WatcherVersionMismatch", ctx, source, reason)
 }
 
 // WatcherVersionMismatch indicates an expected call of WatcherVersionMismatch.
-func (mr *MockMetricsMockRecorder) WatcherVersionMismatch(ctx, source any) *gomock.Call {
+func (mr *MockMetricsMockRecorder) WatcherVersionMismatch(ctx, source, reason any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WatcherVersionMismatch", reflect.TypeOf((*MockMetrics)(nil).WatcherVersionMismatch), ctx, source)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WatcherVersionMismatch", reflect.TypeOf((*MockMetrics)(nil).WatcherVersionMismatch), ctx, source, reason)
 }

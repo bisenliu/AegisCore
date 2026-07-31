@@ -53,6 +53,7 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
 			fx.Annotate(&permissionModuleOutboxStore{}, fx.As(new(permissionapplication.OutboxStore))),
+			fx.Annotate(permissionModuleRevisionSource{}, fx.As(new(permissionapplication.LatestPolicyRevisionSource))),
 		),
 		Module,
 		fx.Populate(
@@ -117,6 +118,7 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
 			fx.Annotate(&permissionModuleOutboxStore{}, fx.As(new(permissionapplication.OutboxStore))),
+			fx.Annotate(permissionModuleRevisionSource{}, fx.As(new(permissionapplication.LatestPolicyRevisionSource))),
 		),
 		Module,
 		fx.Populate(&watcherStatus),
@@ -161,6 +163,7 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
 			fx.Annotate(&permissionModuleOutboxStore{}, fx.As(new(permissionapplication.OutboxStore))),
+			fx.Annotate(permissionModuleRevisionSource{}, fx.As(new(permissionapplication.LatestPolicyRevisionSource))),
 		),
 		Module,
 		fx.Populate(&authorizer, &policyHealth, &watcherStatus),
@@ -319,6 +322,7 @@ func TestPermissionModuleRequiresMetricsProvider(t *testing.T) {
 			fx.Annotate(permissionModuleUserRoleCacheCloser{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
 			fx.Annotate(&permissionModuleOutboxStore{}, fx.As(new(permissionapplication.OutboxStore))),
+			fx.Annotate(permissionModuleRevisionSource{}, fx.As(new(permissionapplication.LatestPolicyRevisionSource))),
 		),
 		Module,
 	)
@@ -343,6 +347,12 @@ type permissionModuleStore struct {
 }
 
 type permissionModuleOutboxStore struct{}
+
+type permissionModuleRevisionSource struct{}
+
+func (permissionModuleRevisionSource) LatestPolicyRevision(context.Context) (int64, error) {
+	return 0, nil
+}
 
 func (*permissionModuleOutboxStore) Claim(context.Context, time.Time, int, time.Duration) ([]permissionapplication.OutboxClaim, error) {
 	return nil, nil

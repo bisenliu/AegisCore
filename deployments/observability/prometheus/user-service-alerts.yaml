@@ -164,7 +164,19 @@ groups:
           severity: warning
         annotations:
           summary: "RBAC policy reload lag 持续存在"
-          description: "实例 {{ $labels.instance }} 的本地 RBAC policy version 落后 Redis 最新 version 已持续超过 30 秒，权限变更可能尚未最终生效。"
+          description: "实例 {{ $labels.instance }} 的本地 Casbin applied projection revision 落后最近成功读取的数据库 latest policy revision 已持续超过 30 秒，权限变更可能尚未最终生效。"
+          runbook_url: "docs/observability/user-service-runbook.md#rbac-policy-reload-lag"
+
+      - alert: AegisCoreUserServiceRBACRevisionStoreUnavailable
+        expr: |
+          increase(aegiscore_user_service_rbac_policy_sync_operations_total{service="aegiscore-user-service",operation="watcher_revision_check",result="failure",reason="revision_store_unavailable"}[5m]) > 0
+        for: 0m
+        labels:
+          service: aegiscore-user-service
+          severity: critical
+        annotations:
+          summary: "RBAC 数据库 policy revision 查询失败"
+          description: "RBAC watcher 最近 5 分钟无法读取数据库 latest policy revision。Pub/Sub hint 和 Redis counter 不会作为补偿权威值，当前 lag gauge 可能保留上一次成功校准结果。"
           runbook_url: "docs/observability/user-service-runbook.md#rbac-policy-reload-lag"
 
       - alert: AegisCoreUserServiceWorkerpoolFailedOrPanicked

@@ -1183,7 +1183,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "按实例展示当前 Redis 最新 RBAC policy version 与本地已应用 version 的差值；大于 0 表示该实例尚未完成最终收敛。",
+      "description": "按实例展示最近一次成功数据库校准得到的 latest RBAC policy revision 与本地 Casbin engine 实际 applied projection revision 的非负差值；大于 0 表示该实例尚未完成最终收敛。",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1244,7 +1244,7 @@
           "refId": "A"
         }
       ],
-      "title": "RBAC policy reload lag",
+      "title": "RBAC database projection lag",
       "type": "stat"
     },
     {

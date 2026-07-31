@@ -48,7 +48,6 @@ BOOTSTRAP_PASSWORD="AegisCoreLoad123!"
 BOOTSTRAP_NICKNAME="Metrics Admin"
 BOOTSTRAP_USER_ID="00000000-0000-0000-0000-00000000a001"
 SUPER_ADMIN_ROLE_ID="00000000-0000-0000-0000-000000000001"
-RBAC_POLICY_VERSION_KEY="aegiscore-user-service:rbac:policy:version"
 RBAC_POLICY_CHANNEL="aegiscore-user-service:rbac:policy:refresh"
 
 STATIC_PASSWORD_HASH="\$2y\$12\$0W17hTDYsMOjsS30IsyJ.u1gtJEJ6kZhpI86BpWR9dhj65Tsgy/42"
@@ -254,13 +253,24 @@ ON CONFLICT (user_id, role_id) DO NOTHING;
 SQL
 }
 
-# publish_rbac_reload 触发运行中实例刷新 Casbin policy，确保刚分配的角色立即生效。
+# create_rbac_policy_revision 写入数据库权威 revision，并返回新 revision。
+create_rbac_policy_revision() {
+  local reason="$1"
+  compose exec -T "$POSTGRES_SERVICE" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -tA \
+    -v reason="$reason" <<'SQL' | tr -d '[:space:]'
+INSERT INTO rbac_policy_revisions (reason, created_at)
+VALUES (:'reason', floor(extract(epoch from now()) * 1000)::bigint)
+RETURNING revision;
+SQL
+}
+
+# publish_rbac_reload 写入数据库 revision 并发布唤醒 hint，确保刚分配的角色立即生效。
 publish_rbac_reload() {
   log "publishing RBAC policy refresh message for running service"
   local version payload
-  version="$(compose exec -T "$REDIS_SERVICE" redis-cli INCR "$RBAC_POLICY_VERSION_KEY" | tr -d '\r')"
-  payload="$(jq -nc --argjson version "$version" --arg reason "metrics_bootstrap" \
-    '{version:$version,instance_id:"metrics-load-script",kind:"policy",reason:$reason,user_id:"00000000-0000-0000-0000-000000000000",role_id:"00000000-0000-0000-0000-000000000000",permission_id:"00000000-0000-0000-0000-000000000000",published_at:now|floor}')"
+  version="$(create_rbac_policy_revision "metrics_bootstrap")"
+  payload="$(jq -nc --argjson version "$version" \
+    '{schema_version:1,event_id:"00000000-0000-0000-0000-090000000001",idempotency_key:("metrics-bootstrap:"+($version|tostring)),policy_revision:$version,kind:"policy_changed",reason:"metrics_bootstrap",publisher_instance_id:"metrics-load-script"}')"
   compose exec -T "$REDIS_SERVICE" redis-cli PUBLISH "$RBAC_POLICY_CHANNEL" "$payload" >/dev/null
   sleep "$WARMUP_SECONDS"
 }
@@ -416,15 +426,15 @@ exercise_auth_edges() {
   bootstrap_admin_tokens
 }
 
-# trigger_rbac_watcher_version_check 只递增 Redis policy version，不发布 Pub/Sub 消息。
-# 运行中的 watcher 会在定时补偿检查中发现版本差异，生成 watcher_version_check 指标。
-trigger_rbac_watcher_version_check() {
+# trigger_rbac_watcher_revision_check 只提交数据库 policy revision，不发布 Pub/Sub hint。
+# 运行中的 watcher 会在定时补偿检查中发现数据库 revision 差异，生成 watcher_revision_check 指标。
+trigger_rbac_watcher_revision_check() {
   if (( RBAC_WATCHER_CHECK_WAIT_SECONDS <= 0 )); then
     return
   fi
-  log "triggering RBAC watcher version-check mismatch"
-  compose exec -T "$REDIS_SERVICE" redis-cli INCR "$RBAC_POLICY_VERSION_KEY" >/dev/null
-  log "waiting ${RBAC_WATCHER_CHECK_WAIT_SECONDS}s for RBAC watcher version check"
+  log "triggering RBAC watcher database revision-check mismatch"
+  create_rbac_policy_revision "metrics_periodic_compensation" >/dev/null
+  log "waiting ${RBAC_WATCHER_CHECK_WAIT_SECONDS}s for RBAC watcher revision check"
   sleep "$RBAC_WATCHER_CHECK_WAIT_SECONDS"
 }
 
@@ -646,7 +656,7 @@ main() {
   bootstrap_admin_tokens
   prepare_business_data
   exercise_auth_edges
-  trigger_rbac_watcher_version_check
+  trigger_rbac_watcher_revision_check
   run_load
   save_service_metrics_snapshot
   wait_for_prometheus_scrape

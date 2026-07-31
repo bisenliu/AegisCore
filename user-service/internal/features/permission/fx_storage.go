@@ -16,6 +16,7 @@ var permissionStorageOptions = fx.Options(
 	fx.Provide(
 		providePermissionStore,
 		provideOutboxStore,
+		providePolicyRevisionSource,
 	),
 )
 
@@ -43,4 +44,8 @@ func providePermissionStore(params PrimaryDBParams) permissionapplication.Permis
 
 func provideOutboxStore(params PrimaryDBParams) permissionapplication.OutboxStore {
 	return permissionpostgres.NewOutboxStore(params.Client)
+}
+
+func providePolicyRevisionSource(params PrimaryDBParams) permissionapplication.LatestPolicyRevisionSource {
+	return permissionpostgres.NewPolicyRevisionSource(params.Client)
 }

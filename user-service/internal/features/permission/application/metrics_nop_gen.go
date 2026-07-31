@@ -14,15 +14,15 @@ func NopMetrics() Metrics {
 	return nopMetrics{}
 }
 
-func (nopMetrics) PolicyReloadSucceeded(ctx context.Context, source string)              {}
-func (nopMetrics) PolicyReloadFailed(ctx context.Context, source string, reason string)  {}
-func (nopMetrics) PolicyPublishSucceeded(ctx context.Context)                            {}
-func (nopMetrics) PolicyPublishFailed(ctx context.Context, reason string)                {}
-func (nopMetrics) WatcherCheckFailed(ctx context.Context, reason string)                 {}
-func (nopMetrics) WatcherReloadSucceeded(ctx context.Context, source string)             {}
-func (nopMetrics) WatcherReloadFailed(ctx context.Context, source string, reason string) {}
-func (nopMetrics) WatcherVersionMismatch(ctx context.Context, source string)             {}
-func (nopMetrics) PolicyReloadLagObserved(ctx context.Context, lag int64)                {}
+func (nopMetrics) PolicyReloadSucceeded(ctx context.Context, source string)                 {}
+func (nopMetrics) PolicyReloadFailed(ctx context.Context, source string, reason string)     {}
+func (nopMetrics) PolicyPublishSucceeded(ctx context.Context)                               {}
+func (nopMetrics) PolicyPublishFailed(ctx context.Context, reason string)                   {}
+func (nopMetrics) WatcherCheckFailed(ctx context.Context, source string, reason string)     {}
+func (nopMetrics) WatcherReloadSucceeded(ctx context.Context, source string)                {}
+func (nopMetrics) WatcherReloadFailed(ctx context.Context, source string, reason string)    {}
+func (nopMetrics) WatcherVersionMismatch(ctx context.Context, source string, reason string) {}
+func (nopMetrics) PolicyReloadLagObserved(ctx context.Context, lag int64)                   {}
 func (nopMetrics) EnforceObserved(ctx context.Context, result string, method string, routeTemplate string, duration time.Duration) {
 }
 func (nopMetrics) DispatcherOperationObserved(ctx context.Context, operation string, result string, reason string, kind string) {

@@ -30,10 +30,11 @@ var permissionPolicySyncOptions = fx.Options(
 type WatcherParams struct {
 	fx.In
 
-	Store   *permissionredis.Store
-	Engine  permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
-	Log     *zap.Logger
-	Metrics permissionapplication.Metrics
+	Store          *permissionredis.Store
+	RevisionSource permissionapplication.LatestPolicyRevisionSource
+	Engine         permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
+	Log            *zap.Logger
+	Metrics        permissionapplication.Metrics
 }
 
 // PolicyChangeNotifierParams 汇集本实例写操作后的本地 reload 与远端版本通知依赖。
@@ -106,7 +107,7 @@ func providePolicyChangeNotifier(params PolicyChangeNotifierParams) PolicyChange
 
 // provideWatcher 将 Redis watcher 同时投影为 lifecycle runner 和健康状态来源。
 func provideWatcher(params WatcherParams) PolicyWatcherResult {
-	watcher := permissionredis.NewWatcher(permissionredis.WatcherParams{Store: params.Store, Engine: params.Engine, Log: params.Log, Metrics: params.Metrics})
+	watcher := permissionredis.NewWatcher(permissionredis.WatcherParams{Store: params.Store, RevisionSource: params.RevisionSource, Engine: params.Engine, Log: params.Log, Metrics: params.Metrics})
 	return PolicyWatcherResult{Watcher: watcher, Runner: watcher, Status: watcher}
 }
 

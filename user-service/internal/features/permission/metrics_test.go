@@ -33,7 +33,8 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 	require.NoError(t, err)
 	recorder.PolicyReloadSucceeded(context.Background(), permissionapplication.MetricsSourceLocalChange)
 	recorder.PolicyPublishFailed(context.Background(), permissionapplication.MetricsReasonPublishFailed)
-	recorder.WatcherVersionMismatch(context.Background(), permissionapplication.MetricsSourceWatcherVersionCheck)
+	recorder.WatcherVersionMismatch(context.Background(), permissionapplication.MetricsSourceWatcherRevisionCheck, permissionapplication.MetricsReasonRevisionMismatch)
+	recorder.WatcherCheckFailed(context.Background(), permissionapplication.MetricsSourceWatcherPubSub, permissionapplication.MetricsReasonRevisionStoreUnavailable)
 	recorder.PolicyReloadFailed(context.Background(), permissionapplication.MetricsSourceLocalChange, permissionapplication.MetricsReasonReloadFailed)
 	recorder.PolicyReloadLagObserved(context.Background(), 4)
 	recorder.PolicyReloadLagObserved(context.Background(), -1)
@@ -50,9 +51,10 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 	for _, want := range []string{
 		`aegiscore_user_service_rbac_policy_sync_operations_total{environment="test",operation="policy_reload",reason="none",result="success",service="aegiscore-user-service-test",source="local_change"} 1`,
 		`aegiscore_user_service_rbac_policy_sync_operations_total{environment="test",operation="policy_publish",reason="publish_failed",result="failure",service="aegiscore-user-service-test",source="local_change"} 1`,
-		`aegiscore_user_service_rbac_policy_version_mismatches_total{environment="test",service="aegiscore-user-service-test",source="watcher_version_check"} 1`,
+		`aegiscore_user_service_rbac_policy_version_mismatches_total{environment="test",reason="revision_mismatch",service="aegiscore-user-service-test",source="watcher_revision_check"} 1`,
+		`aegiscore_user_service_rbac_policy_sync_operations_total{environment="test",operation="watcher_revision_check",reason="revision_store_unavailable",result="failure",service="aegiscore-user-service-test",source="watcher_pubsub"} 1`,
 		`aegiscore_user_service_rbac_policy_applied_revision{environment="test",service="aegiscore-user-service-test"} 11`,
-		`aegiscore_user_service_rbac_policy_reload_lag{environment="test",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_user_service_rbac_policy_reload_lag{environment="test",service="aegiscore-user-service-test"} 2`,
 		`aegiscore_user_service_rbac_enforce_total{environment="test",method="GET",result="allow",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_user_service_rbac_enforce_total{environment="test",method="DELETE",result="deny",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_user_service_rbac_enforce_total{environment="test",method="PATCH",result="error",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
@@ -70,7 +72,6 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 	require.NotContains(t, text, "permission_id=\"")
 	require.NotContains(t, text, "revision=\"")
 	require.NotContains(t, text, "raw_path=")
-	require.NotContains(t, text, "source=\"watcher_pubsub\"")
 	require.NotContains(t, text, "reason=\"reload_lag\"")
 	require.NotContains(t, text, "error=")
 	require.Equal(t, "Current RBAC policy projection lag measured as max(known latest database revision - local engine applied revision, 0).", rbacPolicyReloadLagMetricHelp)
