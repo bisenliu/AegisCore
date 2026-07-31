@@ -20,6 +20,7 @@ var permissionPolicySyncOptions = fx.Options(
 		provideVersionTracker,
 		providePolicyChangeNotifier,
 		provideWatcher,
+		provideOutboxDispatcher,
 		fx.Private,
 	),
 )
@@ -41,11 +42,10 @@ type WatcherParams struct {
 type PolicyChangeNotifierParams struct {
 	fx.In
 
-	Engine    permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
-	Publisher permissionapplication.PolicyVersionPublisher
-	Tracker   permissionapplication.PolicyVersionTracker
-	Log       *zap.Logger
-	Metrics   permissionapplication.Metrics
+	Engine  permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
+	Tracker permissionapplication.PolicyVersionTracker
+	Log     *zap.Logger
+	Metrics permissionapplication.Metrics
 }
 
 type PolicyChangeNotifierResult struct {
@@ -58,7 +58,7 @@ type PolicyRedisStoreResult struct {
 	fx.Out
 
 	Store     *permissionredis.Store
-	Publisher permissionapplication.PolicyVersionPublisher
+	Publisher permissionapplication.PolicyRevisionPublisher
 }
 
 type PolicyVersionTrackerResult struct {
@@ -74,6 +74,23 @@ type PolicyWatcherResult struct {
 	Watcher *permissionredis.Watcher
 	Runner  policyWatcherRunner                       `name:"permission_policy_watcher_runner"`
 	Status  permissionapplication.PolicyWatcherStatus `name:"permission_policy_watcher_status"`
+}
+
+type OutboxDispatcherParams struct {
+	fx.In
+
+	Store     permissionapplication.OutboxStore
+	Publisher permissionapplication.PolicyRevisionPublisher
+	Settings  serviceconfig.RBACSettings
+	Log       *zap.Logger
+	Metrics   permissionapplication.Metrics
+}
+
+type OutboxDispatcherResult struct {
+	fx.Out
+
+	Runner permissionapplication.OutboxDispatcherRunner `name:"permission_outbox_dispatcher_runner"`
+	Status permissionapplication.OutboxDispatcherStatus `name:"permission_outbox_dispatcher_status"`
 }
 
 // policyWatcherRunner 是 lifecycle 对 policy watcher 的最小控制面。
@@ -97,13 +114,29 @@ func provideVersionTracker() PolicyVersionTrackerResult {
 	return PolicyVersionTrackerResult{Tracker: tracker, Port: tracker}
 }
 
-// providePolicyChangeNotifier 复用同一 coordinator 串联本地 reload、Redis publish 和 revision 追踪。
+// providePolicyChangeNotifier 只编排本实例 reload、缓存失效和 revision 追踪。
 func providePolicyChangeNotifier(params PolicyChangeNotifierParams) PolicyChangeNotifierResult {
-	return PolicyChangeNotifierResult{Notifier: permissionapplication.NewPolicyRefreshCoordinator(params.Engine, params.Publisher, params.Tracker, params.Log, params.Metrics)}
+	return PolicyChangeNotifierResult{Notifier: permissionapplication.NewPolicyRefreshCoordinator(params.Engine, params.Tracker, params.Log, params.Metrics)}
 }
 
 // provideWatcher 将 Redis watcher 同时投影为 lifecycle runner 和健康状态来源。
 func provideWatcher(params WatcherParams) PolicyWatcherResult {
 	watcher := permissionredis.NewWatcher(permissionredis.WatcherParams{Store: params.Store, Tracker: params.Tracker, Engine: params.Engine, Log: params.Log, Metrics: params.Metrics})
 	return PolicyWatcherResult{Watcher: watcher, Runner: watcher, Status: watcher}
+}
+
+// provideOutboxDispatcher 将同一个 dispatcher 投影为 lifecycle runner 和只读状态来源。
+func provideOutboxDispatcher(params OutboxDispatcherParams) (OutboxDispatcherResult, error) {
+	config := params.Settings.OutboxDispatcher
+	dispatcher, err := permissionapplication.NewDispatcher(params.Store, params.Publisher, permissionapplication.DispatcherSettings{
+		PollInterval:   config.PollInterval,
+		BatchSize:      config.BatchSize,
+		ClaimTimeout:   config.ClaimTimeout,
+		BackoffInitial: config.RetryBackoff.Initial,
+		BackoffMax:     config.RetryBackoff.Max,
+	}, nil, params.Log, params.Metrics)
+	if err != nil {
+		return OutboxDispatcherResult{}, err
+	}
+	return OutboxDispatcherResult{Runner: dispatcher, Status: dispatcher}, nil
 }

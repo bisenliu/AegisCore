@@ -1,4 +1,5 @@
-h1:DKV8AdYNDwQo+adZXIUlq/eYSmeCyjjAHiwUSOtb1PQ=
+h1:4ABjJiKLzlcZpxNpct2wRA0QWEz/BGJxNe0XHSIvunI=
 0000000000001_extensions.sql h1:yyuJqMNnPsE2DTwtv3ExfZ64pVpza6jWjQWi+0ogEtk=
 20260721084848_init_sql.sql h1:nRQFWeBK0APO5Z4rOfo3Zb4B1LzC0fH+p5zDZgIpRfo=
 20260731032009_add-rbac-policy-revision-outbox.sql h1:c682SOe6E/CzFctA6gTuW9rsOLByuRDARWu3HdPn/BU=
+20260731041142_add-rbac-policy-outbox-dispatcher.sql h1:xa3R1kV82rsRBYyv6bwcpPEMTi/p/YupQqZJl45RA6g=

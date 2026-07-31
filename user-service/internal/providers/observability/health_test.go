@@ -22,6 +22,7 @@ import (
 	"github.com/aegiscore/common/runtime/workerpool"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
+	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	"github.com/aegiscore/user-service/internal/router"
 )
 
@@ -103,13 +104,37 @@ func TestWatcherHealthChecker(t *testing.T) {
 	}
 }
 
+func TestOutboxDispatcherHealthChecker(t *testing.T) {
+	checker := outboxDispatcherHealthChecker{dispatcher: &stubDispatcherStatus{status: permissionapplication.DispatcherStatus{Running: true, DueCount: 3, LastErrorCategory: permissionapplication.DispatcherErrorPublish}}}
+	require.Equal(t, "rbac.outbox_dispatcher", checker.Name())
+	require.Equal(t, router.HealthCheckResult{Name: checker.Name(), Status: router.HealthCheckStatusOK}, checker.Check(context.Background()))
+	require.Equal(t, 1, checker.dispatcher.(*stubDispatcherStatus).calls)
+
+	tests := []struct {
+		name       string
+		dispatcher permissionapplication.OutboxDispatcherStatus
+		message    string
+	}{
+		{name: "unavailable", message: "rbac outbox dispatcher unavailable"},
+		{name: "not running", dispatcher: &stubDispatcherStatus{}, message: "rbac outbox dispatcher not running"},
+		{name: "query error", dispatcher: &stubDispatcherStatus{err: errors.New("query failed")}, message: "rbac outbox dispatcher status query failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := outboxDispatcherHealthChecker{dispatcher: tt.dispatcher}.Check(context.Background())
+			require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
+			require.Equal(t, tt.message, result.Message)
+		})
+	}
+}
+
 func TestProvideHealthChecksUsesResourcePingTimeouts(t *testing.T) {
 	settings := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
 		"cache_redis": {Mode: commonresources.RedisModeCluster, Addrs: []string{"127.0.0.1:6379"}, Timeout: 2 * time.Second},
 	}}
 	checks := ProvideHealthChecks(HealthCheckParams{Resources: settings})
 
-	require.Len(t, checks.Readiness, 4)
+	require.Len(t, checks.Readiness, 5)
 	postgres, ok := checks.Readiness[0].(postgresHealthChecker)
 	require.True(t, ok)
 	require.Equal(t, commonresources.DefaultPostgresPingTimeout(), postgres.timeout)
@@ -194,6 +219,17 @@ func (s stubLastError) LastError() error {
 type stubWatcherStatus struct {
 	running bool
 	err     error
+}
+
+type stubDispatcherStatus struct {
+	status permissionapplication.DispatcherStatus
+	err    error
+	calls  int
+}
+
+func (s *stubDispatcherStatus) Status(context.Context) (permissionapplication.DispatcherStatus, error) {
+	s.calls++
+	return s.status, s.err
 }
 
 func (s stubWatcherStatus) Running() bool {

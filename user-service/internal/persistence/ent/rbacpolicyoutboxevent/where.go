@@ -109,6 +109,16 @@ func LastError(v string) predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldLastError, v))
 }
 
+// ClaimToken applies equality check predicate on the "claim_token" field. It's identical to ClaimTokenEQ.
+func ClaimToken(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldClaimToken, v))
+}
+
+// ClaimedUntil applies equality check predicate on the "claimed_until" field. It's identical to ClaimedUntilEQ.
+func ClaimedUntil(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldClaimedUntil, v))
+}
+
 // IdempotencyKey applies equality check predicate on the "idempotency_key" field. It's identical to IdempotencyKeyEQ.
 func IdempotencyKey(v string) predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldIdempotencyKey, v))
@@ -687,6 +697,106 @@ func LastErrorEqualFold(v string) predicate.RbacPolicyOutboxEvent {
 // LastErrorContainsFold applies the ContainsFold predicate on the "last_error" field.
 func LastErrorContainsFold(v string) predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldContainsFold(FieldLastError, v))
+}
+
+// ClaimTokenEQ applies the EQ predicate on the "claim_token" field.
+func ClaimTokenEQ(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldClaimToken, v))
+}
+
+// ClaimTokenNEQ applies the NEQ predicate on the "claim_token" field.
+func ClaimTokenNEQ(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldClaimToken, v))
+}
+
+// ClaimTokenIn applies the In predicate on the "claim_token" field.
+func ClaimTokenIn(vs ...uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldClaimToken, vs...))
+}
+
+// ClaimTokenNotIn applies the NotIn predicate on the "claim_token" field.
+func ClaimTokenNotIn(vs ...uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldClaimToken, vs...))
+}
+
+// ClaimTokenGT applies the GT predicate on the "claim_token" field.
+func ClaimTokenGT(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldGT(FieldClaimToken, v))
+}
+
+// ClaimTokenGTE applies the GTE predicate on the "claim_token" field.
+func ClaimTokenGTE(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldGTE(FieldClaimToken, v))
+}
+
+// ClaimTokenLT applies the LT predicate on the "claim_token" field.
+func ClaimTokenLT(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldLT(FieldClaimToken, v))
+}
+
+// ClaimTokenLTE applies the LTE predicate on the "claim_token" field.
+func ClaimTokenLTE(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldLTE(FieldClaimToken, v))
+}
+
+// ClaimTokenIsNil applies the IsNil predicate on the "claim_token" field.
+func ClaimTokenIsNil() predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldIsNull(FieldClaimToken))
+}
+
+// ClaimTokenNotNil applies the NotNil predicate on the "claim_token" field.
+func ClaimTokenNotNil() predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNotNull(FieldClaimToken))
+}
+
+// ClaimedUntilEQ applies the EQ predicate on the "claimed_until" field.
+func ClaimedUntilEQ(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldClaimedUntil, v))
+}
+
+// ClaimedUntilNEQ applies the NEQ predicate on the "claimed_until" field.
+func ClaimedUntilNEQ(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldClaimedUntil, v))
+}
+
+// ClaimedUntilIn applies the In predicate on the "claimed_until" field.
+func ClaimedUntilIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldClaimedUntil, vs...))
+}
+
+// ClaimedUntilNotIn applies the NotIn predicate on the "claimed_until" field.
+func ClaimedUntilNotIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldClaimedUntil, vs...))
+}
+
+// ClaimedUntilGT applies the GT predicate on the "claimed_until" field.
+func ClaimedUntilGT(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldGT(FieldClaimedUntil, v))
+}
+
+// ClaimedUntilGTE applies the GTE predicate on the "claimed_until" field.
+func ClaimedUntilGTE(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldGTE(FieldClaimedUntil, v))
+}
+
+// ClaimedUntilLT applies the LT predicate on the "claimed_until" field.
+func ClaimedUntilLT(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldLT(FieldClaimedUntil, v))
+}
+
+// ClaimedUntilLTE applies the LTE predicate on the "claimed_until" field.
+func ClaimedUntilLTE(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldLTE(FieldClaimedUntil, v))
+}
+
+// ClaimedUntilIsNil applies the IsNil predicate on the "claimed_until" field.
+func ClaimedUntilIsNil() predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldIsNull(FieldClaimedUntil))
+}
+
+// ClaimedUntilNotNil applies the NotNil predicate on the "claimed_until" field.
+func ClaimedUntilNotNil() predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNotNull(FieldClaimedUntil))
 }
 
 // IdempotencyKeyEQ applies the EQ predicate on the "idempotency_key" field.

@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
+	"github.com/google/uuid"
 )
 
 // RbacPolicyOutboxEventUpdate is the builder for updating RbacPolicyOutboxEvent entities.
@@ -100,6 +101,53 @@ func (_u *RbacPolicyOutboxEventUpdate) SetNillableLastError(v *string) *RbacPoli
 // ClearLastError clears the value of the "last_error" field.
 func (_u *RbacPolicyOutboxEventUpdate) ClearLastError() *RbacPolicyOutboxEventUpdate {
 	_u.mutation.ClearLastError()
+	return _u
+}
+
+// SetClaimToken sets the "claim_token" field.
+func (_u *RbacPolicyOutboxEventUpdate) SetClaimToken(v uuid.UUID) *RbacPolicyOutboxEventUpdate {
+	_u.mutation.SetClaimToken(v)
+	return _u
+}
+
+// SetNillableClaimToken sets the "claim_token" field if the given value is not nil.
+func (_u *RbacPolicyOutboxEventUpdate) SetNillableClaimToken(v *uuid.UUID) *RbacPolicyOutboxEventUpdate {
+	if v != nil {
+		_u.SetClaimToken(*v)
+	}
+	return _u
+}
+
+// ClearClaimToken clears the value of the "claim_token" field.
+func (_u *RbacPolicyOutboxEventUpdate) ClearClaimToken() *RbacPolicyOutboxEventUpdate {
+	_u.mutation.ClearClaimToken()
+	return _u
+}
+
+// SetClaimedUntil sets the "claimed_until" field.
+func (_u *RbacPolicyOutboxEventUpdate) SetClaimedUntil(v int64) *RbacPolicyOutboxEventUpdate {
+	_u.mutation.ResetClaimedUntil()
+	_u.mutation.SetClaimedUntil(v)
+	return _u
+}
+
+// SetNillableClaimedUntil sets the "claimed_until" field if the given value is not nil.
+func (_u *RbacPolicyOutboxEventUpdate) SetNillableClaimedUntil(v *int64) *RbacPolicyOutboxEventUpdate {
+	if v != nil {
+		_u.SetClaimedUntil(*v)
+	}
+	return _u
+}
+
+// AddClaimedUntil adds value to the "claimed_until" field.
+func (_u *RbacPolicyOutboxEventUpdate) AddClaimedUntil(v int64) *RbacPolicyOutboxEventUpdate {
+	_u.mutation.AddClaimedUntil(v)
+	return _u
+}
+
+// ClearClaimedUntil clears the value of the "claimed_until" field.
+func (_u *RbacPolicyOutboxEventUpdate) ClearClaimedUntil() *RbacPolicyOutboxEventUpdate {
+	_u.mutation.ClearClaimedUntil()
 	return _u
 }
 
@@ -249,6 +297,21 @@ func (_u *RbacPolicyOutboxEventUpdate) sqlSave(ctx context.Context) (_node int, 
 	if _u.mutation.LastErrorCleared() {
 		_spec.ClearField(rbacpolicyoutboxevent.FieldLastError, field.TypeString)
 	}
+	if value, ok := _u.mutation.ClaimToken(); ok {
+		_spec.SetField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeUUID, value)
+	}
+	if _u.mutation.ClaimTokenCleared() {
+		_spec.ClearField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeUUID)
+	}
+	if value, ok := _u.mutation.ClaimedUntil(); ok {
+		_spec.SetField(rbacpolicyoutboxevent.FieldClaimedUntil, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedClaimedUntil(); ok {
+		_spec.AddField(rbacpolicyoutboxevent.FieldClaimedUntil, field.TypeInt64, value)
+	}
+	if _u.mutation.ClaimedUntilCleared() {
+		_spec.ClearField(rbacpolicyoutboxevent.FieldClaimedUntil, field.TypeInt64)
+	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)
 	}
@@ -357,6 +420,53 @@ func (_u *RbacPolicyOutboxEventUpdateOne) SetNillableLastError(v *string) *RbacP
 // ClearLastError clears the value of the "last_error" field.
 func (_u *RbacPolicyOutboxEventUpdateOne) ClearLastError() *RbacPolicyOutboxEventUpdateOne {
 	_u.mutation.ClearLastError()
+	return _u
+}
+
+// SetClaimToken sets the "claim_token" field.
+func (_u *RbacPolicyOutboxEventUpdateOne) SetClaimToken(v uuid.UUID) *RbacPolicyOutboxEventUpdateOne {
+	_u.mutation.SetClaimToken(v)
+	return _u
+}
+
+// SetNillableClaimToken sets the "claim_token" field if the given value is not nil.
+func (_u *RbacPolicyOutboxEventUpdateOne) SetNillableClaimToken(v *uuid.UUID) *RbacPolicyOutboxEventUpdateOne {
+	if v != nil {
+		_u.SetClaimToken(*v)
+	}
+	return _u
+}
+
+// ClearClaimToken clears the value of the "claim_token" field.
+func (_u *RbacPolicyOutboxEventUpdateOne) ClearClaimToken() *RbacPolicyOutboxEventUpdateOne {
+	_u.mutation.ClearClaimToken()
+	return _u
+}
+
+// SetClaimedUntil sets the "claimed_until" field.
+func (_u *RbacPolicyOutboxEventUpdateOne) SetClaimedUntil(v int64) *RbacPolicyOutboxEventUpdateOne {
+	_u.mutation.ResetClaimedUntil()
+	_u.mutation.SetClaimedUntil(v)
+	return _u
+}
+
+// SetNillableClaimedUntil sets the "claimed_until" field if the given value is not nil.
+func (_u *RbacPolicyOutboxEventUpdateOne) SetNillableClaimedUntil(v *int64) *RbacPolicyOutboxEventUpdateOne {
+	if v != nil {
+		_u.SetClaimedUntil(*v)
+	}
+	return _u
+}
+
+// AddClaimedUntil adds value to the "claimed_until" field.
+func (_u *RbacPolicyOutboxEventUpdateOne) AddClaimedUntil(v int64) *RbacPolicyOutboxEventUpdateOne {
+	_u.mutation.AddClaimedUntil(v)
+	return _u
+}
+
+// ClearClaimedUntil clears the value of the "claimed_until" field.
+func (_u *RbacPolicyOutboxEventUpdateOne) ClearClaimedUntil() *RbacPolicyOutboxEventUpdateOne {
+	_u.mutation.ClearClaimedUntil()
 	return _u
 }
 
@@ -535,6 +645,21 @@ func (_u *RbacPolicyOutboxEventUpdateOne) sqlSave(ctx context.Context) (_node *R
 	}
 	if _u.mutation.LastErrorCleared() {
 		_spec.ClearField(rbacpolicyoutboxevent.FieldLastError, field.TypeString)
+	}
+	if value, ok := _u.mutation.ClaimToken(); ok {
+		_spec.SetField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeUUID, value)
+	}
+	if _u.mutation.ClaimTokenCleared() {
+		_spec.ClearField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeUUID)
+	}
+	if value, ok := _u.mutation.ClaimedUntil(); ok {
+		_spec.SetField(rbacpolicyoutboxevent.FieldClaimedUntil, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedClaimedUntil(); ok {
+		_spec.AddField(rbacpolicyoutboxevent.FieldClaimedUntil, field.TypeInt64, value)
+	}
+	if _u.mutation.ClaimedUntilCleared() {
+		_spec.ClearField(rbacpolicyoutboxevent.FieldClaimedUntil, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)

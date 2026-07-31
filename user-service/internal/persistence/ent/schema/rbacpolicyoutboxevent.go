@@ -15,6 +15,8 @@ const (
 	rbacPolicyOutboxKindPolicyChanged   = "policy_changed"
 	rbacPolicyOutboxKindUserRoleChanged = "user_role_changed"
 	rbacPolicyOutboxStatusPending       = "pending"
+	rbacPolicyOutboxStatusProcessing    = "processing"
+	rbacPolicyOutboxStatusFailed        = "failed"
 	rbacPolicyOutboxStatusDelivered     = "delivered"
 	defaultRbacPolicyOutboxStatus       = rbacPolicyOutboxStatusPending
 )
@@ -40,10 +42,12 @@ func (RbacPolicyOutboxEvent) Fields() []ent.Field {
 		field.UUID("role_id", uuid.UUID{}).Optional().Nillable().Immutable().Comment("相关外部角色ID"),
 		field.UUID("user_id", uuid.UUID{}).Optional().Nillable().Immutable().Comment("相关外部用户ID"),
 		field.UUID("permission_id", uuid.UUID{}).Optional().Nillable().Immutable().Comment("相关外部权限ID"),
-		field.String("status").Default(defaultRbacPolicyOutboxStatus).MaxLen(16).Validate(oneOfStrings(rbacPolicyOutboxStatusPending, rbacPolicyOutboxStatusDelivered)).Comment("投递状态"),
+		field.String("status").Default(defaultRbacPolicyOutboxStatus).MaxLen(16).Validate(oneOfStrings(rbacPolicyOutboxStatusPending, rbacPolicyOutboxStatusProcessing, rbacPolicyOutboxStatusFailed, rbacPolicyOutboxStatusDelivered)).Comment("投递状态"),
 		field.Int("attempt_count").Default(0).NonNegative().Comment("投递尝试次数"),
 		field.Int64("next_attempt_at").DefaultFunc(func() int64 { return time.Now().UnixMilli() }).Comment("下次允许尝试的时间戳毫秒"),
 		field.String("last_error").Optional().Nillable().MaxLen(2048).Comment("最近一次投递错误"),
+		field.UUID("claim_token", uuid.UUID{}).Optional().Nillable().Comment("当前 dispatcher claim token"),
+		field.Int64("claimed_until").Optional().Nillable().Comment("当前 claim lease 截止时间戳毫秒"),
 		field.String("idempotency_key").NotEmpty().Unique().Immutable().MaxLen(128).Comment("稳定投递幂等键"),
 		field.Int64("created_at").DefaultFunc(func() int64 { return time.Now().UnixMilli() }).Immutable().Comment("创建时间戳毫秒"),
 		field.Int64("updated_at").DefaultFunc(func() int64 { return time.Now().UnixMilli() }).UpdateDefault(func() int64 { return time.Now().UnixMilli() }).Comment("更新时间戳毫秒"),
@@ -62,6 +66,7 @@ func (RbacPolicyOutboxEvent) Edges() []ent.Edge {
 func (RbacPolicyOutboxEvent) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("status", "next_attempt_at", "revision"),
+		index.Fields("status", "claimed_until", "revision"),
 	}
 }
 

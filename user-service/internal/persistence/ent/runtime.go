@@ -181,7 +181,7 @@ func init() {
 	// rbacpolicyoutboxevent.LastErrorValidator is a validator for the "last_error" field. It is called by the builders before save.
 	rbacpolicyoutboxevent.LastErrorValidator = rbacpolicyoutboxeventDescLastError.Validators[0].(func(string) error)
 	// rbacpolicyoutboxeventDescIdempotencyKey is the schema descriptor for idempotency_key field.
-	rbacpolicyoutboxeventDescIdempotencyKey := rbacpolicyoutboxeventFields[12].Descriptor()
+	rbacpolicyoutboxeventDescIdempotencyKey := rbacpolicyoutboxeventFields[14].Descriptor()
 	// rbacpolicyoutboxevent.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
 	rbacpolicyoutboxevent.IdempotencyKeyValidator = func() func(string) error {
 		validators := rbacpolicyoutboxeventDescIdempotencyKey.Validators
@@ -199,11 +199,11 @@ func init() {
 		}
 	}()
 	// rbacpolicyoutboxeventDescCreatedAt is the schema descriptor for created_at field.
-	rbacpolicyoutboxeventDescCreatedAt := rbacpolicyoutboxeventFields[13].Descriptor()
+	rbacpolicyoutboxeventDescCreatedAt := rbacpolicyoutboxeventFields[15].Descriptor()
 	// rbacpolicyoutboxevent.DefaultCreatedAt holds the default value on creation for the created_at field.
 	rbacpolicyoutboxevent.DefaultCreatedAt = rbacpolicyoutboxeventDescCreatedAt.Default.(func() int64)
 	// rbacpolicyoutboxeventDescUpdatedAt is the schema descriptor for updated_at field.
-	rbacpolicyoutboxeventDescUpdatedAt := rbacpolicyoutboxeventFields[14].Descriptor()
+	rbacpolicyoutboxeventDescUpdatedAt := rbacpolicyoutboxeventFields[16].Descriptor()
 	// rbacpolicyoutboxevent.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	rbacpolicyoutboxevent.DefaultUpdatedAt = rbacpolicyoutboxeventDescUpdatedAt.Default.(func() int64)
 	// rbacpolicyoutboxevent.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

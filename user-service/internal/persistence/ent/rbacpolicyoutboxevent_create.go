@@ -145,6 +145,34 @@ func (_c *RbacPolicyOutboxEventCreate) SetNillableLastError(v *string) *RbacPoli
 	return _c
 }
 
+// SetClaimToken sets the "claim_token" field.
+func (_c *RbacPolicyOutboxEventCreate) SetClaimToken(v uuid.UUID) *RbacPolicyOutboxEventCreate {
+	_c.mutation.SetClaimToken(v)
+	return _c
+}
+
+// SetNillableClaimToken sets the "claim_token" field if the given value is not nil.
+func (_c *RbacPolicyOutboxEventCreate) SetNillableClaimToken(v *uuid.UUID) *RbacPolicyOutboxEventCreate {
+	if v != nil {
+		_c.SetClaimToken(*v)
+	}
+	return _c
+}
+
+// SetClaimedUntil sets the "claimed_until" field.
+func (_c *RbacPolicyOutboxEventCreate) SetClaimedUntil(v int64) *RbacPolicyOutboxEventCreate {
+	_c.mutation.SetClaimedUntil(v)
+	return _c
+}
+
+// SetNillableClaimedUntil sets the "claimed_until" field if the given value is not nil.
+func (_c *RbacPolicyOutboxEventCreate) SetNillableClaimedUntil(v *int64) *RbacPolicyOutboxEventCreate {
+	if v != nil {
+		_c.SetClaimedUntil(*v)
+	}
+	return _c
+}
+
 // SetIdempotencyKey sets the "idempotency_key" field.
 func (_c *RbacPolicyOutboxEventCreate) SetIdempotencyKey(v string) *RbacPolicyOutboxEventCreate {
 	_c.mutation.SetIdempotencyKey(v)
@@ -405,6 +433,14 @@ func (_c *RbacPolicyOutboxEventCreate) createSpec() (*RbacPolicyOutboxEvent, *sq
 		_spec.SetField(rbacpolicyoutboxevent.FieldLastError, field.TypeString, value)
 		_node.LastError = &value
 	}
+	if value, ok := _c.mutation.ClaimToken(); ok {
+		_spec.SetField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeUUID, value)
+		_node.ClaimToken = &value
+	}
+	if value, ok := _c.mutation.ClaimedUntil(); ok {
+		_spec.SetField(rbacpolicyoutboxevent.FieldClaimedUntil, field.TypeInt64, value)
+		_node.ClaimedUntil = &value
+	}
 	if value, ok := _c.mutation.IdempotencyKey(); ok {
 		_spec.SetField(rbacpolicyoutboxevent.FieldIdempotencyKey, field.TypeString, value)
 		_node.IdempotencyKey = value
@@ -553,6 +589,48 @@ func (u *RbacPolicyOutboxEventUpsert) UpdateLastError() *RbacPolicyOutboxEventUp
 // ClearLastError clears the value of the "last_error" field.
 func (u *RbacPolicyOutboxEventUpsert) ClearLastError() *RbacPolicyOutboxEventUpsert {
 	u.SetNull(rbacpolicyoutboxevent.FieldLastError)
+	return u
+}
+
+// SetClaimToken sets the "claim_token" field.
+func (u *RbacPolicyOutboxEventUpsert) SetClaimToken(v uuid.UUID) *RbacPolicyOutboxEventUpsert {
+	u.Set(rbacpolicyoutboxevent.FieldClaimToken, v)
+	return u
+}
+
+// UpdateClaimToken sets the "claim_token" field to the value that was provided on create.
+func (u *RbacPolicyOutboxEventUpsert) UpdateClaimToken() *RbacPolicyOutboxEventUpsert {
+	u.SetExcluded(rbacpolicyoutboxevent.FieldClaimToken)
+	return u
+}
+
+// ClearClaimToken clears the value of the "claim_token" field.
+func (u *RbacPolicyOutboxEventUpsert) ClearClaimToken() *RbacPolicyOutboxEventUpsert {
+	u.SetNull(rbacpolicyoutboxevent.FieldClaimToken)
+	return u
+}
+
+// SetClaimedUntil sets the "claimed_until" field.
+func (u *RbacPolicyOutboxEventUpsert) SetClaimedUntil(v int64) *RbacPolicyOutboxEventUpsert {
+	u.Set(rbacpolicyoutboxevent.FieldClaimedUntil, v)
+	return u
+}
+
+// UpdateClaimedUntil sets the "claimed_until" field to the value that was provided on create.
+func (u *RbacPolicyOutboxEventUpsert) UpdateClaimedUntil() *RbacPolicyOutboxEventUpsert {
+	u.SetExcluded(rbacpolicyoutboxevent.FieldClaimedUntil)
+	return u
+}
+
+// AddClaimedUntil adds v to the "claimed_until" field.
+func (u *RbacPolicyOutboxEventUpsert) AddClaimedUntil(v int64) *RbacPolicyOutboxEventUpsert {
+	u.Add(rbacpolicyoutboxevent.FieldClaimedUntil, v)
+	return u
+}
+
+// ClearClaimedUntil clears the value of the "claimed_until" field.
+func (u *RbacPolicyOutboxEventUpsert) ClearClaimedUntil() *RbacPolicyOutboxEventUpsert {
+	u.SetNull(rbacpolicyoutboxevent.FieldClaimedUntil)
 	return u
 }
 
@@ -747,6 +825,55 @@ func (u *RbacPolicyOutboxEventUpsertOne) UpdateLastError() *RbacPolicyOutboxEven
 func (u *RbacPolicyOutboxEventUpsertOne) ClearLastError() *RbacPolicyOutboxEventUpsertOne {
 	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
 		s.ClearLastError()
+	})
+}
+
+// SetClaimToken sets the "claim_token" field.
+func (u *RbacPolicyOutboxEventUpsertOne) SetClaimToken(v uuid.UUID) *RbacPolicyOutboxEventUpsertOne {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.SetClaimToken(v)
+	})
+}
+
+// UpdateClaimToken sets the "claim_token" field to the value that was provided on create.
+func (u *RbacPolicyOutboxEventUpsertOne) UpdateClaimToken() *RbacPolicyOutboxEventUpsertOne {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.UpdateClaimToken()
+	})
+}
+
+// ClearClaimToken clears the value of the "claim_token" field.
+func (u *RbacPolicyOutboxEventUpsertOne) ClearClaimToken() *RbacPolicyOutboxEventUpsertOne {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.ClearClaimToken()
+	})
+}
+
+// SetClaimedUntil sets the "claimed_until" field.
+func (u *RbacPolicyOutboxEventUpsertOne) SetClaimedUntil(v int64) *RbacPolicyOutboxEventUpsertOne {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.SetClaimedUntil(v)
+	})
+}
+
+// AddClaimedUntil adds v to the "claimed_until" field.
+func (u *RbacPolicyOutboxEventUpsertOne) AddClaimedUntil(v int64) *RbacPolicyOutboxEventUpsertOne {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.AddClaimedUntil(v)
+	})
+}
+
+// UpdateClaimedUntil sets the "claimed_until" field to the value that was provided on create.
+func (u *RbacPolicyOutboxEventUpsertOne) UpdateClaimedUntil() *RbacPolicyOutboxEventUpsertOne {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.UpdateClaimedUntil()
+	})
+}
+
+// ClearClaimedUntil clears the value of the "claimed_until" field.
+func (u *RbacPolicyOutboxEventUpsertOne) ClearClaimedUntil() *RbacPolicyOutboxEventUpsertOne {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.ClearClaimedUntil()
 	})
 }
 
@@ -1114,6 +1241,55 @@ func (u *RbacPolicyOutboxEventUpsertBulk) UpdateLastError() *RbacPolicyOutboxEve
 func (u *RbacPolicyOutboxEventUpsertBulk) ClearLastError() *RbacPolicyOutboxEventUpsertBulk {
 	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
 		s.ClearLastError()
+	})
+}
+
+// SetClaimToken sets the "claim_token" field.
+func (u *RbacPolicyOutboxEventUpsertBulk) SetClaimToken(v uuid.UUID) *RbacPolicyOutboxEventUpsertBulk {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.SetClaimToken(v)
+	})
+}
+
+// UpdateClaimToken sets the "claim_token" field to the value that was provided on create.
+func (u *RbacPolicyOutboxEventUpsertBulk) UpdateClaimToken() *RbacPolicyOutboxEventUpsertBulk {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.UpdateClaimToken()
+	})
+}
+
+// ClearClaimToken clears the value of the "claim_token" field.
+func (u *RbacPolicyOutboxEventUpsertBulk) ClearClaimToken() *RbacPolicyOutboxEventUpsertBulk {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.ClearClaimToken()
+	})
+}
+
+// SetClaimedUntil sets the "claimed_until" field.
+func (u *RbacPolicyOutboxEventUpsertBulk) SetClaimedUntil(v int64) *RbacPolicyOutboxEventUpsertBulk {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.SetClaimedUntil(v)
+	})
+}
+
+// AddClaimedUntil adds v to the "claimed_until" field.
+func (u *RbacPolicyOutboxEventUpsertBulk) AddClaimedUntil(v int64) *RbacPolicyOutboxEventUpsertBulk {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.AddClaimedUntil(v)
+	})
+}
+
+// UpdateClaimedUntil sets the "claimed_until" field to the value that was provided on create.
+func (u *RbacPolicyOutboxEventUpsertBulk) UpdateClaimedUntil() *RbacPolicyOutboxEventUpsertBulk {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.UpdateClaimedUntil()
+	})
+}
+
+// ClearClaimedUntil clears the value of the "claimed_until" field.
+func (u *RbacPolicyOutboxEventUpsertBulk) ClearClaimedUntil() *RbacPolicyOutboxEventUpsertBulk {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.ClearClaimedUntil()
 	})
 }
 

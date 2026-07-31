@@ -40,6 +40,7 @@ var permissionPublicOptions = fx.Options(
 		providePermissionAuthorizer,
 		providePermissionPolicyHealth,
 		providePermissionPolicyWatcherStatus,
+		providePermissionOutboxDispatcherStatus,
 		providePermissionUserRoleCacheStats,
 		providePermissionPolicyChangeNotifier,
 		providePermissionController,
@@ -97,13 +98,15 @@ type PermissionUserRoleCacheStatsResult struct {
 type PermissionRuntimeParams struct {
 	fx.In
 
-	Authorizer  permissionauthorization.Authorizer         `name:"permission_authorizer"`
-	Health      permissionauthorization.PolicyHealth       `name:"permission_policy_health"`
-	Watcher     policyWatcherRunner                        `name:"permission_policy_watcher_runner"`
-	Status      permissionapplication.PolicyWatcherStatus  `name:"permission_policy_watcher_status"`
-	Notifier    permissionapplication.PolicyChangeNotifier `name:"permission_policy_change_notifier"`
-	Initializer permissionPolicyInitializer                `name:"permission_policy_initializer"`
-	UserRoles   userRoleResolverLifecycle                  `name:"permission_user_role_resolver_lifecycle"`
+	Authorizer     permissionauthorization.Authorizer           `name:"permission_authorizer"`
+	Health         permissionauthorization.PolicyHealth         `name:"permission_policy_health"`
+	Watcher        policyWatcherRunner                          `name:"permission_policy_watcher_runner"`
+	Status         permissionapplication.PolicyWatcherStatus    `name:"permission_policy_watcher_status"`
+	Dispatcher     permissionapplication.OutboxDispatcherRunner `name:"permission_outbox_dispatcher_runner"`
+	DispatchStatus permissionapplication.OutboxDispatcherStatus `name:"permission_outbox_dispatcher_status"`
+	Notifier       permissionapplication.PolicyChangeNotifier   `name:"permission_policy_change_notifier"`
+	Initializer    permissionPolicyInitializer                  `name:"permission_policy_initializer"`
+	UserRoles      userRoleResolverLifecycle                    `name:"permission_user_role_resolver_lifecycle"`
 }
 
 type PolicyEngineResult struct {
@@ -132,13 +135,15 @@ type userRoleResolverHolder struct {
 
 // PermissionRuntime 聚合 permission feature 对外稳定 RBAC runtime 组件，避免 public 投影散落在多个 named 转发函数中。
 type PermissionRuntime struct {
-	Authorizer    permissionauthorization.Authorizer
-	PolicyHealth  permissionauthorization.PolicyHealth
-	WatcherStatus permissionapplication.PolicyWatcherStatus
-	Notifier      permissionapplication.PolicyChangeNotifier
-	Initializer   permissionPolicyInitializer
-	Watcher       policyWatcherRunner
-	UserRoles     userRoleResolverLifecycle
+	Authorizer       permissionauthorization.Authorizer
+	PolicyHealth     permissionauthorization.PolicyHealth
+	WatcherStatus    permissionapplication.PolicyWatcherStatus
+	DispatcherStatus permissionapplication.OutboxDispatcherStatus
+	Notifier         permissionapplication.PolicyChangeNotifier
+	Initializer      permissionPolicyInitializer
+	Watcher          policyWatcherRunner
+	Dispatcher       permissionapplication.OutboxDispatcherRunner
+	UserRoles        userRoleResolverLifecycle
 }
 
 // permissionPolicyInitializer 只暴露 fail-closed 初始化能力给 lifecycle hook。
@@ -171,13 +176,15 @@ func provideAuthorizer(params AuthorizerParams) AuthorizerResult {
 
 func newPermissionRuntime(params PermissionRuntimeParams) *PermissionRuntime {
 	return &PermissionRuntime{
-		Authorizer:    params.Authorizer,
-		PolicyHealth:  params.Health,
-		WatcherStatus: params.Status,
-		Notifier:      params.Notifier,
-		Initializer:   params.Initializer,
-		Watcher:       params.Watcher,
-		UserRoles:     params.UserRoles,
+		Authorizer:       params.Authorizer,
+		PolicyHealth:     params.Health,
+		WatcherStatus:    params.Status,
+		DispatcherStatus: params.DispatchStatus,
+		Notifier:         params.Notifier,
+		Initializer:      params.Initializer,
+		Watcher:          params.Watcher,
+		Dispatcher:       params.Dispatcher,
+		UserRoles:        params.UserRoles,
 	}
 }
 
@@ -191,6 +198,10 @@ func providePermissionPolicyHealth(runtime *PermissionRuntime) permissionauthori
 
 func providePermissionPolicyWatcherStatus(runtime *PermissionRuntime) permissionapplication.PolicyWatcherStatus {
 	return runtime.WatcherStatus
+}
+
+func providePermissionOutboxDispatcherStatus(runtime *PermissionRuntime) permissionapplication.OutboxDispatcherStatus {
+	return runtime.DispatcherStatus
 }
 
 func providePermissionUserRoleCacheStats(params PermissionUserRoleCacheStatsParams) PermissionUserRoleCacheStatsResult {

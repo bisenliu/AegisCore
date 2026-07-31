@@ -104,6 +104,42 @@ func (m *MockMetrics) EXPECT() *MockMetricsMockRecorder {
 	return m.recorder
 }
 
+// DispatcherBacklogObserved mocks base method.
+func (m *MockMetrics) DispatcherBacklogObserved(ctx context.Context, dueCount int, oldestUnfinishedAge time.Duration) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DispatcherBacklogObserved", ctx, dueCount, oldestUnfinishedAge)
+}
+
+// DispatcherBacklogObserved indicates an expected call of DispatcherBacklogObserved.
+func (mr *MockMetricsMockRecorder) DispatcherBacklogObserved(ctx, dueCount, oldestUnfinishedAge any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatcherBacklogObserved", reflect.TypeOf((*MockMetrics)(nil).DispatcherBacklogObserved), ctx, dueCount, oldestUnfinishedAge)
+}
+
+// DispatcherOperationObserved mocks base method.
+func (m *MockMetrics) DispatcherOperationObserved(ctx context.Context, operation, result, reason, kind string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DispatcherOperationObserved", ctx, operation, result, reason, kind)
+}
+
+// DispatcherOperationObserved indicates an expected call of DispatcherOperationObserved.
+func (mr *MockMetricsMockRecorder) DispatcherOperationObserved(ctx, operation, result, reason, kind any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatcherOperationObserved", reflect.TypeOf((*MockMetrics)(nil).DispatcherOperationObserved), ctx, operation, result, reason, kind)
+}
+
+// DispatcherRunningObserved mocks base method.
+func (m *MockMetrics) DispatcherRunningObserved(ctx context.Context, running bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DispatcherRunningObserved", ctx, running)
+}
+
+// DispatcherRunningObserved indicates an expected call of DispatcherRunningObserved.
+func (mr *MockMetricsMockRecorder) DispatcherRunningObserved(ctx, running any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatcherRunningObserved", reflect.TypeOf((*MockMetrics)(nil).DispatcherRunningObserved), ctx, running)
+}
+
 // EnforceObserved mocks base method.
 func (m *MockMetrics) EnforceObserved(ctx context.Context, result, method, routeTemplate string, duration time.Duration) {
 	m.ctrl.T.Helper()

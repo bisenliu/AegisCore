@@ -16,6 +16,28 @@ const (
 	MetricsOperationWatcherReload = "watcher_reload"
 	// MetricsOperationWatcherVersionCheck 表示 watcher 版本补偿检查。
 	MetricsOperationWatcherVersionCheck = "watcher_version_check"
+	// MetricsOperationDispatcherClaim 表示 outbox batch claim 操作。
+	MetricsOperationDispatcherClaim = "dispatcher_claim"
+	// MetricsOperationDispatcherPublish 表示 outbox event publish 操作。
+	MetricsOperationDispatcherPublish = "dispatcher_publish"
+	// MetricsOperationDispatcherAck 表示 outbox event ack 操作。
+	MetricsOperationDispatcherAck = "dispatcher_ack"
+	// MetricsOperationDispatcherFailure 表示 outbox failure 持久化操作。
+	MetricsOperationDispatcherFailure = "dispatcher_failure"
+	// MetricsOperationDispatcherRetry 表示 outbox retry 调度操作。
+	MetricsOperationDispatcherRetry = "dispatcher_retry"
+
+	// MetricsResultSuccess 表示 dispatcher 操作成功。
+	MetricsResultSuccess = "success"
+	// MetricsResultFailure 表示 dispatcher 操作失败。
+	MetricsResultFailure = "failure"
+
+	// MetricsKindNone 表示 dispatcher 操作不关联单个 event kind。
+	MetricsKindNone = "none"
+	// MetricsKindPolicyChanged 表示全局 policy 变更 event。
+	MetricsKindPolicyChanged = "policy_changed"
+	// MetricsKindUserRoleChanged 表示用户角色变更 event。
+	MetricsKindUserRoleChanged = "user_role_changed"
 
 	// MetricsReasonNone 表示操作成功或无需补充原因。
 	MetricsReasonNone = "none"
@@ -27,7 +49,14 @@ const (
 	MetricsReasonStoreUnavailable = "store_unavailable"
 	// MetricsReasonSystemError 表示未能稳定归类的系统异常。
 	MetricsReasonSystemError = "system_error"
-
+	// MetricsReasonClaimFailed 表示 outbox claim 失败。
+	MetricsReasonClaimFailed = "claim_failed"
+	// MetricsReasonAckFailed 表示 outbox ack 失败。
+	MetricsReasonAckFailed = "ack_failed"
+	// MetricsReasonFailureRecordFailed 表示 outbox failure 持久化失败。
+	MetricsReasonFailureRecordFailed = "failure_record_failed"
+	// MetricsReasonClaimLost 表示 outbox claim lease 已失效。
+	MetricsReasonClaimLost = "claim_lost"
 	// MetricsSourceLocalChange 表示本实例在线 RBAC 变更触发。
 	MetricsSourceLocalChange = "local_change"
 	// MetricsSourceWatcherPubSub 表示 watcher Pub/Sub 消息触发。
@@ -55,4 +84,7 @@ type Metrics interface {
 	WatcherVersionMismatch(ctx context.Context, source string)
 	PolicyReloadLagObserved(ctx context.Context, lag int64)
 	EnforceObserved(ctx context.Context, result string, method string, routeTemplate string, duration time.Duration)
+	DispatcherOperationObserved(ctx context.Context, operation string, result string, reason string, kind string)
+	DispatcherBacklogObserved(ctx context.Context, dueCount int, oldestUnfinishedAge time.Duration)
+	DispatcherRunningObserved(ctx context.Context, running bool)
 }

@@ -929,6 +929,9 @@ type RbacPolicyOutboxEventMutation struct {
 	next_attempt_at        *int64
 	addnext_attempt_at     *int64
 	last_error             *string
+	claim_token            *uuid.UUID
+	claimed_until          *int64
+	addclaimed_until       *int64
 	idempotency_key        *string
 	created_at             *int64
 	addcreated_at          *int64
@@ -1536,6 +1539,125 @@ func (m *RbacPolicyOutboxEventMutation) ResetLastError() {
 	delete(m.clearedFields, rbacpolicyoutboxevent.FieldLastError)
 }
 
+// SetClaimToken sets the "claim_token" field.
+func (m *RbacPolicyOutboxEventMutation) SetClaimToken(u uuid.UUID) {
+	m.claim_token = &u
+}
+
+// ClaimToken returns the value of the "claim_token" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) ClaimToken() (r uuid.UUID, exists bool) {
+	v := m.claim_token
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClaimToken returns the old "claim_token" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldClaimToken(ctx context.Context) (v *uuid.UUID, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClaimToken is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClaimToken requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClaimToken: %w", err)
+	}
+	return oldValue.ClaimToken, nil
+}
+
+// ClearClaimToken clears the value of the "claim_token" field.
+func (m *RbacPolicyOutboxEventMutation) ClearClaimToken() {
+	m.claim_token = nil
+	m.clearedFields[rbacpolicyoutboxevent.FieldClaimToken] = struct{}{}
+}
+
+// ClaimTokenCleared returns if the "claim_token" field was cleared in this mutation.
+func (m *RbacPolicyOutboxEventMutation) ClaimTokenCleared() bool {
+	_, ok := m.clearedFields[rbacpolicyoutboxevent.FieldClaimToken]
+	return ok
+}
+
+// ResetClaimToken resets all changes to the "claim_token" field.
+func (m *RbacPolicyOutboxEventMutation) ResetClaimToken() {
+	m.claim_token = nil
+	delete(m.clearedFields, rbacpolicyoutboxevent.FieldClaimToken)
+}
+
+// SetClaimedUntil sets the "claimed_until" field.
+func (m *RbacPolicyOutboxEventMutation) SetClaimedUntil(i int64) {
+	m.claimed_until = &i
+	m.addclaimed_until = nil
+}
+
+// ClaimedUntil returns the value of the "claimed_until" field in the mutation.
+func (m *RbacPolicyOutboxEventMutation) ClaimedUntil() (r int64, exists bool) {
+	v := m.claimed_until
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldClaimedUntil returns the old "claimed_until" field's value of the RbacPolicyOutboxEvent entity.
+// If the RbacPolicyOutboxEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyOutboxEventMutation) OldClaimedUntil(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldClaimedUntil is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldClaimedUntil requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldClaimedUntil: %w", err)
+	}
+	return oldValue.ClaimedUntil, nil
+}
+
+// AddClaimedUntil adds i to the "claimed_until" field.
+func (m *RbacPolicyOutboxEventMutation) AddClaimedUntil(i int64) {
+	if m.addclaimed_until != nil {
+		*m.addclaimed_until += i
+	} else {
+		m.addclaimed_until = &i
+	}
+}
+
+// AddedClaimedUntil returns the value that was added to the "claimed_until" field in this mutation.
+func (m *RbacPolicyOutboxEventMutation) AddedClaimedUntil() (r int64, exists bool) {
+	v := m.addclaimed_until
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearClaimedUntil clears the value of the "claimed_until" field.
+func (m *RbacPolicyOutboxEventMutation) ClearClaimedUntil() {
+	m.claimed_until = nil
+	m.addclaimed_until = nil
+	m.clearedFields[rbacpolicyoutboxevent.FieldClaimedUntil] = struct{}{}
+}
+
+// ClaimedUntilCleared returns if the "claimed_until" field was cleared in this mutation.
+func (m *RbacPolicyOutboxEventMutation) ClaimedUntilCleared() bool {
+	_, ok := m.clearedFields[rbacpolicyoutboxevent.FieldClaimedUntil]
+	return ok
+}
+
+// ResetClaimedUntil resets all changes to the "claimed_until" field.
+func (m *RbacPolicyOutboxEventMutation) ResetClaimedUntil() {
+	m.claimed_until = nil
+	m.addclaimed_until = nil
+	delete(m.clearedFields, rbacpolicyoutboxevent.FieldClaimedUntil)
+}
+
 // SetIdempotencyKey sets the "idempotency_key" field.
 func (m *RbacPolicyOutboxEventMutation) SetIdempotencyKey(s string) {
 	m.idempotency_key = &s
@@ -1828,7 +1950,7 @@ func (m *RbacPolicyOutboxEventMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RbacPolicyOutboxEventMutation) Fields() []string {
-	fields := make([]string, 0, 15)
+	fields := make([]string, 0, 17)
 	if m.event_id != nil {
 		fields = append(fields, rbacpolicyoutboxevent.FieldEventID)
 	}
@@ -1861,6 +1983,12 @@ func (m *RbacPolicyOutboxEventMutation) Fields() []string {
 	}
 	if m.last_error != nil {
 		fields = append(fields, rbacpolicyoutboxevent.FieldLastError)
+	}
+	if m.claim_token != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldClaimToken)
+	}
+	if m.claimed_until != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldClaimedUntil)
 	}
 	if m.idempotency_key != nil {
 		fields = append(fields, rbacpolicyoutboxevent.FieldIdempotencyKey)
@@ -1904,6 +2032,10 @@ func (m *RbacPolicyOutboxEventMutation) Field(name string) (ent.Value, bool) {
 		return m.NextAttemptAt()
 	case rbacpolicyoutboxevent.FieldLastError:
 		return m.LastError()
+	case rbacpolicyoutboxevent.FieldClaimToken:
+		return m.ClaimToken()
+	case rbacpolicyoutboxevent.FieldClaimedUntil:
+		return m.ClaimedUntil()
 	case rbacpolicyoutboxevent.FieldIdempotencyKey:
 		return m.IdempotencyKey()
 	case rbacpolicyoutboxevent.FieldCreatedAt:
@@ -1943,6 +2075,10 @@ func (m *RbacPolicyOutboxEventMutation) OldField(ctx context.Context, name strin
 		return m.OldNextAttemptAt(ctx)
 	case rbacpolicyoutboxevent.FieldLastError:
 		return m.OldLastError(ctx)
+	case rbacpolicyoutboxevent.FieldClaimToken:
+		return m.OldClaimToken(ctx)
+	case rbacpolicyoutboxevent.FieldClaimedUntil:
+		return m.OldClaimedUntil(ctx)
 	case rbacpolicyoutboxevent.FieldIdempotencyKey:
 		return m.OldIdempotencyKey(ctx)
 	case rbacpolicyoutboxevent.FieldCreatedAt:
@@ -2037,6 +2173,20 @@ func (m *RbacPolicyOutboxEventMutation) SetField(name string, value ent.Value) e
 		}
 		m.SetLastError(v)
 		return nil
+	case rbacpolicyoutboxevent.FieldClaimToken:
+		v, ok := value.(uuid.UUID)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClaimToken(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldClaimedUntil:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetClaimedUntil(v)
+		return nil
 	case rbacpolicyoutboxevent.FieldIdempotencyKey:
 		v, ok := value.(string)
 		if !ok {
@@ -2079,6 +2229,9 @@ func (m *RbacPolicyOutboxEventMutation) AddedFields() []string {
 	if m.addnext_attempt_at != nil {
 		fields = append(fields, rbacpolicyoutboxevent.FieldNextAttemptAt)
 	}
+	if m.addclaimed_until != nil {
+		fields = append(fields, rbacpolicyoutboxevent.FieldClaimedUntil)
+	}
 	if m.addcreated_at != nil {
 		fields = append(fields, rbacpolicyoutboxevent.FieldCreatedAt)
 	}
@@ -2100,6 +2253,8 @@ func (m *RbacPolicyOutboxEventMutation) AddedField(name string) (ent.Value, bool
 		return m.AddedAttemptCount()
 	case rbacpolicyoutboxevent.FieldNextAttemptAt:
 		return m.AddedNextAttemptAt()
+	case rbacpolicyoutboxevent.FieldClaimedUntil:
+		return m.AddedClaimedUntil()
 	case rbacpolicyoutboxevent.FieldCreatedAt:
 		return m.AddedCreatedAt()
 	case rbacpolicyoutboxevent.FieldUpdatedAt:
@@ -2128,6 +2283,13 @@ func (m *RbacPolicyOutboxEventMutation) AddField(name string, value ent.Value) e
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddNextAttemptAt(v)
+		return nil
+	case rbacpolicyoutboxevent.FieldClaimedUntil:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddClaimedUntil(v)
 		return nil
 	case rbacpolicyoutboxevent.FieldCreatedAt:
 		v, ok := value.(int64)
@@ -2170,6 +2332,12 @@ func (m *RbacPolicyOutboxEventMutation) ClearedFields() []string {
 	if m.FieldCleared(rbacpolicyoutboxevent.FieldLastError) {
 		fields = append(fields, rbacpolicyoutboxevent.FieldLastError)
 	}
+	if m.FieldCleared(rbacpolicyoutboxevent.FieldClaimToken) {
+		fields = append(fields, rbacpolicyoutboxevent.FieldClaimToken)
+	}
+	if m.FieldCleared(rbacpolicyoutboxevent.FieldClaimedUntil) {
+		fields = append(fields, rbacpolicyoutboxevent.FieldClaimedUntil)
+	}
 	if m.FieldCleared(rbacpolicyoutboxevent.FieldDeliveredAt) {
 		fields = append(fields, rbacpolicyoutboxevent.FieldDeliveredAt)
 	}
@@ -2198,6 +2366,12 @@ func (m *RbacPolicyOutboxEventMutation) ClearField(name string) error {
 		return nil
 	case rbacpolicyoutboxevent.FieldLastError:
 		m.ClearLastError()
+		return nil
+	case rbacpolicyoutboxevent.FieldClaimToken:
+		m.ClearClaimToken()
+		return nil
+	case rbacpolicyoutboxevent.FieldClaimedUntil:
+		m.ClearClaimedUntil()
 		return nil
 	case rbacpolicyoutboxevent.FieldDeliveredAt:
 		m.ClearDeliveredAt()
@@ -2242,6 +2416,12 @@ func (m *RbacPolicyOutboxEventMutation) ResetField(name string) error {
 		return nil
 	case rbacpolicyoutboxevent.FieldLastError:
 		m.ResetLastError()
+		return nil
+	case rbacpolicyoutboxevent.FieldClaimToken:
+		m.ResetClaimToken()
+		return nil
+	case rbacpolicyoutboxevent.FieldClaimedUntil:
+		m.ResetClaimedUntil()
 		return nil
 	case rbacpolicyoutboxevent.FieldIdempotencyKey:
 		m.ResetIdempotencyKey()

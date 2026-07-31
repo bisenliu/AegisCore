@@ -25,3 +25,8 @@ func (nopMetrics) WatcherVersionMismatch(ctx context.Context, source string)    
 func (nopMetrics) PolicyReloadLagObserved(ctx context.Context, lag int64)                {}
 func (nopMetrics) EnforceObserved(ctx context.Context, result string, method string, routeTemplate string, duration time.Duration) {
 }
+func (nopMetrics) DispatcherOperationObserved(ctx context.Context, operation string, result string, reason string, kind string) {
+}
+func (nopMetrics) DispatcherBacklogObserved(ctx context.Context, dueCount int, oldestUnfinishedAge time.Duration) {
+}
+func (nopMetrics) DispatcherRunningObserved(ctx context.Context, running bool) {}

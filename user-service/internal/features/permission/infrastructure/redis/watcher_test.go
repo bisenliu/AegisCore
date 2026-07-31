@@ -16,7 +16,7 @@ import (
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 
-func TestStorePublishPolicyChangedCachesSuppliedRevisionAndPublishes(t *testing.T) {
+func TestStorePublishPolicyRevisionCachesSuppliedRevisionAndPublishes(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
@@ -28,7 +28,8 @@ func TestStorePublishPolicyChangedCachesSuppliedRevisionAndPublishes(t *testing.
 	change := permissionapplication.NewPolicyReloadChange("role_permission_added")
 
 	const revision int64 = 42
-	require.NoError(t, store.PublishPolicyChanged(context.Background(), revision, change))
+	event := testPolicyPublicationEvent(revision, change)
+	require.NoError(t, store.PublishPolicyRevision(context.Background(), event))
 	storedRevision, err := store.CurrentVersion(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, revision, storedRevision)
@@ -36,13 +37,16 @@ func TestStorePublishPolicyChangedCachesSuppliedRevisionAndPublishes(t *testing.
 	require.NoError(t, err)
 	decoded, err := decodePolicyRefreshMessage(message.Payload)
 	require.NoError(t, err)
-	require.Equal(t, revision, decoded.Version)
+	require.Equal(t, policyRefreshSchemaVersion, decoded.SchemaVersion)
+	require.Equal(t, event.EventID, decoded.EventID)
+	require.Equal(t, event.IdempotencyKey, decoded.IdempotencyKey)
+	require.Equal(t, revision, decoded.PolicyRevision)
 	require.Equal(t, "instance-a", decoded.InstanceID)
-	require.Equal(t, permissionapplication.PolicyChangeKindPolicy, decoded.Kind)
+	require.Equal(t, policyRefreshKindPolicyChanged, decoded.Kind)
 	require.Equal(t, "role_permission_added", decoded.Reason)
 }
 
-func TestStorePublishPolicyChangedDoesNotLowerCachedRevision(t *testing.T) {
+func TestStorePublishPolicyRevisionDoesNotLowerCachedRevision(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
@@ -53,7 +57,7 @@ func TestStorePublishPolicyChangedDoesNotLowerCachedRevision(t *testing.T) {
 	_, err := pubsub.Receive(context.Background())
 	require.NoError(t, err)
 
-	require.NoError(t, store.PublishPolicyChanged(context.Background(), 41, permissionapplication.NewPolicyReloadChange("role_updated")))
+	require.NoError(t, store.PublishPolicyRevision(context.Background(), testPolicyPublicationEvent(41, permissionapplication.NewPolicyReloadChange("role_updated"))))
 	storedRevision, err := store.CurrentVersion(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, int64(50), storedRevision)
@@ -61,10 +65,10 @@ func TestStorePublishPolicyChangedDoesNotLowerCachedRevision(t *testing.T) {
 	require.NoError(t, err)
 	decoded, err := decodePolicyRefreshMessage(message.Payload)
 	require.NoError(t, err)
-	require.Equal(t, int64(41), decoded.Version)
+	require.Equal(t, int64(41), decoded.PolicyRevision)
 }
 
-func TestStorePublishPolicyChangedCachesLargerBigIntRevisionExactly(t *testing.T) {
+func TestStorePublishPolicyRevisionCachesLargerBigIntRevisionExactly(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
@@ -73,13 +77,13 @@ func TestStorePublishPolicyChangedCachesLargerBigIntRevisionExactly(t *testing.T
 	const revision int64 = 9223372036854775807
 	require.NoError(t, client.Set(context.Background(), store.keys.PolicyVersionKey(), previousRevision, 0).Err())
 
-	require.NoError(t, store.PublishPolicyChanged(context.Background(), revision, permissionapplication.NewPolicyReloadChange("role_updated")))
+	require.NoError(t, store.PublishPolicyRevision(context.Background(), testPolicyPublicationEvent(revision, permissionapplication.NewPolicyReloadChange("role_updated"))))
 	storedRevision, err := store.CurrentVersion(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, revision, storedRevision)
 }
 
-func TestStorePublishPolicyChangedReturnsCacheFailureWithoutPublishing(t *testing.T) {
+func TestStorePublishPolicyRevisionReturnsCacheFailureWithoutPublishing(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
@@ -87,7 +91,7 @@ func TestStorePublishPolicyChangedReturnsCacheFailureWithoutPublishing(t *testin
 	failingClient := &failingPolicyRedisClient{policyRedisClient: client, evalErr: cacheErr}
 	store := newStore(failingClient, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
 
-	err := store.PublishPolicyChanged(context.Background(), 43, permissionapplication.NewPolicyReloadChange("role_updated"))
+	err := store.PublishPolicyRevision(context.Background(), testPolicyPublicationEvent(43, permissionapplication.NewPolicyReloadChange("role_updated")))
 
 	require.ErrorIs(t, err, cacheErr)
 	require.Equal(t, int64(0), failingClient.publishCalls.Load())
@@ -96,7 +100,7 @@ func TestStorePublishPolicyChangedReturnsCacheFailureWithoutPublishing(t *testin
 	require.Zero(t, storedRevision)
 }
 
-func TestStorePublishPolicyChangedReturnsPublishFailureAndPreservesCachedRevision(t *testing.T) {
+func TestStorePublishPolicyRevisionReturnsPublishFailureAndPreservesCachedRevision(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
@@ -104,7 +108,7 @@ func TestStorePublishPolicyChangedReturnsPublishFailureAndPreservesCachedRevisio
 	failingClient := &failingPolicyRedisClient{policyRedisClient: client, publishErr: publishErr}
 	store := newStore(failingClient, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
 
-	err := store.PublishPolicyChanged(context.Background(), 44, permissionapplication.NewPolicyReloadChange("role_updated"))
+	err := store.PublishPolicyRevision(context.Background(), testPolicyPublicationEvent(44, permissionapplication.NewPolicyReloadChange("role_updated")))
 
 	require.ErrorIs(t, err, publishErr)
 	require.Equal(t, int64(1), failingClient.publishCalls.Load())
@@ -121,23 +125,25 @@ func TestVersionTrackerDoesNotMoveBackward(t *testing.T) {
 	require.Equal(t, int64(9), tracker.Applied())
 }
 
-func TestWatcherHandlePayloadReloadsPolicyOnlyForNewerVersions(t *testing.T) {
+func TestWatcherHandlePayloadReloadsPolicyForEveryValidEvent(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	engine := NewMockPolicyReloadEngine(ctrl)
 	tracker := NewVersionTracker()
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherWithMetrics(nil, tracker, engine, nil, time.Second, metrics)
-	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(3, "instance-b", permissionapplication.NewPolicyReloadChange("role_permission_added")))
+	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(3, permissionapplication.NewPolicyReloadChange("role_permission_added")), "instance-b"))
 	require.NoError(t, err)
 
 	gomock.InOrder(
-		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(3)),
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(3)),
 		engine.EXPECT().Reload(gomock.Any()).Return(nil),
 		engine.EXPECT().InvalidateAllUserRoles(),
 		metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub),
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
+		engine.EXPECT().Reload(gomock.Any()).Return(nil),
+		engine.EXPECT().InvalidateAllUserRoles(),
+		metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub),
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
 	)
 
@@ -155,11 +161,10 @@ func TestWatcherHandlePayloadInvalidatesUserRoleWithoutReload(t *testing.T) {
 	tracker := NewVersionTracker()
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherWithMetrics(nil, tracker, engine, nil, time.Second, metrics)
-	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(4, "instance-b", permissionapplication.NewUserRoleChange("user_role_added", userID, roleID)))
+	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(4, permissionapplication.NewUserRoleChange("user_role_added", userID, roleID)), "instance-b"))
 	require.NoError(t, err)
 
 	gomock.InOrder(
-		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(4)),
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(4)),
 		engine.EXPECT().InvalidateUserRole(userID),
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
@@ -168,6 +173,73 @@ func TestWatcherHandlePayloadInvalidatesUserRoleWithoutReload(t *testing.T) {
 	watcher.HandlePayload(context.Background(), payload)
 
 	require.Equal(t, int64(4), tracker.Applied())
+}
+
+func TestWatcherHandlePayloadExecutesOutOfOrderUserRoleEventWithoutMovingTrackerBackward(t *testing.T) {
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000703")
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000704")
+	ctrl := gomock.NewController(t)
+	engine := NewMockPolicyReloadEngine(ctrl)
+	tracker := NewVersionTracker()
+	tracker.MarkApplied(9)
+	metrics := NewMockMetrics(ctrl)
+	watcher := newWatcherWithMetrics(nil, tracker, engine, nil, time.Second, metrics)
+	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(4, permissionapplication.NewUserRoleChange("user_role_removed", userID, roleID)), "instance-b"))
+	require.NoError(t, err)
+
+	gomock.InOrder(
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
+		engine.EXPECT().InvalidateUserRole(userID),
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
+	)
+
+	watcher.HandlePayload(context.Background(), payload)
+
+	require.Equal(t, int64(9), tracker.Applied())
+}
+
+func TestWatcherHandlePayloadReloadsOutOfOrderPolicyEventWithoutMovingTrackerBackward(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	engine := NewMockPolicyReloadEngine(ctrl)
+	tracker := NewVersionTracker()
+	tracker.MarkApplied(9)
+	metrics := NewMockMetrics(ctrl)
+	watcher := newWatcherWithMetrics(nil, tracker, engine, nil, time.Second, metrics)
+	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(4, permissionapplication.NewPolicyReloadChange("role_updated")), "instance-b"))
+	require.NoError(t, err)
+
+	gomock.InOrder(
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
+		engine.EXPECT().Reload(gomock.Any()).Return(nil),
+		engine.EXPECT().InvalidateAllUserRoles(),
+		metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub),
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
+	)
+
+	watcher.HandlePayload(context.Background(), payload)
+
+	require.Equal(t, int64(9), tracker.Applied())
+}
+
+func TestDecodePolicyRefreshMessageRejectsInvalidEnvelope(t *testing.T) {
+	valid, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(6, permissionapplication.NewPolicyReloadChange("role_updated")), "instance-b"))
+	require.NoError(t, err)
+
+	tests := map[string]string{
+		"legacy payload":      `{"version":6,"kind":"policy"}`,
+		"unknown schema":      `{"schema_version":2,"event_id":"018f0000-0000-7000-8000-000000000801","idempotency_key":"rbac:6","policy_revision":6,"kind":"policy_changed","reason":"role_updated","publisher_instance_id":"instance-b"}`,
+		"missing event id":    `{"schema_version":1,"idempotency_key":"rbac:6","policy_revision":6,"kind":"policy_changed","reason":"role_updated","publisher_instance_id":"instance-b"}`,
+		"invalid event id":    `{"schema_version":1,"event_id":"not-a-uuid","idempotency_key":"rbac:6","policy_revision":6,"kind":"policy_changed","reason":"role_updated","publisher_instance_id":"instance-b"}`,
+		"missing idempotency": `{"schema_version":1,"event_id":"018f0000-0000-7000-8000-000000000801","policy_revision":6,"kind":"policy_changed","reason":"role_updated","publisher_instance_id":"instance-b"}`,
+		"missing user id":     `{"schema_version":1,"event_id":"018f0000-0000-7000-8000-000000000801","idempotency_key":"rbac:6","policy_revision":6,"kind":"user_role_changed","reason":"user_role_added","publisher_instance_id":"instance-b"}`,
+		"unknown field":       valid[:len(valid)-1] + `,"published_at":123}`,
+	}
+	for name, payload := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := decodePolicyRefreshMessage(payload)
+			require.Error(t, err)
+		})
+	}
 }
 
 func TestWatcherCheckVersionCompensatesMissedMessage(t *testing.T) {
@@ -198,6 +270,23 @@ func TestWatcherCheckVersionCompensatesMissedMessage(t *testing.T) {
 	require.Equal(t, int64(8), tracker.Applied())
 }
 
+func TestWatcherCheckVersionRemainsGatedByAppliedVersion(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	store := newStore(client, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
+	require.NoError(t, client.Set(context.Background(), store.keys.PolicyVersionKey(), 4, 0).Err())
+	tracker := NewVersionTracker()
+	tracker.MarkApplied(9)
+	metrics := NewMockMetrics(gomock.NewController(t))
+	metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0))
+	watcher := newWatcherWithMetrics(store, tracker, NewMockPolicyReloadEngine(gomock.NewController(t)), nil, time.Second, metrics)
+
+	watcher.CheckVersion(context.Background())
+
+	require.Equal(t, int64(9), tracker.Applied())
+}
+
 func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
 	reloadErr := errors.New("reload failed")
 	ctrl := gomock.NewController(t)
@@ -206,11 +295,10 @@ func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
 	tracker.MarkApplied(2)
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherWithMetrics(nil, tracker, engine, nil, time.Second, metrics)
-	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(5, "instance-b", permissionapplication.NewPolicyReloadChange("permission_updated")))
+	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(5, permissionapplication.NewPolicyReloadChange("permission_updated")), "instance-b"))
 	require.NoError(t, err)
 
 	gomock.InOrder(
-		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(3)),
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(3)),
 		engine.EXPECT().Reload(gomock.Any()).Return(reloadErr),
 		metrics.EXPECT().WatcherReloadFailed(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub, permissionapplication.MetricsReasonReloadFailed),
@@ -381,6 +469,30 @@ type failingPolicyRedisClient struct {
 	evalErr      error
 	publishErr   error
 	publishCalls atomic.Int64
+}
+
+func testPolicyPublicationEvent(revision int64, change permissionapplication.PolicyChange) permissionapplication.OutboxEvent {
+	event := permissionapplication.OutboxEvent{
+		EventID:        uuid.MustParse("018f0000-0000-7000-8000-000000000801"),
+		IdempotencyKey: "rbac-policy:" + change.ReasonText(),
+		Revision:       revision,
+		Reason:         change.ReasonText(),
+	}
+	if change.Kind == permissionapplication.PolicyChangeKindUserRole {
+		event.Kind = policyRefreshKindUserRoleChanged
+	} else {
+		event.Kind = policyRefreshKindPolicyChanged
+	}
+	if change.UserID != uuid.Nil {
+		event.UserID = &change.UserID
+	}
+	if change.RoleID != uuid.Nil {
+		event.RoleID = &change.RoleID
+	}
+	if change.PermissionID != uuid.Nil {
+		event.PermissionID = &change.PermissionID
+	}
+	return event
 }
 
 func (c *failingPolicyRedisClient) Eval(ctx context.Context, script string, keys []string, args ...any) *rediscmd.Cmd {

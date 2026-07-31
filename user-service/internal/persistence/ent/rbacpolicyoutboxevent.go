@@ -41,6 +41,10 @@ type RbacPolicyOutboxEvent struct {
 	NextAttemptAt int64 `json:"next_attempt_at,omitempty"`
 	// 最近一次投递错误
 	LastError *string `json:"last_error,omitempty"`
+	// 当前 dispatcher claim token
+	ClaimToken *uuid.UUID `json:"claim_token,omitempty"`
+	// 当前 claim lease 截止时间戳毫秒
+	ClaimedUntil *int64 `json:"claimed_until,omitempty"`
 	// 稳定投递幂等键
 	IdempotencyKey string `json:"idempotency_key,omitempty"`
 	// 创建时间戳毫秒
@@ -80,9 +84,9 @@ func (*RbacPolicyOutboxEvent) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case rbacpolicyoutboxevent.FieldRoleID, rbacpolicyoutboxevent.FieldUserID, rbacpolicyoutboxevent.FieldPermissionID:
+		case rbacpolicyoutboxevent.FieldRoleID, rbacpolicyoutboxevent.FieldUserID, rbacpolicyoutboxevent.FieldPermissionID, rbacpolicyoutboxevent.FieldClaimToken:
 			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
-		case rbacpolicyoutboxevent.FieldID, rbacpolicyoutboxevent.FieldRevision, rbacpolicyoutboxevent.FieldAttemptCount, rbacpolicyoutboxevent.FieldNextAttemptAt, rbacpolicyoutboxevent.FieldCreatedAt, rbacpolicyoutboxevent.FieldUpdatedAt, rbacpolicyoutboxevent.FieldDeliveredAt:
+		case rbacpolicyoutboxevent.FieldID, rbacpolicyoutboxevent.FieldRevision, rbacpolicyoutboxevent.FieldAttemptCount, rbacpolicyoutboxevent.FieldNextAttemptAt, rbacpolicyoutboxevent.FieldClaimedUntil, rbacpolicyoutboxevent.FieldCreatedAt, rbacpolicyoutboxevent.FieldUpdatedAt, rbacpolicyoutboxevent.FieldDeliveredAt:
 			values[i] = new(sql.NullInt64)
 		case rbacpolicyoutboxevent.FieldKind, rbacpolicyoutboxevent.FieldReason, rbacpolicyoutboxevent.FieldStatus, rbacpolicyoutboxevent.FieldLastError, rbacpolicyoutboxevent.FieldIdempotencyKey:
 			values[i] = new(sql.NullString)
@@ -178,6 +182,20 @@ func (_m *RbacPolicyOutboxEvent) assignValues(columns []string, values []any) er
 			} else if value.Valid {
 				_m.LastError = new(string)
 				*_m.LastError = value.String
+			}
+		case rbacpolicyoutboxevent.FieldClaimToken:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field claim_token", values[i])
+			} else if value.Valid {
+				_m.ClaimToken = new(uuid.UUID)
+				*_m.ClaimToken = *value.S.(*uuid.UUID)
+			}
+		case rbacpolicyoutboxevent.FieldClaimedUntil:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field claimed_until", values[i])
+			} else if value.Valid {
+				_m.ClaimedUntil = new(int64)
+				*_m.ClaimedUntil = value.Int64
 			}
 		case rbacpolicyoutboxevent.FieldIdempotencyKey:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -284,6 +302,16 @@ func (_m *RbacPolicyOutboxEvent) String() string {
 	if v := _m.LastError; v != nil {
 		builder.WriteString("last_error=")
 		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.ClaimToken; v != nil {
+		builder.WriteString("claim_token=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.ClaimedUntil; v != nil {
+		builder.WriteString("claimed_until=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("idempotency_key=")

@@ -15,6 +15,7 @@ import (
 var permissionStorageOptions = fx.Options(
 	fx.Provide(
 		providePermissionStore,
+		provideOutboxStore,
 	),
 )
 
@@ -38,4 +39,8 @@ type CacheRedisParams struct {
 
 func providePermissionStore(params PrimaryDBParams) permissionapplication.PermissionStore {
 	return permissionpostgres.NewPermissionStore(params.Client)
+}
+
+func provideOutboxStore(params PrimaryDBParams) permissionapplication.OutboxStore {
+	return permissionpostgres.NewOutboxStore(params.Client)
 }

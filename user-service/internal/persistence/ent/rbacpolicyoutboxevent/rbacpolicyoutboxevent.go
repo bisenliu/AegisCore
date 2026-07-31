@@ -34,6 +34,10 @@ const (
 	FieldNextAttemptAt = "next_attempt_at"
 	// FieldLastError holds the string denoting the last_error field in the database.
 	FieldLastError = "last_error"
+	// FieldClaimToken holds the string denoting the claim_token field in the database.
+	FieldClaimToken = "claim_token"
+	// FieldClaimedUntil holds the string denoting the claimed_until field in the database.
+	FieldClaimedUntil = "claimed_until"
 	// FieldIdempotencyKey holds the string denoting the idempotency_key field in the database.
 	FieldIdempotencyKey = "idempotency_key"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -71,6 +75,8 @@ var Columns = []string{
 	FieldAttemptCount,
 	FieldNextAttemptAt,
 	FieldLastError,
+	FieldClaimToken,
+	FieldClaimedUntil,
 	FieldIdempotencyKey,
 	FieldCreatedAt,
 	FieldUpdatedAt,
@@ -175,6 +181,16 @@ func ByNextAttemptAt(opts ...sql.OrderTermOption) OrderOption {
 // ByLastError orders the results by the last_error field.
 func ByLastError(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastError, opts...).ToFunc()
+}
+
+// ByClaimToken orders the results by the claim_token field.
+func ByClaimToken(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldClaimToken, opts...).ToFunc()
+}
+
+// ByClaimedUntil orders the results by the claimed_until field.
+func ByClaimedUntil(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldClaimedUntil, opts...).ToFunc()
 }
 
 // ByIdempotencyKey orders the results by the idempotency_key field.

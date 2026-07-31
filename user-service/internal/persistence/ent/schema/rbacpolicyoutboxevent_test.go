@@ -26,7 +26,30 @@ func TestRbacPolicyOutboxDefaultsAndConstraints(t *testing.T) {
 	require.True(t, fields["revision"].Unique)
 	require.True(t, fields["event_id"].Unique)
 	require.True(t, fields["idempotency_key"].Unique)
+	require.True(t, fields["claim_token"].Optional)
+	require.True(t, fields["claim_token"].Nillable)
+	require.True(t, fields["claimed_until"].Optional)
+	require.True(t, fields["claimed_until"].Nillable)
 	require.True(t, fields["delivered_at"].Optional)
+
+	for _, status := range []string{
+		rbacPolicyOutboxStatusPending,
+		rbacPolicyOutboxStatusProcessing,
+		rbacPolicyOutboxStatusFailed,
+		rbacPolicyOutboxStatusDelivered,
+	} {
+		for _, validator := range fields["status"].Validators {
+			require.NoError(t, validator.(func(string) error)(status))
+		}
+	}
+	var validationErr error
+	for _, validator := range fields["status"].Validators {
+		if err := validator.(func(string) error)("unknown"); err != nil {
+			validationErr = err
+			break
+		}
+	}
+	require.Error(t, validationErr)
 }
 
 func fieldDescriptors(fields []ent.Field) map[string]*field.Descriptor {

@@ -32,6 +32,10 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 	recorder.EnforceObserved(context.Background(), permissionapplication.MetricsEnforceResultAllow, "GET", "/api/v1/users/:user_id", 10*time.Millisecond)
 	recorder.EnforceObserved(context.Background(), permissionapplication.MetricsEnforceResultDeny, "DELETE", "/api/v1/users/:user_id", 20*time.Millisecond)
 	recorder.EnforceObserved(context.Background(), "unexpected", "PATCH", "/api/v1/users/:user_id", 30*time.Millisecond)
+	recorder.DispatcherOperationObserved(context.Background(), permissionapplication.MetricsOperationDispatcherClaim, permissionapplication.MetricsResultSuccess, permissionapplication.MetricsReasonNone, permissionapplication.MetricsKindNone)
+	recorder.DispatcherOperationObserved(context.Background(), permissionapplication.MetricsOperationDispatcherPublish, permissionapplication.MetricsResultFailure, permissionapplication.MetricsReasonPublishFailed, permissionapplication.MetricsKindPolicyChanged)
+	recorder.DispatcherBacklogObserved(context.Background(), 7, 3*time.Minute)
+	recorder.DispatcherRunningObserved(context.Background(), true)
 
 	text := gatherPermissionMetricText(t, provider)
 	for _, want := range []string{
@@ -43,6 +47,11 @@ func TestPermissionPrometheusMetrics(t *testing.T) {
 		`aegiscore_user_service_rbac_enforce_total{environment="test",method="DELETE",result="deny",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_user_service_rbac_enforce_total{environment="test",method="PATCH",result="error",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_user_service_rbac_enforce_duration_seconds{environment="test",method="GET",result="allow",route_template="/api/v1/users/:user_id",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_user_service_rbac_outbox_dispatcher_operations_total{environment="test",kind="none",operation="dispatcher_claim",reason="none",result="success",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_user_service_rbac_outbox_dispatcher_operations_total{environment="test",kind="policy_changed",operation="dispatcher_publish",reason="publish_failed",result="failure",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_user_service_rbac_outbox_due_events{environment="test",service="aegiscore-user-service-test"} 7`,
+		`aegiscore_user_service_rbac_outbox_oldest_unfinished_age_seconds{environment="test",service="aegiscore-user-service-test"} 180`,
+		`aegiscore_user_service_rbac_outbox_dispatcher_running{environment="test",service="aegiscore-user-service-test"} 1`,
 	} {
 		require.Contains(t, text, want)
 	}

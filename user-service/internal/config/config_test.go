@@ -29,6 +29,11 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.EqualValues(t, 4096, cfg.RBAC.UserRoleCache.Size)
 	require.Equal(t, 7*time.Second, cfg.RBAC.UserRoleCache.TTL)
 	require.Equal(t, 600*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeout)
+	require.Equal(t, 2*time.Second, cfg.RBAC.OutboxDispatcher.PollInterval)
+	require.Equal(t, 25, cfg.RBAC.OutboxDispatcher.BatchSize)
+	require.Equal(t, 45*time.Second, cfg.RBAC.OutboxDispatcher.ClaimTimeout)
+	require.Equal(t, 3*time.Second, cfg.RBAC.OutboxDispatcher.RetryBackoff.Initial)
+	require.Equal(t, 2*time.Minute, cfg.RBAC.OutboxDispatcher.RetryBackoff.Max)
 	require.True(t, cfg.Auth.RefreshTokenRotation)
 	require.Equal(t, 5, cfg.Auth.MaxActiveSessionsPerUser)
 	require.True(t, cfg.APIRateLimit.Anonymous.Enabled)
@@ -85,6 +90,12 @@ func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
 	require.Equal(t, commonresources.DefaultPostgresConnMaxIdleTime, postgres.Pool.ConnMaxIdleTime)
 	require.Equal(t, DefaultFeatureCacheConfig(100000, time.Second, 300*time.Millisecond), cfg.Auth.TokenVersionCache)
 	require.Equal(t, DefaultFeatureCacheConfig(100000, 5*time.Second, 500*time.Millisecond), cfg.RBAC.UserRoleCache)
+	require.Equal(t, OutboxDispatcherConfig{
+		PollInterval: time.Second,
+		BatchSize:    100,
+		ClaimTimeout: 30 * time.Second,
+		RetryBackoff: RetryBackoffConfig{Initial: time.Second, Max: time.Minute},
+	}, cfg.RBAC.OutboxDispatcher)
 	require.Equal(t, DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64), cfg.APIRateLimit.Anonymous)
 	require.Equal(t, DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, 30*time.Second, 128), cfg.APIRateLimit.Authenticated)
 	require.False(t, cfg.Ent.Plugins.SQLLog.Enabled)
@@ -125,7 +136,7 @@ func TestLoadAppliesFeatureCacheDefaults(t *testing.T) {
     size: 4096
     ttl: 7s
     load_timeout: 600ms
-`, "", 1)
+`, "rbac:\n", 1)
 
 	cfg := loadServiceConfig(t, yaml)
 	require.True(t, cfg.Auth.TokenVersionCache.Enabled)
@@ -136,6 +147,45 @@ func TestLoadAppliesFeatureCacheDefaults(t *testing.T) {
 	require.EqualValues(t, 100000, cfg.RBAC.UserRoleCache.Size)
 	require.Equal(t, 5*time.Second, cfg.RBAC.UserRoleCache.TTL)
 	require.Equal(t, 500*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeout)
+}
+
+func TestLoadAppliesOutboxDispatcherDefaults(t *testing.T) {
+	yaml := strings.Replace(serviceConfigYAML(), `  outbox_dispatcher:
+    poll_interval: 2s
+    batch_size: 25
+    claim_timeout: 45s
+    retry_backoff:
+      initial: 3s
+      max: 2m
+`, "", 1)
+
+	cfg := loadServiceConfig(t, yaml)
+	require.Equal(t, DefaultOutboxDispatcherConfig(), cfg.RBAC.OutboxDispatcher)
+}
+
+func TestValidateOutboxDispatcher(t *testing.T) {
+	t.Run("requires positive values", func(t *testing.T) {
+		errs := (OutboxDispatcherConfig{}).Validate("rbac.outbox_dispatcher")
+		require.Len(t, errs, 5)
+		require.Contains(t, errs[0].Error(), "rbac.outbox_dispatcher.poll_interval")
+		require.Contains(t, errs[1].Error(), "rbac.outbox_dispatcher.batch_size")
+		require.Contains(t, errs[2].Error(), "rbac.outbox_dispatcher.claim_timeout")
+		require.Contains(t, errs[3].Error(), "rbac.outbox_dispatcher.retry_backoff.initial")
+		require.Contains(t, errs[4].Error(), "rbac.outbox_dispatcher.retry_backoff.max")
+	})
+
+	t.Run("max backoff must not be less than initial", func(t *testing.T) {
+		cfg := DefaultOutboxDispatcherConfig()
+		cfg.RetryBackoff.Initial = 2 * time.Minute
+		cfg.RetryBackoff.Max = time.Minute
+		errs := cfg.Validate("rbac.outbox_dispatcher")
+		require.Len(t, errs, 1)
+		require.Contains(t, errs[0].Error(), "rbac.outbox_dispatcher.retry_backoff.max must be >= retry_backoff.initial")
+	})
+
+	t.Run("accepts complete defaults", func(t *testing.T) {
+		require.Empty(t, DefaultOutboxDispatcherConfig().Validate("rbac.outbox_dispatcher"))
+	})
 }
 
 func TestLoadAppliesAPIRateLimitDefaults(t *testing.T) {
@@ -392,6 +442,14 @@ func TestLoadFromDocumentsMergesLayeredServiceConfig(t *testing.T) {
 func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "  token_version_cache:\n    enabled: true\n    size: 2048\n    ttl: 2s\n    load_timeout: 400ms\n", "", 1)
 	yaml = strings.Replace(yaml, "rbac:\n  user_role_cache:\n    enabled: true\n    size: 4096\n    ttl: 7s\n    load_timeout: 600ms\n", "", 1)
+	yaml = strings.Replace(yaml, `  outbox_dispatcher:
+    poll_interval: 2s
+    batch_size: 25
+    claim_timeout: 45s
+    retry_backoff:
+      initial: 3s
+      max: 2m
+`, "", 1)
 	yaml = strings.Replace(yaml, `api_rate_limit:
   anonymous:
     enabled: true
@@ -435,6 +493,13 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
 	require.EqualValues(t, 100000, userRoleCache["size"])
 	require.Equal(t, "5s", userRoleCache["ttl"])
 	require.Equal(t, "500ms", userRoleCache["load_timeout"])
+	outboxDispatcher := rbac["outbox_dispatcher"].(map[string]any)
+	require.Equal(t, "1s", outboxDispatcher["poll_interval"])
+	require.EqualValues(t, 100, outboxDispatcher["batch_size"])
+	require.Equal(t, "30s", outboxDispatcher["claim_timeout"])
+	retryBackoff := outboxDispatcher["retry_backoff"].(map[string]any)
+	require.Equal(t, "1s", retryBackoff["initial"])
+	require.Equal(t, "1m0s", retryBackoff["max"])
 	ent := settings["ent"].(map[string]any)
 	plugins := ent["plugins"].(map[string]any)
 	require.Equal(t, "500ms", plugins["sql_log"].(map[string]any)["slow_threshold"])
@@ -568,6 +633,13 @@ rbac:
     size: 4096
     ttl: 7s
     load_timeout: 600ms
+  outbox_dispatcher:
+    poll_interval: 2s
+    batch_size: 25
+    claim_timeout: 45s
+    retry_backoff:
+      initial: 3s
+      max: 2m
 ent:
   plugins:
     sql_log:

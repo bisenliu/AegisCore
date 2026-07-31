@@ -21,7 +21,15 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 			RefreshTokenRotation:     true,
 			MaxActiveSessionsPerUser: 7,
 		},
-		RBAC:         RBACConfig{UserRoleCache: FeatureCacheConfig{Enabled: true, Size: 13}},
+		RBAC: RBACConfig{
+			UserRoleCache: FeatureCacheConfig{Enabled: true, Size: 13},
+			OutboxDispatcher: OutboxDispatcherConfig{
+				PollInterval: time.Second,
+				BatchSize:    17,
+				ClaimTimeout: time.Minute,
+				RetryBackoff: RetryBackoffConfig{Initial: 2 * time.Second, Max: time.Minute},
+			},
+		},
 		APIRateLimit: APIRateLimitConfig{Anonymous: RateLimitPolicyConfig{Enabled: true, RatePerSecond: 2, Burst: 3}},
 		Ent:          EntConfig{Plugins: EntPluginsConfig{Metrics: EntMetricsPluginConfig{Enabled: true}}},
 		Resources: ResourcesConfig{
@@ -38,7 +46,11 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 		RefreshTokenRotation:     true,
 		MaxActiveSessionsPerUser: 7,
 	}, NewAuthSettings(cfg))
-	require.Equal(t, RBACSettings{AppName: "user-service", UserRoleCache: cfg.RBAC.UserRoleCache}, NewRBACSettings(cfg))
+	require.Equal(t, RBACSettings{
+		AppName:          "user-service",
+		UserRoleCache:    cfg.RBAC.UserRoleCache,
+		OutboxDispatcher: cfg.RBAC.OutboxDispatcher,
+	}, NewRBACSettings(cfg))
 	require.Equal(t, EntSettings{Plugins: cfg.Ent.Plugins}, NewEntSettings(cfg))
 	require.Equal(t, RateLimitSettings{APIRateLimit: cfg.APIRateLimit}, NewRateLimitSettings(cfg))
 	require.Equal(t, ResourceSettings{Redis: cfg.Resources.Redis, Postgres: cfg.Resources.Postgres}, NewResourceSettings(cfg))
@@ -51,7 +63,7 @@ func TestNarrowSettingsFieldOwnership(t *testing.T) {
 		fields []string
 	}{
 		{name: "auth", value: AuthSettings{}, fields: []string{"AppName", "JWT", "TokenVersionCache", "TokenVersionCacheTTL", "RefreshTokenRotation", "MaxActiveSessionsPerUser"}},
-		{name: "rbac", value: RBACSettings{}, fields: []string{"AppName", "UserRoleCache"}},
+		{name: "rbac", value: RBACSettings{}, fields: []string{"AppName", "UserRoleCache", "OutboxDispatcher"}},
 		{name: "ent", value: EntSettings{}, fields: []string{"Plugins"}},
 		{name: "rate limit", value: RateLimitSettings{}, fields: []string{"APIRateLimit"}},
 		{name: "resources", value: ResourceSettings{}, fields: []string{"Redis", "Postgres"}},

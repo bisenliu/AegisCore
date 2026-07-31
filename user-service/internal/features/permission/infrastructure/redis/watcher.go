@@ -142,7 +142,7 @@ func (w *Watcher) CheckVersion(ctx context.Context) {
 }
 
 // HandlePayload 处理一条 RBAC policy Pub/Sub payload。
-// payload 可能只要求失效某个用户角色缓存，也可能要求全量 reload；最终是否执行取决于远端版本是否新于本地已应用版本。
+// 每条有效消息都必须执行副作用；revision 只用于完成后以 max 语义推进 tracker。
 func (w *Watcher) HandlePayload(ctx context.Context, payload string) {
 	message, err := decodePolicyRefreshMessage(payload)
 	if err != nil {
@@ -150,9 +150,9 @@ func (w *Watcher) HandlePayload(ctx context.Context, payload string) {
 		return
 	}
 	localVersion := w.tracker.Applied()
-	w.observeLag(ctx, message.Version, localVersion)
-	logger.Info(ctx, "rbac policy refresh received", zap.Int64("remote_policy_revision", message.Version), zap.Int64("local_policy_revision", localVersion), zap.String("instance_id", message.InstanceID), zap.String("reason", message.Reason))
-	w.applyIfNewer(ctx, message.Version, message.policyChange(), message.InstanceID, permissionapplication.MetricsSourceWatcherPubSub)
+	w.observeLag(ctx, message.PolicyRevision, localVersion)
+	logger.Info(ctx, "rbac policy refresh received", zap.Int64("remote_policy_revision", message.PolicyRevision), zap.Int64("local_policy_revision", localVersion), zap.String("instance_id", message.InstanceID), zap.String("reason", message.Reason))
+	w.apply(ctx, message.PolicyRevision, message.policyChange(), message.InstanceID, permissionapplication.MetricsSourceWatcherPubSub)
 }
 
 func (w *Watcher) run(ctx context.Context, done chan struct{}) {
@@ -196,10 +196,14 @@ func (w *Watcher) run(ctx context.Context, done chan struct{}) {
 func (w *Watcher) applyIfNewer(ctx context.Context, version int64, change permissionapplication.PolicyChange, instanceID string, source string) {
 	localVersion := w.tracker.Applied()
 	w.observeLag(ctx, version, localVersion)
-	// revision 是跨实例幂等门禁；已经应用过的 revision 必须跳过，避免旧 Pub/Sub 消息覆盖后续 reload 状态。
 	if version <= localVersion {
 		return
 	}
+	w.apply(ctx, version, change, instanceID, source)
+}
+
+func (w *Watcher) apply(ctx context.Context, version int64, change permissionapplication.PolicyChange, instanceID string, source string) {
+	localVersion := w.tracker.Applied()
 	reason := change.ReasonText()
 	if change.RequiresReload() {
 		if err := w.engine.Reload(ctx); err != nil {

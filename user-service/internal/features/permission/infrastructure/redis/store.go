@@ -20,6 +20,8 @@ type Store struct {
 	log        *zap.Logger
 }
 
+var _ permissionapplication.PolicyRevisionPublisher = (*Store)(nil)
+
 type policyRedisClient interface {
 	Eval(ctx context.Context, script string, keys []string, args ...any) *rediscmd.Cmd
 	Publish(ctx context.Context, channel string, message any) *rediscmd.IntCmd
@@ -64,23 +66,23 @@ func newStore(client policyRedisClient, keys KeyCatalog, instanceID string, log 
 	return &Store{client: client, instanceID: instanceID, keys: keys, log: log}
 }
 
-// PublishPolicyChanged 原子缓存不小于现值的数据库 revision，并使用同一 revision 发布刷新消息。
-func (s *Store) PublishPolicyChanged(ctx context.Context, revision int64, change permissionapplication.PolicyChange) error {
-	reason := change.ReasonText()
-	if err := s.client.Eval(ctx, cachePolicyRevisionScript, []string{s.keys.PolicyVersionKey()}, revision).Err(); err != nil {
-		logger.Error(ctx, "rbac policy revision cache failed", logger.StackTrace(zap.Int64("policy_revision", revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))...)
-		return fmt.Errorf("cache rbac policy revision: %w", err)
-	}
-	logger.Info(ctx, "rbac policy revision cached", zap.Int64("policy_revision", revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason))
-	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(revision, s.instanceID, change))
+// PublishPolicyRevision 原子缓存不小于现值的数据库 revision，并发布对应 outbox event envelope。
+func (s *Store) PublishPolicyRevision(ctx context.Context, event permissionapplication.OutboxEvent) error {
+	reason := event.Reason
+	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(event, s.instanceID))
 	if err != nil {
 		return err
 	}
+	if err := s.client.Eval(ctx, cachePolicyRevisionScript, []string{s.keys.PolicyVersionKey()}, event.Revision).Err(); err != nil {
+		logger.Error(ctx, "rbac policy revision cache failed", logger.StackTrace(zap.Int64("policy_revision", event.Revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))...)
+		return fmt.Errorf("cache rbac policy revision: %w", err)
+	}
+	logger.Info(ctx, "rbac policy revision cached", zap.Int64("policy_revision", event.Revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason))
 	if err := s.client.Publish(ctx, s.keys.PolicyChannel(), payload).Err(); err != nil {
-		logger.Error(ctx, "rbac policy refresh publish failed", logger.StackTrace(zap.Int64("policy_revision", revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))...)
+		logger.Error(ctx, "rbac policy refresh publish failed", logger.StackTrace(zap.Int64("policy_revision", event.Revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))...)
 		return fmt.Errorf("publish rbac policy refresh: %w", err)
 	}
-	logger.Info(ctx, "rbac policy refresh published", zap.Int64("policy_revision", revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason))
+	logger.Info(ctx, "rbac policy refresh published", zap.Int64("policy_revision", event.Revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason))
 	return nil
 }
 

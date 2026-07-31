@@ -57,6 +57,8 @@ var (
 		{Name: "attempt_count", Type: field.TypeInt, Comment: "投递尝试次数", Default: 0},
 		{Name: "next_attempt_at", Type: field.TypeInt64, Comment: "下次允许尝试的时间戳毫秒"},
 		{Name: "last_error", Type: field.TypeString, Nullable: true, Size: 2048, Comment: "最近一次投递错误"},
+		{Name: "claim_token", Type: field.TypeUUID, Nullable: true, Comment: "当前 dispatcher claim token"},
+		{Name: "claimed_until", Type: field.TypeInt64, Nullable: true, Comment: "当前 claim lease 截止时间戳毫秒"},
 		{Name: "idempotency_key", Type: field.TypeString, Unique: true, Size: 128, Comment: "稳定投递幂等键"},
 		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
 		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
@@ -71,7 +73,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "rbac_policy_outbox_events_rbac_policy_revisions_outbox_event",
-				Columns:    []*schema.Column{RbacPolicyOutboxEventsColumns[15]},
+				Columns:    []*schema.Column{RbacPolicyOutboxEventsColumns[17]},
 				RefColumns: []*schema.Column{RbacPolicyRevisionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -80,7 +82,12 @@ var (
 			{
 				Name:    "rbacpolicyoutboxevent_status_next_attempt_at_revision",
 				Unique:  false,
-				Columns: []*schema.Column{RbacPolicyOutboxEventsColumns[7], RbacPolicyOutboxEventsColumns[9], RbacPolicyOutboxEventsColumns[15]},
+				Columns: []*schema.Column{RbacPolicyOutboxEventsColumns[7], RbacPolicyOutboxEventsColumns[9], RbacPolicyOutboxEventsColumns[17]},
+			},
+			{
+				Name:    "rbacpolicyoutboxevent_status_claimed_until_revision",
+				Unique:  false,
+				Columns: []*schema.Column{RbacPolicyOutboxEventsColumns[7], RbacPolicyOutboxEventsColumns[12], RbacPolicyOutboxEventsColumns[17]},
 			},
 		},
 	}
