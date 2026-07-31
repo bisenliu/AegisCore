@@ -447,7 +447,7 @@ func routerRegistrationV1Routes() []routerRegisteredRoute {
 	routes := []routerRegisteredRoute{
 		{method: http.MethodPost, path: "/api/v1/auth/login"},
 		{method: http.MethodPost, path: "/api/v1/auth/refresh"},
-		{method: http.MethodPost, path: "/api/v1/auth/change-password"},
+		{method: http.MethodPost, path: "/api/v1/auth/force-change-password"},
 		{method: http.MethodPost, path: "/api/v1/auth/logout"},
 		{method: http.MethodPost, path: "/api/v1/auth/logout-all"},
 		{method: http.MethodGet, path: "/api/v1/users"},

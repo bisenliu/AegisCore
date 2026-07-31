@@ -97,7 +97,7 @@ func TestVerifierInvalidHashDoesNotRevealUserExistence(t *testing.T) {
 	}
 }
 
-func TestVerifierChangePasswordUpdatesCredentials(t *testing.T) {
+func TestVerifierForceChangePasswordUpdatesCredentials(t *testing.T) {
 	oldHash, err := hashTestPassword(t, "old-secret")
 	require.NoError(t, err,
 		"Hash: %v", err)
@@ -111,9 +111,9 @@ func TestVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 	})
 	verifier := NewVerifier(store, testPasswordService(t))
 
-	result, err := verifier.ChangePassword(context.Background(), verifierTestUserID, 2, "new-secret")
+	result, err := verifier.ForceChangePassword(context.Background(), verifierTestUserID, 2, "new-secret")
 	require.NoError(t, err,
-		"ChangePassword: %v", err)
+		"ForceChangePassword: %v", err)
 	require.False(t, result.UserID != verifierTestUserID || result.TokenVersion != 3,
 		"result = %#v", result)
 	require.False(t, updatedInput.UserID != verifierTestUserID || updatedInput.Status != identity.UserStatusNormal,

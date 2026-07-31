@@ -6,7 +6,7 @@ import "github.com/gin-gonic/gin"
 func RegisterPublicRoutes(group *gin.RouterGroup, controller *AuthController) {
 	group.POST("/login", controller.LoginUser)
 	group.POST("/refresh", controller.RefreshToken)
-	group.POST("/change-password", controller.ChangePassword)
+	group.POST("/force-change-password", controller.ForceChangePassword)
 }
 
 // RegisterProtectedRoutes 挂载需要普通 access token 的认证路由。

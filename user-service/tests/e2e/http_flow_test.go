@@ -36,7 +36,7 @@ type tokenResponse struct {
 	ExpiresIn    int64  `json:"expires_in"`
 }
 
-type changePasswordResponse struct {
+type forceChangePasswordResponse struct {
 	Changed bool `json:"changed"`
 }
 
@@ -50,7 +50,7 @@ func TestHTTPAuthUserFlow(t *testing.T) {
 
 	bootstrapPasswordChangeTokens := loginPasswordChangeRequired(t, harness, "initial-admin", "bootstrap-secret")
 	bootstrapPassword := "changed-bootstrap-secret"
-	changePassword(t, harness, bootstrapPasswordChangeTokens.AccessToken, bootstrapPassword)
+	forceChangePassword(t, harness, bootstrapPasswordChangeTokens.AccessToken, bootstrapPassword)
 	bootstrapTokens := login(t, harness, "initial-admin", bootstrapPassword)
 	delegatedAdminPassword := "delegated-admin-secret"
 	delegatedAdmin := createUser(t, harness, bootstrapTokens.AccessToken, map[string]any{
@@ -75,7 +75,7 @@ func TestHTTPAuthUserFlow(t *testing.T) {
 	passwordChangeTokens := loginPasswordChangeRequired(t, harness, targetUser.Username, mustChangePassword)
 
 	newPassword := "changed-secret"
-	changePassword(t, harness, passwordChangeTokens.AccessToken, newPassword)
+	forceChangePassword(t, harness, passwordChangeTokens.AccessToken, newPassword)
 	expectLoginFailure(t, harness, targetUser.Username, mustChangePassword)
 
 	targetTokens := login(t, harness, targetUser.Username, newPassword)
@@ -209,13 +209,13 @@ func getUser(t *testing.T, harness *httpFlowHarness, token string, userID string
 	return user
 }
 
-func changePassword(t *testing.T, harness *httpFlowHarness, passwordChangeToken string, newPassword string) {
+func forceChangePassword(t *testing.T, harness *httpFlowHarness, passwordChangeToken string, newPassword string) {
 	t.Helper()
-	recorder := harness.request(t, http.MethodPost, "/api/v1/auth/change-password", map[string]any{
+	recorder := harness.request(t, http.MethodPost, "/api/v1/auth/force-change-password", map[string]any{
 		"new_password": newPassword,
 	}, passwordChangeToken)
 	envelope := expectEnvelope(t, recorder, http.StatusOK, true, contracterrors.CodeOK)
-	result := decodeData[changePasswordResponse](t, envelope)
+	result := decodeData[forceChangePasswordResponse](t, envelope)
 	require.Equal(t, true, result.Changed, "change password response changed")
 }
 

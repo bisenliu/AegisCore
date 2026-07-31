@@ -24,8 +24,8 @@ func ValidateRefreshToken(token string) error {
 	return nil
 }
 
-// ValidateChangePasswordCommand 校验强制改密输入。
-func ValidateChangePasswordCommand(token string, newPassword string) error {
+// ValidateForceChangePasswordCommand 校验强制改密输入。
+func ValidateForceChangePasswordCommand(token string, newPassword string) error {
 	if isBlankToken(token) {
 		return authdomain.ErrTokenInvalid
 	}

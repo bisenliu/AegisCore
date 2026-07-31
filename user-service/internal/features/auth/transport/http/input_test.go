@@ -31,11 +31,11 @@ func TestPrepareTokenCommands(t *testing.T) {
 	require.Equal(t, "refresh-token", refresh.RefreshToken,
 		"refresh = %#v", refresh)
 
-	change, err := prepareChangePasswordCommand(ChangePasswordRequest{Token: " " + commonauth.TokenPrefix + "password-token ", NewPassword: " new-secret-123 "})
+	forceChange, err := prepareForceChangePasswordCommand(ForceChangePasswordRequest{Token: " " + commonauth.TokenPrefix + "password-token ", NewPassword: " new-secret-123 "})
 	require.NoError(t, err,
-		"prepareChangePasswordCommand: %v", err)
-	require.False(t, change.Token != "password-token" || change.NewPassword != "new-secret-123",
-		"change = %#v", change)
+		"prepareForceChangePasswordCommand: %v", err)
+	require.False(t, forceChange.Token != "password-token" || forceChange.NewPassword != "new-secret-123",
+		"forceChange = %#v", forceChange)
 
 	_, err = prepareRefreshTokenCommand(RefreshTokenRequest{RefreshToken: " " + commonauth.TokenPrefix})
 	appErr := contracterrors.FromError(err)

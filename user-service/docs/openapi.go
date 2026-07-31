@@ -10,29 +10,6 @@ func ReadOpenAPI() []byte {
 const openAPIDocument = `{
   "components": {
     "schemas": {
-      "ChangePasswordRequest": {
-        "properties": {
-          "new_password": {
-            "example": "new-secret",
-            "maxLength": 256,
-            "minLength": 8,
-            "type": "string"
-          }
-        },
-        "required": [
-          "new_password"
-        ],
-        "type": "object"
-      },
-      "ChangePasswordResponse": {
-        "properties": {
-          "changed": {
-            "example": true,
-            "type": "boolean"
-          }
-        },
-        "type": "object"
-      },
       "Code": {
         "enum": [
           0,
@@ -141,6 +118,29 @@ const openAPIDocument = `{
             "type": "string"
           },
           "success": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "ForceChangePasswordRequest": {
+        "properties": {
+          "new_password": {
+            "example": "new-secret",
+            "maxLength": 256,
+            "minLength": 8,
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_password"
+        ],
+        "type": "object"
+      },
+      "ForceChangePasswordResponse": {
+        "properties": {
+          "changed": {
+            "example": true,
             "type": "boolean"
           }
         },
@@ -535,9 +535,9 @@ const openAPIDocument = `{
   },
   "openapi": "3.0.3",
   "paths": {
-    "/auth/change-password": {
+    "/auth/force-change-password": {
       "post": {
-        "description": "使用登录后返回的受限改密凭据修改密码，并将用户状态恢复为正常。",
+        "description": "使用登录后返回的 password-change 受限凭据完成强制改密，并将用户状态恢复为正常。",
         "parameters": [
           {
             "description": "Bearer password-change-token",
@@ -553,11 +553,11 @@ const openAPIDocument = `{
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ChangePasswordRequest"
+                "$ref": "#/components/schemas/ForceChangePasswordRequest"
               }
             }
           },
-          "description": "修改密码请求",
+          "description": "强制改密请求",
           "required": true,
           "x-originalParamName": "request"
         },
@@ -573,7 +573,7 @@ const openAPIDocument = `{
                     {
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/ChangePasswordResponse"
+                          "$ref": "#/components/schemas/ForceChangePasswordResponse"
                         }
                       },
                       "type": "object"
@@ -582,7 +582,7 @@ const openAPIDocument = `{
                 }
               }
             },
-            "description": "修改成功"
+            "description": "强制改密成功"
           },
           "400": {
             "content": {
@@ -635,7 +635,7 @@ const openAPIDocument = `{
             "description": "认证安全撤销未完成，请稍后重试"
           }
         },
-        "summary": "修改密码",
+        "summary": "强制修改密码",
         "tags": [
           "认证"
         ]

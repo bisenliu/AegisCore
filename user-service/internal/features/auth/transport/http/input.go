@@ -28,15 +28,15 @@ func prepareRefreshTokenCommand(req RefreshTokenRequest) (authcommand.RefreshTok
 	return authcommand.RefreshTokenCommand{RefreshToken: refreshToken}, nil
 }
 
-// prepareChangePasswordCommand 将强制改密 HTTP 请求转换为应用层命令。
-func prepareChangePasswordCommand(req ChangePasswordRequest) (authcommand.ChangePasswordCommand, error) {
+// prepareForceChangePasswordCommand 将强制改密 HTTP 请求转换为应用层命令。
+func prepareForceChangePasswordCommand(req ForceChangePasswordRequest) (authcommand.ForceChangePasswordCommand, error) {
 	token := commonauth.StripBearerPrefix(req.Token)
 	newPassword := strings.TrimSpace(req.NewPassword)
 	if token == "" || strings.EqualFold(token, commonauth.TokenTypeBearer) {
-		return authcommand.ChangePasswordCommand{}, contracterrors.TokenInvalidError(messages.MissingSession)
+		return authcommand.ForceChangePasswordCommand{}, contracterrors.TokenInvalidError(messages.MissingSession)
 	}
 	if newPassword == "" {
-		return authcommand.ChangePasswordCommand{}, contracterrors.ValidationFailedError(messages.InvalidPassword)
+		return authcommand.ForceChangePasswordCommand{}, contracterrors.ValidationFailedError(messages.InvalidPassword)
 	}
-	return authcommand.ChangePasswordCommand{Token: token, NewPassword: newPassword}, nil
+	return authcommand.ForceChangePasswordCommand{Token: token, NewPassword: newPassword}, nil
 }

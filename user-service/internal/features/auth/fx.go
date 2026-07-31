@@ -84,7 +84,7 @@ var authApplicationOptions = fx.Options(
 		newRefreshTokenSettings,
 		authcommand.NewLoginUseCase,
 		authcommand.NewRefreshTokenUseCase,
-		authcommand.NewChangePasswordUseCase,
+		authcommand.NewForceChangePasswordUseCase,
 		authcommand.NewLogoutCurrentSessionUseCase,
 		authcommand.NewLogoutAllSessionsUseCase,
 	),
@@ -165,12 +165,12 @@ type TokenVersionValidatorResult struct {
 type AuthControllerParams struct {
 	fx.In
 
-	Login          authcommand.LoginUseCase
-	Refresh        authcommand.RefreshTokenUseCase
-	ChangePassword authcommand.ChangePasswordUseCase
-	LogoutCurrent  authcommand.LogoutCurrentSessionUseCase
-	LogoutAll      authcommand.LogoutAllSessionsUseCase
-	Validator      *commonvalidation.Validator
+	Login         authcommand.LoginUseCase
+	Refresh       authcommand.RefreshTokenUseCase
+	ForceChange   authcommand.ForceChangePasswordUseCase
+	LogoutCurrent authcommand.LogoutCurrentSessionUseCase
+	LogoutAll     authcommand.LogoutAllSessionsUseCase
+	Validator     *commonvalidation.Validator
 }
 
 // 运行时资源 holder
@@ -291,12 +291,12 @@ func newTokenVersionValidator(params TokenVersionValidatorParams) TokenVersionVa
 
 func newAuthController(params AuthControllerParams) *authhttp.AuthController {
 	return authhttp.NewAuthController(authhttp.AuthControllerOptions{
-		Login:          params.Login,
-		Refresh:        params.Refresh,
-		ChangePassword: params.ChangePassword,
-		LogoutCurrent:  params.LogoutCurrent,
-		LogoutAll:      params.LogoutAll,
-		Validator:      params.Validator,
+		Login:         params.Login,
+		Refresh:       params.Refresh,
+		ForceChange:   params.ForceChange,
+		LogoutCurrent: params.LogoutCurrent,
+		LogoutAll:     params.LogoutAll,
+		Validator:     params.Validator,
 	})
 }
 

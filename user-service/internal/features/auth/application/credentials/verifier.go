@@ -26,7 +26,7 @@ type PasswordService interface {
 // Verifier 校验登录凭证并完成强制改密。
 type Verifier interface {
 	VerifyPassword(ctx context.Context, username string, plainPassword string) (*authdomain.UserCredential, error)
-	ChangePassword(ctx context.Context, userID uuid.UUID, expectedTokenVersion int64, newPassword string) (*authdomain.CredentialUpdateResult, error)
+	ForceChangePassword(ctx context.Context, userID uuid.UUID, expectedTokenVersion int64, newPassword string) (*authdomain.CredentialUpdateResult, error)
 }
 
 type verifier struct {
@@ -74,8 +74,8 @@ func (v *verifier) VerifyPassword(ctx context.Context, username string, plainPas
 	return credential, nil
 }
 
-// ChangePassword 为当前受限于改密流程的用户替换凭证。
-func (v *verifier) ChangePassword(ctx context.Context, userID uuid.UUID, expectedTokenVersion int64, newPassword string) (*authdomain.CredentialUpdateResult, error) {
+// ForceChangePassword 为当前受限于改密流程的用户替换凭证。
+func (v *verifier) ForceChangePassword(ctx context.Context, userID uuid.UUID, expectedTokenVersion int64, newPassword string) (*authdomain.CredentialUpdateResult, error) {
 	credential, err := v.repo.GetCredentialByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, identity.ErrUserNotFound) {

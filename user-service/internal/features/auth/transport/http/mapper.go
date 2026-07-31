@@ -26,8 +26,8 @@ func toPasswordChangeRequiredEnvelope(result *authtokens.TokenResult) contractre
 	}
 }
 
-func toChangePasswordResponse(result *authcommand.ChangePasswordResult) ChangePasswordResponse {
-	return ChangePasswordResponse{Changed: result.Changed}
+func toForceChangePasswordResponse(result *authcommand.ForceChangePasswordResult) ForceChangePasswordResponse {
+	return ForceChangePasswordResponse{Changed: result.Changed}
 }
 
 func toLogoutResponse(result *authcommand.LogoutResult) LogoutResponse {

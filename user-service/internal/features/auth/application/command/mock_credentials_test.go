@@ -42,19 +42,19 @@ func (m *MockVerifier) EXPECT() *MockVerifierMockRecorder {
 	return m.recorder
 }
 
-// ChangePassword mocks base method.
-func (m *MockVerifier) ChangePassword(ctx context.Context, userID uuid.UUID, expectedTokenVersion int64, newPassword string) (*domain.CredentialUpdateResult, error) {
+// ForceChangePassword mocks base method.
+func (m *MockVerifier) ForceChangePassword(ctx context.Context, userID uuid.UUID, expectedTokenVersion int64, newPassword string) (*domain.CredentialUpdateResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ChangePassword", ctx, userID, expectedTokenVersion, newPassword)
+	ret := m.ctrl.Call(m, "ForceChangePassword", ctx, userID, expectedTokenVersion, newPassword)
 	ret0, _ := ret[0].(*domain.CredentialUpdateResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ChangePassword indicates an expected call of ChangePassword.
-func (mr *MockVerifierMockRecorder) ChangePassword(ctx, userID, expectedTokenVersion, newPassword any) *gomock.Call {
+// ForceChangePassword indicates an expected call of ForceChangePassword.
+func (mr *MockVerifierMockRecorder) ForceChangePassword(ctx, userID, expectedTokenVersion, newPassword any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChangePassword", reflect.TypeOf((*MockVerifier)(nil).ChangePassword), ctx, userID, expectedTokenVersion, newPassword)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceChangePassword", reflect.TypeOf((*MockVerifier)(nil).ForceChangePassword), ctx, userID, expectedTokenVersion, newPassword)
 }
 
 // VerifyPassword mocks base method.

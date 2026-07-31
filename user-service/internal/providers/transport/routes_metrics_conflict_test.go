@@ -28,12 +28,12 @@ func TestRegisterRoutesRejectsMetricsPathConflict(t *testing.T) {
 	}
 	validator := mustRouteTestValidator(t)
 	authController := authhttp.NewAuthController(authhttp.AuthControllerOptions{
-		Login:          &routeAuthAuthUseCases{},
-		Refresh:        &routeAuthAuthUseCases{},
-		ChangePassword: &routeAuthAuthUseCases{},
-		LogoutCurrent:  &routeAuthAuthUseCases{},
-		LogoutAll:      &routeAuthAuthUseCases{},
-		Validator:      validator,
+		Login:         &routeAuthAuthUseCases{},
+		Refresh:       &routeAuthAuthUseCases{},
+		ForceChange:   &routeAuthAuthUseCases{},
+		LogoutCurrent: &routeAuthAuthUseCases{},
+		LogoutAll:     &routeAuthAuthUseCases{},
+		Validator:     validator,
 	})
 	err := RegisterRoutes(RegisterRouteParams{
 		Config:        cfg,

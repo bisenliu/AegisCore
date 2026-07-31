@@ -201,8 +201,8 @@ func (s *routeAuthAuthUseCases) Refresh(context.Context, authcommand.RefreshToke
 	return &authtokens.TokenResult{AccessToken: "access", RefreshToken: "refresh", TokenType: commonauth.TokenTypeBearer, ExpiresIn: 3600}, nil
 }
 
-func (s *routeAuthAuthUseCases) ChangePassword(context.Context, authcommand.ChangePasswordCommand) (*authcommand.ChangePasswordResult, error) {
-	return &authcommand.ChangePasswordResult{Changed: true}, nil
+func (s *routeAuthAuthUseCases) ForceChangePassword(context.Context, authcommand.ForceChangePasswordCommand) (*authcommand.ForceChangePasswordResult, error) {
+	return &authcommand.ForceChangePasswordResult{Changed: true}, nil
 }
 
 func (s *routeAuthAuthUseCases) LogoutCurrentSession(context.Context) (*authcommand.LogoutResult, error) {

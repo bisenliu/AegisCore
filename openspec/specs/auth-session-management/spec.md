@@ -4,7 +4,7 @@
 ## Requirements
 ### Requirement: 登录、用途隔离令牌与 HTTP 契约
 
-系统 MUST 在凭证、用户状态和会话策略校验通过后签发用途隔离的 access、refresh 或 password-change token。所有 token MUST 包含标准 `jti`，并通过 `access`、`refresh` 和 `password_change` subject 限定使用流程；任一用途、subject 或必要 claims 不匹配时 MUST 被拒绝。系统 MUST 仅通过 `/api/v1/auth` 暴露认证入口，并使用共享 response helper 渲染业务错误。
+系统 MUST 在凭证、用户状态和会话策略校验通过后签发用途隔离的 access、refresh 或 password-change token。所有 token MUST 包含标准 `jti`，并通过 `access`、`refresh` 和 `password_change` subject 限定使用流程；任一用途、subject 或必要 claims 不匹配时 MUST 被拒绝。系统 MUST 仅通过 `/api/v1/auth` 暴露认证入口，并使用共享 response helper 渲染业务错误。强制改密 HTTP 入口 MUST 使用 `POST /api/v1/auth/force-change-password`，MUST NOT 暴露旧 `POST /api/v1/auth/change-password` 路径。
 
 #### Scenario: 普通登录成功
 
@@ -31,8 +31,9 @@
 
 - **WHEN** 调用方访问登录、refresh 或强制改密入口
 - **THEN** controller MUST 允许请求进入并在业务层校验相应凭据或 token
+- **AND** 强制改密入口 MUST 挂载为 `POST /api/v1/auth/force-change-password`，MUST 使用 `password_change` 受限 token 和一次性 password-change session 完成校验，MUST NOT 要求普通 access token middleware 先放行
 - **AND** 退出当前会话、退出全部会话和普通改密 MUST 在业务处理前校验 bearer token、user-service access claims 和 token version
-- **AND** 系统 MUST NOT 暴露旧认证路径别名或认证绕过路径
+- **AND** 系统 MUST NOT 暴露旧认证路径别名或认证绕过路径，包括 `POST /api/v1/auth/change-password`
 - **AND** 共享认证 middleware 只 MUST 获得 access token 验证能力，MUST NOT 获得 refresh token、password-change token 或任何 token 签发能力
 
 #### Scenario: 认证错误统一出口

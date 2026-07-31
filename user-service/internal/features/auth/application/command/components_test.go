@@ -127,9 +127,9 @@ func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 		return 3, nil
 	})
 
-	result, err := verifier.ChangePassword(context.Background(), authTestUserID, 2, "new-secret")
+	result, err := verifier.ForceChangePassword(context.Background(), authTestUserID, 2, "new-secret")
 	require.NoError(t, err,
-		"ChangePassword: %v", err)
+		"ForceChangePassword: %v", err)
 	require.False(t, result.UserID != authTestUserID || result.TokenVersion != 3,
 		"result = %#v", result)
 	require.False(t, updatedInput.UserID != authTestUserID || updatedInput.Status != identity.UserStatusNormal,
@@ -141,31 +141,31 @@ func TestCredentialVerifierChangePasswordUpdatesCredentials(t *testing.T) {
 
 }
 
-func TestCredentialVerifierChangePasswordMapsUserNotFound(t *testing.T) {
+func TestCredentialVerifierForceChangePasswordMapsUserNotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	repo := NewMockUserCredentialStore(ctrl)
 	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
 	repo.EXPECT().GetCredentialByUserID(gomock.Any(), authTestUserID).Return(nil, identity.ErrUserNotFound)
 
-	_, err := verifier.ChangePassword(context.Background(), authTestUserID, 2, "new-secret")
+	_, err := verifier.ForceChangePassword(context.Background(), authTestUserID, 2, "new-secret")
 	require.ErrorIs(t, err, identity.ErrUserNotFound,
 		"err = %v, want ErrUserNotFound", err)
 
 }
 
-func TestCredentialVerifierChangePasswordRejectsInvalidStatus(t *testing.T) {
+func TestCredentialVerifierForceChangePasswordRejectsInvalidStatus(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	repo := NewMockUserCredentialStore(ctrl)
 	verifier := authcredentials.NewVerifier(repo, testPasswordService(t))
 	repo.EXPECT().GetCredentialByUserID(gomock.Any(), authTestUserID).Return(&authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusNormal, TokenVersion: 2}, nil)
 
-	_, err := verifier.ChangePassword(context.Background(), authTestUserID, 2, "new-secret")
+	_, err := verifier.ForceChangePassword(context.Background(), authTestUserID, 2, "new-secret")
 	require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
 		"err = %v, want authdomain.ErrTokenInvalid", err)
 
 }
 
-func TestCredentialVerifierChangePasswordMapsUpdateError(t *testing.T) {
+func TestCredentialVerifierForceChangePasswordMapsUpdateError(t *testing.T) {
 	updateErr := errors.New("update failed")
 	ctrl := gomock.NewController(t)
 	repo := NewMockUserCredentialStore(ctrl)
@@ -173,7 +173,7 @@ func TestCredentialVerifierChangePasswordMapsUpdateError(t *testing.T) {
 	repo.EXPECT().GetCredentialByUserID(gomock.Any(), authTestUserID).Return(&authdomain.UserCredential{UserID: authTestUserID, Status: identity.UserStatusMustChangePassword, TokenVersion: 2}, nil)
 	repo.EXPECT().UpdateCredentials(gomock.Any(), gomock.Any()).Return(int64(0), updateErr)
 
-	_, err := verifier.ChangePassword(context.Background(), authTestUserID, 2, "new-secret")
+	_, err := verifier.ForceChangePassword(context.Background(), authTestUserID, 2, "new-secret")
 	require.ErrorIs(t, err, updateErr,
 		"err = %v, want %v", err, updateErr)
 

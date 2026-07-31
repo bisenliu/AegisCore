@@ -39,15 +39,15 @@ func TestValidateRefreshTokenRejectsBlankToken(t *testing.T) {
 	}
 }
 
-func TestValidateChangePasswordCommandRejectsInvalidInput(t *testing.T) {
+func TestValidateForceChangePasswordCommandRejectsInvalidInput(t *testing.T) {
 	{
-		err := ValidateChangePasswordCommand("", "new-secret")
+		err := ValidateForceChangePasswordCommand("", "new-secret")
 		require.ErrorIs(t, err, authdomain.ErrTokenInvalid,
 			"missing token err = %v, want ErrTokenInvalid", err)
 	}
 	{
 
-		err := ValidateChangePasswordCommand("password-token", " ")
+		err := ValidateForceChangePasswordCommand("password-token", " ")
 		require.ErrorIs(t, err, password.ErrEmptyPassword,
 			"missing password err = %v, want ErrEmptyPassword", err)
 	}

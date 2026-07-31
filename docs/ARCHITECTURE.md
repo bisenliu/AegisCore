@@ -64,7 +64,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 
 业务路由分层：
 
-- `/api/v1/auth/login`、`/api/v1/auth/refresh`、`/api/v1/auth/change-password` 由认证公开路由挂载。
+- `/api/v1/auth/login`、`/api/v1/auth/refresh`、`/api/v1/auth/force-change-password` 由认证公开路由挂载。
 - 其余受保护路由先通过 `AuthWithTokenVersionValidator`。
 - 权限、角色和用户接口再通过 `permissionhttp.Authorize` 执行 RBAC 授权。
 - 用户 API 位于 `/api/v1/users`。

@@ -21,7 +21,7 @@ import (
 type testAuthUseCases struct {
 	LoginUseCase
 	RefreshTokenUseCase
-	ChangePasswordUseCase
+	ForceChangePasswordUseCase
 	LogoutCurrentSessionUseCase
 	LogoutAllSessionsUseCase
 }
@@ -50,7 +50,7 @@ func newAuthCommandFixtureWithController(ctrl *gomock.Controller, authCfg servic
 		testAuthUseCases: testAuthUseCases{
 			LoginUseCase:                NewLoginUseCase(credentials, tokens, sessions, metrics),
 			RefreshTokenUseCase:         NewRefreshTokenUseCase(tokens, sessions, metrics, RefreshTokenSettings{RefreshTokenRotation: authCfg.RefreshTokenRotation}),
-			ChangePasswordUseCase:       NewChangePasswordUseCase(credentials, tokens, sessions, metrics),
+			ForceChangePasswordUseCase:  NewForceChangePasswordUseCase(credentials, tokens, sessions, metrics),
 			LogoutCurrentSessionUseCase: NewLogoutCurrentSessionUseCase(sessions, metrics),
 			LogoutAllSessionsUseCase:    NewLogoutAllSessionsUseCase(sessions, metrics),
 		},

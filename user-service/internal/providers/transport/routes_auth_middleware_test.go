@@ -55,12 +55,12 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	validator, err := validation.NewDefault()
 	require.NoError(t, err)
 	authController := authhttp.NewAuthController(authhttp.AuthControllerOptions{
-		Login:          &routeAuthAuthUseCases{},
-		Refresh:        &routeAuthAuthUseCases{},
-		ChangePassword: &routeAuthAuthUseCases{},
-		LogoutCurrent:  &routeAuthAuthUseCases{},
-		LogoutAll:      &routeAuthAuthUseCases{},
-		Validator:      validator,
+		Login:         &routeAuthAuthUseCases{},
+		Refresh:       &routeAuthAuthUseCases{},
+		ForceChange:   &routeAuthAuthUseCases{},
+		LogoutCurrent: &routeAuthAuthUseCases{},
+		LogoutAll:     &routeAuthAuthUseCases{},
+		Validator:     validator,
 	})
 	err = RegisterRoutes(RegisterRouteParams{
 		Config:        cfg,
@@ -93,14 +93,14 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 		{method: http.MethodGet, path: "/metrics"},
 		{method: http.MethodPost, path: "/api/v1/auth/login", body: `{"username":"alice","password":"secret"}`},
 		{method: http.MethodPost, path: "/api/v1/auth/refresh", body: `{"refresh_token":"refresh"}`},
-		{method: http.MethodPost, path: "/api/v1/auth/change-password", body: `{"new_password":"NewPassword123!"}`},
+		{method: http.MethodPost, path: "/api/v1/auth/force-change-password", body: `{"new_password":"NewPassword123!"}`},
 	}
 	for _, tt := range publicRequests {
 		t.Run("public "+tt.path, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
 			request.Header.Set("Content-Type", "application/json")
-			if tt.path == "/api/v1/auth/change-password" {
+			if tt.path == "/api/v1/auth/force-change-password" {
 				request.Header.Set(commonauth.AuthorizationHeader, commonauth.TokenPrefix+"password-change-token")
 			}
 			engine.ServeHTTP(recorder, request)

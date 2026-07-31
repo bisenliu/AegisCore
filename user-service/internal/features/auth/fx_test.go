@@ -148,7 +148,7 @@ func TestAuthModuleBuildsCommandGraphWithMetricsConfigurations(t *testing.T) {
 
 			require.NotNil(t, outputs.login)
 			require.NotNil(t, outputs.refresh)
-			require.NotNil(t, outputs.changePassword)
+			require.NotNil(t, outputs.forceChange)
 			require.NotNil(t, outputs.logoutCurrent)
 			require.NotNil(t, outputs.logoutAll)
 			require.NotNil(t, outputs.verifier)
@@ -191,7 +191,7 @@ func TestAuthModuleMetricsEdgesAreRequired(t *testing.T) {
 func TestAuthModuleCommandConstructorsHaveMetricsEdges(t *testing.T) {
 	outputs := newAuthModuleTestApp(t, true, true)
 	graphText := string(outputs.graph)
-	for _, constructor := range []string{"NewLoginUseCase", "NewRefreshTokenUseCase", "NewChangePasswordUseCase", "NewLogoutCurrentSessionUseCase", "NewLogoutAllSessionsUseCase"} {
+	for _, constructor := range []string{"NewLoginUseCase", "NewRefreshTokenUseCase", "NewForceChangePasswordUseCase", "NewLogoutCurrentSessionUseCase", "NewLogoutAllSessionsUseCase"} {
 		match := regexp.MustCompile(`(constructor_\d+) \[shape=plaintext label="` + constructor + `"\];`).FindStringSubmatch(graphText)
 		require.Len(t, match, 2, graphText)
 		require.Contains(t, graphText, match[1]+` -> "application.Metrics" [ltail=`)
@@ -292,7 +292,7 @@ type authModuleOutputs struct {
 	provider               *commonmetrics.Provider
 	login                  authcommand.LoginUseCase
 	refresh                authcommand.RefreshTokenUseCase
-	changePassword         authcommand.ChangePasswordUseCase
+	forceChange            authcommand.ForceChangePasswordUseCase
 	logoutCurrent          authcommand.LogoutCurrentSessionUseCase
 	logoutAll              authcommand.LogoutAllSessionsUseCase
 	verifier               authcredentials.Verifier
@@ -314,7 +314,7 @@ func newAuthModuleTestApp(t *testing.T, metricsEnabled bool, refreshRotation boo
 		fx.Populate(
 			&outputs.login,
 			&outputs.refresh,
-			&outputs.changePassword,
+			&outputs.forceChange,
 			&outputs.logoutCurrent,
 			&outputs.logoutAll,
 			&outputs.verifier,

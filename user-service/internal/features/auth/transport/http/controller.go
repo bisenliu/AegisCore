@@ -14,33 +14,33 @@ import (
 
 // AuthController 处理认证和会话端点的 HTTP 请求。
 type AuthController struct {
-	login          authcommand.LoginUseCase
-	refresh        authcommand.RefreshTokenUseCase
-	changePassword authcommand.ChangePasswordUseCase
-	logoutCurrent  authcommand.LogoutCurrentSessionUseCase
-	logoutAll      authcommand.LogoutAllSessionsUseCase
-	validator      *commonvalidation.Validator
+	login         authcommand.LoginUseCase
+	refresh       authcommand.RefreshTokenUseCase
+	forceChange   authcommand.ForceChangePasswordUseCase
+	logoutCurrent authcommand.LogoutCurrentSessionUseCase
+	logoutAll     authcommand.LogoutAllSessionsUseCase
+	validator     *commonvalidation.Validator
 }
 
 // AuthControllerOptions 包含构造认证控制器所需的普通依赖。
 type AuthControllerOptions struct {
-	Login          authcommand.LoginUseCase
-	Refresh        authcommand.RefreshTokenUseCase
-	ChangePassword authcommand.ChangePasswordUseCase
-	LogoutCurrent  authcommand.LogoutCurrentSessionUseCase
-	LogoutAll      authcommand.LogoutAllSessionsUseCase
-	Validator      *commonvalidation.Validator
+	Login         authcommand.LoginUseCase
+	Refresh       authcommand.RefreshTokenUseCase
+	ForceChange   authcommand.ForceChangePasswordUseCase
+	LogoutCurrent authcommand.LogoutCurrentSessionUseCase
+	LogoutAll     authcommand.LogoutAllSessionsUseCase
+	Validator     *commonvalidation.Validator
 }
 
 // NewAuthController 使用 command use case 和 validator 依赖构造认证控制器。
 func NewAuthController(options AuthControllerOptions) *AuthController {
 	return &AuthController{
-		login:          options.Login,
-		refresh:        options.Refresh,
-		changePassword: options.ChangePassword,
-		logoutCurrent:  options.LogoutCurrent,
-		logoutAll:      options.LogoutAll,
-		validator:      options.Validator,
+		login:         options.Login,
+		refresh:       options.Refresh,
+		forceChange:   options.ForceChange,
+		logoutCurrent: options.LogoutCurrent,
+		logoutAll:     options.LogoutAll,
+		validator:     options.Validator,
 	}
 }
 
@@ -117,38 +117,38 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 	response.OK(c, toTokenResponse(tokens))
 }
 
-// ChangePassword 使用受限 token 处理强制改密请求。
-// @Summary 修改密码
-// @Description 使用登录后返回的受限改密凭据修改密码，并将用户状态恢复为正常。
+// ForceChangePassword 使用受限 token 处理强制改密请求。
+// @Summary 强制修改密码
+// @Description 使用登录后返回的 password-change 受限凭据完成强制改密，并将用户状态恢复为正常。
 // @Tags 认证
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer password-change-token"
-// @Param request body authhttp.ChangePasswordRequest true "修改密码请求"
-// @Success 200 {object} response.Envelope{data=authhttp.ChangePasswordResponse} "修改成功"
+// @Param request body authhttp.ForceChangePasswordRequest true "强制改密请求"
+// @Success 200 {object} response.Envelope{data=authhttp.ForceChangePasswordResponse} "强制改密成功"
 // @Failure 400 {object} response.Envelope "请求体错误或参数校验失败"
 // @Failure 401 {object} response.Envelope "改密凭据无效或已失效"
 // @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 503 {object} response.Envelope "认证安全撤销未完成，请稍后重试"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
-// @Router /auth/change-password [post]
-func (ctl *AuthController) ChangePassword(c *gin.Context) {
-	req := ChangePasswordRequest{}
+// @Router /auth/force-change-password [post]
+func (ctl *AuthController) ForceChangePassword(c *gin.Context) {
+	req := ForceChangePasswordRequest{}
 	if !binding.BindOrAbort(ctl.validator, c, &req, binding.Compose(binding.HeaderBinder, binding.JSONBinder)) {
 		return
 	}
 
-	cmd, err := prepareChangePasswordCommand(req)
+	cmd, err := prepareForceChangePasswordCommand(req)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	result, err := ctl.changePassword.ChangePassword(c.Request.Context(), cmd)
+	result, err := ctl.forceChange.ForceChangePassword(c.Request.Context(), cmd)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, toChangePasswordResponse(result))
+	response.OK(c, toForceChangePasswordResponse(result))
 }
 
 // LogoutCurrentSession 处理当前认证会话的登出请求。

@@ -13,7 +13,7 @@ type LogoutResponse struct {
 	LoggedOut bool `json:"logged_out" example:"true"`
 }
 
-// ChangePasswordResponse 表示改密操作是否完成。
-type ChangePasswordResponse struct {
+// ForceChangePasswordResponse 表示强制改密操作是否完成。
+type ForceChangePasswordResponse struct {
 	Changed bool `json:"changed" example:"true"`
 }
