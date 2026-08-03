@@ -91,6 +91,33 @@ func TestDispatcherSuccessfulDeliveryClearsRecoveredError(t *testing.T) {
 	require.Empty(t, status.LastErrorCategory)
 }
 
+func TestDispatcherFaultInjectionRetryReplaysAddRemoveReplaceWithoutDroppingNotifications(t *testing.T) {
+	now := time.Date(2026, 7, 31, 4, 0, 0, 0, time.UTC)
+	add := testOutboxClaimWithReason(21, 0, "user_role_added")
+	remove := testOutboxClaimWithReason(22, 0, "user_role_removed")
+	replace := testOutboxClaimWithReason(23, 1, "role_permissions_replaced")
+	store := &fakeOutboxStore{claims: []OutboxClaim{add, remove, replace}}
+	publisher := &sequenceRevisionPublisher{failures: map[int64]error{23: errors.New("redis unavailable")}}
+	dispatcher := newTestDispatcher(t, store, publisher, newFakeClock(now))
+
+	err := dispatcher.DispatchOnce(context.Background())
+	require.ErrorContains(t, err, "redis unavailable")
+	require.Equal(t, []int64{21, 22, 23}, publisher.revisions())
+	require.Equal(t, []uuid.UUID{add.Event.EventID, remove.Event.EventID}, store.acked)
+	require.Len(t, store.failed, 1)
+	require.Equal(t, replace.Event.EventID, store.failed[0].eventID)
+	require.Equal(t, DispatcherErrorPublish, store.failed[0].summary)
+
+	store.claims = []OutboxClaim{{Event: replace.Event, ClaimToken: uuid.New(), AttemptCount: 2}}
+	publisher.failures = nil
+	require.NoError(t, dispatcher.DispatchOnce(context.Background()))
+	require.Equal(t, []int64{21, 22, 23, 23}, publisher.revisions())
+	require.Equal(t, []uuid.UUID{add.Event.EventID, remove.Event.EventID, replace.Event.EventID}, store.acked)
+	status, statusErr := dispatcher.Status(context.Background())
+	require.NoError(t, statusErr)
+	require.Empty(t, status.LastErrorCategory)
+}
+
 func TestDispatcherRecordsPublishFailureAndRetryOperations(t *testing.T) {
 	now := time.Date(2026, 7, 31, 4, 0, 0, 0, time.UTC)
 	claim := testOutboxClaim(1, 2)
@@ -228,6 +255,13 @@ func testOutboxClaim(revision int64, attempt int) OutboxClaim {
 	}
 }
 
+func testOutboxClaimWithReason(revision int64, attempt int, reason string) OutboxClaim {
+	claim := testOutboxClaim(revision, attempt)
+	claim.Event.Reason = reason
+	claim.Event.IdempotencyKey = "rbac-policy:" + reason
+	return claim
+}
+
 type fakeOutboxStore struct {
 	mu         sync.Mutex
 	claims     []OutboxClaim
@@ -291,8 +325,27 @@ type recoveringRevisionPublisher struct {
 	err error
 }
 
+type sequenceRevisionPublisher struct {
+	mu       sync.Mutex
+	seen     []int64
+	failures map[int64]error
+}
+
 func (p *recoveringRevisionPublisher) PublishPolicyRevision(context.Context, OutboxEvent) error {
 	return p.err
+}
+
+func (p *sequenceRevisionPublisher) PublishPolicyRevision(_ context.Context, event OutboxEvent) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.seen = append(p.seen, event.Revision)
+	return p.failures[event.Revision]
+}
+
+func (p *sequenceRevisionPublisher) revisions() []int64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]int64(nil), p.seen...)
 }
 
 func (f revisionPublisherFunc) PublishPolicyRevision(ctx context.Context, event OutboxEvent) error {

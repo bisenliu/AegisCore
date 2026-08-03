@@ -49,6 +49,50 @@ func (m *reloadMetricsRecorder) ReloadSucceeded()      { m.succeeded.Add(1) }
 func (m *reloadMetricsRecorder) ReloadFailed()         { m.failed.Add(1) }
 func (m *reloadMetricsRecorder) SetLastStatus(ok bool) { m.status.Store(ok) }
 
+type faultInjectedRoleResolver struct {
+	mu             sync.RWMutex
+	roles          map[uuid.UUID][]uuid.UUID
+	started        chan struct{}
+	release        chan struct{}
+	invalidateUser atomic.Int64
+	invalidateAll  atomic.Int64
+}
+
+func newFaultInjectedRoleResolver(roles map[uuid.UUID][]uuid.UUID) *faultInjectedRoleResolver {
+	return &faultInjectedRoleResolver{roles: roles}
+}
+
+func (r *faultInjectedRoleResolver) RolesForUser(_ context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	if r.started != nil {
+		close(r.started)
+	}
+	if r.release != nil {
+		<-r.release
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return append([]uuid.UUID(nil), r.roles[userID]...), nil
+}
+
+func (r *faultInjectedRoleResolver) InvalidateUserRole(uuid.UUID) { r.invalidateUser.Add(1) }
+func (r *faultInjectedRoleResolver) InvalidateAllUserRoles()      { r.invalidateAll.Add(1) }
+
+func requireEventuallyProjection(t *testing.T, engine *Engine, revision int64) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		status := engine.ProjectionStatus()
+		return status.Ready() && status.AppliedRevision == revision && status.TargetRevision == revision
+	}, time.Second, time.Millisecond, "projection status: %+v", engine.ProjectionStatus())
+}
+
+func requireEventuallyAllowed(t *testing.T, engine *Engine, userID uuid.UUID, path string, method string, want bool) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		allowed, err := engine.Enforce(context.Background(), userID, path, method)
+		return err == nil && allowed == want
+	}, time.Second, time.Millisecond, "projection status: %+v", engine.ProjectionStatus())
+}
+
 func TestEngineEnforceAllowDenyAndDoesNotReload(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000301")
@@ -163,6 +207,51 @@ func TestEngineCandidateSwapIsHigherOnlyAndEqualIsIdempotent(t *testing.T) {
 	require.Same(t, newer, engine.enforcer)
 	engine.mu.RUnlock()
 	require.Equal(t, int64(2), engine.AppliedRevision())
+}
+
+func TestEngineFaultInjectionOutOfOrderReloadKeepsLatestProjection(t *testing.T) {
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000551")
+	oldRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000552")
+	newRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000553")
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int64
+	loader := loaderFunc(func(ctx context.Context, target int64) (PolicySet, error) {
+		call := calls.Add(1)
+		if call == 1 {
+			close(started)
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return PolicySet{}, ctx.Err()
+			}
+			return policy(1, oldRoleID, "/api/v1/old", "GET"), nil
+		}
+		return policy(target, newRoleID, "/api/v1/new", "GET"), nil
+	})
+	resolver := newFaultInjectedRoleResolver(map[uuid.UUID][]uuid.UUID{userID: {newRoleID}})
+	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), resolver)
+
+	first := make(chan error, 1)
+	go func() {
+		_, err := engine.ReloadToRevision(context.Background(), 1)
+		first <- err
+	}()
+	<-started
+	second := make(chan error, 1)
+	go func() {
+		_, err := engine.ReloadToRevision(context.Background(), 2)
+		second <- err
+	}()
+	require.Eventually(t, func() bool { return engine.ProjectionStatus().TargetRevision == 2 }, time.Second, time.Millisecond)
+	close(release)
+
+	require.NoError(t, <-first)
+	require.NoError(t, <-second)
+	requireEventuallyProjection(t, engine, 2)
+	requireEventuallyAllowed(t, engine, userID, "/api/v1/new", "GET", true)
+	requireEventuallyAllowed(t, engine, userID, "/api/v1/old", "GET", false)
+	require.Equal(t, int64(2), calls.Load())
 }
 
 func TestEngineCanceledHigherTargetIsObservedAndFailsClosed(t *testing.T) {
@@ -337,6 +426,54 @@ func TestEngineCoalescesOneHundredConcurrentTargetsToLatest(t *testing.T) {
 	}
 	require.Equal(t, latest, engine.AppliedRevision())
 	require.Equal(t, int64(1), calls.Load(), "coalescing should load latest once, not every intermediate revision")
+}
+
+func TestEngineFaultInjectionOneHundredConcurrentWritesConvergeToAuthorizationProjection(t *testing.T) {
+	const latest = int64(100)
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000571")
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000572")
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int64
+	loader := loaderFunc(func(ctx context.Context, _ int64) (PolicySet, error) {
+		if calls.Add(1) == 1 {
+			close(started)
+		}
+		select {
+		case <-release:
+			return policy(latest, roleID, "/api/v1/users", "GET"), nil
+		case <-ctx.Done():
+			return PolicySet{}, ctx.Err()
+		}
+	})
+	resolver := newFaultInjectedRoleResolver(map[uuid.UUID][]uuid.UUID{userID: {roleID}})
+	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), resolver)
+
+	results := make(chan error, 100)
+	var wg sync.WaitGroup
+	for revision := int64(1); revision <= latest; revision++ {
+		wg.Add(1)
+		go func(revision int64) {
+			defer wg.Done()
+			applied, err := engine.ReloadToRevision(context.Background(), revision)
+			if err == nil && applied < revision {
+				err = fmt.Errorf("database revision %d returned applied revision %d", revision, applied)
+			}
+			results <- err
+		}(revision)
+	}
+	<-started
+	require.Eventually(t, func() bool { return engine.ProjectionStatus().TargetRevision == latest }, time.Second, time.Millisecond)
+	close(release)
+	wg.Wait()
+	close(results)
+	for err := range results {
+		require.NoError(t, err)
+	}
+	requireEventuallyProjection(t, engine, latest)
+	requireEventuallyAllowed(t, engine, userID, "/api/v1/users", "GET", true)
+	requireEventuallyAllowed(t, engine, userID, "/api/v1/users", "DELETE", false)
+	require.Equal(t, int64(1), calls.Load(), "100 concurrent writes should coalesce to one latest projection load")
 }
 
 func TestEngineInitializeUsesTargetZeroAndCallerContext(t *testing.T) {

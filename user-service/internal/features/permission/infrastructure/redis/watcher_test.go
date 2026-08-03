@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -267,6 +268,31 @@ func TestWatcherCheckVersionCompensatesMissedMessage(t *testing.T) {
 	require.Equal(t, int64(8), applied.Load())
 }
 
+func TestWatcherFaultInjectionRedisFailureRecoveryConvergesWithoutNewWrite(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	store := newStore(client, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
+	publishErr := errors.New("redis publish failed")
+	failingClient := &failingPolicyRedisClient{policyRedisClient: client, publishErr: publishErr}
+	failingStore := newStore(failingClient, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
+	change := permissionapplication.NewPolicyReloadChange("role_permission_added")
+	const databaseRevision int64 = 11
+
+	err := failingStore.PublishPolicyRevision(context.Background(), testPolicyPublicationEvent(databaseRevision, change))
+	require.ErrorIs(t, err, publishErr)
+	storedRevision, err := store.CurrentVersion(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, databaseRevision, storedRevision)
+
+	engine := &faultInjectedPolicyReloadEngine{appliedRevision: 4, targetRevision: 4, ready: true}
+	watcher := newWatcherWithMetrics(store, staticPolicyRevisionSource{revision: databaseRevision}, engine, nil, time.Second, nil)
+	watcher.CheckVersion(context.Background())
+
+	requireEventuallyWatcherProjection(t, engine, databaseRevision)
+	require.Equal(t, int64(1), engine.invalidateAllCount.Load())
+}
+
 func TestWatcherCheckVersionSkipsWhenProjectionIsAuthoritativelyReady(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
@@ -304,6 +330,31 @@ func TestWatcherCheckVersionRetriesAfterPriorFailureAtEqualRevision(t *testing.T
 	watcher := newWatcherWithMetrics(store, staticPolicyRevisionSource{revision: 8}, engine, nil, time.Second, metrics)
 
 	watcher.CheckVersion(context.Background())
+}
+
+func TestWatcherFaultInjectionReplayAddRemoveReplaceEventsKeepsIdempotentProjection(t *testing.T) {
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000711")
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000712")
+	engine := &faultInjectedPolicyReloadEngine{appliedRevision: 1, targetRevision: 1, ready: true}
+	revisions := &sequencePolicyRevisionSource{results: []policyRevisionResult{
+		{revision: 4}, {revision: 4}, {revision: 4}, {revision: 4},
+	}}
+	watcher := newWatcherWithMetrics(nil, revisions, engine, nil, time.Second, nil)
+	payloads := []string{
+		mustPolicyPayload(t, testPolicyPublicationEvent(2, permissionapplication.NewUserRoleChange("user_role_added", userID, roleID))),
+		mustPolicyPayload(t, testPolicyPublicationEvent(3, permissionapplication.NewUserRoleChange("user_role_removed", userID, roleID))),
+		mustPolicyPayload(t, testPolicyPublicationEvent(4, permissionapplication.NewPolicyReloadChange("role_permissions_replaced"))),
+		mustPolicyPayload(t, testPolicyPublicationEvent(4, permissionapplication.NewPolicyReloadChange("role_permissions_replaced"))),
+	}
+
+	for _, payload := range payloads {
+		watcher.HandlePayload(context.Background(), payload)
+	}
+
+	requireEventuallyWatcherProjection(t, engine, 4)
+	require.Equal(t, int64(2), engine.invalidateUserCount.Load())
+	require.Equal(t, int64(2), engine.invalidateAllCount.Load())
+	require.Equal(t, []int64{4}, engine.reloads())
 }
 
 func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
@@ -465,6 +516,74 @@ func TestWatcherStopHonorsDeadlineAndCanBeRepeated(t *testing.T) {
 	require.NoError(t, watcher.Stop(context.Background()))
 	require.False(t, watcher.Running())
 	require.Equal(t, int64(1), closed.Load())
+}
+
+type faultInjectedPolicyReloadEngine struct {
+	mu                  sync.Mutex
+	appliedRevision     int64
+	targetRevision      int64
+	ready               bool
+	reloadRevisions     []int64
+	invalidateUserCount atomic.Int64
+	invalidateAllCount  atomic.Int64
+}
+
+func (e *faultInjectedPolicyReloadEngine) ObserveTargetRevision(targetRevision int64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if targetRevision > e.targetRevision {
+		e.targetRevision = targetRevision
+	}
+}
+
+func (e *faultInjectedPolicyReloadEngine) ReloadToRevision(_ context.Context, targetRevision int64) (int64, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if targetRevision > e.targetRevision {
+		e.targetRevision = targetRevision
+	}
+	if targetRevision > e.appliedRevision {
+		e.appliedRevision = targetRevision
+		e.reloadRevisions = append(e.reloadRevisions, targetRevision)
+	}
+	e.ready = true
+	return e.appliedRevision, nil
+}
+
+func (e *faultInjectedPolicyReloadEngine) ProjectionStatus() permissionapplication.PolicyProjectionStatus {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: e.ready, AppliedRevision: e.appliedRevision, TargetRevision: e.targetRevision}
+}
+
+func (e *faultInjectedPolicyReloadEngine) AppliedRevision() int64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.appliedRevision
+}
+
+func (e *faultInjectedPolicyReloadEngine) InvalidateUserRole(uuid.UUID) { e.invalidateUserCount.Add(1) }
+func (e *faultInjectedPolicyReloadEngine) InvalidateAllUserRoles()      { e.invalidateAllCount.Add(1) }
+
+func (e *faultInjectedPolicyReloadEngine) reloads() []int64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]int64(nil), e.reloadRevisions...)
+}
+
+func requireEventuallyWatcherProjection(t *testing.T, engine *faultInjectedPolicyReloadEngine, revision int64) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		status := engine.ProjectionStatus()
+		return status.Ready() && status.AppliedRevision == revision && status.TargetRevision == revision
+	}, time.Second, time.Millisecond, "projection status: %+v", engine.ProjectionStatus())
+}
+
+func mustPolicyPayload(t *testing.T, event permissionapplication.OutboxEvent) string {
+	t.Helper()
+	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(event, "instance-b"))
+	require.NoError(t, err)
+	return payload
 }
 
 type countingSubscriptionStore struct {

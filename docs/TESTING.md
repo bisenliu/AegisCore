@@ -61,6 +61,23 @@ AEGISCORE_TEST_CONTAINERS=1 make test
 
 容器测试门禁应记录执行测试名和耗时；Docker daemon、镜像拉取、容器启动或 migration 失败时必须使测试失败，而不是在已启用 `AEGISCORE_TEST_CONTAINERS=1` 后静默 skip。
 
+### RBAC policy sync 故障注入
+
+RBAC 写后同步测试位于 permission application、Redis watcher 和 Casbin engine 相关测试包，使用 `_test.go` 内 harness 控制 loader 阻塞、Redis publish 失败、dispatcher 重试、watcher 消息乱序和 user-role cache 解析延迟。测试必须通过 channel、barrier、`require.Eventually` 或明确 deadline 等待状态谓词，不使用固定 `time.Sleep` 作为状态变化的主要判断。
+
+覆盖场景和风险：
+
+- Redis publish 或 Pub/Sub 故障后恢复：验证数据库 revision 已提交但通知链路失败时，watcher 的数据库 revision 补偿可在没有新 RBAC 写入的情况下使副本 lag 归零，并使 applied revision、Casbin projection 与 user-role cache 收敛。
+- reload 乱序完成：验证后发 revision 先完成、先发 revision 后完成时，旧 projection 不会覆盖最新 applied revision，授权 allow/deny 结果必须对应最新数据库状态。
+- Add/Remove/Replace 重放：验证 dispatcher 重试、重复投递和乱序 watcher 事件不会丢通知，也不会因非幂等副作用破坏最终 projection 或 cache 失效语义。
+- 100 并发 RBAC 写：验证高并发 revision 目标会最终收敛到最新数据库 revision，并通过授权断言证明不是只在数值上假收敛。
+
+运行相关 package 测试时可使用窄化 `go test` 命令定位 `user-service/internal/features/permission/application`、`user-service/internal/features/permission/infrastructure/redis` 和 `user-service/internal/features/permission/infrastructure/casbin`。涉及真实 PostgreSQL/Redis 的集成验收遵循仓库统一开关：
+
+```bash
+AEGISCORE_TEST_CONTAINERS=1 make test
+```
+
 ## 4. 断言和失败处理
 
 测试断言与失败处理优先使用 `testify/require`，通过立即失败机制减少后续空指针、错误状态级联和手写判断样板。测试应优先使用能够准确表达意图的语义化断言，而不是通过 `True`、`False`、手写 `if` 或组合多个基础断言来表达同一语义。
