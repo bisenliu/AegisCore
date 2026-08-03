@@ -113,6 +113,32 @@ func TestFailureResponseErrors(t *testing.T) {
 		require.Equal(t, "请求过于频繁", envelope.Message)
 	})
 
+	t.Run("payload too large failure", func(t *testing.T) {
+		ctx, recorder := newTestContext()
+
+		PayloadTooLarge(ctx)
+
+		var envelope contractresponse.Envelope
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+		require.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeRequestBodyTooLarge, envelope.Code)
+		require.Equal(t, contracterrors.MessageRequestBodyTooLarge, envelope.Message)
+	})
+
+	t.Run("wrapped payload too large keeps semantic status", func(t *testing.T) {
+		ctx, recorder := newTestContext()
+
+		Fail(ctx, errors.Join(errors.New("outer"), contracterrors.RequestBodyTooLargeError()))
+
+		var envelope contractresponse.Envelope
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+		require.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+		require.False(t, envelope.Success)
+		require.Equal(t, contracterrors.CodeRequestBodyTooLarge, envelope.Code)
+		require.Equal(t, contracterrors.MessageRequestBodyTooLarge, envelope.Message)
+	})
+
 	t.Run("unknown application kind is sanitized as internal", func(t *testing.T) {
 		ctx, recorder := newTestContext()
 

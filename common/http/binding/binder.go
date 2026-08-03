@@ -2,6 +2,7 @@ package binding
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -71,14 +72,28 @@ func jsonBinder(c *gin.Context, dst any, disallowUnknownFields bool) error {
 		decoder.DisallowUnknownFields()
 	}
 	if err := decoder.Decode(dst); err != nil {
-		return err
+		return normalizeJSONDecodeError(err)
 	}
 	var extra any
 	// API 只接受一个 JSON 文档，避免拼接载荷隐藏尾随数据。
 	if err := decoder.Decode(&extra); err != io.EOF {
+		if err != nil {
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				return contracterrors.WrapRequestBodyTooLarge(err)
+			}
+		}
 		return &validation.Error{Message: validation.ErrTrailingJSONBody, Kind: contracterrors.KindBadRequest, Reason: contracterrors.ReasonTrailingJSONBody, Code: contracterrors.CodeBadRequest}
 	}
 	return nil
+}
+
+func normalizeJSONDecodeError(err error) error {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		return contracterrors.WrapRequestBodyTooLarge(err)
+	}
+	return err
 }
 
 // FormBinder 使用 form tag 将表单值绑定到 dst。

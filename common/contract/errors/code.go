@@ -84,6 +84,9 @@ const (
 const (
 	// CodeRateLimited 表示调用方超过限流或配额约束。
 	CodeRateLimited Code = 60000
+
+	// CodeRequestBodyTooLarge 表示请求体超过服务允许的字节上限。
+	CodeRequestBodyTooLarge Code = 60001
 )
 
 // 90xxx：内部错误、依赖不可用和服务端临时故障。

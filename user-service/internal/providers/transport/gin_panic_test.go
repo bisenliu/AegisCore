@@ -21,7 +21,7 @@ func TestNewGinEngineRecordsPanicHTTPServerMetrics(t *testing.T) {
 	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true, Path: "/metrics"}
 	traceProvider := newGinTestTracingProvider(t, cfg)
 	metricsProvider := newGinTestMetricsProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 	engine.GET("/api/v1/panic", func(_ *gin.Context) {
 		panic("metrics panic test")
@@ -43,7 +43,7 @@ func TestNewGinEngineRecordsPanicSpanError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 	engine.GET("/api/v1/panic", func(_ *gin.Context) {
 		panic("route boom password token")

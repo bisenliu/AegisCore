@@ -1,9 +1,12 @@
 package binding
 
 import (
+	"errors"
+
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/http/response"
 	commonroute "github.com/aegiscore/common/http/route"
 	"github.com/aegiscore/common/runtime/logger"
@@ -28,8 +31,10 @@ func BindOrAbort(validator *validation.Validator, c *gin.Context, dst any, binde
 		}
 		logger.Warn(c.Request.Context(), "invalid request", fields...)
 		if failure.IsValidation {
-			// validator 规则失败会暴露字段级明细；解析和绑定失败保持为通用 bad request。
+			// validator 规则失败会暴露字段级明细；其他错误保持普通失败信封。
 			response.ValidationFailedWithErrors(c, failure.Message, failure.Fields)
+		} else if appErr := applicationError(err); appErr != nil {
+			response.WriteError(c, appErr)
 		} else {
 			response.BadRequest(c, failure.Message)
 		}
@@ -37,4 +42,12 @@ func BindOrAbort(validator *validation.Validator, c *gin.Context, dst any, binde
 		return false
 	}
 	return true
+}
+
+func applicationError(err error) *contracterrors.Error {
+	var appErr *contracterrors.Error
+	if errors.As(err, &appErr) {
+		return appErr
+	}
+	return nil
 }

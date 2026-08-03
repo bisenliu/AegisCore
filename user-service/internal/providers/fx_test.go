@@ -30,6 +30,7 @@ func TestModuleResolvesServiceLevelProviders(t *testing.T) {
 				Tracing: config.TracingConfig{Enabled: false, SampleRatio: 1},
 			},
 		},
+		HTTP: serviceconfig.HTTPConfig{RequestBodyMaxBytes: serviceconfig.DefaultHTTPRequestBodyMaxBytes},
 	}
 	err := fx.ValidateApp(
 		fx.Supply(serviceCfg, zap.NewNop()),
@@ -39,6 +40,7 @@ func TestModuleResolvesServiceLevelProviders(t *testing.T) {
 			serviceconfig.NewRBACSettings,
 			serviceconfig.NewEntSettings,
 			serviceconfig.NewRateLimitSettings,
+			serviceconfig.NewHTTPSettings,
 			serviceconfig.NewResourceSettings,
 		),
 		validation.Module,

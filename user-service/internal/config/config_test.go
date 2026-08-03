@@ -48,6 +48,7 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, 12*time.Minute, cfg.APIRateLimit.Authenticated.KeyTTL)
 	require.Equal(t, 20*time.Second, cfg.APIRateLimit.Authenticated.CleanupInterval)
 	require.Equal(t, 64, cfg.APIRateLimit.Authenticated.Shards)
+	require.EqualValues(t, 32768, cfg.HTTP.RequestBodyMaxBytes)
 	require.True(t, cfg.Ent.Plugins.SQLLog.Enabled)
 	require.True(t, cfg.Ent.Plugins.SQLLog.Debug)
 	require.Equal(t, 250*time.Millisecond, cfg.Ent.Plugins.SQLLog.SlowThreshold)
@@ -98,6 +99,7 @@ func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
 	}, cfg.RBAC.OutboxDispatcher)
 	require.Equal(t, DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64), cfg.APIRateLimit.Anonymous)
 	require.Equal(t, DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, 30*time.Second, 128), cfg.APIRateLimit.Authenticated)
+	require.Equal(t, HTTPConfig{RequestBodyMaxBytes: DefaultHTTPRequestBodyMaxBytes}, cfg.HTTP)
 	require.False(t, cfg.Ent.Plugins.SQLLog.Enabled)
 	require.False(t, cfg.Ent.Plugins.SQLLog.Debug)
 	require.Equal(t, DefaultEntSlowQueryThreshold, cfg.Ent.Plugins.SQLLog.SlowThreshold)
@@ -209,6 +211,28 @@ func TestLoadAppliesAPIRateLimitDefaults(t *testing.T) {
 	cfg := loadServiceConfig(t, yaml)
 	require.Equal(t, DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64), cfg.APIRateLimit.Anonymous)
 	require.Equal(t, DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, 30*time.Second, 128), cfg.APIRateLimit.Authenticated)
+}
+
+func TestLoadHTTPConfig(t *testing.T) {
+	t.Run("applies default when omitted", func(t *testing.T) {
+		yaml := strings.Replace(serviceConfigYAML(), "http:\n  request_body_max_bytes: 32768\n", "", 1)
+		cfg := loadServiceConfig(t, yaml)
+		require.EqualValues(t, DefaultHTTPRequestBodyMaxBytes, cfg.HTTP.RequestBodyMaxBytes)
+	})
+
+	for _, value := range []string{"0", "-1"} {
+		t.Run("rejects "+value, func(t *testing.T) {
+			yaml := strings.Replace(serviceConfigYAML(), "request_body_max_bytes: 32768", "request_body_max_bytes: "+value, 1)
+			err := loadServiceConfigError(t, yaml)
+			require.Contains(t, err.Error(), "http.request_body_max_bytes must be > 0")
+		})
+	}
+
+	t.Run("rejects unknown field", func(t *testing.T) {
+		yaml := strings.Replace(serviceConfigYAML(), "  request_body_max_bytes: 32768", "  request_body_max_bytes: 32768\n  unknown: true", 1)
+		err := loadServiceConfigError(t, yaml)
+		require.Contains(t, err.Error(), "unknown configuration keys: http.unknown")
+	})
 }
 
 func TestLoadPreservesDisabledAPIRateLimit(t *testing.T) {
@@ -591,6 +615,8 @@ server:
     shutdown_timeout: 5s
   grpc:
     enabled: false
+http:
+  request_body_max_bytes: 32768
 runtime:
   lifecycle:
     start_timeout: 21s

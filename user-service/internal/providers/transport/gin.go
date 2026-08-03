@@ -16,6 +16,7 @@ import (
 	commonlogger "github.com/aegiscore/common/runtime/logger"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	"github.com/aegiscore/user-service/internal/router"
 )
 
@@ -40,13 +41,18 @@ type GinParams struct {
 	Log            *zap.Logger
 	Metrics        *commonmetrics.Provider
 	Trace          *commontracing.Provider
+	HTTP           serviceconfig.HTTPSettings
 }
 
 // NewGinEngine 创建 Gin engine，配置可信代理并安装共享中间件。
-// 中间件顺序保持 tracing -> span rename -> request id -> metrics -> recovery -> request log -> CORS，避免 panic 丢失指标和日志上下文。
+// 中间件顺序保持 tracing -> span rename -> request id -> metrics -> recovery -> request log -> CORS -> body limit，避免失败丢失指标和日志上下文。
 func NewGinEngine(params GinParams) (*gin.Engine, error) {
 	if params.Trace == nil {
 		return nil, fmt.Errorf("tracing provider is required")
+	}
+	bodyLimit, err := commonmw.RequestBodyLimit(params.HTTP.RequestBodyMaxBytes)
+	if err != nil {
+		return nil, fmt.Errorf("configure request body limit: %w", err)
 	}
 	engine := gin.New()
 	if err := engine.SetTrustedProxies(params.Config.Server.HTTP.TrustedProxies); err != nil {
@@ -68,6 +74,7 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 		commonmw.Recovery(params.Log),
 		commonmw.RequestLoggerWithOptions(params.Log, commonmw.RequestLoggerOptions{Skip: skipSuccessfulRuntimeEndpointLog(params.Config.Observability.Metrics)}),
 		commonmw.CORS(),
+		bodyLimit,
 	)
 	return engine, nil
 }

@@ -36,6 +36,8 @@ func statusCode(err *contracterrors.Error) int {
 		return http.StatusConflict
 	case contracterrors.KindRateLimited:
 		return http.StatusTooManyRequests
+	case contracterrors.KindPayloadTooLarge:
+		return http.StatusRequestEntityTooLarge
 	case contracterrors.KindServiceUnavailable:
 		return http.StatusServiceUnavailable
 	default:

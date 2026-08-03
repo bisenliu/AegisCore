@@ -42,7 +42,7 @@ func newGinClientIPFromRequest(t *testing.T, trustedProxies []string, remoteAddr
 	cfg := ginTestConfig()
 	cfg.Server.HTTP.TrustedProxies = trustedProxies
 	traceProvider := newGinTestTracingProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 
 	var clientIP string

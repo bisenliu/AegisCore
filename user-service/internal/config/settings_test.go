@@ -31,6 +31,7 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 			},
 		},
 		APIRateLimit: APIRateLimitConfig{Anonymous: RateLimitPolicyConfig{Enabled: true, RatePerSecond: 2, Burst: 3}},
+		HTTP:         HTTPConfig{RequestBodyMaxBytes: 12345},
 		Ent:          EntConfig{Plugins: EntPluginsConfig{Metrics: EntMetricsPluginConfig{Enabled: true}}},
 		Resources: ResourcesConfig{
 			Redis:    commonresources.RedisConfigs{"cache_redis": {Mode: commonresources.RedisModeCluster, Addrs: []string{"redis:6379"}}},
@@ -53,6 +54,7 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 	}, NewRBACSettings(cfg))
 	require.Equal(t, EntSettings{Plugins: cfg.Ent.Plugins}, NewEntSettings(cfg))
 	require.Equal(t, RateLimitSettings{APIRateLimit: cfg.APIRateLimit}, NewRateLimitSettings(cfg))
+	require.Equal(t, HTTPSettings{RequestBodyMaxBytes: 12345}, NewHTTPSettings(cfg))
 	require.Equal(t, ResourceSettings{Redis: cfg.Resources.Redis, Postgres: cfg.Resources.Postgres}, NewResourceSettings(cfg))
 }
 
@@ -66,6 +68,7 @@ func TestNarrowSettingsFieldOwnership(t *testing.T) {
 		{name: "rbac", value: RBACSettings{}, fields: []string{"AppName", "UserRoleCache", "OutboxDispatcher"}},
 		{name: "ent", value: EntSettings{}, fields: []string{"Plugins"}},
 		{name: "rate limit", value: RateLimitSettings{}, fields: []string{"APIRateLimit"}},
+		{name: "http", value: HTTPSettings{}, fields: []string{"RequestBodyMaxBytes"}},
 		{name: "resources", value: ResourceSettings{}, fields: []string{"Redis", "Postgres"}},
 	}
 

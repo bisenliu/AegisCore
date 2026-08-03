@@ -7,6 +7,8 @@ import (
 const (
 	// MessageInternalError 是对外暴露的非敏感服务器错误消息。
 	MessageInternalError = "internal server error"
+	// MessageRequestBodyTooLarge 是请求体超过容量边界时的公开消息。
+	MessageRequestBodyTooLarge = "请求体过大"
 )
 
 // New 创建不包含内部原因的语义应用错误。
@@ -62,6 +64,16 @@ func NotFoundError(format string, args ...any) *Error {
 // RateLimitedError 创建表示请求超过限流或配额约束的应用错误。
 func RateLimitedError(format string, args ...any) *Error {
 	return New(KindRateLimited, ReasonRateLimited, CodeRateLimited, formatMessage(format, args))
+}
+
+// RequestBodyTooLargeError 创建表示请求体超过服务字节上限的应用错误。
+func RequestBodyTooLargeError() *Error {
+	return New(KindPayloadTooLarge, ReasonRequestBodyTooLarge, CodeRequestBodyTooLarge, MessageRequestBodyTooLarge)
+}
+
+// WrapRequestBodyTooLarge 创建请求体超限应用错误，并保留底层读取错误。
+func WrapRequestBodyTooLarge(err error) *Error {
+	return Wrap(err, KindPayloadTooLarge, ReasonRequestBodyTooLarge, CodeRequestBodyTooLarge, MessageRequestBodyTooLarge)
 }
 
 // ServiceUnavailableError 创建表示服务实例或依赖暂时不可用的应用错误。

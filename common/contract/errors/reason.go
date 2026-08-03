@@ -34,6 +34,8 @@ const (
 	ReasonNotFound Reason = "not_found"
 	// ReasonRateLimited 表示调用方请求频率超过限制。
 	ReasonRateLimited Reason = "rate_limited"
+	// ReasonRequestBodyTooLarge 表示请求体超过服务允许的字节上限。
+	ReasonRequestBodyTooLarge Reason = "request_body_too_large"
 	// ReasonInternalError 表示服务内部错误。
 	ReasonInternalError Reason = "internal_error"
 	// ReasonServiceUnavailable 表示服务实例或依赖暂时不可用。

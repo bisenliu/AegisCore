@@ -25,6 +25,10 @@ server:
     port: 9090
     shutdown_timeout: 10s
 
+http:
+  # request_body_max_bytes 限制入站请求体可读取字节数；当前 JSON API 默认上限为 64 KiB。
+  request_body_max_bytes: 65536
+
 auth:
   jwt:
     # secret 用于签发和校验 JWT；production-like 环境必须使用 >=32 字节且非默认值的 secret。

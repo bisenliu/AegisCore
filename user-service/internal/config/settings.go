@@ -33,6 +33,11 @@ type RateLimitSettings struct {
 	APIRateLimit APIRateLimitConfig
 }
 
+// HTTPSettings 是 user-service HTTP transport 所需的私有配置视图。
+type HTTPSettings struct {
+	RequestBodyMaxBytes int64
+}
+
 // ResourceSettings 是 user-service 具名资源 provider 所需的配置视图。
 type ResourceSettings struct {
 	Redis    commonresources.RedisConfigs
@@ -68,6 +73,11 @@ func NewEntSettings(cfg *Config) EntSettings {
 // NewRateLimitSettings 从根配置派生 API 限流 settings。
 func NewRateLimitSettings(cfg *Config) RateLimitSettings {
 	return RateLimitSettings{APIRateLimit: cfg.APIRateLimit}
+}
+
+// NewHTTPSettings 从根配置派生 user-service HTTP transport settings。
+func NewHTTPSettings(cfg *Config) HTTPSettings {
+	return HTTPSettings{RequestBodyMaxBytes: cfg.HTTP.RequestBodyMaxBytes}
 }
 
 // NewResourceSettings 从根配置派生具名资源 settings。

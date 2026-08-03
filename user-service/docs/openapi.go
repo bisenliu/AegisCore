@@ -26,6 +26,7 @@ const openAPIDocument = `{
           40000,
           50000,
           60000,
+          60001,
           90000,
           90001
         ],
@@ -45,6 +46,7 @@ const openAPIDocument = `{
           "CodeConflict",
           "CodeNotFound",
           "CodeRateLimited",
+          "CodeRequestBodyTooLarge",
           "CodeInternalError",
           "CodeServiceUnavailable"
         ]

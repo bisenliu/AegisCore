@@ -12,6 +12,8 @@ import (
 
 const (
 	minProductionJWTBytes = 32
+	// DefaultHTTPRequestBodyMaxBytes 是 user-service JSON 请求体的默认字节上限。
+	DefaultHTTPRequestBodyMaxBytes int64 = 64 * 1024
 	// DefaultEntSlowQueryThreshold 是 Ent SQL log 插件的默认慢查询阈值。
 	DefaultEntSlowQueryThreshold = 500 * time.Millisecond
 )
@@ -23,7 +25,13 @@ type Config struct {
 	Auth                AuthConfig         `mapstructure:"auth"`
 	RBAC                RBACConfig         `mapstructure:"rbac"`
 	APIRateLimit        APIRateLimitConfig `mapstructure:"api_rate_limit"`
+	HTTP                HTTPConfig         `mapstructure:"http"`
 	Ent                 EntConfig          `mapstructure:"ent"`
+}
+
+// HTTPConfig 包含 user-service 私有 HTTP 暴露策略。
+type HTTPConfig struct {
+	RequestBodyMaxBytes int64 `mapstructure:"request_body_max_bytes"`
 }
 
 // ResourcesConfig 包含 user-service 按名称声明的外部运行时资源。
@@ -258,6 +266,7 @@ func DefaultConfig() Config {
 			Anonymous:     DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64),
 			Authenticated: DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, 30*time.Second, 128),
 		},
+		HTTP: HTTPConfig{RequestBodyMaxBytes: DefaultHTTPRequestBodyMaxBytes},
 		Ent: EntConfig{
 			Plugins: EntPluginsConfig{
 				SQLLog: EntSQLLogPluginConfig{
@@ -321,6 +330,9 @@ func (c Config) Validate() error {
 	errs = append(errs, c.RBAC.OutboxDispatcher.Validate("rbac.outbox_dispatcher")...)
 	errs = append(errs, c.APIRateLimit.Anonymous.Validate("api_rate_limit.anonymous")...)
 	errs = append(errs, c.APIRateLimit.Authenticated.Validate("api_rate_limit.authenticated")...)
+	if c.HTTP.RequestBodyMaxBytes <= 0 {
+		errs = append(errs, commonconfig.FieldError("http.request_body_max_bytes", "must be > 0"))
+	}
 	if len(errs) == 0 {
 		return nil
 	}

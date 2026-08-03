@@ -18,7 +18,7 @@ func TestNewGinEngineRecordsHTTPServerMetrics(t *testing.T) {
 	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true, Path: "/metrics"}
 	traceProvider := newGinTestTracingProvider(t, cfg)
 	metricsProvider := newGinTestMetricsProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
@@ -47,7 +47,7 @@ func TestNewGinEngineSkipsSuccessfulRuntimeEndpointMetrics(t *testing.T) {
 	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true, Path: "/metrics"}
 	traceProvider := newGinTestTracingProvider(t, cfg)
 	metricsProvider := newGinTestMetricsProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 	for _, path := range []string{"/livez", "/readyz", "/startupz", "/metrics"} {
 		path := path
@@ -72,7 +72,7 @@ func TestNewGinEngineRecordsUnmatchedRouteWithStableFallback(t *testing.T) {
 	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true, Path: "/metrics"}
 	traceProvider := newGinTestTracingProvider(t, cfg)
 	metricsProvider := newGinTestMetricsProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: traceProvider, Metrics: metricsProvider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/users/123", nil))

@@ -18,6 +18,8 @@ const (
 	KindNotFound Kind = "not_found"
 	// KindRateLimited 表示调用方超过限流或配额约束。
 	KindRateLimited Kind = "rate_limited"
+	// KindPayloadTooLarge 表示请求体超过服务允许的容量边界。
+	KindPayloadTooLarge Kind = "payload_too_large"
 	// KindInternal 表示服务内部错误。
 	KindInternal Kind = "internal"
 	// KindServiceUnavailable 表示服务实例或依赖暂时不可用。

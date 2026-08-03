@@ -19,7 +19,7 @@ func TestNewGinEngineCreatesOTelServerSpan(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 
 	var spanContext trace.SpanContext
@@ -41,7 +41,7 @@ func TestNewGinEngineExtractsTraceparent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 
 	var spanContext trace.SpanContext
@@ -61,7 +61,7 @@ func TestNewGinEngineTracesHealthProbeWithoutRawPathFilter(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 
 	var spanContext trace.SpanContext
@@ -81,7 +81,7 @@ func TestNewGinEngineTracesMetricsWithoutRawPathFilter(t *testing.T) {
 	cfg := ginTestConfig()
 	cfg.Observability.Metrics = config.MetricsConfig{Enabled: true, Path: "/metrics"}
 	provider := newGinTestTracingProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 
 	var spanContext trace.SpanContext
@@ -100,7 +100,7 @@ func TestNewGinEngineMarksServerErrorSpanStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 	failResponse := commonresponse.Fail
 	engine.GET("/api/v1/fail", func(c *gin.Context) {
@@ -120,7 +120,7 @@ func TestNewGinEngineDoesNotMarkClientErrorSpanStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 	engine.GET("/api/v1/bad-request", func(c *gin.Context) {
 		commonresponse.BadRequest(c, "请求格式错误")
@@ -139,7 +139,7 @@ func TestNewGinEngineKeepsSuccessfulHealthProbeSpanStatusUnset(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 	engine.GET("/livez", func(c *gin.Context) {
 		c.Status(http.StatusOK)
@@ -176,7 +176,7 @@ func TestNewGinEngineRenamesSpansWithLowCardinalityRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 	engine.GET("/api/v1/users/:user_id", func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
@@ -194,7 +194,7 @@ func TestNewGinEngineRenamesUnmatchedSpanWithStableFallback(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider, recorder := newGinTestTracingProviderWithRecorder(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 
 	rawPath := "/unknown/018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"

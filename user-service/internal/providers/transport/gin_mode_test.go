@@ -34,7 +34,7 @@ func TestNewGinEngineDoesNotOverrideConfiguredGinMode(t *testing.T) {
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
 
-	_, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	_, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 
 	require.NoError(t, err)
 	require.Equal(t, gin.TestMode, gin.Mode())
@@ -52,7 +52,7 @@ func TestProviderGraphConfiguresGinModeBeforeEngine(t *testing.T) {
 
 	var engine *gin.Engine
 	app := fxtest.New(t,
-		fx.Supply(&cfg, zap.NewNop()),
+		fx.Supply(&cfg, zap.NewNop(), ginTestHTTPSettings()),
 		fx.Provide(ConfigureGinMode, commonmetrics.NewMetricsProvider, commontracing.NewTracingProvider, NewGinEngine),
 		fx.Populate(&engine),
 	)

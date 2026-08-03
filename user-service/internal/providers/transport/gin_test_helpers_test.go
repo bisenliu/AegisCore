@@ -15,6 +15,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commontracing "github.com/aegiscore/common/runtime/observability/tracing"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 func ginTestConfig() *config.Config {
@@ -24,6 +25,10 @@ func ginTestConfig() *config.Config {
 			Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1, OTLPEndpoint: "127.0.0.1:4317", Insecure: true},
 		},
 	}
+}
+
+func ginTestHTTPSettings() serviceconfig.HTTPSettings {
+	return serviceconfig.HTTPSettings{RequestBodyMaxBytes: serviceconfig.DefaultHTTPRequestBodyMaxBytes}
 }
 
 func newGinTestTracingProvider(t *testing.T, cfg *config.Config) *commontracing.Provider {

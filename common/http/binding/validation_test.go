@@ -81,6 +81,30 @@ func TestJSONBinder(t *testing.T) {
 		var req request
 		require.Error(t, Bind(validator, ctx, &req, StrictJSONBinder))
 	})
+
+	t.Run("limited body normalizes max bytes error", func(t *testing.T) {
+		ctx, recorder := newJSONContextWithRecorder(`{"id":123}`)
+		ctx.Request.Body = http.MaxBytesReader(recorder, ctx.Request.Body, 8)
+		var req request
+		err := Bind(validator, ctx, &req, JSONBinder)
+		var appErr *contracterrors.Error
+		require.ErrorAs(t, err, &appErr)
+		require.Equal(t, contracterrors.KindPayloadTooLarge, appErr.Kind)
+		require.Equal(t, contracterrors.ReasonRequestBodyTooLarge, appErr.Reason)
+		require.Equal(t, contracterrors.CodeRequestBodyTooLarge, appErr.Code)
+	})
+
+	t.Run("trailing data normalizes max bytes error", func(t *testing.T) {
+		ctx, recorder := newJSONContextWithRecorder(`{"id":1} {"id":456}`)
+		ctx.Request.Body = http.MaxBytesReader(recorder, ctx.Request.Body, 8)
+		var req request
+		err := Bind(validator, ctx, &req, JSONBinder)
+		var appErr *contracterrors.Error
+		require.ErrorAs(t, err, &appErr)
+		require.Equal(t, contracterrors.KindPayloadTooLarge, appErr.Kind)
+		require.Equal(t, contracterrors.ReasonRequestBodyTooLarge, appErr.Reason)
+		require.Equal(t, contracterrors.CodeRequestBodyTooLarge, appErr.Code)
+	})
 }
 
 func TestBinders(t *testing.T) {

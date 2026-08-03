@@ -50,7 +50,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 	authorizer := &routeAuthorizer{allowed: true}
 	metricsProvider := newRouteTestMetricsProvider(t, cfg)
 	traceProvider := newRouteTestTracingProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log, Metrics: metricsProvider, Trace: traceProvider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Log: log, Metrics: metricsProvider, Trace: traceProvider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 	validator, err := validation.NewDefault()
 	require.NoError(t, err)

@@ -64,6 +64,12 @@ type deploymentBaseDocument struct {
 	} `yaml:"observability"`
 }
 
+type deploymentUserServiceDocument struct {
+	HTTP struct {
+		RequestBodyMaxBytes int64 `yaml:"request_body_max_bytes"`
+	} `yaml:"http"`
+}
+
 type deploymentWorkloadDocument struct {
 	Spec struct {
 		Template struct {
@@ -161,11 +167,14 @@ func TestRepositoryDeploymentConfigConsistency(t *testing.T) {
 		require.Empty(t, service.Environment["AEGISCORE_NACOS_DATA_IDS"], "Compose 应使用运行时默认三文档顺序")
 		require.Equal(t, "service_completed_successfully", service.DependsOn["nacos-init-docker"].Condition)
 	}
-
 	hostResources := readDeploymentYAML[deploymentResourcesDocument](t, filepath.Join(nacosDir, "local-host", "resources.yaml"))
 	dockerResources := readDeploymentYAML[deploymentResourcesDocument](t, resourcesPath)
 	hostBase := readDeploymentYAML[deploymentBaseDocument](t, filepath.Join(nacosDir, "local-host", "base.yaml"))
 	dockerBase := readDeploymentYAML[deploymentBaseDocument](t, filepath.Join(nacosDir, "local-docker", "base.yaml"))
+	hostService := readDeploymentYAML[deploymentUserServiceDocument](t, filepath.Join(nacosDir, "local-host", "user-service.yaml"))
+	dockerService := readDeploymentYAML[deploymentUserServiceDocument](t, filepath.Join(nacosDir, "local-docker", "user-service.yaml"))
+	require.EqualValues(t, DefaultHTTPRequestBodyMaxBytes, hostService.HTTP.RequestBodyMaxBytes)
+	require.Equal(t, hostService.HTTP.RequestBodyMaxBytes, dockerService.HTTP.RequestBodyMaxBytes)
 	require.Equal(t, "standalone", hostResources.Resources.Redis["cache_redis"].Mode)
 	require.Equal(t, "127.0.0.1:"+deploymentPublishedPort(t, redis.Ports, "6379"), hostResources.Resources.Redis["cache_redis"].Addr)
 	require.Empty(t, hostResources.Resources.Redis["cache_redis"].Addrs)

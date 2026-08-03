@@ -83,3 +83,8 @@ func NotFound(c *gin.Context, format string, args ...any) {
 func RateLimited(c *gin.Context, format string, args ...any) {
 	WriteError(c, contracterrors.RateLimitedError(format, args...))
 }
+
+// PayloadTooLarge 写入请求体超过容量边界的 413 失败信封。
+func PayloadTooLarge(c *gin.Context) {
+	WriteError(c, contracterrors.RequestBodyTooLargeError())
+}

@@ -17,7 +17,7 @@ func TestNewGinEnginePassesThroughRequestID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 
 	var requestID string
@@ -41,7 +41,7 @@ func TestNewGinEngineGeneratesRequestID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 
 	var requestID string
@@ -64,7 +64,7 @@ func TestNewGinEngineKeepsTraceparentAndRequestID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := ginTestConfig()
 	provider := newGinTestTracingProvider(t, cfg)
-	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider})
+	engine, err := NewGinEngine(GinParams{Config: cfg, Trace: provider, HTTP: ginTestHTTPSettings()})
 	require.NoError(t, err)
 
 	var spanContext trace.SpanContext

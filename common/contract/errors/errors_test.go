@@ -28,6 +28,7 @@ func TestCodeValues(t *testing.T) {
 		{name: "conflict", code: CodeConflict, want: 40000},
 		{name: "not found", code: CodeNotFound, want: 50000},
 		{name: "rate limited", code: CodeRateLimited, want: 60000},
+		{name: "request body too large", code: CodeRequestBodyTooLarge, want: 60001},
 		{name: "internal error", code: CodeInternalError, want: 90000},
 		{name: "service unavailable", code: CodeServiceUnavailable, want: 90001},
 	}
@@ -75,6 +76,7 @@ func TestErrorConstructors(t *testing.T) {
 		{name: "conflict", err: ConflictError("当前状态不允许操作"), wantKind: KindConflict, wantReason: ReasonConflict, wantCode: CodeConflict, wantMsg: "当前状态不允许操作"},
 		{name: "not found", err: NotFoundError("用户不存在"), wantKind: KindNotFound, wantReason: ReasonNotFound, wantCode: CodeNotFound, wantMsg: "用户不存在"},
 		{name: "rate limited", err: RateLimitedError("请求过于频繁"), wantKind: KindRateLimited, wantReason: ReasonRateLimited, wantCode: CodeRateLimited, wantMsg: "请求过于频繁"},
+		{name: "request body too large", err: RequestBodyTooLargeError(), wantKind: KindPayloadTooLarge, wantReason: ReasonRequestBodyTooLarge, wantCode: CodeRequestBodyTooLarge, wantMsg: MessageRequestBodyTooLarge},
 		{name: "service unavailable", err: ServiceUnavailableError("服务繁忙，请稍后重试"), wantKind: KindServiceUnavailable, wantReason: ReasonServiceUnavailable, wantCode: CodeServiceUnavailable, wantMsg: "服务繁忙，请稍后重试"},
 	}
 
@@ -86,6 +88,16 @@ func TestErrorConstructors(t *testing.T) {
 			require.Equal(t, tt.wantMsg, tt.err.Message)
 		})
 	}
+}
+
+func TestWrapRequestBodyTooLarge(t *testing.T) {
+	cause := stderrors.New("http: request body too large")
+	err := WrapRequestBodyTooLarge(cause)
+	require.Equal(t, KindPayloadTooLarge, err.Kind)
+	require.Equal(t, ReasonRequestBodyTooLarge, err.Reason)
+	require.Equal(t, CodeRequestBodyTooLarge, err.Code)
+	require.Equal(t, MessageRequestBodyTooLarge, err.Message)
+	require.ErrorIs(t, err, cause)
 }
 
 func TestWrapInternalAndFromError(t *testing.T) {
