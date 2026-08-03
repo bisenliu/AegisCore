@@ -41,6 +41,8 @@ type ResourcesConfig struct {
 }
 
 // AuthConfig 包含 user-service 认证 token 与会话校验设置。
+// TokenVersionCache 由各服务副本独立持有，其 TTL 表示正常路径可接受的跨副本撤销收敛窗口。
+// 是否使用事务 outbox 取决于 Redis token version 投影失败后是否需要可靠补偿，与固定 TTL 阈值无关。
 type AuthConfig struct {
 	JWT                      JWTConfig          `mapstructure:"jwt"`
 	TokenVersionCache        FeatureCacheConfig `mapstructure:"token_version_cache"`
@@ -256,6 +258,7 @@ func DefaultConfig() Config {
 			},
 		},
 		Auth: AuthConfig{
+			// 默认接受 logout-all 和改密在正常 Redis 更新成功后最多 1 秒的跨副本撤销收敛窗口。
 			TokenVersionCache: DefaultFeatureCacheConfig(100000, time.Second, 300*time.Millisecond),
 		},
 		RBAC: RBACConfig{

@@ -251,6 +251,9 @@ func newTokenVersionLocalCacheResource(cfg serviceconfig.FeatureCacheConfig, use
 		direct := authvalidators.NewDirectTokenVersionCache(users, cache)
 		return &tokenVersionCacheResource{cache: direct, stats: direct}, nil
 	}
+	// 每个副本独立维护该缓存；撤销只主动清理当前副本，其他副本在 TTL 到期后经 Redis 或数据库收敛。
+	// cfg.TTL 表示正常路径可接受的 logout-all/改密跨副本撤销收敛窗口，调整时应重新评估撤销 SLA。
+	// 是否使用事务 outbox 取决于 Redis token version 投影失败后是否需要可靠补偿，与固定 TTL 阈值无关。
 	local, err := localcache.NewLoadingCache[string, int64](cfg.Localcache(authTokenVersionCacheName), func(ctx context.Context, userID string) (int64, error) {
 		parsedUserID, err := uuid.Parse(userID)
 		if err != nil {

@@ -47,6 +47,9 @@ auth:
     enabled: true
     # enabled=false 时 size/ttl/load_timeout 不参与校验，也不会构造本地缓存。
     size: 100000
+    # 各副本独立持有本地缓存；正常完成 Redis token version 更新后，其他副本仍可能在该 TTL 内命中旧值。
+    # TTL 表示 logout-all 和改密在正常路径下可接受的跨副本撤销收敛窗口，调整时应重新评估撤销 SLA。
+    # 是否使用事务 outbox 取决于 Redis token version 投影失败后是否必须可靠补偿，与固定 TTL 阈值无关。
     ttl: 1s
     # load_timeout 是缓存 miss 后加载 token version 的单次等待预算。
     load_timeout: 300ms
