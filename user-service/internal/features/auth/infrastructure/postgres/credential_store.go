@@ -64,20 +64,37 @@ func (s *CredentialStore) GetTokenVersion(ctx context.Context, userID uuid.UUID)
 
 // IncrementTokenVersion 递增用户 token version 并返回新值。
 func (s *CredentialStore) IncrementTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
-	updated, err := s.client.User.Update().Where(entuser.UserIDEQ(userID), entuser.DeletedAtIsNil()).AddTokenVersion(1).Save(ctx)
-	if err == nil {
-		if updated == 0 {
-			// Ent Update().Save 返回受影响行数，0 表示过滤条件未匹配到用户。
+	found, err := s.client.User.Query().Where(entuser.UserIDEQ(userID), entuser.DeletedAtIsNil()).Select(entuser.FieldID).Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
 			return 0, identity.ErrUserNotFound
 		}
-		return s.GetTokenVersion(ctx, userID)
+		return 0, fmt.Errorf("query user before increment token version by user_id %s: %w", userID.String(), err)
 	}
-	return 0, fmt.Errorf("increment user token version by user_id %s: %w", userID.String(), err)
+	updated, err := s.client.User.UpdateOneID(found.ID).
+		Where(entuser.DeletedAtIsNil()).
+		AddTokenVersion(1).
+		Select(entuser.FieldTokenVersion).
+		Save(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return 0, identity.ErrUserNotFound
+		}
+		return 0, fmt.Errorf("increment user token version by user_id %s: %w", userID.String(), err)
+	}
+	return updated.TokenVersion, nil
 }
 
 // UpdateCredentials 替换密码哈希和状态，递增 token version 并返回新版本。
 func (s *CredentialStore) UpdateCredentials(ctx context.Context, input authdomain.UpdateCredentialsInput) (int64, error) {
-	predicates := []predicate.User{entuser.UserIDEQ(input.UserID), entuser.DeletedAtIsNil()}
+	found, err := s.client.User.Query().Where(entuser.UserIDEQ(input.UserID), entuser.DeletedAtIsNil()).Select(entuser.FieldID).Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return 0, identity.ErrUserNotFound
+		}
+		return 0, fmt.Errorf("query user before update credentials by user_id %s: %w", input.UserID.String(), err)
+	}
+	predicates := []predicate.User{entuser.DeletedAtIsNil()}
 	conditional := false
 	if input.ExpectedStatus != nil {
 		predicates = append(predicates, entuser.StatusEQ(int64(*input.ExpectedStatus)))
@@ -87,25 +104,25 @@ func (s *CredentialStore) UpdateCredentials(ctx context.Context, input authdomai
 		predicates = append(predicates, entuser.TokenVersionEQ(*input.ExpectedTokenVersion))
 		conditional = true
 	}
-	updated, err := s.client.User.Update().
+	updated, err := s.client.User.UpdateOneID(found.ID).
 		Where(predicates...).
 		SetPasswordHash(input.PasswordHash).
 		SetStatus(int64(input.Status)).
 		AddTokenVersion(1).
+		Select(entuser.FieldTokenVersion).
 		Save(ctx)
-	if err == nil {
-		if updated == 0 {
+	if err != nil {
+		if ent.IsNotFound(err) {
 			if conditional {
 				if _, getErr := s.GetCredentialByUserID(ctx, input.UserID); getErr == nil {
 					return 0, authdomain.ErrTokenInvalid
 				}
 			}
-			// Ent Update().Save 返回受影响行数，0 表示过滤条件未匹配到用户。
 			return 0, identity.ErrUserNotFound
 		}
-		return s.GetTokenVersion(ctx, input.UserID)
+		return 0, fmt.Errorf("update user credentials by user_id %s: %w", input.UserID.String(), err)
 	}
-	return 0, fmt.Errorf("update user credentials by user_id %s: %w", input.UserID.String(), err)
+	return updated.TokenVersion, nil
 }
 
 func toCredential(entUser *ent.User) *authdomain.UserCredential {
