@@ -14,6 +14,7 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevisioncounter"
 	"github.com/aegiscore/user-service/internal/persistence/ent/role"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/user"
@@ -30,13 +31,14 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
-	TypePermission            = "Permission"
-	TypeRbacPolicyOutboxEvent = "RbacPolicyOutboxEvent"
-	TypeRbacPolicyRevision    = "RbacPolicyRevision"
-	TypeRole                  = "Role"
-	TypeRolePermission        = "RolePermission"
-	TypeUser                  = "User"
-	TypeUserRole              = "UserRole"
+	TypePermission                = "Permission"
+	TypeRbacPolicyOutboxEvent     = "RbacPolicyOutboxEvent"
+	TypeRbacPolicyRevision        = "RbacPolicyRevision"
+	TypeRbacPolicyRevisionCounter = "RbacPolicyRevisionCounter"
+	TypeRole                      = "Role"
+	TypeRolePermission            = "RolePermission"
+	TypeUser                      = "User"
+	TypeUserRole                  = "UserRole"
 )
 
 // PermissionMutation represents an operation that mutates the Permission nodes in the graph.
@@ -3222,6 +3224,374 @@ func (m *RbacPolicyRevisionMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown RbacPolicyRevision edge %s", name)
+}
+
+// RbacPolicyRevisionCounterMutation represents an operation that mutates the RbacPolicyRevisionCounter nodes in the graph.
+type RbacPolicyRevisionCounterMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *int64
+	last_revision    *int64
+	addlast_revision *int64
+	clearedFields    map[string]struct{}
+	done             bool
+	oldValue         func(context.Context) (*RbacPolicyRevisionCounter, error)
+	predicates       []predicate.RbacPolicyRevisionCounter
+}
+
+var _ ent.Mutation = (*RbacPolicyRevisionCounterMutation)(nil)
+
+// rbacpolicyrevisioncounterOption allows management of the mutation configuration using functional options.
+type rbacpolicyrevisioncounterOption func(*RbacPolicyRevisionCounterMutation)
+
+// newRbacPolicyRevisionCounterMutation creates new mutation for the RbacPolicyRevisionCounter entity.
+func newRbacPolicyRevisionCounterMutation(c config, op Op, opts ...rbacpolicyrevisioncounterOption) *RbacPolicyRevisionCounterMutation {
+	m := &RbacPolicyRevisionCounterMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeRbacPolicyRevisionCounter,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withRbacPolicyRevisionCounterID sets the ID field of the mutation.
+func withRbacPolicyRevisionCounterID(id int64) rbacpolicyrevisioncounterOption {
+	return func(m *RbacPolicyRevisionCounterMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *RbacPolicyRevisionCounter
+		)
+		m.oldValue = func(ctx context.Context) (*RbacPolicyRevisionCounter, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().RbacPolicyRevisionCounter.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withRbacPolicyRevisionCounter sets the old RbacPolicyRevisionCounter of the mutation.
+func withRbacPolicyRevisionCounter(node *RbacPolicyRevisionCounter) rbacpolicyrevisioncounterOption {
+	return func(m *RbacPolicyRevisionCounterMutation) {
+		m.oldValue = func(context.Context) (*RbacPolicyRevisionCounter, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m RbacPolicyRevisionCounterMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m RbacPolicyRevisionCounterMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of RbacPolicyRevisionCounter entities.
+func (m *RbacPolicyRevisionCounterMutation) SetID(id int64) {
+	m.id = &id
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *RbacPolicyRevisionCounterMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *RbacPolicyRevisionCounterMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().RbacPolicyRevisionCounter.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetLastRevision sets the "last_revision" field.
+func (m *RbacPolicyRevisionCounterMutation) SetLastRevision(i int64) {
+	m.last_revision = &i
+	m.addlast_revision = nil
+}
+
+// LastRevision returns the value of the "last_revision" field in the mutation.
+func (m *RbacPolicyRevisionCounterMutation) LastRevision() (r int64, exists bool) {
+	v := m.last_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastRevision returns the old "last_revision" field's value of the RbacPolicyRevisionCounter entity.
+// If the RbacPolicyRevisionCounter object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RbacPolicyRevisionCounterMutation) OldLastRevision(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastRevision is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastRevision requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastRevision: %w", err)
+	}
+	return oldValue.LastRevision, nil
+}
+
+// AddLastRevision adds i to the "last_revision" field.
+func (m *RbacPolicyRevisionCounterMutation) AddLastRevision(i int64) {
+	if m.addlast_revision != nil {
+		*m.addlast_revision += i
+	} else {
+		m.addlast_revision = &i
+	}
+}
+
+// AddedLastRevision returns the value that was added to the "last_revision" field in this mutation.
+func (m *RbacPolicyRevisionCounterMutation) AddedLastRevision() (r int64, exists bool) {
+	v := m.addlast_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetLastRevision resets all changes to the "last_revision" field.
+func (m *RbacPolicyRevisionCounterMutation) ResetLastRevision() {
+	m.last_revision = nil
+	m.addlast_revision = nil
+}
+
+// Where appends a list predicates to the RbacPolicyRevisionCounterMutation builder.
+func (m *RbacPolicyRevisionCounterMutation) Where(ps ...predicate.RbacPolicyRevisionCounter) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the RbacPolicyRevisionCounterMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RbacPolicyRevisionCounterMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RbacPolicyRevisionCounter, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *RbacPolicyRevisionCounterMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RbacPolicyRevisionCounterMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (RbacPolicyRevisionCounter).
+func (m *RbacPolicyRevisionCounterMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *RbacPolicyRevisionCounterMutation) Fields() []string {
+	fields := make([]string, 0, 1)
+	if m.last_revision != nil {
+		fields = append(fields, rbacpolicyrevisioncounter.FieldLastRevision)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *RbacPolicyRevisionCounterMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case rbacpolicyrevisioncounter.FieldLastRevision:
+		return m.LastRevision()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *RbacPolicyRevisionCounterMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case rbacpolicyrevisioncounter.FieldLastRevision:
+		return m.OldLastRevision(ctx)
+	}
+	return nil, fmt.Errorf("unknown RbacPolicyRevisionCounter field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RbacPolicyRevisionCounterMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case rbacpolicyrevisioncounter.FieldLastRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastRevision(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyRevisionCounter field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *RbacPolicyRevisionCounterMutation) AddedFields() []string {
+	var fields []string
+	if m.addlast_revision != nil {
+		fields = append(fields, rbacpolicyrevisioncounter.FieldLastRevision)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *RbacPolicyRevisionCounterMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case rbacpolicyrevisioncounter.FieldLastRevision:
+		return m.AddedLastRevision()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RbacPolicyRevisionCounterMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case rbacpolicyrevisioncounter.FieldLastRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddLastRevision(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyRevisionCounter numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *RbacPolicyRevisionCounterMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *RbacPolicyRevisionCounterMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *RbacPolicyRevisionCounterMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown RbacPolicyRevisionCounter nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *RbacPolicyRevisionCounterMutation) ResetField(name string) error {
+	switch name {
+	case rbacpolicyrevisioncounter.FieldLastRevision:
+		m.ResetLastRevision()
+		return nil
+	}
+	return fmt.Errorf("unknown RbacPolicyRevisionCounter field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *RbacPolicyRevisionCounterMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *RbacPolicyRevisionCounterMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *RbacPolicyRevisionCounterMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *RbacPolicyRevisionCounterMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *RbacPolicyRevisionCounterMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *RbacPolicyRevisionCounterMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *RbacPolicyRevisionCounterMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown RbacPolicyRevisionCounter unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *RbacPolicyRevisionCounterMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown RbacPolicyRevisionCounter edge %s", name)
 }
 
 // RoleMutation represents an operation that mutates the Role nodes in the graph.

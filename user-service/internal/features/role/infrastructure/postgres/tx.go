@@ -14,6 +14,8 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
+const policyRevisionCounterID int64 = 1
+
 type entTxStarter struct {
 	client *ent.Client
 }
@@ -53,7 +55,14 @@ func transactPolicyChange[T any](ctx context.Context, client *ent.Client, operat
 	if err != nil {
 		return value, result, finish.Fail(err)
 	}
+	counter, err := tx.RbacPolicyRevisionCounter.UpdateOneID(policyRevisionCounterID).
+		AddLastRevision(1).
+		Save(ctx)
+	if err != nil {
+		return value, result, finish.Fail(fmt.Errorf("allocate rbac policy revision after %s: %w", operation, err))
+	}
 	revision, err := tx.RbacPolicyRevision.Create().
+		SetID(counter.LastRevision).
 		SetReason(change.Reason).
 		SetNillableRoleID(nonNilUUID(change.RoleID)).
 		SetNillableUserID(nonNilUUID(change.UserID)).

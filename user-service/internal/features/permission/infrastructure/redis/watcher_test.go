@@ -123,11 +123,11 @@ func TestWatcherHandlePayloadReloadsPolicyForEveryValidEvent(t *testing.T) {
 	engine := NewMockPolicyReloadEngine(ctrl)
 	var applied atomic.Int64
 	engine.EXPECT().AppliedRevision().DoAndReturn(func() int64 { return applied.Load() }).AnyTimes()
-	engine.EXPECT().ReloadToRevision(gomock.Any(), int64(3)).DoAndReturn(func(context.Context, int64) (int64, error) {
+	engine.EXPECT().RefreshToRevision(gomock.Any(), int64(3)).DoAndReturn(func(context.Context, int64) (int64, error) {
 		applied.Store(3)
 		return 3, nil
-	})
-	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 3, TargetRevision: 3}).Times(3)
+	}).Times(2)
+	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 3, TargetRevision: 3}).Times(4)
 	engine.EXPECT().InvalidateAllUserRoles().Times(2)
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherWithMetrics(nil, staticPolicyRevisionSource{revision: 3}, engine, nil, time.Second, metrics)
@@ -140,6 +140,8 @@ func TestWatcherHandlePayloadReloadsPolicyForEveryValidEvent(t *testing.T) {
 		metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub),
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
+		metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub),
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
 	)
 
 	watcher.HandlePayload(context.Background(), payload)
@@ -148,14 +150,14 @@ func TestWatcherHandlePayloadReloadsPolicyForEveryValidEvent(t *testing.T) {
 	require.Equal(t, int64(3), applied.Load())
 }
 
-func TestWatcherHandlePayloadInvalidatesUserRoleWithoutReload(t *testing.T) {
+func TestWatcherHandlePayloadRevisionGapInvalidatesAllUserRoleCaches(t *testing.T) {
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000701")
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000702")
 	ctrl := gomock.NewController(t)
 	engine := NewMockPolicyReloadEngine(ctrl)
 	engine.EXPECT().AppliedRevision().Return(int64(0)).AnyTimes()
 	engine.EXPECT().ReloadToRevision(gomock.Any(), int64(4)).Return(int64(4), nil)
-	engine.EXPECT().InvalidateUserRole(userID)
+	engine.EXPECT().InvalidateAllUserRoles()
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 4, TargetRevision: 4}).Times(2)
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherWithMetrics(nil, staticPolicyRevisionSource{revision: 4}, engine, nil, time.Second, metrics)
@@ -198,7 +200,8 @@ func TestWatcherHandlePayloadReloadsOutOfOrderPolicyEventWithoutMovingAppliedRev
 	ctrl := gomock.NewController(t)
 	engine := NewMockPolicyReloadEngine(ctrl)
 	engine.EXPECT().AppliedRevision().Return(int64(9)).AnyTimes()
-	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 9, TargetRevision: 9})
+	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 9, TargetRevision: 9}).Times(2)
+	engine.EXPECT().RefreshToRevision(gomock.Any(), int64(9)).Return(int64(9), nil)
 	engine.EXPECT().InvalidateAllUserRoles()
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherWithMetrics(nil, staticPolicyRevisionSource{revision: 9}, engine, nil, time.Second, metrics)
@@ -206,6 +209,8 @@ func TestWatcherHandlePayloadReloadsOutOfOrderPolicyEventWithoutMovingAppliedRev
 	require.NoError(t, err)
 
 	gomock.InOrder(
+		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
+		metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub),
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
 	)
 
@@ -247,7 +252,7 @@ func TestWatcherCheckVersionCompensatesMissedMessage(t *testing.T) {
 	applied.Store(4)
 	engine.EXPECT().AppliedRevision().DoAndReturn(func() int64 { return applied.Load() }).AnyTimes()
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 4, TargetRevision: 4}).Times(2)
-	engine.EXPECT().ReloadToRevision(gomock.Any(), int64(8)).DoAndReturn(func(context.Context, int64) (int64, error) {
+	engine.EXPECT().RefreshToRevision(gomock.Any(), int64(8)).DoAndReturn(func(context.Context, int64) (int64, error) {
 		applied.Store(8)
 		return 8, nil
 	})
@@ -320,7 +325,7 @@ func TestWatcherCheckVersionRetriesAfterPriorFailureAtEqualRevision(t *testing.T
 	engine := NewMockPolicyReloadEngine(ctrl)
 	engine.EXPECT().AppliedRevision().Return(int64(8)).AnyTimes()
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, AppliedRevision: 8, TargetRevision: 8, LastError: errors.New("prior reload failed")}).Times(2)
-	engine.EXPECT().ReloadToRevision(gomock.Any(), int64(8)).Return(int64(8), nil)
+	engine.EXPECT().RefreshToRevision(gomock.Any(), int64(8)).Return(int64(8), nil)
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 8, TargetRevision: 8})
 	engine.EXPECT().InvalidateAllUserRoles()
 	metrics := NewMockMetrics(ctrl)
@@ -352,9 +357,9 @@ func TestWatcherFaultInjectionReplayAddRemoveReplaceEventsKeepsIdempotentProject
 	}
 
 	requireEventuallyWatcherProjection(t, engine, 4)
-	require.Equal(t, int64(2), engine.invalidateUserCount.Load())
-	require.Equal(t, int64(2), engine.invalidateAllCount.Load())
-	require.Equal(t, []int64{4}, engine.reloads())
+	require.Equal(t, int64(1), engine.invalidateUserCount.Load())
+	require.Equal(t, int64(3), engine.invalidateAllCount.Load())
+	require.Equal(t, []int64{4, 4, 4}, engine.reloads())
 }
 
 func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
@@ -363,7 +368,7 @@ func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
 	engine := NewMockPolicyReloadEngine(ctrl)
 	engine.EXPECT().AppliedRevision().Return(int64(2)).AnyTimes()
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, AppliedRevision: 2, TargetRevision: 5, LastError: reloadErr})
-	engine.EXPECT().ReloadToRevision(gomock.Any(), int64(5)).Return(int64(2), reloadErr)
+	engine.EXPECT().RefreshToRevision(gomock.Any(), int64(5)).Return(int64(2), reloadErr)
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherWithMetrics(nil, staticPolicyRevisionSource{revision: 5}, engine, nil, time.Second, metrics)
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(5, permissionapplication.NewPolicyReloadChange("permission_updated")), "instance-b"))
@@ -403,9 +408,9 @@ func TestWatcherCheckVersionRecoversFromRevisionSourceAndReloadFailure(t *testin
 	applied.Store(3)
 	engine.EXPECT().AppliedRevision().DoAndReturn(func() int64 { return applied.Load() }).AnyTimes()
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 3, TargetRevision: 3})
-	engine.EXPECT().ReloadToRevision(gomock.Any(), int64(7)).Return(int64(3), reloadErr)
+	engine.EXPECT().RefreshToRevision(gomock.Any(), int64(7)).Return(int64(3), reloadErr)
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, AppliedRevision: 3, TargetRevision: 7, LastError: reloadErr}).Times(3)
-	engine.EXPECT().ReloadToRevision(gomock.Any(), int64(7)).DoAndReturn(func(context.Context, int64) (int64, error) {
+	engine.EXPECT().RefreshToRevision(gomock.Any(), int64(7)).DoAndReturn(func(context.Context, int64) (int64, error) {
 		applied.Store(7)
 		return 7, nil
 	})
@@ -537,14 +542,25 @@ func (e *faultInjectedPolicyReloadEngine) ObserveTargetRevision(targetRevision i
 }
 
 func (e *faultInjectedPolicyReloadEngine) ReloadToRevision(_ context.Context, targetRevision int64) (int64, error) {
+	return e.reload(targetRevision, false)
+}
+
+func (e *faultInjectedPolicyReloadEngine) RefreshToRevision(_ context.Context, targetRevision int64) (int64, error) {
+	return e.reload(targetRevision, true)
+}
+
+func (e *faultInjectedPolicyReloadEngine) reload(targetRevision int64, force bool) (int64, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if targetRevision > e.targetRevision {
 		e.targetRevision = targetRevision
 	}
-	if targetRevision > e.appliedRevision {
+	advanced := targetRevision > e.appliedRevision
+	if advanced {
 		e.appliedRevision = targetRevision
-		e.reloadRevisions = append(e.reloadRevisions, targetRevision)
+	}
+	if advanced || force {
+		e.reloadRevisions = append(e.reloadRevisions, e.appliedRevision)
 	}
 	e.ready = true
 	return e.appliedRevision, nil

@@ -159,10 +159,10 @@ func (m *MockUserRoleStore) EXPECT() *MockUserRoleStoreMockRecorder {
 }
 
 // Add mocks base method.
-func (m *MockUserRoleStore) Add(ctx context.Context, userID, roleID uuid.UUID, change application.PolicyChange) (application.PolicyWriteResult, error) {
+func (m *MockUserRoleStore) Add(ctx context.Context, userID, roleID uuid.UUID, change application.PolicyChange) (application.RolesWriteResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Add", ctx, userID, roleID, change)
-	ret0, _ := ret[0].(application.PolicyWriteResult)
+	ret0, _ := ret[0].(application.RolesWriteResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -189,10 +189,10 @@ func (mr *MockUserRoleStoreMockRecorder) ListByUserID(ctx, userID any) *gomock.C
 }
 
 // Remove mocks base method.
-func (m *MockUserRoleStore) Remove(ctx context.Context, userID, roleID uuid.UUID, change application.PolicyChange) (application.PolicyWriteResult, error) {
+func (m *MockUserRoleStore) Remove(ctx context.Context, userID, roleID uuid.UUID, change application.PolicyChange) (application.RolesWriteResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Remove", ctx, userID, roleID, change)
-	ret0, _ := ret[0].(application.PolicyWriteResult)
+	ret0, _ := ret[0].(application.RolesWriteResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -243,10 +243,10 @@ func (m *MockRolePermissionStore) EXPECT() *MockRolePermissionStoreMockRecorder 
 }
 
 // Add mocks base method.
-func (m *MockRolePermissionStore) Add(ctx context.Context, roleID uuid.UUID, permission application.PermissionReference, change application.PolicyChange) (application.PolicyWriteResult, error) {
+func (m *MockRolePermissionStore) Add(ctx context.Context, roleID uuid.UUID, permission application.PermissionReference, change application.PolicyChange) (application.PermissionsWriteResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Add", ctx, roleID, permission, change)
-	ret0, _ := ret[0].(application.PolicyWriteResult)
+	ret0, _ := ret[0].(application.PermissionsWriteResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -273,10 +273,10 @@ func (mr *MockRolePermissionStoreMockRecorder) ListByRoleID(ctx, roleID any) *go
 }
 
 // Remove mocks base method.
-func (m *MockRolePermissionStore) Remove(ctx context.Context, roleID, permissionID uuid.UUID, change application.PolicyChange) (application.PolicyWriteResult, error) {
+func (m *MockRolePermissionStore) Remove(ctx context.Context, roleID, permissionID uuid.UUID, change application.PolicyChange) (application.PermissionsWriteResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Remove", ctx, roleID, permissionID, change)
-	ret0, _ := ret[0].(application.PolicyWriteResult)
+	ret0, _ := ret[0].(application.PermissionsWriteResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

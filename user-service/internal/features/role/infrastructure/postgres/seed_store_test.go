@@ -107,6 +107,8 @@ func TestUserRoleStoreAssignRoleIdempotent(t *testing.T) {
 func newRoleStoreTestClient(t *testing.T) *ent.Client {
 	t.Helper()
 	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:role_seed_test_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
+	_, err := client.RbacPolicyRevisionCounter.Create().SetID(policyRevisionCounterID).SetLastRevision(0).Save(context.Background())
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 	return client
 }

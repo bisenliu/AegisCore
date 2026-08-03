@@ -37,6 +37,7 @@ type reloadFlight struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	waiters int
+	force   bool
 }
 
 // NewEngine 构造 Casbin Engine；调用方负责在启动边界显式执行 Initialize。
@@ -93,6 +94,15 @@ func (e *Engine) ObserveTargetRevision(targetRevision int64) {
 
 // ReloadToRevision 将 policy 投影推进到至少 targetRevision，并返回实际 applied revision。
 func (e *Engine) ReloadToRevision(ctx context.Context, targetRevision int64) (int64, error) {
+	return e.reloadToRevision(ctx, targetRevision, false)
+}
+
+// RefreshToRevision 强制从当前 PostgreSQL 快照刷新 policy，同时保持 target revision 门禁。
+func (e *Engine) RefreshToRevision(ctx context.Context, targetRevision int64) (int64, error) {
+	return e.reloadToRevision(ctx, targetRevision, true)
+}
+
+func (e *Engine) reloadToRevision(ctx context.Context, targetRevision int64, force bool) (int64, error) {
 	if targetRevision < 0 {
 		return e.failReload(fmt.Errorf("casbin policy target revision must not be negative: %d", targetRevision))
 	}
@@ -108,14 +118,16 @@ func (e *Engine) ReloadToRevision(ctx context.Context, targetRevision int64) (in
 		e.mu.Unlock()
 		return applied, err
 	}
-	if e.projectionReadyForLocked(targetRevision) {
+	if !force && e.projectionReadyForLocked(targetRevision) {
 		applied := e.appliedRevision
 		e.mu.Unlock()
 		return applied, nil
 	}
 	flight := e.flight
 	if flight == nil {
-		flight = e.startFlightLocked()
+		flight = e.startFlightLocked(force)
+	} else if force {
+		flight.force = true
 	}
 	flight.waiters++
 	e.mu.Unlock()
@@ -142,9 +154,9 @@ func (e *Engine) ReloadToRevision(ctx context.Context, targetRevision int64) (in
 	}
 }
 
-func (e *Engine) startFlightLocked() *reloadFlight {
+func (e *Engine) startFlightLocked(force bool) *reloadFlight {
 	sharedCtx, cancel := context.WithCancel(context.Background())
-	flight := &reloadFlight{done: make(chan struct{}), ctx: sharedCtx, cancel: cancel}
+	flight := &reloadFlight{done: make(chan struct{}), ctx: sharedCtx, cancel: cancel, force: force}
 	e.flight = flight
 	go e.runReloadFlight(flight)
 	return flight
@@ -174,9 +186,15 @@ func (e *Engine) runReloadFlight(flight *reloadFlight) {
 	}()
 
 	for {
-		e.mu.RLock()
+		e.mu.Lock()
+		if e.flight != flight {
+			e.mu.Unlock()
+			return
+		}
 		target := e.targetRevision
-		e.mu.RUnlock()
+		force := flight.force
+		flight.force = false
+		e.mu.Unlock()
 
 		policySet, enforcer, err := e.buildEnforcer(flight.ctx, target)
 		if err != nil {
@@ -192,13 +210,13 @@ func (e *Engine) runReloadFlight(flight *reloadFlight) {
 			return
 		}
 
-		if e.applyCandidate(flight, policySet, enforcer) {
+		if e.applyCandidate(flight, policySet, enforcer, force) {
 			return
 		}
 	}
 }
 
-func (e *Engine) applyCandidate(flight *reloadFlight, policySet PolicySet, enforcer *casbinlib.Enforcer) bool {
+func (e *Engine) applyCandidate(flight *reloadFlight, policySet PolicySet, enforcer *casbinlib.Enforcer, force bool) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.flight != flight {
@@ -207,7 +225,11 @@ func (e *Engine) applyCandidate(flight *reloadFlight, policySet PolicySet, enfor
 	if policySet.Revision < e.targetRevision {
 		return false
 	}
-	if policySet.Revision > e.appliedRevision || !e.initialized {
+	// 构造候选期间到达的强制刷新必须再读一次数据库，不能用请求到达前的候选冒充已刷新快照。
+	if flight != nil && flight.force {
+		return false
+	}
+	if policySet.Revision > e.appliedRevision || !e.initialized || force {
 		e.enforcer = enforcer
 		e.appliedRevision = policySet.Revision
 		e.initialized = true

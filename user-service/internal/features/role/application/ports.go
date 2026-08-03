@@ -26,17 +26,17 @@ type SeedRoleStore interface {
 // UserRoleStore 定义用户角色绑定 use case 实际消费的持久化端口。
 type UserRoleStore interface {
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]roledomain.Role, error)
-	Add(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change PolicyChange) (PolicyWriteResult, error)
+	Add(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change PolicyChange) (RolesWriteResult, error)
 	Replace(ctx context.Context, userID uuid.UUID, roleIDs []uuid.UUID, change PolicyChange) (RolesWriteResult, error)
-	Remove(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change PolicyChange) (PolicyWriteResult, error)
+	Remove(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change PolicyChange) (RolesWriteResult, error)
 }
 
 // RolePermissionStore 定义角色权限绑定 use case 实际消费的持久化端口。
 type RolePermissionStore interface {
 	ListByRoleID(ctx context.Context, roleID uuid.UUID) ([]PermissionReference, error)
-	Add(ctx context.Context, roleID uuid.UUID, permission PermissionReference, change PolicyChange) (PolicyWriteResult, error)
+	Add(ctx context.Context, roleID uuid.UUID, permission PermissionReference, change PolicyChange) (PermissionsWriteResult, error)
 	Replace(ctx context.Context, roleID uuid.UUID, permissions []PermissionReference, change PolicyChange) (PermissionsWriteResult, error)
-	Remove(ctx context.Context, roleID uuid.UUID, permissionID uuid.UUID, change PolicyChange) (PolicyWriteResult, error)
+	Remove(ctx context.Context, roleID uuid.UUID, permissionID uuid.UUID, change PolicyChange) (PermissionsWriteResult, error)
 }
 
 // PolicyChangeKind 表示可靠 RBAC policy 事件的稳定类别。

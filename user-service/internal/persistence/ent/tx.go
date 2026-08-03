@@ -18,6 +18,8 @@ type Tx struct {
 	RbacPolicyOutboxEvent *RbacPolicyOutboxEventClient
 	// RbacPolicyRevision is the client for interacting with the RbacPolicyRevision builders.
 	RbacPolicyRevision *RbacPolicyRevisionClient
+	// RbacPolicyRevisionCounter is the client for interacting with the RbacPolicyRevisionCounter builders.
+	RbacPolicyRevisionCounter *RbacPolicyRevisionCounterClient
 	// Role is the client for interacting with the Role builders.
 	Role *RoleClient
 	// RolePermission is the client for interacting with the RolePermission builders.
@@ -160,6 +162,7 @@ func (tx *Tx) init() {
 	tx.Permission = NewPermissionClient(tx.config)
 	tx.RbacPolicyOutboxEvent = NewRbacPolicyOutboxEventClient(tx.config)
 	tx.RbacPolicyRevision = NewRbacPolicyRevisionClient(tx.config)
+	tx.RbacPolicyRevisionCounter = NewRbacPolicyRevisionCounterClient(tx.config)
 	tx.Role = NewRoleClient(tx.config)
 	tx.RolePermission = NewRolePermissionClient(tx.config)
 	tx.User = NewUserClient(tx.config)

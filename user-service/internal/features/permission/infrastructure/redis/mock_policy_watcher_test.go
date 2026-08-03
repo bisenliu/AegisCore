@@ -107,6 +107,21 @@ func (mr *MockPolicyReloadEngineMockRecorder) ProjectionStatus() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProjectionStatus", reflect.TypeOf((*MockPolicyReloadEngine)(nil).ProjectionStatus))
 }
 
+// RefreshToRevision mocks base method.
+func (m *MockPolicyReloadEngine) RefreshToRevision(ctx context.Context, targetRevision int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshToRevision", ctx, targetRevision)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RefreshToRevision indicates an expected call of RefreshToRevision.
+func (mr *MockPolicyReloadEngineMockRecorder) RefreshToRevision(ctx, targetRevision any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshToRevision", reflect.TypeOf((*MockPolicyReloadEngine)(nil).RefreshToRevision), ctx, targetRevision)
+}
+
 // ReloadToRevision mocks base method.
 func (m *MockPolicyReloadEngine) ReloadToRevision(ctx context.Context, targetRevision int64) (int64, error) {
 	m.ctrl.T.Helper()

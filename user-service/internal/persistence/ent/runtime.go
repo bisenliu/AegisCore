@@ -6,6 +6,7 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent/permission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevisioncounter"
 	"github.com/aegiscore/user-service/internal/persistence/ent/role"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/schema"
@@ -232,6 +233,14 @@ func init() {
 	rbacpolicyrevisionDescCreatedAt := rbacpolicyrevisionFields[5].Descriptor()
 	// rbacpolicyrevision.DefaultCreatedAt holds the default value on creation for the created_at field.
 	rbacpolicyrevision.DefaultCreatedAt = rbacpolicyrevisionDescCreatedAt.Default.(func() int64)
+	rbacpolicyrevisioncounterFields := schema.RbacPolicyRevisionCounter{}.Fields()
+	_ = rbacpolicyrevisioncounterFields
+	// rbacpolicyrevisioncounterDescLastRevision is the schema descriptor for last_revision field.
+	rbacpolicyrevisioncounterDescLastRevision := rbacpolicyrevisioncounterFields[1].Descriptor()
+	// rbacpolicyrevisioncounter.DefaultLastRevision holds the default value on creation for the last_revision field.
+	rbacpolicyrevisioncounter.DefaultLastRevision = rbacpolicyrevisioncounterDescLastRevision.Default.(int64)
+	// rbacpolicyrevisioncounter.LastRevisionValidator is a validator for the "last_revision" field. It is called by the builders before save.
+	rbacpolicyrevisioncounter.LastRevisionValidator = rbacpolicyrevisioncounterDescLastRevision.Validators[0].(func(int64) error)
 	roleFields := schema.Role{}.Fields()
 	_ = roleFields
 	// roleDescName is the schema descriptor for name field.

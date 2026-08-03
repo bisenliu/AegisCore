@@ -18,6 +18,7 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent/permission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevisioncounter"
 	"github.com/aegiscore/user-service/internal/persistence/ent/role"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/user"
@@ -35,6 +36,8 @@ type Client struct {
 	RbacPolicyOutboxEvent *RbacPolicyOutboxEventClient
 	// RbacPolicyRevision is the client for interacting with the RbacPolicyRevision builders.
 	RbacPolicyRevision *RbacPolicyRevisionClient
+	// RbacPolicyRevisionCounter is the client for interacting with the RbacPolicyRevisionCounter builders.
+	RbacPolicyRevisionCounter *RbacPolicyRevisionCounterClient
 	// Role is the client for interacting with the Role builders.
 	Role *RoleClient
 	// RolePermission is the client for interacting with the RolePermission builders.
@@ -57,6 +60,7 @@ func (c *Client) init() {
 	c.Permission = NewPermissionClient(c.config)
 	c.RbacPolicyOutboxEvent = NewRbacPolicyOutboxEventClient(c.config)
 	c.RbacPolicyRevision = NewRbacPolicyRevisionClient(c.config)
+	c.RbacPolicyRevisionCounter = NewRbacPolicyRevisionCounterClient(c.config)
 	c.Role = NewRoleClient(c.config)
 	c.RolePermission = NewRolePermissionClient(c.config)
 	c.User = NewUserClient(c.config)
@@ -151,15 +155,16 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:                   ctx,
-		config:                cfg,
-		Permission:            NewPermissionClient(cfg),
-		RbacPolicyOutboxEvent: NewRbacPolicyOutboxEventClient(cfg),
-		RbacPolicyRevision:    NewRbacPolicyRevisionClient(cfg),
-		Role:                  NewRoleClient(cfg),
-		RolePermission:        NewRolePermissionClient(cfg),
-		User:                  NewUserClient(cfg),
-		UserRole:              NewUserRoleClient(cfg),
+		ctx:                       ctx,
+		config:                    cfg,
+		Permission:                NewPermissionClient(cfg),
+		RbacPolicyOutboxEvent:     NewRbacPolicyOutboxEventClient(cfg),
+		RbacPolicyRevision:        NewRbacPolicyRevisionClient(cfg),
+		RbacPolicyRevisionCounter: NewRbacPolicyRevisionCounterClient(cfg),
+		Role:                      NewRoleClient(cfg),
+		RolePermission:            NewRolePermissionClient(cfg),
+		User:                      NewUserClient(cfg),
+		UserRole:                  NewUserRoleClient(cfg),
 	}, nil
 }
 
@@ -177,15 +182,16 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:                   ctx,
-		config:                cfg,
-		Permission:            NewPermissionClient(cfg),
-		RbacPolicyOutboxEvent: NewRbacPolicyOutboxEventClient(cfg),
-		RbacPolicyRevision:    NewRbacPolicyRevisionClient(cfg),
-		Role:                  NewRoleClient(cfg),
-		RolePermission:        NewRolePermissionClient(cfg),
-		User:                  NewUserClient(cfg),
-		UserRole:              NewUserRoleClient(cfg),
+		ctx:                       ctx,
+		config:                    cfg,
+		Permission:                NewPermissionClient(cfg),
+		RbacPolicyOutboxEvent:     NewRbacPolicyOutboxEventClient(cfg),
+		RbacPolicyRevision:        NewRbacPolicyRevisionClient(cfg),
+		RbacPolicyRevisionCounter: NewRbacPolicyRevisionCounterClient(cfg),
+		Role:                      NewRoleClient(cfg),
+		RolePermission:            NewRolePermissionClient(cfg),
+		User:                      NewUserClient(cfg),
+		UserRole:                  NewUserRoleClient(cfg),
 	}, nil
 }
 
@@ -215,8 +221,8 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.Permission, c.RbacPolicyOutboxEvent, c.RbacPolicyRevision, c.Role,
-		c.RolePermission, c.User, c.UserRole,
+		c.Permission, c.RbacPolicyOutboxEvent, c.RbacPolicyRevision,
+		c.RbacPolicyRevisionCounter, c.Role, c.RolePermission, c.User, c.UserRole,
 	} {
 		n.Use(hooks...)
 	}
@@ -226,8 +232,8 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.Permission, c.RbacPolicyOutboxEvent, c.RbacPolicyRevision, c.Role,
-		c.RolePermission, c.User, c.UserRole,
+		c.Permission, c.RbacPolicyOutboxEvent, c.RbacPolicyRevision,
+		c.RbacPolicyRevisionCounter, c.Role, c.RolePermission, c.User, c.UserRole,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -242,6 +248,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.RbacPolicyOutboxEvent.mutate(ctx, m)
 	case *RbacPolicyRevisionMutation:
 		return c.RbacPolicyRevision.mutate(ctx, m)
+	case *RbacPolicyRevisionCounterMutation:
+		return c.RbacPolicyRevisionCounter.mutate(ctx, m)
 	case *RoleMutation:
 		return c.Role.mutate(ctx, m)
 	case *RolePermissionMutation:
@@ -699,6 +707,139 @@ func (c *RbacPolicyRevisionClient) mutate(ctx context.Context, m *RbacPolicyRevi
 		return (&RbacPolicyRevisionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown RbacPolicyRevision mutation op: %q", m.Op())
+	}
+}
+
+// RbacPolicyRevisionCounterClient is a client for the RbacPolicyRevisionCounter schema.
+type RbacPolicyRevisionCounterClient struct {
+	config
+}
+
+// NewRbacPolicyRevisionCounterClient returns a client for the RbacPolicyRevisionCounter from the given config.
+func NewRbacPolicyRevisionCounterClient(c config) *RbacPolicyRevisionCounterClient {
+	return &RbacPolicyRevisionCounterClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `rbacpolicyrevisioncounter.Hooks(f(g(h())))`.
+func (c *RbacPolicyRevisionCounterClient) Use(hooks ...Hook) {
+	c.hooks.RbacPolicyRevisionCounter = append(c.hooks.RbacPolicyRevisionCounter, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `rbacpolicyrevisioncounter.Intercept(f(g(h())))`.
+func (c *RbacPolicyRevisionCounterClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RbacPolicyRevisionCounter = append(c.inters.RbacPolicyRevisionCounter, interceptors...)
+}
+
+// Create returns a builder for creating a RbacPolicyRevisionCounter entity.
+func (c *RbacPolicyRevisionCounterClient) Create() *RbacPolicyRevisionCounterCreate {
+	mutation := newRbacPolicyRevisionCounterMutation(c.config, OpCreate)
+	return &RbacPolicyRevisionCounterCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RbacPolicyRevisionCounter entities.
+func (c *RbacPolicyRevisionCounterClient) CreateBulk(builders ...*RbacPolicyRevisionCounterCreate) *RbacPolicyRevisionCounterCreateBulk {
+	return &RbacPolicyRevisionCounterCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RbacPolicyRevisionCounterClient) MapCreateBulk(slice any, setFunc func(*RbacPolicyRevisionCounterCreate, int)) *RbacPolicyRevisionCounterCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RbacPolicyRevisionCounterCreateBulk{err: fmt.Errorf("calling to RbacPolicyRevisionCounterClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RbacPolicyRevisionCounterCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RbacPolicyRevisionCounterCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RbacPolicyRevisionCounter.
+func (c *RbacPolicyRevisionCounterClient) Update() *RbacPolicyRevisionCounterUpdate {
+	mutation := newRbacPolicyRevisionCounterMutation(c.config, OpUpdate)
+	return &RbacPolicyRevisionCounterUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RbacPolicyRevisionCounterClient) UpdateOne(_m *RbacPolicyRevisionCounter) *RbacPolicyRevisionCounterUpdateOne {
+	mutation := newRbacPolicyRevisionCounterMutation(c.config, OpUpdateOne, withRbacPolicyRevisionCounter(_m))
+	return &RbacPolicyRevisionCounterUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RbacPolicyRevisionCounterClient) UpdateOneID(id int64) *RbacPolicyRevisionCounterUpdateOne {
+	mutation := newRbacPolicyRevisionCounterMutation(c.config, OpUpdateOne, withRbacPolicyRevisionCounterID(id))
+	return &RbacPolicyRevisionCounterUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RbacPolicyRevisionCounter.
+func (c *RbacPolicyRevisionCounterClient) Delete() *RbacPolicyRevisionCounterDelete {
+	mutation := newRbacPolicyRevisionCounterMutation(c.config, OpDelete)
+	return &RbacPolicyRevisionCounterDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RbacPolicyRevisionCounterClient) DeleteOne(_m *RbacPolicyRevisionCounter) *RbacPolicyRevisionCounterDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RbacPolicyRevisionCounterClient) DeleteOneID(id int64) *RbacPolicyRevisionCounterDeleteOne {
+	builder := c.Delete().Where(rbacpolicyrevisioncounter.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RbacPolicyRevisionCounterDeleteOne{builder}
+}
+
+// Query returns a query builder for RbacPolicyRevisionCounter.
+func (c *RbacPolicyRevisionCounterClient) Query() *RbacPolicyRevisionCounterQuery {
+	return &RbacPolicyRevisionCounterQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRbacPolicyRevisionCounter},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RbacPolicyRevisionCounter entity by its id.
+func (c *RbacPolicyRevisionCounterClient) Get(ctx context.Context, id int64) (*RbacPolicyRevisionCounter, error) {
+	return c.Query().Where(rbacpolicyrevisioncounter.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RbacPolicyRevisionCounterClient) GetX(ctx context.Context, id int64) *RbacPolicyRevisionCounter {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *RbacPolicyRevisionCounterClient) Hooks() []Hook {
+	return c.hooks.RbacPolicyRevisionCounter
+}
+
+// Interceptors returns the client interceptors.
+func (c *RbacPolicyRevisionCounterClient) Interceptors() []Interceptor {
+	return c.inters.RbacPolicyRevisionCounter
+}
+
+func (c *RbacPolicyRevisionCounterClient) mutate(ctx context.Context, m *RbacPolicyRevisionCounterMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RbacPolicyRevisionCounterCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RbacPolicyRevisionCounterUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RbacPolicyRevisionCounterUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RbacPolicyRevisionCounterDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RbacPolicyRevisionCounter mutation op: %q", m.Op())
 	}
 }
 
@@ -1349,11 +1490,12 @@ func (c *UserRoleClient) mutate(ctx context.Context, m *UserRoleMutation) (Value
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Permission, RbacPolicyOutboxEvent, RbacPolicyRevision, Role, RolePermission,
-		User, UserRole []ent.Hook
+		Permission, RbacPolicyOutboxEvent, RbacPolicyRevision,
+		RbacPolicyRevisionCounter, Role, RolePermission, User, UserRole []ent.Hook
 	}
 	inters struct {
-		Permission, RbacPolicyOutboxEvent, RbacPolicyRevision, Role, RolePermission,
-		User, UserRole []ent.Interceptor
+		Permission, RbacPolicyOutboxEvent, RbacPolicyRevision,
+		RbacPolicyRevisionCounter, Role, RolePermission, User,
+		UserRole []ent.Interceptor
 	}
 )

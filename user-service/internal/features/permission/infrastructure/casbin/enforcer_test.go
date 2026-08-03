@@ -194,19 +194,99 @@ func TestEngineCandidateSwapIsHigherOnlyAndEqualIsIdempotent(t *testing.T) {
 	go func() {
 		close(olderBuilt)
 		<-applyOlder
-		engine.applyCandidate(nil, PolicySet{Revision: 1}, older)
+		engine.applyCandidate(nil, PolicySet{Revision: 1}, older, false)
 		close(olderDone)
 	}()
 	<-olderBuilt
-	require.True(t, engine.applyCandidate(nil, PolicySet{Revision: 2}, newer))
+	require.True(t, engine.applyCandidate(nil, PolicySet{Revision: 2}, newer, false))
 	close(applyOlder)
 	<-olderDone
-	require.True(t, engine.applyCandidate(nil, PolicySet{Revision: 2}, equal))
+	require.True(t, engine.applyCandidate(nil, PolicySet{Revision: 2}, equal, false))
 
 	engine.mu.RLock()
 	require.Same(t, newer, engine.enforcer)
 	engine.mu.RUnlock()
 	require.Equal(t, int64(2), engine.AppliedRevision())
+}
+
+func TestEngineRefreshReplacesStaleSnapshotAtEqualRevision(t *testing.T) {
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000561")
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000562")
+	var calls atomic.Int64
+	loader := loaderFunc(func(context.Context, int64) (PolicySet, error) {
+		if calls.Add(1) == 1 {
+			return policy(2, roleID, "/api/v1/stale", "GET"), nil
+		}
+		return policy(2, roleID, "/api/v1/current", "GET"), nil
+	})
+	resolver := newFaultInjectedRoleResolver(map[uuid.UUID][]uuid.UUID{userID: {roleID}})
+	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), resolver)
+
+	_, err := engine.ReloadToRevision(context.Background(), 2)
+	require.NoError(t, err)
+	_, err = engine.ReloadToRevision(context.Background(), 2)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), calls.Load(), "普通 reload 对相同 revision 保持幂等")
+	requireEventuallyAllowed(t, engine, userID, "/api/v1/stale", "GET", true)
+
+	applied, err := engine.RefreshToRevision(context.Background(), 2)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), applied)
+	require.Equal(t, int64(2), calls.Load())
+	requireEventuallyAllowed(t, engine, userID, "/api/v1/current", "GET", true)
+	requireEventuallyAllowed(t, engine, userID, "/api/v1/stale", "GET", false)
+}
+
+func TestEngineForceJoiningInFlightReloadReadsSnapshotAgain(t *testing.T) {
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000571")
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000572")
+	ordinaryLoadStarted := make(chan struct{})
+	releaseOrdinaryLoad := make(chan struct{})
+	var calls atomic.Int64
+	loader := loaderFunc(func(ctx context.Context, target int64) (PolicySet, error) {
+		switch calls.Add(1) {
+		case 1:
+			return policy(2, roleID, "/api/v1/initial", "GET"), nil
+		case 2:
+			close(ordinaryLoadStarted)
+			select {
+			case <-releaseOrdinaryLoad:
+			case <-ctx.Done():
+				return PolicySet{}, ctx.Err()
+			}
+			return policy(target, roleID, "/api/v1/before-force", "GET"), nil
+		default:
+			return policy(target, roleID, "/api/v1/after-force", "GET"), nil
+		}
+	})
+	resolver := newFaultInjectedRoleResolver(map[uuid.UUID][]uuid.UUID{userID: {roleID}})
+	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), resolver)
+	_, err := engine.ReloadToRevision(context.Background(), 2)
+	require.NoError(t, err)
+
+	ordinaryDone := make(chan error, 1)
+	go func() {
+		_, reloadErr := engine.ReloadToRevision(context.Background(), 3)
+		ordinaryDone <- reloadErr
+	}()
+	<-ordinaryLoadStarted
+	forceDone := make(chan error, 1)
+	go func() {
+		_, refreshErr := engine.RefreshToRevision(context.Background(), 3)
+		forceDone <- refreshErr
+	}()
+	require.Eventually(t, func() bool {
+		engine.mu.RLock()
+		defer engine.mu.RUnlock()
+		return engine.flight != nil && engine.flight.force
+	}, time.Second, time.Millisecond)
+	close(releaseOrdinaryLoad)
+
+	require.NoError(t, <-ordinaryDone)
+	require.NoError(t, <-forceDone)
+	require.Equal(t, int64(3), calls.Load())
+	requireEventuallyAllowed(t, engine, userID, "/api/v1/after-force", "GET", true)
+	requireEventuallyAllowed(t, engine, userID, "/api/v1/before-force", "GET", false)
 }
 
 func TestEngineFaultInjectionOutOfOrderReloadKeepsLatestProjection(t *testing.T) {

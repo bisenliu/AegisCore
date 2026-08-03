@@ -89,16 +89,16 @@ func (roleModuleStore) ListByUserID(context.Context, uuid.UUID) ([]roledomain.Ro
 	return nil, nil
 }
 
-func (roleModuleStore) Add(context.Context, uuid.UUID, uuid.UUID, roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
-	return roleapplication.PolicyWriteResult{}, nil
+func (roleModuleStore) Add(context.Context, uuid.UUID, uuid.UUID, roleapplication.PolicyChange) (roleapplication.RolesWriteResult, error) {
+	return roleapplication.RolesWriteResult{}, nil
 }
 
 func (roleModuleStore) Replace(context.Context, uuid.UUID, []uuid.UUID, roleapplication.PolicyChange) (roleapplication.RolesWriteResult, error) {
 	return roleapplication.RolesWriteResult{}, nil
 }
 
-func (roleModuleStore) Remove(context.Context, uuid.UUID, uuid.UUID, roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
-	return roleapplication.PolicyWriteResult{}, nil
+func (roleModuleStore) Remove(context.Context, uuid.UUID, uuid.UUID, roleapplication.PolicyChange) (roleapplication.RolesWriteResult, error) {
+	return roleapplication.RolesWriteResult{}, nil
 }
 
 func (roleModuleStore) ListByRoleID(context.Context, uuid.UUID) ([]roleapplication.PermissionReference, error) {
@@ -129,16 +129,16 @@ type roleModulePermissionStore struct {
 	roleModuleStore
 }
 
-func (roleModulePermissionStore) Add(context.Context, uuid.UUID, roleapplication.PermissionReference, roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
-	return roleapplication.PolicyWriteResult{}, nil
+func (roleModulePermissionStore) Add(context.Context, uuid.UUID, roleapplication.PermissionReference, roleapplication.PolicyChange) (roleapplication.PermissionsWriteResult, error) {
+	return roleapplication.PermissionsWriteResult{}, nil
 }
 
 func (roleModulePermissionStore) Replace(context.Context, uuid.UUID, []roleapplication.PermissionReference, roleapplication.PolicyChange) (roleapplication.PermissionsWriteResult, error) {
 	return roleapplication.PermissionsWriteResult{}, nil
 }
 
-func (roleModulePermissionStore) Remove(context.Context, uuid.UUID, uuid.UUID, roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
-	return roleapplication.PolicyWriteResult{}, nil
+func (roleModulePermissionStore) Remove(context.Context, uuid.UUID, uuid.UUID, roleapplication.PolicyChange) (roleapplication.PermissionsWriteResult, error) {
+	return roleapplication.PermissionsWriteResult{}, nil
 }
 
 var _ roleapplication.RolePermissionStore = roleModulePermissionStore{}

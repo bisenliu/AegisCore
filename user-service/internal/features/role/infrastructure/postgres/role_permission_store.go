@@ -47,25 +47,25 @@ func (s *RolePermissionStore) ListByRoleID(ctx context.Context, roleID uuid.UUID
 }
 
 // Add 新增角色权限绑定。
-func (s *RolePermissionStore) Add(ctx context.Context, roleID uuid.UUID, permission roleapplication.PermissionReference, change roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
-	_, write, err := transactPolicyChange(ctx, s.client, "add role permission", change, func(tx *ent.Tx) (struct{}, error) {
+func (s *RolePermissionStore) Add(ctx context.Context, roleID uuid.UUID, permission roleapplication.PermissionReference, change roleapplication.PolicyChange) (roleapplication.PermissionsWriteResult, error) {
+	items, write, err := transactPolicyChange(ctx, s.client, "add role permission", change, func(tx *ent.Tx) ([]roleapplication.PermissionReference, error) {
 		role, err := s.getLockedRoleByExternalID(ctx, tx, roleID)
 		if err != nil {
-			return struct{}{}, err
+			return nil, err
 		}
 		lockedPermission, err := s.getLockedPermissionByExternalID(ctx, tx, permission.PermissionID)
 		if err != nil {
-			return struct{}{}, err
+			return nil, err
 		}
 		if _, err := tx.RolePermission.Create().SetRoleID(role.ID).SetPermissionID(lockedPermission.ID).Save(ctx); err != nil {
 			if ent.IsConstraintError(err) {
-				return struct{}{}, roledomain.ErrRolePermissionAlreadyExists
+				return nil, roledomain.ErrRolePermissionAlreadyExists
 			}
-			return struct{}{}, fmt.Errorf("add role permission role %s permission %s: %w", roleID.String(), permission.PermissionID.String(), err)
+			return nil, fmt.Errorf("add role permission role %s permission %s: %w", roleID.String(), permission.PermissionID.String(), err)
 		}
-		return struct{}{}, nil
+		return s.listPermissionsByInternalRoleID(ctx, tx, role.ID, roleID)
 	})
-	return write, err
+	return roleapplication.PermissionsWriteResult{Items: items, Revision: write.Revision}, err
 }
 
 // Replace 幂等替换角色的完整权限绑定集合。
@@ -98,29 +98,40 @@ func (s *RolePermissionStore) Replace(ctx context.Context, roleID uuid.UUID, per
 }
 
 // Remove 删除角色权限绑定。
-func (s *RolePermissionStore) Remove(ctx context.Context, roleID uuid.UUID, permissionID uuid.UUID, change roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
-	_, write, err := transactPolicyChange(ctx, s.client, "remove role permission", change, func(tx *ent.Tx) (struct{}, error) {
+func (s *RolePermissionStore) Remove(ctx context.Context, roleID uuid.UUID, permissionID uuid.UUID, change roleapplication.PolicyChange) (roleapplication.PermissionsWriteResult, error) {
+	items, write, err := transactPolicyChange(ctx, s.client, "remove role permission", change, func(tx *ent.Tx) ([]roleapplication.PermissionReference, error) {
 		role, err := s.getLockedRoleByExternalID(ctx, tx, roleID)
 		if err != nil {
-			return struct{}{}, err
+			return nil, err
 		}
 		permission, err := s.getLockedPermissionByExternalID(ctx, tx, permissionID)
 		if err != nil {
 			if errors.Is(err, permissiondomain.ErrPermissionNotFound) {
-				return struct{}{}, roledomain.ErrRolePermissionNotFound
+				return nil, roledomain.ErrRolePermissionNotFound
 			}
-			return struct{}{}, err
+			return nil, err
 		}
 		deleted, err := tx.RolePermission.Delete().Where(entrolepermission.RoleIDEQ(role.ID), entrolepermission.PermissionIDEQ(permission.ID)).Exec(ctx)
 		if err != nil {
-			return struct{}{}, fmt.Errorf("remove role permission role %s permission %s: %w", roleID.String(), permissionID.String(), err)
+			return nil, fmt.Errorf("remove role permission role %s permission %s: %w", roleID.String(), permissionID.String(), err)
 		}
 		if deleted == 0 {
-			return struct{}{}, roledomain.ErrRolePermissionNotFound
+			return nil, roledomain.ErrRolePermissionNotFound
 		}
-		return struct{}{}, nil
+		return s.listPermissionsByInternalRoleID(ctx, tx, role.ID, roleID)
 	})
-	return write, err
+	return roleapplication.PermissionsWriteResult{Items: items, Revision: write.Revision}, err
+}
+
+func (s *RolePermissionStore) listPermissionsByInternalRoleID(ctx context.Context, tx *ent.Tx, internalRoleID int64, roleID uuid.UUID) ([]roleapplication.PermissionReference, error) {
+	permissions, err := tx.Permission.Query().
+		Where(entpermission.HasRolePermissionsWith(entrolepermission.RoleIDEQ(internalRoleID))).
+		Order(entpermission.ByHTTPMethod(), entpermission.ByPathTemplate()).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list permissions for role %s in mutation transaction: %w", roleID.String(), err)
+	}
+	return toPermissionReferences(permissions), nil
 }
 
 // EnsureSystemBindings 补齐系统角色权限绑定，不删除额外绑定。

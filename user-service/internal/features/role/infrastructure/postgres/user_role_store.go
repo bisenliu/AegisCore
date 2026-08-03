@@ -43,22 +43,22 @@ func (s *UserRoleStore) ListByUserID(ctx context.Context, userID uuid.UUID) ([]r
 }
 
 // Add 新增用户角色绑定。
-func (s *UserRoleStore) Add(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
-	_, write, err := transactPolicyChange(ctx, s.client, "add user role", change, func(tx *ent.Tx) (struct{}, error) {
+func (s *UserRoleStore) Add(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change roleapplication.PolicyChange) (roleapplication.RolesWriteResult, error) {
+	roles, write, err := transactPolicyChange(ctx, s.client, "add user role", change, func(tx *ent.Tx) ([]*ent.Role, error) {
 		user, role, err := s.getLockedUserAndRole(ctx, tx, userID, roleID)
 		if err != nil {
-			return struct{}{}, err
+			return nil, err
 		}
 		_, err = tx.UserRole.Create().SetUserID(user.ID).SetRoleID(role.ID).Save(ctx)
 		if ent.IsConstraintError(err) {
-			return struct{}{}, roledomain.ErrUserRoleAlreadyExists
+			return nil, roledomain.ErrUserRoleAlreadyExists
 		}
 		if err != nil {
-			return struct{}{}, fmt.Errorf("add user role user %s role %s: %w", userID.String(), roleID.String(), err)
+			return nil, fmt.Errorf("add user role user %s role %s: %w", userID.String(), roleID.String(), err)
 		}
-		return struct{}{}, nil
+		return s.listRolesByInternalUserID(ctx, tx, user.ID, userID)
 	})
-	return write, err
+	return roleapplication.RolesWriteResult{Items: toRoleModels(roles), Revision: write.Revision}, err
 }
 
 // Replace 幂等替换用户的完整角色绑定集合。
@@ -90,22 +90,33 @@ func (s *UserRoleStore) Replace(ctx context.Context, userID uuid.UUID, roleIDs [
 }
 
 // Remove 删除用户角色绑定。
-func (s *UserRoleStore) Remove(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
-	_, write, err := transactPolicyChange(ctx, s.client, "remove user role", change, func(tx *ent.Tx) (struct{}, error) {
+func (s *UserRoleStore) Remove(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change roleapplication.PolicyChange) (roleapplication.RolesWriteResult, error) {
+	roles, write, err := transactPolicyChange(ctx, s.client, "remove user role", change, func(tx *ent.Tx) ([]*ent.Role, error) {
 		user, role, err := s.getLockedUserAndRole(ctx, tx, userID, roleID)
 		if err != nil {
-			return struct{}{}, err
+			return nil, err
 		}
 		deleted, err := tx.UserRole.Delete().Where(entuserrole.UserIDEQ(user.ID), entuserrole.RoleIDEQ(role.ID)).Exec(ctx)
 		if err != nil {
-			return struct{}{}, fmt.Errorf("remove user role user %s role %s: %w", userID.String(), roleID.String(), err)
+			return nil, fmt.Errorf("remove user role user %s role %s: %w", userID.String(), roleID.String(), err)
 		}
 		if deleted == 0 {
-			return struct{}{}, roledomain.ErrUserRoleNotFound
+			return nil, roledomain.ErrUserRoleNotFound
 		}
-		return struct{}{}, nil
+		return s.listRolesByInternalUserID(ctx, tx, user.ID, userID)
 	})
-	return write, err
+	return roleapplication.RolesWriteResult{Items: toRoleModels(roles), Revision: write.Revision}, err
+}
+
+func (s *UserRoleStore) listRolesByInternalUserID(ctx context.Context, tx *ent.Tx, internalUserID int64, userID uuid.UUID) ([]*ent.Role, error) {
+	roles, err := tx.Role.Query().
+		Where(entrole.HasUserRolesWith(entuserrole.UserIDEQ(internalUserID))).
+		Order(entrole.ByRoleID()).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list roles for user %s in mutation transaction: %w", userID.String(), err)
+	}
+	return roles, nil
 }
 
 // AssignRole 幂等新增用户角色绑定，已存在时返回 added=false。

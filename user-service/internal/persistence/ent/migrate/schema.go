@@ -106,6 +106,17 @@ var (
 		Columns:    RbacPolicyRevisionsColumns,
 		PrimaryKey: []*schema.Column{RbacPolicyRevisionsColumns[0]},
 	}
+	// RbacPolicyRevisionCountersColumns holds the columns for the "rbac_policy_revision_counters" table.
+	RbacPolicyRevisionCountersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "固定 RBAC policy revision counter ID"},
+		{Name: "last_revision", Type: field.TypeInt64, Comment: "最近已分配的 RBAC policy revision", Default: 0},
+	}
+	// RbacPolicyRevisionCountersTable holds the schema information for the "rbac_policy_revision_counters" table.
+	RbacPolicyRevisionCountersTable = &schema.Table{
+		Name:       "rbac_policy_revision_counters",
+		Columns:    RbacPolicyRevisionCountersColumns,
+		PrimaryKey: []*schema.Column{RbacPolicyRevisionCountersColumns[0]},
+	}
 	// RolesColumns holds the columns for the "roles" table.
 	RolesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "角色ID"},
@@ -270,6 +281,7 @@ var (
 		PermissionsTable,
 		RbacPolicyOutboxEventsTable,
 		RbacPolicyRevisionsTable,
+		RbacPolicyRevisionCountersTable,
 		RolesTable,
 		RolePermissionsTable,
 		UsersTable,

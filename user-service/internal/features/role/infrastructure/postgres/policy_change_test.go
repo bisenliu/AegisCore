@@ -2,9 +2,13 @@ package postgres
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -130,6 +134,153 @@ func TestPolicyFactCommitFailureRollsBackAllWrites(t *testing.T) {
 	_, err = store.Update(commitCtx, roleapplication.UpdateRoleInput{RoleID: roleID, Name: "Commit Failed", Active: true}, rolePolicyChange("role_updated", roleID))
 	require.ErrorIs(t, err, context.Canceled)
 	assertRoleAndFactCounts(ctx, t, client, roleID, created.Role.Name, baseRevisionCount, baseOutboxCount)
+}
+
+func TestPostgresPolicyRevisionFollowsCommitOrderAndHandlesConcurrentWrites(t *testing.T) {
+	ctx, _, client := newBootstrapPostgresTestDB(t)
+	_, err := client.RbacPolicyRevisionCounter.Create().SetID(policyRevisionCounterID).SetLastRevision(0).Save(ctx)
+	require.NoError(t, err)
+	store := NewRoleStore(client)
+
+	t.Run("later mutation waits for earlier revision transaction", func(t *testing.T) {
+		firstRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000022001")
+		secondRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000022002")
+		firstTx, err := client.Tx(ctx)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = firstTx.Rollback() })
+		_, err = firstTx.Role.Create().SetRoleID(firstRoleID).SetName("First Commit Role").SetActive(true).Save(ctx)
+		require.NoError(t, err)
+		firstRevision := appendPolicyFactInOpenTransaction(ctx, t, firstTx, rolePolicyChange("role_created", firstRoleID))
+		counterUpdateStarted := make(chan struct{})
+		var counterUpdateOnce sync.Once
+		client.RbacPolicyRevisionCounter.Use(func(next ent.Mutator) ent.Mutator {
+			return ent.MutateFunc(func(ctx context.Context, mutation ent.Mutation) (ent.Value, error) {
+				counterUpdateOnce.Do(func() { close(counterUpdateStarted) })
+				return next.Mutate(ctx, mutation)
+			})
+		})
+
+		type writeOutcome struct {
+			result *roleapplication.RoleWriteResult
+			err    error
+		}
+		secondDone := make(chan writeOutcome, 1)
+		go func() {
+			result, writeErr := store.Create(ctx, roleapplication.CreateRoleInput{RoleID: secondRoleID, Name: "Second Commit Role", Active: true}, rolePolicyChange("role_created", secondRoleID))
+			secondDone <- writeOutcome{result: result, err: writeErr}
+		}()
+
+		select {
+		case <-counterUpdateStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("second mutation did not reach the revision counter")
+		}
+		select {
+		case outcome := <-secondDone:
+			t.Fatalf("second mutation committed before the first transaction: result=%+v err=%v", outcome.result, outcome.err)
+		case <-time.After(150 * time.Millisecond):
+		}
+		require.NoError(t, firstTx.Commit())
+
+		select {
+		case outcome := <-secondDone:
+			require.NoError(t, outcome.err)
+			require.Equal(t, firstRevision+1, outcome.result.Revision)
+		case <-time.After(5 * time.Second):
+			t.Fatal("second mutation did not complete after the first transaction committed")
+		}
+	})
+
+	t.Run("one hundred concurrent mutations append one contiguous fact each", func(t *testing.T) {
+		const writes = 100
+		baseRevisionCount, err := client.RbacPolicyRevision.Query().Count(ctx)
+		require.NoError(t, err)
+		baseOutboxCount, err := client.RbacPolicyOutboxEvent.Query().Count(ctx)
+		require.NoError(t, err)
+		baseRoleCount, err := client.Role.Query().Count(ctx)
+		require.NoError(t, err)
+
+		start := make(chan struct{})
+		outcomes := make(chan *roleapplication.RoleWriteResult, writes)
+		errs := make(chan error, writes)
+		var wg sync.WaitGroup
+		for index := 0; index < writes; index++ {
+			index := index
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				roleID := uuid.MustParse(fmt.Sprintf("018f0000-0000-7000-8000-%012d", 23000+index))
+				result, writeErr := store.Create(ctx, roleapplication.CreateRoleInput{
+					RoleID: roleID,
+					Name:   fmt.Sprintf("Concurrent Policy Role %03d", index),
+					Active: true,
+				}, rolePolicyChange("role_created", roleID))
+				if writeErr != nil {
+					errs <- writeErr
+					return
+				}
+				outcomes <- result
+			}()
+		}
+		close(start)
+		wg.Wait()
+		close(errs)
+		close(outcomes)
+		for writeErr := range errs {
+			require.NoError(t, writeErr)
+		}
+
+		revisions := make([]int64, 0, writes)
+		for outcome := range outcomes {
+			revisions = append(revisions, outcome.Revision)
+		}
+		require.Len(t, revisions, writes)
+		sort.Slice(revisions, func(i, j int) bool { return revisions[i] < revisions[j] })
+		for index, revision := range revisions {
+			require.Equal(t, int64(baseRevisionCount+index+1), revision)
+		}
+
+		revisionCount, err := client.RbacPolicyRevision.Query().Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, baseRevisionCount+writes, revisionCount)
+		outboxCount, err := client.RbacPolicyOutboxEvent.Query().Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, baseOutboxCount+writes, outboxCount)
+		roleCount, err := client.Role.Query().Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, baseRoleCount+writes, roleCount)
+		counter, err := client.RbacPolicyRevisionCounter.Get(ctx, policyRevisionCounterID)
+		require.NoError(t, err)
+		require.Equal(t, revisions[len(revisions)-1], counter.LastRevision)
+	})
+}
+
+func appendPolicyFactInOpenTransaction(ctx context.Context, t *testing.T, tx *ent.Tx, change roleapplication.PolicyChange) int64 {
+	t.Helper()
+	counter, err := tx.RbacPolicyRevisionCounter.UpdateOneID(policyRevisionCounterID).AddLastRevision(1).Save(ctx)
+	require.NoError(t, err)
+	revision, err := tx.RbacPolicyRevision.Create().
+		SetID(counter.LastRevision).
+		SetReason(change.Reason).
+		SetNillableRoleID(nonNilUUID(change.RoleID)).
+		SetNillableUserID(nonNilUUID(change.UserID)).
+		SetNillablePermissionID(nonNilUUID(change.PermissionID)).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = tx.RbacPolicyOutboxEvent.Create().
+		SetEventID(uuid.New()).
+		SetRevision(revision.ID).
+		SetKind(string(change.Kind)).
+		SetReason(change.Reason).
+		SetNillableRoleID(nonNilUUID(change.RoleID)).
+		SetNillableUserID(nonNilUUID(change.UserID)).
+		SetNillablePermissionID(nonNilUUID(change.PermissionID)).
+		SetIdempotencyKey("rbac-policy-revision:" + strconv.FormatInt(revision.ID, 10)).
+		SetPolicyRevisionID(revision.ID).
+		Save(ctx)
+	require.NoError(t, err)
+	return revision.ID
 }
 
 func assertPolicyFact(ctx context.Context, t *testing.T, client *ent.Client, revision int64, change roleapplication.PolicyChange) {

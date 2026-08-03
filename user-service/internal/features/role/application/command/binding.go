@@ -53,10 +53,9 @@ func (s *roleCommandService) AddUserRole(ctx context.Context, cmd UserRoleComman
 		return nil, err
 	}
 	if err := s.notifyUserRoleChanged(ctx, write.Revision, change.Reason, cmd.UserID, cmd.RoleID); err != nil {
-		logger.Error(ctx, "refresh rbac policy after user role add failed", logger.StackTrace(zap.String("user_id", cmd.UserID.String()), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
-		return nil, err
+		logger.Error(ctx, "refresh rbac policy after user role add failed", logger.StackTrace(zap.Int64("policy_revision", write.Revision), zap.String("user_id", cmd.UserID.String()), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
 	}
-	return s.listUserRoles(ctx, cmd.UserID, write.Revision)
+	return &RolesResult{Items: write.Items, Revision: write.Revision}, nil
 }
 
 // ReplaceUserRoles 幂等替换用户的完整角色绑定集合。
@@ -78,8 +77,7 @@ func (s *roleCommandService) ReplaceUserRoles(ctx context.Context, cmd ReplaceUs
 		return nil, err
 	}
 	if err := s.notifyUserRoleChanged(ctx, write.Revision, change.Reason, cmd.UserID, uuid.Nil); err != nil {
-		logger.Error(ctx, "refresh rbac policy after user roles replace failed", logger.StackTrace(zap.String("user_id", cmd.UserID.String()), zap.Error(err))...)
-		return nil, err
+		logger.Error(ctx, "refresh rbac policy after user roles replace failed", logger.StackTrace(zap.Int64("policy_revision", write.Revision), zap.String("user_id", cmd.UserID.String()), zap.Error(err))...)
 	}
 	return &RolesResult{Items: write.Items, Revision: write.Revision}, nil
 }
@@ -92,10 +90,9 @@ func (s *roleCommandService) RemoveUserRole(ctx context.Context, cmd UserRoleCom
 		return nil, err
 	}
 	if err := s.notifyUserRoleChanged(ctx, write.Revision, change.Reason, cmd.UserID, cmd.RoleID); err != nil {
-		logger.Error(ctx, "refresh rbac policy after user role remove failed", logger.StackTrace(zap.String("user_id", cmd.UserID.String()), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
-		return nil, err
+		logger.Error(ctx, "refresh rbac policy after user role remove failed", logger.StackTrace(zap.Int64("policy_revision", write.Revision), zap.String("user_id", cmd.UserID.String()), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
 	}
-	return s.listUserRoles(ctx, cmd.UserID, write.Revision)
+	return &RolesResult{Items: write.Items, Revision: write.Revision}, nil
 }
 
 // AddRolePermission 为角色新增权限绑定；重复绑定由 store 映射为明确冲突语义。
@@ -113,14 +110,13 @@ func (s *roleCommandService) AddRolePermission(ctx context.Context, cmd RolePerm
 		return nil, err
 	}
 	if err := s.notifyPolicyChanged(ctx, write.Revision, change.Reason); err != nil {
-		logger.Error(ctx, "refresh rbac policy after role permission add failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
-		return nil, err
+		logger.Error(ctx, "refresh rbac policy after role permission add failed", logger.StackTrace(zap.Int64("policy_revision", write.Revision), zap.String("role_id", cmd.RoleID.String()), zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
 	}
-	return s.listRolePermissions(ctx, cmd.RoleID, write.Revision)
+	return &PermissionsResult{Items: write.Items, Revision: write.Revision}, nil
 }
 
 // ReplaceRolePermissions 幂等替换角色的完整权限绑定集合。
-// 替换语义以去重后的完整权限集合为准；policy reload 失败会返回错误，但已提交的绑定不会回滚到旧授权集。
+// 替换语义以去重后的完整权限集合为准；提交后的 policy reload 失败由 outbox 自动恢复。
 func (s *roleCommandService) ReplaceRolePermissions(ctx context.Context, cmd ReplaceRolePermissionsCommand) (*PermissionsResult, error) {
 	if _, err := s.roles.GetByRoleID(ctx, cmd.RoleID); err != nil {
 		return nil, err
@@ -140,8 +136,7 @@ func (s *roleCommandService) ReplaceRolePermissions(ctx context.Context, cmd Rep
 		return nil, err
 	}
 	if err := s.notifyPolicyChanged(ctx, write.Revision, change.Reason); err != nil {
-		logger.Error(ctx, "refresh rbac policy after role permissions replace failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
-		return nil, err
+		logger.Error(ctx, "refresh rbac policy after role permissions replace failed", logger.StackTrace(zap.Int64("policy_revision", write.Revision), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
 	}
 	return &PermissionsResult{Items: write.Items, Revision: write.Revision}, nil
 }
@@ -154,26 +149,9 @@ func (s *roleCommandService) RemoveRolePermission(ctx context.Context, cmd RoleP
 		return nil, err
 	}
 	if err := s.notifyPolicyChanged(ctx, write.Revision, change.Reason); err != nil {
-		logger.Error(ctx, "refresh rbac policy after role permission remove failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
-		return nil, err
+		logger.Error(ctx, "refresh rbac policy after role permission remove failed", logger.StackTrace(zap.Int64("policy_revision", write.Revision), zap.String("role_id", cmd.RoleID.String()), zap.String("permission_id", cmd.PermissionID.String()), zap.Error(err))...)
 	}
-	return s.listRolePermissions(ctx, cmd.RoleID, write.Revision)
-}
-
-func (s *roleCommandService) listUserRoles(ctx context.Context, userID uuid.UUID, revision int64) (*RolesResult, error) {
-	items, err := s.userRoles.ListByUserID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	return &RolesResult{Items: items, Revision: revision}, nil
-}
-
-func (s *roleCommandService) listRolePermissions(ctx context.Context, roleID uuid.UUID, revision int64) (*PermissionsResult, error) {
-	items, err := s.rolePermissions.ListByRoleID(ctx, roleID)
-	if err != nil {
-		return nil, err
-	}
-	return &PermissionsResult{Items: items, Revision: revision}, nil
+	return &PermissionsResult{Items: write.Items, Revision: write.Revision}, nil
 }
 
 func uniqueUUIDs(values []uuid.UUID) []uuid.UUID {

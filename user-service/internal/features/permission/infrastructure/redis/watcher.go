@@ -204,10 +204,20 @@ func (w *Watcher) run(ctx context.Context, done chan struct{}) {
 // ObserveTargetRevision 处理数据库 revision 目标，并始终保留消息要求的缓存失效副作用。
 func (w *Watcher) ObserveTargetRevision(ctx context.Context, targetRevision int64, change permissionapplication.PolicyChange, instanceID string, source string) {
 	localApplied := w.engine.AppliedRevision()
+	hasRevisionGap := targetRevision > localApplied
 	reason := change.ReasonText()
 	status := w.engine.ProjectionStatus()
-	if targetRevision > localApplied || !status.Ready() {
-		appliedRevision, err := w.engine.ReloadToRevision(ctx, targetRevision)
+	requiresReload := change.RequiresReload()
+	if requiresReload || targetRevision > localApplied || !status.Ready() {
+		var (
+			appliedRevision int64
+			err             error
+		)
+		if requiresReload {
+			appliedRevision, err = w.engine.RefreshToRevision(ctx, targetRevision)
+		} else {
+			appliedRevision, err = w.engine.ReloadToRevision(ctx, targetRevision)
+		}
 		if err != nil {
 			w.metrics.WatcherReloadFailed(ctx, source, permissionapplication.MetricsReasonReloadFailed)
 			w.observeLag(ctx, targetRevision, appliedRevision)
@@ -224,7 +234,12 @@ func (w *Watcher) ObserveTargetRevision(ctx context.Context, targetRevision int6
 		w.metrics.WatcherReloadSucceeded(ctx, source)
 		w.observeLag(ctx, targetRevision, status.AppliedRevision)
 	}
-	w.invalidateChange(change)
+	if hasRevisionGap {
+		// 跨过 revision 表示期间可能漏收了任意用户的绑定事件，精确失效不足以恢复这些缓存。
+		w.engine.InvalidateAllUserRoles()
+	} else {
+		w.invalidateChange(change)
+	}
 	appliedRevision := w.engine.AppliedRevision()
 	logger.Info(ctx, "rbac policy projection synchronized", zap.Int64("target_revision", targetRevision), zap.Int64("local_applied_policy_revision", appliedRevision), zap.Int64("previous_applied_policy_revision", localApplied), zap.String("instance_id", instanceID), zap.String("source", source), zap.String("reason", reason))
 }
