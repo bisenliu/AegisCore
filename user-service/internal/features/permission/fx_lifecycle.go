@@ -28,7 +28,7 @@ type RegisterRBACLifecycleParams struct {
 
 // Provider：生命周期注册
 
-// registerRBACLifecycle 先启动用户角色缓存，再 fail-closed 初始化策略，最后启动跨副本 watcher。
+// registerRBACLifecycle 依次启动 resolver、策略初始化、watcher 和 outbox dispatcher。
 func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
@@ -37,19 +37,23 @@ func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
 			}
 			params.Runtime.Initializer.InitializeFailClosed(ctx)
 			params.Runtime.Watcher.Start()
+			if err := params.Runtime.Dispatcher.Start(); err != nil {
+				return errors.Join(err, params.Runtime.Watcher.Stop(ctx), params.Runtime.UserRoles.Close())
+			}
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			return stopRBACLifecycle(ctx, params.Runtime.Watcher.Stop, params.Runtime.UserRoles)
+			return stopRBACLifecycle(ctx, params.Runtime.Dispatcher.Stop, params.Runtime.Watcher.Stop, params.Runtime.UserRoles)
 		},
 	})
 }
 
 // 生命周期辅助函数
 
-// stopRBACLifecycle 聚合 watcher 停止和本地用户角色缓存关闭错误，避免静默丢失清理失败。
-func stopRBACLifecycle(ctx context.Context, stopWatcher func(context.Context) error, closer userRoleResolverLifecycle) error {
+// stopRBACLifecycle 按 dispatcher、watcher、resolver 顺序停止并聚合全部错误。
+func stopRBACLifecycle(ctx context.Context, stopDispatcher func(context.Context) error, stopWatcher func(context.Context) error, closer userRoleResolverLifecycle) error {
 	return errors.Join(
+		stopDispatcher(ctx),
 		stopWatcher(ctx),
 		closer.Close(),
 	)

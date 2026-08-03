@@ -60,6 +60,16 @@ rbac:
     size: 100000
     ttl: 5s
     load_timeout: 500ms
+  outbox_dispatcher:
+    # poll_interval 控制无待投递事件时的轮询间隔；batch_size 限制单轮 claim 数量。
+    poll_interval: 1s
+    batch_size: 100
+    # claim_timeout 是事件处理租约，需为正常 Redis 发布与数据库确认留出充足预算。
+    claim_timeout: 30s
+    retry_backoff:
+      # 投递失败后使用有界指数退避，避免下游故障时形成高频重试。
+      initial: 1s
+      max: 1m
 
 api_rate_limit:
   # 限流使用进程内 token bucket，不是认证或授权边界；限流器错误默认降级放行。

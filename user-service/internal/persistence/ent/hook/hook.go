@@ -21,6 +21,42 @@ func (f PermissionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PermissionMutation", m)
 }
 
+// The RbacPolicyOutboxEventFunc type is an adapter to allow the use of ordinary
+// function as RbacPolicyOutboxEvent mutator.
+type RbacPolicyOutboxEventFunc func(context.Context, *ent.RbacPolicyOutboxEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RbacPolicyOutboxEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RbacPolicyOutboxEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RbacPolicyOutboxEventMutation", m)
+}
+
+// The RbacPolicyRevisionFunc type is an adapter to allow the use of ordinary
+// function as RbacPolicyRevision mutator.
+type RbacPolicyRevisionFunc func(context.Context, *ent.RbacPolicyRevisionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RbacPolicyRevisionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RbacPolicyRevisionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RbacPolicyRevisionMutation", m)
+}
+
+// The RbacPolicyRevisionCounterFunc type is an adapter to allow the use of ordinary
+// function as RbacPolicyRevisionCounter mutator.
+type RbacPolicyRevisionCounterFunc func(context.Context, *ent.RbacPolicyRevisionCounterMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RbacPolicyRevisionCounterFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RbacPolicyRevisionCounterMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RbacPolicyRevisionCounterMutation", m)
+}
+
 // The RoleFunc type is an adapter to allow the use of ordinary
 // function as Role mutator.
 type RoleFunc func(context.Context, *ent.RoleMutation) (ent.Value, error)

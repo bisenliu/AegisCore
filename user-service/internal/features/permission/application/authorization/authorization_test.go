@@ -95,15 +95,19 @@ type spyMetrics struct {
 	enforce []enforceObservation
 }
 
-func (m *spyMetrics) PolicyReloadSucceeded(context.Context, string)       {}
-func (m *spyMetrics) PolicyReloadFailed(context.Context, string, string)  {}
-func (m *spyMetrics) PolicyPublishSucceeded(context.Context)              {}
-func (m *spyMetrics) PolicyPublishFailed(context.Context, string)         {}
-func (m *spyMetrics) WatcherCheckFailed(context.Context, string)          {}
-func (m *spyMetrics) WatcherReloadSucceeded(context.Context, string)      {}
-func (m *spyMetrics) WatcherReloadFailed(context.Context, string, string) {}
-func (m *spyMetrics) WatcherVersionMismatch(context.Context, string)      {}
-func (m *spyMetrics) PolicyReloadLagObserved(context.Context, int64)      {}
+func (m *spyMetrics) PolicyReloadSucceeded(context.Context, string)          {}
+func (m *spyMetrics) PolicyReloadFailed(context.Context, string, string)     {}
+func (m *spyMetrics) PolicyPublishSucceeded(context.Context)                 {}
+func (m *spyMetrics) PolicyPublishFailed(context.Context, string)            {}
+func (m *spyMetrics) WatcherCheckFailed(context.Context, string, string)     {}
+func (m *spyMetrics) WatcherReloadSucceeded(context.Context, string)         {}
+func (m *spyMetrics) WatcherReloadFailed(context.Context, string, string)    {}
+func (m *spyMetrics) WatcherVersionMismatch(context.Context, string, string) {}
+func (m *spyMetrics) PolicyReloadLagObserved(context.Context, int64)         {}
+func (m *spyMetrics) DispatcherOperationObserved(context.Context, string, string, string, string) {
+}
+func (m *spyMetrics) DispatcherBacklogObserved(context.Context, int, time.Duration) {}
+func (m *spyMetrics) DispatcherRunningObserved(context.Context, bool)               {}
 func (m *spyMetrics) EnforceObserved(_ context.Context, result string, method string, routeTemplate string, duration time.Duration) {
 	m.enforce = append(m.enforce, enforceObservation{result: result, method: method, routeTemplate: routeTemplate, duration: duration})
 }

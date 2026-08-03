@@ -20,11 +20,12 @@ import (
 type HealthCheckParams struct {
 	fx.In
 
-	Resources     serviceconfig.ResourceSettings
-	PrimaryDB     *sql.DB               `name:"primary_db"`
-	CacheRedis    redis.UniversalClient `name:"cache_redis"`
-	CasbinPolicy  permissionauthorization.PolicyHealth
-	PolicyWatcher permissionapplication.PolicyWatcherStatus
+	Resources        serviceconfig.ResourceSettings
+	PrimaryDB        *sql.DB               `name:"primary_db"`
+	CacheRedis       redis.UniversalClient `name:"cache_redis"`
+	CasbinPolicy     permissionauthorization.PolicyHealth
+	PolicyWatcher    permissionapplication.PolicyWatcherStatus
+	OutboxDispatcher permissionapplication.OutboxDispatcherStatus
 }
 
 type postgresHealthChecker struct {
@@ -40,13 +41,15 @@ type redisHealthChecker struct {
 }
 
 type casbinPolicyHealthChecker struct {
-	engine interface {
-		LastError() error
-	}
+	engine permissionauthorization.PolicyHealth
 }
 
 type watcherHealthChecker struct {
 	watcher permissionapplication.PolicyWatcherStatus
+}
+
+type outboxDispatcherHealthChecker struct {
+	dispatcher permissionapplication.OutboxDispatcherStatus
 }
 
 // ProvideHealthChecks 构造用户服务启动和流量接入探针检查项。
@@ -59,8 +62,28 @@ func ProvideHealthChecks(params HealthCheckParams) router.HealthChecks {
 		redisHealthChecker{name: "redis." + resources.NameCacheRedis, client: params.CacheRedis, timeout: redisCfg.Timeout},
 		casbinPolicyHealthChecker{engine: params.CasbinPolicy},
 		watcherHealthChecker{watcher: params.PolicyWatcher},
+		outboxDispatcherHealthChecker{dispatcher: params.OutboxDispatcher},
 	}
 	return router.HealthChecks{Readiness: checks, Startup: checks}
+}
+
+func (c outboxDispatcherHealthChecker) Name() string {
+	return "rbac.outbox_dispatcher"
+}
+
+func (c outboxDispatcherHealthChecker) Check(ctx context.Context) router.HealthCheckResult {
+	name := c.Name()
+	if c.dispatcher == nil {
+		return unavailableHealthResult(name, "rbac outbox dispatcher unavailable")
+	}
+	status, err := c.dispatcher.Status(ctx)
+	if err != nil {
+		return unavailableHealthResult(name, "rbac outbox dispatcher status query failed")
+	}
+	if !status.Running {
+		return unavailableHealthResult(name, "rbac outbox dispatcher not running")
+	}
+	return okHealthResult(name)
 }
 
 func (c postgresHealthChecker) Name() string {
@@ -104,7 +127,7 @@ func (c casbinPolicyHealthChecker) Check(context.Context) router.HealthCheckResu
 	if c.engine == nil {
 		return unavailableHealthResult(name, "casbin policy unavailable")
 	}
-	if err := c.engine.LastError(); err != nil {
+	if !c.engine.ProjectionStatus().Ready() {
 		return unavailableHealthResult(name, "casbin policy unavailable")
 	}
 	return okHealthResult(name)

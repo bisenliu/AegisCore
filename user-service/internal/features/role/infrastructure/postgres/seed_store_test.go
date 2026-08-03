@@ -31,7 +31,7 @@ func TestRoleStoreUpsertSystemRole(t *testing.T) {
 	require.Equal(t, roleID, created.RoleID)
 	require.True(t, created.Active)
 	require.True(t, created.IsSystem)
-	err = store.SetActive(ctx, roleID, false)
+	_, err = store.SetActive(ctx, roleID, false, rolePolicyChange("role_active_changed", roleID))
 	require.NoError(t, err)
 
 	input.Name = "Super Admin Updated"
@@ -107,6 +107,8 @@ func TestUserRoleStoreAssignRoleIdempotent(t *testing.T) {
 func newRoleStoreTestClient(t *testing.T) *ent.Client {
 	t.Helper()
 	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:role_seed_test_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
+	_, err := client.RbacPolicyRevisionCounter.Create().SetID(policyRevisionCounterID).SetLastRevision(0).Save(context.Background())
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 	return client
 }

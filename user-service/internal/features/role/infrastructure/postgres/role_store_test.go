@@ -29,16 +29,17 @@ func TestRoleStoreCRUDAndDomainErrors(t *testing.T) {
 		Name:        "Operator",
 		Description: "operate user resources",
 		Active:      true,
-	})
+	}, rolePolicyChange("role_created", roleID))
 	require.NoError(t, err)
-	require.Equal(t, roleID, created.RoleID)
-	require.Equal(t, "Operator", created.Name)
-	require.True(t, created.Active)
-	require.False(t, created.IsSystem)
+	require.Equal(t, roleID, created.Role.RoleID)
+	require.Equal(t, "Operator", created.Role.Name)
+	require.True(t, created.Role.Active)
+	require.False(t, created.Role.IsSystem)
+	require.Positive(t, created.Revision)
 
 	got, err := store.GetByRoleID(ctx, roleID)
 	require.NoError(t, err)
-	require.Equal(t, created.ID, got.ID)
+	require.Equal(t, created.Role.ID, got.ID)
 	require.Equal(t, roleID, got.RoleID)
 
 	batch, err := store.GetByRoleIDs(ctx, []uuid.UUID{roleID})
@@ -48,30 +49,32 @@ func TestRoleStoreCRUDAndDomainErrors(t *testing.T) {
 	_, err = store.GetByRoleIDs(ctx, []uuid.UUID{roleID, missingRoleID})
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
 
-	_, err = store.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: "Duplicate", Active: true})
+	_, err = store.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: "Duplicate", Active: true}, rolePolicyChange("role_created", roleID))
 	require.ErrorIs(t, err, roledomain.ErrRoleAlreadyExists)
 
-	err = store.Update(ctx, roleapplication.UpdateRoleInput{RoleID: missingRoleID, Name: "Missing", Active: true})
+	_, err = store.Update(ctx, roleapplication.UpdateRoleInput{RoleID: missingRoleID, Name: "Missing", Active: true}, rolePolicyChange("role_updated", missingRoleID))
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
-	err = store.Update(ctx, roleapplication.UpdateRoleInput{
+	write, err := store.Update(ctx, roleapplication.UpdateRoleInput{
 		RoleID:      roleID,
 		Name:        "Operator Updated",
 		Description: "updated description",
 		Active:      false,
-	})
+	}, rolePolicyChange("role_updated", roleID))
 	require.NoError(t, err)
+	require.Greater(t, write.Revision, created.Revision)
 	updated, err := store.GetByRoleID(ctx, roleID)
 	require.NoError(t, err)
 	require.Equal(t, "Operator Updated", updated.Name)
 	require.Equal(t, "updated description", updated.Description)
 	require.False(t, updated.Active)
 
-	err = store.SetActive(ctx, roleID, true)
+	write, err = store.SetActive(ctx, roleID, true, rolePolicyChange("role_active_changed", roleID))
 	require.NoError(t, err)
+	require.Greater(t, write.Revision, created.Revision)
 	activated, err := store.GetByRoleID(ctx, roleID)
 	require.NoError(t, err)
 	require.True(t, activated.Active)
-	err = store.SetActive(ctx, missingRoleID, true)
+	_, err = store.SetActive(ctx, missingRoleID, true, rolePolicyChange("role_active_changed", missingRoleID))
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
 
 }
@@ -124,15 +127,19 @@ func createRoleForTest(ctx context.Context, t *testing.T, store *RoleStore, role
 		require.NotNil(t, role)
 		return *role
 	}
-	role, err := store.Create(ctx, roleapplication.CreateRoleInput{
+	write, err := store.Create(ctx, roleapplication.CreateRoleInput{
 		RoleID:      roleID,
 		Name:        name,
 		Description: name + " role",
 		Active:      active,
-	})
+	}, rolePolicyChange("role_created", roleID))
 	require.NoError(t, err)
-	require.NotNil(t, role)
-	return *role
+	require.NotNil(t, write)
+	return write.Role
+}
+
+func rolePolicyChange(reason string, roleID uuid.UUID) roleapplication.PolicyChange {
+	return roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindPolicyChanged, Reason: reason, RoleID: roleID}
 }
 
 func roleIDs(roles []roledomain.Role) []uuid.UUID {

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 	"github.com/aegiscore/user-service/internal/shared/identity"
@@ -26,9 +27,9 @@ func TestUserRoleStoreAddListAndRemove(t *testing.T) {
 	createUserForTest(ctx, t, client, softDeletedUserID, "deleted-user-role-add@example.com", true)
 	createRoleForTest(ctx, t, roleStore, roleID, "Operator", true, false)
 
-	err := userRoleStore.Add(ctx, userID, roleID)
+	_, err := userRoleStore.Add(ctx, userID, roleID, userRolePolicyChange("user_role_added", userID, roleID))
 	require.NoError(t, err)
-	err = userRoleStore.Add(ctx, userID, roleID)
+	_, err = userRoleStore.Add(ctx, userID, roleID, userRolePolicyChange("user_role_added", userID, roleID))
 	require.ErrorIs(t, err, roledomain.ErrUserRoleAlreadyExists)
 
 	items, err := userRoleStore.ListByUserID(ctx, userID)
@@ -39,21 +40,21 @@ func TestUserRoleStoreAddListAndRemove(t *testing.T) {
 	_, err = userRoleStore.ListByUserID(ctx, softDeletedUserID)
 	require.ErrorIs(t, err, identity.ErrUserNotFound)
 
-	err = userRoleStore.Add(ctx, missingUserID, roleID)
+	_, err = userRoleStore.Add(ctx, missingUserID, roleID, userRolePolicyChange("user_role_added", missingUserID, roleID))
 	require.ErrorIs(t, err, identity.ErrUserNotFound)
-	err = userRoleStore.Add(ctx, userID, missingRoleID)
+	_, err = userRoleStore.Add(ctx, userID, missingRoleID, userRolePolicyChange("user_role_added", userID, missingRoleID))
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
 
-	err = userRoleStore.Remove(ctx, userID, roleID)
+	_, err = userRoleStore.Remove(ctx, userID, roleID, userRolePolicyChange("user_role_removed", userID, roleID))
 	require.NoError(t, err)
 	items, err = userRoleStore.ListByUserID(ctx, userID)
 	require.NoError(t, err)
 	require.Empty(t, items)
-	err = userRoleStore.Remove(ctx, userID, roleID)
+	_, err = userRoleStore.Remove(ctx, userID, roleID, userRolePolicyChange("user_role_removed", userID, roleID))
 	require.ErrorIs(t, err, roledomain.ErrUserRoleNotFound)
-	err = userRoleStore.Remove(ctx, missingUserID, roleID)
+	_, err = userRoleStore.Remove(ctx, missingUserID, roleID, userRolePolicyChange("user_role_removed", missingUserID, roleID))
 	require.ErrorIs(t, err, identity.ErrUserNotFound)
-	err = userRoleStore.Remove(ctx, userID, missingRoleID)
+	_, err = userRoleStore.Remove(ctx, userID, missingRoleID, userRolePolicyChange("user_role_removed", userID, missingRoleID))
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
 }
 
@@ -72,36 +73,41 @@ func TestUserRoleStoreReplace(t *testing.T) {
 	createRoleForTest(ctx, t, roleStore, roleAID, "Alpha", true, false)
 	createRoleForTest(ctx, t, roleStore, roleBID, "Beta", true, false)
 	createRoleForTest(ctx, t, roleStore, roleCID, "Gamma", true, false)
-	require.NoError(t, userRoleStore.Add(ctx, userID, roleAID))
-
-	replaced, err := userRoleStore.Replace(ctx, userID, []uuid.UUID{roleBID, roleCID})
+	_, err := userRoleStore.Add(ctx, userID, roleAID, userRolePolicyChange("user_role_added", userID, roleAID))
 	require.NoError(t, err)
-	require.ElementsMatch(t, []uuid.UUID{roleBID, roleCID}, roleIDs(replaced))
+
+	replaced, err := userRoleStore.Replace(ctx, userID, []uuid.UUID{roleBID, roleCID}, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil))
+	require.NoError(t, err)
+	require.ElementsMatch(t, []uuid.UUID{roleBID, roleCID}, roleIDs(replaced.Items))
 	items, err := userRoleStore.ListByUserID(ctx, userID)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{roleBID, roleCID}, roleIDs(items))
 
-	_, err = userRoleStore.Replace(ctx, missingUserID, []uuid.UUID{roleAID})
+	_, err = userRoleStore.Replace(ctx, missingUserID, []uuid.UUID{roleAID}, userRolePolicyChange("user_roles_replaced", missingUserID, uuid.Nil))
 	require.ErrorIs(t, err, identity.ErrUserNotFound)
 
-	_, err = userRoleStore.Replace(ctx, userID, []uuid.UUID{roleBID, missingRoleID})
+	_, err = userRoleStore.Replace(ctx, userID, []uuid.UUID{roleBID, missingRoleID}, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil))
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
 	items, err = userRoleStore.ListByUserID(ctx, userID)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{roleBID, roleCID}, roleIDs(items))
 
-	_, err = userRoleStore.Replace(ctx, userID, []uuid.UUID{roleBID, roleBID})
+	_, err = userRoleStore.Replace(ctx, userID, []uuid.UUID{roleBID, roleBID}, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil))
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
 	items, err = userRoleStore.ListByUserID(ctx, userID)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{roleBID, roleCID}, roleIDs(items))
 
-	replaced, err = userRoleStore.Replace(ctx, userID, nil)
+	replaced, err = userRoleStore.Replace(ctx, userID, nil, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil))
 	require.NoError(t, err)
-	require.Empty(t, replaced)
+	require.Empty(t, replaced.Items)
 	items, err = userRoleStore.ListByUserID(ctx, userID)
 	require.NoError(t, err)
 	require.Empty(t, items)
+}
+
+func userRolePolicyChange(reason string, userID uuid.UUID, roleID uuid.UUID) roleapplication.PolicyChange {
+	return roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindUserRoleChanged, Reason: reason, UserID: userID, RoleID: roleID}
 }
 
 func createUserForTest(ctx context.Context, t *testing.T, client *ent.Client, userID uuid.UUID, username string, deleted bool) *ent.User {

@@ -20,9 +20,9 @@
 - 延迟升高：检查 HTTP p95、PostgreSQL wait/pool stats、Redis ping 和 downstream runtime 指标。
 - `/readyz` 或 `/startupz` 失败：检查 PostgreSQL、Redis、Casbin policy state 和 RBAC watcher state。
 - Goroutine 数量过高：检查 Go runtime dashboard、`/debug/pprof/goroutine`、近期发布变更和后台任务状态，区分真实泄漏与短时并发堆积。
-- RBAC watcher stopped：检查 Redis Pub/Sub、policy version compensation、实例日志和 watcher metrics；授权热路径不会每请求读 Redis 强一致校验。
+- RBAC watcher stopped：检查 Redis Pub/Sub、数据库 policy revision compensation、实例日志和 watcher metrics；授权热路径不会每请求读取数据库或 Redis revision。
 - Casbin reload failed：检查权限目录、角色状态、绑定关系和 policy loader 错误；不要通过 route diff 写入权限。
-- RBAC policy reload lag：在线 RBAC 写成功后，Redis 和 watcher 正常运行时其他副本应在 30 秒内完成 policy 最终生效；持续 lag 表示至少一个副本本地已应用 policy version 落后 Redis 最新 version。
+- RBAC policy reload lag：在线 RBAC 写成功后，数据库和 watcher 正常运行时其他副本应在 30 秒内完成 policy 最终生效；持续 lag 表示至少一个副本本地 Casbin applied projection revision 落后数据库 latest policy revision。
 - Workerpool failed/panicked：定位 owning feature 的后台清理任务，workerpool 只是 runtime executor，不承担业务补偿语义。
 
 ## Runtime Alerts
@@ -39,11 +39,11 @@
 
 ### rbac-policy-reload-lag
 
-`aegiscore_user_service_rbac_policy_reload_lag` 表示当前实例 Redis 最新 RBAC policy version 与本地已应用 version 的非负差值。值大于 `0` 持续 30 秒时，权限变更可能尚未在该实例最终生效；新增权限可能继续被拒绝，移除权限或禁用角色可能在落后实例上短暂继续允许。
+`aegiscore_user_service_rbac_policy_reload_lag` 表示 watcher 最近一次成功读取的数据库 latest RBAC policy revision 与本地 Casbin engine 实际 applied projection revision 的非负差值。值大于 `0` 持续 30 秒时，权限变更可能尚未在该实例最终生效；新增权限可能继续被拒绝，移除权限或禁用角色可能在落后实例上短暂继续允许。lag 为 `0` 只在成功数据库校准证明本地 applied revision 不小于该次 database latest 时成立。
 
-优先检查同一实例的 `rbac_policy_watcher` runtime component 是否 running、`aegiscore_runtime_component_last_error{resource="rbac_policy_watcher"}` 是否为 1、Redis `cache_redis` 可用性、`aegiscore_user_service_rbac_policy_sync_operations_total{operation="watcher_version_check",result="failure"}` 是否增加，以及 `aegiscore_casbin_policy_reloads_total{status="failure"}` 是否增加。依赖恢复后，watcher 的周期性 version compensation 应自动 reload policy 或失效用户角色缓存并把 lag 收敛到 0。
+优先检查同一实例的 `rbac_policy_watcher` runtime component 是否 running、`aegiscore_runtime_component_last_error{resource="rbac_policy_watcher"}` 是否为 1、PostgreSQL `primary_db` 可用性、`aegiscore_user_service_rbac_policy_sync_operations_total{operation="watcher_revision_check",result="failure",reason="revision_store_unavailable"}` 是否增加，以及 `aegiscore_casbin_policy_reloads_total{status="failure"}` 是否增加。revision source 查询失败时 lag gauge 保留上一次成功校准值，不得把保留值 `0` 当作当前数据库已收敛证明。依赖恢复后，watcher 的下一条 Pub/Sub hint 或周期性 database revision compensation 应重新读取 database latest、reload policy并把 lag 收敛到 0。
 
-授权热路径不会每请求读取 Redis version，不要通过要求业务接口强一致读 Redis 来处理该告警；如果 lag 持续且 Redis、watcher、reload 均正常，检查最近部署是否改变了 policy loader、version tracker、Pub/Sub channel 或权限/角色绑定写后通知路径。
+Redis Pub/Sub 只提供唤醒 hint，消息允许丢失、重复、乱序；Redis counter 不存在、落后或重建不会参与补偿判断。遇到旧消息时确认日志中的 `hint_revision` 与 `database_latest_policy_revision`，实际 reload target 必须来自数据库。授权热路径不会每请求读取数据库或 Redis revision，不要通过要求业务接口强一致回源来处理该告警；如果 lag 持续且数据库、watcher、reload 均正常，检查最近部署是否改变了 policy loader、revision source、Pub/Sub channel 或权限/角色绑定写后通知路径。
 
 ## Localcache Alerts
 

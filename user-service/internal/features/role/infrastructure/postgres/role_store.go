@@ -25,21 +25,27 @@ func NewRoleStore(client *ent.Client) *RoleStore {
 }
 
 // Create 插入角色记录，并将唯一约束冲突映射为 ErrRoleAlreadyExists。
-func (s *RoleStore) Create(ctx context.Context, input roleapplication.CreateRoleInput) (*roledomain.Role, error) {
-	created, err := s.client.Role.Create().
-		SetRoleID(input.RoleID).
-		SetName(input.Name).
-		SetDescription(input.Description).
-		SetActive(input.Active).
-		SetIsSystem(false).
-		Save(ctx)
-	if err == nil {
-		return toRoleModel(created), nil
+func (s *RoleStore) Create(ctx context.Context, input roleapplication.CreateRoleInput, change roleapplication.PolicyChange) (*roleapplication.RoleWriteResult, error) {
+	created, write, err := transactPolicyChange(ctx, s.client, "create role", change, func(tx *ent.Tx) (*ent.Role, error) {
+		created, err := tx.Role.Create().
+			SetRoleID(input.RoleID).
+			SetName(input.Name).
+			SetDescription(input.Description).
+			SetActive(input.Active).
+			SetIsSystem(false).
+			Save(ctx)
+		if ent.IsConstraintError(err) {
+			return nil, roledomain.ErrRoleAlreadyExists
+		}
+		if err != nil {
+			return nil, fmt.Errorf("create role %s: %w", input.RoleID.String(), err)
+		}
+		return created, nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	if ent.IsConstraintError(err) {
-		return nil, roledomain.ErrRoleAlreadyExists
-	}
-	return nil, fmt.Errorf("create role %s: %w", input.RoleID.String(), err)
+	return &roleapplication.RoleWriteResult{Role: *toRoleModel(created), Revision: write.Revision}, nil
 }
 
 // GetByRoleID 按外部 UUID 返回角色记录。
@@ -91,35 +97,36 @@ func (s *RoleStore) List(ctx context.Context, input roleapplication.ListRolesInp
 }
 
 // Update 更新角色记录，并将唯一约束冲突映射为 ErrRoleAlreadyExists。
-func (s *RoleStore) Update(ctx context.Context, input roleapplication.UpdateRoleInput) error {
-	updated, err := s.client.Role.Update().
-		Where(entrole.RoleIDEQ(input.RoleID)).
-		SetName(input.Name).
-		SetDescription(input.Description).
-		SetActive(input.Active).
-		Save(ctx)
-	if err == nil && updated == 0 {
-		return roledomain.ErrRoleNotFound
-	}
-	if err != nil {
-		if ent.IsConstraintError(err) {
-			return roledomain.ErrRoleAlreadyExists
+func (s *RoleStore) Update(ctx context.Context, input roleapplication.UpdateRoleInput, change roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
+	_, write, err := transactPolicyChange(ctx, s.client, "update role", change, func(tx *ent.Tx) (struct{}, error) {
+		updated, err := tx.Role.Update().Where(entrole.RoleIDEQ(input.RoleID)).SetName(input.Name).SetDescription(input.Description).SetActive(input.Active).Save(ctx)
+		if err == nil && updated == 0 {
+			return struct{}{}, roledomain.ErrRoleNotFound
 		}
-		return fmt.Errorf("update role %s: %w", input.RoleID.String(), err)
-	}
-	return nil
+		if ent.IsConstraintError(err) {
+			return struct{}{}, roledomain.ErrRoleAlreadyExists
+		}
+		if err != nil {
+			return struct{}{}, fmt.Errorf("update role %s: %w", input.RoleID.String(), err)
+		}
+		return struct{}{}, nil
+	})
+	return write, err
 }
 
 // SetActive 启用或停用角色记录。
-func (s *RoleStore) SetActive(ctx context.Context, roleID uuid.UUID, active bool) error {
-	updated, err := s.client.Role.Update().Where(entrole.RoleIDEQ(roleID)).SetActive(active).Save(ctx)
-	if err == nil && updated == 0 {
-		return roledomain.ErrRoleNotFound
-	}
-	if err != nil {
-		return fmt.Errorf("set role active %s: %w", roleID.String(), err)
-	}
-	return nil
+func (s *RoleStore) SetActive(ctx context.Context, roleID uuid.UUID, active bool, change roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
+	_, write, err := transactPolicyChange(ctx, s.client, "set role active", change, func(tx *ent.Tx) (struct{}, error) {
+		updated, err := tx.Role.Update().Where(entrole.RoleIDEQ(roleID)).SetActive(active).Save(ctx)
+		if err == nil && updated == 0 {
+			return struct{}{}, roledomain.ErrRoleNotFound
+		}
+		if err != nil {
+			return struct{}{}, fmt.Errorf("set role active %s: %w", roleID.String(), err)
+		}
+		return struct{}{}, nil
+	})
+	return write, err
 }
 
 // UpsertSystemRole 按 role_id 幂等写入系统角色 seed 数据。

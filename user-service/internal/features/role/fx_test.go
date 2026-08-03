@@ -55,13 +55,13 @@ func TestRoleModuleBuildsWithCompositionAdapters(t *testing.T) {
 
 type roleModulePolicyNotifier struct{}
 
-func (roleModulePolicyNotifier) NotifyPolicyChanged(context.Context, permissionapplication.PolicyChange) error {
+func (roleModulePolicyNotifier) NotifyPolicyChanged(context.Context, int64, permissionapplication.PolicyChange) error {
 	return nil
 }
 
 type roleModuleStore struct{}
 
-func (roleModuleStore) Create(context.Context, roleapplication.CreateRoleInput) (*roledomain.Role, error) {
+func (roleModuleStore) Create(context.Context, roleapplication.CreateRoleInput, roleapplication.PolicyChange) (*roleapplication.RoleWriteResult, error) {
 	return nil, nil
 }
 
@@ -77,28 +77,28 @@ func (roleModuleStore) List(context.Context, roleapplication.ListRolesInput) ([]
 	return nil, false, nil
 }
 
-func (roleModuleStore) Update(context.Context, roleapplication.UpdateRoleInput) error {
-	return nil
+func (roleModuleStore) Update(context.Context, roleapplication.UpdateRoleInput, roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
+	return roleapplication.PolicyWriteResult{}, nil
 }
 
-func (roleModuleStore) SetActive(context.Context, uuid.UUID, bool) error {
-	return nil
+func (roleModuleStore) SetActive(context.Context, uuid.UUID, bool, roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
+	return roleapplication.PolicyWriteResult{}, nil
 }
 
 func (roleModuleStore) ListByUserID(context.Context, uuid.UUID) ([]roledomain.Role, error) {
 	return nil, nil
 }
 
-func (roleModuleStore) Add(context.Context, uuid.UUID, uuid.UUID) error {
-	return nil
+func (roleModuleStore) Add(context.Context, uuid.UUID, uuid.UUID, roleapplication.PolicyChange) (roleapplication.RolesWriteResult, error) {
+	return roleapplication.RolesWriteResult{}, nil
 }
 
-func (roleModuleStore) Replace(context.Context, uuid.UUID, []uuid.UUID) ([]roledomain.Role, error) {
-	return nil, nil
+func (roleModuleStore) Replace(context.Context, uuid.UUID, []uuid.UUID, roleapplication.PolicyChange) (roleapplication.RolesWriteResult, error) {
+	return roleapplication.RolesWriteResult{}, nil
 }
 
-func (roleModuleStore) Remove(context.Context, uuid.UUID, uuid.UUID) error {
-	return nil
+func (roleModuleStore) Remove(context.Context, uuid.UUID, uuid.UUID, roleapplication.PolicyChange) (roleapplication.RolesWriteResult, error) {
+	return roleapplication.RolesWriteResult{}, nil
 }
 
 func (roleModuleStore) ListByRoleID(context.Context, uuid.UUID) ([]roleapplication.PermissionReference, error) {
@@ -129,16 +129,16 @@ type roleModulePermissionStore struct {
 	roleModuleStore
 }
 
-func (roleModulePermissionStore) Add(context.Context, uuid.UUID, roleapplication.PermissionReference) error {
-	return nil
+func (roleModulePermissionStore) Add(context.Context, uuid.UUID, roleapplication.PermissionReference, roleapplication.PolicyChange) (roleapplication.PermissionsWriteResult, error) {
+	return roleapplication.PermissionsWriteResult{}, nil
 }
 
-func (roleModulePermissionStore) Replace(context.Context, uuid.UUID, []roleapplication.PermissionReference) ([]roleapplication.PermissionReference, error) {
-	return nil, nil
+func (roleModulePermissionStore) Replace(context.Context, uuid.UUID, []roleapplication.PermissionReference, roleapplication.PolicyChange) (roleapplication.PermissionsWriteResult, error) {
+	return roleapplication.PermissionsWriteResult{}, nil
 }
 
-func (roleModulePermissionStore) Remove(context.Context, uuid.UUID, uuid.UUID) error {
-	return nil
+func (roleModulePermissionStore) Remove(context.Context, uuid.UUID, uuid.UUID, roleapplication.PolicyChange) (roleapplication.PermissionsWriteResult, error) {
+	return roleapplication.PermissionsWriteResult{}, nil
 }
 
 var _ roleapplication.RolePermissionStore = roleModulePermissionStore{}

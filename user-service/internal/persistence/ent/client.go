@@ -16,6 +16,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/aegiscore/user-service/internal/persistence/ent/permission"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevisioncounter"
 	"github.com/aegiscore/user-service/internal/persistence/ent/role"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/user"
@@ -29,6 +32,12 @@ type Client struct {
 	Schema *migrate.Schema
 	// Permission is the client for interacting with the Permission builders.
 	Permission *PermissionClient
+	// RbacPolicyOutboxEvent is the client for interacting with the RbacPolicyOutboxEvent builders.
+	RbacPolicyOutboxEvent *RbacPolicyOutboxEventClient
+	// RbacPolicyRevision is the client for interacting with the RbacPolicyRevision builders.
+	RbacPolicyRevision *RbacPolicyRevisionClient
+	// RbacPolicyRevisionCounter is the client for interacting with the RbacPolicyRevisionCounter builders.
+	RbacPolicyRevisionCounter *RbacPolicyRevisionCounterClient
 	// Role is the client for interacting with the Role builders.
 	Role *RoleClient
 	// RolePermission is the client for interacting with the RolePermission builders.
@@ -49,6 +58,9 @@ func NewClient(opts ...Option) *Client {
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.Permission = NewPermissionClient(c.config)
+	c.RbacPolicyOutboxEvent = NewRbacPolicyOutboxEventClient(c.config)
+	c.RbacPolicyRevision = NewRbacPolicyRevisionClient(c.config)
+	c.RbacPolicyRevisionCounter = NewRbacPolicyRevisionCounterClient(c.config)
 	c.Role = NewRoleClient(c.config)
 	c.RolePermission = NewRolePermissionClient(c.config)
 	c.User = NewUserClient(c.config)
@@ -143,13 +155,16 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:            ctx,
-		config:         cfg,
-		Permission:     NewPermissionClient(cfg),
-		Role:           NewRoleClient(cfg),
-		RolePermission: NewRolePermissionClient(cfg),
-		User:           NewUserClient(cfg),
-		UserRole:       NewUserRoleClient(cfg),
+		ctx:                       ctx,
+		config:                    cfg,
+		Permission:                NewPermissionClient(cfg),
+		RbacPolicyOutboxEvent:     NewRbacPolicyOutboxEventClient(cfg),
+		RbacPolicyRevision:        NewRbacPolicyRevisionClient(cfg),
+		RbacPolicyRevisionCounter: NewRbacPolicyRevisionCounterClient(cfg),
+		Role:                      NewRoleClient(cfg),
+		RolePermission:            NewRolePermissionClient(cfg),
+		User:                      NewUserClient(cfg),
+		UserRole:                  NewUserRoleClient(cfg),
 	}, nil
 }
 
@@ -167,13 +182,16 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:            ctx,
-		config:         cfg,
-		Permission:     NewPermissionClient(cfg),
-		Role:           NewRoleClient(cfg),
-		RolePermission: NewRolePermissionClient(cfg),
-		User:           NewUserClient(cfg),
-		UserRole:       NewUserRoleClient(cfg),
+		ctx:                       ctx,
+		config:                    cfg,
+		Permission:                NewPermissionClient(cfg),
+		RbacPolicyOutboxEvent:     NewRbacPolicyOutboxEventClient(cfg),
+		RbacPolicyRevision:        NewRbacPolicyRevisionClient(cfg),
+		RbacPolicyRevisionCounter: NewRbacPolicyRevisionCounterClient(cfg),
+		Role:                      NewRoleClient(cfg),
+		RolePermission:            NewRolePermissionClient(cfg),
+		User:                      NewUserClient(cfg),
+		UserRole:                  NewUserRoleClient(cfg),
 	}, nil
 }
 
@@ -202,21 +220,23 @@ func (c *Client) Close() error {
 // Use adds the mutation hooks to all the entity clients.
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
-	c.Permission.Use(hooks...)
-	c.Role.Use(hooks...)
-	c.RolePermission.Use(hooks...)
-	c.User.Use(hooks...)
-	c.UserRole.Use(hooks...)
+	for _, n := range []interface{ Use(...Hook) }{
+		c.Permission, c.RbacPolicyOutboxEvent, c.RbacPolicyRevision,
+		c.RbacPolicyRevisionCounter, c.Role, c.RolePermission, c.User, c.UserRole,
+	} {
+		n.Use(hooks...)
+	}
 }
 
 // Intercept adds the query interceptors to all the entity clients.
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
-	c.Permission.Intercept(interceptors...)
-	c.Role.Intercept(interceptors...)
-	c.RolePermission.Intercept(interceptors...)
-	c.User.Intercept(interceptors...)
-	c.UserRole.Intercept(interceptors...)
+	for _, n := range []interface{ Intercept(...Interceptor) }{
+		c.Permission, c.RbacPolicyOutboxEvent, c.RbacPolicyRevision,
+		c.RbacPolicyRevisionCounter, c.Role, c.RolePermission, c.User, c.UserRole,
+	} {
+		n.Intercept(interceptors...)
+	}
 }
 
 // Mutate implements the ent.Mutator interface.
@@ -224,6 +244,12 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
 	case *PermissionMutation:
 		return c.Permission.mutate(ctx, m)
+	case *RbacPolicyOutboxEventMutation:
+		return c.RbacPolicyOutboxEvent.mutate(ctx, m)
+	case *RbacPolicyRevisionMutation:
+		return c.RbacPolicyRevision.mutate(ctx, m)
+	case *RbacPolicyRevisionCounterMutation:
+		return c.RbacPolicyRevisionCounter.mutate(ctx, m)
 	case *RoleMutation:
 		return c.Role.mutate(ctx, m)
 	case *RolePermissionMutation:
@@ -383,6 +409,437 @@ func (c *PermissionClient) mutate(ctx context.Context, m *PermissionMutation) (V
 		return (&PermissionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Permission mutation op: %q", m.Op())
+	}
+}
+
+// RbacPolicyOutboxEventClient is a client for the RbacPolicyOutboxEvent schema.
+type RbacPolicyOutboxEventClient struct {
+	config
+}
+
+// NewRbacPolicyOutboxEventClient returns a client for the RbacPolicyOutboxEvent from the given config.
+func NewRbacPolicyOutboxEventClient(c config) *RbacPolicyOutboxEventClient {
+	return &RbacPolicyOutboxEventClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `rbacpolicyoutboxevent.Hooks(f(g(h())))`.
+func (c *RbacPolicyOutboxEventClient) Use(hooks ...Hook) {
+	c.hooks.RbacPolicyOutboxEvent = append(c.hooks.RbacPolicyOutboxEvent, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `rbacpolicyoutboxevent.Intercept(f(g(h())))`.
+func (c *RbacPolicyOutboxEventClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RbacPolicyOutboxEvent = append(c.inters.RbacPolicyOutboxEvent, interceptors...)
+}
+
+// Create returns a builder for creating a RbacPolicyOutboxEvent entity.
+func (c *RbacPolicyOutboxEventClient) Create() *RbacPolicyOutboxEventCreate {
+	mutation := newRbacPolicyOutboxEventMutation(c.config, OpCreate)
+	return &RbacPolicyOutboxEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RbacPolicyOutboxEvent entities.
+func (c *RbacPolicyOutboxEventClient) CreateBulk(builders ...*RbacPolicyOutboxEventCreate) *RbacPolicyOutboxEventCreateBulk {
+	return &RbacPolicyOutboxEventCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RbacPolicyOutboxEventClient) MapCreateBulk(slice any, setFunc func(*RbacPolicyOutboxEventCreate, int)) *RbacPolicyOutboxEventCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RbacPolicyOutboxEventCreateBulk{err: fmt.Errorf("calling to RbacPolicyOutboxEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RbacPolicyOutboxEventCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RbacPolicyOutboxEventCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RbacPolicyOutboxEvent.
+func (c *RbacPolicyOutboxEventClient) Update() *RbacPolicyOutboxEventUpdate {
+	mutation := newRbacPolicyOutboxEventMutation(c.config, OpUpdate)
+	return &RbacPolicyOutboxEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RbacPolicyOutboxEventClient) UpdateOne(_m *RbacPolicyOutboxEvent) *RbacPolicyOutboxEventUpdateOne {
+	mutation := newRbacPolicyOutboxEventMutation(c.config, OpUpdateOne, withRbacPolicyOutboxEvent(_m))
+	return &RbacPolicyOutboxEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RbacPolicyOutboxEventClient) UpdateOneID(id int64) *RbacPolicyOutboxEventUpdateOne {
+	mutation := newRbacPolicyOutboxEventMutation(c.config, OpUpdateOne, withRbacPolicyOutboxEventID(id))
+	return &RbacPolicyOutboxEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RbacPolicyOutboxEvent.
+func (c *RbacPolicyOutboxEventClient) Delete() *RbacPolicyOutboxEventDelete {
+	mutation := newRbacPolicyOutboxEventMutation(c.config, OpDelete)
+	return &RbacPolicyOutboxEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RbacPolicyOutboxEventClient) DeleteOne(_m *RbacPolicyOutboxEvent) *RbacPolicyOutboxEventDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RbacPolicyOutboxEventClient) DeleteOneID(id int64) *RbacPolicyOutboxEventDeleteOne {
+	builder := c.Delete().Where(rbacpolicyoutboxevent.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RbacPolicyOutboxEventDeleteOne{builder}
+}
+
+// Query returns a query builder for RbacPolicyOutboxEvent.
+func (c *RbacPolicyOutboxEventClient) Query() *RbacPolicyOutboxEventQuery {
+	return &RbacPolicyOutboxEventQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRbacPolicyOutboxEvent},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RbacPolicyOutboxEvent entity by its id.
+func (c *RbacPolicyOutboxEventClient) Get(ctx context.Context, id int64) (*RbacPolicyOutboxEvent, error) {
+	return c.Query().Where(rbacpolicyoutboxevent.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RbacPolicyOutboxEventClient) GetX(ctx context.Context, id int64) *RbacPolicyOutboxEvent {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryPolicyRevision queries the policy_revision edge of a RbacPolicyOutboxEvent.
+func (c *RbacPolicyOutboxEventClient) QueryPolicyRevision(_m *RbacPolicyOutboxEvent) *RbacPolicyRevisionQuery {
+	query := (&RbacPolicyRevisionClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(rbacpolicyoutboxevent.Table, rbacpolicyoutboxevent.FieldID, id),
+			sqlgraph.To(rbacpolicyrevision.Table, rbacpolicyrevision.FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, true, rbacpolicyoutboxevent.PolicyRevisionTable, rbacpolicyoutboxevent.PolicyRevisionColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *RbacPolicyOutboxEventClient) Hooks() []Hook {
+	return c.hooks.RbacPolicyOutboxEvent
+}
+
+// Interceptors returns the client interceptors.
+func (c *RbacPolicyOutboxEventClient) Interceptors() []Interceptor {
+	return c.inters.RbacPolicyOutboxEvent
+}
+
+func (c *RbacPolicyOutboxEventClient) mutate(ctx context.Context, m *RbacPolicyOutboxEventMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RbacPolicyOutboxEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RbacPolicyOutboxEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RbacPolicyOutboxEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RbacPolicyOutboxEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RbacPolicyOutboxEvent mutation op: %q", m.Op())
+	}
+}
+
+// RbacPolicyRevisionClient is a client for the RbacPolicyRevision schema.
+type RbacPolicyRevisionClient struct {
+	config
+}
+
+// NewRbacPolicyRevisionClient returns a client for the RbacPolicyRevision from the given config.
+func NewRbacPolicyRevisionClient(c config) *RbacPolicyRevisionClient {
+	return &RbacPolicyRevisionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `rbacpolicyrevision.Hooks(f(g(h())))`.
+func (c *RbacPolicyRevisionClient) Use(hooks ...Hook) {
+	c.hooks.RbacPolicyRevision = append(c.hooks.RbacPolicyRevision, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `rbacpolicyrevision.Intercept(f(g(h())))`.
+func (c *RbacPolicyRevisionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RbacPolicyRevision = append(c.inters.RbacPolicyRevision, interceptors...)
+}
+
+// Create returns a builder for creating a RbacPolicyRevision entity.
+func (c *RbacPolicyRevisionClient) Create() *RbacPolicyRevisionCreate {
+	mutation := newRbacPolicyRevisionMutation(c.config, OpCreate)
+	return &RbacPolicyRevisionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RbacPolicyRevision entities.
+func (c *RbacPolicyRevisionClient) CreateBulk(builders ...*RbacPolicyRevisionCreate) *RbacPolicyRevisionCreateBulk {
+	return &RbacPolicyRevisionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RbacPolicyRevisionClient) MapCreateBulk(slice any, setFunc func(*RbacPolicyRevisionCreate, int)) *RbacPolicyRevisionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RbacPolicyRevisionCreateBulk{err: fmt.Errorf("calling to RbacPolicyRevisionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RbacPolicyRevisionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RbacPolicyRevisionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RbacPolicyRevision.
+func (c *RbacPolicyRevisionClient) Update() *RbacPolicyRevisionUpdate {
+	mutation := newRbacPolicyRevisionMutation(c.config, OpUpdate)
+	return &RbacPolicyRevisionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RbacPolicyRevisionClient) UpdateOne(_m *RbacPolicyRevision) *RbacPolicyRevisionUpdateOne {
+	mutation := newRbacPolicyRevisionMutation(c.config, OpUpdateOne, withRbacPolicyRevision(_m))
+	return &RbacPolicyRevisionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RbacPolicyRevisionClient) UpdateOneID(id int64) *RbacPolicyRevisionUpdateOne {
+	mutation := newRbacPolicyRevisionMutation(c.config, OpUpdateOne, withRbacPolicyRevisionID(id))
+	return &RbacPolicyRevisionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RbacPolicyRevision.
+func (c *RbacPolicyRevisionClient) Delete() *RbacPolicyRevisionDelete {
+	mutation := newRbacPolicyRevisionMutation(c.config, OpDelete)
+	return &RbacPolicyRevisionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RbacPolicyRevisionClient) DeleteOne(_m *RbacPolicyRevision) *RbacPolicyRevisionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RbacPolicyRevisionClient) DeleteOneID(id int64) *RbacPolicyRevisionDeleteOne {
+	builder := c.Delete().Where(rbacpolicyrevision.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RbacPolicyRevisionDeleteOne{builder}
+}
+
+// Query returns a query builder for RbacPolicyRevision.
+func (c *RbacPolicyRevisionClient) Query() *RbacPolicyRevisionQuery {
+	return &RbacPolicyRevisionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRbacPolicyRevision},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RbacPolicyRevision entity by its id.
+func (c *RbacPolicyRevisionClient) Get(ctx context.Context, id int64) (*RbacPolicyRevision, error) {
+	return c.Query().Where(rbacpolicyrevision.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RbacPolicyRevisionClient) GetX(ctx context.Context, id int64) *RbacPolicyRevision {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryOutboxEvent queries the outbox_event edge of a RbacPolicyRevision.
+func (c *RbacPolicyRevisionClient) QueryOutboxEvent(_m *RbacPolicyRevision) *RbacPolicyOutboxEventQuery {
+	query := (&RbacPolicyOutboxEventClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(rbacpolicyrevision.Table, rbacpolicyrevision.FieldID, id),
+			sqlgraph.To(rbacpolicyoutboxevent.Table, rbacpolicyoutboxevent.FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, false, rbacpolicyrevision.OutboxEventTable, rbacpolicyrevision.OutboxEventColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *RbacPolicyRevisionClient) Hooks() []Hook {
+	return c.hooks.RbacPolicyRevision
+}
+
+// Interceptors returns the client interceptors.
+func (c *RbacPolicyRevisionClient) Interceptors() []Interceptor {
+	return c.inters.RbacPolicyRevision
+}
+
+func (c *RbacPolicyRevisionClient) mutate(ctx context.Context, m *RbacPolicyRevisionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RbacPolicyRevisionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RbacPolicyRevisionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RbacPolicyRevisionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RbacPolicyRevisionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RbacPolicyRevision mutation op: %q", m.Op())
+	}
+}
+
+// RbacPolicyRevisionCounterClient is a client for the RbacPolicyRevisionCounter schema.
+type RbacPolicyRevisionCounterClient struct {
+	config
+}
+
+// NewRbacPolicyRevisionCounterClient returns a client for the RbacPolicyRevisionCounter from the given config.
+func NewRbacPolicyRevisionCounterClient(c config) *RbacPolicyRevisionCounterClient {
+	return &RbacPolicyRevisionCounterClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `rbacpolicyrevisioncounter.Hooks(f(g(h())))`.
+func (c *RbacPolicyRevisionCounterClient) Use(hooks ...Hook) {
+	c.hooks.RbacPolicyRevisionCounter = append(c.hooks.RbacPolicyRevisionCounter, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `rbacpolicyrevisioncounter.Intercept(f(g(h())))`.
+func (c *RbacPolicyRevisionCounterClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RbacPolicyRevisionCounter = append(c.inters.RbacPolicyRevisionCounter, interceptors...)
+}
+
+// Create returns a builder for creating a RbacPolicyRevisionCounter entity.
+func (c *RbacPolicyRevisionCounterClient) Create() *RbacPolicyRevisionCounterCreate {
+	mutation := newRbacPolicyRevisionCounterMutation(c.config, OpCreate)
+	return &RbacPolicyRevisionCounterCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RbacPolicyRevisionCounter entities.
+func (c *RbacPolicyRevisionCounterClient) CreateBulk(builders ...*RbacPolicyRevisionCounterCreate) *RbacPolicyRevisionCounterCreateBulk {
+	return &RbacPolicyRevisionCounterCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RbacPolicyRevisionCounterClient) MapCreateBulk(slice any, setFunc func(*RbacPolicyRevisionCounterCreate, int)) *RbacPolicyRevisionCounterCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RbacPolicyRevisionCounterCreateBulk{err: fmt.Errorf("calling to RbacPolicyRevisionCounterClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RbacPolicyRevisionCounterCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RbacPolicyRevisionCounterCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RbacPolicyRevisionCounter.
+func (c *RbacPolicyRevisionCounterClient) Update() *RbacPolicyRevisionCounterUpdate {
+	mutation := newRbacPolicyRevisionCounterMutation(c.config, OpUpdate)
+	return &RbacPolicyRevisionCounterUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RbacPolicyRevisionCounterClient) UpdateOne(_m *RbacPolicyRevisionCounter) *RbacPolicyRevisionCounterUpdateOne {
+	mutation := newRbacPolicyRevisionCounterMutation(c.config, OpUpdateOne, withRbacPolicyRevisionCounter(_m))
+	return &RbacPolicyRevisionCounterUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RbacPolicyRevisionCounterClient) UpdateOneID(id int64) *RbacPolicyRevisionCounterUpdateOne {
+	mutation := newRbacPolicyRevisionCounterMutation(c.config, OpUpdateOne, withRbacPolicyRevisionCounterID(id))
+	return &RbacPolicyRevisionCounterUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RbacPolicyRevisionCounter.
+func (c *RbacPolicyRevisionCounterClient) Delete() *RbacPolicyRevisionCounterDelete {
+	mutation := newRbacPolicyRevisionCounterMutation(c.config, OpDelete)
+	return &RbacPolicyRevisionCounterDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RbacPolicyRevisionCounterClient) DeleteOne(_m *RbacPolicyRevisionCounter) *RbacPolicyRevisionCounterDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RbacPolicyRevisionCounterClient) DeleteOneID(id int64) *RbacPolicyRevisionCounterDeleteOne {
+	builder := c.Delete().Where(rbacpolicyrevisioncounter.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RbacPolicyRevisionCounterDeleteOne{builder}
+}
+
+// Query returns a query builder for RbacPolicyRevisionCounter.
+func (c *RbacPolicyRevisionCounterClient) Query() *RbacPolicyRevisionCounterQuery {
+	return &RbacPolicyRevisionCounterQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRbacPolicyRevisionCounter},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RbacPolicyRevisionCounter entity by its id.
+func (c *RbacPolicyRevisionCounterClient) Get(ctx context.Context, id int64) (*RbacPolicyRevisionCounter, error) {
+	return c.Query().Where(rbacpolicyrevisioncounter.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RbacPolicyRevisionCounterClient) GetX(ctx context.Context, id int64) *RbacPolicyRevisionCounter {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *RbacPolicyRevisionCounterClient) Hooks() []Hook {
+	return c.hooks.RbacPolicyRevisionCounter
+}
+
+// Interceptors returns the client interceptors.
+func (c *RbacPolicyRevisionCounterClient) Interceptors() []Interceptor {
+	return c.inters.RbacPolicyRevisionCounter
+}
+
+func (c *RbacPolicyRevisionCounterClient) mutate(ctx context.Context, m *RbacPolicyRevisionCounterMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RbacPolicyRevisionCounterCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RbacPolicyRevisionCounterUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RbacPolicyRevisionCounterUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RbacPolicyRevisionCounterDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RbacPolicyRevisionCounter mutation op: %q", m.Op())
 	}
 }
 
@@ -1033,9 +1490,12 @@ func (c *UserRoleClient) mutate(ctx context.Context, m *UserRoleMutation) (Value
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Permission, Role, RolePermission, User, UserRole []ent.Hook
+		Permission, RbacPolicyOutboxEvent, RbacPolicyRevision,
+		RbacPolicyRevisionCounter, Role, RolePermission, User, UserRole []ent.Hook
 	}
 	inters struct {
-		Permission, Role, RolePermission, User, UserRole []ent.Interceptor
+		Permission, RbacPolicyOutboxEvent, RbacPolicyRevision,
+		RbacPolicyRevisionCounter, Role, RolePermission, User,
+		UserRole []ent.Interceptor
 	}
 )

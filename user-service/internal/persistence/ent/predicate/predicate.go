@@ -9,6 +9,15 @@ import (
 // Permission is the predicate function for permission builders.
 type Permission func(*sql.Selector)
 
+// RbacPolicyOutboxEvent is the predicate function for rbacpolicyoutboxevent builders.
+type RbacPolicyOutboxEvent func(*sql.Selector)
+
+// RbacPolicyRevision is the predicate function for rbacpolicyrevision builders.
+type RbacPolicyRevision func(*sql.Selector)
+
+// RbacPolicyRevisionCounter is the predicate function for rbacpolicyrevisioncounter builders.
+type RbacPolicyRevisionCounter func(*sql.Selector)
+
 // Role is the predicate function for role builders.
 type Role func(*sql.Selector)
 

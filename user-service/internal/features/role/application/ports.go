@@ -10,12 +10,12 @@ import (
 
 // RoleStore 定义角色生命周期 use case 实际消费的角色持久化端口。
 type RoleStore interface {
-	Create(ctx context.Context, input CreateRoleInput) (*roledomain.Role, error)
+	Create(ctx context.Context, input CreateRoleInput, change PolicyChange) (*RoleWriteResult, error)
 	GetByRoleID(ctx context.Context, roleID uuid.UUID) (*roledomain.Role, error)
 	GetByRoleIDs(ctx context.Context, roleIDs []uuid.UUID) ([]roledomain.Role, error)
 	List(ctx context.Context, input ListRolesInput) ([]roledomain.Role, bool, error)
-	Update(ctx context.Context, input UpdateRoleInput) error
-	SetActive(ctx context.Context, roleID uuid.UUID, active bool) error
+	Update(ctx context.Context, input UpdateRoleInput, change PolicyChange) (PolicyWriteResult, error)
+	SetActive(ctx context.Context, roleID uuid.UUID, active bool, change PolicyChange) (PolicyWriteResult, error)
 }
 
 // SeedRoleStore 定义 RBAC seed 消费的角色持久化端口。
@@ -26,17 +26,57 @@ type SeedRoleStore interface {
 // UserRoleStore 定义用户角色绑定 use case 实际消费的持久化端口。
 type UserRoleStore interface {
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]roledomain.Role, error)
-	Add(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) error
-	Replace(ctx context.Context, userID uuid.UUID, roleIDs []uuid.UUID) ([]roledomain.Role, error)
-	Remove(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) error
+	Add(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change PolicyChange) (RolesWriteResult, error)
+	Replace(ctx context.Context, userID uuid.UUID, roleIDs []uuid.UUID, change PolicyChange) (RolesWriteResult, error)
+	Remove(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change PolicyChange) (RolesWriteResult, error)
 }
 
 // RolePermissionStore 定义角色权限绑定 use case 实际消费的持久化端口。
 type RolePermissionStore interface {
 	ListByRoleID(ctx context.Context, roleID uuid.UUID) ([]PermissionReference, error)
-	Add(ctx context.Context, roleID uuid.UUID, permission PermissionReference) error
-	Replace(ctx context.Context, roleID uuid.UUID, permissions []PermissionReference) ([]PermissionReference, error)
-	Remove(ctx context.Context, roleID uuid.UUID, permissionID uuid.UUID) error
+	Add(ctx context.Context, roleID uuid.UUID, permission PermissionReference, change PolicyChange) (PermissionsWriteResult, error)
+	Replace(ctx context.Context, roleID uuid.UUID, permissions []PermissionReference, change PolicyChange) (PermissionsWriteResult, error)
+	Remove(ctx context.Context, roleID uuid.UUID, permissionID uuid.UUID, change PolicyChange) (PermissionsWriteResult, error)
+}
+
+// PolicyChangeKind 表示可靠 RBAC policy 事件的稳定类别。
+type PolicyChangeKind string
+
+const (
+	PolicyChangeKindPolicyChanged   PolicyChangeKind = "policy_changed"
+	PolicyChangeKindUserRoleChanged PolicyChangeKind = "user_role_changed"
+)
+
+// PolicyChange 描述在线 RBAC mutation 对应的可靠变更事实。
+type PolicyChange struct {
+	Kind         PolicyChangeKind
+	Reason       string
+	RoleID       uuid.UUID
+	UserID       uuid.UUID
+	PermissionID uuid.UUID
+}
+
+// PolicyWriteResult 返回数据库已提交的权威 policy revision。
+type PolicyWriteResult struct {
+	Revision int64
+}
+
+// RoleWriteResult 返回角色和对应的已提交 policy revision。
+type RoleWriteResult struct {
+	Role     roledomain.Role
+	Revision int64
+}
+
+// RolesWriteResult 返回角色集合和对应的已提交 policy revision。
+type RolesWriteResult struct {
+	Items    []roledomain.Role
+	Revision int64
+}
+
+// PermissionsWriteResult 返回权限集合和对应的已提交 policy revision。
+type PermissionsWriteResult struct {
+	Items    []PermissionReference
+	Revision int64
 }
 
 // SeedRolePermissionStore 定义 RBAC seed 消费的系统角色权限绑定端口。

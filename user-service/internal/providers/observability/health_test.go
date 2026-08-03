@@ -22,6 +22,7 @@ import (
 	"github.com/aegiscore/common/runtime/workerpool"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authredis "github.com/aegiscore/user-service/internal/features/auth/infrastructure/redis"
+	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	"github.com/aegiscore/user-service/internal/router"
 )
 
@@ -58,25 +59,37 @@ func TestRedisHealthChecker(t *testing.T) {
 }
 
 func TestCasbinPolicyHealthChecker(t *testing.T) {
-	checker := casbinPolicyHealthChecker{engine: stubLastError{}}
+	checker := casbinPolicyHealthChecker{engine: stubPolicyHealth{status: readyPolicyProjectionStatus(2, 2)}}
 	require.Equal(t, "rbac.casbin_policy", checker.Name())
 	result := checker.Check(context.Background())
 	require.Equal(t, router.HealthCheckStatusOK, result.Status)
 
-	checker = casbinPolicyHealthChecker{engine: stubLastError{err: errors.New("load failed")}}
-	result = checker.Check(context.Background())
-	require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
-	require.NotEmpty(t, result.Message)
+	tests := []struct {
+		name   string
+		status permissionapplication.PolicyProjectionStatus
+	}{
+		{name: "uninitialized"},
+		{name: "last reload failed", status: permissionapplication.PolicyProjectionStatus{Initialized: true, AppliedRevision: 2, TargetRevision: 2, LastError: errors.New("load failed")}},
+		{name: "reload status failed", status: permissionapplication.PolicyProjectionStatus{Initialized: true, AppliedRevision: 2, TargetRevision: 2}},
+		{name: "target not reached", status: readyPolicyProjectionStatus(2, 3)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := (casbinPolicyHealthChecker{engine: stubPolicyHealth{status: tt.status}}).Check(context.Background())
+			require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
+			require.NotEmpty(t, result.Message)
+		})
+	}
 }
 
 func TestCasbinPolicyHealthCheckerRecoversAfterReloadSuccess(t *testing.T) {
-	engine := &stubLastError{err: errors.New("initial load failed")}
+	engine := &stubPolicyHealth{status: permissionapplication.PolicyProjectionStatus{LastError: errors.New("initial load failed")}}
 	checker := casbinPolicyHealthChecker{engine: engine}
 
 	result := checker.Check(context.Background())
 	require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
 
-	engine.err = nil
+	engine.status = readyPolicyProjectionStatus(4, 4)
 	result = checker.Check(context.Background())
 	require.Equal(t, router.HealthCheckStatusOK, result.Status)
 }
@@ -103,13 +116,37 @@ func TestWatcherHealthChecker(t *testing.T) {
 	}
 }
 
+func TestOutboxDispatcherHealthChecker(t *testing.T) {
+	checker := outboxDispatcherHealthChecker{dispatcher: &stubDispatcherStatus{status: permissionapplication.DispatcherStatus{Running: true, DueCount: 3, LastErrorCategory: permissionapplication.DispatcherErrorPublish}}}
+	require.Equal(t, "rbac.outbox_dispatcher", checker.Name())
+	require.Equal(t, router.HealthCheckResult{Name: checker.Name(), Status: router.HealthCheckStatusOK}, checker.Check(context.Background()))
+	require.Equal(t, 1, checker.dispatcher.(*stubDispatcherStatus).calls)
+
+	tests := []struct {
+		name       string
+		dispatcher permissionapplication.OutboxDispatcherStatus
+		message    string
+	}{
+		{name: "unavailable", message: "rbac outbox dispatcher unavailable"},
+		{name: "not running", dispatcher: &stubDispatcherStatus{}, message: "rbac outbox dispatcher not running"},
+		{name: "query error", dispatcher: &stubDispatcherStatus{err: errors.New("query failed")}, message: "rbac outbox dispatcher status query failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := outboxDispatcherHealthChecker{dispatcher: tt.dispatcher}.Check(context.Background())
+			require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
+			require.Equal(t, tt.message, result.Message)
+		})
+	}
+}
+
 func TestProvideHealthChecksUsesResourcePingTimeouts(t *testing.T) {
 	settings := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
 		"cache_redis": {Mode: commonresources.RedisModeCluster, Addrs: []string{"127.0.0.1:6379"}, Timeout: 2 * time.Second},
 	}}
 	checks := ProvideHealthChecks(HealthCheckParams{Resources: settings})
 
-	require.Len(t, checks.Readiness, 4)
+	require.Len(t, checks.Readiness, 5)
 	postgres, ok := checks.Readiness[0].(postgresHealthChecker)
 	require.True(t, ok)
 	require.Equal(t, commonresources.DefaultPostgresPingTimeout(), postgres.timeout)
@@ -183,17 +220,37 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 	}
 }
 
-type stubLastError struct {
-	err error
+type stubPolicyHealth struct {
+	status permissionapplication.PolicyProjectionStatus
 }
 
-func (s stubLastError) LastError() error {
-	return s.err
+func (s stubPolicyHealth) ProjectionStatus() permissionapplication.PolicyProjectionStatus {
+	return s.status
+}
+
+func readyPolicyProjectionStatus(appliedRevision int64, targetRevision int64) permissionapplication.PolicyProjectionStatus {
+	return permissionapplication.PolicyProjectionStatus{
+		Initialized:     true,
+		ReloadSucceeded: true,
+		AppliedRevision: appliedRevision,
+		TargetRevision:  targetRevision,
+	}
 }
 
 type stubWatcherStatus struct {
 	running bool
 	err     error
+}
+
+type stubDispatcherStatus struct {
+	status permissionapplication.DispatcherStatus
+	err    error
+	calls  int
+}
+
+func (s *stubDispatcherStatus) Status(context.Context) (permissionapplication.DispatcherStatus, error) {
+	s.calls++
+	return s.status, s.err
 }
 
 func (s stubWatcherStatus) Running() bool {

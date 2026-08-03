@@ -1,7 +1,7 @@
 USER_SERVICE_BIN ?= ../bin/user-service
 ADMIN_USERNAME ?=
 ADMIN_NICKNAME ?=
-CONTAINER_TEST_PACKAGES := ./internal/features/role/infrastructure/postgres ./tests/e2e
+CONTAINER_TEST_PACKAGES := ./internal/features/permission/infrastructure/postgres ./internal/features/role/infrastructure/postgres ./tests/e2e
 export ADMIN_BOOTSTRAP_PASSWORD
 
 .PHONY: help build run test test-containers lint architecture-lint architecture-lint-test verify seed-rbac bootstrap-super-admin generate migrate-diff migrate-validate openapi-generate fxgraph-generate fxgraph-check

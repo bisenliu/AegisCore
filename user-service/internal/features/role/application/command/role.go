@@ -50,17 +50,20 @@ type SetRoleActiveCommand struct {
 
 // RoleResult 是角色写侧用例的 transport-neutral 输出。
 type RoleResult struct {
-	Role roledomain.Role
+	Role     roledomain.Role
+	Revision int64
 }
 
 // RolesResult 是角色集合写侧用例的 transport-neutral 输出。
 type RolesResult struct {
-	Items []roledomain.Role
+	Items    []roledomain.Role
+	Revision int64
 }
 
 // PermissionsResult 是权限集合写侧用例的 transport-neutral 输出。
 type PermissionsResult struct {
-	Items []roleapplication.PermissionReference
+	Items    []roleapplication.PermissionReference
+	Revision int64
 }
 
 // CreateRole 创建角色记录。
@@ -78,12 +81,16 @@ func (s *roleCommandService) CreateRole(ctx context.Context, cmd CreateRoleComma
 	if cmd.Active != nil {
 		active = *cmd.Active
 	}
-	created, err := s.roles.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: name, Description: description, Active: active})
+	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindPolicyChanged, Reason: "role_created", RoleID: roleID}
+	created, err := s.roles.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: name, Description: description, Active: active}, change)
 	if err != nil {
 		logger.Error(ctx, "create role failed", logger.StackTrace(zap.String("role_id", roleID.String()), zap.Error(err))...)
 		return nil, err
 	}
-	return &RoleResult{Role: *created}, nil
+	if err := s.notifyPolicyChanged(ctx, created.Revision, change.Reason); err != nil {
+		logger.Error(ctx, "refresh rbac policy after role create failed", logger.StackTrace(zap.Int64("policy_revision", created.Revision), zap.String("role_id", roleID.String()), zap.Error(err))...)
+	}
+	return &RoleResult{Role: created.Role, Revision: created.Revision}, nil
 }
 
 // UpdateRole 更新角色记录。
@@ -99,14 +106,17 @@ func (s *roleCommandService) UpdateRole(ctx context.Context, cmd UpdateRoleComma
 	if err := current.ProtectSystemMutation(roledomain.RoleMutation{Name: name, Active: cmd.Active}); err != nil {
 		return err
 	}
-	err = s.roles.Update(ctx, roleapplication.UpdateRoleInput{RoleID: cmd.RoleID, Name: name, Description: description, Active: cmd.Active})
+	if current.Name == name && current.Description == description && current.Active == cmd.Active {
+		return nil
+	}
+	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindPolicyChanged, Reason: "role_updated", RoleID: cmd.RoleID}
+	write, err := s.roles.Update(ctx, roleapplication.UpdateRoleInput{RoleID: cmd.RoleID, Name: name, Description: description, Active: cmd.Active}, change)
 	if err != nil {
 		logger.Error(ctx, "update role failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
 		return err
 	}
-	if err := s.notifyPolicyChanged(ctx, "role_updated"); err != nil {
-		logger.Error(ctx, "refresh rbac policy after role update failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
-		return err
+	if err := s.notifyPolicyChanged(ctx, write.Revision, change.Reason); err != nil {
+		logger.Error(ctx, "refresh rbac policy after role update failed", logger.StackTrace(zap.Int64("policy_revision", write.Revision), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
 	}
 	return nil
 }
@@ -120,14 +130,17 @@ func (s *roleCommandService) SetRoleActive(ctx context.Context, cmd SetRoleActiv
 	if err := current.ProtectSystemMutation(roledomain.RoleMutation{Name: current.Name, Active: cmd.Active}); err != nil {
 		return err
 	}
-	err = s.roles.SetActive(ctx, cmd.RoleID, cmd.Active)
+	if current.Active == cmd.Active {
+		return nil
+	}
+	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindPolicyChanged, Reason: "role_active_changed", RoleID: cmd.RoleID}
+	write, err := s.roles.SetActive(ctx, cmd.RoleID, cmd.Active, change)
 	if err != nil {
 		logger.Error(ctx, "set role active failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Bool("active", cmd.Active), zap.Error(err))...)
 		return err
 	}
-	if err := s.notifyPolicyChanged(ctx, "role_active_changed"); err != nil {
-		logger.Error(ctx, "refresh rbac policy after role active state change failed", logger.StackTrace(zap.String("role_id", cmd.RoleID.String()), zap.Bool("active", cmd.Active), zap.Error(err))...)
-		return err
+	if err := s.notifyPolicyChanged(ctx, write.Revision, change.Reason); err != nil {
+		logger.Error(ctx, "refresh rbac policy after role active state change failed", logger.StackTrace(zap.Int64("policy_revision", write.Revision), zap.String("role_id", cmd.RoleID.String()), zap.Bool("active", cmd.Active), zap.Error(err))...)
 	}
 	return nil
 }

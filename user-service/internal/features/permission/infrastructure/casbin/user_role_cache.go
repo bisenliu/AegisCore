@@ -39,11 +39,7 @@ func NewUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult,
 		return UserRoleResolverResult{Resolver: resolver, Stats: resolver, Closer: resolver}, nil
 	}
 	cache, err := localcache.NewLoadingCache[uuid.UUID, []uuid.UUID](cfg.Localcache(rbacUserRolesCacheName), func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-		roleIDs, err := resolver.loadRolesForUser(ctx, userID)
-		if err != nil {
-			return nil, err
-		}
-		return cloneRoleIDs(roleIDs), nil
+		return resolver.loadCacheableRolesForUser(ctx, userID)
 	})
 	if err != nil {
 		return UserRoleResolverResult{}, fmt.Errorf("create rbac user roles localcache: %w", err)
