@@ -340,3 +340,139 @@
 - **WHEN** 测试或未来服务使用非 Nacos 配置来源
 - **THEN** 来源 MUST 能通过业务中立的 document source contract 接入同一 merge、digest、decode、normalize 和 validate 管线
 - **AND** 新来源 MUST NOT 要求修改 Nacos adapter 或把服务业务配置加入 `common`
+
+### Requirement: 共享限流错误与 HTTP 映射
+
+系统 MUST 在 `common/contract` 中提供业务中立的限流应用错误语义，并在 `common/http/response` 中将该错误渲染为 `429 Too Many Requests`。限流错误 MUST 使用稳定低基数 `Kind`、`Reason`、`Code` 和公开 `Message`，不得暴露 limiter key、IP、User ID、token、内部分片或实现细节。
+
+#### Scenario: 限流错误响应
+
+- **WHEN** HTTP middleware 或 handler 返回限流应用错误
+- **THEN** `common/http/response` MUST 渲染 `429 Too Many Requests`
+- **AND** 响应 envelope MUST 为 `success=false`、稳定限流 code 和公开限流 message
+
+#### Scenario: 未知错误不伪装为限流
+
+- **WHEN** 系统返回 nil、未知错误或内部错误
+- **THEN** `common/http/response` MUST 保持现有内部错误归一化语义
+- **AND** 系统 MUST NOT 将非限流错误映射为 `429 Too Many Requests`
+
+### Requirement: 业务中立本地限流 primitive
+
+`common/http/middleware` 或 `common/runtime` MUST 提供业务中立的本地限流 primitive。该 primitive MUST 支持基于调用方提供 key 的 `Allow` 判定、`golang.org/x/time/rate` token bucket、分片存储、后台清理和显式关闭。
+
+#### Scenario: 调用方提供限流 key
+
+- **WHEN** 调用方使用共享限流 middleware
+- **THEN** 调用方 MUST 提供 key resolver 或等价 key 来源
+- **AND** 共享 primitive MUST NOT 内置 user-service 路由、业务 DTO、权限目录、Casbin subject 或服务私有限流阈值
+
+#### Scenario: 本地 limiter 并发访问
+
+- **WHEN** 多个请求并发访问不同 IP 或 User ID 对应的限流 key
+- **THEN** 本地限流 store MUST 使用分片或等价机制降低单一全局锁竞争
+- **AND** 每个 key MUST 拥有独立 token bucket 状态
+
+### Requirement: 应用错误码段治理
+
+系统 MUST 将 `common/contract/errors.Code` 作为稳定公开应用码治理，并 MUST 在共享契约中维护明确的错误码段分配、预留范围和扩展准入规则。`Code` MUST NOT 作为 HTTP status 使用，HTTP status MUST 继续只根据低基数 `Kind` 推导。
+
+#### Scenario: 使用既定错误码段
+
+- **WHEN** 系统定义或审查 `common/contract/errors.Code`
+- **THEN** `0` MUST 只用于成功响应 `CodeOK`
+- **AND** `10xxx` MUST 用于请求解析、绑定和字段校验错误
+- **AND** `20xxx` MUST 用于认证、凭证、token、session 和账号登录态错误
+- **AND** `30xxx` MUST 用于授权、访问控制和策略拒绝错误
+- **AND** `40xxx` MUST 用于业务冲突、资源状态不允许和幂等冲突错误
+- **AND** `50xxx` MUST 用于资源不存在或不可见错误
+- **AND** `60xxx` MUST 预留给限流、配额或用量约束，启用前必须先定义对应 `Kind`、HTTP 映射和测试
+- **AND** `70xxx` 至 `89xxx` MUST 保持预留，未经规格变更不得使用
+- **AND** `90xxx` MUST 用于内部错误、依赖不可用和服务端临时故障
+
+#### Scenario: 新增错误码准入
+
+- **WHEN** 系统新增应用错误码
+- **THEN** 新错误码 MUST 优先复用现有低基数 `Kind`，并使用稳定 `Reason` 表达可细分原因
+- **AND** 系统 MUST NOT 按 feature、目录、临时实现任务或调用方便利随意开辟错误码段
+- **AND** 新错误码 MUST 位于其语义对应的既定段位内，不得复用其他稳定公开错误码数值
+- **AND** 内部错误对外 MUST 使用非敏感公开消息，`Cause` 不得进入响应 envelope
+
+#### Scenario: 新增 Kind 同步 HTTP 映射
+
+- **WHEN** 现有 `Kind` 无法表达新的低基数 HTTP 映射语义，系统新增 `Kind`
+- **THEN** 系统 MUST 同步更新 `common/http/response.statusCode` 的 HTTP status 推导
+- **AND** 系统 MUST 添加或更新响应测试，覆盖新增 `Kind` 到 HTTP status 和响应 code 的映射
+- **AND** 未定义 HTTP 映射的 `Kind` MUST NOT 作为公开业务错误进入 feature 或 HTTP transport
+
+### Requirement: HTTP trusted proxy 配置契约
+
+系统 MUST 在共享 runtime HTTP server 配置中提供 `server.http.trusted_proxies`，用于声明 Gin 可信任的上游代理 IP 或 CIDR 列表。该配置 MUST 由 `common/runtime/config` 严格解码、默认保持空值，并由服务级 Gin engine 初始化直接传入 `SetTrustedProxies`；系统 MUST NOT 读取、迁移、兼容或双写 `http.trusted_proxies` 或其他旧配置位置。
+
+#### Scenario: 默认不信任代理
+
+- **WHEN** `server.http.trusted_proxies` 未配置或为空
+- **THEN** Gin engine MUST 不信任任何代理
+- **AND** `c.ClientIP()` MUST 忽略 `X-Forwarded-For` 和 `X-Real-IP`，只返回请求 TCP peer 地址
+
+#### Scenario: 显式信任代理 CIDR
+
+- **WHEN** `server.http.trusted_proxies` 包含请求 TCP peer 所属的 IP 或 CIDR
+- **THEN** Gin engine MUST 使用 Gin trusted proxy 机制解析 `X-Forwarded-For` 或 `X-Real-IP`
+- **AND** `c.ClientIP()` MUST 返回可信代理链解析后的客户端地址
+
+#### Scenario: 拒绝旧配置位置
+
+- **WHEN** 配置文档包含 `http.trusted_proxies` 或其他未声明 trusted proxy 键
+- **THEN** 严格配置解码 MUST 失败并报告完整配置路径
+- **AND** 系统 MUST NOT 通过 normalize、alias 或 fallback 接受该旧配置
+
+### Requirement: 通用事务生命周期 helper
+
+`common/runtime/datastore` MUST 提供业务中立的泛型事务生命周期 helper，用于 infrastructure 代码创建、提交和回滚显式事务边界。helper MUST 只依赖标准库和最小事务接口，MUST NOT 导入 user-service、Ent 生成代码、feature 包或服务私有类型。
+
+#### Scenario: 使用 detached lifecycle context 创建事务
+
+- **WHEN** infrastructure 代码通过共享 helper 使用 request context 开始事务
+- **THEN** helper MUST 使用保留原始 context values 的事务 lifecycle context 调用事务 starter
+- **AND** 事务 lifecycle context MUST NOT 继承 request cancellation
+- **AND** 原始 context 存在 deadline 时，事务 lifecycle context MUST 继承该 deadline
+- **AND** 原始 context 不存在 deadline 时，事务 lifecycle context MUST 使用有界 cleanup timeout
+
+#### Scenario: 事务内业务操作使用原始 request context
+
+- **WHEN** application 或 infrastructure 代码在事务内执行 SQL 或 Ent 业务操作
+- **THEN** 这些业务操作 MUST 继续使用原始 request context
+- **AND** request cancellation MUST 仍能中断事务内业务查询
+
+#### Scenario: request 取消后拒绝提交
+
+- **WHEN** 原始 request context 在 commit 前已经取消
+- **THEN** 事务完成器 MUST 拒绝提交并返回原始 context error
+- **AND** 调用方 MUST 通过事务完成器的 rollback 兜底路径回滚事务
+
+#### Scenario: 失败分支保留 rollback 错误
+
+- **WHEN** 事务内业务操作失败且 rollback 也失败
+- **THEN** 事务完成器 MUST 返回同时保留原始业务错误和 rollback 错误的 error
+- **AND** rollback 错误 MUST NOT 被吞掉或覆盖原始业务错误
+
+### Requirement: 禁止直接事务边界
+
+新增或改造后的 infrastructure 事务边界 MUST 通过 `common/runtime/datastore` 的共享事务 helper 创建、提交和回滚。业务 infrastructure MUST NOT 直接调用 `client.Tx(ctx)`、`db.BeginTx(ctx, ...)`、`tx.Commit()`、`tx.Rollback()` 或手写 `rollback(tx, err)` helper 管理可由共享 helper 表达的事务生命周期。
+
+#### Scenario: Ent 事务边界适配共享 helper
+
+- **WHEN** user-service infrastructure 需要创建 Ent 事务
+- **THEN** infrastructure 包 MUST 在消费侧适配 Ent client 到共享 transaction starter 接口
+- **AND** Ent 适配器 MUST 留在 user-service infrastructure 边界内
+- **AND** `common/runtime/datastore` MUST NOT 依赖 user-service Ent 生成类型
+
+#### Scenario: 使用事务完成器终结事务
+
+- **WHEN** infrastructure 代码已经通过共享 helper 开始事务
+- **THEN** 成功路径 MUST 使用事务完成器执行 commit
+- **AND** 错误路径 MUST 使用事务完成器执行 rollback 并保留原始错误
+- **AND** defer 兜底路径 MUST 使用事务完成器在未提交时回滚事务
+- **AND** 调用方 MUST NOT 绕过事务完成器直接提交或回滚事务
+

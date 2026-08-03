@@ -61,7 +61,7 @@
 
 ### Requirement: Ent/Atlas migration 交付
 
-Ent schema MUST 是数据库结构来源，Atlas SQL migration MUST 是可审查交付工件。仓库 MUST 支持生成、diff、validate 和 hash 校验，但 MUST NOT 提供自动连接目标数据库执行 `atlas migrate apply` 的入口。
+Ent schema MUST 是数据库结构来源，Atlas SQL migration MUST 是可审查交付工件。user-service 的 Ent schema、client、entity、predicate、`enttest` 和 `migrate` 生成物 MUST 位于 `user-service/internal/persistence/ent/`，并通过 Go `internal` 规则作为 user-service 私有持久化实现受保护。仓库 MUST 支持生成、diff、validate 和 hash 校验，但 MUST NOT 提供自动连接目标数据库执行 `atlas migrate apply` 的入口，也 MUST NOT 保留模块根级 `github.com/aegiscore/user-service/ent` 兼容包、别名、shim 或双路径支持。
 
 #### Scenario: Schema、migration 与数据库结构
 
@@ -80,6 +80,17 @@ Ent schema MUST 是数据库结构来源，Atlas SQL migration MUST 是可审查
 - **AND** SQL MUST 提交 Git，并通过 DBA 工单或受控发布平台执行
 - **AND** user-service、E2E、Makefile、脚本和部署资产准备数据库时 MUST 使用已提交 migration，运行时代码 MUST NOT 使用 `client.Schema.Create(ctx)` 表达 schema 变更
 - **AND** 仓库 MUST NOT 提供 `migrate-apply`、自动 migration Job 或等价 Atlas apply 入口
+
+#### Scenario: Ent 生成包路径受 internal 保护
+
+- **WHEN** 执行 `make user-service-generate` 或 Ent 生成入口
+- **THEN** Ent 生成物 MUST 收敛到 `github.com/aegiscore/user-service/internal/persistence/ent` 及其子包
+- **AND** 生成流程 MUST NOT 创建、更新或依赖 `user-service/ent/` 根级目录
+- **WHEN** user-service 内部 provider、feature infrastructure、RBAC CLI、Atlas schema helper 或测试需要访问 Ent client、entity、predicate、`enttest` 或 `migrate`
+- **THEN** 代码 MUST 导入 `github.com/aegiscore/user-service/internal/persistence/ent` 及其子包
+- **AND** 代码 MUST NOT 导入 `github.com/aegiscore/user-service/ent` 及其子包
+- **WHEN** 其他 workspace module 或未来服务尝试直接 import user-service 的 Ent 包
+- **THEN** Go `internal` 规则 MUST 阻止该导入，调用方 MUST 通过正式服务边界访问 user-service 能力
 
 ### Requirement: 镜像、部署与受控发布
 
@@ -283,3 +294,56 @@ Redis Cluster 发布 MUST 以空 Cluster 和新配置切换为前提，不迁移
 - **WHEN** 需要回滚到旧 Redis 单机版本
 - **THEN** 运维 MUST 同步回滚应用镜像和 Redis 配置为旧版本要求的契约
 - **AND** 系统 MUST 接受 refresh session、password-change session、token version cache 和 RBAC policy version 在回滚过程中失效或重建
+
+### Requirement: Trusted proxy 配置交付
+
+Nacos、Compose、Kubernetes、Helm、README 和部署说明 MUST 使用 `server.http.trusted_proxies` 表达 user-service 受信任入口代理 IP 或 CIDR。生产和 production-like 环境 MUST 按实际 Ingress、gateway、ALB、Envoy、Nginx 或 service mesh 拓扑配置该列表；系统 MUST NOT 提供旧 `http.trusted_proxies` 示例或兼容说明。
+
+#### Scenario: 部署配置声明可信入口
+
+- **WHEN** user-service 部署在反向代理、Ingress、gateway、load balancer 或 service mesh 后方
+- **THEN** 运行配置 MUST 在 `server.http.trusted_proxies` 中声明真实入口代理 IP 或 CIDR
+- **AND** 配置示例 MUST 明确该列表需要按环境拓扑填写，MUST NOT 默认信任所有私有网段或所有来源
+
+#### Scenario: 入口层清洗 forwarded headers
+
+- **WHEN** 外部请求进入 Ingress、gateway、ALB、Envoy、Nginx 或 service mesh 边界
+- **THEN** 入口层 MUST 覆盖或重建 `X-Forwarded-For` 和 `X-Real-IP` 等 forwarded headers
+- **AND** 入口层 MUST NOT 将客户端提供的未清洗 forwarded headers 直接透传给 user-service
+
+#### Scenario: 发布验证客户端地址
+
+- **WHEN** 发布启用 trusted proxy 配置的 user-service
+- **THEN** 发布验证 MUST 覆盖登录请求在受信任代理后方记录真实客户端地址
+- **AND** 未配置或错误配置 trusted proxy 时，验证 MUST 能暴露 `client_ip` 仍为代理地址的 drift
+
+### Requirement: Helm 生产镜像不可变发布
+
+user-service Helm 生产发布 MUST 使用不可变镜像引用。Deployment、RBAC seed Job、安全扫描、SBOM、镜像身份记录和 Helm release MUST 指向同一个已构建并已推送的 user-service 镜像工件。生产 Helm chart MUST NOT 默认渲染 `:latest`，也 MUST NOT 通过 `Chart.appVersion`、空 tag fallback、环境 values 或命令行覆盖接受 `latest` 作为发布镜像。
+
+#### Scenario: 默认 Helm 渲染禁止 latest
+
+- **WHEN** 渲染 user-service Helm chart 的生产基线 values
+- **THEN** chart MUST 要求调用方显式提供不可变 image ref
+- **AND** 渲染结果 MUST NOT 包含 `image: *:latest`
+- **AND** 缺少 image ref 时 Helm lint 或 Helm template MUST 失败
+
+#### Scenario: 显式 latest 覆盖被拒绝
+
+- **WHEN** 发布方通过 values 文件或 `--set` 将 user-service 镜像设置为 `latest` tag
+- **THEN** Helm lint 或 Helm template MUST 失败
+- **AND** 系统 MUST NOT 生成 Deployment 或 RBAC seed Job manifest
+
+#### Scenario: 同一发布工件贯穿 CI 与 Helm
+
+- **WHEN** CI/CD 构建准备发布的 user-service 镜像
+- **THEN** pipeline MUST 推送 `sha-<commit>` tag 或解析 registry digest，并记录该镜像身份
+- **AND** 漏洞扫描、SBOM、镜像内容断言和 Helm 发布 MUST 使用同一 image ID、digest 或等价不可变引用
+- **AND** Deployment 与 RBAC seed Job MUST 使用完全相同的不可变 image ref
+
+#### Scenario: 回滚使用不可变历史引用
+
+- **WHEN** Helm release 需要回滚 user-service 镜像
+- **THEN** 发布方 MUST 回退到上一版已记录的不可变 image ref
+- **AND** 回滚流程 MUST NOT 将镜像改回 `latest` 或依赖 registry 当前 tag 指向
+

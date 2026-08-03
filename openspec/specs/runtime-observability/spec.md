@@ -86,6 +86,16 @@
 - **THEN** 查询、变量、静态 label、告警 label、dashboard UID、rule group、job name 和示例 MUST 使用单数服务名，生成脚本 MUST 更新 provisioning JSON
 - **AND** `make compose-dashboard-check` 或等价校验 MUST 在生成物 drift 时失败
 
+#### Scenario: RBAC policy reload lag 观测与告警
+
+- **WHEN** permission feature 记录 RBAC policy sync 状态
+- **THEN** 系统 MUST 导出 `aegiscore_user_service_rbac_policy_reload_lag` gauge 表示当前实例 Redis 最新 policy version 与本地已应用 policy version 的非负差值
+- **AND** 该指标 MUST 使用 provider 注入的稳定 service、environment 和 instance 标签，业务 recorder MUST NOT 增加用户、角色、权限、Redis key、raw path、source、reason 或原始错误标签
+- **WHEN** 任一 user-service 实例的 `aegiscore_user_service_rbac_policy_reload_lag` 大于 `0` 持续 30 秒
+- **THEN** Prometheus alert MUST 触发 RBAC policy reload lag 告警，并指向稳定 runbook
+- **WHEN** Grafana dashboard 展示 RBAC policy sync 状态
+- **THEN** dashboard MUST 展示每个实例当前 policy reload lag，并与 Compose provisioning dashboard 保持一致
+
 ### Requirement: 结构化日志与请求关联
 
 系统 MUST 为每个 HTTP 请求建立 request ID，并通过共享 logger context 关联 access log、应用日志、有效 tracing context 和 Fx 初始化事件。日志 MUST 结构化输出到 stdout/stderr、保持分级、使用 `aegiscore-user-service` 服务名且不得记录敏感信息。
@@ -292,3 +302,154 @@ Redis tracing instrumentation MUST 支持 Redis Cluster client，并继续过滤
 - **WHEN** 用户访问 Jaeger UI 查看 trace
 - **THEN** Jaeger 服务进程 MUST 能加载 `Asia/Shanghai`，trace 时间戳 MUST 继续表示 Unix epoch 绝对时间
 - **AND** UI 日期 MUST 继续由访问浏览器的本地时区渲染，Compose MUST NOT 伪造不存在的服务端 UI timezone 配置
+
+### Requirement: HTTP 日志客户端地址语义
+
+系统 MUST 在 HTTP access log 和认证失败日志中使用 Gin trusted proxy 校验后的 `c.ClientIP()` 作为 `client_ip` 字段。日志 middleware MUST NOT 自行解析 `X-Forwarded-For`、`X-Real-IP` 或其他 forwarded headers；IP 是否可信 MUST 由 Gin engine 的 `server.http.trusted_proxies` 配置统一决定。
+
+#### Scenario: Access log 记录真实客户端地址
+
+- **WHEN** 请求来自已配置的 trusted proxy，且 forwarded headers 已由入口层清洗
+- **THEN** HTTP access log 的 `client_ip` 字段 MUST 记录 Gin 解析后的真实客户端地址
+- **AND** 日志字段 MUST NOT 额外记录完整 forwarded header 链路或未清洗原始 header
+
+#### Scenario: 未信任代理时忽略 forwarded headers
+
+- **WHEN** 请求来自未受信任 TCP peer
+- **THEN** HTTP access log 和认证失败日志的 `client_ip` 字段 MUST 记录 TCP peer 地址
+- **AND** 请求携带的 `X-Forwarded-For` 或 `X-Real-IP` MUST NOT 改变该字段
+
+### Requirement: Gin 入站 HTTP 观测路径低基数契约
+
+系统 MUST 对 Gin 入站 HTTP 观测路径使用低基数 route template。access log、认证失败日志、绑定或校验失败日志、HTTP metrics route label、trace span name、授权 object 和默认观测过滤判断 MUST 使用 Gin route template 或固定 `__unmatched__`，MUST NOT 发出或依赖原始 URL path。
+
+#### Scenario: 匹配动态业务路由的观测路径
+- **WHEN** Gin 入站请求匹配包含路径参数的业务 route template，例如 `/api/v1/users/:user_id`
+- **THEN** 日志 `path` 字段、HTTP metrics route label、trace span name 和授权 object MUST 使用该 route template
+- **AND** 系统 MUST NOT 在这些默认观测字段中写入真实用户 ID、角色 ID、权限 ID、session ID、tenant、cursor、UUID 或其他 raw path 参数值
+
+#### Scenario: 未匹配路由的观测路径
+- **WHEN** Gin 入站请求未匹配任何 route template
+- **THEN** 日志 `path` 字段、HTTP metrics route label、trace span name 和授权 object MUST 使用固定值 `__unmatched__`
+- **AND** 系统 MUST NOT 回退到 `c.Request.URL.Path`、`request.URL.Path` 或等价 raw URL path
+
+#### Scenario: 请求绑定和校验失败日志
+- **WHEN** Gin 入站请求在 binding 或 validation 阶段失败
+- **THEN** 失败日志 MUST 使用匹配 route template 或 `__unmatched__` 作为 `path` 字段
+- **AND** 失败日志 MUST NOT 因请求体绑定失败、参数校验失败或上下文尚未进入 feature controller 而记录 raw URL path
+
+#### Scenario: runtime endpoint 观测跳过判断
+- **WHEN** 系统判断 `/metrics`、`/livez`、`/readyz` 或 `/startupz` 等 runtime endpoint 是否跳过成功请求日志、请求计数或请求耗时
+- **THEN** 判断输入 MUST 是 route template 或显式静态配置归一化结果
+- **AND** Gin 入站观测跳过判断 MUST NOT 使用 raw URL path
+
+#### Scenario: tracing 过滤与 span name
+- **WHEN** OTel Gin instrumentation 处理入站 HTTP 请求
+- **THEN** 应用内 Gin tracing 逻辑 MUST NOT 在 route match 前基于 `request.URL.Path` 过滤请求
+- **AND** HTTP server span name MUST 使用 `METHOD <route template>` 或 `METHOD __unmatched__`
+- **AND** 低噪声 tracing 过滤如仍需要，MUST 在应用外或基于稳定 route/span name 执行，MUST NOT 依赖 raw URL path
+
+#### Scenario: HTTP metrics route fallback
+- **WHEN** HTTP metrics middleware 记录未匹配 Gin 入站请求
+- **THEN** route label fallback MUST 固定为 `__unmatched__`
+- **AND** 公共 middleware 配置 MUST NOT 允许调用方提供可能包含 raw path 或高基数值的 route fallback
+
+### Requirement: RBAC outbox dispatcher 运行时配置与生命周期
+
+user-service MUST 私有拥有 RBAC outbox dispatcher 的轮询、批量、claim lease 和重试退避配置，并通过 permission runtime 与 Fx lifecycle 显式启动和停止同一 dispatcher 实例。constructor MUST 只构造对象，application/domain MUST 不依赖 Fx、Ent 或 Redis concrete type，dispatcher MUST 不关闭共享 PostgreSQL 或 Redis client。
+
+#### Scenario: 配置默认值与校验
+
+- **WHEN** dispatcher 配置缺失
+- **THEN** user-service MUST 提供完整且安全的 `poll_interval`、`batch_size`、`claim_timeout`、`retry_backoff.initial` 和 `retry_backoff.max` 默认值
+- **WHEN** interval、batch size、claim timeout 或 backoff 不是正值，或 max backoff 小于 initial backoff
+- **THEN** composition MUST 返回明确配置错误并拒绝启动，MUST NOT 静默修正为零值或禁用可靠投递
+
+#### Scenario: dispatcher 显式启停
+
+- **WHEN** permission/RBAC lifecycle 启动
+- **THEN** hook MUST 在所需共享资源可用后显式启动 dispatcher，constructor MUST NOT 提前启动 goroutine、扫描数据库或发布 Redis 消息
+- **WHEN** lifecycle 停止、启动回滚或 stop context 到期
+- **THEN** dispatcher MUST 取消轮询并在调用方期限内等待 in-flight 工作退出，重复 Start/Stop MUST 安全且幂等
+- **AND** dispatcher MUST NOT 关闭共享 Ent、PostgreSQL 或 Redis resource
+
+#### Scenario: 后台错误不中断可恢复循环
+
+- **WHEN** 单轮扫描、claim、publish、ack 或失败记录发生可重试错误
+- **THEN** dispatcher MUST 更新只读状态并继续后续轮询，MUST NOT panic、静默退出或使 event 从 PostgreSQL 消失
+- **WHEN** 循环发生不可恢复的意外退出
+- **THEN** status MUST 将 running 置为 false 并保留稳定错误类别供 readiness 读取
+
+### Requirement: RBAC outbox dispatcher 可观测性与健康状态
+
+系统 MUST 为 dispatcher 暴露低基数 metrics、结构化日志和 permission feature 只读 status，并将其接入 user-service health/readiness。健康探测 MUST 只读取状态或执行只读 outbox 查询，不得 claim、publish、ack、修改 retry 时间或依赖 infrastructure concrete implementation。
+
+#### Scenario: backlog、lag 与投递指标
+
+- **WHEN** dispatcher claim、publish、ack、失败、重试或采集 outbox 状态
+- **THEN** feature metrics MUST 记录固定 result/reason/kind 枚举下的处理计数、due backlog、最老未完成 event age 和 loop 运行状态
+- **AND** metrics label MUST NOT 包含 event/revision/user/role/permission ID、idempotency key、原始错误、SQL、Redis key、payload 或其他高基数字段
+
+#### Scenario: dispatcher 结构化日志
+
+- **WHEN** event 被 claim、成功投递、失败退避、lease 冲突或循环状态变化
+- **THEN** 日志 MUST 使用英文 message 和稳定 `snake_case` 字段，并 MAY 记录 policy revision、attempt、kind、reason 和稳定错误类别
+- **AND** 日志 MUST NOT 记录完整 event payload、SQL、Redis key、连接 secret 或将原始底层错误暴露到公共健康响应
+
+#### Scenario: 只读 health 与 readiness
+
+- **WHEN** dispatcher 正在运行且可读取 outbox 状态
+- **THEN** status MUST 可报告最近成功时间、最近错误类别、due count 和最老未完成 event age，探测 MUST 不改变任何 event
+- **WHEN** dispatcher 未启动、循环意外退出或 outbox 状态查询失败
+- **THEN** readiness MUST 失败并返回稳定且不含敏感信息的定位结果
+- **AND** 单次 publish 失败或处于退避中的 backlog MUST 保持可见且不得终止 dispatcher 循环
+
+#### Scenario: metrics 禁用时保持行为
+
+- **WHEN** 全局 metrics provider 禁用
+- **THEN** dispatcher MUST 继续 claim、发布、重试和更新只读 status，并通过非 nil no-op feature metrics 满足正式依赖图
+- **AND** 系统 MUST NOT 因 collector 未注册而改变 event 投递、health 或 readiness 状态机
+
+### Requirement: RBAC policy reload lag 反映数据库投影差值
+
+系统 MUST以`max(database_latest_policy_revision - local_applied_policy_revision, 0)`作为RBAC policy reload lag的唯一稳定语义。database latest MUST来自watcher最近一次成功读取的可靠数据库revision source，local applied MUST来自Casbin engine当前实际成功应用的projection revision；Redis counter、Pub/Sub payload、消息接收进度或reload attempt MUST NOT作为lag任一侧的权威值。旧Redis/local version差值 MUST NOT作为稳定指标、dashboard、alert、runbook或兼容PromQL保留。
+
+#### Scenario: 数据库latest超前时暴露非零lag
+
+- **WHEN** watcher成功读取的database latest policy revision大于local applied projection revision
+- **THEN** `aegiscore_user_service_rbac_policy_reload_lag` MUST记录两者的正差值
+- **AND** watcher MUST记录database revision mismatch事件，metrics label MUST只使用固定低基数source、result和reason allowlist
+- **AND** dashboard、alert和runbook MUST将该值解释为数据库授权事实与本地实际投影之间的差值
+
+#### Scenario: lag为零禁止假收敛
+
+- **WHEN** watcher基于一次成功数据库revision读取记录lag为`0`
+- **THEN** local applied projection revision MUST不小于该次读取的database latest policy revision
+- **AND** Redis counter缺失、落后、重建、等于local值或Pub/Sub消息处理成功 MUST NOT单独使lag变为`0`
+- **WHEN** local applied revision高于本次读取的database latest revision
+- **THEN** lag MUST按非负规则记录为`0`且 MUST NOT降低local applied revision
+
+#### Scenario: 查询或reload失败不清零lag
+
+- **WHEN** database latest revision读取失败
+- **THEN** 系统 MUST记录固定`revision_store_unavailable`或等价reason，并保留上一lag观测值，MUST NOT用Redis或hint revision更新lag
+- **WHEN** database latest读取成功但reload失败或实际applied revision仍低于目标
+- **THEN** 系统 MUST记录固定`reload_failed`reason并保留基于database latest与actual applied计算的非零lag
+- **AND** 只有后续成功数据库校准证明actual applied revision不低于database latest时，系统才 MUST把lag记录为`0`
+
+#### Scenario: watcher指标reason与日志字段
+
+- **WHEN** watcher记录周期检查、Pub/Sub唤醒、revision mismatch、reload success或reload failure
+- **THEN** metrics MUST使用稳定低基数source/result/reason区分`revision_store_unavailable`、`revision_mismatch`、`reload_failed`与成功
+- **AND** metrics reason MUST NOT继续以Redis version store不可用表达数据库revision查询失败，也 MUST NOT包含revision数值、用户、角色、权限、Redis key或原始错误文本
+- **AND** 结构化日志 MUST使用`database_latest_policy_revision`、`local_applied_policy_revision`、`target_revision`、`hint_revision`、`source`和稳定reason中的适用字段
+- **AND** 日志 MUST NOT使用含混的`remote_policy_revision`或`remote_version`字段把Redis消息或counter描述为数据库权威事实，也 MUST NOT记录policy内容、SQL、Redis key或secret
+
+#### Scenario: dashboard、alert与fixture同步
+
+- **WHEN** Grafana dashboard展示RBAC policy reload lag或Prometheus alert评估持续未收敛
+- **THEN** 查询、panel说明、alert annotation和runbook MUST使用database latest与local applied projection revision语义
+- **AND** alert MUST继续覆盖超过既定最终收敛SLO的非零lag，并将revision store unavailable与reload failure作为可定位关联信号
+- **AND** dashboard源、Compose provisioning副本、Prometheus rules、metrics load测试和相关fixture MUST在同一change中更新
+- **AND** 生成或检查命令 MUST在旧Redis/local version文案、PromQL或dashboard drift存在时失败
+
