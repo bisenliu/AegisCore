@@ -121,6 +121,10 @@ func (roleModuleStore) GetByPermissionID(context.Context, uuid.UUID) (*roleappli
 	return nil, nil
 }
 
+func (roleModuleStore) GetByPermissionIDs(context.Context, []uuid.UUID) ([]roleapplication.PermissionReference, error) {
+	return nil, nil
+}
+
 var _ roleapplication.RoleStore = roleModuleStore{}
 var _ roleapplication.UserRoleStore = roleModuleStore{}
 var _ roleapplication.PermissionLookup = roleModuleStore{}
@@ -146,6 +150,10 @@ var _ roleapplication.RolePermissionStore = roleModulePermissionStore{}
 type roleModulePermissionCatalogStore struct{}
 
 func (roleModulePermissionCatalogStore) GetByPermissionID(context.Context, uuid.UUID) (*permissiondomain.Permission, error) {
+	return nil, nil
+}
+
+func (roleModulePermissionCatalogStore) GetByPermissionIDs(context.Context, []uuid.UUID) ([]permissiondomain.Permission, error) {
 	return nil, nil
 }
 

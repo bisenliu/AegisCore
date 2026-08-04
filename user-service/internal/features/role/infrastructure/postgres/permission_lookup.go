@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
+	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 )
 
@@ -26,5 +27,23 @@ func (l *PermissionLookup) GetByPermissionID(ctx context.Context, permissionID u
 	if err != nil {
 		return nil, err
 	}
-	return &roleapplication.PermissionReference{ID: permission.ID, PermissionID: permission.PermissionID, Name: permission.Name, Description: permission.Description, Module: permission.Module, HTTPMethod: permission.HTTPMethod, PathTemplate: permission.PathTemplate, CreatedAt: permission.CreatedAt, UpdatedAt: permission.UpdatedAt}, nil
+	reference := toPermissionLookupReference(*permission)
+	return &reference, nil
+}
+
+// GetByPermissionIDs 批量校验权限，并按查询端口返回顺序映射最小权限视图。
+func (l *PermissionLookup) GetByPermissionIDs(ctx context.Context, permissionIDs []uuid.UUID) ([]roleapplication.PermissionReference, error) {
+	permissions, err := l.store.GetByPermissionIDs(ctx, permissionIDs)
+	if err != nil {
+		return nil, err
+	}
+	references := make([]roleapplication.PermissionReference, 0, len(permissions))
+	for _, permission := range permissions {
+		references = append(references, toPermissionLookupReference(permission))
+	}
+	return references, nil
+}
+
+func toPermissionLookupReference(permission permissiondomain.Permission) roleapplication.PermissionReference {
+	return roleapplication.PermissionReference{ID: permission.ID, PermissionID: permission.PermissionID, Name: permission.Name, Description: permission.Description, Module: permission.Module, HTTPMethod: permission.HTTPMethod, PathTemplate: permission.PathTemplate, CreatedAt: permission.CreatedAt, UpdatedAt: permission.UpdatedAt}
 }

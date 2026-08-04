@@ -122,13 +122,9 @@ func (s *roleCommandService) ReplaceRolePermissions(ctx context.Context, cmd Rep
 		return nil, err
 	}
 	permissionIDs := uniqueUUIDs(cmd.PermissionIDs)
-	permissions := make([]roleapplication.PermissionReference, 0, len(permissionIDs))
-	for _, permissionID := range permissionIDs {
-		permission, err := s.permissions.GetByPermissionID(ctx, permissionID)
-		if err != nil {
-			return nil, err
-		}
-		permissions = append(permissions, *permission)
+	permissions, err := s.permissions.GetByPermissionIDs(ctx, permissionIDs)
+	if err != nil {
+		return nil, err
 	}
 	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindPolicyChanged, Reason: "role_permissions_replaced", RoleID: cmd.RoleID}
 	write, err := s.rolePermissions.Replace(ctx, cmd.RoleID, permissions, change)

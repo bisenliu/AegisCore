@@ -88,6 +88,7 @@ type SeedRolePermissionStore interface {
 // PermissionLookup 定义角色绑定权限前对权限目录的只读校验端口。
 type PermissionLookup interface {
 	GetByPermissionID(ctx context.Context, permissionID uuid.UUID) (*PermissionReference, error)
+	GetByPermissionIDs(ctx context.Context, permissionIDs []uuid.UUID) ([]PermissionReference, error)
 }
 
 // CreateRoleInput 包含规范化后的角色创建数据。

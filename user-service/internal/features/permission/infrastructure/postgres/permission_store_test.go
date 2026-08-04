@@ -91,9 +91,60 @@ func TestPermissionStoreNotFound(t *testing.T) {
 	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
 }
 
+func TestPermissionStoreGetByPermissionIDsEmptySkipsDatabase(t *testing.T) {
+	store := NewPermissionStore(nil)
+
+	permissions, err := store.GetByPermissionIDs(context.Background(), nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, permissions)
+	require.Empty(t, permissions)
+}
+
+func TestPermissionStoreGetByPermissionIDs(t *testing.T) {
+	store := newTestPermissionStore(t)
+	ctx := context.Background()
+	firstID := uuid.MustParse("018f0000-0000-7000-8000-000000000051")
+	secondID := uuid.MustParse("018f0000-0000-7000-8000-000000000052")
+	missingID := uuid.MustParse("018f0000-0000-7000-8000-000000000059")
+
+	_, inserted, err := store.UpsertPermission(ctx, permissionapplication.SeedPermissionInput{PermissionID: firstID, Name: "First Permission", Module: "role", HTTPMethod: "GET", PathTemplate: "/api/v1/bulk/first"})
+	require.NoError(t, err)
+	require.True(t, inserted)
+	_, inserted, err = store.UpsertPermission(ctx, permissionapplication.SeedPermissionInput{PermissionID: secondID, Name: "Second Permission", Module: "role", HTTPMethod: "GET", PathTemplate: "/api/v1/bulk/second"})
+	require.NoError(t, err)
+	require.True(t, inserted)
+
+	t.Run("single permission", func(t *testing.T) {
+		permissions, err := store.GetByPermissionIDs(ctx, []uuid.UUID{firstID})
+		require.NoError(t, err)
+		require.Equal(t, []uuid.UUID{firstID}, permissionDomainIDs(permissions))
+	})
+
+	t.Run("multiple permissions preserve first occurrence order", func(t *testing.T) {
+		permissions, err := store.GetByPermissionIDs(ctx, []uuid.UUID{secondID, firstID, secondID})
+		require.NoError(t, err)
+		require.Equal(t, []uuid.UUID{secondID, firstID}, permissionDomainIDs(permissions))
+	})
+
+	t.Run("missing permission returns no partial result", func(t *testing.T) {
+		permissions, err := store.GetByPermissionIDs(ctx, []uuid.UUID{firstID, missingID})
+		require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
+		require.Nil(t, permissions)
+	})
+}
+
 func newTestPermissionStore(t *testing.T) *PermissionStore {
 	t.Helper()
 	client := enttest.Open(t, "sqlite3", fmt.Sprintf("file:permission_store_test_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
 	t.Cleanup(func() { _ = client.Close() })
 	return NewPermissionStore(client)
+}
+
+func permissionDomainIDs(permissions []permissiondomain.Permission) []uuid.UUID {
+	result := make([]uuid.UUID, 0, len(permissions))
+	for _, permission := range permissions {
+		result = append(result, permission.PermissionID)
+	}
+	return result
 }

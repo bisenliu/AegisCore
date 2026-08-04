@@ -11,6 +11,7 @@ import (
 // PermissionStore 定义权限目录 use case 实际消费的持久化端口。
 type PermissionStore interface {
 	GetByPermissionID(ctx context.Context, permissionID uuid.UUID) (*permissiondomain.Permission, error)
+	GetByPermissionIDs(ctx context.Context, permissionIDs []uuid.UUID) ([]permissiondomain.Permission, error)
 	List(ctx context.Context, input ListPermissionsInput) ([]permissiondomain.Permission, error)
 	ListEffectiveByUserID(ctx context.Context, userID uuid.UUID) ([]permissiondomain.Permission, error)
 }

@@ -199,10 +199,10 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	require.Len(t, result.Items, 1)
 	require.Equal(t, permissionID, result.Items[0].PermissionID)
 
+	fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), gomock.Any()).Times(0)
 	gomock.InOrder(
 		fixture.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil),
-		fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
-		fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), otherPermissionID).Return(&otherPermission, nil),
+		fixture.permissions.EXPECT().GetByPermissionIDs(gomock.Any(), uuidSliceMatches(permissionID, otherPermissionID)).Return([]roleapplication.PermissionReference{permission, otherPermission}, nil),
 		fixture.rolePermissions.EXPECT().Replace(gomock.Any(), roleID, permissionSliceMatches(permission, otherPermission), gomock.Any()).Return(roleapplication.PermissionsWriteResult{Items: []roleapplication.PermissionReference{permission, otherPermission}, Revision: 22}, nil),
 		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(22), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permissions_replaced", uuid.Nil, uuid.Nil)).Return(nil),
 	)
@@ -219,7 +219,6 @@ func TestRoleCommandServiceRolePermissionLookupFailureSkipsWriteAndNotify(t *tes
 	permissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000026")
 	otherPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000000027")
 	role := roledomain.Role{RoleID: roleID, Name: "operator", Active: true}
-	permission := roleapplication.PermissionReference{PermissionID: permissionID, HTTPMethod: "GET", PathTemplate: "/api/v1/users"}
 	lookupErr := errors.Join(permissiondomain.ErrPermissionNotFound, errors.New("permission lookup failed"))
 
 	t.Run("add skips binding write when permission is unavailable", func(t *testing.T) {
@@ -238,10 +237,10 @@ func TestRoleCommandServiceRolePermissionLookupFailureSkipsWriteAndNotify(t *tes
 
 	t.Run("replace skips binding write when any permission lookup fails", func(t *testing.T) {
 		fixture := newRoleCommandFixture(t)
+		fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), gomock.Any()).Times(0)
 		gomock.InOrder(
 			fixture.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil),
-			fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
-			fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), otherPermissionID).Return(nil, permissiondomain.ErrPermissionNotFound),
+			fixture.permissions.EXPECT().GetByPermissionIDs(gomock.Any(), uuidSliceMatches(permissionID, otherPermissionID)).Return(nil, lookupErr),
 		)
 		fixture.rolePermissions.EXPECT().Replace(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
@@ -250,6 +249,25 @@ func TestRoleCommandServiceRolePermissionLookupFailureSkipsWriteAndNotify(t *tes
 		require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
 		require.Nil(t, result)
 	})
+}
+
+func TestRoleCommandServiceReplaceRolePermissionsEmptySet(t *testing.T) {
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000028")
+	role := roledomain.Role{RoleID: roleID, Name: "operator", Active: true}
+	fixture := newRoleCommandFixture(t)
+	fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), gomock.Any()).Times(0)
+	gomock.InOrder(
+		fixture.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil),
+		fixture.permissions.EXPECT().GetByPermissionIDs(gomock.Any(), uuidSliceMatches()).Return([]roleapplication.PermissionReference{}, nil),
+		fixture.rolePermissions.EXPECT().Replace(gomock.Any(), roleID, permissionSliceMatches(), gomock.Any()).Return(roleapplication.PermissionsWriteResult{Items: []roleapplication.PermissionReference{}, Revision: 23}, nil),
+		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(23), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permissions_replaced", uuid.Nil, uuid.Nil)).Return(nil),
+	)
+
+	result, err := fixture.service.ReplaceRolePermissions(context.Background(), ReplaceRolePermissionsCommand{RoleID: roleID})
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Items)
+	require.Empty(t, result.Items)
 }
 
 func TestRoleCommandServiceRequiresPolicyChangeNotifier(t *testing.T) {
@@ -368,9 +386,10 @@ func TestRoleCommandServiceReturnsCommittedSuccessAfterRefreshFailure(t *testing
 		{
 			name: "replace role permissions",
 			setup: func(f *roleCommandFixture) {
+				f.permissions.EXPECT().GetByPermissionID(gomock.Any(), gomock.Any()).Times(0)
 				gomock.InOrder(
 					f.roles.EXPECT().GetByRoleID(gomock.Any(), roleID).Return(&role, nil),
-					f.permissions.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
+					f.permissions.EXPECT().GetByPermissionIDs(gomock.Any(), uuidSliceMatches(permissionID)).Return([]roleapplication.PermissionReference{permission}, nil),
 					f.rolePermissions.EXPECT().Replace(gomock.Any(), roleID, permissionSliceMatches(permission), gomock.Any()).Return(roleapplication.PermissionsWriteResult{Items: []roleapplication.PermissionReference{permission}, Revision: 37}, nil),
 					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(37), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permissions_replaced", uuid.Nil, uuid.Nil)).Return(refreshErr),
 				)
@@ -462,6 +481,9 @@ func (m policyChangeMatcher) String() string {
 }
 
 func uuidSliceMatches(values ...uuid.UUID) gomock.Matcher {
+	if values == nil {
+		values = []uuid.UUID{}
+	}
 	return uuidSliceMatcher{values: values}
 }
 
@@ -482,6 +504,9 @@ func (m uuidSliceMatcher) String() string {
 }
 
 func permissionSliceMatches(values ...roleapplication.PermissionReference) gomock.Matcher {
+	if values == nil {
+		values = []roleapplication.PermissionReference{}
+	}
 	return permissionSliceMatcher{values: values}
 }
 

@@ -94,22 +94,43 @@ func TestRolePermissionStoreDefaultListRemoveAndSyncSystemBindings(t *testing.T)
 	require.ErrorIs(t, err, roledomain.ErrRolePermissionNotFound)
 }
 
-func TestPermissionLookupGetByPermissionID(t *testing.T) {
+func TestPermissionLookup(t *testing.T) {
 	client := newRoleStoreTestClient(t)
 	ctx := context.Background()
 	permissionStore := permissionpostgres.NewPermissionStore(client)
 	lookup := NewPermissionLookup(permissionStore)
-	activePermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000011001")
+	firstPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000011001")
+	secondPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000011002")
 	missingPermissionID := uuid.MustParse("018f0000-0000-7000-8000-000000011003")
-	activePermission := createPermissionForTest(ctx, t, permissionStore, activePermissionID, "Lookup Active", "GET", "/api/v1/lookup/active", true)
+	firstPermission := createPermissionForTest(ctx, t, permissionStore, firstPermissionID, "Lookup First", "GET", "/api/v1/lookup/first", true)
+	secondPermission := createPermissionForTest(ctx, t, permissionStore, secondPermissionID, "Lookup Second", "GET", "/api/v1/lookup/second", true)
 
-	permission, err := lookup.GetByPermissionID(ctx, activePermissionID)
+	permission, err := lookup.GetByPermissionID(ctx, firstPermissionID)
 	require.NoError(t, err)
-	require.Equal(t, activePermission.PermissionID, permission.PermissionID)
-	require.Equal(t, activePermission.PathTemplate, permission.PathTemplate)
+	require.Equal(t, firstPermission.PermissionID, permission.PermissionID)
+	require.Equal(t, firstPermission.PathTemplate, permission.PathTemplate)
 
 	_, err = lookup.GetByPermissionID(ctx, missingPermissionID)
 	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
+
+	empty, err := lookup.GetByPermissionIDs(ctx, nil)
+	require.NoError(t, err)
+	require.NotNil(t, empty)
+	require.Empty(t, empty)
+
+	single, err := lookup.GetByPermissionIDs(ctx, []uuid.UUID{firstPermissionID})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{firstPermissionID}, permissionIDsForTest(single))
+
+	permissions, err := lookup.GetByPermissionIDs(ctx, []uuid.UUID{secondPermissionID, firstPermissionID, secondPermissionID})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{secondPermissionID, firstPermissionID}, permissionIDsForTest(permissions))
+	require.Equal(t, secondPermission.PathTemplate, permissions[0].PathTemplate)
+	require.Equal(t, firstPermission.PathTemplate, permissions[1].PathTemplate)
+
+	permissions, err = lookup.GetByPermissionIDs(ctx, []uuid.UUID{firstPermissionID, missingPermissionID})
+	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
+	require.Nil(t, permissions)
 }
 
 func TestRolePermissionStoreMappingHelpers(t *testing.T) {

@@ -40,6 +40,43 @@ func (s *PermissionStore) GetByPermissionID(ctx context.Context, permissionID uu
 	return nil, fmt.Errorf("query permission by permission_id %s: %w", permissionID.String(), err)
 }
 
+// GetByPermissionIDs 按首次出现顺序批量返回去重后的权限记录。
+func (s *PermissionStore) GetByPermissionIDs(ctx context.Context, permissionIDs []uuid.UUID) ([]permissiondomain.Permission, error) {
+	uniqueIDs := make([]uuid.UUID, 0, len(permissionIDs))
+	seen := make(map[uuid.UUID]struct{}, len(permissionIDs))
+	for _, permissionID := range permissionIDs {
+		if _, ok := seen[permissionID]; ok {
+			continue
+		}
+		seen[permissionID] = struct{}{}
+		uniqueIDs = append(uniqueIDs, permissionID)
+	}
+	if len(uniqueIDs) == 0 {
+		return []permissiondomain.Permission{}, nil
+	}
+
+	found, err := s.client.Permission.Query().Where(entpermission.PermissionIDIn(uniqueIDs...)).All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("query permissions by permission_ids: %w", err)
+	}
+	byPermissionID := make(map[uuid.UUID]permissiondomain.Permission, len(found))
+	for _, entPermission := range found {
+		if mapped := toModel(entPermission); mapped != nil {
+			byPermissionID[mapped.PermissionID] = *mapped
+		}
+	}
+
+	permissions := make([]permissiondomain.Permission, 0, len(uniqueIDs))
+	for _, permissionID := range uniqueIDs {
+		permission, ok := byPermissionID[permissionID]
+		if !ok {
+			return nil, fmt.Errorf("%w: permission_id %s", permissiondomain.ErrPermissionNotFound, permissionID.String())
+		}
+		permissions = append(permissions, permission)
+	}
+	return permissions, nil
+}
+
 // List 返回全部匹配权限记录。
 func (s *PermissionStore) List(ctx context.Context, input permissionapplication.ListPermissionsInput) ([]permissiondomain.Permission, error) {
 	predicates := buildListPredicates(input)

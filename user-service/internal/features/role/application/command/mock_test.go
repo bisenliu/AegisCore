@@ -340,3 +340,18 @@ func (mr *MockPermissionLookupMockRecorder) GetByPermissionID(ctx, permissionID 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByPermissionID", reflect.TypeOf((*MockPermissionLookup)(nil).GetByPermissionID), ctx, permissionID)
 }
+
+// GetByPermissionIDs mocks base method.
+func (m *MockPermissionLookup) GetByPermissionIDs(ctx context.Context, permissionIDs []uuid.UUID) ([]application.PermissionReference, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByPermissionIDs", ctx, permissionIDs)
+	ret0, _ := ret[0].([]application.PermissionReference)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByPermissionIDs indicates an expected call of GetByPermissionIDs.
+func (mr *MockPermissionLookupMockRecorder) GetByPermissionIDs(ctx, permissionIDs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByPermissionIDs", reflect.TypeOf((*MockPermissionLookup)(nil).GetByPermissionIDs), ctx, permissionIDs)
+}
