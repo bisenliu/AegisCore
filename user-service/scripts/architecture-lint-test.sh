@@ -82,17 +82,27 @@ EOF
 
 cat > "${fixture_root}/.github/workflows/ci.yml" <<'EOF'
 name: ci
+on:
+  pull_request:
 jobs:
-  test:
+  quality:
+    uses: ./.github/workflows/lint.yml
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
+      - run: |
+          make lint
+          make test
 EOF
 
 cat > "${fixture_root}/.github/workflows/lint.yml" <<'EOF'
-name: lint
+name: quality
+on:
+  workflow_call:
+  pull_request:
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -100,6 +110,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: '1.26.5'
+      - run: make lint
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make test
 EOF
 
 cat > "${fixture_root}/deployments/docker/atlas-postgres-pgtrgm.Dockerfile" <<'EOF'
@@ -380,6 +395,11 @@ fi
 
 if [[ "${output}" != *"feature application/domain production code must not carry Fx DI metadata"* ]]; then
   printf 'architecture-lint-test: expected application/domain Fx metadata violation report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
+if [[ "${output}" != *"quality workflow must not directly trigger pull_request or push"* || "${output}" != *"CI standard lint command must appear exactly once"* || "${output}" != *"CI standard unit test command must appear exactly once"* ]]; then
+  printf 'architecture-lint-test: expected duplicate CI quality gate violation reports\n%s\n' "${output}" >&2
   exit 1
 fi
 

@@ -14,7 +14,7 @@ set -euo pipefail
 #   - 部分检查会调用 git diff --name-only，用于发现 Ent/OpenAPI 生成物漂移。
 #
 # 行为：
-#   - 检查 Go toolchain 版本在 go.work、go.mod 和 CI workflow 中保持一致。
+#   - 检查 Go toolchain 版本一致，并防止 CI 重复触发标准 lint 与普通单测。
 #   - 检查 Atlas dev PostgreSQL 镜像配置在 Dockerfile、Compose、atlas.hcl 和迁移脚本中一致。
 #   - 扫描 common 与 user-service 的架构边界，避免共享包、feature 分层、Ent 根级暴露和 DI 元数据越界。
 #   - 检查 mock 生成文件 build tag、测试专用符号、OpenSpec 中文模板和生成物未提交漂移。
@@ -163,6 +163,35 @@ check_go_toolchain_version() {
       report "${mod} toolchain has Go version ${version}; expected ${expected}"
     fi
   done
+}
+
+check_ci_quality_workflow() {
+  # 顶层 CI 唯一拥有事件触发；复用 workflow 只定义一次标准 lint 与普通单测。
+  local ci_workflow="${repo_root}/.github/workflows/ci.yml"
+  local quality_workflow="${repo_root}/.github/workflows/lint.yml"
+  local caller_count lint_count unit_count
+
+  caller_count="$( (rg -n 'uses:[[:space:]]+\./\.github/workflows/lint\.yml[[:space:]]*$' "${ci_workflow}" || true) | wc -l | tr -d ' ' )"
+  if [[ "${caller_count}" -ne 1 ]]; then
+    report "ci workflow must call .github/workflows/lint.yml exactly once; found ${caller_count}"
+  fi
+
+  if ! rg -q '^  workflow_call:[[:space:]]*$' "${quality_workflow}"; then
+    report "quality workflow must expose workflow_call"
+  fi
+  if rg -q '^  (pull_request|push):[[:space:]]*$' "${quality_workflow}"; then
+    report "quality workflow must not directly trigger pull_request or push"
+  fi
+
+  lint_count="$( (rg -n '^[[:space:]]+(-[[:space:]]+)?(run:[[:space:]]+)?make lint[[:space:]]*$' "${ci_workflow}" "${quality_workflow}" || true) | wc -l | tr -d ' ' )"
+  if [[ "${lint_count}" -ne 1 ]]; then
+    report "CI standard lint command must appear exactly once; found ${lint_count}"
+  fi
+
+  unit_count="$( (rg -n '^[[:space:]]+(-[[:space:]]+)?(run:[[:space:]]+)?make test[[:space:]]*$' "${ci_workflow}" "${quality_workflow}" || true) | wc -l | tr -d ' ' )"
+  if [[ "${unit_count}" -ne 1 ]]; then
+    report "CI standard unit test command must appear exactly once; found ${unit_count}"
+  fi
 }
 
 check_atlas_postgres_version() {
@@ -449,6 +478,7 @@ check_environment_variable_config_removed() {
 }
 
 check_go_toolchain_version
+check_ci_quality_workflow
 check_atlas_postgres_version
 check_ent_internal_persistence_boundary
 check_helm_user_service_immutable_image

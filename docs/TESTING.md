@@ -47,7 +47,7 @@ make user-service-test
 - `common/testing/containers/postgres.go`
 - `common/testing/containers/redis.go`
 
-user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration 和测试 harness。HTTP harness 在启动 Fx App 前加载一次 service config，并复用 `bootstrap.AppOptions`，使测试与正式 App 使用相同的 service/runtime config 和 composition root 接线。真实 PostgreSQL/Redis 测试的唯一规范开关是 `AEGISCORE_TEST_CONTAINERS=1`；CI 的阻塞式 `test` job 设置该开关并运行 `make test`，从而执行 common 容器 smoke、role PostgreSQL 集成测试和 user-service HTTP E2E。不要新增或使用 `TEST_CONTAINERS` 兼容别名；单独设置 `AEGISCORE_TEST_E2E` 只适合本地兼容触发 user-service E2E，不代表完整容器测试门禁。
+user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration 和测试 harness。HTTP harness 在启动 Fx App 前加载一次 service config，并复用 `bootstrap.AppOptions`，使测试与正式 App 使用相同的 service/runtime config 和 composition root 接线。CI 的阻塞式 `container-test` job 运行 `make -C user-service test-containers`，由该 target 通过 `-aegiscore.testcontainers` flag 执行 permission/role PostgreSQL 集成测试和 user-service HTTP E2E；普通单测只由复用质量 workflow 的 `unit` job 运行一次。
 
 配置 fixture 必须使用最终严格契约：核心路径为 `app/server/log/observability`，服务资源位于 `resources.redis.cache_redis` 和 `resources.postgres.primary_db`，feature cache 位于 `auth.token_version_cache` 与 `rbac.user_role_cache`。Redis 正向 fixture 必须显式配置 `mode`；`cluster` 使用 `addrs`、`timeout` 和可选 `cluster.max_redirects`，`standalone` 使用 `addr` 和 `timeout`，两种 mode 均固定使用 Redis 0 号库且不暴露 `db` 配置。旧路径只允许出现在 strict decoder 负向测试中，用于证明未知字段会被拒绝；正向 fixture 必须能够通过 Nacos 分层配置合成后的 strict decode。
 
@@ -56,10 +56,10 @@ user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration
 运行：
 
 ```bash
-AEGISCORE_TEST_CONTAINERS=1 make test
+make -C user-service test-containers
 ```
 
-容器测试门禁应记录执行测试名和耗时；Docker daemon、镜像拉取、容器启动或 migration 失败时必须使测试失败，而不是在已启用 `AEGISCORE_TEST_CONTAINERS=1` 后静默 skip。
+容器测试门禁应记录执行测试名和耗时；Docker daemon、镜像拉取、容器启动或 migration 失败时必须使测试失败，而不是在已传入 `-aegiscore.testcontainers` 后静默 skip。
 
 ### RBAC policy sync 故障注入
 
@@ -151,6 +151,7 @@ require.True(t, strings.Contains(err.Error(), "timeout"))
 - 禁止 shared package 导入 feature package。
 - 禁止 application/domain/infrastructure 导入 feature HTTP transport。
 - 检查 `go.work`、各 `go.mod` 的 `go` 版本和 GitHub Actions 的 Go toolchain 版本一致；`go.mod` 中存在 `toolchain` 行时也必须一致。
+- 检查主 CI 只调用一次复用质量 workflow，且 lint/unit workflow 不直接监听重复 PR/push 事件、标准 lint 与普通单测命令各只出现一次。
 - 检查 OpenAPI 和 Ent 生成物 drift。
 - 检查 `openspec/specs/`、`openspec/changes/` 和 `docs/opsx/` 下 Markdown 是否保留默认英文模板内容。
 - 检查 `common/` 与 `user-service/` 的 `mock_generate.go` 是否使用 `generate` build tag。

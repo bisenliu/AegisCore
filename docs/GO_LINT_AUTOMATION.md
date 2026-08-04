@@ -55,6 +55,7 @@ Architecture-lint 还必须检查 `openspec/specs/`、`openspec/changes/` 和 `d
 ## Governance
 
 - CI lint failure 阻断 PR 合并和主线 push。
+- `.github/workflows/lint.yml` 仅提供 `workflow_call`，由主 CI 唯一调用；分支保护绑定主 CI 下稳定的 `quality / lint` check，不得再绑定或触发独立的重复 lint matrix。
 - 本地提交前运行 `make lint`，或至少运行受影响模块的 lint。
 - 新增严格规则导致大量历史 findings 时，应先单独设计治理范围，不要混入业务 PR。
 - CI 安全门禁和 lint 工具必须固定版本，不得使用 `@latest`；`gosec` 等工具通过 `renovate.json` 定期升级并由 CI 验证。

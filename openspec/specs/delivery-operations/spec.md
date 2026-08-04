@@ -25,12 +25,16 @@
 
 ### Requirement: 质量门禁、架构诊断与可复现生成
 
-系统 MUST 提供模块级和仓库级测试、lint、架构检查、生成和完整 verify 入口。测试与生成 MUST 可诊断、可复现且不得扩张正式生产 API。`user-service-architecture-lint` MUST 保护正式架构来源声明的边界；Fx 依赖图诊断 MUST 无外部及运行时激活副作用。OpenAPI 转换库、CLI 和服务脚本 MUST 分别由 `common/http/openapi`、`tools/openapi-convert` 和 user-service 拥有其通用逻辑、可执行入口与服务参数。
+系统 MUST 提供模块级和仓库级测试、lint、架构检查、生成和完整 verify 入口。测试与生成 MUST 可诊断、可复现且不得扩张正式生产 API。`user-service-architecture-lint` MUST 保护正式架构来源声明的边界；Fx 依赖图诊断 MUST 无外部及运行时激活副作用。OpenAPI 转换库、CLI 和服务脚本 MUST 分别由 `common/http/openapi`、`tools/openapi-convert` 和 user-service 拥有其通用逻辑、可执行入口与服务参数。GitHub Actions MUST 由主 CI workflow 唯一拥有 PR 与主线 push 的标准质量触发，并通过仅支持 `workflow_call` 的复用 workflow 为同一 commit 各执行一次 lint 和普通单测。
 
 #### Scenario: 统一质量与生成门禁
 
 - **WHEN** 执行 `make test`、`make lint` 或 `make verify`
 - **THEN** 系统 MUST 分别运行 common 与 user-service 测试、各 module 的 `golangci-lint`，或覆盖 lint、架构检查、测试、必要生成并以 `git diff --exit-code` 检测 drift
+- **WHEN** PR 或主线 push 触发 GitHub Actions 标准质量门禁
+- **THEN** 主 CI MUST 仅调用一次复用质量 workflow，且同一 commit MUST 只产生一组稳定命名的 `quality / lint` 与 `quality / unit` 检查
+- **AND** 复用质量 workflow MUST 仅接受 `workflow_call`，MUST NOT 同时直接监听与主 CI 重叠的 `pull_request` 或主线 `push`
+- **AND** CI 的架构/生成检查和 Docker-backed 测试 MUST 使用独立 job，MUST NOT 再次执行 `make lint` 或普通 `make test`
 - **WHEN** CI 检查 user-service 架构、OpenAPI 或 migration
 - **THEN** MUST 使用 `make user-service-architecture-lint`、`make user-service-openapi-generate` 和 `make user-service-migrate-validate`，MUST NOT 调用不存在或缺少服务前缀的私有目标
 - **WHEN** package 需要 mock、metrics no-op 或其他 Go 生成物
@@ -110,11 +114,11 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 
 #### Scenario: CI 真实依赖测试
 
-- **WHEN** PR 或主线 push 执行阻塞式 test job
-- **THEN** job MUST 设置唯一开关 `AEGISCORE_TEST_CONTAINERS=1` 并运行 `make test`，MUST NOT 读取 `TEST_CONTAINERS` 或仅以 `AEGISCORE_TEST_E2E` 替代完整门禁
-- **WHEN** 该开关启用
-- **THEN** Docker daemon、镜像、容器、migration 或配置前置失败 MUST 使 job 失败，PostgreSQL/Redis smoke、role store 和 HTTP E2E MUST 实际执行而非 skip
-- **AND** E2E harness MUST 使用当前严格配置、真实 PostgreSQL/Redis 和已提交 migration，覆盖认证与用户 HTTP flow；verify、race 或 coverage job MAY 不重复该容器负载
+- **WHEN** PR 或主线 push 执行阻塞式 `container-test` job
+- **THEN** job MUST 运行 `make -C user-service test-containers`，通过唯一 `-aegiscore.testcontainers` flag 启用专用 PostgreSQL/Redis 与 HTTP E2E 包，MUST NOT 再次运行普通 `make test`
+- **WHEN** 该专用入口启用
+- **THEN** Docker daemon、镜像、容器、migration 或配置前置失败 MUST 使 job 失败，permission/role PostgreSQL 集成测试和 user-service HTTP E2E MUST 实际执行而非 skip
+- **AND** E2E harness MUST 使用当前严格配置、真实 PostgreSQL/Redis 和已提交 migration，覆盖认证与用户 HTTP flow；verify、unit、race 或 coverage job MUST NOT 重复该容器负载
 
 #### Scenario: 部署资产与安全基线
 
