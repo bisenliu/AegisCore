@@ -75,13 +75,6 @@ func NewWatcher(params WatcherParams) *Watcher {
 	return newWatcher(params.Store, params.RevisionSource, params.Engine, params.Log, params.Settings, params.Metrics)
 }
 
-func newWatcherWithMetrics(store policySubscriptionStore, revisionSource permissionapplication.LatestPolicyRevisionSource, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, checkInterval time.Duration, metrics permissionapplication.Metrics) *Watcher {
-	return newWatcher(store, revisionSource, engine, log, WatcherSettings{
-		CheckInterval: checkInterval, SubscribeTimeout: defaultSubscribeTimeout,
-		BackoffInitial: defaultBackoffInitial, BackoffMax: defaultBackoffMax,
-	}, metrics)
-}
-
 func newWatcher(store policySubscriptionStore, revisionSource permissionapplication.LatestPolicyRevisionSource, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, settings WatcherSettings, metrics permissionapplication.Metrics) *Watcher {
 	settings.applyDefaults()
 	if metrics == nil {

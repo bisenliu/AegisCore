@@ -17,6 +17,10 @@ import (
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 
+func newWatcherForTest(store policySubscriptionStore, revisionSource permissionapplication.LatestPolicyRevisionSource, engine permissionapplication.PolicyReloadEngine, checkInterval time.Duration, metrics permissionapplication.Metrics) *Watcher {
+	return newWatcher(store, revisionSource, engine, nil, WatcherSettings{CheckInterval: checkInterval}, metrics)
+}
+
 func TestStorePublishPolicyRevisionCachesSuppliedRevisionAndPublishes(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
@@ -130,7 +134,7 @@ func TestWatcherHandlePayloadReloadsPolicyForEveryValidEvent(t *testing.T) {
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 3, TargetRevision: 3}).Times(4)
 	engine.EXPECT().InvalidateAllUserRoles().Times(2)
 	metrics := NewMockMetrics(ctrl)
-	watcher := newWatcherWithMetrics(nil, staticPolicyRevisionSource{revision: 3}, engine, nil, time.Second, metrics)
+	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 3}, engine, time.Second, metrics)
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(3, permissionapplication.NewPolicyReloadChange("role_permission_added")), "instance-b"))
 	require.NoError(t, err)
 
@@ -160,7 +164,7 @@ func TestWatcherHandlePayloadRevisionGapInvalidatesAllUserRoleCaches(t *testing.
 	engine.EXPECT().InvalidateAllUserRoles()
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 4, TargetRevision: 4}).Times(2)
 	metrics := NewMockMetrics(ctrl)
-	watcher := newWatcherWithMetrics(nil, staticPolicyRevisionSource{revision: 4}, engine, nil, time.Second, metrics)
+	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 4}, engine, time.Second, metrics)
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(4, permissionapplication.NewUserRoleChange("user_role_added", userID, roleID)), "instance-b"))
 	require.NoError(t, err)
 
@@ -185,7 +189,7 @@ func TestWatcherHandlePayloadExecutesOutOfOrderUserRoleEventWithoutMovingApplied
 	engine.EXPECT().InvalidateUserRole(userID)
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 9, TargetRevision: 9})
 	metrics := NewMockMetrics(ctrl)
-	watcher := newWatcherWithMetrics(nil, staticPolicyRevisionSource{revision: 9}, engine, nil, time.Second, metrics)
+	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 9}, engine, time.Second, metrics)
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(4, permissionapplication.NewUserRoleChange("user_role_removed", userID, roleID)), "instance-b"))
 	require.NoError(t, err)
 
@@ -204,7 +208,7 @@ func TestWatcherHandlePayloadReloadsOutOfOrderPolicyEventWithoutMovingAppliedRev
 	engine.EXPECT().RefreshToRevision(gomock.Any(), int64(9)).Return(int64(9), nil)
 	engine.EXPECT().InvalidateAllUserRoles()
 	metrics := NewMockMetrics(ctrl)
-	watcher := newWatcherWithMetrics(nil, staticPolicyRevisionSource{revision: 9}, engine, nil, time.Second, metrics)
+	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 9}, engine, time.Second, metrics)
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(4, permissionapplication.NewPolicyReloadChange("role_updated")), "instance-b"))
 	require.NoError(t, err)
 
@@ -259,7 +263,7 @@ func TestWatcherCheckVersionCompensatesMissedMessage(t *testing.T) {
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 8, TargetRevision: 8})
 	engine.EXPECT().InvalidateAllUserRoles()
 	metrics := NewMockMetrics(ctrl)
-	watcher := newWatcherWithMetrics(store, staticPolicyRevisionSource{revision: 8}, engine, nil, time.Second, metrics)
+	watcher := newWatcherForTest(store, staticPolicyRevisionSource{revision: 8}, engine, time.Second, metrics)
 
 	gomock.InOrder(
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(4)),
@@ -291,7 +295,7 @@ func TestWatcherFaultInjectionRedisFailureRecoveryConvergesWithoutNewWrite(t *te
 	require.Equal(t, databaseRevision, storedRevision)
 
 	engine := &faultInjectedPolicyReloadEngine{appliedRevision: 4, targetRevision: 4, ready: true}
-	watcher := newWatcherWithMetrics(store, staticPolicyRevisionSource{revision: databaseRevision}, engine, nil, time.Second, nil)
+	watcher := newWatcherForTest(store, staticPolicyRevisionSource{revision: databaseRevision}, engine, time.Second, nil)
 	watcher.CheckVersion(context.Background())
 
 	requireEventuallyWatcherProjection(t, engine, databaseRevision)
@@ -309,7 +313,7 @@ func TestWatcherCheckVersionSkipsWhenProjectionIsAuthoritativelyReady(t *testing
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 9, TargetRevision: 9})
 	metrics := NewMockMetrics(gomock.NewController(t))
 	metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0))
-	watcher := newWatcherWithMetrics(store, staticPolicyRevisionSource{revision: 4}, engine, nil, time.Second, metrics)
+	watcher := newWatcherForTest(store, staticPolicyRevisionSource{revision: 4}, engine, time.Second, metrics)
 
 	watcher.CheckVersion(context.Background())
 
@@ -332,7 +336,7 @@ func TestWatcherCheckVersionRetriesAfterPriorFailureAtEqualRevision(t *testing.T
 	metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)).Times(2)
 	metrics.EXPECT().WatcherVersionMismatch(gomock.Any(), permissionapplication.MetricsSourceWatcherRevisionCheck, permissionapplication.MetricsReasonRevisionMismatch)
 	metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherRevisionCheck)
-	watcher := newWatcherWithMetrics(store, staticPolicyRevisionSource{revision: 8}, engine, nil, time.Second, metrics)
+	watcher := newWatcherForTest(store, staticPolicyRevisionSource{revision: 8}, engine, time.Second, metrics)
 
 	watcher.CheckVersion(context.Background())
 }
@@ -344,7 +348,7 @@ func TestWatcherFaultInjectionReplayAddRemoveReplaceEventsKeepsIdempotentProject
 	revisions := &sequencePolicyRevisionSource{results: []policyRevisionResult{
 		{revision: 4}, {revision: 4}, {revision: 4}, {revision: 4},
 	}}
-	watcher := newWatcherWithMetrics(nil, revisions, engine, nil, time.Second, nil)
+	watcher := newWatcherForTest(nil, revisions, engine, time.Second, nil)
 	payloads := []string{
 		mustPolicyPayload(t, testPolicyPublicationEvent(2, permissionapplication.NewUserRoleChange("user_role_added", userID, roleID))),
 		mustPolicyPayload(t, testPolicyPublicationEvent(3, permissionapplication.NewUserRoleChange("user_role_removed", userID, roleID))),
@@ -370,7 +374,7 @@ func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, AppliedRevision: 2, TargetRevision: 5, LastError: reloadErr})
 	engine.EXPECT().RefreshToRevision(gomock.Any(), int64(5)).Return(int64(2), reloadErr)
 	metrics := NewMockMetrics(ctrl)
-	watcher := newWatcherWithMetrics(nil, staticPolicyRevisionSource{revision: 5}, engine, nil, time.Second, metrics)
+	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 5}, engine, time.Second, metrics)
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(5, permissionapplication.NewPolicyReloadChange("permission_updated")), "instance-b"))
 	require.NoError(t, err)
 
@@ -390,7 +394,7 @@ func TestWatcherCheckVersionFailureDoesNotClearLag(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	engine := NewMockPolicyReloadEngine(ctrl)
 	metrics := NewMockMetrics(ctrl)
-	watcher := newWatcherWithMetrics(&failingVersionStore{}, failingPolicyRevisionSource{err: errors.New("database unavailable")}, engine, nil, time.Second, metrics)
+	watcher := newWatcherForTest(&failingVersionStore{}, failingPolicyRevisionSource{err: errors.New("database unavailable")}, engine, time.Second, metrics)
 
 	engine.EXPECT().AppliedRevision().Return(int64(2))
 	metrics.EXPECT().WatcherCheckFailed(gomock.Any(), permissionapplication.MetricsSourceWatcherRevisionCheck, permissionapplication.MetricsReasonRevisionStoreUnavailable)
@@ -402,7 +406,7 @@ func TestWatcherCheckVersionCancellationDoesNotRecordFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	engine := NewMockPolicyReloadEngine(ctrl)
 	metrics := NewMockMetrics(ctrl)
-	watcher := newWatcherWithMetrics(nil, failingPolicyRevisionSource{err: context.Canceled}, engine, nil, time.Second, metrics)
+	watcher := newWatcherForTest(nil, failingPolicyRevisionSource{err: context.Canceled}, engine, time.Second, metrics)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -432,7 +436,7 @@ func TestWatcherCheckVersionRecoversFromRevisionSourceAndReloadFailure(t *testin
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 7, TargetRevision: 7})
 	engine.EXPECT().InvalidateAllUserRoles()
 	metrics := NewMockMetrics(ctrl)
-	watcher := newWatcherWithMetrics(&failingVersionStore{}, revisions, engine, nil, time.Second, metrics)
+	watcher := newWatcherForTest(&failingVersionStore{}, revisions, engine, time.Second, metrics)
 
 	gomock.InOrder(
 		metrics.EXPECT().WatcherCheckFailed(gomock.Any(), permissionapplication.MetricsSourceWatcherRevisionCheck, permissionapplication.MetricsReasonRevisionStoreUnavailable),
@@ -469,7 +473,7 @@ func TestWatcherHandlePayloadRevisionSourceFailureDoesNotUseHint(t *testing.T) {
 	engine.EXPECT().AppliedRevision().Return(int64(2)).Times(2)
 	engine.EXPECT().InvalidateAllUserRoles()
 	metrics := NewMockMetrics(ctrl)
-	watcher := newWatcherWithMetrics(nil, failingPolicyRevisionSource{err: errors.New("database unavailable")}, engine, nil, time.Second, metrics)
+	watcher := newWatcherForTest(nil, failingPolicyRevisionSource{err: errors.New("database unavailable")}, engine, time.Second, metrics)
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(99, permissionapplication.NewPolicyReloadChange("role_updated")), "instance-b"))
 	require.NoError(t, err)
 	metrics.EXPECT().WatcherCheckFailed(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub, permissionapplication.MetricsReasonRevisionStoreUnavailable)
@@ -486,7 +490,7 @@ func TestWatcherRunningStatus(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 	store := newStore(client, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
 	engine := &faultInjectedPolicyReloadEngine{ready: true}
-	watcher := newWatcherWithMetrics(store, staticPolicyRevisionSource{}, engine, nil, time.Hour, nil)
+	watcher := newWatcherForTest(store, staticPolicyRevisionSource{}, engine, time.Hour, nil)
 
 	require.False(t, watcher.Status().Running)
 	watcher.Start()
@@ -631,7 +635,7 @@ func TestWatcherStopHonorsDeadlineAndCanBeRepeated(t *testing.T) {
 	subscriber := blockingPolicySubscriber{release: release, closed: closed}
 	store := &countingSubscriptionStore{subscriber: subscriber}
 	engine := &faultInjectedPolicyReloadEngine{ready: true}
-	watcher := newWatcherWithMetrics(store, staticPolicyRevisionSource{}, engine, nil, time.Hour, nil)
+	watcher := newWatcherForTest(store, staticPolicyRevisionSource{}, engine, time.Hour, nil)
 
 	watcher.Start()
 	require.True(t, watcher.Status().Running)

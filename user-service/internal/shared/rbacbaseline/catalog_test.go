@@ -109,13 +109,3 @@ func TestDefaultRolePermissionsReferenceBaseline(t *testing.T) {
 	}
 	require.Equal(t, permissions, superAdminPermissions, "super admin must bind every default permission")
 }
-
-func TestPermissionIDsReturnsDefensiveCopy(t *testing.T) {
-	getIDs := permissionIDs(PermissionUserListID, PermissionUserGetID)
-
-	first := getIDs()
-	require.Equal(t, []string{PermissionUserListID, PermissionUserGetID}, first)
-
-	first[0] = PermissionUserCreateID
-	require.Equal(t, []string{PermissionUserListID, PermissionUserGetID}, getIDs())
-}

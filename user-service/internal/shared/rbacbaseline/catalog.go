@@ -82,14 +82,6 @@ func DefaultRolePermissions() []RolePermissionSpec {
 	return bindings
 }
 
-func permissionIDs(ids ...string) func() []string {
-	return func() []string {
-		result := make([]string, 0, len(ids))
-		result = append(result, ids...)
-		return result
-	}
-}
-
 func allPermissionIDs() []string {
 	permissions := DefaultPermissions()
 	ids := make([]string, 0, len(permissions))

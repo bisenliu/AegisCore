@@ -18,24 +18,13 @@ import (
 
 var errAuthorizationUnauthenticated = errors.New("authorization user is not authenticated")
 
-// AuthorizationWhitelistRule 描述一条跳过 RBAC 的显式路由模板规则。
-type AuthorizationWhitelistRule = commonmiddleware.CasbinAuthorizationWhitelistRule
-
-// AuthorizationOption 配置 RBAC 授权中间件。
-type AuthorizationOption = commonmiddleware.CasbinAuthorizationOption
-
 type authorizationAdapter struct {
 	authz authorization.Authorizer
 }
 
-// WithAuthorizationWhitelist 配置按 HTTP 方法和 Gin 路由模板匹配的授权白名单。
-func WithAuthorizationWhitelist(rules ...AuthorizationWhitelistRule) AuthorizationOption {
-	return commonmiddleware.WithCasbinAuthorizationWhitelist(rules...)
-}
-
 // Authorize 返回在 JWT 认证之后执行的 Gin RBAC 授权中间件。
-func Authorize(authz authorization.Authorizer, opts ...AuthorizationOption) gin.HandlerFunc {
-	options := append([]AuthorizationOption{
+func Authorize(authz authorization.Authorizer, opts ...commonmiddleware.CasbinAuthorizationOption) gin.HandlerFunc {
+	options := append([]commonmiddleware.CasbinAuthorizationOption{
 		commonmiddleware.WithCasbinAuthorizationErrorHandler(handleAuthorizationError),
 	}, opts...)
 	return commonmiddleware.CasbinAuthorization(authorizationAdapter{authz: authz}, resolveAuthorizationRequest, options...)

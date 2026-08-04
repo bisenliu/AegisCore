@@ -15,6 +15,7 @@ import (
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	contractresponse "github.com/aegiscore/common/contract/response"
+	commonmiddleware "github.com/aegiscore/common/http/middleware"
 	commonauth "github.com/aegiscore/common/security/auth"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 )
@@ -150,12 +151,16 @@ func TestAuthorizeAllowsSuperAdminWildcardDecision(t *testing.T) {
 }
 
 func TestAuthorizeWhitelistAndOptionsBypass(t *testing.T) {
+	whitelist := commonmiddleware.WithCasbinAuthorizationWhitelist(commonmiddleware.CasbinAuthorizationWhitelistRule{
+		Method:       http.MethodGet,
+		PathTemplate: "/api/v1/users/:user_id",
+	})
 	tests := []struct {
 		name    string
 		method  string
-		options []AuthorizationOption
+		options []commonmiddleware.CasbinAuthorizationOption
 	}{
-		{name: "whitelist", method: http.MethodGet, options: []AuthorizationOption{WithAuthorizationWhitelist(AuthorizationWhitelistRule{Method: http.MethodGet, PathTemplate: "/api/v1/users/:user_id"})}},
+		{name: "whitelist", method: http.MethodGet, options: []commonmiddleware.CasbinAuthorizationOption{whitelist}},
 		{name: "options", method: http.MethodOptions},
 	}
 	for _, tt := range tests {
