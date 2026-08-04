@@ -63,9 +63,31 @@
 - **WHEN** 新会话使用户超过配置的活跃 refresh session 上限
 - **THEN** 系统 MUST 同步裁剪 Redis 中最旧的活跃会话，MUST NOT 依赖后台 workerpool 完成安全裁剪
 
+### Requirement: 认证入口请求体容量边界
+
+系统 MUST 对 `/api/v1/auth` 下需要 JSON 请求体的认证入口执行请求体字节上限检查。超限请求 MUST 在密码校验、refresh token 解析、password-change session 消费或会话撤销 use case 前被拒绝，并 MUST 返回 `413 Payload Too Large` 与统一错误 envelope。
+
+#### Scenario: 公开认证入口拒绝超限请求体
+
+- **WHEN** 调用方向登录、refresh 或强制改密入口提交超过配置上限的 JSON 请求体
+- **THEN** 系统 MUST 返回 `413 Payload Too Large`
+- **AND** 系统 MUST NOT 执行密码哈希校验、refresh token 解析、password-change session 消费、token 签发或 session 创建
+
+#### Scenario: 认证入口覆盖固定长度和 chunked 载荷
+
+- **WHEN** 超限认证请求体使用固定 `Content-Length` 或 chunked 传输
+- **THEN** 两类请求 MUST 都被同一容量边界拒绝
+- **AND** 认证错误、限流错误和字段校验错误语义 MUST 保持与非超限请求一致，不得互相伪装
+
+#### Scenario: 认证入口尾随 JSON 超限
+
+- **WHEN** 认证请求体首个 JSON 文档合法，但其后追加的尾随 JSON 使总请求体超过配置上限
+- **THEN** 系统 MUST 返回 `413 Payload Too Large`
+- **AND** auth use case MUST NOT 被调用
+
 ### Requirement: Token version 校验与会话撤销
 
-系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地 loading cache 和 Redis 投影加速校验。缓存未命中、关闭、过期、驱逐或显式禁用只能影响性能，MUST NOT 改变认证与撤销语义。退出全部会话和密码变更 MUST 递增主事实，使旧 access token 失效并撤销相应 refresh sessions。token-version feature cache MUST 由 user-service 私有配置提供完整默认值、启用时校验和到通用 localcache 配置的集中映射，auth 构造路径 MUST 只消费窄 auth settings。
+系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地 loading cache 和 Redis 投影加速校验。缓存未命中、关闭、过期、驱逐或显式禁用只能影响性能，MUST NOT 改变认证与撤销语义。退出全部会话和密码变更 MUST 递增主事实，使旧 access token 失效并撤销相应 refresh sessions。token-version feature cache MUST 由 user-service 私有配置提供完整默认值、启用时校验和到通用 localcache 配置的集中映射，auth 构造路径 MUST 只消费窄 auth settings。递增 `token_version` 或更新凭证并返回新 `token_version` MUST 是单一确定的 PostgreSQL 结果，成功路径 MUST NOT 在提交后通过第二条 `SELECT` 才获取撤销版本。
 
 #### Scenario: 受保护访问与本地缓存
 
@@ -97,16 +119,30 @@
 #### Scenario: 全部退出与已认证改密
 
 - **WHEN** 已认证用户请求退出全部会话
-- **THEN** 系统 MUST 递增 PostgreSQL `token_version` 并撤销全部活跃 refresh sessions，使旧 access 和 refresh token 无效
+- **THEN** 系统 MUST 递增 PostgreSQL `token_version` 并在同一数据库结果中返回新版本，然后撤销全部活跃 refresh sessions，使旧 access 和 refresh token 无效
 - **AND** 安全失效 MUST NOT 依赖后台 workerpool，Redis key 物理清理 MAY 异步执行
 - **WHEN** 已认证用户提供正确旧密码和满足策略的新密码
-- **THEN** 系统 MUST 原子更新密码哈希并递增 `token_version`，再执行本地缓存失效、Redis 投影刷新和 refresh session 撤销
+- **THEN** 系统 MUST 原子更新密码哈希并递增 `token_version`，在同一数据库结果中返回新版本，再执行本地缓存失效、Redis 投影刷新和 refresh session 撤销
 - **WHEN** 旧密码错误或新密码不满足策略
 - **THEN** 系统 MUST 拒绝修改并保持密码、状态和 `token_version` 不变
 
+#### Scenario: 撤销版本原子返回
+
+- **WHEN** 系统执行退出全部会话所需的 `token_version` 递增，或执行强制改密所需的密码哈希、状态和 `token_version` 条件更新
+- **THEN** PostgreSQL mutation 与新 `token_version` 返回 MUST 来自单条 `UPDATE ... RETURNING token_version` 或等价事务内更新返回
+- **AND** 成功更新路径 MUST NOT 在更新提交后执行第二条 `SELECT` 才获取新版本
+- **AND** 故障注入 MUST 只能产生“未更新且返回失败”或“已更新、已拿到新版本并进入撤销编排”两种 application 可观察状态
+
+#### Scenario: 条件凭证更新拒绝
+
+- **WHEN** 强制改密条件更新时用户不存在
+- **THEN** 系统 MUST 返回用户不存在错误，并保持密码、状态和 `token_version` 不变
+- **WHEN** 用户状态或当前 `token_version` 与强制改密 token/session 绑定条件不匹配
+- **THEN** 系统 MUST 返回统一无效凭据，并保持密码、状态和 `token_version` 不变
+
 #### Scenario: 撤销投影不完整
 
-- **WHEN** PostgreSQL 主事实已更新，但本地缓存失效、Redis 投影刷新或 refresh session 删除失败
+- **WHEN** PostgreSQL 主事实已更新并已返回新 `token_version`，但本地缓存失效、Redis 投影刷新或 refresh session 删除失败
 - **THEN** use case MUST 返回 `authdomain.ErrSessionRevocationIncomplete`，MUST NOT 返回普通成功结果
 - **AND** 错误链 MUST 保留底层原因，metrics MUST 将结果记录为撤销不完整失败
 
@@ -139,9 +175,10 @@
 #### Scenario: 条件更新与撤销
 
 - **WHEN** session 已消费，用户仍为 `UserStatusMustChangePassword` 且 PostgreSQL 当前 `token_version` 等于 token 中旧版本
-- **THEN** 系统 MUST 更新密码哈希、将状态改为 `UserStatusNormal` 并递增 `token_version`
+- **THEN** 系统 MUST 更新密码哈希、将状态改为 `UserStatusNormal` 并递增 `token_version`，且 MUST 在同一数据库结果中返回新 `token_version`
 - **AND** 状态或版本不匹配时 MUST 返回统一无效凭据且不得更新任何字段
-- **AND** 更新成功后 MUST 失效本地缓存、刷新 Redis 投影并删除该用户 refresh sessions；任一步失败 MUST 返回可观察的安全撤销未完成错误，MUST NOT 返回普通成功结果
+- **AND** 更新成功并拿到新 `token_version` 后 MUST 失效本地缓存、刷新 Redis 投影并删除该用户 refresh sessions；任一步失败 MUST 返回可观察的安全撤销未完成错误，MUST NOT 返回普通成功结果
+- **AND** 成功更新路径 MUST NOT 在更新提交后执行第二条 `SELECT` 才获取新版本
 
 ### Requirement: 认证架构、配置与资源生命周期
 
@@ -234,4 +271,3 @@ auth Redis adapter MUST 兼容 Redis Cluster。多 key Lua、pipeline、refresh 
 - **WHEN** 登录请求来自未配置为 trusted proxy 的 TCP peer，即使请求携带 `X-Forwarded-For` 或 `X-Real-IP`
 - **THEN** auth controller MUST 将 TCP peer 地址写入 `authctx.ClientContext.ClientIP`
 - **AND** 系统 MUST NOT 信任或记录未受信任 peer 提供的 forwarded client IP
-
