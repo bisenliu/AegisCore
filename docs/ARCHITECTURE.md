@@ -137,7 +137,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 2. 使用 `make user-service-migrate-diff name=<migration-name>` 生成 Atlas migration。
 3. 使用 `make user-service-migrate-validate` 校验 migration。
 4. 使用 `atlas migrate hash` 或等价流程刷新 `atlas.sum`，将 SQL migration 与权限要求提交 Git。
-5. 发布时通过 DBA 工单或受控发布平台人工或受控执行 SQL migration；`CREATE EXTENSION IF NOT EXISTS pg_trgm;` 等扩展语句可能需要 DBA 权限或前置动作。
+5. `users.nickname` substring 模糊查询统一使用 `pg_trgm` 提供的 GIN `gin_trgm_ops` 索引，不保留普通索引、无扩展 fallback 或双索引兼容分支；发布时通过 DBA 工单或受控发布平台人工或受控执行 SQL migration，并确认 `CREATE EXTENSION IF NOT EXISTS pg_trgm;` 所需的 DBA 权限或前置动作。
 6. 删除权限时 migration 先删除 `role_permissions` 再删除 `permissions`；随后执行同版本 RBAC seed，并通过显式 reload 或滚动重启收敛 Casbin policy。
 
 ## 7. 部署和观测

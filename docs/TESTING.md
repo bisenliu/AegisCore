@@ -183,7 +183,7 @@ make user-service-migrate-diff name=<migration-name>
 make user-service-migrate-validate
 ```
 
-进入环境或发布流程前，确认 SQL migration 和 `atlas.sum` 已提交到 Git，并通过 DBA 工单或受控发布平台执行。若 SQL 包含 `CREATE EXTENSION IF NOT EXISTS pg_trgm;`，测试记录应说明目标库是否需要 DBA 权限或前置动作。
+进入环境或发布流程前，确认 SQL migration 和 `atlas.sum` 已提交到 Git，并通过 DBA 工单或受控发布平台执行。`users.nickname` substring 模糊查询必须由 `pg_trgm` 提供的 GIN `gin_trgm_ops` 索引支撑，不得保留普通索引、无扩展 fallback 或双索引兼容分支；测试记录必须说明目标库创建 `pg_trgm` 是否需要 DBA 权限或前置动作。
 
 部署资产变更还应检查 Compose、Kubernetes 和 Helm 渲染结果不包含自动执行 `atlas migrate apply` 的 Job、service、command 或 args；普通 user-service 运行时镜像应确认不包含 `/usr/local/bin/atlas`。
 

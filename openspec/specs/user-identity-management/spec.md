@@ -46,7 +46,8 @@
 
 - **WHEN** 已授权调用方通过 `GET /api/v1/users` 提交有效分页、状态或 cursor 参数
 - **THEN** 系统 MUST 按软删除过滤、状态过滤和 `user_id` keyset 顺序返回用户列表及共享 pagination 信息，并拒绝无效分页参数
-- **AND** Ent schema 和 Atlas migration MUST 为列表过滤、`user_id` cursor 排序和昵称查询提供索引，昵称索引 MUST NOT 依赖 PostgreSQL GIN、`gin_trgm_ops` 或插件
+- **AND** Ent schema 和 Atlas migration MUST 为列表过滤、`user_id` cursor 排序和昵称 substring 模糊查询提供索引；昵称模糊查询 MUST 使用 PostgreSQL `pg_trgm` 扩展提供的 GIN `gin_trgm_ops` 索引
+- **AND** 系统 MUST NOT 为昵称模糊查询保留普通索引、无 `pg_trgm` 查询 fallback、双索引或其他兼容分支
 - **AND** 索引调整 MUST NOT 改变用户名唯一性、软删除、状态、排序、响应字段或错误语义
 
 #### Scenario: 路由保护与错误渲染

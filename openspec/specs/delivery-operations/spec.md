@@ -69,8 +69,9 @@ Ent schema MUST 是数据库结构来源，Atlas SQL migration MUST 是可审查
 - **THEN** 协作者 MUST 执行 `make user-service-generate` 和 `make user-service-migrate-diff name=<migration-name>` 并审查 SQL 与 `atlas.sum`；interface、生成指令、Ent 生成物、SQL 或 hash 不一致时验证 MUST 失败
 - **WHEN** 生成或审查 SQL migration
 - **THEN** migration MUST NOT 包含 `FOREIGN KEY` 或 `REFERENCES`，并 MUST 保留 Ent edge、关联字段和必要唯一索引
-- **WHEN** migration 使用 `gin_trgm_ops`
-- **THEN** 首个 migration MUST 在索引前创建 `pg_trgm` 并提示 DBA 权限
+- **WHEN** migration 交付 `users.nickname` 昵称 substring 模糊查询索引
+- **THEN** migration MUST 使用 GIN `gin_trgm_ops`，且首个 migration MUST 在索引前创建 `pg_trgm` 并提示 DBA 权限
+- **AND** migration、Ent schema 和交付文档 MUST NOT 保留普通昵称索引、无 `pg_trgm` fallback、双索引或其他兼容分支
 - **AND** Atlas dev Dockerfile、diff 脚本、`atlas.hcl` 与 Compose 本地 image tag MUST 一致，lint MUST 检测 drift
 
 #### Scenario: Migration 校验与受控执行

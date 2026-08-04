@@ -146,7 +146,7 @@ make user-service-migrate-validate
 
 1. 运行 `make user-service-migrate-validate` 校验 SQL 目录和 `atlas.sum`。
 2. 将 SQL migration 和 `atlas.sum` 提交到 Git。
-3. 通过 DBA 工单或受控发布平台执行 SQL migration；如 SQL 包含 `CREATE EXTENSION IF NOT EXISTS pg_trgm;`，确认目标库权限或 DBA 前置动作。
+3. 通过 DBA 工单或受控发布平台执行 SQL migration；`users.nickname` substring 模糊查询统一使用 `pg_trgm` 提供的 GIN `gin_trgm_ops` 索引，不保留普通索引、无扩展 fallback 或双索引兼容分支，执行前必须确认目标库创建 `pg_trgm` 所需的权限或 DBA 前置动作。
 
 普通 user-service 运行时镜像不包含 Atlas。容器化环境应先确认数据库 SQL migration 已受控执行，再启动服务镜像。
 
