@@ -97,9 +97,6 @@ func (s *roleCommandService) RemoveUserRole(ctx context.Context, cmd UserRoleCom
 
 // AddRolePermission 为角色新增权限绑定；重复绑定由 store 映射为明确冲突语义。
 func (s *roleCommandService) AddRolePermission(ctx context.Context, cmd RolePermissionCommand) (*PermissionsResult, error) {
-	if _, err := s.roles.GetByRoleID(ctx, cmd.RoleID); err != nil {
-		return nil, err
-	}
 	permission, err := s.permissions.GetByPermissionID(ctx, cmd.PermissionID)
 	if err != nil {
 		return nil, err
@@ -118,9 +115,6 @@ func (s *roleCommandService) AddRolePermission(ctx context.Context, cmd RolePerm
 // ReplaceRolePermissions 幂等替换角色的完整权限绑定集合。
 // 替换语义以去重后的完整权限集合为准；提交后的 policy reload 失败由 outbox 自动恢复。
 func (s *roleCommandService) ReplaceRolePermissions(ctx context.Context, cmd ReplaceRolePermissionsCommand) (*PermissionsResult, error) {
-	if _, err := s.roles.GetByRoleID(ctx, cmd.RoleID); err != nil {
-		return nil, err
-	}
 	permissionIDs := uniqueUUIDs(cmd.PermissionIDs)
 	permissions, err := s.permissions.GetByPermissionIDs(ctx, permissionIDs)
 	if err != nil {

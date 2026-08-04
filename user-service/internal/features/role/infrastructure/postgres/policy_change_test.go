@@ -22,8 +22,7 @@ import (
 )
 
 func TestOnlineRoleMutationsAppendCommittedRevisionAndPendingOutbox(t *testing.T) {
-	client := newRoleStoreTestClient(t)
-	ctx := context.Background()
+	ctx, _, client := newBootstrapPostgresTestDB(t)
 	roles := NewRoleStore(client)
 	rolePermissions := NewRolePermissionStore(client)
 	userRoles := NewUserRoleStore(client)
@@ -78,8 +77,7 @@ func TestOnlineRoleMutationsAppendCommittedRevisionAndPendingOutbox(t *testing.T
 }
 
 func TestPolicyFactFailuresRollbackBusinessMutation(t *testing.T) {
-	client := newRoleStoreTestClient(t)
-	ctx := context.Background()
+	ctx, _, client := newBootstrapPostgresTestDB(t)
 	store := NewRoleStore(client)
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000021001")
 	created, err := store.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: "Before Failure", Active: true}, rolePolicyChange("role_created", roleID))
@@ -109,8 +107,7 @@ func TestPolicyFactFailuresRollbackBusinessMutation(t *testing.T) {
 }
 
 func TestPolicyFactCommitFailureRollsBackAllWrites(t *testing.T) {
-	client := newRoleStoreTestClient(t)
-	ctx := context.Background()
+	ctx, _, client := newBootstrapPostgresTestDB(t)
 	store := NewRoleStore(client)
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000021002")
 	created, err := store.Create(ctx, roleapplication.CreateRoleInput{RoleID: roleID, Name: "Before Commit Failure", Active: true}, rolePolicyChange("role_created", roleID))

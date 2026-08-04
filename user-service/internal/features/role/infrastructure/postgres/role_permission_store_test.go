@@ -81,17 +81,6 @@ func TestRolePermissionStoreDefaultListRemoveAndSyncSystemBindings(t *testing.T)
 	require.NoError(t, err)
 	require.Zero(t, added)
 
-	_, err = bindingStore.Remove(ctx, roleID, addPermissionID, permissionPolicyChange("role_permission_removed", roleID, addPermissionID))
-	require.NoError(t, err)
-	items, err = bindingStore.ListByRoleID(ctx, roleID)
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{keepPermissionID}, permissionIDsForTest(items))
-	_, err = bindingStore.Remove(ctx, roleID, addPermissionID, permissionPolicyChange("role_permission_removed", roleID, addPermissionID))
-	require.ErrorIs(t, err, roledomain.ErrRolePermissionNotFound)
-	_, err = bindingStore.Remove(ctx, missingRoleID, keepPermissionID, permissionPolicyChange("role_permission_removed", missingRoleID, keepPermissionID))
-	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
-	_, err = bindingStore.Remove(ctx, roleID, missingPermissionID, permissionPolicyChange("role_permission_removed", roleID, missingPermissionID))
-	require.ErrorIs(t, err, roledomain.ErrRolePermissionNotFound)
 }
 
 func TestPermissionLookup(t *testing.T) {

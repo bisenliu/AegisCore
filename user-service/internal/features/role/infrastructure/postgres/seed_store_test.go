@@ -31,7 +31,7 @@ func TestRoleStoreUpsertSystemRole(t *testing.T) {
 	require.Equal(t, roleID, created.RoleID)
 	require.True(t, created.Active)
 	require.True(t, created.IsSystem)
-	_, err = store.SetActive(ctx, roleID, false, rolePolicyChange("role_active_changed", roleID))
+	_, err = client.Role.UpdateOneID(created.ID).SetActive(false).Save(ctx)
 	require.NoError(t, err)
 
 	input.Name = "Super Admin Updated"

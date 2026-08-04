@@ -1604,7 +1604,7 @@ const openAPIDocument = `{
                 }
               }
             },
-            "description": "请求错误或系统角色受保护"
+            "description": "请求错误"
           },
           "401": {
             "content": {
@@ -1644,7 +1644,7 @@ const openAPIDocument = `{
                 }
               }
             },
-            "description": "角色已存在"
+            "description": "角色已存在或系统角色受保护"
           },
           "429": {
             "content": {
@@ -1878,7 +1878,7 @@ const openAPIDocument = `{
                 }
               }
             },
-            "description": "绑定已存在"
+            "description": "绑定已存在或系统角色受保护"
           },
           "429": {
             "content": {
@@ -2002,6 +2002,16 @@ const openAPIDocument = `{
             },
             "description": "角色或权限不存在"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "系统角色受保护"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -2123,6 +2133,16 @@ const openAPIDocument = `{
             },
             "description": "绑定不存在"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "系统角色受保护"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -2193,7 +2213,7 @@ const openAPIDocument = `{
                 }
               }
             },
-            "description": "请求错误或系统角色受保护"
+            "description": "请求错误"
           },
           "401": {
             "content": {
@@ -2224,6 +2244,16 @@ const openAPIDocument = `{
               }
             },
             "description": "角色不存在"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "系统角色受保护"
           },
           "429": {
             "content": {

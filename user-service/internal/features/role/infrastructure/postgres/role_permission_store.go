@@ -49,7 +49,7 @@ func (s *RolePermissionStore) ListByRoleID(ctx context.Context, roleID uuid.UUID
 // Add 新增角色权限绑定。
 func (s *RolePermissionStore) Add(ctx context.Context, roleID uuid.UUID, permission roleapplication.PermissionReference, change roleapplication.PolicyChange) (roleapplication.PermissionsWriteResult, error) {
 	items, write, err := transactPolicyChange(ctx, s.client, "add role permission", change, func(tx *ent.Tx) ([]roleapplication.PermissionReference, error) {
-		role, err := s.getLockedRoleByExternalID(ctx, tx, roleID)
+		role, err := lockOrdinaryRole(ctx, tx, roleID)
 		if err != nil {
 			return nil, err
 		}
@@ -72,7 +72,7 @@ func (s *RolePermissionStore) Add(ctx context.Context, roleID uuid.UUID, permiss
 // 事务内先校验角色和目标权限，再删除旧绑定并批量创建新绑定。
 func (s *RolePermissionStore) Replace(ctx context.Context, roleID uuid.UUID, permissions []roleapplication.PermissionReference, change roleapplication.PolicyChange) (roleapplication.PermissionsWriteResult, error) {
 	items, write, err := transactPolicyChange(ctx, s.client, "replace role permissions", change, func(tx *ent.Tx) ([]roleapplication.PermissionReference, error) {
-		role, err := s.getLockedRoleByExternalID(ctx, tx, roleID)
+		role, err := lockOrdinaryRole(ctx, tx, roleID)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +100,7 @@ func (s *RolePermissionStore) Replace(ctx context.Context, roleID uuid.UUID, per
 // Remove 删除角色权限绑定。
 func (s *RolePermissionStore) Remove(ctx context.Context, roleID uuid.UUID, permissionID uuid.UUID, change roleapplication.PolicyChange) (roleapplication.PermissionsWriteResult, error) {
 	items, write, err := transactPolicyChange(ctx, s.client, "remove role permission", change, func(tx *ent.Tx) ([]roleapplication.PermissionReference, error) {
-		role, err := s.getLockedRoleByExternalID(ctx, tx, roleID)
+		role, err := lockOrdinaryRole(ctx, tx, roleID)
 		if err != nil {
 			return nil, err
 		}
@@ -228,17 +228,6 @@ func (s *RolePermissionStore) SyncSystemBindings(ctx context.Context, roleID uui
 
 func (s *RolePermissionStore) getRoleByExternalID(ctx context.Context, roleID uuid.UUID) (*ent.Role, error) {
 	role, err := s.client.Role.Query().Where(entrole.RoleIDEQ(roleID)).Only(ctx)
-	if err == nil {
-		return role, nil
-	}
-	if ent.IsNotFound(err) {
-		return nil, roledomain.ErrRoleNotFound
-	}
-	return nil, fmt.Errorf("query role by role_id %s: %w", roleID.String(), err)
-}
-
-func (s *RolePermissionStore) getLockedRoleByExternalID(ctx context.Context, tx *ent.Tx, roleID uuid.UUID) (*ent.Role, error) {
-	role, err := tx.Role.Query().Where(entrole.RoleIDEQ(roleID)).Only(ctx)
 	if err == nil {
 		return role, nil
 	}

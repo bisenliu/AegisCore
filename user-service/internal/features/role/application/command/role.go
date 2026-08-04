@@ -99,16 +99,6 @@ func (s *roleCommandService) UpdateRole(ctx context.Context, cmd UpdateRoleComma
 	if err != nil {
 		return err
 	}
-	current, err := s.roles.GetByRoleID(ctx, cmd.RoleID)
-	if err != nil {
-		return err
-	}
-	if err := current.ProtectSystemMutation(roledomain.RoleMutation{Name: name, Active: cmd.Active}); err != nil {
-		return err
-	}
-	if current.Name == name && current.Description == description && current.Active == cmd.Active {
-		return nil
-	}
 	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindPolicyChanged, Reason: "role_updated", RoleID: cmd.RoleID}
 	write, err := s.roles.Update(ctx, roleapplication.UpdateRoleInput{RoleID: cmd.RoleID, Name: name, Description: description, Active: cmd.Active}, change)
 	if err != nil {
@@ -123,16 +113,6 @@ func (s *roleCommandService) UpdateRole(ctx context.Context, cmd UpdateRoleComma
 
 // SetRoleActive 启用或停用角色。
 func (s *roleCommandService) SetRoleActive(ctx context.Context, cmd SetRoleActiveCommand) error {
-	current, err := s.roles.GetByRoleID(ctx, cmd.RoleID)
-	if err != nil {
-		return err
-	}
-	if err := current.ProtectSystemMutation(roledomain.RoleMutation{Name: current.Name, Active: cmd.Active}); err != nil {
-		return err
-	}
-	if current.Active == cmd.Active {
-		return nil
-	}
 	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindPolicyChanged, Reason: "role_active_changed", RoleID: cmd.RoleID}
 	write, err := s.roles.SetActive(ctx, cmd.RoleID, cmd.Active, change)
 	if err != nil {

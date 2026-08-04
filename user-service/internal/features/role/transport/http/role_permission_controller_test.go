@@ -88,6 +88,14 @@ func TestRoleControllerReplaceRolePermissions(t *testing.T) {
 		recorder := performRoleHTTPRequest(t, engine, http.MethodPut, "/api/v1/roles/"+roleHTTPTestRoleID+"/permissions", jsonBody(`{"permission_ids":["`+roleHTTPTestPermissionID+`"]}`))
 		expectRoleEnvelope(t, recorder, http.StatusNotFound, false, contracterrors.CodeNotFound, messages.PermissionNotFound)
 	})
+
+	t.Run("protected system role maps to conflict envelope", func(t *testing.T) {
+		engine, commands, _ := newRoleHTTPTestHarness(t)
+		commands.EXPECT().ReplaceRolePermissions(gomock.Any(), gomock.Any()).Return(nil, roledomain.ErrSystemRoleProtected)
+
+		recorder := performRoleHTTPRequest(t, engine, http.MethodPut, "/api/v1/roles/"+roleHTTPTestRoleID+"/permissions", jsonBody(`{"permission_ids":["`+roleHTTPTestPermissionID+`"]}`))
+		expectRoleEnvelope(t, recorder, http.StatusConflict, false, contracterrors.CodeConflict, messages.SystemRoleProtected)
+	})
 }
 
 func TestRoleControllerAddRolePermission(t *testing.T) {
@@ -122,6 +130,14 @@ func TestRoleControllerAddRolePermission(t *testing.T) {
 
 		recorder := performRoleHTTPRequest(t, engine, http.MethodPost, "/api/v1/roles/"+roleHTTPTestRoleID+"/permissions", jsonBody(`{"permission_id":"`+roleHTTPTestPermissionID+`"}`))
 		expectRoleEnvelope(t, recorder, http.StatusConflict, false, contracterrors.CodeConflict, messages.RolePermissionAlreadyExists)
+	})
+
+	t.Run("protected system role maps to conflict envelope", func(t *testing.T) {
+		engine, commands, _ := newRoleHTTPTestHarness(t)
+		commands.EXPECT().AddRolePermission(gomock.Any(), gomock.Any()).Return(nil, roledomain.ErrSystemRoleProtected)
+
+		recorder := performRoleHTTPRequest(t, engine, http.MethodPost, "/api/v1/roles/"+roleHTTPTestRoleID+"/permissions", jsonBody(`{"permission_id":"`+roleHTTPTestPermissionID+`"}`))
+		expectRoleEnvelope(t, recorder, http.StatusConflict, false, contracterrors.CodeConflict, messages.SystemRoleProtected)
 	})
 
 	t.Run("command service error maps to internal error", func(t *testing.T) {
@@ -165,5 +181,13 @@ func TestRoleControllerRemoveRolePermission(t *testing.T) {
 
 		recorder := performRoleHTTPRequest(t, engine, http.MethodDelete, "/api/v1/roles/"+roleHTTPTestRoleID+"/permissions/"+roleHTTPTestPermissionID, nil)
 		expectRoleEnvelope(t, recorder, http.StatusNotFound, false, contracterrors.CodeNotFound, messages.RolePermissionNotFound)
+	})
+
+	t.Run("protected system role maps to conflict envelope", func(t *testing.T) {
+		engine, commands, _ := newRoleHTTPTestHarness(t)
+		commands.EXPECT().RemoveRolePermission(gomock.Any(), gomock.Any()).Return(nil, roledomain.ErrSystemRoleProtected)
+
+		recorder := performRoleHTTPRequest(t, engine, http.MethodDelete, "/api/v1/roles/"+roleHTTPTestRoleID+"/permissions/"+roleHTTPTestPermissionID, nil)
+		expectRoleEnvelope(t, recorder, http.StatusConflict, false, contracterrors.CodeConflict, messages.SystemRoleProtected)
 	})
 }

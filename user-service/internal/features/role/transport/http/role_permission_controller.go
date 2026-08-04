@@ -53,6 +53,7 @@ func (ctl *RoleController) ListRolePermissions(c *gin.Context) {
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
 // @Failure 404 {object} response.Envelope "角色或权限不存在"
+// @Failure 409 {object} response.Envelope "系统角色受保护"
 // @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
@@ -89,7 +90,7 @@ func (ctl *RoleController) ReplaceRolePermissions(c *gin.Context) {
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
 // @Failure 404 {object} response.Envelope "角色或启用权限不存在"
-// @Failure 409 {object} response.Envelope "绑定已存在"
+// @Failure 409 {object} response.Envelope "绑定已存在或系统角色受保护"
 // @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth
@@ -125,6 +126,7 @@ func (ctl *RoleController) AddRolePermission(c *gin.Context) {
 // @Failure 401 {object} response.Envelope "未认证或 token 无效"
 // @Failure 403 {object} response.Envelope "无访问权限"
 // @Failure 404 {object} response.Envelope "绑定不存在"
+// @Failure 409 {object} response.Envelope "系统角色受保护"
 // @Failure 429 {object} response.Envelope "请求过于频繁"
 // @Failure 500 {object} response.Envelope "服务器内部错误"
 // @Security BearerAuth

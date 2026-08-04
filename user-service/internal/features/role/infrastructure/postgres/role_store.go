@@ -99,12 +99,21 @@ func (s *RoleStore) List(ctx context.Context, input roleapplication.ListRolesInp
 // Update 更新角色记录，并将唯一约束冲突映射为 ErrRoleAlreadyExists。
 func (s *RoleStore) Update(ctx context.Context, input roleapplication.UpdateRoleInput, change roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
 	_, write, err := transactPolicyChange(ctx, s.client, "update role", change, func(tx *ent.Tx) (struct{}, error) {
-		updated, err := tx.Role.Update().Where(entrole.RoleIDEQ(input.RoleID)).SetName(input.Name).SetDescription(input.Description).SetActive(input.Active).Save(ctx)
-		if err == nil && updated == 0 {
-			return struct{}{}, roledomain.ErrRoleNotFound
+		role, err := lockOrdinaryRole(ctx, tx, input.RoleID)
+		if err != nil {
+			return struct{}{}, err
 		}
+		_, err = tx.Role.UpdateOneID(role.ID).
+			Where(entrole.IsSystemEQ(false)).
+			SetName(input.Name).
+			SetDescription(input.Description).
+			SetActive(input.Active).
+			Save(ctx)
 		if ent.IsConstraintError(err) {
 			return struct{}{}, roledomain.ErrRoleAlreadyExists
+		}
+		if ent.IsNotFound(err) {
+			return struct{}{}, roledomain.ErrSystemRoleProtected
 		}
 		if err != nil {
 			return struct{}{}, fmt.Errorf("update role %s: %w", input.RoleID.String(), err)
@@ -117,9 +126,16 @@ func (s *RoleStore) Update(ctx context.Context, input roleapplication.UpdateRole
 // SetActive 启用或停用角色记录。
 func (s *RoleStore) SetActive(ctx context.Context, roleID uuid.UUID, active bool, change roleapplication.PolicyChange) (roleapplication.PolicyWriteResult, error) {
 	_, write, err := transactPolicyChange(ctx, s.client, "set role active", change, func(tx *ent.Tx) (struct{}, error) {
-		updated, err := tx.Role.Update().Where(entrole.RoleIDEQ(roleID)).SetActive(active).Save(ctx)
-		if err == nil && updated == 0 {
-			return struct{}{}, roledomain.ErrRoleNotFound
+		role, err := lockOrdinaryRole(ctx, tx, roleID)
+		if err != nil {
+			return struct{}{}, err
+		}
+		_, err = tx.Role.UpdateOneID(role.ID).
+			Where(entrole.IsSystemEQ(false)).
+			SetActive(active).
+			Save(ctx)
+		if ent.IsNotFound(err) {
+			return struct{}{}, roledomain.ErrSystemRoleProtected
 		}
 		if err != nil {
 			return struct{}{}, fmt.Errorf("set role active %s: %w", roleID.String(), err)

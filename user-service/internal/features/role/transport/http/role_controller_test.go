@@ -257,6 +257,14 @@ func TestRoleControllerSetRoleStatus(t *testing.T) {
 		expectRoleEnvelope(t, recorder, http.StatusBadRequest, false, contracterrors.CodeValidationFailed, validation.ErrValidationFailed)
 	})
 
+	t.Run("protected system role maps to conflict envelope", func(t *testing.T) {
+		engine, commands, _ := newRoleHTTPTestHarness(t)
+		commands.EXPECT().SetRoleActive(gomock.Any(), gomock.Any()).Return(roledomain.ErrSystemRoleProtected)
+
+		recorder := performRoleHTTPRequest(t, engine, http.MethodPatch, "/api/v1/roles/"+roleHTTPTestRoleID+"/status", jsonBody(`{"active":true}`))
+		expectRoleEnvelope(t, recorder, http.StatusConflict, false, contracterrors.CodeConflict, messages.SystemRoleProtected)
+	})
+
 	t.Run("command service error maps to internal error", func(t *testing.T) {
 		engine, commands, _ := newRoleHTTPTestHarness(t)
 		commands.EXPECT().SetRoleActive(gomock.Any(), gomock.Any()).Return(errors.New("database down"))

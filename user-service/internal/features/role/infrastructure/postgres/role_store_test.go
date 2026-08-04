@@ -12,9 +12,8 @@ import (
 )
 
 func TestRoleStoreCRUDAndDomainErrors(t *testing.T) {
-	client := newRoleStoreTestClient(t)
+	ctx, _, client := newBootstrapPostgresTestDB(t)
 	store := NewRoleStore(client)
-	ctx := context.Background()
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000001001")
 	missingRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000001099")
 
