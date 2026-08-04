@@ -136,10 +136,60 @@ func TestPolicyFactCommitFailureRollsBackAllWrites(t *testing.T) {
 	assertRoleAndFactCounts(ctx, t, client, roleID, created.Role.Name, baseRevisionCount, baseOutboxCount)
 }
 
+func TestPostgresPolicyRevisionInitializesMissingCounterFromLatestRevision(t *testing.T) {
+	ctx, _, client := newBootstrapPostgresTestDB(t)
+	const latestRevision int64 = 41
+	_, err := client.RbacPolicyRevision.Create().
+		SetID(latestRevision).
+		SetReason("existing_revision").
+		Save(ctx)
+	require.NoError(t, err)
+
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000021003")
+	write, err := NewRoleStore(client).Create(ctx, roleapplication.CreateRoleInput{
+		RoleID: roleID,
+		Name:   "Runtime Counter Initialization",
+		Active: true,
+	}, rolePolicyChange("role_created", roleID))
+	require.NoError(t, err)
+	require.Equal(t, latestRevision+1, write.Revision)
+
+	counter, err := client.RbacPolicyRevisionCounter.Get(ctx, policyRevisionCounterID)
+	require.NoError(t, err)
+	require.Equal(t, write.Revision, counter.LastRevision)
+	assertPolicyFact(ctx, t, client, write.Revision, rolePolicyChange("role_created", roleID))
+}
+
+func TestPostgresPolicyRevisionInitializationRollsBackWithPolicyFact(t *testing.T) {
+	ctx, _, client := newBootstrapPostgresTestDB(t)
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000021004")
+
+	_, err := NewRoleStore(client).Create(ctx, roleapplication.CreateRoleInput{
+		RoleID: roleID,
+		Name:   "Rollback Counter Initialization",
+		Active: true,
+	}, roleapplication.PolicyChange{
+		Kind:   roleapplication.PolicyChangeKind("invalid"),
+		Reason: "role_created",
+		RoleID: roleID,
+	})
+	require.ErrorContains(t, err, "append rbac policy outbox event")
+
+	_, err = client.RbacPolicyRevisionCounter.Get(ctx, policyRevisionCounterID)
+	require.True(t, ent.IsNotFound(err))
+	roleCount, err := client.Role.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, roleCount)
+	revisionCount, err := client.RbacPolicyRevision.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, revisionCount)
+	outboxCount, err := client.RbacPolicyOutboxEvent.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, outboxCount)
+}
+
 func TestPostgresPolicyRevisionFollowsCommitOrderAndHandlesConcurrentWrites(t *testing.T) {
 	ctx, _, client := newBootstrapPostgresTestDB(t)
-	_, err := client.RbacPolicyRevisionCounter.Create().SetID(policyRevisionCounterID).SetLastRevision(0).Save(ctx)
-	require.NoError(t, err)
 	store := NewRoleStore(client)
 
 	t.Run("later mutation waits for earlier revision transaction", func(t *testing.T) {
@@ -258,7 +308,7 @@ func TestPostgresPolicyRevisionFollowsCommitOrderAndHandlesConcurrentWrites(t *t
 
 func appendPolicyFactInOpenTransaction(ctx context.Context, t *testing.T, tx *ent.Tx, change roleapplication.PolicyChange) int64 {
 	t.Helper()
-	counter, err := tx.RbacPolicyRevisionCounter.UpdateOneID(policyRevisionCounterID).AddLastRevision(1).Save(ctx)
+	counter, err := allocatePolicyRevision(ctx, tx)
 	require.NoError(t, err)
 	revision, err := tx.RbacPolicyRevision.Create().
 		SetID(counter.LastRevision).

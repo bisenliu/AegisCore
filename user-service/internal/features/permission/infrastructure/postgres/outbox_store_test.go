@@ -291,6 +291,7 @@ func createTestOutboxEvent(t *testing.T, client *ent.Client, revision int64, cre
 		SetRevision(policyRevision.ID).
 		SetKind("policy_changed").
 		SetReason("role_updated").
+		SetNextAttemptAt(createdAt.UnixMilli()).
 		SetIdempotencyKey(fmt.Sprintf("rbac-policy-revision:%d", revision)).
 		SetCreatedAt(createdAt.UnixMilli()).
 		SetUpdatedAt(createdAt.UnixMilli()).
