@@ -511,5 +511,5 @@ func jitteredBackoff(delay time.Duration) time.Duration {
 	if half <= 0 {
 		return delay
 	}
-	return half + time.Duration(rand.Int64N(int64(delay-half)+1))
+	return half + time.Duration(rand.Int64N(int64(delay-half)+1)) // #nosec G404 -- 重连退避抖动不用于生成密码、令牌、密钥或其他安全敏感随机值。
 }
