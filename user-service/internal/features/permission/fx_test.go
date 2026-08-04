@@ -28,7 +28,7 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 	redisClient := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = redisClient.Close() })
 	provider := newPermissionModuleMetricsProvider(t, false)
-	settings := serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test"}
+	settings := serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test", PolicyWatcher: serviceconfig.DefaultPolicyWatcherConfig()}
 	settings.OutboxDispatcher = serviceconfig.DefaultOutboxDispatcherConfig()
 	loader := permissionModulePolicyLoader{}
 	roles := permissionModuleUserRoleResolver{}
@@ -66,15 +66,15 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 	)
 	require.NotNil(t, runtime)
 	app.RequireStart()
-	require.True(t, watcherStatus.Running())
-	require.True(t, runtime.WatcherStatus.Running())
+	require.True(t, watcherStatus.Status().Running)
+	require.True(t, runtime.WatcherStatus.Status().Running)
 	dispatcherStatus, err := runtime.DispatcherStatus.Status(context.Background())
 	require.NoError(t, err)
 	require.True(t, dispatcherStatus.Running)
 	require.Same(t, runtime.Dispatcher, runtime.DispatcherStatus)
 	app.RequireStop()
-	require.False(t, watcherStatus.Running())
-	require.False(t, runtime.WatcherStatus.Running())
+	require.False(t, watcherStatus.Status().Running)
+	require.False(t, runtime.WatcherStatus.Status().Running)
 	dispatcherStatus, err = runtime.DispatcherStatus.Status(context.Background())
 	require.NoError(t, err)
 	require.False(t, dispatcherStatus.Running)
@@ -97,7 +97,7 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	redisClient := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	provider := newPermissionModuleMetricsProvider(t, false)
-	settings := serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test"}
+	settings := serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test", PolicyWatcher: serviceconfig.DefaultPolicyWatcherConfig()}
 	settings.OutboxDispatcher = serviceconfig.DefaultOutboxDispatcherConfig()
 	loader := permissionModulePolicyLoader{}
 	roles := permissionModuleUserRoleResolver{}
@@ -130,7 +130,7 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 	defer cancel()
 	err := app.Start(startCtx)
 	require.ErrorIs(t, err, startErr)
-	require.False(t, watcherStatus.Running())
+	require.False(t, watcherStatus.Status().Running)
 	require.NoError(t, redisClient.Ping(context.Background()).Err())
 	require.NoError(t, redisClient.Close())
 }
@@ -140,7 +140,7 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 	redisClient := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = redisClient.Close() })
 	provider := newPermissionModuleMetricsProvider(t, false)
-	settings := serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test"}
+	settings := serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test", PolicyWatcher: serviceconfig.DefaultPolicyWatcherConfig()}
 	settings.OutboxDispatcher = serviceconfig.DefaultOutboxDispatcherConfig()
 	loadErr := errors.New("initial policy load failed")
 	loader := &permissionModuleFailOncePolicyLoader{err: loadErr}
@@ -170,13 +170,13 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 	)
 
 	app.RequireStart()
-	require.True(t, watcherStatus.Running())
+	require.True(t, watcherStatus.Status().Running)
 	require.ErrorIs(t, policyHealth.ProjectionStatus().LastError, loadErr)
 	allowed, err := authorizer.Enforce(context.Background(), uuid.NewString(), "/api/v1/users", "GET")
 	require.NoError(t, err)
 	require.False(t, allowed)
 	app.RequireStop()
-	require.False(t, watcherStatus.Running())
+	require.False(t, watcherStatus.Status().Running)
 }
 
 func TestStopRBACLifecycleJoinsDispatcherWatcherAndCloserErrors(t *testing.T) {

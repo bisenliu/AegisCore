@@ -211,6 +211,8 @@ make compose-dashboard-generate
 make compose-dashboard-check
 ```
 
+RBAC policy watcher 的正式配置位于 `rbac.policy_watcher`，包含 `check_interval`、`subscribe_timeout`、`max_staleness` 和 `retry_backoff.initial|max`。发布时先部署能够使用默认值且暴露新 watcher 指标的二进制，确认全部副本正常后再发布包含这些键的 Nacos 文档；Prometheus rules、通用 Grafana dashboard 及其 Compose 生成副本随同一变更发布。由于配置使用 strict decode 且不保留旧接口、旧指标或配置别名，回滚必须先从 Nacos 移除整个 `rbac.policy_watcher` 配置块，再回滚旧二进制和旧观测资产。
+
 构建 Docker 镜像：
 
 ```bash

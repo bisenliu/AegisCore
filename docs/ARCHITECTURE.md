@@ -119,6 +119,8 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 4. permission authorizer 使用 Casbin 或同步后的 policy 判断访问权限。
 5. 通过后进入目标 controller。
 
+在线 RBAC 写入提交后，Redis Pub/Sub 只向各副本发送快速唤醒 hint，PostgreSQL latest policy revision 是恢复与收敛的唯一权威事实。permission Redis watcher 在单一根生命周期中并行监督可重建的 Pub/Sub subscription 和启动立即执行、随后周期执行的数据库 revision 校准；订阅确认或 Receive 失败只进入有界退避重连，不停止权威校准。消息处理与周期校准在根循环中串行执行，防止 Casbin projection 并发倒退。readiness 依据最后一次完整权威校准的 staleness 判定，当前订阅正在重连但校准仍新鲜时不制造 watcher 粘滞失败。
+
 ### 6.4 RBAC seed 和超级管理员 bootstrap
 
 1. `rbac seed` 加载 user-service 私有配置，按服务私有资源名打开 user DB，创建 Ent client。

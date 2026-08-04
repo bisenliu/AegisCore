@@ -21,6 +21,7 @@ type HealthCheckParams struct {
 	fx.In
 
 	Resources        serviceconfig.ResourceSettings
+	RBAC             serviceconfig.RBACSettings
 	PrimaryDB        *sql.DB               `name:"primary_db"`
 	CacheRedis       redis.UniversalClient `name:"cache_redis"`
 	CasbinPolicy     permissionauthorization.PolicyHealth
@@ -45,7 +46,9 @@ type casbinPolicyHealthChecker struct {
 }
 
 type watcherHealthChecker struct {
-	watcher permissionapplication.PolicyWatcherStatus
+	watcher      permissionapplication.PolicyWatcherStatus
+	maxStaleness time.Duration
+	now          func() time.Time
 }
 
 type outboxDispatcherHealthChecker struct {
@@ -61,7 +64,7 @@ func ProvideHealthChecks(params HealthCheckParams) router.HealthChecks {
 		postgresHealthChecker{name: "postgres." + resources.NamePrimaryDB, db: params.PrimaryDB, timeout: commonresources.DefaultPostgresPingTimeout()},
 		redisHealthChecker{name: "redis." + resources.NameCacheRedis, client: params.CacheRedis, timeout: redisCfg.Timeout},
 		casbinPolicyHealthChecker{engine: params.CasbinPolicy},
-		watcherHealthChecker{watcher: params.PolicyWatcher},
+		watcherHealthChecker{watcher: params.PolicyWatcher, maxStaleness: params.RBAC.PolicyWatcher.MaxStaleness},
 		outboxDispatcherHealthChecker{dispatcher: params.OutboxDispatcher},
 	}
 	return router.HealthChecks{Readiness: checks, Startup: checks}
@@ -142,11 +145,19 @@ func (c watcherHealthChecker) Check(context.Context) router.HealthCheckResult {
 	if c.watcher == nil {
 		return unavailableHealthResult(name, "rbac policy watcher unavailable")
 	}
-	if !c.watcher.Running() {
+	status := c.watcher.Status()
+	if !status.Running {
 		return unavailableHealthResult(name, "rbac policy watcher stopped")
 	}
-	if err := c.watcher.LastError(); err != nil {
-		return unavailableHealthResult(name, "rbac policy watcher error")
+	if status.LastReconcileSuccessAt.IsZero() {
+		return unavailableHealthResult(name, "rbac policy watcher not synchronized")
+	}
+	now := time.Now
+	if c.now != nil {
+		now = c.now
+	}
+	if now().Sub(status.LastReconcileSuccessAt) > c.maxStaleness {
+		return unavailableHealthResult(name, "rbac policy watcher stale")
 	}
 	return okHealthResult(name)
 }

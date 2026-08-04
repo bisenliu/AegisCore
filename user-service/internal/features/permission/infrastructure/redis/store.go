@@ -41,7 +41,6 @@ return 1
 
 type policySubscriber interface {
 	Receive(ctx context.Context) (interface{}, error)
-	Channel(opts ...rediscmd.ChannelOption) <-chan *rediscmd.Message
 	Close() error
 }
 

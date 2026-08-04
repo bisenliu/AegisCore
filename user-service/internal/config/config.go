@@ -55,6 +55,15 @@ type AuthConfig struct {
 type RBACConfig struct {
 	UserRoleCache    FeatureCacheConfig     `mapstructure:"user_role_cache"`
 	OutboxDispatcher OutboxDispatcherConfig `mapstructure:"outbox_dispatcher"`
+	PolicyWatcher    PolicyWatcherConfig    `mapstructure:"policy_watcher"`
+}
+
+// PolicyWatcherConfig 控制 RBAC policy watcher 的校准、订阅确认和重连节奏。
+type PolicyWatcherConfig struct {
+	CheckInterval    time.Duration      `mapstructure:"check_interval"`
+	SubscribeTimeout time.Duration      `mapstructure:"subscribe_timeout"`
+	MaxStaleness     time.Duration      `mapstructure:"max_staleness"`
+	RetryBackoff     RetryBackoffConfig `mapstructure:"retry_backoff"`
 }
 
 // OutboxDispatcherConfig 控制 RBAC policy outbox 的后台 claim 与投递节奏。
@@ -82,6 +91,36 @@ func DefaultOutboxDispatcherConfig() OutboxDispatcherConfig {
 			Max:     time.Minute,
 		},
 	}
+}
+
+// DefaultPolicyWatcherConfig 返回 RBAC policy watcher 的完整默认配置。
+func DefaultPolicyWatcherConfig() PolicyWatcherConfig {
+	return PolicyWatcherConfig{
+		CheckInterval:    15 * time.Second,
+		SubscribeTimeout: 5 * time.Second,
+		MaxStaleness:     45 * time.Second,
+		RetryBackoff: RetryBackoffConfig{
+			Initial: 250 * time.Millisecond,
+			Max:     30 * time.Second,
+		},
+	}
+}
+
+// Validate 校验 policy watcher 的校准、新鲜度和重连边界。
+func (c PolicyWatcherConfig) Validate(path string) []error {
+	var errs []error
+	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".check_interval", c.CheckInterval)...)
+	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".subscribe_timeout", c.SubscribeTimeout)...)
+	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".max_staleness", c.MaxStaleness)...)
+	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".retry_backoff.initial", c.RetryBackoff.Initial)...)
+	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".retry_backoff.max", c.RetryBackoff.Max)...)
+	if c.RetryBackoff.Max > 0 && c.RetryBackoff.Initial > 0 && c.RetryBackoff.Max < c.RetryBackoff.Initial {
+		errs = append(errs, commonconfig.FieldError(path+".retry_backoff.max", "must be >= retry_backoff.initial"))
+	}
+	if c.MaxStaleness > 0 && c.CheckInterval > 0 && c.MaxStaleness <= c.CheckInterval {
+		errs = append(errs, commonconfig.FieldError(path+".max_staleness", "must be > check_interval"))
+	}
+	return errs
 }
 
 // Validate 校验 outbox dispatcher 的轮询、claim 和重试边界。
@@ -264,6 +303,7 @@ func DefaultConfig() Config {
 		RBAC: RBACConfig{
 			UserRoleCache:    DefaultFeatureCacheConfig(100000, 5*time.Second, 500*time.Millisecond),
 			OutboxDispatcher: DefaultOutboxDispatcherConfig(),
+			PolicyWatcher:    DefaultPolicyWatcherConfig(),
 		},
 		APIRateLimit: APIRateLimitConfig{
 			Anonymous:     DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64),
@@ -331,6 +371,7 @@ func (c Config) Validate() error {
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.RBAC.UserRoleCache.Validate("rbac.user_role_cache")...)
 	errs = append(errs, c.RBAC.OutboxDispatcher.Validate("rbac.outbox_dispatcher")...)
+	errs = append(errs, c.RBAC.PolicyWatcher.Validate("rbac.policy_watcher")...)
 	errs = append(errs, c.APIRateLimit.Anonymous.Validate("api_rate_limit.anonymous")...)
 	errs = append(errs, c.APIRateLimit.Authenticated.Validate("api_rate_limit.authenticated")...)
 	if c.HTTP.RequestBodyMaxBytes <= 0 {

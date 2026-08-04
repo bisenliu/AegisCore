@@ -33,6 +33,7 @@ type WatcherParams struct {
 	Store          *permissionredis.Store
 	RevisionSource permissionapplication.LatestPolicyRevisionSource
 	Engine         permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
+	Settings       serviceconfig.RBACSettings
 	Log            *zap.Logger
 	Metrics        permissionapplication.Metrics
 }
@@ -107,7 +108,14 @@ func providePolicyChangeNotifier(params PolicyChangeNotifierParams) PolicyChange
 
 // provideWatcher 将 Redis watcher 同时投影为 lifecycle runner 和健康状态来源。
 func provideWatcher(params WatcherParams) PolicyWatcherResult {
-	watcher := permissionredis.NewWatcher(permissionredis.WatcherParams{Store: params.Store, RevisionSource: params.RevisionSource, Engine: params.Engine, Log: params.Log, Metrics: params.Metrics})
+	settings := params.Settings.PolicyWatcher
+	watcher := permissionredis.NewWatcher(permissionredis.WatcherParams{
+		Store: params.Store, RevisionSource: params.RevisionSource, Engine: params.Engine, Log: params.Log, Metrics: params.Metrics,
+		Settings: permissionredis.WatcherSettings{
+			CheckInterval: settings.CheckInterval, SubscribeTimeout: settings.SubscribeTimeout,
+			BackoffInitial: settings.RetryBackoff.Initial, BackoffMax: settings.RetryBackoff.Max,
+		},
+	})
 	return PolicyWatcherResult{Watcher: watcher, Runner: watcher, Status: watcher}
 }
 

@@ -95,23 +95,31 @@ func TestCasbinPolicyHealthCheckerRecoversAfterReloadSuccess(t *testing.T) {
 }
 
 func TestWatcherHealthChecker(t *testing.T) {
-	checker := watcherHealthChecker{watcher: stubWatcherStatus{running: true}}
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	healthy := permissionapplication.PolicyWatcherStatusSnapshot{
+		Running: true, SubscriptionState: permissionapplication.PolicyWatcherSubscriptionReconnecting,
+		LastReconcileSuccessAt: now.Add(-45 * time.Second), LastFailureAt: now.Add(-time.Second),
+		SubscriptionErrorCategory: permissionapplication.PolicyWatcherErrorReceive,
+	}
+	checker := watcherHealthChecker{watcher: stubWatcherStatus{status: healthy}, maxStaleness: 45 * time.Second, now: func() time.Time { return now }}
 	require.Equal(t, "rbac.policy_watcher", checker.Name())
 	result := checker.Check(context.Background())
 	require.Equal(t, router.HealthCheckStatusOK, result.Status)
 
 	cases := []struct {
 		name    string
-		watcher stubWatcherStatus
+		status  permissionapplication.PolicyWatcherStatusSnapshot
+		message string
 	}{
-		{name: "stopped", watcher: stubWatcherStatus{}},
-		{name: "last error", watcher: stubWatcherStatus{running: true, err: errors.New("subscribe failed")}},
+		{name: "stopped", message: "rbac policy watcher stopped"},
+		{name: "never synchronized", status: permissionapplication.PolicyWatcherStatusSnapshot{Running: true}, message: "rbac policy watcher not synchronized"},
+		{name: "stale", status: permissionapplication.PolicyWatcherStatusSnapshot{Running: true, LastReconcileSuccessAt: now.Add(-46 * time.Second)}, message: "rbac policy watcher stale"},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			result := watcherHealthChecker{watcher: tt.watcher}.Check(context.Background())
+			result := watcherHealthChecker{watcher: stubWatcherStatus{status: tt.status}, maxStaleness: 45 * time.Second, now: func() time.Time { return now }}.Check(context.Background())
 			require.Equal(t, router.HealthCheckStatusUnavailable, result.Status)
-			require.NotEmpty(t, result.Message)
+			require.Equal(t, tt.message, result.Message)
 		})
 	}
 }
@@ -144,7 +152,7 @@ func TestProvideHealthChecksUsesResourcePingTimeouts(t *testing.T) {
 	settings := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
 		"cache_redis": {Mode: commonresources.RedisModeCluster, Addrs: []string{"127.0.0.1:6379"}, Timeout: 2 * time.Second},
 	}}
-	checks := ProvideHealthChecks(HealthCheckParams{Resources: settings})
+	checks := ProvideHealthChecks(HealthCheckParams{Resources: settings, RBAC: serviceconfig.RBACSettings{PolicyWatcher: serviceconfig.DefaultPolicyWatcherConfig()}})
 
 	require.Len(t, checks.Readiness, 5)
 	postgres, ok := checks.Readiness[0].(postgresHealthChecker)
@@ -153,13 +161,15 @@ func TestProvideHealthChecksUsesResourcePingTimeouts(t *testing.T) {
 	redis, ok := checks.Readiness[1].(redisHealthChecker)
 	require.True(t, ok)
 	require.Equal(t, 2*time.Second, redis.timeout)
+	watcher := checks.Readiness[3].(watcherHealthChecker)
+	require.Equal(t, 45*time.Second, watcher.maxStaleness)
 }
 
 func TestProvideHealthChecksAppliesDefaultRedisPingTimeout(t *testing.T) {
 	settings := serviceconfig.ResourceSettings{Redis: commonresources.RedisConfigs{
 		"cache_redis": {Mode: commonresources.RedisModeCluster, Addrs: []string{"127.0.0.1:6379"}},
 	}}
-	checks := ProvideHealthChecks(HealthCheckParams{Resources: settings})
+	checks := ProvideHealthChecks(HealthCheckParams{Resources: settings, RBAC: serviceconfig.RBACSettings{PolicyWatcher: serviceconfig.DefaultPolicyWatcherConfig()}})
 
 	redis := checks.Readiness[1].(redisHealthChecker)
 	require.Equal(t, commonresources.DefaultRedisTimeout, redis.timeout)
@@ -194,13 +204,17 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 
 	err = RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{
 		Resources:        settings,
+		RBAC:             serviceconfig.RBACSettings{PolicyWatcher: serviceconfig.DefaultPolicyWatcherConfig()},
 		Metrics:          provider,
 		PrimaryDB:        db,
 		CacheRedis:       client,
 		SessionPurgePool: fakePurgeTaskPool{stats: workerpool.Stats{Name: "auth.redis.session_purge", Workers: 4, Submitted: 3}},
-		PolicyWatcher:    stubWatcherStatus{running: true},
-		AuthTokenCache:   fakeLocalcacheStatsSource{name: "auth_token_version", stats: localcache.Stats{Hit: 3, Capacity: 1000}},
-		RBACRolesCache:   fakeLocalcacheStatsSource{name: "rbac_user_roles", stats: localcache.Stats{Miss: 2, Capacity: 2000}},
+		PolicyWatcher: stubWatcherStatus{status: permissionapplication.PolicyWatcherStatusSnapshot{
+			Running: true, SubscriptionState: permissionapplication.PolicyWatcherSubscriptionConnected,
+			LastSubscriptionSuccessAt: time.Unix(1_722_770_390, 0), LastReconcileSuccessAt: time.Now().Add(-10 * time.Second), ReconnectAttempts: 2,
+		}},
+		AuthTokenCache: fakeLocalcacheStatsSource{name: "auth_token_version", stats: localcache.Stats{Hit: 3, Capacity: 1000}},
+		RBACRolesCache: fakeLocalcacheStatsSource{name: "rbac_user_roles", stats: localcache.Stats{Miss: 2, Capacity: 2000}},
 	})
 	require.NoError(t, err)
 
@@ -214,10 +228,23 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 		`aegiscore_localcache_loads_total{cache="auth_token_version",environment="test",result="success",service="aegiscore-user-service-test"} 0`,
 		`aegiscore_localcache_evictions_total{cache="auth_token_version",environment="test",service="aegiscore-user-service-test"} 0`,
 		`aegiscore_localcache_capacity{cache="auth_token_version",environment="test",service="aegiscore-user-service-test"} 1000`,
-		`aegiscore_runtime_component_running{environment="test",resource="rbac_policy_watcher",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_user_service_rbac_policy_watcher_running{environment="test",service="aegiscore-user-service-test"} 1`,
+		`aegiscore_user_service_rbac_policy_watcher_subscription_state{environment="test",service="aegiscore-user-service-test",state="starting"} 0`,
+		`aegiscore_user_service_rbac_policy_watcher_subscription_state{environment="test",service="aegiscore-user-service-test",state="connected"} 1`,
+		`aegiscore_user_service_rbac_policy_watcher_subscription_state{environment="test",service="aegiscore-user-service-test",state="reconnecting"} 0`,
+		`aegiscore_user_service_rbac_policy_watcher_subscription_state{environment="test",service="aegiscore-user-service-test",state="stopped"} 0`,
+		`aegiscore_user_service_rbac_policy_watcher_last_subscription_success_timestamp_seconds{environment="test",service="aegiscore-user-service-test"} 1722770390`,
+		`aegiscore_user_service_rbac_policy_watcher_max_staleness_seconds{environment="test",service="aegiscore-user-service-test"} 45`,
+		`aegiscore_user_service_rbac_policy_watcher_reconnect_attempts_total{environment="test",service="aegiscore-user-service-test"} 2`,
 	} {
 		assert.Contains(t, body, want)
 	}
+	assert.NotContains(t, body, `aegiscore_runtime_component_running{environment="test",resource="rbac_policy_watcher"`)
+	assert.NotContains(t, body, `aegiscore_runtime_component_last_error{environment="test",resource="rbac_policy_watcher"`)
+}
+
+func TestRegisterRuntimeDependencyMetricsSkipsDisabledProvider(t *testing.T) {
+	require.NoError(t, RegisterRuntimeDependencyMetrics(RuntimeDependencyMetricsParams{}))
 }
 
 type stubPolicyHealth struct {
@@ -238,8 +265,7 @@ func readyPolicyProjectionStatus(appliedRevision int64, targetRevision int64) pe
 }
 
 type stubWatcherStatus struct {
-	running bool
-	err     error
+	status permissionapplication.PolicyWatcherStatusSnapshot
 }
 
 type stubDispatcherStatus struct {
@@ -253,12 +279,8 @@ func (s *stubDispatcherStatus) Status(context.Context) (permissionapplication.Di
 	return s.status, s.err
 }
 
-func (s stubWatcherStatus) Running() bool {
-	return s.running
-}
-
-func (s stubWatcherStatus) LastError() error {
-	return s.err
+func (s stubWatcherStatus) Status() permissionapplication.PolicyWatcherStatusSnapshot {
+	return s.status
 }
 
 type fakePurgeTaskPool struct {

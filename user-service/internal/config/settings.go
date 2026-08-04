@@ -21,6 +21,7 @@ type RBACSettings struct {
 	AppName          string
 	UserRoleCache    FeatureCacheConfig
 	OutboxDispatcher OutboxDispatcherConfig
+	PolicyWatcher    PolicyWatcherConfig
 }
 
 // EntSettings 是 Ent client 构造插件所需的最小配置视图。
@@ -62,6 +63,7 @@ func NewRBACSettings(cfg *Config) RBACSettings {
 		AppName:          cfg.App.Name,
 		UserRoleCache:    cfg.RBAC.UserRoleCache,
 		OutboxDispatcher: cfg.RBAC.OutboxDispatcher,
+		PolicyWatcher:    cfg.RBAC.PolicyWatcher,
 	}
 }
 

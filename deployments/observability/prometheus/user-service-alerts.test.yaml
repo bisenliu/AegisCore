@@ -1,0 +1,66 @@
+rule_files:
+  - user-service-alerts.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - name: rbac watcher stopped
+    interval: 1m
+    input_series:
+      - series: 'aegiscore_user_service_rbac_policy_watcher_running{service="aegiscore-user-service",environment="test",instance="instance-a"}'
+        values: '0x7'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: AegisCoreUserServiceRBACWatcherStopped
+        exp_alerts:
+          - exp_labels:
+              service: aegiscore-user-service
+              environment: test
+              instance: instance-a
+              severity: critical
+            exp_annotations:
+              summary: "RBAC policy watcher 已停止"
+              description: "RBAC policy watcher 已连续 5 分钟报告 stopped。Policy 更新可能无法在副本之间传播。"
+              runbook_url: "docs/observability/user-service-runbook.md#rbac-watcher-stopped"
+
+  - name: rbac watcher stale and reconnecting
+    interval: 1m
+    input_series:
+      - series: 'aegiscore_user_service_rbac_policy_watcher_running{service="aegiscore-user-service",environment="test",instance="instance-a"}'
+        values: '1x8'
+      - series: 'aegiscore_user_service_rbac_policy_watcher_reconcile_staleness_seconds{service="aegiscore-user-service",environment="test",instance="instance-a"}'
+        values: '46x8'
+      - series: 'aegiscore_user_service_rbac_policy_watcher_max_staleness_seconds{service="aegiscore-user-service",environment="test",instance="instance-a"}'
+        values: '45x8'
+      - series: 'aegiscore_user_service_rbac_policy_watcher_last_reconcile_success_timestamp_seconds{service="aegiscore-user-service",environment="test",instance="instance-a"}'
+        values: '1x8'
+      - series: 'aegiscore_user_service_rbac_policy_watcher_subscription_state{service="aegiscore-user-service",environment="test",instance="instance-a",state="reconnecting"}'
+        values: '1x8'
+      - series: 'aegiscore_user_service_rbac_policy_watcher_reconnect_attempts_total{service="aegiscore-user-service",environment="test",instance="instance-a"}'
+        values: '0+1x8'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: AegisCoreUserServiceRBACWatcherStale
+        exp_alerts:
+          - exp_labels:
+              service: aegiscore-user-service
+              environment: test
+              instance: instance-a
+              severity: critical
+            exp_annotations:
+              summary: "RBAC policy watcher 权威校准已过期"
+              description: "实例 instance-a 的 RBAC policy watcher 从未完成权威校准，或校准 staleness 已持续超过该实例配置预算。"
+              runbook_url: "docs/observability/user-service-runbook.md#rbac-watcher-stale"
+      - eval_time: 7m
+        alertname: AegisCoreUserServiceRBACWatcherReconnecting
+        exp_alerts:
+          - exp_labels:
+              service: aegiscore-user-service
+              environment: test
+              instance: instance-a
+              state: reconnecting
+              severity: warning
+            exp_annotations:
+              summary: "RBAC policy watcher 持续重连"
+              description: "实例 instance-a 的 RBAC Pub/Sub subscription 已持续重连 5 分钟；权威数据库校准仍独立运行。"
+              runbook_url: "docs/observability/user-service-runbook.md#rbac-watcher-reconnecting"

@@ -34,6 +34,11 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, 45*time.Second, cfg.RBAC.OutboxDispatcher.ClaimTimeout)
 	require.Equal(t, 3*time.Second, cfg.RBAC.OutboxDispatcher.RetryBackoff.Initial)
 	require.Equal(t, 2*time.Minute, cfg.RBAC.OutboxDispatcher.RetryBackoff.Max)
+	require.Equal(t, 10*time.Second, cfg.RBAC.PolicyWatcher.CheckInterval)
+	require.Equal(t, 4*time.Second, cfg.RBAC.PolicyWatcher.SubscribeTimeout)
+	require.Equal(t, 35*time.Second, cfg.RBAC.PolicyWatcher.MaxStaleness)
+	require.Equal(t, 500*time.Millisecond, cfg.RBAC.PolicyWatcher.RetryBackoff.Initial)
+	require.Equal(t, 20*time.Second, cfg.RBAC.PolicyWatcher.RetryBackoff.Max)
 	require.True(t, cfg.Auth.RefreshTokenRotation)
 	require.Equal(t, 5, cfg.Auth.MaxActiveSessionsPerUser)
 	require.True(t, cfg.APIRateLimit.Anonymous.Enabled)
@@ -97,6 +102,7 @@ func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
 		ClaimTimeout: 30 * time.Second,
 		RetryBackoff: RetryBackoffConfig{Initial: time.Second, Max: time.Minute},
 	}, cfg.RBAC.OutboxDispatcher)
+	require.Equal(t, DefaultPolicyWatcherConfig(), cfg.RBAC.PolicyWatcher)
 	require.Equal(t, DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64), cfg.APIRateLimit.Anonymous)
 	require.Equal(t, DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, 30*time.Second, 128), cfg.APIRateLimit.Authenticated)
 	require.Equal(t, HTTPConfig{RequestBodyMaxBytes: DefaultHTTPRequestBodyMaxBytes}, cfg.HTTP)
@@ -187,6 +193,51 @@ func TestValidateOutboxDispatcher(t *testing.T) {
 
 	t.Run("accepts complete defaults", func(t *testing.T) {
 		require.Empty(t, DefaultOutboxDispatcherConfig().Validate("rbac.outbox_dispatcher"))
+	})
+}
+
+func TestLoadAppliesPolicyWatcherDefaults(t *testing.T) {
+	yaml := strings.Replace(serviceConfigYAML(), `  policy_watcher:
+    check_interval: 10s
+    subscribe_timeout: 4s
+    max_staleness: 35s
+    retry_backoff:
+      initial: 500ms
+      max: 20s
+`, "", 1)
+
+	cfg := loadServiceConfig(t, yaml)
+	require.Equal(t, DefaultPolicyWatcherConfig(), cfg.RBAC.PolicyWatcher)
+}
+
+func TestValidatePolicyWatcher(t *testing.T) {
+	t.Run("requires positive values", func(t *testing.T) {
+		errs := (PolicyWatcherConfig{}).Validate("rbac.policy_watcher")
+		require.Len(t, errs, 5)
+		for _, field := range []string{"check_interval", "subscribe_timeout", "max_staleness", "retry_backoff.initial", "retry_backoff.max"} {
+			require.Condition(t, func() bool {
+				for _, err := range errs {
+					if strings.Contains(err.Error(), "rbac.policy_watcher."+field) {
+						return true
+					}
+				}
+				return false
+			})
+		}
+	})
+
+	t.Run("rejects invalid ordering", func(t *testing.T) {
+		cfg := DefaultPolicyWatcherConfig()
+		cfg.MaxStaleness = cfg.CheckInterval
+		cfg.RetryBackoff.Max = cfg.RetryBackoff.Initial / 2
+		errs := cfg.Validate("rbac.policy_watcher")
+		require.Len(t, errs, 2)
+		require.Contains(t, errs[0].Error()+errs[1].Error(), "retry_backoff.max must be >= retry_backoff.initial")
+		require.Contains(t, errs[0].Error()+errs[1].Error(), "max_staleness must be > check_interval")
+	})
+
+	t.Run("accepts complete defaults", func(t *testing.T) {
+		require.Empty(t, DefaultPolicyWatcherConfig().Validate("rbac.policy_watcher"))
 	})
 }
 
@@ -474,6 +525,14 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
       initial: 3s
       max: 2m
 `, "", 1)
+	yaml = strings.Replace(yaml, `  policy_watcher:
+    check_interval: 10s
+    subscribe_timeout: 4s
+    max_staleness: 35s
+    retry_backoff:
+      initial: 500ms
+      max: 20s
+`, "", 1)
 	yaml = strings.Replace(yaml, `api_rate_limit:
   anonymous:
     enabled: true
@@ -524,6 +583,13 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
 	retryBackoff := outboxDispatcher["retry_backoff"].(map[string]any)
 	require.Equal(t, "1s", retryBackoff["initial"])
 	require.Equal(t, "1m0s", retryBackoff["max"])
+	policyWatcher := rbac["policy_watcher"].(map[string]any)
+	require.Equal(t, "15s", policyWatcher["check_interval"])
+	require.Equal(t, "5s", policyWatcher["subscribe_timeout"])
+	require.Equal(t, "45s", policyWatcher["max_staleness"])
+	watcherBackoff := policyWatcher["retry_backoff"].(map[string]any)
+	require.Equal(t, "250ms", watcherBackoff["initial"])
+	require.Equal(t, "30s", watcherBackoff["max"])
 	ent := settings["ent"].(map[string]any)
 	plugins := ent["plugins"].(map[string]any)
 	require.Equal(t, "500ms", plugins["sql_log"].(map[string]any)["slow_threshold"])
@@ -666,6 +732,13 @@ rbac:
     retry_backoff:
       initial: 3s
       max: 2m
+  policy_watcher:
+    check_interval: 10s
+    subscribe_timeout: 4s
+    max_staleness: 35s
+    retry_backoff:
+      initial: 500ms
+      max: 20s
 ent:
   plugins:
     sql_log:

@@ -131,7 +131,7 @@ groups:
 
       - alert: AegisCoreUserServiceRBACWatcherStopped
         expr: |
-          aegiscore_runtime_component_running{service="aegiscore-user-service",resource="rbac_policy_watcher"} == 0
+          aegiscore_user_service_rbac_policy_watcher_running{service="aegiscore-user-service"} == 0
         for: 5m
         labels:
           service: aegiscore-user-service
@@ -140,6 +140,42 @@ groups:
           summary: "RBAC policy watcher 已停止"
           description: "RBAC policy watcher 已连续 5 分钟报告 stopped。Policy 更新可能无法在副本之间传播。"
           runbook_url: "docs/observability/user-service-runbook.md#rbac-watcher-stopped"
+
+      - alert: AegisCoreUserServiceRBACWatcherStale
+        expr: |
+          (
+            aegiscore_user_service_rbac_policy_watcher_reconcile_staleness_seconds{service="aegiscore-user-service"}
+            >
+            aegiscore_user_service_rbac_policy_watcher_max_staleness_seconds{service="aegiscore-user-service"}
+          )
+          or
+          (
+            aegiscore_user_service_rbac_policy_watcher_running{service="aegiscore-user-service"} == 1
+            and
+            aegiscore_user_service_rbac_policy_watcher_last_reconcile_success_timestamp_seconds{service="aegiscore-user-service"} == 0
+          )
+        for: 1m
+        labels:
+          service: aegiscore-user-service
+          severity: critical
+        annotations:
+          summary: "RBAC policy watcher 权威校准已过期"
+          description: "实例 {{ $labels.instance }} 的 RBAC policy watcher 从未完成权威校准，或校准 staleness 已持续超过该实例配置预算。"
+          runbook_url: "docs/observability/user-service-runbook.md#rbac-watcher-stale"
+
+      - alert: AegisCoreUserServiceRBACWatcherReconnecting
+        expr: |
+          aegiscore_user_service_rbac_policy_watcher_subscription_state{service="aegiscore-user-service",state="reconnecting"} == 1
+          and on (service, environment, instance)
+          increase(aegiscore_user_service_rbac_policy_watcher_reconnect_attempts_total{service="aegiscore-user-service"}[5m]) > 0
+        for: 5m
+        labels:
+          service: aegiscore-user-service
+          severity: warning
+        annotations:
+          summary: "RBAC policy watcher 持续重连"
+          description: "实例 {{ $labels.instance }} 的 RBAC Pub/Sub subscription 已持续重连 5 分钟；权威数据库校准仍独立运行。"
+          runbook_url: "docs/observability/user-service-runbook.md#rbac-watcher-reconnecting"
 
       - alert: AegisCoreUserServicePolicyReloadFailed
         expr: |

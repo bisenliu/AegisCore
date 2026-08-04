@@ -32,6 +32,7 @@ import (
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
+	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 	usercommand "github.com/aegiscore/user-service/internal/features/user/application/command"
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
@@ -75,13 +76,16 @@ func registerRouteTestRuntimeMetrics(t *testing.T, provider *commonmetrics.Provi
 
 	err = providerobservability.RegisterRuntimeDependencyMetrics(providerobservability.RuntimeDependencyMetricsParams{
 		Resources:        resourceSettings,
+		RBAC:             serviceconfig.RBACSettings{PolicyWatcher: serviceconfig.DefaultPolicyWatcherConfig()},
 		Metrics:          provider,
 		PrimaryDB:        db,
 		CacheRedis:       client,
 		SessionPurgePool: routePurgeTaskPool{stats: workerpool.Stats{Name: "auth.redis.session_purge", Workers: 4, Submitted: 1}},
-		PolicyWatcher:    routeWatcherStatus{running: true},
-		AuthTokenCache:   routeLocalcacheStatsSource{name: "auth_token_version", stats: localcache.Stats{Capacity: 1000}},
-		RBACRolesCache:   routeLocalcacheStatsSource{name: "rbac_user_roles", stats: localcache.Stats{Capacity: 2000}},
+		PolicyWatcher: routeWatcherStatus{status: permissionapplication.PolicyWatcherStatusSnapshot{
+			Running: true, SubscriptionState: permissionapplication.PolicyWatcherSubscriptionConnected, LastReconcileSuccessAt: time.Now(),
+		}},
+		AuthTokenCache: routeLocalcacheStatsSource{name: "auth_token_version", stats: localcache.Stats{Capacity: 1000}},
+		RBACRolesCache: routeLocalcacheStatsSource{name: "rbac_user_roles", stats: localcache.Stats{Capacity: 2000}},
 	})
 	require.NoError(t, err)
 }
@@ -122,8 +126,7 @@ type routePurgeTaskPool struct {
 }
 
 type routeWatcherStatus struct {
-	running bool
-	err     error
+	status permissionapplication.PolicyWatcherStatusSnapshot
 }
 
 type routeLocalcacheStatsSource struct {
@@ -139,12 +142,8 @@ func (p routePurgeTaskPool) Stats() workerpool.Stats {
 	return p.stats
 }
 
-func (s routeWatcherStatus) Running() bool {
-	return s.running
-}
-
-func (s routeWatcherStatus) LastError() error {
-	return s.err
+func (s routeWatcherStatus) Status() permissionapplication.PolicyWatcherStatusSnapshot {
+	return s.status
 }
 
 func (s routeLocalcacheStatsSource) Name() string {

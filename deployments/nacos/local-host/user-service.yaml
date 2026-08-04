@@ -77,6 +77,15 @@ rbac:
       # 投递失败后使用有界指数退避，避免下游故障时形成高频重试。
       initial: 1s
       max: 1m
+  policy_watcher:
+    # PostgreSQL revision 每 15 秒校准一次，连续三个周期未成功后判定 stale。
+    check_interval: 15s
+    subscribe_timeout: 5s
+    max_staleness: 45s
+    retry_backoff:
+      # Redis 订阅故障以带抖动的有界指数退避持续重建。
+      initial: 250ms
+      max: 30s
 
 api_rate_limit:
   # 限流使用进程内 token bucket，不是认证或授权边界；限流器错误默认降级放行。

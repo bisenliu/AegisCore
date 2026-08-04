@@ -23,6 +23,7 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 		},
 		RBAC: RBACConfig{
 			UserRoleCache: FeatureCacheConfig{Enabled: true, Size: 13},
+			PolicyWatcher: PolicyWatcherConfig{CheckInterval: 3 * time.Second, MaxStaleness: 10 * time.Second},
 			OutboxDispatcher: OutboxDispatcherConfig{
 				PollInterval: time.Second,
 				BatchSize:    17,
@@ -51,6 +52,7 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 		AppName:          "user-service",
 		UserRoleCache:    cfg.RBAC.UserRoleCache,
 		OutboxDispatcher: cfg.RBAC.OutboxDispatcher,
+		PolicyWatcher:    cfg.RBAC.PolicyWatcher,
 	}, NewRBACSettings(cfg))
 	require.Equal(t, EntSettings{Plugins: cfg.Ent.Plugins}, NewEntSettings(cfg))
 	require.Equal(t, RateLimitSettings{APIRateLimit: cfg.APIRateLimit}, NewRateLimitSettings(cfg))
@@ -65,7 +67,7 @@ func TestNarrowSettingsFieldOwnership(t *testing.T) {
 		fields []string
 	}{
 		{name: "auth", value: AuthSettings{}, fields: []string{"AppName", "JWT", "TokenVersionCache", "TokenVersionCacheTTL", "RefreshTokenRotation", "MaxActiveSessionsPerUser"}},
-		{name: "rbac", value: RBACSettings{}, fields: []string{"AppName", "UserRoleCache", "OutboxDispatcher"}},
+		{name: "rbac", value: RBACSettings{}, fields: []string{"AppName", "UserRoleCache", "OutboxDispatcher", "PolicyWatcher"}},
 		{name: "ent", value: EntSettings{}, fields: []string{"Plugins"}},
 		{name: "rate limit", value: RateLimitSettings{}, fields: []string{"APIRateLimit"}},
 		{name: "http", value: HTTPSettings{}, fields: []string{"RequestBodyMaxBytes"}},

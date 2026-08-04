@@ -2202,7 +2202,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 99
+        "y": 104
       },
       "id": 26,
       "options": {
@@ -2314,7 +2314,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 107
+        "y": 112
       },
       "id": 27,
       "options": {
@@ -2423,7 +2423,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 107
+        "y": 112
       },
       "id": 28,
       "options": {
@@ -2529,7 +2529,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 99
+        "y": 104
       },
       "id": 29,
       "options": {
@@ -2610,7 +2610,7 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 8,
+        "w": 6,
         "x": 0,
         "y": 94
       },
@@ -2638,7 +2638,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "min(aegiscore_runtime_component_running{service=\"$service\",environment=\"$environment\",resource=\"rbac_policy_watcher\"})",
+          "expr": "min(aegiscore_user_service_rbac_policy_watcher_running{service=\"$service\",environment=\"$environment\"})",
           "legendFormat": "running",
           "range": true,
           "refId": "A"
@@ -2652,11 +2652,11 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "RBAC policy watcher 是否存在最近错误。",
+      "description": "RBAC policy watcher 当前 subscription state；只显示 one-hot 值为 1 的状态。",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
           "unit": "short",
           "noValue": "No data",
@@ -2667,35 +2667,16 @@
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
               }
             ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "color": "green",
-                  "text": "OK"
-                },
-                "1": {
-                  "color": "red",
-                  "text": "ERROR"
-                }
-              }
-            }
-          ]
+          }
         },
         "overrides": []
       },
       "gridPos": {
         "h": 5,
-        "w": 8,
-        "x": 8,
+        "w": 6,
+        "x": 6,
         "y": 94
       },
       "id": 31,
@@ -2722,13 +2703,151 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "max(aegiscore_runtime_component_last_error{service=\"$service\",environment=\"$environment\",resource=\"rbac_policy_watcher\"}) or vector(0)",
-          "legendFormat": "last error",
+          "expr": "max by (state) (aegiscore_user_service_rbac_policy_watcher_subscription_state{service=\"$service\",environment=\"$environment\"} == 1)",
+          "legendFormat": "{{state}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "RBAC watcher 最近错误",
+      "title": "RBAC watcher 订阅状态",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "RBAC policy watcher 最后一次成功完成 PostgreSQL revision 权威校准的时间。",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "dateTimeAsIso",
+          "noValue": "Never",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 94
+      },
+      "id": 53,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(aegiscore_user_service_rbac_policy_watcher_last_reconcile_success_timestamp_seconds{service=\"$service\",environment=\"$environment\"}) * 1000",
+          "legendFormat": "last reconcile",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "RBAC watcher 最后校准",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "RBAC policy watcher 距最后一次成功权威校准的时间；红色表示超过默认 45 秒预算。",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "s",
+          "noValue": "No data",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 45
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 94
+      },
+      "id": 54,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(aegiscore_user_service_rbac_policy_watcher_reconcile_staleness_seconds{service=\"$service\",environment=\"$environment\"})",
+          "legendFormat": "staleness",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "RBAC watcher 校准 staleness",
       "type": "stat"
     },
     {
@@ -2784,7 +2903,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 99
+        "y": 104
       },
       "id": 32,
       "options": {
@@ -2865,9 +2984,9 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 8,
-        "x": 16,
-        "y": 94
+        "w": 24,
+        "x": 0,
+        "y": 99
       },
       "id": 33,
       "options": {
@@ -2908,7 +3027,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 115
+        "y": 120
       },
       "id": 34,
       "panels": [],
@@ -2968,7 +3087,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 116
+        "y": 121
       },
       "id": 35,
       "options": {
@@ -3055,7 +3174,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 116
+        "y": 121
       },
       "id": 36,
       "options": {
@@ -3153,7 +3272,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 116
+        "y": 121
       },
       "id": 37,
       "options": {
@@ -3240,7 +3359,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 124
+        "y": 129
       },
       "id": 38,
       "options": {
@@ -3327,7 +3446,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 124
+        "y": 129
       },
       "id": 39,
       "options": {
@@ -3366,7 +3485,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 124
+        "y": 129
       },
       "id": 40,
       "options": {

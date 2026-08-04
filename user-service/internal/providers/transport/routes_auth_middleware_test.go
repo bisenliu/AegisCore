@@ -127,7 +127,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			"aegiscore_localcache_loads_total",
 			"aegiscore_localcache_evictions_total",
 			"aegiscore_localcache_capacity",
-			"aegiscore_runtime_component_running",
+			"aegiscore_user_service_rbac_policy_watcher_running",
 		} {
 			assert.Contains(t, body, family)
 		}
