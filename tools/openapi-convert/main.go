@@ -109,7 +109,10 @@ func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 		return exitError
 	}
 
-	fmt.Fprintf(stdout, "generated OpenAPI %s document with %d paths\n", doc.OpenAPI, doc.PathCount)
+	if _, err := fmt.Fprintf(stdout, "generated OpenAPI %s document with %d paths\n", doc.OpenAPI, doc.PathCount); err != nil {
+		failf(stderr, "write success output: %v", err)
+		return exitError
+	}
 	return exitOK
 }
 
@@ -153,5 +156,6 @@ func writeFile(path string, data []byte) error {
 }
 
 func failf(stderr io.Writer, format string, args ...any) {
-	fmt.Fprintf(stderr, format+"\n", args...)
+	// 调用方已经确定返回失败；诊断 writer 不可用时仍保持原非零退出状态。
+	_, _ = fmt.Fprintf(stderr, format+"\n", args...)
 }

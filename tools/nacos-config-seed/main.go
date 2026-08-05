@@ -78,13 +78,16 @@ func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 		failf(stderr, "%v", err)
 		return exitError
 	}
-	fmt.Fprintf(
+	if _, err := fmt.Fprintf(
 		stdout,
 		"seeded Nacos namespace=%s group=%s data_ids=%s\n",
 		options.Namespace,
 		options.Group,
 		strings.Join(options.DataIDs, ","),
-	)
+	); err != nil {
+		failf(stderr, "write success output: %v", err)
+		return exitError
+	}
 	return exitOK
 }
 
@@ -125,5 +128,6 @@ func secretEnv(name string) string {
 }
 
 func failf(stderr io.Writer, format string, args ...any) {
-	fmt.Fprintf(stderr, format+"\n", args...)
+	// 调用方已经确定返回失败；诊断 writer 不可用时仍保持原非零退出状态。
+	_, _ = fmt.Fprintf(stderr, format+"\n", args...)
 }

@@ -9,7 +9,7 @@ export ADMIN_BOOTSTRAP_PASSWORD
 
 .PHONY: help build test test-containers lint verify
 .PHONY: common-test common-test-containers common-lint common-generate common-verify
-.PHONY: tools-openapi-convert-test tools-nacos-config-seed-test
+.PHONY: tools-openapi-convert-test tools-openapi-convert-lint tools-nacos-config-seed-test tools-nacos-config-seed-lint
 .PHONY: user-service-build user-service-run user-service-test user-service-test-containers user-service-lint user-service-verify user-service-architecture-lint
 .PHONY: user-service-seed-rbac user-service-bootstrap-super-admin user-service-image-verify
 .PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-openapi-generate user-service-fxgraph-generate user-service-fxgraph-check
@@ -24,7 +24,7 @@ test: common-test user-service-test tools-openapi-convert-test tools-nacos-confi
 
 test-containers: common-test-containers user-service-test-containers ## 运行 common 与 user-service 的全部 Docker-backed 测试。
 
-lint: common-lint user-service-lint ## 运行全部 Go 模块 lint。
+lint: common-lint user-service-lint tools-openapi-convert-lint tools-nacos-config-seed-lint ## 运行全部 Go 模块 lint。
 
 verify: lint user-service-architecture-lint common-generate user-service-generate test user-service-openapi-generate ## 运行完整本地验证。
 	git diff --exit-code -- . ':(exclude)AGENTS.md' ':(exclude)openspec/AGENTS.md' ':(exclude)CLAUDE.md' ':(exclude).multica/project/resources.json' ':(exclude).multica/**'
@@ -47,8 +47,14 @@ common-verify: ## 运行 common 模块验证。
 tools-openapi-convert-test: ## 运行 OpenAPI 转换工具测试。
 	$(MAKE) -C $(TOOLS_OPENAPI_CONVERT_DIR) test
 
+tools-openapi-convert-lint: ## 运行 OpenAPI 转换工具 lint。
+	$(MAKE) -C $(TOOLS_OPENAPI_CONVERT_DIR) lint
+
 tools-nacos-config-seed-test: ## 运行 Nacos 配置初始化工具测试。
 	$(MAKE) -C $(TOOLS_NACOS_CONFIG_SEED_DIR) test
+
+tools-nacos-config-seed-lint: ## 运行 Nacos 配置初始化工具 lint。
+	$(MAKE) -C $(TOOLS_NACOS_CONFIG_SEED_DIR) lint
 
 user-service-build: ## 构建 user-service 二进制。
 	$(MAKE) -C $(USER_SERVICE_DIR) build USER_SERVICE_BIN='$(USER_SERVICE_BIN)'

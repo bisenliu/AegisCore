@@ -11,6 +11,11 @@
   .golangci.yml
   common/
     go.mod
+  tools/
+    openapi-convert/
+      go.mod
+    nacos-config-seed/
+      go.mod
   user-service/
     go.mod
   docs/
@@ -18,7 +23,7 @@
     GO_LINT_AUTOMATION.md
 ```
 
-根 `.golangci.yml` 统一约束 `common/` 和 `user-service/`。CI 和本地开发应分别进入两个 Go module 执行，不建议把根目录 `golangci-lint run ./...` 作为唯一命令。
+根 `.golangci.yml` 统一约束 `common/`、`user-service/`、`tools/openapi-convert/` 和 `tools/nacos-config-seed/`。CI 和本地开发应分别进入四个 Go module 执行；根目录不是单一 Go module，不应把根目录 `golangci-lint run ./...` 作为唯一命令。
 
 ## Local Commands
 
@@ -28,6 +33,8 @@ go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
 make lint
 make common-lint
 make user-service-lint
+make tools-openapi-convert-lint
+make tools-nacos-config-seed-lint
 ```
 
 直接排查时可分别执行：
@@ -35,6 +42,8 @@ make user-service-lint
 ```bash
 cd common && golangci-lint run ./...
 cd user-service && golangci-lint run ./...
+cd tools/openapi-convert && golangci-lint run ./...
+cd tools/nacos-config-seed && golangci-lint run ./...
 ```
 
 ## Architecture Lint
@@ -55,6 +64,7 @@ Architecture-lint 还必须检查 `openspec/specs/`、`openspec/changes/` 和 `d
 ## Governance
 
 - CI lint failure 阻断 PR 合并和主线 push。
+- CI 的 `govulncheck` 和 `gosec` matrix 必须覆盖四个 Go module；工具 module 不得低于业务 module 的静态安全门禁。
 - `.github/workflows/lint.yml` 仅提供 `workflow_call`，由主 CI 唯一调用；分支保护绑定主 CI 下稳定的 `quality / lint` check，不得再绑定或触发独立的重复 lint matrix。
 - 本地提交前运行 `make lint`，或至少运行受影响模块的 lint。
 - 新增严格规则导致大量历史 findings 时，应先单独设计治理范围，不要混入业务 PR。

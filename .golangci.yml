@@ -1,6 +1,6 @@
 version: "2"
 
-# 从 common/ 和 user-service/ 模块目录运行；根目录不是单一 Go module。
+# 从 common/、user-service/ 和两个 tools/* 模块目录分别运行；根目录不是单一 Go module。
 run:
   modules-download-mode: readonly
   tests: true

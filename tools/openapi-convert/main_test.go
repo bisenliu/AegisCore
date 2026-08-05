@@ -3,12 +3,21 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+var errWriterUnavailable = errors.New("writer unavailable")
+
+type unavailableWriter struct{}
+
+func (unavailableWriter) Write([]byte) (int, error) {
+	return 0, errWriterUnavailable
+}
 
 func TestRunRequiresInputAndOutputPaths(t *testing.T) {
 	var stdout bytes.Buffer
@@ -115,6 +124,23 @@ func TestRunGeneratesOpenAPIFiles(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(goData), "package apidocs")
 	require.Contains(t, string(goData), "tools/openapi-convert")
+}
+
+func TestRunReturnsErrorWhenSuccessOutputFails(t *testing.T) {
+	dir := t.TempDir()
+	inputPath := filepath.Join(dir, "swagger.json")
+	writeMinimalSwagger(t, inputPath)
+	var stderr bytes.Buffer
+
+	code := run(context.Background(), []string{
+		"-input", inputPath,
+		"-json", filepath.Join(dir, "openapi.json"),
+		"-yaml", filepath.Join(dir, "openapi.yaml"),
+		"-go", filepath.Join(dir, "openapi.go"),
+	}, unavailableWriter{}, &stderr)
+
+	require.Equal(t, exitError, code)
+	require.Contains(t, stderr.String(), "write success output: writer unavailable")
 }
 
 func writeMinimalSwagger(t *testing.T, path string) {

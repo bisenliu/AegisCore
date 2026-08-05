@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,14 @@ import (
 	"sync/atomic"
 	"testing"
 )
+
+var errWriterUnavailable = errors.New("writer unavailable")
+
+type unavailableWriter struct{}
+
+func (unavailableWriter) Write([]byte) (int, error) {
+	return 0, errWriterUnavailable
+}
 
 func TestRunSeedsNamespaceAndDocuments(t *testing.T) {
 	dir := writeConfigDocuments(t)
@@ -57,6 +66,32 @@ func TestRunSeedsNamespaceAndDocuments(t *testing.T) {
 	}
 	if len(calls) != 5 {
 		t.Fatalf("calls = %v", calls)
+	}
+}
+
+func TestRunReturnsErrorWhenSuccessOutputFails(t *testing.T) {
+	dir := writeConfigDocuments(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/nacos/v3/admin/core/namespace/check" {
+			writeResponse(t, w, `{"code":0,"message":"success","data":1}`)
+			return
+		}
+		writeResponse(t, w, `{"code":0,"message":"success","data":true}`)
+	}))
+	defer server.Close()
+	var stderr bytes.Buffer
+
+	code := run(context.Background(), []string{
+		"-addr", server.URL,
+		"-config-dir", dir,
+		"-data-ids", "base.yaml,resources.yaml,user-service.yaml",
+	}, unavailableWriter{}, &stderr)
+
+	if code != exitError {
+		t.Fatalf("code = %d", code)
+	}
+	if got := stderr.String(); !strings.Contains(got, "write success output: writer unavailable") {
+		t.Fatalf("stderr = %q", got)
 	}
 }
 

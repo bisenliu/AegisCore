@@ -164,15 +164,21 @@ jobs:
           retention-days: 14
 
   govulncheck:
-    name: govulncheck (${{ matrix.module }})
+    name: govulncheck (${{ matrix.module.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         module:
-          - common
-          - user-service
+          - name: common
+            path: common
+          - name: user-service
+            path: user-service
+          - name: tools-openapi-convert
+            path: tools/openapi-convert
+          - name: tools-nacos-config-seed
+            path: tools/nacos-config-seed
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -194,19 +200,25 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Run govulncheck
-        working-directory: ${{ matrix.module }}
+        working-directory: ${{ matrix.module.path }}
         run: govulncheck ./...
 
   gosec:
-    name: gosec (${{ matrix.module }})
+    name: gosec (${{ matrix.module.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         module:
-          - common
-          - user-service
+          - name: common
+            path: common
+          - name: user-service
+            path: user-service
+          - name: tools-openapi-convert
+            path: tools/openapi-convert
+          - name: tools-nacos-config-seed
+            path: tools/nacos-config-seed
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -228,17 +240,17 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Run gosec high severity gate
-        working-directory: ${{ matrix.module }}
+        working-directory: ${{ matrix.module.path }}
         run: |
-          mkdir -p ../security
-          gosec -severity high -fmt sarif -out ../security/gosec-${{ matrix.module }}.sarif ./...
+          mkdir -p "${{ github.workspace }}/security"
+          gosec -severity high -fmt sarif -out "${{ github.workspace }}/security/gosec-${{ matrix.module.name }}.sarif" ./...
 
       - name: Upload gosec artifact
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: gosec-${{ matrix.module }}
-          path: security/gosec-${{ matrix.module }}.sarif
+          name: gosec-${{ matrix.module.name }}
+          path: security/gosec-${{ matrix.module.name }}.sarif
           if-no-files-found: warn
           retention-days: 14
 
