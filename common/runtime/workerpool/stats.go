@@ -43,3 +43,35 @@ type counters struct {
 	queued    atomic.Int64
 	running   atomic.Int64
 }
+
+// StatsSource 暴露任务池统计快照，供监控 adapter 只读消费。
+type StatsSource interface {
+	Stats() Stats
+}
+
+// Stats 返回任务池计数器的瞬时快照。
+func (p *Pool) Stats() Stats {
+	return Stats{
+		Name:      p.name,
+		Workers:   p.workers,
+		Submitted: p.counters.submitted.Load(),
+		Rejected:  p.counters.rejected.Load(),
+		Started:   p.counters.started.Load(),
+		Completed: p.counters.completed.Load(),
+		Failed:    p.counters.failed.Load(),
+		Panicked:  p.counters.panicked.Load(),
+		Queued:    p.counters.queued.Load(),
+		Running:   p.counters.running.Load(),
+		Free:      p.freeWorkers(),
+		Waiting:   p.waitingSubmitters(),
+		Closed:    p.closed.Load(),
+	}
+}
+
+func (p *Pool) freeWorkers() int64 {
+	return int64(p.workersPool.Free())
+}
+
+func (p *Pool) waitingSubmitters() int64 {
+	return int64(p.workersPool.Waiting())
+}

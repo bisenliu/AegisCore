@@ -2,6 +2,8 @@ package localcache
 
 import "errors"
 
+var errLoadInvalidated = errors.New("localcache internal load invalidated")
+
 var (
 	// ErrNameRequired 表示本地缓存缺少稳定实例名。
 	ErrNameRequired = errors.New("localcache name is required")

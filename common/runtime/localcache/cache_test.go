@@ -71,10 +71,29 @@ func TestLoadingCacheEnforcesItemCapacity(t *testing.T) {
 	require.NoError(t, err)
 	_, err = cache.Get(context.Background(), "b")
 	require.NoError(t, err)
+	require.EqualValues(t, 1, cache.Stats().CapacityEvictions, "容量驱逐应在 Get 返回前同步可见")
 	value, err := cache.Get(context.Background(), "a")
 	require.NoError(t, err)
 	require.Equal(t, 2, value, "最早的 item 应因容量达到上限被移除")
-	require.Eventually(t, func() bool { return cache.Stats().CapacityEvictions >= 1 }, time.Second, time.Millisecond)
+	require.EqualValues(t, 2, cache.Stats().CapacityEvictions)
+}
+
+func TestLoadingCacheCachesNilInterfaceValue(t *testing.T) {
+	var loads atomic.Uint64
+	cache := newTestCache[any](t, testConfig(), func(context.Context, string) (any, error) {
+		loads.Add(1)
+		return nil, nil
+	})
+
+	first, err := cache.Get(context.Background(), "key")
+	require.NoError(t, err)
+	require.Nil(t, first)
+
+	second, err := cache.Get(context.Background(), "key")
+	require.NoError(t, err)
+	require.Nil(t, second)
+	require.EqualValues(t, 1, loads.Load())
+	require.Equal(t, Stats{Hit: 1, Miss: 1, LoadSuccess: 1, Capacity: 10}, cache.Stats())
 }
 
 func TestLoadingCacheCoalescesConcurrentMisses(t *testing.T) {
