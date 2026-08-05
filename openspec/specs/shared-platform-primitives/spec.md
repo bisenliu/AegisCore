@@ -201,15 +201,62 @@
 
 系统 MUST 在 `common/runtime` 中提供业务中立的 ID、scheduler、workerpool、localcache、Redis key、timezone、logger、Fx provider 和依赖图原语。拥有后台执行的 primitive MUST 具有明确的容量、并发、失败处理、观测和关闭语义；localcache MUST NOT 拥有后台执行或关闭生命周期。构造函数、provider 和 Fx graph helper MUST 只消费真实运行时依赖或调用方显式提供的无副作用 Fx option，MUST NOT 为测试便利暴露生产 API 或读取服务私有配置。公开 provider 名称 MUST 表达其 runtime 能力或资源职责，MUST NOT 仅用模糊的 DI framework 术语隐藏能力语义。
 
-#### Scenario: workerpool 与 scheduler 生命周期
+#### Scenario: workerpool 生命周期
 
 - **WHEN** 调用方通过 `workerpool.New` 创建任务池并通过 `Stop(ctx)` 关闭
 - **THEN** task pool MUST 作为不依赖 Fx 的普通 Go 资源创建并由拥有者显式关闭；Stop MUST 停止接收新任务、等待已登记或已接受任务 drain，并允许重复调用共享同一 drain 状态
 - **AND** Stop 超时 MUST 返回包装 `context.DeadlineExceeded` 的错误，workerpool MUST NOT 承载 refresh session、token version、可靠消息、eventbus、outbox 或业务一致性语义
+
+#### Scenario: Scheduler 注册与配置状态
+
+- **WHEN** 调用方注册 scheduler job
+- **THEN** job MUST 提供裁剪后非空且唯一的固定 key、有效 spec、非 nil `func(context.Context) error` task 和非负 timeout
+- **AND** scheduler MUST 接受标准五字段、可选 seconds、descriptors、scheduler timezone 和 `CRON_TZ`，并 MUST 支持按固定 key 删除任务而不向调用方暴露底层 `cron.EntryID`
+- **AND** nil lock policy MUST 表示不启用分布式锁，非 nil lock policy MUST 表示启用；零 `WaitTimeout` MUST 表示单次尝试，正数 MUST 表示在该上限内等待
+- **AND** nil renew policy MUST 表示不续租，非 nil renew policy MUST 表示启用续租；公开配置 MUST NOT 同时保留可与 nil/non-nil 或 timeout 语义冲突的 lock enabled、lock mode 或 auto renew 开关
+
+#### Scenario: Scheduler 分阶段执行与本地重叠
+
 - **WHEN** scheduler 触发已注册任务
-- **THEN** 系统 MUST 按本地 overlap gate、全局并发 gate、可选分布式锁、任务 context、可选锁续租、任务执行和 cleanup 的顺序处理，并 MUST 记录跳过、开始、完成、失败、拒绝和 panic，在 shutdown 时优雅停止
-- **AND** 多实例副作用任务 MUST 声明正数 TTL 的分布式锁策略，执行时间可能超过 TTL 的任务 MUST 使用续租
-- **AND** 即使任务未配置 timeout，scheduler MUST 创建可取消 context，并在自动续租失败时取消任务和记录失败
+- **THEN** 系统 MUST 按 triggered、本地 overlap gate、全局并发 gate、可选分布式锁、任务 context、可选锁续租、started/result 观测、任务执行和逆序 cleanup 的顺序处理
+- **AND** 每个内部 stage MUST 只释放自己成功取得的资源，error、panic、skip 和 cancellation MUST NOT 泄漏 local/global token、lock、context cancel 或 renew goroutine
+- **AND** `AllowOverlap=false` 时同 key 前一实例仍运行的触发 MUST 立即跳过并记录 `local_overlap`，`AllowOverlap=true` 时不同触发 MAY 并行执行
+- **AND** 即使任务未配置 timeout，scheduler MUST 创建可由 shutdown 取消的 context；配置 timeout 时 MUST 创建受 timeout 限制的 context
+- **AND** 正常返回 MUST 记录 completed，返回 error 或 panic MUST 记录 failed，panic MUST 由 `robfig/cron` recovery 记录且不得永久占用已获取资源
+- **AND** completed/failed duration MUST 从 started 时刻计算，MUST NOT 包含 overlap、全局并发或锁等待时间
+
+#### Scenario: Scheduler 全局并发策略
+
+- **WHEN** `MaxConcurrentJobs` 为零
+- **THEN** scheduler MUST 不施加全局并发限制
+- **WHEN** 并发上限已满且 policy 为 skip
+- **THEN** 当前触发 MUST 立即跳过并记录 `global_concurrency_limit`
+- **WHEN** 并发上限已满且 policy 为 wait
+- **THEN** 当前触发 MUST 等待配额或 scheduler root context 取消，取得配额后 MUST 继续执行并在结束时释放
+- **AND** scheduler MUST 保留 `AllowOverlap=true` 与 wait 组合的既有等待语义，文档 MUST 明确高频触发可能产生等待 goroutine，不得静默改为 skip 或无界持久化队列
+
+#### Scenario: Scheduler 分布式锁、重试与续租
+
+- **WHEN** job 配置分布式锁且锁未被其他 owner 持有
+- **THEN** scheduler MUST 通过 `Locker` 使用正数 TTL 获取 owner lock，并在任务退出路径使用独立有界 context 释放
+- **WHEN** lock `WaitTimeout` 为零且锁忙
+- **THEN** 本轮 MUST 跳过并记录 `lock_busy`
+- **WHEN** lock `WaitTimeout` 为正且锁忙
+- **THEN** Redis locker MUST 在总等待上限内按 initial/max interval、最大尝试次数和可选 jitter 重试，等待到期或尝试耗尽 MUST 返回 lock busy，parent context 取消或 Redis 错误 MUST 返回 error
+- **AND** Redis lock MUST 使用随机 owner token 与 Lua owner 校验执行 unlock/renew，非 owner 操作 MUST 返回 `ErrLockNotOwned`
+- **WHEN** job 启用自动续租
+- **THEN** scheduler MUST 按有效 interval 和 operation timeout 刷新 TTL，并在任务结束前停止且等待 renew goroutine
+- **WHEN** 续租失败
+- **THEN** scheduler MUST 记录 `lock_renew_failed`；`ContinueOnFailure=false` 时 MUST 取消任务 context，`true` 时 MUST 允许任务继续，最终任务结果 MUST 保留续租失败语义
+- **AND** 多实例副作用任务 MUST 使用正数 TTL，执行时间可能超过 TTL 的任务 MUST 使用续租并协作响应 context；Redis lease MUST NOT 被描述为 exactly-once、fencing 或 goroutine 强杀保证
+
+#### Scenario: Scheduler 关闭
+
+- **WHEN** 调用方首次执行 `Stop(ctx)`
+- **THEN** scheduler MUST 先停止新 cron 触发，再取消活动任务及 gate/lock wait context，并等待已触发任务 drain；进入 stopping 后 MUST 拒绝新增任务和重新启动
+- **WHEN** Stop 的调用方 context 在 drain 完成前取消或超时
+- **THEN** Stop MUST 返回包装后的 context error，实际 drain MUST 继续，后续 Stop MUST 继续等待同一个完成状态而不得提前返回成功
+- **AND** 多次 Start 在 running 状态 MUST 幂等，多次 Stop MUST 共享单一 drain，任务不协作响应 context 时 scheduler MUST NOT 声称能够强杀 goroutine
 
 #### Scenario: loading cache 构造、读取与回源
 
@@ -311,7 +358,7 @@
 - **THEN** 测试 MUST 优先使用 `common/testing/containers` 管理依赖生命周期，测试数据 MUST 使用稳定 fixture 或 feature-local builder，避免不可重复的随机输入
 - **WHEN** 测试需要注入失败、固定返回、控制顺序或观察后台状态
 - **THEN** 测试 MUST 使用消费侧最小接口、局部 fixture、通道或可观察状态，正式代码 MUST NOT 为测试新增全局可变函数、测试 flag、`NewXForTest` 或无运行时职责的 adapter
-- **WHEN** 测试验证缓存过期、workerpool drain、scheduler 续租或后台任务取消
+- **WHEN** 测试验证缓存过期、workerpool drain、scheduler overlap/global gate/lock retry/renew/timeout/shutdown 或后台任务取消
 - **THEN** 测试 MUST 使用通道、eventually-style 条件或其他可观察同步机制和明确 deadline，MUST NOT 只依赖固定 `time.Sleep` 判断状态已经变化
 
 #### Scenario: 隔离进程级状态

@@ -61,6 +61,19 @@
 - **WHEN** feature-local `Metrics` 需要空实现
 - **THEN** 系统 MUST 通过统一生成入口维护匹配接口的 no-op；业务指标 MUST 留在所属 feature，`common/runtime/observability/metrics` MUST NOT 承载 user-service 业务语义
 
+#### Scenario: Scheduler 指标契约
+
+- **WHEN** scheduler job 被触发、开始、完成、失败、跳过或发生锁续租失败
+- **THEN** 系统 MUST 通过 `aegiscore_scheduler_jobs_total` 记录固定 event `triggered|started|completed|failed|skipped|lock_renew_failed`
+- **AND** skipped reason MUST 只使用 `local_overlap|global_concurrency_limit|lock_busy|lock_error`，无特定 reason 的事件 MUST 使用 `none`
+- **AND** `scheduler_job` MUST 来自注册时固定低基数 job key，label MUST NOT 包含 cron spec、原始错误、panic、Redis key、lock owner token、身份标识或业务实体 ID
+- **WHEN** 已开始的任务完成、返回 error、因续租失败结束或 panic
+- **THEN** `aegiscore_scheduler_job_duration_seconds` MUST 仅观察从 started 到任务退出的 completed/failed duration，MUST NOT 包含 overlap、全局并发或锁等待时间
+- **WHEN** scheduler lock 续租失败
+- **THEN** 系统 MUST 保留 `lock_renew_failed` counter event、Prometheus alert、Grafana 查询和 runbook 定位，不得因内部重构丢失该观测信号
+- **WHEN** metrics provider 禁用
+- **THEN** scheduler MUST 获得非 nil no-op metrics 实现，scheduler collector MUST NOT 注册
+
 #### Scenario: 本地缓存指标契约
 
 - **WHEN** cache 命中、未命中、loader 成功或失败
