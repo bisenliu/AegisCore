@@ -50,7 +50,7 @@
 
 ### Requirement: 角色、权限与用户绑定
 
-系统 MUST 提供角色创建、更新、启停、详情、列表和角色权限绑定，以及用户角色绑定的查询、添加、移除和完整替换能力。公开写接口 MUST NOT 允许创建或篡改系统角色；绑定 MUST 只引用存在的代码基线权限、未软删除用户和启用角色，完整替换 MUST 保持事务性。角色权限完整替换 MUST 在 application 层批量校验去重后的完整权限集合，且权限校验查询次数 MUST NOT 随权限 ID 数量增长。
+系统 MUST 提供角色创建、更新、启停、详情、列表和角色权限绑定，以及用户角色绑定的查询、添加、移除和完整替换能力。公开写接口 MUST NOT 允许创建或篡改系统角色；普通角色 metadata、状态和权限绑定写端口 MUST 在同一数据库事务内锁定目标角色并基于最新 `IsSystem` 拒绝系统角色。绑定 MUST 只引用存在的代码基线权限、未软删除用户和启用角色，完整替换 MUST 保持事务性。角色权限完整替换 MUST 在 application 层批量校验去重后的完整权限集合，且权限校验查询次数 MUST NOT 随权限 ID 数量增长。
 
 #### Scenario: 角色目录写入和查询
 
@@ -61,16 +61,43 @@
 - **WHEN** 授权调用方查询角色详情或分页查询角色
 - **THEN** 系统 MUST 返回角色数据、权限摘要和共享 pagination 信息
 
-#### Scenario: 系统角色与权限绑定保护
+#### Scenario: 系统角色 metadata 与状态保护
 
-- **WHEN** 普通角色接口尝试创建、修改或停用系统角色
-- **THEN** 系统 MUST 拒绝操作并保持系统角色及其基线语义不变
+- **WHEN** 普通角色接口尝试修改系统角色的 `Name`、`Description` 或 `Active`，或提交与当前值相同的 metadata 或状态
+- **THEN** 系统 MUST 返回 `roledomain.ErrSystemRoleProtected` 语义且 HTTP 接口 MUST 返回 `409 Conflict`
+- **AND** 系统 MUST 保持该角色全部字段、角色权限绑定和系统基线语义不变
+- **WHEN** 公开角色创建接口创建角色
+- **THEN** 持久化记录的 `IsSystem` MUST 为 `false`，公开输入 MUST NOT 提供提升为系统角色的方式
+
+#### Scenario: 系统角色权限绑定保护
+
+- **WHEN** 角色权限 add、replace 或 remove 普通写请求以系统角色为目标并引用合法基线权限
+- **THEN** 系统 MUST 返回 `roledomain.ErrSystemRoleProtected` 语义且 HTTP 接口 MUST 返回 `409 Conflict`
+- **AND** 系统 MUST 保持该系统角色的已有权限绑定集合不变
 - **WHEN** 角色权限写请求引用不存在或不属于当前代码基线投影的权限
 - **THEN** 系统 MUST 拒绝写入并保持已有关系不变
 - **AND** role application MUST 通过 permission application 拥有的最小查询端口校验权限，MUST NOT 导入 permission infrastructure
 - **WHEN** 调用方把任意现存基线权限绑定给普通角色
 - **THEN** 系统 MUST 允许绑定且 MUST NOT 检查权限 active 或 system 状态
 - **AND** Permission 状态语义的移除 MUST NOT 删除或改变 `Role.Active` 与 `Role.IsSystem`
+
+#### Scenario: 系统角色保护的事务原子性
+
+- **WHEN** 普通 metadata、状态或角色权限 store 开始目标角色写事务
+- **THEN** store MUST 在任何角色或绑定 mutation 前以 PostgreSQL `FOR UPDATE` 锁定目标角色，并以锁定后的最新 `IsSystem` 判定是否允许写入
+- **AND** metadata UPDATE MUST 额外强制 `is_system=false`，application 层事务外读取 MUST NOT 作为系统角色保护的权威判断
+- **WHEN** store 判定目标为系统角色并返回 `ErrSystemRoleProtected`
+- **THEN** 本次事务 MUST NOT 改变角色、角色权限绑定、policy revision counter、policy revision 或 outbox event
+- **AND** application MUST NOT 发送 policy change 通知或触发本实例 reload
+
+#### Scenario: 系统角色保护与并发 seed
+
+- **WHEN** RBAC seed 正在更新目标系统角色并持有该角色数据库行锁，普通 metadata、状态或角色权限写请求并发到达
+- **THEN** 普通写请求 MUST 等待 seed transaction 结束并读取提交后的最新角色状态
+- **AND** seed 提交 `IsSystem=true` 后普通写请求 MUST 返回 `ErrSystemRoleProtected`
+- **AND** 普通写请求 MUST NOT 覆盖 seed metadata、改变系统角色绑定、推进 revision 或创建 outbox event
+- **WHEN** 系统维护代码写入系统角色或其基线权限绑定
+- **THEN** 系统 MUST 只使用 `SeedRoleStore` 或 `SeedRolePermissionStore` 受信端口，普通 HTTP use case MUST NOT 获得绕过参数、兼容开关或受信端口依赖
 
 #### Scenario: 角色权限完整替换的 application 批量校验
 
@@ -93,7 +120,7 @@
 - **WHEN** 调用方以合法权限集合完整替换角色权限
 - **THEN** 系统 MUST 在同一事务中删除旧绑定并批量写入新绑定，任一非幂等错误 MUST 回滚全部变更
 - **AND** application 批量校验与事务写入之间任一权限变为不存在时，事务内重校验 MUST 拒绝替换并保持已有关系不变
-- **WHEN** 角色被停用
+- **WHEN** 普通角色被停用
 - **THEN** 该角色 MUST NOT 出现在用户有效角色、有效权限或 Casbin policy 中
 - **WHEN** seed 补齐或同步系统角色权限绑定
 - **THEN** 系统 MUST 批量维护绑定并将已有绑定视为幂等成功，非唯一冲突错误 MUST 使本次事务失败
@@ -136,8 +163,8 @@
 
 - **WHEN** 请求缺少用户 ID、用户 ID 类型非法或 subject 不能解析为用户 UUID
 - **THEN** 系统 MUST 返回未认证错误并拒绝请求，且 MUST NOT 调用 Casbin engine
-- **WHEN** 用户角色回源失败、context 取消、Casbin 执行错误、policy 未加载、目标 revision 未追平或最近一次 reload 失败
-- **THEN** 系统 MUST 拒绝请求并暴露 policy 不可用 readiness/startup 状态，MUST NOT 使用保留的旧 enforcer 继续允许请求
+- **WHEN** 用户角色回源失败、context 取消、连续失效、Casbin 执行错误、policy 未加载、目标 revision 未追平或最近一次 reload 失败
+- **THEN** 系统 MUST 拒绝请求并暴露 policy 不可用 readiness/startup 状态，MUST NOT 使用旧角色集合或保留的旧 enforcer 继续允许请求
 - **WHEN** 请求命中显式授权白名单或使用 `OPTIONS`
 - **THEN** 中间件 MUST 允许请求并 MUST NOT 调用授权服务
 - **WHEN** 注册 `/api/v1` 权限、角色和用户业务路由
@@ -187,17 +214,17 @@
 #### Scenario: 用户角色缓存键、容量与值隔离
 
 - **WHEN** user-role cache 启用
-- **THEN** permission feature MUST 使用 `uuid.UUID` 作为真实业务 key，并将配置的正数 size 映射为最大 item 数
-- **AND** common MUST NOT 字符串化 UUID、接收 key encoder 或暴露底层 cache option
+- **THEN** permission feature MUST 在 localcache 边界使用 `userID.String()` 作为规范 string key，并将配置的正数 size 映射为最大 item 数
+- **AND** common MUST NOT 接收 key encoder、解析业务 UUID 或暴露底层 cache option
 - **WHEN** 缓存命中
 - **THEN** loader 写入缓存前和 `RolesForUser` 返回前 MUST 复制 `[]uuid.UUID`，调用方修改返回 slice MUST NOT 污染缓存或后续读取
 - **AND** `common/runtime/localcache` MUST NOT 承担角色 ID clone 语义
 
-#### Scenario: 用户角色回源与缓存关闭
+#### Scenario: 用户角色回源与缓存失效
 
 - **WHEN** 缓存未命中
 - **THEN** 系统 MUST 合并同一用户的并发回源并查询 PostgreSQL 中的当前启用角色，loader 错误 MUST NOT 写入缓存
-- **WHEN** cache 已关闭或回源失败
+- **WHEN** 回源失败或结果连续两次与失效并发
 - **THEN** 授权 MUST fail-closed，MUST NOT 因 cache 不可用产生允许结果
 - **WHEN** `rbac.user_role_cache.enabled=false`
 - **THEN** 系统 MUST 直接回源、返回独立角色 ID slice并保持fail-closed；direct stats source MUST使用`LoadSuccess`与`LoadError`表达逐次结果
@@ -206,7 +233,7 @@
 
 - **WHEN** 角色状态、角色权限或用户角色绑定通过在线API与policy revision原子提交成功
 - **THEN** 本实例coordinator MUST使用该数据库revision作为reload或cache invalidation目标，outbox dispatcher MUST传播同一数据库revision
-- **AND** reload、cache invalidation或通知失败 MUST保持可诊断和fail-closed语义，MUST NOT把通知接收、Redis max写入或publish成功标记为engine已应用
+- **AND** reload或通知失败 MUST保持可诊断和fail-closed语义，cache invalidation MUST 保持同步幂等，MUST NOT把通知接收、Redis max写入或publish成功标记为engine已应用
 - **AND** `PolicyChangeNotifier` MUST是正式command service的必需依赖并接收数据库revision
 - **WHEN** 权限投影由离线migration、seed或bootstrap改变
 - **THEN** 离线命令 MUST NOT宣称已完成在线policy refresh，运维 MUST显式创建/传播对应revision、执行revision-aware reload或滚动重启副本
@@ -383,7 +410,7 @@ permission、role 和 binding domain MUST 返回携带稳定 HTTP status、共�
 
 ### Requirement: RBAC 架构装配与资源生命周期
 
-role 和 permission feature MUST 保持 domain、application、transport 和 infrastructure 分层。permission application MUST 只保留权限查询、授权、policy loading/sync 和 seed/角色绑定所需最小端口，不得保留公开权限 command 或 route diff 生产装配。domain/application MUST 框架无关并拥有消费侧最小 port；Fx、Gin、Ent、Redis、SQL、HTTP response 和 named resource metadata MUST 留在对应边界。RBAC watcher、cache、resolver 和 policy 投影资源 MUST 显式启动、停止和回滚；permission composition MUST 以单一 runtime 聚合对象表达稳定组件集合。
+role 和 permission feature MUST 保持 domain、application、transport 和 infrastructure 分层。permission application MUST 只保留权限查询、授权、policy loading/sync 和 seed/角色绑定所需最小端口，不得保留公开权限 command 或 route diff 生产装配。domain/application MUST 框架无关并拥有消费侧最小 port；Fx、Gin、Ent、Redis、SQL、HTTP response 和 named resource metadata MUST 留在对应边界。RBAC watcher 和 policy 投影主动资源 MUST 显式启动、停止和回滚；无后台执行的 user-role localcache MUST 不拥有启停或关闭生命周期。permission composition MUST 以单一 runtime 聚合对象表达稳定组件集合。
 
 #### Scenario: 分层、bootstrap 与最小依赖
 
@@ -414,23 +441,54 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 - **THEN** 服务 MUST 具备可用 notifier；缺少 notifier 或安全 collaborator 时 constructor MUST 返回明确 error 并拒绝装配，MUST NOT panic
 - **AND** 系统 MUST NOT 用 no-op、nil fallback 或兼容 wrapper 跳过 reload、Redis version 或 watcher 同步
 
-#### Scenario: watcher、cache 与 lifecycle
+#### Scenario: watcher 与 cache lifecycle
 
-- **WHEN** user-service 启停 watcher 和 user-role resolver/cache
+- **WHEN** user-service 启停 permission/RBAC runtime
 - **THEN** `NewWatcher` MUST 只构造对象，MUST NOT 启动 goroutine、订阅 Redis 或执行补偿循环
-- **AND** resolver/cache 的 Fx result MUST 显式提供 `Start(context.Context) error` 与 `Close() error` lifecycle 视图，hook MUST NOT 通过 type assertion 探测启动能力
-- **AND** hook MUST 先启动 resolver/cache，再初始加载 policy 并启动 watcher；resolver/cache 启动失败时 MUST 返回错误且 MUST NOT 继续
-- **AND** `Start()` 和 `Stop(ctx)` MUST 幂等，`Stop(ctx)` MUST 取消内部 context 并在调用方期限内等待退出
-- **AND** Stop 超时 MUST 返回 context 错误并保持重复停止安全
-- **AND** 启动失败或停止时已启动 watcher MUST 被停止，cache MUST 幂等关闭
-- **AND** watcher stop 和 cache close 同时失败时 hook MUST 保留全部 cause，且前者失败时仍 MUST 执行后者
+- **AND** hook MUST 初始加载 policy 后启动 watcher；`Start()` 和 `Stop(ctx)` MUST 幂等，`Stop(ctx)` MUST 取消内部 context 并在调用方期限内等待 watcher 退出
+- **AND** Stop 超时 MUST 返回 context 错误并保持重复停止安全，启动失败或停止时已启动 watcher MUST 被停止
+- **WHEN** user-role localcache 被构造或应用停止
+- **THEN** cache MUST 作为无后台 goroutine 的普通对象使用，Fx result 与 hook MUST NOT 为其提供或调用 `Start(context.Context) error`、`Close() error`、closed state 或 lifecycle rollback
 
 #### Scenario: 共享资源所有权与关闭安全
 
-- **WHEN** RBAC 关闭 watcher、cache、store 或 resolver
+- **WHEN** RBAC 关闭 watcher、store 或其他主动资源
 - **THEN** `Stop` 或 `Close` MUST NOT 关闭共享 Redis、Ent 或 PostgreSQL 资源
 - **AND** 关闭后授权 MUST 继续 fail-closed，不得因本地资源不可用产生允许结果
-- **AND** RBAC MUST NOT 把服务业务配置、权限基线或 key schema 下沉到 `common`
+- **AND** RBAC MUST NOT 把服务业务配置、权限基线、角色值复制或 key schema 下沉到 `common`
+
+### Requirement: 用户角色缓存失效顺序门禁
+
+系统 MUST 使用 `common/runtime/localcache` 的业务中立 cache-wide revision 与发布门禁保护 user-role cache。用户角色缓存失效 MUST 在同一发布临界区提升 revision 并删除指定或全部缓存项；任何在失效前开始但未发布的旧回源结果 MUST NOT 在失效后写入缓存或返回给授权 caller。permission feature MUST NOT 维护 `userRoleCacheGeneration`、generation token、stale generation error 或等价重复门禁。cache disabled 模式 MUST 继续直接回源并保持 fail-closed。
+
+#### Scenario: 单用户失效抑制旧 load 返回与写回
+
+- **WHEN** 用户角色 cache miss 已经开始为某个用户回源，且该用户的 Add、Remove 或 Replace 用户角色绑定成功后调用 `InvalidateUserRole`
+- **THEN** resolver MUST 调用 `Invalidate(userID.String())`，并在方法返回时完成通用 revision 提升与指定 item 删除
+- **AND** 失效前开始但失效后完成的旧回源结果 MUST NOT 写入该用户缓存或返回给当前授权 caller
+- **AND** localcache 透明重试成功时后续授权 MUST 使用失效后的最终角色集合
+
+#### Scenario: 全量失效抑制所有旧 load 返回与写回
+
+- **WHEN** 一个或多个用户角色 cache miss 已经开始回源，且系统调用 `InvalidateAllUserRoles`
+- **THEN** resolver MUST 调用 `InvalidateAll()`，并在方法返回时完成通用 revision 提升与全部 item 删除
+- **AND** 全量失效前开始但失效后完成的任一旧回源结果 MUST NOT 写入缓存或返回给授权 caller
+- **AND** localcache 透明重试成功时后续授权 MUST 使用全量失效后的最终角色集合
+
+#### Scenario: 连续失效竞态保持 fail-closed
+
+- **WHEN** `RolesForUser` 的首次回源结果因通用 revision 变化被抑制
+- **THEN** localcache MUST 透明重试一次且 permission feature MUST NOT 增加 generation-aware retry wrapper
+- **WHEN** 第二次回源仍被失效并返回 `ErrInvalidated`
+- **THEN** 当前授权请求 MUST fail-closed，MUST NOT 使用旧角色集合产生允许结果
+- **AND** loader 错误、context 取消或过期回源结果 MUST NOT 写入缓存
+
+#### Scenario: cache disabled 模式保持直接回源
+
+- **WHEN** `rbac.user_role_cache.enabled=false`
+- **THEN** 系统 MUST 不创建通用 loading cache，并逐次从 PostgreSQL 回源当前启用角色
+- **AND** `InvalidateUserRole` 与 `InvalidateAllUserRoles` MUST 保持同步幂等且不得引入旧 load 写回路径
+- **AND** 回源成功 MUST 返回独立角色 ID slice，回源错误或 context 取消 MUST 保持 fail-closed
 
 ### Requirement: RBAC feature cache 配置与依赖边界
 

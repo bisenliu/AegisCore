@@ -44,7 +44,7 @@
 
 ### Requirement: Metrics 与部署观测资产
 
-系统 MUST 提供显式表达启用或禁用状态的非 nil Prometheus metrics provider。HTTP、runtime、scheduler、workerpool、SQL、Redis、localcache 和 feature metrics MUST 稳定、低基数且不泄露敏感数据；localcache 稳定指标契约 MUST 只覆盖请求、回源、自动驱逐和 item 容量。系统 MUST 维护 Prometheus alerts、Grafana dashboards、Compose 观测配置、生成脚本和 runbook。PostgreSQL 与 Redis 资源名 MUST 分别为 `primary_db` 和 `cache_redis`；metrics `service` label、tracing `service.name`、日志与健康响应 `service` 字段、dashboard 变量和 alert 表达式 MUST 统一使用 `aegiscore-user-service`，MUST NOT 保留旧 `aegiscore-user-services` label、查询或兼容资产。metrics Fx provider MUST 以可识别的能力名称由 composition root 显式装配。
+系统 MUST 提供显式表达启用或禁用状态的非 nil Prometheus metrics provider。HTTP、runtime、scheduler、workerpool、SQL、Redis、localcache 和 feature metrics MUST 稳定、低基数且不泄露敏感数据；localcache 稳定指标契约 MUST 只覆盖请求、回源、容量驱逐和 item 容量。系统 MUST 维护 Prometheus alerts、Grafana dashboards、Compose 观测配置、生成脚本和 runbook。PostgreSQL 与 Redis 资源名 MUST 分别为 `primary_db` 和 `cache_redis`；metrics `service` label、tracing `service.name`、日志与健康响应 `service` 字段、dashboard 变量和 alert 表达式 MUST 统一使用 `aegiscore-user-service`，MUST NOT 保留旧 `aegiscore-user-services` label、查询或兼容资产。metrics Fx provider MUST 以可识别的能力名称由 composition root 显式装配。
 
 #### Scenario: Metrics 启停、依赖与标签契约
 
@@ -65,13 +65,15 @@
 
 - **WHEN** cache 命中、未命中、loader 成功或失败
 - **THEN** 系统 MUST 分别通过 `aegiscore_localcache_requests_total{cache,result="hit|miss"}` 和 `aegiscore_localcache_loads_total{cache,result="success|error"}` 导出累计值，success MUST 直接来自 `Stats.LoadSuccess`，MUST NOT 由 load 总数减去 error 推导
-- **WHEN** TTL 过期或达到最大 item 数自动移除条目，或 collector 读取容量
-- **THEN** 系统 MUST 通过 `aegiscore_localcache_evictions_total{cache}` 和 `aegiscore_localcache_capacity{cache}` 导出累计自动驱逐值与配置容量，显式 `Delete` 或 `Clear` MUST NOT 计入 eviction
+- **WHEN** 达到最大 item 数发生容量驱逐，或 collector 读取容量
+- **THEN** 系统 MUST 通过 `aegiscore_localcache_capacity_evictions_total{cache}` 和 `aegiscore_localcache_capacity{cache}` 导出累计容量驱逐值与配置容量
+- **WHEN** item 因 TTL 到期、`Invalidate` 或 `InvalidateAll` 被移除
+- **THEN** `aegiscore_localcache_capacity_evictions_total` MUST NOT 增加，系统 MUST NOT 把这些移除解释为容量压力
 - **AND** 标签 MUST 仅使用固定 cache 名和 result 枚举，MUST NOT 包含 raw key、身份标识或原始错误
-- **AND** 系统 MUST NOT 导出或查询 `aegiscore_localcache_singleflight_total`、`aegiscore_localcache_writes_total`，MUST NOT 将 shared、double-check、set-dropped 或 admission-rejected 保留为稳定统计字段、event label 或兼容 PromQL
+- **AND** 系统 MUST NOT 导出或查询 `aegiscore_localcache_evictions_total`、`aegiscore_localcache_singleflight_total` 或 `aegiscore_localcache_writes_total`，MUST NOT 将 shared、double-check、set-dropped、admission-rejected、explicit invalidation 或 TTL expiration 保留为稳定统计字段、event label 或兼容 PromQL
 - **WHEN** metrics provider 禁用
 - **THEN** localcache collector MUST NOT 注册，但 localcache MUST 继续维护可由 `Stats()` 读取的快照
-- **AND** dashboard、alert、metrics load 校验和 runbook MUST 仅消费 requests、loads、evictions、capacity 及固定 `cache`、`result` 标签，并与源 dashboard 和 provisioning JSON 在同一变更中保持一致
+- **AND** dashboard、alert、metrics load 校验和 runbook MUST 仅消费 requests、loads、capacity evictions、capacity 及固定 `cache`、`result` 标签，并与源 dashboard 和 provisioning JSON 在同一变更中保持一致
 
 #### Scenario: 依赖探测、安全指标与资产 drift
 

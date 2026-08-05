@@ -87,29 +87,38 @@
 
 ### Requirement: Token version 校验与会话撤销
 
-系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地 loading cache 和 Redis 投影加速校验。缓存未命中、关闭、过期、驱逐或显式禁用只能影响性能，MUST NOT 改变认证与撤销语义。退出全部会话和密码变更 MUST 递增主事实，使旧 access token 失效并撤销相应 refresh sessions。token-version feature cache MUST 由 user-service 私有配置提供完整默认值、启用时校验和到通用 localcache 配置的集中映射，auth 构造路径 MUST 只消费窄 auth settings。递增 `token_version` 或更新凭证并返回新 `token_version` MUST 是单一确定的 PostgreSQL 结果，成功路径 MUST NOT 在提交后通过第二条 `SELECT` 才获取撤销版本。
+系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地 loading cache 和 Redis 投影加速校验。缓存未命中、过期、容量驱逐或显式禁用只能影响性能，MUST NOT 改变认证与撤销语义。退出全部会话和密码变更 MUST 递增主事实，使旧 access token 失效并撤销相应 refresh sessions。token-version feature cache MUST 由 user-service 私有配置提供完整默认值、启用时校验和到通用 localcache 配置的集中映射，auth 构造路径 MUST 只消费窄 auth settings。递增 `token_version` 或更新凭证并返回新 `token_version` MUST 是单一确定的 PostgreSQL 结果，成功路径 MUST NOT 在提交后通过第二条 `SELECT` 才获取撤销版本。
 
 #### Scenario: 受保护访问与本地缓存
 
 - **WHEN** access token 已通过签名、subject 和过期校验
 - **THEN** 系统 MUST 按有界本地缓存、Redis 投影和 PostgreSQL 当前值的顺序解析 token version，版本不一致时 MUST 拒绝访问，Redis miss 后 MAY 回源并回填
+- **AND** UUID MUST 在 validator 边界转换为规范 string key；`int64` token version MUST 直接缓存，MUST NOT 配置 common key encoder 或 clone callback
 - **AND** 系统 MUST NOT 缓存错误结果；容量驱逐或 TTL 过期后 MUST 可通过同 key 合并回源恢复校验，不得依赖异步写入可见性
 - **WHEN** `auth.token_version_cache` 未配置
 - **THEN** user-service MUST 使用 `enabled=true`、`size=100000`、`ttl=1s` 和 `load_timeout=300ms` 的完整默认值
 - **WHEN** `auth.token_version_cache.enabled` 为 true
 - **THEN** 具名 `auth_token_version` cache 的 `size`、`ttl` 和 `load_timeout` MUST 为正值，`size` MUST 表示最大 item 数
-- **AND** auth feature MUST 直接提供 string key，MUST NOT 配置 common key encoder；`int64` token version MUST 直接缓存，MUST NOT 配置 clone callback
 - **WHEN** cache 被禁用
 - **THEN** 系统 MUST 忽略 cache 的 `size`、`ttl` 和 `load_timeout`，不创建通用 loading cache，并保持校验和撤销正确
 - **AND** direct stats source MUST 使用 `LoadSuccess` 与 `LoadError` 表达逐次回源结果
 
-#### Scenario: Redis 投影更新
+#### Scenario: Redis 投影更新与本地失效顺序
 
 - **WHEN** 系统写入 Redis token version 投影
 - **THEN** 正数 `auth.token_version_cache_ttl` MUST 作为显式 TTL，零值或负值 MUST 使用服务默认 TTL，MUST NOT 创建永久投影
-- **WHEN** PostgreSQL `token_version` 增加
-- **THEN** 系统 MUST 失效本实例本地缓存并刷新 Redis 投影，旧版本 MUST NOT 覆盖较新版本
-- **AND** Redis 刷新失败时 MUST 尝试删除投影，使后续校验回源 PostgreSQL；本地失效或投影失败 MUST 被记录并作为可观察错误返回
+- **WHEN** PostgreSQL `token_version` 增加并进入撤销编排
+- **THEN** 系统 MUST 在 Redis 投影更新前执行第一次本地 `Invalidate`，在更新后执行第二次本地 `Invalidate`，旧版本 MUST NOT 覆盖较新版本
+- **AND** 删除 refresh sessions 后 MUST NOT 为旧 localcache 生命周期兼容执行第三次本地失效
+- **AND** Redis 刷新失败时 MUST 尝试删除投影，使后续校验回源 PostgreSQL；投影失败 MUST 被记录并作为可观察错误返回
+
+#### Scenario: Token version 并发失效保持 fail-closed
+
+- **WHEN** token-version loader 在本地失效前开始且在失效后完成
+- **THEN** 旧 token version MUST NOT 返回给 validator，也 MUST NOT 回填本地缓存
+- **AND** localcache MUST 透明重试后只返回失效后的新版本；若重试再次与失效并发，validator MUST 对 `ErrInvalidated` fail-closed
+- **WHEN** 撤销流程与旧 access token 校验并发
+- **THEN** 撤销所需本地失效返回后，旧 loader MUST NOT 使旧 access token 获得认证成功
 
 #### Scenario: 退出当前会话
 
@@ -142,7 +151,7 @@
 
 #### Scenario: 撤销投影不完整
 
-- **WHEN** PostgreSQL 主事实已更新并已返回新 `token_version`，但本地缓存失效、Redis 投影刷新或 refresh session 删除失败
+- **WHEN** PostgreSQL 主事实已更新并已返回新 `token_version`，但 Redis 投影刷新或 refresh session 删除失败
 - **THEN** use case MUST 返回 `authdomain.ErrSessionRevocationIncomplete`，MUST NOT 返回普通成功结果
 - **AND** 错误链 MUST 保留底层原因，metrics MUST 将结果记录为撤销不完整失败
 
@@ -199,9 +208,11 @@ user-service auth feature MUST 私有拥有 token issuer、claims schema、subje
 
 #### Scenario: 自有资源生命周期与共享资源所有权
 
-- **WHEN** auth session purge pool、本地缓存或其他主动资源启用、停止或启动失败
-- **THEN** composition MUST 显式创建、启动和幂等关闭 auth 自有资源；部分失败时 MUST 立即清理并保留原始失败与清理失败，关闭 MUST 受 context/deadline 约束，disabled 或 direct 模式 MUST 提供一致 no-op close
-- **AND** auth MUST NOT 关闭共享 Redis client、Redis 投影存储或 PostgreSQL 用户存储，且自有资源 MUST 先于共享 Redis client 关闭
+- **WHEN** auth session purge pool 或其他主动资源启用、停止或启动失败
+- **THEN** composition MUST 显式创建、启动和幂等关闭 auth 自有主动资源；部分失败时 MUST 立即清理并保留原始失败与清理失败，关闭 MUST 受 context/deadline 约束
+- **WHEN** token-version localcache 启用或禁用
+- **THEN** composition MUST 提供 cache 或 direct validator 所需的稳定读取、失效和统计视图，MUST NOT 为 localcache 创建 `Close`、`ErrClosed`、resource closed 状态或 no-op close 生命周期
+- **AND** auth MUST NOT 关闭共享 Redis client、Redis 投影存储或 PostgreSQL 用户存储，且 auth 自有主动资源 MUST 先于共享 Redis client 关闭
 - **AND** 资源不可用时受保护访问和撤销 MUST 明确报错或 fail-closed，MUST NOT 因 holder 为空而放行旧 token、无效 session 或撤销不完整结果
 
 #### Scenario: 日志与 Redis key 命名
