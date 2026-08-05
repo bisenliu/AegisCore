@@ -37,6 +37,12 @@
 
 不要通过重启实例作为唯一处置；如果重启后 goroutine 数量随流量持续线性增长，应保留 profile、日志和变更窗口，优先回滚最近涉及 goroutine 生命周期、请求上下文取消、Redis Pub/Sub、scheduler 或 workerpool 的发布。
 
+### scheduler-job-failed
+
+`aegiscore_scheduler_jobs_total{event="failed"}` 增加表示已开始的任务返回 error、panic 或因锁续租失败结束。先按固定低基数 `scheduler_job` label 定位任务，再检查同一时间窗口的结构化日志和依赖指标。`aegiscore_scheduler_job_duration_seconds` 只覆盖 started 到任务退出的实际执行时间，不包含本地 overlap、全局并发或分布式锁等待；排查等待堆积时应同时查看 goroutine profile 和 scheduler skipped reason。
+
+`event="lock_renew_failed"` 增加表示 Redis lease 续租失败。检查 `cache_redis` 可用性、网络、任务 TTL、renew interval/timeout 和任务是否协作响应 context；不得把 owner-token lease 当作 exactly-once 或 fencing。`ContinueOnFailure` 只决定续租失败后是否立即取消任务，最终结果仍保留续租失败语义。高频任务同时启用 overlap 与全局或锁 wait 时可能形成等待 goroutine，应降低触发频率、关闭 overlap 或改用 skip 策略，而不是假设 scheduler 提供持久队列。
+
 ## RBAC Alerts
 
 ### rbac-watcher-stopped

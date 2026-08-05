@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -60,6 +61,17 @@ func TestRedisLockRenewExtendsTTL(t *testing.T) {
 	require.Greater(t, ttl, 3*time.Second)
 }
 
+func TestRedisLockRenewRejectsLostOwnership(t *testing.T) {
+	_, client := newMiniRedisClient(t)
+	locker := newTestRedisLocker(t, client)
+
+	lock, ok, err := locker.Acquire(context.Background(), "nightly", time.Minute, 0)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.NoError(t, client.Set(context.Background(), "aegiscore:cron:nightly", "other-owner", time.Minute).Err())
+	require.ErrorIs(t, lock.Renew(context.Background(), time.Minute), ErrLockNotOwned)
+}
+
 func TestRedisLockerWaitTimeoutReturnsBusy(t *testing.T) {
 	_, client := newMiniRedisClient(t)
 	locker := newTestRedisLocker(t, client)
@@ -107,6 +119,33 @@ func TestRedisLockerMaxAttemptsLimitsRetries(t *testing.T) {
 	require.LessOrEqual(t, time.Since(startedAt), 100*time.Millisecond)
 }
 
+func TestRedisLockerWaitHonorsParentCancellation(t *testing.T) {
+	_, client := newMiniRedisClient(t)
+	locker := newTestRedisLocker(t, client)
+	firstLock, ok, err := locker.Acquire(context.Background(), "nightly", time.Minute, 0)
+	require.NoError(t, err)
+	require.True(t, ok)
+	defer func() { _ = firstLock.Unlock(context.Background()) }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, ok, err = locker.Acquire(ctx, "nightly", time.Minute, time.Second)
+	require.False(t, ok)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestRedisLockerReturnsRedisError(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	locker := newTestRedisLocker(t, client)
+	require.NoError(t, client.Close())
+
+	_, ok, err := locker.Acquire(context.Background(), "nightly", time.Minute, 0)
+	require.False(t, ok)
+	require.Error(t, err)
+	require.False(t, errors.Is(err, context.Canceled))
+}
+
 func TestRetryPolicyDefaultsAndBackoff(t *testing.T) {
 	policy, err := normalizeRetryPolicy(RetryPolicy{})
 	require.NoError(t, err)
@@ -122,12 +161,43 @@ func TestRetryPolicyDefaultsAndBackoff(t *testing.T) {
 	require.Equal(t, time.Second, delay)
 }
 
+func TestRetryJitterStaysWithinConfiguredBounds(t *testing.T) {
+	locker := &RedisLocker{retry: RetryPolicy{Jitter: true}}
+	for range 100 {
+		delay := locker.retryDelay(100 * time.Millisecond)
+		require.GreaterOrEqual(t, delay, 50*time.Millisecond)
+		require.LessOrEqual(t, delay, 100*time.Millisecond)
+	}
+}
+
 func TestRetryPolicyRejectsInvalidIntervals(t *testing.T) {
 	_, err := normalizeRetryPolicy(RetryPolicy{
 		InitialInterval: time.Second,
 		MaxInterval:     time.Millisecond,
 	})
 	require.ErrorIs(t, err, ErrInvalidLock)
+}
+
+func TestRedisLockerSupportsClusterClient(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs: []string{server.Addr()},
+		ClusterSlots: func(context.Context) ([]redis.ClusterSlot, error) {
+			return []redis.ClusterSlot{{
+				Start: 0,
+				End:   16383,
+				Nodes: []redis.ClusterNode{{Addr: server.Addr()}},
+			}}, nil
+		},
+	})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	locker := newTestRedisLocker(t, client)
+
+	lock, ok, err := locker.Acquire(context.Background(), "cluster-job", time.Minute, 0)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.NoError(t, lock.Renew(context.Background(), time.Minute))
+	require.NoError(t, lock.Unlock(context.Background()))
 }
 
 func newMiniRedisClient(t *testing.T) (*miniredis.Miniredis, *redis.Client) {

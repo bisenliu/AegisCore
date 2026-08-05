@@ -218,8 +218,26 @@ func TestSchedulerMetricsAdapterRecordsEvents(t *testing.T) {
 	jobs := gatherFamily(t, provider, schedulerJobsMetricName)
 	assertMetricWithLabelsValue(t, jobs, map[string]string{
 		LabelSchedulerJob: "rbac_policy_version_check",
+		LabelEvent:        schedulerEventTriggered,
+		LabelStatus:       schedulerStatusSuccess,
+		LabelReason:       schedulerReasonNone,
+	}, 1)
+	assertMetricWithLabelsValue(t, jobs, map[string]string{
+		LabelSchedulerJob: "rbac_policy_version_check",
+		LabelEvent:        schedulerEventStarted,
+		LabelStatus:       schedulerStatusSuccess,
+		LabelReason:       schedulerReasonNone,
+	}, 1)
+	assertMetricWithLabelsValue(t, jobs, map[string]string{
+		LabelSchedulerJob: "rbac_policy_version_check",
 		LabelEvent:        schedulerEventCompleted,
 		LabelStatus:       schedulerStatusSuccess,
+		LabelReason:       schedulerReasonNone,
+	}, 1)
+	assertMetricWithLabelsValue(t, jobs, map[string]string{
+		LabelSchedulerJob: "rbac_policy_version_check",
+		LabelEvent:        schedulerEventFailed,
+		LabelStatus:       schedulerStatusFailure,
 		LabelReason:       schedulerReasonNone,
 	}, 1)
 	assertMetricWithLabelsValue(t, jobs, map[string]string{
@@ -238,6 +256,8 @@ func TestSchedulerMetricsAdapterRecordsEvents(t *testing.T) {
 	duration := gatherFamily(t, provider, schedulerJobDurationMetricName)
 	assertHistogramSampleCount(t, duration, map[string]string{LabelSchedulerJob: "rbac_policy_version_check", LabelStatus: schedulerStatusSuccess}, 1)
 	assertHistogramSampleCount(t, duration, map[string]string{LabelSchedulerJob: "rbac_policy_version_check", LabelStatus: schedulerStatusFailure}, 1)
+	assertHistogramSampleSum(t, duration, map[string]string{LabelSchedulerJob: "rbac_policy_version_check", LabelStatus: schedulerStatusSuccess}, 0.05)
+	assertHistogramSampleSum(t, duration, map[string]string{LabelSchedulerJob: "rbac_policy_version_check", LabelStatus: schedulerStatusFailure}, 0.075)
 }
 
 func TestSchedulerMetricsAdapterDisabledProviderReturnsNop(t *testing.T) {
@@ -376,6 +396,12 @@ func assertHistogramSampleCount(t *testing.T, family *io_prometheus_client.Metri
 	t.Helper()
 	metric := findMetricWithLabels(t, family, labels)
 	require.Equalf(t, want, metric.GetHistogram().GetSampleCount(), "%s labels %#v sample count", family.GetName(), labels)
+}
+
+func assertHistogramSampleSum(t *testing.T, family *io_prometheus_client.MetricFamily, labels map[string]string, want float64) {
+	t.Helper()
+	metric := findMetricWithLabels(t, family, labels)
+	require.InDeltaf(t, want, metric.GetHistogram().GetSampleSum(), 0.000001, "%s labels %#v sample sum", family.GetName(), labels)
 }
 
 func findMetricWithLabels(t *testing.T, family *io_prometheus_client.MetricFamily, labels map[string]string) *io_prometheus_client.Metric {

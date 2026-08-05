@@ -39,6 +39,10 @@
 - `scheduler` 不是 feature orchestration、outbox 或具体 Prometheus registry wiring。
 - `openapi` helper 不拥有服务 API server、auth scheme、source scan range 或输出目录。
 
+`runtime/scheduler` 使用固定 job key 提供 `Add`、`Remove`、`Start` 和 `Stop`。nil `LockPolicy` 表示不加分布式锁，正数 `WaitTimeout` 表示在总上限内重试等待，nil `RenewPolicy` 表示不续租；全局并发、Redis retry、owner token 锁和续租能力均保留。内部执行顺序固定为 triggered、本地 overlap、全局并发、锁、任务 context、续租、started/result 和 task，各 stage 只释放自身资源。
+
+`AllowOverlap=true` 与全局或锁 wait 组合会让高频触发形成等待 goroutine，scheduler 不提供持久队列或 pending 上限。Redis 锁是需要任务协作响应 context 的 lease，不提供 exactly-once、fencing 或 goroutine 强杀保证；长任务必须配置足够 TTL 和续租，并保证副作用幂等。
+
 ## 开发
 
 从仓库根目录执行：

@@ -2481,7 +2481,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "按 scheduler_job 和 status 展示任务执行耗时 P95。",
+      "description": "按 scheduler_job 和 status 展示任务实际执行耗时 P95，不包含并发或分布式锁等待。",
       "fieldConfig": {
         "defaults": {
           "color": {

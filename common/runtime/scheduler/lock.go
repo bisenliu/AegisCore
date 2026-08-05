@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -16,12 +17,15 @@ import (
 
 // Locker 定义调度器使用的分布式锁能力。
 type Locker interface {
+	// Acquire 在 waitTimeout 总时限内获取指定 key 的 owner lock。
 	Acquire(ctx context.Context, key string, ttl time.Duration, waitTimeout time.Duration) (Lock, bool, error)
 }
 
 // Lock 定义已持有锁的释放和续租能力。
 type Lock interface {
+	// Unlock 仅允许当前 owner 释放锁。
 	Unlock(ctx context.Context) error
+	// Renew 仅允许当前 owner 刷新锁 TTL。
 	Renew(ctx context.Context, ttl time.Duration) error
 }
 
@@ -52,6 +56,12 @@ type redisLock struct {
 	key    string
 	token  string
 }
+
+var (
+	// Script 会缓存 SHA 并在 NOSCRIPT 时回退 EVAL，所有调用仍通过 owner token 校验。
+	redisUnlockScript = redis.NewScript(`if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) else return 0 end`)
+	redisRenewScript  = redis.NewScript(`if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("PEXPIRE", KEYS[1], ARGV[2]) else return 0 end`)
+)
 
 // NewRedisLocker 使用已有 Redis client 构造分布式锁实现。
 func NewRedisLocker(client redis.UniversalClient, opts RedisLockerOptions) (*RedisLocker, error) {
@@ -94,6 +104,9 @@ func (l *RedisLocker) Acquire(ctx context.Context, key string, ttl time.Duration
 	if ttl <= 0 {
 		return nil, false, fmt.Errorf("%w: ttl must be positive", ErrInvalidLock)
 	}
+	if waitTimeout < 0 {
+		return nil, false, fmt.Errorf("%w: wait timeout must not be negative", ErrInvalidLock)
+	}
 
 	fullKey, err := l.builder.Key(key)
 	if err != nil {
@@ -104,25 +117,43 @@ func (l *RedisLocker) Acquire(ctx context.Context, key string, ttl time.Duration
 		return nil, false, err
 	}
 
-	deadline := time.Now().Add(waitTimeout)
-	attempt := 1
-	nextDelay := l.retry.InitialInterval
-	for {
+	if waitTimeout == 0 {
 		acquired, err := l.client.SetNX(ctx, fullKey, token, ttl).Result()
 		if err != nil {
 			return nil, false, err
 		}
+		if !acquired {
+			return nil, false, nil
+		}
+		return &redisLock{client: l.client, key: fullKey, token: token}, true, nil
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, waitTimeout)
+	defer cancel()
+
+	// waitCtx 表达所有重试共享的总等待上限，单次退避不会越过该 deadline。
+	attempt := 1
+	nextDelay := l.retry.InitialInterval
+	for {
+		acquired, err := l.client.SetNX(waitCtx, fullKey, token, ttl).Result()
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, false, ctx.Err()
+			}
+			if errors.Is(err, context.DeadlineExceeded) || waitCtx.Err() != nil {
+				return nil, false, nil
+			}
+			return nil, false, err
+		}
 		if acquired {
 			return &redisLock{client: l.client, key: fullKey, token: token}, true, nil
-		}
-		if waitTimeout <= 0 || time.Now().After(deadline) {
-			return nil, false, nil
 		}
 		if l.retry.MaxAttempts > 0 && attempt >= l.retry.MaxAttempts {
 			return nil, false, nil
 		}
 
 		sleep := l.retryDelay(nextDelay)
+		deadline, _ := waitCtx.Deadline()
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			return nil, false, nil
@@ -134,8 +165,14 @@ func (l *RedisLocker) Acquire(ctx context.Context, key string, ttl time.Duration
 		timer := time.NewTimer(sleep)
 		select {
 		case <-ctx.Done():
-			timer.Stop()
+			stopTimer(timer)
 			return nil, false, ctx.Err()
+		case <-waitCtx.Done():
+			stopTimer(timer)
+			if ctx.Err() != nil {
+				return nil, false, ctx.Err()
+			}
+			return nil, false, nil
 		case <-timer.C:
 		}
 		attempt++
@@ -148,8 +185,7 @@ func (l *redisLock) Unlock(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	const script = `if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) else return 0 end`
-	result, err := l.client.Eval(ctx, script, []string{l.key}, l.token).Int()
+	result, err := redisUnlockScript.Run(ctx, l.client, []string{l.key}, l.token).Int()
 	if err != nil {
 		return err
 	}
@@ -167,8 +203,7 @@ func (l *redisLock) Renew(ctx context.Context, ttl time.Duration) error {
 	if ttl <= 0 {
 		return fmt.Errorf("%w: ttl must be positive", ErrInvalidLock)
 	}
-	const script = `if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("PEXPIRE", KEYS[1], ARGV[2]) else return 0 end`
-	result, err := l.client.Eval(ctx, script, []string{l.key}, l.token, ttl.Milliseconds()).Int()
+	result, err := redisRenewScript.Run(ctx, l.client, []string{l.key}, l.token, ttl.Milliseconds()).Int()
 	if err != nil {
 		return err
 	}
@@ -178,6 +213,7 @@ func (l *redisLock) Renew(ctx context.Context, ttl time.Duration) error {
 	return nil
 }
 
+// randomToken 生成单次 acquire 使用的随机 owner token。
 func randomToken() (string, error) {
 	token := make([]byte, 16)
 	if _, err := rand.Read(token); err != nil {
@@ -186,6 +222,7 @@ func randomToken() (string, error) {
 	return hex.EncodeToString(token), nil
 }
 
+// normalizeRetryPolicy 填充 retry 默认值并拒绝无法执行的区间或次数配置。
 func normalizeRetryPolicy(policy RetryPolicy) (RetryPolicy, error) {
 	if policy.InitialInterval <= 0 {
 		policy.InitialInterval = 50 * time.Millisecond
@@ -202,6 +239,7 @@ func normalizeRetryPolicy(policy RetryPolicy) (RetryPolicy, error) {
 	return policy, nil
 }
 
+// retryDelay 根据配置返回当前退避时长，并在启用时施加有界 jitter。
 func (l *RedisLocker) retryDelay(delay time.Duration) time.Duration {
 	// jitter 在 [delay/2, delay] 内随机；随机源异常时回退原 delay，避免锁竞争路径引入额外错误。
 	if !l.retry.Jitter || delay <= 1 {
@@ -219,6 +257,7 @@ func (l *RedisLocker) retryDelay(delay time.Duration) time.Duration {
 	return min + time.Duration(offset.Int64())
 }
 
+// nextRetryDelay 计算下一次指数退避，并在溢出或超过上限时截断。
 func nextRetryDelay(current time.Duration, max time.Duration) time.Duration {
 	// 倍增退避在溢出或超过上限时截断到 max。
 	if current <= 0 {
@@ -232,4 +271,15 @@ func nextRetryDelay(current time.Duration, max time.Duration) time.Duration {
 		return max
 	}
 	return next
+}
+
+// stopTimer 在取消分支回收 timer，且兼容 timer channel 已触发或已被消费的状态。
+func stopTimer(timer *time.Timer) {
+	if timer.Stop() {
+		return
+	}
+	select {
+	case <-timer.C:
+	default:
+	}
 }

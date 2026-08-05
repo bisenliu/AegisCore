@@ -38,6 +38,8 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 | `common/testing/` | Postgres/Redis Testcontainers 和 fixtures |
 | `common/validation/` | validator、翻译、字段和错误 |
 
+Scheduler 对外只暴露固定 key 的注册/删除和生命周期操作，以 nil/non-nil lock、renew policy 以及 `WaitTimeout` 表达策略。内部不可导出的 pipeline 固定串联本地 overlap、全局并发、Redis lock、任务 context、续租与结果观测，每个 stage 通过局部 `defer` 释放自身资源；completed/failed duration 从任务 started 计算，不包含 gate 或 lock wait。全局/锁 wait 在高频且允许 overlap 时可能积累等待 goroutine，不等价于有界任务队列。Redis owner-token lock 仍是 lease，不提供 exactly-once 或 fencing 保证。
+
 ## 3. `user-service` 运行入口
 
 `user-service/cmd/main.go` 定义 `aegiscore-user-service` CLI：

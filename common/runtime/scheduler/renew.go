@@ -2,62 +2,68 @@ package scheduler
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"go.uber.org/zap"
 )
 
-// startRenew 启动锁续租循环，并在不可恢复的续租失败时按任务策略取消任务。
-func (s *Scheduler) startRenew(jobCtx context.Context, cancelJob context.CancelFunc, cfg JobConfig, lock Lock) (func(), <-chan error) {
-	interval := cfg.Lock.RenewInterval
-	if interval <= 0 {
-		interval = cfg.Lock.TTL / 3
-	}
-	renewTimeout := cfg.Lock.RenewTimeout
-	if renewTimeout <= 0 {
-		renewTimeout = defaultLockRenewTimeout
-	}
+// renewGuard 归属于单次 invocation，stop 必须在 unlock 前完成。
+type renewGuard struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+	errCh  chan error
+}
 
-	renewCtx, cancelRenew := context.WithCancel(s.root)
-	done := make(chan struct{})
-	errCh := make(chan error, 1)
+// stop 由 renewStage 的单个 defer 调用，停止 goroutine 后返回本轮唯一的续租错误。
+func (g *renewGuard) stop() error {
+	g.cancel()
+	<-g.done
+	return <-g.errCh
+}
+
+// startRenewGuard 启动 invocation 局部续租循环，guard.stop 会停止并等待 goroutine。
+func (s *Scheduler) startRenewGuard(jobCtx context.Context, cancelJob context.CancelFunc, job Job, lock Lock) *renewGuard {
+	policy := job.Lock.Renew
+	renewCtx, cancelRenew := context.WithCancel(jobCtx)
+	guard := &renewGuard{
+		cancel: cancelRenew,
+		done:   make(chan struct{}),
+		errCh:  make(chan error, 1),
+	}
 
 	go func() {
-		defer close(done)
-		defer close(errCh)
+		defer close(guard.done)
+		defer close(guard.errCh)
 
-		ticker := time.NewTicker(interval)
+		ticker := time.NewTicker(policy.Interval)
 		defer ticker.Stop()
 
 		for {
 			select {
 			case <-renewCtx.Done():
 				return
-			case <-jobCtx.Done():
-				return
 			case <-ticker.C:
-				opCtx, cancel := context.WithTimeout(renewCtx, renewTimeout)
-				err := lock.Renew(opCtx, cfg.Lock.TTL)
+				// 每次 Redis 操作另有短 timeout，避免一次续租阻塞整个 guard drain。
+				opCtx, cancel := context.WithTimeout(renewCtx, policy.Timeout)
+				err := lock.Renew(opCtx, job.Lock.TTL)
 				cancel()
-				if err != nil {
-					if errors.Is(err, context.Canceled) && renewCtx.Err() != nil {
-						return
-					}
-					s.metrics.JobLockRenewFailed(cfg.Key)
-					s.logger.Error("scheduler job lock renew failed", zap.String("job", cfg.Key), zap.Error(err))
-					errCh <- err
-					if !cfg.Lock.ContinueOnRenewFailure {
-						cancelJob()
-					}
+				if err == nil {
+					continue
+				}
+				if renewCtx.Err() != nil {
 					return
 				}
+
+				s.metrics.JobLockRenewFailed(job.Key)
+				s.logger.Error("scheduler job lock renew failed", zap.String("job", job.Key), zap.Error(err))
+				guard.errCh <- err
+				if !policy.ContinueOnFailure {
+					cancelJob()
+				}
+				return
 			}
 		}
 	}()
 
-	return func() {
-		cancelRenew()
-		<-done
-	}, errCh
+	return guard
 }
