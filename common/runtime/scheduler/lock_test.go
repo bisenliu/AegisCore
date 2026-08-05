@@ -171,11 +171,23 @@ func TestRetryJitterStaysWithinConfiguredBounds(t *testing.T) {
 }
 
 func TestRetryPolicyRejectsInvalidIntervals(t *testing.T) {
-	_, err := normalizeRetryPolicy(RetryPolicy{
-		InitialInterval: time.Second,
-		MaxInterval:     time.Millisecond,
-	})
-	require.ErrorIs(t, err, ErrInvalidLock)
+	tests := map[string]RetryPolicy{
+		"initial greater than max": {
+			InitialInterval: time.Second,
+			MaxInterval:     time.Millisecond,
+		},
+		"negative initial": {InitialInterval: -time.Millisecond},
+		"negative max":     {MaxInterval: -time.Millisecond},
+		"negative attempts": {
+			MaxAttempts: -1,
+		},
+	}
+	for name, policy := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := normalizeRetryPolicy(policy)
+			require.ErrorIs(t, err, ErrInvalidLock)
+		})
+	}
 }
 
 func TestRedisLockerSupportsClusterClient(t *testing.T) {

@@ -58,30 +58,76 @@ func TestNewRejectsInvalidSchedulerConfiguration(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidJob)
 	_, err = New(Config{GlobalConcurrencyPolicy: "queue"})
 	require.ErrorIs(t, err, ErrInvalidJob)
+	_, err = New(Config{DefaultLockTTL: -time.Second})
+	require.ErrorIs(t, err, ErrInvalidLock)
 }
 
-func TestValidateJobNormalizesLockAndRenewPolicies(t *testing.T) {
-	s := newTestScheduler(t, Config{Locker: &recordingLocker{}, DefaultLockTTL: 30 * time.Second})
+func TestNormalizeJobCopiesAndDefaultsLockAndRenewPolicies(t *testing.T) {
+	locker := &recordingLocker{}
+	s := newTestScheduler(t, Config{Locker: locker, DefaultLockTTL: 30 * time.Second})
 	job := Job{
 		Key:  "renew-defaults",
 		Spec: "@daily",
 		Lock: &LockPolicy{Renew: &RenewPolicy{}},
 		Task: successfulTask,
 	}
-	require.NoError(t, s.validateJob(&job))
-	require.Equal(t, 30*time.Second, job.Lock.TTL)
-	require.Equal(t, 10*time.Second, job.Lock.Renew.Interval)
-	require.Equal(t, defaultLockRenewTimeout, job.Lock.Renew.Timeout)
+	normalized, err := s.normalizeJob(job)
+	require.NoError(t, err)
+	require.NotSame(t, job.Lock, normalized.Lock)
+	require.NotSame(t, job.Lock.Renew, normalized.Lock.Renew)
+	require.Zero(t, job.Lock.TTL)
+	require.Zero(t, job.Lock.Renew.Interval)
+	require.Zero(t, job.Lock.Renew.Timeout)
+	require.Equal(t, 30*time.Second, normalized.Lock.TTL)
+	require.Equal(t, 10*time.Second, normalized.Lock.Renew.Interval)
+	require.Equal(t, defaultLockRenewTimeout, normalized.Lock.Renew.Timeout)
+
+	job.Lock.TTL = time.Minute
+	job.Lock.Renew.Interval = 20 * time.Second
+	require.Equal(t, 30*time.Second, normalized.Lock.TTL)
+	require.Equal(t, 10*time.Second, normalized.Lock.Renew.Interval)
+
+	job.Lock.TTL = 0
+	job.Lock.Renew.Interval = 0
 	require.NoError(t, s.Add(job))
+	require.Zero(t, job.Lock.TTL)
+	require.Zero(t, job.Lock.Renew.Interval)
+	require.Zero(t, job.Lock.Renew.Timeout)
+	job.Lock.TTL = 45 * time.Second
+	s.cron.Entry(s.jobs["renew-defaults"]).Job.Run()
+	require.Equal(t, 30*time.Second, time.Duration(locker.lastTTL.Load()))
 
 	require.NoError(t, s.Add(Job{Key: "without-lock", Spec: "@daily", Task: successfulTask}))
 	withoutLocker := newTestScheduler(t, Config{})
 	require.ErrorIs(t, withoutLocker.Add(Job{Key: "missing-locker", Spec: "@daily", Lock: &LockPolicy{TTL: time.Minute}, Task: successfulTask}), ErrInvalidLock)
 
 	invalidWait := Job{Key: "wait", Spec: "@daily", Lock: &LockPolicy{TTL: time.Minute, WaitTimeout: -time.Second}, Task: successfulTask}
-	require.ErrorIs(t, s.validateJob(&invalidWait), ErrInvalidLock)
+	_, err = s.normalizeJob(invalidWait)
+	require.ErrorIs(t, err, ErrInvalidLock)
 	invalidTTL := Job{Key: "ttl", Spec: "@daily", Timeout: time.Minute, Lock: &LockPolicy{TTL: time.Minute}, Task: successfulTask}
-	require.ErrorIs(t, s.validateJob(&invalidTTL), ErrInvalidLock)
+	_, err = s.normalizeJob(invalidTTL)
+	require.ErrorIs(t, err, ErrInvalidLock)
+}
+
+func TestNormalizeJobRejectsNegativeLockAndRenewDurations(t *testing.T) {
+	s := newTestScheduler(t, Config{Locker: &recordingLocker{}})
+	tests := map[string]Job{
+		"lock ttl": {
+			Key: "job", Spec: "@daily", Lock: &LockPolicy{TTL: -time.Second}, Task: successfulTask,
+		},
+		"renew interval": {
+			Key: "job", Spec: "@daily", Lock: &LockPolicy{TTL: time.Minute, Renew: &RenewPolicy{Interval: -time.Second}}, Task: successfulTask,
+		},
+		"renew timeout": {
+			Key: "job", Spec: "@daily", Lock: &LockPolicy{TTL: time.Minute, Renew: &RenewPolicy{Interval: 10 * time.Second, Timeout: -time.Second}}, Task: successfulTask,
+		},
+	}
+	for name, job := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := s.normalizeJob(job)
+			require.ErrorIs(t, err, ErrInvalidLock)
+		})
+	}
 }
 
 func TestStartIsIdempotentAndStopRejectsRestartAndAdd(t *testing.T) {
@@ -163,7 +209,7 @@ func TestLockStageRecordsBusyAndErrorAndUsesWaitTimeout(t *testing.T) {
 		locker := &recordingLocker{}
 		s := newTestScheduler(t, Config{Locker: locker})
 		job := lockedJob("busy", 0, successfulTask)
-		require.NoError(t, s.validateJob(&job))
+		job = normalizeTestJob(t, s, job)
 		executeTestJob(s, job, newLocalGate())
 		assertSkipped(t, s.metrics.(*recordingMetrics), job.Key, "lock_busy")
 	})
@@ -172,7 +218,7 @@ func TestLockStageRecordsBusyAndErrorAndUsesWaitTimeout(t *testing.T) {
 		locker := &recordingLocker{err: errors.New("redis unavailable")}
 		s := newTestScheduler(t, Config{Locker: locker})
 		job := lockedJob("error", 0, successfulTask)
-		require.NoError(t, s.validateJob(&job))
+		job = normalizeTestJob(t, s, job)
 		executeTestJob(s, job, newLocalGate())
 		assertSkipped(t, s.metrics.(*recordingMetrics), job.Key, "lock_error")
 	})
@@ -181,7 +227,7 @@ func TestLockStageRecordsBusyAndErrorAndUsesWaitTimeout(t *testing.T) {
 		locker := &recordingLocker{lock: &recordingLock{}, acquired: true}
 		s := newTestScheduler(t, Config{Locker: locker})
 		job := lockedJob("wait", 125*time.Millisecond, successfulTask)
-		require.NoError(t, s.validateJob(&job))
+		job = normalizeTestJob(t, s, job)
 		executeTestJob(s, job, newLocalGate())
 		require.Equal(t, 125*time.Millisecond, time.Duration(locker.lastWaitTimeout.Load()))
 	})
@@ -194,7 +240,7 @@ func TestPanicRecordsFailureAndReleasesAllResources(t *testing.T) {
 		<-lock.renewStarted
 		panic("boom")
 	})
-	require.NoError(t, s.validateJob(&job))
+	job = normalizeTestJob(t, s, job)
 	localGate := newLocalGate()
 	require.Panics(t, func() { executeTestJob(s, job, localGate) })
 
@@ -250,7 +296,7 @@ func TestRenewFailureCancelsOrContinuesAndMergesErrors(t *testing.T) {
 			<-ctx.Done()
 			return nil
 		})
-		require.NoError(t, s.validateJob(&job))
+		job = normalizeTestJob(t, s, job)
 		executeTestJob(s, job, newLocalGate())
 		require.Equal(t, 1, s.metrics.(*recordingMetrics).lockRenewFailedCount(job.Key))
 		require.Equal(t, 1, s.metrics.(*recordingMetrics).failedCount(job.Key))
@@ -261,7 +307,7 @@ func TestRenewFailureCancelsOrContinuesAndMergesErrors(t *testing.T) {
 		lock := &recordingLock{renewErr: renewErr, renewStarted: make(chan struct{})}
 		s := newTestScheduler(t, Config{Locker: &recordingLocker{lock: lock, acquired: true}})
 		job := renewingJob("renew-continue", lock, true, successfulTask)
-		require.NoError(t, s.validateJob(&job))
+		job = normalizeTestJob(t, s, job)
 
 		inv := &invocation{ctx: context.Background(), job: job, lock: lock}
 		err := s.renewStage()(func(*invocation) error {
@@ -281,7 +327,7 @@ func TestRenewSuccessCompletesBeforeUnlock(t *testing.T) {
 		<-lock.renewStarted
 		return nil
 	})
-	require.NoError(t, s.validateJob(&job))
+	job = normalizeTestJob(t, s, job)
 	executeTestJob(s, job, newLocalGate())
 	require.GreaterOrEqual(t, lock.renewCount.Load(), int64(1))
 	require.True(t, lock.unlocked.Load())
@@ -295,7 +341,7 @@ func TestRenewGuardDrainsBlockedRenewAndUnlockUsesIndependentTimeout(t *testing.
 		<-lock.renewStarted
 		return nil
 	})
-	require.NoError(t, s.validateJob(&job))
+	job = normalizeTestJob(t, s, job)
 
 	done := make(chan struct{})
 	go func() {
@@ -316,7 +362,7 @@ func TestTaskTimeoutDoesNotReportRenewFailure(t *testing.T) {
 		return ctx.Err()
 	})
 	job.Timeout = 15 * time.Millisecond
-	require.NoError(t, s.validateJob(&job))
+	job = normalizeTestJob(t, s, job)
 	executeTestJob(s, job, newLocalGate())
 	require.Zero(t, s.metrics.(*recordingMetrics).lockRenewFailedCount(job.Key))
 	require.Equal(t, 1, s.metrics.(*recordingMetrics).failedCount(job.Key))
@@ -347,7 +393,7 @@ func TestDurationExcludesLockWait(t *testing.T) {
 	locker := &blockingLocker{started: make(chan struct{}), release: make(chan struct{}), lock: &recordingLock{}}
 	s := newTestScheduler(t, Config{Locker: locker})
 	job := lockedJob("lock-duration", time.Second, successfulTask)
-	require.NoError(t, s.validateJob(&job))
+	job = normalizeTestJob(t, s, job)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -399,6 +445,13 @@ func TestStopTimeoutKeepsSharedDrainAndCancelsActiveTask(t *testing.T) {
 }
 
 func successfulTask(context.Context) error { return nil }
+
+func normalizeTestJob(t *testing.T, s *Scheduler, job Job) Job {
+	t.Helper()
+	normalized, err := s.normalizeJob(job)
+	require.NoError(t, err)
+	return normalized
+}
 
 func executeTestJob(s *Scheduler, job Job, localGate chan struct{}) {
 	_ = s.buildPipeline(localGate)(&invocation{ctx: s.root, job: job})
@@ -540,10 +593,12 @@ type recordingLocker struct {
 	lock            Lock
 	acquired        bool
 	err             error
+	lastTTL         atomic.Int64
 	lastWaitTimeout atomic.Int64
 }
 
-func (l *recordingLocker) Acquire(_ context.Context, _ string, _ time.Duration, wait time.Duration) (Lock, bool, error) {
+func (l *recordingLocker) Acquire(_ context.Context, _ string, ttl time.Duration, wait time.Duration) (Lock, bool, error) {
+	l.lastTTL.Store(int64(ttl))
 	l.lastWaitTimeout.Store(int64(wait))
 	return l.lock, l.acquired, l.err
 }

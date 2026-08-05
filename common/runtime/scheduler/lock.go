@@ -224,10 +224,16 @@ func randomToken() (string, error) {
 
 // normalizeRetryPolicy 填充 retry 默认值并拒绝无法执行的区间或次数配置。
 func normalizeRetryPolicy(policy RetryPolicy) (RetryPolicy, error) {
-	if policy.InitialInterval <= 0 {
+	if policy.InitialInterval < 0 {
+		return RetryPolicy{}, fmt.Errorf("%w: retry initial interval must not be negative", ErrInvalidLock)
+	}
+	if policy.InitialInterval == 0 {
 		policy.InitialInterval = 50 * time.Millisecond
 	}
-	if policy.MaxInterval <= 0 {
+	if policy.MaxInterval < 0 {
+		return RetryPolicy{}, fmt.Errorf("%w: retry max interval must not be negative", ErrInvalidLock)
+	}
+	if policy.MaxInterval == 0 {
 		policy.MaxInterval = time.Second
 	}
 	if policy.InitialInterval > policy.MaxInterval {
