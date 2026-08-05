@@ -29,6 +29,75 @@ func TestNewRequestDefaults(t *testing.T) {
 	require.Nil(t, request.JSONData)
 }
 
+func TestSnapshotCopiesAndNormalizesRequestConfiguration(t *testing.T) {
+	request := &SendRequest{
+		URL:         "  https://example.com/resources  ",
+		Method:      "\tPATCH\n",
+		QueryParams: map[string]string{"page": "1"},
+		FormData:    map[string]string{"name": "aegis"},
+		Headers:     map[string]string{"X-Request-ID": "request-123"},
+		ProxyURL:    "  http://proxy.example.com  ",
+	}
+
+	snapshot, err := request.snapshot(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "https://example.com/resources", snapshot.url)
+	require.Equal(t, http.MethodPatch, snapshot.method)
+	require.Equal(t, "http://proxy.example.com", snapshot.proxyURL)
+	require.Equal(t, DefaultTimeout, snapshot.timeout)
+
+	request.QueryParams["page"] = "2"
+	request.FormData["name"] = "changed"
+	request.Headers["X-Request-ID"] = "changed"
+	require.Equal(t, "1", snapshot.queryParams["page"])
+	require.Equal(t, "aegis", snapshot.formData["name"])
+	require.Equal(t, "request-123", snapshot.headers["X-Request-ID"])
+
+	require.Equal(t, "  https://example.com/resources  ", request.URL)
+	require.Equal(t, "\tPATCH\n", request.Method)
+	require.Equal(t, "  http://proxy.example.com  ", request.ProxyURL)
+}
+
+func TestSendContextUsesTrimmedURLAndMethod(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		require.Equal(t, http.MethodGet, request.Method)
+		_, err := writer.Write([]byte("ok"))
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	request := NewRequest("  "+server.URL+"  ", "\tGET\n")
+	success, body, err := request.Send()
+	require.NoError(t, err)
+	require.True(t, success)
+	require.Equal(t, "ok", string(body))
+}
+
+func TestSendContextReusesRequestSequentiallyWithoutRestyRequestState(t *testing.T) {
+	received := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		received <- request.URL.Query().Get("page") + ":" + request.Header.Get("X-Request-ID")
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	request := NewRequest(server.URL, http.MethodGet)
+	request.QueryParams["page"] = "1"
+	request.Headers["X-Request-ID"] = "first"
+	firstSuccess, _, firstErr := request.Send()
+
+	request.QueryParams["page"] = "2"
+	request.Headers["X-Request-ID"] = "second"
+	secondSuccess, _, secondErr := request.Send()
+
+	require.NoError(t, firstErr)
+	require.NoError(t, secondErr)
+	require.True(t, firstSuccess)
+	require.True(t, secondSuccess)
+	require.Equal(t, "1:first", <-received)
+	require.Equal(t, "2:second", <-received)
+}
+
 func TestSendContextUsesDefaultTimeoutForZeroValue(t *testing.T) {
 	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		deadline, ok := request.Context().Deadline()
@@ -232,7 +301,7 @@ func TestSendContextUsesProxyURL(t *testing.T) {
 	defer proxy.Close()
 
 	request := NewRequest("http://upstream.invalid/through-proxy", http.MethodGet)
-	request.ProxyURL = proxy.URL
+	request.ProxyURL = "  " + proxy.URL + "\t"
 
 	success, body, err := request.Send()
 	require.NoError(t, err)
@@ -335,6 +404,7 @@ func TestDefaultRestyClientDoesNotPersistCookiesOrRetry(t *testing.T) {
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
+// RoundTrip 将请求转发给测试函数。
 func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return fn(request)
 }
@@ -343,6 +413,7 @@ type roundTripStub struct {
 	roundTrip func(*http.Request) (*http.Response, error)
 }
 
+// RoundTrip 将请求转发给可检查身份的测试 stub。
 func (stub *roundTripStub) RoundTrip(request *http.Request) (*http.Response, error) {
 	return stub.roundTrip(request)
 }
