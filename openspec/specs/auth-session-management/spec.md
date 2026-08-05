@@ -1,10 +1,10 @@
 ## Purpose
 
-定义 user-service 的认证会话能力，覆盖登录、用途隔离 token、refresh 轮换、token version 主事实、会话撤销、改密、HTTP 契约和认证资源生命周期。
+定义 user-service 的认证会话能力，覆盖登录、用途隔离 token、refresh 轮换、token version 主事实、会话撤销、强制改密、HTTP 契约和认证资源生命周期。
 ## Requirements
-### Requirement: 登录、用途隔离令牌与 HTTP 契约
+### Requirement: 登录、用途隔离令牌与 HTTP 边界
 
-系统 MUST 在凭证、用户状态和会话策略校验通过后签发用途隔离的 access、refresh 或 password-change token。所有 token MUST 包含标准 `jti`，并通过 `access`、`refresh` 和 `password_change` subject 限定使用流程；任一用途、subject 或必要 claims 不匹配时 MUST 被拒绝。系统 MUST 仅通过 `/api/v1/auth` 暴露认证入口，并使用共享 response helper 渲染业务错误。强制改密 HTTP 入口 MUST 使用 `POST /api/v1/auth/force-change-password`，MUST NOT 暴露旧 `POST /api/v1/auth/change-password` 路径。
+系统 MUST 在凭证、用户状态和会话策略校验通过后签发用途隔离的 access、refresh 或 password-change token。所有 token MUST 包含标准 `jti`，并通过 `access`、`refresh` 和 `password_change` subject 限定使用流程；任一用途、subject 或必要 claims 不匹配时 MUST 被拒绝。系统 MUST 仅通过 `/api/v1/auth` 暴露认证入口，执行请求体容量检查，并使用共享 response helper 渲染业务错误。登录审计客户端地址 MUST 来自 Gin trusted proxy 规则解析后的 `c.ClientIP()`。
 
 #### Scenario: 普通登录成功
 
@@ -32,7 +32,7 @@
 - **WHEN** 调用方访问登录、refresh 或强制改密入口
 - **THEN** controller MUST 允许请求进入并在业务层校验相应凭据或 token
 - **AND** 强制改密入口 MUST 挂载为 `POST /api/v1/auth/force-change-password`，MUST 使用 `password_change` 受限 token 和一次性 password-change session 完成校验，MUST NOT 要求普通 access token middleware 先放行
-- **AND** 退出当前会话、退出全部会话和普通改密 MUST 在业务处理前校验 bearer token、user-service access claims 和 token version
+- **AND** 退出当前会话和退出全部会话 MUST 在业务处理前校验 bearer token、user-service access claims 和 token version
 - **AND** 系统 MUST NOT 暴露旧认证路径别名或认证绕过路径，包括 `POST /api/v1/auth/change-password`
 - **AND** 共享认证 middleware 只 MUST 获得 access token 验证能力，MUST NOT 获得 refresh token、password-change token 或任何 token 签发能力
 
@@ -44,6 +44,20 @@
 - **THEN** 系统 MUST 返回 `503 Service Unavailable`、`CodeServiceUnavailable` 和稳定公开消息
 - **AND** 认证错误 MUST 携带稳定 `Kind`、`Reason`、`Code` 和中文公开 `Message`，直接或包装后 MUST 保持 `errors.Is` 或稳定 `Reason` 分类能力
 - **AND** HTTP transport MUST NOT 维护认证专用 sentinel-to-HTTP mapper，响应 MUST NOT 泄露 Redis key、session ID、jti、SQL、stacktrace 或内部错误文本
+
+#### Scenario: 认证入口请求体容量边界
+
+- **WHEN** 登录、refresh 或强制改密请求的固定长度、chunked 或含尾随 JSON 的总请求体超过配置上限
+- **THEN** 系统 MUST 在密码校验、token 解析、session 消费、use case 和 token 签发前返回 `413 Payload Too Large`
+- **AND** 认证、限流和字段校验错误 MUST 保持各自语义，不得互相伪装
+
+#### Scenario: 登录审计客户端地址
+
+- **WHEN** 登录请求来自显式信任的代理且代理提供已清洗的 forwarded headers
+- **THEN** controller MUST 将 `c.ClientIP()` 解析的客户端地址写入认证审计上下文
+- **WHEN** 登录请求来自未信任 TCP peer
+- **THEN** 系统 MUST 使用 peer 地址并忽略其提供的 `X-Forwarded-For` 或 `X-Real-IP`
+- **AND** controller、input preparer 与 auth application MUST NOT 手写解析 forwarded headers
 
 ### Requirement: Refresh 会话、轮换与数量限制
 
@@ -63,31 +77,9 @@
 - **WHEN** 新会话使用户超过配置的活跃 refresh session 上限
 - **THEN** 系统 MUST 同步裁剪 Redis 中最旧的活跃会话，MUST NOT 依赖后台 workerpool 完成安全裁剪
 
-### Requirement: 认证入口请求体容量边界
-
-系统 MUST 对 `/api/v1/auth` 下需要 JSON 请求体的认证入口执行请求体字节上限检查。超限请求 MUST 在密码校验、refresh token 解析、password-change session 消费或会话撤销 use case 前被拒绝，并 MUST 返回 `413 Payload Too Large` 与统一错误 envelope。
-
-#### Scenario: 公开认证入口拒绝超限请求体
-
-- **WHEN** 调用方向登录、refresh 或强制改密入口提交超过配置上限的 JSON 请求体
-- **THEN** 系统 MUST 返回 `413 Payload Too Large`
-- **AND** 系统 MUST NOT 执行密码哈希校验、refresh token 解析、password-change session 消费、token 签发或 session 创建
-
-#### Scenario: 认证入口覆盖固定长度和 chunked 载荷
-
-- **WHEN** 超限认证请求体使用固定 `Content-Length` 或 chunked 传输
-- **THEN** 两类请求 MUST 都被同一容量边界拒绝
-- **AND** 认证错误、限流错误和字段校验错误语义 MUST 保持与非超限请求一致，不得互相伪装
-
-#### Scenario: 认证入口尾随 JSON 超限
-
-- **WHEN** 认证请求体首个 JSON 文档合法，但其后追加的尾随 JSON 使总请求体超过配置上限
-- **THEN** 系统 MUST 返回 `413 Payload Too Large`
-- **AND** auth use case MUST NOT 被调用
-
 ### Requirement: Token version 校验与会话撤销
 
-系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地 loading cache 和 Redis 投影加速校验。缓存未命中、过期、容量驱逐或显式禁用只能影响性能，MUST NOT 改变认证与撤销语义。退出全部会话和密码变更 MUST 递增主事实，使旧 access token 失效并撤销相应 refresh sessions。token-version feature cache MUST 由 user-service 私有配置提供完整默认值、启用时校验和到通用 localcache 配置的集中映射，auth 构造路径 MUST 只消费窄 auth settings。递增 `token_version` 或更新凭证并返回新 `token_version` MUST 是单一确定的 PostgreSQL 结果，成功路径 MUST NOT 在提交后通过第二条 `SELECT` 才获取撤销版本。
+系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地 loading cache 和 Redis 投影加速校验。缓存未命中、过期、容量驱逐或显式禁用只能影响性能，MUST NOT 改变认证与撤销语义。退出全部会话和强制改密 MUST 递增主事实，使旧 access token 失效并撤销相应 refresh sessions。token-version feature cache MUST 由 user-service 私有配置提供完整默认值、启用时校验和到通用 localcache 配置的集中映射，auth 构造路径 MUST 只消费窄 auth settings。递增 `token_version` 或更新凭证并返回新 `token_version` MUST 是单一确定的 PostgreSQL 结果，成功路径 MUST NOT 在提交后通过第二条 `SELECT` 才获取撤销版本。
 
 #### Scenario: 受保护访问与本地缓存
 
@@ -125,15 +117,11 @@
 - **WHEN** 已认证用户退出当前会话，或重复退出已撤销或不存在的会话
 - **THEN** 系统 MUST 只撤销目标 refresh session，MUST NOT 递增 `token_version` 或恢复会话，并 MUST 返回稳定结果或明确错误
 
-#### Scenario: 全部退出与已认证改密
+#### Scenario: 退出全部会话
 
 - **WHEN** 已认证用户请求退出全部会话
 - **THEN** 系统 MUST 递增 PostgreSQL `token_version` 并在同一数据库结果中返回新版本，然后撤销全部活跃 refresh sessions，使旧 access 和 refresh token 无效
 - **AND** 安全失效 MUST NOT 依赖后台 workerpool，Redis key 物理清理 MAY 异步执行
-- **WHEN** 已认证用户提供正确旧密码和满足策略的新密码
-- **THEN** 系统 MUST 原子更新密码哈希并递增 `token_version`，在同一数据库结果中返回新版本，再执行本地缓存失效、Redis 投影刷新和 refresh session 撤销
-- **WHEN** 旧密码错误或新密码不满足策略
-- **THEN** 系统 MUST 拒绝修改并保持密码、状态和 `token_version` 不变
 
 #### Scenario: 撤销版本原子返回
 
@@ -189,9 +177,9 @@
 - **AND** 更新成功并拿到新 `token_version` 后 MUST 失效本地缓存、刷新 Redis 投影并删除该用户 refresh sessions；任一步失败 MUST 返回可观察的安全撤销未完成错误，MUST NOT 返回普通成功结果
 - **AND** 成功更新路径 MUST NOT 在更新提交后执行第二条 `SELECT` 才获取新版本
 
-### Requirement: 认证架构、配置与资源生命周期
+### Requirement: 认证架构、配置与 Redis 资源生命周期
 
-user-service auth feature MUST 私有拥有 token issuer、claims schema、subject、TTL fallback 和认证策略配置；`common/security/auth` MUST 只提供通用验证原语。application、adapter、controller 和 composition MUST 通过 framework-neutral constructor、消费侧最小 port 和窄 settings 表达依赖，并显式管理 auth 自有后台资源。默认 JWT issuer、auth Redis key prefix 和相关示例 MUST 使用 `aegiscore-user-service`，MUST NOT 兼容、读取或双写旧 `aegiscore-user-services` 值。
+user-service auth feature MUST 私有拥有 token issuer、claims schema、subject、TTL fallback 和认证策略配置；`common/security/auth` MUST 只提供通用验证原语。application、adapter、controller 和 composition MUST 通过 framework-neutral constructor、消费侧最小 port 和窄 settings 表达依赖，并显式管理 auth 自有后台资源。auth Redis adapter MUST 使用 Cluster-capable client 与同用户 hash tag 保证多 key 原子操作，且不得关闭共享 Redis client。
 
 #### Scenario: 服务私有配置与分层
 
@@ -223,10 +211,6 @@ user-service auth feature MUST 私有拥有 token issuer、claims schema、subje
 - **WHEN** auth Redis adapter 生成 session、token version projection 或 purge key
 - **THEN** prefix MUST 来自当前 `app.name` 并归一化为 `aegiscore-user-service`，MUST NOT 查询、删除、迁移或双写旧 prefix；旧 prefix 数据 MUST NOT 再影响认证结果
 
-### Requirement: 认证 Redis 存储兼容 Redis Cluster
-
-auth Redis adapter MUST 兼容 Redis Cluster。多 key Lua、pipeline、refresh session、password-change session、token version projection 和用户级批量撤销 MUST 使用稳定 hash tag 使同一原子操作内 key 位于同一 slot。auth MUST 只消费 Cluster-capable Redis client 或最小接口，MUST NOT 要求 `*redis.Client` 单机 concrete type。
-
 #### Scenario: refresh session 多 key 原子操作
 
 - **WHEN** auth 创建、轮换、撤销或裁剪同一用户的 refresh sessions
@@ -244,41 +228,3 @@ auth Redis adapter MUST 兼容 Redis Cluster。多 key Lua、pipeline、refresh 
 - **WHEN** auth store、purge pool、本地 cache 或 invalidator 停止
 - **THEN** auth MUST NOT 关闭共享 Redis Cluster client
 - **AND** Redis Cluster MOVED/ASK、slot 初始化或 CROSSSLOT 错误 MUST 作为可诊断错误暴露，不得被吞掉或降级为认证成功
-
-### Requirement: 认证入口限流门禁
-
-系统 MUST 对 `/api/v1/auth` 下不需要普通 access token 的认证入口执行匿名 IP 限流，对需要普通 access token 的会话控制入口执行 User ID 限流。限流 MUST 不改变 token 签发、refresh、强制改密、退出或 token version 校验的安全语义。
-
-#### Scenario: 公开认证入口先限流
-
-- **WHEN** 调用方访问登录、refresh 或强制改密入口
-- **THEN** 系统 MUST 在 auth controller 执行前按客户端 IP 执行匿名限流
-- **AND** 超限时 MUST 返回 `429 Too Many Requests`，MUST NOT 执行密码校验、refresh token 解析或 password-change session 消费
-
-#### Scenario: 已认证会话控制按 User ID 限流
-
-- **WHEN** 调用方访问退出当前会话或退出全部会话接口
-- **THEN** 系统 MUST 先校验 bearer access token 和 token version
-- **AND** 校验通过后 MUST 按认证 User ID 执行限流，再进入 auth controller
-
-#### Scenario: 限流不改变认证错误
-
-- **WHEN** bearer token 缺失、格式非法、过期、签名无效或 token version 不匹配
-- **THEN** 系统 MUST 返回现有认证错误响应
-- **AND** 系统 MUST NOT 将认证失败映射为限流错误
-
-### Requirement: 登录审计客户端地址
-
-系统 MUST 在登录流程中将 Gin trusted proxy 校验后的 `c.ClientIP()` 写入认证审计上下文。登录 controller MUST 保持 `binding.BindOrAbort`、input preparer、use case、`response.OK` 或 `response.Fail` 的职责边界，MUST NOT 在 controller、input preparer 或 auth application 中手写解析 forwarded headers。
-
-#### Scenario: 受信任代理后的登录审计
-
-- **WHEN** 登录请求来自 `server.http.trusted_proxies` 显式信任的上游代理，且代理提供已清洗的 forwarded headers
-- **THEN** auth controller MUST 将 `c.ClientIP()` 解析出的真实客户端地址写入 `authctx.ClientContext.ClientIP`
-- **AND** 登录失败、密码不匹配或用户状态拒绝的认证安全日志 MUST 使用该客户端地址
-
-#### Scenario: 未受信任来源的登录审计
-
-- **WHEN** 登录请求来自未配置为 trusted proxy 的 TCP peer，即使请求携带 `X-Forwarded-For` 或 `X-Real-IP`
-- **THEN** auth controller MUST 将 TCP peer 地址写入 `authctx.ClientContext.ClientIP`
-- **AND** 系统 MUST NOT 信任或记录未受信任 peer 提供的 forwarded client IP

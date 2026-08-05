@@ -6,8 +6,8 @@ context: |
   技术栈：Go 1.26 workspace、Gin、Fx、Ent、Atlas、PostgreSQL、Redis、Casbin、Prometheus、OpenTelemetry、Docker、Compose、Kubernetes、Helm。
   代码结构：common 为跨服务共享模块；user-service 为用户服务模块；deployments 为 Docker、Compose、Kubernetes、Helm、Prometheus 和 Grafana 资产；docs 为项目文档；openspec/specs 为主规格；openspec/changes 为待实施或待归档的 change artifacts。
   运行入口：user-service/cmd/main.go 提供 serve 和 rbac CLI；user-service/internal/router/router.go 挂载健康检查、OpenAPI、metrics、pprof、认证、权限、角色和用户 API。
-  业务边界：auth 管理认证会话、强制改密、refresh session 和 token version；user 管理用户资料；permission 管理权限目录、route diff、授权中间件、Casbin policy loader 和 policy sync；role 管理角色、角色权限、用户角色绑定、RBAC seed 和超级管理员绑定；common 维护跨服务契约和无业务语义 runtime primitive。
-  结构边界：服务内业务代码按 feature-first 组织；user-service/internal/shared 当前只开放 identity 与 rbacbaseline；user-service/internal/integration 只承载真实外部系统防腐层；当前没有真实入站 gRPC、MQ/broker、eventbus 或 outbox。
+  业务边界：auth 管理认证会话、强制改密、refresh session 和 token version；user 管理用户资料；permission 管理只读权限投影、授权中间件、Casbin policy loader、policy sync 和 outbox dispatcher；role 管理角色、角色权限、用户角色绑定、RBAC seed 和超级管理员绑定；common 维护跨服务契约和无业务语义 runtime primitive。
+  结构边界：服务内业务代码按 feature-first 组织；user-service/internal/shared 当前只开放 identity 与 rbacbaseline；user-service/internal/integration 只承载真实外部系统防腐层；当前没有真实入站 gRPC、MQ/broker 或 eventbus，RBAC 事务 outbox 留在 role/permission feature 边界。
   运维边界：Ent schema 是数据库结构来源，Atlas SQL migration 是可审查迁移工件；生产优先通过独立 migration Job 或 CI/CD release job 在 HTTP rollout 前执行 migration，再执行 RBAC seed，最后滚动 HTTP 副本。
   常用验证：make test、make user-service-architecture-lint、make user-service-openapi-generate、make user-service-migrate-validate、make compose-dashboard-check。OpenSpec 流程全部完成后，先将本次预期代码和文档变更加到暂存区，再执行 make lint 和 make verify，避免 verify 的最终 git diff --exit-code 被未暂存的预期变更阻塞。
 

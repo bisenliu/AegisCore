@@ -168,9 +168,9 @@
 - **AND** `OnStart` 创建的资源 MUST 由 `OnStop` 或 Fx rollback 关闭，constructor 阶段已创建的部分资源 MUST 在后续失败时立即清理
 - **AND** feature 关闭自身 workerpool、watcher、cache 或 store 时 MUST NOT 关闭共享 Redis、Ent 或 PostgreSQL 资源
 
-### Requirement: Redis mode-driven 资源契约
+### Requirement: Redis mode-driven 配置、client 与生命周期
 
-系统 MUST 将共享 Redis 资源契约定义为 mode-driven 配置，`mode: cluster` MUST 使用 `addrs`、`timeout` 和可选 `cluster.max_redirects`，`mode: standalone` MUST 使用 `addr` 和 `timeout`。`addrs` MUST 表示 Redis Cluster seed endpoints，并 MUST 允许只配置一个阿里云 Redis 集群访问地址。Redis DB MUST NOT 作为配置项暴露；Cluster 与 standalone 均 MUST 固定使用 Redis 0 号库。系统 MUST NOT 支持 Sentinel 或根据字段隐式推断 mode。
+系统 MUST 将共享 Redis 资源定义为 mode-driven 配置，并通过 Cluster-capable 公开 client 边界构造、探测和关闭单个资源。`cluster` MUST 使用 `addrs`，`standalone` MUST 使用 `addr`；系统 MUST NOT 暴露 Redis DB、支持 Sentinel、隐式推断 mode 或要求 feature 依赖 `*redis.Client` 单机 concrete type。
 
 #### Scenario: 加载最小 Cluster 配置
 
@@ -183,10 +183,6 @@
 - **WHEN** `mode=cluster` 的配置包含 `addr` 或 `db`，或 `mode=standalone` 的配置包含 `addrs`、`cluster.max_redirects` 或 `db`
 - **THEN** Redis resource validation MUST 在启动前失败并报告完整字段路径
 - **AND** 未声明 mode、未知 mode、Sentinel 字段或未知 Redis 字段 MUST 在启动前失败
-
-### Requirement: Redis Cluster client 构造与生命周期
-
-系统 MUST 通过共享 datastore 构造可承载 Redis Cluster 的单资源 client，并在 Fx lifecycle 中执行启动 PING、tracing instrumentation 和关闭清理。Redis client 公开边界 MUST 支持 Cluster client，MUST NOT 要求 `*redis.Client` 单机 concrete type。
 
 #### Scenario: 构造并探测 Cluster client
 
@@ -203,7 +199,7 @@
 
 ### Requirement: Runtime 执行与装配原语
 
-系统 MUST 在 `common/runtime` 中提供业务中立的 ID、scheduler、workerpool、localcache、Redis key、timezone、logger、Fx provider 和依赖图原语。拥有后台执行的 primitive MUST 具有明确的容量、并发、失败处理、观测和关闭语义；localcache MUST 不拥有后台执行或关闭生命周期。构造函数、provider 和 Fx graph helper MUST 只消费真实运行时依赖或调用方显式提供的无副作用 Fx option，MUST NOT 为测试便利暴露生产 API 或读取服务私有配置。公开 provider 名称 MUST 表达其 runtime 能力或资源职责，MUST NOT 仅用模糊的 DI framework 术语隐藏能力语义。
+系统 MUST 在 `common/runtime` 中提供业务中立的 ID、scheduler、workerpool、localcache、Redis key、timezone、logger、Fx provider 和依赖图原语。拥有后台执行的 primitive MUST 具有明确的容量、并发、失败处理、观测和关闭语义；localcache MUST NOT 拥有后台执行或关闭生命周期。构造函数、provider 和 Fx graph helper MUST 只消费真实运行时依赖或调用方显式提供的无副作用 Fx option，MUST NOT 为测试便利暴露生产 API 或读取服务私有配置。公开 provider 名称 MUST 表达其 runtime 能力或资源职责，MUST NOT 仅用模糊的 DI framework 术语隐藏能力语义。
 
 #### Scenario: workerpool 与 scheduler 生命周期
 
@@ -212,7 +208,7 @@
 - **AND** Stop 超时 MUST 返回包装 `context.DeadlineExceeded` 的错误，workerpool MUST NOT 承载 refresh session、token version、可靠消息、eventbus、outbox 或业务一致性语义
 - **WHEN** scheduler 触发已注册任务
 - **THEN** 系统 MUST 按本地 overlap gate、全局并发 gate、可选分布式锁、任务 context、可选锁续租、任务执行和 cleanup 的顺序处理，并 MUST 记录跳过、开始、完成、失败、拒绝和 panic，在 shutdown 时优雅停止
-- **AND** 多实例副作用任务 MUST 声明正数 TTL 的分布式锁策略，长任务 SHOULD 使用续租
+- **AND** 多实例副作用任务 MUST 声明正数 TTL 的分布式锁策略，执行时间可能超过 TTL 的任务 MUST 使用续租
 - **AND** 即使任务未配置 timeout，scheduler MUST 创建可取消 context，并在自动续租失败时取消任务和记录失败
 
 #### Scenario: loading cache 构造、读取与回源
@@ -305,9 +301,9 @@
 - **WHEN** 没有真实 broker、外部 API 或单独批准的设计
 - **THEN** 系统 MUST NOT 新增 eventbus、outbox、producer、subscriber、consumer handler、dispatcher、Ent hook 或 transaction wrapper
 
-### Requirement: 测试基础设施与隔离
+### Requirement: 测试基础设施、Cluster fixture 与隔离
 
-系统 MUST 在 `common/testing` 中提供可复用的容器和 fixture，并 MUST 使用可重复、可观察且不污染生产 API 或进程全局状态的测试方式验证共享能力。
+系统 MUST 在 `common/testing` 中提供可复用的 PostgreSQL 与 Redis Cluster 容器 fixture，并使用可重复、可观察且不污染生产 API 或进程全局状态的方式验证共享能力。
 
 #### Scenario: 可重复且可观察的测试
 
@@ -324,10 +320,6 @@
 - **THEN** 测试 MUST 在 package-local helper 中保存状态并通过 cleanup 恢复
 - **AND** 环境变量 MUST 使用 `t.Setenv`，相关测试 MUST NOT 并行执行
 - **AND** 非测试目标所需的日志捕获 MUST 使用 context logger 或局部 logger 注入
-
-### Requirement: Redis Cluster 测试基础设施
-
-系统 MUST 提供可由集成测试复用的 Redis Cluster 测试能力，用于验证 hash slot、多 key Lua、Pub/Sub、PING 和 MOVED/ASK redirect 相关行为。普通单元测试 MAY 继续使用 mock 或轻量 Redis fixture，但 Cluster 兼容性 MUST 通过真实 Redis Cluster 覆盖。
 
 #### Scenario: 真实 Cluster 集成测试
 
@@ -352,16 +344,6 @@
 - **THEN** 进程 MUST 通过 `AEGISCORE_NACOS_NAMESPACE` 显式选择 `loca-host` 或 `loca-docker`
 - **AND** 两个 Namespace MUST 都使用 `base.yaml`、`resources.yaml`、`user-service.yaml` 三 dataId，不得要求环境专用第四文档
 - **AND** Nacos source MUST 只根据已解析环境加载文档，MUST NOT 读取 Git 配置目录、感知 Compose 初始化服务、推断主机或容器环境、创建 Namespace 或改写资源地址
-
-### Requirement: Go 模块依赖声明
-
-`common` 模块 MUST 将生产代码直接 import 的第三方模块声明为 direct require，MUST NOT 将直接 import 的运行时依赖标记为 `// indirect`。
-
-#### Scenario: PostgreSQL tracing direct dependency
-
-- **WHEN** `common/runtime/datastore/postgres.go` 直接 import `github.com/XSAM/otelsql`
-- **THEN** `common/go.mod` MUST 在 direct require 组声明 `github.com/XSAM/otelsql`
-- **AND** 该 require MUST NOT 标记为 `// indirect`
 
 #### Scenario: 文档合成与严格解码
 
@@ -392,9 +374,9 @@
 - **THEN** 来源 MUST 能通过业务中立的 document source contract 接入同一 merge、digest、decode、normalize 和 validate 管线
 - **AND** 新来源 MUST NOT 要求修改 Nacos adapter 或把服务业务配置加入 `common`
 
-### Requirement: 共享限流错误与 HTTP 映射
+### Requirement: 业务中立本地限流与 HTTP 映射
 
-系统 MUST 在 `common/contract` 中提供业务中立的限流应用错误语义，并在 `common/http/response` 中将该错误渲染为 `429 Too Many Requests`。限流错误 MUST 使用稳定低基数 `Kind`、`Reason`、`Code` 和公开 `Message`，不得暴露 limiter key、IP、User ID、token、内部分片或实现细节。
+系统 MUST 提供由调用方决定 key 与策略的本地 token bucket primitive，并在共享 contract/response 中提供稳定限流错误与 `429 Too Many Requests` 映射。共享实现 MAY 提供分片存储、后台清理和显式关闭，但 MUST NOT 内置 user-service 路由、身份 schema 或服务私有阈值。
 
 #### Scenario: 限流错误响应
 
@@ -407,10 +389,6 @@
 - **WHEN** 系统返回 nil、未知错误或内部错误
 - **THEN** `common/http/response` MUST 保持现有内部错误归一化语义
 - **AND** 系统 MUST NOT 将非限流错误映射为 `429 Too Many Requests`
-
-### Requirement: 业务中立本地限流 primitive
-
-`common/http/middleware` 或 `common/runtime` MUST 提供业务中立的本地限流 primitive。该 primitive MUST 支持基于调用方提供 key 的 `Allow` 判定、`golang.org/x/time/rate` token bucket、分片存储、后台清理和显式关闭。
 
 #### Scenario: 调用方提供限流 key
 
@@ -463,7 +441,7 @@
 #### Scenario: 默认不信任代理
 
 - **WHEN** `server.http.trusted_proxies` 未配置或为空
-- **THEN** Gin engine MUST 不信任任何代理
+- **THEN** Gin engine MUST NOT 信任任何代理
 - **AND** `c.ClientIP()` MUST 忽略 `X-Forwarded-For` 和 `X-Real-IP`，只返回请求 TCP peer 地址
 
 #### Scenario: 显式信任代理 CIDR
@@ -478,9 +456,9 @@
 - **THEN** 严格配置解码 MUST 失败并报告完整配置路径
 - **AND** 系统 MUST NOT 通过 normalize、alias 或 fallback 接受该旧配置
 
-### Requirement: 通用事务生命周期 helper
+### Requirement: 通用事务生命周期与直接调用禁令
 
-`common/runtime/datastore` MUST 提供业务中立的泛型事务生命周期 helper，用于 infrastructure 代码创建、提交和回滚显式事务边界。helper MUST 只依赖标准库和最小事务接口，MUST NOT 导入 user-service、Ent 生成代码、feature 包或服务私有类型。
+`common/runtime/datastore` MUST 提供业务中立的泛型事务生命周期 helper，用于 infrastructure 代码创建、提交和回滚显式事务边界。新增或改造的业务 infrastructure MUST 通过该 helper 终结事务，MUST NOT 直接调用底层 commit/rollback 或维护重复 helper。共享实现 MUST 只依赖标准库和最小事务接口。
 
 #### Scenario: 使用 detached lifecycle context 创建事务
 
@@ -507,10 +485,6 @@
 - **WHEN** 事务内业务操作失败且 rollback 也失败
 - **THEN** 事务完成器 MUST 返回同时保留原始业务错误和 rollback 错误的 error
 - **AND** rollback 错误 MUST NOT 被吞掉或覆盖原始业务错误
-
-### Requirement: 禁止直接事务边界
-
-新增或改造后的 infrastructure 事务边界 MUST 通过 `common/runtime/datastore` 的共享事务 helper 创建、提交和回滚。业务 infrastructure MUST NOT 直接调用 `client.Tx(ctx)`、`db.BeginTx(ctx, ...)`、`tx.Commit()`、`tx.Rollback()` 或手写 `rollback(tx, err)` helper 管理可由共享 helper 表达的事务生命周期。
 
 #### Scenario: Ent 事务边界适配共享 helper
 

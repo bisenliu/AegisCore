@@ -56,7 +56,7 @@
 #### Scenario: 架构边界与 Fx graph
 
 - **WHEN** 业务代码违反 feature-first、分层、共享边界、生成配置或部署契约
-- **THEN** `user-service-architecture-lint` MUST 失败并指向正式架构来源；当前不存在的 gRPC、MQ、eventbus 或 outbox MUST NOT 以空壳或推测性实现进入正式边界
+- **THEN** `user-service-architecture-lint` MUST 失败并指向正式架构来源；当前不存在的 gRPC、MQ 或 eventbus MUST NOT 以空壳或推测性实现进入正式边界，现有 RBAC outbox MUST 留在 role/permission feature
 - **WHEN** 执行 `cd user-service && go run ./cmd fxgraph --config ./configs/config.yaml --output /tmp/aegis-fx.dot`
 - **THEN** 系统 MUST 基于正式配置投影和无运行时激活的 wiring graph 或专用 graph root 生成非空 DOT
 - **AND** 生成过程 MUST NOT 执行生产 `fx.Invoke`、连接 PostgreSQL/Redis/OTLP、启动 listener、创建 workerpool/localcache/tracing exporter 后台资源、注册真实 route 或 runtime metrics，也 MUST NOT 修改 `TZ`、`time.Local` 或 Gin mode
@@ -164,10 +164,6 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 - **WHEN** 滚动发布、缩容、驱逐或故障退出终止 Pod
 - **THEN** kubelet MUST 为完整 Fx Stop 链路与平台阶段保留默认宽限期；正常关闭后 MUST 立即退出，仅在宽限期耗尽且进程未退出时强制终止
 
-### Requirement: HTTP 请求体上限配置与部署默认值
-
-系统 MUST 在 user-service 运行配置和 Nacos 环境资产中声明 HTTP 入站请求体字节上限。默认值 MUST 与当前 Pod 内存预算相容，并 MUST 在代码默认值与本地 Nacos 配置之间保持一致；配置非法时服务 MUST 在启动前失败。Compose 与 Helm MUST 继续只负责选择 Nacos 配置来源，不得为该业务字段新增专用环境变量覆盖。
-
 #### Scenario: 服务配置声明请求体上限
 
 - **WHEN** user-service 加载 `server.http` 或等价服务私有 HTTP 配置
@@ -183,27 +179,12 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 #### Scenario: 发布与回滚
 
 - **WHEN** 发布包含请求体上限的 user-service 版本
-- **THEN** 发布 MUST 不需要数据库 migration、RBAC seed 变化或 OpenAPI 重新生成
+- **THEN** 发布 MUST 无需数据库 migration、RBAC seed 变化或 OpenAPI 重新生成
 - **AND** 如合法请求被误拒，运维 MUST 能通过提高配置上限并滚动重启回滚行为
 
-### Requirement: 项目身份初始化与重命名 ID 边界
+### Requirement: Compose 本地编排与时区一致性
 
-系统 MUST 区分从基础框架初始化新项目和已有项目重命名。新项目初始化 MAY 写入新的 RBAC 系统 ID 固化常量；已有项目重命名 MUST NOT 默认修改、重算或复用系统内置 RBAC、permission 或 bootstrap 用户 ID。
-
-#### Scenario: 初始化、重命名与文档边界
-
-- **WHEN** AegisCore 作为基础框架复制为全新项目
-- **THEN** 初始化流程 MAY 将新的手写固化 UUID 字符串常量写入 `user-service/internal/shared/rbacbaseline/ids.go`
-- **AND** 初始化 MUST 只修改代码或文档，MUST NOT 连接或修改数据库，也 MUST NOT 执行 RBAC seed
-- **WHEN** 已有项目修改展示名、服务名、module path、CLI、镜像、部署资源或观测 label
-- **THEN** 重命名 MUST NOT 默认修改 `SuperAdminRoleID`、`BootstrapSuperAdminUserID`、baseline permission ID 或数据库中的角色、权限、用户和绑定 ID
-- **AND** 重算系统 ID MUST 作为单独高风险数据迁移 change，MUST NOT 混入普通重命名
-- **WHEN** 仓库提供初始化或重命名脚本
-- **THEN** 文档 MUST 明确初始化仅用于新项目且重命名默认不重算系统 ID，脚本或 README MUST NOT 宣称已有项目改名会自动迁移 RBAC 系统 ID
-
-### Requirement: 本地 Compose 时区一致性
-
-本地 Compose 的常驻服务与一次性任务 MUST 显式使用 `TZ=Asia/Shanghai`，不得依赖宿主机时区或镜像浮动默认值。缺少 IANA zoneinfo 的基础镜像 MUST 通过可审查的最小镜像层补齐所需时区数据，不得保留设置了 `TZ` 但进程仍以 UTC 运行的无效配置。
+系统 MUST 提供可从仓库根目录运行的本地 Compose 编排，启动 PostgreSQL、Redis、Nacos、Jaeger、user-service、Prometheus 和 Grafana，并在缺少必填 secret 时提前失败。常驻服务与一次性任务 MUST 显式使用 `TZ=Asia/Shanghai`；默认端口 MUST 只暴露当前真实入口。
 
 #### Scenario: 全部 Compose 服务声明时区
 
@@ -222,10 +203,6 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 - **WHEN** Compose 使用已经初始化且配置为 UTC 的 PostgreSQL data volume 重建容器
 - **THEN** PostgreSQL session `timezone` 与 `log_timezone` MUST 在不删除 volume、不运行 migration 的情况下变为 `Asia/Shanghai`
 - **AND** 官方 `docker-entrypoint.sh` 与健康检查 MUST 继续正常工作
-
-### Requirement: Compose 本地编排
-
-系统 MUST 提供可从仓库根目录运行的本地 Compose 编排，启动 PostgreSQL、Redis、Jaeger OTLP、本地用户服务、Prometheus 和 Grafana。Compose MUST 使用本地必填环境变量注入数据库、JWT 和 Grafana 密码，MUST 在缺少必填值时提前失败。Compose 默认 MUST 只发布当前真实本地入口端口，MUST NOT 默认发布没有真实入站 API 的 gRPC 端口或默认关闭的诊断端口。
 
 #### Scenario: 默认本地入口端口
 
@@ -299,9 +276,9 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 - **AND** 迁移验证 MUST 分别检查两个 Namespace 的配置来源、严格校验、脱敏 effective render 和依赖地址
 - **AND** seed 工具 MUST NOT 自动删除旧 `loca` Namespace；回滚 MAY 在旧内容仍保留时恢复旧来源选择，旧 Namespace 的最终清理由运维显式执行
 
-### Requirement: Redis Cluster 配置交付
+### Requirement: Redis Cluster 与可信入口配置交付
 
-Nacos、Compose、Kubernetes、Helm、README、E2E harness 和测试配置 fixture MUST 使用 Redis mode-driven 配置契约。交付资产 MUST 明确展示 `mode: cluster` 或 `mode: standalone`，MUST NOT 使用隐式 Redis mode、Redis DB 配置或 Sentinel 参数。
+Nacos、Compose、Kubernetes、Helm、README、E2E harness 和测试 fixture MUST 使用 Redis mode-driven 配置契约，并通过 `server.http.trusted_proxies` 声明受信任入口代理。Redis 交付 MUST 明确 `cluster` 或 `standalone`，入口代理配置 MUST 与真实网络拓扑一致，二者均不得接受旧配置别名。
 
 #### Scenario: Nacos 与部署配置使用 Cluster 契约
 
@@ -316,10 +293,6 @@ Nacos、Compose、Kubernetes、Helm、README、E2E harness 和测试配置 fixtu
 - **THEN** 资产 MUST 提供 Redis Cluster fixture 或明确连接外部 Redis Cluster 的配置路径
 - **AND** 根 `make test-containers` 启用的 Redis Cluster 兼容测试 MUST 覆盖 auth、RBAC、health 和 metrics 的 Cluster-sensitive 行为
 
-### Requirement: Redis Cluster 发布与回滚
-
-Redis Cluster 发布 MUST 以空 Cluster 和新配置切换为前提，不迁移旧 Redis 数据。回滚 MUST 同步回滚应用镜像和 Redis 配置契约，不要求从 Redis Cluster 回写旧 Redis。
-
 #### Scenario: 发布顺序
 
 - **WHEN** 发布 Redis Cluster 支持版本
@@ -331,10 +304,6 @@ Redis Cluster 发布 MUST 以空 Cluster 和新配置切换为前提，不迁移
 - **WHEN** 需要回滚到旧 Redis 单机版本
 - **THEN** 运维 MUST 同步回滚应用镜像和 Redis 配置为旧版本要求的契约
 - **AND** 系统 MUST 接受 refresh session、password-change session、token version cache 和 RBAC policy version 在回滚过程中失效或重建
-
-### Requirement: Trusted proxy 配置交付
-
-Nacos、Compose、Kubernetes、Helm、README 和部署说明 MUST 使用 `server.http.trusted_proxies` 表达 user-service 受信任入口代理 IP 或 CIDR。生产和 production-like 环境 MUST 按实际 Ingress、gateway、ALB、Envoy、Nginx 或 service mesh 拓扑配置该列表；系统 MUST NOT 提供旧 `http.trusted_proxies` 示例或兼容说明。
 
 #### Scenario: 部署配置声明可信入口
 

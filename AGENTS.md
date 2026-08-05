@@ -37,7 +37,7 @@
 - `features/user|auth|role|permission/`：按 feature 分层组织业务代码。
 - `shared/identity`：user/auth 共同消费的用户状态、账号生命周期判断和身份错误。
 - `shared/rbacbaseline`：role/permission 共同消费的系统 RBAC 角色、权限和默认绑定规格。
-- `integration/http|grpc|events`：真实外部系统协议适配和防腐层；当前无真实外部 client、入站 gRPC API、MQ/broker、eventbus 或 outbox。
+- `integration/http|grpc|events`：真实外部系统协议适配和防腐层；当前无真实外部 client、入站 gRPC API、MQ/broker 或 eventbus。RBAC 事务 outbox 属于 permission/role 内部可靠同步能力，不属于外部集成边界。
 
 ## 3. 关键入口
 
@@ -56,11 +56,11 @@
 
 ## 4. 当前能力
 
-- 用户资料：`POST /api/v1/users`、`GET /api/v1/users/:id`、`GET /api/v1/users`。
+- 用户资料：`POST /api/v1/users`、`GET /api/v1/users/:user_id`、`GET /api/v1/users`。
 - 认证会话：登录、refresh、强制改密、退出当前会话、退出全部会话、refresh session 上限和 token version 撤销校验。
-- 权限目录：权限创建、更新、启停、查询、有效权限和 route diff 诊断。
+- 权限目录：代码基线权限的只读投影查询和用户有效权限查询；权限变更由 RBAC seed 维护，route graph 一致性由测试门禁验证。
 - 角色管理：角色创建、更新、启停、查询、角色权限绑定和用户角色绑定。
-- RBAC 授权：JWT 认证后使用 Casbin 对用户、角色和权限业务接口授权；在线 RBAC 写操作通过本实例 reload、Redis policy version、Pub/Sub 和定时补偿同步其他副本。
+- RBAC 授权：JWT 认证后使用 Casbin 对用户、角色和权限业务接口授权；在线 RBAC 写操作通过 PostgreSQL revision 与事务 outbox、本实例 reload、Redis Pub/Sub 和数据库 revision 定时补偿同步其他副本。
 - 运行时观测：`/livez`、`/readyz`、`/startupz`、配置化 metrics endpoint、OpenAPI UI/JSON、pprof、Prometheus alerts 和 Grafana dashboards。
 
 ## 5. 常用命令
@@ -130,7 +130,7 @@ openspec init --tools none --force
 - feature 内保持 domain、application、transport、infrastructure 分层；application/domain/infrastructure 不导入 feature HTTP transport DTO 或 controller。
 - HTTP controller 先用 `binding.BindOrAbort`，再调用 feature-local input preparer 进行裁剪、默认值归一化、UUID/cursor/token 解析和 command/query 构造；input preparer 不查询 store、不调用 use case、不执行授权、不写 HTTP 响应。
 - Ports 由消费侧 feature application 拥有，infrastructure adapter 只实现这些最小接口；不要为了 adapter 方便在 infrastructure 包或共享根包定义大接口。
-- `transport/grpc`、`domain/events`、`domain/services` 和 `infrastructure/consumers` 只有存在真实 API、领域事件模型、纯领域服务或消费者需求时才承载业务代码；当前没有真实 gRPC API、MQ/broker、eventbus、outbox、producer、subscriber、consumer handler 或后台投递 worker。
+- `transport/grpc`、`domain/events`、`domain/services` 和 `infrastructure/consumers` 只有存在真实 API、领域事件模型、纯领域服务或消息消费者需求时才承载业务代码；当前没有真实 gRPC API、MQ/broker、eventbus、producer、subscriber 或外部 consumer handler。现有 RBAC outbox dispatcher 留在 permission application/infrastructure 边界。
 - 外部系统防腐层统一使用 `user-service/internal/integration/http|grpc|events`；`integration/grpc` 是出站 external client adapter，不是本服务入站 gRPC transport。
 - 不要手写 `user-service/internal/persistence/ent/` 下的 Ent 生成代码或 OpenAPI 生成物；通过 `make user-service-generate` 和 `make user-service-openapi-generate` 更新。
 - 运行时服务代码不得使用 `client.Schema.Create(ctx)` 表达 schema 变更；Ent schema 变化必须生成 Ent 代码和 Atlas SQL migration。
