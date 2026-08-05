@@ -110,10 +110,10 @@ groups:
           description: "localcache {{ $labels.cache }} 最近 10 分钟出现 loader error。请检查回源依赖、缓存注册状态和对应 feature 日志。"
           runbook_url: "docs/observability/user-service-runbook.md#localcache-load-errors"
 
-      - alert: AegisCoreUserServiceLocalcacheEvictionPressure
+      - alert: AegisCoreUserServiceLocalcacheCapacityEvictionPressure
         expr: |
           sum by (cache) (
-            increase(aegiscore_localcache_evictions_total{service="aegiscore-user-service"}[15m])
+            increase(aegiscore_localcache_capacity_evictions_total{service="aegiscore-user-service"}[15m])
           )
           /
           clamp_min(
@@ -125,9 +125,9 @@ groups:
           service: aegiscore-user-service
           severity: warning
         annotations:
-          summary: "用户服务 localcache 淘汰压力升高"
-          description: "localcache {{ $labels.cache }} 最近 15 分钟淘汰增量超过容量预算的 20%。请检查容量、TTL、key 基数和缓存命中率。"
-          runbook_url: "docs/observability/user-service-runbook.md#localcache-eviction-pressure"
+          summary: "用户服务 localcache 容量驱逐压力升高"
+          description: "localcache {{ $labels.cache }} 最近 15 分钟容量驱逐增量超过容量预算的 20%。请检查容量、key 基数和缓存命中率。TTL 到期与显式失效不计入该指标。"
+          runbook_url: "docs/observability/user-service-runbook.md#localcache-capacity-eviction-pressure"
 
       - alert: AegisCoreUserServiceRBACWatcherStopped
         expr: |

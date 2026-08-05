@@ -35,7 +35,7 @@ type authCommandFixture struct {
 
 type noopTokenVersionInvalidator struct{}
 
-func (noopTokenVersionInvalidator) InvalidateTokenVersion(string) error { return nil }
+func (noopTokenVersionInvalidator) InvalidateTokenVersion(string) {}
 
 func newAuthCommandFixture(t testing.TB, authCfg serviceconfig.AuthConfig, metrics authapplication.Metrics) *authCommandFixture {
 	t.Helper()

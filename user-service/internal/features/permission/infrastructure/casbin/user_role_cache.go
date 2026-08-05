@@ -23,12 +23,6 @@ type UserRoleResolverParams struct {
 type UserRoleResolverResult struct {
 	Resolver UserRoleResolver
 	Stats    localcache.StatsSource `name:"rbac_user_roles_cache"`
-	Closer   UserRoleCacheCloser
-}
-
-// UserRoleCacheCloser 关闭用户角色本地缓存资源。
-type UserRoleCacheCloser interface {
-	Close() error
 }
 
 // NewUserRoleResolver 构造按用户 bounded TTL 缓存的角色解析器。
@@ -36,14 +30,18 @@ func NewUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult,
 	cfg := params.Settings.UserRoleCache
 	resolver := &entUserRoleResolver{client: params.Client}
 	if !cfg.Enabled {
-		return UserRoleResolverResult{Resolver: resolver, Stats: resolver, Closer: resolver}, nil
+		return UserRoleResolverResult{Resolver: resolver, Stats: resolver}, nil
 	}
-	cache, err := localcache.NewLoadingCache[uuid.UUID, []uuid.UUID](cfg.Localcache(rbacUserRolesCacheName), func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	cache, err := localcache.NewLoadingCache(cfg.Localcache(rbacUserRolesCacheName), func(ctx context.Context, key string) ([]uuid.UUID, error) {
+		userID, err := uuid.Parse(key)
+		if err != nil {
+			return nil, fmt.Errorf("parse rbac user role cache user id: %w", err)
+		}
 		return resolver.loadCacheableRolesForUser(ctx, userID)
 	})
 	if err != nil {
 		return UserRoleResolverResult{}, fmt.Errorf("create rbac user roles localcache: %w", err)
 	}
 	resolver.cache = cache
-	return UserRoleResolverResult{Resolver: resolver, Stats: cache, Closer: resolver}, nil
+	return UserRoleResolverResult{Resolver: resolver, Stats: cache}, nil
 }

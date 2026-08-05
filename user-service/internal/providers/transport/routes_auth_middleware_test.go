@@ -125,7 +125,7 @@ func TestGinEngineAuthMiddleware(t *testing.T) {
 			"aegiscore_workerpool_tasks_total",
 			"aegiscore_localcache_requests_total",
 			"aegiscore_localcache_loads_total",
-			"aegiscore_localcache_evictions_total",
+			"aegiscore_localcache_capacity_evictions_total",
 			"aegiscore_localcache_capacity",
 			"aegiscore_user_service_rbac_policy_watcher_running",
 		} {

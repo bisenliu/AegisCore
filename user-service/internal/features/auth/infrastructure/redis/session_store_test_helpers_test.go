@@ -35,7 +35,7 @@ func defaultMaxActiveSessionsPerUser() int {
 
 func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenVersionStore, tokenCache authapplication.TokenVersionCache) commonauth.TokenVersionValidator {
 	t.Helper()
-	cache, err := localcache.NewLoadingCache[string, int64](localcache.Config{
+	cache, err := localcache.NewLoadingCache(localcache.Config{
 		Name:        "auth_token_version_test",
 		Capacity:    100,
 		TTL:         time.Minute,
@@ -50,21 +50,8 @@ func newTestTokenVersionValidator(t testing.TB, users authapplication.UserTokenV
 	require.NoError(t, err,
 		"New localcache: %v", err)
 
-	t.Cleanup(cache.Close)
-	validator := authvalidators.NewCachingValidator(redisLocalTokenVersionCacheAdapter{cache: cache})
+	validator := authvalidators.NewCachingValidator(cache)
 	return authvalidators.NewMetricsTokenVersionValidator(validator, nil)
-}
-
-type redisLocalTokenVersionCacheAdapter struct {
-	cache *localcache.LoadingCache[string, int64]
-}
-
-func (a redisLocalTokenVersionCacheAdapter) GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error) {
-	return a.cache.GetOrLoad(ctx, userID.String())
-}
-
-func (a redisLocalTokenVersionCacheAdapter) Delete(userID string) error {
-	return a.cache.Delete(userID)
 }
 
 func newTestSessionStoreWithAppName(t testing.TB, redisServer *miniredis.Miniredis, appName string) *SessionStore {

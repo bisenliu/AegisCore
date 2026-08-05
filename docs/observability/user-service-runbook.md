@@ -9,7 +9,7 @@
 - HTTP RED：请求数、延迟 histogram、in-flight gauge，route label 使用 Gin route template。
 - PostgreSQL：`primary_db` pool stats 和可用性。
 - Redis：`cache_redis` ping/up 状态。
-- Localcache：`auth_token_version` 与 `rbac_user_roles` 的 hit/miss、loader success/error、自动 eviction 和最大 item capacity。
+- Localcache：`auth_token_version` 与 `rbac_user_roles` 的 hit/miss、loader success/error、容量驱逐和最大 item capacity。
 - Runtime components：workerpool、scheduler、runtime component status。
 - RBAC：policy watcher 状态、Casbin policy reload 成功/失败、policy sync 版本 mismatch、policy reload lag。
 - Business metrics：auth login/refresh/logout、token version mismatch、route diff missing/stale 等固定低基数指标。
@@ -75,11 +75,11 @@ Redis Pub/Sub 只提供唤醒 hint，消息允许丢失、重复、乱序；Redi
 
 如果同时出现 Redis 或 PostgreSQL 告警，优先处理依赖不可用；如果依赖正常，检查最近部署是否改变了 loader、TTL、容量或权限/认证数据路径。该指标不包含 raw key、用户 ID 或原始错误，定位具体请求需要结合日志中的稳定错误信息和 trace/span 上下文。
 
-### localcache-eviction-pressure
+### localcache-capacity-eviction-pressure
 
-`aegiscore_localcache_evictions_total` 相对 `aegiscore_localcache_capacity` 快速增长表示缓存淘汰压力升高。先确认是否是冷启动或批量流量导致的短暂加载，再检查对应 cache 的 hit ratio、loader error 和依赖延迟。
+`aegiscore_localcache_capacity_evictions_total` 相对 `aegiscore_localcache_capacity` 快速增长表示容量驱逐压力升高。该指标只统计达到容量上限的驱逐，不包含 TTL 到期、`Invalidate` 或 `InvalidateAll`。先确认是否是冷启动或批量流量导致的短暂加载，再检查对应 cache 的 hit ratio、loader error 和依赖延迟。
 
-如果淘汰压力持续存在且 hit ratio 下降，优先评估容量、TTL 和 key 基数；如果淘汰压力升高但 hit ratio 稳定，可能只是访问集大于容量预算，需要结合资源成本决定是否扩容。
+如果容量驱逐压力持续存在且 hit ratio 下降，优先评估容量和 key 基数；如果压力升高但 hit ratio 稳定，可能只是访问集大于容量预算，需要结合资源成本决定是否扩容。若同时出现 token-version 撤销或 RBAC 绑定变更，容量驱逐指标不会反映强失效竞态；应结合 loader error 和业务拒绝结果判断。一次失效竞态会透明重试，连续两次失效会 fail-closed，待写入与失效流量收敛后恢复。
 
 ## Safety Rules
 

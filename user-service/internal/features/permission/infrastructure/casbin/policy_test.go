@@ -324,16 +324,16 @@ func TestUserRoleResolverSuppressesStaleSingleUserLoadAfterInvalidation(t *testi
 	}))
 
 	resolver := newTestUserRoleResolver(t, client, time.Minute)
-	staleErr := make(chan error, 1)
+	loadErr := make(chan error, 1)
 	go func() {
 		_, err := resolver.RolesForUser(ctx, userID)
-		staleErr <- err
+		loadErr <- err
 	}()
 	<-queryStarted
 	createPolicyTestUserRole(t, client, user.ID, secondRole.ID)
 	resolver.InvalidateUserRole(userID)
 	close(releaseQuery)
-	require.ErrorIs(t, <-staleErr, errUserRoleCacheGenerationStale)
+	require.NoError(t, <-loadErr)
 
 	reloaded, err := resolver.RolesForUser(ctx, userID)
 	require.NoError(t, err)
@@ -384,8 +384,8 @@ func TestUserRoleResolverSuppressesStaleLoadsAfterInvalidateAll(t *testing.T) {
 	<-queriesStarted
 	resolver.InvalidateAllUserRoles()
 	close(releaseQueries)
-	require.ErrorIs(t, <-errCh, errUserRoleCacheGenerationStale)
-	require.ErrorIs(t, <-errCh, errUserRoleCacheGenerationStale)
+	require.NoError(t, <-errCh)
+	require.NoError(t, <-errCh)
 
 	firstReloaded, err := resolver.RolesForUser(ctx, firstUserID)
 	require.NoError(t, err)
@@ -407,14 +407,15 @@ func TestUserRoleResolverStaleLoadFailsClosedAndReloadsFinalState(t *testing.T) 
 	finalRole := createPolicyTestRole(t, client, finalRoleID, true)
 	createPolicyTestUserRole(t, client, user.ID, oldRole.ID)
 
-	queryStarted := make(chan struct{})
-	releaseQuery := make(chan struct{})
+	queriesStarted := make(chan int64)
+	releaseQueries := []chan struct{}{make(chan struct{}), make(chan struct{})}
 	var roleQueries atomic.Int64
 	client.Role.Intercept(ent.InterceptFunc(func(next ent.Querier) ent.Querier {
 		return ent.QuerierFunc(func(ctx context.Context, q ent.Query) (ent.Value, error) {
-			if roleQueries.Add(1) == 1 {
-				close(queryStarted)
-				<-releaseQuery
+			queryNumber := roleQueries.Add(1)
+			if queryNumber <= 2 {
+				queriesStarted <- queryNumber
+				<-releaseQueries[queryNumber-1]
 			}
 			return next.Query(ctx, q)
 		})
@@ -426,10 +427,13 @@ func TestUserRoleResolverStaleLoadFailsClosedAndReloadsFinalState(t *testing.T) 
 		_, err := resolver.RolesForUser(ctx, userID)
 		staleErr <- err
 	}()
-	<-queryStarted
+	require.Equal(t, int64(1), <-queriesStarted)
 	resolver.InvalidateUserRole(userID)
-	close(releaseQuery)
-	require.ErrorIs(t, <-staleErr, errUserRoleCacheGenerationStale)
+	close(releaseQueries[0])
+	require.Equal(t, int64(2), <-queriesStarted)
+	resolver.InvalidateUserRole(userID)
+	close(releaseQueries[1])
+	require.ErrorIs(t, <-staleErr, localcache.ErrInvalidated)
 
 	_, err := client.UserRole.Delete().Where(entuserrole.UserIDEQ(user.ID)).Exec(ctx)
 	require.NoError(t, err)
@@ -437,7 +441,7 @@ func TestUserRoleResolverStaleLoadFailsClosedAndReloadsFinalState(t *testing.T) 
 	reloaded, err := resolver.RolesForUser(ctx, userID)
 	require.NoError(t, err)
 	assertRoleIDs(t, reloaded, []uuid.UUID{finalRoleID})
-	require.Equal(t, int64(2), roleQueries.Load())
+	require.Equal(t, int64(3), roleQueries.Load())
 }
 
 func TestNewUserRoleResolverUsesRBACFeatureConfig(t *testing.T) {
@@ -449,10 +453,8 @@ func TestNewUserRoleResolverUsesRBACFeatureConfig(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 321, result.Stats.Stats().Capacity)
-	require.NoError(t, result.Closer.Close())
-	require.NoError(t, result.Closer.Close())
 	_, err = result.Resolver.RolesForUser(context.Background(), uuid.New())
-	require.ErrorIs(t, err, localcache.ErrClosed)
+	require.NoError(t, err)
 }
 
 func TestNewUserRoleResolverRejectsNegativeCapacity(t *testing.T) {
@@ -494,8 +496,6 @@ func TestDisabledUserRoleResolverReadsThroughAndInvalidationIsSafe(t *testing.T)
 
 	result.Resolver.InvalidateUserRole(userID)
 	result.Resolver.InvalidateAllUserRoles()
-	require.NoError(t, result.Closer.Close())
-	require.NoError(t, result.Closer.Close())
 	require.Equal(t, rbacUserRolesCacheName, result.Stats.Name())
 	require.EqualValues(t, 2, result.Stats.Stats().LoadSuccess)
 	require.Zero(t, result.Stats.Stats().Capacity)
@@ -571,17 +571,20 @@ func (tx *policyRollbackErrorTx) Rollback() error {
 func newTestUserRoleResolver(t *testing.T, client *ent.Client, ttl time.Duration) *entUserRoleResolver {
 	t.Helper()
 	resolver := &entUserRoleResolver{client: client}
-	cache, err := localcache.NewLoadingCache[uuid.UUID, []uuid.UUID](localcache.Config{
+	cache, err := localcache.NewLoadingCache[[]uuid.UUID](localcache.Config{
 		Name:        "rbac_user_roles_test",
 		Capacity:    100,
 		TTL:         ttl,
 		LoadTimeout: time.Second,
-	}, func(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	}, func(ctx context.Context, key string) ([]uuid.UUID, error) {
+		userID, err := uuid.Parse(key)
+		if err != nil {
+			return nil, err
+		}
 		return resolver.loadCacheableRolesForUser(ctx, userID)
 	})
 	require.NoError(t, err)
 	resolver.cache = cache
-	t.Cleanup(cache.Close)
 	return resolver
 }
 

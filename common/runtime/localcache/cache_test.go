@@ -3,6 +3,7 @@ package localcache
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,7 +18,7 @@ func TestNewLoadingCacheValidatesConfig(t *testing.T) {
 	tests := []struct {
 		name string
 		cfg  Config
-		load Loader[string, int]
+		load Loader[int]
 		want error
 	}{
 		{name: "missing name", cfg: Config{Capacity: 10, TTL: time.Second, LoadTimeout: time.Second}, load: loader, want: ErrNameRequired},
@@ -29,7 +30,7 @@ func TestNewLoadingCacheValidatesConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache, err := NewLoadingCache[string, int](tt.cfg, tt.load)
+			cache, err := NewLoadingCache(tt.cfg, tt.load)
 			require.ErrorIs(t, err, tt.want)
 			require.Nil(t, cache)
 		})
@@ -38,21 +39,22 @@ func TestNewLoadingCacheValidatesConfig(t *testing.T) {
 
 func TestLoadingCacheUsesFixedTTLWithoutTouchOnHit(t *testing.T) {
 	var loads atomic.Uint64
-	cache := newTestCache(t, Config{Name: "test", Capacity: 10, TTL: 80 * time.Millisecond, LoadTimeout: time.Second}, func(context.Context, string) (int, error) {
+	cache := newTestCache(t, Config{Name: "test", Capacity: 10, TTL: 100 * time.Millisecond, LoadTimeout: time.Second}, func(context.Context, string) (int, error) {
 		return int(loads.Add(1)), nil
 	})
 
-	first, err := cache.GetOrLoad(context.Background(), "key")
+	first, err := cache.Get(context.Background(), "key")
 	require.NoError(t, err)
 	require.Equal(t, 1, first)
-	require.Eventually(t, func() bool {
-		value, loadErr := cache.GetOrLoad(context.Background(), "key")
-		return loadErr == nil && value == 1 && cache.Stats().Hit > 0
-	}, 40*time.Millisecond, 5*time.Millisecond)
-	require.Eventually(t, func() bool {
-		value, loadErr := cache.GetOrLoad(context.Background(), "key")
-		return loadErr == nil && value == 2
-	}, time.Second, 5*time.Millisecond, "读取不应延长首次写入的 TTL")
+	time.Sleep(60 * time.Millisecond)
+	value, err := cache.Get(context.Background(), "key")
+	require.NoError(t, err)
+	require.Equal(t, 1, value)
+	time.Sleep(60 * time.Millisecond)
+	value, err = cache.Get(context.Background(), "key")
+	require.NoError(t, err)
+	require.Equal(t, 2, value, "读取不应延长首次写入的 TTL")
+	require.Equal(t, Stats{Hit: 1, Miss: 2, LoadSuccess: 2, Capacity: 10}, cache.Stats())
 }
 
 func TestLoadingCacheEnforcesItemCapacity(t *testing.T) {
@@ -65,14 +67,14 @@ func TestLoadingCacheEnforcesItemCapacity(t *testing.T) {
 		return loads[key], nil
 	})
 
-	_, err := cache.GetOrLoad(context.Background(), "a")
+	_, err := cache.Get(context.Background(), "a")
 	require.NoError(t, err)
-	_, err = cache.GetOrLoad(context.Background(), "b")
+	_, err = cache.Get(context.Background(), "b")
 	require.NoError(t, err)
-	value, err := cache.GetOrLoad(context.Background(), "a")
+	value, err := cache.Get(context.Background(), "a")
 	require.NoError(t, err)
 	require.Equal(t, 2, value, "最早的 item 应因容量达到上限被移除")
-	require.Eventually(t, func() bool { return cache.Stats().Evicted >= 1 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return cache.Stats().CapacityEvictions >= 1 }, time.Second, time.Millisecond)
 }
 
 func TestLoadingCacheCoalescesConcurrentMisses(t *testing.T) {
@@ -97,7 +99,7 @@ func TestLoadingCacheCoalescesConcurrentMisses(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			value, err := cache.GetOrLoad(context.Background(), "alice")
+			value, err := cache.Get(context.Background(), "alice")
 			results <- value
 			errs <- err
 		}()
@@ -129,7 +131,7 @@ func TestLoadingCacheKeepsDifferentKeysIndependent(t *testing.T) {
 	errs := make(chan error, 2)
 	for _, key := range []string{"a", "b"} {
 		go func() {
-			_, err := cache.GetOrLoad(context.Background(), key)
+			_, err := cache.Get(context.Background(), key)
 			errs <- err
 		}()
 	}
@@ -150,12 +152,11 @@ func TestLoadingCacheDoesNotCacheLoaderErrors(t *testing.T) {
 	})
 
 	for range 2 {
-		_, err := cache.GetOrLoad(context.Background(), "key")
+		_, err := cache.Get(context.Background(), "key")
 		require.ErrorIs(t, err, loadErr)
 	}
 	require.EqualValues(t, 2, loads.Load())
-	require.EqualValues(t, 2, cache.Stats().LoadError)
-	require.Zero(t, cache.Stats().LoadSuccess)
+	require.Equal(t, Stats{Miss: 2, LoadError: 2, Capacity: 10}, cache.Stats())
 }
 
 func TestLoadingCacheCallerCancellationDoesNotCancelSharedLoader(t *testing.T) {
@@ -164,7 +165,9 @@ func TestLoadingCacheCallerCancellationDoesNotCancelSharedLoader(t *testing.T) {
 	releaseLoader := make(chan struct{})
 	cache := newTestCache(t, testConfig(), func(ctx context.Context, _ string) (string, error) {
 		close(loaderEntered)
-		require.Equal(t, "request-value", ctx.Value(contextKey{}))
+		if ctx.Value(contextKey{}) != "request-value" {
+			return "", errors.New("loader context value was not preserved")
+		}
 		<-releaseLoader
 		return "loaded", ctx.Err()
 	})
@@ -172,14 +175,14 @@ func TestLoadingCacheCallerCancellationDoesNotCancelSharedLoader(t *testing.T) {
 	leaderCtx, cancelLeader := context.WithCancel(context.WithValue(context.Background(), contextKey{}, "request-value"))
 	leaderResult := make(chan error, 1)
 	go func() {
-		_, err := cache.GetOrLoad(leaderCtx, "key")
+		_, err := cache.Get(leaderCtx, "key")
 		leaderResult <- err
 	}()
 	waitForSignal(t, loaderEntered)
 
 	followerResult := make(chan error, 1)
 	go func() {
-		value, err := cache.GetOrLoad(context.Background(), "key")
+		value, err := cache.Get(context.Background(), "key")
 		if err == nil && value != "loaded" {
 			err = errors.New("unexpected value")
 		}
@@ -193,75 +196,187 @@ func TestLoadingCacheCallerCancellationDoesNotCancelSharedLoader(t *testing.T) {
 	require.EqualValues(t, 1, cache.Stats().LoadSuccess)
 }
 
-func TestLoadingCacheDeleteAndClearInvalidateSynchronously(t *testing.T) {
-	var loads atomic.Uint64
-	cache := newTestCache(t, testConfig(), func(context.Context, string) (uint64, error) {
-		return loads.Add(1), nil
+func TestLoadingCacheLoadTimeout(t *testing.T) {
+	cache := newTestCache(t, Config{Name: "test", Capacity: 10, TTL: time.Minute, LoadTimeout: 20 * time.Millisecond}, func(ctx context.Context, _ string) (int, error) {
+		<-ctx.Done()
+		return 0, ctx.Err()
 	})
 
-	_, err := cache.GetOrLoad(context.Background(), "a")
-	require.NoError(t, err)
-	_, err = cache.GetOrLoad(context.Background(), "b")
-	require.NoError(t, err)
-	require.NoError(t, cache.Delete("a"))
-	value, err := cache.GetOrLoad(context.Background(), "a")
-	require.NoError(t, err)
-	require.EqualValues(t, 3, value)
-	require.NoError(t, cache.Clear())
-	value, err = cache.GetOrLoad(context.Background(), "b")
-	require.NoError(t, err)
-	require.EqualValues(t, 4, value)
-	require.Zero(t, cache.Stats().Evicted, "显式失效不得计入自动驱逐")
+	_, err := cache.Get(context.Background(), "key")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.EqualValues(t, 1, cache.Stats().LoadError)
 }
 
-func TestLoadingCacheCloseRejectsOperationsAndSkipsInflightWrite(t *testing.T) {
-	loaderEntered := make(chan struct{})
-	releaseLoader := make(chan struct{})
+func TestLoadingCacheInvalidationSuppressesInflightValue(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		invalidate func(*LoadingCache[int])
+	}{
+		{name: "single key", invalidate: func(cache *LoadingCache[int]) { cache.Invalidate("key") }},
+		{name: "all keys", invalidate: func(cache *LoadingCache[int]) { cache.InvalidateAll() }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var source atomic.Int64
+			source.Store(1)
+			var calls atomic.Uint64
+			started := make(chan uint64, 2)
+			releases := []chan struct{}{make(chan struct{}), make(chan struct{})}
+			cache := newTestCache(t, testConfig(), func(context.Context, string) (int, error) {
+				call := calls.Add(1)
+				value := int(source.Load())
+				started <- call
+				<-releases[call-1]
+				return value, nil
+			})
+
+			result := make(chan struct {
+				value int
+				err   error
+			}, 1)
+			go func() {
+				value, err := cache.Get(context.Background(), "key")
+				result <- struct {
+					value int
+					err   error
+				}{value: value, err: err}
+			}()
+
+			require.EqualValues(t, 1, waitForSignal(t, started))
+			source.Store(2)
+			tt.invalidate(cache)
+			close(releases[0])
+			require.EqualValues(t, 2, waitForSignal(t, started))
+			close(releases[1])
+
+			got := waitForSignal(t, result)
+			require.NoError(t, got.err)
+			require.Equal(t, 2, got.value)
+			cached, err := cache.Get(context.Background(), "key")
+			require.NoError(t, err)
+			require.Equal(t, 2, cached)
+			require.EqualValues(t, 2, calls.Load())
+			require.Equal(t, Stats{Hit: 1, Miss: 1, LoadSuccess: 2, Capacity: 10}, cache.Stats())
+		})
+	}
+}
+
+func TestLoadingCacheReturnsErrInvalidatedAfterSecondConflict(t *testing.T) {
+	var source atomic.Int64
+	source.Store(1)
+	var calls atomic.Uint64
+	started := make(chan uint64, 2)
+	releases := []chan struct{}{make(chan struct{}), make(chan struct{})}
 	cache := newTestCache(t, testConfig(), func(context.Context, string) (int, error) {
-		close(loaderEntered)
-		<-releaseLoader
-		return 7, nil
+		call := calls.Add(1)
+		value := int(source.Load())
+		if call <= 2 {
+			started <- call
+			<-releases[call-1]
+		}
+		return value, nil
 	})
 
 	result := make(chan error, 1)
 	go func() {
-		value, err := cache.GetOrLoad(context.Background(), "key")
-		if err == nil && value != 7 {
-			err = errors.New("unexpected value")
-		}
+		_, err := cache.Get(context.Background(), "key")
 		result <- err
 	}()
-	waitForSignal(t, loaderEntered)
-	cache.Close()
-	cache.Close()
-	close(releaseLoader)
-	require.NoError(t, <-result)
+	require.EqualValues(t, 1, waitForSignal(t, started))
+	source.Store(2)
+	cache.Invalidate("key")
+	close(releases[0])
+	require.EqualValues(t, 2, waitForSignal(t, started))
+	source.Store(3)
+	cache.Invalidate("key")
+	close(releases[1])
+	require.ErrorIs(t, waitForSignal(t, result), ErrInvalidated)
 
-	_, err := cache.GetOrLoad(context.Background(), "key")
-	require.ErrorIs(t, err, ErrClosed)
-	require.ErrorIs(t, cache.Delete("key"), ErrClosed)
-	require.ErrorIs(t, cache.Clear(), ErrClosed)
-	require.Equal(t, "test", cache.Name())
-	require.EqualValues(t, 1, cache.Stats().LoadSuccess)
+	value, err := cache.Get(context.Background(), "key")
+	require.NoError(t, err)
+	require.Equal(t, 3, value)
+	require.EqualValues(t, 3, calls.Load())
+	require.Equal(t, Stats{Miss: 2, LoadSuccess: 3, Capacity: 10}, cache.Stats())
+}
+
+func TestLoadingCacheCanceledCallersDoNotWaitInDrainGoroutines(t *testing.T) {
+	baseline := runtime.NumGoroutine()
+	loaderEntered := make(chan struct{})
+	releaseLoader := make(chan struct{})
+	defer close(releaseLoader)
+	cache := newTestCache(t, testConfig(), func(context.Context, string) (int, error) {
+		select {
+		case <-loaderEntered:
+		default:
+			close(loaderEntered)
+		}
+		<-releaseLoader
+		return 1, nil
+	})
+
+	const callers = 100
+	contexts := make([]context.CancelFunc, 0, callers)
+	var wg sync.WaitGroup
+	for range callers {
+		ctx, cancel := context.WithCancel(context.Background())
+		contexts = append(contexts, cancel)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = cache.Get(ctx, "key")
+		}()
+	}
+	waitForSignal(t, loaderEntered)
+	require.Eventually(t, func() bool { return cache.Stats().Miss == callers }, time.Second, time.Millisecond)
+	for _, cancel := range contexts {
+		cancel()
+	}
+	wg.Wait()
+
+	require.Eventually(t, func() bool {
+		runtime.GC()
+		return runtime.NumGoroutine() <= baseline+10
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestLoadingCacheExpiryAndInvalidationAreNotCapacityEvictions(t *testing.T) {
+	var loads atomic.Uint64
+	cache := newTestCache(t, Config{Name: "test", Capacity: 10, TTL: 20 * time.Millisecond, LoadTimeout: time.Second}, func(context.Context, string) (uint64, error) {
+		return loads.Add(1), nil
+	})
+
+	_, err := cache.Get(context.Background(), "key")
+	require.NoError(t, err)
+	time.Sleep(30 * time.Millisecond)
+	_, err = cache.Get(context.Background(), "key")
+	require.NoError(t, err)
+	cache.Invalidate("key")
+	_, err = cache.Get(context.Background(), "key")
+	require.NoError(t, err)
+	cache.InvalidateAll()
+	_, err = cache.Get(context.Background(), "key")
+	require.NoError(t, err)
+	require.Zero(t, cache.Stats().CapacityEvictions)
 }
 
 func testConfig() Config {
 	return Config{Name: "test", Capacity: 10, TTL: time.Minute, LoadTimeout: time.Second}
 }
 
-func newTestCache[K comparable, V any](t *testing.T, cfg Config, loader Loader[K, V]) *LoadingCache[K, V] {
+func newTestCache[V any](t *testing.T, cfg Config, loader Loader[V]) *LoadingCache[V] {
 	t.Helper()
 	cache, err := NewLoadingCache(cfg, loader)
 	require.NoError(t, err)
-	t.Cleanup(cache.Close)
 	return cache
 }
 
-func waitForSignal[T any](t *testing.T, ch <-chan T) {
+func waitForSignal[T any](t *testing.T, ch <-chan T) T {
 	t.Helper()
 	select {
-	case <-ch:
+	case value := <-ch:
+		return value
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for test signal")
+		var zero T
+		return zero
 	}
 }

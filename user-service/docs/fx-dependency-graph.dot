@@ -1,14 +1,6 @@
 digraph {
 	rankdir=RL;
 	graph [compound=true];
-	"[type=router.PublicRouteRegistrar group=public_routes]" [shape=diamond label=<router.PublicRouteRegistrar<BR /><FONT POINT-SIZE="10">Group: public_routes</FONT>>];
-	"[type=router.PublicRouteRegistrar group=public_routes]" -> "router.PublicRouteRegistrar[group=public_routes]0";
-	"[type=router.AuthenticatedRouteRegistrar group=authenticated_routes]" [shape=diamond label=<router.AuthenticatedRouteRegistrar<BR /><FONT POINT-SIZE="10">Group: authenticated_routes</FONT>>];
-	"[type=router.AuthenticatedRouteRegistrar group=authenticated_routes]" -> "router.AuthenticatedRouteRegistrar[group=authenticated_routes]0";
-	"[type=router.AuthorizedRouteRegistrar group=authorized_routes]" [shape=diamond label=<router.AuthorizedRouteRegistrar<BR /><FONT POINT-SIZE="10">Group: authorized_routes</FONT>>];
-	"[type=router.AuthorizedRouteRegistrar group=authorized_routes]" -> "router.AuthorizedRouteRegistrar[group=authorized_routes]0";
-	"[type=router.AuthorizedRouteRegistrar group=authorized_routes]" -> "router.AuthorizedRouteRegistrar[group=authorized_routes]1";
-	"[type=router.AuthorizedRouteRegistrar group=authorized_routes]" -> "router.AuthorizedRouteRegistrar[group=authorized_routes]2";
 	subgraph cluster_0 {
 		label = "go.uber.org/fx";
 		constructor_0 [shape=plaintext label="New.func1"];
@@ -30,519 +22,558 @@ digraph {
 		"*config.Config" [label=<*config.Config>];
 	}
 	subgraph cluster_4 {
-		label = "reflect";
-		constructor_4 [shape=plaintext label="makeFuncStub"];
+		label = "github.com/aegiscore/user-service/internal/config";
+		constructor_4 [shape=plaintext label="NewRuntimeConfig"];
 		"*config.Config" [label=<*config.Config>];
 	}
+	constructor_4 -> "*config.Config" [ltail=cluster_4];
 	subgraph cluster_5 {
-		label = "github.com/aegiscore/common/runtime/logger";
-		constructor_5 [shape=plaintext label="NewLogger"];
-		"*zap.Logger" [label=<*zap.Logger>];
+		label = "github.com/aegiscore/user-service/internal/config";
+		constructor_5 [shape=plaintext label="NewAuthSettings"];
+		"config.AuthSettings" [label=<config.AuthSettings>];
 	}
-	constructor_5 -> "fx.Lifecycle" [ltail=cluster_5];
 	constructor_5 -> "*config.Config" [ltail=cluster_5];
 	subgraph cluster_6 {
+		label = "github.com/aegiscore/user-service/internal/config";
+		constructor_6 [shape=plaintext label="NewRBACSettings"];
+		"config.RBACSettings" [label=<config.RBACSettings>];
+	}
+	constructor_6 -> "*config.Config" [ltail=cluster_6];
+	subgraph cluster_7 {
+		label = "github.com/aegiscore/user-service/internal/config";
+		constructor_7 [shape=plaintext label="NewEntSettings"];
+		"config.EntSettings" [label=<config.EntSettings>];
+	}
+	constructor_7 -> "*config.Config" [ltail=cluster_7];
+	subgraph cluster_8 {
+		label = "github.com/aegiscore/user-service/internal/config";
+		constructor_8 [shape=plaintext label="NewRateLimitSettings"];
+		"config.RateLimitSettings" [label=<config.RateLimitSettings>];
+	}
+	constructor_8 -> "*config.Config" [ltail=cluster_8];
+	subgraph cluster_9 {
+		label = "github.com/aegiscore/user-service/internal/config";
+		constructor_9 [shape=plaintext label="NewHTTPSettings"];
+		"config.HTTPSettings" [label=<config.HTTPSettings>];
+	}
+	constructor_9 -> "*config.Config" [ltail=cluster_9];
+	subgraph cluster_10 {
+		label = "github.com/aegiscore/user-service/internal/config";
+		constructor_10 [shape=plaintext label="NewResourceSettings"];
+		"config.ResourceSettings" [label=<config.ResourceSettings>];
+	}
+	constructor_10 -> "*config.Config" [ltail=cluster_10];
+	subgraph cluster_11 {
+		label = "github.com/aegiscore/common/runtime/logger";
+		constructor_11 [shape=plaintext label="NewLogger"];
+		"*zap.Logger" [label=<*zap.Logger>];
+	}
+	constructor_11 -> "fx.Lifecycle" [ltail=cluster_11];
+	constructor_11 -> "*config.Config" [ltail=cluster_11];
+	subgraph cluster_12 {
 		label = "github.com/aegiscore/user-service/internal/bootstrap";
-		constructor_6 [shape=plaintext label="NewHTTPServer"];
+		constructor_12 [shape=plaintext label="NewHTTPServer"];
 		"*http.Server" [label=<*http.Server>];
 	}
-	constructor_6 -> "fx.Lifecycle" [ltail=cluster_6];
-	constructor_6 -> "fx.Shutdowner" [ltail=cluster_6];
-	constructor_6 -> "*config.Config" [ltail=cluster_6];
-	constructor_6 -> "*zap.Logger" [ltail=cluster_6];
-	constructor_6 -> "*gin.Engine" [ltail=cluster_6];
-	subgraph cluster_7 {
+	constructor_12 -> "fx.Lifecycle" [ltail=cluster_12];
+	constructor_12 -> "fx.Shutdowner" [ltail=cluster_12];
+	constructor_12 -> "*config.Config" [ltail=cluster_12];
+	constructor_12 -> "*zap.Logger" [ltail=cluster_12];
+	constructor_12 -> "*gin.Engine" [ltail=cluster_12];
+	subgraph cluster_13 {
 		label = "github.com/aegiscore/user-service/internal/bootstrap";
-		constructor_7 [shape=plaintext label="NewPprofServer"];
+		constructor_13 [shape=plaintext label="NewPprofServer"];
 		"*bootstrap.PprofServer" [label=<*bootstrap.PprofServer>];
 	}
-	constructor_7 -> "fx.Lifecycle" [ltail=cluster_7];
-	constructor_7 -> "fx.Shutdowner" [ltail=cluster_7];
-	constructor_7 -> "*config.Config" [ltail=cluster_7];
-	constructor_7 -> "*zap.Logger" [ltail=cluster_7];
-	subgraph cluster_8 {
+	constructor_13 -> "fx.Lifecycle" [ltail=cluster_13];
+	constructor_13 -> "fx.Shutdowner" [ltail=cluster_13];
+	constructor_13 -> "*config.Config" [ltail=cluster_13];
+	constructor_13 -> "*zap.Logger" [ltail=cluster_13];
+	subgraph cluster_14 {
 		label = "github.com/aegiscore/common/validation";
-		constructor_8 [shape=plaintext label="NewDefault"];
+		constructor_14 [shape=plaintext label="NewDefault"];
 		"*validation.Validator" [label=<*validation.Validator>];
 	}
-	subgraph cluster_9 {
+	subgraph cluster_15 {
 		label = "github.com/aegiscore/user-service/internal/features/auth";
-		constructor_9 [shape=plaintext label="newAuthMetrics"];
+		constructor_15 [shape=plaintext label="newAuthMetrics"];
 		"application.Metrics" [label=<application.Metrics>];
 	}
-	constructor_9 -> "*metrics.Provider" [ltail=cluster_9];
-	subgraph cluster_10 {
+	constructor_15 -> "*metrics.Provider" [ltail=cluster_15];
+	subgraph cluster_16 {
 		label = "reflect";
-		constructor_10 [shape=plaintext label="makeFuncStub"];
+		constructor_16 [shape=plaintext label="makeFuncStub"];
 		"application.UserTokenVersionStore" [label=<application.UserTokenVersionStore>];
 		"application.UserCredentialStore" [label=<application.UserCredentialStore>];
 	}
-	constructor_10 -> "*ent.Client[name=primary_db]" [ltail=cluster_10];
-	subgraph cluster_11 {
+	constructor_16 -> "*ent.Client[name=primary_db]" [ltail=cluster_16];
+	subgraph cluster_17 {
 		label = "reflect";
-		constructor_11 [shape=plaintext label="makeFuncStub"];
+		constructor_17 [shape=plaintext label="makeFuncStub"];
 		"application.TokenVersionCache" [label=<application.TokenVersionCache>];
 		"application.RefreshSessionStore" [label=<application.RefreshSessionStore>];
 		"application.PasswordChangeSessionStore" [label=<application.PasswordChangeSessionStore>];
 	}
-	constructor_11 -> "fx.Lifecycle" [ltail=cluster_11];
-	constructor_11 -> "*redis.Client[name=cache_redis]" [ltail=cluster_11];
-	constructor_11 -> "*config.Config" [ltail=cluster_11];
-	constructor_11 -> "redis.PurgeTaskPool[name=auth_session_purge_pool]" [ltail=cluster_11];
-	constructor_11 -> "application.Metrics" [ltail=cluster_11];
-	subgraph cluster_12 {
+	constructor_17 -> "fx.Lifecycle" [ltail=cluster_17];
+	constructor_17 -> "redis.UniversalClient[name=cache_redis]" [ltail=cluster_17];
+	constructor_17 -> "config.AuthSettings" [ltail=cluster_17];
+	constructor_17 -> "redis.PurgeTaskPool[name=auth_session_purge_pool]" [ltail=cluster_17];
+	constructor_17 -> "application.Metrics" [ltail=cluster_17];
+	subgraph cluster_18 {
 		label = "github.com/aegiscore/user-service/internal/features/auth";
-		constructor_12 [shape=plaintext label="newSessionPurgePool"];
+		constructor_18 [shape=plaintext label="newSessionPurgePool"];
 		"redis.PurgeTaskPool[name=auth_session_purge_pool]" [label=<redis.PurgeTaskPool<BR /><FONT POINT-SIZE="10">Name: auth_session_purge_pool</FONT>>];
 	}
-	constructor_12 -> "*zap.Logger" [ltail=cluster_12];
-	subgraph cluster_13 {
+	constructor_18 -> "*zap.Logger" [ltail=cluster_18];
+	subgraph cluster_19 {
 		label = "github.com/aegiscore/user-service/internal/features/auth";
-		constructor_13 [shape=plaintext label="newTokenVersionLocalCache"];
+		constructor_19 [shape=plaintext label="newTokenVersionLocalCache"];
 		"validators.LocalTokenVersionCache[name=auth_token_version_cache]" [label=<validators.LocalTokenVersionCache<BR /><FONT POINT-SIZE="10">Name: auth_token_version_cache</FONT>>];
 		"localcache.StatsSource[name=auth_token_version_cache]" [label=<localcache.StatsSource<BR /><FONT POINT-SIZE="10">Name: auth_token_version_cache</FONT>>];
 	}
-	constructor_13 -> "fx.Lifecycle" [ltail=cluster_13];
-	constructor_13 -> "*config.Config" [ltail=cluster_13];
-	constructor_13 -> "application.UserTokenVersionStore" [ltail=cluster_13];
-	constructor_13 -> "application.TokenVersionCache" [ltail=cluster_13];
-	subgraph cluster_14 {
+	constructor_19 -> "config.AuthSettings" [ltail=cluster_19];
+	constructor_19 -> "application.UserTokenVersionStore" [ltail=cluster_19];
+	constructor_19 -> "application.TokenVersionCache" [ltail=cluster_19];
+	subgraph cluster_20 {
 		label = "github.com/aegiscore/user-service/internal/features/auth";
-		constructor_14 [shape=plaintext label="newTokenVersionValidator"];
+		constructor_20 [shape=plaintext label="newTokenVersionValidator"];
 		"auth.TokenVersionValidator" [label=<auth.TokenVersionValidator>];
 		"validators.TokenVersionLocalInvalidator" [label=<validators.TokenVersionLocalInvalidator>];
 	}
-	constructor_14 -> "validators.LocalTokenVersionCache[name=auth_token_version_cache]" [ltail=cluster_14];
-	constructor_14 -> "application.Metrics" [ltail=cluster_14];
-	subgraph cluster_15 {
-		label = "reflect";
-		constructor_15 [shape=plaintext label="makeFuncStub"];
-		"credentials.Verifier" [label=<credentials.Verifier>];
-	}
-	constructor_15 -> "application.UserCredentialStore" [ltail=cluster_15];
-	constructor_15 -> "*password.Service" [ltail=cluster_15];
-	subgraph cluster_16 {
-		label = "github.com/aegiscore/user-service/internal/features/auth/application/tokens";
-		constructor_16 [shape=plaintext label="NewIssuer"];
-		"tokens.Issuer" [label=<tokens.Issuer>];
-	}
-	constructor_16 -> "*auth.JWTService" [ltail=cluster_16];
-	constructor_16 -> "*config.Config" [ltail=cluster_16];
-	subgraph cluster_17 {
-		label = "github.com/aegiscore/user-service/internal/features/auth/application/tokens";
-		constructor_17 [shape=plaintext label="NewAccessTokenVerifier"];
-		"auth.AccessTokenVerifier" [label=<auth.AccessTokenVerifier>];
-	}
-	constructor_17 -> "*auth.JWTService" [ltail=cluster_17];
-	constructor_17 -> "*config.Config" [ltail=cluster_17];
-	subgraph cluster_18 {
-		label = "github.com/aegiscore/user-service/internal/features/auth";
-		constructor_18 [shape=plaintext label="newAuthSessionLifecycle"];
-		"sessions.Lifecycle" [label=<sessions.Lifecycle>];
-	}
-	constructor_18 -> "application.UserTokenVersionStore" [ltail=cluster_18];
-	constructor_18 -> "application.TokenVersionCache" [ltail=cluster_18];
-	constructor_18 -> "application.RefreshSessionStore" [ltail=cluster_18];
-	constructor_18 -> "application.PasswordChangeSessionStore" [ltail=cluster_18];
-	constructor_18 -> "validators.TokenVersionLocalInvalidator" [ltail=cluster_18];
-	constructor_18 -> "*config.Config" [ltail=cluster_18];
-	subgraph cluster_19 {
-		label = "github.com/aegiscore/user-service/internal/features/auth";
-		constructor_19 [shape=plaintext label="newRefreshTokenSettings"];
-		"command.RefreshTokenSettings" [label=<command.RefreshTokenSettings>];
-	}
-	constructor_19 -> "*config.Config" [ltail=cluster_19];
-	subgraph cluster_20 {
-		label = "github.com/aegiscore/user-service/internal/features/auth/application/command";
-		constructor_20 [shape=plaintext label="NewLoginUseCase"];
-		"command.LoginUseCase" [label=<command.LoginUseCase>];
-	}
-	constructor_20 -> "credentials.Verifier" [ltail=cluster_20];
-	constructor_20 -> "tokens.Issuer" [ltail=cluster_20];
-	constructor_20 -> "sessions.Lifecycle" [ltail=cluster_20];
+	constructor_20 -> "validators.LocalTokenVersionCache[name=auth_token_version_cache]" [ltail=cluster_20];
 	constructor_20 -> "application.Metrics" [ltail=cluster_20];
 	subgraph cluster_21 {
-		label = "github.com/aegiscore/user-service/internal/features/auth/application/command";
-		constructor_21 [shape=plaintext label="NewRefreshTokenUseCase"];
-		"command.RefreshTokenUseCase" [label=<command.RefreshTokenUseCase>];
+		label = "reflect";
+		constructor_21 [shape=plaintext label="makeFuncStub"];
+		"credentials.Verifier" [label=<credentials.Verifier>];
 	}
-	constructor_21 -> "tokens.Issuer" [ltail=cluster_21];
-	constructor_21 -> "sessions.Lifecycle" [ltail=cluster_21];
-	constructor_21 -> "application.Metrics" [ltail=cluster_21];
-	constructor_21 -> "command.RefreshTokenSettings" [ltail=cluster_21];
+	constructor_21 -> "application.UserCredentialStore" [ltail=cluster_21];
+	constructor_21 -> "*password.Service" [ltail=cluster_21];
 	subgraph cluster_22 {
-		label = "github.com/aegiscore/user-service/internal/features/auth/application/command";
-		constructor_22 [shape=plaintext label="NewChangePasswordUseCase"];
-		"command.ChangePasswordUseCase" [label=<command.ChangePasswordUseCase>];
+		label = "github.com/aegiscore/user-service/internal/features/auth/application/tokens";
+		constructor_22 [shape=plaintext label="NewIssuer"];
+		"tokens.Issuer" [label=<tokens.Issuer>];
 	}
-	constructor_22 -> "credentials.Verifier" [ltail=cluster_22];
-	constructor_22 -> "tokens.Issuer" [ltail=cluster_22];
-	constructor_22 -> "sessions.Lifecycle" [ltail=cluster_22];
-	constructor_22 -> "application.Metrics" [ltail=cluster_22];
+	constructor_22 -> "*auth.JWTService" [ltail=cluster_22];
+	constructor_22 -> "config.AuthSettings" [ltail=cluster_22];
 	subgraph cluster_23 {
-		label = "github.com/aegiscore/user-service/internal/features/auth/application/command";
-		constructor_23 [shape=plaintext label="NewLogoutCurrentSessionUseCase"];
-		"command.LogoutCurrentSessionUseCase" [label=<command.LogoutCurrentSessionUseCase>];
+		label = "github.com/aegiscore/user-service/internal/features/auth/application/tokens";
+		constructor_23 [shape=plaintext label="NewAccessTokenVerifier"];
+		"auth.AccessTokenVerifier" [label=<auth.AccessTokenVerifier>];
 	}
-	constructor_23 -> "sessions.Lifecycle" [ltail=cluster_23];
-	constructor_23 -> "application.Metrics" [ltail=cluster_23];
+	constructor_23 -> "*auth.JWTService" [ltail=cluster_23];
+	constructor_23 -> "config.AuthSettings" [ltail=cluster_23];
 	subgraph cluster_24 {
-		label = "github.com/aegiscore/user-service/internal/features/auth/application/command";
-		constructor_24 [shape=plaintext label="NewLogoutAllSessionsUseCase"];
-		"command.LogoutAllSessionsUseCase" [label=<command.LogoutAllSessionsUseCase>];
+		label = "github.com/aegiscore/user-service/internal/features/auth";
+		constructor_24 [shape=plaintext label="newAuthSessionLifecycle"];
+		"sessions.Lifecycle" [label=<sessions.Lifecycle>];
 	}
-	constructor_24 -> "sessions.Lifecycle" [ltail=cluster_24];
-	constructor_24 -> "application.Metrics" [ltail=cluster_24];
+	constructor_24 -> "application.UserTokenVersionStore" [ltail=cluster_24];
+	constructor_24 -> "application.TokenVersionCache" [ltail=cluster_24];
+	constructor_24 -> "application.RefreshSessionStore" [ltail=cluster_24];
+	constructor_24 -> "application.PasswordChangeSessionStore" [ltail=cluster_24];
+	constructor_24 -> "validators.TokenVersionLocalInvalidator" [ltail=cluster_24];
+	constructor_24 -> "config.AuthSettings" [ltail=cluster_24];
 	subgraph cluster_25 {
 		label = "github.com/aegiscore/user-service/internal/features/auth";
-		constructor_25 [shape=plaintext label="newAuthController"];
+		constructor_25 [shape=plaintext label="newRefreshTokenSettings"];
+		"command.RefreshTokenSettings" [label=<command.RefreshTokenSettings>];
+	}
+	constructor_25 -> "config.AuthSettings" [ltail=cluster_25];
+	subgraph cluster_26 {
+		label = "github.com/aegiscore/user-service/internal/features/auth/application/command";
+		constructor_26 [shape=plaintext label="NewLoginUseCase"];
+		"command.LoginUseCase" [label=<command.LoginUseCase>];
+	}
+	constructor_26 -> "credentials.Verifier" [ltail=cluster_26];
+	constructor_26 -> "tokens.Issuer" [ltail=cluster_26];
+	constructor_26 -> "sessions.Lifecycle" [ltail=cluster_26];
+	constructor_26 -> "application.Metrics" [ltail=cluster_26];
+	subgraph cluster_27 {
+		label = "github.com/aegiscore/user-service/internal/features/auth/application/command";
+		constructor_27 [shape=plaintext label="NewRefreshTokenUseCase"];
+		"command.RefreshTokenUseCase" [label=<command.RefreshTokenUseCase>];
+	}
+	constructor_27 -> "tokens.Issuer" [ltail=cluster_27];
+	constructor_27 -> "sessions.Lifecycle" [ltail=cluster_27];
+	constructor_27 -> "application.Metrics" [ltail=cluster_27];
+	constructor_27 -> "command.RefreshTokenSettings" [ltail=cluster_27];
+	subgraph cluster_28 {
+		label = "github.com/aegiscore/user-service/internal/features/auth/application/command";
+		constructor_28 [shape=plaintext label="NewForceChangePasswordUseCase"];
+		"command.ForceChangePasswordUseCase" [label=<command.ForceChangePasswordUseCase>];
+	}
+	constructor_28 -> "credentials.Verifier" [ltail=cluster_28];
+	constructor_28 -> "tokens.Issuer" [ltail=cluster_28];
+	constructor_28 -> "sessions.Lifecycle" [ltail=cluster_28];
+	constructor_28 -> "application.Metrics" [ltail=cluster_28];
+	subgraph cluster_29 {
+		label = "github.com/aegiscore/user-service/internal/features/auth/application/command";
+		constructor_29 [shape=plaintext label="NewLogoutCurrentSessionUseCase"];
+		"command.LogoutCurrentSessionUseCase" [label=<command.LogoutCurrentSessionUseCase>];
+	}
+	constructor_29 -> "sessions.Lifecycle" [ltail=cluster_29];
+	constructor_29 -> "application.Metrics" [ltail=cluster_29];
+	subgraph cluster_30 {
+		label = "github.com/aegiscore/user-service/internal/features/auth/application/command";
+		constructor_30 [shape=plaintext label="NewLogoutAllSessionsUseCase"];
+		"command.LogoutAllSessionsUseCase" [label=<command.LogoutAllSessionsUseCase>];
+	}
+	constructor_30 -> "sessions.Lifecycle" [ltail=cluster_30];
+	constructor_30 -> "application.Metrics" [ltail=cluster_30];
+	subgraph cluster_31 {
+		label = "github.com/aegiscore/user-service/internal/features/auth";
+		constructor_31 [shape=plaintext label="newAuthController"];
 		"*authhttp.AuthController" [label=<*authhttp.AuthController>];
 	}
-	constructor_25 -> "command.LoginUseCase" [ltail=cluster_25];
-	constructor_25 -> "command.RefreshTokenUseCase" [ltail=cluster_25];
-	constructor_25 -> "command.ChangePasswordUseCase" [ltail=cluster_25];
-	constructor_25 -> "command.LogoutCurrentSessionUseCase" [ltail=cluster_25];
-	constructor_25 -> "command.LogoutAllSessionsUseCase" [ltail=cluster_25];
-	constructor_25 -> "*validation.Validator" [ltail=cluster_25];
-	subgraph cluster_26 {
-		label = "reflect";
-		constructor_26 [shape=plaintext label="makeFuncStub"];
-		"router.PublicRouteRegistrar[group=public_routes]0" [label=<router.PublicRouteRegistrar<BR /><FONT POINT-SIZE="10">Group: public_routes</FONT>>];
-	}
-	constructor_26 -> "*authhttp.AuthController" [ltail=cluster_26];
-	subgraph cluster_27 {
-		label = "reflect";
-		constructor_27 [shape=plaintext label="makeFuncStub"];
-		"router.AuthenticatedRouteRegistrar[group=authenticated_routes]0" [label=<router.AuthenticatedRouteRegistrar<BR /><FONT POINT-SIZE="10">Group: authenticated_routes</FONT>>];
-	}
-	constructor_27 -> "*authhttp.AuthController" [ltail=cluster_27];
-	subgraph cluster_28 {
-		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_28 [shape=plaintext label="providePermissionStore"];
-		"application.PermissionStore" [label=<application.PermissionStore>];
-	}
-	constructor_28 -> "*ent.Client[name=primary_db]" [ltail=cluster_28];
-	subgraph cluster_29 {
-		label = "github.com/aegiscore/user-service/internal/features/permission/application/query";
-		constructor_29 [shape=plaintext label="NewPermissionQueryService"];
-		"query.PermissionQueryService" [label=<query.PermissionQueryService>];
-	}
-	constructor_29 -> "application.PermissionStore" [ltail=cluster_29];
-	subgraph cluster_30 {
-		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_30 [shape=plaintext label="providePermissionAuthorizer"];
-		"authorization.Authorizer" [label=<authorization.Authorizer>];
-	}
-	constructor_30 -> "authorization.Authorizer[name=permission_authorizer]" [ltail=cluster_30];
-	subgraph cluster_31 {
-		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_31 [shape=plaintext label="providePermissionPolicyHealth"];
-		"authorization.PolicyHealth" [label=<authorization.PolicyHealth>];
-	}
-	constructor_31 -> "authorization.PolicyHealth[name=permission_policy_health]" [ltail=cluster_31];
+	constructor_31 -> "command.LoginUseCase" [ltail=cluster_31];
+	constructor_31 -> "command.RefreshTokenUseCase" [ltail=cluster_31];
+	constructor_31 -> "command.ForceChangePasswordUseCase" [ltail=cluster_31];
+	constructor_31 -> "command.LogoutCurrentSessionUseCase" [ltail=cluster_31];
+	constructor_31 -> "command.LogoutAllSessionsUseCase" [ltail=cluster_31];
+	constructor_31 -> "*validation.Validator" [ltail=cluster_31];
 	subgraph cluster_32 {
 		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_32 [shape=plaintext label="providePermissionPolicyWatcherStatus"];
-		"application.PolicyWatcherStatus" [label=<application.PolicyWatcherStatus>];
+		constructor_32 [shape=plaintext label="providePermissionStore"];
+		"application.PermissionStore" [label=<application.PermissionStore>];
 	}
-	constructor_32 -> "application.PolicyWatcherStatus[name=permission_policy_watcher_status]" [ltail=cluster_32];
+	constructor_32 -> "*ent.Client[name=primary_db]" [ltail=cluster_32];
 	subgraph cluster_33 {
 		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_33 [shape=plaintext label="providePermissionUserRoleCacheStats"];
-		"localcache.StatsSource[name=rbac_user_roles_cache]" [label=<localcache.StatsSource<BR /><FONT POINT-SIZE="10">Name: rbac_user_roles_cache</FONT>>];
+		constructor_33 [shape=plaintext label="provideOutboxStore"];
+		"application.OutboxStore" [label=<application.OutboxStore>];
 	}
-	constructor_33 -> "localcache.StatsSource[name=permission_rbac_user_roles_cache]" [ltail=cluster_33];
+	constructor_33 -> "*ent.Client[name=primary_db]" [ltail=cluster_33];
 	subgraph cluster_34 {
 		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_34 [shape=plaintext label="providePermissionPolicyChangeNotifier"];
-		"application.PolicyChangeNotifier" [label=<application.PolicyChangeNotifier>];
+		constructor_34 [shape=plaintext label="providePolicyRevisionSource"];
+		"application.LatestPolicyRevisionSource" [label=<application.LatestPolicyRevisionSource>];
 	}
-	constructor_34 -> "application.PolicyChangeNotifier[name=permission_policy_change_notifier]" [ltail=cluster_34];
+	constructor_34 -> "*ent.Client[name=primary_db]" [ltail=cluster_34];
 	subgraph cluster_35 {
-		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_35 [shape=plaintext label="providePermissionPolicyInitializer"];
-		"permission.permissionPolicyInitializer" [label=<permission.permissionPolicyInitializer>];
+		label = "github.com/aegiscore/user-service/internal/features/permission/application/query";
+		constructor_35 [shape=plaintext label="NewPermissionQueryService"];
+		"query.PermissionQueryService" [label=<query.PermissionQueryService>];
 	}
-	constructor_35 -> "permission.permissionPolicyInitializer[name=permission_policy_initializer]" [ltail=cluster_35];
+	constructor_35 -> "application.PermissionStore" [ltail=cluster_35];
 	subgraph cluster_36 {
 		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_36 [shape=plaintext label="providePermissionApplicationWatcher"];
-		"permission.permissionApplicationWatcher" [label=<permission.permissionApplicationWatcher>];
+		constructor_36 [shape=plaintext label="newPermissionRuntime"];
+		"*permission.PermissionRuntime" [label=<*permission.PermissionRuntime>];
 	}
-	constructor_36 -> "permission.permissionApplicationWatcher[name=permission_policy_watcher_runner]" [ltail=cluster_36];
+	constructor_36 -> "authorization.Authorizer[name=permission_authorizer]" [ltail=cluster_36];
+	constructor_36 -> "authorization.PolicyHealth[name=permission_policy_health]" [ltail=cluster_36];
+	constructor_36 -> "permission.policyWatcherRunner[name=permission_policy_watcher_runner]" [ltail=cluster_36];
+	constructor_36 -> "application.PolicyWatcherStatus[name=permission_policy_watcher_status]" [ltail=cluster_36];
+	constructor_36 -> "application.OutboxDispatcherRunner[name=permission_outbox_dispatcher_runner]" [ltail=cluster_36];
+	constructor_36 -> "application.OutboxDispatcherStatus[name=permission_outbox_dispatcher_status]" [ltail=cluster_36];
+	constructor_36 -> "application.PolicyChangeNotifier[name=permission_policy_change_notifier]" [ltail=cluster_36];
+	constructor_36 -> "permission.permissionPolicyInitializer[name=permission_policy_initializer]" [ltail=cluster_36];
 	subgraph cluster_37 {
 		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_37 [shape=plaintext label="providePermissionUserRoleCacheCloser"];
-		"casbin.UserRoleCacheCloser" [label=<casbin.UserRoleCacheCloser>];
+		constructor_37 [shape=plaintext label="providePermissionAuthorizer"];
+		"authorization.Authorizer" [label=<authorization.Authorizer>];
 	}
-	constructor_37 -> "casbin.UserRoleCacheCloser[name=permission_user_role_cache_closer]" [ltail=cluster_37];
+	constructor_37 -> "*permission.PermissionRuntime" [ltail=cluster_37];
 	subgraph cluster_38 {
 		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_38 [shape=plaintext label="providePermissionController"];
+		constructor_38 [shape=plaintext label="providePermissionPolicyHealth"];
+		"authorization.PolicyHealth" [label=<authorization.PolicyHealth>];
+	}
+	constructor_38 -> "*permission.PermissionRuntime" [ltail=cluster_38];
+	subgraph cluster_39 {
+		label = "github.com/aegiscore/user-service/internal/features/permission";
+		constructor_39 [shape=plaintext label="providePermissionPolicyWatcherStatus"];
+		"application.PolicyWatcherStatus" [label=<application.PolicyWatcherStatus>];
+	}
+	constructor_39 -> "*permission.PermissionRuntime" [ltail=cluster_39];
+	subgraph cluster_40 {
+		label = "github.com/aegiscore/user-service/internal/features/permission";
+		constructor_40 [shape=plaintext label="providePermissionOutboxDispatcherStatus"];
+		"application.OutboxDispatcherStatus" [label=<application.OutboxDispatcherStatus>];
+	}
+	constructor_40 -> "*permission.PermissionRuntime" [ltail=cluster_40];
+	subgraph cluster_41 {
+		label = "github.com/aegiscore/user-service/internal/features/permission";
+		constructor_41 [shape=plaintext label="providePermissionUserRoleCacheStats"];
+		"localcache.StatsSource[name=rbac_user_roles_cache]" [label=<localcache.StatsSource<BR /><FONT POINT-SIZE="10">Name: rbac_user_roles_cache</FONT>>];
+	}
+	constructor_41 -> "localcache.StatsSource[name=permission_rbac_user_roles_cache]" [ltail=cluster_41];
+	subgraph cluster_42 {
+		label = "github.com/aegiscore/user-service/internal/features/permission";
+		constructor_42 [shape=plaintext label="providePermissionPolicyChangeNotifier"];
+		"application.PolicyChangeNotifier" [label=<application.PolicyChangeNotifier>];
+	}
+	constructor_42 -> "*permission.PermissionRuntime" [ltail=cluster_42];
+	subgraph cluster_43 {
+		label = "github.com/aegiscore/user-service/internal/features/permission";
+		constructor_43 [shape=plaintext label="providePermissionController"];
 		"*permissionhttp.PermissionController" [label=<*permissionhttp.PermissionController>];
 	}
-	constructor_38 -> "query.PermissionQueryService" [ltail=cluster_38];
-	constructor_38 -> "*validation.Validator" [ltail=cluster_38];
-	subgraph cluster_39 {
+	constructor_43 -> "query.PermissionQueryService" [ltail=cluster_43];
+	constructor_43 -> "*validation.Validator" [ltail=cluster_43];
+	subgraph cluster_44 {
 		label = "reflect";
-		constructor_39 [shape=plaintext label="makeFuncStub"];
-		"router.AuthorizedRouteRegistrar[group=authorized_routes]0" [label=<router.AuthorizedRouteRegistrar<BR /><FONT POINT-SIZE="10">Group: authorized_routes</FONT>>];
-	}
-	constructor_39 -> "*permissionhttp.PermissionController" [ltail=cluster_39];
-	subgraph cluster_40 {
-		label = "reflect";
-		constructor_40 [shape=plaintext label="makeFuncStub"];
+		constructor_44 [shape=plaintext label="makeFuncStub"];
 		"application.RoleStore" [label=<application.RoleStore>];
 	}
-	constructor_40 -> "*ent.Client[name=primary_db]" [ltail=cluster_40];
-	subgraph cluster_41 {
+	constructor_44 -> "*ent.Client[name=primary_db]" [ltail=cluster_44];
+	subgraph cluster_45 {
 		label = "reflect";
-		constructor_41 [shape=plaintext label="makeFuncStub"];
+		constructor_45 [shape=plaintext label="makeFuncStub"];
 		"application.UserRoleStore" [label=<application.UserRoleStore>];
 	}
-	constructor_41 -> "*ent.Client[name=primary_db]" [ltail=cluster_41];
-	subgraph cluster_42 {
+	constructor_45 -> "*ent.Client[name=primary_db]" [ltail=cluster_45];
+	subgraph cluster_46 {
 		label = "reflect";
-		constructor_42 [shape=plaintext label="makeFuncStub"];
+		constructor_46 [shape=plaintext label="makeFuncStub"];
 		"application.RolePermissionStore" [label=<application.RolePermissionStore>];
 	}
-	constructor_42 -> "*ent.Client[name=primary_db]" [ltail=cluster_42];
-	subgraph cluster_43 {
-		label = "reflect";
-		constructor_43 [shape=plaintext label="makeFuncStub"];
-		"application.PermissionLookup" [label=<application.PermissionLookup>];
-	}
-	constructor_43 -> "application.PermissionStore" [ltail=cluster_43];
-	subgraph cluster_44 {
-		label = "github.com/aegiscore/user-service/internal/features/role/application/command";
-		constructor_44 [shape=plaintext label="NewRoleCommandService"];
-		"command.RoleCommandService" [label=<command.RoleCommandService>];
-	}
-	constructor_44 -> "application.RoleStore" [ltail=cluster_44];
-	constructor_44 -> "application.UserRoleStore" [ltail=cluster_44];
-	constructor_44 -> "application.RolePermissionStore" [ltail=cluster_44];
-	constructor_44 -> "application.PermissionLookup" [ltail=cluster_44];
-	constructor_44 -> "application.PolicyChangeNotifier" [ltail=cluster_44];
-	subgraph cluster_45 {
-		label = "github.com/aegiscore/user-service/internal/features/role/application/query";
-		constructor_45 [shape=plaintext label="NewRoleQueryService"];
-		"query.RoleQueryService" [label=<query.RoleQueryService>];
-	}
-	constructor_45 -> "application.RoleStore" [ltail=cluster_45];
-	constructor_45 -> "application.UserRoleStore" [ltail=cluster_45];
-	constructor_45 -> "application.RolePermissionStore" [ltail=cluster_45];
-	subgraph cluster_46 {
-		label = "github.com/aegiscore/user-service/internal/features/role/transport/http";
-		constructor_46 [shape=plaintext label="NewRoleController"];
-		"*rolehttp.RoleController" [label=<*rolehttp.RoleController>];
-	}
-	constructor_46 -> "command.RoleCommandService" [ltail=cluster_46];
-	constructor_46 -> "query.RoleQueryService" [ltail=cluster_46];
-	constructor_46 -> "*validation.Validator" [ltail=cluster_46];
+	constructor_46 -> "*ent.Client[name=primary_db]" [ltail=cluster_46];
 	subgraph cluster_47 {
 		label = "reflect";
 		constructor_47 [shape=plaintext label="makeFuncStub"];
-		"router.AuthorizedRouteRegistrar[group=authorized_routes]1" [label=<router.AuthorizedRouteRegistrar<BR /><FONT POINT-SIZE="10">Group: authorized_routes</FONT>>];
+		"application.PermissionLookup" [label=<application.PermissionLookup>];
 	}
-	constructor_47 -> "*rolehttp.RoleController" [ltail=cluster_47];
+	constructor_47 -> "application.PermissionStore" [ltail=cluster_47];
 	subgraph cluster_48 {
 		label = "reflect";
 		constructor_48 [shape=plaintext label="makeFuncStub"];
-		"application.UserProfileStore" [label=<application.UserProfileStore>];
+		"command.PolicyChangeNotifier" [label=<command.PolicyChangeNotifier>];
 	}
-	constructor_48 -> "*ent.Client[name=primary_db]" [ltail=cluster_48];
+	constructor_48 -> "application.PolicyChangeNotifier" [ltail=cluster_48];
 	subgraph cluster_49 {
-		label = "github.com/aegiscore/user-service/internal/features/user/application/command";
-		constructor_49 [shape=plaintext label="NewCreateUserService"];
-		"command.CreateUserService" [label=<command.CreateUserService>];
+		label = "github.com/aegiscore/user-service/internal/features/role/application/command";
+		constructor_49 [shape=plaintext label="NewRoleCommandService"];
+		"command.RoleCommandService" [label=<command.RoleCommandService>];
 	}
-	constructor_49 -> "application.UserProfileStore" [ltail=cluster_49];
-	constructor_49 -> "*password.Service" [ltail=cluster_49];
+	constructor_49 -> "application.RoleStore" [ltail=cluster_49];
+	constructor_49 -> "application.UserRoleStore" [ltail=cluster_49];
+	constructor_49 -> "application.RolePermissionStore" [ltail=cluster_49];
+	constructor_49 -> "application.PermissionLookup" [ltail=cluster_49];
+	constructor_49 -> "command.PolicyChangeNotifier" [ltail=cluster_49];
 	subgraph cluster_50 {
-		label = "github.com/aegiscore/user-service/internal/features/user/application/query";
-		constructor_50 [shape=plaintext label="NewUserQueryService"];
-		"query.UserQueryService" [label=<query.UserQueryService>];
+		label = "github.com/aegiscore/user-service/internal/features/role/application/query";
+		constructor_50 [shape=plaintext label="NewRoleQueryService"];
+		"query.RoleQueryService" [label=<query.RoleQueryService>];
 	}
-	constructor_50 -> "application.UserProfileStore" [ltail=cluster_50];
+	constructor_50 -> "application.RoleStore" [ltail=cluster_50];
+	constructor_50 -> "application.UserRoleStore" [ltail=cluster_50];
+	constructor_50 -> "application.RolePermissionStore" [ltail=cluster_50];
 	subgraph cluster_51 {
-		label = "github.com/aegiscore/user-service/internal/features/user/transport/http";
-		constructor_51 [shape=plaintext label="NewUserController"];
-		"*userhttp.UserController" [label=<*userhttp.UserController>];
+		label = "github.com/aegiscore/user-service/internal/features/role/transport/http";
+		constructor_51 [shape=plaintext label="NewRoleController"];
+		"*rolehttp.RoleController" [label=<*rolehttp.RoleController>];
 	}
-	constructor_51 -> "command.CreateUserService" [ltail=cluster_51];
-	constructor_51 -> "query.UserQueryService" [ltail=cluster_51];
+	constructor_51 -> "command.RoleCommandService" [ltail=cluster_51];
+	constructor_51 -> "query.RoleQueryService" [ltail=cluster_51];
 	constructor_51 -> "*validation.Validator" [ltail=cluster_51];
 	subgraph cluster_52 {
 		label = "reflect";
 		constructor_52 [shape=plaintext label="makeFuncStub"];
-		"router.AuthorizedRouteRegistrar[group=authorized_routes]2" [label=<router.AuthorizedRouteRegistrar<BR /><FONT POINT-SIZE="10">Group: authorized_routes</FONT>>];
+		"application.UserProfileStore" [label=<application.UserProfileStore>];
 	}
-	constructor_52 -> "*userhttp.UserController" [ltail=cluster_52];
+	constructor_52 -> "*ent.Client[name=primary_db]" [ltail=cluster_52];
 	subgraph cluster_53 {
-		label = "github.com/aegiscore/user-service/internal/providers";
-		constructor_53 [shape=plaintext label="ConfigureGinMode"];
-		"providers.GinModeConfigured" [label=<providers.GinModeConfigured>];
+		label = "github.com/aegiscore/user-service/internal/features/user/application/command";
+		constructor_53 [shape=plaintext label="NewCreateUserService"];
+		"command.CreateUserService" [label=<command.CreateUserService>];
 	}
-	constructor_53 -> "*config.Config" [ltail=cluster_53];
+	constructor_53 -> "application.UserProfileStore" [ltail=cluster_53];
+	constructor_53 -> "*password.Service" [ltail=cluster_53];
 	subgraph cluster_54 {
+		label = "github.com/aegiscore/user-service/internal/features/user/application/query";
+		constructor_54 [shape=plaintext label="NewUserQueryService"];
+		"query.UserQueryService" [label=<query.UserQueryService>];
+	}
+	constructor_54 -> "application.UserProfileStore" [ltail=cluster_54];
+	subgraph cluster_55 {
+		label = "github.com/aegiscore/user-service/internal/features/user/transport/http";
+		constructor_55 [shape=plaintext label="NewUserController"];
+		"*userhttp.UserController" [label=<*userhttp.UserController>];
+	}
+	constructor_55 -> "command.CreateUserService" [ltail=cluster_55];
+	constructor_55 -> "query.UserQueryService" [ltail=cluster_55];
+	constructor_55 -> "*validation.Validator" [ltail=cluster_55];
+	subgraph cluster_56 {
 		label = "github.com/aegiscore/common/runtime/observability/metrics";
-		constructor_54 [shape=plaintext label="NewFxProvider"];
+		constructor_56 [shape=plaintext label="NewMetricsProvider"];
 		"*metrics.Provider" [label=<*metrics.Provider>];
 	}
-	constructor_54 -> "*config.Config" [ltail=cluster_54];
-	subgraph cluster_55 {
-		label = "github.com/aegiscore/common/runtime/observability/tracing";
-		constructor_55 [shape=plaintext label="NewFxProvider"];
-		"*tracing.Provider" [label=<*tracing.Provider>];
-	}
-	constructor_55 -> "fx.Lifecycle" [ltail=cluster_55];
-	constructor_55 -> "*config.Config" [ltail=cluster_55];
-	subgraph cluster_56 {
-		label = "github.com/aegiscore/common/security/password";
-		constructor_56 [shape=plaintext label="NewService"];
-		"*password.Service" [label=<*password.Service>];
-	}
+	constructor_56 -> "*config.Config" [ltail=cluster_56];
 	subgraph cluster_57 {
-		label = "reflect";
-		constructor_57 [shape=plaintext label="makeFuncStub"];
-		"*sql.DB[name=primary_db]" [label=<*sql.DB<BR /><FONT POINT-SIZE="10">Name: primary_db</FONT>>];
+		label = "github.com/aegiscore/common/runtime/observability/tracing";
+		constructor_57 [shape=plaintext label="NewTracingProvider"];
+		"*tracing.Provider" [label=<*tracing.Provider>];
 	}
 	constructor_57 -> "fx.Lifecycle" [ltail=cluster_57];
 	constructor_57 -> "*config.Config" [ltail=cluster_57];
-	constructor_57 -> "*zap.Logger" [ltail=cluster_57];
 	subgraph cluster_58 {
-		label = "reflect";
-		constructor_58 [shape=plaintext label="makeFuncStub"];
-		"*redis.Client[name=cache_redis]" [label=<*redis.Client<BR /><FONT POINT-SIZE="10">Name: cache_redis</FONT>>];
-	}
-	constructor_58 -> "fx.Lifecycle" [ltail=cluster_58];
-	constructor_58 -> "*config.Config" [ltail=cluster_58];
-	constructor_58 -> "*zap.Logger" [ltail=cluster_58];
-	constructor_58 -> "*tracing.Provider" [ltail=cluster_58];
-	subgraph cluster_59 {
-		label = "github.com/aegiscore/user-service/internal/providers";
-		constructor_59 [shape=plaintext label="NewJWTService"];
-		"*auth.JWTService" [label=<*auth.JWTService>];
-	}
-	constructor_59 -> "*config.Config" [ltail=cluster_59];
-	subgraph cluster_60 {
-		label = "github.com/aegiscore/user-service/internal/providers";
-		constructor_60 [shape=plaintext label="ProvideEntClients"];
-		"*ent.Client[name=primary_db]" [label=<*ent.Client<BR /><FONT POINT-SIZE="10">Name: primary_db</FONT>>];
-	}
-	constructor_60 -> "fx.Lifecycle" [ltail=cluster_60];
-	constructor_60 -> "*config.Config" [ltail=cluster_60];
-	constructor_60 -> "*zap.Logger" [ltail=cluster_60];
-	constructor_60 -> "*metrics.Provider" [ltail=cluster_60];
-	constructor_60 -> "*tracing.Provider" [ltail=cluster_60];
-	constructor_60 -> "*sql.DB[name=primary_db]" [ltail=cluster_60];
-	subgraph cluster_61 {
-		label = "github.com/aegiscore/user-service/internal/providers";
-		constructor_61 [shape=plaintext label="ProvideHealthChecks"];
+		label = "github.com/aegiscore/user-service/internal/providers/observability";
+		constructor_58 [shape=plaintext label="ProvideHealthChecks"];
 		"router.HealthChecks" [label=<router.HealthChecks>];
 	}
-	constructor_61 -> "*config.Config" [ltail=cluster_61];
-	constructor_61 -> "*sql.DB[name=primary_db]" [ltail=cluster_61];
-	constructor_61 -> "*redis.Client[name=cache_redis]" [ltail=cluster_61];
-	constructor_61 -> "authorization.PolicyHealth" [ltail=cluster_61];
-	constructor_61 -> "application.PolicyWatcherStatus" [ltail=cluster_61];
-	subgraph cluster_62 {
-		label = "github.com/aegiscore/user-service/internal/providers";
-		constructor_62 [shape=plaintext label="NewGinEngine"];
-		"*gin.Engine" [label=<*gin.Engine>];
+	constructor_58 -> "config.ResourceSettings" [ltail=cluster_58];
+	constructor_58 -> "config.RBACSettings" [ltail=cluster_58];
+	constructor_58 -> "*sql.DB[name=primary_db]" [ltail=cluster_58];
+	constructor_58 -> "redis.UniversalClient[name=cache_redis]" [ltail=cluster_58];
+	constructor_58 -> "authorization.PolicyHealth" [ltail=cluster_58];
+	constructor_58 -> "application.PolicyWatcherStatus" [ltail=cluster_58];
+	constructor_58 -> "application.OutboxDispatcherStatus" [ltail=cluster_58];
+	subgraph cluster_59 {
+		label = "github.com/aegiscore/common/security/password";
+		constructor_59 [shape=plaintext label="NewService"];
+		"*password.Service" [label=<*password.Service>];
 	}
-	constructor_62 -> "providers.GinModeConfigured" [ltail=cluster_62];
-	constructor_62 -> "*config.Config" [ltail=cluster_62];
+	subgraph cluster_60 {
+		label = "github.com/aegiscore/user-service/internal/providers/security";
+		constructor_60 [shape=plaintext label="NewJWTService"];
+		"*auth.JWTService" [label=<*auth.JWTService>];
+	}
+	constructor_60 -> "config.AuthSettings" [ltail=cluster_60];
+	subgraph cluster_61 {
+		label = "reflect";
+		constructor_61 [shape=plaintext label="makeFuncStub"];
+		"*sql.DB[name=primary_db]" [label=<*sql.DB<BR /><FONT POINT-SIZE="10">Name: primary_db</FONT>>];
+	}
+	constructor_61 -> "fx.Lifecycle" [ltail=cluster_61];
+	constructor_61 -> "config.ResourceSettings" [ltail=cluster_61];
+	constructor_61 -> "*zap.Logger" [ltail=cluster_61];
+	constructor_61 -> "*tracing.Provider" [ltail=cluster_61];
+	subgraph cluster_62 {
+		label = "reflect";
+		constructor_62 [shape=plaintext label="makeFuncStub"];
+		"redis.UniversalClient[name=cache_redis]" [label=<redis.UniversalClient<BR /><FONT POINT-SIZE="10">Name: cache_redis</FONT>>];
+	}
+	constructor_62 -> "fx.Lifecycle" [ltail=cluster_62];
+	constructor_62 -> "config.ResourceSettings" [ltail=cluster_62];
 	constructor_62 -> "*zap.Logger" [ltail=cluster_62];
-	constructor_62 -> "*metrics.Provider" [ltail=cluster_62];
 	constructor_62 -> "*tracing.Provider" [ltail=cluster_62];
 	subgraph cluster_63 {
+		label = "github.com/aegiscore/user-service/internal/providers/datastore";
+		constructor_63 [shape=plaintext label="ProvideEntClients"];
+		"*ent.Client[name=primary_db]" [label=<*ent.Client<BR /><FONT POINT-SIZE="10">Name: primary_db</FONT>>];
+	}
+	constructor_63 -> "fx.Lifecycle" [ltail=cluster_63];
+	constructor_63 -> "config.EntSettings" [ltail=cluster_63];
+	constructor_63 -> "*zap.Logger" [ltail=cluster_63];
+	constructor_63 -> "*metrics.Provider" [ltail=cluster_63];
+	constructor_63 -> "*tracing.Provider" [ltail=cluster_63];
+	constructor_63 -> "*sql.DB[name=primary_db]" [ltail=cluster_63];
+	subgraph cluster_64 {
+		label = "github.com/aegiscore/user-service/internal/providers/transport";
+		constructor_64 [shape=plaintext label="ConfigureGinMode"];
+		"transport.GinModeConfigured" [label=<transport.GinModeConfigured>];
+	}
+	constructor_64 -> "*config.Config" [ltail=cluster_64];
+	subgraph cluster_65 {
+		label = "github.com/aegiscore/user-service/internal/providers/transport";
+		constructor_65 [shape=plaintext label="NewAPIRateLimiters"];
+		"*transport.APIRateLimiters" [label=<*transport.APIRateLimiters>];
+	}
+	constructor_65 -> "fx.Lifecycle" [ltail=cluster_65];
+	constructor_65 -> "config.RateLimitSettings" [ltail=cluster_65];
+	subgraph cluster_66 {
+		label = "github.com/aegiscore/user-service/internal/providers/transport";
+		constructor_66 [shape=plaintext label="NewGinEngine"];
+		"*gin.Engine" [label=<*gin.Engine>];
+	}
+	constructor_66 -> "transport.GinModeConfigured" [ltail=cluster_66];
+	constructor_66 -> "*config.Config" [ltail=cluster_66];
+	constructor_66 -> "*zap.Logger" [ltail=cluster_66];
+	constructor_66 -> "*metrics.Provider" [ltail=cluster_66];
+	constructor_66 -> "*tracing.Provider" [ltail=cluster_66];
+	constructor_66 -> "config.HTTPSettings" [ltail=cluster_66];
+	subgraph cluster_67 {
 		label = "github.com/aegiscore/common/runtime/logger";
-		constructor_63 [shape=plaintext label="NewFxEventLogger"];
+		constructor_67 [shape=plaintext label="NewFxEventLogger"];
 		"fxevent.Logger" [label=<fxevent.Logger>];
 	}
-	constructor_63 -> "*zap.Logger" [ltail=cluster_63];
-	subgraph cluster_64 {
-		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_64 [shape=plaintext label="newPermissionMetrics"];
-		"application.Metrics" [label=<application.Metrics>];
-	}
-	constructor_64 -> "*metrics.Provider" [ltail=cluster_64];
-	subgraph cluster_65 {
-		label = "github.com/aegiscore/common/runtime/observability/metrics";
-		constructor_65 [shape=plaintext label="NewCasbinPolicyReloadMetrics"];
-		"metrics.ReloadMetrics" [label=<metrics.ReloadMetrics>];
-	}
-	constructor_65 -> "*metrics.Provider" [ltail=cluster_65];
-	subgraph cluster_66 {
-		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_66 [shape=plaintext label="providePolicyLoader"];
-		"casbin.Loader" [label=<casbin.Loader>];
-	}
-	constructor_66 -> "*ent.Client[name=primary_db]" [ltail=cluster_66];
-	subgraph cluster_67 {
-		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_67 [shape=plaintext label="provideUserRoleResolver"];
-		"casbin.UserRoleResolver" [label=<casbin.UserRoleResolver>];
-		"localcache.StatsSource[name=permission_rbac_user_roles_cache]" [label=<localcache.StatsSource<BR /><FONT POINT-SIZE="10">Name: permission_rbac_user_roles_cache</FONT>>];
-		"casbin.UserRoleCacheCloser[name=permission_user_role_cache_closer]" [label=<casbin.UserRoleCacheCloser<BR /><FONT POINT-SIZE="10">Name: permission_user_role_cache_closer</FONT>>];
-		"permission.userRoleResolverStarter" [label=<permission.userRoleResolverStarter>];
-	}
-	constructor_67 -> "*config.Config" [ltail=cluster_67];
-	constructor_67 -> "*ent.Client[name=primary_db]" [ltail=cluster_67];
+	constructor_67 -> "*zap.Logger" [ltail=cluster_67];
 	subgraph cluster_68 {
 		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_68 [shape=plaintext label="provideEngine"];
+		constructor_68 [shape=plaintext label="newPermissionMetrics"];
+		"application.Metrics" [label=<application.Metrics>];
+	}
+	constructor_68 -> "*metrics.Provider" [ltail=cluster_68];
+	constructor_68 -> "authorization.PolicyHealth[name=permission_policy_health]" [ltail=cluster_68];
+	subgraph cluster_69 {
+		label = "github.com/aegiscore/common/runtime/observability/metrics";
+		constructor_69 [shape=plaintext label="NewCasbinPolicyReloadMetrics"];
+		"metrics.ReloadMetrics" [label=<metrics.ReloadMetrics>];
+	}
+	constructor_69 -> "*metrics.Provider" [ltail=cluster_69];
+	subgraph cluster_70 {
+		label = "github.com/aegiscore/user-service/internal/features/permission";
+		constructor_70 [shape=plaintext label="providePolicyLoader"];
+		"casbin.Loader" [label=<casbin.Loader>];
+	}
+	constructor_70 -> "*ent.Client[name=primary_db]" [ltail=cluster_70];
+	subgraph cluster_71 {
+		label = "github.com/aegiscore/user-service/internal/features/permission";
+		constructor_71 [shape=plaintext label="provideUserRoleResolver"];
+		"casbin.UserRoleResolver" [label=<casbin.UserRoleResolver>];
+		"localcache.StatsSource[name=permission_rbac_user_roles_cache]" [label=<localcache.StatsSource<BR /><FONT POINT-SIZE="10">Name: permission_rbac_user_roles_cache</FONT>>];
+	}
+	constructor_71 -> "config.RBACSettings" [ltail=cluster_71];
+	constructor_71 -> "*ent.Client[name=primary_db]" [ltail=cluster_71];
+	subgraph cluster_72 {
+		label = "github.com/aegiscore/user-service/internal/features/permission";
+		constructor_72 [shape=plaintext label="provideEngine"];
 		"authorization.Engine[name=permission_authorization_engine]" [label=<authorization.Engine<BR /><FONT POINT-SIZE="10">Name: permission_authorization_engine</FONT>>];
 		"application.PolicyReloadEngine[name=permission_policy_reload_engine]" [label=<application.PolicyReloadEngine<BR /><FONT POINT-SIZE="10">Name: permission_policy_reload_engine</FONT>>];
 		"authorization.PolicyHealth[name=permission_policy_health]" [label=<authorization.PolicyHealth<BR /><FONT POINT-SIZE="10">Name: permission_policy_health</FONT>>];
 		"permission.permissionPolicyInitializer[name=permission_policy_initializer]" [label=<permission.permissionPolicyInitializer<BR /><FONT POINT-SIZE="10">Name: permission_policy_initializer</FONT>>];
 	}
-	constructor_68 -> "casbin.Loader" [ltail=cluster_68];
-	constructor_68 -> "metrics.ReloadMetrics" [ltail=cluster_68];
-	constructor_68 -> "casbin.UserRoleResolver" [ltail=cluster_68];
-	subgraph cluster_69 {
-		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_69 [shape=plaintext label="provideAuthorizer"];
-		"authorization.Authorizer[name=permission_authorizer]" [label=<authorization.Authorizer<BR /><FONT POINT-SIZE="10">Name: permission_authorizer</FONT>>];
-	}
-	constructor_69 -> "authorization.Engine[name=permission_authorization_engine]" [ltail=cluster_69];
-	constructor_69 -> "application.Metrics" [ltail=cluster_69];
-	subgraph cluster_70 {
-		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_70 [shape=plaintext label="provideRedisStore"];
-		"*redis.Store" [label=<*redis.Store>];
-		"application.PolicyVersionPublisher" [label=<application.PolicyVersionPublisher>];
-	}
-	constructor_70 -> "*redis.Client[name=cache_redis]" [ltail=cluster_70];
-	constructor_70 -> "*config.Config" [ltail=cluster_70];
-	constructor_70 -> "*zap.Logger" [ltail=cluster_70];
-	subgraph cluster_71 {
-		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_71 [shape=plaintext label="provideVersionTracker"];
-		"*redis.VersionTracker" [label=<*redis.VersionTracker>];
-		"application.PolicyVersionTracker" [label=<application.PolicyVersionTracker>];
-	}
-	subgraph cluster_72 {
-		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_72 [shape=plaintext label="providePolicyChangeNotifier"];
-		"application.PolicyChangeNotifier[name=permission_policy_change_notifier]" [label=<application.PolicyChangeNotifier<BR /><FONT POINT-SIZE="10">Name: permission_policy_change_notifier</FONT>>];
-	}
-	constructor_72 -> "application.PolicyReloadEngine[name=permission_policy_reload_engine]" [ltail=cluster_72];
-	constructor_72 -> "application.PolicyVersionPublisher" [ltail=cluster_72];
-	constructor_72 -> "application.PolicyVersionTracker" [ltail=cluster_72];
-	constructor_72 -> "*zap.Logger" [ltail=cluster_72];
-	constructor_72 -> "application.Metrics" [ltail=cluster_72];
+	constructor_72 -> "casbin.Loader" [ltail=cluster_72];
+	constructor_72 -> "metrics.ReloadMetrics" [ltail=cluster_72];
+	constructor_72 -> "casbin.UserRoleResolver" [ltail=cluster_72];
 	subgraph cluster_73 {
 		label = "github.com/aegiscore/user-service/internal/features/permission";
-		constructor_73 [shape=plaintext label="provideWatcher"];
+		constructor_73 [shape=plaintext label="provideAuthorizer"];
+		"authorization.Authorizer[name=permission_authorizer]" [label=<authorization.Authorizer<BR /><FONT POINT-SIZE="10">Name: permission_authorizer</FONT>>];
+	}
+	constructor_73 -> "authorization.Engine[name=permission_authorization_engine]" [ltail=cluster_73];
+	constructor_73 -> "application.Metrics" [ltail=cluster_73];
+	subgraph cluster_74 {
+		label = "github.com/aegiscore/user-service/internal/features/permission";
+		constructor_74 [shape=plaintext label="provideRedisStore"];
+		"*redis.Store" [label=<*redis.Store>];
+		"application.PolicyRevisionPublisher" [label=<application.PolicyRevisionPublisher>];
+	}
+	constructor_74 -> "redis.UniversalClient[name=cache_redis]" [ltail=cluster_74];
+	constructor_74 -> "config.RBACSettings" [ltail=cluster_74];
+	constructor_74 -> "*zap.Logger" [ltail=cluster_74];
+	subgraph cluster_75 {
+		label = "github.com/aegiscore/user-service/internal/features/permission";
+		constructor_75 [shape=plaintext label="providePolicyChangeNotifier"];
+		"application.PolicyChangeNotifier[name=permission_policy_change_notifier]" [label=<application.PolicyChangeNotifier<BR /><FONT POINT-SIZE="10">Name: permission_policy_change_notifier</FONT>>];
+	}
+	constructor_75 -> "application.PolicyReloadEngine[name=permission_policy_reload_engine]" [ltail=cluster_75];
+	constructor_75 -> "*zap.Logger" [ltail=cluster_75];
+	constructor_75 -> "application.Metrics" [ltail=cluster_75];
+	subgraph cluster_76 {
+		label = "github.com/aegiscore/user-service/internal/features/permission";
+		constructor_76 [shape=plaintext label="provideWatcher"];
 		"*redis.Watcher" [label=<*redis.Watcher>];
-		"permission.permissionApplicationWatcher[name=permission_policy_watcher_runner]" [label=<permission.permissionApplicationWatcher<BR /><FONT POINT-SIZE="10">Name: permission_policy_watcher_runner</FONT>>];
+		"permission.policyWatcherRunner[name=permission_policy_watcher_runner]" [label=<permission.policyWatcherRunner<BR /><FONT POINT-SIZE="10">Name: permission_policy_watcher_runner</FONT>>];
 		"application.PolicyWatcherStatus[name=permission_policy_watcher_status]" [label=<application.PolicyWatcherStatus<BR /><FONT POINT-SIZE="10">Name: permission_policy_watcher_status</FONT>>];
 	}
-	constructor_73 -> "*redis.Store" [ltail=cluster_73];
-	constructor_73 -> "*redis.VersionTracker" [ltail=cluster_73];
-	constructor_73 -> "application.PolicyReloadEngine[name=permission_policy_reload_engine]" [ltail=cluster_73];
-	constructor_73 -> "*zap.Logger" [ltail=cluster_73];
-	constructor_73 -> "application.Metrics" [ltail=cluster_73];
+	constructor_76 -> "*redis.Store" [ltail=cluster_76];
+	constructor_76 -> "application.LatestPolicyRevisionSource" [ltail=cluster_76];
+	constructor_76 -> "application.PolicyReloadEngine[name=permission_policy_reload_engine]" [ltail=cluster_76];
+	constructor_76 -> "config.RBACSettings" [ltail=cluster_76];
+	constructor_76 -> "*zap.Logger" [ltail=cluster_76];
+	constructor_76 -> "application.Metrics" [ltail=cluster_76];
+	subgraph cluster_77 {
+		label = "github.com/aegiscore/user-service/internal/features/permission";
+		constructor_77 [shape=plaintext label="provideOutboxDispatcher"];
+		"application.OutboxDispatcherRunner[name=permission_outbox_dispatcher_runner]" [label=<application.OutboxDispatcherRunner<BR /><FONT POINT-SIZE="10">Name: permission_outbox_dispatcher_runner</FONT>>];
+		"application.OutboxDispatcherStatus[name=permission_outbox_dispatcher_status]" [label=<application.OutboxDispatcherStatus<BR /><FONT POINT-SIZE="10">Name: permission_outbox_dispatcher_status</FONT>>];
+	}
+	constructor_77 -> "application.OutboxStore" [ltail=cluster_77];
+	constructor_77 -> "application.PolicyRevisionPublisher" [ltail=cluster_77];
+	constructor_77 -> "config.RBACSettings" [ltail=cluster_77];
+	constructor_77 -> "*zap.Logger" [ltail=cluster_77];
+	constructor_77 -> "application.Metrics" [ltail=cluster_77];
 }

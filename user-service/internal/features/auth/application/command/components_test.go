@@ -421,7 +421,7 @@ func TestTokenVersionValidatorRejectsStaleTokenWhenCacheHasNewVersion(t *testing
 
 func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenVersionStore, tokenCache authapplication.TokenVersionCache) commonauth.TokenVersionValidator {
 	t.Helper()
-	cache, err := localcache.NewLoadingCache[string, int64](localcache.Config{
+	cache, err := localcache.NewLoadingCache(localcache.Config{
 		Name:        "auth_token_version_test",
 		Capacity:    100,
 		TTL:         time.Minute,
@@ -432,25 +432,12 @@ func newTestTokenVersionValidator(t *testing.T, users authapplication.UserTokenV
 	require.NoError(t, err,
 		"New localcache: %v", err)
 
-	t.Cleanup(cache.Close)
-	validator := authvalidators.NewCachingValidator(commandLocalTokenVersionCacheAdapter{cache: cache})
+	validator := authvalidators.NewCachingValidator(cache)
 	return authvalidators.NewMetricsTokenVersionValidator(validator, nil)
 }
 
 func authRefreshTestSession(sessionID string, tokenVersion int64) authdomain.AuthSession {
 	return authdomain.AuthSession{UserID: authTestUserID, SessionID: sessionID, TokenVersion: tokenVersion}
-}
-
-type commandLocalTokenVersionCacheAdapter struct {
-	cache *localcache.LoadingCache[string, int64]
-}
-
-func (a commandLocalTokenVersionCacheAdapter) GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error) {
-	return a.cache.GetOrLoad(ctx, userID.String())
-}
-
-func (a commandLocalTokenVersionCacheAdapter) Delete(userID string) error {
-	return a.cache.Delete(userID)
 }
 
 func newGeneratedAuthSessionLifecycle(t testing.TB, ctrl *gomock.Controller) (authsessions.Lifecycle, *MockUserTokenVersionStore, *MockTokenVersionCache, *MockRefreshSessionStore) {

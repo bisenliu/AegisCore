@@ -560,7 +560,7 @@ report_service_metric_presence() {
     aegiscore_user_service_ent_query_errors_total
     aegiscore_localcache_requests_total
     aegiscore_localcache_loads_total
-    aegiscore_localcache_evictions_total
+    aegiscore_localcache_capacity_evictions_total
     aegiscore_localcache_capacity
     aegiscore_scheduler_jobs_total
     aegiscore_scheduler_job_duration_seconds
@@ -623,7 +623,7 @@ summarize_results() {
     'aegiscore_postgres_pool_open_connections'
     'sum by (cache, result) (aegiscore_localcache_requests_total)'
     'sum by (cache, result) (aegiscore_localcache_loads_total)'
-    'sum by (cache) (aegiscore_localcache_evictions_total)'
+    'sum by (cache) (aegiscore_localcache_capacity_evictions_total)'
     'aegiscore_localcache_capacity'
     'sum by (event) (aegiscore_workerpool_tasks_total)'
     'sum by (scheduler_job, event, status, reason) (aegiscore_scheduler_jobs_total)'

@@ -3939,7 +3939,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "按 cache 展示 TTL 过期或容量达到上限产生的自动 eviction 5 分钟速率。",
+      "description": "按 cache 展示达到容量上限产生的驱逐 5 分钟速率；TTL 到期与显式失效不计入。",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4012,13 +4012,13 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (cache) (rate(aegiscore_localcache_evictions_total{service=\"$service\",environment=\"$environment\"}[5m]))",
+          "expr": "sum by (cache) (rate(aegiscore_localcache_capacity_evictions_total{service=\"$service\",environment=\"$environment\"}[5m]))",
           "legendFormat": "{{cache}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "缓存淘汰速率",
+      "title": "缓存容量驱逐速率",
       "type": "timeseries"
     },
     {
@@ -4091,7 +4091,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "最近 15 分钟自动 eviction 增量。非 0 时检查容量、TTL、key 基数和流量变化。",
+      "description": "最近 15 分钟容量驱逐增量。非 0 时检查容量、key 基数和流量变化；TTL 到期与显式失效不计入。",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -4150,13 +4150,13 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (cache) (increase(aegiscore_localcache_evictions_total{service=\"$service\",environment=\"$environment\"}[15m])) or label_replace(vector(0), \"cache\", \"auth_token_version\", \"__name__\", \".*\") or label_replace(vector(0), \"cache\", \"rbac_user_roles\", \"__name__\", \".*\")",
+          "expr": "sum by (cache) (increase(aegiscore_localcache_capacity_evictions_total{service=\"$service\",environment=\"$environment\"}[15m])) or label_replace(vector(0), \"cache\", \"auth_token_version\", \"__name__\", \".*\") or label_replace(vector(0), \"cache\", \"rbac_user_roles\", \"__name__\", \".*\")",
           "legendFormat": "{{cache}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "自动驱逐（15m）",
+      "title": "容量驱逐（15m）",
       "type": "stat"
     },
     {

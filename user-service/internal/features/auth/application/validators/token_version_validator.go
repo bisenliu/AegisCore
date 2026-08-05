@@ -23,8 +23,8 @@ type TokenVersionValidator struct {
 
 // LocalTokenVersionCache 定义 token version 本地读取与失效所需的最小接口。
 type LocalTokenVersionCache interface {
-	GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error)
-	Delete(userID string) error
+	Get(ctx context.Context, key string) (int64, error)
+	Invalidate(key string)
 }
 
 // DirectTokenVersionCache 在关闭本地缓存时逐次回源，并保留稳定的指标来源。
@@ -37,7 +37,7 @@ type DirectTokenVersionCache struct {
 
 // TokenVersionLocalInvalidator 失效本实例内 token version 本地缓存。
 type TokenVersionLocalInvalidator interface {
-	InvalidateTokenVersion(userID string) error
+	InvalidateTokenVersion(userID string)
 }
 
 // NewCachingValidator 构造使用外部注入 localcache 的 token version 校验器。
@@ -50,8 +50,12 @@ func NewDirectTokenVersionCache(users authapplication.UserTokenVersionStore, cac
 	return &DirectTokenVersionCache{users: users, cache: cache}
 }
 
-// GetOrLoad 每次通过 Redis 投影或用户存储读取当前 token version。
-func (c *DirectTokenVersionCache) GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error) {
+// Get 每次通过 Redis 投影或用户存储读取当前 token version。
+func (c *DirectTokenVersionCache) Get(ctx context.Context, key string) (int64, error) {
+	userID, err := uuid.Parse(key)
+	if err != nil {
+		return 0, fmt.Errorf("parse token version user id: %w", err)
+	}
 	c.load.Add(1)
 	version, err := Current(ctx, c.users, c.cache, userID)
 	if err != nil {
@@ -60,10 +64,8 @@ func (c *DirectTokenVersionCache) GetOrLoad(ctx context.Context, userID uuid.UUI
 	return version, err
 }
 
-// Delete 在无本地缓存模式下是安全 no-op。
-func (c *DirectTokenVersionCache) Delete(string) error {
-	return nil
-}
+// Invalidate 在无本地缓存模式下是安全 no-op。
+func (c *DirectTokenVersionCache) Invalidate(string) {}
 
 // Name 返回供 metrics 使用的稳定缓存实例名。
 func (c *DirectTokenVersionCache) Name() string {
@@ -88,18 +90,12 @@ func (v *TokenVersionValidator) ValidateTokenVersion(ctx context.Context, userID
 
 // Current 返回本实例缓存或后端存储中的当前 token version。
 func (v *TokenVersionValidator) Current(ctx context.Context, userID uuid.UUID) (int64, error) {
-	return v.cache.GetOrLoad(ctx, userID)
+	return v.cache.Get(ctx, userID.String())
 }
 
-// InvalidateTokenVersion 删除本实例内指定用户的 token version 本地缓存。
-func (v *TokenVersionValidator) InvalidateTokenVersion(userID string) error {
-	if err := v.cache.Delete(userID); err != nil {
-		if errors.Is(err, localcache.ErrClosed) {
-			return nil
-		}
-		return fmt.Errorf("delete local token version cache: %w", err)
-	}
-	return nil
+// InvalidateTokenVersion 失效本实例内指定用户的 token version 本地缓存。
+func (v *TokenVersionValidator) InvalidateTokenVersion(userID string) {
+	v.cache.Invalidate(userID)
 }
 
 // Current 使用 Redis token version cache，并在 miss 时回源用户凭据存储。

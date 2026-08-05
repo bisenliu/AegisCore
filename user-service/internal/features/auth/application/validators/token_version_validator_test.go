@@ -246,8 +246,7 @@ func TestTokenVersionValidatorInvalidateReloads(t *testing.T) {
 			"ValidateTokenVersion first: %v", err)
 	}
 
-	require.NoError(t, validator.InvalidateTokenVersion(userID.String()),
-		"InvalidateTokenVersion")
+	validator.InvalidateTokenVersion(userID.String())
 	{
 		err := validator.ValidateTokenVersion(context.Background(), userID, 7)
 		require.NoError(t, err,
@@ -256,27 +255,76 @@ func TestTokenVersionValidatorInvalidateReloads(t *testing.T) {
 
 }
 
-func TestTokenVersionValidatorInvalidateAfterCacheCloseIsNoop(t *testing.T) {
-	cache, err := localcache.NewLoadingCache[string, int64](localcache.Config{
-		Name:        "auth_token_version_invalidate_error_test",
-		Capacity:    100,
+func TestTokenVersionValidatorConcurrentInvalidationRejectsStaleVersion(t *testing.T) {
+	var source atomic.Int64
+	source.Store(1)
+	var loads atomic.Uint64
+	started := make(chan uint64, 2)
+	releases := []chan struct{}{make(chan struct{}), make(chan struct{})}
+	cache, err := localcache.NewLoadingCache(localcache.Config{
+		Name:        "auth_token_version_concurrent_invalidation_test",
+		Capacity:    10,
 		TTL:         time.Minute,
 		LoadTimeout: time.Second,
 	}, func(context.Context, string) (int64, error) {
-		return 0, nil
+		call := loads.Add(1)
+		version := source.Load()
+		started <- call
+		<-releases[call-1]
+		return version, nil
 	})
-	require.NoError(t, err,
-		"New localcache: %v", err)
-	cache.Close()
-
-	validator := NewCachingValidator(localTokenVersionCacheAdapter{cache: cache})
-	err = validator.InvalidateTokenVersion(tokenVersionTestUserID.String())
 	require.NoError(t, err)
+	validator := NewCachingValidator(cache)
+
+	result := make(chan error, 1)
+	go func() {
+		result <- validator.ValidateTokenVersion(context.Background(), tokenVersionTestUserID, 1)
+	}()
+	require.EqualValues(t, 1, waitTokenVersionLoad(t, started))
+	source.Store(2)
+	validator.InvalidateTokenVersion(tokenVersionTestUserID.String())
+	close(releases[0])
+	require.EqualValues(t, 2, waitTokenVersionLoad(t, started))
+	close(releases[1])
+
+	require.ErrorIs(t, waitTokenVersionLoad(t, result), commonauth.ErrTokenVersionMismatch)
+	require.NoError(t, validator.ValidateTokenVersion(context.Background(), tokenVersionTestUserID, 2))
+	require.EqualValues(t, 2, loads.Load())
+}
+
+func TestTokenVersionValidatorContinuousInvalidationFailsClosed(t *testing.T) {
+	var loads atomic.Uint64
+	started := make(chan uint64, 2)
+	releases := []chan struct{}{make(chan struct{}), make(chan struct{})}
+	cache, err := localcache.NewLoadingCache(localcache.Config{
+		Name:        "auth_token_version_continuous_invalidation_test",
+		Capacity:    10,
+		TTL:         time.Minute,
+		LoadTimeout: time.Second,
+	}, func(context.Context, string) (int64, error) {
+		call := loads.Add(1)
+		started <- call
+		<-releases[call-1]
+		return int64(call), nil
+	})
+	require.NoError(t, err)
+	validator := NewCachingValidator(cache)
+
+	result := make(chan error, 1)
+	go func() {
+		result <- validator.ValidateTokenVersion(context.Background(), tokenVersionTestUserID, 1)
+	}()
+	for index := range 2 {
+		require.EqualValues(t, index+1, waitTokenVersionLoad(t, started))
+		validator.InvalidateTokenVersion(tokenVersionTestUserID.String())
+		close(releases[index])
+	}
+	require.ErrorIs(t, waitTokenVersionLoad(t, result), localcache.ErrInvalidated)
 }
 
 func newTestTokenVersionValidator(t *testing.T, users *MockUserTokenVersionStore, tokenCache *MockTokenVersionCache, ttl time.Duration) *TokenVersionValidator {
 	t.Helper()
-	cache, err := localcache.NewLoadingCache[string, int64](localcache.Config{
+	cache, err := localcache.NewLoadingCache(localcache.Config{
 		Name:        "auth_token_version_test",
 		Capacity:    100,
 		TTL:         ttl,
@@ -291,18 +339,17 @@ func newTestTokenVersionValidator(t *testing.T, users *MockUserTokenVersionStore
 	require.NoError(t, err,
 		"New localcache: %v", err)
 
-	t.Cleanup(cache.Close)
-	return NewCachingValidator(localTokenVersionCacheAdapter{cache: cache})
+	return NewCachingValidator(cache)
 }
 
-type localTokenVersionCacheAdapter struct {
-	cache *localcache.LoadingCache[string, int64]
-}
-
-func (a localTokenVersionCacheAdapter) GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error) {
-	return a.cache.GetOrLoad(ctx, userID.String())
-}
-
-func (a localTokenVersionCacheAdapter) Delete(userID string) error {
-	return a.cache.Delete(userID)
+func waitTokenVersionLoad[T any](t *testing.T, ch <-chan T) T {
+	t.Helper()
+	select {
+	case value := <-ch:
+		return value
+	case <-time.After(time.Second):
+		t.Fatal("等待 token version loader 超时")
+		var zero T
+		return zero
+	}
 }

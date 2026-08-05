@@ -59,6 +59,8 @@ spec:
 
 `readyz` 告警依赖外部探测指标，例如 blackbox exporter 的 `probe_success` 或等价 Kubernetes probe metrics。仅靠应用 `/metrics` 不能证明 `/readyz` 正在失败。
 
+Localcache 容量压力使用 `aegiscore_localcache_capacity_evictions_total`。该指标只统计容量达到上限产生的驱逐，不包含 TTL 到期和显式失效；auth token-version 与 RBAC user-role 的强失效竞态应结合 loader error、认证拒绝和授权拒绝结果排查。
+
 ## 本地验证
 
 1. 启用 metrics：

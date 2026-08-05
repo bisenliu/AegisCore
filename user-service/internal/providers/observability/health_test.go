@@ -226,7 +226,7 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 		`aegiscore_localcache_requests_total{cache="auth_token_version",environment="test",result="hit",service="aegiscore-user-service-test"} 3`,
 		`aegiscore_localcache_requests_total{cache="rbac_user_roles",environment="test",result="miss",service="aegiscore-user-service-test"} 2`,
 		`aegiscore_localcache_loads_total{cache="auth_token_version",environment="test",result="success",service="aegiscore-user-service-test"} 0`,
-		`aegiscore_localcache_evictions_total{cache="auth_token_version",environment="test",service="aegiscore-user-service-test"} 0`,
+		`aegiscore_localcache_capacity_evictions_total{cache="auth_token_version",environment="test",service="aegiscore-user-service-test"} 0`,
 		`aegiscore_localcache_capacity{cache="auth_token_version",environment="test",service="aegiscore-user-service-test"} 1000`,
 		`aegiscore_user_service_rbac_policy_watcher_running{environment="test",service="aegiscore-user-service-test"} 1`,
 		`aegiscore_user_service_rbac_policy_watcher_subscription_state{environment="test",service="aegiscore-user-service-test",state="starting"} 0`,

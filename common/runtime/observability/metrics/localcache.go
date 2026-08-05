@@ -10,15 +10,15 @@ import (
 )
 
 const (
-	localcacheRequestsMetricName  = "aegiscore_localcache_requests_total"
-	localcacheLoadsMetricName     = "aegiscore_localcache_loads_total"
-	localcacheEvictionsMetricName = "aegiscore_localcache_evictions_total"
-	localcacheCapacityMetricName  = "aegiscore_localcache_capacity"
+	localcacheRequestsMetricName          = "aegiscore_localcache_requests_total"
+	localcacheLoadsMetricName             = "aegiscore_localcache_loads_total"
+	localcacheCapacityEvictionsMetricName = "aegiscore_localcache_capacity_evictions_total"
+	localcacheCapacityMetricName          = "aegiscore_localcache_capacity"
 
-	localcacheRequestsMetricHelp  = "Total number of localcache business requests by fixed cache and result."
-	localcacheLoadsMetricHelp     = "Total number of localcache loader executions by fixed cache and result."
-	localcacheEvictionsMetricHelp = "Total number of automatic localcache evictions by fixed cache."
-	localcacheCapacityMetricHelp  = "Configured localcache maximum item count by fixed cache."
+	localcacheRequestsMetricHelp          = "Total number of localcache business requests by fixed cache and result."
+	localcacheLoadsMetricHelp             = "Total number of localcache loader executions by fixed cache and result."
+	localcacheCapacityEvictionsMetricHelp = "Total number of localcache capacity evictions by fixed cache."
+	localcacheCapacityMetricHelp          = "Configured localcache maximum item count by fixed cache."
 
 	localcacheResultHit     = "hit"
 	localcacheResultMiss    = "miss"
@@ -61,7 +61,7 @@ func NewLocalcacheCollector(opts LocalcacheCollectorOptions) (*LocalcacheCollect
 		source:    opts.Source,
 		requests:  prometheus.NewDesc(localcacheRequestsMetricName, localcacheRequestsMetricHelp, []string{LabelResult}, prometheus.Labels{LabelCache: cache}),
 		loads:     prometheus.NewDesc(localcacheLoadsMetricName, localcacheLoadsMetricHelp, []string{LabelResult}, prometheus.Labels{LabelCache: cache}),
-		evictions: prometheus.NewDesc(localcacheEvictionsMetricName, localcacheEvictionsMetricHelp, nil, prometheus.Labels{LabelCache: cache}),
+		evictions: prometheus.NewDesc(localcacheCapacityEvictionsMetricName, localcacheCapacityEvictionsMetricHelp, nil, prometheus.Labels{LabelCache: cache}),
 		capacity:  prometheus.NewDesc(localcacheCapacityMetricName, localcacheCapacityMetricHelp, nil, prometheus.Labels{LabelCache: cache}),
 	}, nil
 }
@@ -81,6 +81,6 @@ func (c *LocalcacheCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(c.requests, prometheus.CounterValue, float64(stats.Miss), localcacheResultMiss)
 	ch <- prometheus.MustNewConstMetric(c.loads, prometheus.CounterValue, float64(stats.LoadSuccess), localcacheResultSuccess)
 	ch <- prometheus.MustNewConstMetric(c.loads, prometheus.CounterValue, float64(stats.LoadError), localcacheResultError)
-	ch <- prometheus.MustNewConstMetric(c.evictions, prometheus.CounterValue, float64(stats.Evicted))
+	ch <- prometheus.MustNewConstMetric(c.evictions, prometheus.CounterValue, float64(stats.CapacityEvictions))
 	ch <- prometheus.MustNewConstMetric(c.capacity, prometheus.GaugeValue, float64(stats.Capacity))
 }

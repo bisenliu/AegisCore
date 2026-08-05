@@ -131,10 +131,9 @@ type SessionPurgePoolResult struct {
 type TokenVersionLocalCacheParams struct {
 	fx.In
 
-	Lifecycle fx.Lifecycle
-	Settings  serviceconfig.AuthSettings
-	Users     authapplication.UserTokenVersionStore
-	Cache     authapplication.TokenVersionCache
+	Settings serviceconfig.AuthSettings
+	Users    authapplication.UserTokenVersionStore
+	Cache    authapplication.TokenVersionCache
 }
 
 type TokenVersionLocalCacheResult struct {
@@ -175,32 +174,10 @@ type AuthControllerParams struct {
 
 // 运行时资源 holder
 
-type tokenVersionCacheResource struct {
-	mu     sync.RWMutex
-	cache  authvalidators.LocalTokenVersionCache
-	stats  localcache.StatsSource
-	closed bool
-
-	closeOnce sync.Once
-	close     func()
-}
-
 type sessionPurgePoolHolder struct {
 	mu   sync.RWMutex
 	log  *zap.Logger
 	pool *workerpool.Pool
-}
-
-type tokenVersionCacheHolder struct {
-	mu       sync.RWMutex
-	cfg      serviceconfig.FeatureCacheConfig
-	users    authapplication.UserTokenVersionStore
-	cache    authapplication.TokenVersionCache
-	resource *tokenVersionCacheResource
-}
-
-type localTokenVersionCacheAdapter struct {
-	cache *localcache.LoadingCache[string, int64]
 }
 
 // Provider：基础设施
@@ -237,42 +214,25 @@ func newSessionPurgePool(params SessionPurgePoolParams) (SessionPurgePoolResult,
 }
 
 func newTokenVersionLocalCache(params TokenVersionLocalCacheParams) (TokenVersionLocalCacheResult, error) {
-	resource := &tokenVersionCacheHolder{cfg: params.Settings.TokenVersionCache, users: params.Users, cache: params.Cache}
-	if params.Lifecycle != nil {
-		params.Lifecycle.Append(fx.Hook{OnStart: resource.Start, OnStop: resource.Close})
-	} else if err := resource.Start(context.Background()); err != nil {
-		return TokenVersionLocalCacheResult{}, err
-	}
-	return TokenVersionLocalCacheResult{Cache: resource, Stats: resource}, nil
-}
-
-func newTokenVersionLocalCacheResource(cfg serviceconfig.FeatureCacheConfig, users authapplication.UserTokenVersionStore, cache authapplication.TokenVersionCache) (*tokenVersionCacheResource, error) {
+	cfg := params.Settings.TokenVersionCache
 	if !cfg.Enabled {
-		direct := authvalidators.NewDirectTokenVersionCache(users, cache)
-		return &tokenVersionCacheResource{cache: direct, stats: direct}, nil
+		direct := authvalidators.NewDirectTokenVersionCache(params.Users, params.Cache)
+		return TokenVersionLocalCacheResult{Cache: direct, Stats: direct}, nil
 	}
 	// 每个副本独立维护该缓存；撤销只主动清理当前副本，其他副本在 TTL 到期后经 Redis 或数据库收敛。
 	// cfg.TTL 表示正常路径可接受的 logout-all/改密跨副本撤销收敛窗口，调整时应重新评估撤销 SLA。
 	// 是否使用事务 outbox 取决于 Redis token version 投影失败后是否需要可靠补偿，与固定 TTL 阈值无关。
-	local, err := localcache.NewLoadingCache[string, int64](cfg.Localcache(authTokenVersionCacheName), func(ctx context.Context, userID string) (int64, error) {
+	local, err := localcache.NewLoadingCache(cfg.Localcache(authTokenVersionCacheName), func(ctx context.Context, userID string) (int64, error) {
 		parsedUserID, err := uuid.Parse(userID)
 		if err != nil {
 			return 0, fmt.Errorf("parse auth token version cache user id: %w", err)
 		}
-		return authvalidators.Current(ctx, users, cache, parsedUserID)
+		return authvalidators.Current(ctx, params.Users, params.Cache, parsedUserID)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create auth token version localcache: %w", err)
+		return TokenVersionLocalCacheResult{}, fmt.Errorf("create auth token version localcache: %w", err)
 	}
-	return &tokenVersionCacheResource{cache: localTokenVersionCacheAdapter{cache: local}, stats: local, close: local.Close}, nil
-}
-
-func (a localTokenVersionCacheAdapter) GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error) {
-	return a.cache.GetOrLoad(ctx, userID.String())
-}
-
-func (a localTokenVersionCacheAdapter) Delete(userID string) error {
-	return a.cache.Delete(userID)
+	return TokenVersionLocalCacheResult{Cache: local, Stats: local}, nil
 }
 
 // Provider：应用服务
@@ -301,48 +261,6 @@ func newAuthController(params AuthControllerParams) *authhttp.AuthController {
 		LogoutAll:     params.LogoutAll,
 		Validator:     params.Validator,
 	})
-}
-
-// 运行时资源方法：token version 本地缓存
-
-func (r *tokenVersionCacheResource) Close() error {
-	if r == nil {
-		return nil
-	}
-	r.closeOnce.Do(func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-
-		r.closed = true
-		if r.close != nil {
-			r.close()
-		}
-	})
-	return nil
-}
-
-func (r *tokenVersionCacheResource) GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error) {
-	if r == nil {
-		return 0, localcache.ErrClosed
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if r.closed || r.cache == nil {
-		return 0, localcache.ErrClosed
-	}
-	return r.cache.GetOrLoad(ctx, userID)
-}
-
-func (r *tokenVersionCacheResource) Delete(userID string) error {
-	if r == nil {
-		return localcache.ErrClosed
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if r.closed || r.cache == nil {
-		return localcache.ErrClosed
-	}
-	return r.cache.Delete(userID)
 }
 
 // 运行时资源方法：session purge workerpool
@@ -390,69 +308,4 @@ func (h *sessionPurgePoolHolder) Stats() workerpool.Stats {
 		return workerpool.Stats{Name: "auth.redis.session_purge", Closed: true}
 	}
 	return pool.Stats()
-}
-
-// 运行时资源方法：token version 本地缓存 holder
-
-func (h *tokenVersionCacheHolder) Start(context.Context) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.resource != nil {
-		return nil
-	}
-	resource, err := newTokenVersionLocalCacheResource(h.cfg, h.users, h.cache)
-	if err != nil {
-		return err
-	}
-	h.resource = resource
-	return nil
-}
-
-func (h *tokenVersionCacheHolder) GetOrLoad(ctx context.Context, userID uuid.UUID) (int64, error) {
-	resource := h.currentResource()
-	if resource == nil {
-		return 0, localcache.ErrClosed
-	}
-	return resource.GetOrLoad(ctx, userID)
-}
-
-func (h *tokenVersionCacheHolder) Delete(userID string) error {
-	resource := h.currentResource()
-	if resource == nil {
-		return localcache.ErrClosed
-	}
-	return resource.Delete(userID)
-}
-
-func (h *tokenVersionCacheHolder) Name() string {
-	resource := h.currentResource()
-	if resource == nil || resource.stats == nil {
-		return authTokenVersionCacheName
-	}
-	return resource.stats.Name()
-}
-
-func (h *tokenVersionCacheHolder) Stats() localcache.Stats {
-	resource := h.currentResource()
-	if resource == nil || resource.stats == nil {
-		return localcache.Stats{}
-	}
-	return resource.stats.Stats()
-}
-
-func (h *tokenVersionCacheHolder) Close(context.Context) error {
-	h.mu.Lock()
-	resource := h.resource
-	h.resource = nil
-	h.mu.Unlock()
-	if resource == nil {
-		return nil
-	}
-	return resource.Close()
-}
-
-func (h *tokenVersionCacheHolder) currentResource() *tokenVersionCacheResource {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.resource
 }

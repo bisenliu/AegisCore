@@ -106,11 +106,10 @@ func TestLifecycleRevokeAllUserSessions(t *testing.T) {
 	fixture := newLifecycleTestFixture(t)
 	gomock.InOrder(
 		fixture.users.EXPECT().IncrementTokenVersion(gomock.Any(), sessionTestUserID).Return(int64(4), nil),
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
+		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()),
 		fixture.tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), sessionTestUserID, int64(4)).Return(nil),
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
+		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()),
 		fixture.sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), sessionTestUserID).Return(nil),
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
 	)
 
 	result, projectionErr, err := fixture.lifecycle.RevokeAllUserSessions(context.Background(), sessionTestUserID)
@@ -128,12 +127,11 @@ func TestLifecycleRevokeAllUserSessionsReturnsProjectionErrorAfterVersionIncreme
 	projectionErr := errors.New("redis unavailable")
 	gomock.InOrder(
 		fixture.users.EXPECT().IncrementTokenVersion(gomock.Any(), sessionTestUserID).Return(int64(4), nil),
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
+		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()),
 		fixture.tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), sessionTestUserID, int64(4)).Return(projectionErr),
 		fixture.tokenVersions.EXPECT().DeleteCachedTokenVersion(gomock.Any(), sessionTestUserID).Return(nil),
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
+		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()),
 		fixture.sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), sessionTestUserID).Return(nil),
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(sessionTestUserID.String()).Return(nil),
 	)
 
 	result, gotProjectionErr, err := fixture.lifecycle.RevokeAllUserSessions(context.Background(), sessionTestUserID)
@@ -144,25 +142,6 @@ func TestLifecycleRevokeAllUserSessionsReturnsProjectionErrorAfterVersionIncreme
 		"projection err = %v, want cache error", gotProjectionErr)
 	require.False(t, result == nil || result.UserID != sessionTestUserID || result.TokenVersion != 4,
 		"result = %#v", result)
-}
-
-func TestLifecycleRevokeUserSessionsAtVersionReturnsLocalInvalidationErrors(t *testing.T) {
-	fixture := newLifecycleTestFixture(t)
-	userID := sessionTestUserID
-	userIDString := sessionTestUserID.String()
-	invalidateErr := errors.New("local cache closed")
-	gomock.InOrder(
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(userIDString).Return(invalidateErr),
-		fixture.tokenVersions.EXPECT().CacheTokenVersion(gomock.Any(), userID, int64(4)).Return(nil),
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(userIDString).Return(nil),
-		fixture.sessions.EXPECT().DeleteAllUserSessions(gomock.Any(), userID).Return(nil),
-		fixture.invalidator.EXPECT().InvalidateTokenVersion(userIDString).Return(nil),
-	)
-
-	err := fixture.lifecycle.RevokeUserSessionsAtVersion(context.Background(), sessionTestUserID, 4)
-	require.ErrorIs(t, err, invalidateErr,
-		"err = %v, want local invalidation error", err)
-	require.ErrorContains(t, err, "invalidate local token version cache before projection")
 }
 
 type lifecycleTestFixture struct {

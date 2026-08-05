@@ -14,12 +14,12 @@ func TestLocalcacheCollectorExportsStats(t *testing.T) {
 	source := staticLocalcacheStatsSource{
 		name: "auth_token_version",
 		stats: localcache.Stats{
-			Hit:         10,
-			Miss:        3,
-			LoadSuccess: 2,
-			LoadError:   1,
-			Evicted:     7,
-			Capacity:    1000,
+			Hit:               10,
+			Miss:              3,
+			LoadSuccess:       2,
+			LoadError:         1,
+			CapacityEvictions: 7,
+			Capacity:          1000,
 		},
 	}
 	collector, err := NewLocalcacheCollector(LocalcacheCollectorOptions{Source: source})
@@ -32,10 +32,11 @@ func TestLocalcacheCollectorExportsStats(t *testing.T) {
 	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheRequestsMetricName), map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultMiss}, 3)
 	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheLoadsMetricName), map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultSuccess}, 2)
 	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheLoadsMetricName), map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultError}, 1)
-	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheEvictionsMetricName), map[string]string{LabelCache: "auth_token_version"}, 7)
+	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheCapacityEvictionsMetricName), map[string]string{LabelCache: "auth_token_version"}, 7)
 	assertMetricWithLabelsValue(t, familyFrom(t, families, localcacheCapacityMetricName), map[string]string{LabelCache: "auth_token_version"}, 1000)
 	require.Nil(t, findMetricFamily(families, "aegiscore_localcache_singleflight_total"))
 	require.Nil(t, findMetricFamily(families, "aegiscore_localcache_writes_total"))
+	require.Nil(t, findMetricFamily(families, "aegiscore_localcache_evictions_total"))
 }
 
 func findMetricFamily(families []*io_prometheus_client.MetricFamily, name string) *io_prometheus_client.MetricFamily {

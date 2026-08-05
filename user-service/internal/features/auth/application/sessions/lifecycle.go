@@ -137,11 +137,3 @@ func (m *lifecycle) DeleteSession(ctx context.Context, userID uuid.UUID, session
 func (m *lifecycle) CurrentTokenVersion(ctx context.Context, userID uuid.UUID) (int64, error) {
 	return authvalidators.Current(ctx, m.users, m.tokenVersions, userID)
 }
-
-func (m *lifecycle) invalidateLocalTokenVersion(ctx context.Context, userID string) error {
-	if err := m.localTokenVersions.InvalidateTokenVersion(userID); err != nil {
-		logger.Warn(ctx, "invalidate local token version cache failed", zap.String("user_id", userID), zap.Error(err))
-		return err
-	}
-	return nil
-}

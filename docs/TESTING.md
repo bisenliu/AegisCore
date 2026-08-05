@@ -33,6 +33,18 @@ make common-test
 make user-service-test
 ```
 
+Localcache 行为或消费边界变化后，需用 race detector 覆盖固定 TTL、容量驱逐、singleflight、caller 取消、loader timeout、强失效和 fail-closed 场景：
+
+```bash
+cd common
+go test -race ./runtime/localcache ./runtime/observability/metrics
+
+cd ../user-service
+go test -race ./internal/features/auth/... ./internal/features/permission/...
+```
+
+容量统计只断言 `aegiscore_localcache_capacity_evictions_total`；TTL 到期、`Invalidate` 和 `InvalidateAll` 不得增加该指标。并发失效测试应使用 channel 或 barrier 控制 loader 发布顺序，证明首次竞态透明重试、连续竞态返回 `ErrInvalidated`，不得使用固定 `time.Sleep` 推测竞态窗口。
+
 ### 测试替身与生成
 
 - 生成 mock 的入口放在消费测试所在 package 的 `mock_generate.go`，文件必须使用 `//go:build generate`，使 `go generate ./...` 可以发现指令而普通构建不会编译测试生成入口。
