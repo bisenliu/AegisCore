@@ -99,7 +99,7 @@ Ent schema MUST 是数据库结构来源，Atlas SQL migration MUST 是可审查
 
 ### Requirement: 镜像、部署与受控发布
 
-user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go module 解析和分离缓存构建，并以最小非 root 运行时交付同一可验证工件。CI MUST 运行真实依赖测试。Docker、Compose、Kubernetes、Helm 和观测资产 MUST 使用一致的 runtime config、release 工件、安全上下文、探针、Secret、资源和网络边界，MUST NOT 包含真实 secret 或自动 migration apply。外部服务标识与镜像名 MUST 使用 `aegiscore-user-service`，容器、二进制和本地目录语义 MUST 使用 `user-service`，MUST NOT 保留旧复数命名。
+user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go module 解析和分离缓存构建，并以最小非 root 运行时交付同一可验证工件。CI MUST 运行覆盖 common 与 user-service 的真实依赖测试。Docker、Compose、Kubernetes、Helm 和观测资产 MUST 使用一致的 runtime config、release 工件、安全上下文、探针、Secret、资源和网络边界，MUST NOT 包含真实 secret 或自动 migration apply。外部服务标识与镜像名 MUST 使用 `aegiscore-user-service`，容器、二进制和本地目录语义 MUST 使用 `user-service`，MUST NOT 保留旧复数命名。
 
 #### Scenario: 可复现且最小的镜像工件
 
@@ -115,9 +115,10 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 #### Scenario: CI 真实依赖测试
 
 - **WHEN** PR 或主线 push 执行阻塞式 `container-test` job
-- **THEN** job MUST 运行 `make -C user-service test-containers`，通过唯一 `-aegiscore.testcontainers` flag 启用专用 PostgreSQL/Redis 与 HTTP E2E 包，MUST NOT 再次运行普通 `make test`
+- **THEN** job MUST 仅运行根 `make test-containers`，由 common 与 user-service 模块 target 显式传递唯一 `-aegiscore.testcontainers` flag，MUST NOT 调用 service-local 容器入口或再次运行普通 `make test`
+- **AND** 门禁 MUST 使用 `-v -count=1` 输出实际执行的测试名与耗时并禁止测试缓存，覆盖 common PostgreSQL/Redis fixture、permission/role PostgreSQL 集成测试和 user-service HTTP E2E
 - **WHEN** 该专用入口启用
-- **THEN** Docker daemon、镜像、容器、migration 或配置前置失败 MUST 使 job 失败，permission/role PostgreSQL 集成测试和 user-service HTTP E2E MUST 实际执行而非 skip
+- **THEN** Docker daemon、镜像、容器、migration 或配置前置失败 MUST 使 job 失败，Docker-backed 测试 MUST 实际执行而非 skip
 - **AND** E2E harness MUST 使用当前严格配置、真实 PostgreSQL/Redis 和已提交 migration，覆盖认证与用户 HTTP flow；verify、unit、race 或 coverage job MUST NOT 重复该容器负载
 
 #### Scenario: 部署资产与安全基线
@@ -304,7 +305,7 @@ Nacos、Compose、Kubernetes、Helm、README、E2E harness 和测试配置 fixtu
 
 - **WHEN** Compose 或 Docker-backed 测试需要 Redis
 - **THEN** 资产 MUST 提供 Redis Cluster fixture 或明确连接外部 Redis Cluster 的配置路径
-- **AND** `AEGISCORE_TEST_CONTAINERS=1` 下的 Redis Cluster 兼容测试 MUST 覆盖 auth、RBAC、health 和 metrics 的 Cluster-sensitive 行为
+- **AND** 根 `make test-containers` 启用的 Redis Cluster 兼容测试 MUST 覆盖 auth、RBAC、health 和 metrics 的 Cluster-sensitive 行为
 
 ### Requirement: Redis Cluster 发布与回滚
 

@@ -166,10 +166,10 @@ check_go_toolchain_version() {
 }
 
 check_ci_quality_workflow() {
-  # 顶层 CI 唯一拥有事件触发；复用 workflow 只定义一次标准 lint 与普通单测。
+  # 顶层 CI 唯一拥有事件触发；复用 workflow 只定义一次标准 lint 与普通单测，容器门禁只调用根入口。
   local ci_workflow="${repo_root}/.github/workflows/ci.yml"
   local quality_workflow="${repo_root}/.github/workflows/lint.yml"
-  local caller_count lint_count unit_count
+  local caller_count lint_count unit_count container_count service_container_count
 
   caller_count="$( (rg -n 'uses:[[:space:]]+\./\.github/workflows/lint\.yml[[:space:]]*$' "${ci_workflow}" || true) | wc -l | tr -d ' ' )"
   if [[ "${caller_count}" -ne 1 ]]; then
@@ -191,6 +191,16 @@ check_ci_quality_workflow() {
   unit_count="$( (rg -n '^[[:space:]]+(-[[:space:]]+)?(run:[[:space:]]+)?make test[[:space:]]*$' "${ci_workflow}" "${quality_workflow}" || true) | wc -l | tr -d ' ' )"
   if [[ "${unit_count}" -ne 1 ]]; then
     report "CI standard unit test command must appear exactly once; found ${unit_count}"
+  fi
+
+  container_count="$( (rg -n '^[[:space:]]+(-[[:space:]]+)?(run:[[:space:]]+)?make test-containers[[:space:]]*$' "${ci_workflow}" "${quality_workflow}" || true) | wc -l | tr -d ' ' )"
+  if [[ "${container_count}" -ne 1 ]]; then
+    report "CI Docker-backed test command must call root make test-containers exactly once; found ${container_count}"
+  fi
+
+  service_container_count="$( (rg -n 'make[[:space:]]+-C[[:space:]]+(common|user-service)[[:space:]]+test-containers' "${ci_workflow}" "${quality_workflow}" || true) | wc -l | tr -d ' ' )"
+  if [[ "${service_container_count}" -ne 0 ]]; then
+    report "CI must not bypass root make test-containers with module-local container targets; found ${service_container_count}"
   fi
 }
 

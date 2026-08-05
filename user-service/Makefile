@@ -20,7 +20,7 @@ test: ## 运行 user-service 测试。
 	go test ./...
 
 test-containers: ## 运行包含 Docker-backed 容器的 user-service 测试。
-	go test $(CONTAINER_TEST_PACKAGES) -args -aegiscore.testcontainers
+	go test -v -count=1 $(CONTAINER_TEST_PACKAGES) -args -aegiscore.testcontainers
 
 lint: ## 运行 user-service lint。
 	golangci-lint run ./...

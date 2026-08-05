@@ -7,10 +7,10 @@ ADMIN_USERNAME ?=
 ADMIN_NICKNAME ?=
 export ADMIN_BOOTSTRAP_PASSWORD
 
-.PHONY: help build test lint verify
-.PHONY: common-test common-lint common-generate common-verify
+.PHONY: help build test test-containers lint verify
+.PHONY: common-test common-test-containers common-lint common-generate common-verify
 .PHONY: tools-openapi-convert-test tools-nacos-config-seed-test
-.PHONY: user-service-build user-service-run user-service-test user-service-lint user-service-verify user-service-architecture-lint
+.PHONY: user-service-build user-service-run user-service-test user-service-test-containers user-service-lint user-service-verify user-service-architecture-lint
 .PHONY: user-service-seed-rbac user-service-bootstrap-super-admin user-service-image-verify
 .PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-openapi-generate user-service-fxgraph-generate user-service-fxgraph-check
 .PHONY: compose-dashboard-generate compose-dashboard-check
@@ -22,6 +22,8 @@ build: user-service-build ## 构建全部服务二进制。
 
 test: common-test user-service-test tools-openapi-convert-test tools-nacos-config-seed-test ## 运行全部 Go 模块测试。
 
+test-containers: common-test-containers user-service-test-containers ## 运行 common 与 user-service 的全部 Docker-backed 测试。
+
 lint: common-lint user-service-lint ## 运行全部 Go 模块 lint。
 
 verify: lint user-service-architecture-lint common-generate user-service-generate test user-service-openapi-generate ## 运行完整本地验证。
@@ -29,6 +31,9 @@ verify: lint user-service-architecture-lint common-generate user-service-generat
 
 common-test: ## 运行 common 模块测试。
 	$(MAKE) -C $(COMMON_DIR) test
+
+common-test-containers: ## 运行 common Docker-backed 测试。
+	$(MAKE) -C $(COMMON_DIR) test-containers
 
 common-lint: ## 运行 common 模块 lint。
 	$(MAKE) -C $(COMMON_DIR) lint
@@ -53,6 +58,9 @@ user-service-run: ## 使用 AEGISCORE_NACOS_* 环境变量运行 user-service。
 
 user-service-test: ## 运行 user-service 测试。
 	$(MAKE) -C $(USER_SERVICE_DIR) test
+
+user-service-test-containers: ## 运行 user-service Docker-backed 测试。
+	$(MAKE) -C $(USER_SERVICE_DIR) test-containers
 
 user-service-lint: ## 运行 user-service lint。
 	$(MAKE) -C $(USER_SERVICE_DIR) lint

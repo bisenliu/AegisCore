@@ -96,6 +96,10 @@ jobs:
       - run: |
           make lint
           make test
+  container-test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make -C user-service test-containers
 EOF
 
 cat > "${fixture_root}/.github/workflows/lint.yml" <<'EOF'
@@ -398,7 +402,7 @@ if [[ "${output}" != *"feature application/domain production code must not carry
   exit 1
 fi
 
-if [[ "${output}" != *"quality workflow must not directly trigger pull_request or push"* || "${output}" != *"CI standard lint command must appear exactly once"* || "${output}" != *"CI standard unit test command must appear exactly once"* ]]; then
+if [[ "${output}" != *"quality workflow must not directly trigger pull_request or push"* || "${output}" != *"CI standard lint command must appear exactly once"* || "${output}" != *"CI standard unit test command must appear exactly once"* || "${output}" != *"CI Docker-backed test command must call root make test-containers exactly once"* || "${output}" != *"CI must not bypass root make test-containers with module-local container targets"* ]]; then
   printf 'architecture-lint-test: expected duplicate CI quality gate violation reports\n%s\n' "${output}" >&2
   exit 1
 fi

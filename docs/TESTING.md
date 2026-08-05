@@ -5,6 +5,7 @@
 | 命令 | 用途 |
 |---|---|
 | `make test` | 运行 `common` 和 `user-service` 的 Go 测试 |
+| `make test-containers` | 显式运行 `common` 和 `user-service` 的全部 Docker-backed 测试 |
 | `make lint` | 运行各模块 `golangci-lint` |
 | `make user-service-architecture-lint` | 检查 user-service 架构边界、生成物 drift 和 OPSX 文档语言约束 |
 | `make user-service-openapi-generate` | 生成 OpenAPI 3 文档 |
@@ -47,7 +48,7 @@ make user-service-test
 - `common/testing/containers/postgres.go`
 - `common/testing/containers/redis.go`
 
-user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration 和测试 harness。HTTP harness 在启动 Fx App 前加载一次 service config，并复用 `bootstrap.AppOptions`，使测试与正式 App 使用相同的 service/runtime config 和 composition root 接线。CI 的阻塞式 `container-test` job 运行 `make -C user-service test-containers`，由该 target 通过 `-aegiscore.testcontainers` flag 执行 permission/role PostgreSQL 集成测试和 user-service HTTP E2E；普通单测只由复用质量 workflow 的 `unit` job 运行一次。
+user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration 和测试 harness。HTTP harness 在启动 Fx App 前加载一次 service config，并复用 `bootstrap.AppOptions`，使测试与正式 App 使用相同的 service/runtime config 和 composition root 接线。CI 的阻塞式 `container-test` job 运行根 `make test-containers`：根 target 分别调用 common 与 user-service 的模块 target，由模块 target 显式传递 `-aegiscore.testcontainers` flag，覆盖 common PostgreSQL/Redis fixture、permission/role PostgreSQL 集成测试和 user-service HTTP E2E；普通单测只由复用质量 workflow 的 `unit` job 运行一次。
 
 配置 fixture 必须使用最终严格契约：核心路径为 `app/server/log/observability`，服务资源位于 `resources.redis.cache_redis` 和 `resources.postgres.primary_db`，feature cache 位于 `auth.token_version_cache` 与 `rbac.user_role_cache`。Redis 正向 fixture 必须显式配置 `mode`；`cluster` 使用 `addrs`、`timeout` 和可选 `cluster.max_redirects`，`standalone` 使用 `addr` 和 `timeout`，两种 mode 均固定使用 Redis 0 号库且不暴露 `db` 配置。旧路径只允许出现在 strict decoder 负向测试中，用于证明未知字段会被拒绝；正向 fixture 必须能够通过 Nacos 分层配置合成后的 strict decode。
 
@@ -56,10 +57,10 @@ user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration
 运行：
 
 ```bash
-make -C user-service test-containers
+make test-containers
 ```
 
-容器测试门禁应记录执行测试名和耗时；Docker daemon、镜像拉取、容器启动或 migration 失败时必须使测试失败，而不是在已传入 `-aegiscore.testcontainers` 后静默 skip。
+`make test-containers` 是完整真实依赖门禁的唯一仓库入口。common 与 user-service 的模块 target 使用 `-v -count=1`，在日志中记录实际执行的测试名和耗时，并禁止 Go test cache 代替真实执行。Docker daemon、镜像拉取、容器启动、连接、migration 或配置失败时必须使测试失败；已传入 `-aegiscore.testcontainers` 后 Docker-backed 测试不得静默 skip。`AEGISCORE_TEST_CONTAINERS` 不是受支持的开关。
 
 ### RBAC policy sync 故障注入
 
@@ -90,10 +91,10 @@ go test ./internal/features/role/infrastructure/postgres -run TestPostgresPolicy
 go test ./tests/e2e -run TestRBACOutboxRedisRecoveryConvergesAllProjectionsWithoutNewWrite -count=1 -args -aegiscore.testcontainers
 ```
 
-完整真实 PostgreSQL/Redis 集成门禁仍遵循仓库统一开关：
+完整真实 PostgreSQL/Redis 集成门禁使用仓库根入口：
 
 ```bash
-AEGISCORE_TEST_CONTAINERS=1 make test
+make test-containers
 ```
 
 ## 4. 断言和失败处理

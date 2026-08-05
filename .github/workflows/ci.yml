@@ -65,7 +65,7 @@ jobs:
             **/go.sum
 
       - name: Run Docker-backed tests
-        run: make -C user-service test-containers
+        run: make test-containers
 
   build:
     name: build

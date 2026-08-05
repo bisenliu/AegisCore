@@ -310,9 +310,10 @@
 
 #### Scenario: 真实 Cluster 集成测试
 
-- **WHEN** `AEGISCORE_TEST_CONTAINERS=1` 启用真实依赖测试
+- **WHEN** 模块容器测试 target 通过 `-args -aegiscore.testcontainers` 启用真实依赖测试
 - **THEN** Redis Cluster 相关集成测试 MUST 实际连接 Cluster fixture 并执行 Cluster-sensitive Redis 命令
 - **AND** Docker daemon、Cluster fixture 启动、slot 初始化或连接失败 MUST 使相关集成测试失败而不是静默跳过
+- **AND** `common/testing/containers` 自身的 PostgreSQL 与 Redis 集成测试 MUST 包含在根 `make test-containers` 门禁中
 
 ### Requirement: 显式配置来源与加载管线
 
