@@ -33,7 +33,9 @@ func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			params.Runtime.Initializer.InitializeFailClosed(ctx)
-			params.Runtime.Watcher.Start()
+			if err := params.Runtime.Watcher.Start(); err != nil {
+				return errors.Join(err, params.Runtime.Watcher.Stop(ctx))
+			}
 			if err := params.Runtime.Dispatcher.Start(); err != nil {
 				return errors.Join(err, params.Runtime.Watcher.Stop(ctx))
 			}

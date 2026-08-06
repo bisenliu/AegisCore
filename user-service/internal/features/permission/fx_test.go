@@ -233,6 +233,29 @@ func TestRegisterRBACLifecycleOrdersStartAndStop(t *testing.T) {
 	require.Equal(t, []string{"dispatcher.stop", "watcher.stop"}, order)
 }
 
+func TestRegisterRBACLifecycleRollsBackWhenWatcherStartFails(t *testing.T) {
+	startErr := errors.New("watcher start failed")
+	stopErr := errors.New("watcher rollback failed")
+	var order []string
+	lifecycle := &permissionModuleLifecycle{}
+	watcher := &permissionModuleApplicationWatcher{startErr: startErr, stopErr: stopErr, order: &order}
+	dispatcher := &permissionModuleDispatcher{order: &order}
+	registerRBACLifecycle(RegisterRBACLifecycleParams{
+		Lifecycle: lifecycle,
+		Runtime: &PermissionRuntime{
+			Initializer: &permissionModulePolicyInitializer{order: &order},
+			Watcher:     watcher,
+			Dispatcher:  dispatcher,
+		},
+	})
+
+	err := lifecycle.hooks[0].OnStart(context.Background())
+	require.ErrorIs(t, err, startErr)
+	require.ErrorIs(t, err, stopErr)
+	require.Equal(t, []string{"initializer.initialize", "watcher.start", "watcher.stop"}, order)
+	require.False(t, dispatcher.started)
+}
+
 func TestRegisterRBACLifecycleRollsBackWhenDispatcherStartFails(t *testing.T) {
 	startErr := errors.New("dispatcher start failed")
 	watcherErr := errors.New("watcher rollback failed")
@@ -380,6 +403,7 @@ func (i *permissionModulePolicyInitializer) InitializeFailClosed(context.Context
 
 type permissionModuleApplicationWatcher struct {
 	started   bool
+	startErr  error
 	stopCalls int
 	stopErr   error
 	order     *[]string
@@ -406,9 +430,13 @@ func (d *permissionModuleDispatcher) Stop(context.Context) error {
 	return d.stopErr
 }
 
-func (w *permissionModuleApplicationWatcher) Start() {
+func (w *permissionModuleApplicationWatcher) Start() error {
 	appendPermissionModuleOrder(w.order, "watcher.start")
+	if w.startErr != nil {
+		return w.startErr
+	}
 	w.started = true
+	return nil
 }
 
 func (w *permissionModuleApplicationWatcher) Stop(context.Context) error {

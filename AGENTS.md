@@ -27,7 +27,7 @@
 | `openspec/specs/` | 当前有效主规格，描述长期稳定 capability |
 | `openspec/changes/` | 待实施或待归档的 proposal、design、spec delta 和 tasks |
 
-`common/` 只承载跨服务稳定能力：`contract/errors`、`contract/pagination`、`contract/response`、`http/binding`、`http/middleware`、`http/openapi`、`http/pprof`、`http/response`、`runtime/config`、`runtime/datastore`、`runtime/id`、`runtime/localcache`、`runtime/logger`、`runtime/observability`、`runtime/rediskey`、`runtime/resources`、`runtime/scheduler`、`runtime/timezone`、`runtime/workerpool`、`security/auth`、`security/casbin`、`security/password`、`testing` 和 `validation`。
+`common/` 只承载跨服务稳定能力：`contract/errors`、`contract/pagination`、`contract/response`、`http/binding`、`http/middleware`、`http/openapi`、`http/pprof`、`http/response`、`runtime/config`、`runtime/datastore`、`runtime/id`、`runtime/localcache`、`runtime/logger`、`runtime/observability`、`runtime/redispubsub`、`runtime/rediskey`、`runtime/resources`、`runtime/scheduler`、`runtime/timezone`、`runtime/workerpool`、`security/auth`、`security/casbin`、`security/password`、`testing` 和 `validation`。
 
 `user-service/internal/` 的主要边界：
 
@@ -124,7 +124,7 @@ openspec init --tools none --force
 - `common/` 不依赖 `user-service/internal/features/`，也不承载 user-service 业务 DTO、feature key schema、policy loader、route diff、OpenAPI 服务元数据、eventbus/outbox 设计或推测性 helper。
 - `common/http/openapi` 只承载 Swagger/OpenAPI 转换、规范化、序列化和 Go embed 渲染 helper；`tools/openapi-convert` 承载仓库级转换 CLI；服务 API server、认证方案、扫描范围和输出目录由服务脚本拥有。
 - `common/security/casbin` 只承载通用请求三元组和 authorizer 包装；user-service subject schema、权限目录、策略加载、超级管理员基线和 route diff 留在 permission/shared 边界。
-- `common/runtime/workerpool`、`scheduler`、`rediskey`、`localcache` 只提供无业务语义 primitive；auth/user/role/permission 的 key schema、缓存策略和安全语义留在对应 feature。
+- `common/runtime/workerpool`、`scheduler`、`redispubsub`、`rediskey`、`localcache` 只提供无业务语义 primitive；auth/user/role/permission 的 key schema、消息 envelope、revision、数据库校准、缓存策略和安全语义留在对应 feature。
 - `user-service/internal/shared/` 只允许至少两个 feature 真实消费、边界稳定且不能归入 `common` 的服务内业务内核；当前只开放 `identity` 与 `rbacbaseline`。
 - `user-service/internal/shared/` 不引入 feature 包、Gin、Ent、Redis、SQL、Fx、runtime config/logger/datastore、HTTP response envelope、controller、DTO、store port、use case、外部调用或部署资产。
 - feature 内保持 domain、application、transport、infrastructure 分层；application/domain/infrastructure 不导入 feature HTTP transport DTO 或 controller。

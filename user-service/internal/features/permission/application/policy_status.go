@@ -26,6 +26,8 @@ const (
 	PolicyWatcherErrorSubscribe PolicyWatcherErrorCategory = "subscribe_failed"
 	// PolicyWatcherErrorReceive 表示已确认订阅的接收路径失败。
 	PolicyWatcherErrorReceive PolicyWatcherErrorCategory = "receive_failed"
+	// PolicyWatcherErrorProtocol 表示订阅收到不符合 classic Pub/Sub 契约的消息。
+	PolicyWatcherErrorProtocol PolicyWatcherErrorCategory = "protocol_failed"
 	// PolicyWatcherErrorRevisionSource 表示数据库 revision 查询失败。
 	PolicyWatcherErrorRevisionSource PolicyWatcherErrorCategory = "revision_store_unavailable"
 	// PolicyWatcherErrorReload 表示本地 policy projection 未能达到数据库目标。

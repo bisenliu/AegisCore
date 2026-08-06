@@ -30,6 +30,7 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 | `common/runtime/config/` | 仅包含 app/server/log/observability 的跨服务核心配置、严格 YAML loader 和 validation primitive |
 | `common/runtime/resources/` | 无业务语义的 Redis/PostgreSQL 资源类型、默认值和校验；具名资源由服务声明 |
 | `common/runtime/datastore/` | Postgres、Redis 和 Fx provider |
+| `common/runtime/redispubsub/` | Redis classic Pub/Sub 单 channel 订阅确认、阻塞接收、有界背压、退避重连和单向生命周期 |
 | `common/runtime/logger/` | 写 stdout/stderr 的 zap logger |
 | `common/runtime/observability/` | metrics 与 tracing provider |
 | `common/runtime/scheduler/` | scheduler、lock、metrics 和 logger |
@@ -39,6 +40,8 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 | `common/validation/` | validator、翻译、字段和错误 |
 
 Scheduler 对外只暴露固定 key 的注册/删除和生命周期操作，以 nil/non-nil lock、renew policy 以及 `WaitTimeout` 表达策略。内部不可导出的 pipeline 固定串联本地 overlap、全局并发、Redis lock、任务 context、续租与结果观测，每个 stage 通过局部 `defer` 释放自身资源；completed/failed duration 从任务 started 计算，不包含 gate 或 lock wait。全局/锁 wait 在高频且允许 overlap 时可能积累等待 goroutine，不等价于有界任务队列。Redis owner-token lock 仍是 lease，不提供 exactly-once 或 fencing 保证。
+
+`common/runtime/redispubsub` 只管理一个 Redis classic Pub/Sub channel 的 subscription lifecycle：调用方必须显式提供全部 options，subscriber 等待订阅确认后阻塞接收，以固定容量 channel 施加 context-aware 背压，并在失败后按带抖动的有界指数退避重连。每个 attempt 只关闭自己拥有的 PubSub，不关闭共享 Redis client。该 primitive 不提供 publish envelope、revision、outbox、数据库校准、缓存失效、pattern/sharded subscription、Redis Streams 或可靠投递；Redis Pub/Sub 仍是可丢失的 at-most-once 通知。
 
 ## 3. `user-service` 运行入口
 
@@ -121,7 +124,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 4. permission authorizer 使用 Casbin 或同步后的 policy 判断访问权限。
 5. 通过后进入目标 controller。
 
-在线 RBAC 写入提交后，Redis Pub/Sub 只向各副本发送快速唤醒 hint，PostgreSQL latest policy revision 是恢复与收敛的唯一权威事实。permission Redis watcher 在单一根生命周期中并行监督可重建的 Pub/Sub subscription 和启动立即执行、随后周期执行的数据库 revision 校准；订阅确认或 Receive 失败只进入有界退避重连，不停止权威校准。消息处理与周期校准在根循环中串行执行，防止 Casbin projection 并发倒退。readiness 依据最后一次完整权威校准的 staleness 判定，当前订阅正在重连但校准仍新鲜时不制造 watcher 粘滞失败。
+在线 RBAC 写入提交后，Redis Pub/Sub 只向各副本发送快速唤醒 hint，PostgreSQL latest policy revision 是恢复与收敛的唯一权威事实。`common/runtime/redispubsub` 独立监督可重建的 Pub/Sub subscription，permission Redis watcher 只消费其消息并在自己的根生命周期中执行启动立即校准和后续周期数据库 revision 校准；通用 subscriber 的确认、Receive 或协议失败只进入有界退避重连，不停止 watcher 的权威校准。消息处理与周期校准在 watcher 根循环中串行执行，防止 Casbin projection 并发倒退。readiness 依据最后一次完整权威校准的 staleness 判定，当前订阅正在重连但校准仍新鲜时不制造 watcher 粘滞失败。
 
 ### 6.4 RBAC seed 和超级管理员 bootstrap
 

@@ -3,38 +3,27 @@ package redis
 import (
 	"context"
 	"errors"
-	"fmt"
-	"math/rand/v2"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	rediscmd "github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
+	"github.com/aegiscore/common/runtime/redispubsub"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 
-const (
-	defaultCheckInterval    = 15 * time.Second
-	defaultSubscribeTimeout = 5 * time.Second
-	defaultBackoffInitial   = 250 * time.Millisecond
-	defaultBackoffMax       = 30 * time.Second
-	policyPayloadBuffer     = 64
-)
+const defaultCheckInterval = 15 * time.Second
 
-// WatcherSettings 控制 watcher 的数据库校准、订阅确认和重连节奏。
+// WatcherSettings 控制 watcher 的数据库权威校准节奏。
 type WatcherSettings struct {
-	CheckInterval    time.Duration
-	SubscribeTimeout time.Duration
-	BackoffInitial   time.Duration
-	BackoffMax       time.Duration
+	CheckInterval time.Duration
 }
 
 // WatcherParams 包含 RBAC policy watcher 所需依赖。
 type WatcherParams struct {
-	Store          *Store
+	Subscriber     *redispubsub.Subscriber
 	RevisionSource permissionapplication.LatestPolicyRevisionSource
 	Engine         permissionapplication.PolicyReloadEngine
 	Log            *zap.Logger
@@ -44,44 +33,41 @@ type WatcherParams struct {
 
 // Watcher 监听 RBAC policy 分布式 revision 并执行补偿 reload。
 type Watcher struct {
-	store          policySubscriptionStore
+	source         messageSource
 	revisionSource permissionapplication.LatestPolicyRevisionSource
 	engine         permissionapplication.PolicyReloadEngine
 	log            *zap.Logger
 	metrics        permissionapplication.Metrics
 	settings       WatcherSettings
 
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	done   chan struct{}
-	active *subscriptionAttempt
-	status permissionapplication.PolicyWatcherStatusSnapshot
+	mu                     sync.Mutex
+	cancel                 context.CancelFunc
+	done                   chan struct{}
+	stopped                bool
+	status                 permissionapplication.PolicyWatcherStatusSnapshot
+	lastReconcileFailureAt time.Time
 }
 
-type subscriptionAttempt struct {
-	subscriber policySubscriber
-	closeOnce  sync.Once
-}
-
-func (a *subscriptionAttempt) close() {
-	if a == nil || a.subscriber == nil {
-		return
-	}
-	// Stop 和 supervisor 的失败路径可能并发关闭同一订阅，Close 必须只执行一次。
-	a.closeOnce.Do(func() { _ = a.subscriber.Close() })
+type messageSource interface {
+	Start() error
+	Stop(context.Context) error
+	Messages() <-chan redispubsub.Message
+	Status() redispubsub.Status
 }
 
 // NewWatcher 只构造 RBAC policy watcher；调用方负责显式调用 Start 和 Stop。
 func NewWatcher(params WatcherParams) *Watcher {
-	return newWatcher(params.Store, params.RevisionSource, params.Engine, params.Log, params.Settings, params.Metrics)
+	return newWatcher(params.Subscriber, params.RevisionSource, params.Engine, params.Log, params.Settings, params.Metrics)
 }
 
-func newWatcher(store policySubscriptionStore, revisionSource permissionapplication.LatestPolicyRevisionSource, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, settings WatcherSettings, metrics permissionapplication.Metrics) *Watcher {
-	settings.applyDefaults()
+func newWatcher(source messageSource, revisionSource permissionapplication.LatestPolicyRevisionSource, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, settings WatcherSettings, metrics permissionapplication.Metrics) *Watcher {
+	if settings.CheckInterval <= 0 {
+		settings.CheckInterval = defaultCheckInterval
+	}
 	if metrics == nil {
 		metrics = permissionapplication.NopMetrics()
 	}
-	return &Watcher{store: store, revisionSource: revisionSource, engine: engine, log: log, metrics: metrics, settings: settings,
+	return &Watcher{source: source, revisionSource: revisionSource, engine: engine, log: log, metrics: metrics, settings: settings,
 		status: permissionapplication.PolicyWatcherStatusSnapshot{
 			SubscriptionState:         permissionapplication.PolicyWatcherSubscriptionStopped,
 			SubscriptionErrorCategory: permissionapplication.PolicyWatcherErrorNone,
@@ -89,27 +75,20 @@ func newWatcher(store policySubscriptionStore, revisionSource permissionapplicat
 		}}
 }
 
-func (s *WatcherSettings) applyDefaults() {
-	if s.CheckInterval <= 0 {
-		s.CheckInterval = defaultCheckInterval
-	}
-	if s.SubscribeTimeout <= 0 {
-		s.SubscribeTimeout = defaultSubscribeTimeout
-	}
-	if s.BackoffInitial <= 0 {
-		s.BackoffInitial = defaultBackoffInitial
-	}
-	if s.BackoffMax < s.BackoffInitial {
-		s.BackoffMax = defaultBackoffMax
-	}
-}
-
 // Start 启动 Pub/Sub 监听和定时版本补偿检查。
-func (w *Watcher) Start() {
+func (w *Watcher) Start() error {
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	if w.stopped {
+		w.mu.Unlock()
+		return redispubsub.ErrStopped
+	}
 	if w.done != nil {
-		return
+		w.mu.Unlock()
+		return nil
+	}
+	if err := w.source.Start(); err != nil {
+		w.mu.Unlock()
+		return err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	if w.log != nil {
@@ -117,18 +96,11 @@ func (w *Watcher) Start() {
 	}
 	w.cancel = cancel
 	w.done = make(chan struct{})
-	lastFailureAt := w.status.LastFailureAt
-	reconnectAttempts := w.status.ReconnectAttempts
-	w.status = permissionapplication.PolicyWatcherStatusSnapshot{
-		Running:                   true,
-		SubscriptionState:         permissionapplication.PolicyWatcherSubscriptionStarting,
-		LastFailureAt:             lastFailureAt,
-		SubscriptionErrorCategory: permissionapplication.PolicyWatcherErrorNone,
-		ReconcileErrorCategory:    permissionapplication.PolicyWatcherErrorNone,
-		ReconnectAttempts:         reconnectAttempts,
-	}
+	w.status.Running = true
 	done := w.done
+	w.mu.Unlock()
 	go w.run(ctx, done)
+	return nil
 }
 
 // Stop 停止 Pub/Sub 监听和定时版本补偿检查。
@@ -139,31 +111,44 @@ func (w *Watcher) Stop(ctx context.Context) error {
 	w.mu.Lock()
 	cancel := w.cancel
 	done := w.done
-	w.mu.Unlock()
-	if cancel == nil || done == nil {
-		return nil
+	if done == nil {
+		w.stopped = true
+		w.status.Running = false
+		w.mu.Unlock()
+		return w.source.Stop(ctx)
 	}
-	cancel()
-	w.closeActiveSubscription()
+	w.stopped = true
+	w.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	sourceErr := w.source.Stop(ctx)
+	var watcherErr error
 	select {
 	case <-done:
-		w.mu.Lock()
-		if w.done == done {
-			w.cancel = nil
-			w.done = nil
-		}
-		w.mu.Unlock()
-		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		watcherErr = ctx.Err()
 	}
+	return errors.Join(sourceErr, watcherErr)
 }
 
 // Status 返回 watcher 当前结构化状态的只读快照。
 func (w *Watcher) Status() permissionapplication.PolicyWatcherStatusSnapshot {
 	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.status
+	status := w.status
+	lastReconcileFailureAt := w.lastReconcileFailureAt
+	w.mu.Unlock()
+
+	subscription := w.source.Status()
+	status.SubscriptionState = mapSubscriptionState(subscription.State)
+	status.SubscriptionErrorCategory = mapSubscriptionError(subscription.ErrorCategory)
+	status.LastSubscriptionSuccessAt = subscription.LastConnectedAt
+	status.ReconnectAttempts = subscription.Reconnects
+	status.LastFailureAt = subscription.LastFailureAt
+	if lastReconcileFailureAt.After(status.LastFailureAt) {
+		status.LastFailureAt = lastReconcileFailureAt
+	}
+	return status
 }
 
 // CheckVersion 执行一次数据库 revision 补偿检查。
@@ -231,28 +216,16 @@ func (w *Watcher) HandlePayload(ctx context.Context, payload string) {
 }
 
 func (w *Watcher) run(ctx context.Context, done chan struct{}) {
-	// supervisor 只负责易阻塞的订阅重连；单一消费循环串行化 reload 与定时校准，避免投影副作用乱序。
-	payloads := make(chan string, policyPayloadBuffer)
-	subscriptionDone := make(chan struct{})
-	go func() {
-		defer close(subscriptionDone)
-		w.runSubscriptionSupervisor(ctx, payloads)
-	}()
+	// 消息与周期校准在同一循环串行执行，避免授权投影副作用乱序。
+	messages := w.source.Messages()
 	ticker := time.NewTicker(w.settings.CheckInterval)
 	defer ticker.Stop()
 	defer func() {
-		w.closeActiveSubscription()
-		// 必须等待 supervisor 退出后再发布 done，确保 Stop 返回时没有残留订阅 goroutine。
-		<-subscriptionDone
 		w.mu.Lock()
 		if w.done == done {
 			w.cancel = nil
-			w.done = nil
 		}
-		w.active = nil
 		w.status.Running = false
-		w.status.SubscriptionState = permissionapplication.PolicyWatcherSubscriptionStopped
-		w.status.SubscriptionErrorCategory = permissionapplication.PolicyWatcherErrorNone
 		w.status.ReconcileErrorCategory = permissionapplication.PolicyWatcherErrorNone
 		w.mu.Unlock()
 		close(done)
@@ -263,84 +236,15 @@ func (w *Watcher) run(ctx context.Context, done chan struct{}) {
 		select {
 		case <-ctx.Done():
 			return
-		case payload := <-payloads:
-			w.HandlePayload(ctx, payload)
+		case message, ok := <-messages:
+			if !ok {
+				// 订阅 source 停止后禁用该 select 分支，数据库补偿仍由 ticker 继续。
+				messages = nil
+				continue
+			}
+			w.HandlePayload(ctx, message.Payload)
 		case <-ticker.C:
 			w.CheckVersion(ctx)
-		}
-	}
-}
-
-func (w *Watcher) runSubscriptionSupervisor(ctx context.Context, payloads chan<- string) {
-	backoff := w.settings.BackoffInitial
-	for ctx.Err() == nil {
-		attempt := &subscriptionAttempt{subscriber: w.store.Subscribe(ctx)}
-		w.setActiveSubscription(attempt)
-		if ctx.Err() != nil {
-			attempt.close()
-			w.clearActiveSubscription(attempt)
-			return
-		}
-
-		confirmCtx, cancel := context.WithTimeout(ctx, w.settings.SubscribeTimeout)
-		// Redis 客户端收到订阅确认前不保证消息通道已建立，显式确认可使健康状态反映真实连接。
-		message, err := attempt.subscriber.Receive(confirmCtx)
-		cancel()
-		if err == nil {
-			if _, ok := message.(*rediscmd.Subscription); !ok {
-				err = fmt.Errorf("unexpected subscription confirmation: %T", message)
-			}
-		}
-		if err != nil {
-			attempt.close()
-			w.clearActiveSubscription(attempt)
-			if ctx.Err() != nil || errors.Is(err, context.Canceled) {
-				return
-			}
-			w.markSubscriptionFailure(permissionapplication.PolicyWatcherErrorSubscribe)
-			logger.Error(ctx, "rbac policy refresh subscribe failed", logger.StackTrace(zap.Error(err))...)
-			if !waitForRetry(ctx, jitteredBackoff(backoff)) {
-				return
-			}
-			backoff = nextBackoff(backoff, w.settings.BackoffMax)
-			continue
-		}
-
-		w.markSubscriptionSuccess()
-		backoff = w.settings.BackoffInitial
-		err = w.receiveSubscription(ctx, attempt, payloads)
-		attempt.close()
-		w.clearActiveSubscription(attempt)
-		if ctx.Err() != nil || errors.Is(err, context.Canceled) {
-			return
-		}
-		w.markSubscriptionFailure(permissionapplication.PolicyWatcherErrorReceive)
-		logger.Error(ctx, "rbac policy refresh receive failed", logger.StackTrace(zap.Error(err))...)
-		if !waitForRetry(ctx, jitteredBackoff(backoff)) {
-			return
-		}
-		backoff = nextBackoff(backoff, w.settings.BackoffMax)
-	}
-}
-
-func (w *Watcher) receiveSubscription(ctx context.Context, attempt *subscriptionAttempt, payloads chan<- string) error {
-	for {
-		message, err := attempt.subscriber.Receive(ctx)
-		if err != nil {
-			return err
-		}
-		switch value := message.(type) {
-		case *rediscmd.Message:
-			select {
-			case payloads <- value.Payload:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		case *rediscmd.Subscription:
-			w.markSubscriptionSuccess()
-		case *rediscmd.Pong:
-		default:
-			return fmt.Errorf("unexpected pubsub message: %T", message)
 		}
 	}
 }
@@ -430,23 +334,6 @@ func (w *Watcher) observeLag(ctx context.Context, databaseLatest int64, localApp
 	w.metrics.PolicyReloadLagObserved(ctx, lag)
 }
 
-func (w *Watcher) markSubscriptionSuccess() {
-	w.mu.Lock()
-	w.status.SubscriptionState = permissionapplication.PolicyWatcherSubscriptionConnected
-	w.status.SubscriptionErrorCategory = permissionapplication.PolicyWatcherErrorNone
-	w.status.LastSubscriptionSuccessAt = time.Now()
-	w.mu.Unlock()
-}
-
-func (w *Watcher) markSubscriptionFailure(category permissionapplication.PolicyWatcherErrorCategory) {
-	w.mu.Lock()
-	w.status.SubscriptionState = permissionapplication.PolicyWatcherSubscriptionReconnecting
-	w.status.SubscriptionErrorCategory = category
-	w.status.LastFailureAt = time.Now()
-	w.status.ReconnectAttempts++
-	w.mu.Unlock()
-}
-
 func (w *Watcher) markReconcileSuccess() {
 	w.mu.Lock()
 	w.status.ReconcileErrorCategory = permissionapplication.PolicyWatcherErrorNone
@@ -460,53 +347,36 @@ func (w *Watcher) markReconcileFailure(ctx context.Context, category permissiona
 	}
 	w.mu.Lock()
 	w.status.ReconcileErrorCategory = category
-	w.status.LastFailureAt = time.Now()
+	w.lastReconcileFailureAt = time.Now()
 	w.mu.Unlock()
 }
 
-func (w *Watcher) setActiveSubscription(attempt *subscriptionAttempt) {
-	w.mu.Lock()
-	w.active = attempt
-	w.mu.Unlock()
-}
-
-func (w *Watcher) clearActiveSubscription(attempt *subscriptionAttempt) {
-	w.mu.Lock()
-	if w.active == attempt {
-		w.active = nil
-	}
-	w.mu.Unlock()
-}
-
-func (w *Watcher) closeActiveSubscription() {
-	w.mu.Lock()
-	attempt := w.active
-	w.mu.Unlock()
-	attempt.close()
-}
-
-func waitForRetry(ctx context.Context, delay time.Duration) bool {
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
+func mapSubscriptionState(state redispubsub.State) permissionapplication.PolicyWatcherSubscriptionState {
+	switch state {
+	case redispubsub.StateStarting:
+		return permissionapplication.PolicyWatcherSubscriptionStarting
+	case redispubsub.StateConnected:
+		return permissionapplication.PolicyWatcherSubscriptionConnected
+	case redispubsub.StateReconnecting:
+		return permissionapplication.PolicyWatcherSubscriptionReconnecting
+	case redispubsub.StateCreated, redispubsub.StateStopping, redispubsub.StateStopped:
+		return permissionapplication.PolicyWatcherSubscriptionStopped
+	default:
+		return permissionapplication.PolicyWatcherSubscriptionStopped
 	}
 }
 
-func nextBackoff(current time.Duration, maximum time.Duration) time.Duration {
-	if current >= maximum || current > maximum/2 {
-		return maximum
+func mapSubscriptionError(category redispubsub.ErrorCategory) permissionapplication.PolicyWatcherErrorCategory {
+	switch category {
+	case redispubsub.ErrorNone:
+		return permissionapplication.PolicyWatcherErrorNone
+	case redispubsub.ErrorSubscribe:
+		return permissionapplication.PolicyWatcherErrorSubscribe
+	case redispubsub.ErrorReceive:
+		return permissionapplication.PolicyWatcherErrorReceive
+	case redispubsub.ErrorProtocol:
+		return permissionapplication.PolicyWatcherErrorProtocol
+	default:
+		return permissionapplication.PolicyWatcherErrorProtocol
 	}
-	return current * 2
-}
-
-func jitteredBackoff(delay time.Duration) time.Duration {
-	half := delay / 2
-	if half <= 0 {
-		return delay
-	}
-	return half + time.Duration(rand.Int64N(int64(delay-half)+1)) // #nosec G404 -- 重连退避抖动不用于生成密码、令牌、密钥或其他安全敏感随机值。
 }

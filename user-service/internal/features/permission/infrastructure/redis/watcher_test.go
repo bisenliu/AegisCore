@@ -14,11 +14,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/aegiscore/common/runtime/redispubsub"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 
-func newWatcherForTest(store policySubscriptionStore, revisionSource permissionapplication.LatestPolicyRevisionSource, engine permissionapplication.PolicyReloadEngine, checkInterval time.Duration, metrics permissionapplication.Metrics) *Watcher {
-	return newWatcher(store, revisionSource, engine, nil, WatcherSettings{CheckInterval: checkInterval}, metrics)
+func newWatcherForTest(source messageSource, revisionSource permissionapplication.LatestPolicyRevisionSource, engine permissionapplication.PolicyReloadEngine, checkInterval time.Duration, metrics permissionapplication.Metrics) *Watcher {
+	if source == nil {
+		source = newFakeMessageSource(redispubsub.Status{State: redispubsub.StateStopped, ErrorCategory: redispubsub.ErrorNone})
+	}
+	return newWatcher(source, revisionSource, engine, nil, WatcherSettings{CheckInterval: checkInterval}, metrics)
 }
 
 func TestStorePublishPolicyRevisionCachesSuppliedRevisionAndPublishes(t *testing.T) {
@@ -26,6 +30,7 @@ func TestStorePublishPolicyRevisionCachesSuppliedRevisionAndPublishes(t *testing
 	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 	store := newStore(client, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
+	require.Equal(t, store.keys.PolicyChannel(), store.PolicyChannel())
 	pubsub := client.Subscribe(context.Background(), store.keys.PolicyChannel())
 	t.Cleanup(func() { _ = pubsub.Close() })
 	_, err := pubsub.Receive(context.Background())
@@ -245,11 +250,6 @@ func TestDecodePolicyRefreshMessageRejectsInvalidEnvelope(t *testing.T) {
 }
 
 func TestWatcherCheckVersionCompensatesMissedMessage(t *testing.T) {
-	redisServer := miniredis.RunT(t)
-	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
-	t.Cleanup(func() { _ = client.Close() })
-	store := newStore(client, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
-	require.NoError(t, client.Set(context.Background(), store.keys.PolicyVersionKey(), 1, 0).Err())
 	ctrl := gomock.NewController(t)
 	engine := NewMockPolicyReloadEngine(ctrl)
 	var applied atomic.Int64
@@ -263,7 +263,7 @@ func TestWatcherCheckVersionCompensatesMissedMessage(t *testing.T) {
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 8, TargetRevision: 8})
 	engine.EXPECT().InvalidateAllUserRoles()
 	metrics := NewMockMetrics(ctrl)
-	watcher := newWatcherForTest(store, staticPolicyRevisionSource{revision: 8}, engine, time.Second, metrics)
+	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 8}, engine, time.Second, metrics)
 
 	gomock.InOrder(
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(4)),
@@ -295,7 +295,7 @@ func TestWatcherFaultInjectionRedisFailureRecoveryConvergesWithoutNewWrite(t *te
 	require.Equal(t, databaseRevision, storedRevision)
 
 	engine := &faultInjectedPolicyReloadEngine{appliedRevision: 4, targetRevision: 4, ready: true}
-	watcher := newWatcherForTest(store, staticPolicyRevisionSource{revision: databaseRevision}, engine, time.Second, nil)
+	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: databaseRevision}, engine, time.Second, nil)
 	watcher.CheckVersion(context.Background())
 
 	requireEventuallyWatcherProjection(t, engine, databaseRevision)
@@ -303,28 +303,18 @@ func TestWatcherFaultInjectionRedisFailureRecoveryConvergesWithoutNewWrite(t *te
 }
 
 func TestWatcherCheckVersionSkipsWhenProjectionIsAuthoritativelyReady(t *testing.T) {
-	redisServer := miniredis.RunT(t)
-	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
-	t.Cleanup(func() { _ = client.Close() })
-	store := newStore(client, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
-	require.NoError(t, client.Set(context.Background(), store.keys.PolicyVersionKey(), 4, 0).Err())
 	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
 	engine.EXPECT().AppliedRevision().Return(int64(9))
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 9, TargetRevision: 9})
 	metrics := NewMockMetrics(gomock.NewController(t))
 	metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0))
-	watcher := newWatcherForTest(store, staticPolicyRevisionSource{revision: 4}, engine, time.Second, metrics)
+	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 4}, engine, time.Second, metrics)
 
 	watcher.CheckVersion(context.Background())
 
 }
 
 func TestWatcherCheckVersionRetriesAfterPriorFailureAtEqualRevision(t *testing.T) {
-	redisServer := miniredis.RunT(t)
-	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
-	t.Cleanup(func() { _ = client.Close() })
-	store := newStore(client, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
-	require.NoError(t, client.Set(context.Background(), store.keys.PolicyVersionKey(), 8, 0).Err())
 	ctrl := gomock.NewController(t)
 	engine := NewMockPolicyReloadEngine(ctrl)
 	engine.EXPECT().AppliedRevision().Return(int64(8)).AnyTimes()
@@ -336,7 +326,7 @@ func TestWatcherCheckVersionRetriesAfterPriorFailureAtEqualRevision(t *testing.T
 	metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)).Times(2)
 	metrics.EXPECT().WatcherVersionMismatch(gomock.Any(), permissionapplication.MetricsSourceWatcherRevisionCheck, permissionapplication.MetricsReasonRevisionMismatch)
 	metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherRevisionCheck)
-	watcher := newWatcherForTest(store, staticPolicyRevisionSource{revision: 8}, engine, time.Second, metrics)
+	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 8}, engine, time.Second, metrics)
 
 	watcher.CheckVersion(context.Background())
 }
@@ -394,7 +384,7 @@ func TestWatcherCheckVersionFailureDoesNotClearLag(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	engine := NewMockPolicyReloadEngine(ctrl)
 	metrics := NewMockMetrics(ctrl)
-	watcher := newWatcherForTest(&failingVersionStore{}, failingPolicyRevisionSource{err: errors.New("database unavailable")}, engine, time.Second, metrics)
+	watcher := newWatcherForTest(nil, failingPolicyRevisionSource{err: errors.New("database unavailable")}, engine, time.Second, metrics)
 
 	engine.EXPECT().AppliedRevision().Return(int64(2))
 	metrics.EXPECT().WatcherCheckFailed(gomock.Any(), permissionapplication.MetricsSourceWatcherRevisionCheck, permissionapplication.MetricsReasonRevisionStoreUnavailable)
@@ -436,7 +426,7 @@ func TestWatcherCheckVersionRecoversFromRevisionSourceAndReloadFailure(t *testin
 	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 7, TargetRevision: 7})
 	engine.EXPECT().InvalidateAllUserRoles()
 	metrics := NewMockMetrics(ctrl)
-	watcher := newWatcherForTest(&failingVersionStore{}, revisions, engine, time.Second, metrics)
+	watcher := newWatcherForTest(nil, revisions, engine, time.Second, metrics)
 
 	gomock.InOrder(
 		metrics.EXPECT().WatcherCheckFailed(gomock.Any(), permissionapplication.MetricsSourceWatcherRevisionCheck, permissionapplication.MetricsReasonRevisionStoreUnavailable),
@@ -485,128 +475,60 @@ func TestWatcherHandlePayloadRevisionSourceFailureDoesNotUseHint(t *testing.T) {
 }
 
 func TestWatcherRunningStatus(t *testing.T) {
-	redisServer := miniredis.RunT(t)
-	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
-	t.Cleanup(func() { _ = client.Close() })
-	store := newStore(client, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
+	source := newFakeMessageSource(redispubsub.Status{State: redispubsub.StateCreated, ErrorCategory: redispubsub.ErrorNone})
 	engine := &faultInjectedPolicyReloadEngine{ready: true}
-	watcher := newWatcherForTest(store, staticPolicyRevisionSource{}, engine, time.Hour, nil)
+	watcher := newWatcherForTest(source, staticPolicyRevisionSource{}, engine, time.Hour, nil)
 
 	require.False(t, watcher.Status().Running)
-	watcher.Start()
-	watcher.Start()
+	require.NoError(t, watcher.Start())
+	require.NoError(t, watcher.Start())
 	require.Eventually(t, func() bool {
 		status := watcher.Status()
 		return status.Running && status.SubscriptionState == permissionapplication.PolicyWatcherSubscriptionConnected && !status.LastReconcileSuccessAt.IsZero()
 	}, time.Second, time.Millisecond)
+	require.Equal(t, int64(1), source.startCalls.Load())
 	require.NoError(t, watcher.Stop(context.Background()))
 	require.NoError(t, watcher.Stop(context.Background()))
 	status := watcher.Status()
 	require.False(t, status.Running)
 	require.Equal(t, permissionapplication.PolicyWatcherSubscriptionStopped, status.SubscriptionState)
 	require.Equal(t, permissionapplication.PolicyWatcherErrorNone, status.SubscriptionErrorCategory)
+	require.ErrorIs(t, watcher.Start(), redispubsub.ErrStopped)
 }
 
-func TestWatcherRecoversFromInitialSubscribeAndReceiveFailures(t *testing.T) {
-	subscribeErr := errors.New("subscribe failed")
-	receiveErr := errors.New("receive failed")
-	first := newScriptedPolicySubscriber(policyReceiveResult{err: subscribeErr})
-	second := newScriptedPolicySubscriber(
-		policyReceiveResult{value: subscriptionConfirmation()},
-		policyReceiveResult{err: receiveErr},
-	)
-	third := newScriptedPolicySubscriber(policyReceiveResult{value: subscriptionConfirmation()})
-	store := &sequenceSubscriptionStore{subscribers: []*scriptedPolicySubscriber{first, second, third}}
-	engine := &faultInjectedPolicyReloadEngine{ready: true}
-	watcher := newWatcher(store, staticPolicyRevisionSource{}, engine, nil, WatcherSettings{
-		CheckInterval: time.Hour, SubscribeTimeout: time.Second, BackoffInitial: time.Millisecond, BackoffMax: 2 * time.Millisecond,
-	}, nil)
-
-	watcher.Start()
-	require.Eventually(t, func() bool {
-		status := watcher.Status()
-		return store.subscriptions.Load() == 3 && status.SubscriptionState == permissionapplication.PolicyWatcherSubscriptionConnected
-	}, time.Second, time.Millisecond)
-	status := watcher.Status()
-	require.True(t, status.Running)
-	require.Equal(t, permissionapplication.PolicyWatcherErrorNone, status.SubscriptionErrorCategory)
-	require.Equal(t, uint64(2), status.ReconnectAttempts)
-	require.False(t, status.LastSubscriptionSuccessAt.IsZero())
-	require.Equal(t, int64(1), first.closed.Load())
-	require.Equal(t, int64(1), second.closed.Load())
-	require.NoError(t, watcher.Stop(context.Background()))
-	require.Equal(t, int64(1), third.closed.Load())
-}
-
-func TestWatcherReconcilesWhileSubscriptionKeepsFailing(t *testing.T) {
-	store := &failingSubscriptionStore{err: errors.New("redis unavailable")}
+func TestWatcherReconcilesWhileSubscriptionIsReconnecting(t *testing.T) {
+	failureAt := time.Now().Add(-time.Second)
+	source := newFakeMessageSource(redispubsub.Status{
+		Running: true, State: redispubsub.StateReconnecting, ErrorCategory: redispubsub.ErrorSubscribe,
+		LastFailureAt: failureAt, Reconnects: 3,
+	})
 	engine := &faultInjectedPolicyReloadEngine{appliedRevision: 2, targetRevision: 2, ready: true}
-	watcher := newWatcher(store, staticPolicyRevisionSource{revision: 8}, engine, nil, WatcherSettings{
-		CheckInterval: 5 * time.Millisecond, SubscribeTimeout: time.Second,
-		BackoffInitial: 20 * time.Millisecond, BackoffMax: 40 * time.Millisecond,
-	}, nil)
+	watcher := newWatcherForTest(source, staticPolicyRevisionSource{revision: 8}, engine, 5*time.Millisecond, nil)
 
-	watcher.Start()
+	require.NoError(t, watcher.Start())
+	source.setStatus(redispubsub.Status{
+		Running: true, State: redispubsub.StateReconnecting, ErrorCategory: redispubsub.ErrorSubscribe,
+		LastFailureAt: failureAt, Reconnects: 3,
+	})
 	requireEventuallyWatcherProjection(t, engine, 8)
 	require.Eventually(t, func() bool {
 		status := watcher.Status()
 		return status.Running && status.SubscriptionState == permissionapplication.PolicyWatcherSubscriptionReconnecting &&
-			status.SubscriptionErrorCategory == permissionapplication.PolicyWatcherErrorSubscribe && !status.LastReconcileSuccessAt.IsZero()
+			status.SubscriptionErrorCategory == permissionapplication.PolicyWatcherErrorSubscribe &&
+			status.ReconnectAttempts == 3 && !status.LastReconcileSuccessAt.IsZero()
 	}, time.Second, time.Millisecond)
 	require.NoError(t, watcher.Stop(context.Background()))
-}
-
-func TestWatcherBackoffIsBoundedAndJittered(t *testing.T) {
-	const (
-		initial = 8 * time.Millisecond
-		maximum = 20 * time.Millisecond
-	)
-
-	backoff := initial
-	require.Equal(t, 16*time.Millisecond, nextBackoff(backoff, maximum))
-	backoff = nextBackoff(backoff, maximum)
-	require.Equal(t, maximum, nextBackoff(backoff, maximum))
-	require.Equal(t, maximum, nextBackoff(maximum, maximum))
-
-	for range 100 {
-		delay := jitteredBackoff(maximum)
-		require.GreaterOrEqual(t, delay, maximum/2)
-		require.LessOrEqual(t, delay, maximum)
-	}
-}
-
-func TestWatcherStopCancelsReconnectBackoffWithoutAnotherSubscription(t *testing.T) {
-	store := &failingSubscriptionStore{err: errors.New("redis unavailable")}
-	engine := &faultInjectedPolicyReloadEngine{ready: true}
-	watcher := newWatcher(store, staticPolicyRevisionSource{}, engine, nil, WatcherSettings{
-		CheckInterval: time.Hour, SubscribeTimeout: time.Second,
-		BackoffInitial: time.Hour, BackoffMax: time.Hour,
-	}, nil)
-
-	watcher.Start()
-	require.Eventually(t, func() bool {
-		return store.subscriptions.Load() == 1 && watcher.Status().SubscriptionState == permissionapplication.PolicyWatcherSubscriptionReconnecting
-	}, time.Second, time.Millisecond)
-	require.NoError(t, watcher.Stop(context.Background()))
-	require.Equal(t, int64(1), store.subscriptions.Load())
-	require.Equal(t, int64(1), store.closedCount())
 }
 
 func TestWatcherStopCancelsBlockedPayloadWithoutRecordingFailure(t *testing.T) {
 	payload := mustPolicyPayload(t, testPolicyPublicationEvent(1, permissionapplication.NewPolicyReloadChange("role_updated")))
-	subscriber := newScriptedPolicySubscriber(
-		policyReceiveResult{value: subscriptionConfirmation()},
-		policyReceiveResult{value: &rediscmd.Message{Channel: "rbac", Payload: payload}},
-	)
-	store := &sequenceSubscriptionStore{subscribers: []*scriptedPolicySubscriber{subscriber}}
+	source := newFakeMessageSource(redispubsub.Status{State: redispubsub.StateCreated, ErrorCategory: redispubsub.ErrorNone})
 	revisions := newBlockingAfterFirstRevisionSource()
 	engine := &faultInjectedPolicyReloadEngine{ready: true}
-	watcher := newWatcher(store, revisions, engine, nil, WatcherSettings{
-		CheckInterval: time.Hour, SubscribeTimeout: time.Second,
-		BackoffInitial: time.Hour, BackoffMax: time.Hour,
-	}, nil)
+	watcher := newWatcherForTest(source, revisions, engine, time.Hour, nil)
 
-	watcher.Start()
+	require.NoError(t, watcher.Start())
+	source.messages <- redispubsub.Message{Channel: "rbac", Payload: payload}
 	select {
 	case <-revisions.blocked:
 	case <-time.After(time.Second):
@@ -616,50 +538,77 @@ func TestWatcherStopCancelsBlockedPayloadWithoutRecordingFailure(t *testing.T) {
 	status := watcher.Status()
 	require.False(t, status.Running)
 	require.True(t, status.LastFailureAt.IsZero())
-	require.Equal(t, int64(1), subscriber.closed.Load())
 }
 
 func TestNewWatcherDoesNotStartBackgroundLoop(t *testing.T) {
+	source := newFakeMessageSource(redispubsub.Status{State: redispubsub.StateCreated, ErrorCategory: redispubsub.ErrorNone})
 	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
 	watcher := NewWatcher(WatcherParams{
+		Subscriber:     nil,
 		Engine:         engine,
 		RevisionSource: staticPolicyRevisionSource{},
 	})
+	watcher.source = source
 
 	require.False(t, watcher.Status().Running)
+	require.Equal(t, int64(0), source.startCalls.Load())
+}
+
+func TestWatcherStartPropagatesMessageSourceError(t *testing.T) {
+	startErr := errors.New("subscriber start failed")
+	source := newFakeMessageSource(redispubsub.Status{State: redispubsub.StateStopped, ErrorCategory: redispubsub.ErrorNone})
+	source.startErr = startErr
+	engine := &faultInjectedPolicyReloadEngine{ready: true}
+	watcher := newWatcherForTest(source, staticPolicyRevisionSource{}, engine, time.Hour, nil)
+
+	require.ErrorIs(t, watcher.Start(), startErr)
+	require.False(t, watcher.Status().Running)
+	require.Equal(t, int64(1), source.startCalls.Load())
+}
+
+func TestWatcherMapsSubscriptionStatusAndUsesNewestFailure(t *testing.T) {
+	subscriptionFailure := time.Now().Add(-2 * time.Minute)
+	connectedAt := time.Now().Add(-time.Minute)
+	source := newFakeMessageSource(redispubsub.Status{
+		Running: true, State: redispubsub.StateReconnecting, ErrorCategory: redispubsub.ErrorProtocol,
+		LastConnectedAt: connectedAt, LastFailureAt: subscriptionFailure, Reconnects: 7,
+	})
+	watcher := newWatcherForTest(source, staticPolicyRevisionSource{}, &faultInjectedPolicyReloadEngine{ready: true}, time.Hour, nil)
+	reconcileFailure := time.Now()
+	watcher.mu.Lock()
+	watcher.status.Running = true
+	watcher.status.ReconcileErrorCategory = permissionapplication.PolicyWatcherErrorReload
+	watcher.lastReconcileFailureAt = reconcileFailure
+	watcher.mu.Unlock()
+
+	status := watcher.Status()
+	require.True(t, status.Running)
+	require.Equal(t, permissionapplication.PolicyWatcherSubscriptionReconnecting, status.SubscriptionState)
+	require.Equal(t, permissionapplication.PolicyWatcherErrorProtocol, status.SubscriptionErrorCategory)
+	require.Equal(t, permissionapplication.PolicyWatcherErrorReload, status.ReconcileErrorCategory)
+	require.Equal(t, connectedAt, status.LastSubscriptionSuccessAt)
+	require.Equal(t, reconcileFailure, status.LastFailureAt)
+	require.Equal(t, uint64(7), status.ReconnectAttempts)
 }
 
 func TestWatcherStopHonorsDeadlineAndCanBeRepeated(t *testing.T) {
 	release := make(chan struct{})
-	closed := &atomic.Int64{}
-	subscriber := blockingPolicySubscriber{release: release, closed: closed}
-	store := &countingSubscriptionStore{subscriber: subscriber}
+	source := newFakeMessageSource(redispubsub.Status{State: redispubsub.StateCreated, ErrorCategory: redispubsub.ErrorNone})
+	source.stopRelease = release
 	engine := &faultInjectedPolicyReloadEngine{ready: true}
-	watcher := newWatcherForTest(store, staticPolicyRevisionSource{}, engine, time.Hour, nil)
+	watcher := newWatcherForTest(source, staticPolicyRevisionSource{}, engine, time.Hour, nil)
 
-	watcher.Start()
+	require.NoError(t, watcher.Start())
 	require.True(t, watcher.Status().Running)
-	require.Eventually(t, func() bool { return store.subscriptions.Load() == 1 }, time.Second, 10*time.Millisecond)
 
-	stopCtx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+	stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
-	stopDone := make(chan error, 1)
-	go func() { stopDone <- watcher.Stop(stopCtx) }()
-	select {
-	case err := <-stopDone:
-		require.ErrorIs(t, err, context.DeadlineExceeded)
-	case <-time.After(time.Second):
-		t.Fatal("watcher stop did not honor deadline")
-	}
-	require.True(t, watcher.Status().Running)
-	require.Equal(t, int64(1), closed.Load())
+	require.ErrorIs(t, watcher.Stop(stopCtx), context.DeadlineExceeded)
 
 	close(release)
-
 	require.NoError(t, watcher.Stop(context.Background()))
 	require.NoError(t, watcher.Stop(context.Background()))
 	require.False(t, watcher.Status().Running)
-	require.Equal(t, int64(1), closed.Load())
 }
 
 type faultInjectedPolicyReloadEngine struct {
@@ -741,45 +690,69 @@ func mustPolicyPayload(t *testing.T, event permissionapplication.OutboxEvent) st
 	return payload
 }
 
-type countingSubscriptionStore struct {
-	subscriber    policySubscriber
-	subscriptions atomic.Int64
+type fakeMessageSource struct {
+	mu          sync.Mutex
+	status      redispubsub.Status
+	messages    chan redispubsub.Message
+	startErr    error
+	stopRelease <-chan struct{}
+	startCalls  atomic.Int64
+	stopCalls   atomic.Int64
+	closeOnce   sync.Once
 }
 
-func (s *countingSubscriptionStore) Subscribe(context.Context) policySubscriber {
-	s.subscriptions.Add(1)
-	return s.subscriber
+func newFakeMessageSource(status redispubsub.Status) *fakeMessageSource {
+	return &fakeMessageSource{status: status, messages: make(chan redispubsub.Message, 8)}
 }
 
-type blockingPolicySubscriber struct {
-	release <-chan struct{}
-	closed  *atomic.Int64
-}
-
-func (s blockingPolicySubscriber) Receive(context.Context) (any, error) {
-	<-s.release
-	return nil, context.Canceled
-}
-
-func (s blockingPolicySubscriber) Close() error {
-	s.closed.Add(1)
+func (s *fakeMessageSource) Start() error {
+	s.startCalls.Add(1)
+	if s.startErr != nil {
+		return s.startErr
+	}
+	s.mu.Lock()
+	s.status.Running = true
+	s.status.State = redispubsub.StateConnected
+	s.status.ErrorCategory = redispubsub.ErrorNone
+	if s.status.LastConnectedAt.IsZero() {
+		s.status.LastConnectedAt = time.Now()
+	}
+	s.mu.Unlock()
 	return nil
 }
 
-type closedPolicySubscriber struct{}
-
-func (s closedPolicySubscriber) Receive(context.Context) (any, error) {
-	return nil, nil
-}
-
-func (s closedPolicySubscriber) Close() error {
+func (s *fakeMessageSource) Stop(ctx context.Context) error {
+	s.stopCalls.Add(1)
+	if s.stopRelease != nil {
+		select {
+		case <-s.stopRelease:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	s.mu.Lock()
+	s.status.Running = false
+	s.status.State = redispubsub.StateStopped
+	s.status.ErrorCategory = redispubsub.ErrorNone
+	s.mu.Unlock()
+	s.closeOnce.Do(func() { close(s.messages) })
 	return nil
 }
 
-type failingVersionStore struct{}
+func (s *fakeMessageSource) Messages() <-chan redispubsub.Message {
+	return s.messages
+}
 
-func (s *failingVersionStore) Subscribe(context.Context) policySubscriber {
-	return closedPolicySubscriber{}
+func (s *fakeMessageSource) Status() redispubsub.Status {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.status
+}
+
+func (s *fakeMessageSource) setStatus(status redispubsub.Status) {
+	s.mu.Lock()
+	s.status = status
+	s.mu.Unlock()
 }
 
 type staticPolicyRevisionSource struct {
@@ -830,84 +803,6 @@ type sequencePolicyRevisionSource struct {
 func (s *sequencePolicyRevisionSource) LatestPolicyRevision(context.Context) (int64, error) {
 	index := int(s.calls.Add(1) - 1)
 	return s.results[index].revision, s.results[index].err
-}
-
-type policyReceiveResult struct {
-	value any
-	err   error
-}
-
-type scriptedPolicySubscriber struct {
-	results chan policyReceiveResult
-	closed  atomic.Int64
-}
-
-func newScriptedPolicySubscriber(results ...policyReceiveResult) *scriptedPolicySubscriber {
-	channel := make(chan policyReceiveResult, len(results))
-	for _, result := range results {
-		channel <- result
-	}
-	return &scriptedPolicySubscriber{results: channel}
-}
-
-func (s *scriptedPolicySubscriber) Receive(ctx context.Context) (any, error) {
-	select {
-	case result := <-s.results:
-		return result.value, result.err
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
-func (s *scriptedPolicySubscriber) Close() error {
-	s.closed.Add(1)
-	return nil
-}
-
-type sequenceSubscriptionStore struct {
-	mu            sync.Mutex
-	subscribers   []*scriptedPolicySubscriber
-	subscriptions atomic.Int64
-}
-
-func (s *sequenceSubscriptionStore) Subscribe(context.Context) policySubscriber {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	index := int(s.subscriptions.Add(1) - 1)
-	if index >= len(s.subscribers) {
-		return s.subscribers[len(s.subscribers)-1]
-	}
-	return s.subscribers[index]
-}
-
-type failingSubscriptionStore struct {
-	err           error
-	subscriptions atomic.Int64
-	mu            sync.Mutex
-	subscribers   []*scriptedPolicySubscriber
-}
-
-func (s *failingSubscriptionStore) Subscribe(context.Context) policySubscriber {
-	s.subscriptions.Add(1)
-	subscriber := newScriptedPolicySubscriber(policyReceiveResult{err: s.err})
-	s.mu.Lock()
-	s.subscribers = append(s.subscribers, subscriber)
-	s.mu.Unlock()
-	return subscriber
-}
-
-func (s *failingSubscriptionStore) closedCount() int64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	total := int64(0)
-	for _, subscriber := range s.subscribers {
-		total += subscriber.closed.Load()
-	}
-	return total
-}
-
-func subscriptionConfirmation() *rediscmd.Subscription {
-	return &rediscmd.Subscription{Kind: "subscribe", Channel: "rbac", Count: 1}
 }
 
 type failingPolicyRedisClient struct {

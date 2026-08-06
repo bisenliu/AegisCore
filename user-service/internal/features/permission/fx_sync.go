@@ -3,9 +3,11 @@ package permission
 import (
 	"context"
 
+	rediscmd "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
+	"github.com/aegiscore/common/runtime/redispubsub"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionredis "github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis"
@@ -24,6 +26,8 @@ var permissionPolicySyncOptions = fx.Options(
 	),
 )
 
+const policySubscriberBufferSize = 64
+
 // Fx 参数与结果：Policy 同步
 
 // WatcherParams 汇集 watcher 运行时依赖，watcher 只通过 reload 端口触发内存策略刷新。
@@ -31,6 +35,7 @@ type WatcherParams struct {
 	fx.In
 
 	Store          *permissionredis.Store
+	Client         rediscmd.UniversalClient `name:"cache_redis"`
 	RevisionSource permissionapplication.LatestPolicyRevisionSource
 	Engine         permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
 	Settings       serviceconfig.RBACSettings
@@ -92,7 +97,7 @@ type OutboxDispatcherResult struct {
 
 // policyWatcherRunner 是 lifecycle 对 policy watcher 的最小控制面。
 type policyWatcherRunner interface {
-	Start()
+	Start() error
 	Stop(context.Context) error
 }
 
@@ -112,16 +117,24 @@ func providePolicyChangeNotifier(params PolicyChangeNotifierParams) PolicyChange
 }
 
 // provideWatcher 将 Redis watcher 同时投影为 lifecycle runner 和健康状态来源。
-func provideWatcher(params WatcherParams) PolicyWatcherResult {
+func provideWatcher(params WatcherParams) (PolicyWatcherResult, error) {
 	settings := params.Settings.PolicyWatcher
-	watcher := permissionredis.NewWatcher(permissionredis.WatcherParams{
-		Store: params.Store, RevisionSource: params.RevisionSource, Engine: params.Engine, Log: params.Log, Metrics: params.Metrics,
-		Settings: permissionredis.WatcherSettings{
-			CheckInterval: settings.CheckInterval, SubscribeTimeout: settings.SubscribeTimeout,
-			BackoffInitial: settings.RetryBackoff.Initial, BackoffMax: settings.RetryBackoff.Max,
-		},
+	subscriber, err := redispubsub.NewSubscriber(params.Client, params.Log, redispubsub.Options{
+		Name:             "permission-policy-watcher",
+		Channel:          params.Store.PolicyChannel(),
+		BufferSize:       policySubscriberBufferSize,
+		SubscribeTimeout: settings.SubscribeTimeout,
+		BackoffInitial:   settings.RetryBackoff.Initial,
+		BackoffMax:       settings.RetryBackoff.Max,
 	})
-	return PolicyWatcherResult{Watcher: watcher, Runner: watcher, Status: watcher}
+	if err != nil {
+		return PolicyWatcherResult{}, err
+	}
+	watcher := permissionredis.NewWatcher(permissionredis.WatcherParams{
+		Subscriber: subscriber, RevisionSource: params.RevisionSource, Engine: params.Engine, Log: params.Log, Metrics: params.Metrics,
+		Settings: permissionredis.WatcherSettings{CheckInterval: settings.CheckInterval},
+	})
+	return PolicyWatcherResult{Watcher: watcher, Runner: watcher, Status: watcher}, nil
 }
 
 // provideOutboxDispatcher 将同一个 dispatcher 投影为 lifecycle runner 和只读状态来源。

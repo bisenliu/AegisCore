@@ -26,7 +26,6 @@ type policyRedisClient interface {
 	Eval(ctx context.Context, script string, keys []string, args ...any) *rediscmd.Cmd
 	Publish(ctx context.Context, channel string, message any) *rediscmd.IntCmd
 	Get(ctx context.Context, key string) *rediscmd.StringCmd
-	Subscribe(ctx context.Context, channels ...string) *rediscmd.PubSub
 }
 
 const cachePolicyRevisionScript = `
@@ -38,15 +37,6 @@ if not current or string.len(current) < string.len(supplied) or
 end
 return 1
 `
-
-type policySubscriber interface {
-	Receive(ctx context.Context) (interface{}, error)
-	Close() error
-}
-
-type policySubscriptionStore interface {
-	Subscribe(ctx context.Context) policySubscriber
-}
 
 // NewStore 构造 RBAC policy Redis store。
 func NewStore(client rediscmd.UniversalClient, appName string, log *zap.Logger) (*Store, error) {
@@ -96,9 +86,9 @@ func (s *Store) CurrentVersion(ctx context.Context) (int64, error) {
 	return 0, fmt.Errorf("read rbac policy version: %w", err)
 }
 
-// Subscribe 订阅 RBAC policy 刷新 channel。
-func (s *Store) Subscribe(ctx context.Context) policySubscriber {
-	return s.client.Subscribe(ctx, s.keys.PolicyChannel())
+// PolicyChannel 返回 RBAC policy 刷新 Pub/Sub channel，供 composition 构造通用 subscriber。
+func (s *Store) PolicyChannel() string {
+	return s.keys.PolicyChannel()
 }
 
 func defaultInstanceID() string {
