@@ -6,7 +6,6 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/aegiscore/common/runtime/localcache"
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commonvalidation "github.com/aegiscore/common/validation"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -146,7 +145,7 @@ func provideUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverRes
 }
 
 // provideEngine 将同一个 Casbin engine 按不同端口投影，保持授权、reload、健康检查和初始化使用同一份内存策略。
-func provideEngine(loader permissioncasbin.Loader, metrics commonmetrics.ReloadMetrics, userRoles permissioncasbin.UserRoleResolver) PolicyEngineResult {
+func provideEngine(loader permissioncasbin.Loader, metrics permissioncasbin.ReloadMetrics, userRoles permissioncasbin.UserRoleResolver) PolicyEngineResult {
 	engine := permissioncasbin.NewEngine(loader, metrics, userRoles)
 	return PolicyEngineResult{AuthorizationEngine: engine, ReloadEngine: engine, Health: engine, Initializer: engine}
 }

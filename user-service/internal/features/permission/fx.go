@@ -3,7 +3,6 @@ package permission
 import (
 	"go.uber.org/fx"
 
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 )
 
@@ -42,7 +41,7 @@ var permissionInternalModule = fx.Module(
 var permissionMetricsOptions = fx.Options(
 	fx.Provide(
 		newPermissionMetrics,
-		commonmetrics.NewCasbinPolicyReloadMetrics,
+		newCasbinPolicyReloadMetrics,
 		fx.Private,
 	),
 )

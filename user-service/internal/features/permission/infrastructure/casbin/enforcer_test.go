@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"
 )
 
@@ -104,7 +103,7 @@ func TestEngineEnforceAllowDenyAndDoesNotReload(t *testing.T) {
 	})
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return([]uuid.UUID{roleID}, nil).Times(2)
-	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), roles)
+	engine := NewEngine(loader, NopReloadMetrics(), roles)
 	applied, err := engine.ReloadToRevision(context.Background(), 1)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), applied)
@@ -127,7 +126,7 @@ func TestEngineSuperAdminWildcard(t *testing.T) {
 	})
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return([]uuid.UUID{superAdminRoleID}, nil)
-	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), roles)
+	engine := NewEngine(loader, NopReloadMetrics(), roles)
 	_, err := engine.ReloadToRevision(context.Background(), 1)
 	require.NoError(t, err)
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/anything/:id", "DELETE")
@@ -182,7 +181,7 @@ func TestEngineReloadFailurePreservesProjectionButFailsClosedUntilRecovery(t *te
 }
 
 func TestEngineCandidateSwapIsHigherOnlyAndEqualIsIdempotent(t *testing.T) {
-	engine := NewEngine(nil, commonmetrics.NopReloadMetrics(), nil)
+	engine := NewEngine(nil, NopReloadMetrics(), nil)
 	newer := mustEnforcer(t, policy(2, uuid.New(), "/new", "GET"))
 	older := mustEnforcer(t, policy(1, uuid.New(), "/old", "GET"))
 	equal := mustEnforcer(t, policy(2, uuid.New(), "/equal", "GET"))
@@ -220,7 +219,7 @@ func TestEngineRefreshReplacesStaleSnapshotAtEqualRevision(t *testing.T) {
 		return policy(2, roleID, "/api/v1/current", "GET"), nil
 	})
 	resolver := newFaultInjectedRoleResolver(map[uuid.UUID][]uuid.UUID{userID: {roleID}})
-	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), resolver)
+	engine := NewEngine(loader, NopReloadMetrics(), resolver)
 
 	_, err := engine.ReloadToRevision(context.Background(), 2)
 	require.NoError(t, err)
@@ -260,7 +259,7 @@ func TestEngineForceJoiningInFlightReloadReadsSnapshotAgain(t *testing.T) {
 		}
 	})
 	resolver := newFaultInjectedRoleResolver(map[uuid.UUID][]uuid.UUID{userID: {roleID}})
-	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), resolver)
+	engine := NewEngine(loader, NopReloadMetrics(), resolver)
 	_, err := engine.ReloadToRevision(context.Background(), 2)
 	require.NoError(t, err)
 
@@ -310,7 +309,7 @@ func TestEngineFaultInjectionOutOfOrderReloadKeepsLatestProjection(t *testing.T)
 		return policy(target, newRoleID, "/api/v1/new", "GET"), nil
 	})
 	resolver := newFaultInjectedRoleResolver(map[uuid.UUID][]uuid.UUID{userID: {newRoleID}})
-	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), resolver)
+	engine := NewEngine(loader, NopReloadMetrics(), resolver)
 
 	first := make(chan error, 1)
 	go func() {
@@ -338,7 +337,7 @@ func TestEngineCanceledHigherTargetIsObservedAndFailsClosed(t *testing.T) {
 	roleID := uuid.New()
 	engine := NewEngine(loaderFunc(func(context.Context, int64) (PolicySet, error) {
 		return policy(1, roleID, "/api/v1/users", "GET"), nil
-	}), commonmetrics.NopReloadMetrics(), nil)
+	}), NopReloadMetrics(), nil)
 	_, err := engine.ReloadToRevision(context.Background(), 1)
 	require.NoError(t, err)
 
@@ -362,7 +361,7 @@ func TestEngineEnforceReturnsRoleResolverError(t *testing.T) {
 	})
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return(nil, resolveErr)
-	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), roles)
+	engine := NewEngine(loader, NopReloadMetrics(), roles)
 	_, err := engine.ReloadToRevision(context.Background(), 1)
 	require.NoError(t, err)
 
@@ -377,7 +376,7 @@ func TestEngineEnforceFailsClosedWhenProjectionBecomesStaleDuringRoleResolution(
 	resolver := &blockingUserRoleResolver{started: make(chan struct{}), release: make(chan struct{}), roles: []uuid.UUID{roleID}}
 	engine := NewEngine(loaderFunc(func(context.Context, int64) (PolicySet, error) {
 		return policy(1, roleID, "/api/v1/users", "GET"), nil
-	}), commonmetrics.NopReloadMetrics(), resolver)
+	}), NopReloadMetrics(), resolver)
 	_, err := engine.ReloadToRevision(context.Background(), 1)
 	require.NoError(t, err)
 
@@ -407,7 +406,7 @@ func TestEngineWaiterCancellationDoesNotCancelSharedReload(t *testing.T) {
 			return PolicySet{}, ctx.Err()
 		}
 	})
-	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), nil)
+	engine := NewEngine(loader, NopReloadMetrics(), nil)
 	leaderCtx, cancelLeader := context.WithCancel(context.Background())
 	leaderResult := make(chan error, 1)
 	go func() {
@@ -446,7 +445,7 @@ func TestEngineNewWaiterStartsFreshFlightAfterSoleWaiterCancels(t *testing.T) {
 		}
 		return PolicySet{Revision: target}, nil
 	})
-	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), nil)
+	engine := NewEngine(loader, NopReloadMetrics(), nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	firstResult := make(chan error, 1)
 	go func() {
@@ -481,7 +480,7 @@ func TestEngineCoalescesOneHundredConcurrentTargetsToLatest(t *testing.T) {
 			return PolicySet{}, ctx.Err()
 		}
 	})
-	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), nil)
+	engine := NewEngine(loader, NopReloadMetrics(), nil)
 
 	results := make(chan error, 100)
 	var wg sync.WaitGroup
@@ -527,7 +526,7 @@ func TestEngineFaultInjectionOneHundredConcurrentWritesConvergeToAuthorizationPr
 		}
 	})
 	resolver := newFaultInjectedRoleResolver(map[uuid.UUID][]uuid.UUID{userID: {roleID}})
-	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), resolver)
+	engine := NewEngine(loader, NopReloadMetrics(), resolver)
 
 	results := make(chan error, 100)
 	var wg sync.WaitGroup
@@ -564,7 +563,7 @@ func TestEngineInitializeUsesTargetZeroAndCallerContext(t *testing.T) {
 		<-loaderCtx.Done()
 		return PolicySet{}, loaderCtx.Err()
 	})
-	engine := NewEngine(loader, commonmetrics.NopReloadMetrics(), nil)
+	engine := NewEngine(loader, NopReloadMetrics(), nil)
 	engine.InitializeFailClosed(ctx)
 	require.Eventually(t, func() bool { return errors.Is(engine.LastError(), context.Canceled) }, time.Second, time.Millisecond)
 	require.False(t, engine.ProjectionStatus().Ready())
@@ -578,7 +577,7 @@ func TestEngineInvalidatesUserRoleResolver(t *testing.T) {
 		roles.EXPECT().InvalidateUserRole(userID),
 		roles.EXPECT().InvalidateAllUserRoles(),
 	)
-	engine := NewEngine(nil, commonmetrics.NopReloadMetrics(), roles)
+	engine := NewEngine(nil, NopReloadMetrics(), roles)
 	engine.InvalidateUserRole(userID)
 	engine.InvalidateAllUserRoles()
 }
@@ -594,7 +593,7 @@ func mustEnforcer(t *testing.T, policySet PolicySet) *casbinlib.Enforcer {
 	t.Helper()
 	engine := NewEngine(loaderFunc(func(context.Context, int64) (PolicySet, error) {
 		return policySet, nil
-	}), commonmetrics.NopReloadMetrics(), nil)
+	}), NopReloadMetrics(), nil)
 	_, enforcer, err := engine.buildEnforcer(context.Background(), policySet.Revision)
 	require.NoError(t, err)
 	return enforcer

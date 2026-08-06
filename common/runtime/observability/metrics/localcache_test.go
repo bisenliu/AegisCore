@@ -51,8 +51,8 @@ func findMetricFamily(families []*io_prometheus_client.MetricFamily, name string
 func TestLocalcacheCollectorAllowsMultipleCaches(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	for _, source := range []staticLocalcacheStatsSource{
-		{name: "auth_token_version", stats: localcache.Stats{Hit: 1, Capacity: 100}},
-		{name: "rbac_user_roles", stats: localcache.Stats{Miss: 2, Capacity: 200}},
+		{name: "session_tokens", stats: localcache.Stats{Hit: 1, Capacity: 100}},
+		{name: "catalog_entries", stats: localcache.Stats{Miss: 2, Capacity: 200}},
 	} {
 		collector, err := NewLocalcacheCollector(LocalcacheCollectorOptions{Source: source})
 		require.NoErrorf(t, err, "NewLocalcacheCollector(%s)", source.name)
@@ -60,8 +60,8 @@ func TestLocalcacheCollectorAllowsMultipleCaches(t *testing.T) {
 	}
 
 	family := familyFrom(t, gatherRegistryFamilies(t, registry), localcacheRequestsMetricName)
-	assertMetricWithLabelsValue(t, family, map[string]string{LabelCache: "auth_token_version", LabelResult: localcacheResultHit}, 1)
-	assertMetricWithLabelsValue(t, family, map[string]string{LabelCache: "rbac_user_roles", LabelResult: localcacheResultMiss}, 2)
+	assertMetricWithLabelsValue(t, family, map[string]string{LabelCache: "session_tokens", LabelResult: localcacheResultHit}, 1)
+	assertMetricWithLabelsValue(t, family, map[string]string{LabelCache: "catalog_entries", LabelResult: localcacheResultMiss}, 2)
 }
 
 type staticLocalcacheStatsSource struct {

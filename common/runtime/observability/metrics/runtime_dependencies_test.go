@@ -208,56 +208,56 @@ func TestSchedulerMetricsAdapterRecordsEvents(t *testing.T) {
 	provider := newTestProvider(t, true, false)
 	recorder := NewSchedulerMetrics(provider, SchedulerMetricsOptions{DurationBuckets: []float64{0.01, 0.1, 1}})
 
-	recorder.JobTriggered("rbac_policy_version_check")
-	recorder.JobStarted("rbac_policy_version_check")
-	recorder.JobCompleted("rbac_policy_version_check", 50*time.Millisecond)
-	recorder.JobFailed("rbac_policy_version_check", 75*time.Millisecond)
-	recorder.JobSkipped("rbac_policy_version_check", "lock_busy")
-	recorder.JobLockRenewFailed("rbac_policy_version_check")
+	recorder.JobTriggered("cache_refresh")
+	recorder.JobStarted("cache_refresh")
+	recorder.JobCompleted("cache_refresh", 50*time.Millisecond)
+	recorder.JobFailed("cache_refresh", 75*time.Millisecond)
+	recorder.JobSkipped("cache_refresh", "lock_busy")
+	recorder.JobLockRenewFailed("cache_refresh")
 
 	jobs := gatherFamily(t, provider, schedulerJobsMetricName)
 	assertMetricWithLabelsValue(t, jobs, map[string]string{
-		LabelSchedulerJob: "rbac_policy_version_check",
+		LabelSchedulerJob: "cache_refresh",
 		LabelEvent:        schedulerEventTriggered,
 		LabelStatus:       schedulerStatusSuccess,
 		LabelReason:       schedulerReasonNone,
 	}, 1)
 	assertMetricWithLabelsValue(t, jobs, map[string]string{
-		LabelSchedulerJob: "rbac_policy_version_check",
+		LabelSchedulerJob: "cache_refresh",
 		LabelEvent:        schedulerEventStarted,
 		LabelStatus:       schedulerStatusSuccess,
 		LabelReason:       schedulerReasonNone,
 	}, 1)
 	assertMetricWithLabelsValue(t, jobs, map[string]string{
-		LabelSchedulerJob: "rbac_policy_version_check",
+		LabelSchedulerJob: "cache_refresh",
 		LabelEvent:        schedulerEventCompleted,
 		LabelStatus:       schedulerStatusSuccess,
 		LabelReason:       schedulerReasonNone,
 	}, 1)
 	assertMetricWithLabelsValue(t, jobs, map[string]string{
-		LabelSchedulerJob: "rbac_policy_version_check",
+		LabelSchedulerJob: "cache_refresh",
 		LabelEvent:        schedulerEventFailed,
 		LabelStatus:       schedulerStatusFailure,
 		LabelReason:       schedulerReasonNone,
 	}, 1)
 	assertMetricWithLabelsValue(t, jobs, map[string]string{
-		LabelSchedulerJob: "rbac_policy_version_check",
+		LabelSchedulerJob: "cache_refresh",
 		LabelEvent:        schedulerEventSkipped,
 		LabelStatus:       schedulerStatusSkipped,
 		LabelReason:       "lock_busy",
 	}, 1)
 	assertMetricWithLabelsValue(t, jobs, map[string]string{
-		LabelSchedulerJob: "rbac_policy_version_check",
+		LabelSchedulerJob: "cache_refresh",
 		LabelEvent:        schedulerEventLockRenewFailed,
 		LabelStatus:       schedulerStatusFailure,
 		LabelReason:       schedulerReasonNone,
 	}, 1)
 
 	duration := gatherFamily(t, provider, schedulerJobDurationMetricName)
-	assertHistogramSampleCount(t, duration, map[string]string{LabelSchedulerJob: "rbac_policy_version_check", LabelStatus: schedulerStatusSuccess}, 1)
-	assertHistogramSampleCount(t, duration, map[string]string{LabelSchedulerJob: "rbac_policy_version_check", LabelStatus: schedulerStatusFailure}, 1)
-	assertHistogramSampleSum(t, duration, map[string]string{LabelSchedulerJob: "rbac_policy_version_check", LabelStatus: schedulerStatusSuccess}, 0.05)
-	assertHistogramSampleSum(t, duration, map[string]string{LabelSchedulerJob: "rbac_policy_version_check", LabelStatus: schedulerStatusFailure}, 0.075)
+	assertHistogramSampleCount(t, duration, map[string]string{LabelSchedulerJob: "cache_refresh", LabelStatus: schedulerStatusSuccess}, 1)
+	assertHistogramSampleCount(t, duration, map[string]string{LabelSchedulerJob: "cache_refresh", LabelStatus: schedulerStatusFailure}, 1)
+	assertHistogramSampleSum(t, duration, map[string]string{LabelSchedulerJob: "cache_refresh", LabelStatus: schedulerStatusSuccess}, 0.05)
+	assertHistogramSampleSum(t, duration, map[string]string{LabelSchedulerJob: "cache_refresh", LabelStatus: schedulerStatusFailure}, 0.075)
 }
 
 func TestSchedulerMetricsAdapterDisabledProviderReturnsNop(t *testing.T) {
@@ -282,32 +282,17 @@ func TestSchedulerMetricsAdapterUsesDefaultDurationBuckets(t *testing.T) {
 func TestComponentStatusCollectorExportsRunningAndLastError(t *testing.T) {
 	provider := newTestProvider(t, true, false)
 	collector, err := NewComponentStatusCollector(ComponentStatusCollectorOptions{
-		Resource: "rbac_policy_watcher",
+		Resource: "cache_watcher",
 		Source:   staticComponentStatusSource{running: true, err: errors.New("subscribe failed")},
 	})
 	require.NoError(t, err, "NewComponentStatusCollector")
 	require.NoError(t, provider.Register(collector), "Register")
 
 	running := firstMetric(t, gatherFamily(t, provider, statusRunningMetricName))
-	assertMetricLabel(t, running, LabelResource, "rbac_policy_watcher")
+	assertMetricLabel(t, running, LabelResource, "cache_watcher")
 	require.Equal(t, float64(1), running.GetGauge().GetValue(), "running")
 	lastErr := firstMetric(t, gatherFamily(t, provider, statusLastErrorMetricName))
 	require.Equal(t, float64(1), lastErr.GetGauge().GetValue(), "last error")
-}
-
-func TestCasbinPolicyReloadMetricsRecordsStatus(t *testing.T) {
-	provider := newTestProvider(t, true, false)
-	recorder := NewCasbinPolicyReloadMetrics(provider)
-	recorder.ReloadSucceeded()
-	recorder.SetLastStatus(true)
-	recorder.ReloadFailed()
-	recorder.SetLastStatus(false)
-
-	reloads := gatherFamily(t, provider, casbinReloadsMetricName)
-	assertMetricWithLabelsValue(t, reloads, map[string]string{LabelStatus: StatusSuccess}, 1)
-	assertMetricWithLabelsValue(t, reloads, map[string]string{LabelStatus: StatusFailure}, 1)
-	lastStatus := gatherFamily(t, provider, casbinReloadLastMetricName)
-	assertGaugeValue(t, lastStatus, 0)
 }
 
 type staticRedisPinger struct {

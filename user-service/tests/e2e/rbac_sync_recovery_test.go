@@ -14,7 +14,6 @@ import (
 	rediscmd "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	"github.com/aegiscore/common/testing/containers"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissioncasbin "github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin"
@@ -37,8 +36,8 @@ func TestRBACOutboxRedisRecoveryConvergesAllProjectionsWithoutNewWrite(t *testin
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000024002")
 	resolver := staticRBACUserRoleResolver{roleID: roleID}
 	engines := []*permissioncasbin.Engine{
-		permissioncasbin.NewEngine(permissioncasbin.NewPolicyLoader(client), commonmetrics.NopReloadMetrics(), resolver),
-		permissioncasbin.NewEngine(permissioncasbin.NewPolicyLoader(client), commonmetrics.NopReloadMetrics(), resolver),
+		permissioncasbin.NewEngine(permissioncasbin.NewPolicyLoader(client), permissioncasbin.NopReloadMetrics(), resolver),
+		permissioncasbin.NewEngine(permissioncasbin.NewPolicyLoader(client), permissioncasbin.NopReloadMetrics(), resolver),
 	}
 	for _, engine := range engines {
 		applied, reloadErr := engine.ReloadToRevision(ctx, 0)

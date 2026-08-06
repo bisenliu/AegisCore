@@ -9,7 +9,6 @@ import (
 	casbinlib "github.com/casbin/casbin/v3"
 	"github.com/google/uuid"
 
-	commonmetrics "github.com/aegiscore/common/runtime/observability/metrics"
 	commoncasbin "github.com/aegiscore/common/security/casbin"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
@@ -19,7 +18,7 @@ var errPolicyRevisionNotReached = errors.New("casbin policy target revision was 
 // Engine 使用内存 Casbin enforcer 执行权限判断。
 type Engine struct {
 	loader    Loader
-	metrics   commonmetrics.ReloadMetrics
+	metrics   ReloadMetrics
 	userRoles UserRoleResolver
 
 	mu              sync.RWMutex
@@ -41,7 +40,10 @@ type reloadFlight struct {
 }
 
 // NewEngine 构造 Casbin Engine；调用方负责在启动边界显式执行 Initialize。
-func NewEngine(loader Loader, metrics commonmetrics.ReloadMetrics, userRoles UserRoleResolver) *Engine {
+func NewEngine(loader Loader, metrics ReloadMetrics, userRoles UserRoleResolver) *Engine {
+	if metrics == nil {
+		metrics = NopReloadMetrics()
+	}
 	return &Engine{loader: loader, metrics: metrics, userRoles: userRoles}
 }
 

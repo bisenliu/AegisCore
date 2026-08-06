@@ -88,6 +88,42 @@ func TestPermissionMetricsDisabledUsesNoop(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestCasbinPolicyReloadMetricsRecordsStatus(t *testing.T) {
+	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+		Config:      config.MetricsConfig{Enabled: true},
+		ServiceName: "aegiscore-user-service-test",
+		Environment: "test",
+	})
+	require.NoError(t, err)
+	recorder := newCasbinPolicyReloadMetrics(provider)
+	recorder.ReloadSucceeded()
+	recorder.SetLastStatus(true)
+	recorder.ReloadFailed()
+	recorder.SetLastStatus(false)
+
+	text := gatherPermissionMetricText(t, provider)
+	for _, want := range []string{
+		`aegiscore_casbin_policy_reloads_total{environment="test",service="aegiscore-user-service-test",status="success"} 1`,
+		`aegiscore_casbin_policy_reloads_total{environment="test",service="aegiscore-user-service-test",status="failure"} 1`,
+		`aegiscore_casbin_policy_reload_last_success{environment="test",service="aegiscore-user-service-test"} 0`,
+	} {
+		require.Contains(t, text, want)
+	}
+}
+
+func TestCasbinPolicyReloadMetricsDisabledUsesNoop(t *testing.T) {
+	provider, err := commonmetrics.NewProvider(commonmetrics.Options{
+		Config:      config.MetricsConfig{Enabled: false},
+		ServiceName: "aegiscore-user-service-test",
+		Environment: "test",
+	})
+	require.NoError(t, err)
+	recorder := newCasbinPolicyReloadMetrics(provider)
+	recorder.ReloadSucceeded()
+	recorder.ReloadFailed()
+	recorder.SetLastStatus(false)
+}
+
 type metricPolicyHealth struct {
 	status permissionapplication.PolicyProjectionStatus
 }

@@ -27,6 +27,7 @@ trap 'rm -rf "${fixture_root}"' EXIT
 mkdir -p \
   "${fixture_root}/.github/workflows" \
   "${fixture_root}/common" \
+  "${fixture_root}/common/runtime/observability/metrics" \
   "${fixture_root}/common/runtime/example" \
   "${fixture_root}/common/testing/example" \
   "${fixture_root}/deployments/docker" \
@@ -194,6 +195,12 @@ cat > "${fixture_root}/common/runtime/example/root_ent_import.go" <<'EOF'
 package example
 
 import _ "github.com/aegiscore/user-service/ent"
+EOF
+
+cat > "${fixture_root}/common/runtime/observability/metrics/casbin_reload.go" <<'EOF'
+package metrics
+
+const casbinReloadsMetricName = "aegiscore_casbin_policy_reloads_total"
 EOF
 
 cat > "${fixture_root}/user-service/internal/features/auth/application/test_hook.go" <<'EOF'
@@ -399,6 +406,11 @@ fi
 
 if [[ "${output}" != *"feature application/domain production code must not carry Fx DI metadata"* ]]; then
   printf 'architecture-lint-test: expected application/domain Fx metadata violation report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
+if [[ "${output}" != *"common runtime metrics must not contain service or RBAC business metrics semantics"* ]]; then
+  printf 'architecture-lint-test: expected common metrics business semantics violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 

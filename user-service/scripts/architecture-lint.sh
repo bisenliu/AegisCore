@@ -487,12 +487,24 @@ check_environment_variable_config_removed() {
   fi
 }
 
+check_common_metrics_business_semantics() {
+  # common metrics 只承载跨服务观测 primitive，不拥有 user-service 或 RBAC 业务指标。
+  local common_metrics_dir="${repo_root}/common/runtime/observability/metrics"
+  if [[ ! -d "${common_metrics_dir}" ]]; then
+    return
+  fi
+  run_rg "common runtime metrics must not contain service or RBAC business metrics semantics" \
+    'Casbin|casbin|permission|role|rbac|user-service|aegiscore_casbin' \
+    "${common_metrics_dir}"
+}
+
 check_go_toolchain_version
 check_ci_quality_workflow
 check_atlas_postgres_version
 check_ent_internal_persistence_boundary
 check_helm_user_service_immutable_image
 check_environment_variable_config_removed
+check_common_metrics_business_semantics
 check_mock_generate_build_tags
 check_test_only_production_symbols
 check_feature_default_logger_dependencies
