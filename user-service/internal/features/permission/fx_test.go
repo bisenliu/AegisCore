@@ -3,6 +3,7 @@ package permission
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -138,7 +139,8 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 	settings := serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test", PolicyWatcher: serviceconfig.DefaultPolicyWatcherConfig()}
 	settings.OutboxDispatcher = serviceconfig.DefaultOutboxDispatcherConfig()
 	loadErr := errors.New("initial policy load failed")
-	loader := &permissionModuleFailOncePolicyLoader{err: loadErr}
+	allowRecovery := make(chan struct{})
+	loader := &permissionModuleFailOncePolicyLoader{err: loadErr, allowRecovery: allowRecovery}
 	roles := permissionModuleUserRoleResolver{}
 	var authorizer permissionauthorization.Authorizer
 	var policyHealth permissionauthorization.PolicyHealth
@@ -168,6 +170,10 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 	allowed, err := authorizer.Enforce(context.Background(), uuid.NewString(), "/api/v1/users", "GET")
 	require.NoError(t, err)
 	require.False(t, allowed)
+	close(allowRecovery)
+	require.Eventually(t, func() bool {
+		return policyHealth.ProjectionStatus().Ready()
+	}, time.Second, time.Millisecond)
 	app.RequireStop()
 	require.False(t, watcherStatus.Status().Running)
 }
@@ -321,16 +327,21 @@ func (permissionModulePolicyLoader) LoadPoliciesAtLeast(context.Context, int64) 
 }
 
 type permissionModuleFailOncePolicyLoader struct {
-	err  error
-	done bool
+	err           error
+	allowRecovery <-chan struct{}
+	calls         atomic.Int64
 }
 
-func (l *permissionModuleFailOncePolicyLoader) LoadPoliciesAtLeast(context.Context, int64) (permissioncasbin.PolicySet, error) {
-	if !l.done {
-		l.done = true
+func (l *permissionModuleFailOncePolicyLoader) LoadPoliciesAtLeast(ctx context.Context, _ int64) (permissioncasbin.PolicySet, error) {
+	if l.calls.Add(1) == 1 {
 		return permissioncasbin.PolicySet{}, l.err
 	}
-	return permissioncasbin.PolicySet{}, nil
+	select {
+	case <-ctx.Done():
+		return permissioncasbin.PolicySet{}, ctx.Err()
+	case <-l.allowRecovery:
+		return permissioncasbin.PolicySet{}, nil
+	}
 }
 
 type permissionModuleUserRoleResolver struct{}
