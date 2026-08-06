@@ -36,6 +36,16 @@
 - **THEN** 变更 MUST NOT 改变业务代码、数据库 migration、OpenAPI 生成物或部署清单的运行时语义
 - **AND** 一旦需要改变运行时语义，变更 MUST 归入对应 capability 的 OpenSpec change
 
+#### Scenario: 代码注释质量约束
+
+- **WHEN** 协作者新增或修改 Go 导出类型、函数、方法、接口、常量、变量或包
+- **THEN** 对应文档注释 MUST 以被注释对象名称开头，并准确描述用途、行为约束、重要输入输出和错误语义
+- **AND** 已有注释缺失、不完整或与实现不一致时 MUST 同步补充或修正
+- **WHEN** 实现包含复杂逻辑、关键分支、边界条件、异常处理、并发操作、性能敏感路径或不易理解的权衡
+- **THEN** 代码 MUST 添加必要且简洁的行内注释，说明原因、约束或风险，而不是重复代码表面含义
+- **AND** 能通过更清晰命名、职责拆分或简化控制流解决的问题 MUST 优先改进实现，不得用注释掩盖不清晰代码
+- **AND** 代码注释和函数/方法注释 MUST 使用中文，日志消息 MUST 使用英文，日志字段名 MUST 使用稳定英文 `snake_case`
+
 ### Requirement: 服务级 provider 物理边界治理
 
 `user-service/internal/providers` 根包 MUST 只汇总服务级 Fx module，具体 datastore、observability、security 和 transport 接线 MUST 位于对应子包，且不得通过兼容 wrapper、alias 或重复构造器绕过该边界。
