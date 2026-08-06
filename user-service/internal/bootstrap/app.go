@@ -5,7 +5,6 @@ import (
 
 	"go.uber.org/fx"
 
-	commonconfig "github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/logger"
 	commontz "github.com/aegiscore/common/runtime/timezone"
 	"github.com/aegiscore/common/validation"
@@ -56,8 +55,8 @@ var RuntimeModule = fx.Module("aegiscore-user-service-runtime",
 func registerRuntimeServers(_ *http.Server, _ *PprofServer) {}
 
 // InitProcessRuntime 初始化 user-service 拥有的进程级 runtime 状态。
-func InitProcessRuntime(cfg *commonconfig.Config) error {
-	return commontz.Init(cfg.Runtime.Timezone)
+func InitProcessRuntime(settings serviceconfig.TimezoneSettings) error {
+	return commontz.Init(settings.Name)
 }
 
 // AppModule 组装 user-service 顶层模块、服务级 provider 和 HTTP server 生命周期。
@@ -81,6 +80,7 @@ func AppOptions(cfg *serviceconfig.Config, additional ...fx.Option) []fx.Option 
 			serviceconfig.NewEntSettings,
 			serviceconfig.NewRateLimitSettings,
 			serviceconfig.NewHTTPSettings,
+			serviceconfig.NewTimezoneSettings,
 			serviceconfig.NewResourceSettings,
 			// Fx 分类：基础运行时 - 结构化日志。
 			logger.NewLogger,

@@ -158,7 +158,7 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 
 - **WHEN** 交付 user-service 配置
 - **THEN** server MUST 使用 `server.http` 和默认禁用的 `server.grpc`，资源 MUST 使用 `resources.redis` 与 `resources.postgres`，主 PostgreSQL 路径 MUST 为 `resources.postgres.primary_db`
-- **AND** 环境变量 MUST 使用当前嵌套路径，时区 MUST 使用 `TZ`，secret MUST 通过环境变量或 Secret 注入
+- **AND** 环境变量 MUST 仅用于定位 Nacos 配置来源，时区 MUST 使用 Nacos 合成配置中的 `runtime.timezone`，secret MUST 通过 Nacos 受控配置或 Secret 注入
 - **WHEN** lifecycle timeout、preStop、原生清单或 Helm values 变化
 - **THEN** 结构化测试 MUST 验证 termination grace 不小于 `runtime.lifecycle.stop_timeout` 加平台安全余量，且原生 Kubernetes 与 Helm 默认值一致，MUST NOT 以正则误匹配注释或无关字段
 - **WHEN** 滚动发布、缩容、驱逐或故障退出终止 Pod

@@ -132,7 +132,7 @@ func TestRuntimeModuleRegistersRuntimeServersThroughNamedInvoke(t *testing.T) {
 	require.Contains(t, source, "fx.Invoke(InitProcessRuntime)")
 	require.Contains(t, source, "fx.Invoke(registerRuntimeServers)")
 	require.Contains(t, source, "func registerRuntimeServers(_ *http.Server, _ *PprofServer) {}")
-	require.Contains(t, source, "func InitProcessRuntime(cfg *commonconfig.Config) error")
+	require.Contains(t, source, "func InitProcessRuntime(settings serviceconfig.TimezoneSettings) error")
 	require.NotContains(t, source, "commontz.Module")
 	require.NotContains(t, source, "func(*http.Server) {}")
 	require.NotContains(t, source, "func(*PprofServer) {}")

@@ -14,8 +14,9 @@ func TestInitUsesDefaultTimezone(t *testing.T) {
 	})
 }
 
-func TestInitUsesConfiguredTimezone(t *testing.T) {
+func TestInitUsesConfiguredTimezoneInsteadOfPlatformTZ(t *testing.T) {
 	withIsolatedTimezone(t, func() {
+		t.Setenv("TZ", "Asia/Shanghai")
 		require.NoError(t, Init("UTC"))
 		assertTimezone(t, "UTC")
 	})

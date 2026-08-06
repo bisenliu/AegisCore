@@ -308,7 +308,7 @@
 - **WHEN** feature 需要 refresh session、token version、RBAC 或其他业务 Redis key
 - **THEN** feature infrastructure MUST 拥有业务 key schema，并只能复用 `common/runtime/rediskey` 的通用构造规则
 - **WHEN** runtime 初始化进程时区
-- **THEN** timezone primitive MUST 优先使用平台 `TZ` 环境变量并在缺省时使用稳定默认值，MUST NOT 依赖核心 Config 或服务业务配置
+- **THEN** timezone primitive MUST 使用调用方从 `runtime.timezone` 配置派生并显式传入的有效 IANA 时区初始化 `time.Local`，MUST NOT 读取或修改平台 `TZ` 环境变量，也 MUST NOT 直接依赖核心 Config 类型
 - **AND** 如果通过 Fx 初始化，服务 composition root MUST 显式绑定初始化调用或服务级 runtime 初始化函数，common MUST NOT 仅为了包装 `Init` 暴露无额外运行时职责的 Fx provider
 - **WHEN** 调用方通过 `logger.New`、`NewWithConfig` 或 Fx provider `NewLogger` 创建 logger
 - **THEN** 系统 MUST 返回由调用方拥有的 logger，Fx provider MUST 注册既有 Sync 关闭 hook；构造过程 MUST NOT 隐式安装、覆盖或恢复进程级默认 logger

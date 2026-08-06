@@ -39,6 +39,11 @@ type HTTPSettings struct {
 	RequestBodyMaxBytes int64
 }
 
+// TimezoneSettings 是进程时区初始化所需的最小配置视图。
+type TimezoneSettings struct {
+	Name string
+}
+
 // ResourceSettings 是 user-service 具名资源 provider 所需的配置视图。
 type ResourceSettings struct {
 	Redis    commonresources.RedisConfigs
@@ -80,6 +85,11 @@ func NewRateLimitSettings(cfg *Config) RateLimitSettings {
 // NewHTTPSettings 从根配置派生 user-service HTTP transport settings。
 func NewHTTPSettings(cfg *Config) HTTPSettings {
 	return HTTPSettings{RequestBodyMaxBytes: cfg.HTTP.RequestBodyMaxBytes}
+}
+
+// NewTimezoneSettings 从根配置派生进程时区 settings。
+func NewTimezoneSettings(cfg *Config) TimezoneSettings {
+	return TimezoneSettings{Name: cfg.Runtime.Timezone}
 }
 
 // NewResourceSettings 从根配置派生具名资源 settings。
