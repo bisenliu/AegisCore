@@ -3,14 +3,8 @@ package tracing
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 	"sync"
-	"time"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -21,13 +15,13 @@ import (
 )
 
 const (
-	defaultOTLPTimeout = 5 * time.Second
-
-	attributeServiceName           = "service.name"
-	attributeDeploymentEnvironment = "deployment.environment"
-	attributeServiceVersion        = "service.version"
-	attributeServiceInstanceID     = "service.instance.id"
+	errProviderAlreadyStarted = lifecycleError("tracing provider is already started")
 )
+
+type lifecycleError string
+
+// Error 返回 lifecycle sentinel 的稳定错误文本。
+func (e lifecycleError) Error() string { return string(e) }
 
 // Options 描述构造 OpenTelemetry tracer provider 所需的跨服务运行时输入。
 type Options struct {
@@ -53,23 +47,31 @@ func NewProvider(ctx context.Context, opts Options) (*Provider, error) {
 
 type exporterFactory func(context.Context, config.TracingConfig) (sdktrace.SpanExporter, error)
 
+// newProvider 创建并立即启动普通 Go provider。
+//
+// 与 Fx adapter 不同，该路径在 constructor 返回前完成 exporter 和 SDK provider 初始化；调用方获得
+// provider 后拥有显式 Shutdown 责任。
 func newProvider(ctx context.Context, opts Options, createExporter exporterFactory) (*Provider, error) {
 	provider, sampler, err := newUnstartedProvider(opts)
 	if err != nil {
 		return nil, err
 	}
-	if err := provider.Start(ctx, opts.Config, sampler, createExporter); err != nil {
+	if err := provider.start(ctx, opts.Config, sampler, createExporter); err != nil {
 		return nil, err
 	}
 	return provider, nil
 }
 
+// newUnstartedProvider 构造未启动的 provider facade 和采样器。
+//
+// Fx adapter 使用该函数在依赖图构造阶段提供稳定 facade，但不会连接 exporter 或启动 batch
+// processor。返回的 provider 在 start 前通过 dynamic tracer 安全 no-op。
 func newUnstartedProvider(opts Options) (*Provider, sdktrace.Sampler, error) {
-	serviceName := strings.TrimSpace(opts.ServiceName)
+	serviceName := trimSpace(opts.ServiceName)
 	if serviceName == "" {
 		return nil, nil, errors.New("tracing service name is required")
 	}
-	environment := strings.TrimSpace(opts.Environment)
+	environment := trimSpace(opts.Environment)
 	if environment == "" {
 		return nil, nil, errors.New("tracing deployment environment is required")
 	}
@@ -77,7 +79,7 @@ func newUnstartedProvider(opts Options) (*Provider, sdktrace.Sampler, error) {
 	if sampleRatio < 0 || sampleRatio > 1 {
 		return nil, nil, errors.New("tracing sample ratio must be between 0 and 1")
 	}
-	res := newResource(serviceName, environment, strings.TrimSpace(opts.Version), strings.TrimSpace(opts.InstanceID))
+	res := newResource(serviceName, environment, trimSpace(opts.Version), trimSpace(opts.InstanceID))
 	sampler := sdktrace.ParentBased(sdktrace.TraceIDRatioBased(sampleRatio))
 	if !opts.Config.Enabled {
 		sampler = sdktrace.NeverSample()
@@ -91,110 +93,12 @@ func newUnstartedProvider(opts Options) (*Provider, sdktrace.Sampler, error) {
 	}, sampler, nil
 }
 
-func newTracerProvider(
-	ctx context.Context,
-	cfg config.TracingConfig,
-	res *resource.Resource,
-	sampler sdktrace.Sampler,
-	createExporter exporterFactory,
-) (*sdktrace.TracerProvider, error) {
-	options := []sdktrace.TracerProviderOption{
-		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sampler),
-	}
-	if !cfg.Enabled {
-		return sdktrace.NewTracerProvider(options...), nil
-	}
-	if createExporter == nil {
-		return nil, errors.New("tracing exporter factory is required")
-	}
-	traceExporter, err := createExporter(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	options = append(options, sdktrace.WithBatcher(traceExporter))
-	return sdktrace.NewTracerProvider(options...), nil
-}
-
-func newOTLPExporter(ctx context.Context, cfg config.TracingConfig) (sdktrace.SpanExporter, error) {
-	endpoint := strings.TrimSpace(cfg.OTLPEndpoint)
-	if endpoint == "" {
-		return nil, errors.New("otlp tracing endpoint is required")
-	}
-	clientOptions := []otlptracegrpc.Option{
-		otlptracegrpc.WithEndpoint(endpoint),
-		otlptracegrpc.WithTimeout(defaultOTLPTimeout),
-	}
-	if cfg.Insecure {
-		clientOptions = append(clientOptions, otlptracegrpc.WithInsecure())
-	}
-	traceExporter, err := otlptrace.New(ctx, otlptracegrpc.NewClient(clientOptions...))
-	if err != nil {
-		return nil, wrapOTLPExporterError(err)
-	}
-	return traceExporter, nil
-}
-
-func wrapOTLPExporterError(err error) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("create OTLP tracing exporter: %w", err)
-}
-
-type dynamicTracerProvider struct {
-	trace.TracerProvider
-	provider *Provider
-}
-
-type dynamicTracer struct {
-	noop.Tracer
-	provider *Provider
-	name     string
-	options  []trace.TracerOption
-}
-
 // OTelTracerProvider 返回可在 constructor 阶段安全注入的 OpenTelemetry provider 视图。
 func (p *Provider) OTelTracerProvider() trace.TracerProvider {
 	if p == nil {
 		return noop.NewTracerProvider()
 	}
 	return dynamicTracerProvider{TracerProvider: noop.NewTracerProvider(), provider: p}
-}
-
-func (p dynamicTracerProvider) Tracer(name string, opts ...trace.TracerOption) trace.Tracer {
-	return dynamicTracer{provider: p.provider, name: name, options: append([]trace.TracerOption(nil), opts...)}
-}
-
-func (t dynamicTracer) Start(ctx context.Context, spanName string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
-	if t.provider == nil {
-		return t.Tracer.Start(ctx, spanName, opts...)
-	}
-	return t.provider.realTracer(t.name, t.options...).Start(ctx, spanName, opts...)
-}
-
-// Start 使用 lifecycle context 初始化底层 SDK provider。
-func (p *Provider) Start(ctx context.Context, cfg config.TracingConfig, sampler sdktrace.Sampler, createExporter exporterFactory) error {
-	if p == nil {
-		return errors.New("tracing provider is required")
-	}
-	if ctx == nil {
-		return errors.New("tracing provider context is required")
-	}
-	p.mu.RLock()
-	res := p.resource
-	p.mu.RUnlock()
-	if res == nil {
-		return errors.New("tracing resource is required")
-	}
-	tp, err := newTracerProvider(ctx, cfg, res, sampler, createExporter)
-	if err != nil {
-		return err
-	}
-	p.mu.Lock()
-	p.tracerProvider = tp
-	p.mu.Unlock()
-	return nil
 }
 
 // TextMapPropagator 返回 W3C trace context 与 baggage 组合传播器。
@@ -215,6 +119,10 @@ func (p *Provider) Tracer(name string, opts ...trace.TracerOption) trace.Tracer 
 	return dynamicTracer{provider: p, name: name, options: append([]trace.TracerOption(nil), opts...)}
 }
 
+// realTracer 返回当前底层 SDK provider 创建的 tracer。
+//
+// provider 为 nil、尚未启动或已经 Shutdown 时返回 no-op tracer，保证 constructor-time
+// instrumentation 保存的 tracer 在任意生命周期阶段都可安全使用。
 func (p *Provider) realTracer(name string, opts ...trace.TracerOption) trace.Tracer {
 	if p == nil {
 		return noop.NewTracerProvider().Tracer(name, opts...)
@@ -241,18 +149,4 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	return tp.Shutdown(ctx)
-}
-
-func newResource(serviceName string, environment string, version string, instanceID string) *resource.Resource {
-	attrs := []attribute.KeyValue{
-		attribute.String(attributeServiceName, serviceName),
-		attribute.String(attributeDeploymentEnvironment, environment),
-	}
-	if version != "" {
-		attrs = append(attrs, attribute.String(attributeServiceVersion, version))
-	}
-	if instanceID != "" {
-		attrs = append(attrs, attribute.String(attributeServiceInstanceID, instanceID))
-	}
-	return resource.NewWithAttributes("", attrs...)
 }

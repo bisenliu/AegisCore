@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
@@ -81,6 +83,23 @@ func TestProviderShutdown(t *testing.T) {
 	require.NoError(t, provider.Shutdown(context.Background()), "second Shutdown")
 }
 
+// TestNilProviderShutdownIsNoop 验证 nil provider 关闭语义保持幂等。
+func TestNilProviderShutdownIsNoop(t *testing.T) {
+	var provider *Provider
+	require.NoError(t, provider.Shutdown(context.Background()))
+}
+
+// TestUnstartedProviderShutdownIsNoop 验证未启动 facade 可以安全关闭。
+func TestUnstartedProviderShutdownIsNoop(t *testing.T) {
+	provider, _, err := newUnstartedProvider(Options{
+		Config:      testTracingConfig(1.0),
+		ServiceName: "aegiscore-test",
+		Environment: "local",
+	})
+	require.NoError(t, err)
+	require.NoError(t, provider.Shutdown(context.Background()))
+}
+
 func TestProviderTracerFallsBackToNoopWhenProviderIsNil(t *testing.T) {
 	var provider *Provider
 
@@ -101,6 +120,32 @@ func TestProviderTracerFallsBackToNoopWhenTracerProviderIsNil(t *testing.T) {
 	defer span.End()
 
 	require.False(t, span.SpanContext().IsValid(), "span context is valid, want noop span")
+}
+
+// TestDynamicTracerMovesFromNoopToStartedProviderAndBack 验证 constructor 阶段保存的 dynamic tracer
+// 会随 provider lifecycle 从 no-op 切换到真实 SDK provider，并在 Shutdown 后恢复 no-op。
+func TestDynamicTracerMovesFromNoopToStartedProviderAndBack(t *testing.T) {
+	provider, sampler, err := newUnstartedProvider(Options{
+		Config:      testTracingConfig(1.0),
+		ServiceName: "aegiscore-test",
+		Environment: "local",
+	})
+	require.NoError(t, err)
+
+	tracer := provider.OTelTracerProvider().Tracer("test")
+	_, span := tracer.Start(context.Background(), "before-start")
+	span.End()
+	require.False(t, span.SpanContext().IsValid(), "span context is valid before start")
+
+	require.NoError(t, provider.start(context.Background(), testTracingConfig(1.0), sampler, testExporterFactory))
+	_, span = tracer.Start(context.Background(), "after-start")
+	span.End()
+	require.True(t, span.SpanContext().IsValid(), "span context is invalid after start")
+
+	require.NoError(t, provider.Shutdown(context.Background()))
+	_, span = tracer.Start(context.Background(), "after-shutdown")
+	span.End()
+	require.False(t, span.SpanContext().IsValid(), "span context is valid after shutdown")
 }
 
 func TestNewProviderWithOTLPConfigCreatesProvider(t *testing.T) {
@@ -157,6 +202,74 @@ func TestDisabledProviderDoesNotCreateOTLPExporter(t *testing.T) {
 	require.False(t, called)
 }
 
+// TestProviderStartRejectsDuplicateStartWithoutReplacingProvider 验证重复启动不会替换或泄漏已启动 provider。
+func TestProviderStartRejectsDuplicateStartWithoutReplacingProvider(t *testing.T) {
+	provider, sampler, err := newUnstartedProvider(Options{
+		Config:      testTracingConfig(1.0),
+		ServiceName: "aegiscore-test",
+		Environment: "local",
+	})
+	require.NoError(t, err)
+	require.NoError(t, provider.start(context.Background(), testTracingConfig(1.0), sampler, testExporterFactory))
+	defer shutdownProvider(t, provider)
+
+	called := false
+	err = provider.start(context.Background(), testTracingConfig(1.0), sampler, func(context.Context, config.TracingConfig) (sdktrace.SpanExporter, error) {
+		called = true
+		return &testSpanExporter{}, nil
+	})
+	require.ErrorIs(t, err, errProviderAlreadyStarted)
+	require.False(t, called, "duplicate start should not create exporter")
+
+	_, span := provider.Tracer("test").Start(context.Background(), "operation")
+	span.End()
+	require.True(t, span.SpanContext().IsValid(), "existing provider was replaced or cleared")
+}
+
+// TestProviderStartRejectsInvalidInputs 验证 lifecycle 启动入口对非法输入返回明确错误。
+func TestProviderStartRejectsInvalidInputs(t *testing.T) {
+	provider, sampler, err := newUnstartedProvider(Options{
+		Config:      testTracingConfig(1.0),
+		ServiceName: "aegiscore-test",
+		Environment: "local",
+	})
+	require.NoError(t, err)
+
+	var nilProvider *Provider
+	var nilContext context.Context
+	require.ErrorContains(t, nilProvider.start(context.Background(), testTracingConfig(1.0), sampler, testExporterFactory), "provider")
+	require.ErrorContains(t, provider.start(nilContext, testTracingConfig(1.0), sampler, testExporterFactory), "context")
+	require.ErrorContains(t, provider.start(context.Background(), testTracingConfig(1.0), sampler, nil), "exporter factory")
+
+	provider.resource = nil
+	require.ErrorContains(t, provider.start(context.Background(), testTracingConfig(1.0), sampler, testExporterFactory), "resource")
+}
+
+// TestProviderStartFailureKeepsProviderNoop 验证启动失败不会留下半初始化 provider。
+func TestProviderStartFailureKeepsProviderNoop(t *testing.T) {
+	provider, sampler, err := newUnstartedProvider(Options{
+		Config:      testTracingConfig(1.0),
+		ServiceName: "aegiscore-test",
+		Environment: "local",
+	})
+	require.NoError(t, err)
+	startErr := errors.New("exporter failed")
+
+	err = provider.start(context.Background(), testTracingConfig(1.0), sampler, func(context.Context, config.TracingConfig) (sdktrace.SpanExporter, error) {
+		return nil, startErr
+	})
+	require.ErrorIs(t, err, startErr)
+	_, span := provider.Tracer("test").Start(context.Background(), "operation")
+	span.End()
+	require.False(t, span.SpanContext().IsValid(), "failed start should keep provider noop")
+
+	require.NoError(t, provider.start(context.Background(), testTracingConfig(1.0), sampler, testExporterFactory))
+	defer shutdownProvider(t, provider)
+	_, span = provider.Tracer("test").Start(context.Background(), "operation")
+	span.End()
+	require.True(t, span.SpanContext().IsValid(), "provider did not recover after failed start")
+}
+
 func TestNewProviderRejectsMissingServiceIdentity(t *testing.T) {
 	tests := []struct {
 		name string
@@ -208,6 +321,29 @@ func TestTextMapPropagatorUsesTraceContextAndBaggage(t *testing.T) {
 	assertContains(t, fields, "traceparent")
 	assertContains(t, fields, "tracestate")
 	assertContains(t, fields, "baggage")
+}
+
+// TestTextMapPropagatorInjectsAndExtractsTraceContextAndBaggage 验证传播器同时处理 trace context 与 baggage。
+func TestTextMapPropagatorInjectsAndExtractsTraceContextAndBaggage(t *testing.T) {
+	provider := newTestProvider(t, 1.0)
+	defer shutdownProvider(t, provider)
+	traceID, err := trace.TraceIDFromHex("00112233445566778899aabbccddeeff")
+	require.NoError(t, err)
+	spanID, err := trace.SpanIDFromHex("0011223344556677")
+	require.NoError(t, err)
+	spanCtx := trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: spanID, Remote: true})
+	member, err := baggage.NewMember("tenant", "local")
+	require.NoError(t, err)
+	bag, err := baggage.New(member)
+	require.NoError(t, err)
+	ctx := baggage.ContextWithBaggage(trace.ContextWithRemoteSpanContext(context.Background(), spanCtx), bag)
+	carrier := propagation.MapCarrier{}
+
+	provider.TextMapPropagator().Inject(ctx, carrier)
+	extracted := provider.TextMapPropagator().Extract(context.Background(), carrier)
+
+	require.Equal(t, traceID, trace.SpanContextFromContext(extracted).TraceID())
+	require.Equal(t, "local", baggage.FromContext(extracted).Member("tenant").Value())
 }
 
 func TestNewTracingProviderRegistersShutdown(t *testing.T) {
