@@ -56,7 +56,8 @@ func (c *LoadingCache[V]) load(ctx context.Context, key string) (V, error) {
 // publish 必须在持有 publishMu 时调用；所有写入串行化后，容量判定和 Set 之间不会出现写竞态。
 func (c *LoadingCache[V]) publish(key string, value V) {
 	c.client.DeleteExpired()
-	if uint64(c.client.Len()) >= c.capacity {
+	itemCount := c.client.Len()
+	if itemCount >= 0 && uint64(itemCount) >= c.capacity {
 		c.capacityEvictions.Add(1)
 	}
 	c.client.Set(key, value, ttlcache.DefaultTTL)
