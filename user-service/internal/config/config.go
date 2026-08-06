@@ -19,7 +19,9 @@ const (
 )
 
 var sensitiveConfigPaths = []string{
+	// JWT secret 是 auth feature 私有签名材料，common 只负责执行调用方声明的脱敏路径。
 	"auth.jwt.secret",
+	// Redis/PostgreSQL 具名资源属于 user-service 运行时接线策略，由服务决定哪些字段敏感。
 	"resources.redis.*.password",
 	"resources.postgres.*.password",
 }
@@ -277,11 +279,16 @@ func (c Config) RuntimeConfig() commonconfig.Config {
 }
 
 // SensitiveConfigPaths 返回 user-service 拥有的配置脱敏路径副本。
+//
+// 返回副本是为了避免测试或未来调用方修改 slice 后影响 CLI render 的安全策略。
 func SensitiveConfigPaths() []string {
 	return append([]string(nil), sensitiveConfigPaths...)
 }
 
 // RedactEffectiveSettings 使用 user-service 敏感路径策略返回脱敏副本。
+//
+// 该函数是 user-service 配置渲染边界的唯一入口：服务在这里集中声明自身 secret schema，
+// common/runtime/config 只执行业务中立的路径匹配和深拷贝。
 func RedactEffectiveSettings(settings map[string]any) map[string]any {
 	return commonconfig.RedactSettings(settings, sensitiveConfigPaths)
 }
@@ -352,6 +359,8 @@ func normalizeConfig(c *Config, settings map[string]any) {
 	c.Resources.Postgres.ApplyDefaults()
 }
 
+// hasRawNamedResource 判断 raw settings 中是否显式声明了某类具名资源。
+// normalize 阶段依赖该判断删除未声明的默认固定资源，避免默认值伪造资源存在性。
 func hasRawNamedResource(settings map[string]any, resourceType string, name string) bool {
 	resources, ok := settings["resources"].(map[string]any)
 	if !ok {
@@ -399,6 +408,7 @@ func (c Config) Validate() error {
 	return commonconfig.NewValidationError(errs)
 }
 
+// validateAuth 校验 user-service auth 私有配置，包括 JWT secret、TTL 和会话上限。
 func (c Config) validateAuth() []error {
 	// production-like 环境对 JWT secret 额外加固；0 个活跃会话上限表示不裁剪。
 	var errs []error
@@ -419,6 +429,7 @@ func (c Config) validateAuth() []error {
 	return errs
 }
 
+// isProductionLike 判断 user-service 环境是否需要生产级 secret 校验。
 func (c Config) isProductionLike() bool {
 	// staging 按生产级安全策略校验，避免预发环境使用开发默认 secret。
 	switch strings.ToLower(strings.TrimSpace(c.App.Environment)) {
@@ -429,6 +440,7 @@ func (c Config) isProductionLike() bool {
 	}
 }
 
+// isInsecureJWTSecret 判断 JWT secret 是否属于禁止用于生产类环境的开发默认值。
 func isInsecureJWTSecret(value string) bool {
 	switch value {
 	case "changeme", "local-development-secret", "secret", "test-secret":

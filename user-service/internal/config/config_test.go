@@ -14,6 +14,7 @@ import (
 	serviceresources "github.com/aegiscore/user-service/internal/resources"
 )
 
+// TestLoadParsesServicePrivateConfig 验证 user-service 私有配置字段能被完整解析。
 func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	cfg := loadServiceConfig(t, serviceConfigYAML())
 	require.Equal(t, "secret-123456789012345678901234567890", cfg.Auth.JWT.Secret)
@@ -72,6 +73,7 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, 50*time.Second, runtime.Runtime.Lifecycle.StopTimeout)
 }
 
+// TestDefaultFeatureCacheConfigReturnsCompleteValue 验证 feature cache 默认值构造器返回完整启用配置。
 func TestDefaultFeatureCacheConfigReturnsCompleteValue(t *testing.T) {
 	cfg := DefaultFeatureCacheConfig(100000, time.Second, 300*time.Millisecond)
 
@@ -81,6 +83,7 @@ func TestDefaultFeatureCacheConfigReturnsCompleteValue(t *testing.T) {
 	require.Equal(t, 300*time.Millisecond, cfg.LoadTimeout)
 }
 
+// TestDefaultConfigReturnsCompleteServiceDefaults 验证 user-service 默认配置覆盖认证、RBAC、资源和观测插件。
 func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
 	cfg := DefaultConfig()
 
@@ -113,6 +116,7 @@ func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
 	require.False(t, cfg.Ent.Plugins.Metrics.Enabled)
 }
 
+// TestFeatureCacheLocalcache 验证服务私有 feature cache 可映射为通用 localcache 配置。
 func TestFeatureCacheLocalcache(t *testing.T) {
 	tests := []struct {
 		name string
@@ -136,6 +140,7 @@ func TestFeatureCacheLocalcache(t *testing.T) {
 	}
 }
 
+// TestLoadAppliesFeatureCacheDefaults 验证缺省 feature cache 会补齐服务默认值。
 func TestLoadAppliesFeatureCacheDefaults(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "  token_version_cache:\n    enabled: true\n    size: 2048\n    ttl: 2s\n    load_timeout: 400ms\n", "", 1)
 	yaml = strings.Replace(yaml, `rbac:
@@ -157,6 +162,7 @@ func TestLoadAppliesFeatureCacheDefaults(t *testing.T) {
 	require.Equal(t, 500*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeout)
 }
 
+// TestLoadAppliesOutboxDispatcherDefaults 验证 RBAC outbox dispatcher 缺省配置会被补齐。
 func TestLoadAppliesOutboxDispatcherDefaults(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), `  outbox_dispatcher:
     poll_interval: 2s
@@ -171,6 +177,7 @@ func TestLoadAppliesOutboxDispatcherDefaults(t *testing.T) {
 	require.Equal(t, DefaultOutboxDispatcherConfig(), cfg.RBAC.OutboxDispatcher)
 }
 
+// TestValidateOutboxDispatcher 验证 outbox dispatcher 配置边界和字段路径错误。
 func TestValidateOutboxDispatcher(t *testing.T) {
 	t.Run("requires positive values", func(t *testing.T) {
 		errs := (OutboxDispatcherConfig{}).Validate("rbac.outbox_dispatcher")
@@ -196,6 +203,7 @@ func TestValidateOutboxDispatcher(t *testing.T) {
 	})
 }
 
+// TestLoadAppliesPolicyWatcherDefaults 验证 RBAC policy watcher 缺省配置会被补齐。
 func TestLoadAppliesPolicyWatcherDefaults(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), `  policy_watcher:
     check_interval: 10s
@@ -210,6 +218,7 @@ func TestLoadAppliesPolicyWatcherDefaults(t *testing.T) {
 	require.Equal(t, DefaultPolicyWatcherConfig(), cfg.RBAC.PolicyWatcher)
 }
 
+// TestValidatePolicyWatcher 验证 policy watcher 校准、新鲜度和重试退避边界。
 func TestValidatePolicyWatcher(t *testing.T) {
 	t.Run("requires positive values", func(t *testing.T) {
 		errs := (PolicyWatcherConfig{}).Validate("rbac.policy_watcher")
@@ -241,6 +250,7 @@ func TestValidatePolicyWatcher(t *testing.T) {
 	})
 }
 
+// TestLoadAppliesAPIRateLimitDefaults 验证 API rate limit 缺省策略会被补齐。
 func TestLoadAppliesAPIRateLimitDefaults(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), `api_rate_limit:
   anonymous:
@@ -264,6 +274,7 @@ func TestLoadAppliesAPIRateLimitDefaults(t *testing.T) {
 	require.Equal(t, DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, 30*time.Second, 128), cfg.APIRateLimit.Authenticated)
 }
 
+// TestLoadHTTPConfig 验证 user-service 私有 HTTP 配置加载和严格字段拒绝。
 func TestLoadHTTPConfig(t *testing.T) {
 	t.Run("applies default when omitted", func(t *testing.T) {
 		yaml := strings.Replace(serviceConfigYAML(), "http:\n  request_body_max_bytes: 32768\n", "", 1)
@@ -286,6 +297,7 @@ func TestLoadHTTPConfig(t *testing.T) {
 	})
 }
 
+// TestLoadPreservesDisabledAPIRateLimit 验证禁用限流时保留禁用状态且不校验无关字段。
 func TestLoadPreservesDisabledAPIRateLimit(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), `api_rate_limit:
   anonymous:
@@ -316,6 +328,7 @@ func TestLoadPreservesDisabledAPIRateLimit(t *testing.T) {
 	require.Equal(t, 5.0, cfg.APIRateLimit.Authenticated.RatePerSecond)
 }
 
+// TestValidateAPIRateLimit 验证启用限流策略时的速率、burst 和清理配置边界。
 func TestValidateAPIRateLimit(t *testing.T) {
 	t.Run("enabled requires positive values", func(t *testing.T) {
 		errs := (RateLimitPolicyConfig{Enabled: true}).Validate("api_rate_limit.anonymous")
@@ -333,6 +346,7 @@ func TestValidateAPIRateLimit(t *testing.T) {
 	})
 }
 
+// TestLoadAppliesEntPluginDefaults 验证 Ent 插件默认值会被补齐。
 func TestLoadAppliesEntPluginDefaults(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), `ent:
   plugins:
@@ -354,11 +368,13 @@ func TestLoadAppliesEntPluginDefaults(t *testing.T) {
 	require.False(t, cfg.Ent.Plugins.Metrics.Enabled)
 }
 
+// TestLoadParsesEntSlowThresholdDuration 验证 Ent SQL 慢查询阈值按 duration 解析。
 func TestLoadParsesEntSlowThresholdDuration(t *testing.T) {
 	cfg := loadServiceConfig(t, serviceConfigYAML())
 	require.Equal(t, 250*time.Millisecond, cfg.Ent.Plugins.SQLLog.SlowThreshold)
 }
 
+// TestLoadPreservesExplicitDisabledFeatureCaches 验证显式禁用的 feature cache 不会被默认值重新启用。
 func TestLoadPreservesExplicitDisabledFeatureCaches(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), `  token_version_cache:
     enabled: true
@@ -390,12 +406,14 @@ func TestLoadPreservesExplicitDisabledFeatureCaches(t *testing.T) {
 	require.Equal(t, 500*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeout)
 }
 
+// TestLoadRejectsExplicitInvalidFeatureCacheValue 验证启用 cache 时非法容量会被拒绝。
 func TestLoadRejectsExplicitInvalidFeatureCacheValue(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "    size: 2048", "    size: 0", 1)
 	err := loadServiceConfigError(t, yaml)
 	require.Contains(t, err.Error(), "auth.token_version_cache.size must be > 0 when enabled")
 }
 
+// TestValidateFeatureCaches 验证 token-version 与 RBAC feature cache 的字段校验。
 func TestValidateFeatureCaches(t *testing.T) {
 	t.Run("enabled requires positive values", func(t *testing.T) {
 		errs := (FeatureCacheConfig{Enabled: true}).Validate("auth.token_version_cache")
@@ -409,6 +427,7 @@ func TestValidateFeatureCaches(t *testing.T) {
 	})
 }
 
+// TestLoadAppliesResourceDefaultsBeforeValidation 验证具名资源先补默认值再执行校验。
 func TestLoadAppliesResourceDefaultsBeforeValidation(t *testing.T) {
 	cfg := loadServiceConfig(t, serviceConfigYAMLWithResourceDefaults())
 
@@ -421,12 +440,14 @@ func TestLoadAppliesResourceDefaultsBeforeValidation(t *testing.T) {
 	require.Equal(t, commonresources.DefaultPostgresConnMaxIdleTime, postgres.Pool.ConnMaxIdleTime)
 }
 
+// TestLoadParsesNestedResourceConfig 验证嵌套 Redis/PostgreSQL 资源配置被正确解析。
 func TestLoadParsesNestedResourceConfig(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "      timeout: 7s", "      timeout: 11s", 1)
 	cfg := loadServiceConfig(t, yaml)
 	require.Equal(t, 11*time.Second, cfg.Resources.Redis[serviceresources.NameCacheRedis].Timeout)
 }
 
+// TestLoadPreservesAdditionalNamedResourceAndAppliesDefaults 验证额外具名资源会保留并应用通用默认值。
 func TestLoadPreservesAdditionalNamedResourceAndAppliesDefaults(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "  postgres:\n", "    queue_redis:\n      mode: cluster\n      addrs:\n        - 127.0.0.1:6380\n  postgres:\n", 1)
 
@@ -436,6 +457,7 @@ func TestLoadPreservesAdditionalNamedResourceAndAppliesDefaults(t *testing.T) {
 	require.Equal(t, commonresources.DefaultRedisTimeout, cfg.Resources.Redis["queue_redis"].Timeout)
 }
 
+// TestLoadRepositoryConfigTargets 验证仓库内 Nacos 配置目录的目标环境保持一致。
 func TestLoadRepositoryConfigTargets(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -485,6 +507,7 @@ func TestLoadRepositoryConfigTargets(t *testing.T) {
 	require.Equal(t, *configs["docker"], host, "host 与 Docker 配置除运行位置端点外必须一致")
 }
 
+// loadRepositoryConfigDocuments 读取指定环境的 base/resources/user-service 三份仓库配置文档。
 func loadRepositoryConfigDocuments(t *testing.T, environment string) []commonconfig.ConfigDocument {
 	t.Helper()
 	var docs []commonconfig.ConfigDocument
@@ -496,7 +519,9 @@ func loadRepositoryConfigDocuments(t *testing.T, environment string) []commoncon
 	return docs
 }
 
+// TestLoadFromDocumentsMergesLayeredServiceConfig 验证分层文档合并、effective render 脱敏和输入不变。
 func TestLoadFromDocumentsMergesLayeredServiceConfig(t *testing.T) {
+	// 为 render 断言显式注入非空资源密码，避免只覆盖 JWT secret 而遗漏具名资源凭据。
 	baseYAML := strings.Replace(serviceConfigYAML(), "      mode: cluster\n", "      mode: cluster\n      password: redis-secret-123\n", 1)
 	baseYAML = strings.Replace(baseYAML, "      password: \"\"", "      password: postgres-secret-123", 1)
 	docs := []commonconfig.ConfigDocument{
@@ -510,6 +535,7 @@ func TestLoadFromDocumentsMergesLayeredServiceConfig(t *testing.T) {
 	require.NotEmpty(t, result.Source.Digest)
 	settings, err := result.EffectiveSettings()
 	require.NoError(t, err)
+	// RedactEffectiveSettings 必须返回副本；后续断言同时检查输出已脱敏、原 settings 未被修改。
 	redacted := RedactEffectiveSettings(settings)
 	rendered, err := commonconfig.RenderYAML(redacted)
 	require.NoError(t, err)
@@ -525,13 +551,16 @@ func TestLoadFromDocumentsMergesLayeredServiceConfig(t *testing.T) {
 	require.Equal(t, "***", redacted["resources"].(map[string]any)["postgres"].(map[string]any)["primary_db"].(map[string]any)["password"])
 }
 
+// TestSensitiveConfigPathsReturnsCopy 验证服务敏感路径 API 不暴露内部 slice 所有权。
 func TestSensitiveConfigPathsReturnsCopy(t *testing.T) {
 	paths := SensitiveConfigPaths()
 	require.Contains(t, paths, "auth.jwt.secret")
+	// 调用方拿到的是副本，外部修改不能改变服务级脱敏策略。
 	paths[0] = "mutated.path"
 	require.NotEqual(t, paths[0], SensitiveConfigPaths()[0])
 }
 
+// TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest 验证 effective settings 补默认值不反写 raw digest。
 func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "  token_version_cache:\n    enabled: true\n    size: 2048\n    ttl: 2s\n    load_timeout: 400ms\n", "", 1)
 	yaml = strings.Replace(yaml, "rbac:\n  user_role_cache:\n    enabled: true\n    size: 4096\n    ttl: 7s\n    load_timeout: 600ms\n", "", 1)
@@ -631,18 +660,21 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
 	require.Equal(t, "warn", settings["log"].(map[string]any)["level"])
 }
 
+// TestLoadRejectsLegacyPasswordKDFConfig 验证旧 password_kdf 配置不再被接受。
 func TestLoadRejectsLegacyPasswordKDFConfig(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "  token_version_cache:\n", "  password_kdf:\n    argon2_concurrency: 2\n    argon2_queue_size: 16\n  token_version_cache:\n", 1)
 	err := loadServiceConfigError(t, yaml)
 	require.Contains(t, err.Error(), "unknown configuration keys: auth.password_kdf.argon2_concurrency, auth.password_kdf.argon2_queue_size")
 }
 
+// TestLoadRejectsBootstrapSuperAdminConfig 验证 bootstrap 超级管理员密码不得进入运行时配置。
 func TestLoadRejectsBootstrapSuperAdminConfig(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "rbac:\n", "rbac:\n  bootstrap_super_admin:\n    password: bootstrap-secret-value\n", 1)
 	err := loadServiceConfigError(t, yaml)
 	require.Contains(t, err.Error(), "unknown configuration keys: rbac.bootstrap_super_admin.password")
 }
 
+// TestValidateRejectsShortProductionJWTSecret 验证生产类环境拒绝过短 JWT secret。
 func TestValidateRejectsShortProductionJWTSecret(t *testing.T) {
 	yaml := strings.ReplaceAll(serviceConfigYAML(), "environment: local", "environment: production")
 	yaml = strings.ReplaceAll(yaml, "secret-123456789012345678901234567890", "short-secret")
@@ -650,6 +682,7 @@ func TestValidateRejectsShortProductionJWTSecret(t *testing.T) {
 	require.Contains(t, err.Error(), "auth.jwt.secret must be at least 32 bytes in production-like environments")
 }
 
+// TestValidateRejectsMissingRequiredResources 验证 user-service 必需具名资源缺失会失败。
 func TestValidateRejectsMissingRequiredResources(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "  cache_redis:\n", "  other_redis:\n", 1)
 	yaml = strings.Replace(yaml, "  primary_db:\n", "  other_db:\n", 1)
@@ -658,18 +691,21 @@ func TestValidateRejectsMissingRequiredResources(t *testing.T) {
 	require.Contains(t, err.Error(), "resources.postgres.primary_db is required")
 }
 
+// TestValidateReportsFullResourceFieldPath 验证资源校验错误包含完整字段路径。
 func TestValidateReportsFullResourceFieldPath(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), "        - 127.0.0.1:6379", "        - invalid", 1)
 	err := loadServiceConfigError(t, yaml)
 	require.Contains(t, err.Error(), "resources.redis.cache_redis.addrs[0] must be in host:port format")
 }
 
+// TestLoadRejectsLegacyTopLevelResourcePath 验证旧顶层资源路径被严格解码拒绝。
 func TestLoadRejectsLegacyTopLevelResourcePath(t *testing.T) {
 	yaml := "redis:\n  cache_redis:\n    addr: 127.0.0.1:6379\n" + serviceConfigYAML()
 	err := loadServiceConfigError(t, yaml)
 	require.Contains(t, err.Error(), "unknown configuration keys: redis.cache_redis.addr")
 }
 
+// loadServiceConfig 加载一段 user-service 测试配置并要求成功。
 func loadServiceConfig(t *testing.T, content string) *Config {
 	t.Helper()
 	result, err := LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
@@ -677,6 +713,7 @@ func loadServiceConfig(t *testing.T, content string) *Config {
 	return result.Config
 }
 
+// loadServiceConfigError 加载一段预期失败的 user-service 测试配置并返回错误。
 func loadServiceConfigError(t *testing.T, content string) error {
 	t.Helper()
 	_, err := LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
@@ -684,6 +721,7 @@ func loadServiceConfigError(t *testing.T, content string) error {
 	return err
 }
 
+// serviceConfigYAML 返回覆盖 user-service 私有配置和共享 runtime 配置的基线 YAML。
 func serviceConfigYAML() string {
 	return `app:
   name: aegiscore-test
@@ -805,6 +843,7 @@ resources:
 `
 }
 
+// serviceConfigYAMLWithResourceDefaults 返回省略资源默认字段后的基线 YAML。
 func serviceConfigYAMLWithResourceDefaults() string {
 	yaml := serviceConfigYAML()
 	yaml = strings.Replace(yaml, "      timeout: 7s\n", "", 1)

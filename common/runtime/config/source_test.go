@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLoadSourceMergesDocumentsAndCalculatesRawDigest 验证 source 文档合并与 raw digest 元数据生成。
 func TestLoadSourceMergesDocumentsAndCalculatesRawDigest(t *testing.T) {
 	metadata := SourceMetadata{
 		Provider: "memory",
@@ -41,6 +42,7 @@ func TestLoadSourceMergesDocumentsAndCalculatesRawDigest(t *testing.T) {
 	require.Equal(t, "base.yaml", loadedMetadata.DataIDs[0])
 }
 
+// TestLoadSourceWrapsSourceError 验证文档来源错误会被加载管线包装并保留原始错误。
 func TestLoadSourceWrapsSourceError(t *testing.T) {
 	boom := errors.New("source unavailable")
 	_, _, err := LoadSource(context.Background(), fakeDocumentSource{err: boom})
@@ -48,12 +50,15 @@ func TestLoadSourceWrapsSourceError(t *testing.T) {
 	require.ErrorIs(t, err, boom)
 }
 
+// TestLoadSourceRequiresDocumentSource 验证 nil source 会被启动前拒绝。
 func TestLoadSourceRequiresDocumentSource(t *testing.T) {
 	_, _, err := LoadSource(context.Background(), nil)
 	require.EqualError(t, err, "load config source: document source is required")
 }
 
+// TestRedactSettingsUsesCallerOwnedPathsAndDigestRemainStable 验证调用方路径脱敏不会改变原始 digest 输入。
 func TestRedactSettingsUsesCallerOwnedPathsAndDigestRemainStable(t *testing.T) {
+	// 使用业务中立字段名，防止 common 测试重新耦合到某个服务的配置 schema。
 	settings := map[string]any{
 		"service": map[string]any{"credential": "service-secret"},
 		"stores": map[string]any{
@@ -64,6 +69,7 @@ func TestRedactSettingsUsesCallerOwnedPathsAndDigestRemainStable(t *testing.T) {
 			map[string]any{"headers": map[string]any{"token": "slice-secret"}},
 		},
 	}
+	// 同时覆盖精确路径、map 通配、slice 递归、未知路径和空路径 no-op。
 	redacted := RedactSettings(settings, []string{"service.credential", "stores.*.credential", "targets.headers.token", "unknown.path", ""})
 	require.Equal(t, "***", redacted["service"].(map[string]any)["credential"])
 	require.Equal(t, "***", redacted["stores"].(map[string]any)["primary"].(map[string]any)["credential"])
@@ -83,9 +89,11 @@ func TestRedactSettingsUsesCallerOwnedPathsAndDigestRemainStable(t *testing.T) {
 	require.Equal(t, first, second)
 }
 
+// TestRedactSettingsNoCallerPathsAreNoop 验证 common 不再内置默认脱敏路径。
 func TestRedactSettingsNoCallerPathsAreNoop(t *testing.T) {
 	settings := map[string]any{"service": map[string]any{"credential": "service-secret"}}
 
+	// 没有调用方路径时 common 不做默认猜测，返回的副本内容应与输入一致。
 	require.Nil(t, RedactSettings(nil, []string{"service.credential"}))
 	require.Equal(t, settings, RedactSettings(settings, nil))
 	require.Equal(t, settings, RedactSettings(settings, []string{}))
@@ -97,6 +105,7 @@ type fakeDocumentSource struct {
 	err      error
 }
 
+// LoadDocuments 实现测试用内存 DocumentSource。
 func (s fakeDocumentSource) LoadDocuments(context.Context) ([]ConfigDocument, SourceMetadata, error) {
 	return s.docs, s.metadata, s.err
 }

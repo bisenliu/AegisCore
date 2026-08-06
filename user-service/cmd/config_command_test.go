@@ -12,6 +12,7 @@ import (
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
+// TestConfigSourcesCommandUsesDefaultDataIDs 验证 config sources 使用默认 Nacos dataId 顺序。
 func TestConfigSourcesCommandUsesDefaultDataIDs(t *testing.T) {
 	t.Setenv("AEGISCORE_SERVICE", "user-service")
 	t.Setenv("AEGISCORE_NACOS_ADDR", "nacos:8848")
@@ -27,12 +28,14 @@ func TestConfigSourcesCommandUsesDefaultDataIDs(t *testing.T) {
 	require.Contains(t, out.String(), "config_data_ids: base.yaml,resources.yaml,user-service.yaml")
 }
 
+// TestConfigRenderRedactsSecrets 验证 config render 不泄漏 JWT、Redis 和 PostgreSQL 凭据。
 func TestConfigRenderRedactsSecrets(t *testing.T) {
 	setTestNacosEnv(t)
 	docs := readRepositoryConfigDocList(t)
 	for index := range docs {
 		if docs[index].DataID != "user-service.yaml" {
 			if docs[index].DataID == "resources.yaml" {
+				// 仓库本地资源默认密码为空；测试中注入非空值以验证 CLI render 不泄漏资源凭据。
 				content := strings.Replace(string(docs[index].Content), `      password: ""`, `      password: redis-render-secret`, 1)
 				content = strings.Replace(content, `      password: ""`, `      password: postgres-render-secret`, 1)
 				docs[index].Content = []byte(content)
@@ -92,6 +95,7 @@ func TestConfigRenderRedactsSecrets(t *testing.T) {
 	require.Equal(t, "***", rendered.Resources.Postgres["primary_db"].Password)
 }
 
+// TestLegacyConfigFlagRejected 验证旧 --config flag 不再被 serve 或 rbac 命令接受。
 func TestLegacyConfigFlagRejected(t *testing.T) {
 	root := newRootCommand(testRootCommandDependencies(t))
 	root.SetArgs([]string{"serve", "--config", "./configs/config.yaml"})

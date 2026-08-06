@@ -11,6 +11,7 @@ import (
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
+// newConfigCommand 创建 user-service 配置检查命令组。
 func newConfigCommand(loadConfig configLoader) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
@@ -21,6 +22,7 @@ func newConfigCommand(loadConfig configLoader) *cobra.Command {
 	return cmd
 }
 
+// newConfigValidateCommand 创建只校验配置、不启动运行时资源的命令。
 func newConfigValidateCommand(loadConfig configLoader) *cobra.Command {
 	return &cobra.Command{
 		Use:   "validate",
@@ -36,6 +38,7 @@ func newConfigValidateCommand(loadConfig configLoader) *cobra.Command {
 	}
 }
 
+// newConfigRenderCommand 创建渲染 effective settings 的命令，输出前必须使用 user-service 脱敏策略。
 func newConfigRenderCommand(loadConfig configLoader) *cobra.Command {
 	return &cobra.Command{
 		Use:   "render",
@@ -50,6 +53,7 @@ func newConfigRenderCommand(loadConfig configLoader) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// CLI 只渲染 user-service 自己声明的脱敏结果，避免 common 隐式持有服务私有 secret 路径。
 			rendered, err := commonconfig.RenderYAML(serviceconfig.RedactEffectiveSettings(settings))
 			if err != nil {
 				return err
@@ -60,6 +64,7 @@ func newConfigRenderCommand(loadConfig configLoader) *cobra.Command {
 	}
 }
 
+// newConfigSourcesCommand 创建展示 Nacos source 顺序和环境选择的命令。
 func newConfigSourcesCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "sources",
