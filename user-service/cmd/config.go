@@ -8,6 +8,7 @@ import (
 
 	commonconfig "github.com/aegiscore/common/runtime/config"
 	commonnacos "github.com/aegiscore/common/runtime/config/nacos"
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 func newConfigCommand(loadConfig configLoader) *cobra.Command {
@@ -49,7 +50,7 @@ func newConfigRenderCommand(loadConfig configLoader) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			rendered, err := commonconfig.RenderYAML(commonconfig.RedactSettings(settings, nil))
+			rendered, err := commonconfig.RenderYAML(serviceconfig.RedactEffectiveSettings(settings))
 			if err != nil {
 				return err
 			}

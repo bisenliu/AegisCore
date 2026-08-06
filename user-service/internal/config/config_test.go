@@ -497,8 +497,10 @@ func loadRepositoryConfigDocuments(t *testing.T, environment string) []commoncon
 }
 
 func TestLoadFromDocumentsMergesLayeredServiceConfig(t *testing.T) {
+	baseYAML := strings.Replace(serviceConfigYAML(), "      mode: cluster\n", "      mode: cluster\n      password: redis-secret-123\n", 1)
+	baseYAML = strings.Replace(baseYAML, "      password: \"\"", "      password: postgres-secret-123", 1)
 	docs := []commonconfig.ConfigDocument{
-		{DataID: "base.yaml", Content: []byte(serviceConfigYAML())},
+		{DataID: "base.yaml", Content: []byte(baseYAML)},
 		{DataID: "user-service.yaml", Content: []byte("log:\n  level: debug\n")},
 	}
 	result, err := LoadFromDocuments(docs)
@@ -508,10 +510,26 @@ func TestLoadFromDocumentsMergesLayeredServiceConfig(t *testing.T) {
 	require.NotEmpty(t, result.Source.Digest)
 	settings, err := result.EffectiveSettings()
 	require.NoError(t, err)
-	rendered, err := commonconfig.RenderYAML(commonconfig.RedactSettings(settings, nil))
+	redacted := RedactEffectiveSettings(settings)
+	rendered, err := commonconfig.RenderYAML(redacted)
 	require.NoError(t, err)
 	require.NotContains(t, string(rendered), "secret-123456789012345678901234567890")
+	require.NotContains(t, string(rendered), "redis-secret-123")
+	require.NotContains(t, string(rendered), "postgres-secret-123")
 	require.Contains(t, string(rendered), "***")
+	require.Equal(t, "secret-123456789012345678901234567890", settings["auth"].(map[string]any)["jwt"].(map[string]any)["secret"])
+	require.Equal(t, "redis-secret-123", settings["resources"].(map[string]any)["redis"].(map[string]any)["cache_redis"].(map[string]any)["password"])
+	require.Equal(t, "postgres-secret-123", settings["resources"].(map[string]any)["postgres"].(map[string]any)["primary_db"].(map[string]any)["password"])
+	require.Equal(t, "***", redacted["auth"].(map[string]any)["jwt"].(map[string]any)["secret"])
+	require.Equal(t, "***", redacted["resources"].(map[string]any)["redis"].(map[string]any)["cache_redis"].(map[string]any)["password"])
+	require.Equal(t, "***", redacted["resources"].(map[string]any)["postgres"].(map[string]any)["primary_db"].(map[string]any)["password"])
+}
+
+func TestSensitiveConfigPathsReturnsCopy(t *testing.T) {
+	paths := SensitiveConfigPaths()
+	require.Contains(t, paths, "auth.jwt.secret")
+	paths[0] = "mutated.path"
+	require.NotEqual(t, paths[0], SensitiveConfigPaths()[0])
 }
 
 func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing.T) {

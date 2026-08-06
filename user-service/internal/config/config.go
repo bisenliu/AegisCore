@@ -18,6 +18,12 @@ const (
 	DefaultEntSlowQueryThreshold = 500 * time.Millisecond
 )
 
+var sensitiveConfigPaths = []string{
+	"auth.jwt.secret",
+	"resources.redis.*.password",
+	"resources.postgres.*.password",
+}
+
 // Config 是 user-service 的根配置对象。
 type Config struct {
 	commonconfig.Config `mapstructure:",squash"`
@@ -268,6 +274,16 @@ type JWTConfig struct {
 // RuntimeConfig 返回共享 runtime 配置副本。
 func (c Config) RuntimeConfig() commonconfig.Config {
 	return c.Config
+}
+
+// SensitiveConfigPaths 返回 user-service 拥有的配置脱敏路径副本。
+func SensitiveConfigPaths() []string {
+	return append([]string(nil), sensitiveConfigPaths...)
+}
+
+// RedactEffectiveSettings 使用 user-service 敏感路径策略返回脱敏副本。
+func RedactEffectiveSettings(settings map[string]any) map[string]any {
+	return commonconfig.RedactSettings(settings, sensitiveConfigPaths)
 }
 
 // DefaultConfig 返回 user-service 的完整默认配置初值。

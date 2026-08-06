@@ -32,6 +32,11 @@ func TestConfigRenderRedactsSecrets(t *testing.T) {
 	docs := readRepositoryConfigDocList(t)
 	for index := range docs {
 		if docs[index].DataID != "user-service.yaml" {
+			if docs[index].DataID == "resources.yaml" {
+				content := strings.Replace(string(docs[index].Content), `      password: ""`, `      password: redis-render-secret`, 1)
+				content = strings.Replace(content, `      password: ""`, `      password: postgres-render-secret`, 1)
+				docs[index].Content = []byte(content)
+			}
 			continue
 		}
 		content := strings.Replace(string(docs[index].Content), `  token_version_cache:
@@ -52,6 +57,8 @@ func TestConfigRenderRedactsSecrets(t *testing.T) {
 	root.SetArgs([]string{"config", "render"})
 	require.NoError(t, root.Execute())
 	require.NotContains(t, out.String(), "local-development-secret")
+	require.NotContains(t, out.String(), "redis-render-secret")
+	require.NotContains(t, out.String(), "postgres-render-secret")
 	require.Contains(t, out.String(), "***")
 
 	var rendered struct {

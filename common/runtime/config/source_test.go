@@ -53,25 +53,42 @@ func TestLoadSourceRequiresDocumentSource(t *testing.T) {
 	require.EqualError(t, err, "load config source: document source is required")
 }
 
-func TestRedactSettingsAndDigestRemainStable(t *testing.T) {
+func TestRedactSettingsUsesCallerOwnedPathsAndDigestRemainStable(t *testing.T) {
 	settings := map[string]any{
-		"auth": map[string]any{"jwt": map[string]any{"secret": "secret-value"}},
-		"resources": map[string]any{
-			"redis":    map[string]any{"cache_redis": map[string]any{"password": "redis-secret"}},
-			"postgres": map[string]any{"primary_db": map[string]any{"password": "pg-secret"}},
+		"service": map[string]any{"credential": "service-secret"},
+		"stores": map[string]any{
+			"primary": map[string]any{"credential": "primary-secret"},
+			"replica": map[string]any{"credential": "replica-secret"},
+		},
+		"targets": []any{
+			map[string]any{"headers": map[string]any{"token": "slice-secret"}},
 		},
 	}
-	redacted := RedactSettings(settings, nil)
-	require.Equal(t, "***", redacted["auth"].(map[string]any)["jwt"].(map[string]any)["secret"])
-	require.Equal(t, "secret-value", settings["auth"].(map[string]any)["jwt"].(map[string]any)["secret"])
+	redacted := RedactSettings(settings, []string{"service.credential", "stores.*.credential", "targets.headers.token", "unknown.path", ""})
+	require.Equal(t, "***", redacted["service"].(map[string]any)["credential"])
+	require.Equal(t, "***", redacted["stores"].(map[string]any)["primary"].(map[string]any)["credential"])
+	require.Equal(t, "***", redacted["stores"].(map[string]any)["replica"].(map[string]any)["credential"])
+	require.Equal(t, "***", redacted["targets"].([]any)[0].(map[string]any)["headers"].(map[string]any)["token"])
+	require.Equal(t, "service-secret", settings["service"].(map[string]any)["credential"])
+	require.Equal(t, "primary-secret", settings["stores"].(map[string]any)["primary"].(map[string]any)["credential"])
+	require.Equal(t, "slice-secret", settings["targets"].([]any)[0].(map[string]any)["headers"].(map[string]any)["token"])
 	first, err := DigestSettings(settings)
 	require.NoError(t, err)
 	second, err := DigestSettings(map[string]any{
-		"resources": settings["resources"],
-		"auth":      settings["auth"],
+		"targets": settings["targets"],
+		"stores":  settings["stores"],
+		"service": settings["service"],
 	})
 	require.NoError(t, err)
 	require.Equal(t, first, second)
+}
+
+func TestRedactSettingsNoCallerPathsAreNoop(t *testing.T) {
+	settings := map[string]any{"service": map[string]any{"credential": "service-secret"}}
+
+	require.Nil(t, RedactSettings(nil, []string{"service.credential"}))
+	require.Equal(t, settings, RedactSettings(settings, nil))
+	require.Equal(t, settings, RedactSettings(settings, []string{}))
 }
 
 type fakeDocumentSource struct {

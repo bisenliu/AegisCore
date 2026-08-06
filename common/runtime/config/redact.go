@@ -6,16 +6,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var defaultRedactPaths = []string{
-	"auth.jwt.secret",
-	"resources.redis.*.password",
-	"resources.postgres.*.password",
-}
-
-// RedactSettings 返回 settings 的脱敏副本。
+// RedactSettings 按调用方提供的路径返回 settings 的脱敏副本。
 func RedactSettings(settings map[string]any, paths []string) map[string]any {
-	if paths == nil {
-		paths = defaultRedactPaths
+	if settings == nil {
+		return nil
 	}
 	copied := cloneSettings(settings).(map[string]any)
 	for _, path := range paths {
@@ -52,8 +46,17 @@ func redactPath(value any, parts []string) {
 	if len(parts) == 0 {
 		return
 	}
+	if items, ok := value.([]any); ok {
+		for _, child := range items {
+			redactPath(child, parts)
+		}
+		return
+	}
 	settings, ok := value.(map[string]any)
 	if !ok {
+		return
+	}
+	if parts[0] == "" {
 		return
 	}
 	if len(parts) == 1 {
@@ -78,5 +81,8 @@ func redactPath(value any, parts []string) {
 }
 
 func splitConfigPath(path string) []string {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
 	return strings.Split(path, ".")
 }
