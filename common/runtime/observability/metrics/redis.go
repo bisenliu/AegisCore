@@ -130,6 +130,7 @@ func (c *RedisPingCollector) snapshot(parent context.Context) redisPingSnapshot 
 		parent = context.Background()
 	}
 	now := time.Now()
+	// 持锁覆盖探测，确保并发 scrape 只发起一次 Redis ping，并在 interval 内共享同一快照。
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -155,6 +156,7 @@ func (c *RedisPingCollector) snapshot(parent context.Context) redisPingSnapshot 
 	return c.last
 }
 
+// Ping 将 go-redis StatusCmd 适配为 RedisPinger 的 error-only 契约。
 func (p redisClientPinger) Ping(ctx context.Context) error {
 	return p.client.Ping(ctx).Err()
 }

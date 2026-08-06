@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// DefaultTransactionCleanupTimeout 是原始 context 没有 deadline 时事务清理的最长等待时间。
 const DefaultTransactionCleanupTimeout = 5 * time.Second
 
 // Transaction 表达业务中立的最小事务终结接口。

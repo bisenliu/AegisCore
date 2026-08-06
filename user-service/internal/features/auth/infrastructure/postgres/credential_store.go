@@ -14,6 +14,7 @@ import (
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
+// CredentialStore 使用 Ent 实现认证凭据和 token version 持久化端口。
 type CredentialStore struct {
 	client *ent.Client
 }
@@ -114,6 +115,7 @@ func (s *CredentialStore) UpdateCredentials(ctx context.Context, input authdomai
 	if err != nil {
 		if ent.IsNotFound(err) {
 			if conditional {
+				// 条件更新未命中时再次确认用户是否仍存在，以区分并发状态/version 变化与真实删除。
 				if _, getErr := s.GetCredentialByUserID(ctx, input.UserID); getErr == nil {
 					return 0, authdomain.ErrTokenInvalid
 				}

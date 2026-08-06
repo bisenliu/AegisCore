@@ -85,18 +85,21 @@ func newEntSQLLogDriver(driver dialect.Driver, log *zap.Logger, db string, debug
 	}
 }
 
+// Exec 记录非查询 SQL 的操作类型、耗时和失败状态，不记录参数值。
 func (d *entSQLLogDriver) Exec(ctx context.Context, query string, args, v any) error {
 	return d.observe(ctx, sqlOperation(query, "exec"), query, func() error {
 		return d.Driver.Exec(ctx, query, args, v)
 	})
 }
 
+// Query 记录查询 SQL 的操作类型、耗时和失败状态，不改变结果解码。
 func (d *entSQLLogDriver) Query(ctx context.Context, query string, args, v any) error {
 	return d.observe(ctx, sqlOperation(query, "query"), query, func() error {
 		return d.Driver.Query(ctx, query, args, v)
 	})
 }
 
+// Tx 记录事务开始结果，并返回继续记录事务内操作及提交结果的包装器。
 func (d *entSQLLogDriver) Tx(ctx context.Context) (dialect.Tx, error) {
 	start := d.now()
 	tx, err := d.Driver.Tx(ctx)
@@ -107,6 +110,7 @@ func (d *entSQLLogDriver) Tx(ctx context.Context) (dialect.Tx, error) {
 	return &entSQLLogTx{Tx: tx, driver: d, ctx: ctx}, nil
 }
 
+// BeginTx 保留调用方事务选项，并在底层不支持该扩展时返回明确错误。
 func (d *entSQLLogDriver) BeginTx(ctx context.Context, opts *sql.TxOptions) (dialect.Tx, error) {
 	start := d.now()
 	driver, ok := d.Driver.(interface {
@@ -152,22 +156,26 @@ func (d *entSQLLogDriver) logOperation(ctx context.Context, operation string, st
 	}
 }
 
+// Exec 通过父 driver 统一记录事务内非查询 SQL。
 func (tx *entSQLLogTx) Exec(ctx context.Context, query string, args, v any) error {
 	return tx.driver.observe(ctx, sqlOperation(query, "tx.exec"), query, func() error {
 		return tx.Tx.Exec(ctx, query, args, v)
 	})
 }
 
+// Query 通过父 driver 统一记录事务内查询 SQL。
 func (tx *entSQLLogTx) Query(ctx context.Context, query string, args, v any) error {
 	return tx.driver.observe(ctx, sqlOperation(query, "tx.query"), query, func() error {
 		return tx.Tx.Query(ctx, query, args, v)
 	})
 }
 
+// Commit 使用事务创建时的 context 记录提交耗时和结果。
 func (tx *entSQLLogTx) Commit() error {
 	return tx.driver.observe(tx.ctx, "tx.commit", "", tx.Tx.Commit)
 }
 
+// Rollback 使用事务创建时的 context 记录回滚耗时和结果。
 func (tx *entSQLLogTx) Rollback() error {
 	return tx.driver.observe(tx.ctx, "tx.rollback", "", tx.Tx.Rollback)
 }

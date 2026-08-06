@@ -7,6 +7,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+// fieldName 按显式 label 和各绑定来源 tag 的优先级选择对外字段名。
 func fieldName(fld reflect.StructField) string {
 	if label := fld.Tag.Get(TagLabel); label != "" {
 		return label
@@ -23,6 +24,7 @@ func fieldName(fld reflect.StructField) string {
 	return fld.Name
 }
 
+// displayName 将 decoder 报告的点分隔字段路径解析为面向调用方的末级字段名称。
 func displayName(dst any, path string) string {
 	if path == "" {
 		return "参数"
@@ -74,6 +76,7 @@ func displayNameFromField(field reflect.StructField) string {
 }
 
 func validationFieldNames(dst any, fieldErr validator.FieldError) (string, string) {
+	// 优先从 StructNamespace 重建请求字段路径，失败时退回 validator 提供的 Go 字段名。
 	field, label, ok := validationFieldNamesFromPath(dst, fieldErr.StructNamespace())
 	if ok {
 		return field, label
@@ -83,6 +86,7 @@ func validationFieldNames(dst any, fieldErr validator.FieldError) (string, strin
 }
 
 func validationFieldNamesFromPath(dst any, namespace string) (string, string, bool) {
+	// validator namespace 的首段是根类型名，不属于对外请求字段路径。
 	parts := strings.Split(namespace, ".")
 	if len(parts) < 2 {
 		return "", "", false
@@ -98,6 +102,7 @@ func validationFieldNamesFromPath(dst any, namespace string) (string, string, bo
 	fieldParts := make([]string, 0, len(parts)-1)
 	label := ""
 	for _, part := range parts[1:] {
+		// slice/array 元素带有 [n] 后缀；反射查字段前先剥离索引，响应路径仍保持字段级粒度。
 		part = strings.SplitN(part, "[", 2)[0]
 		structField, ok := typ.FieldByName(part)
 		if !ok {
@@ -125,6 +130,7 @@ func validationFieldNamesFromPath(dst any, namespace string) (string, string, bo
 }
 
 func requestFieldName(field reflect.StructField) string {
+	// tag 优先级与 Binder 支持的请求来源保持一致，避免错误响应暴露 Go 字段名。
 	for _, tag := range [...]string{TagJSON, TagForm, TagHeader, TagURI, TagQuery} {
 		name := strings.SplitN(field.Tag.Get(tag), ",", 2)[0]
 		if name == "-" {

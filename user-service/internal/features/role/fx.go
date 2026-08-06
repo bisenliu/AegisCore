@@ -50,6 +50,7 @@ func newPolicyChangeNotifier(notifier permissionapplication.PolicyChangeNotifier
 	return &policyChangeNotifier{notifier: notifier}
 }
 
+// NotifyPolicyChanged 将 role application 的通知端口转发到 permission feature 的 revision-aware 协调器。
 func (n *policyChangeNotifier) NotifyPolicyChanged(ctx context.Context, revision int64, change permissionapplication.PolicyChange) error {
 	return n.notifier.NotifyPolicyChanged(ctx, revision, change)
 }

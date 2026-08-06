@@ -13,6 +13,7 @@ import (
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
+// UserStore 使用 Ent 实现用户资料持久化端口，并统一映射基础设施错误。
 type UserStore struct {
 	client *ent.Client
 }
@@ -61,6 +62,7 @@ func (s *UserStore) ListUsers(ctx context.Context, input userapplication.ListUse
 		predicates = append(predicates, entuser.UserIDGT(*input.AfterUserID))
 	}
 
+	// 多读取一条记录即可判断下一页是否存在，无需额外执行 COUNT 查询。
 	users, err := s.client.User.Query().
 		Where(predicates...).
 		Order(entuser.ByUserID()).

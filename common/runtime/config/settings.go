@@ -31,6 +31,7 @@ func encodeSettingValue(value reflect.Value) (any, error) {
 	if !value.IsValid() {
 		return nil, nil
 	}
+	// time.Duration 的底层类型是 int64，必须在整数分支前转为可读且可再次解码的时长文本。
 	if value.Type() == durationType {
 		return value.Interface().(time.Duration).String(), nil
 	}
@@ -64,6 +65,7 @@ func encodeSettingStruct(value reflect.Value) (map[string]any, error) {
 	valueType := value.Type()
 	for index := 0; index < value.NumField(); index++ {
 		field := valueType.Field(index)
+		// 未导出字段不属于配置契约，且对其调用 Interface 会触发 reflect panic。
 		if field.PkgPath != "" {
 			continue
 		}
@@ -84,6 +86,7 @@ func encodeSettingStruct(value reflect.Value) (map[string]any, error) {
 			return nil, fmt.Errorf("encode runtime config: squashed field %s must be a struct", field.Name)
 		}
 		for nestedName, nestedValue := range nested {
+			// squash 冲突若静默覆盖会使生效配置取决于字段顺序，因此直接拒绝歧义。
 			if _, exists := settings[nestedName]; exists {
 				return nil, fmt.Errorf("encode runtime config: duplicate field %s", nestedName)
 			}

@@ -45,6 +45,7 @@ var permissionPublicOptions = fx.Options(
 
 // Fx 参数与结果：授权核心
 
+// UserRoleResolverParams 汇集用户角色 resolver 的缓存配置与主库依赖。
 type UserRoleResolverParams struct {
 	fx.In
 
@@ -60,6 +61,7 @@ type UserRoleResolverResult struct {
 	Stats    localcache.StatsSource `name:"permission_rbac_user_roles_cache"`
 }
 
+// AuthorizerParams 汇集授权服务使用的命名策略引擎和观测依赖。
 type AuthorizerParams struct {
 	fx.In
 
@@ -67,6 +69,7 @@ type AuthorizerParams struct {
 	Metrics permissionapplication.Metrics
 }
 
+// AuthorizerResult 以 feature 私有名称导出授权服务，防止 Fx 按接口类型误绑定其他实现。
 type AuthorizerResult struct {
 	fx.Out
 
@@ -75,12 +78,14 @@ type AuthorizerResult struct {
 
 // Fx 参数与结果：公开投影
 
+// PermissionUserRoleCacheStatsParams 接收 permission feature 内部命名的缓存统计源。
 type PermissionUserRoleCacheStatsParams struct {
 	fx.In
 
 	Stats localcache.StatsSource `name:"permission_rbac_user_roles_cache"`
 }
 
+// PermissionUserRoleCacheStatsResult 将缓存统计源投影为服务级统一名称。
 type PermissionUserRoleCacheStatsResult struct {
 	fx.Out
 
@@ -89,6 +94,7 @@ type PermissionUserRoleCacheStatsResult struct {
 
 // Fx 参数与结果：运行时聚合
 
+// PermissionRuntimeParams 汇集 lifecycle、健康检查和跨 feature 消费的 RBAC 运行时组件。
 type PermissionRuntimeParams struct {
 	fx.In
 
@@ -102,6 +108,7 @@ type PermissionRuntimeParams struct {
 	Initializer    permissionPolicyInitializer                  `name:"permission_policy_initializer"`
 }
 
+// PolicyEngineResult 将同一个内存引擎投影为授权、reload、健康检查和初始化端口。
 type PolicyEngineResult struct {
 	fx.Out
 

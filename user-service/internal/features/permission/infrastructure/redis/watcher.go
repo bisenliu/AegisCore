@@ -67,6 +67,7 @@ func (a *subscriptionAttempt) close() {
 	if a == nil || a.subscriber == nil {
 		return
 	}
+	// Stop 和 supervisor 的失败路径可能并发关闭同一订阅，Close 必须只执行一次。
 	a.closeOnce.Do(func() { _ = a.subscriber.Close() })
 }
 
@@ -230,6 +231,7 @@ func (w *Watcher) HandlePayload(ctx context.Context, payload string) {
 }
 
 func (w *Watcher) run(ctx context.Context, done chan struct{}) {
+	// supervisor 只负责易阻塞的订阅重连；单一消费循环串行化 reload 与定时校准，避免投影副作用乱序。
 	payloads := make(chan string, policyPayloadBuffer)
 	subscriptionDone := make(chan struct{})
 	go func() {
@@ -240,6 +242,7 @@ func (w *Watcher) run(ctx context.Context, done chan struct{}) {
 	defer ticker.Stop()
 	defer func() {
 		w.closeActiveSubscription()
+		// 必须等待 supervisor 退出后再发布 done，确保 Stop 返回时没有残留订阅 goroutine。
 		<-subscriptionDone
 		w.mu.Lock()
 		if w.done == done {
@@ -280,6 +283,7 @@ func (w *Watcher) runSubscriptionSupervisor(ctx context.Context, payloads chan<-
 		}
 
 		confirmCtx, cancel := context.WithTimeout(ctx, w.settings.SubscribeTimeout)
+		// Redis 客户端收到订阅确认前不保证消息通道已建立，显式确认可使健康状态反映真实连接。
 		message, err := attempt.subscriber.Receive(confirmCtx)
 		cancel()
 		if err == nil {

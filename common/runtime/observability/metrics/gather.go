@@ -21,6 +21,8 @@ type contextCollectorWrapper struct {
 }
 
 // GatherContext 使用调用方 context 采集支持 context 的 collector。
+// 同一 Provider 的采集会串行执行，因为 Prometheus Collector 接口本身不能传递 context，
+// wrapper 需要在一次 Gather 期间从 Provider 读取临时保存的 context。
 func (p *Provider) GatherContext(ctx context.Context) ([]*io_prometheus_client.MetricFamily, error) {
 	if !p.Enabled() {
 		return nil, nil
@@ -53,6 +55,7 @@ func (w contextCollectorWrapper) Describe(ch chan<- *prometheus.Desc) {
 	w.collector.Describe(ch)
 }
 
+// Collect 使用当前 scrape context 调用底层 collector。
 func (w contextCollectorWrapper) Collect(ch chan<- prometheus.Metric) {
 	ctx := w.provider.currentGatherContext()
 	w.collector.CollectContext(ctx, ch)

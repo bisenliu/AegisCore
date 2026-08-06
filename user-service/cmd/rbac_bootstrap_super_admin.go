@@ -39,6 +39,7 @@ func bootstrapSuperAdmin(ctx context.Context, deps rbacSeedDependencies, opts rb
 	if !ok {
 		return rolebootstrap.BootstrapSuperAdminResult{}, fmt.Errorf("bootstrap password environment variable %s is required", passwordEnv)
 	}
+	// 密码只从环境变量读取且不写入命令输出，后续明文校验和哈希由 bootstrap application 负责。
 	return deps.bootstrap.BootstrapSuperAdmin(ctx, rolebootstrap.Command{
 		Username: opts.username,
 		Nickname: opts.nickname,

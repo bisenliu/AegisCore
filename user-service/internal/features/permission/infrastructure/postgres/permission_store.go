@@ -16,6 +16,7 @@ import (
 	entuserrole "github.com/aegiscore/user-service/internal/persistence/ent/userrole"
 )
 
+// PermissionStore 使用 Ent 持久化权限目录，并实现查询与 seed 写入端口。
 type PermissionStore struct {
 	client *ent.Client
 }

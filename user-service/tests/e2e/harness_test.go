@@ -178,6 +178,7 @@ resources:
 
 func freeTCPPort(t *testing.T) int {
 	t.Helper()
+	// 这里只为 Fx 测试配置选择候选端口；listener 关闭到应用绑定之间仍存在极小竞态，绑定失败会由 App start 明确报告。
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err, "listen free tcp port")
 	defer func() { _ = listener.Close() }()

@@ -36,6 +36,7 @@ type NamedEntClients struct {
 	PrimaryClient *ent.Client `name:"primary_db"`
 }
 
+// nonClosingEntDriver 将 Ent client 的生命周期与由 Fx 管理的底层 SQL 连接池解耦。
 type nonClosingEntDriver struct {
 	dialect.Driver
 }
@@ -90,11 +91,12 @@ func newEntDriver(db *sql.DB) dialect.Driver {
 	return nonClosingEntDriver{Driver: entsql.OpenDB(dialect.Postgres, db)}
 }
 
+// Close 保留 Ent driver 接口，但不关闭由 datastore provider 持有的 SQL 连接池。
 func (d nonClosingEntDriver) Close() error {
-	// Close 有意保持为空操作，只屏蔽 Ent client 对底层连接池的关闭，不改变 Query/Exec 行为。
 	return nil
 }
 
+// BeginTx 在保留事务选项的同时透传到底层支持该扩展接口的 driver。
 func (d nonClosingEntDriver) BeginTx(ctx context.Context, opts *sql.TxOptions) (dialect.Tx, error) {
 	driver, ok := d.Driver.(interface {
 		BeginTx(context.Context, *sql.TxOptions) (dialect.Tx, error)

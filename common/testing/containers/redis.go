@@ -14,20 +14,26 @@ import (
 )
 
 const (
+	// DefaultRedisImage 是 Redis 测试容器的默认镜像。
 	DefaultRedisImage = "redis:7-alpine"
 	defaultRedisPort  = "6379/tcp"
 )
 
+// RedisOptions 配置 Redis 测试容器；零值字段由 StartRedis 补为测试默认值。
 type RedisOptions struct {
 	Image          string
 	StartupTimeout time.Duration
 }
 
+// RedisContainer 描述已启动 Redis Cluster 测试容器的连接信息。
+// 容器生命周期由 StartRedis 注册到 testing.TB.Cleanup，无需调用方手动停止。
 type RedisContainer struct {
 	ContainerID string
 	Addr        string
 }
 
+// StartRedis 启动单节点 Redis Cluster 测试容器，完成槽位配置并等待其可接受请求。
+// 未启用 -aegiscore.testcontainers 时跳过测试；启动或就绪失败时通过 testing.TB 终止当前测试。
 func StartRedis(ctx context.Context, t testing.TB, opts RedisOptions) *RedisContainer {
 	t.Helper()
 	requireContainersEnabled(t)
@@ -61,6 +67,7 @@ func StartRedis(ctx context.Context, t testing.TB, opts RedisOptions) *RedisCont
 	return redisContainer
 }
 
+// Options 返回连接测试容器所需的 go-redis client 配置。
 func (r RedisContainer) Options() *redis.Options {
 	return &redis.Options{
 		Addr:         r.Addr,
@@ -70,6 +77,7 @@ func (r RedisContainer) Options() *redis.Options {
 	}
 }
 
+// Config 返回与测试容器连接信息匹配的运行时 Redis Cluster 配置。
 func (r RedisContainer) Config() resources.RedisConfig {
 	return resources.RedisConfig{
 		Mode:    resources.RedisModeCluster,
@@ -133,6 +141,7 @@ func assignRedisClusterSlots(ctx context.Context, t testing.TB, redisContainer *
 	t.Helper()
 	waitFor(ctx, t, "Redis cluster slots", func(context.Context) error {
 		out, stderr, err := dockerOutput(ctx, "exec", redisContainer.ContainerID, "sh", "-c", "redis-cli cluster addslots $(seq 0 16383)")
+		// 就绪探测可能重试整段配置；槽位已分配表示前一次调用已经成功，可按幂等成功处理。
 		if err != nil && strings.Contains(out+stderr, "Slot") && strings.Contains(out+stderr, "is already busy") {
 			return nil
 		}

@@ -146,6 +146,7 @@ func (i *authTokenIssuer) ParsePasswordChangeToken(ctx context.Context, token st
 	return claims, claims.UserID, nil
 }
 
+// VerifyAccessToken 校验访问令牌的签名、标准 claims、会话标识和 subject，并返回中间件所需的最小认证信息。
 func (i *authTokenIssuer) VerifyAccessToken(tokenString string) (commonauth.AccessToken, error) {
 	claims, err := i.parse(tokenString, SubjectAccess, true)
 	if err != nil {

@@ -74,6 +74,7 @@ type documentSource struct {
 	docs []commonconfig.ConfigDocument
 }
 
+// LoadDocuments 返回输入文档 slice 的副本，避免配置加载过程持有或修改测试调用方的 slice。
 func (s documentSource) LoadDocuments(context.Context) ([]commonconfig.ConfigDocument, commonconfig.SourceMetadata, error) {
 	docs := append([]commonconfig.ConfigDocument(nil), s.docs...)
 	dataIDs := make([]string, 0, len(docs))

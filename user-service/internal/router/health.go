@@ -9,7 +9,9 @@ import (
 )
 
 const (
-	HealthCheckStatusOK          HealthCheckStatus = "ok"
+	// HealthCheckStatusOK 表示检查项当前可用。
+	HealthCheckStatusOK HealthCheckStatus = "ok"
+	// HealthCheckStatusUnavailable 表示检查项当前不可用或未能在探针预算内完成。
 	HealthCheckStatusUnavailable HealthCheckStatus = "unavailable"
 	healthProbeTimeout                             = 500 * time.Millisecond
 	healthPathLivez                                = "/livez"

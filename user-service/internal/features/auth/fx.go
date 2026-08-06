@@ -98,12 +98,14 @@ var authTransportOptions = fx.Options(
 
 // Fx 参数与结果：基础设施
 
+// CredentialStoreParams 包含构造认证凭据存储所需的具名主库客户端。
 type CredentialStoreParams struct {
 	fx.In
 
 	Client *ent.Client `name:"primary_db"`
 }
 
+// SessionStoreParams 包含构造认证 Redis 会话存储及注册清理任务生命周期所需的依赖。
 type SessionStoreParams struct {
 	fx.In
 
@@ -116,18 +118,21 @@ type SessionStoreParams struct {
 
 // Fx 参数与结果：运行时资源
 
+// SessionPurgePoolParams 包含构造认证会话后台清理池所需的 Fx 输入。
 type SessionPurgePoolParams struct {
 	fx.In
 
 	Log *zap.Logger
 }
 
+// SessionPurgePoolResult 导出带稳定名称的认证会话后台清理池。
 type SessionPurgePoolResult struct {
 	fx.Out
 
 	Pool authredis.PurgeTaskPool `name:"auth_session_purge_pool"`
 }
 
+// TokenVersionLocalCacheParams 包含选择直读或本地缓存 token version 策略所需的依赖。
 type TokenVersionLocalCacheParams struct {
 	fx.In
 
@@ -136,6 +141,7 @@ type TokenVersionLocalCacheParams struct {
 	Cache    authapplication.TokenVersionCache
 }
 
+// TokenVersionLocalCacheResult 同时导出 token version 读取策略及其观测数据源。
 type TokenVersionLocalCacheResult struct {
 	fx.Out
 
@@ -145,6 +151,7 @@ type TokenVersionLocalCacheResult struct {
 
 // Fx 参数与结果：应用服务
 
+// TokenVersionValidatorParams 包含构造带指标 token version 校验器所需的依赖。
 type TokenVersionValidatorParams struct {
 	fx.In
 
@@ -152,6 +159,7 @@ type TokenVersionValidatorParams struct {
 	Metrics authapplication.Metrics
 }
 
+// TokenVersionValidatorResult 同时导出中间件校验能力和应用层本地失效能力。
 type TokenVersionValidatorResult struct {
 	fx.Out
 
@@ -161,6 +169,7 @@ type TokenVersionValidatorResult struct {
 
 // Fx 参数与结果：传输层
 
+// AuthControllerParams 汇总认证 HTTP controller 消费的 use case 和校验器。
 type AuthControllerParams struct {
 	fx.In
 
@@ -265,9 +274,11 @@ func newAuthController(params AuthControllerParams) *authhttp.AuthController {
 
 // 运行时资源方法：session purge workerpool
 
+// Start 幂等创建 holder 管理的认证会话清理池。
 func (h *sessionPurgePoolHolder) Start(context.Context) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	// 持锁检查使重复或并发 Start 保持幂等，确保只创建一个真实 worker pool。
 	if h.pool != nil {
 		return nil
 	}
@@ -279,9 +290,11 @@ func (h *sessionPurgePoolHolder) Start(context.Context) error {
 	return nil
 }
 
+// Stop 阻止新任务提交，并在调用方生命周期预算内排空已有任务。
 func (h *sessionPurgePoolHolder) Stop(ctx context.Context) error {
 	h.mu.Lock()
 	pool := h.pool
+	// 先从 holder 摘除实例，使并发 Submit 立即观察到关闭状态，避免向正在 drain 的 pool 投递新任务。
 	h.pool = nil
 	h.mu.Unlock()
 	if pool == nil {
@@ -290,6 +303,7 @@ func (h *sessionPurgePoolHolder) Stop(ctx context.Context) error {
 	return pool.Stop(ctx)
 }
 
+// Submit 将任务转交给已启动的清理池；尚未启动或已停止时返回 ErrClosed。
 func (h *sessionPurgePoolHolder) Submit(ctx context.Context, task workerpool.Task) error {
 	h.mu.RLock()
 	pool := h.pool
@@ -300,6 +314,7 @@ func (h *sessionPurgePoolHolder) Submit(ctx context.Context, task workerpool.Tas
 	return pool.Submit(ctx, task)
 }
 
+// Stats 返回当前清理池快照；未运行时返回稳定名称的关闭状态。
 func (h *sessionPurgePoolHolder) Stats() workerpool.Stats {
 	h.mu.RLock()
 	pool := h.pool

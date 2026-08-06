@@ -12,6 +12,7 @@ import (
 	entrole "github.com/aegiscore/user-service/internal/persistence/ent/role"
 )
 
+// RoleStore 使用 Ent 持久化普通角色写操作和系统角色 seed。
 type RoleStore struct {
 	client *ent.Client
 }
@@ -161,6 +162,7 @@ func (s *RoleStore) UpsertSystemRole(ctx context.Context, input roleapplication.
 			Save(ctx)
 		if err != nil {
 			if ent.IsConstraintError(err) {
+				// 并发 seed 可能已插入同一 role_id；重新读取并走更新分支即可收敛到基线。
 				return s.UpsertSystemRole(ctx, input)
 			}
 			return nil, false, fmt.Errorf("create seed role %s: %w", input.RoleID.String(), err)

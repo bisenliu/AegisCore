@@ -15,6 +15,7 @@ import (
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
+// UserRoleStore 使用 Ent 持久化用户角色绑定，并随写操作记录 policy revision。
 type UserRoleStore struct {
 	client *ent.Client
 }

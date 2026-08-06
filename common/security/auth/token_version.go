@@ -19,10 +19,12 @@ type TokenVersionMismatchError struct {
 	Token   int64 // token claims 携带的 token_version。
 }
 
+// Error 返回稳定的 token version 不匹配错误消息。
 func (e *TokenVersionMismatchError) Error() string {
 	return ErrTokenVersionMismatch.Error()
 }
 
+// Unwrap 允许调用方通过 errors.Is 匹配 ErrTokenVersionMismatch。
 func (e *TokenVersionMismatchError) Unwrap() error {
 	return ErrTokenVersionMismatch
 }

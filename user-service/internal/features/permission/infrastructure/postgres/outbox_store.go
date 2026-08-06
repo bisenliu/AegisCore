@@ -62,6 +62,7 @@ func (s *OutboxStore) Claim(ctx context.Context, now time.Time, limit int, claim
 		Where(dueOutboxPredicate(nowMillis)).
 		Order(entrbacoutbox.ByRevision()).
 		Limit(limit).
+		// SKIP LOCKED 允许多个副本并行领取互不重叠的 batch，避免慢 worker 阻塞其他 dispatcher。
 		ForUpdate(entsql.WithLockAction(entsql.SkipLocked)).
 		All(ctx)
 	if err != nil {
@@ -74,6 +75,7 @@ func (s *OutboxStore) Claim(ctx context.Context, now time.Time, limit int, claim
 		return []permissionapplication.OutboxClaim{}, nil
 	}
 
+	// 同一 batch 共用随机 lease token；Ack/Fail 还会匹配 event_id，因此不会扩大单个事件的更新权限。
 	claimToken, err := uuid.NewRandom()
 	if err != nil {
 		return nil, finish.Fail(fmt.Errorf("generate outbox claim token: %w", err))
@@ -180,6 +182,7 @@ func dueOutboxPredicate(nowMillis int64) predicate.RbacPolicyOutboxEvent {
 			entrbacoutbox.NextAttemptAtLTE(nowMillis),
 		),
 		entrbacoutbox.And(
+			// processing lease 超时后重新开放认领，用于恢复进程崩溃或投递中断留下的事件。
 			entrbacoutbox.StatusEQ(permissionapplication.OutboxStatusProcessing),
 			entrbacoutbox.ClaimedUntilLTE(nowMillis),
 		),
@@ -201,6 +204,7 @@ func toOutboxEvent(row *ent.RbacPolicyOutboxEvent) permissionapplication.OutboxE
 
 func truncateOutboxError(summary string) string {
 	const maxLength = 2048
+	// 先修复非法 UTF-8，再按 rune 截断，避免写入数据库的诊断文本切断多字节字符。
 	summary = strings.ToValidUTF8(summary, "?")
 	runes := []rune(summary)
 	if len(runes) <= maxLength {

@@ -62,6 +62,7 @@ func encodePolicyRefreshMessage(message PolicyRefreshMessage) (string, error) {
 func decodePolicyRefreshMessage(payload string) (PolicyRefreshMessage, error) {
 	var message PolicyRefreshMessage
 	decoder := json.NewDecoder(bytes.NewBufferString(payload))
+	// 拒绝未知字段和尾随 JSON，避免生产者协议漂移被旧消费者静默接受。
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&message); err != nil {
 		return PolicyRefreshMessage{}, fmt.Errorf("unmarshal rbac policy refresh message: %w", err)

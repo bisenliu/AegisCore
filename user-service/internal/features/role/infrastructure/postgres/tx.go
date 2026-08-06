@@ -39,6 +39,8 @@ func (s sqlTxStarter) BeginTransaction(ctx context.Context) (*sql.Tx, error) {
 	return s.db.BeginTx(ctx, nil)
 }
 
+// transactPolicyChange 将业务写入、单调 revision 和 outbox event 原子提交。
+// 返回成功即表示数据库事实和跨实例补偿事件均已持久化；本实例即时 reload 在事务提交后由 application 层触发。
 func transactPolicyChange[T any](ctx context.Context, client *ent.Client, operation string, change roleapplication.PolicyChange, mutate func(*ent.Tx) (T, error)) (value T, result roleapplication.PolicyWriteResult, err error) {
 	eventID, err := runtimeid.NewUUID()
 	if err != nil {
@@ -126,6 +128,7 @@ func allocatePolicyRevision(ctx context.Context, tx *ent.Tx) (*ent.RbacPolicyRev
 		return nil, fmt.Errorf("initialize rbac policy revision counter: %w", err)
 	}
 
+	// 并发初始化只有一个事务会创建 counter；冲突被忽略后所有事务都通过行更新串行分配 revision。
 	counter, err = tx.RbacPolicyRevisionCounter.UpdateOneID(policyRevisionCounterID).
 		AddLastRevision(1).
 		Save(ctx)

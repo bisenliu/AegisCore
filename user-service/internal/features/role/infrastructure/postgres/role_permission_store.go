@@ -18,6 +18,7 @@ import (
 	entrolepermission "github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
 )
 
+// RolePermissionStore 使用 Ent 持久化角色权限绑定及系统基线同步。
 type RolePermissionStore struct {
 	client *ent.Client
 }

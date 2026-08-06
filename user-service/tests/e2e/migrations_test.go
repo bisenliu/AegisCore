@@ -56,6 +56,7 @@ func userServiceRoot(t *testing.T) string {
 }
 
 func splitSQLStatements(sqlText string) ([]string, error) {
+	// 迁移包含函数体和 quoted identifier，不能用 strings.Split 按分号切分；这里仅实现仓库迁移所需的 SQL lexical states。
 	var statements []string
 	var current strings.Builder
 	var dollarTag string
@@ -64,6 +65,7 @@ func splitSQLStatements(sqlText string) ([]string, error) {
 
 	for i := 0; i < len(sqlText); {
 		if dollarTag != "" {
+			// dollar-quoted body 内的引号和分号都属于正文，只有完全匹配的结束 tag 才退出该状态。
 			if strings.HasPrefix(sqlText[i:], dollarTag) {
 				current.WriteString(dollarTag)
 				i += len(dollarTag)
@@ -104,6 +106,7 @@ func splitSQLStatements(sqlText string) ([]string, error) {
 		}
 
 		if strings.HasPrefix(sqlText[i:], "--") {
+			// 注释本身无需发送到数据库，但保留换行可防止相邻 token 在删除注释后意外拼接。
 			for i < len(sqlText) && sqlText[i] != '\n' {
 				i++
 			}
@@ -171,6 +174,7 @@ func splitSQLStatements(sqlText string) ([]string, error) {
 }
 
 func readDollarTag(value string) (string, bool) {
+	// 将空 tag（$$）或由字母、数字和下划线组成的定界符视为 dollar tag；返回完整 tag 便于精确匹配结束边界。
 	if value == "" || value[0] != '$' {
 		return "", false
 	}

@@ -45,6 +45,7 @@ type SessionStoreOptions struct {
 	Metrics              authapplication.Metrics
 }
 
+// SessionStore 使用 Redis 实现 token version 投影、refresh 会话和一次性改密会话端口。
 type SessionStore struct {
 	redis                rediscache.UniversalClient
 	keys                 KeyCatalog

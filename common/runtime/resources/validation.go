@@ -107,6 +107,7 @@ func (c PostgresConfigs) Validate(basePath string) error {
 }
 
 func sortedNames[T any](values map[string]T) []string {
+	// 配置校验错误会直接用于诊断输出，排序可避免 map 遍历顺序造成结果抖动。
 	names := make([]string, 0, len(values))
 	for name := range values {
 		names = append(names, name)

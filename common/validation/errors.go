@@ -12,6 +12,7 @@ import (
 	contracterrors "github.com/aegiscore/common/contract/errors"
 )
 
+// normalizeError 将 validator、JSON decoder 和字段 binder 的错误归一化为稳定的公开错误契约。
 func (v *Validator) normalizeError(dst any, err error) error {
 	if err == nil {
 		return nil

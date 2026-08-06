@@ -39,6 +39,7 @@ func (s *BootstrapStore) BootstrapSuperAdmin(ctx context.Context, input roleboot
 	}
 	defer func() { _ = finish.RollbackUnlessCommitted() }()
 
+	// 固定事务级 advisory lock 将所有副本的一次性引导串行化，避免两个不同用户名同时绕过存在性检查。
 	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, bootstrapAdvisoryLockKey); err != nil {
 		return nil, finish.Fail(fmt.Errorf("lock bootstrap super admin: %w", err))
 	}

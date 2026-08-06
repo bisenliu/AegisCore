@@ -55,6 +55,7 @@ func (l *entLoader) LoadPoliciesAtLeast(ctx context.Context, targetRevision int6
 		return PolicySet{}, fmt.Errorf("load casbin policies: target revision must not be negative: %d", targetRevision)
 	}
 
+	// 在线 policy 写入会将 revision 与投影数据在同一事务提交；若只看到较旧快照，短暂重试而不是发布不完整 policy。
 	for {
 		policySet, stale, err := l.loadSnapshot(ctx, targetRevision)
 		if err != nil {
@@ -70,6 +71,7 @@ func (l *entLoader) LoadPoliciesAtLeast(ctx context.Context, targetRevision int6
 }
 
 func (l *entLoader) loadSnapshot(ctx context.Context, targetRevision int64) (PolicySet, bool, error) {
+	// revision 与绑定必须来自同一 repeatable-read 快照，否则返回的 revision 可能与规则集合不对应。
 	tx, err := l.client.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return PolicySet{}, false, fmt.Errorf("begin casbin policy snapshot: %w", err)

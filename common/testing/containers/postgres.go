@@ -21,17 +21,24 @@ import (
 )
 
 const (
-	DefaultPostgresImage           = "postgres:15-alpine"
-	DefaultPostgresDatabase        = "aegiscore_test"
-	DefaultPostgresUsername        = "aegiscore"
-	DefaultPostgresPassword        = "secret"
-	DefaultStartupTimeout          = 90 * time.Second
+	// DefaultPostgresImage 是 PostgreSQL 测试容器的默认镜像。
+	DefaultPostgresImage = "postgres:15-alpine"
+	// DefaultPostgresDatabase 是 PostgreSQL 测试容器的默认数据库名。
+	DefaultPostgresDatabase = "aegiscore_test"
+	// DefaultPostgresUsername 是 PostgreSQL 测试容器的默认用户名。
+	DefaultPostgresUsername = "aegiscore"
+	// DefaultPostgresPassword 是 PostgreSQL 测试容器的默认密码，仅用于隔离的本地测试容器。
+	DefaultPostgresPassword = "secret"
+	// DefaultStartupTimeout 是测试容器启动和就绪探测的默认总超时。
+	DefaultStartupTimeout = 90 * time.Second
+
 	defaultPostgresPort            = "5432/tcp"
 	defaultDockerPortProbeInterval = time.Millisecond * 100
 )
 
 var testContainersEnabled = flag.Bool("aegiscore.testcontainers", false, "enable Docker-backed integration containers")
 
+// PostgresOptions 配置 PostgreSQL 测试容器；零值字段由 StartPostgres 补为测试默认值。
 type PostgresOptions struct {
 	Image          string
 	Database       string
@@ -40,6 +47,8 @@ type PostgresOptions struct {
 	StartupTimeout time.Duration
 }
 
+// PostgresContainer 描述已启动测试容器的连接信息。
+// 容器生命周期由 StartPostgres 注册到 testing.TB.Cleanup，无需调用方手动停止。
 type PostgresContainer struct {
 	ContainerID string
 	Host        string
@@ -50,6 +59,8 @@ type PostgresContainer struct {
 	DSN         string
 }
 
+// StartPostgres 启动 PostgreSQL 测试容器并等待其可接受连接。
+// 未启用 -aegiscore.testcontainers 时跳过测试；启动或就绪失败时通过 testing.TB 终止当前测试。
 func StartPostgres(ctx context.Context, t testing.TB, opts PostgresOptions) *PostgresContainer {
 	t.Helper()
 	requireContainersEnabled(t)
@@ -84,6 +95,7 @@ func StartPostgres(ctx context.Context, t testing.TB, opts PostgresOptions) *Pos
 	return pg
 }
 
+// Config 返回与测试容器连接信息匹配的运行时 PostgreSQL 配置。
 func (p PostgresContainer) Config() resources.PostgresConfig {
 	return resources.PostgresConfig{
 		Host:     p.Host,
@@ -101,6 +113,7 @@ func (p PostgresContainer) Config() resources.PostgresConfig {
 	}
 }
 
+// ContainersEnabled 报告当前测试进程是否显式启用了 Docker 测试容器。
 func ContainersEnabled() bool {
 	return testContainersEnabled != nil && *testContainersEnabled
 }
@@ -162,6 +175,7 @@ func dockerMappedPort(ctx context.Context, t testing.TB, containerID, containerP
 
 	var lastErr error
 	for time.Now().Before(deadline) {
+		// docker run 返回后端口映射可能尚未可查询，因此在同一启动 deadline 内轮询。
 		out, stderr, err := dockerOutput(ctx, "port", containerID, containerPort)
 		if err == nil {
 			host, port, parseErr := parseDockerPort(out)
@@ -221,6 +235,7 @@ func waitFor(ctx context.Context, t testing.TB, label string, check func(context
 
 	var lastErr error
 	for {
+		// 单次探测使用短 timeout，避免某次阻塞耗尽整个容器启动期限。
 		checkCtx, cancel := context.WithTimeout(ctx, time.Second)
 		err := check(checkCtx)
 		cancel()

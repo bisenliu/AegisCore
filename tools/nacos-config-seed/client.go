@@ -30,6 +30,7 @@ type seedOptions struct {
 	Password  string
 }
 
+// Validate 校验 seed 所需字段，并要求认证用户名与密码成对提供。
 func (o seedOptions) Validate() error {
 	if strings.TrimSpace(o.Addr) == "" {
 		return fmt.Errorf("addr is required")
@@ -80,6 +81,8 @@ func newAdminClient(options seedOptions) (*adminClient, error) {
 	return client, nil
 }
 
+// Seed 在同一个总超时内完成可选登录、namespace 确保和配置顺序发布。
+// 任一步失败都会停止后续操作，但已经创建的 namespace 或已发布的配置不会回滚。
 func (c *adminClient) Seed(ctx context.Context, options seedOptions, documents map[string][]byte) error {
 	ctx, cancel := context.WithTimeout(ctx, options.Timeout)
 	defer cancel()
@@ -194,6 +197,7 @@ func (c *adminClient) do(ctx context.Context, method string, endpoint *url.URL, 
 	defer func() {
 		_ = resp.Body.Close()
 	}()
+	// 多读一个字节即可判定越界，同时限制异常服务端响应占用的内存。
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return fmt.Errorf("read response: %w", err)
@@ -211,6 +215,7 @@ func (c *adminClient) do(ctx context.Context, method string, endpoint *url.URL, 
 }
 
 func (c *adminClient) endpoint(apiPath string) *url.URL {
+	// 每次请求复制基准 URL，避免修改共享 client 状态并使并发构造 endpoint 保持安全。
 	endpoint := *c.server
 	endpoint.Path = path.Join(c.server.Path, apiPath)
 	endpoint.RawPath = ""
@@ -257,6 +262,7 @@ func apiError(code int, message string) error {
 	if message == "" {
 		message = "unspecified error"
 	}
+	// 服务端消息不受本工具控制，限制长度可避免诊断输出被异常响应无限放大。
 	if len(message) > 512 {
 		message = message[:512] + "..."
 	}

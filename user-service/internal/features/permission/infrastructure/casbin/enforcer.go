@@ -62,6 +62,7 @@ func (e *Engine) Enforce(ctx context.Context, userID uuid.UUID, pathTemplate str
 	if e.userRoles == nil {
 		return false, nil
 	}
+	// 角色解析可能访问数据库或缓存，不能在此期间持有 enforcer 读锁；解析后会再次检查 readiness。
 	roleIDs, err := e.userRoles.RolesForUser(ctx, userID)
 	if err != nil {
 		return false, err
@@ -129,6 +130,7 @@ func (e *Engine) reloadToRevision(ctx context.Context, targetRevision int64, for
 	if flight == nil {
 		flight = e.startFlightLocked(force)
 	} else if force {
+		// 合并并发 reload，但保留强制刷新语义，让当前候选完成前至少再读取一次数据库快照。
 		flight.force = true
 	}
 	flight.waiters++
@@ -172,6 +174,7 @@ func (e *Engine) leaveFlight(flight *reloadFlight, waiterErr error) {
 	}
 	flight.waiters--
 	if flight.waiters == 0 {
+		// 所有调用方都已取消时终止共享 reload，避免后台查询失去任何请求生命周期约束。
 		e.flight = nil
 		e.lastErr = waiterErr
 		e.reloadSucceeded = false

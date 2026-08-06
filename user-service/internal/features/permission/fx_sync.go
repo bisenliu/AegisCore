@@ -47,12 +47,14 @@ type PolicyChangeNotifierParams struct {
 	Metrics permissionapplication.Metrics
 }
 
+// PolicyChangeNotifierResult 以 feature 私有名称导出本实例刷新通知器。
 type PolicyChangeNotifierResult struct {
 	fx.Out
 
 	Notifier permissionapplication.PolicyChangeNotifier `name:"permission_policy_change_notifier"`
 }
 
+// PolicyRedisStoreResult 复用同一个 Redis store 提供订阅和 revision 发布能力。
 type PolicyRedisStoreResult struct {
 	fx.Out
 
@@ -60,6 +62,7 @@ type PolicyRedisStoreResult struct {
 	Publisher permissionapplication.PolicyRevisionPublisher
 }
 
+// PolicyWatcherResult 将同一个 watcher 投影为具体实例、lifecycle runner 和状态端口。
 type PolicyWatcherResult struct {
 	fx.Out
 
@@ -68,6 +71,7 @@ type PolicyWatcherResult struct {
 	Status  permissionapplication.PolicyWatcherStatus `name:"permission_policy_watcher_status"`
 }
 
+// OutboxDispatcherParams 汇集 outbox dispatcher 的持久化、发布、配置与观测依赖。
 type OutboxDispatcherParams struct {
 	fx.In
 
@@ -78,6 +82,7 @@ type OutboxDispatcherParams struct {
 	Metrics   permissionapplication.Metrics
 }
 
+// OutboxDispatcherResult 将同一个 dispatcher 投影为 lifecycle runner 和状态端口。
 type OutboxDispatcherResult struct {
 	fx.Out
 

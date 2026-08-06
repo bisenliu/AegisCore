@@ -74,6 +74,7 @@ func (c outboxDispatcherHealthChecker) Name() string {
 	return "rbac.outbox_dispatcher"
 }
 
+// Check 确认 outbox dispatcher 可查询且其后台循环正在运行。
 func (c outboxDispatcherHealthChecker) Check(ctx context.Context) router.HealthCheckResult {
 	name := c.Name()
 	if c.dispatcher == nil {
@@ -93,6 +94,7 @@ func (c postgresHealthChecker) Name() string {
 	return c.name
 }
 
+// Check 在独立依赖超时内探测 PostgreSQL 连接池。
 func (c postgresHealthChecker) Check(ctx context.Context) router.HealthCheckResult {
 	if c.db == nil {
 		return unavailableHealthResult(c.name, "postgres unavailable")
@@ -109,6 +111,7 @@ func (c redisHealthChecker) Name() string {
 	return c.name
 }
 
+// Check 在独立依赖超时内探测 Redis 客户端。
 func (c redisHealthChecker) Check(ctx context.Context) router.HealthCheckResult {
 	if c.client == nil {
 		return unavailableHealthResult(c.name, "redis unavailable")
@@ -125,6 +128,7 @@ func (c casbinPolicyHealthChecker) Name() string {
 	return "rbac.casbin_policy"
 }
 
+// Check 确认 Casbin policy 投影已经达到可授权状态。
 func (c casbinPolicyHealthChecker) Check(context.Context) router.HealthCheckResult {
 	name := c.Name()
 	if c.engine == nil {
@@ -140,6 +144,7 @@ func (c watcherHealthChecker) Name() string {
 	return "rbac.policy_watcher"
 }
 
+// Check 确认 watcher 正在运行，且最近一次权威校准未超过允许的新鲜度窗口。
 func (c watcherHealthChecker) Check(context.Context) router.HealthCheckResult {
 	name := c.Name()
 	if c.watcher == nil {

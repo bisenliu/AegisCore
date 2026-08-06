@@ -98,10 +98,12 @@ type Validator struct {
 	trans    ut.Translator
 }
 
+// Error 返回字段绑定失败的底层错误消息。
 func (e *bindFieldError) Error() string {
 	return e.err.Error()
 }
 
+// Unwrap 暴露底层绑定错误，供 errors.Is 和 errors.As 继续匹配。
 func (e *bindFieldError) Unwrap() error {
 	return e.err
 }

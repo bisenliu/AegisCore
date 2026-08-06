@@ -59,6 +59,7 @@ func HTTPServerMetrics(options HTTPMetricsOptions) gin.HandlerFunc {
 		recorder.inFlight.WithLabelValues(method, inFlightRoute).Inc()
 		defer func() {
 			status := c.Writer.Status()
+			// decrement 必须复用 increment 时捕获的路由标签；若请求结束后重新取值，标签变化会让原 gauge 无法归零。
 			recorder.inFlight.WithLabelValues(method, inFlightRoute).Dec()
 
 			if options.SkipResult != nil && options.SkipResult(c) {

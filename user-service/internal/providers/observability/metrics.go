@@ -77,6 +77,7 @@ func newPolicyWatcherCollector(source permissionapplication.PolicyWatcherStatus,
 	}, nil
 }
 
+// Describe 发送 policy watcher collector 暴露的固定指标描述符。
 func (c *policyWatcherCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.running
 	ch <- c.subscriptionState
@@ -87,6 +88,7 @@ func (c *policyWatcherCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.reconnectAttempts
 }
 
+// Collect 从同一份 watcher 快照生成指标，避免一次 scrape 内状态彼此不一致。
 func (c *policyWatcherCollector) Collect(ch chan<- prometheus.Metric) {
 	status := c.source.Status()
 	ch <- prometheus.MustNewConstMetric(c.running, prometheus.GaugeValue, boolMetric(status.Running))

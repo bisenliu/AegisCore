@@ -82,6 +82,7 @@ func (c *LoadingCache[V]) Get(ctx context.Context, key string) (V, error) {
 	}
 	c.miss.Add(1)
 
+	// 失效与回源竞争时允许重试一次；持续失效则尽快返回，避免请求无限占用执行资源。
 	for attempt := 0; attempt < 2; attempt++ {
 		value, err := c.load(ctx, key)
 		if !errors.Is(err, errLoadInvalidated) {

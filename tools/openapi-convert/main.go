@@ -27,10 +27,12 @@ const (
 
 type stringList []string
 
+// String 实现 flag.Value，返回当前已收集参数的可读形式。
 func (values *stringList) String() string {
 	return fmt.Sprint([]string(*values))
 }
 
+// Set 实现 flag.Value，按命令行出现顺序追加一次参数值。
 func (values *stringList) Set(value string) error {
 	// 支持重复传入 -root-path；这里只追加不去重，后续 map 构造会让重复路径以最后一次配置为准。
 	*values = append(*values, value)

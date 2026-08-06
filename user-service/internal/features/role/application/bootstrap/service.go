@@ -78,6 +78,7 @@ type normalizedCommand struct {
 }
 
 func normalizeCommand(cmd Command) (normalizedCommand, string, error) {
+	// bcrypt 对超过 72 bytes 的输入会截断；按 bytes 校验可避免不同明文产生相同有效输入。
 	password := cmd.Password
 	if password == "" {
 		return normalizedCommand{}, "", fmt.Errorf("%w: bootstrap password is required", ErrBootstrapInvalidInput)

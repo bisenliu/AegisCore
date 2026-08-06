@@ -93,6 +93,7 @@ func (s *Service) Seed(ctx context.Context, opts SeedOptions) (SeedResult, error
 			actualIDs = append(actualIDs, actualID)
 		}
 		if opts.SyncSystemBindings {
+			// 精确同步是显式破坏性选项；默认路径只补缺失绑定，保留基线之外的现有数据。
 			added, removed, err := s.rolePermissions.SyncSystemBindings(ctx, roleID, actualIDs)
 			if err != nil {
 				return result, err

@@ -189,6 +189,7 @@ func (d *Dispatcher) dispatchClaim(ctx context.Context, claim OutboxClaim) error
 	}
 	d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherPublish, MetricsResultSuccess, MetricsReasonNone, claim.Event.Kind)
 
+	// publish 成功而 Ack 失败时事件会在 lease 过期后重投，因此整体是至少一次投递；revision-aware 消费方必须能重复处理同一事件。
 	deliveredAt := d.clock.Now()
 	updated, err := d.store.Ack(ctx, claim.Event.EventID, claim.ClaimToken, deliveredAt)
 	if err != nil {
@@ -222,6 +223,7 @@ func (d *Dispatcher) run(ctx context.Context, done chan struct{}) {
 			ticker.Stop()
 		}
 		d.mu.Lock()
+		// 仅在字段仍指向本轮句柄时清理，使生命周期状态更新与传入的 done 保持绑定。
 		if d.done == done {
 			d.cancel = nil
 			d.done = nil

@@ -10,6 +10,7 @@ import (
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 )
 
+// PermissionLookup 将 permission feature 的查询端口适配为 role application 所需的最小权限引用。
 type PermissionLookup struct {
 	store permissionapplication.PermissionStore
 }

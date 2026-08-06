@@ -25,6 +25,7 @@ const (
 	DispatcherErrorUnexpectedExit = "unexpected_exit"
 )
 
+// ErrOutboxClaimLost 表示事件的 lease 已被其他 dispatcher 接管，当前 worker 不得再更新该事件。
 var ErrOutboxClaimLost = errors.New("rbac policy outbox claim lost")
 
 // OutboxEvent 是 dispatcher 发布所需的最小 RBAC policy 事件。

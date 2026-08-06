@@ -56,6 +56,7 @@ func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 	}
 
 	documents := make(map[string][]byte, len(options.DataIDs))
+	// 在发起网络请求前完整读取所有文档，避免中途才发现本地文件不可读而造成部分发布。
 	for _, dataID := range options.DataIDs {
 		content, readErr := os.ReadFile(filepath.Join(options.ConfigDir, dataID))
 		if readErr != nil {
@@ -104,6 +105,7 @@ func parseDataIDs(raw string) ([]string, error) {
 		if dataID == "" {
 			return nil, fmt.Errorf("data-ids contains an empty value")
 		}
+		// data-id 只作为配置名使用，不允许通过路径片段逃逸 config-dir。
 		if filepath.Base(dataID) != dataID {
 			return nil, fmt.Errorf("data-id %q must be a file name", dataID)
 		}
@@ -124,6 +126,7 @@ func secretEnv(name string) string {
 	if strings.TrimSpace(value) == "" {
 		return ""
 	}
+	// 凭据的首尾空白可能有意义，只用 TrimSpace 判断是否缺失，不改写原值。
 	return value
 }
 

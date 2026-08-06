@@ -26,6 +26,7 @@ func runRBACSeedCommand(ctx context.Context, opts rbacSeedOptions, newDependenci
 		return err
 	}
 	defer func() {
+		// 清理错误与业务错误同时返回，避免连接关闭失败掩盖 seed 结果或被静默丢弃。
 		err = errors.Join(err, cleanup())
 	}()
 	ctx = contextWithRBACLogger(ctx, deps)
@@ -44,6 +45,7 @@ func runBootstrapSuperAdminCommand(ctx context.Context, opts rbacBootstrapSuperA
 		return err
 	}
 	defer func() {
+		// bootstrap 已失败时仍保留资源清理错误，便于诊断 CLI 进程退出阶段的问题。
 		err = errors.Join(err, cleanup())
 	}()
 
