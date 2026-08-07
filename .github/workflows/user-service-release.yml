@@ -7,6 +7,19 @@ on:
         description: Immutable image repository without tag
         required: false
         default: ""
+      deploy_to_cluster:
+        description: Apply gated release to the configured Kubernetes cluster
+        required: false
+        type: boolean
+        default: false
+      kubernetes_namespace:
+        description: Kubernetes namespace for the gated rollout
+        required: false
+        default: aegiscore
+      migration_confirmation:
+        description: Type migration-confirmed:<commit-sha> after the controlled migration record is complete
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -18,6 +31,7 @@ jobs:
     if: ${{ github.ref_protected == true }}
     environment: user-service-release
     permissions:
+      actions: read
       contents: read
       packages: write
       security-events: write
@@ -152,10 +166,28 @@ jobs:
       - name: Render Helm release manifests
         run: |
           helm lint deployments/helm/aegiscore-user-service --set-string "image.ref=${{ steps.digest.outputs.image_ref }}"
+
+          seed_suffix="rbac-seed-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           helm template aegiscore-user-service deployments/helm/aegiscore-user-service \
             --values deployments/helm/aegiscore-user-service/values.yaml \
             --set-string "image.ref=${{ steps.digest.outputs.image_ref }}" \
-            > release/aegiscore-user-service.yaml
+            --set rbacSeedJob.enabled=true \
+            --set-string "rbacSeedJob.nameSuffix=${seed_suffix}" \
+            --show-only templates/rbac-seed-job.yaml \
+            > release/aegiscore-user-service-rbac-seed.yaml
+
+          helm template aegiscore-user-service deployments/helm/aegiscore-user-service \
+            --values deployments/helm/aegiscore-user-service/values.yaml \
+            --set-string "image.ref=${{ steps.digest.outputs.image_ref }}" \
+            --set rbacSeedJob.enabled=false \
+            > release/aegiscore-user-service-runtime.yaml
+
+          if grep -q '^kind: Job$' release/aegiscore-user-service-runtime.yaml; then
+            printf 'runtime manifest must not contain RBAC seed Job\n' >&2
+            exit 1
+          fi
+
+          printf 'SEED_JOB_NAME=aegiscore-user-service-%s\n' "${seed_suffix}" | tee release/user-service-seed-job.env
 
       - name: Clean up quarantined image tag
         if: always() && steps.image.outputs.quarantine_tagged_ref != ''
@@ -173,6 +205,62 @@ jobs:
             release/user-service-image-identity.txt
             release/trivy-image.sarif
             release/sbom-image.cdx.json
-            release/aegiscore-user-service.yaml
+            release/aegiscore-user-service-rbac-seed.yaml
+            release/aegiscore-user-service-runtime.yaml
+            release/user-service-seed-job.env
           if-no-files-found: warn
           retention-days: 30
+
+  deploy-gated-release:
+    name: deploy gated Kubernetes release
+    runs-on: ubuntu-latest
+    needs: build-scan-render
+    if: ${{ github.ref_protected == true && inputs.deploy_to_cluster == true }}
+    environment: user-service-release
+    permissions:
+      actions: read
+      contents: read
+    timeout-minutes: 30
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v6
+        with:
+          name: user-service-release
+          path: release
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure Kubernetes credentials
+        run: |
+          if [[ -z "${{ secrets.USER_SERVICE_RELEASE_KUBECONFIG_B64 }}" ]]; then
+            printf 'USER_SERVICE_RELEASE_KUBECONFIG_B64 secret is required for deploy_to_cluster=true\n' >&2
+            exit 1
+          fi
+          mkdir -p "${HOME}/.kube"
+          printf '%s' "${{ secrets.USER_SERVICE_RELEASE_KUBECONFIG_B64 }}" | base64 -d > "${HOME}/.kube/config"
+          chmod 600 "${HOME}/.kube/config"
+
+      - name: Confirm controlled migration record
+        run: |
+          expected="migration-confirmed:${GITHUB_SHA}"
+          if [[ "${{ inputs.migration_confirmation }}" != "${expected}" ]]; then
+            printf 'migration_confirmation must be %s before rollout\n' "${expected}" >&2
+            exit 1
+          fi
+
+          source release/user-service-image-ref.env
+          printf 'Using release image %s after migration confirmation %s\n' "${IMAGE_REF}" "${expected}"
+
+      - name: Run RBAC seed gate
+        run: |
+          source release/user-service-seed-job.env
+          namespace="${{ inputs.kubernetes_namespace }}"
+          kubectl apply -f release/aegiscore-user-service-rbac-seed.yaml -n "${namespace}"
+          kubectl wait --for=condition=complete --timeout=15m "job/${SEED_JOB_NAME}" -n "${namespace}"
+
+      - name: Roll out runtime manifest
+        run: |
+          namespace="${{ inputs.kubernetes_namespace }}"
+          kubectl apply -f release/aegiscore-user-service-runtime.yaml -n "${namespace}"
+          kubectl rollout status deployment/aegiscore-user-service -n "${namespace}" --timeout=10m

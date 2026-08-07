@@ -6,6 +6,7 @@ metadata:
   labels:
     {{- include "aegiscore-user-service.labels" . | nindent 4 }}
     app.kubernetes.io/component: rbac-seed
+    aegiscore.io/release-job-suffix: {{ .Values.rbacSeedJob.nameSuffix | quote }}
 spec:
   backoffLimit: {{ .Values.rbacSeedJob.backoffLimit }}
   activeDeadlineSeconds: {{ .Values.rbacSeedJob.activeDeadlineSeconds }}

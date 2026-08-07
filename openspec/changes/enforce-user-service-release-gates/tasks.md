@@ -1,0 +1,8 @@
+- [x] 更新 `delivery-operations` change delta，声明受控发布阶段、失败阻断 rollout 和 runtime manifest 不含 seed Job。
+- [x] 调整 Helm values/template，使 RBAC seed Job 默认关闭并支持 release 唯一名称。
+- [x] 调整 release workflow，输出 seed/runtime 分离 manifest 并新增 migration/seed/rollout 可选部署门禁。
+- [x] 调整原生 Kustomize 默认聚合，避免默认应用 seed Job 与 Deployment。
+- [x] 更新架构 lint，防止默认 Helm/Kustomize 发布产物重新耦合 seed Job 与 Deployment。
+- [x] 运行 `make user-service-architecture-lint`。
+- [x] 运行 Helm 与 Kustomize 渲染验证。
+- [ ] 暂存本次预期变更后运行 `make lint` 和 `make verify`。

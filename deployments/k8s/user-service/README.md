@@ -6,7 +6,7 @@
 
 | 文件 | 作用 |
 |---|---|
-| `kustomization.yaml` | 聚合默认可应用资源 |
+| `kustomization.yaml` | 聚合默认 runtime 资源，不包含 RBAC seed Job |
 | `namespace.yaml` | `aegiscore` namespace |
 | `serviceaccount.yaml` | 运行时 ServiceAccount、空 Role 和 RoleBinding |
 | `deployment.yaml` | HTTP 副本、探针、资源、安全上下文和 rollout 策略 |
@@ -51,7 +51,7 @@
    kubectl rollout status deployment/aegiscore-user-service -n aegiscore
    ```
 
-`kustomization.yaml` 聚合完整资源集合，适合验证和审查。生产首次发布应使用上面的分阶段命令，避免 Deployment 在数据库 SQL migration 和 RBAC seed 完成前创建。
+`kustomization.yaml` 聚合默认 runtime 资源，适合在 seed 成功后应用和审查。RBAC seed Job 保留为独立文件，生产发布必须使用上面的分阶段命令，避免 Deployment 在数据库 SQL migration 和 RBAC seed 完成前创建。
 
 运行时配置集中存储在 Nacos。环境通过 namespace 区分，系统通过 group 区分，配置域通过 dataId 区分。执行 bootstrap 时超级管理员临时密码只通过 `ADMIN_BOOTSTRAP_PASSWORD` 环境变量提供，不写入 Nacos 配置。
 
@@ -87,7 +87,7 @@ pprof 默认关闭且不由 Service 暴露。临时诊断时修改 Nacos 中的 
 
 ```bash
 kubectl kustomize deployments/k8s/user-service > /tmp/aegiscore-user-service-k8s.yaml
-ruby -e 'require "yaml"; docs = YAML.load_stream(File.read("/tmp/aegiscore-user-service-k8s.yaml")); abort("no docs") if docs.empty?'
+ruby -e 'require "yaml"; docs = YAML.load_stream(File.read("/tmp/aegiscore-user-service-k8s.yaml")); abort("no docs") if docs.empty?; abort("seed job must not be in default runtime kustomization") if docs.any? { |doc| doc && doc["kind"] == "Job" && doc.dig("metadata", "name") == "aegiscore-user-service-rbac-seed" }'
 grep -q 'atlas migrate apply\|migrate apply' /tmp/aegiscore-user-service-k8s.yaml && exit 1 || true
 grep -q 'runAsUser: 65532' /tmp/aegiscore-user-service-k8s.yaml
 grep -q 'runAsGroup: 65532' /tmp/aegiscore-user-service-k8s.yaml

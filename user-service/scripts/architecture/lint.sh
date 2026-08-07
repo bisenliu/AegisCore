@@ -258,6 +258,7 @@ check_helm_user_service_immutable_image() {
   local helpers_file="${chart_dir}/templates/_helpers.tpl"
   local deployment_file="${chart_dir}/templates/deployment.yaml"
   local seed_job_file="${chart_dir}/templates/rbac-seed-job.yaml"
+  local kustomize_file="${repo_root}/deployments/k8s/user-service/kustomization.yaml"
 
   if [[ ! -d "${chart_dir}" ]]; then
     return
@@ -295,6 +296,15 @@ check_helm_user_service_immutable_image() {
   fi
   if ! rg -q 'image:[[:space:]]+\{\{ include "aegiscore-user-service\.image" \. \| quote \}\}' "${seed_job_file}"; then
     report "Helm RBAC seed Job must use centralized immutable image helper"
+  fi
+  if ! rg -q '^[[:space:]]+enabled:[[:space:]]+false[[:space:]]*#' "${values_file}"; then
+    report "Helm RBAC seed Job must be disabled by default for runtime manifests"
+  fi
+  if ! rg -q 'rbacSeedJob\.nameSuffix' "${seed_job_file}"; then
+    report "Helm RBAC seed Job name must support release-unique suffixes"
+  fi
+  if [[ -f "${kustomize_file}" ]] && rg -q '^[[:space:]]*-[[:space:]]*rbac-seed-job\.yaml([[:space:]#]|$)' "${kustomize_file}"; then
+    report "Kustomize default user-service resources must not include RBAC seed Job"
   fi
 }
 

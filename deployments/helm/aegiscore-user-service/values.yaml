@@ -1,5 +1,5 @@
 # 本文件是 aegiscore-user-service Helm chart 的默认 values。
-# 适用于生产基线渲染，提供云厂商无关的 Deployment、RBAC seed Job、PDB、HPA 和 NetworkPolicy 配置。
+# 适用于生产基线渲染，提供云厂商无关的 Deployment、PDB、HPA 和 NetworkPolicy 配置。
 # 运行配置通过 AEGISCORE_* 环境变量定位 Nacos，业务字段存放在 Nacos dataId 中。
 replicaCount: 2 # 默认 HTTP 副本数；autoscaling.enabled=true 时由 HPA 控制。
 
@@ -166,9 +166,9 @@ networkPolicy: # NetworkPolicy 配置。
         - protocol: TCP # DNS 大响应或重试可用 TCP。
           port: 53 # DNS TCP 端口。
 
-rbacSeedJob: # RBAC 系统数据 seed 发布前置 Job 配置。
-  enabled: true # 是否渲染 RBAC seed Job。
-  nameSuffix: rbac-seed # Job 名称后缀。
+rbacSeedJob: # RBAC 系统数据 seed 发布前置 Job 配置；生产最终 runtime manifest 默认不包含 Job。
+  enabled: false # 是否渲染 RBAC seed Job；发布流水线执行 seed 阶段时显式开启。
+  nameSuffix: rbac-seed # Job 名称后缀；生产流水线应覆盖为 release 唯一值。
   backoffLimit: 3 # 失败重试次数上限。
   activeDeadlineSeconds: 900 # Job 最大运行时间。
   ttlSecondsAfterFinished: 86400 # Job 完成后保留时间。
