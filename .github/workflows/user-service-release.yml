@@ -38,20 +38,20 @@ jobs:
     timeout-minutes: 40
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Crane
-        uses: imjasonh/setup-crane@v0.4
+        uses: imjasonh/setup-crane@31b88efe9de28ae0ffa220711af4b60be9435f6e # v0.4
 
       - name: Prepare immutable image reference
         id: image
@@ -85,7 +85,7 @@ jobs:
           printf 'quarantine_tagged_ref=%s:%s\n' "${quarantine_repository}" "${tag}" >> "${GITHUB_OUTPUT}"
 
       - name: Build and push quarantined user-service image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: deployments/docker/user-service.Dockerfile
@@ -114,7 +114,7 @@ jobs:
         run: ./deployments/docker/verify-user-service-image.sh "${{ steps.quarantine_digest.outputs.image_ref }}"
 
       - name: Generate image scan report
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.quarantine_digest.outputs.image_ref }}
           scanners: vuln
@@ -124,7 +124,7 @@ jobs:
           exit-code: '0'
 
       - name: Generate image SBOM
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.quarantine_digest.outputs.image_ref }}
           format: cyclonedx
@@ -132,7 +132,7 @@ jobs:
           skip-setup-trivy: true
 
       - name: Fail on high or critical image findings
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.quarantine_digest.outputs.image_ref }}
           scanners: vuln
@@ -197,7 +197,7 @@ jobs:
 
       - name: Upload release artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: user-service-release
           path: |
@@ -223,13 +223,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Download release artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: user-service-release
           path: release
 
       - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
 
       - name: Configure Kubernetes credentials
         run: |

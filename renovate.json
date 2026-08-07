@@ -45,6 +45,17 @@
       ],
       "depNameTemplate": "securego/gosec",
       "datasourceTemplate": "github-tags"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": [
+        "^\\.github/workflows/.*\\.ya?ml$"
+      ],
+      "matchStrings": [
+        "uses:\\s+(?<depName>[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)@(?<currentDigest>[0-9a-f]{40})\\s+#\\s+(?<currentValue>v\\d+(?:\\.\\d+){0,2})"
+      ],
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "semver-coerced"
     }
   ],
   "packageRules": [
@@ -98,6 +109,7 @@
       "matchManagers": [
         "github-actions"
       ],
+      "pinDigests": true,
       "rangeStrategy": "bump",
       "automerge": false
     },
