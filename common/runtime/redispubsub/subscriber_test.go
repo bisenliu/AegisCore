@@ -173,7 +173,7 @@ func TestSubscriberStartRequiresContext(t *testing.T) {
 	factory := &scriptedFactory{}
 	subscriber := newSubscriber(factory.subscribe, zap.NewNop(), validOptions())
 
-	require.Error(t, subscriber.Start(nil))
+	require.Error(t, subscriber.Start(nil)) //nolint:staticcheck // 需要验证 nil context 输入被拒绝。
 	require.Equal(t, StateCreated, subscriber.Status().State)
 	require.Equal(t, 0, factory.callCount())
 }
