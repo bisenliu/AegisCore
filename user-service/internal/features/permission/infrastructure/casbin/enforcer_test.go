@@ -103,7 +103,7 @@ func TestEngineEnforceAllowDenyAndDoesNotReload(t *testing.T) {
 	})
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return([]uuid.UUID{roleID}, nil).Times(2)
-	engine := NewEngine(loader, NopReloadMetrics(), roles)
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), roles)
 	applied, err := engine.ReloadToRevision(context.Background(), 1)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), applied)
@@ -126,7 +126,7 @@ func TestEngineSuperAdminWildcard(t *testing.T) {
 	})
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return([]uuid.UUID{superAdminRoleID}, nil)
-	engine := NewEngine(loader, NopReloadMetrics(), roles)
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), roles)
 	_, err := engine.ReloadToRevision(context.Background(), 1)
 	require.NoError(t, err)
 	allowed, err := engine.Enforce(context.Background(), userID, "/api/v1/anything/:id", "DELETE")
@@ -153,7 +153,7 @@ func TestEngineReloadFailurePreservesProjectionButFailsClosedUntilRecovery(t *te
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return([]uuid.UUID{roleID}, nil)
 	metrics := &reloadMetricsRecorder{}
-	engine := NewEngine(loader, metrics, roles)
+	engine := newStartedEngine(t, loader, metrics, roles)
 
 	_, err := engine.ReloadToRevision(context.Background(), 1)
 	require.NoError(t, err)
@@ -181,7 +181,7 @@ func TestEngineReloadFailurePreservesProjectionButFailsClosedUntilRecovery(t *te
 }
 
 func TestEngineCandidateSwapIsHigherOnlyAndEqualIsIdempotent(t *testing.T) {
-	engine := NewEngine(nil, NopReloadMetrics(), nil)
+	engine := newStartedEngine(t, nil, NopReloadMetrics(), nil)
 	newer := mustEnforcer(t, policy(2, uuid.New(), "/new", "GET"))
 	older := mustEnforcer(t, policy(1, uuid.New(), "/old", "GET"))
 	equal := mustEnforcer(t, policy(2, uuid.New(), "/equal", "GET"))
@@ -219,7 +219,7 @@ func TestEngineRefreshReplacesStaleSnapshotAtEqualRevision(t *testing.T) {
 		return policy(2, roleID, "/api/v1/current", "GET"), nil
 	})
 	resolver := newFaultInjectedRoleResolver(map[uuid.UUID][]uuid.UUID{userID: {roleID}})
-	engine := NewEngine(loader, NopReloadMetrics(), resolver)
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), resolver)
 
 	_, err := engine.ReloadToRevision(context.Background(), 2)
 	require.NoError(t, err)
@@ -259,7 +259,7 @@ func TestEngineForceJoiningInFlightReloadReadsSnapshotAgain(t *testing.T) {
 		}
 	})
 	resolver := newFaultInjectedRoleResolver(map[uuid.UUID][]uuid.UUID{userID: {roleID}})
-	engine := NewEngine(loader, NopReloadMetrics(), resolver)
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), resolver)
 	_, err := engine.ReloadToRevision(context.Background(), 2)
 	require.NoError(t, err)
 
@@ -309,7 +309,7 @@ func TestEngineFaultInjectionOutOfOrderReloadKeepsLatestProjection(t *testing.T)
 		return policy(target, newRoleID, "/api/v1/new", "GET"), nil
 	})
 	resolver := newFaultInjectedRoleResolver(map[uuid.UUID][]uuid.UUID{userID: {newRoleID}})
-	engine := NewEngine(loader, NopReloadMetrics(), resolver)
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), resolver)
 
 	first := make(chan error, 1)
 	go func() {
@@ -335,7 +335,7 @@ func TestEngineFaultInjectionOutOfOrderReloadKeepsLatestProjection(t *testing.T)
 
 func TestEngineCanceledHigherTargetIsObservedAndFailsClosed(t *testing.T) {
 	roleID := uuid.New()
-	engine := NewEngine(loaderFunc(func(context.Context, int64) (PolicySet, error) {
+	engine := newStartedEngine(t, loaderFunc(func(context.Context, int64) (PolicySet, error) {
 		return policy(1, roleID, "/api/v1/users", "GET"), nil
 	}), NopReloadMetrics(), nil)
 	_, err := engine.ReloadToRevision(context.Background(), 1)
@@ -361,7 +361,7 @@ func TestEngineEnforceReturnsRoleResolverError(t *testing.T) {
 	})
 	roles := NewMockUserRoleResolver(ctrl)
 	roles.EXPECT().RolesForUser(gomock.Any(), userID).Return(nil, resolveErr)
-	engine := NewEngine(loader, NopReloadMetrics(), roles)
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), roles)
 	_, err := engine.ReloadToRevision(context.Background(), 1)
 	require.NoError(t, err)
 
@@ -374,7 +374,7 @@ func TestEngineEnforceFailsClosedWhenProjectionBecomesStaleDuringRoleResolution(
 	userID := uuid.New()
 	roleID := uuid.New()
 	resolver := &blockingUserRoleResolver{started: make(chan struct{}), release: make(chan struct{}), roles: []uuid.UUID{roleID}}
-	engine := NewEngine(loaderFunc(func(context.Context, int64) (PolicySet, error) {
+	engine := newStartedEngine(t, loaderFunc(func(context.Context, int64) (PolicySet, error) {
 		return policy(1, roleID, "/api/v1/users", "GET"), nil
 	}), NopReloadMetrics(), resolver)
 	_, err := engine.ReloadToRevision(context.Background(), 1)
@@ -406,7 +406,7 @@ func TestEngineWaiterCancellationDoesNotCancelSharedReload(t *testing.T) {
 			return PolicySet{}, ctx.Err()
 		}
 	})
-	engine := NewEngine(loader, NopReloadMetrics(), nil)
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), nil)
 	leaderCtx, cancelLeader := context.WithCancel(context.Background())
 	leaderResult := make(chan error, 1)
 	go func() {
@@ -432,6 +432,159 @@ func TestEngineWaiterCancellationDoesNotCancelSharedReload(t *testing.T) {
 	require.Equal(t, int64(2), engine.AppliedRevision())
 }
 
+func TestEngineConcurrentReloadAndRefreshWaitersConvergeToHighestTarget(t *testing.T) {
+	const latest = int64(25)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int64
+	loader := loaderFunc(func(ctx context.Context, target int64) (PolicySet, error) {
+		if calls.Add(1) == 1 {
+			require.Equal(t, int64(3), target)
+			close(started)
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return PolicySet{}, ctx.Err()
+			}
+			return PolicySet{Revision: target}, nil
+		}
+		require.Equal(t, latest, target)
+		return PolicySet{Revision: latest}, nil
+	})
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), nil)
+
+	results := make(chan error, 4)
+	go func() {
+		applied, err := engine.ReloadToRevision(context.Background(), 3)
+		if err == nil && applied < 3 {
+			err = fmt.Errorf("reload target 3 returned applied %d", applied)
+		}
+		results <- err
+	}()
+	<-started
+
+	for _, call := range []struct {
+		target int64
+		force  bool
+	}{
+		{target: 20, force: true},
+		{target: 12, force: false},
+		{target: latest, force: true},
+	} {
+		go func(target int64, force bool) {
+			var (
+				applied int64
+				err     error
+			)
+			if force {
+				applied, err = engine.RefreshToRevision(context.Background(), target)
+			} else {
+				applied, err = engine.ReloadToRevision(context.Background(), target)
+			}
+			if err == nil && applied < target {
+				err = fmt.Errorf("target %d returned applied %d", target, applied)
+			}
+			results <- err
+		}(call.target, call.force)
+	}
+
+	require.Eventually(t, func() bool {
+		engine.mu.RLock()
+		defer engine.mu.RUnlock()
+		return engine.targetRevision == latest && engine.flight != nil && engine.flight.force
+	}, time.Second, time.Millisecond)
+	close(release)
+	for range 4 {
+		require.NoError(t, <-results)
+	}
+	require.Equal(t, latest, engine.AppliedRevision())
+	require.Equal(t, int64(2), calls.Load(), "force refresh joining an in-flight ordinary reload must read a fresh snapshot")
+}
+
+func TestEngineAllWaitersCancelCancelsSharedReloadAndFailsClosed(t *testing.T) {
+	started := make(chan struct{})
+	loaderCanceled := make(chan struct{})
+	var cancelOnce sync.Once
+	loader := loaderFunc(func(ctx context.Context, _ int64) (PolicySet, error) {
+		close(started)
+		<-ctx.Done()
+		cancelOnce.Do(func() { close(loaderCanceled) })
+		return PolicySet{}, ctx.Err()
+	})
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), nil)
+	firstCtx, cancelFirst := context.WithCancel(context.Background())
+	secondCtx, cancelSecond := context.WithCancel(context.Background())
+	firstResult := make(chan error, 1)
+	secondResult := make(chan error, 1)
+
+	go func() {
+		_, err := engine.ReloadToRevision(firstCtx, 1)
+		firstResult <- err
+	}()
+	<-started
+	go func() {
+		_, err := engine.ReloadToRevision(secondCtx, 2)
+		secondResult <- err
+	}()
+	require.Eventually(t, func() bool { return engine.ProjectionStatus().TargetRevision == 2 }, time.Second, time.Millisecond)
+
+	cancelFirst()
+	require.ErrorIs(t, <-firstResult, context.Canceled)
+	select {
+	case <-loaderCanceled:
+		t.Fatal("shared reload was canceled while another waiter still needed it")
+	default:
+	}
+	cancelSecond()
+	require.ErrorIs(t, <-secondResult, context.Canceled)
+	select {
+	case <-loaderCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("shared reload was not canceled after all waiters canceled")
+	}
+
+	status := engine.ProjectionStatus()
+	require.Equal(t, int64(0), status.AppliedRevision)
+	require.Equal(t, int64(2), status.TargetRevision)
+	require.False(t, status.Ready())
+	require.ErrorIs(t, status.LastError, context.Canceled)
+}
+
+func TestEngineLifecycleRootCancellationCancelsSharedReload(t *testing.T) {
+	started := make(chan struct{})
+	loaderCanceled := make(chan struct{})
+	var cancelOnce sync.Once
+	loader := loaderFunc(func(ctx context.Context, _ int64) (PolicySet, error) {
+		close(started)
+		<-ctx.Done()
+		cancelOnce.Do(func() { close(loaderCanceled) })
+		return PolicySet{}, ctx.Err()
+	})
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), nil)
+	lifecycleCtx, cancelLifecycle := context.WithCancel(context.Background())
+	require.NoError(t, engine.Start(lifecycleCtx))
+	result := make(chan error, 1)
+
+	go func() {
+		_, err := engine.ReloadToRevision(context.Background(), 1)
+		result <- err
+	}()
+	<-started
+	cancelLifecycle()
+
+	select {
+	case <-loaderCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("engine lifecycle root did not cancel shared reload")
+	}
+	require.ErrorIs(t, <-result, context.Canceled)
+	status := engine.ProjectionStatus()
+	require.Equal(t, int64(0), status.AppliedRevision)
+	require.Equal(t, int64(1), status.TargetRevision)
+	require.False(t, status.Ready())
+	require.ErrorIs(t, status.LastError, context.Canceled)
+}
+
 func TestEngineNewWaiterStartsFreshFlightAfterSoleWaiterCancels(t *testing.T) {
 	firstStarted := make(chan struct{})
 	firstCanceled := make(chan struct{})
@@ -445,7 +598,7 @@ func TestEngineNewWaiterStartsFreshFlightAfterSoleWaiterCancels(t *testing.T) {
 		}
 		return PolicySet{Revision: target}, nil
 	})
-	engine := NewEngine(loader, NopReloadMetrics(), nil)
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	firstResult := make(chan error, 1)
 	go func() {
@@ -480,7 +633,7 @@ func TestEngineCoalescesOneHundredConcurrentTargetsToLatest(t *testing.T) {
 			return PolicySet{}, ctx.Err()
 		}
 	})
-	engine := NewEngine(loader, NopReloadMetrics(), nil)
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), nil)
 
 	results := make(chan error, 100)
 	var wg sync.WaitGroup
@@ -526,7 +679,7 @@ func TestEngineFaultInjectionOneHundredConcurrentWritesConvergeToAuthorizationPr
 		}
 	})
 	resolver := newFaultInjectedRoleResolver(map[uuid.UUID][]uuid.UUID{userID: {roleID}})
-	engine := NewEngine(loader, NopReloadMetrics(), resolver)
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), resolver)
 
 	results := make(chan error, 100)
 	var wg sync.WaitGroup
@@ -563,7 +716,7 @@ func TestEngineInitializeUsesTargetZeroAndCallerContext(t *testing.T) {
 		<-loaderCtx.Done()
 		return PolicySet{}, loaderCtx.Err()
 	})
-	engine := NewEngine(loader, NopReloadMetrics(), nil)
+	engine := newStartedEngine(t, loader, NopReloadMetrics(), nil)
 	engine.InitializeFailClosed(ctx)
 	require.Eventually(t, func() bool { return errors.Is(engine.LastError(), context.Canceled) }, time.Second, time.Millisecond)
 	require.False(t, engine.ProjectionStatus().Ready())
@@ -580,6 +733,14 @@ func TestEngineInvalidatesUserRoleResolver(t *testing.T) {
 	engine := NewEngine(nil, NopReloadMetrics(), roles)
 	engine.InvalidateUserRole(userID)
 	engine.InvalidateAllUserRoles()
+}
+
+func newStartedEngine(t *testing.T, loader Loader, metrics ReloadMetrics, roles UserRoleResolver) *Engine {
+	t.Helper()
+	engine := NewEngine(loader, metrics, roles)
+	require.NoError(t, engine.Start(context.Background()))
+	t.Cleanup(func() { require.NoError(t, engine.Stop(context.Background())) })
+	return engine
 }
 
 func policy(revision int64, roleID uuid.UUID, path, method string) PolicySet {

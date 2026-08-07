@@ -3,6 +3,7 @@ package permission
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"go.uber.org/fx"
 )
@@ -28,21 +29,39 @@ type RegisterRBACLifecycleParams struct {
 
 // Provider：生命周期注册
 
-// registerRBACLifecycle 依次初始化策略、启动 watcher 和 outbox dispatcher。
+// registerRBACLifecycle 依次启动 engine root、初始化策略、启动 watcher 和 outbox dispatcher。
 func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
+	var (
+		runMu     sync.Mutex
+		runCancel context.CancelFunc
+	)
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			params.Runtime.Initializer.InitializeFailClosed(ctx)
-			if err := params.Runtime.Watcher.Start(); err != nil {
-				return errors.Join(err, params.Runtime.Watcher.Stop(ctx))
+			runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+			runMu.Lock()
+			runCancel = cancel
+			runMu.Unlock()
+			if err := params.Runtime.EngineLifecycle.Start(runCtx); err != nil {
+				cancel()
+				return err
 			}
-			if err := params.Runtime.Dispatcher.Start(ctx); err != nil {
-				return errors.Join(err, params.Runtime.Watcher.Stop(ctx))
+			params.Runtime.Initializer.InitializeFailClosed(ctx)
+			if err := params.Runtime.Watcher.Start(runCtx); err != nil {
+				cancel()
+				return errors.Join(err, params.Runtime.Watcher.Stop(ctx), params.Runtime.EngineLifecycle.Stop(ctx))
+			}
+			if err := params.Runtime.Dispatcher.Start(runCtx); err != nil {
+				cancel()
+				return errors.Join(err, params.Runtime.Watcher.Stop(ctx), params.Runtime.EngineLifecycle.Stop(ctx))
 			}
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			return stopRBACLifecycle(ctx, params.Runtime.Dispatcher.Stop, params.Runtime.Watcher.Stop)
+			runMu.Lock()
+			cancel := runCancel
+			runCancel = nil
+			runMu.Unlock()
+			return stopRBACLifecycle(ctx, cancel, params.Runtime.Dispatcher.Stop, params.Runtime.Watcher.Stop, params.Runtime.EngineLifecycle.Stop)
 		},
 	})
 }
@@ -50,9 +69,14 @@ func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
 // 生命周期辅助函数
 
 // stopRBACLifecycle 按 dispatcher、watcher 顺序停止并聚合全部错误。
-func stopRBACLifecycle(ctx context.Context, stopDispatcher func(context.Context) error, stopWatcher func(context.Context) error) error {
+func stopRBACLifecycle(ctx context.Context, cancelRoot context.CancelFunc, stopDispatcher func(context.Context) error, stopWatcher func(context.Context) error, stopEngine func(context.Context) error) error {
+	dispatcherErr := stopDispatcher(ctx)
+	if cancelRoot != nil {
+		cancelRoot()
+	}
 	return errors.Join(
-		stopDispatcher(ctx),
+		dispatcherErr,
 		stopWatcher(ctx),
+		stopEngine(ctx),
 	)
 }

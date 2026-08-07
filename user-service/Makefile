@@ -2,9 +2,10 @@ USER_SERVICE_BIN ?= ../bin/user-service
 ADMIN_USERNAME ?=
 ADMIN_NICKNAME ?=
 CONTAINER_TEST_PACKAGES := ./internal/features/permission/infrastructure/postgres ./internal/features/role/infrastructure/postgres ./tests/e2e
+RBAC_SYNC_RACE_PACKAGES := ./internal/features/permission/infrastructure/redis ./internal/features/permission/infrastructure/casbin
 export ADMIN_BOOTSTRAP_PASSWORD
 
-.PHONY: help build run test test-containers lint architecture-lint architecture-lint-test verify seed-rbac bootstrap-super-admin generate migrate-diff migrate-validate openapi-generate fxgraph-generate fxgraph-check
+.PHONY: help build run test test-containers rbac-sync-race-test lint architecture-lint architecture-lint-test verify seed-rbac bootstrap-super-admin generate migrate-diff migrate-validate openapi-generate fxgraph-generate fxgraph-check
 
 help: ## 查看 user-service 可用命令。
 	@awk 'BEGIN {FS = ":.*##"; printf "user-service 可用命令：\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -21,6 +22,9 @@ test: ## 运行 user-service 测试。
 
 test-containers: ## 运行包含 Docker-backed 容器的 user-service 测试。
 	go test -v -count=1 $(CONTAINER_TEST_PACKAGES) -args -aegiscore.testcontainers
+
+rbac-sync-race-test: ## 使用 race detector 运行 RBAC policy sync 相关测试。
+	go test -race $(RBAC_SYNC_RACE_PACKAGES)
 
 lint: ## 运行 user-service lint。
 	golangci-lint run ./...

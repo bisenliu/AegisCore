@@ -127,7 +127,10 @@ func TestOutboxDispatcherRetriesPersistedFailureAfterPublisherRecovery(t *testin
 	}, clock, nil, permissionapplication.NopMetrics())
 	require.NoError(t, err)
 
-	require.ErrorContains(t, dispatcher.DispatchOnce(ctx), "redis unavailable")
+	result, err := dispatcher.DispatchOnce(ctx)
+	require.ErrorContains(t, err, "redis unavailable")
+	require.Equal(t, 1, result.Claimed)
+	require.Equal(t, 1, result.Retried)
 	failed := client.RbacPolicyOutboxEvent.Query().Where(entrbacoutbox.EventIDEQ(event.EventID)).OnlyX(ctx)
 	require.Equal(t, permissionapplication.OutboxStatusFailed, failed.Status)
 	require.Equal(t, 1, failed.AttemptCount)
@@ -136,7 +139,10 @@ func TestOutboxDispatcherRetriesPersistedFailureAfterPublisherRecovery(t *testin
 
 	clock.now = now.Add(time.Second)
 	publisher.err = nil
-	require.NoError(t, dispatcher.DispatchOnce(ctx))
+	result, err = dispatcher.DispatchOnce(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Delivered)
+	require.Equal(t, 1, result.Acknowledged)
 	delivered := client.RbacPolicyOutboxEvent.Query().Where(entrbacoutbox.EventIDEQ(event.EventID)).OnlyX(ctx)
 	require.Equal(t, permissionapplication.OutboxStatusDelivered, delivered.Status)
 	require.NotNil(t, delivered.DeliveredAt)

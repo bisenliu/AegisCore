@@ -356,6 +356,46 @@ func TestWatcherFaultInjectionReplayAddRemoveReplaceEventsKeepsIdempotentProject
 	require.Equal(t, []int64{4, 4, 4}, engine.reloads())
 }
 
+func TestWatcherLoopConcurrentHintsAndTickerConvergesToAuthoritativeRevision(t *testing.T) {
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000713")
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000714")
+	source := newFakeMessageSource(redispubsub.Status{State: redispubsub.StateCreated, ErrorCategory: redispubsub.ErrorNone})
+	revisions := &atomicPolicyRevisionSource{}
+	revisions.Store(1)
+	engine := &faultInjectedPolicyReloadEngine{appliedRevision: 1, targetRevision: 1, ready: true}
+	watcher := newWatcherForTest(source, revisions, engine, time.Millisecond, nil)
+
+	require.NoError(t, watcher.Start(context.Background()))
+	require.Eventually(t, func() bool {
+		return !watcher.Status().LastReconcileSuccessAt.IsZero()
+	}, time.Second, time.Millisecond)
+
+	revisions.Store(12)
+	payloads := []string{
+		mustPolicyPayload(t, testPolicyPublicationEvent(3, permissionapplication.NewUserRoleChange("user_role_added", userID, roleID))),
+		mustPolicyPayload(t, testPolicyPublicationEvent(8, permissionapplication.NewPolicyReloadChange("role_permissions_replaced"))),
+		mustPolicyPayload(t, testPolicyPublicationEvent(12, permissionapplication.NewUserRoleChange("user_role_removed", userID, roleID))),
+		mustPolicyPayload(t, testPolicyPublicationEvent(6, permissionapplication.NewPolicyReloadChange("role_updated"))),
+	}
+	var wg sync.WaitGroup
+	for _, payload := range payloads {
+		wg.Add(1)
+		go func(payload string) {
+			defer wg.Done()
+			source.messages <- redispubsub.Message{Channel: "rbac", Payload: payload}
+		}(payload)
+	}
+	wg.Wait()
+
+	requireEventuallyWatcherProjection(t, engine, 12)
+	require.GreaterOrEqual(t, engine.invalidateAllCount.Load(), int64(1))
+	require.Equal(t, int64(12), engine.AppliedRevision())
+	require.NoError(t, watcher.Stop(context.Background()))
+	status := watcher.Status()
+	require.False(t, status.Running)
+	require.Equal(t, permissionapplication.PolicyWatcherSubscriptionStopped, status.SubscriptionState)
+}
+
 func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
 	reloadErr := errors.New("reload failed")
 	ctrl := gomock.NewController(t)
@@ -480,8 +520,8 @@ func TestWatcherRunningStatus(t *testing.T) {
 	watcher := newWatcherForTest(source, staticPolicyRevisionSource{}, engine, time.Hour, nil)
 
 	require.False(t, watcher.Status().Running)
-	require.NoError(t, watcher.Start())
-	require.NoError(t, watcher.Start())
+	require.NoError(t, watcher.Start(context.Background()))
+	require.NoError(t, watcher.Start(context.Background()))
 	require.Eventually(t, func() bool {
 		status := watcher.Status()
 		return status.Running && status.SubscriptionState == permissionapplication.PolicyWatcherSubscriptionConnected && !status.LastReconcileSuccessAt.IsZero()
@@ -493,7 +533,30 @@ func TestWatcherRunningStatus(t *testing.T) {
 	require.False(t, status.Running)
 	require.Equal(t, permissionapplication.PolicyWatcherSubscriptionStopped, status.SubscriptionState)
 	require.Equal(t, permissionapplication.PolicyWatcherErrorNone, status.SubscriptionErrorCategory)
-	require.ErrorIs(t, watcher.Start(), redispubsub.ErrStopped)
+	require.ErrorIs(t, watcher.Start(context.Background()), redispubsub.ErrStopped)
+}
+
+func TestWatcherStartDerivesRunContextFromLifecycleContext(t *testing.T) {
+	const contextValue = "lifecycle"
+
+	source := newFakeMessageSource(redispubsub.Status{State: redispubsub.StateCreated, ErrorCategory: redispubsub.ErrorNone})
+	revisions := &capturingPolicyRevisionSource{value: make(chan any, 1)}
+	engine := &faultInjectedPolicyReloadEngine{ready: true}
+	watcher := newWatcherForTest(source, revisions, engine, time.Hour, nil)
+	startCtx, cancel := context.WithCancel(context.WithValue(context.Background(), watcherLifecycleContextKey{}, contextValue))
+
+	require.NoError(t, watcher.Start(startCtx))
+
+	select {
+	case value := <-revisions.value:
+		require.Equal(t, contextValue, value)
+	case <-time.After(time.Second):
+		t.Fatal("watcher did not use lifecycle context for revision check")
+	}
+	require.True(t, watcher.Status().Running)
+	cancel()
+	require.Eventually(t, func() bool { return !watcher.Status().Running }, time.Second, time.Millisecond)
+	require.NoError(t, watcher.Stop(context.Background()))
 }
 
 func TestWatcherReconcilesWhileSubscriptionIsReconnecting(t *testing.T) {
@@ -505,7 +568,7 @@ func TestWatcherReconcilesWhileSubscriptionIsReconnecting(t *testing.T) {
 	engine := &faultInjectedPolicyReloadEngine{appliedRevision: 2, targetRevision: 2, ready: true}
 	watcher := newWatcherForTest(source, staticPolicyRevisionSource{revision: 8}, engine, 5*time.Millisecond, nil)
 
-	require.NoError(t, watcher.Start())
+	require.NoError(t, watcher.Start(context.Background()))
 	source.setStatus(redispubsub.Status{
 		Running: true, State: redispubsub.StateReconnecting, ErrorCategory: redispubsub.ErrorSubscribe,
 		LastFailureAt: failureAt, Reconnects: 3,
@@ -517,6 +580,40 @@ func TestWatcherReconcilesWhileSubscriptionIsReconnecting(t *testing.T) {
 			status.SubscriptionErrorCategory == permissionapplication.PolicyWatcherErrorSubscribe &&
 			status.ReconnectAttempts == 3 && !status.LastReconcileSuccessAt.IsZero()
 	}, time.Second, time.Millisecond)
+	connectedAt := time.Now()
+	source.setStatus(redispubsub.Status{
+		Running: true, State: redispubsub.StateConnected, ErrorCategory: redispubsub.ErrorNone,
+		LastConnectedAt: connectedAt, Reconnects: 3,
+	})
+	require.Eventually(t, func() bool {
+		status := watcher.Status()
+		return status.Running && status.SubscriptionState == permissionapplication.PolicyWatcherSubscriptionConnected &&
+			status.SubscriptionErrorCategory == permissionapplication.PolicyWatcherErrorNone &&
+			status.LastSubscriptionSuccessAt.Equal(connectedAt)
+	}, time.Second, time.Millisecond)
+	require.NoError(t, watcher.Stop(context.Background()))
+}
+
+func TestWatcherKeepsReconcilingAfterMessageChannelCloses(t *testing.T) {
+	source := newFakeMessageSource(redispubsub.Status{State: redispubsub.StateCreated, ErrorCategory: redispubsub.ErrorNone})
+	revisions := &atomicPolicyRevisionSource{}
+	revisions.Store(2)
+	engine := &faultInjectedPolicyReloadEngine{appliedRevision: 2, targetRevision: 2, ready: true}
+	watcher := newWatcherForTest(source, revisions, engine, time.Millisecond, nil)
+
+	require.NoError(t, watcher.Start(context.Background()))
+	require.Eventually(t, func() bool {
+		return watcher.Status().Running && !watcher.Status().LastReconcileSuccessAt.IsZero()
+	}, time.Second, time.Millisecond)
+
+	source.closeOnce.Do(func() { close(source.messages) })
+	revisions.Store(9)
+
+	requireEventuallyWatcherProjection(t, engine, 9)
+	status := watcher.Status()
+	require.True(t, status.Running)
+	require.Equal(t, permissionapplication.PolicyWatcherSubscriptionConnected, status.SubscriptionState)
+	require.Equal(t, permissionapplication.PolicyWatcherErrorNone, status.ReconcileErrorCategory)
 	require.NoError(t, watcher.Stop(context.Background()))
 }
 
@@ -527,7 +624,7 @@ func TestWatcherStopCancelsBlockedPayloadWithoutRecordingFailure(t *testing.T) {
 	engine := &faultInjectedPolicyReloadEngine{ready: true}
 	watcher := newWatcherForTest(source, revisions, engine, time.Hour, nil)
 
-	require.NoError(t, watcher.Start())
+	require.NoError(t, watcher.Start(context.Background()))
 	source.messages <- redispubsub.Message{Channel: "rbac", Payload: payload}
 	select {
 	case <-revisions.blocked:
@@ -538,6 +635,30 @@ func TestWatcherStopCancelsBlockedPayloadWithoutRecordingFailure(t *testing.T) {
 	status := watcher.Status()
 	require.False(t, status.Running)
 	require.True(t, status.LastFailureAt.IsZero())
+}
+
+func TestWatcherStopCancelsBlockedReloadWithoutRecordingFailure(t *testing.T) {
+	payload := mustPolicyPayload(t, testPolicyPublicationEvent(9, permissionapplication.NewPolicyReloadChange("role_updated")))
+	source := newFakeMessageSource(redispubsub.Status{State: redispubsub.StateCreated, ErrorCategory: redispubsub.ErrorNone})
+	revisions := &sequencePolicyRevisionSource{results: []policyRevisionResult{{revision: 0}, {revision: 9}}}
+	engine := newBlockingPolicyReloadEngine()
+	watcher := newWatcherForTest(source, revisions, engine, time.Hour, nil)
+
+	require.NoError(t, watcher.Start(context.Background()))
+	source.messages <- redispubsub.Message{Channel: "rbac", Payload: payload}
+	select {
+	case <-engine.started:
+	case <-time.After(time.Second):
+		t.Fatal("watcher reload did not reach the blocking engine")
+	}
+
+	require.NoError(t, watcher.Stop(context.Background()))
+	status := watcher.Status()
+	require.False(t, status.Running)
+	require.Equal(t, permissionapplication.PolicyWatcherSubscriptionStopped, status.SubscriptionState)
+	require.Equal(t, permissionapplication.PolicyWatcherErrorNone, status.ReconcileErrorCategory)
+	require.True(t, status.LastFailureAt.IsZero())
+	require.Equal(t, int64(0), engine.AppliedRevision())
 }
 
 func TestNewWatcherDoesNotStartBackgroundLoop(t *testing.T) {
@@ -561,7 +682,7 @@ func TestWatcherStartPropagatesMessageSourceError(t *testing.T) {
 	engine := &faultInjectedPolicyReloadEngine{ready: true}
 	watcher := newWatcherForTest(source, staticPolicyRevisionSource{}, engine, time.Hour, nil)
 
-	require.ErrorIs(t, watcher.Start(), startErr)
+	require.ErrorIs(t, watcher.Start(context.Background()), startErr)
 	require.False(t, watcher.Status().Running)
 	require.Equal(t, int64(1), source.startCalls.Load())
 }
@@ -598,7 +719,7 @@ func TestWatcherStopHonorsDeadlineAndCanBeRepeated(t *testing.T) {
 	engine := &faultInjectedPolicyReloadEngine{ready: true}
 	watcher := newWatcherForTest(source, staticPolicyRevisionSource{}, engine, time.Hour, nil)
 
-	require.NoError(t, watcher.Start())
+	require.NoError(t, watcher.Start(context.Background()))
 	require.True(t, watcher.Status().Running)
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
@@ -675,6 +796,56 @@ func (e *faultInjectedPolicyReloadEngine) reloads() []int64 {
 	return append([]int64(nil), e.reloadRevisions...)
 }
 
+type blockingPolicyReloadEngine struct {
+	mu              sync.Mutex
+	started         chan struct{}
+	startOnce       sync.Once
+	appliedRevision int64
+	targetRevision  int64
+}
+
+func newBlockingPolicyReloadEngine() *blockingPolicyReloadEngine {
+	return &blockingPolicyReloadEngine{started: make(chan struct{})}
+}
+
+func (e *blockingPolicyReloadEngine) ObserveTargetRevision(targetRevision int64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if targetRevision > e.targetRevision {
+		e.targetRevision = targetRevision
+	}
+}
+
+func (e *blockingPolicyReloadEngine) ReloadToRevision(ctx context.Context, targetRevision int64) (int64, error) {
+	return e.reload(ctx, targetRevision)
+}
+
+func (e *blockingPolicyReloadEngine) RefreshToRevision(ctx context.Context, targetRevision int64) (int64, error) {
+	return e.reload(ctx, targetRevision)
+}
+
+func (e *blockingPolicyReloadEngine) reload(ctx context.Context, targetRevision int64) (int64, error) {
+	e.ObserveTargetRevision(targetRevision)
+	e.startOnce.Do(func() { close(e.started) })
+	<-ctx.Done()
+	return e.AppliedRevision(), ctx.Err()
+}
+
+func (e *blockingPolicyReloadEngine) ProjectionStatus() permissionapplication.PolicyProjectionStatus {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: e.appliedRevision >= e.targetRevision, AppliedRevision: e.appliedRevision, TargetRevision: e.targetRevision}
+}
+
+func (e *blockingPolicyReloadEngine) AppliedRevision() int64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.appliedRevision
+}
+
+func (*blockingPolicyReloadEngine) InvalidateUserRole(uuid.UUID) {}
+func (*blockingPolicyReloadEngine) InvalidateAllUserRoles()      {}
+
 func requireEventuallyWatcherProjection(t *testing.T, engine *faultInjectedPolicyReloadEngine, revision int64) {
 	t.Helper()
 	require.Eventually(t, func() bool {
@@ -705,7 +876,7 @@ func newFakeMessageSource(status redispubsub.Status) *fakeMessageSource {
 	return &fakeMessageSource{status: status, messages: make(chan redispubsub.Message, 8)}
 }
 
-func (s *fakeMessageSource) Start() error {
+func (s *fakeMessageSource) Start(context.Context) error {
 	s.startCalls.Add(1)
 	if s.startErr != nil {
 		return s.startErr
@@ -761,6 +932,32 @@ type staticPolicyRevisionSource struct {
 
 func (s staticPolicyRevisionSource) LatestPolicyRevision(context.Context) (int64, error) {
 	return s.revision, nil
+}
+
+type atomicPolicyRevisionSource struct {
+	revision atomic.Int64
+}
+
+func (s *atomicPolicyRevisionSource) Store(revision int64) {
+	s.revision.Store(revision)
+}
+
+func (s *atomicPolicyRevisionSource) LatestPolicyRevision(context.Context) (int64, error) {
+	return s.revision.Load(), nil
+}
+
+type watcherLifecycleContextKey struct{}
+
+type capturingPolicyRevisionSource struct {
+	value chan any
+}
+
+func (s *capturingPolicyRevisionSource) LatestPolicyRevision(ctx context.Context) (int64, error) {
+	select {
+	case s.value <- ctx.Value(watcherLifecycleContextKey{}):
+	default:
+	}
+	return 0, nil
 }
 
 type failingPolicyRevisionSource struct {

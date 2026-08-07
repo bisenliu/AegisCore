@@ -49,7 +49,7 @@ type Watcher struct {
 }
 
 type messageSource interface {
-	Start() error
+	Start(context.Context) error
 	Stop(context.Context) error
 	Messages() <-chan redispubsub.Message
 	Status() redispubsub.Status
@@ -76,7 +76,10 @@ func newWatcher(source messageSource, revisionSource permissionapplication.Lates
 }
 
 // Start 启动 Pub/Sub 监听和定时版本补偿检查。
-func (w *Watcher) Start() error {
+func (w *Watcher) Start(ctx context.Context) error {
+	if ctx == nil {
+		return errors.New("watcher start context is required")
+	}
 	w.mu.Lock()
 	if w.stopped {
 		w.mu.Unlock()
@@ -86,20 +89,20 @@ func (w *Watcher) Start() error {
 		w.mu.Unlock()
 		return nil
 	}
-	if err := w.source.Start(); err != nil {
+	if err := w.source.Start(ctx); err != nil {
 		w.mu.Unlock()
 		return err
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	runCtx, cancel := context.WithCancel(ctx)
 	if w.log != nil {
-		ctx = logger.ToContext(ctx, w.log)
+		runCtx = logger.ToContext(runCtx, w.log)
 	}
 	w.cancel = cancel
 	w.done = make(chan struct{})
 	w.status.Running = true
 	done := w.done
 	w.mu.Unlock()
-	go w.run(ctx, done)
+	go w.run(runCtx, done)
 	return nil
 }
 

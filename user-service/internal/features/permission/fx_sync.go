@@ -97,7 +97,7 @@ type OutboxDispatcherResult struct {
 
 // policyWatcherRunner 是 lifecycle 对 policy watcher 的最小控制面。
 type policyWatcherRunner interface {
-	Start() error
+	Start(context.Context) error
 	Stop(context.Context) error
 }
 

@@ -181,10 +181,12 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 func TestStopRBACLifecycleJoinsDispatcherAndWatcherErrors(t *testing.T) {
 	dispatcherErr := errors.New("dispatcher stop failed")
 	watcherErr := errors.New("watcher stop failed")
+	engineErr := errors.New("engine stop failed")
 
 	stopDone := make(chan error, 1)
+	rootCanceled := false
 	go func() {
-		stopDone <- stopRBACLifecycle(context.Background(), func(context.Context) error { return dispatcherErr }, func(context.Context) error { return watcherErr })
+		stopDone <- stopRBACLifecycle(context.Background(), func() { rootCanceled = true }, func(context.Context) error { return dispatcherErr }, func(context.Context) error { return watcherErr }, func(context.Context) error { return engineErr })
 	}()
 	var err error
 	select {
@@ -194,6 +196,8 @@ func TestStopRBACLifecycleJoinsDispatcherAndWatcherErrors(t *testing.T) {
 	}
 	require.ErrorIs(t, err, watcherErr)
 	require.ErrorIs(t, err, dispatcherErr)
+	require.ErrorIs(t, err, engineErr)
+	require.True(t, rootCanceled)
 }
 
 func TestRegisterRBACLifecycleStopsDispatcherAndWatcherAfterWatcherError(t *testing.T) {
@@ -204,7 +208,7 @@ func TestRegisterRBACLifecycleStopsDispatcherAndWatcherAfterWatcherError(t *test
 
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
 		Lifecycle: lifecycle,
-		Runtime:   &PermissionRuntime{Initializer: &permissionModulePolicyInitializer{}, Watcher: watcher, Dispatcher: dispatcher},
+		Runtime:   &PermissionRuntime{EngineLifecycle: &permissionModuleEngineLifecycle{}, Initializer: &permissionModulePolicyInitializer{}, Watcher: watcher, Dispatcher: dispatcher},
 	})
 	require.Len(t, lifecycle.hooks, 1)
 
@@ -219,20 +223,23 @@ func TestRegisterRBACLifecycleOrdersStartAndStop(t *testing.T) {
 	var order []string
 	lifecycle := &permissionModuleLifecycle{}
 	initializer := &permissionModulePolicyInitializer{order: &order}
+	engineLifecycle := &permissionModuleEngineLifecycle{order: &order}
 	watcher := &permissionModuleApplicationWatcher{order: &order}
 	dispatcher := &permissionModuleDispatcher{order: &order}
 	startCtx := context.WithValue(context.Background(), permissionModuleLifecycleContextKey{}, "start")
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
 		Lifecycle: lifecycle,
-		Runtime:   &PermissionRuntime{Initializer: initializer, Watcher: watcher, Dispatcher: dispatcher},
+		Runtime:   &PermissionRuntime{EngineLifecycle: engineLifecycle, Initializer: initializer, Watcher: watcher, Dispatcher: dispatcher},
 	})
 
 	require.NoError(t, lifecycle.hooks[0].OnStart(startCtx))
-	require.Equal(t, []string{"initializer.initialize", "watcher.start", "dispatcher.start"}, order)
-	require.True(t, startCtx == dispatcher.startCtx)
+	require.Equal(t, []string{"engine.start", "initializer.initialize", "watcher.start", "dispatcher.start"}, order)
+	require.Equal(t, "start", engineLifecycle.startCtx.Value(permissionModuleLifecycleContextKey{}))
+	require.Equal(t, "start", watcher.startCtx.Value(permissionModuleLifecycleContextKey{}))
+	require.Equal(t, "start", dispatcher.startCtx.Value(permissionModuleLifecycleContextKey{}))
 	order = nil
 	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
-	require.Equal(t, []string{"dispatcher.stop", "watcher.stop"}, order)
+	require.Equal(t, []string{"dispatcher.stop", "watcher.stop", "engine.stop"}, order)
 }
 
 func TestRegisterRBACLifecycleRollsBackWhenWatcherStartFails(t *testing.T) {
@@ -245,16 +252,17 @@ func TestRegisterRBACLifecycleRollsBackWhenWatcherStartFails(t *testing.T) {
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
 		Lifecycle: lifecycle,
 		Runtime: &PermissionRuntime{
-			Initializer: &permissionModulePolicyInitializer{order: &order},
-			Watcher:     watcher,
-			Dispatcher:  dispatcher,
+			EngineLifecycle: &permissionModuleEngineLifecycle{order: &order},
+			Initializer:     &permissionModulePolicyInitializer{order: &order},
+			Watcher:         watcher,
+			Dispatcher:      dispatcher,
 		},
 	})
 
 	err := lifecycle.hooks[0].OnStart(context.Background())
 	require.ErrorIs(t, err, startErr)
 	require.ErrorIs(t, err, stopErr)
-	require.Equal(t, []string{"initializer.initialize", "watcher.start", "watcher.stop"}, order)
+	require.Equal(t, []string{"engine.start", "initializer.initialize", "watcher.start", "watcher.stop", "engine.stop"}, order)
 	require.False(t, dispatcher.started)
 }
 
@@ -268,16 +276,17 @@ func TestRegisterRBACLifecycleRollsBackWhenDispatcherStartFails(t *testing.T) {
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
 		Lifecycle: lifecycle,
 		Runtime: &PermissionRuntime{
-			Initializer: &permissionModulePolicyInitializer{order: &order},
-			Watcher:     watcher,
-			Dispatcher:  dispatcher,
+			EngineLifecycle: &permissionModuleEngineLifecycle{order: &order},
+			Initializer:     &permissionModulePolicyInitializer{order: &order},
+			Watcher:         watcher,
+			Dispatcher:      dispatcher,
 		},
 	})
 
 	err := lifecycle.hooks[0].OnStart(context.Background())
 	require.ErrorIs(t, err, startErr)
 	require.ErrorIs(t, err, watcherErr)
-	require.Equal(t, []string{"initializer.initialize", "watcher.start", "dispatcher.start", "watcher.stop"}, order)
+	require.Equal(t, []string{"engine.start", "initializer.initialize", "watcher.start", "dispatcher.start", "watcher.stop", "engine.stop"}, order)
 }
 
 func TestPermissionModuleRequiresMetricsProvider(t *testing.T) {
@@ -398,13 +407,37 @@ type permissionModulePolicyInitializer struct {
 	order       *[]string
 }
 
+type permissionModuleEngineLifecycle struct {
+	started   bool
+	startCtx  context.Context
+	startErr  error
+	stopCalls int
+	stopErr   error
+	order     *[]string
+}
+
 func (i *permissionModulePolicyInitializer) InitializeFailClosed(context.Context) {
 	i.initialized = true
 	appendPermissionModuleOrder(i.order, "initializer.initialize")
 }
 
+func (e *permissionModuleEngineLifecycle) Start(ctx context.Context) error {
+	appendPermissionModuleOrder(e.order, "engine.start")
+	e.startCtx = ctx
+	e.started = e.startErr == nil
+	return e.startErr
+}
+
+func (e *permissionModuleEngineLifecycle) Stop(context.Context) error {
+	appendPermissionModuleOrder(e.order, "engine.stop")
+	e.stopCalls++
+	e.started = false
+	return e.stopErr
+}
+
 type permissionModuleApplicationWatcher struct {
 	started   bool
+	startCtx  context.Context
 	startErr  error
 	stopCalls int
 	stopErr   error
@@ -434,8 +467,9 @@ func (d *permissionModuleDispatcher) Stop(context.Context) error {
 	return d.stopErr
 }
 
-func (w *permissionModuleApplicationWatcher) Start() error {
+func (w *permissionModuleApplicationWatcher) Start(ctx context.Context) error {
 	appendPermissionModuleOrder(w.order, "watcher.start")
+	w.startCtx = ctx
 	if w.startErr != nil {
 		return w.startErr
 	}

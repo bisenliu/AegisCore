@@ -105,34 +105,18 @@ func (d *Dispatcher) Stop(ctx context.Context) error {
 	}
 }
 
-// DispatchOnce claim 并逐条处理一个 batch；单条失败不会阻塞同 batch 后续事件。
-func (d *Dispatcher) DispatchOnce(ctx context.Context) error {
-	now := d.clock.Now()
-	claims, err := d.store.Claim(ctx, now, d.settings.BatchSize, d.settings.ClaimTimeout)
+// DispatchOnce claim 并逐条处理一个 batch；返回结果中的成功计数表示同 batch 中可能已经 publish 并 ack 的事件。
+func (d *Dispatcher) DispatchOnce(ctx context.Context) (DispatcherDispatchResult, error) {
+	result, claims, err := d.claimDispatchBatch(ctx)
 	if err != nil {
-		d.recordError(DispatcherErrorClaim)
-		d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherClaim, MetricsResultFailure, MetricsReasonClaimFailed, MetricsKindNone)
-		logger.Error(d.logContext(ctx), "rbac policy outbox claim failed", logger.StackTrace(zap.String("error_category", DispatcherErrorClaim))...)
-		return fmt.Errorf("claim rbac policy outbox events: %w", err)
+		return result, err
 	}
-	d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherClaim, MetricsResultSuccess, MetricsReasonNone, MetricsKindNone)
-	d.log.Debug("rbac policy outbox events claimed", zap.Int("claimed_count", len(claims)))
-	var dispatchErr error
-	for _, claim := range claims {
-		if err := ctx.Err(); err != nil {
-			return errors.Join(dispatchErr, err)
-		}
-		if err := d.dispatchClaim(ctx, claim); err != nil {
-			dispatchErr = errors.Join(dispatchErr, err)
-		}
+	result, dispatchErr := d.dispatchBatch(ctx, result, claims)
+	if errors.Is(dispatchErr, context.Canceled) {
+		return d.finalizeDispatchResult(result, dispatchErr)
 	}
-	if _, err := d.Status(ctx); err != nil {
-		dispatchErr = errors.Join(dispatchErr, err)
-	}
-	if dispatchErr == nil && len(claims) > 0 {
-		d.clearError()
-	}
-	return dispatchErr
+	statusErr := d.refreshDispatchStatus(ctx, &result)
+	return d.finalizeDispatchResult(result, errors.Join(dispatchErr, statusErr))
 }
 
 // Status 合并进程内运行状态与 store 的只读 backlog 快照。
@@ -160,11 +144,77 @@ func (d *Dispatcher) Status(ctx context.Context) (DispatcherStatus, error) {
 	return status, nil
 }
 
-func (d *Dispatcher) dispatchClaim(ctx context.Context, claim OutboxClaim) error {
+func (d *Dispatcher) claimDispatchBatch(ctx context.Context) (DispatcherDispatchResult, []OutboxClaim, error) {
+	now := d.clock.Now()
+	claims, err := d.store.Claim(ctx, now, d.settings.BatchSize, d.settings.ClaimTimeout)
+	if err != nil {
+		d.recordError(DispatcherErrorClaim)
+		d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherClaim, MetricsResultFailure, MetricsReasonClaimFailed, MetricsKindNone)
+		logger.Error(d.logContext(ctx), "rbac policy outbox claim failed", logger.StackTrace(zap.String("error_category", DispatcherErrorClaim))...)
+		return DispatcherDispatchResult{}, nil, dispatchError(DispatcherDispatchStageClaim, DispatcherErrorClaim, OutboxClaim{}, fmt.Errorf("claim rbac policy outbox events: %w", err))
+	}
+	d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherClaim, MetricsResultSuccess, MetricsReasonNone, MetricsKindNone)
+	d.log.Debug("rbac policy outbox events claimed", zap.Int("claimed_count", len(claims)))
+	return DispatcherDispatchResult{Claimed: len(claims)}, claims, nil
+}
+
+func (d *Dispatcher) dispatchBatch(ctx context.Context, result DispatcherDispatchResult, claims []OutboxClaim) (DispatcherDispatchResult, error) {
+	var dispatchErr error
+	for _, claim := range claims {
+		if err := ctx.Err(); err != nil {
+			return result, errors.Join(dispatchErr, dispatchError(DispatcherDispatchStageContext, DispatcherErrorContext, claim, err))
+		}
+		claimResult, err := d.dispatchClaim(ctx, claim)
+		if claimResult.delivered {
+			result.Delivered++
+		}
+		if claimResult.acknowledged {
+			result.Acknowledged++
+		}
+		if claimResult.retried {
+			result.Retried++
+		}
+		if claimResult.failed {
+			result.Failed++
+		}
+		if err != nil {
+			dispatchErr = errors.Join(dispatchErr, err)
+		}
+	}
+	return result, dispatchErr
+}
+
+func (d *Dispatcher) refreshDispatchStatus(ctx context.Context, result *DispatcherDispatchResult) error {
+	status, err := d.Status(ctx)
+	if err != nil {
+		return dispatchError(DispatcherDispatchStageStatus, DispatcherErrorBacklog, OutboxClaim{}, err)
+	}
+	result.Status = status
+	result.StatusRefreshed = true
+	return nil
+}
+
+func (d *Dispatcher) finalizeDispatchResult(result DispatcherDispatchResult, err error) (DispatcherDispatchResult, error) {
+	if err == nil && result.Claimed > 0 {
+		d.clearError()
+	}
+	return result, err
+}
+
+type dispatcherClaimResult struct {
+	delivered    bool
+	acknowledged bool
+	retried      bool
+	failed       bool
+}
+
+func (d *Dispatcher) dispatchClaim(ctx context.Context, claim OutboxClaim) (dispatcherClaimResult, error) {
+	var result dispatcherClaimResult
 	if err := d.publisher.PublishPolicyRevision(ctx, claim.Event); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
+			return result, dispatchError(DispatcherDispatchStageContext, DispatcherErrorContext, claim, ctxErr)
 		}
+		result.failed = true
 		failedAt := d.clock.Now()
 		d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherPublish, MetricsResultFailure, MetricsReasonPublishFailed, claim.Event.Kind)
 		logger.Error(d.logContext(ctx), "rbac policy outbox publish failed", logger.StackTrace(zap.Int64("policy_revision", claim.Event.Revision), zap.Int("attempt_count", claim.AttemptCount+1), zap.String("error_category", DispatcherErrorPublish))...)
@@ -175,21 +225,29 @@ func (d *Dispatcher) dispatchClaim(ctx context.Context, claim OutboxClaim) error
 			d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherFailure, MetricsResultFailure, MetricsReasonFailureRecordFailed, claim.Event.Kind)
 			d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherRetry, MetricsResultFailure, MetricsReasonFailureRecordFailed, claim.Event.Kind)
 			logger.Error(d.logContext(ctx), "rbac policy outbox failure record failed", logger.StackTrace(zap.Int64("policy_revision", claim.Event.Revision), zap.Int("attempt_count", claim.AttemptCount+1), zap.String("error_category", DispatcherErrorFailureRecord))...)
-			return errors.Join(fmt.Errorf("publish rbac policy revision %d: %w", claim.Event.Revision, err), fmt.Errorf("record rbac policy outbox failure: %w", failErr))
+			return result, errors.Join(
+				dispatchError(DispatcherDispatchStagePublish, DispatcherErrorPublish, claim, fmt.Errorf("publish rbac policy revision %d: %w", claim.Event.Revision, err)),
+				dispatchError(DispatcherDispatchStageFailureRecord, DispatcherErrorFailureRecord, claim, fmt.Errorf("record rbac policy outbox failure: %w", failErr)),
+			)
 		}
 		if !updated {
 			d.recordError(DispatcherErrorClaimLost)
 			d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherFailure, MetricsResultFailure, MetricsReasonClaimLost, claim.Event.Kind)
 			d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherRetry, MetricsResultFailure, MetricsReasonClaimLost, claim.Event.Kind)
 			logger.Warn(d.logContext(ctx), "rbac policy outbox failure claim lost", zap.Int64("policy_revision", claim.Event.Revision), zap.Int("attempt_count", claim.AttemptCount+1), zap.String("error_category", DispatcherErrorClaimLost))
-			return errors.Join(fmt.Errorf("publish rbac policy revision %d: %w", claim.Event.Revision, err), claimLostError(claim.Event.EventID))
+			return result, errors.Join(
+				dispatchError(DispatcherDispatchStagePublish, DispatcherErrorPublish, claim, fmt.Errorf("publish rbac policy revision %d: %w", claim.Event.Revision, err)),
+				dispatchError(DispatcherDispatchStageFailureRecord, DispatcherErrorClaimLost, claim, claimLostError(claim.Event.EventID)),
+			)
 		}
 		d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherFailure, MetricsResultSuccess, MetricsReasonNone, claim.Event.Kind)
 		d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherRetry, MetricsResultSuccess, MetricsReasonPublishFailed, claim.Event.Kind)
 		logger.Warn(d.logContext(ctx), "rbac policy outbox retry scheduled", zap.Int64("policy_revision", claim.Event.Revision), zap.Int("attempt_count", claim.AttemptCount+1), zap.String("kind", claim.Event.Kind), zap.String("reason", MetricsReasonPublishFailed), zap.Duration("retry_delay", nextAttemptAt.Sub(failedAt)))
 		d.recordError(DispatcherErrorPublish)
-		return fmt.Errorf("publish rbac policy revision %d: %w", claim.Event.Revision, err)
+		result.retried = true
+		return result, dispatchError(DispatcherDispatchStagePublish, DispatcherErrorPublish, claim, fmt.Errorf("publish rbac policy revision %d: %w", claim.Event.Revision, err))
 	}
+	result.delivered = true
 	d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherPublish, MetricsResultSuccess, MetricsReasonNone, claim.Event.Kind)
 
 	// publish 成功而 Ack 失败时事件会在 lease 过期后重投，因此整体是至少一次投递；revision-aware 消费方必须能重复处理同一事件。
@@ -199,18 +257,25 @@ func (d *Dispatcher) dispatchClaim(ctx context.Context, claim OutboxClaim) error
 		d.recordError(DispatcherErrorAck)
 		d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherAck, MetricsResultFailure, MetricsReasonAckFailed, claim.Event.Kind)
 		logger.Error(d.logContext(ctx), "rbac policy outbox acknowledgement failed", logger.StackTrace(zap.Int64("policy_revision", claim.Event.Revision), zap.Int("attempt_count", claim.AttemptCount+1), zap.String("error_category", DispatcherErrorAck))...)
-		return fmt.Errorf("ack rbac policy outbox event %s: %w", claim.Event.EventID.String(), err)
+		result.failed = true
+		return result, dispatchError(DispatcherDispatchStageAck, DispatcherErrorAck, claim, fmt.Errorf("ack rbac policy outbox event %s: %w", claim.Event.EventID.String(), err))
 	}
 	if !updated {
 		d.recordError(DispatcherErrorClaimLost)
 		d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherAck, MetricsResultFailure, MetricsReasonClaimLost, claim.Event.Kind)
 		logger.Warn(d.logContext(ctx), "rbac policy outbox acknowledgement claim lost", zap.Int64("policy_revision", claim.Event.Revision), zap.Int("attempt_count", claim.AttemptCount+1), zap.String("error_category", DispatcherErrorClaimLost))
-		return claimLostError(claim.Event.EventID)
+		result.failed = true
+		return result, dispatchError(DispatcherDispatchStageAck, DispatcherErrorClaimLost, claim, claimLostError(claim.Event.EventID))
 	}
+	result.acknowledged = true
 	d.metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherAck, MetricsResultSuccess, MetricsReasonNone, claim.Event.Kind)
 	d.recordSuccess(deliveredAt)
 	logger.Info(d.logContext(ctx), "rbac policy outbox event delivered", zap.Int64("policy_revision", claim.Event.Revision), zap.Int("attempt_count", claim.AttemptCount+1), zap.String("kind", claim.Event.Kind), zap.String("reason", claim.Event.Reason))
-	return nil
+	return result, nil
+}
+
+func dispatchError(stage DispatcherDispatchStage, category string, claim OutboxClaim, cause error) error {
+	return &DispatcherDispatchError{Stage: stage, Category: category, EventID: claim.Event.EventID, Revision: claim.Event.Revision, Cause: cause}
 }
 
 func (d *Dispatcher) run(ctx context.Context, done chan struct{}) {
@@ -218,9 +283,10 @@ func (d *Dispatcher) run(ctx context.Context, done chan struct{}) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			d.recordError(DispatcherErrorUnexpectedExit)
-			d.log.Error("rbac policy outbox dispatcher exited unexpectedly",
+			logger.Error(d.logContext(ctx), "rbac policy outbox dispatcher exited unexpectedly", logger.StackTrace(
 				zap.String("error_category", DispatcherErrorUnexpectedExit),
-			)
+				zap.Any("recovered", recovered),
+			)...)
 		}
 		if ticker != nil {
 			ticker.Stop()
@@ -240,7 +306,7 @@ func (d *Dispatcher) run(ctx context.Context, done chan struct{}) {
 	ticker = d.clock.NewTicker(d.settings.PollInterval)
 
 	for {
-		if err := d.DispatchOnce(ctx); err != nil && ctx.Err() != nil {
+		if _, err := d.DispatchOnce(ctx); err != nil && ctx.Err() != nil {
 			return
 		}
 		select {

@@ -13,7 +13,7 @@ export ADMIN_BOOTSTRAP_PASSWORD
 .PHONY: help build test test-containers lint verify
 .PHONY: common-test common-test-containers common-lint common-generate common-verify
 .PHONY: tools-openapi-convert-test tools-openapi-convert-lint tools-nacos-config-seed-test tools-nacos-config-seed-lint tools-nacos-config-seed-local-host tools-nacos-config-seed-local-docker
-.PHONY: user-service-build user-service-run user-service-test user-service-test-containers user-service-lint user-service-verify user-service-architecture-lint
+.PHONY: user-service-build user-service-run user-service-test user-service-test-containers user-service-rbac-sync-race-test user-service-lint user-service-verify user-service-architecture-lint
 .PHONY: user-service-seed-rbac user-service-bootstrap-super-admin user-service-image-verify
 .PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-openapi-generate user-service-fxgraph-generate user-service-fxgraph-check
 .PHONY: compose-dashboard-generate compose-dashboard-check
@@ -86,6 +86,9 @@ user-service-test: ## 运行 user-service 测试。
 
 user-service-test-containers: ## 运行 user-service Docker-backed 测试。
 	$(MAKE) -C $(USER_SERVICE_DIR) test-containers
+
+user-service-rbac-sync-race-test: ## 使用 race detector 运行 user-service RBAC policy sync 相关测试。
+	$(MAKE) -C $(USER_SERVICE_DIR) rbac-sync-race-test
 
 user-service-lint: ## 运行 user-service lint。
 	$(MAKE) -C $(USER_SERVICE_DIR) lint

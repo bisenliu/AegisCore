@@ -21,14 +21,18 @@ type Engine struct {
 	metrics   ReloadMetrics
 	userRoles UserRoleResolver
 
-	mu              sync.RWMutex
-	enforcer        *casbinlib.Enforcer
-	appliedRevision int64
-	targetRevision  int64
-	initialized     bool
-	reloadSucceeded bool
-	lastErr         error
-	flight          *reloadFlight
+	lifecycleCtx     context.Context
+	lifecycleCancel  context.CancelFunc
+	lifecycleStarted bool
+	lifecycleDone    bool
+	mu               sync.RWMutex
+	enforcer         *casbinlib.Enforcer
+	appliedRevision  int64
+	targetRevision   int64
+	initialized      bool
+	reloadSucceeded  bool
+	lastErr          error
+	flight           *reloadFlight
 }
 
 type reloadFlight struct {
@@ -126,6 +130,16 @@ func (e *Engine) reloadToRevision(ctx context.Context, targetRevision int64, for
 		e.mu.Unlock()
 		return applied, nil
 	}
+	if !e.lifecycleStarted {
+		applied := e.appliedRevision
+		err := errors.New("casbin engine lifecycle is not started")
+		e.lastErr = err
+		e.reloadSucceeded = false
+		e.metrics.ReloadFailed()
+		e.metrics.SetLastStatus(false)
+		e.mu.Unlock()
+		return applied, err
+	}
 	flight := e.flight
 	if flight == nil {
 		flight = e.startFlightLocked(force)
@@ -159,7 +173,7 @@ func (e *Engine) reloadToRevision(ctx context.Context, targetRevision int64, for
 }
 
 func (e *Engine) startFlightLocked(force bool) *reloadFlight {
-	sharedCtx, cancel := context.WithCancel(context.Background())
+	sharedCtx, cancel := context.WithCancel(e.lifecycleCtx)
 	flight := &reloadFlight{done: make(chan struct{}), ctx: sharedCtx, cancel: cancel, force: force}
 	e.flight = flight
 	go e.runReloadFlight(flight)

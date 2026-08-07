@@ -157,16 +157,25 @@ func TestSubscriberStartIsIdempotentAndLifecycleIsOneWay(t *testing.T) {
 	factory := &scriptedFactory{subscriptions: []subscription{sub}}
 	subscriber := newSubscriber(factory.subscribe, zap.NewNop(), validOptions())
 
-	require.NoError(t, subscriber.Start())
-	require.NoError(t, subscriber.Start())
+	require.NoError(t, subscriber.Start(context.Background()))
+	require.NoError(t, subscriber.Start(context.Background()))
 	require.Eventually(t, func() bool { return subscriber.Status().State == StateConnected }, time.Second, time.Millisecond)
 	require.Equal(t, 1, factory.callCount())
 
 	require.NoError(t, subscriber.Stop(context.Background()))
 	require.Equal(t, StateStopped, subscriber.Status().State)
-	require.ErrorIs(t, subscriber.Start(), ErrStopped)
+	require.ErrorIs(t, subscriber.Start(context.Background()), ErrStopped)
 	_, open := <-subscriber.Messages()
 	require.False(t, open)
+}
+
+func TestSubscriberStartRequiresContext(t *testing.T) {
+	factory := &scriptedFactory{}
+	subscriber := newSubscriber(factory.subscribe, zap.NewNop(), validOptions())
+
+	require.Error(t, subscriber.Start(nil))
+	require.Equal(t, StateCreated, subscriber.Status().State)
+	require.Equal(t, 0, factory.callCount())
 }
 
 func TestSubscriberReconnectsAndClearsCurrentFailure(t *testing.T) {
@@ -191,7 +200,7 @@ func TestSubscriberReconnectsAndClearsCurrentFailure(t *testing.T) {
 			}
 			factory := &scriptedFactory{subscriptions: []subscription{first, second}}
 			subscriber := newSubscriber(factory.subscribe, zap.NewNop(), validOptions())
-			require.NoError(t, subscriber.Start())
+			require.NoError(t, subscriber.Start(context.Background()))
 
 			require.Eventually(t, func() bool {
 				status := subscriber.Status()
@@ -224,7 +233,7 @@ func TestSubscriberDeliversMessagesInOrder(t *testing.T) {
 	)
 	factory := &scriptedFactory{subscriptions: []subscription{sub}}
 	subscriber := newSubscriber(factory.subscribe, zap.NewNop(), validOptions())
-	require.NoError(t, subscriber.Start())
+	require.NoError(t, subscriber.Start(context.Background()))
 
 	first := <-subscriber.Messages()
 	second := <-subscriber.Messages()
@@ -267,7 +276,7 @@ func TestSubscriberStopCancelsBlockingPhases(t *testing.T) {
 			sub := newScriptedSubscription(tt.results...)
 			factory := &scriptedFactory{subscriptions: []subscription{sub}}
 			subscriber := newSubscriber(factory.subscribe, zap.NewNop(), tt.opts)
-			require.NoError(t, subscriber.Start())
+			require.NoError(t, subscriber.Start(context.Background()))
 			require.Eventually(t, func() bool { return factory.callCount() == 1 }, time.Second, time.Millisecond)
 			require.Eventually(t, func() bool { return subscriber.Status().State == tt.waitState }, time.Second, time.Millisecond)
 			if tt.name == "buffer delivery" {
@@ -281,6 +290,39 @@ func TestSubscriberStopCancelsBlockingPhases(t *testing.T) {
 			require.Equal(t, StateStopped, subscriber.Status().State)
 			require.Equal(t, int64(1), sub.closeCalls.Load())
 			require.Equal(t, 1, factory.callCount())
+		})
+	}
+}
+
+func TestSubscriberLifecycleContextCancelsBlockingPhases(t *testing.T) {
+	tests := []struct {
+		name      string
+		opts      Options
+		results   []receiveResult
+		waitState State
+	}{
+		{name: "confirmation", opts: validOptions(), waitState: StateStarting},
+		{name: "receive", opts: validOptions(), results: []receiveResult{confirmation()}, waitState: StateConnected},
+		{name: "backoff", opts: Options{Name: "backoff", Channel: testChannel, BufferSize: 1, SubscribeTimeout: time.Second, BackoffInitial: time.Hour, BackoffMax: time.Hour}, results: []receiveResult{{err: errors.New("failed")}}, waitState: StateReconnecting},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sub := newScriptedSubscription(tt.results...)
+			factory := &scriptedFactory{subscriptions: []subscription{sub}}
+			subscriber := newSubscriber(factory.subscribe, zap.NewNop(), tt.opts)
+			runCtx, cancel := context.WithCancel(context.Background())
+			require.NoError(t, subscriber.Start(runCtx))
+			require.Eventually(t, func() bool { return factory.callCount() == 1 }, time.Second, time.Millisecond)
+			require.Eventually(t, func() bool { return subscriber.Status().State == tt.waitState }, time.Second, time.Millisecond)
+
+			cancel()
+
+			require.Eventually(t, func() bool { return subscriber.Status().State == StateStopped }, time.Second, time.Millisecond)
+			require.Equal(t, int64(1), sub.closeCalls.Load())
+			require.Equal(t, 1, factory.callCount())
+			_, open := <-subscriber.Messages()
+			require.False(t, open)
 		})
 	}
 }
@@ -321,7 +363,7 @@ func TestSubscriberStopTimeoutKeepsTheSameDrain(t *testing.T) {
 	}
 	factory := &scriptedFactory{subscriptions: []subscription{sub}}
 	subscriber := newSubscriber(factory.subscribe, zap.NewNop(), validOptions())
-	require.NoError(t, subscriber.Start())
+	require.NoError(t, subscriber.Start(context.Background()))
 	<-sub.receiveStarted
 
 	timedOut, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
@@ -363,7 +405,7 @@ func TestStopBeforeStartClosesMessagesAndPreventsStart(t *testing.T) {
 
 	require.NoError(t, subscriber.Stop(context.Background()))
 	require.Equal(t, StateStopped, subscriber.Status().State)
-	require.ErrorIs(t, subscriber.Start(), ErrStopped)
+	require.ErrorIs(t, subscriber.Start(context.Background()), ErrStopped)
 	require.Equal(t, 0, factory.callCount())
 	_, open := <-subscriber.Messages()
 	require.False(t, open)

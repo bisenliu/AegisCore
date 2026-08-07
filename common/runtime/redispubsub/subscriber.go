@@ -116,18 +116,21 @@ func isNilClient(client Client) bool {
 }
 
 // Start 启动订阅；运行期重复调用幂等，停止开始后返回 ErrStopped。
-func (s *Subscriber) Start() error {
+func (s *Subscriber) Start(ctx context.Context) error {
+	if ctx == nil {
+		return errors.New("redis pubsub subscriber start context is required")
+	}
 	s.mu.Lock()
 	switch s.status.State {
 	case StateCreated:
-		ctx, cancel := context.WithCancel(context.Background())
+		runCtx, cancel := context.WithCancel(ctx)
 		done := make(chan struct{})
 		s.cancel = cancel
 		s.done = done
 		s.status.Running = true
 		s.status.State = StateStarting
 		s.mu.Unlock()
-		go s.run(ctx, done)
+		go s.run(runCtx, done)
 		return nil
 	case StateStarting, StateConnected, StateReconnecting:
 		s.mu.Unlock()

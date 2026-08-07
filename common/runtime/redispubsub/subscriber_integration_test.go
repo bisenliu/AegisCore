@@ -53,7 +53,7 @@ func TestSubscriberReceivesClassicPubSubFromRedisCluster(t *testing.T) {
 		BackoffMax:       time.Second,
 	})
 	require.NoError(t, err)
-	require.NoError(t, subscriber.Start())
+	require.NoError(t, subscriber.Start(ctx))
 	require.Eventually(t, func() bool {
 		return subscriber.Status().State == redispubsub.StateConnected
 	}, 10*time.Second, 10*time.Millisecond)

@@ -22,6 +22,7 @@ const (
 	DispatcherErrorFailureRecord  = "failure_record_failed"
 	DispatcherErrorClaimLost      = "claim_lost"
 	DispatcherErrorBacklog        = "backlog_failed"
+	DispatcherErrorContext        = "context_canceled"
 	DispatcherErrorUnexpectedExit = "unexpected_exit"
 )
 
@@ -51,6 +52,55 @@ type OutboxClaim struct {
 type OutboxBacklog struct {
 	DueCount        int
 	OldestCreatedAt *time.Time
+}
+
+// DispatcherDispatchStage 表示一次 batch dispatch 中失败所在的处理阶段。
+type DispatcherDispatchStage string
+
+const (
+	DispatcherDispatchStageClaim         DispatcherDispatchStage = "claim"
+	DispatcherDispatchStagePublish       DispatcherDispatchStage = "publish"
+	DispatcherDispatchStageAck           DispatcherDispatchStage = "ack"
+	DispatcherDispatchStageFailureRecord DispatcherDispatchStage = "failure_record"
+	DispatcherDispatchStageStatus        DispatcherDispatchStage = "status"
+	DispatcherDispatchStageContext       DispatcherDispatchStage = "context"
+)
+
+// DispatcherDispatchResult 描述一次 batch dispatch 的可观察结果；非零成功计数表示对应事件可能已经产生副本通知副作用。
+type DispatcherDispatchResult struct {
+	Claimed         int
+	Delivered       int
+	Acknowledged    int
+	Retried         int
+	Failed          int
+	StatusRefreshed bool
+	Status          DispatcherStatus
+}
+
+// DispatcherDispatchError 标记一次 batch dispatch 中可判别的失败阶段。
+type DispatcherDispatchError struct {
+	Stage    DispatcherDispatchStage
+	Category string
+	EventID  uuid.UUID
+	Revision int64
+	Cause    error
+}
+
+func (e *DispatcherDispatchError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.EventID != uuid.Nil {
+		return fmt.Sprintf("rbac policy outbox dispatch %s failed for event %s revision %d: %v", e.Stage, e.EventID.String(), e.Revision, e.Cause)
+	}
+	return fmt.Sprintf("rbac policy outbox dispatch %s failed: %v", e.Stage, e.Cause)
+}
+
+func (e *DispatcherDispatchError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
 }
 
 // OutboxStore 定义 dispatcher 消费的持久化状态机端口。

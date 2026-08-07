@@ -98,14 +98,15 @@ type PermissionUserRoleCacheStatsResult struct {
 type PermissionRuntimeParams struct {
 	fx.In
 
-	Authorizer     permissionauthorization.Authorizer           `name:"permission_authorizer"`
-	Health         permissionauthorization.PolicyHealth         `name:"permission_policy_health"`
-	Watcher        policyWatcherRunner                          `name:"permission_policy_watcher_runner"`
-	Status         permissionapplication.PolicyWatcherStatus    `name:"permission_policy_watcher_status"`
-	Dispatcher     permissionapplication.OutboxDispatcherRunner `name:"permission_outbox_dispatcher_runner"`
-	DispatchStatus permissionapplication.OutboxDispatcherStatus `name:"permission_outbox_dispatcher_status"`
-	Notifier       permissionapplication.PolicyChangeNotifier   `name:"permission_policy_change_notifier"`
-	Initializer    permissionPolicyInitializer                  `name:"permission_policy_initializer"`
+	Authorizer      permissionauthorization.Authorizer           `name:"permission_authorizer"`
+	Health          permissionauthorization.PolicyHealth         `name:"permission_policy_health"`
+	Watcher         policyWatcherRunner                          `name:"permission_policy_watcher_runner"`
+	Status          permissionapplication.PolicyWatcherStatus    `name:"permission_policy_watcher_status"`
+	Dispatcher      permissionapplication.OutboxDispatcherRunner `name:"permission_outbox_dispatcher_runner"`
+	DispatchStatus  permissionapplication.OutboxDispatcherStatus `name:"permission_outbox_dispatcher_status"`
+	Notifier        permissionapplication.PolicyChangeNotifier   `name:"permission_policy_change_notifier"`
+	Initializer     permissionPolicyInitializer                  `name:"permission_policy_initializer"`
+	EngineLifecycle permissionPolicyEngineLifecycle              `name:"permission_policy_engine_lifecycle"`
 }
 
 // PolicyEngineResult 将同一个内存引擎投影为授权、reload、健康检查和初始化端口。
@@ -116,6 +117,7 @@ type PolicyEngineResult struct {
 	ReloadEngine        permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
 	Health              permissionauthorization.PolicyHealth     `name:"permission_policy_health"`
 	Initializer         permissionPolicyInitializer              `name:"permission_policy_initializer"`
+	EngineLifecycle     permissionPolicyEngineLifecycle          `name:"permission_policy_engine_lifecycle"`
 }
 
 // 内部运行时类型
@@ -127,6 +129,7 @@ type PermissionRuntime struct {
 	WatcherStatus    permissionapplication.PolicyWatcherStatus
 	DispatcherStatus permissionapplication.OutboxDispatcherStatus
 	Notifier         permissionapplication.PolicyChangeNotifier
+	EngineLifecycle  permissionPolicyEngineLifecycle
 	Initializer      permissionPolicyInitializer
 	Watcher          policyWatcherRunner
 	Dispatcher       permissionapplication.OutboxDispatcherRunner
@@ -135,6 +138,12 @@ type PermissionRuntime struct {
 // permissionPolicyInitializer 只暴露 fail-closed 初始化能力给 lifecycle hook。
 type permissionPolicyInitializer interface {
 	InitializeFailClosed(context.Context)
+}
+
+// permissionPolicyEngineLifecycle 只暴露 Casbin engine lifecycle root 控制面给 lifecycle hook。
+type permissionPolicyEngineLifecycle interface {
+	Start(context.Context) error
+	Stop(context.Context) error
 }
 
 // Provider：授权核心
@@ -154,7 +163,7 @@ func provideUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverRes
 // provideEngine 将同一个 Casbin engine 按不同端口投影，保持授权、reload、健康检查和初始化使用同一份内存策略。
 func provideEngine(loader permissioncasbin.Loader, metrics permissioncasbin.ReloadMetrics, userRoles permissioncasbin.UserRoleResolver) PolicyEngineResult {
 	engine := permissioncasbin.NewEngine(loader, metrics, userRoles)
-	return PolicyEngineResult{AuthorizationEngine: engine, ReloadEngine: engine, Health: engine, Initializer: engine}
+	return PolicyEngineResult{AuthorizationEngine: engine, ReloadEngine: engine, Health: engine, Initializer: engine, EngineLifecycle: engine}
 }
 
 func provideAuthorizer(params AuthorizerParams) AuthorizerResult {
@@ -170,6 +179,7 @@ func newPermissionRuntime(params PermissionRuntimeParams) *PermissionRuntime {
 		WatcherStatus:    params.Status,
 		DispatcherStatus: params.DispatchStatus,
 		Notifier:         params.Notifier,
+		EngineLifecycle:  params.EngineLifecycle,
 		Initializer:      params.Initializer,
 		Watcher:          params.Watcher,
 		Dispatcher:       params.Dispatcher,
