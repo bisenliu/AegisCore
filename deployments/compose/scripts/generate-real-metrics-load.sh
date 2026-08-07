@@ -34,6 +34,9 @@ POSTGRES_DB="aegiscore"
 
 DURATION="60"
 CONCURRENCY="8"
+MIN_REQUESTS="100"
+MAX_ERROR_RATE_PERCENT="1.0"
+MAX_P95_SECONDS="1.0"
 CREATE_RATE="3"
 STATUS_RATE="5"
 AUTH_RATE="4"
@@ -89,6 +92,9 @@ Environment:
   COMPOSE_FILE                     docker compose 文件路径，默认: $COMPOSE_FILE
   DURATION                         并发流量持续秒数，默认: $DURATION
   CONCURRENCY                      并发 worker 数，默认: $CONCURRENCY
+  MIN_REQUESTS                     最少 HTTP 请求数预算，默认: $MIN_REQUESTS
+  MAX_ERROR_RATE_PERCENT           最大非预期 5xx/000 比例，默认: $MAX_ERROR_RATE_PERCENT
+  MAX_P95_SECONDS                  最大 HTTP p95 耗时秒数，默认: $MAX_P95_SECONDS
   CREATE_RATE                      每 N 轮创建用户，默认: $CREATE_RATE
   STATUS_RATE                      每 N 轮启停角色，默认: $STATUS_RATE
   AUTH_RATE                        每 N 轮执行认证请求，默认: $AUTH_RATE
@@ -583,6 +589,53 @@ report_service_metric_presence() {
   fi
 }
 
+# enforce_performance_budget 使用客户端观测结果做本地可重复预算门禁。
+enforce_performance_budget() {
+  local summary count errors p95 error_rate
+  summary="$(awk -F '\t' '
+    {
+      count++
+      if ($2 == "000" || $2 ~ /^5/) {
+        errors++
+      }
+    }
+    END {
+      if (count == 0) {
+        print "ERROR: no HTTP request records were captured" > "/dev/stderr"
+        exit 1
+      }
+      error_rate = errors * 100 / count
+      printf "%d %d %.6f", count, errors, error_rate
+    }
+  ' "$RESULTS_FILE")"
+  read -r count errors error_rate <<<"$summary"
+  p95="$(awk -F '\t' '{ print $3 + 0 }' "$RESULTS_FILE" | sort -n | awk -v count="$count" 'BEGIN { p95_index = int(count * 0.95); if (p95_index < 1) p95_index = 1 } NR == p95_index { printf "%.6f", $1; exit }')"
+
+  printf 'performance budget: requests=%d p95=%.3fs error_rate=%.2f%%\n' "$count" "$p95" "$error_rate"
+  awk \
+    -v count="$count" \
+    -v p95="$p95" \
+    -v error_rate="$error_rate" \
+    -v min_requests="$MIN_REQUESTS" \
+    -v max_error_rate="$MAX_ERROR_RATE_PERCENT" \
+    -v max_p95="$MAX_P95_SECONDS" '
+    BEGIN {
+      if (count + 0 < min_requests + 0) {
+        printf "ERROR: request count %d is below budget %d\n", count, min_requests > "/dev/stderr"
+        exit 1
+      }
+      if (p95 + 0 > max_p95 + 0) {
+        printf "ERROR: p95 %.3fs exceeds budget %.3fs\n", p95, max_p95 > "/dev/stderr"
+        exit 1
+      }
+      if (error_rate + 0 > max_error_rate + 0) {
+        printf "ERROR: error rate %.2f%% exceeds budget %.2f%%\n", error_rate, max_error_rate > "/dev/stderr"
+        exit 1
+      }
+    }
+  '
+}
+
 # histogram 在 /metrics 中会以 _bucket/_sum/_count 输出，所以单独兼容 duration 类指标。
 service_metric_present() {
   local metric="$1"
@@ -642,6 +695,7 @@ summarize_results() {
   done
 
   report_service_metric_presence
+  enforce_performance_budget
 
   log "raw request records: $RESULTS_FILE"
   log "prometheus query snapshot: $PROM_SAMPLES_FILE"

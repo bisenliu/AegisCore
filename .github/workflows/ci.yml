@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -146,14 +148,7 @@ jobs:
             **/go.sum
 
       - name: Generate coverage profiles
-        run: |
-          mkdir -p coverage
-          cd common
-          go test -coverprofile=../coverage/common.out ./...
-          go tool cover -func=../coverage/common.out > ../coverage/common.txt
-          cd ../user-service
-          go test -coverprofile=../coverage/user-service.out ./...
-          go tool cover -func=../coverage/user-service.out > ../coverage/user-service.txt
+        run: ./scripts/check-coverage.sh
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v7

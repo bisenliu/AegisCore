@@ -6,6 +6,7 @@
 |---|---|
 | `make test` | 运行 `common` 和 `user-service` 的 Go 测试 |
 | `make test-containers` | 显式运行 `common` 和 `user-service` 的全部 Docker-backed 测试 |
+| `make coverage` | 生成覆盖率报告并检查 `common` 与 user-service 手写包覆盖率基线 |
 | `make lint` | 运行各模块 `golangci-lint` |
 | `make user-service-architecture-lint` | 检查 user-service 架构边界、生成物 drift 和 OPSX 文档语言约束 |
 | `make user-service-openapi-generate` | 生成 OpenAPI 3 文档 |
@@ -31,6 +32,22 @@ Go 单元测试位于对应包内，以 `_test.go` 结尾。常见覆盖范围�
 ```bash
 make common-test
 make user-service-test
+```
+
+### 覆盖率门禁
+
+CI 的 coverage job 和本地 `make coverage` 使用同一个仓库级脚本 `scripts/check-coverage.sh`。脚本输出并上传三个 profile：
+
+- `coverage/common.out` 与 `coverage/common.txt`：`common` 全量 statement coverage，默认最低基线为 `COMMON_MIN_COVERAGE=75.0`。
+- `coverage/user-service.out` 与 `coverage/user-service.txt`：user-service 全量 statement coverage，仅用于可见性，数值会包含 Ent/OpenAPI 生成代码。
+- `coverage/user-service-handwritten.out` 与 `coverage/user-service-handwritten.txt`：user-service 手写包覆盖率门禁，排除 `user-service/docs/openapi.go` 和 `user-service/internal/persistence/ent/` 下除 `schema/` 外的 Ent 生成物，默认最低基线为 `USER_SERVICE_HANDWRITTEN_MIN_COVERAGE=75.0`。
+- changed-code coverage：在 PR 或设置 `CHANGED_COVERAGE_BASE` 时检查 `common` 与 user-service 手写 Go 文件变更行，默认最低基线为 `CHANGED_CODE_MIN_COVERAGE=80.0`；只统计落入 coverage block 的可执行行。
+
+调整基线时必须显式覆盖环境变量并同步记录原因，例如：
+
+```bash
+COMMON_MIN_COVERAGE=76.0 USER_SERVICE_HANDWRITTEN_MIN_COVERAGE=76.0 make coverage
+CHANGED_COVERAGE_BASE=origin/main CHANGED_CODE_MIN_COVERAGE=85.0 make coverage
 ```
 
 Localcache 行为或消费边界变化后，需用 race detector 覆盖固定 TTL、容量驱逐、singleflight、caller 取消、loader timeout、强失效和 fail-closed 场景：
@@ -109,7 +126,32 @@ go test ./tests/e2e -run TestRBACOutboxRedisRecoveryConvergesAllProjectionsWitho
 make test-containers
 ```
 
-## 4. 断言和失败处理
+## 4. 性能和容量验收
+
+本地 Compose 环境的可重复性能入口是 `deployments/compose/scripts/generate-real-metrics-load.sh`。脚本覆盖管理员登录、refresh、认证异常、用户创建/列表、角色启停、RBAC 授权和 watcher revision 检查，并采集 user-service `/metrics` 与 Prometheus 查询快照。
+
+默认预算：
+
+- `CONCURRENCY=8`、`DURATION=60`，用于覆盖常规并发流量。
+- `MIN_REQUESTS=100`，防止空跑或流量不足。
+- `MAX_P95_SECONDS=1.0`，限制客户端观测 HTTP p95。
+- `MAX_ERROR_RATE_PERCENT=1.0`，限制 `000` 和 `5xx` 请求比例。
+
+100 并发验收和容量记录示例：
+
+```bash
+CONCURRENCY=100 DURATION=120 MIN_REQUESTS=1000 MAX_P95_SECONDS=2.0 MAX_ERROR_RATE_PERCENT=1.0 \
+  ./deployments/compose/scripts/generate-real-metrics-load.sh
+```
+
+执行后必须保留脚本输出的三个 artifact 路径，并在验收记录中说明：
+
+- HTTP 请求数、p95 和错误率是否满足预算。
+- `aegiscore_postgres_pool_open_connections`、Redis 健康指标、`process_resident_memory_bytes`、`go_goroutines` 和 CPU/内存采样是否接近 Compose、Kubernetes 或 Helm 中配置的上限。
+- HPA 最大副本、单副本数据库连接池上限和 PostgreSQL `max_connections` 是否满足 `maxReplicas * 单副本最大连接数 + 管理/迁移预留连接 <= 数据库可用连接`。
+- Redis 连接数、Pub/Sub watcher 和 RBAC 写入收敛是否在 100 并发场景下无持续 lag 或重试堆积。
+
+## 5. 断言和失败处理
 
 测试断言与失败处理优先使用 `testify/require`，通过立即失败机制减少后续空指针、错误状态级联和手写判断样板。测试应优先使用能够准确表达意图的语义化断言，而不是通过 `True`、`False`、手写 `if` 或组合多个基础断言来表达同一语义。
 
@@ -155,7 +197,7 @@ require.True(t, strings.Contains(err.Error(), "timeout"))
 
 直接使用 `t.Fatal`、`t.Fatalf`、`t.Error` 或 `t.Errorf` 仅限于无法通过现有语义化断言清晰表达的自定义测试控制流、特殊诊断输出，或测试辅助工具不适合依赖 `testify` 的场景。保留此类用法时，应让原因在代码上下文中保持清晰。
 
-## 5. 架构边界测试
+## 6. 架构边界测试
 
 架构检查脚本位于 `user-service/scripts/architecture/lint.sh`，fixture 自测位于 `user-service/scripts/architecture/lint-test.sh`，覆盖：
 
@@ -177,7 +219,7 @@ require.True(t, strings.Contains(err.Error(), "timeout"))
 make user-service-architecture-lint
 ```
 
-## 6. OpenAPI drift
+## 7. OpenAPI drift
 
 API 注解、路由、request、response 或共享 OpenAPI helper 变化后，执行：
 
@@ -188,7 +230,7 @@ git diff -- user-service/docs/openapi.go user-service/docs/openapi.json user-ser
 
 若生成物有变化，应随代码一起提交。
 
-## 7. Ent 和 migration 验证
+## 8. Ent 和 migration 验证
 
 Ent schema 变化后执行：
 
@@ -213,7 +255,7 @@ IMAGE=aegiscore-user-service:latest make user-service-image-verify
 
 该验证检查静态链接、UID/GID `65532`、CA certificates、`Asia/Shanghai` timezone、`/tmp`、CLI help，以及 shell、`apk`、`wget`、`curl`、`grep` 和 Atlas 均不存在。
 
-## 8. 观测资产验证
+## 9. 观测资产验证
 
 通用 Grafana dashboard 变化后执行：
 
@@ -224,7 +266,7 @@ make compose-dashboard-check
 
 Prometheus alert 或 dashboard 变更需要同时检查 `deployments/observability/` 和 `deployments/compose/` 中的对应资产。
 
-## 9. OPSX 文档和规格验证
+## 10. OPSX 文档和规格验证
 
 变更 OPSX 文档或 OpenSpec specs 后执行：
 
