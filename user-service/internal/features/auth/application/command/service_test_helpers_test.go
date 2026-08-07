@@ -70,7 +70,7 @@ func normalCredential() *authdomain.UserCredential {
 
 func issuedTokenPair(accessToken string, refreshToken string, expiresIn int64, refreshTTL time.Duration) *authtokens.IssuedTokenPair {
 	return &authtokens.IssuedTokenPair{
-		Response:   &authtokens.TokenResult{AccessToken: accessToken, RefreshToken: refreshToken, TokenType: commonauth.TokenTypeBearer, ExpiresIn: expiresIn},
+		Result:     &authtokens.TokenResult{AccessToken: accessToken, RefreshToken: refreshToken, TokenType: commonauth.TokenTypeBearer, ExpiresIn: expiresIn},
 		RefreshTTL: refreshTTL,
 	}
 }

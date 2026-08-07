@@ -58,9 +58,9 @@ type Issuer interface {
 	ParsePasswordChangeToken(ctx context.Context, token string) (*Claims, uuid.UUID, error)
 }
 
-// IssuedTokenPair 表示已签发的 token 响应和 refresh 会话生命周期。
+// IssuedTokenPair 表示内部已签发的 token 结果和 refresh 会话生命周期。
 type IssuedTokenPair struct {
-	Response   *TokenResult
+	Result     *TokenResult
 	RefreshTTL time.Duration
 }
 
@@ -101,7 +101,7 @@ func (i *authTokenIssuer) IssueTokenPair(ctx context.Context, userID uuid.UUID, 
 		return nil, fmt.Errorf("sign refresh token: %w", err)
 	}
 	return &IssuedTokenPair{
-		Response:   &TokenResult{AccessToken: access, RefreshToken: refresh, TokenType: commonauth.TokenTypeBearer, ExpiresIn: int64(accessTTL.Seconds())},
+		Result:     &TokenResult{AccessToken: access, RefreshToken: refresh, TokenType: commonauth.TokenTypeBearer, ExpiresIn: int64(accessTTL.Seconds())},
 		RefreshTTL: refreshTTL,
 	}, nil
 }

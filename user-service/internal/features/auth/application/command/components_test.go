@@ -187,7 +187,7 @@ func TestAuthTokenIssuerParsesBearerRefreshToken(t *testing.T) {
 	require.NoError(t, err,
 		"IssueTokenPair: %v", err)
 
-	claims, _, err := issuer.ParseRefreshToken(context.Background(), "Bearer "+pair.Response.RefreshToken)
+	claims, _, err := issuer.ParseRefreshToken(context.Background(), "Bearer "+pair.Result.RefreshToken)
 	require.NoError(t, err,
 		"ParseRefreshToken: %v", err)
 	require.False(t, claims.UserID != authTestUserID || claims.SessionID != "s-123" || claims.Subject != authtokens.SubjectRefresh,

@@ -25,14 +25,14 @@ func metricsOrNop(metrics authapplication.Metrics) authapplication.Metrics {
 }
 
 func issueTokenPair(ctx context.Context, issuer authtokens.Issuer, sessions authsessions.Lifecycle, userID uuid.UUID, tokenVersion int64, sessionID string) (*authtokens.TokenResult, string, error) {
-	tokens, err := issuer.IssueTokenPair(ctx, userID, tokenVersion, sessionID)
+	issued, err := issuer.IssueTokenPair(ctx, userID, tokenVersion, sessionID)
 	if err != nil {
 		return nil, authapplication.MetricsReasonTokenIssueFailed, err
 	}
-	if err := sessions.CreateTokenSession(ctx, userID, sessionID, tokenVersion, tokens.RefreshTTL); err != nil {
+	if err := sessions.CreateTokenSession(ctx, userID, sessionID, tokenVersion, issued.RefreshTTL); err != nil {
 		return nil, authapplication.MetricsReasonSessionCreateFailed, err
 	}
-	return tokens.Response, authapplication.MetricsReasonNone, nil
+	return issued.Result, authapplication.MetricsReasonNone, nil
 }
 
 func newAuthSessionID() (string, error) {

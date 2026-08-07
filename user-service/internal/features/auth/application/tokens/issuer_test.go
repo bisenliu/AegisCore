@@ -22,8 +22,8 @@ func TestIssuerUsesDefaultTTLs(t *testing.T) {
 	tokens, err := issuer.IssueTokenPair(context.Background(), issuerTestUserID, 2, "s-123")
 	require.NoError(t, err,
 		"IssueTokenPair: %v", err)
-	require.Equal(t, int64(defaultAccessTokenTTL.Seconds()), tokens.Response.ExpiresIn,
-		"ExpiresIn = %d, want %d", tokens.Response.ExpiresIn, int64(defaultAccessTokenTTL.Seconds()))
+	require.Equal(t, int64(defaultAccessTokenTTL.Seconds()), tokens.Result.ExpiresIn,
+		"ExpiresIn = %d, want %d", tokens.Result.ExpiresIn, int64(defaultAccessTokenTTL.Seconds()))
 	require.Equal(t, defaultRefreshTokenTTL, tokens.RefreshTTL,
 		"RefreshTTL = %s, want %s", tokens.RefreshTTL, defaultRefreshTokenTTL)
 
@@ -65,7 +65,7 @@ func TestIssuerParsesBearerRefreshToken(t *testing.T) {
 	require.NoError(t, err,
 		"SignRefreshToken: %v", err)
 
-	claims, parsedUserID, err := issuer.ParseRefreshToken(context.Background(), "Bearer "+pair.Response.RefreshToken)
+	claims, parsedUserID, err := issuer.ParseRefreshToken(context.Background(), "Bearer "+pair.Result.RefreshToken)
 	require.NoError(t, err,
 		"ParseRefreshToken: %v", err)
 	require.False(t, parsedUserID != issuerTestUserID || claims.UserID != issuerTestUserID || claims.SessionID != "s-123" || claims.Subject != SubjectRefresh,

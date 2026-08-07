@@ -90,19 +90,19 @@ func (u *refreshTokenUseCase) refreshWithRotation(ctx context.Context, claims *a
 		u.metrics.RefreshFailed(ctx, authapplication.MetricsReasonTokenIssueFailed)
 		return nil, err
 	}
-	tokens, err := u.tokens.IssueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
+	issued, err := u.tokens.IssueTokenPair(ctx, claims.UserID, currentVersion, sessionID)
 	if err != nil {
 		u.metrics.RefreshFailed(ctx, authapplication.MetricsReasonTokenIssueFailed)
 		return nil, err
 	}
 	// 先签发 token 再轮换 session；若 Redis 轮换失败，调用方不会拿到 token 响应，避免产生没有服务端会话投影的 refresh token。
 	newSession := authdomain.AuthSession{UserID: claims.UserID, SessionID: sessionID, TokenVersion: currentVersion}
-	if err := u.sessions.RotateTokenSession(ctx, oldSession, newSession, tokens.RefreshTTL); err != nil {
+	if err := u.sessions.RotateTokenSession(ctx, oldSession, newSession, issued.RefreshTTL); err != nil {
 		u.metrics.RefreshFailed(ctx, authapplication.MetricsReasonSessionRotateFailed)
 		return nil, err
 	}
 	u.metrics.RefreshSucceeded(ctx)
-	return tokens.Response, nil
+	return issued.Result, nil
 }
 
 func refreshFailureReason(err error) string {
