@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
 func TestRootCommandSurface(t *testing.T) {
@@ -59,4 +63,31 @@ func TestRootCommandSurface(t *testing.T) {
 	flag = healthcheck.Flags().Lookup("timeout")
 	require.NotNil(t, flag)
 	assert.Equal(t, defaultHealthcheckTimeout.String(), flag.DefValue)
+}
+
+func TestWithConfigLoadTimeoutCancelsSlowLoader(t *testing.T) {
+	started := make(chan struct{})
+	wrapped := withConfigLoadTimeout(func(ctx context.Context) (*serviceconfig.LoadResult, error) {
+		close(started)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}, 10*time.Millisecond)
+
+	_, err := wrapped(context.Background())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	<-started
+}
+
+func TestWithConfigLoadTimeoutCanBeDisabled(t *testing.T) {
+	called := false
+	wrapped := withConfigLoadTimeout(func(ctx context.Context) (*serviceconfig.LoadResult, error) {
+		called = true
+		_, ok := ctx.Deadline()
+		require.False(t, ok)
+		return nil, nil
+	}, 0)
+
+	_, err := wrapped(context.Background())
+	require.NoError(t, err)
+	require.True(t, called)
 }

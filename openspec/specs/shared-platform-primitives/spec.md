@@ -412,8 +412,16 @@
 - **THEN** `SourceMetadata.Digest` MUST 基于 defaults 和 normalize 前的 raw merged settings 生成稳定摘要
 - **AND** 默认值、normalize 或 typed config 的后续修改 MUST NOT 反向改变已记录的 source digest
 - **WHEN** CLI 渲染 effective settings
-- **THEN** 系统 MUST 从最终 typed config 编码可读 duration 和 mapstructure 字段，并在输出前脱敏 JWT、Redis、PostgreSQL 及调用方声明的敏感路径
+- **THEN** 系统 MUST 从最终 typed config 编码可读 duration 和 mapstructure 字段，并在输出前使用消费服务显式声明的敏感路径脱敏 JWT、Redis、PostgreSQL 及调用方声明的其他敏感字段
 - **AND** effective render MUST NOT 泄漏原始 secret
+
+#### Scenario: 业务中立配置脱敏原语
+
+- **WHEN** 调用方使用 `common/runtime/config` 的配置脱敏能力
+- **THEN** 调用方 MUST 显式提供自身敏感路径策略，路径 MAY 使用 `*` 匹配 map key 或 slice 中的元素
+- **AND** `common/runtime/config` MUST NOT 内置 `auth.jwt.secret`、user-service feature 配置、服务私有资源名或其他消费服务 secret schema
+- **AND** nil settings、nil 路径、空路径和未知路径 MUST 安全处理且不得 panic
+- **AND** 脱敏 MUST 返回深拷贝结果，不得修改输入 map、slice 或嵌套对象
 
 #### Scenario: 新增配置来源
 

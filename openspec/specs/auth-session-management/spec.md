@@ -179,7 +179,7 @@
 
 ### Requirement: 认证架构、配置与 Redis 资源生命周期
 
-user-service auth feature MUST 私有拥有 token issuer、claims schema、subject、TTL fallback 和认证策略配置；`common/security/auth` MUST 只提供通用验证原语。application、adapter、controller 和 composition MUST 通过 framework-neutral constructor、消费侧最小 port 和窄 settings 表达依赖，并显式管理 auth 自有后台资源。auth Redis adapter MUST 使用 Cluster-capable client 与同用户 hash tag 保证多 key 原子操作，且不得关闭共享 Redis client。
+user-service auth feature MUST 私有拥有 token issuer、claims schema、subject、TTL fallback 和认证策略配置；`common/security/auth` MUST 只提供通用验证原语。application、adapter、controller 和 composition MUST 通过 framework-neutral constructor、消费侧最小 port 和窄 settings 表达依赖，并显式管理 auth 自有后台资源。auth Redis adapter MUST 使用 Cluster-capable client 与同用户 hash tag 保证多 key 原子操作，且不得关闭共享 Redis client。user-service 的配置渲染边界 MUST 私有拥有 JWT、Redis、PostgreSQL 及服务私有敏感字段路径策略，并显式传入共享脱敏原语。
 
 #### Scenario: 服务私有配置与分层
 
@@ -187,6 +187,13 @@ user-service auth feature MUST 私有拥有 token issuer、claims schema、subje
 - **THEN** 系统 MUST 从服务私有配置读取 JWT TTL、refresh rotation、token version cache TTL 和活跃 session 上限，`common/runtime/config` MUST NOT 声明或校验这些策略
 - **AND** 服务私有配置 MUST NOT 承载 password KDF、Argon2 或 bcrypt cost 预算；production-like 环境的 `auth.jwt.secret` MUST 至少 32 bytes，错误 MUST 定位配置项；默认 `auth.jwt.issuer` MUST 为 `aegiscore-user-service`
 - **AND** 业务编排 MUST 位于 auth application 或 domain，Redis 与 PostgreSQL adapter MUST 只实现消费侧最小存储 port
+
+#### Scenario: 服务私有敏感路径策略
+
+- **WHEN** user-service CLI 或测试渲染 effective settings
+- **THEN** user-service MUST 在自身 config 或 CLI 边界集中声明 `auth.jwt.secret`、Redis password、PostgreSQL password 及其他服务私有敏感路径
+- **AND** 调用 `common/runtime/config` redaction primitive 时 MUST 显式传入这些路径，不得依赖 common 默认识别 auth、JWT、RBAC、Ent 或具名资源业务语义
+- **AND** render 输出 MUST NOT 包含 JWT secret、Redis 凭据或 PostgreSQL 凭据，且原 settings map MUST 保持不变
 
 #### Scenario: Framework-neutral 构造与安全依赖
 
