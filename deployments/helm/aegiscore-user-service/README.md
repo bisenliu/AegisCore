@@ -89,7 +89,7 @@ helm template aegiscore-user-service deployments/helm/aegiscore-user-service \
 生产流水线应按顺序执行：
 
 1. 创建或更新目标 Nacos namespace/group/dataId。
-2. 构建、推送、扫描并记录当前 release 的 user-service 不可变镜像引用，例如 `registry.example.com/aegiscore/user-service@sha256:<digest>` 或 `registry.example.com/aegiscore/user-service:sha-<commit>`。
+2. 构建、推送、扫描并记录当前 release 的 user-service 不可变镜像引用。生产基线使用 `registry.example.com/aegiscore/user-service@sha256:<64hex>`；如保留 commit tag，只允许 `registry.example.com/aegiscore/user-service:sha-<40hex>`，并要求 registry 对该 tag 启用 immutability。
 3. 确认本 release 对应的已提交 SQL migration 已通过 DBA 工单或受控发布平台执行完成；如包含 `CREATE EXTENSION IF NOT EXISTS pg_trgm;`，确认 DBA 权限或前置动作已处理。
 4. 使用同一个 `image.ref` 执行 RBAC seed Job，等待 Job 成功。
 5. 执行 `helm upgrade --install aegiscore-user-service deployments/helm/aegiscore-user-service --values <env-values> --set-string image.ref=<immutable-ref> --set rbacSeedJob.enabled=false`。

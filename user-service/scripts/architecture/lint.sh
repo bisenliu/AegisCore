@@ -250,7 +250,7 @@ check_ent_internal_persistence_boundary() {
 }
 
 check_helm_user_service_immutable_image() {
-  # 生产 Helm chart 必须由发布流程显式传入不可变 image.ref，禁止 latest fallback。
+  # 生产 Helm chart 必须由发布流程显式传入不可变 image.ref，禁止移动 tag fallback。
   local chart_dir="${repo_root}/deployments/helm/aegiscore-user-service"
   local values_file="${chart_dir}/values.yaml"
   local local_values_file="${chart_dir}/values-local.yaml"
@@ -275,8 +275,14 @@ check_helm_user_service_immutable_image() {
   if ! rg -q 'required "image\.ref is required' "${helpers_file}"; then
     report "Helm image helper must require image.ref"
   fi
-  if ! rg -q 'fail "image\.ref must be immutable and must not use latest tag"' "${helpers_file}"; then
-    report "Helm image helper must fail on latest image ref"
+  if ! rg -F -q 'regexMatch "^[^[:space:]@:]+(:[0-9]+)?(/[^[:space:]@:]+)*@sha256:[0-9a-fA-F]{64}$"' "${helpers_file}"; then
+    report "Helm image helper must allow only repository digest refs"
+  fi
+  if ! rg -F -q 'regexMatch "^[^[:space:]@]+:sha-[0-9a-f]{40}$"' "${helpers_file}"; then
+    report "Helm image helper must allow only full sha commit tags"
+  fi
+  if ! rg -q 'fail "image\.ref must be immutable: use repository@sha256:<64hex> or sha-<40hex> tag"' "${helpers_file}"; then
+    report "Helm image helper must reject mutable image refs"
   fi
   if rg -q 'image\.repository|image\.tag' "${helpers_file}"; then
     report "Helm image helper must not retain repository/tag fallback"

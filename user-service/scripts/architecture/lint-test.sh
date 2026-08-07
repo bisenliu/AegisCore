@@ -184,7 +184,7 @@ version: 0.1.0
 appVersion: "latest"
 EOF
 
-# 步骤 18：写入故意违规的 Helm helper，触发未强制 image.ref 和未阻止 latest 的检查。
+# 步骤 18：写入故意违规的 Helm helper，触发未强制 image.ref 和未使用不可变 allowlist 的检查。
 cat > "${fixture_root}/deployments/helm/aegiscore-user-service/templates/_helpers.tpl" <<'EOF'
 {{- define "aegiscore-user-service.image" -}}
 {{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) -}}
@@ -444,9 +444,9 @@ if [[ "${output}" != *"Helm production values must require explicit image.ref"* 
   exit 1
 fi
 
-# 步骤 51：断言 Helm image helper 未阻止 latest 的违规被报告。
-if [[ "${output}" != *"Helm image helper must fail on latest image ref"* ]]; then
-  printf 'architecture-lint-test: expected Helm latest guard violation report\n%s\n' "${output}" >&2
+# 步骤 51：断言 Helm image helper 未使用不可变 allowlist 的违规被报告。
+if [[ "${output}" != *"Helm image helper must allow only repository digest refs"* || "${output}" != *"Helm image helper must allow only full sha commit tags"* || "${output}" != *"Helm image helper must reject mutable image refs"* ]]; then
+  printf 'architecture-lint-test: expected Helm immutable allowlist violation reports\n%s\n' "${output}" >&2
   exit 1
 fi
 

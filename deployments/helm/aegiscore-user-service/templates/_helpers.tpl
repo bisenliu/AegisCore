@@ -81,9 +81,11 @@ Nacos source environment shared by the runtime Deployment and RBAC seed Job.
 Image reference.
 */}}
 {{- define "aegiscore-user-service.image" -}}
-{{- $ref := required "image.ref is required and must use an immutable digest or sha-<commit> tag" .Values.image.ref | trim -}}
-{{- if or (eq $ref "") (hasSuffix ":latest" $ref) (contains ":latest@" $ref) -}}
-{{- fail "image.ref must be immutable and must not use latest tag" -}}
+{{- $ref := required "image.ref is required and must use repository@sha256:<64hex> or sha-<40hex> tag" .Values.image.ref | trim -}}
+{{- $digestRef := regexMatch "^[^[:space:]@:]+(:[0-9]+)?(/[^[:space:]@:]+)*@sha256:[0-9a-fA-F]{64}$" $ref -}}
+{{- $commitTagRef := regexMatch "^[^[:space:]@]+:sha-[0-9a-f]{40}$" $ref -}}
+{{- if not (or $digestRef $commitTagRef) -}}
+{{- fail "image.ref must be immutable: use repository@sha256:<64hex> or sha-<40hex> tag" -}}
 {{- end -}}
 {{- $ref -}}
 {{- end -}}

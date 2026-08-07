@@ -12,4 +12,4 @@ autoscaling:
 replicaCount: 1
 
 image:
-  ref: aegiscore-user-service:sha-local
+  ref: aegiscore-user-service@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

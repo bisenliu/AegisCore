@@ -4,7 +4,7 @@
 replicaCount: 2 # 默认 HTTP 副本数；autoscaling.enabled=true 时由 HPA 控制。
 
 image: # user-service 镜像配置，用于 HTTP Deployment 和 RBAC seed Job。
-  ref: "" # 必填的不可变镜像引用；生产使用 digest 或 sha-<commit> tag。
+  ref: "" # 必填的不可变镜像引用；生产使用 repository@sha256:<64hex>，或受 registry immutability 保护的 sha-<40hex> tag。
   pullPolicy: IfNotPresent # 拉取策略；仅用于不可变镜像引用，禁止配合 latest tag 使用。
 
 imagePullSecrets: [] # 私有镜像仓库拉取凭据列表；为空表示不额外配置。
