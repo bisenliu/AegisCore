@@ -169,10 +169,12 @@ func TestDispatcherStartStopAreIdempotent(t *testing.T) {
 	clock := newFakeClock(time.Now())
 	store := &fakeOutboxStore{}
 	dispatcher := newTestDispatcher(t, store, &fakeRevisionPublisher{}, clock)
+	startCtx := context.WithValue(context.Background(), dispatcherTestContextKey{}, "lifecycle")
 
-	require.NoError(t, dispatcher.Start())
-	require.NoError(t, dispatcher.Start())
+	require.NoError(t, dispatcher.Start(startCtx))
+	require.NoError(t, dispatcher.Start(context.WithValue(context.Background(), dispatcherTestContextKey{}, "second")))
 	require.Eventually(t, func() bool { return store.claimCount() == 1 }, time.Second, time.Millisecond)
+	require.Equal(t, []any{"lifecycle"}, store.recordedClaimContextValues())
 	status, err := dispatcher.Status(context.Background())
 	require.NoError(t, err)
 	require.True(t, status.Running)
@@ -187,7 +189,7 @@ func TestDispatcherStartStopAreIdempotent(t *testing.T) {
 func TestDispatcherUnexpectedExitUpdatesStatus(t *testing.T) {
 	dispatcher := newTestDispatcher(t, &panicOutboxStore{}, &fakeRevisionPublisher{}, newFakeClock(time.Now()))
 
-	require.NoError(t, dispatcher.Start())
+	require.NoError(t, dispatcher.Start(context.Background()))
 	require.Eventually(t, func() bool {
 		status, err := dispatcher.Status(context.Background())
 		return err == nil && !status.Running && status.LastErrorCategory == DispatcherErrorUnexpectedExit
@@ -230,10 +232,13 @@ func TestDispatcherRecordsOperationsBacklogAndRunningState(t *testing.T) {
 	require.Equal(t, 2, metrics.dueCount)
 	require.Equal(t, time.Minute, metrics.oldestAge)
 
-	require.NoError(t, dispatcher.Start())
+	startCtx := context.WithValue(context.Background(), dispatcherTestContextKey{}, "metrics")
+	require.NoError(t, dispatcher.Start(startCtx))
 	require.Equal(t, []bool{true}, metrics.running)
+	require.Equal(t, []any{"metrics"}, metrics.runningContextValues)
 	require.NoError(t, dispatcher.Stop(context.Background()))
 	require.Equal(t, []bool{true, false}, metrics.running)
+	require.Equal(t, []any{"metrics", "metrics"}, metrics.runningContextValues)
 }
 
 func testDispatcherSettings() DispatcherSettings {
@@ -263,13 +268,14 @@ func testOutboxClaimWithReason(revision int64, attempt int, reason string) Outbo
 }
 
 type fakeOutboxStore struct {
-	mu         sync.Mutex
-	claims     []OutboxClaim
-	claimCalls int
-	acked      []uuid.UUID
-	failed     []fakeFailure
-	ackUpdated *bool
-	backlog    OutboxBacklog
+	mu                 sync.Mutex
+	claims             []OutboxClaim
+	claimCalls         int
+	claimContextValues []any
+	acked              []uuid.UUID
+	failed             []fakeFailure
+	ackUpdated         *bool
+	backlog            OutboxBacklog
 }
 
 type fakeFailure struct {
@@ -278,10 +284,11 @@ type fakeFailure struct {
 	summary       string
 }
 
-func (s *fakeOutboxStore) Claim(context.Context, time.Time, int, time.Duration) ([]OutboxClaim, error) {
+func (s *fakeOutboxStore) Claim(ctx context.Context, _ time.Time, _ int, _ time.Duration) ([]OutboxClaim, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.claimCalls++
+	s.claimContextValues = append(s.claimContextValues, ctx.Value(dispatcherTestContextKey{}))
 	return append([]OutboxClaim(nil), s.claims...), nil
 }
 
@@ -310,6 +317,12 @@ func (s *fakeOutboxStore) claimCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.claimCalls
+}
+
+func (s *fakeOutboxStore) recordedClaimContextValues() []any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]any(nil), s.claimContextValues...)
 }
 
 type fakeRevisionPublisher struct {
@@ -412,11 +425,12 @@ type dispatcherMetricEvent struct {
 
 type recordingDispatcherMetrics struct {
 	nopMetrics
-	mu         sync.Mutex
-	operations []dispatcherMetricEvent
-	dueCount   int
-	oldestAge  time.Duration
-	running    []bool
+	mu                   sync.Mutex
+	operations           []dispatcherMetricEvent
+	dueCount             int
+	oldestAge            time.Duration
+	running              []bool
+	runningContextValues []any
 }
 
 func (m *recordingDispatcherMetrics) DispatcherOperationObserved(_ context.Context, operation string, result string, reason string, kind string) {
@@ -432,10 +446,13 @@ func (m *recordingDispatcherMetrics) DispatcherBacklogObserved(_ context.Context
 	m.oldestAge = oldestAge
 }
 
-func (m *recordingDispatcherMetrics) DispatcherRunningObserved(_ context.Context, running bool) {
+func (m *recordingDispatcherMetrics) DispatcherRunningObserved(ctx context.Context, running bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.running = append(m.running, running)
+	m.runningContextValues = append(m.runningContextValues, ctx.Value(dispatcherTestContextKey{}))
 }
+
+type dispatcherTestContextKey struct{}
 
 func boolPointer(value bool) *bool { return &value }

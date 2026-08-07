@@ -64,21 +64,24 @@ func NewDispatcher(store OutboxStore, publisher PolicyRevisionPublisher, setting
 }
 
 // Start 幂等启动后台轮询循环。
-func (d *Dispatcher) Start() error {
+func (d *Dispatcher) Start(ctx context.Context) error {
+	if ctx == nil {
+		return errors.New("dispatcher start context is required")
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.done != nil {
 		return nil
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	d.cancel = cancel
 	d.done = make(chan struct{})
 	d.running = true
 	d.lastErrorCategory = DispatcherErrorNone
-	d.metrics.DispatcherRunningObserved(context.Background(), true)
-	d.log.Info("rbac policy outbox dispatcher started")
+	d.metrics.DispatcherRunningObserved(runCtx, true)
+	logger.FromContext(d.logContext(runCtx)).Info("rbac policy outbox dispatcher started")
 	done := d.done
-	go d.run(ctx, done)
+	go d.run(runCtx, done)
 	return nil
 }
 
@@ -231,7 +234,7 @@ func (d *Dispatcher) run(ctx context.Context, done chan struct{}) {
 		d.running = false
 		d.mu.Unlock()
 		d.metrics.DispatcherRunningObserved(ctx, false)
-		d.log.Info("rbac policy outbox dispatcher stopped")
+		logger.FromContext(d.logContext(ctx)).Info("rbac policy outbox dispatcher stopped")
 		close(done)
 	}()
 	ticker = d.clock.NewTicker(d.settings.PollInterval)

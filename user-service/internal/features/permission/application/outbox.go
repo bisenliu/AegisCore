@@ -141,7 +141,7 @@ type OutboxDispatcherStatus interface {
 
 // OutboxDispatcherRunner 暴露 lifecycle 所需的显式启停能力。
 type OutboxDispatcherRunner interface {
-	Start() error
+	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
 }
 

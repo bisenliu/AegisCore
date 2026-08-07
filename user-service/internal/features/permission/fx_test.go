@@ -221,13 +221,15 @@ func TestRegisterRBACLifecycleOrdersStartAndStop(t *testing.T) {
 	initializer := &permissionModulePolicyInitializer{order: &order}
 	watcher := &permissionModuleApplicationWatcher{order: &order}
 	dispatcher := &permissionModuleDispatcher{order: &order}
+	startCtx := context.WithValue(context.Background(), permissionModuleLifecycleContextKey{}, "start")
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
 		Lifecycle: lifecycle,
 		Runtime:   &PermissionRuntime{Initializer: initializer, Watcher: watcher, Dispatcher: dispatcher},
 	})
 
-	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
+	require.NoError(t, lifecycle.hooks[0].OnStart(startCtx))
 	require.Equal(t, []string{"initializer.initialize", "watcher.start", "dispatcher.start"}, order)
+	require.True(t, startCtx == dispatcher.startCtx)
 	order = nil
 	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
 	require.Equal(t, []string{"dispatcher.stop", "watcher.stop"}, order)
@@ -411,14 +413,16 @@ type permissionModuleApplicationWatcher struct {
 
 type permissionModuleDispatcher struct {
 	started   bool
+	startCtx  context.Context
 	startErr  error
 	stopCalls int
 	stopErr   error
 	order     *[]string
 }
 
-func (d *permissionModuleDispatcher) Start() error {
+func (d *permissionModuleDispatcher) Start(ctx context.Context) error {
 	appendPermissionModuleOrder(d.order, "dispatcher.start")
+	d.startCtx = ctx
 	d.started = d.startErr == nil
 	return d.startErr
 }
@@ -451,3 +455,5 @@ func appendPermissionModuleOrder(order *[]string, event string) {
 		*order = append(*order, event)
 	}
 }
+
+type permissionModuleLifecycleContextKey struct{}

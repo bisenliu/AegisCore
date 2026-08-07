@@ -36,7 +36,7 @@ func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
 			if err := params.Runtime.Watcher.Start(); err != nil {
 				return errors.Join(err, params.Runtime.Watcher.Stop(ctx))
 			}
-			if err := params.Runtime.Dispatcher.Start(); err != nil {
+			if err := params.Runtime.Dispatcher.Start(ctx); err != nil {
 				return errors.Join(err, params.Runtime.Watcher.Stop(ctx))
 			}
 			return nil
