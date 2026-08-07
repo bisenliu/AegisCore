@@ -36,67 +36,73 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Crane
+        uses: imjasonh/setup-crane@v0.4
+
       - name: Prepare immutable image reference
         id: image
         env:
           RAW_IMAGE_REPOSITORY: ${{ inputs.image_repository }}
         run: |
-          repository="${RAW_IMAGE_REPOSITORY}"
-          if [[ -z "${repository}" ]]; then
-            repository="ghcr.io/${GITHUB_REPOSITORY_OWNER}/aegiscore/user-service"
+          release_repository="${RAW_IMAGE_REPOSITORY}"
+          if [[ -z "${release_repository}" ]]; then
+            release_repository="ghcr.io/${GITHUB_REPOSITORY_OWNER}/aegiscore/user-service"
           fi
-          repository="$(printf '%s' "${repository}" | tr '[:upper:]' '[:lower:]')"
+          release_repository="$(printf '%s' "${release_repository}" | tr '[:upper:]' '[:lower:]')"
           repository_owner="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
           allowed_repository="ghcr.io/${repository_owner}/aegiscore/user-service"
 
-          if [[ "${repository}" != "${allowed_repository}" ]]; then
+          if [[ "${release_repository}" != "${allowed_repository}" ]]; then
             printf 'image_repository must be %s\n' "${allowed_repository}" >&2
             exit 1
           fi
 
-          if [[ ! "${repository}" =~ ^ghcr\.io/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*$ ]]; then
+          if [[ ! "${release_repository}" =~ ^ghcr\.io/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*$ ]]; then
             printf 'image_repository must be a lowercase GHCR repository without whitespace, protocol, or tag\n' >&2
             exit 1
           fi
 
           tag="sha-${GITHUB_SHA}"
-          printf 'repository=%s\n' "${repository}" >> "${GITHUB_OUTPUT}"
+          quarantine_repository="${release_repository}-quarantine"
+          printf 'repository=%s\n' "${release_repository}" >> "${GITHUB_OUTPUT}"
+          printf 'quarantine_repository=%s\n' "${quarantine_repository}" >> "${GITHUB_OUTPUT}"
           printf 'tag=%s\n' "${tag}" >> "${GITHUB_OUTPUT}"
-          printf 'tagged_ref=%s:%s\n' "${repository}" "${tag}" >> "${GITHUB_OUTPUT}"
+          printf 'tagged_ref=%s:%s\n' "${release_repository}" "${tag}" >> "${GITHUB_OUTPUT}"
+          printf 'quarantine_tagged_ref=%s:%s\n' "${quarantine_repository}" "${tag}" >> "${GITHUB_OUTPUT}"
 
-      - name: Build and push user-service image
+      - name: Build and push quarantined user-service image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: deployments/docker/user-service.Dockerfile
           push: true
-          tags: ${{ steps.image.outputs.tagged_ref }}
+          tags: ${{ steps.image.outputs.quarantine_tagged_ref }}
           cache-from: type=gha,scope=user-service-image-release
           cache-to: type=gha,scope=user-service-image-release,mode=max
 
-      - name: Resolve pushed image digest
-        id: digest
+      - name: Resolve quarantined image digest
+        id: quarantine_digest
         run: |
-          digest="$(docker buildx imagetools inspect "${{ steps.image.outputs.tagged_ref }}" --format '{{json .Manifest.Digest}}' | tr -d '"')"
-          image_ref="${{ steps.image.outputs.repository }}@${digest}"
+          digest="$(docker buildx imagetools inspect "${{ steps.image.outputs.quarantine_tagged_ref }}" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          image_ref="${{ steps.image.outputs.quarantine_repository }}@${digest}"
           mkdir -p release
-          printf 'IMAGE_REF=%s\n' "${image_ref}" | tee release/user-service-image-ref.env
+          printf 'digest=%s\n' "${digest}" >> "${GITHUB_OUTPUT}"
           printf 'image_ref=%s\n' "${image_ref}" >> "${GITHUB_OUTPUT}"
 
-      - name: Inspect immutable image identity
+      - name: Inspect quarantined image identity
         run: |
-          docker buildx imagetools inspect "${{ steps.digest.outputs.image_ref }}" | tee release/user-service-image-identity.txt
+          docker buildx imagetools inspect "${{ steps.quarantine_digest.outputs.image_ref }}" | tee release/user-service-image-identity.txt
 
-      - name: Pull immutable image for runtime verification
-        run: docker pull "${{ steps.digest.outputs.image_ref }}"
+      - name: Pull quarantined image for runtime verification
+        run: docker pull "${{ steps.quarantine_digest.outputs.image_ref }}"
 
       - name: Verify Distroless runtime contents
-        run: ./deployments/docker/verify-user-service-image.sh "${{ steps.digest.outputs.image_ref }}"
+        run: ./deployments/docker/verify-user-service-image.sh "${{ steps.quarantine_digest.outputs.image_ref }}"
 
       - name: Generate image scan report
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ steps.digest.outputs.image_ref }}
+          image-ref: ${{ steps.quarantine_digest.outputs.image_ref }}
           scanners: vuln
           format: sarif
           output: release/trivy-image.sarif
@@ -106,7 +112,7 @@ jobs:
       - name: Generate image SBOM
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ steps.digest.outputs.image_ref }}
+          image-ref: ${{ steps.quarantine_digest.outputs.image_ref }}
           format: cyclonedx
           output: release/sbom-image.cdx.json
           skip-setup-trivy: true
@@ -114,12 +120,34 @@ jobs:
       - name: Fail on high or critical image findings
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ steps.digest.outputs.image_ref }}
+          image-ref: ${{ steps.quarantine_digest.outputs.image_ref }}
           scanners: vuln
           format: table
           severity: HIGH,CRITICAL
           exit-code: '1'
           skip-setup-trivy: true
+
+      - name: Promote verified image to release repository
+        run: |
+          crane auth login ghcr.io -u "${GITHUB_ACTOR}" -p "${{ secrets.GITHUB_TOKEN }}"
+          crane copy "${{ steps.quarantine_digest.outputs.image_ref }}" "${{ steps.image.outputs.tagged_ref }}"
+
+      - name: Resolve promoted image digest
+        id: digest
+        run: |
+          digest="$(docker buildx imagetools inspect "${{ steps.image.outputs.tagged_ref }}" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          if [[ "${digest}" != "${{ steps.quarantine_digest.outputs.digest }}" ]]; then
+            printf 'promoted digest %s does not match quarantined digest %s\n' "${digest}" "${{ steps.quarantine_digest.outputs.digest }}" >&2
+            exit 1
+          fi
+
+          image_ref="${{ steps.image.outputs.repository }}@${digest}"
+          printf 'IMAGE_REF=%s\n' "${image_ref}" | tee release/user-service-image-ref.env
+          printf 'image_ref=%s\n' "${image_ref}" >> "${GITHUB_OUTPUT}"
+
+      - name: Inspect promoted image identity
+        run: |
+          docker buildx imagetools inspect "${{ steps.digest.outputs.image_ref }}" | tee -a release/user-service-image-identity.txt
 
       - name: Render Helm release manifests
         run: |
@@ -128,6 +156,12 @@ jobs:
             --values deployments/helm/aegiscore-user-service/values.yaml \
             --set-string "image.ref=${{ steps.digest.outputs.image_ref }}" \
             > release/aegiscore-user-service.yaml
+
+      - name: Clean up quarantined image tag
+        if: always() && steps.image.outputs.quarantine_tagged_ref != ''
+        run: |
+          crane auth login ghcr.io -u "${GITHUB_ACTOR}" -p "${{ secrets.GITHUB_TOKEN }}"
+          crane delete "${{ steps.image.outputs.quarantine_tagged_ref }}" || true
 
       - name: Upload release artifacts
         if: always()
