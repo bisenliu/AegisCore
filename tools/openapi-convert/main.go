@@ -39,6 +39,26 @@ func (values *stringList) Set(value string) error {
 	return nil
 }
 
+// 用法：本工具只转换已有 Swagger 2 JSON 文件，不负责从源码注解生成 Swagger。
+// 用户服务 OpenAPI 生成应优先在仓库根目录执行：
+//
+//	make user-service-openapi-generate
+//
+// 如需单独调试本工具，先用 swag 生成临时 Swagger 2 输入，再在 user-service 目录执行：
+//
+//	go run ../tools/openapi-convert \
+//	  -input /tmp/swagger/swagger.json \
+//	  -json docs/openapi.json \
+//	  -yaml docs/openapi.yaml \
+//	  -go docs/openapi.go \
+//	  -server /api/v1 \
+//	  -root-server / \
+//	  -root-path /livez \
+//	  -root-path /readyz \
+//	  -root-path /startupz \
+//	  -bearer-auth-name BearerAuth
+//
+// 完整参数以 user-service/scripts/openapi-generate.sh 为准，避免手动遗漏 root-path、bearer auth 等服务级参数。
 func main() {
 	os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
 }

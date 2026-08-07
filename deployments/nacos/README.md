@@ -28,16 +28,11 @@ deployments/nacos/
 Compose 使用两个一次性初始化任务分别发布两个目录。也可以在仓库根目录手动发布：
 
 ```bash
-go run ./tools/nacos-config-seed \
-  --addr 127.0.0.1:8848 \
-  --namespace loca-host \
-  --config-dir ./deployments/nacos/local-host
-
-go run ./tools/nacos-config-seed \
-  --addr 127.0.0.1:8848 \
-  --namespace loca-docker \
-  --config-dir ./deployments/nacos/local-docker
+make tools-nacos-config-seed-local-host
+make tools-nacos-config-seed-local-docker
 ```
+
+默认连接 `127.0.0.1:8848` 和 group `AEGISCORE`。需要覆盖时传入 Make 变量，例如 `make tools-nacos-config-seed-local-host NACOS_ADDR=localhost:8848`。
 
 相同命令可幂等重跑并覆盖已有 dataId。工具不会自动删除旧 dataId 或旧 Namespace；网络阶段中途失败时，修复问题后重新运行对应命令。
 

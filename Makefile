@@ -5,11 +5,14 @@ USER_SERVICE_DIR := user-service
 USER_SERVICE_BIN ?= $(CURDIR)/bin/user-service
 ADMIN_USERNAME ?=
 ADMIN_NICKNAME ?=
+NACOS_ADDR ?= 127.0.0.1:8848
+NACOS_GROUP ?= AEGISCORE
+NACOS_TIMEOUT ?= 30s
 export ADMIN_BOOTSTRAP_PASSWORD
 
 .PHONY: help build test test-containers lint verify
 .PHONY: common-test common-test-containers common-lint common-generate common-verify
-.PHONY: tools-openapi-convert-test tools-openapi-convert-lint tools-nacos-config-seed-test tools-nacos-config-seed-lint
+.PHONY: tools-openapi-convert-test tools-openapi-convert-lint tools-nacos-config-seed-test tools-nacos-config-seed-lint tools-nacos-config-seed-local-host tools-nacos-config-seed-local-docker
 .PHONY: user-service-build user-service-run user-service-test user-service-test-containers user-service-lint user-service-verify user-service-architecture-lint
 .PHONY: user-service-seed-rbac user-service-bootstrap-super-admin user-service-image-verify
 .PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-openapi-generate user-service-fxgraph-generate user-service-fxgraph-check
@@ -55,6 +58,22 @@ tools-nacos-config-seed-test: ## 运行 Nacos 配置初始化工具测试。
 
 tools-nacos-config-seed-lint: ## 运行 Nacos 配置初始化工具 lint。
 	$(MAKE) -C $(TOOLS_NACOS_CONFIG_SEED_DIR) lint
+
+tools-nacos-config-seed-local-host: ## 发布宿主机进程使用的本地 Nacos 配置，可覆盖 NACOS_ADDR/NACOS_GROUP/NACOS_TIMEOUT。
+	go run ./$(TOOLS_NACOS_CONFIG_SEED_DIR) \
+		-addr '$(NACOS_ADDR)' \
+		-namespace loca-host \
+		-group '$(NACOS_GROUP)' \
+		-config-dir deployments/nacos/local-host \
+		-timeout '$(NACOS_TIMEOUT)'
+
+tools-nacos-config-seed-local-docker: ## 发布 Compose 容器使用的本地 Nacos 配置，可覆盖 NACOS_ADDR/NACOS_GROUP/NACOS_TIMEOUT。
+	go run ./$(TOOLS_NACOS_CONFIG_SEED_DIR) \
+		-addr '$(NACOS_ADDR)' \
+		-namespace loca-docker \
+		-group '$(NACOS_GROUP)' \
+		-config-dir deployments/nacos/local-docker \
+		-timeout '$(NACOS_TIMEOUT)'
 
 user-service-build: ## 构建 user-service 二进制。
 	$(MAKE) -C $(USER_SERVICE_DIR) build USER_SERVICE_BIN='$(USER_SERVICE_BIN)'

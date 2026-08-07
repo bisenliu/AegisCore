@@ -16,6 +16,18 @@ const (
 	exitError = 1
 )
 
+// 用法：在仓库根目录通过 `go run ./tools/nacos-config-seed` 执行；不要只运行 main.go，
+// 否则同目录 client.go 中的 seedOptions 和 newAdminClient 不会参与编译。
+// 本机直连本地 Compose Nacos 时可使用：
+//
+//	go run ./tools/nacos-config-seed \
+//	  -addr localhost:8848 \
+//	  -namespace local \
+//	  -group AEGISCORE \
+//	  -config-dir deployments/nacos/local-docker
+//
+// Compose 内部服务配置使用 deployments/nacos/local-docker 和 namespace loca-docker；
+// 正常本地启动优先让 docker compose 的 nacos-init-host/nacos-init-docker 服务自动 seed。
 func main() {
 	os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
 }
