@@ -1,3 +1,7 @@
+// atlas-schema 是 Atlas external schema loader 的入口。
+//
+// 该程序由 migrations/atlas.hcl 间接调用，用 Ent 生成的 migrate metadata 输出 PostgreSQL DDL，
+// 供 atlas migrate diff 与历史迁移目录做差异对比；它不连接真实业务数据库，也不写入迁移文件。
 package main
 
 import (

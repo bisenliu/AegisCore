@@ -157,7 +157,7 @@ require.True(t, strings.Contains(err.Error(), "timeout"))
 
 ## 5. 架构边界测试
 
-架构检查脚本位于 `user-service/scripts/architecture-lint.sh`，覆盖：
+架构检查脚本位于 `user-service/scripts/architecture/lint.sh`，fixture 自测位于 `user-service/scripts/architecture/lint-test.sh`，覆盖：
 
 - 禁止旧 RBAC baseline import。
 - 禁止 auth、role 直接导入 user domain。

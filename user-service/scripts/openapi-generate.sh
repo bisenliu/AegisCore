@@ -13,6 +13,7 @@ set -eu
 #   user-service/docs/openapi.yaml
 #
 # 执行前提：
+#   - 本机需要安装 go，并能访问 Go module 依赖源。
 #   - 在 Go workspace 可用的仓库中运行，脚本会先切换到 user-service 目录。
 #   - swag 通过 go run 拉取固定版本 github.com/swaggo/swag/cmd/swag@v1.16.6。
 #   - tools/openapi-convert 必须可通过 ../tools/openapi-convert 运行。
@@ -27,6 +28,12 @@ set -eu
 #   - 脚本会覆盖 docs/openapi.go、docs/openapi.json 和 docs/openapi.yaml；提交前应检查 diff。
 #   - 修改路由、Swagger 注解、认证方案或健康探针路径后需要重新运行本脚本。
 #   - macOS 下 go run swag 使用 external link mode，以规避本地链接器兼容性问题。
+
+if ! command -v go >/dev/null 2>&1; then
+  # swag 和 openapi-convert 都通过 go run 执行，缺少 Go 工具链时无需继续创建临时目录。
+  echo "openapi-generate: required command not found: go" >&2
+  exit 1
+fi
 
 cd "$(dirname "$0")/.."
 

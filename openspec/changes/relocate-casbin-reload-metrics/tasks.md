@@ -14,8 +14,8 @@
 ## 3. 测试与门禁
 
 - [x] 3.1 将原 common Casbin reload metrics 输出断言迁移到 permission feature 测试，覆盖成功、失败、last success gauge 和 metrics disabled no-op。
-- [x] 3.2 增加 `user-service/scripts/architecture-lint.sh` 检查，禁止业务 metrics 语义回流 `common/runtime/observability/metrics`。
-- [x] 3.3 更新 `user-service/scripts/architecture-lint-test.sh` fixture，覆盖新门禁的通过和失败场景。
+- [x] 3.2 增加 `user-service/scripts/architecture/lint.sh` 检查，禁止业务 metrics 语义回流 `common/runtime/observability/metrics`。
+- [x] 3.3 更新 `user-service/scripts/architecture/lint-test.sh` fixture，覆盖新门禁的通过和失败场景。
 - [x] 3.4 运行 permission 相关包测试和 common runtime metrics 测试，确认迁移后行为不变。
 
 ## 4. 验证与收尾

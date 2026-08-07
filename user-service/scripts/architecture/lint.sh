@@ -4,13 +4,14 @@ set -euo pipefail
 # 校验仓库级架构边界和生成物状态。
 #
 # 用法：
-#   ./user-service/scripts/architecture-lint.sh
-#   ./user-service/scripts/architecture-lint.sh --repo-root /path/to/repo
+#   ./user-service/scripts/architecture/lint.sh
+#   ./user-service/scripts/architecture/lint.sh --repo-root /path/to/repo
 #   make user-service-architecture-lint
 #
 # 执行前提：
 #   - 在 Git 工作区内运行，且仓库包含 common、user-service、tools/openapi-convert 等模块。
 #   - 本机需要安装 ripgrep（rg）；脚本依赖 rg 执行正则扫描。
+#   - 需要可用的常见 Unix 工具 awk、sed、head、find、wc、tr 和 git。
 #   - 部分检查会调用 git diff --name-only，用于发现 Ent/OpenAPI 生成物漂移。
 #
 # 行为：
@@ -22,9 +23,11 @@ set -euo pipefail
 #
 # 注意事项：
 #   - 本脚本只做静态扫描和 Git diff 检查，不会修改源码或生成物。
-#   - 新增目录或架构边界时，应同步扩展本脚本和 architecture-lint-test.sh 的 fixture 覆盖。
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+#   - 新增目录或架构边界时，应同步扩展本脚本和 architecture/lint-test.sh 的 fixture 覆盖。
+# 该脚本使用 Bash 数组、进程替换和 BASH_SOURCE；保持 Bash shebang，避免被 sh 误执行。
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
+# 解析可选参数，允许测试脚本把 lint 根目录切到临时 fixture 仓库。
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo-root)
@@ -47,8 +50,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 service_dir="${repo_root}/user-service"
+
+# 让未匹配的 glob 展开为空列表，避免不存在的 feature 子目录被当作字面路径传给 rg。
 shopt -s nullglob
 
+# 先校验核心扫描工具是否存在；缺少 rg 时后续架构规则无法可靠执行。
 if ! command -v rg >/dev/null 2>&1; then
   printf 'architecture-lint: required command not found: rg; install ripgrep before running this check\n' >&2
   exit 1
@@ -56,12 +62,14 @@ fi
 
 failures=0
 
+# 累积违规数量并输出完整上下文，最后统一决定是否失败，方便一次修复多类问题。
 report() {
   printf 'architecture-lint: %s\n' "$*" >&2
   failures=$((failures + 1))
 }
 
 run_rg() {
+  # 针对 Go 文件执行违规模式扫描；rg 退出码 1 表示无匹配，不属于失败。
   local description="$1"
   local pattern="$2"
   shift 2
@@ -89,6 +97,7 @@ run_rg() {
 }
 
 run_rg_any() {
+  # 针对任意文件执行违规模式扫描，供 YAML、Markdown、Git diff 输出等非 Go 内容复用。
   local description="$1"
   local pattern="$2"
   shift 2
@@ -498,28 +507,56 @@ check_common_metrics_business_semantics() {
     "${common_metrics_dir}"
 }
 
+# 步骤 1：校验 Go 版本在 go.work、各模块和 CI workflow 中保持一致。
 check_go_toolchain_version
+
+# 步骤 2：校验 CI 质量门禁只保留一个标准 lint、单测和容器测试入口。
 check_ci_quality_workflow
+
+# 步骤 3：校验 Atlas dev PostgreSQL 镜像引用在 Docker、Compose、atlas.hcl 和迁移脚本中一致。
 check_atlas_postgres_version
+
+# 步骤 4：校验 Ent 生成代码只暴露在 user-service/internal/persistence/ent 私有边界内。
 check_ent_internal_persistence_boundary
+
+# 步骤 5：校验 Helm chart 生产镜像必须使用显式不可变 image.ref，禁止 latest fallback。
 check_helm_user_service_immutable_image
+
+# 步骤 6：校验旧本地完整配置文件入口没有回流到 Go 代码、Compose、Kubernetes、Helm 或 workflow。
 check_environment_variable_config_removed
+
+# 步骤 7：校验 common metrics 只承载跨服务 primitive，不包含 user-service 或 RBAC 业务语义。
 check_common_metrics_business_semantics
+
+# 步骤 8：校验 mock_generate.go 只在 generate build tag 下参与 mockgen。
 check_mock_generate_build_tags
+
+# 步骤 9：校验 ForTest/testHook 等测试专用符号不会进入生产 Go 文件。
 check_test_only_production_symbols
+
+# 步骤 10：校验 feature 主路径不依赖包级默认 logger 或 context.Background logger。
 check_feature_default_logger_dependencies
+
+# 步骤 11：校验 feature application/domain 层不携带 Fx DI 框架元数据。
 check_feature_application_domain_fx_metadata
+
+# 步骤 12：校验 user feature 除组合入口外不携带 Fx/Dig 注入元数据。
 check_user_feature_framework_metadata
+
+# 步骤 13：校验 role feature 除组合入口外不携带 Fx/Dig 注入元数据。
 check_role_feature_framework_metadata
 
+# 步骤 14：校验 feature 不再保留固定 route_registrar.go，路由统一由 router 总装。
 if [[ -n "$(find "${service_dir}/internal/features" -type f -name 'route_registrar.go' -print -quit)" ]]; then
   report "fixed feature route_registrar.go files are forbidden; register auth, permission, role and user routes centrally in user-service/internal/router"
 fi
 
+# 步骤 15：校验旧 RBAC baseline 包目录已清理，统一使用 internal/shared/rbacbaseline。
 if [[ -d "${service_dir}/internal/features/permission/application/rbacbaseline" ]]; then
   report "old permission/application/rbacbaseline package still exists"
 fi
 
+# 步骤 16：校验仓库中没有集中式 mock 目录，mock 应放在消费测试附近。
 for forbidden_mock_dir in \
   "${repo_root}/mocks" \
   "${repo_root}/testmocks" \
@@ -532,30 +569,37 @@ for forbidden_mock_dir in \
   fi
 done
 
+# 步骤 17：校验旧 permission/application/rbacbaseline import 已全部迁移。
 run_rg "old RBAC baseline import remains" \
   'github\.com/aegiscore/user-service/internal/features/permission/application/rbacbaseline' \
   "${service_dir}/internal"
 
+# 步骤 18：校验旧 user/domain 状态枚举引用已迁移到 shared/identity。
 run_rg "old user-domain status reference remains" \
   'userdomain\.UserStatus|github\.com/aegiscore/user-service/internal/features/user/domain.*UserStatus' \
   "${service_dir}/internal/features" "${service_dir}/internal/persistence/ent/schema"
 
+# 步骤 19：校验旧 user/domain/user_status.go 文件不存在，避免状态枚举回到 user feature 私有域。
 if [[ -e "${service_dir}/internal/features/user/domain/user_status.go" ]]; then
   report "old user/domain/user_status.go still exists; use internal/shared/identity"
 fi
 
+# 步骤 20：校验 auth feature 不直接导入 user domain，用户状态与身份错误通过 shared/identity 消费。
 run_rg "auth feature must not import user domain" \
   'github\.com/aegiscore/user-service/internal/features/user/domain' \
   "${service_dir}/internal/features/auth"
 
+# 步骤 21：校验 role feature 不直接导入 user domain，用户身份错误通过 shared/identity 消费。
 run_rg "role feature must not import user domain; use shared/identity for user identity errors" \
   'github\.com/aegiscore/user-service/internal/features/user/domain' \
   "${service_dir}/internal/features/role"
 
+# 步骤 22：校验 shared 包不反向依赖任何 feature 包，保持服务内共享内核稳定。
 run_rg "shared packages must not import feature packages" \
   'github\.com/aegiscore/user-service/internal/features/' \
   "${service_dir}/internal/shared"
 
+# 步骤 23：校验服务组合层不直接依赖 permission infrastructure 具体实现。
 for service_composition_dir in \
   "${service_dir}/internal/providers" \
   "${service_dir}/internal/bootstrap" \
@@ -568,44 +612,53 @@ for service_composition_dir in \
   fi
 done
 
+# 步骤 24：校验 internal/shared 下不存在 errors/enums/types/utils/helpers 这类兜底包。
 for forbidden_shared_dir in errors enums types utils helpers; do
   if [[ -d "${service_dir}/internal/shared/${forbidden_shared_dir}" ]]; then
     report "internal/shared/${forbidden_shared_dir} is a forbidden root-level catch-all package; put shared errors/enums/types in the owning shared kernel package"
   fi
 done
 
+# 步骤 25：校验 shared identity 枚举文件命名保持主体明确，避免泛化为 status.go。
 if [[ -e "${service_dir}/internal/shared/identity/status.go" ]]; then
   report "internal/shared/identity/status.go should be named user_status.go to keep shared enum files subject-specific"
 fi
 
+# 步骤 26：校验 shared 包不引入运行时、传输层、数据库、Redis、Fx 等禁止依赖。
 run_rg "shared packages must not import forbidden runtime or transport dependencies" \
   'github\.com/gin-gonic/gin|github\.com/aegiscore/user-service/internal/persistence/ent(/|")|github\.com/redis/go-redis|database/sql|github\.com/jackc/pgx|go\.uber\.org/fx|github\.com/aegiscore/common/http/response|github\.com/aegiscore/common/contract/response|github\.com/aegiscore/common/runtime/(config|logger|datastore)' \
   "${service_dir}/internal/shared"
 
+# 步骤 27：校验 application/domain/infrastructure 不反向导入 feature HTTP transport DTO 或 controller。
 run_rg "application/domain/infrastructure must not import feature HTTP transport DTO/controller packages" \
   'github\.com/aegiscore/user-service/internal/features/.*/transport/http' \
   "${service_dir}"/internal/features/*/application \
   "${service_dir}"/internal/features/*/domain \
   "${service_dir}"/internal/features/*/infrastructure
 
+# 步骤 28：校验 gRPC transport 不复用 HTTP transport 包，避免协议适配层互相耦合。
 run_rg "gRPC transport must not import feature HTTP transport packages" \
   'github\.com/aegiscore/user-service/internal/features/.*/transport/http' \
   "${service_dir}"/internal/features/*/transport/grpc
 
+# 步骤 29：校验 OpenAPI 生成物没有未提交漂移，确保注解变更后重新生成。
 run_rg_any "OpenAPI generated files have uncommitted drift" \
   '^user-service/docs/(openapi\.go|openapi\.json|openapi\.yaml)$' \
   <(cd "${repo_root}" && git diff --name-only -- user-service/docs/openapi.go user-service/docs/openapi.json user-service/docs/openapi.yaml)
 
+# 步骤 30：校验 OpenSpec/OPSX 文档没有遗留默认英文模板或占位内容。
 run_rg_any "OpenSpec/OPSX markdown must use Simplified Chinese instead of default English templates" \
   '(<!--|-->|What problem does this solve|Describe what will change|brief description|condition|expected outcome|Overview|Summary|Acceptance Criteria|Migration Notes|Implementation Plan|Rollout Plan|Out of Scope)' \
   "${repo_root}/openspec/specs" \
   "${repo_root}/openspec/changes" \
   "${repo_root}/docs/opsx"
 
+# 步骤 31：校验 Ent 生成物没有未提交漂移，确保 schema 变更后重新生成。
 run_rg_any "Ent generated files have uncommitted drift; run make generate and commit generated output" \
   '^user-service/internal/persistence/ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update|permission|permission_create|permission_delete|permission_query|permission_update|role|role_create|role_delete|role_query|role_update|rolepermission|rolepermission_create|rolepermission_delete|rolepermission_query|rolepermission_update|userrole|userrole_create|userrole_delete|userrole_query|userrole_update)\.go$|^user-service/internal/persistence/ent/(enttest|hook|migrate|predicate|runtime|user|permission|role|rolepermission|userrole)/' \
   <(cd "${repo_root}" && git diff --name-only -- user-service/internal/persistence/ent)
 
+# 汇总所有步骤发现的违规；只有执行完全部检查后才统一返回失败状态。
 if [[ "${failures}" -gt 0 ]]; then
   printf 'architecture-lint: failed with %d issue(s)\n' "${failures}" >&2
   exit 1

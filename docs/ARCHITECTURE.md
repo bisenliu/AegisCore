@@ -97,7 +97,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 - `infrastructure/`：Postgres、Redis、Casbin 等适配器。
 - `transport/http/`：controller、request、response、mapper、routes 和输入校验。
 
-`domain/` 和 `application/` 生产代码保持框架无关，不承载仅服务于 Fx DI 的 import、`fx.In` 或 `name`/`optional` tag；无 DI metadata 需求的普通 application 构造器由 feature 根 `fx.go` 直接注册，确有 named/optional 等 metadata 或配置转换需求时才由 composition adapter 转换。分层约束由 `user-service/scripts/architecture-lint.sh` 检查。
+`domain/` 和 `application/` 生产代码保持框架无关，不承载仅服务于 Fx DI 的 import、`fx.In` 或 `name`/`optional` tag；无 DI metadata 需求的普通 application 构造器由 feature 根 `fx.go` 直接注册，确有 named/optional 等 metadata 或配置转换需求时才由 composition adapter 转换。分层约束由 `user-service/scripts/architecture/lint.sh` 检查。
 
 真实外部 HTTP 系统的消费侧端口、DTO、认证、retry policy、业务错误映射和防腐逻辑仍位于 `user-service/internal/integration/http` 或所属 feature；`common/http/client` 只提供 Resty client 复用、单次请求构造与发送原语，消费侧可注入预配置的 Resty client。
 

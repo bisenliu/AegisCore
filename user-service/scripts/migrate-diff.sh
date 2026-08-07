@@ -16,6 +16,9 @@ set -eu
 #                  migrations/atlas.hcl 中的值，当前使用本仓库 latest pg_trgm 镜像；
 #                  正式/受控环境建议固定具体 PostgreSQL 版本或镜像 digest。
 #
+# 执行前提：
+#   - 本机需要安装 docker 和 atlas CLI。
+#
 # 行为：
 #   - 切换到 user-service 目录，使 Atlas 读取 ./migrations/atlas.hcl 和 ./migrations。
 #   - 确保 Atlas dev database 镜像预置 pg_trgm，支持 Ent schema 中的 gin_trgm_ops。
@@ -33,6 +36,17 @@ if [ "$#" -ne 1 ]; then
   echo "用法：$0 <migration-name>" >&2
   exit 2
 fi
+
+require_command() {
+  # 在真正构建镜像或写入迁移前尽早失败，避免生成流程执行到一半才暴露环境问题。
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "migrate-diff: required command not found: $1" >&2
+    exit 1
+  fi
+}
+
+require_command docker
+require_command atlas
 
 cd "$(dirname "$0")/.."
 

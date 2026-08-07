@@ -26,6 +26,6 @@
 
 - 测试入口：修改根 `Makefile`、`common/Makefile` 和 `user-service/Makefile`。
 - CI：修改 `.github/workflows/ci.yml`，容器 job 的负载增加 common PostgreSQL/Redis fixture 验收，但不重复普通单测。
-- 架构检查：修改 `user-service/scripts/architecture-lint.sh` 及其 fixture 测试。
+- 架构检查：修改 `user-service/scripts/architecture/lint.sh` 及其 fixture 测试。
 - 文档和规格：修改 `docs/TESTING.md`、`docs/ARCHITECTURE.md` 以及三个现有 capability 的主规格 delta。
 - 不影响生产 Go 代码、HTTP API、OpenAPI 生成物、数据库 schema/migration、部署清单、观测资产或安全边界。

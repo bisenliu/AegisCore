@@ -26,10 +26,10 @@ lint: ## 运行 user-service lint。
 	golangci-lint run ./...
 
 architecture-lint: architecture-lint-test ## 运行 user-service 架构边界检查。
-	./scripts/architecture-lint.sh
+	./scripts/architecture/lint.sh
 
 architecture-lint-test: ## 使用故意违规 fixture 验证架构检查可命中分层污染。
-	./scripts/architecture-lint-test.sh
+	./scripts/architecture/lint-test.sh
 
 verify: lint architecture-lint generate test openapi-generate ## 运行 user-service 验证。
 	git diff --exit-code

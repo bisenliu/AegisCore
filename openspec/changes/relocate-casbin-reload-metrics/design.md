@@ -45,7 +45,7 @@ permission feature 当前在 `user-service/internal/features/permission/fx.go` �
 
 4. architecture lint 扫描 common metrics 的业务词汇。
 
-   在 `user-service/scripts/architecture-lint.sh` 中增加针对 `common/runtime/observability/metrics` 的静态扫描，禁止 `Casbin`、`permission`、`role`、`user-service`、`rbac` 或 `aegiscore_casbin` 等业务语义重新进入。同步更新 `architecture-lint-test.sh` fixture，避免规则漂移。
+   在 `user-service/scripts/architecture/lint.sh` 中增加针对 `common/runtime/observability/metrics` 的静态扫描，禁止 `Casbin`、`permission`、`role`、`user-service`、`rbac` 或 `aegiscore_casbin` 等业务语义重新进入。同步更新 `architecture/lint-test.sh` fixture，避免规则漂移。
 
    备选方案是只依靠 code review。该方案不能形成持续门禁，无法满足验收中防回流要求。
 
