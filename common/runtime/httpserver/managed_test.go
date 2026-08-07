@@ -178,6 +178,34 @@ func TestUnexpectedServeErrorCallsCallbackOnceWithoutHoldingLock(t *testing.T) {
 	require.Equal(t, callbackCalls.Load(), int32(1))
 }
 
+func TestServeUnexpectedErrorTransitionsToFailed(t *testing.T) {
+	t.Parallel()
+
+	serveErr := errors.New("accept failed")
+	callbackDone := make(chan error, 1)
+	managed := newTestManaged(t, "fake:direct", http.NotFoundHandler(), time.Second, func(err error) {
+		callbackDone <- err
+	})
+	managed.state = stateRunning
+	managed.serveDone = make(chan struct{})
+
+	managed.serve(newErrorListener(serveErr))
+
+	select {
+	case callbackErr := <-callbackDone:
+		require.ErrorIs(t, callbackErr, serveErr)
+		require.ErrorContains(t, callbackErr, "serve http server")
+	case <-time.After(time.Second):
+		t.Fatal("OnServeError was not called")
+	}
+	managed.mu.Lock()
+	require.Equal(t, stateFailed, managed.state)
+	require.ErrorIs(t, managed.serveErr, serveErr)
+	serveDone := managed.serveDone
+	managed.mu.Unlock()
+	requireChannelClosed(t, serveDone, time.Second)
+}
+
 func TestNormalStopDoesNotCallServeErrorCallback(t *testing.T) {
 	t.Parallel()
 

@@ -121,7 +121,7 @@ func (s *Managed) Stop(ctx context.Context) error {
 		s.mu.Unlock()
 		return nil
 	}
-	if !s.cleanupStarted && (s.state == stateRunning || s.state == stateFailed) {
+	if s.canStartCleanupLocked() {
 		s.cleanupStarted = true
 		s.state = stateStopping
 		go s.cleanup()
@@ -143,6 +143,12 @@ func (s *Managed) Stop(ctx context.Context) error {
 	}
 }
 
+func (s *Managed) canStartCleanupLocked() bool {
+	// cleanup 只从 running/failed 进入 stopping；created 直接 stopped，
+	// stopping/stopped 只等待同一个 cleanupDone 结果。
+	return !s.cleanupStarted && (s.state == stateRunning || s.state == stateFailed)
+}
+
 // HTTPServer 返回 Managed 拥有的底层 net/http server。
 // 返回值的 Handler 是内部 drain tracker，而不是构造时传入的原始 handler。
 func (s *Managed) HTTPServer() *http.Server {
@@ -153,11 +159,9 @@ func (s *Managed) serve(listener net.Listener) {
 	err := s.server.Serve(listener)
 
 	s.mu.Lock()
-	expected := errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) ||
-		((s.state == stateStopping || s.state == stateStopped) && errors.Is(err, context.Canceled))
 	var callback func(error)
 	var callbackErr error
-	if err != nil && !expected {
+	if err != nil && !s.isExpectedServeErrorLocked(err) {
 		callbackErr = s.operationError("serve", err)
 		s.serveErr = callbackErr
 		if s.state == stateRunning {
@@ -173,30 +177,57 @@ func (s *Managed) serve(listener net.Listener) {
 	}
 }
 
+func (s *Managed) isExpectedServeErrorLocked(err error) bool {
+	if errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	// Stop 关闭 listener 时，部分自定义 listener 会以 context.Canceled 退出 Accept。
+	return (s.state == stateStopping || s.state == stateStopped) && errors.Is(err, context.Canceled)
+}
+
 func (s *Managed) cleanup() {
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
 	defer cancel()
 
-	shutdownErr := s.operationError("shutdown", s.server.Shutdown(cleanupCtx))
-	listenerErr := wrapExpectedCloseError(s, "close listener", s.closeListener())
-	var closeErr error
-	if shutdownErr != nil {
-		closeErr = wrapExpectedCloseError(s, "force close", s.server.Close())
-	}
-	drainErr := s.operationError("wait handlers", s.drain.Wait(cleanupCtx))
-
-	s.mu.Lock()
-	serveDone := s.serveDone
-	s.mu.Unlock()
-	if serveDone != nil {
-		<-serveDone
-	}
+	shutdownErr := s.shutdown(cleanupCtx)
+	listenerErr := s.closeManagedListener()
+	closeErr := s.forceCloseAfterShutdownError(shutdownErr)
+	drainErr := s.waitHandlers(cleanupCtx)
+	s.waitServeDone()
 
 	s.mu.Lock()
 	s.stopErr = errors.Join(shutdownErr, listenerErr, closeErr, drainErr, s.serveErr)
 	s.state = stateStopped
 	close(s.cleanupDone)
 	s.mu.Unlock()
+}
+
+func (s *Managed) shutdown(ctx context.Context) error {
+	return s.operationError("shutdown", s.server.Shutdown(ctx))
+}
+
+func (s *Managed) closeManagedListener() error {
+	return wrapExpectedCloseError(s, "close listener", s.closeListener())
+}
+
+func (s *Managed) forceCloseAfterShutdownError(shutdownErr error) error {
+	if shutdownErr == nil {
+		return nil
+	}
+	return wrapExpectedCloseError(s, "force close", s.server.Close())
+}
+
+func (s *Managed) waitHandlers(ctx context.Context) error {
+	return s.operationError("wait handlers", s.drain.Wait(ctx))
+}
+
+func (s *Managed) waitServeDone() {
+	s.mu.Lock()
+	serveDone := s.serveDone
+	s.mu.Unlock()
+	if serveDone != nil {
+		<-serveDone
+	}
 }
 
 func (s *Managed) closeListener() error {
