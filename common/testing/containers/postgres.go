@@ -168,13 +168,16 @@ func dockerStop(ctx context.Context, t testing.TB, containerID string) {
 
 func dockerMappedPort(ctx context.Context, t testing.TB, containerID, containerPort string) (string, int) {
 	t.Helper()
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		deadline = time.Now().Add(DefaultStartupTimeout)
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultStartupTimeout)
+		defer cancel()
 	}
+	ticker := time.NewTicker(defaultDockerPortProbeInterval)
+	defer ticker.Stop()
 
 	var lastErr error
-	for time.Now().Before(deadline) {
+	for {
 		// docker run 返回后端口映射可能尚未可查询，因此在同一启动 deadline 内轮询。
 		out, stderr, err := dockerOutput(ctx, "port", containerID, containerPort)
 		if err == nil {
@@ -186,10 +189,13 @@ func dockerMappedPort(ctx context.Context, t testing.TB, containerID, containerP
 		} else {
 			lastErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr+out))
 		}
-		time.Sleep(defaultDockerPortProbeInterval)
+
+		select {
+		case <-ctx.Done():
+			t.Fatalf("resolve mapped Docker port %s for %s: %v: %v", containerPort, containerID, ctx.Err(), lastErr)
+		case <-ticker.C:
+		}
 	}
-	t.Fatalf("resolve mapped Docker port %s for %s: %v", containerPort, containerID, lastErr)
-	return "", 0
 }
 
 func parseDockerPort(output string) (string, int, error) {

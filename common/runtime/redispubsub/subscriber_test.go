@@ -281,7 +281,7 @@ func TestSubscriberStopCancelsBlockingPhases(t *testing.T) {
 			require.Eventually(t, func() bool { return subscriber.Status().State == tt.waitState }, time.Second, time.Millisecond)
 			if tt.name == "buffer delivery" {
 				require.Eventually(t, func() bool { return len(subscriber.messages) == 1 }, time.Second, time.Millisecond)
-				time.Sleep(10 * time.Millisecond)
+				require.Eventually(t, func() bool { return len(sub.receives) == 0 }, time.Second, time.Millisecond)
 			}
 
 			stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)

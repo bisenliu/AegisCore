@@ -55,10 +55,8 @@ func TestRunHealthcheckConnectionFailure(t *testing.T) {
 }
 
 func TestRunHealthcheckTimeout(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(100 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
 	}))
 	t.Cleanup(server.Close)
 

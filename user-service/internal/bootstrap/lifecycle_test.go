@@ -73,8 +73,12 @@ func TestFxLifecycleStopHooksShareDeadline(t *testing.T) {
 			})
 			lifecycle.Append(fx.Hook{
 				OnStart: func(context.Context) error { return nil },
-				OnStop: func(context.Context) error {
-					time.Sleep(30 * time.Millisecond)
+				OnStop: func(ctx context.Context) error {
+					deadline, ok := ctx.Deadline()
+					require.True(t, ok)
+					require.Eventually(t, func() bool {
+						return time.Until(deadline) < 80*time.Millisecond
+					}, 50*time.Millisecond, time.Millisecond)
 					return nil
 				},
 			})
