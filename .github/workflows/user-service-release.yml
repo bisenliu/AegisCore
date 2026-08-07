@@ -10,13 +10,17 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  security-events: write
 
 jobs:
   build-scan-render:
     name: build, scan, and render Helm release
     runs-on: ubuntu-latest
+    if: ${{ github.ref_protected == true }}
+    environment: user-service-release
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
     timeout-minutes: 40
     steps:
       - name: Checkout
@@ -34,12 +38,27 @@ jobs:
 
       - name: Prepare immutable image reference
         id: image
+        env:
+          RAW_IMAGE_REPOSITORY: ${{ inputs.image_repository }}
         run: |
-          repository="${{ inputs.image_repository }}"
+          repository="${RAW_IMAGE_REPOSITORY}"
           if [[ -z "${repository}" ]]; then
             repository="ghcr.io/${GITHUB_REPOSITORY_OWNER}/aegiscore/user-service"
           fi
-          repository="${repository,,}"
+          repository="$(printf '%s' "${repository}" | tr '[:upper:]' '[:lower:]')"
+          repository_owner="$(printf '%s' "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          allowed_repository="ghcr.io/${repository_owner}/aegiscore/user-service"
+
+          if [[ "${repository}" != "${allowed_repository}" ]]; then
+            printf 'image_repository must be %s\n' "${allowed_repository}" >&2
+            exit 1
+          fi
+
+          if [[ ! "${repository}" =~ ^ghcr\.io/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*$ ]]; then
+            printf 'image_repository must be a lowercase GHCR repository without whitespace, protocol, or tag\n' >&2
+            exit 1
+          fi
+
           tag="sha-${GITHUB_SHA}"
           printf 'repository=%s\n' "${repository}" >> "${GITHUB_OUTPUT}"
           printf 'tag=%s\n' "${tag}" >> "${GITHUB_OUTPUT}"
