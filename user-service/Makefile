@@ -54,7 +54,7 @@ migrate-diff: ## 生成 migration，需传入 name=<migration-name>。
 	./scripts/migrate-diff.sh "$(name)"
 
 migrate-validate: ## 校验 migrations。
-	./scripts/migrate-validate.sh
+	atlas migrate validate --dir file://migrations
 
 openapi-generate: ## 生成 OpenAPI 3 文档。
 	./scripts/openapi-generate.sh

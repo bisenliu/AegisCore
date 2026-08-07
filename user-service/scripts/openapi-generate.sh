@@ -3,6 +3,9 @@ set -eu
 
 # 基于源码注解生成用户服务 OpenAPI 3 文档。
 #
+# 这是围绕第三方 swag CLI 和仓库 openapi-convert 工具的薄封装：脚本只固定扫描范围、
+# 输出路径、server、认证方案和生成标记，避免开发者手写一长串容易漂移的参数。
+#
 # 用法：
 #   make user-service-openapi-generate
 #   cd user-service && ./scripts/openapi-generate.sh

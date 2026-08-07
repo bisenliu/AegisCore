@@ -12,7 +12,8 @@ set -euo pipefail
 #
 # 行为：
 #   - 构造 common、user-service、tools/openapi-convert、CI workflow、deployments 和 openspec 的最小目录。
-#   - 写入一组故意违规的 Go 文件和配置，用来覆盖架构分层、mock build tag、测试钩子、默认 logger、Fx/Dig 元数据等检查。
+#   - 写入一组故意违规的 Go 文件和配置，用来覆盖 mock build tag、测试钩子、默认 logger、Fx/Dig 元数据等检查。
+#   - Go import 分层规则由 `.golangci.yml` 的 depguard 覆盖，不在本 fixture 中断言。
 #   - 通过 --repo-root 让 architecture/lint.sh 针对 fixture 运行，而不是扫描真实仓库。
 #   - 断言预期违规都会出现在输出中，并断言测试文件、生成目录、组合入口等白名单不会产生误报。
 #
@@ -395,113 +396,107 @@ if [[ "${status}" -eq 0 ]]; then
   exit 1
 fi
 
-# 步骤 43：断言 feature 分层违规被报告。
-if [[ "${output}" != *"application/domain/infrastructure must not import feature HTTP transport DTO/controller packages"* ]]; then
-  printf 'architecture-lint-test: expected layering violation report\n%s\n' "${output}" >&2
-  exit 1
-fi
-
-# 步骤 44：断言 mock_generate.go build tag 违规被报告。
+# 步骤 43：断言 mock_generate.go build tag 违规被报告。
 if [[ "${output}" != *"mock_generate.go must use //go:build generate"* ]]; then
   printf 'architecture-lint-test: expected mock generate build tag violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 45：断言生产文件中的测试专用符号违规被报告。
+# 步骤 44：断言生产文件中的测试专用符号违规被报告。
 if [[ "${output}" != *"test-only symbol must not enter production Go files"* ]]; then
   printf 'architecture-lint-test: expected test-only production symbol violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 46：断言 feature 主路径默认 logger 依赖违规被报告。
+# 步骤 45：断言 feature 主路径默认 logger 依赖违规被报告。
 if [[ "${output}" != *"feature production code must not use package-level default logger as main-path dependency"* ]]; then
   printf 'architecture-lint-test: expected default logger dependency violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 47：断言旧本地配置入口的 Go 代码违规被报告。
+# 步骤 46：断言旧本地配置入口的 Go 代码违规被报告。
 if [[ "${output}" != *"production Go code must not retain local config path entrypoints"* ]]; then
   printf 'architecture-lint-test: expected Go local config path violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 48：断言 root-level user-service/ent 目录违规被报告。
+# 步骤 47：断言 root-level user-service/ent 目录违规被报告。
 if [[ "${output}" != *"root-level user-service/ent package is forbidden"* ]]; then
   printf 'architecture-lint-test: expected root-level Ent directory violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 49：断言 root-level Ent import 违规被报告。
+# 步骤 48：断言 root-level Ent import 违规被报告。
 if [[ "${output}" != *"root-level user-service Ent import is forbidden"* ]]; then
   printf 'architecture-lint-test: expected root-level Ent import violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 50：断言 Compose 中旧本地配置入口违规被报告。
+# 步骤 49：断言 Compose 中旧本地配置入口违规被报告。
 if [[ "${output}" != *"Docker Compose runtime config must not mount local full config or pass --config"* ]]; then
   printf 'architecture-lint-test: expected Compose local config path violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 51：断言 Helm production values 未强制 image.ref 的违规被报告。
+# 步骤 50：断言 Helm production values 未强制 image.ref 的违规被报告。
 if [[ "${output}" != *"Helm production values must require explicit image.ref"* ]]; then
   printf 'architecture-lint-test: expected Helm image.ref required violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 52：断言 Helm image helper 未阻止 latest 的违规被报告。
+# 步骤 51：断言 Helm image helper 未阻止 latest 的违规被报告。
 if [[ "${output}" != *"Helm image helper must fail on latest image ref"* ]]; then
   printf 'architecture-lint-test: expected Helm latest guard violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 53：断言 application/domain 层 Fx 元数据违规被报告。
+# 步骤 52：断言 application/domain 层 Fx 元数据违规被报告。
 if [[ "${output}" != *"feature application/domain production code must not carry Fx DI metadata"* ]]; then
   printf 'architecture-lint-test: expected application/domain Fx metadata violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 54：断言 common metrics 中的服务或 RBAC 业务语义违规被报告。
+# 步骤 53：断言 common metrics 中的服务或 RBAC 业务语义违规被报告。
 if [[ "${output}" != *"common runtime metrics must not contain service or RBAC business metrics semantics"* ]]; then
   printf 'architecture-lint-test: expected common metrics business semantics violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 55：断言 CI 质量门禁相关违规被完整报告。
+# 步骤 54：断言 CI 质量门禁相关违规被完整报告。
 if [[ "${output}" != *"quality workflow must not directly trigger pull_request or push"* || "${output}" != *"CI standard lint command must appear exactly once"* || "${output}" != *"CI standard unit test command must appear exactly once"* || "${output}" != *"CI Docker-backed test command must call root make test-containers exactly once"* || "${output}" != *"CI must not bypass root make test-containers with module-local container targets"* ]]; then
   printf 'architecture-lint-test: expected duplicate CI quality gate violation reports\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 56：断言 user feature 分层 Fx/Dig 元数据违规被报告。
+# 步骤 55：断言 user feature 分层 Fx/Dig 元数据违规被报告。
 if [[ "${output}" != *"user feature production code must not carry Fx/Dig DI metadata outside composition"* ]]; then
   printf 'architecture-lint-test: expected user feature Fx/Dig metadata violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 57：断言 role feature 分层 Fx/Dig 元数据违规被报告。
+# 步骤 56：断言 role feature 分层 Fx/Dig 元数据违规被报告。
 if [[ "${output}" != *"role feature production code must not carry Fx/Dig DI metadata outside composition"* ]]; then
   printf 'architecture-lint-test: expected role feature Fx/Dig metadata violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 58：断言固定 route_registrar.go 违规被报告。
+# 步骤 57：断言固定 route_registrar.go 违规被报告。
 if [[ "${output}" != *"fixed feature route_registrar.go files are forbidden"* ]]; then
   printf 'architecture-lint-test: expected fixed feature route registrar violation report\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 59：断言白名单文件不进入违规结果；覆盖测试文件、测试 helper、Ent/OpenAPI 生成目录和 feature 组合入口。
+# 步骤 58：断言白名单文件不进入违规结果；覆盖测试文件、测试 helper、Ent/OpenAPI 生成目录和 feature 组合入口。
 if [[ "${output}" == *"allowed_test.go"* || "${output}" == *"common/testing/example/helper.go"* || "${output}" == *"user-service/internal/persistence/ent/schema/generated.go"* || "${output}" == *"user-service/docs/openapi.go"* || "${output}" == *"user-service/internal/features/role/fx.go"* || "${output}" == *"user-service/internal/features/user/fx.go"* || "${output}" == *"user-service/internal/features/user/infrastructure/postgres/store_test.go"* || "${output}" == *"user-service/internal/features/user/transport/http/mock_generate.go"* ]]; then
   printf 'architecture-lint-test: excluded test or generated file produced a false positive\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 60：断言 rg 没有执行错误；如果失败通常意味着规则路径或 fixture 目录布局需要同步调整。
+# 步骤 59：断言 rg 没有执行错误；如果失败通常意味着规则路径或 fixture 目录布局需要同步调整。
 if [[ "${output}" == *"rg execution failed"* ]]; then
   printf 'architecture-lint-test: unexpected rg execution failure\n%s\n' "${output}" >&2
   exit 1
 fi
 
-# 步骤 61：全部断言通过后输出成功标记，供调用方和 CI 识别。
+# 步骤 60：全部断言通过后输出成功标记，供调用方和 CI 识别。
 printf 'architecture-lint-test: ok\n'

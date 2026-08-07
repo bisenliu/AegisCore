@@ -199,12 +199,9 @@ require.True(t, strings.Contains(err.Error(), "timeout"))
 
 ## 6. 架构边界测试
 
-架构检查脚本位于 `user-service/scripts/architecture/lint.sh`，fixture 自测位于 `user-service/scripts/architecture/lint-test.sh`，覆盖：
+Go import 分层边界由根 `.golangci.yml` 的 `depguard` 规则随 `make lint` 检查。架构检查脚本位于 `user-service/scripts/architecture/lint.sh`，fixture 自测位于 `user-service/scripts/architecture/lint-test.sh`，覆盖其余跨文件或非 Go import 约束：
 
 - 禁止旧 RBAC baseline import。
-- 禁止 auth、role 直接导入 user domain。
-- 禁止 shared package 导入 feature package。
-- 禁止 application/domain/infrastructure 导入 feature HTTP transport。
 - 检查 `go.work`、各 `go.mod` 的 `go` 版本和 GitHub Actions 的 Go toolchain 版本一致；`go.mod` 中存在 `toolchain` 行时也必须一致。
 - 检查主 CI 只调用一次复用质量 workflow，且 lint/unit workflow 不直接监听重复 PR/push 事件、标准 lint 与普通单测命令各只出现一次。
 - 检查 OpenAPI 和 Ent 生成物 drift。

@@ -17,7 +17,8 @@ set -euo pipefail
 # 行为：
 #   - 检查 Go toolchain 版本一致，并防止 CI 重复触发标准 lint 与普通单测。
 #   - 检查 Atlas dev PostgreSQL 镜像配置在 Dockerfile、Compose、atlas.hcl 和迁移脚本中一致。
-#   - 扫描 common 与 user-service 的架构边界，避免共享包、feature 分层、Ent 根级暴露和 DI 元数据越界。
+#   - 扫描 common 与 user-service 的非 import 架构边界，避免生成物漂移、Ent 根级暴露和 DI 元数据越界。
+#   - Go import 分层边界由根 `.golangci.yml` 的 depguard 规则承接，随 `make lint` 执行。
 #   - 检查 mock 生成文件 build tag、测试专用符号、OpenSpec 中文模板和生成物未提交漂移。
 #   - 收集所有违规项后统一退出；任一违规会以非 0 状态结束。
 #
@@ -584,76 +585,31 @@ if [[ -e "${service_dir}/internal/features/user/domain/user_status.go" ]]; then
   report "old user/domain/user_status.go still exists; use internal/shared/identity"
 fi
 
-# 步骤 20：校验 auth feature 不直接导入 user domain，用户状态与身份错误通过 shared/identity 消费。
-run_rg "auth feature must not import user domain" \
-  'github\.com/aegiscore/user-service/internal/features/user/domain' \
-  "${service_dir}/internal/features/auth"
-
-# 步骤 21：校验 role feature 不直接导入 user domain，用户身份错误通过 shared/identity 消费。
-run_rg "role feature must not import user domain; use shared/identity for user identity errors" \
-  'github\.com/aegiscore/user-service/internal/features/user/domain' \
-  "${service_dir}/internal/features/role"
-
-# 步骤 22：校验 shared 包不反向依赖任何 feature 包，保持服务内共享内核稳定。
-run_rg "shared packages must not import feature packages" \
-  'github\.com/aegiscore/user-service/internal/features/' \
-  "${service_dir}/internal/shared"
-
-# 步骤 23：校验服务组合层不直接依赖 permission infrastructure 具体实现。
-for service_composition_dir in \
-  "${service_dir}/internal/providers" \
-  "${service_dir}/internal/bootstrap" \
-  "${service_dir}/internal/router" \
-  "${service_dir}/cmd"; do
-  if [[ -d "${service_composition_dir}" ]]; then
-    run_rg "service composition must not import permission infrastructure concrete; use permission public contracts" \
-      'github\.com/aegiscore/user-service/internal/features/permission/infrastructure/(casbin|redis)' \
-      "${service_composition_dir}"
-  fi
-done
-
-# 步骤 24：校验 internal/shared 下不存在 errors/enums/types/utils/helpers 这类兜底包。
+# 步骤 20：校验 internal/shared 下不存在 errors/enums/types/utils/helpers 这类兜底包。
 for forbidden_shared_dir in errors enums types utils helpers; do
   if [[ -d "${service_dir}/internal/shared/${forbidden_shared_dir}" ]]; then
     report "internal/shared/${forbidden_shared_dir} is a forbidden root-level catch-all package; put shared errors/enums/types in the owning shared kernel package"
   fi
 done
 
-# 步骤 25：校验 shared identity 枚举文件命名保持主体明确，避免泛化为 status.go。
+# 步骤 21：校验 shared identity 枚举文件命名保持主体明确，避免泛化为 status.go。
 if [[ -e "${service_dir}/internal/shared/identity/status.go" ]]; then
   report "internal/shared/identity/status.go should be named user_status.go to keep shared enum files subject-specific"
 fi
 
-# 步骤 26：校验 shared 包不引入运行时、传输层、数据库、Redis、Fx 等禁止依赖。
-run_rg "shared packages must not import forbidden runtime or transport dependencies" \
-  'github\.com/gin-gonic/gin|github\.com/aegiscore/user-service/internal/persistence/ent(/|")|github\.com/redis/go-redis|database/sql|github\.com/jackc/pgx|go\.uber\.org/fx|github\.com/aegiscore/common/http/response|github\.com/aegiscore/common/contract/response|github\.com/aegiscore/common/runtime/(config|logger|datastore)' \
-  "${service_dir}/internal/shared"
-
-# 步骤 27：校验 application/domain/infrastructure 不反向导入 feature HTTP transport DTO 或 controller。
-run_rg "application/domain/infrastructure must not import feature HTTP transport DTO/controller packages" \
-  'github\.com/aegiscore/user-service/internal/features/.*/transport/http' \
-  "${service_dir}"/internal/features/*/application \
-  "${service_dir}"/internal/features/*/domain \
-  "${service_dir}"/internal/features/*/infrastructure
-
-# 步骤 28：校验 gRPC transport 不复用 HTTP transport 包，避免协议适配层互相耦合。
-run_rg "gRPC transport must not import feature HTTP transport packages" \
-  'github\.com/aegiscore/user-service/internal/features/.*/transport/http' \
-  "${service_dir}"/internal/features/*/transport/grpc
-
-# 步骤 29：校验 OpenAPI 生成物没有未提交漂移，确保注解变更后重新生成。
+# 步骤 22：校验 OpenAPI 生成物没有未提交漂移，确保注解变更后重新生成。
 run_rg_any "OpenAPI generated files have uncommitted drift" \
   '^user-service/docs/(openapi\.go|openapi\.json|openapi\.yaml)$' \
   <(cd "${repo_root}" && git diff --name-only -- user-service/docs/openapi.go user-service/docs/openapi.json user-service/docs/openapi.yaml)
 
-# 步骤 30：校验 OpenSpec/OPSX 文档没有遗留默认英文模板或占位内容。
+# 步骤 23：校验 OpenSpec/OPSX 文档没有遗留默认英文模板或占位内容。
 run_rg_any "OpenSpec/OPSX markdown must use Simplified Chinese instead of default English templates" \
   '(<!--|-->|What problem does this solve|Describe what will change|brief description|condition|expected outcome|Overview|Summary|Acceptance Criteria|Migration Notes|Implementation Plan|Rollout Plan|Out of Scope)' \
   "${repo_root}/openspec/specs" \
   "${repo_root}/openspec/changes" \
   "${repo_root}/docs/opsx"
 
-# 步骤 31：校验 Ent 生成物没有未提交漂移，确保 schema 变更后重新生成。
+# 步骤 24：校验 Ent 生成物没有未提交漂移，确保 schema 变更后重新生成。
 run_rg_any "Ent generated files have uncommitted drift; run make generate and commit generated output" \
   '^user-service/internal/persistence/ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update|permission|permission_create|permission_delete|permission_query|permission_update|role|role_create|role_delete|role_query|role_update|rolepermission|rolepermission_create|rolepermission_delete|rolepermission_query|rolepermission_update|userrole|userrole_create|userrole_delete|userrole_query|userrole_update)\.go$|^user-service/internal/persistence/ent/(enttest|hook|migrate|predicate|runtime|user|permission|role|rolepermission|userrole)/' \
   <(cd "${repo_root}" && git diff --name-only -- user-service/internal/persistence/ent)

@@ -76,6 +76,22 @@ linters:
               desc: domain must not depend on infrastructure adapters
             - pkg: github.com/aegiscore/user-service/internal/features/permission/infrastructure/
               desc: domain must not depend on infrastructure adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/transport/http$
+              desc: domain must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/transport/http/
+              desc: domain must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/user/transport/http$
+              desc: domain must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/user/transport/http/
+              desc: domain must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/role/transport/http$
+              desc: domain must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/role/transport/http/
+              desc: domain must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/transport/http$
+              desc: domain must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/transport/http/
+              desc: domain must not depend on HTTP transport DTO/controller packages
         feature-application:
           files:
             - "**/internal/features/**/application/*.go"
@@ -91,6 +107,22 @@ linters:
               desc: application must not depend on Redis clients
             - pkg: github.com/aegiscore/common/http/binding
               desc: application must not depend on HTTP binder
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/transport/http$
+              desc: application must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/transport/http/
+              desc: application must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/user/transport/http$
+              desc: application must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/user/transport/http/
+              desc: application must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/role/transport/http$
+              desc: application must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/role/transport/http/
+              desc: application must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/transport/http$
+              desc: application must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/transport/http/
+              desc: application must not depend on HTTP transport DTO/controller packages
         feature-transport-http:
           files:
             - "**/internal/features/**/transport/http/*.go"
@@ -139,6 +171,14 @@ linters:
               desc: gRPC transport must not depend on HTTP controllers
             - pkg: github.com/aegiscore/user-service/internal/features/user/transport/http/
               desc: gRPC transport must not depend on HTTP controllers
+            - pkg: github.com/aegiscore/user-service/internal/features/role/transport/http$
+              desc: gRPC transport must not depend on HTTP controllers
+            - pkg: github.com/aegiscore/user-service/internal/features/role/transport/http/
+              desc: gRPC transport must not depend on HTTP controllers
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/transport/http$
+              desc: gRPC transport must not depend on HTTP controllers
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/transport/http/
+              desc: gRPC transport must not depend on HTTP controllers
         feature-infrastructure:
           files:
             - "**/internal/features/**/infrastructure/*.go"
@@ -150,6 +190,22 @@ linters:
               desc: infrastructure must not depend on HTTP response helpers
             - pkg: github.com/aegiscore/common/contract/response
               desc: infrastructure must not depend on HTTP response envelopes
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/transport/http$
+              desc: infrastructure must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/auth/transport/http/
+              desc: infrastructure must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/user/transport/http$
+              desc: infrastructure must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/user/transport/http/
+              desc: infrastructure must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/role/transport/http$
+              desc: infrastructure must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/role/transport/http/
+              desc: infrastructure must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/transport/http$
+              desc: infrastructure must not depend on HTTP transport DTO/controller packages
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/transport/http/
+              desc: infrastructure must not depend on HTTP transport DTO/controller packages
         integration-boundary:
           files:
             - "**/internal/integration/*.go"
@@ -181,6 +237,74 @@ linters:
               desc: integration adapters must not depend on feature persistence adapters
             - pkg: github.com/aegiscore/user-service/internal/features/permission/infrastructure/
               desc: integration adapters must not depend on feature persistence adapters
+        auth-user-domain-boundary:
+          files:
+            - "**/internal/features/auth/*.go"
+            - "**/internal/features/auth/**/*.go"
+          deny:
+            - pkg: github.com/aegiscore/user-service/internal/features/user/domain$
+              desc: auth feature must use shared/identity instead of user domain
+            - pkg: github.com/aegiscore/user-service/internal/features/user/domain/
+              desc: auth feature must use shared/identity instead of user domain
+        role-user-domain-boundary:
+          files:
+            - "**/internal/features/role/*.go"
+            - "**/internal/features/role/**/*.go"
+          deny:
+            - pkg: github.com/aegiscore/user-service/internal/features/user/domain$
+              desc: role feature must use shared/identity instead of user domain
+            - pkg: github.com/aegiscore/user-service/internal/features/user/domain/
+              desc: role feature must use shared/identity instead of user domain
+        shared-boundary:
+          files:
+            - "**/internal/shared/*.go"
+            - "**/internal/shared/**/*.go"
+          deny:
+            - pkg: github.com/aegiscore/user-service/internal/features/
+              desc: shared packages must not depend on feature packages
+            - pkg: github.com/gin-gonic/gin
+              desc: shared packages must not depend on Gin transport
+            - pkg: github.com/aegiscore/user-service/internal/persistence/ent$
+              desc: shared packages must not depend on Ent persistence
+            - pkg: github.com/aegiscore/user-service/internal/persistence/ent/
+              desc: shared packages must not depend on Ent persistence
+            - pkg: github.com/redis/go-redis/v9
+              desc: shared packages must not depend on Redis clients
+            - pkg: database/sql
+              desc: shared packages must not depend on SQL packages
+            - pkg: github.com/jackc/pgx/v5
+              desc: shared packages must not depend on PostgreSQL driver packages
+            - pkg: go.uber.org/fx
+              desc: shared packages must not depend on Fx DI
+            - pkg: github.com/aegiscore/common/http/response
+              desc: shared packages must not depend on HTTP response helpers
+            - pkg: github.com/aegiscore/common/contract/response
+              desc: shared packages must not depend on HTTP response envelopes
+            - pkg: github.com/aegiscore/common/runtime/config
+              desc: shared packages must not depend on runtime config
+            - pkg: github.com/aegiscore/common/runtime/logger
+              desc: shared packages must not depend on runtime logger
+            - pkg: github.com/aegiscore/common/runtime/datastore
+              desc: shared packages must not depend on runtime datastore
+        service-composition-boundary:
+          files:
+            - "**/cmd/*.go"
+            - "**/cmd/**/*.go"
+            - "**/internal/bootstrap/*.go"
+            - "**/internal/bootstrap/**/*.go"
+            - "**/internal/providers/*.go"
+            - "**/internal/providers/**/*.go"
+            - "**/internal/router/*.go"
+            - "**/internal/router/**/*.go"
+          deny:
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin$
+              desc: service composition must use permission public contracts instead of concrete policy sync adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/infrastructure/casbin/
+              desc: service composition must use permission public contracts instead of concrete policy sync adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis$
+              desc: service composition must use permission public contracts instead of concrete policy sync adapters
+            - pkg: github.com/aegiscore/user-service/internal/features/permission/infrastructure/redis/
+              desc: service composition must use permission public contracts instead of concrete policy sync adapters
     revive:
       severity: warning
       rules:

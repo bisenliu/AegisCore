@@ -31,7 +31,7 @@ set -eu
 # Review 流程：
 #   1. 提交前审查生成的 .sql 文件。
 #   2. 如果手动修改 SQL，必须再次运行本脚本或 `atlas migrate hash --dir file://migrations`。
-#   3. 提交前或 CI 中运行 `./scripts/migrate-validate.sh`。
+#   3. 提交前或 CI 中运行 `make migrate-validate`。
 if [ "$#" -ne 1 ]; then
   echo "用法：$0 <migration-name>" >&2
   exit 2
