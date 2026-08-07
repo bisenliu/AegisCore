@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"net/http"
 	"testing"
 	"time"
 
@@ -61,8 +60,8 @@ func TestFxGraphOptionsUseWiringModuleOnly(t *testing.T) {
 		"RegisterRuntimeDependencyMetrics",
 		"RegisterRoutes",
 		"registerRBACLifecycle",
-		"func(*http.Server)",
-		"func(*bootstrap.PprofServer)",
+		"func(*bootstrap.HTTPRuntime)",
+		"func(*bootstrap.PprofRuntime)",
 	} {
 		require.NotContains(t, dot, runtimeOnly)
 	}
@@ -164,11 +163,11 @@ func fxGraphSideEffectGuards(t *testing.T) []fx.Option {
 			fail("gin engine")
 			return engine
 		}),
-		fx.Decorate(func(server *http.Server) *http.Server {
+		fx.Decorate(func(server *bootstrap.HTTPRuntime) *bootstrap.HTTPRuntime {
 			fail("http server")
 			return server
 		}),
-		fx.Decorate(func(server *bootstrap.PprofServer) *bootstrap.PprofServer {
+		fx.Decorate(func(server *bootstrap.PprofRuntime) *bootstrap.PprofRuntime {
 			fail("pprof server")
 			return server
 		}),

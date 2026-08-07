@@ -1,8 +1,6 @@
 package bootstrap
 
 import (
-	"net/http"
-
 	"go.uber.org/fx"
 
 	"github.com/aegiscore/common/runtime/logger"
@@ -34,7 +32,7 @@ var WiringModule = fx.Module("aegiscore-user-service-wiring",
 	fx.Provide(
 		// Fx 分类：传输 - 对外 HTTP server 及其生命周期 hook。
 		NewHTTPServer,
-		// Fx 分类：开发工具 - 通过进程环境控制的独立 pprof 诊断 server。
+		// Fx 分类：开发工具 - 通过已解析配置控制的独立 pprof 诊断 server。
 		NewPprofServer,
 	),
 )
@@ -52,7 +50,7 @@ var RuntimeModule = fx.Module("aegiscore-user-service-runtime",
 )
 
 // registerRuntimeServers 强制解析运行时 server，使其构造函数注册 lifecycle hook。
-func registerRuntimeServers(_ *http.Server, _ *PprofServer) {}
+func registerRuntimeServers(_ *HTTPRuntime, _ *PprofRuntime) {}
 
 // InitProcessRuntime 初始化 user-service 拥有的进程级 runtime 状态。
 func InitProcessRuntime(settings serviceconfig.TimezoneSettings) error {

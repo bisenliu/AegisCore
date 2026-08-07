@@ -7,8 +7,8 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,13 +33,13 @@ func (r *lifecycleRecorder) Append(hook fx.Hook) {
 }
 
 type shutdownRecorder struct {
-	calls    int
+	calls    atomic.Int32
 	err      error
 	delegate fx.Shutdowner
 }
 
 func (r *shutdownRecorder) Shutdown(options ...fx.ShutdownOption) error {
-	r.calls++
+	r.calls.Add(1)
 	if r.err != nil {
 		return r.err
 	}
@@ -47,6 +47,10 @@ func (r *shutdownRecorder) Shutdown(options ...fx.ShutdownOption) error {
 		return r.delegate.Shutdown(options...)
 	}
 	return nil
+}
+
+func (r *shutdownRecorder) Calls() int32 {
+	return r.calls.Load()
 }
 
 func newShutdownSignalRecorder(t testing.TB) (*shutdownRecorder, <-chan fx.ShutdownSignal) {
@@ -72,18 +76,23 @@ func requireShutdownSignal(t testing.TB, signals <-chan fx.ShutdownSignal) fx.Sh
 }
 
 func TestDefaultConfigHTTPTimeouts(t *testing.T) {
-	cfg := config.DefaultConfig()
+	t.Parallel()
 
+	cfg := config.DefaultConfig()
 	require.True(t, cfg.Server.HTTP.Enabled)
 	require.Equal(t, 30*time.Second, cfg.Server.HTTP.ReadTimeout)
 	require.Equal(t, 60*time.Second, cfg.Server.HTTP.WriteTimeout)
 	require.Equal(t, 120*time.Second, cfg.Server.HTTP.IdleTimeout)
 	require.Equal(t, 10*time.Second, cfg.Server.HTTP.ShutdownTimeout)
+	require.GreaterOrEqual(t, cfg.Runtime.Lifecycle.StopTimeout, cfg.Server.HTTP.ShutdownTimeout)
 }
 
-func TestHTTPServerUsesConfiguredTimeouts(t *testing.T) {
+func TestHTTPRuntimeUsesConfiguredOptions(t *testing.T) {
+	t.Parallel()
+
 	lifecycle := &lifecycleRecorder{}
 	cfg := httpServerTestRuntimeConfig(config.HTTPServerConfig{
+		Enabled:         true,
 		Host:            "127.0.0.1",
 		Port:            18080,
 		ReadTimeout:     30 * time.Second,
@@ -91,47 +100,72 @@ func TestHTTPServerUsesConfiguredTimeouts(t *testing.T) {
 		IdleTimeout:     120 * time.Second,
 		ShutdownTimeout: 25 * time.Second,
 	})
-	server := NewHTTPServer(HTTPServerParams{
+	runtime, err := NewHTTPServer(HTTPServerParams{
 		Lifecycle: lifecycle,
 		Config:    cfg,
 		Log:       zap.NewNop(),
 		Engine:    gin.New(),
 	})
+	require.NoError(t, err)
+	require.True(t, runtime.Enabled)
+	require.NotNil(t, runtime.Managed)
 
+	server := runtime.Managed.HTTPServer()
+	require.Equal(t, "127.0.0.1:18080", server.Addr)
 	require.Equal(t, cfg.Server.HTTP.ReadTimeout, server.ReadTimeout)
 	require.Equal(t, cfg.Server.HTTP.WriteTimeout, server.WriteTimeout)
 	require.Equal(t, cfg.Server.HTTP.IdleTimeout, server.IdleTimeout)
 	require.Len(t, lifecycle.hooks, 1)
+	require.NotNil(t, lifecycle.hooks[0].OnStart)
 	require.NotNil(t, lifecycle.hooks[0].OnStop)
 }
 
-func TestHTTPServerStartReturnsListenError(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	defer listener.Close()
+func TestHTTPRuntimeRejectsInvalidManagedOptions(t *testing.T) {
+	t.Parallel()
 
-	addr := listener.Addr().(*net.TCPAddr)
-	lifecycle := &lifecycleRecorder{}
-	NewHTTPServer(HTTPServerParams{
-		Lifecycle: lifecycle,
+	_, err := NewHTTPServer(HTTPServerParams{
+		Lifecycle: &lifecycleRecorder{},
 		Config: httpServerTestRuntimeConfig(config.HTTPServerConfig{
-			Host: "127.0.0.1",
-			Port: addr.Port,
+			Enabled: true,
+			Host:    "127.0.0.1",
+			Port:    8080,
 		}),
 		Log:    zap.NewNop(),
 		Engine: gin.New(),
 	})
-
-	require.Len(t, lifecycle.hooks, 1)
-	require.NotNil(t, lifecycle.hooks[0].OnStart)
-	err = lifecycle.hooks[0].OnStart(context.Background())
-	require.ErrorContains(t, err, "listen http server")
+	require.ErrorContains(t, err, "shutdown timeout must be positive")
 }
 
-func TestHTTPServerDisabledDoesNotRegisterLifecycleOrListen(t *testing.T) {
+func TestHTTPFxOnStartReturnsListenError(t *testing.T) {
+	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, occupied.Close()) })
+	port := occupied.Addr().(*net.TCPAddr).Port
+	cfg := httpServerTestRuntimeConfig(config.HTTPServerConfig{
+		Enabled:         true,
+		Host:            "127.0.0.1",
+		Port:            port,
+		ShutdownTimeout: time.Second,
+	})
+	app := fx.New(
+		fxtest.WithTestLogger(t),
+		fx.Supply(cfg, zap.NewNop(), gin.New()),
+		fx.Provide(NewHTTPServer),
+		fx.Invoke(func(*HTTPRuntime) {}),
+	)
+	require.NoError(t, app.Err())
+
+	err = app.Start(context.Background())
+	require.ErrorContains(t, err, "listen http server")
+	require.ErrorContains(t, err, occupied.Addr().String())
+}
+
+func TestHTTPDisabledDoesNotConstructManagedOrRegisterLifecycle(t *testing.T) {
+	t.Parallel()
+
 	port := reserveHTTPTestPort(t)
 	lifecycle := &lifecycleRecorder{}
-	server := NewHTTPServer(HTTPServerParams{
+	runtime, err := NewHTTPServer(HTTPServerParams{
 		Lifecycle: lifecycle,
 		Config: &config.Config{Server: config.ServerConfig{
 			HTTP: config.HTTPServerConfig{Enabled: false, Host: "127.0.0.1", Port: port},
@@ -140,15 +174,19 @@ func TestHTTPServerDisabledDoesNotRegisterLifecycleOrListen(t *testing.T) {
 		Log:    zap.NewNop(),
 		Engine: gin.New(),
 	})
-
-	require.Equal(t, fmt.Sprintf("127.0.0.1:%d", port), server.Addr)
+	require.NoError(t, err)
+	require.False(t, runtime.Enabled)
+	require.Nil(t, runtime.Managed)
 	require.Empty(t, lifecycle.hooks)
-	listener, err := net.Listen("tcp", server.Addr)
+
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	require.NoError(t, err)
 	require.NoError(t, listener.Close())
 }
 
-func TestHTTPServerDisabledAllowsFxAppStartAndStop(t *testing.T) {
+func TestHTTPDisabledAllowsFxAppStartAndStop(t *testing.T) {
+	t.Parallel()
+
 	cfg := &config.Config{Server: config.ServerConfig{
 		HTTP: config.HTTPServerConfig{Enabled: false},
 		GRPC: config.GRPCServerConfig{Enabled: true},
@@ -156,84 +194,62 @@ func TestHTTPServerDisabledAllowsFxAppStartAndStop(t *testing.T) {
 	app := fx.New(
 		fx.Supply(cfg, zap.NewNop(), gin.New()),
 		fx.Provide(NewHTTPServer),
-		fx.Invoke(func(*http.Server) {}),
+		fx.Invoke(func(runtime *HTTPRuntime) {
+			require.False(t, runtime.Enabled)
+			require.Nil(t, runtime.Managed)
+		}),
 	)
-
 	require.NoError(t, app.Err())
 	require.NoError(t, app.Start(context.Background()))
 	require.NoError(t, app.Stop(context.Background()))
 }
 
-func TestHTTPServerUnexpectedServeErrorTriggersShutdown(t *testing.T) {
-	core, logs := observer.New(zapcore.ErrorLevel)
-	shutdowner, signals := newShutdownSignalRecorder(t)
-	serveErr := errors.New("serve failed")
+func TestRuntimeServerFailureHandlerTriggersExitCodeOne(t *testing.T) {
+	t.Parallel()
 
-	shutdownOnHTTPServeError(zap.New(core), shutdowner, serveErr)
+	for _, serverName := range []string{"http", "pprof"} {
+		serverName := serverName
+		t.Run(serverName, func(t *testing.T) {
+			core, logs := observer.New(zapcore.ErrorLevel)
+			shutdowner, signals := newShutdownSignalRecorder(t)
+			serveErr := errors.New("serve failed")
 
-	require.Equal(t, 1, shutdowner.calls)
-	require.Equal(t, 1, requireShutdownSignal(t, signals).ExitCode)
-	entries := logs.FilterMessage("http server failed").All()
-	require.Len(t, entries, 1)
-	if loggedErr, ok := entries[0].ContextMap()["error"].(string); !ok || loggedErr != serveErr.Error() {
-		require.Equal(t, serveErr.Error(), loggedErr)
+			newRuntimeServerFailureHandler(zap.New(core), shutdowner, serverName)(serveErr)
+
+			require.Equal(t, int32(1), shutdowner.Calls())
+			require.Equal(t, 1, requireShutdownSignal(t, signals).ExitCode)
+			entries := logs.FilterMessage(serverName + " server failed").All()
+			require.Len(t, entries, 1)
+			require.Equal(t, serveErr.Error(), entries[0].ContextMap()["error"])
+		})
 	}
 }
 
-func TestHTTPServerUnexpectedServeErrorLogsShutdownFailure(t *testing.T) {
+func TestRuntimeServerFailureHandlerLogsShutdownFailure(t *testing.T) {
+	t.Parallel()
+
 	core, logs := observer.New(zapcore.ErrorLevel)
 	shutdownErr := errors.New("shutdown failed")
 	shutdowner := &shutdownRecorder{err: shutdownErr}
 
-	shutdownOnHTTPServeError(zap.New(core), shutdowner, errors.New("serve failed"))
+	newRuntimeServerFailureHandler(zap.New(core), shutdowner, "http")(errors.New("serve failed"))
 
-	require.Equal(t, 1, shutdowner.calls)
+	require.Equal(t, int32(1), shutdowner.Calls())
 	entries := logs.FilterMessage("shutdown after http server failure failed").All()
 	require.Len(t, entries, 1)
-	if loggedErr, ok := entries[0].ContextMap()["error"].(string); !ok || loggedErr != shutdownErr.Error() {
-		require.Equal(t, shutdownErr.Error(), loggedErr)
-	}
+	require.Equal(t, shutdownErr.Error(), entries[0].ContextMap()["error"])
 }
 
-func TestHTTPServerClosedServeErrorDoesNotTriggerShutdown(t *testing.T) {
-	core, logs := observer.New(zapcore.ErrorLevel)
-	shutdowner := &shutdownRecorder{}
+func TestHTTPRuntimeNormalStartAndStopDoesNotTriggerShutdown(t *testing.T) {
+	t.Parallel()
 
-	shutdownOnHTTPServeError(zap.New(core), shutdowner, http.ErrServerClosed)
-	shutdownOnHTTPServeError(zap.New(core), shutdowner, nil)
-
-	require.Equal(t, 0, shutdowner.calls)
-	require.Equal(t, 0, logs.Len())
-}
-
-func TestHTTPServerLifecycleCancelStopsServeGoroutine(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-
-	core, logs := observer.New(zapcore.DebugLevel)
-	shutdowner := &shutdownRecorder{}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		serveHTTPWithLifecycle(ctx, zap.New(core), shutdowner, &http.Server{}, listener)
-	}()
-
-	cancel()
-	requireEventuallyClosed(t, done, time.Second)
-
-	require.Equal(t, 0, shutdowner.calls)
-	require.Empty(t, logs.FilterMessage("http server failed").All())
-	entries := logs.FilterMessage("http server goroutine stopped").All()
-	require.Len(t, entries, 1)
-	require.Equal(t, "lifecycle_canceled", entries[0].ContextMap()["reason"])
-}
-
-func TestHTTPServerStartAndStop(t *testing.T) {
 	lifecycle := &lifecycleRecorder{}
-	NewHTTPServer(HTTPServerParams{
-		Lifecycle: lifecycle,
+	shutdowner := &shutdownRecorder{}
+	runtime, err := NewHTTPServer(HTTPServerParams{
+		Lifecycle:  lifecycle,
+		Shutdowner: shutdowner,
 		Config: httpServerTestRuntimeConfig(config.HTTPServerConfig{
+			Enabled:         true,
 			Host:            "127.0.0.1",
 			Port:            0,
 			ShutdownTimeout: time.Second,
@@ -241,38 +257,32 @@ func TestHTTPServerStartAndStop(t *testing.T) {
 		Log:    zap.NewNop(),
 		Engine: gin.New(),
 	})
-
-	require.Len(t, lifecycle.hooks, 1)
-	require.NotNil(t, lifecycle.hooks[0].OnStart)
-	require.NotNil(t, lifecycle.hooks[0].OnStop)
+	require.NoError(t, err)
+	require.NotNil(t, runtime.Managed)
 	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
-	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	require.NoError(t, lifecycle.hooks[0].OnStop(stopCtx))
+	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
+	require.Equal(t, int32(0), shutdowner.Calls())
 }
 
-func TestHTTPServerStopWaitsForActiveRequest(t *testing.T) {
+func TestHTTPRuntimeStopWaitsForActiveRequest(t *testing.T) {
+	t.Parallel()
+
 	port := reserveHTTPTestPort(t)
 	lifecycle := &lifecycleRecorder{}
 	started := make(chan struct{})
 	release := make(chan struct{})
 	var releaseOnce sync.Once
-	releaseRequest := func() {
-		releaseOnce.Do(func() {
-			close(release)
-		})
-	}
-	t.Cleanup(releaseRequest)
-
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
 	engine := gin.New()
-	engine.GET("/slow", func(c *gin.Context) {
+	engine.GET("/slow", func(ctx *gin.Context) {
 		close(started)
 		<-release
-		c.String(http.StatusOK, "ok")
+		ctx.String(http.StatusOK, "ok")
 	})
-	NewHTTPServer(HTTPServerParams{
+	_, err := NewHTTPServer(HTTPServerParams{
 		Lifecycle: lifecycle,
 		Config: httpServerTestRuntimeConfig(config.HTTPServerConfig{
+			Enabled:         true,
 			Host:            "127.0.0.1",
 			Port:            port,
 			ShutdownTimeout: time.Second,
@@ -280,44 +290,13 @@ func TestHTTPServerStopWaitsForActiveRequest(t *testing.T) {
 		Log:    zap.NewNop(),
 		Engine: engine,
 	})
-
+	require.NoError(t, err)
 	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
-	defer func() {
-		stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		_ = lifecycle.hooks[0].OnStop(stopCtx)
-	}()
 
-	type responseResult struct {
-		status int
-		err    error
-	}
-	responseDone := make(chan responseResult, 1)
-	go func() {
-		client := &http.Client{Timeout: 2 * time.Second}
-		resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/slow", port))
-		if err != nil {
-			responseDone <- responseResult{err: err}
-			return
-		}
-		defer resp.Body.Close()
-		_, err = io.ReadAll(resp.Body)
-		if err != nil {
-			responseDone <- responseResult{err: err}
-			return
-		}
-		responseDone <- responseResult{status: resp.StatusCode}
-	}()
-
+	responseDone := startBootstrapHTTPRequest(fmt.Sprintf("http://127.0.0.1:%d/slow", port))
 	requireEventuallyClosed(t, started, time.Second)
-
 	stopDone := make(chan error, 1)
-	go func() {
-		stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		stopDone <- lifecycle.hooks[0].OnStop(stopCtx)
-	}()
-
+	go func() { stopDone <- lifecycle.hooks[0].OnStop(context.Background()) }()
 	require.Never(t, func() bool {
 		select {
 		case <-stopDone:
@@ -325,108 +304,68 @@ func TestHTTPServerStopWaitsForActiveRequest(t *testing.T) {
 		default:
 			return false
 		}
-	}, 100*time.Millisecond, 10*time.Millisecond)
-
-	releaseRequest()
-	select {
-	case err := <-stopDone:
-		require.NoError(t, err)
-	case <-time.After(time.Second):
-		t.Fatal("HTTP server stop blocked after active request release")
-	}
-	result := <-responseDone
-	require.NoError(t, result.err)
-	require.Equal(t, http.StatusOK, result.status)
+	}, 50*time.Millisecond, 5*time.Millisecond)
+	releaseOnce.Do(func() { close(release) })
+	require.NoError(t, <-stopDone)
+	require.NoError(t, <-responseDone)
 }
 
-func TestHTTPServerStopClosesAndDrainsActiveRequestAfterShutdownTimeout(t *testing.T) {
+func TestHTTPRuntimeForcesCloseAfterShutdownTimeout(t *testing.T) {
+	t.Parallel()
+
 	port := reserveHTTPTestPort(t)
 	lifecycle := &lifecycleRecorder{}
 	started := make(chan struct{})
 	exited := make(chan struct{})
-
 	engine := gin.New()
-	engine.GET("/blocked", func(c *gin.Context) {
+	engine.GET("/blocked", func(ctx *gin.Context) {
 		close(started)
-		<-c.Request.Context().Done()
+		<-ctx.Request.Context().Done()
 		close(exited)
 	})
-	NewHTTPServer(HTTPServerParams{
+	_, err := NewHTTPServer(HTTPServerParams{
 		Lifecycle: lifecycle,
 		Config: httpServerTestRuntimeConfig(config.HTTPServerConfig{
+			Enabled:         true,
 			Host:            "127.0.0.1",
 			Port:            port,
-			ShutdownTimeout: 20 * time.Millisecond,
+			ShutdownTimeout: 30 * time.Millisecond,
 		}),
 		Log:    zap.NewNop(),
 		Engine: engine,
 	})
-
+	require.NoError(t, err)
 	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
-	defer func() {
-		stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		_ = lifecycle.hooks[0].OnStop(stopCtx)
-	}()
-
-	responseDone := make(chan error, 1)
-	go func() {
-		client := &http.Client{Timeout: 2 * time.Second}
-		resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/blocked", port))
-		if err != nil {
-			responseDone <- err
-			return
-		}
-		defer resp.Body.Close()
-		_, err = io.ReadAll(resp.Body)
-		responseDone <- err
-	}()
-
+	responseDone := startBootstrapHTTPRequest(fmt.Sprintf("http://127.0.0.1:%d/blocked", port))
 	requireEventuallyClosed(t, started, time.Second)
 
-	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	stopDone := make(chan error, 1)
-	go func() { stopDone <- lifecycle.hooks[0].OnStop(stopCtx) }()
-	var err error
-	select {
-	case err = <-stopDone:
-	case <-time.After(time.Second):
-		t.Fatal("HTTP server stop did not honor shutdown timeout")
-	}
+	err = lifecycle.hooks[0].OnStop(context.Background())
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-
 	requireEventuallyClosed(t, exited, time.Second)
 	requireEventuallyReceives(t, responseDone, time.Second)
 }
 
-func TestHTTPServerStartLogIncludesRuntimeIdentity(t *testing.T) {
+func TestHTTPRuntimeStartLogIncludesRuntimeIdentity(t *testing.T) {
+	t.Parallel()
+
 	lifecycle := &lifecycleRecorder{}
 	core, logs := observer.New(zapcore.InfoLevel)
-	log := zap.New(core)
-	NewHTTPServer(HTTPServerParams{
-		Lifecycle: lifecycle,
-		Config: &config.Config{
-			App: config.AppConfig{Name: "aegiscore-user-service", Environment: "local"},
-			Server: config.ServerConfig{
-				HTTP: config.HTTPServerConfig{
-					Enabled: true,
-					Host:    "127.0.0.1",
-					Port:    0,
-				},
-			},
-		},
-		Log:    log,
-		Engine: gin.New(),
+	cfg := httpServerTestRuntimeConfig(config.HTTPServerConfig{
+		Enabled:         true,
+		Host:            "127.0.0.1",
+		Port:            0,
+		ShutdownTimeout: time.Second,
 	})
-
-	require.Len(t, lifecycle.hooks, 1)
-	require.NotNil(t, lifecycle.hooks[0].OnStart)
-	require.NotNil(t, lifecycle.hooks[0].OnStop)
+	cfg.App = config.AppConfig{Name: "aegiscore-user-service", Environment: "local"}
+	_, err := NewHTTPServer(HTTPServerParams{
+		Lifecycle: lifecycle,
+		Config:    cfg,
+		Log:       zap.New(core),
+		Engine:    gin.New(),
+	})
+	require.NoError(t, err)
 	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
-	stopCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	require.NoError(t, lifecycle.hooks[0].OnStop(stopCtx))
+	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
 
 	entries := logs.FilterMessage("starting http server").All()
 	require.Len(t, entries, 1)
@@ -439,50 +378,8 @@ func TestHTTPServerStartLogIncludesRuntimeIdentity(t *testing.T) {
 	require.Equal(t, time.Local.String(), fields["timezone"])
 }
 
-func TestDefaultHTTPShutdownTimeout(t *testing.T) {
-	require.Equal(t, 10*time.Second, defaultHTTPShutdownTimeout)
-}
-
-func TestHTTPDrainTrackerWaitsForActiveHandlers(t *testing.T) {
-	started := make(chan struct{})
-	release := make(chan struct{})
-	done := make(chan struct{})
-	tracker := newHTTPDrainTracker(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		close(started)
-		<-release
-	}))
-
-	go func() {
-		defer close(done)
-		request := httptest.NewRequest(http.MethodGet, "/", nil)
-		tracker.ServeHTTP(httptest.NewRecorder(), request)
-	}()
-
-	requireEventuallyClosed(t, started, time.Second)
-
-	waitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
-	require.ErrorIs(t, tracker.Wait(waitCtx), context.DeadlineExceeded)
-
-	close(release)
-	require.NoError(t, tracker.Wait(context.Background()))
-	requireEventuallyClosed(t, done, time.Second)
-}
-
-func TestHTTPDrainTrackerReturnsContextErrorWithActiveHandlers(t *testing.T) {
-	tracker := newHTTPDrainTracker(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	tracker.mu.Lock()
-	tracker.active = 1
-	tracker.mu.Unlock()
-	waitCtx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	require.ErrorIs(t, tracker.Wait(waitCtx), context.Canceled)
-}
-
-func reserveHTTPTestPort(t *testing.T) int {
+func reserveHTTPTestPort(t testing.TB) int {
 	t.Helper()
-
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	port := listener.Addr().(*net.TCPAddr).Port
@@ -491,15 +388,30 @@ func reserveHTTPTestPort(t *testing.T) int {
 }
 
 func httpServerTestRuntimeConfig(httpCfg config.HTTPServerConfig) *config.Config {
-	httpCfg.Enabled = true
 	return &config.Config{Server: config.ServerConfig{HTTP: httpCfg}}
 }
 
-func requireEventuallyClosed(t *testing.T, ch <-chan struct{}, waitFor time.Duration) {
+func startBootstrapHTTPRequest(url string) <-chan error {
+	done := make(chan error, 1)
+	go func() {
+		client := &http.Client{Timeout: 2 * time.Second}
+		response, err := client.Get(url)
+		if err != nil {
+			done <- err
+			return
+		}
+		defer response.Body.Close()
+		_, err = io.Copy(io.Discard, response.Body)
+		done <- err
+	}()
+	return done
+}
+
+func requireEventuallyClosed(t testing.TB, channel <-chan struct{}, waitFor time.Duration) {
 	t.Helper()
 	require.Eventually(t, func() bool {
 		select {
-		case <-ch:
+		case <-channel:
 			return true
 		default:
 			return false
@@ -507,11 +419,11 @@ func requireEventuallyClosed(t *testing.T, ch <-chan struct{}, waitFor time.Dura
 	}, waitFor, 10*time.Millisecond)
 }
 
-func requireEventuallyReceives[T any](t *testing.T, ch <-chan T, waitFor time.Duration) {
+func requireEventuallyReceives[T any](t testing.TB, channel <-chan T, waitFor time.Duration) {
 	t.Helper()
 	require.Eventually(t, func() bool {
 		select {
-		case <-ch:
+		case <-channel:
 			return true
 		default:
 			return false

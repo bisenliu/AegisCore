@@ -2,23 +2,21 @@ package bootstrap
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net"
-	"net/http"
 
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 
 	commonpprof "github.com/aegiscore/common/http/pprof"
 	commonconfig "github.com/aegiscore/common/runtime/config"
+	"github.com/aegiscore/common/runtime/httpserver"
 	"github.com/aegiscore/common/runtime/logger"
 )
 
-// PprofServer 持有独立于业务 Gin router 的诊断 HTTP server。
-type PprofServer struct {
-	Server  *http.Server
+// PprofRuntime 表达独立 pprof server 的启用状态和可选运行实例。
+type PprofRuntime struct {
 	Enabled bool
+	Managed *httpserver.Managed
 }
 
 // PprofServerParams 包含诊断 server 的已解析配置和生命周期依赖。
@@ -31,60 +29,42 @@ type PprofServerParams struct {
 	Log        *zap.Logger
 }
 
-// NewPprofServer 根据已解析配置创建诊断监听，并仅在启用时注册独立生命周期。
-func NewPprofServer(params PprofServerParams) (*PprofServer, error) {
+// NewPprofServer 根据已解析配置创建 pprof runtime，并在启用时注册 Fx hook。
+func NewPprofServer(params PprofServerParams) (*PprofRuntime, error) {
 	if params.Config == nil {
-		return nil, fmt.Errorf("config is required")
+		return nil, fmt.Errorf("create pprof runtime: config is required")
 	}
 	pprofCfg := params.Config.Observability.Pprof
-
-	server := &http.Server{
-		Addr:    pprofCfg.Addr,
-		Handler: commonpprof.Handler(commonpprof.Options{}),
+	runtime := &PprofRuntime{Enabled: pprofCfg.Enabled}
+	if !runtime.Enabled {
+		return runtime, nil
 	}
-	result := &PprofServer{Server: server, Enabled: pprofCfg.Enabled}
-	if !pprofCfg.Enabled {
-		return result, nil
+	if params.Lifecycle == nil {
+		return nil, fmt.Errorf("create pprof runtime: lifecycle is required")
 	}
 
 	pprofLog := logger.NamedComponent(params.Log, "pprof", "diagnostics")
+	managed, err := httpserver.New(httpserver.Options{
+		Name:            "pprof",
+		Addr:            pprofCfg.Addr,
+		Handler:         commonpprof.Handler(commonpprof.Options{}),
+		ShutdownTimeout: params.Config.Server.HTTP.ShutdownTimeout,
+		OnServeError:    newRuntimeServerFailureHandler(pprofLog, params.Shutdowner, "pprof"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create pprof runtime: %w", err)
+	}
+	runtime.Managed = managed
+
 	params.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			listener, err := net.Listen("tcp", pprofCfg.Addr)
-			if err != nil {
-				return fmt.Errorf("listen pprof server on %s: %w", pprofCfg.Addr, err)
-			}
 			logger.WithContext(ctx, pprofLog).Info("starting pprof server", zap.String("addr", pprofCfg.Addr))
-			go servePprofServer(pprofLog, params.Shutdowner, server, listener)
-			return nil
+			return managed.Start(ctx)
 		},
 		OnStop: func(ctx context.Context) error {
 			logger.WithContext(ctx, pprofLog).Info("stopping pprof server")
-			shutdownErr := server.Shutdown(ctx)
-			if shutdownErr == nil {
-				return nil
-			}
-			return errors.Join(
-				fmt.Errorf("shutdown pprof server: %w", shutdownErr),
-				server.Close(),
-			)
+			return managed.Stop(ctx)
 		},
 	})
-	return result, nil
-}
-
-func servePprofServer(log *zap.Logger, shutdowner fx.Shutdowner, server *http.Server, listener net.Listener) {
-	handlePprofServeExit(log, shutdowner, server.Serve(listener))
-}
-
-func handlePprofServeExit(log *zap.Logger, shutdowner fx.Shutdowner, err error) {
-	if err == nil || errors.Is(err, http.ErrServerClosed) {
-		return
-	}
-	log.Error("pprof server failed", logger.StackTrace(zap.Error(err))...)
-	if shutdowner != nil {
-		if shutdownErr := shutdowner.Shutdown(fx.ExitCode(1)); shutdownErr != nil {
-			log.Error("shutdown after pprof server failure failed", logger.StackTrace(zap.Error(shutdownErr))...)
-		}
-	}
+	return runtime, nil
 }

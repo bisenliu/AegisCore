@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -10,172 +9,144 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/aegiscore/common/runtime/config"
 )
 
-func TestPprofServerDisabledDoesNotRegisterLifecycle(t *testing.T) {
+func TestPprofDisabledDoesNotConstructManagedRegisterLifecycleOrListen(t *testing.T) {
+	t.Parallel()
+
+	port := reserveHTTPTestPort(t)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	lifecycle := &lifecycleRecorder{}
-	server, err := NewPprofServer(PprofServerParams{
+	runtime, err := NewPprofServer(PprofServerParams{
 		Lifecycle: lifecycle,
-		Config:    newPprofRuntimeConfig(false, config.DefaultPprofAddr),
+		Config:    newPprofRuntimeConfig(false, addr),
 		Log:       zap.NewNop(),
 	})
 	require.NoError(t, err)
-	require.False(t, server.Enabled)
+	require.False(t, runtime.Enabled)
+	require.Nil(t, runtime.Managed)
 	require.Empty(t, lifecycle.hooks)
-}
 
-func TestPprofServerUsesParsedConfigInsteadOfProcessEnvironment(t *testing.T) {
-	lifecycle := &lifecycleRecorder{}
-	server, err := NewPprofServer(PprofServerParams{
-		Lifecycle: lifecycle,
-		Config:    newPprofRuntimeConfig(false, config.DefaultPprofAddr),
-		Log:       zap.NewNop(),
-	})
+	listener, err := net.Listen("tcp", addr)
 	require.NoError(t, err)
-	require.False(t, server.Enabled)
-	require.Equal(t, config.DefaultPprofAddr, server.Server.Addr)
-	require.Empty(t, lifecycle.hooks)
+	require.NoError(t, listener.Close())
 }
 
-func TestPprofServerUsesIndependentHandler(t *testing.T) {
-	server, err := NewPprofServer(PprofServerParams{
+func TestPprofRuntimeUsesConfiguredIndependentHandlerAndAddress(t *testing.T) {
+	t.Parallel()
+
+	addr := "127.0.0.1:16060"
+	runtime, err := NewPprofServer(PprofServerParams{
 		Lifecycle: &lifecycleRecorder{},
-		Config:    newPprofRuntimeConfig(false, config.DefaultPprofAddr),
+		Config:    newPprofRuntimeConfig(true, addr),
 		Log:       zap.NewNop(),
 	})
 	require.NoError(t, err)
+	require.True(t, runtime.Enabled)
+	require.NotNil(t, runtime.Managed)
+	require.Equal(t, addr, runtime.Managed.HTTPServer().Addr)
 
 	pprofResponse := httptest.NewRecorder()
-	server.Server.Handler.ServeHTTP(pprofResponse, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
+	runtime.Managed.HTTPServer().Handler.ServeHTTP(
+		pprofResponse,
+		httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil),
+	)
 	require.Equal(t, http.StatusOK, pprofResponse.Code)
-
 	businessResponse := httptest.NewRecorder()
-	server.Server.Handler.ServeHTTP(businessResponse, httptest.NewRequest(http.MethodGet, "/livez", nil))
+	runtime.Managed.HTTPServer().Handler.ServeHTTP(
+		businessResponse,
+		httptest.NewRequest(http.MethodGet, "/livez", nil),
+	)
 	require.Equal(t, http.StatusNotFound, businessResponse.Code)
 }
 
-func TestPprofServerLifecycleStartsAndStopsIndependentListener(t *testing.T) {
+func TestPprofLifecycleStartsAndStopsIndependentListener(t *testing.T) {
+	t.Parallel()
+
 	port := reserveHTTPTestPort(t)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	lifecycle := &lifecycleRecorder{}
 	shutdowner := &shutdownRecorder{}
-	server, err := NewPprofServer(PprofServerParams{
+	runtime, err := NewPprofServer(PprofServerParams{
 		Lifecycle:  lifecycle,
 		Shutdowner: shutdowner,
 		Config:     newPprofRuntimeConfig(true, addr),
 		Log:        zap.NewNop(),
 	})
 	require.NoError(t, err)
-	require.True(t, server.Enabled)
+	require.True(t, runtime.Enabled)
 	require.Len(t, lifecycle.hooks, 1)
 	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
 
-	response, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/debug/pprof/", port))
+	response, err := http.Get("http://" + addr + "/debug/pprof/")
 	require.NoError(t, err)
 	require.NoError(t, response.Body.Close())
 	require.Equal(t, http.StatusOK, response.StatusCode)
-
 	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
-	require.Equal(t, 0, shutdowner.calls)
+	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
+	require.Equal(t, int32(0), shutdowner.Calls())
 }
 
-func TestPprofServerStopClosesServerAfterCanceledShutdown(t *testing.T) {
-	port := reserveHTTPTestPort(t)
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
+func TestPprofOnStartReturnsListenError(t *testing.T) {
+	t.Parallel()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, listener.Close()) })
 	lifecycle := &lifecycleRecorder{}
-	shutdowner := &shutdownRecorder{}
-	server, err := NewPprofServer(PprofServerParams{
-		Lifecycle:  lifecycle,
-		Shutdowner: shutdowner,
-		Config:     newPprofRuntimeConfig(true, addr),
-		Log:        zap.NewNop(),
+	_, err = NewPprofServer(PprofServerParams{
+		Lifecycle: lifecycle,
+		Config:    newPprofRuntimeConfig(true, listener.Addr().String()),
+		Log:       zap.NewNop(),
 	})
 	require.NoError(t, err)
-	require.Len(t, lifecycle.hooks, 1)
-	entered := make(chan struct{})
-	server.Server.Handler = http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		close(entered)
-		<-r.Context().Done()
-	})
-	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
-	requestDone := startBlockedPprofRequest(t, server.Server.Addr, entered)
 
-	stopCtx, cancel := context.WithCancel(context.Background())
-	cancel()
-	stopDone := make(chan error, 1)
-	go func() { stopDone <- lifecycle.hooks[0].OnStop(stopCtx) }()
-	select {
-	case err = <-stopDone:
-	case <-time.After(time.Second):
-		t.Fatal("pprof stop blocked after canceled shutdown")
-	}
-	require.ErrorIs(t, err, context.Canceled)
-	requireEventuallyReceives(t, requestDone, time.Second)
-	require.Eventually(t, func() bool {
-		conn, dialErr := net.DialTimeout("tcp", server.Server.Addr, 10*time.Millisecond)
-		if dialErr != nil {
-			return true
-		}
-		require.NoError(t, conn.Close())
-		return false
-	}, time.Second, 10*time.Millisecond)
-	require.Equal(t, 0, shutdowner.calls)
+	err = lifecycle.hooks[0].OnStart(context.Background())
+	require.ErrorContains(t, err, "listen http server")
+	require.ErrorContains(t, err, listener.Addr().String())
 }
 
-func TestPprofServerRepeatedStopAfterForcedCloseDoesNotBlock(t *testing.T) {
-	port := reserveHTTPTestPort(t)
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
+func TestBusinessAndPprofUseIndependentManagedInstances(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.DefaultConfig()
+	cfg.Server.HTTP.Host = "127.0.0.1"
+	cfg.Server.HTTP.Port = 0
+	cfg.Observability.Pprof.Enabled = true
+	cfg.Observability.Pprof.Addr = "127.0.0.1:0"
 	lifecycle := &lifecycleRecorder{}
-	server, err := NewPprofServer(PprofServerParams{
-		Lifecycle:  lifecycle,
-		Shutdowner: &shutdownRecorder{},
-		Config:     newPprofRuntimeConfig(true, addr),
-		Log:        zap.NewNop(),
+	httpRuntime, err := NewHTTPServer(HTTPServerParams{
+		Lifecycle: lifecycle,
+		Config:    &cfg,
+		Log:       zap.NewNop(),
+		Engine:    gin.New(),
 	})
 	require.NoError(t, err)
-	require.Len(t, lifecycle.hooks, 1)
-	entered := make(chan struct{})
-	server.Server.Handler = http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		close(entered)
-		<-r.Context().Done()
+	pprofRuntime, err := NewPprofServer(PprofServerParams{
+		Lifecycle: lifecycle,
+		Config:    &cfg,
+		Log:       zap.NewNop(),
 	})
-	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
-	requestDone := startBlockedPprofRequest(t, server.Server.Addr, entered)
+	require.NoError(t, err)
 
-	stopCtx, cancel := context.WithCancel(context.Background())
-	cancel()
-	stopDone := make(chan error, 1)
-	go func() { stopDone <- lifecycle.hooks[0].OnStop(stopCtx) }()
-	select {
-	case err := <-stopDone:
-		require.ErrorIs(t, err, context.Canceled)
-	case <-time.After(time.Second):
-		t.Fatal("pprof stop blocked after canceled shutdown")
-	}
-	requireEventuallyReceives(t, requestDone, time.Second)
+	require.NotNil(t, httpRuntime.Managed)
+	require.NotNil(t, pprofRuntime.Managed)
+	require.NotSame(t, httpRuntime.Managed, pprofRuntime.Managed)
+	require.NotSame(t, httpRuntime.Managed.HTTPServer(), pprofRuntime.Managed.HTTPServer())
+	require.Len(t, lifecycle.hooks, 2)
+}
 
-	done := make(chan error, 1)
-	go func() {
-		done <- lifecycle.hooks[0].OnStop(context.Background())
-	}()
-	select {
-	case err := <-done:
-		require.NoError(t, err)
-	case <-time.After(time.Second):
-		t.Fatal("repeated pprof stop blocked")
-	}
+func TestPprofUsesHTTPShutdownBudgetCoveredByFxStopBudget(t *testing.T) {
+	t.Parallel()
 
-	conn, err := net.DialTimeout("tcp", server.Server.Addr, 10*time.Millisecond)
-	if err == nil {
-		require.NoError(t, conn.Close())
-		t.Fatal("pprof server still accepts connections after repeated stop")
-	}
+	cfg := newPprofRuntimeConfig(true, "127.0.0.1:0")
+	require.Positive(t, cfg.Server.HTTP.ShutdownTimeout)
+	require.GreaterOrEqual(t, cfg.Runtime.Lifecycle.StopTimeout, cfg.Server.HTTP.ShutdownTimeout)
 }
 
 func newPprofRuntimeConfig(enabled bool, addr string) *config.Config {
@@ -185,78 +156,62 @@ func newPprofRuntimeConfig(enabled bool, addr string) *config.Config {
 	return &cfg
 }
 
-func startBlockedPprofRequest(t testing.TB, addr string, entered <-chan struct{}) <-chan error {
-	t.Helper()
-	done := make(chan error, 1)
-	go func() {
-		response, err := http.Get("http://" + addr + "/debug/pprof/")
-		if err != nil {
-			done <- err
-			return
-		}
-		done <- response.Body.Close()
-	}()
+func TestPprofStopCallerCancellationCanBeRetried(t *testing.T) {
+	t.Parallel()
+
+	lifecycle := &lifecycleRecorder{}
+	runtime, err := NewPprofServer(PprofServerParams{
+		Lifecycle: lifecycle,
+		Config:    newPprofRuntimeConfig(true, "127.0.0.1:0"),
+		Log:       zap.NewNop(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	firstErr := lifecycle.hooks[0].OnStop(canceled)
+	if firstErr != nil {
+		require.ErrorIs(t, firstErr, context.Canceled)
+	}
+	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
+	require.NoError(t, runtime.Managed.Stop(context.Background()))
+}
+
+func TestPprofRuntimeRejectsMissingShutdownTimeout(t *testing.T) {
+	t.Parallel()
+
+	cfg := newPprofRuntimeConfig(true, "127.0.0.1:0")
+	cfg.Server.HTTP.ShutdownTimeout = 0
+	_, err := NewPprofServer(PprofServerParams{
+		Lifecycle: &lifecycleRecorder{},
+		Config:    cfg,
+		Log:       zap.NewNop(),
+	})
+	require.ErrorContains(t, err, "shutdown timeout must be positive")
+}
+
+func TestPprofAddressRemainsAvailableAfterStop(t *testing.T) {
+	t.Parallel()
+
+	port := reserveHTTPTestPort(t)
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	lifecycle := &lifecycleRecorder{}
+	_, err := NewPprofServer(PprofServerParams{
+		Lifecycle: lifecycle,
+		Config:    newPprofRuntimeConfig(true, addr),
+		Log:       zap.NewNop(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, lifecycle.hooks[0].OnStart(context.Background()))
+	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
+
 	require.Eventually(t, func() bool {
-		select {
-		case <-entered:
-			return true
-		default:
+		listener, listenErr := net.Listen("tcp", addr)
+		if listenErr != nil {
 			return false
 		}
+		require.NoError(t, listener.Close())
+		return true
 	}, time.Second, 10*time.Millisecond)
-	return done
-}
-
-func TestPprofServeReturnsAfterServerCloseWithoutShutdownSignal(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	server := &http.Server{Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})}
-	shutdowner := &shutdownRecorder{}
-	done := make(chan struct{})
-
-	go func() {
-		servePprofServer(zap.NewNop(), shutdowner, server, listener)
-		close(done)
-	}()
-
-	require.NoError(t, server.Close())
-	requireEventuallyClosed(t, done, time.Second)
-	require.Equal(t, 0, shutdowner.calls)
-}
-
-func TestPprofServerUnexpectedListenerCloseTriggersShutdown(t *testing.T) {
-	core, logs := observer.New(zapcore.ErrorLevel)
-	shutdowner, signals := newShutdownSignalRecorder(t)
-
-	handlePprofServeExit(zap.New(core), shutdowner, net.ErrClosed)
-
-	require.Equal(t, 1, shutdowner.calls)
-	require.Equal(t, 1, requireShutdownSignal(t, signals).ExitCode)
-	entries := logs.FilterMessage("pprof server failed").All()
-	require.Len(t, entries, 1)
-	require.Equal(t, net.ErrClosed.Error(), entries[0].ContextMap()["error"])
-}
-
-func TestPprofServerExpectedServeExitDoesNotTriggerShutdown(t *testing.T) {
-	core, logs := observer.New(zapcore.ErrorLevel)
-	shutdowner := &shutdownRecorder{}
-
-	handlePprofServeExit(zap.New(core), shutdowner, nil)
-	handlePprofServeExit(zap.New(core), shutdowner, http.ErrServerClosed)
-
-	require.Equal(t, 0, shutdowner.calls)
-	require.Equal(t, 0, logs.Len())
-}
-
-func TestPprofServerUnexpectedServeErrorLogsShutdownFailure(t *testing.T) {
-	core, logs := observer.New(zapcore.ErrorLevel)
-	shutdownErr := errors.New("shutdown failed")
-	shutdowner := &shutdownRecorder{err: shutdownErr}
-
-	handlePprofServeExit(zap.New(core), shutdowner, errors.New("serve failed"))
-
-	require.Equal(t, 1, shutdowner.calls)
-	entries := logs.FilterMessage("shutdown after pprof server failure failed").All()
-	require.Len(t, entries, 1)
-	require.Equal(t, shutdownErr.Error(), entries[0].ContextMap()["error"])
 }

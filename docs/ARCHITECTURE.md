@@ -30,6 +30,7 @@ AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
 | `common/runtime/config/` | 仅包含 app/server/log/observability 的跨服务核心配置、严格 YAML loader 和 validation primitive |
 | `common/runtime/resources/` | 无业务语义的 Redis/PostgreSQL 资源类型、默认值和校验；具名资源由服务声明 |
 | `common/runtime/datastore/` | Postgres、Redis 和 Fx provider |
+| `common/runtime/httpserver/` | 业务中立的 `net/http` 同步监听、异步服务、异常分类、优雅关闭、强制关闭和 handler drain 生命周期 |
 | `common/runtime/redispubsub/` | Redis classic Pub/Sub 单 channel 订阅确认、阻塞接收、有界背压、退避重连和单向生命周期 |
 | `common/runtime/logger/` | 写 stdout/stderr 的 zap logger |
 | `common/runtime/observability/` | metrics 与 tracing provider |
@@ -43,6 +44,8 @@ Scheduler 对外只暴露固定 key 的注册/删除和生命周期操作，以 
 
 `common/runtime/redispubsub` 只管理一个 Redis classic Pub/Sub channel 的 subscription lifecycle：调用方必须显式提供全部 options，subscriber 等待订阅确认后阻塞接收，以固定容量 channel 施加 context-aware 背压，并在失败后按带抖动的有界指数退避重连。每个 attempt 只关闭自己拥有的 PubSub，不关闭共享 Redis client。该 primitive 不提供 publish envelope、revision、outbox、数据库校准、缓存失效、pattern/sharded subscription、Redis Streams 或可靠投递；Redis Pub/Sub 仍是可丢失的 at-most-once 通知。
 
+`common/runtime/httpserver` 只管理一个 `net/http` server 的生命周期：`New` 严格校验调用方提供的全部 options 且不产生监听或 goroutine，`Start` 同步绑定地址后异步 `Serve`，`Stop` 以唯一后台 cleanup 统一执行 Shutdown、listener 显式关闭、必要时强制 Close、handler drain 和 Serve goroutine 等待。实例从 created 进入 running，异常 Serve 可进入 failed，停止后固定进入 stopped 且不能重启；并发 Stop 共享最终结果，单个调用方 context 到期不会取消后台 cleanup。该 primitive 不依赖 Gin、Fx、服务配置或业务日志，也不管理 hijacked connection、WebSocket、进程外负载均衡 drain 或无法协作退出的 goroutine。
+
 ## 3. `user-service` 运行入口
 
 `user-service/cmd/main.go` 定义 `aegiscore-user-service` CLI：
@@ -54,7 +57,7 @@ Scheduler 对外只暴露固定 key 的注册/删除和生命周期操作，以 
 - `config validate|render|sources`：验证 Nacos 配置、脱敏渲染最终配置和展示实际来源。
 - `healthcheck --url <url> --timeout <duration>`：在容器内无 shell、wget、curl 或 grep 依赖地检查 `/readyz`。
 
-`user-service/internal/bootstrap/` 构造应用、HTTP server 和默认关闭的独立 pprof 诊断监听，并通过 `AppOptions` 接收 CLI 已解析的 service config、派生共享 runtime config 和组装 Fx options。`user-service/internal/config/` 拥有服务根配置、认证/RBAC feature cache、Ent 配置、具名 resources 和服务级校验，并复用 `common/runtime/config` 的 Nacos 来源解析、YAML deep merge、strict decode、digest 和脱敏能力。`user-service/internal/providers/` 是服务级 provider 汇总入口，只组合子模块，不承载具体 provider 构造器；`providers/datastore/` 承载 PostgreSQL、Redis、Ent client、Ent plugins、Ent SQL log、Ent metrics 和 Ent tracing 接线；`providers/observability/` 承载 health checks、runtime dependency metrics、metrics provider 和 tracing provider 接线；`providers/security/` 承载 JWT service、认证 token policy 和 password service 接线；`providers/transport/` 承载 Gin mode、Gin engine、routes 和 API rate limiters 接线。providers 不读取配置来源。版本化本地 Nacos 配置位于 `deployments/nacos/local-host/` 与 `deployments/nacos/local-docker/`，每个目录都是对应 Namespace 的完整三文档发布源；`tools/nacos-config-seed` 只负责将指定目录发布到指定 Namespace。
+`user-service/internal/bootstrap/` 构造应用，并以 `HTTPRuntime` 和 `PprofRuntime` 显式表达业务 HTTP 与默认关闭的独立 pprof 诊断监听。bootstrap 只负责 enabled 策略、配置到 `httpserver.Options` 的映射、Fx hook、服务日志和异常退出信号，不拥有通用 listener、Serve、Shutdown、Close 或 drain 状态机；两个 runtime 各自持有独立的 `httpserver.Managed`。`AppOptions` 接收 CLI 已解析的 service config、派生共享 runtime config 和组装 Fx options。`user-service/internal/config/` 拥有服务根配置、认证/RBAC feature cache、Ent 配置、具名 resources 和服务级校验，并复用 `common/runtime/config` 的 Nacos 来源解析、YAML deep merge、strict decode、digest 和脱敏能力。`user-service/internal/providers/` 是服务级 provider 汇总入口，只组合子模块，不承载具体 provider 构造器；`providers/datastore/` 承载 PostgreSQL、Redis、Ent client、Ent plugins、Ent SQL log、Ent metrics 和 Ent tracing 接线；`providers/observability/` 承载 health checks、runtime dependency metrics、metrics provider 和 tracing provider 接线；`providers/security/` 承载 JWT service、认证 token policy 和 password service 接线；`providers/transport/` 承载 Gin mode、Gin engine、routes 和 API rate limiters 接线。providers 不读取配置来源。版本化本地 Nacos 配置位于 `deployments/nacos/local-host/` 与 `deployments/nacos/local-docker/`，每个目录都是对应 Namespace 的完整三文档发布源；`tools/nacos-config-seed` 只负责将指定目录发布到指定 Namespace。
 
 ## 4. HTTP 路由结构
 
@@ -105,8 +108,8 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 1. `aegiscore-user-service serve` 进入 `runServe`，CLI 从环境变量读取 Nacos 来源，按 dataId 加载 YAML、deep merge、strict decode、ApplyDefaults 并校验 service config。
 2. `bootstrap.NewApp(cfg)` 通过 `AppOptions` supply 同一个 service config 及其派生的共享 runtime config，并组装 logger、datastore、auth、metrics、health、routes 和 HTTP server。
 3. `fx.New` 同步构建依赖图、执行 invoke 及其 constructor 依赖；该阶段不受 `runtime.lifecycle.start_timeout` 限制。
-4. CLI 使用同一配置值建立显式 Start context 并调用 `App.Start`，该 context 约束全部 `OnStart` hooks。
-5. 收到外部终止信号或内部 Fx shutdown signal 后，CLI 使用同一配置值建立显式 Stop context 并调用一次 `App.Stop`。
+4. CLI 使用同一配置值建立显式 Start context 并调用 `App.Start`，该 context 约束全部 `OnStart` hooks；业务 HTTP 与启用的 pprof 必须先同步绑定 listener，绑定失败直接阻断启动，成功后才异步 Serve。
+5. 收到外部终止信号或 HTTP/pprof 异常退出产生的 Fx shutdown signal 后，CLI 使用同一配置值建立显式 Stop context 并调用一次 `App.Stop`；各 Managed 在独立内部 shutdown timeout 内继续后台 cleanup，Fx context 只约束本次 hook 等待和 App 总预算。
 
 ### 6.2 登录和会话
 
