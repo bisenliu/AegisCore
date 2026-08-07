@@ -130,6 +130,14 @@ Ent schema 变化后生成代码：
 make user-service-generate
 ```
 
+`user-service/internal/persistence/ent/` 下除 `schema/` 之外的文件是 Ent codegen 输出，不应手改。人工搜索和审查默认排除这些生成物，避免把生成代码中的 `panic(err)`、builder 或 mutation 逻辑误判为业务代码问题。
+
+人工维护入口：
+
+- `user-service/internal/persistence/ent/schema/`
+- `user-service/migrations/*.sql`
+- `user-service/migrations/atlas.sum`
+
 生成 Atlas migration：
 
 ```bash

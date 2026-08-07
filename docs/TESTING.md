@@ -169,6 +169,7 @@ require.True(t, strings.Contains(err.Error(), "timeout"))
 - 检查 `openspec/specs/`、`openspec/changes/` 和 `docs/opsx/` 下 Markdown 是否保留默认英文模板内容。
 - 检查 `common/` 与 `user-service/` 的 `mock_generate.go` 是否使用 `generate` build tag。
 - 检查人工维护的正式 Go 文件是否新增 `*ForTest` 或 `testHook*` 等明确测试语义 symbol；`_test.go`、`common/testing`、Ent 和 OpenAPI 生成物不在该扫描范围内。
+- 人工搜索和审查应默认排除 `user-service/internal/persistence/ent/` 下除 `schema/` 外的 Ent 生成物；生成物 drift 仍由 `make user-service-architecture-lint`、`make user-service-generate` 和 `make verify` 暴露。
 
 运行：
 
@@ -196,6 +197,8 @@ make user-service-generate
 make user-service-migrate-diff name=<migration-name>
 make user-service-migrate-validate
 ```
+
+Ent 生成物不是人工修改入口。审查重点应放在 `user-service/internal/persistence/ent/schema/`、SQL migration 和 `atlas.sum`，并通过生成命令确认 `user-service/internal/persistence/ent/` 生成输出可复现。
 
 进入环境或发布流程前，确认 SQL migration 和 `atlas.sum` 已提交到 Git，并通过 DBA 工单或受控发布平台执行。`users.nickname` substring 模糊查询必须由 `pg_trgm` 提供的 GIN `gin_trgm_ops` 索引支撑，不得保留普通索引、无扩展 fallback 或双索引兼容分支；测试记录必须说明目标库创建 `pg_trgm` 是否需要 DBA 权限或前置动作。
 

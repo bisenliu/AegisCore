@@ -74,7 +74,7 @@
 
 ### Requirement: Ent/Atlas migration 交付
 
-Ent schema MUST 是数据库结构来源，Atlas SQL migration MUST 是可审查交付工件。user-service 的 Ent schema、client、entity、predicate、`enttest` 和 `migrate` 生成物 MUST 位于 `user-service/internal/persistence/ent/`，并通过 Go `internal` 规则作为 user-service 私有持久化实现受保护。仓库 MUST 支持生成、diff、validate 和 hash 校验，但 MUST NOT 提供自动连接目标数据库执行 `atlas migrate apply` 的入口，也 MUST NOT 保留模块根级 `github.com/aegiscore/user-service/ent` 兼容包、别名、shim 或双路径支持。
+Ent schema MUST 是数据库结构来源，Atlas SQL migration MUST 是可审查交付工件。user-service 的 Ent schema、client、entity、predicate、`enttest` 和 `migrate` 生成物 MUST 位于 `user-service/internal/persistence/ent/`，并通过 Go `internal` 规则作为 user-service 私有持久化实现受保护。仓库 MUST 支持生成、diff、validate 和 hash 校验，但 MUST NOT 提供自动连接目标数据库执行 `atlas migrate apply` 的入口，也 MUST NOT 保留模块根级 `github.com/aegiscore/user-service/ent` 兼容包、别名、shim 或双路径支持。人工搜索和代码审查 MUST 将 `user-service/internal/persistence/ent/` 下除 `schema/` 之外的文件视为生成物并默认排除；人工编辑入口 MUST 收敛到 Ent schema、SQL migration 和 `atlas.sum`。
 
 #### Scenario: Schema、migration 与数据库结构
 
@@ -105,6 +105,14 @@ Ent schema MUST 是数据库结构来源，Atlas SQL migration MUST 是可审查
 - **AND** 代码 MUST NOT 导入 `github.com/aegiscore/user-service/ent` 及其子包
 - **WHEN** 其他 workspace module 或未来服务尝试直接 import user-service 的 Ent 包
 - **THEN** Go `internal` 规则 MUST 阻止该导入，调用方 MUST 通过正式服务边界访问 user-service 能力
+
+#### Scenario: Ent 生成物审查隔离
+
+- **WHEN** 人工搜索、lint 诊断或代码审查扫描 `panic(err)`、builder、mutation、predicate 或持久化 helper
+- **THEN** 工具和文档 SHOULD 默认排除 `user-service/internal/persistence/ent/` 下除 `schema/` 之外的 Ent codegen 输出
+- **AND** 若审查工具支持 generated-code filter，MUST 将这些 Ent codegen 输出标记为 generated code
+- **AND** `user-service/internal/persistence/ent/schema/`、`user-service/migrations/*.sql` 和 `user-service/migrations/atlas.sum` MUST 保持正常搜索、lint 诊断和审查范围
+- **AND** Ent 生成物变更 MUST 通过 `make user-service-generate` 和 drift 检查确认可复现，MUST NOT 通过手写调整生成物解决审查 finding
 
 ### Requirement: 镜像、部署与受控发布
 
