@@ -1,8 +1,6 @@
 package schema
 
 import (
-	"time"
-
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
@@ -17,7 +15,7 @@ type Role struct {
 
 // Mixin 返回 roles 表复用的公共 schema mixin。
 func (Role) Mixin() []ent.Mixin {
-	return []ent.Mixin{databaseCommentMixin{}}
+	return []ent.Mixin{databaseCommentMixin{}, createdAtMillisMixin{}, updatedAtMillisMixin{}}
 }
 
 // Fields 返回角色表字段定义。
@@ -29,8 +27,6 @@ func (Role) Fields() []ent.Field {
 		field.String("description").Default("").MaxLen(512).Comment("角色说明"),
 		field.Bool("active").Default(true).Comment("角色是否启用"),
 		field.Bool("is_system").Default(false).Comment("是否系统角色"),
-		field.Int64("created_at").DefaultFunc(func() int64 { return time.Now().UnixMilli() }).Immutable().Comment("创建时间戳毫秒"),
-		field.Int64("updated_at").DefaultFunc(func() int64 { return time.Now().UnixMilli() }).UpdateDefault(func() int64 { return time.Now().UnixMilli() }).Comment("更新时间戳毫秒"),
 	}
 }
 

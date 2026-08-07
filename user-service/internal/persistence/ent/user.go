@@ -18,6 +18,10 @@ type User struct {
 	// ID of the ent.
 	// 用户ID
 	ID int64 `json:"id,omitempty"`
+	// 创建时间戳毫秒
+	CreatedAt int64 `json:"created_at,omitempty"`
+	// 更新时间戳毫秒
+	UpdatedAt int64 `json:"updated_at,omitempty"`
 	// 外部用户ID
 	UserID uuid.UUID `json:"user_id,omitempty"`
 	// 用户昵称
@@ -32,10 +36,6 @@ type User struct {
 	Status int64 `json:"status,omitempty"`
 	// 软删除时间戳毫秒，NULL 表示未删除
 	DeletedAt *int64 `json:"deleted_at,omitempty"`
-	// 创建时间戳毫秒
-	CreatedAt int64 `json:"created_at,omitempty"`
-	// 更新时间戳毫秒
-	UpdatedAt int64 `json:"updated_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UserQuery when eager-loading is set.
 	Edges        UserEdges `json:"edges"`
@@ -65,7 +65,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldID, user.FieldTokenVersion, user.FieldStatus, user.FieldDeletedAt, user.FieldCreatedAt, user.FieldUpdatedAt:
+		case user.FieldID, user.FieldCreatedAt, user.FieldUpdatedAt, user.FieldTokenVersion, user.FieldStatus, user.FieldDeletedAt:
 			values[i] = new(sql.NullInt64)
 		case user.FieldNickname, user.FieldUsername, user.FieldPasswordHash:
 			values[i] = new(sql.NullString)
@@ -92,6 +92,18 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			_m.ID = int64(value.Int64)
+		case user.FieldCreatedAt:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field created_at", values[i])
+			} else if value.Valid {
+				_m.CreatedAt = value.Int64
+			}
+		case user.FieldUpdatedAt:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
+			} else if value.Valid {
+				_m.UpdatedAt = value.Int64
+			}
 		case user.FieldUserID:
 			if value, ok := values[i].(*uuid.UUID); !ok {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
@@ -135,18 +147,6 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				_m.DeletedAt = new(int64)
 				*_m.DeletedAt = value.Int64
 			}
-		case user.FieldCreatedAt:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field created_at", values[i])
-			} else if value.Valid {
-				_m.CreatedAt = value.Int64
-			}
-		case user.FieldUpdatedAt:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
-			} else if value.Valid {
-				_m.UpdatedAt = value.Int64
-			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -188,6 +188,12 @@ func (_m *User) String() string {
 	var builder strings.Builder
 	builder.WriteString("User(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	builder.WriteString("created_at=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CreatedAt))
+	builder.WriteString(", ")
+	builder.WriteString("updated_at=")
+	builder.WriteString(fmt.Sprintf("%v", _m.UpdatedAt))
+	builder.WriteString(", ")
 	builder.WriteString("user_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.UserID))
 	builder.WriteString(", ")
@@ -210,12 +216,6 @@ func (_m *User) String() string {
 		builder.WriteString("deleted_at=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
-	builder.WriteString(", ")
-	builder.WriteString("created_at=")
-	builder.WriteString(fmt.Sprintf("%v", _m.CreatedAt))
-	builder.WriteString(", ")
-	builder.WriteString("updated_at=")
-	builder.WriteString(fmt.Sprintf("%v", _m.UpdatedAt))
 	builder.WriteByte(')')
 	return builder.String()
 }

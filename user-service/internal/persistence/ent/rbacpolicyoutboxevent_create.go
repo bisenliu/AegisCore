@@ -23,6 +23,34 @@ type RbacPolicyOutboxEventCreate struct {
 	conflict []sql.ConflictOption
 }
 
+// SetCreatedAt sets the "created_at" field.
+func (_c *RbacPolicyOutboxEventCreate) SetCreatedAt(v int64) *RbacPolicyOutboxEventCreate {
+	_c.mutation.SetCreatedAt(v)
+	return _c
+}
+
+// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
+func (_c *RbacPolicyOutboxEventCreate) SetNillableCreatedAt(v *int64) *RbacPolicyOutboxEventCreate {
+	if v != nil {
+		_c.SetCreatedAt(*v)
+	}
+	return _c
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (_c *RbacPolicyOutboxEventCreate) SetUpdatedAt(v int64) *RbacPolicyOutboxEventCreate {
+	_c.mutation.SetUpdatedAt(v)
+	return _c
+}
+
+// SetNillableUpdatedAt sets the "updated_at" field if the given value is not nil.
+func (_c *RbacPolicyOutboxEventCreate) SetNillableUpdatedAt(v *int64) *RbacPolicyOutboxEventCreate {
+	if v != nil {
+		_c.SetUpdatedAt(*v)
+	}
+	return _c
+}
+
 // SetEventID sets the "event_id" field.
 func (_c *RbacPolicyOutboxEventCreate) SetEventID(v uuid.UUID) *RbacPolicyOutboxEventCreate {
 	_c.mutation.SetEventID(v)
@@ -179,34 +207,6 @@ func (_c *RbacPolicyOutboxEventCreate) SetIdempotencyKey(v string) *RbacPolicyOu
 	return _c
 }
 
-// SetCreatedAt sets the "created_at" field.
-func (_c *RbacPolicyOutboxEventCreate) SetCreatedAt(v int64) *RbacPolicyOutboxEventCreate {
-	_c.mutation.SetCreatedAt(v)
-	return _c
-}
-
-// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
-func (_c *RbacPolicyOutboxEventCreate) SetNillableCreatedAt(v *int64) *RbacPolicyOutboxEventCreate {
-	if v != nil {
-		_c.SetCreatedAt(*v)
-	}
-	return _c
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (_c *RbacPolicyOutboxEventCreate) SetUpdatedAt(v int64) *RbacPolicyOutboxEventCreate {
-	_c.mutation.SetUpdatedAt(v)
-	return _c
-}
-
-// SetNillableUpdatedAt sets the "updated_at" field if the given value is not nil.
-func (_c *RbacPolicyOutboxEventCreate) SetNillableUpdatedAt(v *int64) *RbacPolicyOutboxEventCreate {
-	if v != nil {
-		_c.SetUpdatedAt(*v)
-	}
-	return _c
-}
-
 // SetDeliveredAt sets the "delivered_at" field.
 func (_c *RbacPolicyOutboxEventCreate) SetDeliveredAt(v int64) *RbacPolicyOutboxEventCreate {
 	_c.mutation.SetDeliveredAt(v)
@@ -273,6 +273,14 @@ func (_c *RbacPolicyOutboxEventCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *RbacPolicyOutboxEventCreate) defaults() {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		v := rbacpolicyoutboxevent.DefaultCreatedAt()
+		_c.mutation.SetCreatedAt(v)
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		v := rbacpolicyoutboxevent.DefaultUpdatedAt()
+		_c.mutation.SetUpdatedAt(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := rbacpolicyoutboxevent.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -285,18 +293,16 @@ func (_c *RbacPolicyOutboxEventCreate) defaults() {
 		v := rbacpolicyoutboxevent.DefaultNextAttemptAt()
 		_c.mutation.SetNextAttemptAt(v)
 	}
-	if _, ok := _c.mutation.CreatedAt(); !ok {
-		v := rbacpolicyoutboxevent.DefaultCreatedAt()
-		_c.mutation.SetCreatedAt(v)
-	}
-	if _, ok := _c.mutation.UpdatedAt(); !ok {
-		v := rbacpolicyoutboxevent.DefaultUpdatedAt()
-		_c.mutation.SetUpdatedAt(v)
-	}
 }
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *RbacPolicyOutboxEventCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "RbacPolicyOutboxEvent.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "RbacPolicyOutboxEvent.updated_at"`)}
+	}
 	if _, ok := _c.mutation.EventID(); !ok {
 		return &ValidationError{Name: "event_id", err: errors.New(`ent: missing required field "RbacPolicyOutboxEvent.event_id"`)}
 	}
@@ -351,12 +357,6 @@ func (_c *RbacPolicyOutboxEventCreate) check() error {
 			return &ValidationError{Name: "idempotency_key", err: fmt.Errorf(`ent: validator failed for field "RbacPolicyOutboxEvent.idempotency_key": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.CreatedAt(); !ok {
-		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "RbacPolicyOutboxEvent.created_at"`)}
-	}
-	if _, ok := _c.mutation.UpdatedAt(); !ok {
-		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "RbacPolicyOutboxEvent.updated_at"`)}
-	}
 	if len(_c.mutation.PolicyRevisionIDs()) == 0 {
 		return &ValidationError{Name: "policy_revision", err: errors.New(`ent: missing required edge "RbacPolicyOutboxEvent.policy_revision"`)}
 	}
@@ -392,6 +392,14 @@ func (_c *RbacPolicyOutboxEventCreate) createSpec() (*RbacPolicyOutboxEvent, *sq
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
+	}
+	if value, ok := _c.mutation.CreatedAt(); ok {
+		_spec.SetField(rbacpolicyoutboxevent.FieldCreatedAt, field.TypeInt64, value)
+		_node.CreatedAt = value
+	}
+	if value, ok := _c.mutation.UpdatedAt(); ok {
+		_spec.SetField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)
+		_node.UpdatedAt = value
 	}
 	if value, ok := _c.mutation.EventID(); ok {
 		_spec.SetField(rbacpolicyoutboxevent.FieldEventID, field.TypeUUID, value)
@@ -445,14 +453,6 @@ func (_c *RbacPolicyOutboxEventCreate) createSpec() (*RbacPolicyOutboxEvent, *sq
 		_spec.SetField(rbacpolicyoutboxevent.FieldIdempotencyKey, field.TypeString, value)
 		_node.IdempotencyKey = value
 	}
-	if value, ok := _c.mutation.CreatedAt(); ok {
-		_spec.SetField(rbacpolicyoutboxevent.FieldCreatedAt, field.TypeInt64, value)
-		_node.CreatedAt = value
-	}
-	if value, ok := _c.mutation.UpdatedAt(); ok {
-		_spec.SetField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)
-		_node.UpdatedAt = value
-	}
 	if value, ok := _c.mutation.DeliveredAt(); ok {
 		_spec.SetField(rbacpolicyoutboxevent.FieldDeliveredAt, field.TypeInt64, value)
 		_node.DeliveredAt = &value
@@ -481,7 +481,7 @@ func (_c *RbacPolicyOutboxEventCreate) createSpec() (*RbacPolicyOutboxEvent, *sq
 // of the `INSERT` statement. For example:
 //
 //	client.RbacPolicyOutboxEvent.Create().
-//		SetEventID(v).
+//		SetCreatedAt(v).
 //		OnConflict(
 //			// Update the row with the new values
 //			// the was proposed for insertion.
@@ -490,7 +490,7 @@ func (_c *RbacPolicyOutboxEventCreate) createSpec() (*RbacPolicyOutboxEvent, *sq
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.RbacPolicyOutboxEventUpsert) {
-//			SetEventID(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *RbacPolicyOutboxEventCreate) OnConflict(opts ...sql.ConflictOption) *RbacPolicyOutboxEventUpsertOne {
@@ -525,6 +525,24 @@ type (
 		*sql.UpdateSet
 	}
 )
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *RbacPolicyOutboxEventUpsert) SetUpdatedAt(v int64) *RbacPolicyOutboxEventUpsert {
+	u.Set(rbacpolicyoutboxevent.FieldUpdatedAt, v)
+	return u
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *RbacPolicyOutboxEventUpsert) UpdateUpdatedAt() *RbacPolicyOutboxEventUpsert {
+	u.SetExcluded(rbacpolicyoutboxevent.FieldUpdatedAt)
+	return u
+}
+
+// AddUpdatedAt adds v to the "updated_at" field.
+func (u *RbacPolicyOutboxEventUpsert) AddUpdatedAt(v int64) *RbacPolicyOutboxEventUpsert {
+	u.Add(rbacpolicyoutboxevent.FieldUpdatedAt, v)
+	return u
+}
 
 // SetStatus sets the "status" field.
 func (u *RbacPolicyOutboxEventUpsert) SetStatus(v string) *RbacPolicyOutboxEventUpsert {
@@ -634,24 +652,6 @@ func (u *RbacPolicyOutboxEventUpsert) ClearClaimedUntil() *RbacPolicyOutboxEvent
 	return u
 }
 
-// SetUpdatedAt sets the "updated_at" field.
-func (u *RbacPolicyOutboxEventUpsert) SetUpdatedAt(v int64) *RbacPolicyOutboxEventUpsert {
-	u.Set(rbacpolicyoutboxevent.FieldUpdatedAt, v)
-	return u
-}
-
-// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
-func (u *RbacPolicyOutboxEventUpsert) UpdateUpdatedAt() *RbacPolicyOutboxEventUpsert {
-	u.SetExcluded(rbacpolicyoutboxevent.FieldUpdatedAt)
-	return u
-}
-
-// AddUpdatedAt adds v to the "updated_at" field.
-func (u *RbacPolicyOutboxEventUpsert) AddUpdatedAt(v int64) *RbacPolicyOutboxEventUpsert {
-	u.Add(rbacpolicyoutboxevent.FieldUpdatedAt, v)
-	return u
-}
-
 // SetDeliveredAt sets the "delivered_at" field.
 func (u *RbacPolicyOutboxEventUpsert) SetDeliveredAt(v int64) *RbacPolicyOutboxEventUpsert {
 	u.Set(rbacpolicyoutboxevent.FieldDeliveredAt, v)
@@ -693,6 +693,9 @@ func (u *RbacPolicyOutboxEventUpsertOne) UpdateNewValues() *RbacPolicyOutboxEven
 		if _, exists := u.create.mutation.ID(); exists {
 			s.SetIgnore(rbacpolicyoutboxevent.FieldID)
 		}
+		if _, exists := u.create.mutation.CreatedAt(); exists {
+			s.SetIgnore(rbacpolicyoutboxevent.FieldCreatedAt)
+		}
 		if _, exists := u.create.mutation.EventID(); exists {
 			s.SetIgnore(rbacpolicyoutboxevent.FieldEventID)
 		}
@@ -716,9 +719,6 @@ func (u *RbacPolicyOutboxEventUpsertOne) UpdateNewValues() *RbacPolicyOutboxEven
 		}
 		if _, exists := u.create.mutation.IdempotencyKey(); exists {
 			s.SetIgnore(rbacpolicyoutboxevent.FieldIdempotencyKey)
-		}
-		if _, exists := u.create.mutation.CreatedAt(); exists {
-			s.SetIgnore(rbacpolicyoutboxevent.FieldCreatedAt)
 		}
 	}))
 	return u
@@ -749,6 +749,27 @@ func (u *RbacPolicyOutboxEventUpsertOne) Update(set func(*RbacPolicyOutboxEventU
 		set(&RbacPolicyOutboxEventUpsert{UpdateSet: update})
 	}))
 	return u
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *RbacPolicyOutboxEventUpsertOne) SetUpdatedAt(v int64) *RbacPolicyOutboxEventUpsertOne {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// AddUpdatedAt adds v to the "updated_at" field.
+func (u *RbacPolicyOutboxEventUpsertOne) AddUpdatedAt(v int64) *RbacPolicyOutboxEventUpsertOne {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.AddUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *RbacPolicyOutboxEventUpsertOne) UpdateUpdatedAt() *RbacPolicyOutboxEventUpsertOne {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.UpdateUpdatedAt()
+	})
 }
 
 // SetStatus sets the "status" field.
@@ -874,27 +895,6 @@ func (u *RbacPolicyOutboxEventUpsertOne) UpdateClaimedUntil() *RbacPolicyOutboxE
 func (u *RbacPolicyOutboxEventUpsertOne) ClearClaimedUntil() *RbacPolicyOutboxEventUpsertOne {
 	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
 		s.ClearClaimedUntil()
-	})
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (u *RbacPolicyOutboxEventUpsertOne) SetUpdatedAt(v int64) *RbacPolicyOutboxEventUpsertOne {
-	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
-		s.SetUpdatedAt(v)
-	})
-}
-
-// AddUpdatedAt adds v to the "updated_at" field.
-func (u *RbacPolicyOutboxEventUpsertOne) AddUpdatedAt(v int64) *RbacPolicyOutboxEventUpsertOne {
-	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
-		s.AddUpdatedAt(v)
-	})
-}
-
-// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
-func (u *RbacPolicyOutboxEventUpsertOne) UpdateUpdatedAt() *RbacPolicyOutboxEventUpsertOne {
-	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
-		s.UpdateUpdatedAt()
 	})
 }
 
@@ -1061,7 +1061,7 @@ func (_c *RbacPolicyOutboxEventCreateBulk) ExecX(ctx context.Context) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.RbacPolicyOutboxEventUpsert) {
-//			SetEventID(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *RbacPolicyOutboxEventCreateBulk) OnConflict(opts ...sql.ConflictOption) *RbacPolicyOutboxEventUpsertBulk {
@@ -1108,6 +1108,9 @@ func (u *RbacPolicyOutboxEventUpsertBulk) UpdateNewValues() *RbacPolicyOutboxEve
 			if _, exists := b.mutation.ID(); exists {
 				s.SetIgnore(rbacpolicyoutboxevent.FieldID)
 			}
+			if _, exists := b.mutation.CreatedAt(); exists {
+				s.SetIgnore(rbacpolicyoutboxevent.FieldCreatedAt)
+			}
 			if _, exists := b.mutation.EventID(); exists {
 				s.SetIgnore(rbacpolicyoutboxevent.FieldEventID)
 			}
@@ -1131,9 +1134,6 @@ func (u *RbacPolicyOutboxEventUpsertBulk) UpdateNewValues() *RbacPolicyOutboxEve
 			}
 			if _, exists := b.mutation.IdempotencyKey(); exists {
 				s.SetIgnore(rbacpolicyoutboxevent.FieldIdempotencyKey)
-			}
-			if _, exists := b.mutation.CreatedAt(); exists {
-				s.SetIgnore(rbacpolicyoutboxevent.FieldCreatedAt)
 			}
 		}
 	}))
@@ -1165,6 +1165,27 @@ func (u *RbacPolicyOutboxEventUpsertBulk) Update(set func(*RbacPolicyOutboxEvent
 		set(&RbacPolicyOutboxEventUpsert{UpdateSet: update})
 	}))
 	return u
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *RbacPolicyOutboxEventUpsertBulk) SetUpdatedAt(v int64) *RbacPolicyOutboxEventUpsertBulk {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// AddUpdatedAt adds v to the "updated_at" field.
+func (u *RbacPolicyOutboxEventUpsertBulk) AddUpdatedAt(v int64) *RbacPolicyOutboxEventUpsertBulk {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.AddUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *RbacPolicyOutboxEventUpsertBulk) UpdateUpdatedAt() *RbacPolicyOutboxEventUpsertBulk {
+	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
+		s.UpdateUpdatedAt()
+	})
 }
 
 // SetStatus sets the "status" field.
@@ -1290,27 +1311,6 @@ func (u *RbacPolicyOutboxEventUpsertBulk) UpdateClaimedUntil() *RbacPolicyOutbox
 func (u *RbacPolicyOutboxEventUpsertBulk) ClearClaimedUntil() *RbacPolicyOutboxEventUpsertBulk {
 	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
 		s.ClearClaimedUntil()
-	})
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (u *RbacPolicyOutboxEventUpsertBulk) SetUpdatedAt(v int64) *RbacPolicyOutboxEventUpsertBulk {
-	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
-		s.SetUpdatedAt(v)
-	})
-}
-
-// AddUpdatedAt adds v to the "updated_at" field.
-func (u *RbacPolicyOutboxEventUpsertBulk) AddUpdatedAt(v int64) *RbacPolicyOutboxEventUpsertBulk {
-	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
-		s.AddUpdatedAt(v)
-	})
-}
-
-// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
-func (u *RbacPolicyOutboxEventUpsertBulk) UpdateUpdatedAt() *RbacPolicyOutboxEventUpsertBulk {
-	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
-		s.UpdateUpdatedAt()
 	})
 }
 

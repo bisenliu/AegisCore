@@ -1,8 +1,6 @@
 package schema
 
 import (
-	"time"
-
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
@@ -16,7 +14,7 @@ type UserRole struct {
 
 // Mixin 返回 user_roles 表复用的公共 schema mixin。
 func (UserRole) Mixin() []ent.Mixin {
-	return []ent.Mixin{databaseCommentMixin{}}
+	return []ent.Mixin{databaseCommentMixin{}, createdAtMillisMixin{}}
 }
 
 // Fields 返回用户角色绑定表字段定义。
@@ -25,7 +23,6 @@ func (UserRole) Fields() []ent.Field {
 		field.Int64("id").Unique().Immutable().Comment("用户角色绑定ID"),
 		field.Int64("user_id").Comment("用户内部ID"),
 		field.Int64("role_id").Comment("角色内部ID"),
-		field.Int64("created_at").DefaultFunc(func() int64 { return time.Now().UnixMilli() }).Immutable().Comment("创建时间戳毫秒"),
 	}
 }
 

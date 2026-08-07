@@ -23,6 +23,34 @@ type UserCreate struct {
 	conflict []sql.ConflictOption
 }
 
+// SetCreatedAt sets the "created_at" field.
+func (_c *UserCreate) SetCreatedAt(v int64) *UserCreate {
+	_c.mutation.SetCreatedAt(v)
+	return _c
+}
+
+// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
+func (_c *UserCreate) SetNillableCreatedAt(v *int64) *UserCreate {
+	if v != nil {
+		_c.SetCreatedAt(*v)
+	}
+	return _c
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (_c *UserCreate) SetUpdatedAt(v int64) *UserCreate {
+	_c.mutation.SetUpdatedAt(v)
+	return _c
+}
+
+// SetNillableUpdatedAt sets the "updated_at" field if the given value is not nil.
+func (_c *UserCreate) SetNillableUpdatedAt(v *int64) *UserCreate {
+	if v != nil {
+		_c.SetUpdatedAt(*v)
+	}
+	return _c
+}
+
 // SetUserID sets the "user_id" field.
 func (_c *UserCreate) SetUserID(v uuid.UUID) *UserCreate {
 	_c.mutation.SetUserID(v)
@@ -89,34 +117,6 @@ func (_c *UserCreate) SetNillableDeletedAt(v *int64) *UserCreate {
 	return _c
 }
 
-// SetCreatedAt sets the "created_at" field.
-func (_c *UserCreate) SetCreatedAt(v int64) *UserCreate {
-	_c.mutation.SetCreatedAt(v)
-	return _c
-}
-
-// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
-func (_c *UserCreate) SetNillableCreatedAt(v *int64) *UserCreate {
-	if v != nil {
-		_c.SetCreatedAt(*v)
-	}
-	return _c
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (_c *UserCreate) SetUpdatedAt(v int64) *UserCreate {
-	_c.mutation.SetUpdatedAt(v)
-	return _c
-}
-
-// SetNillableUpdatedAt sets the "updated_at" field if the given value is not nil.
-func (_c *UserCreate) SetNillableUpdatedAt(v *int64) *UserCreate {
-	if v != nil {
-		_c.SetUpdatedAt(*v)
-	}
-	return _c
-}
-
 // SetID sets the "id" field.
 func (_c *UserCreate) SetID(v int64) *UserCreate {
 	_c.mutation.SetID(v)
@@ -173,14 +173,6 @@ func (_c *UserCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *UserCreate) defaults() {
-	if _, ok := _c.mutation.TokenVersion(); !ok {
-		v := user.DefaultTokenVersion
-		_c.mutation.SetTokenVersion(v)
-	}
-	if _, ok := _c.mutation.Status(); !ok {
-		v := user.DefaultStatus
-		_c.mutation.SetStatus(v)
-	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := user.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -189,10 +181,24 @@ func (_c *UserCreate) defaults() {
 		v := user.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.TokenVersion(); !ok {
+		v := user.DefaultTokenVersion
+		_c.mutation.SetTokenVersion(v)
+	}
+	if _, ok := _c.mutation.Status(); !ok {
+		v := user.DefaultStatus
+		_c.mutation.SetStatus(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *UserCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "User.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "User.updated_at"`)}
+	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "User.user_id"`)}
 	}
@@ -225,12 +231,6 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "User.status"`)}
-	}
-	if _, ok := _c.mutation.CreatedAt(); !ok {
-		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "User.created_at"`)}
-	}
-	if _, ok := _c.mutation.UpdatedAt(); !ok {
-		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "User.updated_at"`)}
 	}
 	return nil
 }
@@ -265,6 +265,14 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_node.ID = id
 		_spec.ID.Value = id
 	}
+	if value, ok := _c.mutation.CreatedAt(); ok {
+		_spec.SetField(user.FieldCreatedAt, field.TypeInt64, value)
+		_node.CreatedAt = value
+	}
+	if value, ok := _c.mutation.UpdatedAt(); ok {
+		_spec.SetField(user.FieldUpdatedAt, field.TypeInt64, value)
+		_node.UpdatedAt = value
+	}
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(user.FieldUserID, field.TypeUUID, value)
 		_node.UserID = value
@@ -293,14 +301,6 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldDeletedAt, field.TypeInt64, value)
 		_node.DeletedAt = &value
 	}
-	if value, ok := _c.mutation.CreatedAt(); ok {
-		_spec.SetField(user.FieldCreatedAt, field.TypeInt64, value)
-		_node.CreatedAt = value
-	}
-	if value, ok := _c.mutation.UpdatedAt(); ok {
-		_spec.SetField(user.FieldUpdatedAt, field.TypeInt64, value)
-		_node.UpdatedAt = value
-	}
 	if nodes := _c.mutation.UserRolesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -324,7 +324,7 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 // of the `INSERT` statement. For example:
 //
 //	client.User.Create().
-//		SetUserID(v).
+//		SetCreatedAt(v).
 //		OnConflict(
 //			// Update the row with the new values
 //			// the was proposed for insertion.
@@ -333,7 +333,7 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.UserUpsert) {
-//			SetUserID(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *UserCreate) OnConflict(opts ...sql.ConflictOption) *UserUpsertOne {
@@ -368,6 +368,24 @@ type (
 		*sql.UpdateSet
 	}
 )
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *UserUpsert) SetUpdatedAt(v int64) *UserUpsert {
+	u.Set(user.FieldUpdatedAt, v)
+	return u
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *UserUpsert) UpdateUpdatedAt() *UserUpsert {
+	u.SetExcluded(user.FieldUpdatedAt)
+	return u
+}
+
+// AddUpdatedAt adds v to the "updated_at" field.
+func (u *UserUpsert) AddUpdatedAt(v int64) *UserUpsert {
+	u.Add(user.FieldUpdatedAt, v)
+	return u
+}
 
 // SetNickname sets the "nickname" field.
 func (u *UserUpsert) SetNickname(v string) *UserUpsert {
@@ -465,24 +483,6 @@ func (u *UserUpsert) ClearDeletedAt() *UserUpsert {
 	return u
 }
 
-// SetUpdatedAt sets the "updated_at" field.
-func (u *UserUpsert) SetUpdatedAt(v int64) *UserUpsert {
-	u.Set(user.FieldUpdatedAt, v)
-	return u
-}
-
-// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
-func (u *UserUpsert) UpdateUpdatedAt() *UserUpsert {
-	u.SetExcluded(user.FieldUpdatedAt)
-	return u
-}
-
-// AddUpdatedAt adds v to the "updated_at" field.
-func (u *UserUpsert) AddUpdatedAt(v int64) *UserUpsert {
-	u.Add(user.FieldUpdatedAt, v)
-	return u
-}
-
 // UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
 // Using this option is equivalent to using:
 //
@@ -500,11 +500,11 @@ func (u *UserUpsertOne) UpdateNewValues() *UserUpsertOne {
 		if _, exists := u.create.mutation.ID(); exists {
 			s.SetIgnore(user.FieldID)
 		}
-		if _, exists := u.create.mutation.UserID(); exists {
-			s.SetIgnore(user.FieldUserID)
-		}
 		if _, exists := u.create.mutation.CreatedAt(); exists {
 			s.SetIgnore(user.FieldCreatedAt)
+		}
+		if _, exists := u.create.mutation.UserID(); exists {
+			s.SetIgnore(user.FieldUserID)
 		}
 	}))
 	return u
@@ -535,6 +535,27 @@ func (u *UserUpsertOne) Update(set func(*UserUpsert)) *UserUpsertOne {
 		set(&UserUpsert{UpdateSet: update})
 	}))
 	return u
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *UserUpsertOne) SetUpdatedAt(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// AddUpdatedAt adds v to the "updated_at" field.
+func (u *UserUpsertOne) AddUpdatedAt(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateUpdatedAt() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateUpdatedAt()
+	})
 }
 
 // SetNickname sets the "nickname" field.
@@ -646,27 +667,6 @@ func (u *UserUpsertOne) UpdateDeletedAt() *UserUpsertOne {
 func (u *UserUpsertOne) ClearDeletedAt() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.ClearDeletedAt()
-	})
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (u *UserUpsertOne) SetUpdatedAt(v int64) *UserUpsertOne {
-	return u.Update(func(s *UserUpsert) {
-		s.SetUpdatedAt(v)
-	})
-}
-
-// AddUpdatedAt adds v to the "updated_at" field.
-func (u *UserUpsertOne) AddUpdatedAt(v int64) *UserUpsertOne {
-	return u.Update(func(s *UserUpsert) {
-		s.AddUpdatedAt(v)
-	})
-}
-
-// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
-func (u *UserUpsertOne) UpdateUpdatedAt() *UserUpsertOne {
-	return u.Update(func(s *UserUpsert) {
-		s.UpdateUpdatedAt()
 	})
 }
 
@@ -805,7 +805,7 @@ func (_c *UserCreateBulk) ExecX(ctx context.Context) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.UserUpsert) {
-//			SetUserID(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *UserCreateBulk) OnConflict(opts ...sql.ConflictOption) *UserUpsertBulk {
@@ -852,11 +852,11 @@ func (u *UserUpsertBulk) UpdateNewValues() *UserUpsertBulk {
 			if _, exists := b.mutation.ID(); exists {
 				s.SetIgnore(user.FieldID)
 			}
-			if _, exists := b.mutation.UserID(); exists {
-				s.SetIgnore(user.FieldUserID)
-			}
 			if _, exists := b.mutation.CreatedAt(); exists {
 				s.SetIgnore(user.FieldCreatedAt)
+			}
+			if _, exists := b.mutation.UserID(); exists {
+				s.SetIgnore(user.FieldUserID)
 			}
 		}
 	}))
@@ -888,6 +888,27 @@ func (u *UserUpsertBulk) Update(set func(*UserUpsert)) *UserUpsertBulk {
 		set(&UserUpsert{UpdateSet: update})
 	}))
 	return u
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *UserUpsertBulk) SetUpdatedAt(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// AddUpdatedAt adds v to the "updated_at" field.
+func (u *UserUpsertBulk) AddUpdatedAt(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateUpdatedAt() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateUpdatedAt()
+	})
 }
 
 // SetNickname sets the "nickname" field.
@@ -999,27 +1020,6 @@ func (u *UserUpsertBulk) UpdateDeletedAt() *UserUpsertBulk {
 func (u *UserUpsertBulk) ClearDeletedAt() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.ClearDeletedAt()
-	})
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (u *UserUpsertBulk) SetUpdatedAt(v int64) *UserUpsertBulk {
-	return u.Update(func(s *UserUpsert) {
-		s.SetUpdatedAt(v)
-	})
-}
-
-// AddUpdatedAt adds v to the "updated_at" field.
-func (u *UserUpsertBulk) AddUpdatedAt(v int64) *UserUpsertBulk {
-	return u.Update(func(s *UserUpsert) {
-		s.AddUpdatedAt(v)
-	})
-}
-
-// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
-func (u *UserUpsertBulk) UpdateUpdatedAt() *UserUpsertBulk {
-	return u.Update(func(s *UserUpsert) {
-		s.UpdateUpdatedAt()
 	})
 }
 

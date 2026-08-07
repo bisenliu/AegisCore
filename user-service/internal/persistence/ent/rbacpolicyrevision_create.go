@@ -23,6 +23,20 @@ type RbacPolicyRevisionCreate struct {
 	conflict []sql.ConflictOption
 }
 
+// SetCreatedAt sets the "created_at" field.
+func (_c *RbacPolicyRevisionCreate) SetCreatedAt(v int64) *RbacPolicyRevisionCreate {
+	_c.mutation.SetCreatedAt(v)
+	return _c
+}
+
+// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
+func (_c *RbacPolicyRevisionCreate) SetNillableCreatedAt(v *int64) *RbacPolicyRevisionCreate {
+	if v != nil {
+		_c.SetCreatedAt(*v)
+	}
+	return _c
+}
+
 // SetReason sets the "reason" field.
 func (_c *RbacPolicyRevisionCreate) SetReason(v string) *RbacPolicyRevisionCreate {
 	_c.mutation.SetReason(v)
@@ -67,20 +81,6 @@ func (_c *RbacPolicyRevisionCreate) SetPermissionID(v uuid.UUID) *RbacPolicyRevi
 func (_c *RbacPolicyRevisionCreate) SetNillablePermissionID(v *uuid.UUID) *RbacPolicyRevisionCreate {
 	if v != nil {
 		_c.SetPermissionID(*v)
-	}
-	return _c
-}
-
-// SetCreatedAt sets the "created_at" field.
-func (_c *RbacPolicyRevisionCreate) SetCreatedAt(v int64) *RbacPolicyRevisionCreate {
-	_c.mutation.SetCreatedAt(v)
-	return _c
-}
-
-// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
-func (_c *RbacPolicyRevisionCreate) SetNillableCreatedAt(v *int64) *RbacPolicyRevisionCreate {
-	if v != nil {
-		_c.SetCreatedAt(*v)
 	}
 	return _c
 }
@@ -153,6 +153,9 @@ func (_c *RbacPolicyRevisionCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *RbacPolicyRevisionCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "RbacPolicyRevision.created_at"`)}
+	}
 	if _, ok := _c.mutation.Reason(); !ok {
 		return &ValidationError{Name: "reason", err: errors.New(`ent: missing required field "RbacPolicyRevision.reason"`)}
 	}
@@ -160,9 +163,6 @@ func (_c *RbacPolicyRevisionCreate) check() error {
 		if err := rbacpolicyrevision.ReasonValidator(v); err != nil {
 			return &ValidationError{Name: "reason", err: fmt.Errorf(`ent: validator failed for field "RbacPolicyRevision.reason": %w`, err)}
 		}
-	}
-	if _, ok := _c.mutation.CreatedAt(); !ok {
-		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "RbacPolicyRevision.created_at"`)}
 	}
 	return nil
 }
@@ -197,6 +197,10 @@ func (_c *RbacPolicyRevisionCreate) createSpec() (*RbacPolicyRevision, *sqlgraph
 		_node.ID = id
 		_spec.ID.Value = id
 	}
+	if value, ok := _c.mutation.CreatedAt(); ok {
+		_spec.SetField(rbacpolicyrevision.FieldCreatedAt, field.TypeInt64, value)
+		_node.CreatedAt = value
+	}
 	if value, ok := _c.mutation.Reason(); ok {
 		_spec.SetField(rbacpolicyrevision.FieldReason, field.TypeString, value)
 		_node.Reason = value
@@ -212,10 +216,6 @@ func (_c *RbacPolicyRevisionCreate) createSpec() (*RbacPolicyRevision, *sqlgraph
 	if value, ok := _c.mutation.PermissionID(); ok {
 		_spec.SetField(rbacpolicyrevision.FieldPermissionID, field.TypeUUID, value)
 		_node.PermissionID = &value
-	}
-	if value, ok := _c.mutation.CreatedAt(); ok {
-		_spec.SetField(rbacpolicyrevision.FieldCreatedAt, field.TypeInt64, value)
-		_node.CreatedAt = value
 	}
 	if nodes := _c.mutation.OutboxEventIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -240,7 +240,7 @@ func (_c *RbacPolicyRevisionCreate) createSpec() (*RbacPolicyRevision, *sqlgraph
 // of the `INSERT` statement. For example:
 //
 //	client.RbacPolicyRevision.Create().
-//		SetReason(v).
+//		SetCreatedAt(v).
 //		OnConflict(
 //			// Update the row with the new values
 //			// the was proposed for insertion.
@@ -249,7 +249,7 @@ func (_c *RbacPolicyRevisionCreate) createSpec() (*RbacPolicyRevision, *sqlgraph
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.RbacPolicyRevisionUpsert) {
-//			SetReason(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *RbacPolicyRevisionCreate) OnConflict(opts ...sql.ConflictOption) *RbacPolicyRevisionUpsertOne {
@@ -302,6 +302,9 @@ func (u *RbacPolicyRevisionUpsertOne) UpdateNewValues() *RbacPolicyRevisionUpser
 		if _, exists := u.create.mutation.ID(); exists {
 			s.SetIgnore(rbacpolicyrevision.FieldID)
 		}
+		if _, exists := u.create.mutation.CreatedAt(); exists {
+			s.SetIgnore(rbacpolicyrevision.FieldCreatedAt)
+		}
 		if _, exists := u.create.mutation.Reason(); exists {
 			s.SetIgnore(rbacpolicyrevision.FieldReason)
 		}
@@ -313,9 +316,6 @@ func (u *RbacPolicyRevisionUpsertOne) UpdateNewValues() *RbacPolicyRevisionUpser
 		}
 		if _, exists := u.create.mutation.PermissionID(); exists {
 			s.SetIgnore(rbacpolicyrevision.FieldPermissionID)
-		}
-		if _, exists := u.create.mutation.CreatedAt(); exists {
-			s.SetIgnore(rbacpolicyrevision.FieldCreatedAt)
 		}
 	}))
 	return u
@@ -483,7 +483,7 @@ func (_c *RbacPolicyRevisionCreateBulk) ExecX(ctx context.Context) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.RbacPolicyRevisionUpsert) {
-//			SetReason(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *RbacPolicyRevisionCreateBulk) OnConflict(opts ...sql.ConflictOption) *RbacPolicyRevisionUpsertBulk {
@@ -530,6 +530,9 @@ func (u *RbacPolicyRevisionUpsertBulk) UpdateNewValues() *RbacPolicyRevisionUpse
 			if _, exists := b.mutation.ID(); exists {
 				s.SetIgnore(rbacpolicyrevision.FieldID)
 			}
+			if _, exists := b.mutation.CreatedAt(); exists {
+				s.SetIgnore(rbacpolicyrevision.FieldCreatedAt)
+			}
 			if _, exists := b.mutation.Reason(); exists {
 				s.SetIgnore(rbacpolicyrevision.FieldReason)
 			}
@@ -541,9 +544,6 @@ func (u *RbacPolicyRevisionUpsertBulk) UpdateNewValues() *RbacPolicyRevisionUpse
 			}
 			if _, exists := b.mutation.PermissionID(); exists {
 				s.SetIgnore(rbacpolicyrevision.FieldPermissionID)
-			}
-			if _, exists := b.mutation.CreatedAt(); exists {
-				s.SetIgnore(rbacpolicyrevision.FieldCreatedAt)
 			}
 		}
 	}))

@@ -54,6 +54,16 @@ func IDLTE(id int64) predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldLTE(FieldID, id))
 }
 
+// CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
+func CreatedAt(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldCreatedAt, v))
+}
+
+// UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
+func UpdatedAt(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldUpdatedAt, v))
+}
+
 // EventID applies equality check predicate on the "event_id" field. It's identical to EventIDEQ.
 func EventID(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldEventID, v))
@@ -124,19 +134,89 @@ func IdempotencyKey(v string) predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldIdempotencyKey, v))
 }
 
-// CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
-func CreatedAt(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldCreatedAt, v))
-}
-
-// UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
-func UpdatedAt(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldUpdatedAt, v))
-}
-
 // DeliveredAt applies equality check predicate on the "delivered_at" field. It's identical to DeliveredAtEQ.
 func DeliveredAt(v int64) predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldDeliveredAt, v))
+}
+
+// CreatedAtEQ applies the EQ predicate on the "created_at" field.
+func CreatedAtEQ(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldCreatedAt, v))
+}
+
+// CreatedAtNEQ applies the NEQ predicate on the "created_at" field.
+func CreatedAtNEQ(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldCreatedAt, v))
+}
+
+// CreatedAtIn applies the In predicate on the "created_at" field.
+func CreatedAtIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldCreatedAt, vs...))
+}
+
+// CreatedAtNotIn applies the NotIn predicate on the "created_at" field.
+func CreatedAtNotIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldCreatedAt, vs...))
+}
+
+// CreatedAtGT applies the GT predicate on the "created_at" field.
+func CreatedAtGT(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldGT(FieldCreatedAt, v))
+}
+
+// CreatedAtGTE applies the GTE predicate on the "created_at" field.
+func CreatedAtGTE(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldGTE(FieldCreatedAt, v))
+}
+
+// CreatedAtLT applies the LT predicate on the "created_at" field.
+func CreatedAtLT(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldLT(FieldCreatedAt, v))
+}
+
+// CreatedAtLTE applies the LTE predicate on the "created_at" field.
+func CreatedAtLTE(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldLTE(FieldCreatedAt, v))
+}
+
+// UpdatedAtEQ applies the EQ predicate on the "updated_at" field.
+func UpdatedAtEQ(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldUpdatedAt, v))
+}
+
+// UpdatedAtNEQ applies the NEQ predicate on the "updated_at" field.
+func UpdatedAtNEQ(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldUpdatedAt, v))
+}
+
+// UpdatedAtIn applies the In predicate on the "updated_at" field.
+func UpdatedAtIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldUpdatedAt, vs...))
+}
+
+// UpdatedAtNotIn applies the NotIn predicate on the "updated_at" field.
+func UpdatedAtNotIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldUpdatedAt, vs...))
+}
+
+// UpdatedAtGT applies the GT predicate on the "updated_at" field.
+func UpdatedAtGT(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldGT(FieldUpdatedAt, v))
+}
+
+// UpdatedAtGTE applies the GTE predicate on the "updated_at" field.
+func UpdatedAtGTE(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldGTE(FieldUpdatedAt, v))
+}
+
+// UpdatedAtLT applies the LT predicate on the "updated_at" field.
+func UpdatedAtLT(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldLT(FieldUpdatedAt, v))
+}
+
+// UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
+func UpdatedAtLTE(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldLTE(FieldUpdatedAt, v))
 }
 
 // EventIDEQ applies the EQ predicate on the "event_id" field.
@@ -862,86 +942,6 @@ func IdempotencyKeyEqualFold(v string) predicate.RbacPolicyOutboxEvent {
 // IdempotencyKeyContainsFold applies the ContainsFold predicate on the "idempotency_key" field.
 func IdempotencyKeyContainsFold(v string) predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldContainsFold(FieldIdempotencyKey, v))
-}
-
-// CreatedAtEQ applies the EQ predicate on the "created_at" field.
-func CreatedAtEQ(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldCreatedAt, v))
-}
-
-// CreatedAtNEQ applies the NEQ predicate on the "created_at" field.
-func CreatedAtNEQ(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldCreatedAt, v))
-}
-
-// CreatedAtIn applies the In predicate on the "created_at" field.
-func CreatedAtIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldCreatedAt, vs...))
-}
-
-// CreatedAtNotIn applies the NotIn predicate on the "created_at" field.
-func CreatedAtNotIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldCreatedAt, vs...))
-}
-
-// CreatedAtGT applies the GT predicate on the "created_at" field.
-func CreatedAtGT(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGT(FieldCreatedAt, v))
-}
-
-// CreatedAtGTE applies the GTE predicate on the "created_at" field.
-func CreatedAtGTE(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGTE(FieldCreatedAt, v))
-}
-
-// CreatedAtLT applies the LT predicate on the "created_at" field.
-func CreatedAtLT(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLT(FieldCreatedAt, v))
-}
-
-// CreatedAtLTE applies the LTE predicate on the "created_at" field.
-func CreatedAtLTE(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLTE(FieldCreatedAt, v))
-}
-
-// UpdatedAtEQ applies the EQ predicate on the "updated_at" field.
-func UpdatedAtEQ(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldUpdatedAt, v))
-}
-
-// UpdatedAtNEQ applies the NEQ predicate on the "updated_at" field.
-func UpdatedAtNEQ(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldUpdatedAt, v))
-}
-
-// UpdatedAtIn applies the In predicate on the "updated_at" field.
-func UpdatedAtIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldUpdatedAt, vs...))
-}
-
-// UpdatedAtNotIn applies the NotIn predicate on the "updated_at" field.
-func UpdatedAtNotIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldUpdatedAt, vs...))
-}
-
-// UpdatedAtGT applies the GT predicate on the "updated_at" field.
-func UpdatedAtGT(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGT(FieldUpdatedAt, v))
-}
-
-// UpdatedAtGTE applies the GTE predicate on the "updated_at" field.
-func UpdatedAtGTE(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGTE(FieldUpdatedAt, v))
-}
-
-// UpdatedAtLT applies the LT predicate on the "updated_at" field.
-func UpdatedAtLT(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLT(FieldUpdatedAt, v))
-}
-
-// UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
-func UpdatedAtLTE(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLTE(FieldUpdatedAt, v))
 }
 
 // DeliveredAtEQ applies the EQ predicate on the "delivered_at" field.

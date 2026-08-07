@@ -300,12 +300,12 @@ func (_q *RbacPolicyOutboxEventQuery) WithPolicyRevision(opts ...func(*RbacPolic
 // Example:
 //
 //	var v []struct {
-//		EventID uuid.UUID `json:"event_id,omitempty"`
+//		CreatedAt int64 `json:"created_at,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.RbacPolicyOutboxEvent.Query().
-//		GroupBy(rbacpolicyoutboxevent.FieldEventID).
+//		GroupBy(rbacpolicyoutboxevent.FieldCreatedAt).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *RbacPolicyOutboxEventQuery) GroupBy(field string, fields ...string) *RbacPolicyOutboxEventGroupBy {
@@ -323,11 +323,11 @@ func (_q *RbacPolicyOutboxEventQuery) GroupBy(field string, fields ...string) *R
 // Example:
 //
 //	var v []struct {
-//		EventID uuid.UUID `json:"event_id,omitempty"`
+//		CreatedAt int64 `json:"created_at,omitempty"`
 //	}
 //
 //	client.RbacPolicyOutboxEvent.Query().
-//		Select(rbacpolicyoutboxevent.FieldEventID).
+//		Select(rbacpolicyoutboxevent.FieldCreatedAt).
 //		Scan(ctx, &v)
 func (_q *RbacPolicyOutboxEventQuery) Select(fields ...string) *RbacPolicyOutboxEventSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

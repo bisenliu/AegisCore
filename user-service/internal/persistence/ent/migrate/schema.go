@@ -12,14 +12,14 @@ var (
 	// PermissionsColumns holds the columns for the "permissions" table.
 	PermissionsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "权限ID"},
+		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
+		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
 		{Name: "permission_id", Type: field.TypeUUID, Unique: true, Comment: "外部权限ID"},
 		{Name: "name", Type: field.TypeString, Size: 128, Comment: "权限名称"},
 		{Name: "description", Type: field.TypeString, Size: 512, Comment: "权限说明", Default: ""},
 		{Name: "module", Type: field.TypeString, Size: 64, Comment: "权限所属模块"},
 		{Name: "http_method", Type: field.TypeString, Size: 16, Comment: "HTTP 方法"},
 		{Name: "path_template", Type: field.TypeString, Size: 512, Comment: "路径模板"},
-		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
-		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
 	}
 	// PermissionsTable holds the schema information for the "permissions" table.
 	PermissionsTable = &schema.Table{
@@ -30,23 +30,25 @@ var (
 			{
 				Name:    "permission_http_method_path_template",
 				Unique:  true,
-				Columns: []*schema.Column{PermissionsColumns[5], PermissionsColumns[6]},
+				Columns: []*schema.Column{PermissionsColumns[7], PermissionsColumns[8]},
 			},
 			{
 				Name:    "permission_module_permission_id",
 				Unique:  false,
-				Columns: []*schema.Column{PermissionsColumns[4], PermissionsColumns[1]},
+				Columns: []*schema.Column{PermissionsColumns[6], PermissionsColumns[3]},
 			},
 			{
 				Name:    "permission_http_method_permission_id",
 				Unique:  false,
-				Columns: []*schema.Column{PermissionsColumns[5], PermissionsColumns[1]},
+				Columns: []*schema.Column{PermissionsColumns[7], PermissionsColumns[3]},
 			},
 		},
 	}
 	// RbacPolicyOutboxEventsColumns holds the columns for the "rbac_policy_outbox_events" table.
 	RbacPolicyOutboxEventsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "RBAC policy outbox 内部ID"},
+		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
+		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
 		{Name: "event_id", Type: field.TypeUUID, Unique: true, Comment: "稳定 outbox event ID"},
 		{Name: "kind", Type: field.TypeString, Size: 32, Comment: "事件类型"},
 		{Name: "reason", Type: field.TypeString, Size: 64, Comment: "触发 policy 变更的稳定原因"},
@@ -60,8 +62,6 @@ var (
 		{Name: "claim_token", Type: field.TypeUUID, Nullable: true, Comment: "当前 dispatcher claim token"},
 		{Name: "claimed_until", Type: field.TypeInt64, Nullable: true, Comment: "当前 claim lease 截止时间戳毫秒"},
 		{Name: "idempotency_key", Type: field.TypeString, Unique: true, Size: 128, Comment: "稳定投递幂等键"},
-		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
-		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
 		{Name: "delivered_at", Type: field.TypeInt64, Nullable: true, Comment: "投递完成时间戳毫秒"},
 		{Name: "revision", Type: field.TypeInt64, Unique: true, Comment: "关联的 RBAC policy revision"},
 	}
@@ -82,23 +82,23 @@ var (
 			{
 				Name:    "rbacpolicyoutboxevent_status_next_attempt_at_revision",
 				Unique:  false,
-				Columns: []*schema.Column{RbacPolicyOutboxEventsColumns[7], RbacPolicyOutboxEventsColumns[9], RbacPolicyOutboxEventsColumns[17]},
+				Columns: []*schema.Column{RbacPolicyOutboxEventsColumns[9], RbacPolicyOutboxEventsColumns[11], RbacPolicyOutboxEventsColumns[17]},
 			},
 			{
 				Name:    "rbacpolicyoutboxevent_status_claimed_until_revision",
 				Unique:  false,
-				Columns: []*schema.Column{RbacPolicyOutboxEventsColumns[7], RbacPolicyOutboxEventsColumns[12], RbacPolicyOutboxEventsColumns[17]},
+				Columns: []*schema.Column{RbacPolicyOutboxEventsColumns[9], RbacPolicyOutboxEventsColumns[14], RbacPolicyOutboxEventsColumns[17]},
 			},
 		},
 	}
 	// RbacPolicyRevisionsColumns holds the columns for the "rbac_policy_revisions" table.
 	RbacPolicyRevisionsColumns = []*schema.Column{
 		{Name: "revision", Type: field.TypeInt64, Increment: true, Comment: "单调递增的 RBAC policy revision"},
+		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
 		{Name: "reason", Type: field.TypeString, Size: 64, Comment: "触发 policy 变更的稳定原因"},
 		{Name: "role_id", Type: field.TypeUUID, Nullable: true, Comment: "相关外部角色ID"},
 		{Name: "user_id", Type: field.TypeUUID, Nullable: true, Comment: "相关外部用户ID"},
 		{Name: "permission_id", Type: field.TypeUUID, Nullable: true, Comment: "相关外部权限ID"},
-		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
 	}
 	// RbacPolicyRevisionsTable holds the schema information for the "rbac_policy_revisions" table.
 	RbacPolicyRevisionsTable = &schema.Table{
@@ -120,13 +120,13 @@ var (
 	// RolesColumns holds the columns for the "roles" table.
 	RolesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "角色ID"},
+		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
+		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
 		{Name: "role_id", Type: field.TypeUUID, Unique: true, Comment: "外部角色ID"},
 		{Name: "name", Type: field.TypeString, Size: 128, Comment: "角色名称"},
 		{Name: "description", Type: field.TypeString, Size: 512, Comment: "角色说明", Default: ""},
 		{Name: "active", Type: field.TypeBool, Comment: "角色是否启用", Default: true},
 		{Name: "is_system", Type: field.TypeBool, Comment: "是否系统角色", Default: false},
-		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
-		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
 	}
 	// RolesTable holds the schema information for the "roles" table.
 	RolesTable = &schema.Table{
@@ -137,12 +137,12 @@ var (
 			{
 				Name:    "role_active_role_id",
 				Unique:  false,
-				Columns: []*schema.Column{RolesColumns[4], RolesColumns[1]},
+				Columns: []*schema.Column{RolesColumns[6], RolesColumns[3]},
 			},
 			{
 				Name:    "role_is_system_role_id",
 				Unique:  false,
-				Columns: []*schema.Column{RolesColumns[5], RolesColumns[1]},
+				Columns: []*schema.Column{RolesColumns[7], RolesColumns[3]},
 			},
 		},
 	}
@@ -188,6 +188,8 @@ var (
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "用户ID"},
+		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
+		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
 		{Name: "user_id", Type: field.TypeUUID, Unique: true, Comment: "外部用户ID"},
 		{Name: "nickname", Type: field.TypeString, Size: 128, Comment: "用户昵称"},
 		{Name: "username", Type: field.TypeString, Unique: true, Size: 255, Comment: "用户名"},
@@ -195,8 +197,6 @@ var (
 		{Name: "token_version", Type: field.TypeInt64, Comment: "认证令牌版本", Default: 1},
 		{Name: "status", Type: field.TypeInt64, Comment: "用户状态：100 正常，200 冻结/停用，300 必须修改密码", Default: 100},
 		{Name: "deleted_at", Type: field.TypeInt64, Nullable: true, Comment: "软删除时间戳毫秒，NULL 表示未删除"},
-		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
-		{Name: "updated_at", Type: field.TypeInt64, Comment: "更新时间戳毫秒"},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{
@@ -207,7 +207,7 @@ var (
 			{
 				Name:    "users_nickname_trgm",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[2]},
+				Columns: []*schema.Column{UsersColumns[4]},
 				Annotation: &entsql.IndexAnnotation{
 					OpClass: "gin_trgm_ops",
 					Types: map[string]string{
@@ -218,22 +218,22 @@ var (
 			{
 				Name:    "user_status",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[6]},
+				Columns: []*schema.Column{UsersColumns[8]},
 			},
 			{
 				Name:    "user_deleted_at",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[7]},
+				Columns: []*schema.Column{UsersColumns[9]},
 			},
 			{
 				Name:    "user_deleted_at_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[7], UsersColumns[1]},
+				Columns: []*schema.Column{UsersColumns[9], UsersColumns[3]},
 			},
 			{
 				Name:    "user_status_deleted_at_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[6], UsersColumns[7], UsersColumns[1]},
+				Columns: []*schema.Column{UsersColumns[8], UsersColumns[9], UsersColumns[3]},
 			},
 		},
 	}

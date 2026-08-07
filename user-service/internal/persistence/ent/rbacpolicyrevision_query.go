@@ -301,12 +301,12 @@ func (_q *RbacPolicyRevisionQuery) WithOutboxEvent(opts ...func(*RbacPolicyOutbo
 // Example:
 //
 //	var v []struct {
-//		Reason string `json:"reason,omitempty"`
+//		CreatedAt int64 `json:"created_at,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.RbacPolicyRevision.Query().
-//		GroupBy(rbacpolicyrevision.FieldReason).
+//		GroupBy(rbacpolicyrevision.FieldCreatedAt).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *RbacPolicyRevisionQuery) GroupBy(field string, fields ...string) *RbacPolicyRevisionGroupBy {
@@ -324,11 +324,11 @@ func (_q *RbacPolicyRevisionQuery) GroupBy(field string, fields ...string) *Rbac
 // Example:
 //
 //	var v []struct {
-//		Reason string `json:"reason,omitempty"`
+//		CreatedAt int64 `json:"created_at,omitempty"`
 //	}
 //
 //	client.RbacPolicyRevision.Query().
-//		Select(rbacpolicyrevision.FieldReason).
+//		Select(rbacpolicyrevision.FieldCreatedAt).
 //		Scan(ctx, &v)
 func (_q *RbacPolicyRevisionQuery) Select(fields ...string) *RbacPolicyRevisionSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

@@ -12,6 +12,8 @@ const (
 	Label = "rbac_policy_revision"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "revision"
+	// FieldCreatedAt holds the string denoting the created_at field in the database.
+	FieldCreatedAt = "created_at"
 	// FieldReason holds the string denoting the reason field in the database.
 	FieldReason = "reason"
 	// FieldRoleID holds the string denoting the role_id field in the database.
@@ -20,8 +22,6 @@ const (
 	FieldUserID = "user_id"
 	// FieldPermissionID holds the string denoting the permission_id field in the database.
 	FieldPermissionID = "permission_id"
-	// FieldCreatedAt holds the string denoting the created_at field in the database.
-	FieldCreatedAt = "created_at"
 	// EdgeOutboxEvent holds the string denoting the outbox_event edge name in mutations.
 	EdgeOutboxEvent = "outbox_event"
 	// RbacPolicyOutboxEventFieldID holds the string denoting the ID field of the RbacPolicyOutboxEvent.
@@ -40,11 +40,11 @@ const (
 // Columns holds all SQL columns for rbacpolicyrevision fields.
 var Columns = []string{
 	FieldID,
+	FieldCreatedAt,
 	FieldReason,
 	FieldRoleID,
 	FieldUserID,
 	FieldPermissionID,
-	FieldCreatedAt,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -58,10 +58,10 @@ func ValidColumn(column string) bool {
 }
 
 var (
-	// ReasonValidator is a validator for the "reason" field. It is called by the builders before save.
-	ReasonValidator func(string) error
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() int64
+	// ReasonValidator is a validator for the "reason" field. It is called by the builders before save.
+	ReasonValidator func(string) error
 )
 
 // OrderOption defines the ordering options for the RbacPolicyRevision queries.
@@ -70,6 +70,11 @@ type OrderOption func(*sql.Selector)
 // ByID orders the results by the id field.
 func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
+}
+
+// ByCreatedAt orders the results by the created_at field.
+func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCreatedAt, opts...).ToFunc()
 }
 
 // ByReason orders the results by the reason field.
@@ -90,11 +95,6 @@ func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 // ByPermissionID orders the results by the permission_id field.
 func ByPermissionID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPermissionID, opts...).ToFunc()
-}
-
-// ByCreatedAt orders the results by the created_at field.
-func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldCreatedAt, opts...).ToFunc()
 }
 
 // ByOutboxEventField orders the results by outbox_event field.

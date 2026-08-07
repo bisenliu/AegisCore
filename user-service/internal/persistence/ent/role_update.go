@@ -29,6 +29,19 @@ func (_u *RoleUpdate) Where(ps ...predicate.Role) *RoleUpdate {
 	return _u
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *RoleUpdate) SetUpdatedAt(v int64) *RoleUpdate {
+	_u.mutation.ResetUpdatedAt()
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// AddUpdatedAt adds value to the "updated_at" field.
+func (_u *RoleUpdate) AddUpdatedAt(v int64) *RoleUpdate {
+	_u.mutation.AddUpdatedAt(v)
+	return _u
+}
+
 // SetName sets the "name" field.
 func (_u *RoleUpdate) SetName(v string) *RoleUpdate {
 	_u.mutation.SetName(v)
@@ -82,19 +95,6 @@ func (_u *RoleUpdate) SetNillableIsSystem(v *bool) *RoleUpdate {
 	if v != nil {
 		_u.SetIsSystem(*v)
 	}
-	return _u
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (_u *RoleUpdate) SetUpdatedAt(v int64) *RoleUpdate {
-	_u.mutation.ResetUpdatedAt()
-	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// AddUpdatedAt adds value to the "updated_at" field.
-func (_u *RoleUpdate) AddUpdatedAt(v int64) *RoleUpdate {
-	_u.mutation.AddUpdatedAt(v)
 	return _u
 }
 
@@ -238,6 +238,12 @@ func (_u *RoleUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			}
 		}
 	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(role.FieldUpdatedAt, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
+		_spec.AddField(role.FieldUpdatedAt, field.TypeInt64, value)
+	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(role.FieldName, field.TypeString, value)
 	}
@@ -249,12 +255,6 @@ func (_u *RoleUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.IsSystem(); ok {
 		_spec.SetField(role.FieldIsSystem, field.TypeBool, value)
-	}
-	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(role.FieldUpdatedAt, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
-		_spec.AddField(role.FieldUpdatedAt, field.TypeInt64, value)
 	}
 	if _u.mutation.UserRolesCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -366,6 +366,19 @@ type RoleUpdateOne struct {
 	mutation *RoleMutation
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *RoleUpdateOne) SetUpdatedAt(v int64) *RoleUpdateOne {
+	_u.mutation.ResetUpdatedAt()
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// AddUpdatedAt adds value to the "updated_at" field.
+func (_u *RoleUpdateOne) AddUpdatedAt(v int64) *RoleUpdateOne {
+	_u.mutation.AddUpdatedAt(v)
+	return _u
+}
+
 // SetName sets the "name" field.
 func (_u *RoleUpdateOne) SetName(v string) *RoleUpdateOne {
 	_u.mutation.SetName(v)
@@ -419,19 +432,6 @@ func (_u *RoleUpdateOne) SetNillableIsSystem(v *bool) *RoleUpdateOne {
 	if v != nil {
 		_u.SetIsSystem(*v)
 	}
-	return _u
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (_u *RoleUpdateOne) SetUpdatedAt(v int64) *RoleUpdateOne {
-	_u.mutation.ResetUpdatedAt()
-	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// AddUpdatedAt adds value to the "updated_at" field.
-func (_u *RoleUpdateOne) AddUpdatedAt(v int64) *RoleUpdateOne {
-	_u.mutation.AddUpdatedAt(v)
 	return _u
 }
 
@@ -605,6 +605,12 @@ func (_u *RoleUpdateOne) sqlSave(ctx context.Context) (_node *Role, err error) {
 			}
 		}
 	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(role.FieldUpdatedAt, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
+		_spec.AddField(role.FieldUpdatedAt, field.TypeInt64, value)
+	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(role.FieldName, field.TypeString, value)
 	}
@@ -616,12 +622,6 @@ func (_u *RoleUpdateOne) sqlSave(ctx context.Context) (_node *Role, err error) {
 	}
 	if value, ok := _u.mutation.IsSystem(); ok {
 		_spec.SetField(role.FieldIsSystem, field.TypeBool, value)
-	}
-	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(role.FieldUpdatedAt, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
-		_spec.AddField(role.FieldUpdatedAt, field.TypeInt64, value)
 	}
 	if _u.mutation.UserRolesCleared() {
 		edge := &sqlgraph.EdgeSpec{

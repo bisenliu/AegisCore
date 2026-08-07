@@ -18,8 +18,23 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	permissionMixin := schema.Permission{}.Mixin()
+	permissionMixinFields1 := permissionMixin[1].Fields()
+	_ = permissionMixinFields1
+	permissionMixinFields2 := permissionMixin[2].Fields()
+	_ = permissionMixinFields2
 	permissionFields := schema.Permission{}.Fields()
 	_ = permissionFields
+	// permissionDescCreatedAt is the schema descriptor for created_at field.
+	permissionDescCreatedAt := permissionMixinFields1[0].Descriptor()
+	// permission.DefaultCreatedAt holds the default value on creation for the created_at field.
+	permission.DefaultCreatedAt = permissionDescCreatedAt.Default.(func() int64)
+	// permissionDescUpdatedAt is the schema descriptor for updated_at field.
+	permissionDescUpdatedAt := permissionMixinFields2[0].Descriptor()
+	// permission.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	permission.DefaultUpdatedAt = permissionDescUpdatedAt.Default.(func() int64)
+	// permission.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	permission.UpdateDefaultUpdatedAt = permissionDescUpdatedAt.UpdateDefault.(func() int64)
 	// permissionDescName is the schema descriptor for name field.
 	permissionDescName := permissionFields[2].Descriptor()
 	// permission.NameValidator is a validator for the "name" field. It is called by the builders before save.
@@ -98,18 +113,23 @@ func init() {
 			return nil
 		}
 	}()
-	// permissionDescCreatedAt is the schema descriptor for created_at field.
-	permissionDescCreatedAt := permissionFields[7].Descriptor()
-	// permission.DefaultCreatedAt holds the default value on creation for the created_at field.
-	permission.DefaultCreatedAt = permissionDescCreatedAt.Default.(func() int64)
-	// permissionDescUpdatedAt is the schema descriptor for updated_at field.
-	permissionDescUpdatedAt := permissionFields[8].Descriptor()
-	// permission.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	permission.DefaultUpdatedAt = permissionDescUpdatedAt.Default.(func() int64)
-	// permission.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	permission.UpdateDefaultUpdatedAt = permissionDescUpdatedAt.UpdateDefault.(func() int64)
+	rbacpolicyoutboxeventMixin := schema.RbacPolicyOutboxEvent{}.Mixin()
+	rbacpolicyoutboxeventMixinFields1 := rbacpolicyoutboxeventMixin[1].Fields()
+	_ = rbacpolicyoutboxeventMixinFields1
+	rbacpolicyoutboxeventMixinFields2 := rbacpolicyoutboxeventMixin[2].Fields()
+	_ = rbacpolicyoutboxeventMixinFields2
 	rbacpolicyoutboxeventFields := schema.RbacPolicyOutboxEvent{}.Fields()
 	_ = rbacpolicyoutboxeventFields
+	// rbacpolicyoutboxeventDescCreatedAt is the schema descriptor for created_at field.
+	rbacpolicyoutboxeventDescCreatedAt := rbacpolicyoutboxeventMixinFields1[0].Descriptor()
+	// rbacpolicyoutboxevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	rbacpolicyoutboxevent.DefaultCreatedAt = rbacpolicyoutboxeventDescCreatedAt.Default.(func() int64)
+	// rbacpolicyoutboxeventDescUpdatedAt is the schema descriptor for updated_at field.
+	rbacpolicyoutboxeventDescUpdatedAt := rbacpolicyoutboxeventMixinFields2[0].Descriptor()
+	// rbacpolicyoutboxevent.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	rbacpolicyoutboxevent.DefaultUpdatedAt = rbacpolicyoutboxeventDescUpdatedAt.Default.(func() int64)
+	// rbacpolicyoutboxevent.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	rbacpolicyoutboxevent.UpdateDefaultUpdatedAt = rbacpolicyoutboxeventDescUpdatedAt.UpdateDefault.(func() int64)
 	// rbacpolicyoutboxeventDescKind is the schema descriptor for kind field.
 	rbacpolicyoutboxeventDescKind := rbacpolicyoutboxeventFields[3].Descriptor()
 	// rbacpolicyoutboxevent.KindValidator is a validator for the "kind" field. It is called by the builders before save.
@@ -199,18 +219,15 @@ func init() {
 			return nil
 		}
 	}()
-	// rbacpolicyoutboxeventDescCreatedAt is the schema descriptor for created_at field.
-	rbacpolicyoutboxeventDescCreatedAt := rbacpolicyoutboxeventFields[15].Descriptor()
-	// rbacpolicyoutboxevent.DefaultCreatedAt holds the default value on creation for the created_at field.
-	rbacpolicyoutboxevent.DefaultCreatedAt = rbacpolicyoutboxeventDescCreatedAt.Default.(func() int64)
-	// rbacpolicyoutboxeventDescUpdatedAt is the schema descriptor for updated_at field.
-	rbacpolicyoutboxeventDescUpdatedAt := rbacpolicyoutboxeventFields[16].Descriptor()
-	// rbacpolicyoutboxevent.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	rbacpolicyoutboxevent.DefaultUpdatedAt = rbacpolicyoutboxeventDescUpdatedAt.Default.(func() int64)
-	// rbacpolicyoutboxevent.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	rbacpolicyoutboxevent.UpdateDefaultUpdatedAt = rbacpolicyoutboxeventDescUpdatedAt.UpdateDefault.(func() int64)
+	rbacpolicyrevisionMixin := schema.RbacPolicyRevision{}.Mixin()
+	rbacpolicyrevisionMixinFields1 := rbacpolicyrevisionMixin[1].Fields()
+	_ = rbacpolicyrevisionMixinFields1
 	rbacpolicyrevisionFields := schema.RbacPolicyRevision{}.Fields()
 	_ = rbacpolicyrevisionFields
+	// rbacpolicyrevisionDescCreatedAt is the schema descriptor for created_at field.
+	rbacpolicyrevisionDescCreatedAt := rbacpolicyrevisionMixinFields1[0].Descriptor()
+	// rbacpolicyrevision.DefaultCreatedAt holds the default value on creation for the created_at field.
+	rbacpolicyrevision.DefaultCreatedAt = rbacpolicyrevisionDescCreatedAt.Default.(func() int64)
 	// rbacpolicyrevisionDescReason is the schema descriptor for reason field.
 	rbacpolicyrevisionDescReason := rbacpolicyrevisionFields[1].Descriptor()
 	// rbacpolicyrevision.ReasonValidator is a validator for the "reason" field. It is called by the builders before save.
@@ -229,10 +246,6 @@ func init() {
 			return nil
 		}
 	}()
-	// rbacpolicyrevisionDescCreatedAt is the schema descriptor for created_at field.
-	rbacpolicyrevisionDescCreatedAt := rbacpolicyrevisionFields[5].Descriptor()
-	// rbacpolicyrevision.DefaultCreatedAt holds the default value on creation for the created_at field.
-	rbacpolicyrevision.DefaultCreatedAt = rbacpolicyrevisionDescCreatedAt.Default.(func() int64)
 	rbacpolicyrevisioncounterFields := schema.RbacPolicyRevisionCounter{}.Fields()
 	_ = rbacpolicyrevisioncounterFields
 	// rbacpolicyrevisioncounterDescLastRevision is the schema descriptor for last_revision field.
@@ -241,8 +254,23 @@ func init() {
 	rbacpolicyrevisioncounter.DefaultLastRevision = rbacpolicyrevisioncounterDescLastRevision.Default.(int64)
 	// rbacpolicyrevisioncounter.LastRevisionValidator is a validator for the "last_revision" field. It is called by the builders before save.
 	rbacpolicyrevisioncounter.LastRevisionValidator = rbacpolicyrevisioncounterDescLastRevision.Validators[0].(func(int64) error)
+	roleMixin := schema.Role{}.Mixin()
+	roleMixinFields1 := roleMixin[1].Fields()
+	_ = roleMixinFields1
+	roleMixinFields2 := roleMixin[2].Fields()
+	_ = roleMixinFields2
 	roleFields := schema.Role{}.Fields()
 	_ = roleFields
+	// roleDescCreatedAt is the schema descriptor for created_at field.
+	roleDescCreatedAt := roleMixinFields1[0].Descriptor()
+	// role.DefaultCreatedAt holds the default value on creation for the created_at field.
+	role.DefaultCreatedAt = roleDescCreatedAt.Default.(func() int64)
+	// roleDescUpdatedAt is the schema descriptor for updated_at field.
+	roleDescUpdatedAt := roleMixinFields2[0].Descriptor()
+	// role.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	role.DefaultUpdatedAt = roleDescUpdatedAt.Default.(func() int64)
+	// role.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	role.UpdateDefaultUpdatedAt = roleDescUpdatedAt.UpdateDefault.(func() int64)
 	// roleDescName is the schema descriptor for name field.
 	roleDescName := roleFields[2].Descriptor()
 	// role.NameValidator is a validator for the "name" field. It is called by the builders before save.
@@ -275,24 +303,32 @@ func init() {
 	roleDescIsSystem := roleFields[5].Descriptor()
 	// role.DefaultIsSystem holds the default value on creation for the is_system field.
 	role.DefaultIsSystem = roleDescIsSystem.Default.(bool)
-	// roleDescCreatedAt is the schema descriptor for created_at field.
-	roleDescCreatedAt := roleFields[6].Descriptor()
-	// role.DefaultCreatedAt holds the default value on creation for the created_at field.
-	role.DefaultCreatedAt = roleDescCreatedAt.Default.(func() int64)
-	// roleDescUpdatedAt is the schema descriptor for updated_at field.
-	roleDescUpdatedAt := roleFields[7].Descriptor()
-	// role.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	role.DefaultUpdatedAt = roleDescUpdatedAt.Default.(func() int64)
-	// role.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	role.UpdateDefaultUpdatedAt = roleDescUpdatedAt.UpdateDefault.(func() int64)
+	rolepermissionMixin := schema.RolePermission{}.Mixin()
+	rolepermissionMixinFields1 := rolepermissionMixin[1].Fields()
+	_ = rolepermissionMixinFields1
 	rolepermissionFields := schema.RolePermission{}.Fields()
 	_ = rolepermissionFields
 	// rolepermissionDescCreatedAt is the schema descriptor for created_at field.
-	rolepermissionDescCreatedAt := rolepermissionFields[3].Descriptor()
+	rolepermissionDescCreatedAt := rolepermissionMixinFields1[0].Descriptor()
 	// rolepermission.DefaultCreatedAt holds the default value on creation for the created_at field.
 	rolepermission.DefaultCreatedAt = rolepermissionDescCreatedAt.Default.(func() int64)
+	userMixin := schema.User{}.Mixin()
+	userMixinFields1 := userMixin[1].Fields()
+	_ = userMixinFields1
+	userMixinFields2 := userMixin[2].Fields()
+	_ = userMixinFields2
 	userFields := schema.User{}.Fields()
 	_ = userFields
+	// userDescCreatedAt is the schema descriptor for created_at field.
+	userDescCreatedAt := userMixinFields1[0].Descriptor()
+	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
+	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() int64)
+	// userDescUpdatedAt is the schema descriptor for updated_at field.
+	userDescUpdatedAt := userMixinFields2[0].Descriptor()
+	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() int64)
+	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	user.UpdateDefaultUpdatedAt = userDescUpdatedAt.UpdateDefault.(func() int64)
 	// userDescNickname is the schema descriptor for nickname field.
 	userDescNickname := userFields[2].Descriptor()
 	// user.NicknameValidator is a validator for the "nickname" field. It is called by the builders before save.
@@ -341,20 +377,13 @@ func init() {
 	userDescStatus := userFields[6].Descriptor()
 	// user.DefaultStatus holds the default value on creation for the status field.
 	user.DefaultStatus = userDescStatus.Default.(int64)
-	// userDescCreatedAt is the schema descriptor for created_at field.
-	userDescCreatedAt := userFields[8].Descriptor()
-	// user.DefaultCreatedAt holds the default value on creation for the created_at field.
-	user.DefaultCreatedAt = userDescCreatedAt.Default.(func() int64)
-	// userDescUpdatedAt is the schema descriptor for updated_at field.
-	userDescUpdatedAt := userFields[9].Descriptor()
-	// user.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() int64)
-	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	user.UpdateDefaultUpdatedAt = userDescUpdatedAt.UpdateDefault.(func() int64)
+	userroleMixin := schema.UserRole{}.Mixin()
+	userroleMixinFields1 := userroleMixin[1].Fields()
+	_ = userroleMixinFields1
 	userroleFields := schema.UserRole{}.Fields()
 	_ = userroleFields
 	// userroleDescCreatedAt is the schema descriptor for created_at field.
-	userroleDescCreatedAt := userroleFields[3].Descriptor()
+	userroleDescCreatedAt := userroleMixinFields1[0].Descriptor()
 	// userrole.DefaultCreatedAt holds the default value on creation for the created_at field.
 	userrole.DefaultCreatedAt = userroleDescCreatedAt.Default.(func() int64)
 }

@@ -54,6 +54,11 @@ func IDLTE(id int64) predicate.RbacPolicyRevision {
 	return predicate.RbacPolicyRevision(sql.FieldLTE(FieldID, id))
 }
 
+// CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
+func CreatedAt(v int64) predicate.RbacPolicyRevision {
+	return predicate.RbacPolicyRevision(sql.FieldEQ(FieldCreatedAt, v))
+}
+
 // Reason applies equality check predicate on the "reason" field. It's identical to ReasonEQ.
 func Reason(v string) predicate.RbacPolicyRevision {
 	return predicate.RbacPolicyRevision(sql.FieldEQ(FieldReason, v))
@@ -74,9 +79,44 @@ func PermissionID(v uuid.UUID) predicate.RbacPolicyRevision {
 	return predicate.RbacPolicyRevision(sql.FieldEQ(FieldPermissionID, v))
 }
 
-// CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
-func CreatedAt(v int64) predicate.RbacPolicyRevision {
+// CreatedAtEQ applies the EQ predicate on the "created_at" field.
+func CreatedAtEQ(v int64) predicate.RbacPolicyRevision {
 	return predicate.RbacPolicyRevision(sql.FieldEQ(FieldCreatedAt, v))
+}
+
+// CreatedAtNEQ applies the NEQ predicate on the "created_at" field.
+func CreatedAtNEQ(v int64) predicate.RbacPolicyRevision {
+	return predicate.RbacPolicyRevision(sql.FieldNEQ(FieldCreatedAt, v))
+}
+
+// CreatedAtIn applies the In predicate on the "created_at" field.
+func CreatedAtIn(vs ...int64) predicate.RbacPolicyRevision {
+	return predicate.RbacPolicyRevision(sql.FieldIn(FieldCreatedAt, vs...))
+}
+
+// CreatedAtNotIn applies the NotIn predicate on the "created_at" field.
+func CreatedAtNotIn(vs ...int64) predicate.RbacPolicyRevision {
+	return predicate.RbacPolicyRevision(sql.FieldNotIn(FieldCreatedAt, vs...))
+}
+
+// CreatedAtGT applies the GT predicate on the "created_at" field.
+func CreatedAtGT(v int64) predicate.RbacPolicyRevision {
+	return predicate.RbacPolicyRevision(sql.FieldGT(FieldCreatedAt, v))
+}
+
+// CreatedAtGTE applies the GTE predicate on the "created_at" field.
+func CreatedAtGTE(v int64) predicate.RbacPolicyRevision {
+	return predicate.RbacPolicyRevision(sql.FieldGTE(FieldCreatedAt, v))
+}
+
+// CreatedAtLT applies the LT predicate on the "created_at" field.
+func CreatedAtLT(v int64) predicate.RbacPolicyRevision {
+	return predicate.RbacPolicyRevision(sql.FieldLT(FieldCreatedAt, v))
+}
+
+// CreatedAtLTE applies the LTE predicate on the "created_at" field.
+func CreatedAtLTE(v int64) predicate.RbacPolicyRevision {
+	return predicate.RbacPolicyRevision(sql.FieldLTE(FieldCreatedAt, v))
 }
 
 // ReasonEQ applies the EQ predicate on the "reason" field.
@@ -292,46 +332,6 @@ func PermissionIDIsNil() predicate.RbacPolicyRevision {
 // PermissionIDNotNil applies the NotNil predicate on the "permission_id" field.
 func PermissionIDNotNil() predicate.RbacPolicyRevision {
 	return predicate.RbacPolicyRevision(sql.FieldNotNull(FieldPermissionID))
-}
-
-// CreatedAtEQ applies the EQ predicate on the "created_at" field.
-func CreatedAtEQ(v int64) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldEQ(FieldCreatedAt, v))
-}
-
-// CreatedAtNEQ applies the NEQ predicate on the "created_at" field.
-func CreatedAtNEQ(v int64) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldNEQ(FieldCreatedAt, v))
-}
-
-// CreatedAtIn applies the In predicate on the "created_at" field.
-func CreatedAtIn(vs ...int64) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldIn(FieldCreatedAt, vs...))
-}
-
-// CreatedAtNotIn applies the NotIn predicate on the "created_at" field.
-func CreatedAtNotIn(vs ...int64) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldNotIn(FieldCreatedAt, vs...))
-}
-
-// CreatedAtGT applies the GT predicate on the "created_at" field.
-func CreatedAtGT(v int64) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldGT(FieldCreatedAt, v))
-}
-
-// CreatedAtGTE applies the GTE predicate on the "created_at" field.
-func CreatedAtGTE(v int64) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldGTE(FieldCreatedAt, v))
-}
-
-// CreatedAtLT applies the LT predicate on the "created_at" field.
-func CreatedAtLT(v int64) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldLT(FieldCreatedAt, v))
-}
-
-// CreatedAtLTE applies the LTE predicate on the "created_at" field.
-func CreatedAtLTE(v int64) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldLTE(FieldCreatedAt, v))
 }
 
 // HasOutboxEvent applies the HasEdge predicate on the "outbox_event" edge.

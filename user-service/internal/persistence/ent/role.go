@@ -18,6 +18,10 @@ type Role struct {
 	// ID of the ent.
 	// 角色ID
 	ID int64 `json:"id,omitempty"`
+	// 创建时间戳毫秒
+	CreatedAt int64 `json:"created_at,omitempty"`
+	// 更新时间戳毫秒
+	UpdatedAt int64 `json:"updated_at,omitempty"`
 	// 外部角色ID
 	RoleID uuid.UUID `json:"role_id,omitempty"`
 	// 角色名称
@@ -28,10 +32,6 @@ type Role struct {
 	Active bool `json:"active,omitempty"`
 	// 是否系统角色
 	IsSystem bool `json:"is_system,omitempty"`
-	// 创建时间戳毫秒
-	CreatedAt int64 `json:"created_at,omitempty"`
-	// 更新时间戳毫秒
-	UpdatedAt int64 `json:"updated_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the RoleQuery when eager-loading is set.
 	Edges        RoleEdges `json:"edges"`
@@ -101,6 +101,18 @@ func (_m *Role) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			_m.ID = int64(value.Int64)
+		case role.FieldCreatedAt:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field created_at", values[i])
+			} else if value.Valid {
+				_m.CreatedAt = value.Int64
+			}
+		case role.FieldUpdatedAt:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
+			} else if value.Valid {
+				_m.UpdatedAt = value.Int64
+			}
 		case role.FieldRoleID:
 			if value, ok := values[i].(*uuid.UUID); !ok {
 				return fmt.Errorf("unexpected type %T for field role_id", values[i])
@@ -130,18 +142,6 @@ func (_m *Role) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field is_system", values[i])
 			} else if value.Valid {
 				_m.IsSystem = value.Bool
-			}
-		case role.FieldCreatedAt:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field created_at", values[i])
-			} else if value.Valid {
-				_m.CreatedAt = value.Int64
-			}
-		case role.FieldUpdatedAt:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
-			} else if value.Valid {
-				_m.UpdatedAt = value.Int64
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -189,6 +189,12 @@ func (_m *Role) String() string {
 	var builder strings.Builder
 	builder.WriteString("Role(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	builder.WriteString("created_at=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CreatedAt))
+	builder.WriteString(", ")
+	builder.WriteString("updated_at=")
+	builder.WriteString(fmt.Sprintf("%v", _m.UpdatedAt))
+	builder.WriteString(", ")
 	builder.WriteString("role_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RoleID))
 	builder.WriteString(", ")
@@ -203,12 +209,6 @@ func (_m *Role) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("is_system=")
 	builder.WriteString(fmt.Sprintf("%v", _m.IsSystem))
-	builder.WriteString(", ")
-	builder.WriteString("created_at=")
-	builder.WriteString(fmt.Sprintf("%v", _m.CreatedAt))
-	builder.WriteString(", ")
-	builder.WriteString("updated_at=")
-	builder.WriteString(fmt.Sprintf("%v", _m.UpdatedAt))
 	builder.WriteByte(')')
 	return builder.String()
 }

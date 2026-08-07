@@ -18,6 +18,25 @@ func TestRbacPolicyRevisionUsesRevisionIdentity(t *testing.T) {
 	require.True(t, fields["permission_id"].Optional)
 }
 
+func TestTimestampMixinsUseMillisDefaults(t *testing.T) {
+	createdAt := createdAtMillisMixin{}.Fields()[0].Descriptor()
+	updatedAt := updatedAtMillisMixin{}.Fields()[0].Descriptor()
+
+	require.Equal(t, "created_at", createdAt.Name)
+	require.True(t, createdAt.Immutable)
+	require.Equal(t, "创建时间戳毫秒", createdAt.Comment)
+	require.NotNil(t, createdAt.Default)
+	require.IsType(t, func() int64 { return 0 }, createdAt.Default)
+
+	require.Equal(t, "updated_at", updatedAt.Name)
+	require.False(t, updatedAt.Immutable)
+	require.Equal(t, "更新时间戳毫秒", updatedAt.Comment)
+	require.NotNil(t, updatedAt.Default)
+	require.NotNil(t, updatedAt.UpdateDefault)
+	require.IsType(t, func() int64 { return 0 }, updatedAt.Default)
+	require.IsType(t, func() int64 { return 0 }, updatedAt.UpdateDefault)
+}
+
 func TestRbacPolicyOutboxDefaultsAndConstraints(t *testing.T) {
 	fields := fieldDescriptors(RbacPolicyOutboxEvent{}.Fields())
 

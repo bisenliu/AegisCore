@@ -28,6 +28,19 @@ func (_u *UserUpdate) Where(ps ...predicate.User) *UserUpdate {
 	return _u
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *UserUpdate) SetUpdatedAt(v int64) *UserUpdate {
+	_u.mutation.ResetUpdatedAt()
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// AddUpdatedAt adds value to the "updated_at" field.
+func (_u *UserUpdate) AddUpdatedAt(v int64) *UserUpdate {
+	_u.mutation.AddUpdatedAt(v)
+	return _u
+}
+
 // SetNickname sets the "nickname" field.
 func (_u *UserUpdate) SetNickname(v string) *UserUpdate {
 	_u.mutation.SetNickname(v)
@@ -136,19 +149,6 @@ func (_u *UserUpdate) AddDeletedAt(v int64) *UserUpdate {
 // ClearDeletedAt clears the value of the "deleted_at" field.
 func (_u *UserUpdate) ClearDeletedAt() *UserUpdate {
 	_u.mutation.ClearDeletedAt()
-	return _u
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (_u *UserUpdate) SetUpdatedAt(v int64) *UserUpdate {
-	_u.mutation.ResetUpdatedAt()
-	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// AddUpdatedAt adds value to the "updated_at" field.
-func (_u *UserUpdate) AddUpdatedAt(v int64) *UserUpdate {
-	_u.mutation.AddUpdatedAt(v)
 	return _u
 }
 
@@ -261,6 +261,12 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			}
 		}
 	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(user.FieldUpdatedAt, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
+		_spec.AddField(user.FieldUpdatedAt, field.TypeInt64, value)
+	}
 	if value, ok := _u.mutation.Nickname(); ok {
 		_spec.SetField(user.FieldNickname, field.TypeString, value)
 	}
@@ -290,12 +296,6 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(user.FieldDeletedAt, field.TypeInt64)
-	}
-	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(user.FieldUpdatedAt, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
-		_spec.AddField(user.FieldUpdatedAt, field.TypeInt64, value)
 	}
 	if _u.mutation.UserRolesCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -360,6 +360,19 @@ type UserUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *UserMutation
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *UserUpdateOne) SetUpdatedAt(v int64) *UserUpdateOne {
+	_u.mutation.ResetUpdatedAt()
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// AddUpdatedAt adds value to the "updated_at" field.
+func (_u *UserUpdateOne) AddUpdatedAt(v int64) *UserUpdateOne {
+	_u.mutation.AddUpdatedAt(v)
+	return _u
 }
 
 // SetNickname sets the "nickname" field.
@@ -470,19 +483,6 @@ func (_u *UserUpdateOne) AddDeletedAt(v int64) *UserUpdateOne {
 // ClearDeletedAt clears the value of the "deleted_at" field.
 func (_u *UserUpdateOne) ClearDeletedAt() *UserUpdateOne {
 	_u.mutation.ClearDeletedAt()
-	return _u
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (_u *UserUpdateOne) SetUpdatedAt(v int64) *UserUpdateOne {
-	_u.mutation.ResetUpdatedAt()
-	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// AddUpdatedAt adds value to the "updated_at" field.
-func (_u *UserUpdateOne) AddUpdatedAt(v int64) *UserUpdateOne {
-	_u.mutation.AddUpdatedAt(v)
 	return _u
 }
 
@@ -625,6 +625,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			}
 		}
 	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(user.FieldUpdatedAt, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
+		_spec.AddField(user.FieldUpdatedAt, field.TypeInt64, value)
+	}
 	if value, ok := _u.mutation.Nickname(); ok {
 		_spec.SetField(user.FieldNickname, field.TypeString, value)
 	}
@@ -654,12 +660,6 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(user.FieldDeletedAt, field.TypeInt64)
-	}
-	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(user.FieldUpdatedAt, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
-		_spec.AddField(user.FieldUpdatedAt, field.TypeInt64, value)
 	}
 	if _u.mutation.UserRolesCleared() {
 		edge := &sqlgraph.EdgeSpec{

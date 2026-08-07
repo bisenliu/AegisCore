@@ -301,12 +301,12 @@ func (_q *PermissionQuery) WithRolePermissions(opts ...func(*RolePermissionQuery
 // Example:
 //
 //	var v []struct {
-//		PermissionID uuid.UUID `json:"permission_id,omitempty"`
+//		CreatedAt int64 `json:"created_at,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.Permission.Query().
-//		GroupBy(permission.FieldPermissionID).
+//		GroupBy(permission.FieldCreatedAt).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *PermissionQuery) GroupBy(field string, fields ...string) *PermissionGroupBy {
@@ -324,11 +324,11 @@ func (_q *PermissionQuery) GroupBy(field string, fields ...string) *PermissionGr
 // Example:
 //
 //	var v []struct {
-//		PermissionID uuid.UUID `json:"permission_id,omitempty"`
+//		CreatedAt int64 `json:"created_at,omitempty"`
 //	}
 //
 //	client.Permission.Query().
-//		Select(permission.FieldPermissionID).
+//		Select(permission.FieldCreatedAt).
 //		Scan(ctx, &v)
 func (_q *PermissionQuery) Select(fields ...string) *PermissionSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

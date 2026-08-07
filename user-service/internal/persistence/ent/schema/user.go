@@ -1,8 +1,6 @@
 package schema
 
 import (
-	"time"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
@@ -23,7 +21,7 @@ type User struct {
 
 // Mixin 返回 users 表复用的公共 schema mixin。
 func (User) Mixin() []ent.Mixin {
-	return []ent.Mixin{databaseCommentMixin{}}
+	return []ent.Mixin{databaseCommentMixin{}, createdAtMillisMixin{}, updatedAtMillisMixin{}}
 }
 
 // Fields 返回 users 表列定义，包括认证字段和时间戳默认值。
@@ -37,8 +35,6 @@ func (User) Fields() []ent.Field {
 		field.Int64("token_version").Default(1).Comment("认证令牌版本"),
 		field.Int64("status").Default(defaultUserStatus).Comment("用户状态：100 正常，200 冻结/停用，300 必须修改密码"),
 		field.Int64("deleted_at").Optional().Nillable().Comment("软删除时间戳毫秒，NULL 表示未删除"),
-		field.Int64("created_at").DefaultFunc(func() int64 { return time.Now().UnixMilli() }).Immutable().Comment("创建时间戳毫秒"),
-		field.Int64("updated_at").DefaultFunc(func() int64 { return time.Now().UnixMilli() }).UpdateDefault(func() int64 { return time.Now().UnixMilli() }).Comment("更新时间戳毫秒"),
 	}
 }
 

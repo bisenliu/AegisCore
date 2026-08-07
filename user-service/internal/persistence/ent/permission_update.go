@@ -28,6 +28,19 @@ func (_u *PermissionUpdate) Where(ps ...predicate.Permission) *PermissionUpdate 
 	return _u
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *PermissionUpdate) SetUpdatedAt(v int64) *PermissionUpdate {
+	_u.mutation.ResetUpdatedAt()
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// AddUpdatedAt adds value to the "updated_at" field.
+func (_u *PermissionUpdate) AddUpdatedAt(v int64) *PermissionUpdate {
+	_u.mutation.AddUpdatedAt(v)
+	return _u
+}
+
 // SetName sets the "name" field.
 func (_u *PermissionUpdate) SetName(v string) *PermissionUpdate {
 	_u.mutation.SetName(v)
@@ -95,19 +108,6 @@ func (_u *PermissionUpdate) SetNillablePathTemplate(v *string) *PermissionUpdate
 	if v != nil {
 		_u.SetPathTemplate(*v)
 	}
-	return _u
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (_u *PermissionUpdate) SetUpdatedAt(v int64) *PermissionUpdate {
-	_u.mutation.ResetUpdatedAt()
-	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// AddUpdatedAt adds value to the "updated_at" field.
-func (_u *PermissionUpdate) AddUpdatedAt(v int64) *PermissionUpdate {
-	_u.mutation.AddUpdatedAt(v)
 	return _u
 }
 
@@ -230,6 +230,12 @@ func (_u *PermissionUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 			}
 		}
 	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(permission.FieldUpdatedAt, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
+		_spec.AddField(permission.FieldUpdatedAt, field.TypeInt64, value)
+	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(permission.FieldName, field.TypeString, value)
 	}
@@ -244,12 +250,6 @@ func (_u *PermissionUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	}
 	if value, ok := _u.mutation.PathTemplate(); ok {
 		_spec.SetField(permission.FieldPathTemplate, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(permission.FieldUpdatedAt, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
-		_spec.AddField(permission.FieldUpdatedAt, field.TypeInt64, value)
 	}
 	if _u.mutation.RolePermissionsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -314,6 +314,19 @@ type PermissionUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *PermissionMutation
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *PermissionUpdateOne) SetUpdatedAt(v int64) *PermissionUpdateOne {
+	_u.mutation.ResetUpdatedAt()
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// AddUpdatedAt adds value to the "updated_at" field.
+func (_u *PermissionUpdateOne) AddUpdatedAt(v int64) *PermissionUpdateOne {
+	_u.mutation.AddUpdatedAt(v)
+	return _u
 }
 
 // SetName sets the "name" field.
@@ -383,19 +396,6 @@ func (_u *PermissionUpdateOne) SetNillablePathTemplate(v *string) *PermissionUpd
 	if v != nil {
 		_u.SetPathTemplate(*v)
 	}
-	return _u
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (_u *PermissionUpdateOne) SetUpdatedAt(v int64) *PermissionUpdateOne {
-	_u.mutation.ResetUpdatedAt()
-	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// AddUpdatedAt adds value to the "updated_at" field.
-func (_u *PermissionUpdateOne) AddUpdatedAt(v int64) *PermissionUpdateOne {
-	_u.mutation.AddUpdatedAt(v)
 	return _u
 }
 
@@ -548,6 +548,12 @@ func (_u *PermissionUpdateOne) sqlSave(ctx context.Context) (_node *Permission, 
 			}
 		}
 	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(permission.FieldUpdatedAt, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
+		_spec.AddField(permission.FieldUpdatedAt, field.TypeInt64, value)
+	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(permission.FieldName, field.TypeString, value)
 	}
@@ -562,12 +568,6 @@ func (_u *PermissionUpdateOne) sqlSave(ctx context.Context) (_node *Permission, 
 	}
 	if value, ok := _u.mutation.PathTemplate(); ok {
 		_spec.SetField(permission.FieldPathTemplate, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(permission.FieldUpdatedAt, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
-		_spec.AddField(permission.FieldUpdatedAt, field.TypeInt64, value)
 	}
 	if _u.mutation.RolePermissionsCleared() {
 		edge := &sqlgraph.EdgeSpec{

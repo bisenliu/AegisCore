@@ -53,6 +53,11 @@ func IDLTE(id int64) predicate.RolePermission {
 	return predicate.RolePermission(sql.FieldLTE(FieldID, id))
 }
 
+// CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
+func CreatedAt(v int64) predicate.RolePermission {
+	return predicate.RolePermission(sql.FieldEQ(FieldCreatedAt, v))
+}
+
 // RoleID applies equality check predicate on the "role_id" field. It's identical to RoleIDEQ.
 func RoleID(v int64) predicate.RolePermission {
 	return predicate.RolePermission(sql.FieldEQ(FieldRoleID, v))
@@ -61,51 +66,6 @@ func RoleID(v int64) predicate.RolePermission {
 // PermissionID applies equality check predicate on the "permission_id" field. It's identical to PermissionIDEQ.
 func PermissionID(v int64) predicate.RolePermission {
 	return predicate.RolePermission(sql.FieldEQ(FieldPermissionID, v))
-}
-
-// CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
-func CreatedAt(v int64) predicate.RolePermission {
-	return predicate.RolePermission(sql.FieldEQ(FieldCreatedAt, v))
-}
-
-// RoleIDEQ applies the EQ predicate on the "role_id" field.
-func RoleIDEQ(v int64) predicate.RolePermission {
-	return predicate.RolePermission(sql.FieldEQ(FieldRoleID, v))
-}
-
-// RoleIDNEQ applies the NEQ predicate on the "role_id" field.
-func RoleIDNEQ(v int64) predicate.RolePermission {
-	return predicate.RolePermission(sql.FieldNEQ(FieldRoleID, v))
-}
-
-// RoleIDIn applies the In predicate on the "role_id" field.
-func RoleIDIn(vs ...int64) predicate.RolePermission {
-	return predicate.RolePermission(sql.FieldIn(FieldRoleID, vs...))
-}
-
-// RoleIDNotIn applies the NotIn predicate on the "role_id" field.
-func RoleIDNotIn(vs ...int64) predicate.RolePermission {
-	return predicate.RolePermission(sql.FieldNotIn(FieldRoleID, vs...))
-}
-
-// PermissionIDEQ applies the EQ predicate on the "permission_id" field.
-func PermissionIDEQ(v int64) predicate.RolePermission {
-	return predicate.RolePermission(sql.FieldEQ(FieldPermissionID, v))
-}
-
-// PermissionIDNEQ applies the NEQ predicate on the "permission_id" field.
-func PermissionIDNEQ(v int64) predicate.RolePermission {
-	return predicate.RolePermission(sql.FieldNEQ(FieldPermissionID, v))
-}
-
-// PermissionIDIn applies the In predicate on the "permission_id" field.
-func PermissionIDIn(vs ...int64) predicate.RolePermission {
-	return predicate.RolePermission(sql.FieldIn(FieldPermissionID, vs...))
-}
-
-// PermissionIDNotIn applies the NotIn predicate on the "permission_id" field.
-func PermissionIDNotIn(vs ...int64) predicate.RolePermission {
-	return predicate.RolePermission(sql.FieldNotIn(FieldPermissionID, vs...))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
@@ -146,6 +106,46 @@ func CreatedAtLT(v int64) predicate.RolePermission {
 // CreatedAtLTE applies the LTE predicate on the "created_at" field.
 func CreatedAtLTE(v int64) predicate.RolePermission {
 	return predicate.RolePermission(sql.FieldLTE(FieldCreatedAt, v))
+}
+
+// RoleIDEQ applies the EQ predicate on the "role_id" field.
+func RoleIDEQ(v int64) predicate.RolePermission {
+	return predicate.RolePermission(sql.FieldEQ(FieldRoleID, v))
+}
+
+// RoleIDNEQ applies the NEQ predicate on the "role_id" field.
+func RoleIDNEQ(v int64) predicate.RolePermission {
+	return predicate.RolePermission(sql.FieldNEQ(FieldRoleID, v))
+}
+
+// RoleIDIn applies the In predicate on the "role_id" field.
+func RoleIDIn(vs ...int64) predicate.RolePermission {
+	return predicate.RolePermission(sql.FieldIn(FieldRoleID, vs...))
+}
+
+// RoleIDNotIn applies the NotIn predicate on the "role_id" field.
+func RoleIDNotIn(vs ...int64) predicate.RolePermission {
+	return predicate.RolePermission(sql.FieldNotIn(FieldRoleID, vs...))
+}
+
+// PermissionIDEQ applies the EQ predicate on the "permission_id" field.
+func PermissionIDEQ(v int64) predicate.RolePermission {
+	return predicate.RolePermission(sql.FieldEQ(FieldPermissionID, v))
+}
+
+// PermissionIDNEQ applies the NEQ predicate on the "permission_id" field.
+func PermissionIDNEQ(v int64) predicate.RolePermission {
+	return predicate.RolePermission(sql.FieldNEQ(FieldPermissionID, v))
+}
+
+// PermissionIDIn applies the In predicate on the "permission_id" field.
+func PermissionIDIn(vs ...int64) predicate.RolePermission {
+	return predicate.RolePermission(sql.FieldIn(FieldPermissionID, vs...))
+}
+
+// PermissionIDNotIn applies the NotIn predicate on the "permission_id" field.
+func PermissionIDNotIn(vs ...int64) predicate.RolePermission {
+	return predicate.RolePermission(sql.FieldNotIn(FieldPermissionID, vs...))
 }
 
 // HasRole applies the HasEdge predicate on the "role" edge.

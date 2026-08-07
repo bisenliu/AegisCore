@@ -336,12 +336,12 @@ func (_q *UserRoleQuery) WithRole(opts ...func(*RoleQuery)) *UserRoleQuery {
 // Example:
 //
 //	var v []struct {
-//		UserID int64 `json:"user_id,omitempty"`
+//		CreatedAt int64 `json:"created_at,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.UserRole.Query().
-//		GroupBy(userrole.FieldUserID).
+//		GroupBy(userrole.FieldCreatedAt).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *UserRoleQuery) GroupBy(field string, fields ...string) *UserRoleGroupBy {
@@ -359,11 +359,11 @@ func (_q *UserRoleQuery) GroupBy(field string, fields ...string) *UserRoleGroupB
 // Example:
 //
 //	var v []struct {
-//		UserID int64 `json:"user_id,omitempty"`
+//		CreatedAt int64 `json:"created_at,omitempty"`
 //	}
 //
 //	client.UserRole.Query().
-//		Select(userrole.FieldUserID).
+//		Select(userrole.FieldCreatedAt).
 //		Scan(ctx, &v)
 func (_q *UserRoleQuery) Select(fields ...string) *UserRoleSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

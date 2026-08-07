@@ -1,8 +1,6 @@
 package schema
 
 import (
-	"time"
-
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
@@ -17,7 +15,7 @@ type Permission struct {
 
 // Mixin 返回 permissions 表复用的公共 schema mixin。
 func (Permission) Mixin() []ent.Mixin {
-	return []ent.Mixin{databaseCommentMixin{}}
+	return []ent.Mixin{databaseCommentMixin{}, createdAtMillisMixin{}, updatedAtMillisMixin{}}
 }
 
 // Fields 返回权限表字段定义。
@@ -30,8 +28,6 @@ func (Permission) Fields() []ent.Field {
 		field.String("module").NotEmpty().MaxLen(64).Comment("权限所属模块"),
 		field.String("http_method").NotEmpty().MaxLen(16).Comment("HTTP 方法"),
 		field.String("path_template").NotEmpty().MaxLen(512).Comment("路径模板"),
-		field.Int64("created_at").DefaultFunc(func() int64 { return time.Now().UnixMilli() }).Immutable().Comment("创建时间戳毫秒"),
-		field.Int64("updated_at").DefaultFunc(func() int64 { return time.Now().UnixMilli() }).UpdateDefault(func() int64 { return time.Now().UnixMilli() }).Comment("更新时间戳毫秒"),
 	}
 }
 

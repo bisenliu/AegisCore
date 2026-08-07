@@ -23,18 +23,6 @@ type RolePermissionCreate struct {
 	conflict []sql.ConflictOption
 }
 
-// SetRoleID sets the "role_id" field.
-func (_c *RolePermissionCreate) SetRoleID(v int64) *RolePermissionCreate {
-	_c.mutation.SetRoleID(v)
-	return _c
-}
-
-// SetPermissionID sets the "permission_id" field.
-func (_c *RolePermissionCreate) SetPermissionID(v int64) *RolePermissionCreate {
-	_c.mutation.SetPermissionID(v)
-	return _c
-}
-
 // SetCreatedAt sets the "created_at" field.
 func (_c *RolePermissionCreate) SetCreatedAt(v int64) *RolePermissionCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -46,6 +34,18 @@ func (_c *RolePermissionCreate) SetNillableCreatedAt(v *int64) *RolePermissionCr
 	if v != nil {
 		_c.SetCreatedAt(*v)
 	}
+	return _c
+}
+
+// SetRoleID sets the "role_id" field.
+func (_c *RolePermissionCreate) SetRoleID(v int64) *RolePermissionCreate {
+	_c.mutation.SetRoleID(v)
+	return _c
+}
+
+// SetPermissionID sets the "permission_id" field.
+func (_c *RolePermissionCreate) SetPermissionID(v int64) *RolePermissionCreate {
+	_c.mutation.SetPermissionID(v)
 	return _c
 }
 
@@ -108,14 +108,14 @@ func (_c *RolePermissionCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *RolePermissionCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "RolePermission.created_at"`)}
+	}
 	if _, ok := _c.mutation.RoleID(); !ok {
 		return &ValidationError{Name: "role_id", err: errors.New(`ent: missing required field "RolePermission.role_id"`)}
 	}
 	if _, ok := _c.mutation.PermissionID(); !ok {
 		return &ValidationError{Name: "permission_id", err: errors.New(`ent: missing required field "RolePermission.permission_id"`)}
-	}
-	if _, ok := _c.mutation.CreatedAt(); !ok {
-		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "RolePermission.created_at"`)}
 	}
 	if len(_c.mutation.RoleIDs()) == 0 {
 		return &ValidationError{Name: "role", err: errors.New(`ent: missing required edge "RolePermission.role"`)}
@@ -201,7 +201,7 @@ func (_c *RolePermissionCreate) createSpec() (*RolePermission, *sqlgraph.CreateS
 // of the `INSERT` statement. For example:
 //
 //	client.RolePermission.Create().
-//		SetRoleID(v).
+//		SetCreatedAt(v).
 //		OnConflict(
 //			// Update the row with the new values
 //			// the was proposed for insertion.
@@ -210,7 +210,7 @@ func (_c *RolePermissionCreate) createSpec() (*RolePermission, *sqlgraph.CreateS
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.RolePermissionUpsert) {
-//			SetRoleID(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *RolePermissionCreate) OnConflict(opts ...sql.ConflictOption) *RolePermissionUpsertOne {
@@ -484,7 +484,7 @@ func (_c *RolePermissionCreateBulk) ExecX(ctx context.Context) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.RolePermissionUpsert) {
-//			SetRoleID(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *RolePermissionCreateBulk) OnConflict(opts ...sql.ConflictOption) *RolePermissionUpsertBulk {

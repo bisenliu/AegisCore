@@ -23,18 +23,6 @@ type UserRoleCreate struct {
 	conflict []sql.ConflictOption
 }
 
-// SetUserID sets the "user_id" field.
-func (_c *UserRoleCreate) SetUserID(v int64) *UserRoleCreate {
-	_c.mutation.SetUserID(v)
-	return _c
-}
-
-// SetRoleID sets the "role_id" field.
-func (_c *UserRoleCreate) SetRoleID(v int64) *UserRoleCreate {
-	_c.mutation.SetRoleID(v)
-	return _c
-}
-
 // SetCreatedAt sets the "created_at" field.
 func (_c *UserRoleCreate) SetCreatedAt(v int64) *UserRoleCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -46,6 +34,18 @@ func (_c *UserRoleCreate) SetNillableCreatedAt(v *int64) *UserRoleCreate {
 	if v != nil {
 		_c.SetCreatedAt(*v)
 	}
+	return _c
+}
+
+// SetUserID sets the "user_id" field.
+func (_c *UserRoleCreate) SetUserID(v int64) *UserRoleCreate {
+	_c.mutation.SetUserID(v)
+	return _c
+}
+
+// SetRoleID sets the "role_id" field.
+func (_c *UserRoleCreate) SetRoleID(v int64) *UserRoleCreate {
+	_c.mutation.SetRoleID(v)
 	return _c
 }
 
@@ -108,14 +108,14 @@ func (_c *UserRoleCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *UserRoleCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "UserRole.created_at"`)}
+	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "UserRole.user_id"`)}
 	}
 	if _, ok := _c.mutation.RoleID(); !ok {
 		return &ValidationError{Name: "role_id", err: errors.New(`ent: missing required field "UserRole.role_id"`)}
-	}
-	if _, ok := _c.mutation.CreatedAt(); !ok {
-		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "UserRole.created_at"`)}
 	}
 	if len(_c.mutation.UserIDs()) == 0 {
 		return &ValidationError{Name: "user", err: errors.New(`ent: missing required edge "UserRole.user"`)}
@@ -201,7 +201,7 @@ func (_c *UserRoleCreate) createSpec() (*UserRole, *sqlgraph.CreateSpec) {
 // of the `INSERT` statement. For example:
 //
 //	client.UserRole.Create().
-//		SetUserID(v).
+//		SetCreatedAt(v).
 //		OnConflict(
 //			// Update the row with the new values
 //			// the was proposed for insertion.
@@ -210,7 +210,7 @@ func (_c *UserRoleCreate) createSpec() (*UserRole, *sqlgraph.CreateSpec) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.UserRoleUpsert) {
-//			SetUserID(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *UserRoleCreate) OnConflict(opts ...sql.ConflictOption) *UserRoleUpsertOne {
@@ -484,7 +484,7 @@ func (_c *UserRoleCreateBulk) ExecX(ctx context.Context) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.UserRoleUpsert) {
-//			SetUserID(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *UserRoleCreateBulk) OnConflict(opts ...sql.ConflictOption) *UserRoleUpsertBulk {

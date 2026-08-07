@@ -23,6 +23,34 @@ type PermissionCreate struct {
 	conflict []sql.ConflictOption
 }
 
+// SetCreatedAt sets the "created_at" field.
+func (_c *PermissionCreate) SetCreatedAt(v int64) *PermissionCreate {
+	_c.mutation.SetCreatedAt(v)
+	return _c
+}
+
+// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
+func (_c *PermissionCreate) SetNillableCreatedAt(v *int64) *PermissionCreate {
+	if v != nil {
+		_c.SetCreatedAt(*v)
+	}
+	return _c
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (_c *PermissionCreate) SetUpdatedAt(v int64) *PermissionCreate {
+	_c.mutation.SetUpdatedAt(v)
+	return _c
+}
+
+// SetNillableUpdatedAt sets the "updated_at" field if the given value is not nil.
+func (_c *PermissionCreate) SetNillableUpdatedAt(v *int64) *PermissionCreate {
+	if v != nil {
+		_c.SetUpdatedAt(*v)
+	}
+	return _c
+}
+
 // SetPermissionID sets the "permission_id" field.
 func (_c *PermissionCreate) SetPermissionID(v uuid.UUID) *PermissionCreate {
 	_c.mutation.SetPermissionID(v)
@@ -64,34 +92,6 @@ func (_c *PermissionCreate) SetHTTPMethod(v string) *PermissionCreate {
 // SetPathTemplate sets the "path_template" field.
 func (_c *PermissionCreate) SetPathTemplate(v string) *PermissionCreate {
 	_c.mutation.SetPathTemplate(v)
-	return _c
-}
-
-// SetCreatedAt sets the "created_at" field.
-func (_c *PermissionCreate) SetCreatedAt(v int64) *PermissionCreate {
-	_c.mutation.SetCreatedAt(v)
-	return _c
-}
-
-// SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
-func (_c *PermissionCreate) SetNillableCreatedAt(v *int64) *PermissionCreate {
-	if v != nil {
-		_c.SetCreatedAt(*v)
-	}
-	return _c
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (_c *PermissionCreate) SetUpdatedAt(v int64) *PermissionCreate {
-	_c.mutation.SetUpdatedAt(v)
-	return _c
-}
-
-// SetNillableUpdatedAt sets the "updated_at" field if the given value is not nil.
-func (_c *PermissionCreate) SetNillableUpdatedAt(v *int64) *PermissionCreate {
-	if v != nil {
-		_c.SetUpdatedAt(*v)
-	}
 	return _c
 }
 
@@ -151,10 +151,6 @@ func (_c *PermissionCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *PermissionCreate) defaults() {
-	if _, ok := _c.mutation.Description(); !ok {
-		v := permission.DefaultDescription
-		_c.mutation.SetDescription(v)
-	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := permission.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -163,10 +159,20 @@ func (_c *PermissionCreate) defaults() {
 		v := permission.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.Description(); !ok {
+		v := permission.DefaultDescription
+		_c.mutation.SetDescription(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *PermissionCreate) check() error {
+	if _, ok := _c.mutation.CreatedAt(); !ok {
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Permission.created_at"`)}
+	}
+	if _, ok := _c.mutation.UpdatedAt(); !ok {
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Permission.updated_at"`)}
+	}
 	if _, ok := _c.mutation.PermissionID(); !ok {
 		return &ValidationError{Name: "permission_id", err: errors.New(`ent: missing required field "Permission.permission_id"`)}
 	}
@@ -210,12 +216,6 @@ func (_c *PermissionCreate) check() error {
 			return &ValidationError{Name: "path_template", err: fmt.Errorf(`ent: validator failed for field "Permission.path_template": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.CreatedAt(); !ok {
-		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Permission.created_at"`)}
-	}
-	if _, ok := _c.mutation.UpdatedAt(); !ok {
-		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Permission.updated_at"`)}
-	}
 	return nil
 }
 
@@ -249,6 +249,14 @@ func (_c *PermissionCreate) createSpec() (*Permission, *sqlgraph.CreateSpec) {
 		_node.ID = id
 		_spec.ID.Value = id
 	}
+	if value, ok := _c.mutation.CreatedAt(); ok {
+		_spec.SetField(permission.FieldCreatedAt, field.TypeInt64, value)
+		_node.CreatedAt = value
+	}
+	if value, ok := _c.mutation.UpdatedAt(); ok {
+		_spec.SetField(permission.FieldUpdatedAt, field.TypeInt64, value)
+		_node.UpdatedAt = value
+	}
 	if value, ok := _c.mutation.PermissionID(); ok {
 		_spec.SetField(permission.FieldPermissionID, field.TypeUUID, value)
 		_node.PermissionID = value
@@ -273,14 +281,6 @@ func (_c *PermissionCreate) createSpec() (*Permission, *sqlgraph.CreateSpec) {
 		_spec.SetField(permission.FieldPathTemplate, field.TypeString, value)
 		_node.PathTemplate = value
 	}
-	if value, ok := _c.mutation.CreatedAt(); ok {
-		_spec.SetField(permission.FieldCreatedAt, field.TypeInt64, value)
-		_node.CreatedAt = value
-	}
-	if value, ok := _c.mutation.UpdatedAt(); ok {
-		_spec.SetField(permission.FieldUpdatedAt, field.TypeInt64, value)
-		_node.UpdatedAt = value
-	}
 	if nodes := _c.mutation.RolePermissionsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -304,7 +304,7 @@ func (_c *PermissionCreate) createSpec() (*Permission, *sqlgraph.CreateSpec) {
 // of the `INSERT` statement. For example:
 //
 //	client.Permission.Create().
-//		SetPermissionID(v).
+//		SetCreatedAt(v).
 //		OnConflict(
 //			// Update the row with the new values
 //			// the was proposed for insertion.
@@ -313,7 +313,7 @@ func (_c *PermissionCreate) createSpec() (*Permission, *sqlgraph.CreateSpec) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.PermissionUpsert) {
-//			SetPermissionID(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *PermissionCreate) OnConflict(opts ...sql.ConflictOption) *PermissionUpsertOne {
@@ -348,6 +348,24 @@ type (
 		*sql.UpdateSet
 	}
 )
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *PermissionUpsert) SetUpdatedAt(v int64) *PermissionUpsert {
+	u.Set(permission.FieldUpdatedAt, v)
+	return u
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *PermissionUpsert) UpdateUpdatedAt() *PermissionUpsert {
+	u.SetExcluded(permission.FieldUpdatedAt)
+	return u
+}
+
+// AddUpdatedAt adds v to the "updated_at" field.
+func (u *PermissionUpsert) AddUpdatedAt(v int64) *PermissionUpsert {
+	u.Add(permission.FieldUpdatedAt, v)
+	return u
+}
 
 // SetName sets the "name" field.
 func (u *PermissionUpsert) SetName(v string) *PermissionUpsert {
@@ -409,24 +427,6 @@ func (u *PermissionUpsert) UpdatePathTemplate() *PermissionUpsert {
 	return u
 }
 
-// SetUpdatedAt sets the "updated_at" field.
-func (u *PermissionUpsert) SetUpdatedAt(v int64) *PermissionUpsert {
-	u.Set(permission.FieldUpdatedAt, v)
-	return u
-}
-
-// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
-func (u *PermissionUpsert) UpdateUpdatedAt() *PermissionUpsert {
-	u.SetExcluded(permission.FieldUpdatedAt)
-	return u
-}
-
-// AddUpdatedAt adds v to the "updated_at" field.
-func (u *PermissionUpsert) AddUpdatedAt(v int64) *PermissionUpsert {
-	u.Add(permission.FieldUpdatedAt, v)
-	return u
-}
-
 // UpdateNewValues updates the mutable fields using the new values that were set on create except the ID field.
 // Using this option is equivalent to using:
 //
@@ -444,11 +444,11 @@ func (u *PermissionUpsertOne) UpdateNewValues() *PermissionUpsertOne {
 		if _, exists := u.create.mutation.ID(); exists {
 			s.SetIgnore(permission.FieldID)
 		}
-		if _, exists := u.create.mutation.PermissionID(); exists {
-			s.SetIgnore(permission.FieldPermissionID)
-		}
 		if _, exists := u.create.mutation.CreatedAt(); exists {
 			s.SetIgnore(permission.FieldCreatedAt)
+		}
+		if _, exists := u.create.mutation.PermissionID(); exists {
+			s.SetIgnore(permission.FieldPermissionID)
 		}
 	}))
 	return u
@@ -479,6 +479,27 @@ func (u *PermissionUpsertOne) Update(set func(*PermissionUpsert)) *PermissionUps
 		set(&PermissionUpsert{UpdateSet: update})
 	}))
 	return u
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *PermissionUpsertOne) SetUpdatedAt(v int64) *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// AddUpdatedAt adds v to the "updated_at" field.
+func (u *PermissionUpsertOne) AddUpdatedAt(v int64) *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.AddUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *PermissionUpsertOne) UpdateUpdatedAt() *PermissionUpsertOne {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateUpdatedAt()
+	})
 }
 
 // SetName sets the "name" field.
@@ -548,27 +569,6 @@ func (u *PermissionUpsertOne) SetPathTemplate(v string) *PermissionUpsertOne {
 func (u *PermissionUpsertOne) UpdatePathTemplate() *PermissionUpsertOne {
 	return u.Update(func(s *PermissionUpsert) {
 		s.UpdatePathTemplate()
-	})
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (u *PermissionUpsertOne) SetUpdatedAt(v int64) *PermissionUpsertOne {
-	return u.Update(func(s *PermissionUpsert) {
-		s.SetUpdatedAt(v)
-	})
-}
-
-// AddUpdatedAt adds v to the "updated_at" field.
-func (u *PermissionUpsertOne) AddUpdatedAt(v int64) *PermissionUpsertOne {
-	return u.Update(func(s *PermissionUpsert) {
-		s.AddUpdatedAt(v)
-	})
-}
-
-// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
-func (u *PermissionUpsertOne) UpdateUpdatedAt() *PermissionUpsertOne {
-	return u.Update(func(s *PermissionUpsert) {
-		s.UpdateUpdatedAt()
 	})
 }
 
@@ -707,7 +707,7 @@ func (_c *PermissionCreateBulk) ExecX(ctx context.Context) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.PermissionUpsert) {
-//			SetPermissionID(v+v).
+//			SetCreatedAt(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *PermissionCreateBulk) OnConflict(opts ...sql.ConflictOption) *PermissionUpsertBulk {
@@ -754,11 +754,11 @@ func (u *PermissionUpsertBulk) UpdateNewValues() *PermissionUpsertBulk {
 			if _, exists := b.mutation.ID(); exists {
 				s.SetIgnore(permission.FieldID)
 			}
-			if _, exists := b.mutation.PermissionID(); exists {
-				s.SetIgnore(permission.FieldPermissionID)
-			}
 			if _, exists := b.mutation.CreatedAt(); exists {
 				s.SetIgnore(permission.FieldCreatedAt)
+			}
+			if _, exists := b.mutation.PermissionID(); exists {
+				s.SetIgnore(permission.FieldPermissionID)
 			}
 		}
 	}))
@@ -790,6 +790,27 @@ func (u *PermissionUpsertBulk) Update(set func(*PermissionUpsert)) *PermissionUp
 		set(&PermissionUpsert{UpdateSet: update})
 	}))
 	return u
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (u *PermissionUpsertBulk) SetUpdatedAt(v int64) *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.SetUpdatedAt(v)
+	})
+}
+
+// AddUpdatedAt adds v to the "updated_at" field.
+func (u *PermissionUpsertBulk) AddUpdatedAt(v int64) *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.AddUpdatedAt(v)
+	})
+}
+
+// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
+func (u *PermissionUpsertBulk) UpdateUpdatedAt() *PermissionUpsertBulk {
+	return u.Update(func(s *PermissionUpsert) {
+		s.UpdateUpdatedAt()
+	})
 }
 
 // SetName sets the "name" field.
@@ -859,27 +880,6 @@ func (u *PermissionUpsertBulk) SetPathTemplate(v string) *PermissionUpsertBulk {
 func (u *PermissionUpsertBulk) UpdatePathTemplate() *PermissionUpsertBulk {
 	return u.Update(func(s *PermissionUpsert) {
 		s.UpdatePathTemplate()
-	})
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (u *PermissionUpsertBulk) SetUpdatedAt(v int64) *PermissionUpsertBulk {
-	return u.Update(func(s *PermissionUpsert) {
-		s.SetUpdatedAt(v)
-	})
-}
-
-// AddUpdatedAt adds v to the "updated_at" field.
-func (u *PermissionUpsertBulk) AddUpdatedAt(v int64) *PermissionUpsertBulk {
-	return u.Update(func(s *PermissionUpsert) {
-		s.AddUpdatedAt(v)
-	})
-}
-
-// UpdateUpdatedAt sets the "updated_at" field to the value that was provided on create.
-func (u *PermissionUpsertBulk) UpdateUpdatedAt() *PermissionUpsertBulk {
-	return u.Update(func(s *PermissionUpsert) {
-		s.UpdateUpdatedAt()
 	})
 }
 

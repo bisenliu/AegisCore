@@ -19,6 +19,10 @@ type RbacPolicyOutboxEvent struct {
 	// ID of the ent.
 	// RBAC policy outbox 内部ID
 	ID int64 `json:"id,omitempty"`
+	// 创建时间戳毫秒
+	CreatedAt int64 `json:"created_at,omitempty"`
+	// 更新时间戳毫秒
+	UpdatedAt int64 `json:"updated_at,omitempty"`
 	// 稳定 outbox event ID
 	EventID uuid.UUID `json:"event_id,omitempty"`
 	// 关联的 RBAC policy revision
@@ -47,10 +51,6 @@ type RbacPolicyOutboxEvent struct {
 	ClaimedUntil *int64 `json:"claimed_until,omitempty"`
 	// 稳定投递幂等键
 	IdempotencyKey string `json:"idempotency_key,omitempty"`
-	// 创建时间戳毫秒
-	CreatedAt int64 `json:"created_at,omitempty"`
-	// 更新时间戳毫秒
-	UpdatedAt int64 `json:"updated_at,omitempty"`
 	// 投递完成时间戳毫秒
 	DeliveredAt *int64 `json:"delivered_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -86,7 +86,7 @@ func (*RbacPolicyOutboxEvent) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case rbacpolicyoutboxevent.FieldRoleID, rbacpolicyoutboxevent.FieldUserID, rbacpolicyoutboxevent.FieldPermissionID, rbacpolicyoutboxevent.FieldClaimToken:
 			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
-		case rbacpolicyoutboxevent.FieldID, rbacpolicyoutboxevent.FieldRevision, rbacpolicyoutboxevent.FieldAttemptCount, rbacpolicyoutboxevent.FieldNextAttemptAt, rbacpolicyoutboxevent.FieldClaimedUntil, rbacpolicyoutboxevent.FieldCreatedAt, rbacpolicyoutboxevent.FieldUpdatedAt, rbacpolicyoutboxevent.FieldDeliveredAt:
+		case rbacpolicyoutboxevent.FieldID, rbacpolicyoutboxevent.FieldCreatedAt, rbacpolicyoutboxevent.FieldUpdatedAt, rbacpolicyoutboxevent.FieldRevision, rbacpolicyoutboxevent.FieldAttemptCount, rbacpolicyoutboxevent.FieldNextAttemptAt, rbacpolicyoutboxevent.FieldClaimedUntil, rbacpolicyoutboxevent.FieldDeliveredAt:
 			values[i] = new(sql.NullInt64)
 		case rbacpolicyoutboxevent.FieldKind, rbacpolicyoutboxevent.FieldReason, rbacpolicyoutboxevent.FieldStatus, rbacpolicyoutboxevent.FieldLastError, rbacpolicyoutboxevent.FieldIdempotencyKey:
 			values[i] = new(sql.NullString)
@@ -113,6 +113,18 @@ func (_m *RbacPolicyOutboxEvent) assignValues(columns []string, values []any) er
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			_m.ID = int64(value.Int64)
+		case rbacpolicyoutboxevent.FieldCreatedAt:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field created_at", values[i])
+			} else if value.Valid {
+				_m.CreatedAt = value.Int64
+			}
+		case rbacpolicyoutboxevent.FieldUpdatedAt:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
+			} else if value.Valid {
+				_m.UpdatedAt = value.Int64
+			}
 		case rbacpolicyoutboxevent.FieldEventID:
 			if value, ok := values[i].(*uuid.UUID); !ok {
 				return fmt.Errorf("unexpected type %T for field event_id", values[i])
@@ -203,18 +215,6 @@ func (_m *RbacPolicyOutboxEvent) assignValues(columns []string, values []any) er
 			} else if value.Valid {
 				_m.IdempotencyKey = value.String
 			}
-		case rbacpolicyoutboxevent.FieldCreatedAt:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field created_at", values[i])
-			} else if value.Valid {
-				_m.CreatedAt = value.Int64
-			}
-		case rbacpolicyoutboxevent.FieldUpdatedAt:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
-			} else if value.Valid {
-				_m.UpdatedAt = value.Int64
-			}
 		case rbacpolicyoutboxevent.FieldDeliveredAt:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field delivered_at", values[i])
@@ -263,6 +263,12 @@ func (_m *RbacPolicyOutboxEvent) String() string {
 	var builder strings.Builder
 	builder.WriteString("RbacPolicyOutboxEvent(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	builder.WriteString("created_at=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CreatedAt))
+	builder.WriteString(", ")
+	builder.WriteString("updated_at=")
+	builder.WriteString(fmt.Sprintf("%v", _m.UpdatedAt))
+	builder.WriteString(", ")
 	builder.WriteString("event_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.EventID))
 	builder.WriteString(", ")
@@ -316,12 +322,6 @@ func (_m *RbacPolicyOutboxEvent) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("idempotency_key=")
 	builder.WriteString(_m.IdempotencyKey)
-	builder.WriteString(", ")
-	builder.WriteString("created_at=")
-	builder.WriteString(fmt.Sprintf("%v", _m.CreatedAt))
-	builder.WriteString(", ")
-	builder.WriteString("updated_at=")
-	builder.WriteString(fmt.Sprintf("%v", _m.UpdatedAt))
 	builder.WriteString(", ")
 	if v := _m.DeliveredAt; v != nil {
 		builder.WriteString("delivered_at=")

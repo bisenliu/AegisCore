@@ -28,6 +28,19 @@ func (_u *RbacPolicyOutboxEventUpdate) Where(ps ...predicate.RbacPolicyOutboxEve
 	return _u
 }
 
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *RbacPolicyOutboxEventUpdate) SetUpdatedAt(v int64) *RbacPolicyOutboxEventUpdate {
+	_u.mutation.ResetUpdatedAt()
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// AddUpdatedAt adds value to the "updated_at" field.
+func (_u *RbacPolicyOutboxEventUpdate) AddUpdatedAt(v int64) *RbacPolicyOutboxEventUpdate {
+	_u.mutation.AddUpdatedAt(v)
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *RbacPolicyOutboxEventUpdate) SetStatus(v string) *RbacPolicyOutboxEventUpdate {
 	_u.mutation.SetStatus(v)
@@ -151,19 +164,6 @@ func (_u *RbacPolicyOutboxEventUpdate) ClearClaimedUntil() *RbacPolicyOutboxEven
 	return _u
 }
 
-// SetUpdatedAt sets the "updated_at" field.
-func (_u *RbacPolicyOutboxEventUpdate) SetUpdatedAt(v int64) *RbacPolicyOutboxEventUpdate {
-	_u.mutation.ResetUpdatedAt()
-	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// AddUpdatedAt adds value to the "updated_at" field.
-func (_u *RbacPolicyOutboxEventUpdate) AddUpdatedAt(v int64) *RbacPolicyOutboxEventUpdate {
-	_u.mutation.AddUpdatedAt(v)
-	return _u
-}
-
 // SetDeliveredAt sets the "delivered_at" field.
 func (_u *RbacPolicyOutboxEventUpdate) SetDeliveredAt(v int64) *RbacPolicyOutboxEventUpdate {
 	_u.mutation.ResetDeliveredAt()
@@ -267,6 +267,12 @@ func (_u *RbacPolicyOutboxEventUpdate) sqlSave(ctx context.Context) (_node int, 
 			}
 		}
 	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
+		_spec.AddField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)
+	}
 	if _u.mutation.RoleIDCleared() {
 		_spec.ClearField(rbacpolicyoutboxevent.FieldRoleID, field.TypeUUID)
 	}
@@ -312,12 +318,6 @@ func (_u *RbacPolicyOutboxEventUpdate) sqlSave(ctx context.Context) (_node int, 
 	if _u.mutation.ClaimedUntilCleared() {
 		_spec.ClearField(rbacpolicyoutboxevent.FieldClaimedUntil, field.TypeInt64)
 	}
-	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
-		_spec.AddField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)
-	}
 	if value, ok := _u.mutation.DeliveredAt(); ok {
 		_spec.SetField(rbacpolicyoutboxevent.FieldDeliveredAt, field.TypeInt64, value)
 	}
@@ -345,6 +345,19 @@ type RbacPolicyOutboxEventUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *RbacPolicyOutboxEventMutation
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (_u *RbacPolicyOutboxEventUpdateOne) SetUpdatedAt(v int64) *RbacPolicyOutboxEventUpdateOne {
+	_u.mutation.ResetUpdatedAt()
+	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// AddUpdatedAt adds value to the "updated_at" field.
+func (_u *RbacPolicyOutboxEventUpdateOne) AddUpdatedAt(v int64) *RbacPolicyOutboxEventUpdateOne {
+	_u.mutation.AddUpdatedAt(v)
+	return _u
 }
 
 // SetStatus sets the "status" field.
@@ -467,19 +480,6 @@ func (_u *RbacPolicyOutboxEventUpdateOne) AddClaimedUntil(v int64) *RbacPolicyOu
 // ClearClaimedUntil clears the value of the "claimed_until" field.
 func (_u *RbacPolicyOutboxEventUpdateOne) ClearClaimedUntil() *RbacPolicyOutboxEventUpdateOne {
 	_u.mutation.ClearClaimedUntil()
-	return _u
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (_u *RbacPolicyOutboxEventUpdateOne) SetUpdatedAt(v int64) *RbacPolicyOutboxEventUpdateOne {
-	_u.mutation.ResetUpdatedAt()
-	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// AddUpdatedAt adds value to the "updated_at" field.
-func (_u *RbacPolicyOutboxEventUpdateOne) AddUpdatedAt(v int64) *RbacPolicyOutboxEventUpdateOne {
-	_u.mutation.AddUpdatedAt(v)
 	return _u
 }
 
@@ -616,6 +616,12 @@ func (_u *RbacPolicyOutboxEventUpdateOne) sqlSave(ctx context.Context) (_node *R
 			}
 		}
 	}
+	if value, ok := _u.mutation.UpdatedAt(); ok {
+		_spec.SetField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
+		_spec.AddField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)
+	}
 	if _u.mutation.RoleIDCleared() {
 		_spec.ClearField(rbacpolicyoutboxevent.FieldRoleID, field.TypeUUID)
 	}
@@ -660,12 +666,6 @@ func (_u *RbacPolicyOutboxEventUpdateOne) sqlSave(ctx context.Context) (_node *R
 	}
 	if _u.mutation.ClaimedUntilCleared() {
 		_spec.ClearField(rbacpolicyoutboxevent.FieldClaimedUntil, field.TypeInt64)
-	}
-	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.AddedUpdatedAt(); ok {
-		_spec.AddField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.DeliveredAt(); ok {
 		_spec.SetField(rbacpolicyoutboxevent.FieldDeliveredAt, field.TypeInt64, value)

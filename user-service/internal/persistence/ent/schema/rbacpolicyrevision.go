@@ -1,8 +1,6 @@
 package schema
 
 import (
-	"time"
-
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
@@ -16,7 +14,7 @@ type RbacPolicyRevision struct {
 
 // Mixin 返回 policy revision 表复用的公共 schema mixin。
 func (RbacPolicyRevision) Mixin() []ent.Mixin {
-	return []ent.Mixin{databaseCommentMixin{}}
+	return []ent.Mixin{databaseCommentMixin{}, createdAtMillisMixin{}}
 }
 
 // Fields 返回 policy revision 表字段定义。
@@ -27,7 +25,6 @@ func (RbacPolicyRevision) Fields() []ent.Field {
 		field.UUID("role_id", uuid.UUID{}).Optional().Nillable().Immutable().Comment("相关外部角色ID"),
 		field.UUID("user_id", uuid.UUID{}).Optional().Nillable().Immutable().Comment("相关外部用户ID"),
 		field.UUID("permission_id", uuid.UUID{}).Optional().Nillable().Immutable().Comment("相关外部权限ID"),
-		field.Int64("created_at").DefaultFunc(func() int64 { return time.Now().UnixMilli() }).Immutable().Comment("创建时间戳毫秒"),
 	}
 }
 
