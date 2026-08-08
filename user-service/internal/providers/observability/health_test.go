@@ -208,7 +208,7 @@ func TestRegisterRuntimeDependencyMetricsRegistersCollectors(t *testing.T) {
 		Metrics:          provider,
 		PrimaryDB:        db,
 		CacheRedis:       client,
-		SessionPurgePool: fakePurgeTaskPool{stats: workerpool.Stats{Name: "auth.redis.session_purge", Workers: 4, Submitted: 3}},
+		SessionPurgePool: fakePurgeTaskPool{stats: workerpool.Stats{Name: "auth.redis.session_purge", Workers: 5, Submitted: 3}},
 		PolicyWatcher: stubWatcherStatus{status: permissionapplication.PolicyWatcherStatusSnapshot{
 			Running: true, SubscriptionState: permissionapplication.PolicyWatcherSubscriptionConnected,
 			LastSubscriptionSuccessAt: time.Unix(1_722_770_390, 0), LastReconcileSuccessAt: time.Now().Add(-10 * time.Second), ReconnectAttempts: 2,

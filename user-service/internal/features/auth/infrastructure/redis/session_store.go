@@ -28,7 +28,12 @@ const (
 	// deleteAllUserSessionsBatchSize 限制退出全部设备后台清理每批 Redis key 数量。
 	deleteAllUserSessionsBatchSize int64 = 500
 	// deleteAllUserSessionsPurgeWorkers 限制退出全部设备后台清理并发。
-	deleteAllUserSessionsPurgeWorkers = 4
+	// 配置参考：
+	// 小型项目，峰值 <500 QPS：5。
+	// 中型项目，峰值 500-5k QPS：20。
+	// 高并发项目，峰值 5k-20k QPS：100。
+	// 该任务由已认证用户的 logout-all/改密撤销路径触发；建议参考 api_rate_limit.authenticated 的 rate_per_second，并结合 Redis 承载能力调整。
+	deleteAllUserSessionsPurgeWorkers = 5
 	// deleteAllUserSessionsPurgeStopTimeout 限制服务关闭时等待后台清理的时间，必须与 runtime lifecycle worker drain 预算一致。
 	deleteAllUserSessionsPurgeStopTimeout = runtimeconfig.DefaultLifecycleWorkerDrainAllowance
 

@@ -80,7 +80,7 @@ func registerRouteTestRuntimeMetrics(t *testing.T, provider *commonmetrics.Provi
 		Metrics:          provider,
 		PrimaryDB:        db,
 		CacheRedis:       client,
-		SessionPurgePool: routePurgeTaskPool{stats: workerpool.Stats{Name: "auth.redis.session_purge", Workers: 4, Submitted: 1}},
+		SessionPurgePool: routePurgeTaskPool{stats: workerpool.Stats{Name: "auth.redis.session_purge", Workers: 5, Submitted: 1}},
 		PolicyWatcher: routeWatcherStatus{status: permissionapplication.PolicyWatcherStatusSnapshot{
 			Running: true, SubscriptionState: permissionapplication.PolicyWatcherSubscriptionConnected, LastReconcileSuccessAt: time.Now(),
 		}},

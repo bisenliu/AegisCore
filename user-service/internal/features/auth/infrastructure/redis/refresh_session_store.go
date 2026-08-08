@@ -164,6 +164,7 @@ func (r *SessionStore) DeleteAllUserSessions(ctx context.Context, userID uuid.UU
 		return nil
 	case detachUserSessionsResultDetached:
 		sessionPrefix := r.keys.AuthSessionPrefix(userID.String())
+		// 后台清理使用固定 workerpool 执行，避免单次 logout-all/改密撤销在请求线程内批量删除大量 Redis key。
 		task := workerpool.Task{
 			Name: "auth.redis.purge_detached_user_sessions",
 			Fields: []zap.Field{
