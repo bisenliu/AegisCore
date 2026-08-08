@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	"go.uber.org/fx"
+
+	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 
 // Fx 选项
@@ -23,8 +25,11 @@ var permissionLifecycleOptions = fx.Options(
 type RegisterRBACLifecycleParams struct {
 	fx.In
 
-	Lifecycle fx.Lifecycle
-	Runtime   *PermissionRuntime
+	Lifecycle       fx.Lifecycle
+	EngineLifecycle permissionPolicyEngineLifecycle              `name:"permission_policy_engine_lifecycle"`
+	Initializer     permissionPolicyInitializer                  `name:"permission_policy_initializer"`
+	Watcher         policyWatcherRunner                          `name:"permission_policy_watcher_runner"`
+	Dispatcher      permissionapplication.OutboxDispatcherRunner `name:"permission_outbox_dispatcher_runner"`
 }
 
 // Provider：生命周期注册
@@ -41,18 +46,18 @@ func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
 			runMu.Lock()
 			runCancel = cancel
 			runMu.Unlock()
-			if err := params.Runtime.EngineLifecycle.Start(runCtx); err != nil {
+			if err := params.EngineLifecycle.Start(runCtx); err != nil {
 				cancel()
 				return err
 			}
-			params.Runtime.Initializer.InitializeFailClosed(ctx)
-			if err := params.Runtime.Watcher.Start(runCtx); err != nil {
+			params.Initializer.InitializeFailClosed(ctx)
+			if err := params.Watcher.Start(runCtx); err != nil {
 				cancel()
-				return errors.Join(err, params.Runtime.Watcher.Stop(ctx), params.Runtime.EngineLifecycle.Stop(ctx))
+				return errors.Join(err, params.Watcher.Stop(ctx), params.EngineLifecycle.Stop(ctx))
 			}
-			if err := params.Runtime.Dispatcher.Start(runCtx); err != nil {
+			if err := params.Dispatcher.Start(runCtx); err != nil {
 				cancel()
-				return errors.Join(err, params.Runtime.Watcher.Stop(ctx), params.Runtime.EngineLifecycle.Stop(ctx))
+				return errors.Join(err, params.Watcher.Stop(ctx), params.EngineLifecycle.Stop(ctx))
 			}
 			return nil
 		},
@@ -61,7 +66,7 @@ func registerRBACLifecycle(params RegisterRBACLifecycleParams) {
 			cancel := runCancel
 			runCancel = nil
 			runMu.Unlock()
-			return stopRBACLifecycle(ctx, cancel, params.Runtime.Dispatcher.Stop, params.Runtime.Watcher.Stop, params.Runtime.EngineLifecycle.Stop)
+			return stopRBACLifecycle(ctx, cancel, params.Dispatcher.Stop, params.Watcher.Stop, params.EngineLifecycle.Stop)
 		},
 	})
 }

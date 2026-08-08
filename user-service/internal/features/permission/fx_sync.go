@@ -22,7 +22,6 @@ var permissionPolicySyncOptions = fx.Options(
 		providePolicyChangeNotifier,
 		provideWatcher,
 		provideOutboxDispatcher,
-		fx.Private,
 	),
 )
 
@@ -56,7 +55,8 @@ type PolicyChangeNotifierParams struct {
 type PolicyChangeNotifierResult struct {
 	fx.Out
 
-	Notifier permissionapplication.PolicyChangeNotifier `name:"permission_policy_change_notifier"`
+	InternalNotifier permissionapplication.PolicyChangeNotifier `name:"permission_policy_change_notifier"`
+	Notifier         permissionapplication.PolicyChangeNotifier
 }
 
 // PolicyRedisStoreResult 复用同一个 Redis store 提供订阅和 revision 发布能力。
@@ -71,9 +71,10 @@ type PolicyRedisStoreResult struct {
 type PolicyWatcherResult struct {
 	fx.Out
 
-	Watcher *permissionredis.Watcher
-	Runner  policyWatcherRunner                       `name:"permission_policy_watcher_runner"`
-	Status  permissionapplication.PolicyWatcherStatus `name:"permission_policy_watcher_status"`
+	Watcher        *permissionredis.Watcher
+	Runner         policyWatcherRunner                       `name:"permission_policy_watcher_runner"`
+	InternalStatus permissionapplication.PolicyWatcherStatus `name:"permission_policy_watcher_status"`
+	Status         permissionapplication.PolicyWatcherStatus
 }
 
 // OutboxDispatcherParams 汇集 outbox dispatcher 的持久化、发布、配置与观测依赖。
@@ -91,8 +92,9 @@ type OutboxDispatcherParams struct {
 type OutboxDispatcherResult struct {
 	fx.Out
 
-	Runner permissionapplication.OutboxDispatcherRunner `name:"permission_outbox_dispatcher_runner"`
-	Status permissionapplication.OutboxDispatcherStatus `name:"permission_outbox_dispatcher_status"`
+	Runner         permissionapplication.OutboxDispatcherRunner `name:"permission_outbox_dispatcher_runner"`
+	InternalStatus permissionapplication.OutboxDispatcherStatus `name:"permission_outbox_dispatcher_status"`
+	Status         permissionapplication.OutboxDispatcherStatus
 }
 
 // policyWatcherRunner 是 lifecycle 对 policy watcher 的最小控制面。
@@ -113,7 +115,8 @@ func provideRedisStore(params CacheRedisParams, settings serviceconfig.RBACSetti
 
 // providePolicyChangeNotifier 只编排本实例 revision-aware reload 和缓存失效。
 func providePolicyChangeNotifier(params PolicyChangeNotifierParams) PolicyChangeNotifierResult {
-	return PolicyChangeNotifierResult{Notifier: permissionapplication.NewPolicyRefreshCoordinator(params.Engine, params.Log, params.Metrics)}
+	notifier := permissionapplication.NewPolicyRefreshCoordinator(params.Engine, params.Log, params.Metrics)
+	return PolicyChangeNotifierResult{InternalNotifier: notifier, Notifier: notifier}
 }
 
 // provideWatcher 将 Redis watcher 同时投影为 lifecycle runner 和健康状态来源。
@@ -134,7 +137,7 @@ func provideWatcher(params WatcherParams) (PolicyWatcherResult, error) {
 		Subscriber: subscriber, RevisionSource: params.RevisionSource, Engine: params.Engine, Log: params.Log, Metrics: params.Metrics,
 		Settings: permissionredis.WatcherSettings{CheckInterval: settings.CheckInterval},
 	})
-	return PolicyWatcherResult{Watcher: watcher, Runner: watcher, Status: watcher}, nil
+	return PolicyWatcherResult{Watcher: watcher, Runner: watcher, InternalStatus: watcher, Status: watcher}, nil
 }
 
 // provideOutboxDispatcher 将同一个 dispatcher 投影为 lifecycle runner 和只读状态来源。
@@ -150,5 +153,5 @@ func provideOutboxDispatcher(params OutboxDispatcherParams) (OutboxDispatcherRes
 	if err != nil {
 		return OutboxDispatcherResult{}, err
 	}
-	return OutboxDispatcherResult{Runner: dispatcher, Status: dispatcher}, nil
+	return OutboxDispatcherResult{Runner: dispatcher, InternalStatus: dispatcher, Status: dispatcher}, nil
 }

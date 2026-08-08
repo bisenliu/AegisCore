@@ -36,9 +36,9 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 
 	var policyHealth permissionauthorization.PolicyHealth
 	var watcherStatus permissionapplication.PolicyWatcherStatus
+	var dispatcherStatusSource permissionapplication.OutboxDispatcherStatus
 	var authorizer permissionauthorization.Authorizer
 	var notifier permissionapplication.PolicyChangeNotifier
-	var runtime *PermissionRuntime
 	app := fxtest.New(t,
 		fx.Supply(
 			provider,
@@ -57,38 +57,27 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 		Module,
 		fx.Populate(
 			&watcherStatus,
+			&dispatcherStatusSource,
 			&authorizer,
 			&policyHealth,
 			&notifier,
-			&runtime,
 		),
 	)
-	require.NotNil(t, runtime)
 	app.RequireStart()
 	require.True(t, watcherStatus.Status().Running)
-	require.True(t, runtime.WatcherStatus.Status().Running)
-	dispatcherStatus, err := runtime.DispatcherStatus.Status(context.Background())
+	dispatcherStatus, err := dispatcherStatusSource.Status(context.Background())
 	require.NoError(t, err)
 	require.True(t, dispatcherStatus.Running)
-	require.Same(t, runtime.Dispatcher, runtime.DispatcherStatus)
 	app.RequireStop()
 	require.False(t, watcherStatus.Status().Running)
-	require.False(t, runtime.WatcherStatus.Status().Running)
-	dispatcherStatus, err = runtime.DispatcherStatus.Status(context.Background())
+	dispatcherStatus, err = dispatcherStatusSource.Status(context.Background())
 	require.NoError(t, err)
 	require.False(t, dispatcherStatus.Running)
 
 	require.NotNil(t, authorizer)
 	require.NotNil(t, policyHealth)
 	require.NotNil(t, notifier)
-	require.NotNil(t, runtime.Authorizer)
-	require.NotNil(t, runtime.PolicyHealth)
-	require.NotNil(t, runtime.WatcherStatus)
-	require.NotNil(t, runtime.Watcher)
-	require.NotNil(t, runtime.Dispatcher)
-	require.NotNil(t, runtime.DispatcherStatus)
-	require.NotNil(t, runtime.Notifier)
-	require.NotNil(t, runtime.Initializer)
+	require.NotNil(t, dispatcherStatusSource)
 }
 
 func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
@@ -207,8 +196,11 @@ func TestRegisterRBACLifecycleStopsDispatcherAndWatcherAfterWatcherError(t *test
 	dispatcher := &permissionModuleDispatcher{stopErr: errors.New("dispatcher stop failed")}
 
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
-		Lifecycle: lifecycle,
-		Runtime:   &PermissionRuntime{EngineLifecycle: &permissionModuleEngineLifecycle{}, Initializer: &permissionModulePolicyInitializer{}, Watcher: watcher, Dispatcher: dispatcher},
+		Lifecycle:       lifecycle,
+		EngineLifecycle: &permissionModuleEngineLifecycle{},
+		Initializer:     &permissionModulePolicyInitializer{},
+		Watcher:         watcher,
+		Dispatcher:      dispatcher,
 	})
 	require.Len(t, lifecycle.hooks, 1)
 
@@ -228,8 +220,11 @@ func TestRegisterRBACLifecycleOrdersStartAndStop(t *testing.T) {
 	dispatcher := &permissionModuleDispatcher{order: &order}
 	startCtx := context.WithValue(context.Background(), permissionModuleLifecycleContextKey{}, "start")
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
-		Lifecycle: lifecycle,
-		Runtime:   &PermissionRuntime{EngineLifecycle: engineLifecycle, Initializer: initializer, Watcher: watcher, Dispatcher: dispatcher},
+		Lifecycle:       lifecycle,
+		EngineLifecycle: engineLifecycle,
+		Initializer:     initializer,
+		Watcher:         watcher,
+		Dispatcher:      dispatcher,
 	})
 
 	require.NoError(t, lifecycle.hooks[0].OnStart(startCtx))
@@ -250,13 +245,11 @@ func TestRegisterRBACLifecycleRollsBackWhenWatcherStartFails(t *testing.T) {
 	watcher := &permissionModuleApplicationWatcher{startErr: startErr, stopErr: stopErr, order: &order}
 	dispatcher := &permissionModuleDispatcher{order: &order}
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
-		Lifecycle: lifecycle,
-		Runtime: &PermissionRuntime{
-			EngineLifecycle: &permissionModuleEngineLifecycle{order: &order},
-			Initializer:     &permissionModulePolicyInitializer{order: &order},
-			Watcher:         watcher,
-			Dispatcher:      dispatcher,
-		},
+		Lifecycle:       lifecycle,
+		EngineLifecycle: &permissionModuleEngineLifecycle{order: &order},
+		Initializer:     &permissionModulePolicyInitializer{order: &order},
+		Watcher:         watcher,
+		Dispatcher:      dispatcher,
 	})
 
 	err := lifecycle.hooks[0].OnStart(context.Background())
@@ -274,13 +267,11 @@ func TestRegisterRBACLifecycleRollsBackWhenDispatcherStartFails(t *testing.T) {
 	watcher := &permissionModuleApplicationWatcher{stopErr: watcherErr, order: &order}
 	dispatcher := &permissionModuleDispatcher{startErr: startErr, order: &order}
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
-		Lifecycle: lifecycle,
-		Runtime: &PermissionRuntime{
-			EngineLifecycle: &permissionModuleEngineLifecycle{order: &order},
-			Initializer:     &permissionModulePolicyInitializer{order: &order},
-			Watcher:         watcher,
-			Dispatcher:      dispatcher,
-		},
+		Lifecycle:       lifecycle,
+		EngineLifecycle: &permissionModuleEngineLifecycle{order: &order},
+		Initializer:     &permissionModulePolicyInitializer{order: &order},
+		Watcher:         watcher,
+		Dispatcher:      dispatcher,
 	})
 
 	err := lifecycle.hooks[0].OnStart(context.Background())

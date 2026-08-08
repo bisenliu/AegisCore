@@ -25,20 +25,13 @@ var permissionAuthorizationOptions = fx.Options(
 		provideUserRoleResolver,
 		provideEngine,
 		provideAuthorizer,
-		fx.Private,
 	),
 )
 
 // permissionPublicOptions 将 permission 内部命名组件投影为跨 feature 或 router 可消费的公开依赖。
 var permissionPublicOptions = fx.Options(
 	fx.Provide(
-		newPermissionRuntime,
-		providePermissionAuthorizer,
-		providePermissionPolicyHealth,
-		providePermissionPolicyWatcherStatus,
-		providePermissionOutboxDispatcherStatus,
 		providePermissionUserRoleCacheStats,
-		providePermissionPolicyChangeNotifier,
 		providePermissionController,
 	),
 )
@@ -73,7 +66,8 @@ type AuthorizerParams struct {
 type AuthorizerResult struct {
 	fx.Out
 
-	Authorizer permissionauthorization.Authorizer `name:"permission_authorizer"`
+	InternalAuthorizer permissionauthorization.Authorizer `name:"permission_authorizer"`
+	Authorizer         permissionauthorization.Authorizer
 }
 
 // Fx 参数与结果：公开投影
@@ -92,47 +86,16 @@ type PermissionUserRoleCacheStatsResult struct {
 	Stats localcache.StatsSource `name:"rbac_user_roles_cache"`
 }
 
-// Fx 参数与结果：运行时聚合
-
-// PermissionRuntimeParams 汇集 lifecycle、健康检查和跨 feature 消费的 RBAC 运行时组件。
-type PermissionRuntimeParams struct {
-	fx.In
-
-	Authorizer      permissionauthorization.Authorizer           `name:"permission_authorizer"`
-	Health          permissionauthorization.PolicyHealth         `name:"permission_policy_health"`
-	Watcher         policyWatcherRunner                          `name:"permission_policy_watcher_runner"`
-	Status          permissionapplication.PolicyWatcherStatus    `name:"permission_policy_watcher_status"`
-	Dispatcher      permissionapplication.OutboxDispatcherRunner `name:"permission_outbox_dispatcher_runner"`
-	DispatchStatus  permissionapplication.OutboxDispatcherStatus `name:"permission_outbox_dispatcher_status"`
-	Notifier        permissionapplication.PolicyChangeNotifier   `name:"permission_policy_change_notifier"`
-	Initializer     permissionPolicyInitializer                  `name:"permission_policy_initializer"`
-	EngineLifecycle permissionPolicyEngineLifecycle              `name:"permission_policy_engine_lifecycle"`
-}
-
 // PolicyEngineResult 将同一个内存引擎投影为授权、reload、健康检查和初始化端口。
 type PolicyEngineResult struct {
 	fx.Out
 
 	AuthorizationEngine permissionauthorization.Engine           `name:"permission_authorization_engine"`
 	ReloadEngine        permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
-	Health              permissionauthorization.PolicyHealth     `name:"permission_policy_health"`
-	Initializer         permissionPolicyInitializer              `name:"permission_policy_initializer"`
-	EngineLifecycle     permissionPolicyEngineLifecycle          `name:"permission_policy_engine_lifecycle"`
-}
-
-// 内部运行时类型
-
-// PermissionRuntime 聚合 permission feature 对外稳定 RBAC runtime 组件，避免 public 投影散落在多个 named 转发函数中。
-type PermissionRuntime struct {
-	Authorizer       permissionauthorization.Authorizer
-	PolicyHealth     permissionauthorization.PolicyHealth
-	WatcherStatus    permissionapplication.PolicyWatcherStatus
-	DispatcherStatus permissionapplication.OutboxDispatcherStatus
-	Notifier         permissionapplication.PolicyChangeNotifier
-	EngineLifecycle  permissionPolicyEngineLifecycle
-	Initializer      permissionPolicyInitializer
-	Watcher          policyWatcherRunner
-	Dispatcher       permissionapplication.OutboxDispatcherRunner
+	InternalHealth      permissionauthorization.PolicyHealth     `name:"permission_policy_health"`
+	Health              permissionauthorization.PolicyHealth
+	Initializer         permissionPolicyInitializer     `name:"permission_policy_initializer"`
+	EngineLifecycle     permissionPolicyEngineLifecycle `name:"permission_policy_engine_lifecycle"`
 }
 
 // permissionPolicyInitializer 只暴露 fail-closed 初始化能力给 lifecycle hook。
@@ -163,51 +126,18 @@ func provideUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverRes
 // provideEngine 将同一个 Casbin engine 按不同端口投影，保持授权、reload、健康检查和初始化使用同一份内存策略。
 func provideEngine(loader permissioncasbin.Loader, metrics permissioncasbin.ReloadMetrics, userRoles permissioncasbin.UserRoleResolver) PolicyEngineResult {
 	engine := permissioncasbin.NewEngine(loader, metrics, userRoles)
-	return PolicyEngineResult{AuthorizationEngine: engine, ReloadEngine: engine, Health: engine, Initializer: engine, EngineLifecycle: engine}
+	return PolicyEngineResult{AuthorizationEngine: engine, ReloadEngine: engine, InternalHealth: engine, Health: engine, Initializer: engine, EngineLifecycle: engine}
 }
 
 func provideAuthorizer(params AuthorizerParams) AuthorizerResult {
-	return AuthorizerResult{Authorizer: permissionauthorization.NewAuthorizer(params.Engine, params.Metrics)}
+	authorizer := permissionauthorization.NewAuthorizer(params.Engine, params.Metrics)
+	return AuthorizerResult{InternalAuthorizer: authorizer, Authorizer: authorizer}
 }
 
 // Provider：公开投影
 
-func newPermissionRuntime(params PermissionRuntimeParams) *PermissionRuntime {
-	return &PermissionRuntime{
-		Authorizer:       params.Authorizer,
-		PolicyHealth:     params.Health,
-		WatcherStatus:    params.Status,
-		DispatcherStatus: params.DispatchStatus,
-		Notifier:         params.Notifier,
-		EngineLifecycle:  params.EngineLifecycle,
-		Initializer:      params.Initializer,
-		Watcher:          params.Watcher,
-		Dispatcher:       params.Dispatcher,
-	}
-}
-
-func providePermissionAuthorizer(runtime *PermissionRuntime) permissionauthorization.Authorizer {
-	return runtime.Authorizer
-}
-
-func providePermissionPolicyHealth(runtime *PermissionRuntime) permissionauthorization.PolicyHealth {
-	return runtime.PolicyHealth
-}
-
-func providePermissionPolicyWatcherStatus(runtime *PermissionRuntime) permissionapplication.PolicyWatcherStatus {
-	return runtime.WatcherStatus
-}
-
-func providePermissionOutboxDispatcherStatus(runtime *PermissionRuntime) permissionapplication.OutboxDispatcherStatus {
-	return runtime.DispatcherStatus
-}
-
 func providePermissionUserRoleCacheStats(params PermissionUserRoleCacheStatsParams) PermissionUserRoleCacheStatsResult {
 	return PermissionUserRoleCacheStatsResult{Stats: params.Stats}
-}
-
-func providePermissionPolicyChangeNotifier(runtime *PermissionRuntime) permissionapplication.PolicyChangeNotifier {
-	return runtime.Notifier
 }
 
 func providePermissionController(query permissionquery.PermissionQueryService, validator *commonvalidation.Validator) *permissionhttp.PermissionController {
