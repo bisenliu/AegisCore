@@ -231,4 +231,20 @@ rbacSeedJob: # RBAC 系统数据 seed 发布前置 Job 配置；生产最终 run
 nodeSelector: {} # Pod 节点选择器；按环境需要约束调度节点。
 tolerations: [] # Pod tolerations；按环境需要容忍节点 taint。
 affinity: {} # Pod affinity/anti-affinity；按环境需要设置亲和性。
-topologySpreadConstraints: [] # 拓扑分布约束；按环境需要跨可用区或节点分散副本。
+topologySpreadConstraints: # 默认优先跨节点和可用区分散 runtime 副本；生产可按环境覆盖为硬约束。
+  - maxSkew: 1 # 节点维度最多允许 1 个副本偏差。
+    topologyKey: kubernetes.io/hostname # 按节点 hostname 分散。
+    whenUnsatisfiable: ScheduleAnyway # 单节点或资源不足时仍允许调度。
+    labelSelector: # 只统计本 release 的 runtime Pod；模板会随 nameOverride 和 release name 渲染。
+      matchLabels:
+        app.kubernetes.io/name: '{{ include "aegiscore-user-service.name" . }}'
+        app.kubernetes.io/instance: '{{ .Release.Name }}'
+        app.kubernetes.io/component: runtime
+  - maxSkew: 1 # 可用区维度最多允许 1 个副本偏差。
+    topologyKey: topology.kubernetes.io/zone # 按可用区分散。
+    whenUnsatisfiable: ScheduleAnyway # 单可用区集群仍可运行；多可用区时优先打散。
+    labelSelector: # 只统计本 release 的 runtime Pod；模板会随 nameOverride 和 release name 渲染。
+      matchLabels:
+        app.kubernetes.io/name: '{{ include "aegiscore-user-service.name" . }}'
+        app.kubernetes.io/instance: '{{ .Release.Name }}'
+        app.kubernetes.io/component: runtime

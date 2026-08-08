@@ -39,6 +39,21 @@ spec: # Deployment 期望状态。
         fsGroup: 65532 # 挂载卷文件所属组，便于非 root 写入。
         seccompProfile: # seccomp 限制配置。
           type: RuntimeDefault # 使用容器运行时默认 seccomp profile。
+      topologySpreadConstraints: # 优先将 runtime 副本分散到不同故障域，避免双副本同节点或同可用区。
+        - maxSkew: 1 # 节点维度最多允许 1 个副本偏差。
+          topologyKey: kubernetes.io/hostname # 按节点 hostname 分散。
+          whenUnsatisfiable: ScheduleAnyway # 单节点或资源不足时仍允许调度，生产可按环境覆盖为 DoNotSchedule。
+          labelSelector: # 只统计本服务 runtime Pod。
+            matchLabels:
+              app.kubernetes.io/name: aegiscore-user-service
+              app.kubernetes.io/component: runtime
+        - maxSkew: 1 # 可用区维度最多允许 1 个副本偏差。
+          topologyKey: topology.kubernetes.io/zone # 按可用区分散。
+          whenUnsatisfiable: ScheduleAnyway # 单可用区集群仍可运行；多可用区时优先打散。
+          labelSelector: # 只统计本服务 runtime Pod。
+            matchLabels:
+              app.kubernetes.io/name: aegiscore-user-service
+              app.kubernetes.io/component: runtime
       containers: # Pod 内容器列表。
         - name: user-service # 容器名称，日志和事件中使用。
           image: aegiscore-user-service:sha-local # 示例镜像；生产必须替换为当前发布的不可变 tag 或 digest。
