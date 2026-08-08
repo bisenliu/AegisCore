@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// DefaultTransactionCleanupTimeout 是原始 context 没有 deadline 时事务清理的最长等待时间。
+// DefaultTransactionCleanupTimeout 是事务终结清理的建议等待预算，不得作为 BeginTx lifecycle timeout。
 const DefaultTransactionCleanupTimeout = 5 * time.Second
 
 // Transaction 表达业务中立的最小事务终结接口。
@@ -104,5 +104,5 @@ func transactionLifecycleContext(ctx context.Context) (context.Context, context.
 		return context.WithDeadline(txCtx, deadline)
 	}
 
-	return context.WithTimeout(txCtx, DefaultTransactionCleanupTimeout)
+	return context.WithCancel(txCtx)
 }

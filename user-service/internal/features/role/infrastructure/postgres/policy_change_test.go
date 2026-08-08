@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/aegiscore/common/runtime/datastore"
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
@@ -190,14 +191,15 @@ func TestPostgresPolicyRevisionFollowsCommitOrderAndHandlesConcurrentWrites(t *t
 	store := NewRoleStore(client)
 
 	t.Run("later mutation waits for earlier revision transaction", func(t *testing.T) {
+		operationCtx := context.Background()
 		firstRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000022001")
 		secondRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000022002")
-		firstTx, err := client.Tx(ctx)
+		firstTx, err := client.Tx(operationCtx)
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = firstTx.Rollback() })
-		_, err = firstTx.Role.Create().SetRoleID(firstRoleID).SetName("First Commit Role").SetActive(true).Save(ctx)
+		_, err = firstTx.Role.Create().SetRoleID(firstRoleID).SetName("First Commit Role").SetActive(true).Save(operationCtx)
 		require.NoError(t, err)
-		firstRevision := appendPolicyFactInOpenTransaction(ctx, t, firstTx, rolePolicyChange("role_created", firstRoleID))
+		firstRevision := appendPolicyFactInOpenTransaction(operationCtx, t, firstTx, rolePolicyChange("role_created", firstRoleID))
 		counterUpdateStarted := make(chan struct{})
 		var counterUpdateOnce sync.Once
 		client.RbacPolicyRevisionCounter.Use(func(next ent.Mutator) ent.Mutator {
@@ -213,7 +215,7 @@ func TestPostgresPolicyRevisionFollowsCommitOrderAndHandlesConcurrentWrites(t *t
 		}
 		secondDone := make(chan writeOutcome, 1)
 		go func() {
-			result, writeErr := store.Create(ctx, roleapplication.CreateRoleInput{RoleID: secondRoleID, Name: "Second Commit Role", Active: true}, rolePolicyChange("role_created", secondRoleID))
+			result, writeErr := store.Create(operationCtx, roleapplication.CreateRoleInput{RoleID: secondRoleID, Name: "Second Commit Role", Active: true}, rolePolicyChange("role_created", secondRoleID))
 			secondDone <- writeOutcome{result: result, err: writeErr}
 		}()
 
@@ -224,8 +226,8 @@ func TestPostgresPolicyRevisionFollowsCommitOrderAndHandlesConcurrentWrites(t *t
 		}
 		select {
 		case outcome := <-secondDone:
-			t.Fatalf("second mutation committed before the first transaction: result=%+v err=%v", outcome.result, outcome.err)
-		case <-time.After(150 * time.Millisecond):
+			t.Fatalf("second mutation completed before the first transaction: result=%+v err=%v", outcome.result, outcome.err)
+		case <-time.After(datastore.DefaultTransactionCleanupTimeout + 250*time.Millisecond):
 		}
 		require.NoError(t, firstTx.Commit())
 

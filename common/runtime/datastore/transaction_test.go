@@ -22,10 +22,8 @@ func TestBeginTransactionUsesDetachedLifecycleContext(t *testing.T) {
 	require.NotNil(t, finish)
 	require.Equal(t, "request-value", starter.ctx.Value(transactionContextKey{}))
 	require.NoError(t, starter.ctx.Err())
-	deadline, ok := starter.ctx.Deadline()
-	require.True(t, ok)
-	require.Greater(t, time.Until(deadline), 4*time.Second)
-	require.LessOrEqual(t, time.Until(deadline), DefaultTransactionCleanupTimeout)
+	_, ok := starter.ctx.Deadline()
+	require.False(t, ok)
 }
 
 func TestBeginTransactionInheritsOriginalDeadline(t *testing.T) {
@@ -53,6 +51,37 @@ func TestBeginTransactionFailureCancelsLifecycleContext(t *testing.T) {
 	require.ErrorIs(t, starter.ctx.Err(), context.Canceled)
 }
 
+func TestCommitCancelsLifecycleContext(t *testing.T) {
+	starter := &testTransactionStarter{tx: &testTransaction{}}
+
+	_, finish, err := BeginTransaction(context.Background(), starter)
+	require.NoError(t, err)
+
+	require.NoError(t, finish.Commit(context.Background()))
+	require.ErrorIs(t, starter.ctx.Err(), context.Canceled)
+}
+
+func TestFailCancelsLifecycleContext(t *testing.T) {
+	starter := &testTransactionStarter{tx: &testTransaction{}}
+	businessErr := errors.New("business failed")
+
+	_, finish, err := BeginTransaction(context.Background(), starter)
+	require.NoError(t, err)
+
+	require.ErrorIs(t, finish.Fail(businessErr), businessErr)
+	require.ErrorIs(t, starter.ctx.Err(), context.Canceled)
+}
+
+func TestRollbackUnlessCommittedCancelsLifecycleContext(t *testing.T) {
+	starter := &testTransactionStarter{tx: &testTransaction{}}
+
+	_, finish, err := BeginTransaction(context.Background(), starter)
+	require.NoError(t, err)
+
+	require.NoError(t, finish.RollbackUnlessCommitted())
+	require.ErrorIs(t, starter.ctx.Err(), context.Canceled)
+}
+
 func TestRollbackUnlessCommittedRunsAfterRequestCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	tx := &testTransaction{}
@@ -69,15 +98,30 @@ func TestRollbackUnlessCommittedRunsAfterRequestCanceled(t *testing.T) {
 func TestCommitRejectsCanceledRequestContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	tx := &testTransaction{}
-	_, finish, err := BeginTransaction(ctx, &testTransactionStarter{tx: tx})
+	starter := &testTransactionStarter{tx: tx}
+	_, finish, err := BeginTransaction(ctx, starter)
 	require.NoError(t, err)
 
 	cancel()
 
 	require.ErrorIs(t, finish.Commit(ctx), context.Canceled)
 	require.Zero(t, tx.commitCount)
+	require.NoError(t, starter.ctx.Err())
 	require.NoError(t, finish.RollbackUnlessCommitted())
 	require.Equal(t, 1, tx.rollbackCount)
+	require.ErrorIs(t, starter.ctx.Err(), context.Canceled)
+}
+
+func TestCommitWithoutOriginalDeadlineSucceedsAfterCleanupTimeout(t *testing.T) {
+	tx := &testTransaction{}
+	_, finish, err := BeginTransaction(context.Background(), &testTransactionStarter{tx: tx})
+	require.NoError(t, err)
+
+	time.Sleep(DefaultTransactionCleanupTimeout + 20*time.Millisecond)
+
+	require.NoError(t, finish.Commit(context.Background()))
+	require.Equal(t, 1, tx.commitCount)
+	require.Zero(t, tx.rollbackCount)
 }
 
 func TestFailJoinsOriginalAndRollbackErrors(t *testing.T) {

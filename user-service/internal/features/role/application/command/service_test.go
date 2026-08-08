@@ -45,6 +45,16 @@ func TestRoleCommandServiceCreateRoleReturnsStoreError(t *testing.T) {
 	require.Nil(t, result)
 }
 
+func TestRoleCommandServiceCommitCanceledSkipsPolicyNotification(t *testing.T) {
+	fixture := newRoleCommandFixture(t)
+	fixture.roles.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, context.Canceled)
+	fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	result, err := fixture.service.CreateRole(context.Background(), CreateRoleCommand{Name: "operator"})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, result)
+}
+
 func TestRoleCommandServiceUpdateRoleProtectsSystemRole(t *testing.T) {
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000001")
 	fixture := newRoleCommandFixture(t)
