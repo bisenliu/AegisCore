@@ -16,7 +16,7 @@ export ADMIN_BOOTSTRAP_PASSWORD
 .PHONY: user-service-build user-service-run user-service-test user-service-test-containers user-service-rbac-sync-race-test user-service-lint user-service-verify user-service-architecture-lint
 .PHONY: user-service-seed-rbac user-service-bootstrap-super-admin user-service-image-verify
 .PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-openapi-generate user-service-fxgraph-generate user-service-fxgraph-check
-.PHONY: compose-dashboard-generate compose-dashboard-check github-actions-pins-check
+.PHONY: compose-dashboard-generate compose-dashboard-check delivery-verify github-actions-pins-check
 
 help: ## 查看可用命令。
 	@awk 'BEGIN {FS = ":.*##"; printf "可用命令：\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-36s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -32,7 +32,7 @@ coverage: ## 生成覆盖率报告并检查手写关键包基线。
 
 lint: common-lint user-service-lint tools-openapi-convert-lint tools-nacos-config-seed-lint ## 运行全部 Go 模块 lint。
 
-verify: lint user-service-architecture-lint github-actions-pins-check common-generate user-service-generate test user-service-openapi-generate ## 运行完整本地验证。
+verify: lint user-service-architecture-lint github-actions-pins-check delivery-verify common-generate user-service-generate test user-service-openapi-generate ## 运行完整本地验证。
 	git diff --exit-code -- . ':(exclude)AGENTS.md' ':(exclude)openspec/AGENTS.md' ':(exclude)CLAUDE.md' ':(exclude).multica/project/resources.json' ':(exclude).multica/**'
 
 github-actions-pins-check: ## 检查 GitHub Actions 第三方 Action 是否固定 commit SHA。
@@ -137,3 +137,6 @@ compose-dashboard-generate: ## 从通用观测 dashboard 生成 Compose Grafana 
 
 compose-dashboard-check: ## 检查 Compose Grafana dashboard 是否已生成且无 drift。
 	./deployments/compose/scripts/generate-grafana-dashboard.sh --check
+
+delivery-verify: ## 校验 Helm、Kustomize、Compose、Prometheus 和 dashboard 交付资产。
+	./scripts/verify-delivery-assets.sh

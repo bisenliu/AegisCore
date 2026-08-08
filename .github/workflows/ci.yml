@@ -58,6 +58,82 @@ jobs:
           make user-service-openapi-generate
           git diff --exit-code
 
+  delivery:
+    name: delivery assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect delivery asset changes
+        id: changes
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            base_ref="origin/${GITHUB_BASE_REF}"
+            git fetch --no-tags --depth=1 origin "${GITHUB_BASE_REF}"
+            changed_files="$(git diff --name-only "${base_ref}"...HEAD)"
+          elif [[ -n "${GITHUB_EVENT_BEFORE:-}" && "${GITHUB_EVENT_BEFORE}" != "0000000000000000000000000000000000000000" ]]; then
+            changed_files="$(git diff --name-only "${GITHUB_EVENT_BEFORE}" "${GITHUB_SHA}")"
+          else
+            changed_files="__run_all__"
+          fi
+
+          if grep -Eq '^(deployments/|\.github/workflows/ci\.yml|Makefile|scripts/verify-delivery-assets\.sh)' <<<"${changed_files}" || [[ "${changed_files}" == "__run_all__" ]]; then
+            echo 'run=true' >> "${GITHUB_OUTPUT}"
+          else
+            echo 'run=false' >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Install delivery verification tools
+        if: steps.changes.outputs.run == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${HOME}/.local/bin"
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+
+          helm_version='v3.19.2'
+          helm_archive="helm-${helm_version}-linux-amd64.tar.gz"
+          curl -fsSL "https://get.helm.sh/${helm_archive}" -o "/tmp/${helm_archive}"
+          curl -fsSL "https://get.helm.sh/${helm_archive}.sha256sum" -o "/tmp/${helm_archive}.sha256sum"
+          (cd /tmp && sha256sum -c "${helm_archive}.sha256sum")
+          tar -xzf "/tmp/${helm_archive}" -C /tmp
+          install /tmp/linux-amd64/helm "${HOME}/.local/bin/helm"
+
+          kubectl_version='v1.34.1'
+          curl -fsSLo "${HOME}/.local/bin/kubectl" "https://dl.k8s.io/release/${kubectl_version}/bin/linux/amd64/kubectl"
+          curl -fsSLo /tmp/kubectl.sha256 "https://dl.k8s.io/release/${kubectl_version}/bin/linux/amd64/kubectl.sha256"
+          printf '%s  %s\n' "$(cat /tmp/kubectl.sha256)" "${HOME}/.local/bin/kubectl" | sha256sum -c -
+          chmod +x "${HOME}/.local/bin/kubectl"
+
+          kubeconform_version='v0.7.0'
+          kubeconform_archive='kubeconform-linux-amd64.tar.gz'
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${kubeconform_version}/${kubeconform_archive}" -o "/tmp/${kubeconform_archive}"
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${kubeconform_version}/CHECKSUMS" -o /tmp/kubeconform.CHECKSUMS
+          grep 'kubeconform-linux-amd64.tar.gz$' /tmp/kubeconform.CHECKSUMS | sed 's#  #  /tmp/#' | sha256sum -c -
+          tar -xzf "/tmp/${kubeconform_archive}" -C /tmp kubeconform
+          install /tmp/kubeconform "${HOME}/.local/bin/kubeconform"
+
+          prometheus_version='3.7.3'
+          prometheus_archive="prometheus-${prometheus_version}.linux-amd64.tar.gz"
+          curl -fsSL "https://github.com/prometheus/prometheus/releases/download/v${prometheus_version}/${prometheus_archive}" -o "/tmp/${prometheus_archive}"
+          curl -fsSL "https://github.com/prometheus/prometheus/releases/download/v${prometheus_version}/sha256sums.txt" -o /tmp/prometheus.sha256sums.txt
+          grep "prometheus-${prometheus_version}.linux-amd64.tar.gz$" /tmp/prometheus.sha256sums.txt | sed 's#  #  /tmp/#' | sha256sum -c -
+          tar -xzf "/tmp/${prometheus_archive}" -C /tmp
+          install "/tmp/prometheus-${prometheus_version}.linux-amd64/promtool" "${HOME}/.local/bin/promtool"
+
+      - name: Verify delivery assets
+        if: steps.changes.outputs.run == 'true'
+        run: make delivery-verify
+
+      - name: Skip delivery assets
+        if: steps.changes.outputs.run != 'true'
+        run: echo 'No delivery asset changes detected.'
+
   container-test:
     name: container-test
     runs-on: ubuntu-latest
