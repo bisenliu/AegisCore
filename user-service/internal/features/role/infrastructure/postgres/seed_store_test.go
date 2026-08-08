@@ -2,9 +2,12 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
@@ -46,6 +49,28 @@ func TestRoleStoreUpsertSystemRole(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, inserted)
 	require.True(t, updated.Active)
+}
+
+func TestRoleStoreUpsertSystemRoleConstraintConflictReturnsOriginalError(t *testing.T) {
+	db, err := sql.Open("sqlite3", fmt.Sprintf("file:role_seed_constraint_test_%s?mode=memory&cache=shared&_fk=1", runtimeid.MustNewUUIDString()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	client := enttest.NewClient(t, enttest.WithOptions(ent.Driver(entsql.OpenDB(dialect.SQLite, db))))
+	t.Cleanup(func() { _ = client.Close() })
+	store := NewRoleStore(client)
+	ctx := context.Background()
+	existingRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000111")
+	newRoleID := uuid.MustParse("018f0000-0000-7000-8000-000000000112")
+
+	_, _, err = store.UpsertSystemRole(ctx, roleapplication.SeedRoleInput{RoleID: existingRoleID, Name: "System", Active: true})
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `CREATE UNIQUE INDEX roles_name_test_key ON roles (name)`)
+	require.NoError(t, err)
+
+	_, inserted, err := store.UpsertSystemRole(ctx, roleapplication.SeedRoleInput{RoleID: newRoleID, Name: "System", Active: true})
+	require.Error(t, err)
+	require.False(t, inserted)
+	require.True(t, ent.IsConstraintError(err))
 }
 
 func TestRolePermissionStoreSeedEnsureAndSync(t *testing.T) {

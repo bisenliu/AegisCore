@@ -149,27 +149,41 @@ func (s *RoleStore) SetActive(ctx context.Context, roleID uuid.UUID, active bool
 // UpsertSystemRole 按 role_id 幂等写入系统角色 seed 数据。
 func (s *RoleStore) UpsertSystemRole(ctx context.Context, input roleapplication.SeedRoleInput) (*roledomain.Role, bool, error) {
 	existing, err := s.client.Role.Query().Where(entrole.RoleIDEQ(input.RoleID)).Only(ctx)
-	if err != nil && !ent.IsNotFound(err) {
+	if err == nil {
+		updated, err := s.updateSystemRole(ctx, existing, input)
+		return updated, false, err
+	}
+	if !ent.IsNotFound(err) {
 		return nil, false, fmt.Errorf("query seed role %s: %w", input.RoleID.String(), err)
 	}
-	if ent.IsNotFound(err) {
-		created, err := s.client.Role.Create().
-			SetRoleID(input.RoleID).
-			SetName(input.Name).
-			SetDescription(input.Description).
-			SetActive(input.Active).
-			SetIsSystem(true).
-			Save(ctx)
-		if err != nil {
-			if ent.IsConstraintError(err) {
-				// 并发 seed 可能已插入同一 role_id；重新读取并走更新分支即可收敛到基线。
-				return s.UpsertSystemRole(ctx, input)
-			}
-			return nil, false, fmt.Errorf("create seed role %s: %w", input.RoleID.String(), err)
-		}
+
+	created, err := s.client.Role.Create().
+		SetRoleID(input.RoleID).
+		SetName(input.Name).
+		SetDescription(input.Description).
+		SetActive(input.Active).
+		SetIsSystem(true).
+		Save(ctx)
+	if err == nil {
 		return toRoleModel(created), true, nil
 	}
+	if !ent.IsConstraintError(err) {
+		return nil, false, fmt.Errorf("create seed role %s: %w", input.RoleID.String(), err)
+	}
 
+	createErr := err
+	existing, err = s.client.Role.Query().Where(entrole.RoleIDEQ(input.RoleID)).Only(ctx)
+	if err == nil {
+		updated, err := s.updateSystemRole(ctx, existing, input)
+		return updated, false, err
+	}
+	if ent.IsNotFound(err) {
+		return nil, false, fmt.Errorf("create seed role %s after constraint conflict: %w", input.RoleID.String(), createErr)
+	}
+	return nil, false, fmt.Errorf("query seed role %s after constraint conflict: %w", input.RoleID.String(), err)
+}
+
+func (s *RoleStore) updateSystemRole(ctx context.Context, existing *ent.Role, input roleapplication.SeedRoleInput) (*roledomain.Role, error) {
 	active := existing.Active
 	if input.ReactivateSystem {
 		active = input.Active
@@ -181,9 +195,9 @@ func (s *RoleStore) UpsertSystemRole(ctx context.Context, input roleapplication.
 		SetIsSystem(true).
 		Save(ctx)
 	if err != nil {
-		return nil, false, fmt.Errorf("update seed role %s: %w", input.RoleID.String(), err)
+		return nil, fmt.Errorf("update seed role %s: %w", input.RoleID.String(), err)
 	}
-	return toRoleModel(updated), false, nil
+	return toRoleModel(updated), nil
 }
 
 func toRoleModel(entRole *ent.Role) *roledomain.Role {
