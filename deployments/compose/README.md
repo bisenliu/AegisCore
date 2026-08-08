@@ -47,6 +47,8 @@ export AEGISCORE_SERVICE=user-service
 export AEGISCORE_NACOS_ADDR=127.0.0.1:8848
 export AEGISCORE_NACOS_NAMESPACE=loca-host
 export AEGISCORE_NACOS_GROUP=AEGISCORE
+export AEGISCORE_NACOS_USERNAME=nacos
+export AEGISCORE_NACOS_PASSWORD=nacos
 make user-service-run
 ```
 
@@ -56,7 +58,7 @@ Compose 的常驻服务和一次性任务统一显式设置 `TZ=Asia/Shanghai`�
 
 user-service 通过 Nacos v3 Client HTTP API 读取配置，两个 `nacos-init-*` 任务通过 v3 Admin API 创建 namespace 并发布配置，因此兼容已经移除 v1/v2 API 的 Nacos 3.2。Nacos 以 `microservice` 功能模式运行，只加载 Config 和 Naming，不加载 AI 模块及其控制台入口；该模式要求 Nacos 3.2.2 或更高版本。Compose 有意使用浮动 `latest` 以持续验证最新版；正式环境应在验收后固定具体版本或镜像 digest。`nacos-data` volume 会保留本地 Nacos 数据；旧 volume 中的 `loca` Namespace 不再被当前 workload 引用，也不会由 seed 工具自动删除。
 
-本地 Compose 显式设置 `NACOS_AUTH_ENABLE=false`、`NACOS_AUTH_ADMIN_ENABLE=false` 和 `NACOS_AUTH_CONSOLE_ENABLE=false`，分别关闭 Client、Admin API 和 Console API 鉴权，避免本地控制台操作因仅关闭部分鉴权而被拒绝。这些值只适用于隔离的本地开发网络，生产部署必须启用鉴权并使用受控凭据。
+本地 Compose 显式设置 `NACOS_AUTH_ENABLE=true`、`NACOS_AUTH_ADMIN_ENABLE=true` 和 `NACOS_AUTH_CONSOLE_ENABLE=true`，分别启用 Client、Admin API 和 Console API 鉴权。`nacos-init-*`、容器内 user-service 和主机进程都应通过 `AEGISCORE_NACOS_USERNAME`/`AEGISCORE_NACOS_PASSWORD` 使用同一组本地凭据；默认账号密码为 Nacos 镜像内置的 `nacos`/`nacos`，仅允许 loopback 访问时用于本地开发，生产部署必须替换为受控凭据。
 
 pprof 不进入 Compose 默认配置。临时诊断应修改 Nacos 中的 `observability.pprof`，并通过容器 namespace 内 loopback 或受控端口转发访问。
 
@@ -65,12 +67,14 @@ user-service 使用固定 digest 的 Distroless static nonroot 运行时镜像�
 本地端口：
 
 - 用户服务：http://localhost:8080
-- PostgreSQL：localhost:15432 -> 容器内 5432
-- Redis：localhost:16379 -> 容器内 6379
+- PostgreSQL：localhost:5432 -> 容器内 5432，密码为 `aegiscore-local-postgres`
+- Redis：localhost:6379 -> 容器内 6379，密码为 `aegiscore-local-redis`
 - Nacos Console：http://localhost:8849，API 为 localhost:8848，Nacos gRPC 为 localhost:9848
 - Jaeger：http://localhost:16686，OTLP gRPC 为 localhost:4317，OTLP HTTP 为 localhost:4318
 - Prometheus：http://localhost:9090
-- Grafana：http://localhost:3000，账号为 `admin`，本地默认密码来自 `grafana/grafana.ini`
+- Grafana：http://localhost:3000，默认账号为 `admin`，默认密码为 `aegiscore-local-grafana`
+
+所有宿主端口都绑定 `127.0.0.1`，不向局域网或 Runner 外部网卡暴露。需要从其他设备访问时，应使用受控端口转发或显式覆盖 Compose 端口绑定，不能把本地弱凭据服务直接发布到全部网卡。
 
 从仓库根目录单独构建用户服务运行时镜像：
 

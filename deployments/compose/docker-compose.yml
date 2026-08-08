@@ -1,4 +1,7 @@
 # 常用命令（在仓库根目录执行）：
+# 安全边界：宿主发布端口只绑定 127.0.0.1；不要改回短端口语法，避免暴露到全部网卡。
+# 本地默认凭据：PostgreSQL=aegiscore-local-postgres，Redis=aegiscore-local-redis，Nacos=nacos/nacos，Grafana=admin/aegiscore-local-grafana。
+# 若已有旧数据卷保存了无认证状态或旧密码，应执行文件底部的 down -v 命令重新初始化本地依赖。
 # 校验配置：
 #   docker compose -f deployments/compose/docker-compose.yml config --quiet
 # 构建本地镜像；--pull 会检查并拉取更新的基础镜像：
@@ -61,11 +64,11 @@ services:
       <<: *timezone-env
       PGDATA: /var/lib/postgresql/data/pgdata
       POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: aegiscore-local-postgres
       POSTGRES_DB: aegiscore
-      POSTGRES_HOST_AUTH_METHOD: trust
     command: ["postgres", "-c", "timezone=Asia/Shanghai", "-c", "log_timezone=Asia/Shanghai"]
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -82,17 +85,17 @@ services:
     image: redis:latest
     environment: *timezone-env
     # 默认使用非集群 Redis。需要本地 Cluster 模式时，注释下一行并启用下面的 redis cluster services。
-    command: ["redis-server", "--appendonly", "yes", "--protected-mode", "no"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "aegiscore-local-redis"]
     # Cluster 节点 1 启动方式：
-    # command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--appendonly", "yes", "--protected-mode", "no"]
+    # command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--appendonly", "yes", "--requirepass", "aegiscore-local-redis", "--masterauth", "aegiscore-local-redis"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     networks:
       - aegiscore-runtime
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "aegiscore-local-redis", "ping"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -103,15 +106,15 @@ services:
   # redis-cluster-2:
   #   image: redis:latest
   #   environment: *timezone-env
-  #   command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--appendonly", "yes", "--protected-mode", "no"]
+  #   command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--appendonly", "yes", "--requirepass", "aegiscore-local-redis", "--masterauth", "aegiscore-local-redis"]
   #   ports:
-  #     - "6380:6379"
+  #     - "127.0.0.1:6380:6379"
   #   volumes:
   #     - redis-cluster-2-data:/data
   #   networks:
   #     - aegiscore-runtime
   #   healthcheck:
-  #     test: ["CMD", "redis-cli", "ping"]
+  #     test: ["CMD", "redis-cli", "-a", "aegiscore-local-redis", "ping"]
   #     interval: 10s
   #     timeout: 5s
   #     retries: 12
@@ -122,15 +125,15 @@ services:
   # redis-cluster-3:
   #   image: redis:latest
   #   environment: *timezone-env
-  #   command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--appendonly", "yes", "--protected-mode", "no"]
+  #   command: ["redis-server", "--cluster-enabled", "yes", "--cluster-config-file", "nodes.conf", "--appendonly", "yes", "--requirepass", "aegiscore-local-redis", "--masterauth", "aegiscore-local-redis"]
   #   ports:
-  #     - "6381:6379"
+  #     - "127.0.0.1:6381:6379"
   #   volumes:
   #     - redis-cluster-3-data:/data
   #   networks:
   #     - aegiscore-runtime
   #   healthcheck:
-  #     test: ["CMD", "redis-cli", "ping"]
+  #     test: ["CMD", "redis-cli", "-a", "aegiscore-local-redis", "ping"]
   #     interval: 10s
   #     timeout: 5s
   #     retries: 12
@@ -141,7 +144,7 @@ services:
   # redis-cluster-init:
   #   image: redis:latest
   #   environment: *timezone-env
-  #   command: ["sh", "-c", "redis-cli --cluster create redis:6379 redis-cluster-2:6379 redis-cluster-3:6379 --cluster-replicas 0 --cluster-yes || redis-cli -h redis cluster info | grep -q cluster_state:ok"]
+  #   command: ["sh", "-c", "redis-cli -a aegiscore-local-redis --cluster create redis:6379 redis-cluster-2:6379 redis-cluster-3:6379 --cluster-replicas 0 --cluster-yes || redis-cli -a aegiscore-local-redis -h redis cluster info | grep -q cluster_state:ok"]
   #   depends_on:
   #     redis:
   #       condition: service_healthy
@@ -158,22 +161,22 @@ services:
     image: aegiscore-nacos:latest
     environment:
       <<: *timezone-env
-      NACOS_AUTH_ENABLE: "false"
-      NACOS_AUTH_ADMIN_ENABLE: "false"
-      NACOS_AUTH_CONSOLE_ENABLE: "false"
-      NACOS_AUTH_TOKEN: QWVnaXNDb3JlTmFjb3NMb2NhbERldmVsb3BtZW50VG9rZW4wMTIzNDU2Nzg5
-      NACOS_AUTH_IDENTITY_KEY: aegiscore-local
-      NACOS_AUTH_IDENTITY_VALUE: aegiscore-local
+      NACOS_AUTH_ENABLE: "true"
+      NACOS_AUTH_ADMIN_ENABLE: "true"
+      NACOS_AUTH_CONSOLE_ENABLE: "true"
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-QWVnaXNDb3JlTmFjb3NMb2NhbERldmVsb3BtZW50VG9rZW4wMTIzNDU2Nzg5}
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-aegiscore-local}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-aegiscore-local}
     ports:
-      - "8849:8080"
-      - "8848:8848"
-      - "9848:9848"
+      - "127.0.0.1:8849:8080"
+      - "127.0.0.1:8848:8848"
+      - "127.0.0.1:9848:9848"
     volumes:
       - nacos-data:/home/nacos/data
     networks:
       - aegiscore-runtime
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8848/nacos/v3/admin/core/state/readiness"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8848/nacos/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 18
@@ -194,6 +197,8 @@ services:
       AEGISCORE_NACOS_NAMESPACE: loca-host
       AEGISCORE_NACOS_GROUP: AEGISCORE
       AEGISCORE_NACOS_TIMEOUT: 30s
+      AEGISCORE_NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      AEGISCORE_NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
     depends_on:
       nacos:
         condition: service_healthy
@@ -215,6 +220,8 @@ services:
       AEGISCORE_NACOS_NAMESPACE: loca-docker
       AEGISCORE_NACOS_GROUP: AEGISCORE
       AEGISCORE_NACOS_TIMEOUT: 30s
+      AEGISCORE_NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      AEGISCORE_NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
     depends_on:
       nacos:
         condition: service_healthy
@@ -229,9 +236,9 @@ services:
     command:
       - --collector.otlp.enabled=true
     ports:
-      - "16686:16686"
-      - "4317:4317"
-      - "4318:4318"
+      - "127.0.0.1:16686:16686"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
     networks:
       - aegiscore-observability
     restart: unless-stopped
@@ -252,6 +259,8 @@ services:
       AEGISCORE_NACOS_ADDR: nacos:8848
       AEGISCORE_NACOS_NAMESPACE: loca-docker
       AEGISCORE_NACOS_GROUP: AEGISCORE
+      AEGISCORE_NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      AEGISCORE_NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
     depends_on:
       nacos-init-docker:
         condition: service_completed_successfully
@@ -276,7 +285,7 @@ services:
       - serve
     environment: *user-service-nacos-env
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       nacos-init-docker:
         condition: service_completed_successfully
@@ -313,9 +322,8 @@ services:
       - --storage.tsdb.path=/prometheus
       - --web.console.libraries=/usr/share/prometheus/console_libraries
       - --web.console.templates=/usr/share/prometheus/consoles
-      - --web.enable-lifecycle
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - prometheus-data:/prometheus
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
@@ -335,11 +343,14 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    environment: *timezone-env
+    environment:
+      <<: *timezone-env
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-aegiscore-local-grafana}
     command:
       - --config=/etc/grafana/grafana.ini
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro

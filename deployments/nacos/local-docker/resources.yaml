@@ -7,9 +7,9 @@ resources:
       mode: standalone
       # standalone 模式只允许配置 addr；cluster 模式改用 addrs，且不要同时保留 addr。
       addr: redis:6379
-      # 本地 Redis 默认无 ACL 用户名和密码；启用认证时两个环境目录需要同步调整。
+      # 本地 Compose Redis 启用密码；修改 Compose 默认值时两个环境目录需要同步调整。
       username: ""
-      password: ""
+      password: aegiscore-local-redis
       # timeout 是 Redis 命令级超时，过低会放大本地容器冷启动或调试暂停导致的失败。
       timeout: 5s
       # Cluster 配置示例：
@@ -29,7 +29,7 @@ resources:
       port: 5432
       # 本地 Compose 默认使用 postgres 超级用户；生产类环境应改为最小权限账号并使用外部 secret 注入。
       username: postgres
-      password: ""
+      password: aegiscore-local-postgres
       db_name: aegiscore
       # 本地 PostgreSQL 未启用 TLS；非本地环境应按数据库安全要求调整 sslmode。
       sslmode: disable

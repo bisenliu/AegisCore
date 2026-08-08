@@ -88,7 +88,7 @@ go run ./cmd serve
 
 本地 Nacos Dockerfile 参考官方最新部署说明，使用 `nacos/nacos-server:latest`，在镜像内固定 standalone、`FUNCTION_MODE=microservice` 和 `docker-startup.sh` 入口，只加载 Config 与 Naming；Compose 不提供或覆盖 Nacos 启动命令，仅通过 v3 Admin API 初始化 namespace 和配置。该功能模式要求 Nacos 3.2.2 或更高版本。浮动 tag 适合本地验证最新版兼容性；生产部署仍应在验证后固定具体版本或镜像 digest。
 
-本地 `docker run` 示例和 Compose 同时关闭 Client、Admin API、Console API 三类鉴权。Nacos 3.x 的三个鉴权开关相互独立，只设置 `NACOS_AUTH_ENABLE=false` 不会关闭控制台鉴权；生产环境不得沿用本地关闭鉴权的配置。
+本地 Compose 同时启用 Client、Admin API、Console API 三类鉴权。Nacos 3.x 的三个鉴权开关相互独立，只设置 `NACOS_AUTH_ENABLE=true` 不会保护 Admin API 和控制台；生产环境必须保留三类鉴权并使用受控凭据。
 
 `serve` 由 CLI 在创建 App 前单次加载 service config，再通过 `bootstrap.AppOptions` 将该对象及其派生 runtime config 交给 composition root。`runtime.lifecycle.start_timeout` 和 `stop_timeout` 同时用于 App 顶层 Fx options 与 CLI 显式 Start/Stop context；当前手动生命周期的实际 deadline 由传给 `App.Start`/`App.Stop` 的 context 决定。`fx.StartTimeout` 不限制配置加载或 `fx.New` 中的同步 constructor/invoke，构造期 I/O 必须由自身边界治理。
 
