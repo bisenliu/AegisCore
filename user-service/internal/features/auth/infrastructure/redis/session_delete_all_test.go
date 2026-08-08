@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"strconv"
 	"strings"
@@ -14,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	runtimeconfig "github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/workerpool"
@@ -194,6 +197,73 @@ func TestSessionStoreDeleteAllUserSessionsPurgeFailureIsObservable(t *testing.T)
 
 }
 
+func TestSessionStoreDeleteAllUserSessionsPurgeFailureLogRedactsRedisKeyMaterial(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestSessionStoreWithAppName(t, redisServer, "aegiscore-user-service")
+	core, logs := observer.New(zapcore.ErrorLevel)
+	pool, err := workerpool.New(zap.New(core), workerpool.Options{Name: "auth.redis.session_purge_test", Workers: 1, StopTimeout: time.Second})
+	require.NoError(t, err,
+		"workerpool.New: %v", err)
+	t.Cleanup(func() { require.NoError(t, pool.Stop(context.Background())) })
+	store.purgePool = wrappingPurgeTaskPool{inner: pool, beforeSubmit: redisServer.Close}
+	ctx := context.Background()
+	sessionID := "s-failure-redaction"
+	{
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID, SessionID: sessionID, TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession: %v", err)
+	}
+	{
+		err := store.DeleteAllUserSessions(ctx, sessionTestUserID)
+		require.NoError(t, err,
+			"DeleteAllUserSessions: %v", err)
+	}
+
+	entry := waitForObservedLog(t, logs, "worker pool task failed")
+	fields := entry.ContextMap()
+	require.Equal(t, "auth.redis.purge_detached_user_sessions", fields["task"])
+	require.Contains(t, fields, "cut_time")
+	require.Equal(t, deleteAllUserSessionsBatchSize, fields["batch_size"])
+	assertPurgeLogDoesNotContainRedisKeyMaterial(t, fields, sessionID)
+}
+
+func TestSessionStoreDeleteAllUserSessionsPurgePanicLogRedactsRedisKeyMaterial(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	store := newTestSessionStoreWithAppName(t, redisServer, "aegiscore-user-service")
+	core, logs := observer.New(zapcore.ErrorLevel)
+	pool, err := workerpool.New(zap.New(core), workerpool.Options{Name: "auth.redis.session_purge_test", Workers: 1, StopTimeout: time.Second})
+	require.NoError(t, err,
+		"workerpool.New: %v", err)
+	t.Cleanup(func() { require.NoError(t, pool.Stop(context.Background())) })
+	store.purgePool = wrappingPurgeTaskPool{inner: pool, wrapRun: func(task workerpool.Task) workerpool.Task {
+		task.Run = func(context.Context) error {
+			panic("purge panic probe")
+		}
+		return task
+	}}
+	ctx := context.Background()
+	sessionID := "s-panic-redaction"
+	{
+		err := store.CreateSession(ctx, authdomain.AuthSession{UserID: sessionTestUserID, SessionID: sessionID, TokenVersion: 1}, time.Hour, defaultMaxActiveSessionsPerUser())
+		require.NoError(t, err,
+			"CreateSession: %v", err)
+	}
+	{
+		err := store.DeleteAllUserSessions(ctx, sessionTestUserID)
+		require.NoError(t, err,
+			"DeleteAllUserSessions: %v", err)
+	}
+
+	entry := waitForObservedLog(t, logs, "worker pool task panicked")
+	fields := entry.ContextMap()
+	require.Equal(t, "auth.redis.purge_detached_user_sessions", fields["task"])
+	require.Contains(t, fields, "panic")
+	require.Contains(t, fields, "stacktrace")
+	require.Contains(t, fields, "cut_time")
+	require.Equal(t, deleteAllUserSessionsBatchSize, fields["batch_size"])
+	assertPurgeLogDoesNotContainRedisKeyMaterial(t, fields, sessionID)
+}
+
 func TestSessionStorePurgePoolStopsBeforeRedisClose(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	client := rediscache.NewClient(&rediscache.Options{Addr: redisServer.Addr()})
@@ -337,4 +407,50 @@ func TestSessionPurgePoolStopRespectsCallerTimeout(t *testing.T) {
 
 func TestSessionPurgePoolStopTimeoutMatchesRuntimeWorkerDrainAllowance(t *testing.T) {
 	require.Equal(t, runtimeconfig.DefaultLifecycleWorkerDrainAllowance, deleteAllUserSessionsPurgeStopTimeout)
+}
+
+type wrappingPurgeTaskPool struct {
+	inner        *workerpool.Pool
+	beforeSubmit func()
+	wrapRun      func(workerpool.Task) workerpool.Task
+}
+
+func (p wrappingPurgeTaskPool) Submit(ctx context.Context, task workerpool.Task) error {
+	if p.beforeSubmit != nil {
+		p.beforeSubmit()
+	}
+	if p.wrapRun != nil {
+		task = p.wrapRun(task)
+	}
+	return p.inner.Submit(ctx, task)
+}
+
+func (p wrappingPurgeTaskPool) Stats() workerpool.Stats {
+	return p.inner.Stats()
+}
+
+func waitForObservedLog(t *testing.T, logs *observer.ObservedLogs, message string) observer.LoggedEntry {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		return logs.FilterMessage(message).Len() == 1
+	}, 5*time.Second, 10*time.Millisecond, "log %q count=%d, want 1", message, logs.FilterMessage(message).Len())
+	return logs.FilterMessage(message).All()[0]
+}
+
+func assertPurgeLogDoesNotContainRedisKeyMaterial(t *testing.T, fields map[string]interface{}, sessionID string) {
+	t.Helper()
+	require.NotContains(t, fields, "user_id")
+	require.NotContains(t, fields, "purge_key")
+	require.NotContains(t, fields, "session_prefix")
+	serialized := fmt.Sprint(fields)
+	for _, forbidden := range []string{
+		"aegiscore-user-service",
+		"auth:session",
+		"auth:user:sessions",
+		"{" + sessionTestUserID.String() + "}",
+		sessionTestUserID.String(),
+		sessionID,
+	} {
+		require.NotContains(t, serialized, forbidden)
+	}
 }

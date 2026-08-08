@@ -168,9 +168,6 @@ func (r *SessionStore) DeleteAllUserSessions(ctx context.Context, userID uuid.UU
 		task := workerpool.Task{
 			Name: "auth.redis.purge_detached_user_sessions",
 			Fields: []zap.Field{
-				zap.String("user_id", userID.String()),
-				zap.String("purge_key", purgeKey),
-				zap.String("session_prefix", sessionPrefix),
 				zap.Time("cut_time", cutTime),
 				zap.Int64("batch_size", deleteAllUserSessionsBatchSize),
 			},
