@@ -13,7 +13,7 @@
 | `probes` | `/livez`、`/readyz`、`/startupz` 探针配置 |
 | `autoscaling` | HPA 配置 |
 | `pdb` | PodDisruptionBudget 配置 |
-| `networkPolicy` | ingress 与 Nacos 之外的 additional egress 网络意图 |
+| `networkPolicy` | namespace 默认拒绝、runtime ingress/egress 与 RBAC seed egress 网络意图 |
 | `rbacSeedJob` | RBAC seed Job 配置，默认关闭以保证最终 runtime manifest 不包含 Job |
 
 默认 `values.yaml` 不包含真实敏感值，也不设置 `RUN_MIGRATIONS=true`。普通 user-service 镜像不包含 Atlas，chart 不渲染自动执行 Atlas apply 的 migration Job。生产环境必须提前在 Nacos 写入 `base.yaml`、`resources.yaml` 和 `user-service.yaml` 等 dataId，并确保数据库 SQL migration 已通过 DBA 工单或受控发布平台执行完成。生产发布必须显式传入 `image.ref`，且该值必须是当前 release 的不可变镜像引用，不得使用 `latest`。
@@ -26,15 +26,22 @@
 
 ## NetworkPolicy 安全边界
 
-默认 `networkPolicy` 仅允许 `ingress-system` namespace 中带 `aegiscore.io/allow-user-service: "true"` 的受控上游访问 user-service HTTP 端口。Nacos egress 直接从 `nacos.server.namespace`、`nacos.server.port` 和 `nacos.server.podSelector` 生成，保证 Service DNS 与网络策略使用同一组定位信息；PostgreSQL、Redis 和 OTLP Collector egress 分别约束到明确 namespace 与 Pod selector。生产环境必须通过 admission policy 或等价准入控制限制 `aegiscore.io/allow-user-service` 标签只能由受信任 namespace 或受控 workload 使用；仓库原生清单提供了 `deployments/k8s/user-service/admissionpolicy.yaml` 作为参考资产。
+默认 `networkPolicy` 会先渲染 namespace 级 default-deny，再分别渲染 runtime 和 RBAC seed Job 的组件级策略。runtime 仅允许 `ingress-system` namespace 中带 `aegiscore.io/allow-user-service: "true"` 的受控上游访问 user-service HTTP 端口；RBAC seed 不配置 ingress，因此拒绝所有入站流量。Nacos egress 直接从 `nacos.server.namespace`、`nacos.server.port` 和 `nacos.server.podSelector` 生成，保证 Service DNS 与网络策略使用同一组定位信息；PostgreSQL、Redis、OTLP Collector 和 DNS egress 分别约束到明确 namespace 与 Pod selector。生产环境必须通过 admission policy 或等价准入控制限制 `aegiscore.io/allow-user-service` 标签只能由受信任 namespace 或受控 workload 使用；仓库原生清单提供了 `deployments/k8s/user-service/admissionpolicy.yaml` 作为参考资产。
 
-如果目标环境使用集群外 PostgreSQL、Redis 或 OTLP Collector，应在环境 values 的 `networkPolicy.additionalEgress` 中使用精确 `ipBlock.cidr` 或等价明确目的地覆盖对应规则。不得删除 `to` 字段恢复对任意目的地址开放 `5432`、`6379`、`4317` 或 `4318`。
+如果目标环境使用集群外 PostgreSQL、Redis 或 OTLP Collector，应在环境 values 的 `networkPolicy.runtimeAdditionalEgress` 或 `networkPolicy.rbacSeedAdditionalEgress` 中使用精确 `ipBlock.cidr` 或等价明确目的地覆盖对应规则。不得删除 `to` 字段恢复对任意目的地址开放 `5432`、`6379`、`4317` 或 `4318`。
 
 外部 PostgreSQL 覆盖示例：
 
 ```yaml
 networkPolicy:
-  additionalEgress:
+  runtimeAdditionalEgress:
+    - to:
+        - ipBlock:
+            cidr: 10.20.30.40/32
+      ports:
+        - protocol: TCP
+          port: 5432
+  rbacSeedAdditionalEgress:
     - to:
         - ipBlock:
             cidr: 10.20.30.40/32
@@ -68,13 +75,13 @@ chart 默认不配置或暴露 pprof。临时排障应修改 Nacos 中的 `obser
 
 ```bash
 helm lint deployments/helm/aegiscore-user-service \
-  --set-string image.ref=aegiscore-user-service:sha-local
+  --set-string image.ref=aegiscore-user-service@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 helm template aegiscore-user-service deployments/helm/aegiscore-user-service \
   --values deployments/helm/aegiscore-user-service/values.yaml \
-  --set-string image.ref=aegiscore-user-service:sha-local
+  --set-string image.ref=aegiscore-user-service@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 ```
 
-默认渲染结果应包含 UID/GID/fsGroup `65532`、`terminationGracePeriodSeconds: 150` 和 `AEGISCORE_NACOS_*` 环境变量，且不包含 RBAC seed Job、容器内 shell healthcheck、Atlas apply 命令、`--config` 参数或 migration Job。seed 阶段可追加 `--set rbacSeedJob.enabled=true --set-string rbacSeedJob.nameSuffix=rbac-seed-<release-id>` 单独渲染 Job。
+默认渲染结果应包含 namespace default-deny、runtime NetworkPolicy、RBAC seed NetworkPolicy、UID/GID/fsGroup `65532`、`terminationGracePeriodSeconds: 150` 和 `AEGISCORE_NACOS_*` 环境变量，且不包含 RBAC seed Job、容器内 shell healthcheck、Atlas apply 命令、`--config` 参数或 migration Job。seed 阶段可追加 `--set rbacSeedJob.enabled=true --set-string rbacSeedJob.nameSuffix=rbac-seed-<release-id>` 单独渲染 Job。
 
 本地覆盖示例：
 

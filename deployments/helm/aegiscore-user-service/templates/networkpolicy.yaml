@@ -2,7 +2,21 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "aegiscore-user-service.fullname" . }}
+  name: {{ printf "%s-default-deny" (include "aegiscore-user-service.fullname" .) | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "aegiscore-user-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: network-policy
+spec:
+  podSelector:
+    matchLabels: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-runtime" (include "aegiscore-user-service.fullname" .) | trunc 63 | trimSuffix "-" }}
   labels:
     {{- include "aegiscore-user-service.labels" . | nindent 4 }}
     app.kubernetes.io/component: runtime
@@ -26,7 +40,38 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.nacos.server.port }}
-    {{- with .Values.networkPolicy.additionalEgress }}
+    {{- with .Values.networkPolicy.runtimeAdditionalEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-rbac-seed" (include "aegiscore-user-service.fullname" .) | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "aegiscore-user-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rbac-seed
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "aegiscore-user-service.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: rbac-seed
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.nacos.server.namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.nacos.server.podSelector | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.nacos.server.port }}
+    {{- with .Values.networkPolicy.rbacSeedAdditionalEgress }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 {{- end }}

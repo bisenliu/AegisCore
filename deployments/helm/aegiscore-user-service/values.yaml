@@ -111,8 +111,8 @@ pdb: # PodDisruptionBudget 配置。
   maxUnavailable: 1 # 自愿驱逐时最多允许 1 个 Pod 不可用。
 
 networkPolicy: # NetworkPolicy 配置。
-  enabled: true # 是否渲染网络策略；需 CNI 支持策略执行。
-  ingress: # 入站允许规则。
+  enabled: true # 是否渲染 namespace 默认拒绝、runtime 和 RBAC seed 网络策略；需 CNI 支持策略执行。
+  ingress: # runtime 入站允许规则；RBAC seed 不配置 ingress，默认拒绝所有入站。
     - from: # 允许访问 user-service 的来源。
         - namespaceSelector: # 仅允许受信任入口 namespace。
             matchLabels: # namespace 标签条件。
@@ -123,7 +123,7 @@ networkPolicy: # NetworkPolicy 配置。
       ports: # 入站允许端口。
         - protocol: TCP # HTTP 使用 TCP。
           port: 8080 # user-service HTTP 端口。
-  additionalEgress: # Nacos egress 由 nacos.server 自动生成；这里只维护其他出站规则。
+  runtimeAdditionalEgress: # runtime 的 Nacos egress 由 nacos.server 自动生成；这里只维护其他出站规则。
     - to: # PostgreSQL 目的地限制。
         - namespaceSelector: # 选择数据库所在 namespace。
             matchLabels: # namespace 标签条件。
@@ -156,6 +156,36 @@ networkPolicy: # NetworkPolicy 配置。
           port: 4317 # OTLP gRPC 端口。
         - protocol: TCP # OTLP HTTP 使用 TCP。
           port: 4318 # OTLP HTTP 端口。
+    - to: # DNS 目的地限制。
+        - namespaceSelector: # 选择 DNS 所在 namespace。
+            matchLabels: # namespace 标签条件。
+              kubernetes.io/metadata.name: kube-system # CoreDNS 通常位于 kube-system。
+      ports: # DNS 允许端口。
+        - protocol: UDP # DNS 常用 UDP。
+          port: 53 # DNS UDP 端口。
+        - protocol: TCP # DNS 大响应或重试可用 TCP。
+          port: 53 # DNS TCP 端口。
+  rbacSeedAdditionalEgress: # RBAC seed 的 Nacos egress 由 nacos.server 自动生成；仅允许 seed 必需的其他出站。
+    - to: # PostgreSQL 目的地限制；RBAC seed 需要写入系统角色、权限和绑定。
+        - namespaceSelector: # 选择数据库所在 namespace。
+            matchLabels: # namespace 标签条件。
+              kubernetes.io/metadata.name: data-services # 数据服务 namespace。
+          podSelector: # 选择 PostgreSQL Pod。
+            matchLabels: # Pod 标签条件。
+              app.kubernetes.io/name: postgres # PostgreSQL 工作负载标签。
+      ports: # PostgreSQL 允许端口。
+        - protocol: TCP # PostgreSQL 使用 TCP。
+          port: 5432 # PostgreSQL 端口。
+    - to: # Redis 目的地限制；seed 复用服务配置，保留确有数据路径依赖的缓存访问。
+        - namespaceSelector: # 选择缓存所在 namespace。
+            matchLabels: # namespace 标签条件。
+              kubernetes.io/metadata.name: data-services # 数据服务 namespace。
+          podSelector: # 选择 Redis Pod。
+            matchLabels: # Pod 标签条件。
+              app.kubernetes.io/name: redis # Redis 工作负载标签。
+      ports: # Redis 允许端口。
+        - protocol: TCP # Redis 使用 TCP。
+          port: 6379 # Redis 端口。
     - to: # DNS 目的地限制。
         - namespaceSelector: # 选择 DNS 所在 namespace。
             matchLabels: # namespace 标签条件。

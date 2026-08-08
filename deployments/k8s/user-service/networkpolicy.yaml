@@ -1,10 +1,25 @@
-# 本文件声明 user-service runtime Pod 的最小网络访问意图。
+# 本文件声明 user-service namespace 与发布前置 Job 的最小网络访问意图。
 # 适用于启用 NetworkPolicy 的 CNI；未启用策略执行的集群会忽略这些限制。
-# 默认仅允许受信任 namespace 中带有准入标签的调用方访问 HTTP，并仅允许访问明确的 Nacos、数据库、Redis、OTLP 和 DNS 目的地。
+# 默认拒绝 namespace 内所有 Pod 的入站和出站流量，再为 runtime 与 RBAC seed 分别放行必要目的地。
 apiVersion: networking.k8s.io/v1 # NetworkPolicy 使用 networking.k8s.io/v1 API。
 kind: NetworkPolicy # 声明 Pod 网络隔离策略。
 metadata: # NetworkPolicy 的元数据。
-  name: aegiscore-user-service # NetworkPolicy 名称，与工作负载保持一致。
+  name: aegiscore-user-service-default-deny # NetworkPolicy 名称，作为 namespace 级默认拒绝基线。
+  labels: # 资源标签，便于归类和查询。
+    app.kubernetes.io/name: aegiscore-user-service # 应用名称标签。
+    app.kubernetes.io/component: network-policy # 组件类型；表示隔离基线策略。
+    app.kubernetes.io/part-of: aegiscore # 系统归属标签。
+spec: # 网络策略规格。
+  podSelector: # 选择受此策略约束的 Pod。
+    matchLabels: {} # 空选择器匹配 namespace 内所有 Pod，建立默认拒绝。
+  policyTypes: # 策略方向；声明后未放行的流量会被拒绝。
+    - Ingress # 约束进入 Pod 的流量。
+    - Egress # 约束 Pod 发出的流量。
+---
+apiVersion: networking.k8s.io/v1 # NetworkPolicy 使用 networking.k8s.io/v1 API。
+kind: NetworkPolicy # 声明 Pod 网络隔离策略。
+metadata: # NetworkPolicy 的元数据。
+  name: aegiscore-user-service-runtime # NetworkPolicy 名称，约束 runtime Pod。
   labels: # 资源标签，便于归类和查询。
     app.kubernetes.io/name: aegiscore-user-service # 应用名称标签。
     app.kubernetes.io/component: runtime # 组件类型；runtime 表示作用于 HTTP Pod。
@@ -13,7 +28,7 @@ spec: # 网络策略规格。
   podSelector: # 选择受此策略约束的 Pod。
     matchLabels: # 必须同时匹配以下标签。
       app.kubernetes.io/name: aegiscore-user-service # 匹配 user-service runtime Pod。
-      app.kubernetes.io/component: runtime # 排除 migration 和 seed Job Pod。
+      app.kubernetes.io/component: runtime # 仅约束 HTTP runtime Pod。
   policyTypes: # 策略方向；声明后未放行的流量会被拒绝。
     - Ingress # 约束进入 Pod 的流量。
     - Egress # 约束 Pod 发出的流量。
@@ -71,6 +86,63 @@ spec: # 网络策略规格。
           port: 4317 # OpenTelemetry Collector gRPC 端口。
         - protocol: TCP # OTLP HTTP 使用 TCP。
           port: 4318 # OpenTelemetry Collector HTTP 端口。
+    - to: # DNS 解析目的地限制。
+        - namespaceSelector: # 选择 DNS 所在 namespace。
+            matchLabels: # namespace 必须匹配以下标签。
+              kubernetes.io/metadata.name: kube-system # kube-system 通常承载 CoreDNS。
+      ports: # DNS 允许端口。
+        - protocol: UDP # DNS 常用 UDP。
+          port: 53 # DNS UDP 端口。
+        - protocol: TCP # 大响应或重试时 DNS 可使用 TCP。
+          port: 53 # DNS TCP 端口。
+---
+apiVersion: networking.k8s.io/v1 # NetworkPolicy 使用 networking.k8s.io/v1 API。
+kind: NetworkPolicy # 声明 Pod 网络隔离策略。
+metadata: # NetworkPolicy 的元数据。
+  name: aegiscore-user-service-rbac-seed # NetworkPolicy 名称，约束 RBAC seed Job Pod。
+  labels: # 资源标签，便于归类和查询。
+    app.kubernetes.io/name: aegiscore-user-service # 应用名称标签。
+    app.kubernetes.io/component: rbac-seed # 组件类型；表示 RBAC seed 任务。
+    app.kubernetes.io/part-of: aegiscore # 系统归属标签。
+spec: # 网络策略规格。
+  podSelector: # 选择受此策略约束的 Pod。
+    matchLabels: # 必须同时匹配以下标签。
+      app.kubernetes.io/name: aegiscore-user-service # 匹配 user-service seed Pod。
+      app.kubernetes.io/component: rbac-seed # 仅约束 RBAC seed Job Pod。
+  policyTypes: # 策略方向；声明后未放行的流量会被拒绝。
+    - Ingress # 禁止所有进入 seed Pod 的流量。
+    - Egress # 约束 seed Pod 发出的流量。
+  egress: # 出站允许规则；未列出的目的地会被拒绝。
+    - to: # Nacos 配置中心目的地限制。
+        - namespaceSelector: # 选择 Nacos 所在 namespace。
+            matchLabels: # namespace 必须匹配以下标签。
+              kubernetes.io/metadata.name: prod # 必须与 Nacos Service DNS 中的 namespace 一致。
+          podSelector: # 选择 Nacos Pod。
+            matchLabels: # Pod 必须匹配以下标签。
+              app.kubernetes.io/name: nacos # Nacos 工作负载标签。
+      ports: # Nacos 允许端口。
+        - protocol: TCP # Nacos v3 Client HTTP API 使用 TCP。
+          port: 8848 # Nacos HTTP 端口。
+    - to: # PostgreSQL 目的地限制。
+        - namespaceSelector: # 选择数据库所在 namespace。
+            matchLabels: # namespace 必须匹配以下标签。
+              kubernetes.io/metadata.name: data-services # 数据服务 namespace。
+          podSelector: # 选择 PostgreSQL Pod。
+            matchLabels: # Pod 必须匹配以下标签。
+              app.kubernetes.io/name: postgres # PostgreSQL 工作负载标签。
+      ports: # PostgreSQL 允许端口。
+        - protocol: TCP # PostgreSQL 使用 TCP。
+          port: 5432 # PostgreSQL primary_db 端口。
+    - to: # Redis 目的地限制；seed 使用服务配置，保留确有数据路径依赖的缓存访问。
+        - namespaceSelector: # 选择缓存所在 namespace。
+            matchLabels: # namespace 必须匹配以下标签。
+              kubernetes.io/metadata.name: data-services # 数据服务 namespace。
+          podSelector: # 选择 Redis Pod。
+            matchLabels: # Pod 必须匹配以下标签。
+              app.kubernetes.io/name: redis # Redis 工作负载标签。
+      ports: # Redis 允许端口。
+        - protocol: TCP # Redis 使用 TCP。
+          port: 6379 # Redis cache_redis 端口。
     - to: # DNS 解析目的地限制。
         - namespaceSelector: # 选择 DNS 所在 namespace。
             matchLabels: # namespace 必须匹配以下标签。
