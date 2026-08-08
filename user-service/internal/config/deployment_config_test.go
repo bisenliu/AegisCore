@@ -250,9 +250,9 @@ func requireDeploymentConfigDocuments(t *testing.T, directory string) {
 func deploymentPublishedPort(t *testing.T, ports []string, containerPort string) string {
 	t.Helper()
 	for _, mapping := range ports {
-		hostPort, targetPort, ok := strings.Cut(mapping, ":")
-		if ok && targetPort == containerPort {
-			return hostPort
+		parts := strings.Split(mapping, ":")
+		if len(parts) >= 2 && parts[len(parts)-1] == containerPort {
+			return parts[len(parts)-2]
 		}
 	}
 	require.FailNow(t, "compose published port is missing", "container_port=%s", containerPort)
@@ -348,19 +348,22 @@ func parseDeploymentNacosEndpoint(address string) (deploymentNacosEndpoint, erro
 
 func deploymentRequireNetworkPolicyAllowsNacos(t *testing.T, path string, endpoint deploymentNacosEndpoint) {
 	t.Helper()
-	document := readDeploymentYAML[deploymentNetworkPolicyDocument](t, path)
-	for _, egress := range document.Spec.Egress {
-		for _, destination := range egress.To {
-			if destination.PodSelector.MatchLabels["app.kubernetes.io/name"] != endpoint.serviceName {
-				continue
-			}
-			require.Equal(t, endpoint.namespace, destination.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"])
-			for _, port := range egress.Ports {
-				if port.Port == endpoint.port {
-					return
+	for _, content := range strings.Split(readDeploymentFile(t, path), "\n---") {
+		var document deploymentNetworkPolicyDocument
+		require.NoError(t, yaml.Unmarshal([]byte(content), &document), "parse YAML %s", path)
+		for _, egress := range document.Spec.Egress {
+			for _, destination := range egress.To {
+				if destination.PodSelector.MatchLabels["app.kubernetes.io/name"] != endpoint.serviceName {
+					continue
 				}
+				require.Equal(t, endpoint.namespace, destination.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"])
+				for _, port := range egress.Ports {
+					if port.Port == endpoint.port {
+						return
+					}
+				}
+				require.FailNow(t, "Nacos NetworkPolicy egress port is missing", "port=%d", endpoint.port)
 			}
-			require.FailNow(t, "Nacos NetworkPolicy egress port is missing", "port=%d", endpoint.port)
 		}
 	}
 	require.FailNow(t, "Nacos NetworkPolicy egress destination is missing", "service=%s", endpoint.serviceName)

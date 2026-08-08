@@ -495,7 +495,7 @@ func TestLoadRepositoryConfigTargets(t *testing.T) {
 	configs := make(map[string]*Config, len(tests))
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := LoadFromDocuments(loadRepositoryConfigDocuments(t, tt.environment))
+			result, err := loadFromDocumentsForTest(loadRepositoryConfigDocuments(t, tt.environment))
 			require.NoError(t, err)
 			cfg := result.Config
 			require.Equal(t, 60*time.Second, cfg.Runtime.Lifecycle.StartTimeout)
@@ -541,8 +541,8 @@ func loadRepositoryConfigDocuments(t *testing.T, environment string) []commoncon
 	return docs
 }
 
-// TestLoadFromDocumentsMergesLayeredServiceConfig 验证分层文档合并、effective render 脱敏和输入不变。
-func TestLoadFromDocumentsMergesLayeredServiceConfig(t *testing.T) {
+// TestLoadFromTestDocumentsMergesLayeredServiceConfig 验证分层文档合并、effective render 脱敏和输入不变。
+func TestLoadFromTestDocumentsMergesLayeredServiceConfig(t *testing.T) {
 	// 为 render 断言显式注入非空资源密码，避免只覆盖 JWT secret 而遗漏具名资源凭据。
 	baseYAML := strings.Replace(serviceConfigYAML(), "      mode: cluster\n", "      mode: cluster\n      password: redis-secret-123\n", 1)
 	baseYAML = strings.Replace(baseYAML, "      password: \"\"", "      password: postgres-secret-123", 1)
@@ -550,7 +550,7 @@ func TestLoadFromDocumentsMergesLayeredServiceConfig(t *testing.T) {
 		{DataID: "base.yaml", Content: []byte(baseYAML)},
 		{DataID: "user-service.yaml", Content: []byte("log:\n  level: debug\n")},
 	}
-	result, err := LoadFromDocuments(docs)
+	result, err := loadFromDocumentsForTest(docs)
 	require.NoError(t, err)
 	require.Equal(t, "debug", result.Config.Log.Level)
 	require.Equal(t, "json", result.Config.Log.Format)
@@ -631,7 +631,7 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
 	wantDigest, err := commonconfig.DigestSettings(rawSettings)
 	require.NoError(t, err)
 
-	result, err := DecodeSettings(rawSettings, commonconfig.SourceMetadata{Provider: "test"})
+	result, err := DecodeSettings(rawSettings, commonconfig.SourceMetadata{Provider: "testkit"})
 	require.NoError(t, err)
 	settings, err := result.EffectiveSettings()
 	require.NoError(t, err)
@@ -734,7 +734,7 @@ func TestLoadRejectsLegacyTopLevelResourcePath(t *testing.T) {
 // loadServiceConfig 加载一段 user-service 测试配置并要求成功。
 func loadServiceConfig(t *testing.T, content string) *Config {
 	t.Helper()
-	result, err := LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
+	result, err := loadFromDocumentsForTest([]commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
 	require.NoError(t, err)
 	return result.Config
 }
@@ -742,9 +742,22 @@ func loadServiceConfig(t *testing.T, content string) *Config {
 // loadServiceConfigError 加载一段预期失败的 user-service 测试配置并返回错误。
 func loadServiceConfigError(t *testing.T, content string) error {
 	t.Helper()
-	_, err := LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
+	_, err := loadFromDocumentsForTest([]commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(content)}})
 	require.Error(t, err)
 	return err
+}
+
+// loadFromDocumentsForTest 使用测试文档解码配置，避免生产包暴露 fixture 来源 API。
+func loadFromDocumentsForTest(docs []commonconfig.ConfigDocument) (*LoadResult, error) {
+	settings, err := commonconfig.DeepMergeYAML(append([]commonconfig.ConfigDocument(nil), docs...))
+	if err != nil {
+		return nil, err
+	}
+	dataIDs := make([]string, 0, len(docs))
+	for _, doc := range docs {
+		dataIDs = append(dataIDs, doc.DataID)
+	}
+	return DecodeSettings(settings, commonconfig.SourceMetadata{Provider: "testkit", DataIDs: dataIDs})
 }
 
 // serviceConfigYAML 返回覆盖 user-service 私有配置和共享 runtime 配置的基线 YAML。

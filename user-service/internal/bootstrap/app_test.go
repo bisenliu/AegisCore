@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	commonconfig "github.com/aegiscore/common/runtime/config"
-	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	configtestkit "github.com/aegiscore/user-service/internal/config/testkit"
 )
 
 func TestAppModuleValidatesFullRuntimeGraph(t *testing.T) {
@@ -22,7 +22,7 @@ func TestAppModuleValidatesFullRuntimeGraph(t *testing.T) {
 		require.NoError(t, err)
 		docs = append(docs, commonconfig.ConfigDocument{DataID: dataID, Content: content})
 	}
-	result, err := serviceconfig.LoadFromDocuments(docs)
+	result, err := configtestkit.LoadFromDocuments(docs)
 	require.NoError(t, err)
 	cfg := result.Config
 

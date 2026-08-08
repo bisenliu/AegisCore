@@ -10,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	configtestkit "github.com/aegiscore/user-service/internal/config/testkit"
 )
 
 // TestConfigSourcesCommandUsesDefaultDataIDs 验证 config sources 使用默认 Nacos dataId 顺序。
@@ -52,7 +53,7 @@ func TestConfigRenderRedactsSecrets(t *testing.T) {
 	}
 	deps := testRootCommandDependencies(t)
 	deps.configLoader = func(context.Context) (*serviceconfig.LoadResult, error) {
-		return serviceconfig.LoadFromDocuments(docs)
+		return configtestkit.LoadFromDocuments(docs)
 	}
 	root := newRootCommand(deps)
 	var out bytes.Buffer

@@ -27,7 +27,7 @@ import (
 	commonresources "github.com/aegiscore/common/runtime/resources"
 	"github.com/aegiscore/common/testing/containers"
 	"github.com/aegiscore/user-service/internal/bootstrap"
-	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	configtestkit "github.com/aegiscore/user-service/internal/config/testkit"
 )
 
 type httpFlowHarness struct {
@@ -59,7 +59,7 @@ func newHTTPFlowHarness(t *testing.T) *httpFlowHarness {
 	configPath := writeTestConfig(t, postgres.Config(), redis.Config())
 	content, err := os.ReadFile(configPath)
 	require.NoError(t, err)
-	loaded, err := serviceconfig.LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "config.yaml", Content: content}})
+	loaded, err := configtestkit.LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "config.yaml", Content: content}})
 	require.NoError(t, err)
 	serviceCfg := loaded.Config
 	var engine *gin.Engine

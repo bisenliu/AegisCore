@@ -10,6 +10,7 @@ import (
 	commonconfig "github.com/aegiscore/common/runtime/config"
 	commonnacos "github.com/aegiscore/common/runtime/config/nacos"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	configtestkit "github.com/aegiscore/user-service/internal/config/testkit"
 )
 
 func setTestNacosEnv(t *testing.T) {
@@ -22,7 +23,7 @@ func setTestNacosEnv(t *testing.T) {
 
 func loadRepositoryConfigForTest(t *testing.T) *serviceconfig.Config {
 	t.Helper()
-	result, err := serviceconfig.LoadFromDocuments(readRepositoryConfigDocList(t))
+	result, err := configtestkit.LoadFromDocuments(readRepositoryConfigDocList(t))
 	require.NoError(t, err)
 	return result.Config
 }

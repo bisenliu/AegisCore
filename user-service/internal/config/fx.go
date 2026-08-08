@@ -61,29 +61,6 @@ func DecodeSettings(settings map[string]any, source commonconfig.SourceMetadata)
 	return &LoadResult{Config: cfg, Source: source}, nil
 }
 
-// LoadFromDocuments 使用测试或初始化来源提供的多段 YAML 生成配置。
-func LoadFromDocuments(docs []commonconfig.ConfigDocument) (*LoadResult, error) {
-	settings, source, err := commonconfig.LoadSource(context.Background(), documentSource{docs: docs})
-	if err != nil {
-		return nil, err
-	}
-	return DecodeSettings(settings, source)
-}
-
-type documentSource struct {
-	docs []commonconfig.ConfigDocument
-}
-
-// LoadDocuments 返回输入文档 slice 的副本，避免配置加载过程持有或修改测试调用方的 slice。
-func (s documentSource) LoadDocuments(context.Context) ([]commonconfig.ConfigDocument, commonconfig.SourceMetadata, error) {
-	docs := append([]commonconfig.ConfigDocument(nil), s.docs...)
-	dataIDs := make([]string, 0, len(docs))
-	for _, doc := range docs {
-		dataIDs = append(dataIDs, doc.DataID)
-	}
-	return docs, commonconfig.SourceMetadata{Provider: "test", DataIDs: dataIDs}, nil
-}
-
 // NewRuntimeConfig 提供共享 runtime 配置，供 common provider 消费。
 func NewRuntimeConfig(cfg *Config) *commonconfig.Config {
 	runtime := cfg.RuntimeConfig()

@@ -8,6 +8,7 @@ import (
 	"go.uber.org/fx"
 
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	configtestkit "github.com/aegiscore/user-service/internal/config/testkit"
 )
 
 type testLifecycleApp struct {
@@ -40,7 +41,7 @@ func testRootCommandDependencies(t testing.TB) rootCommandDependencies {
 			return testLifecycleApp{}
 		},
 		configLoader: func(context.Context) (*serviceconfig.LoadResult, error) {
-			return serviceconfig.LoadFromDocuments(readRepositoryConfigDocList(t))
+			return configtestkit.LoadFromDocuments(readRepositoryConfigDocList(t))
 		},
 		seedRunner: func(context.Context, rbacSeedOptions) error {
 			unexpected("seedRunner")

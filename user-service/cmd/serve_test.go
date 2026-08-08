@@ -13,6 +13,7 @@ import (
 
 	commonconfig "github.com/aegiscore/common/runtime/config"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
+	configtestkit "github.com/aegiscore/user-service/internal/config/testkit"
 )
 
 type testContextKey string
@@ -231,6 +232,6 @@ resources:
       db_name: aegiscore_user
 `
 	return func(context.Context) (*serviceconfig.LoadResult, error) {
-		return serviceconfig.LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "user-service.yaml", Content: []byte(content)}})
+		return configtestkit.LoadFromDocuments([]commonconfig.ConfigDocument{{DataID: "user-service.yaml", Content: []byte(content)}})
 	}
 }
