@@ -41,10 +41,9 @@
         "^\\.gitlab/ci/.*\\.ya?ml$"
       ],
       "matchStrings": [
-        "GOSEC_VERSION:\\s*['\"]?(?<currentValue>v\\d+\\.\\d+\\.\\d+)['\"]?"
+        "#\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+)\\s+depName=(?<depName>[^\\s]+)\\s*\\n\\s*[A-Z0-9_]+_VERSION:\\s*['\"]?(?<currentValue>v\\d+\\.\\d+\\.\\d+)['\"]?"
       ],
-      "depNameTemplate": "securego/gosec",
-      "datasourceTemplate": "github-tags"
+      "versioningTemplate": "semver-coerced"
     },
     {
       "customType": "regex",
@@ -122,9 +121,11 @@
       "automerge": false
     },
     {
-      "description": "Keep gosec pinned and upgraded by Renovate instead of using @latest.",
+      "description": "Keep Go security and lint tools pinned and upgraded by Renovate instead of using @latest.",
       "matchDepNames": [
-        "securego/gosec"
+        "golang.org/x/vuln",
+        "github.com/securego/gosec/v2",
+        "github.com/golangci/golangci-lint/v2"
       ],
       "rangeStrategy": "bump",
       "automerge": false

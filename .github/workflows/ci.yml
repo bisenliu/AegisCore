@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+env:
+  # renovate: datasource=go depName=golang.org/x/vuln
+  GOVULNCHECK_VERSION: 'v1.3.0'
+  # renovate: datasource=go depName=github.com/securego/gosec/v2
+  GOSEC_VERSION: 'v2.22.10'
+
 jobs:
   quality:
     name: quality
@@ -278,8 +284,11 @@ jobs:
 
       - name: Install govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+          go install golang.org/x/vuln/cmd/govulncheck@"${GOVULNCHECK_VERSION}"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          installed_version="$(go version -m "$(go env GOPATH)/bin/govulncheck" | awk '$1 == "mod" && $2 == "golang.org/x/vuln" {print $3}')"
+          test "${installed_version}" = "${GOVULNCHECK_VERSION}"
+          govulncheck -version
 
       - name: Run govulncheck
         working-directory: ${{ matrix.module.path }}
@@ -318,8 +327,11 @@ jobs:
 
       - name: Install gosec
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.22.10
+          go install github.com/securego/gosec/v2/cmd/gosec@"${GOSEC_VERSION}"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          installed_version="$(go version -m "$(go env GOPATH)/bin/gosec" | awk '$1 == "mod" && $2 == "github.com/securego/gosec/v2" {print $3}')"
+          test "${installed_version}" = "${GOSEC_VERSION}"
+          gosec -version
 
       - name: Run gosec high severity gate
         working-directory: ${{ matrix.module.path }}
