@@ -63,7 +63,8 @@ var (
 		{Name: "claimed_until", Type: field.TypeInt64, Nullable: true, Comment: "当前 claim lease 截止时间戳毫秒"},
 		{Name: "idempotency_key", Type: field.TypeString, Unique: true, Size: 128, Comment: "稳定投递幂等键"},
 		{Name: "delivered_at", Type: field.TypeInt64, Nullable: true, Comment: "投递完成时间戳毫秒"},
-		{Name: "revision", Type: field.TypeInt64, Unique: true, Comment: "关联的 RBAC policy revision"},
+		{Name: "policy_revision", Type: field.TypeInt64, Unique: true, Nullable: true, Comment: "关联的 RBAC policy revision"},
+		{Name: "user_role_revision", Type: field.TypeInt64, Unique: true, Nullable: true, Comment: "关联的 RBAC user-role revision"},
 	}
 	// RbacPolicyOutboxEventsTable holds the schema information for the "rbac_policy_outbox_events" table.
 	RbacPolicyOutboxEventsTable = &schema.Table{
@@ -75,19 +76,25 @@ var (
 				Symbol:     "rbac_policy_outbox_events_rbac_policy_revisions_outbox_event",
 				Columns:    []*schema.Column{RbacPolicyOutboxEventsColumns[17]},
 				RefColumns: []*schema.Column{RbacPolicyRevisionsColumns[0]},
-				OnDelete:   schema.NoAction,
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "rbac_policy_outbox_events_rbac_user_role_revisions_outbox_event",
+				Columns:    []*schema.Column{RbacPolicyOutboxEventsColumns[18]},
+				RefColumns: []*schema.Column{RbacUserRoleRevisionsColumns[0]},
+				OnDelete:   schema.SetNull,
 			},
 		},
 		Indexes: []*schema.Index{
 			{
-				Name:    "rbacpolicyoutboxevent_status_next_attempt_at_revision",
+				Name:    "rbacpolicyoutboxevent_status_next_attempt_at_policy_revision_user_role_revision",
 				Unique:  false,
-				Columns: []*schema.Column{RbacPolicyOutboxEventsColumns[9], RbacPolicyOutboxEventsColumns[11], RbacPolicyOutboxEventsColumns[17]},
+				Columns: []*schema.Column{RbacPolicyOutboxEventsColumns[9], RbacPolicyOutboxEventsColumns[11], RbacPolicyOutboxEventsColumns[17], RbacPolicyOutboxEventsColumns[18]},
 			},
 			{
-				Name:    "rbacpolicyoutboxevent_status_claimed_until_revision",
+				Name:    "rbacpolicyoutboxevent_status_claimed_until_policy_revision_user_role_revision",
 				Unique:  false,
-				Columns: []*schema.Column{RbacPolicyOutboxEventsColumns[9], RbacPolicyOutboxEventsColumns[14], RbacPolicyOutboxEventsColumns[17]},
+				Columns: []*schema.Column{RbacPolicyOutboxEventsColumns[9], RbacPolicyOutboxEventsColumns[14], RbacPolicyOutboxEventsColumns[17], RbacPolicyOutboxEventsColumns[18]},
 			},
 		},
 	}
@@ -97,7 +104,6 @@ var (
 		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
 		{Name: "reason", Type: field.TypeString, Size: 64, Comment: "触发 policy 变更的稳定原因"},
 		{Name: "role_id", Type: field.TypeUUID, Nullable: true, Comment: "相关外部角色ID"},
-		{Name: "user_id", Type: field.TypeUUID, Nullable: true, Comment: "相关外部用户ID"},
 		{Name: "permission_id", Type: field.TypeUUID, Nullable: true, Comment: "相关外部权限ID"},
 	}
 	// RbacPolicyRevisionsTable holds the schema information for the "rbac_policy_revisions" table.
@@ -116,6 +122,31 @@ var (
 		Name:       "rbac_policy_revision_counters",
 		Columns:    RbacPolicyRevisionCountersColumns,
 		PrimaryKey: []*schema.Column{RbacPolicyRevisionCountersColumns[0]},
+	}
+	// RbacUserRoleRevisionsColumns holds the columns for the "rbac_user_role_revisions" table.
+	RbacUserRoleRevisionsColumns = []*schema.Column{
+		{Name: "revision", Type: field.TypeInt64, Increment: true, Comment: "单调递增的 RBAC user-role revision"},
+		{Name: "created_at", Type: field.TypeInt64, Comment: "创建时间戳毫秒"},
+		{Name: "reason", Type: field.TypeString, Size: 64, Comment: "触发用户角色缓存失效的稳定原因"},
+		{Name: "user_id", Type: field.TypeUUID, Comment: "相关外部用户ID"},
+		{Name: "role_id", Type: field.TypeUUID, Nullable: true, Comment: "相关外部角色ID"},
+	}
+	// RbacUserRoleRevisionsTable holds the schema information for the "rbac_user_role_revisions" table.
+	RbacUserRoleRevisionsTable = &schema.Table{
+		Name:       "rbac_user_role_revisions",
+		Columns:    RbacUserRoleRevisionsColumns,
+		PrimaryKey: []*schema.Column{RbacUserRoleRevisionsColumns[0]},
+	}
+	// RbacUserRoleRevisionCountersColumns holds the columns for the "rbac_user_role_revision_counters" table.
+	RbacUserRoleRevisionCountersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true, Comment: "固定 RBAC user-role revision counter ID"},
+		{Name: "last_revision", Type: field.TypeInt64, Comment: "最近已分配的 RBAC user-role revision", Default: 0},
+	}
+	// RbacUserRoleRevisionCountersTable holds the schema information for the "rbac_user_role_revision_counters" table.
+	RbacUserRoleRevisionCountersTable = &schema.Table{
+		Name:       "rbac_user_role_revision_counters",
+		Columns:    RbacUserRoleRevisionCountersColumns,
+		PrimaryKey: []*schema.Column{RbacUserRoleRevisionCountersColumns[0]},
 	}
 	// RolesColumns holds the columns for the "roles" table.
 	RolesColumns = []*schema.Column{
@@ -282,6 +313,8 @@ var (
 		RbacPolicyOutboxEventsTable,
 		RbacPolicyRevisionsTable,
 		RbacPolicyRevisionCountersTable,
+		RbacUserRoleRevisionsTable,
+		RbacUserRoleRevisionCountersTable,
 		RolesTable,
 		RolePermissionsTable,
 		UsersTable,
@@ -291,6 +324,7 @@ var (
 
 func init() {
 	RbacPolicyOutboxEventsTable.ForeignKeys[0].RefTable = RbacPolicyRevisionsTable
+	RbacPolicyOutboxEventsTable.ForeignKeys[1].RefTable = RbacUserRoleRevisionsTable
 	RolePermissionsTable.ForeignKeys[0].RefTable = PermissionsTable
 	RolePermissionsTable.ForeignKeys[1].RefTable = RolesTable
 	UserRolesTable.ForeignKeys[0].RefTable = RolesTable

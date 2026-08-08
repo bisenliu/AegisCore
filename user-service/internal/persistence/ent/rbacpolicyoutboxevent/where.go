@@ -69,9 +69,14 @@ func EventID(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldEventID, v))
 }
 
-// Revision applies equality check predicate on the "revision" field. It's identical to RevisionEQ.
-func Revision(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldRevision, v))
+// PolicyRevision applies equality check predicate on the "policy_revision" field. It's identical to PolicyRevisionEQ.
+func PolicyRevision(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldPolicyRevision, v))
+}
+
+// UserRoleRevision applies equality check predicate on the "user_role_revision" field. It's identical to UserRoleRevisionEQ.
+func UserRoleRevision(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldUserRoleRevision, v))
 }
 
 // Kind applies equality check predicate on the "kind" field. It's identical to KindEQ.
@@ -259,24 +264,64 @@ func EventIDLTE(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldLTE(FieldEventID, v))
 }
 
-// RevisionEQ applies the EQ predicate on the "revision" field.
-func RevisionEQ(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldRevision, v))
+// PolicyRevisionEQ applies the EQ predicate on the "policy_revision" field.
+func PolicyRevisionEQ(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldPolicyRevision, v))
 }
 
-// RevisionNEQ applies the NEQ predicate on the "revision" field.
-func RevisionNEQ(v int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldRevision, v))
+// PolicyRevisionNEQ applies the NEQ predicate on the "policy_revision" field.
+func PolicyRevisionNEQ(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldPolicyRevision, v))
 }
 
-// RevisionIn applies the In predicate on the "revision" field.
-func RevisionIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldRevision, vs...))
+// PolicyRevisionIn applies the In predicate on the "policy_revision" field.
+func PolicyRevisionIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldPolicyRevision, vs...))
 }
 
-// RevisionNotIn applies the NotIn predicate on the "revision" field.
-func RevisionNotIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldRevision, vs...))
+// PolicyRevisionNotIn applies the NotIn predicate on the "policy_revision" field.
+func PolicyRevisionNotIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldPolicyRevision, vs...))
+}
+
+// PolicyRevisionIsNil applies the IsNil predicate on the "policy_revision" field.
+func PolicyRevisionIsNil() predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldIsNull(FieldPolicyRevision))
+}
+
+// PolicyRevisionNotNil applies the NotNil predicate on the "policy_revision" field.
+func PolicyRevisionNotNil() predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNotNull(FieldPolicyRevision))
+}
+
+// UserRoleRevisionEQ applies the EQ predicate on the "user_role_revision" field.
+func UserRoleRevisionEQ(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldUserRoleRevision, v))
+}
+
+// UserRoleRevisionNEQ applies the NEQ predicate on the "user_role_revision" field.
+func UserRoleRevisionNEQ(v int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldUserRoleRevision, v))
+}
+
+// UserRoleRevisionIn applies the In predicate on the "user_role_revision" field.
+func UserRoleRevisionIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldUserRoleRevision, vs...))
+}
+
+// UserRoleRevisionNotIn applies the NotIn predicate on the "user_role_revision" field.
+func UserRoleRevisionNotIn(vs ...int64) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldUserRoleRevision, vs...))
+}
+
+// UserRoleRevisionIsNil applies the IsNil predicate on the "user_role_revision" field.
+func UserRoleRevisionIsNil() predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldIsNull(FieldUserRoleRevision))
+}
+
+// UserRoleRevisionNotNil applies the NotNil predicate on the "user_role_revision" field.
+func UserRoleRevisionNotNil() predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(sql.FieldNotNull(FieldUserRoleRevision))
 }
 
 // KindEQ applies the EQ predicate on the "kind" field.
@@ -994,21 +1039,44 @@ func DeliveredAtNotNil() predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldNotNull(FieldDeliveredAt))
 }
 
-// HasPolicyRevision applies the HasEdge predicate on the "policy_revision" edge.
-func HasPolicyRevision() predicate.RbacPolicyOutboxEvent {
+// HasPolicyRevisionEdge applies the HasEdge predicate on the "policy_revision_edge" edge.
+func HasPolicyRevisionEdge() predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2O, true, PolicyRevisionTable, PolicyRevisionColumn),
+			sqlgraph.Edge(sqlgraph.O2O, true, PolicyRevisionEdgeTable, PolicyRevisionEdgeColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasPolicyRevisionWith applies the HasEdge predicate on the "policy_revision" edge with a given conditions (other predicates).
-func HasPolicyRevisionWith(preds ...predicate.RbacPolicyRevision) predicate.RbacPolicyOutboxEvent {
+// HasPolicyRevisionEdgeWith applies the HasEdge predicate on the "policy_revision_edge" edge with a given conditions (other predicates).
+func HasPolicyRevisionEdgeWith(preds ...predicate.RbacPolicyRevision) predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(func(s *sql.Selector) {
-		step := newPolicyRevisionStep()
+		step := newPolicyRevisionEdgeStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasUserRoleRevisionEdge applies the HasEdge predicate on the "user_role_revision_edge" edge.
+func HasUserRoleRevisionEdge() predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, true, UserRoleRevisionEdgeTable, UserRoleRevisionEdgeColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasUserRoleRevisionEdgeWith applies the HasEdge predicate on the "user_role_revision_edge" edge with a given conditions (other predicates).
+func HasUserRoleRevisionEdgeWith(preds ...predicate.RbacUserRoleRevision) predicate.RbacPolicyOutboxEvent {
+	return predicate.RbacPolicyOutboxEvent(func(s *sql.Selector) {
+		step := newUserRoleRevisionEdgeStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

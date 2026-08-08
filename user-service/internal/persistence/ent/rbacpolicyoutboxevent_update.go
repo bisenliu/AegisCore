@@ -249,9 +249,6 @@ func (_u *RbacPolicyOutboxEventUpdate) check() error {
 			return &ValidationError{Name: "last_error", err: fmt.Errorf(`ent: validator failed for field "RbacPolicyOutboxEvent.last_error": %w`, err)}
 		}
 	}
-	if _u.mutation.PolicyRevisionCleared() && len(_u.mutation.PolicyRevisionIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "RbacPolicyOutboxEvent.policy_revision"`)
-	}
 	return nil
 }
 
@@ -580,9 +577,6 @@ func (_u *RbacPolicyOutboxEventUpdateOne) check() error {
 		if err := rbacpolicyoutboxevent.LastErrorValidator(v); err != nil {
 			return &ValidationError{Name: "last_error", err: fmt.Errorf(`ent: validator failed for field "RbacPolicyOutboxEvent.last_error": %w`, err)}
 		}
-	}
-	if _u.mutation.PolicyRevisionCleared() && len(_u.mutation.PolicyRevisionIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "RbacPolicyOutboxEvent.policy_revision"`)
 	}
 	return nil
 }

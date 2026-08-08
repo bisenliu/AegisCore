@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
 	"github.com/google/uuid"
 )
 
@@ -57,9 +58,31 @@ func (_c *RbacPolicyOutboxEventCreate) SetEventID(v uuid.UUID) *RbacPolicyOutbox
 	return _c
 }
 
-// SetRevision sets the "revision" field.
-func (_c *RbacPolicyOutboxEventCreate) SetRevision(v int64) *RbacPolicyOutboxEventCreate {
-	_c.mutation.SetRevision(v)
+// SetPolicyRevision sets the "policy_revision" field.
+func (_c *RbacPolicyOutboxEventCreate) SetPolicyRevision(v int64) *RbacPolicyOutboxEventCreate {
+	_c.mutation.SetPolicyRevision(v)
+	return _c
+}
+
+// SetNillablePolicyRevision sets the "policy_revision" field if the given value is not nil.
+func (_c *RbacPolicyOutboxEventCreate) SetNillablePolicyRevision(v *int64) *RbacPolicyOutboxEventCreate {
+	if v != nil {
+		_c.SetPolicyRevision(*v)
+	}
+	return _c
+}
+
+// SetUserRoleRevision sets the "user_role_revision" field.
+func (_c *RbacPolicyOutboxEventCreate) SetUserRoleRevision(v int64) *RbacPolicyOutboxEventCreate {
+	_c.mutation.SetUserRoleRevision(v)
+	return _c
+}
+
+// SetNillableUserRoleRevision sets the "user_role_revision" field if the given value is not nil.
+func (_c *RbacPolicyOutboxEventCreate) SetNillableUserRoleRevision(v *int64) *RbacPolicyOutboxEventCreate {
+	if v != nil {
+		_c.SetUserRoleRevision(*v)
+	}
 	return _c
 }
 
@@ -227,15 +250,42 @@ func (_c *RbacPolicyOutboxEventCreate) SetID(v int64) *RbacPolicyOutboxEventCrea
 	return _c
 }
 
-// SetPolicyRevisionID sets the "policy_revision" edge to the RbacPolicyRevision entity by ID.
-func (_c *RbacPolicyOutboxEventCreate) SetPolicyRevisionID(id int64) *RbacPolicyOutboxEventCreate {
-	_c.mutation.SetPolicyRevisionID(id)
+// SetPolicyRevisionEdgeID sets the "policy_revision_edge" edge to the RbacPolicyRevision entity by ID.
+func (_c *RbacPolicyOutboxEventCreate) SetPolicyRevisionEdgeID(id int64) *RbacPolicyOutboxEventCreate {
+	_c.mutation.SetPolicyRevisionEdgeID(id)
 	return _c
 }
 
-// SetPolicyRevision sets the "policy_revision" edge to the RbacPolicyRevision entity.
-func (_c *RbacPolicyOutboxEventCreate) SetPolicyRevision(v *RbacPolicyRevision) *RbacPolicyOutboxEventCreate {
-	return _c.SetPolicyRevisionID(v.ID)
+// SetNillablePolicyRevisionEdgeID sets the "policy_revision_edge" edge to the RbacPolicyRevision entity by ID if the given value is not nil.
+func (_c *RbacPolicyOutboxEventCreate) SetNillablePolicyRevisionEdgeID(id *int64) *RbacPolicyOutboxEventCreate {
+	if id != nil {
+		_c = _c.SetPolicyRevisionEdgeID(*id)
+	}
+	return _c
+}
+
+// SetPolicyRevisionEdge sets the "policy_revision_edge" edge to the RbacPolicyRevision entity.
+func (_c *RbacPolicyOutboxEventCreate) SetPolicyRevisionEdge(v *RbacPolicyRevision) *RbacPolicyOutboxEventCreate {
+	return _c.SetPolicyRevisionEdgeID(v.ID)
+}
+
+// SetUserRoleRevisionEdgeID sets the "user_role_revision_edge" edge to the RbacUserRoleRevision entity by ID.
+func (_c *RbacPolicyOutboxEventCreate) SetUserRoleRevisionEdgeID(id int64) *RbacPolicyOutboxEventCreate {
+	_c.mutation.SetUserRoleRevisionEdgeID(id)
+	return _c
+}
+
+// SetNillableUserRoleRevisionEdgeID sets the "user_role_revision_edge" edge to the RbacUserRoleRevision entity by ID if the given value is not nil.
+func (_c *RbacPolicyOutboxEventCreate) SetNillableUserRoleRevisionEdgeID(id *int64) *RbacPolicyOutboxEventCreate {
+	if id != nil {
+		_c = _c.SetUserRoleRevisionEdgeID(*id)
+	}
+	return _c
+}
+
+// SetUserRoleRevisionEdge sets the "user_role_revision_edge" edge to the RbacUserRoleRevision entity.
+func (_c *RbacPolicyOutboxEventCreate) SetUserRoleRevisionEdge(v *RbacUserRoleRevision) *RbacPolicyOutboxEventCreate {
+	return _c.SetUserRoleRevisionEdgeID(v.ID)
 }
 
 // Mutation returns the RbacPolicyOutboxEventMutation object of the builder.
@@ -306,9 +356,6 @@ func (_c *RbacPolicyOutboxEventCreate) check() error {
 	if _, ok := _c.mutation.EventID(); !ok {
 		return &ValidationError{Name: "event_id", err: errors.New(`ent: missing required field "RbacPolicyOutboxEvent.event_id"`)}
 	}
-	if _, ok := _c.mutation.Revision(); !ok {
-		return &ValidationError{Name: "revision", err: errors.New(`ent: missing required field "RbacPolicyOutboxEvent.revision"`)}
-	}
 	if _, ok := _c.mutation.Kind(); !ok {
 		return &ValidationError{Name: "kind", err: errors.New(`ent: missing required field "RbacPolicyOutboxEvent.kind"`)}
 	}
@@ -356,9 +403,6 @@ func (_c *RbacPolicyOutboxEventCreate) check() error {
 		if err := rbacpolicyoutboxevent.IdempotencyKeyValidator(v); err != nil {
 			return &ValidationError{Name: "idempotency_key", err: fmt.Errorf(`ent: validator failed for field "RbacPolicyOutboxEvent.idempotency_key": %w`, err)}
 		}
-	}
-	if len(_c.mutation.PolicyRevisionIDs()) == 0 {
-		return &ValidationError{Name: "policy_revision", err: errors.New(`ent: missing required edge "RbacPolicyOutboxEvent.policy_revision"`)}
 	}
 	return nil
 }
@@ -457,12 +501,12 @@ func (_c *RbacPolicyOutboxEventCreate) createSpec() (*RbacPolicyOutboxEvent, *sq
 		_spec.SetField(rbacpolicyoutboxevent.FieldDeliveredAt, field.TypeInt64, value)
 		_node.DeliveredAt = &value
 	}
-	if nodes := _c.mutation.PolicyRevisionIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.PolicyRevisionEdgeIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2O,
 			Inverse: true,
-			Table:   rbacpolicyoutboxevent.PolicyRevisionTable,
-			Columns: []string{rbacpolicyoutboxevent.PolicyRevisionColumn},
+			Table:   rbacpolicyoutboxevent.PolicyRevisionEdgeTable,
+			Columns: []string{rbacpolicyoutboxevent.PolicyRevisionEdgeColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(rbacpolicyrevision.FieldID, field.TypeInt64),
@@ -471,7 +515,24 @@ func (_c *RbacPolicyOutboxEventCreate) createSpec() (*RbacPolicyOutboxEvent, *sq
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_node.Revision = nodes[0]
+		_node.PolicyRevision = &nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.UserRoleRevisionEdgeIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2O,
+			Inverse: true,
+			Table:   rbacpolicyoutboxevent.UserRoleRevisionEdgeTable,
+			Columns: []string{rbacpolicyoutboxevent.UserRoleRevisionEdgeColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(rbacuserrolerevision.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.UserRoleRevision = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
@@ -699,8 +760,11 @@ func (u *RbacPolicyOutboxEventUpsertOne) UpdateNewValues() *RbacPolicyOutboxEven
 		if _, exists := u.create.mutation.EventID(); exists {
 			s.SetIgnore(rbacpolicyoutboxevent.FieldEventID)
 		}
-		if _, exists := u.create.mutation.Revision(); exists {
-			s.SetIgnore(rbacpolicyoutboxevent.FieldRevision)
+		if _, exists := u.create.mutation.PolicyRevision(); exists {
+			s.SetIgnore(rbacpolicyoutboxevent.FieldPolicyRevision)
+		}
+		if _, exists := u.create.mutation.UserRoleRevision(); exists {
+			s.SetIgnore(rbacpolicyoutboxevent.FieldUserRoleRevision)
 		}
 		if _, exists := u.create.mutation.Kind(); exists {
 			s.SetIgnore(rbacpolicyoutboxevent.FieldKind)
@@ -1114,8 +1178,11 @@ func (u *RbacPolicyOutboxEventUpsertBulk) UpdateNewValues() *RbacPolicyOutboxEve
 			if _, exists := b.mutation.EventID(); exists {
 				s.SetIgnore(rbacpolicyoutboxevent.FieldEventID)
 			}
-			if _, exists := b.mutation.Revision(); exists {
-				s.SetIgnore(rbacpolicyoutboxevent.FieldRevision)
+			if _, exists := b.mutation.PolicyRevision(); exists {
+				s.SetIgnore(rbacpolicyoutboxevent.FieldPolicyRevision)
+			}
+			if _, exists := b.mutation.UserRoleRevision(); exists {
+				s.SetIgnore(rbacpolicyoutboxevent.FieldUserRoleRevision)
 			}
 			if _, exists := b.mutation.Kind(); exists {
 				s.SetIgnore(rbacpolicyoutboxevent.FieldKind)

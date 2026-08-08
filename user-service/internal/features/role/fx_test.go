@@ -59,6 +59,10 @@ func (roleModulePolicyNotifier) NotifyPolicyChanged(context.Context, int64, perm
 	return nil
 }
 
+func (roleModulePolicyNotifier) NotifyUserRoleChanged(context.Context, int64, permissionapplication.PolicyChange) error {
+	return nil
+}
+
 type roleModuleStore struct{}
 
 func (roleModuleStore) Create(context.Context, roleapplication.CreateRoleInput, roleapplication.PolicyChange) (*roleapplication.RoleWriteResult, error) {

@@ -18,8 +18,10 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldEventID holds the string denoting the event_id field in the database.
 	FieldEventID = "event_id"
-	// FieldRevision holds the string denoting the revision field in the database.
-	FieldRevision = "revision"
+	// FieldPolicyRevision holds the string denoting the policy_revision field in the database.
+	FieldPolicyRevision = "policy_revision"
+	// FieldUserRoleRevision holds the string denoting the user_role_revision field in the database.
+	FieldUserRoleRevision = "user_role_revision"
 	// FieldKind holds the string denoting the kind field in the database.
 	FieldKind = "kind"
 	// FieldReason holds the string denoting the reason field in the database.
@@ -46,19 +48,30 @@ const (
 	FieldIdempotencyKey = "idempotency_key"
 	// FieldDeliveredAt holds the string denoting the delivered_at field in the database.
 	FieldDeliveredAt = "delivered_at"
-	// EdgePolicyRevision holds the string denoting the policy_revision edge name in mutations.
-	EdgePolicyRevision = "policy_revision"
+	// EdgePolicyRevisionEdge holds the string denoting the policy_revision_edge edge name in mutations.
+	EdgePolicyRevisionEdge = "policy_revision_edge"
+	// EdgeUserRoleRevisionEdge holds the string denoting the user_role_revision_edge edge name in mutations.
+	EdgeUserRoleRevisionEdge = "user_role_revision_edge"
 	// RbacPolicyRevisionFieldID holds the string denoting the ID field of the RbacPolicyRevision.
 	RbacPolicyRevisionFieldID = "revision"
+	// RbacUserRoleRevisionFieldID holds the string denoting the ID field of the RbacUserRoleRevision.
+	RbacUserRoleRevisionFieldID = "revision"
 	// Table holds the table name of the rbacpolicyoutboxevent in the database.
 	Table = "rbac_policy_outbox_events"
-	// PolicyRevisionTable is the table that holds the policy_revision relation/edge.
-	PolicyRevisionTable = "rbac_policy_outbox_events"
-	// PolicyRevisionInverseTable is the table name for the RbacPolicyRevision entity.
+	// PolicyRevisionEdgeTable is the table that holds the policy_revision_edge relation/edge.
+	PolicyRevisionEdgeTable = "rbac_policy_outbox_events"
+	// PolicyRevisionEdgeInverseTable is the table name for the RbacPolicyRevision entity.
 	// It exists in this package in order to avoid circular dependency with the "rbacpolicyrevision" package.
-	PolicyRevisionInverseTable = "rbac_policy_revisions"
-	// PolicyRevisionColumn is the table column denoting the policy_revision relation/edge.
-	PolicyRevisionColumn = "revision"
+	PolicyRevisionEdgeInverseTable = "rbac_policy_revisions"
+	// PolicyRevisionEdgeColumn is the table column denoting the policy_revision_edge relation/edge.
+	PolicyRevisionEdgeColumn = "policy_revision"
+	// UserRoleRevisionEdgeTable is the table that holds the user_role_revision_edge relation/edge.
+	UserRoleRevisionEdgeTable = "rbac_policy_outbox_events"
+	// UserRoleRevisionEdgeInverseTable is the table name for the RbacUserRoleRevision entity.
+	// It exists in this package in order to avoid circular dependency with the "rbacuserrolerevision" package.
+	UserRoleRevisionEdgeInverseTable = "rbac_user_role_revisions"
+	// UserRoleRevisionEdgeColumn is the table column denoting the user_role_revision_edge relation/edge.
+	UserRoleRevisionEdgeColumn = "user_role_revision"
 )
 
 // Columns holds all SQL columns for rbacpolicyoutboxevent fields.
@@ -67,7 +80,8 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldEventID,
-	FieldRevision,
+	FieldPolicyRevision,
+	FieldUserRoleRevision,
 	FieldKind,
 	FieldReason,
 	FieldRoleID,
@@ -143,9 +157,14 @@ func ByEventID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEventID, opts...).ToFunc()
 }
 
-// ByRevision orders the results by the revision field.
-func ByRevision(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldRevision, opts...).ToFunc()
+// ByPolicyRevision orders the results by the policy_revision field.
+func ByPolicyRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPolicyRevision, opts...).ToFunc()
+}
+
+// ByUserRoleRevision orders the results by the user_role_revision field.
+func ByUserRoleRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUserRoleRevision, opts...).ToFunc()
 }
 
 // ByKind orders the results by the kind field.
@@ -213,16 +232,30 @@ func ByDeliveredAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDeliveredAt, opts...).ToFunc()
 }
 
-// ByPolicyRevisionField orders the results by policy_revision field.
-func ByPolicyRevisionField(field string, opts ...sql.OrderTermOption) OrderOption {
+// ByPolicyRevisionEdgeField orders the results by policy_revision_edge field.
+func ByPolicyRevisionEdgeField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newPolicyRevisionStep(), sql.OrderByField(field, opts...))
+		sqlgraph.OrderByNeighborTerms(s, newPolicyRevisionEdgeStep(), sql.OrderByField(field, opts...))
 	}
 }
-func newPolicyRevisionStep() *sqlgraph.Step {
+
+// ByUserRoleRevisionEdgeField orders the results by user_role_revision_edge field.
+func ByUserRoleRevisionEdgeField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newUserRoleRevisionEdgeStep(), sql.OrderByField(field, opts...))
+	}
+}
+func newPolicyRevisionEdgeStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(PolicyRevisionInverseTable, RbacPolicyRevisionFieldID),
-		sqlgraph.Edge(sqlgraph.O2O, true, PolicyRevisionTable, PolicyRevisionColumn),
+		sqlgraph.To(PolicyRevisionEdgeInverseTable, RbacPolicyRevisionFieldID),
+		sqlgraph.Edge(sqlgraph.O2O, true, PolicyRevisionEdgeTable, PolicyRevisionEdgeColumn),
+	)
+}
+func newUserRoleRevisionEdgeStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(UserRoleRevisionEdgeInverseTable, RbacUserRoleRevisionFieldID),
+		sqlgraph.Edge(sqlgraph.O2O, true, UserRoleRevisionEdgeTable, UserRoleRevisionEdgeColumn),
 	)
 }

@@ -24,7 +24,7 @@
 - RBAC watcher reconnecting：检查 Redis Pub/Sub 与重连计数；只要 PostgreSQL 权威校准仍在 staleness 预算内，watcher health 可以保持 available。
 - RBAC watcher stale：检查 PostgreSQL revision 查询、Casbin reload 和校准成功时间；从未完成校准或超过 staleness 预算会使 readiness/startup unavailable。
 - Casbin reload failed：检查权限目录、角色状态、绑定关系和 policy loader 错误；不要通过 route diff 写入权限。
-- RBAC policy reload lag：在线 RBAC 写成功后，数据库和 watcher 正常运行时其他副本应在 30 秒内完成 policy 最终生效；持续 lag 表示至少一个副本本地 Casbin applied projection revision 落后数据库 latest policy revision。
+- RBAC policy reload lag：在线 RBAC policy 写成功后，数据库和 watcher 正常运行时其他副本应在 30 秒内完成 policy 最终生效；持续 lag 表示至少一个副本本地 Casbin applied projection revision 落后数据库 latest policy revision。用户角色绑定变化使用独立 user-role revision，只要求用户角色缓存失效，不进入 policy reload lag。
 - Workerpool failed/panicked：定位 owning feature 的后台清理任务，workerpool 只是 runtime executor，不承担业务补偿语义。
 
 ## Runtime Alerts
@@ -63,11 +63,11 @@
 
 ### rbac-policy-reload-lag
 
-`aegiscore_user_service_rbac_policy_reload_lag` 表示 watcher 最近一次成功读取的数据库 latest RBAC policy revision 与本地 Casbin engine 实际 applied projection revision 的非负差值。值大于 `0` 持续 30 秒时，权限变更可能尚未在该实例最终生效；新增权限可能继续被拒绝，移除权限或禁用角色可能在落后实例上短暂继续允许。lag 为 `0` 只在成功数据库校准证明本地 applied revision 不小于该次 database latest 时成立。
+`aegiscore_user_service_rbac_policy_reload_lag` 表示 watcher 最近一次成功读取的数据库 latest RBAC policy revision 与本地 Casbin engine 实际 applied projection revision 的非负差值。值大于 `0` 持续 30 秒时，权限或角色状态变更可能尚未在该实例最终生效；新增权限可能继续被拒绝，移除权限或禁用角色可能在落后实例上短暂继续允许。lag 为 `0` 只在成功数据库 policy 校准证明本地 applied revision 不小于该次 database latest policy revision 时成立。纯用户角色绑定变更不得让该指标变为非零，也不得作为 policy readiness 失败原因。
 
 优先检查同一实例的 `aegiscore_user_service_rbac_policy_watcher_running`、subscription state、最后权威校准成功时间、staleness、PostgreSQL `primary_db` 可用性、`aegiscore_user_service_rbac_policy_sync_operations_total{operation="watcher_revision_check",result="failure",reason="revision_store_unavailable"}` 是否增加，以及 `aegiscore_casbin_policy_reloads_total{status="failure"}` 是否增加。revision source 查询失败时 lag gauge 保留上一次成功校准值，不得把保留值 `0` 当作当前数据库已收敛证明。依赖恢复后，watcher 的下一条 Pub/Sub hint 或周期性 database revision compensation 应重新读取 database latest、reload policy 并把 lag 收敛到 0。
 
-Redis Pub/Sub 只提供唤醒 hint，消息允许丢失、重复、乱序；Redis counter 不存在、落后或重建不会参与补偿判断。遇到旧消息时确认日志中的 `hint_revision` 与 `database_latest_policy_revision`，实际 reload target 必须来自数据库。授权热路径不会每请求读取数据库或 Redis revision，不要通过要求业务接口强一致回源来处理该告警；如果 lag 持续且数据库、watcher、reload 均正常，检查最近部署是否改变了 policy loader、revision source、Pub/Sub channel 或权限/角色绑定写后通知路径。
+Redis Pub/Sub 只提供唤醒 hint，消息允许丢失、重复、乱序；Redis counter 不存在、落后或重建不会参与补偿判断。遇到旧消息时确认日志中的 `hint_policy_revision`、`user_role_revision` 与 `database_latest_policy_revision`，实际 policy reload target 必须来自数据库 policy revision。授权热路径不会每请求读取数据库或 Redis revision，不要通过要求业务接口强一致回源来处理该告警；如果 lag 持续且数据库、watcher、reload 均正常，检查最近部署是否改变了 policy loader、revision source、Pub/Sub channel 或权限/角色绑定写后通知路径。
 
 ## Localcache Alerts
 

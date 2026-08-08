@@ -7,6 +7,8 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevisioncounter"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevisioncounter"
 	"github.com/aegiscore/user-service/internal/persistence/ent/role"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/schema"
@@ -131,7 +133,7 @@ func init() {
 	// rbacpolicyoutboxevent.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	rbacpolicyoutboxevent.UpdateDefaultUpdatedAt = rbacpolicyoutboxeventDescUpdatedAt.UpdateDefault.(func() int64)
 	// rbacpolicyoutboxeventDescKind is the schema descriptor for kind field.
-	rbacpolicyoutboxeventDescKind := rbacpolicyoutboxeventFields[3].Descriptor()
+	rbacpolicyoutboxeventDescKind := rbacpolicyoutboxeventFields[4].Descriptor()
 	// rbacpolicyoutboxevent.KindValidator is a validator for the "kind" field. It is called by the builders before save.
 	rbacpolicyoutboxevent.KindValidator = func() func(string) error {
 		validators := rbacpolicyoutboxeventDescKind.Validators
@@ -150,7 +152,7 @@ func init() {
 		}
 	}()
 	// rbacpolicyoutboxeventDescReason is the schema descriptor for reason field.
-	rbacpolicyoutboxeventDescReason := rbacpolicyoutboxeventFields[4].Descriptor()
+	rbacpolicyoutboxeventDescReason := rbacpolicyoutboxeventFields[5].Descriptor()
 	// rbacpolicyoutboxevent.ReasonValidator is a validator for the "reason" field. It is called by the builders before save.
 	rbacpolicyoutboxevent.ReasonValidator = func() func(string) error {
 		validators := rbacpolicyoutboxeventDescReason.Validators
@@ -168,7 +170,7 @@ func init() {
 		}
 	}()
 	// rbacpolicyoutboxeventDescStatus is the schema descriptor for status field.
-	rbacpolicyoutboxeventDescStatus := rbacpolicyoutboxeventFields[8].Descriptor()
+	rbacpolicyoutboxeventDescStatus := rbacpolicyoutboxeventFields[9].Descriptor()
 	// rbacpolicyoutboxevent.DefaultStatus holds the default value on creation for the status field.
 	rbacpolicyoutboxevent.DefaultStatus = rbacpolicyoutboxeventDescStatus.Default.(string)
 	// rbacpolicyoutboxevent.StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -188,21 +190,21 @@ func init() {
 		}
 	}()
 	// rbacpolicyoutboxeventDescAttemptCount is the schema descriptor for attempt_count field.
-	rbacpolicyoutboxeventDescAttemptCount := rbacpolicyoutboxeventFields[9].Descriptor()
+	rbacpolicyoutboxeventDescAttemptCount := rbacpolicyoutboxeventFields[10].Descriptor()
 	// rbacpolicyoutboxevent.DefaultAttemptCount holds the default value on creation for the attempt_count field.
 	rbacpolicyoutboxevent.DefaultAttemptCount = rbacpolicyoutboxeventDescAttemptCount.Default.(int)
 	// rbacpolicyoutboxevent.AttemptCountValidator is a validator for the "attempt_count" field. It is called by the builders before save.
 	rbacpolicyoutboxevent.AttemptCountValidator = rbacpolicyoutboxeventDescAttemptCount.Validators[0].(func(int) error)
 	// rbacpolicyoutboxeventDescNextAttemptAt is the schema descriptor for next_attempt_at field.
-	rbacpolicyoutboxeventDescNextAttemptAt := rbacpolicyoutboxeventFields[10].Descriptor()
+	rbacpolicyoutboxeventDescNextAttemptAt := rbacpolicyoutboxeventFields[11].Descriptor()
 	// rbacpolicyoutboxevent.DefaultNextAttemptAt holds the default value on creation for the next_attempt_at field.
 	rbacpolicyoutboxevent.DefaultNextAttemptAt = rbacpolicyoutboxeventDescNextAttemptAt.Default.(func() int64)
 	// rbacpolicyoutboxeventDescLastError is the schema descriptor for last_error field.
-	rbacpolicyoutboxeventDescLastError := rbacpolicyoutboxeventFields[11].Descriptor()
+	rbacpolicyoutboxeventDescLastError := rbacpolicyoutboxeventFields[12].Descriptor()
 	// rbacpolicyoutboxevent.LastErrorValidator is a validator for the "last_error" field. It is called by the builders before save.
 	rbacpolicyoutboxevent.LastErrorValidator = rbacpolicyoutboxeventDescLastError.Validators[0].(func(string) error)
 	// rbacpolicyoutboxeventDescIdempotencyKey is the schema descriptor for idempotency_key field.
-	rbacpolicyoutboxeventDescIdempotencyKey := rbacpolicyoutboxeventFields[14].Descriptor()
+	rbacpolicyoutboxeventDescIdempotencyKey := rbacpolicyoutboxeventFields[15].Descriptor()
 	// rbacpolicyoutboxevent.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
 	rbacpolicyoutboxevent.IdempotencyKeyValidator = func() func(string) error {
 		validators := rbacpolicyoutboxeventDescIdempotencyKey.Validators
@@ -254,6 +256,41 @@ func init() {
 	rbacpolicyrevisioncounter.DefaultLastRevision = rbacpolicyrevisioncounterDescLastRevision.Default.(int64)
 	// rbacpolicyrevisioncounter.LastRevisionValidator is a validator for the "last_revision" field. It is called by the builders before save.
 	rbacpolicyrevisioncounter.LastRevisionValidator = rbacpolicyrevisioncounterDescLastRevision.Validators[0].(func(int64) error)
+	rbacuserrolerevisionMixin := schema.RbacUserRoleRevision{}.Mixin()
+	rbacuserrolerevisionMixinFields1 := rbacuserrolerevisionMixin[1].Fields()
+	_ = rbacuserrolerevisionMixinFields1
+	rbacuserrolerevisionFields := schema.RbacUserRoleRevision{}.Fields()
+	_ = rbacuserrolerevisionFields
+	// rbacuserrolerevisionDescCreatedAt is the schema descriptor for created_at field.
+	rbacuserrolerevisionDescCreatedAt := rbacuserrolerevisionMixinFields1[0].Descriptor()
+	// rbacuserrolerevision.DefaultCreatedAt holds the default value on creation for the created_at field.
+	rbacuserrolerevision.DefaultCreatedAt = rbacuserrolerevisionDescCreatedAt.Default.(func() int64)
+	// rbacuserrolerevisionDescReason is the schema descriptor for reason field.
+	rbacuserrolerevisionDescReason := rbacuserrolerevisionFields[1].Descriptor()
+	// rbacuserrolerevision.ReasonValidator is a validator for the "reason" field. It is called by the builders before save.
+	rbacuserrolerevision.ReasonValidator = func() func(string) error {
+		validators := rbacuserrolerevisionDescReason.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(reason string) error {
+			for _, fn := range fns {
+				if err := fn(reason); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	rbacuserrolerevisioncounterFields := schema.RbacUserRoleRevisionCounter{}.Fields()
+	_ = rbacuserrolerevisioncounterFields
+	// rbacuserrolerevisioncounterDescLastRevision is the schema descriptor for last_revision field.
+	rbacuserrolerevisioncounterDescLastRevision := rbacuserrolerevisioncounterFields[1].Descriptor()
+	// rbacuserrolerevisioncounter.DefaultLastRevision holds the default value on creation for the last_revision field.
+	rbacuserrolerevisioncounter.DefaultLastRevision = rbacuserrolerevisioncounterDescLastRevision.Default.(int64)
+	// rbacuserrolerevisioncounter.LastRevisionValidator is a validator for the "last_revision" field. It is called by the builders before save.
+	rbacuserrolerevisioncounter.LastRevisionValidator = rbacuserrolerevisioncounterDescLastRevision.Validators[0].(func(int64) error)
 	roleMixin := schema.Role{}.Mixin()
 	roleMixinFields1 := roleMixin[1].Fields()
 	_ = roleMixinFields1

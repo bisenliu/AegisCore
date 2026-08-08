@@ -18,6 +18,12 @@ type RbacPolicyRevision func(*sql.Selector)
 // RbacPolicyRevisionCounter is the predicate function for rbacpolicyrevisioncounter builders.
 type RbacPolicyRevisionCounter func(*sql.Selector)
 
+// RbacUserRoleRevision is the predicate function for rbacuserrolerevision builders.
+type RbacUserRoleRevision func(*sql.Selector)
+
+// RbacUserRoleRevisionCounter is the predicate function for rbacuserrolerevisioncounter builders.
+type RbacUserRoleRevisionCounter func(*sql.Selector)
+
 // Role is the predicate function for role builders.
 type Role func(*sql.Selector)
 

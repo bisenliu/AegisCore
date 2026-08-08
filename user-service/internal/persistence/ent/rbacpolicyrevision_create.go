@@ -57,20 +57,6 @@ func (_c *RbacPolicyRevisionCreate) SetNillableRoleID(v *uuid.UUID) *RbacPolicyR
 	return _c
 }
 
-// SetUserID sets the "user_id" field.
-func (_c *RbacPolicyRevisionCreate) SetUserID(v uuid.UUID) *RbacPolicyRevisionCreate {
-	_c.mutation.SetUserID(v)
-	return _c
-}
-
-// SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_c *RbacPolicyRevisionCreate) SetNillableUserID(v *uuid.UUID) *RbacPolicyRevisionCreate {
-	if v != nil {
-		_c.SetUserID(*v)
-	}
-	return _c
-}
-
 // SetPermissionID sets the "permission_id" field.
 func (_c *RbacPolicyRevisionCreate) SetPermissionID(v uuid.UUID) *RbacPolicyRevisionCreate {
 	_c.mutation.SetPermissionID(v)
@@ -209,10 +195,6 @@ func (_c *RbacPolicyRevisionCreate) createSpec() (*RbacPolicyRevision, *sqlgraph
 		_spec.SetField(rbacpolicyrevision.FieldRoleID, field.TypeUUID, value)
 		_node.RoleID = &value
 	}
-	if value, ok := _c.mutation.UserID(); ok {
-		_spec.SetField(rbacpolicyrevision.FieldUserID, field.TypeUUID, value)
-		_node.UserID = &value
-	}
 	if value, ok := _c.mutation.PermissionID(); ok {
 		_spec.SetField(rbacpolicyrevision.FieldPermissionID, field.TypeUUID, value)
 		_node.PermissionID = &value
@@ -310,9 +292,6 @@ func (u *RbacPolicyRevisionUpsertOne) UpdateNewValues() *RbacPolicyRevisionUpser
 		}
 		if _, exists := u.create.mutation.RoleID(); exists {
 			s.SetIgnore(rbacpolicyrevision.FieldRoleID)
-		}
-		if _, exists := u.create.mutation.UserID(); exists {
-			s.SetIgnore(rbacpolicyrevision.FieldUserID)
 		}
 		if _, exists := u.create.mutation.PermissionID(); exists {
 			s.SetIgnore(rbacpolicyrevision.FieldPermissionID)
@@ -538,9 +517,6 @@ func (u *RbacPolicyRevisionUpsertBulk) UpdateNewValues() *RbacPolicyRevisionUpse
 			}
 			if _, exists := b.mutation.RoleID(); exists {
 				s.SetIgnore(rbacpolicyrevision.FieldRoleID)
-			}
-			if _, exists := b.mutation.UserID(); exists {
-				s.SetIgnore(rbacpolicyrevision.FieldUserID)
 			}
 			if _, exists := b.mutation.PermissionID(); exists {
 				s.SetIgnore(rbacpolicyrevision.FieldPermissionID)

@@ -388,7 +388,7 @@ func newTestDispatcher(t *testing.T, store OutboxStore, publisher PolicyRevision
 
 func testOutboxClaim(revision int64, attempt int) OutboxClaim {
 	return OutboxClaim{
-		Event:        OutboxEvent{EventID: uuid.New(), Revision: revision, Kind: "policy_changed", Reason: "role_updated", IdempotencyKey: "key"},
+		Event:        OutboxEvent{EventID: uuid.New(), PolicyRevision: int64Pointer(revision), Kind: "policy_changed", Reason: "role_updated", IdempotencyKey: "key"},
 		ClaimToken:   uuid.New(),
 		AttemptCount: attempt,
 	}
@@ -505,8 +505,9 @@ func (p *recoveringRevisionPublisher) PublishPolicyRevision(context.Context, Out
 func (p *sequenceRevisionPublisher) PublishPolicyRevision(_ context.Context, event OutboxEvent) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.seen = append(p.seen, event.Revision)
-	return p.failures[event.Revision]
+	revision := event.Revision()
+	p.seen = append(p.seen, revision)
+	return p.failures[revision]
 }
 
 func (p *sequenceRevisionPublisher) revisions() []int64 {
@@ -522,11 +523,16 @@ func (f revisionPublisherFunc) PublishPolicyRevision(ctx context.Context, event 
 func (p *fakeRevisionPublisher) PublishPolicyRevision(_ context.Context, event OutboxEvent) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.revisions = append(p.revisions, event.Revision)
-	if event.Revision == p.failRevision {
+	revision := event.Revision()
+	p.revisions = append(p.revisions, revision)
+	if revision == p.failRevision {
 		return p.err
 	}
 	return nil
+}
+
+func int64Pointer(value int64) *int64 {
+	return &value
 }
 
 type panicOutboxStore struct {

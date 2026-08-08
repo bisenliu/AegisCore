@@ -31,14 +31,26 @@ var ErrOutboxClaimLost = errors.New("rbac policy outbox claim lost")
 
 // OutboxEvent 是 dispatcher 发布所需的最小 RBAC policy 事件。
 type OutboxEvent struct {
-	EventID        uuid.UUID
-	Revision       int64
-	Kind           string
-	Reason         string
-	RoleID         *uuid.UUID
-	UserID         *uuid.UUID
-	PermissionID   *uuid.UUID
-	IdempotencyKey string
+	EventID          uuid.UUID
+	PolicyRevision   *int64
+	UserRoleRevision *int64
+	Kind             string
+	Reason           string
+	RoleID           *uuid.UUID
+	UserID           *uuid.UUID
+	PermissionID     *uuid.UUID
+	IdempotencyKey   string
+}
+
+// Revision 返回事件自身 kind 对应的 revision，用于通用 dispatcher 诊断上下文。
+func (e OutboxEvent) Revision() int64 {
+	if e.PolicyRevision != nil {
+		return *e.PolicyRevision
+	}
+	if e.UserRoleRevision != nil {
+		return *e.UserRoleRevision
+	}
+	return 0
 }
 
 // OutboxClaim 表示由 PostgreSQL lease 仲裁后的单次处理权。

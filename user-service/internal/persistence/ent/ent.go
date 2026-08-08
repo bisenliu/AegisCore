@@ -16,6 +16,8 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevisioncounter"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevisioncounter"
 	"github.com/aegiscore/user-service/internal/persistence/ent/role"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/user"
@@ -80,14 +82,16 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			permission.Table:                permission.ValidColumn,
-			rbacpolicyoutboxevent.Table:     rbacpolicyoutboxevent.ValidColumn,
-			rbacpolicyrevision.Table:        rbacpolicyrevision.ValidColumn,
-			rbacpolicyrevisioncounter.Table: rbacpolicyrevisioncounter.ValidColumn,
-			role.Table:                      role.ValidColumn,
-			rolepermission.Table:            rolepermission.ValidColumn,
-			user.Table:                      user.ValidColumn,
-			userrole.Table:                  userrole.ValidColumn,
+			permission.Table:                  permission.ValidColumn,
+			rbacpolicyoutboxevent.Table:       rbacpolicyoutboxevent.ValidColumn,
+			rbacpolicyrevision.Table:          rbacpolicyrevision.ValidColumn,
+			rbacpolicyrevisioncounter.Table:   rbacpolicyrevisioncounter.ValidColumn,
+			rbacuserrolerevision.Table:        rbacuserrolerevision.ValidColumn,
+			rbacuserrolerevisioncounter.Table: rbacuserrolerevisioncounter.ValidColumn,
+			role.Table:                        role.ValidColumn,
+			rolepermission.Table:              rolepermission.ValidColumn,
+			user.Table:                        user.ValidColumn,
+			userrole.Table:                    userrole.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

@@ -97,9 +97,6 @@ func (_u *RbacPolicyRevisionUpdate) sqlSave(ctx context.Context) (_node int, err
 	if _u.mutation.RoleIDCleared() {
 		_spec.ClearField(rbacpolicyrevision.FieldRoleID, field.TypeUUID)
 	}
-	if _u.mutation.UserIDCleared() {
-		_spec.ClearField(rbacpolicyrevision.FieldUserID, field.TypeUUID)
-	}
 	if _u.mutation.PermissionIDCleared() {
 		_spec.ClearField(rbacpolicyrevision.FieldPermissionID, field.TypeUUID)
 	}
@@ -250,9 +247,6 @@ func (_u *RbacPolicyRevisionUpdateOne) sqlSave(ctx context.Context) (_node *Rbac
 	}
 	if _u.mutation.RoleIDCleared() {
 		_spec.ClearField(rbacpolicyrevision.FieldRoleID, field.TypeUUID)
-	}
-	if _u.mutation.UserIDCleared() {
-		_spec.ClearField(rbacpolicyrevision.FieldUserID, field.TypeUUID)
 	}
 	if _u.mutation.PermissionIDCleared() {
 		_spec.ClearField(rbacpolicyrevision.FieldPermissionID, field.TypeUUID)

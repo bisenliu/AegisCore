@@ -10,6 +10,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
 	"github.com/google/uuid"
 )
 
@@ -26,7 +27,9 @@ type RbacPolicyOutboxEvent struct {
 	// 稳定 outbox event ID
 	EventID uuid.UUID `json:"event_id,omitempty"`
 	// 关联的 RBAC policy revision
-	Revision int64 `json:"revision,omitempty"`
+	PolicyRevision *int64 `json:"policy_revision,omitempty"`
+	// 关联的 RBAC user-role revision
+	UserRoleRevision *int64 `json:"user_role_revision,omitempty"`
 	// 事件类型
 	Kind string `json:"kind,omitempty"`
 	// 触发 policy 变更的稳定原因
@@ -61,22 +64,35 @@ type RbacPolicyOutboxEvent struct {
 
 // RbacPolicyOutboxEventEdges holds the relations/edges for other nodes in the graph.
 type RbacPolicyOutboxEventEdges struct {
-	// PolicyRevision holds the value of the policy_revision edge.
-	PolicyRevision *RbacPolicyRevision `json:"policy_revision,omitempty"`
+	// PolicyRevisionEdge holds the value of the policy_revision_edge edge.
+	PolicyRevisionEdge *RbacPolicyRevision `json:"policy_revision_edge,omitempty"`
+	// UserRoleRevisionEdge holds the value of the user_role_revision_edge edge.
+	UserRoleRevisionEdge *RbacUserRoleRevision `json:"user_role_revision_edge,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [1]bool
+	loadedTypes [2]bool
 }
 
-// PolicyRevisionOrErr returns the PolicyRevision value or an error if the edge
+// PolicyRevisionEdgeOrErr returns the PolicyRevisionEdge value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
-func (e RbacPolicyOutboxEventEdges) PolicyRevisionOrErr() (*RbacPolicyRevision, error) {
-	if e.PolicyRevision != nil {
-		return e.PolicyRevision, nil
+func (e RbacPolicyOutboxEventEdges) PolicyRevisionEdgeOrErr() (*RbacPolicyRevision, error) {
+	if e.PolicyRevisionEdge != nil {
+		return e.PolicyRevisionEdge, nil
 	} else if e.loadedTypes[0] {
 		return nil, &NotFoundError{label: rbacpolicyrevision.Label}
 	}
-	return nil, &NotLoadedError{edge: "policy_revision"}
+	return nil, &NotLoadedError{edge: "policy_revision_edge"}
+}
+
+// UserRoleRevisionEdgeOrErr returns the UserRoleRevisionEdge value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e RbacPolicyOutboxEventEdges) UserRoleRevisionEdgeOrErr() (*RbacUserRoleRevision, error) {
+	if e.UserRoleRevisionEdge != nil {
+		return e.UserRoleRevisionEdge, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: rbacuserrolerevision.Label}
+	}
+	return nil, &NotLoadedError{edge: "user_role_revision_edge"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -86,7 +102,7 @@ func (*RbacPolicyOutboxEvent) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case rbacpolicyoutboxevent.FieldRoleID, rbacpolicyoutboxevent.FieldUserID, rbacpolicyoutboxevent.FieldPermissionID, rbacpolicyoutboxevent.FieldClaimToken:
 			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
-		case rbacpolicyoutboxevent.FieldID, rbacpolicyoutboxevent.FieldCreatedAt, rbacpolicyoutboxevent.FieldUpdatedAt, rbacpolicyoutboxevent.FieldRevision, rbacpolicyoutboxevent.FieldAttemptCount, rbacpolicyoutboxevent.FieldNextAttemptAt, rbacpolicyoutboxevent.FieldClaimedUntil, rbacpolicyoutboxevent.FieldDeliveredAt:
+		case rbacpolicyoutboxevent.FieldID, rbacpolicyoutboxevent.FieldCreatedAt, rbacpolicyoutboxevent.FieldUpdatedAt, rbacpolicyoutboxevent.FieldPolicyRevision, rbacpolicyoutboxevent.FieldUserRoleRevision, rbacpolicyoutboxevent.FieldAttemptCount, rbacpolicyoutboxevent.FieldNextAttemptAt, rbacpolicyoutboxevent.FieldClaimedUntil, rbacpolicyoutboxevent.FieldDeliveredAt:
 			values[i] = new(sql.NullInt64)
 		case rbacpolicyoutboxevent.FieldKind, rbacpolicyoutboxevent.FieldReason, rbacpolicyoutboxevent.FieldStatus, rbacpolicyoutboxevent.FieldLastError, rbacpolicyoutboxevent.FieldIdempotencyKey:
 			values[i] = new(sql.NullString)
@@ -131,11 +147,19 @@ func (_m *RbacPolicyOutboxEvent) assignValues(columns []string, values []any) er
 			} else if value != nil {
 				_m.EventID = *value
 			}
-		case rbacpolicyoutboxevent.FieldRevision:
+		case rbacpolicyoutboxevent.FieldPolicyRevision:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field revision", values[i])
+				return fmt.Errorf("unexpected type %T for field policy_revision", values[i])
 			} else if value.Valid {
-				_m.Revision = value.Int64
+				_m.PolicyRevision = new(int64)
+				*_m.PolicyRevision = value.Int64
+			}
+		case rbacpolicyoutboxevent.FieldUserRoleRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field user_role_revision", values[i])
+			} else if value.Valid {
+				_m.UserRoleRevision = new(int64)
+				*_m.UserRoleRevision = value.Int64
 			}
 		case rbacpolicyoutboxevent.FieldKind:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -235,9 +259,14 @@ func (_m *RbacPolicyOutboxEvent) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
-// QueryPolicyRevision queries the "policy_revision" edge of the RbacPolicyOutboxEvent entity.
-func (_m *RbacPolicyOutboxEvent) QueryPolicyRevision() *RbacPolicyRevisionQuery {
-	return NewRbacPolicyOutboxEventClient(_m.config).QueryPolicyRevision(_m)
+// QueryPolicyRevisionEdge queries the "policy_revision_edge" edge of the RbacPolicyOutboxEvent entity.
+func (_m *RbacPolicyOutboxEvent) QueryPolicyRevisionEdge() *RbacPolicyRevisionQuery {
+	return NewRbacPolicyOutboxEventClient(_m.config).QueryPolicyRevisionEdge(_m)
+}
+
+// QueryUserRoleRevisionEdge queries the "user_role_revision_edge" edge of the RbacPolicyOutboxEvent entity.
+func (_m *RbacPolicyOutboxEvent) QueryUserRoleRevisionEdge() *RbacUserRoleRevisionQuery {
+	return NewRbacPolicyOutboxEventClient(_m.config).QueryUserRoleRevisionEdge(_m)
 }
 
 // Update returns a builder for updating this RbacPolicyOutboxEvent.
@@ -272,8 +301,15 @@ func (_m *RbacPolicyOutboxEvent) String() string {
 	builder.WriteString("event_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.EventID))
 	builder.WriteString(", ")
-	builder.WriteString("revision=")
-	builder.WriteString(fmt.Sprintf("%v", _m.Revision))
+	if v := _m.PolicyRevision; v != nil {
+		builder.WriteString("policy_revision=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.UserRoleRevision; v != nil {
+		builder.WriteString("user_role_revision=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("kind=")
 	builder.WriteString(_m.Kind)

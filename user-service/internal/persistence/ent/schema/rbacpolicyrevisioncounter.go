@@ -5,7 +5,7 @@ import (
 	"entgo.io/ent/schema/field"
 )
 
-// RbacPolicyRevisionCounter 是在线 RBAC mutation 的提交顺序 revision counter。
+// RbacPolicyRevisionCounter 是在线 RBAC policy mutation 的提交顺序 revision counter。
 type RbacPolicyRevisionCounter struct {
 	ent.Schema
 }

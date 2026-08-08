@@ -50,7 +50,9 @@ func TestStorePublishPolicyRevisionCachesSuppliedRevisionAndPublishes(t *testing
 	require.Equal(t, policyRefreshSchemaVersion, decoded.SchemaVersion)
 	require.Equal(t, event.EventID, decoded.EventID)
 	require.Equal(t, event.IdempotencyKey, decoded.IdempotencyKey)
-	require.Equal(t, revision, decoded.PolicyRevision)
+	require.NotNil(t, decoded.PolicyRevision)
+	require.Equal(t, revision, *decoded.PolicyRevision)
+	require.Nil(t, decoded.UserRoleRevision)
 	require.Equal(t, "instance-a", decoded.InstanceID)
 	require.Equal(t, policyRefreshKindPolicyChanged, decoded.Kind)
 	require.Equal(t, "role_permission_added", decoded.Reason)
@@ -75,7 +77,36 @@ func TestStorePublishPolicyRevisionDoesNotLowerCachedRevision(t *testing.T) {
 	require.NoError(t, err)
 	decoded, err := decodePolicyRefreshMessage(message.Payload)
 	require.NoError(t, err)
-	require.Equal(t, int64(41), decoded.PolicyRevision)
+	require.NotNil(t, decoded.PolicyRevision)
+	require.Equal(t, int64(41), *decoded.PolicyRevision)
+}
+
+func TestStorePublishUserRoleRevisionPublishesWithoutPolicyVersionCache(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	store := newStore(client, mustKeyCatalog("aegiscore-user-service"), "instance-a", nil)
+	pubsub := client.Subscribe(context.Background(), store.keys.PolicyChannel())
+	t.Cleanup(func() { _ = pubsub.Close() })
+	_, err := pubsub.Receive(context.Background())
+	require.NoError(t, err)
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000717")
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000718")
+
+	const revision int64 = 17
+	event := testPolicyPublicationEvent(revision, permissionapplication.NewUserRoleChange("user_role_added", userID, roleID))
+	require.NoError(t, store.PublishPolicyRevision(context.Background(), event))
+	storedRevision, err := store.CurrentVersion(context.Background())
+	require.NoError(t, err)
+	require.Zero(t, storedRevision)
+	message, err := pubsub.ReceiveMessage(context.Background())
+	require.NoError(t, err)
+	decoded, err := decodePolicyRefreshMessage(message.Payload)
+	require.NoError(t, err)
+	require.Nil(t, decoded.PolicyRevision)
+	require.NotNil(t, decoded.UserRoleRevision)
+	require.Equal(t, revision, *decoded.UserRoleRevision)
+	require.Equal(t, userID, *decoded.UserID)
 }
 
 func TestStorePublishPolicyRevisionCachesLargerBigIntRevisionExactly(t *testing.T) {
@@ -127,7 +158,7 @@ func TestStorePublishPolicyRevisionReturnsPublishFailureAndPreservesCachedRevisi
 	require.Equal(t, int64(44), storedRevision)
 }
 
-func TestWatcherHandlePayloadReloadsPolicyForEveryValidEvent(t *testing.T) {
+func TestWatcherHandlePayloadSkipsReloadForDuplicateAppliedPolicyEvent(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	engine := NewMockPolicyReloadEngine(ctrl)
 	var applied atomic.Int64
@@ -135,8 +166,8 @@ func TestWatcherHandlePayloadReloadsPolicyForEveryValidEvent(t *testing.T) {
 	engine.EXPECT().RefreshToRevision(gomock.Any(), int64(3)).DoAndReturn(func(context.Context, int64) (int64, error) {
 		applied.Store(3)
 		return 3, nil
-	}).Times(2)
-	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 3, TargetRevision: 3}).Times(4)
+	}).Times(1)
+	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 3, TargetRevision: 3}).Times(3)
 	engine.EXPECT().InvalidateAllUserRoles().Times(2)
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 3}, engine, time.Second, metrics)
@@ -149,8 +180,6 @@ func TestWatcherHandlePayloadReloadsPolicyForEveryValidEvent(t *testing.T) {
 		metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub),
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
-		metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub),
-		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
 	)
 
 	watcher.HandlePayload(context.Background(), payload)
@@ -159,26 +188,17 @@ func TestWatcherHandlePayloadReloadsPolicyForEveryValidEvent(t *testing.T) {
 	require.Equal(t, int64(3), applied.Load())
 }
 
-func TestWatcherHandlePayloadRevisionGapInvalidatesAllUserRoleCaches(t *testing.T) {
+func TestWatcherHandlePayloadUserRoleEventOnlyInvalidatesTargetUser(t *testing.T) {
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000701")
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000702")
 	ctrl := gomock.NewController(t)
 	engine := NewMockPolicyReloadEngine(ctrl)
 	engine.EXPECT().AppliedRevision().Return(int64(0)).AnyTimes()
-	engine.EXPECT().ReloadToRevision(gomock.Any(), int64(4)).Return(int64(4), nil)
-	engine.EXPECT().InvalidateAllUserRoles()
-	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 4, TargetRevision: 4}).Times(2)
+	engine.EXPECT().InvalidateUserRole(userID)
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 4}, engine, time.Second, metrics)
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(4, permissionapplication.NewUserRoleChange("user_role_added", userID, roleID)), "instance-b"))
 	require.NoError(t, err)
-
-	gomock.InOrder(
-		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(4)),
-		metrics.EXPECT().WatcherVersionMismatch(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub, permissionapplication.MetricsReasonRevisionMismatch),
-		metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub),
-		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
-	)
 
 	watcher.HandlePayload(context.Background(), payload)
 
@@ -192,13 +212,10 @@ func TestWatcherHandlePayloadExecutesOutOfOrderUserRoleEventWithoutMovingApplied
 	engine := NewMockPolicyReloadEngine(ctrl)
 	engine.EXPECT().AppliedRevision().Return(int64(9)).AnyTimes()
 	engine.EXPECT().InvalidateUserRole(userID)
-	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 9, TargetRevision: 9})
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 9}, engine, time.Second, metrics)
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(testPolicyPublicationEvent(4, permissionapplication.NewUserRoleChange("user_role_removed", userID, roleID)), "instance-b"))
 	require.NoError(t, err)
-
-	metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0))
 
 	watcher.HandlePayload(context.Background(), payload)
 
@@ -209,8 +226,7 @@ func TestWatcherHandlePayloadReloadsOutOfOrderPolicyEventWithoutMovingAppliedRev
 	ctrl := gomock.NewController(t)
 	engine := NewMockPolicyReloadEngine(ctrl)
 	engine.EXPECT().AppliedRevision().Return(int64(9)).AnyTimes()
-	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 9, TargetRevision: 9}).Times(2)
-	engine.EXPECT().RefreshToRevision(gomock.Any(), int64(9)).Return(int64(9), nil)
+	engine.EXPECT().ProjectionStatus().Return(permissionapplication.PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: 9, TargetRevision: 9})
 	engine.EXPECT().InvalidateAllUserRoles()
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 9}, engine, time.Second, metrics)
@@ -218,8 +234,6 @@ func TestWatcherHandlePayloadReloadsOutOfOrderPolicyEventWithoutMovingAppliedRev
 	require.NoError(t, err)
 
 	gomock.InOrder(
-		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
-		metrics.EXPECT().WatcherReloadSucceeded(gomock.Any(), permissionapplication.MetricsSourceWatcherPubSub),
 		metrics.EXPECT().PolicyReloadLagObserved(gomock.Any(), int64(0)),
 	)
 
@@ -351,9 +365,9 @@ func TestWatcherFaultInjectionReplayAddRemoveReplaceEventsKeepsIdempotentProject
 	}
 
 	requireEventuallyWatcherProjection(t, engine, 4)
-	require.Equal(t, int64(1), engine.invalidateUserCount.Load())
-	require.Equal(t, int64(3), engine.invalidateAllCount.Load())
-	require.Equal(t, []int64{4, 4, 4}, engine.reloads())
+	require.Equal(t, int64(2), engine.invalidateUserCount.Load())
+	require.Equal(t, int64(2), engine.invalidateAllCount.Load())
+	require.Equal(t, []int64{4}, engine.reloads())
 }
 
 func TestWatcherLoopConcurrentHintsAndTickerConvergesToAuthoritativeRevision(t *testing.T) {
@@ -394,6 +408,37 @@ func TestWatcherLoopConcurrentHintsAndTickerConvergesToAuthoritativeRevision(t *
 	status := watcher.Status()
 	require.False(t, status.Running)
 	require.Equal(t, permissionapplication.PolicyWatcherSubscriptionStopped, status.SubscriptionState)
+}
+
+func TestWatcherCoalescesDuplicatePolicyNotificationsToSingleReload(t *testing.T) {
+	engine := &faultInjectedPolicyReloadEngine{appliedRevision: 1, targetRevision: 1, ready: true}
+	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 10}, engine, time.Second, nil)
+	payloads := make([]string, 0, 100)
+	for range 100 {
+		payloads = append(payloads, mustPolicyPayload(t, testPolicyPublicationEvent(10, permissionapplication.NewPolicyReloadChange("role_permissions_replaced"))))
+	}
+
+	watcher.HandlePayloads(context.Background(), payloads)
+
+	requireEventuallyWatcherProjection(t, engine, 10)
+	require.Equal(t, []int64{10}, engine.reloads())
+}
+
+func TestWatcherPureUserRoleNotificationsDoNotReloadPolicy(t *testing.T) {
+	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000715")
+	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000716")
+	engine := &faultInjectedPolicyReloadEngine{appliedRevision: 10, targetRevision: 10, ready: true}
+	watcher := newWatcherForTest(nil, staticPolicyRevisionSource{revision: 10}, engine, time.Second, nil)
+	payloads := make([]string, 0, 100)
+	for index := range 100 {
+		payloads = append(payloads, mustPolicyPayload(t, testPolicyPublicationEvent(int64(index+1), permissionapplication.NewUserRoleChange("user_role_added", userID, roleID))))
+	}
+
+	watcher.HandlePayloads(context.Background(), payloads)
+
+	require.Empty(t, engine.reloads())
+	require.Equal(t, int64(100), engine.invalidateUserCount.Load())
+	require.Equal(t, int64(0), engine.invalidateAllCount.Load())
 }
 
 func TestWatcherReloadFailurePreservesAppliedVersion(t *testing.T) {
@@ -500,7 +545,7 @@ func TestWatcherCheckVersionRecoversFromRevisionSourceAndReloadFailure(t *testin
 func TestWatcherHandlePayloadRevisionSourceFailureDoesNotUseHint(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	engine := NewMockPolicyReloadEngine(ctrl)
-	engine.EXPECT().AppliedRevision().Return(int64(2)).Times(2)
+	engine.EXPECT().AppliedRevision().Return(int64(2)).Times(3)
 	engine.EXPECT().InvalidateAllUserRoles()
 	metrics := NewMockMetrics(ctrl)
 	watcher := newWatcherForTest(nil, failingPolicyRevisionSource{err: errors.New("database unavailable")}, engine, time.Second, metrics)
@@ -1013,13 +1058,14 @@ func testPolicyPublicationEvent(revision int64, change permissionapplication.Pol
 	event := permissionapplication.OutboxEvent{
 		EventID:        uuid.MustParse("018f0000-0000-7000-8000-000000000801"),
 		IdempotencyKey: "rbac-policy:" + change.ReasonText(),
-		Revision:       revision,
 		Reason:         change.ReasonText(),
 	}
 	if change.Kind == permissionapplication.PolicyChangeKindUserRole {
 		event.Kind = policyRefreshKindUserRoleChanged
+		event.UserRoleRevision = int64Pointer(revision)
 	} else {
 		event.Kind = policyRefreshKindPolicyChanged
+		event.PolicyRevision = int64Pointer(revision)
 	}
 	if change.UserID != uuid.Nil {
 		event.UserID = &change.UserID
@@ -1031,6 +1077,10 @@ func testPolicyPublicationEvent(revision int64, change permissionapplication.Pol
 		event.PermissionID = &change.PermissionID
 	}
 	return event
+}
+
+func int64Pointer(value int64) *int64 {
+	return &value
 }
 
 func (c *failingPolicyRedisClient) Eval(ctx context.Context, script string, keys []string, args ...any) *rediscmd.Cmd {

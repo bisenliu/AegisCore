@@ -57,6 +57,30 @@ func (f RbacPolicyRevisionCounterFunc) Mutate(ctx context.Context, m ent.Mutatio
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RbacPolicyRevisionCounterMutation", m)
 }
 
+// The RbacUserRoleRevisionFunc type is an adapter to allow the use of ordinary
+// function as RbacUserRoleRevision mutator.
+type RbacUserRoleRevisionFunc func(context.Context, *ent.RbacUserRoleRevisionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RbacUserRoleRevisionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RbacUserRoleRevisionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RbacUserRoleRevisionMutation", m)
+}
+
+// The RbacUserRoleRevisionCounterFunc type is an adapter to allow the use of ordinary
+// function as RbacUserRoleRevisionCounter mutator.
+type RbacUserRoleRevisionCounterFunc func(context.Context, *ent.RbacUserRoleRevisionCounterMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RbacUserRoleRevisionCounterFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RbacUserRoleRevisionCounterMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RbacUserRoleRevisionCounterMutation", m)
+}
+
 // The RoleFunc type is an adapter to allow the use of ordinary
 // function as Role mutator.
 type RoleFunc func(context.Context, *ent.RoleMutation) (ent.Value, error)

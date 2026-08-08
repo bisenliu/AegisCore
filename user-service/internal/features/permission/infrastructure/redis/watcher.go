@@ -187,28 +187,57 @@ func (w *Watcher) CheckVersion(ctx context.Context) {
 // HandlePayload 处理一条 RBAC policy Pub/Sub payload。
 // 每条有效消息都必须执行副作用；notification revision 只作为唤醒 hint，不代表数据库目标或已应用投影。
 func (w *Watcher) HandlePayload(ctx context.Context, payload string) {
-	message, err := decodePolicyRefreshMessage(payload)
-	if err != nil {
-		logger.Error(ctx, "rbac policy refresh message invalid", logger.StackTrace(zap.Error(err))...)
+	w.HandlePayloads(ctx, []string{payload})
+}
+
+// HandlePayloads 合并处理一批 RBAC policy Pub/Sub payload。
+func (w *Watcher) HandlePayloads(ctx context.Context, payloads []string) {
+	if len(payloads) == 0 {
 		return
 	}
+	pending := newPendingRefreshBatch()
+	for _, payload := range payloads {
+		message, err := decodePolicyRefreshMessage(payload)
+		if err != nil {
+			logger.Error(ctx, "rbac policy refresh message invalid", logger.StackTrace(zap.Error(err))...)
+			continue
+		}
+		localApplied := w.engine.AppliedRevision()
+		logger.Info(ctx, "rbac policy refresh hint received", append(messageRevisionLogFields(message), zap.Int64("local_applied_policy_revision", localApplied), zap.String("instance_id", message.InstanceID), zap.String("source", permissionapplication.MetricsSourceWatcherPubSub), zap.String("reason", message.Reason))...)
+		pending.add(message)
+	}
+	if !pending.hasMessages {
+		return
+	}
+	if pending.hasPolicyChange {
+		w.handlePolicyBatch(ctx, pending)
+		return
+	}
+	for _, change := range pending.userRoleChanges {
+		w.invalidateChange(change)
+	}
+	w.markReconcileSuccess()
+}
+
+func (w *Watcher) handlePolicyBatch(ctx context.Context, pending pendingRefreshBatch) {
 	localApplied := w.engine.AppliedRevision()
-	logger.Info(ctx, "rbac policy refresh hint received", zap.Int64("hint_revision", message.PolicyRevision), zap.Int64("local_applied_policy_revision", localApplied), zap.String("instance_id", message.InstanceID), zap.String("source", permissionapplication.MetricsSourceWatcherPubSub), zap.String("reason", message.Reason))
-	databaseLatest, err := w.latestRevision(ctx, permissionapplication.MetricsSourceWatcherPubSub, message.PolicyRevision)
+	databaseLatest, err := w.latestRevision(ctx, permissionapplication.MetricsSourceWatcherPubSub, pending.maxPolicyRevision)
 	if err != nil {
 		if ctx.Err() != nil {
 			return
 		}
 		w.markReconcileFailure(ctx, permissionapplication.PolicyWatcherErrorRevisionSource)
-		w.invalidateChange(message.policyChange())
+		for _, change := range pending.changes {
+			w.invalidateChange(change)
+		}
 		return
 	}
 	w.observeLag(ctx, databaseLatest, localApplied)
 	if databaseLatest > localApplied {
-		logger.Warn(ctx, "rbac policy revision mismatch detected", zap.Int64("database_latest_policy_revision", databaseLatest), zap.Int64("local_applied_policy_revision", localApplied), zap.Int64("hint_revision", message.PolicyRevision), zap.String("source", permissionapplication.MetricsSourceWatcherPubSub), zap.String("reason", permissionapplication.MetricsReasonRevisionMismatch))
+		logger.Warn(ctx, "rbac policy revision mismatch detected", zap.Int64("database_latest_policy_revision", databaseLatest), zap.Int64("local_applied_policy_revision", localApplied), zap.Int64("hint_policy_revision", pending.maxPolicyRevision), zap.String("source", permissionapplication.MetricsSourceWatcherPubSub), zap.String("reason", permissionapplication.MetricsReasonRevisionMismatch))
 		w.metrics.WatcherVersionMismatch(ctx, permissionapplication.MetricsSourceWatcherPubSub, permissionapplication.MetricsReasonRevisionMismatch)
 	}
-	if err := w.ObserveTargetRevision(ctx, databaseLatest, message.policyChange(), message.InstanceID, permissionapplication.MetricsSourceWatcherPubSub); err != nil {
+	if err := w.ObserveTargetRevision(ctx, databaseLatest, permissionapplication.NewPolicyReloadChange(pending.policyReason), pending.instanceID, permissionapplication.MetricsSourceWatcherPubSub); err != nil {
 		if ctx.Err() != nil {
 			return
 		}
@@ -216,6 +245,36 @@ func (w *Watcher) HandlePayload(ctx context.Context, payload string) {
 		return
 	}
 	w.markReconcileSuccess()
+}
+
+type pendingRefreshBatch struct {
+	hasMessages       bool
+	hasPolicyChange   bool
+	maxPolicyRevision int64
+	policyReason      string
+	instanceID        string
+	changes           []permissionapplication.PolicyChange
+	userRoleChanges   []permissionapplication.PolicyChange
+}
+
+func newPendingRefreshBatch() pendingRefreshBatch {
+	return pendingRefreshBatch{policyReason: "policy_changed"}
+}
+
+func (b *pendingRefreshBatch) add(message PolicyRefreshMessage) {
+	b.hasMessages = true
+	change := message.policyChange()
+	b.changes = append(b.changes, change)
+	if message.Kind == policyRefreshKindPolicyChanged {
+		b.hasPolicyChange = true
+		if revision := message.policyRevision(); revision > b.maxPolicyRevision {
+			b.maxPolicyRevision = revision
+			b.policyReason = message.Reason
+			b.instanceID = message.InstanceID
+		}
+		return
+	}
+	b.userRoleChanges = append(b.userRoleChanges, change)
 }
 
 func (w *Watcher) run(ctx context.Context, done chan struct{}) {
@@ -245,9 +304,24 @@ func (w *Watcher) run(ctx context.Context, done chan struct{}) {
 				messages = nil
 				continue
 			}
-			w.HandlePayload(ctx, message.Payload)
+			w.HandlePayloads(ctx, drainPayloads(message.Payload, messages))
 		case <-ticker.C:
 			w.CheckVersion(ctx)
+		}
+	}
+}
+
+func drainPayloads(first string, messages <-chan redispubsub.Message) []string {
+	payloads := []string{first}
+	for {
+		select {
+		case message, ok := <-messages:
+			if !ok {
+				return payloads
+			}
+			payloads = append(payloads, message.Payload)
+		default:
+			return payloads
 		}
 	}
 }
@@ -259,7 +333,7 @@ func (w *Watcher) ObserveTargetRevision(ctx context.Context, targetRevision int6
 	reason := change.ReasonText()
 	status := w.engine.ProjectionStatus()
 	requiresReload := change.RequiresReload()
-	if requiresReload || targetRevision > localApplied || !status.Ready() {
+	if targetRevision > localApplied || !status.Ready() {
 		var (
 			appliedRevision int64
 			err             error

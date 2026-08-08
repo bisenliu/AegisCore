@@ -18,8 +18,6 @@ const (
 	FieldReason = "reason"
 	// FieldRoleID holds the string denoting the role_id field in the database.
 	FieldRoleID = "role_id"
-	// FieldUserID holds the string denoting the user_id field in the database.
-	FieldUserID = "user_id"
 	// FieldPermissionID holds the string denoting the permission_id field in the database.
 	FieldPermissionID = "permission_id"
 	// EdgeOutboxEvent holds the string denoting the outbox_event edge name in mutations.
@@ -34,7 +32,7 @@ const (
 	// It exists in this package in order to avoid circular dependency with the "rbacpolicyoutboxevent" package.
 	OutboxEventInverseTable = "rbac_policy_outbox_events"
 	// OutboxEventColumn is the table column denoting the outbox_event relation/edge.
-	OutboxEventColumn = "revision"
+	OutboxEventColumn = "policy_revision"
 )
 
 // Columns holds all SQL columns for rbacpolicyrevision fields.
@@ -43,7 +41,6 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldReason,
 	FieldRoleID,
-	FieldUserID,
 	FieldPermissionID,
 }
 
@@ -85,11 +82,6 @@ func ByReason(opts ...sql.OrderTermOption) OrderOption {
 // ByRoleID orders the results by the role_id field.
 func ByRoleID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRoleID, opts...).ToFunc()
-}
-
-// ByUserID orders the results by the user_id field.
-func ByUserID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldUserID, opts...).ToFunc()
 }
 
 // ByPermissionID orders the results by the permission_id field.

@@ -60,7 +60,7 @@ func (s *OutboxStore) Claim(ctx context.Context, now time.Time, limit int, claim
 	nowMillis := now.UnixMilli()
 	rows, err := tx.RbacPolicyOutboxEvent.Query().
 		Where(dueOutboxPredicate(nowMillis)).
-		Order(entrbacoutbox.ByRevision()).
+		Order(entrbacoutbox.ByID()).
 		Limit(limit).
 		// SKIP LOCKED 允许多个副本并行领取互不重叠的 batch，避免慢 worker 阻塞其他 dispatcher。
 		ForUpdate(entsql.WithLockAction(entsql.SkipLocked)).
@@ -191,14 +191,15 @@ func dueOutboxPredicate(nowMillis int64) predicate.RbacPolicyOutboxEvent {
 
 func toOutboxEvent(row *ent.RbacPolicyOutboxEvent) permissionapplication.OutboxEvent {
 	return permissionapplication.OutboxEvent{
-		EventID:        row.EventID,
-		Revision:       row.Revision,
-		Kind:           row.Kind,
-		Reason:         row.Reason,
-		RoleID:         row.RoleID,
-		UserID:         row.UserID,
-		PermissionID:   row.PermissionID,
-		IdempotencyKey: row.IdempotencyKey,
+		EventID:          row.EventID,
+		PolicyRevision:   row.PolicyRevision,
+		UserRoleRevision: row.UserRoleRevision,
+		Kind:             row.Kind,
+		Reason:           row.Reason,
+		RoleID:           row.RoleID,
+		UserID:           row.UserID,
+		PermissionID:     row.PermissionID,
+		IdempotencyKey:   row.IdempotencyKey,
 	}
 }
 

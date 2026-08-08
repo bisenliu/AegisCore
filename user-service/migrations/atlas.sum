@@ -1,3 +1,4 @@
-h1:D//eDC3qWJSib7G7bAzYieOZqreRX9x8ELOtapDsakA=
+h1:ZSr8uOdaVAYwWwOarlxiuhB9VX15xEXhWA8qEVMFNrs=
 0000000000001_extensions.sql h1:yyuJqMNnPsE2DTwtv3ExfZ64pVpza6jWjQWi+0ogEtk=
 20260803031549_init_sql.sql h1:6YD0hs3BfzZINy+4ueQgDHP18CpSz5vxwUBWeRc6E7k=
+20260808065135_split-rbac-policy-and-user-role-revisions.sql h1:MgTU7+hHid9BP46ZSD5MlWXouh8ZEpy9pCsebhGr/q8=

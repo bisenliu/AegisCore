@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
@@ -21,30 +22,32 @@ const (
 
 // PolicyRefreshMessage 是版本化的 RBAC policy Redis Pub/Sub 刷新 envelope。
 type PolicyRefreshMessage struct {
-	SchemaVersion  int        `json:"schema_version"`
-	EventID        uuid.UUID  `json:"event_id"`
-	IdempotencyKey string     `json:"idempotency_key"`
-	PolicyRevision int64      `json:"policy_revision"`
-	Kind           string     `json:"kind"`
-	Reason         string     `json:"reason"`
-	InstanceID     string     `json:"publisher_instance_id"`
-	UserID         *uuid.UUID `json:"user_id,omitempty"`
-	RoleID         *uuid.UUID `json:"role_id,omitempty"`
-	PermissionID   *uuid.UUID `json:"permission_id,omitempty"`
+	SchemaVersion    int        `json:"schema_version"`
+	EventID          uuid.UUID  `json:"event_id"`
+	IdempotencyKey   string     `json:"idempotency_key"`
+	PolicyRevision   *int64     `json:"policy_revision,omitempty"`
+	UserRoleRevision *int64     `json:"user_role_revision,omitempty"`
+	Kind             string     `json:"kind"`
+	Reason           string     `json:"reason"`
+	InstanceID       string     `json:"publisher_instance_id"`
+	UserID           *uuid.UUID `json:"user_id,omitempty"`
+	RoleID           *uuid.UUID `json:"role_id,omitempty"`
+	PermissionID     *uuid.UUID `json:"permission_id,omitempty"`
 }
 
 func newPolicyRefreshMessage(event permissionapplication.OutboxEvent, instanceID string) PolicyRefreshMessage {
 	return PolicyRefreshMessage{
-		SchemaVersion:  policyRefreshSchemaVersion,
-		EventID:        event.EventID,
-		IdempotencyKey: event.IdempotencyKey,
-		PolicyRevision: event.Revision,
-		Kind:           event.Kind,
-		Reason:         event.Reason,
-		InstanceID:     instanceID,
-		UserID:         event.UserID,
-		RoleID:         event.RoleID,
-		PermissionID:   event.PermissionID,
+		SchemaVersion:    policyRefreshSchemaVersion,
+		EventID:          event.EventID,
+		IdempotencyKey:   event.IdempotencyKey,
+		PolicyRevision:   event.PolicyRevision,
+		UserRoleRevision: event.UserRoleRevision,
+		Kind:             event.Kind,
+		Reason:           event.Reason,
+		InstanceID:       instanceID,
+		UserID:           event.UserID,
+		RoleID:           event.RoleID,
+		PermissionID:     event.PermissionID,
 	}
 }
 
@@ -86,9 +89,6 @@ func validatePolicyRefreshMessage(message PolicyRefreshMessage) error {
 	if strings.TrimSpace(message.IdempotencyKey) == "" {
 		return fmt.Errorf("rbac policy refresh idempotency_key is required")
 	}
-	if message.PolicyRevision <= 0 {
-		return fmt.Errorf("invalid rbac policy revision: %d", message.PolicyRevision)
-	}
 	if strings.TrimSpace(message.Reason) == "" {
 		return fmt.Errorf("rbac policy refresh reason is required")
 	}
@@ -104,7 +104,19 @@ func validatePolicyRefreshMessage(message PolicyRefreshMessage) error {
 	}
 	switch message.Kind {
 	case policyRefreshKindPolicyChanged:
+		if message.PolicyRevision == nil || *message.PolicyRevision <= 0 {
+			return fmt.Errorf("invalid rbac policy revision")
+		}
+		if message.UserRoleRevision != nil {
+			return fmt.Errorf("rbac policy refresh user_role_revision must be empty for %s", message.Kind)
+		}
 	case policyRefreshKindUserRoleChanged:
+		if message.UserRoleRevision == nil || *message.UserRoleRevision <= 0 {
+			return fmt.Errorf("invalid rbac user-role revision")
+		}
+		if message.PolicyRevision != nil {
+			return fmt.Errorf("rbac policy refresh policy_revision must be empty for %s", message.Kind)
+		}
 		if message.UserID == nil || *message.UserID == uuid.Nil {
 			return fmt.Errorf("rbac policy refresh user_id is required for %s", message.Kind)
 		}
@@ -112,6 +124,13 @@ func validatePolicyRefreshMessage(message PolicyRefreshMessage) error {
 		return fmt.Errorf("invalid rbac policy change kind: %q", message.Kind)
 	}
 	return nil
+}
+
+func (m PolicyRefreshMessage) policyRevision() int64 {
+	if m.PolicyRevision == nil {
+		return 0
+	}
+	return *m.PolicyRevision
 }
 
 func (m PolicyRefreshMessage) policyChange() permissionapplication.PolicyChange {
@@ -126,6 +145,17 @@ func (m PolicyRefreshMessage) policyChange() permissionapplication.PolicyChange 
 		RoleID:       uuidValue(m.RoleID),
 		PermissionID: uuidValue(m.PermissionID),
 	}
+}
+
+func messageRevisionLogFields(message PolicyRefreshMessage) []zap.Field {
+	fields := make([]zap.Field, 0, 2)
+	if message.PolicyRevision != nil {
+		fields = append(fields, zap.Int64("hint_policy_revision", *message.PolicyRevision))
+	}
+	if message.UserRoleRevision != nil {
+		fields = append(fields, zap.Int64("user_role_revision", *message.UserRoleRevision))
+	}
+	return fields
 }
 
 func uuidValue(value *uuid.UUID) uuid.UUID {

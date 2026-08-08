@@ -14,8 +14,16 @@ func TestRbacPolicyRevisionUsesRevisionIdentity(t *testing.T) {
 	require.Equal(t, "revision", fields["id"].StorageKey)
 	require.True(t, fields["id"].Immutable)
 	require.True(t, fields["role_id"].Optional)
-	require.True(t, fields["user_id"].Optional)
 	require.True(t, fields["permission_id"].Optional)
+}
+
+func TestRbacUserRoleRevisionUsesRevisionIdentity(t *testing.T) {
+	fields := fieldDescriptors(RbacUserRoleRevision{}.Fields())
+
+	require.Equal(t, "revision", fields["id"].StorageKey)
+	require.True(t, fields["id"].Immutable)
+	require.False(t, fields["user_id"].Optional)
+	require.True(t, fields["role_id"].Optional)
 }
 
 func TestTimestampMixinsUseMillisDefaults(t *testing.T) {
@@ -42,7 +50,10 @@ func TestRbacPolicyOutboxDefaultsAndConstraints(t *testing.T) {
 
 	require.Equal(t, defaultRbacPolicyOutboxStatus, fields["status"].Default)
 	require.Equal(t, 0, fields["attempt_count"].Default)
-	require.True(t, fields["revision"].Unique)
+	require.True(t, fields["policy_revision"].Optional)
+	require.True(t, fields["policy_revision"].Nillable)
+	require.True(t, fields["user_role_revision"].Optional)
+	require.True(t, fields["user_role_revision"].Nillable)
 	require.True(t, fields["event_id"].Unique)
 	require.True(t, fields["idempotency_key"].Unique)
 	require.True(t, fields["claim_token"].Optional)

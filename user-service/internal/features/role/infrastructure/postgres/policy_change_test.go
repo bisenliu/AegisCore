@@ -19,6 +19,7 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 	entrbacpolicyoutboxevent "github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	entrbacpolicyrevision "github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
+	entrbacuserrolerevision "github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
 	entrole "github.com/aegiscore/user-service/internal/persistence/ent/role"
 )
 
@@ -63,18 +64,28 @@ func TestOnlineRoleMutationsAppendCommittedRevisionAndPendingOutbox(t *testing.T
 
 	userRoleAdded, err := userRoles.Add(ctx, userID, roleID, userRolePolicyChange("user_role_added", userID, roleID))
 	require.NoError(t, err)
-	assertPolicyFact(ctx, t, client, userRoleAdded.Revision, userRolePolicyChange("user_role_added", userID, roleID))
+	assertUserRoleFact(ctx, t, client, userRoleAdded.Revision, userRolePolicyChange("user_role_added", userID, roleID))
 	userRolesReplaced, err := userRoles.Replace(ctx, userID, []uuid.UUID{otherRoleID}, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil))
 	require.NoError(t, err)
-	assertPolicyFact(ctx, t, client, userRolesReplaced.Revision, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil))
+	assertUserRoleFact(ctx, t, client, userRolesReplaced.Revision, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil))
 	userRoleRemoved, err := userRoles.Remove(ctx, userID, otherRoleID, userRolePolicyChange("user_role_removed", userID, otherRoleID))
 	require.NoError(t, err)
-	assertPolicyFact(ctx, t, client, userRoleRemoved.Revision, userRolePolicyChange("user_role_removed", userID, otherRoleID))
+	assertUserRoleFact(ctx, t, client, userRoleRemoved.Revision, userRolePolicyChange("user_role_removed", userID, otherRoleID))
 
-	committed := []int64{created.Revision, updated.Revision, status.Revision, permissionAdded.Revision, permissionReplaced.Revision, permissionRemoved.Revision, userRoleAdded.Revision, userRolesReplaced.Revision, userRoleRemoved.Revision}
+	committed := []int64{created.Revision, updated.Revision, status.Revision, permissionAdded.Revision, permissionReplaced.Revision, permissionRemoved.Revision}
 	for index := 1; index < len(committed); index++ {
 		require.Greater(t, committed[index], committed[index-1])
 	}
+	userRoleCommitted := []int64{userRoleAdded.Revision, userRolesReplaced.Revision, userRoleRemoved.Revision}
+	for index := 1; index < len(userRoleCommitted); index++ {
+		require.Greater(t, userRoleCommitted[index], userRoleCommitted[index-1])
+	}
+	policyRevisionCount, err := client.RbacPolicyRevision.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, len(committed), policyRevisionCount)
+	userRoleRevisionCount, err := client.RbacUserRoleRevision.Query().Count(ctx)
+	require.NoError(t, err)
+	require.Equal(t, len(userRoleCommitted), userRoleRevisionCount)
 }
 
 func TestPolicyFactFailuresRollbackBusinessMutation(t *testing.T) {
@@ -313,20 +324,17 @@ func appendPolicyFactInOpenTransaction(ctx context.Context, t *testing.T, tx *en
 		SetID(counter.LastRevision).
 		SetReason(change.Reason).
 		SetNillableRoleID(nonNilUUID(change.RoleID)).
-		SetNillableUserID(nonNilUUID(change.UserID)).
 		SetNillablePermissionID(nonNilUUID(change.PermissionID)).
 		Save(ctx)
 	require.NoError(t, err)
 	_, err = tx.RbacPolicyOutboxEvent.Create().
 		SetEventID(uuid.New()).
-		SetRevision(revision.ID).
+		SetPolicyRevision(revision.ID).
 		SetKind(string(change.Kind)).
 		SetReason(change.Reason).
 		SetNillableRoleID(nonNilUUID(change.RoleID)).
-		SetNillableUserID(nonNilUUID(change.UserID)).
 		SetNillablePermissionID(nonNilUUID(change.PermissionID)).
 		SetIdempotencyKey("rbac-policy-revision:" + strconv.FormatInt(revision.ID, 10)).
-		SetPolicyRevisionID(revision.ID).
 		Save(ctx)
 	require.NoError(t, err)
 	return revision.ID
@@ -339,19 +347,39 @@ func assertPolicyFact(ctx context.Context, t *testing.T, client *ent.Client, rev
 	require.NoError(t, err)
 	require.Equal(t, change.Reason, revisionRow.Reason)
 	require.Equal(t, optionalUUID(change.RoleID), revisionRow.RoleID)
-	require.Equal(t, optionalUUID(change.UserID), revisionRow.UserID)
 	require.Equal(t, optionalUUID(change.PermissionID), revisionRow.PermissionID)
-	event, err := client.RbacPolicyOutboxEvent.Query().Where(entrbacpolicyoutboxevent.RevisionEQ(revision)).Only(ctx)
+	event, err := client.RbacPolicyOutboxEvent.Query().Where(entrbacpolicyoutboxevent.PolicyRevisionEQ(revision)).Only(ctx)
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, event.EventID)
+	require.Equal(t, string(change.Kind), event.Kind)
+	require.Equal(t, change.Reason, event.Reason)
+	require.Equal(t, optionalUUID(change.RoleID), event.RoleID)
+	require.Nil(t, event.UserID)
+	require.Equal(t, optionalUUID(change.PermissionID), event.PermissionID)
+	require.Equal(t, "pending", event.Status)
+	require.Zero(t, event.AttemptCount)
+	require.Equal(t, "rbac-policy-revision:"+strconv.FormatInt(revision, 10), event.IdempotencyKey)
+}
+
+func assertUserRoleFact(ctx context.Context, t *testing.T, client *ent.Client, revision int64, change roleapplication.PolicyChange) {
+	t.Helper()
+	require.Positive(t, revision)
+	revisionRow, err := client.RbacUserRoleRevision.Query().Where(entrbacuserrolerevision.IDEQ(revision)).Only(ctx)
+	require.NoError(t, err)
+	require.Equal(t, change.Reason, revisionRow.Reason)
+	require.Equal(t, change.UserID, revisionRow.UserID)
+	require.Equal(t, optionalUUID(change.RoleID), revisionRow.RoleID)
+	event, err := client.RbacPolicyOutboxEvent.Query().Where(entrbacpolicyoutboxevent.UserRoleRevisionEQ(revision)).Only(ctx)
 	require.NoError(t, err)
 	require.NotEqual(t, uuid.Nil, event.EventID)
 	require.Equal(t, string(change.Kind), event.Kind)
 	require.Equal(t, change.Reason, event.Reason)
 	require.Equal(t, optionalUUID(change.RoleID), event.RoleID)
 	require.Equal(t, optionalUUID(change.UserID), event.UserID)
-	require.Equal(t, optionalUUID(change.PermissionID), event.PermissionID)
+	require.Nil(t, event.PermissionID)
 	require.Equal(t, "pending", event.Status)
 	require.Zero(t, event.AttemptCount)
-	require.Equal(t, "rbac-policy-revision:"+strconv.FormatInt(revision, 10), event.IdempotencyKey)
+	require.Equal(t, "rbac-user-role-revision:"+strconv.FormatInt(revision, 10), event.IdempotencyKey)
 }
 
 func assertRoleAndFactCounts(ctx context.Context, t *testing.T, client *ent.Client, roleID uuid.UUID, name string, revisionCount int, outboxCount int) {

@@ -35,7 +35,8 @@ func (RbacPolicyOutboxEvent) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("id").Unique().Immutable().Comment("RBAC policy outbox 内部ID"),
 		field.UUID("event_id", uuid.UUID{}).Unique().Immutable().Comment("稳定 outbox event ID"),
-		field.Int64("revision").Unique().Immutable().Comment("关联的 RBAC policy revision"),
+		field.Int64("policy_revision").Optional().Nillable().Immutable().Comment("关联的 RBAC policy revision"),
+		field.Int64("user_role_revision").Optional().Nillable().Immutable().Comment("关联的 RBAC user-role revision"),
 		field.String("kind").NotEmpty().Immutable().MaxLen(32).Validate(oneOfStrings(rbacPolicyOutboxKindPolicyChanged, rbacPolicyOutboxKindUserRoleChanged)).Comment("事件类型"),
 		field.String("reason").NotEmpty().Immutable().MaxLen(64).Comment("触发 policy 变更的稳定原因"),
 		field.UUID("role_id", uuid.UUID{}).Optional().Nillable().Immutable().Comment("相关外部角色ID"),
@@ -55,14 +56,15 @@ func (RbacPolicyOutboxEvent) Fields() []ent.Field {
 // Edges 返回 outbox event 与 policy revision 的一对一关联。
 func (RbacPolicyOutboxEvent) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.From("policy_revision", RbacPolicyRevision.Type).Ref("outbox_event").Field("revision").Required().Unique().Immutable(),
+		edge.From("policy_revision_edge", RbacPolicyRevision.Type).Ref("outbox_event").Field("policy_revision").Unique().Immutable(),
+		edge.From("user_role_revision_edge", RbacUserRoleRevision.Type).Ref("outbox_event").Field("user_role_revision").Unique().Immutable(),
 	}
 }
 
 // Indexes 返回 dispatcher 后续按状态和重试时间扫描所需索引。
 func (RbacPolicyOutboxEvent) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("status", "next_attempt_at", "revision"),
-		index.Fields("status", "claimed_until", "revision"),
+		index.Fields("status", "next_attempt_at", "policy_revision", "user_role_revision"),
+		index.Fields("status", "claimed_until", "policy_revision", "user_role_revision"),
 	}
 }

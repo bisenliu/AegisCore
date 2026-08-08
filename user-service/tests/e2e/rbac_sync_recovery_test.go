@@ -118,7 +118,7 @@ func TestRBACOutboxRedisRecoveryConvergesAllProjectionsWithoutNewWrite(t *testin
 	// 先制造一次投递失败，确认事件保留在 outbox；恢复 Redis 后不得依赖新的业务写入触发重试。
 	_, err = dispatcher.DispatchOnce(ctx)
 	require.Error(t, err)
-	failed, err := client.RbacPolicyOutboxEvent.Query().Where(entrbacoutbox.RevisionEQ(finalRevision)).Only(ctx)
+	failed, err := client.RbacPolicyOutboxEvent.Query().Where(entrbacoutbox.PolicyRevisionEQ(finalRevision)).Only(ctx)
 	require.NoError(t, err)
 	require.Equal(t, permissionapplication.OutboxStatusFailed, failed.Status)
 	require.Equal(t, 1, failed.AttemptCount)

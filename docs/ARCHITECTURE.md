@@ -127,7 +127,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 4. permission authorizer 使用 Casbin 或同步后的 policy 判断访问权限。
 5. 通过后进入目标 controller。
 
-在线 RBAC 写入提交后，Redis Pub/Sub 只向各副本发送快速唤醒 hint，PostgreSQL latest policy revision 是恢复与收敛的唯一权威事实。`common/runtime/redispubsub` 独立监督可重建的 Pub/Sub subscription，permission Redis watcher 只消费其消息并在自己的根生命周期中执行启动立即校准和后续周期数据库 revision 校准；通用 subscriber 的确认、Receive 或协议失败只进入有界退避重连，不停止 watcher 的权威校准。消息处理与周期校准在 watcher 根循环中串行执行，防止 Casbin projection 并发倒退。readiness 依据最后一次完整权威校准的 staleness 判定，当前订阅正在重连但校准仍新鲜时不制造 watcher 粘滞失败。
+在线 RBAC policy 写入提交后，Redis Pub/Sub 只向各副本发送快速唤醒 hint，PostgreSQL latest policy revision 是 Casbin 静态授权规则恢复与收敛的唯一权威事实。用户角色绑定写入使用独立 user-role revision，只驱动用户角色缓存失效，不推进 Casbin engine applied revision，也不触发 `role_permissions` 全量加载。`common/runtime/redispubsub` 独立监督可重建的 Pub/Sub subscription，permission Redis watcher 只消费其消息并在自己的根生命周期中执行启动立即校准和后续周期数据库 policy revision 校准；通用 subscriber 的确认、Receive 或协议失败只进入有界退避重连，不停止 watcher 的权威校准。消息处理与周期校准在 watcher 根循环中串行执行，并合并同批待处理通知，防止 Casbin projection 并发倒退或被重复消息放大全量重建。readiness 依据最后一次完整权威校准的 staleness 判定，当前订阅正在重连但校准仍新鲜时不制造 watcher 粘滞失败。
 
 ### 6.4 RBAC seed 和超级管理员 bootstrap
 
@@ -135,7 +135,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 2. role seed service 按 `rbacbaseline.DefaultPermissions()` 的稳定 `permission_id` 创建或更新权限投影，并维护系统角色和默认绑定。
 3. 权限定义变更随代码发布；路由测试构建真实 Gin route graph，与代码基线双向比较，missing 或 stale 均阻断 CI。
 4. `bootstrap-super-admin` 读取 `ADMIN_BOOTSTRAP_PASSWORD`，使用 `rbacbaseline.BootstrapSuperAdminUserID` 创建 `MustChangePassword` 用户并绑定内置超级管理员角色。
-5. 后续超级管理员授权通过在线用户角色绑定 API 完成，由在线流程负责 policy version 发布和缓存收敛。
+5. 后续超级管理员授权通过在线用户角色绑定 API 完成，由在线流程负责 user-role revision 发布和用户角色缓存失效；只有角色状态、角色权限或权限投影变化才负责 policy revision 发布和 Casbin policy 收敛。
 
 系统内置 RBAC 角色、权限和 bootstrap 用户 ID 由 `user-service/internal/shared/rbacbaseline/ids.go` 统一定义为手写固化 UUID 字符串，semantic name 绑定稳定业务授权语义，不绑定项目展示名、HTTP path、中文文案或 Go symbol。普通运行时业务实体仍使用 `common/runtime/id.NewUUID()` 生成 UUID v7；已有项目重命名不得默认修改、重算或复用系统内置 ID。
 

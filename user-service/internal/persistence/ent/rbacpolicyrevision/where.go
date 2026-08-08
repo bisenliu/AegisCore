@@ -69,11 +69,6 @@ func RoleID(v uuid.UUID) predicate.RbacPolicyRevision {
 	return predicate.RbacPolicyRevision(sql.FieldEQ(FieldRoleID, v))
 }
 
-// UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
-func UserID(v uuid.UUID) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldEQ(FieldUserID, v))
-}
-
 // PermissionID applies equality check predicate on the "permission_id" field. It's identical to PermissionIDEQ.
 func PermissionID(v uuid.UUID) predicate.RbacPolicyRevision {
 	return predicate.RbacPolicyRevision(sql.FieldEQ(FieldPermissionID, v))
@@ -232,56 +227,6 @@ func RoleIDIsNil() predicate.RbacPolicyRevision {
 // RoleIDNotNil applies the NotNil predicate on the "role_id" field.
 func RoleIDNotNil() predicate.RbacPolicyRevision {
 	return predicate.RbacPolicyRevision(sql.FieldNotNull(FieldRoleID))
-}
-
-// UserIDEQ applies the EQ predicate on the "user_id" field.
-func UserIDEQ(v uuid.UUID) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldEQ(FieldUserID, v))
-}
-
-// UserIDNEQ applies the NEQ predicate on the "user_id" field.
-func UserIDNEQ(v uuid.UUID) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldNEQ(FieldUserID, v))
-}
-
-// UserIDIn applies the In predicate on the "user_id" field.
-func UserIDIn(vs ...uuid.UUID) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldIn(FieldUserID, vs...))
-}
-
-// UserIDNotIn applies the NotIn predicate on the "user_id" field.
-func UserIDNotIn(vs ...uuid.UUID) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldNotIn(FieldUserID, vs...))
-}
-
-// UserIDGT applies the GT predicate on the "user_id" field.
-func UserIDGT(v uuid.UUID) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldGT(FieldUserID, v))
-}
-
-// UserIDGTE applies the GTE predicate on the "user_id" field.
-func UserIDGTE(v uuid.UUID) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldGTE(FieldUserID, v))
-}
-
-// UserIDLT applies the LT predicate on the "user_id" field.
-func UserIDLT(v uuid.UUID) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldLT(FieldUserID, v))
-}
-
-// UserIDLTE applies the LTE predicate on the "user_id" field.
-func UserIDLTE(v uuid.UUID) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldLTE(FieldUserID, v))
-}
-
-// UserIDIsNil applies the IsNil predicate on the "user_id" field.
-func UserIDIsNil() predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldIsNull(FieldUserID))
-}
-
-// UserIDNotNil applies the NotNil predicate on the "user_id" field.
-func UserIDNotNil() predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(sql.FieldNotNull(FieldUserID))
 }
 
 // PermissionIDEQ applies the EQ predicate on the "permission_id" field.

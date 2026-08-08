@@ -25,8 +25,6 @@ type RbacPolicyRevision struct {
 	Reason string `json:"reason,omitempty"`
 	// 相关外部角色ID
 	RoleID *uuid.UUID `json:"role_id,omitempty"`
-	// 相关外部用户ID
-	UserID *uuid.UUID `json:"user_id,omitempty"`
 	// 相关外部权限ID
 	PermissionID *uuid.UUID `json:"permission_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -60,7 +58,7 @@ func (*RbacPolicyRevision) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case rbacpolicyrevision.FieldRoleID, rbacpolicyrevision.FieldUserID, rbacpolicyrevision.FieldPermissionID:
+		case rbacpolicyrevision.FieldRoleID, rbacpolicyrevision.FieldPermissionID:
 			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
 		case rbacpolicyrevision.FieldID, rbacpolicyrevision.FieldCreatedAt:
 			values[i] = new(sql.NullInt64)
@@ -105,13 +103,6 @@ func (_m *RbacPolicyRevision) assignValues(columns []string, values []any) error
 			} else if value.Valid {
 				_m.RoleID = new(uuid.UUID)
 				*_m.RoleID = *value.S.(*uuid.UUID)
-			}
-		case rbacpolicyrevision.FieldUserID:
-			if value, ok := values[i].(*sql.NullScanner); !ok {
-				return fmt.Errorf("unexpected type %T for field user_id", values[i])
-			} else if value.Valid {
-				_m.UserID = new(uuid.UUID)
-				*_m.UserID = *value.S.(*uuid.UUID)
 			}
 		case rbacpolicyrevision.FieldPermissionID:
 			if value, ok := values[i].(*sql.NullScanner); !ok {
@@ -169,11 +160,6 @@ func (_m *RbacPolicyRevision) String() string {
 	builder.WriteString(", ")
 	if v := _m.RoleID; v != nil {
 		builder.WriteString("role_id=")
-		builder.WriteString(fmt.Sprintf("%v", *v))
-	}
-	builder.WriteString(", ")
-	if v := _m.UserID; v != nil {
-		builder.WriteString("user_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")

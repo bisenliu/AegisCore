@@ -61,17 +61,30 @@ func (s *Store) PublishPolicyRevision(ctx context.Context, event permissionappli
 	if err != nil {
 		return err
 	}
-	if err := s.client.Eval(ctx, cachePolicyRevisionScript, []string{s.keys.PolicyVersionKey()}, event.Revision).Err(); err != nil {
-		logger.Error(ctx, "rbac policy revision cache failed", logger.StackTrace(zap.Int64("policy_revision", event.Revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))...)
-		return fmt.Errorf("cache rbac policy revision: %w", err)
+	if event.PolicyRevision != nil {
+		if err := s.client.Eval(ctx, cachePolicyRevisionScript, []string{s.keys.PolicyVersionKey()}, *event.PolicyRevision).Err(); err != nil {
+			logger.Error(ctx, "rbac policy revision cache failed", logger.StackTrace(zap.Int64("policy_revision", *event.PolicyRevision), zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))...)
+			return fmt.Errorf("cache rbac policy revision: %w", err)
+		}
+		logger.Info(ctx, "rbac policy revision cached", zap.Int64("policy_revision", *event.PolicyRevision), zap.String("instance_id", s.instanceID), zap.String("reason", reason))
 	}
-	logger.Info(ctx, "rbac policy revision cached", zap.Int64("policy_revision", event.Revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason))
 	if err := s.client.Publish(ctx, s.keys.PolicyChannel(), payload).Err(); err != nil {
-		logger.Error(ctx, "rbac policy refresh publish failed", logger.StackTrace(zap.Int64("policy_revision", event.Revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))...)
+		logger.Error(ctx, "rbac policy refresh publish failed", logger.StackTrace(append(eventRevisionLogFields(event), zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))...)...)
 		return fmt.Errorf("publish rbac policy refresh: %w", err)
 	}
-	logger.Info(ctx, "rbac policy refresh published", zap.Int64("policy_revision", event.Revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason))
+	logger.Info(ctx, "rbac policy refresh published", append(eventRevisionLogFields(event), zap.String("instance_id", s.instanceID), zap.String("reason", reason))...)
 	return nil
+}
+
+func eventRevisionLogFields(event permissionapplication.OutboxEvent) []zap.Field {
+	fields := make([]zap.Field, 0, 2)
+	if event.PolicyRevision != nil {
+		fields = append(fields, zap.Int64("policy_revision", *event.PolicyRevision))
+	}
+	if event.UserRoleRevision != nil {
+		fields = append(fields, zap.Int64("user_role_revision", *event.UserRoleRevision))
+	}
+	return fields
 }
 
 // CurrentVersion 读取 Redis 中缓存的最新 RBAC policy revision。

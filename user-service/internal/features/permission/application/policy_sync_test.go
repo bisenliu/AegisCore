@@ -49,18 +49,15 @@ func TestPolicyRefreshCoordinatorRejectsIncompleteProjectionStatus(t *testing.T)
 	require.ErrorContains(t, coordinator.NotifyPolicyChanged(context.Background(), revision, NewPolicyReloadChange("permission_updated")), "did not reach target revision")
 }
 
-func TestPolicyRefreshCoordinatorUserRoleChangeAdvancesProjectionBeforeInvalidation(t *testing.T) {
+func TestPolicyRefreshCoordinatorUserRoleChangeOnlyInvalidatesCache(t *testing.T) {
 	const revision int64 = 7
 	userID := uuid.MustParse("018f0000-0000-7000-8000-000000000901")
 	roleID := uuid.MustParse("018f0000-0000-7000-8000-000000000902")
 	engine := NewMockPolicyReloadEngine(gomock.NewController(t))
-	engine.EXPECT().ReloadToRevision(gomock.Any(), revision).Return(revision, nil)
-	engine.EXPECT().ProjectionStatus().Return(PolicyProjectionStatus{Initialized: true, ReloadSucceeded: true, AppliedRevision: revision, TargetRevision: revision})
 	engine.EXPECT().InvalidateUserRole(userID)
-	engine.EXPECT().AppliedRevision().Return(revision)
 	metrics := NewMockMetrics(gomock.NewController(t))
 	metrics.EXPECT().PolicyReloadSucceeded(gomock.Any(), MetricsSourceLocalChange)
 	coordinator := NewPolicyRefreshCoordinator(engine, nil, metrics)
 
-	require.NoError(t, coordinator.NotifyPolicyChanged(context.Background(), revision, NewUserRoleChange("user_role_added", userID, roleID)))
+	require.NoError(t, coordinator.NotifyUserRoleChanged(context.Background(), revision, NewUserRoleChange("user_role_added", userID, roleID)))
 }

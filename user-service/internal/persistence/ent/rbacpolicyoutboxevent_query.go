@@ -15,17 +15,19 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
+	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
 )
 
 // RbacPolicyOutboxEventQuery is the builder for querying RbacPolicyOutboxEvent entities.
 type RbacPolicyOutboxEventQuery struct {
 	config
-	ctx                *QueryContext
-	order              []rbacpolicyoutboxevent.OrderOption
-	inters             []Interceptor
-	predicates         []predicate.RbacPolicyOutboxEvent
-	withPolicyRevision *RbacPolicyRevisionQuery
-	modifiers          []func(*sql.Selector)
+	ctx                      *QueryContext
+	order                    []rbacpolicyoutboxevent.OrderOption
+	inters                   []Interceptor
+	predicates               []predicate.RbacPolicyOutboxEvent
+	withPolicyRevisionEdge   *RbacPolicyRevisionQuery
+	withUserRoleRevisionEdge *RbacUserRoleRevisionQuery
+	modifiers                []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -62,8 +64,8 @@ func (_q *RbacPolicyOutboxEventQuery) Order(o ...rbacpolicyoutboxevent.OrderOpti
 	return _q
 }
 
-// QueryPolicyRevision chains the current query on the "policy_revision" edge.
-func (_q *RbacPolicyOutboxEventQuery) QueryPolicyRevision() *RbacPolicyRevisionQuery {
+// QueryPolicyRevisionEdge chains the current query on the "policy_revision_edge" edge.
+func (_q *RbacPolicyOutboxEventQuery) QueryPolicyRevisionEdge() *RbacPolicyRevisionQuery {
 	query := (&RbacPolicyRevisionClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
@@ -76,7 +78,29 @@ func (_q *RbacPolicyOutboxEventQuery) QueryPolicyRevision() *RbacPolicyRevisionQ
 		step := sqlgraph.NewStep(
 			sqlgraph.From(rbacpolicyoutboxevent.Table, rbacpolicyoutboxevent.FieldID, selector),
 			sqlgraph.To(rbacpolicyrevision.Table, rbacpolicyrevision.FieldID),
-			sqlgraph.Edge(sqlgraph.O2O, true, rbacpolicyoutboxevent.PolicyRevisionTable, rbacpolicyoutboxevent.PolicyRevisionColumn),
+			sqlgraph.Edge(sqlgraph.O2O, true, rbacpolicyoutboxevent.PolicyRevisionEdgeTable, rbacpolicyoutboxevent.PolicyRevisionEdgeColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryUserRoleRevisionEdge chains the current query on the "user_role_revision_edge" edge.
+func (_q *RbacPolicyOutboxEventQuery) QueryUserRoleRevisionEdge() *RbacUserRoleRevisionQuery {
+	query := (&RbacUserRoleRevisionClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(rbacpolicyoutboxevent.Table, rbacpolicyoutboxevent.FieldID, selector),
+			sqlgraph.To(rbacuserrolerevision.Table, rbacuserrolerevision.FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, true, rbacpolicyoutboxevent.UserRoleRevisionEdgeTable, rbacpolicyoutboxevent.UserRoleRevisionEdgeColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -271,26 +295,38 @@ func (_q *RbacPolicyOutboxEventQuery) Clone() *RbacPolicyOutboxEventQuery {
 		return nil
 	}
 	return &RbacPolicyOutboxEventQuery{
-		config:             _q.config,
-		ctx:                _q.ctx.Clone(),
-		order:              append([]rbacpolicyoutboxevent.OrderOption{}, _q.order...),
-		inters:             append([]Interceptor{}, _q.inters...),
-		predicates:         append([]predicate.RbacPolicyOutboxEvent{}, _q.predicates...),
-		withPolicyRevision: _q.withPolicyRevision.Clone(),
+		config:                   _q.config,
+		ctx:                      _q.ctx.Clone(),
+		order:                    append([]rbacpolicyoutboxevent.OrderOption{}, _q.order...),
+		inters:                   append([]Interceptor{}, _q.inters...),
+		predicates:               append([]predicate.RbacPolicyOutboxEvent{}, _q.predicates...),
+		withPolicyRevisionEdge:   _q.withPolicyRevisionEdge.Clone(),
+		withUserRoleRevisionEdge: _q.withUserRoleRevisionEdge.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
 }
 
-// WithPolicyRevision tells the query-builder to eager-load the nodes that are connected to
-// the "policy_revision" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *RbacPolicyOutboxEventQuery) WithPolicyRevision(opts ...func(*RbacPolicyRevisionQuery)) *RbacPolicyOutboxEventQuery {
+// WithPolicyRevisionEdge tells the query-builder to eager-load the nodes that are connected to
+// the "policy_revision_edge" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *RbacPolicyOutboxEventQuery) WithPolicyRevisionEdge(opts ...func(*RbacPolicyRevisionQuery)) *RbacPolicyOutboxEventQuery {
 	query := (&RbacPolicyRevisionClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withPolicyRevision = query
+	_q.withPolicyRevisionEdge = query
+	return _q
+}
+
+// WithUserRoleRevisionEdge tells the query-builder to eager-load the nodes that are connected to
+// the "user_role_revision_edge" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *RbacPolicyOutboxEventQuery) WithUserRoleRevisionEdge(opts ...func(*RbacUserRoleRevisionQuery)) *RbacPolicyOutboxEventQuery {
+	query := (&RbacUserRoleRevisionClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withUserRoleRevisionEdge = query
 	return _q
 }
 
@@ -372,8 +408,9 @@ func (_q *RbacPolicyOutboxEventQuery) sqlAll(ctx context.Context, hooks ...query
 	var (
 		nodes       = []*RbacPolicyOutboxEvent{}
 		_spec       = _q.querySpec()
-		loadedTypes = [1]bool{
-			_q.withPolicyRevision != nil,
+		loadedTypes = [2]bool{
+			_q.withPolicyRevisionEdge != nil,
+			_q.withUserRoleRevisionEdge != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -397,20 +434,29 @@ func (_q *RbacPolicyOutboxEventQuery) sqlAll(ctx context.Context, hooks ...query
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
-	if query := _q.withPolicyRevision; query != nil {
-		if err := _q.loadPolicyRevision(ctx, query, nodes, nil,
-			func(n *RbacPolicyOutboxEvent, e *RbacPolicyRevision) { n.Edges.PolicyRevision = e }); err != nil {
+	if query := _q.withPolicyRevisionEdge; query != nil {
+		if err := _q.loadPolicyRevisionEdge(ctx, query, nodes, nil,
+			func(n *RbacPolicyOutboxEvent, e *RbacPolicyRevision) { n.Edges.PolicyRevisionEdge = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withUserRoleRevisionEdge; query != nil {
+		if err := _q.loadUserRoleRevisionEdge(ctx, query, nodes, nil,
+			func(n *RbacPolicyOutboxEvent, e *RbacUserRoleRevision) { n.Edges.UserRoleRevisionEdge = e }); err != nil {
 			return nil, err
 		}
 	}
 	return nodes, nil
 }
 
-func (_q *RbacPolicyOutboxEventQuery) loadPolicyRevision(ctx context.Context, query *RbacPolicyRevisionQuery, nodes []*RbacPolicyOutboxEvent, init func(*RbacPolicyOutboxEvent), assign func(*RbacPolicyOutboxEvent, *RbacPolicyRevision)) error {
+func (_q *RbacPolicyOutboxEventQuery) loadPolicyRevisionEdge(ctx context.Context, query *RbacPolicyRevisionQuery, nodes []*RbacPolicyOutboxEvent, init func(*RbacPolicyOutboxEvent), assign func(*RbacPolicyOutboxEvent, *RbacPolicyRevision)) error {
 	ids := make([]int64, 0, len(nodes))
 	nodeids := make(map[int64][]*RbacPolicyOutboxEvent)
 	for i := range nodes {
-		fk := nodes[i].Revision
+		if nodes[i].PolicyRevision == nil {
+			continue
+		}
+		fk := *nodes[i].PolicyRevision
 		if _, ok := nodeids[fk]; !ok {
 			ids = append(ids, fk)
 		}
@@ -427,7 +473,39 @@ func (_q *RbacPolicyOutboxEventQuery) loadPolicyRevision(ctx context.Context, qu
 	for _, n := range neighbors {
 		nodes, ok := nodeids[n.ID]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "revision" returned %v`, n.ID)
+			return fmt.Errorf(`unexpected foreign-key "policy_revision" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
+func (_q *RbacPolicyOutboxEventQuery) loadUserRoleRevisionEdge(ctx context.Context, query *RbacUserRoleRevisionQuery, nodes []*RbacPolicyOutboxEvent, init func(*RbacPolicyOutboxEvent), assign func(*RbacPolicyOutboxEvent, *RbacUserRoleRevision)) error {
+	ids := make([]int64, 0, len(nodes))
+	nodeids := make(map[int64][]*RbacPolicyOutboxEvent)
+	for i := range nodes {
+		if nodes[i].UserRoleRevision == nil {
+			continue
+		}
+		fk := *nodes[i].UserRoleRevision
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(rbacuserrolerevision.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "user_role_revision" returned %v`, n.ID)
 		}
 		for i := range nodes {
 			assign(nodes[i], n)
@@ -464,8 +542,11 @@ func (_q *RbacPolicyOutboxEventQuery) querySpec() *sqlgraph.QuerySpec {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
 		}
-		if _q.withPolicyRevision != nil {
-			_spec.Node.AddColumnOnce(rbacpolicyoutboxevent.FieldRevision)
+		if _q.withPolicyRevisionEdge != nil {
+			_spec.Node.AddColumnOnce(rbacpolicyoutboxevent.FieldPolicyRevision)
+		}
+		if _q.withUserRoleRevisionEdge != nil {
+			_spec.Node.AddColumnOnce(rbacpolicyoutboxevent.FieldUserRoleRevision)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

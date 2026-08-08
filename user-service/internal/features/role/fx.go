@@ -54,3 +54,8 @@ func newPolicyChangeNotifier(notifier permissionapplication.PolicyChangeNotifier
 func (n *policyChangeNotifier) NotifyPolicyChanged(ctx context.Context, revision int64, change permissionapplication.PolicyChange) error {
 	return n.notifier.NotifyPolicyChanged(ctx, revision, change)
 }
+
+// NotifyUserRoleChanged 将 role application 的用户角色缓存失效端口转发到 permission feature 协调器。
+func (n *policyChangeNotifier) NotifyUserRoleChanged(ctx context.Context, revision int64, change permissionapplication.PolicyChange) error {
+	return n.notifier.NotifyUserRoleChanged(ctx, revision, change)
+}

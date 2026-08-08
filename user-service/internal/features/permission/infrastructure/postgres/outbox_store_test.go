@@ -186,9 +186,10 @@ func TestOutboxStorePostgresConcurrentClaimsDoNotOverlap(t *testing.T) {
 		require.Len(t, claims, 3)
 		claimCount += len(claims)
 		for _, claim := range claims {
-			_, duplicate := claimedRevisions[claim.Event.Revision]
-			require.False(t, duplicate, "revision %d was claimed twice", claim.Event.Revision)
-			claimedRevisions[claim.Event.Revision] = struct{}{}
+			revision := claim.Event.Revision()
+			_, duplicate := claimedRevisions[revision]
+			require.False(t, duplicate, "revision %d was claimed twice", revision)
+			claimedRevisions[revision] = struct{}{}
 			claimTokens[claim.ClaimToken] = struct{}{}
 		}
 	}
@@ -207,14 +208,14 @@ func TestOutboxStorePostgresClaimSkipsLockedFirstRow(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tx.Rollback() })
 	var lockedID int64
-	err = tx.QueryRowContext(ctx, "SELECT id FROM rbac_policy_outbox_events WHERE revision = $1 FOR UPDATE", 1).Scan(&lockedID)
+	err = tx.QueryRowContext(ctx, "SELECT id FROM rbac_policy_outbox_events WHERE policy_revision = $1 FOR UPDATE", 1).Scan(&lockedID)
 	require.NoError(t, err)
 	require.Positive(t, lockedID)
 
 	claims, err := store.Claim(ctx, now, 1, time.Minute)
 	require.NoError(t, err)
 	require.Len(t, claims, 1)
-	require.Equal(t, int64(2), claims[0].Event.Revision)
+	require.Equal(t, int64(2), claims[0].Event.Revision())
 }
 
 func TestOutboxStorePostgresReclaimsExpiredLeaseAndRejectsStaleToken(t *testing.T) {
@@ -257,7 +258,7 @@ func TestOutboxStorePostgresClaimExcludesDeliveredEvents(t *testing.T) {
 	claims, err := store.Claim(ctx, now, 10, time.Minute)
 	require.NoError(t, err)
 	require.Len(t, claims, 1)
-	require.Equal(t, int64(2), claims[0].Event.Revision)
+	require.Equal(t, int64(2), claims[0].Event.Revision())
 }
 
 func newTestOutboxStore(t *testing.T) (*ent.Client, *OutboxStore) {
@@ -294,14 +295,13 @@ func createTestOutboxEvent(t *testing.T, client *ent.Client, revision int64, cre
 	require.NoError(t, err)
 	builder := client.RbacPolicyOutboxEvent.Create().
 		SetEventID(uuid.New()).
-		SetRevision(policyRevision.ID).
+		SetPolicyRevision(policyRevision.ID).
 		SetKind("policy_changed").
 		SetReason("role_updated").
 		SetNextAttemptAt(createdAt.UnixMilli()).
 		SetIdempotencyKey(fmt.Sprintf("rbac-policy-revision:%d", revision)).
 		SetCreatedAt(createdAt.UnixMilli()).
-		SetUpdatedAt(createdAt.UnixMilli()).
-		SetPolicyRevisionID(policyRevision.ID)
+		SetUpdatedAt(createdAt.UnixMilli())
 	if configure != nil {
 		configure(builder)
 	}

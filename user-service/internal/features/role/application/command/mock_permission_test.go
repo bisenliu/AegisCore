@@ -54,3 +54,17 @@ func (mr *MockPolicyChangeNotifierMockRecorder) NotifyPolicyChanged(ctx, revisio
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyPolicyChanged", reflect.TypeOf((*MockPolicyChangeNotifier)(nil).NotifyPolicyChanged), ctx, revision, change)
 }
+
+// NotifyUserRoleChanged mocks base method.
+func (m *MockPolicyChangeNotifier) NotifyUserRoleChanged(ctx context.Context, revision int64, change application.PolicyChange) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NotifyUserRoleChanged", ctx, revision, change)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// NotifyUserRoleChanged indicates an expected call of NotifyUserRoleChanged.
+func (mr *MockPolicyChangeNotifierMockRecorder) NotifyUserRoleChanged(ctx, revision, change any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyUserRoleChanged", reflect.TypeOf((*MockPolicyChangeNotifier)(nil).NotifyUserRoleChanged), ctx, revision, change)
+}

@@ -15,7 +15,7 @@ import (
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
-// UserRoleStore 使用 Ent 持久化用户角色绑定，并随写操作记录 policy revision。
+// UserRoleStore 使用 Ent 持久化用户角色绑定，并随写操作记录 user-role revision。
 type UserRoleStore struct {
 	client *ent.Client
 }
@@ -45,7 +45,7 @@ func (s *UserRoleStore) ListByUserID(ctx context.Context, userID uuid.UUID) ([]r
 
 // Add 新增用户角色绑定。
 func (s *UserRoleStore) Add(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change roleapplication.PolicyChange) (roleapplication.RolesWriteResult, error) {
-	roles, write, err := transactPolicyChange(ctx, s.client, "add user role", change, func(tx *ent.Tx) ([]*ent.Role, error) {
+	roles, write, err := transactUserRoleChange(ctx, s.client, "add user role", change, func(tx *ent.Tx) ([]*ent.Role, error) {
 		user, role, err := s.getLockedUserAndRole(ctx, tx, userID, roleID)
 		if err != nil {
 			return nil, err
@@ -64,7 +64,7 @@ func (s *UserRoleStore) Add(ctx context.Context, userID uuid.UUID, roleID uuid.U
 
 // Replace 幂等替换用户的完整角色绑定集合。
 func (s *UserRoleStore) Replace(ctx context.Context, userID uuid.UUID, roleIDs []uuid.UUID, change roleapplication.PolicyChange) (roleapplication.RolesWriteResult, error) {
-	roles, write, err := transactPolicyChange(ctx, s.client, "replace user roles", change, func(tx *ent.Tx) ([]*ent.Role, error) {
+	roles, write, err := transactUserRoleChange(ctx, s.client, "replace user roles", change, func(tx *ent.Tx) ([]*ent.Role, error) {
 		user, err := s.getLockedUserByExternalID(ctx, tx, userID)
 		if err != nil {
 			return nil, err
@@ -92,7 +92,7 @@ func (s *UserRoleStore) Replace(ctx context.Context, userID uuid.UUID, roleIDs [
 
 // Remove 删除用户角色绑定。
 func (s *UserRoleStore) Remove(ctx context.Context, userID uuid.UUID, roleID uuid.UUID, change roleapplication.PolicyChange) (roleapplication.RolesWriteResult, error) {
-	roles, write, err := transactPolicyChange(ctx, s.client, "remove user role", change, func(tx *ent.Tx) ([]*ent.Role, error) {
+	roles, write, err := transactUserRoleChange(ctx, s.client, "remove user role", change, func(tx *ent.Tx) ([]*ent.Role, error) {
 		user, role, err := s.getLockedUserAndRole(ctx, tx, userID, roleID)
 		if err != nil {
 			return nil, err

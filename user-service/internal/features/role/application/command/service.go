@@ -21,6 +21,7 @@ type roleCommandService struct {
 // PolicyChangeNotifier 消费数据库已提交 revision 执行即时 policy 同步。
 type PolicyChangeNotifier interface {
 	NotifyPolicyChanged(ctx context.Context, revision int64, change permissionapplication.PolicyChange) error
+	NotifyUserRoleChanged(ctx context.Context, revision int64, change permissionapplication.PolicyChange) error
 }
 
 // NewRoleCommandService 根据角色相关端口构造角色写侧服务。
@@ -48,5 +49,5 @@ func (s *roleCommandService) notifyPolicyChanged(ctx context.Context, revision i
 }
 
 func (s *roleCommandService) notifyUserRoleChanged(ctx context.Context, revision int64, reason string, userID uuid.UUID, roleID uuid.UUID) error {
-	return s.policyChanges.NotifyPolicyChanged(ctx, revision, permissionapplication.NewUserRoleChange(reason, userID, roleID))
+	return s.policyChanges.NotifyUserRoleChanged(ctx, revision, permissionapplication.NewUserRoleChange(reason, userID, roleID))
 }

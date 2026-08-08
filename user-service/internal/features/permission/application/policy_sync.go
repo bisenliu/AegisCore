@@ -25,6 +25,7 @@ type PolicyReloadEngine interface {
 // PolicyChangeNotifier 定义已提交 RBAC policy 变更后的刷新通知端口。
 type PolicyChangeNotifier interface {
 	NotifyPolicyChanged(ctx context.Context, revision int64, change PolicyChange) error
+	NotifyUserRoleChanged(ctx context.Context, revision int64, change PolicyChange) error
 }
 
 // PolicyChangeKind 表示 RBAC policy 同步变更类别。
@@ -87,7 +88,7 @@ func NewPolicyRefreshCoordinator(engine PolicyReloadEngine, log *zap.Logger, met
 	return &PolicyRefreshCoordinator{engine: engine, log: log, metrics: metrics}
 }
 
-// NotifyPolicyChanged 使用已提交数据库 revision 立即刷新本实例。
+// NotifyPolicyChanged 使用已提交数据库 policy revision 立即刷新本实例。
 // 跨实例发布只由 outbox dispatcher 承担，Redis 故障不会改变已提交 mutation 的本地同步结果。
 func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, revision int64, change PolicyChange) error {
 	if c == nil {
@@ -96,11 +97,22 @@ func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, revi
 	if c.log != nil {
 		ctx = logger.ToContext(ctx, c.log)
 	}
-	return c.ObserveTargetRevision(ctx, revision, change)
+	return c.ObservePolicyRevision(ctx, revision, change)
 }
 
-// ObserveTargetRevision 以数据库 revision 驱动本地 policy 投影和用户角色缓存失效。
-func (c *PolicyRefreshCoordinator) ObserveTargetRevision(ctx context.Context, targetRevision int64, change PolicyChange) error {
+// NotifyUserRoleChanged 使用已提交 user-role revision 立即失效本实例用户角色缓存。
+func (c *PolicyRefreshCoordinator) NotifyUserRoleChanged(ctx context.Context, revision int64, change PolicyChange) error {
+	if c == nil {
+		return errors.New("rbac policy refresh coordinator is required")
+	}
+	if c.log != nil {
+		ctx = logger.ToContext(ctx, c.log)
+	}
+	return c.ObserveUserRoleRevision(ctx, revision, change)
+}
+
+// ObservePolicyRevision 以数据库 policy revision 驱动本地 policy 投影和用户角色缓存失效。
+func (c *PolicyRefreshCoordinator) ObservePolicyRevision(ctx context.Context, targetRevision int64, change PolicyChange) error {
 	reason := change.ReasonText()
 	appliedRevision, err := c.engine.ReloadToRevision(ctx, targetRevision)
 	if err != nil {
@@ -124,5 +136,18 @@ func (c *PolicyRefreshCoordinator) ObserveTargetRevision(ctx context.Context, ta
 	}
 	c.metrics.PolicyReloadSucceeded(ctx, MetricsSourceLocalChange)
 	logger.Info(ctx, "rbac policy local refresh succeeded", zap.Int64("target_revision", targetRevision), zap.Int64("applied_revision", c.engine.AppliedRevision()), zap.String("reason", reason))
+	return nil
+}
+
+// ObserveUserRoleRevision 以数据库 user-role revision 驱动本地用户角色缓存失效，不触碰 Casbin policy 投影。
+func (c *PolicyRefreshCoordinator) ObserveUserRoleRevision(ctx context.Context, userRoleRevision int64, change PolicyChange) error {
+	reason := change.ReasonText()
+	if change.UserID != uuid.Nil {
+		c.engine.InvalidateUserRole(change.UserID)
+	} else {
+		c.engine.InvalidateAllUserRoles()
+	}
+	c.metrics.PolicyReloadSucceeded(ctx, MetricsSourceLocalChange)
+	logger.Info(ctx, "rbac user role local cache invalidated", zap.Int64("user_role_revision", userRoleRevision), zap.String("reason", reason))
 	return nil
 }
