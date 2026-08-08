@@ -168,6 +168,39 @@ func TestRegisterUserServiceHTTPRoutesRecordsRateLimitObservability(t *testing.T
 	require.Len(t, logs.FilterMessage("api request rate limited").All(), 1)
 }
 
+func TestRegisterUserServiceHTTPRoutesRecordsCapacityReasonsWithoutKeyLabels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	core, logs := observer.New(zap.DebugLevel)
+	metricsCfg := metricsRouteConfig(true, "/internal/metrics")
+	params := newRouterRegistrationRouteParams(t, routerRegistrationRouteOptions{
+		metrics:          metricsCfg,
+		anonymousLimiter: &routerRegistrationLimiter{allowed: true, err: commonmw.ErrRateLimitCapacityOverflow},
+	})
+	params.Log = zap.New(core)
+	engine := gin.New()
+	require.NoError(t, RegisterUserServiceHTTPRoutes(engine, params))
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader("{}"))
+	request.Header.Set("Content-Type", "application/json")
+	request.RemoteAddr = "203.0.113.99:12345"
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, request)
+
+	require.NotEqual(t, http.StatusTooManyRequests, recorder.Code, "body=%s", recorder.Body.String())
+	families, err := params.Metrics.GatherContext(context.Background())
+	require.NoError(t, err)
+	requireMetricCounterValue(t, families, apiRateLimitEventsMetricName, map[string]string{"scope": "anonymous_auth", "event": "error", "reason": "overflow"}, 1)
+	requireMetricFamilyHasNoLabelValue(t, families, apiRateLimitEventsMetricName, "203.0.113.99")
+	entries := logs.FilterMessage("api rate limiter failed").All()
+	require.Len(t, entries, 1)
+	fields := entries[0].ContextMap()
+	require.Equal(t, "anonymous_auth", fields["scope"])
+	require.Equal(t, "overflow", fields["reason"])
+	require.Equal(t, true, fields["key_present"])
+	require.NotContains(t, fields, "key")
+	require.NotContains(t, fields, "user_id")
+}
+
 func TestAuthorizedRouteGraphMatchesPermissionBaseline(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -268,7 +301,7 @@ func (l *routerRegistrationLimiter) Allow(key string) (bool, error) {
 	l.calls++
 	l.keys = append(l.keys, key)
 	if l.err != nil {
-		return false, l.err
+		return l.allowed, l.err
 	}
 	return l.allowed, nil
 }
@@ -328,6 +361,20 @@ func requireMetricCounterValue(t *testing.T, families []*io_prometheus_client.Me
 		}
 	}
 	require.Failf(t, "missing metric", "name=%s labels=%v", name, labels)
+}
+
+func requireMetricFamilyHasNoLabelValue(t *testing.T, families []*io_prometheus_client.MetricFamily, name string, forbidden string) {
+	t.Helper()
+	for _, family := range families {
+		if family.GetName() != name {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			for _, label := range metric.GetLabel() {
+				require.NotEqual(t, forbidden, label.GetValue())
+			}
+		}
+	}
 }
 
 func metricLabelsMatch(metric *io_prometheus_client.Metric, want map[string]string) bool {

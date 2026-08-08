@@ -70,6 +70,8 @@ func newLocalRateLimiter(cfg serviceconfig.RateLimitPolicyConfig) (*commonmw.Loc
 		Rate:            rate.Limit(cfg.RatePerSecond),
 		Burst:           cfg.Burst,
 		Shards:          cfg.Shards,
+		MaxKeys:         cfg.MaxKeys,
+		CapacityPolicy:  commonmw.RateLimitCapacityPolicy(cfg.CapacityPolicy),
 		KeyTTL:          cfg.KeyTTL,
 		CleanupInterval: cfg.CleanupInterval,
 	})

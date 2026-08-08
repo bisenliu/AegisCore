@@ -21,6 +21,8 @@ const (
 	rateLimitReasonLimitExceeded = "limit_exceeded"
 	rateLimitReasonKeyRequired   = "key_required"
 	rateLimitReasonLimiterClosed = "limiter_closed"
+	rateLimitReasonOverflow      = "overflow"
+	rateLimitReasonRejected      = "rejected"
 	rateLimitReasonError         = "error"
 )
 
@@ -87,6 +89,10 @@ func rateLimitErrorReason(err error) string {
 		return rateLimitReasonKeyRequired
 	case errors.Is(err, commonmw.ErrRateLimiterClosed):
 		return rateLimitReasonLimiterClosed
+	case errors.Is(err, commonmw.ErrRateLimitCapacityOverflow):
+		return rateLimitReasonOverflow
+	case errors.Is(err, commonmw.ErrRateLimitCapacityRejected):
+		return rateLimitReasonRejected
 	default:
 		return rateLimitReasonError
 	}

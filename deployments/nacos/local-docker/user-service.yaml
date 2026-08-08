@@ -93,20 +93,24 @@ api_rate_limit:
   # enabled: 是否构造该策略。
   # rate_per_second: 每个限流 key 的稳定补充速率，单位 token/s。
   # burst: 每个限流 key 允许的瞬时突发 token 数。
+  # max_keys: 该策略在单进程内保留的最大活跃限流 key 数量。
+  # capacity_policy: 容量耗尽时新 key 的处理方式，overflow 表示共享 overflow bucket，reject 表示直接限流拒绝。
   # key_ttl: 闲置限流 key 保留时间，避免本地内存无限增长。
   # cleanup_interval: 过期限流 key 的清理频率。
   # shards: 本地限流状态分片数，用于降低并发锁竞争。
   #
   # 配置参考：
-  # 小型项目，峰值 <500 QPS：anonymous 1/5/64，authenticated 5/20/128。
-  # 中型项目，峰值 500-5k QPS：anonymous 2/10/256，authenticated 20/100/1024。
-  # 高并发项目，峰值 5k-20k QPS：anonymous 5/20/1024，authenticated 100/500/4096。
-  # 格式为 rate_per_second/burst/shards；公网匿名入口可再降低 anonymous。
+  # 小型项目，峰值 <500 QPS：anonymous 1/5/65536/64，authenticated 5/20/131072/128。
+  # 中型项目，峰值 500-5k QPS：anonymous 2/10/262144/256，authenticated 20/100/1048576/1024。
+  # 高并发项目，峰值 5k-20k QPS：anonymous 5/20/1048576/1024，authenticated 100/500/4194304/4096。
+  # 格式为 rate_per_second/burst/max_keys/shards；公网匿名入口可再降低 anonymous。
   # 未携带有效用户身份的请求使用匿名限流策略。
   anonymous:
     enabled: true
     rate_per_second: 1
     burst: 5
+    max_keys: 65536
+    capacity_policy: overflow
     key_ttl: 10m
     cleanup_interval: 30s
     shards: 64
@@ -115,6 +119,8 @@ api_rate_limit:
     enabled: true
     rate_per_second: 5
     burst: 20
+    max_keys: 131072
+    capacity_policy: overflow
     key_ttl: 10m
     cleanup_interval: 30s
     shards: 128

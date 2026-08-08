@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,11 +21,25 @@ const (
 	defaultRateLimitMessage = "too many requests"
 )
 
+// RateLimitCapacityPolicy 定义本地限流器容量耗尽时新 key 的处理策略。
+type RateLimitCapacityPolicy string
+
+const (
+	// RateLimitCapacityPolicyOverflow 表示新 key 共享分片 overflow token bucket，不创建独立状态。
+	RateLimitCapacityPolicyOverflow RateLimitCapacityPolicy = "overflow"
+	// RateLimitCapacityPolicyReject 表示容量耗尽时直接拒绝新 key。
+	RateLimitCapacityPolicyReject RateLimitCapacityPolicy = "reject"
+)
+
 var (
 	// ErrRateLimitKeyRequired 表示调用方未提供可用的限流身份 key。
 	ErrRateLimitKeyRequired = errors.New("rate limit key is required")
 	// ErrRateLimiterClosed 表示限流器已关闭。
 	ErrRateLimiterClosed = errors.New("rate limiter is closed")
+	// ErrRateLimitCapacityOverflow 表示新 key 未创建独立状态，改用共享 overflow bucket 判定。
+	ErrRateLimitCapacityOverflow = errors.New("rate limit capacity overflow")
+	// ErrRateLimitCapacityRejected 表示容量耗尽且新 key 被拒绝。
+	ErrRateLimitCapacityRejected = errors.New("rate limit capacity rejected")
 )
 
 // RateLimiter 是 Gin 限流 middleware 消费的最小限流判定接口。
@@ -56,6 +71,8 @@ type LocalRateLimiterOptions struct {
 	Rate            rate.Limit
 	Burst           int
 	Shards          int
+	MaxKeys         int
+	CapacityPolicy  RateLimitCapacityPolicy
 	KeyTTL          time.Duration
 	CleanupInterval time.Duration
 	Now             func() time.Time
@@ -68,10 +85,14 @@ type LocalRateLimiter struct {
 	keyTTL          time.Duration
 	cleanupInterval time.Duration
 	now             func() time.Time
+	maxKeys         uint64
+	currentKeys     atomic.Uint64
+	capacityPolicy  RateLimitCapacityPolicy
 	shards          []rateLimitShard
+	shardMask       int
 	ctx             context.Context
 	cancel          context.CancelFunc
-	cleanupCursor   int
+	cleanupCursor   atomic.Uint64
 	startOnce       sync.Once
 	stopOnce        sync.Once
 	closedMu        sync.RWMutex
@@ -79,8 +100,9 @@ type LocalRateLimiter struct {
 }
 
 type rateLimitShard struct {
-	mu       sync.Mutex
-	visitors map[string]*rateLimitVisitor
+	mu              sync.Mutex
+	visitors        map[string]*rateLimitVisitor
+	overflowLimiter *rate.Limiter
 }
 
 type rateLimitVisitor struct {
@@ -102,6 +124,17 @@ func NewLocalRateLimiter(options LocalRateLimiterOptions) (*LocalRateLimiter, er
 	if options.CleanupInterval <= 0 {
 		return nil, fmt.Errorf("cleanup interval must be > 0")
 	}
+	if options.MaxKeys <= 0 {
+		return nil, fmt.Errorf("max keys must be > 0")
+	}
+	capacityPolicy := options.CapacityPolicy
+	switch capacityPolicy {
+	case RateLimitCapacityPolicyOverflow, RateLimitCapacityPolicyReject:
+	case "":
+		return nil, fmt.Errorf("capacity policy is required")
+	default:
+		return nil, fmt.Errorf("capacity policy must be one of %q or %q", RateLimitCapacityPolicyOverflow, RateLimitCapacityPolicyReject)
+	}
 	shardCount := options.Shards
 	if shardCount <= 0 {
 		shardCount = defaultRateLimitShards
@@ -117,12 +150,16 @@ func NewLocalRateLimiter(options LocalRateLimiterOptions) (*LocalRateLimiter, er
 		keyTTL:          options.KeyTTL,
 		cleanupInterval: options.CleanupInterval,
 		now:             now,
+		maxKeys:         uint64(options.MaxKeys),
+		capacityPolicy:  capacityPolicy,
 		shards:          make([]rateLimitShard, shardCount),
+		shardMask:       shardMask(shardCount),
 		ctx:             ctx,
 		cancel:          cancel,
 	}
 	for i := range limiter.shards {
 		limiter.shards[i].visitors = make(map[string]*rateLimitVisitor)
+		limiter.shards[i].overflowLimiter = rate.NewLimiter(limiter.rate, limiter.burst)
 	}
 	return limiter, nil
 }
@@ -142,6 +179,15 @@ func (l *LocalRateLimiter) Allow(key string) (bool, error) {
 	shard.mu.Lock()
 	visitor := shard.visitors[key]
 	if visitor == nil {
+		if !l.reserveKey() {
+			if l.capacityPolicy == RateLimitCapacityPolicyReject {
+				shard.mu.Unlock()
+				return false, ErrRateLimitCapacityRejected
+			}
+			allowed := shard.allowOverflow(now)
+			shard.mu.Unlock()
+			return allowed, ErrRateLimitCapacityOverflow
+		}
 		visitor = &rateLimitVisitor{limiter: rate.NewLimiter(l.rate, l.burst)}
 		shard.visitors[key] = visitor
 	}
@@ -150,6 +196,22 @@ func (l *LocalRateLimiter) Allow(key string) (bool, error) {
 	shard.mu.Unlock()
 
 	return allowed, nil
+}
+
+func (s *rateLimitShard) allowOverflow(now time.Time) bool {
+	if s.overflowLimiter == nil {
+		return false
+	}
+	return s.overflowLimiter.AllowN(now, 1)
+}
+
+// reserveKey 预占一个全局 key 配额，超出上限时回滚并返回 false。
+func (l *LocalRateLimiter) reserveKey() bool {
+	if l.currentKeys.Add(1) <= l.maxKeys {
+		return true
+	}
+	l.currentKeys.Add(^uint64(0))
+	return false
 }
 
 // StartJanitor 启动后台清理 goroutine。重复调用不会创建多个 janitor。
@@ -204,20 +266,26 @@ func (l *LocalRateLimiter) cleanupNextShards(now time.Time) {
 		return
 	}
 	limit := max(1, len(l.shards)/16)
-	for range limit {
-		index := l.cleanupCursor % len(l.shards)
+	start := l.cleanupCursor.Add(uint64(limit)) - uint64(limit)
+	for offset := range limit {
+		index := int(start+uint64(offset)) % len(l.shards)
 		l.cleanupShard(index, now)
-		l.cleanupCursor = (l.cleanupCursor + 1) % len(l.shards)
 	}
 }
 
+// cleanupShard 删除单个分片中超过 TTL 的 key，并同步释放全局 key 配额。
 func (l *LocalRateLimiter) cleanupShard(index int, now time.Time) {
 	shard := &l.shards[index]
 	shard.mu.Lock()
+	deleted := 0
 	for key, visitor := range shard.visitors {
 		if now.Sub(visitor.lastSeen) > l.keyTTL {
 			delete(shard.visitors, key)
+			deleted++
 		}
+	}
+	if deleted > 0 {
+		l.currentKeys.Add(0 - uint64(deleted))
 	}
 	shard.mu.Unlock()
 }
@@ -237,23 +305,35 @@ func (l *LocalRateLimiter) Len() int {
 	return total
 }
 
+// isClosed 判断限流器是否已停止。
 func (l *LocalRateLimiter) isClosed() bool {
 	l.closedMu.RLock()
 	defer l.closedMu.RUnlock()
 	return l.closed
 }
 
+// shardFor 根据 key 计算所属分片。
 func (l *LocalRateLimiter) shardFor(key string) *rateLimitShard {
 	const (
 		fnvOffset32 = 2166136261
 		fnvPrime32  = 16777619
 	)
 	hash := uint32(fnvOffset32)
-	for i := range len(key) {
-		hash ^= uint32(key[i])
-		hash *= fnvPrime32
+	for i := 0; i < len(key); i++ {
+		hash = (hash ^ uint32(key[i])) * fnvPrime32
+	}
+	if l.shardMask >= 0 {
+		return &l.shards[int(hash)&l.shardMask]
 	}
 	return &l.shards[int(hash)%len(l.shards)]
+}
+
+// shardMask 在分片数量为 2 的幂时返回可用于位与运算的掩码，否则返回 -1。
+func shardMask(shards int) int {
+	if shards > 0 && shards&(shards-1) == 0 {
+		return shards - 1
+	}
+	return -1
 }
 
 // RateLimit 返回 Gin 请求限流 middleware。
@@ -271,6 +351,18 @@ func RateLimit(options RateLimitOptions) gin.HandlerFunc {
 		if err != nil {
 			if options.OnError != nil {
 				options.OnError(c, key, err)
+			}
+			if errors.Is(err, ErrRateLimitCapacityRejected) || !allowed && errors.Is(err, ErrRateLimitCapacityOverflow) {
+				if options.OnLimit != nil {
+					options.OnLimit(c, key)
+				}
+				message := strings.TrimSpace(options.Message)
+				if message == "" {
+					message = defaultRateLimitMessage
+				}
+				response.RateLimited(c, message)
+				c.Abort()
+				return
 			}
 			// 限流默认不是认证或授权边界；key 缺失、关闭或内部错误时默认降级放行，由后续 middleware 保持原有语义。
 			if options.FailClosed {

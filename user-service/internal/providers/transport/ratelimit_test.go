@@ -30,6 +30,30 @@ func TestNewAPIRateLimitersConstructsEnabledLimiters(t *testing.T) {
 	require.False(t, allowed)
 }
 
+func TestNewAPIRateLimitersPassesCapacitySettings(t *testing.T) {
+	limiters, err := NewAPIRateLimiters(fxtest.NewLifecycle(t), serviceconfig.RateLimitSettings{APIRateLimit: serviceconfig.APIRateLimitConfig{
+		Anonymous: serviceconfig.RateLimitPolicyConfig{
+			Enabled:         true,
+			RatePerSecond:   100,
+			Burst:           100,
+			MaxKeys:         1,
+			CapacityPolicy:  string(commonmw.RateLimitCapacityPolicyReject),
+			KeyTTL:          time.Minute,
+			CleanupInterval: time.Hour,
+			Shards:          1,
+		},
+	}})
+	require.NoError(t, err)
+	t.Cleanup(limiters.Close)
+
+	allowed, err := limiters.Anonymous.Allow("ip:203.0.113.1")
+	require.NoError(t, err)
+	require.True(t, allowed)
+	allowed, err = limiters.Anonymous.Allow("ip:203.0.113.2")
+	require.ErrorIs(t, err, commonmw.ErrRateLimitCapacityRejected)
+	require.False(t, allowed)
+}
+
 func TestNewAPIRateLimitersHonorsDisabledPolicies(t *testing.T) {
 	lifecycle := fxtest.NewLifecycle(t)
 	limiters, err := NewAPIRateLimiters(lifecycle, serviceconfig.RateLimitSettings{APIRateLimit: serviceconfig.APIRateLimitConfig{

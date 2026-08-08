@@ -45,12 +45,16 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.True(t, cfg.APIRateLimit.Anonymous.Enabled)
 	require.Equal(t, 2.5, cfg.APIRateLimit.Anonymous.RatePerSecond)
 	require.Equal(t, 7, cfg.APIRateLimit.Anonymous.Burst)
+	require.Equal(t, 8192, cfg.APIRateLimit.Anonymous.MaxKeys)
+	require.Equal(t, "overflow", cfg.APIRateLimit.Anonymous.CapacityPolicy)
 	require.Equal(t, 11*time.Minute, cfg.APIRateLimit.Anonymous.KeyTTL)
 	require.Equal(t, 15*time.Second, cfg.APIRateLimit.Anonymous.CleanupInterval)
 	require.Equal(t, 32, cfg.APIRateLimit.Anonymous.Shards)
 	require.True(t, cfg.APIRateLimit.Authenticated.Enabled)
 	require.Equal(t, 8.0, cfg.APIRateLimit.Authenticated.RatePerSecond)
 	require.Equal(t, 30, cfg.APIRateLimit.Authenticated.Burst)
+	require.Equal(t, 16384, cfg.APIRateLimit.Authenticated.MaxKeys)
+	require.Equal(t, "reject", cfg.APIRateLimit.Authenticated.CapacityPolicy)
 	require.Equal(t, 12*time.Minute, cfg.APIRateLimit.Authenticated.KeyTTL)
 	require.Equal(t, 20*time.Second, cfg.APIRateLimit.Authenticated.CleanupInterval)
 	require.Equal(t, 64, cfg.APIRateLimit.Authenticated.Shards)
@@ -257,6 +261,8 @@ func TestLoadAppliesAPIRateLimitDefaults(t *testing.T) {
     enabled: true
     rate_per_second: 2.5
     burst: 7
+    max_keys: 8192
+    capacity_policy: overflow
     key_ttl: 11m
     cleanup_interval: 15s
     shards: 32
@@ -264,6 +270,8 @@ func TestLoadAppliesAPIRateLimitDefaults(t *testing.T) {
     enabled: true
     rate_per_second: 8
     burst: 30
+    max_keys: 16384
+    capacity_policy: reject
     key_ttl: 12m
     cleanup_interval: 20s
     shards: 64
@@ -304,6 +312,8 @@ func TestLoadPreservesDisabledAPIRateLimit(t *testing.T) {
     enabled: true
     rate_per_second: 2.5
     burst: 7
+    max_keys: 8192
+    capacity_policy: overflow
     key_ttl: 11m
     cleanup_interval: 15s
     shards: 32
@@ -311,6 +321,8 @@ func TestLoadPreservesDisabledAPIRateLimit(t *testing.T) {
     enabled: true
     rate_per_second: 8
     burst: 30
+    max_keys: 16384
+    capacity_policy: reject
     key_ttl: 12m
     cleanup_interval: 20s
     shards: 64
@@ -332,12 +344,22 @@ func TestLoadPreservesDisabledAPIRateLimit(t *testing.T) {
 func TestValidateAPIRateLimit(t *testing.T) {
 	t.Run("enabled requires positive values", func(t *testing.T) {
 		errs := (RateLimitPolicyConfig{Enabled: true}).Validate("api_rate_limit.anonymous")
-		require.Len(t, errs, 5)
+		require.Len(t, errs, 7)
 		require.Contains(t, errs[0].Error(), "api_rate_limit.anonymous.rate_per_second")
 		require.Contains(t, errs[1].Error(), "api_rate_limit.anonymous.burst")
-		require.Contains(t, errs[2].Error(), "api_rate_limit.anonymous.key_ttl")
-		require.Contains(t, errs[3].Error(), "api_rate_limit.anonymous.cleanup_interval")
-		require.Contains(t, errs[4].Error(), "api_rate_limit.anonymous.shards")
+		require.Contains(t, errs[2].Error(), "api_rate_limit.anonymous.max_keys")
+		require.Contains(t, errs[3].Error(), "api_rate_limit.anonymous.capacity_policy")
+		require.Contains(t, errs[4].Error(), "api_rate_limit.anonymous.key_ttl")
+		require.Contains(t, errs[5].Error(), "api_rate_limit.anonymous.cleanup_interval")
+		require.Contains(t, errs[6].Error(), "api_rate_limit.anonymous.shards")
+	})
+
+	t.Run("rejects invalid capacity policy", func(t *testing.T) {
+		cfg := DefaultRateLimitPolicyConfig(1, 1, time.Minute, time.Hour, 1)
+		cfg.CapacityPolicy = "drop"
+		errs := cfg.Validate("api_rate_limit.anonymous")
+		require.Len(t, errs, 1)
+		require.Contains(t, errs[0].Error(), "api_rate_limit.anonymous.capacity_policy")
 	})
 
 	t.Run("disabled allows zero values", func(t *testing.T) {
@@ -585,6 +607,8 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
     enabled: true
     rate_per_second: 2.5
     burst: 7
+    max_keys: 8192
+    capacity_policy: overflow
     key_ttl: 11m
     cleanup_interval: 15s
     shards: 32
@@ -592,6 +616,8 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
     enabled: true
     rate_per_second: 8
     burst: 30
+    max_keys: 16384
+    capacity_policy: reject
     key_ttl: 12m
     cleanup_interval: 20s
     shards: 64
@@ -765,6 +791,8 @@ api_rate_limit:
     enabled: true
     rate_per_second: 2.5
     burst: 7
+    max_keys: 8192
+    capacity_policy: overflow
     key_ttl: 11m
     cleanup_interval: 15s
     shards: 32
@@ -772,6 +800,8 @@ api_rate_limit:
     enabled: true
     rate_per_second: 8
     burst: 30
+    max_keys: 16384
+    capacity_policy: reject
     key_ttl: 12m
     cleanup_interval: 20s
     shards: 64

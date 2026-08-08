@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	commonmw "github.com/aegiscore/common/http/middleware"
 	commonconfig "github.com/aegiscore/common/runtime/config"
 	"github.com/aegiscore/common/runtime/localcache"
 	commonresources "github.com/aegiscore/common/runtime/resources"
@@ -158,6 +159,8 @@ type RateLimitPolicyConfig struct {
 	Enabled         bool          `mapstructure:"enabled"`
 	RatePerSecond   float64       `mapstructure:"rate_per_second"`
 	Burst           int           `mapstructure:"burst"`
+	MaxKeys         int           `mapstructure:"max_keys"`
+	CapacityPolicy  string        `mapstructure:"capacity_policy"`
 	KeyTTL          time.Duration `mapstructure:"key_ttl"`
 	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`
 	Shards          int           `mapstructure:"shards"`
@@ -165,7 +168,14 @@ type RateLimitPolicyConfig struct {
 
 // DefaultRateLimitPolicyConfig 构造启用状态下的完整限流策略默认配置。
 func DefaultRateLimitPolicyConfig(ratePerSecond float64, burst int, keyTTL time.Duration, cleanupInterval time.Duration, shards int) RateLimitPolicyConfig {
-	return RateLimitPolicyConfig{Enabled: true, RatePerSecond: ratePerSecond, Burst: burst, KeyTTL: keyTTL, CleanupInterval: cleanupInterval, Shards: shards}
+	return RateLimitPolicyConfig{Enabled: true, RatePerSecond: ratePerSecond, Burst: burst, MaxKeys: defaultRateLimitMaxKeys(shards), CapacityPolicy: string(commonmw.RateLimitCapacityPolicyOverflow), KeyTTL: keyTTL, CleanupInterval: cleanupInterval, Shards: shards}
+}
+
+func defaultRateLimitMaxKeys(shards int) int {
+	if shards <= 0 {
+		return 1024
+	}
+	return shards * 1024
 }
 
 // Validate 校验启用的限流策略；禁用时其余字段不参与运行时构造和校验。
@@ -179,6 +189,16 @@ func (c RateLimitPolicyConfig) Validate(path string) []error {
 	}
 	if c.Burst <= 0 {
 		errs = append(errs, commonconfig.FieldError(path+".burst", "must be > 0 when enabled"))
+	}
+	if c.MaxKeys <= 0 {
+		errs = append(errs, commonconfig.FieldError(path+".max_keys", "must be > 0 when enabled"))
+	}
+	switch commonmw.RateLimitCapacityPolicy(strings.TrimSpace(c.CapacityPolicy)) {
+	case commonmw.RateLimitCapacityPolicyOverflow, commonmw.RateLimitCapacityPolicyReject:
+	case "":
+		errs = append(errs, commonconfig.FieldError(path+".capacity_policy", "is required when enabled"))
+	default:
+		errs = append(errs, commonconfig.FieldError(path+".capacity_policy", "must be one of overflow or reject when enabled"))
 	}
 	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".key_ttl", c.KeyTTL)...)
 	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".cleanup_interval", c.CleanupInterval)...)
