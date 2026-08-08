@@ -147,7 +147,7 @@
 
 ### Requirement: Casbin 授权、策略缓存与多副本同步
 
-系统 MUST 在认证后使用 RBAC 中间件保护权限、角色和用户业务接口，并以 PostgreSQL 关系数据与单调 policy revision 作为业务权威来源，以本地 Casbin policy 和用户角色 loading cache 作为授权投影。每个本地 Casbin enforcer MUST 与其实际加载的数据库 policy revision 绑定，applied revision MUST 表示该 engine 当前成功应用的授权投影，MUST NOT 表示 Redis 通知序号、消息接收进度或 reload attempt。授权 MUST 使用稳定 subject、Gin route template 和 HTTP method，并在任何身份、策略、revision 或执行异常下 fail-closed。Redis 与 Pub/Sub MUST 只传播数据库 revision并加速副本收敛；授权热路径 MUST 使用本地投影，MUST NOT 每请求读取 Redis或PostgreSQL revision。
+系统 MUST 在认证后使用 RBAC 中间件保护权限、角色和用户业务接口，并以 PostgreSQL 关系数据作为业务权威来源。系统 MUST 将会改变 Casbin 静态授权规则集合的事实记录为单调 policy revision，并将用户角色绑定变更记录为独立 user-role revision 或等价提交水位；两类 revision MUST NOT 混用。每个本地 Casbin enforcer MUST 与其实际加载的数据库 policy revision 绑定，applied revision MUST 表示该 engine 当前成功应用的授权投影，MUST NOT 表示 Redis 通知序号、用户角色绑定提交水位、消息接收进度或 reload attempt。授权 MUST 使用稳定 subject、Gin route template 和 HTTP method，并在任何身份、策略、revision 或执行异常下 fail-closed。Redis 与 Pub/Sub MUST 只传播数据库提交事实并加速副本收敛；授权热路径 MUST 使用本地投影，MUST NOT 每请求读取 Redis 或 PostgreSQL revision。
 
 #### Scenario: 授权请求与超级管理员
 
@@ -163,7 +163,7 @@
 
 - **WHEN** 请求缺少用户 ID、用户 ID 类型非法或 subject 不能解析为用户 UUID
 - **THEN** 系统 MUST 返回未认证错误并拒绝请求，且 MUST NOT 调用 Casbin engine
-- **WHEN** 用户角色回源失败、context 取消、连续失效、Casbin 执行错误、policy 未加载、目标 revision 未追平或最近一次 reload 失败
+- **WHEN** 用户角色回源失败、context 取消、连续失效、Casbin 执行错误、policy 未加载、目标 policy revision 未追平或最近一次 policy reload 失败
 - **THEN** 系统 MUST 拒绝请求并暴露 policy 不可用 readiness/startup 状态，MUST NOT 使用旧角色集合或保留的旧 enforcer 继续允许请求
 - **WHEN** 请求命中显式授权白名单或使用 `OPTIONS`
 - **THEN** 中间件 MUST 允许请求并 MUST NOT 调用授权服务
@@ -172,44 +172,48 @@
 
 #### Scenario: revision-aware policy 快照加载
 
-- **WHEN** policy loader 面向目标数据库 revision 构造授权策略
+- **WHEN** policy loader 面向目标数据库 policy revision 构造授权策略
 - **THEN** loader MUST 在同一 PostgreSQL 一致性快照中读取可见 latest policy revision 与启用角色、角色权限绑定和 permissions 投影，并返回 `PolicySet{Revision, PermissionRules}` 或等价结构
-- **AND** 返回的 revision MUST 大于或等于目标 revision，规则 MUST 与该 revision 所属数据库快照绑定；loader MUST NOT 为旧规则附加较新的 revision
+- **AND** 返回的 revision MUST 大于或等于目标 policy revision，规则 MUST 与该 revision 所属数据库快照绑定；loader MUST NOT 为旧规则附加较新的 revision
 - **AND** 用户身份解析 MUST 排除已软删除用户，loader MUST NOT 使用权限 active predicate，独立 `casbin_rules` 表 MUST NOT 成为业务权威来源
-- **WHEN** 当前快照可见 revision 低于目标 revision
-- **THEN** loader MUST 在 context 期限内结束旧快照并使用新快照重试，MUST NOT 返回低于目标的 policy、在旧快照内无限等待或将通知 revision直接作为快照 revision
-- **WHEN** target revision 为 0且数据库尚无 policy revision记录
-- **THEN** loader MUST 以revision 0加载当前基线投影，并保持超级管理员wildcard policy语义
+- **WHEN** 当前快照可见 policy revision 低于目标 policy revision
+- **THEN** loader MUST 在 context 期限内结束旧快照并使用新快照重试，MUST NOT 返回低于目标的 policy、在旧快照内无限等待或将通知 revision 直接作为快照 revision
+- **WHEN** target policy revision 为 0 且数据库尚无 policy revision 记录
+- **THEN** loader MUST 以 revision 0 加载当前基线投影，并保持超级管理员 wildcard policy 语义
+- **WHEN** 只有用户角色绑定发生变化且未改变角色状态、角色权限绑定或 permissions 投影
+- **THEN** 系统 MUST NOT 调用 policy loader，MUST NOT 查询 `role_permissions` 全集，MUST NOT 构造新的 Casbin enforcer
 
 #### Scenario: revision-aware engine 交换与防倒退
 
-- **WHEN** engine 收到目标 revision 并完成候选 `PolicySet` 与 enforcer 构造
-- **THEN** engine MUST 在同一锁定临界区比较候选 revision与当前 applied revision，并原子交换 enforcer、applied revision与成功状态
-- **AND** 只有更高候选 revision可以替换当前enforcer，相等候选 MUST 幂等成功，较低候选 MUST 被丢弃且不得覆盖或降低当前投影
-- **WHEN** revision 1的reload在revision 2成功应用后才完成
-- **THEN** 最终enforcer和applied revision MUST 仍对应revision 2或更高的数据库快照
-- **AND** engine、tracker/status、metrics与health暴露的applied revision MUST 来自同一实际投影状态，MUST NOT 由watcher独立推进
+- **WHEN** engine 收到目标 policy revision 并完成候选 `PolicySet` 与 enforcer 构造
+- **THEN** engine MUST 在同一锁定临界区比较候选 revision 与当前 applied revision，并原子交换 enforcer、applied revision 与成功状态
+- **AND** 只有更高候选 revision 可以替换当前 enforcer，相等候选 MUST 幂等成功，较低候选 MUST 被丢弃且不得覆盖或降低当前投影
+- **WHEN** policy revision 1 的 reload 在 policy revision 2 成功应用后才完成
+- **THEN** 最终 enforcer 和 applied revision MUST 仍对应 policy revision 2 或更高的数据库快照
+- **AND** engine、tracker/status、metrics 与 health 暴露的 applied revision MUST 来自同一实际投影状态，MUST NOT 由 watcher 独立推进
+- **WHEN** user-role revision 高于当前 Casbin applied policy revision
+- **THEN** engine applied revision MUST 保持不变，MUST NOT 把 user-role revision 当成 policy target 或 applied revision
 
 #### Scenario: 同实例并发 reload 收敛
 
-- **WHEN** 同一实例并发收到多个数据库target revision
-- **THEN** engine MUST 串行化或coalesce实际reload工作，将pending target单调提升到已观察到的最大值，并防止并发构造导致投影倒退
-- **AND** 等待方只有在实际applied revision不低于其target时才能观察到成功；单个等待方context取消 MUST NOT 取消其他调用仍需要的共享reload
-- **WHEN** 100个并发policy写入触发reload且数据库latest revision可见
-- **THEN** reload稳定后engine applied revision MUST 等于加载时数据库latest revision且不低于全部target中的最大值
-- **AND** 系统 MUST NOT 要求revision连续或为每个中间revision分别构造enforcer
+- **WHEN** 同一实例并发收到多个数据库 policy target revision
+- **THEN** engine MUST 串行化或 coalesce 实际 reload 工作，将 pending target 单调提升到已观察到的最大 policy revision，并防止并发构造导致投影倒退
+- **AND** 等待方只有在实际 applied revision 不低于其 target policy revision 时才能观察到成功；单个等待方 context 取消 MUST NOT 取消其他调用仍需要的共享 reload
+- **WHEN** 100 个并发 policy 写入触发 reload 且数据库 latest policy revision 可见
+- **THEN** reload 稳定后 engine applied revision MUST 等于加载时数据库 latest policy revision 且不低于全部 policy target 中的最大值
+- **AND** 系统 MUST NOT 要求 policy revision 连续或为每个中间 policy revision 分别构造 enforcer
 
 #### Scenario: 初始加载、reload 失败与恢复
 
-- **WHEN** user-service启动permission/RBAC模块
-- **THEN** composition层 MUST 使用可取消或带超时的启动context显式加载当前数据库latest policy revision
-- **WHEN** 初始加载失败、被取消或不能达到目标revision
-- **THEN** engine MUST 保留实际applied revision、记录最近错误和reload失败指标，后续授权 MUST fail-closed，`app.Start` MUST 保持成功
-- **AND** reload状态和readiness/startup MUST 保留失败信息并拒绝接入业务流量
-- **WHEN** 已存在成功投影后的reload加载、构造或交换失败
-- **THEN** engine MUST 保留上一成功enforcer及其applied revision，MUST NOT 提升revision、清除失败或使用旧投影放行请求
-- **WHEN** 后续显式reload、Pub/Sub或周期补偿成功应用不低于目标的数据库快照
-- **THEN** engine MUST 原子替换或确认当前投影、清除最近reload错误并恢复readiness/startup
+- **WHEN** user-service 启动 permission/RBAC 模块
+- **THEN** composition 层 MUST 使用可取消或带超时的启动 context 显式加载当前数据库 latest policy revision
+- **WHEN** 初始加载失败、被取消或不能达到目标 policy revision
+- **THEN** engine MUST 保留实际 applied revision、记录最近错误和 reload 失败指标，后续授权 MUST fail-closed，`app.Start` MUST 保持成功
+- **AND** reload 状态和 readiness/startup MUST 保留失败信息并拒绝接入业务流量
+- **WHEN** 已存在成功投影后的 reload 加载、构造或交换失败
+- **THEN** engine MUST 保留上一成功 enforcer 及其 applied revision，MUST NOT 提升 revision、清除失败或使用旧投影放行请求
+- **WHEN** 后续显式 reload、Pub/Sub 或周期补偿成功应用不低于目标的数据库 policy 快照
+- **THEN** engine MUST 原子替换或确认当前投影、清除最近 reload 错误并恢复 readiness/startup
 
 #### Scenario: 用户角色缓存键、容量与值隔离
 
@@ -227,81 +231,55 @@
 - **WHEN** 回源失败或结果连续两次与失效并发
 - **THEN** 授权 MUST fail-closed，MUST NOT 因 cache 不可用产生允许结果
 - **WHEN** `rbac.user_role_cache.enabled=false`
-- **THEN** 系统 MUST 直接回源、返回独立角色 ID slice并保持fail-closed；direct stats source MUST 使用`LoadSuccess`与`LoadError`表达逐次结果
+- **THEN** 系统 MUST 直接回源、返回独立角色 ID slice 并保持 fail-closed；direct stats source MUST 使用 `LoadSuccess` 与 `LoadError` 表达逐次结果
 
 #### Scenario: 在线写后同步与数据库 revision 目标
 
-- **WHEN** 角色状态、角色权限或用户角色绑定通过在线API与policy revision原子提交成功
-- **THEN** 本实例coordinator MUST 使用该数据库revision作为reload或cache invalidation目标，outbox dispatcher MUST 传播同一数据库revision
-- **AND** reload或通知失败 MUST 保持可诊断和fail-closed语义，cache invalidation MUST 保持同步幂等，MUST NOT 把通知接收、Redis max写入或publish成功标记为engine已应用
-- **AND** `PolicyChangeNotifier` MUST 是正式command service的必需依赖并接收数据库revision
-- **WHEN** 权限投影由离线migration、seed或bootstrap改变
-- **THEN** 离线命令 MUST NOT 宣称已完成在线policy refresh，运维 MUST 显式创建/传播对应revision、执行revision-aware reload或滚动重启副本
+- **WHEN** 角色状态、角色权限或权限投影通过在线 API 或受控维护流程与 policy revision 原子提交成功
+- **THEN** 本实例 coordinator MUST 使用该数据库 policy revision 作为 reload 目标，outbox dispatcher MUST 传播同一数据库 policy revision
+- **AND** reload 或通知失败 MUST 保持可诊断和 fail-closed 语义，cache invalidation MUST 保持同步幂等，MUST NOT 把通知接收、Redis publish 成功或 user-role revision 标记为 engine 已应用
+- **AND** `PolicyChangeNotifier` 或等价 policy reload port MUST 是正式 command service 的必需依赖并接收数据库 policy revision
+- **WHEN** 用户角色绑定通过在线 API 与 user-role revision 原子提交成功
+- **THEN** 本实例 coordinator MUST 只执行指定用户角色缓存失效，outbox dispatcher MUST 传播同一 user-role revision 和 user ID，MUST NOT 调用 Casbin policy reload 或 policy loader
+- **AND** user-role cache invalidation 失败 MUST 保持可诊断和 fail-closed 语义，MUST NOT 推进 Casbin target revision 或 applied revision
+- **WHEN** 权限投影由离线 migration、seed 或 bootstrap 改变
+- **THEN** 离线命令 MUST NOT 宣称已完成在线 policy refresh，运维 MUST 显式创建/传播对应 policy revision、执行 revision-aware reload 或滚动重启副本
 
 #### Scenario: watcher、重复通知与副本收敛
 
-- **WHEN** watcher通过Pub/Sub或周期性检查发现数据库policy revision高于engine applied revision
-- **THEN** watcher MUST 以该revision调用revision-aware application port，只有engine成功应用不低于target的投影后才能将该revision视为applied
-- **AND** Pub/Sub丢失时周期性revision补偿 MUST 使副本最终收敛
-- **WHEN** watcher收到重复、相等或乱序通知
-- **THEN** policy reload MUST 保持幂等且不得倒退enforcer；消息kind要求的用户角色cache invalidation副作用 MUST 仍按既有协议执行
-- **AND** 定向user-role invalidation通知 MUST NOT 独立推进Casbin engine applied revision或伪造policy reload完成
+- **WHEN** watcher 通过 Pub/Sub 或周期性检查发现数据库 policy revision 高于 engine applied revision
+- **THEN** watcher MUST 以该 policy revision 调用 revision-aware application port，只有 engine 成功应用不低于 target 的投影后才能将该 policy revision 视为 applied
+- **AND** Pub/Sub 丢失时周期性 policy revision 补偿 MUST 使副本最终收敛
+- **WHEN** watcher 收到重复、相等或乱序 policy 通知
+- **THEN** policy reload MUST 保持幂等且不得倒退 enforcer；已应用且 projection ready 的 policy revision MUST 跳过全量 reload
+- **AND** watcher MUST 合并当前待处理通知，对同批 policy 通知只针对最高未应用 policy revision 构造一次 Casbin enforcer
+- **WHEN** watcher 收到 user-role 通知
+- **THEN** watcher MUST 执行消息要求的用户角色 cache invalidation 副作用，MUST NOT 独立推进 Casbin engine applied revision 或伪造 policy reload 完成
+- **AND** 定向 user-role invalidation 通知携带可用 user ID 时 MUST 失效该用户缓存；存在 revision gap、无法证明精确用户集合完整或缺少可用 user ID 时 MUST 失效全部用户角色缓存
+- **WHEN** watcher 处理 100 条重复或连续通知且其中没有新的未应用 policy revision
+- **THEN** policy loader 调用次数 MUST 有常数上界；纯 user-role 通知 MUST 产生 0 次 policy loader 调用
 
 ### Requirement: RBAC watcher 自恢复生命周期与权威校准状态
 
-RBAC watcher MUST 在单一显式生命周期内持续监督 Redis policy refresh 订阅与 PostgreSQL policy revision 权威校准。订阅故障 MUST NOT 终止数据库补偿；瞬时错误恢复后 MUST 更新当前状态且不得因历史错误保持永久失败。watcher MUST 只通过 permission application 拥有的结构化只读 status port 暴露状态，MUST NOT 保留 `Running()`/`LastError()` 旧接口、旧状态 adapter 或兼容分支。
+RBAC watcher MUST 在单一显式生命周期内持续监督 Redis policy refresh 订阅与 PostgreSQL policy revision 权威校准。订阅故障 MUST NOT 终止数据库补偿；瞬时错误恢复后 MUST 更新当前状态且不得因历史错误保持永久失败。watcher MUST 只通过 permission application 拥有的结构化只读 status port 暴露状态，MUST NOT 保留 `Running()`/`LastError()` 旧接口、旧状态 adapter 或兼容分支。watcher 启动 MUST 接收显式 lifecycle context，并以该 context 派生后台运行 context；Start 路径 MUST NOT 使用 `context.Background()` 作为运行根上下文，也 MUST NOT 保留无参 `Start()` 兼容接口或 adapter。
 
-#### Scenario: 启动订阅失败后自动恢复
+#### Scenario: Watcher 生命周期与状态恢复
 
-- **WHEN** watcher 初次创建订阅或等待订阅确认时发生瞬时错误
-- **THEN** watcher MUST 关闭本次 PubSub，并按带抖动且不超过配置最大值的指数退避持续创建新订阅
-- **AND** 重试 MUST NOT 设置永久终止次数；成功确认订阅后 MUST 将 subscription state 置为 `connected`、记录最后订阅成功时间、清除当前 subscription 错误并重置退避
-- **AND** watcher 根生命周期 MUST 保持 running，MUST NOT 要求人工操作、进程重启或新的 RBAC mutation 才能恢复
+- **WHEN** permission runtime 启动、停止或启动回滚
+- **THEN** lifecycle MUST 在 `OnStart(ctx)` 中显式调用 `Watcher.Start(ctx)`，或幂等调用 `Stop(ctx)` 停止 watcher，constructor MUST NOT 提前启动 goroutine
+- **AND** watcher `Start(ctx)` MUST 使用传入 ctx 派生后台运行 context，并保存 cancel 供 `Stop(ctx)` 触发退出
+- **AND** watcher MUST 在 stop context 内等待 in-flight 消息处理或 revision check 退出，`Stop(ctx)` 的 ctx MUST 只控制等待退出的期限，MUST NOT 替代 Start 建立的运行根 context
+- **AND** watcher MUST NOT 关闭共享 Redis client
+- **WHEN** 同一 watcher 已经运行且调用方再次调用 `Start(ctx)`
+- **THEN** watcher MUST 保持单一后台 loop 或 ticker，并 MUST NOT 覆盖正在运行实例的 cancel 或启动第二个 worker
+- **WHEN** Redis subscription 断开、重连或关闭消息 channel
+- **THEN** watcher 根生命周期 MUST 保持 running，MUST NOT 要求人工操作、进程重启或新的 RBAC mutation 才能恢复
 
-#### Scenario: 运行期订阅终止后重建
+#### Scenario: Watcher 运行上下文观测
 
-- **WHEN** 已确认的 Pub/Sub 订阅在接收期间返回非取消错误、连接终止或等价的不可继续接收状态
-- **THEN** watcher MUST 只关闭当前 PubSub 一次，将 subscription state 置为 `reconnecting` 并启动有界退避重订阅
-- **AND** watcher MUST NOT 退出根生命周期或停止后续 PostgreSQL revision 周期补偿
-- **AND** 重建成功后收到的重复、乱序或旧 hint MUST 继续遵守既有幂等和 projection revision 不倒退语义
-
-#### Scenario: 权威校准独立于订阅状态
-
-- **WHEN** watcher 启动、达到配置检查周期，或订阅正在失败和退避
-- **THEN** watcher MUST 立即或按期直接读取 PostgreSQL latest policy revision，并在需要时执行 revision-aware reload
-- **AND** 只有数据库查询成功且最终 projection ready、applied revision 不低于本次数据库目标时，才 MUST 更新最后权威校准成功时间并清除当前 reconcile 错误
-- **AND** 数据库查询成功但 reload 失败、被取消或未达到目标时 MUST NOT 刷新成功时间或宣称校准成功
-
-#### Scenario: 订阅与校准错误分别恢复
-
-- **WHEN** subscription 或 reconcile 路径发生错误
-- **THEN** 结构化 status MUST 记录对应路径的固定低基数当前错误类别和最近失败时间，并将底层 cause 仅保留在日志中
-- **WHEN** 同一路径随后成功确认订阅或完成权威校准
-- **THEN** watcher MUST 清除该路径的当前错误类别并保留可诊断的历史时间，MUST NOT 清除另一条仍未恢复路径的当前错误
-
-#### Scenario: 配置边界
-
-- **WHEN** user-service 加载 `rbac.policy_watcher` 配置
-- **THEN** 系统 MUST 支持正数 `check_interval`、`subscribe_timeout`、`max_staleness`、`retry_backoff.initial` 和 `retry_backoff.max`
-- **AND** `retry_backoff.max` MUST 大于或等于 `retry_backoff.initial`，`max_staleness` MUST 大于 `check_interval`，非法配置 MUST 在应用启动前被拒绝
-- **AND** 系统 MUST NOT 读取旧 watcher 配置名、别名或回退配置分支
-
-#### Scenario: 停止时无 goroutine 和订阅泄漏
-
-- **WHEN** Fx lifecycle 调用 watcher `Stop` 或启动回滚取消 watcher
-- **THEN** 根 context MUST 取消订阅确认、Receive、退避 timer、payload 交付和周期校准，并等待全部 watcher goroutine 退出
-- **AND** 当前 PubSub MUST 只关闭一次，共享 Redis client MUST NOT 被 watcher 关闭，取消后 MUST NOT 再创建订阅
-- **AND** 正常停止 MUST 将结构化状态置为 stopped 且不得记录为非预期后台错误
-
-#### Scenario: applied revision、lag 与健康语义
-
-- **WHEN** 系统报告本地applied revision、policy reload status或reload lag
-- **THEN** local applied值 MUST 来自engine当前实际授权投影，lag MUST 计算为`max(known_latest_database_revision - engine_applied_revision, 0)`
-- **AND** reload失败、消息接收或Redis revision更新 MUST NOT 提升applied revision或将lag错误清零
-- **WHEN** lag为0且latest revision已知
-- **THEN** engine 实际投影 revision MUST 大于或等于该 latest revision，且最近 reload 状态 MUST 成功，系统才可仅基于 policy projection 判定 readiness/startup 健康
-- **WHEN** engine未初始化、最近reload失败或applied revision低于已知target
-- **THEN** readiness/startup MUST 报告policy不可用并拒绝业务流量
+- **WHEN** watcher 启动、处理 Pub/Sub payload、执行周期 revision check、查询 latest revision、执行 projection reload 或记录同步结果
+- **THEN** 后台消息处理、周期校准、结构化日志和 watcher metrics MUST 使用由 `Start(ctx)` 传入 lifecycle context 派生的运行 context 或其 logger-aware 派生 context
+- **AND** watcher Start 路径 MUST NOT 调用 `context.WithCancel(context.Background())` 建立运行根 context
 
 ### Requirement: RBAC 系统数据与运维 CLI
 
@@ -410,7 +388,7 @@ permission、role 和 binding domain MUST 返回携带稳定 HTTP status、共�
 
 ### Requirement: RBAC 架构装配与资源生命周期
 
-role 和 permission feature MUST 保持 domain、application、transport 和 infrastructure 分层。permission application MUST 只保留权限查询、授权、policy loading/sync 和 seed/角色绑定所需最小端口，不得保留公开权限 command 或 route diff 生产装配。domain/application MUST 框架无关并拥有消费侧最小 port；Fx、Gin、Ent、Redis、SQL、HTTP response 和 named resource metadata MUST 留在对应边界。RBAC watcher 和 policy 投影主动资源 MUST 显式启动、停止和回滚；无后台执行的 user-role localcache MUST NOT 拥有启停或关闭生命周期。permission composition MUST 以单一 runtime 聚合对象表达稳定组件集合。
+role 和 permission feature MUST 保持 domain、application、transport 和 infrastructure 分层。permission application MUST 只保留权限查询、授权、policy loading/sync 和 seed/角色绑定所需最小端口，不得保留公开权限 command 或 route diff 生产装配。domain/application MUST 框架无关并拥有消费侧最小 port；Fx、Gin、Ent、Redis、SQL、HTTP response 和 named resource metadata MUST 留在对应边界。RBAC watcher、Casbin Engine policy reload flight 和 policy 投影主动资源 MUST 显式启动、停止和回滚；无后台执行的 user-role localcache MUST NOT 拥有启停或关闭生命周期。permission composition MUST 以单一 runtime 聚合对象表达稳定组件集合。
 
 #### Scenario: 分层、bootstrap 与最小依赖
 
@@ -441,18 +419,29 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 - **THEN** 服务 MUST 具备可用 notifier；缺少 notifier 或安全 collaborator 时 constructor MUST 返回明确 error 并拒绝装配，MUST NOT panic
 - **AND** 系统 MUST NOT 用 no-op、nil fallback 或兼容 wrapper 跳过 reload、Redis version 或 watcher 同步
 
-#### Scenario: watcher 与 cache lifecycle
+#### Scenario: watcher、Casbin Engine 与 cache lifecycle
 
 - **WHEN** user-service 启停 permission/RBAC runtime
 - **THEN** `NewWatcher` MUST 只构造对象，MUST NOT 启动 goroutine、订阅 Redis 或执行补偿循环
-- **AND** hook MUST 初始加载 policy 后启动 watcher；`Start()` 和 `Stop(ctx)` MUST 幂等，`Stop(ctx)` MUST 取消内部 context 并在调用方期限内等待 watcher 退出
+- **AND** hook MUST 先启动 Casbin Engine lifecycle root，再使用启动 context 执行 fail-closed 初始 policy 加载，然后启动 watcher；`Start()` 和 `Stop(ctx)` MUST 幂等，`Stop(ctx)` MUST 取消内部 context 并在调用方期限内等待 watcher 退出
 - **AND** Stop 超时 MUST 返回 context 错误并保持重复停止安全，启动失败或停止时已启动 watcher MUST 被停止
 - **WHEN** user-role localcache 被构造或应用停止
 - **THEN** cache MUST 作为无后台 goroutine 的普通对象使用，Fx result 与 hook MUST NOT 为其提供或调用 `Start(context.Context) error`、`Close() error`、closed state 或 lifecycle rollback
 
+#### Scenario: Casbin Engine shared reload flight root
+
+- **WHEN** Casbin Engine 启动后创建 shared reload flight
+- **THEN** `startFlightLocked` MUST 从 engine lifecycle root 派生 shared flight context，MUST NOT 从 `context.Background()` 或任一 waiter context 派生 shared flight context
+- **AND** 任一单个 `ReloadToRevision(ctx)` 或 `RefreshToRevision(ctx)` waiter context 取消 MUST 只取消该调用等待，MUST NOT 取消其他 waiter 仍需要的 shared reload flight
+- **AND** 全部 waiter 取消后 engine MAY 取消当前 shared reload flight 并保持 fail-closed，后续新 waiter MUST 能启动 fresh flight
+- **WHEN** engine lifecycle root 被 RBAC lifecycle Stop、启动回滚或服务 shutdown 取消
+- **THEN** 正在阻塞的 shared reload loader MUST 收到取消信号，engine MUST 记录 reload 失败并保持 fail-closed，MUST NOT 使用旧 `context.Background()` 兼容路径继续执行该 flight
+- **WHEN** `InitializeFailClosed(ctx)` 执行启动期初始加载
+- **THEN** engine MUST 使用 target revision 0 执行 reload；若启动 context 取消、loader 失败或目标 revision 未达到，服务启动 MUST 保持成功且后续授权 MUST fail-closed
+
 #### Scenario: 共享资源所有权与关闭安全
 
-- **WHEN** RBAC 关闭 watcher、store 或其他主动资源
+- **WHEN** RBAC 关闭 watcher、store、Casbin Engine 或其他主动资源
 - **THEN** `Stop` 或 `Close` MUST NOT 关闭共享 Redis、Ent 或 PostgreSQL 资源
 - **AND** 关闭后授权 MUST 继续 fail-closed，不得因本地资源不可用产生允许结果
 - **AND** RBAC MUST NOT 把服务业务配置、权限基线、角色值复制或 key schema 下沉到 `common`
@@ -641,51 +630,18 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 
 ### Requirement: RBAC policy outbox 可靠投递
 
-系统 MUST 以 PostgreSQL 中已提交的 RBAC policy outbox event 作为跨副本 revision 通知的可靠恢复事实，并由显式 dispatcher 对到期 event 执行 claim、Redis publish、成功 ack 和失败退避。user-service MUST 私有拥有轮询、批量、claim lease 与退避配置，并通过 permission lifecycle 启停同一 dispatcher 实例。dispatcher MUST 提供至少一次投递并在进程崩溃或 Redis 故障后自动恢复；Redis MUST 只作为可重放加速层。
+系统 MUST 以 PostgreSQL 中已提交的 RBAC policy outbox event 作为跨副本 revision 通知的可靠恢复事实，并由显式 dispatcher 对到期 event 执行 claim、Redis publish、成功 ack 和失败退避。user-service MUST 私有拥有轮询、批量、claim lease 与退避配置，并通过 permission lifecycle 启停同一 dispatcher 实例。dispatcher MUST 提供至少一次投递并在进程崩溃或 Redis 故障后自动恢复；Redis MUST 只作为可重放加速层。dispatcher 后台 goroutine 发生 panic 时 MUST fail-closed 停止运行，并记录包含 recovered value、稳定错误分类和 stack trace 的结构化日志。
 
-#### Scenario: 配置与生命周期
+#### Scenario: dispatcher 后台 panic recovery 可观测性
 
-- **WHEN** dispatcher 配置缺失或含非正数 interval、batch size、claim timeout、backoff，或最大退避小于初始退避
-- **THEN** user-service MUST 应用完整安全默认值，或在显式非法配置时拒绝启动并报告字段路径
-- **WHEN** permission runtime 启动、停止或启动回滚
-- **THEN** lifecycle MUST 显式启动或幂等停止 dispatcher，constructor MUST NOT 提前启动 goroutine
-- **AND** dispatcher MUST 在 stop context 内等待 in-flight 工作退出，MUST NOT 关闭共享 Ent、PostgreSQL 或 Redis client
-
-#### Scenario: 到期事件被 claim 并成功投递
-
-- **WHEN** pending 或 failed event 的 `next_attempt_at` 已到期且 dispatcher 正在运行
-- **THEN** dispatcher MUST 按 revision 升序批量 claim event、发布同一数据库 revision 的 Redis 通知并条件标记 delivered
-- **AND** delivered event MUST 记录完成时间、清除 claim 与最近错误，后续扫描 MUST NOT 再将其作为可投递事件返回
-
-#### Scenario: Redis 故障后自动恢复
-
-- **WHEN** Redis 不可用、version cache 更新失败或 Pub/Sub publish 失败
-- **THEN** dispatcher MUST NOT 删除、吞掉或标记该 event 为 delivered
-- **AND** 系统 MUST 记录失败 attempt、稳定错误摘要和下一次尝试时间，并按配置退避继续重试
-- **WHEN** Redis 恢复且 event 再次到期
-- **THEN** dispatcher MUST 无需新的 RBAC mutation 或人工复制 event 即可重新发布并最终 ack
-
-#### Scenario: 进程重启与过期 lease 恢复
-
-- **WHEN** dispatcher 在 claim 后、publish 中或 publish 成功但 ack 前停止或崩溃
-- **THEN** event MUST 保留 processing 状态和持久 lease，且不得因进程内状态丢失而消失
-- **WHEN** claim lease 到期
-- **THEN** 任一健康 dispatcher MUST 能重新 claim 并继续处理该 event
-- **AND** publish 成功但 ack 前崩溃 MAY 产生重复通知，consumer 副作用 MUST 保持幂等
-
-#### Scenario: 多 dispatcher 并发 claim
-
-- **WHEN** 多个 user-service 副本并发扫描同一批 due event
-- **THEN** PostgreSQL claim MUST 通过行级仲裁为每个 event 建立唯一有效 claim token 与 lease
-- **AND** 同一 lease 期间最多一个 owner MUST 获得该 event，其他 dispatcher MUST 跳过已 claim 行而非执行非幂等副作用
-- **AND** ack 或失败更新 MUST 同时匹配 event、processing 状态和 claim token，过期 owner MUST NOT 覆盖新 owner 的处理结果
-
-#### Scenario: 失败退避与保留
-
-- **WHEN** 第 N 次实际 publish 尝试失败
-- **THEN** attempt count MUST 增加一次，下一次尝试 MUST 使用不超过配置最大值的有界指数退避
-- **AND** failed event MUST 持续保留且没有因达到固定 attempt 次数而进入不可恢复终态
-- **AND** 无效 event 数据 MUST 作为可诊断失败保留并退避，MUST NOT 被静默 ack 或删除
+- **WHEN** dispatcher 后台 `run` 循环发生 panic
+- **THEN** recovery 日志 MUST 记录 `error_category=unexpected_exit`
+- **AND** recovery 日志 MUST 记录 `recovered` 字段，值来自 `recover()` 捕获结果
+- **AND** recovery 日志 MUST 记录 stack trace 字段
+- **AND** dispatcher MUST 将 `LastErrorCategory` 更新为 `unexpected_exit`
+- **AND** dispatcher MUST 停止当前 ticker、标记 `Running=false`、上报 `DispatcherRunningObserved(false)` 并关闭当前 `done`
+- **AND** 后续调用 `Stop(ctx)` MUST 幂等稳定返回
+- **AND** dispatcher MUST NOT 因本场景自动重启后台 loop
 
 ### Requirement: RBAC revision 通知、幂等消费与故障验收
 
@@ -825,3 +781,204 @@ RBAC 生产源码 MUST 只保留生产运行、生成期框架入口或稳定服
 - **WHEN** CI 或开发者对 user-service 运行不包含测试入口的生产调用图 deadcode 检查
 - **THEN** RBAC 手写生产代码 MUST NOT 报告仅由测试引用的 watcher 构造器、baseline helper 或 authorization wrapper
 - **AND** Ent schema/mixin 生成期入口和其他明确归属 capability 的测试支持入口 MUST 单独复核，不得通过删除共享公开 API 或生成期入口消除报告
+
+### Requirement: Casbin reload metrics 归属 permission feature
+
+Casbin policy reload recorder MUST 由 user-service permission/RBAC 边界拥有。permission feature MUST 定义 Engine 消费的最小 reload recorder interface、disabled metrics 时使用的非 nil no-op 实现，以及使用通用 metrics Provider 注册 Prometheus collector 的实现。该 recorder MUST NOT 位于 `common/runtime/observability/metrics`、`user-service/internal/shared` 或 role feature。
+
+#### Scenario: Engine 使用 permission-owned recorder
+
+- **WHEN** permission composition 构造 Casbin Engine
+- **THEN** Engine MUST 接收 permission-owned reload recorder interface
+- **AND** Engine MUST NOT import `common/runtime/observability/metrics` 以获得 Casbin reload 业务接口
+- **AND** Engine 的授权、reload、health 和 initialization 投影 MUST 继续指向同一个 engine 实例
+
+#### Scenario: 指标名称和语义保持不变
+
+- **WHEN** policy reload 成功或失败
+- **THEN** recorder MUST 分别增加 `aegiscore_casbin_policy_reloads_total{status="success"}` 或 `aegiscore_casbin_policy_reloads_total{status="failure"}`
+- **AND** recorder MUST 使用 `aegiscore_casbin_policy_reload_last_success` 以 `1` 表示最近 reload 成功，以 `0` 表示最近 reload 失败
+- **AND** 指标 MUST NOT 增加用户、角色、权限、revision、Redis key、SQL、原始错误或其他高基数 label
+
+#### Scenario: metrics 禁用时使用安全空实现
+
+- **WHEN** 全局 metrics provider 缺失或禁用
+- **THEN** permission feature MUST 为 Casbin Engine 注入非 nil no-op reload recorder
+- **AND** no-op recorder MUST 保持 reload、watcher、initializer 和授权 fail-closed 行为不变，不得注册 collector 或引入 nil 分支
+
+#### Scenario: 不改变 policy reload 行为
+
+- **WHEN** Casbin policy 初始加载、显式 reload、Pub/Sub 触发 reload 或周期补偿 reload 执行
+- **THEN** 本 change MUST NOT 改变 revision-aware loading、enforcer swap、防倒退、最近错误、readiness/startup 或 watcher 收敛语义
+- **AND** 观测失败 MUST NOT 改变 reload 成功或失败的业务结果
+
+### Requirement: RBAC policy sync 并发与状态测试门禁
+
+系统 MUST 为 RBAC watcher 与 Casbin enforcer 的并发同步、补偿、关闭和 cancellation 语义提供 race/stress 测试门禁。测试 MUST 使用 deterministic fake、可控 channel 或同步 primitive 构造竞态，MUST 能在 `go test -race` 下稳定运行，并且 MUST NOT 依赖真实外部 Redis 或 PostgreSQL 服务。
+
+#### Scenario: watcher 并发通知与周期补偿收敛
+
+- **WHEN** watcher 并发接收多条重复、乱序或较小的 Pub/Sub policy hint，并同时触发周期性 PostgreSQL revision check
+- **THEN** 测试 MUST 断言 watcher 只把数据库可见 revision 作为 reload target，并最终通过 revision-aware port 追赶到不低于最高权威 revision 的投影
+- **AND** 测试 MUST 断言重复或旧 hint 不会导致 Casbin applied revision 倒退
+- **AND** 定向 user-role cache invalidation 的副作用 MUST 按协议执行，但不得独立推进 Casbin applied revision
+
+#### Scenario: watcher 重订阅与状态语义
+
+- **WHEN** 已确认的 Redis Pub/Sub 订阅断连、message channel 关闭或 Receive 返回可恢复错误
+- **THEN** 测试 MUST 断言 watcher 根生命周期仍保持 running，subscription state 进入 reconnecting 或等价的重订阅状态
+- **AND** 周期性 PostgreSQL revision check MUST 在订阅退避期间继续运行
+- **WHEN** 重订阅确认成功
+- **THEN** 测试 MUST 断言 subscription state 恢复 connected，并清除当前 subscription 错误
+
+#### Scenario: watcher Stop 竞态与取消语义
+
+- **WHEN** watcher `Stop(ctx)` 与阻塞 revision source、阻塞 reload engine、订阅确认、Receive、退避 timer 或 payload delivery 并发发生
+- **THEN** 测试 MUST 断言 Stop 在调用方 context 期限内取消内部 root context 并等待 watcher goroutine 退出，除非测试显式覆盖 Stop 超时语义
+- **AND** Stop 完成后 watcher lifecycle MUST 为 stopped，subscription state MUST 为 stopped 或等价关闭状态
+- **AND** 正常停止导致的 reconcile cancellation MUST NOT 记录为业务 failure、最近失败时间或当前 reconcile 错误
+- **AND** Stop 超时 MUST 返回 context 错误，并保持后续重复 Stop 调用安全
+
+#### Scenario: enforcer 多 waiter 与 reload coalescing
+
+- **WHEN** 多个 goroutine 并发调用 `ReloadToRevision`、`RefreshToRevision` 或等价 revision-aware reload 入口，且 target revision 重复、乱序或递增
+- **THEN** 测试 MUST 断言实际 reload 工作被串行化或 coalesce，最终 applied revision 不低于所有未取消等待方请求的最高 target
+- **AND** 每个未取消等待方 MUST 只在 engine 实际 applied revision 不低于其 target 后返回成功
+- **AND** 单个等待方 context cancellation MUST NOT 取消其他等待方仍需要的共享 reload
+
+#### Scenario: enforcer root cancel、leader cancel 与强制刷新
+
+- **WHEN** engine root context 被取消、reload leader context 被取消或 loader/reload gate 被阻塞
+- **THEN** 测试 MUST 断言未完成等待方返回取消错误或对应 reload 错误，engine 不提升 applied revision，不清除最近失败状态，也不使用旧投影放行请求
+- **WHEN** force refresh 请求在普通 reload 已经开始读取数据库后加入同一 flight
+- **THEN** 测试 MUST 断言 engine 在 force refresh 到达后重新读取一次 PostgreSQL 快照，并且不得把 force 请求到达前构造的候选视为该请求已完成
+
+### Requirement: RBAC policy sync 统一生命周期上下文
+
+RBAC policy sync 的 dispatcher、watcher、subscriber 和 enforcer reload engine MUST 由 permission runtime 接收的显式服务 lifecycle root context 统一约束。后台运行 context MUST 从该 root context 派生；启动路径 MUST NOT 使用 `context.Background()` 建立独立 root，MUST NOT 保留无参 `Start()` 或等价兼容 adapter。`Stop(ctx)` 的 ctx MUST 只限制等待退出的期限，单个 reload waiter 的 ctx MUST 只取消该 waiter，MUST NOT 替代或取消仍被其他参与者需要的共享运行 root 或 reload flight。
+
+#### Scenario: permission lifecycle 启动与停止后台同步链路
+
+- **WHEN** permission runtime 启动、停止或执行启动失败回滚
+- **THEN** lifecycle MUST 使用同一服务 lifecycle root context 显式启动 watcher、subscriber 和 dispatcher，并使 enforcer reload engine 受该 root cancellation 约束
+- **AND** constructor MUST NOT 提前启动 goroutine，启动失败 MUST 幂等停止已启动资源
+- **AND** 停止顺序 MUST 阻止新的 dispatch 或 reconcile 工作进入，再取消运行 root 并等待 in-flight 工作退出
+- **AND** 任一组件 MUST NOT 关闭共享 PostgreSQL、Ent 或 Redis client
+
+#### Scenario: lifecycle root cancellation 终止共享 reload flight
+
+- **WHEN** 服务 lifecycle root context 被取消且 enforcer 仍有进行中的 reload flight 或等待方
+- **THEN** reload engine MUST 取消未完成工作并使等待方返回 cancellation 或对应 reload error
+- **AND** engine MUST NOT 提升 applied revision、清除最近失败状态或把未完成候选投影发布为成功结果
+- **WHEN** 仅一个 reload waiter 的 context 被取消且其他 waiter 仍需要同一 flight
+- **THEN** engine MUST 只结束该 waiter 的等待，共享 flight MUST 继续服务其他未取消 waiter
+
+### Requirement: RBAC dispatcher batch partial success 与异常终态
+
+RBAC policy outbox dispatcher 单次 batch MUST 返回结构化结果或等价结构化状态，使调用方能够区分 claim、publish、ack、failure record、claim lost、backlog/status refresh 和 context cancellation。dispatcher MUST 保留 partial success：单条事件失败 MUST NOT 阻断同 batch 后续未取消事件，已成功 publish 或 ack 的结果 MUST NOT 因最终返回 error 而被抹除。旧 error-only `DispatchOnce` 语义 MUST NOT 作为兼容行为保留。后台 loop panic MUST fail-closed 进入 `unexpected_exit`，并留下完整恢复证据。
+
+#### Scenario: dispatcher batch 部分成功
+
+- **WHEN** dispatcher claim 多个 due event，且其中部分事件发生 publish、ack、failure record 或 claim lost 错误
+- **THEN** dispatcher MUST 继续处理同 batch 后续未取消 claim
+- **AND** 结构化结果 MUST 暴露 claimed、delivered、acknowledged、retried、failed 和 status refresh 成功与否或等价信息
+- **AND** 返回错误 MUST 可判别每个失败阶段，MUST NOT 暗示整个 batch 未发生成功投递
+- **AND** 已成功 ack 的事件 MUST 保持 delivered，失败或失去 claim 的事件 MUST 按既有 lease recovery 与退避语义恢复
+
+#### Scenario: claim、status refresh 与 cancellation 相互独立
+
+- **WHEN** batch claim 失败
+- **THEN** 结果 MUST NOT 伪造已 claim、已投递或已 ack 事件，并 MUST 标识 claim 阶段错误
+- **WHEN** backlog/status refresh 失败但 batch 内已有事件成功投递
+- **THEN** 结果 MUST 保留已成功事件计数，并独立标识 status refresh 失败
+- **WHEN** context 在某个 claim 完成前被取消
+- **THEN** dispatcher MUST 停止开始新的工作，且 MUST NOT 主动 Ack 或 Fail 当前未完成 claim，后续恢复 MUST 继续依赖 claim lease
+
+#### Scenario: dispatcher 后台 panic recovery 可观测性
+
+- **WHEN** dispatcher 后台 run loop 发生 panic
+- **THEN** recovery 日志 MUST 记录 `error_category=unexpected_exit`
+- **AND** recovery 日志 MUST 记录来自 `recover()` 的 recovered value 和 stack trace
+- **AND** dispatcher MUST 将最近错误分类更新为 `unexpected_exit`，停止 ticker，设置 running=false，上报对应运行指标并关闭当前 done signal
+- **AND** dispatcher MUST NOT 自动重启后台 loop，后续 `Stop(ctx)` MUST 幂等稳定返回
+
+### Requirement: RBAC watcher 断连恢复与 final state
+
+RBAC watcher MUST 分别维护 lifecycle、subscription 与 reconcile 状态，并以 PostgreSQL policy revision 作为最终权威事实。Redis subscription 断连、message channel 关闭或可恢复 Receive error MUST 触发重订阅而不是终止 watcher root lifecycle；订阅退避期间周期 reconcile MUST 继续运行。正常停止、Stop 等待超时、reconcile cancellation 与异常退出 MUST 形成可判别 final state，历史瞬时错误恢复后 MUST NOT 使 watcher 永久保持失败。
+
+#### Scenario: Redis 断连与重订阅
+
+- **WHEN** 已确认的 Redis subscription 断连、message channel 关闭或 Receive 返回可恢复错误
+- **THEN** watcher lifecycle MUST 保持 running，subscription MUST 进入 reconnecting 或等价状态
+- **AND** PostgreSQL revision reconcile MUST 在重订阅退避期间继续运行，Redis hint MUST NOT 取代数据库权威 revision
+- **WHEN** subscriber 完成新的订阅确认
+- **THEN** subscription MUST 恢复 connected，并清除当前 subscription error 与对应失败时间
+
+#### Scenario: watcher 正常停止与 reconcile cancellation
+
+- **WHEN** watcher root context 因正常 lifecycle shutdown 被取消，且 revision query、reload、订阅确认、Receive、退避 timer 或 payload handling 正在执行
+- **THEN** watcher MUST 停止接收新工作并等待 in-flight 工作退出
+- **AND** 由该正常停止直接导致的 reconcile cancellation MUST NOT 记录为业务 failure、最近失败时间或当前 reconcile error
+- **AND** 后台 loop 真正退出后 lifecycle 与 subscription MUST 进入 stopped 或等价关闭终态
+
+#### Scenario: watcher Stop 超时
+
+- **WHEN** `Stop(ctx)` 的等待期限先于 watcher 后台 loop 退出到期
+- **THEN** Stop MUST 返回调用方 context error，并保持内部 root cancellation 已发出
+- **AND** watcher MUST NOT 在后台 loop 实际退出前伪造 stopped final state
+- **AND** 后续重复 Stop MUST 保持安全，并可在后台退出后观察到 stopped final state
+
+#### Scenario: subscriber 与 watcher 责任边界
+
+- **WHEN** Redis 订阅需要建立、确认、取消、断连检测或重新建立
+- **THEN** `common/runtime/redispubsub` subscriber MAY 提供无业务语义 lifecycle primitive
+- **AND** policy revision envelope、数据库权威校准、reconcile 状态、user-role cache invalidation 和 watcher final state MUST 由 permission feature 拥有
+
+### Requirement: RBAC policy sync race 与 stress 验证门禁
+
+系统 MUST 为 dispatcher、watcher、subscriber 和 enforcer reload engine 的并发、关闭、异常与 cancellation 语义提供 race/stress 验证。测试 MUST 使用 deterministic fake、可控 channel、barrier 或等价同步 primitive，MUST NOT 依赖真实 Redis 或 PostgreSQL，并 MUST 断言规格状态而非偶然 goroutine 调度顺序。
+
+#### Scenario: dispatcher、watcher 与 subscriber 并发验证
+
+- **WHEN** 测试并发触发 dispatcher partial success、panic finalization、watcher 断连重订阅、reconcile、Stop 和 subscriber cancellation
+- **THEN** 测试 MUST 在 `go test -race` 下稳定通过且不得报告 data race、goroutine leak 或重复关闭 panic
+- **AND** 测试 MUST 覆盖 running、reconnecting、connected、stopped、unexpected_exit 和 Stop timeout 等适用状态迁移
+
+#### Scenario: enforcer 多 waiter 与 force refresh 验证
+
+- **WHEN** 多个 goroutine 以重复、乱序或递增 target revision 并发请求普通 reload 或 force refresh
+- **THEN** 实际 reload MUST 串行化或 coalesce，未取消 waiter MUST 只在 applied revision 不低于各自 target 后成功
+- **AND** 单个 waiter cancellation MUST NOT 取消其他 waiter 所需 flight
+- **AND** force refresh 在普通 reload 已开始读取数据库后加入时，engine MUST 为 force 请求重新读取一次 PostgreSQL 快照
+
+#### Scenario: 推荐验证命令
+
+- **WHEN** 维护者验证 RBAC policy sync 的统一并发语义
+- **THEN** SHOULD 运行 `go test -race -count=20 ./user-service/internal/features/permission/application ./user-service/internal/features/permission/infrastructure/redis ./user-service/internal/features/permission/infrastructure/casbin`
+- **AND** SHOULD 再运行相关包普通测试、`openspec validate document-rbac-policy-sync-semantics --strict` 和 `make user-service-architecture-lint`
+
+### Requirement: RBAC policy 写事务不得受共享 helper 隐式 5 秒断点限制
+
+RBAC 角色、角色权限、用户角色、系统绑定、超级管理员 bootstrap 和 policy outbox claim 的 PostgreSQL 事务 MUST 依赖 `common/runtime/datastore` 修正后的事务 lifecycle 语义。无原始 deadline 时，这些事务 MUST NOT 因 datastore helper 的固定 5 秒 timeout 被自动回滚；事务耗时、锁等待和慢查询边界 MUST 由调用方显式 deadline 或数据库 timeout 策略控制。
+
+#### Scenario: policy revision counter 锁等待超过 5 秒仍按策略完成
+- **WHEN** RBAC policy 写事务在分配单调 revision 时等待固定 `rbac_policy_revision_counters` 行锁超过 `DefaultTransactionCleanupTimeout`
+- **THEN** datastore helper MUST NOT 因隐藏 5 秒 deadline 取消该事务
+- **AND** 锁释放后事务 MUST 能继续追加 policy revision 和 outbox event，并在原始 context 和数据库策略允许时提交成功
+
+#### Scenario: 提交前请求取消仍不得提交 RBAC 写结果
+- **WHEN** RBAC policy 写事务已完成业务 mutation、revision 分配和 outbox event 构造，但原始 request context 在 commit 前取消或超时
+- **THEN** store MUST 拒绝提交该事务
+- **AND** 系统 MUST 回滚角色、角色权限、用户角色、policy revision counter、policy revision 和 outbox event 变更
+- **AND** application MUST NOT 发送 policy change 通知或触发本实例 reload
+
+#### Scenario: RBAC 高并发写入不存在 helper 层固定 5 秒失败点
+- **WHEN** 多个 RBAC 写请求并发竞争 revision counter、角色行锁或系统绑定事务资源
+- **THEN** 请求成功、失败或超时 MUST 由原始 context deadline、数据库错误或显式数据库 timeout 决定
+- **AND** 系统 MUST NOT 因 `DefaultTransactionCleanupTimeout` 被传入 `BeginTx` 而在约 5 秒处形成固定自动回滚断点
+
+#### Scenario: RBAC 本地代码不保留兼容绕过分支
+- **WHEN** RBAC PostgreSQL store 使用事务 helper 执行在线写入、seed/system binding、bootstrap 或 outbox claim
+- **THEN** store MUST 直接消费修正后的 `datastore.BeginTransaction` 行为
+- **AND** store MUST NOT 增加旧 5 秒行为兼容开关、绕过参数或重复事务 lifecycle helper
+

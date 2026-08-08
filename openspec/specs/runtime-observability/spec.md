@@ -238,30 +238,38 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 
 ### Requirement: 运行时故障、诊断与依赖观测边界
 
-系统 MUST 将 HTTP 或 pprof listener 的非预期退出转换为 Fx shutdown signal，并在统一预算内优雅关闭。composition root MUST 显式绑定 runtime server、诊断监听及 Redis/PostgreSQL 观测依赖；可预期错误 MUST 通过 constructor 返回，依赖健康、metrics、tracing 与日志 MUST 保持低基数且不泄露敏感信息。
+系统 MUST 将 HTTP 或 pprof listener 的非预期退出转换为 Fx shutdown signal，并在统一预算内优雅关闭。业务 HTTP 与 pprof MUST 使用 `common/runtime/httpserver` 的独立 managed server，composition root MUST 显式绑定 runtime server、诊断监听及 Redis/PostgreSQL 观测依赖；可预期错误 MUST 通过 constructor 返回，依赖健康、metrics、tracing 与日志 MUST 保持低基数且不泄露敏感信息。
 
 #### Scenario: Listener 故障与关闭预算
 
-- **WHEN** HTTP 或 pprof `Serve` 在正常关闭前返回错误
-- **THEN** 系统 MUST 记录可诊断错误并触发非零内部 shutdown signal；`http.ErrServerClosed` MUST NOT 被视为内部故障
+- **WHEN** 业务 HTTP 或 pprof 启用且 Fx 执行 OnStart
+- **THEN** hook MUST 直接调用对应 `Managed.Start(ctx)`，监听失败 MUST 同步阻断 App 启动且 MUST NOT 留下后台资源
+- **WHEN** HTTP 或 pprof `Serve` 在正常关闭前返回非预期错误
+- **THEN** 服务侧 `OnServeError` MUST 记录可诊断错误并触发 exit code 1 的内部 shutdown signal；`http.ErrServerClosed`、`net.ErrClosed` 与停止期间的 context cancellation MUST NOT 被视为内部故障
 - **WHEN** 外部信号或内部故障触发关闭
-- **THEN** 系统 MUST 使用同一未被取消的上游 context value 和 `runtime.lifecycle.stop_timeout` 总预算执行 `App.Stop`，局部组件 timeout MUST NOT 替代总预算，后续 hook MUST 仅使用剩余时间，MUST NOT 通过为每个组件重建完整预算使总耗时无界增长
+- **THEN** hook MUST 直接调用对应 `Managed.Stop(ctx)`，系统 MUST 使用同一未被取消的上游 context value 和 `runtime.lifecycle.stop_timeout` 总预算执行 `App.Stop`，各 Managed 的内部 shutdown timeout MUST 不大于总预算，后续 hook MUST 仅使用剩余时间，MUST NOT 通过为每个组件重建完整总预算使总耗时无界增长
+- **WHEN** 某次 Fx Stop 等待 context 先于 Managed cleanup 到期
+- **THEN** 本次等待 MUST 返回 context error，Managed 后台 cleanup MUST 继续，后续 Stop MUST 能继续等待同一 cleanup
 - **WHEN** 所有 hook 在预算内完成
 - **THEN** App MUST 立即关闭，MUST NOT 等待完整 timeout
-- **WHEN** pprof `server.Shutdown(ctx)` 失败
-- **THEN** 系统 MUST 对同一 server best-effort `Close()`，返回错误 MUST 保留 Shutdown 及可能的 Close 失败信息，重复停止 MUST NOT panic 或阻塞
+- **WHEN** 业务 HTTP 或 pprof 的优雅关闭失败
+- **THEN** 对应 Managed MUST 对同一 server best-effort `Close()`、等待 handler 与 `Serve` goroutine，并保留 Shutdown、Close、drain 与 Serve 的最终错误；重复停止 MUST NOT panic 或阻塞
 
 #### Scenario: DI 初始化与 composition root 绑定
 
 - **WHEN** Fx constructor、decorator 或 Invoke 发生未预期 panic
 - **THEN** App 构造或启动 MUST 通过 Fx error 暴露信息，进程 MUST NOT 直接崩溃
-- **AND** `fx.RecoverFromPanics()` MUST NOT 被视为 HTTP handler、worker、后台 goroutine 或 lifecycle hook 运行期 panic 的恢复策略，各边界 MUST 使用自身机制
+- **AND** `fx.RecoverFromPanics()` MUST NOT 被视为 HTTP handler、worker、后台 goroutine或 lifecycle hook 运行期 panic 的恢复策略，各边界 MUST 使用自身机制
 - **WHEN** 构建正式或测试 Fx App
 - **THEN** composition root MUST 显式绑定 process runtime 初始化、metrics、tracing、服务资源、feature lifecycle 和 runtime server，process runtime 初始化 MUST 先于 server 启动
-- **AND** `common/runtime/observability` MUST 保持业务中立，MUST NOT 导入 user-service feature、router、bootstrap 或服务私有配置包
+- **AND** `common/runtime/httpserver` 与 `common/runtime/observability` MUST 保持业务中立，MUST NOT 导入 user-service feature、router、bootstrap、Gin、Fx 或服务私有配置包
+- **WHEN** `server.http.enabled=false` 或 pprof 未启用
+- **THEN** 对应 composition DTO MUST 显式表达 disabled，MUST NOT 构造或启动 `Managed`，也 MUST NOT 注册对应 lifecycle hook
+- **WHEN** 业务 HTTP 与 pprof 同时启用
+- **THEN** composition MUST 从各自配置映射地址和 handler，并构造两个不同的 `Managed` 实例；pprof shutdown timeout MUST 由 composition 显式选择，核心包 MUST NOT 回退到业务默认值
 - **WHEN** 正式 `AppModule` 构建 runtime graph
-- **THEN** composition root MUST 通过具名注册函数或等价可识别结构显式解析 `*http.Server` 与 `*PprofServer`，MUST NOT 依赖空匿名 Invoke
-- **AND** bootstrap 测试 MUST 验证这些 server 及 lifecycle hook 注册链路仍存在
+- **THEN** composition root MUST 通过具名注册函数或等价可识别结构显式解析业务 HTTP 与 pprof runtime DTO，MUST NOT 依赖空匿名 Invoke
+- **AND** bootstrap 测试 MUST 验证两个 server 及 lifecycle hook 注册链路仍存在，bootstrap MUST NOT 保留通用 listener、Serve、Shutdown、Close 或 drain 状态机
 
 #### Scenario: Compose 默认不暴露 pprof
 
@@ -354,19 +362,21 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 
 ### Requirement: RBAC 同步可观测性、健康与投影 lag
 
-系统 MUST 为 outbox dispatcher 与 policy watcher 暴露低基数 metrics、结构化日志和只读 status，并接入 health/readiness。policy reload lag MUST 只表示 PostgreSQL latest revision 与 Casbin engine actual applied revision 的非负差值；Redis counter、Pub/Sub payload 或 reload attempt MUST NOT 充当权威值。健康探测 MUST 只读，MUST NOT 修改 outbox event。
+系统 MUST 为 outbox dispatcher 与 policy watcher 暴露低基数 metrics、结构化日志和只读 status，并接入 health/readiness。Policy reload lag MUST 只表示 PostgreSQL latest policy revision 与 Casbin engine actual applied revision 的非负差值；user-role revision、Redis counter、Pub/Sub payload 或 reload attempt MUST NOT 充当 policy lag 权威值。健康探测 MUST 只读，MUST NOT 修改 outbox event。
 
 #### Scenario: backlog、lag 与投递指标
 
 - **WHEN** dispatcher claim、publish、ack、失败、重试或采集 outbox 状态
 - **THEN** feature metrics MUST 记录固定 result/reason/kind 枚举下的处理计数、due backlog、最老未完成 event age 和 loop 运行状态
 - **AND** metrics label MUST NOT 包含 event/revision/user/role/permission ID、idempotency key、原始错误、SQL、Redis key、payload 或其他高基数字段
+- **AND** `kind` MUST 使用固定枚举区分 policy 事件与 user-role 事件，MUST NOT 通过 label 暴露具体 revision 或用户标识
 
 #### Scenario: dispatcher 结构化日志
 
 - **WHEN** event 被 claim、成功投递、失败退避、lease 冲突或循环状态变化
-- **THEN** 日志 MUST 使用英文 message 和稳定 `snake_case` 字段，并 MAY 记录 policy revision、attempt、kind、reason 和稳定错误类别
+- **THEN** 日志 MUST 使用英文 message 和稳定 `snake_case` 字段，并 MAY 记录 policy revision、user-role revision、attempt、kind、reason 和稳定错误类别
 - **AND** 日志 MUST NOT 记录完整 event payload、SQL、Redis key、连接 secret 或将原始底层错误暴露到公共健康响应
+- **AND** policy 事件字段 MUST 使用 `policy_revision`，user-role 事件字段 MUST 使用 `user_role_revision`，MUST NOT 用 `policy_revision` 表示用户角色绑定提交水位
 
 #### Scenario: 只读 health 与 readiness
 
@@ -382,41 +392,203 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 - **THEN** dispatcher MUST 继续 claim、发布、重试和更新只读 status，并通过非 nil no-op feature metrics 满足正式依赖图
 - **AND** 系统 MUST NOT 因 collector 未注册而改变 event 投递、health 或 readiness 状态机
 
-#### Scenario: 数据库latest超前时暴露非零lag
+#### Scenario: 数据库 latest policy 超前时暴露非零 lag
 
-- **WHEN** watcher成功读取的database latest policy revision大于local applied projection revision
+- **WHEN** watcher 成功读取的 database latest policy revision 大于 local applied projection revision
 - **THEN** `aegiscore_user_service_rbac_policy_reload_lag` MUST 记录两者的正差值
-- **AND** watcher MUST 记录database revision mismatch事件，metrics label MUST 只使用固定低基数source、result和reason allowlist
-- **AND** dashboard、alert和runbook MUST 将该值解释为数据库授权事实与本地实际投影之间的差值
+- **AND** watcher MUST 记录 database revision mismatch 事件，metrics label MUST 只使用固定低基数 source、result 和 reason allowlist
+- **AND** dashboard、alert 和 runbook MUST 将该值解释为数据库 policy 授权事实与本地实际 Casbin 投影之间的差值
 
-#### Scenario: lag为零禁止假收敛
+#### Scenario: user-role revision 禁止影响 policy lag
 
-- **WHEN** watcher基于一次成功数据库revision读取记录lag为`0`
+- **WHEN** 只有用户角色绑定变化且 latest user-role revision 高于 local applied policy revision
+- **THEN** `aegiscore_user_service_rbac_policy_reload_lag` MUST NOT 因 user-role revision 变为非零
+- **AND** watcher MUST NOT 将 user-role revision mismatch 记录为 policy reload lag，MUST NOT 触发 policy reload failure 或 policy readiness 失败
+- **AND** user-role 通知 MAY 通过固定 kind/reason 的 dispatcher 或 watcher 计数、缓存失效计数和结构化日志体现
+
+#### Scenario: lag 为零禁止假收敛
+
+- **WHEN** watcher 基于一次成功数据库 policy revision 读取记录 lag 为 `0`
 - **THEN** local applied projection revision MUST 大于或等于该次读取的 database latest policy revision
-- **AND** Redis counter缺失、落后、重建、等于local值或Pub/Sub消息处理成功 MUST NOT 单独使lag变为`0`
-- **WHEN** local applied revision高于本次读取的database latest revision
-- **THEN** lag MUST 按非负规则记录为`0`且 MUST NOT 降低local applied revision
+- **AND** Redis counter 缺失、落后、重建、等于 local 值、user-role revision 推进或 Pub/Sub 消息处理成功 MUST NOT 单独使 policy lag 变为 `0`
+- **WHEN** local applied revision 高于本次读取的 database latest policy revision
+- **THEN** lag MUST 按非负规则记录为 `0` 且 MUST NOT 降低 local applied revision
 
-#### Scenario: 查询或reload失败不清零lag
+#### Scenario: 查询或 reload 失败不清零 lag
 
-- **WHEN** database latest revision读取失败
-- **THEN** 系统 MUST 记录固定`revision_store_unavailable`或等价reason，并保留上一lag观测值，MUST NOT 用Redis或hint revision更新lag
-- **WHEN** database latest读取成功但reload失败或实际applied revision仍低于目标
-- **THEN** 系统 MUST 记录固定`reload_failed`reason并保留基于database latest与actual applied计算的非零lag
-- **AND** 只有后续成功数据库校准证明actual applied revision不低于database latest时，系统才 MUST 把lag记录为`0`
+- **WHEN** database latest policy revision 读取失败
+- **THEN** 系统 MUST 记录固定 `revision_store_unavailable` 或等价 reason，并保留上一 lag 观测值，MUST NOT 用 Redis、hint revision 或 user-role revision 更新 lag
+- **WHEN** database latest policy revision 读取成功但 reload 失败或实际 applied revision 仍低于目标
+- **THEN** 系统 MUST 记录固定 `reload_failed` reason 并保留基于 database latest policy revision 与 actual applied 计算的非零 lag
+- **AND** 只有后续成功数据库 policy 校准证明 actual applied revision 不低于 database latest policy revision 时，系统才 MUST 把 lag 记录为 `0`
 
-#### Scenario: watcher指标reason与日志字段
+#### Scenario: watcher 指标 reason 与日志字段
 
-- **WHEN** watcher记录周期检查、Pub/Sub唤醒、revision mismatch、reload success或reload failure
-- **THEN** metrics MUST 使用稳定低基数source/result/reason区分`revision_store_unavailable`、`revision_mismatch`、`reload_failed`与成功
-- **AND** metrics reason MUST NOT 继续以Redis version store不可用表达数据库revision查询失败，也 MUST NOT 包含revision数值、用户、角色、权限、Redis key或原始错误文本
-- **AND** 结构化日志 MUST 使用`database_latest_policy_revision`、`local_applied_policy_revision`、`target_revision`、`hint_revision`、`source`和稳定reason中的适用字段
-- **AND** 日志 MUST NOT 使用含混的`remote_policy_revision`或`remote_version`字段把Redis消息或counter描述为数据库权威事实，也 MUST NOT 记录policy内容、SQL、Redis key或secret
+- **WHEN** watcher 记录周期检查、Pub/Sub 唤醒、revision mismatch、reload success 或 reload failure
+- **THEN** metrics MUST 使用稳定低基数 source/result/reason 区分 `revision_store_unavailable`、`revision_mismatch`、`reload_failed` 与成功
+- **AND** metrics reason MUST NOT 继续以 Redis version store 不可用表达数据库 revision 查询失败，也 MUST NOT 包含 revision 数值、用户、角色、权限、Redis key 或原始错误文本
+- **AND** 结构化日志 MUST 使用 `database_latest_policy_revision`、`local_applied_policy_revision`、`target_policy_revision`、`hint_policy_revision`、`user_role_revision`、`source` 和稳定 reason 中的适用字段
+- **AND** 日志 MUST NOT 使用含混的 `remote_policy_revision` 或 `remote_version` 字段把 Redis 消息、user-role revision 或 counter 描述为数据库 policy 权威事实，也 MUST NOT 记录 policy 内容、SQL、Redis key 或 secret
 
-#### Scenario: dashboard、alert与fixture同步
+#### Scenario: dashboard、alert 与 fixture 同步
 
-- **WHEN** Grafana dashboard展示RBAC policy reload lag或Prometheus alert评估持续未收敛
-- **THEN** 查询、panel说明、alert annotation和runbook MUST 使用database latest与local applied projection revision语义
-- **AND** alert MUST 继续覆盖超过既定最终收敛SLO的非零lag，并将revision store unavailable与reload failure作为可定位关联信号
-- **AND** dashboard源、Compose provisioning副本、Prometheus rules、metrics load测试和相关fixture MUST 在同一change中更新
-- **AND** 生成或检查命令 MUST 在旧Redis/local version文案、PromQL或dashboard drift存在时失败
+- **WHEN** Grafana dashboard 展示 RBAC policy reload lag 或 Prometheus alert 评估持续未收敛
+- **THEN** 查询、panel 说明、alert annotation 和 runbook MUST 使用 database latest policy revision 与 local applied projection revision 语义
+- **AND** alert MUST 继续覆盖超过既定最终收敛 SLO 的非零 policy lag，并将 policy revision store unavailable 与 policy reload failure 作为可定位关联信号
+- **AND** dashboard 源、Compose provisioning 副本、Prometheus rules、metrics load 测试和相关 fixture MUST 在同一 change 中更新
+- **AND** 生成或检查命令 MUST 在旧 Redis/local version 文案、混合 revision 文案、PromQL 或 dashboard drift 存在时失败
+
+### Requirement: Metrics provider registry 与 scrape context 契约
+
+系统 MUST 通过 `common/runtime/observability/metrics` 提供显式 enabled/disabled 状态的非 nil provider，并为启用状态使用独立 Prometheus registry。provider MUST 支持重复注册幂等、context-aware gather 和基于 HTTP request context 的 scrape handler；禁用状态 MUST 保持 no-op 且不得暴露 collector 或 HTTP metrics 输出。
+
+#### Scenario: 启用 provider 使用独立 registry
+
+- **WHEN** metrics provider 基于启用配置创建
+- **THEN** provider MUST 返回 `Enabled()=true`，并使用独立 registry、registerer 和 gatherer
+- **AND** provider MUST NOT 注册或依赖 Prometheus global registry
+- **AND** service 与 environment label MUST 继续由 provider registerer 统一包装为稳定低基数字段
+
+#### Scenario: 禁用 provider 保持正式依赖图可用
+
+- **WHEN** metrics provider 基于禁用配置创建
+- **THEN** provider MUST 返回非 nil provider 且 `Enabled()=false`
+- **AND** `Registerer()` 与 `Gatherer()` MUST 返回 nil，`Register` 和 `MustRegister` MUST 保持 no-op
+- **AND** `HTTPHandler` MUST NOT 暴露 metrics 内容
+
+#### Scenario: 重复注册不破坏启动
+
+- **WHEN** 同一 collector 或等价 collector 被重复注册到启用 provider
+- **THEN** provider MUST 将 Prometheus `AlreadyRegisteredError` 视为成功
+- **AND** 其他注册错误 MUST 继续向调用方返回，nil collector MUST 返回稳定错误
+
+#### Scenario: HTTP scrape context 传播给 context-aware collector
+
+- **WHEN** 调用方通过 `HTTPHandler` 暴露 metrics endpoint 且 HTTP request context 被取消
+- **THEN** provider MUST 通过 `GatherContext` 将该 request context 提供给实现 `ContextCollector` 的 collector
+- **AND** Redis PING 等支持 context 的 collector MUST 能在 scrape 取消时尽快终止
+- **AND** 标准 `Collect` 或 `Gatherer().Gather()` 直接调用 MUST 使用 background context，MUST NOT 声称感知 HTTP request cancellation
+
+#### Scenario: metrics label 保持低基数
+
+- **WHEN** runtime collector、feature metrics 或自定义 collector 通过 provider 注册并导出指标
+- **THEN** label MUST 只使用固定资源名、结果、状态、reason 或 service/environment 等低基数字段
+- **AND** label MUST NOT 包含用户、角色、权限、会话、token、trace/span ID、raw path、IP、邮箱、用户名、SQL、Redis key、原始错误或其他高基数字段
+
+### Requirement: Metrics package 文档与示例
+
+`common/runtime/observability/metrics` MUST 提供 package 文档和可执行示例，说明 provider 启停、独立 registry、重复注册、`HTTPHandler`、`GatherContext`、collector context 和 label cardinality 的稳定用法。示例 MUST 使用本地 registry 与内存 collector，MUST NOT 访问公网或真实 datastore。
+
+#### Scenario: go doc 导航到主要示例
+
+- **WHEN** 开发者查看 `common/runtime/observability/metrics` 的 package 文档
+- **THEN** 文档 MUST 能说明 enabled/disabled provider、独立 registry、重复注册、`HTTPHandler`、`GatherContext`、collector context 和 label cardinality 约束
+- **AND** go doc MUST 能导航到主要 executable examples
+
+#### Scenario: 示例测试不依赖外部系统
+
+- **WHEN** 执行 metrics package 的示例测试
+- **THEN** 示例 MUST 只使用本地 registry、自定义 collector、`httptest` 或等价内存对象
+- **AND** 示例 MUST NOT 访问公网、PostgreSQL、Redis、scheduler、workerpool 或真实 localcache datastore
+
+### Requirement: Tracing provider 生命周期所有权
+
+系统 MUST 为 `common/runtime/observability/tracing` provider 定义单一启动和关闭所有权。普通 constructor MUST 在返回前立即启动底层 SDK provider，并由调用方显式 `Shutdown`；Fx adapter MUST 在 constructor 阶段只返回未启动但可安全注入的 facade，并且只允许 Fx `OnStart` 创建 exporter、batch processor 和真实 SDK provider，Fx `OnStop` 或 rollback MUST 关闭同一 provider 并恢复 no-op。
+
+#### Scenario: 普通 constructor 立即启动
+- **WHEN** 调用方使用普通 constructor 创建启用 tracing 的 provider
+- **THEN** constructor MUST 在调用方 context 预算内创建 OTLP exporter、batch processor 和 SDK provider
+- **AND** 返回成功后调用方 MUST 通过 `Shutdown(ctx)` 关闭该 provider
+- **AND** constructor 失败时 MUST 返回包含 `create OTLP tracing exporter` 或等价可定位上下文的错误，并通过标准 wrapping 保留底层 cause
+
+#### Scenario: Fx constructor 延迟启动
+- **WHEN** Fx graph 构造 tracing provider
+- **THEN** constructor MUST 返回非 nil provider 和可安全注入的 dynamic tracer provider
+- **AND** constructor 阶段 MUST NOT 创建 exporter、连接 OTLP endpoint、启动 batch processor 或执行可能阻塞的 tracing 初始化
+- **WHEN** Fx lifecycle 执行 `OnStart(ctx)`
+- **THEN** provider MUST 使用同一个实例创建真实 SDK provider，并在启动 context 预算内完成
+
+#### Scenario: Fx rollback 关闭已启动 provider
+- **WHEN** tracing `OnStart` 已成功但后续 lifecycle hook 启动失败
+- **THEN** Fx rollback MUST 调用同一 provider 的 `Shutdown(ctx)`
+- **AND** provider MUST 关闭 SDK provider、batch processor 和 exporter，并将后续 dynamic tracer 使用恢复为 no-op
+- **AND** 系统 MUST NOT 悬挂已关闭 provider 或保留旧 exporter
+
+#### Scenario: 禁用 tracing 不连接 OTLP
+- **WHEN** tracing 配置为 disabled
+- **THEN** provider MUST 保持非 nil 且可注入
+- **AND** 启动路径 MUST NOT 要求 OTLP endpoint、创建 OTLP exporter 或连接网络
+- **AND** span 创建 MUST 安全返回 no-op 或 never-sampled span，且不改变调用方业务语义
+
+### Requirement: Dynamic tracer 启停安全
+
+constructor 阶段获取的 dynamic tracer provider 和 tracer MUST 在 provider 启动前、启动后、Shutdown 后都可安全使用。启动前和 Shutdown 后 MUST 使用 no-op provider；启动后 MUST 委托当前真实 SDK provider；该切换 MUST NOT 安装 OpenTelemetry global provider，也 MUST NOT 要求 instrumentation 重新获取 tracer。
+
+#### Scenario: 启动前 dynamic tracer 安全 no-op
+- **WHEN** Redis、Gin、Ent 或其他 instrumentation 在 constructor 阶段保存 dynamic tracer 或 tracer provider
+- **THEN** provider 尚未启动时 span 创建 MUST 返回安全 no-op span
+- **AND** 调用方 MUST NOT 因 tracing 未启动而 panic、阻塞或连接 exporter
+
+#### Scenario: 启动后 dynamic tracer 使用真实 provider
+- **WHEN** 同一个 provider 在 lifecycle 中成功启动
+- **THEN** constructor 阶段已保存的 dynamic tracer MUST 使用当前真实 SDK provider 创建 span
+- **AND** 调用方 MUST NOT 重新安装 instrumentation 或重新获取 tracer provider 才能获得真实 span
+
+#### Scenario: Shutdown 后恢复 no-op
+- **WHEN** provider 已执行 `Shutdown(ctx)` 并关闭底层 SDK provider
+- **THEN** 既有 dynamic tracer 后续 span 创建 MUST 回退到 no-op
+- **AND** 系统 MUST NOT 使用已关闭的 SDK provider、batch processor 或 exporter
+
+#### Scenario: 传播器保持稳定
+- **WHEN** 调用方通过 provider 获取 `TextMapPropagator`
+- **THEN** propagator MUST 支持 W3C trace context 与 baggage 的 inject/extract
+- **AND** propagator 行为 MUST NOT 依赖 provider 是否已连接 OTLP exporter
+
+### Requirement: Tracing lifecycle 重复调用语义
+
+tracing provider MUST 对重复或非法 lifecycle 调用提供明确且被测试的结果。重复启动同一 provider MUST 失败并保持既有已启动 provider 不变；`Shutdown(ctx)` 对 nil provider、未启动 provider 和已关闭 provider MUST 幂等成功；非法启动输入 MUST 返回明确错误。
+
+#### Scenario: 重复启动不得泄漏旧 provider
+- **WHEN** 同一个 provider 已成功启动后再次执行启动逻辑
+- **THEN** 第二次启动 MUST 返回可识别错误
+- **AND** 系统 MUST 保持第一次启动的 SDK provider 仍为当前 provider
+- **AND** 系统 MUST NOT 静默替换、丢失或泄漏旧 exporter、batch processor 或 SDK provider
+
+#### Scenario: Shutdown 幂等
+- **WHEN** provider 为 nil、从未启动或已经关闭
+- **THEN** `Shutdown(ctx)` MUST 返回 nil
+- **AND** 重复 Shutdown MUST NOT panic、阻塞或重复关闭同一 exporter
+
+#### Scenario: 非法启动输入失败
+- **WHEN** 启动逻辑收到 nil context、nil provider、缺失 resource 或启用 tracing 但缺失 exporter factory
+- **THEN** 启动 MUST 返回明确错误
+- **AND** provider MUST 保持未启动或保持原有已启动 provider 不变
+
+### Requirement: 通用 metrics provider 与 feature metrics 所有权分离
+
+系统 MUST 保持通用 metrics Provider、Prometheus registry、metrics endpoint、HTTP metrics middleware、runtime collector 和 component status collector 的跨服务边界，同时 MUST 让带业务语义的 feature metrics 由 owning feature 或服务级 adapter 拥有。permission/RBAC metrics MAY 复用通用 Provider 注册 collector，但其 recorder interface、指标定义和空实现 MUST 留在 permission 边界。
+
+#### Scenario: 通用 provider 继续支撑 feature collector 注册
+
+- **WHEN** metrics 启用且 permission feature 注册 Casbin reload collector
+- **THEN** collector MUST 通过通用 metrics Provider 注册到同一 Prometheus registry
+- **AND** `/metrics` endpoint、service/environment label 约束和 provider enabled/disabled 语义 MUST 保持不变
+
+#### Scenario: disabled metrics 不暴露 collector
+
+- **WHEN** metrics 禁用
+- **THEN** 系统 MUST NOT 暴露 metrics endpoint 或注册 Casbin reload collector
+- **AND** permission feature MUST 继续获得非 nil feature-local no-op recorder，运行时行为和依赖图 MUST 保持稳定
+
+#### Scenario: component status collector 不承载 feature 指标
+
+- **WHEN** user-service 通过 component status collector 暴露运行时组件状态
+- **THEN** collector MUST 继续只表达业务中立的 running 和 last error 状态
+- **AND** Casbin reload 计数、last success gauge、RBAC watcher 专用指标和 outbox 指标 MUST 由 permission feature metrics 拥有
+
+#### Scenario: 架构门禁防止业务指标回流 common
+
+- **WHEN** 运行 `make user-service-architecture-lint`
+- **THEN** 检查 MUST 在 `common/runtime/observability/metrics` 出现 Casbin、permission、role、RBAC、user-service 或 `aegiscore_casbin` 业务 metrics 语义时失败
+- **AND** 该门禁 MUST 不禁止 common 保留通用 Provider、通用 label、HTTP metrics 和 component status collector
+

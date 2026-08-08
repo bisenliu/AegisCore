@@ -379,55 +379,26 @@
 
 系统 MUST 将配置文档来源、文档合成、严格解码和服务配置策略表达为显式边界。`common/runtime/config` MUST 只拥有业务中立的配置 schema、document contract、deep merge、raw digest、strict decode、encode、render、redact 和通用校验原语；具体 Nacos 环境、认证、client、failover 和文档读取 MUST 位于 Nacos source adapter。服务 MUST 显式组合 defaults、normalize 和 validate，shared loader MUST NOT 通过服务类型的隐式接口自动发现这些行为。本地配置目录与 Namespace 的发布选择 MUST 留在 Compose 初始化服务和仓库级发布工具边界，runtime Nacos source MUST NOT 读取或解释仓库目录。
 
-#### Scenario: Nacos 缺省文档来源
+#### Scenario: Nacos source adapter 职责边界
 
-- **WHEN** 服务已设置必需 Nacos 环境变量但未设置 `AEGISCORE_NACOS_DATA_IDS`
-- **THEN** Nacos source MUST 按 `base.yaml`、`resources.yaml`、`<service>.yaml` 的稳定顺序读取文档
-- **AND** 显式 `AEGISCORE_NACOS_DATA_IDS` MUST 继续按声明顺序读取，认证、timeout 和 server failover 行为 MUST 保持不变
+- **WHEN** Nacos source adapter 通过 Nacos v3 HTTP API 读取配置文档
+- **THEN** adapter MUST 将 server endpoint 解析、认证 token 获取与复用、HTTP 请求/响应处理、按声明顺序 failover 和单个 dataId 读取保持在 `common/runtime/config/nacos` package 内
+- **AND** adapter MUST 继续实现业务中立 `DocumentSource` contract，使调用方能通过 `config.LoadSource` 合成多 dataId 文档并生成 `SourceMetadata`
+- **AND** adapter MUST NOT 把 Nacos 认证、endpoint、failover、watch、长轮询、SDK fallback、服务发现或仓库目录映射能力加入 `common/runtime/config` 核心包
 
-#### Scenario: 本地主机和 Compose 选择独立 Namespace
+#### Scenario: Nacos source 失败语义
 
-- **WHEN** 本地主机或 Compose workload 使用各自完整 Nacos 配置
-- **THEN** 进程 MUST 通过 `AEGISCORE_NACOS_NAMESPACE` 显式选择 `loca-host` 或 `loca-docker`
-- **AND** 两个 Namespace MUST 都使用 `base.yaml`、`resources.yaml`、`user-service.yaml` 三 dataId，不得要求环境专用第四文档
-- **AND** Nacos source MUST 只根据已解析环境加载文档，MUST NOT 读取 Git 配置目录、感知 Compose 初始化服务、推断主机或容器环境、创建 Namespace 或改写资源地址
+- **WHEN** Nacos source 依次尝试多个 server 读取同一 dataId
+- **THEN** adapter MUST 按声明顺序尝试 server，并在总 timeout 预算内为剩余 server 分配尝试预算，单个故障 server MUST NOT 独占全部预算
+- **AND** 全部 server 失败时错误 MUST 聚合每个已尝试 server 的 origin 和原始失败原因
+- **AND** Nacos envelope、配置结果、HTTP 状态、JSON 解码、响应体读取和响应体超限错误 MUST 保持可诊断但不包含配置文档内容、password 或 access token
+- **AND** 认证启用时 adapter MUST 使用 `Bearer` token 调用配置接口并复用已取得 token；未启用认证时 MUST NOT 发送认证 header
 
-#### Scenario: 文档合成与严格解码
+#### Scenario: Nacos source 本地示例
 
-- **WHEN** source 返回多份 YAML 文档
-- **THEN** pipeline MUST 按文档顺序递归合并 map，后者 MUST 覆盖相同 scalar、slice 或显式 null，未被覆盖的嵌套字段 MUST 保留
-- **AND** pipeline MUST 依次执行 raw settings 合成、raw digest、strict decode、normalize 和 validate
-- **AND** 未声明配置键 MUST 在返回 typed config 前失败并报告完整叶子路径
-
-#### Scenario: 显式服务配置策略
-
-- **WHEN** user-service 解码服务私有配置
-- **THEN** 调用点 MUST 显式提供完整默认配置、可选 normalize 和最终 validate
-- **AND** shared loader MUST NOT 依赖 `ConfigDefaults()`、`ApplyDefaults()` 或其他按目标类型自动发现的服务 hook
-- **AND** user-service 的 auth、RBAC、Ent、具名资源默认值和业务校验 MUST 留在 `user-service/internal/config`
-
-#### Scenario: Raw digest 与 effective render
-
-- **WHEN** pipeline 成功合成 raw settings
-- **THEN** `SourceMetadata.Digest` MUST 基于 defaults 和 normalize 前的 raw merged settings 生成稳定摘要
-- **AND** 默认值、normalize 或 typed config 的后续修改 MUST NOT 反向改变已记录的 source digest
-- **WHEN** CLI 渲染 effective settings
-- **THEN** 系统 MUST 从最终 typed config 编码可读 duration 和 mapstructure 字段，并在输出前使用消费服务显式声明的敏感路径脱敏 JWT、Redis、PostgreSQL 及调用方声明的其他敏感字段
-- **AND** effective render MUST NOT 泄漏原始 secret
-
-#### Scenario: 业务中立配置脱敏原语
-
-- **WHEN** 调用方使用 `common/runtime/config` 的配置脱敏能力
-- **THEN** 调用方 MUST 显式提供自身敏感路径策略，路径 MAY 使用 `*` 匹配 map key 或 slice 中的元素
-- **AND** `common/runtime/config` MUST NOT 内置 `auth.jwt.secret`、user-service feature 配置、服务私有资源名或其他消费服务 secret schema
-- **AND** nil settings、nil 路径、空路径和未知路径 MUST 安全处理且不得 panic
-- **AND** 脱敏 MUST 返回深拷贝结果，不得修改输入 map、slice 或嵌套对象
-
-#### Scenario: 新增配置来源
-
-- **WHEN** 测试或未来服务使用非 Nacos 配置来源
-- **THEN** 来源 MUST 能通过业务中立的 document source contract 接入同一 merge、digest、decode、normalize 和 validate 管线
-- **AND** 新来源 MUST NOT 要求修改 Nacos adapter 或把服务业务配置加入 `common`
+- **WHEN** 示例或测试展示 Nacos source 与配置加载管线的组合
+- **THEN** 示例 MUST 使用本地 `httptest.Server` 模拟 Nacos v3 响应，MUST NOT 连接真实 Nacos、依赖外部网络或读取仓库部署目录
+- **AND** 示例 MUST 展示多个 dataId 按声明顺序加载、后者覆盖前者、metadata 保留 provider、service、namespace、group、dataId 顺序和 digest
 
 ### Requirement: 业务中立本地限流与 HTTP 映射
 
@@ -618,3 +589,293 @@
 - **WHEN** `JSONData` 包含 map、slice、pointer、`io.Reader` 或其他引用值，或者调用方提供 `RestyClient`
 - **THEN** helper MUST 将这些值视为调用方拥有的浅层引用，不得隐式 deep-copy、缓存、重放或 clone
 - **AND** 调用方 MUST 在发送返回前保持 body 与注入 client 配置稳定，并 MUST NOT 并发修改或并发发送同一个 `SendRequest`
+
+### Requirement: metrics primitive 文件职责与业务中立边界
+
+`common/runtime/observability/metrics` MUST 作为跨服务共享、业务中立的 runtime primitive 维护 provider、registry、context-aware gather、runtime collector 与 adapter 职责。实现可以在同 package 内按职责拆分文件，但 MUST 保持原 package、调用方 import path、导出 API、指标名称、label、bucket 和采集语义兼容。
+
+#### Scenario: 同 package 文件职责可独立审查
+
+- **WHEN** metrics package 维护 Provider/registry、`ContextCollector`/gather wrapper、runtime collector 和 SQL、Redis、scheduler、workerpool、localcache、component status collector adapter
+- **THEN** 这些职责 MUST 通过清晰的同 package 文件组织表达
+- **AND** 文件拆分 MUST NOT 创建 `metrics` 子包或改变调用方 import path
+
+#### Scenario: 导出 API 与指标契约保持兼容
+
+- **WHEN** 调用方升级到整理后的 metrics package
+- **THEN** 既有导出 constructor、method、interface、error 和 adapter 类型 MUST 保持可用
+- **AND** 既有 Prometheus 指标名称、label name、label value 枚举、bucket 和采集语义 MUST 保持兼容
+- **AND** 系统 MUST NOT 为本次重构新增业务指标或删除既有稳定指标
+
+#### Scenario: common 不承载服务业务语义
+
+- **WHEN** metrics package 增加文档、示例、collector 或 adapter
+- **THEN** 内容 MUST 保持业务中立，MUST NOT 导入 user-service feature 包、DTO、业务状态、业务 key schema、policy loader、route diff 或服务私有配置
+- **AND** 业务指标 MUST 留在所属 feature 或消费服务边界，只通过共享 provider 注册低基数 collector
+
+#### Scenario: 测试与示例不污染生产 API
+
+- **WHEN** 为 metrics package 增加测试或 executable examples
+- **THEN** 测试 MUST 基于现有公开 API、本地 registry、局部 fixture 或内存对象验证行为
+- **AND** 正式代码 MUST NOT 仅为测试便利新增全局可变函数、测试 flag、`NewXForTest` 或无运行时职责的 adapter
+
+### Requirement: Tracing primitive 公开 API 与实现边界
+
+`common/runtime/observability/tracing` MUST 作为业务中立的共享 runtime primitive 维护清晰的公开 API 和包内职责边界。公开入口 MUST 表达 tracing 能力、构造、传播和关闭职责；仅供 lifecycle adapter 使用的启动状态机 MUST 留在包内，除非存在经规格确认的跨服务调用需求。
+
+#### Scenario: 公开入口表达真实运行时职责
+- **WHEN** 调用方需要创建或消费 tracing provider
+- **THEN** 公开 API MUST 优先使用 `Options`、`Provider`、普通 constructor、Fx tracing provider constructor、`Tracer`、`OTelTracerProvider`、`TextMapPropagator` 和 `Shutdown`
+- **AND** 公开名称 MUST 表达 tracing 能力语义，MUST NOT 以缺少能力语义的通用 Fx 名称作为主要入口
+
+#### Scenario: Start 暴露面收窄
+- **WHEN** 启动状态机只被 tracing 包内 lifecycle 使用
+- **THEN** 该启动函数 MUST 保持未导出或包内可见
+- **AND** 包外调用方 MUST 使用普通 constructor 表达立即启动所有权，或使用 Fx adapter 表达延迟启动所有权
+- **AND** 系统 MUST NOT 保留绕过所有权边界的兼容双生命周期路径
+
+#### Scenario: 包内文件职责聚焦
+- **WHEN** 维护 tracing package 实现
+- **THEN** provider facade、resource 构造、OTLP exporter、dynamic tracer、lifecycle 状态机、Fx adapter、包文档和 examples MUST 分别放置在聚焦文件中
+- **AND** Fx adapter MUST 只负责配置映射和 hook 注册，MUST NOT 承载 resource、exporter 或 dynamic tracer 细节
+- **AND** tracing primitive MUST NOT 导入 user-service feature、router、bootstrap、服务私有配置包、部署资产或业务 DTO
+
+#### Scenario: 文档和示例不连接真实 endpoint
+- **WHEN** tracing package 提供 `doc.go` 和 executable examples
+- **THEN** 示例 MUST 覆盖 disabled provider、span 创建、propagator inject/extract 和显式 `Shutdown`
+- **AND** 示例 MUST NOT 连接真实 OTLP endpoint、修改 OpenTelemetry global provider 或依赖外部网络服务
+
+### Requirement: Runtime config pipeline 文档与布局
+
+`common/runtime/config` MUST 作为跨服务共享、业务中立的配置原语维护清晰的 source、merge、decode、defaults、validation、encode、redact 和 render 导航。实现 MAY 在同 package 内按职责拆分文件和测试，但 MUST 保持原 package、`Config` 类型、导出函数、默认值、字段路径、错误聚合、strict decode、raw digest、effective encode、redact 和 render 语义兼容。
+
+#### Scenario: 固定配置加载管线可从包文档导航
+
+- **WHEN** 调用方阅读 `common/runtime/config` 包文档或 executable example
+- **THEN** 文档 MUST 展示通过 `DocumentSource` 调用 `LoadSource` 取得 raw merged settings 和 source metadata
+- **AND** 文档 MUST 展示 `LoadSource` 内部按文档顺序执行 YAML deep merge，并在 defaults 和 normalize 前基于 raw settings 计算 `SourceMetadata.Digest`
+- **AND** 文档 MUST 展示调用方随后显式执行 `DecodeStrict`、`Validate`、`EncodeSettings`、可选 `RedactSettings` 和 `RenderYAML`
+
+#### Scenario: 服务扩展配置显式组合
+
+- **WHEN** 服务在共享 `Config` 之外增加服务私有配置字段
+- **THEN** 服务 MUST 通过 `DecodeOptions` 显式提供完整 defaults、可选 normalize 和最终 validate
+- **AND** `DecodeStrict` MUST 在 normalize 和 validate 前拒绝未知配置键并报告完整叶子路径
+- **AND** shared loader MUST NOT 通过目标类型自动发现 `ConfigDefaults()`、`ApplyDefaults()` 或其他服务 hook
+- **AND** user-service 的 auth、RBAC、Ent、rate limit、具名资源必需名称和业务校验 MUST 留在 `user-service/internal/config` 或所属 feature 边界
+
+#### Scenario: validation 文件职责清晰且 API 兼容
+
+- **WHEN** config package 维护 validation error/aggregate、runtime、server、log 和 observability 校验
+- **THEN** 这些职责 MUST 通过清晰的同 package 文件组织表达
+- **AND** 文件拆分 MUST NOT 创建 config 子包、改变调用方 import path、移除导出 helper 或改变错误文本和字段路径
+
+#### Scenario: 测试与示例覆盖 pipeline 而不污染生产 API
+
+- **WHEN** 为 config package 增加或重排测试和 executable examples
+- **THEN** 测试 MUST 覆盖 defaults、strict decode、server validation 和 observability validation 的既有行为
+- **AND** executable example MUST 使用本地内存 `DocumentSource` 或局部 YAML fixture，不访问公网、Nacos、PostgreSQL、Redis、user-service feature 或部署资产
+- **AND** 正式代码 MUST NOT 仅为测试便利新增全局可变函数、测试 flag、`NewXForTest` 或无运行时职责的 adapter
+
+### Requirement: 通用 Redis Pub/Sub 单 channel 订阅原语
+
+`common/runtime/redispubsub` MUST 提供业务中立的 Redis classic Pub/Sub 单 channel subscriber，负责显式订阅确认、阻塞接收、有界消息缓冲、context 背压、带抖动的有界指数退避重连、单向生命周期和结构化状态。该 primitive MUST 保持 Redis Pub/Sub 的 at-most-once 通知语义，MUST NOT 承担 Publish 业务封装、消息 envelope、revision、outbox、幂等、数据库校准、Casbin reload、缓存失效、模式订阅、sharded Pub/Sub、Redis Streams 或可靠投递。
+
+#### Scenario: 严格 options 与无副作用构造
+
+- **WHEN** 调用方构造 subscriber
+- **THEN** `Options.Name` 与 `Options.Channel` MUST 为非空非空白字符串，`BufferSize`、`SubscribeTimeout`、`BackoffInitial` 与 `BackoffMax` MUST 为正数，且 `BackoffMax` MUST 大于或等于 `BackoffInitial`
+- **AND** 任一 option 非法或必需依赖缺失时 `NewSubscriber` MUST 返回 error，primitive MUST NOT 补默认值、静默归一化非法值或进入部分可用状态
+- **AND** constructor MUST NOT 创建 goroutine、调用 Redis、建立订阅或关闭共享 client，初始状态 MUST 为 `created` 且 `Running` MUST 为 false
+
+#### Scenario: 单向启动状态
+
+- **WHEN** created subscriber 首次调用 `Start()`
+- **THEN** subscriber MUST 原子进入 `starting`、创建唯一 root lifecycle 并异步建立订阅
+- **WHEN** subscriber 已处于 starting、connected 或 reconnecting 状态并再次调用 `Start()`
+- **THEN** `Start()` MUST 幂等返回 nil 且 MUST NOT 创建额外 goroutine或订阅
+- **WHEN** subscriber 已进入 stopping 或 stopped 状态并调用 `Start()`
+- **THEN** `Start()` MUST 返回稳定的 `ErrStopped`，MUST NOT 恢复或创建新的生命周期
+
+#### Scenario: 显式确认与成功接收
+
+- **WHEN** subscriber 为 `Options.Channel` 创建一次 classic Pub/Sub attempt
+- **THEN** subscriber MUST 使用不超过 `SubscribeTimeout` 的 context 阻塞等待 go-redis 订阅确认，确认前 MUST NOT 将状态报告为 connected
+- **WHEN** 收到合法订阅确认
+- **THEN** subscriber MUST 将状态置为 `connected`、记录 `LastConnectedAt`、将当前 `ErrorCategory` 清为 `none` 并把下一次退避重置为 `BackoffInitial`
+- **WHEN** 已确认订阅收到合法 go-redis message
+- **THEN** subscriber MUST 将 `Channel`、`Pattern` 和 `Payload` 投影为公开 `Message` 并写入唯一的 `Messages()` channel
+
+#### Scenario: 故障分类与有界重连
+
+- **WHEN** 等待订阅确认的 Receive 失败或超时
+- **THEN** subscriber MUST 记录 `subscribe_failed`、`LastFailureAt` 和重连次数，关闭当前 attempt 并进入 `reconnecting`
+- **WHEN** 已确认订阅的 Receive 返回非取消错误
+- **THEN** subscriber MUST 记录 `receive_failed`、`LastFailureAt` 和重连次数，关闭当前 attempt 并进入 `reconnecting`
+- **WHEN** 确认或接收阶段收到不受支持的协议类型
+- **THEN** subscriber MUST 记录 `protocol_failed`、`LastFailureAt` 和重连次数，关闭当前 attempt 并进入 `reconnecting`
+- **AND** 重连 MUST 使用从 `BackoffInitial` 指数增长且不超过 `BackoffMax` 的基准延迟，每次实际等待 MUST 位于对应基准延迟的 `[1/2, 1]` 闭区间，且 MUST NOT 设置永久终止次数
+
+#### Scenario: 有界缓冲与 context 背压
+
+- **WHEN** `Messages()` 缓冲尚有容量
+- **THEN** subscriber MUST 按接收顺序交付消息且缓冲容量 MUST 等于显式 `BufferSize`
+- **WHEN** 缓冲已满且 subscriber 已从 Redis 读取下一条消息
+- **THEN** 接收 goroutine MUST 阻塞等待消费者腾出容量，MUST NOT 主动丢弃该消息、扩展为无界缓冲或启动绕过背压的额外交付 goroutine
+- **WHEN** subscriber 在消息交付阻塞期间被停止
+- **THEN** root context 取消 MUST 解除阻塞并允许 lifecycle drain 完成
+
+#### Scenario: 单 owner 停止与资源所有权
+
+- **WHEN** subscriber 首次调用 `Stop(ctx)`，包括尚未 Start 的 created 状态
+- **THEN** subscriber MUST 单向进入 `stopping`、取消 root context、触发活动 PubSub 关闭并等待唯一完成状态
+- **AND** 订阅确认、Receive、重连 backoff 或缓冲交付中的阻塞 MUST 能被停止解除，取消后 MUST NOT 创建新 attempt
+- **WHEN** Stop 与 attempt 失败路径并发关闭同一 PubSub
+- **THEN** 每个 attempt MUST 通过单 owner 与恰好一个 close-once gate 保证 `PubSub.Close()` 最多执行一次，subscriber MUST NOT 关闭共享 Redis client
+- **WHEN** lifecycle 完全 drain
+- **THEN** subscriber MUST 将状态置为 `stopped`、将 `Running` 置为 false，并且只关闭一次 `Messages()` channel
+
+#### Scenario: Stop 超时与重复等待
+
+- **WHEN** `Stop(ctx)` 的调用方 context 在后台 lifecycle drain 完成前结束
+- **THEN** 本次 Stop MUST 返回 context error，但后台 drain MUST 继续，完成状态、消息 channel 和 stopping 状态 MUST NOT 被替换或重置
+- **WHEN** 调用方随后再次调用 `Stop(ctx)`
+- **THEN** 后续调用 MUST 等待同一个完成状态，并在该 drain 已完成时幂等返回 nil
+
+#### Scenario: Redis Cluster classic Pub/Sub 边界
+
+- **WHEN** subscriber 使用仓库 Redis Cluster fixture 订阅 channel 且另一个 client 通过 classic `Publish` 发送消息
+- **THEN** subscriber MUST 能完成订阅确认并接收对应消息
+- **AND** 该验证 MUST NOT 使用 `PSubscribe`、`SSubscribe`、Redis Streams 或宣称断线、重连和背压期间的消息可恢复
+
+### Requirement: 业务中立的 managed HTTP server 生命周期
+
+系统 MUST 在 `common/runtime/httpserver` 提供不依赖 Gin、Fx、服务私有配置或业务日志字段的 managed `net/http` server。公开 API MUST 包含严格的 `Options`、`Managed`、`New`、`Start`、`Stop`、`HTTPServer` 以及可匹配的 `ErrInvalidOptions`、`ErrAlreadyStarted` 和 `ErrStopped`；启用策略、地址来源、默认 timeout、日志和进程 shutdown 策略 MUST 由调用服务拥有。
+
+#### Scenario: 构造严格校验且无运行时副作用
+
+- **WHEN** 调用方执行 `New(options)`
+- **THEN** `Name`、`Addr` 和 `Handler` MUST 非空，`ShutdownTimeout` MUST 大于零，read/write/idle timeout MUST 不小于零
+- **AND** 任一字段非法时错误 MUST 包装 `ErrInvalidOptions` 并包含 server name、addr 与具体字段或操作
+- **AND** `Options` MUST NOT 提供默认值，`New` MUST NOT 监听端口或创建 goroutine
+- **WHEN** 构造成功
+- **THEN** `HTTPServer()` MUST 返回 addr 与 timeout 均匹配 options 的 `*http.Server`，其 `Handler` MUST 是内部 drain tracker 而不是原始 handler
+
+#### Scenario: 同步启动与不可重启状态机
+
+- **WHEN** created 状态的实例执行 `Start(ctx)`
+- **THEN** 系统 MUST 使用 `net.ListenConfig.Listen` 同步绑定 `Addr`，成功绑定并保存 listener 后才启动异步 `Serve`
+- **WHEN** 地址被占用或监听失败
+- **THEN** `Start` MUST 直接返回包含 server name、addr 与 listen 操作的错误，MUST NOT 留下 listener 或 goroutine，也 MUST NOT 调用 `OnServeError`
+- **WHEN** `Start` 成功返回
+- **THEN** 地址 MUST 已经可以接受连接，状态 MUST 为 running
+- **WHEN** running 或 failed 状态再次调用 `Start`
+- **THEN** 系统 MUST 返回包装 `ErrAlreadyStarted` 的稳定错误
+- **WHEN** stopping 或 stopped 状态调用 `Start`
+- **THEN** 系统 MUST 返回包装 `ErrStopped` 的稳定错误且 MUST NOT 重启
+
+#### Scenario: Serve 退出分类与故障回调
+
+- **WHEN** `Serve` 因 `http.ErrServerClosed`、`net.ErrClosed` 或停止期间的 context cancellation 返回
+- **THEN** 系统 MUST 将其视为正常退出且 MUST NOT 调用 `OnServeError`
+- **WHEN** `Serve` 返回其他错误
+- **THEN** 状态 MUST 从 running 进入 failed，错误 MUST 被保存，`OnServeError` MUST 恰好调用一次
+- **AND** 调用 `OnServeError` 时 MUST NOT 持有内部锁，callback MUST 能安全触发调用方 shutdown
+
+#### Scenario: 单一后台 cleanup 与调用方独立等待
+
+- **WHEN** created 状态首次调用 `Stop(ctx)`
+- **THEN** 系统 MUST 直接进入 stopped 并返回 nil
+- **WHEN** running 或 failed 状态首次调用 `Stop(ctx)`
+- **THEN** 系统 MUST 只启动一个使用 `context.Background()` 和 `ShutdownTimeout` 的后台 cleanup，并切换为 stopping
+- **AND** cleanup MUST 调用 `http.Server.Shutdown`，无论其是否识别到 listener 都 MUST 显式关闭 Managed 持有的 listener
+- **WHEN** `Shutdown` 失败
+- **THEN** cleanup MUST 调用 `http.Server.Close` 强制关闭活跃连接
+- **AND** cleanup MUST 等待 drain tracker 与 `Serve` goroutine，使用 `errors.Join` 保存最终错误，切换为 stopped 并只关闭一次完成 channel
+- **WHEN** 多个 goroutine 并发或重复调用 `Stop`
+- **THEN** 所有调用 MUST 共享同一 cleanup 与最终结果，MUST NOT 重复关闭、panic 或永久阻塞
+- **WHEN** 某次 `Stop(ctx)` 的调用方 context 在 cleanup 完成前取消或超时
+- **THEN** 本次调用 MUST 返回 `ctx.Err()`，后台 cleanup MUST 继续，后续 `Stop` MUST 能继续等待并取得同一个最终结果
+
+#### Scenario: 已进入 handler 的请求 drain
+
+- **WHEN** 请求进入真实 handler
+- **THEN** drain tracker MUST 在调用前增加 active，并通过 defer 在 handler 返回或 panic unwind 时减少 active，active 归零时 MUST 唤醒等待者
+- **WHEN** `Wait(ctx)` 等待期间 context 取消或超时
+- **THEN** wait MUST 被唤醒并返回对应 context error，MUST NOT 泄漏永久等待 goroutine
+- **WHEN** 慢 handler 在 shutdown timeout 内完成
+- **THEN** `Stop` MUST 等待其完成并优雅退出
+- **WHEN** handler 超过 shutdown timeout
+- **THEN** 系统 MUST 强制关闭连接；handler 仍忽略取消时 drain timeout MUST 保留到最终错误
+- **AND** tracker MUST 只代表已进入 handler 的请求，MUST NOT 声称管理 hijacked connection、WebSocket、进程外负载均衡 drain 或强杀 goroutine
+
+### Requirement: Runtime metrics 保持业务中立
+
+`common/runtime/observability/metrics` MUST 只提供跨服务通用的 metrics Provider、registry 注册、稳定 label 常量、HTTP metrics 支撑和业务中立 collector。该包 MUST NOT 定义、注册或导出 Casbin policy reload、permission、role、RBAC、user-service 或其他单一服务业务指标的接口、空实现、constructor、collector 或指标名称。
+
+#### Scenario: common metrics 不拥有 Casbin reload 指标
+
+- **WHEN** 系统编译或审查 `common/runtime/observability/metrics`
+- **THEN** 该包 MUST NOT 包含 `ReloadMetrics`、`NopReloadMetrics`、`NewCasbinPolicyReloadMetrics` 或 `aegiscore_casbin_*` 指标定义
+- **AND** 该包 MUST NOT 通过业务命名的 no-op recorder 为 user-service permission/RBAC 运行时提供依赖
+
+#### Scenario: 通用 component status collector 保留
+
+- **WHEN** 服务需要导出业务中立运行时组件的 running 和 last error 状态
+- **THEN** 系统 MUST 继续复用 `common/runtime/observability/metrics` 的 component status collector
+- **AND** collector MUST 只使用稳定 resource label 与只读状态接口，不得内置 Casbin、permission、role 或 user-service 组件名
+
+#### Scenario: 业务指标归属调用方
+
+- **WHEN** 消费服务或 feature 需要记录带业务语义的 metrics
+- **THEN** 业务指标接口、空实现、指标名称和 collector MUST 由 owning service、feature 或其 observability adapter 拥有
+- **AND** owning 代码 MAY 复用通用 metrics Provider 注册 collector，但 MUST NOT 把业务 recorder 下沉到 `common`
+
+### Requirement: 共享事务 helper 不得注入隐藏事务生命周期上限
+
+`common/runtime/datastore` 的共享事务 helper MUST 使用调用方拥有的 context 策略表达事务生命周期。`BeginTransaction` MUST 保留原始 context value，并 MUST 隔离原始取消信号以允许请求取消后执行 rollback cleanup；当原始 context 提供 deadline 时，事务 lifecycle context MUST 继承该 deadline；当原始 context 没有 deadline 时，helper MUST NOT 为传入 `Ent Tx`、`database/sql.BeginTx` 或其他 transaction starter 的 context 注入固定 timeout、cleanup budget 或隐藏 deadline。
+
+#### Scenario: 无原始 deadline 的事务不会获得默认 5 秒 deadline
+- **WHEN** 调用方以没有 deadline 的 context 调用 `datastore.BeginTransaction`
+- **THEN** transaction starter 接收的 lifecycle context MUST 保留原始 context value 且不继承原始取消信号
+- **AND** lifecycle context MUST NOT 包含由 datastore helper 注入的 5 秒 deadline 或其他固定 deadline
+
+#### Scenario: 显式原始 deadline 继续约束事务生命周期
+- **WHEN** 调用方以带 deadline 的 context 调用 `datastore.BeginTransaction`
+- **THEN** transaction starter 接收的 lifecycle context MUST 继承同一个 deadline
+- **AND** helper MUST NOT 放宽、覆盖或替换调用方显式 deadline
+
+#### Scenario: 超过清理预算的无 deadline 事务仍可提交
+- **WHEN** 原始 context 没有 deadline，且事务从 begin 到 commit 的耗时超过 `DefaultTransactionCleanupTimeout`
+- **THEN** datastore helper MUST NOT 因该常量到期取消事务 lifecycle context
+- **AND** 事务 MUST 能在 transaction implementation 和数据库策略允许时成功提交
+
+#### Scenario: 提交前原始 context 取消时拒绝提交
+- **WHEN** 事务已经开始，且原始 request context 在提交前被取消或超时
+- **THEN** `Finish.Commit(ctx)` MUST 返回原始 context 错误并拒绝调用底层 commit
+- **AND** 调用方 MUST 能通过 `Fail` 或 `RollbackUnlessCommitted` 回滚未提交事务
+
+#### Scenario: rollback cleanup 不依赖 BeginTx 固定 timeout
+- **WHEN** 事务需要在业务错误、提交拒绝或 defer 兜底中回滚
+- **THEN** helper MUST NOT 通过传给 `BeginTx` 的固定 timeout 表达 rollback cleanup budget
+- **AND** 长事务和泄漏保护 MUST 由调用方 context deadline、数据库 timeout 或拥有者显式生命周期策略表达
+
+### Requirement: workerpool 消费端日志字段安全
+
+系统 MUST 要求 `workerpool.Task.Fields` 的生产者只传入低敏定位字段。任何消费端提交的后台任务字段 MUST NOT 包含密码、token、完整 Redis key、Redis key prefix、可拼装 Redis key 的材料、SQL、原始凭据或其他敏感值。workerpool MAY 在 error 和 panic 路径原样记录 `Task.Fields`，字段安全责任 MUST 由消费端在提交任务前满足。
+
+#### Scenario: 任务失败日志只记录低敏字段
+- **WHEN** 消费端提交 workerpool 任务且任务返回 error
+- **THEN** workerpool MAY 记录任务池名称、任务名称、调用方提供的低敏 `Task.Fields` 和 error
+- **AND** 消费端提供的 `Task.Fields` MUST NOT 包含完整 Redis key、Redis key prefix、可拼装 Redis key 的材料、token、密码、SQL 或原始凭据
+
+#### Scenario: 任务 panic 日志只记录低敏字段
+- **WHEN** 消费端提交 workerpool 任务且任务发生 panic
+- **THEN** workerpool MAY 记录任务池名称、任务名称、调用方提供的低敏 `Task.Fields`、panic 和 stacktrace
+- **AND** 消费端提供的 `Task.Fields` MUST NOT 包含完整 Redis key、Redis key prefix、可拼装 Redis key 的材料、token、密码、SQL 或原始凭据
+
+#### Scenario: common 不承担业务字段脱敏
+- **WHEN** feature 需要在后台任务失败或 panic 日志中关联单次业务操作
+- **THEN** feature MUST 在自身边界生成低敏字段或不可逆 opaque 标识后再写入 `Task.Fields`
+- **AND** `common/runtime/workerpool` MUST NOT 为 user-service auth、RBAC、refresh session、Redis key schema 或其他服务私有字段提供业务专用过滤、兼容字段或脱敏分支
+
