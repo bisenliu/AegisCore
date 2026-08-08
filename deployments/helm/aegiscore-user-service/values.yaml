@@ -56,6 +56,9 @@ nacos: # Nacos 配置来源；同一组 server 字段同时生成地址和 Netwo
   group: AEGISCORE # AEGISCORE_NACOS_GROUP。
   extraEnv: [] # 可追加 username、password、timeout 等环境变量或 Secret 引用。
 
+goRuntime: # runtime 容器 Go 运行时调优。
+  gomemlimit: 384MiB # GOMEMLIMIT；为 512Mi 容器限制预留约 25% 非堆、线程和 mmap 余量。
+
 deployment: # runtime Deployment 行为配置。
   revisionHistoryLimit: 5 # 保留的历史 ReplicaSet 数量。
   minReadySeconds: 10 # Pod ready 后至少稳定多少秒才算可用。
@@ -215,6 +218,8 @@ rbacSeedJob: # RBAC 系统数据 seed 发布前置 Job 配置；生产最终 run
     limits: # 容器资源上限。
       cpu: 500m # 限制最多 0.5 CPU。
       memory: 512Mi # 限制最多 512Mi 内存。
+  goRuntime: # seed Job 容器 Go 运行时调优。
+    gomemlimit: 384MiB # GOMEMLIMIT；与默认 512Mi Job 内存限制保持余量。
   volumeMounts: # seed 容器挂载卷。
     - name: tmp # 临时卷名称。
       mountPath: /tmp # 可写临时目录。

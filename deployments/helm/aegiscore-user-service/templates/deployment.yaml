@@ -51,6 +51,10 @@ spec:
             - serve
           env:
             {{- include "aegiscore-user-service.nacosEnv" . | nindent 12 }}
+            {{- with .Values.goRuntime.gomemlimit }}
+            - name: GOMEMLIMIT
+              value: {{ . | quote }}
+            {{- end }}
           livenessProbe:
             httpGet:
               path: {{ .Values.probes.liveness.path }}

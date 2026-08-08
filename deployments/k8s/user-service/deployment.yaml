@@ -59,6 +59,8 @@ spec: # Deployment 期望状态。
               value: prod
             - name: AEGISCORE_NACOS_GROUP
               value: AEGISCORE
+            - name: GOMEMLIMIT # Go GC 内存软上限；为 512Mi 容器限制预留非堆和运行时余量。
+              value: 384MiB
           livenessProbe: # 存活探针；失败会触发 kubelet 重启容器。
             httpGet: # 使用 HTTP GET 探测。
               path: /livez # liveness 路径，表示进程是否存活。

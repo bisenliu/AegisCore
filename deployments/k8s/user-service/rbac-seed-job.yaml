@@ -49,6 +49,8 @@ spec: # Job 执行规格。
               value: prod
             - name: AEGISCORE_NACOS_GROUP
               value: AEGISCORE
+            - name: GOMEMLIMIT # Go GC 内存软上限；为 512Mi Job 容器限制预留非堆和运行时余量。
+              value: 384MiB
           resources: # seed 容器资源边界。
             requests: # 调度使用的资源请求。
               cpu: 100m # 请求 0.1 CPU。

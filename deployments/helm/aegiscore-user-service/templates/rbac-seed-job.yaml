@@ -30,6 +30,10 @@ spec:
             {{- toYaml .Values.rbacSeedJob.command | nindent 12 }}
           env:
             {{- include "aegiscore-user-service.nacosEnv" . | nindent 12 }}
+            {{- with .Values.rbacSeedJob.goRuntime.gomemlimit }}
+            - name: GOMEMLIMIT
+              value: {{ . | quote }}
+            {{- end }}
           resources:
             {{- toYaml .Values.rbacSeedJob.resources | nindent 12 }}
           securityContext:
