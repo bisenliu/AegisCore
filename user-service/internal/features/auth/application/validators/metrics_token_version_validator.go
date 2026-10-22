@@ -3,8 +3,7 @@ package validators
 import (
 	"context"
 	"errors"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	commonauth "github.com/aegiscore/common/security/auth"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"

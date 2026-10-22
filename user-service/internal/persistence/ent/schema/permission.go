@@ -1,11 +1,12 @@
 package schema
 
 import (
+	"uuid"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
-	"github.com/google/uuid"
 )
 
 // Permission 是 permissions 表的 Ent schema。
@@ -22,7 +23,7 @@ func (Permission) Mixin() []ent.Mixin {
 func (Permission) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("id").Unique().Immutable().Comment("权限ID"),
-		field.UUID("permission_id", uuid.UUID{}).Unique().Immutable().Comment("外部权限ID"),
+		field.String("permission_id").GoType(uuid.UUID{}).ValueScanner(uuidScanner).SchemaType(uuidColumnTypes).Unique().Immutable().Comment("外部权限ID"),
 		field.String("name").NotEmpty().MaxLen(128).Comment("权限名称"),
 		field.String("description").Default("").MaxLen(512).Comment("权限说明"),
 		field.String("module").NotEmpty().MaxLen(64).Comment("权限所属模块"),

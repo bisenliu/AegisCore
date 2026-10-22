@@ -3,10 +3,12 @@
 package permission
 
 import (
+	"fmt"
+	"uuid"
+
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
-	"github.com/google/uuid"
 )
 
 // ID filters vertices based on their ID field.
@@ -66,7 +68,8 @@ func UpdatedAt(v int64) predicate.Permission {
 
 // PermissionID applies equality check predicate on the "permission_id" field. It's identical to PermissionIDEQ.
 func PermissionID(v uuid.UUID) predicate.Permission {
-	return predicate.Permission(sql.FieldEQ(FieldPermissionID, v))
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.PermissionOrErr(sql.FieldEQ(FieldPermissionID, vc), err)
 }
 
 // Name applies equality check predicate on the "name" field. It's identical to NameEQ.
@@ -176,42 +179,116 @@ func UpdatedAtLTE(v int64) predicate.Permission {
 
 // PermissionIDEQ applies the EQ predicate on the "permission_id" field.
 func PermissionIDEQ(v uuid.UUID) predicate.Permission {
-	return predicate.Permission(sql.FieldEQ(FieldPermissionID, v))
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.PermissionOrErr(sql.FieldEQ(FieldPermissionID, vc), err)
 }
 
 // PermissionIDNEQ applies the NEQ predicate on the "permission_id" field.
 func PermissionIDNEQ(v uuid.UUID) predicate.Permission {
-	return predicate.Permission(sql.FieldNEQ(FieldPermissionID, v))
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.PermissionOrErr(sql.FieldNEQ(FieldPermissionID, vc), err)
 }
 
 // PermissionIDIn applies the In predicate on the "permission_id" field.
 func PermissionIDIn(vs ...uuid.UUID) predicate.Permission {
-	return predicate.Permission(sql.FieldIn(FieldPermissionID, vs...))
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.PermissionID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.PermissionOrErr(sql.FieldIn(FieldPermissionID, v...), err)
 }
 
 // PermissionIDNotIn applies the NotIn predicate on the "permission_id" field.
 func PermissionIDNotIn(vs ...uuid.UUID) predicate.Permission {
-	return predicate.Permission(sql.FieldNotIn(FieldPermissionID, vs...))
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.PermissionID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.PermissionOrErr(sql.FieldNotIn(FieldPermissionID, v...), err)
 }
 
 // PermissionIDGT applies the GT predicate on the "permission_id" field.
 func PermissionIDGT(v uuid.UUID) predicate.Permission {
-	return predicate.Permission(sql.FieldGT(FieldPermissionID, v))
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.PermissionOrErr(sql.FieldGT(FieldPermissionID, vc), err)
 }
 
 // PermissionIDGTE applies the GTE predicate on the "permission_id" field.
 func PermissionIDGTE(v uuid.UUID) predicate.Permission {
-	return predicate.Permission(sql.FieldGTE(FieldPermissionID, v))
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.PermissionOrErr(sql.FieldGTE(FieldPermissionID, vc), err)
 }
 
 // PermissionIDLT applies the LT predicate on the "permission_id" field.
 func PermissionIDLT(v uuid.UUID) predicate.Permission {
-	return predicate.Permission(sql.FieldLT(FieldPermissionID, v))
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.PermissionOrErr(sql.FieldLT(FieldPermissionID, vc), err)
 }
 
 // PermissionIDLTE applies the LTE predicate on the "permission_id" field.
 func PermissionIDLTE(v uuid.UUID) predicate.Permission {
-	return predicate.Permission(sql.FieldLTE(FieldPermissionID, v))
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.PermissionOrErr(sql.FieldLTE(FieldPermissionID, vc), err)
+}
+
+// PermissionIDContains applies the Contains predicate on the "permission_id" field.
+func PermissionIDContains(v uuid.UUID) predicate.Permission {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("permission_id value is not a string: %T", vc)
+	}
+	return predicate.PermissionOrErr(sql.FieldContains(FieldPermissionID, vcs), err)
+}
+
+// PermissionIDHasPrefix applies the HasPrefix predicate on the "permission_id" field.
+func PermissionIDHasPrefix(v uuid.UUID) predicate.Permission {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("permission_id value is not a string: %T", vc)
+	}
+	return predicate.PermissionOrErr(sql.FieldHasPrefix(FieldPermissionID, vcs), err)
+}
+
+// PermissionIDHasSuffix applies the HasSuffix predicate on the "permission_id" field.
+func PermissionIDHasSuffix(v uuid.UUID) predicate.Permission {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("permission_id value is not a string: %T", vc)
+	}
+	return predicate.PermissionOrErr(sql.FieldHasSuffix(FieldPermissionID, vcs), err)
+}
+
+// PermissionIDEqualFold applies the EqualFold predicate on the "permission_id" field.
+func PermissionIDEqualFold(v uuid.UUID) predicate.Permission {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("permission_id value is not a string: %T", vc)
+	}
+	return predicate.PermissionOrErr(sql.FieldEqualFold(FieldPermissionID, vcs), err)
+}
+
+// PermissionIDContainsFold applies the ContainsFold predicate on the "permission_id" field.
+func PermissionIDContainsFold(v uuid.UUID) predicate.Permission {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("permission_id value is not a string: %T", vc)
+	}
+	return predicate.PermissionOrErr(sql.FieldContainsFold(FieldPermissionID, vcs), err)
 }
 
 // NameEQ applies the EQ predicate on the "name" field.

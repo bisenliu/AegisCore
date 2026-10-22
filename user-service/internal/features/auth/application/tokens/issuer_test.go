@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
 	jwtv5 "github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	commonauth "github.com/aegiscore/common/security/auth"

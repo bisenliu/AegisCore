@@ -3,8 +3,11 @@
 package user
 
 import (
+	"uuid"
+
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/schema/field"
 )
 
 const (
@@ -84,6 +87,10 @@ var (
 	DefaultTokenVersion int64
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus int64
+	// ValueScanner of all User fields.
+	ValueScanner struct {
+		UserID field.TypeValueScanner[uuid.UUID]
+	}
 )
 
 // OrderOption defines the ordering options for the User queries.

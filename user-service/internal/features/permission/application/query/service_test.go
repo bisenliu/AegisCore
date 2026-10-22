@@ -3,8 +3,8 @@ package query
 import (
 	"context"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 
 	"github.com/stretchr/testify/require"

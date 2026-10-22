@@ -6,13 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"uuid"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
-	"github.com/google/uuid"
 )
 
 // RbacPolicyRevisionCreate is the builder for creating a RbacPolicyRevision entity.
@@ -44,30 +44,14 @@ func (_c *RbacPolicyRevisionCreate) SetReason(v string) *RbacPolicyRevisionCreat
 }
 
 // SetRoleID sets the "role_id" field.
-func (_c *RbacPolicyRevisionCreate) SetRoleID(v uuid.UUID) *RbacPolicyRevisionCreate {
+func (_c *RbacPolicyRevisionCreate) SetRoleID(v *uuid.UUID) *RbacPolicyRevisionCreate {
 	_c.mutation.SetRoleID(v)
 	return _c
 }
 
-// SetNillableRoleID sets the "role_id" field if the given value is not nil.
-func (_c *RbacPolicyRevisionCreate) SetNillableRoleID(v *uuid.UUID) *RbacPolicyRevisionCreate {
-	if v != nil {
-		_c.SetRoleID(*v)
-	}
-	return _c
-}
-
 // SetPermissionID sets the "permission_id" field.
-func (_c *RbacPolicyRevisionCreate) SetPermissionID(v uuid.UUID) *RbacPolicyRevisionCreate {
+func (_c *RbacPolicyRevisionCreate) SetPermissionID(v *uuid.UUID) *RbacPolicyRevisionCreate {
 	_c.mutation.SetPermissionID(v)
-	return _c
-}
-
-// SetNillablePermissionID sets the "permission_id" field if the given value is not nil.
-func (_c *RbacPolicyRevisionCreate) SetNillablePermissionID(v *uuid.UUID) *RbacPolicyRevisionCreate {
-	if v != nil {
-		_c.SetPermissionID(*v)
-	}
 	return _c
 }
 
@@ -157,7 +141,10 @@ func (_c *RbacPolicyRevisionCreate) sqlSave(ctx context.Context) (*RbacPolicyRev
 	if err := _c.check(); err != nil {
 		return nil, err
 	}
-	_node, _spec := _c.createSpec()
+	_node, _spec, err := _c.createSpec()
+	if err != nil {
+		return nil, err
+	}
 	if err := sqlgraph.CreateNode(ctx, _c.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
@@ -173,7 +160,7 @@ func (_c *RbacPolicyRevisionCreate) sqlSave(ctx context.Context) (*RbacPolicyRev
 	return _node, nil
 }
 
-func (_c *RbacPolicyRevisionCreate) createSpec() (*RbacPolicyRevision, *sqlgraph.CreateSpec) {
+func (_c *RbacPolicyRevisionCreate) createSpec() (*RbacPolicyRevision, *sqlgraph.CreateSpec, error) {
 	var (
 		_node = &RbacPolicyRevision{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(rbacpolicyrevision.Table, sqlgraph.NewFieldSpec(rbacpolicyrevision.FieldID, field.TypeInt64))
@@ -192,12 +179,20 @@ func (_c *RbacPolicyRevisionCreate) createSpec() (*RbacPolicyRevision, *sqlgraph
 		_node.Reason = value
 	}
 	if value, ok := _c.mutation.RoleID(); ok {
-		_spec.SetField(rbacpolicyrevision.FieldRoleID, field.TypeUUID, value)
-		_node.RoleID = &value
+		vv, err := rbacpolicyrevision.ValueScanner.RoleID.Value(value)
+		if err != nil {
+			return nil, nil, err
+		}
+		_spec.SetField(rbacpolicyrevision.FieldRoleID, field.TypeString, vv)
+		_node.RoleID = value
 	}
 	if value, ok := _c.mutation.PermissionID(); ok {
-		_spec.SetField(rbacpolicyrevision.FieldPermissionID, field.TypeUUID, value)
-		_node.PermissionID = &value
+		vv, err := rbacpolicyrevision.ValueScanner.PermissionID.Value(value)
+		if err != nil {
+			return nil, nil, err
+		}
+		_spec.SetField(rbacpolicyrevision.FieldPermissionID, field.TypeString, vv)
+		_node.PermissionID = value
 	}
 	if nodes := _c.mutation.OutboxEventIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -215,7 +210,7 @@ func (_c *RbacPolicyRevisionCreate) createSpec() (*RbacPolicyRevision, *sqlgraph
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	return _node, _spec
+	return _node, _spec, nil
 }
 
 // OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
@@ -390,7 +385,10 @@ func (_c *RbacPolicyRevisionCreateBulk) Save(ctx context.Context) ([]*RbacPolicy
 				}
 				builder.mutation = mutation
 				var err error
-				nodes[i], specs[i] = builder.createSpec()
+				nodes[i], specs[i], err = builder.createSpec()
+				if err != nil {
+					return nil, err
+				}
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {

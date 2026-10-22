@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"uuid"
 
 	casbinlib "github.com/casbin/casbin/v3"
-	"github.com/google/uuid"
 
 	commoncasbin "github.com/aegiscore/common/security/casbin"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"

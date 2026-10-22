@@ -3,8 +3,8 @@ package command
 import (
 	"context"
 	"fmt"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	runtimeid "github.com/aegiscore/common/runtime/id"

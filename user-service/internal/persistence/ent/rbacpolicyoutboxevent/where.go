@@ -3,10 +3,12 @@
 package rbacpolicyoutboxevent
 
 import (
+	"fmt"
+	"uuid"
+
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
-	"github.com/google/uuid"
 )
 
 // ID filters vertices based on their ID field.
@@ -66,7 +68,8 @@ func UpdatedAt(v int64) predicate.RbacPolicyOutboxEvent {
 
 // EventID applies equality check predicate on the "event_id" field. It's identical to EventIDEQ.
 func EventID(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldEventID, v))
+	vc, err := ValueScanner.EventID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEQ(FieldEventID, vc), err)
 }
 
 // PolicyRevision applies equality check predicate on the "policy_revision" field. It's identical to PolicyRevisionEQ.
@@ -90,18 +93,21 @@ func Reason(v string) predicate.RbacPolicyOutboxEvent {
 }
 
 // RoleID applies equality check predicate on the "role_id" field. It's identical to RoleIDEQ.
-func RoleID(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldRoleID, v))
+func RoleID(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEQ(FieldRoleID, vc), err)
 }
 
 // UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
-func UserID(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldUserID, v))
+func UserID(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEQ(FieldUserID, vc), err)
 }
 
 // PermissionID applies equality check predicate on the "permission_id" field. It's identical to PermissionIDEQ.
-func PermissionID(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldPermissionID, v))
+func PermissionID(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEQ(FieldPermissionID, vc), err)
 }
 
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
@@ -125,8 +131,9 @@ func LastError(v string) predicate.RbacPolicyOutboxEvent {
 }
 
 // ClaimToken applies equality check predicate on the "claim_token" field. It's identical to ClaimTokenEQ.
-func ClaimToken(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldClaimToken, v))
+func ClaimToken(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.ClaimToken.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEQ(FieldClaimToken, vc), err)
 }
 
 // ClaimedUntil applies equality check predicate on the "claimed_until" field. It's identical to ClaimedUntilEQ.
@@ -226,42 +233,116 @@ func UpdatedAtLTE(v int64) predicate.RbacPolicyOutboxEvent {
 
 // EventIDEQ applies the EQ predicate on the "event_id" field.
 func EventIDEQ(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldEventID, v))
+	vc, err := ValueScanner.EventID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEQ(FieldEventID, vc), err)
 }
 
 // EventIDNEQ applies the NEQ predicate on the "event_id" field.
 func EventIDNEQ(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldEventID, v))
+	vc, err := ValueScanner.EventID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldNEQ(FieldEventID, vc), err)
 }
 
 // EventIDIn applies the In predicate on the "event_id" field.
 func EventIDIn(vs ...uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldEventID, vs...))
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.EventID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldIn(FieldEventID, v...), err)
 }
 
 // EventIDNotIn applies the NotIn predicate on the "event_id" field.
 func EventIDNotIn(vs ...uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldEventID, vs...))
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.EventID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldNotIn(FieldEventID, v...), err)
 }
 
 // EventIDGT applies the GT predicate on the "event_id" field.
 func EventIDGT(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGT(FieldEventID, v))
+	vc, err := ValueScanner.EventID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldGT(FieldEventID, vc), err)
 }
 
 // EventIDGTE applies the GTE predicate on the "event_id" field.
 func EventIDGTE(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGTE(FieldEventID, v))
+	vc, err := ValueScanner.EventID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldGTE(FieldEventID, vc), err)
 }
 
 // EventIDLT applies the LT predicate on the "event_id" field.
 func EventIDLT(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLT(FieldEventID, v))
+	vc, err := ValueScanner.EventID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldLT(FieldEventID, vc), err)
 }
 
 // EventIDLTE applies the LTE predicate on the "event_id" field.
 func EventIDLTE(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLTE(FieldEventID, v))
+	vc, err := ValueScanner.EventID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldLTE(FieldEventID, vc), err)
+}
+
+// EventIDContains applies the Contains predicate on the "event_id" field.
+func EventIDContains(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.EventID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("event_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldContains(FieldEventID, vcs), err)
+}
+
+// EventIDHasPrefix applies the HasPrefix predicate on the "event_id" field.
+func EventIDHasPrefix(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.EventID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("event_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldHasPrefix(FieldEventID, vcs), err)
+}
+
+// EventIDHasSuffix applies the HasSuffix predicate on the "event_id" field.
+func EventIDHasSuffix(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.EventID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("event_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldHasSuffix(FieldEventID, vcs), err)
+}
+
+// EventIDEqualFold applies the EqualFold predicate on the "event_id" field.
+func EventIDEqualFold(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.EventID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("event_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEqualFold(FieldEventID, vcs), err)
+}
+
+// EventIDContainsFold applies the ContainsFold predicate on the "event_id" field.
+func EventIDContainsFold(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.EventID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("event_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldContainsFold(FieldEventID, vcs), err)
 }
 
 // PolicyRevisionEQ applies the EQ predicate on the "policy_revision" field.
@@ -455,43 +536,97 @@ func ReasonContainsFold(v string) predicate.RbacPolicyOutboxEvent {
 }
 
 // RoleIDEQ applies the EQ predicate on the "role_id" field.
-func RoleIDEQ(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldRoleID, v))
+func RoleIDEQ(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEQ(FieldRoleID, vc), err)
 }
 
 // RoleIDNEQ applies the NEQ predicate on the "role_id" field.
-func RoleIDNEQ(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldRoleID, v))
+func RoleIDNEQ(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldNEQ(FieldRoleID, vc), err)
 }
 
 // RoleIDIn applies the In predicate on the "role_id" field.
-func RoleIDIn(vs ...uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldRoleID, vs...))
+func RoleIDIn(vs ...*uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.RoleID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldIn(FieldRoleID, v...), err)
 }
 
 // RoleIDNotIn applies the NotIn predicate on the "role_id" field.
-func RoleIDNotIn(vs ...uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldRoleID, vs...))
+func RoleIDNotIn(vs ...*uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.RoleID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldNotIn(FieldRoleID, v...), err)
 }
 
 // RoleIDGT applies the GT predicate on the "role_id" field.
-func RoleIDGT(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGT(FieldRoleID, v))
+func RoleIDGT(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldGT(FieldRoleID, vc), err)
 }
 
 // RoleIDGTE applies the GTE predicate on the "role_id" field.
-func RoleIDGTE(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGTE(FieldRoleID, v))
+func RoleIDGTE(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldGTE(FieldRoleID, vc), err)
 }
 
 // RoleIDLT applies the LT predicate on the "role_id" field.
-func RoleIDLT(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLT(FieldRoleID, v))
+func RoleIDLT(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldLT(FieldRoleID, vc), err)
 }
 
 // RoleIDLTE applies the LTE predicate on the "role_id" field.
-func RoleIDLTE(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLTE(FieldRoleID, v))
+func RoleIDLTE(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldLTE(FieldRoleID, vc), err)
+}
+
+// RoleIDContains applies the Contains predicate on the "role_id" field.
+func RoleIDContains(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldContains(FieldRoleID, vcs), err)
+}
+
+// RoleIDHasPrefix applies the HasPrefix predicate on the "role_id" field.
+func RoleIDHasPrefix(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldHasPrefix(FieldRoleID, vcs), err)
+}
+
+// RoleIDHasSuffix applies the HasSuffix predicate on the "role_id" field.
+func RoleIDHasSuffix(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldHasSuffix(FieldRoleID, vcs), err)
 }
 
 // RoleIDIsNil applies the IsNil predicate on the "role_id" field.
@@ -504,44 +639,118 @@ func RoleIDNotNil() predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldNotNull(FieldRoleID))
 }
 
+// RoleIDEqualFold applies the EqualFold predicate on the "role_id" field.
+func RoleIDEqualFold(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEqualFold(FieldRoleID, vcs), err)
+}
+
+// RoleIDContainsFold applies the ContainsFold predicate on the "role_id" field.
+func RoleIDContainsFold(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldContainsFold(FieldRoleID, vcs), err)
+}
+
 // UserIDEQ applies the EQ predicate on the "user_id" field.
-func UserIDEQ(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldUserID, v))
+func UserIDEQ(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEQ(FieldUserID, vc), err)
 }
 
 // UserIDNEQ applies the NEQ predicate on the "user_id" field.
-func UserIDNEQ(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldUserID, v))
+func UserIDNEQ(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldNEQ(FieldUserID, vc), err)
 }
 
 // UserIDIn applies the In predicate on the "user_id" field.
-func UserIDIn(vs ...uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldUserID, vs...))
+func UserIDIn(vs ...*uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.UserID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldIn(FieldUserID, v...), err)
 }
 
 // UserIDNotIn applies the NotIn predicate on the "user_id" field.
-func UserIDNotIn(vs ...uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldUserID, vs...))
+func UserIDNotIn(vs ...*uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.UserID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldNotIn(FieldUserID, v...), err)
 }
 
 // UserIDGT applies the GT predicate on the "user_id" field.
-func UserIDGT(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGT(FieldUserID, v))
+func UserIDGT(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldGT(FieldUserID, vc), err)
 }
 
 // UserIDGTE applies the GTE predicate on the "user_id" field.
-func UserIDGTE(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGTE(FieldUserID, v))
+func UserIDGTE(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldGTE(FieldUserID, vc), err)
 }
 
 // UserIDLT applies the LT predicate on the "user_id" field.
-func UserIDLT(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLT(FieldUserID, v))
+func UserIDLT(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldLT(FieldUserID, vc), err)
 }
 
 // UserIDLTE applies the LTE predicate on the "user_id" field.
-func UserIDLTE(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLTE(FieldUserID, v))
+func UserIDLTE(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldLTE(FieldUserID, vc), err)
+}
+
+// UserIDContains applies the Contains predicate on the "user_id" field.
+func UserIDContains(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldContains(FieldUserID, vcs), err)
+}
+
+// UserIDHasPrefix applies the HasPrefix predicate on the "user_id" field.
+func UserIDHasPrefix(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldHasPrefix(FieldUserID, vcs), err)
+}
+
+// UserIDHasSuffix applies the HasSuffix predicate on the "user_id" field.
+func UserIDHasSuffix(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldHasSuffix(FieldUserID, vcs), err)
 }
 
 // UserIDIsNil applies the IsNil predicate on the "user_id" field.
@@ -554,44 +763,118 @@ func UserIDNotNil() predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldNotNull(FieldUserID))
 }
 
+// UserIDEqualFold applies the EqualFold predicate on the "user_id" field.
+func UserIDEqualFold(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEqualFold(FieldUserID, vcs), err)
+}
+
+// UserIDContainsFold applies the ContainsFold predicate on the "user_id" field.
+func UserIDContainsFold(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldContainsFold(FieldUserID, vcs), err)
+}
+
 // PermissionIDEQ applies the EQ predicate on the "permission_id" field.
-func PermissionIDEQ(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldPermissionID, v))
+func PermissionIDEQ(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEQ(FieldPermissionID, vc), err)
 }
 
 // PermissionIDNEQ applies the NEQ predicate on the "permission_id" field.
-func PermissionIDNEQ(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldPermissionID, v))
+func PermissionIDNEQ(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldNEQ(FieldPermissionID, vc), err)
 }
 
 // PermissionIDIn applies the In predicate on the "permission_id" field.
-func PermissionIDIn(vs ...uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldPermissionID, vs...))
+func PermissionIDIn(vs ...*uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.PermissionID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldIn(FieldPermissionID, v...), err)
 }
 
 // PermissionIDNotIn applies the NotIn predicate on the "permission_id" field.
-func PermissionIDNotIn(vs ...uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldPermissionID, vs...))
+func PermissionIDNotIn(vs ...*uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.PermissionID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldNotIn(FieldPermissionID, v...), err)
 }
 
 // PermissionIDGT applies the GT predicate on the "permission_id" field.
-func PermissionIDGT(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGT(FieldPermissionID, v))
+func PermissionIDGT(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldGT(FieldPermissionID, vc), err)
 }
 
 // PermissionIDGTE applies the GTE predicate on the "permission_id" field.
-func PermissionIDGTE(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGTE(FieldPermissionID, v))
+func PermissionIDGTE(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldGTE(FieldPermissionID, vc), err)
 }
 
 // PermissionIDLT applies the LT predicate on the "permission_id" field.
-func PermissionIDLT(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLT(FieldPermissionID, v))
+func PermissionIDLT(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldLT(FieldPermissionID, vc), err)
 }
 
 // PermissionIDLTE applies the LTE predicate on the "permission_id" field.
-func PermissionIDLTE(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLTE(FieldPermissionID, v))
+func PermissionIDLTE(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldLTE(FieldPermissionID, vc), err)
+}
+
+// PermissionIDContains applies the Contains predicate on the "permission_id" field.
+func PermissionIDContains(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("permission_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldContains(FieldPermissionID, vcs), err)
+}
+
+// PermissionIDHasPrefix applies the HasPrefix predicate on the "permission_id" field.
+func PermissionIDHasPrefix(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("permission_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldHasPrefix(FieldPermissionID, vcs), err)
+}
+
+// PermissionIDHasSuffix applies the HasSuffix predicate on the "permission_id" field.
+func PermissionIDHasSuffix(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("permission_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldHasSuffix(FieldPermissionID, vcs), err)
 }
 
 // PermissionIDIsNil applies the IsNil predicate on the "permission_id" field.
@@ -602,6 +885,26 @@ func PermissionIDIsNil() predicate.RbacPolicyOutboxEvent {
 // PermissionIDNotNil applies the NotNil predicate on the "permission_id" field.
 func PermissionIDNotNil() predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldNotNull(FieldPermissionID))
+}
+
+// PermissionIDEqualFold applies the EqualFold predicate on the "permission_id" field.
+func PermissionIDEqualFold(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("permission_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEqualFold(FieldPermissionID, vcs), err)
+}
+
+// PermissionIDContainsFold applies the ContainsFold predicate on the "permission_id" field.
+func PermissionIDContainsFold(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.PermissionID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("permission_id value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldContainsFold(FieldPermissionID, vcs), err)
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.
@@ -825,43 +1128,97 @@ func LastErrorContainsFold(v string) predicate.RbacPolicyOutboxEvent {
 }
 
 // ClaimTokenEQ applies the EQ predicate on the "claim_token" field.
-func ClaimTokenEQ(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldEQ(FieldClaimToken, v))
+func ClaimTokenEQ(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.ClaimToken.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEQ(FieldClaimToken, vc), err)
 }
 
 // ClaimTokenNEQ applies the NEQ predicate on the "claim_token" field.
-func ClaimTokenNEQ(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNEQ(FieldClaimToken, v))
+func ClaimTokenNEQ(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.ClaimToken.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldNEQ(FieldClaimToken, vc), err)
 }
 
 // ClaimTokenIn applies the In predicate on the "claim_token" field.
-func ClaimTokenIn(vs ...uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldIn(FieldClaimToken, vs...))
+func ClaimTokenIn(vs ...*uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.ClaimToken.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldIn(FieldClaimToken, v...), err)
 }
 
 // ClaimTokenNotIn applies the NotIn predicate on the "claim_token" field.
-func ClaimTokenNotIn(vs ...uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldNotIn(FieldClaimToken, vs...))
+func ClaimTokenNotIn(vs ...*uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.ClaimToken.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldNotIn(FieldClaimToken, v...), err)
 }
 
 // ClaimTokenGT applies the GT predicate on the "claim_token" field.
-func ClaimTokenGT(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGT(FieldClaimToken, v))
+func ClaimTokenGT(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.ClaimToken.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldGT(FieldClaimToken, vc), err)
 }
 
 // ClaimTokenGTE applies the GTE predicate on the "claim_token" field.
-func ClaimTokenGTE(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldGTE(FieldClaimToken, v))
+func ClaimTokenGTE(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.ClaimToken.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldGTE(FieldClaimToken, vc), err)
 }
 
 // ClaimTokenLT applies the LT predicate on the "claim_token" field.
-func ClaimTokenLT(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLT(FieldClaimToken, v))
+func ClaimTokenLT(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.ClaimToken.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldLT(FieldClaimToken, vc), err)
 }
 
 // ClaimTokenLTE applies the LTE predicate on the "claim_token" field.
-func ClaimTokenLTE(v uuid.UUID) predicate.RbacPolicyOutboxEvent {
-	return predicate.RbacPolicyOutboxEvent(sql.FieldLTE(FieldClaimToken, v))
+func ClaimTokenLTE(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.ClaimToken.Value(v)
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldLTE(FieldClaimToken, vc), err)
+}
+
+// ClaimTokenContains applies the Contains predicate on the "claim_token" field.
+func ClaimTokenContains(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.ClaimToken.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("claim_token value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldContains(FieldClaimToken, vcs), err)
+}
+
+// ClaimTokenHasPrefix applies the HasPrefix predicate on the "claim_token" field.
+func ClaimTokenHasPrefix(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.ClaimToken.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("claim_token value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldHasPrefix(FieldClaimToken, vcs), err)
+}
+
+// ClaimTokenHasSuffix applies the HasSuffix predicate on the "claim_token" field.
+func ClaimTokenHasSuffix(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.ClaimToken.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("claim_token value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldHasSuffix(FieldClaimToken, vcs), err)
 }
 
 // ClaimTokenIsNil applies the IsNil predicate on the "claim_token" field.
@@ -872,6 +1229,26 @@ func ClaimTokenIsNil() predicate.RbacPolicyOutboxEvent {
 // ClaimTokenNotNil applies the NotNil predicate on the "claim_token" field.
 func ClaimTokenNotNil() predicate.RbacPolicyOutboxEvent {
 	return predicate.RbacPolicyOutboxEvent(sql.FieldNotNull(FieldClaimToken))
+}
+
+// ClaimTokenEqualFold applies the EqualFold predicate on the "claim_token" field.
+func ClaimTokenEqualFold(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.ClaimToken.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("claim_token value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldEqualFold(FieldClaimToken, vcs), err)
+}
+
+// ClaimTokenContainsFold applies the ContainsFold predicate on the "claim_token" field.
+func ClaimTokenContainsFold(v *uuid.UUID) predicate.RbacPolicyOutboxEvent {
+	vc, err := ValueScanner.ClaimToken.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("claim_token value is not a string: %T", vc)
+	}
+	return predicate.RbacPolicyOutboxEventOrErr(sql.FieldContainsFold(FieldClaimToken, vcs), err)
 }
 
 // ClaimedUntilEQ applies the EQ predicate on the "claimed_until" field.

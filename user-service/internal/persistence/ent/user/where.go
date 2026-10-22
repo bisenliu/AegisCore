@@ -3,10 +3,12 @@
 package user
 
 import (
+	"fmt"
+	"uuid"
+
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
-	"github.com/google/uuid"
 )
 
 // ID filters vertices based on their ID field.
@@ -66,7 +68,8 @@ func UpdatedAt(v int64) predicate.User {
 
 // UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
 func UserID(v uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldEQ(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.UserOrErr(sql.FieldEQ(FieldUserID, vc), err)
 }
 
 // Nickname applies equality check predicate on the "nickname" field. It's identical to NicknameEQ.
@@ -181,42 +184,116 @@ func UpdatedAtLTE(v int64) predicate.User {
 
 // UserIDEQ applies the EQ predicate on the "user_id" field.
 func UserIDEQ(v uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldEQ(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.UserOrErr(sql.FieldEQ(FieldUserID, vc), err)
 }
 
 // UserIDNEQ applies the NEQ predicate on the "user_id" field.
 func UserIDNEQ(v uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldNEQ(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.UserOrErr(sql.FieldNEQ(FieldUserID, vc), err)
 }
 
 // UserIDIn applies the In predicate on the "user_id" field.
 func UserIDIn(vs ...uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldIn(FieldUserID, vs...))
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.UserID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.UserOrErr(sql.FieldIn(FieldUserID, v...), err)
 }
 
 // UserIDNotIn applies the NotIn predicate on the "user_id" field.
 func UserIDNotIn(vs ...uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldNotIn(FieldUserID, vs...))
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.UserID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.UserOrErr(sql.FieldNotIn(FieldUserID, v...), err)
 }
 
 // UserIDGT applies the GT predicate on the "user_id" field.
 func UserIDGT(v uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldGT(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.UserOrErr(sql.FieldGT(FieldUserID, vc), err)
 }
 
 // UserIDGTE applies the GTE predicate on the "user_id" field.
 func UserIDGTE(v uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldGTE(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.UserOrErr(sql.FieldGTE(FieldUserID, vc), err)
 }
 
 // UserIDLT applies the LT predicate on the "user_id" field.
 func UserIDLT(v uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldLT(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.UserOrErr(sql.FieldLT(FieldUserID, vc), err)
 }
 
 // UserIDLTE applies the LTE predicate on the "user_id" field.
 func UserIDLTE(v uuid.UUID) predicate.User {
-	return predicate.User(sql.FieldLTE(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.UserOrErr(sql.FieldLTE(FieldUserID, vc), err)
+}
+
+// UserIDContains applies the Contains predicate on the "user_id" field.
+func UserIDContains(v uuid.UUID) predicate.User {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.UserOrErr(sql.FieldContains(FieldUserID, vcs), err)
+}
+
+// UserIDHasPrefix applies the HasPrefix predicate on the "user_id" field.
+func UserIDHasPrefix(v uuid.UUID) predicate.User {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.UserOrErr(sql.FieldHasPrefix(FieldUserID, vcs), err)
+}
+
+// UserIDHasSuffix applies the HasSuffix predicate on the "user_id" field.
+func UserIDHasSuffix(v uuid.UUID) predicate.User {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.UserOrErr(sql.FieldHasSuffix(FieldUserID, vcs), err)
+}
+
+// UserIDEqualFold applies the EqualFold predicate on the "user_id" field.
+func UserIDEqualFold(v uuid.UUID) predicate.User {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.UserOrErr(sql.FieldEqualFold(FieldUserID, vcs), err)
+}
+
+// UserIDContainsFold applies the ContainsFold predicate on the "user_id" field.
+func UserIDContainsFold(v uuid.UUID) predicate.User {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.UserOrErr(sql.FieldContainsFold(FieldUserID, vcs), err)
 }
 
 // NicknameEQ applies the EQ predicate on the "nickname" field.

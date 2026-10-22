@@ -5,11 +5,11 @@ package ent
 import (
 	"fmt"
 	"strings"
+	"uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/aegiscore/user-service/internal/persistence/ent/role"
-	"github.com/google/uuid"
 )
 
 // Role is the model entity for the Role schema.
@@ -79,7 +79,7 @@ func (*Role) scanValues(columns []string) ([]any, error) {
 		case role.FieldName, role.FieldDescription:
 			values[i] = new(sql.NullString)
 		case role.FieldRoleID:
-			values[i] = new(uuid.UUID)
+			values[i] = role.ValueScanner.RoleID.ScanValue()
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -114,10 +114,10 @@ func (_m *Role) assignValues(columns []string, values []any) error {
 				_m.UpdatedAt = value.Int64
 			}
 		case role.FieldRoleID:
-			if value, ok := values[i].(*uuid.UUID); !ok {
-				return fmt.Errorf("unexpected type %T for field role_id", values[i])
-			} else if value != nil {
-				_m.RoleID = *value
+			if value, err := role.ValueScanner.RoleID.FromValue(values[i]); err != nil {
+				return err
+			} else {
+				_m.RoleID = value
 			}
 		case role.FieldName:
 			if value, ok := values[i].(*sql.NullString); !ok {

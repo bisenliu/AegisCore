@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -83,7 +83,7 @@ func validatePolicyRefreshMessage(message PolicyRefreshMessage) error {
 	if message.SchemaVersion != policyRefreshSchemaVersion {
 		return fmt.Errorf("unsupported rbac policy refresh schema version: %d", message.SchemaVersion)
 	}
-	if message.EventID == uuid.Nil {
+	if message.EventID == uuid.Nil() {
 		return fmt.Errorf("rbac policy refresh event_id is required")
 	}
 	if strings.TrimSpace(message.IdempotencyKey) == "" {
@@ -98,7 +98,7 @@ func validatePolicyRefreshMessage(message PolicyRefreshMessage) error {
 	for name, value := range map[string]*uuid.UUID{
 		"user_id": message.UserID, "role_id": message.RoleID, "permission_id": message.PermissionID,
 	} {
-		if value != nil && *value == uuid.Nil {
+		if value != nil && *value == uuid.Nil() {
 			return fmt.Errorf("rbac policy refresh %s must not be nil UUID", name)
 		}
 	}
@@ -117,7 +117,7 @@ func validatePolicyRefreshMessage(message PolicyRefreshMessage) error {
 		if message.PolicyRevision != nil {
 			return fmt.Errorf("rbac policy refresh policy_revision must be empty for %s", message.Kind)
 		}
-		if message.UserID == nil || *message.UserID == uuid.Nil {
+		if message.UserID == nil || *message.UserID == uuid.Nil() {
 			return fmt.Errorf("rbac policy refresh user_id is required for %s", message.Kind)
 		}
 	default:
@@ -160,7 +160,7 @@ func messageRevisionLogFields(message PolicyRefreshMessage) []zap.Field {
 
 func uuidValue(value *uuid.UUID) uuid.UUID {
 	if value == nil {
-		return uuid.Nil
+		return uuid.Nil()
 	}
 	return *value
 }

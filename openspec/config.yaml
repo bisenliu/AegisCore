@@ -3,7 +3,7 @@ schema: spec-driven
 context: |
   项目：AegisCore。
   输出语言：简体中文。OpenSpec 主规格、change artifacts 和 OPSX 相关文档的正文、标题、需求、场景、任务和面向协作者的说明必须使用简体中文；技术术语、路径、命令、配置项名称、Go symbol、HTTP 方法和 OpenSpec 关键字可以保留英文原文。
-  技术栈：Go 1.26 workspace、Gin、Fx、Ent、Atlas、PostgreSQL、Redis、Casbin、Prometheus、OpenTelemetry、Docker、Compose、Kubernetes、Helm。
+  技术栈：Go 1.27.3 workspace、Gin、Fx、Ent、Atlas、PostgreSQL、Redis、Casbin、Prometheus、OpenTelemetry、Docker、Compose、Kubernetes、Helm。
   代码结构：common 为跨服务共享模块；user-service 为用户服务模块；deployments 为 Docker、Compose、Kubernetes、Helm、Prometheus 和 Grafana 资产；docs 为项目文档；openspec/specs 为主规格；openspec/changes 为待实施或待归档的 change artifacts。
   运行入口：user-service/cmd/main.go 提供 serve 和 rbac CLI；user-service/internal/router/router.go 挂载健康检查、OpenAPI、metrics、pprof、认证、权限、角色和用户 API。
   业务边界：auth 管理认证会话、强制改密、refresh session 和 token version；user 管理用户资料；permission 管理只读权限投影、授权中间件、Casbin policy loader、policy sync 和 outbox dispatcher；role 管理角色、角色权限、用户角色绑定、RBAC seed 和超级管理员绑定；common 维护跨服务契约和无业务语义 runtime primitive。

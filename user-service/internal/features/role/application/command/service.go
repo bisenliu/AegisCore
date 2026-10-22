@@ -3,8 +3,7 @@ package command
 import (
 	"context"
 	"errors"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"

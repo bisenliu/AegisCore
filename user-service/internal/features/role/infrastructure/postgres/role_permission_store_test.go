@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"testing"
 	"time"
+	"uuid"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
-	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
 
@@ -193,29 +193,29 @@ func TestRolePermissionStorePostgresReplace(t *testing.T) {
 	permissionB := createPermissionForTest(ctx, t, permissionStore, permissionBID, "Create Reports", "POST", "/api/v1/reports", true)
 	permissionC := createPermissionForTest(ctx, t, permissionStore, permissionCID, "Delete Reports", "DELETE", "/api/v1/reports/:id", true)
 
-	replaced, err := bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{permissionA, permissionB}, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil))
+	replaced, err := bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{permissionA, permissionB}, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil()))
 	require.NoError(t, err)
 	require.ElementsMatch(t, []uuid.UUID{permissionAID, permissionBID}, permissionIDsForTest(replaced.Items))
 	items, err := bindingStore.ListByRoleID(ctx, roleID)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []uuid.UUID{permissionAID, permissionBID}, permissionIDsForTest(items))
 
-	replaced, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{permissionC, permissionC}, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil))
+	replaced, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{permissionC, permissionC}, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil()))
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{permissionCID}, permissionIDsForTest(replaced.Items))
 	items, err = bindingStore.ListByRoleID(ctx, roleID)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{permissionCID}, permissionIDsForTest(items))
 
-	_, err = bindingStore.Replace(ctx, missingRoleID, []roleapplication.PermissionReference{permissionA}, permissionPolicyChange("role_permissions_replaced", missingRoleID, uuid.Nil))
+	_, err = bindingStore.Replace(ctx, missingRoleID, []roleapplication.PermissionReference{permissionA}, permissionPolicyChange("role_permissions_replaced", missingRoleID, uuid.Nil()))
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
-	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{{PermissionID: missingPermissionID}}, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil))
+	_, err = bindingStore.Replace(ctx, roleID, []roleapplication.PermissionReference{{PermissionID: missingPermissionID}}, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil()))
 	require.ErrorIs(t, err, permissiondomain.ErrPermissionNotFound)
 	items, err = bindingStore.ListByRoleID(ctx, roleID)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{permissionCID}, permissionIDsForTest(items))
 
-	replaced, err = bindingStore.Replace(ctx, roleID, nil, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil))
+	replaced, err = bindingStore.Replace(ctx, roleID, nil, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil()))
 	require.NoError(t, err)
 	require.Empty(t, replaced.Items)
 	items, err = bindingStore.ListByRoleID(ctx, roleID)

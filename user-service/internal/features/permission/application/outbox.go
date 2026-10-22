@@ -5,8 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 const (
@@ -102,7 +101,7 @@ func (e *DispatcherDispatchError) Error() string {
 	if e == nil {
 		return ""
 	}
-	if e.EventID != uuid.Nil {
+	if e.EventID != uuid.Nil() {
 		return fmt.Sprintf("rbac policy outbox dispatch %s failed for event %s revision %d: %v", e.Stage, e.EventID.String(), e.Revision, e.Cause)
 	}
 	return fmt.Sprintf("rbac policy outbox dispatch %s failed: %v", e.Stage, e.Cause)

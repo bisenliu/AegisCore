@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"uuid"
 
 	entsql "entgo.io/ent/dialect/sql"
-	"github.com/google/uuid"
 
 	"github.com/aegiscore/common/runtime/datastore"
 	runtimeid "github.com/aegiscore/common/runtime/id"
@@ -70,8 +70,8 @@ func transactPolicyChange[T any](ctx context.Context, client *ent.Client, operat
 	revision, err := tx.RbacPolicyRevision.Create().
 		SetID(counter.LastRevision).
 		SetReason(change.Reason).
-		SetNillableRoleID(nonNilUUID(change.RoleID)).
-		SetNillablePermissionID(nonNilUUID(change.PermissionID)).
+		SetRoleID(nonNilUUID(change.RoleID)).
+		SetPermissionID(nonNilUUID(change.PermissionID)).
 		Save(ctx)
 	if err != nil {
 		return value, result, finish.Fail(fmt.Errorf("append rbac policy revision after %s: %w", operation, err))
@@ -81,8 +81,8 @@ func transactPolicyChange[T any](ctx context.Context, client *ent.Client, operat
 		SetPolicyRevision(revision.ID).
 		SetKind(string(change.Kind)).
 		SetReason(change.Reason).
-		SetNillableRoleID(nonNilUUID(change.RoleID)).
-		SetNillablePermissionID(nonNilUUID(change.PermissionID)).
+		SetRoleID(nonNilUUID(change.RoleID)).
+		SetPermissionID(nonNilUUID(change.PermissionID)).
 		SetIdempotencyKey(fmt.Sprintf("rbac-policy-revision:%d", revision.ID)).
 		Save(ctx)
 	if err != nil {
@@ -122,7 +122,7 @@ func transactUserRoleChange[T any](ctx context.Context, client *ent.Client, oper
 		SetID(counter.LastRevision).
 		SetReason(change.Reason).
 		SetUserID(change.UserID).
-		SetNillableRoleID(nonNilUUID(change.RoleID)).
+		SetRoleID(nonNilUUID(change.RoleID)).
 		Save(ctx)
 	if err != nil {
 		return value, result, finish.Fail(fmt.Errorf("append rbac user-role revision after %s: %w", operation, err))
@@ -132,8 +132,8 @@ func transactUserRoleChange[T any](ctx context.Context, client *ent.Client, oper
 		SetUserRoleRevision(revision.ID).
 		SetKind(string(change.Kind)).
 		SetReason(change.Reason).
-		SetNillableRoleID(nonNilUUID(change.RoleID)).
-		SetUserID(change.UserID).
+		SetRoleID(nonNilUUID(change.RoleID)).
+		SetUserID(&change.UserID).
 		SetIdempotencyKey(fmt.Sprintf("rbac-user-role-revision:%d", revision.ID)).
 		Save(ctx)
 	if err != nil {
@@ -233,7 +233,7 @@ func allocateUserRoleRevision(ctx context.Context, tx *ent.Tx) (*ent.RbacUserRol
 }
 
 func nonNilUUID(value uuid.UUID) *uuid.UUID {
-	if value == uuid.Nil {
+	if value == uuid.Nil() {
 		return nil
 	}
 	return &value

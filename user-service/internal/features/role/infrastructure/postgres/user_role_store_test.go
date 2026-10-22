@@ -3,8 +3,8 @@ package postgres
 import (
 	"context"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
@@ -76,29 +76,29 @@ func TestUserRoleStoreReplace(t *testing.T) {
 	_, err := userRoleStore.Add(ctx, userID, roleAID, userRolePolicyChange("user_role_added", userID, roleAID))
 	require.NoError(t, err)
 
-	replaced, err := userRoleStore.Replace(ctx, userID, []uuid.UUID{roleBID, roleCID}, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil))
+	replaced, err := userRoleStore.Replace(ctx, userID, []uuid.UUID{roleBID, roleCID}, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil()))
 	require.NoError(t, err)
 	require.ElementsMatch(t, []uuid.UUID{roleBID, roleCID}, roleIDs(replaced.Items))
 	items, err := userRoleStore.ListByUserID(ctx, userID)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{roleBID, roleCID}, roleIDs(items))
 
-	_, err = userRoleStore.Replace(ctx, missingUserID, []uuid.UUID{roleAID}, userRolePolicyChange("user_roles_replaced", missingUserID, uuid.Nil))
+	_, err = userRoleStore.Replace(ctx, missingUserID, []uuid.UUID{roleAID}, userRolePolicyChange("user_roles_replaced", missingUserID, uuid.Nil()))
 	require.ErrorIs(t, err, identity.ErrUserNotFound)
 
-	_, err = userRoleStore.Replace(ctx, userID, []uuid.UUID{roleBID, missingRoleID}, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil))
+	_, err = userRoleStore.Replace(ctx, userID, []uuid.UUID{roleBID, missingRoleID}, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil()))
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
 	items, err = userRoleStore.ListByUserID(ctx, userID)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{roleBID, roleCID}, roleIDs(items))
 
-	_, err = userRoleStore.Replace(ctx, userID, []uuid.UUID{roleBID, roleBID}, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil))
+	_, err = userRoleStore.Replace(ctx, userID, []uuid.UUID{roleBID, roleBID}, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil()))
 	require.ErrorIs(t, err, roledomain.ErrRoleNotFound)
 	items, err = userRoleStore.ListByUserID(ctx, userID)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{roleBID, roleCID}, roleIDs(items))
 
-	replaced, err = userRoleStore.Replace(ctx, userID, nil, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil))
+	replaced, err = userRoleStore.Replace(ctx, userID, nil, userRolePolicyChange("user_roles_replaced", userID, uuid.Nil()))
 	require.NoError(t, err)
 	require.Empty(t, replaced.Items)
 	items, err = userRoleStore.ListByUserID(ctx, userID)

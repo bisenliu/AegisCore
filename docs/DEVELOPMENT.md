@@ -2,7 +2,7 @@
 
 ## 1. 环境前提
 
-- Go 1.26。
+- Go 1.27.3。
 - `make`。
 - `golangci-lint`。
 - Docker，用于本地依赖、Compose 和 Testcontainers 场景。

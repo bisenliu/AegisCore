@@ -3,8 +3,7 @@ package seed
 import (
 	"context"
 	"fmt"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 	permissionvalidators "github.com/aegiscore/user-service/internal/features/permission/application/validators"

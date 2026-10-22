@@ -3,8 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	userapplication "github.com/aegiscore/user-service/internal/features/user/application"
 	userdomain "github.com/aegiscore/user-service/internal/features/user/domain"

@@ -95,7 +95,7 @@ func (_u *RbacUserRoleRevisionUpdate) sqlSave(ctx context.Context) (_node int, e
 		}
 	}
 	if _u.mutation.RoleIDCleared() {
-		_spec.ClearField(rbacuserrolerevision.FieldRoleID, field.TypeUUID)
+		_spec.ClearField(rbacuserrolerevision.FieldRoleID, field.TypeString)
 	}
 	if _u.mutation.OutboxEventCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -243,7 +243,7 @@ func (_u *RbacUserRoleRevisionUpdateOne) sqlSave(ctx context.Context) (_node *Rb
 		}
 	}
 	if _u.mutation.RoleIDCleared() {
-		_spec.ClearField(rbacuserrolerevision.FieldRoleID, field.TypeUUID)
+		_spec.ClearField(rbacuserrolerevision.FieldRoleID, field.TypeString)
 	}
 	if _u.mutation.OutboxEventCleared() {
 		edge := &sqlgraph.EdgeSpec{

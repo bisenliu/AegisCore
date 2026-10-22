@@ -2,8 +2,7 @@ package authctx
 
 import (
 	"context"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	commonauth "github.com/aegiscore/common/security/auth"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
@@ -13,15 +12,15 @@ import (
 func AuthenticatedSession(ctx context.Context) (uuid.UUID, string, error) {
 	userIDString, ok := commonauth.UserIDFromContext(ctx)
 	if !ok {
-		return uuid.Nil, "", authdomain.ErrMissingSession
+		return uuid.Nil(), "", authdomain.ErrMissingSession
 	}
 	parsedUserID, err := uuid.Parse(userIDString)
 	if err != nil {
-		return uuid.Nil, "", authdomain.ErrMissingSession
+		return uuid.Nil(), "", authdomain.ErrMissingSession
 	}
 	sessionID, ok := commonauth.SessionIDFromContext(ctx)
 	if !ok {
-		return uuid.Nil, "", authdomain.ErrMissingSession
+		return uuid.Nil(), "", authdomain.ErrMissingSession
 	}
 	return parsedUserID, sessionID, nil
 }
@@ -30,11 +29,11 @@ func AuthenticatedSession(ctx context.Context) (uuid.UUID, string, error) {
 func AuthenticatedUserID(ctx context.Context) (uuid.UUID, error) {
 	userIDString, ok := commonauth.UserIDFromContext(ctx)
 	if !ok {
-		return uuid.Nil, authdomain.ErrMissingSession
+		return uuid.Nil(), authdomain.ErrMissingSession
 	}
 	parsedUserID, err := uuid.Parse(userIDString)
 	if err != nil {
-		return uuid.Nil, authdomain.ErrMissingSession
+		return uuid.Nil(), authdomain.ErrMissingSession
 	}
 	return parsedUserID, nil
 }

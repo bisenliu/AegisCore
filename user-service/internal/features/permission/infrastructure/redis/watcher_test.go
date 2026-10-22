@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/google/uuid"
 	rediscmd "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -1067,13 +1067,13 @@ func testPolicyPublicationEvent(revision int64, change permissionapplication.Pol
 		event.Kind = policyRefreshKindPolicyChanged
 		event.PolicyRevision = int64Pointer(revision)
 	}
-	if change.UserID != uuid.Nil {
+	if change.UserID != uuid.Nil() {
 		event.UserID = &change.UserID
 	}
-	if change.RoleID != uuid.Nil {
+	if change.RoleID != uuid.Nil() {
 		event.RoleID = &change.RoleID
 	}
-	if change.PermissionID != uuid.Nil {
+	if change.PermissionID != uuid.Nil() {
 		event.PermissionID = &change.PermissionID
 	}
 	return event

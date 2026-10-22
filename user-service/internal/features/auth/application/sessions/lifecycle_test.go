@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
 	jwtv5 "github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 

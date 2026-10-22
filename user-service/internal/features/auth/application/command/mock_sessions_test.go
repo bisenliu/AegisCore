@@ -13,10 +13,10 @@ import (
 	context "context"
 	reflect "reflect"
 	time "time"
+	uuid "uuid"
 
 	tokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	domain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
 

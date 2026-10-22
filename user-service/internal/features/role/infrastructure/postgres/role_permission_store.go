@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"uuid"
 
 	"entgo.io/ent/dialect/sql"
-	"github.com/google/uuid"
 
 	"github.com/aegiscore/common/runtime/datastore"
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"

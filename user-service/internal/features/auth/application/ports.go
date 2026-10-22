@@ -3,8 +3,7 @@ package application
 import (
 	"context"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )

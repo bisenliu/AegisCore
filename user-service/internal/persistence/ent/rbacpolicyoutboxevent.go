@@ -5,13 +5,13 @@ package ent
 import (
 	"fmt"
 	"strings"
+	"uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
-	"github.com/google/uuid"
 )
 
 // RbacPolicyOutboxEvent is the model entity for the RbacPolicyOutboxEvent schema.
@@ -100,14 +100,20 @@ func (*RbacPolicyOutboxEvent) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case rbacpolicyoutboxevent.FieldRoleID, rbacpolicyoutboxevent.FieldUserID, rbacpolicyoutboxevent.FieldPermissionID, rbacpolicyoutboxevent.FieldClaimToken:
-			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
 		case rbacpolicyoutboxevent.FieldID, rbacpolicyoutboxevent.FieldCreatedAt, rbacpolicyoutboxevent.FieldUpdatedAt, rbacpolicyoutboxevent.FieldPolicyRevision, rbacpolicyoutboxevent.FieldUserRoleRevision, rbacpolicyoutboxevent.FieldAttemptCount, rbacpolicyoutboxevent.FieldNextAttemptAt, rbacpolicyoutboxevent.FieldClaimedUntil, rbacpolicyoutboxevent.FieldDeliveredAt:
 			values[i] = new(sql.NullInt64)
 		case rbacpolicyoutboxevent.FieldKind, rbacpolicyoutboxevent.FieldReason, rbacpolicyoutboxevent.FieldStatus, rbacpolicyoutboxevent.FieldLastError, rbacpolicyoutboxevent.FieldIdempotencyKey:
 			values[i] = new(sql.NullString)
 		case rbacpolicyoutboxevent.FieldEventID:
-			values[i] = new(uuid.UUID)
+			values[i] = rbacpolicyoutboxevent.ValueScanner.EventID.ScanValue()
+		case rbacpolicyoutboxevent.FieldRoleID:
+			values[i] = rbacpolicyoutboxevent.ValueScanner.RoleID.ScanValue()
+		case rbacpolicyoutboxevent.FieldUserID:
+			values[i] = rbacpolicyoutboxevent.ValueScanner.UserID.ScanValue()
+		case rbacpolicyoutboxevent.FieldPermissionID:
+			values[i] = rbacpolicyoutboxevent.ValueScanner.PermissionID.ScanValue()
+		case rbacpolicyoutboxevent.FieldClaimToken:
+			values[i] = rbacpolicyoutboxevent.ValueScanner.ClaimToken.ScanValue()
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -142,10 +148,10 @@ func (_m *RbacPolicyOutboxEvent) assignValues(columns []string, values []any) er
 				_m.UpdatedAt = value.Int64
 			}
 		case rbacpolicyoutboxevent.FieldEventID:
-			if value, ok := values[i].(*uuid.UUID); !ok {
-				return fmt.Errorf("unexpected type %T for field event_id", values[i])
-			} else if value != nil {
-				_m.EventID = *value
+			if value, err := rbacpolicyoutboxevent.ValueScanner.EventID.FromValue(values[i]); err != nil {
+				return err
+			} else {
+				_m.EventID = value
 			}
 		case rbacpolicyoutboxevent.FieldPolicyRevision:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -174,25 +180,22 @@ func (_m *RbacPolicyOutboxEvent) assignValues(columns []string, values []any) er
 				_m.Reason = value.String
 			}
 		case rbacpolicyoutboxevent.FieldRoleID:
-			if value, ok := values[i].(*sql.NullScanner); !ok {
-				return fmt.Errorf("unexpected type %T for field role_id", values[i])
-			} else if value.Valid {
-				_m.RoleID = new(uuid.UUID)
-				*_m.RoleID = *value.S.(*uuid.UUID)
+			if value, err := rbacpolicyoutboxevent.ValueScanner.RoleID.FromValue(values[i]); err != nil {
+				return err
+			} else {
+				_m.RoleID = value
 			}
 		case rbacpolicyoutboxevent.FieldUserID:
-			if value, ok := values[i].(*sql.NullScanner); !ok {
-				return fmt.Errorf("unexpected type %T for field user_id", values[i])
-			} else if value.Valid {
-				_m.UserID = new(uuid.UUID)
-				*_m.UserID = *value.S.(*uuid.UUID)
+			if value, err := rbacpolicyoutboxevent.ValueScanner.UserID.FromValue(values[i]); err != nil {
+				return err
+			} else {
+				_m.UserID = value
 			}
 		case rbacpolicyoutboxevent.FieldPermissionID:
-			if value, ok := values[i].(*sql.NullScanner); !ok {
-				return fmt.Errorf("unexpected type %T for field permission_id", values[i])
-			} else if value.Valid {
-				_m.PermissionID = new(uuid.UUID)
-				*_m.PermissionID = *value.S.(*uuid.UUID)
+			if value, err := rbacpolicyoutboxevent.ValueScanner.PermissionID.FromValue(values[i]); err != nil {
+				return err
+			} else {
+				_m.PermissionID = value
 			}
 		case rbacpolicyoutboxevent.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -220,11 +223,10 @@ func (_m *RbacPolicyOutboxEvent) assignValues(columns []string, values []any) er
 				*_m.LastError = value.String
 			}
 		case rbacpolicyoutboxevent.FieldClaimToken:
-			if value, ok := values[i].(*sql.NullScanner); !ok {
-				return fmt.Errorf("unexpected type %T for field claim_token", values[i])
-			} else if value.Valid {
-				_m.ClaimToken = new(uuid.UUID)
-				*_m.ClaimToken = *value.S.(*uuid.UUID)
+			if value, err := rbacpolicyoutboxevent.ValueScanner.ClaimToken.FromValue(values[i]); err != nil {
+				return err
+			} else {
+				_m.ClaimToken = value
 			}
 		case rbacpolicyoutboxevent.FieldClaimedUntil:
 			if value, ok := values[i].(*sql.NullInt64); !ok {

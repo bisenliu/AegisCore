@@ -6,13 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"uuid"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
-	"github.com/google/uuid"
 )
 
 // RbacPolicyOutboxEventUpdate is the builder for updating RbacPolicyOutboxEvent entities.
@@ -118,16 +118,8 @@ func (_u *RbacPolicyOutboxEventUpdate) ClearLastError() *RbacPolicyOutboxEventUp
 }
 
 // SetClaimToken sets the "claim_token" field.
-func (_u *RbacPolicyOutboxEventUpdate) SetClaimToken(v uuid.UUID) *RbacPolicyOutboxEventUpdate {
+func (_u *RbacPolicyOutboxEventUpdate) SetClaimToken(v *uuid.UUID) *RbacPolicyOutboxEventUpdate {
 	_u.mutation.SetClaimToken(v)
-	return _u
-}
-
-// SetNillableClaimToken sets the "claim_token" field if the given value is not nil.
-func (_u *RbacPolicyOutboxEventUpdate) SetNillableClaimToken(v *uuid.UUID) *RbacPolicyOutboxEventUpdate {
-	if v != nil {
-		_u.SetClaimToken(*v)
-	}
 	return _u
 }
 
@@ -271,13 +263,13 @@ func (_u *RbacPolicyOutboxEventUpdate) sqlSave(ctx context.Context) (_node int, 
 		_spec.AddField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)
 	}
 	if _u.mutation.RoleIDCleared() {
-		_spec.ClearField(rbacpolicyoutboxevent.FieldRoleID, field.TypeUUID)
+		_spec.ClearField(rbacpolicyoutboxevent.FieldRoleID, field.TypeString)
 	}
 	if _u.mutation.UserIDCleared() {
-		_spec.ClearField(rbacpolicyoutboxevent.FieldUserID, field.TypeUUID)
+		_spec.ClearField(rbacpolicyoutboxevent.FieldUserID, field.TypeString)
 	}
 	if _u.mutation.PermissionIDCleared() {
-		_spec.ClearField(rbacpolicyoutboxevent.FieldPermissionID, field.TypeUUID)
+		_spec.ClearField(rbacpolicyoutboxevent.FieldPermissionID, field.TypeString)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(rbacpolicyoutboxevent.FieldStatus, field.TypeString, value)
@@ -301,10 +293,14 @@ func (_u *RbacPolicyOutboxEventUpdate) sqlSave(ctx context.Context) (_node int, 
 		_spec.ClearField(rbacpolicyoutboxevent.FieldLastError, field.TypeString)
 	}
 	if value, ok := _u.mutation.ClaimToken(); ok {
-		_spec.SetField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeUUID, value)
+		vv, err := rbacpolicyoutboxevent.ValueScanner.ClaimToken.Value(value)
+		if err != nil {
+			return 0, err
+		}
+		_spec.SetField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeString, vv)
 	}
 	if _u.mutation.ClaimTokenCleared() {
-		_spec.ClearField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeUUID)
+		_spec.ClearField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeString)
 	}
 	if value, ok := _u.mutation.ClaimedUntil(); ok {
 		_spec.SetField(rbacpolicyoutboxevent.FieldClaimedUntil, field.TypeInt64, value)
@@ -434,16 +430,8 @@ func (_u *RbacPolicyOutboxEventUpdateOne) ClearLastError() *RbacPolicyOutboxEven
 }
 
 // SetClaimToken sets the "claim_token" field.
-func (_u *RbacPolicyOutboxEventUpdateOne) SetClaimToken(v uuid.UUID) *RbacPolicyOutboxEventUpdateOne {
+func (_u *RbacPolicyOutboxEventUpdateOne) SetClaimToken(v *uuid.UUID) *RbacPolicyOutboxEventUpdateOne {
 	_u.mutation.SetClaimToken(v)
-	return _u
-}
-
-// SetNillableClaimToken sets the "claim_token" field if the given value is not nil.
-func (_u *RbacPolicyOutboxEventUpdateOne) SetNillableClaimToken(v *uuid.UUID) *RbacPolicyOutboxEventUpdateOne {
-	if v != nil {
-		_u.SetClaimToken(*v)
-	}
 	return _u
 }
 
@@ -617,13 +605,13 @@ func (_u *RbacPolicyOutboxEventUpdateOne) sqlSave(ctx context.Context) (_node *R
 		_spec.AddField(rbacpolicyoutboxevent.FieldUpdatedAt, field.TypeInt64, value)
 	}
 	if _u.mutation.RoleIDCleared() {
-		_spec.ClearField(rbacpolicyoutboxevent.FieldRoleID, field.TypeUUID)
+		_spec.ClearField(rbacpolicyoutboxevent.FieldRoleID, field.TypeString)
 	}
 	if _u.mutation.UserIDCleared() {
-		_spec.ClearField(rbacpolicyoutboxevent.FieldUserID, field.TypeUUID)
+		_spec.ClearField(rbacpolicyoutboxevent.FieldUserID, field.TypeString)
 	}
 	if _u.mutation.PermissionIDCleared() {
-		_spec.ClearField(rbacpolicyoutboxevent.FieldPermissionID, field.TypeUUID)
+		_spec.ClearField(rbacpolicyoutboxevent.FieldPermissionID, field.TypeString)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(rbacpolicyoutboxevent.FieldStatus, field.TypeString, value)
@@ -647,10 +635,14 @@ func (_u *RbacPolicyOutboxEventUpdateOne) sqlSave(ctx context.Context) (_node *R
 		_spec.ClearField(rbacpolicyoutboxevent.FieldLastError, field.TypeString)
 	}
 	if value, ok := _u.mutation.ClaimToken(); ok {
-		_spec.SetField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeUUID, value)
+		vv, err := rbacpolicyoutboxevent.ValueScanner.ClaimToken.Value(value)
+		if err != nil {
+			return nil, err
+		}
+		_spec.SetField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeString, vv)
 	}
 	if _u.mutation.ClaimTokenCleared() {
-		_spec.ClearField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeUUID)
+		_spec.ClearField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeString)
 	}
 	if value, ok := _u.mutation.ClaimedUntil(); ok {
 		_spec.SetField(rbacpolicyoutboxevent.FieldClaimedUntil, field.TypeInt64, value)

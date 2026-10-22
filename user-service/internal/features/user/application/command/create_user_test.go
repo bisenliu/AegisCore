@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -35,7 +35,7 @@ func TestCreateUserServiceCreateUser(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "Alice", createdInput.Nickname)
 		require.Equal(t, "alice", createdInput.Username)
-		require.NotEqual(t, uuid.Nil, createdInput.UserID)
+		require.NotEqual(t, uuid.Nil(), createdInput.UserID)
 		require.Equal(t, identity.UserStatusNormal, createdInput.Status)
 		matched, err := verifyTestPassword(t, "secret", createdInput.PasswordHash)
 		require.NoError(t, err)

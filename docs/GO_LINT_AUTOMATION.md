@@ -25,6 +25,8 @@
 
 根 `.golangci.yml` 统一约束 `common/`、`user-service/`、`tools/openapi-convert/` 和 `tools/nacos-config-seed/`。CI 和本地开发应分别进入四个 Go module 执行；根目录不是单一 Go module，不应把根目录 `golangci-lint run ./...` 作为唯一命令。
 
+导入格式由根 `.golangci.yml` 的 `goimports` formatter 检查，`local-prefixes` 只标记仓库模块。Go 1.27 标准库 `uuid` 与其他标准库导入放在同一组；`goimports` 会保留已有导入块中的空行，迁移旧第三方 UUID 导入时需要清理旧分组空行。`Prefix(...)` 属于 GCI 的独立自定义分组语法，本仓库没有额外的导入排序脚本。
+
 ## Local Commands
 
 ```bash

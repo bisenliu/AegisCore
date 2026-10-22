@@ -2,8 +2,7 @@ package domain
 
 import (
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // AuthSession 包含 refresh token 会话元数据。

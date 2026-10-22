@@ -1,10 +1,10 @@
 package id
 
-import "github.com/google/uuid"
+import "uuid"
 
 // NewUUID 生成当前跨服务默认 UUID。
 func NewUUID() (uuid.UUID, error) {
-	return uuid.NewV7()
+	return uuid.NewV7(), nil
 }
 
 // NewUUIDString 生成当前跨服务默认 UUID 字符串。

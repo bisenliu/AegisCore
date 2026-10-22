@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"uuid"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 

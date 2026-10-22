@@ -24,7 +24,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           # 与 go.work / go.mod 中声明的工具链基线保持一致。
-          go-version: '1.26.5'
+          go-version: '1.27.3'
           cache: true
           cache-dependency-path: |
             go.work
@@ -54,7 +54,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.3'
           cache: true
           cache-dependency-path: |
             go.work

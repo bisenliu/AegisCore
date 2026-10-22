@@ -1,3 +1,3 @@
 module github.com/aegiscore/tools/nacos-config-seed
 
-go 1.26.5
+go 1.27.3

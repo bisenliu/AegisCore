@@ -12,8 +12,8 @@ package validators
 import (
 	context "context"
 	reflect "reflect"
+	uuid "uuid"
 
-	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
 

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/aegiscore/user-service/internal/shared/identity"

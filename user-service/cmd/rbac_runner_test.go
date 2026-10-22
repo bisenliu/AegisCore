@@ -20,23 +20,23 @@ func TestRunRBACSeedCommand(t *testing.T) {
 		cleanupCalled := false
 		runners := rbacCommandRunnersWithFactory(func(_ context.Context) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
-					service: newRBACSeedServiceMock(t, func(_ context.Context, opts roleseed.SeedOptions) (roleseed.SeedResult, error) {
-						seedCalled = true
-						require.True(t, opts.ReactivateSystem)
-						require.True(t, opts.SyncSystemBindings)
-						return roleseed.SeedResult{
-							RolesInserted:             1,
-							RolesUpdated:              2,
-							PermissionsInserted:       3,
-							PermissionsUpdated:        4,
-							RolePermissionBindingsAdd: 5,
-							RolePermissionBindingsDel: 6,
-						}, nil
-					}),
-				}, func() error {
-					cleanupCalled = true
-					return nil
-				}, nil
+				service: newRBACSeedServiceMock(t, func(_ context.Context, opts roleseed.SeedOptions) (roleseed.SeedResult, error) {
+					seedCalled = true
+					require.True(t, opts.ReactivateSystem)
+					require.True(t, opts.SyncSystemBindings)
+					return roleseed.SeedResult{
+						RolesInserted:             1,
+						RolesUpdated:              2,
+						PermissionsInserted:       3,
+						PermissionsUpdated:        4,
+						RolePermissionBindingsAdd: 5,
+						RolePermissionBindingsDel: 6,
+					}, nil
+				}),
+			}, func() error {
+				cleanupCalled = true
+				return nil
+			}, nil
 		})
 
 		out, err := captureStdout(t, func() error {
@@ -65,12 +65,12 @@ func TestRunRBACSeedCommand(t *testing.T) {
 		cleanupErr := errors.New("cleanup failed")
 		runners := rbacCommandRunnersWithFactory(func(context.Context) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
-					service: newRBACSeedServiceMock(t, func(context.Context, roleseed.SeedOptions) (roleseed.SeedResult, error) {
-						return roleseed.SeedResult{}, seedErr
-					}),
-				}, func() error {
-					return cleanupErr
-				}, nil
+				service: newRBACSeedServiceMock(t, func(context.Context, roleseed.SeedOptions) (roleseed.SeedResult, error) {
+					return roleseed.SeedResult{}, seedErr
+				}),
+			}, func() error {
+				return cleanupErr
+			}, nil
 		})
 
 		err := runners.seedRunner(context.Background(), rbacSeedOptions{})
@@ -88,11 +88,11 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 		t.Setenv(passwordEnv, " long secret ")
 		runners := rbacCommandRunnersWithFactory(func(_ context.Context) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
-					bootstrap: rolebootstrap.NewService(store, &testBootstrapHasher{}),
-				}, func() error {
-					cleanupCalled = true
-					return nil
-				}, nil
+				bootstrap: rolebootstrap.NewService(store, &testBootstrapHasher{}),
+			}, func() error {
+				cleanupCalled = true
+				return nil
+			}, nil
 		})
 
 		out, err := captureStdout(t, func() error {
@@ -121,10 +121,10 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 		t.Setenv(passwordEnv, "long-password")
 		runners := rbacCommandRunnersWithFactory(func(context.Context) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
-					bootstrap: rolebootstrap.NewService(&testBootstrapStore{err: bootstrapErr}, &testBootstrapHasher{}),
-				}, func() error {
-					return cleanupErr
-				}, nil
+				bootstrap: rolebootstrap.NewService(&testBootstrapStore{err: bootstrapErr}, &testBootstrapHasher{}),
+			}, func() error {
+				return cleanupErr
+			}, nil
 		})
 
 		err := runners.bootstrapSuperAdminRunner(context.Background(), rbacBootstrapSuperAdminOptions{username: "admin", passwordEnv: passwordEnv})
@@ -137,10 +137,10 @@ func TestRunBootstrapSuperAdminCommand(t *testing.T) {
 		passwordEnv := uniquePasswordEnv(t)
 		runners := rbacCommandRunnersWithFactory(func(context.Context) (rbacSeedDependencies, func() error, error) {
 			return rbacSeedDependencies{
-					bootstrap: rolebootstrap.NewService(&testBootstrapStore{}, &testBootstrapHasher{}),
-				}, func() error {
-					return nil
-				}, nil
+				bootstrap: rolebootstrap.NewService(&testBootstrapStore{}, &testBootstrapHasher{}),
+			}, func() error {
+				return nil
+			}, nil
 		})
 
 		err := runners.bootstrapSuperAdminRunner(context.Background(), rbacBootstrapSuperAdminOptions{username: "admin", passwordEnv: passwordEnv})

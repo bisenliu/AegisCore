@@ -9,10 +9,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
-	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 
@@ -30,7 +30,7 @@ func TestOutboxStoreAckRequiresCurrentProcessingClaim(t *testing.T) {
 	now := time.Date(2026, 7, 31, 5, 0, 0, 0, time.UTC)
 	claimToken := uuid.New()
 	event := createTestOutboxEvent(t, client, 1, now.Add(-time.Minute), func(builder *ent.RbacPolicyOutboxEventCreate) {
-		builder.SetStatus(permissionapplication.OutboxStatusProcessing).SetClaimToken(claimToken).SetClaimedUntil(now.Add(time.Minute).UnixMilli()).SetLastError("old error")
+		builder.SetStatus(permissionapplication.OutboxStatusProcessing).SetClaimToken(&claimToken).SetClaimedUntil(now.Add(time.Minute).UnixMilli()).SetLastError("old error")
 	})
 
 	updated, err := store.Ack(ctx, event.EventID, uuid.New(), now)
@@ -59,7 +59,7 @@ func TestOutboxStoreFailRequiresCurrentClaimAndIncrementsAttempt(t *testing.T) {
 	now := time.Date(2026, 7, 31, 5, 0, 0, 0, time.UTC)
 	claimToken := uuid.New()
 	event := createTestOutboxEvent(t, client, 2, now.Add(-time.Minute), func(builder *ent.RbacPolicyOutboxEventCreate) {
-		builder.SetStatus(permissionapplication.OutboxStatusProcessing).SetAttemptCount(3).SetClaimToken(claimToken).SetClaimedUntil(now.Add(time.Minute).UnixMilli())
+		builder.SetStatus(permissionapplication.OutboxStatusProcessing).SetAttemptCount(3).SetClaimToken(&claimToken).SetClaimedUntil(now.Add(time.Minute).UnixMilli())
 	})
 
 	updated, err := store.Fail(ctx, event.EventID, uuid.New(), now, now.Add(time.Minute), "ignored")
@@ -89,8 +89,9 @@ func TestOutboxStoreBacklogIsReadOnlyAndIncludesExpiredLease(t *testing.T) {
 	createTestOutboxEvent(t, client, 1, oldest, func(builder *ent.RbacPolicyOutboxEventCreate) {
 		builder.SetNextAttemptAt(now.Add(-time.Second).UnixMilli())
 	})
+	claimToken := uuid.New()
 	processing := createTestOutboxEvent(t, client, 2, now.Add(-5*time.Minute), func(builder *ent.RbacPolicyOutboxEventCreate) {
-		builder.SetStatus(permissionapplication.OutboxStatusProcessing).SetClaimToken(uuid.New()).SetClaimedUntil(now.Add(-time.Second).UnixMilli())
+		builder.SetStatus(permissionapplication.OutboxStatusProcessing).SetClaimToken(&claimToken).SetClaimedUntil(now.Add(-time.Second).UnixMilli())
 	})
 	createTestOutboxEvent(t, client, 3, now.Add(-time.Minute), func(builder *ent.RbacPolicyOutboxEventCreate) {
 		builder.SetStatus(permissionapplication.OutboxStatusFailed).SetNextAttemptAt(now.Add(time.Minute).UnixMilli())
@@ -186,6 +187,7 @@ func TestOutboxStorePostgresConcurrentClaimsDoNotOverlap(t *testing.T) {
 		require.Len(t, claims, 3)
 		claimCount += len(claims)
 		for _, claim := range claims {
+			require.Equal(t, byte(4), claim.ClaimToken[6]>>4)
 			revision := claim.Event.Revision()
 			_, duplicate := claimedRevisions[revision]
 			require.False(t, duplicate, "revision %d was claimed twice", revision)
@@ -224,7 +226,7 @@ func TestOutboxStorePostgresReclaimsExpiredLeaseAndRejectsStaleToken(t *testing.
 	now := time.Date(2026, 7, 31, 5, 0, 0, 0, time.UTC)
 	staleToken := uuid.New()
 	event := createTestOutboxEvent(t, client, 1, now.Add(-time.Minute), func(builder *ent.RbacPolicyOutboxEventCreate) {
-		builder.SetStatus(permissionapplication.OutboxStatusProcessing).SetClaimToken(staleToken).SetClaimedUntil(now.Add(-time.Second).UnixMilli())
+		builder.SetStatus(permissionapplication.OutboxStatusProcessing).SetClaimToken(&staleToken).SetClaimedUntil(now.Add(-time.Second).UnixMilli())
 	})
 
 	claims, err := store.Claim(ctx, now, 1, time.Minute)

@@ -3,8 +3,11 @@
 package role
 
 import (
+	"uuid"
+
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/schema/field"
 )
 
 const (
@@ -87,6 +90,10 @@ var (
 	DefaultActive bool
 	// DefaultIsSystem holds the default value on creation for the "is_system" field.
 	DefaultIsSystem bool
+	// ValueScanner of all Role fields.
+	ValueScanner struct {
+		RoleID field.TypeValueScanner[uuid.UUID]
+	}
 )
 
 // OrderOption defines the ordering options for the Role queries.

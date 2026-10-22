@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"testing"
 	"time"
+	"uuid"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/alicebob/miniredis/v2"
-	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	rediscmd "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -40,6 +40,8 @@ func TestRBACOutboxRedisRecoveryConvergesAllProjectionsWithoutNewWrite(t *testin
 		permissioncasbin.NewEngine(permissioncasbin.NewPolicyLoader(client), permissioncasbin.NopReloadMetrics(), resolver),
 	}
 	for _, engine := range engines {
+		require.NoError(t, engine.Start(ctx))
+		t.Cleanup(func() { _ = engine.Stop(context.Background()) })
 		applied, reloadErr := engine.ReloadToRevision(ctx, 0)
 		require.NoError(t, reloadErr)
 		require.Zero(t, applied)

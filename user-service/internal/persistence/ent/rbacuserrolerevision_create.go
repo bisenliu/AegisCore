@@ -6,13 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"uuid"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
-	"github.com/google/uuid"
 )
 
 // RbacUserRoleRevisionCreate is the builder for creating a RbacUserRoleRevision entity.
@@ -50,16 +50,8 @@ func (_c *RbacUserRoleRevisionCreate) SetUserID(v uuid.UUID) *RbacUserRoleRevisi
 }
 
 // SetRoleID sets the "role_id" field.
-func (_c *RbacUserRoleRevisionCreate) SetRoleID(v uuid.UUID) *RbacUserRoleRevisionCreate {
+func (_c *RbacUserRoleRevisionCreate) SetRoleID(v *uuid.UUID) *RbacUserRoleRevisionCreate {
 	_c.mutation.SetRoleID(v)
-	return _c
-}
-
-// SetNillableRoleID sets the "role_id" field if the given value is not nil.
-func (_c *RbacUserRoleRevisionCreate) SetNillableRoleID(v *uuid.UUID) *RbacUserRoleRevisionCreate {
-	if v != nil {
-		_c.SetRoleID(*v)
-	}
 	return _c
 }
 
@@ -152,7 +144,10 @@ func (_c *RbacUserRoleRevisionCreate) sqlSave(ctx context.Context) (*RbacUserRol
 	if err := _c.check(); err != nil {
 		return nil, err
 	}
-	_node, _spec := _c.createSpec()
+	_node, _spec, err := _c.createSpec()
+	if err != nil {
+		return nil, err
+	}
 	if err := sqlgraph.CreateNode(ctx, _c.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
@@ -168,7 +163,7 @@ func (_c *RbacUserRoleRevisionCreate) sqlSave(ctx context.Context) (*RbacUserRol
 	return _node, nil
 }
 
-func (_c *RbacUserRoleRevisionCreate) createSpec() (*RbacUserRoleRevision, *sqlgraph.CreateSpec) {
+func (_c *RbacUserRoleRevisionCreate) createSpec() (*RbacUserRoleRevision, *sqlgraph.CreateSpec, error) {
 	var (
 		_node = &RbacUserRoleRevision{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(rbacuserrolerevision.Table, sqlgraph.NewFieldSpec(rbacuserrolerevision.FieldID, field.TypeInt64))
@@ -187,12 +182,20 @@ func (_c *RbacUserRoleRevisionCreate) createSpec() (*RbacUserRoleRevision, *sqlg
 		_node.Reason = value
 	}
 	if value, ok := _c.mutation.UserID(); ok {
-		_spec.SetField(rbacuserrolerevision.FieldUserID, field.TypeUUID, value)
+		vv, err := rbacuserrolerevision.ValueScanner.UserID.Value(value)
+		if err != nil {
+			return nil, nil, err
+		}
+		_spec.SetField(rbacuserrolerevision.FieldUserID, field.TypeString, vv)
 		_node.UserID = value
 	}
 	if value, ok := _c.mutation.RoleID(); ok {
-		_spec.SetField(rbacuserrolerevision.FieldRoleID, field.TypeUUID, value)
-		_node.RoleID = &value
+		vv, err := rbacuserrolerevision.ValueScanner.RoleID.Value(value)
+		if err != nil {
+			return nil, nil, err
+		}
+		_spec.SetField(rbacuserrolerevision.FieldRoleID, field.TypeString, vv)
+		_node.RoleID = value
 	}
 	if nodes := _c.mutation.OutboxEventIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -210,7 +213,7 @@ func (_c *RbacUserRoleRevisionCreate) createSpec() (*RbacUserRoleRevision, *sqlg
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	return _node, _spec
+	return _node, _spec, nil
 }
 
 // OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
@@ -385,7 +388,10 @@ func (_c *RbacUserRoleRevisionCreateBulk) Save(ctx context.Context) ([]*RbacUser
 				}
 				builder.mutation = mutation
 				var err error
-				nodes[i], specs[i] = builder.createSpec()
+				nodes[i], specs[i], err = builder.createSpec()
+				if err != nil {
+					return nil, err
+				}
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {

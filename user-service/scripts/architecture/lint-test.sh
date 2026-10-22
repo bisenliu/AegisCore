@@ -43,6 +43,7 @@ mkdir -p \
   "${fixture_root}/openspec/changes" \
   "${fixture_root}/openspec/specs" \
   "${fixture_root}/tools/openapi-convert" \
+  "${fixture_root}/tools/nacos-config-seed" \
   "${fixture_root}/user-service/ent" \
   "${fixture_root}/user-service/docs" \
   "${fixture_root}/user-service/internal/persistence/ent/schema" \
@@ -61,18 +62,19 @@ mkdir -p \
 cat > "${fixture_root}/common/go.mod" <<'EOF'
 module github.com/aegiscore/common
 
-go 1.26.5
+go 1.27.3
 EOF
 
 # 步骤 6：写入 go.work，覆盖 workspace go 版本、toolchain 和模块列表检查。
 cat > "${fixture_root}/go.work" <<'EOF'
-go 1.26.5
+go 1.27.3
 
-toolchain go1.26.5
+toolchain go1.27.3
 
 use (
 	./common
 	./tools/openapi-convert
+	./tools/nacos-config-seed
 	./user-service
 )
 EOF
@@ -81,14 +83,21 @@ EOF
 cat > "${fixture_root}/tools/openapi-convert/go.mod" <<'EOF'
 module github.com/aegiscore/tools/openapi-convert
 
-go 1.26.5
+go 1.27.3
+EOF
+
+# 故意让第二个工具模块落后一个补丁版，验证全部 module 都受版本检查覆盖。
+cat > "${fixture_root}/tools/nacos-config-seed/go.mod" <<'EOF'
+module github.com/aegiscore/tools/nacos-config-seed
+
+go 1.27.2
 EOF
 
 # 步骤 8：写入 user-service/go.mod，覆盖服务模块版本检查。
 cat > "${fixture_root}/user-service/go.mod" <<'EOF'
 module github.com/aegiscore/user-service
 
-go 1.26.5
+go 1.27.3
 EOF
 
 # 步骤 9：写入故意违规的 CI workflow，触发重复 lint、重复单测和模块本地容器测试入口检查。
@@ -104,7 +113,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.3'
       - run: |
           make lint
           make test
@@ -126,7 +135,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.3'
       - run: make lint
   unit:
     runs-on: ubuntu-latest
@@ -407,6 +416,11 @@ if [[ "${status}" -eq 0 ]]; then
 fi
 
 # 步骤 43：断言 mock_generate.go build tag 违规被报告。
+if [[ "${output}" != *"tools/nacos-config-seed/go.mod go has Go version 1.27.2; expected 1.27.3"* ]]; then
+  printf 'architecture-lint-test: expected nacos tool module Go version mismatch report\n%s\n' "${output}" >&2
+  exit 1
+fi
+
 if [[ "${output}" != *"mock_generate.go must use //go:build generate"* ]]; then
   printf 'architecture-lint-test: expected mock generate build tag violation report\n%s\n' "${output}" >&2
   exit 1

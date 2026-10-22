@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	permissionpostgres "github.com/aegiscore/user-service/internal/features/permission/infrastructure/postgres"
@@ -74,7 +74,7 @@ func TestSystemRoleOrdinaryWritesAreProtectedWithoutPolicyFacts(t *testing.T) {
 		{
 			name: "replace permissions",
 			run: func() error {
-				_, err := bindings.Replace(ctx, roleID, []roleapplication.PermissionReference{otherPermission}, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil))
+				_, err := bindings.Replace(ctx, roleID, []roleapplication.PermissionReference{otherPermission}, permissionPolicyChange("role_permissions_replaced", roleID, uuid.Nil()))
 				return err
 			},
 		},

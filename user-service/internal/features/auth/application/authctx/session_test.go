@@ -3,8 +3,8 @@ package authctx
 import (
 	"context"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	commonauth "github.com/aegiscore/common/security/auth"

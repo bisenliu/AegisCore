@@ -2,7 +2,7 @@
 
 ## 1. 总体结构
 
-AegisCore 是 Go 1.26 workspace，当前由四个主要部分组成：
+AegisCore 是 Go 1.27.3 workspace，当前由四个主要部分组成：
 
 | 模块 | 职责 |
 |---|---|

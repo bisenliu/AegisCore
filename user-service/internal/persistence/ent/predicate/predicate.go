@@ -9,11 +9,44 @@ import (
 // Permission is the predicate function for permission builders.
 type Permission func(*sql.Selector)
 
+// PermissionOrErr calls the predicate only if the error is not nit.
+func PermissionOrErr(p Permission, err error) Permission {
+	return func(s *sql.Selector) {
+		if err != nil {
+			s.AddError(err)
+			return
+		}
+		p(s)
+	}
+}
+
 // RbacPolicyOutboxEvent is the predicate function for rbacpolicyoutboxevent builders.
 type RbacPolicyOutboxEvent func(*sql.Selector)
 
+// RbacPolicyOutboxEventOrErr calls the predicate only if the error is not nit.
+func RbacPolicyOutboxEventOrErr(p RbacPolicyOutboxEvent, err error) RbacPolicyOutboxEvent {
+	return func(s *sql.Selector) {
+		if err != nil {
+			s.AddError(err)
+			return
+		}
+		p(s)
+	}
+}
+
 // RbacPolicyRevision is the predicate function for rbacpolicyrevision builders.
 type RbacPolicyRevision func(*sql.Selector)
+
+// RbacPolicyRevisionOrErr calls the predicate only if the error is not nit.
+func RbacPolicyRevisionOrErr(p RbacPolicyRevision, err error) RbacPolicyRevision {
+	return func(s *sql.Selector) {
+		if err != nil {
+			s.AddError(err)
+			return
+		}
+		p(s)
+	}
+}
 
 // RbacPolicyRevisionCounter is the predicate function for rbacpolicyrevisioncounter builders.
 type RbacPolicyRevisionCounter func(*sql.Selector)
@@ -21,17 +54,50 @@ type RbacPolicyRevisionCounter func(*sql.Selector)
 // RbacUserRoleRevision is the predicate function for rbacuserrolerevision builders.
 type RbacUserRoleRevision func(*sql.Selector)
 
+// RbacUserRoleRevisionOrErr calls the predicate only if the error is not nit.
+func RbacUserRoleRevisionOrErr(p RbacUserRoleRevision, err error) RbacUserRoleRevision {
+	return func(s *sql.Selector) {
+		if err != nil {
+			s.AddError(err)
+			return
+		}
+		p(s)
+	}
+}
+
 // RbacUserRoleRevisionCounter is the predicate function for rbacuserrolerevisioncounter builders.
 type RbacUserRoleRevisionCounter func(*sql.Selector)
 
 // Role is the predicate function for role builders.
 type Role func(*sql.Selector)
 
+// RoleOrErr calls the predicate only if the error is not nit.
+func RoleOrErr(p Role, err error) Role {
+	return func(s *sql.Selector) {
+		if err != nil {
+			s.AddError(err)
+			return
+		}
+		p(s)
+	}
+}
+
 // RolePermission is the predicate function for rolepermission builders.
 type RolePermission func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)
+
+// UserOrErr calls the predicate only if the error is not nit.
+func UserOrErr(p User, err error) User {
+	return func(s *sql.Selector) {
+		if err != nil {
+			s.AddError(err)
+			return
+		}
+		p(s)
+	}
+}
 
 // UserRole is the predicate function for userrole builders.
 type UserRole func(*sql.Selector)

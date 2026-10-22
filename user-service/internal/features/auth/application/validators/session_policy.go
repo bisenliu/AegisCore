@@ -2,8 +2,7 @@ package validators
 
 import (
 	"errors"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	commonauth "github.com/aegiscore/common/security/auth"
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"

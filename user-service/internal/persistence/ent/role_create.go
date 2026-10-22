@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"uuid"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -13,7 +14,6 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent/role"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/userrole"
-	"github.com/google/uuid"
 )
 
 // RoleCreate is the builder for creating a Role entity.
@@ -239,7 +239,10 @@ func (_c *RoleCreate) sqlSave(ctx context.Context) (*Role, error) {
 	if err := _c.check(); err != nil {
 		return nil, err
 	}
-	_node, _spec := _c.createSpec()
+	_node, _spec, err := _c.createSpec()
+	if err != nil {
+		return nil, err
+	}
 	if err := sqlgraph.CreateNode(ctx, _c.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
@@ -255,7 +258,7 @@ func (_c *RoleCreate) sqlSave(ctx context.Context) (*Role, error) {
 	return _node, nil
 }
 
-func (_c *RoleCreate) createSpec() (*Role, *sqlgraph.CreateSpec) {
+func (_c *RoleCreate) createSpec() (*Role, *sqlgraph.CreateSpec, error) {
 	var (
 		_node = &Role{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(role.Table, sqlgraph.NewFieldSpec(role.FieldID, field.TypeInt64))
@@ -274,7 +277,11 @@ func (_c *RoleCreate) createSpec() (*Role, *sqlgraph.CreateSpec) {
 		_node.UpdatedAt = value
 	}
 	if value, ok := _c.mutation.RoleID(); ok {
-		_spec.SetField(role.FieldRoleID, field.TypeUUID, value)
+		vv, err := role.ValueScanner.RoleID.Value(value)
+		if err != nil {
+			return nil, nil, err
+		}
+		_spec.SetField(role.FieldRoleID, field.TypeString, vv)
 		_node.RoleID = value
 	}
 	if value, ok := _c.mutation.Name(); ok {
@@ -325,7 +332,7 @@ func (_c *RoleCreate) createSpec() (*Role, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	return _node, _spec
+	return _node, _spec, nil
 }
 
 // OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
@@ -637,7 +644,10 @@ func (_c *RoleCreateBulk) Save(ctx context.Context) ([]*Role, error) {
 				}
 				builder.mutation = mutation
 				var err error
-				nodes[i], specs[i] = builder.createSpec()
+				nodes[i], specs[i], err = builder.createSpec()
+				if err != nil {
+					return nil, err
+				}
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {

@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"uuid"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
-	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"

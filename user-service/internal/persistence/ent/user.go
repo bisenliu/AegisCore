@@ -5,11 +5,11 @@ package ent
 import (
 	"fmt"
 	"strings"
+	"uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/aegiscore/user-service/internal/persistence/ent/user"
-	"github.com/google/uuid"
 )
 
 // User is the model entity for the User schema.
@@ -70,7 +70,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		case user.FieldNickname, user.FieldUsername, user.FieldPasswordHash:
 			values[i] = new(sql.NullString)
 		case user.FieldUserID:
-			values[i] = new(uuid.UUID)
+			values[i] = user.ValueScanner.UserID.ScanValue()
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -105,10 +105,10 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				_m.UpdatedAt = value.Int64
 			}
 		case user.FieldUserID:
-			if value, ok := values[i].(*uuid.UUID); !ok {
-				return fmt.Errorf("unexpected type %T for field user_id", values[i])
-			} else if value != nil {
-				_m.UserID = *value
+			if value, err := user.ValueScanner.UserID.FromValue(values[i]); err != nil {
+				return err
+			} else {
+				_m.UserID = value
 			}
 		case user.FieldNickname:
 			if value, ok := values[i].(*sql.NullString); !ok {

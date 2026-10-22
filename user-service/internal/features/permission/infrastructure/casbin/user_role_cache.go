@@ -3,8 +3,7 @@ package casbin
 import (
 	"context"
 	"fmt"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/aegiscore/common/runtime/localcache"
 	serviceconfig "github.com/aegiscore/user-service/internal/config"

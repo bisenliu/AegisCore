@@ -5,8 +5,8 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -19,7 +19,7 @@ import (
 func TestRoleCommandServiceCreateRoleDefaultsAndNormalizes(t *testing.T) {
 	fixture := newRoleCommandFixture(t)
 	fixture.roles.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, input roleapplication.CreateRoleInput, _ roleapplication.PolicyChange) (*roleapplication.RoleWriteResult, error) {
-		require.NotEqual(t, uuid.Nil, input.RoleID)
+		require.NotEqual(t, uuid.Nil(), input.RoleID)
 		require.Equal(t, "Operator", input.Name)
 		require.Equal(t, "Ops user", input.Description)
 		require.True(t, input.Active)
@@ -29,7 +29,7 @@ func TestRoleCommandServiceCreateRoleDefaultsAndNormalizes(t *testing.T) {
 
 	result, err := fixture.service.CreateRole(context.Background(), CreateRoleCommand{Name: "  Operator  ", Description: "  Ops user  "})
 	require.NoError(t, err)
-	require.NotEqual(t, uuid.Nil, result.Role.RoleID)
+	require.NotEqual(t, uuid.Nil(), result.Role.RoleID)
 	require.True(t, result.Role.Active)
 	require.False(t, result.Role.IsSystem)
 	require.Equal(t, "Operator", result.Role.Name)
@@ -121,7 +121,7 @@ func TestRoleCommandServiceUserRoleBindings(t *testing.T) {
 	gomock.InOrder(
 		fixture.roles.EXPECT().GetByRoleIDs(gomock.Any(), uuidSliceMatches(roleID, otherRoleID)).Return([]roledomain.Role{role, otherRole}, nil),
 		fixture.userRoles.EXPECT().Replace(gomock.Any(), userID, uuidSliceMatches(roleID, otherRoleID), gomock.Any()).Return(roleapplication.RolesWriteResult{Items: []roledomain.Role{role, otherRole}, Revision: 12}, nil),
-		fixture.policyChanges.EXPECT().NotifyUserRoleChanged(gomock.Any(), int64(12), policyChangeMatches(permissionapplication.PolicyChangeKindUserRole, "user_roles_replaced", userID, uuid.Nil)).Return(nil),
+		fixture.policyChanges.EXPECT().NotifyUserRoleChanged(gomock.Any(), int64(12), policyChangeMatches(permissionapplication.PolicyChangeKindUserRole, "user_roles_replaced", userID, uuid.Nil())).Return(nil),
 	)
 
 	replaced, err := fixture.service.ReplaceUserRoles(context.Background(), ReplaceUserRolesCommand{UserID: userID, RoleIDs: []uuid.UUID{roleID, otherRoleID, roleID}})
@@ -198,7 +198,7 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	gomock.InOrder(
 		fixture.permissions.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
 		fixture.rolePermissions.EXPECT().Add(gomock.Any(), roleID, permission, gomock.Any()).Return(roleapplication.PermissionsWriteResult{Items: []roleapplication.PermissionReference{permission}, Revision: 21}, nil),
-		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(21), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permission_added", uuid.Nil, uuid.Nil)).Return(nil),
+		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(21), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permission_added", uuid.Nil(), uuid.Nil())).Return(nil),
 	)
 
 	result, err := fixture.service.AddRolePermission(context.Background(), RolePermissionCommand{RoleID: roleID, PermissionID: permissionID})
@@ -210,7 +210,7 @@ func TestRoleCommandServiceRolePermissionBindings(t *testing.T) {
 	gomock.InOrder(
 		fixture.permissions.EXPECT().GetByPermissionIDs(gomock.Any(), uuidSliceMatches(permissionID, otherPermissionID)).Return([]roleapplication.PermissionReference{permission, otherPermission}, nil),
 		fixture.rolePermissions.EXPECT().Replace(gomock.Any(), roleID, permissionSliceMatches(permission, otherPermission), gomock.Any()).Return(roleapplication.PermissionsWriteResult{Items: []roleapplication.PermissionReference{permission, otherPermission}, Revision: 22}, nil),
-		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(22), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permissions_replaced", uuid.Nil, uuid.Nil)).Return(nil),
+		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(22), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permissions_replaced", uuid.Nil(), uuid.Nil())).Return(nil),
 	)
 
 	replaced, err := fixture.service.ReplaceRolePermissions(context.Background(), ReplaceRolePermissionsCommand{RoleID: roleID, PermissionIDs: []uuid.UUID{permissionID, otherPermissionID, permissionID}})
@@ -295,7 +295,7 @@ func TestRoleCommandServiceReplaceRolePermissionsEmptySet(t *testing.T) {
 	gomock.InOrder(
 		fixture.permissions.EXPECT().GetByPermissionIDs(gomock.Any(), uuidSliceMatches()).Return([]roleapplication.PermissionReference{}, nil),
 		fixture.rolePermissions.EXPECT().Replace(gomock.Any(), roleID, permissionSliceMatches(), gomock.Any()).Return(roleapplication.PermissionsWriteResult{Items: []roleapplication.PermissionReference{}, Revision: 23}, nil),
-		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(23), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permissions_replaced", uuid.Nil, uuid.Nil)).Return(nil),
+		fixture.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(23), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permissions_replaced", uuid.Nil(), uuid.Nil())).Return(nil),
 	)
 
 	result, err := fixture.service.ReplaceRolePermissions(context.Background(), ReplaceRolePermissionsCommand{RoleID: roleID})
@@ -333,7 +333,7 @@ func TestRoleCommandServiceReturnsCommittedSuccessAfterRefreshFailure(t *testing
 			setup: func(f *roleCommandFixture) {
 				gomock.InOrder(
 					f.roles.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).Return(roleapplication.PolicyWriteResult{Revision: 31}, nil),
-					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(31), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_updated", uuid.Nil, uuid.Nil)).Return(refreshErr),
+					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(31), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_updated", uuid.Nil(), uuid.Nil())).Return(refreshErr),
 				)
 			},
 			run: func(service RoleCommandService) error {
@@ -345,7 +345,7 @@ func TestRoleCommandServiceReturnsCommittedSuccessAfterRefreshFailure(t *testing
 			setup: func(f *roleCommandFixture) {
 				gomock.InOrder(
 					f.roles.EXPECT().SetActive(gomock.Any(), roleID, false, gomock.Any()).Return(roleapplication.PolicyWriteResult{Revision: 32}, nil),
-					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(32), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_active_changed", uuid.Nil, uuid.Nil)).Return(refreshErr),
+					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(32), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_active_changed", uuid.Nil(), uuid.Nil())).Return(refreshErr),
 				)
 			},
 			run: func(service RoleCommandService) error {
@@ -374,7 +374,7 @@ func TestRoleCommandServiceReturnsCommittedSuccessAfterRefreshFailure(t *testing
 				gomock.InOrder(
 					f.roles.EXPECT().GetByRoleIDs(gomock.Any(), uuidSliceMatches(roleID)).Return([]roledomain.Role{role}, nil),
 					f.userRoles.EXPECT().Replace(gomock.Any(), userID, uuidSliceMatches(roleID), gomock.Any()).Return(roleapplication.RolesWriteResult{Items: []roledomain.Role{role}, Revision: 34}, nil),
-					f.policyChanges.EXPECT().NotifyUserRoleChanged(gomock.Any(), int64(34), policyChangeMatches(permissionapplication.PolicyChangeKindUserRole, "user_roles_replaced", userID, uuid.Nil)).Return(refreshErr),
+					f.policyChanges.EXPECT().NotifyUserRoleChanged(gomock.Any(), int64(34), policyChangeMatches(permissionapplication.PolicyChangeKindUserRole, "user_roles_replaced", userID, uuid.Nil())).Return(refreshErr),
 				)
 			},
 			run: func(service RoleCommandService) error {
@@ -405,7 +405,7 @@ func TestRoleCommandServiceReturnsCommittedSuccessAfterRefreshFailure(t *testing
 				gomock.InOrder(
 					f.permissions.EXPECT().GetByPermissionID(gomock.Any(), permissionID).Return(&permission, nil),
 					f.rolePermissions.EXPECT().Add(gomock.Any(), roleID, permission, gomock.Any()).Return(roleapplication.PermissionsWriteResult{Items: []roleapplication.PermissionReference{permission}, Revision: 36}, nil),
-					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(36), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permission_added", uuid.Nil, uuid.Nil)).Return(refreshErr),
+					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(36), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permission_added", uuid.Nil(), uuid.Nil())).Return(refreshErr),
 				)
 			},
 			run: func(service RoleCommandService) error {
@@ -422,7 +422,7 @@ func TestRoleCommandServiceReturnsCommittedSuccessAfterRefreshFailure(t *testing
 				gomock.InOrder(
 					f.permissions.EXPECT().GetByPermissionIDs(gomock.Any(), uuidSliceMatches(permissionID)).Return([]roleapplication.PermissionReference{permission}, nil),
 					f.rolePermissions.EXPECT().Replace(gomock.Any(), roleID, permissionSliceMatches(permission), gomock.Any()).Return(roleapplication.PermissionsWriteResult{Items: []roleapplication.PermissionReference{permission}, Revision: 37}, nil),
-					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(37), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permissions_replaced", uuid.Nil, uuid.Nil)).Return(refreshErr),
+					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(37), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permissions_replaced", uuid.Nil(), uuid.Nil())).Return(refreshErr),
 				)
 			},
 			run: func(service RoleCommandService) error {
@@ -437,7 +437,7 @@ func TestRoleCommandServiceReturnsCommittedSuccessAfterRefreshFailure(t *testing
 			setup: func(f *roleCommandFixture) {
 				gomock.InOrder(
 					f.rolePermissions.EXPECT().Remove(gomock.Any(), roleID, permissionID, gomock.Any()).Return(roleapplication.PermissionsWriteResult{Revision: 38}, nil),
-					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(38), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permission_removed", uuid.Nil, uuid.Nil)).Return(refreshErr),
+					f.policyChanges.EXPECT().NotifyPolicyChanged(gomock.Any(), int64(38), policyChangeMatches(permissionapplication.PolicyChangeKindPolicy, "role_permission_removed", uuid.Nil(), uuid.Nil())).Return(refreshErr),
 				)
 			},
 			run: func(service RoleCommandService) error {
@@ -504,7 +504,7 @@ func (m policyChangeMatcher) Matches(value any) bool {
 		change.Reason == m.reason &&
 		change.UserID == m.userID &&
 		change.RoleID == m.roleID &&
-		change.PermissionID == uuid.Nil
+		change.PermissionID == uuid.Nil()
 }
 
 func (m policyChangeMatcher) String() string {

@@ -1,6 +1,6 @@
 package casbin
 
-import "github.com/google/uuid"
+import "uuid"
 
 func roleSubject(roleID uuid.UUID) string {
 	return "role:" + roleID.String()

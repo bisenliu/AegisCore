@@ -2,8 +2,8 @@ package query
 
 import (
 	"context"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"

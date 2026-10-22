@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"testing"
+	"uuid"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
-	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 

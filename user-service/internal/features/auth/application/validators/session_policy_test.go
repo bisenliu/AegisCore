@@ -2,8 +2,8 @@ package validators
 
 import (
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"

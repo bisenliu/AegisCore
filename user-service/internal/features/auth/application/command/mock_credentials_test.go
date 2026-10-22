@@ -12,9 +12,9 @@ package command
 import (
 	context "context"
 	reflect "reflect"
+	uuid "uuid"
 
 	domain "github.com/aegiscore/user-service/internal/features/auth/domain"
-	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
 

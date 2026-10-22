@@ -2,8 +2,8 @@ package command
 
 import (
 	"context"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
@@ -76,7 +76,7 @@ func (s *roleCommandService) ReplaceUserRoles(ctx context.Context, cmd ReplaceUs
 	if err != nil {
 		return nil, err
 	}
-	if err := s.notifyUserRoleChanged(ctx, write.Revision, change.Reason, cmd.UserID, uuid.Nil); err != nil {
+	if err := s.notifyUserRoleChanged(ctx, write.Revision, change.Reason, cmd.UserID, uuid.Nil()); err != nil {
 		logger.Error(ctx, "refresh rbac policy after user roles replace failed", logger.StackTrace(zap.Int64("policy_revision", write.Revision), zap.String("user_id", cmd.UserID.String()), zap.Error(err))...)
 	}
 	return &RolesResult{Items: write.Items, Revision: write.Revision}, nil

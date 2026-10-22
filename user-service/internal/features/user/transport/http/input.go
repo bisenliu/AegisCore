@@ -2,8 +2,7 @@ package userhttp
 
 import (
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/pagination"

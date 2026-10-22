@@ -1,13 +1,14 @@
 package schema
 
 import (
+	"uuid"
+
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
-	"github.com/google/uuid"
 )
 
 // defaultUserStatus 是 users.status 的持久化默认值，调用方未显式传入状态时新用户默认为正常状态。
@@ -28,7 +29,7 @@ func (User) Mixin() []ent.Mixin {
 func (User) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("id").Unique().Immutable().Comment("用户ID"),
-		field.UUID("user_id", uuid.UUID{}).Unique().Immutable().Comment("外部用户ID"),
+		field.String("user_id").GoType(uuid.UUID{}).ValueScanner(uuidScanner).SchemaType(uuidColumnTypes).Unique().Immutable().Comment("外部用户ID"),
 		field.String("nickname").NotEmpty().MaxLen(128).Comment("用户昵称"),
 		field.String("username").NotEmpty().Unique().MaxLen(255).Comment("用户名"),
 		field.String("password_hash").NotEmpty().Comment("密码哈希"),

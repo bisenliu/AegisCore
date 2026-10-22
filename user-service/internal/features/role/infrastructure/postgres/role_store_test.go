@@ -3,8 +3,8 @@ package postgres
 import (
 	"context"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"

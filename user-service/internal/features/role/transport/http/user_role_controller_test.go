@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 

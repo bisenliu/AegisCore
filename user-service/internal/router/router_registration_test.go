@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/gin-gonic/gin"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -451,7 +451,7 @@ func executeRouterRegistrationRequest(engine *gin.Engine, method string, path st
 
 func signRouterRegistrationAccessToken(t *testing.T) string {
 	t.Helper()
-	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, routerRegistrationClaims{UserID: uuid.NewString(), TokenVersion: 1, SessionID: uuid.NewString(), RegisteredClaims: jwtv5.RegisteredClaims{Subject: "access", ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Minute))}}).SignedString([]byte("router-registration-secret"))
+	token, err := jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, routerRegistrationClaims{UserID: uuid.New().String(), TokenVersion: 1, SessionID: uuid.New().String(), RegisteredClaims: jwtv5.RegisteredClaims{Subject: "access", ExpiresAt: jwtv5.NewNumericDate(time.Now().Add(time.Minute))}}).SignedString([]byte("router-registration-secret"))
 	require.NoError(t, err)
 	return token
 }

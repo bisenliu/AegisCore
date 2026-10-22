@@ -3,6 +3,8 @@
 package ent
 
 import (
+	"uuid"
+
 	"github.com/aegiscore/user-service/internal/persistence/ent/permission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
@@ -14,6 +16,8 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent/schema"
 	"github.com/aegiscore/user-service/internal/persistence/ent/user"
 	"github.com/aegiscore/user-service/internal/persistence/ent/userrole"
+
+	"entgo.io/ent/schema/field"
 )
 
 // The init function reads all schema descriptors with runtime code
@@ -37,6 +41,9 @@ func init() {
 	permission.DefaultUpdatedAt = permissionDescUpdatedAt.Default.(func() int64)
 	// permission.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	permission.UpdateDefaultUpdatedAt = permissionDescUpdatedAt.UpdateDefault.(func() int64)
+	// permissionDescPermissionID is the schema descriptor for permission_id field.
+	permissionDescPermissionID := permissionFields[1].Descriptor()
+	permission.ValueScanner.PermissionID = permissionDescPermissionID.ValueScanner.(field.TypeValueScanner[uuid.UUID])
 	// permissionDescName is the schema descriptor for name field.
 	permissionDescName := permissionFields[2].Descriptor()
 	// permission.NameValidator is a validator for the "name" field. It is called by the builders before save.
@@ -132,6 +139,9 @@ func init() {
 	rbacpolicyoutboxevent.DefaultUpdatedAt = rbacpolicyoutboxeventDescUpdatedAt.Default.(func() int64)
 	// rbacpolicyoutboxevent.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	rbacpolicyoutboxevent.UpdateDefaultUpdatedAt = rbacpolicyoutboxeventDescUpdatedAt.UpdateDefault.(func() int64)
+	// rbacpolicyoutboxeventDescEventID is the schema descriptor for event_id field.
+	rbacpolicyoutboxeventDescEventID := rbacpolicyoutboxeventFields[1].Descriptor()
+	rbacpolicyoutboxevent.ValueScanner.EventID = rbacpolicyoutboxeventDescEventID.ValueScanner.(field.TypeValueScanner[uuid.UUID])
 	// rbacpolicyoutboxeventDescKind is the schema descriptor for kind field.
 	rbacpolicyoutboxeventDescKind := rbacpolicyoutboxeventFields[4].Descriptor()
 	// rbacpolicyoutboxevent.KindValidator is a validator for the "kind" field. It is called by the builders before save.
@@ -169,6 +179,15 @@ func init() {
 			return nil
 		}
 	}()
+	// rbacpolicyoutboxeventDescRoleID is the schema descriptor for role_id field.
+	rbacpolicyoutboxeventDescRoleID := rbacpolicyoutboxeventFields[6].Descriptor()
+	rbacpolicyoutboxevent.ValueScanner.RoleID = rbacpolicyoutboxeventDescRoleID.ValueScanner.(field.TypeValueScanner[*uuid.UUID])
+	// rbacpolicyoutboxeventDescUserID is the schema descriptor for user_id field.
+	rbacpolicyoutboxeventDescUserID := rbacpolicyoutboxeventFields[7].Descriptor()
+	rbacpolicyoutboxevent.ValueScanner.UserID = rbacpolicyoutboxeventDescUserID.ValueScanner.(field.TypeValueScanner[*uuid.UUID])
+	// rbacpolicyoutboxeventDescPermissionID is the schema descriptor for permission_id field.
+	rbacpolicyoutboxeventDescPermissionID := rbacpolicyoutboxeventFields[8].Descriptor()
+	rbacpolicyoutboxevent.ValueScanner.PermissionID = rbacpolicyoutboxeventDescPermissionID.ValueScanner.(field.TypeValueScanner[*uuid.UUID])
 	// rbacpolicyoutboxeventDescStatus is the schema descriptor for status field.
 	rbacpolicyoutboxeventDescStatus := rbacpolicyoutboxeventFields[9].Descriptor()
 	// rbacpolicyoutboxevent.DefaultStatus holds the default value on creation for the status field.
@@ -203,6 +222,9 @@ func init() {
 	rbacpolicyoutboxeventDescLastError := rbacpolicyoutboxeventFields[12].Descriptor()
 	// rbacpolicyoutboxevent.LastErrorValidator is a validator for the "last_error" field. It is called by the builders before save.
 	rbacpolicyoutboxevent.LastErrorValidator = rbacpolicyoutboxeventDescLastError.Validators[0].(func(string) error)
+	// rbacpolicyoutboxeventDescClaimToken is the schema descriptor for claim_token field.
+	rbacpolicyoutboxeventDescClaimToken := rbacpolicyoutboxeventFields[13].Descriptor()
+	rbacpolicyoutboxevent.ValueScanner.ClaimToken = rbacpolicyoutboxeventDescClaimToken.ValueScanner.(field.TypeValueScanner[*uuid.UUID])
 	// rbacpolicyoutboxeventDescIdempotencyKey is the schema descriptor for idempotency_key field.
 	rbacpolicyoutboxeventDescIdempotencyKey := rbacpolicyoutboxeventFields[15].Descriptor()
 	// rbacpolicyoutboxevent.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
@@ -248,6 +270,12 @@ func init() {
 			return nil
 		}
 	}()
+	// rbacpolicyrevisionDescRoleID is the schema descriptor for role_id field.
+	rbacpolicyrevisionDescRoleID := rbacpolicyrevisionFields[2].Descriptor()
+	rbacpolicyrevision.ValueScanner.RoleID = rbacpolicyrevisionDescRoleID.ValueScanner.(field.TypeValueScanner[*uuid.UUID])
+	// rbacpolicyrevisionDescPermissionID is the schema descriptor for permission_id field.
+	rbacpolicyrevisionDescPermissionID := rbacpolicyrevisionFields[3].Descriptor()
+	rbacpolicyrevision.ValueScanner.PermissionID = rbacpolicyrevisionDescPermissionID.ValueScanner.(field.TypeValueScanner[*uuid.UUID])
 	rbacpolicyrevisioncounterFields := schema.RbacPolicyRevisionCounter{}.Fields()
 	_ = rbacpolicyrevisioncounterFields
 	// rbacpolicyrevisioncounterDescLastRevision is the schema descriptor for last_revision field.
@@ -283,6 +311,12 @@ func init() {
 			return nil
 		}
 	}()
+	// rbacuserrolerevisionDescUserID is the schema descriptor for user_id field.
+	rbacuserrolerevisionDescUserID := rbacuserrolerevisionFields[2].Descriptor()
+	rbacuserrolerevision.ValueScanner.UserID = rbacuserrolerevisionDescUserID.ValueScanner.(field.TypeValueScanner[uuid.UUID])
+	// rbacuserrolerevisionDescRoleID is the schema descriptor for role_id field.
+	rbacuserrolerevisionDescRoleID := rbacuserrolerevisionFields[3].Descriptor()
+	rbacuserrolerevision.ValueScanner.RoleID = rbacuserrolerevisionDescRoleID.ValueScanner.(field.TypeValueScanner[*uuid.UUID])
 	rbacuserrolerevisioncounterFields := schema.RbacUserRoleRevisionCounter{}.Fields()
 	_ = rbacuserrolerevisioncounterFields
 	// rbacuserrolerevisioncounterDescLastRevision is the schema descriptor for last_revision field.
@@ -308,6 +342,9 @@ func init() {
 	role.DefaultUpdatedAt = roleDescUpdatedAt.Default.(func() int64)
 	// role.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	role.UpdateDefaultUpdatedAt = roleDescUpdatedAt.UpdateDefault.(func() int64)
+	// roleDescRoleID is the schema descriptor for role_id field.
+	roleDescRoleID := roleFields[1].Descriptor()
+	role.ValueScanner.RoleID = roleDescRoleID.ValueScanner.(field.TypeValueScanner[uuid.UUID])
 	// roleDescName is the schema descriptor for name field.
 	roleDescName := roleFields[2].Descriptor()
 	// role.NameValidator is a validator for the "name" field. It is called by the builders before save.
@@ -366,6 +403,9 @@ func init() {
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() int64)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	user.UpdateDefaultUpdatedAt = userDescUpdatedAt.UpdateDefault.(func() int64)
+	// userDescUserID is the schema descriptor for user_id field.
+	userDescUserID := userFields[1].Descriptor()
+	user.ValueScanner.UserID = userDescUserID.ValueScanner.(field.TypeValueScanner[uuid.UUID])
 	// userDescNickname is the schema descriptor for nickname field.
 	userDescNickname := userFields[2].Descriptor()
 	// user.NicknameValidator is a validator for the "nickname" field. It is called by the builders before save.

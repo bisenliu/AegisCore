@@ -3,8 +3,11 @@
 package rbacpolicyoutboxevent
 
 import (
+	"uuid"
+
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/schema/field"
 )
 
 const (
@@ -132,6 +135,14 @@ var (
 	LastErrorValidator func(string) error
 	// IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
 	IdempotencyKeyValidator func(string) error
+	// ValueScanner of all RbacPolicyOutboxEvent fields.
+	ValueScanner struct {
+		EventID      field.TypeValueScanner[uuid.UUID]
+		RoleID       field.TypeValueScanner[*uuid.UUID]
+		UserID       field.TypeValueScanner[*uuid.UUID]
+		PermissionID field.TypeValueScanner[*uuid.UUID]
+		ClaimToken   field.TypeValueScanner[*uuid.UUID]
+	}
 )
 
 // OrderOption defines the ordering options for the RbacPolicyOutboxEvent queries.

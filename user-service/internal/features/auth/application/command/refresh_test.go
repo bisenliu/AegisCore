@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -232,7 +232,7 @@ func TestAuthUseCaseRefreshUsesNormalizedToken(t *testing.T) {
 
 func TestAuthUseCaseRefreshRejectsAccessTokenSubject(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(false), nil)
-	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "access").Return(nil, uuid.Nil, authdomain.ErrTokenInvalid)
+	fixture.tokens.EXPECT().ParseRefreshToken(gomock.Any(), "access").Return(nil, uuid.Nil(), authdomain.ErrTokenInvalid)
 
 	_, err := fixture.Refresh(context.Background(), RefreshTokenCommand{RefreshToken: "access"})
 	require.ErrorIs(t, err, authdomain.ErrTokenInvalid,

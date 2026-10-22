@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )

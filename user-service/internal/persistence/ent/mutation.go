@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
@@ -21,7 +22,6 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/user"
 	"github.com/aegiscore/user-service/internal/persistence/ent/userrole"
-	"github.com/google/uuid"
 )
 
 const (
@@ -930,16 +930,16 @@ type RbacPolicyOutboxEventMutation struct {
 	event_id                       *uuid.UUID
 	kind                           *string
 	reason                         *string
-	role_id                        *uuid.UUID
-	user_id                        *uuid.UUID
-	permission_id                  *uuid.UUID
+	role_id                        **uuid.UUID
+	user_id                        **uuid.UUID
+	permission_id                  **uuid.UUID
 	status                         *string
 	attempt_count                  *int
 	addattempt_count               *int
 	next_attempt_at                *int64
 	addnext_attempt_at             *int64
 	last_error                     *string
-	claim_token                    *uuid.UUID
+	claim_token                    **uuid.UUID
 	claimed_until                  *int64
 	addclaimed_until               *int64
 	idempotency_key                *string
@@ -1378,12 +1378,12 @@ func (m *RbacPolicyOutboxEventMutation) ResetReason() {
 }
 
 // SetRoleID sets the "role_id" field.
-func (m *RbacPolicyOutboxEventMutation) SetRoleID(u uuid.UUID) {
+func (m *RbacPolicyOutboxEventMutation) SetRoleID(u *uuid.UUID) {
 	m.role_id = &u
 }
 
 // RoleID returns the value of the "role_id" field in the mutation.
-func (m *RbacPolicyOutboxEventMutation) RoleID() (r uuid.UUID, exists bool) {
+func (m *RbacPolicyOutboxEventMutation) RoleID() (r *uuid.UUID, exists bool) {
 	v := m.role_id
 	if v == nil {
 		return
@@ -1427,12 +1427,12 @@ func (m *RbacPolicyOutboxEventMutation) ResetRoleID() {
 }
 
 // SetUserID sets the "user_id" field.
-func (m *RbacPolicyOutboxEventMutation) SetUserID(u uuid.UUID) {
+func (m *RbacPolicyOutboxEventMutation) SetUserID(u *uuid.UUID) {
 	m.user_id = &u
 }
 
 // UserID returns the value of the "user_id" field in the mutation.
-func (m *RbacPolicyOutboxEventMutation) UserID() (r uuid.UUID, exists bool) {
+func (m *RbacPolicyOutboxEventMutation) UserID() (r *uuid.UUID, exists bool) {
 	v := m.user_id
 	if v == nil {
 		return
@@ -1476,12 +1476,12 @@ func (m *RbacPolicyOutboxEventMutation) ResetUserID() {
 }
 
 // SetPermissionID sets the "permission_id" field.
-func (m *RbacPolicyOutboxEventMutation) SetPermissionID(u uuid.UUID) {
+func (m *RbacPolicyOutboxEventMutation) SetPermissionID(u *uuid.UUID) {
 	m.permission_id = &u
 }
 
 // PermissionID returns the value of the "permission_id" field in the mutation.
-func (m *RbacPolicyOutboxEventMutation) PermissionID() (r uuid.UUID, exists bool) {
+func (m *RbacPolicyOutboxEventMutation) PermissionID() (r *uuid.UUID, exists bool) {
 	v := m.permission_id
 	if v == nil {
 		return
@@ -1722,12 +1722,12 @@ func (m *RbacPolicyOutboxEventMutation) ResetLastError() {
 }
 
 // SetClaimToken sets the "claim_token" field.
-func (m *RbacPolicyOutboxEventMutation) SetClaimToken(u uuid.UUID) {
+func (m *RbacPolicyOutboxEventMutation) SetClaimToken(u *uuid.UUID) {
 	m.claim_token = &u
 }
 
 // ClaimToken returns the value of the "claim_token" field in the mutation.
-func (m *RbacPolicyOutboxEventMutation) ClaimToken() (r uuid.UUID, exists bool) {
+func (m *RbacPolicyOutboxEventMutation) ClaimToken() (r *uuid.UUID, exists bool) {
 	v := m.claim_token
 	if v == nil {
 		return
@@ -2263,21 +2263,21 @@ func (m *RbacPolicyOutboxEventMutation) SetField(name string, value ent.Value) e
 		m.SetReason(v)
 		return nil
 	case rbacpolicyoutboxevent.FieldRoleID:
-		v, ok := value.(uuid.UUID)
+		v, ok := value.(*uuid.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRoleID(v)
 		return nil
 	case rbacpolicyoutboxevent.FieldUserID:
-		v, ok := value.(uuid.UUID)
+		v, ok := value.(*uuid.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUserID(v)
 		return nil
 	case rbacpolicyoutboxevent.FieldPermissionID:
-		v, ok := value.(uuid.UUID)
+		v, ok := value.(*uuid.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -2312,7 +2312,7 @@ func (m *RbacPolicyOutboxEventMutation) SetField(name string, value ent.Value) e
 		m.SetLastError(v)
 		return nil
 	case rbacpolicyoutboxevent.FieldClaimToken:
-		v, ok := value.(uuid.UUID)
+		v, ok := value.(*uuid.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -2679,8 +2679,8 @@ type RbacPolicyRevisionMutation struct {
 	created_at          *int64
 	addcreated_at       *int64
 	reason              *string
-	role_id             *uuid.UUID
-	permission_id       *uuid.UUID
+	role_id             **uuid.UUID
+	permission_id       **uuid.UUID
 	clearedFields       map[string]struct{}
 	outbox_event        *int64
 	clearedoutbox_event bool
@@ -2886,12 +2886,12 @@ func (m *RbacPolicyRevisionMutation) ResetReason() {
 }
 
 // SetRoleID sets the "role_id" field.
-func (m *RbacPolicyRevisionMutation) SetRoleID(u uuid.UUID) {
+func (m *RbacPolicyRevisionMutation) SetRoleID(u *uuid.UUID) {
 	m.role_id = &u
 }
 
 // RoleID returns the value of the "role_id" field in the mutation.
-func (m *RbacPolicyRevisionMutation) RoleID() (r uuid.UUID, exists bool) {
+func (m *RbacPolicyRevisionMutation) RoleID() (r *uuid.UUID, exists bool) {
 	v := m.role_id
 	if v == nil {
 		return
@@ -2935,12 +2935,12 @@ func (m *RbacPolicyRevisionMutation) ResetRoleID() {
 }
 
 // SetPermissionID sets the "permission_id" field.
-func (m *RbacPolicyRevisionMutation) SetPermissionID(u uuid.UUID) {
+func (m *RbacPolicyRevisionMutation) SetPermissionID(u *uuid.UUID) {
 	m.permission_id = &u
 }
 
 // PermissionID returns the value of the "permission_id" field in the mutation.
-func (m *RbacPolicyRevisionMutation) PermissionID() (r uuid.UUID, exists bool) {
+func (m *RbacPolicyRevisionMutation) PermissionID() (r *uuid.UUID, exists bool) {
 	v := m.permission_id
 	if v == nil {
 		return
@@ -3126,14 +3126,14 @@ func (m *RbacPolicyRevisionMutation) SetField(name string, value ent.Value) erro
 		m.SetReason(v)
 		return nil
 	case rbacpolicyrevision.FieldRoleID:
-		v, ok := value.(uuid.UUID)
+		v, ok := value.(*uuid.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRoleID(v)
 		return nil
 	case rbacpolicyrevision.FieldPermissionID:
-		v, ok := value.(uuid.UUID)
+		v, ok := value.(*uuid.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -3686,7 +3686,7 @@ type RbacUserRoleRevisionMutation struct {
 	addcreated_at       *int64
 	reason              *string
 	user_id             *uuid.UUID
-	role_id             *uuid.UUID
+	role_id             **uuid.UUID
 	clearedFields       map[string]struct{}
 	outbox_event        *int64
 	clearedoutbox_event bool
@@ -3928,12 +3928,12 @@ func (m *RbacUserRoleRevisionMutation) ResetUserID() {
 }
 
 // SetRoleID sets the "role_id" field.
-func (m *RbacUserRoleRevisionMutation) SetRoleID(u uuid.UUID) {
+func (m *RbacUserRoleRevisionMutation) SetRoleID(u *uuid.UUID) {
 	m.role_id = &u
 }
 
 // RoleID returns the value of the "role_id" field in the mutation.
-func (m *RbacUserRoleRevisionMutation) RoleID() (r uuid.UUID, exists bool) {
+func (m *RbacUserRoleRevisionMutation) RoleID() (r *uuid.UUID, exists bool) {
 	v := m.role_id
 	if v == nil {
 		return
@@ -4126,7 +4126,7 @@ func (m *RbacUserRoleRevisionMutation) SetField(name string, value ent.Value) er
 		m.SetUserID(v)
 		return nil
 	case rbacuserrolerevision.FieldRoleID:
-		v, ok := value.(uuid.UUID)
+		v, ok := value.(*uuid.UUID)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}

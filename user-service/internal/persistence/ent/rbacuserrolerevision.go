@@ -5,12 +5,12 @@ package ent
 import (
 	"fmt"
 	"strings"
+	"uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
-	"github.com/google/uuid"
 )
 
 // RbacUserRoleRevision is the model entity for the RbacUserRoleRevision schema.
@@ -58,14 +58,14 @@ func (*RbacUserRoleRevision) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case rbacuserrolerevision.FieldRoleID:
-			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
 		case rbacuserrolerevision.FieldID, rbacuserrolerevision.FieldCreatedAt:
 			values[i] = new(sql.NullInt64)
 		case rbacuserrolerevision.FieldReason:
 			values[i] = new(sql.NullString)
 		case rbacuserrolerevision.FieldUserID:
-			values[i] = new(uuid.UUID)
+			values[i] = rbacuserrolerevision.ValueScanner.UserID.ScanValue()
+		case rbacuserrolerevision.FieldRoleID:
+			values[i] = rbacuserrolerevision.ValueScanner.RoleID.ScanValue()
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -100,17 +100,16 @@ func (_m *RbacUserRoleRevision) assignValues(columns []string, values []any) err
 				_m.Reason = value.String
 			}
 		case rbacuserrolerevision.FieldUserID:
-			if value, ok := values[i].(*uuid.UUID); !ok {
-				return fmt.Errorf("unexpected type %T for field user_id", values[i])
-			} else if value != nil {
-				_m.UserID = *value
+			if value, err := rbacuserrolerevision.ValueScanner.UserID.FromValue(values[i]); err != nil {
+				return err
+			} else {
+				_m.UserID = value
 			}
 		case rbacuserrolerevision.FieldRoleID:
-			if value, ok := values[i].(*sql.NullScanner); !ok {
-				return fmt.Errorf("unexpected type %T for field role_id", values[i])
-			} else if value.Valid {
-				_m.RoleID = new(uuid.UUID)
-				*_m.RoleID = *value.S.(*uuid.UUID)
+			if value, err := rbacuserrolerevision.ValueScanner.RoleID.FromValue(values[i]); err != nil {
+				return err
+			} else {
+				_m.RoleID = value
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])

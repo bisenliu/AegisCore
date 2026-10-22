@@ -2,8 +2,7 @@ package permissionhttp
 
 import (
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"

@@ -60,8 +60,7 @@ swag_go_run init \
   -g main.go \
   -o "$tmp_dir/swagger" \
   --useStructName \
-  --parseDependency \
-  --parseInternal
+  --parseDependency
 
 go run ../tools/openapi-convert \
   -input "$tmp_dir/swagger/swagger.json" \

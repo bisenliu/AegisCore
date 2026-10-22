@@ -3,8 +3,7 @@ package casbin
 import (
 	"context"
 	"fmt"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	entrole "github.com/aegiscore/user-service/internal/persistence/ent/role"
 	entuser "github.com/aegiscore/user-service/internal/persistence/ent/user"
@@ -13,7 +12,7 @@ import (
 
 func (r *entUserRoleResolver) loadRolesForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	var rows []struct {
-		RoleID uuid.UUID `json:"role_id,omitempty"`
+		RoleID string `json:"role_id,omitempty"`
 	}
 	err := r.client.Role.Query().
 		Where(
@@ -30,7 +29,11 @@ func (r *entUserRoleResolver) loadRolesForUser(ctx context.Context, userID uuid.
 	}
 	roleIDs := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {
-		roleIDs = append(roleIDs, row.RoleID)
+		roleID, err := uuid.Parse(row.RoleID)
+		if err != nil {
+			return nil, fmt.Errorf("parse role policy subject %q for user %s: %w", row.RoleID, userID.String(), err)
+		}
+		roleIDs = append(roleIDs, roleID)
 	}
 	return roleIDs, nil
 }

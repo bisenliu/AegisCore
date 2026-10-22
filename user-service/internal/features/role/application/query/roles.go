@@ -2,8 +2,7 @@ package query
 
 import (
 	"context"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/aegiscore/common/contract/pagination"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"

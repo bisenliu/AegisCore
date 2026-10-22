@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 

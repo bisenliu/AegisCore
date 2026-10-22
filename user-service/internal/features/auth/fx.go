@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"uuid"
 
-	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 	"go.uber.org/fx"
 	"go.uber.org/zap"

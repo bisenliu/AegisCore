@@ -3,8 +3,11 @@
 package permission
 
 import (
+	"uuid"
+
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/schema/field"
 )
 
 const (
@@ -83,6 +86,10 @@ var (
 	HTTPMethodValidator func(string) error
 	// PathTemplateValidator is a validator for the "path_template" field. It is called by the builders before save.
 	PathTemplateValidator func(string) error
+	// ValueScanner of all Permission fields.
+	ValueScanner struct {
+		PermissionID field.TypeValueScanner[uuid.UUID]
+	}
 )
 
 // OrderOption defines the ordering options for the Permission queries.

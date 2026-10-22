@@ -5,11 +5,11 @@ package ent
 import (
 	"fmt"
 	"strings"
+	"uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/aegiscore/user-service/internal/persistence/ent/permission"
-	"github.com/google/uuid"
 )
 
 // Permission is the model entity for the Permission schema.
@@ -68,7 +68,7 @@ func (*Permission) scanValues(columns []string) ([]any, error) {
 		case permission.FieldName, permission.FieldDescription, permission.FieldModule, permission.FieldHTTPMethod, permission.FieldPathTemplate:
 			values[i] = new(sql.NullString)
 		case permission.FieldPermissionID:
-			values[i] = new(uuid.UUID)
+			values[i] = permission.ValueScanner.PermissionID.ScanValue()
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -103,10 +103,10 @@ func (_m *Permission) assignValues(columns []string, values []any) error {
 				_m.UpdatedAt = value.Int64
 			}
 		case permission.FieldPermissionID:
-			if value, ok := values[i].(*uuid.UUID); !ok {
-				return fmt.Errorf("unexpected type %T for field permission_id", values[i])
-			} else if value != nil {
-				_m.PermissionID = *value
+			if value, err := permission.ValueScanner.PermissionID.FromValue(values[i]); err != nil {
+				return err
+			} else {
+				_m.PermissionID = value
 			}
 		case permission.FieldName:
 			if value, ok := values[i].(*sql.NullString); !ok {

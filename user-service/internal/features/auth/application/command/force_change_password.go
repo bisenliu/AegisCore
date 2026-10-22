@@ -3,8 +3,8 @@ package command
 import (
 	"context"
 	"errors"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
@@ -75,10 +75,10 @@ func (u *forceChangePasswordUseCase) ForceChangePassword(ctx context.Context, cm
 func (u *forceChangePasswordUseCase) verifyPasswordChangeToken(ctx context.Context, token string) (uuid.UUID, int64, error) {
 	claims, parsedUserID, err := u.tokens.ParsePasswordChangeToken(ctx, token)
 	if err != nil {
-		return uuid.Nil, 0, err
+		return uuid.Nil(), 0, err
 	}
 	if err := u.sessions.ConsumePasswordChangeClaims(ctx, claims); err != nil {
-		return uuid.Nil, 0, err
+		return uuid.Nil(), 0, err
 	}
 	return parsedUserID, claims.TokenVersion, nil
 }

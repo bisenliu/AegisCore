@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 
 	runtimeconfig "github.com/aegiscore/common/runtime/config"

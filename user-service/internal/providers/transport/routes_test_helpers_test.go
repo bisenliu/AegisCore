@@ -9,10 +9,10 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/alicebob/miniredis/v2"
 	jwtv5 "github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	rediscmd "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"

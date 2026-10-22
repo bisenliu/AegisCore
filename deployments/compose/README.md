@@ -35,7 +35,7 @@ docker compose -f deployments/compose/docker-compose.yml up --build
 docker compose -f deployments/compose/docker-compose.yml --profile seed run --rm rbac-seed
 ```
 
-Compose 通过 `nacos-init-host` 与 `nacos-init-docker` 两个一次性任务，分别将 `deployments/nacos/local-host/` 和 `deployments/nacos/local-docker/` 发布到 Nacos `loca-host/AEGISCORE` 与 `loca-docker/AEGISCORE`。容器内 user-service 与 RBAC seed 固定选择 `loca-docker`，主机进程选择 `loca-host`；两端均按默认顺序加载 `base.yaml`、`resources.yaml`、`user-service.yaml`。user-service 只通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` 选择配置来源，不挂载本地完整配置文件。日志只写 stdout/stderr；本地 tracing 默认启用并固定通过 OTLP gRPC 连接 `jaeger:4317`。本地 tracing 同时保留 Ent 实体级 `ent.query` / `ent.mutation` span 和 PostgreSQL `otelsql` SQL/driver 级 span，用于本地完整链路诊断；该组合会提供更多细节，也会让 trace 更噪。
+Compose 先通过 `nacos-init-auth` 一次性任务初始化新 Nacos 数据卷的管理员密码，再通过 `nacos-init-host` 与 `nacos-init-docker` 分别将 `deployments/nacos/local-host/` 和 `deployments/nacos/local-docker/` 发布到 Nacos `loca-host/AEGISCORE` 与 `loca-docker/AEGISCORE`。容器内 user-service 与 RBAC seed 固定选择 `loca-docker`，主机进程选择 `loca-host`；两端均按默认顺序加载 `base.yaml`、`resources.yaml`、`user-service.yaml`。user-service 只通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` 选择配置来源，不挂载本地完整配置文件。日志只写 stdout/stderr；本地 tracing 默认启用并固定通过 OTLP gRPC 连接 `jaeger:4317`。本地 tracing 同时保留 Ent 实体级 `ent.query` / `ent.mutation` span 和 PostgreSQL `otelsql` SQL/driver 级 span，用于本地完整链路诊断；该组合会提供更多细节，也会让 trace 更噪。
 
 全新 PostgreSQL volume 会显式创建 `postgres` 用户和 `aegiscore` 数据库。Compose healthcheck、`local-docker/resources.yaml` 与真实指标压测脚本都使用同一组用户和数据库名称，避免健康检查通过后服务仍因目标数据库不存在而启动失败。
 
@@ -58,7 +58,7 @@ Compose 的常驻服务和一次性任务统一显式设置 `TZ=Asia/Shanghai`�
 
 user-service 通过 Nacos v3 Client HTTP API 读取配置，两个 `nacos-init-*` 任务通过 v3 Admin API 创建 namespace 并发布配置，因此兼容已经移除 v1/v2 API 的 Nacos 3.2。Nacos 以 `microservice` 功能模式运行，只加载 Config 和 Naming，不加载 AI 模块及其控制台入口；该模式要求 Nacos 3.2.2 或更高版本。Compose 有意使用浮动 `latest` 以持续验证最新版；正式环境应在验收后固定具体版本或镜像 digest。`nacos-data` volume 会保留本地 Nacos 数据；旧 volume 中的 `loca` Namespace 不再被当前 workload 引用，也不会由 seed 工具自动删除。
 
-本地 Compose 显式设置 `NACOS_AUTH_ENABLE=true`、`NACOS_AUTH_ADMIN_ENABLE=true` 和 `NACOS_AUTH_CONSOLE_ENABLE=true`，分别启用 Client、Admin API 和 Console API 鉴权。`nacos-init-*`、容器内 user-service 和主机进程都应通过 `AEGISCORE_NACOS_USERNAME`/`AEGISCORE_NACOS_PASSWORD` 使用同一组本地凭据；默认账号密码为 Nacos 镜像内置的 `nacos`/`nacos`，仅允许 loopback 访问时用于本地开发，生产部署必须替换为受控凭据。
+本地 Compose 显式设置 `NACOS_AUTH_ENABLE=true`、`NACOS_AUTH_ADMIN_ENABLE=true` 和 `NACOS_AUTH_CONSOLE_ENABLE=true`，分别启用 Client、Admin API 和 Console API 鉴权。Nacos 自 2.4.0 起不再内置管理员密码；`nacos-init-auth` 仅在首次启动时将 `nacos` 管理员密码初始化为 `NACOS_PASSWORD`（本地默认值为 `nacos`），已有管理员时验证现有凭据，凭据不匹配则启动失败且不会重置密码。`nacos-init-*`、容器内 user-service 和主机进程都应使用同一组本地凭据；仅允许 loopback 访问时使用默认凭据，生产部署必须替换为受控凭据。
 
 pprof 不进入 Compose 默认配置。临时诊断应修改 Nacos 中的 `observability.pprof`，并通过容器 namespace 内 loopback 或受控端口转发访问。
 

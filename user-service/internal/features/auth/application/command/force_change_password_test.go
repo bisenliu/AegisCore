@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -91,7 +91,7 @@ func TestAuthUseCaseForceChangePasswordMapsTokenVersionUserNotFound(t *testing.T
 
 func TestAuthUseCaseForceChangePasswordRejectsAccessToken(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
-	fixture.tokens.EXPECT().ParsePasswordChangeToken(gomock.Any(), "access").Return(nil, uuid.Nil, authdomain.ErrTokenInvalid)
+	fixture.tokens.EXPECT().ParsePasswordChangeToken(gomock.Any(), "access").Return(nil, uuid.Nil(), authdomain.ErrTokenInvalid)
 
 	_, err := fixture.ForceChangePassword(context.Background(), ForceChangePasswordCommand{Token: "access", NewPassword: "new-secret"})
 	require.ErrorIs(t, err, authdomain.ErrTokenInvalid,

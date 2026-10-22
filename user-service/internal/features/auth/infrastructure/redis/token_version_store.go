@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"uuid"
 
-	"github.com/google/uuid"
 	rediscache "github.com/redis/go-redis/v9"
 
 	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"

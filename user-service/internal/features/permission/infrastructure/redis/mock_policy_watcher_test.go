@@ -13,9 +13,9 @@ import (
 	context "context"
 	reflect "reflect"
 	time "time"
+	uuid "uuid"
 
 	application "github.com/aegiscore/user-service/internal/features/permission/application"
-	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
 

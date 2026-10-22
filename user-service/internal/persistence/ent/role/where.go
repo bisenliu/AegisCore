@@ -3,10 +3,12 @@
 package role
 
 import (
+	"fmt"
+	"uuid"
+
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
-	"github.com/google/uuid"
 )
 
 // ID filters vertices based on their ID field.
@@ -66,7 +68,8 @@ func UpdatedAt(v int64) predicate.Role {
 
 // RoleID applies equality check predicate on the "role_id" field. It's identical to RoleIDEQ.
 func RoleID(v uuid.UUID) predicate.Role {
-	return predicate.Role(sql.FieldEQ(FieldRoleID, v))
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RoleOrErr(sql.FieldEQ(FieldRoleID, vc), err)
 }
 
 // Name applies equality check predicate on the "name" field. It's identical to NameEQ.
@@ -171,42 +174,116 @@ func UpdatedAtLTE(v int64) predicate.Role {
 
 // RoleIDEQ applies the EQ predicate on the "role_id" field.
 func RoleIDEQ(v uuid.UUID) predicate.Role {
-	return predicate.Role(sql.FieldEQ(FieldRoleID, v))
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RoleOrErr(sql.FieldEQ(FieldRoleID, vc), err)
 }
 
 // RoleIDNEQ applies the NEQ predicate on the "role_id" field.
 func RoleIDNEQ(v uuid.UUID) predicate.Role {
-	return predicate.Role(sql.FieldNEQ(FieldRoleID, v))
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RoleOrErr(sql.FieldNEQ(FieldRoleID, vc), err)
 }
 
 // RoleIDIn applies the In predicate on the "role_id" field.
 func RoleIDIn(vs ...uuid.UUID) predicate.Role {
-	return predicate.Role(sql.FieldIn(FieldRoleID, vs...))
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.RoleID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RoleOrErr(sql.FieldIn(FieldRoleID, v...), err)
 }
 
 // RoleIDNotIn applies the NotIn predicate on the "role_id" field.
 func RoleIDNotIn(vs ...uuid.UUID) predicate.Role {
-	return predicate.Role(sql.FieldNotIn(FieldRoleID, vs...))
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.RoleID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RoleOrErr(sql.FieldNotIn(FieldRoleID, v...), err)
 }
 
 // RoleIDGT applies the GT predicate on the "role_id" field.
 func RoleIDGT(v uuid.UUID) predicate.Role {
-	return predicate.Role(sql.FieldGT(FieldRoleID, v))
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RoleOrErr(sql.FieldGT(FieldRoleID, vc), err)
 }
 
 // RoleIDGTE applies the GTE predicate on the "role_id" field.
 func RoleIDGTE(v uuid.UUID) predicate.Role {
-	return predicate.Role(sql.FieldGTE(FieldRoleID, v))
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RoleOrErr(sql.FieldGTE(FieldRoleID, vc), err)
 }
 
 // RoleIDLT applies the LT predicate on the "role_id" field.
 func RoleIDLT(v uuid.UUID) predicate.Role {
-	return predicate.Role(sql.FieldLT(FieldRoleID, v))
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RoleOrErr(sql.FieldLT(FieldRoleID, vc), err)
 }
 
 // RoleIDLTE applies the LTE predicate on the "role_id" field.
 func RoleIDLTE(v uuid.UUID) predicate.Role {
-	return predicate.Role(sql.FieldLTE(FieldRoleID, v))
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RoleOrErr(sql.FieldLTE(FieldRoleID, vc), err)
+}
+
+// RoleIDContains applies the Contains predicate on the "role_id" field.
+func RoleIDContains(v uuid.UUID) predicate.Role {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RoleOrErr(sql.FieldContains(FieldRoleID, vcs), err)
+}
+
+// RoleIDHasPrefix applies the HasPrefix predicate on the "role_id" field.
+func RoleIDHasPrefix(v uuid.UUID) predicate.Role {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RoleOrErr(sql.FieldHasPrefix(FieldRoleID, vcs), err)
+}
+
+// RoleIDHasSuffix applies the HasSuffix predicate on the "role_id" field.
+func RoleIDHasSuffix(v uuid.UUID) predicate.Role {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RoleOrErr(sql.FieldHasSuffix(FieldRoleID, vcs), err)
+}
+
+// RoleIDEqualFold applies the EqualFold predicate on the "role_id" field.
+func RoleIDEqualFold(v uuid.UUID) predicate.Role {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RoleOrErr(sql.FieldEqualFold(FieldRoleID, vcs), err)
+}
+
+// RoleIDContainsFold applies the ContainsFold predicate on the "role_id" field.
+func RoleIDContainsFold(v uuid.UUID) predicate.Role {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RoleOrErr(sql.FieldContainsFold(FieldRoleID, vcs), err)
 }
 
 // NameEQ applies the EQ predicate on the "name" field.

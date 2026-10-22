@@ -2,8 +2,7 @@ package query
 
 import (
 	"context"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	permissiondomain "github.com/aegiscore/user-service/internal/features/permission/domain"
 )

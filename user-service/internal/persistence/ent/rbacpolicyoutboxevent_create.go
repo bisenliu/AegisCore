@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"uuid"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -13,7 +14,6 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
-	"github.com/google/uuid"
 )
 
 // RbacPolicyOutboxEventCreate is the builder for creating a RbacPolicyOutboxEvent entity.
@@ -99,44 +99,20 @@ func (_c *RbacPolicyOutboxEventCreate) SetReason(v string) *RbacPolicyOutboxEven
 }
 
 // SetRoleID sets the "role_id" field.
-func (_c *RbacPolicyOutboxEventCreate) SetRoleID(v uuid.UUID) *RbacPolicyOutboxEventCreate {
+func (_c *RbacPolicyOutboxEventCreate) SetRoleID(v *uuid.UUID) *RbacPolicyOutboxEventCreate {
 	_c.mutation.SetRoleID(v)
 	return _c
 }
 
-// SetNillableRoleID sets the "role_id" field if the given value is not nil.
-func (_c *RbacPolicyOutboxEventCreate) SetNillableRoleID(v *uuid.UUID) *RbacPolicyOutboxEventCreate {
-	if v != nil {
-		_c.SetRoleID(*v)
-	}
-	return _c
-}
-
 // SetUserID sets the "user_id" field.
-func (_c *RbacPolicyOutboxEventCreate) SetUserID(v uuid.UUID) *RbacPolicyOutboxEventCreate {
+func (_c *RbacPolicyOutboxEventCreate) SetUserID(v *uuid.UUID) *RbacPolicyOutboxEventCreate {
 	_c.mutation.SetUserID(v)
 	return _c
 }
 
-// SetNillableUserID sets the "user_id" field if the given value is not nil.
-func (_c *RbacPolicyOutboxEventCreate) SetNillableUserID(v *uuid.UUID) *RbacPolicyOutboxEventCreate {
-	if v != nil {
-		_c.SetUserID(*v)
-	}
-	return _c
-}
-
 // SetPermissionID sets the "permission_id" field.
-func (_c *RbacPolicyOutboxEventCreate) SetPermissionID(v uuid.UUID) *RbacPolicyOutboxEventCreate {
+func (_c *RbacPolicyOutboxEventCreate) SetPermissionID(v *uuid.UUID) *RbacPolicyOutboxEventCreate {
 	_c.mutation.SetPermissionID(v)
-	return _c
-}
-
-// SetNillablePermissionID sets the "permission_id" field if the given value is not nil.
-func (_c *RbacPolicyOutboxEventCreate) SetNillablePermissionID(v *uuid.UUID) *RbacPolicyOutboxEventCreate {
-	if v != nil {
-		_c.SetPermissionID(*v)
-	}
 	return _c
 }
 
@@ -197,16 +173,8 @@ func (_c *RbacPolicyOutboxEventCreate) SetNillableLastError(v *string) *RbacPoli
 }
 
 // SetClaimToken sets the "claim_token" field.
-func (_c *RbacPolicyOutboxEventCreate) SetClaimToken(v uuid.UUID) *RbacPolicyOutboxEventCreate {
+func (_c *RbacPolicyOutboxEventCreate) SetClaimToken(v *uuid.UUID) *RbacPolicyOutboxEventCreate {
 	_c.mutation.SetClaimToken(v)
-	return _c
-}
-
-// SetNillableClaimToken sets the "claim_token" field if the given value is not nil.
-func (_c *RbacPolicyOutboxEventCreate) SetNillableClaimToken(v *uuid.UUID) *RbacPolicyOutboxEventCreate {
-	if v != nil {
-		_c.SetClaimToken(*v)
-	}
 	return _c
 }
 
@@ -411,7 +379,10 @@ func (_c *RbacPolicyOutboxEventCreate) sqlSave(ctx context.Context) (*RbacPolicy
 	if err := _c.check(); err != nil {
 		return nil, err
 	}
-	_node, _spec := _c.createSpec()
+	_node, _spec, err := _c.createSpec()
+	if err != nil {
+		return nil, err
+	}
 	if err := sqlgraph.CreateNode(ctx, _c.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
@@ -427,7 +398,7 @@ func (_c *RbacPolicyOutboxEventCreate) sqlSave(ctx context.Context) (*RbacPolicy
 	return _node, nil
 }
 
-func (_c *RbacPolicyOutboxEventCreate) createSpec() (*RbacPolicyOutboxEvent, *sqlgraph.CreateSpec) {
+func (_c *RbacPolicyOutboxEventCreate) createSpec() (*RbacPolicyOutboxEvent, *sqlgraph.CreateSpec, error) {
 	var (
 		_node = &RbacPolicyOutboxEvent{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(rbacpolicyoutboxevent.Table, sqlgraph.NewFieldSpec(rbacpolicyoutboxevent.FieldID, field.TypeInt64))
@@ -446,7 +417,11 @@ func (_c *RbacPolicyOutboxEventCreate) createSpec() (*RbacPolicyOutboxEvent, *sq
 		_node.UpdatedAt = value
 	}
 	if value, ok := _c.mutation.EventID(); ok {
-		_spec.SetField(rbacpolicyoutboxevent.FieldEventID, field.TypeUUID, value)
+		vv, err := rbacpolicyoutboxevent.ValueScanner.EventID.Value(value)
+		if err != nil {
+			return nil, nil, err
+		}
+		_spec.SetField(rbacpolicyoutboxevent.FieldEventID, field.TypeString, vv)
 		_node.EventID = value
 	}
 	if value, ok := _c.mutation.Kind(); ok {
@@ -458,16 +433,28 @@ func (_c *RbacPolicyOutboxEventCreate) createSpec() (*RbacPolicyOutboxEvent, *sq
 		_node.Reason = value
 	}
 	if value, ok := _c.mutation.RoleID(); ok {
-		_spec.SetField(rbacpolicyoutboxevent.FieldRoleID, field.TypeUUID, value)
-		_node.RoleID = &value
+		vv, err := rbacpolicyoutboxevent.ValueScanner.RoleID.Value(value)
+		if err != nil {
+			return nil, nil, err
+		}
+		_spec.SetField(rbacpolicyoutboxevent.FieldRoleID, field.TypeString, vv)
+		_node.RoleID = value
 	}
 	if value, ok := _c.mutation.UserID(); ok {
-		_spec.SetField(rbacpolicyoutboxevent.FieldUserID, field.TypeUUID, value)
-		_node.UserID = &value
+		vv, err := rbacpolicyoutboxevent.ValueScanner.UserID.Value(value)
+		if err != nil {
+			return nil, nil, err
+		}
+		_spec.SetField(rbacpolicyoutboxevent.FieldUserID, field.TypeString, vv)
+		_node.UserID = value
 	}
 	if value, ok := _c.mutation.PermissionID(); ok {
-		_spec.SetField(rbacpolicyoutboxevent.FieldPermissionID, field.TypeUUID, value)
-		_node.PermissionID = &value
+		vv, err := rbacpolicyoutboxevent.ValueScanner.PermissionID.Value(value)
+		if err != nil {
+			return nil, nil, err
+		}
+		_spec.SetField(rbacpolicyoutboxevent.FieldPermissionID, field.TypeString, vv)
+		_node.PermissionID = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(rbacpolicyoutboxevent.FieldStatus, field.TypeString, value)
@@ -486,8 +473,12 @@ func (_c *RbacPolicyOutboxEventCreate) createSpec() (*RbacPolicyOutboxEvent, *sq
 		_node.LastError = &value
 	}
 	if value, ok := _c.mutation.ClaimToken(); ok {
-		_spec.SetField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeUUID, value)
-		_node.ClaimToken = &value
+		vv, err := rbacpolicyoutboxevent.ValueScanner.ClaimToken.Value(value)
+		if err != nil {
+			return nil, nil, err
+		}
+		_spec.SetField(rbacpolicyoutboxevent.FieldClaimToken, field.TypeString, vv)
+		_node.ClaimToken = value
 	}
 	if value, ok := _c.mutation.ClaimedUntil(); ok {
 		_spec.SetField(rbacpolicyoutboxevent.FieldClaimedUntil, field.TypeInt64, value)
@@ -535,7 +526,7 @@ func (_c *RbacPolicyOutboxEventCreate) createSpec() (*RbacPolicyOutboxEvent, *sq
 		_node.UserRoleRevision = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	return _node, _spec
+	return _node, _spec, nil
 }
 
 // OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
@@ -672,7 +663,7 @@ func (u *RbacPolicyOutboxEventUpsert) ClearLastError() *RbacPolicyOutboxEventUps
 }
 
 // SetClaimToken sets the "claim_token" field.
-func (u *RbacPolicyOutboxEventUpsert) SetClaimToken(v uuid.UUID) *RbacPolicyOutboxEventUpsert {
+func (u *RbacPolicyOutboxEventUpsert) SetClaimToken(v *uuid.UUID) *RbacPolicyOutboxEventUpsert {
 	u.Set(rbacpolicyoutboxevent.FieldClaimToken, v)
 	return u
 }
@@ -914,7 +905,7 @@ func (u *RbacPolicyOutboxEventUpsertOne) ClearLastError() *RbacPolicyOutboxEvent
 }
 
 // SetClaimToken sets the "claim_token" field.
-func (u *RbacPolicyOutboxEventUpsertOne) SetClaimToken(v uuid.UUID) *RbacPolicyOutboxEventUpsertOne {
+func (u *RbacPolicyOutboxEventUpsertOne) SetClaimToken(v *uuid.UUID) *RbacPolicyOutboxEventUpsertOne {
 	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
 		s.SetClaimToken(v)
 	})
@@ -1053,7 +1044,10 @@ func (_c *RbacPolicyOutboxEventCreateBulk) Save(ctx context.Context) ([]*RbacPol
 				}
 				builder.mutation = mutation
 				var err error
-				nodes[i], specs[i] = builder.createSpec()
+				nodes[i], specs[i], err = builder.createSpec()
+				if err != nil {
+					return nil, err
+				}
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
@@ -1333,7 +1327,7 @@ func (u *RbacPolicyOutboxEventUpsertBulk) ClearLastError() *RbacPolicyOutboxEven
 }
 
 // SetClaimToken sets the "claim_token" field.
-func (u *RbacPolicyOutboxEventUpsertBulk) SetClaimToken(v uuid.UUID) *RbacPolicyOutboxEventUpsertBulk {
+func (u *RbacPolicyOutboxEventUpsertBulk) SetClaimToken(v *uuid.UUID) *RbacPolicyOutboxEventUpsertBulk {
 	return u.Update(func(s *RbacPolicyOutboxEventUpsert) {
 		s.SetClaimToken(v)
 	})

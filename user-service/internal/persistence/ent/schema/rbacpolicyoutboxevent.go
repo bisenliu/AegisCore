@@ -3,11 +3,12 @@ package schema
 import (
 	"time"
 
+	"uuid"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
-	"github.com/google/uuid"
 )
 
 const (
@@ -34,19 +35,19 @@ func (RbacPolicyOutboxEvent) Mixin() []ent.Mixin {
 func (RbacPolicyOutboxEvent) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("id").Unique().Immutable().Comment("RBAC policy outbox 内部ID"),
-		field.UUID("event_id", uuid.UUID{}).Unique().Immutable().Comment("稳定 outbox event ID"),
+		field.String("event_id").GoType(uuid.UUID{}).ValueScanner(uuidScanner).SchemaType(uuidColumnTypes).Unique().Immutable().Comment("稳定 outbox event ID"),
 		field.Int64("policy_revision").Optional().Nillable().Immutable().Comment("关联的 RBAC policy revision"),
 		field.Int64("user_role_revision").Optional().Nillable().Immutable().Comment("关联的 RBAC user-role revision"),
 		field.String("kind").NotEmpty().Immutable().MaxLen(32).Validate(oneOfStrings(rbacPolicyOutboxKindPolicyChanged, rbacPolicyOutboxKindUserRoleChanged)).Comment("事件类型"),
 		field.String("reason").NotEmpty().Immutable().MaxLen(64).Comment("触发 policy 变更的稳定原因"),
-		field.UUID("role_id", uuid.UUID{}).Optional().Nillable().Immutable().Comment("相关外部角色ID"),
-		field.UUID("user_id", uuid.UUID{}).Optional().Nillable().Immutable().Comment("相关外部用户ID"),
-		field.UUID("permission_id", uuid.UUID{}).Optional().Nillable().Immutable().Comment("相关外部权限ID"),
+		field.String("role_id").GoType((*uuid.UUID)(nil)).ValueScanner(nullableUUIDScanner).SchemaType(uuidColumnTypes).Optional().Nillable().Immutable().Comment("相关外部角色ID"),
+		field.String("user_id").GoType((*uuid.UUID)(nil)).ValueScanner(nullableUUIDScanner).SchemaType(uuidColumnTypes).Optional().Nillable().Immutable().Comment("相关外部用户ID"),
+		field.String("permission_id").GoType((*uuid.UUID)(nil)).ValueScanner(nullableUUIDScanner).SchemaType(uuidColumnTypes).Optional().Nillable().Immutable().Comment("相关外部权限ID"),
 		field.String("status").Default(defaultRbacPolicyOutboxStatus).MaxLen(16).Validate(oneOfStrings(rbacPolicyOutboxStatusPending, rbacPolicyOutboxStatusProcessing, rbacPolicyOutboxStatusFailed, rbacPolicyOutboxStatusDelivered)).Comment("投递状态"),
 		field.Int("attempt_count").Default(0).NonNegative().Comment("投递尝试次数"),
 		field.Int64("next_attempt_at").DefaultFunc(func() int64 { return time.Now().UnixMilli() }).Comment("下次允许尝试的时间戳毫秒"),
 		field.String("last_error").Optional().Nillable().MaxLen(2048).Comment("最近一次投递错误"),
-		field.UUID("claim_token", uuid.UUID{}).Optional().Nillable().Comment("当前 dispatcher claim token"),
+		field.String("claim_token").GoType((*uuid.UUID)(nil)).ValueScanner(nullableUUIDScanner).SchemaType(uuidColumnTypes).Optional().Nillable().Comment("当前 dispatcher claim token"),
 		field.Int64("claimed_until").Optional().Nillable().Comment("当前 claim lease 截止时间戳毫秒"),
 		field.String("idempotency_key").NotEmpty().Unique().Immutable().MaxLen(128).Comment("稳定投递幂等键"),
 		field.Int64("delivered_at").Optional().Nillable().Comment("投递完成时间戳毫秒"),

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
@@ -374,7 +374,7 @@ func (w *Watcher) ObserveTargetRevision(ctx context.Context, targetRevision int6
 }
 
 func (w *Watcher) invalidateChange(change permissionapplication.PolicyChange) {
-	if change.UserID != uuid.Nil {
+	if change.UserID != uuid.Nil() {
 		w.engine.InvalidateUserRole(change.UserID)
 	} else if change.RequiresReload() {
 		w.engine.InvalidateAllUserRoles()

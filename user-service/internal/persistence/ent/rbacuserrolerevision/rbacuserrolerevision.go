@@ -3,8 +3,11 @@
 package rbacuserrolerevision
 
 import (
+	"uuid"
+
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/schema/field"
 )
 
 const (
@@ -59,6 +62,11 @@ var (
 	DefaultCreatedAt func() int64
 	// ReasonValidator is a validator for the "reason" field. It is called by the builders before save.
 	ReasonValidator func(string) error
+	// ValueScanner of all RbacUserRoleRevision fields.
+	ValueScanner struct {
+		UserID field.TypeValueScanner[uuid.UUID]
+		RoleID field.TypeValueScanner[*uuid.UUID]
+	}
 )
 
 // OrderOption defines the ordering options for the RbacUserRoleRevision queries.

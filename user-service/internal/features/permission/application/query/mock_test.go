@@ -12,10 +12,10 @@ package query
 import (
 	context "context"
 	reflect "reflect"
+	uuid "uuid"
 
 	application "github.com/aegiscore/user-service/internal/features/permission/application"
 	domain "github.com/aegiscore/user-service/internal/features/permission/domain"
-	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
 

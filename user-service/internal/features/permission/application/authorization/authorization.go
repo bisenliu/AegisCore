@@ -5,8 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )

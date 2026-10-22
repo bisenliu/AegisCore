@@ -5,12 +5,12 @@ package ent
 import (
 	"fmt"
 	"strings"
+	"uuid"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
-	"github.com/google/uuid"
 )
 
 // RbacPolicyRevision is the model entity for the RbacPolicyRevision schema.
@@ -58,12 +58,14 @@ func (*RbacPolicyRevision) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case rbacpolicyrevision.FieldRoleID, rbacpolicyrevision.FieldPermissionID:
-			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
 		case rbacpolicyrevision.FieldID, rbacpolicyrevision.FieldCreatedAt:
 			values[i] = new(sql.NullInt64)
 		case rbacpolicyrevision.FieldReason:
 			values[i] = new(sql.NullString)
+		case rbacpolicyrevision.FieldRoleID:
+			values[i] = rbacpolicyrevision.ValueScanner.RoleID.ScanValue()
+		case rbacpolicyrevision.FieldPermissionID:
+			values[i] = rbacpolicyrevision.ValueScanner.PermissionID.ScanValue()
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -98,18 +100,16 @@ func (_m *RbacPolicyRevision) assignValues(columns []string, values []any) error
 				_m.Reason = value.String
 			}
 		case rbacpolicyrevision.FieldRoleID:
-			if value, ok := values[i].(*sql.NullScanner); !ok {
-				return fmt.Errorf("unexpected type %T for field role_id", values[i])
-			} else if value.Valid {
-				_m.RoleID = new(uuid.UUID)
-				*_m.RoleID = *value.S.(*uuid.UUID)
+			if value, err := rbacpolicyrevision.ValueScanner.RoleID.FromValue(values[i]); err != nil {
+				return err
+			} else {
+				_m.RoleID = value
 			}
 		case rbacpolicyrevision.FieldPermissionID:
-			if value, ok := values[i].(*sql.NullScanner); !ok {
-				return fmt.Errorf("unexpected type %T for field permission_id", values[i])
-			} else if value.Valid {
-				_m.PermissionID = new(uuid.UUID)
-				*_m.PermissionID = *value.S.(*uuid.UUID)
+			if value, err := rbacpolicyrevision.ValueScanner.PermissionID.FromValue(values[i]); err != nil {
+				return err
+			} else {
+				_m.PermissionID = value
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])

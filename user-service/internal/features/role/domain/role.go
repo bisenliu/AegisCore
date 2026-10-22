@@ -1,6 +1,6 @@
 package domain
 
-import "github.com/google/uuid"
+import "uuid"
 
 // Role 是角色管理 feature 的标准领域模型。
 type Role struct {

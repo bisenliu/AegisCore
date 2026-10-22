@@ -13,8 +13,8 @@ import (
 	context "context"
 	reflect "reflect"
 	time "time"
+	uuid "uuid"
 
-	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
 

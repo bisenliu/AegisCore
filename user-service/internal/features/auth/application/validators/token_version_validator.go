@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sync/atomic"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/localcache"

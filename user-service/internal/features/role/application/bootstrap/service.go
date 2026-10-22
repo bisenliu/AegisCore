@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/aegiscore/user-service/internal/shared/identity"
 	"github.com/aegiscore/user-service/internal/shared/rbacbaseline"

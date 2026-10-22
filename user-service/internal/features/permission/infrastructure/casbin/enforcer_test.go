@@ -8,9 +8,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"uuid"
 
 	casbinlib "github.com/casbin/casbin/v3"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 

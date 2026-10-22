@@ -6,9 +6,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/google/uuid"
 	rediscmd "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
@@ -156,7 +156,7 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 	app.RequireStart()
 	require.True(t, watcherStatus.Status().Running)
 	require.ErrorIs(t, policyHealth.ProjectionStatus().LastError, loadErr)
-	allowed, err := authorizer.Enforce(context.Background(), uuid.NewString(), "/api/v1/users", "GET")
+	allowed, err := authorizer.Enforce(context.Background(), uuid.New().String(), "/api/v1/users", "GET")
 	require.NoError(t, err)
 	require.False(t, allowed)
 	close(allowRecovery)

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"uuid"
 
 	entsql "entgo.io/ent/dialect/sql"
-	"github.com/google/uuid"
 
 	"github.com/aegiscore/common/runtime/datastore"
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
@@ -76,10 +76,7 @@ func (s *OutboxStore) Claim(ctx context.Context, now time.Time, limit int, claim
 	}
 
 	// 同一 batch 共用随机 lease token；Ack/Fail 还会匹配 event_id，因此不会扩大单个事件的更新权限。
-	claimToken, err := uuid.NewRandom()
-	if err != nil {
-		return nil, finish.Fail(fmt.Errorf("generate outbox claim token: %w", err))
-	}
+	claimToken := uuid.NewV4()
 	ids := make([]int64, 0, len(rows))
 	for _, row := range rows {
 		ids = append(ids, row.ID)
@@ -87,7 +84,7 @@ func (s *OutboxStore) Claim(ctx context.Context, now time.Time, limit int, claim
 	updated, err := tx.RbacPolicyOutboxEvent.Update().
 		Where(entrbacoutbox.IDIn(ids...)).
 		SetStatus(permissionapplication.OutboxStatusProcessing).
-		SetClaimToken(claimToken).
+		SetClaimToken(&claimToken).
 		SetClaimedUntil(now.Add(claimTimeout).UnixMilli()).
 		SetUpdatedAt(nowMillis).
 		Save(ctx)
@@ -118,7 +115,7 @@ func (s *OutboxStore) Ack(ctx context.Context, eventID uuid.UUID, claimToken uui
 		Where(
 			entrbacoutbox.EventIDEQ(eventID),
 			entrbacoutbox.StatusEQ(permissionapplication.OutboxStatusProcessing),
-			entrbacoutbox.ClaimTokenEQ(claimToken),
+			entrbacoutbox.ClaimTokenEQ(&claimToken),
 		).
 		SetStatus(permissionapplication.OutboxStatusDelivered).
 		SetDeliveredAt(deliveredAt.UnixMilli()).
@@ -139,7 +136,7 @@ func (s *OutboxStore) Fail(ctx context.Context, eventID uuid.UUID, claimToken uu
 		Where(
 			entrbacoutbox.EventIDEQ(eventID),
 			entrbacoutbox.StatusEQ(permissionapplication.OutboxStatusProcessing),
-			entrbacoutbox.ClaimTokenEQ(claimToken),
+			entrbacoutbox.ClaimTokenEQ(&claimToken),
 		).
 		SetStatus(permissionapplication.OutboxStatusFailed).
 		AddAttemptCount(1).

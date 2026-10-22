@@ -3,10 +3,12 @@
 package rbacuserrolerevision
 
 import (
+	"fmt"
+	"uuid"
+
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
-	"github.com/google/uuid"
 )
 
 // ID filters vertices based on their ID field.
@@ -66,12 +68,14 @@ func Reason(v string) predicate.RbacUserRoleRevision {
 
 // UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
 func UserID(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldEQ(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldEQ(FieldUserID, vc), err)
 }
 
 // RoleID applies equality check predicate on the "role_id" field. It's identical to RoleIDEQ.
-func RoleID(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldEQ(FieldRoleID, v))
+func RoleID(v *uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldEQ(FieldRoleID, vc), err)
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
@@ -181,82 +185,210 @@ func ReasonContainsFold(v string) predicate.RbacUserRoleRevision {
 
 // UserIDEQ applies the EQ predicate on the "user_id" field.
 func UserIDEQ(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldEQ(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldEQ(FieldUserID, vc), err)
 }
 
 // UserIDNEQ applies the NEQ predicate on the "user_id" field.
 func UserIDNEQ(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldNEQ(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldNEQ(FieldUserID, vc), err)
 }
 
 // UserIDIn applies the In predicate on the "user_id" field.
 func UserIDIn(vs ...uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldIn(FieldUserID, vs...))
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.UserID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldIn(FieldUserID, v...), err)
 }
 
 // UserIDNotIn applies the NotIn predicate on the "user_id" field.
 func UserIDNotIn(vs ...uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldNotIn(FieldUserID, vs...))
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.UserID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldNotIn(FieldUserID, v...), err)
 }
 
 // UserIDGT applies the GT predicate on the "user_id" field.
 func UserIDGT(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldGT(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldGT(FieldUserID, vc), err)
 }
 
 // UserIDGTE applies the GTE predicate on the "user_id" field.
 func UserIDGTE(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldGTE(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldGTE(FieldUserID, vc), err)
 }
 
 // UserIDLT applies the LT predicate on the "user_id" field.
 func UserIDLT(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldLT(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldLT(FieldUserID, vc), err)
 }
 
 // UserIDLTE applies the LTE predicate on the "user_id" field.
 func UserIDLTE(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldLTE(FieldUserID, v))
+	vc, err := ValueScanner.UserID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldLTE(FieldUserID, vc), err)
+}
+
+// UserIDContains applies the Contains predicate on the "user_id" field.
+func UserIDContains(v uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldContains(FieldUserID, vcs), err)
+}
+
+// UserIDHasPrefix applies the HasPrefix predicate on the "user_id" field.
+func UserIDHasPrefix(v uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldHasPrefix(FieldUserID, vcs), err)
+}
+
+// UserIDHasSuffix applies the HasSuffix predicate on the "user_id" field.
+func UserIDHasSuffix(v uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldHasSuffix(FieldUserID, vcs), err)
+}
+
+// UserIDEqualFold applies the EqualFold predicate on the "user_id" field.
+func UserIDEqualFold(v uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldEqualFold(FieldUserID, vcs), err)
+}
+
+// UserIDContainsFold applies the ContainsFold predicate on the "user_id" field.
+func UserIDContainsFold(v uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.UserID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("user_id value is not a string: %T", vc)
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldContainsFold(FieldUserID, vcs), err)
 }
 
 // RoleIDEQ applies the EQ predicate on the "role_id" field.
-func RoleIDEQ(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldEQ(FieldRoleID, v))
+func RoleIDEQ(v *uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldEQ(FieldRoleID, vc), err)
 }
 
 // RoleIDNEQ applies the NEQ predicate on the "role_id" field.
-func RoleIDNEQ(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldNEQ(FieldRoleID, v))
+func RoleIDNEQ(v *uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldNEQ(FieldRoleID, vc), err)
 }
 
 // RoleIDIn applies the In predicate on the "role_id" field.
-func RoleIDIn(vs ...uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldIn(FieldRoleID, vs...))
+func RoleIDIn(vs ...*uuid.UUID) predicate.RbacUserRoleRevision {
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.RoleID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldIn(FieldRoleID, v...), err)
 }
 
 // RoleIDNotIn applies the NotIn predicate on the "role_id" field.
-func RoleIDNotIn(vs ...uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldNotIn(FieldRoleID, vs...))
+func RoleIDNotIn(vs ...*uuid.UUID) predicate.RbacUserRoleRevision {
+	var (
+		err error
+		v   = make([]any, len(vs))
+	)
+	for i := range v {
+		if v[i], err = ValueScanner.RoleID.Value(vs[i]); err != nil {
+			break
+		}
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldNotIn(FieldRoleID, v...), err)
 }
 
 // RoleIDGT applies the GT predicate on the "role_id" field.
-func RoleIDGT(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldGT(FieldRoleID, v))
+func RoleIDGT(v *uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldGT(FieldRoleID, vc), err)
 }
 
 // RoleIDGTE applies the GTE predicate on the "role_id" field.
-func RoleIDGTE(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldGTE(FieldRoleID, v))
+func RoleIDGTE(v *uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldGTE(FieldRoleID, vc), err)
 }
 
 // RoleIDLT applies the LT predicate on the "role_id" field.
-func RoleIDLT(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldLT(FieldRoleID, v))
+func RoleIDLT(v *uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldLT(FieldRoleID, vc), err)
 }
 
 // RoleIDLTE applies the LTE predicate on the "role_id" field.
-func RoleIDLTE(v uuid.UUID) predicate.RbacUserRoleRevision {
-	return predicate.RbacUserRoleRevision(sql.FieldLTE(FieldRoleID, v))
+func RoleIDLTE(v *uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.RoleID.Value(v)
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldLTE(FieldRoleID, vc), err)
+}
+
+// RoleIDContains applies the Contains predicate on the "role_id" field.
+func RoleIDContains(v *uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldContains(FieldRoleID, vcs), err)
+}
+
+// RoleIDHasPrefix applies the HasPrefix predicate on the "role_id" field.
+func RoleIDHasPrefix(v *uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldHasPrefix(FieldRoleID, vcs), err)
+}
+
+// RoleIDHasSuffix applies the HasSuffix predicate on the "role_id" field.
+func RoleIDHasSuffix(v *uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldHasSuffix(FieldRoleID, vcs), err)
 }
 
 // RoleIDIsNil applies the IsNil predicate on the "role_id" field.
@@ -267,6 +399,26 @@ func RoleIDIsNil() predicate.RbacUserRoleRevision {
 // RoleIDNotNil applies the NotNil predicate on the "role_id" field.
 func RoleIDNotNil() predicate.RbacUserRoleRevision {
 	return predicate.RbacUserRoleRevision(sql.FieldNotNull(FieldRoleID))
+}
+
+// RoleIDEqualFold applies the EqualFold predicate on the "role_id" field.
+func RoleIDEqualFold(v *uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldEqualFold(FieldRoleID, vcs), err)
+}
+
+// RoleIDContainsFold applies the ContainsFold predicate on the "role_id" field.
+func RoleIDContainsFold(v *uuid.UUID) predicate.RbacUserRoleRevision {
+	vc, err := ValueScanner.RoleID.Value(v)
+	vcs, ok := vc.(string)
+	if err == nil && !ok {
+		err = fmt.Errorf("role_id value is not a string: %T", vc)
+	}
+	return predicate.RbacUserRoleRevisionOrErr(sql.FieldContainsFold(FieldRoleID, vcs), err)
 }
 
 // HasOutboxEvent applies the HasEdge predicate on the "outbox_event" edge.

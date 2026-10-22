@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
 	entsql "entgo.io/ent/dialect/sql"
-	"github.com/google/uuid"
 
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 	entrbacpolicyrevision "github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"

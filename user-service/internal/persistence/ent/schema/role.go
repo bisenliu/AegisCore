@@ -1,11 +1,12 @@
 package schema
 
 import (
+	"uuid"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
-	"github.com/google/uuid"
 )
 
 // Role 是 roles 表的 Ent schema。
@@ -22,7 +23,7 @@ func (Role) Mixin() []ent.Mixin {
 func (Role) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("id").Unique().Immutable().Comment("角色ID"),
-		field.UUID("role_id", uuid.UUID{}).Unique().Immutable().Comment("外部角色ID"),
+		field.String("role_id").GoType(uuid.UUID{}).ValueScanner(uuidScanner).SchemaType(uuidColumnTypes).Unique().Immutable().Comment("外部角色ID"),
 		field.String("name").NotEmpty().MaxLen(128).Comment("角色名称"),
 		field.String("description").Default("").MaxLen(512).Comment("角色说明"),
 		field.Bool("active").Default(true).Comment("角色是否启用"),

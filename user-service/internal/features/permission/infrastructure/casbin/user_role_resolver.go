@@ -3,8 +3,7 @@ package casbin
 import (
 	"context"
 	"sync/atomic"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/aegiscore/common/runtime/localcache"
 	"github.com/aegiscore/user-service/internal/persistence/ent"

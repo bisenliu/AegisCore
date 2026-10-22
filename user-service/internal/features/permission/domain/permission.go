@@ -1,6 +1,6 @@
 package domain
 
-import "github.com/google/uuid"
+import "uuid"
 
 // Permission 是权限目录 feature 的标准领域模型。
 type Permission struct {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 

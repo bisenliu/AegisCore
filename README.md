@@ -1,6 +1,6 @@
 # AegisCore
 
-AegisCore 是 Go 1.26 workspace 后端项目底座，当前包含跨服务共享模块 `common`、用户服务模块 `user-service` 和仓库级交付工具 `tools`。用户服务提供用户资料、认证会话、角色、权限、RBAC 授权、健康探针、OpenAPI、metrics/tracing/logging 和 Ent/Atlas migration 工作流。
+AegisCore 是 Go 1.27.3 workspace 后端项目底座，当前包含跨服务共享模块 `common`、用户服务模块 `user-service` 和仓库级交付工具 `tools`。用户服务提供用户资料、认证会话、角色、权限、RBAC 授权、健康探针、OpenAPI、metrics/tracing/logging 和 Ent/Atlas migration 工作流。
 
 ## 仓库布局
 

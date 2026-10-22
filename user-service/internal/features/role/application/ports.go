@@ -2,8 +2,7 @@ package application
 
 import (
 	"context"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 )

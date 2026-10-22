@@ -95,10 +95,10 @@ func (_u *RbacPolicyRevisionUpdate) sqlSave(ctx context.Context) (_node int, err
 		}
 	}
 	if _u.mutation.RoleIDCleared() {
-		_spec.ClearField(rbacpolicyrevision.FieldRoleID, field.TypeUUID)
+		_spec.ClearField(rbacpolicyrevision.FieldRoleID, field.TypeString)
 	}
 	if _u.mutation.PermissionIDCleared() {
-		_spec.ClearField(rbacpolicyrevision.FieldPermissionID, field.TypeUUID)
+		_spec.ClearField(rbacpolicyrevision.FieldPermissionID, field.TypeString)
 	}
 	if _u.mutation.OutboxEventCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -246,10 +246,10 @@ func (_u *RbacPolicyRevisionUpdateOne) sqlSave(ctx context.Context) (_node *Rbac
 		}
 	}
 	if _u.mutation.RoleIDCleared() {
-		_spec.ClearField(rbacpolicyrevision.FieldRoleID, field.TypeUUID)
+		_spec.ClearField(rbacpolicyrevision.FieldRoleID, field.TypeString)
 	}
 	if _u.mutation.PermissionIDCleared() {
-		_spec.ClearField(rbacpolicyrevision.FieldPermissionID, field.TypeUUID)
+		_spec.ClearField(rbacpolicyrevision.FieldPermissionID, field.TypeString)
 	}
 	if _u.mutation.OutboxEventCleared() {
 		edge := &sqlgraph.EdgeSpec{

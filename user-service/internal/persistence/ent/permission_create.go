@@ -6,13 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"uuid"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/aegiscore/user-service/internal/persistence/ent/permission"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rolepermission"
-	"github.com/google/uuid"
 )
 
 // PermissionCreate is the builder for creating a Permission entity.
@@ -223,7 +223,10 @@ func (_c *PermissionCreate) sqlSave(ctx context.Context) (*Permission, error) {
 	if err := _c.check(); err != nil {
 		return nil, err
 	}
-	_node, _spec := _c.createSpec()
+	_node, _spec, err := _c.createSpec()
+	if err != nil {
+		return nil, err
+	}
 	if err := sqlgraph.CreateNode(ctx, _c.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
@@ -239,7 +242,7 @@ func (_c *PermissionCreate) sqlSave(ctx context.Context) (*Permission, error) {
 	return _node, nil
 }
 
-func (_c *PermissionCreate) createSpec() (*Permission, *sqlgraph.CreateSpec) {
+func (_c *PermissionCreate) createSpec() (*Permission, *sqlgraph.CreateSpec, error) {
 	var (
 		_node = &Permission{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(permission.Table, sqlgraph.NewFieldSpec(permission.FieldID, field.TypeInt64))
@@ -258,7 +261,11 @@ func (_c *PermissionCreate) createSpec() (*Permission, *sqlgraph.CreateSpec) {
 		_node.UpdatedAt = value
 	}
 	if value, ok := _c.mutation.PermissionID(); ok {
-		_spec.SetField(permission.FieldPermissionID, field.TypeUUID, value)
+		vv, err := permission.ValueScanner.PermissionID.Value(value)
+		if err != nil {
+			return nil, nil, err
+		}
+		_spec.SetField(permission.FieldPermissionID, field.TypeString, vv)
 		_node.PermissionID = value
 	}
 	if value, ok := _c.mutation.Name(); ok {
@@ -297,7 +304,7 @@ func (_c *PermissionCreate) createSpec() (*Permission, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	return _node, _spec
+	return _node, _spec, nil
 }
 
 // OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
@@ -635,7 +642,10 @@ func (_c *PermissionCreateBulk) Save(ctx context.Context) ([]*Permission, error)
 				}
 				builder.mutation = mutation
 				var err error
-				nodes[i], specs[i] = builder.createSpec()
+				nodes[i], specs[i], err = builder.createSpec()
+				if err != nil {
+					return nil, err
+				}
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {

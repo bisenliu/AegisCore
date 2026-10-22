@@ -2,8 +2,7 @@ package rolehttp
 
 import (
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	contracterrors "github.com/aegiscore/common/contract/errors"
 	"github.com/aegiscore/common/contract/pagination"
@@ -132,7 +131,7 @@ func prepareRolePermissionCommand(req RolePermissionHTTPRequest) (rolecommand.Ro
 func parseUserID(raw string) (uuid.UUID, error) {
 	userID, err := uuid.Parse(raw)
 	if err != nil {
-		return uuid.Nil, contracterrors.BadRequestError(messages.InvalidUserID)
+		return uuid.Nil(), contracterrors.BadRequestError(messages.InvalidUserID)
 	}
 	return userID, nil
 }
@@ -140,7 +139,7 @@ func parseUserID(raw string) (uuid.UUID, error) {
 func parseRoleID(raw string) (uuid.UUID, error) {
 	roleID, err := uuid.Parse(raw)
 	if err != nil {
-		return uuid.Nil, contracterrors.BadRequestError(messages.InvalidRole)
+		return uuid.Nil(), contracterrors.BadRequestError(messages.InvalidRole)
 	}
 	return roleID, nil
 }
@@ -148,7 +147,7 @@ func parseRoleID(raw string) (uuid.UUID, error) {
 func parsePermissionID(raw string) (uuid.UUID, error) {
 	permissionID, err := uuid.Parse(raw)
 	if err != nil {
-		return uuid.Nil, contracterrors.BadRequestError(messages.InvalidPermission)
+		return uuid.Nil(), contracterrors.BadRequestError(messages.InvalidPermission)
 	}
 	return permissionID, nil
 }

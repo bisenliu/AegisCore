@@ -3,8 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	runtimeid "github.com/aegiscore/common/runtime/id"
 	authapplication "github.com/aegiscore/user-service/internal/features/auth/application"

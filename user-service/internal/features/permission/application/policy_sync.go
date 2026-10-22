@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/aegiscore/common/runtime/logger"
@@ -129,7 +129,7 @@ func (c *PolicyRefreshCoordinator) ObservePolicyRevision(ctx context.Context, ta
 	}
 	if change.RequiresReload() {
 		c.engine.InvalidateAllUserRoles()
-	} else if change.UserID != uuid.Nil {
+	} else if change.UserID != uuid.Nil() {
 		c.engine.InvalidateUserRole(change.UserID)
 	} else {
 		c.engine.InvalidateAllUserRoles()
@@ -142,7 +142,7 @@ func (c *PolicyRefreshCoordinator) ObservePolicyRevision(ctx context.Context, ta
 // ObserveUserRoleRevision 以数据库 user-role revision 驱动本地用户角色缓存失效，不触碰 Casbin policy 投影。
 func (c *PolicyRefreshCoordinator) ObserveUserRoleRevision(ctx context.Context, userRoleRevision int64, change PolicyChange) error {
 	reason := change.ReasonText()
-	if change.UserID != uuid.Nil {
+	if change.UserID != uuid.Nil() {
 		c.engine.InvalidateUserRole(change.UserID)
 	} else {
 		c.engine.InvalidateAllUserRoles()

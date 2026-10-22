@@ -1,10 +1,11 @@
 package schema
 
 import (
+	"uuid"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
-	"github.com/google/uuid"
 )
 
 // RbacPolicyRevision 是会改变 Casbin 静态 policy 的 RBAC 变更数据库权威 revision schema。
@@ -22,8 +23,8 @@ func (RbacPolicyRevision) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("id").StorageKey("revision").Unique().Immutable().Comment("单调递增的 RBAC policy revision"),
 		field.String("reason").NotEmpty().MaxLen(64).Immutable().Comment("触发 policy 变更的稳定原因"),
-		field.UUID("role_id", uuid.UUID{}).Optional().Nillable().Immutable().Comment("相关外部角色ID"),
-		field.UUID("permission_id", uuid.UUID{}).Optional().Nillable().Immutable().Comment("相关外部权限ID"),
+		field.String("role_id").GoType((*uuid.UUID)(nil)).ValueScanner(nullableUUIDScanner).SchemaType(uuidColumnTypes).Optional().Nillable().Immutable().Comment("相关外部角色ID"),
+		field.String("permission_id").GoType((*uuid.UUID)(nil)).ValueScanner(nullableUUIDScanner).SchemaType(uuidColumnTypes).Optional().Nillable().Immutable().Comment("相关外部权限ID"),
 	}
 }
 

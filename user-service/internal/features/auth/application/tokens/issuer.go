@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"uuid"
 
 	jwtv5 "github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	runtimeid "github.com/aegiscore/common/runtime/id"
@@ -131,7 +131,7 @@ func (i *authTokenIssuer) ParseRefreshToken(ctx context.Context, token string) (
 	claims, err := i.parse(commonauth.StripBearerPrefix(token), SubjectRefresh, false)
 	if err != nil {
 		logger.Warn(ctx, "refresh token invalid", zap.Bool("token_present", token != ""))
-		return nil, uuid.Nil, authdomain.ErrTokenInvalid
+		return nil, uuid.Nil(), authdomain.ErrTokenInvalid
 	}
 	return claims, claims.UserID, nil
 }
@@ -141,7 +141,7 @@ func (i *authTokenIssuer) ParsePasswordChangeToken(ctx context.Context, token st
 	claims, err := i.parse(commonauth.StripBearerPrefix(token), SubjectPasswordChange, true)
 	if err != nil {
 		logger.Warn(ctx, "password change token invalid", zap.Bool("token_present", token != ""))
-		return nil, uuid.Nil, authdomain.ErrTokenInvalid
+		return nil, uuid.Nil(), authdomain.ErrTokenInvalid
 	}
 	return claims, claims.UserID, nil
 }
@@ -166,7 +166,7 @@ func (i *authTokenIssuer) parse(tokenString string, subject string, requireSessi
 	if _, err := uuid.Parse(claims.ID); err != nil {
 		return nil, errInvalidTokenID
 	}
-	if claims.UserID == uuid.Nil {
+	if claims.UserID == uuid.Nil() {
 		return nil, errMissingUserID
 	}
 	if claims.TokenVersion <= 0 {
@@ -185,7 +185,7 @@ func (i *authTokenIssuer) sign(input signInput, subject string) (string, error) 
 	if i.config.Secret == "" {
 		return "", commonauth.ErrMissingSecret
 	}
-	if input.UserID == uuid.Nil {
+	if input.UserID == uuid.Nil() {
 		return "", errMissingUserID
 	}
 	if input.TokenVersion <= 0 {

@@ -6,13 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"uuid"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/aegiscore/user-service/internal/persistence/ent/user"
 	"github.com/aegiscore/user-service/internal/persistence/ent/userrole"
-	"github.com/google/uuid"
 )
 
 // UserCreate is the builder for creating a User entity.
@@ -239,7 +239,10 @@ func (_c *UserCreate) sqlSave(ctx context.Context) (*User, error) {
 	if err := _c.check(); err != nil {
 		return nil, err
 	}
-	_node, _spec := _c.createSpec()
+	_node, _spec, err := _c.createSpec()
+	if err != nil {
+		return nil, err
+	}
 	if err := sqlgraph.CreateNode(ctx, _c.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
@@ -255,7 +258,7 @@ func (_c *UserCreate) sqlSave(ctx context.Context) (*User, error) {
 	return _node, nil
 }
 
-func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
+func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec, error) {
 	var (
 		_node = &User{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(user.Table, sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt64))
@@ -274,7 +277,11 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_node.UpdatedAt = value
 	}
 	if value, ok := _c.mutation.UserID(); ok {
-		_spec.SetField(user.FieldUserID, field.TypeUUID, value)
+		vv, err := user.ValueScanner.UserID.Value(value)
+		if err != nil {
+			return nil, nil, err
+		}
+		_spec.SetField(user.FieldUserID, field.TypeString, vv)
 		_node.UserID = value
 	}
 	if value, ok := _c.mutation.Nickname(); ok {
@@ -317,7 +324,7 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	return _node, _spec
+	return _node, _spec, nil
 }
 
 // OnConflict allows configuring the `ON CONFLICT` / `ON DUPLICATE KEY` clause
@@ -733,7 +740,10 @@ func (_c *UserCreateBulk) Save(ctx context.Context) ([]*User, error) {
 				}
 				builder.mutation = mutation
 				var err error
-				nodes[i], specs[i] = builder.createSpec()
+				nodes[i], specs[i], err = builder.createSpec()
+				if err != nil {
+					return nil, err
+				}
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
