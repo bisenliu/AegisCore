@@ -6,9 +6,11 @@
 #   docker compose -f deployments/compose/docker-compose.yml config --quiet
 # 构建本地镜像；--pull 会检查并拉取更新的基础镜像：
 #   docker compose -f deployments/compose/docker-compose.yml build --pull
-# 启动全部服务；配置或源码变化时添加 --build：
+# 启动默认服务；配置或源码变化时添加 --build：
 #   docker compose -f deployments/compose/docker-compose.yml up -d
 #   docker compose -f deployments/compose/docker-compose.yml up -d --build
+# 按需启动 Prometheus 和 Grafana：
+#   docker compose -f deployments/compose/docker-compose.yml --profile observability up -d
 # 查看服务状态和日志：
 #   docker compose -f deployments/compose/docker-compose.yml ps -a
 #   docker compose -f deployments/compose/docker-compose.yml logs -f --tail=200
@@ -270,7 +272,6 @@ services:
   rbac-seed:
     profiles:
       - seed
-    build: *user-service-build
     image: aegiscore-user-service:latest
     command:
       - rbac
@@ -339,6 +340,8 @@ services:
         max-file: "5"
 
   prometheus:
+    profiles:
+      - observability
     image: prom/prometheus:latest
     environment: *timezone-env
     command:
@@ -366,6 +369,8 @@ services:
     restart: unless-stopped
 
   grafana:
+    profiles:
+      - observability
     image: grafana/grafana:latest
     environment:
       <<: *timezone-env

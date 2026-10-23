@@ -8,6 +8,7 @@
 # 都尽量走 user-service 的真实 API 与运行时链路。
 #
 # 典型用法：
+#   docker compose -f deployments/compose/docker-compose.yml --profile observability up -d
 #   ./deployments/compose/scripts/generate-real-metrics-load.sh
 #
 # 输出文件：
@@ -109,7 +110,7 @@ Artifacts:
   $SERVICE_METRICS_FILE
 
 Notes:
-  - 请先启动本地 docker compose，并确认 user-service /readyz 可用。
+  - 请先使用 --profile observability 启动本地 docker compose，并确认 user-service /readyz 可用。
   - 脚本会创建 metrics-* 测试数据，只建议在本地或测试环境运行。
   - scheduler 指标依赖服务端真实注册 scheduler job；若没有注册，脚本会报告 no_data/missing。
 USAGE

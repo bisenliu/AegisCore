@@ -4,7 +4,7 @@
 
 当前提供可直接运行的本地 Compose 编排：
 
-- `docker-compose.yml`：启动 PostgreSQL、Redis、Nacos、Jaeger OTLP、本地用户服务、Prometheus 和 Grafana；`deployments/docker/nacos.Dockerfile` 基于 `nacos/nacos-server:latest`，自行固定 standalone、`microservice` 功能模式和官方容器启动入口，Compose 不覆盖 Nacos 启动命令，RBAC seed 作为 `seed` profile 下的一次性任务按需手动执行。
+- `docker-compose.yml`：默认启动 PostgreSQL、Redis、Nacos、Jaeger OTLP 和本地用户服务；Prometheus 和 Grafana 由 `observability` profile 按需启动。`deployments/docker/nacos.Dockerfile` 基于 `nacos/nacos-server:latest`，自行固定 standalone、`microservice` 功能模式和官方容器启动入口，Compose 不覆盖 Nacos 启动命令，RBAC seed 作为 `seed` profile 下的一次性任务按需手动执行。
 - `deployments/docker/jaeger.Dockerfile`：保留 `jaegertracing/all-in-one:latest` 的入口与功能，只从仓库固定 digest 的 Distroless runtime 复制 `Asia/Shanghai` zoneinfo，避免 Jaeger 1.76 基础镜像缺少时区数据时忽略 `TZ`。
 - `../nacos/`：Git 中唯一的本地 Nacos 配置来源，`local-host/` 与 `local-docker/` 分别保存三份完整配置，由 `tools/nacos-config-seed` 通过 Nacos v3 Admin API 发布。
 - `prometheus/prometheus.yml`：抓取用户服务 `/metrics`，并加载 `deployments/observability/prometheus/user-service-alerts.yaml`。
@@ -23,13 +23,19 @@ make compose-dashboard-generate
 make compose-dashboard-check
 ```
 
-从仓库根目录启动：
+从仓库根目录启动默认服务并构建本地镜像：
 
 ```bash
-docker compose -f deployments/compose/docker-compose.yml up --build
+docker compose -f deployments/compose/docker-compose.yml up -d --build
 ```
 
-数据库 SQL migration 已受控执行后，可按需单独执行 RBAC seed：
+需要 Prometheus 和 Grafana 时，再启动观测 profile：
+
+```bash
+docker compose -f deployments/compose/docker-compose.yml --profile observability up -d
+```
+
+数据库 SQL migration 已受控执行且 user-service 镜像已通过上述启动命令构建后，可按需单独执行 RBAC seed。seed 复用同一个本地镜像，不会单独构建：
 
 ```bash
 docker compose -f deployments/compose/docker-compose.yml --profile seed run --rm rbac-seed
@@ -73,6 +79,12 @@ user-service 使用固定 digest 的 Distroless static nonroot 运行时镜像�
 - Jaeger：http://localhost:16686，OTLP gRPC 为 localhost:4317，OTLP HTTP 为 localhost:4318
 - Prometheus：http://localhost:9090
 - Grafana：http://localhost:3000，默认账号为 `admin`，默认密码为 `aegiscore-local-grafana`
+
+Prometheus 和 Grafana 端口仅在启用 `observability` profile 时由新启动的容器提供。已经运行的旧容器不会因为省略 profile 自动停止；需要释放资源时可显式停止：
+
+```bash
+docker compose -f deployments/compose/docker-compose.yml --profile observability stop prometheus grafana
+```
 
 所有宿主端口都绑定 `127.0.0.1`，不向局域网或 Runner 外部网卡暴露。需要从其他设备访问时，应使用受控端口转发或显式覆盖 Compose 端口绑定，不能把本地弱凭据服务直接发布到全部网卡。
 

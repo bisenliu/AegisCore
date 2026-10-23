@@ -129,6 +129,7 @@ make test-containers
 ## 4. 性能和容量验收
 
 本地 Compose 环境的可重复性能入口是 `deployments/compose/scripts/generate-real-metrics-load.sh`。脚本覆盖管理员登录、refresh、认证异常、用户创建/列表、角色启停、RBAC 授权和 watcher revision 检查，并采集 user-service `/metrics` 与 Prometheus 查询快照。
+运行前需通过 `docker compose -f deployments/compose/docker-compose.yml --profile observability up -d` 启动 Prometheus。
 
 默认预算：
 
