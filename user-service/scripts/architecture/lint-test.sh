@@ -210,15 +210,8 @@ cat > "${fixture_root}/deployments/helm/aegiscore-user-service/templates/rbac-se
 image: {{ .Values.image.ref | quote }}
 EOF
 
-# 步骤 20.1：写入故意违规的 Kustomize 聚合，触发默认资源包含 seed Job 的检查。
+# 步骤 20.1：写入回流的手写 Kubernetes 目录，触发生产清单必须由 Helm 渲染的检查。
 mkdir -p "${fixture_root}/deployments/k8s/user-service"
-cat > "${fixture_root}/deployments/k8s/user-service/kustomization.yaml" <<'EOF'
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - deployment.yaml
-  - rbac-seed-job.yaml
-EOF
 
 # 步骤 21：写入 application 反向导入 HTTP transport 的违规样例，覆盖 feature 分层检查。
 cat > "${fixture_root}/user-service/internal/features/auth/application/violating_import.go" <<'EOF'
@@ -475,7 +468,7 @@ if [[ "${output}" != *"Helm image helper must allow only repository digest refs"
 fi
 
 # 步骤 51.1：断言 RBAC seed Job 默认发布门禁违规被报告。
-if [[ "${output}" != *"Helm RBAC seed Job must be disabled by default for runtime manifests"* || "${output}" != *"Helm RBAC seed Job name must support release-unique suffixes"* || "${output}" != *"Kustomize default user-service resources must not include RBAC seed Job"* ]]; then
+if [[ "${output}" != *"Helm RBAC seed Job must be disabled by default for runtime manifests"* || "${output}" != *"Helm RBAC seed Job name must support release-unique suffixes"* || "${output}" != *"hand-written Kubernetes manifests must not return; render deployments/helm instead"* ]]; then
   printf 'architecture-lint-test: expected RBAC seed release gate violation reports\n%s\n' "${output}" >&2
   exit 1
 fi

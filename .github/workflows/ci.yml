@@ -110,12 +110,6 @@ jobs:
           tar -xzf "/tmp/${helm_archive}" -C /tmp
           install /tmp/linux-amd64/helm "${HOME}/.local/bin/helm"
 
-          kubectl_version='v1.34.1'
-          curl -fsSLo "${HOME}/.local/bin/kubectl" "https://dl.k8s.io/release/${kubectl_version}/bin/linux/amd64/kubectl"
-          curl -fsSLo /tmp/kubectl.sha256 "https://dl.k8s.io/release/${kubectl_version}/bin/linux/amd64/kubectl.sha256"
-          printf '%s  %s\n' "$(cat /tmp/kubectl.sha256)" "${HOME}/.local/bin/kubectl" | sha256sum -c -
-          chmod +x "${HOME}/.local/bin/kubectl"
-
           kubeconform_version='v0.7.0'
           kubeconform_archive='kubeconform-linux-amd64.tar.gz'
           curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${kubeconform_version}/${kubeconform_archive}" -o "/tmp/${kubeconform_archive}"

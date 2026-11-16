@@ -13,7 +13,8 @@
 - **WHEN** 协作者从仓库根目录进入 OPSX 工作流或判断代码归属
 - **THEN** `AGENTS.md`、`docs/ARCHITECTURE.md`、`docs/opsx/CAPABILITY_MAP.md`、`docs/opsx/CHANGE_WORKFLOW.md`、`openspec/config.yaml` 和 `openspec/specs/` MUST 存在且引用路径可解析
 - **AND** `AGENTS.md` MUST 提供导航与规则摘要，架构文档 MUST 定义结构边界，主规格 MUST 定义稳定行为，能力地图 MUST 只提供 capability、代码位置、状态和依赖索引
-- **AND** 临时草稿、归档 change 或一次性任务名 MUST NOT 取代当前主规格或创建重复 capability
+- **AND** 临时草稿、已完成 change 或一次性任务名 MUST NOT 取代当前主规格或创建重复 capability
+- **AND** 已合并的 change MUST 从 `openspec/changes/` 删除，仓库 MUST NOT 保留 `openspec/changes/archive/`
 
 #### Scenario: artifact 语言、结构与能力定位
 
@@ -27,7 +28,7 @@
 - **WHEN** 需求改变跨模块、外部契约、schema、部署或其他长期稳定行为
 - **THEN** 协作者 MUST 使用 kebab-case change name 创建相互一致的 proposal、design、spec delta 和 tasks，并在 artifacts 就绪后实施
 - **WHEN** change 已实现
-- **THEN** 预期变更 MUST 先被暂存，相关测试、`make lint` 和 `make verify` MUST 全部通过，tasks MUST 全部完成，之后才可归档并合并回主规格
+- **THEN** 预期变更 MUST 先被暂存，相关测试、`make lint` 和 `make verify` MUST 全部通过，tasks MUST 全部完成，之后才可将 delta 合并回主规格并删除 change 目录
 - **AND** 任一必要验证未运行或未通过时，change MUST NOT 被视为完成
 
 #### Scenario: 纯治理调整不改变运行时

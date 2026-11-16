@@ -258,7 +258,6 @@ check_helm_user_service_immutable_image() {
   local helpers_file="${chart_dir}/templates/_helpers.tpl"
   local deployment_file="${chart_dir}/templates/deployment.yaml"
   local seed_job_file="${chart_dir}/templates/rbac-seed-job.yaml"
-  local kustomize_file="${repo_root}/deployments/k8s/user-service/kustomization.yaml"
 
   if [[ ! -d "${chart_dir}" ]]; then
     return
@@ -303,8 +302,8 @@ check_helm_user_service_immutable_image() {
   if ! rg -q 'rbacSeedJob\.nameSuffix' "${seed_job_file}"; then
     report "Helm RBAC seed Job name must support release-unique suffixes"
   fi
-  if [[ -f "${kustomize_file}" ]] && rg -q '^[[:space:]]*-[[:space:]]*rbac-seed-job\.yaml([[:space:]#]|$)' "${kustomize_file}"; then
-    report "Kustomize default user-service resources must not include RBAC seed Job"
+  if [[ -d "${repo_root}/deployments/k8s" ]]; then
+    report "hand-written Kubernetes manifests must not return; render deployments/helm instead"
   fi
 }
 
@@ -483,21 +482,6 @@ check_environment_variable_config_removed() {
   run_rg_any "Docker Compose runtime config must not mount local full config or pass --config" \
     'user-service\.local\.yaml|configs/config\.yaml|^[[:space:]]*-[[:space:]]*--config[[:space:]]*$' \
     "${repo_root}/deployments/compose/docker-compose.yml"
-
-  local k8s_manifest_files=()
-  local k8s_file
-  for k8s_file in \
-    "${repo_root}/deployments/k8s/user-service/deployment.yaml" \
-    "${repo_root}/deployments/k8s/user-service/rbac-seed-job.yaml"; do
-    if [[ -e "${k8s_file}" ]]; then
-      k8s_manifest_files+=("${k8s_file}")
-    fi
-  done
-  if [[ "${#k8s_manifest_files[@]}" -gt 0 ]]; then
-    run_rg_any "Kubernetes user-service manifests must not mount local full config or pass --config" \
-      'runtime-config|config/config\.yaml|^[[:space:]]*-[[:space:]]*--config[[:space:]]*$' \
-      "${k8s_manifest_files[@]}"
-  fi
 
   local helm_and_workflow_paths=()
   if [[ -d "${repo_root}/deployments/helm/aegiscore-user-service/templates" ]]; then

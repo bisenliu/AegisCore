@@ -22,10 +22,10 @@
 | `common/` | 跨服务共享契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力 |
 | `user-service/` | 用户服务 CLI、Fx/Gin runtime、feature 业务代码、Ent schema、migration 和 OpenAPI 生成 |
 | `tools/` | 仓库级交付工具，例如跨服务复用的 OpenAPI 转换 CLI |
-| `deployments/` | Docker、Compose、Kubernetes、Helm、Prometheus 和 Grafana 部署观测资产 |
+| `deployments/` | Docker、Compose、Helm、Prometheus 和 Grafana 部署观测资产；Kubernetes 清单只由 Helm 渲染 |
 | `docs/` | 架构、开发、产品、测试和 OPSX 工作流说明 |
 | `openspec/specs/` | 当前有效主规格，描述长期稳定 capability |
-| `openspec/changes/` | 待实施或待归档的 proposal、design、spec delta 和 tasks |
+| `openspec/changes/` | 进行中的 proposal、design、spec delta 和 tasks；完成后合并主规格并删除，不保留历史归档 |
 
 `common/` 只承载跨服务稳定能力：`contract/errors`、`contract/pagination`、`contract/response`、`http/binding`、`http/middleware`、`http/openapi`、`http/pprof`、`http/response`、`runtime/config`、`runtime/datastore`、`runtime/id`、`runtime/localcache`、`runtime/logger`、`runtime/observability`、`runtime/redispubsub`、`runtime/rediskey`、`runtime/resources`、`runtime/scheduler`、`runtime/timezone`、`runtime/workerpool`、`security/auth`、`security/casbin`、`security/password`、`testing` 和 `validation`。
 
@@ -103,7 +103,7 @@ ADMIN_BOOTSTRAP_PASSWORD='<temporary-password>' ADMIN_USERNAME='initial-admin' m
 3. 用 `/opsx:explore` 梳理问题或方案。
 4. 用 `/opsx:propose <change-name>` 创建 proposal、design、spec delta 和 tasks。
 5. 准备实现时运行 `/opsx:apply <change-name>`。
-6. 实现验证后运行 `/opsx:archive <change-name>` 合并主规格。
+6. 实现验证后运行 `/opsx:archive <change-name>`，把 delta 合并进主规格并删除 change 目录。不要把已完成 change 移动到 `openspec/changes/archive/`。
 
 如果新仓库或工作区缺少 `openspec/`，先执行：
 

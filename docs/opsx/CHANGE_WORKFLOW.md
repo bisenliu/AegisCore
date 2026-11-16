@@ -194,5 +194,5 @@ change 完成后：
 
 1. 确认 tasks 全部为 `- [x]`。
 2. 确认本次预期变更已暂存，且相关单元测试、`make lint` 和 `make verify` 全部通过；任一验证未通过或未运行时，不得将 OpenSpec 任务或 change 视为完成。
-3. 运行 `/opsx:archive <change-name>`，把 delta specs 合并到 `openspec/specs/`。
-4. 检查主规格、能力地图和 README 入口是否仍一致。
+3. 运行 `/opsx:archive <change-name>`，把 delta specs 合并到 `openspec/specs/`，然后删除 `openspec/changes/<change-name>/`。
+4. 检查主规格、能力地图和 README 入口是否仍一致。不要创建或保留 `openspec/changes/archive/`。

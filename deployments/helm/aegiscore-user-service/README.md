@@ -22,11 +22,11 @@
 
 默认 `podSecurityContext.runAsUser`、`runAsGroup` 和 `fsGroup` 均为 `65532`，与 Distroless static nonroot 运行时镜像身份一致。Deployment 和 RBAC seed Job 使用同一数值身份，保持只读根文件系统、禁止提权、capabilities drop 和 RuntimeDefault seccomp；Kubernetes 探针继续由 kubelet 通过 HTTP 访问 `/livez`、`/readyz`、`/startupz`。
 
-默认 `deployment.terminationGracePeriodSeconds` 为 150 秒，其中 120 秒覆盖 Fx `app.Stop()` 对全部 `OnStop` hook 的逆注册顺序串行总预算，30 秒保留给 kubelet 调度、信号传递、受控 `preStop` 和网络抖动。HTTP、workerpool 或 exporter 的局部 timeout 不能替代 Fx 总预算；正常关闭完成后 Pod 会立即退出，不会等待完整 150 秒。环境 values 覆盖该值或新增、延长 `preStop` 时，发布方必须保持 grace 至少覆盖 Fx Stop 总预算和 30 秒平台余量，并同步验证原生 Kubernetes 与 Helm 的默认契约未漂移。
+默认 `deployment.terminationGracePeriodSeconds` 为 150 秒，其中 120 秒覆盖 Fx `app.Stop()` 对全部 `OnStop` hook 的逆注册顺序串行总预算，30 秒保留给 kubelet 调度、信号传递、受控 `preStop` 和网络抖动。HTTP、workerpool 或 exporter 的局部 timeout 不能替代 Fx 总预算；正常关闭完成后 Pod 会立即退出，不会等待完整 150 秒。环境 values 覆盖该值或新增、延长 `preStop` 时，发布方必须保持 grace 至少覆盖 Fx Stop 总预算和 30 秒平台余量。生产 Kubernetes 清单只由本 chart 渲染，不维护平行的手写 YAML。
 
 ## NetworkPolicy 安全边界
 
-默认 `networkPolicy` 会先渲染 namespace 级 default-deny，再分别渲染 runtime 和 RBAC seed Job 的组件级策略。runtime 仅允许 `ingress-system` namespace 中带 `aegiscore.io/allow-user-service: "true"` 的受控上游访问 user-service HTTP 端口；RBAC seed 不配置 ingress，因此拒绝所有入站流量。Nacos egress 直接从 `nacos.server.namespace`、`nacos.server.port` 和 `nacos.server.podSelector` 生成，保证 Service DNS 与网络策略使用同一组定位信息；PostgreSQL、Redis、OTLP Collector 和 DNS egress 分别约束到明确 namespace 与 Pod selector。生产环境必须通过 admission policy 或等价准入控制限制 `aegiscore.io/allow-user-service` 标签只能由受信任 namespace 或受控 workload 使用；仓库原生清单提供了 `deployments/k8s/user-service/admissionpolicy.yaml` 作为参考资产。
+默认 `networkPolicy` 会先渲染 namespace 级 default-deny，再分别渲染 runtime 和 RBAC seed Job 的组件级策略。runtime 仅允许 `ingress-system` namespace 中带 `aegiscore.io/allow-user-service: "true"` 的受控上游访问 user-service HTTP 端口；RBAC seed 不配置 ingress，因此拒绝所有入站流量。Nacos egress 直接从 `nacos.server.namespace`、`nacos.server.port` 和 `nacos.server.podSelector` 生成，保证 Service DNS 与网络策略使用同一组定位信息；PostgreSQL、Redis、OTLP Collector 和 DNS egress 分别约束到明确 namespace 与 Pod selector。生产环境必须通过集群级 admission policy 或等价准入控制限制 `aegiscore.io/allow-user-service` 标签只能由受信任 namespace 或受控 workload 使用。该策略是集群级资源，不随本 chart 安装到业务 namespace。
 
 如果目标环境使用集群外 PostgreSQL、Redis 或 OTLP Collector，应在环境 values 的 `networkPolicy.runtimeAdditionalEgress` 或 `networkPolicy.rbacSeedAdditionalEgress` 中使用精确 `ipBlock.cidr` 或等价明确目的地覆盖对应规则。不得删除 `to` 字段恢复对任意目的地址开放 `5432`、`6379`、`4317` 或 `4318`。
 

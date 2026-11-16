@@ -13,7 +13,7 @@
 | `auth-session-management` | 登录、服务私有认证配置、令牌签发、刷新、退出、强制改密、会话和 token version 校验 | `user-service/internal/config/`、`user-service/internal/providers/security/`、`user-service/internal/features/auth/`、`common/security/password/` | `openspec/specs/auth-session-management/spec.md` | ready |
 | `rbac-access-control` | 只读权限投影、角色、角色权限、用户角色、Casbin 授权、policy revision/outbox 同步、RBAC seed 和超级管理员引导 | `user-service/internal/features/permission/`、`user-service/internal/features/role/`、`common/security/casbin/`、`user-service/cmd/rbac.go` | `openspec/specs/rbac-access-control/spec.md` | ready |
 | `runtime-observability` | 健康检查、OpenAPI、metrics、OTLP tracing、stdout/stderr logging、复用共享 lifecycle 的独立业务 HTTP/pprof runtime、Prometheus/Grafana 资产 | `user-service/internal/bootstrap/`、`user-service/internal/providers/observability/`、`user-service/internal/providers/transport/`、`user-service/internal/router/`、`common/runtime/httpserver/`、`common/runtime/observability/`、`common/runtime/logger/`、`common/http/middleware/`、`deployments/observability/`、`deployments/compose/grafana/` | `openspec/specs/runtime-observability/spec.md` | ready |
-| `delivery-operations` | 构建、测试、lint、OpenAPI 生成、Ent/Atlas migration、运行时镜像、Docker-backed 测试门禁、CI 镜像安全扫描、Nacos 环境目录发布、Compose、Kubernetes、Helm 和发布顺序 | `Makefile`、`.github/workflows/ci.yml`、`.github/workflows/lint.yml`、`user-service/Makefile`、`user-service/scripts/`、`tools/openapi-convert/`、`tools/nacos-config-seed/`、`deployments/` | `openspec/specs/delivery-operations/spec.md` | ready |
+| `delivery-operations` | 构建、测试、lint、OpenAPI 生成、Ent/Atlas migration、运行时镜像、Docker-backed 测试门禁、CI 镜像安全扫描、Nacos 环境目录发布、Compose、Helm 和发布顺序 | `Makefile`、`.github/workflows/ci.yml`、`.github/workflows/lint.yml`、`user-service/Makefile`、`user-service/scripts/`、`tools/openapi-convert/`、`tools/nacos-config-seed/`、`deployments/` | `openspec/specs/delivery-operations/spec.md` | ready |
 
 ## 2. 关键入口点
 
@@ -33,7 +33,7 @@
 - `auth-session-management` 依赖 `user-identity-management` 的用户状态和用户 ID，也依赖 `shared-platform-primitives` 的 JWT verifier、password、Redis 和 response helper；认证 issuer、claims、subject 和服务私有认证配置由 user-service auth 能力拥有。
 - `rbac-access-control` 依赖用户 ID、权限目录、角色绑定、Casbin authorizer、HTTP route scanner 和 `shared-platform-primitives` 的 Redis Pub/Sub subscriber；PostgreSQL revision 权威校准、消息 envelope、reload 与缓存失效仍由 permission feature 拥有。
 - `runtime-observability` 依赖 `shared-platform-primitives` 的 managed HTTP server，并横跨 user-service bootstrap、`common/runtime/observability/`、HTTP middleware、router、deployments 和 dashboard 生成脚本；enabled、配置映射、Fx、日志与异常退出策略留在服务 composition。
-- `delivery-operations` 横跨 Makefile、CI、脚本、仓库级工具、Ent、Atlas、OpenAPI、运行时镜像、Docker-backed 测试门禁、Docker、Compose、Kubernetes、Helm 和发布说明。
+- `delivery-operations` 横跨 Makefile、CI、脚本、仓库级工具、Ent、Atlas、OpenAPI、运行时镜像、Docker-backed 测试门禁、Docker、Compose、Helm 和发布说明。Kubernetes 清单由 Helm 渲染，不维护手写原生 YAML。
 - `opsx-foundation` 不改变业务行为，但约束所有后续 capability 的文档和变更流程。
 
 ## 4. 待补能力

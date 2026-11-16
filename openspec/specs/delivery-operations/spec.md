@@ -78,7 +78,7 @@ Ent schema MUST 是数据库结构来源，Atlas SQL migration MUST 是可审查
 
 ### Requirement: 镜像、部署与受控发布
 
-user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go module 解析和分离缓存构建，并以最小非 root 运行时交付同一可验证工件。CI MUST 运行覆盖 common 与 user-service 的真实依赖测试。Docker、Compose、Kubernetes、Helm 和观测资产 MUST 使用一致的 runtime config、release 工件、安全上下文、探针、Secret、资源和网络边界，MUST NOT 包含真实 secret 或自动 migration apply。外部服务标识与镜像名 MUST 使用 `aegiscore-user-service`，容器、二进制和本地目录语义 MUST 使用 `user-service`，MUST NOT 保留旧复数命名。
+user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go module 解析和分离缓存构建，并以最小非 root 运行时交付同一可验证工件。CI MUST 运行覆盖 common 与 user-service 的真实依赖测试。Docker、Compose、Helm 渲染的 Kubernetes 清单和观测资产 MUST 使用一致的 runtime config、release 工件、安全上下文、探针、Secret、资源和网络边界，MUST NOT 包含真实 secret 或自动 migration apply。仓库 MUST NOT 再维护与 Helm chart 平行的手写 Kubernetes YAML。外部服务标识与镜像名 MUST 使用 `aegiscore-user-service`，容器、二进制和本地目录语义 MUST 使用 `user-service`，MUST NOT 保留旧复数命名。
 
 #### Scenario: 发布顺序与兼容边界
 
@@ -190,7 +190,7 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 
 ### Requirement: Redis Cluster 与可信入口配置交付
 
-Nacos、Compose、Kubernetes、Helm、README、E2E harness 和测试 fixture MUST 使用 Redis mode-driven 配置契约，并通过 `server.http.trusted_proxies` 声明受信任入口代理。Redis 交付 MUST 明确 `cluster` 或 `standalone`，入口代理配置 MUST 与真实网络拓扑一致，二者均不得接受旧配置别名。
+Nacos、Compose、Helm、README、E2E harness 和测试 fixture MUST 使用 Redis mode-driven 配置契约，并通过 `server.http.trusted_proxies` 声明受信任入口代理。Redis 交付 MUST 明确 `cluster` 或 `standalone`，入口代理配置 MUST 与真实网络拓扑一致，二者均不得接受旧配置别名。
 
 #### Scenario: Nacos 与部署配置使用 Cluster 契约
 
@@ -208,7 +208,7 @@ Nacos、Compose、Kubernetes、Helm、README、E2E harness 和测试 fixture MUS
 #### Scenario: 发布顺序
 
 - **WHEN** 发布 Redis Cluster 支持版本
-- **THEN** 运维 MUST 先准备 Redis Cluster 并更新 Nacos、Kubernetes 或 Helm Redis 配置，再滚动发布 user-service
+- **THEN** 运维 MUST 先准备 Redis Cluster 并更新 Nacos 或 Helm Redis 配置，再滚动发布 user-service
 - **AND** 发布验证 MUST 覆盖 `/readyz`、`/startupz`、Redis metrics、登录、refresh、退出全部会话、强制改密和 RBAC 写后同步
 
 #### Scenario: 回滚边界

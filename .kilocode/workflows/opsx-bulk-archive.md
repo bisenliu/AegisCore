@@ -114,11 +114,12 @@ This skill allows you to batch-archive changes, handling spec conflicts intellig
       - For conflicts, apply in resolved order
       - Track if sync was done
 
-   b. **Perform the archive**:
+   b. **Remove the completed change**:
       ```bash
-      mkdir -p openspec/changes/archive
-      mv openspec/changes/<name> openspec/changes/archive/YYYY-MM-DD-<name>
+      rm -rf openspec/changes/<name>
       ```
+
+      Do not create `openspec/changes/archive/`. The main specs are the only long-term record.
 
    c. **Track outcome** for each change:
       - Success: archived successfully
@@ -132,10 +133,10 @@ This skill allows you to batch-archive changes, handling spec conflicts intellig
    ```
    ## Bulk Archive Complete
 
-   Archived 3 changes:
-   - schema-management-cli -> archive/2026-01-19-schema-management-cli/
-   - project-config -> archive/2026-01-19-project-config/
-   - add-oauth -> archive/2026-01-19-add-oauth/
+   Removed 3 completed changes:
+   - schema-management-cli
+   - project-config
+   - add-oauth
 
    Skipped 1 change:
    - add-verify-skill (user chose not to archive incomplete)
@@ -148,7 +149,7 @@ This skill allows you to batch-archive changes, handling spec conflicts intellig
    If any failures:
    ```
    Failed 1 change:
-   - some-change: Archive directory already exists
+   - some-change: delta specs were not synced before removal
    ```
 
 **Conflict Resolution Examples**
@@ -189,9 +190,9 @@ then add-graphql specs (chronological order, newer takes precedence).
 ```
 ## Bulk Archive Complete
 
-Archived N changes:
-- <change-1> -> archive/YYYY-MM-DD-<change-1>/
-- <change-2> -> archive/YYYY-MM-DD-<change-2>/
+Removed N completed changes:
+- <change-1>
+- <change-2>
 
 Spec sync summary:
 - N delta specs synced to main specs
@@ -203,14 +204,14 @@ Spec sync summary:
 ```
 ## Bulk Archive Complete (partial)
 
-Archived N changes:
-- <change-1> -> archive/YYYY-MM-DD-<change-1>/
+Removed N completed changes:
+- <change-1>
 
 Skipped M changes:
 - <change-2> (user chose not to archive incomplete)
 
 Failed K changes:
-- <change-3>: Archive directory already exists
+- <change-3>: delta specs were not synced before removal
 ```
 
 **Output When No Changes**
@@ -230,6 +231,6 @@ No active changes found. Create a new change to get started.
 - Show clear per-change status before confirming
 - Use single confirmation for entire batch
 - Track and report all outcomes (success/skip/fail)
-- Preserve .openspec.yaml when moving to archive
-- Archive directory target uses current date: YYYY-MM-DD-<name>
-- If archive target exists, fail that change but continue with others
+- Delete each completed change directory after spec sync
+- Do not create `openspec/changes/archive/`
+- If a delta is not synced, fail that change but continue with the others

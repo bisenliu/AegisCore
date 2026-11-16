@@ -31,7 +31,7 @@ AegisCore 是面向后端服务的 Go workspace 项目底座，当前聚焦用�
 | `auth-session-management` | 登录、刷新、退出、改密、会话和 token version 校验 |
 | `rbac-access-control` | 代码定义的权限目录只读投影、角色、角色权限、用户角色、Casbin 授权、RBAC seed |
 | `runtime-observability` | 健康检查、OpenAPI、metrics、OTLP tracing、stdout/stderr logging、独立 pprof、dashboard 和 alerts |
-| `delivery-operations` | 构建、测试、lint、OpenAPI 生成、Ent/Atlas migration、Docker、Compose、Kubernetes、Helm |
+| `delivery-operations` | 构建、测试、lint、OpenAPI 生成、Ent/Atlas migration、Docker、Compose、Helm |
 | `opsx-foundation` | 仓库级 OPSX/OpenSpec 文档、配置、能力地图、主规格和变更工作流 |
 
 ## 5. 关键约束

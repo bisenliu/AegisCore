@@ -1,6 +1,6 @@
 # Helm 部署
 
-本目录承载 AegisCore 服务的 Helm charts。当前可用 chart 位于 `aegiscore-user-service/`，用于模板化 user-service 的 Kubernetes 运行时资源；RBAC seed 发布前置 Job 仅在受控 seed 阶段显式开启渲染。
+本目录是 Kubernetes 生产清单的唯一来源。当前可用 chart 位于 `aegiscore-user-service/`，用于渲染 user-service 运行时资源；RBAC seed 发布前置 Job 仅在受控 seed 阶段显式开启渲染。不要再维护平行的手写 Kubernetes YAML。
 
 ## Chart
 

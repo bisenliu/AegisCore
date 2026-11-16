@@ -9,7 +9,7 @@ AegisCore 是 Go 1.27.3 workspace，当前由四个主要部分组成：
 | `common/` | 跨服务稳定契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力 |
 | `user-service/` | 用户服务 CLI、Fx/Gin runtime、feature 业务代码、Ent schema、migration 和 OpenAPI 生成 |
 | `tools/` | 仓库级交付工具，例如跨服务复用的 OpenAPI 转换 CLI |
-| `deployments/` | Docker、Compose、Kubernetes、Helm、Prometheus 和 Grafana 部署观测资产 |
+| `deployments/` | Docker、Compose、Helm、Prometheus 和 Grafana 部署观测资产；Kubernetes 清单只由 Helm 渲染 |
 
 根 `Makefile` 汇总构建、测试、lint、verify、migration、OpenAPI 和 dashboard 命令。README 将 `docs/` 与 `openspec/` 定义为协作和规格入口。
 
@@ -155,8 +155,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 - Dockerfile：`deployments/docker/user-service.Dockerfile` 使用 BuildKit manifest-first 依赖层、只读 Go module 解析、静态编译和固定 digest 的 `gcr.io/distroless/static-debian12:nonroot` 运行时；运行镜像身份为 UID/GID `65532`，不包含 shell、包管理器、下载工具或 Atlas。
 - Compose：`deployments/compose/docker-compose.yml` 继承 Distroless `nonroot` 身份，user-service healthcheck 使用 exec-form 调用原生 `healthcheck` CLI。
 - 本地 Nacos：`deployments/nacos/` 是 Git 权威来源；两个 Compose 初始化任务分别将 `local-host/` 与 `local-docker/` 的完整三文档发布到 `loca-host` 与 `loca-docker`。
-- Kubernetes：`deployments/k8s/user-service/` 使用 UID/GID/fsGroup `65532`、只读根文件系统、`/tmp` emptyDir 和 kubelet HTTP probes。
-- Helm：`deployments/helm/aegiscore-user-service/` 渲染与原生 YAML 一致的 UID/GID `65532`、HTTP probes 和 RBAC seed Job，并要求生产发布显式传入不可变 `image.ref`。
+- Helm：`deployments/helm/aegiscore-user-service/` 是唯一 Kubernetes 生产清单来源，渲染 UID/GID/fsGroup `65532`、只读根文件系统、`/tmp` emptyDir、kubelet HTTP probes 和 RBAC seed Job，并要求生产发布显式传入不可变 `image.ref`。不要再维护手写原生 Kubernetes YAML。
 - CI：主 `ci.yml` 唯一触发仅支持 `workflow_call` 的质量 workflow，使同一 commit 的 lint 与普通单测各运行一次；独立 `container-test` job 通过根 `make test-containers` 显式运行 common 与 user-service 的真实 PostgreSQL/Redis 测试；镜像安全 job 复用同一 BuildKit image ID 执行内容断言、Trivy HIGH/CRITICAL 门禁和 SBOM 生成。
 - Prometheus alerts：`deployments/observability/prometheus/user-service-alerts.yaml`。
 - Grafana dashboard：`deployments/observability/grafana/user-service-overview.json`。
@@ -164,4 +163,4 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 
 ## 8. 规格边界
 
-稳定能力位于 `openspec/specs/`。跨 feature、跨模块、外部契约、schema、部署或行为变更必须先创建 `openspec/changes/<change-name>/`，完成后归档回主规格。
+稳定能力位于 `openspec/specs/`。跨 feature、跨模块、外部契约、schema、部署或行为变更必须先创建 `openspec/changes/<change-name>/`，完成后把 delta 合并回主规格并删除 change 目录。仓库不保留 `openspec/changes/archive/`。
