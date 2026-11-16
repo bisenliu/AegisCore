@@ -295,12 +295,7 @@ func TestCallerStopTimeoutDoesNotCancelSharedCleanup(t *testing.T) {
 	secondDone := make(chan error, 1)
 	go func() { secondDone <- managed.Stop(context.Background()) }()
 	require.Never(t, func() bool {
-		select {
-		case <-secondDone:
-			return true
-		default:
-			return false
-		}
+		return errorChannelReady(secondDone)
 	}, 50*time.Millisecond, 5*time.Millisecond)
 	close(release)
 	require.NoError(t, <-secondDone)
@@ -325,12 +320,7 @@ func TestStopGracefullyDrainsSlowHandler(t *testing.T) {
 	stopDone := make(chan error, 1)
 	go func() { stopDone <- managed.Stop(context.Background()) }()
 	require.Never(t, func() bool {
-		select {
-		case <-stopDone:
-			return true
-		default:
-			return false
-		}
+		return errorChannelReady(stopDone)
 	}, 50*time.Millisecond, 5*time.Millisecond)
 	close(release)
 	require.NoError(t, <-stopDone)
@@ -356,7 +346,8 @@ func TestStopForcesCloseAfterShutdownTimeout(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	requireChannelClosed(t, exited, time.Second)
 	select {
-	case <-requestDone:
+	case err = <-requestDone:
+		require.Error(t, err)
 	case <-time.After(time.Second):
 		t.Fatal("forced Close did not release the client request")
 	}
@@ -382,7 +373,7 @@ func TestStopPreservesDrainTimeoutWhenHandlerIgnoresCancellation(t *testing.T) {
 	require.EqualError(t, managed.Stop(context.Background()), err.Error())
 	close(release)
 	select {
-	case <-requestDone:
+	case <-requestDone: //nolint:errcheck // 只确认被强制关闭的请求已结束，客户端错误不稳定。
 	case <-time.After(time.Second):
 		t.Fatal("handler did not return after test release")
 	}
@@ -450,6 +441,15 @@ func startHTTPTestRequest(addr string) <-chan error {
 		done <- err
 	}()
 	return done
+}
+
+func errorChannelReady(channel <-chan error) bool {
+	select {
+	case <-channel: //nolint:errcheck // 只探测 Stop 是否提前返回，结果由后续接收断言。
+		return true
+	default:
+		return false
+	}
 }
 
 func requireChannelClosed(t testing.TB, channel <-chan struct{}, timeout time.Duration) {
