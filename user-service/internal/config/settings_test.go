@@ -27,12 +27,6 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 		RBAC: RBACConfig{
 			UserRoleCache: FeatureCacheConfig{Enabled: true, Size: 13},
 			PolicyWatcher: PolicyWatcherConfig{CheckInterval: 3 * time.Second, MaxStaleness: 10 * time.Second},
-			OutboxDispatcher: OutboxDispatcherConfig{
-				PollInterval: time.Second,
-				BatchSize:    17,
-				ClaimTimeout: time.Minute,
-				RetryBackoff: RetryBackoffConfig{Initial: 2 * time.Second, Max: time.Minute},
-			},
 		},
 		APIRateLimit: APIRateLimitConfig{Anonymous: RateLimitPolicyConfig{Enabled: true, RatePerSecond: 2, Burst: 3}},
 		HTTP:         HTTPConfig{RequestBodyMaxBytes: 12345},
@@ -52,10 +46,9 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 		MaxActiveSessionsPerUser: 7,
 	}, NewAuthSettings(cfg))
 	require.Equal(t, RBACSettings{
-		AppName:          "user-service",
-		UserRoleCache:    cfg.RBAC.UserRoleCache,
-		OutboxDispatcher: cfg.RBAC.OutboxDispatcher,
-		PolicyWatcher:    cfg.RBAC.PolicyWatcher,
+		AppName:       "user-service",
+		UserRoleCache: cfg.RBAC.UserRoleCache,
+		PolicyWatcher: cfg.RBAC.PolicyWatcher,
 	}, NewRBACSettings(cfg))
 	require.Equal(t, EntSettings{Plugins: cfg.Ent.Plugins}, NewEntSettings(cfg))
 	require.Equal(t, RateLimitSettings{APIRateLimit: cfg.APIRateLimit}, NewRateLimitSettings(cfg))
@@ -71,7 +64,7 @@ func TestNarrowSettingsFieldOwnership(t *testing.T) {
 		fields []string
 	}{
 		{name: "auth", value: AuthSettings{}, fields: []string{"AppName", "JWT", "TokenVersionCache", "TokenVersionCacheTTL", "RefreshTokenRotation", "MaxActiveSessionsPerUser"}},
-		{name: "rbac", value: RBACSettings{}, fields: []string{"AppName", "UserRoleCache", "OutboxDispatcher", "PolicyWatcher"}},
+		{name: "rbac", value: RBACSettings{}, fields: []string{"AppName", "UserRoleCache", "PolicyWatcher"}},
 		{name: "ent", value: EntSettings{}, fields: []string{"Plugins"}},
 		{name: "rate limit", value: RateLimitSettings{}, fields: []string{"APIRateLimit"}},
 		{name: "http", value: HTTPSettings{}, fields: []string{"RequestBodyMaxBytes"}},

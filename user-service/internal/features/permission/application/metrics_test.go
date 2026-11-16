@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 func TestNopMetricsImplementsMetrics(t *testing.T) {
@@ -19,7 +18,4 @@ func TestNopMetricsImplementsMetrics(t *testing.T) {
 	metrics.WatcherReloadSucceeded(ctx, MetricsSourceWatcherRevisionCheck)
 	metrics.WatcherReloadFailed(ctx, MetricsSourceWatcherPubSub, MetricsReasonSystemError)
 	metrics.WatcherVersionMismatch(ctx, MetricsSourceWatcherPubSub, MetricsReasonRevisionMismatch)
-	metrics.DispatcherOperationObserved(ctx, MetricsOperationDispatcherClaim, MetricsResultSuccess, MetricsReasonNone, MetricsKindNone)
-	metrics.DispatcherBacklogObserved(ctx, 1, time.Second)
-	metrics.DispatcherRunningObserved(ctx, true)
 }

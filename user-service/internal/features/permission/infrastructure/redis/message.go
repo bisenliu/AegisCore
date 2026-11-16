@@ -20,11 +20,9 @@ const (
 	policyRefreshKindUserRoleChanged = "user_role_changed"
 )
 
-// PolicyRefreshMessage 是版本化的 RBAC policy Redis Pub/Sub 刷新 envelope。
+// PolicyRefreshMessage 是版本化的 RBAC policy Redis Pub/Sub 刷新 hint。
 type PolicyRefreshMessage struct {
 	SchemaVersion    int        `json:"schema_version"`
-	EventID          uuid.UUID  `json:"event_id"`
-	IdempotencyKey   string     `json:"idempotency_key"`
 	PolicyRevision   *int64     `json:"policy_revision,omitempty"`
 	UserRoleRevision *int64     `json:"user_role_revision,omitempty"`
 	Kind             string     `json:"kind"`
@@ -35,20 +33,23 @@ type PolicyRefreshMessage struct {
 	PermissionID     *uuid.UUID `json:"permission_id,omitempty"`
 }
 
-func newPolicyRefreshMessage(event permissionapplication.OutboxEvent, instanceID string) PolicyRefreshMessage {
-	return PolicyRefreshMessage{
-		SchemaVersion:    policyRefreshSchemaVersion,
-		EventID:          event.EventID,
-		IdempotencyKey:   event.IdempotencyKey,
-		PolicyRevision:   event.PolicyRevision,
-		UserRoleRevision: event.UserRoleRevision,
-		Kind:             event.Kind,
-		Reason:           event.Reason,
-		InstanceID:       instanceID,
-		UserID:           event.UserID,
-		RoleID:           event.RoleID,
-		PermissionID:     event.PermissionID,
+func newPolicyRefreshMessage(revision int64, change permissionapplication.PolicyChange, instanceID string) PolicyRefreshMessage {
+	message := PolicyRefreshMessage{
+		SchemaVersion: policyRefreshSchemaVersion,
+		Reason:        change.ReasonText(),
+		InstanceID:    instanceID,
+		UserID:        optionalUUID(change.UserID),
+		RoleID:        optionalUUID(change.RoleID),
+		PermissionID:  optionalUUID(change.PermissionID),
 	}
+	if change.Kind == permissionapplication.PolicyChangeKindUserRole {
+		message.Kind = policyRefreshKindUserRoleChanged
+		message.UserRoleRevision = int64Pointer(revision)
+		return message
+	}
+	message.Kind = policyRefreshKindPolicyChanged
+	message.PolicyRevision = int64Pointer(revision)
+	return message
 }
 
 func encodePolicyRefreshMessage(message PolicyRefreshMessage) (string, error) {
@@ -82,12 +83,6 @@ func decodePolicyRefreshMessage(payload string) (PolicyRefreshMessage, error) {
 func validatePolicyRefreshMessage(message PolicyRefreshMessage) error {
 	if message.SchemaVersion != policyRefreshSchemaVersion {
 		return fmt.Errorf("unsupported rbac policy refresh schema version: %d", message.SchemaVersion)
-	}
-	if message.EventID == uuid.Nil() {
-		return fmt.Errorf("rbac policy refresh event_id is required")
-	}
-	if strings.TrimSpace(message.IdempotencyKey) == "" {
-		return fmt.Errorf("rbac policy refresh idempotency_key is required")
 	}
 	if strings.TrimSpace(message.Reason) == "" {
 		return fmt.Errorf("rbac policy refresh reason is required")
@@ -124,6 +119,13 @@ func validatePolicyRefreshMessage(message PolicyRefreshMessage) error {
 		return fmt.Errorf("invalid rbac policy change kind: %q", message.Kind)
 	}
 	return nil
+}
+
+func (m PolicyRefreshMessage) userRoleRevision() int64 {
+	if m.UserRoleRevision == nil {
+		return 0
+	}
+	return *m.UserRoleRevision
 }
 
 func (m PolicyRefreshMessage) policyRevision() int64 {
@@ -163,4 +165,15 @@ func uuidValue(value *uuid.UUID) uuid.UUID {
 		return uuid.Nil()
 	}
 	return *value
+}
+
+func optionalUUID(value uuid.UUID) *uuid.UUID {
+	if value == uuid.Nil() {
+		return nil
+	}
+	return &value
+}
+
+func int64Pointer(value int64) *int64 {
+	return &value
 }

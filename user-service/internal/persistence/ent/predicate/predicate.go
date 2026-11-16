@@ -20,20 +20,6 @@ func PermissionOrErr(p Permission, err error) Permission {
 	}
 }
 
-// RbacPolicyOutboxEvent is the predicate function for rbacpolicyoutboxevent builders.
-type RbacPolicyOutboxEvent func(*sql.Selector)
-
-// RbacPolicyOutboxEventOrErr calls the predicate only if the error is not nit.
-func RbacPolicyOutboxEventOrErr(p RbacPolicyOutboxEvent, err error) RbacPolicyOutboxEvent {
-	return func(s *sql.Selector) {
-		if err != nil {
-			s.AddError(err)
-			return
-		}
-		p(s)
-	}
-}
-
 // RbacPolicyRevision is the predicate function for rbacpolicyrevision builders.
 type RbacPolicyRevision func(*sql.Selector)
 

@@ -20,20 +20,12 @@ const (
 	rbacPolicyReloadLagMetricName = "aegiscore_user_service_rbac_policy_reload_lag"
 	rbacEnforceMetricName         = "aegiscore_user_service_rbac_enforce_total"
 	rbacEnforceLatencyMetricName  = "aegiscore_user_service_rbac_enforce_duration_seconds"
-	rbacDispatcherMetricName      = "aegiscore_user_service_rbac_outbox_dispatcher_operations_total"
-	rbacDispatcherDueMetricName   = "aegiscore_user_service_rbac_outbox_due_events"
-	rbacDispatcherAgeMetricName   = "aegiscore_user_service_rbac_outbox_oldest_unfinished_age_seconds"
-	rbacDispatcherRunningName     = "aegiscore_user_service_rbac_outbox_dispatcher_running"
 	rbacPolicySyncMetricHelp      = "Total number of RBAC policy sync operation results by fixed operation, result, reason, and source."
 	rbacPolicyMismatchMetricHelp  = "Total number of RBAC policy version mismatches by fixed watcher source."
 	rbacPolicyAppliedMetricHelp   = "Current database policy revision atomically applied by the local Casbin engine."
 	rbacPolicyReloadLagMetricHelp = "Current RBAC policy projection lag measured as max(known latest database revision - local engine applied revision, 0)."
 	rbacEnforceMetricHelp         = "Total number of RBAC enforce decisions by fixed result, method, and route template."
 	rbacEnforceLatencyMetricHelp  = "RBAC enforce latency in seconds by fixed result, method, and route template."
-	rbacDispatcherMetricHelp      = "Total number of RBAC outbox dispatcher operations by fixed operation, result, and reason."
-	rbacDispatcherDueMetricHelp   = "Current number of due RBAC policy outbox events."
-	rbacDispatcherAgeMetricHelp   = "Current age in seconds of the oldest unfinished RBAC policy outbox event."
-	rbacDispatcherRunningHelp     = "Whether the RBAC policy outbox dispatcher is running."
 )
 
 type prometheusMetrics struct {
@@ -43,10 +35,6 @@ type prometheusMetrics struct {
 	policyReloadLag prometheus.Gauge
 	enforce         *prometheus.CounterVec
 	enforceLatency  *prometheus.HistogramVec
-	dispatcher      *prometheus.CounterVec
-	dispatcherDue   prometheus.Gauge
-	dispatcherAge   prometheus.Gauge
-	dispatcherRun   prometheus.Gauge
 }
 
 type permissionMetricsParams struct {
@@ -97,22 +85,6 @@ func newPermissionMetrics(params permissionMetricsParams) (permissionapplication
 			Help:    rbacEnforceLatencyMetricHelp,
 			Buckets: prometheus.DefBuckets,
 		}, []string{"result", "method", "route_template"}),
-		dispatcher: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: rbacDispatcherMetricName,
-			Help: rbacDispatcherMetricHelp,
-		}, []string{"operation", "result", "reason", "kind"}),
-		dispatcherDue: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: rbacDispatcherDueMetricName,
-			Help: rbacDispatcherDueMetricHelp,
-		}),
-		dispatcherAge: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: rbacDispatcherAgeMetricName,
-			Help: rbacDispatcherAgeMetricHelp,
-		}),
-		dispatcherRun: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: rbacDispatcherRunningName,
-			Help: rbacDispatcherRunningHelp,
-		}),
 	}
 	if err := provider.Register(recorder.policySync); err != nil {
 		return nil, fmt.Errorf("register rbac policy sync metrics: %w", err)
@@ -131,18 +103,6 @@ func newPermissionMetrics(params permissionMetricsParams) (permissionapplication
 	}
 	if err := provider.Register(recorder.enforceLatency); err != nil {
 		return nil, fmt.Errorf("register rbac enforce latency metrics: %w", err)
-	}
-	if err := provider.Register(recorder.dispatcher); err != nil {
-		return nil, fmt.Errorf("register rbac outbox dispatcher metrics: %w", err)
-	}
-	if err := provider.Register(recorder.dispatcherDue); err != nil {
-		return nil, fmt.Errorf("register rbac outbox due events metric: %w", err)
-	}
-	if err := provider.Register(recorder.dispatcherAge); err != nil {
-		return nil, fmt.Errorf("register rbac outbox oldest unfinished age metric: %w", err)
-	}
-	if err := provider.Register(recorder.dispatcherRun); err != nil {
-		return nil, fmt.Errorf("register rbac outbox dispatcher running metric: %w", err)
 	}
 	return recorder, nil
 }
@@ -190,76 +150,6 @@ func (m *prometheusMetrics) EnforceObserved(_ context.Context, result string, me
 	result = rbacEnforceResult(result)
 	m.enforce.WithLabelValues(result, method, routeTemplate).Inc()
 	m.enforceLatency.WithLabelValues(result, method, routeTemplate).Observe(duration.Seconds())
-}
-
-func (m *prometheusMetrics) DispatcherOperationObserved(_ context.Context, operation string, result string, reason string, kind string) {
-	m.dispatcher.WithLabelValues(rbacDispatcherOperation(operation), rbacDispatcherResult(result), rbacDispatcherReason(reason), rbacDispatcherKind(kind)).Inc()
-}
-
-func rbacDispatcherKind(kind string) string {
-	switch kind {
-	case permissionapplication.MetricsKindNone,
-		permissionapplication.MetricsKindPolicyChanged,
-		permissionapplication.MetricsKindUserRoleChanged:
-		return kind
-	default:
-		return permissionapplication.MetricsKindNone
-	}
-}
-
-func (m *prometheusMetrics) DispatcherBacklogObserved(_ context.Context, dueCount int, oldestUnfinishedAge time.Duration) {
-	if dueCount < 0 {
-		dueCount = 0
-	}
-	if oldestUnfinishedAge < 0 {
-		oldestUnfinishedAge = 0
-	}
-	m.dispatcherDue.Set(float64(dueCount))
-	m.dispatcherAge.Set(oldestUnfinishedAge.Seconds())
-}
-
-func (m *prometheusMetrics) DispatcherRunningObserved(_ context.Context, running bool) {
-	if running {
-		m.dispatcherRun.Set(1)
-		return
-	}
-	m.dispatcherRun.Set(0)
-}
-
-func rbacDispatcherOperation(operation string) string {
-	switch operation {
-	case permissionapplication.MetricsOperationDispatcherClaim,
-		permissionapplication.MetricsOperationDispatcherPublish,
-		permissionapplication.MetricsOperationDispatcherAck,
-		permissionapplication.MetricsOperationDispatcherFailure,
-		permissionapplication.MetricsOperationDispatcherRetry:
-		return operation
-	default:
-		return permissionapplication.MetricsOperationDispatcherFailure
-	}
-}
-
-func rbacDispatcherResult(result string) string {
-	switch result {
-	case permissionapplication.MetricsResultSuccess, permissionapplication.MetricsResultFailure:
-		return result
-	default:
-		return permissionapplication.MetricsResultFailure
-	}
-}
-
-func rbacDispatcherReason(reason string) string {
-	switch reason {
-	case permissionapplication.MetricsReasonNone,
-		permissionapplication.MetricsReasonClaimFailed,
-		permissionapplication.MetricsReasonPublishFailed,
-		permissionapplication.MetricsReasonAckFailed,
-		permissionapplication.MetricsReasonFailureRecordFailed,
-		permissionapplication.MetricsReasonClaimLost:
-		return reason
-	default:
-		return permissionapplication.MetricsReasonSystemError
-	}
 }
 
 func rbacSource(source string) string {

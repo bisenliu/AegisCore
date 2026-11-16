@@ -23,29 +23,33 @@ type WatcherSettings struct {
 
 // WatcherParams 包含 RBAC policy watcher 所需依赖。
 type WatcherParams struct {
-	Subscriber     *redispubsub.Subscriber
-	RevisionSource permissionapplication.LatestPolicyRevisionSource
-	Engine         permissionapplication.PolicyReloadEngine
-	Log            *zap.Logger
-	Metrics        permissionapplication.Metrics
-	Settings       WatcherSettings
+	Subscriber        *redispubsub.Subscriber
+	RevisionSource    permissionapplication.LatestPolicyRevisionSource
+	UserRoleRevisions permissionapplication.UserRoleRevisionSource
+	Engine            permissionapplication.PolicyReloadEngine
+	Log               *zap.Logger
+	Metrics           permissionapplication.Metrics
+	Settings          WatcherSettings
 }
 
 // Watcher 监听 RBAC policy 分布式 revision 并执行补偿 reload。
 type Watcher struct {
-	source         messageSource
-	revisionSource permissionapplication.LatestPolicyRevisionSource
-	engine         permissionapplication.PolicyReloadEngine
-	log            *zap.Logger
-	metrics        permissionapplication.Metrics
-	settings       WatcherSettings
+	source            messageSource
+	revisionSource    permissionapplication.LatestPolicyRevisionSource
+	userRoleRevisions permissionapplication.UserRoleRevisionSource
+	engine            permissionapplication.PolicyReloadEngine
+	log               *zap.Logger
+	metrics           permissionapplication.Metrics
+	settings          WatcherSettings
+	userRoleBatchSize int
 
-	mu                     sync.Mutex
-	cancel                 context.CancelFunc
-	done                   chan struct{}
-	stopped                bool
-	status                 permissionapplication.PolicyWatcherStatusSnapshot
-	lastReconcileFailureAt time.Time
+	mu                       sync.Mutex
+	cancel                   context.CancelFunc
+	done                     chan struct{}
+	stopped                  bool
+	status                   permissionapplication.PolicyWatcherStatusSnapshot
+	lastReconcileFailureAt   time.Time
+	observedUserRoleRevision int64
 }
 
 type messageSource interface {
@@ -57,17 +61,17 @@ type messageSource interface {
 
 // NewWatcher 只构造 RBAC policy watcher；调用方负责显式调用 Start 和 Stop。
 func NewWatcher(params WatcherParams) *Watcher {
-	return newWatcher(params.Subscriber, params.RevisionSource, params.Engine, params.Log, params.Settings, params.Metrics)
+	return newWatcher(params.Subscriber, params.RevisionSource, params.UserRoleRevisions, params.Engine, params.Log, params.Settings, params.Metrics)
 }
 
-func newWatcher(source messageSource, revisionSource permissionapplication.LatestPolicyRevisionSource, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, settings WatcherSettings, metrics permissionapplication.Metrics) *Watcher {
+func newWatcher(source messageSource, revisionSource permissionapplication.LatestPolicyRevisionSource, userRoleRevisions permissionapplication.UserRoleRevisionSource, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, settings WatcherSettings, metrics permissionapplication.Metrics) *Watcher {
 	if settings.CheckInterval <= 0 {
 		settings.CheckInterval = defaultCheckInterval
 	}
 	if metrics == nil {
 		metrics = permissionapplication.NopMetrics()
 	}
-	return &Watcher{source: source, revisionSource: revisionSource, engine: engine, log: log, metrics: metrics, settings: settings,
+	return &Watcher{source: source, revisionSource: revisionSource, userRoleRevisions: userRoleRevisions, engine: engine, log: log, metrics: metrics, settings: settings, userRoleBatchSize: permissionapplication.DefaultUserRoleRevisionBatchSize,
 		status: permissionapplication.PolicyWatcherStatusSnapshot{
 			SubscriptionState:         permissionapplication.PolicyWatcherSubscriptionStopped,
 			SubscriptionErrorCategory: permissionapplication.PolicyWatcherErrorNone,
@@ -181,6 +185,7 @@ func (w *Watcher) CheckVersion(ctx context.Context) {
 		w.markReconcileFailure(ctx, permissionapplication.PolicyWatcherErrorReload)
 		return
 	}
+	w.compensateUserRoles(ctx)
 	w.markReconcileSuccess()
 }
 
@@ -214,7 +219,8 @@ func (w *Watcher) HandlePayloads(ctx context.Context, payloads []string) {
 		return
 	}
 	for _, change := range pending.userRoleChanges {
-		w.invalidateChange(change)
+		w.invalidateChange(change.change)
+		w.observeUserRoleRevision(change.revisionHint)
 	}
 	w.markReconcileSuccess()
 }
@@ -254,7 +260,7 @@ type pendingRefreshBatch struct {
 	policyReason      string
 	instanceID        string
 	changes           []permissionapplication.PolicyChange
-	userRoleChanges   []permissionapplication.PolicyChange
+	userRoleChanges   []userRoleRefresh
 }
 
 func newPendingRefreshBatch() pendingRefreshBatch {
@@ -274,7 +280,12 @@ func (b *pendingRefreshBatch) add(message PolicyRefreshMessage) {
 		}
 		return
 	}
-	b.userRoleChanges = append(b.userRoleChanges, change)
+	b.userRoleChanges = append(b.userRoleChanges, userRoleRefresh{change: change, revisionHint: message.userRoleRevision()})
+}
+
+type userRoleRefresh struct {
+	change       permissionapplication.PolicyChange
+	revisionHint int64
 }
 
 func (w *Watcher) run(ctx context.Context, done chan struct{}) {
@@ -371,6 +382,73 @@ func (w *Watcher) ObserveTargetRevision(ctx context.Context, targetRevision int6
 	appliedRevision := w.engine.AppliedRevision()
 	logger.Info(ctx, "rbac policy projection synchronized", zap.Int64("target_revision", targetRevision), zap.Int64("local_applied_policy_revision", appliedRevision), zap.Int64("previous_applied_policy_revision", localApplied), zap.String("instance_id", instanceID), zap.String("source", source), zap.String("reason", reason))
 	return nil
+}
+
+func (w *Watcher) compensateUserRoles(ctx context.Context) {
+	if w.userRoleRevisions == nil {
+		return
+	}
+	after := w.observedUserRoleRevisionValue()
+	batch, err := w.userRoleRevisions.UserRoleRevisionsAfter(ctx, after, w.userRoleBatchSize)
+	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		w.metrics.WatcherCheckFailed(ctx, permissionapplication.MetricsSourceWatcherRevisionCheck, permissionapplication.MetricsReasonRevisionStoreUnavailable)
+		logger.Error(ctx, "rbac user role revision query failed", logger.StackTrace(zap.Int64("observed_user_role_revision", after), zap.String("reason", permissionapplication.MetricsReasonRevisionStoreUnavailable), zap.Error(err))...)
+		return
+	}
+	if batch.Truncated || batch.LatestRevision < after {
+		w.engine.InvalidateAllUserRoles()
+		w.setObservedUserRoleRevision(maxInt64(batch.LatestRevision, after))
+		return
+	}
+	seen := make(map[uuid.UUID]struct{}, len(batch.Changes))
+	for _, change := range batch.Changes {
+		if change.UserID == uuid.Nil() {
+			w.engine.InvalidateAllUserRoles()
+			w.setObservedUserRoleRevision(batch.LatestRevision)
+			return
+		}
+		if _, ok := seen[change.UserID]; ok {
+			continue
+		}
+		seen[change.UserID] = struct{}{}
+		w.engine.InvalidateUserRole(change.UserID)
+	}
+	w.setObservedUserRoleRevision(batch.LatestRevision)
+}
+
+func (w *Watcher) observeUserRoleRevision(revision int64) {
+	if revision <= 0 {
+		return
+	}
+	w.mu.Lock()
+	if revision > w.observedUserRoleRevision {
+		w.observedUserRoleRevision = revision
+	}
+	w.mu.Unlock()
+}
+
+func (w *Watcher) observedUserRoleRevisionValue() int64 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.observedUserRoleRevision
+}
+
+func (w *Watcher) setObservedUserRoleRevision(revision int64) {
+	w.mu.Lock()
+	if revision > w.observedUserRoleRevision {
+		w.observedUserRoleRevision = revision
+	}
+	w.mu.Unlock()
+}
+
+func maxInt64(left int64, right int64) int64 {
+	if left > right {
+		return left
+	}
+	return right
 }
 
 func (w *Watcher) invalidateChange(change permissionapplication.PolicyChange) {

@@ -51,7 +51,6 @@ type ResourcesConfig struct {
 
 // AuthConfig 包含 user-service 认证 token 与会话校验设置。
 // TokenVersionCache 由各服务副本独立持有，其 TTL 表示正常路径可接受的跨副本撤销收敛窗口。
-// 是否使用事务 outbox 取决于 Redis token version 投影失败后是否需要可靠补偿，与固定 TTL 阈值无关。
 type AuthConfig struct {
 	JWT                      JWTConfig          `mapstructure:"jwt"`
 	TokenVersionCache        FeatureCacheConfig `mapstructure:"token_version_cache"`
@@ -62,9 +61,8 @@ type AuthConfig struct {
 
 // RBACConfig 包含 user-service RBAC 热路径的服务私有设置。
 type RBACConfig struct {
-	UserRoleCache    FeatureCacheConfig     `mapstructure:"user_role_cache"`
-	OutboxDispatcher OutboxDispatcherConfig `mapstructure:"outbox_dispatcher"`
-	PolicyWatcher    PolicyWatcherConfig    `mapstructure:"policy_watcher"`
+	UserRoleCache FeatureCacheConfig  `mapstructure:"user_role_cache"`
+	PolicyWatcher PolicyWatcherConfig `mapstructure:"policy_watcher"`
 }
 
 // PolicyWatcherConfig 控制 RBAC policy watcher 的校准、订阅确认和重连节奏。
@@ -75,31 +73,10 @@ type PolicyWatcherConfig struct {
 	RetryBackoff     RetryBackoffConfig `mapstructure:"retry_backoff"`
 }
 
-// OutboxDispatcherConfig 控制 RBAC policy outbox 的后台 claim 与投递节奏。
-type OutboxDispatcherConfig struct {
-	PollInterval time.Duration      `mapstructure:"poll_interval"`
-	BatchSize    int                `mapstructure:"batch_size"`
-	ClaimTimeout time.Duration      `mapstructure:"claim_timeout"`
-	RetryBackoff RetryBackoffConfig `mapstructure:"retry_backoff"`
-}
-
-// RetryBackoffConfig 描述 outbox 投递失败后的有界指数退避范围。
+// RetryBackoffConfig 描述 watcher 重连的有界指数退避范围。
 type RetryBackoffConfig struct {
 	Initial time.Duration `mapstructure:"initial"`
 	Max     time.Duration `mapstructure:"max"`
-}
-
-// DefaultOutboxDispatcherConfig 返回安全且完整的 RBAC outbox dispatcher 默认配置。
-func DefaultOutboxDispatcherConfig() OutboxDispatcherConfig {
-	return OutboxDispatcherConfig{
-		PollInterval: time.Second,
-		BatchSize:    100,
-		ClaimTimeout: 30 * time.Second,
-		RetryBackoff: RetryBackoffConfig{
-			Initial: time.Second,
-			Max:     time.Minute,
-		},
-	}
 }
 
 // DefaultPolicyWatcherConfig 返回 RBAC policy watcher 的完整默认配置。
@@ -128,22 +105,6 @@ func (c PolicyWatcherConfig) Validate(path string) []error {
 	}
 	if c.MaxStaleness > 0 && c.CheckInterval > 0 && c.MaxStaleness <= c.CheckInterval {
 		errs = append(errs, commonconfig.FieldError(path+".max_staleness", "must be > check_interval"))
-	}
-	return errs
-}
-
-// Validate 校验 outbox dispatcher 的轮询、claim 和重试边界。
-func (c OutboxDispatcherConfig) Validate(path string) []error {
-	var errs []error
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".poll_interval", c.PollInterval)...)
-	if c.BatchSize <= 0 {
-		errs = append(errs, commonconfig.FieldError(path+".batch_size", "must be > 0"))
-	}
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".claim_timeout", c.ClaimTimeout)...)
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".retry_backoff.initial", c.RetryBackoff.Initial)...)
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".retry_backoff.max", c.RetryBackoff.Max)...)
-	if c.RetryBackoff.Max > 0 && c.RetryBackoff.Initial > 0 && c.RetryBackoff.Max < c.RetryBackoff.Initial {
-		errs = append(errs, commonconfig.FieldError(path+".retry_backoff.max", "must be >= retry_backoff.initial"))
 	}
 	return errs
 }
@@ -344,9 +305,8 @@ func DefaultConfig() Config {
 			TokenVersionCache: DefaultFeatureCacheConfig(100000, time.Second, 300*time.Millisecond),
 		},
 		RBAC: RBACConfig{
-			UserRoleCache:    DefaultFeatureCacheConfig(100000, 5*time.Second, 500*time.Millisecond),
-			OutboxDispatcher: DefaultOutboxDispatcherConfig(),
-			PolicyWatcher:    DefaultPolicyWatcherConfig(),
+			UserRoleCache: DefaultFeatureCacheConfig(100000, 5*time.Second, 500*time.Millisecond),
+			PolicyWatcher: DefaultPolicyWatcherConfig(),
 		},
 		APIRateLimit: APIRateLimitConfig{
 			Anonymous:     DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64),
@@ -415,7 +375,6 @@ func (c Config) Validate() error {
 	}
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.RBAC.UserRoleCache.Validate("rbac.user_role_cache")...)
-	errs = append(errs, c.RBAC.OutboxDispatcher.Validate("rbac.outbox_dispatcher")...)
 	errs = append(errs, c.RBAC.PolicyWatcher.Validate("rbac.policy_watcher")...)
 	errs = append(errs, c.APIRateLimit.Anonymous.Validate("api_rate_limit.anonymous")...)
 	errs = append(errs, c.APIRateLimit.Authenticated.Validate("api_rate_limit.authenticated")...)

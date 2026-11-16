@@ -4,7 +4,6 @@ package ent
 
 import (
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -14,19 +13,17 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
-	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
 )
 
 // RbacUserRoleRevisionQuery is the builder for querying RbacUserRoleRevision entities.
 type RbacUserRoleRevisionQuery struct {
 	config
-	ctx             *QueryContext
-	order           []rbacuserrolerevision.OrderOption
-	inters          []Interceptor
-	predicates      []predicate.RbacUserRoleRevision
-	withOutboxEvent *RbacPolicyOutboxEventQuery
-	modifiers       []func(*sql.Selector)
+	ctx        *QueryContext
+	order      []rbacuserrolerevision.OrderOption
+	inters     []Interceptor
+	predicates []predicate.RbacUserRoleRevision
+	modifiers  []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -61,28 +58,6 @@ func (_q *RbacUserRoleRevisionQuery) Unique(unique bool) *RbacUserRoleRevisionQu
 func (_q *RbacUserRoleRevisionQuery) Order(o ...rbacuserrolerevision.OrderOption) *RbacUserRoleRevisionQuery {
 	_q.order = append(_q.order, o...)
 	return _q
-}
-
-// QueryOutboxEvent chains the current query on the "outbox_event" edge.
-func (_q *RbacUserRoleRevisionQuery) QueryOutboxEvent() *RbacPolicyOutboxEventQuery {
-	query := (&RbacPolicyOutboxEventClient{config: _q.config}).Query()
-	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
-		if err := _q.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		selector := _q.sqlQuery(ctx)
-		if err := selector.Err(); err != nil {
-			return nil, err
-		}
-		step := sqlgraph.NewStep(
-			sqlgraph.From(rbacuserrolerevision.Table, rbacuserrolerevision.FieldID, selector),
-			sqlgraph.To(rbacpolicyoutboxevent.Table, rbacpolicyoutboxevent.FieldID),
-			sqlgraph.Edge(sqlgraph.O2O, false, rbacuserrolerevision.OutboxEventTable, rbacuserrolerevision.OutboxEventColumn),
-		)
-		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
-		return fromU, nil
-	}
-	return query
 }
 
 // First returns the first RbacUserRoleRevision entity from the query.
@@ -272,27 +247,15 @@ func (_q *RbacUserRoleRevisionQuery) Clone() *RbacUserRoleRevisionQuery {
 		return nil
 	}
 	return &RbacUserRoleRevisionQuery{
-		config:          _q.config,
-		ctx:             _q.ctx.Clone(),
-		order:           append([]rbacuserrolerevision.OrderOption{}, _q.order...),
-		inters:          append([]Interceptor{}, _q.inters...),
-		predicates:      append([]predicate.RbacUserRoleRevision{}, _q.predicates...),
-		withOutboxEvent: _q.withOutboxEvent.Clone(),
+		config:     _q.config,
+		ctx:        _q.ctx.Clone(),
+		order:      append([]rbacuserrolerevision.OrderOption{}, _q.order...),
+		inters:     append([]Interceptor{}, _q.inters...),
+		predicates: append([]predicate.RbacUserRoleRevision{}, _q.predicates...),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
-}
-
-// WithOutboxEvent tells the query-builder to eager-load the nodes that are connected to
-// the "outbox_event" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *RbacUserRoleRevisionQuery) WithOutboxEvent(opts ...func(*RbacPolicyOutboxEventQuery)) *RbacUserRoleRevisionQuery {
-	query := (&RbacPolicyOutboxEventClient{config: _q.config}).Query()
-	for _, opt := range opts {
-		opt(query)
-	}
-	_q.withOutboxEvent = query
-	return _q
 }
 
 // GroupBy is used to group vertices by one or more fields/columns.
@@ -371,11 +334,8 @@ func (_q *RbacUserRoleRevisionQuery) prepareQuery(ctx context.Context) error {
 
 func (_q *RbacUserRoleRevisionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*RbacUserRoleRevision, error) {
 	var (
-		nodes       = []*RbacUserRoleRevision{}
-		_spec       = _q.querySpec()
-		loadedTypes = [1]bool{
-			_q.withOutboxEvent != nil,
-		}
+		nodes = []*RbacUserRoleRevision{}
+		_spec = _q.querySpec()
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*RbacUserRoleRevision).scanValues(nil, columns)
@@ -383,7 +343,6 @@ func (_q *RbacUserRoleRevisionQuery) sqlAll(ctx context.Context, hooks ...queryH
 	_spec.Assign = func(columns []string, values []any) error {
 		node := &RbacUserRoleRevision{config: _q.config}
 		nodes = append(nodes, node)
-		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
 	}
 	if len(_q.modifiers) > 0 {
@@ -398,44 +357,7 @@ func (_q *RbacUserRoleRevisionQuery) sqlAll(ctx context.Context, hooks ...queryH
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
-	if query := _q.withOutboxEvent; query != nil {
-		if err := _q.loadOutboxEvent(ctx, query, nodes, nil,
-			func(n *RbacUserRoleRevision, e *RbacPolicyOutboxEvent) { n.Edges.OutboxEvent = e }); err != nil {
-			return nil, err
-		}
-	}
 	return nodes, nil
-}
-
-func (_q *RbacUserRoleRevisionQuery) loadOutboxEvent(ctx context.Context, query *RbacPolicyOutboxEventQuery, nodes []*RbacUserRoleRevision, init func(*RbacUserRoleRevision), assign func(*RbacUserRoleRevision, *RbacPolicyOutboxEvent)) error {
-	fks := make([]driver.Value, 0, len(nodes))
-	nodeids := make(map[int64]*RbacUserRoleRevision)
-	for i := range nodes {
-		fks = append(fks, nodes[i].ID)
-		nodeids[nodes[i].ID] = nodes[i]
-	}
-	if len(query.ctx.Fields) > 0 {
-		query.ctx.AppendFieldOnce(rbacpolicyoutboxevent.FieldUserRoleRevision)
-	}
-	query.Where(predicate.RbacPolicyOutboxEvent(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(rbacuserrolerevision.OutboxEventColumn), fks...))
-	}))
-	neighbors, err := query.All(ctx)
-	if err != nil {
-		return err
-	}
-	for _, n := range neighbors {
-		fk := n.UserRoleRevision
-		if fk == nil {
-			return fmt.Errorf(`foreign-key "user_role_revision" is nil for node %v`, n.ID)
-		}
-		node, ok := nodeids[*fk]
-		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "user_role_revision" returned %v for node %v`, *fk, n.ID)
-		}
-		assign(node, n)
-	}
-	return nil
 }
 
 func (_q *RbacUserRoleRevisionQuery) sqlCount(ctx context.Context) (int, error) {

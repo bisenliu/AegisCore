@@ -93,16 +93,16 @@ make test-containers
 
 ### RBAC policy sync 故障注入
 
-RBAC 写后同步 unit harness 位于 permission application、Redis watcher 和 Casbin engine 相关测试包，使用 `_test.go` 内 fake 控制 loader 阻塞、Redis publish 失败、dispatcher 重试、watcher 消息乱序和 user-role cache 解析延迟。Docker-backed 验收位于 role PostgreSQL adapter 和 `user-service/tests/e2e/rbac_sync_recovery_test.go`，穿透真实 PostgreSQL transaction、生产 outbox store/dispatcher/Redis publisher/watcher 和两个 Casbin engine。测试必须通过 channel、barrier、`require.Eventually` 或明确 deadline 等待状态谓词，不使用固定 `time.Sleep` 作为状态变化的主要判断。
+RBAC 写后同步 unit harness 位于 permission application、Redis watcher 和 Casbin engine 相关测试包，使用 `_test.go` 内 fake 控制 loader 阻塞、Redis publish 失败、watcher 消息乱序和 user-role cache 解析延迟。Docker-backed 验收位于 role PostgreSQL adapter 和 `user-service/tests/e2e/rbac_sync_recovery_test.go`，穿透真实 PostgreSQL transaction、Redis publisher、watcher 和两个 Casbin engine。测试必须通过 channel、barrier、`require.Eventually` 或明确 deadline 等待状态谓词，不使用固定 `time.Sleep` 作为状态变化的主要判断。
 
 覆盖场景和风险：
 
-- Redis publish 或 Pub/Sub 故障后恢复：验证数据库 policy revision 已提交但通知链路失败时，dispatcher 重试和 watcher 数据库 policy revision 补偿可在没有新 RBAC 写入的情况下使两个副本 lag 归零，并通过恢复前 deny、恢复后 allow 证明 Casbin projection 已更新；纯 user-role revision 只验证用户角色缓存失效和回源收敛，不要求 Casbin policy reload。
+- Redis publish 或 Pub/Sub 故障后恢复：验证数据库 policy revision 已提交但通知链路失败时，watcher 数据库 policy revision 补偿可在没有新 RBAC 写入的情况下使两个副本 lag 归零，并通过恢复前 deny、恢复后 allow 证明 Casbin projection 已更新；纯 user-role revision 只验证用户角色缓存失效和回源收敛，不要求 Casbin policy reload。
 - Watcher 自恢复状态机：使用可控 subscriber 分别注入初始订阅确认失败、运行期 Receive 终止、持续重连和恢复后消息，断言带抖动退避不超过配置上限、成功确认只清除 subscription 当前错误，并且订阅退避期间 PostgreSQL revision 周期校准继续推进 `LastReconcileSuccessAt`。
 - Watcher 停止阶段：分别在订阅确认、Receive、退避和 payload 数据库查询阻塞时取消根 context，断言停止后不再订阅、每个 PubSub 恰好关闭一次、正常取消不记录故障，并以 `go test -race` 检查 goroutine 生命周期和状态竞争。
 - reload 乱序完成：验证后发 revision 先完成、先发 revision 后完成时，旧 projection 不会覆盖最新 applied revision，授权 allow/deny 结果必须对应最新数据库状态。
-- Add/Remove/Replace 重放：验证 dispatcher 重试、重复投递和乱序 watcher 事件不会丢通知，也不会因非幂等副作用破坏最终 projection 或 cache 失效语义；重复 policy 通知必须被合并到最高未应用 policy revision，重复 user-role 通知不得查询 `role_permissions` 全集。
-- 100 并发 RBAC 写：使用真实 PostgreSQL mutation 验证业务行、commit-ordered policy/user-role revision 和 pending outbox 一一对应且各自 revision 连续唯一；授权收敛由独立的 Redis 故障恢复 e2e 断言覆盖。
+- Add/Remove/Replace 重放：验证重复投递和乱序 watcher 事件不会因非幂等副作用破坏最终 projection 或 cache 失效语义；重复 policy 通知必须被合并到最高未应用 policy revision，重复 user-role 通知不得查询 `role_permissions` 全集。
+- 100 并发 RBAC 写：使用真实 PostgreSQL mutation 验证业务行与 commit-ordered policy/user-role revision 一一对应且各自 revision 连续唯一；授权收敛由独立的 Redis 故障恢复 e2e 断言覆盖。
 
 运行 unit harness：
 
@@ -117,7 +117,7 @@ go test -race ./internal/features/permission/infrastructure/redis ./internal/fea
 ```bash
 cd user-service
 go test ./internal/features/role/infrastructure/postgres -run TestPostgresPolicyRevisionFollowsCommitOrderAndHandlesConcurrentWrites -count=1 -args -aegiscore.testcontainers
-go test ./tests/e2e -run TestRBACOutboxRedisRecoveryConvergesAllProjectionsWithoutNewWrite -count=1 -args -aegiscore.testcontainers
+go test ./tests/e2e -run TestRBACRevisionRecoveryConvergesAllProjectionsWithoutNewWrite -count=1 -args -aegiscore.testcontainers
 ```
 
 完整真实 PostgreSQL/Redis 集成门禁使用仓库根入口：

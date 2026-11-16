@@ -362,35 +362,28 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 
 ### Requirement: RBAC 同步可观测性、健康与投影 lag
 
-系统 MUST 为 outbox dispatcher 与 policy watcher 暴露低基数 metrics、结构化日志和只读 status，并接入 health/readiness。Policy reload lag MUST 只表示 PostgreSQL latest policy revision 与 Casbin engine actual applied revision 的非负差值；user-role revision、Redis counter、Pub/Sub payload 或 reload attempt MUST NOT 充当 policy lag 权威值。健康探测 MUST 只读，MUST NOT 修改 outbox event。
+系统 MUST 为 policy watcher 暴露低基数 metrics、结构化日志和只读 status，并接入 health/readiness。Policy reload lag MUST 只表示 PostgreSQL latest policy revision 与 Casbin engine actual applied revision 的非负差值；user-role revision、Redis counter、Pub/Sub payload 或 reload attempt MUST NOT 充当 policy lag 权威值。系统 MUST NOT 暴露 outbox dispatcher backlog、投递计数、运行状态或健康检查。健康探测 MUST 只读，MUST NOT 修改 RBAC revision。
 
-#### Scenario: backlog、lag 与投递指标
+#### Scenario: watcher 指标与日志
 
-- **WHEN** dispatcher claim、publish、ack、失败、重试或采集 outbox 状态
-- **THEN** feature metrics MUST 记录固定 result/reason/kind 枚举下的处理计数、due backlog、最老未完成 event age 和 loop 运行状态
-- **AND** metrics label MUST NOT 包含 event/revision/user/role/permission ID、idempotency key、原始错误、SQL、Redis key、payload 或其他高基数字段
-- **AND** `kind` MUST 使用固定枚举区分 policy 事件与 user-role 事件，MUST NOT 通过 label 暴露具体 revision 或用户标识
-
-#### Scenario: dispatcher 结构化日志
-
-- **WHEN** event 被 claim、成功投递、失败退避、lease 冲突或循环状态变化
-- **THEN** 日志 MUST 使用英文 message 和稳定 `snake_case` 字段，并 MAY 记录 policy revision、user-role revision、attempt、kind、reason 和稳定错误类别
-- **AND** 日志 MUST NOT 记录完整 event payload、SQL、Redis key、连接 secret 或将原始底层错误暴露到公共健康响应
-- **AND** policy 事件字段 MUST 使用 `policy_revision`，user-role 事件字段 MUST 使用 `user_role_revision`，MUST NOT 用 `policy_revision` 表示用户角色绑定提交水位
+- **WHEN** watcher 执行 revision 检查、reload、缓存失效或状态采集
+- **THEN** feature metrics MUST 记录固定 result/reason/kind 枚举下的处理计数和 loop 运行状态
+- **AND** metrics label MUST NOT 包含 revision、user、role、permission ID、原始错误、SQL、Redis key、payload 或其他高基数字段
+- **AND** 日志 MUST 使用英文 message 和稳定 `snake_case` 字段，policy 字段 MUST 使用 `policy_revision`，user-role 字段 MUST 使用 `user_role_revision`
 
 #### Scenario: 只读 health 与 readiness
 
-- **WHEN** dispatcher 正在运行且可读取 outbox 状态
-- **THEN** status MUST 报告最近成功时间、最近错误类别、due count 和最老未完成 event age，探测 MUST NOT 改变任何 event
-- **WHEN** dispatcher 未启动、循环意外退出或 outbox 状态查询失败
+- **WHEN** watcher 正在运行且最近的数据库 revision 校准未超过 staleness 预算
+- **THEN** readiness MUST 通过，探测 MUST NOT 改变 revision、缓存或 Casbin 投影
+- **WHEN** watcher 未启动、循环意外退出或 revision source 持续不可用
 - **THEN** readiness MUST 失败并返回稳定且不含敏感信息的定位结果
-- **AND** 单次 publish 失败或处于退避中的 backlog MUST 保持可见且不得终止 dispatcher 循环
+- **AND** 单次 Pub/Sub 发布失败 MUST NOT 单独导致 readiness 失败
 
 #### Scenario: metrics 禁用时保持行为
 
 - **WHEN** 全局 metrics provider 禁用
-- **THEN** dispatcher MUST 继续 claim、发布、重试和更新只读 status，并通过非 nil no-op feature metrics 满足正式依赖图
-- **AND** 系统 MUST NOT 因 collector 未注册而改变 event 投递、health 或 readiness 状态机
+- **THEN** watcher MUST 继续执行数据库 revision 补偿，并通过非 nil no-op feature metrics 满足正式依赖图
+- **AND** 系统 MUST NOT 因 collector 未注册而改变补偿、health 或 readiness 状态机
 
 #### Scenario: 数据库 latest policy 超前时暴露非零 lag
 
@@ -404,7 +397,7 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 - **WHEN** 只有用户角色绑定变化且 latest user-role revision 高于 local applied policy revision
 - **THEN** `aegiscore_user_service_rbac_policy_reload_lag` MUST NOT 因 user-role revision 变为非零
 - **AND** watcher MUST NOT 将 user-role revision mismatch 记录为 policy reload lag，MUST NOT 触发 policy reload failure 或 policy readiness 失败
-- **AND** user-role 通知 MAY 通过固定 kind/reason 的 dispatcher 或 watcher 计数、缓存失效计数和结构化日志体现
+- **AND** user-role 补偿 MAY 通过固定 kind/reason 的 watcher 计数、缓存失效计数和结构化日志体现
 
 #### Scenario: lag 为零禁止假收敛
 
@@ -584,7 +577,7 @@ tracing provider MUST 对重复或非法 lifecycle 调用提供明确且被测�
 
 - **WHEN** user-service 通过 component status collector 暴露运行时组件状态
 - **THEN** collector MUST 继续只表达业务中立的 running 和 last error 状态
-- **AND** Casbin reload 计数、last success gauge、RBAC watcher 专用指标和 outbox 指标 MUST 由 permission feature metrics 拥有
+- **AND** Casbin reload 计数、last success gauge 和 RBAC watcher 专用指标 MUST 由 permission feature metrics 拥有
 
 #### Scenario: 架构门禁防止业务指标回流 common
 

@@ -14,8 +14,6 @@ type Tx struct {
 	config
 	// Permission is the client for interacting with the Permission builders.
 	Permission *PermissionClient
-	// RbacPolicyOutboxEvent is the client for interacting with the RbacPolicyOutboxEvent builders.
-	RbacPolicyOutboxEvent *RbacPolicyOutboxEventClient
 	// RbacPolicyRevision is the client for interacting with the RbacPolicyRevision builders.
 	RbacPolicyRevision *RbacPolicyRevisionClient
 	// RbacPolicyRevisionCounter is the client for interacting with the RbacPolicyRevisionCounter builders.
@@ -164,7 +162,6 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.Permission = NewPermissionClient(tx.config)
-	tx.RbacPolicyOutboxEvent = NewRbacPolicyOutboxEventClient(tx.config)
 	tx.RbacPolicyRevision = NewRbacPolicyRevisionClient(tx.config)
 	tx.RbacPolicyRevisionCounter = NewRbacPolicyRevisionCounterClient(tx.config)
 	tx.RbacUserRoleRevision = NewRbacUserRoleRevisionClient(tx.config)

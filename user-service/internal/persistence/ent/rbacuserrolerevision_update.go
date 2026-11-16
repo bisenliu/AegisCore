@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
-	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
 )
 
@@ -28,34 +27,9 @@ func (_u *RbacUserRoleRevisionUpdate) Where(ps ...predicate.RbacUserRoleRevision
 	return _u
 }
 
-// SetOutboxEventID sets the "outbox_event" edge to the RbacPolicyOutboxEvent entity by ID.
-func (_u *RbacUserRoleRevisionUpdate) SetOutboxEventID(id int64) *RbacUserRoleRevisionUpdate {
-	_u.mutation.SetOutboxEventID(id)
-	return _u
-}
-
-// SetNillableOutboxEventID sets the "outbox_event" edge to the RbacPolicyOutboxEvent entity by ID if the given value is not nil.
-func (_u *RbacUserRoleRevisionUpdate) SetNillableOutboxEventID(id *int64) *RbacUserRoleRevisionUpdate {
-	if id != nil {
-		_u = _u.SetOutboxEventID(*id)
-	}
-	return _u
-}
-
-// SetOutboxEvent sets the "outbox_event" edge to the RbacPolicyOutboxEvent entity.
-func (_u *RbacUserRoleRevisionUpdate) SetOutboxEvent(v *RbacPolicyOutboxEvent) *RbacUserRoleRevisionUpdate {
-	return _u.SetOutboxEventID(v.ID)
-}
-
 // Mutation returns the RbacUserRoleRevisionMutation object of the builder.
 func (_u *RbacUserRoleRevisionUpdate) Mutation() *RbacUserRoleRevisionMutation {
 	return _u.mutation
-}
-
-// ClearOutboxEvent clears the "outbox_event" edge to the RbacPolicyOutboxEvent entity.
-func (_u *RbacUserRoleRevisionUpdate) ClearOutboxEvent() *RbacUserRoleRevisionUpdate {
-	_u.mutation.ClearOutboxEvent()
-	return _u
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -97,35 +71,6 @@ func (_u *RbacUserRoleRevisionUpdate) sqlSave(ctx context.Context) (_node int, e
 	if _u.mutation.RoleIDCleared() {
 		_spec.ClearField(rbacuserrolerevision.FieldRoleID, field.TypeString)
 	}
-	if _u.mutation.OutboxEventCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2O,
-			Inverse: false,
-			Table:   rbacuserrolerevision.OutboxEventTable,
-			Columns: []string{rbacuserrolerevision.OutboxEventColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(rbacpolicyoutboxevent.FieldID, field.TypeInt64),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.OutboxEventIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2O,
-			Inverse: false,
-			Table:   rbacuserrolerevision.OutboxEventTable,
-			Columns: []string{rbacuserrolerevision.OutboxEventColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(rbacpolicyoutboxevent.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{rbacuserrolerevision.Label}
@@ -146,34 +91,9 @@ type RbacUserRoleRevisionUpdateOne struct {
 	mutation *RbacUserRoleRevisionMutation
 }
 
-// SetOutboxEventID sets the "outbox_event" edge to the RbacPolicyOutboxEvent entity by ID.
-func (_u *RbacUserRoleRevisionUpdateOne) SetOutboxEventID(id int64) *RbacUserRoleRevisionUpdateOne {
-	_u.mutation.SetOutboxEventID(id)
-	return _u
-}
-
-// SetNillableOutboxEventID sets the "outbox_event" edge to the RbacPolicyOutboxEvent entity by ID if the given value is not nil.
-func (_u *RbacUserRoleRevisionUpdateOne) SetNillableOutboxEventID(id *int64) *RbacUserRoleRevisionUpdateOne {
-	if id != nil {
-		_u = _u.SetOutboxEventID(*id)
-	}
-	return _u
-}
-
-// SetOutboxEvent sets the "outbox_event" edge to the RbacPolicyOutboxEvent entity.
-func (_u *RbacUserRoleRevisionUpdateOne) SetOutboxEvent(v *RbacPolicyOutboxEvent) *RbacUserRoleRevisionUpdateOne {
-	return _u.SetOutboxEventID(v.ID)
-}
-
 // Mutation returns the RbacUserRoleRevisionMutation object of the builder.
 func (_u *RbacUserRoleRevisionUpdateOne) Mutation() *RbacUserRoleRevisionMutation {
 	return _u.mutation
-}
-
-// ClearOutboxEvent clears the "outbox_event" edge to the RbacPolicyOutboxEvent entity.
-func (_u *RbacUserRoleRevisionUpdateOne) ClearOutboxEvent() *RbacUserRoleRevisionUpdateOne {
-	_u.mutation.ClearOutboxEvent()
-	return _u
 }
 
 // Where appends a list predicates to the RbacUserRoleRevisionUpdate builder.
@@ -244,35 +164,6 @@ func (_u *RbacUserRoleRevisionUpdateOne) sqlSave(ctx context.Context) (_node *Rb
 	}
 	if _u.mutation.RoleIDCleared() {
 		_spec.ClearField(rbacuserrolerevision.FieldRoleID, field.TypeString)
-	}
-	if _u.mutation.OutboxEventCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2O,
-			Inverse: false,
-			Table:   rbacuserrolerevision.OutboxEventTable,
-			Columns: []string{rbacuserrolerevision.OutboxEventColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(rbacpolicyoutboxevent.FieldID, field.TypeInt64),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.OutboxEventIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2O,
-			Inverse: false,
-			Table:   rbacuserrolerevision.OutboxEventTable,
-			Columns: []string{rbacuserrolerevision.OutboxEventColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(rbacpolicyoutboxevent.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_node = &RbacUserRoleRevision{config: _u.config}
 	_spec.Assign = _node.assignValues

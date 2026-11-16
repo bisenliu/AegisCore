@@ -22,10 +22,9 @@ import (
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	rolepostgres "github.com/aegiscore/user-service/internal/features/role/infrastructure/postgres"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
-	entrbacoutbox "github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 )
 
-func TestRBACOutboxRedisRecoveryConvergesAllProjectionsWithoutNewWrite(t *testing.T) {
+func TestRBACRevisionRecoveryConvergesAllProjectionsWithoutNewWrite(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	t.Cleanup(cancel)
 	client := newRBACSyncPostgresClient(ctx, t)
@@ -100,51 +99,29 @@ func TestRBACOutboxRedisRecoveryConvergesAllProjectionsWithoutNewWrite(t *testin
 	t.Cleanup(func() { _ = redisClient.Close() })
 	redisStore, err := permissionredis.NewStore(redisClient, "aegiscore-user-service-test", nil)
 	require.NoError(t, err)
-	dispatcher, err := permissionapplication.NewDispatcher(
-		permissionpostgres.NewOutboxStore(client),
-		redisStore,
-		permissionapplication.DispatcherSettings{
-			PollInterval:   time.Second,
-			BatchSize:      10,
-			ClaimTimeout:   time.Second,
-			BackoffInitial: 10 * time.Millisecond,
-			BackoffMax:     100 * time.Millisecond,
-		},
-		nil,
-		nil,
-		permissionapplication.NopMetrics(),
-	)
-	require.NoError(t, err)
 
 	redisServer.Close()
-	// 先制造一次投递失败，确认事件保留在 outbox；恢复 Redis 后不得依赖新的业务写入触发重试。
-	_, err = dispatcher.DispatchOnce(ctx)
+	// 发布失败不得回滚已提交 revision；恢复后由数据库 revision 补偿，不依赖新的业务写入。
+	err = redisStore.PublishPolicyChanged(ctx, finalRevision, permissionapplication.NewPolicyReloadChange("role_permission_added"))
 	require.Error(t, err)
-	failed, err := client.RbacPolicyOutboxEvent.Query().Where(entrbacoutbox.PolicyRevisionEQ(finalRevision)).Only(ctx)
-	require.NoError(t, err)
-	require.Equal(t, permissionapplication.OutboxStatusFailed, failed.Status)
-	require.Equal(t, 1, failed.AttemptCount)
 	for _, engine := range engines {
 		require.Zero(t, engine.AppliedRevision())
 	}
 
 	require.NoError(t, redisServer.Restart())
-	// DispatchOnce 同时承担失败事件的到期重试，最终应把此前的全部 revision 推进到 Redis 权威版本。
-	require.Eventually(t, func() bool {
-		_, _ = dispatcher.DispatchOnce(ctx)
-		delivered, queryErr := client.RbacPolicyOutboxEvent.Query().Where(entrbacoutbox.StatusEQ(permissionapplication.OutboxStatusDelivered)).Count(ctx)
-		return queryErr == nil && delivered == 2
-	}, 5*time.Second, 20*time.Millisecond)
+	require.NoError(t, redisStore.PublishPolicyChanged(ctx, finalRevision, permissionapplication.NewPolicyReloadChange("role_permission_added")))
 	version, err := redisStore.CurrentVersion(ctx)
 	require.NoError(t, err)
 	require.Equal(t, finalRevision, version)
 
 	revisionSource := permissionpostgres.NewPolicyRevisionSource(client)
+	userRoleSource := permissionpostgres.NewUserRoleRevisionSource(client)
 	for _, engine := range engines {
 		// 两个独立 engine 都从同一数据库 revision 校准，验证恢复过程不是单实例内存状态偶然生效。
 		watcher := permissionredis.NewWatcher(permissionredis.WatcherParams{
-			RevisionSource: revisionSource,
-			Engine:         engine,
+			RevisionSource:    revisionSource,
+			UserRoleRevisions: userRoleSource,
+			Engine:            engine,
 		})
 		watcher.CheckVersion(ctx)
 		status := engine.ProjectionStatus()

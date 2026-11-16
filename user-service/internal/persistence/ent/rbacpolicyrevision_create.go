@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
 )
 
@@ -59,25 +58,6 @@ func (_c *RbacPolicyRevisionCreate) SetPermissionID(v *uuid.UUID) *RbacPolicyRev
 func (_c *RbacPolicyRevisionCreate) SetID(v int64) *RbacPolicyRevisionCreate {
 	_c.mutation.SetID(v)
 	return _c
-}
-
-// SetOutboxEventID sets the "outbox_event" edge to the RbacPolicyOutboxEvent entity by ID.
-func (_c *RbacPolicyRevisionCreate) SetOutboxEventID(id int64) *RbacPolicyRevisionCreate {
-	_c.mutation.SetOutboxEventID(id)
-	return _c
-}
-
-// SetNillableOutboxEventID sets the "outbox_event" edge to the RbacPolicyOutboxEvent entity by ID if the given value is not nil.
-func (_c *RbacPolicyRevisionCreate) SetNillableOutboxEventID(id *int64) *RbacPolicyRevisionCreate {
-	if id != nil {
-		_c = _c.SetOutboxEventID(*id)
-	}
-	return _c
-}
-
-// SetOutboxEvent sets the "outbox_event" edge to the RbacPolicyOutboxEvent entity.
-func (_c *RbacPolicyRevisionCreate) SetOutboxEvent(v *RbacPolicyOutboxEvent) *RbacPolicyRevisionCreate {
-	return _c.SetOutboxEventID(v.ID)
 }
 
 // Mutation returns the RbacPolicyRevisionMutation object of the builder.
@@ -193,22 +173,6 @@ func (_c *RbacPolicyRevisionCreate) createSpec() (*RbacPolicyRevision, *sqlgraph
 		}
 		_spec.SetField(rbacpolicyrevision.FieldPermissionID, field.TypeString, vv)
 		_node.PermissionID = value
-	}
-	if nodes := _c.mutation.OutboxEventIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2O,
-			Inverse: false,
-			Table:   rbacpolicyrevision.OutboxEventTable,
-			Columns: []string{rbacpolicyrevision.OutboxEventColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(rbacpolicyoutboxevent.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec, nil
 }

@@ -10,7 +10,6 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 
 	"github.com/aegiscore/common/runtime/datastore"
-	runtimeid "github.com/aegiscore/common/runtime/id"
 	roleapplication "github.com/aegiscore/user-service/internal/features/role/application"
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 	entrbacpolicyrevision "github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
@@ -42,13 +41,9 @@ func (s sqlTxStarter) BeginTransaction(ctx context.Context) (*sql.Tx, error) {
 	return s.db.BeginTx(ctx, nil)
 }
 
-// transactPolicyChange 将 policy 业务写入、单调 policy revision 和 outbox event 原子提交。
-// 返回成功即表示数据库事实和跨实例补偿事件均已持久化；本实例即时 reload 在事务提交后由 application 层触发。
+// transactPolicyChange 将 policy 业务写入和单调 policy revision 原子提交。
+// 返回成功即表示数据库授权事实已持久化；本实例即时 reload 在事务提交后由 application 层触发。
 func transactPolicyChange[T any](ctx context.Context, client *ent.Client, operation string, change roleapplication.PolicyChange, mutate func(*ent.Tx) (T, error)) (value T, result roleapplication.PolicyWriteResult, err error) {
-	eventID, err := runtimeid.NewUUID()
-	if err != nil {
-		return value, result, fmt.Errorf("generate rbac policy outbox event id: %w", err)
-	}
 	tx, finish, err := datastore.BeginTransaction(ctx, entTxStarter{client: client})
 	if err != nil {
 		return value, result, fmt.Errorf("begin %s: %w", operation, err)
@@ -76,30 +71,14 @@ func transactPolicyChange[T any](ctx context.Context, client *ent.Client, operat
 	if err != nil {
 		return value, result, finish.Fail(fmt.Errorf("append rbac policy revision after %s: %w", operation, err))
 	}
-	_, err = tx.RbacPolicyOutboxEvent.Create().
-		SetEventID(eventID).
-		SetPolicyRevision(revision.ID).
-		SetKind(string(change.Kind)).
-		SetReason(change.Reason).
-		SetRoleID(nonNilUUID(change.RoleID)).
-		SetPermissionID(nonNilUUID(change.PermissionID)).
-		SetIdempotencyKey(fmt.Sprintf("rbac-policy-revision:%d", revision.ID)).
-		Save(ctx)
-	if err != nil {
-		return value, result, finish.Fail(fmt.Errorf("append rbac policy outbox event after %s: %w", operation, err))
-	}
 	if err := finish.Commit(ctx); err != nil {
 		return value, result, finish.Fail(fmt.Errorf("commit %s: %w", operation, err))
 	}
 	return value, roleapplication.PolicyWriteResult{Revision: revision.ID}, nil
 }
 
-// transactUserRoleChange 将用户角色绑定写入、单调 user-role revision 和 outbox event 原子提交。
+// transactUserRoleChange 将用户角色绑定写入和单调 user-role revision 原子提交。
 func transactUserRoleChange[T any](ctx context.Context, client *ent.Client, operation string, change roleapplication.PolicyChange, mutate func(*ent.Tx) (T, error)) (value T, result roleapplication.PolicyWriteResult, err error) {
-	eventID, err := runtimeid.NewUUID()
-	if err != nil {
-		return value, result, fmt.Errorf("generate rbac user-role outbox event id: %w", err)
-	}
 	tx, finish, err := datastore.BeginTransaction(ctx, entTxStarter{client: client})
 	if err != nil {
 		return value, result, fmt.Errorf("begin %s: %w", operation, err)
@@ -126,18 +105,6 @@ func transactUserRoleChange[T any](ctx context.Context, client *ent.Client, oper
 		Save(ctx)
 	if err != nil {
 		return value, result, finish.Fail(fmt.Errorf("append rbac user-role revision after %s: %w", operation, err))
-	}
-	_, err = tx.RbacPolicyOutboxEvent.Create().
-		SetEventID(eventID).
-		SetUserRoleRevision(revision.ID).
-		SetKind(string(change.Kind)).
-		SetReason(change.Reason).
-		SetRoleID(nonNilUUID(change.RoleID)).
-		SetUserID(&change.UserID).
-		SetIdempotencyKey(fmt.Sprintf("rbac-user-role-revision:%d", revision.ID)).
-		Save(ctx)
-	if err != nil {
-		return value, result, finish.Fail(fmt.Errorf("append rbac user-role outbox event after %s: %w", operation, err))
 	}
 	if err := finish.Commit(ctx); err != nil {
 		return value, result, finish.Fail(fmt.Errorf("commit %s: %w", operation, err))

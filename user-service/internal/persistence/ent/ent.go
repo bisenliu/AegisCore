@@ -13,7 +13,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/aegiscore/user-service/internal/persistence/ent/permission"
-	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevisioncounter"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
@@ -83,7 +82,6 @@ func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			permission.Table:                  permission.ValidColumn,
-			rbacpolicyoutboxevent.Table:       rbacpolicyoutboxevent.ValidColumn,
 			rbacpolicyrevision.Table:          rbacpolicyrevision.ValidColumn,
 			rbacpolicyrevisioncounter.Table:   rbacpolicyrevisioncounter.ValidColumn,
 			rbacuserrolerevision.Table:        rbacuserrolerevision.ValidColumn,

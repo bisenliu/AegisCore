@@ -54,37 +54,42 @@ func newStore(client policyRedisClient, keys KeyCatalog, instanceID string, log 
 	return &Store{client: client, instanceID: instanceID, keys: keys, log: log}
 }
 
-// PublishPolicyRevision 原子缓存不小于现值的数据库 revision，并发布对应 outbox event envelope。
-func (s *Store) PublishPolicyRevision(ctx context.Context, event permissionapplication.OutboxEvent) error {
-	reason := event.Reason
-	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(event, s.instanceID))
+// PublishPolicyChanged 原子缓存不小于现值的数据库 policy revision，并发布可丢失的刷新 hint。
+func (s *Store) PublishPolicyChanged(ctx context.Context, revision int64, change permissionapplication.PolicyChange) error {
+	return s.publish(ctx, revision, change, true)
+}
+
+// PublishUserRoleChanged 发布可丢失的用户角色缓存失效 hint，不写入 policy revision 缓存。
+func (s *Store) PublishUserRoleChanged(ctx context.Context, revision int64, change permissionapplication.PolicyChange) error {
+	return s.publish(ctx, revision, change, false)
+}
+
+func (s *Store) publish(ctx context.Context, revision int64, change permissionapplication.PolicyChange, cachePolicyRevision bool) error {
+	reason := change.ReasonText()
+	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(revision, change, s.instanceID))
 	if err != nil {
 		return err
 	}
-	if event.PolicyRevision != nil {
-		if err := s.client.Eval(ctx, cachePolicyRevisionScript, []string{s.keys.PolicyVersionKey()}, *event.PolicyRevision).Err(); err != nil {
-			logger.Error(ctx, "rbac policy revision cache failed", logger.StackTrace(zap.Int64("policy_revision", *event.PolicyRevision), zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))...)
+	if cachePolicyRevision {
+		if err := s.client.Eval(ctx, cachePolicyRevisionScript, []string{s.keys.PolicyVersionKey()}, revision).Err(); err != nil {
+			logger.Error(ctx, "rbac policy revision cache failed", logger.StackTrace(zap.Int64("policy_revision", revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))...)
 			return fmt.Errorf("cache rbac policy revision: %w", err)
 		}
-		logger.Info(ctx, "rbac policy revision cached", zap.Int64("policy_revision", *event.PolicyRevision), zap.String("instance_id", s.instanceID), zap.String("reason", reason))
+		logger.Info(ctx, "rbac policy revision cached", zap.Int64("policy_revision", revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason))
 	}
 	if err := s.client.Publish(ctx, s.keys.PolicyChannel(), payload).Err(); err != nil {
-		logger.Error(ctx, "rbac policy refresh publish failed", logger.StackTrace(append(eventRevisionLogFields(event), zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))...)...)
+		logger.Error(ctx, "rbac policy refresh publish failed", logger.StackTrace(append(publicationLogFields(revision, change), zap.String("instance_id", s.instanceID), zap.Error(err))...)...)
 		return fmt.Errorf("publish rbac policy refresh: %w", err)
 	}
-	logger.Info(ctx, "rbac policy refresh published", append(eventRevisionLogFields(event), zap.String("instance_id", s.instanceID), zap.String("reason", reason))...)
+	logger.Info(ctx, "rbac policy refresh published", append(publicationLogFields(revision, change), zap.String("instance_id", s.instanceID))...)
 	return nil
 }
 
-func eventRevisionLogFields(event permissionapplication.OutboxEvent) []zap.Field {
-	fields := make([]zap.Field, 0, 2)
-	if event.PolicyRevision != nil {
-		fields = append(fields, zap.Int64("policy_revision", *event.PolicyRevision))
+func publicationLogFields(revision int64, change permissionapplication.PolicyChange) []zap.Field {
+	if change.Kind == permissionapplication.PolicyChangeKindUserRole {
+		return []zap.Field{zap.Int64("user_role_revision", revision), zap.String("reason", change.ReasonText())}
 	}
-	if event.UserRoleRevision != nil {
-		fields = append(fields, zap.Int64("user_role_revision", *event.UserRoleRevision))
-	}
-	return fields
+	return []zap.Field{zap.Int64("policy_revision", revision), zap.String("reason", change.ReasonText())}
 }
 
 // CurrentVersion 读取 Redis 中缓存的最新 RBAC policy revision。

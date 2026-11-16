@@ -7,7 +7,6 @@ import (
 	"uuid"
 
 	"entgo.io/ent/dialect/sql"
-	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
 )
 
@@ -429,29 +428,6 @@ func PermissionIDContainsFold(v *uuid.UUID) predicate.RbacPolicyRevision {
 		err = fmt.Errorf("permission_id value is not a string: %T", vc)
 	}
 	return predicate.RbacPolicyRevisionOrErr(sql.FieldContainsFold(FieldPermissionID, vcs), err)
-}
-
-// HasOutboxEvent applies the HasEdge predicate on the "outbox_event" edge.
-func HasOutboxEvent() predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2O, false, OutboxEventTable, OutboxEventColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasOutboxEventWith applies the HasEdge predicate on the "outbox_event" edge with a given conditions (other predicates).
-func HasOutboxEventWith(preds ...predicate.RbacPolicyOutboxEvent) predicate.RbacPolicyRevision {
-	return predicate.RbacPolicyRevision(func(s *sql.Selector) {
-		step := newOutboxEventStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
 }
 
 // And groups predicates with the AND operator between them.

@@ -187,7 +187,6 @@ type policyFactState struct {
 	CounterExists bool
 	Counter       int64
 	Revisions     int
-	OutboxEvents  int
 }
 
 func snapshotProtectedRoleState(ctx context.Context, t *testing.T, client *ent.Client, bindings *RolePermissionStore, roleID uuid.UUID) protectedRoleState {
@@ -212,8 +211,6 @@ func snapshotPolicyFacts(ctx context.Context, t *testing.T, client *ent.Client) 
 		require.True(t, ent.IsNotFound(err), "read policy revision counter: %v", err)
 	}
 	state.Revisions, err = client.RbacPolicyRevision.Query().Count(ctx)
-	require.NoError(t, err)
-	state.OutboxEvents, err = client.RbacPolicyOutboxEvent.Query().Count(ctx)
 	require.NoError(t, err)
 	return state
 }

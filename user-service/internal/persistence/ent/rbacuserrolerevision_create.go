@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
 )
 
@@ -59,25 +58,6 @@ func (_c *RbacUserRoleRevisionCreate) SetRoleID(v *uuid.UUID) *RbacUserRoleRevis
 func (_c *RbacUserRoleRevisionCreate) SetID(v int64) *RbacUserRoleRevisionCreate {
 	_c.mutation.SetID(v)
 	return _c
-}
-
-// SetOutboxEventID sets the "outbox_event" edge to the RbacPolicyOutboxEvent entity by ID.
-func (_c *RbacUserRoleRevisionCreate) SetOutboxEventID(id int64) *RbacUserRoleRevisionCreate {
-	_c.mutation.SetOutboxEventID(id)
-	return _c
-}
-
-// SetNillableOutboxEventID sets the "outbox_event" edge to the RbacPolicyOutboxEvent entity by ID if the given value is not nil.
-func (_c *RbacUserRoleRevisionCreate) SetNillableOutboxEventID(id *int64) *RbacUserRoleRevisionCreate {
-	if id != nil {
-		_c = _c.SetOutboxEventID(*id)
-	}
-	return _c
-}
-
-// SetOutboxEvent sets the "outbox_event" edge to the RbacPolicyOutboxEvent entity.
-func (_c *RbacUserRoleRevisionCreate) SetOutboxEvent(v *RbacPolicyOutboxEvent) *RbacUserRoleRevisionCreate {
-	return _c.SetOutboxEventID(v.ID)
 }
 
 // Mutation returns the RbacUserRoleRevisionMutation object of the builder.
@@ -196,22 +176,6 @@ func (_c *RbacUserRoleRevisionCreate) createSpec() (*RbacUserRoleRevision, *sqlg
 		}
 		_spec.SetField(rbacuserrolerevision.FieldRoleID, field.TypeString, vv)
 		_node.RoleID = value
-	}
-	if nodes := _c.mutation.OutboxEventIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2O,
-			Inverse: false,
-			Table:   rbacuserrolerevision.OutboxEventTable,
-			Columns: []string{rbacuserrolerevision.OutboxEventColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(rbacpolicyoutboxevent.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec, nil
 }

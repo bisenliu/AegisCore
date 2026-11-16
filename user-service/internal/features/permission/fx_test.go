@@ -30,13 +30,11 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 	t.Cleanup(func() { _ = redisClient.Close() })
 	provider := newPermissionModuleMetricsProvider(t, false)
 	settings := serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test", PolicyWatcher: serviceconfig.DefaultPolicyWatcherConfig()}
-	settings.OutboxDispatcher = serviceconfig.DefaultOutboxDispatcherConfig()
 	loader := permissionModulePolicyLoader{}
 	roles := permissionModuleUserRoleResolver{}
 
 	var policyHealth permissionauthorization.PolicyHealth
 	var watcherStatus permissionapplication.PolicyWatcherStatus
-	var dispatcherStatusSource permissionapplication.OutboxDispatcherStatus
 	var authorizer permissionauthorization.Authorizer
 	var notifier permissionapplication.PolicyChangeNotifier
 	app := fxtest.New(t,
@@ -51,13 +49,12 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 			fx.Annotate(roles, fx.As(new(permissioncasbin.UserRoleResolver))),
 			fx.Annotate(permissionModuleUserRoleCacheStats{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
-			fx.Annotate(&permissionModuleOutboxStore{}, fx.As(new(permissionapplication.OutboxStore))),
 			fx.Annotate(permissionModuleRevisionSource{}, fx.As(new(permissionapplication.LatestPolicyRevisionSource))),
+			fx.Annotate(permissionModuleUserRoleRevisionSource{}, fx.As(new(permissionapplication.UserRoleRevisionSource))),
 		),
 		Module,
 		fx.Populate(
 			&watcherStatus,
-			&dispatcherStatusSource,
 			&authorizer,
 			&policyHealth,
 			&notifier,
@@ -65,19 +62,12 @@ func TestPermissionModuleProjectsRBACInfrastructureSameInstancesAndStarts(t *tes
 	)
 	app.RequireStart()
 	require.True(t, watcherStatus.Status().Running)
-	dispatcherStatus, err := dispatcherStatusSource.Status(context.Background())
-	require.NoError(t, err)
-	require.True(t, dispatcherStatus.Running)
 	app.RequireStop()
 	require.False(t, watcherStatus.Status().Running)
-	dispatcherStatus, err = dispatcherStatusSource.Status(context.Background())
-	require.NoError(t, err)
-	require.False(t, dispatcherStatus.Running)
 
 	require.NotNil(t, authorizer)
 	require.NotNil(t, policyHealth)
 	require.NotNil(t, notifier)
-	require.NotNil(t, dispatcherStatusSource)
 }
 
 func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
@@ -85,7 +75,6 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 	redisClient := rediscmd.NewClient(&rediscmd.Options{Addr: redisServer.Addr()})
 	provider := newPermissionModuleMetricsProvider(t, false)
 	settings := serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test", PolicyWatcher: serviceconfig.DefaultPolicyWatcherConfig()}
-	settings.OutboxDispatcher = serviceconfig.DefaultOutboxDispatcherConfig()
 	loader := permissionModulePolicyLoader{}
 	roles := permissionModuleUserRoleResolver{}
 	startErr := errors.New("later start failed")
@@ -102,8 +91,8 @@ func TestPermissionModuleStopsWatcherWhenLaterStartHookFails(t *testing.T) {
 			fx.Annotate(roles, fx.As(new(permissioncasbin.UserRoleResolver))),
 			fx.Annotate(permissionModuleUserRoleCacheStats{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
-			fx.Annotate(&permissionModuleOutboxStore{}, fx.As(new(permissionapplication.OutboxStore))),
 			fx.Annotate(permissionModuleRevisionSource{}, fx.As(new(permissionapplication.LatestPolicyRevisionSource))),
+			fx.Annotate(permissionModuleUserRoleRevisionSource{}, fx.As(new(permissionapplication.UserRoleRevisionSource))),
 		),
 		Module,
 		fx.Populate(&watcherStatus),
@@ -126,7 +115,6 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 	t.Cleanup(func() { _ = redisClient.Close() })
 	provider := newPermissionModuleMetricsProvider(t, false)
 	settings := serviceconfig.RBACSettings{AppName: "aegiscore-user-service-module-test", PolicyWatcher: serviceconfig.DefaultPolicyWatcherConfig()}
-	settings.OutboxDispatcher = serviceconfig.DefaultOutboxDispatcherConfig()
 	loadErr := errors.New("initial policy load failed")
 	allowRecovery := make(chan struct{})
 	loader := &permissionModuleFailOncePolicyLoader{err: loadErr, allowRecovery: allowRecovery}
@@ -146,8 +134,8 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 			fx.Annotate(roles, fx.As(new(permissioncasbin.UserRoleResolver))),
 			fx.Annotate(permissionModuleUserRoleCacheStats{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
-			fx.Annotate(&permissionModuleOutboxStore{}, fx.As(new(permissionapplication.OutboxStore))),
 			fx.Annotate(permissionModuleRevisionSource{}, fx.As(new(permissionapplication.LatestPolicyRevisionSource))),
+			fx.Annotate(permissionModuleUserRoleRevisionSource{}, fx.As(new(permissionapplication.UserRoleRevisionSource))),
 		),
 		Module,
 		fx.Populate(&authorizer, &policyHealth, &watcherStatus),
@@ -167,15 +155,14 @@ func TestPermissionModuleStartsFailClosedWhenInitialPolicyLoadFails(t *testing.T
 	require.False(t, watcherStatus.Status().Running)
 }
 
-func TestStopRBACLifecycleJoinsDispatcherAndWatcherErrors(t *testing.T) {
-	dispatcherErr := errors.New("dispatcher stop failed")
+func TestStopRBACLifecycleJoinsWatcherAndEngineErrors(t *testing.T) {
 	watcherErr := errors.New("watcher stop failed")
 	engineErr := errors.New("engine stop failed")
 
 	stopDone := make(chan error, 1)
 	rootCanceled := false
 	go func() {
-		stopDone <- stopRBACLifecycle(context.Background(), func() { rootCanceled = true }, func(context.Context) error { return dispatcherErr }, func(context.Context) error { return watcherErr }, func(context.Context) error { return engineErr })
+		stopDone <- stopRBACLifecycle(context.Background(), func() { rootCanceled = true }, func(context.Context) error { return watcherErr }, func(context.Context) error { return engineErr })
 	}()
 	var err error
 	select {
@@ -184,31 +171,26 @@ func TestStopRBACLifecycleJoinsDispatcherAndWatcherErrors(t *testing.T) {
 		t.Fatal("RBAC lifecycle stop blocked")
 	}
 	require.ErrorIs(t, err, watcherErr)
-	require.ErrorIs(t, err, dispatcherErr)
 	require.ErrorIs(t, err, engineErr)
 	require.True(t, rootCanceled)
 }
 
-func TestRegisterRBACLifecycleStopsDispatcherAndWatcherAfterWatcherError(t *testing.T) {
+func TestRegisterRBACLifecycleStopsWatcherAfterStop(t *testing.T) {
 	watcherErr := errors.New("watcher stop failed")
 	lifecycle := &permissionModuleLifecycle{}
 	watcher := &permissionModuleApplicationWatcher{stopErr: watcherErr}
-	dispatcher := &permissionModuleDispatcher{stopErr: errors.New("dispatcher stop failed")}
 
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
 		Lifecycle:       lifecycle,
 		EngineLifecycle: &permissionModuleEngineLifecycle{},
 		Initializer:     &permissionModulePolicyInitializer{},
 		Watcher:         watcher,
-		Dispatcher:      dispatcher,
 	})
 	require.Len(t, lifecycle.hooks, 1)
 
 	err := lifecycle.hooks[0].OnStop(context.Background())
-	require.ErrorIs(t, err, dispatcher.stopErr)
 	require.ErrorIs(t, err, watcherErr)
 	require.Equal(t, 1, watcher.stopCalls)
-	require.Equal(t, 1, dispatcher.stopCalls)
 }
 
 func TestRegisterRBACLifecycleOrdersStartAndStop(t *testing.T) {
@@ -217,24 +199,21 @@ func TestRegisterRBACLifecycleOrdersStartAndStop(t *testing.T) {
 	initializer := &permissionModulePolicyInitializer{order: &order}
 	engineLifecycle := &permissionModuleEngineLifecycle{order: &order}
 	watcher := &permissionModuleApplicationWatcher{order: &order}
-	dispatcher := &permissionModuleDispatcher{order: &order}
 	startCtx := context.WithValue(context.Background(), permissionModuleLifecycleContextKey{}, "start")
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
 		Lifecycle:       lifecycle,
 		EngineLifecycle: engineLifecycle,
 		Initializer:     initializer,
 		Watcher:         watcher,
-		Dispatcher:      dispatcher,
 	})
 
 	require.NoError(t, lifecycle.hooks[0].OnStart(startCtx))
-	require.Equal(t, []string{"engine.start", "initializer.initialize", "watcher.start", "dispatcher.start"}, order)
+	require.Equal(t, []string{"engine.start", "initializer.initialize", "watcher.start"}, order)
 	require.Equal(t, "start", engineLifecycle.startCtx.Value(permissionModuleLifecycleContextKey{}))
 	require.Equal(t, "start", watcher.startCtx.Value(permissionModuleLifecycleContextKey{}))
-	require.Equal(t, "start", dispatcher.startCtx.Value(permissionModuleLifecycleContextKey{}))
 	order = nil
 	require.NoError(t, lifecycle.hooks[0].OnStop(context.Background()))
-	require.Equal(t, []string{"dispatcher.stop", "watcher.stop", "engine.stop"}, order)
+	require.Equal(t, []string{"watcher.stop", "engine.stop"}, order)
 }
 
 func TestRegisterRBACLifecycleRollsBackWhenWatcherStartFails(t *testing.T) {
@@ -243,41 +222,17 @@ func TestRegisterRBACLifecycleRollsBackWhenWatcherStartFails(t *testing.T) {
 	var order []string
 	lifecycle := &permissionModuleLifecycle{}
 	watcher := &permissionModuleApplicationWatcher{startErr: startErr, stopErr: stopErr, order: &order}
-	dispatcher := &permissionModuleDispatcher{order: &order}
 	registerRBACLifecycle(RegisterRBACLifecycleParams{
 		Lifecycle:       lifecycle,
 		EngineLifecycle: &permissionModuleEngineLifecycle{order: &order},
 		Initializer:     &permissionModulePolicyInitializer{order: &order},
 		Watcher:         watcher,
-		Dispatcher:      dispatcher,
 	})
 
 	err := lifecycle.hooks[0].OnStart(context.Background())
 	require.ErrorIs(t, err, startErr)
 	require.ErrorIs(t, err, stopErr)
 	require.Equal(t, []string{"engine.start", "initializer.initialize", "watcher.start", "watcher.stop", "engine.stop"}, order)
-	require.False(t, dispatcher.started)
-}
-
-func TestRegisterRBACLifecycleRollsBackWhenDispatcherStartFails(t *testing.T) {
-	startErr := errors.New("dispatcher start failed")
-	watcherErr := errors.New("watcher rollback failed")
-	var order []string
-	lifecycle := &permissionModuleLifecycle{}
-	watcher := &permissionModuleApplicationWatcher{stopErr: watcherErr, order: &order}
-	dispatcher := &permissionModuleDispatcher{startErr: startErr, order: &order}
-	registerRBACLifecycle(RegisterRBACLifecycleParams{
-		Lifecycle:       lifecycle,
-		EngineLifecycle: &permissionModuleEngineLifecycle{order: &order},
-		Initializer:     &permissionModulePolicyInitializer{order: &order},
-		Watcher:         watcher,
-		Dispatcher:      dispatcher,
-	})
-
-	err := lifecycle.hooks[0].OnStart(context.Background())
-	require.ErrorIs(t, err, startErr)
-	require.ErrorIs(t, err, watcherErr)
-	require.Equal(t, []string{"engine.start", "initializer.initialize", "watcher.start", "dispatcher.start", "watcher.stop", "engine.stop"}, order)
 }
 
 func TestPermissionModuleRequiresMetricsProvider(t *testing.T) {
@@ -296,8 +251,8 @@ func TestPermissionModuleRequiresMetricsProvider(t *testing.T) {
 			fx.Annotate(permissionModuleUserRoleResolver{}, fx.As(new(permissioncasbin.UserRoleResolver))),
 			fx.Annotate(permissionModuleUserRoleCacheStats{}, fx.As(new(localcache.StatsSource)), fx.ResultTags(`name:"permission_rbac_user_roles_cache"`)),
 			fx.Annotate(&permissionModuleStore{}, fx.As(new(permissionapplication.PermissionStore))),
-			fx.Annotate(&permissionModuleOutboxStore{}, fx.As(new(permissionapplication.OutboxStore))),
 			fx.Annotate(permissionModuleRevisionSource{}, fx.As(new(permissionapplication.LatestPolicyRevisionSource))),
+			fx.Annotate(permissionModuleUserRoleRevisionSource{}, fx.As(new(permissionapplication.UserRoleRevisionSource))),
 		),
 		Module,
 	)
@@ -321,28 +276,16 @@ type permissionModuleStore struct {
 	permissionapplication.PermissionStore
 }
 
-type permissionModuleOutboxStore struct{}
-
 type permissionModuleRevisionSource struct{}
 
 func (permissionModuleRevisionSource) LatestPolicyRevision(context.Context) (int64, error) {
 	return 0, nil
 }
 
-func (*permissionModuleOutboxStore) Claim(context.Context, time.Time, int, time.Duration) ([]permissionapplication.OutboxClaim, error) {
-	return nil, nil
-}
+type permissionModuleUserRoleRevisionSource struct{}
 
-func (*permissionModuleOutboxStore) Ack(context.Context, uuid.UUID, uuid.UUID, time.Time) (bool, error) {
-	return true, nil
-}
-
-func (*permissionModuleOutboxStore) Fail(context.Context, uuid.UUID, uuid.UUID, time.Time, time.Time, string) (bool, error) {
-	return true, nil
-}
-
-func (*permissionModuleOutboxStore) Backlog(context.Context, time.Time) (permissionapplication.OutboxBacklog, error) {
-	return permissionapplication.OutboxBacklog{}, nil
+func (permissionModuleUserRoleRevisionSource) UserRoleRevisionsAfter(context.Context, int64, int) (permissionapplication.UserRoleRevisionBatch, error) {
+	return permissionapplication.UserRoleRevisionBatch{}, nil
 }
 
 type permissionModulePolicyLoader struct{}
@@ -433,29 +376,6 @@ type permissionModuleApplicationWatcher struct {
 	stopCalls int
 	stopErr   error
 	order     *[]string
-}
-
-type permissionModuleDispatcher struct {
-	started   bool
-	startCtx  context.Context
-	startErr  error
-	stopCalls int
-	stopErr   error
-	order     *[]string
-}
-
-func (d *permissionModuleDispatcher) Start(ctx context.Context) error {
-	appendPermissionModuleOrder(d.order, "dispatcher.start")
-	d.startCtx = ctx
-	d.started = d.startErr == nil
-	return d.startErr
-}
-
-func (d *permissionModuleDispatcher) Stop(context.Context) error {
-	appendPermissionModuleOrder(d.order, "dispatcher.stop")
-	d.stopCalls++
-	d.started = false
-	return d.stopErr
 }
 
 func (w *permissionModuleApplicationWatcher) Start(ctx context.Context) error {

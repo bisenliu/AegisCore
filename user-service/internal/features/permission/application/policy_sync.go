@@ -47,11 +47,18 @@ type PolicyChange struct {
 	PermissionID uuid.UUID
 }
 
-// PolicyRefreshCoordinator 负责本实例 policy reload 和缓存失效编排。
+// PolicyRevisionPublisher 在已提交 revision 之后 best-effort 发布可丢失的 Pub/Sub hint。
+type PolicyRevisionPublisher interface {
+	PublishPolicyChanged(ctx context.Context, revision int64, change PolicyChange) error
+	PublishUserRoleChanged(ctx context.Context, revision int64, change PolicyChange) error
+}
+
+// PolicyRefreshCoordinator 负责本实例 policy reload、缓存失效和 best-effort 副本 hint。
 type PolicyRefreshCoordinator struct {
-	engine  PolicyReloadEngine
-	log     *zap.Logger
-	metrics Metrics
+	engine    PolicyReloadEngine
+	publisher PolicyRevisionPublisher
+	log       *zap.Logger
+	metrics   Metrics
 }
 
 // NewPolicyReloadChange 构造需要重建角色权限策略的变更。
@@ -81,15 +88,15 @@ func (c PolicyChange) ReasonText() string {
 }
 
 // NewPolicyRefreshCoordinator 构造 RBAC policy 刷新编排器。
-func NewPolicyRefreshCoordinator(engine PolicyReloadEngine, log *zap.Logger, metrics Metrics) *PolicyRefreshCoordinator {
+func NewPolicyRefreshCoordinator(engine PolicyReloadEngine, publisher PolicyRevisionPublisher, log *zap.Logger, metrics Metrics) *PolicyRefreshCoordinator {
 	if metrics == nil {
 		metrics = NopMetrics()
 	}
-	return &PolicyRefreshCoordinator{engine: engine, log: log, metrics: metrics}
+	return &PolicyRefreshCoordinator{engine: engine, publisher: publisher, log: log, metrics: metrics}
 }
 
-// NotifyPolicyChanged 使用已提交数据库 policy revision 立即刷新本实例。
-// 跨实例发布只由 outbox dispatcher 承担，Redis 故障不会改变已提交 mutation 的本地同步结果。
+// NotifyPolicyChanged 使用已提交数据库 policy revision 立即刷新本实例，并 best-effort 发布副本 hint。
+// Redis 发布失败只记录日志，不改变已提交 mutation 的本地同步结果。
 func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, revision int64, change PolicyChange) error {
 	if c == nil {
 		return errors.New("rbac policy refresh coordinator is required")
@@ -97,10 +104,14 @@ func (c *PolicyRefreshCoordinator) NotifyPolicyChanged(ctx context.Context, revi
 	if c.log != nil {
 		ctx = logger.ToContext(ctx, c.log)
 	}
-	return c.ObservePolicyRevision(ctx, revision, change)
+	if err := c.ObservePolicyRevision(ctx, revision, change); err != nil {
+		return err
+	}
+	c.publishPolicyHint(ctx, revision, change)
+	return nil
 }
 
-// NotifyUserRoleChanged 使用已提交 user-role revision 立即失效本实例用户角色缓存。
+// NotifyUserRoleChanged 使用已提交 user-role revision 立即失效本实例用户角色缓存，并 best-effort 发布副本 hint。
 func (c *PolicyRefreshCoordinator) NotifyUserRoleChanged(ctx context.Context, revision int64, change PolicyChange) error {
 	if c == nil {
 		return errors.New("rbac policy refresh coordinator is required")
@@ -108,7 +119,35 @@ func (c *PolicyRefreshCoordinator) NotifyUserRoleChanged(ctx context.Context, re
 	if c.log != nil {
 		ctx = logger.ToContext(ctx, c.log)
 	}
-	return c.ObserveUserRoleRevision(ctx, revision, change)
+	if err := c.ObserveUserRoleRevision(ctx, revision, change); err != nil {
+		return err
+	}
+	c.publishUserRoleHint(ctx, revision, change)
+	return nil
+}
+
+func (c *PolicyRefreshCoordinator) publishPolicyHint(ctx context.Context, revision int64, change PolicyChange) {
+	if c.publisher == nil {
+		return
+	}
+	if err := c.publisher.PublishPolicyChanged(ctx, revision, change); err != nil {
+		c.metrics.PolicyPublishFailed(ctx, MetricsReasonPublishFailed)
+		logger.Warn(ctx, "rbac policy refresh hint publish failed", zap.Int64("policy_revision", revision), zap.String("reason", change.ReasonText()), zap.Error(err))
+		return
+	}
+	c.metrics.PolicyPublishSucceeded(ctx)
+}
+
+func (c *PolicyRefreshCoordinator) publishUserRoleHint(ctx context.Context, revision int64, change PolicyChange) {
+	if c.publisher == nil {
+		return
+	}
+	if err := c.publisher.PublishUserRoleChanged(ctx, revision, change); err != nil {
+		c.metrics.PolicyPublishFailed(ctx, MetricsReasonPublishFailed)
+		logger.Warn(ctx, "rbac user role refresh hint publish failed", zap.Int64("user_role_revision", revision), zap.String("reason", change.ReasonText()), zap.Error(err))
+		return
+	}
+	c.metrics.PolicyPublishSucceeded(ctx)
 }
 
 // ObservePolicyRevision 以数据库 policy revision 驱动本地 policy 投影和用户角色缓存失效。

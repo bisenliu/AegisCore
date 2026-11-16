@@ -4,7 +4,6 @@ import (
 	"uuid"
 
 	"entgo.io/ent"
-	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 )
 
@@ -25,12 +24,5 @@ func (RbacUserRoleRevision) Fields() []ent.Field {
 		field.String("reason").NotEmpty().MaxLen(64).Immutable().Comment("触发用户角色缓存失效的稳定原因"),
 		field.String("user_id").GoType(uuid.UUID{}).ValueScanner(uuidScanner).SchemaType(uuidColumnTypes).Immutable().Comment("相关外部用户ID"),
 		field.String("role_id").GoType((*uuid.UUID)(nil)).ValueScanner(nullableUUIDScanner).SchemaType(uuidColumnTypes).Optional().Nillable().Immutable().Comment("相关外部角色ID"),
-	}
-}
-
-// Edges 返回 user-role revision 与 outbox event 的一对一关联。
-func (RbacUserRoleRevision) Edges() []ent.Edge {
-	return []ent.Edge{
-		edge.To("outbox_event", RbacPolicyOutboxEvent.Type).Unique(),
 	}
 }

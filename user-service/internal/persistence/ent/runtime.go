@@ -6,7 +6,6 @@ import (
 	"uuid"
 
 	"github.com/aegiscore/user-service/internal/persistence/ent/permission"
-	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevision"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyrevisioncounter"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
@@ -116,127 +115,6 @@ func init() {
 		return func(path_template string) error {
 			for _, fn := range fns {
 				if err := fn(path_template); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-	}()
-	rbacpolicyoutboxeventMixin := schema.RbacPolicyOutboxEvent{}.Mixin()
-	rbacpolicyoutboxeventMixinFields1 := rbacpolicyoutboxeventMixin[1].Fields()
-	_ = rbacpolicyoutboxeventMixinFields1
-	rbacpolicyoutboxeventMixinFields2 := rbacpolicyoutboxeventMixin[2].Fields()
-	_ = rbacpolicyoutboxeventMixinFields2
-	rbacpolicyoutboxeventFields := schema.RbacPolicyOutboxEvent{}.Fields()
-	_ = rbacpolicyoutboxeventFields
-	// rbacpolicyoutboxeventDescCreatedAt is the schema descriptor for created_at field.
-	rbacpolicyoutboxeventDescCreatedAt := rbacpolicyoutboxeventMixinFields1[0].Descriptor()
-	// rbacpolicyoutboxevent.DefaultCreatedAt holds the default value on creation for the created_at field.
-	rbacpolicyoutboxevent.DefaultCreatedAt = rbacpolicyoutboxeventDescCreatedAt.Default.(func() int64)
-	// rbacpolicyoutboxeventDescUpdatedAt is the schema descriptor for updated_at field.
-	rbacpolicyoutboxeventDescUpdatedAt := rbacpolicyoutboxeventMixinFields2[0].Descriptor()
-	// rbacpolicyoutboxevent.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	rbacpolicyoutboxevent.DefaultUpdatedAt = rbacpolicyoutboxeventDescUpdatedAt.Default.(func() int64)
-	// rbacpolicyoutboxevent.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	rbacpolicyoutboxevent.UpdateDefaultUpdatedAt = rbacpolicyoutboxeventDescUpdatedAt.UpdateDefault.(func() int64)
-	// rbacpolicyoutboxeventDescEventID is the schema descriptor for event_id field.
-	rbacpolicyoutboxeventDescEventID := rbacpolicyoutboxeventFields[1].Descriptor()
-	rbacpolicyoutboxevent.ValueScanner.EventID = rbacpolicyoutboxeventDescEventID.ValueScanner.(field.TypeValueScanner[uuid.UUID])
-	// rbacpolicyoutboxeventDescKind is the schema descriptor for kind field.
-	rbacpolicyoutboxeventDescKind := rbacpolicyoutboxeventFields[4].Descriptor()
-	// rbacpolicyoutboxevent.KindValidator is a validator for the "kind" field. It is called by the builders before save.
-	rbacpolicyoutboxevent.KindValidator = func() func(string) error {
-		validators := rbacpolicyoutboxeventDescKind.Validators
-		fns := [...]func(string) error{
-			validators[0].(func(string) error),
-			validators[1].(func(string) error),
-			validators[2].(func(string) error),
-		}
-		return func(kind string) error {
-			for _, fn := range fns {
-				if err := fn(kind); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-	}()
-	// rbacpolicyoutboxeventDescReason is the schema descriptor for reason field.
-	rbacpolicyoutboxeventDescReason := rbacpolicyoutboxeventFields[5].Descriptor()
-	// rbacpolicyoutboxevent.ReasonValidator is a validator for the "reason" field. It is called by the builders before save.
-	rbacpolicyoutboxevent.ReasonValidator = func() func(string) error {
-		validators := rbacpolicyoutboxeventDescReason.Validators
-		fns := [...]func(string) error{
-			validators[0].(func(string) error),
-			validators[1].(func(string) error),
-		}
-		return func(reason string) error {
-			for _, fn := range fns {
-				if err := fn(reason); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-	}()
-	// rbacpolicyoutboxeventDescRoleID is the schema descriptor for role_id field.
-	rbacpolicyoutboxeventDescRoleID := rbacpolicyoutboxeventFields[6].Descriptor()
-	rbacpolicyoutboxevent.ValueScanner.RoleID = rbacpolicyoutboxeventDescRoleID.ValueScanner.(field.TypeValueScanner[*uuid.UUID])
-	// rbacpolicyoutboxeventDescUserID is the schema descriptor for user_id field.
-	rbacpolicyoutboxeventDescUserID := rbacpolicyoutboxeventFields[7].Descriptor()
-	rbacpolicyoutboxevent.ValueScanner.UserID = rbacpolicyoutboxeventDescUserID.ValueScanner.(field.TypeValueScanner[*uuid.UUID])
-	// rbacpolicyoutboxeventDescPermissionID is the schema descriptor for permission_id field.
-	rbacpolicyoutboxeventDescPermissionID := rbacpolicyoutboxeventFields[8].Descriptor()
-	rbacpolicyoutboxevent.ValueScanner.PermissionID = rbacpolicyoutboxeventDescPermissionID.ValueScanner.(field.TypeValueScanner[*uuid.UUID])
-	// rbacpolicyoutboxeventDescStatus is the schema descriptor for status field.
-	rbacpolicyoutboxeventDescStatus := rbacpolicyoutboxeventFields[9].Descriptor()
-	// rbacpolicyoutboxevent.DefaultStatus holds the default value on creation for the status field.
-	rbacpolicyoutboxevent.DefaultStatus = rbacpolicyoutboxeventDescStatus.Default.(string)
-	// rbacpolicyoutboxevent.StatusValidator is a validator for the "status" field. It is called by the builders before save.
-	rbacpolicyoutboxevent.StatusValidator = func() func(string) error {
-		validators := rbacpolicyoutboxeventDescStatus.Validators
-		fns := [...]func(string) error{
-			validators[0].(func(string) error),
-			validators[1].(func(string) error),
-		}
-		return func(status string) error {
-			for _, fn := range fns {
-				if err := fn(status); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-	}()
-	// rbacpolicyoutboxeventDescAttemptCount is the schema descriptor for attempt_count field.
-	rbacpolicyoutboxeventDescAttemptCount := rbacpolicyoutboxeventFields[10].Descriptor()
-	// rbacpolicyoutboxevent.DefaultAttemptCount holds the default value on creation for the attempt_count field.
-	rbacpolicyoutboxevent.DefaultAttemptCount = rbacpolicyoutboxeventDescAttemptCount.Default.(int)
-	// rbacpolicyoutboxevent.AttemptCountValidator is a validator for the "attempt_count" field. It is called by the builders before save.
-	rbacpolicyoutboxevent.AttemptCountValidator = rbacpolicyoutboxeventDescAttemptCount.Validators[0].(func(int) error)
-	// rbacpolicyoutboxeventDescNextAttemptAt is the schema descriptor for next_attempt_at field.
-	rbacpolicyoutboxeventDescNextAttemptAt := rbacpolicyoutboxeventFields[11].Descriptor()
-	// rbacpolicyoutboxevent.DefaultNextAttemptAt holds the default value on creation for the next_attempt_at field.
-	rbacpolicyoutboxevent.DefaultNextAttemptAt = rbacpolicyoutboxeventDescNextAttemptAt.Default.(func() int64)
-	// rbacpolicyoutboxeventDescLastError is the schema descriptor for last_error field.
-	rbacpolicyoutboxeventDescLastError := rbacpolicyoutboxeventFields[12].Descriptor()
-	// rbacpolicyoutboxevent.LastErrorValidator is a validator for the "last_error" field. It is called by the builders before save.
-	rbacpolicyoutboxevent.LastErrorValidator = rbacpolicyoutboxeventDescLastError.Validators[0].(func(string) error)
-	// rbacpolicyoutboxeventDescClaimToken is the schema descriptor for claim_token field.
-	rbacpolicyoutboxeventDescClaimToken := rbacpolicyoutboxeventFields[13].Descriptor()
-	rbacpolicyoutboxevent.ValueScanner.ClaimToken = rbacpolicyoutboxeventDescClaimToken.ValueScanner.(field.TypeValueScanner[*uuid.UUID])
-	// rbacpolicyoutboxeventDescIdempotencyKey is the schema descriptor for idempotency_key field.
-	rbacpolicyoutboxeventDescIdempotencyKey := rbacpolicyoutboxeventFields[15].Descriptor()
-	// rbacpolicyoutboxevent.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
-	rbacpolicyoutboxevent.IdempotencyKeyValidator = func() func(string) error {
-		validators := rbacpolicyoutboxeventDescIdempotencyKey.Validators
-		fns := [...]func(string) error{
-			validators[0].(func(string) error),
-			validators[1].(func(string) error),
-		}
-		return func(idempotency_key string) error {
-			for _, fn := range fns {
-				if err := fn(idempotency_key); err != nil {
 					return err
 				}
 			}

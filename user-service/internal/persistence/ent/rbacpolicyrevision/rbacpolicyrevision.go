@@ -6,7 +6,6 @@ import (
 	"uuid"
 
 	"entgo.io/ent/dialect/sql"
-	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 )
 
@@ -23,19 +22,8 @@ const (
 	FieldRoleID = "role_id"
 	// FieldPermissionID holds the string denoting the permission_id field in the database.
 	FieldPermissionID = "permission_id"
-	// EdgeOutboxEvent holds the string denoting the outbox_event edge name in mutations.
-	EdgeOutboxEvent = "outbox_event"
-	// RbacPolicyOutboxEventFieldID holds the string denoting the ID field of the RbacPolicyOutboxEvent.
-	RbacPolicyOutboxEventFieldID = "id"
 	// Table holds the table name of the rbacpolicyrevision in the database.
 	Table = "rbac_policy_revisions"
-	// OutboxEventTable is the table that holds the outbox_event relation/edge.
-	OutboxEventTable = "rbac_policy_outbox_events"
-	// OutboxEventInverseTable is the table name for the RbacPolicyOutboxEvent entity.
-	// It exists in this package in order to avoid circular dependency with the "rbacpolicyoutboxevent" package.
-	OutboxEventInverseTable = "rbac_policy_outbox_events"
-	// OutboxEventColumn is the table column denoting the outbox_event relation/edge.
-	OutboxEventColumn = "policy_revision"
 )
 
 // Columns holds all SQL columns for rbacpolicyrevision fields.
@@ -95,18 +83,4 @@ func ByRoleID(opts ...sql.OrderTermOption) OrderOption {
 // ByPermissionID orders the results by the permission_id field.
 func ByPermissionID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPermissionID, opts...).ToFunc()
-}
-
-// ByOutboxEventField orders the results by outbox_event field.
-func ByOutboxEventField(field string, opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newOutboxEventStep(), sql.OrderByField(field, opts...))
-	}
-}
-func newOutboxEventStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(OutboxEventInverseTable, RbacPolicyOutboxEventFieldID),
-		sqlgraph.Edge(sqlgraph.O2O, false, OutboxEventTable, OutboxEventColumn),
-	)
 }

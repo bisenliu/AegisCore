@@ -113,7 +113,7 @@ func (s *roleCommandService) AddRolePermission(ctx context.Context, cmd RolePerm
 }
 
 // ReplaceRolePermissions 幂等替换角色的完整权限绑定集合。
-// 替换语义以去重后的完整权限集合为准；提交后的 policy reload 失败由 outbox 自动恢复。
+// 替换语义以去重后的完整权限集合为准；提交后的 policy reload 失败由数据库 revision 补偿恢复。
 func (s *roleCommandService) ReplaceRolePermissions(ctx context.Context, cmd ReplaceRolePermissionsCommand) (*PermissionsResult, error) {
 	permissionIDs := uniqueUUIDs(cmd.PermissionIDs)
 	permissions, err := s.permissions.GetByPermissionIDs(ctx, permissionIDs)

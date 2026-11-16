@@ -9,7 +9,6 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/aegiscore/user-service/internal/persistence/ent/rbacpolicyoutboxevent"
 	"github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevision"
 )
 
@@ -26,31 +25,8 @@ type RbacUserRoleRevision struct {
 	// 相关外部用户ID
 	UserID uuid.UUID `json:"user_id,omitempty"`
 	// 相关外部角色ID
-	RoleID *uuid.UUID `json:"role_id,omitempty"`
-	// Edges holds the relations/edges for other nodes in the graph.
-	// The values are being populated by the RbacUserRoleRevisionQuery when eager-loading is set.
-	Edges        RbacUserRoleRevisionEdges `json:"edges"`
+	RoleID       *uuid.UUID `json:"role_id,omitempty"`
 	selectValues sql.SelectValues
-}
-
-// RbacUserRoleRevisionEdges holds the relations/edges for other nodes in the graph.
-type RbacUserRoleRevisionEdges struct {
-	// OutboxEvent holds the value of the outbox_event edge.
-	OutboxEvent *RbacPolicyOutboxEvent `json:"outbox_event,omitempty"`
-	// loadedTypes holds the information for reporting if a
-	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [1]bool
-}
-
-// OutboxEventOrErr returns the OutboxEvent value or an error if the edge
-// was not loaded in eager-loading, or loaded but was not found.
-func (e RbacUserRoleRevisionEdges) OutboxEventOrErr() (*RbacPolicyOutboxEvent, error) {
-	if e.OutboxEvent != nil {
-		return e.OutboxEvent, nil
-	} else if e.loadedTypes[0] {
-		return nil, &NotFoundError{label: rbacpolicyoutboxevent.Label}
-	}
-	return nil, &NotLoadedError{edge: "outbox_event"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -122,11 +98,6 @@ func (_m *RbacUserRoleRevision) assignValues(columns []string, values []any) err
 // This includes values selected through modifiers, order, etc.
 func (_m *RbacUserRoleRevision) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
-}
-
-// QueryOutboxEvent queries the "outbox_event" edge of the RbacUserRoleRevision entity.
-func (_m *RbacUserRoleRevision) QueryOutboxEvent() *RbacPolicyOutboxEventQuery {
-	return NewRbacUserRoleRevisionClient(_m.config).QueryOutboxEvent(_m)
 }
 
 // Update returns a builder for updating this RbacUserRoleRevision.

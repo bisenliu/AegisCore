@@ -49,7 +49,6 @@ auth:
     size: 100000
     # 各副本独立持有本地缓存；正常完成 Redis token version 更新后，其他副本仍可能在该 TTL 内命中旧值。
     # TTL 表示 logout-all 和改密在正常路径下可接受的跨副本撤销收敛窗口，调整时应重新评估撤销 SLA。
-    # 是否使用事务 outbox 取决于 Redis token version 投影失败后是否必须可靠补偿，与固定 TTL 阈值无关。
     ttl: 1s
     # load_timeout 是缓存 miss 后加载 token version 的单次等待预算。
     load_timeout: 300ms
@@ -67,16 +66,6 @@ rbac:
     size: 100000
     ttl: 5s
     load_timeout: 500ms
-  outbox_dispatcher:
-    # poll_interval 控制无待投递事件时的轮询间隔；batch_size 限制单轮 claim 数量。
-    poll_interval: 1s
-    batch_size: 100
-    # claim_timeout 是事件处理租约，需为正常 Redis 发布与数据库确认留出充足预算。
-    claim_timeout: 30s
-    retry_backoff:
-      # 投递失败后使用有界指数退避，避免下游故障时形成高频重试。
-      initial: 1s
-      max: 1m
   policy_watcher:
     # PostgreSQL revision 每 15 秒校准一次，连续三个周期未成功后判定 stale。
     check_interval: 15s

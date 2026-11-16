@@ -18,10 +18,9 @@ type AuthSettings struct {
 
 // RBACSettings 是 permission/RBAC 构造运行时组件所需的最小配置视图。
 type RBACSettings struct {
-	AppName          string
-	UserRoleCache    FeatureCacheConfig
-	OutboxDispatcher OutboxDispatcherConfig
-	PolicyWatcher    PolicyWatcherConfig
+	AppName       string
+	UserRoleCache FeatureCacheConfig
+	PolicyWatcher PolicyWatcherConfig
 }
 
 // EntSettings 是 Ent client 构造插件所需的最小配置视图。
@@ -65,10 +64,9 @@ func NewAuthSettings(cfg *Config) AuthSettings {
 // NewRBACSettings 从根配置派生 permission/RBAC settings。
 func NewRBACSettings(cfg *Config) RBACSettings {
 	return RBACSettings{
-		AppName:          cfg.App.Name,
-		UserRoleCache:    cfg.RBAC.UserRoleCache,
-		OutboxDispatcher: cfg.RBAC.OutboxDispatcher,
-		PolicyWatcher:    cfg.RBAC.PolicyWatcher,
+		AppName:       cfg.App.Name,
+		UserRoleCache: cfg.RBAC.UserRoleCache,
+		PolicyWatcher: cfg.RBAC.PolicyWatcher,
 	}
 }
 

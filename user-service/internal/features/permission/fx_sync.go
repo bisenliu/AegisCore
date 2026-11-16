@@ -21,7 +21,6 @@ var permissionPolicySyncOptions = fx.Options(
 		provideRedisStore,
 		providePolicyChangeNotifier,
 		provideWatcher,
-		provideOutboxDispatcher,
 	),
 )
 
@@ -33,22 +32,24 @@ const policySubscriberBufferSize = 64
 type WatcherParams struct {
 	fx.In
 
-	Store          *permissionredis.Store
-	Client         rediscmd.UniversalClient `name:"cache_redis"`
-	RevisionSource permissionapplication.LatestPolicyRevisionSource
-	Engine         permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
-	Settings       serviceconfig.RBACSettings
-	Log            *zap.Logger
-	Metrics        permissionapplication.Metrics
+	Store             *permissionredis.Store
+	Client            rediscmd.UniversalClient `name:"cache_redis"`
+	RevisionSource    permissionapplication.LatestPolicyRevisionSource
+	UserRoleRevisions permissionapplication.UserRoleRevisionSource
+	Engine            permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
+	Settings          serviceconfig.RBACSettings
+	Log               *zap.Logger
+	Metrics           permissionapplication.Metrics
 }
 
 // PolicyChangeNotifierParams 汇集本实例写操作后的本地 reload 与远端版本通知依赖。
 type PolicyChangeNotifierParams struct {
 	fx.In
 
-	Engine  permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
-	Log     *zap.Logger
-	Metrics permissionapplication.Metrics
+	Engine    permissionapplication.PolicyReloadEngine `name:"permission_policy_reload_engine"`
+	Publisher permissionapplication.PolicyRevisionPublisher
+	Log       *zap.Logger
+	Metrics   permissionapplication.Metrics
 }
 
 // PolicyChangeNotifierResult 以 feature 私有名称导出本实例刷新通知器。
@@ -77,26 +78,6 @@ type PolicyWatcherResult struct {
 	Status         permissionapplication.PolicyWatcherStatus
 }
 
-// OutboxDispatcherParams 汇集 outbox dispatcher 的持久化、发布、配置与观测依赖。
-type OutboxDispatcherParams struct {
-	fx.In
-
-	Store     permissionapplication.OutboxStore
-	Publisher permissionapplication.PolicyRevisionPublisher
-	Settings  serviceconfig.RBACSettings
-	Log       *zap.Logger
-	Metrics   permissionapplication.Metrics
-}
-
-// OutboxDispatcherResult 将同一个 dispatcher 投影为 lifecycle runner 和状态端口。
-type OutboxDispatcherResult struct {
-	fx.Out
-
-	Runner         permissionapplication.OutboxDispatcherRunner `name:"permission_outbox_dispatcher_runner"`
-	InternalStatus permissionapplication.OutboxDispatcherStatus `name:"permission_outbox_dispatcher_status"`
-	Status         permissionapplication.OutboxDispatcherStatus
-}
-
 // policyWatcherRunner 是 lifecycle 对 policy watcher 的最小控制面。
 type policyWatcherRunner interface {
 	Start(context.Context) error
@@ -113,9 +94,9 @@ func provideRedisStore(params CacheRedisParams, settings serviceconfig.RBACSetti
 	return PolicyRedisStoreResult{Store: store, Publisher: store}, nil
 }
 
-// providePolicyChangeNotifier 只编排本实例 revision-aware reload 和缓存失效。
+// providePolicyChangeNotifier 编排本实例 revision-aware reload、缓存失效和 best-effort Pub/Sub hint。
 func providePolicyChangeNotifier(params PolicyChangeNotifierParams) PolicyChangeNotifierResult {
-	notifier := permissionapplication.NewPolicyRefreshCoordinator(params.Engine, params.Log, params.Metrics)
+	notifier := permissionapplication.NewPolicyRefreshCoordinator(params.Engine, params.Publisher, params.Log, params.Metrics)
 	return PolicyChangeNotifierResult{InternalNotifier: notifier, Notifier: notifier}
 }
 
@@ -134,24 +115,8 @@ func provideWatcher(params WatcherParams) (PolicyWatcherResult, error) {
 		return PolicyWatcherResult{}, err
 	}
 	watcher := permissionredis.NewWatcher(permissionredis.WatcherParams{
-		Subscriber: subscriber, RevisionSource: params.RevisionSource, Engine: params.Engine, Log: params.Log, Metrics: params.Metrics,
+		Subscriber: subscriber, RevisionSource: params.RevisionSource, UserRoleRevisions: params.UserRoleRevisions, Engine: params.Engine, Log: params.Log, Metrics: params.Metrics,
 		Settings: permissionredis.WatcherSettings{CheckInterval: settings.CheckInterval},
 	})
 	return PolicyWatcherResult{Watcher: watcher, Runner: watcher, InternalStatus: watcher, Status: watcher}, nil
-}
-
-// provideOutboxDispatcher 将同一个 dispatcher 投影为 lifecycle runner 和只读状态来源。
-func provideOutboxDispatcher(params OutboxDispatcherParams) (OutboxDispatcherResult, error) {
-	config := params.Settings.OutboxDispatcher
-	dispatcher, err := permissionapplication.NewDispatcher(params.Store, params.Publisher, permissionapplication.DispatcherSettings{
-		PollInterval:   config.PollInterval,
-		BatchSize:      config.BatchSize,
-		ClaimTimeout:   config.ClaimTimeout,
-		BackoffInitial: config.RetryBackoff.Initial,
-		BackoffMax:     config.RetryBackoff.Max,
-	}, nil, params.Log, params.Metrics)
-	if err != nil {
-		return OutboxDispatcherResult{}, err
-	}
-	return OutboxDispatcherResult{Runner: dispatcher, InternalStatus: dispatcher, Status: dispatcher}, nil
 }
