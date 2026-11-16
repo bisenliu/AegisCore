@@ -1,8 +1,6 @@
 package config
 
 import (
-	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -70,39 +68,6 @@ type deploymentUserServiceDocument struct {
 	} `yaml:"http"`
 }
 
-type deploymentWorkloadDocument struct {
-	Spec struct {
-		Template struct {
-			Spec struct {
-				Containers []struct {
-					Env []struct {
-						Name  string `yaml:"name"`
-						Value string `yaml:"value"`
-					} `yaml:"env"`
-				} `yaml:"containers"`
-			} `yaml:"spec"`
-		} `yaml:"template"`
-	} `yaml:"spec"`
-}
-
-type deploymentNetworkPolicyDocument struct {
-	Spec struct {
-		Egress []struct {
-			To []struct {
-				NamespaceSelector struct {
-					MatchLabels map[string]string `yaml:"matchLabels"`
-				} `yaml:"namespaceSelector"`
-				PodSelector struct {
-					MatchLabels map[string]string `yaml:"matchLabels"`
-				} `yaml:"podSelector"`
-			} `yaml:"to"`
-			Ports []struct {
-				Port int `yaml:"port"`
-			} `yaml:"ports"`
-		} `yaml:"egress"`
-	} `yaml:"spec"`
-}
-
 type deploymentHelmValuesDocument struct {
 	Nacos struct {
 		Service string `yaml:"service"`
@@ -125,7 +90,6 @@ func TestRepositoryDeploymentConfigConsistency(t *testing.T) {
 	resourcesPath := filepath.Join(repoRoot, "deployments", "nacos", "local-docker", "resources.yaml")
 	nacosDir := filepath.Join(repoRoot, "deployments", "nacos")
 	metricsPath := filepath.Join(repoRoot, "deployments", "compose", "scripts", "generate-real-metrics-load.sh")
-	kubernetesDir := filepath.Join(repoRoot, "deployments", "k8s", "user-service")
 	chartDir := filepath.Join(repoRoot, "deployments", "helm", "aegiscore-user-service")
 
 	compose := readDeploymentYAML[deploymentComposeDocument](t, composePath)
@@ -199,11 +163,6 @@ func TestRepositoryDeploymentConfigConsistency(t *testing.T) {
 	require.Equal(t, composeTarget.username, deploymentShellVariable(t, metrics, "POSTGRES_USER"))
 	require.Equal(t, composeTarget.database, deploymentShellVariable(t, metrics, "POSTGRES_DB"))
 
-	deploymentEndpoint := deploymentWorkloadNacosEndpoint(t, filepath.Join(kubernetesDir, "deployment.yaml"))
-	seedEndpoint := deploymentWorkloadNacosEndpoint(t, filepath.Join(kubernetesDir, "rbac-seed-job.yaml"))
-	require.Equal(t, deploymentEndpoint, seedEndpoint)
-	deploymentRequireNetworkPolicyAllowsNacos(t, filepath.Join(kubernetesDir, "networkpolicy.yaml"), deploymentEndpoint)
-
 	helmValues := readDeploymentYAML[deploymentHelmValuesDocument](t, filepath.Join(chartDir, "values.yaml"))
 	helmEndpoint := deploymentNacosEndpoint{
 		serviceName:   strings.TrimSpace(helmValues.Nacos.Server.ServiceName),
@@ -211,8 +170,11 @@ func TestRepositoryDeploymentConfigConsistency(t *testing.T) {
 		clusterDomain: strings.TrimSpace(helmValues.Nacos.Server.ClusterDomain),
 		port:          helmValues.Nacos.Server.Port,
 	}
-	require.Equal(t, deploymentEndpoint, helmEndpoint)
-	require.Equal(t, deploymentEndpoint.serviceName, helmValues.Nacos.Server.PodSelector["app.kubernetes.io/name"])
+	require.NotEmpty(t, helmEndpoint.serviceName)
+	require.NotEmpty(t, helmEndpoint.namespace)
+	require.NotEmpty(t, helmEndpoint.clusterDomain)
+	require.Positive(t, helmEndpoint.port)
+	require.Equal(t, helmEndpoint.serviceName, helmValues.Nacos.Server.PodSelector["app.kubernetes.io/name"])
 	require.NotEmpty(t, strings.TrimSpace(helmValues.Nacos.Service))
 	require.NotEmpty(t, strings.TrimSpace(helmValues.Nacos.ConfigNamespace))
 	require.NotEmpty(t, strings.TrimSpace(helmValues.Nacos.Group))
@@ -308,63 +270,4 @@ func deploymentShellVariable(t *testing.T, script string, name string) string {
 	}
 	require.FailNow(t, "required shell variable is missing", "variable=%s", name)
 	return ""
-}
-
-func deploymentWorkloadNacosEndpoint(t *testing.T, path string) deploymentNacosEndpoint {
-	t.Helper()
-	document := readDeploymentYAML[deploymentWorkloadDocument](t, path)
-	require.NotEmpty(t, document.Spec.Template.Spec.Containers, "%s must contain a container", path)
-	for _, variable := range document.Spec.Template.Spec.Containers[0].Env {
-		if variable.Name == "AEGISCORE_NACOS_ADDR" {
-			endpoint, err := parseDeploymentNacosEndpoint(variable.Value)
-			require.NoError(t, err, "parse AEGISCORE_NACOS_ADDR in %s", path)
-			return endpoint
-		}
-	}
-	require.FailNow(t, "AEGISCORE_NACOS_ADDR is required", "path=%s", path)
-	return deploymentNacosEndpoint{}
-}
-
-func parseDeploymentNacosEndpoint(address string) (deploymentNacosEndpoint, error) {
-	host, portText, err := net.SplitHostPort(strings.TrimSpace(address))
-	if err != nil {
-		return deploymentNacosEndpoint{}, fmt.Errorf("split Nacos address %q: %w", address, err)
-	}
-	labels := strings.Split(host, ".")
-	if len(labels) < 5 || labels[2] != "svc" {
-		return deploymentNacosEndpoint{}, fmt.Errorf("Nacos address %q must use service.namespace.svc.cluster-domain", address)
-	}
-	port, err := strconv.Atoi(portText)
-	if err != nil || port <= 0 {
-		return deploymentNacosEndpoint{}, fmt.Errorf("Nacos address %q has invalid port", address)
-	}
-	return deploymentNacosEndpoint{
-		serviceName:   labels[0],
-		namespace:     labels[1],
-		clusterDomain: strings.Join(labels[3:], "."),
-		port:          port,
-	}, nil
-}
-
-func deploymentRequireNetworkPolicyAllowsNacos(t *testing.T, path string, endpoint deploymentNacosEndpoint) {
-	t.Helper()
-	for _, content := range strings.Split(readDeploymentFile(t, path), "\n---") {
-		var document deploymentNetworkPolicyDocument
-		require.NoError(t, yaml.Unmarshal([]byte(content), &document), "parse YAML %s", path)
-		for _, egress := range document.Spec.Egress {
-			for _, destination := range egress.To {
-				if destination.PodSelector.MatchLabels["app.kubernetes.io/name"] != endpoint.serviceName {
-					continue
-				}
-				require.Equal(t, endpoint.namespace, destination.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"])
-				for _, port := range egress.Ports {
-					if port.Port == endpoint.port {
-						return
-					}
-				}
-				require.FailNow(t, "Nacos NetworkPolicy egress port is missing", "port=%d", endpoint.port)
-			}
-		}
-	}
-	require.FailNow(t, "Nacos NetworkPolicy egress destination is missing", "service=%s", endpoint.serviceName)
 }

@@ -124,7 +124,8 @@ func (s *Managed) Stop(ctx context.Context) error {
 	if s.canStartCleanupLocked() {
 		s.cleanupStarted = true
 		s.state = stateStopping
-		go s.cleanup()
+		// cleanup 必须在调用方取消后继续完成，不能复用 Stop 的等待 context。
+		go s.cleanup() // #nosec G118 -- 后台清理使用独立超时，不能绑定调用方 context。
 	}
 	done := s.cleanupDone
 	s.mu.Unlock()

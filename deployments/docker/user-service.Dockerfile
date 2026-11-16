@@ -4,7 +4,7 @@
 #
 # 基础镜像同时保留可读 tag 与多架构 manifest digest，便于 Renovate 审查 tag/digest 更新。
 
-FROM golang:1.27.3-alpine3.24@sha256:d530cf60723abf1ffae0cd16bb546b379ec0550d2f3815e5b16ed69dbc00fba4 AS builder
+FROM golang:1.27.4-alpine3.24@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS builder
 WORKDIR /src
 
 COPY go.work go.work.sum ./

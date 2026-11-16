@@ -394,6 +394,7 @@ func TestNewTracingProviderExporterCreationUsesStartContext(t *testing.T) {
 	started := make(chan struct{})
 	var provider *Provider
 	app := fxtest.New(t,
+		fx.NopLogger,
 		fx.Supply(&config.Config{
 			App:           config.AppConfig{Name: "aegiscore-test", Environment: "local"},
 			Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1.0, OTLPEndpoint: "collector.internal:4317"}},
@@ -427,6 +428,7 @@ func TestNewTracingProviderShutdownRunsWhenLaterStartHookFails(t *testing.T) {
 	startErr := errors.New("later start failed")
 	var provider *Provider
 	app := fxtest.New(t,
+		fx.NopLogger,
 		fx.Supply(&config.Config{
 			App:           config.AppConfig{Name: "aegiscore-test", Environment: "local"},
 			Observability: config.ObservabilityConfig{Tracing: config.TracingConfig{Enabled: true, SampleRatio: 1.0, OTLPEndpoint: "collector.internal:4317"}},

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -23,10 +24,11 @@ type terminationBudgets struct {
 
 func TestRepositoryTerminationBudgets(t *testing.T) {
 	repoRoot := filepath.Join("..", "..", "..")
+	chartDir := filepath.Join(repoRoot, "deployments", "helm", "aegiscore-user-service")
 	budgets, err := loadTerminationBudgets(
 		filepath.Join(repoRoot, "deployments", "nacos", "local-docker", "base.yaml"),
-		filepath.Join(repoRoot, "deployments", "k8s", "user-service", "deployment.yaml"),
-		filepath.Join(repoRoot, "deployments", "helm", "aegiscore-user-service", "values.yaml"),
+		filepath.Join(chartDir, "templates", "deployment.yaml"),
+		filepath.Join(chartDir, "values.yaml"),
 	)
 	require.NoError(t, err)
 	require.Equal(t, 120*time.Second, budgets.stopTimeout)
@@ -37,7 +39,7 @@ func TestRepositoryTerminationBudgets(t *testing.T) {
 
 func TestParseTerminationBudgetsRejectsInvalidInput(t *testing.T) {
 	validApp := []byte("runtime:\n  lifecycle:\n    stop_timeout: 120s\n")
-	validKubernetes := []byte("spec:\n  template:\n    spec:\n      terminationGracePeriodSeconds: 150\n")
+	validKubernetes := []byte("spec:\n  template:\n    spec:\n      terminationGracePeriodSeconds: {{ .Values.deployment.terminationGracePeriodSeconds }}\n")
 	validHelm := []byte("deployment:\n  terminationGracePeriodSeconds: 150\n")
 
 	tests := []struct {
@@ -71,9 +73,9 @@ func TestParseTerminationBudgetsRejectsInvalidInput(t *testing.T) {
 		{
 			name:           "non-positive kubernetes grace",
 			app:            validApp,
-			kubernetes:     []byte("spec:\n  template:\n    spec:\n      terminationGracePeriodSeconds: 0\n"),
-			helm:           validHelm,
-			errorSubstring: "kubernetes spec.template.spec.terminationGracePeriodSeconds must be > 0",
+			kubernetes:     []byte("spec:\n  template:\n    spec:\n      terminationGracePeriodSeconds: {{ .Values.deployment.terminationGracePeriodSeconds }}\n"),
+			helm:           []byte("deployment:\n  terminationGracePeriodSeconds: 0\n"),
+			errorSubstring: "helm deployment.terminationGracePeriodSeconds must be > 0",
 		},
 		{
 			name:           "missing helm grace",
@@ -173,11 +175,11 @@ func parseTerminationBudgets(app []byte, kubernetes []byte, helm []byte) (termin
 	if err != nil {
 		return terminationBudgets{}, err
 	}
-	kubernetesGrace, err := parseKubernetesGrace(kubernetes)
+	helmGrace, err := parseHelmGrace(helm)
 	if err != nil {
 		return terminationBudgets{}, err
 	}
-	helmGrace, err := parseHelmGrace(helm)
+	kubernetesGrace, err := parseKubernetesGrace(kubernetes, helmGrace)
 	if err != nil {
 		return terminationBudgets{}, err
 	}
@@ -213,7 +215,9 @@ func parseStopTimeout(data []byte) (time.Duration, error) {
 	return duration, nil
 }
 
-func parseKubernetesGrace(data []byte) (time.Duration, error) {
+func parseKubernetesGrace(data []byte, helmGrace time.Duration) (time.Duration, error) {
+	const source = "kubernetes spec.template.spec.terminationGracePeriodSeconds"
+	rendered := neutralizeHelmActions(string(data))
 	var document struct {
 		Spec struct {
 			Template struct {
@@ -223,11 +227,24 @@ func parseKubernetesGrace(data []byte) (time.Duration, error) {
 			} `yaml:"template"`
 		} `yaml:"spec"`
 	}
-	if err := yaml.Unmarshal(data, &document); err != nil {
+	if err := yaml.Unmarshal([]byte(rendered), &document); err != nil {
 		return 0, fmt.Errorf("parse kubernetes deployment YAML: %w", err)
 	}
-	return graceDuration("kubernetes spec.template.spec.terminationGracePeriodSeconds", document.Spec.Template.Spec.TerminationGracePeriodSeconds)
+	if document.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
+		return 0, fmt.Errorf("%s is required", source)
+	}
+	if !strings.Contains(string(data), "{{ .Values.deployment.terminationGracePeriodSeconds }}") {
+		return 0, fmt.Errorf("%s must render Helm deployment.terminationGracePeriodSeconds", source)
+	}
+	return helmGrace, nil
 }
+
+func neutralizeHelmActions(template string) string {
+	template = strings.ReplaceAll(template, "{{ .Values.deployment.terminationGracePeriodSeconds }}", "1")
+	return helmActionPattern.ReplaceAllString(template, "")
+}
+
+var helmActionPattern = regexp.MustCompile(`\{\{-?[\s\S]*?-?\}\}`)
 
 func parseHelmGrace(data []byte) (time.Duration, error) {
 	var document struct {

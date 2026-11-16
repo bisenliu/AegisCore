@@ -266,10 +266,10 @@ func (l *LocalRateLimiter) cleanupNextShards(now time.Time) {
 		return
 	}
 	limit := max(1, len(l.shards)/16)
-	start := l.cleanupCursor.Add(uint64(limit)) - uint64(limit)
+	// cursor 只用于轮转起点；分片数量由构造函数限制为 int，取模结果可安全作为下标。
+	start := int(l.cleanupCursor.Add(uint64(limit)) % uint64(len(l.shards))) // #nosec G115 -- 取模结果严格小于 len(shards)。
 	for offset := range limit {
-		index := int(start+uint64(offset)) % len(l.shards)
-		l.cleanupShard(index, now)
+		l.cleanupShard((start+offset)%len(l.shards), now)
 	}
 }
 

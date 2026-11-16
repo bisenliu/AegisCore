@@ -30,7 +30,7 @@
 ## Local Commands
 
 ```bash
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0
 make lint
 make common-lint
