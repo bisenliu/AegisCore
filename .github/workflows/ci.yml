@@ -37,21 +37,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: ./.github/actions/setup-go
         with:
-          go-version: '1.27.3'
-          cache: true
-          cache-dependency-path: |
-            go.work
-            go.work.sum
-            **/go.mod
-            **/go.sum
+          fetch-depth: "0"
 
       - name: Install architecture lint dependencies
         run: |
@@ -94,37 +83,26 @@ jobs:
             echo 'run=false' >> "${GITHUB_OUTPUT}"
           fi
 
-      - name: Install delivery verification tools
+      - name: Install Helm
         if: steps.changes.outputs.run == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "${HOME}/.local/bin"
-          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: v3.19.2
 
-          helm_version='v3.19.2'
-          helm_archive="helm-${helm_version}-linux-amd64.tar.gz"
-          curl -fsSL "https://get.helm.sh/${helm_archive}" -o "/tmp/${helm_archive}"
-          curl -fsSL "https://get.helm.sh/${helm_archive}.sha256sum" -o "/tmp/${helm_archive}.sha256sum"
-          (cd /tmp && sha256sum -c "${helm_archive}.sha256sum")
-          tar -xzf "/tmp/${helm_archive}" -C /tmp
-          install /tmp/linux-amd64/helm "${HOME}/.local/bin/helm"
+      - name: Install kubeconform
+        if: steps.changes.outputs.run == 'true'
+        uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
+        with:
+          repo: yannh/kubeconform
+          tag: v0.7.0
 
-          kubeconform_version='v0.7.0'
-          kubeconform_archive='kubeconform-linux-amd64.tar.gz'
-          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${kubeconform_version}/${kubeconform_archive}" -o "/tmp/${kubeconform_archive}"
-          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${kubeconform_version}/CHECKSUMS" -o /tmp/kubeconform.CHECKSUMS
-          grep 'kubeconform-linux-amd64.tar.gz$' /tmp/kubeconform.CHECKSUMS | sed 's#  #  /tmp/#' | sha256sum -c -
-          tar -xzf "/tmp/${kubeconform_archive}" -C /tmp kubeconform
-          install /tmp/kubeconform "${HOME}/.local/bin/kubeconform"
-
-          prometheus_version='3.7.3'
-          prometheus_archive="prometheus-${prometheus_version}.linux-amd64.tar.gz"
-          curl -fsSL "https://github.com/prometheus/prometheus/releases/download/v${prometheus_version}/${prometheus_archive}" -o "/tmp/${prometheus_archive}"
-          curl -fsSL "https://github.com/prometheus/prometheus/releases/download/v${prometheus_version}/sha256sums.txt" -o /tmp/prometheus.sha256sums.txt
-          grep "prometheus-${prometheus_version}.linux-amd64.tar.gz$" /tmp/prometheus.sha256sums.txt | sed 's#  #  /tmp/#' | sha256sum -c -
-          tar -xzf "/tmp/${prometheus_archive}" -C /tmp
-          install "/tmp/prometheus-${prometheus_version}.linux-amd64/promtool" "${HOME}/.local/bin/promtool"
+      - name: Install promtool
+        if: steps.changes.outputs.run == 'true'
+        uses: jaxxstorm/action-install-gh-release@6096f2a2bbfee498ced520b6922ac2c06e990ed2 # v2.1.0
+        with:
+          repo: prometheus/prometheus
+          tag: v3.7.3
+          binary: promtool
 
       - name: Verify delivery assets
         if: steps.changes.outputs.run == 'true'
@@ -139,19 +117,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: '1.27.3'
-          cache: true
-          cache-dependency-path: |
-            go.work
-            go.work.sum
-            **/go.mod
-            **/go.sum
+        uses: ./.github/actions/setup-go
 
       - name: Run Docker-backed tests
         run: make test-containers
@@ -161,19 +128,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: '1.27.3'
-          cache: true
-          cache-dependency-path: |
-            go.work
-            go.work.sum
-            **/go.mod
-            **/go.sum
+        uses: ./.github/actions/setup-go
 
       - name: Build binary
         run: make build
@@ -197,19 +153,8 @@ jobs:
           - common
           - user-service
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: '1.27.3'
-          cache: true
-          cache-dependency-path: |
-            go.work
-            go.work.sum
-            **/go.mod
-            **/go.sum
+        uses: ./.github/actions/setup-go
 
       - name: Run race tests
         working-directory: ${{ matrix.module }}
@@ -220,19 +165,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: '1.27.3'
-          cache: true
-          cache-dependency-path: |
-            go.work
-            go.work.sum
-            **/go.mod
-            **/go.sum
+        uses: ./.github/actions/setup-go
 
       - name: Generate coverage profiles
         run: ./scripts/check-coverage.sh
@@ -262,19 +196,8 @@ jobs:
           - name: tools-nacos-config-seed
             path: tools/nacos-config-seed
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: '1.27.3'
-          cache: true
-          cache-dependency-path: |
-            go.work
-            go.work.sum
-            **/go.mod
-            **/go.sum
+        uses: ./.github/actions/setup-go
 
       - name: Install govulncheck
         run: |
@@ -305,19 +228,8 @@ jobs:
           - name: tools-nacos-config-seed
             path: tools/nacos-config-seed
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: '1.27.3'
-          cache: true
-          cache-dependency-path: |
-            go.work
-            go.work.sum
-            **/go.mod
-            **/go.sum
+        uses: ./.github/actions/setup-go
 
       - name: Install gosec
         run: |

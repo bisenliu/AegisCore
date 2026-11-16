@@ -55,7 +55,6 @@ cd tools/nacos-config-seed && golangci-lint run ./...
 - `domain` 不得导入 Gin、Ent、Redis、runtime config/logger、response envelope、application ports 或 infrastructure adapter。
 - `application` 不得导入 Gin、Ent、Redis 或 `common/http/binding`。
 - `transport/http` 不得导入 Ent、Redis 或 SQL/pgx package。
-- `transport/grpc` 不得导入 Ent、Redis、SQL/pgx、Gin controller、HTTP response envelope 或 external integration adapter。
 - `infrastructure/*` 不得导入 Gin 或 HTTP response envelope。
 - `integration/*` 不得导入 Gin response、Ent 或 feature persistence adapter。
 

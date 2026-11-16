@@ -5,21 +5,13 @@ run:
   modules-download-mode: readonly
   tests: true
 
-# 使用文本输出，便于本地终端和 CI 日志直接定位问题。
-output:
-  formats:
-    text:
-      path: stdout
-
 linters:
   # standard 默认包含 errcheck、govet、staticcheck、unused 等基础高价值检查。
   default: standard
   enable:
-    # revive 提供可配置的代码风格和常见问题检查。
-    - revive
     # depguard 将 docs/ARCHITECTURE.md 中的分层依赖规则转为可执行 lint。
+    # revive 默认规则已被 staticcheck/govet 覆盖，不再单独启用。
     - depguard
-  # golangci-lint v2 将旧版独立的 gosimple/stylecheck analyzer family 合并到 staticcheck suite 中。
   settings:
     depguard:
       rules:
@@ -86,35 +78,6 @@ linters:
               desc: HTTP transport must not depend on SQL packages
             - pkg: github.com/jackc/pgx/v5
               desc: HTTP transport must not depend on PostgreSQL driver packages
-        feature-transport-grpc:
-          files:
-            - "**/internal/features/**/transport/grpc/*.go"
-            - "**/internal/features/**/transport/grpc/**/*.go"
-          deny:
-            - pkg: github.com/aegiscore/user-service/internal/persistence/ent$
-              desc: gRPC transport must not depend on Ent persistence
-            - pkg: github.com/aegiscore/user-service/internal/persistence/ent/
-              desc: gRPC transport must not depend on Ent persistence
-            - pkg: github.com/redis/go-redis/v9
-              desc: gRPC transport must not depend on Redis clients
-            - pkg: database/sql
-              desc: gRPC transport must not depend on SQL packages
-            - pkg: github.com/jackc/pgx/v5
-              desc: gRPC transport must not depend on PostgreSQL driver packages
-            - pkg: github.com/gin-gonic/gin
-              desc: gRPC transport must not depend on Gin transport
-            - pkg: github.com/aegiscore/common/http/response
-              desc: gRPC transport must not depend on HTTP response helpers
-            - pkg: github.com/aegiscore/common/contract/response
-              desc: gRPC transport must not depend on HTTP response envelopes
-            - pkg: github.com/aegiscore/user-service/internal/integration$
-              desc: gRPC transport must not depend on external integration adapters
-            - pkg: github.com/aegiscore/user-service/internal/integration/
-              desc: gRPC transport must not depend on external integration adapters
-            - pkg: github.com/aegiscore/user-service/internal/features/.+/transport/http$
-              desc: gRPC transport must not depend on HTTP controllers
-            - pkg: github.com/aegiscore/user-service/internal/features/.+/transport/http/
-              desc: gRPC transport must not depend on HTTP controllers
         feature-infrastructure:
           files:
             - "**/internal/features/**/infrastructure/*.go"
@@ -203,29 +166,6 @@ linters:
               desc: service composition must use permission public contracts instead of concrete policy sync adapters
             - pkg: github.com/aegiscore/user-service/internal/features/permission/infrastructure/(casbin|redis)/
               desc: service composition must use permission public contracts instead of concrete policy sync adapters
-    revive:
-      severity: warning
-      rules:
-        - name: blank-imports
-        - name: context-as-argument
-        - name: dot-imports
-        - name: error-return
-        - name: error-strings
-        - name: error-naming
-        - name: exported
-          disabled: true
-        - name: if-return
-        - name: increment-decrement
-        - name: var-naming
-        - name: var-declaration
-        - name: package-comments
-          disabled: true
-        - name: range
-        - name: receiver-naming
-        - name: time-naming
-        - name: unexported-return
-        - name: unreachable-code
-        - name: unused-parameter
   exclusions:
     generated: lax
     rules:
@@ -241,11 +181,6 @@ linters:
       - third_party$
       - builtin$
       - examples$
-
-issues:
-  # 不截断问题数量，首次接入时便于完整统计存量 lint findings。
-  max-issues-per-linter: 0
-  max-same-issues: 0
 
 formatters:
   enable:

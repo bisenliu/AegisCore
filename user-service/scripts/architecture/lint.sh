@@ -162,9 +162,7 @@ check_go_toolchain_version() {
     for mod in common/go.mod user-service/go.mod tools/openapi-convert/go.mod tools/nacos-config-seed/go.mod; do
       printf '%s go\t%s\n' "${mod}" "$(go_mod_version "${repo_root}/${mod}")"
     done
-    for workflow in .github/workflows/ci.yml .github/workflows/lint.yml; do
-      printf '%s go-version\t%s\n' "${workflow}" "$(workflow_go_version "${repo_root}/${workflow}")"
-    done
+    printf '.github/actions/setup-go/action.yml go-version\t%s\n' "$(workflow_go_version "${repo_root}/.github/actions/setup-go/action.yml")"
   )
 
   for mod in common/go.mod user-service/go.mod tools/openapi-convert/go.mod tools/nacos-config-seed/go.mod; do

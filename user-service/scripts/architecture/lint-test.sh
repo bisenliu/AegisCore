@@ -32,6 +32,7 @@ trap 'rm -rf "${fixture_root}"' EXIT
 # 步骤 4：构造最小仓库布局；目录只包含触发或排除规则所需的文件。
 mkdir -p \
   "${fixture_root}/.github/workflows" \
+  "${fixture_root}/.github/actions/setup-go" \
   "${fixture_root}/common" \
   "${fixture_root}/common/runtime/observability/metrics" \
   "${fixture_root}/common/runtime/example" \
@@ -98,6 +99,16 @@ cat > "${fixture_root}/user-service/go.mod" <<'EOF'
 module github.com/aegiscore/user-service
 
 go 1.27.3
+EOF
+
+# 步骤 8.1：写入公共 Go setup，覆盖 CI 工具链版本检查。
+cat > "${fixture_root}/.github/actions/setup-go/action.yml" <<'EOF'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v7
+      with:
+        go-version: '1.27.3'
 EOF
 
 # 步骤 9：写入故意违规的 CI workflow，触发重复 lint、重复单测和模块本地容器测试入口检查。
