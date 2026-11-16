@@ -299,7 +299,7 @@ func TestHTTPRuntimeStopWaitsForActiveRequest(t *testing.T) {
 	go func() { stopDone <- lifecycle.hooks[0].OnStop(context.Background()) }()
 	require.Never(t, func() bool {
 		select {
-		case <-stopDone:
+		case <-stopDone: //nolint:errcheck // 只探测停止是否提前完成，结果由后续接收断言。
 			return true
 		default:
 			return false

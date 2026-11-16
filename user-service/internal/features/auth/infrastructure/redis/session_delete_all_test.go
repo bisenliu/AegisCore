@@ -347,7 +347,7 @@ func TestSessionPurgePoolStopDrainsAndIsIdempotent(t *testing.T) {
 	}()
 	require.Never(t, func() bool {
 		select {
-		case <-stopDone:
+		case <-stopDone: //nolint:errcheck // 只探测停止是否提前完成，结果由后续接收断言。
 			return true
 		default:
 			return false
