@@ -103,6 +103,8 @@ EOF
 
 # 步骤 8.1：写入公共 Go setup，覆盖 CI 工具链版本检查。
 cat > "${fixture_root}/.github/actions/setup-go/action.yml" <<'EOF'
+name: Setup Go
+description: Install the pinned Go toolchain. The caller must check out the repository first.
 runs:
   using: composite
   steps:

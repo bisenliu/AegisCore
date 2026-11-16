@@ -37,10 +37,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
       - name: Set up Go
         uses: ./.github/actions/setup-go
-        with:
-          fetch-depth: "0"
 
       - name: Install architecture lint dependencies
         run: |
@@ -117,6 +120,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
       - name: Set up Go
         uses: ./.github/actions/setup-go
 
@@ -128,6 +134,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
       - name: Set up Go
         uses: ./.github/actions/setup-go
 
@@ -153,6 +162,9 @@ jobs:
           - common
           - user-service
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
       - name: Set up Go
         uses: ./.github/actions/setup-go
 
@@ -165,6 +177,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
       - name: Set up Go
         uses: ./.github/actions/setup-go
 
@@ -196,6 +211,9 @@ jobs:
           - name: tools-nacos-config-seed
             path: tools/nacos-config-seed
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
       - name: Set up Go
         uses: ./.github/actions/setup-go
 
@@ -228,6 +246,9 @@ jobs:
           - name: tools-nacos-config-seed
             path: tools/nacos-config-seed
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
       - name: Set up Go
         uses: ./.github/actions/setup-go
 
