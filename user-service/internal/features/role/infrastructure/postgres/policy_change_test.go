@@ -166,8 +166,8 @@ func TestPostgresPolicyRevisionInitializationRollsBackWithPolicyFact(t *testing.
 		Name:   "Rollback Counter Initialization",
 		Active: true,
 	}, roleapplication.PolicyChange{
-		Kind:   roleapplication.PolicyChangeKind("invalid"),
-		Reason: "role_created",
+		Kind:   roleapplication.PolicyChangeKindPolicyChanged,
+		Reason: strings.Repeat("r", 65),
 		RoleID: roleID,
 	})
 	require.ErrorContains(t, err, "append rbac policy revision")

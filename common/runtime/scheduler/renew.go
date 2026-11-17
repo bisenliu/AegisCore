@@ -33,10 +33,16 @@ func (s *Scheduler) startRenewGuard(jobCtx context.Context, cancelJob context.Ca
 
 	go func() {
 		defer close(guard.done)
-		defer close(guard.errCh)
 
 		ticker := time.NewTicker(policy.Interval)
 		defer ticker.Stop()
+
+		var renewErr error
+		defer func() {
+			// errCh 在 goroutine 退出前写入，避免 stop 观察到 done 后读到已关闭的空通道。
+			guard.errCh <- renewErr
+			close(guard.errCh)
+		}()
 
 		for {
 			select {
@@ -56,7 +62,7 @@ func (s *Scheduler) startRenewGuard(jobCtx context.Context, cancelJob context.Ca
 
 				s.metrics.JobLockRenewFailed(job.Key)
 				s.logger.Error("scheduler job lock renew failed", zap.String("job", job.Key), zap.Error(err))
-				guard.errCh <- err
+				renewErr = err
 				if !policy.ContinueOnFailure {
 					cancelJob()
 				}
