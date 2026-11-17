@@ -58,6 +58,40 @@ x-jaeger-build: &jaeger-build
   context: ../..
   dockerfile: deployments/docker/jaeger.Dockerfile
 
+x-nacos-seed-env: &nacos-seed-env
+  <<: *timezone-env
+  AEGISCORE_NACOS_ADDR: nacos:8848
+  AEGISCORE_NACOS_GROUP: AEGISCORE
+  AEGISCORE_NACOS_TIMEOUT: 30s
+  AEGISCORE_NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+  AEGISCORE_NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
+
+x-nacos-seed-service: &nacos-seed-service
+  build: *nacos-config-seed-build
+  image: aegiscore-nacos-config-seed:latest
+  command:
+    - --config-dir
+    - /nacos/config
+  depends_on:
+    nacos-init-auth:
+      condition: service_completed_successfully
+  networks:
+    - aegiscore-runtime
+  restart: "no"
+
+x-user-service-dependencies: &user-service-dependencies
+  nacos-init-docker:
+    condition: service_completed_successfully
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  # Cluster 模式下恢复以下依赖，确保 slot 初始化后再启动。
+  # redis-cluster-init:
+  #   condition: service_completed_successfully
+  jaeger:
+    condition: service_started
+
 services:
   postgres:
     # 本地开发跟随最新 PostgreSQL 镜像；正式环境建议固定具体版本或镜像 digest。
@@ -187,6 +221,7 @@ services:
 
   nacos-init-auth:
     image: aegiscore-nacos:latest
+    pull_policy: never
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
@@ -210,50 +245,20 @@ services:
     restart: "no"
 
   nacos-init-host:
-    build: *nacos-config-seed-build
-    image: aegiscore-nacos-config-seed:latest
-    command:
-      - --config-dir
-      - /nacos/config
+    <<: *nacos-seed-service
     volumes:
       - ../nacos/local-host:/nacos/config:ro
     environment:
-      <<: *timezone-env
-      AEGISCORE_NACOS_ADDR: nacos:8848
+      <<: *nacos-seed-env
       AEGISCORE_NACOS_NAMESPACE: loca-host
-      AEGISCORE_NACOS_GROUP: AEGISCORE
-      AEGISCORE_NACOS_TIMEOUT: 30s
-      AEGISCORE_NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
-      AEGISCORE_NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
-    depends_on:
-      nacos-init-auth:
-        condition: service_completed_successfully
-    networks:
-      - aegiscore-runtime
-    restart: "no"
 
   nacos-init-docker:
-    build: *nacos-config-seed-build
-    image: aegiscore-nacos-config-seed:latest
-    command:
-      - --config-dir
-      - /nacos/config
+    <<: *nacos-seed-service
     volumes:
       - ../nacos/local-docker:/nacos/config:ro
     environment:
-      <<: *timezone-env
-      AEGISCORE_NACOS_ADDR: nacos:8848
+      <<: *nacos-seed-env
       AEGISCORE_NACOS_NAMESPACE: loca-docker
-      AEGISCORE_NACOS_GROUP: AEGISCORE
-      AEGISCORE_NACOS_TIMEOUT: 30s
-      AEGISCORE_NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
-      AEGISCORE_NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
-    depends_on:
-      nacos-init-auth:
-        condition: service_completed_successfully
-    networks:
-      - aegiscore-runtime
-    restart: "no"
 
   jaeger:
     build: *jaeger-build
@@ -273,6 +278,7 @@ services:
     profiles:
       - seed
     image: aegiscore-user-service:latest
+    pull_policy: never
     command:
       - rbac
       - seed
@@ -286,18 +292,7 @@ services:
       AEGISCORE_NACOS_GROUP: AEGISCORE
       AEGISCORE_NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
       AEGISCORE_NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
-    depends_on:
-      nacos-init-docker:
-        condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      # Cluster 模式下恢复以下依赖，确保 slot 初始化后再启动。
-      # redis-cluster-init:
-      #   condition: service_completed_successfully
-      jaeger:
-        condition: service_started
+    depends_on: *user-service-dependencies
     networks:
       - aegiscore-runtime
       - aegiscore-observability
@@ -311,18 +306,7 @@ services:
     environment: *user-service-nacos-env
     ports:
       - "127.0.0.1:8080:8080"
-    depends_on:
-      nacos-init-docker:
-        condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      # Cluster 模式下恢复以下依赖，确保 slot 初始化后再启动。
-      # redis-cluster-init:
-      #   condition: service_completed_successfully
-      jaeger:
-        condition: service_started
+    depends_on: *user-service-dependencies
     networks:
       - aegiscore-runtime
       - aegiscore-observability
