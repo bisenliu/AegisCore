@@ -17,6 +17,7 @@
 
 ## 2. 关键入口点
 
+- 根目录业务服务登记：根 `Makefile` 的 `BUSINESS_SERVICES` 与 `go.work`。新增服务与 `user-service/` 平级，不创建 `services/`，也不得 import 其他业务服务。
 - 服务入口：`user-service/cmd/main.go`。
 - RBAC CLI：`user-service/cmd/rbac.go`。
 - HTTP 聚合路由：`user-service/internal/router/router.go`。

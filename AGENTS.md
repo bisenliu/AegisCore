@@ -18,14 +18,16 @@
 
 | 路径 | 作用 |
 |---|---|
-| `go.work` | Go workspace，包含 `common`、`user-service` 和仓库级工具模块；仓库根目录不是单一 Go module |
+| `go.work` | Go workspace，包含 `common`、根目录业务服务和仓库级工具模块；仓库根目录不是单一 Go module |
 | `common/` | 跨服务共享契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力 |
-| `user-service/` | 用户服务 CLI、Fx/Gin runtime、feature 业务代码、Ent schema、migration 和 OpenAPI 生成 |
+| `user-service/` | 当前用户服务，位于仓库根目录；新业务服务同样位于根目录，不引入 `services/` |
 | `tools/` | 仓库级交付工具，例如跨服务复用的 OpenAPI 转换 CLI |
 | `deployments/` | Docker、Compose、Helm、Prometheus 和 Grafana 部署观测资产；Kubernetes 清单只由 Helm 渲染 |
 | `docs/` | 架构、开发、产品、测试和 OPSX 工作流说明 |
 | `openspec/specs/` | 当前有效主规格，描述长期稳定 capability |
 | `openspec/changes/` | 进行中的 proposal、design、spec delta 和 tasks；完成后合并主规格并删除，不保留历史归档 |
+
+根目录业务服务与 `user-service/` 平级。新增服务时登记根 `Makefile` 的 `BUSINESS_SERVICES` 和 `go.work`，module path 使用 `github.com/aegiscore/<service>`。服务只能依赖 `common/`，不得 import 其他业务服务；需要共享的稳定契约再放入 `common/contract`。不要把服务移动到 `services/`。
 
 `common/` 只承载跨服务稳定能力：`contract/errors`、`contract/pagination`、`contract/response`、`http/binding`、`http/middleware`、`http/openapi`、`http/pprof`、`http/response`、`runtime/config`、`runtime/datastore`、`runtime/id`、`runtime/localcache`、`runtime/logger`、`runtime/observability`、`runtime/redispubsub`、`runtime/rediskey`、`runtime/resources`、`runtime/scheduler`、`runtime/timezone`、`runtime/workerpool`、`security/auth`、`security/casbin`、`security/password`、`testing` 和 `validation`。
 

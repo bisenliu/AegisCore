@@ -7,7 +7,7 @@ AegisCore 是 Go 1.27.4 workspace 后端项目底座，当前包含跨服务共�
 | 路径 | 目的 |
 |---|---|
 | `common/` | 跨服务稳定契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力 |
-| `user-service/` | 用户服务 CLI、Fx/Gin runtime、feature 业务代码、Ent schema、migrations、OpenAPI 生成 |
+| `user-service/` | 当前用户服务，位于仓库根目录；新业务服务与它平级，不使用 `services/` |
 | `tools/` | 仓库级交付工具，例如跨服务复用的 OpenAPI 转换 CLI |
 | `deployments/` | Docker、Compose、Helm、Prometheus/Grafana 部署和观测资产；Kubernetes 清单由 Helm 渲染 |
 | `docs/` | 当前有效架构、开发、产品、测试、lint 和 runbook 文档 |

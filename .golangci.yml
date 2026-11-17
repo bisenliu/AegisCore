@@ -22,9 +22,9 @@ linters:
           deny:
             - pkg: github.com/gin-gonic/gin
               desc: domain must not depend on Gin transport
-            - pkg: github.com/aegiscore/user-service/internal/persistence/ent$
+            - pkg: github.com/aegiscore/.+/internal/persistence/ent$
               desc: domain must not depend on Ent persistence
-            - pkg: github.com/aegiscore/user-service/internal/persistence/ent/
+            - pkg: github.com/aegiscore/.+/internal/persistence/ent/
               desc: domain must not depend on Ent persistence
             - pkg: github.com/redis/go-redis/v9
               desc: domain must not depend on Redis clients
@@ -36,15 +36,15 @@ linters:
               desc: domain must not depend on HTTP response envelopes
             - pkg: github.com/aegiscore/common/http/response
               desc: domain must not depend on HTTP response helpers
-            - pkg: github.com/aegiscore/user-service/internal/features/.+/application$
+            - pkg: github.com/aegiscore/.+/internal/features/.+/application$
               desc: domain must not depend on application ports
-            - pkg: github.com/aegiscore/user-service/internal/features/.+/application/
+            - pkg: github.com/aegiscore/.+/internal/features/.+/application/
               desc: domain must not depend on application code
-            - pkg: github.com/aegiscore/user-service/internal/features/.+/infrastructure$
+            - pkg: github.com/aegiscore/.+/internal/features/.+/infrastructure$
               desc: domain must not depend on infrastructure adapters
-            - pkg: github.com/aegiscore/user-service/internal/features/.+/infrastructure/
+            - pkg: github.com/aegiscore/.+/internal/features/.+/infrastructure/
               desc: domain must not depend on infrastructure adapters
-            - pkg: github.com/aegiscore/user-service/internal/features/.+/transport/
+            - pkg: github.com/aegiscore/.+/internal/features/.+/transport/
               desc: domain must not depend on transport DTO/controller packages
         feature-application:
           files:
@@ -53,24 +53,24 @@ linters:
           deny:
             - pkg: github.com/gin-gonic/gin
               desc: application must not depend on Gin transport
-            - pkg: github.com/aegiscore/user-service/internal/persistence/ent$
+            - pkg: github.com/aegiscore/.+/internal/persistence/ent$
               desc: application must not depend on Ent persistence
-            - pkg: github.com/aegiscore/user-service/internal/persistence/ent/
+            - pkg: github.com/aegiscore/.+/internal/persistence/ent/
               desc: application must not depend on Ent persistence
             - pkg: github.com/redis/go-redis/v9
               desc: application must not depend on Redis clients
             - pkg: github.com/aegiscore/common/http/binding
               desc: application must not depend on HTTP binder
-            - pkg: github.com/aegiscore/user-service/internal/features/.+/transport/
+            - pkg: github.com/aegiscore/.+/internal/features/.+/transport/
               desc: application must not depend on transport DTO/controller packages
         feature-transport-http:
           files:
             - "**/internal/features/**/transport/http/*.go"
             - "**/internal/features/**/transport/http/**/*.go"
           deny:
-            - pkg: github.com/aegiscore/user-service/internal/persistence/ent$
+            - pkg: github.com/aegiscore/.+/internal/persistence/ent$
               desc: HTTP transport must not depend on Ent persistence
-            - pkg: github.com/aegiscore/user-service/internal/persistence/ent/
+            - pkg: github.com/aegiscore/.+/internal/persistence/ent/
               desc: HTTP transport must not depend on Ent persistence
             - pkg: github.com/redis/go-redis/v9
               desc: HTTP transport must not depend on Redis clients
@@ -89,7 +89,7 @@ linters:
               desc: infrastructure must not depend on HTTP response helpers
             - pkg: github.com/aegiscore/common/contract/response
               desc: infrastructure must not depend on HTTP response envelopes
-            - pkg: github.com/aegiscore/user-service/internal/features/.+/transport/
+            - pkg: github.com/aegiscore/.+/internal/features/.+/transport/
               desc: infrastructure must not depend on transport DTO/controller packages
         integration-boundary:
           files:
@@ -102,13 +102,13 @@ linters:
               desc: integration adapters must not depend on HTTP response helpers
             - pkg: github.com/aegiscore/common/contract/response
               desc: integration adapters must not depend on HTTP response envelopes
-            - pkg: github.com/aegiscore/user-service/internal/persistence/ent$
+            - pkg: github.com/aegiscore/.+/internal/persistence/ent$
               desc: integration adapters must not depend on Ent persistence
-            - pkg: github.com/aegiscore/user-service/internal/persistence/ent/
+            - pkg: github.com/aegiscore/.+/internal/persistence/ent/
               desc: integration adapters must not depend on Ent persistence
-            - pkg: github.com/aegiscore/user-service/internal/features/.+/infrastructure$
+            - pkg: github.com/aegiscore/.+/internal/features/.+/infrastructure$
               desc: integration adapters must not depend on feature persistence adapters
-            - pkg: github.com/aegiscore/user-service/internal/features/.+/infrastructure/
+            - pkg: github.com/aegiscore/.+/internal/features/.+/infrastructure/
               desc: integration adapters must not depend on feature persistence adapters
         feature-user-domain-boundary:
           files:
@@ -125,13 +125,13 @@ linters:
             - "**/internal/shared/*.go"
             - "**/internal/shared/**/*.go"
           deny:
-            - pkg: github.com/aegiscore/user-service/internal/features/
+            - pkg: github.com/aegiscore/.+/internal/features/
               desc: shared packages must not depend on feature packages
             - pkg: github.com/gin-gonic/gin
               desc: shared packages must not depend on Gin transport
-            - pkg: github.com/aegiscore/user-service/internal/persistence/ent$
+            - pkg: github.com/aegiscore/.+/internal/persistence/ent$
               desc: shared packages must not depend on Ent persistence
-            - pkg: github.com/aegiscore/user-service/internal/persistence/ent/
+            - pkg: github.com/aegiscore/.+/internal/persistence/ent/
               desc: shared packages must not depend on Ent persistence
             - pkg: github.com/redis/go-redis/v9
               desc: shared packages must not depend on Redis clients
@@ -162,9 +162,9 @@ linters:
             - "**/internal/router/*.go"
             - "**/internal/router/**/*.go"
           deny:
-            - pkg: github.com/aegiscore/user-service/internal/features/permission/infrastructure/(casbin|redis)$
+            - pkg: github.com/aegiscore/.+/internal/features/permission/infrastructure/(casbin|redis)$
               desc: service composition must use permission public contracts instead of concrete policy sync adapters
-            - pkg: github.com/aegiscore/user-service/internal/features/permission/infrastructure/(casbin|redis)/
+            - pkg: github.com/aegiscore/.+/internal/features/permission/infrastructure/(casbin|redis)/
               desc: service composition must use permission public contracts instead of concrete policy sync adapters
   exclusions:
     generated: lax

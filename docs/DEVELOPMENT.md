@@ -9,6 +9,10 @@
 - OpenSpec CLI，用于 `/opsx:*` 变更工作流。
 - Atlas 相关本地脚本通过 `user-service/scripts/` 生成和校验 SQL；数据库变更执行由 DBA 工单或受控发布平台完成。
 
+仓库级项目身份位于 `project.yaml`。更换整个项目名称时运行 `./scripts/rename-project.sh --apply`，不要手工全局替换。脚本先检查 `go version`，失败时不写文件；成功后更新 module、环境变量、指标和镜像前缀，再执行 `go work sync`、Ent 生成和 OpenAPI 生成。它不移动服务目录，也不修改 `user-service/internal/shared/rbacbaseline/ids.go` 中已固化的系统 ID。生成失败时只恢复本次写过的文件。新增根目录业务服务不需要改 `project.yaml`。
+
+新增根目录业务服务时，只追加根 `Makefile` 的 `BUSINESS_SERVICES` 和 `go.work` 的 `use` 条目。服务目录与 `user-service/` 平级，不创建 `services/`。新服务复制启动、配置、provider 和 router 骨架，不复制 `user-service/internal/features/`、RBAC CLI 或 Ent schema。服务 module 只能依赖 `github.com/aegiscore/common`，不得 import 其他业务服务。共享 Nacos `resources.yaml` 中的新资源名必须带服务前缀；user-service 继续使用已发布的 `cache_redis` 和 `primary_db`。
+
 ### 1.1 Go 工具链版本治理
 
 Go 工具链使用固定版本声明和 Renovate 升级 PR/MR 治理。CI 合并门禁不得使用 `stable`、`latest` 或 `GOTOOLCHAIN=auto`，避免 lint、`go tool`、analyzer、生成物和测试行为随运行时间漂移。

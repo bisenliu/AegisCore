@@ -600,14 +600,47 @@ run_rg_any "OpenAPI generated files have uncommitted drift" \
   '^user-service/docs/(openapi\.go|openapi\.json|openapi\.yaml)$' \
   <(cd "${repo_root}" && git diff --name-only -- user-service/docs/openapi.go user-service/docs/openapi.json user-service/docs/openapi.yaml)
 
-# 步骤 23：校验 OpenSpec/OPSX 文档没有遗留默认英文模板或占位内容。
+# 步骤 23：校验根目录业务服务不 import 其他业务服务。
+check_cross_service_imports() {
+  local services=()
+  local service other
+  while IFS= read -r service; do
+    [[ -z "${service}" ]] && continue
+    services+=("${service}")
+  done < <(awk -F':=' '/^BUSINESS_SERVICES[[:space:]]*:=/ {print $2}' "${repo_root}/Makefile" | tr ' ' '\n' | sed '/^$/d')
+  if [[ "${#services[@]}" -eq 0 ]]; then
+    report "root Makefile missing BUSINESS_SERVICES"
+    return
+  fi
+  for service in "${services[@]}"; do
+    if [[ ! -f "${repo_root}/${service}/go.mod" ]]; then
+      report "registered business service missing go.mod: ${service}"
+      continue
+    fi
+    if ! grep -q "^[[:space:]]*\\./${service}$" "${repo_root}/go.work"; then
+      report "registered business service missing from go.work: ${service}"
+    fi
+    for other in "${services[@]}"; do
+      if [[ "${other}" == "${service}" ]]; then
+        continue
+      fi
+      run_rg "${service} must not import ${other}" \
+        "github\\.com/aegiscore/${other}(/|\")" \
+        "${repo_root}/${service}" --glob '!**/*_test.go'
+    done
+  done
+}
+
+check_cross_service_imports
+
+# 步骤 24：校验 OpenSpec/OPSX 文档没有遗留默认英文模板或占位内容。
 run_rg_any "OpenSpec/OPSX markdown must use Simplified Chinese instead of default English templates" \
   '(<!--|-->|What problem does this solve|Describe what will change|brief description|condition|expected outcome|Overview|Summary|Acceptance Criteria|Migration Notes|Implementation Plan|Rollout Plan|Out of Scope)' \
   "${repo_root}/openspec/specs" \
   "${repo_root}/openspec/changes" \
   "${repo_root}/docs/opsx"
 
-# 步骤 24：校验 Ent 生成物没有未提交漂移，确保 schema 变更后重新生成。
+# 步骤 25：校验 Ent 生成物没有未提交漂移，确保 schema 变更后重新生成。
 run_rg_any "Ent generated files have uncommitted drift; run make generate and commit generated output" \
   '^user-service/internal/persistence/ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update|permission|permission_create|permission_delete|permission_query|permission_update|role|role_create|role_delete|role_query|role_update|rolepermission|rolepermission_create|rolepermission_delete|rolepermission_query|rolepermission_update|userrole|userrole_create|userrole_delete|userrole_query|userrole_update)\.go$|^user-service/internal/persistence/ent/(enttest|hook|migrate|predicate|runtime|user|permission|role|rolepermission|userrole)/' \
   <(cd "${repo_root}" && git diff --name-only -- user-service/internal/persistence/ent)

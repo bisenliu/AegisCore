@@ -7,11 +7,11 @@ AegisCore 是 Go 1.27.4 workspace，当前由四个主要部分组成：
 | 模块 | 职责 |
 |---|---|
 | `common/` | 跨服务稳定契约、HTTP helper、安全原语、runtime primitive、测试基础设施和校验能力 |
-| `user-service/` | 用户服务 CLI、Fx/Gin runtime、feature 业务代码、Ent schema、migration 和 OpenAPI 生成 |
+| `user-service/` | 当前用户服务，位于仓库根目录；后续业务服务同样与它平级，不集中到 `services/` |
 | `tools/` | 仓库级交付工具，例如跨服务复用的 OpenAPI 转换 CLI |
 | `deployments/` | Docker、Compose、Helm、Prometheus 和 Grafana 部署观测资产；Kubernetes 清单只由 Helm 渲染 |
 
-根 `Makefile` 汇总构建、测试、lint、verify、migration、OpenAPI 和 dashboard 命令。README 将 `docs/` 与 `openspec/` 定义为协作和规格入口。
+根 `Makefile` 通过 `BUSINESS_SERVICES` 汇总已登记根目录业务服务的构建、测试、lint、verify、migration 和 OpenAPI 命令。新增服务时把目录名追加到该清单，并在 `go.work` 登记对应 module；服务私有命令仍保留 `<service>-` 前缀。业务服务之间不得互相 import。README 将 `docs/` 与 `openspec/` 定义为协作和规格入口。
 
 ## 2. `common/` 共享基础
 

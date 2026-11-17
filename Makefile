@@ -1,6 +1,8 @@
 COMMON_DIR := common
 TOOLS_OPENAPI_CONVERT_DIR := tools/openapi-convert
 TOOLS_NACOS_CONFIG_SEED_DIR := tools/nacos-config-seed
+# 根目录业务服务清单。新增服务时追加目录名，并同步登记 go.work。
+BUSINESS_SERVICES := user-service
 USER_SERVICE_DIR := user-service
 USER_SERVICE_BIN ?= $(CURDIR)/bin/user-service
 ADMIN_USERNAME ?=
@@ -21,18 +23,18 @@ export ADMIN_BOOTSTRAP_PASSWORD
 help: ## 查看可用命令。
 	@awk 'BEGIN {FS = ":.*##"; printf "可用命令：\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-36s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-build: user-service-build ## 构建全部服务二进制。
+build: $(addsuffix -build,$(BUSINESS_SERVICES)) ## 构建全部已登记业务服务二进制。
 
-test: common-test user-service-test tools-openapi-convert-test tools-nacos-config-seed-test ## 运行全部 Go 模块测试。
+test: common-test $(addsuffix -test,$(BUSINESS_SERVICES)) tools-openapi-convert-test tools-nacos-config-seed-test ## 运行全部 Go 模块测试。
 
-test-containers: common-test-containers user-service-test-containers ## 运行 common 与 user-service 的全部 Docker-backed 测试。
+test-containers: common-test-containers $(addsuffix -test-containers,$(BUSINESS_SERVICES)) ## 运行 common 与已登记业务服务的全部 Docker-backed 测试。
 
 coverage: ## 生成覆盖率报告并检查手写关键包基线。
 	./scripts/check-coverage.sh
 
-lint: common-lint user-service-lint tools-openapi-convert-lint tools-nacos-config-seed-lint ## 运行全部 Go 模块 lint。
+lint: common-lint $(addsuffix -lint,$(BUSINESS_SERVICES)) tools-openapi-convert-lint tools-nacos-config-seed-lint ## 运行全部 Go 模块 lint。
 
-verify: lint user-service-architecture-lint github-actions-pins-check delivery-verify common-generate user-service-generate test user-service-openapi-generate ## 运行完整本地验证。
+verify: lint $(addsuffix -architecture-lint,$(BUSINESS_SERVICES)) github-actions-pins-check delivery-verify common-generate $(addsuffix -generate,$(BUSINESS_SERVICES)) test $(addsuffix -openapi-generate,$(BUSINESS_SERVICES)) ## 运行完整本地验证。
 	git diff --exit-code -- . ':(exclude)AGENTS.md' ':(exclude)openspec/AGENTS.md' ':(exclude)CLAUDE.md' ':(exclude).multica/project/resources.json' ':(exclude).multica/**'
 
 github-actions-pins-check: ## 检查 GitHub Actions 第三方 Action 是否固定 commit SHA。
