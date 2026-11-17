@@ -96,13 +96,25 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 
 ### Requirement: Compose 本地编排与时区一致性
 
-系统 MUST 提供可从仓库根目录运行的本地 Compose 编排，启动 PostgreSQL、Redis、Nacos、Jaeger、user-service、Prometheus 和 Grafana，并在缺少必填 secret 时提前失败。常驻服务与一次性任务 MUST 显式使用 `TZ=Asia/Shanghai`；默认端口 MUST 只暴露当前真实入口。
+系统 MUST 提供可从仓库根目录运行的本地 Compose 编排，默认启动 PostgreSQL、Redis、Nacos、Jaeger 和 user-service，并通过 `observability` profile 按需启动 Prometheus 和 Grafana；缺少必填 secret 时 MUST 提前失败。常驻服务与一次性任务 MUST 显式使用 `TZ=Asia/Shanghai`；端口 MUST 只暴露当前真实入口。
 
 #### Scenario: 全部 Compose 服务声明时区
 
 - **WHEN** 渲染 `deployments/compose/docker-compose.yml`
 - **THEN** PostgreSQL、Redis、Nacos、Nacos 初始化任务、Jaeger、RBAC seed、user-service、Prometheus 和 Grafana MUST 都获得 `TZ=Asia/Shanghai`
 - **AND** 配置 MUST NOT 挂载宿主机 `/etc/localtime` 或把宿主机时区作为正确性前提
+
+#### Scenario: 默认与按需观测服务
+
+- **WHEN** 不启用 profile 启动本地 Compose
+- **THEN** Compose MUST 启动核心依赖、Jaeger 和 user-service，MUST NOT 启动 Prometheus 或 Grafana
+- **WHEN** 启用 `observability` profile 启动本地 Compose
+- **THEN** Compose MUST 同时提供 Prometheus 和 Grafana，并沿用各自原有的依赖、配置、数据卷和本地端口
+
+#### Scenario: RBAC seed 复用服务镜像
+
+- **WHEN** 已构建 user-service 镜像后运行 `rbac-seed`
+- **THEN** RBAC seed MUST 使用与 user-service 相同的本地镜像，MUST NOT 单独声明同一镜像的构建
 
 #### Scenario: Jaeger 基础镜像缺少 zoneinfo
 
@@ -119,8 +131,8 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 #### Scenario: 默认本地入口端口
 
 - **WHEN** 调用方使用必填本地环境变量渲染 `deployments/compose/docker-compose.yml`
-- **THEN** Compose MUST 发布 user-service HTTP `8080:8080`
-- **AND** Compose MUST 发布 PostgreSQL、Redis、Jaeger、Prometheus 和 Grafana 的本地入口端口
+- **THEN** Compose MUST 发布 user-service HTTP `8080:8080`，以及 PostgreSQL、Redis 和 Jaeger 的本地入口端口
+- **AND** 启用 `observability` profile 时 Compose MUST 发布 Prometheus 和 Grafana 的本地入口端口
 - **AND** Compose MUST NOT 发布 `19090:9090`
 - **AND** Compose MUST NOT 发布 `6060:6060`
 
@@ -129,6 +141,43 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 - **WHEN** user-service 尚未提供真实入站 gRPC API
 - **THEN** Compose 默认 MUST 设置 `AEGISCORE_SERVER_GRPC_ENABLED=false`
 - **AND** Compose MUST NOT 为 user-service 发布宿主 gRPC 端口
+
+### Requirement: Compose Nacos 就绪与管理员初始化
+
+本地 Compose MUST 使用 Nacos 3.x readiness 接口判断 Nacos 是否可供依赖任务使用。配置发布任务 MUST 在管理员凭据初始化或校验成功后启动；已有管理员密码 MUST NOT 被初始化任务重置。
+
+#### Scenario: 新数据卷首次启动
+
+- **WHEN** Nacos 已就绪且数据卷尚无管理员用户
+- **THEN** Compose MUST 使用 `NACOS_PASSWORD` 初始化 `nacos` 管理员并验证登录
+- **AND** 两个 Nacos 配置发布任务 MUST 在初始化成功后运行
+
+#### Scenario: 已有管理员数据卷
+
+- **WHEN** Nacos 数据卷已有管理员用户
+- **THEN** Compose MUST 使用配置的凭据验证登录并保持原密码不变
+- **AND** 凭据不匹配时配置发布任务 MUST NOT 启动
+
+#### Scenario: Nacos 尚未就绪
+
+- **WHEN** Nacos readiness 接口未返回成功状态
+- **THEN** Compose MUST NOT 启动管理员初始化和配置发布任务
+
+### Requirement: Go 1.27 工具链一致性
+
+仓库 MUST 使用 Go 1.27.4 作为统一构建工具链版本；workspace、全部一方 Go module、CI workflow、Docker builder 和现行文档 MUST 保持版本一致。UUID 类型迁移后的 Ent 生成物 MUST 与 schema 一致，PostgreSQL UUID 列 MUST 继续使用数据库 `uuid` 类型。
+
+#### Scenario: 仓库与 CI 使用一致版本
+
+- **WHEN** 执行仓库架构检查或 CI 构建
+- **THEN** `go.work`、`common`、`user-service`、`tools/openapi-convert`、`tools/nacos-config-seed`、CI workflow 和 Docker builder MUST 指向 Go 1.27.4
+- **AND** 架构版本检查及其 fixture MUST 覆盖全部四个 module，并能发现版本不一致
+
+#### Scenario: UUID 持久化结构不漂移
+
+- **WHEN** 从 Ent schema 重新生成客户端并比较 Atlas 迁移状态
+- **THEN** Ent 生成代码 MUST 使用标准库 UUID 的可读写映射，现有 PostgreSQL UUID 列 MUST 保持 `uuid` 类型
+- **AND** 仅因 Go UUID 类型切换 MUST NOT 产生 SQL 结构变更或空 migration
 
 ### Requirement: 独立本地 Nacos 配置目录与双初始化服务
 

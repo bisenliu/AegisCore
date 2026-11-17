@@ -155,8 +155,8 @@ Retained/Refactored：保留原子创建、共享 identity 状态、UUID 查询�
 
 ## 6. 保留的实现缺口与后续风险
 
-- Helm 不可变镜像 Requirement 仍要求生产使用 digest 或 `sha-<commit>` 等不可变引用，但当前 helper 只拒绝空值和 `latest`。这是实现门禁缺口，不通过弱化规格掩盖，需单独 change 修复。
-- outbox delivered event 当前没有 retention/purge 稳定边界。代码和既有产品行为未定义该策略，本次审计不擅自新增；若数据库增长成为运行风险，应创建独立 OpenSpec change。
+- Helm 不可变镜像 Requirement 已由 `aegiscore-user-service.image` helper 落地：生产 `image.ref` 只接受 `repository@sha256:<64hex>` 或 `sha-<40hex>` tag，空值、`latest` 和其他可变 tag 会被拒绝。
+- outbox delivered event 的 retention/purge 缺口已随 RBAC transaction outbox 移除而消失；当前同步以 PostgreSQL revision 和 watcher 补偿为准，不再保留 outbox event。
 
 ## 7. 精简后的完整规格索引
 
