@@ -27,7 +27,7 @@ const (
 //	  -config-dir deployments/nacos/local-docker
 //
 // Compose 内部服务配置使用 deployments/nacos/local-docker 和 namespace loca-docker；
-// 正常本地启动优先让 docker compose 的 nacos-init-host/nacos-init-docker 服务自动 seed。
+// 本地默认 up 不自动 seed；Nacos 就绪后执行 make local-init，或显式 run --rm nacos-init-host/nacos-init-docker。
 func main() {
 	os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
 }

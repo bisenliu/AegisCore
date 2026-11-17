@@ -96,7 +96,7 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 
 ### Requirement: Compose 本地编排与时区一致性
 
-系统 MUST 提供可从仓库根目录运行的本地 Compose 编排，默认启动 PostgreSQL、Redis、Nacos、Jaeger 和 user-service，并通过 `observability` profile 按需启动 Prometheus 和 Grafana；缺少必填 secret 时 MUST 提前失败。常驻服务与一次性任务 MUST 显式使用 `TZ=Asia/Shanghai`；端口 MUST 只暴露当前真实入口。
+系统 MUST 提供可从仓库根目录运行的本地 Compose 编排，默认启动 PostgreSQL、Redis、Nacos、Jaeger 和 user-service，并通过 `observability` profile 按需启动 Prometheus 和 Grafana。Nacos 管理员初始化、配置发布和 RBAC seed MUST 属于 `init` profile，由显式 `run --rm` 或 `make local-init` 执行，MUST NOT 进入默认 `up`。缺少必填 secret 时 MUST 提前失败。常驻服务与一次性任务 MUST 显式使用 `TZ=Asia/Shanghai`；端口 MUST 只暴露当前真实入口。
 
 #### Scenario: 全部 Compose 服务声明时区
 
@@ -107,7 +107,7 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 #### Scenario: 默认与按需观测服务
 
 - **WHEN** 不启用 profile 启动本地 Compose
-- **THEN** Compose MUST 启动核心依赖、Jaeger 和 user-service，MUST NOT 启动 Prometheus 或 Grafana
+- **THEN** Compose MUST 启动核心依赖、Jaeger 和 user-service，MUST NOT 启动 Prometheus、Grafana 或 `init` profile 中的一次性任务
 - **WHEN** 启用 `observability` profile 启动本地 Compose
 - **THEN** Compose MUST 同时提供 Prometheus 和 Grafana，并沿用各自原有的依赖、配置、数据卷和本地端口
 
@@ -144,7 +144,7 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 
 ### Requirement: Compose Nacos 就绪与管理员初始化
 
-本地 Compose MUST 使用 Nacos 3.x readiness 接口判断 Nacos 是否可供依赖任务使用。配置发布任务 MUST 在管理员凭据初始化或校验成功后启动；已有管理员密码 MUST NOT 被初始化任务重置。
+本地 Compose MUST 使用 Nacos 3.x readiness 接口判断 Nacos 是否可供显式初始化任务使用。管理员初始化和配置发布 MUST 通过 `init` profile 的 `run --rm` 执行，MUST NOT 由默认 `up` 自动启动。配置发布 MUST 在管理员凭据初始化或校验成功后执行；已有管理员密码 MUST NOT 被初始化任务重置。
 
 #### Scenario: 新数据卷首次启动
 
@@ -161,7 +161,7 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 #### Scenario: Nacos 尚未就绪
 
 - **WHEN** Nacos readiness 接口未返回成功状态
-- **THEN** Compose MUST NOT 启动管理员初始化和配置发布任务
+- **THEN** 显式执行的管理员初始化和配置发布任务 MUST 失败，MUST NOT 写入管理员或配置
 
 ### Requirement: Go 1.27 工具链一致性
 
@@ -193,11 +193,12 @@ user-service 镜像 MUST 使用 BuildKit、不可变基础镜像、只读 Go mod
 
 #### Scenario: 两个单目标初始化服务
 
-- **WHEN** Compose 启动本地 Nacos 配置初始化
+- **WHEN** 运维显式执行本地 Nacos 配置初始化
 - **THEN** `nacos-init-host` MUST 只读挂载 `deployments/nacos/local-host/` 并发布到 `loca-host`
 - **AND** `nacos-init-docker` MUST 只读挂载 `deployments/nacos/local-docker/` 并发布到 `loca-docker`
 - **AND** 两个服务 MUST 使用 `AEGISCORE` group 和 `base.yaml`、`resources.yaml`、`user-service.yaml` 三 dataId
-- **AND** Docker user-service 与 RBAC seed MUST 在 `nacos-init-docker` 成功后启动，MUST NOT 依赖主机配置完成发布
+- **AND** 两个服务和 RBAC seed MUST 位于 `init` profile，成功执行 MUST 使用 `run --rm` 删除容器
+- **AND** Docker user-service MUST 选择 `loca-docker`，RBAC seed MUST 在配置发布成功后显式执行，二者 MUST NOT 依赖主机配置完成发布，也 MUST NOT 依赖已退出初始化容器作为启动门禁
 
 #### Scenario: seed 工具保持单目录单 Namespace 契约
 

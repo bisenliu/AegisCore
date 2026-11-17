@@ -207,6 +207,15 @@ ID 约束：
 
 Compose 文档位于 `deployments/compose/README.md`。通用观测文档位于 `deployments/observability/README.md`。
 
+本地 `up` 只启动可复用基础设施和常驻服务。Nacos 管理员初始化、两套配置发布和 RBAC seed 必须在 Nacos readiness 通过、且 SQL migration 已确认后显式执行：
+
+```bash
+docker compose -f deployments/compose/docker-compose.yml up -d --build
+make local-init
+```
+
+生产不使用 Compose 初始化。发布顺序是确认 SQL migration、执行 release 唯一 RBAC seed Job、等待成功，再滚动不包含该 Job 的 Deployment。Job 成功后保留 24 小时。
+
 生成 Compose Grafana dashboard：
 
 ```bash

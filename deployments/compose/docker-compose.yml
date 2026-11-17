@@ -1,41 +1,59 @@
-# 常用命令（在仓库根目录执行）：
+# 本地框架边界：up 只启动可复用基础设施和常驻服务。Nacos 管理员初始化、配置发布和 RBAC seed 是一次性发布动作，不进入默认 up。
 # 安全边界：宿主发布端口只绑定 127.0.0.1；不要改回短端口语法，避免暴露到全部网卡。
 # 本地默认凭据：PostgreSQL=aegiscore-local-postgres，Redis=aegiscore-local-redis，Nacos=nacos/nacos，Grafana=admin/aegiscore-local-grafana。
 # 若已有旧数据卷保存了无认证状态或旧密码，应执行文件底部的 down -v 命令重新初始化本地依赖。
-# 校验配置：
-#   docker compose -f deployments/compose/docker-compose.yml config --quiet
-# 构建本地镜像；--pull 会检查并拉取更新的基础镜像：
-#   docker compose -f deployments/compose/docker-compose.yml build --pull
-# 启动默认服务；配置或源码变化时添加 --build：
-#   docker compose -f deployments/compose/docker-compose.yml up -d
-#   docker compose -f deployments/compose/docker-compose.yml up -d --build
-# 按需启动 Prometheus 和 Grafana：
-#   docker compose -f deployments/compose/docker-compose.yml --profile observability up -d
-# 查看服务状态和日志：
+#
+# 本地详细步骤（在仓库根目录执行）：
+# 1. 校验编排：
+#      docker compose -f deployments/compose/docker-compose.yml config --quiet
+# 2. 构建本地镜像；--pull 会检查并拉取更新的基础镜像：
+#      docker compose -f deployments/compose/docker-compose.yml build --pull
+# 3. 启动常驻服务。默认包含 PostgreSQL、Redis、Nacos、Jaeger 和 user-service，不包含 init 任务：
+#      docker compose -f deployments/compose/docker-compose.yml up -d
+#    配置或源码变化时：
+#      docker compose -f deployments/compose/docker-compose.yml up -d --build
+# 4. 等待 Nacos readiness 通过后，显式初始化新数据卷管理员并验证登录。已有管理员只校验，不会重置密码：
+#      docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-auth
+# 5. 凭据校验成功后，分别发布主机和容器配置。成功容器由 --rm 删除，失败容器保留日志：
+#      docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-host
+#      docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-docker
+# 6. 配置发布后重启容器内 user-service，使其读取 loca-docker：
+#      docker compose -f deployments/compose/docker-compose.yml restart user-service
+# 7. 确认 SQL migration 已由 DBA 工单或受控平台执行后，显式执行 RBAC seed：
+#      docker compose -f deployments/compose/docker-compose.yml --profile init run --rm rbac-seed
+#    或从仓库根目录一次执行第 4 到第 7 步：
+#      make local-init
+# 8. 全新数据库在 migration 和 RBAC seed 成功后，一次性创建初始超级管理员：
+#      read -s "ADMIN_BOOTSTRAP_PASSWORD?请输入临时密码: " && echo
+#      export ADMIN_BOOTSTRAP_PASSWORD
+#      docker compose -f deployments/compose/docker-compose.yml run --rm \
+#        -e ADMIN_BOOTSTRAP_PASSWORD \
+#        user-service rbac bootstrap-super-admin \
+#        --username admin --nickname "Administrator"
+#      unset ADMIN_BOOTSTRAP_PASSWORD
+#      docker compose -f deployments/compose/docker-compose.yml restart user-service
+# 9. 需要 Prometheus 和 Grafana 时，再启动观测 profile：
+#      docker compose -f deployments/compose/docker-compose.yml --profile observability up -d
+#
+# 生产发布不使用本文件，顺序固定为：
+# 1. 受控平台确认本 release 对应 SQL migration 已执行。
+# 2. 使用同一不可变镜像 digest 创建 release 唯一 RBAC seed Job，并等待成功。
+# 3. Job 由 ttlSecondsAfterFinished 保留 24 小时后删除；失败 Job 不自动删除。
+# 4. 应用不包含 seed Job 的 Deployment，并等待 rollout。
+#
+# 查看、停止和清理：
 #   docker compose -f deployments/compose/docker-compose.yml ps -a
 #   docker compose -f deployments/compose/docker-compose.yml logs -f --tail=200
-#   docker compose -f deployments/compose/docker-compose.yml logs -f nacos nacos-init-host nacos-init-docker user-service
-# 停止、恢复或重启现有容器（保留容器和数据卷）：
+#   docker compose -f deployments/compose/docker-compose.yml logs -f nacos user-service
 #   docker compose -f deployments/compose/docker-compose.yml stop
 #   docker compose -f deployments/compose/docker-compose.yml start
 #   docker compose -f deployments/compose/docker-compose.yml restart
-# 手动执行一次 RBAC seed：
-#   docker compose -f deployments/compose/docker-compose.yml --profile seed run --rm rbac-seed
-# migration 和 RBAC seed 完成后，一次性创建初始超级管理员：
-#   read -s "ADMIN_BOOTSTRAP_PASSWORD?请输入临时密码: " && echo
-#   export ADMIN_BOOTSTRAP_PASSWORD
-#   docker compose -f deployments/compose/docker-compose.yml run --rm \
-#     -e ADMIN_BOOTSTRAP_PASSWORD \
-#     user-service rbac bootstrap-super-admin \
-#     --username admin --nickname "Administrator"
-#   unset ADMIN_BOOTSTRAP_PASSWORD
-#   docker compose -f deployments/compose/docker-compose.yml restart user-service
 # 删除容器和网络但保留数据卷：
-#   docker compose -f deployments/compose/docker-compose.yml down --remove-orphans
+#   docker compose -f deployments/compose/docker-compose.yml --profile init --profile observability down --remove-orphans
 # 删除本仓库构建的镜像（应先执行 down）：
 #   docker image rm aegiscore-user-service:latest aegiscore-nacos:latest aegiscore-nacos-config-seed:latest aegiscore-jaeger:latest
 # 危险：删除容器、网络及 PostgreSQL、Redis、Nacos、Prometheus、Grafana 的全部本地数据卷：
-#   docker compose -f deployments/compose/docker-compose.yml down -v --remove-orphans
+#   docker compose -f deployments/compose/docker-compose.yml --profile init --profile observability down -v --remove-orphans
 
 name: aegiscore-local
 
@@ -67,21 +85,22 @@ x-nacos-seed-env: &nacos-seed-env
   AEGISCORE_NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
 
 x-nacos-seed-service: &nacos-seed-service
+  profiles:
+    - init
   build: *nacos-config-seed-build
   image: aegiscore-nacos-config-seed:latest
+  pull_policy: never
   command:
     - --config-dir
     - /nacos/config
   depends_on:
-    nacos-init-auth:
-      condition: service_completed_successfully
+    nacos:
+      condition: service_healthy
   networks:
     - aegiscore-runtime
   restart: "no"
 
 x-user-service-dependencies: &user-service-dependencies
-  nacos-init-docker:
-    condition: service_completed_successfully
   postgres:
     condition: service_healthy
   redis:
@@ -220,6 +239,8 @@ services:
     restart: unless-stopped
 
   nacos-init-auth:
+    profiles:
+      - init
     image: aegiscore-nacos:latest
     pull_policy: never
     entrypoint: ["/bin/sh", "-ec"]
@@ -276,7 +297,7 @@ services:
 
   rbac-seed:
     profiles:
-      - seed
+      - init
     image: aegiscore-user-service:latest
     pull_policy: never
     command:

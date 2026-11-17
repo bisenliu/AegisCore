@@ -28,6 +28,7 @@ type deploymentComposeDocument struct {
 		Environment map[string]string `yaml:"environment"`
 		Ports       []string          `yaml:"ports"`
 		Volumes     []string          `yaml:"volumes"`
+		Profiles    []string          `yaml:"profiles"`
 		Restart     string            `yaml:"restart"`
 		DependsOn   map[string]struct {
 			Condition string `yaml:"condition"`
@@ -113,6 +114,7 @@ func TestRepositoryDeploymentConfigConsistency(t *testing.T) {
 	require.Equal(t, "AEGISCORE", hostInit.Environment["AEGISCORE_NACOS_GROUP"])
 	require.Empty(t, hostInit.Environment["AEGISCORE_NACOS_DATA_IDS"], "Compose 应使用运行时默认三文档顺序")
 	require.Equal(t, "no", hostInit.Restart)
+	require.Equal(t, []string{"init"}, hostInit.Profiles, "Nacos 主机配置发布必须是显式 init 步骤")
 
 	dockerInit, ok := compose.Services["nacos-init-docker"]
 	require.True(t, ok, "compose nacos-init-docker service is required")
@@ -121,6 +123,7 @@ func TestRepositoryDeploymentConfigConsistency(t *testing.T) {
 	require.Equal(t, "AEGISCORE", dockerInit.Environment["AEGISCORE_NACOS_GROUP"])
 	require.Empty(t, dockerInit.Environment["AEGISCORE_NACOS_DATA_IDS"], "Compose 应使用运行时默认三文档顺序")
 	require.Equal(t, "no", dockerInit.Restart)
+	require.Equal(t, []string{"init"}, dockerInit.Profiles, "Nacos 容器配置发布必须是显式 init 步骤")
 	requireDeploymentConfigDocuments(t, filepath.Join(nacosDir, "local-docker"))
 	requireDeploymentConfigDocuments(t, filepath.Join(nacosDir, "local-host"))
 
@@ -129,8 +132,15 @@ func TestRepositoryDeploymentConfigConsistency(t *testing.T) {
 		require.True(t, exists, "compose %s service is required", serviceName)
 		require.Equal(t, "loca-docker", service.Environment["AEGISCORE_NACOS_NAMESPACE"])
 		require.Empty(t, service.Environment["AEGISCORE_NACOS_DATA_IDS"], "Compose 应使用运行时默认三文档顺序")
-		require.Equal(t, "service_completed_successfully", service.DependsOn["nacos-init-docker"].Condition)
+		_, dependsOnInit := service.DependsOn["nacos-init-docker"]
+		require.False(t, dependsOnInit, "常驻服务不得依赖已退出的一次性初始化容器")
 	}
+	authInit, ok := compose.Services["nacos-init-auth"]
+	require.True(t, ok, "compose nacos-init-auth service is required")
+	require.Equal(t, []string{"init"}, authInit.Profiles, "Nacos 管理员初始化必须是显式 init 步骤")
+	seed, ok := compose.Services["rbac-seed"]
+	require.True(t, ok)
+	require.Equal(t, []string{"init"}, seed.Profiles, "RBAC seed 必须是显式 init 步骤")
 	hostResources := readDeploymentYAML[deploymentResourcesDocument](t, filepath.Join(nacosDir, "local-host", "resources.yaml"))
 	dockerResources := readDeploymentYAML[deploymentResourcesDocument](t, resourcesPath)
 	hostBase := readDeploymentYAML[deploymentBaseDocument](t, filepath.Join(nacosDir, "local-host", "base.yaml"))

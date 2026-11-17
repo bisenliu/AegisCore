@@ -4,7 +4,7 @@
 
 当前提供可直接运行的本地 Compose 编排：
 
-- `docker-compose.yml`：默认启动 PostgreSQL、Redis、Nacos、Jaeger OTLP 和本地用户服务；Prometheus 和 Grafana 由 `observability` profile 按需启动。`deployments/docker/nacos.Dockerfile` 基于 `nacos/nacos-server:latest`，自行固定 standalone、`microservice` 功能模式和官方容器启动入口，Compose 不覆盖 Nacos 启动命令，RBAC seed 作为 `seed` profile 下的一次性任务按需手动执行。
+- `docker-compose.yml`：默认启动 PostgreSQL、Redis、Nacos、Jaeger OTLP 和本地用户服务；Prometheus 和 Grafana 由 `observability` profile 按需启动。Nacos 管理员初始化、两套配置发布和 RBAC seed 位于 `init` profile，只能显式 `run --rm`。`deployments/docker/nacos.Dockerfile` 基于 `nacos/nacos-server:latest`，自行固定 standalone、`microservice` 功能模式和官方容器启动入口，Compose 不覆盖 Nacos 启动命令。
 - `deployments/docker/jaeger.Dockerfile`：保留 `jaegertracing/all-in-one:latest` 的入口与功能，只从仓库固定 digest 的 Distroless runtime 复制 `Asia/Shanghai` zoneinfo，避免 Jaeger 1.76 基础镜像缺少时区数据时忽略 `TZ`。
 - `../nacos/`：Git 中唯一的本地 Nacos 配置来源，`local-host/` 与 `local-docker/` 分别保存三份完整配置，由 `tools/nacos-config-seed` 通过 Nacos v3 Admin API 发布。
 - `prometheus/prometheus.yml`：抓取用户服务 `/metrics`，并加载 `deployments/observability/prometheus/user-service-alerts.yaml`。
@@ -23,11 +23,29 @@ make compose-dashboard-generate
 make compose-dashboard-check
 ```
 
-从仓库根目录启动默认服务并构建本地镜像：
+从仓库根目录启动常驻服务并构建本地镜像。这一步不执行 Nacos 初始化或 RBAC seed：
 
 ```bash
 docker compose -f deployments/compose/docker-compose.yml up -d --build
 ```
+
+Nacos readiness 通过后，显式执行本地初始化。成功容器自动删除，失败容器保留日志：
+
+```bash
+make local-init
+```
+
+等价的分步命令是：
+
+```bash
+docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-auth
+docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-host
+docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-docker
+docker compose -f deployments/compose/docker-compose.yml restart user-service
+docker compose -f deployments/compose/docker-compose.yml --profile init run --rm rbac-seed
+```
+
+`nacos-init-auth` 只在新数据卷没有管理员时初始化密码，已有管理员只验证且不重置。两个配置任务分别发布 `loca-host` 和 `loca-docker`。RBAC seed 复用 user-service 镜像，执行前必须确认 SQL migration 已由 DBA 工单或受控平台完成。
 
 需要 Prometheus 和 Grafana 时，再启动观测 profile：
 
@@ -35,20 +53,16 @@ docker compose -f deployments/compose/docker-compose.yml up -d --build
 docker compose -f deployments/compose/docker-compose.yml --profile observability up -d
 ```
 
-数据库 SQL migration 已受控执行且 user-service 镜像已通过上述启动命令构建后，可按需单独执行 RBAC seed。seed 复用同一个本地镜像，不会单独构建：
-
-```bash
-docker compose -f deployments/compose/docker-compose.yml --profile seed run --rm rbac-seed
-```
-
-Compose 先通过 `nacos-init-auth` 一次性任务初始化新 Nacos 数据卷的管理员密码，再通过 `nacos-init-host` 与 `nacos-init-docker` 分别将 `deployments/nacos/local-host/` 和 `deployments/nacos/local-docker/` 发布到 Nacos `loca-host/AEGISCORE` 与 `loca-docker/AEGISCORE`。容器内 user-service 与 RBAC seed 固定选择 `loca-docker`，主机进程选择 `loca-host`；两端均按默认顺序加载 `base.yaml`、`resources.yaml`、`user-service.yaml`。user-service 只通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` 选择配置来源，不挂载本地完整配置文件。日志只写 stdout/stderr；本地 tracing 默认启用并固定通过 OTLP gRPC 连接 `jaeger:4317`。本地 tracing 同时保留 Ent 实体级 `ent.query` / `ent.mutation` span 和 PostgreSQL `otelsql` SQL/driver 级 span，用于本地完整链路诊断；该组合会提供更多细节，也会让 trace 更噪。
+`nacos-init-host` 与 `nacos-init-docker` 分别将 `deployments/nacos/local-host/` 和 `deployments/nacos/local-docker/` 发布到 Nacos `loca-host/AEGISCORE` 与 `loca-docker/AEGISCORE`。容器内 user-service 与 RBAC seed 固定选择 `loca-docker`，主机进程选择 `loca-host`；两端均按默认顺序加载 `base.yaml`、`resources.yaml`、`user-service.yaml`。user-service 只通过 `AEGISCORE_SERVICE` 和 `AEGISCORE_NACOS_*` 选择配置来源，不挂载本地完整配置文件。日志只写 stdout/stderr；本地 tracing 默认启用并固定通过 OTLP gRPC 连接 `jaeger:4317`。本地 tracing 同时保留 Ent 实体级 `ent.query` / `ent.mutation` span 和 PostgreSQL `otelsql` SQL/driver 级 span，用于本地完整链路诊断；该组合会提供更多细节，也会让 trace 更噪。
 
 全新 PostgreSQL volume 会显式创建 `postgres` 用户和 `aegiscore` 数据库。Compose healthcheck、`local-docker/resources.yaml` 与真实指标压测脚本都使用同一组用户和数据库名称，避免健康检查通过后服务仍因目标数据库不存在而启动失败。
 
 需要在主机直接运行 user-service 时，只启动依赖和初始化任务：
 
 ```bash
-docker compose -f deployments/compose/docker-compose.yml up -d postgres redis nacos nacos-init-host nacos-init-docker jaeger
+docker compose -f deployments/compose/docker-compose.yml up -d postgres redis nacos jaeger
+docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-auth
+docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-host
 export AEGISCORE_SERVICE=user-service
 export AEGISCORE_NACOS_ADDR=127.0.0.1:8848
 export AEGISCORE_NACOS_NAMESPACE=loca-host

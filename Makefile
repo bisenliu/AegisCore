@@ -16,7 +16,7 @@ export ADMIN_BOOTSTRAP_PASSWORD
 .PHONY: user-service-build user-service-run user-service-test user-service-test-containers user-service-rbac-sync-race-test user-service-lint user-service-verify user-service-architecture-lint
 .PHONY: user-service-seed-rbac user-service-bootstrap-super-admin user-service-image-verify
 .PHONY: user-service-generate user-service-migrate-diff user-service-migrate-validate user-service-openapi-generate user-service-fxgraph-generate user-service-fxgraph-check
-.PHONY: compose-dashboard-generate compose-dashboard-check delivery-verify github-actions-pins-check
+.PHONY: compose-dashboard-generate compose-dashboard-check local-init delivery-verify github-actions-pins-check
 
 help: ## 查看可用命令。
 	@awk 'BEGIN {FS = ":.*##"; printf "可用命令：\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-36s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -137,6 +137,13 @@ compose-dashboard-generate: ## 从通用观测 dashboard 生成 Compose Grafana 
 
 compose-dashboard-check: ## 检查 Compose Grafana dashboard 是否已生成且无 drift。
 	./deployments/compose/scripts/generate-grafana-dashboard.sh --check
+
+local-init: ## 显式执行本地 Nacos 管理员校验、两套配置发布和 RBAC seed；成功容器自动删除。
+	docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-auth
+	docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-host
+	docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-docker
+	docker compose -f deployments/compose/docker-compose.yml restart user-service
+	docker compose -f deployments/compose/docker-compose.yml --profile init run --rm rbac-seed
 
 delivery-verify: ## 校验 Helm、Kustomize、Compose、Prometheus 和 dashboard 交付资产。
 	./scripts/verify-delivery-assets.sh

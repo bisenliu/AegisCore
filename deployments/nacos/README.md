@@ -25,7 +25,14 @@ deployments/nacos/
 
 ## 发布
 
-Compose 使用两个一次性初始化任务分别发布两个目录。也可以在仓库根目录手动发布：
+Compose 不在默认 `up` 中发布配置。常驻 Nacos 就绪后，使用 `make local-init` 或以下显式命令发布：
+
+```bash
+docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-host
+docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-docker
+```
+
+也可以在仓库根目录通过本机进程发布：
 
 ```bash
 make tools-nacos-config-seed-local-host
