@@ -29,6 +29,8 @@ func BindOrAbort(validator *validation.Validator, c *gin.Context, dst any, binde
 		if len(failure.Fields) > 0 {
 			fields = append(fields, zap.Any("errors", failure.Fields))
 		}
+		// 请求解析失败或参数校验未通过属于客户端输入问题（HTTP 400/422），系统已安全拦截，并非服务端内部故障。
+		// 此处使用 Warn 级别记录具体的校验失败字段与路由，便于前后端联调排查和异常流量感知；严禁记录为 Error 级别，避免将用户输入手误或外部扫描探测误当成系统故障触发线上报警风暴。
 		logger.Warn(c.Request.Context(), "invalid request", fields...)
 		if failure.IsValidation {
 			// 若是表单或字段规则未通过，则返回详细的字段错误清单（如提示具体哪个字段超长或为空）；若是请求解析失败等通用问题，则返回标准错误提示。

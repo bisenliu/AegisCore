@@ -162,6 +162,17 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 - **THEN** access log MUST 记录稳定字段，recovery MUST 记录错误并返回统一响应，span MUST 标记错误
 - **AND** 日志 MUST NOT 包含密码、token、Cookie、Authorization、DSN、SQL 参数或完整 Redis key
 
+#### Scenario: 生产日志级别划分与异常诊断规范
+
+- **WHEN** 系统记录运行日志与各 feature 业务应用日志
+- **THEN** 系统 MUST 严格遵守 DEBUG、INFO、WARN、ERROR 划分规范，日志 message MUST 使用英文，日志字段名 MUST 使用稳定英文 `snake_case`
+- **AND** DEBUG 级别 MUST 仅用于细粒度诊断、底层高频执行详情（如单条 SQL 完成）或防刷限流拦截，生产环境 MUST NOT 输出过多调试日志
+- **AND** INFO 级别 MUST 用于生命周期事件、配置加载摘要、策略重载生效及正常业务流转（如强制改密登录等合法安全流转），MUST NOT 将正常业务流程记录为告警（WARN）或错误（ERROR）
+- **AND** WARN 级别 MUST 用于输入校验失败、业务鉴权拦截、资源冲突、任务执行重叠被跳过、并发配额耗尽被跳过、以及有兜底补偿机制的轻量级异步操作失败；系统 MUST NOT 将任务堆积卡顿或配额耗尽等关键异常降级为普通 INFO
+- **AND** ERROR 级别 MUST 仅用于基础设施故障、Panic 恢复、事务中断等导致核心流程无法完成的系统级严重异常；关键错误与 Panic 必须记录完整的调用堆栈（stacktrace）与业务排查上下文
+- **AND** 系统 MUST 保持异常处理层级一致，best-effort 异步操作失败 MUST NOT 作为带调用栈的系统级 ERROR 触发监控虚警，且同一错误链条 MUST 避免多层重复记录
+- **AND** 所有级别的日志 MUST 严格遵循脱敏规范，MUST NOT 记录密码明文、完整凭证或未经清洗的敏感数据
+
 #### Scenario: App logger 与 Fx event 生命周期
 
 - **WHEN** 正式 App 启停或多个 App 并行运行
