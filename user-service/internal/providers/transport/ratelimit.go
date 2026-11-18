@@ -65,6 +65,7 @@ func (l *APIRateLimiters) Close() {
 	}
 }
 
+// newLocalRateLimiter 创建基于本地内存的高频访问限制器，防止恶意刷接口。
 func newLocalRateLimiter(cfg serviceconfig.RateLimitPolicyConfig, shards int) (*commonmw.LocalRateLimiter, error) {
 	return commonmw.NewLocalRateLimiter(commonmw.LocalRateLimiterOptions{
 		Rate:            rate.Limit(cfg.RatePerSecond),

@@ -10,6 +10,7 @@ import (
 	entuserrole "github.com/aegiscore/user-service/internal/persistence/ent/userrole"
 )
 
+// loadRolesForUser 从数据库中查询某位用户当前拥有的所有有效角色列表。
 func (r *entUserRoleResolver) loadRolesForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	var rows []struct {
 		RoleID string `json:"role_id,omitempty"`

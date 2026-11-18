@@ -18,7 +18,7 @@ import (
 // 基础运行时负责配置和进程初始化，资源负责外部连接与有状态运行组件，横切能力负责安全、校验和可观测性；
 // Feature 基础设施负责实现 application port，Feature 应用负责用例与业务编排，传输负责协议入口，生命周期负责主动初始化或启停注册，开发工具仅服务构图与诊断。
 
-// WiringModule 组装 user-service 无运行时激活副作用的 provider graph。
+// WiringModule 汇总声明整个用户服务所需的所有组件及其依赖关系（只声明关系，不立即启动后台任务或发起网络请求）。
 var WiringModule = fx.Module("aegiscore-user-service-wiring",
 	// Fx 分类：横切能力 - 跨 feature 的输入校验能力。
 	validation.Module,
@@ -37,7 +37,7 @@ var WiringModule = fx.Module("aegiscore-user-service-wiring",
 	),
 )
 
-// RuntimeModule 注册 user-service 正式运行时需要主动执行的初始化、路由和 lifecycle。
+// RuntimeModule 注册服务在启动运行时需要主动执行的初始化操作、路由监听与生命周期启停事件。
 var RuntimeModule = fx.Module("aegiscore-user-service-runtime",
 	// Fx 分类：基础运行时 - 跨 feature 的进程时区初始化。
 	fx.Invoke(InitProcessRuntime),
@@ -49,7 +49,7 @@ var RuntimeModule = fx.Module("aegiscore-user-service-runtime",
 	fx.Invoke(registerRuntimeServers),
 )
 
-// registerRuntimeServers 强制解析运行时 server，使其构造函数注册 lifecycle hook。
+// registerRuntimeServers 触发 HTTP 服务与性能诊断服务的初始化，使它们随系统生命周期一同启动和关闭。
 func registerRuntimeServers(_ *HTTPRuntime, _ *PprofRuntime) {}
 
 // InitProcessRuntime 初始化 user-service 拥有的进程级 runtime 状态。
@@ -57,7 +57,7 @@ func InitProcessRuntime(settings serviceconfig.TimezoneSettings) error {
 	return commontz.Init(settings.Name)
 }
 
-// AppModule 组装 user-service 顶层模块、服务级 provider 和 HTTP server 生命周期。
+// AppModule 汇总用户服务的全部组件装配与运行时启动逻辑，作为服务启动的唯一总入口。
 var AppModule = fx.Module("aegiscore-user-service",
 	WiringModule,
 	RuntimeModule,

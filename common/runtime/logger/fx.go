@@ -36,6 +36,7 @@ func NewFxEventLogger(log *zap.Logger) fxevent.Logger {
 	return fxLog
 }
 
+// isIgnorableSyncError 判断日志立即保存到磁盘时发生的错误是否可以安全忽略（例如在某些操作系统或控制台管道关闭时属于常见情况）。
 func isIgnorableSyncError(err error) bool {
 	return errors.Is(err, syscall.EBADF) || errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTTY)
 }

@@ -63,6 +63,7 @@ func StrictJSONBinder(c *gin.Context, dst any) error {
 	return jsonBinder(c, dst, true)
 }
 
+// jsonBinder 读取并解析用户提交的 JSON 请求数据；如果内容为空、格式损坏或包含未允许的未知项，则直接拦截并报错。
 func jsonBinder(c *gin.Context, dst any, disallowUnknownFields bool) error {
 	if c.Request.Body == nil || c.Request.ContentLength == 0 {
 		return &validation.Error{Message: validation.ErrEmptyRequestBody, Kind: contracterrors.KindBadRequest, Reason: contracterrors.ReasonEmptyRequestBody, Code: contracterrors.CodeBadRequest}
@@ -88,6 +89,7 @@ func jsonBinder(c *gin.Context, dst any, disallowUnknownFields bool) error {
 	return nil
 }
 
+// normalizeJSONDecodeError 将数据解析过程中的底层报错转换为用户友好的提示（例如请求体积超限或内容格式错误），避免泄露系统代码细节。
 func normalizeJSONDecodeError(err error) error {
 	var maxBytesErr *http.MaxBytesError
 	if errors.As(err, &maxBytesErr) {

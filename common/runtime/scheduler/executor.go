@@ -18,15 +18,14 @@ type invocation struct {
 	duration time.Duration
 }
 
-// handler 是内部带 context/error 语义的执行单元，最终节点调用业务 Task。
+// handler 是调度链条内部的处理函数，贯穿整个执行过程并在最内层调用实际的业务任务。
 type handler func(*invocation) error
 
-// middleware 是不可导出的固定 stage 构造器，调用方不能插入或重排安全关键步骤。
+// middleware 是不可导出的阶段包装函数，确保任务触发、排重、限流、加锁、续租等关键安全步骤按严格顺序执行，防止外部随意打乱执行链条。
 type middleware func(handler) handler
 
-// buildPipeline 在 Add 时构造不可变执行链。
-// resultStage 在调用栈上包住 renewStage，以便续租错误合并后再记录结果；实际前向动作仍按
-// triggered、local、global、lock、task context、renew、started、task 的顺序发生。
+// buildPipeline 在注册任务时构造固定的执行链条。
+// 该链条严格按顺序执行：记录触发 -> 本地防重判断 -> 全局并发检查 -> 分布式加锁 -> 准备任务上下文 -> 自动续租 -> 标记任务开始 -> 执行实际任务 -> 收集执行结果与错误。
 func (s *Scheduler) buildPipeline(localGate chan struct{}) handler {
 	return chain(
 		func(inv *invocation) error {

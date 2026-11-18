@@ -54,6 +54,7 @@ func RegisterUserServiceHTTPRoutes(engine *gin.Engine, params RouteParams) error
 	return nil
 }
 
+// registerV1Routes 挂载系统第一版业务接口（包含登录、权限、角色和用户管理）；普通业务接口必须登录并具备对应权限方可访问。
 func registerV1Routes(engine *gin.Engine, params RouteParams, rateLimitObserver *rateLimitObserver) {
 	v1 := engine.Group("/api/v1")
 
@@ -76,6 +77,7 @@ func registerV1Routes(engine *gin.Engine, params RouteParams, rateLimitObserver 
 	userhttp.RegisterRoutes(authorized.Group("/users"), params.User)
 }
 
+// validateSecurityRouteDependencies 在启动前严密检查用户登录校验、权限判定以及各业务控制器是否均已就绪，缺一不可。
 func validateSecurityRouteDependencies(params RouteParams) error {
 	if params.TokenVersionValidator == nil {
 		return fmt.Errorf("token version validator is required")

@@ -88,6 +88,7 @@ func (c *WorkerpoolCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(c.waiting, prometheus.GaugeValue, float64(stats.Waiting), c.pool)
 }
 
+// boolFloat 将开启/关闭状态（true/false）转换为数字 1 或 0，方便监控系统进行图表绘制。
 func boolFloat(value bool) float64 {
 	if value {
 		return 1

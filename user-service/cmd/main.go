@@ -18,6 +18,7 @@ import (
 	"os"
 )
 
+// main 用户服务进程的总入口，负责解析命令行指令并执行对应的子功能。
 func main() {
 	if err := newRootCommand(defaultRootCommandDependencies()).Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

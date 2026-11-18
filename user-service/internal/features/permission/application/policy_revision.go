@@ -5,6 +5,7 @@ import (
 	"uuid"
 )
 
+// DefaultUserRoleRevisionBatchSize 每次补充同步用户角色变更时的最大读取条数，防止单次查询数据量过大造成数据库卡顿。
 const DefaultUserRoleRevisionBatchSize = 100
 
 // LatestPolicyRevisionSource 提供数据库中已提交的最新 RBAC policy revision。

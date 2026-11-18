@@ -21,13 +21,13 @@ const (
 	defaultRateLimitMessage = "too many requests"
 )
 
-// RateLimitCapacityPolicy 定义本地限流器容量耗尽时新 key 的处理策略。
+// RateLimitCapacityPolicy 定义当被限流的用户/IP 数量达到系统容量上限时，对新来访问者的处理策略。
 type RateLimitCapacityPolicy string
 
 const (
-	// RateLimitCapacityPolicyOverflow 表示新 key 共享分片 overflow token bucket，不创建独立状态。
+	// RateLimitCapacityPolicyOverflow 表示当独立限流名额已满时，让新来的用户共享一个公共的备用限流配额，防止占用过多内存。
 	RateLimitCapacityPolicyOverflow RateLimitCapacityPolicy = "overflow"
-	// RateLimitCapacityPolicyReject 表示容量耗尽时直接拒绝新 key。
+	// RateLimitCapacityPolicyReject 表示当限流名单已满时，直接拒绝任何新的访问者，优先保护系统不被冲垮。
 	RateLimitCapacityPolicyReject RateLimitCapacityPolicy = "reject"
 )
 
@@ -42,12 +42,12 @@ var (
 	ErrRateLimitCapacityRejected = errors.New("rate limit capacity rejected")
 )
 
-// RateLimiter 是 Gin 限流 middleware 消费的最小限流判定接口。
+// RateLimiter 定义接口限流器所需的最核心判定能力：根据传入的标识（如用户 ID 或 IP）判断是否允许本次访问。
 type RateLimiter interface {
 	Allow(key string) (bool, error)
 }
 
-// RateLimitKeyFunc 从 Gin 请求上下文解析限流身份 key。
+// RateLimitKeyFunc 定义从 HTTP 请求中提取限流标识（如客户端 IP 地址、用户 ID 等）的函数类型。
 type RateLimitKeyFunc func(*gin.Context) string
 
 // RateLimitErrorFunc 处理限流器错误，调用方可用于记录日志或 metrics。
@@ -198,6 +198,7 @@ func (l *LocalRateLimiter) Allow(key string) (bool, error) {
 	return allowed, nil
 }
 
+// allowOverflow 当单个访问者的专属访问额度耗尽时，检查是否还可以使用共享的突发备用额度，给偶然突发的高频访问留一定缓冲。
 func (s *rateLimitShard) allowOverflow(now time.Time) bool {
 	if s.overflowLimiter == nil {
 		return false
@@ -238,6 +239,7 @@ func (l *LocalRateLimiter) Close() {
 	})
 }
 
+// runJanitor 在后台定期清理过期的访问频次记录，释放内存空间；收到服务停止通知后自动安全退出。
 func (l *LocalRateLimiter) runJanitor() {
 	ticker := time.NewTicker(l.cleanupInterval)
 	defer ticker.Stop()
@@ -251,7 +253,7 @@ func (l *LocalRateLimiter) runJanitor() {
 	}
 }
 
-// Cleanup 删除超过 key TTL 未访问的 limiter。测试可直接调用该方法验证清理语义。
+// Cleanup 清理所有长时间未访问的限流记录，回收内存空间；单元测试可显式调用此方法验证清理逻辑。
 func (l *LocalRateLimiter) Cleanup(now time.Time) {
 	if l == nil || l.isClosed() {
 		return
@@ -261,6 +263,7 @@ func (l *LocalRateLimiter) Cleanup(now time.Time) {
 	}
 }
 
+// cleanupNextShards 分批清理过期的访问频率记录，避免单次清理过多数据造成系统卡顿。
 func (l *LocalRateLimiter) cleanupNextShards(now time.Time) {
 	if l == nil || l.isClosed() {
 		return
@@ -364,7 +367,7 @@ func RateLimit(options RateLimitOptions) gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			// 限流默认不是认证或授权边界；key 缺失、关闭或内部错误时默认降级放行，由后续 middleware 保持原有语义。
+			// 限流仅用于防护突发高频流量，不负责用户身份认证与权限校验；若限流标识缺失、限流器关闭或发生内部错误，系统默认采取降级放行策略，继续交给后续的认证与权限拦截器进行严格校验。
 			if options.FailClosed {
 				message := strings.TrimSpace(options.Message)
 				if message == "" {

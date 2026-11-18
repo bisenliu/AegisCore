@@ -27,6 +27,7 @@ type entTxStarter struct {
 
 var _ datastore.TransactionStarter[*ent.Tx] = entTxStarter{}
 
+// BeginTransaction 开启数据库写入事务，确保后续多步操作要么全部成功生效，要么全部回滚撤销。
 func (s entTxStarter) BeginTransaction(ctx context.Context) (*ent.Tx, error) {
 	return s.client.Tx(ctx)
 }
@@ -37,12 +38,13 @@ type sqlTxStarter struct {
 
 var _ datastore.TransactionStarter[*sql.Tx] = sqlTxStarter{}
 
+// BeginTransaction 开启底层数据库写入事务。
 func (s sqlTxStarter) BeginTransaction(ctx context.Context) (*sql.Tx, error) {
 	return s.db.BeginTx(ctx, nil)
 }
 
-// transactPolicyChange 将 policy 业务写入和单调 policy revision 原子提交。
-// 返回成功即表示数据库授权事实已持久化；本实例即时 reload 在事务提交后由 application 层触发。
+// transactPolicyChange 将权限规则的业务修改与递增的版本号放在同一个数据库事务中原子提交。
+// 该方法返回成功即代表数据库中的权限数据已安全保存；随后应用层会基于新版本号立即刷新内存中的权限规则。
 func transactPolicyChange[T any](ctx context.Context, client *ent.Client, operation string, change roleapplication.PolicyChange, mutate func(*ent.Tx) (T, error)) (value T, result roleapplication.PolicyWriteResult, err error) {
 	tx, finish, err := datastore.BeginTransaction(ctx, entTxStarter{client: client})
 	if err != nil {
@@ -199,6 +201,7 @@ func allocateUserRoleRevision(ctx context.Context, tx *ent.Tx) (*ent.RbacUserRol
 	return counter, nil
 }
 
+// nonNilUUID 将全零的无效编号转为空指针，防止把无意义的空编号误存入数据库可选字段中。
 func nonNilUUID(value uuid.UUID) *uuid.UUID {
 	if value == uuid.Nil() {
 		return nil

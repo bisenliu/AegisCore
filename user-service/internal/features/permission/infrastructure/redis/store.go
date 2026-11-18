@@ -47,6 +47,7 @@ func NewStore(client rediscmd.UniversalClient, appName string, log *zap.Logger) 
 	return newStore(client, keys, defaultInstanceID(), log), nil
 }
 
+// newStore 创建负责在缓存中广播和接收权限变更通知的组件。
 func newStore(client policyRedisClient, keys KeyCatalog, instanceID string, log *zap.Logger) *Store {
 	if instanceID == "" {
 		instanceID = defaultInstanceID()
@@ -64,6 +65,7 @@ func (s *Store) PublishUserRoleChanged(ctx context.Context, revision int64, chan
 	return s.publish(ctx, revision, change, false)
 }
 
+// publish 将权限变更通知广播到缓存频道中，提醒其他服务节点拉取最新规则。
 func (s *Store) publish(ctx context.Context, revision int64, change permissionapplication.PolicyChange, cachePolicyRevision bool) error {
 	reason := change.ReasonText()
 	payload, err := encodePolicyRefreshMessage(newPolicyRefreshMessage(revision, change, s.instanceID))
@@ -85,6 +87,7 @@ func (s *Store) publish(ctx context.Context, revision int64, change permissionap
 	return nil
 }
 
+// publicationLogFields 整理广播日志的输出项，杜绝在日志中打印用户的敏感凭据。
 func publicationLogFields(revision int64, change permissionapplication.PolicyChange) []zap.Field {
 	if change.Kind == permissionapplication.PolicyChangeKindUserRole {
 		return []zap.Field{zap.Int64("user_role_revision", revision), zap.String("reason", change.ReasonText())}
@@ -109,6 +112,7 @@ func (s *Store) PolicyChannel() string {
 	return s.keys.PolicyChannel()
 }
 
+// defaultInstanceID 若未配置机器编号则自动生成一个，便于在广播时区分消息是由哪台服务器发出的。
 func defaultInstanceID() string {
 	hostname, err := os.Hostname()
 	if err != nil || hostname == "" {

@@ -35,6 +35,7 @@ func ValidateForceChangePasswordCommand(token string, newPassword string) error 
 	return nil
 }
 
+// isBlankToken 检查传入的凭证文本是否为空或全由空格组成。
 func isBlankToken(token string) bool {
 	token = commonauth.StripBearerPrefix(token)
 	return token == "" || strings.EqualFold(token, commonauth.TokenTypeBearer)

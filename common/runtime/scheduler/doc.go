@@ -77,8 +77,7 @@
 // 最迟在当前 TTL 到期后释放。两种失败策略分别参见 ExampleScheduler_Add_lockRenewFailure 与
 // ExampleScheduler_Add_lockRenew_continueOnFailure。
 //
-// Redis owner-token lock 是 lease，不提供 exactly-once 或 fencing。所有可能产生外部副作用的任务仍
-// 必须幂等，并在下游系统需要严格顺序时使用业务版本、fencing token 或事务约束。
+// Redis 分布式锁属于带有效期的租约机制，无法从根源上杜绝极端网络分区下的偶发并发。所有涉及数据修改的后台任务必须具备防重复执行能力（即支持多次重复提交且最终结果一致），在需要严格顺序的场景下应配合数据库版本号或事务控制。
 //
 // # 优雅关闭与观测
 //
@@ -95,7 +94,5 @@
 //
 // # 能力边界
 //
-// scheduler 负责进程内触发和通用 lease 协调，不持久化执行状态，不保证投递、顺序、exactly-once 或
-// 进程崩溃恢复。可靠业务消息应使用 outbox/MQ，跨实例严格互斥应结合具备 fencing 的业务协议，feature
-// orchestration 与业务一致性语义必须留在消费 feature。
+// scheduler 仅负责单进程内的定时触发与通用的分布式锁协调，不持久化任务状态，不保证任务绝对只执行一次，也不负责系统崩溃后的自动恢复。对可靠性要求极高的消息投递应使用消息队列或事务日志，具体的业务逻辑编排和数据一致性保障应留在具体业务模块中实现。
 package scheduler

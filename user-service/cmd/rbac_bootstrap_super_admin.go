@@ -29,6 +29,7 @@ type rbacSeedDependencies struct {
 
 type rbacSeedDependencyFactory func(context.Context) (rbacSeedDependencies, func() error, error)
 
+// bootstrapSuperAdmin 创建系统首位超级管理员；如果账号已存在或权限未预置则停止操作，避免覆盖现有账号。
 func bootstrapSuperAdmin(ctx context.Context, deps rbacSeedDependencies, opts rbacBootstrapSuperAdminOptions) (rolebootstrap.BootstrapSuperAdminResult, error) {
 	ctx = contextWithRBACLogger(ctx, deps)
 	passwordEnv := strings.TrimSpace(opts.passwordEnv)
@@ -47,6 +48,7 @@ func bootstrapSuperAdmin(ctx context.Context, deps rbacSeedDependencies, opts rb
 	})
 }
 
+// contextWithRBACLogger 将权限初始化操作的日志工具传递到上下文中，保证整套初始化操作打印的日志风格统一。
 func contextWithRBACLogger(ctx context.Context, deps rbacSeedDependencies) context.Context {
 	if deps.log == nil {
 		return ctx

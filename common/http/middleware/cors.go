@@ -80,6 +80,7 @@ func CORSWithOptions(options CORSOptions) gin.HandlerFunc {
 	}
 }
 
+// normalizeCORSOptions 补齐未配置的跨域访问参数（如允许的网站来源、操作方式和请求头），防止因配置缺失导致浏览器网页无法调用接口。
 func normalizeCORSOptions(options CORSOptions) CORSOptions {
 	defaults := defaultCORSOptions()
 	if len(options.AllowedOrigins) == 0 {
@@ -94,6 +95,7 @@ func normalizeCORSOptions(options CORSOptions) CORSOptions {
 	return options
 }
 
+// defaultCORSOptions 提供本地开发时使用的宽松跨域默认设置，方便前端本地调试页面直接调用服务。
 func defaultCORSOptions() CORSOptions {
 	// 共享默认策略对服务内 API 保持宽松，部署环境可传入更严格的选项。
 	return CORSOptions{

@@ -26,6 +26,7 @@ func unknownConfigPaths(settings map[string]any, unused []string) string {
 	return strings.Join(paths, ", ")
 }
 
+// configFieldName 读取配置项在文本文件中的对应名称，并识别该项是否需要忽略或并入上一级配置。
 func configFieldName(field reflect.StructField) (name string, squash bool, skip bool) {
 	tag := field.Tag.Get(mapstructureTag)
 	parts := strings.Split(tag, ",")
@@ -46,6 +47,7 @@ func configFieldName(field reflect.StructField) (name string, squash bool, skip 
 	return strings.ToLower(field.Name), false, false
 }
 
+// unknownLeafPaths 找出配置文件中写了但系统根本不需要的无效多余配置项，生成完整的层级路径提示用户修改（例如 a.b.c）。
 func unknownLeafPaths(value any, prefix string) []string {
 	settings, ok := value.(map[string]any)
 	if !ok || len(settings) == 0 {
@@ -58,6 +60,7 @@ func unknownLeafPaths(value any, prefix string) []string {
 	return paths
 }
 
+// joinConfigPath 将父级名称与当前配置项名称用圆点连接（例如 server.port），拼接出完整的配置层级路径。
 func joinConfigPath(prefix string, name string) string {
 	if prefix == "" {
 		return name

@@ -50,6 +50,7 @@ func NewPolicyLoader(client *ent.Client) Loader {
 	return &entLoader{client: client, superAdminRoleID: uuid.MustParse(rbacbaseline.SuperAdminRoleID)}
 }
 
+// LoadPoliciesAtLeast 从数据库中读取版本号不低于指定要求的权限快照；如果数据库尚未就绪则提示可稍后重试。
 func (l *entLoader) LoadPoliciesAtLeast(ctx context.Context, targetRevision int64) (PolicySet, error) {
 	if targetRevision < 0 {
 		return PolicySet{}, fmt.Errorf("load casbin policies: target revision must not be negative: %d", targetRevision)
@@ -70,6 +71,7 @@ func (l *entLoader) LoadPoliciesAtLeast(ctx context.Context, targetRevision int6
 	}
 }
 
+// loadSnapshot 读取指定版本的权限数据快照；若版本尚未达到或读取不完整则不能视为加载成功。
 func (l *entLoader) loadSnapshot(ctx context.Context, targetRevision int64) (PolicySet, bool, error) {
 	// revision 与绑定必须来自同一 repeatable-read 快照，否则返回的 revision 可能与规则集合不对应。
 	tx, err := l.client.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
@@ -100,6 +102,7 @@ func (l *entLoader) loadSnapshot(ctx context.Context, targetRevision int64) (Pol
 	return PolicySet{Revision: revision, PermissionRules: rules}, false, nil
 }
 
+// latestPolicyRevision 从数据库中查询系统当前的最新权限规则版本号。
 func latestPolicyRevision(ctx context.Context, tx *ent.Tx) (int64, error) {
 	revision, err := tx.RbacPolicyRevision.Query().
 		Order(entrbacpolicyrevision.ByID(entsql.OrderDesc())).
@@ -110,6 +113,7 @@ func latestPolicyRevision(ctx context.Context, tx *ent.Tx) (int64, error) {
 	return revision, err
 }
 
+// loadPermissionRules 查询数据库中所有当前处于启用状态的角色与功能权限绑定清单。
 func (l *entLoader) loadPermissionRules(ctx context.Context, tx *ent.Tx) ([]PermissionRule, error) {
 	bindings, err := tx.RolePermission.Query().
 		Where(entrolepermission.HasRoleWith(entrole.ActiveEQ(true))).
@@ -135,6 +139,7 @@ func (l *entLoader) loadPermissionRules(ctx context.Context, tx *ent.Tx) ([]Perm
 	return rules, nil
 }
 
+// finishPolicySnapshot 整理读取完毕的权限规则列表，打包成完整的权限快照数据。
 func finishPolicySnapshot(tx *ent.Tx, loadErr error) error {
 	if rollbackErr := tx.Rollback(); rollbackErr != nil {
 		rollbackErr = fmt.Errorf("rollback casbin policy snapshot: %w", rollbackErr)
@@ -146,6 +151,7 @@ func finishPolicySnapshot(tx *ent.Tx, loadErr error) error {
 	return loadErr
 }
 
+// waitForPolicySnapshot 当检测到数据库版本尚未达到通知中的目标版本时，稍作等待以让数据库事务完成提交。
 func waitForPolicySnapshot(ctx context.Context) error {
 	timer := time.NewTimer(policySnapshotRetry)
 	defer timer.Stop()

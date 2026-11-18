@@ -42,7 +42,9 @@ type RolePermissionStore interface {
 type PolicyChangeKind string
 
 const (
-	PolicyChangeKindPolicyChanged   PolicyChangeKind = "policy_changed"
+	// PolicyChangeKindPolicyChanged 表示角色绑定的功能权限发生了变动。
+	PolicyChangeKindPolicyChanged PolicyChangeKind = "policy_changed"
+	// PolicyChangeKindUserRoleChanged 表示某个具体用户被分配的角色发生了变动。
 	PolicyChangeKindUserRoleChanged PolicyChangeKind = "user_role_changed"
 )
 

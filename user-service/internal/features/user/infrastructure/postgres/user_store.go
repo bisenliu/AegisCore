@@ -77,6 +77,7 @@ func (s *UserStore) ListUsers(ctx context.Context, input userapplication.ListUse
 	return toModels(users), hasNext, nil
 }
 
+// toModel 将数据库中的用户记录转换为系统内部使用的用户数据对象。
 func toModel(entUser *ent.User) *userdomain.User {
 	if entUser == nil {
 		return nil
@@ -94,6 +95,7 @@ func toModel(entUser *ent.User) *userdomain.User {
 	}
 }
 
+// toModels 批量将数据库中的多条用户记录转换为内部对象列表。
 func toModels(users []*ent.User) []userdomain.User {
 	result := make([]userdomain.User, 0, len(users))
 	for _, entUser := range users {

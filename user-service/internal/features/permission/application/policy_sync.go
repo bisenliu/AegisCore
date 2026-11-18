@@ -126,6 +126,7 @@ func (c *PolicyRefreshCoordinator) NotifyUserRoleChanged(ctx context.Context, re
 	return nil
 }
 
+// publishPolicyHint 向其他服务节点广播权限规则已发生变更的提醒；广播失败不会回滚已经保存的数据库数据。
 func (c *PolicyRefreshCoordinator) publishPolicyHint(ctx context.Context, revision int64, change PolicyChange) {
 	if c.publisher == nil {
 		return
@@ -138,6 +139,7 @@ func (c *PolicyRefreshCoordinator) publishPolicyHint(ctx context.Context, revisi
 	c.metrics.PolicyPublishSucceeded(ctx)
 }
 
+// publishUserRoleHint 向其他服务节点广播用户角色已变更的提醒。
 func (c *PolicyRefreshCoordinator) publishUserRoleHint(ctx context.Context, revision int64, change PolicyChange) {
 	if c.publisher == nil {
 		return

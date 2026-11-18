@@ -58,10 +58,12 @@ func (f *Faker) UUIDString() string {
 	return newUUIDString()
 }
 
+// newUUIDString 生成一个测试用的随机编号。
 func newUUIDString() string {
 	return runtimeid.MustNewUUIDString()
 }
 
+// joinSlug 把前缀和后缀拼成测试用的短标识。
 func joinSlug(prefix, suffix string) string {
 	cleanPrefix := slug(prefix)
 	if cleanPrefix == "" {
@@ -70,6 +72,7 @@ func joinSlug(prefix, suffix string) string {
 	return cleanPrefix + "-" + suffix
 }
 
+// slug 把文本收成小写短标识，去掉不适合放进测试数据的字符。
 func slug(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	value = nonSlugChars.ReplaceAllString(value, "-")

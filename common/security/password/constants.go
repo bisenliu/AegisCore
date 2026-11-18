@@ -3,11 +3,11 @@ package password
 import stderrors "errors"
 
 const (
-	// defaultBcryptCost 是当前唯一支持的密码哈希成本。
+	// defaultBcryptCost 定义密码加密计算的强度系数（默认为 12），在保障密码防破解安全性的同时避免占用过多服务器 CPU 资源。
 	defaultBcryptCost = 12
-	// maxPasswordLength 遵循 bcrypt 安全输入上限，避免超长密码截断语义。
+	// maxPasswordLength 规定明文密码的最大长度为 72 个字节（受底层加密算法限制，超过 72 字节的部分会被算法自动忽略，因此直接拒绝以避免安全隐患）。
 	maxPasswordLength = 72
-	// maxEncodedHashLength 限制不可信编码哈希输入长度。
+	// maxEncodedHashLength 限制密文哈希字符串的最大长度，防止恶意传入超长字符串浪费内存与计算资源。
 	maxEncodedHashLength = 128
 )
 

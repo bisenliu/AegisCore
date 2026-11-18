@@ -27,6 +27,7 @@ func NewSource(env Env) (*Source, error) {
 	return newSource(env, loader), nil
 }
 
+// newSource 创建远程配置加载源，记录连接参数与拉取工具，后续用于从配置中心下载配置文件。
 func newSource(env Env, loader documentLoader) *Source {
 	env.DataIDs = append([]string(nil), env.DataIDs...)
 	return &Source{env: env, loader: loader}

@@ -7,7 +7,7 @@ import (
 	"github.com/aegiscore/common/http/response"
 )
 
-// ListUserRoles 处理用户角色查询请求。
+// ListUserRoles 查询指定用户当前拥有的角色列表接口。
 // @Summary 查询用户角色
 // @Description 查询用户当前绑定的角色列表。
 // @Tags 角色
@@ -40,7 +40,7 @@ func (ctl *RoleController) ListUserRoles(c *gin.Context) {
 	response.OK(c, toRoleResponses(result.Items))
 }
 
-// ReplaceUserRoles 处理用户角色全量替换请求。
+// ReplaceUserRoles 全量覆盖指定用户的角色列表接口。
 // @Summary 替换用户角色
 // @Description 幂等替换用户完整角色集合，用户角色解绑后相关 RBAC 授权应被拒绝。
 // @Tags 角色
@@ -76,7 +76,7 @@ func (ctl *RoleController) ReplaceUserRoles(c *gin.Context) {
 	response.OK(c, toCommandRoleResponses(result))
 }
 
-// AddUserRole 处理用户角色增量绑定请求。
+// AddUserRole 为用户分配单条角色接口。
 // @Summary 绑定用户角色
 // @Description 为用户新增一个角色绑定。
 // @Tags 角色
@@ -113,7 +113,7 @@ func (ctl *RoleController) AddUserRole(c *gin.Context) {
 	response.OK(c, toCommandRoleResponses(result))
 }
 
-// RemoveUserRole 处理用户角色解绑请求。
+// RemoveUserRole 移除用户的指定角色接口。
 // @Summary 解绑用户角色
 // @Description 删除用户角色绑定，解绑后相关 RBAC 授权应被拒绝。
 // @Tags 角色

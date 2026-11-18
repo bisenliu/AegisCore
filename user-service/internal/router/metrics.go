@@ -24,6 +24,7 @@ type MetricsRouteParams struct {
 	Provider *commonmetrics.Provider
 }
 
+// registerMetricsRoute 开放用于监控系统采集数据的抓取接口。
 func registerMetricsRoute(engine *gin.Engine, params MetricsRouteParams) error {
 	if !params.Config.Enabled || params.Provider == nil || !params.Provider.Enabled() {
 		return nil
@@ -60,6 +61,7 @@ func IsLowNoiseRuntimeRoute(route string, metricsCfg config.MetricsConfig) bool 
 	return IsHealthProbePath(route) || IsMetricsRoute(route, metricsCfg)
 }
 
+// normalizeMetricsPath 规范化监控数据抓取接口的访问路径，确保以斜杠开头。
 func normalizeMetricsPath(rawPath string) (string, error) {
 	// metrics endpoint 必须是规范化的绝对静态路径，避免与 Gin 参数、通配符或保留运行时路由产生歧义。
 	metricsPath := strings.TrimSpace(rawPath)
@@ -79,6 +81,7 @@ func normalizeMetricsPath(rawPath string) (string, error) {
 	return metricsPath, nil
 }
 
+// validateMetricsPath 检查监控接口路径是否合法，严禁占用健康检查或核心业务的接口地址。
 func validateMetricsPath(metricsPath string) error {
 	// 启动期阻断与健康检查、OpenAPI 和业务 API 的冲突，避免后注册路由覆盖已知端点。
 	if metricsPath == "/" {
@@ -103,6 +106,7 @@ func validateMetricsPath(metricsPath string) error {
 	return nil
 }
 
+// reservedMetricsExactPaths 列出系统保留的核心接口路径（如健康检查接口），防止被监控配置意外覆盖。
 func reservedMetricsExactPaths() []string {
 	return []string{
 		openAPIJSONPath,
@@ -111,6 +115,7 @@ func reservedMetricsExactPaths() []string {
 	}
 }
 
+// reservedMetricsPathPrefixes 列出系统保留的路径前缀（如 /api/ 业务接口），防止监控路径与业务路径产生冲突。
 func reservedMetricsPathPrefixes() []string {
 	return []string{
 		"/api/v1",
@@ -118,6 +123,7 @@ func reservedMetricsPathPrefixes() []string {
 	}
 }
 
+// pathHasPrefix 检查访问路径是否以某个指定的前缀开头。
 func pathHasPrefix(candidate string, prefix string) bool {
 	if candidate == prefix {
 		return true

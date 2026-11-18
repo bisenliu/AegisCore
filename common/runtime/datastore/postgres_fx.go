@@ -21,6 +21,7 @@ func NewPostgres(lc fx.Lifecycle, log *zap.Logger, name string, cfg resources.Po
 	return db, nil
 }
 
+// registerPostgresLifecycle 将数据库纳入系统生命周期管理：服务启动时先测试数据库是否连通，服务停止时自动安全关闭所有连接。
 func registerPostgresLifecycle(lc fx.Lifecycle, log *zap.Logger, name string, db *sql.DB) {
 	postgresLog := logger.NamedComponent(log, "postgres", "postgres")
 	lc.Append(fx.Hook{

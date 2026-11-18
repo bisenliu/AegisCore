@@ -19,10 +19,9 @@ type dynamicTracer struct {
 	options  []trace.TracerOption
 }
 
-// Tracer 返回绑定当前 Provider facade 的动态 tracer。
+// Tracer 返回一个动态追踪器。
 //
-// 返回值会复制 tracer options，避免调用方后续修改参数切片影响已保存的 constructor-time
-// instrumentation。
+// 内部会对配置参数进行拷贝，防止外部修改原参数切片影响已经初始化的追踪配置。
 func (p dynamicTracerProvider) Tracer(name string, opts ...trace.TracerOption) trace.Tracer {
 	return dynamicTracer{provider: p.provider, name: name, options: append([]trace.TracerOption(nil), opts...)}
 }

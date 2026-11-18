@@ -26,6 +26,7 @@ type subscriptionAttempt struct {
 	closeOnce    sync.Once
 }
 
+// close 断开当前消息广播订阅的底层网络连接并释放资源。
 func (a *subscriptionAttempt) close() {
 	if a == nil || a.subscription == nil {
 		return
@@ -33,7 +34,7 @@ func (a *subscriptionAttempt) close() {
 	a.closeOnce.Do(func() { _ = a.subscription.Close() })
 }
 
-// Subscriber 管理一个 Redis classic Pub/Sub channel 的订阅与重连生命周期。
+// Subscriber 管理单个 Redis 广播通道的订阅建立、消息接收与掉线自动重连。
 type Subscriber struct {
 	subscribe subscriptionFactory
 	log       *zap.Logger
@@ -48,7 +49,7 @@ type Subscriber struct {
 	closeOnce sync.Once
 }
 
-// NewSubscriber 构造 subscriber，但不连接 Redis、创建订阅或启动 goroutine。
+// NewSubscriber 创建消息订阅器对象（仅做参数校验与初始化，不会立即建立网络连接或启动后台协程）。
 func NewSubscriber(client Client, log *zap.Logger, opts Options) (*Subscriber, error) {
 	if isNilClient(client) {
 		return nil, errors.New("redis pubsub client is required")
@@ -68,6 +69,7 @@ func NewSubscriber(client Client, log *zap.Logger, opts Options) (*Subscriber, e
 	}, log, opts), nil
 }
 
+// newSubscriber 创建跨服务消息监听器；只有在显式调用 Start 后才会开始建立网络连接。
 func newSubscriber(subscribe subscriptionFactory, log *zap.Logger, opts Options) *Subscriber {
 	return &Subscriber{
 		subscribe: subscribe,
@@ -81,6 +83,7 @@ func newSubscriber(subscribe subscriptionFactory, log *zap.Logger, opts Options)
 	}
 }
 
+// validateOptions 检查监听频道名称、缓存连接客户端以及重连时间间隔等参数是否有效。
 func validateOptions(opts Options) error {
 	switch {
 	case strings.TrimSpace(opts.Name) == "":
@@ -102,6 +105,7 @@ func validateOptions(opts Options) error {
 	}
 }
 
+// isNilClient 检查是否传入了有效的缓存客户端，防止空指针导致程序崩溃。
 func isNilClient(client Client) bool {
 	if client == nil {
 		return true
@@ -201,6 +205,7 @@ func (s *Subscriber) Stop(ctx context.Context) error {
 	}
 }
 
+// run 在后台持续监听消息广播；一旦网络断开则根据设定的等待时间自动尝试重新连接。
 func (s *Subscriber) run(ctx context.Context, done chan struct{}) {
 	defer func() {
 		s.mu.Lock()
@@ -247,6 +252,7 @@ func (s *Subscriber) run(ctx context.Context, done chan struct{}) {
 	}
 }
 
+// createAttempt 发起一次新的网络订阅连接；如果连接建立失败则记录错误并等待下一次重试。
 func (s *Subscriber) createAttempt(ctx context.Context) *subscriptionAttempt {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -258,6 +264,7 @@ func (s *Subscriber) createAttempt(ctx context.Context) *subscriptionAttempt {
 	return attempt
 }
 
+// confirm 确认服务端已经成功受理了本次消息订阅请求；如果确认失败则视为连接异常并准备重试。
 func (s *Subscriber) confirm(ctx context.Context, attempt *subscriptionAttempt) (ErrorCategory, error) {
 	if attempt.subscription == nil {
 		return ErrorSubscribe, errors.New("redis pubsub subscribe returned nil PubSub")
@@ -275,6 +282,7 @@ func (s *Subscriber) confirm(ctx context.Context, attempt *subscriptionAttempt) 
 	return ErrorNone, nil
 }
 
+// receive 持续接收频道里广播推送的新消息并交给业务处理；若网络意外中断则退出并触发重连流程。
 func (s *Subscriber) receive(ctx context.Context, attempt *subscriptionAttempt) (ErrorCategory, error) {
 	for {
 		received, err := attempt.subscription.Receive(ctx)
@@ -303,6 +311,7 @@ func (s *Subscriber) receive(ctx context.Context, attempt *subscriptionAttempt) 
 	}
 }
 
+// clearAttempt 清理当前失效的连接记录，避免后续误接收旧通道的残留废弃消息。
 func (s *Subscriber) clearAttempt(attempt *subscriptionAttempt) {
 	s.mu.Lock()
 	if s.active == attempt {
@@ -311,6 +320,7 @@ func (s *Subscriber) clearAttempt(attempt *subscriptionAttempt) {
 	s.mu.Unlock()
 }
 
+// markConnected 将当前监听状态更新为已就绪连接，并清除之前的故障标记。
 func (s *Subscriber) markConnected() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -322,6 +332,7 @@ func (s *Subscriber) markConnected() {
 	s.status.LastConnectedAt = time.Now()
 }
 
+// markFailure 记录监听过程中的故障类型（例如网络连不上、订阅未被受理或传输中断），供系统健康检查判断具体原因。
 func (s *Subscriber) markFailure(category ErrorCategory) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -334,6 +345,7 @@ func (s *Subscriber) markFailure(category ErrorCategory) {
 	s.status.Reconnects++
 }
 
+// finishLocked 标记消息监听流程彻底结束，并唤醒所有等待退出的协程。
 func (s *Subscriber) finishLocked(done chan struct{}) {
 	if s.done != done || s.status.State == StateStopped {
 		return
@@ -346,6 +358,7 @@ func (s *Subscriber) finishLocked(done chan struct{}) {
 	close(done)
 }
 
+// waitForRetry 在连接断开后稍作等待再进行下一次重连；如果此时收到系统停机通知则立即退出不再等待。
 func waitForRetry(ctx context.Context, delay time.Duration) bool {
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
@@ -357,6 +370,7 @@ func waitForRetry(ctx context.Context, delay time.Duration) bool {
 	}
 }
 
+// nextBackoff 逐步增加每次重连的等待间隔时间（指数退避），防止因服务故障导致频繁发起重试冲击服务器。
 func nextBackoff(current time.Duration, maximum time.Duration) time.Duration {
 	if current >= maximum || current > maximum/2 {
 		return maximum
@@ -364,6 +378,7 @@ func nextBackoff(current time.Duration, maximum time.Duration) time.Duration {
 	return current * 2
 }
 
+// jitteredBackoff 为重连等待时间增加小幅随机抖动，防止大量客户端在完全相同的秒数内同时发起重连冲击系统。
 func jitteredBackoff(delay time.Duration) time.Duration {
 	half := delay / 2
 	if half <= 0 {

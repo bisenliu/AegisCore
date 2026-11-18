@@ -51,6 +51,7 @@ func (p *Provider) HTTPHandler(opts promhttp.HandlerOpts) http.Handler {
 	})
 }
 
+// Describe 注册监控指标的元数据说明（如指标名称和含义解释）。
 func (w contextCollectorWrapper) Describe(ch chan<- *prometheus.Desc) {
 	w.collector.Describe(ch)
 }
@@ -61,6 +62,7 @@ func (w contextCollectorWrapper) Collect(ch chan<- prometheus.Metric) {
 	w.collector.CollectContext(ctx, ch)
 }
 
+// currentGatherContext 获取当前指标收集过程中的上下文环境；如果未指定则使用系统默认环境。
 func (p *Provider) currentGatherContext() context.Context {
 	if p == nil || p.gatherCtx == nil {
 		return context.Background()

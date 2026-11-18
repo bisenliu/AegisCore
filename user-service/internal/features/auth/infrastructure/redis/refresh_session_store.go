@@ -189,6 +189,7 @@ func (r *SessionStore) DeleteAllUserSessions(ctx context.Context, userID uuid.UU
 	}
 }
 
+// purgeDetachedUserSessions 清理用户在缓存中已经超时过期的所有历史登录会话，释放存储空间。
 func (r *SessionStore) purgeDetachedUserSessions(ctx context.Context, purgeKey string, sessionPrefix string, cutTime time.Time) error {
 	cutScore := redisScoreFloat(cutTime)
 	for {

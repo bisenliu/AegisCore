@@ -68,6 +68,7 @@ func (r *entUserRoleResolver) Stats() localcache.Stats {
 	return localcache.Stats{Miss: loads, LoadSuccess: loads - errors, LoadError: errors}
 }
 
+// loadCacheableRolesForUser 读取用户的有效角色，若查询出错则明确报错，严禁把查询失败误当成该用户没有任何角色。
 func (r *entUserRoleResolver) loadCacheableRolesForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	roleIDs, err := r.loadRolesForUser(ctx, userID)
 	if err != nil {
@@ -76,6 +77,7 @@ func (r *entUserRoleResolver) loadCacheableRolesForUser(ctx context.Context, use
 	return cloneRoleIDs(roleIDs), nil
 }
 
+// cloneRoleIDs 复制一份角色编号列表，防止外部使用者修改返回结果时意外改动了缓存中的原数据。
 func cloneRoleIDs(roleIDs []uuid.UUID) []uuid.UUID {
 	if len(roleIDs) == 0 {
 		return []uuid.UUID{}

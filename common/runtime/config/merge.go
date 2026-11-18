@@ -30,6 +30,7 @@ func DeepMergeYAML(docs []ConfigDocument) (map[string]any, error) {
 	return merged, nil
 }
 
+// mergeConfigValues 合并两份配置内容，后读取的配置会覆盖先前的同名配置；如果同一配置项下包含多条子项，则逐项更新子项，不会粗暴地把整组子项全部替换掉。
 func mergeConfigValues(left any, right any) any {
 	leftMap, leftOK := left.(map[string]any)
 	rightMap, rightOK := right.(map[string]any)

@@ -15,7 +15,7 @@ import (
 
 var errPolicyRevisionNotReached = errors.New("casbin policy target revision was not reached")
 
-// Engine 使用内存 Casbin enforcer 执行权限判断。
+// Engine 在内存中维护权限规则判定引擎，并负责高并发下的接口权限快速裁决。
 type Engine struct {
 	loader    Loader
 	metrics   ReloadMetrics
@@ -43,7 +43,7 @@ type reloadFlight struct {
 	force   bool
 }
 
-// NewEngine 构造 Casbin Engine；调用方负责在启动边界显式执行 Initialize。
+// NewEngine 创建权限引擎对象（需在系统启动阶段显式调用 Initialize 初始化规则模型）。
 func NewEngine(loader Loader, metrics ReloadMetrics, userRoles UserRoleResolver) *Engine {
 	if metrics == nil {
 		metrics = NopReloadMetrics()
@@ -51,8 +51,8 @@ func NewEngine(loader Loader, metrics ReloadMetrics, userRoles UserRoleResolver)
 	return &Engine{loader: loader, metrics: metrics, userRoles: userRoles}
 }
 
-// Enforce 基于已加载的内存 policy 判断用户是否允许访问指定路由模板和 HTTP 方法。
-// 返回 false,nil 代表安全拒绝而不是系统错误，调用方应按无权限处理；只有上下文、角色解析或 Casbin 执行失败才返回 error。
+// Enforce 基于内存中的最新权限规则，判定用户是否有权访问指定的接口路径及对应操作。
+// 若返回 false, nil 代表用户确实无权访问（属于正常的拒绝访问，不是系统故障）；仅在请求超时被取消、用户角色解析失败或引擎内部执行异常时才会返回非空 error。
 func (e *Engine) Enforce(ctx context.Context, userID uuid.UUID, pathTemplate string, method string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -109,6 +109,7 @@ func (e *Engine) RefreshToRevision(ctx context.Context, targetRevision int64) (i
 	return e.reloadToRevision(ctx, targetRevision, true)
 }
 
+// reloadToRevision 将本地内存中的权限规则更新到指定的最新版本；若加载失败则继续沿用上一份可用的规则，防止权限检查全部瘫痪。
 func (e *Engine) reloadToRevision(ctx context.Context, targetRevision int64, force bool) (int64, error) {
 	if targetRevision < 0 {
 		return e.failReload(fmt.Errorf("casbin policy target revision must not be negative: %d", targetRevision))
@@ -144,7 +145,7 @@ func (e *Engine) reloadToRevision(ctx context.Context, targetRevision int64, for
 	if flight == nil {
 		flight = e.startFlightLocked(force)
 	} else if force {
-		// 合并并发 reload，但保留强制刷新语义，让当前候选完成前至少再读取一次数据库快照。
+		// 多个并发的重载请求合并为单次执行；若其中包含强制刷新标记，则确保在当前执行结束前至少再重新读取一次数据库的最新快照。
 		flight.force = true
 	}
 	flight.waiters++
@@ -172,6 +173,7 @@ func (e *Engine) reloadToRevision(ctx context.Context, targetRevision int64, for
 	}
 }
 
+// startFlightLocked 检查当前是否已有正在进行的权限加载；如果有，则合并等待同一批次完成，避免多人并发操作时重复查询数据库。
 func (e *Engine) startFlightLocked(force bool) *reloadFlight {
 	sharedCtx, cancel := context.WithCancel(e.lifecycleCtx)
 	flight := &reloadFlight{done: make(chan struct{}), ctx: sharedCtx, cancel: cancel, force: force}
@@ -180,6 +182,7 @@ func (e *Engine) startFlightLocked(force bool) *reloadFlight {
 	return flight
 }
 
+// leaveFlight 结束当前合并的加载流程，由最后离开的协程完成状态清理。
 func (e *Engine) leaveFlight(flight *reloadFlight, waiterErr error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -198,6 +201,7 @@ func (e *Engine) leaveFlight(flight *reloadFlight, waiterErr error) {
 	}
 }
 
+// runReloadFlight 真正执行从数据库读取权限规则的操作，并将加载好的结果共享给所有等待的请求。
 func (e *Engine) runReloadFlight(flight *reloadFlight) {
 	defer func() {
 		flight.cancel()
@@ -235,6 +239,7 @@ func (e *Engine) runReloadFlight(flight *reloadFlight) {
 	}
 }
 
+// applyCandidate 确认加载完成的规则版本未被更新的操作覆盖后，正式替换当前内存中运行的权限规则。
 func (e *Engine) applyCandidate(flight *reloadFlight, policySet PolicySet, enforcer *casbinlib.Enforcer, force bool) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -263,6 +268,7 @@ func (e *Engine) applyCandidate(flight *reloadFlight, policySet PolicySet, enfor
 	return true
 }
 
+// recordFlightFailure 记录合并加载失败，并让所有正在等待的调用方收到相同的错误信息。
 func (e *Engine) recordFlightFailure(flight *reloadFlight, err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -278,6 +284,7 @@ func (e *Engine) recordFlightFailure(flight *reloadFlight, err error) {
 	e.metrics.SetLastStatus(false)
 }
 
+// failReload 记录权限加载失败并返回错误，同时保留现有可用的旧权限规则，保障系统正常运转。
 func (e *Engine) failReload(err error) (int64, error) {
 	e.recordReloadFailure(err)
 	e.mu.RLock()
@@ -286,6 +293,7 @@ func (e *Engine) failReload(err error) (int64, error) {
 	return applied, err
 }
 
+// recordReloadFailure 记录重载权限规则失败的监控日志。
 func (e *Engine) recordReloadFailure(err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -295,6 +303,7 @@ func (e *Engine) recordReloadFailure(err error) {
 	e.metrics.SetLastStatus(false)
 }
 
+// projectionReadyForLocked 检查本地内存中的权限版本是否已经达到或超过了目标版本号。
 func (e *Engine) projectionReadyForLocked(target int64) bool {
 	return e.initialized && e.reloadSucceeded && e.lastErr == nil && e.appliedRevision >= target && e.appliedRevision >= e.targetRevision
 }
@@ -322,6 +331,7 @@ func (e *Engine) LastError() error {
 	return e.ProjectionStatus().LastError
 }
 
+// buildEnforcer 根据从数据库读取到的权限规则清单，组装全新的权限判定器；若规则不完整则返回错误。
 func (e *Engine) buildEnforcer(ctx context.Context, targetRevision int64) (PolicySet, *casbinlib.Enforcer, error) {
 	if err := ctx.Err(); err != nil {
 		return PolicySet{}, nil, err

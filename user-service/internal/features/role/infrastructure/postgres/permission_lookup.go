@@ -44,6 +44,7 @@ func (l *PermissionLookup) GetByPermissionIDs(ctx context.Context, permissionIDs
 	return references, nil
 }
 
+// toPermissionLookupReference 将数据库中查询到的权限记录转换为角色模块所需的轻量引用对象。
 func toPermissionLookupReference(permission permissiondomain.Permission) roleapplication.PermissionReference {
 	return roleapplication.PermissionReference{ID: permission.ID, PermissionID: permission.PermissionID, Name: permission.Name, Description: permission.Description, Module: permission.Module, HTTPMethod: permission.HTTPMethod, PathTemplate: permission.PathTemplate, CreatedAt: permission.CreatedAt, UpdatedAt: permission.UpdatedAt}
 }

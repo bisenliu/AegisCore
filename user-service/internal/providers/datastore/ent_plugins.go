@@ -14,12 +14,12 @@ import (
 )
 
 type entDriverPlugin interface {
-	// WrapEntDriver 按资源名包装基础 Ent driver，并保持 Query/Exec/Tx 语义不变。
+	// WrapEntDriver 为底层数据库驱动添加拦截能力（如慢查询监控、链路追踪），同时保证原有的 SQL 查询、执行与事务行为完全不受影响。
 	WrapEntDriver(name string, driver dialect.Driver) (dialect.Driver, error)
 }
 
 type entClientPlugin interface {
-	// InstallEntClientPlugin 在 Ent client 上安装 hook 或 interceptor。
+	// InstallEntClientPlugin 为数据库操作客户端安装业务拦截插件或钩子函数。
 	InstallEntClientPlugin(client *ent.Client) error
 }
 

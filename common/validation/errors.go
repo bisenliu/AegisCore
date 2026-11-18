@@ -45,6 +45,7 @@ func (v *Validator) normalizeError(dst any, err error) error {
 	return err
 }
 
+// publicMessage 返回适合直接展示给用户看的错误提示语，隐藏技术底层细节。
 func publicMessage(err error) string {
 	var validationErr *Error
 	if errors.As(err, &validationErr) && validationErr.Message != "" {
@@ -53,11 +54,13 @@ func publicMessage(err error) string {
 	return err.Error()
 }
 
+// validationFailure 检查错误是否属于用户输入内容未通过规则检查（如密码太短、邮箱格式不对等）。
 func validationFailure(err error) bool {
 	var appErr *contracterrors.Error
 	return errors.As(err, &appErr) && appErr.Kind == contracterrors.KindValidation
 }
 
+// validationDetails 汇总所有不合格输入项的详细信息，便于在返回结果中逐一标明哪个输入框填写有误。
 func validationDetails(err error) []FieldError {
 	var validationErr *Error
 	if errors.As(err, &validationErr) {
@@ -78,9 +81,10 @@ func ClassifyError(err error) Failure {
 	return failure
 }
 
+// expectedType 获取该字段期望输入的数据类型名称（如数字或文本），用于在用户填错类型时给出明确提示。
 func expectedType(t reflect.Type) string {
 	if t == nil {
-		// decoder 无法报告具体 Go 类型时可能出现 nil，这里保持用户可见消息语义通顺。
+		// 当无法确定具体期望类型时返回通用的“正确”二字，确保拼接出来的错误提示语句（如“请输入正确类型”）通顺自然。
 		return "正确"
 	}
 	for t.Kind() == reflect.Pointer {

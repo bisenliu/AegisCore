@@ -111,10 +111,12 @@ type permissionPolicyEngineLifecycle interface {
 
 // Provider：授权核心
 
+// providePolicyLoader 提供用于从数据库中读取全部有效权限规则的加载组件。
 func providePolicyLoader(params PrimaryDBParams) permissioncasbin.Loader {
 	return permissioncasbin.NewPolicyLoader(params.Client)
 }
 
+// provideUserRoleResolver 创建用于查询用户所属角色的组件，带有本地缓存以提高鉴权性能。
 func provideUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult, error) {
 	result, err := permissioncasbin.NewUserRoleResolver(permissioncasbin.UserRoleResolverParams{Settings: params.Settings, Client: params.Client})
 	if err != nil {
@@ -129,6 +131,7 @@ func provideEngine(loader permissioncasbin.Loader, metrics permissioncasbin.Relo
 	return PolicyEngineResult{AuthorizationEngine: engine, ReloadEngine: engine, InternalHealth: engine, Health: engine, Initializer: engine, EngineLifecycle: engine}
 }
 
+// provideAuthorizer 将权限核对能力接入到网络请求的处理流程中。
 func provideAuthorizer(params AuthorizerParams) AuthorizerResult {
 	authorizer := permissionauthorization.NewAuthorizer(params.Engine, params.Metrics)
 	return AuthorizerResult{InternalAuthorizer: authorizer, Authorizer: authorizer}
@@ -136,10 +139,12 @@ func provideAuthorizer(params AuthorizerParams) AuthorizerResult {
 
 // Provider：公开投影
 
+// providePermissionUserRoleCacheStats 将用户角色缓存的命中与查询情况提供给监控看板展示。
 func providePermissionUserRoleCacheStats(params PermissionUserRoleCacheStatsParams) PermissionUserRoleCacheStatsResult {
 	return PermissionUserRoleCacheStatsResult{Stats: params.Stats}
 }
 
+// providePermissionController 将系统权限列表查询等功能接入到公开的 HTTP 接口。
 func providePermissionController(query permissionquery.PermissionQueryService, validator *commonvalidation.Validator) *permissionhttp.PermissionController {
 	return permissionhttp.NewPermissionController(query, validator)
 }

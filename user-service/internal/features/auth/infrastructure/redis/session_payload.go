@@ -23,6 +23,7 @@ type passwordChangeSessionPayload struct {
 	ExpiresAt    time.Time `json:"expires_at"`
 }
 
+// newAuthSessionPayload 将登录会话信息转换并打包为缓存系统所需的存储格式。
 func newAuthSessionPayload(session authdomain.AuthSession) authSessionPayload {
 	return authSessionPayload{
 		UserID:       session.UserID.String(),
@@ -32,6 +33,7 @@ func newAuthSessionPayload(session authdomain.AuthSession) authSessionPayload {
 	}
 }
 
+// domainSession 将缓存中读取到的存储内容还原为业务会话对象；若内容已损坏则返回错误。
 func (p authSessionPayload) domainSession() (authdomain.AuthSession, error) {
 	userID, err := uuid.Parse(p.UserID)
 	if err != nil {
@@ -45,6 +47,7 @@ func (p authSessionPayload) domainSession() (authdomain.AuthSession, error) {
 	}, nil
 }
 
+// newPasswordChangeSessionPayload 将一次性改密凭证信息打包为缓存存储格式。
 func newPasswordChangeSessionPayload(session authdomain.PasswordChangeSession) passwordChangeSessionPayload {
 	return passwordChangeSessionPayload{
 		UserID:       session.UserID.String(),

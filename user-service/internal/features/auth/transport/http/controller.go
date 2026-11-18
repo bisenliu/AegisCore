@@ -12,7 +12,7 @@ import (
 	authcommand "github.com/aegiscore/user-service/internal/features/auth/application/command"
 )
 
-// AuthController 处理认证和会话端点的 HTTP 请求。
+// AuthController 负责接收和处理用户登录、刷新令牌、强制改密以及退出登录等 HTTP 接口请求。
 type AuthController struct {
 	login         authcommand.LoginUseCase
 	refresh       authcommand.RefreshTokenUseCase
@@ -32,7 +32,7 @@ type AuthControllerOptions struct {
 	Validator     *commonvalidation.Validator
 }
 
-// NewAuthController 使用 command use case 和 validator 依赖构造认证控制器。
+// NewAuthController 创建认证接口控制器，组装认证业务用例与请求校验服务。
 func NewAuthController(options AuthControllerOptions) *AuthController {
 	return &AuthController{
 		login:         options.Login,
@@ -44,7 +44,7 @@ func NewAuthController(options AuthControllerOptions) *AuthController {
 	}
 }
 
-// LoginUser 处理用户名和密码登录请求。
+// LoginUser 用户登录接口（支持账号密码验证及强制改密流程）。
 // @Summary 用户登录
 // @Description 校验用户名和密码；普通登录返回 success=true、code=0、Access Token 与 Refresh Token，强制改密登录返回 success=false、code=20006 与受限改密 Token。
 // @Tags 认证
@@ -85,7 +85,7 @@ func (ctl *AuthController) LoginUser(c *gin.Context) {
 	response.OK(c, toTokenResponse(result.Tokens))
 }
 
-// RefreshToken 处理 refresh token 换取请求。
+// RefreshToken 刷新访问令牌接口。
 // @Summary 刷新 Access Token
 // @Description 使用仍有效且未撤销的 Refresh Token 换取新的 Access Token。
 // @Tags 认证
@@ -117,7 +117,7 @@ func (ctl *AuthController) RefreshToken(c *gin.Context) {
 	response.OK(c, toTokenResponse(tokens))
 }
 
-// ForceChangePassword 使用受限 token 处理强制改密请求。
+// ForceChangePassword 强制修改密码接口（需携带临时受限改密凭据）。
 // @Summary 强制修改密码
 // @Description 使用登录后返回的 password-change 受限凭据完成强制改密，并将用户状态恢复为正常。
 // @Tags 认证
@@ -151,7 +151,7 @@ func (ctl *AuthController) ForceChangePassword(c *gin.Context) {
 	response.OK(c, toForceChangePasswordResponse(result))
 }
 
-// LogoutCurrentSession 处理当前认证会话的登出请求。
+// LogoutCurrentSession 退出当前登录会话接口。
 // @Summary 退出当前设备
 // @Description 删除当前会话的 Refresh Token 会话记录，不修改用户 token_version。
 // @Tags 认证
@@ -171,7 +171,7 @@ func (ctl *AuthController) LogoutCurrentSession(c *gin.Context) {
 	response.OK(c, toLogoutResponse(result))
 }
 
-// LogoutAllSessions 处理认证用户全部会话的撤销请求。
+// LogoutAllSessions 退出该用户在所有设备上的登录状态接口。
 // @Summary 退出全部设备
 // @Description 递增用户 token_version 并清理该用户所有 Refresh Token 会话。
 // @Tags 认证

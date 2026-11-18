@@ -43,10 +43,12 @@ func NewRoleCommandService(
 	}, nil
 }
 
+// notifyPolicyChanged 在角色的功能权限发生修改后，向整个系统广播通知，触发各服务节点刷新权限规则。
 func (s *roleCommandService) notifyPolicyChanged(ctx context.Context, revision int64, reason string) error {
 	return s.policyChanges.NotifyPolicyChanged(ctx, revision, permissionapplication.NewPolicyReloadChange(reason))
 }
 
+// notifyUserRoleChanged 在用户的角色分配发生调整后，向整个系统广播通知，确保该用户的有效权限实时更新。
 func (s *roleCommandService) notifyUserRoleChanged(ctx context.Context, revision int64, reason string, userID uuid.UUID, roleID uuid.UUID) error {
 	return s.policyChanges.NotifyUserRoleChanged(ctx, revision, permissionapplication.NewUserRoleChange(reason, userID, roleID))
 }

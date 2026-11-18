@@ -14,7 +14,7 @@ const (
 	DefaultLocale = "zh"
 	// ErrEmptyRequestBody 表示请求需要 JSON body 但内容为空。
 	ErrEmptyRequestBody = "请求体参数不能为空"
-	// ErrValidationFailed 是 validator 规则失败时的响应信封消息。
+	// ErrValidationFailed 是校验规则未通过时的标准对外提示消息。
 	ErrValidationFailed = "请求参数验证失败"
 	// ErrTrailingJSONBody 表示请求体包含多个 JSON 值，必须拒绝解析。
 	ErrTrailingJSONBody = "请求体只能包含一个 JSON 值"
@@ -116,7 +116,7 @@ func (e *Error) Error() string {
 	return e.Message
 }
 
-// Unwrap 暴露语义应用错误，供 errors.As 识别共享错误契约。
+// Unwrap 返回该校验错误对应的标准业务错误对象，支持标准库 errors.As 识别和处理。
 func (e *Error) Unwrap() error {
 	if e == nil {
 		return nil
@@ -124,6 +124,7 @@ func (e *Error) Unwrap() error {
 	return validationAppError(e)
 }
 
+// validationAppError 将表单输入检查失败整理成对外的标准业务错误，同时附带具体每个输入项的错误原因。
 func validationAppError(e *Error) *contracterrors.Error {
 	kind := e.Kind
 	reason := e.Reason
@@ -144,6 +145,7 @@ func validationAppError(e *Error) *contracterrors.Error {
 	return contracterrors.New(kind, reason, code, e.Message)
 }
 
+// defaultReason 根据错误的类别（如输入不合法、数据冲突等），给出默认的技术原因标识。
 func defaultReason(kind contracterrors.Kind) contracterrors.Reason {
 	switch kind {
 	case contracterrors.KindValidation:
@@ -155,6 +157,7 @@ func defaultReason(kind contracterrors.Kind) contracterrors.Reason {
 	}
 }
 
+// defaultCode 根据错误的类别，给出统一的数字或文本错误代号。
 func defaultCode(kind contracterrors.Kind) contracterrors.Code {
 	switch kind {
 	case contracterrors.KindValidation:

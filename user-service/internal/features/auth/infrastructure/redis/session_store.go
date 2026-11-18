@@ -83,6 +83,7 @@ func NewSessionStore(options SessionStoreOptions) *SessionStore {
 	}
 }
 
+// metricsRecorder 获取会话存储使用的监控记录器；若未配置则使用空操作对象。
 func (r *SessionStore) metricsRecorder() authapplication.Metrics {
 	if r == nil || r.metrics == nil {
 		return authapplication.NopMetrics()
@@ -90,22 +91,27 @@ func (r *SessionStore) metricsRecorder() authapplication.Metrics {
 	return r.metrics
 }
 
+// tokenVersionKey 拼接保存用户凭证版本的缓存键名。
 func (r *SessionStore) tokenVersionKey(userID uuid.UUID) string {
 	return r.keys.AuthUserTokenVersion(userID.String())
 }
 
+// sessionKey 拼接单次登录会话的缓存键名。
 func (r *SessionStore) sessionKey(userID uuid.UUID, sessionID string) string {
 	return r.keys.AuthSession(userID.String(), sessionID)
 }
 
+// passwordChangeSessionKey 拼接一次性改密凭证的缓存键名，防止与普通登录会话冲突。
 func (r *SessionStore) passwordChangeSessionKey(userID uuid.UUID, sessionID string) string {
 	return r.keys.PasswordChangeSession(userID.String(), sessionID)
 }
 
+// userSessionsKey 拼接记录某位用户全部有效登录会话的索引键名。
 func (r *SessionStore) userSessionsKey(userID uuid.UUID) string {
 	return r.keys.AuthUserSessions(userID.String())
 }
 
+// purgeUserSessionsKey 拼接清理过期会话时使用的辅助索引键名。
 func (r *SessionStore) purgeUserSessionsKey(userID uuid.UUID) (string, error) {
 	purgeID, err := runtimeid.NewUUIDString()
 	if err != nil {

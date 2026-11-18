@@ -64,6 +64,7 @@ func ProvideHealthChecks(params HealthCheckParams) router.HealthChecks {
 	return router.HealthChecks{Readiness: checks, Startup: checks}
 }
 
+// Name 返回数据库健康检查项的唯一名称。
 func (c postgresHealthChecker) Name() string {
 	return c.name
 }
@@ -81,6 +82,7 @@ func (c postgresHealthChecker) Check(ctx context.Context) router.HealthCheckResu
 	return okHealthResult(c.name)
 }
 
+// Name 返回缓存服务健康检查项的唯一名称。
 func (c redisHealthChecker) Name() string {
 	return c.name
 }
@@ -98,6 +100,7 @@ func (c redisHealthChecker) Check(ctx context.Context) router.HealthCheckResult 
 	return okHealthResult(c.name)
 }
 
+// Name 返回权限规则状态检查项的唯一名称。
 func (c casbinPolicyHealthChecker) Name() string {
 	return "rbac.casbin_policy"
 }
@@ -114,6 +117,7 @@ func (c casbinPolicyHealthChecker) Check(context.Context) router.HealthCheckResu
 	return okHealthResult(name)
 }
 
+// Name 返回权限更新广播监听检查项的唯一名称。
 func (c watcherHealthChecker) Name() string {
 	return "rbac.policy_watcher"
 }
@@ -141,10 +145,12 @@ func (c watcherHealthChecker) Check(context.Context) router.HealthCheckResult {
 	return okHealthResult(name)
 }
 
+// okHealthResult 构造一个检查正常的成功检查结果。
 func okHealthResult(name string) router.HealthCheckResult {
 	return router.HealthCheckResult{Name: name, Status: router.HealthCheckStatusOK}
 }
 
+// unavailableHealthResult 构造一个检查不合格的故障检查结果，并附带直观的故障原因说明。
 func unavailableHealthResult(name string, message string) router.HealthCheckResult {
 	if message == "" {
 		message = "dependency unavailable"

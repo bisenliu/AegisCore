@@ -28,6 +28,7 @@ type postgresOptions struct {
 	tracerProvider trace.TracerProvider
 }
 
+// newPostgresOptions 提供数据库连接的基础默认设置，包括默认的请求追踪工具。
 func newPostgresOptions() postgresOptions {
 	return postgresOptions{tracerProvider: otel.GetTracerProvider()}
 }
@@ -98,6 +99,7 @@ func PostgresDSN(cfg resources.PostgresConfig) string {
 	return postgresDSN(cfg)
 }
 
+// postgresDSN 根据配置的主机地址、数据库名称、登录账号和密码拼接数据库连接串；连接串包含密码，禁止直接打印到普通日志中。
 func postgresDSN(cfg resources.PostgresConfig) string {
 	databasePath := "/" + cfg.DBName
 	u := url.URL{
@@ -113,6 +115,7 @@ func postgresDSN(cfg resources.PostgresConfig) string {
 	return u.String()
 }
 
+// applyPostgresPoolConfig 设置数据库连接池参数，包括允许同时打开的最大连接数、闲置连接数以及单个连接的最长有效时间，防止连接过多拖垮数据库。
 func applyPostgresPoolConfig(db *sql.DB, cfg resources.PostgresPoolConfig) {
 	db.SetMaxOpenConns(cfg.MaxOpenConns)
 	db.SetMaxIdleConns(cfg.MaxIdleConns)

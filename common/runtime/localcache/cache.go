@@ -12,8 +12,8 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// LoadingCache 是 bounded、固定 TTL 的本地 loading cache。
-// 可变 value 的复制语义由调用方负责。
+// LoadingCache 是具有容量上限（防内存撑爆）、固定过期时间（TTL）并支持并发自动加载的本地内存缓存。
+// 缓存中存储的对象若会被外部修改，调用方应自行深拷贝，避免污染共享缓存中的数据。
 type LoadingCache[V any] struct {
 	name        string
 	capacity    uint64
@@ -33,7 +33,7 @@ type LoadingCache[V any] struct {
 }
 
 // NewLoadingCache 创建一个有容量上限、固定 TTL、支持并发回源合并的进程内缓存。
-// 完整的配置、回源、取消、强失效、统计和值所有权契约参见 package localcache 文档与 ExampleLoadingCache。
+// 详细的配置说明、回源加载、并发合并、主动失效、指标统计和数据防污染机制，请参阅 package localcache 文档与 ExampleLoadingCache。
 func NewLoadingCache[V any](cfg Config, loader Loader[V]) (*LoadingCache[V], error) {
 	name := strings.TrimSpace(cfg.Name)
 	if name == "" {
@@ -94,6 +94,7 @@ func (c *LoadingCache[V]) Get(ctx context.Context, key string) (V, error) {
 	return zero, ErrInvalidated
 }
 
+// lookup 快速查看本地内存缓存中是否已经存有该数据；如果未命中则直接返回不存在，不在此处触发耗时的回源加载。
 func (c *LoadingCache[V]) lookup(key string) (V, bool) {
 	var zero V
 	item := c.client.Get(key)

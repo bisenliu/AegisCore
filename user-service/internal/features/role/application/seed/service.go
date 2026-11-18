@@ -111,6 +111,7 @@ func (s *Service) Seed(ctx context.Context, opts SeedOptions) (SeedResult, error
 	return result, nil
 }
 
+// buildRoleInputs 整理系统内置的基础角色清单，检查角色标识是否有效。
 func buildRoleInputs(reactivate bool) ([]roleapplication.SeedRoleInput, error) {
 	seen := make(map[uuid.UUID]struct{})
 	roles := rbacbaseline.DefaultRoles()
@@ -133,6 +134,7 @@ func buildRoleInputs(reactivate bool) ([]roleapplication.SeedRoleInput, error) {
 	return inputs, nil
 }
 
+// buildPermissionInputs 整理系统内置的功能权限清单，检查权限标识和接口地址是否有效。
 func buildPermissionInputs() ([]permissionapplication.SeedPermissionInput, error) {
 	seenIDs := make(map[uuid.UUID]struct{})
 	seenRoutes := make(map[string]struct{})
@@ -160,6 +162,7 @@ func buildPermissionInputs() ([]permissionapplication.SeedPermissionInput, error
 	return inputs, nil
 }
 
+// buildRolePermissionInputs 整理各个内置角色默认应该包含的功能权限清单。
 func buildRolePermissionInputs() (map[uuid.UUID][]uuid.UUID, error) {
 	roles := make(map[uuid.UUID]struct{})
 	for _, spec := range rbacbaseline.DefaultRoles() {

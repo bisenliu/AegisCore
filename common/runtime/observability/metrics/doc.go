@@ -1,5 +1,4 @@
-// Package metrics 为 AegisCore runtime component 提供业务中立的 Prometheus
-// metrics primitive。
+// Package metrics 为系统各运行组件提供通用的 Prometheus 监控指标采集与注册能力。
 //
 // Provider 始终为依赖图提供非 nil 值。metrics 禁用时，provider 是 no-op：
 // Enabled 返回 false，Register 和 MustRegister 无副作用，Registerer 和 Gatherer

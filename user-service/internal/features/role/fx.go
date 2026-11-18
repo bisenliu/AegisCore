@@ -46,6 +46,7 @@ type policyChangeNotifier struct {
 	notifier permissionapplication.PolicyChangeNotifier
 }
 
+// newPolicyChangeNotifier 将角色模块的变更通知能力与权限广播组件进行连接。
 func newPolicyChangeNotifier(notifier permissionapplication.PolicyChangeNotifier) *policyChangeNotifier {
 	return &policyChangeNotifier{notifier: notifier}
 }

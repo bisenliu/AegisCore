@@ -1,18 +1,18 @@
 package errors
 
-// Reason 表达稳定、可公开的具体错误原因。
+// Reason 表示具体且明确的业务错误原因，前端与接口调用方可以根据此标识做针对性的页面提示或逻辑分支处理。
 type Reason string
 
 const (
 	// ReasonBadRequest 表示通用请求格式错误。
 	ReasonBadRequest Reason = "bad_request"
-	// ReasonRequestBindingFailed 表示请求字段绑定或类型转换失败。
+	// ReasonRequestBindingFailed 表示请求参数解析或数据类型转换失败（如将非数字字符传给了整数参数）。
 	ReasonRequestBindingFailed Reason = "request_binding_failed"
 	// ReasonEmptyRequestBody 表示请求需要 body 但内容为空。
 	ReasonEmptyRequestBody Reason = "empty_request_body"
 	// ReasonTrailingJSONBody 表示 JSON body 包含多个 JSON 值。
 	ReasonTrailingJSONBody Reason = "trailing_json_body"
-	// ReasonValidationFailed 表示请求字段语义校验失败。
+	// ReasonValidationFailed 表示提交的参数未通过校验规则（如手机号格式不合法、密码长度不够等）。
 	ReasonValidationFailed Reason = "validation_failed"
 	// ReasonUnauthenticated 表示缺少认证状态。
 	ReasonUnauthenticated Reason = "unauthenticated"
@@ -28,7 +28,7 @@ const (
 	ReasonUserAccountLocked Reason = "user_account_locked"
 	// ReasonForbidden 表示权限不足。
 	ReasonForbidden Reason = "forbidden"
-	// ReasonConflict 表示领域冲突。
+	// ReasonConflict 表示数据状态冲突（如尝试创建已存在的唯一数据或并发修改冲突）。
 	ReasonConflict Reason = "conflict"
 	// ReasonNotFound 表示资源不存在或不可见。
 	ReasonNotFound Reason = "not_found"

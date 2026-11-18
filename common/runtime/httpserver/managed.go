@@ -144,6 +144,7 @@ func (s *Managed) Stop(ctx context.Context) error {
 	}
 }
 
+// canStartCleanupLocked 检查当前服务是否允许开始执行关闭收尾流程，防止重复触发关闭。
 func (s *Managed) canStartCleanupLocked() bool {
 	// cleanup 只从 running/failed 进入 stopping；created 直接 stopped，
 	// stopping/stopped 只等待同一个 cleanupDone 结果。
@@ -156,6 +157,7 @@ func (s *Managed) HTTPServer() *http.Server {
 	return s.server
 }
 
+// serve 在后台持续监听并接收外部访问请求；如果是系统正常关闭导致的停止监听，则视为正常退出而非系统故障。
 func (s *Managed) serve(listener net.Listener) {
 	err := s.server.Serve(listener)
 
@@ -178,6 +180,7 @@ func (s *Managed) serve(listener net.Listener) {
 	}
 }
 
+// isExpectedServeErrorLocked 判断网络监听停止的原因是否为系统主动下线；主动下线属于正常行为，不视为程序异常。
 func (s *Managed) isExpectedServeErrorLocked(err error) bool {
 	if errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {
 		return true
@@ -186,6 +189,7 @@ func (s *Managed) isExpectedServeErrorLocked(err error) bool {
 	return (s.state == stateStopping || s.state == stateStopped) && errors.Is(err, context.Canceled)
 }
 
+// cleanup 执行系统停止时的资源清理工作，包括关闭监听网络端口并等待正在处理的请求全部做完。
 func (s *Managed) cleanup() {
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), s.shutdownTimeout)
 	defer cancel()
@@ -203,14 +207,17 @@ func (s *Managed) cleanup() {
 	s.mu.Unlock()
 }
 
+// shutdown 停止接收新的网络请求，并给当前正在处理中的请求预留平稳退出的缓冲时间。
 func (s *Managed) shutdown(ctx context.Context) error {
 	return s.operationError("shutdown", s.server.Shutdown(ctx))
 }
 
+// closeManagedListener 关闭系统占用的网络监听端口，停止接受外界新的连接。
 func (s *Managed) closeManagedListener() error {
 	return wrapExpectedCloseError(s, "close listener", s.closeListener())
 }
 
+// forceCloseAfterShutdownError 当平稳关机等待超时后，强制切断所有网络连接以确保系统能正常停止，同时保留原始的超时错误记录。
 func (s *Managed) forceCloseAfterShutdownError(shutdownErr error) error {
 	if shutdownErr == nil {
 		return nil
@@ -218,10 +225,12 @@ func (s *Managed) forceCloseAfterShutdownError(shutdownErr error) error {
 	return wrapExpectedCloseError(s, "force close", s.server.Close())
 }
 
+// waitHandlers 等待所有业务处理协程将手头的请求完成；如果等待超时则返回错误。
 func (s *Managed) waitHandlers(ctx context.Context) error {
 	return s.operationError("wait handlers", s.drain.Wait(ctx))
 }
 
+// waitServeDone 等待负责接收网络连接的后台任务彻底退出。
 func (s *Managed) waitServeDone() {
 	s.mu.Lock()
 	serveDone := s.serveDone
@@ -231,6 +240,7 @@ func (s *Managed) waitServeDone() {
 	}
 }
 
+// closeListener 关闭底层的网络监听通道；如果已经关闭过则不再重复操作。
 func (s *Managed) closeListener() error {
 	s.mu.Lock()
 	listener := s.listener
@@ -241,16 +251,19 @@ func (s *Managed) closeListener() error {
 	return listener.Close()
 }
 
+// finalStopError 记录服务关闭时遇到的第一个错误，避免后续连锁收尾问题掩盖最开始的根本故障原因。
 func (s *Managed) finalStopError() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.stopErr
 }
 
+// lifecycleError 在服务启动或停止出错时，补充服务名称和操作步骤信息，方便日志排查。
 func (s *Managed) lifecycleError(operation string, err error) error {
 	return fmt.Errorf("%s http server %q at %q: %w", operation, s.name, s.addr, err)
 }
 
+// operationError 给操作执行失败补充服务标识，方便排查是哪个组件在什么环节出错。
 func (s *Managed) operationError(operation string, err error) error {
 	if err == nil {
 		return nil
@@ -258,6 +271,7 @@ func (s *Managed) operationError(operation string, err error) error {
 	return fmt.Errorf("%s http server %q at %q: %w", operation, s.name, s.addr, err)
 }
 
+// wrapExpectedCloseError 识别并过滤因主动关闭网络端口而产生的常规网络中断提示，避免将正常的关机操作误报为系统故障。
 func wrapExpectedCloseError(s *Managed, operation string, err error) error {
 	if err == nil || errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {
 		return nil

@@ -58,6 +58,7 @@ func ConvertSwagger2JSON(ctx context.Context, data []byte, opts ConvertOptions) 
 	}, nil
 }
 
+// normalizeDocument 补齐接口说明文档所需的基础信息（如规范版本号、服务调用地址和用户身份验证方式），防止生成的接口文档缺失关键信息。
 func normalizeDocument(doc *openapi3.T, opts ConvertOptions) {
 	// 规范化只覆盖调用方显式提供的部分：顶层 servers 非空才替换，PathServers 只作用于转换后已存在的 path，同名 security scheme 由参数覆盖。
 	doc.OpenAPI = opts.openAPIVersion()
@@ -88,6 +89,7 @@ func normalizeDocument(doc *openapi3.T, opts ConvertOptions) {
 	}
 }
 
+// toOpenAPIServers 将内部配置的服务访问地址列表，转换为对外公开文档中的标准化服务器地址清单。
 func toOpenAPIServers(servers []Server) openapi3.Servers {
 	result := make(openapi3.Servers, 0, len(servers))
 	for _, server := range servers {
@@ -96,6 +98,7 @@ func toOpenAPIServers(servers []Server) openapi3.Servers {
 	return result
 }
 
+// toOpenAPISecurityScheme 将系统内部的身份验证规则（如通过请求头携带通行证），转换为公开接口文档中的权限说明。
 func toOpenAPISecurityScheme(scheme SecurityScheme) *openapi3.SecurityScheme {
 	return &openapi3.SecurityScheme{
 		Type:         scheme.Type,

@@ -1,5 +1,4 @@
-// Package tracing 为 AegisCore runtime component 提供业务中立的 OpenTelemetry
-// tracing facade。
+// Package tracing 为系统各运行组件提供通用的分布式调用链追踪能力，支持与 OpenTelemetry 标准对接。
 //
 // NewProvider 会立即构造并启动 provider。调用方拥有返回的 provider，并必须在不再使用时
 // 调用 Shutdown。NewTracingProvider 是 Fx adapter：它在依赖图构造阶段返回可注入的

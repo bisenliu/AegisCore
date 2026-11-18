@@ -31,6 +31,7 @@ type rateLimitObserver struct {
 	events *prometheus.CounterVec
 }
 
+// newRateLimitObserver 创建记录频次超限日志和报警指标的监控组件。
 func newRateLimitObserver(log *zap.Logger, provider *commonmetrics.Provider) (*rateLimitObserver, error) {
 	if log == nil {
 		log = zap.NewNop()
@@ -49,6 +50,7 @@ func newRateLimitObserver(log *zap.Logger, provider *commonmetrics.Provider) (*r
 	return observer, nil
 }
 
+// options 组装不同业务接口的访问频率限制规则（如登录接口限制更严，查询接口相对宽松），并挂接超限拦截记录。
 func (o *rateLimitObserver) options(scope string, limiter commonmw.RateLimiter, keyFunc commonmw.RateLimitKeyFunc) commonmw.RateLimitOptions {
 	return commonmw.RateLimitOptions{
 		Limiter: limiter,
@@ -62,6 +64,7 @@ func (o *rateLimitObserver) options(scope string, limiter commonmw.RateLimiter, 
 	}
 }
 
+// recordError 记录频次限制判断过程中发生的异常，杜绝在日志中打印用户的真实输入内容。
 func (o *rateLimitObserver) recordError(_ *gin.Context, scope string, key string, err error) {
 	if o == nil {
 		return
@@ -73,6 +76,7 @@ func (o *rateLimitObserver) recordError(_ *gin.Context, scope string, key string
 	o.log.Warn("api rate limiter failed", zap.String("scope", scope), zap.String("reason", reason), zap.Bool("key_present", key != ""), zap.Error(err))
 }
 
+// recordLimited 记录某次用户访问因频次超限而被系统成功拦截的事件。
 func (o *rateLimitObserver) recordLimited(_ *gin.Context, scope string, key string) {
 	if o == nil {
 		return
@@ -83,6 +87,7 @@ func (o *rateLimitObserver) recordLimited(_ *gin.Context, scope string, key stri
 	o.log.Debug("api request rate limited", zap.String("scope", scope), zap.Bool("key_present", key != ""))
 }
 
+// rateLimitErrorReason 将频次检查失败的原因归纳为统一标识。
 func rateLimitErrorReason(err error) string {
 	switch {
 	case errors.Is(err, commonmw.ErrRateLimitKeyRequired):

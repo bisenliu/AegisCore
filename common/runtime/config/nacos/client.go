@@ -66,7 +66,7 @@ func (l *v3Loader) loadFromServer(ctx context.Context, server *url.URL, env Env,
 	if err != nil {
 		return nil, fmt.Errorf("authenticate: %w", err)
 	}
-	// query 参数保持 Nacos API 原始命名，避免在 common 中引入服务私有配置语义。
+	// 请求参数严格遵照 Nacos 官方接口规范命名，保持通用底层的纯粹性，不掺杂任何特定业务的私有字段。
 	endpoint := endpoint(server, configAPIPath)
 	query := endpoint.Query()
 	query.Set("namespaceId", env.Namespace)

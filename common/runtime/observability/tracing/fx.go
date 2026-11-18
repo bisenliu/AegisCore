@@ -18,10 +18,7 @@ func NewTracingProvider(lifecycle fx.Lifecycle, cfg *config.Config) (*Provider, 
 	return newTracingProvider(lifecycle, cfg, newOTLPExporter)
 }
 
-// newTracingProvider 使用可替换 exporter factory 构造 Fx tracing provider。
-//
-// 测试通过注入 createExporter 验证 OnStart context、rollback 和 disabled provider 语义；生产路径
-// 使用 newOTLPExporter。该函数保持包内可见，避免暴露第二套 lifecycle 入口。
+// newTracingProvider 支持传入自定义的数据导出函数，方便测试时模拟启动失败、配置禁用或正常关闭等不同场景；生产环境下默认使用标准的 OpenTelemetry 协议向监控收集端上报数据。
 func newTracingProvider(lifecycle fx.Lifecycle, cfg *config.Config, createExporter exporterFactory) (*Provider, error) {
 	if cfg == nil {
 		return nil, errors.New("tracing config is required")

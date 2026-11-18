@@ -49,6 +49,7 @@ type policyWatcherCollector struct {
 	reconnectAttempts       *prometheus.Desc
 }
 
+// newPolicyWatcherCollector 创建用于向监控大盘暴露权限监听同步状态的统计指标。
 func newPolicyWatcherCollector(source permissionapplication.PolicyWatcherStatus, maxStaleness time.Duration) (*policyWatcherCollector, error) {
 	if source == nil {
 		return nil, fmt.Errorf("rbac policy watcher status source is required")
@@ -109,6 +110,7 @@ func (c *policyWatcherCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(c.reconnectAttempts, prometheus.CounterValue, float64(status.ReconnectAttempts))
 }
 
+// boolMetric 将布尔开关转换为数字 1（开启）或 0（关闭），便于在监控图表中展示状态。
 func boolMetric(value bool) float64 {
 	if value {
 		return 1
@@ -116,6 +118,7 @@ func boolMetric(value bool) float64 {
 	return 0
 }
 
+// timestampMetric 将时间转换为秒级时间戳，便于计算延迟。
 func timestampMetric(value time.Time) float64 {
 	if value.IsZero() {
 		return 0

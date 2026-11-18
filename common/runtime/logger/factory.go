@@ -28,6 +28,7 @@ func NewWithConfig(cfg config.LogConfig) (*zap.Logger, error) {
 	return newLogger(cfg, "", "", zapcore.AddSync(os.Stdout), zapcore.AddSync(os.Stderr))
 }
 
+// newLogger 根据配置创建日志输出工具，支持区分输出级别（如普通信息或警告）并分别导向控制台或文件。
 func newLogger(cfg config.LogConfig, serviceName string, environment string, stdout zapcore.WriteSyncer, stderr zapcore.WriteSyncer) (*zap.Logger, error) {
 	level := parseLevel(cfg.Level)
 	core := zapcore.NewTee(
@@ -46,6 +47,7 @@ func newLogger(cfg config.LogConfig, serviceName string, environment string, std
 	return log, nil
 }
 
+// newEncoder 根据配置选择日志输出格式，例如适合机器自动收集的结构化 JSON 格式，或是适合人工肉眼阅读的彩色控制台文本。
 func newEncoder(format string) zapcore.Encoder {
 	cfg := zap.NewProductionEncoderConfig()
 	cfg.EncodeTime = zapcore.ISO8601TimeEncoder

@@ -44,6 +44,7 @@ func (s *Service) VerifyContext(ctx context.Context, plain, encodedHash string) 
 	}
 }
 
+// validatePlainPassword 检查用户输入的明文密码是否合格，必须非空且长度不得超过 72 个字符（防止底层加密算法被超长密码撑爆）。
 func validatePlainPassword(plain string) error {
 	if plain == "" {
 		return ErrEmptyPassword

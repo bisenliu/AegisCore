@@ -2,7 +2,7 @@
 //
 // # 配置
 //
-// Options 的配置语义如下：
+// Options 各配置项说明如下：
 //
 //   - Name 是任务池的稳定名称，会裁剪首尾空白且不能为空。它会进入日志和 metrics，应使用
 //     auth.session_purge 等低基数名称，不能包含 user ID、请求 ID 等动态内容。
@@ -54,17 +54,17 @@
 // 设置任务自己的 deadline。不要在 Submit 返回后立即 cancel 作为 parent 传入的 context，否则刚被
 // 接收的异步任务也会被取消。完整代码参见 ExamplePool_Submit_detachedContext。
 //
-// # 满载背压
+// # 队列满载与限流等待
 //
 // Workers=2 时最多同时运行两个任务。第三个及后续 Submit 会阻塞，直到有 worker 空闲或 Pool 被
 // Stop。Options 没有 queue capacity、非阻塞提交或 admission timeout 配置。Submit 的 context 会在
 // 进入等待前检查，但在等待空闲 worker 的过程中取消 context 不会中断该次阻塞；任务最终被接收后会
 // 携带已经取消的 context 开始执行，或者在 Pool 停止竞态中返回 ErrClosed。
 //
-// 因此只能在允许同步背压的调用路径直接 Submit，不能把它当成“请求立即返回、后台无限排队”的队列。
+// 因此任务提交适合能够接受排队等待的场景，不能把它当成“无论多少任务都无限堆积在内存中”的无界队列。
 // 如果入口不能阻塞，应由调用方设计明确的过载策略，或选择具备有界队列和可取消 admission 的组件；
 // 不要通过无界 goroutine 包裹 Submit。ErrQueueFull 保留用于映射 ants 过载错误，但当前阻塞配置不会
-// 仅因为所有 worker 正忙就返回 ErrQueueFull。可观察的背压示例参见 ExamplePool_Submit_backpressure。
+// 仅因为所有 worker 正忙就返回 ErrQueueFull。满载排队等待的示例参见 ExamplePool_Submit_backpressure。
 //
 // # 优雅停止
 //
@@ -92,7 +92,7 @@
 //
 // # 能力边界
 //
-// workerpool 是单进程、内存内的并发限制 primitive，不持久化任务，不保证执行顺序、重试、
+// workerpool 是单机内存级的并发限制组件，不持久化任务，不保证执行顺序、重试、
 // exactly-once 或进程崩溃后的恢复。可靠投递应使用 outbox、MQ 或对应业务基础设施；周期任务应使用
 // scheduler。
 package workerpool

@@ -79,6 +79,7 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 	return engine, nil
 }
 
+// requestLoggerContext 将带有当前请求流水号的日志工具存入请求上下文中，方便后续业务打印日志时自动关联。
 func requestLoggerContext(log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Request = c.Request.WithContext(commonlogger.ToContext(c.Request.Context(), log))
@@ -86,24 +87,28 @@ func requestLoggerContext(log *zap.Logger) gin.HandlerFunc {
 	}
 }
 
+// skipSuccessfulRuntimeEndpointLog 判断频繁的心跳探针与监控拉取请求在成功时是否需要跳过打印日志，防止大量无意义访问日志淹没正常业务。
 func skipSuccessfulRuntimeEndpointLog(metricsCfg config.MetricsConfig) func(*gin.Context) bool {
 	return func(c *gin.Context) bool {
 		return c.Writer.Status() < 400 && router.IsLowNoiseRuntimeRoute(commonroute.TemplateOrUnmatched(c), metricsCfg)
 	}
 }
 
+// skipMetricsScrapeRequest 判断当前请求是否属于监控系统定时拉取数据，避免为监控数据拉取本身重复记日志。
 func skipMetricsScrapeRequest(metricsCfg config.MetricsConfig) func(*gin.Context) bool {
 	return func(c *gin.Context) bool {
 		return router.IsMetricsRoute(commonroute.TemplateOrUnmatched(c), metricsCfg)
 	}
 }
 
+// skipSuccessfulRuntimeEndpointMetrics 判断健康检查等系统探针在成功时是否跳过记入普通业务请求耗时统计。
 func skipSuccessfulRuntimeEndpointMetrics(metricsCfg config.MetricsConfig) func(*gin.Context) bool {
 	return func(c *gin.Context) bool {
 		return c.Writer.Status() < http.StatusBadRequest && router.IsLowNoiseRuntimeRoute(commonroute.TemplateOrUnmatched(c), metricsCfg)
 	}
 }
 
+// renameHTTPServerSpan 使用规范的请求路径模板（例如 /users/:id）给调用链路命名，避免因不同用户ID产生海量零散的追踪名字。
 func renameHTTPServerSpan() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
@@ -114,6 +119,7 @@ func renameHTTPServerSpan() gin.HandlerFunc {
 	}
 }
 
+// httpServerSpanName 根据请求方式和规范路径生成标准化的调用链路节点名称。
 func httpServerSpanName(c *gin.Context) string {
 	return c.Request.Method + " " + commonroute.TemplateOrUnmatched(c)
 }

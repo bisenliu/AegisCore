@@ -9,18 +9,18 @@ import (
 	permissionquery "github.com/aegiscore/user-service/internal/features/permission/application/query"
 )
 
-// PermissionController 处理权限目录端点的 HTTP 请求。
+// PermissionController 负责接收和处理权限目录查询相关的 HTTP 接口请求。
 type PermissionController struct {
 	queries   permissionquery.PermissionQueryService
 	validator *commonvalidation.Validator
 }
 
-// NewPermissionController 使用 query service 和请求 validator 依赖构造权限控制器。
+// NewPermissionController 创建权限接口控制器，组装权限查询与参数校验服务。
 func NewPermissionController(queries permissionquery.PermissionQueryService, validator *commonvalidation.Validator) *PermissionController {
 	return &PermissionController{queries: queries, validator: validator}
 }
 
-// ListPermissions 处理权限目录列表请求。
+// ListPermissions 查询系统完整权限目录接口。
 // @Summary 查询完整权限目录
 // @Description 返回由代码基线定义并同步到数据库的完整权限目录，不使用分页；支持按业务模块和 HTTP 方法过滤。该接口由 JWT 和 RBAC 保护。
 // @Tags 权限
@@ -53,7 +53,7 @@ func (ctl *PermissionController) ListPermissions(c *gin.Context) {
 	response.OK(c, toPermissionListResponse(result))
 }
 
-// ListUserEffectivePermissions 处理用户有效权限查询请求。
+// ListUserEffectivePermissions 查询指定用户当前拥有的全部生效权限接口。
 // @Summary 查询用户有效权限
 // @Description 查询用户经角色绑定后当前生效的权限集合。
 // @Tags 权限

@@ -21,6 +21,7 @@ func EncodeSettings(value any) (map[string]any, error) {
 	return settings, nil
 }
 
+// encodeSettingValue 将内部配置项数据转换成通用的键值格式，支持基础数值、列表及复合对象；遇到无法识别的类型时返回错误。
 func encodeSettingValue(value reflect.Value) (any, error) {
 	for value.IsValid() && (value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer) {
 		if value.IsNil() {
@@ -60,6 +61,7 @@ func encodeSettingValue(value reflect.Value) (any, error) {
 	}
 }
 
+// encodeSettingStruct 将一组配置字段逐一转换成普通键值集合，便于后续统一读取和比较。
 func encodeSettingStruct(value reflect.Value) (map[string]any, error) {
 	settings := make(map[string]any)
 	valueType := value.Type()
@@ -96,6 +98,7 @@ func encodeSettingStruct(value reflect.Value) (map[string]any, error) {
 	return settings, nil
 }
 
+// encodeSettingMap 将键值对集合转换成标准字典格式，并要求所有配置项的名称必须是文本。
 func encodeSettingMap(value reflect.Value) (map[string]any, error) {
 	if value.Type().Key().Kind() != reflect.String {
 		return nil, fmt.Errorf("encode runtime config: map key type must be string, got %s", value.Type().Key())

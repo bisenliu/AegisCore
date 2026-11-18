@@ -87,6 +87,7 @@ func (r RedisContainer) Config() resources.RedisConfig {
 	}
 }
 
+// normalizeRedisOptions 补上测试 Redis 没填的镜像和端口。
 func normalizeRedisOptions(opts RedisOptions) RedisOptions {
 	if opts.Image == "" {
 		opts.Image = DefaultRedisImage
@@ -97,6 +98,7 @@ func normalizeRedisOptions(opts RedisOptions) RedisOptions {
 	return opts
 }
 
+// waitForRedis 等到测试 Redis 可以响应；超时就让测试失败。
 func waitForRedis(ctx context.Context, t testing.TB, redisContainer *RedisContainer) {
 	t.Helper()
 	client := redis.NewClient(redisContainer.Options())
@@ -107,6 +109,7 @@ func waitForRedis(ctx context.Context, t testing.TB, redisContainer *RedisContai
 	})
 }
 
+// configureRedisClusterAnnouncement 让测试集群对外公布本机映射地址，否则客户端连不上。
 func configureRedisClusterAnnouncement(
 	ctx context.Context,
 	t testing.TB,
@@ -137,6 +140,7 @@ func configureRedisClusterAnnouncement(
 	})
 }
 
+// assignRedisClusterSlots 给单节点测试集群分配全部槽位，否则读写会报槽位未覆盖。
 func assignRedisClusterSlots(ctx context.Context, t testing.TB, redisContainer *RedisContainer) {
 	t.Helper()
 	waitFor(ctx, t, "Redis cluster slots", func(context.Context) error {

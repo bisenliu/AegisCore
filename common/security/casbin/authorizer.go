@@ -8,25 +8,25 @@ import (
 )
 
 var (
-	// ErrDenied 表示 Casbin 策略拒绝本次访问。
+	// ErrDenied 表示当前用户或角色没有访问该接口的权限。
 	ErrDenied = errors.New("casbin access denied")
 	// ErrNotConfigured 表示授权器或底层 enforcer 未正确配置。
 	ErrNotConfigured = errors.New("casbin authorizer is not configured")
 )
 
-// Enforcer 是 Casbin enforcer 的最小能力接口。
+// Enforcer 定义底层权限规则判定引擎所需的最基础能力接口。
 type Enforcer interface {
 	Enforce(args ...interface{}) (bool, error)
 }
 
-// Request 表示一次 Casbin 授权校验请求。
+// Request 表示权限判定所需的三要素：访问者（Subject，如用户或角色）、被访问的目标资源（Object，如 API 接口路径）和操作方式（Action，如 GET/POST）。
 type Request struct {
 	Subject string
 	Object  string
 	Action  string
 }
 
-// Authorizer 封装无业务语义的 Casbin 授权校验。
+// Authorizer 提供通用的权限检查器，负责对请求方是否有权访问目标接口进行裁决。
 type Authorizer struct {
 	enforcer Enforcer
 }
@@ -36,7 +36,7 @@ func NewAuthorizer(enforcer Enforcer) *Authorizer {
 	return &Authorizer{enforcer: enforcer}
 }
 
-// Enforce 返回 Casbin 对本次授权请求的原始允许结果。
+// Enforce 检查请求是否具备访问权限，返回是否允许的布尔值以及执行过程中是否出错。
 func (a *Authorizer) Enforce(ctx context.Context, req Request) (bool, error) {
 	if a == nil {
 		return false, ErrNotConfigured
@@ -44,7 +44,7 @@ func (a *Authorizer) Enforce(ctx context.Context, req Request) (bool, error) {
 	return Enforce(ctx, a.enforcer, req)
 }
 
-// Authorize 校验请求，策略拒绝时返回 ErrDenied。
+// Authorize 校验用户是否有权访问目标资源；若没有权限则返回 ErrDenied 拒绝访问。
 func (a *Authorizer) Authorize(ctx context.Context, req Request) error {
 	if a == nil {
 		return ErrNotConfigured
@@ -59,7 +59,7 @@ func (a *Authorizer) Authorize(ctx context.Context, req Request) error {
 	return nil
 }
 
-// Enforce 使用传入的 enforcer 执行 Casbin 三元组校验。
+// Enforce 使用权限判定引擎核对访问者、目标资源和操作方式三要素，确认是否允许当前访问。
 func Enforce(ctx context.Context, enforcer Enforcer, req Request) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -74,6 +74,7 @@ func Enforce(ctx context.Context, enforcer Enforcer, req Request) (bool, error) 
 	return allowed, nil
 }
 
+// isNilEnforcer 检查权限检查器是否未正确配置；若未配置则拒绝放行请求，防止在无权限防护的状态下暴露接口。
 func isNilEnforcer(enforcer Enforcer) bool {
 	if enforcer == nil {
 		return true

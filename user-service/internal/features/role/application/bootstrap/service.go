@@ -76,6 +76,7 @@ type normalizedCommand struct {
 	Nickname string
 }
 
+// normalizeCommand 规范化管理员初始信息，清理用户名和密码两端的多余空格，并检查密码是否符合长度要求。
 func normalizeCommand(cmd Command) (normalizedCommand, string, error) {
 	// bcrypt 对超过 72 bytes 的输入会截断；按 bytes 校验可避免不同明文产生相同有效输入。
 	password := cmd.Password

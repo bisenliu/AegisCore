@@ -25,6 +25,7 @@ import (
 
 const rbacCommandTimeout = 30 * time.Second
 
+// defaultRBACSeedDependencies 初始化权限写入命令所需的数据库连接和日志记录工具。
 func defaultRBACSeedDependencies(parent context.Context) (rbacSeedDependencies, func() error, error) {
 	// RBAC CLI 绕过 Fx composition root，只打开 PostgreSQL 并组装 seed 所需最小依赖；不能在这里启动 HTTP、Redis watcher 或服务生命周期。
 	ctx, cancel := context.WithTimeout(parent, rbacCommandTimeout)
@@ -87,6 +88,7 @@ func defaultRBACSeedDependencies(parent context.Context) (rbacSeedDependencies, 
 	return rbacSeedDependencies{service: service, bootstrap: bootstrapService, cfg: cfg, log: log}, cleanup, nil
 }
 
+// rbacPostgresConfig 从系统全局配置中提取数据库连接参数，确保数据库配置已填写。
 func rbacPostgresConfig(cfg *serviceconfig.Config) (commonresources.PostgresConfig, error) {
 	if cfg == nil {
 		return commonresources.PostgresConfig{}, errors.New("user-service config is required")
@@ -98,14 +100,16 @@ func rbacPostgresConfig(cfg *serviceconfig.Config) (commonresources.PostgresConf
 	return dbCfg, nil
 }
 
+// newRBACEntClient 使用已有的数据库连接创建用于操作权限和用户数据的数据访问客户端。
 func newRBACEntClient(db *sql.DB) *ent.Client {
 	driver := entsql.OpenDB(dialect.Postgres, db)
 	return ent.NewClient(ent.Driver(driver))
 }
 
+// chainCleanup 将两个资源释放操作按先后顺序串联起来，确保在命令执行完毕后所有打开的连接都能完整关闭。
 func chainCleanup(first func() error, second func() error) func() error {
 	return func() error {
-		// 后注册资源先关闭，保持与 defer 栈一致的 LIFO 语义，并聚合所有关闭错误。
+		// 遵循后打开的资源先关闭的原则（例如先关闭依赖数据库的客户端，再关闭数据库底层的物理连接），确保依赖关系正常解除，并收集所有关闭时发生的错误。
 		return errors.Join(second(), first())
 	}
 }

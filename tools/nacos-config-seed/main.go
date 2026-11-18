@@ -32,6 +32,7 @@ func main() {
 	os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
 }
 
+// run 解析命令行参数并执行配置推送流程，将初始化配置文件同步到远程配置中心。
 func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
 	var options seedOptions
 	var dataIDsCSV string
@@ -104,11 +105,13 @@ func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 	return exitOK
 }
 
+// defaultDataIDs 返回未手动指定配置文件时系统默认要推送的文件列表（如 base.yaml、resources.yaml）。
 func defaultDataIDs() string {
 	service := envOrDefault("AEGISCORE_SERVICE", "user-service")
 	return "base.yaml,resources.yaml," + service + ".yaml"
 }
 
+// parseDataIDs 将逗号分隔的配置文件名字符串拆分成清单列表，剔除多余空格并检查是否有空白文件名。
 func parseDataIDs(raw string) ([]string, error) {
 	parts := strings.Split(raw, ",")
 	dataIDs := make([]string, 0, len(parts))
@@ -126,6 +129,7 @@ func parseDataIDs(raw string) ([]string, error) {
 	return dataIDs, nil
 }
 
+// envOrDefault 读取指定的环境变量；如果未设置则采用兜底的默认值。
 func envOrDefault(name, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
 		return value
@@ -133,6 +137,7 @@ func envOrDefault(name, fallback string) string {
 	return fallback
 }
 
+// secretEnv 读取密码等敏感配置的环境变量，避免在普通日志中留下敏感信息。
 func secretEnv(name string) string {
 	value := os.Getenv(name)
 	if strings.TrimSpace(value) == "" {
@@ -142,6 +147,7 @@ func secretEnv(name string) string {
 	return value
 }
 
+// failf 将执行失败的简明提示信息输出到错误控制台终端。
 func failf(stderr io.Writer, format string, args ...any) {
 	// 调用方已经确定返回失败；诊断 writer 不可用时仍保持原非零退出状态。
 	_, _ = fmt.Fprintf(stderr, format+"\n", args...)

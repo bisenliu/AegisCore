@@ -106,6 +106,7 @@ func (c PostgresConfigs) Validate(basePath string) error {
 	return errors.Join(errs...)
 }
 
+// sortedNames 对资源名称进行字母排序，确保在校验出错时列出的错误提示顺序稳定一致。
 func sortedNames[T any](values map[string]T) []string {
 	// 配置校验错误会直接用于诊断输出，排序可避免 map 遍历顺序造成结果抖动。
 	names := make([]string, 0, len(values))
@@ -116,6 +117,7 @@ func sortedNames[T any](values map[string]T) []string {
 	return names
 }
 
+// namedResourcePath 拼接配置项的完整访问路径（例如 postgres.primary.host），便于指出是哪一项配置填写有误。
 func namedResourcePath(basePath string, name string) string {
 	if name == "" {
 		return basePath
@@ -123,6 +125,7 @@ func namedResourcePath(basePath string, name string) string {
 	return basePath + "." + name
 }
 
+// validateHostPort 检查连接地址是否符合“主机名:端口”的标准格式。
 func validateHostPort(path string, value string) []error {
 	host, portText, err := net.SplitHostPort(value)
 	if err != nil || strings.TrimSpace(host) == "" {
@@ -135,6 +138,7 @@ func validateHostPort(path string, value string) []error {
 	return validatePort(path, port)
 }
 
+// validatePort 检查网络端口是否在合法的 1 到 65535 范围内。
 func validatePort(path string, value int) []error {
 	if value < minPort || value > maxPort {
 		return []error{fieldError(path, fmt.Sprintf("must be between %d and %d", minPort, maxPort))}
@@ -142,6 +146,7 @@ func validatePort(path string, value int) []error {
 	return nil
 }
 
+// validatePositiveDuration 确保超时时长或间隔时间大于零，防止因设置为零或负数导致请求立即失败或程序陷入死循环。
 func validatePositiveDuration(path string, value time.Duration) []error {
 	if value <= 0 {
 		return []error{fieldError(path, "must be > 0")}
@@ -149,6 +154,7 @@ func validatePositiveDuration(path string, value time.Duration) []error {
 	return nil
 }
 
+// isValidPostgresSSLMode 检查数据库传输加密模式（SSL）是否为系统支持的标准模式（如 disable、require 等）。
 func isValidPostgresSSLMode(value string) bool {
 	switch value {
 	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
@@ -158,6 +164,7 @@ func isValidPostgresSSLMode(value string) bool {
 	}
 }
 
+// fieldError 生成包含具体配置项名称的校验失败提示，方便使用者快速定位问题。
 func fieldError(path string, message string) error {
 	return errors.New(path + " " + message)
 }

@@ -44,6 +44,7 @@ type permissionMetricsParams struct {
 	PolicyHealth permissionauthorization.PolicyHealth `name:"permission_policy_health"`
 }
 
+// newPermissionMetrics 创建用于统计权限同步、加载和拦截情况的监控指标。
 func newPermissionMetrics(params permissionMetricsParams) (permissionapplication.Metrics, error) {
 	provider := params.Provider
 	policyHealth := params.PolicyHealth
@@ -107,38 +108,47 @@ func newPermissionMetrics(params permissionMetricsParams) (permissionapplication
 	return recorder, nil
 }
 
+// PolicyReloadSucceeded 记录权限规则重新加载成功的次数。
 func (m *prometheusMetrics) PolicyReloadSucceeded(_ context.Context, source string) {
 	m.policySync.WithLabelValues(permissionapplication.MetricsOperationPolicyReload, commonmetrics.StatusSuccess, permissionapplication.MetricsReasonNone, rbacSource(source)).Inc()
 }
 
+// PolicyReloadFailed 记录权限规则重新加载失败的次数及原因。
 func (m *prometheusMetrics) PolicyReloadFailed(_ context.Context, source string, reason string) {
 	m.policySync.WithLabelValues(permissionapplication.MetricsOperationPolicyReload, commonmetrics.StatusFailure, rbacReason(reason), rbacSource(source)).Inc()
 }
 
+// PolicyPublishSucceeded 记录广播权限变更通知成功的次数。
 func (m *prometheusMetrics) PolicyPublishSucceeded(context.Context) {
 	m.policySync.WithLabelValues(permissionapplication.MetricsOperationPolicyPublish, commonmetrics.StatusSuccess, permissionapplication.MetricsReasonNone, permissionapplication.MetricsSourceLocalChange).Inc()
 }
 
+// PolicyPublishFailed 记录广播权限变更通知失败的次数。
 func (m *prometheusMetrics) PolicyPublishFailed(_ context.Context, reason string) {
 	m.policySync.WithLabelValues(permissionapplication.MetricsOperationPolicyPublish, commonmetrics.StatusFailure, rbacReason(reason), permissionapplication.MetricsSourceLocalChange).Inc()
 }
 
+// WatcherCheckFailed 记录监听组件执行健康检查或对账检查失败的次数。
 func (m *prometheusMetrics) WatcherCheckFailed(_ context.Context, source string, reason string) {
 	m.policySync.WithLabelValues(permissionapplication.MetricsOperationWatcherRevisionCheck, commonmetrics.StatusFailure, rbacReason(reason), rbacSource(source)).Inc()
 }
 
+// WatcherReloadSucceeded 记录由网络广播触发的权限更新成功次数。
 func (m *prometheusMetrics) WatcherReloadSucceeded(_ context.Context, source string) {
 	m.policySync.WithLabelValues(permissionapplication.MetricsOperationWatcherReload, commonmetrics.StatusSuccess, permissionapplication.MetricsReasonNone, rbacSource(source)).Inc()
 }
 
+// WatcherReloadFailed 记录由网络广播触发的权限更新失败次数。
 func (m *prometheusMetrics) WatcherReloadFailed(_ context.Context, source string, reason string) {
 	m.policySync.WithLabelValues(permissionapplication.MetricsOperationWatcherReload, commonmetrics.StatusFailure, rbacReason(reason), rbacSource(source)).Inc()
 }
 
+// WatcherVersionMismatch 记录本地缓存版本与数据库真实版本出现差异的次数。
 func (m *prometheusMetrics) WatcherVersionMismatch(_ context.Context, source string, reason string) {
 	m.versionMismatch.WithLabelValues(rbacSource(source), rbacReason(reason)).Inc()
 }
 
+// PolicyReloadLagObserved 记录本地节点版本落后数据库最新版本的代数延迟数值。
 func (m *prometheusMetrics) PolicyReloadLagObserved(_ context.Context, lag int64) {
 	if lag < 0 {
 		lag = 0
@@ -146,12 +156,14 @@ func (m *prometheusMetrics) PolicyReloadLagObserved(_ context.Context, lag int64
 	m.policyReloadLag.Set(float64(lag))
 }
 
+// EnforceObserved 记录单次用户接口访问权限检查的结果（通过还是拦截）以及耗时。
 func (m *prometheusMetrics) EnforceObserved(_ context.Context, result string, method string, routeTemplate string, duration time.Duration) {
 	result = rbacEnforceResult(result)
 	m.enforce.WithLabelValues(result, method, routeTemplate).Inc()
 	m.enforceLatency.WithLabelValues(result, method, routeTemplate).Observe(duration.Seconds())
 }
 
+// rbacSource 规范化权限更新触发来源的统计标签（如定时检查或广播推送）。
 func rbacSource(source string) string {
 	switch source {
 	case permissionapplication.MetricsSourceLocalChange,
@@ -163,6 +175,7 @@ func rbacSource(source string) string {
 	}
 }
 
+// rbacReason 规范化权限操作失败原因的统计标签。
 func rbacReason(reason string) string {
 	switch reason {
 	case permissionapplication.MetricsReasonNone,
@@ -177,6 +190,7 @@ func rbacReason(reason string) string {
 	}
 }
 
+// rbacEnforceResult 规范化权限核对结果（允许访问或禁止访问）。
 func rbacEnforceResult(result string) string {
 	switch result {
 	case permissionapplication.MetricsEnforceResultAllow,

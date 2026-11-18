@@ -86,6 +86,7 @@ type policyWatcherRunner interface {
 
 // Provider：Policy 同步
 
+// provideRedisStore 创建用于发布和接收权限变更广播的缓存存储组件。
 func provideRedisStore(params CacheRedisParams, settings serviceconfig.RBACSettings, log *zap.Logger) (PolicyRedisStoreResult, error) {
 	store, err := permissionredis.NewStore(params.Client, settings.AppName, log)
 	if err != nil {

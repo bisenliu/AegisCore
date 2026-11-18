@@ -640,7 +640,15 @@ run_rg_any "OpenSpec/OPSX markdown must use Simplified Chinese instead of defaul
   "${repo_root}/openspec/changes" \
   "${repo_root}/docs/opsx"
 
-# 步骤 25：校验 Ent 生成物没有未提交漂移，确保 schema 变更后重新生成。
+# 步骤 25：校验手写 Go 代码的函数、方法和导出声明都有紧邻的中文说明。
+if ! commentcheck_output="$(
+  cd "${repo_root}/common" &&
+    go run ./testing/commentcheck/cmd -root "${repo_root}"
+)"; then
+  report "手写 Go 代码必须为函数、方法和导出声明提供紧邻、可读的中文注释"$'\n'"${commentcheck_output}"
+fi
+
+# 步骤 26：校验 Ent 生成物没有未提交漂移，确保 schema 变更后重新生成。
 run_rg_any "Ent generated files have uncommitted drift; run make generate and commit generated output" \
   '^user-service/internal/persistence/ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update|permission|permission_create|permission_delete|permission_query|permission_update|role|role_create|role_delete|role_query|role_update|rolepermission|rolepermission_create|rolepermission_delete|rolepermission_query|rolepermission_update|userrole|userrole_create|userrole_delete|userrole_query|userrole_update)\.go$|^user-service/internal/persistence/ent/(enttest|hook|migrate|predicate|runtime|user|permission|role|rolepermission|userrole)/' \
   <(cd "${repo_root}" && git diff --name-only -- user-service/internal/persistence/ent)

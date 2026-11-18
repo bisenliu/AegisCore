@@ -63,6 +63,7 @@ func main() {
 	os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
 }
 
+// run 执行接口文档转换流程，将旧版 Swagger 2 格式转换为现代 OpenAPI 3 格式并生成 JSON、YAML 和 Go 代码文件。
 func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) int {
 	// 转换链路按 Swagger 2 输入 -> OpenAPI 3 规范化 -> Go embed 渲染 -> JSON/YAML/Go 写入执行；任一步失败都返回非零退出码。
 	var inputPath string
@@ -138,8 +139,9 @@ func run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 	return exitOK
 }
 
+// convertOptions 组装文档转换所需的选项，包括文档版本、接口服务器地址及身份验证方式说明。
 func convertOptions(openAPIVersion string, serverURL string, rootServerURL string, rootPaths []string, bearerAuthName string, bearerAuthDescription string) commonopenapi.ConvertOptions {
-	// 工具只把 CLI 参数转换为通用 openapi options，不写死 user-service 语义；root server 是路径级 server 覆盖，不是路径过滤器。
+	// 工具只把命令行参数转换为通用的 OpenAPI 配置，不绑定任何特定服务的私有逻辑；rootServerURL 专门用于为根路径接口（如健康检查探针）指定单独的访问地址。
 	var servers []commonopenapi.Server
 	if serverURL != "" {
 		servers = []commonopenapi.Server{{URL: serverURL}}
@@ -169,6 +171,7 @@ func convertOptions(openAPIVersion string, serverURL string, rootServerURL strin
 	}
 }
 
+// writeFile 将转换生成好的文档内容写入到本地目标文件中，若父目录不存在则自动创建。
 func writeFile(path string, data []byte) error {
 	// 适合生成物目录自动创建；不提供原子写、并发写协调或软链接安全保护。
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -177,6 +180,7 @@ func writeFile(path string, data []byte) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
+// failf 将文档转换工具的出错信息打印到终端错误输出中。
 func failf(stderr io.Writer, format string, args ...any) {
 	// 调用方已经确定返回失败；诊断 writer 不可用时仍保持原非零退出状态。
 	_, _ = fmt.Fprintf(stderr, format+"\n", args...)

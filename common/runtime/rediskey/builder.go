@@ -27,7 +27,7 @@ type Builder struct {
 	scope     []string
 }
 
-// NewBuilder 构造无业务语义的 Redis key builder。
+// NewBuilder 创建通用的 Redis 键名生成器（负责统一命名空间前缀与冒号分隔符规则，本身不绑定特定业务逻辑）。
 func NewBuilder(options Options) (Builder, error) {
 	namespace := strings.TrimSpace(options.Namespace)
 	if namespace != "" {
@@ -133,6 +133,7 @@ func HashTag(value string) string {
 	return "{" + value + "}"
 }
 
+// validateSegment 检查键名片段是否为空或夹带冒号，避免破坏缓存键的层级命名规则。
 func validateSegment(segment string) error {
 	if segment == "" {
 		return fmt.Errorf("%w: empty segment", ErrInvalidSegment)
@@ -147,6 +148,7 @@ func validateSegment(segment string) error {
 	return nil
 }
 
+// validateHashTag 检查花括号标签是否成对出现，确保分布式缓存分片能将关联的数据分配到同一个节点上。
 func validateHashTag(segment string) (bool, error) {
 	openCount := strings.Count(segment, "{")
 	closeCount := strings.Count(segment, "}")

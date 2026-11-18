@@ -35,7 +35,7 @@ type ReplaceRolePermissionsCommand struct {
 	PermissionIDs []uuid.UUID
 }
 
-// AddUserRole 为用户新增角色绑定；重复绑定由 store 映射为明确冲突语义。
+// AddUserRole 为用户绑定新的角色；若该角色已绑定过，则返回数据已存在的冲突错误。
 func (s *roleCommandService) AddUserRole(ctx context.Context, cmd UserRoleCommand) (*RolesResult, error) {
 	role, err := s.roles.GetByRoleID(ctx, cmd.RoleID)
 	if err != nil {
@@ -58,8 +58,8 @@ func (s *roleCommandService) AddUserRole(ctx context.Context, cmd UserRoleComman
 	return &RolesResult{Items: write.Items, Revision: write.Revision}, nil
 }
 
-// ReplaceUserRoles 幂等替换用户的完整角色绑定集合。
-// 输入 role_id 会先去重再整组替换；若替换已提交但 policy 通知失败，数据库绑定已生效，调用方需要依赖 watcher 补偿或重试恢复授权缓存一致性。
+// ReplaceUserRoles 全量覆盖用户的角色绑定列表（多次提交相同内容结果一致）。
+// 系统会先剔除重复的角色 ID 再执行整组更新；若数据库更新已成功但权限变更广播通知失败，权限数据仍以数据库为准，后台定时同步机制会自动校准权限缓存。
 func (s *roleCommandService) ReplaceUserRoles(ctx context.Context, cmd ReplaceUserRolesCommand) (*RolesResult, error) {
 	roleIDs := uniqueUUIDs(cmd.RoleIDs)
 	roles, err := s.roles.GetByRoleIDs(ctx, roleIDs)
@@ -82,7 +82,7 @@ func (s *roleCommandService) ReplaceUserRoles(ctx context.Context, cmd ReplaceUs
 	return &RolesResult{Items: write.Items, Revision: write.Revision}, nil
 }
 
-// RemoveUserRole 删除用户角色绑定；不存在由 store 映射为明确 not found 语义。
+// RemoveUserRole 解除用户的指定角色；若该绑定关系本就不存在，则返回未找到的错误。
 func (s *roleCommandService) RemoveUserRole(ctx context.Context, cmd UserRoleCommand) (*RolesResult, error) {
 	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindUserRoleChanged, Reason: "user_role_removed", UserID: cmd.UserID, RoleID: cmd.RoleID}
 	write, err := s.userRoles.Remove(ctx, cmd.UserID, cmd.RoleID, change)
@@ -95,7 +95,7 @@ func (s *roleCommandService) RemoveUserRole(ctx context.Context, cmd UserRoleCom
 	return &RolesResult{Items: write.Items, Revision: write.Revision}, nil
 }
 
-// AddRolePermission 为角色新增权限绑定；重复绑定由 store 映射为明确冲突语义。
+// AddRolePermission 为角色分配新的权限；若该角色已拥有该权限，则返回重复绑定的冲突错误。
 func (s *roleCommandService) AddRolePermission(ctx context.Context, cmd RolePermissionCommand) (*PermissionsResult, error) {
 	permission, err := s.permissions.GetByPermissionID(ctx, cmd.PermissionID)
 	if err != nil {
@@ -112,8 +112,8 @@ func (s *roleCommandService) AddRolePermission(ctx context.Context, cmd RolePerm
 	return &PermissionsResult{Items: write.Items, Revision: write.Revision}, nil
 }
 
-// ReplaceRolePermissions 幂等替换角色的完整权限绑定集合。
-// 替换语义以去重后的完整权限集合为准；提交后的 policy reload 失败由数据库 revision 补偿恢复。
+// ReplaceRolePermissions 全量覆盖角色的权限列表（多次提交相同内容结果一致）。
+// 系统会自动去重后整组更新；若更新提交后权限引擎热重载失败，系统会通过数据库版本号机制在后台定时自动校准恢复。
 func (s *roleCommandService) ReplaceRolePermissions(ctx context.Context, cmd ReplaceRolePermissionsCommand) (*PermissionsResult, error) {
 	permissionIDs := uniqueUUIDs(cmd.PermissionIDs)
 	permissions, err := s.permissions.GetByPermissionIDs(ctx, permissionIDs)
@@ -131,7 +131,7 @@ func (s *roleCommandService) ReplaceRolePermissions(ctx context.Context, cmd Rep
 	return &PermissionsResult{Items: write.Items, Revision: write.Revision}, nil
 }
 
-// RemoveRolePermission 删除角色权限绑定；不存在由 store 映射为明确 not found 语义。
+// RemoveRolePermission 移除角色的指定权限；若该角色原本就没有绑定该权限，则返回未找到的错误。
 func (s *roleCommandService) RemoveRolePermission(ctx context.Context, cmd RolePermissionCommand) (*PermissionsResult, error) {
 	change := roleapplication.PolicyChange{Kind: roleapplication.PolicyChangeKindPolicyChanged, Reason: "role_permission_removed", RoleID: cmd.RoleID, PermissionID: cmd.PermissionID}
 	write, err := s.rolePermissions.Remove(ctx, cmd.RoleID, cmd.PermissionID, change)
@@ -144,6 +144,7 @@ func (s *roleCommandService) RemoveRolePermission(ctx context.Context, cmd RoleP
 	return &PermissionsResult{Items: write.Items, Revision: write.Revision}, nil
 }
 
+// uniqueUUIDs 剔除列表中重复的编号，同时保持用户传入的先后顺序。
 func uniqueUUIDs(values []uuid.UUID) []uuid.UUID {
 	seen := make(map[uuid.UUID]struct{}, len(values))
 	result := make([]uuid.UUID, 0, len(values))

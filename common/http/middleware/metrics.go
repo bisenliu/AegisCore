@@ -76,6 +76,7 @@ func HTTPServerMetrics(options HTTPMetricsOptions) gin.HandlerFunc {
 	}
 }
 
+// newHTTPServerMetricsRecorder 创建接口访问统计组件，用于记录系统一共收到了多少次请求以及处理耗时。
 func newHTTPServerMetricsRecorder(options HTTPMetricsOptions) *httpServerMetricsRecorder {
 	if options.Provider == nil || !options.Provider.Enabled() {
 		return nil
@@ -110,6 +111,7 @@ func newHTTPServerMetricsRecorder(options HTTPMetricsOptions) *httpServerMetrics
 	return recorder
 }
 
+// normalizeHTTPMetricsMethod 将请求方式转为标准大写字母（如 GET、POST）；对于不常见的非标准方式归为 OTHER，防止监控标签过多导致内存暴涨。
 func normalizeHTTPMetricsMethod(method string) string {
 	switch strings.ToUpper(strings.TrimSpace(method)) {
 	case http.MethodGet:

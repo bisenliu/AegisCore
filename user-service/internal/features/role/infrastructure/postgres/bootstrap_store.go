@@ -73,6 +73,7 @@ func (s *BootstrapStore) BootstrapSuperAdmin(ctx context.Context, input roleboot
 	return &rolebootstrap.BootstrapSuperAdminResult{UserID: input.UserID, RoleID: input.RoleID, Username: input.Username, Nickname: input.Nickname}, nil
 }
 
+// queryBootstrapRole 查询超级管理员角色在数据库中的内部记录；若角色尚未预置则报错。
 func queryBootstrapRole(ctx context.Context, tx *sql.Tx, input rolebootstrap.BootstrapSuperAdminInput) (int64, error) {
 	var internalID int64
 	var isSystem bool
@@ -93,6 +94,7 @@ func queryBootstrapRole(ctx context.Context, tx *sql.Tx, input rolebootstrap.Boo
 	return internalID, nil
 }
 
+// userIDExists 检查该用户编号是否已经在数据库中存在。
 func userIDExists(ctx context.Context, tx *sql.Tx, userID string) (bool, error) {
 	var exists bool
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM users WHERE user_id = $1)`, userID).Scan(&exists); err != nil {
@@ -101,6 +103,7 @@ func userIDExists(ctx context.Context, tx *sql.Tx, userID string) (bool, error) 
 	return exists, nil
 }
 
+// usernameExists 检查该登录用户名是否已被他人占用。
 func usernameExists(ctx context.Context, tx *sql.Tx, username string) (bool, error) {
 	var exists bool
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM users WHERE username = $1)`, username).Scan(&exists); err != nil {
@@ -109,6 +112,7 @@ func usernameExists(ctx context.Context, tx *sql.Tx, username string) (bool, err
 	return exists, nil
 }
 
+// insertBootstrapUser 向数据库中插入首位超级管理员的用户信息；若用户名或编号已存在则拒绝覆盖并报错。
 func insertBootstrapUser(ctx context.Context, tx *sql.Tx, input rolebootstrap.BootstrapSuperAdminInput, now int64) (int64, error) {
 	var internalID int64
 	err := tx.QueryRowContext(ctx, `
@@ -122,6 +126,7 @@ func insertBootstrapUser(ctx context.Context, tx *sql.Tx, input rolebootstrap.Bo
 	return 0, mapBootstrapConstraintError(err, "create bootstrap user")
 }
 
+// insertBootstrapUserRole 为初始超级管理员赋予超级管理员角色。
 func insertBootstrapUserRole(ctx context.Context, tx *sql.Tx, userInternalID int64, roleInternalID int64, now int64) error {
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO user_roles (user_id, role_id, created_at)
@@ -133,6 +138,7 @@ func insertBootstrapUserRole(ctx context.Context, tx *sql.Tx, userInternalID int
 	return mapBootstrapConstraintError(err, "create bootstrap user role")
 }
 
+// mapBootstrapConstraintError 将数据库唯一键冲突（用户名已被占用）转换为友好的错误提示，防止重复创建管理员账号。
 func mapBootstrapConstraintError(err error, operation string) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {

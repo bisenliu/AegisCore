@@ -5,50 +5,50 @@ package rbacbaseline
 // MM 表示模块：00=无模块，01=user，02=permission，03=role，04=user-role，05=role-permission。
 // SSSSSSSS 是同一 TT+MM 下从 00000001 开始递增的序号；已发布或已删除的 ID 不得修改或复用。
 const (
-	// BootstrapSuperAdminUserID semantic=user:bootstrap-super-admin。
+	// BootstrapSuperAdminUserID 预设的首位超级管理员用户的固定唯一编号。
 	BootstrapSuperAdminUserID = "00000000-0000-0000-0000-010000000001"
 
-	// SuperAdminRoleID semantic=role:super-admin。
+	// SuperAdminRoleID 预设的超级管理员角色的固定唯一编号。
 	SuperAdminRoleID = "00000000-0000-0000-0000-020000000001"
 
-	// PermissionUserListID semantic=permission:user:list。
+	// PermissionUserListID 查看用户列表功能的固定权限编号。
 	PermissionUserListID = "00000000-0000-0000-0000-030100000001"
-	// PermissionUserCreateID semantic=permission:user:create。
+	// PermissionUserCreateID 创建新用户功能的固定权限编号。
 	PermissionUserCreateID = "00000000-0000-0000-0000-030100000002"
-	// PermissionUserGetID semantic=permission:user:get。
+	// PermissionUserGetID 查看单个用户详情功能的固定权限编号。
 	PermissionUserGetID = "00000000-0000-0000-0000-030100000003"
 
-	// PermissionPermissionListID semantic=permission:permission:list。
+	// PermissionPermissionListID 查看系统权限列表功能的固定权限编号。
 	PermissionPermissionListID = "00000000-0000-0000-0000-030200000001"
-	// PermissionPermissionUserEffectiveID semantic=permission:permission:effective-by-user。
+	// PermissionPermissionUserEffectiveID 查询某位用户当前实际拥有的全部权限功能的固定权限编号。
 	PermissionPermissionUserEffectiveID = "00000000-0000-0000-0000-030200000002"
 
-	// PermissionRoleListID semantic=permission:role:list。
+	// PermissionRoleListID 查看角色列表功能的固定权限编号。
 	PermissionRoleListID = "00000000-0000-0000-0000-030300000001"
-	// PermissionRoleCreateID semantic=permission:role:create。
+	// PermissionRoleCreateID 创建新角色功能的固定权限编号。
 	PermissionRoleCreateID = "00000000-0000-0000-0000-030300000002"
-	// PermissionRoleGetID semantic=permission:role:get。
+	// PermissionRoleGetID 查看单个角色详情功能的固定权限编号。
 	PermissionRoleGetID = "00000000-0000-0000-0000-030300000003"
-	// PermissionRoleUpdateID semantic=permission:role:update。
+	// PermissionRoleUpdateID 修改角色信息功能的固定权限编号。
 	PermissionRoleUpdateID = "00000000-0000-0000-0000-030300000004"
-	// PermissionRoleStatusID semantic=permission:role:set-status。
+	// PermissionRoleStatusID 启用或停用角色状态功能的固定权限编号。
 	PermissionRoleStatusID = "00000000-0000-0000-0000-030300000005"
 
-	// PermissionUserRoleListID semantic=permission:user-role:list。
+	// PermissionUserRoleListID 查看指定用户已分配角色功能的固定权限编号。
 	PermissionUserRoleListID = "00000000-0000-0000-0000-030400000001"
-	// PermissionUserRoleReplaceID semantic=permission:user-role:replace。
+	// PermissionUserRoleReplaceID 重新分配用户所有角色功能的固定权限编号。
 	PermissionUserRoleReplaceID = "00000000-0000-0000-0000-030400000002"
-	// PermissionUserRoleAddID semantic=permission:user-role:add。
+	// PermissionUserRoleAddID 给用户增加角色功能的固定权限编号。
 	PermissionUserRoleAddID = "00000000-0000-0000-0000-030400000003"
-	// PermissionUserRoleRemoveID semantic=permission:user-role:remove。
+	// PermissionUserRoleRemoveID 移除用户某个角色功能的固定权限编号。
 	PermissionUserRoleRemoveID = "00000000-0000-0000-0000-030400000004"
 
-	// PermissionRolePermissionListID semantic=permission:role-permission:list。
+	// PermissionRolePermissionListID 查看指定角色包含哪些权限功能的固定权限编号。
 	PermissionRolePermissionListID = "00000000-0000-0000-0000-030500000001"
-	// PermissionRolePermissionReplaceID semantic=permission:role-permission:replace。
+	// PermissionRolePermissionReplaceID 重新设置角色包含所有权限功能的固定权限编号。
 	PermissionRolePermissionReplaceID = "00000000-0000-0000-0000-030500000002"
-	// PermissionRolePermissionAddID semantic=permission:role-permission:add。
+	// PermissionRolePermissionAddID 给角色增加权限功能的固定权限编号。
 	PermissionRolePermissionAddID = "00000000-0000-0000-0000-030500000003"
-	// PermissionRolePermissionRemoveID semantic=permission:role-permission:remove。
+	// PermissionRolePermissionRemoveID 从角色中移除某项权限功能的固定权限编号。
 	PermissionRolePermissionRemoveID = "00000000-0000-0000-0000-030500000004"
 )

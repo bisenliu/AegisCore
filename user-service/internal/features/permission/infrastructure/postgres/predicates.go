@@ -6,6 +6,7 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent/predicate"
 )
 
+// buildListPredicates 根据前端传入的筛选条件（如所属模块或关键字），拼接数据库查询筛选语句。
 func buildListPredicates(input permissionapplication.ListPermissionsInput) []predicate.Permission {
 	predicates := make([]predicate.Permission, 0, 2)
 	if input.Module != "" {

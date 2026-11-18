@@ -11,7 +11,7 @@ import (
 	entrole "github.com/aegiscore/user-service/internal/persistence/ent/role"
 )
 
-// RoleStore 使用 Ent 持久化普通角色写操作和系统角色 seed。
+// RoleStore 负责角色信息在 PostgreSQL 数据库中的读写与初始化。
 type RoleStore struct {
 	client *ent.Client
 }
@@ -19,12 +19,12 @@ type RoleStore struct {
 var _ roleapplication.RoleStore = (*RoleStore)(nil)
 var _ roleapplication.SeedRoleStore = (*RoleStore)(nil)
 
-// NewRoleStore 构造基于 Ent 的角色 store。
+// NewRoleStore 创建角色数据库存储操作对象。
 func NewRoleStore(client *ent.Client) *RoleStore {
 	return &RoleStore{client: client}
 }
 
-// Create 插入角色记录，并将唯一约束冲突映射为 ErrRoleAlreadyExists。
+// Create 新建角色记录；若角色名称已存在导致数据库唯一约束冲突，则返回明确的角色已存在错误（ErrRoleAlreadyExists）。
 func (s *RoleStore) Create(ctx context.Context, input roleapplication.CreateRoleInput, change roleapplication.PolicyChange) (*roleapplication.RoleWriteResult, error) {
 	created, write, err := transactPolicyChange(ctx, s.client, "create role", change, func(tx *ent.Tx) (*ent.Role, error) {
 		created, err := tx.Role.Create().
@@ -182,6 +182,7 @@ func (s *RoleStore) UpsertSystemRole(ctx context.Context, input roleapplication.
 	return nil, false, fmt.Errorf("query seed role %s after constraint conflict: %w", input.RoleID.String(), err)
 }
 
+// updateSystemRole 修改系统内置角色的可变属性（如名称和说明），严格保护固定的系统编号不被篡改。
 func (s *RoleStore) updateSystemRole(ctx context.Context, existing *ent.Role, input roleapplication.SeedRoleInput) (*roledomain.Role, error) {
 	active := existing.Active
 	if input.ReactivateSystem {
@@ -199,6 +200,7 @@ func (s *RoleStore) updateSystemRole(ctx context.Context, existing *ent.Role, in
 	return toRoleModel(updated), nil
 }
 
+// toRoleModel 将数据库中的角色记录转换为业务层的角色对象。
 func toRoleModel(entRole *ent.Role) *roledomain.Role {
 	if entRole == nil {
 		return nil
@@ -206,6 +208,7 @@ func toRoleModel(entRole *ent.Role) *roledomain.Role {
 	return &roledomain.Role{ID: entRole.ID, RoleID: entRole.RoleID, Name: entRole.Name, Description: entRole.Description, Active: entRole.Active, IsSystem: entRole.IsSystem, CreatedAt: entRole.CreatedAt, UpdatedAt: entRole.UpdatedAt}
 }
 
+// toRoleModels 批量将数据库中的多条角色记录转换为业务层对象列表。
 func toRoleModels(roles []*ent.Role) []roledomain.Role {
 	result := make([]roledomain.Role, 0, len(roles))
 	for _, entRole := range roles {

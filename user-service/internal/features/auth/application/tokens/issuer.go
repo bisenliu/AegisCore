@@ -117,6 +117,7 @@ func (i *authTokenIssuer) IssuePasswordChangeToken(ctx context.Context, userID u
 	return &TokenResult{AccessToken: token, TokenType: commonauth.TokenTypeBearer, ExpiresIn: int64(ttl.Seconds())}, nil
 }
 
+// passwordChangeTokenTTL 返回强制改密临时凭证的有效时长（通常较短），该凭证无法用于访问普通业务接口。
 func (i *authTokenIssuer) passwordChangeTokenTTL() time.Duration {
 	ttl := i.config.PasswordChangeTokenTTL
 	if ttl <= 0 {
@@ -155,6 +156,7 @@ func (i *authTokenIssuer) VerifyAccessToken(tokenString string) (commonauth.Acce
 	return commonauth.AccessToken{UserID: claims.UserID.String(), SessionID: claims.SessionID, TokenVersion: claims.TokenVersion}, nil
 }
 
+// parse 解析并校验加密通行证文本，提取其中包含的用户信息和有效期。
 func (i *authTokenIssuer) parse(tokenString string, subject string, requireSession bool) (*Claims, error) {
 	claims := &Claims{}
 	if err := i.verifier.VerifyClaims(tokenString, claims); err != nil {
@@ -181,6 +183,7 @@ func (i *authTokenIssuer) parse(tokenString string, subject string, requireSessi
 	return claims, nil
 }
 
+// sign 使用系统密钥对通行证信息进行防伪签名；签名失败则本次登录不能继续。
 func (i *authTokenIssuer) sign(input signInput, subject string) (string, error) {
 	if i.config.Secret == "" {
 		return "", commonauth.ErrMissingSecret
@@ -213,6 +216,7 @@ func (i *authTokenIssuer) sign(input signInput, subject string) (string, error) 
 	return jwtv5.NewWithClaims(jwtv5.SigningMethodHS256, claims).SignedString([]byte(i.config.Secret))
 }
 
+// accessTokenTTL 返回短期访问通行证的有效时长。
 func (i *authTokenIssuer) accessTokenTTL() time.Duration {
 	ttl := i.config.AccessTokenTTL
 	if ttl <= 0 {
@@ -222,6 +226,7 @@ func (i *authTokenIssuer) accessTokenTTL() time.Duration {
 	return ttl
 }
 
+// refreshTokenTTL 返回长期续期通行证的有效时长。
 func (i *authTokenIssuer) refreshTokenTTL() time.Duration {
 	ttl := i.config.RefreshTokenTTL
 	if ttl <= 0 {
@@ -231,6 +236,7 @@ func (i *authTokenIssuer) refreshTokenTTL() time.Duration {
 	return ttl
 }
 
+// audienceClaim 将通行证的受众接收方信息写入凭证中；如果未配置受众则不包含该项。
 func audienceClaim(audience string) jwtv5.ClaimStrings {
 	if audience == "" {
 		return nil

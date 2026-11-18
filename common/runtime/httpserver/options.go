@@ -23,6 +23,7 @@ type Options struct {
 	OnServeError    func(error)
 }
 
+// validateOptions 检查服务启动配置，确保服务名称、网络监听端口和业务处理入口都已正确提供。
 func validateOptions(options Options) error {
 	name := strings.TrimSpace(options.Name)
 	addr := strings.TrimSpace(options.Addr)
@@ -61,6 +62,7 @@ func validateOptions(options Options) error {
 	return nil
 }
 
+// isNilHandler 检查是否提供了有效的业务请求处理逻辑，防止因传入空内容导致服务启动后无法处理请求。
 func isNilHandler(handler http.Handler) bool {
 	if handler == nil {
 		return true

@@ -64,6 +64,7 @@ func NewWatcher(params WatcherParams) *Watcher {
 	return newWatcher(params.Subscriber, params.RevisionSource, params.UserRoleRevisions, params.Engine, params.Log, params.Settings, params.Metrics)
 }
 
+// newWatcher 创建监听权限变更广播的后台监控组件；在调用 Start 后开始正式监听。
 func newWatcher(source messageSource, revisionSource permissionapplication.LatestPolicyRevisionSource, userRoleRevisions permissionapplication.UserRoleRevisionSource, engine permissionapplication.PolicyReloadEngine, log *zap.Logger, settings WatcherSettings, metrics permissionapplication.Metrics) *Watcher {
 	if settings.CheckInterval <= 0 {
 		settings.CheckInterval = defaultCheckInterval
@@ -225,6 +226,7 @@ func (w *Watcher) HandlePayloads(ctx context.Context, payloads []string) {
 	w.markReconcileSuccess()
 }
 
+// handlePolicyBatch 集中处理一批收到的权限变更通知：先清除受影响用户的缓存，再重新从数据库拉取最新的权限规则。
 func (w *Watcher) handlePolicyBatch(ctx context.Context, pending pendingRefreshBatch) {
 	localApplied := w.engine.AppliedRevision()
 	databaseLatest, err := w.latestRevision(ctx, permissionapplication.MetricsSourceWatcherPubSub, pending.maxPolicyRevision)
@@ -263,10 +265,12 @@ type pendingRefreshBatch struct {
 	userRoleChanges   []userRoleRefresh
 }
 
+// newPendingRefreshBatch 创建用于暂存待处理通知的批次容器。
 func newPendingRefreshBatch() pendingRefreshBatch {
 	return pendingRefreshBatch{policyReason: "policy_changed"}
 }
 
+// add 将一条新的变更通知加入待处理批次中，并记录其中出现过的最高版本号。
 func (b *pendingRefreshBatch) add(message PolicyRefreshMessage) {
 	b.hasMessages = true
 	change := message.policyChange()
@@ -288,6 +292,7 @@ type userRoleRefresh struct {
 	revisionHint int64
 }
 
+// run 在后台持续监听广播通知并在收到通知后触发更新；定期还会与数据库进行比对对账，防止遗漏消息。
 func (w *Watcher) run(ctx context.Context, done chan struct{}) {
 	// 消息与周期校准在同一循环串行执行，避免授权投影副作用乱序。
 	messages := w.source.Messages()
@@ -322,6 +327,7 @@ func (w *Watcher) run(ctx context.Context, done chan struct{}) {
 	}
 }
 
+// drainPayloads 将缓冲区中已经到达的所有通知一次性全部取出，合并为一批处理，避免每来一条就刷新一次导致系统频繁卡顿。
 func drainPayloads(first string, messages <-chan redispubsub.Message) []string {
 	payloads := []string{first}
 	for {
@@ -384,6 +390,7 @@ func (w *Watcher) ObserveTargetRevision(ctx context.Context, targetRevision int6
 	return nil
 }
 
+// compensateUserRoles 主动从数据库拉取错过的用户角色变更记录，防止仅靠网络广播出现遗漏。
 func (w *Watcher) compensateUserRoles(ctx context.Context) {
 	if w.userRoleRevisions == nil {
 		return
@@ -419,6 +426,7 @@ func (w *Watcher) compensateUserRoles(ctx context.Context) {
 	w.setObservedUserRoleRevision(batch.LatestRevision)
 }
 
+// observeUserRoleRevision 记录本地节点当前已经处理到的用户角色变更版本序号，该序号只会前进不会后退。
 func (w *Watcher) observeUserRoleRevision(revision int64) {
 	if revision <= 0 {
 		return
@@ -430,12 +438,14 @@ func (w *Watcher) observeUserRoleRevision(revision int64) {
 	w.mu.Unlock()
 }
 
+// observedUserRoleRevisionValue 获取本地节点当前已经同步完成的用户角色版本序号。
 func (w *Watcher) observedUserRoleRevisionValue() int64 {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.observedUserRoleRevision
 }
 
+// setObservedUserRoleRevision 更新本地节点已同步完成的用户角色版本序号。
 func (w *Watcher) setObservedUserRoleRevision(revision int64) {
 	w.mu.Lock()
 	if revision > w.observedUserRoleRevision {
@@ -444,6 +454,7 @@ func (w *Watcher) setObservedUserRoleRevision(revision int64) {
 	w.mu.Unlock()
 }
 
+// maxInt64 取两个版本号中的较大值，用于向前推进同步进度。
 func maxInt64(left int64, right int64) int64 {
 	if left > right {
 		return left
@@ -451,6 +462,7 @@ func maxInt64(left int64, right int64) int64 {
 	return right
 }
 
+// invalidateChange 根据具体的变更内容，清除对应用户在本地内存中缓存的角色列表，促使其下次重新拉取最新权限。
 func (w *Watcher) invalidateChange(change permissionapplication.PolicyChange) {
 	if change.UserID != uuid.Nil() {
 		w.engine.InvalidateUserRole(change.UserID)
@@ -459,6 +471,7 @@ func (w *Watcher) invalidateChange(change permissionapplication.PolicyChange) {
 	}
 }
 
+// latestRevision 从数据库查询最新的权限版本号，若查询失败则严禁假装已经同步。
 func (w *Watcher) latestRevision(ctx context.Context, source string, hintRevision int64) (int64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
@@ -481,6 +494,7 @@ func (w *Watcher) latestRevision(ctx context.Context, source string, hintRevisio
 	return revision, nil
 }
 
+// observeLag 统计并记录本地内存中的权限版本落后数据库真实版本多少代，便于监控延迟。
 func (w *Watcher) observeLag(ctx context.Context, databaseLatest int64, localApplied int64) {
 	lag := databaseLatest - localApplied
 	if lag < 0 {
@@ -489,6 +503,7 @@ func (w *Watcher) observeLag(ctx context.Context, databaseLatest int64, localApp
 	w.metrics.PolicyReloadLagObserved(ctx, lag)
 }
 
+// markReconcileSuccess 记录最近一次与数据库校验对账成功，并清除历史故障标记。
 func (w *Watcher) markReconcileSuccess() {
 	w.mu.Lock()
 	w.status.ReconcileErrorCategory = permissionapplication.PolicyWatcherErrorNone
@@ -496,6 +511,7 @@ func (w *Watcher) markReconcileSuccess() {
 	w.mu.Unlock()
 }
 
+// markReconcileFailure 记录最近一次与数据库对账失败的详细原因，供系统健康检查展示。
 func (w *Watcher) markReconcileFailure(ctx context.Context, category permissionapplication.PolicyWatcherErrorCategory) {
 	if ctx != nil && ctx.Err() != nil {
 		return
@@ -506,6 +522,7 @@ func (w *Watcher) markReconcileFailure(ctx context.Context, category permissiona
 	w.mu.Unlock()
 }
 
+// mapSubscriptionState 将底层的网络连接状态转换为对外展示的监控健康状态。
 func mapSubscriptionState(state redispubsub.State) permissionapplication.PolicyWatcherSubscriptionState {
 	switch state {
 	case redispubsub.StateStarting:
@@ -521,6 +538,7 @@ func mapSubscriptionState(state redispubsub.State) permissionapplication.PolicyW
 	}
 }
 
+// mapSubscriptionError 将底层的网络异常转换为分类清晰的错误原因，便于定位是配置问题还是网络中断。
 func mapSubscriptionError(category redispubsub.ErrorCategory) permissionapplication.PolicyWatcherErrorCategory {
 	switch category {
 	case redispubsub.ErrorNone:

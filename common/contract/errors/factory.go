@@ -11,12 +11,12 @@ const (
 	MessageRequestBodyTooLarge = "请求体过大"
 )
 
-// New 创建不包含内部原因的语义应用错误。
+// New 创建仅包含面向用户提示信息的业务错误（不含底层堆栈或技术异常）。
 func New(kind Kind, reason Reason, code Code, message string) *Error {
 	return &Error{Kind: kind, Reason: reason, Code: code, Message: message}
 }
 
-// Wrap 创建语义应用错误，并将 err 保留为内部原因。
+// Wrap 将系统底层错误（如数据库异常、网络中断）包装为对用户友好的业务错误，同时在内部保留真实错误以供排查。
 func Wrap(err error, kind Kind, reason Reason, code Code, message string) *Error {
 	return &Error{Kind: kind, Reason: reason, Code: code, Message: message, Cause: err}
 }
@@ -26,7 +26,7 @@ func BadRequestError(format string, args ...any) *Error {
 	return New(KindBadRequest, ReasonBadRequest, CodeBadRequest, formatMessage(format, args))
 }
 
-// ValidationFailedError 创建表示请求字段语义校验失败的应用错误。
+// ValidationFailedError 创建表示用户提交的请求参数格式或内容不符合规则的业务错误。
 func ValidationFailedError(format string, args ...any) *Error {
 	return New(KindValidation, ReasonValidationFailed, CodeValidationFailed, formatMessage(format, args))
 }
@@ -51,7 +51,7 @@ func ForbiddenError(format string, args ...any) *Error {
 	return New(KindForbidden, ReasonForbidden, CodeForbidden, formatMessage(format, args))
 }
 
-// ConflictError 创建表示领域冲突或资源状态不允许操作的应用错误。
+// ConflictError 创建表示数据发生冲突或当前状态不允许该操作的错误（例如用户名已存在、数据版本冲突等）。
 func ConflictError(format string, args ...any) *Error {
 	return New(KindConflict, ReasonConflict, CodeConflict, formatMessage(format, args))
 }
@@ -96,6 +96,7 @@ func InternalError(err error) *Error {
 	return WrapInternal(err, MessageInternalError)
 }
 
+// formatMessage 拼接并格式化错误提示文本；如果没有额外参数则直接使用原提示语。
 func formatMessage(format string, args []any) string {
 	if len(args) == 0 {
 		return format

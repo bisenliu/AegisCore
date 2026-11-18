@@ -46,6 +46,7 @@ func (p *Pool) Stop(ctx context.Context) error {
 	}
 }
 
+// drain 停止接收新的异步任务，并耐心等待队列中已有的任务全部执行完毕后再彻底关闭。
 func (p *Pool) drain() {
 	// 先释放 ants 阻止新任务进入，再等待 inFlight；stopDone 为 stopErr 建立 happens-before 保证。
 	p.stopErr = p.workersPool.ReleaseContext(context.Background())
@@ -60,6 +61,7 @@ func (p *Pool) drain() {
 	close(p.stopDone)
 }
 
+// withStopTimeout 为任务池关闭等待设置最长超时时间，防止因某个任务卡死而导致整个服务无法退出。
 func withStopTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if timeout <= 0 {
 		return context.WithCancel(ctx)

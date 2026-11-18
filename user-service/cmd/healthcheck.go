@@ -28,6 +28,7 @@ type healthcheckResponse struct {
 	Status string `json:"status"`
 }
 
+// newHealthcheckCommand 创建用于容器环境探测自身健康状态的命令行工具，通过内部接口检查服务是否正常。
 func newHealthcheckCommand() *cobra.Command {
 	opts := healthcheckOptions{url: defaultHealthcheckURL, timeout: defaultHealthcheckTimeout}
 	cmd := &cobra.Command{
@@ -42,6 +43,7 @@ func newHealthcheckCommand() *cobra.Command {
 	return cmd
 }
 
+// runHealthcheck 调用本地健康检查接口；若接口报错、超时或返回状态不正常，则返回错误促使进程报错退出。
 func runHealthcheck(ctx context.Context, opts healthcheckOptions) error {
 	// 该命令同时要求 HTTP 2xx 和 JSON status == "ok"；LimitReader 防止异常响应体占用过多内存。
 	if strings.TrimSpace(opts.url) == "" {

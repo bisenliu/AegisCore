@@ -69,6 +69,7 @@ type loginResponse struct {
 	AccessToken string `json:"accessToken"`
 }
 
+// newAdminClient 创建连接配置中心的管理客户端，负责校验服务地址是否合法。
 func newAdminClient(options seedOptions) (*adminClient, error) {
 	server, err := parseServerURL(options.Addr)
 	if err != nil {
@@ -111,6 +112,7 @@ func (c *adminClient) Seed(ctx context.Context, options seedOptions, documents m
 	return nil
 }
 
+// login 使用管理员账号密码向配置中心申请登录令牌；登录成功后才能进行后续的配置推送。
 func (c *adminClient) login(ctx context.Context, username, password string) (string, error) {
 	form := url.Values{"username": {username}, "password": {password}}
 	var response loginResponse
@@ -123,6 +125,7 @@ func (c *adminClient) login(ctx context.Context, username, password string) (str
 	return response.AccessToken, nil
 }
 
+// namespaceExists 检查配置中心中是否已经创建了指定的环境分区（命名空间），避免重复创建报错。
 func (c *adminClient) namespaceExists(ctx context.Context, namespace string) (bool, error) {
 	endpoint := c.endpoint("/v3/admin/core/namespace/check")
 	query := endpoint.Query()
@@ -138,6 +141,7 @@ func (c *adminClient) namespaceExists(ctx context.Context, namespace string) (bo
 	return *response.Data != 0, nil
 }
 
+// createNamespace 在配置中心中创建新的环境分区（命名空间），用于隔离不同环境的配置文件。
 func (c *adminClient) createNamespace(ctx context.Context, namespace string) error {
 	form := url.Values{
 		"namespaceId":   {namespace},
@@ -154,6 +158,7 @@ func (c *adminClient) createNamespace(ctx context.Context, namespace string) err
 	return nil
 }
 
+// publishConfig 将本地的配置文件内容推送到配置中心中保存并发布。
 func (c *adminClient) publishConfig(ctx context.Context, namespace, group, dataID string, content []byte) error {
 	form := url.Values{
 		"namespaceId": {namespace},
@@ -172,10 +177,12 @@ func (c *adminClient) publishConfig(ctx context.Context, namespace, group, dataI
 	return nil
 }
 
+// doForm 将表单形式的参数打包并向配置中心发起 HTTP 请求。
 func (c *adminClient) doForm(ctx context.Context, method, apiPath string, form url.Values, target any, authenticated bool) error {
 	return c.do(ctx, method, c.endpoint(apiPath), form.Encode(), target, authenticated)
 }
 
+// do 发起网络请求并处理配置中心的返回结果；遇到请求超时或服务端返回失败时报错。
 func (c *adminClient) do(ctx context.Context, method string, endpoint *url.URL, body string, target any, authenticated bool) error {
 	req, err := http.NewRequestWithContext(ctx, method, endpoint.String(), strings.NewReader(body))
 	if err != nil {
@@ -214,6 +221,7 @@ func (c *adminClient) do(ctx context.Context, method string, endpoint *url.URL, 
 	return nil
 }
 
+// endpoint 根据相对路径拼接配置中心的完整访问网址。
 func (c *adminClient) endpoint(apiPath string) *url.URL {
 	// 每次请求复制基准 URL，避免修改共享 client 状态并使并发构造 endpoint 保持安全。
 	endpoint := *c.server
@@ -224,6 +232,7 @@ func (c *adminClient) endpoint(apiPath string) *url.URL {
 	return &endpoint
 }
 
+// parseServerURL 解析配置中心的服务地址（如 http://127.0.0.1:8848），确保地址格式合法且不包含多台混写。
 func parseServerURL(raw string) (*url.URL, error) {
 	raw = strings.TrimSpace(raw)
 	if strings.Contains(raw, ",") {
@@ -257,6 +266,7 @@ func parseServerURL(raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
+// apiError 将配置中心返回的错误状态码与提示信息整理成统一的错误对象，且不打印敏感账号信息。
 func apiError(code int, message string) error {
 	message = strings.TrimSpace(message)
 	if message == "" {

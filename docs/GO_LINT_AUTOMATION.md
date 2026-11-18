@@ -72,7 +72,7 @@ Import 检查之外，code review 还应检查类型、构造函数、provider�
 
 搜索工具建议使用排除参数聚焦人工代码，例如 `rg --glob '!user-service/internal/persistence/ent/**' --glob 'user-service/internal/persistence/ent/schema/**' 'panic\(err\)'`。若代码审查工具支持 generated-code filter，应将 `user-service/internal/persistence/ent/` 下除 `schema/` 之外的文件标记为 generated，并确保 `schema/`、SQL migration 和 `atlas.sum` 仍参与正常审查。
 
-Architecture-lint 还必须检查 `openspec/specs/`、`openspec/changes/` 和 `docs/opsx/` 下的 Markdown 文档，拒绝保留默认英文 OpenSpec 模板占位、占位注释或非必要英文模板说明。OpenSpec 主规格、change artifacts 和 OPSX 相关文档的正文、标题、需求、场景、任务和说明必须使用简体中文；技术标识符、路径、命令、Go symbol 以及 OpenSpec 解析所需的 `Requirement`、`Scenario`、`ADDED Requirements` 等约定性关键字可保留英文原文。
+Architecture-lint 还必须检查 `openspec/specs/`、`openspec/changes/` 和 `docs/opsx/` 下的 Markdown 文档，拒绝保留默认英文 OpenSpec 模板占位、占位注释或非必要英文模板说明。它也检查手写生产 Go 代码：每个函数、方法以及导出的类型、常量、变量都必须有紧邻、通俗可读的中文文档注释（非必要不要使用技术黑话，让非开发人员也可以看懂）；生成代码和测试代码除外。OpenSpec 主规格、change artifacts 和 OPSX 相关文档的正文、标题、需求、场景、任务和说明必须使用简体中文；技术标识符、路径、命令、Go symbol 以及 OpenSpec 解析所需的 `Requirement`、`Scenario`、`ADDED Requirements` 等约定性关键字可保留英文原文。
 
 ## Governance
 

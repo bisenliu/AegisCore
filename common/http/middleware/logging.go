@@ -51,6 +51,7 @@ func RequestLoggerWithOptions(log *zap.Logger, options RequestLoggerOptions) gin
 	}
 }
 
+// requestUserID 从当前请求信息中提取已登录用户的唯一编号；如果尚未登录则返回空文本。
 func requestUserID(c *gin.Context) string {
 	if userID, ok := auth.UserIDFromContext(c.Request.Context()); ok {
 		return userID

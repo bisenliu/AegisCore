@@ -62,6 +62,7 @@ func (u *refreshTokenUseCase) Refresh(ctx context.Context, cmd RefreshTokenComma
 	return u.refreshWithRotation(ctx, claims, session, currentVersion)
 }
 
+// parseAndValidateRefreshSession 检查续期凭证的真实性并核对服务器上的会话记录；若会话已被注销或版本落后则拒绝续期。
 func (u *refreshTokenUseCase) parseAndValidateRefreshSession(ctx context.Context, refreshToken string) (*authtokens.Claims, authdomain.AuthSession, int64, error) {
 	claims, _, err := u.tokens.ParseRefreshToken(ctx, refreshToken)
 	if err != nil {
@@ -74,6 +75,7 @@ func (u *refreshTokenUseCase) parseAndValidateRefreshSession(ctx context.Context
 	return claims, session, currentVersion, nil
 }
 
+// refreshWithoutRotation 在不更换续期凭证的模式下延长登录状态，仅换发新的短期访问凭证。
 func (u *refreshTokenUseCase) refreshWithoutRotation(ctx context.Context, claims *authtokens.Claims, session authdomain.AuthSession, currentVersion int64) (*authtokens.TokenResult, error) {
 	tokens, reason, err := issueTokenPair(ctx, u.tokens, u.sessions, claims.UserID, currentVersion, session.SessionID)
 	if err != nil {
@@ -84,6 +86,7 @@ func (u *refreshTokenUseCase) refreshWithoutRotation(ctx context.Context, claims
 	return tokens, nil
 }
 
+// refreshWithRotation 在续期时同时换发新的续期凭证，并让旧的续期凭证立即作废，提升安全性。
 func (u *refreshTokenUseCase) refreshWithRotation(ctx context.Context, claims *authtokens.Claims, oldSession authdomain.AuthSession, currentVersion int64) (*authtokens.TokenResult, error) {
 	sessionID, err := newAuthSessionID()
 	if err != nil {
@@ -105,6 +108,7 @@ func (u *refreshTokenUseCase) refreshWithRotation(ctx context.Context, claims *a
 	return issued.Result, nil
 }
 
+// refreshFailureReason 将凭证续期失败的原因归纳为统一标识，供系统监控统计使用。
 func refreshFailureReason(err error) string {
 	switch {
 	case errors.Is(err, commonauth.ErrTokenVersionMismatch):

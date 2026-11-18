@@ -127,6 +127,7 @@ func (d *entSQLLogDriver) BeginTx(ctx context.Context, opts *sql.TxOptions) (dia
 	return &entSQLLogTx{Tx: tx, driver: d, ctx: ctx}, nil
 }
 
+// observe 统计单次数据库 SQL 执行的耗时与结果；日志记录失败不会影响正常的业务数据返回。
 func (d *entSQLLogDriver) observe(ctx context.Context, operation string, statement string, call func() error) error {
 	start := d.now()
 	err := call()
@@ -134,6 +135,7 @@ func (d *entSQLLogDriver) observe(ctx context.Context, operation string, stateme
 	return err
 }
 
+// logOperation 记录执行的 SQL 操作类型与耗时；对于超时慢查询打印警告日志，并且严禁在日志中记录参数里的密码等敏感信息。
 func (d *entSQLLogDriver) logOperation(ctx context.Context, operation string, statement string, duration time.Duration, err error) {
 	fields := []zap.Field{
 		zap.String("db", d.db),

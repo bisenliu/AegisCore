@@ -47,12 +47,14 @@ func SetDefault(log *zap.Logger) {
 	defaultLogger.mu.Unlock()
 }
 
+// getDefault 获取系统当前的默认日志输出工具；在未完成专门初始化时，使用基础日志工具作为兜底。
 func getDefault() *zap.Logger {
 	defaultLogger.mu.RLock()
 	defer defaultLogger.mu.RUnlock()
 	return defaultLogger.log
 }
 
+// fieldsFromContext 从请求环境中提取请求流水号和用户标识等信息，确保同一请求在各个环节打印的日志能被轻松串联和排查。
 func fieldsFromContext(ctx context.Context) []zap.Field {
 	if ctx == nil {
 		return nil

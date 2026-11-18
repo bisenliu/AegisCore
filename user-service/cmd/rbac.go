@@ -22,6 +22,7 @@ type rbacSeedRunner func(context.Context, rbacSeedOptions) error
 
 type rbacBootstrapSuperAdminRunner func(context.Context, rbacBootstrapSuperAdminOptions) error
 
+// newRBACCommand 创建权限管理命令行工具，下设“预置系统权限”和“初始化超级管理员”两个子功能。
 func newRBACCommand(seedRunner rbacSeedRunner, bootstrapRunner rbacBootstrapSuperAdminRunner) *cobra.Command {
 	var seedOpts rbacSeedOptions
 	bootstrapOpts := rbacBootstrapSuperAdminOptions{passwordEnv: defaultAdminBootstrapPasswordEnv}

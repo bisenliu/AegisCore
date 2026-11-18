@@ -21,6 +21,7 @@ type rootCommandDependencies struct {
 	fxGraphWriter             fxGraphWriter
 }
 
+// defaultRootCommandDependencies 组装根命令所依赖的子命令和配置文件加载工具。
 func defaultRootCommandDependencies() rootCommandDependencies {
 	return rootCommandDependencies{
 		appFactory:                newBootstrapLifecycleApp,
@@ -44,6 +45,7 @@ func withConfigLoadTimeout(loadConfig configLoader, timeout time.Duration) confi
 	}
 }
 
+// newRootCommand 创建用户服务的基础根命令，挂载服务运行、健康检查、依赖图导出及权限维护等子命令。
 func newRootCommand(deps rootCommandDependencies) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "aegiscore-user-service",

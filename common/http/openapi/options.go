@@ -46,6 +46,7 @@ type GoDocumentOptions struct {
 	GeneratedBy  string
 }
 
+// openAPIVersion 获取接口文档遵循的标准版本号；如果未明确指定，则默认采用 3.0.3 标准。
 func (opts ConvertOptions) openAPIVersion() string {
 	if opts.OpenAPIVersion == "" {
 		return DefaultOpenAPIVersion

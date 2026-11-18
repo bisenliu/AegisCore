@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// run 调度工作协程真正执行用户提交的任务，处理超时控制并统计任务执行耗时与完成情况。
 func (p *Pool) run(ctx context.Context, task Task) {
 	taskCtx, cancel := linkedTaskContext(ctx, p.ctx)
 	defer cancel()
@@ -31,6 +32,7 @@ func (p *Pool) run(ctx context.Context, task Task) {
 	p.counters.completed.Add(1)
 }
 
+// linkedTaskContext 将任务自身的生命周期与整个任务池的关闭流程绑定，当任务池停机或任务被调用方主动取消时，能及时终止执行。
 func linkedTaskContext(parent context.Context, poolCtx context.Context) (context.Context, context.CancelFunc) {
 	taskCtx, cancel := context.WithCancel(parent)
 	stopPoolCancel := context.AfterFunc(poolCtx, cancel)
@@ -41,6 +43,7 @@ func linkedTaskContext(parent context.Context, poolCtx context.Context) (context
 	}
 }
 
+// fields 为任务日志附加任务池名称和具体任务名称，方便排查报错时确认是哪个异步任务出错。
 func (p *Pool) fields(task Task, fields ...zap.Field) []zap.Field {
 	all := make([]zap.Field, 0, len(task.Fields)+len(fields)+2)
 	all = append(all, zap.String("pool", p.name), zap.String("task", task.Name))
@@ -49,6 +52,7 @@ func (p *Pool) fields(task Task, fields ...zap.Field) []zap.Field {
 	return all
 }
 
+// validateTask 检查提交的任务是否合规，必须提供任务名称和具体的执行函数。
 func validateTask(task Task) error {
 	if strings.TrimSpace(task.Name) == "" {
 		return fmt.Errorf("%w: name is required", ErrInvalidTask)

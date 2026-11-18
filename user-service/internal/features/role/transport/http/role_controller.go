@@ -10,19 +10,19 @@ import (
 	rolequery "github.com/aegiscore/user-service/internal/features/role/application/query"
 )
 
-// RoleController 处理角色管理端点的 HTTP 请求。
+// RoleController 负责接收和处理角色管理相关的 HTTP 接口请求。
 type RoleController struct {
 	commands  rolecommand.RoleCommandService
 	queries   rolequery.RoleQueryService
 	validator *commonvalidation.Validator
 }
 
-// NewRoleController 使用 command/query services 和请求 validator 依赖构造角色控制器。
+// NewRoleController 创建角色接口控制器，组装角色增删改查以及参数校验服务。
 func NewRoleController(commands rolecommand.RoleCommandService, queries rolequery.RoleQueryService, validator *commonvalidation.Validator) *RoleController {
 	return &RoleController{commands: commands, queries: queries, validator: validator}
 }
 
-// ListRoles 处理分页角色列表请求。
+// ListRoles 分页查询角色列表接口。
 // @Summary 分页查询角色
 // @Description 查询角色列表。业务接口由 JWT 和 RBAC 保护，Casbin 使用 role_id 作为策略主体，不依赖 roles.code。
 // @Tags 角色
@@ -58,7 +58,7 @@ func (ctl *RoleController) ListRoles(c *gin.Context) {
 	response.OK(c, toRoleListResponse(result))
 }
 
-// CreateRole 处理角色创建请求。
+// CreateRole 新建角色接口。
 // @Summary 创建角色
 // @Description 创建角色。业务接口由 JWT 和 RBAC 保护。
 // @Tags 角色
@@ -93,7 +93,7 @@ func (ctl *RoleController) CreateRole(c *gin.Context) {
 	response.Created(c, toRoleResponse(result.Role))
 }
 
-// GetRole 处理角色详情请求。
+// GetRole 查询角色详情接口。
 // @Summary 查询角色详情
 // @Description 通过角色 ID 查询角色详情。业务接口由 JWT 和 RBAC 保护。
 // @Tags 角色
@@ -127,7 +127,7 @@ func (ctl *RoleController) GetRole(c *gin.Context) {
 	response.OK(c, toRoleResponse(result.Role))
 }
 
-// UpdateRole 处理角色更新请求。
+// UpdateRole 修改角色资料接口。
 // @Summary 更新角色
 // @Description 更新角色元数据。系统角色受保护字段不可破坏性修改。
 // @Tags 角色
@@ -164,7 +164,7 @@ func (ctl *RoleController) UpdateRole(c *gin.Context) {
 	response.NoContent(c)
 }
 
-// SetRoleStatus 处理角色启停请求。
+// SetRoleStatus 启用或停用角色接口。
 // @Summary 启停角色
 // @Description 启用或停用角色。停用角色后相关 RBAC 授权应被拒绝。
 // @Tags 角色

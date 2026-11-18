@@ -124,6 +124,7 @@ func (s *RolePermissionStore) Remove(ctx context.Context, roleID uuid.UUID, perm
 	return roleapplication.PermissionsWriteResult{Items: items, Revision: write.Revision}, err
 }
 
+// listPermissionsByInternalRoleID 查询某角色当前已经绑定的全部权限；查询出错时终止后续绑定流程。
 func (s *RolePermissionStore) listPermissionsByInternalRoleID(ctx context.Context, tx *ent.Tx, internalRoleID int64, roleID uuid.UUID) ([]roleapplication.PermissionReference, error) {
 	permissions, err := tx.Permission.Query().
 		Where(entpermission.HasRolePermissionsWith(entrolepermission.RoleIDEQ(internalRoleID))).
@@ -227,6 +228,7 @@ func (s *RolePermissionStore) SyncSystemBindings(ctx context.Context, roleID uui
 	return added, removed, nil
 }
 
+// getRoleByExternalID 根据公开的角色编号查询角色详细信息；若角色不存在则返回明确错误。
 func (s *RolePermissionStore) getRoleByExternalID(ctx context.Context, roleID uuid.UUID) (*ent.Role, error) {
 	role, err := s.client.Role.Query().Where(entrole.RoleIDEQ(roleID)).Only(ctx)
 	if err == nil {
@@ -238,6 +240,7 @@ func (s *RolePermissionStore) getRoleByExternalID(ctx context.Context, roleID uu
 	return nil, fmt.Errorf("query role by role_id %s: %w", roleID.String(), err)
 }
 
+// getLockedPermissionByExternalID 在数据库事务中锁定指定权限记录，防止多人在同一瞬间并发修改同一权限。
 func (s *RolePermissionStore) getLockedPermissionByExternalID(ctx context.Context, tx *ent.Tx, permissionID uuid.UUID) (*ent.Permission, error) {
 	permission, err := tx.Permission.Query().Where(entpermission.PermissionIDEQ(permissionID)).Only(ctx)
 	if err == nil {
@@ -249,6 +252,7 @@ func (s *RolePermissionStore) getLockedPermissionByExternalID(ctx context.Contex
 	return nil, fmt.Errorf("query permission by permission_id %s: %w", permissionID.String(), err)
 }
 
+// lockedPermissionsByExternalIDs 批量锁定待绑定的权限记录，防止并发冲突。
 func (s *RolePermissionStore) lockedPermissionsByExternalIDs(ctx context.Context, tx *ent.Tx, permissionIDs []uuid.UUID) ([]roleapplication.PermissionReference, error) {
 	if len(permissionIDs) == 0 {
 		return []roleapplication.PermissionReference{}, nil
@@ -272,6 +276,7 @@ func (s *RolePermissionStore) lockedPermissionsByExternalIDs(ctx context.Context
 	return permissions, nil
 }
 
+// permissionsByExternalIDs 批量查询多个公开编号对应的权限记录；只要缺失任意一个则明确报错。
 func (s *RolePermissionStore) permissionsByExternalIDs(ctx context.Context, permissionIDs []uuid.UUID) ([]*ent.Permission, error) {
 	uniqueIDs := make([]uuid.UUID, 0, len(permissionIDs))
 	seen := make(map[uuid.UUID]struct{}, len(permissionIDs))
@@ -304,6 +309,7 @@ func (s *RolePermissionStore) permissionsByExternalIDs(ctx context.Context, perm
 	return permissions, nil
 }
 
+// permissionReferenceIDs 提取一组权限引用对象中的所有编号，便于后续批量操作。
 func permissionReferenceIDs(permissions []roleapplication.PermissionReference) []uuid.UUID {
 	permissionIDs := make([]uuid.UUID, 0, len(permissions))
 	seen := make(map[uuid.UUID]struct{}, len(permissions))
@@ -317,6 +323,7 @@ func permissionReferenceIDs(permissions []roleapplication.PermissionReference) [
 	return permissionIDs
 }
 
+// existingPermissionIDs 查询角色当前已有的权限编号列表，防止重复添加相同权限。
 func (s *RolePermissionStore) existingPermissionIDs(ctx context.Context, roleID int64) (map[int64]struct{}, error) {
 	bindings, err := s.client.RolePermission.Query().Where(entrolepermission.RoleIDEQ(roleID)).All(ctx)
 	if err != nil {
@@ -329,6 +336,7 @@ func (s *RolePermissionStore) existingPermissionIDs(ctx context.Context, roleID 
 	return existing, nil
 }
 
+// toPermissionReference 将数据库权限记录转换为对外引用的轻量结构。
 func toPermissionReference(permission *ent.Permission) *roleapplication.PermissionReference {
 	if permission == nil {
 		return nil
@@ -336,6 +344,7 @@ func toPermissionReference(permission *ent.Permission) *roleapplication.Permissi
 	return &roleapplication.PermissionReference{ID: permission.ID, PermissionID: permission.PermissionID, Name: permission.Name, Description: permission.Description, Module: permission.Module, HTTPMethod: permission.HTTPMethod, PathTemplate: permission.PathTemplate, CreatedAt: permission.CreatedAt, UpdatedAt: permission.UpdatedAt}
 }
 
+// toPermissionReferences 批量将数据库权限记录转换为对外引用的轻量结构。
 func toPermissionReferences(permissions []*ent.Permission) []roleapplication.PermissionReference {
 	result := make([]roleapplication.PermissionReference, 0, len(permissions))
 	for _, permission := range permissions {

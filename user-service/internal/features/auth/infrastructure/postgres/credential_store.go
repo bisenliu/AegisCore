@@ -126,6 +126,7 @@ func (s *CredentialStore) UpdateCredentials(ctx context.Context, input authdomai
 	return updated.TokenVersion, nil
 }
 
+// toCredential 将数据库中的用户记录转换为登录核对时使用的数据对象，严格杜绝将密码哈希泄露给外部。
 func toCredential(entUser *ent.User) *authdomain.UserCredential {
 	if entUser == nil {
 		return nil

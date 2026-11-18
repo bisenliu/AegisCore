@@ -125,6 +125,7 @@ func (c *RedisPingCollector) CollectContext(ctx context.Context, ch chan<- prome
 	ch <- prometheus.MustNewConstMetric(c.pingFailures, prometheus.CounterValue, float64(c.failures.Load()), c.resource)
 }
 
+// snapshot 检查并记录一次与缓存服务器的连接状态，用于在监控看板中展示缓存是否在线。
 func (c *RedisPingCollector) snapshot(parent context.Context) redisPingSnapshot {
 	if parent == nil {
 		parent = context.Background()

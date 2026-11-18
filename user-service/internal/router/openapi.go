@@ -30,6 +30,7 @@ func RegisterOpenAPI(engine *gin.Engine, environment string) {
 	engine.GET("/api-docs", redirectToOpenAPI)
 }
 
+// serveOpenAPIUI 展示可视化的接口在线测试与文档页面。
 func serveOpenAPIUI(c *gin.Context) {
 	// 清理并限制 swagger 静态资源路径，阻止 ../ 逃逸；index 和 initializer 会替换默认 petstore 文档地址。
 	assetPath := path.Clean(strings.TrimPrefix(c.Param("any"), "/"))
@@ -52,6 +53,7 @@ func serveOpenAPIUI(c *gin.Context) {
 	serveOpenAPIAsset(c, assetPath)
 }
 
+// serveOpenAPIIndex 提供接口文档页面的 HTML 首页内容。
 func serveOpenAPIIndex(c *gin.Context) {
 	index, err := fs.ReadFile(swaggerFiles.FS, "index.html")
 	if err != nil {
@@ -63,6 +65,7 @@ func serveOpenAPIIndex(c *gin.Context) {
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(content))
 }
 
+// serveOpenAPIInitializer 提供接口文档页面初始化配置脚本。
 func serveOpenAPIInitializer(c *gin.Context) {
 	initializer, err := fs.ReadFile(swaggerFiles.FS, "swagger-initializer.js")
 	if err != nil {
@@ -74,6 +77,7 @@ func serveOpenAPIInitializer(c *gin.Context) {
 	c.Data(http.StatusOK, "application/javascript; charset=utf-8", []byte(content))
 }
 
+// serveOpenAPIAsset 提供接口文档所需的静态资源文件（如样式表、图标）；防止非法路径跳出静态资源目录。
 func serveOpenAPIAsset(c *gin.Context, assetPath string) {
 	asset, err := fs.ReadFile(swaggerFiles.FS, assetPath)
 	if err != nil {
@@ -88,14 +92,17 @@ func serveOpenAPIAsset(c *gin.Context, assetPath string) {
 	c.Data(http.StatusOK, contentType, asset)
 }
 
+// serveOpenAPI 对外输出系统自动生成的 OpenAPI 规范标准接口描述内容（JSON格式）。
 func serveOpenAPI(c *gin.Context) {
 	c.Data(http.StatusOK, "application/json; charset=utf-8", docs.ReadOpenAPI())
 }
 
+// redirectToOpenAPI 将访问文档根路径的用户自动引导跳转到文档首页。
 func redirectToOpenAPI(c *gin.Context) {
 	c.Redirect(http.StatusMovedPermanently, openAPIUIPath)
 }
 
+// openAPIEnabled 判断当前运行环境是否允许对外公开接口文档。
 func openAPIEnabled(environment string) bool {
 	switch strings.ToLower(strings.TrimSpace(environment)) {
 	case "prod", "production":

@@ -33,6 +33,7 @@ type PolicyRefreshMessage struct {
 	PermissionID     *uuid.UUID `json:"permission_id,omitempty"`
 }
 
+// newPolicyRefreshMessage 组装一条权限变更的广播通知，包含最新版本号以及发生变更的具体类型。
 func newPolicyRefreshMessage(revision int64, change permissionapplication.PolicyChange, instanceID string) PolicyRefreshMessage {
 	message := PolicyRefreshMessage{
 		SchemaVersion: policyRefreshSchemaVersion,
@@ -52,6 +53,7 @@ func newPolicyRefreshMessage(revision int64, change permissionapplication.Policy
 	return message
 }
 
+// encodePolicyRefreshMessage 将权限变更通知打包为可以在网络中广播传输的格式；内容损坏时报错。
 func encodePolicyRefreshMessage(message PolicyRefreshMessage) (string, error) {
 	if err := validatePolicyRefreshMessage(message); err != nil {
 		return "", err
@@ -63,6 +65,7 @@ func encodePolicyRefreshMessage(message PolicyRefreshMessage) (string, error) {
 	return string(payload), nil
 }
 
+// decodePolicyRefreshMessage 将网络广播中接收到的通知数据还原为权限变更通知对象。
 func decodePolicyRefreshMessage(payload string) (PolicyRefreshMessage, error) {
 	var message PolicyRefreshMessage
 	decoder := json.NewDecoder(bytes.NewBufferString(payload))
@@ -80,6 +83,7 @@ func decodePolicyRefreshMessage(payload string) (PolicyRefreshMessage, error) {
 	return message, nil
 }
 
+// validatePolicyRefreshMessage 检查收到的广播通知是否合规，必须包含合法的版本号与已知的变更类型。
 func validatePolicyRefreshMessage(message PolicyRefreshMessage) error {
 	if message.SchemaVersion != policyRefreshSchemaVersion {
 		return fmt.Errorf("unsupported rbac policy refresh schema version: %d", message.SchemaVersion)
@@ -121,6 +125,7 @@ func validatePolicyRefreshMessage(message PolicyRefreshMessage) error {
 	return nil
 }
 
+// userRoleRevision 从通知中提取用户角色变更的版本序号。
 func (m PolicyRefreshMessage) userRoleRevision() int64 {
 	if m.UserRoleRevision == nil {
 		return 0
@@ -128,6 +133,7 @@ func (m PolicyRefreshMessage) userRoleRevision() int64 {
 	return *m.UserRoleRevision
 }
 
+// policyRevision 从通知中提取系统权限规则变更的版本序号。
 func (m PolicyRefreshMessage) policyRevision() int64 {
 	if m.PolicyRevision == nil {
 		return 0
@@ -135,6 +141,7 @@ func (m PolicyRefreshMessage) policyRevision() int64 {
 	return *m.PolicyRevision
 }
 
+// policyChange 将广播消息转换成具体的权限变更事件，以便接收方决定应该清除哪些本地缓存。
 func (m PolicyRefreshMessage) policyChange() permissionapplication.PolicyChange {
 	kind := permissionapplication.PolicyChangeKindPolicy
 	if m.Kind == policyRefreshKindUserRoleChanged {
@@ -149,6 +156,7 @@ func (m PolicyRefreshMessage) policyChange() permissionapplication.PolicyChange 
 	}
 }
 
+// messageRevisionLogFields 整理通知日志中的版本字段，便于在日志平台中检索对比。
 func messageRevisionLogFields(message PolicyRefreshMessage) []zap.Field {
 	fields := make([]zap.Field, 0, 2)
 	if message.PolicyRevision != nil {
@@ -160,6 +168,7 @@ func messageRevisionLogFields(message PolicyRefreshMessage) []zap.Field {
 	return fields
 }
 
+// uuidValue 安全读取可能为空的唯一编号，空值按全零值处理。
 func uuidValue(value *uuid.UUID) uuid.UUID {
 	if value == nil {
 		return uuid.Nil()
@@ -167,6 +176,7 @@ func uuidValue(value *uuid.UUID) uuid.UUID {
 	return *value
 }
 
+// optionalUUID 将全零的无效编号过滤为空，避免在广播消息中出现无意义的占位数据。
 func optionalUUID(value uuid.UUID) *uuid.UUID {
 	if value == uuid.Nil() {
 		return nil
@@ -174,6 +184,7 @@ func optionalUUID(value uuid.UUID) *uuid.UUID {
 	return &value
 }
 
+// int64Pointer 将数字转为指针，便于在传输时明确区分“未传递该字段”与“传递了数值 0”。
 func int64Pointer(value int64) *int64 {
 	return &value
 }

@@ -18,6 +18,7 @@ func Init(timezone string) error {
 	return state.init(timezone)
 }
 
+// init 设置整个系统使用的统一业务时区（例如默认使用 Asia/Shanghai）；如果时区名称不正确则阻止系统启动。
 func (s *timezoneState) init(timezone string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -31,7 +32,7 @@ func (s *timezoneState) init(timezone string) error {
 	if err != nil {
 		return fmt.Errorf("load timezone %q: %w", timezone, err)
 	}
-	// 更新 time.Local，确保标准库格式化和 location 查询语义一致。
+	// 同步更新系统全局的本地时区变量（time.Local），确保整个程序在格式化时间、解析时间字符串时统一使用该时区。
 	time.Local = location
 	s.initialized = true
 	return nil

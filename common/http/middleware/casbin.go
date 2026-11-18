@@ -93,6 +93,7 @@ func CasbinAuthorization(authorizer CasbinAuthorizer, resolver CasbinRequestReso
 	}
 }
 
+// isWhitelisted 检查当前访问的接口是否属于免登录或免权限白名单（如健康检查或登录接口）。
 func (cfg casbinAuthorizationConfig) isWhitelisted(method string, pathTemplate string) bool {
 	method = strings.ToUpper(method)
 	_, exact := cfg.whitelist[CasbinAuthorizationWhitelistRule{Method: method, PathTemplate: pathTemplate}]
@@ -103,6 +104,7 @@ func (cfg casbinAuthorizationConfig) isWhitelisted(method string, pathTemplate s
 	return wildcard
 }
 
+// abortCasbinAuthorization 当用户没有操作权限时立即拦截并终止处理，向用户返回统一的权限不足提示。
 func abortCasbinAuthorization(c *gin.Context, onError CasbinErrorHandler, err error) {
 	if onError != nil {
 		onError(c, err)
@@ -117,6 +119,7 @@ func abortCasbinAuthorization(c *gin.Context, onError CasbinErrorHandler, err er
 	c.Abort()
 }
 
+// normalizeCasbinAuthorizationRule 整理免权限白名单规则，清理多余空格并将请求方法统一转为大写，防止因大小写不一致导致匹配失效。
 func normalizeCasbinAuthorizationRule(rule CasbinAuthorizationWhitelistRule) CasbinAuthorizationWhitelistRule {
 	method := strings.ToUpper(rule.Method)
 	if method == "" {

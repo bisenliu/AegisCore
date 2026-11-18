@@ -38,14 +38,17 @@ type CacheRedisParams struct {
 
 // Provider：存储适配器
 
+// providePermissionStore 提供操作权限数据的数据存储组件。
 func providePermissionStore(params PrimaryDBParams) permissionapplication.PermissionStore {
 	return permissionpostgres.NewPermissionStore(params.Client)
 }
 
+// providePolicyRevisionSource 提供查询数据库中权限版本号的数据来源。
 func providePolicyRevisionSource(params PrimaryDBParams) permissionapplication.LatestPolicyRevisionSource {
 	return permissionpostgres.NewPolicyRevisionSource(params.Client)
 }
 
+// provideUserRoleRevisionSource 提供查询用户角色变更版本号的数据来源。
 func provideUserRoleRevisionSource(params PrimaryDBParams) permissionapplication.UserRoleRevisionSource {
 	return permissionpostgres.NewUserRoleRevisionSource(params.Client)
 }

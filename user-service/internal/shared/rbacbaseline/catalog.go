@@ -82,6 +82,7 @@ func DefaultRolePermissions() []RolePermissionSpec {
 	return bindings
 }
 
+// allPermissionIDs 获取系统预设的全部功能权限唯一编号列表。
 func allPermissionIDs() []string {
 	permissions := DefaultPermissions()
 	ids := make([]string, 0, len(permissions))

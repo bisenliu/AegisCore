@@ -84,6 +84,7 @@ func (f *Finish[T]) RollbackUnlessCommitted() error {
 	return f.rollback()
 }
 
+// rollback 执行数据库事务的回滚撤销；如果之前的保存操作没有成功提交，则把未完成的改动全部撤销，确保数据库中的数据不处于半成功半失败的混乱状态。
 func (f *Finish[T]) rollback() error {
 	defer f.cancel()
 	if f.done {
@@ -97,6 +98,7 @@ func (f *Finish[T]) rollback() error {
 	return nil
 }
 
+// transactionLifecycleContext 为数据库事务的提交或回滚单独预留充足的处理时间，即使外部客户端已经提前挂断连接，也要确保事务能够平稳收尾，防止数据不一致。
 func transactionLifecycleContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	txCtx := context.WithoutCancel(ctx)
 

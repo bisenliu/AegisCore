@@ -15,6 +15,7 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent/migrate"
 )
 
+// main 导出数据库表结构描述工具入口，将代码中的数据表模型转换为标准数据库结构。
 func main() {
 	// Atlas schema loader 不连接真实数据库，只把 Ent migrate metadata 渲染为 PostgreSQL DDL 输出给 migration diff 流程。
 	ctx := context.Background()
@@ -37,6 +38,7 @@ func main() {
 	}
 }
 
+// tablesWithoutForeignKeys 导出当前系统的全部数据表结构，并去掉数据库物理外键（由业务代码维护关联一致性），供数据库结构变更对比使用。
 func tablesWithoutForeignKeys() ([]*entsqlschema.Table, error) {
 	// 生成迁移基线时有意移除数据库外键，只保留表、字段和索引 DDL；跨表一致性由应用层和业务流程维护。
 	tables, err := entsqlschema.CopyTables(migrate.Tables)

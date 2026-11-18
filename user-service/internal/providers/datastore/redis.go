@@ -35,6 +35,7 @@ func ProvideRedis(name string) func(RedisParams) (redis.UniversalClient, error) 
 	}
 }
 
+// newRedis 根据配置的资源名称创建缓存连接客户端，并注册到系统启动检查与安全关闭生命周期中。
 func newRedis(name string, params RedisParams, createRedisClient redisClientFactory) (redis.UniversalClient, error) {
 	if name == "" {
 		return nil, errors.New("redis resource name is required")

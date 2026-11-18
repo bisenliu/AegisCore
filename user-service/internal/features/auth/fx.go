@@ -191,10 +191,12 @@ type sessionPurgePoolHolder struct {
 
 // Provider：基础设施
 
+// newCredentialStore 创建用于从数据库中核对用户登录账号与密码的数据访问组件。
 func newCredentialStore(params CredentialStoreParams) *authpostgres.CredentialStore {
 	return authpostgres.NewCredentialStore(params.Client)
 }
 
+// newSessionStore 创建基于缓存的登录会话存储，并挂载过期会话清理任务。
 func newSessionStore(params SessionStoreParams) (*authredis.SessionStore, error) {
 	keys, err := authredis.NewKeyCatalog(params.Settings.AppName)
 	if err != nil {
@@ -218,10 +220,12 @@ func newSessionStore(params SessionStoreParams) (*authredis.SessionStore, error)
 
 // Provider：运行时资源
 
+// newSessionPurgePool 创建负责异步清理过期登录会话的工作协程池，并在服务关闭时等待清理任务收尾。
 func newSessionPurgePool(params SessionPurgePoolParams) (SessionPurgePoolResult, error) {
 	return SessionPurgePoolResult{Pool: &sessionPurgePoolHolder{log: params.Log}}, nil
 }
 
+// newTokenVersionLocalCache 创建保存在本地内存中的凭证版本缓存，减少频繁查询数据库的开销。
 func newTokenVersionLocalCache(params TokenVersionLocalCacheParams) (TokenVersionLocalCacheResult, error) {
 	cfg := params.Settings.TokenVersionCache
 	if !cfg.Enabled {
@@ -246,14 +250,17 @@ func newTokenVersionLocalCache(params TokenVersionLocalCacheParams) (TokenVersio
 
 // Provider：应用服务
 
+// newAuthSessionLifecycle 组装用户会话的完整生命周期管理（包括创建、续期、单用户同时在线上限控制及退出作废）。
 func newAuthSessionLifecycle(users authapplication.UserTokenVersionStore, tokenVersionCache authapplication.TokenVersionCache, sessions authapplication.RefreshSessionStore, passwordChangeSessions authapplication.PasswordChangeSessionStore, tokenVersions authvalidators.TokenVersionLocalInvalidator, settings serviceconfig.AuthSettings) (authsessions.Lifecycle, error) {
 	return authsessions.NewLifecycle(users, tokenVersionCache, sessions, passwordChangeSessions, settings.MaxActiveSessionsPerUser, tokenVersions)
 }
 
+// newRefreshTokenSettings 从全局配置中读取续期凭证的有效时长以及续期时是否更换新凭证等策略。
 func newRefreshTokenSettings(settings serviceconfig.AuthSettings) authcommand.RefreshTokenSettings {
 	return authcommand.RefreshTokenSettings{RefreshTokenRotation: settings.RefreshTokenRotation}
 }
 
+// newTokenVersionValidator 创建用于检查用户通行证是否已作废的校验器；若用户修改过密码或被注销，其旧凭证将被拒绝。
 func newTokenVersionValidator(params TokenVersionValidatorParams) TokenVersionValidatorResult {
 	validator := authvalidators.NewCachingValidator(params.Cache)
 	return TokenVersionValidatorResult{Validator: authvalidators.NewMetricsTokenVersionValidator(validator, params.Metrics), Invalidator: validator}
@@ -261,6 +268,7 @@ func newTokenVersionValidator(params TokenVersionValidatorParams) TokenVersionVa
 
 // Provider：传输层
 
+// newAuthController 将登录、凭证续期、强制改密和退出登录等业务流程与对外接口打通。
 func newAuthController(params AuthControllerParams) *authhttp.AuthController {
 	return authhttp.NewAuthController(authhttp.AuthControllerOptions{
 		Login:         params.Login,

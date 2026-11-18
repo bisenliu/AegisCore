@@ -32,6 +32,7 @@ func RequestID() gin.HandlerFunc {
 	}
 }
 
+// normalizeRequestID 清理请求追踪编号中的首尾空格与换行等不可见字符，防止恶意伪造的编号污染排查日志。
 func normalizeRequestID(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" || len(value) > maxRequestIDLength || containsRequestIDControlCharacter(value) {
@@ -40,6 +41,7 @@ func normalizeRequestID(value string) string {
 	return value
 }
 
+// containsRequestIDControlCharacter 检查请求追踪编号中是否夹带了不可见的控制字符（如换行符或制表符）。
 func containsRequestIDControlCharacter(value string) bool {
 	for _, char := range value {
 		if char < ' ' || char == 0x7f {
@@ -49,6 +51,7 @@ func containsRequestIDControlCharacter(value string) bool {
 	return false
 }
 
+// newRequestID 生成一个全局唯一的请求流水号，用于串联单次请求的全链路处理日志。
 func newRequestID() string {
 	requestID, err := id.NewUUIDString()
 	if err == nil {

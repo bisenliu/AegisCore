@@ -26,10 +26,12 @@ type lifecycleApp interface {
 
 type lifecycleAppFactory func(cfg *serviceconfig.Config) lifecycleApp
 
+// newBootstrapLifecycleApp 根据系统配置创建可完整启动和安全停止的服务应用实例。
 func newBootstrapLifecycleApp(cfg *serviceconfig.Config) lifecycleApp {
 	return bootstrap.NewApp(cfg)
 }
 
+// newServeCommand 创建启动用户服务的命令行功能。
 func newServeCommand(appFactory lifecycleAppFactory, loadConfig configLoader) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -41,6 +43,7 @@ func newServeCommand(appFactory lifecycleAppFactory, loadConfig configLoader) *c
 	return cmd
 }
 
+// runServe 加载配置并启动用户服务，同时监听操作系统停机信号（如 Ctrl+C），收到信号后平稳关闭服务。
 func runServe(ctx context.Context, appFactory lifecycleAppFactory, loadConfig configLoader) error {
 	loaded, err := loadConfig(ctx)
 	if err != nil {
@@ -83,6 +86,7 @@ func runServe(ctx context.Context, appFactory lifecycleAppFactory, loadConfig co
 	return errors.Join(exitCodeErr, stopErr)
 }
 
+// logConfigSource 打印当前生效的配置文件是来自本地文件还是来自远程配置中心，方便排查配置生效问题。
 func logConfigSource(loaded *serviceconfig.LoadResult) {
 	if loaded == nil || loaded.Config == nil {
 		return

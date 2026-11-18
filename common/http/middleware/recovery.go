@@ -11,7 +11,7 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 )
 
-// Recovery 将 panic 转换为内部错误响应信封，并记录 panic 与堆栈明细。
+// Recovery 兜底捕获未处理的运行时异常（panic），自动转换为友好的系统内部错误响应，并将异常详情与调用堆栈记录到日志中，防止程序意外崩溃。
 func Recovery(log *zap.Logger) gin.HandlerFunc {
 	recoveryLog := logger.NamedComponent(log, "http", "recovery")
 	return func(c *gin.Context) {

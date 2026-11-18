@@ -15,7 +15,7 @@ import (
 	entuserrole "github.com/aegiscore/user-service/internal/persistence/ent/userrole"
 )
 
-// PermissionStore 使用 Ent 持久化权限目录，并实现查询与 seed 写入端口。
+// PermissionStore 负责权限项在数据库中的存储、查询与初始化。
 type PermissionStore struct {
 	client *ent.Client
 }
@@ -23,12 +23,12 @@ type PermissionStore struct {
 var _ permissionapplication.PermissionStore = (*PermissionStore)(nil)
 var _ permissionapplication.SeedPermissionStore = (*PermissionStore)(nil)
 
-// NewPermissionStore 构造基于 Ent 的权限 store。
+// NewPermissionStore 创建权限数据库操作对象。
 func NewPermissionStore(client *ent.Client) *PermissionStore {
 	return &PermissionStore{client: client}
 }
 
-// GetByPermissionID 按外部 UUID 返回权限记录。
+// GetByPermissionID 根据权限的全局唯一编号查询对应的权限详情。
 func (s *PermissionStore) GetByPermissionID(ctx context.Context, permissionID uuid.UUID) (*permissiondomain.Permission, error) {
 	found, err := s.client.Permission.Query().Where(entpermission.PermissionIDEQ(permissionID)).Only(ctx)
 	if err == nil {
@@ -166,6 +166,7 @@ func (s *PermissionStore) UpsertPermission(ctx context.Context, input permission
 	return toModel(updated), false, nil
 }
 
+// toModel 将数据库中的权限记录转换为系统内部使用的权限数据对象。
 func toModel(entPermission *ent.Permission) *permissiondomain.Permission {
 	if entPermission == nil {
 		return nil
@@ -173,6 +174,7 @@ func toModel(entPermission *ent.Permission) *permissiondomain.Permission {
 	return &permissiondomain.Permission{ID: entPermission.ID, PermissionID: entPermission.PermissionID, Name: entPermission.Name, Description: entPermission.Description, Module: entPermission.Module, HTTPMethod: entPermission.HTTPMethod, PathTemplate: entPermission.PathTemplate, CreatedAt: entPermission.CreatedAt, UpdatedAt: entPermission.UpdatedAt}
 }
 
+// toModels 将数据库中的多条权限记录批量转换为内部权限对象列表。
 func toModels(permissions []*ent.Permission) []permissiondomain.Permission {
 	result := make([]permissiondomain.Permission, 0, len(permissions))
 	for _, entPermission := range permissions {

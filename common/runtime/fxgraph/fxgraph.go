@@ -66,6 +66,7 @@ func WriteFile(path string, dot string) error {
 	return nil
 }
 
+// normalizeDOT 规范化依赖关系图文本，统一换行格式并剔除末尾多余空行。
 func normalizeDOT(dot string) string {
 	dot = strings.ReplaceAll(dot, "\r\n", "\n")
 	dot = strings.TrimRight(dot, "\n")

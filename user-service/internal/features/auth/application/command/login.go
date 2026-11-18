@@ -70,6 +70,7 @@ func (u *loginUseCase) Login(ctx context.Context, cmd LoginCommand) (*LoginResul
 	return u.loginWithSession(ctx, cmd.Username, user)
 }
 
+// loginWithSession 为普通登录成功的用户创建长期有效的登录会话，并签发访问与续期凭证。
 func (u *loginUseCase) loginWithSession(ctx context.Context, username string, user *authdomain.UserCredential) (*LoginResult, error) {
 	sessionID, err := newAuthSessionID()
 	if err != nil {
@@ -87,6 +88,7 @@ func (u *loginUseCase) loginWithSession(ctx context.Context, username string, us
 	return &LoginResult{Tokens: tokens}, nil
 }
 
+// loginWithPasswordChangeSession 针对被要求必须修改密码的用户，仅签发临时的改密专用凭证，不创建长期登录会话。
 func (u *loginUseCase) loginWithPasswordChangeSession(ctx context.Context, username string, user *authdomain.UserCredential) (*LoginResult, error) {
 	// 必须改密用户只完成凭证确认，不创建普通 refresh session，避免旧密码仍可换取长期会话。
 	// 受限 token 的 jti、session_id 和 token_version 必须落到一次性改密会话中，后续改密时据此原子消费并防重放。
@@ -115,6 +117,7 @@ func (u *loginUseCase) loginWithPasswordChangeSession(ctx context.Context, usern
 	return &LoginResult{PasswordChangeRequired: true, Tokens: tokens}, nil
 }
 
+// loginFailureReason 将登录失败的各种原因（如密码错误、用户被冻结）归纳为固定标识，用于监控统计。
 func loginFailureReason(err error) string {
 	switch {
 	case errors.Is(err, authdomain.ErrUserStatusRejected):

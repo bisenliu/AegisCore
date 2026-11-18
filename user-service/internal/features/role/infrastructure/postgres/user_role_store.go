@@ -108,6 +108,7 @@ func (s *UserRoleStore) Remove(ctx context.Context, userID uuid.UUID, roleID uui
 	return roleapplication.RolesWriteResult{Items: toRoleModels(roles), Revision: write.Revision}, err
 }
 
+// listRolesByInternalUserID 查询用户当前已拥有的所有角色；查询失败时终止流程。
 func (s *UserRoleStore) listRolesByInternalUserID(ctx context.Context, tx *ent.Tx, internalUserID int64, userID uuid.UUID) ([]*ent.Role, error) {
 	roles, err := tx.Role.Query().
 		Where(entrole.HasUserRolesWith(entuserrole.UserIDEQ(internalUserID))).
@@ -135,6 +136,7 @@ func (s *UserRoleStore) AssignRole(ctx context.Context, userID uuid.UUID, roleID
 	return false, fmt.Errorf("assign user role user %s role %s: %w", userID.String(), roleID.String(), err)
 }
 
+// getLockedUserAndRole 在事务中同时锁定目标用户和角色记录，防止多人并发分配时产生冲突。
 func (s *UserRoleStore) getLockedUserAndRole(ctx context.Context, tx *ent.Tx, userID uuid.UUID, roleID uuid.UUID) (*ent.User, *ent.Role, error) {
 	user, err := s.getLockedUserByExternalID(ctx, tx, userID)
 	if err != nil {
@@ -150,6 +152,7 @@ func (s *UserRoleStore) getLockedUserAndRole(ctx context.Context, tx *ent.Tx, us
 	return user, role, nil
 }
 
+// getLockedUserByExternalID 在事务中锁定目标用户记录。
 func (s *UserRoleStore) getLockedUserByExternalID(ctx context.Context, tx *ent.Tx, userID uuid.UUID) (*ent.User, error) {
 	user, err := tx.User.Query().Where(entuser.UserIDEQ(userID), entuser.DeletedAtIsNil()).Only(ctx)
 	if ent.IsNotFound(err) {
@@ -161,6 +164,7 @@ func (s *UserRoleStore) getLockedUserByExternalID(ctx context.Context, tx *ent.T
 	return user, nil
 }
 
+// lockedRolesByExternalIDs 批量锁定待分配的角色记录。
 func (s *UserRoleStore) lockedRolesByExternalIDs(ctx context.Context, tx *ent.Tx, roleIDs []uuid.UUID) ([]*ent.Role, error) {
 	if len(roleIDs) == 0 {
 		return []*ent.Role{}, nil
@@ -175,6 +179,7 @@ func (s *UserRoleStore) lockedRolesByExternalIDs(ctx context.Context, tx *ent.Tx
 	return roles, nil
 }
 
+// getUserAndRole 同时查询指定的用户与角色；只要任一方不存在即返回未找到错误。
 func (s *UserRoleStore) getUserAndRole(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) (*ent.User, *ent.Role, error) {
 	user, err := s.getUserByExternalID(ctx, userID)
 	if err != nil {
@@ -187,6 +192,7 @@ func (s *UserRoleStore) getUserAndRole(ctx context.Context, userID uuid.UUID, ro
 	return user, role, nil
 }
 
+// getUserByExternalID 根据公开用户编号查询用户详细信息；用户不存在时报错。
 func (s *UserRoleStore) getUserByExternalID(ctx context.Context, userID uuid.UUID) (*ent.User, error) {
 	user, err := s.client.User.Query().Where(entuser.UserIDEQ(userID), entuser.DeletedAtIsNil()).Only(ctx)
 	if err == nil {
@@ -198,6 +204,7 @@ func (s *UserRoleStore) getUserByExternalID(ctx context.Context, userID uuid.UUI
 	return nil, fmt.Errorf("query user by user_id %s: %w", userID.String(), err)
 }
 
+// getRoleByExternalID 根据公开角色编号查询角色详细信息；角色不存在时报错。
 func (s *UserRoleStore) getRoleByExternalID(ctx context.Context, roleID uuid.UUID) (*ent.Role, error) {
 	role, err := s.client.Role.Query().Where(entrole.RoleIDEQ(roleID)).Only(ctx)
 	if err == nil {

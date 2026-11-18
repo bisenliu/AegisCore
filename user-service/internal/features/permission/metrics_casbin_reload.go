@@ -19,6 +19,7 @@ type casbinPolicyReloadMetrics struct {
 	lastStatus prometheus.Gauge
 }
 
+// newCasbinPolicyReloadMetrics 创建用于统计权限规则加载成功率的监控指标。
 func newCasbinPolicyReloadMetrics(provider *commonmetrics.Provider) permissioncasbin.ReloadMetrics {
 	if provider == nil || !provider.Enabled() {
 		return permissioncasbin.NopReloadMetrics()
@@ -38,14 +39,17 @@ func newCasbinPolicyReloadMetrics(provider *commonmetrics.Provider) permissionca
 	return recorder
 }
 
+// ReloadSucceeded 记录权限规则加载成功的次数。
 func (m *casbinPolicyReloadMetrics) ReloadSucceeded() {
 	m.reloads.WithLabelValues(commonmetrics.StatusSuccess).Inc()
 }
 
+// ReloadFailed 记录权限规则加载失败的次数。
 func (m *casbinPolicyReloadMetrics) ReloadFailed() {
 	m.reloads.WithLabelValues(commonmetrics.StatusFailure).Inc()
 }
 
+// SetLastStatus 更新最近一次权限加载状态是正常还是异常。
 func (m *casbinPolicyReloadMetrics) SetLastStatus(success bool) {
 	if success {
 		m.lastStatus.Set(1)

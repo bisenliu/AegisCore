@@ -47,6 +47,7 @@ func NewRedisClient(lc fx.Lifecycle, log *zap.Logger, name string, redisCfg reso
 	return client, nil
 }
 
+// closeRedisClient 在系统停止时关闭缓存连接，释放网络资源；如果连接已经为空则直接跳过。
 func closeRedisClient(name string, client redis.UniversalClient) error {
 	if err := client.Close(); err != nil {
 		return fmt.Errorf("close redis %s: %w", name, err)

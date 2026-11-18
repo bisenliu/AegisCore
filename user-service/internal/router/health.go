@@ -53,6 +53,7 @@ type healthCheckOutcome struct {
 	result HealthCheckResult
 }
 
+// registerHealthRoutes 挂载存活、就绪和启动健康探针接口，供容器平台（如 K8s）自动检测服务运行状态。
 func registerHealthRoutes(engine *gin.Engine, serviceName string, checks HealthChecks) {
 	engine.GET(healthPathLivez, livez(serviceName))
 	engine.GET(healthPathReadyz, readyz(serviceName, checks.Readiness))
@@ -106,6 +107,7 @@ func startupz(serviceName string, checks []HealthChecker) gin.HandlerFunc {
 	return probez(serviceName, checks)
 }
 
+// probez 执行一组系统健康检查项，若数据库或缓存等核心依赖出现故障，则返回未就绪状态阻止外部流量进入。
 func probez(serviceName string, checks []HealthChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), healthProbeTimeout)
@@ -127,6 +129,7 @@ func probez(serviceName string, checks []HealthChecker) gin.HandlerFunc {
 	}
 }
 
+// runHealthChecks 并发检查各项依赖服务的连通性，并按原顺序汇总检查结果。
 func runHealthChecks(ctx context.Context, checks []HealthChecker) []HealthCheckResult {
 	// 检查项并发执行并按原 index 回填；nil checker 会在压缩结果时移除，超时会把未完成项标记为 unavailable。
 	results := make([]HealthCheckResult, len(checks))
@@ -138,7 +141,7 @@ func runHealthChecks(ctx context.Context, checks []HealthChecker) []HealthCheckR
 			continue
 		}
 		pending[index] = checker
-		// 依赖 Go 1.22+ range 变量语义；如迁移到旧版本，需要显式复制 index 和 checker。
+		// 利用了 Go 语言在新版本中循环变量每次独立赋值的特性；若在老版本 Go 环境下运行，需在协程外部单独复制一份变量以防并发读取错乱。
 		go func() {
 			resultCh <- healthCheckOutcome{index: index, result: normalizeHealthCheckResult(checker, checker.Check(ctx))}
 		}()
@@ -164,6 +167,7 @@ func runHealthChecks(ctx context.Context, checks []HealthChecker) []HealthCheckR
 	return compactHealthCheckResults(results)
 }
 
+// normalizeHealthCheckResult 检查并整理各项检查结果，若检查函数返回了空指针则标记为失败故障。
 func normalizeHealthCheckResult(checker HealthChecker, result HealthCheckResult) HealthCheckResult {
 	if result.Name == "" {
 		result.Name = checker.Name()
@@ -174,6 +178,7 @@ func normalizeHealthCheckResult(checker HealthChecker, result HealthCheckResult)
 	return result
 }
 
+// compactHealthCheckResults 剔除无效的空检查结果，保证返回的数据干净清晰。
 func compactHealthCheckResults(results []HealthCheckResult) []HealthCheckResult {
 	compacted := make([]HealthCheckResult, 0, len(results))
 	for _, result := range results {

@@ -1,24 +1,24 @@
 package errors
 
-// Kind 表达低基数应用错误类别，由 HTTP 层统一推导状态码。
+// Kind 定义错误所属的大分类（例如参数错误、权限不足、系统内部异常等），接口层会根据此类分类自动决定返回给前端的 HTTP 状态码（如 400、401、403、500 等）。
 type Kind string
 
 const (
 	// KindBadRequest 表示请求格式错误或无法解析。
 	KindBadRequest Kind = "bad_request"
-	// KindValidation 表示请求字段语义校验失败。
+	// KindValidation 表示提交的表单或请求参数格式及规则校验未通过。
 	KindValidation Kind = "validation_failed"
 	// KindUnauthenticated 表示调用方缺少有效认证状态。
 	KindUnauthenticated Kind = "unauthenticated"
 	// KindForbidden 表示认证调用方无权执行操作。
 	KindForbidden Kind = "forbidden"
-	// KindConflict 表示领域冲突或资源状态不允许操作。
+	// KindConflict 表示操作与当前数据状态发生冲突（如名称重复或正在被修改）。
 	KindConflict Kind = "conflict"
 	// KindNotFound 表示资源不存在或不可见。
 	KindNotFound Kind = "not_found"
-	// KindRateLimited 表示调用方超过限流或配额约束。
+	// KindRateLimited 表示请求过于频繁，超过了系统允许的访问频率限制。
 	KindRateLimited Kind = "rate_limited"
-	// KindPayloadTooLarge 表示请求体超过服务允许的容量边界。
+	// KindPayloadTooLarge 表示上传或提交的数据体量过大，超过了系统限制。
 	KindPayloadTooLarge Kind = "payload_too_large"
 	// KindInternal 表示服务内部错误。
 	KindInternal Kind = "internal"

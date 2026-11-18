@@ -70,6 +70,7 @@ func ProvideEntClient(name string) func(fx.Lifecycle, *zap.Logger, *sql.DB, EntP
 	}
 }
 
+// newEntClient 创建数据库实体操作客户端，并自动挂载 SQL 执行耗时监控和慢查询日志。
 func newEntClient(name string, db *sql.DB, plugins entPluginSet) (*ent.Client, error) {
 	driver := newEntDriver(db)
 	var err error
@@ -90,6 +91,7 @@ func newEntClient(name string, db *sql.DB, plugins entPluginSet) (*ent.Client, e
 	return client, nil
 }
 
+// newEntDriver 将底层数据库连接池包装为数据访问层所需的驱动组件。
 func newEntDriver(db *sql.DB) dialect.Driver {
 	// SQL 连接池由 datastore 生命周期 hook 持有，Ent client 不应独立关闭它们。
 	return nonClosingEntDriver{Driver: entsql.OpenDB(dialect.Postgres, db)}

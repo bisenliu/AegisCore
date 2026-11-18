@@ -39,6 +39,7 @@ func displayName(dst any, path string) string {
 	return displayNameFromType(typ, strings.Split(path, "."))
 }
 
+// displayNameFromType 顺着层级结构查找字段对外展示的友好中文名称（如“用户手机号”）。
 func displayNameFromType(typ reflect.Type, parts []string) string {
 	if len(parts) == 0 {
 		return typ.Name()
@@ -65,6 +66,7 @@ func displayNameFromType(typ reflect.Type, parts []string) string {
 	return part
 }
 
+// displayNameFromField 读取字段上标注的中文显示名称；如果未标注则使用英文字段名。
 func displayNameFromField(field reflect.StructField) string {
 	if label := field.Tag.Get(TagLabel); label != "" {
 		return label
@@ -75,6 +77,7 @@ func displayNameFromField(field reflect.StructField) string {
 	return fieldName(field)
 }
 
+// validationFieldNames 获取输入检查未通过的字段标识，同时给出程序识别的英文路径和展示给用户看的友好名称。
 func validationFieldNames(dst any, fieldErr validator.FieldError) (string, string) {
 	// 优先从 StructNamespace 重建请求字段路径，失败时退回 validator 提供的 Go 字段名。
 	field, label, ok := validationFieldNamesFromPath(dst, fieldErr.StructNamespace())
@@ -85,6 +88,7 @@ func validationFieldNames(dst any, fieldErr validator.FieldError) (string, strin
 	return name, name
 }
 
+// validationFieldNamesFromPath 顺着检查规则返回的错误层级路径，定位出前端用户实际填写的参数名称。
 func validationFieldNamesFromPath(dst any, namespace string) (string, string, bool) {
 	// validator namespace 的首段是根类型名，不属于对外请求字段路径。
 	parts := strings.Split(namespace, ".")
@@ -129,6 +133,7 @@ func validationFieldNamesFromPath(dst any, namespace string) (string, string, bo
 	return strings.Join(fieldParts, "."), label, true
 }
 
+// requestFieldName 读取字段在表单或数据传输中约定的外部参数名称。
 func requestFieldName(field reflect.StructField) string {
 	// tag 优先级与 Binder 支持的请求来源保持一致，避免错误响应暴露 Go 字段名。
 	for _, tag := range [...]string{TagJSON, TagForm, TagHeader, TagURI, TagQuery} {

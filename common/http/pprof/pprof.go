@@ -1,8 +1,7 @@
 // Package pprof 提供 Gin 版本的 Go runtime pprof 路由注册能力。
 //
-// 该包只封装无业务语义的 HTTP 路由挂载逻辑，不决定是否开启、监听地址、
-// 鉴权、IP allowlist 或网关暴露策略；这些接入策略应由具体服务在配置和
-// 部署层控制。
+// 该包只负责将 Go 原生的性能分析接口（pprof）挂载到 HTTP 路由上，不包含任何业务代码，也不决定是否开启、监听地址、
+// 访问白名单或网关暴露策略；具体的安全控制策略应由各服务通过配置文件和运维部署策略决定。
 package pprof
 
 import (
@@ -62,12 +61,14 @@ func Handler(opts Options) http.Handler {
 	return engine
 }
 
+// redirectToIndex 将访问系统性能监控目录的请求自动重定向到首页，避免直接打开时显示空白页面。
 func redirectToIndex(basePath string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, basePath+"/")
 	}
 }
 
+// dispatchHandler 根据请求的具体监控项目（例如查看内存占用、CPU 繁忙程度），分发展示对应的系统性能诊断内容。
 func dispatchHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		profile := strings.Trim(path.Clean("/"+c.Param("profile")), "/")
@@ -88,6 +89,7 @@ func dispatchHandler() gin.HandlerFunc {
 	}
 }
 
+// normalizeBasePath 规范化性能诊断入口地址，确保以斜杠开头且末尾不带多余斜杠，避免地址拼接错误。
 func normalizeBasePath(basePath string) string {
 	path := strings.TrimSpace(basePath)
 	if path == "" {

@@ -7,7 +7,7 @@ import (
 	"github.com/aegiscore/common/http/response"
 )
 
-// ListRolePermissions 处理角色权限查询请求。
+// ListRolePermissions 查询指定角色拥有的权限列表接口。
 // @Summary 查询角色权限
 // @Description 查询角色绑定的权限列表。
 // @Tags 角色
@@ -40,7 +40,7 @@ func (ctl *RoleController) ListRolePermissions(c *gin.Context) {
 	response.OK(c, toPermissionResponses(result.Items))
 }
 
-// ReplaceRolePermissions 处理角色权限全量替换请求。
+// ReplaceRolePermissions 全量覆盖指定角色的权限列表接口。
 // @Summary 替换角色权限
 // @Description 幂等替换角色完整权限集合，角色权限解绑后相关 RBAC 授权应被拒绝。
 // @Tags 角色
@@ -77,7 +77,7 @@ func (ctl *RoleController) ReplaceRolePermissions(c *gin.Context) {
 	response.OK(c, toPermissionResponses(result.Items))
 }
 
-// AddRolePermission 处理角色权限增量绑定请求。
+// AddRolePermission 为角色添加单条权限接口。
 // @Summary 绑定角色权限
 // @Description 为角色新增一个启用权限绑定。
 // @Tags 角色
@@ -114,7 +114,7 @@ func (ctl *RoleController) AddRolePermission(c *gin.Context) {
 	response.OK(c, toPermissionResponses(result.Items))
 }
 
-// RemoveRolePermission 处理角色权限解绑请求。
+// RemoveRolePermission 移除角色的单条权限接口。
 // @Summary 解绑角色权限
 // @Description 删除角色权限绑定，解绑后相关 RBAC 授权应被拒绝。
 // @Tags 角色

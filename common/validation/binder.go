@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// BindValues 按给定 struct tag 顺序扫描，将 URL 风格 values 绑定到结构体指针。
-// tag 按调用方传入顺序决定字段名优先级；匿名指针结构体只有出现相关输入时才分配，以保留可选过滤器语义。
+// BindValues 将 URL 查询参数（Query 参数）或表单键值对按标签名称自动解析并填充到目标结构体中。
+// 优先级由传入的标签名称顺序决定；对于可选的过滤条件结构体，只有在请求中真正传入了相关参数时才会创建对象，避免生成多余的空对象。
 func BindValues(dst any, values url.Values, tags ...string) error {
 	value := reflect.ValueOf(dst)
 	if value.Kind() != reflect.Pointer || value.IsNil() {
@@ -24,6 +24,7 @@ func BindValues(dst any, values url.Values, tags ...string) error {
 	return bindStruct(value, values, tags)
 }
 
+// bindStruct 读取表单或请求中的各项内容，并逐一填入到数据对象的对应字段中；遇到数据类型不匹配或必填项缺失时返回错误。
 func bindStruct(value reflect.Value, values url.Values, tags []string) error {
 	typ := value.Type()
 	for i := 0; i < value.NumField(); i++ {
@@ -33,7 +34,7 @@ func bindStruct(value reflect.Value, values url.Values, tags []string) error {
 			continue
 		}
 		if structField.Anonymous && field.Kind() == reflect.Pointer && field.Type().Elem().Kind() == reflect.Struct {
-			// 嵌入指针结构体只有在其 tag 字段出现时才分配，保留可选过滤器语义。
+			// 只有当请求参数中确实包含了该嵌套对象的字段时才为其创建内存，避免在用户未传递过滤条件时生成无意义的空结构体。
 			if field.IsNil() && embeddedStructHasValues(field.Type().Elem(), values, tags) {
 				field.Set(reflect.New(field.Type().Elem()))
 			}
@@ -65,6 +66,7 @@ func bindStruct(value reflect.Value, values url.Values, tags []string) error {
 	return nil
 }
 
+// embeddedStructHasValues 检查子数据对象中是否实际填写了数据，避免把没有任何内容的空子对象当作有效输入。
 func embeddedStructHasValues(typ reflect.Type, values url.Values, tags []string) bool {
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
@@ -87,6 +89,7 @@ func embeddedStructHasValues(typ reflect.Type, values url.Values, tags []string)
 	return false
 }
 
+// bindingName 从 json、form 等标签取出绑定用的字段名。
 func bindingName(field reflect.StructField, tags []string) string {
 	for _, tag := range tags {
 		name := strings.SplitN(field.Tag.Get(tag), ",", 2)[0]
@@ -100,6 +103,7 @@ func bindingName(field reflect.StructField, tags []string) string {
 	return ""
 }
 
+// setField 将单个请求输入值转换并写入到对应的字段中；如果格式无法转换则返回错误。
 func setField(field reflect.Value, rawValues []string) error {
 	if !field.CanSet() {
 		return nil
@@ -128,10 +132,11 @@ func setField(field reflect.Value, rawValues []string) error {
 	return setScalar(field, rawValues[0])
 }
 
+// setScalar 将文本形式的输入内容转换成目标基础类型（如数字、布尔值或时间）并保存。
 func setScalar(field reflect.Value, raw string) error {
 	if field.CanAddr() {
 		if unmarshaler, ok := field.Addr().Interface().(encoding.TextUnmarshaler); ok {
-			// 自定义文本反序列化是枚举等领域类型的扩展点。
+			// 若目标字段自定义了文本解析规则（如枚举类型实现了 TextUnmarshaler 接口），则优先调用其自定义解析方法将字符串转换为枚举对象。
 			return unmarshaler.UnmarshalText([]byte(raw))
 		}
 	}

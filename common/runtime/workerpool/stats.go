@@ -68,10 +68,12 @@ func (p *Pool) Stats() Stats {
 	}
 }
 
+// freeWorkers 获取当前处于空闲状态、随时可以领取并执行新任务的工作通道数量。
 func (p *Pool) freeWorkers() int64 {
 	return int64(p.workersPool.Free())
 }
 
+// waitingSubmitters 获取由于所有工作通道均被占满而正在排队等待提交的任务数量。
 func (p *Pool) waitingSubmitters() int64 {
 	return int64(p.workersPool.Waiting())
 }

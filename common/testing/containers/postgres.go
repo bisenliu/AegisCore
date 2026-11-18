@@ -118,6 +118,7 @@ func ContainersEnabled() bool {
 	return testContainersEnabled != nil && *testContainersEnabled
 }
 
+// normalizePostgresOptions 补上测试数据库没填的库名、用户名和镜像。
 func normalizePostgresOptions(opts PostgresOptions) PostgresOptions {
 	if opts.Image == "" {
 		opts.Image = DefaultPostgresImage
@@ -137,6 +138,7 @@ func normalizePostgresOptions(opts PostgresOptions) PostgresOptions {
 	return opts
 }
 
+// requireContainersEnabled 没打开容器测试时跳过当前测试，避免本地没装 Docker 时误失败。
 func requireContainersEnabled(t testing.TB) {
 	t.Helper()
 	if !ContainersEnabled() {
@@ -144,6 +146,7 @@ func requireContainersEnabled(t testing.TB) {
 	}
 }
 
+// dockerRun 启动测试容器，失败时让测试停下来并保留命令输出。
 func dockerRun(ctx context.Context, t testing.TB, args ...string) string {
 	t.Helper()
 	out, stderr, err := dockerOutput(ctx, append([]string{"run"}, args...)...)
@@ -153,6 +156,7 @@ func dockerRun(ctx context.Context, t testing.TB, args ...string) string {
 	return strings.TrimSpace(out)
 }
 
+// dockerStop 停掉并删除测试容器，清理失败也要让测试看到原因。
 func dockerStop(ctx context.Context, t testing.TB, containerID string) {
 	t.Helper()
 	if containerID == "" {
@@ -166,6 +170,7 @@ func dockerStop(ctx context.Context, t testing.TB, containerID string) {
 	}
 }
 
+// dockerMappedPort 查出容器端口映射到本机的地址，供测试连接使用。
 func dockerMappedPort(ctx context.Context, t testing.TB, containerID, containerPort string) (string, int) {
 	t.Helper()
 	if _, ok := ctx.Deadline(); !ok {
@@ -198,6 +203,7 @@ func dockerMappedPort(ctx context.Context, t testing.TB, containerID, containerP
 	}
 }
 
+// parseDockerPort 从容器端口映射输出中提取数字端口号；如果提取出的内容不是合法的数字则返回错误。
 func parseDockerPort(output string) (string, int, error) {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -221,6 +227,7 @@ func parseDockerPort(output string) (string, int, error) {
 	return "", 0, fmt.Errorf("empty Docker port output")
 }
 
+// waitForPostgres 反复尝试连接测试数据库容器，直到数据库准备完毕可以接收请求；若超过等待时限仍连不上则终止测试。
 func waitForPostgres(ctx context.Context, t testing.TB, pg *PostgresContainer) {
 	t.Helper()
 	db, err := sql.Open("pgx", pg.DSN)
@@ -234,6 +241,7 @@ func waitForPostgres(ctx context.Context, t testing.TB, pg *PostgresContainer) {
 	})
 }
 
+// waitFor 定时轮询检查某项服务是否准备就绪，直到检查通过或超时退出。
 func waitFor(ctx context.Context, t testing.TB, label string, check func(context.Context) error) {
 	t.Helper()
 	ticker := time.NewTicker(200 * time.Millisecond)
@@ -258,6 +266,7 @@ func waitFor(ctx context.Context, t testing.TB, label string, check func(context
 	}
 }
 
+// dockerOutput 执行 Docker 命令并返回标准输出和错误输出。
 func dockerOutput(ctx context.Context, args ...string) (string, string, error) {
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	var stderr bytes.Buffer

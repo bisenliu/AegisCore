@@ -207,6 +207,7 @@ Go import 分层边界由根 `.golangci.yml` 的 `depguard` 规则随 `make lint
 - 检查主 CI 只调用一次复用质量 workflow，且 lint/unit workflow 不直接监听重复 PR/push 事件、标准 lint 与普通单测命令各只出现一次。
 - 检查 OpenAPI 和 Ent 生成物 drift。
 - 检查 `openspec/specs/`、`openspec/changes/` 和 `docs/opsx/` 下 Markdown 是否保留默认英文模板内容。
+- 检查手写生产 Go 代码的函数、方法和导出声明是否有紧邻、通俗可读的中文文档注释（非必要不使用技术黑话，让非开发人员也可以看懂）；Ent、OpenAPI、Mock 等生成代码和测试代码不在该扫描范围内。
 - 检查 `common/` 与 `user-service/` 的 `mock_generate.go` 是否使用 `generate` build tag。
 - 检查人工维护的正式 Go 文件是否新增 `*ForTest` 或 `testHook*` 等明确测试语义 symbol；`_test.go`、`common/testing`、Ent 和 OpenAPI 生成物不在该扫描范围内。
 - 人工搜索和审查应默认排除 `user-service/internal/persistence/ent/` 下除 `schema/` 外的 Ent 生成物；生成物 drift 仍由 `make user-service-architecture-lint`、`make user-service-generate` 和 `make verify` 暴露。

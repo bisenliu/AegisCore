@@ -10,19 +10,19 @@ import (
 	userquery "github.com/aegiscore/user-service/internal/features/user/application/query"
 )
 
-// UserController 处理用户资料端点的 HTTP 请求。
+// UserController 负责接收和处理用户资料相关的 HTTP 接口请求。
 type UserController struct {
 	commands  usercommand.CreateUserService
 	queries   userquery.UserQueryService
 	validator *commonvalidation.Validator
 }
 
-// NewUserController 使用 command/query services 和请求 validator 依赖构造用户控制器。
+// NewUserController 创建用户接口控制器，组装用户写入、查询以及参数校验服务。
 func NewUserController(commands usercommand.CreateUserService, queries userquery.UserQueryService, validator *commonvalidation.Validator) *UserController {
 	return &UserController{commands: commands, queries: queries, validator: validator}
 }
 
-// ListUsers 处理分页用户列表请求。
+// ListUsers 分页查询用户列表接口。
 // @Summary 分页查询用户列表
 // @Description 基于 user_id keyset 分页查询用户资料列表，支持按用户昵称、用户名和用户状态过滤，默认排除软删除用户。page_size 未传或小于 1 时使用默认值 10，超过 100 时按 100 处理。
 // @Tags 用户
@@ -58,7 +58,7 @@ func (ctl *UserController) ListUsers(c *gin.Context) {
 	response.OK(c, toUserListResponse(users))
 }
 
-// CreateUser 处理用户创建请求。
+// CreateUser 新建用户接口。
 // @Summary 创建用户
 // @Description 创建一个新的用户资料。请求体使用共享校验器校验，用户名必须唯一，status 缺省为 100。
 // @Tags 用户
@@ -93,7 +93,7 @@ func (ctl *UserController) CreateUser(c *gin.Context) {
 	response.Created(c, toUserResponse(user.User))
 }
 
-// GetByUserID 处理通过外部 UUID 查询用户资料的请求。
+// GetByUserID 根据用户唯一编号查询用户资料接口。
 // @Summary 查询用户资料
 // @Description 通过外部 UUID 用户 ID 查询用户基础资料。
 // @Tags 用户

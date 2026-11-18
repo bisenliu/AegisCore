@@ -37,7 +37,7 @@ type Pool struct {
 
 // New 创建一个固定最大并发数的进程内后台任务池。
 // ants.WithPreAlloc 只预分配内部 worker queue，不会预先启动 worker goroutine。
-// 完整的配置、context、背压、错误、统计和关闭契约参见 package workerpool 文档与 ExamplePool。
+// 详细的配置说明、上下文传递、满载排队、错误处理、监控统计与优雅关闭机制，请参阅 package workerpool 文档与 ExamplePool。
 func New(log *zap.Logger, opts Options) (*Pool, error) {
 	name := strings.TrimSpace(opts.Name)
 	if name == "" {

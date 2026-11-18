@@ -128,6 +128,7 @@ func prepareRolePermissionCommand(req RolePermissionHTTPRequest) (rolecommand.Ro
 	return rolecommand.RolePermissionCommand{RoleID: roleID, PermissionID: permissionID}, nil
 }
 
+// parseUserID 将请求中的用户编号文本解析为标准 UUID 格式；格式不正确时报错。
 func parseUserID(raw string) (uuid.UUID, error) {
 	userID, err := uuid.Parse(raw)
 	if err != nil {
@@ -136,6 +137,7 @@ func parseUserID(raw string) (uuid.UUID, error) {
 	return userID, nil
 }
 
+// parseRoleID 将请求中的角色编号文本解析为标准 UUID 格式；格式不正确时报错。
 func parseRoleID(raw string) (uuid.UUID, error) {
 	roleID, err := uuid.Parse(raw)
 	if err != nil {
@@ -144,6 +146,7 @@ func parseRoleID(raw string) (uuid.UUID, error) {
 	return roleID, nil
 }
 
+// parsePermissionID 将请求中的权限编号文本解析为标准 UUID 格式；格式不正确时报错。
 func parsePermissionID(raw string) (uuid.UUID, error) {
 	permissionID, err := uuid.Parse(raw)
 	if err != nil {
@@ -152,6 +155,7 @@ func parsePermissionID(raw string) (uuid.UUID, error) {
 	return permissionID, nil
 }
 
+// parseUUIDs 批量将一组编号文本解析为标准 UUID 清单；遇到不合法的格式时报错。
 func parseUUIDs(rawValues []string, invalidMessage string) ([]uuid.UUID, error) {
 	ids := make([]uuid.UUID, 0, len(rawValues))
 	for _, raw := range rawValues {
