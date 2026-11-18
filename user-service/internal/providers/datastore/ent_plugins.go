@@ -40,8 +40,8 @@ func newEntPlugins(
 	if settings.Plugins.SQLLog.Enabled {
 		plugins.driverPlugins = append(plugins.driverPlugins, &entSQLLogPlugin{
 			log:           logger.SQL(log),
-			debugEnabled:  settings.Plugins.SQLLog.Debug,
-			slowThreshold: settings.Plugins.SQLLog.SlowThreshold,
+			debugEnabled:  serviceconfig.DefaultEntSQLLogDebug,
+			slowThreshold: serviceconfig.DefaultEntSlowQueryThreshold,
 		})
 	}
 	if settings.Plugins.Tracing.Enabled && tracingProvider != nil {

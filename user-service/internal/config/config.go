@@ -15,8 +15,24 @@ const (
 	minProductionJWTBytes = 32
 	// DefaultHTTPRequestBodyMaxBytes 是 user-service JSON 请求体的默认字节上限。
 	DefaultHTTPRequestBodyMaxBytes int64 = 64 * 1024
-	// DefaultEntSlowQueryThreshold 是 Ent SQL log 插件的默认慢查询阈值。
+	// DefaultEntSlowQueryThreshold 是 Ent SQL log 插件的慢查询阈值。
 	DefaultEntSlowQueryThreshold = 500 * time.Millisecond
+	// DefaultEntSQLLogDebug 控制 SQL log 插件是否记录成功 SQL。
+	DefaultEntSQLLogDebug = false
+
+	// PolicyWatcherSubscribeTimeout 是 policy watcher 等待 Redis 订阅确认的预算。
+	PolicyWatcherSubscribeTimeout = 5 * time.Second
+	// PolicyWatcherRetryBackoffInitial 是 policy watcher 重连退避的初始值。
+	PolicyWatcherRetryBackoffInitial = 250 * time.Millisecond
+	// PolicyWatcherRetryBackoffMax 是 policy watcher 重连退避的上限。
+	PolicyWatcherRetryBackoffMax = 30 * time.Second
+
+	// AnonymousRateLimitShards 是匿名限流器的锁分片数。
+	AnonymousRateLimitShards = 64
+	// AuthenticatedRateLimitShards 是已认证限流器的锁分片数。
+	AuthenticatedRateLimitShards = 128
+	// RateLimitCleanupInterval 是限流 key janitor 的清理周期。
+	RateLimitCleanupInterval = 30 * time.Second
 )
 
 var sensitiveConfigPaths = []string{
@@ -65,44 +81,26 @@ type RBACConfig struct {
 	PolicyWatcher PolicyWatcherConfig `mapstructure:"policy_watcher"`
 }
 
-// PolicyWatcherConfig 控制 RBAC policy watcher 的校准、订阅确认和重连节奏。
+// PolicyWatcherConfig 控制 RBAC policy watcher 的校准周期和新鲜度预算。
+// 订阅确认超时和重连退避由代码常量拥有，不进入配置文件。
 type PolicyWatcherConfig struct {
-	CheckInterval    time.Duration      `mapstructure:"check_interval"`
-	SubscribeTimeout time.Duration      `mapstructure:"subscribe_timeout"`
-	MaxStaleness     time.Duration      `mapstructure:"max_staleness"`
-	RetryBackoff     RetryBackoffConfig `mapstructure:"retry_backoff"`
+	CheckInterval time.Duration `mapstructure:"check_interval"`
+	MaxStaleness  time.Duration `mapstructure:"max_staleness"`
 }
 
-// RetryBackoffConfig 描述 watcher 重连的有界指数退避范围。
-type RetryBackoffConfig struct {
-	Initial time.Duration `mapstructure:"initial"`
-	Max     time.Duration `mapstructure:"max"`
-}
-
-// DefaultPolicyWatcherConfig 返回 RBAC policy watcher 的完整默认配置。
+// DefaultPolicyWatcherConfig 返回 RBAC policy watcher 的外部配置默认值。
 func DefaultPolicyWatcherConfig() PolicyWatcherConfig {
 	return PolicyWatcherConfig{
-		CheckInterval:    15 * time.Second,
-		SubscribeTimeout: 5 * time.Second,
-		MaxStaleness:     45 * time.Second,
-		RetryBackoff: RetryBackoffConfig{
-			Initial: 250 * time.Millisecond,
-			Max:     30 * time.Second,
-		},
+		CheckInterval: 15 * time.Second,
+		MaxStaleness:  45 * time.Second,
 	}
 }
 
-// Validate 校验 policy watcher 的校准、新鲜度和重连边界。
+// Validate 校验 policy watcher 的校准周期和新鲜度预算。
 func (c PolicyWatcherConfig) Validate(path string) []error {
 	var errs []error
 	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".check_interval", c.CheckInterval)...)
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".subscribe_timeout", c.SubscribeTimeout)...)
 	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".max_staleness", c.MaxStaleness)...)
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".retry_backoff.initial", c.RetryBackoff.Initial)...)
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".retry_backoff.max", c.RetryBackoff.Max)...)
-	if c.RetryBackoff.Max > 0 && c.RetryBackoff.Initial > 0 && c.RetryBackoff.Max < c.RetryBackoff.Initial {
-		errs = append(errs, commonconfig.FieldError(path+".retry_backoff.max", "must be >= retry_backoff.initial"))
-	}
 	if c.MaxStaleness > 0 && c.CheckInterval > 0 && c.MaxStaleness <= c.CheckInterval {
 		errs = append(errs, commonconfig.FieldError(path+".max_staleness", "must be > check_interval"))
 	}
@@ -115,28 +113,27 @@ type APIRateLimitConfig struct {
 	Authenticated RateLimitPolicyConfig `mapstructure:"authenticated"`
 }
 
-// RateLimitPolicyConfig 描述一个限流策略的本地 token bucket 与清理设置。
+// RateLimitPolicyConfig 描述一个限流策略的外部配置面。
+// 分片数量和清理周期由代码常量拥有，不进入配置文件。
 type RateLimitPolicyConfig struct {
-	Enabled         bool          `mapstructure:"enabled"`
-	RatePerSecond   float64       `mapstructure:"rate_per_second"`
-	Burst           int           `mapstructure:"burst"`
-	MaxKeys         int           `mapstructure:"max_keys"`
-	CapacityPolicy  string        `mapstructure:"capacity_policy"`
-	KeyTTL          time.Duration `mapstructure:"key_ttl"`
-	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`
-	Shards          int           `mapstructure:"shards"`
+	Enabled        bool          `mapstructure:"enabled"`
+	RatePerSecond  float64       `mapstructure:"rate_per_second"`
+	Burst          int           `mapstructure:"burst"`
+	MaxKeys        int           `mapstructure:"max_keys"`
+	CapacityPolicy string        `mapstructure:"capacity_policy"`
+	KeyTTL         time.Duration `mapstructure:"key_ttl"`
 }
 
-// DefaultRateLimitPolicyConfig 构造启用状态下的完整限流策略默认配置。
-func DefaultRateLimitPolicyConfig(ratePerSecond float64, burst int, keyTTL time.Duration, cleanupInterval time.Duration, shards int) RateLimitPolicyConfig {
-	return RateLimitPolicyConfig{Enabled: true, RatePerSecond: ratePerSecond, Burst: burst, MaxKeys: defaultRateLimitMaxKeys(shards), CapacityPolicy: string(commonmw.RateLimitCapacityPolicyOverflow), KeyTTL: keyTTL, CleanupInterval: cleanupInterval, Shards: shards}
-}
-
-func defaultRateLimitMaxKeys(shards int) int {
-	if shards <= 0 {
-		return 1024
+// DefaultRateLimitPolicyConfig 构造启用状态下的限流策略默认配置。
+func DefaultRateLimitPolicyConfig(ratePerSecond float64, burst int, keyTTL time.Duration, maxKeys int) RateLimitPolicyConfig {
+	return RateLimitPolicyConfig{
+		Enabled:        true,
+		RatePerSecond:  ratePerSecond,
+		Burst:          burst,
+		MaxKeys:        maxKeys,
+		CapacityPolicy: string(commonmw.RateLimitCapacityPolicyOverflow),
+		KeyTTL:         keyTTL,
 	}
-	return shards * 1024
 }
 
 // Validate 校验启用的限流策略；禁用时其余字段不参与运行时构造和校验。
@@ -162,10 +159,6 @@ func (c RateLimitPolicyConfig) Validate(path string) []error {
 		errs = append(errs, commonconfig.FieldError(path+".capacity_policy", "must be one of overflow or reject when enabled"))
 	}
 	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".key_ttl", c.KeyTTL)...)
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".cleanup_interval", c.CleanupInterval)...)
-	if c.Shards <= 0 {
-		errs = append(errs, commonconfig.FieldError(path+".shards", "must be > 0 when enabled"))
-	}
 	return errs
 }
 
@@ -226,11 +219,10 @@ type EntPluginsConfig struct {
 	Metrics EntMetricsPluginConfig `mapstructure:"metrics"`
 }
 
-// EntSQLLogPluginConfig 控制 Ent SQL driver 日志插件行为。
+// EntSQLLogPluginConfig 控制 Ent SQL driver 日志插件启停。
+// debug 输出和慢查询阈值由代码常量拥有，不进入配置文件。
 type EntSQLLogPluginConfig struct {
-	Enabled       bool          `mapstructure:"enabled"`
-	Debug         bool          `mapstructure:"debug"`
-	SlowThreshold time.Duration `mapstructure:"slow_threshold"`
+	Enabled bool `mapstructure:"enabled"`
 }
 
 // EntTracingPluginConfig 控制 Ent tracing 插件行为。
@@ -308,15 +300,12 @@ func DefaultConfig() Config {
 			PolicyWatcher: DefaultPolicyWatcherConfig(),
 		},
 		APIRateLimit: APIRateLimitConfig{
-			Anonymous:     DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64),
-			Authenticated: DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, 30*time.Second, 128),
+			Anonymous:     DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, AnonymousRateLimitShards*1024),
+			Authenticated: DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, AuthenticatedRateLimitShards*1024),
 		},
 		HTTP: HTTPConfig{RequestBodyMaxBytes: DefaultHTTPRequestBodyMaxBytes},
 		Ent: EntConfig{
 			Plugins: EntPluginsConfig{
-				SQLLog: EntSQLLogPluginConfig{
-					SlowThreshold: DefaultEntSlowQueryThreshold,
-				},
 				Tracing: EntTracingPluginConfig{Enabled: true},
 			},
 		},

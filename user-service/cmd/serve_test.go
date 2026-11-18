@@ -201,8 +201,6 @@ ent:
   plugins:
     sql_log:
       enabled: false
-      debug: false
-      slow_threshold: 500ms
     tracing:
       enabled: true
     metrics:

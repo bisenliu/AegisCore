@@ -259,6 +259,29 @@
 - **WHEN** watcher 处理 100 条重复或连续通知且其中没有新的未应用 policy revision
 - **THEN** policy loader 调用次数 MUST 有常数上界；纯 user-role 通知 MUST 产生 0 次 policy loader 调用
 
+### Requirement: RBAC policy watcher 配置面
+
+系统 MUST 将 RBAC policy watcher 的外部配置限制为校准周期和新鲜度预算。订阅确认超时和重连退避 MUST 由 user-service 代码常量提供，并在构造 Redis subscriber 时传入。配置旧字段 MUST 被 strict decode 拒绝。
+
+#### Scenario: 默认校准策略
+
+- **WHEN** `rbac.policy_watcher` 未配置
+- **THEN** user-service MUST 使用 `check_interval=15s` 和 `max_staleness=45s`
+- **AND** 系统 MUST 以代码常量提供 `subscribe_timeout=5s`、`retry_backoff.initial=250ms` 和 `retry_backoff.max=30s`
+
+#### Scenario: 启用配置校验
+
+- **WHEN** `rbac.policy_watcher` 已配置
+- **THEN** `check_interval` 和 `max_staleness` MUST 为正值，且 `max_staleness` MUST 大于 `check_interval`
+- **WHEN** 配置包含 `rbac.policy_watcher.subscribe_timeout` 或 `rbac.policy_watcher.retry_backoff`
+- **THEN** strict decode MUST 以未知字段拒绝配置，MUST NOT 静默忽略或覆盖代码常量
+
+#### Scenario: 构造映射
+
+- **WHEN** permission feature 构造 policy watcher
+- **THEN** watcher MUST 使用配置的 `check_interval` 和 `max_staleness`
+- **AND** Redis subscriber MUST 使用代码常量订阅确认超时和重连退避，MUST NOT 从配置文件读取这些值
+
 ### Requirement: RBAC watcher 自恢复生命周期与权威校准状态
 
 RBAC watcher MUST 在单一显式生命周期内持续监督 Redis policy refresh 订阅与 PostgreSQL policy revision 权威校准。订阅故障 MUST NOT 终止数据库补偿；瞬时错误恢复后 MUST 更新当前状态且不得因历史错误保持永久失败。watcher MUST 只通过 permission application 拥有的结构化只读 status port 暴露状态，MUST NOT 保留 `Running()`/`LastError()` 旧接口、旧状态 adapter 或兼容分支。watcher 启动 MUST 接收显式 lifecycle context，并以该 context 派生后台运行 context；Start 路径 MUST NOT 使用 `context.Background()` 作为运行根上下文，也 MUST NOT 保留无参 `Start()` 兼容接口或 adapter。

@@ -15,8 +15,8 @@ import (
 func TestNewAPIRateLimitersConstructsEnabledLimiters(t *testing.T) {
 	lifecycle := fxtest.NewLifecycle(t)
 	limiters, err := NewAPIRateLimiters(lifecycle, serviceconfig.RateLimitSettings{APIRateLimit: serviceconfig.APIRateLimitConfig{
-		Anonymous:     serviceconfig.DefaultRateLimitPolicyConfig(1, 1, time.Minute, time.Hour, 2),
-		Authenticated: serviceconfig.DefaultRateLimitPolicyConfig(2, 2, time.Minute, time.Hour, 2),
+		Anonymous:     serviceconfig.DefaultRateLimitPolicyConfig(1, 1, time.Minute, 2),
+		Authenticated: serviceconfig.DefaultRateLimitPolicyConfig(2, 2, time.Minute, 2),
 	}})
 	require.NoError(t, err)
 	require.NotNil(t, limiters.Anonymous)
@@ -33,14 +33,12 @@ func TestNewAPIRateLimitersConstructsEnabledLimiters(t *testing.T) {
 func TestNewAPIRateLimitersPassesCapacitySettings(t *testing.T) {
 	limiters, err := NewAPIRateLimiters(fxtest.NewLifecycle(t), serviceconfig.RateLimitSettings{APIRateLimit: serviceconfig.APIRateLimitConfig{
 		Anonymous: serviceconfig.RateLimitPolicyConfig{
-			Enabled:         true,
-			RatePerSecond:   100,
-			Burst:           100,
-			MaxKeys:         1,
-			CapacityPolicy:  string(commonmw.RateLimitCapacityPolicyReject),
-			KeyTTL:          time.Minute,
-			CleanupInterval: time.Hour,
-			Shards:          1,
+			Enabled:        true,
+			RatePerSecond:  100,
+			Burst:          100,
+			MaxKeys:        1,
+			CapacityPolicy: string(commonmw.RateLimitCapacityPolicyReject),
+			KeyTTL:         time.Minute,
 		},
 	}})
 	require.NoError(t, err)

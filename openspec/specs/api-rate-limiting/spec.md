@@ -31,19 +31,21 @@
 
 ### Requirement: 本地限流配置、生命周期与部署边界
 
-user-service MUST 私有声明匿名与已认证限流策略，并使用共享业务中立的本地 token bucket primitive。每类策略 MUST 支持启停、速率、burst、key TTL、清理间隔、分片数量、最大 Key 容量和容量耗尽策略；服务 MUST 清理过期 key、停止自有后台资源，并明确该能力只提供单实例配额。
+user-service MUST 私有声明匿名与已认证限流策略，并使用共享业务中立的本地 token bucket primitive。每类策略的外部配置 MUST 支持启停、速率、burst、key TTL、最大 Key 容量和容量耗尽策略。分片数量和清理间隔 MUST 由 user-service 代码常量提供，MUST NOT 进入配置文件。服务 MUST 清理过期 key、停止自有后台资源，并明确该能力只提供单实例配额。
 
 #### Scenario: 默认值与配置校验
 
 - **WHEN** 未显式配置 API 限流
-- **THEN** 两类策略 MUST 使用启用状态和正数速率、burst、key TTL、清理间隔、分片数量及最大 Key 容量的完整默认值
-- **WHEN** 已启用策略的任一数值为零或非法值，或容量耗尽策略不是支持值
+- **THEN** 两类策略 MUST 使用启用状态和正数速率、burst、key TTL 及最大 Key 容量的默认值，并 MUST 以代码常量提供正数分片数量和清理间隔
+- **WHEN** 已启用策略的任一外部数值为零或非法值，或容量耗尽策略不是支持值
 - **THEN** 配置校验 MUST 在启动前失败，并报告对应配置字段路径
+- **WHEN** 配置包含 `shards` 或 `cleanup_interval`
+- **THEN** strict decode MUST 以未知字段拒绝配置，MUST NOT 静默忽略或覆盖代码常量
 
 #### Scenario: 清理、禁用与停止
 
 - **WHEN** 某个限流 key 超过 TTL 未访问
-- **THEN** janitor MUST 在后续清理周期删除该 key，后续访问 MUST 在容量允许时创建新的 token bucket
+- **THEN** janitor MUST 在代码常量清理周期内删除该 key，后续访问 MUST 在容量允许时创建新的 token bucket
 - **WHEN** 某类限流被禁用
 - **THEN** 对应请求 MUST 直接进入后续 middleware，系统 MUST NOT 为该类策略创建 limiter janitor
 - **WHEN** user-service 停止

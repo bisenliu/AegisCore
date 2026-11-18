@@ -207,9 +207,9 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 
 - **WHEN** 配置 `ent.plugins.sql_log.enabled=true`
 - **THEN** 系统 SHALL 使用 SQL log driver plugin 包装 Ent driver
-- **AND** 慢 SQL、SQL error 和 debug SQL 行为 SHALL 由该插件负责
-- **AND** `ent.plugins.sql_log.debug` SHALL 控制是否记录成功 SQL 的 debug 日志
-- **AND** `ent.plugins.sql_log.slow_threshold` SHALL 控制慢 SQL 阈值
+- **AND** 慢 SQL 和 SQL error 行为 SHALL 由该插件负责
+- **AND** 成功 SQL 的 debug 输出 MUST 保持关闭
+- **AND** 慢 SQL 阈值 MUST 使用代码常量 `500ms`
 
 #### Scenario: 显式启用 Ent metrics 插件
 
@@ -233,8 +233,10 @@ user-service MUST 通过 permission application 的结构化只读 watcher statu
 #### Scenario: Ent 观测插件配置契约
 
 - **WHEN** user-service 读取 Ent 观测配置
-- **THEN** 系统 MUST 使用 `ent.plugins.sql_log.enabled`、`ent.plugins.sql_log.debug`、`ent.plugins.sql_log.slow_threshold`、`ent.plugins.tracing.enabled` 和 `ent.plugins.metrics.enabled` 表达插件启停和 SQL log 行为
-- **AND** 系统 MUST NOT 使用 `ent.sql_debug` 作为配置契约
+- **THEN** 系统 MUST 使用 `ent.plugins.sql_log.enabled`、`ent.plugins.tracing.enabled` 和 `ent.plugins.metrics.enabled` 表达插件启停
+- **AND** 系统 MUST NOT 使用 `ent.sql_debug`、`ent.plugins.sql_log.debug` 或 `ent.plugins.sql_log.slow_threshold` 作为配置契约
+- **WHEN** 配置包含 `ent.plugins.sql_log.debug` 或 `ent.plugins.sql_log.slow_threshold`
+- **THEN** strict decode MUST 以未知字段拒绝配置，MUST NOT 静默忽略或覆盖代码常量
 
 ### Requirement: 运行时故障、诊断与依赖观测边界
 

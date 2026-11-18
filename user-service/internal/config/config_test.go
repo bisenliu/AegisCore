@@ -27,10 +27,7 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.True(t, cfg.RBAC.UserRoleCache.Enabled)
 	require.Equal(t, 7*time.Second, cfg.RBAC.UserRoleCache.TTL)
 	require.Equal(t, 10*time.Second, cfg.RBAC.PolicyWatcher.CheckInterval)
-	require.Equal(t, 4*time.Second, cfg.RBAC.PolicyWatcher.SubscribeTimeout)
 	require.Equal(t, 35*time.Second, cfg.RBAC.PolicyWatcher.MaxStaleness)
-	require.Equal(t, 500*time.Millisecond, cfg.RBAC.PolicyWatcher.RetryBackoff.Initial)
-	require.Equal(t, 20*time.Second, cfg.RBAC.PolicyWatcher.RetryBackoff.Max)
 	require.True(t, cfg.Auth.RefreshTokenRotation)
 	require.Equal(t, 5, cfg.Auth.MaxActiveSessionsPerUser)
 	require.True(t, cfg.APIRateLimit.Anonymous.Enabled)
@@ -39,20 +36,14 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, 8192, cfg.APIRateLimit.Anonymous.MaxKeys)
 	require.Equal(t, "overflow", cfg.APIRateLimit.Anonymous.CapacityPolicy)
 	require.Equal(t, 11*time.Minute, cfg.APIRateLimit.Anonymous.KeyTTL)
-	require.Equal(t, 15*time.Second, cfg.APIRateLimit.Anonymous.CleanupInterval)
-	require.Equal(t, 32, cfg.APIRateLimit.Anonymous.Shards)
 	require.True(t, cfg.APIRateLimit.Authenticated.Enabled)
 	require.Equal(t, 8.0, cfg.APIRateLimit.Authenticated.RatePerSecond)
 	require.Equal(t, 30, cfg.APIRateLimit.Authenticated.Burst)
 	require.Equal(t, 16384, cfg.APIRateLimit.Authenticated.MaxKeys)
 	require.Equal(t, "reject", cfg.APIRateLimit.Authenticated.CapacityPolicy)
 	require.Equal(t, 12*time.Minute, cfg.APIRateLimit.Authenticated.KeyTTL)
-	require.Equal(t, 20*time.Second, cfg.APIRateLimit.Authenticated.CleanupInterval)
-	require.Equal(t, 64, cfg.APIRateLimit.Authenticated.Shards)
 	require.EqualValues(t, 32768, cfg.HTTP.RequestBodyMaxBytes)
 	require.True(t, cfg.Ent.Plugins.SQLLog.Enabled)
-	require.True(t, cfg.Ent.Plugins.SQLLog.Debug)
-	require.Equal(t, 250*time.Millisecond, cfg.Ent.Plugins.SQLLog.SlowThreshold)
 	require.False(t, cfg.Ent.Plugins.Tracing.Enabled)
 	require.True(t, cfg.Ent.Plugins.Metrics.Enabled)
 	require.Len(t, cfg.Resources.Redis, 1)
@@ -93,12 +84,10 @@ func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
 	require.Equal(t, DefaultFeatureCacheConfig(time.Second), cfg.Auth.TokenVersionCache)
 	require.Equal(t, DefaultFeatureCacheConfig(5*time.Second), cfg.RBAC.UserRoleCache)
 	require.Equal(t, DefaultPolicyWatcherConfig(), cfg.RBAC.PolicyWatcher)
-	require.Equal(t, DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64), cfg.APIRateLimit.Anonymous)
-	require.Equal(t, DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, 30*time.Second, 128), cfg.APIRateLimit.Authenticated)
+	require.Equal(t, DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, AnonymousRateLimitShards*1024), cfg.APIRateLimit.Anonymous)
+	require.Equal(t, DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, AuthenticatedRateLimitShards*1024), cfg.APIRateLimit.Authenticated)
 	require.Equal(t, HTTPConfig{RequestBodyMaxBytes: DefaultHTTPRequestBodyMaxBytes}, cfg.HTTP)
 	require.False(t, cfg.Ent.Plugins.SQLLog.Enabled)
-	require.False(t, cfg.Ent.Plugins.SQLLog.Debug)
-	require.Equal(t, DefaultEntSlowQueryThreshold, cfg.Ent.Plugins.SQLLog.SlowThreshold)
 	require.True(t, cfg.Ent.Plugins.Tracing.Enabled)
 	require.False(t, cfg.Ent.Plugins.Metrics.Enabled)
 }
@@ -133,23 +122,19 @@ func TestLoadAppliesFeatureCacheDefaults(t *testing.T) {
 func TestLoadAppliesPolicyWatcherDefaults(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), `  policy_watcher:
     check_interval: 10s
-    subscribe_timeout: 4s
     max_staleness: 35s
-    retry_backoff:
-      initial: 500ms
-      max: 20s
 `, "", 1)
 
 	cfg := loadServiceConfig(t, yaml)
 	require.Equal(t, DefaultPolicyWatcherConfig(), cfg.RBAC.PolicyWatcher)
 }
 
-// TestValidatePolicyWatcher 验证 policy watcher 校准、新鲜度和重试退避边界。
+// TestValidatePolicyWatcher 验证 policy watcher 校准周期和新鲜度预算。
 func TestValidatePolicyWatcher(t *testing.T) {
 	t.Run("requires positive values", func(t *testing.T) {
 		errs := (PolicyWatcherConfig{}).Validate("rbac.policy_watcher")
-		require.Len(t, errs, 5)
-		for _, field := range []string{"check_interval", "subscribe_timeout", "max_staleness", "retry_backoff.initial", "retry_backoff.max"} {
+		require.Len(t, errs, 2)
+		for _, field := range []string{"check_interval", "max_staleness"} {
 			require.Condition(t, func() bool {
 				for _, err := range errs {
 					if strings.Contains(err.Error(), "rbac.policy_watcher."+field) {
@@ -164,11 +149,9 @@ func TestValidatePolicyWatcher(t *testing.T) {
 	t.Run("rejects invalid ordering", func(t *testing.T) {
 		cfg := DefaultPolicyWatcherConfig()
 		cfg.MaxStaleness = cfg.CheckInterval
-		cfg.RetryBackoff.Max = cfg.RetryBackoff.Initial / 2
 		errs := cfg.Validate("rbac.policy_watcher")
-		require.Len(t, errs, 2)
-		require.Contains(t, errs[0].Error()+errs[1].Error(), "retry_backoff.max must be >= retry_backoff.initial")
-		require.Contains(t, errs[0].Error()+errs[1].Error(), "max_staleness must be > check_interval")
+		require.Len(t, errs, 1)
+		require.Contains(t, errs[0].Error(), "max_staleness must be > check_interval")
 	})
 
 	t.Run("accepts complete defaults", func(t *testing.T) {
@@ -186,8 +169,6 @@ func TestLoadAppliesAPIRateLimitDefaults(t *testing.T) {
     max_keys: 8192
     capacity_policy: overflow
     key_ttl: 11m
-    cleanup_interval: 15s
-    shards: 32
   authenticated:
     enabled: true
     rate_per_second: 8
@@ -195,13 +176,11 @@ func TestLoadAppliesAPIRateLimitDefaults(t *testing.T) {
     max_keys: 16384
     capacity_policy: reject
     key_ttl: 12m
-    cleanup_interval: 20s
-    shards: 64
 `, "", 1)
 
 	cfg := loadServiceConfig(t, yaml)
-	require.Equal(t, DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64), cfg.APIRateLimit.Anonymous)
-	require.Equal(t, DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, 30*time.Second, 128), cfg.APIRateLimit.Authenticated)
+	require.Equal(t, DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, AnonymousRateLimitShards*1024), cfg.APIRateLimit.Anonymous)
+	require.Equal(t, DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, AuthenticatedRateLimitShards*1024), cfg.APIRateLimit.Authenticated)
 }
 
 // TestLoadHTTPConfig 验证 user-service 私有 HTTP 配置加载和严格字段拒绝。
@@ -237,8 +216,6 @@ func TestLoadPreservesDisabledAPIRateLimit(t *testing.T) {
     max_keys: 8192
     capacity_policy: overflow
     key_ttl: 11m
-    cleanup_interval: 15s
-    shards: 32
   authenticated:
     enabled: true
     rate_per_second: 8
@@ -246,8 +223,6 @@ func TestLoadPreservesDisabledAPIRateLimit(t *testing.T) {
     max_keys: 16384
     capacity_policy: reject
     key_ttl: 12m
-    cleanup_interval: 20s
-    shards: 64
 `, `api_rate_limit:
   anonymous:
     enabled: false
@@ -266,18 +241,16 @@ func TestLoadPreservesDisabledAPIRateLimit(t *testing.T) {
 func TestValidateAPIRateLimit(t *testing.T) {
 	t.Run("enabled requires positive values", func(t *testing.T) {
 		errs := (RateLimitPolicyConfig{Enabled: true}).Validate("api_rate_limit.anonymous")
-		require.Len(t, errs, 7)
+		require.Len(t, errs, 5)
 		require.Contains(t, errs[0].Error(), "api_rate_limit.anonymous.rate_per_second")
 		require.Contains(t, errs[1].Error(), "api_rate_limit.anonymous.burst")
 		require.Contains(t, errs[2].Error(), "api_rate_limit.anonymous.max_keys")
 		require.Contains(t, errs[3].Error(), "api_rate_limit.anonymous.capacity_policy")
 		require.Contains(t, errs[4].Error(), "api_rate_limit.anonymous.key_ttl")
-		require.Contains(t, errs[5].Error(), "api_rate_limit.anonymous.cleanup_interval")
-		require.Contains(t, errs[6].Error(), "api_rate_limit.anonymous.shards")
 	})
 
 	t.Run("rejects invalid capacity policy", func(t *testing.T) {
-		cfg := DefaultRateLimitPolicyConfig(1, 1, time.Minute, time.Hour, 1)
+		cfg := DefaultRateLimitPolicyConfig(1, 1, time.Minute, 1)
 		cfg.CapacityPolicy = "drop"
 		errs := cfg.Validate("api_rate_limit.anonymous")
 		require.Len(t, errs, 1)
@@ -296,8 +269,6 @@ func TestLoadAppliesEntPluginDefaults(t *testing.T) {
   plugins:
     sql_log:
       enabled: true
-      debug: true
-      slow_threshold: 250ms
     tracing:
       enabled: false
     metrics:
@@ -306,16 +277,23 @@ func TestLoadAppliesEntPluginDefaults(t *testing.T) {
 
 	cfg := loadServiceConfig(t, yaml)
 	require.False(t, cfg.Ent.Plugins.SQLLog.Enabled)
-	require.False(t, cfg.Ent.Plugins.SQLLog.Debug)
-	require.Equal(t, 500*time.Millisecond, cfg.Ent.Plugins.SQLLog.SlowThreshold)
 	require.True(t, cfg.Ent.Plugins.Tracing.Enabled)
 	require.False(t, cfg.Ent.Plugins.Metrics.Enabled)
 }
 
-// TestLoadParsesEntSlowThresholdDuration 验证 Ent SQL 慢查询阈值按 duration 解析。
-func TestLoadParsesEntSlowThresholdDuration(t *testing.T) {
-	cfg := loadServiceConfig(t, serviceConfigYAML())
-	require.Equal(t, 250*time.Millisecond, cfg.Ent.Plugins.SQLLog.SlowThreshold)
+// TestLoadRejectsLegacyImplementationConfigFields 验证实现参数不再接受配置覆盖。
+func TestLoadRejectsLegacyImplementationConfigFields(t *testing.T) {
+	yaml := strings.Replace(serviceConfigYAML(), "    max_staleness: 35s", "    max_staleness: 35s\n    subscribe_timeout: 4s\n    retry_backoff:\n      initial: 500ms\n      max: 20s", 1)
+	yaml = strings.Replace(yaml, "    key_ttl: 11m", "    key_ttl: 11m\n    cleanup_interval: 15s\n    shards: 32", 1)
+	yaml = strings.Replace(yaml, "      enabled: true\n    tracing:", "      enabled: true\n      debug: true\n      slow_threshold: 250ms\n    tracing:", 1)
+
+	err := loadServiceConfigError(t, yaml)
+	require.Contains(t, err.Error(), "api_rate_limit.anonymous.cleanup_interval")
+	require.Contains(t, err.Error(), "api_rate_limit.anonymous.shards")
+	require.Contains(t, err.Error(), "rbac.policy_watcher.subscribe_timeout")
+	require.Contains(t, err.Error(), "rbac.policy_watcher.retry_backoff.initial")
+	require.Contains(t, err.Error(), "ent.plugins.sql_log.debug")
+	require.Contains(t, err.Error(), "ent.plugins.sql_log.slow_threshold")
 }
 
 // TestLoadPreservesExplicitDisabledFeatureCaches 验证显式禁用的 feature cache 不会被默认值重新启用。
@@ -509,11 +487,7 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
 	yaml = strings.Replace(yaml, "rbac:\n  user_role_cache:\n    enabled: true\n    ttl: 7s\n", "", 1)
 	yaml = strings.Replace(yaml, `  policy_watcher:
     check_interval: 10s
-    subscribe_timeout: 4s
     max_staleness: 35s
-    retry_backoff:
-      initial: 500ms
-      max: 20s
 `, "", 1)
 	yaml = strings.Replace(yaml, `api_rate_limit:
   anonymous:
@@ -523,8 +497,6 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
     max_keys: 8192
     capacity_policy: overflow
     key_ttl: 11m
-    cleanup_interval: 15s
-    shards: 32
   authenticated:
     enabled: true
     rate_per_second: 8
@@ -532,10 +504,8 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
     max_keys: 16384
     capacity_policy: reject
     key_ttl: 12m
-    cleanup_interval: 20s
-    shards: 64
 `, "", 1)
-	yaml = strings.Replace(yaml, "ent:\n  plugins:\n    sql_log:\n      enabled: true\n      debug: true\n      slow_threshold: 250ms\n    tracing:\n      enabled: false\n    metrics:\n      enabled: true\n", "ent: {}\n", 1)
+	yaml = strings.Replace(yaml, "ent:\n  plugins:\n    sql_log:\n      enabled: true\n    tracing:\n      enabled: false\n    metrics:\n      enabled: true\n", "ent: {}\n", 1)
 	yaml = strings.Replace(yaml, "      timeout: 7s\n", "", 1)
 	yaml = strings.Replace(yaml, "      sslmode: disable\n      pool:\n        max_open_conns: 20\n        max_idle_conns: 4\n        conn_max_lifetime: 45m\n        conn_max_idle_time: 12m\n", "", 1)
 	docs := []commonconfig.ConfigDocument{{DataID: "test.yaml", Content: []byte(yaml)}}
@@ -564,14 +534,14 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
 	require.NotContains(t, userRoleCache, "load_timeout")
 	policyWatcher := rbac["policy_watcher"].(map[string]any)
 	require.Equal(t, "15s", policyWatcher["check_interval"])
-	require.Equal(t, "5s", policyWatcher["subscribe_timeout"])
 	require.Equal(t, "45s", policyWatcher["max_staleness"])
-	watcherBackoff := policyWatcher["retry_backoff"].(map[string]any)
-	require.Equal(t, "250ms", watcherBackoff["initial"])
-	require.Equal(t, "30s", watcherBackoff["max"])
+	require.NotContains(t, policyWatcher, "subscribe_timeout")
+	require.NotContains(t, policyWatcher, "retry_backoff")
 	ent := settings["ent"].(map[string]any)
 	plugins := ent["plugins"].(map[string]any)
-	require.Equal(t, "500ms", plugins["sql_log"].(map[string]any)["slow_threshold"])
+	require.Equal(t, false, plugins["sql_log"].(map[string]any)["enabled"])
+	require.NotContains(t, plugins["sql_log"].(map[string]any), "debug")
+	require.NotContains(t, plugins["sql_log"].(map[string]any), "slow_threshold")
 	require.Equal(t, true, plugins["tracing"].(map[string]any)["enabled"])
 	resources := settings["resources"].(map[string]any)
 	redis := resources["redis"].(map[string]any)
@@ -711,8 +681,6 @@ api_rate_limit:
     max_keys: 8192
     capacity_policy: overflow
     key_ttl: 11m
-    cleanup_interval: 15s
-    shards: 32
   authenticated:
     enabled: true
     rate_per_second: 8
@@ -720,25 +688,17 @@ api_rate_limit:
     max_keys: 16384
     capacity_policy: reject
     key_ttl: 12m
-    cleanup_interval: 20s
-    shards: 64
 rbac:
   user_role_cache:
     enabled: true
     ttl: 7s
   policy_watcher:
     check_interval: 10s
-    subscribe_timeout: 4s
     max_staleness: 35s
-    retry_backoff:
-      initial: 500ms
-      max: 20s
 ent:
   plugins:
     sql_log:
       enabled: true
-      debug: true
-      slow_threshold: 250ms
     tracing:
       enabled: false
     metrics:

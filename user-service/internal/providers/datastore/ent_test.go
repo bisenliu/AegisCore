@@ -124,7 +124,7 @@ func TestNewEntPluginsDefaultEnablesTracingOnly(t *testing.T) {
 
 func TestNewEntPluginsEnablesSQLLogWhenConfigured(t *testing.T) {
 	settings := serviceconfig.EntSettings{Plugins: serviceconfig.EntPluginsConfig{
-		SQLLog: serviceconfig.EntSQLLogPluginConfig{Enabled: true, Debug: true, SlowThreshold: time.Second},
+		SQLLog: serviceconfig.EntSQLLogPluginConfig{Enabled: true},
 	}}
 
 	plugins, err := newEntPlugins(settings, zap.NewNop(), nil, nil)
@@ -133,8 +133,8 @@ func TestNewEntPluginsEnablesSQLLogWhenConfigured(t *testing.T) {
 	require.Len(t, plugins.driverPlugins, 1)
 	plugin, ok := plugins.driverPlugins[0].(*entSQLLogPlugin)
 	require.True(t, ok)
-	require.True(t, plugin.debugEnabled)
-	require.Equal(t, time.Second, plugin.slowThreshold)
+	require.Equal(t, serviceconfig.DefaultEntSQLLogDebug, plugin.debugEnabled)
+	require.Equal(t, serviceconfig.DefaultEntSlowQueryThreshold, plugin.slowThreshold)
 }
 
 func TestNewEntPluginsEnablesMetricsWhenConfigured(t *testing.T) {

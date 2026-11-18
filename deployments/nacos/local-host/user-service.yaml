@@ -65,13 +65,9 @@ rbac:
     ttl: 5s
   policy_watcher:
     # PostgreSQL revision 每 15 秒校准一次，连续三个周期未成功后判定 stale。
+    # 订阅确认超时和重连退避由代码常量拥有，不在此配置。
     check_interval: 15s
-    subscribe_timeout: 5s
     max_staleness: 45s
-    retry_backoff:
-      # Redis 订阅故障以带抖动的有界指数退避持续重建。
-      initial: 250ms
-      max: 30s
 
 api_rate_limit:
   # 限流使用进程内 token bucket，不是认证或授权边界；限流器错误默认降级放行。
@@ -82,14 +78,13 @@ api_rate_limit:
   # max_keys: 该策略在单进程内保留的最大活跃限流 key 数量。
   # capacity_policy: 容量耗尽时新 key 的处理方式，overflow 表示共享 overflow bucket，reject 表示直接限流拒绝。
   # key_ttl: 闲置限流 key 保留时间，避免本地内存无限增长。
-  # cleanup_interval: 过期限流 key 的清理频率。
-  # shards: 本地限流状态分片数，用于降低并发锁竞争。
+  # 分片数量和清理周期由代码常量拥有，不在此配置。
   #
   # 配置参考：
-  # 小型项目，峰值 <500 QPS：anonymous 1/5/65536/64，authenticated 5/20/131072/128。
-  # 中型项目，峰值 500-5k QPS：anonymous 2/10/262144/256，authenticated 20/100/1048576/1024。
-  # 高并发项目，峰值 5k-20k QPS：anonymous 5/20/1048576/1024，authenticated 100/500/4194304/4096。
-  # 格式为 rate_per_second/burst/max_keys/shards；公网匿名入口可再降低 anonymous。
+  # 小型项目，峰值 <500 QPS：anonymous 1/5/65536，authenticated 5/20/131072。
+  # 中型项目，峰值 500-5k QPS：anonymous 2/10/262144，authenticated 20/100/1048576。
+  # 高并发项目，峰值 5k-20k QPS：anonymous 5/20/1048576，authenticated 100/500/4194304。
+  # 格式为 rate_per_second/burst/max_keys；公网匿名入口可再降低 anonymous。
   # 未携带有效用户身份的请求使用匿名限流策略。
   anonymous:
     enabled: true
@@ -98,8 +93,6 @@ api_rate_limit:
     max_keys: 65536
     capacity_policy: overflow
     key_ttl: 10m
-    cleanup_interval: 30s
-    shards: 64
   # 已通过 JWT 认证的请求按用户身份使用独立限流策略。
   authenticated:
     enabled: true
@@ -108,18 +101,12 @@ api_rate_limit:
     max_keys: 131072
     capacity_policy: overflow
     key_ttl: 10m
-    cleanup_interval: 30s
-    shards: 128
 
 ent:
   plugins:
     sql_log:
-      # sql_log 输出 Ent SQL 执行日志；本地开启便于调试，非本地环境需评估日志量和敏感字段风险。
+      # sql_log 输出 Ent SQL error 和慢 SQL；debug 输出与慢查询阈值由代码常量拥有。
       enabled: true
-      # debug=true 输出更详细 SQL 调试信息，可能增加日志噪音。
-      debug: true
-      # slow_threshold 控制慢 SQL 日志阈值；仅影响日志判定，不会中断查询。
-      slow_threshold: 500ms
     tracing:
       # tracing 插件需要 observability.tracing.enabled=true 才会实际导出 span。
       enabled: false

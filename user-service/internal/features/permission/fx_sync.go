@@ -107,9 +107,9 @@ func provideWatcher(params WatcherParams) (PolicyWatcherResult, error) {
 		Name:             "permission-policy-watcher",
 		Channel:          params.Store.PolicyChannel(),
 		BufferSize:       policySubscriberBufferSize,
-		SubscribeTimeout: settings.SubscribeTimeout,
-		BackoffInitial:   settings.RetryBackoff.Initial,
-		BackoffMax:       settings.RetryBackoff.Max,
+		SubscribeTimeout: serviceconfig.PolicyWatcherSubscribeTimeout,
+		BackoffInitial:   serviceconfig.PolicyWatcherRetryBackoffInitial,
+		BackoffMax:       serviceconfig.PolicyWatcherRetryBackoffMax,
 	})
 	if err != nil {
 		return PolicyWatcherResult{}, err

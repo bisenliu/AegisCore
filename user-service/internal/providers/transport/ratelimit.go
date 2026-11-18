@@ -22,7 +22,7 @@ type APIRateLimiters struct {
 func NewAPIRateLimiters(lifecycle fx.Lifecycle, settings serviceconfig.RateLimitSettings) (*APIRateLimiters, error) {
 	limiters := &APIRateLimiters{}
 	if settings.APIRateLimit.Anonymous.Enabled {
-		limiter, err := newLocalRateLimiter(settings.APIRateLimit.Anonymous)
+		limiter, err := newLocalRateLimiter(settings.APIRateLimit.Anonymous, serviceconfig.AnonymousRateLimitShards)
 		if err != nil {
 			return nil, fmt.Errorf("anonymous rate limiter: %w", err)
 		}
@@ -30,7 +30,7 @@ func NewAPIRateLimiters(lifecycle fx.Lifecycle, settings serviceconfig.RateLimit
 		limiters.closers = append(limiters.closers, limiter)
 	}
 	if settings.APIRateLimit.Authenticated.Enabled {
-		limiter, err := newLocalRateLimiter(settings.APIRateLimit.Authenticated)
+		limiter, err := newLocalRateLimiter(settings.APIRateLimit.Authenticated, serviceconfig.AuthenticatedRateLimitShards)
 		if err != nil {
 			limiters.Close()
 			return nil, fmt.Errorf("authenticated rate limiter: %w", err)
@@ -65,14 +65,14 @@ func (l *APIRateLimiters) Close() {
 	}
 }
 
-func newLocalRateLimiter(cfg serviceconfig.RateLimitPolicyConfig) (*commonmw.LocalRateLimiter, error) {
+func newLocalRateLimiter(cfg serviceconfig.RateLimitPolicyConfig, shards int) (*commonmw.LocalRateLimiter, error) {
 	return commonmw.NewLocalRateLimiter(commonmw.LocalRateLimiterOptions{
 		Rate:            rate.Limit(cfg.RatePerSecond),
 		Burst:           cfg.Burst,
-		Shards:          cfg.Shards,
+		Shards:          shards,
 		MaxKeys:         cfg.MaxKeys,
 		CapacityPolicy:  commonmw.RateLimitCapacityPolicy(cfg.CapacityPolicy),
 		KeyTTL:          cfg.KeyTTL,
-		CleanupInterval: cfg.CleanupInterval,
+		CleanupInterval: serviceconfig.RateLimitCleanupInterval,
 	})
 }
