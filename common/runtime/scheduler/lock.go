@@ -68,15 +68,12 @@ func NewRedisLocker(client redis.UniversalClient, opts RedisLockerOptions) (*Red
 	if client == nil {
 		return nil, fmt.Errorf("%w: redis client is required", ErrInvalidLock)
 	}
-	builder, err := rediskey.NewBuilder(rediskey.Options{Namespace: opts.Namespace})
+	builder, err := rediskey.NewBuilder(rediskey.Options{
+		Namespace: opts.Namespace,
+		Scope:     opts.Scope,
+	})
 	if err != nil {
 		return nil, err
-	}
-	if len(opts.Scope) > 0 {
-		builder, err = builder.Scoped(opts.Scope...)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	retry, err := normalizeRetryPolicy(opts.Retry)

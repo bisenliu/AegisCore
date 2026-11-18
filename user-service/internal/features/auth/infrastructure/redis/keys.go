@@ -5,21 +5,26 @@ import (
 )
 
 // KeyCatalog 构造认证 Redis adapter 私有 key。
+//
+// 集群分片与 HashTag 说明：
+// 同一用户的 refresh 会话数据（AuthSession）与活跃会话 sorted-set 索引（AuthUserSessions）
+// 需要在底层 Lua 脚本（如 create_session.lua、rotate_session.lua 等）中原子更新并淘汰超限会话。
+// 为满足 Redis Cluster 模式下跨 key 原子操作的约束，避免触发 CROSSSLOT 跨槽报错，
+// 所有绑定特定用户的 key 均通过 rediskey.HashTag(userID) 将哈希槽锁定在同一物理节点。
 type KeyCatalog struct {
 	builder rediskey.Builder
 }
 
 // NewKeyCatalog 根据 app name 构造认证 Redis key catalog。
 func NewKeyCatalog(appName string) (KeyCatalog, error) {
-	builder, err := rediskey.NewBuilder(rediskey.Options{Namespace: appName})
+	builder, err := rediskey.NewBuilder(rediskey.Options{
+		Namespace: appName,
+		Scope:     []string{"auth"},
+	})
 	if err != nil {
 		return KeyCatalog{}, err
 	}
-	scoped, err := builder.Scoped("auth")
-	if err != nil {
-		return KeyCatalog{}, err
-	}
-	return KeyCatalog{builder: scoped}, nil
+	return KeyCatalog{builder: builder}, nil
 }
 
 // AuthSession 返回一个 refresh token 会话载荷的 key。
