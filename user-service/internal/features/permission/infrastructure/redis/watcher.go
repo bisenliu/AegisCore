@@ -373,7 +373,7 @@ func (w *Watcher) ObserveTargetRevision(ctx context.Context, targetRevision int6
 		if !status.Ready() || status.AppliedRevision < targetRevision {
 			w.metrics.WatcherReloadFailed(ctx, source, permissionapplication.MetricsReasonReloadFailed)
 			w.observeLag(ctx, targetRevision, status.AppliedRevision)
-			logger.Error(ctx, "rbac policy projection reload incomplete", zap.Int64("target_revision", targetRevision), zap.Int64("local_applied_policy_revision", status.AppliedRevision), zap.String("instance_id", instanceID), zap.String("source", source), zap.String("reason", reason))
+			logger.Error(ctx, "rbac policy projection reload incomplete", logger.StackTrace(zap.Int64("target_revision", targetRevision), zap.Int64("local_applied_policy_revision", status.AppliedRevision), zap.String("instance_id", instanceID), zap.String("source", source), zap.String("reason", reason))...)
 			return errors.New("rbac policy projection reload incomplete")
 		}
 		w.metrics.WatcherReloadSucceeded(ctx, source)

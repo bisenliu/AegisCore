@@ -74,13 +74,13 @@ func (s *Store) publish(ctx context.Context, revision int64, change permissionap
 	}
 	if cachePolicyRevision {
 		if err := s.client.Eval(ctx, cachePolicyRevisionScript, []string{s.keys.PolicyVersionKey()}, revision).Err(); err != nil {
-			logger.Error(ctx, "rbac policy revision cache failed", logger.StackTrace(zap.Int64("policy_revision", revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))...)
+			logger.Warn(ctx, "rbac policy revision cache failed", zap.Int64("policy_revision", revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason), zap.Error(err))
 			return fmt.Errorf("cache rbac policy revision: %w", err)
 		}
 		logger.Info(ctx, "rbac policy revision cached", zap.Int64("policy_revision", revision), zap.String("instance_id", s.instanceID), zap.String("reason", reason))
 	}
 	if err := s.client.Publish(ctx, s.keys.PolicyChannel(), payload).Err(); err != nil {
-		logger.Error(ctx, "rbac policy refresh publish failed", logger.StackTrace(append(publicationLogFields(revision, change), zap.String("instance_id", s.instanceID), zap.Error(err))...)...)
+		logger.Warn(ctx, "rbac policy refresh publish failed", append(publicationLogFields(revision, change), zap.String("instance_id", s.instanceID), zap.Error(err))...)
 		return fmt.Errorf("publish rbac policy refresh: %w", err)
 	}
 	logger.Info(ctx, "rbac policy refresh published", append(publicationLogFields(revision, change), zap.String("instance_id", s.instanceID))...)

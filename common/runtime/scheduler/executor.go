@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -74,7 +75,7 @@ func (s *Scheduler) localOverlapStage(gate chan struct{}) middleware {
 				return next(inv)
 			default:
 				s.metrics.JobSkipped(inv.job.Key, "local_overlap")
-				s.logger.Info("scheduler job skipped because previous run is still active", zap.String("job", inv.job.Key))
+				s.logger.Warn("scheduler job skipped because previous run is still active", zap.String("job", inv.job.Key))
 				return nil
 			}
 		}
@@ -90,7 +91,7 @@ func (s *Scheduler) globalConcurrencyStage() middleware {
 			}
 			if !s.acquireGlobalGate() {
 				s.metrics.JobSkipped(inv.job.Key, "global_concurrency_limit")
-				s.logger.Info("scheduler job skipped because global concurrency limit is reached", zap.String("job", inv.job.Key))
+				s.logger.Warn("scheduler job skipped because global concurrency limit is reached", zap.String("job", inv.job.Key))
 				return nil
 			}
 			// 全局 token 的所有权止于本 stage，内层任何退出路径都会释放。
@@ -151,7 +152,7 @@ func (s *Scheduler) resultStage() middleware {
 			defer func() {
 				if recovered := recover(); recovered != nil {
 					s.metrics.JobFailed(inv.job.Key, inv.duration)
-					s.logger.Error("scheduler job panicked", zap.String("job", inv.job.Key), zap.Any("panic", recovered), zap.Duration("duration", inv.duration))
+					s.logger.Error("scheduler job panicked", zap.String("job", inv.job.Key), zap.Any("panic", recovered), zap.ByteString("stacktrace", debug.Stack()), zap.Duration("duration", inv.duration))
 					panic(recovered)
 				}
 			}()
