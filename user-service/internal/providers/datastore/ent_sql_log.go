@@ -17,21 +17,19 @@ import (
 // entSQLLogPlugin 在显式启用时把 Ent driver 包装为 SQL 结构化日志 driver。
 type entSQLLogPlugin struct {
 	log           *zap.Logger
-	db            string
 	debugEnabled  bool
 	slowThreshold time.Duration
 	now           func() time.Time
 }
 
-// WrapEntDriver 返回带 SQL log 的 driver；默认值只在插件启用路径内生效。
-func (p *entSQLLogPlugin) WrapEntDriver(driver dialect.Driver) (dialect.Driver, error) {
+// WrapEntDriver 返回带资源名的 SQL log driver；默认值只在插件启用路径内生效。
+func (p *entSQLLogPlugin) WrapEntDriver(name string, driver dialect.Driver) (dialect.Driver, error) {
+	if name == "" {
+		return nil, fmt.Errorf("ent sql log resource name is required")
+	}
 	log := p.log
 	if log == nil {
 		log = zap.NewNop()
-	}
-	db := p.db
-	if db == "" {
-		db = primaryDatabaseResource
 	}
 	slowThreshold := p.slowThreshold
 	if slowThreshold <= 0 {
@@ -41,7 +39,7 @@ func (p *entSQLLogPlugin) WrapEntDriver(driver dialect.Driver) (dialect.Driver, 
 	if now == nil {
 		now = time.Now
 	}
-	return newEntSQLLogDriver(driver, log, db, p.debugEnabled, slowThreshold, now), nil
+	return newEntSQLLogDriver(driver, log, name, p.debugEnabled, slowThreshold, now), nil
 }
 
 // entSQLLogDriver 记录 Ent SQL 执行、查询和事务边界的低基数字段。
@@ -67,7 +65,7 @@ func newEntSQLLogDriver(driver dialect.Driver, log *zap.Logger, db string, debug
 		log = zap.NewNop()
 	}
 	if db == "" {
-		db = primaryDatabaseResource
+		db = "unknown"
 	}
 	if slowThreshold <= 0 {
 		slowThreshold = serviceconfig.DefaultEntSlowQueryThreshold

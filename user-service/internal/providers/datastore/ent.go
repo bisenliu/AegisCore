@@ -17,23 +17,9 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
-// NamedEntClientParams 包含由具名 SQL 连接池支撑 Ent client 所需的 Fx 输入。
-type NamedEntClientParams struct {
-	fx.In
-
-	Lifecycle fx.Lifecycle
-	Settings  serviceconfig.EntSettings
-	Log       *zap.Logger
-	Metrics   *commonmetrics.Provider
-	Tracing   *commontracing.Provider
-	PrimaryDB *sql.DB `name:"primary_db"`
-}
-
-// NamedEntClients 包含绑定 user-service 主数据库的 Ent client Fx 输出。
-type NamedEntClients struct {
-	fx.Out
-
-	PrimaryClient *ent.Client `name:"primary_db"`
+// EntPlugins 是可安装到多个同 schema Ent client 的插件集合。
+type EntPlugins struct {
+	plugins entPluginSet
 }
 
 // nonClosingEntDriver 将 Ent client 的生命周期与由 Fx 管理的底层 SQL 连接池解耦。
@@ -41,36 +27,54 @@ type nonClosingEntDriver struct {
 	dialect.Driver
 }
 
-const (
-	primaryDatabaseResource = "primary_db"
-)
-
-// ProvideEntClients 将具名 SQL 连接池包装为 Ent client，并注册 Ent client 关闭 hook。
-func ProvideEntClients(params NamedEntClientParams) (NamedEntClients, error) {
-	plugins, err := newEntPlugins(params.Settings, params.Log, params.Metrics, params.Tracing)
-	if err != nil {
-		return NamedEntClients{}, err
+// ProvideEntPlugins 按服务配置构造一次 Ent 插件。
+//
+// metrics collector 在这里注册，后续每个具名 Ent client 只复用该集合，避免按连接重复注册。
+func ProvideEntPlugins(settings serviceconfig.EntSettings, log *zap.Logger, metrics *commonmetrics.Provider, tracing *commontracing.Provider) (EntPlugins, error) {
+	if metrics == nil {
+		return EntPlugins{}, fmt.Errorf("ent metrics provider is required")
 	}
-	primaryClient, err := newEntClient(params.PrimaryDB, plugins)
-	if err != nil {
-		return NamedEntClients{}, err
+	if tracing == nil {
+		return EntPlugins{}, fmt.Errorf("ent tracing provider is required")
 	}
-
-	params.Lifecycle.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
-			logger.WithContext(ctx, params.Log).Info("closing ent clients")
-			return closeEntClient(primaryDatabaseResource, primaryClient.Close)
-		},
-	})
-
-	return NamedEntClients{PrimaryClient: primaryClient}, nil
+	plugins, err := newEntPlugins(settings, log, metrics, tracing)
+	if err != nil {
+		return EntPlugins{}, err
+	}
+	return EntPlugins{plugins: plugins}, nil
 }
 
-func newEntClient(db *sql.DB, plugins entPluginSet) (*ent.Client, error) {
+// ProvideEntClient 返回按调用方资源名包装单个 Ent client 的构造器。
+//
+// 返回函数使用普通参数，便于 composition root 只给 *sql.DB 加 name tag。
+// 只有显式登记、且与本服务 Ent schema 相同的连接池才应调用该构造器。
+func ProvideEntClient(name string) func(fx.Lifecycle, *zap.Logger, *sql.DB, EntPlugins) (*ent.Client, error) {
+	return func(lc fx.Lifecycle, log *zap.Logger, db *sql.DB, plugins EntPlugins) (*ent.Client, error) {
+		if name == "" {
+			return nil, fmt.Errorf("ent resource name is required")
+		}
+		client, err := newEntClient(name, db, plugins.plugins)
+		if err != nil {
+			return nil, fmt.Errorf("provide ent client %s: %w", name, err)
+		}
+		lc.Append(fx.Hook{
+			OnStop: func(ctx context.Context) error {
+				logger.WithContext(ctx, log).Info("closing ent client", zap.String("resource", name))
+				if err := client.Close(); err != nil {
+					return fmt.Errorf("close %s ent client: %w", name, err)
+				}
+				return nil
+			},
+		})
+		return client, nil
+	}
+}
+
+func newEntClient(name string, db *sql.DB, plugins entPluginSet) (*ent.Client, error) {
 	driver := newEntDriver(db)
 	var err error
 	for _, plugin := range plugins.driverPlugins {
-		driver, err = plugin.WrapEntDriver(driver)
+		driver, err = plugin.WrapEntDriver(name, driver)
 		if err != nil {
 			return nil, err
 		}
@@ -105,11 +109,4 @@ func (d nonClosingEntDriver) BeginTx(ctx context.Context, opts *sql.TxOptions) (
 		return nil, fmt.Errorf("ent driver does not support transaction options")
 	}
 	return driver.BeginTx(ctx, opts)
-}
-
-func closeEntClient(name string, closeClient func() error) error {
-	if err := closeClient(); err != nil {
-		return fmt.Errorf("close %s ent client: %w", name, err)
-	}
-	return nil
 }

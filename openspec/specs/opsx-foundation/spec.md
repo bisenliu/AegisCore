@@ -56,9 +56,18 @@
 - **WHEN** 协作者查看或修改服务级 provider
 - **THEN** 根包 MUST 只维护 `WiringModule`、`RuntimeModule`、`Module` 及必要测试
 - **AND** PostgreSQL、Redis、Ent 及其插件 MUST 位于 `providers/datastore`
+- **AND** datastore constructor MUST 接收调用方传入的资源名，MUST NOT 写死资源名，也 MUST NOT 遍历配置 map 自动供应未登记资源
 - **AND** health、metrics 和 tracing 接线 MUST 位于 `providers/observability`
 - **AND** JWT、认证 token policy 和 password service 接线 MUST 位于 `providers/security`
 - **AND** Gin、routes 和 API rate limiter 接线 MUST 位于 `providers/transport`
+
+#### Scenario: datastore 按显式登记的资源名供应连接
+
+- **WHEN** composition root 以任意资源名登记一个 PostgreSQL 或 Redis 连接
+- **THEN** datastore constructor MUST 只供应该资源名的连接
+- **AND** 未登记的资源名 MUST NOT 被供应，即使配置 map 中存在该资源
+- **AND** 只有与本服务 Ent schema 相同的连接才由 composition root 登记 Ent client
+- **AND** feature 选择具体资源名 MUST 留在 feature composition，不得回写到 datastore constructor
 
 #### Scenario: 文档和测试跟随边界
 

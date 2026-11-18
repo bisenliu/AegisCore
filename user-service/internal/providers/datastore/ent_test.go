@@ -26,9 +26,9 @@ import (
 )
 
 func TestEntSQLLogPluginWrapsDriverWhenEnabled(t *testing.T) {
-	plugin := &entSQLLogPlugin{log: zap.NewNop(), db: primaryDatabaseResource}
+	plugin := &entSQLLogPlugin{log: zap.NewNop()}
 
-	driver, err := plugin.WrapEntDriver(observabilityTestDriver{})
+	driver, err := plugin.WrapEntDriver("analytics_db", observabilityTestDriver{})
 
 	require.NoError(t, err)
 	_, ok := driver.(*entSQLLogDriver)
@@ -41,11 +41,10 @@ func TestEntSQLLogPluginLogsDebugSQLWithStableFields(t *testing.T) {
 	ctx := contextWithSpanContext(context.Background(), t, "00112233445566778899aabbccddeeff", "0102030405060708")
 	plugin := &entSQLLogPlugin{
 		log:          log,
-		db:           primaryDatabaseResource,
 		debugEnabled: true,
 		now:          advancingClock(time.Unix(0, 0), 12*time.Millisecond),
 	}
-	driver, err := plugin.WrapEntDriver(observabilityTestDriver{})
+	driver, err := plugin.WrapEntDriver("analytics_db", observabilityTestDriver{})
 	require.NoError(t, err)
 
 	require.NoError(t, driver.Exec(ctx, "SELECT * FROM users WHERE id = $1", []any{1}, nil))
@@ -55,7 +54,7 @@ func TestEntSQLLogPluginLogsDebugSQLWithStableFields(t *testing.T) {
 	fields := entries[0].ContextMap()
 	require.Equal(t, "00112233445566778899aabbccddeeff", fields[logger.TraceIDField])
 	require.Equal(t, "0102030405060708", fields[logger.SpanIDField])
-	require.Equal(t, primaryDatabaseResource, fields["db"])
+	require.Equal(t, "analytics_db", fields["db"])
 	require.Equal(t, "select", fields["operation"])
 	require.Equal(t, int64(12), fields["duration_ms"])
 	require.Equal(t, "postgres", fields[logger.ComponentField])
@@ -67,10 +66,9 @@ func TestEntSQLLogPluginLogsSlowSQLAtWarn(t *testing.T) {
 	core, logs := observer.New(zap.DebugLevel)
 	plugin := &entSQLLogPlugin{
 		log: logger.SQL(zap.New(core)),
-		db:  primaryDatabaseResource,
 		now: advancingClock(time.Unix(0, 0), serviceconfig.DefaultEntSlowQueryThreshold),
 	}
-	driver, err := plugin.WrapEntDriver(observabilityTestDriver{})
+	driver, err := plugin.WrapEntDriver("analytics_db", observabilityTestDriver{})
 	require.NoError(t, err)
 
 	require.NoError(t, driver.Query(context.Background(), "SELECT 1", nil, nil))
@@ -86,10 +84,9 @@ func TestEntSQLLogPluginLogsSQLError(t *testing.T) {
 	core, logs := observer.New(zap.DebugLevel)
 	plugin := &entSQLLogPlugin{
 		log: logger.SQL(zap.New(core)),
-		db:  primaryDatabaseResource,
 		now: advancingClock(time.Unix(0, 0), time.Millisecond),
 	}
-	driver, err := plugin.WrapEntDriver(observabilityTestDriver{queryErr: wantErr})
+	driver, err := plugin.WrapEntDriver("analytics_db", observabilityTestDriver{queryErr: wantErr})
 	require.NoError(t, err)
 
 	err = driver.Query(context.Background(), "UPDATE users SET name = $1", nil, nil)
@@ -177,7 +174,7 @@ func TestNewEntClientAppliesDriverPluginsBeforeClientPlugins(t *testing.T) {
 		clientPlugins: []entClientPlugin{recordingClientPlugin{order: &order}},
 	}
 
-	client, err := newEntClient(nil, plugins)
+	client, err := newEntClient("analytics_db", nil, plugins)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 	require.Equal(t, []string{"driver", "client"}, order)
@@ -191,7 +188,7 @@ func TestNewEntClientClosesClientWhenClientPluginFails(t *testing.T) {
 		clientPlugins: []entClientPlugin{failingClientPlugin{err: wantErr}},
 	}
 
-	client, err := newEntClient(nil, plugins)
+	client, err := newEntClient("analytics_db", nil, plugins)
 
 	require.Nil(t, client)
 	require.ErrorIs(t, err, wantErr)
@@ -347,7 +344,7 @@ func TestNonClosingEntDriverPassesThroughBeginTxOptions(t *testing.T) {
 
 func TestEntSQLLogDriverPassesThroughBeginTxOptions(t *testing.T) {
 	underlying := &observabilityTestDriver{}
-	driver := newEntSQLLogDriver(underlying, zap.NewNop(), primaryDatabaseResource, false, time.Second, time.Now)
+	driver := newEntSQLLogDriver(underlying, zap.NewNop(), "analytics_db", false, time.Second, time.Now)
 	opts := &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true}
 
 	tx, err := driver.BeginTx(context.Background(), opts)
@@ -357,25 +354,7 @@ func TestEntSQLLogDriverPassesThroughBeginTxOptions(t *testing.T) {
 	require.Same(t, opts, underlying.txOptions)
 }
 
-func TestCloseEntClientPreservesNamedError(t *testing.T) {
-	userErr := errors.New("user close failed")
 
-	err := closeEntClient("primary_db", func() error { return userErr })
-	require.Error(t, err)
-	require.ErrorIs(t, err, userErr)
-	require.ErrorContains(t, err, "close primary_db ent client")
-}
-
-func TestCloseEntClientCallsCloser(t *testing.T) {
-	closed := false
-
-	err := closeEntClient("primary_db", func() error {
-		closed = true
-		return nil
-	})
-	require.NoError(t, err)
-	require.True(t, closed)
-}
 
 func hasEntSpan(spans []*tracepb.Span) bool {
 	for _, span := range spans {
@@ -480,7 +459,7 @@ type recordingDriverPlugin struct {
 	order *[]string
 }
 
-func (p recordingDriverPlugin) WrapEntDriver(driver dialect.Driver) (dialect.Driver, error) {
+func (p recordingDriverPlugin) WrapEntDriver(_ string, driver dialect.Driver) (dialect.Driver, error) {
 	*p.order = append(*p.order, "driver")
 	return driver, nil
 }
@@ -498,7 +477,7 @@ type replaceDriverPlugin struct {
 	driver dialect.Driver
 }
 
-func (p replaceDriverPlugin) WrapEntDriver(dialect.Driver) (dialect.Driver, error) {
+func (p replaceDriverPlugin) WrapEntDriver(string, dialect.Driver) (dialect.Driver, error) {
 	return p.driver, nil
 }
 

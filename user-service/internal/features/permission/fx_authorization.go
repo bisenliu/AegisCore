@@ -38,7 +38,7 @@ var permissionPublicOptions = fx.Options(
 
 // Fx 参数与结果：授权核心
 
-// UserRoleResolverParams 汇集用户角色 resolver 的缓存配置与主库依赖。
+// UserRoleResolverParams 汇集用户角色 resolver 的缓存配置与具名 Ent 依赖。
 type UserRoleResolverParams struct {
 	fx.In
 

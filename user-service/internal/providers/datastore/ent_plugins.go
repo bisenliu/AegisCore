@@ -14,8 +14,8 @@ import (
 )
 
 type entDriverPlugin interface {
-	// WrapEntDriver 包装基础 Ent driver，并保持 Query/Exec/Tx 语义不变。
-	WrapEntDriver(driver dialect.Driver) (dialect.Driver, error)
+	// WrapEntDriver 按资源名包装基础 Ent driver，并保持 Query/Exec/Tx 语义不变。
+	WrapEntDriver(name string, driver dialect.Driver) (dialect.Driver, error)
 }
 
 type entClientPlugin interface {
@@ -40,7 +40,6 @@ func newEntPlugins(
 	if settings.Plugins.SQLLog.Enabled {
 		plugins.driverPlugins = append(plugins.driverPlugins, &entSQLLogPlugin{
 			log:           logger.SQL(log),
-			db:            primaryDatabaseResource,
 			debugEnabled:  settings.Plugins.SQLLog.Debug,
 			slowThreshold: settings.Plugins.SQLLog.SlowThreshold,
 		})
