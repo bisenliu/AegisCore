@@ -21,7 +21,7 @@ type ListUsersRequest struct {
 type CreateUserRequest struct {
 	Nickname string               `json:"nickname" validate:"required,min=1,max=128" label:"用户昵称" example:"Alice"`
 	Username string               `json:"username" validate:"required,min=1,max=255" label:"用户名" example:"alice"`
-	Password string               `json:"password" validate:"required,min=1" label:"密码" example:"secret"`
+	Password string               `json:"password" validate:"required,min=1,max=72" label:"密码" example:"secret"`
 	Status   *identity.UserStatus `json:"status,omitempty" validate:"omitempty,enum" label:"用户状态" example:"100"`
 }
 

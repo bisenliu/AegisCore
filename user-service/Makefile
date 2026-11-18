@@ -14,7 +14,7 @@ build: ## 构建 user-service 二进制。
 	@mkdir -p $(dir $(USER_SERVICE_BIN))
 	go build -o $(USER_SERVICE_BIN) ./cmd
 
-run: ## 使用 AEGISCORE_NACOS_* 环境变量运行 user-service。
+run: ## 使用调用方提供的 AEGISCORE_NACOS_* 环境变量运行 user-service。
 	go run ./cmd serve
 
 test: ## 运行 user-service 测试。
@@ -38,7 +38,7 @@ architecture-lint-test: ## 使用故意违规 fixture 验证架构检查可命�
 verify: lint architecture-lint generate test openapi-generate ## 运行 user-service 验证。
 	git diff --exit-code
 
-seed-rbac: ## 使用 AEGISCORE_NACOS_* 环境变量初始化 RBAC 系统数据。
+seed-rbac: ## 使用调用方提供的 AEGISCORE_NACOS_* 环境变量初始化 RBAC 系统数据。
 	go run ./cmd rbac seed
 
 bootstrap-super-admin: ## 一次性创建初始超级管理员；密码来自 ADMIN_BOOTSTRAP_PASSWORD 环境变量。

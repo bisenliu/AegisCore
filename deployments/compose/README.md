@@ -63,12 +63,6 @@ docker compose -f deployments/compose/docker-compose.yml --profile observability
 docker compose -f deployments/compose/docker-compose.yml up -d postgres redis nacos jaeger
 docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-auth
 docker compose -f deployments/compose/docker-compose.yml --profile init run --rm nacos-init-host
-export AEGISCORE_SERVICE=user-service
-export AEGISCORE_NACOS_ADDR=127.0.0.1:8848
-export AEGISCORE_NACOS_NAMESPACE=loca-host
-export AEGISCORE_NACOS_GROUP=AEGISCORE
-export AEGISCORE_NACOS_USERNAME=nacos
-export AEGISCORE_NACOS_PASSWORD=nacos
 make user-service-run
 ```
 

@@ -65,15 +65,7 @@ make build
 make user-service-run
 ```
 
-运行前需要准备 Nacos，并设置来源环境变量。以下示例复用 Compose 暴露到主机的 PostgreSQL、Redis、Nacos 和 Jaeger，并选择主机配置对应的 Namespace：
-
-```bash
-export AEGISCORE_SERVICE=user-service
-export AEGISCORE_NACOS_ADDR=127.0.0.1:8848
-export AEGISCORE_NACOS_NAMESPACE=loca-host
-export AEGISCORE_NACOS_GROUP=AEGISCORE
-make user-service-run
-```
+运行前需要准备 Nacos，并复用 Compose 暴露到主机的 PostgreSQL、Redis、Nacos 和 Jaeger。`make user-service-run`、`make user-service-seed-rbac` 和 `make user-service-bootstrap-super-admin` 默认连接本地 Nacos Client API `127.0.0.1:8848`、namespace `loca-host`、group `AEGISCORE`，并使用本地默认凭据 `nacos`/`nacos`。不要使用 Console 端口 `8849`。已导出的 `AEGISCORE_NACOS_*` 优先于这些默认值。在 `user-service/` 内直接执行 Make 时不注入本地默认值，必须由调用方显式提供来源环境变量。
 
 直接在模块内运行：
 

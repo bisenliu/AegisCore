@@ -10,6 +10,17 @@ ADMIN_NICKNAME ?=
 NACOS_ADDR ?= 127.0.0.1:8848
 NACOS_GROUP ?= AEGISCORE
 NACOS_TIMEOUT ?= 30s
+LOCAL_NACOS_NAMESPACE ?= loca-host
+LOCAL_NACOS_USERNAME ?= nacos
+LOCAL_NACOS_PASSWORD ?= nacos
+# 仅供仓库根目录的本地进程入口使用。已导出的 AEGISCORE_NACOS_* 优先，服务 Makefile 不拥有这些默认值。
+LOCAL_NACOS_ENV = \
+	AEGISCORE_SERVICE=$${AEGISCORE_SERVICE:-user-service} \
+	AEGISCORE_NACOS_ADDR=$${AEGISCORE_NACOS_ADDR:-$(NACOS_ADDR)} \
+	AEGISCORE_NACOS_NAMESPACE=$${AEGISCORE_NACOS_NAMESPACE:-$(LOCAL_NACOS_NAMESPACE)} \
+	AEGISCORE_NACOS_GROUP=$${AEGISCORE_NACOS_GROUP:-$(NACOS_GROUP)} \
+	AEGISCORE_NACOS_USERNAME=$${AEGISCORE_NACOS_USERNAME:-$(LOCAL_NACOS_USERNAME)} \
+	AEGISCORE_NACOS_PASSWORD=$${AEGISCORE_NACOS_PASSWORD:-$(LOCAL_NACOS_PASSWORD)}
 export ADMIN_BOOTSTRAP_PASSWORD
 
 .PHONY: help build test test-containers coverage lint verify
@@ -86,8 +97,8 @@ tools-nacos-config-seed-local-docker: ## 发布 Compose 容器使用的本地 Na
 user-service-build: ## 构建 user-service 二进制。
 	$(MAKE) -C $(USER_SERVICE_DIR) build USER_SERVICE_BIN='$(USER_SERVICE_BIN)'
 
-user-service-run: ## 使用 AEGISCORE_NACOS_* 环境变量运行 user-service。
-	$(MAKE) -C $(USER_SERVICE_DIR) run
+user-service-run: ## 使用本地 Nacos API 运行 user-service；已设置的 AEGISCORE_NACOS_* 优先。
+	$(LOCAL_NACOS_ENV) $(MAKE) -C $(USER_SERVICE_DIR) run
 
 user-service-test: ## 运行 user-service 测试。
 	$(MAKE) -C $(USER_SERVICE_DIR) test
@@ -107,11 +118,11 @@ user-service-verify: ## 运行 user-service 验证。
 user-service-architecture-lint: ## 运行 user-service 架构边界检查。
 	$(MAKE) -C $(USER_SERVICE_DIR) architecture-lint
 
-user-service-seed-rbac: ## 使用 AEGISCORE_NACOS_* 环境变量初始化 user-service RBAC 系统数据。
-	$(MAKE) -C $(USER_SERVICE_DIR) seed-rbac
+user-service-seed-rbac: ## 使用本地 Nacos API 初始化 user-service RBAC 系统数据；已设置的 AEGISCORE_NACOS_* 优先。
+	$(LOCAL_NACOS_ENV) $(MAKE) -C $(USER_SERVICE_DIR) seed-rbac
 
 user-service-bootstrap-super-admin: ## 为全新数据库一次性创建初始超级管理员；密码来自 ADMIN_BOOTSTRAP_PASSWORD 环境变量。
-	$(MAKE) -C $(USER_SERVICE_DIR) bootstrap-super-admin ADMIN_USERNAME='$(ADMIN_USERNAME)' ADMIN_NICKNAME='$(ADMIN_NICKNAME)'
+	$(LOCAL_NACOS_ENV) $(MAKE) -C $(USER_SERVICE_DIR) bootstrap-super-admin ADMIN_USERNAME='$(ADMIN_USERNAME)' ADMIN_NICKNAME='$(ADMIN_NICKNAME)'
 
 user-service-image-verify: ## 校验 user-service Distroless 镜像内容。
 	./deployments/docker/verify-user-service-image.sh aegiscore-user-service:latest
