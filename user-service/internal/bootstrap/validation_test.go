@@ -167,7 +167,7 @@ func appModuleValidationTestConfig() *serviceconfig.Config {
 }
 
 func appModuleTestFeatureCacheConfig(ttl time.Duration) serviceconfig.FeatureCacheConfig {
-	return serviceconfig.FeatureCacheConfig{Enabled: true, Size: 1000, TTL: ttl, LoadTimeout: time.Second}
+	return serviceconfig.FeatureCacheConfig{Enabled: true, TTL: ttl}
 }
 
 func appModuleTestObservabilityConfig() config.ObservabilityConfig {

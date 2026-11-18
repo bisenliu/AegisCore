@@ -44,14 +44,12 @@ auth:
     password_change_token_ttl: 5m
   token_version_cache:
     # token_version_cache 缓存用户 token version，降低每次认证校验访问存储的压力。
+    # 容量和回源超时由代码常量拥有，不在此配置。
     enabled: true
-    # enabled=false 时 size/ttl/load_timeout 不参与校验，也不会构造本地缓存。
-    size: 100000
+    # enabled=false 时 ttl 不参与校验，也不会构造本地缓存。
     # 各副本独立持有本地缓存；正常完成 Redis token version 更新后，其他副本仍可能在该 TTL 内命中旧值。
     # TTL 表示 logout-all 和改密在正常路径下可接受的跨副本撤销收敛窗口，调整时应重新评估撤销 SLA。
     ttl: 1s
-    # load_timeout 是缓存 miss 后加载 token version 的单次等待预算。
-    load_timeout: 300ms
   # token_version_cache_ttl 是 token version 在 Redis 侧的缓存时间；<=0 时会回退到代码默认值。
   token_version_cache_ttl: 30s
   # true 表示 refresh 成功后轮换 refresh session；关闭会允许旧 refresh token 在有效期内复用。
@@ -62,10 +60,9 @@ auth:
 rbac:
   user_role_cache:
     # user_role_cache 缓存用户角色查询结果，降低 RBAC 授权热路径读库压力。
+    # 容量和回源超时由代码常量拥有，不在此配置。
     enabled: true
-    size: 100000
     ttl: 5s
-    load_timeout: 500ms
   policy_watcher:
     # PostgreSQL revision 每 15 秒校准一次，连续三个周期未成功后判定 stale。
     check_interval: 15s

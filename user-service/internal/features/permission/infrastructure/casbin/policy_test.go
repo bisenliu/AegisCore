@@ -447,24 +447,24 @@ func TestUserRoleResolverStaleLoadFailsClosedAndReloadsFinalState(t *testing.T) 
 func TestNewUserRoleResolverUsesRBACFeatureConfig(t *testing.T) {
 	result, err := NewUserRoleResolver(UserRoleResolverParams{
 		Settings: serviceconfig.RBACSettings{UserRoleCache: serviceconfig.FeatureCacheConfig{
-			Enabled: true, Size: 321, TTL: time.Minute, LoadTimeout: time.Second,
+			Enabled: true, TTL: time.Minute,
 		}},
 		Client: newPolicyTestClient(t),
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, 321, result.Stats.Stats().Capacity)
+	require.Equal(t, serviceconfig.UserRoleCacheCapacity, result.Stats.Stats().Capacity)
 	_, err = result.Resolver.RolesForUser(context.Background(), uuid.New())
 	require.NoError(t, err)
 }
 
-func TestNewUserRoleResolverRejectsNegativeCapacity(t *testing.T) {
+func TestNewUserRoleResolverRejectsNonPositiveTTL(t *testing.T) {
 	_, err := NewUserRoleResolver(UserRoleResolverParams{
 		Settings: serviceconfig.RBACSettings{UserRoleCache: serviceconfig.FeatureCacheConfig{
-			Enabled: true, Size: -1, TTL: time.Minute, LoadTimeout: time.Second,
+			Enabled: true,
 		}},
 		Client: newPolicyTestClient(t),
 	})
-	require.ErrorIs(t, err, localcache.ErrCapacityRequired)
+	require.ErrorIs(t, err, localcache.ErrTTLRequired)
 }
 
 func TestDisabledUserRoleResolverReadsThroughAndInvalidationIsSafe(t *testing.T) {
@@ -479,7 +479,7 @@ func TestDisabledUserRoleResolverReadsThroughAndInvalidationIsSafe(t *testing.T)
 
 	result, err := NewUserRoleResolver(UserRoleResolverParams{
 		Settings: serviceconfig.RBACSettings{UserRoleCache: serviceconfig.FeatureCacheConfig{
-			Enabled: false, Size: -1, TTL: -time.Second, LoadTimeout: -time.Second,
+			Enabled: false, TTL: -time.Second,
 		}},
 		Client: client,
 	})

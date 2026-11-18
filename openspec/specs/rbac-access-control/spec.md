@@ -218,7 +218,7 @@
 #### Scenario: 用户角色缓存键、容量与值隔离
 
 - **WHEN** user-role cache 启用
-- **THEN** permission feature MUST 在 localcache 边界使用 `userID.String()` 作为规范 string key，并将配置的正数 size 映射为最大 item 数
+- **THEN** permission feature MUST 在 localcache 边界使用 `userID.String()` 作为规范 string key，并将 user-service 代码常量容量映射为最大 item 数
 - **AND** common MUST NOT 接收 key encoder、解析业务 UUID 或暴露底层 cache option
 - **WHEN** 缓存命中
 - **THEN** loader 写入缓存前和 `RolesForUser` 返回前 MUST 复制 `[]uuid.UUID`，调用方修改返回 slice MUST NOT 污染缓存或后续读取
@@ -448,7 +448,7 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 
 ### Requirement: 用户角色缓存配置与失效顺序门禁
 
-系统 MUST 使用 `common/runtime/localcache` 的业务中立 cache-wide revision 与发布门禁保护 user-role cache。user-service MUST 私有拥有该 feature cache 的默认值、校验和配置映射。任何在失效前开始但未发布的旧回源结果 MUST NOT 在失效后写入缓存或返回给授权 caller；permission feature MUST NOT 维护重复的 generation 门禁，cache disabled 模式 MUST 直接回源并保持 fail-closed。
+系统 MUST 使用 `common/runtime/localcache` 的业务中立 cache-wide revision 与发布门禁保护 user-role cache。user-service MUST 私有拥有该 feature cache 的启停、TTL 默认值、校验和配置映射；容量与 load timeout MUST 由 user-service 代码常量提供。任何在失效前开始但未发布的旧回源结果 MUST NOT 在失效后写入缓存或返回给授权 caller；permission feature MUST NOT 维护重复的 generation 门禁，cache disabled 模式 MUST 直接回源并保持 fail-closed。
 
 #### Scenario: 单用户失效抑制旧 load 返回与写回
 
@@ -482,15 +482,17 @@ role 和 permission feature MUST 保持 domain、application、transport 和 inf
 #### Scenario: User-role cache 默认值与创建
 
 - **WHEN** `rbac.user_role_cache` 未配置
-- **THEN** user-service MUST 使用 `enabled=true`、`size=100000`、`ttl=5s` 和 `load_timeout=500ms` 的完整默认值
+- **THEN** user-service MUST 使用 `enabled=true` 和 `ttl=5s`，并 MUST 以代码常量提供 `size=100000` item 与 `load_timeout=500ms`
 - **WHEN** `rbac.user_role_cache.enabled=true`
-- **THEN** `size`、`ttl` 和 `load_timeout` MUST 为正值
-- **AND** permission feature MUST 通过集中转换创建具名 `rbac_user_roles` loading cache，配置的 `size` MUST 映射为最大 item 数
+- **THEN** 配置 `ttl` MUST 为正值
+- **AND** permission feature MUST 通过集中转换创建具名 `rbac_user_roles` loading cache；代码常量容量 MUST 映射为最大 item 数，代码常量 load timeout MUST 映射为回源超时
+- **WHEN** 配置包含 `rbac.user_role_cache.size` 或 `rbac.user_role_cache.load_timeout`
+- **THEN** strict decode MUST 以未知字段拒绝配置，MUST NOT 静默忽略或覆盖代码常量
 
 #### Scenario: User-role cache 禁用
 
 - **WHEN** `rbac.user_role_cache.enabled=false`
-- **THEN** 系统 MUST 忽略 cache 的 `size`、`ttl` 和 `load_timeout`，不创建通用 loading cache，并逐次从 PostgreSQL 回源当前启用角色
+- **THEN** 系统 MUST 忽略 cache 的 `ttl`，不创建通用 loading cache，并逐次从 PostgreSQL 回源当前启用角色
 - **AND** direct resolver MUST 返回独立角色 ID slice、记录 `LoadSuccess` 或 `LoadError`，并在回源错误或 context 取消时保持 fail-closed
 
 #### Scenario: RBAC settings 依赖边界

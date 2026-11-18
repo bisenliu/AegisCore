@@ -169,49 +169,48 @@ func (c RateLimitPolicyConfig) Validate(path string) []error {
 	return errs
 }
 
-// FeatureCacheConfig 描述单个 feature 自有 bounded cache 的稳定配置面。
+const (
+	// TokenVersionCacheCapacity 是 token version 本地缓存的最大 item 数。
+	TokenVersionCacheCapacity uint64 = 100000
+	// TokenVersionCacheLoadTimeout 是 token version 单次回源预算。
+	TokenVersionCacheLoadTimeout = 300 * time.Millisecond
+	// UserRoleCacheCapacity 是用户角色本地缓存的最大 item 数。
+	UserRoleCacheCapacity uint64 = 100000
+	// UserRoleCacheLoadTimeout 是用户角色单次回源预算。
+	UserRoleCacheLoadTimeout = 500 * time.Millisecond
+)
+
+// FeatureCacheConfig 描述单个 feature 自有 bounded cache 的外部配置面。
+// 容量和回源超时由代码常量拥有，不进入配置文件。
 type FeatureCacheConfig struct {
-	Enabled     bool          `mapstructure:"enabled"`
-	Size        int64         `mapstructure:"size"`
-	TTL         time.Duration `mapstructure:"ttl"`
-	LoadTimeout time.Duration `mapstructure:"load_timeout"`
+	Enabled bool          `mapstructure:"enabled"`
+	TTL     time.Duration `mapstructure:"ttl"`
 }
 
-// DefaultFeatureCacheConfig 构造启用状态下的完整 feature cache 默认配置。
-func DefaultFeatureCacheConfig(size int64, ttl time.Duration, loadTimeout time.Duration) FeatureCacheConfig {
+// DefaultFeatureCacheConfig 构造启用状态下的 feature cache 默认配置。
+func DefaultFeatureCacheConfig(ttl time.Duration) FeatureCacheConfig {
 	return FeatureCacheConfig{
-		Enabled:     true,
-		Size:        size,
-		TTL:         ttl,
-		LoadTimeout: loadTimeout,
+		Enabled: true,
+		TTL:     ttl,
 	}
 }
 
-// Validate 校验启用的 feature cache；禁用时其余字段不参与运行时构造和校验。
+// Validate 校验启用的 feature cache；禁用时 TTL 不参与运行时构造和校验。
 func (c FeatureCacheConfig) Validate(path string) []error {
 	if !c.Enabled {
 		return nil
 	}
-	var errs []error
-	if c.Size <= 0 {
-		errs = append(errs, commonconfig.FieldError(path+".size", "must be > 0 when enabled"))
-	}
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".ttl", c.TTL)...)
-	errs = append(errs, commonconfig.ValidatePositiveDuration(path+".load_timeout", c.LoadTimeout)...)
-	return errs
+	return commonconfig.ValidatePositiveDuration(path+".ttl", c.TTL)
 }
 
 // Localcache 将服务私有 feature cache 配置集中映射为通用 localcache 配置。
-func (c FeatureCacheConfig) Localcache(name string) localcache.Config {
-	var capacity uint64
-	if c.Size > 0 {
-		capacity = uint64(c.Size)
-	}
+// capacity 与 loadTimeout 必须由调用方传入该 feature 的代码常量。
+func (c FeatureCacheConfig) Localcache(name string, capacity uint64, loadTimeout time.Duration) localcache.Config {
 	return localcache.Config{
 		Name:        name,
 		Capacity:    capacity,
 		TTL:         c.TTL,
-		LoadTimeout: c.LoadTimeout,
+		LoadTimeout: loadTimeout,
 	}
 }
 
@@ -302,10 +301,10 @@ func DefaultConfig() Config {
 		},
 		Auth: AuthConfig{
 			// 默认接受 logout-all 和改密在正常 Redis 更新成功后最多 1 秒的跨副本撤销收敛窗口。
-			TokenVersionCache: DefaultFeatureCacheConfig(100000, time.Second, 300*time.Millisecond),
+			TokenVersionCache: DefaultFeatureCacheConfig(time.Second),
 		},
 		RBAC: RBACConfig{
-			UserRoleCache: DefaultFeatureCacheConfig(100000, 5*time.Second, 500*time.Millisecond),
+			UserRoleCache: DefaultFeatureCacheConfig(5 * time.Second),
 			PolicyWatcher: DefaultPolicyWatcherConfig(),
 		},
 		APIRateLimit: APIRateLimitConfig{

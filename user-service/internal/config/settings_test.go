@@ -19,13 +19,13 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 		},
 		Auth: AuthConfig{
 			JWT:                      JWTConfig{Secret: "secret", Issuer: "issuer"},
-			TokenVersionCache:        FeatureCacheConfig{Enabled: true, Size: 11},
+			TokenVersionCache:        FeatureCacheConfig{Enabled: true, TTL: time.Second},
 			TokenVersionCacheTTL:     3 * time.Minute,
 			RefreshTokenRotation:     true,
 			MaxActiveSessionsPerUser: 7,
 		},
 		RBAC: RBACConfig{
-			UserRoleCache: FeatureCacheConfig{Enabled: true, Size: 13},
+			UserRoleCache: FeatureCacheConfig{Enabled: true, TTL: 5 * time.Second},
 			PolicyWatcher: PolicyWatcherConfig{CheckInterval: 3 * time.Second, MaxStaleness: 10 * time.Second},
 		},
 		APIRateLimit: APIRateLimitConfig{Anonymous: RateLimitPolicyConfig{Enabled: true, RatePerSecond: 2, Burst: 3}},

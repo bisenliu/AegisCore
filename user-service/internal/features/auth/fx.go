@@ -231,7 +231,7 @@ func newTokenVersionLocalCache(params TokenVersionLocalCacheParams) (TokenVersio
 	// 每个副本独立维护该缓存；撤销只主动清理当前副本，其他副本在 TTL 到期后经 Redis 或数据库收敛。
 	// cfg.TTL 表示正常路径可接受的 logout-all/改密跨副本撤销收敛窗口，调整时应重新评估撤销 SLA。
 	// TTL 表示正常路径可接受的跨副本撤销收敛窗口，与 Redis 投影失败后的补偿策略无关。
-	local, err := localcache.NewLoadingCache(cfg.Localcache(authTokenVersionCacheName), func(ctx context.Context, userID string) (int64, error) {
+	local, err := localcache.NewLoadingCache(cfg.Localcache(authTokenVersionCacheName, serviceconfig.TokenVersionCacheCapacity, serviceconfig.TokenVersionCacheLoadTimeout), func(ctx context.Context, userID string) (int64, error) {
 		parsedUserID, err := uuid.Parse(userID)
 		if err != nil {
 			return 0, fmt.Errorf("parse auth token version cache user id: %w", err)

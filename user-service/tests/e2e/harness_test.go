@@ -111,9 +111,7 @@ auth:
     refresh_token_ttl: 30m
   token_version_cache:
     enabled: true
-    size: 1000
     ttl: 1s
-    load_timeout: 300ms
   token_version_cache_ttl: 5s
   refresh_token_rotation: true
   max_active_sessions_per_user: 5
@@ -125,9 +123,7 @@ api_rate_limit:
 rbac:
   user_role_cache:
     enabled: true
-    size: 1000
     ttl: 5s
-    load_timeout: 500ms
 log:
   level: error
   format: json

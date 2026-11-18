@@ -45,9 +45,7 @@ func TestConfigRenderRedactsSecrets(t *testing.T) {
 		}
 		content := strings.Replace(string(docs[index].Content), `  token_version_cache:
     enabled: true
-    size: 100000
     ttl: 1s
-    load_timeout: 300ms
 `, "", 1)
 		docs[index].Content = []byte(content)
 	}
@@ -71,10 +69,8 @@ func TestConfigRenderRedactsSecrets(t *testing.T) {
 				Secret string `yaml:"secret"`
 			} `yaml:"jwt"`
 			TokenVersionCache struct {
-				Enabled     bool   `yaml:"enabled"`
-				Size        int64  `yaml:"size"`
-				TTL         string `yaml:"ttl"`
-				LoadTimeout string `yaml:"load_timeout"`
+				Enabled bool   `yaml:"enabled"`
+				TTL     string `yaml:"ttl"`
 			} `yaml:"token_version_cache"`
 		} `yaml:"auth"`
 		Resources struct {
@@ -88,9 +84,9 @@ func TestConfigRenderRedactsSecrets(t *testing.T) {
 	}
 	require.NoError(t, yaml.Unmarshal(out.Bytes(), &rendered))
 	require.True(t, rendered.Auth.TokenVersionCache.Enabled)
-	require.EqualValues(t, 100000, rendered.Auth.TokenVersionCache.Size)
 	require.Equal(t, "1s", rendered.Auth.TokenVersionCache.TTL)
-	require.Equal(t, "300ms", rendered.Auth.TokenVersionCache.LoadTimeout)
+	require.NotContains(t, out.String(), "load_timeout:")
+	require.NotContains(t, out.String(), "size:")
 	require.Equal(t, "***", rendered.Auth.JWT.Secret)
 	require.Equal(t, "***", rendered.Resources.Redis["cache_redis"].Password)
 	require.Equal(t, "***", rendered.Resources.Postgres["primary_db"].Password)

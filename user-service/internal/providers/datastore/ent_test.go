@@ -354,8 +354,6 @@ func TestEntSQLLogDriverPassesThroughBeginTxOptions(t *testing.T) {
 	require.Same(t, opts, underlying.txOptions)
 }
 
-
-
 func hasEntSpan(spans []*tracepb.Span) bool {
 	for _, span := range spans {
 		if span.GetName() == "ent.query" || span.GetName() == "ent.mutation" {

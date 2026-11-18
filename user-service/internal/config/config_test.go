@@ -23,13 +23,9 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, 5*time.Minute, cfg.Auth.JWT.PasswordChangeTokenTTL)
 	require.Equal(t, 30*time.Second, cfg.Auth.TokenVersionCacheTTL)
 	require.True(t, cfg.Auth.TokenVersionCache.Enabled)
-	require.EqualValues(t, 2048, cfg.Auth.TokenVersionCache.Size)
 	require.Equal(t, 2*time.Second, cfg.Auth.TokenVersionCache.TTL)
-	require.Equal(t, 400*time.Millisecond, cfg.Auth.TokenVersionCache.LoadTimeout)
 	require.True(t, cfg.RBAC.UserRoleCache.Enabled)
-	require.EqualValues(t, 4096, cfg.RBAC.UserRoleCache.Size)
 	require.Equal(t, 7*time.Second, cfg.RBAC.UserRoleCache.TTL)
-	require.Equal(t, 600*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeout)
 	require.Equal(t, 10*time.Second, cfg.RBAC.PolicyWatcher.CheckInterval)
 	require.Equal(t, 4*time.Second, cfg.RBAC.PolicyWatcher.SubscribeTimeout)
 	require.Equal(t, 35*time.Second, cfg.RBAC.PolicyWatcher.MaxStaleness)
@@ -72,14 +68,12 @@ func TestLoadParsesServicePrivateConfig(t *testing.T) {
 	require.Equal(t, 50*time.Second, runtime.Runtime.Lifecycle.StopTimeout)
 }
 
-// TestDefaultFeatureCacheConfigReturnsCompleteValue 验证 feature cache 默认值构造器返回完整启用配置。
+// TestDefaultFeatureCacheConfigReturnsCompleteValue 验证 feature cache 默认值构造器返回启用配置。
 func TestDefaultFeatureCacheConfigReturnsCompleteValue(t *testing.T) {
-	cfg := DefaultFeatureCacheConfig(100000, time.Second, 300*time.Millisecond)
+	cfg := DefaultFeatureCacheConfig(time.Second)
 
 	require.True(t, cfg.Enabled)
-	require.EqualValues(t, 100000, cfg.Size)
 	require.Equal(t, time.Second, cfg.TTL)
-	require.Equal(t, 300*time.Millisecond, cfg.LoadTimeout)
 }
 
 // TestDefaultConfigReturnsCompleteServiceDefaults 验证 user-service 默认配置覆盖认证、RBAC、资源和观测插件。
@@ -96,8 +90,8 @@ func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
 	require.Equal(t, commonresources.DefaultPostgresMaxIdleConns, postgres.Pool.MaxIdleConns)
 	require.Equal(t, commonresources.DefaultPostgresConnMaxLifetime, postgres.Pool.ConnMaxLifetime)
 	require.Equal(t, commonresources.DefaultPostgresConnMaxIdleTime, postgres.Pool.ConnMaxIdleTime)
-	require.Equal(t, DefaultFeatureCacheConfig(100000, time.Second, 300*time.Millisecond), cfg.Auth.TokenVersionCache)
-	require.Equal(t, DefaultFeatureCacheConfig(100000, 5*time.Second, 500*time.Millisecond), cfg.RBAC.UserRoleCache)
+	require.Equal(t, DefaultFeatureCacheConfig(time.Second), cfg.Auth.TokenVersionCache)
+	require.Equal(t, DefaultFeatureCacheConfig(5*time.Second), cfg.RBAC.UserRoleCache)
 	require.Equal(t, DefaultPolicyWatcherConfig(), cfg.RBAC.PolicyWatcher)
 	require.Equal(t, DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, 30*time.Second, 64), cfg.APIRateLimit.Anonymous)
 	require.Equal(t, DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, 30*time.Second, 128), cfg.APIRateLimit.Authenticated)
@@ -109,50 +103,30 @@ func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
 	require.False(t, cfg.Ent.Plugins.Metrics.Enabled)
 }
 
-// TestFeatureCacheLocalcache 验证服务私有 feature cache 可映射为通用 localcache 配置。
+// TestFeatureCacheLocalcache 验证服务私有 feature cache 使用代码常量映射容量和回源超时。
 func TestFeatureCacheLocalcache(t *testing.T) {
-	tests := []struct {
-		name string
-		size int64
-		want uint64
-	}{
-		{name: "positive", size: 123, want: 123},
-		{name: "zero", want: 0},
-		{name: "negative", size: -1, want: 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := FeatureCacheConfig{Size: tt.size, TTL: time.Minute, LoadTimeout: time.Second}
-			mapped := cfg.Localcache("feature_test")
-			require.Equal(t, "feature_test", mapped.Name)
-			require.Equal(t, tt.want, mapped.Capacity)
-			require.Equal(t, time.Minute, mapped.TTL)
-			require.Equal(t, time.Second, mapped.LoadTimeout)
-		})
-	}
+	cfg := FeatureCacheConfig{TTL: time.Minute}
+	mapped := cfg.Localcache("feature_test", TokenVersionCacheCapacity, TokenVersionCacheLoadTimeout)
+	require.Equal(t, "feature_test", mapped.Name)
+	require.Equal(t, TokenVersionCacheCapacity, mapped.Capacity)
+	require.Equal(t, time.Minute, mapped.TTL)
+	require.Equal(t, TokenVersionCacheLoadTimeout, mapped.LoadTimeout)
 }
 
 // TestLoadAppliesFeatureCacheDefaults 验证缺省 feature cache 会补齐服务默认值。
 func TestLoadAppliesFeatureCacheDefaults(t *testing.T) {
-	yaml := strings.Replace(serviceConfigYAML(), "  token_version_cache:\n    enabled: true\n    size: 2048\n    ttl: 2s\n    load_timeout: 400ms\n", "", 1)
+	yaml := strings.Replace(serviceConfigYAML(), "  token_version_cache:\n    enabled: true\n    ttl: 2s\n", "", 1)
 	yaml = strings.Replace(yaml, `rbac:
   user_role_cache:
     enabled: true
-    size: 4096
     ttl: 7s
-    load_timeout: 600ms
 `, "rbac:\n", 1)
 
 	cfg := loadServiceConfig(t, yaml)
 	require.True(t, cfg.Auth.TokenVersionCache.Enabled)
-	require.EqualValues(t, 100000, cfg.Auth.TokenVersionCache.Size)
 	require.Equal(t, time.Second, cfg.Auth.TokenVersionCache.TTL)
-	require.Equal(t, 300*time.Millisecond, cfg.Auth.TokenVersionCache.LoadTimeout)
 	require.True(t, cfg.RBAC.UserRoleCache.Enabled)
-	require.EqualValues(t, 100000, cfg.RBAC.UserRoleCache.Size)
 	require.Equal(t, 5*time.Second, cfg.RBAC.UserRoleCache.TTL)
-	require.Equal(t, 500*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeout)
 }
 
 // TestLoadAppliesPolicyWatcherDefaults 验证 RBAC policy watcher 缺省配置会被补齐。
@@ -348,18 +322,14 @@ func TestLoadParsesEntSlowThresholdDuration(t *testing.T) {
 func TestLoadPreservesExplicitDisabledFeatureCaches(t *testing.T) {
 	yaml := strings.Replace(serviceConfigYAML(), `  token_version_cache:
     enabled: true
-    size: 2048
     ttl: 2s
-    load_timeout: 400ms
 `, `  token_version_cache:
     enabled: false
 `, 1)
 	yaml = strings.Replace(yaml, `rbac:
   user_role_cache:
     enabled: true
-    size: 4096
     ttl: 7s
-    load_timeout: 600ms
 `, `rbac:
   user_role_cache:
     enabled: false
@@ -367,28 +337,31 @@ func TestLoadPreservesExplicitDisabledFeatureCaches(t *testing.T) {
 
 	cfg := loadServiceConfig(t, yaml)
 	require.False(t, cfg.Auth.TokenVersionCache.Enabled)
-	require.EqualValues(t, 100000, cfg.Auth.TokenVersionCache.Size)
 	require.Equal(t, time.Second, cfg.Auth.TokenVersionCache.TTL)
-	require.Equal(t, 300*time.Millisecond, cfg.Auth.TokenVersionCache.LoadTimeout)
 	require.False(t, cfg.RBAC.UserRoleCache.Enabled)
-	require.EqualValues(t, 100000, cfg.RBAC.UserRoleCache.Size)
 	require.Equal(t, 5*time.Second, cfg.RBAC.UserRoleCache.TTL)
-	require.Equal(t, 500*time.Millisecond, cfg.RBAC.UserRoleCache.LoadTimeout)
 }
 
-// TestLoadRejectsExplicitInvalidFeatureCacheValue 验证启用 cache 时非法容量会被拒绝。
+// TestLoadRejectsExplicitInvalidFeatureCacheValue 验证启用 cache 时非正 TTL 会被拒绝。
 func TestLoadRejectsExplicitInvalidFeatureCacheValue(t *testing.T) {
-	yaml := strings.Replace(serviceConfigYAML(), "    size: 2048", "    size: 0", 1)
+	yaml := strings.Replace(serviceConfigYAML(), "    ttl: 2s", "    ttl: 0s", 1)
 	err := loadServiceConfigError(t, yaml)
-	require.Contains(t, err.Error(), "auth.token_version_cache.size must be > 0 when enabled")
+	require.Contains(t, err.Error(), "auth.token_version_cache.ttl must be > 0")
+}
+
+// TestLoadRejectsLegacyFeatureCacheFields 验证容量和回源超时不再接受配置覆盖。
+func TestLoadRejectsLegacyFeatureCacheFields(t *testing.T) {
+	yaml := strings.Replace(serviceConfigYAML(), "    ttl: 2s", "    ttl: 2s\n    size: 2048\n    load_timeout: 400ms", 1)
+	err := loadServiceConfigError(t, yaml)
+	require.Contains(t, err.Error(), "unknown configuration keys: auth.token_version_cache.load_timeout, auth.token_version_cache.size")
 }
 
 // TestValidateFeatureCaches 验证 token-version 与 RBAC feature cache 的字段校验。
 func TestValidateFeatureCaches(t *testing.T) {
 	t.Run("enabled requires positive values", func(t *testing.T) {
 		errs := (FeatureCacheConfig{Enabled: true}).Validate("auth.token_version_cache")
-		require.Len(t, errs, 3)
-		require.Contains(t, errs[0].Error(), "auth.token_version_cache.size")
+		require.Len(t, errs, 1)
+		require.Contains(t, errs[0].Error(), "auth.token_version_cache.ttl")
 	})
 
 	t.Run("disabled allows zero values", func(t *testing.T) {
@@ -532,8 +505,8 @@ func TestSensitiveConfigPathsReturnsCopy(t *testing.T) {
 
 // TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest 验证 effective settings 补默认值不反写 raw digest。
 func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing.T) {
-	yaml := strings.Replace(serviceConfigYAML(), "  token_version_cache:\n    enabled: true\n    size: 2048\n    ttl: 2s\n    load_timeout: 400ms\n", "", 1)
-	yaml = strings.Replace(yaml, "rbac:\n  user_role_cache:\n    enabled: true\n    size: 4096\n    ttl: 7s\n    load_timeout: 600ms\n", "", 1)
+	yaml := strings.Replace(serviceConfigYAML(), "  token_version_cache:\n    enabled: true\n    ttl: 2s\n", "", 1)
+	yaml = strings.Replace(yaml, "rbac:\n  user_role_cache:\n    enabled: true\n    ttl: 7s\n", "", 1)
 	yaml = strings.Replace(yaml, `  policy_watcher:
     check_interval: 10s
     subscribe_timeout: 4s
@@ -580,15 +553,15 @@ func TestEffectiveSettingsContainsDefaultsWithoutChangingSourceDigest(t *testing
 	auth := settings["auth"].(map[string]any)
 	cache := auth["token_version_cache"].(map[string]any)
 	require.Equal(t, true, cache["enabled"])
-	require.EqualValues(t, 100000, cache["size"])
 	require.Equal(t, "1s", cache["ttl"])
-	require.Equal(t, "300ms", cache["load_timeout"])
+	require.NotContains(t, cache, "size")
+	require.NotContains(t, cache, "load_timeout")
 	rbac := settings["rbac"].(map[string]any)
 	userRoleCache := rbac["user_role_cache"].(map[string]any)
 	require.Equal(t, true, userRoleCache["enabled"])
-	require.EqualValues(t, 100000, userRoleCache["size"])
 	require.Equal(t, "5s", userRoleCache["ttl"])
-	require.Equal(t, "500ms", userRoleCache["load_timeout"])
+	require.NotContains(t, userRoleCache, "size")
+	require.NotContains(t, userRoleCache, "load_timeout")
 	policyWatcher := rbac["policy_watcher"].(map[string]any)
 	require.Equal(t, "15s", policyWatcher["check_interval"])
 	require.Equal(t, "5s", policyWatcher["subscribe_timeout"])
@@ -726,9 +699,7 @@ auth:
     password_change_token_ttl: 5m
   token_version_cache:
     enabled: true
-    size: 2048
     ttl: 2s
-    load_timeout: 400ms
   token_version_cache_ttl: 30s
   refresh_token_rotation: true
   max_active_sessions_per_user: 5
@@ -754,9 +725,7 @@ api_rate_limit:
 rbac:
   user_role_cache:
     enabled: true
-    size: 4096
     ttl: 7s
-    load_timeout: 600ms
   policy_watcher:
     check_interval: 10s
     subscribe_timeout: 4s

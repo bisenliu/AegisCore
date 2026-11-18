@@ -39,13 +39,13 @@ func TestNewTokenVersionLocalCacheUsesFeatureConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	result, err := newTokenVersionLocalCache(TokenVersionLocalCacheParams{
 		Settings: serviceconfig.AuthSettings{TokenVersionCache: serviceconfig.FeatureCacheConfig{
-			Enabled: true, Size: 123, TTL: time.Minute, LoadTimeout: time.Second,
+			Enabled: true, TTL: time.Minute,
 		}},
 		Users: NewMockUserTokenVersionStore(ctrl),
 		Cache: NewMockTokenVersionCache(ctrl),
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, 123, result.Stats.Stats().Capacity)
+	require.Equal(t, serviceconfig.TokenVersionCacheCapacity, result.Stats.Stats().Capacity)
 }
 
 func TestDisabledTokenVersionLocalCacheReadsThroughAndPreservesValidation(t *testing.T) {
@@ -63,7 +63,7 @@ func TestDisabledTokenVersionLocalCacheReadsThroughAndPreservesValidation(t *tes
 	)
 	result, err := newTokenVersionLocalCache(TokenVersionLocalCacheParams{
 		Settings: serviceconfig.AuthSettings{TokenVersionCache: serviceconfig.FeatureCacheConfig{
-			Enabled: false, Size: -1, TTL: -time.Second, LoadTimeout: -time.Second,
+			Enabled: false, TTL: -time.Second,
 		}},
 		Users: users,
 		Cache: cache,
@@ -79,15 +79,15 @@ func TestDisabledTokenVersionLocalCacheReadsThroughAndPreservesValidation(t *tes
 	require.Zero(t, result.Stats.Stats().Capacity)
 }
 
-func TestTokenVersionLocalCacheRejectsNegativeCapacity(t *testing.T) {
+func TestTokenVersionLocalCacheRejectsNonPositiveTTL(t *testing.T) {
 	_, err := newTokenVersionLocalCache(TokenVersionLocalCacheParams{
 		Settings: serviceconfig.AuthSettings{TokenVersionCache: serviceconfig.FeatureCacheConfig{
-			Enabled: true, Size: -1, TTL: time.Minute, LoadTimeout: time.Second,
+			Enabled: true,
 		}},
 		Users: NewMockUserTokenVersionStore(gomock.NewController(t)),
 		Cache: NewMockTokenVersionCache(gomock.NewController(t)),
 	})
-	require.ErrorIs(t, err, localcache.ErrCapacityRequired)
+	require.ErrorIs(t, err, localcache.ErrTTLRequired)
 }
 
 func TestAuthModuleBuildsCommandGraphWithMetricsConfigurations(t *testing.T) {

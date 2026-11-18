@@ -84,6 +84,7 @@ const openAPIDocument = `{
           },
           "password": {
             "example": "secret",
+            "maxLength": 72,
             "minLength": 1,
             "type": "string"
           },

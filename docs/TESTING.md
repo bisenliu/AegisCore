@@ -79,7 +79,7 @@ go test -race ./internal/features/auth/... ./internal/features/permission/...
 
 user-service e2e 位于 `user-service/tests/e2e/`，覆盖 HTTP flow、migration 和测试 harness。HTTP harness 在启动 Fx App 前加载一次 service config，并复用 `bootstrap.AppOptions`，使测试与正式 App 使用相同的 service/runtime config 和 composition root 接线。CI 的阻塞式 `container-test` job 运行根 `make test-containers`：根 target 分别调用 common 与 user-service 的模块 target，由模块 target 显式传递 `-aegiscore.testcontainers` flag，覆盖 common PostgreSQL/Redis fixture、permission/role PostgreSQL 集成测试和 user-service HTTP E2E；普通单测只由复用质量 workflow 的 `unit` job 运行一次。
 
-配置 fixture 必须使用最终严格契约：核心路径为 `app/server/log/observability`，服务资源位于 `resources.redis.cache_redis` 和 `resources.postgres.primary_db`，feature cache 位于 `auth.token_version_cache` 与 `rbac.user_role_cache`。Redis 正向 fixture 必须显式配置 `mode`；`cluster` 使用 `addrs`、`timeout` 和可选 `cluster.max_redirects`，`standalone` 使用 `addr` 和 `timeout`，两种 mode 均固定使用 Redis 0 号库且不暴露 `db` 配置。旧路径只允许出现在 strict decoder 负向测试中，用于证明未知字段会被拒绝；正向 fixture 必须能够通过 Nacos 分层配置合成后的 strict decode。
+配置 fixture 必须使用最终严格契约：核心路径为 `app/server/log/observability`，服务资源位于 `resources.redis.cache_redis` 和 `resources.postgres.primary_db`，feature cache 位于 `auth.token_version_cache` 与 `rbac.user_role_cache`，正向 fixture 只包含 `enabled` 和 `ttl`。Redis 正向 fixture 必须显式配置 `mode`；`cluster` 使用 `addrs`、`timeout` 和可选 `cluster.max_redirects`，`standalone` 使用 `addr` 和 `timeout`，两种 mode 均固定使用 Redis 0 号库且不暴露 `db` 配置。旧路径只允许出现在 strict decoder 负向测试中，用于证明未知字段会被拒绝；正向 fixture 必须能够通过 Nacos 分层配置合成后的 strict decode。
 
 版本化本地 Nacos 配置位于 `deployments/nacos/local-host/` 与 `deployments/nacos/local-docker/`。测试必须分别严格解码两个目录中的完整三文档，断言公共字段一致，并确认 Namespace、dataId 顺序、Compose DNS 和宿主映射端口与 Compose 一致。`tools/nacos-config-seed` 测试还必须覆盖目录文档在网络写入前完成读取与基本校验。
 

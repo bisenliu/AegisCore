@@ -31,7 +31,7 @@ func NewUserRoleResolver(params UserRoleResolverParams) (UserRoleResolverResult,
 	if !cfg.Enabled {
 		return UserRoleResolverResult{Resolver: resolver, Stats: resolver}, nil
 	}
-	cache, err := localcache.NewLoadingCache(cfg.Localcache(rbacUserRolesCacheName), func(ctx context.Context, key string) ([]uuid.UUID, error) {
+	cache, err := localcache.NewLoadingCache(cfg.Localcache(rbacUserRolesCacheName, serviceconfig.UserRoleCacheCapacity, serviceconfig.UserRoleCacheLoadTimeout), func(ctx context.Context, key string) ([]uuid.UUID, error) {
 		userID, err := uuid.Parse(key)
 		if err != nil {
 			return nil, fmt.Errorf("parse rbac user role cache user id: %w", err)

@@ -79,7 +79,7 @@
 
 ### Requirement: Token version 校验与会话撤销
 
-系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地 loading cache 和 Redis 投影加速校验。缓存未命中、过期、容量驱逐或显式禁用只能影响性能，MUST NOT 改变认证与撤销语义。退出全部会话和强制改密 MUST 递增主事实，使旧 access token 失效并撤销相应 refresh sessions。token-version feature cache MUST 由 user-service 私有配置提供完整默认值、启用时校验和到通用 localcache 配置的集中映射，auth 构造路径 MUST 只消费窄 auth settings。递增 `token_version` 或更新凭证并返回新 `token_version` MUST 是单一确定的 PostgreSQL 结果，成功路径 MUST NOT 在提交后通过第二条 `SELECT` 才获取撤销版本。
+系统 MUST 以 PostgreSQL 当前 `token_version` 为主事实，并通过有界本地 loading cache 和 Redis 投影加速校验。缓存未命中、过期、容量驱逐或显式禁用只能影响性能，MUST NOT 改变认证与撤销语义。退出全部会话和强制改密 MUST 递增主事实，使旧 access token 失效并撤销相应 refresh sessions。token-version feature cache MUST 由 user-service 私有配置提供启停和 TTL 默认值、启用时校验，以及到通用 localcache 配置的集中映射；容量和 load timeout MUST 由 user-service 代码常量提供，auth 构造路径 MUST 只消费窄 auth settings。递增 `token_version` 或更新凭证并返回新 `token_version` MUST 是单一确定的 PostgreSQL 结果，成功路径 MUST NOT 在提交后通过第二条 `SELECT` 才获取撤销版本。
 
 #### Scenario: 受保护访问与本地缓存
 
@@ -88,11 +88,13 @@
 - **AND** UUID MUST 在 validator 边界转换为规范 string key；`int64` token version MUST 直接缓存，MUST NOT 配置 common key encoder 或 clone callback
 - **AND** 系统 MUST NOT 缓存错误结果；容量驱逐或 TTL 过期后 MUST 可通过同 key 合并回源恢复校验，不得依赖异步写入可见性
 - **WHEN** `auth.token_version_cache` 未配置
-- **THEN** user-service MUST 使用 `enabled=true`、`size=100000`、`ttl=1s` 和 `load_timeout=300ms` 的完整默认值
+- **THEN** user-service MUST 使用 `enabled=true` 和 `ttl=1s`，并 MUST 以代码常量提供 `size=100000` item 与 `load_timeout=300ms`
 - **WHEN** `auth.token_version_cache.enabled` 为 true
-- **THEN** 具名 `auth_token_version` cache 的 `size`、`ttl` 和 `load_timeout` MUST 为正值，`size` MUST 表示最大 item 数
+- **THEN** 具名 `auth_token_version` cache 的配置 `ttl` MUST 为正值；代码常量容量 MUST 映射为最大 item 数，代码常量 load timeout MUST 映射为回源超时
+- **WHEN** 配置包含 `auth.token_version_cache.size` 或 `auth.token_version_cache.load_timeout`
+- **THEN** strict decode MUST 以未知字段拒绝配置，MUST NOT 静默忽略或覆盖代码常量
 - **WHEN** cache 被禁用
-- **THEN** 系统 MUST 忽略 cache 的 `size`、`ttl` 和 `load_timeout`，不创建通用 loading cache，并保持校验和撤销正确
+- **THEN** 系统 MUST 忽略 cache 的 `ttl`，不创建通用 loading cache，并保持校验和撤销正确
 - **AND** direct stats source MUST 使用 `LoadSuccess` 与 `LoadError` 表达逐次回源结果
 
 #### Scenario: Redis 投影更新与本地失效顺序
