@@ -264,6 +264,13 @@ replace_tree() {
   local file
   local files=()
   while IFS= read -r -d '' file; do
+    # 若用户指定 --drop-github，则跳过将被彻底丢弃的 GitHub Actions 与 Renovate 文件，避免无谓修改
+    if [[ "${drop_github}" -eq 1 ]]; then
+      case "${file}" in
+        .github/*|.github|renovate.json) continue ;;
+      esac
+    fi
+
     case "${file}" in
       user-service/internal/persistence/ent/schema/*) ;; # Ent Schema 手写代码必须替换，否则新生成器加载时会找不到新 module
       user-service/internal/persistence/ent/*)
@@ -610,17 +617,20 @@ log_step "4/6" "同步重命名匹配镜像前缀的文件与目录结构..."
 rename_matching_paths "${current_image}" "${image_prefix}"
 
 # 可选清理: 根据用户意愿决定是否移除 GitHub Actions 与 Renovate 依赖配置
+# 必须带 -f/--force 强制删除，防止此前文件存在就地修改时 git rm 报错中断退出
 if [[ "${drop_github}" -eq 1 ]]; then
   if [[ -d "${repo_root}/.github" ]]; then
     log_substep "按用户参数要求移除 GitHub 持续集成配置目录: .github/"
     if [[ "${apply}" -eq 1 ]]; then
-      git -C "${repo_root}" rm -r --quiet -- .github
+      git -C "${repo_root}" rm -rf --quiet -- .github 2>/dev/null || true
+      rm -rf "${repo_root}/.github"
     fi
   fi
   if [[ -f "${repo_root}/renovate.json" ]]; then
     log_substep "按用户参数要求移除依赖自动化更新配置: renovate.json"
     if [[ "${apply}" -eq 1 ]]; then
-      git -C "${repo_root}" rm --quiet -- renovate.json
+      git -C "${repo_root}" rm -f --quiet -- renovate.json 2>/dev/null || true
+      rm -f "${repo_root}/renovate.json"
     fi
   fi
 fi
