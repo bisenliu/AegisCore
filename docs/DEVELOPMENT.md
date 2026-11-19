@@ -9,7 +9,7 @@
 - OpenSpec CLI，用于 `/opsx:*` 变更工作流。
 - Atlas 相关本地脚本通过 `user-service/scripts/` 生成和校验 SQL；数据库变更执行由 DBA 工单或受控发布平台完成。
 
-仓库级项目身份位于 `project.yaml`。更换整个项目内部标识时运行 `./scripts/rename-project.sh`，不要手工全局替换。先用 `--dry-run` 预览，确认后追加 `--apply`。推荐使用 `--module <path>` 简便用法（自动推导环境变量、指标、镜像前缀和展示名），亦可逐项传入 `--module-prefix`、`--env-prefix`、`--metric-prefix`、`--image-prefix`、`--display-name` 显式覆盖。`--apply` 要求当前 Git 工作区纯净，并先检查 `go version`，失败时不写文件；成功后更新 module、环境变量、指标、镜像前缀和未加分隔符的项目名，再执行 `go work sync`、Ent 生成和 OpenAPI 生成。它会改名带旧镜像前缀的 Helm chart 目录，不移动服务目录，不修改 `user-service/internal/shared/rbacbaseline/ids.go` 中已固化的系统 ID，默认也不删除 `.github` 和 `renovate.json`。新项目不上传 GitHub、也不使用 Renovate 时追加 `--drop-github`。执行失败时会自动回滚工作区至执行前状态。`project.yaml` 已是新身份但仍有旧名字时，用 `--from-*` 指定旧身份再跑一次。新增根目录业务服务不需要改 `project.yaml`。完整命令见根 `README.md`。
+仓库级旧身份位于 `project.yaml`，只供更名脚本读取。更换整个项目内部标识时运行 `./scripts/rename-project.sh`，不要手工全局替换。先用 `--dry-run` 预览，确认后追加 `--apply`。推荐使用 `--module <path>` 简便用法（自动推导环境变量、指标、镜像前缀和展示名），亦可逐项传入 `--module-prefix`、`--env-prefix`、`--metric-prefix`、`--image-prefix`、`--display-name` 显式覆盖。`--apply` 要求当前 Git 工作区纯净，并先检查 `go version`，失败时不写文件；成功后更新 module、环境变量、指标、镜像前缀和未加分隔符的项目名，再执行 `go work sync`、Ent 生成和 OpenAPI 生成。它会改名带旧镜像前缀的 Helm chart 目录，不移动服务目录，不修改 `user-service/internal/shared/rbacbaseline/ids.go` 中已固化的系统 ID，也不把新身份回写到 `project.yaml`。更名及代码生成成功后自动删除 `project.yaml`、`.github`、`.git`、`renovate.json` 和 `coverage/`，不初始化新 Git 仓库；预览或生成失败时保留这些资源。脚本支持从子目录调用，文本只替换一次，避免新名称包含旧名称时重复改写；路径仅从 Git 跟踪资源推导，目标已存在时中止。执行失败或中断时恢复 Git 跟踪内容并清理新增的非忽略文件；生成器修改的忽略文件不在 Git 恢复范围内。成功后原 Git 历史和 remote 配置会被移除；不再支持 `--drop-git`、`--drop-github` 和 `--reset-git`，linked worktree 不支持 `--apply`。正文仍有旧名字时，用 `--from-*` 指定旧身份再跑一次。完整命令见根 `README.md`。
 
 新增根目录业务服务时，只追加根 `Makefile` 的 `BUSINESS_SERVICES` 和 `go.work` 的 `use` 条目。服务目录与 `user-service/` 平级，不创建 `services/`。新服务复制启动、配置、provider 和 router 骨架，不复制 `user-service/internal/features/`、RBAC CLI 或 Ent schema。服务 module 只能依赖 `github.com/aegiscore/common`，不得 import 其他业务服务。共享 Nacos `resources.yaml` 中的新资源名必须带服务前缀；user-service 继续使用已发布的 `cache_redis` 和 `primary_db`。
 
@@ -116,7 +116,7 @@ make user-service-architecture-lint
 make verify
 ```
 
-`make verify` 会执行 lint、架构边界检查、测试、OpenAPI 生成，并用 `git diff --exit-code` 暴露生成物 drift。
+`make verify` 会执行 lint、架构边界检查、测试、OpenAPI 生成，并用 `git diff --exit-code` 暴露生成物 drift。更名后尚未初始化 Git 时会明确跳过 Git 差异检查；缺少 GitHub workflow 时会明确跳过 Action 版本检查，其余验证继续执行。重新初始化 Git 后自动恢复差异检查。
 
 ## 5. Ent 和 migration
 

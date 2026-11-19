@@ -338,3 +338,56 @@ user-service Helm 生产发布 MUST 使用不可变镜像引用。Deployment、R
 - **AND** 协作者 MUST 执行 `make user-service-migrate-validate`
 - **AND** 如 Atlas diff 产生 SQL，协作者 MUST 明确审查并确认 SQL 是否为预期；非预期表、列、索引、注释、默认值或约束变化 MUST 阻止本次 change 完成
 
+### Requirement: 项目更名安全执行
+
+项目更名工具 MUST 默认只预览，支持从仓库子目录调用；MUST 在原始文本上按最长源串优先执行一次字面量替换，避免新身份被再次改写。MUST 只移动 Git 跟踪的资源及其父目录，不单独扫描或改名忽略文件。MUST 在参数不完整或模式冲突时拒绝执行。apply MUST 要求纯净工作区，写入后失败或收到中断信号时恢复 Git 跟踪内容并清理新增的非忽略文件；恢复失败 MUST 明确报错。apply MUST 在更名和代码生成成功后直接删除根目录的 `project.yaml`、`.github`、`.git`、`renovate.json` 和 `coverage/`，MUST NOT 回写新身份，也 MUST NOT 自动初始化新仓库；删除前 MUST 保留 `project.yaml` 和 Git 以支持失败回滚。预览 MUST 提示清理行为且不删除文件。`--drop-git`、`--drop-github` 和 `--reset-git` MUST 作为未知参数在写入前拒绝。linked worktree MUST 在写入前拒绝 apply。
+
+#### Scenario: 从子目录执行并保留新身份
+
+- **WHEN** 从子目录将项目更名为包含旧名称的新身份
+- **THEN** 所有匹配文本只替换一次，忽略文件不会被单独改名或修改内容
+
+#### Scenario: 失败恢复
+
+- **WHEN** apply 遇到路径冲突、生成失败或中断
+- **THEN** 工具非零退出并恢复跟踪内容；回滚失败时明确提示
+
+#### Scenario: 参数与工作树保护
+
+- **WHEN** 缺少参数值、同时指定预览与执行，或在 linked worktree 请求删除 Git 历史
+- **THEN** 工具在写入前拒绝执行
+
+#### Scenario: 移除重复的 Git 历史删除入口
+
+- **WHEN** 使用 `--drop-git`
+- **THEN** 工具按未知参数拒绝执行且不修改文件
+
+
+#### Scenario: 更名成功后自动清理模板元数据
+
+- **WHEN** apply 更名和代码生成成功
+- **THEN** 根目录的 `project.yaml`、`.github`、`.git`、`renovate.json` 和 `coverage/` MUST 被删除，缺失项不影响成功，MUST NOT 回写 `project.yaml`，也 MUST NOT 创建新 Git 仓库
+
+#### Scenario: 预览或生成失败时保留模板元数据
+
+- **WHEN** 执行预览或代码生成失败
+- **THEN** 工具 MUST 保留 `project.yaml`、`.github`、`.git`、`renovate.json` 和 `coverage/`，生成失败 MUST 按原有机制恢复跟踪内容
+
+### Requirement: 无 Git 工作区验证
+
+验证脚本 MUST 从自身路径定位项目，不依赖 Git 获取根目录。缺少 GitHub workflow 时 Actions 固定版本检查 MUST 明确跳过；存在 workflow 时 MUST 拒绝未固定 commit SHA 的外部 Action。根目录、common 和 user-service 的验证入口、Fx 图检查及架构检查 MUST 在项目根目录缺少 .git 时跳过依赖 Git 的生成物差异检查并明确说明；其余检查 MUST 继续执行。存在 .git 时 MUST 保留原差异门禁，MUST NOT 误用上级目录的仓库。根目录 coverage 报告 MUST 被 Git 忽略。
+
+#### Scenario: 更名后尚未初始化新仓库
+
+- **WHEN** 成功更名后在没有 .git 和 .github 的项目执行 make verify
+- **THEN** 工具 MUST 执行 lint、架构、交付资产、生成和测试检查，并明确跳过 Git 差异及 GitHub workflow 检查
+
+#### Scenario: 新仓库恢复差异检查
+
+- **WHEN** 初始化新仓库后生成物或其他跟踪文件出现未暂存差异
+- **THEN** 对应 Git 差异门禁 MUST 返回失败
+
+#### Scenario: 保留 GitHub workflow 的模板项目
+
+- **WHEN** workflow 使用未固定 commit SHA 的外部 Action
+- **THEN** Actions 固定版本检查 MUST 返回失败

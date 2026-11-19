@@ -14,6 +14,8 @@
 | `make compose-dashboard-check` | 检查 Compose Grafana dashboard 是否与通用 dashboard 一致 |
 | `make verify` | 运行 lint、架构 lint、测试、OpenAPI 生成和 `git diff --exit-code` |
 
+项目更名脚本的独立回归测试：`python3 scripts/test-rename-project.py`（Python 3）。测试在临时 Git 仓库运行，覆盖预览、参数校验、单次替换、路径冲突、忽略文件、成功清理模板元数据和覆盖率报告和失败回滚，不执行当前仓库更名或真实代码生成。
+
 ## 2. 单元测试
 
 Go 单元测试位于对应包内，以 `_test.go` 结尾。常见覆盖范围：
@@ -33,6 +35,10 @@ Go 单元测试位于对应包内，以 `_test.go` 结尾。常见覆盖范围�
 make common-test
 make user-service-test
 ```
+
+覆盖率报告写入 `coverage/`，该目录不纳入 Git，更名成功后会清除模板携带的报告；`make coverage` 会重新生成。
+
+无 Git 的新项目仍可执行验证；Git 差异检查会明确跳过，初始化新 Git 仓库后恢复。无 GitHub workflow 时跳过 Action 版本检查。验证入口回归测试：`python3 scripts/test-delivery-scripts.py`。
 
 ### 覆盖率门禁
 

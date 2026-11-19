@@ -1,9 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly repo_root="$(git rev-parse --show-toplevel)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly repo_root
 readonly workflow_dir="${repo_root}/.github/workflows"
 readonly sha_ref_regex='^[0-9a-f]{40}$'
+
+# 派生项目可以移除 GitHub 配置，此时没有需要校验的 Action。
+if [[ ! -d "${workflow_dir}" ]]; then
+  printf 'github-actions-pins-check: skipped (no workflows directory)\n'
+  exit 0
+fi
+
+# 先收集文件，让扫描失败直接中止，避免被进程替换掩盖为成功。
+workflow_files="$(mktemp)"
+trap 'rm -f "${workflow_files}"' EXIT
+find "${workflow_dir}" -type f \( -name '*.yml' -o -name '*.yaml' \) -print0 > "${workflow_files}"
 
 failed=0
 
@@ -39,6 +51,6 @@ while IFS= read -r -d '' workflow; do
       failed=1
     fi
   done < "${workflow}"
-done < <(find "${workflow_dir}" -type f \( -name '*.yml' -o -name '*.yaml' \) -print0)
+done < "${workflow_files}"
 
 exit "${failed}"

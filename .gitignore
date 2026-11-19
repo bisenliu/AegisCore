@@ -34,6 +34,7 @@ Thumbs.db
 logs/
 
 # Coverage files
+/coverage/
 *.out
 
 # pb files
