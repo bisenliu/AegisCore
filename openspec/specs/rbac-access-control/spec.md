@@ -177,7 +177,7 @@
 - **AND** 返回的 revision MUST 大于或等于目标 policy revision，规则 MUST 与该 revision 所属数据库快照绑定；loader MUST NOT 为旧规则附加较新的 revision
 - **AND** 用户身份解析 MUST 排除已软删除用户，loader MUST NOT 使用权限 active predicate，独立 `casbin_rules` 表 MUST NOT 成为业务权威来源
 - **WHEN** 当前快照可见 policy revision 低于目标 policy revision
-- **THEN** loader MUST 在 context 期限内结束旧快照并使用新快照重试，MUST NOT 返回低于目标的 policy、在旧快照内无限等待或将通知 revision 直接作为快照 revision
+- **THEN** loader MUST 在有界重试次数（最多 5 次）与退避时间内结束旧快照并使用新快照重试，超过限制后 MUST 返回失败错误退出当前加载，MUST NOT 无界死循环轮询或将通知 revision 直接作为快照 revision
 - **WHEN** target policy revision 为 0 且数据库尚无 policy revision 记录
 - **THEN** loader MUST 以 revision 0 加载当前基线投影，并保持超级管理员 wildcard policy 语义
 - **WHEN** 只有用户角色绑定发生变化且未改变角色状态、角色权限绑定或 permissions 投影

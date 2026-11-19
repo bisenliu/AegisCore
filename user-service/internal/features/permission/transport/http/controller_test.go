@@ -21,8 +21,10 @@ import (
 )
 
 const (
+	// permissionHTTPTestPermissionID 是权限 HTTP 接口测试中使用的权限 UUID。
 	permissionHTTPTestPermissionID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
-	permissionHTTPTestUserID       = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d50"
+	// permissionHTTPTestUserID 是权限 HTTP 接口测试中使用的用户 UUID。
+	permissionHTTPTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d50"
 )
 
 type permissionHTTPTestEnvelope struct {

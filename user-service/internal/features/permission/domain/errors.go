@@ -6,8 +6,10 @@ import (
 )
 
 const (
+	// reasonPermissionNotFound 是权限在系统权限目录中未找到的错误原因标识。
 	reasonPermissionNotFound contracterrors.Reason = "permission_not_found"
-	reasonPermissionInvalid  contracterrors.Reason = "permission_invalid"
+	// reasonPermissionInvalid 是权限标识符或参数不合法的错误原因标识。
+	reasonPermissionInvalid contracterrors.Reason = "permission_invalid"
 )
 
 var (

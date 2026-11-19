@@ -11,19 +11,33 @@ import (
 )
 
 const (
-	authOperationsMetricName                 = "aegiscore_user_service_auth_operations_total"
-	authTokenVersionMismatchMetricName       = "aegiscore_user_service_auth_token_version_mismatches_total" // #nosec G101 -- 指标名称，不包含真实凭据。
-	authSessionPurgeSubmitMetricName         = "aegiscore_user_service_auth_session_purge_submit_failures_total"
-	authPasswordChangeConsumeMetricName      = "aegiscore_user_service_auth_password_change_session_consume_failures_total"         // #nosec G101 -- 指标名称，不包含真实凭据。
-	authPasswordChangeReuseMetricName        = "aegiscore_user_service_auth_password_change_session_reuse_rejections_total"         // #nosec G101 -- 指标名称，不包含真实凭据。
-	authPasswordChangeRevocationMetricName   = "aegiscore_user_service_auth_password_change_revocation_projection_failures_total"   // #nosec G101 -- 指标名称，不包含真实凭据。
+	// authOperationsMetricName 是认证核心操作（登录、改密、会话刷新等）结果计数指标名。
+	authOperationsMetricName = "aegiscore_user_service_auth_operations_total"
+	// authTokenVersionMismatchMetricName 是令牌版本号比对不一致计数指标名。
+	authTokenVersionMismatchMetricName = "aegiscore_user_service_auth_token_version_mismatches_total" // #nosec G101 -- 指标名称，不包含真实凭据。
+	// authSessionPurgeSubmitMetricName 是后台会话清理任务提交失败计数指标名。
+	authSessionPurgeSubmitMetricName = "aegiscore_user_service_auth_session_purge_submit_failures_total"
+	// authPasswordChangeConsumeMetricName 是强制改密一次性会话核销失败计数指标名。
+	authPasswordChangeConsumeMetricName = "aegiscore_user_service_auth_password_change_session_consume_failures_total" // #nosec G101 -- 指标名称，不包含真实凭据。
+	// authPasswordChangeReuseMetricName 是重复使用已被核销的改密会话被拦截计数指标名。
+	authPasswordChangeReuseMetricName = "aegiscore_user_service_auth_password_change_session_reuse_rejections_total" // #nosec G101 -- 指标名称，不包含真实凭据。
+	// authPasswordChangeRevocationMetricName 是改密后投影清理会话失败计数指标名。
+	authPasswordChangeRevocationMetricName = "aegiscore_user_service_auth_password_change_revocation_projection_failures_total" // #nosec G101 -- 指标名称，不包含真实凭据。
+	// authPasswordChangeCompensationMetricName 是改密会话补偿清理重试失败计数指标名。
 	authPasswordChangeCompensationMetricName = "aegiscore_user_service_auth_password_change_revocation_compensation_failures_total" // #nosec G101 -- 指标名称，不包含真实凭据。
-	authOperationsMetricHelp                 = "Total number of auth operation results by fixed operation, result, and reason."
-	authTokenVersionMismatchMetricHelp       = "Total number of auth token version mismatches by fixed token source."
-	authSessionPurgeSubmitMetricHelp         = "Total number of auth session purge task submission failures."
-	authPasswordChangeConsumeMetricHelp      = "Total number of password-change one-time session consume failures by fixed reason."
-	authPasswordChangeReuseMetricHelp        = "Total number of password-change one-time session reuse rejections."
-	authPasswordChangeRevocationMetricHelp   = "Total number of password-change revocation projection failures by fixed step."
+	// authOperationsMetricHelp 是认证核心操作指标说明。
+	authOperationsMetricHelp = "Total number of auth operation results by fixed operation, result, and reason."
+	// authTokenVersionMismatchMetricHelp 是令牌版本不匹配指标说明。
+	authTokenVersionMismatchMetricHelp = "Total number of auth token version mismatches by fixed token source."
+	// authSessionPurgeSubmitMetricHelp 是清理任务提交失败指标说明。
+	authSessionPurgeSubmitMetricHelp = "Total number of auth session purge task submission failures."
+	// authPasswordChangeConsumeMetricHelp 是改密会话核销失败指标说明。
+	authPasswordChangeConsumeMetricHelp = "Total number of password-change one-time session consume failures by fixed reason."
+	// authPasswordChangeReuseMetricHelp 是改密会话重放拦截指标说明。
+	authPasswordChangeReuseMetricHelp = "Total number of password-change one-time session reuse rejections."
+	// authPasswordChangeRevocationMetricHelp 是改密撤销投影失败指标说明。
+	authPasswordChangeRevocationMetricHelp = "Total number of password-change revocation projection failures by fixed step."
+	// authPasswordChangeCompensationMetricHelp 是改密补偿失败指标说明。
 	authPasswordChangeCompensationMetricHelp = "Total number of password-change revocation compensation failures by fixed reason."
 )
 

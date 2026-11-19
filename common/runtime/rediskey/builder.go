@@ -9,6 +9,21 @@ import (
 const (
 	// Separator 是 Redis key 分段的统一分隔符。
 	Separator = ":"
+
+	// separatorByte 是分隔符的单字节表示，用于逐字节高效扫描。
+	separatorByte = ':'
+	// hashTagOpen 是 Redis Cluster 分布式槽位分片 HashTag 的左边界花括号。
+	hashTagOpen = "{"
+	// hashTagClose 是 Redis Cluster 分布式槽位分片 HashTag 的右边界花括号。
+	hashTagClose = "}"
+	// hashTagOpenByte 是 HashTag 左边界花括号的单字节表示。
+	hashTagOpenByte = '{'
+	// hashTagCloseByte 是 HashTag 右边界花括号的单字节表示。
+	hashTagCloseByte = '}'
+	// expectedHashTagBraceCount 是合法 HashTag 片段中左/右花括号各自必须且仅能出现的频次。
+	expectedHashTagBraceCount = 1
+	// emptyHashTagLen 是空 HashTag 字符串（"{}"）的标准字节长度，用于快速识别空分片标识。
+	emptyHashTagLen = 2
 )
 
 var (
@@ -245,7 +260,7 @@ func (b Builder) MustPrefix(parts ...string) string {
 //   - 无需使用：全局独立、单 key 读写的普通缓存或分布式锁（由 Redis 自动负载均衡打散至不同节点即可）。
 //   - 必须使用：需要在同一 Lua 脚本、事务或批量命令中同时操作的多个关联 key（通常包裹业务主体 ID，如 userID、orderID）。
 func HashTag(value string) string {
-	return "{" + value + "}"
+	return hashTagOpen + value + hashTagClose
 }
 
 // validateSegment 检查键名片段是否为空或夹带冒号，避免破坏缓存键的层级命名规则。
@@ -257,11 +272,11 @@ func validateSegment(segment string) error {
 	var openBrace, closeBrace, colonCount int
 	for i := 0; i < len(segment); i++ {
 		switch segment[i] {
-		case '{':
+		case hashTagOpenByte:
 			openBrace++
-		case '}':
+		case hashTagCloseByte:
 			closeBrace++
-		case ':':
+		case separatorByte:
 			colonCount++
 		}
 	}
@@ -273,10 +288,10 @@ func validateSegment(segment string) error {
 		return nil
 	}
 
-	if openBrace != 1 || closeBrace != 1 || segment[0] != '{' || segment[len(segment)-1] != '}' {
+	if openBrace != expectedHashTagBraceCount || closeBrace != expectedHashTagBraceCount || segment[0] != hashTagOpenByte || segment[len(segment)-1] != hashTagCloseByte {
 		return fmt.Errorf("%w: malformed hash tag", ErrInvalidSegment)
 	}
-	if len(segment) == 2 {
+	if len(segment) == emptyHashTagLen {
 		return fmt.Errorf("%w: empty hash tag", ErrInvalidSegment)
 	}
 	return nil

@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// minimumTerminationPlatformMargin 是停机总预算比对测试中要求的最小平台优雅关闭时间余量。
 const minimumTerminationPlatformMargin = 30 * time.Second
 
 type terminationBudgets struct {

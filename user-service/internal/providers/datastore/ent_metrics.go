@@ -14,14 +14,21 @@ import (
 )
 
 const (
+	// entQueryLatencyMetricName 是 Ent ORM 查询执行耗时 Histogram 指标名（单位：秒）。
 	entQueryLatencyMetricName = "aegiscore_user_service_ent_query_duration_seconds"
-	entQueryErrorMetricName   = "aegiscore_user_service_ent_query_errors_total"
+	// entQueryErrorMetricName 是 Ent ORM 查询发生错误累计 Counter 指标名。
+	entQueryErrorMetricName = "aegiscore_user_service_ent_query_errors_total"
+	// entQueryLatencyMetricHelp 是 Ent 查询耗时指标说明。
 	entQueryLatencyMetricHelp = "Ent query latency in seconds by fixed entity, query, and result."
-	entQueryErrorMetricHelp   = "Total number of Ent query errors by fixed entity and query."
+	// entQueryErrorMetricHelp 是 Ent 查询错误指标说明。
+	entQueryErrorMetricHelp = "Total number of Ent query errors by fixed entity and query."
 
+	// entQueryOperation 是 ORM 查询操作标准标签。
 	entQueryOperation = "select"
-	entResultSuccess  = "success"
-	entResultError    = "error"
+	// entResultSuccess 是 ORM 查询成功标签。
+	entResultSuccess = "success"
+	// entResultError 是 ORM 查询失败标签。
+	entResultError = "error"
 )
 
 // entMetricsPlugin 在 Ent client 上安装 Prometheus query metrics interceptor。

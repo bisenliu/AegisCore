@@ -14,8 +14,10 @@ import (
 )
 
 const (
+	// openAPIJSONPath 是提供 OpenAPI 规范 JSON 文件的 HTTP 访问路径。
 	openAPIJSONPath = "/openapi.json"
-	openAPIUIPath   = "/openapi/index.html"
+	// openAPIUIPath 是 Swagger UI 交互式文档首页的 HTTP 访问路径。
+	openAPIUIPath = "/openapi/index.html"
 )
 
 // RegisterOpenAPI 按条件挂载 OpenAPI UI、JSON 文档和文档重定向路由。

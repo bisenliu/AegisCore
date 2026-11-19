@@ -10,20 +10,32 @@ import (
 )
 
 const (
-	localcacheRequestsMetricName          = "aegiscore_localcache_requests_total"
-	localcacheLoadsMetricName             = "aegiscore_localcache_loads_total"
+	// localcacheRequestsMetricName 是本地缓存请求总数指标名。
+	localcacheRequestsMetricName = "aegiscore_localcache_requests_total"
+	// localcacheLoadsMetricName 是本地缓存回源加载总数指标名。
+	localcacheLoadsMetricName = "aegiscore_localcache_loads_total"
+	// localcacheCapacityEvictionsMetricName 是本地缓存因容量达到上限被淘汰条目总数指标名。
 	localcacheCapacityEvictionsMetricName = "aegiscore_localcache_capacity_evictions_total"
-	localcacheCapacityMetricName          = "aegiscore_localcache_capacity"
+	// localcacheCapacityMetricName 是本地缓存配置的最大容量指标名。
+	localcacheCapacityMetricName = "aegiscore_localcache_capacity"
 
-	localcacheRequestsMetricHelp          = "Total number of localcache business requests by fixed cache and result."
-	localcacheLoadsMetricHelp             = "Total number of localcache loader executions by fixed cache and result."
+	// localcacheRequestsMetricHelp 是本地缓存请求总数指标说明。
+	localcacheRequestsMetricHelp = "Total number of localcache business requests by fixed cache and result."
+	// localcacheLoadsMetricHelp 是本地缓存回源总数指标说明。
+	localcacheLoadsMetricHelp = "Total number of localcache loader executions by fixed cache and result."
+	// localcacheCapacityEvictionsMetricHelp 是本地缓存淘汰条目指标说明。
 	localcacheCapacityEvictionsMetricHelp = "Total number of localcache capacity evictions by fixed cache."
-	localcacheCapacityMetricHelp          = "Configured localcache maximum item count by fixed cache."
+	// localcacheCapacityMetricHelp 是本地缓存容量指标说明。
+	localcacheCapacityMetricHelp = "Configured localcache maximum item count by fixed cache."
 
-	localcacheResultHit     = "hit"
-	localcacheResultMiss    = "miss"
+	// localcacheResultHit 表示本地缓存命中结果标签。
+	localcacheResultHit = "hit"
+	// localcacheResultMiss 表示本地缓存未命中结果标签。
+	localcacheResultMiss = "miss"
+	// localcacheResultSuccess 表示本地缓存回源加载成功结果标签。
 	localcacheResultSuccess = "success"
-	localcacheResultError   = "error"
+	// localcacheResultError 表示本地缓存回源加载失败结果标签。
+	localcacheResultError = "error"
 )
 
 // LocalcacheCollectorOptions 配置本地缓存指标 collector。

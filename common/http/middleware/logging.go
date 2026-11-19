@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -10,6 +11,7 @@ import (
 	"github.com/aegiscore/common/security/auth"
 )
 
+// anonymousUserID 是未通过身份认证的请求在日志中记录的默认用户标识。
 const anonymousUserID = "anonymous"
 
 // RequestLoggerOptions 配置 HTTP access log 的请求过滤规则。
@@ -40,9 +42,9 @@ func RequestLoggerWithOptions(log *zap.Logger, options RequestLoggerOptions) gin
 
 		switch {
 		// 5xx 表示服务端失败，4xx 通常表示调用方输入或授权状态问题。
-		case status >= 500:
+		case status >= http.StatusInternalServerError:
 			reqLog.Error("http request completed", fields...)
-		case status >= 400:
+		case status >= http.StatusBadRequest:
 			reqLog.Warn("http request completed", fields...)
 		default:
 			reqLog.Info("http request completed", fields...)

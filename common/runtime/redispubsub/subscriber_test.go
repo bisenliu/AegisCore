@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// testChannel 是 Pub/Sub 订阅者测试使用的模拟 Redis 广播频道。
 const testChannel = "runtime:test:notifications"
 
 type inertClient struct {

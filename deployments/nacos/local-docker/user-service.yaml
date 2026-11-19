@@ -28,6 +28,14 @@ server:
 http:
   # request_body_max_bytes 限制入站请求体可读取字节数；当前 JSON API 默认上限为 64 KiB。
   request_body_max_bytes: 65536
+  cors:
+    # enabled 控制是否在业务 HTTP 管道中挂载 CORS 中间件；若由网关统管跨域，生产环境应设为 false。
+    enabled: true
+    allowed_origins:
+      - "http://localhost:3000"
+      - "http://127.0.0.1:3000"
+      - "http://localhost:8080"
+    allow_credentials: true
 
 auth:
   jwt:

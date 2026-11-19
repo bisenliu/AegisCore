@@ -6,15 +6,24 @@ import (
 )
 
 const (
-	reasonRoleNotFound                contracterrors.Reason = "role_not_found"
-	reasonRoleAlreadyExists           contracterrors.Reason = "role_already_exists"
-	reasonRoleInvalid                 contracterrors.Reason = "role_invalid"
-	reasonSystemRoleProtected         contracterrors.Reason = "system_role_protected"
-	reasonRoleInactive                contracterrors.Reason = "role_inactive"
-	reasonUserRoleAlreadyExists       contracterrors.Reason = "user_role_already_exists"
-	reasonUserRoleNotFound            contracterrors.Reason = "user_role_not_found"
+	// reasonRoleNotFound 是角色在系统中未找到的错误原因标识。
+	reasonRoleNotFound contracterrors.Reason = "role_not_found"
+	// reasonRoleAlreadyExists 是角色标识冲突已存在的错误原因标识。
+	reasonRoleAlreadyExists contracterrors.Reason = "role_already_exists"
+	// reasonRoleInvalid 是角色输入参数不合法的错误原因标识。
+	reasonRoleInvalid contracterrors.Reason = "role_invalid"
+	// reasonSystemRoleProtected 是内置系统角色受保护禁止修改或删除的错误原因标识。
+	reasonSystemRoleProtected contracterrors.Reason = "system_role_protected"
+	// reasonRoleInactive 是角色已被停用不可分配的错误原因标识。
+	reasonRoleInactive contracterrors.Reason = "role_inactive"
+	// reasonUserRoleAlreadyExists 是用户已绑定该角色不可重复绑定的错误原因标识。
+	reasonUserRoleAlreadyExists contracterrors.Reason = "user_role_already_exists"
+	// reasonUserRoleNotFound 是用户未绑定该角色的错误原因标识。
+	reasonUserRoleNotFound contracterrors.Reason = "user_role_not_found"
+	// reasonRolePermissionAlreadyExists 是角色已具有该权限的错误原因标识。
 	reasonRolePermissionAlreadyExists contracterrors.Reason = "role_permission_already_exists"
-	reasonRolePermissionNotFound      contracterrors.Reason = "role_permission_not_found"
+	// reasonRolePermissionNotFound 是角色未具有该权限的错误原因标识。
+	reasonRolePermissionNotFound contracterrors.Reason = "role_permission_not_found"
 )
 
 var (

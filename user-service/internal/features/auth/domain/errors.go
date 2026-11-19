@@ -8,15 +8,24 @@ import (
 )
 
 const (
-	reasonInvalidCredentials            contracterrors.Reason = "invalid_credentials" // #nosec G101 -- 错误 reason，不包含真实凭据。
-	reasonUserStatusRejected            contracterrors.Reason = "user_status_rejected"
-	reasonMissingSession                contracterrors.Reason = "missing_session"
-	reasonAuthTokenInvalid              contracterrors.Reason = "auth_token_invalid" // #nosec G101 -- 错误 reason，不包含真实凭据。
-	reasonAuthSessionNotFound           contracterrors.Reason = "auth_session_not_found"
-	reasonAuthSessionMismatch           contracterrors.Reason = "auth_session_mismatch"
+	// reasonInvalidCredentials 是账号或密码错误等凭据不匹配的错误原因标识。
+	reasonInvalidCredentials contracterrors.Reason = "invalid_credentials" // #nosec G101 -- 错误 reason，不包含真实凭据。
+	// reasonUserStatusRejected 是用户账号状态不可用（如已被禁用或待激活）的错误原因标识。
+	reasonUserStatusRejected contracterrors.Reason = "user_status_rejected"
+	// reasonMissingSession 是上下文缺少必要用户会话凭证的错误原因标识。
+	reasonMissingSession contracterrors.Reason = "missing_session"
+	// reasonAuthTokenInvalid 是 Token 解析校验失败（签名错误、格式不合法或过期）的错误原因标识。
+	reasonAuthTokenInvalid contracterrors.Reason = "auth_token_invalid" // #nosec G101 -- 错误 reason，不包含真实凭据。
+	// reasonAuthSessionNotFound 是根据会话 ID 在存储中未找到活跃会话的错误原因标识。
+	reasonAuthSessionNotFound contracterrors.Reason = "auth_session_not_found"
+	// reasonAuthSessionMismatch 是请求提供的凭据与服务端存储会话上下文不一致的错误原因标识。
+	reasonAuthSessionMismatch contracterrors.Reason = "auth_session_mismatch"
+	// reasonPasswordChangeSessionNotFound 是强制改密一次性会话不存在或已过期的错误原因标识。
 	reasonPasswordChangeSessionNotFound contracterrors.Reason = "password_change_session_not_found"
+	// reasonPasswordChangeSessionMismatch 是强制改密会话与当前用户身份不匹配的错误原因标识。
 	reasonPasswordChangeSessionMismatch contracterrors.Reason = "password_change_session_mismatch"
-	reasonSessionRevocationIncomplete   contracterrors.Reason = "session_revocation_incomplete"
+	// reasonSessionRevocationIncomplete 是改密或退出时撤销会话未能完全成功的错误原因标识。
+	reasonSessionRevocationIncomplete contracterrors.Reason = "session_revocation_incomplete"
 )
 
 // ErrInvalidCredentials 表示登录凭据不能认证用户。

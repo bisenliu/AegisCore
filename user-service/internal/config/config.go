@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/http"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 )
 
 const (
+	// minProductionJWTBytes 是生产环境中 JWT 对称密钥的最小合法字节长度（256 位）。
 	minProductionJWTBytes = 32
 	// DefaultHTTPRequestBodyMaxBytes 是 user-service JSON 请求体的默认字节上限。
 	DefaultHTTPRequestBodyMaxBytes int64 = 64 * 1024
@@ -33,6 +35,19 @@ const (
 	AuthenticatedRateLimitShards = 128
 	// RateLimitCleanupInterval 是限流 key janitor 的清理周期。
 	RateLimitCleanupInterval = 30 * time.Second
+	// RateLimitSlotsPerShard 是限流器每个分片默认分配的容量槽位数。
+	RateLimitSlotsPerShard = 1024
+	// DefaultAPIRateLimitWindow 是默认 API 限流统计的时间窗口时长。
+	DefaultAPIRateLimitWindow = 10 * time.Minute
+
+	// DefaultPolicyWatcherCheckInterval 是策略监听器主动轮询数据库版本的默认周期。
+	DefaultPolicyWatcherCheckInterval = 15 * time.Second
+	// DefaultPolicyWatcherMaxStaleness 是策略监听器判定校准失效的默认最大陈旧时长。
+	DefaultPolicyWatcherMaxStaleness = 45 * time.Second
+	// DefaultUserRoleCacheTTL 是用户角色映射本地缓存的默认过期时长。
+	DefaultUserRoleCacheTTL = 5 * time.Second
+	// DefaultTokenVersionCacheTTL 是令牌版本号本地缓存的默认过期时长。
+	DefaultTokenVersionCacheTTL = time.Second
 )
 
 var sensitiveConfigPaths = []string{
@@ -56,7 +71,76 @@ type Config struct {
 
 // HTTPConfig 包含 user-service 私有 HTTP 暴露策略。
 type HTTPConfig struct {
-	RequestBodyMaxBytes int64 `mapstructure:"request_body_max_bytes"`
+	RequestBodyMaxBytes int64      `mapstructure:"request_body_max_bytes"`
+	CORS                CORSConfig `mapstructure:"cors"`
+}
+
+// CORSConfig 定义 HTTP 跨域访问控制策略配置。
+type CORSConfig struct {
+	Enabled          bool     `mapstructure:"enabled"`
+	AllowedOrigins   []string `mapstructure:"allowed_origins"`
+	AllowedMethods   []string `mapstructure:"allowed_methods"`
+	AllowedHeaders   []string `mapstructure:"allowed_headers"`
+	ExposedHeaders   []string `mapstructure:"exposed_headers"`
+	AllowCredentials bool     `mapstructure:"allow_credentials"`
+	MaxAgeSeconds    int      `mapstructure:"max_age_seconds"`
+}
+
+// DefaultCORSConfig 返回安全收敛的默认跨域配置。
+func DefaultCORSConfig() CORSConfig {
+	return CORSConfig{
+		Enabled: false,
+		AllowedMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodPatch,
+			http.MethodDelete,
+			http.MethodOptions,
+		},
+		AllowedHeaders: []string{
+			"Authorization",
+			"Content-Type",
+		},
+		MaxAgeSeconds: 43200,
+	}
+}
+
+// Validate 校验跨域策略配置。若启用则要求来源不可为空，且禁止在凭据模式下全开通配符。
+func (c CORSConfig) Validate(path string) []error {
+	if !c.Enabled {
+		return nil
+	}
+	var errs []error
+	if len(c.AllowedOrigins) == 0 {
+		errs = append(errs, commonconfig.FieldError(path+".allowed_origins", "must not be empty when cors is enabled"))
+	}
+	for _, origin := range c.AllowedOrigins {
+		if origin == "*" && c.AllowCredentials {
+			errs = append(errs, commonconfig.FieldError(path+".allow_credentials", "cannot be true when allowed_origins contains '*'"))
+		}
+	}
+	return errs
+}
+
+// ToOptions 将配置转换为中间件所需的运行时选项。
+func (c CORSConfig) ToOptions() commonmw.CORSOptions {
+	methods := c.AllowedMethods
+	if len(methods) == 0 {
+		methods = []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions}
+	}
+	headers := c.AllowedHeaders
+	if len(headers) == 0 {
+		headers = []string{"Authorization", "Content-Type"}
+	}
+	return commonmw.CORSOptions{
+		AllowedOrigins:   c.AllowedOrigins,
+		AllowedMethods:   methods,
+		AllowedHeaders:   headers,
+		ExposedHeaders:   c.ExposedHeaders,
+		AllowCredentials: c.AllowCredentials,
+		MaxAgeSeconds:    c.MaxAgeSeconds,
+	}
 }
 
 // ResourcesConfig 包含 user-service 按名称声明的外部运行时资源。
@@ -91,8 +175,8 @@ type PolicyWatcherConfig struct {
 // DefaultPolicyWatcherConfig 返回 RBAC policy watcher 的外部配置默认值。
 func DefaultPolicyWatcherConfig() PolicyWatcherConfig {
 	return PolicyWatcherConfig{
-		CheckInterval: 15 * time.Second,
-		MaxStaleness:  45 * time.Second,
+		CheckInterval: DefaultPolicyWatcherCheckInterval,
+		MaxStaleness:  DefaultPolicyWatcherMaxStaleness,
 	}
 }
 
@@ -293,17 +377,20 @@ func DefaultConfig() Config {
 		},
 		Auth: AuthConfig{
 			// 默认接受 logout-all 和改密在正常 Redis 更新成功后最多 1 秒的跨副本撤销收敛窗口。
-			TokenVersionCache: DefaultFeatureCacheConfig(time.Second),
+			TokenVersionCache: DefaultFeatureCacheConfig(DefaultTokenVersionCacheTTL),
 		},
 		RBAC: RBACConfig{
-			UserRoleCache: DefaultFeatureCacheConfig(5 * time.Second),
+			UserRoleCache: DefaultFeatureCacheConfig(DefaultUserRoleCacheTTL),
 			PolicyWatcher: DefaultPolicyWatcherConfig(),
 		},
 		APIRateLimit: APIRateLimitConfig{
-			Anonymous:     DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, AnonymousRateLimitShards*1024),
-			Authenticated: DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, AuthenticatedRateLimitShards*1024),
+			Anonymous:     DefaultRateLimitPolicyConfig(1, 5, DefaultAPIRateLimitWindow, AnonymousRateLimitShards*RateLimitSlotsPerShard),
+			Authenticated: DefaultRateLimitPolicyConfig(5, 20, DefaultAPIRateLimitWindow, AuthenticatedRateLimitShards*RateLimitSlotsPerShard),
 		},
-		HTTP: HTTPConfig{RequestBodyMaxBytes: DefaultHTTPRequestBodyMaxBytes},
+		HTTP: HTTPConfig{
+			RequestBodyMaxBytes: DefaultHTTPRequestBodyMaxBytes,
+			CORS:                DefaultCORSConfig(),
+		},
 		Ent: EntConfig{
 			Plugins: EntPluginsConfig{
 				Tracing: EntTracingPluginConfig{Enabled: true},
@@ -369,6 +456,7 @@ func (c Config) Validate() error {
 	if c.HTTP.RequestBodyMaxBytes <= 0 {
 		errs = append(errs, commonconfig.FieldError("http.request_body_max_bytes", "must be > 0"))
 	}
+	errs = append(errs, c.HTTP.CORS.Validate("http.cors")...)
 	if len(errs) == 0 {
 		return nil
 	}

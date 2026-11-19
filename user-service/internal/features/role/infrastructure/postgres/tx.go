@@ -18,7 +18,10 @@ import (
 	entrbacuserrolerevisioncounter "github.com/aegiscore/user-service/internal/persistence/ent/rbacuserrolerevisioncounter"
 )
 
+// policyRevisionCounterID 是权限策略版本自增计数器在数据库中的固定记录主键 ID。
 const policyRevisionCounterID int64 = 1
+
+// userRoleRevisionCounterID 是用户角色绑定版本自增计数器在数据库中的固定记录主键 ID。
 const userRoleRevisionCounterID int64 = 1
 
 type entTxStarter struct {

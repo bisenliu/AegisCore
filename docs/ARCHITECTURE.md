@@ -68,7 +68,7 @@ Scheduler 对外只暴露固定 key 的注册/删除和生命周期操作，以 
 3. 按配置注册 metrics。
 4. 挂载 `/api/v1` 业务路由。
 
-pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observability.pprof` 配置，并只通过 loopback、`kubectl port-forward` 或等价受控通道访问。Gin 默认不信任代理；服务只通过 `server.http.trusted_proxies` 信任显式配置的上游代理 IP/CIDR，并使用 Gin trusted proxy 机制解析真实客户端地址。Ingress、gateway 或 service mesh 必须在入口边界覆盖或重建 forwarded headers，不能透传客户端提供的未清洗值。
+pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observability.pprof` 配置，并只通过 loopback、`kubectl port-forward` 或等价受控通道访问。Gin 默认不信任代理；服务只通过 `server.http.trusted_proxies` 信任显式配置的上游代理 IP/CIDR，并使用 Gin trusted proxy 机制解析真实客户端地址。Ingress、gateway 或 service mesh 必须在入口边界覆盖或重建 forwarded headers，不能透传客户端提供的未清洗值。跨域访问由 `http.cors` 配置结构显式控制，支持按源、方法、头部和凭证白名单挂载 CORS 中间件；未启用时（生产推荐由 API 网关统管）不挂载中间件，避免不透明隐式放行。
 
 业务路由分层：
 
@@ -118,6 +118,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 3. session store 写入 Redis 会话状态。
 4. user-service 私有 token issuer 签发 access token 和 refresh token。
 5. 响应通过共享 response helper 返回统一 envelope。
+6. 强制改密场景下，数据库事务原子更新密码、重置 `must_change_password` 标记并自增 `token_version`；旧会话清理为尽力而为（best-effort）异步降级保障，若 Redis 短暂不可用，记录 WARN 日志而不阻断主事务，旧 Access Token 立即通过自增的 `token_version` 被鉴权层阻断，避免用户重试死锁。
 
 ### 6.3 受保护 API 授权
 
@@ -127,7 +128,7 @@ pprof 不挂载到业务 router。临时诊断时修改 Nacos 中的 `observabil
 4. permission authorizer 使用 Casbin 或同步后的 policy 判断访问权限。
 5. 通过后进入目标 controller。
 
-在线 RBAC policy 写入提交后，Redis Pub/Sub 只向各副本发送快速唤醒 hint，PostgreSQL latest policy revision 是 Casbin 静态授权规则恢复与收敛的唯一权威事实。用户角色绑定写入使用独立 user-role revision，只驱动用户角色缓存失效，不推进 Casbin engine applied revision，也不触发 `role_permissions` 全量加载。`common/runtime/redispubsub` 独立监督可重建的 Pub/Sub subscription，permission Redis watcher 只消费其消息并在自己的根生命周期中执行启动立即校准和后续周期数据库 policy revision 校准；通用 subscriber 的确认、Receive 或协议失败只进入有界退避重连，不停止 watcher 的权威校准。消息处理与周期校准在 watcher 根循环中串行执行，并合并同批待处理通知，防止 Casbin projection 并发倒退或被重复消息放大全量重建。readiness 依据最后一次完整权威校准的 staleness 判定，当前订阅正在重连但校准仍新鲜时不制造 watcher 粘滞失败。
+在线 RBAC policy 写入提交后，Redis Pub/Sub 只向各副本发送快速唤醒 hint，PostgreSQL latest policy revision 是 Casbin 静态授权规则恢复与收敛的唯一权威事实。在线写操作的 Pub/Sub 广播采用尽力而为（best-effort）语义，广播失败记录 WARN 日志并由权威数据库 revision 周期对账收敛，不制造系统级 ERROR 虚假告警。用户角色绑定写入使用独立 user-role revision，只驱动用户角色缓存失效，不推进 Casbin engine applied revision，也不触发 `role_permissions` 全量加载。`common/runtime/redispubsub` 独立监督可重建的 Pub/Sub subscription，permission Redis watcher 只消费其消息并在自己的根生命周期中执行启动立即校准和后续周期数据库 policy revision 校准；通用 subscriber 的确认、Receive 或协议失败只进入有界退避重连，不停止 watcher 的权威校准。消息处理与周期校准在 watcher 根循环中串行执行，并合并同批待处理通知，防止 Casbin projection 并发倒退或被重复消息放大全量重建。Casbin `LoadPoliciesAtLeast` 在等待超前 revision 时具备最大重试上限（默认 5 次）与指数退避，超时后明确返回错误交由定时权威校准兜底，消除长生命周期单飞重载中的无休止轮询。readiness 依据最后一次完整权威校准的 staleness 判定，当前订阅正在重连但校准仍新鲜时不制造 watcher 粘滞失败。
 
 ### 6.4 RBAC seed 和超级管理员 bootstrap
 

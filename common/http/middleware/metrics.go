@@ -13,13 +13,20 @@ import (
 )
 
 const (
+	// unknownHTTPMetricsMethod 是无法识别请求方法时记录在指标中的占位方法名。
 	unknownHTTPMetricsMethod = "UNKNOWN"
 
-	httpServerRequestsMetricName   = "http_server_requests_total"
-	httpServerDurationMetricName   = "http_server_request_duration_seconds"
+	// httpServerRequestsMetricName 是 HTTP 请求总数 Counter 指标名。
+	httpServerRequestsMetricName = "http_server_requests_total"
+	// httpServerDurationMetricName 是 HTTP 请求耗时 Histogram 指标名（单位：秒）。
+	httpServerDurationMetricName = "http_server_request_duration_seconds"
+	// httpServerInFlightRequestsName 是当前进行中 HTTP 请求数 Gauge 指标名。
 	httpServerInFlightRequestsName = "http_server_in_flight_requests"
-	httpServerRequestsMetricHelp   = "Total number of completed HTTP server requests."
-	httpServerDurationMetricHelp   = "Duration of completed HTTP server requests in seconds."
+	// httpServerRequestsMetricHelp 是 HTTP 请求总数指标的帮助说明。
+	httpServerRequestsMetricHelp = "Total number of completed HTTP server requests."
+	// httpServerDurationMetricHelp 是 HTTP 请求耗时指标的帮助说明。
+	httpServerDurationMetricHelp = "Duration of completed HTTP server requests in seconds."
+	// httpServerInFlightRequestsHelp 是进行中请求数指标的帮助说明。
 	httpServerInFlightRequestsHelp = "Current number of in-flight HTTP server requests."
 )
 

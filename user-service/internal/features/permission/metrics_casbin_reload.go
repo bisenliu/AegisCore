@@ -8,9 +8,13 @@ import (
 )
 
 const (
-	casbinReloadsMetricName    = "aegiscore_casbin_policy_reloads_total"
+	// casbinReloadsMetricName 是 Casbin 策略重载执行结果累计 Counter 指标名。
+	casbinReloadsMetricName = "aegiscore_casbin_policy_reloads_total"
+	// casbinReloadLastMetricName 是最近一次策略重载是否成功的 Gauge 指标名（1 代表成功，0 代表失败）。
 	casbinReloadLastMetricName = "aegiscore_casbin_policy_reload_last_success"
-	casbinReloadsMetricHelp    = "Total number of Casbin policy reload results by status."
+	// casbinReloadsMetricHelp 是策略重载执行结果指标说明。
+	casbinReloadsMetricHelp = "Total number of Casbin policy reload results by status."
+	// casbinReloadLastMetricHelp 是最近一次重载状态指标说明。
 	casbinReloadLastMetricHelp = "Whether the latest Casbin policy reload succeeded."
 )
 

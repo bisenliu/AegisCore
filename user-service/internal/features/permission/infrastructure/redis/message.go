@@ -13,10 +13,13 @@ import (
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 
+// policyRefreshSchemaVersion 是跨副本策略同步通知消息体的序列化协议版本号。
 const policyRefreshSchemaVersion = 1
 
 const (
-	policyRefreshKindPolicyChanged   = "policy_changed"
+	// policyRefreshKindPolicyChanged 表示角色权限或权限目录发生变更的消息类型。
+	policyRefreshKindPolicyChanged = "policy_changed"
+	// policyRefreshKindUserRoleChanged 表示用户与角色的绑定关系发生变更的消息类型。
 	policyRefreshKindUserRoleChanged = "user_role_changed"
 )
 

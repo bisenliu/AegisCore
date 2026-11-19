@@ -10,6 +10,7 @@ import (
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
+// defaultConfigLoadTimeout 是启动时从 Nacos 配置中心拉取并解析配置的最长等待时间。
 const defaultConfigLoadTimeout = 30 * time.Second
 
 // rootCommandDependencies 包含 CLI 命令树执行各子命令所需的运行时依赖。

@@ -52,7 +52,7 @@ func TestNarrowSettingsDeriveOwnedConfiguration(t *testing.T) {
 	}, NewRBACSettings(cfg))
 	require.Equal(t, EntSettings{Plugins: cfg.Ent.Plugins}, NewEntSettings(cfg))
 	require.Equal(t, RateLimitSettings{APIRateLimit: cfg.APIRateLimit}, NewRateLimitSettings(cfg))
-	require.Equal(t, HTTPSettings{RequestBodyMaxBytes: 12345}, NewHTTPSettings(cfg))
+	require.Equal(t, HTTPSettings{RequestBodyMaxBytes: 12345, CORS: cfg.HTTP.CORS}, NewHTTPSettings(cfg))
 	require.Equal(t, TimezoneSettings{Name: "Asia/Shanghai"}, NewTimezoneSettings(cfg))
 	require.Equal(t, ResourceSettings{Redis: cfg.Resources.Redis, Postgres: cfg.Resources.Postgres}, NewResourceSettings(cfg))
 }
@@ -67,7 +67,7 @@ func TestNarrowSettingsFieldOwnership(t *testing.T) {
 		{name: "rbac", value: RBACSettings{}, fields: []string{"AppName", "UserRoleCache", "PolicyWatcher"}},
 		{name: "ent", value: EntSettings{}, fields: []string{"Plugins"}},
 		{name: "rate limit", value: RateLimitSettings{}, fields: []string{"APIRateLimit"}},
-		{name: "http", value: HTTPSettings{}, fields: []string{"RequestBodyMaxBytes"}},
+		{name: "http", value: HTTPSettings{}, fields: []string{"RequestBodyMaxBytes", "CORS"}},
 		{name: "timezone", value: TimezoneSettings{}, fields: []string{"Name"}},
 		{name: "resources", value: ResourceSettings{}, fields: []string{"Redis", "Postgres"}},
 	}

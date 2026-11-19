@@ -10,6 +10,7 @@ import (
 	"github.com/aegiscore/user-service/internal/persistence/ent"
 )
 
+// rbacUserRolesCacheName 是内存中用户对应已绑定角色列表本地缓存的名称。
 const rbacUserRolesCacheName = "rbac_user_roles"
 
 // UserRoleResolverParams 包含用户角色 resolver 的 Fx 输入。

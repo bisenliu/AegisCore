@@ -24,6 +24,7 @@ import (
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
+// controllerTestUserID 是用户 HTTP 接口单测中使用的模拟用户 UUID。
 const controllerTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
 
 var controllerTestUUID = uuid.MustParse(controllerTestUserID)

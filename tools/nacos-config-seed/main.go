@@ -12,7 +12,9 @@ import (
 )
 
 const (
-	exitOK    = 0
+	// exitOK 表示命令执行成功退出的状态码。
+	exitOK = 0
+	// exitError 表示命令执行遇到错误退出的状态码。
 	exitError = 1
 )
 

@@ -8,10 +8,14 @@ import (
 )
 
 const (
-	attributeServiceName           = "service.name"
+	// attributeServiceName 是 OpenTelemetry 规范中标识微服务名称的标准资源属性键。
+	attributeServiceName = "service.name"
+	// attributeDeploymentEnvironment 是标识部署环境（如 dev/prod）的标准资源属性键。
 	attributeDeploymentEnvironment = "deployment.environment"
-	attributeServiceVersion        = "service.version"
-	attributeServiceInstanceID     = "service.instance.id"
+	// attributeServiceVersion 是标识服务发布版本号的标准资源属性键。
+	attributeServiceVersion = "service.version"
+	// attributeServiceInstanceID 是标识服务运行时 Pod/容器唯一实例 ID 的标准资源属性键。
+	attributeServiceInstanceID = "service.instance.id"
 )
 
 // trimSpace 统一裁剪 tracing identity 和 endpoint 配置中的空白字符。

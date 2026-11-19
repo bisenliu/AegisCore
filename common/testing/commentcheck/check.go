@@ -267,12 +267,15 @@ func containsChinese(value string) bool {
 	return false
 }
 
+// maxGeneratedHeaderBytes 是检测代码文件是否包含自动生成标记时读取的最大头部字节数（4KB）。
+const maxGeneratedHeaderBytes = 4096
+
 // isGenerated 识别带生成标记的文件，这些文件不要求手写中文注释。
 func isGenerated(source []byte) bool {
 	// 生成器标记只认文件头部，避免正文里的普通说明被误判为生成代码。
 	head := source
-	if len(head) > 4096 {
-		head = head[:4096]
+	if len(head) > maxGeneratedHeaderBytes {
+		head = head[:maxGeneratedHeaderBytes]
 	}
 	if !utf8.Valid(head) {
 		return false

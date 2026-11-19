@@ -23,6 +23,7 @@ import (
 	"github.com/aegiscore/user-service/internal/resources"
 )
 
+// rbacCommandTimeout 是执行 RBAC 离线初始化命令的全局超时时间。
 const rbacCommandTimeout = 30 * time.Second
 
 // defaultRBACSeedDependencies 初始化权限写入命令所需的数据库连接和日志记录工具。

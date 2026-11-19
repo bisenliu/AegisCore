@@ -11,7 +11,9 @@ import (
 )
 
 const (
+	// minPasswordBytes 是初始超级管理员密码允许的最小字节长度。
 	minPasswordBytes = 12
+	// maxPasswordBytes 是初始超级管理员密码允许的最大字节长度（符合 bcrypt 限制）。
 	maxPasswordBytes = 72
 )
 

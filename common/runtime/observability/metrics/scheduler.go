@@ -10,20 +10,35 @@ import (
 )
 
 const (
-	schedulerJobsMetricName         = "aegiscore_scheduler_jobs_total"
-	schedulerJobDurationMetricName  = "aegiscore_scheduler_job_duration_seconds"
-	schedulerJobsMetricHelp         = "Total number of scheduler job runtime events by fixed scheduler job, event, status, and reason."
-	schedulerJobDurationMetricHelp  = "Duration of actual scheduler job executions in seconds, excluding concurrency and lock waits."
-	schedulerEventTriggered         = "triggered"
-	schedulerEventStarted           = "started"
-	schedulerEventCompleted         = "completed"
-	schedulerEventFailed            = "failed"
-	schedulerEventSkipped           = "skipped"
-	schedulerEventLockRenewFailed   = "lock_renew_failed"
-	schedulerStatusSuccess          = "success"
-	schedulerStatusFailure          = "failure"
-	schedulerStatusSkipped          = "skipped"
-	schedulerReasonNone             = "none"
+	// schedulerJobsMetricName 是定时任务运行事件总数 Counter 指标名。
+	schedulerJobsMetricName = "aegiscore_scheduler_jobs_total"
+	// schedulerJobDurationMetricName 是定时任务实际执行耗时 Histogram 指标名（单位：秒）。
+	schedulerJobDurationMetricName = "aegiscore_scheduler_job_duration_seconds"
+	// schedulerJobsMetricHelp 是定时任务事件指标说明。
+	schedulerJobsMetricHelp = "Total number of scheduler job runtime events by fixed scheduler job, event, status, and reason."
+	// schedulerJobDurationMetricHelp 是定时任务耗时指标说明。
+	schedulerJobDurationMetricHelp = "Duration of actual scheduler job executions in seconds, excluding concurrency and lock waits."
+	// schedulerEventTriggered 表示定时任务触发事件。
+	schedulerEventTriggered = "triggered"
+	// schedulerEventStarted 表示定时任务开始执行事件。
+	schedulerEventStarted = "started"
+	// schedulerEventCompleted 表示定时任务执行完成事件。
+	schedulerEventCompleted = "completed"
+	// schedulerEventFailed 表示定时任务执行失败事件。
+	schedulerEventFailed = "failed"
+	// schedulerEventSkipped 表示定时任务因并发冲突或未获取到锁被跳过事件。
+	schedulerEventSkipped = "skipped"
+	// schedulerEventLockRenewFailed 表示分布式锁续租失败事件。
+	schedulerEventLockRenewFailed = "lock_renew_failed"
+	// schedulerStatusSuccess 表示执行成功的终态状态。
+	schedulerStatusSuccess = "success"
+	// schedulerStatusFailure 表示执行失败的终态状态。
+	schedulerStatusFailure = "failure"
+	// schedulerStatusSkipped 表示任务跳过的状态。
+	schedulerStatusSkipped = "skipped"
+	// schedulerReasonNone 表示无特殊跳过原因的标准占位。
+	schedulerReasonNone = "none"
+	// defaultSchedulerDurationBuckets 是未提供直方图分桶配置时的默认标记。
 	defaultSchedulerDurationBuckets = 0
 )
 

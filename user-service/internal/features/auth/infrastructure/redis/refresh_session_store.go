@@ -17,13 +17,20 @@ import (
 )
 
 const (
-	createSessionResultOK       int64 = 1
-	rotateSessionResultOK       int64 = 1
-	rotateSessionResultNotFound       = 2
-	rotateSessionResultMismatch       = 3
+	// createSessionResultOK 是 Lua 脚本创建刷新令牌会话成功的返回值。
+	createSessionResultOK int64 = 1
+	// rotateSessionResultOK 是 Lua 脚本轮换刷新会话成功的返回值。
+	rotateSessionResultOK int64 = 1
+	// rotateSessionResultNotFound 是 Lua 脚本轮换时原会话不存在的返回值。
+	rotateSessionResultNotFound = 2
+	// rotateSessionResultMismatch 是 Lua 脚本轮换时会话内容不匹配的返回值。
+	rotateSessionResultMismatch = 3
 
-	detachUserSessionsResultEmpty    = 0
+	// detachUserSessionsResultEmpty 是批量撤销会话时用户名下无活跃会话的返回值。
+	detachUserSessionsResultEmpty = 0
+	// detachUserSessionsResultDetached 是成功将用户所有活跃会话从索引中分离的返回值。
 	detachUserSessionsResultDetached = 1
+	// detachUserSessionsResultConflict 是清理索引发生版本或锁冲突的返回值。
 	detachUserSessionsResultConflict = 2
 )
 

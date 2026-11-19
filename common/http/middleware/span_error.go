@@ -11,9 +11,12 @@ import (
 )
 
 const (
-	spanAttrErrorType  = "error.type"
+	// spanAttrErrorType 是链路追踪中记录错误类型的属性键名。
+	spanAttrErrorType = "error.type"
+	// spanAttrHTTPStatus 是链路追踪中记录 HTTP 状态码的属性键名。
 	spanAttrHTTPStatus = "http_status"
 
+	// spanErrorTypePanic 表示由运行时异常 panic 触发的错误类型标记。
 	spanErrorTypePanic = "panic"
 )
 

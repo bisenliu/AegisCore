@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	// errProviderAlreadyStarted 表示链路追踪提供者已被启动，禁止重复调用 Start。
 	errProviderAlreadyStarted = lifecycleError("tracing provider is already started")
 )
 

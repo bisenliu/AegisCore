@@ -14,9 +14,14 @@ import (
 )
 
 const (
-	defaultContextPath   = "/nacos"
-	maxResponseBytes     = 4 << 20
+	// defaultContextPath 是 Nacos OpenAPI 默认上下文路径前缀。
+	defaultContextPath = "/nacos"
+	// maxResponseBytes 是读取 Nacos 响应的最大字节数（4MB），防止异常大响应耗尽内存。
+	maxResponseBytes = 4 << 20
+	// adminClientUserAgent 是配置发布客户端向 Nacos 发送 HTTP 请求时附带的 User-Agent 标识。
 	adminClientUserAgent = "AegisCore-Nacos-Config-Seed"
+	// maxErrorMessageBytes 是格式化服务端错误响应消息的最大截断字节数。
+	maxErrorMessageBytes = 512
 )
 
 type seedOptions struct {
@@ -273,8 +278,8 @@ func apiError(code int, message string) error {
 		message = "unspecified error"
 	}
 	// 服务端消息不受本工具控制，限制长度可避免诊断输出被异常响应无限放大。
-	if len(message) > 512 {
-		message = message[:512] + "..."
+	if len(message) > maxErrorMessageBytes {
+		message = message[:maxErrorMessageBytes] + "..."
 	}
 	return fmt.Errorf("api code %d: %s", code, message)
 }

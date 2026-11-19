@@ -16,7 +16,8 @@ import (
 const (
 	// DefaultRedisImage 是 Redis 测试容器的默认镜像。
 	DefaultRedisImage = "redis:7-alpine"
-	defaultRedisPort  = "6379/tcp"
+	// defaultRedisPort 是 Redis 容器内默认监听的内部端口与协议。
+	defaultRedisPort = "6379/tcp"
 )
 
 // RedisOptions 配置 Redis 测试容器；零值字段由 StartRedis 补为测试默认值。

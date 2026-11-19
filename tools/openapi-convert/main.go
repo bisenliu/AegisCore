@@ -12,17 +12,30 @@ import (
 )
 
 const (
-	exitOK    = 0
+	// exitOK 表示命令执行成功退出的状态码。
+	exitOK = 0
+	// exitError 表示命令执行遇到错误退出的状态码。
 	exitError = 1
 )
 
 const (
-	defaultOpenAPIVersion   = "3.0.3"
-	defaultGoPackageName    = "docs"
-	defaultGeneratedBy      = "tools/openapi-convert"
-	defaultBearerAuthType   = "http"
+	// defaultOpenAPIVersion 是生成的 OpenAPI 规范默认版本号。
+	defaultOpenAPIVersion = "3.0.3"
+	// defaultGoPackageName 是生成的 Go embed 代码默认包名。
+	defaultGoPackageName = "docs"
+	// defaultGeneratedBy 是生成文件头部声明的工具标识。
+	defaultGeneratedBy = "tools/openapi-convert"
+	// defaultBearerAuthType 是 OpenAPI 规范中 Bearer 认证对应的 Security Scheme 类型。
+	defaultBearerAuthType = "http"
+	// defaultBearerAuthScheme 是 HTTP 认证方案名称（bearer）。
 	defaultBearerAuthScheme = "bearer"
+	// defaultBearerAuthFormat 是 Bearer Token 的格式说明（JWT）。
 	defaultBearerAuthFormat = "JWT"
+
+	// defaultDirPerm 是创建文档导出目录所使用的文件系统权限（rwxr-xr-x）。
+	defaultDirPerm os.FileMode = 0755
+	// defaultFilePerm 是写入 OpenAPI 文档文件所使用的文件系统权限（rw-r--r--）。
+	defaultFilePerm os.FileMode = 0644
 )
 
 type stringList []string
@@ -174,10 +187,10 @@ func convertOptions(openAPIVersion string, serverURL string, rootServerURL strin
 // writeFile 将转换生成好的文档内容写入到本地目标文件中，若父目录不存在则自动创建。
 func writeFile(path string, data []byte) error {
 	// 适合生成物目录自动创建；不提供原子写、并发写协调或软链接安全保护。
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), defaultDirPerm); err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, data, defaultFilePerm)
 }
 
 // failf 将文档转换工具的出错信息打印到终端错误输出中。

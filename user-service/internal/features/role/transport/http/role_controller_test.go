@@ -25,11 +25,16 @@ import (
 )
 
 const (
-	roleHTTPTestRoleID       = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+	// roleHTTPTestRoleID 是角色接口测试中使用的角色 UUID。
+	roleHTTPTestRoleID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+	// roleHTTPTestSecondRoleID 是角色接口测试中使用的第二角色 UUID。
 	roleHTTPTestSecondRoleID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4f"
+	// roleHTTPTestPermissionID 是角色绑定测试中使用的权限 UUID。
 	roleHTTPTestPermissionID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d50"
-	roleHTTPTestUserID       = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d51"
-	roleHTTPTestCursorID     = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d52"
+	// roleHTTPTestUserID 是角色分配测试中使用的用户 UUID。
+	roleHTTPTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d51"
+	// roleHTTPTestCursorID 是分页游标测试中使用的游标 UUID。
+	roleHTTPTestCursorID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d52"
 )
 
 var (

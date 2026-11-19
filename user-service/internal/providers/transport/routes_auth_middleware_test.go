@@ -27,9 +27,16 @@ import (
 	userhttp "github.com/aegiscore/user-service/internal/features/user/transport/http"
 )
 
+// routeAuthUserID 是路由鉴权测试中模拟的已授权用户 UUID。
 const routeAuthUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
+
+// routeAuthForbiddenUserID 是路由鉴权测试中模拟的无权限 403 用户 UUID。
 const routeAuthForbiddenUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3403"
+
+// routeAuthNotFoundUserID 是路由鉴权测试中模拟的资源未找到 404 用户 UUID。
 const routeAuthNotFoundUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3999"
+
+// routeAuthInternalErrorUserID 是路由鉴权测试中模拟的系统错误 500 用户 UUID。
 const routeAuthInternalErrorUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3500"
 
 func TestGinEngineAuthMiddleware(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	serviceconfig "github.com/aegiscore/user-service/internal/config"
 )
 
+// defaultFxGraphOutputPath 是导出 Fx 组件依赖图的默认 DOT 文件保存路径。
 const defaultFxGraphOutputPath = "./docs/fx-dependency-graph.dot"
 
 type fxGraphWriter func(path string, opts ...fx.Option) (string, error)

@@ -24,6 +24,7 @@ var permissionPolicySyncOptions = fx.Options(
 	),
 )
 
+// policySubscriberBufferSize 是 Redis Pub/Sub 策略变更通知订阅通道的缓冲容量。
 const policySubscriberBufferSize = 64
 
 // Fx 参数与结果：Policy 同步

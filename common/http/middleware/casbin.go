@@ -13,6 +13,7 @@ import (
 	commoncasbin "github.com/aegiscore/common/security/casbin"
 )
 
+// casbinAuthorizationWildcardMethod 是 Casbin 授权白名单匹配任意 HTTP 请求方法的通配符。
 const casbinAuthorizationWildcardMethod = "*"
 
 // CasbinAuthorizer 定义 HTTP 中间件依赖的通用授权能力。

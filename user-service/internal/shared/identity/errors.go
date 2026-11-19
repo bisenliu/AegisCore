@@ -6,7 +6,9 @@ import (
 )
 
 const (
-	reasonUserNotFound      contracterrors.Reason = "user_not_found"
+	// reasonUserNotFound 是用户在系统中未找到的错误原因标识。
+	reasonUserNotFound contracterrors.Reason = "user_not_found"
+	// reasonUserAlreadyExists 是用户名已被占用冲突的错误原因标识。
 	reasonUserAlreadyExists contracterrors.Reason = "user_already_exists"
 )
 

@@ -12,18 +12,28 @@ import (
 )
 
 const (
+	// apiRateLimitEventsMetricName 是接口限流触发事件统计 Counter 指标名。
 	apiRateLimitEventsMetricName = "aegiscore_user_service_api_rate_limit_events_total"
+	// apiRateLimitEventsMetricHelp 是接口限流事件指标说明。
 	apiRateLimitEventsMetricHelp = "Total number of API rate limit events by fixed scope, event, and reason."
 
-	rateLimitEventError   = "error"
+	// rateLimitEventError 表示限流检查过程发生内部错误事件。
+	rateLimitEventError = "error"
+	// rateLimitEventLimited 表示请求触发配额上限被成功拦截限流事件。
 	rateLimitEventLimited = "limited"
 
+	// rateLimitReasonLimitExceeded 表示访问频次超过设定窗口配额。
 	rateLimitReasonLimitExceeded = "limit_exceeded"
-	rateLimitReasonKeyRequired   = "key_required"
+	// rateLimitReasonKeyRequired 表示请求未提供识别身份的限流 key。
+	rateLimitReasonKeyRequired = "key_required"
+	// rateLimitReasonLimiterClosed 表示限流器组件已关闭停止接受请求。
 	rateLimitReasonLimiterClosed = "limiter_closed"
-	rateLimitReasonOverflow      = "overflow"
-	rateLimitReasonRejected      = "rejected"
-	rateLimitReasonError         = "error"
+	// rateLimitReasonOverflow 表示独立限流名额已满进入公共备用配额池。
+	rateLimitReasonOverflow = "overflow"
+	// rateLimitReasonRejected 表示限流名单已满拒绝服务。
+	rateLimitReasonRejected = "rejected"
+	// rateLimitReasonError 表示因底层错误导致的异常。
+	rateLimitReasonError = "error"
 )
 
 type rateLimitObserver struct {

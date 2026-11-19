@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// mapstructureTag 是结构体字段上用于配置反序列化映射的 struct tag 标签名。
 const mapstructureTag = "mapstructure"
 
 // unknownConfigPaths 将 mapstructure 报告的未消费键展开为完整叶子路径。

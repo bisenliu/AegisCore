@@ -9,17 +9,29 @@ import (
 )
 
 const (
-	sqlOpenConnectionsMetricName    = "aegiscore_postgres_pool_open_connections"
-	sqlInUseConnectionsMetricName   = "aegiscore_postgres_pool_in_use_connections"
-	sqlIdleConnectionsMetricName    = "aegiscore_postgres_pool_idle_connections"
-	sqlWaitCountMetricName          = "aegiscore_postgres_pool_wait_count_total"
-	sqlWaitDurationMetricName       = "aegiscore_postgres_pool_wait_duration_seconds_total"
+	// sqlOpenConnectionsMetricName 是当前已建立的数据库打开连接数 Gauge 指标名。
+	sqlOpenConnectionsMetricName = "aegiscore_postgres_pool_open_connections"
+	// sqlInUseConnectionsMetricName 是当前正在使用中的数据库连接数 Gauge 指标名。
+	sqlInUseConnectionsMetricName = "aegiscore_postgres_pool_in_use_connections"
+	// sqlIdleConnectionsMetricName 是当前处于空闲状态的数据库连接数 Gauge 指标名。
+	sqlIdleConnectionsMetricName = "aegiscore_postgres_pool_idle_connections"
+	// sqlWaitCountMetricName 是等待空闲连接累计次数 Counter 指标名。
+	sqlWaitCountMetricName = "aegiscore_postgres_pool_wait_count_total"
+	// sqlWaitDurationMetricName 是等待空闲连接累计耗时 Counter 指标名（单位：秒）。
+	sqlWaitDurationMetricName = "aegiscore_postgres_pool_wait_duration_seconds_total"
+	// sqlMaxOpenConnectionsMetricName 是配置的连接池最大连接数 Gauge 指标名。
 	sqlMaxOpenConnectionsMetricName = "aegiscore_postgres_pool_max_open_connections"
-	sqlOpenConnectionsMetricHelp    = "Current number of established PostgreSQL pool connections."
-	sqlInUseConnectionsMetricHelp   = "Current number of in-use PostgreSQL pool connections."
-	sqlIdleConnectionsMetricHelp    = "Current number of idle PostgreSQL pool connections."
-	sqlWaitCountMetricHelp          = "Total number of PostgreSQL pool waits for a free connection."
-	sqlWaitDurationMetricHelp       = "Total time spent waiting for PostgreSQL pool connections in seconds."
+	// sqlOpenConnectionsMetricHelp 是打开连接数指标说明。
+	sqlOpenConnectionsMetricHelp = "Current number of established PostgreSQL pool connections."
+	// sqlInUseConnectionsMetricHelp 是使用中连接数指标说明。
+	sqlInUseConnectionsMetricHelp = "Current number of in-use PostgreSQL pool connections."
+	// sqlIdleConnectionsMetricHelp 是空闲连接数指标说明。
+	sqlIdleConnectionsMetricHelp = "Current number of idle PostgreSQL pool connections."
+	// sqlWaitCountMetricHelp 是等待连接次数指标说明。
+	sqlWaitCountMetricHelp = "Total number of PostgreSQL pool waits for a free connection."
+	// sqlWaitDurationMetricHelp 是等待连接耗时指标说明。
+	sqlWaitDurationMetricHelp = "Total time spent waiting for PostgreSQL pool connections in seconds."
+	// sqlMaxOpenConnectionsMetricHelp 是最大连接数配置指标说明。
 	sqlMaxOpenConnectionsMetricHelp = "Configured maximum number of open PostgreSQL pool connections."
 )
 

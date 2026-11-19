@@ -14,10 +14,15 @@ import (
 type serverState uint8
 
 const (
+	// stateCreated 表示 HTTP 服务实例已创建，尚未开始绑定端口监听。
 	stateCreated serverState = iota
+	// stateRunning 表示端口监听成功且正在后台提供服务。
 	stateRunning
+	// stateFailed 表示启动监听或后台服务遇到不可恢复的异常。
 	stateFailed
+	// stateStopping 表示正在执行优雅停机和连接排出。
 	stateStopping
+	// stateStopped 表示服务已完全停止并清理完所有资源。
 	stateStopped
 )
 

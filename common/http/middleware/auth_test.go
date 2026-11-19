@@ -23,6 +23,7 @@ import (
 	"github.com/aegiscore/common/security/auth"
 )
 
+// authTestUserID 是认证中间件单测中使用的模拟用户 UUID。
 const authTestUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
 
 func TestAuthMiddleware(t *testing.T) {

@@ -47,7 +47,7 @@ func TestAuthUseCaseForceChangePasswordIncrementsTokenVersionOnce(t *testing.T) 
 
 }
 
-func TestAuthUseCaseForceChangePasswordFailsWhenRevocationProjectionFails(t *testing.T) {
+func TestAuthUseCaseForceChangePasswordSucceedsWhenRevocationProjectionFails(t *testing.T) {
 	fixture := newAuthCommandFixture(t, defaultAuthConfig(true), nil)
 	claims := passwordChangeClaims("pc-123", 2)
 
@@ -56,10 +56,9 @@ func TestAuthUseCaseForceChangePasswordFailsWhenRevocationProjectionFails(t *tes
 	fixture.credentials.EXPECT().ForceChangePassword(gomock.Any(), authTestUserID, int64(2), "new-secret").Return(&authdomain.CredentialUpdateResult{UserID: authTestUserID, TokenVersion: 3}, nil)
 	fixture.sessions.EXPECT().RevokeUserSessionsAtVersion(gomock.Any(), authTestUserID, int64(3)).Return(errors.New("projection failed"))
 
-	_, err := fixture.ForceChangePassword(context.Background(), ForceChangePasswordCommand{Token: "password-change", NewPassword: "new-secret"})
-	require.ErrorIs(t, err, authdomain.ErrSessionRevocationIncomplete,
-		"err = %v, want ErrSessionRevocationIncomplete", err)
-
+	result, err := fixture.ForceChangePassword(context.Background(), ForceChangePasswordCommand{Token: "password-change", NewPassword: "new-secret"})
+	require.NoError(t, err)
+	require.True(t, result != nil && result.Changed)
 }
 
 func TestAuthUseCaseForceChangePasswordMapsCredentialUpdateNotFound(t *testing.T) {

@@ -176,7 +176,7 @@
 - **WHEN** session 已消费，用户仍为 `UserStatusMustChangePassword` 且 PostgreSQL 当前 `token_version` 等于 token 中旧版本
 - **THEN** 系统 MUST 更新密码哈希、将状态改为 `UserStatusNormal` 并递增 `token_version`，且 MUST 在同一数据库结果中返回新 `token_version`
 - **AND** 状态或版本不匹配时 MUST 返回统一无效凭据且不得更新任何字段
-- **AND** 更新成功并拿到新 `token_version` 后 MUST 失效本地缓存、刷新 Redis 投影并删除该用户 refresh sessions；任一步失败 MUST 返回可观察的安全撤销未完成错误，MUST NOT 返回普通成功结果
+- **AND** 更新成功并拿到新 `token_version` 后 MUST 失效本地缓存、刷新 Redis 投影并删除该用户 refresh sessions；若后续 Redis 会话物理清理失败，系统 MUST 记录 WARN 并通过后台异步任务补偿重试，主接口 MUST 视为密码修改成功返回 200 OK，MUST NOT 返回导致用户无法重试的 503 阻断错误
 - **AND** 成功更新路径 MUST NOT 在更新提交后执行第二条 `SELECT` 才获取新版本
 
 ### Requirement: 认证架构、配置与 Redis 资源生命周期

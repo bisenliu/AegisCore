@@ -19,6 +19,7 @@ import (
 	"github.com/aegiscore/common/runtime/resources"
 )
 
+// testCacheRedis 是 Redis 客户端生命周期测试中使用的缓存资源名称。
 const testCacheRedis = "cache_redis"
 
 func TestNewRedisClientRegistersLifecycle(t *testing.T) {

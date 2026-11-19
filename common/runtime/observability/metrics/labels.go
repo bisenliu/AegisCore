@@ -39,12 +39,21 @@ const (
 // ErrUnsupportedLabelKey 表示 label key 不属于当前跨服务低基数约定。
 var ErrUnsupportedLabelKey = errors.New("unsupported metrics label key")
 
+const (
+	// minHTTPStatus 是合法 HTTP 状态码的理论最小值。
+	minHTTPStatus = 100
+	// maxHTTPStatus 是合法 HTTP 状态码的理论最大值。
+	maxHTTPStatus = 599
+	// httpStatusClassDivisor 是将三位数字状态码归一化为百位数分类（如 2xx、4xx、5xx）的除数。
+	httpStatusClassDivisor = 100
+)
+
 // StatusClass 将 HTTP status code 归一化为低基数 status class。
 func StatusClass(status int) string {
-	if status < 100 || status > 599 {
+	if status < minHTTPStatus || status > maxHTTPStatus {
 		return "unknown"
 	}
-	return fmt.Sprintf("%dxx", status/100)
+	return fmt.Sprintf("%dxx", status/httpStatusClassDivisor)
 }
 
 // ValidateLowCardinalityLabelKey 校验通用 metrics helper 允许的低基数 label key。

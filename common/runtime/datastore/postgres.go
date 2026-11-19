@@ -19,6 +19,7 @@ import (
 	"github.com/aegiscore/common/runtime/resources"
 )
 
+// postgresDriver 是底层的 database/sql 驱动注册名称（使用 pgx）。
 const postgresDriver = "pgx"
 
 // PostgresOption 配置 PostgreSQL 连接池的共享运行时能力。

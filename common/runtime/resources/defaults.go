@@ -25,6 +25,7 @@ const (
 	// DefaultPostgresConnMaxIdleTime 是 PostgreSQL 空闲连接的默认保留时间。
 	DefaultPostgresConnMaxIdleTime = 10 * time.Minute
 
+	// defaultPostgresPingTimeout 是初始化连接池时探测 PostgreSQL 连通性的默认超时时间。
 	defaultPostgresPingTimeout = 5 * time.Second
 )
 

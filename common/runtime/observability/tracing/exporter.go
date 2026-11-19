@@ -13,6 +13,7 @@ import (
 	"github.com/aegiscore/common/runtime/config"
 )
 
+// defaultOTLPTimeout 是向 OTLP Collector 发送链路追踪数据时的默认网络超时时间。
 const defaultOTLPTimeout = 5 * time.Second
 
 // newOTLPExporter 基于 tracing 配置创建 OTLP gRPC span exporter。

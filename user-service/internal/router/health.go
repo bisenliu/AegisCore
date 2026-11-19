@@ -13,10 +13,14 @@ const (
 	HealthCheckStatusOK HealthCheckStatus = "ok"
 	// HealthCheckStatusUnavailable 表示检查项当前不可用或未能在探针预算内完成。
 	HealthCheckStatusUnavailable HealthCheckStatus = "unavailable"
-	healthProbeTimeout                             = 500 * time.Millisecond
-	healthPathLivez                                = "/livez"
-	healthPathReadyz                               = "/readyz"
-	healthPathStartupz                             = "/startupz"
+	// healthProbeTimeout 是 Kubernetes 健康探针请求处理的最大超时时间。
+	healthProbeTimeout = 500 * time.Millisecond
+	// healthPathLivez 是存活探针（Liveness Probe）的 HTTP 路由路径。
+	healthPathLivez = "/livez"
+	// healthPathReadyz 是就绪探针（Readiness Probe）的 HTTP 路由路径。
+	healthPathReadyz = "/readyz"
+	// healthPathStartupz 是启动探针（Startup Probe）的 HTTP 路由路径。
+	healthPathStartupz = "/startupz"
 )
 
 // HealthCheckStatus 表示单个健康检查项的状态。

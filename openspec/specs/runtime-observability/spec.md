@@ -598,3 +598,19 @@ tracing provider MUST 对重复或非法 lifecycle 调用提供明确且被测�
 - **THEN** 检查 MUST 在 `common/runtime/observability/metrics` 出现 Casbin、permission、role、RBAC、user-service 或 `aegiscore_casbin` 业务 metrics 语义时失败
 - **AND** 该门禁 MUST 不禁止 common 保留通用 Provider、通用 label、HTTP metrics 和 component status collector
 
+### Requirement: HTTP CORS 跨域访问控制策略配置
+
+系统 MUST 支持在服务配置中配置 `server.http.cors`，以控制 HTTP 入站管道中 CORS 中间件的启停与访问控制策略。当处于网关统一代理跨域的生产架构时，系统 MUST 支持通过配置完全禁用服务层 CORS 中间件，避免产生重复响应头冲突；当服务独立处理跨域时，系统 MUST 允许显式声明受信任的源站白名单、允许方法和允许头。
+
+#### Scenario: 禁用 CORS 中间件
+
+- **WHEN** 配置中 `server.http.cors.enabled` 为 false
+- **THEN** Gin HTTP 管道 MUST NOT 挂载 CORS 中间件，且入站请求与预检请求 MUST NOT 注入额外的 CORS 响应头
+
+#### Scenario: 启用 CORS 白名单
+
+- **WHEN** 配置中 `server.http.cors.enabled` 为 true
+- **THEN** Gin HTTP 管道 MUST 挂载由配置初始化的 CORS 中间件
+- **AND** 响应头 `Access-Control-Allow-Origin` MUST 严格匹配配置中声明的允许源站，且 OPTIONS 预检请求 MUST 返回 204 No Content 并终止后续 handler
+- **AND** 配置未显式指定 `allowed_methods` 或 `allowed_headers` 时 MUST 安全回退到默认标准安全方法和头集合
+

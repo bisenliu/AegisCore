@@ -12,10 +12,19 @@ import (
 	"github.com/aegiscore/common/runtime/logger"
 )
 
-// HeaderRequestID 是调用方和网关传递请求关联 ID 的 HTTP header。
-const HeaderRequestID = "X-Request-ID"
+const (
+	// HeaderRequestID 是调用方和网关传递请求关联 ID 的 HTTP header。
+	HeaderRequestID = "X-Request-ID"
 
-const maxRequestIDLength = 128
+	// maxRequestIDLength 是允许透传外部请求 ID 的最大字符长度，超出将被丢弃并重新生成。
+	maxRequestIDLength = 128
+	// asciiSpace 是标准 ASCII 可见字符区间的下边界（空格字符）。
+	asciiSpace = ' '
+	// asciiDel 是 ASCII 控制字符删除符（DEL）。
+	asciiDel = 0x7f
+	// base36 是降级请求流水号格式化时采用的 36 进制基数（包含数字与小写字母）。
+	base36 = 36
+)
 
 var requestIDFallbackCounter atomic.Uint64
 
@@ -44,7 +53,7 @@ func normalizeRequestID(value string) string {
 // containsRequestIDControlCharacter 检查请求追踪编号中是否夹带了不可见的控制字符（如换行符或制表符）。
 func containsRequestIDControlCharacter(value string) bool {
 	for _, char := range value {
-		if char < ' ' || char == 0x7f {
+		if char < asciiSpace || char == asciiDel {
 			return true
 		}
 	}
@@ -57,5 +66,5 @@ func newRequestID() string {
 	if err == nil {
 		return requestID
 	}
-	return "req-" + strconv.FormatInt(time.Now().UnixNano(), 36) + "-" + strconv.FormatUint(requestIDFallbackCounter.Add(1), 36)
+	return "req-" + strconv.FormatInt(time.Now().UnixNano(), base36) + "-" + strconv.FormatUint(requestIDFallbackCounter.Add(1), base36)
 }

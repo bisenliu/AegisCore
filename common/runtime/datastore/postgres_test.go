@@ -18,6 +18,7 @@ import (
 
 var testDriverSeq atomic.Int64
 
+// testPrimaryDB 是数据库初始化单测中使用的主库资源名称。
 const testPrimaryDB = "primary_db"
 
 func TestOpenPostgresAppliesPoolSettings(t *testing.T) {

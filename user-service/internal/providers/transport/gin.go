@@ -58,7 +58,7 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 	if err := engine.SetTrustedProxies(params.Config.Server.HTTP.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
-	engine.Use(
+	middlewares := []gin.HandlerFunc{
 		otelgin.Middleware(params.Config.App.Name,
 			otelgin.WithTracerProvider(params.Trace.OTelTracerProvider()),
 			otelgin.WithPropagators(params.Trace.TextMapPropagator()),
@@ -73,9 +73,12 @@ func NewGinEngine(params GinParams) (*gin.Engine, error) {
 		}),
 		commonmw.Recovery(params.Log),
 		commonmw.RequestLoggerWithOptions(params.Log, commonmw.RequestLoggerOptions{Skip: skipSuccessfulRuntimeEndpointLog(params.Config.Observability.Metrics)}),
-		commonmw.CORS(),
-		bodyLimit,
-	)
+	}
+	if params.HTTP.CORS.Enabled {
+		middlewares = append(middlewares, commonmw.CORSWithOptions(params.HTTP.CORS.ToOptions()))
+	}
+	middlewares = append(middlewares, bodyLimit)
+	engine.Use(middlewares...)
 	return engine, nil
 }
 

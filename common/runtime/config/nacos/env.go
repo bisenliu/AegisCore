@@ -25,6 +25,7 @@ const (
 	// EnvPassword 环境变量名，用来指定登录远程配置中心的管理密码（仅记录环境变量名称，不包含真实凭据）。
 	EnvPassword = "AEGISCORE_NACOS_PASSWORD" // #nosec G101 -- 常量仅表示环境变量名称，不包含凭据。
 
+	// defaultTimeout 是未通过环境变量配置超时时，连接 Nacos 的默认请求超时时间。
 	defaultTimeout = 5 * time.Second
 )
 

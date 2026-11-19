@@ -14,18 +14,30 @@ import (
 )
 
 const (
-	rbacPolicySyncMetricName      = "aegiscore_user_service_rbac_policy_sync_operations_total"
-	rbacPolicyMismatchMetricName  = "aegiscore_user_service_rbac_policy_version_mismatches_total"
-	rbacPolicyAppliedMetricName   = "aegiscore_user_service_rbac_policy_applied_revision"
+	// rbacPolicySyncMetricName 是 RBAC 策略同步操作结果累计 Counter 指标名。
+	rbacPolicySyncMetricName = "aegiscore_user_service_rbac_policy_sync_operations_total"
+	// rbacPolicyMismatchMetricName 是策略版本号不一致计数 Counter 指标名。
+	rbacPolicyMismatchMetricName = "aegiscore_user_service_rbac_policy_version_mismatches_total"
+	// rbacPolicyAppliedMetricName 是当前本地引擎已生效的最新数据库策略版本号 Gauge 指标名。
+	rbacPolicyAppliedMetricName = "aegiscore_user_service_rbac_policy_applied_revision"
+	// rbacPolicyReloadLagMetricName 是策略投影落后数据库权威版本的版本差值 Gauge 指标名。
 	rbacPolicyReloadLagMetricName = "aegiscore_user_service_rbac_policy_reload_lag"
-	rbacEnforceMetricName         = "aegiscore_user_service_rbac_enforce_total"
-	rbacEnforceLatencyMetricName  = "aegiscore_user_service_rbac_enforce_duration_seconds"
-	rbacPolicySyncMetricHelp      = "Total number of RBAC policy sync operation results by fixed operation, result, reason, and source."
-	rbacPolicyMismatchMetricHelp  = "Total number of RBAC policy version mismatches by fixed watcher source."
-	rbacPolicyAppliedMetricHelp   = "Current database policy revision atomically applied by the local Casbin engine."
+	// rbacEnforceMetricName 是鉴权决策判定总次数 Counter 指标名。
+	rbacEnforceMetricName = "aegiscore_user_service_rbac_enforce_total"
+	// rbacEnforceLatencyMetricName 是鉴权决策执行耗时 Histogram 指标名（单位：秒）。
+	rbacEnforceLatencyMetricName = "aegiscore_user_service_rbac_enforce_duration_seconds"
+	// rbacPolicySyncMetricHelp 是策略同步操作指标说明。
+	rbacPolicySyncMetricHelp = "Total number of RBAC policy sync operation results by fixed operation, result, reason, and source."
+	// rbacPolicyMismatchMetricHelp 是策略版本不匹配指标说明。
+	rbacPolicyMismatchMetricHelp = "Total number of RBAC policy version mismatches by fixed watcher source."
+	// rbacPolicyAppliedMetricHelp 是当前生效策略版本指标说明。
+	rbacPolicyAppliedMetricHelp = "Current database policy revision atomically applied by the local Casbin engine."
+	// rbacPolicyReloadLagMetricHelp 是策略生效落后差值指标说明。
 	rbacPolicyReloadLagMetricHelp = "Current RBAC policy projection lag measured as max(known latest database revision - local engine applied revision, 0)."
-	rbacEnforceMetricHelp         = "Total number of RBAC enforce decisions by fixed result, method, and route template."
-	rbacEnforceLatencyMetricHelp  = "RBAC enforce latency in seconds by fixed result, method, and route template."
+	// rbacEnforceMetricHelp 是鉴权决策判定指标说明。
+	rbacEnforceMetricHelp = "Total number of RBAC enforce decisions by fixed result, method, and route template."
+	// rbacEnforceLatencyMetricHelp 是鉴权耗时指标说明。
+	rbacEnforceLatencyMetricHelp = "RBAC enforce latency in seconds by fixed result, method, and route template."
 )
 
 type prometheusMetrics struct {

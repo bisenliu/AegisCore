@@ -62,9 +62,13 @@ type RenewPolicy struct {
 type schedulerState uint8
 
 const (
+	// schedulerCreated 表示调度器实例已初始化，尚未启动 cron 循环。
 	schedulerCreated schedulerState = iota
+	// schedulerRunning 表示调度器已启动并在后台驱动定时作业。
 	schedulerRunning
+	// schedulerStopping 表示调度器正在停止并等待进行中的任务收尾。
 	schedulerStopping
+	// schedulerStopped 表示调度器已彻底停止。
 	schedulerStopped
 )
 

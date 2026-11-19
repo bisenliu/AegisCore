@@ -10,20 +10,34 @@ import (
 )
 
 const (
-	workerpoolTasksMetricName   = "aegiscore_workerpool_tasks_total"
-	workerpoolQueuedMetricName  = "aegiscore_workerpool_queued"
+	// workerpoolTasksMetricName 是工作池任务生命周期事件累计 Counter 指标名。
+	workerpoolTasksMetricName = "aegiscore_workerpool_tasks_total"
+	// workerpoolQueuedMetricName 是工作池当前队列中排队任务数 Gauge 指标名。
+	workerpoolQueuedMetricName = "aegiscore_workerpool_queued"
+	// workerpoolRunningMetricName 是工作池当前正在执行的任务数 Gauge 指标名。
 	workerpoolRunningMetricName = "aegiscore_workerpool_running"
+	// workerpoolWaitingMetricName 是因工作池饱和正在等待空闲 worker 的提交者数量 Gauge 指标名。
 	workerpoolWaitingMetricName = "aegiscore_workerpool_waiting"
-	workerpoolTasksMetricHelp   = "Total number of workerpool tasks by fixed pool and lifecycle event."
-	workerpoolQueuedMetricHelp  = "Current number of queued workerpool tasks."
+	// workerpoolTasksMetricHelp 是工作池任务事件指标说明。
+	workerpoolTasksMetricHelp = "Total number of workerpool tasks by fixed pool and lifecycle event."
+	// workerpoolQueuedMetricHelp 是工作池队列排队任务数指标说明。
+	workerpoolQueuedMetricHelp = "Current number of queued workerpool tasks."
+	// workerpoolRunningMetricHelp 是工作池正在执行任务数指标说明。
 	workerpoolRunningMetricHelp = "Current number of running workerpool tasks."
+	// workerpoolWaitingMetricHelp 是工作池等待提交者数量指标说明。
 	workerpoolWaitingMetricHelp = "Current number of submitters waiting for workerpool workers."
-	workerpoolEventSubmitted    = "submitted"
-	workerpoolEventRejected     = "rejected"
-	workerpoolEventStarted      = "started"
-	workerpoolEventCompleted    = "completed"
-	workerpoolEventFailed       = "failed"
-	workerpoolEventPanicked     = "panicked"
+	// workerpoolEventSubmitted 表示任务提交成功事件。
+	workerpoolEventSubmitted = "submitted"
+	// workerpoolEventRejected 表示任务因队列已满或工作池关闭被拒绝事件。
+	workerpoolEventRejected = "rejected"
+	// workerpoolEventStarted 表示 worker 开始处理任务事件。
+	workerpoolEventStarted = "started"
+	// workerpoolEventCompleted 表示任务顺利执行完成事件。
+	workerpoolEventCompleted = "completed"
+	// workerpoolEventFailed 表示任务执行返回错误事件。
+	workerpoolEventFailed = "failed"
+	// workerpoolEventPanicked 表示任务执行发生 panic 异常事件。
+	workerpoolEventPanicked = "panicked"
 )
 
 // WorkerpoolCollectorOptions 配置后台任务池指标 collector。

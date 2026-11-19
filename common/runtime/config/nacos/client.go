@@ -9,11 +9,16 @@ import (
 )
 
 const (
+	// defaultContextPath 是 Nacos 默认上下文路径前缀。
 	defaultContextPath = "/nacos"
-	configAPIPath      = "/v3/client/cs/config"
-	loginAPIPath       = "/v3/auth/user/login"
-	clientUserAgent    = "AegisCore-Config-Client"
-	maxResponseBytes   = 4 << 20
+	// configAPIPath 是 Nacos v3 获取配置内容的接口路径。
+	configAPIPath = "/v3/client/cs/config"
+	// loginAPIPath 是 Nacos v3 用户名密码登录换取 Token 的接口路径。
+	loginAPIPath = "/v3/auth/user/login"
+	// clientUserAgent 是配置拉取客户端向 Nacos 发送 HTTP 请求时携带的 User-Agent 标识。
+	clientUserAgent = "AegisCore-Config-Client"
+	// maxResponseBytes 是读取配置内容的最大允许字节数（4MB），防止异常大文件导致 OOM。
+	maxResponseBytes = 4 << 20
 )
 
 type v3Loader struct {

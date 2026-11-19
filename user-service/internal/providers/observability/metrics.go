@@ -18,15 +18,24 @@ import (
 )
 
 const (
+	// authSessionPurgePoolMetricsName 是会话清理协程池在监控中的标识名。
 	authSessionPurgePoolMetricsName = "auth_session_purge_pool"
-	redisMetricsMinProbeInterval    = 15 * time.Second
-	watcherRunningMetricName        = "aegiscore_user_service_rbac_policy_watcher_running"
-	watcherSubscriptionMetricName   = "aegiscore_user_service_rbac_policy_watcher_subscription_state"
-	watcherSubscriptionSuccessName  = "aegiscore_user_service_rbac_policy_watcher_last_subscription_success_timestamp_seconds"
-	watcherReconcileSuccessName     = "aegiscore_user_service_rbac_policy_watcher_last_reconcile_success_timestamp_seconds"
-	watcherStalenessMetricName      = "aegiscore_user_service_rbac_policy_watcher_reconcile_staleness_seconds"
-	watcherMaxStalenessMetricName   = "aegiscore_user_service_rbac_policy_watcher_max_staleness_seconds"
-	watcherReconnectAttemptsName    = "aegiscore_user_service_rbac_policy_watcher_reconnect_attempts_total"
+	// redisMetricsMinProbeInterval 是 Redis 指标探测的最小采样间隔。
+	redisMetricsMinProbeInterval = 15 * time.Second
+	// watcherRunningMetricName 是策略监听器是否运行中 Gauge 指标名。
+	watcherRunningMetricName = "aegiscore_user_service_rbac_policy_watcher_running"
+	// watcherSubscriptionMetricName 是策略监听器 Pub/Sub 订阅连接状态 Gauge 指标名。
+	watcherSubscriptionMetricName = "aegiscore_user_service_rbac_policy_watcher_subscription_state"
+	// watcherSubscriptionSuccessName 是上一次成功建立 Pub/Sub 订阅的秒级时间戳 Gauge 指标名。
+	watcherSubscriptionSuccessName = "aegiscore_user_service_rbac_policy_watcher_last_subscription_success_timestamp_seconds"
+	// watcherReconcileSuccessName 是上一次成功完成权威校准的秒级时间戳 Gauge 指标名。
+	watcherReconcileSuccessName = "aegiscore_user_service_rbac_policy_watcher_last_reconcile_success_timestamp_seconds"
+	// watcherStalenessMetricName 是当前距离上一次成功校准已过去的陈旧时间（单位：秒）Gauge 指标名。
+	watcherStalenessMetricName = "aegiscore_user_service_rbac_policy_watcher_reconcile_staleness_seconds"
+	// watcherMaxStalenessMetricName 是判定监听器校准陈旧失效的最大容忍时长 Gauge 指标名。
+	watcherMaxStalenessMetricName = "aegiscore_user_service_rbac_policy_watcher_max_staleness_seconds"
+	// watcherReconnectAttemptsName 是 Pub/Sub 重新连接尝试累计次数 Counter 指标名。
+	watcherReconnectAttemptsName = "aegiscore_user_service_rbac_policy_watcher_reconnect_attempts_total"
 )
 
 var watcherSubscriptionStates = []permissionapplication.PolicyWatcherSubscriptionState{

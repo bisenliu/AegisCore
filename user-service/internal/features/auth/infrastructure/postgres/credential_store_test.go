@@ -17,6 +17,7 @@ import (
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
+// deletedAtForCredentialTest 是凭证仓储测试中用于模拟软删除用户时的毫秒级时间戳。
 const deletedAtForCredentialTest int64 = 1710000000000
 
 type credentialTestUserInput struct {

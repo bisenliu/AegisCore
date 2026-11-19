@@ -13,14 +13,22 @@ import (
 )
 
 const (
-	redisUpMetricName              = "aegiscore_redis_up"
-	redisPingDurationMetricName    = "aegiscore_redis_ping_duration_seconds"
-	redisPingFailuresMetricName    = "aegiscore_redis_ping_failures_total"
-	redisUpMetricHelp              = "Whether the Redis resource responded to the latest cached ping probe."
-	redisPingDurationMetricHelp    = "Duration of the latest Redis ping probe in seconds."
-	redisPingFailuresMetricHelp    = "Total number of failed Redis ping probes."
+	// redisUpMetricName 是 Redis 存活状态 Gauge 指标名（1 代表可用，0 代表不可用）。
+	redisUpMetricName = "aegiscore_redis_up"
+	// redisPingDurationMetricName 是最近一次探测 Redis 耗时 Gauge 指标名（单位：秒）。
+	redisPingDurationMetricName = "aegiscore_redis_ping_duration_seconds"
+	// redisPingFailuresMetricName 是探测 Redis 失败累计次数 Counter 指标名。
+	redisPingFailuresMetricName = "aegiscore_redis_ping_failures_total"
+	// redisUpMetricHelp 是 Redis 存活状态指标说明。
+	redisUpMetricHelp = "Whether the Redis resource responded to the latest cached ping probe."
+	// redisPingDurationMetricHelp 是 Redis 探测耗时指标说明。
+	redisPingDurationMetricHelp = "Duration of the latest Redis ping probe in seconds."
+	// redisPingFailuresMetricHelp 是 Redis 探测失败总数指标说明。
+	redisPingFailuresMetricHelp = "Total number of failed Redis ping probes."
+	// defaultRedisPingMetricsTimeout 是指标采集探测 Redis 的默认最长等待超时。
 	defaultRedisPingMetricsTimeout = time.Second
-	defaultRedisPingMinInterval    = 15 * time.Second
+	// defaultRedisPingMinInterval 是避免 Prometheus 高频刮削导致探测泛滥的最小采样间隔。
+	defaultRedisPingMinInterval = 15 * time.Second
 )
 
 // RedisPinger 定义 Redis ping 指标需要的最小依赖。

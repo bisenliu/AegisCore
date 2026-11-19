@@ -18,9 +18,18 @@ import (
 )
 
 const (
-	policyWildcard      = "*"
-	policySnapshotRetry = 10 * time.Millisecond
+	// policyWildcard 是 Casbin 策略中代表匹配任意方法或操作的通配符。
+	policyWildcard = "*"
+	// defaultPolicyMaxRetries 是等待数据库快照追平目标版本时的最大重试次数，防止超前通知引发死循环。
+	defaultPolicyMaxRetries = 5
+	// policySnapshotBaseRetry 是等待快照可见时的初始退避重试间隔。
+	policySnapshotBaseRetry = 10 * time.Millisecond
+	// policySnapshotMaxRetry 是退避等待快照可见的最大单次退避时间。
+	policySnapshotMaxRetry = 100 * time.Millisecond
 )
+
+// ErrPolicyRevisionTimeout 表示在达到最大重试次数后，数据库中的权限规则版本依然未追赶上通知中的目标版本。
+var ErrPolicyRevisionTimeout = errors.New("wait for casbin policy revision timeout")
 
 // PolicySet 包含一次全量加载得到的 Casbin policy 数据。
 type PolicySet struct {
@@ -50,14 +59,15 @@ func NewPolicyLoader(client *ent.Client) Loader {
 	return &entLoader{client: client, superAdminRoleID: uuid.MustParse(rbacbaseline.SuperAdminRoleID)}
 }
 
-// LoadPoliciesAtLeast 从数据库中读取版本号不低于指定要求的权限快照；如果数据库尚未就绪则提示可稍后重试。
+// LoadPoliciesAtLeast 从数据库中读取版本号不低于指定要求的权限快照；若目标版本暂未达到，在重试上限内进行指数退避等待，超过上限则安全退出。
 func (l *entLoader) LoadPoliciesAtLeast(ctx context.Context, targetRevision int64) (PolicySet, error) {
 	if targetRevision < 0 {
 		return PolicySet{}, fmt.Errorf("load casbin policies: target revision must not be negative: %d", targetRevision)
 	}
 
 	// 在线 policy 写入会将 revision 与投影数据在同一事务提交；若只看到较旧快照，短暂重试而不是发布不完整 policy。
-	for {
+	// 但必须施加最大重试次数限制，防止收到超前的非法版本号时陷入每秒百次事务的高频死循环打爆数据库。
+	for attempt := 0; ; attempt++ {
 		policySet, stale, err := l.loadSnapshot(ctx, targetRevision)
 		if err != nil {
 			return PolicySet{}, err
@@ -65,7 +75,10 @@ func (l *entLoader) LoadPoliciesAtLeast(ctx context.Context, targetRevision int6
 		if !stale {
 			return policySet, nil
 		}
-		if err := waitForPolicySnapshot(ctx); err != nil {
+		if attempt >= defaultPolicyMaxRetries {
+			return PolicySet{}, fmt.Errorf("%w: target revision %d not reached after %d attempts", ErrPolicyRevisionTimeout, targetRevision, attempt)
+		}
+		if err := waitForPolicySnapshot(ctx, attempt); err != nil {
 			return PolicySet{}, fmt.Errorf("wait for casbin policy revision %d: %w", targetRevision, err)
 		}
 	}
@@ -151,9 +164,13 @@ func finishPolicySnapshot(tx *ent.Tx, loadErr error) error {
 	return loadErr
 }
 
-// waitForPolicySnapshot 当检测到数据库版本尚未达到通知中的目标版本时，稍作等待以让数据库事务完成提交。
-func waitForPolicySnapshot(ctx context.Context) error {
-	timer := time.NewTimer(policySnapshotRetry)
+// waitForPolicySnapshot 当检测到数据库版本尚未达到通知中的目标版本时，使用带指数退避的延时等待数据库事务完成提交。
+func waitForPolicySnapshot(ctx context.Context, attempt int) error {
+	delay := policySnapshotBaseRetry * (1 << attempt)
+	if delay > policySnapshotMaxRetry {
+		delay = policySnapshotMaxRetry
+	}
+	timer := time.NewTimer(delay)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():

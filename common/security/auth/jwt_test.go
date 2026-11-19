@@ -13,6 +13,7 @@ type testClaims struct {
 	jwtv5.RegisteredClaims
 }
 
+// testUserID 是 JWT 验签测试中使用的模拟用户 UUID。
 const testUserID = "018f6f3e-7c4d-7b2a-9f8a-4f6b1b2c3d4e"
 
 func TestJWTServiceVerifyClaims(t *testing.T) {

@@ -14,9 +14,12 @@ import (
 )
 
 const (
-	defaultHealthcheckURL     = "http://127.0.0.1:8080/readyz"
+	// defaultHealthcheckURL 是容器内健康检查默认探测的就绪性端点地址。
+	defaultHealthcheckURL = "http://127.0.0.1:8080/readyz"
+	// defaultHealthcheckTimeout 是健康检查 HTTP 请求的默认超时时间。
 	defaultHealthcheckTimeout = 2 * time.Second
-	maxHealthcheckBodyBytes   = 1 << 20
+	// maxHealthcheckBodyBytes 是读取健康检查响应体的最大允许字节数（1MB）。
+	maxHealthcheckBodyBytes = 1 << 20
 )
 
 type healthcheckOptions struct {

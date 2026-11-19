@@ -12,8 +12,11 @@ import (
 )
 
 const (
-	consumePasswordChangeSessionResultOK       int64 = 1
+	// consumePasswordChangeSessionResultOK 是 Lua 脚本原子核销会话成功的返回值。
+	consumePasswordChangeSessionResultOK int64 = 1
+	// consumePasswordChangeSessionResultNotFound 是 Lua 脚本核销时会话不存在的返回值。
 	consumePasswordChangeSessionResultNotFound int64 = 2
+	// consumePasswordChangeSessionResultMismatch 是 Lua 脚本核销时用户身份与会话不匹配的返回值。
 	consumePasswordChangeSessionResultMismatch int64 = 3
 )
 

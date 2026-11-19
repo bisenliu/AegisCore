@@ -14,6 +14,7 @@ import (
 	roledomain "github.com/aegiscore/user-service/internal/features/role/domain"
 )
 
+// bootstrapAdvisoryLockKey 是初始化超级管理员时使用的 PostgreSQL 事务咨询锁（Advisory Lock）唯一整数键。
 const bootstrapAdvisoryLockKey int64 = 4702111234474988097
 
 // BootstrapStore 使用 PostgreSQL 事务完成一次性超级管理员引导。

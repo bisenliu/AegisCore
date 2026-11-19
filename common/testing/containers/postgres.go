@@ -32,8 +32,16 @@ const (
 	// DefaultStartupTimeout 是测试容器启动和就绪探测的默认总超时。
 	DefaultStartupTimeout = 90 * time.Second
 
-	defaultPostgresPort            = "5432/tcp"
+	// defaultPostgresPort 是 PostgreSQL 容器内默认监听的内部端口与协议。
+	defaultPostgresPort = "5432/tcp"
+	// defaultDockerPortProbeInterval 是轮询等待 Docker 端口映射就绪的探测时间间隔。
 	defaultDockerPortProbeInterval = time.Millisecond * 100
+	// defaultContainerStopTimeout 是测试清理时停止 Docker 容器的超时时间。
+	defaultContainerStopTimeout = 10 * time.Second
+	// defaultContainerCheckInterval 是等待容器依赖就绪的轮询间隔。
+	defaultContainerCheckInterval = 200 * time.Millisecond
+	// defaultContainerCheckTimeout 是单次依赖连通性探测的超时时间。
+	defaultContainerCheckTimeout = time.Second
 )
 
 var testContainersEnabled = flag.Bool("aegiscore.testcontainers", false, "enable Docker-backed integration containers")
@@ -162,7 +170,7 @@ func dockerStop(ctx context.Context, t testing.TB, containerID string) {
 	if containerID == "" {
 		return
 	}
-	stopCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	stopCtx, cancel := context.WithTimeout(ctx, defaultContainerStopTimeout)
 	defer cancel()
 	out, stderr, err := dockerOutput(stopCtx, "stop", "-t", "1", containerID)
 	if err != nil {
@@ -244,13 +252,13 @@ func waitForPostgres(ctx context.Context, t testing.TB, pg *PostgresContainer) {
 // waitFor 定时轮询检查某项服务是否准备就绪，直到检查通过或超时退出。
 func waitFor(ctx context.Context, t testing.TB, label string, check func(context.Context) error) {
 	t.Helper()
-	ticker := time.NewTicker(200 * time.Millisecond)
+	ticker := time.NewTicker(defaultContainerCheckInterval)
 	defer ticker.Stop()
 
 	var lastErr error
 	for {
 		// 单次探测使用短 timeout，避免某次阻塞耗尽整个容器启动期限。
-		checkCtx, cancel := context.WithTimeout(ctx, time.Second)
+		checkCtx, cancel := context.WithTimeout(ctx, defaultContainerCheckTimeout)
 		err := check(checkCtx)
 		cancel()
 		if err == nil {

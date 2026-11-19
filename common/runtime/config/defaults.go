@@ -32,12 +32,18 @@ const (
 	defaultLifecycleStartTimeout = 60 * time.Second
 	// defaultLifecycleStopTimeout 是 Fx app 关闭总预算，必须覆盖协议 drain、worker drain、tracing flush 和安全余量。
 	defaultLifecycleStopTimeout = 120 * time.Second
-	defaultHTTPReadTimeout      = 30 * time.Second
-	defaultHTTPWriteTimeout     = 60 * time.Second
-	defaultHTTPIdleTimeout      = 120 * time.Second
-	defaultHTTPShutdownTimeout  = 10 * time.Second
-	defaultGRPCShutdownTimeout  = 10 * time.Second
-	defaultTracingSampleRatio   = 1.0
+	// defaultHTTPReadTimeout 是 HTTP 请求体与请求头的默认读取超时时间。
+	defaultHTTPReadTimeout = 30 * time.Second
+	// defaultHTTPWriteTimeout 是 HTTP 响应写入的默认超时时间。
+	defaultHTTPWriteTimeout = 60 * time.Second
+	// defaultHTTPIdleTimeout 是 Keep-Alive 空闲连接保持打开的默认最大时间。
+	defaultHTTPIdleTimeout = 120 * time.Second
+	// defaultHTTPShutdownTimeout 是 HTTP 优雅关闭等待连接完成的默认超时时间。
+	defaultHTTPShutdownTimeout = 10 * time.Second
+	// defaultGRPCShutdownTimeout 是 gRPC 优雅关闭等待连接完成的默认超时时间。
+	defaultGRPCShutdownTimeout = 10 * time.Second
+	// defaultTracingSampleRatio 是链路追踪全量采样的默认采样比率（1.0 即 100% 采样）。
+	defaultTracingSampleRatio = 1.0
 
 	// DefaultLifecycleWorkerDrainAllowance 是服务内 feature worker 在 App.Stop 总预算中的通用 drain 预留。
 	DefaultLifecycleWorkerDrainAllowance = 30 * time.Second

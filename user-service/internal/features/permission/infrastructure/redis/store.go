@@ -28,6 +28,7 @@ type policyRedisClient interface {
 	Get(ctx context.Context, key string) *rediscmd.StringCmd
 }
 
+// cachePolicyRevisionScript 是将单调递增的策略版本号原子缓存到 Redis 的 Lua 脚本。
 const cachePolicyRevisionScript = `
 local current = redis.call("GET", KEYS[1])
 local supplied = ARGV[1]

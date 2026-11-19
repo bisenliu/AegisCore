@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// defaultBasePath 是 pprof 性能诊断路由挂载的默认基础路径。
 const defaultBasePath = "/debug/pprof"
 
 // Options 配置 pprof 路由注册方式。

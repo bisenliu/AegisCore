@@ -12,6 +12,9 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+// maxLoadAttempts 是本地缓存回源加载在遭遇并发失效时的最大尝试次数（初始 1 次 + 重试 1 次）。
+const maxLoadAttempts = 2
+
 // LoadingCache 是具有容量上限（防内存撑爆）、固定过期时间（TTL）并支持并发自动加载的本地内存缓存。
 // 缓存中存储的对象若会被外部修改，调用方应自行深拷贝，避免污染共享缓存中的数据。
 type LoadingCache[V any] struct {
@@ -83,7 +86,7 @@ func (c *LoadingCache[V]) Get(ctx context.Context, key string) (V, error) {
 	c.miss.Add(1)
 
 	// 失效与回源竞争时允许重试一次；持续失效则尽快返回，避免请求无限占用执行资源。
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := 0; attempt < maxLoadAttempts; attempt++ {
 		value, err := c.load(ctx, key)
 		if !errors.Is(err, errLoadInvalidated) {
 			return value, err

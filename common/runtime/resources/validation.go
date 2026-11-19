@@ -10,7 +10,9 @@ import (
 )
 
 const (
+	// minPort 是合法网络端口号的最小值。
 	minPort = 1
+	// maxPort 是合法网络端口号的最大值。
 	maxPort = 65535
 )
 

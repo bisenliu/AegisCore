@@ -7,7 +7,9 @@ import (
 )
 
 const (
-	primaryDBTag  = `name:"primary_db"`
+	// primaryDBTag 是主业务 PostgreSQL 数据库连接依赖注入的 Fx 标签名。
+	primaryDBTag = `name:"primary_db"`
+	// cacheRedisTag 是主业务 Redis 缓存连接依赖注入的 Fx 标签名。
 	cacheRedisTag = `name:"cache_redis"`
 )
 

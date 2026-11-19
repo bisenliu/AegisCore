@@ -12,7 +12,9 @@ import (
 )
 
 const (
-	cacheTokenVersionResultStored  = 1
+	// cacheTokenVersionResultStored 是 Lua 脚本成功更新令牌版本缓存的返回值。
+	cacheTokenVersionResultStored = 1
+	// cacheTokenVersionResultSkipped 是传入的令牌版本落后于现有版本而跳过更新的返回值。
 	cacheTokenVersionResultSkipped = 2
 )
 

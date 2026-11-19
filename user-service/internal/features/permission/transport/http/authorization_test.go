@@ -20,6 +20,7 @@ import (
 	permissionauthorization "github.com/aegiscore/user-service/internal/features/permission/application/authorization"
 )
 
+// authorizationTestUserID 是权限授权中间件测试中使用的模拟用户 UUID。
 const authorizationTestUserID = "018f0000-0000-7000-8000-000000000801"
 
 func TestAuthorizeAllowsRequestAndUsesFullPath(t *testing.T) {

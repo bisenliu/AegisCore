@@ -16,6 +16,7 @@ import (
 	"github.com/aegiscore/user-service/internal/shared/identity"
 )
 
+// deletedAtForTest 是用户仓储单测中用于模拟软删除时间的毫秒级时间戳。
 const deletedAtForTest int64 = 1710000000000
 
 func TestUserRepositoryDomainErrors(t *testing.T) {

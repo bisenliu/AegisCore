@@ -17,7 +17,9 @@ import (
 )
 
 const (
-	defaultRateLimitShards  = 64
+	// defaultRateLimitShards 是内存限流器分片存储的默认分片数，用于降低并发锁竞争。
+	defaultRateLimitShards = 64
+	// defaultRateLimitMessage 是请求被限流拦截时返回给客户端的默认提示文案。
 	defaultRateLimitMessage = "too many requests"
 )
 

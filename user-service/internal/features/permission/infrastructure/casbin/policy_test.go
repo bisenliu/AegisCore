@@ -99,6 +99,15 @@ func TestPolicyLoaderWaitForTargetRespectsContext(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
+func TestPolicyLoaderReachesMaxRetriesAndReturnsError(t *testing.T) {
+	loader := NewPolicyLoader(newPolicyTestClient(t))
+
+	_, err := loader.LoadPoliciesAtLeast(context.Background(), 999999)
+
+	require.ErrorIs(t, err, ErrPolicyRevisionTimeout)
+	require.ErrorContains(t, err, "target revision 999999 not reached after")
+}
+
 func TestPolicyLoaderRejectsNegativeTarget(t *testing.T) {
 	loader := NewPolicyLoader(newPolicyTestClient(t))
 

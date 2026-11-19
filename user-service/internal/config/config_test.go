@@ -86,7 +86,7 @@ func TestDefaultConfigReturnsCompleteServiceDefaults(t *testing.T) {
 	require.Equal(t, DefaultPolicyWatcherConfig(), cfg.RBAC.PolicyWatcher)
 	require.Equal(t, DefaultRateLimitPolicyConfig(1, 5, 10*time.Minute, AnonymousRateLimitShards*1024), cfg.APIRateLimit.Anonymous)
 	require.Equal(t, DefaultRateLimitPolicyConfig(5, 20, 10*time.Minute, AuthenticatedRateLimitShards*1024), cfg.APIRateLimit.Authenticated)
-	require.Equal(t, HTTPConfig{RequestBodyMaxBytes: DefaultHTTPRequestBodyMaxBytes}, cfg.HTTP)
+	require.Equal(t, HTTPConfig{RequestBodyMaxBytes: DefaultHTTPRequestBodyMaxBytes, CORS: DefaultCORSConfig()}, cfg.HTTP)
 	require.False(t, cfg.Ent.Plugins.SQLLog.Enabled)
 	require.True(t, cfg.Ent.Plugins.Tracing.Enabled)
 	require.False(t, cfg.Ent.Plugins.Metrics.Enabled)
@@ -203,6 +203,64 @@ func TestLoadHTTPConfig(t *testing.T) {
 		yaml := strings.Replace(serviceConfigYAML(), "  request_body_max_bytes: 32768", "  request_body_max_bytes: 32768\n  unknown: true", 1)
 		err := loadServiceConfigError(t, yaml)
 		require.Contains(t, err.Error(), "unknown configuration keys: http.unknown")
+	})
+}
+
+// TestLoadCORSConfig 验证 user-service 跨域策略配置加载与安全约束校验。
+func TestLoadCORSConfig(t *testing.T) {
+	t.Run("defaults to disabled", func(t *testing.T) {
+		cfg := loadServiceConfig(t, serviceConfigYAML())
+		require.False(t, cfg.HTTP.CORS.Enabled)
+	})
+
+	t.Run("parses valid cors configuration", func(t *testing.T) {
+		corsYAML := `http:
+  request_body_max_bytes: 32768
+  cors:
+    enabled: true
+    allowed_origins:
+      - "https://admin.aegiscore.com"
+    allowed_methods:
+      - "GET"
+      - "POST"
+    allowed_headers:
+      - "Authorization"
+    allow_credentials: true
+    max_age_seconds: 3600
+`
+		yaml := strings.Replace(serviceConfigYAML(), "http:\n  request_body_max_bytes: 32768\n", corsYAML, 1)
+		cfg := loadServiceConfig(t, yaml)
+		require.True(t, cfg.HTTP.CORS.Enabled)
+		require.Equal(t, []string{"https://admin.aegiscore.com"}, cfg.HTTP.CORS.AllowedOrigins)
+		require.Equal(t, []string{"GET", "POST"}, cfg.HTTP.CORS.AllowedMethods)
+		require.Equal(t, []string{"Authorization"}, cfg.HTTP.CORS.AllowedHeaders)
+		require.True(t, cfg.HTTP.CORS.AllowCredentials)
+		require.Equal(t, 3600, cfg.HTTP.CORS.MaxAgeSeconds)
+	})
+
+	t.Run("rejects enabled cors without origins", func(t *testing.T) {
+		corsYAML := `http:
+  request_body_max_bytes: 32768
+  cors:
+    enabled: true
+`
+		yaml := strings.Replace(serviceConfigYAML(), "http:\n  request_body_max_bytes: 32768\n", corsYAML, 1)
+		err := loadServiceConfigError(t, yaml)
+		require.Contains(t, err.Error(), "http.cors.allowed_origins must not be empty when cors is enabled")
+	})
+
+	t.Run("rejects wildcard origin with credentials", func(t *testing.T) {
+		corsYAML := `http:
+  request_body_max_bytes: 32768
+  cors:
+    enabled: true
+    allowed_origins:
+      - "*"
+    allow_credentials: true
+`
+		yaml := strings.Replace(serviceConfigYAML(), "http:\n  request_body_max_bytes: 32768\n", corsYAML, 1)
+		err := loadServiceConfigError(t, yaml)
+		require.Contains(t, err.Error(), "http.cors.allow_credentials cannot be true when allowed_origins contains '*'")
 	})
 }
 

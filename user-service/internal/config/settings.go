@@ -36,6 +36,7 @@ type RateLimitSettings struct {
 // HTTPSettings 是 user-service HTTP transport 所需的私有配置视图。
 type HTTPSettings struct {
 	RequestBodyMaxBytes int64
+	CORS                CORSConfig
 }
 
 // TimezoneSettings 是进程时区初始化所需的最小配置视图。
@@ -82,7 +83,10 @@ func NewRateLimitSettings(cfg *Config) RateLimitSettings {
 
 // NewHTTPSettings 从根配置派生 user-service HTTP transport settings。
 func NewHTTPSettings(cfg *Config) HTTPSettings {
-	return HTTPSettings{RequestBodyMaxBytes: cfg.HTTP.RequestBodyMaxBytes}
+	return HTTPSettings{
+		RequestBodyMaxBytes: cfg.HTTP.RequestBodyMaxBytes,
+		CORS:                cfg.HTTP.CORS,
+	}
 }
 
 // NewTimezoneSettings 从根配置派生进程时区 settings。

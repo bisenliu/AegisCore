@@ -11,9 +11,12 @@ import (
 	"github.com/aegiscore/common/security/auth"
 )
 
+// defaultRequestLogFieldsCount 是预分配 HTTP access log 字段切片的初始容量。
+const defaultRequestLogFieldsCount = 9
+
 var requestLogFieldPool = sync.Pool{
 	New: func() any {
-		fields := make([]zap.Field, 0, 9)
+		fields := make([]zap.Field, 0, defaultRequestLogFieldsCount)
 		return &fields
 	},
 }

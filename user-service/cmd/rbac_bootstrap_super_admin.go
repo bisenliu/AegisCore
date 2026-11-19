@@ -14,6 +14,7 @@ import (
 	roleseed "github.com/aegiscore/user-service/internal/features/role/application/seed"
 )
 
+// defaultAdminBootstrapPasswordEnv 是初始化超级管理员密码的环境变量名称。
 const defaultAdminBootstrapPasswordEnv = "ADMIN_BOOTSTRAP_PASSWORD"
 
 type rbacSeedService interface {

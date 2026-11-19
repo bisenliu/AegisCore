@@ -8,9 +8,13 @@ import (
 )
 
 const (
-	statusRunningMetricName   = "aegiscore_runtime_component_running"
+	// statusRunningMetricName 是组件运行状态 Gauge 指标名（1 代表运行中，0 代表停止）。
+	statusRunningMetricName = "aegiscore_runtime_component_running"
+	// statusLastErrorMetricName 是组件是否存在异常错误 Gauge 指标名（1 代表有错误，0 代表无错误）。
 	statusLastErrorMetricName = "aegiscore_runtime_component_last_error"
-	statusRunningMetricHelp   = "Whether the runtime component reports itself as running."
+	// statusRunningMetricHelp 是组件运行状态指标说明。
+	statusRunningMetricHelp = "Whether the runtime component reports itself as running."
+	// statusLastErrorMetricHelp 是组件错误状态指标说明。
 	statusLastErrorMetricHelp = "Whether the runtime component has a last error."
 	// StatusSuccess 表示运行时操作成功。
 	StatusSuccess = "success"

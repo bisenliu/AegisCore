@@ -88,7 +88,7 @@ func (s *roleCommandService) CreateRole(ctx context.Context, cmd CreateRoleComma
 		return nil, err
 	}
 	if err := s.notifyPolicyChanged(ctx, created.Revision, change.Reason); err != nil {
-		logger.Error(ctx, "refresh rbac policy after role create failed", logger.StackTrace(zap.Int64("policy_revision", created.Revision), zap.String("role_id", roleID.String()), zap.Error(err))...)
+		logger.Warn(ctx, "refresh rbac policy after role create failed", zap.Int64("policy_revision", created.Revision), zap.String("role_id", roleID.String()), zap.Error(err))
 	}
 	return &RoleResult{Role: created.Role, Revision: created.Revision}, nil
 }
@@ -106,7 +106,7 @@ func (s *roleCommandService) UpdateRole(ctx context.Context, cmd UpdateRoleComma
 		return err
 	}
 	if err := s.notifyPolicyChanged(ctx, write.Revision, change.Reason); err != nil {
-		logger.Error(ctx, "refresh rbac policy after role update failed", logger.StackTrace(zap.Int64("policy_revision", write.Revision), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))...)
+		logger.Warn(ctx, "refresh rbac policy after role update failed", zap.Int64("policy_revision", write.Revision), zap.String("role_id", cmd.RoleID.String()), zap.Error(err))
 	}
 	return nil
 }
@@ -120,7 +120,7 @@ func (s *roleCommandService) SetRoleActive(ctx context.Context, cmd SetRoleActiv
 		return err
 	}
 	if err := s.notifyPolicyChanged(ctx, write.Revision, change.Reason); err != nil {
-		logger.Error(ctx, "refresh rbac policy after role active state change failed", logger.StackTrace(zap.Int64("policy_revision", write.Revision), zap.String("role_id", cmd.RoleID.String()), zap.Bool("active", cmd.Active), zap.Error(err))...)
+		logger.Warn(ctx, "refresh rbac policy after role active state change failed", zap.Int64("policy_revision", write.Revision), zap.String("role_id", cmd.RoleID.String()), zap.Bool("active", cmd.Active), zap.Error(err))
 	}
 	return nil
 }

@@ -2,7 +2,6 @@ package command
 
 import (
 	"context"
-	"errors"
 	"uuid"
 
 	"go.uber.org/zap"
@@ -13,7 +12,6 @@ import (
 	authsessions "github.com/aegiscore/user-service/internal/features/auth/application/sessions"
 	authtokens "github.com/aegiscore/user-service/internal/features/auth/application/tokens"
 	authvalidators "github.com/aegiscore/user-service/internal/features/auth/application/validators"
-	authdomain "github.com/aegiscore/user-service/internal/features/auth/domain"
 )
 
 // ForceChangePasswordUseCase 处理强制改密。
@@ -63,11 +61,11 @@ func (u *forceChangePasswordUseCase) ForceChangePassword(ctx context.Context, cm
 	if err != nil {
 		return nil, err
 	}
-	// 数据库中新密码已经保存成功，接着作废该用户之前的所有登录会话。若此时清理旧会话失败，返回该错误仅表示“密码已改成功，但清理旧登录态受阻”，调用方切不可认为改密失败而引导用户重试改密。
+	// 数据库中新密码已经保存成功，token_version 已原子自增。由于网关与中间件层校验 token version，旧会话已逻辑失效。
+	// 若此时清理旧会话失败，记录 Warn 并统计指标，主流程仍视为改密成功，避免返回 503 导致一次性改密 token 消费后用户无法重试。
 	if err := u.sessions.RevokeUserSessionsAtVersion(ctx, updated.UserID, updated.TokenVersion); err != nil {
-		logger.Error(ctx, "password change session revocation projection failed", logger.StackTrace(zap.String("user_id", updated.UserID.String()), zap.Int64("token_version", updated.TokenVersion), zap.Error(err))...)
+		logger.Warn(ctx, "password change session revocation projection failed", zap.String("user_id", updated.UserID.String()), zap.Int64("token_version", updated.TokenVersion), zap.Error(err))
 		u.metrics.PasswordChangeRevocationProjectionFailed(ctx, authapplication.MetricsPasswordChangeRevocationProjection)
-		return nil, errors.Join(authdomain.ErrSessionRevocationIncomplete, err)
 	}
 	return &ForceChangePasswordResult{Changed: true}, nil
 }

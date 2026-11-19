@@ -14,6 +14,7 @@ import (
 	permissionapplication "github.com/aegiscore/user-service/internal/features/permission/application"
 )
 
+// defaultCheckInterval 是当未收到 Pub/Sub 通知时，主动轮询数据库版本执行权威校准的兜底时间间隔。
 const defaultCheckInterval = 15 * time.Second
 
 // WatcherSettings 控制 watcher 的数据库权威校准节奏。

@@ -10,6 +10,13 @@ import (
 	"go.uber.org/fx"
 )
 
+const (
+	// defaultDirPerm 是创建依赖图导出目录所使用的文件系统权限（rwxr-xr-x）。
+	defaultDirPerm os.FileMode = 0755
+	// defaultFilePerm 是写入依赖图 DOT 文件所使用的文件系统权限（rw-r--r--）。
+	defaultFilePerm os.FileMode = 0644
+)
+
 // RenderDOT 根据传入 Fx options 生成 DOT 依赖图文本。
 func RenderDOT(opts ...fx.Option) (string, error) {
 	var graph fx.DotGraph
@@ -57,10 +64,10 @@ func WriteFile(path string, dot string) error {
 	if path == "" {
 		return fmt.Errorf("fx graph output path is required")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), defaultDirPerm); err != nil {
 		return fmt.Errorf("create fx graph output directory: %w", err)
 	}
-	if err := os.WriteFile(path, []byte(normalizeDOT(dot)), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(normalizeDOT(dot)), defaultFilePerm); err != nil {
 		return fmt.Errorf("write fx graph output: %w", err)
 	}
 	return nil

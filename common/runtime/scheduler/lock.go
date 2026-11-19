@@ -212,7 +212,7 @@ func (l *redisLock) Renew(ctx context.Context, ttl time.Duration) error {
 
 // randomToken 生成单次 acquire 使用的随机 owner token。
 func randomToken() (string, error) {
-	token := make([]byte, 16)
+	token := make([]byte, lockRandomTokenBytes)
 	if _, err := rand.Read(token); err != nil {
 		return "", err
 	}
@@ -225,13 +225,13 @@ func normalizeRetryPolicy(policy RetryPolicy) (RetryPolicy, error) {
 		return RetryPolicy{}, fmt.Errorf("%w: retry initial interval must not be negative", ErrInvalidLock)
 	}
 	if policy.InitialInterval == 0 {
-		policy.InitialInterval = 50 * time.Millisecond
+		policy.InitialInterval = defaultLockRetryInitialInterval
 	}
 	if policy.MaxInterval < 0 {
 		return RetryPolicy{}, fmt.Errorf("%w: retry max interval must not be negative", ErrInvalidLock)
 	}
 	if policy.MaxInterval == 0 {
-		policy.MaxInterval = time.Second
+		policy.MaxInterval = defaultLockRetryMaxInterval
 	}
 	if policy.InitialInterval > policy.MaxInterval {
 		return RetryPolicy{}, fmt.Errorf("%w: retry initial interval must not be greater than max interval", ErrInvalidLock)
