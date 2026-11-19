@@ -162,7 +162,9 @@ check_go_toolchain_version() {
     for mod in common/go.mod user-service/go.mod tools/openapi-convert/go.mod tools/nacos-config-seed/go.mod; do
       printf '%s go\t%s\n' "${mod}" "$(go_mod_version "${repo_root}/${mod}")"
     done
-    printf '.github/actions/setup-go/action.yml go-version\t%s\n' "$(workflow_go_version "${repo_root}/.github/actions/setup-go/action.yml")"
+    if [[ -f "${repo_root}/.github/actions/setup-go/action.yml" ]]; then
+      printf '.github/actions/setup-go/action.yml go-version\t%s\n' "$(workflow_go_version "${repo_root}/.github/actions/setup-go/action.yml")"
+    fi
   )
 
   for mod in common/go.mod user-service/go.mod tools/openapi-convert/go.mod tools/nacos-config-seed/go.mod; do
@@ -175,6 +177,10 @@ check_go_toolchain_version() {
 
 check_ci_quality_workflow() {
   # 顶层 CI 唯一拥有事件触发；复用 workflow 只定义一次标准 lint 与普通单测，容器门禁只调用根入口。
+  # 不上传 GitHub 的派生仓库可以删除 .github，此时不再检查 Actions workflow。
+  if [[ ! -d "${repo_root}/.github" ]]; then
+    return
+  fi
   local ci_workflow="${repo_root}/.github/workflows/ci.yml"
   local quality_workflow="${repo_root}/.github/workflows/lint.yml"
   local caller_count lint_count unit_count container_count service_container_count

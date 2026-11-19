@@ -52,6 +52,27 @@ Docker 镜像：
 docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-service .
 ```
 
+更换整个项目内部标识：
+
+```bash
+# 推荐简便用法（自动推导环境变量、指标、镜像前缀和展示名）：
+./scripts/rename-project.sh --dry-run --module github.com/example/my-project
+./scripts/rename-project.sh --apply   --module github.com/example/my-project
+
+# 克隆后一键更名并重置 Git 仓库（验证成功后自动 rm -rf .git 并全新初始化）：
+./scripts/rename-project.sh --apply   --module github.com/example/my-project --reset-git
+
+# 显式覆盖五个内部标识（高级用法）：
+./scripts/rename-project.sh --apply \
+  --module-prefix github.com/example/my-project \
+  --env-prefix MY_PROJECT \
+  --metric-prefix my_project \
+  --image-prefix my-project \
+  --display-name MyProject
+```
+
+仓库级身份在 `project.yaml`。不要手工全局替换。脚本更新 Go module、环境变量、指标、镜像前缀和未加分隔符的项目名，并改名带旧镜像前缀的 Helm chart 目录。它不移动 `user-service/`、`common/`，也不修改系统 RBAC ID。默认保留 `.github` 和 `renovate.json`。新项目不上传 GitHub、也不使用 Renovate 时，追加 `--drop-github` 删除这两项。确认前先跑 `--dry-run`。`--apply` 要求工作区纯净，先检查 Go 工具链，再执行 `go work sync`、Ent 生成和 OpenAPI 生成。执行完成后脚本会提供本地项目目录名和远程 Git 仓库的手动操作指引。
+
 ## 运行时配置边界
 
 共享 `common/runtime/config.Config` 只包含 `app`、`server`、`log` 和 `observability`。Redis/PostgreSQL 连接类型由 `common/runtime/resources` 复用，但具名资源及其 `resources.*` 路径由具体服务声明；user-service 当前只声明 `resources.redis.cache_redis` 和 `resources.postgres.primary_db`。Redis 通过 `mode` 选择 `cluster` 或 `standalone`：集群使用 `addrs` 和可选 `cluster.max_redirects`，非集群使用 `addr`，两种 mode 均固定使用 Redis 0 号库且不暴露 `db` 配置。认证 token version cache 与 RBAC user role cache 分别位于 `auth.token_version_cache` 和 `rbac.user_role_cache`，只包含启停与 TTL，不属于共享核心配置。

@@ -1,6 +1,8 @@
 # 仓库级项目身份。新增根目录业务服务不改本文件。
-# 更换整个项目身份时运行：
-#   ./scripts/rename-project.sh --module-prefix github.com/example --env-prefix EXAMPLE --metric-prefix example --image-prefix example --display-name Example
+# 更换整个项目身份时运行（推荐简便用法，自动推导各层级标识）：
+#   ./scripts/rename-project.sh --dry-run --module github.com/example/my-project
+#   ./scripts/rename-project.sh --apply   --module github.com/example/my-project
+# 也可通过 --module-prefix/--env-prefix/--metric-prefix/--image-prefix/--display-name 逐项显式指定。
 module_prefix: github.com/aegiscore
 env_prefix: AEGISCORE
 metric_prefix: aegiscore
