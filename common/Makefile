@@ -18,4 +18,5 @@ generate: ## 生成 common Go 生成物。
 	go generate ./...
 
 verify: lint generate test ## 运行 common 验证。
-	git diff --exit-code -- .
+	@if [ -e ../.git ]; then git diff --exit-code -- .; \
+	else echo "git diff: skipped (project has no .git)"; fi

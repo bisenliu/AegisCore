@@ -59,9 +59,6 @@ docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-ser
 ./scripts/rename-project.sh --dry-run --module github.com/example/my-project
 ./scripts/rename-project.sh --apply   --module github.com/example/my-project
 
-# 克隆后一键更名并重置 Git 仓库（验证成功后自动 rm -rf .git 并全新初始化）：
-./scripts/rename-project.sh --apply   --module github.com/example/my-project --reset-git
-
 # 显式覆盖五个内部标识（高级用法）：
 ./scripts/rename-project.sh --apply \
   --module-prefix github.com/example/my-project \
@@ -71,7 +68,7 @@ docker build -f deployments/docker/user-service.Dockerfile -t aegiscore-user-ser
   --display-name MyProject
 ```
 
-仓库级身份在 `project.yaml`。不要手工全局替换。脚本更新 Go module、环境变量、指标、镜像前缀和未加分隔符的项目名，并改名带旧镜像前缀的 Helm chart 目录。它不移动 `user-service/`、`common/`，也不修改系统 RBAC ID。默认保留 `.github` 和 `renovate.json`。新项目不上传 GitHub、也不使用 Renovate 时，追加 `--drop-github` 删除这两项。确认前先跑 `--dry-run`。`--apply` 要求工作区纯净，先检查 Go 工具链，再执行 `go work sync`、Ent 生成和 OpenAPI 生成。执行完成后脚本会提供本地项目目录名和远程 Git 仓库的手动操作指引。
+不要手工全局替换。脚本从 `project.yaml` 读取旧身份，更新 Go module、环境变量、指标、镜像前缀和未加分隔符的项目名，并改名带旧镜像前缀的 Helm chart 目录。它不移动 `user-service/`、`common/`，也不修改系统 RBAC ID。更名及代码生成成功后自动删除 `project.yaml`、`.github`、`.git`、`renovate.json` 和 `coverage/`，不回写新身份，也不初始化新 Git 仓库，原历史及 remote 配置会被移除。确认前先跑 `--dry-run`。`--apply` 要求工作区纯净，先检查 Go 工具链，再执行 `go work sync`、Ent 生成和 OpenAPI 生成。linked worktree 不支持 `--apply`；预览或更名失败时保留这些文件。执行完成后脚本会提供本地项目目录名和新 Git 仓库的手动操作指引。
 
 ## 运行时配置边界
 

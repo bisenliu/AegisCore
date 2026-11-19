@@ -46,7 +46,8 @@ coverage: ## 生成覆盖率报告并检查手写关键包基线。
 lint: common-lint $(addsuffix -lint,$(BUSINESS_SERVICES)) tools-openapi-convert-lint tools-nacos-config-seed-lint ## 运行全部 Go 模块 lint。
 
 verify: lint $(addsuffix -architecture-lint,$(BUSINESS_SERVICES)) github-actions-pins-check delivery-verify common-generate $(addsuffix -generate,$(BUSINESS_SERVICES)) test $(addsuffix -openapi-generate,$(BUSINESS_SERVICES)) ## 运行完整本地验证。
-	git diff --exit-code -- . ':(exclude)AGENTS.md' ':(exclude)openspec/AGENTS.md' ':(exclude)CLAUDE.md' ':(exclude).multica/project/resources.json' ':(exclude).multica/**'
+	@if [ -e .git ]; then git diff --exit-code -- . ':(exclude)AGENTS.md' ':(exclude)openspec/AGENTS.md' ':(exclude)CLAUDE.md' ':(exclude).multica/project/resources.json' ':(exclude).multica/**'; \
+	else echo "git diff: skipped (project has no .git)"; fi
 
 github-actions-pins-check: ## 检查 GitHub Actions 第三方 Action 是否固定 commit SHA。
 	./scripts/check-github-actions-pins.sh

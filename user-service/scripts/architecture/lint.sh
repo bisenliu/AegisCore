@@ -9,10 +9,10 @@ set -euo pipefail
 #   make user-service-architecture-lint
 #
 # 执行前提：
-#   - 在 Git 工作区内运行，且仓库包含 common、user-service、tools/openapi-convert 等模块。
+#   - 项目包含 common、user-service、tools/openapi-convert 等模块。
 #   - 本机需要安装 ripgrep（rg）；脚本依赖 rg 执行正则扫描。
 #   - 需要可用的常见 Unix 工具 awk、sed、head、find、wc、tr 和 git。
-#   - 部分检查会调用 git diff --name-only，用于发现 Ent/OpenAPI 生成物漂移。
+#   - 存在 .git 时调用 git diff --name-only 检查 Ent/OpenAPI 生成物漂移。
 #
 # 行为：
 #   - 检查 Go toolchain 版本一致，并防止 CI 重复触发标准 lint 与普通单测。
@@ -601,10 +601,16 @@ if [[ -e "${service_dir}/internal/shared/identity/status.go" ]]; then
   report "internal/shared/identity/status.go should be named user_status.go to keep shared enum files subject-specific"
 fi
 
+if [[ ! -e "${repo_root}/.git" ]]; then
+  printf 'architecture-lint: Git drift checks skipped (project has no .git)\n'
+fi
+
 # 步骤 22：校验 OpenAPI 生成物没有未提交漂移，确保注解变更后重新生成。
-run_rg_any "OpenAPI generated files have uncommitted drift" \
-  '^user-service/docs/(openapi\.go|openapi\.json|openapi\.yaml)$' \
-  <(cd "${repo_root}" && git diff --name-only -- user-service/docs/openapi.go user-service/docs/openapi.json user-service/docs/openapi.yaml)
+if [[ -e "${repo_root}/.git" ]]; then
+  run_rg_any "OpenAPI generated files have uncommitted drift" \
+    '^user-service/docs/(openapi\.go|openapi\.json|openapi\.yaml)$' \
+    <(cd "${repo_root}" && git diff --name-only -- user-service/docs/openapi.go user-service/docs/openapi.json user-service/docs/openapi.yaml)
+fi
 
 # 步骤 23：校验根目录业务服务不 import 其他业务服务。
 check_cross_service_imports() {
@@ -655,9 +661,11 @@ if ! commentcheck_output="$(
 fi
 
 # 步骤 26：校验 Ent 生成物没有未提交漂移，确保 schema 变更后重新生成。
-run_rg_any "Ent generated files have uncommitted drift; run make generate and commit generated output" \
-  '^user-service/internal/persistence/ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update|permission|permission_create|permission_delete|permission_query|permission_update|role|role_create|role_delete|role_query|role_update|rolepermission|rolepermission_create|rolepermission_delete|rolepermission_query|rolepermission_update|userrole|userrole_create|userrole_delete|userrole_query|userrole_update)\.go$|^user-service/internal/persistence/ent/(enttest|hook|migrate|predicate|runtime|user|permission|role|rolepermission|userrole)/' \
-  <(cd "${repo_root}" && git diff --name-only -- user-service/internal/persistence/ent)
+if [[ -e "${repo_root}/.git" ]]; then
+  run_rg_any "Ent generated files have uncommitted drift; run make generate and commit generated output" \
+    '^user-service/internal/persistence/ent/(client|ent|mutation|runtime|tx|user|user_create|user_delete|user_query|user_update|permission|permission_create|permission_delete|permission_query|permission_update|role|role_create|role_delete|role_query|role_update|rolepermission|rolepermission_create|rolepermission_delete|rolepermission_query|rolepermission_update|userrole|userrole_create|userrole_delete|userrole_query|userrole_update)\.go$|^user-service/internal/persistence/ent/(enttest|hook|migrate|predicate|runtime|user|permission|role|rolepermission|userrole)/' \
+    <(cd "${repo_root}" && git diff --name-only -- user-service/internal/persistence/ent)
+fi
 
 # 汇总所有步骤发现的违规；只有执行完全部检查后才统一返回失败状态。
 if [[ "${failures}" -gt 0 ]]; then

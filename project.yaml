@@ -1,4 +1,4 @@
-# 仓库级项目身份。新增根目录业务服务不改本文件。
+# 仓库级项目身份，仅供更名脚本读取旧身份。更名成功后本文件会被删除。
 # 更换整个项目身份时运行（推荐简便用法，自动推导各层级标识）：
 #   ./scripts/rename-project.sh --dry-run --module github.com/example/my-project
 #   ./scripts/rename-project.sh --apply   --module github.com/example/my-project

@@ -36,7 +36,8 @@ architecture-lint-test: ## 使用故意违规 fixture 验证架构检查可命�
 	./scripts/architecture/lint-test.sh
 
 verify: lint architecture-lint generate test openapi-generate ## 运行 user-service 验证。
-	git diff --exit-code
+	@if [ -e ../.git ]; then git diff --exit-code; \
+	else echo "git diff: skipped (project has no .git)"; fi
 
 seed-rbac: ## 使用调用方提供的 AEGISCORE_NACOS_* 环境变量初始化 RBAC 系统数据。
 	go run ./cmd rbac seed
@@ -63,4 +64,5 @@ fxgraph-generate: ## 生成 user-service Fx 依赖图。
 	go run ./cmd fxgraph --output ./docs/fx-dependency-graph.dot
 
 fxgraph-check: fxgraph-generate ## 检查 user-service Fx 依赖图是否存在 drift。
-	git diff --exit-code -- docs/fx-dependency-graph.dot
+	@if [ -e ../.git ]; then git diff --exit-code -- docs/fx-dependency-graph.dot; \
+	else echo "git diff: skipped (project has no .git)"; fi

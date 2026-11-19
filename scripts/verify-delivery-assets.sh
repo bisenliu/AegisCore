@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly repo_root="$(git rev-parse --show-toplevel)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly repo_root
 readonly chart_dir="${repo_root}/deployments/helm/aegiscore-user-service"
 readonly compose_file="${repo_root}/deployments/compose/docker-compose.yml"
 readonly alerts_dir="${repo_root}/deployments/observability/prometheus"
